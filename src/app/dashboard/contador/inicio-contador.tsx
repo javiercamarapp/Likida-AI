@@ -13,6 +13,7 @@ import {
   resolverPeriodo, getGastosFiscales, getGastosFiscalesSeries,
   resumirPerdidas, resumirFiscal, opcionesDe,
   type GastoFiscal, type ResumenPerdidas, type ResumenFiscal, type GastosFiscalesSeries,
+  type Periodo,
 } from '@/lib/likida/fiscal';
 import { getFacturacionClientes, type FacturacionClientes } from '@/lib/likida/facturacion_clientes';
 import { saludo, ahoraMs } from '@/lib/saludo';
@@ -24,6 +25,7 @@ import { BarraPagina, ChipFecha, HeroSaludo, MotorFiscal, TituloSeccion } from '
 import { StatCard, EstadoVacio } from '../../admin/ui/kit';
 import { MotorFiscalPeriodo } from '../motor-fiscal-periodo';
 import { AvisoSinFlota } from '../sin-flota';
+import { Bloque, Barra, EsqCifras } from '../bloque';
 
 /** Resiliencia por sección: si una consulta falla, devuelve null y la
  *  tarjeta muestra un fallback en vez de tirar toda la pantalla. */
@@ -73,98 +75,59 @@ export async function InicioContador({
     ? Math.floor((Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${periodoFiscal.desde}T00:00:00Z`)) / 86_400_000) + 1
     : undefined;
 
-  const [
-    acred, kpis, anomalias, huerfanosPendientes,
-    cfgFiscal, gastosFiscales, gastosFiscalesSeries, facturacion,
-  ] = await Promise.all([
-    safe<Acreditables>(() => getAcreditables(tenantId, diasEjercicio)),
-    safe<DashboardKpis>(() => getKpis(tenantId)),
-    safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
-    // Devuelve `null` ante error (≠ 0) y la alerta simplemente no se pinta —
-    // una alerta no puede afirmar en falso. Igual que en el Resumen del dueño,
-    // no entra al conteo de secciones caídas: es solo una alerta.
-    safe<number | null>(() => contarHuerfanosPendientes(tenantId)),
-    safe<LikidaConfig>(() => getConfig(tenantId)),
-    safe<GastoFiscal[]>(() => getGastosFiscales(tenantId, periodoFiscal)),
-    // "En riesgo/perdido" y "Recuperable" ciclan semanal/mensual/histórico
-    // (`MotorFiscalPeriodo`) — serie aparte de `gastosFiscales`, que sigue
-    // fija al ejercicio para el top de causas y el desglose.
-    safe<GastosFiscalesSeries>(() => getGastosFiscalesSeries(tenantId, hoy)),
-    // La cartera: facturas emitidas y qué les falta de pago. El helper NO
-    // atrapa por dentro (una base caída se leería como "no te debe nadie"),
-    // así que aquí el `safe` la marca como sección caída, no como cero.
-    safe<FacturacionClientes>(() => getFacturacionClientes(tenantId)),
-  ]);
+  // ── LAS OCHO CONSULTAS, LANZADAS DE UNA (FE-14) ─────────────────────────
+  // Sin `await`: salen todas en el mismo tick, igual que en el `Promise.all`
+  // que había aquí, pero cada una se espera DENTRO del bloque que la usa. La
+  // cáscara (barra, saludo, el botón de exportar, "Tus pantallas") no
+  // depende de ninguna lectura y sale con el primer flush del stream, en vez
+  // de esperar a que `getFacturacionClientes` recorra la cartera entera.
+  // Todas pasan por `safe`, así que ninguna rechaza: resuelven a `null` y su
+  // tarjeta pinta la leyenda honesta (null ≠ 0).
+  const pAcred = safe<Acreditables>(() => getAcreditables(tenantId, diasEjercicio));
+  const pKpis = safe<DashboardKpis>(() => getKpis(tenantId));
+  const pAnomalias = safe<Anomalia[]>(() => detectarAnomalias(tenantId));
+  // Devuelve `null` ante error (≠ 0) y la alerta simplemente no se pinta —
+  // una alerta no puede afirmar en falso. Igual que en el Resumen del dueño,
+  // no entra al conteo de secciones caídas: es solo una alerta.
+  const pHuerfanos = safe<number | null>(() => contarHuerfanosPendientes(tenantId));
+  const pCfgFiscal = safe<LikidaConfig>(() => getConfig(tenantId));
+  const pGastosFiscales = safe<GastoFiscal[]>(() => getGastosFiscales(tenantId, periodoFiscal));
+  // "En riesgo/perdido" y "Recuperable" ciclan semanal/mensual/histórico
+  // (`MotorFiscalPeriodo`) — serie aparte de `gastosFiscales`, que sigue
+  // fija al ejercicio para el top de causas y el desglose.
+  const pGastosFiscalesSeries = safe<GastosFiscalesSeries>(() => getGastosFiscalesSeries(tenantId, hoy));
+  // La cartera: facturas emitidas y qué les falta de pago. El helper NO
+  // atrapa por dentro (una base caída se leería como "no te debe nadie"),
+  // así que aquí el `safe` la marca como sección caída, no como cero.
+  const pFacturacion = safe<FacturacionClientes>(() => getFacturacionClientes(tenantId));
 
   // `resumirPerdidas`/`resumirFiscal` son puras: se calculan UNA vez aquí en
   // el servidor. `fiscal.ts` importa `supabaseAdmin` a nivel de módulo — un
   // Client Component no puede importarlo sin arrastrar el service-role al
   // bundle del navegador, por eso `MotorFiscalPeriodo` recibe datos planos.
-  const opciones = cfgFiscal ? opcionesDe(cfgFiscal) : null;
-  const resumenPerdidas: ResumenPerdidas | null = opciones && gastosFiscales
-    ? resumirPerdidas(gastosFiscales, opciones)
-    : null;
-  const resumenPerdidasSeries: Record<'semanal' | 'mensual' | 'historico', ResumenPerdidas> | null =
-    opciones && gastosFiscalesSeries
-      ? {
-        semanal: resumirPerdidas(gastosFiscalesSeries.semanal, opciones),
-        mensual: resumirPerdidas(gastosFiscalesSeries.mensual, opciones),
-        historico: resumirPerdidas(gastosFiscalesSeries.historico, opciones),
-      }
-      : null;
-  const resumenFiscal: ResumenFiscal | null = opciones && gastosFiscales
-    ? resumirFiscal(gastosFiscales, opciones)
-    : null;
-
-  // La MISMA regla que `estadoPanel` (estado.ts), sobre las secciones de ESTA
-  // pantalla: "no hay nada" es una afirmación sobre el negocio y solo se hace
-  // cuando TODO cargó. No se reusa la función porque su forma pide viajes y
-  // liquidaciones, que aquí no se consultan — la regla sí se copia entera:
-  // todo caído es error, algo caído se enseña CON aviso.
-  const secciones = [acred, kpis, anomalias, cfgFiscal, gastosFiscales, gastosFiscalesSeries, facturacion];
-  const caidas = secciones.filter((s) => s === null).length;
-  const estado: 'error' | 'parcial' | 'ok' =
-    caidas === secciones.length ? 'error' : caidas > 0 ? 'parcial' : 'ok';
-
-  // Las alertas accionables: cada una lleva a LA pantalla donde se resuelve,
-  // con el sufijo del superadmin a cuestas, y SOLO si la cifra es mayor a
-  // cero — una banda que siempre dice algo entrena a ignorarla.
-  const alertas: Array<{ texto: string; href: string }> = [];
-  if (kpis && kpis.porRevisar > 0) {
-    alertas.push({
-      texto: `${kpis.porRevisar} liquidación${kpis.porRevisar === 1 ? ' espera' : 'es esperan'} tu revisión`,
-      href: `/dashboard/agentes/liquidacion${sufijo}`,
-    });
-  }
-  if (anomalias && anomalias.length > 0) {
-    alertas.push({
-      texto: `${anomalias.length} comprobante${anomalias.length === 1 ? '' : 's'} repetido${anomalias.length === 1 ? '' : 's'} entre viajes distintos`,
-      href: `/dashboard/agentes/liquidacion${sufijo}`,
-    });
-  }
-  if (huerfanosPendientes !== null && huerfanosPendientes !== undefined && huerfanosPendientes > 0) {
-    alertas.push({
-      texto: `${huerfanosPendientes} comprobante${huerfanosPendientes === 1 ? ' sin viaje espera que alguien lo acomode' : 's sin viaje esperan que alguien los acomode'}`,
-      href: `/dashboard/huerfanos${sufijo}`,
-    });
-  }
-  if (facturacion) {
-    // "Emitida sin pago" = viva Y con saldo arriba del centavo de tolerancia
-    // — el MISMO criterio que la vista `factura_saldo` (0049) y que la
-    // pantalla de Facturación, para que el clic aterrice en la misma cuenta.
-    const sinPago = facturacion.cartera.facturas.filter((f) => f.viva && f.conSaldo).length;
-    if (sinPago > 0) {
-      alertas.push({
-        texto: `${sinPago} factura${sinPago === 1 ? '' : 's'} emitida${sinPago === 1 ? '' : 's'} sin cobrar por completo — ${mxn(facturacion.cartera.porCobrar)} por cobrar${facturacion.cartera.vencido > 0 ? ` (${mxn(facturacion.cartera.vencido)} ya vencido)` : ''}`,
-        href: `/dashboard/facturacion${sufijo}`,
-      });
-    }
-  }
+  // `.then` sobre promesas YA lanzadas: no añade espera, solo dice qué hacer
+  // cuando lleguen.
+  const pResumenPerdidas: Promise<ResumenPerdidas | null> =
+    Promise.all([pCfgFiscal, pGastosFiscales]).then(([cfg, gastos]) =>
+      cfg && gastos ? resumirPerdidas(gastos, opcionesDe(cfg)) : null);
+  const pResumenPerdidasSeries: Promise<Record<'semanal' | 'mensual' | 'historico', ResumenPerdidas> | null> =
+    Promise.all([pCfgFiscal, pGastosFiscalesSeries]).then(([cfg, series]) =>
+      cfg && series
+        ? {
+          semanal: resumirPerdidas(series.semanal, opcionesDe(cfg)),
+          mensual: resumirPerdidas(series.mensual, opcionesDe(cfg)),
+          historico: resumirPerdidas(series.historico, opcionesDe(cfg)),
+        }
+        : null);
+  const pResumenFiscal: Promise<ResumenFiscal | null> =
+    Promise.all([pCfgFiscal, pGastosFiscales]).then(([cfg, gastos]) =>
+      cfg && gastos ? resumirFiscal(gastos, opcionesDe(cfg)) : null);
 
   // Los accesos del final salen del MISMO mapa que gatea las páginas
   // (`areaDeRuta`), no de una lista escrita a mano: una pantalla de dinero
   // nueva aparece aquí sola, y una que cambie de área desaparece sola. El
   // chat se excluye porque ya tiene su botón fijo en la barra de arriba.
+  // No consulta nada: se pinta con el primer flush.
   const pantallas: Item[] = [...AUTOMATIZACIONES, ...DINERO_FISCAL, ...SISTEMA]
     .filter((it) => areaDeRuta(it.href) === 'dinero' && it.href !== '/dashboard/chat');
 
@@ -238,170 +201,342 @@ export async function InicioContador({
 
         <div className="px-5 pb-5 flex-1">
           {/* ANTES QUE NINGUNA CIFRA: los ceros de una flota que no existe no
-              son una medición, y menos una fiscal. */}
+              son una medición, y menos una fiscal. Sin consulta de por medio,
+              o sea que llega con el primer flush — que es exactamente lo que
+              "antes que ninguna cifra" pide. */}
           {!tenantExiste && (
             <div className="mt-3"><AvisoSinFlota tenantId={tenantId} /></div>
           )}
 
-          {alertas.length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              {alertas.map((a) => (
-                <Link key={a.texto} href={a.href}
-                  className="card p-3 flex items-center gap-2.5 hover:opacity-85 transition-opacity"
-                  style={{ borderColor: 'var(--warn)' }}>
-                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
-                  <span className="text-[13px]">{a.texto}</span>
-                  <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--muted)' }}>Ver →</span>
+          {/* Condicional de verdad (solo si hay fuego): sin esqueleto, para no
+              reservar un hueco que casi siempre queda vacío. */}
+          <Bloque mensaje="No se pudieron leer las alertas." esqueleto={null}>
+            <BloqueAlertas pKpis={pKpis} pAnomalias={pAnomalias} pHuerfanos={pHuerfanos}
+              pFacturacion={pFacturacion} sufijo={sufijo} />
+          </Bloque>
+
+          {/* El aviso de pantalla incompleta necesita saber de las SIETE
+              secciones, o sea que es por definición el bloque más lento. Con
+              el streaming ya no gobierna el render —cada tarjeta de abajo
+              degrada sola y dice lo suyo—: queda como lo que en el fondo
+              siempre fue, un aviso, y llega cuando puede. */}
+          <Bloque mensaje="No se pudo evaluar el estado de la pantalla." esqueleto={null}>
+            <AvisoEstado pAcred={pAcred} pKpis={pKpis} pAnomalias={pAnomalias} pCfgFiscal={pCfgFiscal}
+              pGastosFiscales={pGastosFiscales} pGastosFiscalesSeries={pGastosFiscalesSeries}
+              pFacturacion={pFacturacion} />
+          </Bloque>
+
+          {/* ── Lo acreditable que tus liquidaciones ya certificaron ──
+              Sale de `liquidacion.*_acreditable` (getAcreditables): son
+              las MISMAS cifras que cada PDF imprimió al cerrar, sumadas
+              al ejercicio — no un recálculo. El desglose de más abajo sí
+              recalcula sobre comprobantes, y por eso cada bloque dice de
+              dónde sale: dos números parecidos sin su fuente se leen
+              como dos cálculos. */}
+          <div className="mt-2">
+            <Bloque mensaje="No se pudo cargar lo acreditable de tus liquidaciones."
+              esqueleto={<EsqCifras n={4} rejilla="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2" />}>
+              <BloqueAcreditables pAcred={pAcred} pResumenPerdidas={pResumenPerdidas} periodoFiscal={periodoFiscal} />
+            </Bloque>
+          </div>
+
+          {/* ── Motor fiscal — las mismas piezas que el Resumen del
+              dueño, porque el motor ES la pantalla del contador. */}
+          <div className="mt-2">
+            <Bloque mensaje="No se pudo cargar el motor fiscal." esqueleto={<EsqMotorFiscal />}>
+              <BloqueFiscal pResumenPerdidas={pResumenPerdidas} pResumenPerdidasSeries={pResumenPerdidasSeries}
+                periodoFiscal={periodoFiscal} />
+            </Bloque>
+          </div>
+
+          {/* ── El gasto del ejercicio, por su suerte fiscal
+              (`resumirFiscal`). Las cubetas deducible/no deducible/por
+              confirmar del motor son POR LIQUIDACIÓN y no se persisten
+              agregadas (recalcularlas aquí sería otra copia de la lógica
+              del dinero — ver `reconstruir` en analytics.ts), así que lo
+              que se afirma es lo que las columnas sí sostienen: el IVA
+              documentado, en sus dos cubetas que SUMAN todo el IVA
+              desglosado, y el estado de cada CFDI ante el SAT. */}
+          <div className="mt-2">
+            <Bloque mensaje="No se pudo leer el desglose fiscal." esqueleto={<EsqDesgloseFiscal />}>
+              <BloqueDesglose pResumenFiscal={pResumenFiscal} periodoFiscal={periodoFiscal} />
+            </Bloque>
+          </div>
+
+          {/* ── Sus pantallas: solo rutas de área `dinero`, del mismo
+              mapa que las gatea. Todos los links cargan el sufijo. Cero
+              consultas: entra con el primer flush. */}
+          <div className="card p-3 mt-2">
+            <TituloSeccion>Tus pantallas</TituloSeccion>
+            <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-1.5">
+              {pantallas.map((it) => (
+                <Link key={it.href} href={`${it.href}${sufijo}`}
+                  className="hairline rounded-lg px-3 py-2 flex items-center gap-2 text-[13px] transition-colors hover:bg-[var(--canvas)]"
+                  style={{ background: 'var(--surface)' }}>
+                  <it.Icono width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+                  <span className="truncate">{it.nombre}</span>
                 </Link>
               ))}
             </div>
-          )}
-
-          {estado === 'error' ? (
-            <div className="card p-10 text-center mt-3">
-              <p className="text-lg font-semibold tracking-tight">No se pudieron cargar los datos</p>
-              <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>
-                Hubo un problema al leer del sistema. Recarga la página en un momento — esto NO significa
-                que no haya nada acreditable, significa que no se pudo leer.
-              </p>
-            </div>
-          ) : (
-            <>
-              {estado === 'parcial' && (
-                <div className="card p-4 flex items-start gap-3 mt-3" style={{ borderColor: 'var(--warn)' }}>
-                  <span className="inline-block w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
-                  <div>
-                    <p className="text-sm font-semibold m-0">Faltan datos por cargar — esta pantalla está incompleta</p>
-                    <p className="text-xs mt-1 m-0" style={{ color: 'var(--muted)' }}>
-                      Una o más secciones no respondieron. No tomes estas cifras como el corte del periodo.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Lo acreditable que tus liquidaciones ya certificaron ──
-                  Sale de `liquidacion.*_acreditable` (getAcreditables): son
-                  las MISMAS cifras que cada PDF imprimió al cerrar, sumadas
-                  al ejercicio — no un recálculo. El desglose de más abajo sí
-                  recalcula sobre comprobantes, y por eso cada bloque dice de
-                  dónde sale: dos números parecidos sin su fuente se leen
-                  como dos cálculos. */}
-              {acred === null ? (
-                <p className="text-sm mt-3" style={{ color: 'var(--muted)' }}>
-                  No se pudo cargar lo acreditable de tus liquidaciones.
-                </p>
-              ) : (
-                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
-                  <StatCard icono={<Landmark width={15} height={15} strokeWidth={1.75} />}
-                    etiqueta={`IVA acreditable de tus liquidaciones — ${periodoFiscal.etiqueta}`}
-                    valor={acred.iva} formato="mxn"
-                    nota="LIVA art. 5 — lo que el motor certificó al cerrar cada liquidación" />
-                  {/* La condición va en el rótulo, no solo en la nota — el
-                      criterio de `liquidacion/acreditable.ts`: "Estímulo de
-                      peaje 50%" a secas se lee como un derecho ya ganado. */}
-                  <StatCard icono={<RouteIcon width={15} height={15} strokeWidth={1.75} />}
-                    etiqueta={`Estímulo de peaje 50% — ${periodoFiscal.etiqueta} · sujeto a elegibilidad`}
-                    valor={acred.peaje} formato="mxn"
-                    nota="LIF 2026 art. 20, ap. A — base: subtotal SIN IVA de casetas con CFDI" />
-                  {resumenPerdidas ? (
-                    <StatCard icono={<ReceiptText width={15} height={15} strokeWidth={1.75} />}
-                      etiqueta={`Recuperable pidiendo factura — ${periodoFiscal.etiqueta}`}
-                      valor={resumenPerdidas.montoRecuperable} formato="mxn"
-                      nota="Gasto cuya factura aún se puede pedir — el motor dice a quién, abajo" />
-                  ) : (
-                    <div className="card p-3 h-full flex items-center text-sm" style={{ color: 'var(--muted)' }}>
-                      No se pudo calcular lo recuperable en este momento.
-                    </div>
-                  )}
-                  {/* En LITROS, nunca en pesos — regla de producto: el
-                      estímulo es cuota DOF (semanal) × litros, y la cuota no
-                      vive aquí (decisión D2; `guion_demo.test.ts` la ata). */}
-                  <StatCard icono={<Fuel width={15} height={15} strokeWidth={1.75} />}
-                    etiqueta="Diésel elegible para el estímulo"
-                    valor={acred.litrosDiesel} formato="litros"
-                    nota="LIF 2026, art. 20-A: cuota semanal del DOF × litros — tu contador aplica la cuota fechada" />
-                </div>
-              )}
-
-              {/* ── Motor fiscal — las mismas piezas que el Resumen del
-                  dueño, porque el motor ES la pantalla del contador. */}
-              <div className="card p-3 mt-2">
-                <TituloSeccion>Tu motor fiscal — {periodoFiscal.etiqueta}</TituloSeccion>
-                <div className="mt-2 flex flex-wrap gap-2 items-stretch">
-                  <MotorFiscalPeriodo series={resumenPerdidasSeries} />
-                </div>
-                <div className="mt-2">
-                  <MotorFiscal resumen={resumenPerdidas} />
-                </div>
-              </div>
-
-              {/* ── El gasto del ejercicio, por su suerte fiscal
-                  (`resumirFiscal`). Las cubetas deducible/no deducible/por
-                  confirmar del motor son POR LIQUIDACIÓN y no se persisten
-                  agregadas (recalcularlas aquí sería otra copia de la lógica
-                  del dinero — ver `reconstruir` en analytics.ts), así que lo
-                  que se afirma es lo que las columnas sí sostienen: el IVA
-                  documentado, en sus dos cubetas que SUMAN todo el IVA
-                  desglosado, y el estado de cada CFDI ante el SAT. */}
-              <div className="card p-3 mt-2">
-                <TituloSeccion>El gasto del periodo, por su suerte fiscal — {periodoFiscal.etiqueta}</TituloSeccion>
-                {resumenFiscal === null ? (
-                  <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
-                    No se pudo leer el desglose fiscal en este momento.
-                  </p>
-                ) : resumenFiscal.n === 0 ? (
-                  <div className="mt-2">
-                    <EstadoVacio icono={<FileSearch width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                      Todavía no hay comprobantes leídos en este ejercicio. En cuanto los operadores manden
-                      los primeros por WhatsApp, aquí se ve cuánto del gasto sostiene su IVA y cuánto no.
-                    </EstadoVacio>
-                  </div>
-                ) : (
-                  <>
-                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <StatCard icono={<Wallet width={15} height={15} strokeWidth={1.75} />}
-                        etiqueta="Gasto comprobado leído" valor={resumenFiscal.gastoTotal} formato="mxn"
-                        nota={`${resumenFiscal.n} comprobante${resumenFiscal.n === 1 ? '' : 's'} · ${resumenFiscal.conCfdi} con CFDI, ${resumenFiscal.sinCfdi} sin CFDI`} />
-                      <StatCard icono={<Landmark width={15} height={15} strokeWidth={1.75} />}
-                        etiqueta="IVA acreditable documentado" valor={resumenFiscal.ivaAcreditable} formato="mxn"
-                        nota="LIVA art. 5 — solo el IVA desglosado en CFDI que lo sostiene" />
-                      <StatCard icono={<FileX2 width={15} height={15} strokeWidth={1.75} />}
-                        etiqueta="IVA desglosado que NO se acredita" valor={resumenFiscal.ivaNoAcreditable} formato="mxn"
-                        nota="Las dos cubetas suman todo el IVA desglosado del periodo — crúzalo con calculadora" />
-                    </div>
-                    <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-                      Estado ante el SAT de los {resumenFiscal.conCfdi} CFDI: {resumenFiscal.vigentes} vigente{resumenFiscal.vigentes === 1 ? '' : 's'} · {resumenFiscal.porValidar} por validar · {resumenFiscal.cancelados} cancelado{resumenFiscal.cancelados === 1 ? '' : 's'}.
-                      {/* "Por validar" no es "inválido": es "no comprobado" —
-                          la distinción viene del propio tipo ResumenFiscal. */}
-                      {resumenFiscal.conCfdiSinDesglose > 0 && (
-                        ` ${resumenFiscal.conCfdiSinDesglose} traen CFDI pero sin desglose de IVA leído — su IVA existe en el papel y aquí no se afirma.`
-                      )}
-                    </p>
-                  </>
-                )}
-              </div>
-
-              {/* ── Sus pantallas: solo rutas de área `dinero`, del mismo
-                  mapa que las gatea. Todos los links cargan el sufijo. */}
-              <div className="card p-3 mt-2">
-                <TituloSeccion>Tus pantallas</TituloSeccion>
-                <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-1.5">
-                  {pantallas.map((it) => (
-                    <Link key={it.href} href={`${it.href}${sufijo}`}
-                      className="hairline rounded-lg px-3 py-2 flex items-center gap-2 text-[13px] transition-colors hover:bg-[var(--canvas)]"
-                      style={{ background: 'var(--surface)' }}>
-                      <it.Icono width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-                      <span className="truncate">{it.nombre}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
+          </div>
 
           <p className="text-[11px] pt-3" style={{ color: 'var(--faint)' }}>{LEYENDA_CORTA}</p>
         </div>
       </div>
     </main>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS BLOQUES (FE-14). Cada uno espera SOLO sus promesas: por eso el de al
+// lado no lo espera.
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function BloqueAlertas({ pKpis, pAnomalias, pHuerfanos, pFacturacion, sufijo }: {
+  pKpis: Promise<DashboardKpis | null>;
+  pAnomalias: Promise<Anomalia[] | null>;
+  pHuerfanos: Promise<number | null>;
+  pFacturacion: Promise<FacturacionClientes | null>;
+  sufijo: string;
+}) {
+  const [kpis, anomalias, huerfanosPendientes, facturacion] =
+    await Promise.all([pKpis, pAnomalias, pHuerfanos, pFacturacion]);
+
+  // Las alertas accionables: cada una lleva a LA pantalla donde se resuelve,
+  // con el sufijo del superadmin a cuestas, y SOLO si la cifra es mayor a
+  // cero — una banda que siempre dice algo entrena a ignorarla.
+  const alertas: Array<{ texto: string; href: string }> = [];
+  if (kpis && kpis.porRevisar > 0) {
+    alertas.push({
+      texto: `${kpis.porRevisar} liquidación${kpis.porRevisar === 1 ? ' espera' : 'es esperan'} tu revisión`,
+      href: `/dashboard/agentes/liquidacion${sufijo}`,
+    });
+  }
+  if (anomalias && anomalias.length > 0) {
+    alertas.push({
+      texto: `${anomalias.length} comprobante${anomalias.length === 1 ? '' : 's'} repetido${anomalias.length === 1 ? '' : 's'} entre viajes distintos`,
+      href: `/dashboard/agentes/liquidacion${sufijo}`,
+    });
+  }
+  if (huerfanosPendientes !== null && huerfanosPendientes !== undefined && huerfanosPendientes > 0) {
+    alertas.push({
+      texto: `${huerfanosPendientes} comprobante${huerfanosPendientes === 1 ? ' sin viaje espera que alguien lo acomode' : 's sin viaje esperan que alguien los acomode'}`,
+      href: `/dashboard/huerfanos${sufijo}`,
+    });
+  }
+  if (facturacion) {
+    // "Emitida sin pago" = viva Y con saldo arriba del centavo de tolerancia
+    // — el MISMO criterio que la vista `factura_saldo` (0049) y que la
+    // pantalla de Facturación, para que el clic aterrice en la misma cuenta.
+    const sinPago = facturacion.cartera.facturas.filter((f) => f.viva && f.conSaldo).length;
+    if (sinPago > 0) {
+      alertas.push({
+        texto: `${sinPago} factura${sinPago === 1 ? '' : 's'} emitida${sinPago === 1 ? '' : 's'} sin cobrar por completo — ${mxn(facturacion.cartera.porCobrar)} por cobrar${facturacion.cartera.vencido > 0 ? ` (${mxn(facturacion.cartera.vencido)} ya vencido)` : ''}`,
+        href: `/dashboard/facturacion${sufijo}`,
+      });
+    }
+  }
+  if (alertas.length === 0) return null;
+
+  return (
+    <div className="mt-3 space-y-1.5">
+      {alertas.map((a) => (
+        <Link key={a.texto} href={a.href}
+          className="card p-3 flex items-center gap-2.5 hover:opacity-85 transition-opacity"
+          style={{ borderColor: 'var(--warn)' }}>
+          <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
+          <span className="text-[13px]">{a.texto}</span>
+          <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--muted)' }}>Ver →</span>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+async function AvisoEstado({
+  pAcred, pKpis, pAnomalias, pCfgFiscal, pGastosFiscales, pGastosFiscalesSeries, pFacturacion,
+}: {
+  pAcred: Promise<Acreditables | null>;
+  pKpis: Promise<DashboardKpis | null>;
+  pAnomalias: Promise<Anomalia[] | null>;
+  pCfgFiscal: Promise<LikidaConfig | null>;
+  pGastosFiscales: Promise<GastoFiscal[] | null>;
+  pGastosFiscalesSeries: Promise<GastosFiscalesSeries | null>;
+  pFacturacion: Promise<FacturacionClientes | null>;
+}) {
+  // La MISMA regla que `estadoPanel` (estado.ts), sobre las secciones de ESTA
+  // pantalla: "no hay nada" es una afirmación sobre el negocio y solo se hace
+  // cuando TODO cargó. No se reusa la función porque su forma pide viajes y
+  // liquidaciones, que aquí no se consultan — la regla sí se copia entera:
+  // todo caído es error, algo caído se enseña CON aviso.
+  const secciones = await Promise.all([
+    pAcred, pKpis, pAnomalias, pCfgFiscal, pGastosFiscales, pGastosFiscalesSeries, pFacturacion,
+  ]);
+  const caidas = secciones.filter((s) => s === null).length;
+  if (caidas === 0) return null;
+
+  if (caidas === secciones.length) {
+    return (
+      <div className="card p-6 mt-3" style={{ borderColor: 'var(--bad)' }}>
+        <p className="text-sm font-semibold tracking-tight m-0">No se pudieron cargar los datos</p>
+        <p className="mt-1.5 text-sm m-0" style={{ color: 'var(--muted)' }}>
+          Hubo un problema al leer del sistema. Recarga la página en un momento — esto NO significa
+          que no haya nada acreditable, significa que no se pudo leer.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="card p-4 flex items-start gap-3 mt-3" style={{ borderColor: 'var(--warn)' }}>
+      <span className="inline-block w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
+      <div>
+        <p className="text-sm font-semibold m-0">Faltan datos por cargar — esta pantalla está incompleta</p>
+        <p className="text-xs mt-1 m-0" style={{ color: 'var(--muted)' }}>
+          Una o más secciones no respondieron. No tomes estas cifras como el corte del periodo.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+async function BloqueAcreditables({ pAcred, pResumenPerdidas, periodoFiscal }: {
+  pAcred: Promise<Acreditables | null>;
+  pResumenPerdidas: Promise<ResumenPerdidas | null>;
+  periodoFiscal: Periodo;
+}) {
+  const [acred, resumenPerdidas] = await Promise.all([pAcred, pResumenPerdidas]);
+  if (acred === null) {
+    return (
+      <p className="text-sm" style={{ color: 'var(--muted)' }}>
+        No se pudo cargar lo acreditable de tus liquidaciones.
+      </p>
+    );
+  }
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+      <StatCard icono={<Landmark width={15} height={15} strokeWidth={1.75} />}
+        etiqueta={`IVA acreditable de tus liquidaciones — ${periodoFiscal.etiqueta}`}
+        valor={acred.iva} formato="mxn"
+        nota="LIVA art. 5 — lo que el motor certificó al cerrar cada liquidación" />
+      {/* La condición va en el rótulo, no solo en la nota — el
+          criterio de `liquidacion/acreditable.ts`: "Estímulo de
+          peaje 50%" a secas se lee como un derecho ya ganado. */}
+      <StatCard icono={<RouteIcon width={15} height={15} strokeWidth={1.75} />}
+        etiqueta={`Estímulo de peaje 50% — ${periodoFiscal.etiqueta} · sujeto a elegibilidad`}
+        valor={acred.peaje} formato="mxn"
+        nota="LIF 2026 art. 20, ap. A — base: subtotal SIN IVA de casetas con CFDI" />
+      {resumenPerdidas ? (
+        <StatCard icono={<ReceiptText width={15} height={15} strokeWidth={1.75} />}
+          etiqueta={`Recuperable pidiendo factura — ${periodoFiscal.etiqueta}`}
+          valor={resumenPerdidas.montoRecuperable} formato="mxn"
+          nota="Gasto cuya factura aún se puede pedir — el motor dice a quién, abajo" />
+      ) : (
+        <div className="card p-3 h-full flex items-center text-sm" style={{ color: 'var(--muted)' }}>
+          No se pudo calcular lo recuperable en este momento.
+        </div>
+      )}
+      {/* En LITROS, nunca en pesos — regla de producto: el
+          estímulo es cuota DOF (semanal) × litros, y la cuota no
+          vive aquí (decisión D2; `guion_demo.test.ts` la ata). */}
+      <StatCard icono={<Fuel width={15} height={15} strokeWidth={1.75} />}
+        etiqueta="Diésel elegible para el estímulo"
+        valor={acred.litrosDiesel} formato="litros"
+        nota="LIF 2026, art. 20-A: cuota semanal del DOF × litros — tu contador aplica la cuota fechada" />
+    </div>
+  );
+}
+
+/** El mismo bulto que el motor fiscal: rótulo, la fila de tarjetas del
+ *  periodo y el cuerpo del desglose de causas. */
+function EsqMotorFiscal() {
+  return (
+    <div className="card p-3" role="status" aria-label="Cargando">
+      <Barra alto={13} ancho="38%" />
+      <div className="mt-2 flex flex-wrap gap-2 items-stretch">
+        <div className="flex-1 min-w-[200px]"><Barra alto={100} className="rounded-xl" /></div>
+        <div className="flex-1 min-w-[200px]"><Barra alto={100} className="rounded-xl" /></div>
+      </div>
+      <div className="mt-2"><Barra alto={150} className="rounded-xl" /></div>
+    </div>
+  );
+}
+
+async function BloqueFiscal({ pResumenPerdidas, pResumenPerdidasSeries, periodoFiscal }: {
+  pResumenPerdidas: Promise<ResumenPerdidas | null>;
+  pResumenPerdidasSeries: Promise<Record<'semanal' | 'mensual' | 'historico', ResumenPerdidas> | null>;
+  periodoFiscal: Periodo;
+}) {
+  const [resumenPerdidas, resumenPerdidasSeries] = await Promise.all([pResumenPerdidas, pResumenPerdidasSeries]);
+  return (
+    <div className="card p-3">
+      <TituloSeccion>Tu motor fiscal — {periodoFiscal.etiqueta}</TituloSeccion>
+      <div className="mt-2 flex flex-wrap gap-2 items-stretch">
+        <MotorFiscalPeriodo series={resumenPerdidasSeries} />
+      </div>
+      <div className="mt-2">
+        <MotorFiscal resumen={resumenPerdidas} />
+      </div>
+    </div>
+  );
+}
+
+/** Rótulo + las tres cifras del desglose + la línea del estado ante el SAT. */
+function EsqDesgloseFiscal() {
+  return (
+    <div className="card p-3" role="status" aria-label="Cargando">
+      <Barra alto={13} ancho="55%" />
+      <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Barra key={i} alto={100} className="rounded-xl" />
+        ))}
+      </div>
+      <div className="mt-2"><Barra alto={12} ancho="80%" /></div>
+    </div>
+  );
+}
+
+async function BloqueDesglose({ pResumenFiscal, periodoFiscal }: {
+  pResumenFiscal: Promise<ResumenFiscal | null>;
+  periodoFiscal: Periodo;
+}) {
+  const resumenFiscal = await pResumenFiscal;
+  return (
+    <div className="card p-3">
+      <TituloSeccion>El gasto del periodo, por su suerte fiscal — {periodoFiscal.etiqueta}</TituloSeccion>
+      {resumenFiscal === null ? (
+        <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
+          No se pudo leer el desglose fiscal en este momento.
+        </p>
+      ) : resumenFiscal.n === 0 ? (
+        <div className="mt-2">
+          <EstadoVacio icono={<FileSearch width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+            Todavía no hay comprobantes leídos en este ejercicio. En cuanto los operadores manden
+            los primeros por WhatsApp, aquí se ve cuánto del gasto sostiene su IVA y cuánto no.
+          </EstadoVacio>
+        </div>
+      ) : (
+        <>
+          <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <StatCard icono={<Wallet width={15} height={15} strokeWidth={1.75} />}
+              etiqueta="Gasto comprobado leído" valor={resumenFiscal.gastoTotal} formato="mxn"
+              nota={`${resumenFiscal.n} comprobante${resumenFiscal.n === 1 ? '' : 's'} · ${resumenFiscal.conCfdi} con CFDI, ${resumenFiscal.sinCfdi} sin CFDI`} />
+            <StatCard icono={<Landmark width={15} height={15} strokeWidth={1.75} />}
+              etiqueta="IVA acreditable documentado" valor={resumenFiscal.ivaAcreditable} formato="mxn"
+              nota="LIVA art. 5 — solo el IVA desglosado en CFDI que lo sostiene" />
+            <StatCard icono={<FileX2 width={15} height={15} strokeWidth={1.75} />}
+              etiqueta="IVA desglosado que NO se acredita" valor={resumenFiscal.ivaNoAcreditable} formato="mxn"
+              nota="Las dos cubetas suman todo el IVA desglosado del periodo — crúzalo con calculadora" />
+          </div>
+          <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+            Estado ante el SAT de los {resumenFiscal.conCfdi} CFDI: {resumenFiscal.vigentes} vigente{resumenFiscal.vigentes === 1 ? '' : 's'} · {resumenFiscal.porValidar} por validar · {resumenFiscal.cancelados} cancelado{resumenFiscal.cancelados === 1 ? '' : 's'}.
+            {/* "Por validar" no es "inválido": es "no comprobado" —
+                la distinción viene del propio tipo ResumenFiscal. */}
+            {resumenFiscal.conCfdiSinDesglose > 0 && (
+              ` ${resumenFiscal.conCfdiSinDesglose} traen CFDI pero sin desglose de IVA leído — su IVA existe en el papel y aquí no se afirma.`
+            )}
+          </p>
+        </>
+      )}
+    </div>
   );
 }
