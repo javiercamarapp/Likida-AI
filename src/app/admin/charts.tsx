@@ -49,14 +49,63 @@ export function Tendencia({ valor }: { valor: number | null }) {
  *  convención que ya fijaba DESIGN.md §3 ("comparativos en gris"). Se escala
  *  al MISMO max que `datos` (dos escalas mentirían la comparación) y solo se
  *  pinta cuando el llamador tiene la serie real — jamás se sintetiza. */
+/**
+ * A partir de cuántos puntos una serie diaria se agrupa por semana. 90 días =
+ * un trimestre: por debajo, cada barra/punto es un día que alguien puede
+ * señalar; por encima, los puntos son más angostos que su propio marcador y
+ * lo único que se lee es la FORMA de la curva — que la semana conserva.
+ */
+export const UMBRAL_AGRUPAR_SEMANA = 90;
+
+/**
+ * Suma los valores de una serie diaria en cubetas de 7 días, ancladas al FINAL
+ * (la última cubeta termina en el último día, que es el que el usuario mira).
+ * Cada cubeta se rotula con su primer día.
+ *
+ * FE-18 (auditoría prod): `AreaChartSimple` pinta un `<g>` por punto con dos
+ * `<circle>`, un `<rect>` y un `<text>` de tooltip. Con "Todo" seleccionado y
+ * un año de operación eso son ~1,800 nodos SVG en una tarjeta de 640×240:
+ * la página tarda en pintar y los puntos quedan a menos de 2 px uno de otro,
+ * más juntos que el radio de su propio marcador.
+ *
+ * SUMA, no promedia: las series que pasan por aquí son magnitudes por día
+ * (costo, liquidado, facturas procesadas) y la suma de la semana es una cifra
+ * real que se puede cruzar. Un promedio sería un número que no aparece en
+ * ninguna parte de la base.
+ */
+export function agruparPorSemana(
+  datos: Array<{ dia: string; valor: number }>,
+): Array<{ dia: string; valor: number }> {
+  const cubetas: Array<{ dia: string; valor: number }> = [];
+  // Se recorre de atrás hacia adelante en tandas de 7 para que la última
+  // cubeta sea una semana COMPLETA que termina hoy; el resto (los días que
+  // sobran al principio) forma la primera, más corta.
+  for (let fin = datos.length; fin > 0; fin -= 7) {
+    const ini = Math.max(0, fin - 7);
+    const tanda = datos.slice(ini, fin);
+    cubetas.unshift({ dia: tanda[0].dia, valor: tanda.reduce((s, d) => s + d.valor, 0) });
+  }
+  return cubetas;
+}
+
 export function AreaChartSimple({
-  datos, etiquetaValor, comparativa, etiquetaComparativa = 'periodo anterior',
+  datos: datosCrudos, etiquetaValor, comparativa: comparativaCruda, etiquetaComparativa = 'periodo anterior',
 }: {
   datos: Array<{ dia: string; valor: number }>;
   etiquetaValor: (v: number) => string;
   comparativa?: Array<{ dia: string; valor: number }>;
   etiquetaComparativa?: string;
 }) {
+  // FE-18: por encima del trimestre se agrupa por semana. El rótulo lo DICE
+  // (regla del repo: un rótulo tiene que ser verdad) — una gráfica que suma
+  // siete días por punto sin avisar se lee como si cada punto fuera un día, y
+  // el usuario compara la altura contra la de otra tarjeta que sí es diaria.
+  const agrupada = datosCrudos.length > UMBRAL_AGRUPAR_SEMANA;
+  const datos = agrupada ? agruparPorSemana(datosCrudos) : datosCrudos;
+  // La comparativa se agrupa con el MISMO criterio que la serie principal:
+  // dos granularidades en la misma gráfica mentirían la comparación igual que
+  // dos escalas (por eso comparten `max` más abajo).
+  const comparativa = comparativaCruda && agrupada ? agruparPorSemana(comparativaCruda) : comparativaCruda;
   const ANCHO = 640, ALTO = 240, PAD_IZQ = 8, PAD_DER = 8, PAD_SUP = 16, PAD_INF = 28;
   const w = ANCHO - PAD_IZQ - PAD_DER, h = ALTO - PAD_SUP - PAD_INF;
   const comp = comparativa && comparativa.length > 1 ? comparativa : null;
@@ -74,6 +123,11 @@ export function AreaChartSimple({
 
   return (
     <>
+    {agrupada && (
+      <div className="mb-1 text-[11px]" style={{ color: 'var(--muted)' }}>
+        Agrupado por semana ({datos.length} semanas) — cada punto suma sus 7 días.
+      </div>
+    )}
     {comp && (
       <div className="flex items-center gap-3 mb-1 text-[11px]" style={{ color: 'var(--muted)' }}>
         <span className="inline-flex items-center gap-1.5"><span className="inline-block w-4 border-t-2 rounded" style={{ borderColor: 'var(--marca)' }} /> actual</span>
