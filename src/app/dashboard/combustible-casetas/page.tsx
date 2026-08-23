@@ -188,10 +188,10 @@ export default async function CombustibleCasetasPage({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
               <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Gastado en combustible" valor={diesel?.total ?? 0} formato="mxn"
-                nota={diesel ? `${diesel.n} cargas registradas` : 'Sin cargas registradas todavía'} />
+                nota={diesel ? `${numero(diesel.n)} cargas registradas` : 'Sin cargas registradas todavía'} />
               <KpiTile icono={<RouteIcon width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Gastado en casetas" valor={caseta?.total ?? 0} formato="mxn"
-                nota={caseta ? `${caseta.n} casetas registradas` : 'Sin casetas registradas todavía'} />
+                nota={caseta ? `${numero(caseta.n)} casetas registradas` : 'Sin casetas registradas todavía'} />
               <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Litros elegibles para el estímulo" valor={acred?.litrosDiesel ?? 0} formato="litros"
                 nota="LIF 2026, Art. 20-A" />

@@ -13,7 +13,7 @@ import { cuadrarDesdeDB } from './cuadre/desde_db';
 // copias son dos oportunidades de que una se quede atrás.
 import { traerResumenCostoIaTenant } from './costos';
 import { filasImprimibles } from './liquidacion/omitidos';
-import { round2, hoyMx } from '@/lib/formato';
+import { round2, hoyMx, inicioDiaMx } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 
 // Los dos bordes de PostgREST (error por valor, y el recorte silencioso a
@@ -69,11 +69,18 @@ export interface DashboardKpis {
  * movía la gráfica de barras — un control de fecha que no cambia los números
  * de abajo enseña a desconfiar del control.
  */
-function corteVentana(ventanaDias?: number, hoy: string = new Date().toISOString().slice(0, 10)): string | null {
+function corteVentana(ventanaDias?: number, hoy: string = hoyMx()): string | null {
   if (!ventanaDias) return null;
+  // DAT-08 (auditoría prod): `hoy` era el día UTC y el corte se devolvía como
+  // medianoche UTC — las 18:00 del día anterior en México. La ventana "últimos
+  // 7 días" arrancaba seis horas antes de lo que decía, y entre las 18:00 y
+  // las 24:00 el propio "hoy" era ya el de mañana. El día se calcula en México
+  // (`hoyMx`) y el corte se ancla a la medianoche DE MÉXICO (`inicioDiaMx`).
+  // La aritmética intermedia sigue en UTC a propósito: sumar y restar días
+  // sobre un día de calendario no es una conversión de zona.
   const d = new Date(`${hoy}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() - (ventanaDias - 1));
-  return d.toISOString();
+  return inicioDiaMx(d.toISOString().slice(0, 10));
 }
 
 export interface ComparativoPeriodo {

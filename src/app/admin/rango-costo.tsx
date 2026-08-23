@@ -12,7 +12,13 @@ import { usd } from '@/lib/utils';
  *  tarjeta `.card` opaca más chica, para que se lea sobrepuesta sobre el
  *  panel grande en vez de dos glass iguales pegados uno sobre otro. */
 export default function GraficaCostoConRango({ porDia, anidado = false }: { porDia: Array<{ dia: string; costoUsd: number }>; anidado?: boolean }) {
-  const [dias, setDias] = useState<7 | 30 | 0>(0); // 0 = todo
+  // FE-18 (auditoría prod): el default era `0` = TODO el histórico. Con un año
+  // de operación son ~365 puntos y `AreaChartSimple` pinta un `<g>` por punto
+  // (dos círculos, un rect y un texto de tooltip cada uno): la pantalla abría
+  // con miles de nodos SVG que casi nadie miraba, y la etiqueta del eje se
+  // amontonaba hasta ser ilegible. 30 días es la ventana con la que se toma
+  // una decisión sobre el costo de IA; "Todo" sigue a un clic.
+  const [dias, setDias] = useState<7 | 30 | 0>(30);
 
   const datos = (dias === 0 ? porDia : porDia.slice(-dias)).map((d) => ({ dia: d.dia, valor: d.costoUsd }));
 

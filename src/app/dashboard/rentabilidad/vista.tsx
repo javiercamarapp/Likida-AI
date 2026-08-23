@@ -90,10 +90,10 @@ export function VistaRentabilidad({
                   </div>
                   <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                     {rentabilidad.margenPct !== null
-                      ? `Margen: ${rentabilidad.margenPct}% — medido solo sobre los ${rentabilidad.viajesConIngreso} viajes con ingreso capturado.`
+                      ? `Margen: ${rentabilidad.margenPct}% — medido solo sobre los ${numero(rentabilidad.viajesConIngreso)} viajes con ingreso capturado.`
                       : 'Sin ingreso capturado, el margen no se calcula.'}
                     {rentabilidad.viajesSinIngreso > 0
-                      && ` ${rentabilidad.viajesSinIngreso} viajes sin ingreso quedan fuera de esta medición.`}
+                      && ` ${numero(rentabilidad.viajesSinIngreso)} viajes sin ingreso quedan fuera de esta medición.`}
                   </p>
                   {/* Qué NO trae esa cifra. Va aquí y no en un tooltip porque
                       es la diferencia entre "este viaje dejó dinero" y "este

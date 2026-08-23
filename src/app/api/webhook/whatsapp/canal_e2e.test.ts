@@ -17,8 +17,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import crypto from 'node:crypto';
 import type { Gasto, Viaje, Operador } from '@/types/likida';
+import { hoyMx } from '@/lib/formato';
 
-const HOY = new Date().toISOString().slice(0, 10);
+// DAT-28: el día de MÉXICO, como el que `ventanaDelViaje` usa desde el
+// arreglo. Con el día UTC, corriendo la prueba después de las 18:00 hora local
+// los comprobantes quedaban fechados MAÑANA y el motor los marcaba —con razón—
+// como del futuro.
+const HOY = hoyMx();
 const VIAJE: Viaje = { id: 'v1', folio: 'VJ-1', origen: 'Mérida', destino: 'Cancún', anticipo: 8000, fechaInicio: HOY };
 const OPERADOR: Operador = { id: 'o1', nombre: 'Juan Pérez', telefono: '5219993700779', terminal: 'Mérida' };
 const GASTOS: Gasto[] = [

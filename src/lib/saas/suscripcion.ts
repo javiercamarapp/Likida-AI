@@ -577,6 +577,11 @@ export async function aplicarFactura(datos: {
   iva?: number | null;
   moneda: string;
   pagada: boolean;
+  /** El instante en que STRIPE registró el pago (`status_transitions.paid_at`).
+   *  `null`/ausente cae al reloj de este proceso, que es lo que había antes.
+   *  DAT-23: sellar con `new Date()` fecha el REINTENTO del webhook, no el
+   *  cobro — y un reintento que cruza la medianoche mueve el cobro de mes. */
+  pagadaEn?: string | null;
   urlPago?: string | null;
 }): Promise<void> {
   // El CHECK `factura_saas_desglose_coherente` (0065) exige que los dos vayan
@@ -594,7 +599,7 @@ export async function aplicarFactura(datos: {
       iva: hayDesglose ? datos.iva : null,
       moneda: datos.moneda,
       estado: datos.pagada ? 'pagada' : 'fallida',
-      pagada_en: datos.pagada ? new Date().toISOString() : null,
+      pagada_en: datos.pagada ? (datos.pagadaEn ?? new Date().toISOString()) : null,
       stripe_invoice_id: datos.stripeInvoiceId,
       url_pago: datos.urlPago ?? null,
     },
