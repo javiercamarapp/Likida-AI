@@ -5,7 +5,7 @@ import {
   getKpis, getLiquidaciones, contarViajes, getLiquidacionesPorDia,
   getHechosSolos, getDineroObservadoPorTipo, getStatsPorOperador, getValorAhorro,
 } from '@/lib/likida/analytics';
-import { getConfig } from '@/lib/likida/config';
+import { getConfig, type LikidaConfig } from '@/lib/likida/config';
 import { traerResumenCostoIaTenant } from '@/lib/likida/costos';
 import { ultimasCorridas } from '@/lib/likida/agentes/corridas';
 import { VistaAgenteLiquidacion, type ExtraAgenteLiquidacion } from './vista';
@@ -16,6 +16,7 @@ import { validarUmbralConfianza, guardarEstrategiaAgente } from '@/lib/likida/ag
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { revalidatePath } from 'next/cache';
 import { FormaEstrategiaLiquidacion, type ResultadoEstrategia } from '../estrategia-forma';
+import { Bloque, EsqTabla, vigilar } from '../../bloque';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,8 +30,22 @@ function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 /**
  * Agente de Liquidación de Ruta — v2 (13-ago-2026: "gráficas, algo visual").
  * Esta puerta trae sesión y TODOS los datos; el dibujo vive en `vista.tsx`
- * (patrón page/vista). Los datos primarios (KPIs, cola) fallan CERRADO: base
- * caída = página caída. Los secundarios degradan a su leyenda.
+ * (patrón page/vista).
+ *
+ * ── FE-14 (22-ago-2026): TRECE CONSULTAS QUE YA NO SE ESPERAN ENTRE SÍ ────
+ *
+ * Aquí había un `Promise.all` de trece lecturas y la página no devolvía nada
+ * hasta la última: la tabla "Esperan tu revisión" —la única razón por la que
+ * un humano abre esta pantalla— aterrizaba al mismo tiempo que la serie de 84
+ * días del calendario de cierres. Ahora las trece se lanzan igual de juntas y
+ * se esperan DENTRO de la tarjeta que las usa (ver `bloque.tsx`).
+ *
+ * Los primarios (KPIs, cola) siguen sin `safe`: no se pinta "0 por revisar"
+ * ciego. Lo que cambia es DÓNDE se nota la caída — antes reventaba la ruta
+ * entera vía `error.tsx`; ahora `LimiteError` la contiene en su tarjeta, con
+ * su `EstadoError` y su botón de reintento, y las hermanas que sí leyeron
+ * siguen en pie. La regla que importaba —jamás un cero sin medir— queda
+ * intacta; la que se cae es la de arrastrar la pantalla completa.
  */
 export default async function PaginaAgenteLiquidacion({
   searchParams,
@@ -44,46 +59,51 @@ export default async function PaginaAgenteLiquidacion({
   const base = sp.tenant ? `?tenant=${sp.tenant}` : sp.vista ? `?vista=${sp.vista}` : '';
   const sufijo = sp.rol ? `${base}${base ? '&' : '?'}rol=${sp.rol}` : base;
 
-  const [
-    kpis, liqs, costo, abiertos, enCuadre, liquidados, porDia, hechos, porTipo, stats, ahorro, config, corridas,
-  ] = await Promise.all([
-    // Primarios: sin catch a propósito — no se pinta "0 por revisar" ciego.
-    getKpis(tenantId),
-    getLiquidaciones(tenantId),
-    // Secundarios: cada uno degrada solo.
-    traerResumenCostoIaTenant(tenantId, 'pagina_agente_liquidacion'),
-    contarViajes(tenantId, ['abierto']),
-    contarViajes(tenantId, ['en_cuadre']),
-    contarViajes(tenantId, ['liquidado']),
-    safe(() => getLiquidacionesPorDia(tenantId, 84)),
-    safe(() => getHechosSolos(tenantId)),
-    safe(() => getDineroObservadoPorTipo(tenantId)),
-    safe(() => getStatsPorOperador(tenantId)),
-    safe(() => getValorAhorro(tenantId)),
-    safe(() => getConfig(tenantId)),
-    // La ficha de corridas (B3): el corazón del producto era el ÚNICO de los
-    // 7 agentes sin bitácora hasta la Fase 1 del blueprint (0115); su corrida
-    // es el cierre por WhatsApp. null = no se pudo leer, y la ficha lo dice.
-    safe(() => ultimasCorridas(tenantId, 'liquidacion')),
-  ]);
+  // Las trece, lanzadas de una. `vigilar` sobre las que PUEDEN rechazar: una
+  // promesa sin oyente que revienta antes de que su bloque la espere se
+  // cuenta como unhandledRejection (ver la nota en `bloque.tsx`).
+  const pKpis = vigilar(getKpis(tenantId));
+  const pLiqs = vigilar(getLiquidaciones(tenantId));
+  const pCosto = vigilar(traerResumenCostoIaTenant(tenantId, 'pagina_agente_liquidacion'));
+  const pAbiertos = vigilar(contarViajes(tenantId, ['abierto']));
+  const pEnCuadre = vigilar(contarViajes(tenantId, ['en_cuadre']));
+  const pLiquidados = vigilar(contarViajes(tenantId, ['liquidado']));
+  // Secundarios: cada uno degrada solo.
+  const pPorDia = safe(() => getLiquidacionesPorDia(tenantId, 84));
+  const pHechos = safe(() => getHechosSolos(tenantId));
+  const pPorTipo = safe(() => getDineroObservadoPorTipo(tenantId));
+  const pStats = safe(() => getStatsPorOperador(tenantId));
+  const pAhorro = safe(() => getValorAhorro(tenantId));
+  const pConfig: Promise<LikidaConfig | null> = safe(() => getConfig(tenantId));
+  // La ficha de corridas (B3): el corazón del producto era el ÚNICO de los
+  // 7 agentes sin bitácora hasta la Fase 1 del blueprint (0115); su corrida
+  // es el cierre por WhatsApp. null = no se pudo leer, y la ficha lo dice.
+  const pCorridas = safe(() => ultimasCorridas(tenantId, 'liquidacion'));
 
+  // Derivadas: `.then` sobre promesas YA lanzadas — no añaden espera, solo
+  // dicen qué hacer cuando lleguen, y agrupan lo que una MISMA tarjeta pinta.
   const extra: ExtraAgenteLiquidacion = {
     puedeVerReglas: puedeVerRuta(rol, '/dashboard/configuracion'),
-    actividadIa: 'ok' in costo
-      ? costo.ok.porFase.filter((f) => f.fase !== 'chat').reduce((s, f) => s + f.n, 0)
-      : null,
-    funnel: { abiertos, enCuadre, porRevisar: kpis.porRevisar, liquidados },
-    cierresPorDia: porDia?.map((d) => ({ fecha: d.dia, valor: d.valor })) ?? null,
-    hechos,
-    huerfanos: ahorro ? { resueltos: ahorro.huerfanosResueltos, totales: ahorro.huerfanosTotales } : null,
-    docsProcesados: ahorro?.documentosProcesados ?? null,
-    porTipo,
-    operadores: stats
+    ciclo: vigilar(Promise.all([pAbiertos, pEnCuadre, pKpis, pLiquidados]).then(
+      ([abiertos, enCuadre, kpis, liquidados]) => ({ abiertos, enCuadre, porRevisar: kpis.porRevisar, liquidados }))),
+    cierresPorDia: pPorDia.then((porDia) => porDia?.map((d) => ({ fecha: d.dia, valor: d.valor })) ?? null),
+    // "Lo que hizo solo" es UNA tarjeta con cuatro fuentes: van juntas para
+    // que aterrice completa y no a pedazos.
+    hizoSolo: vigilar(Promise.all([pHechos, pAhorro, pCosto]).then(([hechos, ahorro, costo]) => ({
+      hechos,
+      huerfanos: ahorro ? { resueltos: ahorro.huerfanosResueltos, totales: ahorro.huerfanosTotales } : null,
+      docsProcesados: ahorro?.documentosProcesados ?? null,
+      actividadIa: 'ok' in costo
+        ? costo.ok.porFase.filter((f) => f.fase !== 'chat').reduce((s, f) => s + f.n, 0)
+        : null,
+    }))),
+    porTipo: pPorTipo,
+    operadores: pStats.then((stats) => stats
       ?.filter((o) => o.diferencias > 0)
       .sort((a, b) => b.diferencias - a.diferencias)
       .slice(0, 6)
-      .map((o) => ({ etiqueta: o.nombre, valor: o.diferencias })) ?? null,
-    politica: config?.politica ?? null,
+      .map((o) => ({ etiqueta: o.nombre, valor: o.diferencias })) ?? null),
+    politica: pConfig.then((config) => config?.politica ?? null),
   };
 
   async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
@@ -104,23 +124,44 @@ export default async function PaginaAgenteLiquidacion({
 
   return (
     <VistaAgenteLiquidacion
-      kpis={kpis}
-      cola={liqs.filter((l) => l.estatus === 'revisar')}
-      cierres={liqs.filter((l) => l.estatus !== 'revisar').slice(0, 5)}
+      kpis={pKpis}
+      liquidaciones={pLiqs}
       extra={extra}
       sufijo={sufijo}
       notificaciones={
         <>
           {/* La estrategia (B4): solo el dueño, y solo con la config actual
               legible — sin ella, la forma guardaría a ciegas. */}
-          {puedeAdministrar(rol) && config !== null && (
-            <FormaEstrategiaLiquidacion accion={guardarEstrategia}
-              umbralActual={config.agentes.liquidacion.umbralConfianza} />
+          {puedeAdministrar(rol) && (
+            <Bloque mensaje="No se pudo leer la estrategia del agente." esqueleto={null}>
+              <BloqueEstrategia pConfig={pConfig} accion={guardarEstrategia} />
+            </Bloque>
           )}
-          <FichaCorridas corridas={corridas} />
-          <SeccionNotificaciones tenantId={tenantId} agenteId="liquidacion" />
+          <Bloque mensaje="No se pudo leer la bitácora de corridas." esqueleto={<EsqTabla filas={3} />}>
+            <BloqueCorridas pCorridas={pCorridas} />
+          </Bloque>
+          {/* Notificaciones hace SUS propias lecturas (config del canal,
+              usuarios avisables): en su propio boundary no retiene a nadie. */}
+          <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
+            <SeccionNotificaciones tenantId={tenantId} agenteId="liquidacion" />
+          </Bloque>
         </>
       }
     />
   );
+}
+
+async function BloqueEstrategia({ pConfig, accion }: {
+  pConfig: Promise<LikidaConfig | null>;
+  accion: (previo: ResultadoEstrategia, fd: FormData) => Promise<ResultadoEstrategia>;
+}) {
+  const config = await pConfig;
+  if (config === null) return null;
+  return <FormaEstrategiaLiquidacion accion={accion} umbralActual={config.agentes.liquidacion.umbralConfianza} />;
+}
+
+async function BloqueCorridas({ pCorridas }: {
+  pCorridas: Promise<Awaited<ReturnType<typeof ultimasCorridas>> | null>;
+}) {
+  return <FichaCorridas corridas={await pCorridas} />;
 }
