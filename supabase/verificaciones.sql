@@ -8013,3 +8013,74 @@ begin
     coalesce(nullif(trim(sin_datos), ''), '—'),
     caza_la_fuga;
 end $$;
+
+-- ── 144. El ejecutor ARCO cancela de verdad, y NO se lleva la contabilidad (mig. 0173) ──
+--
+-- P0-6 de la auditoría externa: `solicitud_arco` sólo registraba. Ahora
+-- `ejecutar_arco_cancelacion` (0173) anonimiza al titular, borra lo que es sólo
+-- suyo, marca sus fotos para Storage y deja evidencia — sin tocar el gasto con
+-- CFDI, que es contabilidad de la flota y el CFF art. 30 obliga a conservar
+-- cinco años.
+--
+-- Esperado: ARCO_0173  ok=t  seudonimo=t  tel_fuera=t  wa_fuera=0  foto_en_cola=1
+--                      gasto_vive=1  cfdi_vive=t  evidencia=t  cerrada=t
+--                      otra_flota_rebota=t  acceso_rebota=t
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; va uuid; sa uuid; sb uuid; s_acc uuid;
+  conv uuid; g_id uuid;
+  r jsonb;
+  ok boolean; seudonimo_ok boolean; tel_fuera boolean;
+  wa_quedan int; foto_en_cola int; gasto_vive int; cfdi_vive boolean;
+  evidencia_ok boolean; cerrada boolean;
+  otra_flota_rebota boolean; acceso_rebota boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ ARCO A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ ARCO B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta,'Juan Perez','+520000017301') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (tb,'Otro','+520000017302') returning id into ob;
+  insert into viaje (tenant_id, operador_id) values (ta, oa) returning id into va;
+
+  -- Un gasto CON CFDI: es contabilidad, tiene que sobrevivir.
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, cfdi_uuid, imagen_url)
+    values (ta, va,'diesel', 1000, current_date - 1, 'zzz-arco-cfdi-1',
+            'https://x.supabase.co/storage/v1/object/public/comprobantes/ta/foto-arco.jpg')
+    returning id into g_id;
+
+  -- Conversación de WhatsApp: es sólo suya, se va.
+  insert into wa_conversacion (tenant_id, operador_id, telefono) values (ta, oa,'+520000017301') returning id into conv;
+
+  insert into solicitud_arco (tenant_id, operador_id, tipo, canal, vence_en)
+    values (ta, oa,'cancelacion','whatsapp', current_date + 15) returning id into sa;
+  insert into solicitud_arco (tenant_id, operador_id, tipo, canal, vence_en)
+    values (tb, ob,'cancelacion','whatsapp', current_date + 15) returning id into sb;
+  insert into solicitud_arco (tenant_id, operador_id, tipo, canal, vence_en)
+    values (ta, oa,'acceso','whatsapp', current_date + 15) returning id into s_acc;
+
+  r := public.ejecutar_arco_cancelacion(ta, sa);
+  ok := (r->>'ok')::boolean;
+
+  select nombre like 'Operador %', telefono like 'anon:%' into seudonimo_ok, tel_fuera
+    from operador where id = oa;
+  select count(*) into wa_quedan from wa_conversacion where operador_id = oa;
+  select count(*) into foto_en_cola from storage_huerfano_candidato
+    where motivo = 'arco' and nombre like '%foto-arco.jpg';
+
+  -- LA CONTABILIDAD SIGUE AHÍ: el gasto y su CFDI no son datos del chofer.
+  select count(*) into gasto_vive from gasto where id = g_id;
+  select cfdi_uuid = 'zzz-arco-cfdi-1' into cfdi_vive from gasto where id = g_id;
+
+  select evidencia is not null and evidencia ? 'operador_anonimizado',
+         estado = 'resuelta' and resuelta_en is not null and ejecutada_en is not null
+    into evidencia_ok, cerrada
+    from solicitud_arco where id = sa;
+
+  -- La solicitud de OTRA flota no existe para esta llamada.
+  otra_flota_rebota := not ((public.ejecutar_arco_cancelacion(ta, sb))->>'ok')::boolean;
+  -- Un ACCESO no se ejecuta solo: lo contesta una persona.
+  acceso_rebota := not ((public.ejecutar_arco_cancelacion(ta, s_acc))->>'ok')::boolean;
+
+  raise exception E'ARCO_0173  ok=%  seudonimo=%  tel_fuera=%  wa_fuera=%  foto_en_cola=%  gasto_vive=%  cfdi_vive=%  evidencia=%  cerrada=%  otra_flota_rebota=%  acceso_rebota=%   (esperado t / t / t / 0 / 1 / 1 / t / t / t / t / t)',
+    ok, seudonimo_ok, tel_fuera, wa_quedan, foto_en_cola, gasto_vive, cfdi_vive,
+    evidencia_ok, cerrada, otra_flota_rebota, acceso_rebota;
+end $$;

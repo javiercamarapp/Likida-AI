@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { borrarStorageMarcado } from '@/lib/likida/storage_borrado';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
@@ -122,9 +123,32 @@ export async function GET(req: Request) {
       if (parcial) logger.warn('cron.purgar.parcial', { vuelta: vueltas, transcurridoMs: Date.now() - inicio });
     } while (parcial && vueltas < MAX_VUELTAS && Date.now() - inicio + PLAZO_VUELTA_MS < (maxDuration - 5) * 1000);
 
-    logger.info('cron.purgar.ok', { ...data, vueltas });
+    // ── EL BORRADO DE STORAGE (23-ago-2026) ────────────────────────────────
+    // `mantenimiento_de_datos` MARCA archivos en `storage_huerfano_candidato`
+    // porque Supabase prohíbe borrar `storage.objects` desde SQL — pero nadie
+    // vaciaba esa cola, así que los archivos quedaban marcados para siempre.
+    // Con el ejecutor ARCO (0173) eso deja de ser deuda y pasa a ser un
+    // incumplimiento: una cancelación que promete borrar las fotos del titular
+    // y las deja en el bucket es una promesa con evidencia escrita de haberse
+    // hecho.
+    //
+    // Va DESPUÉS de la purga y fuera del `do/while`: la purga es la que llena
+    // la cola, así que borrar antes sería borrar la cola de ayer. Y su fallo no
+    // tumba la corrida —las filas ya se purgaron— pero sí sale en el cuerpo,
+    // para que una cola que no baja se vea desde el panel.
+    let storage: Awaited<ReturnType<typeof borrarStorageMarcado>> | null = null;
+    try {
+      storage = await borrarStorageMarcado();
+      if (storage.fallidos > 0) {
+        logger.warn('cron.purgar.storage_con_fallos', { ...storage });
+      }
+    } catch (e) {
+      logger.error('cron.purgar.storage_excepcion', { err: e instanceof Error ? e.message : String(e) });
+    }
+
+    logger.info('cron.purgar.ok', { ...data, vueltas, storage });
     await registrarLatido('purgar', parcial ? 'parcial' : 'ok', { vueltas });
-    return NextResponse.json({ corrio: true, ...data, vueltas });
+    return NextResponse.json({ corrio: true, ...data, vueltas, storage });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     // Mismo criterio que el `if (error)` de arriba, para el camino que lanza.
