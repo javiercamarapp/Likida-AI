@@ -1203,12 +1203,22 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // AUDITORÍA 18, A7: y "electrónico" es la lista cerrada de la RMF 9.1.8
     // fr. III (`MEDIOS_ELECTRONICOS_PEAJE`), no "todo lo que no sea efectivo".
     const peajePagadoElectronicamente = !!g.formaPago && (MEDIOS_ELECTRONICOS_PEAJE as readonly string[]).includes(g.formaPago);
-    // FASE 3: `elegiblePeaje === false` es el perfil confirmando que esta
-    // flota no califica (ingresos ≥ $300M o parte relacionada) — ver el
-    // campo en la interfaz de arriba. `undefined`/`true` preservan la
-    // conducta de siempre.
+    // Dos condiciones distintas, ambas necesarias — se arreglaron el mismo día
+    // por caminos separados y aquí conviven:
+    //
+    //   1. QUIÉN puede acreditar. `elegiblePeaje === false` es el perfil
+    //      confirmando que esta flota no califica (ingresos ≥ $300M o parte
+    //      relacionada). `undefined`/`true` preservan la conducta de siempre.
+    //   2. SOBRE QUÉ se acredita. La base es lo que quedó DESPUÉS del
+    //      `@Descuento` del emisor — un atributo opcional del CFDI 4.0 que
+    //      antes no se leía en ninguna capa, así que una factura de casetas
+    //      con descuento acreditaba sobre el SubTotal íntegro. Se acota a 0
+    //      por si llega un CFDI mal formado: una base negativa no existe.
     const elegiblePeaje = input.elegiblePeaje ?? true;
-    if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0 && peajePagadoElectronicamente && elegiblePeaje) peajeAcreditable += (g.subTotal as number) * peajeFactor;
+    if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0 && peajePagadoElectronicamente && elegiblePeaje) {
+      const baseDelEstimulo = Math.max(0, (g.subTotal as number) - (g.descuento ?? 0));
+      peajeAcreditable += baseDelEstimulo * peajeFactor;
+    }
     // IEPS de DIÉSEL (7): el estímulo (LIF 2026 art. 20, ap. A) es SOLO diésel — NO
     // gasolina. Se identifica por la clave de producto del SAT (15101505).
     const clavesDiesel = input.estimulos?.clavesDieselIeps ?? [];

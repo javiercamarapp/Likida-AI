@@ -167,7 +167,13 @@ function partirEnClavesYEsperado(mensaje) {
   if (conProsa) esperados[ultimo] = conProsa[1].trim();
 
   // Claves = todo token `identificador=` en el lado izquierdo, en orden.
-  const clavesRe = /([\wÁÉÍÓÚáéíóúñÑ-]+)=/g;
+  // El `+` entra en la clase: hay claves como `facturas+2=t` y sin él el parser
+  // partía en el `+`, tomaba "2" como clave y le colgaba a la anterior un valor
+  // de "t facturas+". El bloque PASABA y el CI lo reportaba como fallo — un
+  // parser frágil convierte pruebas buenas en rojo, que es la forma más rápida
+  // de que un equipo deje de mirar el CI. No se añade `/`: en `anon=f/f` la
+  // barra es parte del VALOR, no separador de claves.
+  const clavesRe = /([\wÁÉÍÓÚáéíóúñÑ+-]+)=/g;
   const posiciones = [];
   let cm;
   while ((cm = clavesRe.exec(izq))) posiciones.push({ clave: cm[1], desde: clavesRe.lastIndex });
@@ -350,9 +356,23 @@ if (fallas > 0 || noLanzaron > 0) {
   console.log('\nLa batería de verificaciones.sql/capa1 NO pasó.');
   process.exit(1);
 }
+
+// 23-AGO-2026: `sin_calificar` PASA A SER FALLA.
+//
+// Antes esto solo imprimía un aviso y el proceso salía con 0. Es decir: un
+// bloque que verifica una migración de dinero podía quedar sin calificar y el
+// CI decía "La batería pasó". Un verde que no distingue "verifiqué y está
+// bien" de "no supe leer el resultado" no es una compuerta: es un adorno.
+//
+// Si un bloque no se puede calificar, el arreglo es hacer su resultado
+// explícito en verificaciones.sql, no bajarle el listón al CI.
 if (sinCalificar > 0) {
   console.log(
-    '\nTodo lo calificable pasó. Hay bloques que el parser no pudo calificar con certeza — revísalos arriba.',
+    `\n${sinCalificar} bloque(s) que el parser NO pudo calificar con certeza — revísalos arriba.\n` +
+      'Un bloque sin calificar cuenta como falla: el CI no puede afirmar que pasó algo que no leyó.\n' +
+      'Arréglalo haciendo explícito el resultado esperado del bloque, no relajando esta comprobación.',
   );
+  console.log('\nLa batería de verificaciones.sql/capa1 NO pasó.');
+  process.exit(1);
 }
 console.log('\nLa batería pasó.');

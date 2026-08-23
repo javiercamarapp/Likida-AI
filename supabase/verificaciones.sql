@@ -5842,7 +5842,7 @@ end $$;
 --   RESUMEN_NEGOCIO_0153  a=2  b=1  suma=t  facturas+2=t  dia31=2  dia01=f  anon=f  auth=f  svc=t  idx=2
 do $$
 declare
-  t_a uuid; t_b uuid; o_a uuid; o_b uuid; v uuid;
+  t_a uuid; t_b uuid; o_a uuid; o_a2 uuid; o_b uuid; v uuid;
   antes jsonb; r jsonb; n_a int; n_b int; suma_ok boolean; facturas_ok boolean;
   dia31 int; dia01 boolean; anon_si boolean; auth_si boolean; svc_si boolean; idx int;
 begin
@@ -5853,7 +5853,11 @@ begin
   insert into public.operador (tenant_id, nombre, telefono) values (t_a, 'P', '+520000015301') returning id into o_a;
   insert into public.operador (tenant_id, nombre, telefono) values (t_b, 'P', '+520000015302') returning id into o_b;
   insert into public.viaje (tenant_id, operador_id) values (t_a, o_a) returning id into v;
-  insert into public.viaje (tenant_id, operador_id) values (t_a, o_a);
+  -- El segundo viaje de la flota A va con OTRO operador: la 0029 impide dos
+  -- viajes abiertos por operador, y lo que este bloque mide es el conteo por
+  -- tenant, no quién los maneja.
+  insert into public.operador (tenant_id, nombre, telefono) values (t_a, 'P2', '+520000015303') returning id into o_a2;
+  insert into public.viaje (tenant_id, operador_id) values (t_a, o_a2);
   insert into public.viaje (tenant_id, operador_id) values (t_b, o_b);
   -- Dos comprobantes de la flota A en el año 2000: 19:00 CDMX del 31-dic
   -- (ya 1-ene en UTC) y mediodía del 31-dic.
@@ -6006,7 +6010,7 @@ end $$;
 -- `gasto` filtrado igual — el agregado no inventa ni pierde un peso.
 do $$
 declare
-  ta uuid; tb uuid; oa uuid; ob uuid; va1 uuid; va2 uuid; vb1 uuid;
+  ta uuid; tb uuid; oa uuid; oa2 uuid; ob uuid; va1 uuid; va2 uuid; vb1 uuid;
   j jsonb; celdas int; n_total int; monto_total numeric; monto_directo numeric; n_directo int;
   con_cfdi int; con_cfdi_directo int;
   sobre_tope int; dia_partido numeric; bandas text; contamina boolean;
@@ -6015,10 +6019,13 @@ declare
 begin
   insert into tenant (nombre) values ('ZZZ VERIF 0151 A') returning id into ta;
   insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0151 A', '5215559990151') returning id into oa;
+  -- La 0029 sólo admite UN viaje abierto por operador: el segundo va con su
+  -- propio operador. El bloque agrega por tenant, así que no cambia lo que mide.
   insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
     values (ta, oa, 'ZZZ-0151-A1', 'abierto', current_date - 10, 1000) returning id into va1;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'P2', '+520000015104') returning id into oa2;
   insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
-    values (ta, oa, 'ZZZ-0151-A2', 'abierto', current_date - 5, 1000) returning id into va2;
+    values (ta, oa2, 'ZZZ-0151-A2', 'abierto', current_date - 5, 1000) returning id into va2;
 
   insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, cfdi_uuid, estado_sat, efos, forma_pago, iva_traslado, clave_prod_serv, sub_total, ocr_extra) values
     -- diésel con CFDI vigente, tarjeta — limpio
@@ -6115,7 +6122,7 @@ end $$;
 --   · viajes va1 (oa1, liquidado, anticipo 1000), va2 (oa1, abierto, 500),
 --     va3 (oa2, liquidado, 300, fecha_inicio NULL → fuera de viajes_por_mes)
 --   · gastos: diésel 1500 (va1) + 800 (va2) = 2300; caseta 200 (va1);
---     el MISMO CFDI 'ZZZ-UUID-0150-A' orden 1 en va1 y va2 → 1 anomalía
+--     el MISMO CFDI 'zzz-uuid-0150-a' orden 1 en va1 y va2 → 1 anomalía
 --     cfdi_duplicado; folio 'A-991' caseta 200 sin uuid en va1 y va3 → 1
 --     anomalía folio_duplicado; concepto NULL 50 (va1) → 'otro'.
 --   · liquidaciones: va1 (1500, diferencia -150, diferencias sobre_politica
@@ -6156,7 +6163,7 @@ begin
     values (ta, oa2, 'ZZZ-0150-A3', 'liquidado', null, 300, 'Monterrey', null) returning id into va3;
 
   insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, folio, cfdi_uuid, cfdi_orden) values
-    (ta, va1, 'diesel', 1500, hoy_mx - 3, 'D1', 'ZZZ-UUID-0150-A', 1),
+    (ta, va1, 'diesel', 1500, hoy_mx - 3, 'D1', 'zzz-uuid-0150-a', 1),
     (ta, va2, 'diesel',  800, hoy_mx - 1, 'D2', 'zzz-uuid-0150-a', 1),   -- mismo CFDI (minúsculas) en otro viaje
     (ta, va1, 'caseta',  200, hoy_mx - 2, 'A-991', null, 1),
     (ta, va3, 'caseta',  200, hoy_mx - 2, 'A-991', null, 1),            -- mismo folio+concepto+monto, otro viaje
@@ -6178,7 +6185,7 @@ begin
   insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo, origen, destino)
     values (tb, ob, 'ZZZ-0150-B1', 'liquidado', hoy_mx - 2, 200, 'CDMX', 'Guadalajara') returning id into vb1;
   insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, folio, cfdi_uuid, cfdi_orden)
-    values (tb, vb1, 'diesel', 9999, hoy_mx - 2, 'A-991', 'ZZZ-UUID-0150-A', 1);  -- mismo uuid/folio, OTRA flota
+    values (tb, vb1, 'diesel', 9999, hoy_mx - 2, 'A-991', 'zzz-uuid-0150-a', 1);  -- mismo uuid/folio, OTRA flota
   insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia, estatus, diferencias, created_at)
     values (tb, vb1, 8888, 8888, 50, 'revisar', '[{"tipo":"duplicado","monto":50}]'::jsonb, ts_20);
 
@@ -7527,7 +7534,11 @@ declare
   anon_ok boolean;
 begin
   -- (a) una purga rota no se lleva a las demás: se rompe adrede la de posiciones
-  create or replace function public.purgar_posicion(integer, timestamptz, timestamptz)
+  -- `create or replace` NO puede renombrar los parámetros de una función que
+  -- ya existe con nombres (p_dias, ...). Se respetan los nombres reales para
+  -- que el bloque siga probando lo suyo —que una purga rota no se lleve a las
+  -- demás— en vez de morir en el andamio.
+  create or replace function public.purgar_posicion(p_dias integer default 90, p_ahora timestamptz default now(), p_vence timestamptz default null)
   returns jsonb language plpgsql as $roto$
   begin raise exception 'roto a proposito' using errcode = 'PU999'; end $roto$;
 
@@ -7790,4 +7801,78 @@ begin
 
   raise exception E'PERFIL_VERSION_0169  antes=%  tras_cambio=%  quien_sello_bien=%  tras_no_cambio=%  sobrevive_al_borrado=%   (esperado 0 / 1 / t / 1 / t)',
     n_antes, n_tras_cambio, quien_sello_bien, n_tras_no_cambio, sobrevive_al_borrado;
+end $$;
+-- ── 141. 0170 · la función definer de la 0167 ya no la ejecuta cualquiera ──
+--
+-- La 0167 creó `prospecto_toque_marca_prospecto()` como `security definer` y
+-- olvidó revocarle los permisos por defecto. En Postgres una función nace con
+-- EXECUTE para PUBLIC, y `anon` está en PUBLIC: quedó una función definer al
+-- alcance de la llave anónima. La 0170 la cierra.
+--
+-- Esperado: PU170  es_definer=t  anon=f  authenticated=f  public=f  trigger_vivo=t
+do $$
+declare
+  es_definer boolean; anon_ok boolean; auth_ok boolean; public_ok boolean; trigger_vivo boolean;
+begin
+  select p.prosecdef into es_definer
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'prospecto_toque_marca_prospecto';
+
+  anon_ok   := has_function_privilege('anon',          'public.prospecto_toque_marca_prospecto()', 'execute');
+  auth_ok   := has_function_privilege('authenticated', 'public.prospecto_toque_marca_prospecto()', 'execute');
+  public_ok := has_function_privilege('public',        'public.prospecto_toque_marca_prospecto()', 'execute');
+
+  -- Revocar no debe romper el trigger: lo corre el dueño de la tabla.
+  trigger_vivo := exists (
+    select 1 from pg_trigger t join pg_class c on c.oid = t.tgrelid
+     where c.relname = 'prospecto_toque' and t.tgname = 'trg_toque_marca_prospecto');
+
+  raise exception E'PU170  es_definer=%  anon=%  authenticated=%  public=%  trigger_vivo=%   (esperado t / f / f / f / t)',
+    es_definer, anon_ok, auth_ok, public_ok, trigger_vivo;
+end $$;
+
+-- ── 142. 0171 · `gasto.descuento`, la base del estímulo de peaje ───────────
+--
+-- El 50% de peaje se calculaba sobre `sub_total` íntegro aunque el CFDI
+-- trajera `@Descuento`. La columna existe, acepta NULL (el CFDI no lo trae),
+-- rechaza negativos, y NO tiene default: una base fiscal no se rellena sola.
+--
+-- Esperado: DESCUENTO_0171  existe=t  nullable=t  sin_default=t  guarda=102000.00
+--                           rechaza_negativo=t  cero_entra=t
+do $$
+declare
+  ta uuid; oa uuid; va uuid;
+  existe boolean; nullable boolean; sin_default boolean;
+  guardado numeric; rechaza_negativo boolean := false; cero_entra boolean := false;
+begin
+  select true, (a.attnotnull = false), (d.adbin is null)
+    into existe, nullable, sin_default
+    from pg_attribute a
+    join pg_class c on c.oid = a.attrelid
+    left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
+   where c.relname = 'gasto' and a.attname = 'descuento' and a.attnum > 0;
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0170') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'P', '+520000017001') returning id into oa;
+  insert into viaje (tenant_id, operador_id) values (ta, oa) returning id into va;
+
+  insert into gasto (tenant_id, viaje_id, concepto, monto, sub_total, descuento)
+    values (ta, va, 'caseta', 139200, 120000, 18000);
+  select sub_total - descuento into guardado from gasto where tenant_id = ta and descuento is not null;
+
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, sub_total, descuento)
+      values (ta, va, 'caseta', 100, 100, -1);
+  exception when check_violation then rechaza_negativo := true;
+  end;
+
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, sub_total, descuento)
+      values (ta, va, 'caseta', 100, 100, 0);
+    cero_entra := true;
+  exception when others then cero_entra := false;
+  end;
+
+  raise exception E'DESCUENTO_0171  existe=%  nullable=%  sin_default=%  guarda=%  rechaza_negativo=%  cero_entra=%   (esperado t / t / t / 102000.00 / t / t)',
+    existe, nullable, sin_default, guardado, rechaza_negativo, cero_entra;
 end $$;

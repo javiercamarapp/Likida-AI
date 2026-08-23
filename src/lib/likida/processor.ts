@@ -2112,6 +2112,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
                 cfdiEsquemaAlterno: xml.esquemaAlterno,
                 formaPago: xml.formaPago,
                 subTotal: xml.subTotal,
+                descuento: xml.descuento,
                 iepsTraslado: xml.iepsTraslado,
                 ivaTraslado: xml.ivaTraslado,
                 xmlVerificado: true,
