@@ -13,7 +13,7 @@ import { contarHuerfanosPendientes } from '@/lib/likida/repo';
 import { getConfig, type LikidaConfig } from '@/lib/likida/config';
 import {
   resolverPeriodo, getGastosFiscales, getGastosFiscalesSeries, resumirPerdidas, opcionesDe,
-  type GastoFiscal, type ResumenPerdidas, type GastosFiscalesSeries,
+  type GastoFiscal, type ResumenPerdidas, type GastosFiscalesSeries, type Periodo,
 } from '@/lib/likida/fiscal';
 import { saludo, ahoraMs } from '@/lib/saludo';
 import { fechaMx, mxn, pctCambio, hoyMx } from '@/lib/formato';
@@ -27,16 +27,17 @@ import {
 } from './resumen-visual';
 import { ViajesRecientes } from './viajes-recientes';
 import { StatCard, BannerInsight, VerMas } from '../admin/ui/kit';
-import { BarraAcciones, type ItemBusqueda } from './barra-acciones';
+import { BarraAcciones, type ItemBusqueda, type BuscarViajes } from './barra-acciones';
 import { getViajesRegistro } from '@/lib/likida/viajes_registro';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { KpiPeriodo } from './kpi-periodo';
 import { MotorFiscalPeriodo } from './motor-fiscal-periodo';
 import { PanelPeriodo } from './panel-periodo';
 import { AvisoSinFlota } from './sin-flota';
-import { getPrimerosPasos } from '@/lib/likida/primeros-pasos';
+import { getPrimerosPasos, type PrimerosPasos } from '@/lib/likida/primeros-pasos';
 import { PrimeraLiquidacion } from './primera-liquidacion';
 import { OperaWhatsApp } from './opera-whatsapp';
+import { Bloque, Barra, EsqCifras, EsqTabla, EsqGrafica } from './bloque';
 
 /** Resiliencia por sección: si una consulta falla, devuelve null y la
  *  tarjeta muestra un fallback en vez de tirar toda la pantalla. */
@@ -59,6 +60,25 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  *  2. Sin export no se puede montar en un preview headless sin sesión — y
  *     "verificar mirando" es regla del repo. Recibe el tenant YA resuelto
  *     por eso mismo: lo que se verifica es la pantalla real, no una copia.
+ *
+ * ── FE-14 (22-ago-2026): SE PINTA POR PARTES, YA NO DE GOLPE ──────────────
+ *
+ * Esta función abría con un `Promise.all` de DIECISÉIS consultas y no
+ * devolvía nada hasta que la última terminaba: con `force-dynamic`, Next no
+ * manda un byte de HTML hasta entonces, así que el saludo, la barra y las
+ * cifras baratas esperaban a la serie de 12 semanas y el usuario miraba el
+ * logo respirando (`loading.tsx`) todo ese rato.
+ *
+ * Ahora las promesas se LANZAN todas juntas aquí arriba —el mismo
+ * paralelismo que daba `Promise.all`— pero se ESPERAN dentro de cada
+ * `<Bloque>`, cada uno con un esqueleto de la forma y la altura de su
+ * tarjeta. La cáscara (barra, saludo, chip, CTA) sale con el primer flush y
+ * cada tarjeta aterriza cuando su consulta contesta.
+ *
+ * LA TRAMPA A NO PISAR: pasar la PROMESA, jamás el valor ya esperado. Un
+ * `await` en esta función vuelve a serializar lo que se acaba de
+ * paralelizar, y el bloque de abajo no empezaría hasta que el de arriba
+ * terminara.
  */
 export async function InicioContenido({
   tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '',
@@ -91,103 +111,63 @@ export async function InicioContenido({
     ? Math.floor((Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${periodoFiscal.desde}T00:00:00Z`)) / 86_400_000) + 1
     : undefined;
 
-  const [
-    acred, kpis, anomalias, viajes,
-    gastoSemanalSeries, liquidadoSemanalSeries, seriesKpis,
-    cfgFiscal, gastosFiscales, gastosFiscalesSeries, viajesPorMes, topRutasSeries,
-    viajesPorDia, escalados, huerfanosPendientes, pasos,
-  ] = await Promise.all([
-    safe<Acreditables>(() => getAcreditables(tenantId, diasEjercicio)),
-    safe<DashboardKpis>(() => getKpis(tenantId)),
-    safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
-    // `estadoPanel`, `PanelPeriodo` (Actividad) y la tabla de viajes
-    // recientes reusan este MISMO arreglo.
-    safe<ViajeRow[]>(() => getViajes(tenantId)),
-    // Semanal/mensual/histórico — mismo selector único que las tarjetas de
-    // KPI y el resto de `PanelPeriodo` (dirección del 8-ago-2026).
-    safe<GastoSemanalSeries>(() => getGastoPorSemanaSeries(tenantId, hoy)),
-    safe<LiquidadoSemanalSeries>(() => getLiquidadoPorSemanaSeries(tenantId, hoy)),
-    // Cada tarjeta de KPI cicla su PROPIA granularidad con ‹ ›
-    // (dirección del 8-ago-2026). `PanelPeriodo` también lo reusa para la
-    // dona "Viajes" (liquidados/pendientes DEL periodo).
-    safe<SeriesKpiCards>(() => getSeriesKpiCards(tenantId, hoy)),
-    safe<LikidaConfig>(() => getConfig(tenantId)),
-    safe<GastoFiscal[]>(() => getGastosFiscales(tenantId, periodoFiscal)),
-    // "En riesgo/perdido" y "Recuperable pidiendo factura" ciclan
-    // semanal/mensual/histórico (`MotorFiscalPeriodo`) — serie aparte de
-    // `gastosFiscales` (que sigue fija al ejercicio, para el top-causas).
-    safe<GastosFiscalesSeries>(() => getGastosFiscalesSeries(tenantId, hoy)),
-    // `Actividad` pestaña Histórico — agregado real por mes, SIN el tope de
-    // 100 filas de `viajes` (ver nota en `getViajesPorMes`).
-    safe<Array<{ dia: string; valor: number }>>(() => getViajesPorMes(tenantId)),
-    safe<TopRutasSeries>(() => getTopRutasPorGastoSeries(tenantId, 5, hoy)),
-    // FE-5: "Actividad — últimos 7/30 días" se bucketeaba EN EL CLIENTE sobre
-    // las 100 filas de `viajes` (≈90 min de operación a 50k viajes/mes: seis
-    // barras en cero bajo un rótulo que decía "7 días"). Ahora la base cuenta
-    // por día, en una sola lectura para las dos ventanas.
-    safe<DiaViajes[]>(() => getViajesPorDia(tenantId, hoy)),
-    // Las alertas de F2. Devuelven `null` ante error (≠ 0) y la alerta
-    // simplemente no se pinta — una alerta no puede afirmar en falso.
-    safe<number | null>(() => contarEscalados(tenantId)),
-    safe<number | null>(() => contarHuerfanosPendientes(tenantId)),
-    safe(() => getPrimerosPasos(tenantId)),
-  ]);
-  const resumenPerdidas: ResumenPerdidas | null = cfgFiscal && gastosFiscales
-    ? resumirPerdidas(gastosFiscales, opcionesDe(cfgFiscal))
-    : null;
-  // Las 3 vistas de "En riesgo/Recuperable" (`MotorFiscalPeriodo`, cliente) —
-  // `resumirPerdidas` es pura: se calcula UNA vez por modo aquí en el
-  // servidor y se manda ya resuelta (`fiscal.ts` importa `supabaseAdmin` a
-  // nivel de módulo; un Client Component no puede importarlo sin arrastrar
-  // el service-role al bundle del navegador).
-  const resumenPerdidasSeries: Record<'semanal' | 'mensual' | 'historico', ResumenPerdidas> | null =
-    cfgFiscal && gastosFiscalesSeries
-      ? {
-        semanal: resumirPerdidas(gastosFiscalesSeries.semanal, opcionesDe(cfgFiscal)),
-        mensual: resumirPerdidas(gastosFiscalesSeries.mensual, opcionesDe(cfgFiscal)),
-        historico: resumirPerdidas(gastosFiscalesSeries.historico, opcionesDe(cfgFiscal)),
-      }
-      : null;
+  // ── LAS DIECISÉIS CONSULTAS, LANZADAS DE UNA ────────────────────────────
+  // Sin `await`: salen todas a la base en el mismo tick, igual que en el
+  // `Promise.all` que había aquí. Cada una viaja hasta el bloque que la
+  // consume. Todas pasan por `safe`, así que NINGUNA rechaza — resuelven a
+  // `null` y la tarjeta pinta su leyenda honesta (null ≠ 0).
+  const pAcred = safe<Acreditables>(() => getAcreditables(tenantId, diasEjercicio));
+  const pKpis = safe<DashboardKpis>(() => getKpis(tenantId));
+  const pAnomalias = safe<Anomalia[]>(() => detectarAnomalias(tenantId));
+  // `estadoPanel`, `PanelPeriodo` (Actividad) y la tabla de viajes
+  // recientes reusan este MISMO arreglo.
+  const pViajes = safe<ViajeRow[]>(() => getViajes(tenantId));
+  // Semanal/mensual/histórico — mismo selector único que las tarjetas de
+  // KPI y el resto de `PanelPeriodo` (dirección del 8-ago-2026).
+  const pGastoSemanal = safe<GastoSemanalSeries>(() => getGastoPorSemanaSeries(tenantId, hoy));
+  const pLiquidadoSemanal = safe<LiquidadoSemanalSeries>(() => getLiquidadoPorSemanaSeries(tenantId, hoy));
+  // Cada tarjeta de KPI cicla su PROPIA granularidad con ‹ ›
+  // (dirección del 8-ago-2026). `PanelPeriodo` también lo reusa para la
+  // dona "Viajes" (liquidados/pendientes DEL periodo).
+  const pSeriesKpis = safe<SeriesKpiCards>(() => getSeriesKpiCards(tenantId, hoy));
+  const pCfgFiscal = safe<LikidaConfig>(() => getConfig(tenantId));
+  const pGastosFiscales = safe<GastoFiscal[]>(() => getGastosFiscales(tenantId, periodoFiscal));
+  // "En riesgo/perdido" y "Recuperable pidiendo factura" ciclan
+  // semanal/mensual/histórico (`MotorFiscalPeriodo`) — serie aparte de
+  // `gastosFiscales` (que sigue fija al ejercicio, para el top-causas).
+  const pGastosFiscalesSeries = safe<GastosFiscalesSeries>(() => getGastosFiscalesSeries(tenantId, hoy));
+  // `Actividad` pestaña Histórico — agregado real por mes, SIN el tope de
+  // 100 filas de `viajes` (ver nota en `getViajesPorMes`).
+  const pViajesPorMes = safe<Array<{ dia: string; valor: number }>>(() => getViajesPorMes(tenantId));
+  const pTopRutas = safe<TopRutasSeries>(() => getTopRutasPorGastoSeries(tenantId, 5, hoy));
+  // FE-5: "Actividad — últimos 7/30 días" se bucketeaba EN EL CLIENTE sobre
+  // las 100 filas de `viajes` (≈90 min de operación a 50k viajes/mes: seis
+  // barras en cero bajo un rótulo que decía "7 días"). Ahora la base cuenta
+  // por día, en una sola lectura para las dos ventanas.
+  const pViajesPorDia = safe<DiaViajes[]>(() => getViajesPorDia(tenantId, hoy));
+  // Las alertas de F2. Devuelven `null` ante error (≠ 0) y la alerta
+  // simplemente no se pinta — una alerta no puede afirmar en falso.
+  const pEscalados = safe<number | null>(() => contarEscalados(tenantId));
+  const pHuerfanos = safe<number | null>(() => contarHuerfanosPendientes(tenantId));
+  const pPasos = safe(() => getPrimerosPasos(tenantId));
 
-  // AUDITORÍA 10, ALTO: el estado se decide con VIAJES reales filtrados a
-  // `liquidado` (un arreglo que sí puede quedar vacío), no con `porDia`
-  // (siempre traía 7/30 elementos y la rama 'vacio' era inalcanzable).
-  const estado = estadoPanel({
-    acreditables: acred, kpis, liquidaciones: liquidacionesDeViajes(viajes), anomalias,
-    // A13: las consultas del selector y las fiscales también cuentan — una
-    // caída aquí enseña el banner de "pantalla incompleta", no un vacío.
-    secundarias: { seriesKpis, gastoSemanalSeries, liquidadoSemanalSeries, topRutasSeries, viajesPorMes, cfgFiscal, gastosFiscales },
-  });
-
-  // Las alertas accionables (F2): cada una lleva a LA pantalla donde se
-  // resuelve, con el sufijo del superadmin a cuestas. Se apagaron cuando
-  // Cuadre se borró el 10-ago (un "Ver →" a un 404 es peor que nada);
-  // regresan ahora que sus destinos existen.
-  const alertas: Array<{ texto: string; href: string }> = [];
-  if (kpis && kpis.porRevisar > 0) {
-    alertas.push({
-      texto: `${kpis.porRevisar} liquidación${kpis.porRevisar === 1 ? ' espera' : 'es esperan'} tu revisión`,
-      href: `/dashboard/agentes/liquidacion${sufijo}`,
-    });
-  }
-  if (escalados !== null && escalados !== undefined && escalados > 0) {
-    alertas.push({
-      texto: `${escalados} viaje${escalados === 1 ? '' : 's'} escalado${escalados === 1 ? '' : 's'} sin chofer que acepte — se resuelve en Despacho`,
-      href: `/dashboard/despacho${sufijo}`,
-    });
-  }
-  if (huerfanosPendientes !== null && huerfanosPendientes !== undefined && huerfanosPendientes > 0) {
-    alertas.push({
-      texto: `${huerfanosPendientes} comprobante${huerfanosPendientes === 1 ? ' sin viaje espera que alguien lo acomode' : 's sin viaje esperan que alguien los acomode'}`,
-      href: `/dashboard/huerfanos${sufijo}`,
-    });
-  }
-  if (anomalias && anomalias.length > 0) {
-    alertas.push({
-      texto: `${anomalias.length} comprobante${anomalias.length === 1 ? '' : 's'} repetido${anomalias.length === 1 ? '' : 's'} entre viajes distintos`,
-      href: `/dashboard/agentes/liquidacion${sufijo}`,
-    });
-  }
+  // Derivadas: `.then` sobre promesas YA lanzadas — no añade una espera, solo
+  // dice qué hacer cuando lleguen. `resumirPerdidas` es pura y se calcula UNA
+  // vez aquí en el servidor: `fiscal.ts` importa `supabaseAdmin` a nivel de
+  // módulo, y un Client Component no puede importarlo sin arrastrar el
+  // service-role al bundle del navegador.
+  const pResumenPerdidas: Promise<ResumenPerdidas | null> =
+    Promise.all([pCfgFiscal, pGastosFiscales]).then(([cfg, gastos]) =>
+      cfg && gastos ? resumirPerdidas(gastos, opcionesDe(cfg)) : null);
+  const pResumenPerdidasSeries: Promise<Record<'semanal' | 'mensual' | 'historico', ResumenPerdidas> | null> =
+    Promise.all([pCfgFiscal, pGastosFiscalesSeries]).then(([cfg, series]) =>
+      cfg && series
+        ? {
+          semanal: resumirPerdidas(series.semanal, opcionesDe(cfg)),
+          mensual: resumirPerdidas(series.mensual, opcionesDe(cfg)),
+          historico: resumirPerdidas(series.historico, opcionesDe(cfg)),
+        }
+        : null);
 
   // ── FE-6: EL LINK "Ver" SE CRUZA POR viaje_id, NO POR FOLIO ─────────────
   //
@@ -201,26 +181,30 @@ export async function InicioContenido({
   //      viajes con el mismo folio se llevaban el link del otro, que es peor
   //      que no tener link.
   //
-  // Se pide DESPUÉS del Promise.all a propósito: depende de los ids que ese
-  // bloque acaba de traer, y son a lo más 100 — un `.in()` de una tanda.
-  const liquidaciones = viajes && viajes.length > 0
-    ? await safe<LiquidacionDeViaje[]>(() => getLiquidacionesDeViajes(tenantId, viajes.map((v) => v.id)))
-    : [];
-  const liqPorViaje = new Map((liquidaciones ?? []).map((l) => [l.viajeId, l.id]));
-
-  // TODAS las filas cargadas (tope 100 de getViajes): la tarjeta enseña 6 y
-  // su botón "Ver los N" despliega el resto (pedido del 12-ago). El link
-  // "Ver" solo cuando la liquidación existe Y se pudo cruzar — un viaje sin
-  // cruce se queda sin link, nunca con un link a un 404. Ya no se pregunta
-  // por `estatus === 'liquidado'`: la existencia de la FILA es la condición
-  // real (un viaje en cuadre con liquidación tiene detalle que abrir), y
-  // preguntar por el estatus dejaba sin link a filas cuyo destino sí existe.
-  const filasViajes: FilaViaje[] = (viajes ?? []).map((v) => ({
-    id: v.id, folio: v.folio, origen: v.origen, destino: v.destino,
-    estatus: v.estatus, anticipo: v.anticipo, operadorNombre: v.operadorNombre,
-    fechaInicio: v.fechaInicio,
-    liqId: liqPorViaje.get(v.id) ?? null,
-  }));
+  // Encadenado a `pViajes` a propósito: depende de los ids que esa consulta
+  // trae, y son a lo más 100 — un `.in()` de una tanda. Va encadenado y no
+  // esperado aquí para que la tabla sea el único bloque que aguante esos dos
+  // saltos (FE-14): las demás tarjetas no tienen por qué esperarlos.
+  const pFilasViajes: Promise<FilaViaje[] | null> = pViajes.then(async (viajes) => {
+    if (viajes === null) return null;
+    const liquidaciones = viajes.length > 0
+      ? await safe<LiquidacionDeViaje[]>(() => getLiquidacionesDeViajes(tenantId, viajes.map((v) => v.id)))
+      : [];
+    const liqPorViaje = new Map((liquidaciones ?? []).map((l) => [l.viajeId, l.id]));
+    // TODAS las filas cargadas (tope 100 de getViajes): la tarjeta enseña 6 y
+    // su botón "Ver los N" despliega el resto (pedido del 12-ago). El link
+    // "Ver" solo cuando la liquidación existe Y se pudo cruzar — un viaje sin
+    // cruce se queda sin link, nunca con un link a un 404. Ya no se pregunta
+    // por `estatus === 'liquidado'`: la existencia de la FILA es la condición
+    // real (un viaje en cuadre con liquidación tiene detalle que abrir), y
+    // preguntar por el estatus dejaba sin link a filas cuyo destino sí existe.
+    return viajes.map((v) => ({
+      id: v.id, folio: v.folio, origen: v.origen, destino: v.destino,
+      estatus: v.estatus, anticipo: v.anticipo, operadorNombre: v.operadorNombre,
+      fechaInicio: v.fechaInicio,
+      liqId: liqPorViaje.get(v.id) ?? null,
+    }));
+  });
 
   const ICONO_BARRA = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--muted)' } } as const;
 
@@ -264,28 +248,6 @@ export async function InicioContenido({
     });
   }
 
-  // ── El insight de la semana (BannerInsight, 16-ago-2026) ────────────────
-  // La noticia POSITIVA del periodo, con la regla de siempre: solo se monta
-  // con dato real. La serie semanal ya está cargada para la gráfica
-  // "Liquidado" de abajo — el último bucket es la semana en curso y el
-  // penúltimo la anterior; `pctCambio` devuelve null sin comparable y el
-  // chip se omite. Con $0 liquidado esta semana NO hay banner: un insight
-  // de relleno es ruido, no noticia.
-  const bucketsLiq = liquidadoSemanalSeries?.semanal ?? [];
-  const liqSemanaActual = bucketsLiq.length > 0 ? bucketsLiq[bucketsLiq.length - 1].valor : 0;
-  const liqSemanaAnterior = bucketsLiq.length > 1 ? bucketsLiq[bucketsLiq.length - 2].valor : null;
-
-  // La campana enseña PENDIENTES reales — los mismos que perdieron su
-  // tarjeta cuando Cuadre se borró el 10-ago. Aquí son texto: el link
-  // regresa cuando esa página exista.
-  const pendientes: string[] = [];
-  if (kpis && kpis.porRevisar > 0) {
-    pendientes.push(`${kpis.porRevisar} liquidación${kpis.porRevisar === 1 ? '' : 'es'} por revisar`);
-  }
-  if (anomalias && anomalias.length > 0) {
-    pendientes.push(`${anomalias.length} comprobante${anomalias.length === 1 ? '' : 's'} repetido${anomalias.length === 1 ? '' : 's'} entre viajes distintos`);
-  }
-
   return (
     // El scroll vive DENTRO del panel (patrón FASE 1.5). El lienzo del
     // contenido es TENUE (`--g1`) y las piezas son tarjetas blancas encima —
@@ -302,7 +264,13 @@ export async function InicioContenido({
                   viendo como superadmin · {tenantNombre}
                 </span>
               )}
-              <BarraAcciones buscar={buscarViajes} pendientes={pendientes} hrefAsistente={`/dashboard/chat${sufijo}`} />
+              {/* La campana enseña PENDIENTES reales, y para saberlos hay que
+                  leer kpis + anomalías. Su hueco se reserva con un fantasma
+                  del MISMO tamaño (h-8) para que la barra no dé el brinco al
+                  aterrizar los tres controles. */}
+              <Bloque mensaje="No se pudo cargar la barra de acciones." esqueleto={<FantasmaAcciones />}>
+                <AccionesResumen buscar={buscarViajes} pKpis={pKpis} pAnomalias={pAnomalias} sufijo={sufijo} />
+              </Bloque>
             </div>
           }
         />
@@ -332,160 +300,419 @@ export async function InicioContenido({
 
         <div className="px-5 pb-5 flex-1">
           {/* ANTES QUE NINGUNA CIFRA. Lo de abajo son ceros de una flota que
-              no existe, y esa frase tiene que llegar antes que los ceros. */}
+              no existe, y esa frase tiene que llegar antes que los ceros. No
+              necesita consulta: sale con el primer flush, que es justo lo que
+              "antes que ninguna cifra" quiere decir. */}
           {!tenantExiste && (
             <div className="mt-3"><AvisoSinFlota tenantId={tenantId} /></div>
           )}
 
-          {/* La guía del arranque (auditoría 5): solo mientras no exista la
-              primera liquidación; si la consulta falla, no se pinta — jamás
-              se palomea de cortesía. */}
-          {tenantExiste && pasos && !pasos.completado && (
-            <div className="mt-3"><PrimeraLiquidacion datos={pasos} sufijo={sufijo} /></div>
-          )}
-
-          {/* El canal, presentado con sus mensajes literales — solo mientras
-              la flota arranca: ya operando, el guion lo tiene aprendido y la
-              tarjeta cede el lugar a las cifras. */}
-          {tenantExiste && pasos && !pasos.completado && (
-            <div className="mt-3"><OperaWhatsApp rol="jefe" /></div>
+          {/* La guía del arranque y el canal (auditoría 5): condicionales de
+              verdad —solo mientras no exista la primera liquidación—, así que
+              su hueco NO se reserva: un esqueleto que casi siempre se resuelve
+              en "nada" sería un salto de layout garantizado en vez de uno
+              excepcional. */}
+          {tenantExiste && (
+            <Bloque mensaje="No se pudo leer el avance del arranque." esqueleto={null}>
+              <BloqueArranque pPasos={pPasos} sufijo={sufijo} />
+            </Bloque>
           )}
 
           {/* El insight ANTES que las alertas (patrón de la referencia): la
               noticia del negocio abre; los pendientes accionables siguen
-              justo debajo, cada uno con su puerta. */}
-          {liqSemanaActual > 0 && (
-            <div className="mt-3">
-              <BannerInsight etiqueta="Esta semana" deltaPct={pctCambio(liqSemanaActual, liqSemanaAnterior)} href="#estadisticas">
-                Tu flota liquidó <b className="tabular">{mxn(liqSemanaActual)}</b> en viajes cerrados
-              </BannerInsight>
-            </div>
-          )}
+              justo debajo, cada uno con su puerta. Los dos son condicionales
+              (solo con dato real), por lo mismo van sin esqueleto. */}
+          <Bloque mensaje="No se pudo calcular el insight de la semana." esqueleto={null}>
+            <BloqueInsight pLiquidadoSemanal={pLiquidadoSemanal} />
+          </Bloque>
 
-          {alertas.length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              {alertas.map((a) => (
-                <Link key={a.texto} href={a.href}
-                  className="card p-3 flex items-center gap-2.5 hover:opacity-85 transition-opacity"
-                  style={{ borderColor: 'var(--warn)' }}>
-                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
-                  <span className="text-[13px]">{a.texto}</span>
-                  <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--muted)' }}>Ver →</span>
-                </Link>
-              ))}
-            </div>
-          )}
+          <Bloque mensaje="No se pudieron leer las alertas." esqueleto={null}>
+            <BloqueAlertas pKpis={pKpis} pEscalados={pEscalados} pHuerfanos={pHuerfanos}
+              pAnomalias={pAnomalias} sufijo={sufijo} />
+          </Bloque>
 
-          {estado === 'error' ? (
-            <div className="card p-10 text-center mt-3">
-              <p className="text-lg font-semibold tracking-tight">No se pudieron cargar los datos</p>
-              <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>
-                Hubo un problema al leer del sistema. Recarga la página en un momento — esto NO significa
-                que no haya liquidaciones, significa que no se pudieron leer.
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* `vacio` y `datos` son el MISMO layout — `estadoPanel` ya
-                  garantiza que todo cargó bien en ambos casos: "vacío" son
-                  las mismas piezas con sus propios ceros honestos. */}
-              {estado === 'parcial' && (
-                <div className="card p-4 flex items-start gap-3 mt-3" style={{ borderColor: 'var(--warn)' }}>
-                  <span className="inline-block w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
-                  <div>
-                    <p className="text-sm font-semibold m-0">Faltan datos por cargar — esta pantalla está incompleta</p>
-                    <p className="text-xs mt-1 m-0" style={{ color: 'var(--muted)' }}>
-                      Una o más secciones no respondieron. No tomes estas cifras como el corte del periodo.
-                    </p>
-                  </div>
-                </div>
-              )}
+          {/* El aviso de pantalla incompleta necesita saber de TODAS las
+              secciones, así que es —por definición— el bloque más lento. Con
+              el streaming ya no puede seguir gobernando el render: cada
+              tarjeta de abajo degrada sola y dice lo suyo. Éste queda como lo
+              que siempre fue en el fondo, un AVISO, y llega cuando puede. */}
+          <Bloque mensaje="No se pudo evaluar el estado de la pantalla." esqueleto={null}>
+            <AvisoEstado
+              pAcred={pAcred} pKpis={pKpis} pAnomalias={pAnomalias} pViajes={pViajes}
+              pSeriesKpis={pSeriesKpis} pGastoSemanal={pGastoSemanal}
+              pLiquidadoSemanal={pLiquidadoSemanal} pTopRutas={pTopRutas}
+              pViajesPorMes={pViajesPorMes} pCfgFiscal={pCfgFiscal} pGastosFiscales={pGastosFiscales} />
+          </Bloque>
 
-              {/* ── KPIs (caja interna + delta como texto, referencia) ──
-                  "Total viajes" y "Liquidado" no van aquí: ya se ven como
-                  GRÁFICA más abajo. "Ahorro generado" se queda (pedido
-                  explícito): mismo número que "Recuperable pidiendo
-                  factura", pero fijo al ejercicio fiscal completo. La
-                  dirección buena/mala no es igual para las tres: gastar
-                  más no es bueno aunque el número suba. */}
-              {kpis && (
-                <div className="mt-2">
-                  {seriesKpis ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <KpiPeriodo icono={<Wallet width={15} height={15} strokeWidth={1.75} />}
-                        nombre="Gasto total" campo="gastoTotal" formato="mxn" subeEsBueno={false} series={seriesKpis} />
-                      <KpiPeriodo icono={<Calculator width={15} height={15} strokeWidth={1.75} />}
-                        nombre="Costo por viaje" campo="costoPorViaje" formato="mxn" subeEsBueno={false} series={seriesKpis} />
-                      <StatCard icono={<PiggyBank width={15} height={15} strokeWidth={1.75} />}
-                        etiqueta={`Ahorro generado — ${periodoFiscal.etiqueta}`}
-                        // AUDITORÍA 1, ALTO: si la lectura fiscal falló (o no hay
-                        // config), es `null` — se PRESERVA y la tarjeta dice "—",
-                        // en vez de afirmar "$0.00 de ahorro" que suena a medición.
-                        valor={resumenPerdidas ? resumenPerdidas.montoRecuperable : null}
-                        sinDato="no se pudo leer el dato fiscal"
-                        // Sin `delta`: esta cifra va fija al ejercicio completo,
-                        // no hay "periodo anterior" contra el que compararla (A12).
-                        formato="mxn" />
-                    </div>
-                  ) : (
-                    <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar el comparativo de KPIs.</p>
-                  )}
-                  {/* El fantasma "Ver estadísticas →" (ref. shadcn): la puerta
-                      al bloque de gráficas — mismo ancla que el BannerInsight. */}
-                  <div className="mt-2 flex justify-end">
-                    <VerMas href="#estadisticas" />
-                  </div>
-                </div>
-              )}
+          {/* ── KPIs (caja interna + delta como texto, referencia) ──
+              "Total viajes" y "Liquidado" no van aquí: ya se ven como
+              GRÁFICA más abajo. "Ahorro generado" se queda (pedido
+              explícito): mismo número que "Recuperable pidiendo
+              factura", pero fijo al ejercicio fiscal completo. La
+              dirección buena/mala no es igual para las tres: gastar
+              más no es bueno aunque el número suba. */}
+          <div className="mt-2">
+            <Bloque mensaje="No se pudieron cargar las cifras del periodo."
+              esqueleto={<EsqCifras n={3} rejilla="grid grid-cols-1 sm:grid-cols-3 gap-2" />}>
+              <BloqueKpis pKpis={pKpis} pSeriesKpis={pSeriesKpis} pResumenPerdidas={pResumenPerdidas}
+                periodoFiscal={periodoFiscal} />
+            </Bloque>
+          </div>
 
-              {/* ── Motor fiscal — el diferenciador real, no un TMS
-                  genérico. Todo lo fiscal vive junto, en UNA tarjeta. */}
-              <div className="card p-3 mt-2">
-                <TituloSeccion>Tu motor fiscal — {periodoFiscal.etiqueta}</TituloSeccion>
-                {/* Las 3 tarjetas en la MISMA línea, todo el ancho (pedido
-                    explícito, 8-ago-2026), misma altura (`h-full`). El
-                    diésel elegible va en LITROS, no en pesos — el estímulo
-                    es cuota DOF (semanal) × litros, y esa cuota no vive
-                    aquí. `docs/conocimiento/guion-demo.md` +
-                    `guion_demo.test.ts` atan el guion de venta a esto. */}
-                <div className="mt-2 flex flex-wrap gap-2 items-stretch">
-                  <MotorFiscalPeriodo series={resumenPerdidasSeries} />
-                  {acred && (
-                    <div className="flex-1 min-w-[200px]">
-                      <StatCard icono={<Fuel width={15} height={15} strokeWidth={1.75} />}
-                        etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" />
-                    </div>
-                  )}
-                </div>
-                <div className="mt-2">
-                  <MotorFiscal resumen={resumenPerdidas} />
-                </div>
-              </div>
+          {/* ── Motor fiscal — el diferenciador real, no un TMS
+              genérico. Todo lo fiscal vive junto, en UNA tarjeta. */}
+          <div className="mt-2">
+            <Bloque mensaje="No se pudo cargar el motor fiscal." esqueleto={<EsqMotorFiscal />}>
+              <BloqueFiscal pAcred={pAcred} pResumenPerdidas={pResumenPerdidas}
+                pResumenPerdidasSeries={pResumenPerdidasSeries} periodoFiscal={periodoFiscal} />
+            </Bloque>
+          </div>
 
-              {/* ── La tabla protagonista, con los viajes REALES y su botón
-                  de abrir (despliega los 100 cargados ahí mismo). */}
-              <ViajesRecientes filas={filasViajes} sufijo={sufijo} />
+          {/* ── La tabla protagonista, con los viajes REALES y su botón
+              de abrir (despliega los 100 cargados ahí mismo). */}
+          <Bloque mensaje="No se pudieron cargar los viajes recientes." esqueleto={<div className="mt-2.5"><EsqTabla filas={6} /></div>}>
+            <BloqueViajes pFilasViajes={pFilasViajes} sufijo={sufijo} />
+          </Bloque>
 
-              {/* ── Viajes / Actividad / Gasto por categoría / Liquidado /
-                  Top rutas — UN SOLO selector Semanal/Mensual/Histórico que
-                  mueve las 5 juntas (pedido explícito, 8-ago-2026). El id
-                  es el ancla del BannerInsight de arriba. */}
-              <div className="mt-2.5" id="estadisticas">
-                <PanelPeriodo
-                  porDia={viajesPorDia}
-                  porMes={viajesPorMes ?? []}
-                  seriesKpis={seriesKpis}
-                  gastoSemanalSeries={gastoSemanalSeries}
-                  liquidadoSemanalSeries={liquidadoSemanalSeries}
-                  topRutasSeries={topRutasSeries}
-                />
-              </div>
-            </>
-          )}
+          {/* ── Viajes / Actividad / Gasto por categoría / Liquidado /
+              Top rutas — UN SOLO selector Semanal/Mensual/Histórico que
+              mueve las 5 juntas (pedido explícito, 8-ago-2026). El id
+              es el ancla del BannerInsight de arriba. */}
+          <div className="mt-2.5" id="estadisticas">
+            <Bloque mensaje="No se pudieron cargar las estadísticas del periodo." esqueleto={<EsqGrafica alto={260} />}>
+              <BloqueEstadisticas
+                pViajesPorDia={pViajesPorDia} pViajesPorMes={pViajesPorMes} pSeriesKpis={pSeriesKpis}
+                pGastoSemanal={pGastoSemanal} pLiquidadoSemanal={pLiquidadoSemanal} pTopRutas={pTopRutas} />
+            </Bloque>
+          </div>
 
           <p className="text-[11px] pt-3" style={{ color: 'var(--faint)' }}>{LEYENDA_CORTA}</p>
         </div>
       </div>
     </main>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS BLOQUES. Cada uno espera SOLO sus promesas y nada más: eso es lo que
+// hace que el de al lado no lo espere. Viven en ESTE archivo a propósito —
+// `dinero_por_area.test.ts` escanea `page.tsx` + `inicio-contenido.tsx` +
+// `inicio-operacion.tsx` en busca de pesos sin gatear, y una sección con
+// `mxn(` mudada a un archivo nuevo se saldría de ese escaneo en silencio.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** El hueco de los tres controles de la barra, del mismo alto (h-8). */
+function FantasmaAcciones() {
+  return (
+    <div className="flex items-center gap-2 shrink-0" role="status" aria-label="Cargando">
+      <Barra alto={32} ancho={148} className="rounded-lg" />
+      <Barra alto={32} ancho={32} className="rounded-lg" />
+      <Barra alto={32} ancho={32} className="rounded-lg" />
+    </div>
+  );
+}
+
+async function AccionesResumen({ buscar, pKpis, pAnomalias, sufijo }: {
+  buscar: BuscarViajes;
+  pKpis: Promise<DashboardKpis | null>;
+  pAnomalias: Promise<Anomalia[] | null>;
+  sufijo: string;
+}) {
+  const [kpis, anomalias] = await Promise.all([pKpis, pAnomalias]);
+  // La campana enseña PENDIENTES reales — los mismos que perdieron su
+  // tarjeta cuando Cuadre se borró el 10-ago. Aquí son texto: el link
+  // regresa cuando esa página exista.
+  const pendientes: string[] = [];
+  if (kpis && kpis.porRevisar > 0) {
+    pendientes.push(`${kpis.porRevisar} liquidación${kpis.porRevisar === 1 ? '' : 'es'} por revisar`);
+  }
+  if (anomalias && anomalias.length > 0) {
+    pendientes.push(`${anomalias.length} comprobante${anomalias.length === 1 ? '' : 's'} repetido${anomalias.length === 1 ? '' : 's'} entre viajes distintos`);
+  }
+  return <BarraAcciones buscar={buscar} pendientes={pendientes} hrefAsistente={`/dashboard/chat${sufijo}`} />;
+}
+
+async function BloqueArranque({ pPasos, sufijo }: {
+  pPasos: Promise<PrimerosPasos | null>; sufijo: string;
+}) {
+  const pasos = await pPasos;
+  // Si la consulta falla, no se pinta — jamás se palomea de cortesía.
+  if (!pasos || pasos.completado) return null;
+  return (
+    <>
+      <div className="mt-3"><PrimeraLiquidacion datos={pasos} sufijo={sufijo} /></div>
+      {/* El canal, presentado con sus mensajes literales — solo mientras
+          la flota arranca: ya operando, el guion lo tiene aprendido y la
+          tarjeta cede el lugar a las cifras. */}
+      <div className="mt-3"><OperaWhatsApp rol="jefe" /></div>
+    </>
+  );
+}
+
+async function BloqueInsight({ pLiquidadoSemanal }: {
+  pLiquidadoSemanal: Promise<LiquidadoSemanalSeries | null>;
+}) {
+  // ── El insight de la semana (BannerInsight, 16-ago-2026) ────────────────
+  // La noticia POSITIVA del periodo, con la regla de siempre: solo se monta
+  // con dato real. La serie semanal ya está cargada para la gráfica
+  // "Liquidado" de abajo — el último bucket es la semana en curso y el
+  // penúltimo la anterior; `pctCambio` devuelve null sin comparable y el
+  // chip se omite. Con $0 liquidado esta semana NO hay banner: un insight
+  // de relleno es ruido, no noticia.
+  const liquidadoSemanalSeries = await pLiquidadoSemanal;
+  const buckets = liquidadoSemanalSeries?.semanal ?? [];
+  const actual = buckets.length > 0 ? buckets[buckets.length - 1].valor : 0;
+  const anterior = buckets.length > 1 ? buckets[buckets.length - 2].valor : null;
+  if (actual <= 0) return null;
+  return (
+    <div className="mt-3">
+      <BannerInsight etiqueta="Esta semana" deltaPct={pctCambio(actual, anterior)} href="#estadisticas">
+        Tu flota liquidó <b className="tabular">{mxn(actual)}</b> en viajes cerrados
+      </BannerInsight>
+    </div>
+  );
+}
+
+async function BloqueAlertas({ pKpis, pEscalados, pHuerfanos, pAnomalias, sufijo }: {
+  pKpis: Promise<DashboardKpis | null>;
+  pEscalados: Promise<number | null>;
+  pHuerfanos: Promise<number | null>;
+  pAnomalias: Promise<Anomalia[] | null>;
+  sufijo: string;
+}) {
+  const [kpis, escalados, huerfanosPendientes, anomalias] =
+    await Promise.all([pKpis, pEscalados, pHuerfanos, pAnomalias]);
+
+  // Las alertas accionables (F2): cada una lleva a LA pantalla donde se
+  // resuelve, con el sufijo del superadmin a cuestas. Se apagaron cuando
+  // Cuadre se borró el 10-ago (un "Ver →" a un 404 es peor que nada);
+  // regresan ahora que sus destinos existen.
+  const alertas: Array<{ texto: string; href: string }> = [];
+  if (kpis && kpis.porRevisar > 0) {
+    alertas.push({
+      texto: `${kpis.porRevisar} liquidación${kpis.porRevisar === 1 ? ' espera' : 'es esperan'} tu revisión`,
+      href: `/dashboard/agentes/liquidacion${sufijo}`,
+    });
+  }
+  if (escalados !== null && escalados !== undefined && escalados > 0) {
+    alertas.push({
+      texto: `${escalados} viaje${escalados === 1 ? '' : 's'} escalado${escalados === 1 ? '' : 's'} sin chofer que acepte — se resuelve en Despacho`,
+      href: `/dashboard/despacho${sufijo}`,
+    });
+  }
+  if (huerfanosPendientes !== null && huerfanosPendientes !== undefined && huerfanosPendientes > 0) {
+    alertas.push({
+      texto: `${huerfanosPendientes} comprobante${huerfanosPendientes === 1 ? ' sin viaje espera que alguien lo acomode' : 's sin viaje esperan que alguien los acomode'}`,
+      href: `/dashboard/huerfanos${sufijo}`,
+    });
+  }
+  if (anomalias && anomalias.length > 0) {
+    alertas.push({
+      texto: `${anomalias.length} comprobante${anomalias.length === 1 ? '' : 's'} repetido${anomalias.length === 1 ? '' : 's'} entre viajes distintos`,
+      href: `/dashboard/agentes/liquidacion${sufijo}`,
+    });
+  }
+  if (alertas.length === 0) return null;
+
+  return (
+    <div className="mt-3 space-y-1.5">
+      {alertas.map((a) => (
+        <Link key={a.texto} href={a.href}
+          className="card p-3 flex items-center gap-2.5 hover:opacity-85 transition-opacity"
+          style={{ borderColor: 'var(--warn)' }}>
+          <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
+          <span className="text-[13px]">{a.texto}</span>
+          <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--muted)' }}>Ver →</span>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+async function AvisoEstado({
+  pAcred, pKpis, pAnomalias, pViajes, pSeriesKpis, pGastoSemanal, pLiquidadoSemanal,
+  pTopRutas, pViajesPorMes, pCfgFiscal, pGastosFiscales,
+}: {
+  pAcred: Promise<Acreditables | null>;
+  pKpis: Promise<DashboardKpis | null>;
+  pAnomalias: Promise<Anomalia[] | null>;
+  pViajes: Promise<ViajeRow[] | null>;
+  pSeriesKpis: Promise<SeriesKpiCards | null>;
+  pGastoSemanal: Promise<GastoSemanalSeries | null>;
+  pLiquidadoSemanal: Promise<LiquidadoSemanalSeries | null>;
+  pTopRutas: Promise<TopRutasSeries | null>;
+  pViajesPorMes: Promise<Array<{ dia: string; valor: number }> | null>;
+  pCfgFiscal: Promise<LikidaConfig | null>;
+  pGastosFiscales: Promise<GastoFiscal[] | null>;
+}) {
+  const [
+    acred, kpis, anomalias, viajes, seriesKpis, gastoSemanalSeries,
+    liquidadoSemanalSeries, topRutasSeries, viajesPorMes, cfgFiscal, gastosFiscales,
+  ] = await Promise.all([
+    pAcred, pKpis, pAnomalias, pViajes, pSeriesKpis, pGastoSemanal,
+    pLiquidadoSemanal, pTopRutas, pViajesPorMes, pCfgFiscal, pGastosFiscales,
+  ]);
+
+  // AUDITORÍA 10, ALTO: el estado se decide con VIAJES reales filtrados a
+  // `liquidado` (un arreglo que sí puede quedar vacío), no con `porDia`
+  // (siempre traía 7/30 elementos y la rama 'vacio' era inalcanzable).
+  const estado = estadoPanel({
+    acreditables: acred, kpis, liquidaciones: liquidacionesDeViajes(viajes), anomalias,
+    // A13: las consultas del selector y las fiscales también cuentan — una
+    // caída aquí enseña el banner de "pantalla incompleta", no un vacío.
+    secundarias: { seriesKpis, gastoSemanalSeries, liquidadoSemanalSeries, topRutasSeries, viajesPorMes, cfgFiscal, gastosFiscales },
+  });
+
+  if (estado === 'error') {
+    return (
+      <div className="card p-6 mt-3" style={{ borderColor: 'var(--bad)' }}>
+        <p className="text-sm font-semibold tracking-tight m-0">No se pudieron cargar los datos</p>
+        <p className="mt-1.5 text-sm m-0" style={{ color: 'var(--muted)' }}>
+          Hubo un problema al leer del sistema. Recarga la página en un momento — esto NO significa
+          que no haya liquidaciones, significa que no se pudieron leer.
+        </p>
+      </div>
+    );
+  }
+  if (estado !== 'parcial') return null;
+  // `vacio` y `datos` son el MISMO layout — `estadoPanel` ya garantiza que
+  // todo cargó bien en ambos casos: "vacío" son las mismas piezas con sus
+  // propios ceros honestos.
+  return (
+    <div className="card p-4 flex items-start gap-3 mt-3" style={{ borderColor: 'var(--warn)' }}>
+      <span className="inline-block w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
+      <div>
+        <p className="text-sm font-semibold m-0">Faltan datos por cargar — esta pantalla está incompleta</p>
+        <p className="text-xs mt-1 m-0" style={{ color: 'var(--muted)' }}>
+          Una o más secciones no respondieron. No tomes estas cifras como el corte del periodo.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+async function BloqueKpis({ pKpis, pSeriesKpis, pResumenPerdidas, periodoFiscal }: {
+  pKpis: Promise<DashboardKpis | null>;
+  pSeriesKpis: Promise<SeriesKpiCards | null>;
+  pResumenPerdidas: Promise<ResumenPerdidas | null>;
+  periodoFiscal: Periodo;
+}) {
+  const [kpis, seriesKpis, resumenPerdidas] = await Promise.all([pKpis, pSeriesKpis, pResumenPerdidas]);
+  if (!kpis) return null;
+  return (
+    <>
+      {seriesKpis ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <KpiPeriodo icono={<Wallet width={15} height={15} strokeWidth={1.75} />}
+            nombre="Gasto total" campo="gastoTotal" formato="mxn" subeEsBueno={false} series={seriesKpis} />
+          <KpiPeriodo icono={<Calculator width={15} height={15} strokeWidth={1.75} />}
+            nombre="Costo por viaje" campo="costoPorViaje" formato="mxn" subeEsBueno={false} series={seriesKpis} />
+          <StatCard icono={<PiggyBank width={15} height={15} strokeWidth={1.75} />}
+            etiqueta={`Ahorro generado — ${periodoFiscal.etiqueta}`}
+            // AUDITORÍA 1, ALTO: si la lectura fiscal falló (o no hay
+            // config), es `null` — se PRESERVA y la tarjeta dice "—",
+            // en vez de afirmar "$0.00 de ahorro" que suena a medición.
+            valor={resumenPerdidas ? resumenPerdidas.montoRecuperable : null}
+            sinDato="no se pudo leer el dato fiscal"
+            // Sin `delta`: esta cifra va fija al ejercicio completo,
+            // no hay "periodo anterior" contra el que compararla (A12).
+            formato="mxn" />
+        </div>
+      ) : (
+        <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar el comparativo de KPIs.</p>
+      )}
+      {/* El fantasma "Ver estadísticas →" (ref. shadcn): la puerta
+          al bloque de gráficas — mismo ancla que el BannerInsight. */}
+      <div className="mt-2 flex justify-end">
+        <VerMas href="#estadisticas" />
+      </div>
+    </>
+  );
+}
+
+/** El esqueleto del motor fiscal: título, la fila de tarjetas y el cuerpo del
+ *  desglose — el mismo bulto que la tarjeta real, para que nada brinque. */
+function EsqMotorFiscal() {
+  return (
+    <div className="card p-3" role="status" aria-label="Cargando">
+      <Barra alto={13} ancho="38%" />
+      <div className="mt-2 flex flex-wrap gap-2 items-stretch">
+        <div className="flex-1 min-w-[200px]"><Barra alto={100} className="rounded-xl" /></div>
+        <div className="flex-1 min-w-[200px]"><Barra alto={100} className="rounded-xl" /></div>
+        <div className="flex-1 min-w-[200px]"><Barra alto={100} className="rounded-xl" /></div>
+      </div>
+      <div className="mt-2"><Barra alto={150} className="rounded-xl" /></div>
+    </div>
+  );
+}
+
+async function BloqueFiscal({ pAcred, pResumenPerdidas, pResumenPerdidasSeries, periodoFiscal }: {
+  pAcred: Promise<Acreditables | null>;
+  pResumenPerdidas: Promise<ResumenPerdidas | null>;
+  pResumenPerdidasSeries: Promise<Record<'semanal' | 'mensual' | 'historico', ResumenPerdidas> | null>;
+  periodoFiscal: Periodo;
+}) {
+  const [acred, resumenPerdidas, resumenPerdidasSeries] =
+    await Promise.all([pAcred, pResumenPerdidas, pResumenPerdidasSeries]);
+  return (
+    <div className="card p-3">
+      <TituloSeccion>Tu motor fiscal — {periodoFiscal.etiqueta}</TituloSeccion>
+      {/* Las 3 tarjetas en la MISMA línea, todo el ancho (pedido
+          explícito, 8-ago-2026), misma altura (`h-full`). El
+          diésel elegible va en LITROS, no en pesos — el estímulo
+          es cuota DOF (semanal) × litros, y esa cuota no vive
+          aquí. `docs/conocimiento/guion-demo.md` +
+          `guion_demo.test.ts` atan el guion de venta a esto. */}
+      <div className="mt-2 flex flex-wrap gap-2 items-stretch">
+        <MotorFiscalPeriodo series={resumenPerdidasSeries} />
+        {acred && (
+          <div className="flex-1 min-w-[200px]">
+            <StatCard icono={<Fuel width={15} height={15} strokeWidth={1.75} />}
+              etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" />
+          </div>
+        )}
+      </div>
+      <div className="mt-2">
+        <MotorFiscal resumen={resumenPerdidas} />
+      </div>
+    </div>
+  );
+}
+
+async function BloqueViajes({ pFilasViajes, sufijo }: {
+  pFilasViajes: Promise<FilaViaje[] | null>; sufijo: string;
+}) {
+  const filas = await pFilasViajes;
+  if (filas === null) {
+    return (
+      <div className="card p-6 mt-2.5 text-sm" style={{ color: 'var(--muted)' }}>
+        No se pudieron leer los viajes recientes — no significa que no haya viajes.
+      </div>
+    );
+  }
+  return <ViajesRecientes filas={filas} sufijo={sufijo} />;
+}
+
+async function BloqueEstadisticas({
+  pViajesPorDia, pViajesPorMes, pSeriesKpis, pGastoSemanal, pLiquidadoSemanal, pTopRutas,
+}: {
+  pViajesPorDia: Promise<DiaViajes[] | null>;
+  pViajesPorMes: Promise<Array<{ dia: string; valor: number }> | null>;
+  pSeriesKpis: Promise<SeriesKpiCards | null>;
+  pGastoSemanal: Promise<GastoSemanalSeries | null>;
+  pLiquidadoSemanal: Promise<LiquidadoSemanalSeries | null>;
+  pTopRutas: Promise<TopRutasSeries | null>;
+}) {
+  const [viajesPorDia, viajesPorMes, seriesKpis, gastoSemanalSeries, liquidadoSemanalSeries, topRutasSeries] =
+    await Promise.all([pViajesPorDia, pViajesPorMes, pSeriesKpis, pGastoSemanal, pLiquidadoSemanal, pTopRutas]);
+  return (
+    <PanelPeriodo
+      porDia={viajesPorDia}
+      porMes={viajesPorMes ?? []}
+      seriesKpis={seriesKpis}
+      gastoSemanalSeries={gastoSemanalSeries}
+      liquidadoSemanalSeries={liquidadoSemanalSeries}
+      topRutasSeries={topRutasSeries}
+    />
   );
 }
