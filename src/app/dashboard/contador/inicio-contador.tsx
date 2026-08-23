@@ -63,7 +63,11 @@ export async function InicioContador({
   // 8-ago-2026): todo lo fiscal de esta pantalla se corta al ejercicio en
   // curso, y `getKpis`/`detectarAnomalias` van sin ventana — un pendiente no
   // deja de ser pendiente por ser viejo.
-  const hoy = new Date(ahoraMs()).toISOString().slice(0, 10);
+  // DAT-08/FE-20 (auditoría prod): era `toISOString().slice(0,10)`, el día
+  // UTC. De 18:00 a 24:00 hora de México el panel ya estaba en el día
+  // siguiente, y el 31 de diciembre el `resolverPeriodo` de abajo abría el
+  // ejercicio EQUIVOCADO: todo lo fiscal salía en ceros a las 6 de la tarde.
+  const hoy = hoyMx(new Date(ahoraMs()));
   const periodoFiscal = resolverPeriodo(undefined, hoy);
   const diasEjercicio = periodoFiscal.desde
     ? Math.floor((Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${periodoFiscal.desde}T00:00:00Z`)) / 86_400_000) + 1

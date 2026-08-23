@@ -77,7 +77,11 @@ export async function InicioContenido({
   //   - `getAcreditables` usa el MISMO periodo que el resto de "Tu motor
   //     fiscal" (el ejercicio fiscal en curso) — dos cifras en la misma
   //     tarjeta con dos "cuándo" distintos se leen como error de captura.
-  const hoy = new Date(ahoraMs()).toISOString().slice(0, 10);
+  // DAT-08/FE-20 (auditoría prod): era `toISOString().slice(0,10)`, el día
+  // UTC. De 18:00 a 24:00 hora de México el panel ya estaba en el día
+  // siguiente, y el 31 de diciembre el `resolverPeriodo` de abajo abría el
+  // ejercicio EQUIVOCADO: todo lo fiscal salía en ceros a las 6 de la tarde.
+  const hoy = hoyMx(new Date(ahoraMs()));
   const periodoFiscal = resolverPeriodo(undefined, hoy);
   const diasEjercicio = periodoFiscal.desde
     ? Math.floor((Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${periodoFiscal.desde}T00:00:00Z`)) / 86_400_000) + 1
@@ -416,6 +420,7 @@ export async function InicioContenido({
                 <PanelPeriodo
                   viajes={viajes ?? []}
                   porMes={viajesPorMes ?? []}
+                  hoy={hoy}
                   seriesKpis={seriesKpis}
                   gastoSemanalSeries={gastoSemanalSeries}
                   liquidadoSemanalSeries={liquidadoSemanalSeries}

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Bug, Camera, DollarSign, ListChecks, AlertTriangle, History } from 'lucide-react';
-import { fechaHoraMx, numero } from '@/lib/formato';
+import { fechaHoraMx, numero, usd, usd4 } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { StatCard, StatusPill, EstadoVacio, type Estado } from '../ui/kit';
 import { resumenVeredicto, type CorridaQA, type EstadoCorrida } from '@/lib/admin/qa-tipos';
@@ -63,11 +63,11 @@ export function PantallaQa({ fotos, bancoError, corridas, historialError, gastoH
                     </div>
                     <div className="text-[13px] min-w-0 flex-1" style={{ color: 'var(--muted)' }}>Gasto real de hoy</div>
                   </div>
-                  <div className="font-display text-[20px] leading-tight font-semibold tabular mt-0.5">US${gastoHoy.toFixed(4)}</div>
+                  <div className="font-display text-[20px] leading-tight font-semibold tabular mt-0.5">{usd4(gastoHoy)}</div>
                 </div>
                 <div className="grow" />
                 <p className="text-xs mx-1.5 mt-1.5 pt-1.5 pb-0" style={{ borderTop: '1px dashed var(--line2)', color: 'var(--faint)' }}>
-                  de US${topeDiaUsd.toFixed(2)} de tope diario — suma de llm_costo por corrida, nunca estimado
+                  de {usd(topeDiaUsd)} de tope diario — suma de llm_costo por corrida, nunca estimado
                 </p>
               </div>
             ) : (
@@ -125,7 +125,7 @@ export function PantallaQa({ fotos, bancoError, corridas, historialError, gastoH
                           <td className="px-4 py-2.5 text-right whitespace-nowrap tabular text-xs">
                             {res ? `✅ ${res.ok} · ⚠️ ${res.noVerificado} · ❌ ${res.fallo}` : '—'}
                           </td>
-                          <td className="px-4 py-2.5 text-right whitespace-nowrap tabular text-xs">US${(c.costoUsdTotal ?? 0).toFixed(4)}</td>
+                          <td className="px-4 py-2.5 text-right whitespace-nowrap tabular text-xs">{usd4(c.costoUsdTotal ?? 0)}</td>
                         </tr>
                       );
                     })}

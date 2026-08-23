@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd, mxn } from '@/lib/utils';
+import { hoyMx } from '@/lib/formato';
 import { DollarSign, Calculator, CreditCard, TriangleAlert, Landmark } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
@@ -101,14 +102,20 @@ async function accionEmitir(_previo: ResultadoAccion, fd: FormData): Promise<Res
   const tenantId = String(fd.get('tenantId') ?? '');
   if (!tenantId) return { error: 'Elige una flota.' };
 
-  const hoy = new Date();
-  const ini = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), 1));
-  const fin = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth() + 1, 0));
+  // DAT-23 (auditoría prod): el mes salía de `getUTCMonth()`. El 31 de
+  // diciembre a las 18:01 hora de México ya es 1 de enero en UTC, así que
+  // "emitir la mensualidad de este mes" emitía la de ENERO — con el periodo
+  // equivocado, el índice `una_por_periodo` (0057) sin nada contra qué chocar,
+  // y diciembre sin cobrar. El mes es el de México, como el resto del panel.
+  const [anio, mes] = hoyMx().split('-').map(Number);
+  const ini = `${anio}-${String(mes).padStart(2, '0')}-01`;
+  // Día 0 del mes SIGUIENTE = último del actual. La aritmética va en UTC a
+  // propósito: ya opera sobre un año y un mes resueltos en México, no sobre el
+  // reloj.
+  const fin = new Date(Date.UTC(anio, mes, 0)).toISOString().slice(0, 10);
 
   try {
-    const r = await emitirMensualidad(
-      tenantId, ini.toISOString().slice(0, 10), fin.toISOString().slice(0, 10),
-    );
+    const r = await emitirMensualidad(tenantId, ini, fin);
     revalidatePath('/admin/costos-facturacion');
     revalidatePath('/dashboard/suscripcion');
     // Se dicen las TRES cifras. El total es lo que la flota transfiere y el

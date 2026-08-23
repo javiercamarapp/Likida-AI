@@ -28,6 +28,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Gasto, Viaje, Operador } from '@/types/likida';
+import { hoyMx } from '@/lib/formato';
 
 // ── El estado que la BD tendría, sin BD ─────────────────────────────────────
 //
@@ -35,7 +36,14 @@ import type { Gasto, Viaje, Operador } from '@/types/likida';
 // ventana en `viaje.fechaInicio`: con fechas fijas los comprobantes salen
 // "fuera del rango esperado" y el mensaje se llena de ruido que no es el objeto
 // de esta prueba. Se ancla el viaje a HOY, que es además el caso real.
-const HOY = new Date().toISOString().slice(0, 10);
+//
+// DAT-28: y ese HOY es el de MÉXICO. Era `new Date().toISOString().slice(0,10)`
+// —el día UTC—, así que corriendo la prueba después de las 18:00 hora local los
+// tres comprobantes quedaban fechados MAÑANA: `ventanaDelViaje` los marcaba
+// como del futuro (que es justo lo que se arregló) y el veredicto fiscal del
+// EFOS no llegaba al PDF del contralor. La prueba se caía a las 6 de la tarde
+// por tener el mismo bug que vigila el código que ejercita.
+const HOY = hoyMx();
 
 const VIAJE: Viaje = { id: 'v1', folio: 'VJ-1', origen: 'Mérida', destino: 'Cancún', anticipo: 8000, fechaInicio: HOY };
 const OPERADOR: Operador = { id: 'o1', nombre: 'Juan Pérez', telefono: '5219993700779', terminal: 'Mérida' };

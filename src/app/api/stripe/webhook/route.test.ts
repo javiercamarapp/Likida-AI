@@ -194,6 +194,62 @@ describe('las ramas de fallo lógico LANZAN para entrar al camino de retry', () 
     expect(sellar).not.toHaveBeenCalled();
   });
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // DAT-23 (auditoría prod) — LAS FECHAS DE LA FACTURA ERAN LAS DE LONDRES.
+  //
+  // El periodo y el sello del pago se sacaban de `toISOString().slice(0,10)`
+  // y de `new Date()`. Con el peor caso —las 19:00 del 31 de diciembre en
+  // México, que en UTC ya es el 1 de enero— el periodo se guardaba corrido un
+  // día (y el índice `una_por_periodo` de la 0057 dejaba de chocar con el que
+  // ya existía: DOS facturas del mismo mes) y `pagada_en` fechaba el
+  // REINTENTO del webhook, no el cobro.
+  // ═══════════════════════════════════════════════════════════════════════
+  const NOCHEVIEJA_19_MX_UNIX = Date.UTC(2027, 0, 1, 1, 0, 0) / 1000; // 31-dic-2026 19:00 CDMX
+
+  it('el periodo se guarda en días de MÉXICO, no en el día UTC del instante', async () => {
+    const r = await POST(req({
+      id: 'evt-f9', type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in-9', customer: 'cus-1', amount_paid: 240000, currency: 'mxn',
+          lines: { data: [{ period: { start: NOCHEVIEJA_19_MX_UNIX, end: NOCHEVIEJA_19_MX_UNIX } }] },
+        },
+      },
+    }));
+    expect(r.status).toBe(200);
+    const datos = (aplicarFactura.mock.calls[0] as unknown[])[0] as { periodoInicio: string; periodoFin: string };
+    expect(datos.periodoInicio).toBe('2026-12-31');
+    expect(datos.periodoFin).toBe('2026-12-31');
+    // El día UTC de ese mismo instante — lo que se guardaba antes.
+    expect(new Date(NOCHEVIEJA_19_MX_UNIX * 1000).toISOString().slice(0, 10)).toBe('2027-01-01');
+  });
+
+  it('`pagada_en` sale de Stripe (`status_transitions.paid_at`), no del reloj del webhook', async () => {
+    const r = await POST(req({
+      id: 'evt-f10', type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in-10', customer: 'cus-1', amount_paid: 240000, currency: 'mxn',
+          status_transitions: { paid_at: NOCHEVIEJA_19_MX_UNIX },
+        },
+      },
+    }));
+    expect(r.status).toBe(200);
+    const datos = (aplicarFactura.mock.calls[0] as unknown[])[0] as { pagada: boolean; pagadaEn: string | null };
+    expect(datos.pagada).toBe(true);
+    expect(datos.pagadaEn).toBe('2027-01-01T01:00:00.000Z');
+  });
+
+  it('sin `paid_at` no se inventa: `pagadaEn` va null y el destino decide', async () => {
+    const r = await POST(req({
+      id: 'evt-f11', type: 'invoice.paid',
+      data: { object: { id: 'in-11', customer: 'cus-1', amount_paid: 240000, currency: 'mxn' } },
+    }));
+    expect(r.status).toBe(200);
+    const datos = (aplicarFactura.mock.calls[0] as unknown[])[0] as { pagadaEn: string | null };
+    expect(datos.pagadaEn).toBeNull();
+  });
+
   it('el CONTRASTE: un tipo de evento que no nos concierne contesta 200 sin lanzar', async () => {
     const r = await POST(req({
       id: 'evt-x1', type: 'payment_intent.created',

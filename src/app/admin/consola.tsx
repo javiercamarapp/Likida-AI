@@ -541,7 +541,7 @@ export async function ConsolaAdmin({
                       <tr key={f.id} className="border-t transition-colors hover:bg-[var(--canvas)]" style={{ borderColor: 'var(--line2)' }}>
                         <td className="px-4 py-2.5 font-medium">{f.nombre}</td>
                         <td className="px-4 py-2.5" style={{ color: 'var(--muted)' }}>{f.plan}</td>
-                        <td className="px-4 py-2.5 text-right tabular">{f.viajes}</td>
+                        <td className="px-4 py-2.5 text-right tabular">{numero(f.viajes)}</td>
                         <td className="px-4 py-2.5 text-right tabular">{usd(f.costoIaUsd)}</td>
                         <td className="px-4 py-2.5 text-right">
                           {/* Los TRES paneles del cliente, con la sesión del

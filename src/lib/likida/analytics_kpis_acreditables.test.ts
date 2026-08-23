@@ -1,3 +1,4 @@
+import { hoyMx } from '@/lib/formato';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -290,5 +291,31 @@ describe('getKpis/getAcreditables — el tenant y la ventana viajan como argumen
     expect(kpisArgs.p_desde).toBeNull();
     expect(acredArgs.p_tenant).toBe('t1');
     expect(typeof acredArgs.p_desde).toBe('string'); // con ventanaDias, corteVentana da un ISO, no null
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // DAT-08 (auditoría prod) — LA VENTANA EMPEZABA SEIS HORAS ANTES.
+  //
+  // `corteVentana` devolvía `d.toISOString()`: la medianoche de LONDRES, que
+  // en México son las 18:00 del día ANTERIOR. "Últimos 7 días" arrancaba
+  // media tarde antes de lo que el rótulo promete, y el `hoy` desde el que
+  // contaba era el día UTC — así que de 18:00 a 24:00 la ventana entera
+  // estaba corrida un día. Ahora el corte lleva el offset de México.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('el corte de la ventana es la medianoche DE MÉXICO, no la de Londres', async () => {
+    await getAcreditables('t1', 7);
+    const p = llamadasRpc.find((l) => l.fn === 'acreditables_liquidacion_tenant')!.args.p_desde as string;
+
+    // Lleva el offset explícito, no una `Z`.
+    expect(p).toMatch(/^\d{4}-\d{2}-\d{2}T00:00:00-06:00$/);
+    expect(p).not.toMatch(/Z$/);
+
+    // Y ese instante ES la medianoche local: formateado en México da las 00:00
+    // del mismo día que nombra.
+    const dia = p.slice(0, 10);
+    expect(hoyMx(new Date(p))).toBe(dia);
+    // La medianoche UTC del mismo día —lo que se mandaba antes— cae el día
+    // anterior en México: seis horas de más dentro de la ventana.
+    expect(hoyMx(new Date(`${dia}T00:00:00Z`))).not.toBe(dia);
   });
 });

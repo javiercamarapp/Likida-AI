@@ -21,6 +21,7 @@ import {
 import { getConfig } from '@/lib/likida/config';
 import { resolverPeriodo, getGastosFiscales, resumirPerdidas, opcionesDe } from '@/lib/likida/fiscal';
 import { ahoraMs } from '@/lib/saludo';
+import { hoyMx } from '@/lib/formato';
 
 const SIN_PARAMS = { type: 'object', properties: {}, additionalProperties: false } as const;
 
@@ -39,8 +40,13 @@ function modoDe(args: Record<string, unknown>): Modo {
   const m = args.modo;
   return m === 'mensual' || m === 'historico' ? m : 'semanal';
 }
+/** DAT-23 (auditoría prod): era el día UTC. El dueño que le pregunta al
+ *  copiloto a las 19:00 recibía las cifras de MAÑANA —y el 31 de diciembre,
+ *  las del ejercicio siguiente— porque las tres `*Series` de `analytics.ts`
+ *  cuelgan sus ventanas de este `hoy`. La flota, el contralor y el SAT están
+ *  todos en México. */
 function hoyIso(): string {
-  return new Date(ahoraMs()).toISOString().slice(0, 10);
+  return hoyMx(new Date(ahoraMs()));
 }
 
 /**

@@ -6901,4 +6901,96 @@ begin
     descuadre_rebota, tenant_ajeno_rebota, sin_delete, borrado_rebota,
     concepto_rebota, anticipo_rebota, uuid_mayus_rebota, pago_huerfano_rebota,
     fecha_imposible_rebota, diferencias_rebota, folio_mayus_rebota;
+-- ── 133. El día de la base es el día de MÉXICO, no el de Londres (mig. 0161) ──
+--
+-- DAT-23. Supabase corre en UTC y México va seis horas atrás: de las 18:00 a
+-- las 24:00 hora local, `current_date` YA ES MAÑANA. De ahí colgaban
+-- `factura_saldo.vencida` (y con ella TODA la cobranza, porque `cobranza_tenant`
+-- y `facturacion_clientes_tenant` de la 0152 leen ese flag en vez de
+-- recalcularlo) y los defaults de cuatro columnas de fecha.
+--
+-- El bloque NO puede mover el reloj de la base, así que comprueba las tres
+-- cosas que sí son deterministas a cualquier hora:
+--
+--   (a) LA ARITMÉTICA, con el peor caso escrito a mano: las 19:00 del 31 de
+--       diciembre en México son las 01:00Z del 1 de enero. Leído en México da
+--       2026-12-31; leído en UTC da 2027-01-01 — un EJERCICIO FISCAL de
+--       diferencia. Es el bug, demostrado sin depender de qué hora sea.
+--   (b) LA DEFINICIÓN VIVA de la vista: ya no nombra `current_date`, sí nombra
+--       la zona, y SIGUE SIENDO `security_invoker`. Lo tercero no es adorno:
+--       `create or replace view` RESETEA las reloptions, así que la primera
+--       versión de la 0161 borró sin querer el `security_invoker = true` que
+--       la 0054 puso para tapar la fuga entre inquilinos, y el bloque 33 se
+--       puso rojo (`via-vista=2`) al aplicarla. Se comprueba aquí también
+--       para que el bloque de la migración que la tocó lo vigile de cerca.
+--   (c) LOS CUATRO DEFAULTS, leídos de `information_schema`.
+--
+-- Y además la semántica con filas reales: una factura que vence HOY (día de
+-- México) NO está vencida —el día del vencimiento todavía se puede pagar— y
+-- una que venció ayer SÍ. Corriendo después de las 18:00 hora de México, esta
+-- última pareja es la que se ponía roja de más. Todo revierte con el RAISE.
+--
+-- CORRIDO EL 22-AGO-2026 contra un Postgres 17.11 virgen con el andamio de CI
+-- y las 154 migraciones aplicadas en orden. Salida REAL, copiada tal cual:
+--
+--   FECHAS_LOCALES_0161  mx_19=2026-12-31  utc_19=2027-01-01  difieren=t
+--     vista_sin_current_date=t  vista_con_zona=t  vista_invoker=t  defaults_mx=4
+--     vence_hoy_no_vencida=f  vencio_ayer_si=t
+--
+-- PENDIENTE DE CORRER CONTRA PRODUCCIÓN (escala 50k). Esperado:
+--   FECHAS_LOCALES_0161  mx_19=2026-12-31  utc_19=2027-01-01  difieren=t
+--                        vista_sin_current_date=t  vista_con_zona=t  vista_invoker=t
+--                        defaults_mx=4  vence_hoy_no_vencida=f  vencio_ayer_si=t
+do $$
+declare
+  t uuid; c uuid; hoy_mx date;
+  mx_19 date; utc_19 date; difieren boolean;
+  def_vista text; sin_current_date boolean; con_zona boolean; invoker boolean;
+  defaults_mx int;
+  f_hoy uuid; f_ayer uuid; vencida_hoy boolean; vencida_ayer boolean;
+begin
+  hoy_mx := (now() at time zone 'America/Mexico_City')::date;
+
+  -- ── (a) El peor caso, escrito a mano ──────────────────────────────────
+  mx_19  := (timestamptz '2027-01-01T01:00:00Z' at time zone 'America/Mexico_City')::date;
+  utc_19 := (timestamptz '2027-01-01T01:00:00Z' at time zone 'UTC')::date;
+  difieren := mx_19 <> utc_19;
+
+  -- ── (b) La definición viva de la vista ────────────────────────────────
+  def_vista := pg_get_viewdef('public.factura_saldo'::regclass, true);
+  sin_current_date := def_vista not ilike '%current_date%';
+  con_zona         := def_vista ilike '%America/Mexico_City%';
+  -- La opción que un `create or replace view` descuidado borra (ver arriba).
+  select coalesce('security_invoker=true' = any(reloptions), false) into invoker
+    from pg_class where oid = 'public.factura_saldo'::regclass;
+
+  -- ── (c) Los cuatro defaults ───────────────────────────────────────────
+  select count(*) into defaults_mx
+    from information_schema.columns
+   where table_schema = 'public'
+     and (table_name, column_name) in (
+       ('factura_emitida', 'fecha'), ('pago_recibido', 'fecha'),
+       ('tarifa', 'vigente_desde'), ('suscripcion', 'inicio'))
+     and column_default ilike '%America/Mexico_City%';
+
+  -- ── La semántica, con filas reales ────────────────────────────────────
+  insert into public.tenant (nombre) values ('ZZZ VERIF 0161') returning id into t;
+  insert into public.cliente (tenant_id, nombre) values (t, 'ZZZ VERIF 0161 CLIENTE') returning id into c;
+  -- `fecha` explícita y anterior al vencimiento: el CHECK `factura_vence_despues`
+  -- exige vence_en >= fecha, y sembrar con el default sería probar el default
+  -- con el default.
+  insert into public.factura_emitida (tenant_id, cliente_id, fecha, subtotal, iva, total, estatus, vence_en)
+    values (t, c, hoy_mx - 30, 1000, 160, 1160, 'emitida', hoy_mx)
+    returning id into f_hoy;
+  insert into public.factura_emitida (tenant_id, cliente_id, fecha, subtotal, iva, total, estatus, vence_en)
+    values (t, c, hoy_mx - 30, 1000, 160, 1160, 'emitida', hoy_mx - 1)
+    returning id into f_ayer;
+
+  select vencida into vencida_hoy  from public.factura_saldo where factura_id = f_hoy;
+  select vencida into vencida_ayer from public.factura_saldo where factura_id = f_ayer;
+
+  delete from public.tenant where id = t;
+
+  raise exception E'FECHAS_LOCALES_0161  mx_19=%  utc_19=%  difieren=%  vista_sin_current_date=%  vista_con_zona=%  vista_invoker=%  defaults_mx=%  vence_hoy_no_vencida=%  vencio_ayer_si=%   (esperado 2026-12-31 / 2027-01-01 / t / t / t / t / 4 / f / t)',
+    mx_19, utc_19, difieren, sin_current_date, con_zona, invoker, defaults_mx, vencida_hoy, vencida_ayer;
 end $$;
