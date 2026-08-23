@@ -53,6 +53,25 @@ export function Bloque({ mensaje, esqueleto, children }: {
   );
 }
 
+/**
+ * Marca una promesa como YA OBSERVADA sin cambiarla ni tragarse su error.
+ *
+ * Una promesa que se lanza aquí arriba y se espera dentro de un `<Suspense>`
+ * pasa un rato sin nadie escuchándola. Si revienta en ese hueco, Node la
+ * cuenta como `unhandledRejection` — que en producción puede tumbar el
+ * proceso entero por una consulta caída. El `.catch` vacío ADJUNTA un
+ * observador (y devuelve otra promesa que nadie usa); la original sigue
+ * rechazando igual, y el bloque que la espera sigue viendo el error y
+ * pintando su `EstadoError`.
+ *
+ * Las envueltas en `safe()` no lo necesitan —resuelven a `null` y jamás
+ * rechazan—; esto es para las que fallan CERRADO a propósito.
+ */
+export function vigilar<T>(p: Promise<T>): Promise<T> {
+  p.catch(() => {});
+  return p;
+}
+
 /** Shimmer suelto — el ladrillo con el que se arman los demás esqueletos. */
 export function Barra({ alto = 14, ancho = '100%', className = '' }: {
   alto?: number | string; ancho?: number | string; className?: string;
