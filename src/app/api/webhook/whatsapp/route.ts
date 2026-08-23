@@ -292,29 +292,63 @@ export async function POST(req: NextRequest) {
       // retorno sin excepción sellaba `procesado_en`, incluido el 'duplicado'
       // de un claim huérfano de una invocación muerta — el mensaje quedaba
       // "procesado" sin haber corrido el OCR.
-      await conPool(filasDurables, MAX_EN_PARALELO, async (f) => {
-        try {
-          const claim = await reclamarPendiente(f.id, 0);
-          if (!claim) return; // el cron (u otra entrega) ya lo tiene.
+      // ── EN PARALELO POR CHOFER, EN SERIE DENTRO DE CADA CHOFER ───────────
+      //
+      // 23-ago-2026. El drenado del cron ya lo hacía (ESC-1, ver
+      // `cron/wa-pendientes/drenado.ts`) pero ESTE camino —el vivo, el que
+      // atiende la ráfaga en el momento— paralelizaba por MENSAJE. Un operador
+      // que manda foto, foto y «listo» podía ver su liquidación cerrada antes
+      // de que terminaran las fotos: cierre parcial, gastos que faltan, y una
+      // diferencia que se le cobra a él.
+      //
+      // El orden importa DENTRO de una conversación —la caption que completa la
+      // foto anterior, el «listo» que cierra— y no importa nada entre
+      // conversaciones distintas. Agrupar por remitente da las dos cosas: el
+      // caudal de antes y el orden que faltaba.
+      const porChofer = new Map<string, typeof filasDurables>();
+      for (const f of filasDurables) {
+        // Sin `from` legible, el mensaje va a su propia cadena (su id): peor que
+        // agrupar, nunca peor que mezclarlo con el de otro chofer. Mismo
+        // criterio que `pendientesPorDrenar`.
+        const clave = typeof f.evento?.from === 'string' && f.evento.from ? f.evento.from : f.id;
+        const cadena = porChofer.get(clave) ?? [];
+        cadena.push(f);
+        porChofer.set(clave, cadena);
+      }
+
+      await conPool([...porChofer.values()], MAX_EN_PARALELO, async (cadena) => {
+        for (const f of cadena) {
           try {
-            const resultado = await processInbound(claim.evento, { inicioInvocacionMs: inicioInvocacion });
-            if (quedoPendiente(resultado)) {
-              logger.warn('wa.pendiente_pospuesto', { id: f.id, resultado });
-              await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`);
-            } else {
-              await marcarPendienteProcesado(f.id);
+            const claim = await reclamarPendiente(f.id, 0);
+            // `continue` y NO `return`: dentro de la cadena, salir aquí se
+            // saltaría los mensajes SIGUIENTES del mismo chofer — que es
+            // justamente el orden que este bucle existe para respetar.
+            if (!claim) continue; // el cron (u otra entrega) ya lo tiene.
+            try {
+              const resultado = await processInbound(claim.evento, { inicioInvocacionMs: inicioInvocacion });
+              if (quedoPendiente(resultado)) {
+                logger.warn('wa.pendiente_pospuesto', { id: f.id, resultado });
+                await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`);
+                // Sin presupuesto para éste tampoco lo hay para el que sigue, y
+                // procesar el «listo» sin sus fotos es peor que posponerlo: se
+                // corta la cadena y el cron la retoma entera. Mismo criterio
+                // que el drenado (ESC-1).
+                if (resultado === 'sin_tiempo') return;
+              } else {
+                await marcarPendienteProcesado(f.id);
+              }
+            } catch (e) {
+              await anotarFalloPendiente(f.id, e instanceof Error ? e.message : String(e));
+              // `codigo` (AUDITORÍA 18, M14): sin él este catch era UN solo issue
+              // de Sentry para todos los fallos de procesamiento de todas las
+              // flotas, para siempre — la causa nueva no notificaba.
+              logger.error('processInbound', { id: f.id, err: e instanceof Error ? e.message : String(e), codigo: codigoDeError(e) });
             }
           } catch (e) {
-            await anotarFalloPendiente(f.id, e instanceof Error ? e.message : String(e));
-            // `codigo` (AUDITORÍA 18, M14): sin él este catch era UN solo issue
-            // de Sentry para todos los fallos de procesamiento de todas las
-            // flotas, para siempre — la causa nueva no notificaba.
-            logger.error('processInbound', { id: f.id, err: e instanceof Error ? e.message : String(e), codigo: codigoDeError(e) });
+            // Ni el claim se pudo leer: la fila sigue pendiente y el cron la
+            // recupera — se anota y no se tumba el pool.
+            logger.error('wa.claim_fallo', { id: f.id, err: e instanceof Error ? e.message : String(e) });
           }
-        } catch (e) {
-          // Ni el claim se pudo leer: la fila sigue pendiente y el cron la
-          // recupera — se anota y no se tumba el pool.
-          logger.error('wa.claim_fallo', { id: f.id, err: e instanceof Error ? e.message : String(e) });
         }
       });
 

@@ -69,6 +69,12 @@ const PROCESABLES = /\.(xml|pdf)$/i;
  *  materializaría entero en memoria. */
 const MAX_ADJUNTO_BYTES = 4 * 1024 * 1024;
 
+
+// El tope de la función, DECLARADO: de él sale el presupuesto de las descargas
+// (ver `finPresupuesto` abajo). Sin un número explícito aquí, el presupuesto se
+// calcularía contra un default de la plataforma que puede cambiar sin avisar.
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   // El cuerpo CRUDO: `JSON.parse` + `stringify` reordena llaves y la firma
   // dejaría de cuadrar. Ver `firma_entrante.ts`.
@@ -215,6 +221,24 @@ export async function POST(req: Request) {
   // desde que empezó a procesar adjuntos.
   const inicioCorrida = new Date();
 
+  // ── EL PRESUPUESTO DE TIEMPO (23-ago-2026) ───────────────────────────────
+  //
+  // Los dos `fetch` de abajo no tenían timeout. Un Resend que acepta la
+  // conexión y calla dejaba la función esperando hasta que la mataba la
+  // plataforma — y ahí está el daño: al morir NO corre el `delete` que libera
+  // la fila de dedup, así que el correo queda marcado como procesado sin
+  // haberlo sido. El reintento de Resend choca con la llave primaria, sale por
+  // "ya_procesado", y el CFDI se pierde para siempre. Silenciosamente.
+  //
+  // El presupuesto es por CORRIDA, no por petición: se reserva un margen para
+  // que, pase lo que pase con los adjuntos, quede tiempo de ejecutar la
+  // liberación y contestar 503. Un adjunto que no cabe en el tiempo cuenta como
+  // CAÍDA (transitorio) — que es exactamente lo que es.
+  const RESERVA_PARA_LIBERAR_MS = 3_000;
+  const finPresupuesto = Date.now() + (maxDuration * 1000 - RESERVA_PARA_LIBERAR_MS);
+  /** Lo que queda, acotado: nunca más de 8 s por descarga ni menos de 0. */
+  const restanteMs = () => Math.max(0, Math.min(8_000, finPresupuesto - Date.now()));
+
   for (const adj of adjuntos) {
     // Sin id no hay qué pedirle a Resend, y el reintento trae el MISMO
     // payload: permanente.
@@ -222,15 +246,20 @@ export async function POST(req: Request) {
     try {
       // La `download_url` viene firmada y CADUCA, así que se pide justo antes
       // de usarla en vez de guardarla.
+      // Sin tiempo para intentarlo siquiera, se cuenta como caída: el 503 de
+      // abajo devuelve el correo a la cola de Resend con todo por hacer.
+      if (restanteMs() === 0) { caidas++; continue; }
+
       const meta = await fetch(
         `https://api.resend.com/emails/${emailId}/attachments/${adj.id}`,
-        { headers: { Authorization: `Bearer ${llave}` } },
+        { headers: { Authorization: `Bearer ${llave}` }, signal: AbortSignal.timeout(restanteMs()) },
       );
       if (!meta.ok) { caidas++; continue; }
       const { download_url: url } = (await meta.json()) as { download_url?: string };
       if (!url) { caidas++; continue; }
 
-      const bin = await fetch(url);
+      if (restanteMs() === 0) { caidas++; continue; }
+      const bin = await fetch(url, { signal: AbortSignal.timeout(restanteMs()) });
       if (!bin.ok) { caidas++; continue; }
 
       // El TOPE, con el doble chequeo de `leerCuerpo` (api/v1/_escritura.ts):
