@@ -19,7 +19,8 @@ import { saludo, ahoraMs } from '@/lib/saludo';
 import { fechaMx, mxn, pctCambio, hoyMx } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { estadoPanel, liquidacionesDeViajes } from './estado';
-import { getViajesPorDia, type DiaViajes } from './serie-diaria';
+import type { DiaViajes } from './serie-diaria';
+import { getViajesPorDia } from './serie-diaria-servidor';
 import {
   BarraPagina, ChipFecha, HeroSaludo, MotorFiscal, TituloSeccion,
   type FilaViaje,
