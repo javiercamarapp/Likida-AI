@@ -30,7 +30,7 @@ export default async function DevPage() {
   // tarjeta lo dice (cero eventos ≠ ciego).
   const seguridadP: Promise<FilaSeguridad[] | null> = getEventosSeguridad(12).catch(() => null);
   const slosP: Promise<Slo[] | null> = getSLOs().catch(() => null);
-  const [{ count }, actividad, mapa, autores, seguridad, slos] = await Promise.all([
+  const [conteoTenants, actividad, mapa, autores, seguridad, slos] = await Promise.all([
     supabaseAdmin().from('tenant').select('id', { count: 'exact', head: true }),
     getActividadGitHub(),
     getMapaCommits(),
@@ -38,7 +38,11 @@ export default async function DevPage() {
     seguridadP,
     slosP,
   ]);
-  const tenants = count ?? 0;
+  // FE-24: esto era `count ?? 0`, y `count` llega `null` cuando la CONSULTA
+  // FALLA — supabase-js reporta por valor. Con la base caída, la pantalla
+  // afirmaba "No hay ninguna flota dada de alta" e invitaba a crear una que
+  // quizá ya existe. `null` viaja como `null` y el selector lo dice.
+  const tenants = conteoTenants.error ? null : conteoTenants.count ?? 0;
   return (
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>

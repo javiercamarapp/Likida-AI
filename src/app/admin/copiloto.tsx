@@ -168,7 +168,9 @@ function VisualRespuesta({ v }: { v: Visual }) {
     );
   }
   return (
-    <div className="card p-1.5 mt-2">
+    // FE-19: la tabla que devuelve el copiloto es de ancho DESCONOCIDO (la
+    // arma una consulta): scrollea dentro de la tarjeta o estira la página.
+    <div className="card p-1.5 mt-2 overflow-x-auto">
       <table className="w-full border-collapse text-[13px]">
         <tbody>
           {v.filas.map(([k, val]) => (
@@ -303,6 +305,11 @@ function TarjetaAccion({ a, onEjecutada }: {
   );
 }
 
+/** El `MAX_LISTA` de `lib/agents/copiloto-historial.ts`. Se declara aquí
+ *  porque es la pantalla la que tiene que confesar el tope: con la lista
+ *  llena, el pill del historial enseñaba 100 como si fueran todas (FE-13). */
+const TOPE_CONVERSACIONES_COPILOTO = 100;
+
 export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' | 'panel' }) {
   const [historial, setHistorial] = useState<Array<{ q: string; r: Respuesta }>>([]);
   const [texto, setTexto] = useState('');
@@ -310,6 +317,17 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
   const [fasePensando, setFasePensando] = useState('Pensando…');
   const [pasosVivos, setPasosVivos] = useState<Array<{ tool: string; listo: boolean }>>([]);
   const finConversacion = useRef<HTMLDivElement>(null);
+  /**
+   * FE-24 (22-ago-2026): el `fetch` del copiloto no tenía AbortController.
+   * Solo llevaba `AbortSignal.timeout(75s)`, que corta la ESPERA pero no
+   * cancela nada cuando el usuario cierra el panel o se va de la página: la
+   * petición seguía viva, el lector del stream seguía leyendo y el servidor
+   * seguía gastando tokens de un modelo para una respuesta que ya no tiene a
+   * quién enseñarse. Aquí vive el controlador de la petición EN VUELO, para
+   * poder abortarla al desmontar (y al arrancar otra, que no debería pasar —
+   * `ocupado` lo impide — pero un estado nuevo no puede depender de eso).
+   */
+  const enVuelo = useRef<AbortController | null>(null);
 
   // ── Historial persistente (0121) — el MISMO patrón 0088 del chat ─────────
   // La conversación abierta vive en la base; este id la ancla. `convs` es la
@@ -388,6 +406,9 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
     finConversacion.current?.scrollIntoView({ block: 'end' });
   }, [historial.length]);
 
+  // Al desmontar (cerrar el panel, navegar): se aborta lo que esté en vuelo.
+  useEffect(() => () => enVuelo.current?.abort(), []);
+
   function preguntar(q: string) {
     if (!q.trim() || ocupado) return;
     setTexto('');
@@ -395,6 +416,11 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
   }
 
   async function preguntarCopiloto(q: string) {
+    // Una petición nueva cancela la anterior: `ocupado` ya lo impide, pero el
+    // candado es de estado y esto es de red — el que manda es éste.
+    enVuelo.current?.abort();
+    const control = new AbortController();
+    enVuelo.current = control;
     setOcupado(true);
     setFasePensando('Pensando…');
     setPasosVivos([]);
@@ -414,7 +440,9 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
       const resp = await fetch('/api/admin/copiloto', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensajes: [...previos, { rol: 'usuario', texto: q }], conversacionId }),
-        signal: AbortSignal.timeout(75_000),
+        // Las DOS razones para cortar: el techo de espera de siempre y el
+        // abort del usuario (desmontar / preguntar otra cosa).
+        signal: AbortSignal.any([control.signal, AbortSignal.timeout(75_000)]),
       });
       let d: Record<string, unknown> | null = null;
       if (resp.ok && resp.body && (resp.headers.get('content-type') ?? '').includes('ndjson')) {
@@ -476,11 +504,19 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
       }
       setHistorial((h) => [...h.slice(0, -1), { q, r }]);
     } catch {
-      setHistorial((h) => [...h.slice(0, -1), { q, r: { texto: 'El copiloto no pudo responder en este momento — inténtalo de nuevo.' } }]);
+      // Un abort NO es un fallo del copiloto: es que ya nadie está esperando
+      // la respuesta. Pintar "no pudo responder" sobre una pregunta que el
+      // usuario abandonó sería acusar al sistema de algo que no pasó.
+      if (!control.signal.aborted) {
+        setHistorial((h) => [...h.slice(0, -1), { q, r: { texto: 'El copiloto no pudo responder en este momento — inténtalo de nuevo.' } }]);
+      }
     } finally {
       clearInterval(relojFases);
-      setPasosVivos([]);
-      setOcupado(false);
+      if (enVuelo.current === control) enVuelo.current = null;
+      if (!control.signal.aborted) {
+        setPasosVivos([]);
+        setOcupado(false);
+      }
     }
   }
 
@@ -623,6 +659,11 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
             {convs.length === 0 ? 'Sin chats recientes.' : `Nada coincide con «${busqueda.trim()}».`}
           </p>
         )}
+        {Array.isArray(convs) && convs.length >= TOPE_CONVERSACIONES_COPILOTO && (
+          <p className="text-[11px] px-2.5 pb-1 m-0" style={{ color: 'var(--faint)' }}>
+            Las {TOPE_CONVERSACIONES_COPILOTO} más recientes — las anteriores siguen guardadas.
+          </p>
+        )}
         {listaFiltrada.map((c) => {
           const activa = c.id === conversacionId;
           return (
@@ -648,9 +689,12 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
           style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
           <History width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
           Historial
+          {/* FE-13: `listarConversacionesCopiloto` trae un tope de filas. Con
+              la lista llena, este pill decía el TOPE como si fuera el total de
+              conversaciones que has tenido. El "+" lo declara. */}
           {Array.isArray(convs) && (
             <span className="cifra-mono text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
-              {numero(convs.length)}
+              {numero(convs.length)}{convs.length >= TOPE_CONVERSACIONES_COPILOTO ? '+' : ''}
             </span>
           )}
         </button>
