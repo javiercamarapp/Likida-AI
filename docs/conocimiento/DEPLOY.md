@@ -79,6 +79,115 @@ un fallo de lectura no se pueda pintar como "$0.00".
 
 ---
 
+## Respaldo y restauración (RES-8)
+
+**Este proyecto no tiene respaldo automático ni PITR.** Verificado contra la
+Management API el 4-ago-2026: el plan de Supabase es free y su propia
+documentación es explícita en que los proyectos free exportan por su cuenta. El
+mismo día se borró la base entera y lo único que la salvó fue un dump hecho a
+mano.
+
+Con el CFF art. 30 de por medio —los comprobantes de las flotas clientes se
+conservan **cinco años**— esto no es pérdida de producto: es pérdida de
+evidencia fiscal de un tercero.
+
+### Los dos respaldos, y son dos
+
+| Qué | Script | Qué se pierde sin él |
+|---|---|---|
+| **La base** (filas) | `bash scripts/respaldo.sh [destino]` | Todo: viajes, gastos, liquidaciones, facturación. |
+| **Storage** (archivos) | `bash scripts/respaldo-storage.sh [destino]` | Las FOTOS de los comprobantes y los PDF de las liquidaciones. Las filas quedan apuntando a rutas de un bucket vacío: la liquidación existe y el papel que el contralor cruza, no. |
+
+**El segundo no existía hasta el 22-ago-2026** (RES-8). Correr solo el primero
+deja un respaldo que *parece* completo — es la forma más cara de este fallo.
+
+```bash
+# La base — dump de datos, se comprueba que no venga vacío, 14 días en disco.
+bash scripts/respaldo.sh
+
+# Storage — lista con la service role, baja lo que falte, compara CONTEOS y
+# deja MANIFIESTO.tsv (bucket, ruta, bytes, sha256). Es IDEMPOTENTE: correrlo
+# dos veces no vuelve a bajar nada, y una corrida cortada se retoma.
+bash scripts/respaldo-storage.sh
+
+# A S3 o R2 en la misma corrida (sin --delete: nunca borra allá):
+RESPALDO_S3_DESTINO=s3://likida-respaldos/storage bash scripts/respaldo-storage.sh
+```
+
+Variables de `respaldo-storage.sh`: `NEXT_PUBLIC_SUPABASE_URL` y
+`SUPABASE_SERVICE_ROLE_KEY` (las lee de `.env.local` si no están en el
+entorno), `RESPALDO_BUCKETS` (default `comprobantes liquidaciones bus`) y
+`RESPALDO_S3_DESTINO`. **No hay cron que lo llame**: corre contra producción
+con la service role, y esa tecla es consciente. Cadencia recomendada mientras
+no haya PITR: **semanal**, y a mano antes de cualquier migración que borre.
+
+### PITR: qué es y qué NO cubre
+
+El Point-in-Time Recovery de Supabase (planes de pago) permite restaurar la
+BASE a un instante. Dos cosas que hay que tener claras antes de darlo por
+resuelto:
+
+- **PITR no cubre Storage.** Los archivos van por su lado. Aunque se contrate,
+  `respaldo-storage.sh` sigue haciendo falta.
+- **PITR no protege de un borrado lógico que se replica**: si una migración
+  borra filas, PITR sirve para volver atrás *si alguien se da cuenta dentro de
+  la ventana*. La ventana y la alerta son parte del plan, no un regalo.
+
+Mientras no se contrate, la ventana de pérdida es **el tiempo desde el último
+`respaldo.sh` que alguien haya corrido a mano**. Escribirlo así es el punto:
+esa cifra hoy no la sabe nadie.
+
+### La prueba de restauración (lo que convierte un archivo en un respaldo)
+
+Un respaldo que nunca se restauró es una hipótesis. Se prueba **contra una base
+nueva, jamás contra producción**:
+
+1. Crear un proyecto de Supabase vacío (o una base local:
+   `createdb likida_restauro`).
+2. Esquema y datos:
+   ```bash
+   psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -f supabase/pruebas-aislamiento/andamio_ci.sql
+   for f in supabase/migrations/*.sql; do psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -q -f "$f"; done
+   psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -f ~/Desktop/likida-respaldos/likida-AAAA-MM-DD_HHMM.sql
+   ```
+3. **Cotejar contra el manifiesto**, que es la parte que se salta todo el
+   mundo: por cada `pdf_url` de `liquidacion` y cada `imagen_url` de `gasto`,
+   el archivo tiene que estar en el respaldo de Storage.
+   ```sql
+   select count(*) from liquidacion where pdf_url is not null;
+   select count(*) from gasto      where imagen_url is not null;
+   ```
+   ```bash
+   cut -f2 ~/Desktop/likida-storage/MANIFIESTO.tsv | wc -l
+   ```
+   Los conteos no tienen por qué coincidir uno a uno (Storage guarda además el
+   PDF `-operador` de cada liquidación y los `informes/`), pero **cada ruta de
+   la base tiene que aparecer en el manifiesto**. Si falta una, el respaldo no
+   está completo y hay que decirlo, no promediarlo.
+4. Correr la batería contra la base restaurada:
+   `DATABASE_URL=$URL_RESTAURO node scripts/ci/correr-verificaciones.mjs supabase/verificaciones.sql`
+5. Borrar la base de prueba.
+
+Anota la fecha de la última prueba de restauración aquí abajo. Sin fecha, no se
+ha hecho.
+
+- Última prueba de restauración: **nunca** (22-ago-2026).
+
+### La limpieza de Storage NO libera bytes por sí sola
+
+`limpiar_storage_huerfano()` (mig. 0162) borra del **catálogo**
+(`storage.objects`) los objetos cuya flota o cuyo viaje ya no existen; corre
+dentro de `mantenimiento_de_datos`, o sea en el cron nocturno `/api/cron/purgar`.
+Lo que **no** hace es borrar el blob del almacén S3 —eso solo lo hace la API de
+Storage—, así que la factura de almacenamiento no baja sola. Reclamar los bytes
+es un barrido aparte con la service role, y hoy no está escrito. La función
+nunca toca un objeto de menos de 7 días, ni uno que `comprobante_huerfano` o
+`liquidacion_historico` todavía nombren: ver la cabecera de la 0162 y el bloque
+134 de `supabase/verificaciones.sql`, que lo demuestra con diez objetos
+sembrados.
+
+---
+
 ## Rotar el token de WhatsApp
 
 `WHATSAPP_ACCESS_TOKEN` es un token de usuario de sistema de Meta y **caduca**.
