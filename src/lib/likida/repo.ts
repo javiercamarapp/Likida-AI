@@ -88,6 +88,25 @@ export async function getViaje(viajeId: string, tenantId: string): Promise<Viaje
   };
 }
 
+/**
+ * `tenant.perfil` crudo (FASE 3, migración 0169) — a propósito, sin
+ * interpretar. Sólo `perfil/preguntas.ts` sabe qué forma tiene por dentro
+ * (`calificaEstimuloPeaje`, etc.); este repo se limita a traerlo. Separado
+ * de `getConfig()` (config.ts) a propósito, no por descuido: `getConfig`
+ * fusiona `config` con los defaults de la demo, y el perfil existe
+ * justamente para poder decir "esto lo declaró el cliente" sin que una
+ * fusión lo confunda con relleno (docs/perfil/PERFIL-OPERATIVO.md).
+ */
+export async function getPerfilCrudo(tenantId: string): Promise<unknown> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('tenant')
+    .select('perfil')
+    .eq('id', tenantId)
+    .maybeSingle(), 'getPerfilCrudo');
+  if (error) throw new Error(`perfil: ${error.message}`);
+  return data?.perfil ?? {};
+}
+
 export async function getOperador(operadorId: string, tenantId: string): Promise<Operador | null> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('operador')
