@@ -17,7 +17,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { conteo, exigir, traerTodo, PAGINA, LecturaIncompleta, type RespuestaPg } from '@/lib/likida/pg';
+import { conteo, exigir, traerTodo, traerPorIds, PAGINA, LecturaIncompleta, type RespuestaPg } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 
 // ── El embudo → color. UNA fuente para pines SVG, marcadores de calle,
@@ -290,7 +290,20 @@ export const CRITERIO_SCORES = {
   necesidad: 'Necesidad (0140, GENERADA) = vacante de liquidación/cuadre/auxiliar administrativo +50 (cualquier otra vacante +25), flota investigada ≥20 unidades +25.',
 } as const;
 
-// ── La lectura completa para el mapa ────────────────────────────────────────
+// ── EL LISTADO LIGERO Y LOS TEXTOS LARGOS (FE-16) ──────────────────────────
+//
+// El Cerebro necesita UNA fila por prospecto para poder filtrar y contar en
+// el cliente (los 14 filtros y los cuatro KPIs se calculan sobre el universo
+// entero, no sobre una página). Lo que NO necesita para eso son los textos
+// largos: `notas` (241 bytes de promedio × 33 mil filas = 7.8 MB), el mensaje
+// de WhatsApp y el correo redactados por el agente experto (otros 7.5 MB).
+// Esos tres solo se PINTAN en la ficha, en la tarjeta abierta y en el popup
+// de calles — un puñado de prospectos a la vez—, así que se piden cuando se
+// abren (`getTextosProspectos`) y no viajan en la carga inicial.
+//
+// `notas` sí se LEE del servidor: `giroDe`, `tamanoDe`, `scoreUrgencia`,
+// `completitudDe` y el filtro de duplicados viven de ella. Lo que cambia es
+// que se queda de este lado.
 
 export interface ProspectoMapa {
   id: string;
@@ -303,10 +316,6 @@ export interface ProspectoMapa {
   correo: string | null;
   contacto: string | null;
   vacante: string | null;
-  /** Texto libre de procedencia y detalle (giro/tamaño/domicilio citados,
-   *  cruces DENUE, sucursales) — la fuente NUNCA se lee de aquí en código
-   *  (para eso está giroDe/tamanoDe), solo se enseña al vendedor. */
-  notas: string | null;
   estado: string;
   fuente: string;
   giro: Giro;
@@ -318,11 +327,9 @@ export interface ProspectoMapa {
   completitud: number;
   /** El último contacto registrado (0130) — null = nunca tocado. */
   ultimoToque: string | null;
-  /** El primer toque redactado por el agente experto (0129) — null hasta que
-   *  se genera; los botones caen a la plantilla determinista mientras. */
-  mensajeWaIa: string | null;
-  correoAsuntoIa: string | null;
-  correoCuerpoIa: string | null;
+  /** Cuándo redactó el agente experto el primer toque (0129) — null hasta que
+   *  se genera. Es una MARCA, no el texto: el filtro "solo con mensaje IA" y
+   *  el sello de la tarjeta se resuelven con ella, y el texto se pide aparte. */
   mensajesGeneradosEn: string | null;
   /** Los tres hechos/derivados de la 0140 que SÍ hacen falta a nivel mapa
    *  (filtrar y ordenar) — historia y viajes_mes_estimado se quedan en la
@@ -335,11 +342,106 @@ export interface ProspectoMapa {
   necesidadPct: number;
 }
 
+/**
+ * Los TEXTOS LARGOS de un prospecto — lo que el listado deliberadamente NO
+ * trae. Se piden por id al abrir una ficha, una tarjeta o un popup.
+ *
+ * El mensaje del agente experto (0129) manda sobre la plantilla determinista,
+ * así que el botón de WhatsApp/correo NO puede abrirse con la plantilla
+ * "mientras llega" el texto bueno: mandaría el mensaje equivocado en nombre de
+ * Javier. Por eso `mensajesGeneradosEn` viaja en el listado — dice si hay algo
+ * que esperar — y el texto llega por aquí.
+ */
+export interface TextosProspecto {
+  id: string;
+  notas: string | null;
+  mensajeWaIa: string | null;
+  correoAsuntoIa: string | null;
+  correoCuerpoIa: string | null;
+}
+
+/**
+ * La fila TAL COMO VIAJA: una tupla, no un objeto.
+ *
+ * No es micro-optimización. Los nombres de los 22 campos son ~238 bytes por
+ * fila y el universo son 33 mil: 7.8 MB de payload que dice treinta y tres mil
+ * veces "similitudIcpPct" y ni un dato. En tupla ese costo es cero. Y es una
+ * tupla ETIQUETADA —TypeScript nombra cada posición—, así que un campo movido
+ * de lugar no compila, en vez de pintar el teléfono en la columna del correo.
+ *
+ * Medido contra producción el 22-ago-2026 (33,065 prospectos vivos): el mapa
+ * baja de 33 MB (objetos, con los textos largos) a ~15 MB (objetos, ya sin
+ * ellos) a ~8.5 MB (tuplas).
+ */
+export type FilaCompacta = [
+  id: string,
+  empresa: string,
+  ciudad: string | null,
+  entidad: string | null,
+  lat: number | null,
+  lng: number | null,
+  telefono: string | null,
+  correo: string | null,
+  contacto: string | null,
+  vacante: string | null,
+  estado: string,
+  fuente: string,
+  giro: Giro,
+  urgencia: number,
+  cierre: number,
+  tamano: Tamano | null,
+  completitud: number,
+  ultimoToque: string | null,
+  mensajesGeneradosEn: string | null,
+  numUnidades: number | null,
+  similitudIcpPct: number,
+  necesidadPct: number,
+];
+
+export function empacar(p: ProspectoMapa): FilaCompacta {
+  return [
+    p.id, p.empresa, p.ciudad, p.entidad, p.lat, p.lng, p.telefono, p.correo,
+    p.contacto, p.vacante, p.estado, p.fuente, p.giro, p.urgencia, p.cierre,
+    p.tamano, p.completitud, p.ultimoToque, p.mensajesGeneradosEn,
+    p.numUnidades, p.similitudIcpPct, p.necesidadPct,
+  ];
+}
+
+export function desempacar(f: FilaCompacta): ProspectoMapa {
+  const [
+    id, empresa, ciudad, entidad, lat, lng, telefono, correo, contacto, vacante,
+    estado, fuente, giro, urgencia, cierre, tamano, completitud, ultimoToque,
+    mensajesGeneradosEn, numUnidades, similitudIcpPct, necesidadPct,
+  ] = f;
+  return {
+    id, empresa, ciudad, entidad, lat, lng, telefono, correo, contacto, vacante,
+    estado, fuente, giro, urgencia, cierre, tamano, completitud, ultimoToque,
+    mensajesGeneradosEn, numUnidades, similitudIcpPct, necesidadPct,
+  };
+}
+
 export interface DatosMapa {
-  prospectos: ProspectoMapa[];
+  /** El universo (carga completa) o SOLO lo que cambió (delta). */
+  filas: FilaCompacta[];
   generadoEn: string;
   /** true = la lectura falló y la lista viene vacía POR ESO (no hay cero). */
   fallo: boolean;
+  /**
+   * La marca de agua para el siguiente latido: el `updated_at` MÁS ALTO de lo
+   * que se acaba de leer. Sale del reloj de la BASE y no del servidor web —
+   * con dos reloj distintos, unos milisegundos de desfase se comen los
+   * cambios de esa ventana para siempre. null = no llegó ninguna fila (el
+   * cliente conserva la marca que ya tenía).
+   */
+  marca: string | null;
+  /** true = esta respuesta es un delta: `filas` son altas y cambios, y lo que
+   *  no viene NO desapareció, simplemente no cambió. */
+  delta: boolean;
+  /** Cuántos prospectos hay del otro lado tras el filtro del mapa. El delta
+   *  no puede enterarse de una BAJA (una fila borrada no se actualiza, se va),
+   *  así que el cliente compara este conteo de SERVIDOR contra el suyo y
+   *  recarga completo cuando no cuadran. null = el conteo no se pudo hacer. */
+  total: number | null;
 }
 
 interface FilaProspecto {
@@ -347,8 +449,8 @@ interface FilaProspecto {
   telefono: string | null; correo: string | null; contacto_nombre: string | null;
   vacante: string | null; estado: string; fuente: string; notas: string | null;
   scian: string | null;
-  mensaje_wa: string | null; mensaje_correo_asunto: string | null;
-  mensaje_correo: string | null; mensajes_generados_en: string | null;
+  mensajes_generados_en: string | null;
+  updated_at: string;
   prospecto_toque: Array<{ creado_en: string }> | null;
   /** 0140 — solo lo que hace falta para filtrar/ordenar el mapa. */
   sitio_verificado: boolean;
@@ -356,6 +458,13 @@ interface FilaProspecto {
   similitud_icp_pct: number;
   necesidad_pct: number;
 }
+
+/** Las columnas del LISTADO. `mensaje_wa`, `mensaje_correo_asunto` y
+ *  `mensaje_correo` NO están: 7.5 MB que no se pintan en el mapa. `notas` sí
+ *  —la usan giroDe/tamanoDe/scoreUrgencia/completitudDe y el filtro de
+ *  duplicados—, pero se queda en el servidor. */
+const COLUMNAS_LISTADO =
+  'id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, scian, mensajes_generados_en, updated_at, sitio_verificado, num_unidades, similitud_icp_pct, necesidad_pct, prospecto_toque(creado_en)';
 
 /** Cuántas páginas de 1,000 se piden A LA VEZ (mismo criterio que
  *  `TANDAS_EN_PARALELO` de `traerPorIds` en pg.ts: acotado para no abrir
@@ -411,78 +520,170 @@ export async function traerTodoEnParalelo<T>(
   return filas;
 }
 
-export async function getDatosMapa(): Promise<DatosMapa> {
+/** El filtro de duplicados del mapa: la marca la escribe el deduplicador
+ *  dentro de `notas` (0139). Se resuelve aquí y no en SQL porque `notas` ya
+ *  viaja hasta el servidor para calcular giro/tamaño/urgencia. */
+function esDuplicado(f: { notas: string | null }): boolean {
+  return /DUPLICADO:/.test(f.notas ?? '');
+}
+
+function aProspecto(p: FilaProspecto): ProspectoMapa {
+  const { ciudad, entidad } = plazaDe(p.ciudad);
+  return {
+    id: p.id,
+    empresa: p.empresa,
+    ciudad,
+    entidad,
+    lat: p.lat,
+    lng: p.lng,
+    telefono: p.telefono,
+    correo: p.correo,
+    contacto: p.contacto_nombre,
+    vacante: p.vacante,
+    estado: p.estado,
+    fuente: p.fuente,
+    giro: giroDe(p.empresa, p.vacante, p.notas, p.scian),
+    tamano: tamanoDe(p.notas),
+    completitud: completitudDe({
+      telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
+      lat: p.lat, notas: p.notas, sitioVerificado: p.sitio_verificado,
+    }),
+    mensajesGeneradosEn: p.mensajes_generados_en,
+    ultimoToque: (p.prospecto_toque ?? []).reduce<string | null>(
+      (max, t) => (max === null || t.creado_en > max ? t.creado_en : max), null),
+    urgencia: scoreUrgencia({ vacante: p.vacante, notas: p.notas }),
+    cierre: scoreCierre({
+      telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
+      estado: p.estado, fuente: p.fuente, empresa: p.empresa, vacante: p.vacante, notas: p.notas,
+      scian: p.scian,
+    }),
+    numUnidades: p.num_unidades,
+    similitudIcpPct: p.similitud_icp_pct,
+    necesidadPct: p.necesidad_pct,
+  };
+}
+
+/**
+ * Cuántos prospectos ve el mapa AHORA MISMO, contados por la base.
+ *
+ * Existe por una sola razón: el delta no puede ver una BAJA. Una fila borrada
+ * (purga, deduplicación) no se "actualiza", desaparece, y un cliente que solo
+ * pide cambios se quedaría con su fantasma para siempre. Dos `count` de
+ * cabecera (`head: true` — no viaja una sola fila) contra el conteo del
+ * cliente bastan para detectarlo y pedir la carga completa.
+ *
+ * Se cuenta en dos preguntas y no en una con `not.ilike`: `notas` es NULL en
+ * miles de filas y `NULL not ilike '...'` es NULL, o sea que el filtro
+ * negado se comería en silencio a todo prospecto sin notas. Restar los
+ * duplicados —un filtro POSITIVO, que con NULL simplemente no aplica— no
+ * tiene esa trampa.
+ */
+async function contarMapa(): Promise<number | null> {
+  const admin = supabaseAdmin();
+  const [todo, dup] = await Promise.all([
+    admin.from('prospecto').select('id', { count: 'exact', head: true }),
+    admin.from('prospecto').select('id', { count: 'exact', head: true }).ilike('notas', '%DUPLICADO:%'),
+  ]);
+  if (todo.error || dup.error) return null;
+  if (typeof todo.count !== 'number' || typeof dup.count !== 'number') return null;
+  return todo.count - dup.count;
+}
+
+/**
+ * El mapa entero, o SOLO lo que cambió desde `desde` (FE-16).
+ *
+ * Sin `desde` es la carga inicial: el universo en formato compacto y sin los
+ * textos largos. Con `desde` es el latido: `updated_at > desde`, que en una
+ * cartera en reposo son CERO filas y unos cientos de bytes en vez de los ~33
+ * MB que bajaba antes cada 5 minutos.
+ *
+ * Que `updated_at` diga la verdad lo garantiza el trigger de la 0167 — antes
+ * de esa migración la columna decía la hora del INSERT para todas las filas y
+ * un delta montado sobre ella habría contestado "nada cambió" mientras el
+ * embudo avanzaba.
+ */
+export async function getDatosMapa(opciones?: { desde?: string | null }): Promise<DatosMapa> {
   const generadoEn = new Date().toISOString();
+  // Cadena vacía = sin marca (primera carga), no una marca de 1970.
+  const desde = opciones?.desde || null;
   // traerTodoEnParalelo, no .limit(): PostgREST recorta a 1,000 filas EN
   // SILENCIO (trampa documentada en CLAUDE.md) y el universo DENUE ya pasa
-  // de 3,000 — un mapa con la primera página se leería como "el país
-  // entero" sin serlo.
+  // de 33,000 — un mapa con la primera página se leería como "el país
+  // entero" sin serlo. El delta usa el mismo camino: un enriquecedor que
+  // acaba de tocar 5,000 filas también pasa de mil.
   let filas: FilaProspecto[];
   try {
     filas = await traerTodoEnParalelo<FilaProspecto>(
-      (d, h) => supabaseAdmin()
-        .from('prospecto')
-        .select('id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, scian, mensaje_wa, mensaje_correo_asunto, mensaje_correo, mensajes_generados_en, sitio_verificado, num_unidades, similitud_icp_pct, necesidad_pct, prospecto_toque(creado_en)', conteo(d))
+      (d, h) => {
+        const q = supabaseAdmin().from('prospecto').select(COLUMNAS_LISTADO, conteo(d));
         // El orden secundario por id NO es adorno: created_at se repite (los
         // lotes de siembra comparten el now() de su transacción) y paginar
         // sobre un orden no único duplica y salta filas entre páginas — se
-        // vio como pines duplicados en el mapa (17-ago).
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: true })
-        .range(d, h),
-      'prospecto (mapa)',
+        // vio como pines duplicados en el mapa (17-ago). El delta ordena por
+        // la misma columna que filtra, que es lo estable ahí.
+        return desde
+          ? q.gt('updated_at', desde).order('updated_at', { ascending: true }).order('id', { ascending: true }).range(d, h)
+          : q.order('created_at', { ascending: false }).order('id', { ascending: true }).range(d, h);
+      },
+      desde ? 'prospecto (mapa, delta)' : 'prospecto (mapa)',
     );
+  } catch (e) {
+    logger.error('mapa_prospectos.leer', { delta: desde !== null, err: e instanceof Error ? e.message : String(e) });
+    return { filas: [], generadoEn, fallo: true, marca: null, delta: desde !== null, total: null };
+  }
   // Cinturón sobre los tirantes: si aun así llegara un id repetido, una fila
   // gana y las demás se tiran — dos luces del mismo prospecto mienten.
   const porId = new Map<string, FilaProspecto>();
   for (const f of filas) if (!porId.has(f.id)) porId.set(f.id, f);
   filas = [...porId.values()];
-  } catch (e) {
-    logger.error('mapa_prospectos.leer', { err: e instanceof Error ? e.message : String(e) });
-    return { prospectos: [], generadoEn, fallo: true };
-  }
-  const prospectos = filas
-    .filter((p) => !/DUPLICADO:/.test(p.notas ?? ''))
-    .map((p) => {
-      const { ciudad, entidad } = plazaDe(p.ciudad);
-      return {
-        id: p.id,
-        empresa: p.empresa,
-        ciudad,
-        entidad,
-        lat: p.lat,
-        lng: p.lng,
-        telefono: p.telefono,
-        correo: p.correo,
-        contacto: p.contacto_nombre,
-        vacante: p.vacante,
-        notas: p.notas,
-        estado: p.estado,
-        fuente: p.fuente,
-        giro: giroDe(p.empresa, p.vacante, p.notas, p.scian),
-        tamano: tamanoDe(p.notas),
-        completitud: completitudDe({
-          telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
-          lat: p.lat, notas: p.notas, sitioVerificado: p.sitio_verificado,
-        }),
-        mensajeWaIa: p.mensaje_wa,
-        correoAsuntoIa: p.mensaje_correo_asunto,
-        correoCuerpoIa: p.mensaje_correo,
-        mensajesGeneradosEn: p.mensajes_generados_en,
-        ultimoToque: (p.prospecto_toque ?? []).reduce<string | null>(
-          (max, t) => (max === null || t.creado_en > max ? t.creado_en : max), null),
-        urgencia: scoreUrgencia({ vacante: p.vacante, notas: p.notas }),
-        cierre: scoreCierre({
-          telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
-          estado: p.estado, fuente: p.fuente, empresa: p.empresa, vacante: p.vacante, notas: p.notas,
-          scian: p.scian,
-        }),
-        numUnidades: p.num_unidades,
-        similitudIcpPct: p.similitud_icp_pct,
-        necesidadPct: p.necesidad_pct,
-      };
-    });
-  return { prospectos, generadoEn, fallo: false };
+
+  // La marca sale de TODAS las filas leídas, duplicados incluidos: si la fila
+  // más reciente resulta ser un duplicado y no avanzara la marca, el
+  // siguiente latido volvería a pedirla, y el siguiente, para siempre.
+  const marca = filas.reduce<string | null>(
+    (max, f) => (max === null || f.updated_at > max ? f.updated_at : max), null);
+
+  const vivas = filas.filter((f) => !esDuplicado(f));
+  return {
+    filas: vivas.map(aProspecto).map(empacar),
+    generadoEn,
+    fallo: false,
+    marca,
+    delta: desde !== null,
+    // En la carga completa el conteo del servidor ES la lista (y
+    // `traerTodoEnParalelo` ya demostró que llegó entera): no se paga un
+    // viaje extra para preguntar lo que se acaba de leer.
+    total: desde ? await contarMapa() : vivas.length,
+  };
+}
+
+/**
+ * Los textos largos de un puñado de prospectos — lo que el listado no trae.
+ *
+ * `traerPorIds` y no un `.in()` a pelo: la lista de ids viaja EN LA URL y
+ * PostgREST además recorta a 1,000 filas en silencio (los dos techos mudos de
+ * pg.ts). Con tandas de 200 no se toca ninguno.
+ */
+export async function getTextosProspectos(ids: string[]): Promise<TextosProspecto[]> {
+  if (ids.length === 0) return [];
+  const filas = await traerPorIds<{
+    id: string; notas: string | null; mensaje_wa: string | null;
+    mensaje_correo_asunto: string | null; mensaje_correo: string | null;
+  }>(
+    ids,
+    (tanda) => supabaseAdmin()
+      .from('prospecto')
+      .select('id, notas, mensaje_wa, mensaje_correo_asunto, mensaje_correo')
+      .in('id', tanda),
+    'prospecto (textos)',
+  );
+  return filas.map((f) => ({
+    id: f.id,
+    notas: f.notas,
+    mensajeWaIa: f.mensaje_wa,
+    correoAsuntoIa: f.mensaje_correo_asunto,
+    correoCuerpoIa: f.mensaje_correo,
+  }));
 }
 
 // ── La ficha de UN prospecto — /admin/mapa-prospectos/[id] ─────────────────
@@ -504,7 +705,8 @@ export interface PersonaProspecto {
   evidencia: string | null;
 }
 
-export interface DetalleProspecto extends ProspectoMapa {
+/** La ficha SÍ trae los textos largos — es la pantalla que los pinta. */
+export interface DetalleProspecto extends ProspectoMapa, TextosProspecto {
   sitio: string | null;
   sitioVerificado: boolean;
   numUnidades: number | null;
@@ -518,6 +720,9 @@ export interface DetalleProspecto extends ProspectoMapa {
 }
 
 interface FilaDetalle extends FilaProspecto {
+  mensaje_wa: string | null;
+  mensaje_correo_asunto: string | null;
+  mensaje_correo: string | null;
   sitio: string | null;
   sitio_verificado: boolean;
   num_unidades: number | null;
@@ -543,7 +748,7 @@ export async function getDetalleProspecto(id: string): Promise<DetalleProspecto 
     .select(`id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado,
       fuente, notas, scian, mensaje_wa, mensaje_correo_asunto, mensaje_correo, mensajes_generados_en,
       sitio, sitio_verificado, num_unidades, historia, similitud_icp_pct, necesidad_pct,
-      viajes_mes_estimado, duplicado_de, created_at,
+      viajes_mes_estimado, duplicado_de, created_at, updated_at,
       prospecto_toque(creado_en),
       prospecto_persona(id, nombre, puesto, correo, telefono, linkedin, origen, confianza, evidencia)`)
     .eq('id', id)
