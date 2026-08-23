@@ -13,8 +13,10 @@ función SÍ, y se dice cuál.
 - **QStash entero**: `UPSTASH_QSTASH_TOKEN` + `QSTASH_CURRENT_SIGNING_KEY` +
   `QSTASH_NEXT_SIGNING_KEY` + URL — la cola de facturación firma y verifica.
 - **Resend** (envío + secret del webhook), **Sentry**, **CRON_SECRET** (los 5
-  crons), **cofre** (`LIKIDA_COFRE_LLAVE`), `LIKIDA_DEDUP_FOTOS`,
-  `NEXT_PUBLIC_APP_URL`.
+  crons), **cofre** (`LIKIDA_COFRE_LLAVE`), `NEXT_PUBLIC_APP_URL`.
+  (`LIKIDA_DEDUP_FOTOS` YA NO EXISTE: el hash de la foto se calcula siempre
+  desde DAT-01 —una protección de dinero que una env var podía apagar es una
+  protección que un despliegue apagó sin que nadie lo notara.)
 
 ## 🔴 Falta en Vercel y APAGA algo — dueño: Javier (minutos)
 

@@ -9,6 +9,7 @@ import { acotada } from './presupuesto';
 import { traerTodo, conteo } from './pg';
 import type { Gasto, Liquidacion, Viaje, Operador } from '@/types/likida';
 import type { CodigoPendiente } from './intake/emparejar';
+import { violaIndice } from './pg_errores';
 
 // El tope de consulta vive en `presupuesto.ts`, con `TOPE_CONSULTA_MS` y el
 // resto del presupuesto de la invocación. Estuvo aquí hasta la auditoría 8, y
@@ -189,6 +190,10 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     folio_norm: g.folioNorm ?? null,
     ocr_extra: g.ocrExtra ?? null,
     img_hash: g.imgHash ?? null,
+    // DAT-01: la llave del reproceso. Va aquí, en el MISMO insert, para que la
+    // unicidad y el alta sean el mismo acto: un `update` posterior dejaría
+    // abierta justo la ventana que este campo existe para cerrar.
+    wa_message_id: g.waMessageId ?? null,
   }), 'addGasto');
   if (error) {
     // Se preserva el código de Postgres para que el caller distinga un duplicado
@@ -309,7 +314,16 @@ export interface Huerfano {
   ofrecidoEn?: string;
 }
 
-/** Best-effort: si esto falla, se le dice al operador que no se pudo guardar. */
+/**
+ * Best-effort: si esto falla, se le dice al operador que no se pudo guardar.
+ *
+ * DAT-01 — EL DUPLICADO CUENTA COMO GUARDADO. `uq_huerfano_img_hash` (0164)
+ * impide que el MISMO papel ocupe dos filas en la sala de espera; ese 23505 no
+ * es un fallo: significa que el comprobante ya está esperando, que es
+ * exactamente lo que el llamador necesita saber para decirle al operador que no
+ * se perdió. Tratarlo como error le pediría reenviar una foto que ya está
+ * guardada — y cada reenvío que entra es otra oportunidad de duplicar el gasto.
+ */
 export async function guardarHuerfano(
   tenantId: string, operadorId: string,
   h: { gasto: Gasto; motivo: MotivoHuerfano; rutaImagen?: string },
@@ -318,6 +332,10 @@ export async function guardarHuerfano(
     tenant_id: tenantId, operador_id: operadorId,
     gasto: h.gasto, motivo: h.motivo, ruta_imagen: h.rutaImagen ?? null,
   }), 'guardarHuerfano');
+  if (violaIndice(error, 'uq_huerfano_img_hash')) {
+    logger.info('huerfano.ya_estaba', { tenant: tenantId, operador: operadorId });
+    return true;
+  }
   if (error) logger.error('huerfano.guardar_error', { err: error.message });
   return !error;
 }

@@ -961,7 +961,15 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // producción siempre trae el campo undefined y descarga de Meta.
           const dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
           if (!dataUrl) { await sendText(msg.from, 'No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
-          const ruta = await subirComprobante(op.tenantId, 'sin-viaje', await hashImagen(dataUrl), dataUrl);
+          // DAT-01: el hash se calcula UNA vez y se conserva. Antes se usaba
+          // para nombrar el archivo del bucket y se tiraba, así que la fila de
+          // la sala de espera nacía sin él — y el reproceso del mismo mensaje
+          // dejaba DOS filas del mismo papel, que el «sí» del operador
+          // adjuntaba las dos. Ahora viaja dentro del `gasto` (el jsonb que
+          // `addGasto` lee al adjuntar) y `uq_huerfano_img_hash` (0164) impide
+          // la segunda.
+          const imgHash = await hashImagen(dataUrl);
+          const ruta = await subirComprobante(op.tenantId, 'sin-viaje', imgHash, dataUrl);
           const ex = await extraerComprobante(dataUrl, reloj.senal(25_000));
           await registrarCosto({ tenantId: op.tenantId, viajeId: null, fase: 'ocr', modelo: ex.costo.modelo, tokensIn: ex.costo.tokensIn, tokensOut: ex.costo.tokensOut, costoUsd: ex.costo.costoUsd });
           // ── FALLO NUESTRO: AQUÍ TAMPOCO SE PIERDE EL COMPROBANTE ────────────
@@ -994,7 +1002,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // la consulta, o subir el tope) y queda anotado.
           if (!ex.legible && ex.motivo === 'fallo_tecnico') {
             const guardado = await guardarHuerfano(op.tenantId, op.operadorId, {
-              gasto: ruta ? { ...ex.gasto, imagenUrl: ruta } : ex.gasto,
+              gasto: { ...ex.gasto, imgHash, ...(ruta ? { imagenUrl: ruta } : {}) },
               motivo: 'fallo_ocr', rutaImagen: ruta,
             });
             logger.warn('huerfano.fallo_tecnico', {
@@ -1020,7 +1028,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             return;
           }
           const guardado = await guardarHuerfano(op.tenantId, op.operadorId, {
-            gasto: ruta ? { ...ex.gasto, imagenUrl: ruta } : ex.gasto,
+            gasto: { ...ex.gasto, imgHash, ...(ruta ? { imagenUrl: ruta } : {}) },
             motivo: 'sin_viaje', rutaImagen: ruta,
           });
           logger.info('huerfano.guardado', { tenant: op.tenantId, operador: op.operadorId, monto: ex.gasto.monto, ok: guardado });
@@ -1168,43 +1176,53 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         const dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
         if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
 
-        // FASE 2 (FLAG default-off): dedup por contenido. La idempotencia por
-        // waMessageId cubre reintentos de Meta; esto cubre el reenvío MANUAL de la
-        // misma foto (otro waMessageId). Pre-check antes del OCR → ahorra ese costo.
-        // Camino actual intacto con LIKIDA_DEDUP_FOTOS sin setear (HARD RULE 3).
-        let imgHash: string | undefined;
-        if (process.env.LIKIDA_DEDUP_FOTOS === '1') {
-          imgHash = await hashImagen(dataUrl);
-          if (await gastoExistePorHash(viajeId, imgHash, op.tenantId)) {
-            logger.info('foto.dedup', { viaje: viajeId });
-            // EL SILENCIO ES CORRECTO… SALVO CUANDO ESA FOTO ES LA QUE SE PIDIÓ.
-            //
-            // Fallo del ensayo del 1-ago: se le pidió otra foto de un ticket con
-            // la fecha mal leída, reenvió EL MISMO archivo, y esto lo descartó
-            // antes del OCR sin decir nada. Hizo lo que se le pidió, no pasó
-            // nada, y no tenía forma de enterarse — el peor modo de falla que
-            // hay, porque desde su lado el sistema quedó mudo.
-            //
-            // Para un reenvío cualquiera (doble toque, reintento) el silencio
-            // sigue siendo lo correcto: avisarle de cada foto repetida sería
-            // ruido. Lo que cambia el caso es que el gasto que empata tenga la
-            // fecha en duda, porque entonces esa foto NO puede aportar nada:
-            // es la misma que ya se leyó mal.
-            try {
-              const [previo, v] = await Promise.all([
-                gastoPorHash(viajeId, imgHash, op.tenantId),
-                ventanaDesdeDB(op.tenantId, viajeId),
-              ]);
-              if (previo && v && fechaDudosa(previo.fecha, v)) {
-                await say(`Esa es la *misma foto* que ya me habías mandado 🔁, así que la fecha sigue igual. Necesito una foto *nueva* de ese ticket de ${mxn(previo.monto)} —tomada otra vez, no reenviada— enfocando la parte donde viene la fecha. 📸`);
-              }
-            } catch (e) {
-              // Best-effort: el dedup ya hizo su trabajo. Fallar aquí no puede
-              // costar un gasto, solo un aviso.
-              logger.warn('foto.dedup_aviso_falló', { err: e instanceof Error ? e.message : String(e) });
+        // ── EL HASH SE CALCULA SIEMPRE (DAT-01, CRÍTICO) ────────────────────
+        //
+        // Aquí vivía `if (process.env.LIKIDA_DEDUP_FOTOS === '1')`, y esa
+        // bandera NO está puesta en producción. O sea: ningún gasto de
+        // producción llevaba `img_hash`, y `uq_gasto_img_hash` (0027) —el único
+        // candado que impide cobrar el mismo ticket dos veces cuando el papel
+        // no trae CFDI, que es el caso de TODO ticket de gasolinera— llevaba
+        // meses indexando el vacío. La protección existía en el esquema, en el
+        // repo y en los comentarios; no existía en la base.
+        //
+        // La bandera se retira entera en vez de encenderse: una protección de
+        // dinero que se puede apagar con una variable de entorno es una
+        // protección que un despliegue puede apagar sin que nadie lo note, y
+        // así fue exactamente como se apagó ésta.
+        //
+        // Cuesta un SHA-256 sobre los bytes que ya están en memoria, al lado de
+        // una llamada de visión de ~$0.015. No es una decisión de costo.
+        const imgHash = await hashImagen(dataUrl);
+        if (await gastoExistePorHash(viajeId, imgHash, op.tenantId)) {
+          logger.info('foto.dedup', { viaje: viajeId });
+          // EL SILENCIO ES CORRECTO… SALVO CUANDO ESA FOTO ES LA QUE SE PIDIÓ.
+          //
+          // Fallo del ensayo del 1-ago: se le pidió otra foto de un ticket con
+          // la fecha mal leída, reenvió EL MISMO archivo, y esto lo descartó
+          // antes del OCR sin decir nada. Hizo lo que se le pidió, no pasó
+          // nada, y no tenía forma de enterarse — el peor modo de falla que
+          // hay, porque desde su lado el sistema quedó mudo.
+          //
+          // Para un reenvío cualquiera (doble toque, reintento) el silencio
+          // sigue siendo lo correcto: avisarle de cada foto repetida sería
+          // ruido. Lo que cambia el caso es que el gasto que empata tenga la
+          // fecha en duda, porque entonces esa foto NO puede aportar nada:
+          // es la misma que ya se leyó mal.
+          try {
+            const [previo, v] = await Promise.all([
+              gastoPorHash(viajeId, imgHash, op.tenantId),
+              ventanaDesdeDB(op.tenantId, viajeId),
+            ]);
+            if (previo && v && fechaDudosa(previo.fecha, v)) {
+              await say(`Esa es la *misma foto* que ya me habías mandado 🔁, así que la fecha sigue igual. Necesito una foto *nueva* de ese ticket de ${mxn(previo.monto)} —tomada otra vez, no reenviada— enfocando la parte donde viene la fecha. 📸`);
             }
-            return; // ya la teníamos: no re-OCR, no duplicar gasto
+          } catch (e) {
+            // Best-effort: el dedup ya hizo su trabajo. Fallar aquí no puede
+            // costar un gasto, solo un aviso.
+            logger.warn('foto.dedup_aviso_falló', { err: e instanceof Error ? e.message : String(e) });
           }
+          return; // ya la teníamos: no re-OCR, no duplicar gasto
         }
 
         // LA FOTO SE GUARDA, y se arranca AQUÍ para que corra en paralelo con
@@ -1454,13 +1472,33 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           const imagenUrl = await subida;
           await addGasto(op.tenantId, viajeId, {
             ...gasto,
-            ...(imgHash ? { imgHash } : {}),
+            imgHash,
+            // DAT-01: la llave del REPROCESO. El `say()` de abajo puede lanzar
+            // (Meta 500, red), el catch general suelta el claim y la bandeja
+            // durable vuelve a correr ESTE MISMO mensaje: otro `randomUUID()`,
+            // otro OCR, y hasta hoy nada que lo detuviera. Con el wamid en la
+            // fila, el segundo intento choca contra `uq_gasto_wa_message_id` y
+            // se trata abajo como lo que es: el gasto ya está registrado.
+            ...(msg.waMessageId ? { waMessageId: msg.waMessageId } : {}),
             ...(imagenUrl ? { imagenUrl } : {}),
           });
         } catch (e) {
           // R1: dos fotos IDÉNTICAS en el mismo lote pasan el pre-check antes de
           // que cualquiera inserte; el índice único (mig. 0015) atrapa la 2ª con
           // 23505 → es un duplicado benigno, no un error. Se ignora en silencio.
+          // ── EL MISMO MENSAJE, OTRA VEZ (DAT-01) ─────────────────────────
+          //
+          // No es una carrera ni un reenvío del operador: es NUESTRO reproceso.
+          // El gasto YA está en la base con este wamid, así que el comprobante
+          // no se pierde y no hay nada que decirle a nadie — el turno anterior
+          // ya habló (o murió intentándolo, que es justo lo que trajo el
+          // reintento). Se ignora en silencio, como los otros dos duplicados
+          // benignos, y sobre todo NO se relanza: dejarlo salir tumbaría el
+          // turno otra vez y la bandeja lo reintentaría en bucle.
+          if (violaIndice(e, 'uq_gasto_wa_message_id')) {
+            logger.info('foto.reproceso_mismo_wamid', { viaje: viajeId, id: msg.waMessageId });
+            return;
+          }
           if (imgHash && violaIndice(e, 'uq_gasto_img_hash')) {
             // OJO: EL ÍNDICE ES `unique(tenant_id, img_hash)` — TODA LA FLOTA.
             //
@@ -1522,7 +1560,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             // con el operador cargando un papel que nadie iba a capturar.
             const ruta = await subida;
             const ok = await guardarHuerfano(op.tenantId, op.operadorId, {
-              gasto: ruta ? { ...gasto, imagenUrl: ruta } : gasto,
+              // Con el hash (DAT-01): el mismo comprobante que llega tarde dos
+              // veces —el reproceso de la bandeja durable— es UNA fila en la
+              // sala de espera, no dos que se adjunten juntas al viaje siguiente.
+              gasto: { ...gasto, imgHash, ...(ruta ? { imagenUrl: ruta } : {}) },
               motivo: 'tras_liquidar', rutaImagen: ruta,
             });
             logger.warn('foto.llego_tarde', { viaje: viajeId, monto: gasto.monto, guardado: ok });
