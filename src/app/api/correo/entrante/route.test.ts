@@ -90,7 +90,11 @@ const evento = (extra: Record<string, unknown> = {}) => ({
   },
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  // RES-19: `leerInterruptor` cachea 5 s por instancia y este archivo usa el
+  // módulo REAL con una respuesta distinta por prueba — sin tirar la caché, la
+  // lectura de una contestaría por la siguiente.
+  (await import('@/lib/likida/interruptores')).olvidarInterruptores();
   vi.clearAllMocks();
   process.env.RESEND_WEBHOOK_SECRET = SECRETO;
   process.env.RESEND_EMAIL_DOMAIN = 'mail.likida.ai';

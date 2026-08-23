@@ -75,10 +75,19 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 await import('./tools');
 const { executeTool } = await import('@/lib/llm/tool-executor');
-const CTX = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779' };
+// DAT-22: el cierre exige que el operador lo haya pedido EN ESTE TURNO
+// (`cierrePedidoPorTexto`, que el processor calcula con `pidioCerrar`). Estos
+// archivos prueban otras cosas del cierre, así que dan por hecho el escenario
+// normal —el chofer escribió "listo"— y el candado propio se prueba en
+// `tools_cierre_pedido.test.ts`.
+const CTX = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779', cierrePedidoPorTexto: true };
 const cerrar = () => executeTool('guardar_liquidacion', {}, CTX);
 
-beforeEach(() => {
+beforeEach(async () => {
+  // RES-19: `leerInterruptor` cachea 5 s por instancia y este archivo usa el
+  // módulo REAL con una respuesta distinta por prueba — sin tirar la caché, la
+  // lectura de una contestaría por la siguiente.
+  (await import('@/lib/likida/interruptores')).olvidarInterruptores();
   interruptor = { data: null, error: null }; // sin fila = ENCENDIDO
   corridas.length = 0;
   corridaError = null;
@@ -115,7 +124,8 @@ describe('el kill switch de agente:liquidacion (0110) — antes decorativo, ahor
   it('ENCENDIDO (sin fila, el default del catálogo): el cierre corre completo', async () => {
     const r = await cerrar();
     expect(r.success, r.error).toBe(true);
-    expect(saveLiquidacion).toHaveBeenCalledWith('t1', LIQ, 't1/v1.pdf');
+    // El 4º argumento es el conteo de comprobantes de la 0158 (DAT-02).
+    expect(saveLiquidacion).toHaveBeenCalledWith('t1', LIQ, 't1/v1.pdf', LIQ.gastos.length);
   });
 });
 

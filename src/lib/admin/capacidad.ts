@@ -1,4 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '@/lib/likida/presupuesto';
+import { costoIaDesde } from './negocio';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL MODELO DE CAPACIDAD (fase 7, auditoría 5 §35) — escenarios de escala
@@ -34,18 +36,35 @@ export interface UnidadesMedidas {
   costoIa30d: number;
 }
 
-/** Lo MEDIDO: llm_costo 30d / liquidaciones 30d. Muestra chica se declara. */
+/**
+ * Lo MEDIDO: llm_costo 30d / liquidaciones 30d. Muestra chica se declara.
+ *
+ * CORREGIDO EL 22-AGO-2026 (escala 50k). Dos cosas estaban mal:
+ *   1. Las columnas NO EXISTÍAN: filtraba `llm_costo.creado_en` y
+ *      `liquidacion.creada_en`, y las dos tablas se llaman `created_at`
+ *      (0003, 0001). PostgREST respondía 400 en cada carga, la página lo
+ *      atrapaba (`catch { unidades = null }`) y /admin/capacidad-forecast
+ *      llevaba desde su estreno diciendo "sin muestra" con muestra real.
+ *   2. `llm_costo` venía a JS con `.limit(10000)` para sumar: con ~2,000
+ *      llamadas al modelo diarias, 30 días son 60,000 filas — la suma se
+ *      recortaba en silencio a la sexta parte. Ahora suma la MISMA
+ *      agregación de la consola (`resumen_costo_ia`, 0062) con `p_desde`.
+ * El conteo de liquidaciones sigue por `head` (cero filas cruzan la red) y
+ * se exige como número: `count: null` no es 0, es "no se pudo contar".
+ */
 export async function getUnidadesMedidas(ahoraMs: number): Promise<UnidadesMedidas> {
-  const admin = supabaseAdmin();
   const hace30d = new Date(ahoraMs - 30 * 86_400_000).toISOString();
-  const [rCosto, rLiq] = await Promise.all([
-    admin.from('llm_costo').select('costo_usd').gte('creado_en', hace30d).limit(10000),
-    admin.from('liquidacion').select('id', { count: 'exact', head: true }).gte('creada_en', hace30d),
+  const [costo, rLiq] = await Promise.all([
+    costoIaDesde(hace30d),
+    acotada(supabaseAdmin()
+      .from('liquidacion').select('id', { count: 'exact', head: true }).gte('created_at', hace30d), 'unidades/liquidacion'),
   ]);
-  if (rCosto.error) throw new Error(`unidades/llm_costo: ${rCosto.error.message}`);
   if (rLiq.error) throw new Error(`unidades/liquidacion: ${rLiq.error.message}`);
-  const costoIa30d = (rCosto.data ?? []).reduce((s, f) => s + (Number(f.costo_usd) || 0), 0);
-  const muestraViajes = rLiq.count ?? 0;
+  if (typeof rLiq.count !== 'number') {
+    throw new Error('unidades/liquidacion: PostgREST no devolvió el conteo — no se afirma una muestra de 0.');
+  }
+  const costoIa30d = costo.costoUsd;
+  const muestraViajes = rLiq.count;
   return {
     costoIa30d,
     muestraViajes,

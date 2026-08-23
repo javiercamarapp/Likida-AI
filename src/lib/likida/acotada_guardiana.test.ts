@@ -21,6 +21,34 @@ const GUARDADOS = [
   'src/lib/likida/interruptores.ts',
   'src/lib/likida/contactos.ts',
   'src/lib/likida/consulta_chofer.ts',
+  // ESCALA 50k (22-ago-2026, regla 5 de docs/escala-50k/REGLAS-ESCALA.md):
+  // lo que queda en JS de la consola de superadmin también lleva techo. Un
+  // `Promise.all` de dieciséis lecturas sin techo colgado en una es toda la
+  // página en blanco. OJO: `Array.from(` cuenta como `.from(` para esta
+  // regex — en estos archivos se usa `[...x].map` a propósito.
+  'src/lib/admin/negocio.ts',
+  'src/lib/admin/capacidad.ts',
+  'src/lib/admin/corridas-cruzadas.ts',
+  // ESCALA 50k (regla 5, 22-ago-2026): lo que queda del dashboard en JS va
+  // envuelto en `acotada()`. El registro de viajes (RPC keyset + conteos).
+  'src/lib/likida/viajes_registro.ts',
+  // Escala 50k (mig. 0151): el panel fiscal lee UNA RPC de celdas agregadas;
+  // cualquier lectura que quede en el archivo lleva techo.
+  'src/lib/likida/fiscal.ts',
+  // ESCALA 50k (REGLAS-ESCALA §5, 22-ago-2026): toda lectura del dashboard
+  // que siga en JS lleva techo. Ojo: `Array.from(` también cuenta como
+  // `.from(` aquí — analytics.ts lo evita a propósito.
+  'src/lib/likida/analytics.ts',
+  // ── ESCALA 50k (mig. 0152) ────────────────────────────────────────────
+  // Los cuatro módulos del lado del ingreso y del encargado. No están en el
+  // camino caliente del webhook, pero sí en el de las PANTALLAS: una consulta
+  // sin techo cuelga la carga del panel hasta el timeout de la plataforma, y
+  // el usuario ve una página en blanco en vez de una sección caída. Cada
+  // `.from(`/`.rpc(` de aquí va envuelto en `acotada(`.
+  'src/lib/likida/comercial.ts',
+  'src/lib/likida/clientes.ts',
+  'src/lib/likida/facturacion_clientes.ts',
+  'src/lib/likida/operacion.ts',
 ];
 
 describe('toda consulta de los módulos del camino caliente lleva techo', () => {

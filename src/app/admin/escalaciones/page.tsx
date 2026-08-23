@@ -57,10 +57,18 @@ const FUENTES: FuenteEscalacion[] = [
  * no se pudo leer, SU tarjeta lo dice ("no se pudo leer" ≠ 0) y la cola
  * sigue enseñando lo que sí se leyó.
  */
+/** Cuántos pendientes se listan de una vez. Los CONTEOS de arriba siguen
+ *  siendo de toda la cola — lo acotado es la tabla, y se declara. */
+const TOPE_COLA = 50;
+
 export default async function EscalacionesPage() {
   const ahora = ahoraMs();
   // Nunca lanza: los fallos de lectura vienen por valor DENTRO de la bandeja.
   const bandeja: BandejaEscalaciones = await getBandejaEscalaciones(ahora);
+  // FE-11: cuántas filas de la cola se DIBUJAN. La cola viene ordenada por
+  // urgencia, así que recortar por la cola es recortar lo menos urgente.
+  const cola = bandeja.cola.slice(0, TOPE_COLA);
+  const recortada = bandeja.cola.length > TOPE_COLA;
 
   const ilegibles = FUENTES.filter((f) => bandeja.fuentes[f].error !== null);
   const legibles = FUENTES.filter((f) => bandeja.fuentes[f].error === null);
@@ -138,7 +146,7 @@ export default async function EscalacionesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {bandeja.cola.map((it: ItemEscalacion, i) => {
+                    {cola.map((it: ItemEscalacion, i) => {
                       const Icono = ICONO_FUENTE[it.fuente];
                       return (
                         <tr key={`${it.fuente}-${it.desde}-${i}`} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
@@ -177,10 +185,18 @@ export default async function EscalacionesPage() {
                   </tbody>
                 </table>
               </div>
+              {/* FE-11: la tabla pintaba la cola ENTERA. Con las seis fuentes
+                  acotadas hoy son cientos de <tr>, y el día que la cola de
+                  liquidaciones se llene, miles — una página que no abre justo
+                  cuando hay más que atender. Se pintan las 50 más urgentes y
+                  se dice cuántas hay: el orden ya pone arriba lo que importa. */}
               <p className="text-xs px-4 pt-2 pb-3" style={{ color: 'var(--muted)' }}>
-                {numero(bandeja.cola.length)} {bandeja.cola.length === 1 ? 'pendiente' : 'pendientes'} en la cola.
-                El orden: lo que tiene plazo (ARCO, tickets con SLA) va por su plazo — vencido primero — y lo que
+                {recortada
+                  ? `Se listan las ${numero(TOPE_COLA)} más urgentes de ${numero(bandeja.cola.length)} en la cola.`
+                  : `${numero(bandeja.cola.length)} ${bandeja.cola.length === 1 ? 'pendiente' : 'pendientes'} en la cola.`}
+                {' '}El orden: lo que tiene plazo (ARCO, tickets con SLA) va por su plazo — vencido primero — y lo que
                 no lo tiene, por cuánto lleva esperando. La campana de la consola suma exactamente estas fuentes.
+                {recortada && ' Los conteos de arriba SÍ son de toda la cola: lo acotado es la tabla.'}
               </p>
             </div>
           )}

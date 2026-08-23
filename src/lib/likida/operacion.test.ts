@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { crearDoble, despacharRpc, type Doble } from './espejo_0152.pruebas';
+
+/** La base sintética que contestan las RPC de la 0152. */
+let DOBLE: Doble = crearDoble('2026-08-14');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Las lecturas y escrituras del ENCARGADO (mig. 0047).
@@ -77,34 +81,48 @@ function constructor(tabla: string) {
   return api;
 }
 
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => constructor(t) }) }));
+// Las tres lecturas agregadas de la 0152 (tablero, carga, incidencias) ya no
+// pasan por `from`: van por RPC, y el doble las despacha contra el ESPEJO EN
+// JS de la migración (`espejo_0152.pruebas.ts`). Las escrituras y las lecturas
+// que siguen en JS conservan el constructor encadenable de arriba.
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => ({
+    from: (t: string) => constructor(t),
+    rpc: (fn: string, args: Record<string, unknown>) => Promise.resolve(despacharRpc(DOBLE, fn, args)),
+  }),
+}));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const {
   getCargaOperadores, getViajesSinAsignar, getUnidades, getIncidencias,
   getTableroOperacion, cambiarEstadoIncidencia, crearViaje, asignarUnidad, getPods, rechazarPod,
+  DIAS_LIQUIDADOS_CARGA, LIMITE_INCIDENCIAS,
   marcarPodPedido, crearIncidencia, validarUnidad, crearUnidad, editarUnidad,
 } = await import('./operacion');
 const { DatoInvalido } = await import('./errores');
 
-beforeEach(() => { TABLAS = {}; FALLAN = {}; TOCAN_CERO = new Set(); escrituras.length = 0; });
+beforeEach(() => {
+  TABLAS = {}; FALLAN = {}; TOCAN_CERO = new Set(); escrituras.length = 0;
+  DOBLE = crearDoble('2026-08-14');
+});
+
+/** Un viaje de la flota `t-1` con lo mínimo que pide la forma. */
+const viajeDe = (id: string, operador: string | null, estatus: string, extra: Record<string, unknown> = {}) =>
+  ({ id, tenant_id: 't-1', operador_id: operador, estatus, ...extra });
 
 describe('getCargaOperadores — "¿a quién NO le cargo otro?"', () => {
   it('cuenta en curso por operador y deja fuera los viajes sin dueño', async () => {
-    TABLAS = {
-      operador: [
-        { id: 'o-1', nombre: 'Ana Ruiz', telefono: '52999', activo: true },
-        { id: 'o-2', nombre: 'Beto Lara', telefono: null, activo: true },
-      ],
-      viaje: [
-        { id: 'v-1', operador_id: 'o-1', estatus: 'abierto' },
-        { id: 'v-2', operador_id: 'o-1', estatus: 'en_cuadre' },
-        { id: 'v-3', operador_id: 'o-1', estatus: 'liquidado' },
-        { id: 'v-4', operador_id: 'o-2', estatus: 'abierto' },
-        { id: 'v-5', operador_id: null, estatus: 'abierto' },   // sin dueño
-      ],
-      pod: [], incidencia: [],
-    };
+    DOBLE.base.operador = [
+      { id: 'o-1', tenant_id: 't-1', nombre: 'Ana Ruiz', telefono: '52999', activo: true },
+      { id: 'o-2', tenant_id: 't-1', nombre: 'Beto Lara', telefono: null, activo: true },
+    ];
+    DOBLE.base.viaje = [
+      viajeDe('v-1', 'o-1', 'abierto'),
+      viajeDe('v-2', 'o-1', 'en_cuadre'),
+      viajeDe('v-3', 'o-1', 'liquidado'),
+      viajeDe('v-4', 'o-2', 'abierto'),
+      viajeDe('v-5', null, 'abierto'),   // sin dueño
+    ];
     const r = await getCargaOperadores('t-1');
     const ana = r.find((x) => x.operadorId === 'o-1')!;
     expect(ana.enCurso).toBe(2);            // abierto + en_cuadre, NO el liquidado
@@ -116,45 +134,54 @@ describe('getCargaOperadores — "¿a quién NO le cargo otro?"', () => {
   });
 
   it('un POD RECHAZADO cuenta como que falta — la evidencia existe pero no sirve', async () => {
-    TABLAS = {
-      operador: [{ id: 'o-1', nombre: 'Ana', telefono: null, activo: true }],
-      viaje: [
-        { id: 'v-1', operador_id: 'o-1', estatus: 'abierto' },
-        { id: 'v-2', operador_id: 'o-1', estatus: 'abierto' },
-      ],
-      pod: [
-        { viaje_id: 'v-1', estado: 'subido' },
-        { viaje_id: 'v-2', estado: 'rechazado' },
-      ],
-      incidencia: [],
-    };
+    DOBLE.base.operador = [{ id: 'o-1', tenant_id: 't-1', nombre: 'Ana', telefono: null, activo: true }];
+    DOBLE.base.viaje = [viajeDe('v-1', 'o-1', 'abierto'), viajeDe('v-2', 'o-1', 'abierto')];
+    DOBLE.base.pod = [
+      { tenant_id: 't-1', viaje_id: 'v-1', estado: 'subido' },
+      { tenant_id: 't-1', viaje_id: 'v-2', estado: 'rechazado' },
+    ];
     const [ana] = await getCargaOperadores('t-1');
     expect(ana.sinPod).toBe(1);
   });
 
   it('ordena por carga descendente', async () => {
-    TABLAS = {
-      operador: [
-        { id: 'o-1', nombre: 'Ana', telefono: null, activo: true },
-        { id: 'o-2', nombre: 'Beto', telefono: null, activo: true },
-      ],
-      viaje: [
-        { id: 'v-1', operador_id: 'o-2', estatus: 'abierto' },
-        { id: 'v-2', operador_id: 'o-2', estatus: 'abierto' },
-        { id: 'v-3', operador_id: 'o-1', estatus: 'abierto' },
-      ],
-      pod: [], incidencia: [],
-    };
+    DOBLE.base.operador = [
+      { id: 'o-1', tenant_id: 't-1', nombre: 'Ana', telefono: null, activo: true },
+      { id: 'o-2', tenant_id: 't-1', nombre: 'Beto', telefono: null, activo: true },
+    ];
+    DOBLE.base.viaje = [
+      viajeDe('v-1', 'o-2', 'abierto'), viajeDe('v-2', 'o-2', 'abierto'), viajeDe('v-3', 'o-1', 'abierto'),
+    ];
     const r = await getCargaOperadores('t-1');
     expect(r.map((x) => x.nombre)).toEqual(['Beto', 'Ana']);
   });
 
-  it('si una de las cuatro consultas falla, LANZA — no devuelve carga cero', async () => {
-    TABLAS = { operador: [], viaje: [], pod: [], incidencia: [] };
-    FALLAN = { viaje: 'timeout' };
+  it('FE-3: los VIVOS entran siempre; los LIQUIDADOS solo los de la ventana', async () => {
+    const ahora = new Date('2026-08-14T12:00:00Z');
+    const hace = (dias: number) => new Date(ahora.getTime() - dias * 86_400_000).toISOString();
+    DOBLE.base.operador = [{ id: 'o-1', tenant_id: 't-1', nombre: 'Ana', telefono: null, activo: true }];
+    DOBLE.base.viaje = [
+      viajeDe('v-1', 'o-1', 'abierto', { created_at: hace(400) }),      // viejísimo y VIVO: cuenta
+      viajeDe('v-2', 'o-1', 'liquidado', { created_at: hace(10) }),     // dentro de la ventana
+      viajeDe('v-3', 'o-1', 'liquidado', { created_at: hace(200) }),    // fuera: no cuenta
+    ];
+    const [ana] = await getCargaOperadores('t-1', ahora);
+    expect(ana.enCurso).toBe(1);
+    expect(ana.liquidados).toBe(1);
+    // Y la ventana que se le pide a la base es la documentada, no "todo".
+    expect(DOBLE.llamadas[0].args.p_desde).toBe(hace(DIAS_LIQUIDADOS_CARGA));
+  });
+
+  it('si la lectura falla, LANZA — no devuelve carga cero', async () => {
+    DOBLE.error = { message: 'timeout' };
     // Cero viajes por error se leería como "nadie trae nada" y el encargado
     // repartiría trabajo encima de choferes que ya van llenos.
     await expect(getCargaOperadores('t-1')).rejects.toThrow('timeout');
+  });
+
+  it('una forma inesperada LANZA y nombra la migración', async () => {
+    DOBLE.formaRota = [{ operadorId: 'o-1' }];
+    await expect(getCargaOperadores('t-1')).rejects.toThrow('0152');
   });
 });
 
@@ -214,36 +241,64 @@ describe('getUnidades — el papel que vence primero', () => {
   });
 });
 
-describe('getIncidencias — SLA', () => {
+describe('getIncidencias — SLA y el join que ya no trae 600k viajes', () => {
   const ahora = new Date('2026-08-03T12:00:00Z');
   const base = {
-    id: 'i-1', viaje_id: null, unidad_id: null, tipo: 'averia', prioridad: 'alta',
+    id: 'i-1', tenant_id: 't-1', viaje_id: null, unidad_id: null, tipo: 'averia', prioridad: 'alta',
     descripcion: null, resuelta_en: null,
     abierta_en: '2026-08-03T00:00:00Z',   // 12 h antes
   };
 
   it('marca vencido solo si HAY SLA pactado y ya se pasó', async () => {
-    TABLAS = { incidencia: [{ ...base, estado: 'abierta', sla_horas: 4 }], viaje: [], unidad: [] };
+    DOBLE.base.incidencia = [{ ...base, estado: 'abierta', sla_horas: 4 }];
     const [i] = await getIncidencias('t-1', ahora);
     expect(i.horasAbierta).toBe(12);
     expect(i.slaVencido).toBe(true);
   });
 
   it('sin SLA no está vencida, está SIN PACTAR', async () => {
-    TABLAS = { incidencia: [{ ...base, estado: 'abierta', sla_horas: null }], viaje: [], unidad: [] };
+    DOBLE.base.incidencia = [{ ...base, estado: 'abierta', sla_horas: null }];
     const [i] = await getIncidencias('t-1', ahora);
     expect(i.slaHoras).toBeNull();
     expect(i.slaVencido).toBe(false);
   });
 
   it('una resuelta no está vencida aunque haya tardado más que el SLA', async () => {
-    TABLAS = {
-      incidencia: [{ ...base, estado: 'resuelta', sla_horas: 4, resuelta_en: '2026-08-03T10:00:00Z' }],
-      viaje: [], unidad: [],
-    };
+    DOBLE.base.incidencia = [{ ...base, estado: 'resuelta', sla_horas: 4, resuelta_en: '2026-08-03T10:00:00Z' }];
     const [i] = await getIncidencias('t-1', ahora);
     expect(i.horasAbierta).toBe(10);   // se congela al resolver, no sigue corriendo
     expect(i.slaVencido).toBe(false);
+  });
+
+  it('el folio y el número económico llegan resueltos DESDE SQL', async () => {
+    DOBLE.base.viaje = [viajeDe('v-1', 'o-1', 'abierto', { folio: 'VJ-77' })];
+    DOBLE.base.unidad = [{ id: 'u-1', tenant_id: 't-1', numero_economico: 'T-01', estado: 'en_ruta' }];
+    DOBLE.base.incidencia = [{ ...base, viaje_id: 'v-1', unidad_id: 'u-1', estado: 'abierta', sla_horas: null }];
+    const [i] = await getIncidencias('t-1', ahora);
+    expect(i.folio).toBe('VJ-77');
+    expect(i.numeroEconomico).toBe('T-01');
+  });
+
+  it('un viaje de OTRA flota no presta su folio', async () => {
+    DOBLE.base.viaje = [{ id: 'v-x', tenant_id: 't-2', operador_id: 'o-9', estatus: 'abierto', folio: 'AJENO' }];
+    DOBLE.base.incidencia = [{ ...base, viaje_id: 'v-x', estado: 'abierta', sla_horas: null }];
+    const [i] = await getIncidencias('t-1', ahora);
+    expect(i.folio).toBeNull();
+  });
+
+  it('las ABIERTAS salen siempre; las resueltas viejas quedan fuera de la ventana', async () => {
+    DOBLE.base.incidencia = [
+      { ...base, id: 'i-vieja-abierta', estado: 'abierta', sla_horas: null, abierta_en: '2020-01-01T00:00:00Z' },
+      { ...base, id: 'i-vieja-resuelta', estado: 'resuelta', sla_horas: null, abierta_en: '2020-01-01T00:00:00Z', resuelta_en: '2020-01-02T00:00:00Z' },
+    ];
+    const r = await getIncidencias('t-1', ahora);
+    expect(r.map((i) => i.id)).toEqual(['i-vieja-abierta']);
+    expect(DOBLE.llamadas[0].args.p_limite).toBe(LIMITE_INCIDENCIAS);
+  });
+
+  it('si la lectura falla, LANZA — una lista vacía diría "no hay incidencias"', async () => {
+    DOBLE.error = { message: 'base caída' };
+    await expect(getIncidencias('t-1', ahora)).rejects.toThrow('base caída');
   });
 });
 
@@ -251,16 +306,18 @@ describe('getTableroOperacion', () => {
   it('cuenta como pendiente el viaje del que NADIE creó el POD', async () => {
     // El peor cero posible: contar filas de `pod` dejaría fuera justo el viaje
     // que nadie ha tocado, y el tablero diría "no falta ninguno".
-    TABLAS = {
-      viaje: [
-        { id: 'v-1', operador_id: 'o-1', estatus: 'abierto' },
-        { id: 'v-2', operador_id: 'o-1', estatus: 'abierto' },   // sin fila en `pod`
-        { id: 'v-3', operador_id: 'o-1', estatus: 'liquidado' },
-      ],
-      unidad: [{ estado: 'disponible' }, { estado: 'taller' }, { estado: 'en_ruta' }],
-      incidencia: [{ estado: 'abierta' }],
-      pod: [{ viaje_id: 'v-1', estado: 'subido' }],
-    };
+    DOBLE.base.viaje = [
+      viajeDe('v-1', 'o-1', 'abierto'),
+      viajeDe('v-2', 'o-1', 'abierto'),   // sin fila en `pod`
+      viajeDe('v-3', 'o-1', 'liquidado'),
+    ];
+    DOBLE.base.unidad = [
+      { id: 'u-1', tenant_id: 't-1', numero_economico: 'T1', estado: 'disponible' },
+      { id: 'u-2', tenant_id: 't-1', numero_economico: 'T2', estado: 'taller' },
+      { id: 'u-3', tenant_id: 't-1', numero_economico: 'T3', estado: 'en_ruta' },
+    ];
+    DOBLE.base.incidencia = [{ id: 'i-1', tenant_id: 't-1', tipo: 'averia', estado: 'abierta', abierta_en: '2026-08-01T00:00:00Z' }];
+    DOBLE.base.pod = [{ tenant_id: 't-1', viaje_id: 'v-1', estado: 'subido' }];
     const t = await getTableroOperacion('t-1');
     expect(t.podPendientes).toBe(1);
     expect(t.viajesActivos).toBe(2);
@@ -270,14 +327,29 @@ describe('getTableroOperacion', () => {
   });
 
   it('sinUnidad solo cuenta viajes EN CURSO sin dueño', async () => {
-    TABLAS = {
-      viaje: [
-        { id: 'v-1', operador_id: null, estatus: 'abierto' },
-        { id: 'v-2', operador_id: null, estatus: 'liquidado' },   // ya cerró: no se asigna
-      ],
-      unidad: [], incidencia: [], pod: [],
-    };
+    DOBLE.base.viaje = [
+      viajeDe('v-1', null, 'abierto'),
+      viajeDe('v-2', null, 'liquidado'),   // ya cerró: no se asigna
+    ];
     expect((await getTableroOperacion('t-1')).sinUnidad).toBe(1);
+  });
+
+  it('una unidad DADA DE BAJA no cuenta como disponible', async () => {
+    DOBLE.base.unidad = [
+      { id: 'u-1', tenant_id: 't-1', numero_economico: 'T1', estado: 'disponible', activo: false },
+      { id: 'u-2', tenant_id: 't-1', numero_economico: 'T2', estado: 'disponible' },
+    ];
+    expect((await getTableroOperacion('t-1')).unidadesDisponibles).toBe(1);
+  });
+
+  it('si la lectura falla, LANZA — un tablero en ceros se lee como "no falta nada"', async () => {
+    DOBLE.error = { message: 'timeout' };
+    await expect(getTableroOperacion('t-1')).rejects.toThrow('timeout');
+  });
+
+  it('una forma inesperada LANZA y nombra la migración', async () => {
+    DOBLE.formaRota = { viajesActivos: 3 };
+    await expect(getTableroOperacion('t-1')).rejects.toThrow('0152');
   });
 });
 

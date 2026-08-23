@@ -52,7 +52,8 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const { reiniciarLimites } = await import('@/lib/ratelimit');
 const { LecturaIncompleta } = await import('@/lib/likida/pg');
 const {
-  abrir, urlSinTenant, leerPagina, sobre, rebanar, fallo, errorApi, areaDeLlaveAlcanza,
+  abrir, urlSinTenant, leerPagina, leerCursor, codificarCursor, decodificarCursor,
+  sobre, rebanar, fallo, errorApi, areaDeLlaveAlcanza,
   LIMITE_DEFECTO, LIMITE_MAXIMO, VENTANA_MAXIMA, TASA_ANONIMA, TASA_POR_FLOTA,
 } = await import('./_comun');
 
@@ -339,6 +340,134 @@ describe('areaDeLlaveAlcanza — una llave no puede leer de más', () => {
     for (const a of ['operacion', 'dinero', 'administracion'] as const) {
       expect(areaDeLlaveAlcanza('inventada', a), a).toBe(false);
       expect(areaDeLlaveAlcanza('', a), a).toBe(false);
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ESC-15 (escala 50k) — EL CURSOR. `desplazamiento` se topa en la ventana de
+// 1,000 filas, que a 50k viajes/mes es menos de UN DÍA: el TMS que quiera el
+// histórico no tenía por dónde. El cursor es `(created_at, id)` de la última
+// fila entregada, opaco para el integrador. Aquí se fija que va y vuelve
+// intacto, que lo inválido es 400 (no una consulta rara a la base) y que
+// `?conteo=1` es opt-in.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el cursor de /v1/viajes', () => {
+  const url = (q: string) => `https://app.likida.ai/api/v1/viajes${q}`;
+  const PAG = { limite: 50, desplazamiento: 0 };
+  const ID = '11111111-2222-3333-4444-555555555555';
+  const CREADO = '2026-08-22T18:04:05.123456+00:00';
+
+  it('ida y vuelta: el cursor conserva el instante COMPLETO (microsegundos incluidos)', () => {
+    const c = codificarCursor({ creadoEn: CREADO, id: ID });
+    expect(decodificarCursor(c)).toEqual({ creadoEn: CREADO, id: ID });
+    // Opaco: nada de la forma interna se lee a simple vista.
+    expect(c).not.toContain(ID);
+    expect(c).not.toContain('|');
+  });
+
+  it('sin ?despues= no hay cursor y el conteo NO se pide (es opt-in: cuesta un count(*) por petición)', () => {
+    const r = leerCursor(url(''), PAG);
+    expect(r.ok && r).toMatchObject({ despues: null, conteo: false });
+  });
+
+  it('?conteo=1 lo pide; ?conteo=0 no; cualquier otra cosa es 400', () => {
+    expect(leerCursor(url('?conteo=1'), PAG)).toMatchObject({ ok: true, conteo: true });
+    expect(leerCursor(url('?conteo=0'), PAG)).toMatchObject({ ok: true, conteo: false });
+    expect(leerCursor(url('?conteo=si'), PAG).ok).toBe(false);
+  });
+
+  it('un cursor válido se lee', () => {
+    const r = leerCursor(url(`?despues=${codificarCursor({ creadoEn: CREADO, id: ID })}`), PAG);
+    expect(r.ok && r.despues).toEqual({ creadoEn: CREADO, id: ID });
+  });
+
+  it('un cursor inventado es 400 — NUNCA una consulta con basura dentro', async () => {
+    const basura = [
+      'no-es-base64!!',
+      Buffer.from('sin-separador', 'utf8').toString('base64url'),
+      Buffer.from(`${CREADO}|no-es-uuid`, 'utf8').toString('base64url'),
+      Buffer.from(`no-es-fecha|${ID}`, 'utf8').toString('base64url'),
+      // Inyección al filtro `.or()` de PostgREST, que separa por comas y
+      // paréntesis: el instante no puede traerlos.
+      Buffer.from(`2026-08-22T00:00:00Z,and(id.eq.otro)|${ID}`, 'utf8').toString('base64url'),
+    ];
+    for (const malo of basura) {
+      const r = leerCursor(url(`?despues=${malo}`), PAG);
+      expect(r.ok, malo).toBe(false);
+      if (r.ok) continue;
+      expect(r.respuesta.status).toBe(400);
+      expect((await r.respuesta.json()).error.codigo).toBe('parametro_invalido');
+    }
+  });
+
+  it('cursor y desplazamiento NO se combinan: 400 en vez de una página ambigua', () => {
+    const c = codificarCursor({ creadoEn: CREADO, id: ID });
+    expect(leerCursor(url(`?despues=${c}`), { limite: 50, desplazamiento: 50 }).ok).toBe(false);
+    expect(leerCursor(url(`?despues=${c}`), PAG).ok).toBe(true);
+  });
+
+  it('el sobre lleva `siguiente` y un hayMas MEDIDO que gana sobre la derivación', () => {
+    const s = sobre(['a', 'b'], { limite: 2, desplazamiento: 0 }, null, { hayMas: false, siguiente: null });
+    // Sin el extra, `hayMas` sería true (página llena, total desconocido).
+    expect(s.pagina.hayMas).toBe(false);
+    expect(s.pagina.siguiente).toBeNull();
+    // Y sin extra, el sobre de las otras rutas no inventa la llave.
+    expect('siguiente' in sobre(['a'], { limite: 2, desplazamiento: 0 }, 1).pagina).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA PROD (22-ago-2026) · SEG-9 — CSRF sobre la rama de COOKIE.
+//
+// /v1 no es solo lectura: `_escritura.ts` da de alta viajes y unidades, y
+// `abrir()` acepta la cookie del panel además de la llave. Una página ajena
+// abierta en el mismo navegador podía pedirle al navegador que escribiera en
+// la flota del contralor con su sesión.
+//
+// La rama de `Authorization: Bearer` NO lleva esta puerta a propósito: esa
+// cabecera el navegador no la pone solo, así que no hay CSRF que valga — y
+// exigirla ahí rompería a los TMS, que ni Origin ni Sec-Fetch-* mandan.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('SEG-9 — una escritura por cookie tiene que venir de nuestro sitio', () => {
+  const escribir = (cabeceras: Record<string, string>) =>
+    new Request('https://app.likida.ai/api/v1/viajes', {
+      method: 'POST',
+      headers: { 'x-forwarded-for': `10.9.0.${++n}`, host: 'app.likida.ai', ...cabeceras },
+    });
+
+  it('POST cross-site con la cookie: 403 y no se resuelve ni el tenant', async () => {
+    const r = await abrir(escribir({ 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' }), 'operacion');
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.respuesta.status).toBe(403);
+      expect((await r.respuesta.json()).error.codigo).toBe('sin_permiso');
+    }
+    expect(resolverTenantApi).not.toHaveBeenCalled();
+  });
+
+  it('POST desde el panel (same-origin): pasa', async () => {
+    const r = await abrir(escribir({ 'sec-fetch-site': 'same-origin' }), 'operacion');
+    expect(r.ok).toBe(true);
+  });
+
+  it('un GET cross-site NO se bloquea: no hay efecto que robar y rompería un enlace pegado', async () => {
+    const r = await abrir(
+      new Request('https://app.likida.ai/api/v1/viajes', {
+        headers: { 'x-forwarded-for': `10.9.1.${++n}`, 'sec-fetch-site': 'cross-site' },
+      }),
+      'operacion',
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it('con LLAVE de API la puerta no aplica: un TMS no manda Origin ni Sec-Fetch-*', async () => {
+    // (La llave se resuelve en otro doble; lo que se fija aquí es que la
+    // petición NO muere en la puerta de origen antes de llegar allá.)
+    const r = await abrir(escribir({ authorization: 'Bearer lk_una_llave', 'sec-fetch-site': 'cross-site' }), 'operacion');
+    if (!r.ok) {
+      const cuerpo = await r.respuesta.json();
+      expect(cuerpo.error.mensaje).not.toContain('no viene del sitio de Likida');
     }
   });
 });

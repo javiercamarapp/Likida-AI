@@ -21,7 +21,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { conteo, traerTodo } from '@/lib/likida/pg';
+import { acotada } from '@/lib/likida/presupuesto';
 
 export interface CorridaCruzada {
   id: string;
@@ -69,11 +69,11 @@ const COLUMNAS = 'id, agente, tenant_id, inicio, fin, estado, disparo, tareas_he
  * que los agentes no trabajan — lo que este historial existe para desmentir.
  */
 export async function corridasRecientes(limite = 15): Promise<CorridaCruzada[]> {
-  const { data, error } = await supabaseAdmin()
+  const { data, error } = await acotada(supabaseAdmin()
     .from('agente_corrida')
     .select(COLUMNAS)
     .order('inicio', { ascending: false })
-    .limit(limite);
+    .limit(limite), 'corridasRecientes');
   if (error) throw new Error(`corridasRecientes: ${error.message}`);
   return ((data ?? []) as Array<Record<string, unknown>>).map(desdeFila);
 }
@@ -97,11 +97,11 @@ export interface TrazaCorrida {
 /** Una corrida por id, con su costo de ventana. `null` = no existe. */
 export async function trazaDeCorrida(id: string): Promise<TrazaCorrida | null> {
   const admin = supabaseAdmin();
-  const { data, error } = await admin
+  const { data, error } = await acotada(admin
     .from('agente_corrida')
     .select(COLUMNAS)
     .eq('id', id)
-    .maybeSingle();
+    .maybeSingle(), 'trazaDeCorrida');
   if (error) throw new Error(`trazaDeCorrida: ${error.message}`);
   if (!data) return null;
 
@@ -121,26 +121,23 @@ export async function trazaDeCorrida(id: string): Promise<TrazaCorrida | null> {
     };
   }
 
-  // `traerTodo` y no un .limit: una corrida larga de una flota activa puede
-  // cruzar más de 1,000 llamadas al modelo, y PostgREST recorta en silencio
-  // (el porqué vive en pg.ts) — una suma recortada sería una cifra inventada.
+  // Se SUMA EN LA BASE (`resumen_costo_ia_tenant`, 0064, con la ventana):
+  // antes esto paginaba `llm_costo` a JS con `traerTodo`, que LANZA a las
+  // 100,000 filas — una corrida de cierre masivo de una flota de 50k
+  // viajes/mes cruza eso en horas. La ventana es [inicio, fin): la RPC compara
+  // `created_at < p_hasta`, el `.lte` anterior incluía el milisegundo exacto
+  // de `fin` — una llamada al modelo con ese timestamp exacto es la única
+  // diferencia posible, y es la convención de todas las RPC de costo.
   const { inicio, fin, tenantId } = corrida;
-  const filas = await traerTodo<Record<string, unknown>>(
-    (d, h) => admin.from('llm_costo')
-      .select('tokens_in, tokens_out, costo_usd', conteo(d))
-      .eq('tenant_id', tenantId)
-      .gte('created_at', inicio)
-      .lte('created_at', fin)
-      .order('created_at', { ascending: true })
-      .range(d, h),
-    'trazaDeCorrida.llm_costo',
-  );
-
-  const costo: CostoVentana = { llamadas: filas.length, tokensIn: 0, tokensOut: 0, costoUsd: 0 };
-  for (const f of filas) {
-    costo.tokensIn += Number(f.tokens_in ?? 0);
-    costo.tokensOut += Number(f.tokens_out ?? 0);
-    costo.costoUsd += Number(f.costo_usd ?? 0);
+  const { data: agregado, error: eCosto } = await acotada(admin
+    .rpc('resumen_costo_ia_tenant', { p_tenant: tenantId, p_desde: inicio, p_hasta: fin }), 'trazaDeCorrida.llm_costo');
+  if (eCosto) throw new Error(`trazaDeCorrida.llm_costo: ${eCosto.message}`);
+  const t = (agregado as { totales?: Partial<CostoVentana & { n: number }> } | null)?.totales;
+  const esNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  if (!t || !esNum(t.n) || !esNum(t.tokensIn) || !esNum(t.tokensOut) || !esNum(t.costoUsd)) {
+    // Fail-closed de FORMA: un `?? 0` aquí afirmaría "la corrida salió gratis".
+    throw new Error('trazaDeCorrida.llm_costo: resumen_costo_ia_tenant devolvió otra forma (¿migración 0064 sin aplicar?)');
   }
+  const costo: CostoVentana = { llamadas: t.n, tokensIn: t.tokensIn, tokensOut: t.tokensOut, costoUsd: t.costoUsd };
   return { corrida, costo, costoNoDisponible: null };
 }

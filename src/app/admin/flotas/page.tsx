@@ -12,7 +12,7 @@ import {
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { crearFlota, mensajeParaPantalla } from '@/lib/likida/administracion';
 import { actualizarFacilidad15 } from '@/lib/likida/repo';
-import { getSenalesPmf, type SenalesPmf } from '@/lib/likida/pmf';
+import { getSenalesPmfTodas, SENALES_SIN_DATOS, type SenalesPmf } from '@/lib/likida/pmf';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import ContadorRetro from '../contador-retro';
 import { HBars } from '../ui/graficas';
@@ -154,11 +154,18 @@ export default async function FlotasPage() {
       ? Promise.resolve<Record<string, string> | null>({})
       : telefonosJefe(r.flotas.map((f) => f.id)).catch(() => null),
     getOnboardingFlotas().catch(() => null as Map<string, OnboardingFlota> | null),
-    // Las 3 señales de PMF (mig. 0114), POR FLOTA y cada flota por su lado:
-    // si la lectura de una falla, SU ficha dice "no se pudo leer" y las demás
-    // siguen midiendo — mismo criterio que telefonos/onboarding.
-    Promise.all(r.flotas.map(async (f) => [f.id, await getSenalesPmf(f.id).catch(() => null)] as const))
-      .then((pares) => new Map<string, SenalesPmf | null>(pares)),
+    // Las 3 señales de PMF (mig. 0114), de TODAS las flotas en UNA consulta.
+    //
+    // ERA UN `Promise.all` DE SIETE `count exact` POR FLOTA (ESC-9): 7 × N
+    // consultas simultáneas contra el mismo pooler para pintar esta tabla —
+    // con 50 flotas, 350. Ahora `senales_pmf()` (mig. 0162) las agrupa en la
+    // base y cruza la red un arreglo del tamaño del número de FLOTAS.
+    //
+    // Lo que se perdió al juntarlas, dicho: antes una flota con la lectura
+    // rota dejaba a las demás midiendo; ahora la lectura es una sola, así que
+    // si falla, TODAS las fichas dicen "no se pudo leer" (que es la verdad).
+    // El `.catch` de aquí sigue siendo el que impide que se lleve la página.
+    getSenalesPmfTodas().catch(() => null as Map<string, SenalesPmf> | null),
   ]);
   /** Una flota sin filas en las tablas de onboarding = ceros CONTADOS (la
    *  lectura sí se completó); `null` solo cuando la lectura entera falló. */
@@ -212,7 +219,7 @@ export default async function FlotasPage() {
                       <tr key={f.id} className="border-t transition-colors hover:bg-[var(--canvas)]" style={{ borderColor: 'var(--line2)' }}>
                         <td className="px-4 py-2.5 font-medium">{f.nombre}</td>
                         <td className="px-4 py-2.5" style={{ color: 'var(--muted)' }}>{f.plan}</td>
-                        <td className="px-4 py-2.5 text-right tabular">{f.viajes}</td>
+                        <td className="px-4 py-2.5 text-right tabular">{numero(f.viajes)}</td>
                         <td className="px-4 py-2.5 text-right tabular">{usd(f.costoIaUsd)}</td>
                         <td className="px-4 py-2.5">
                           <FormaConAviso accion={accionFacilidad} boton="Guardar" columnas="110px auto">
@@ -372,7 +379,10 @@ export default async function FlotasPage() {
               flotas={flotasOrdenadas.map((f) => ({
                 id: f.id,
                 nombre: f.nombre,
-                senales: senalesPmf.get(f.id) ?? null,
+                // `null` (la lectura entera falló) → "no se pudo leer".
+                // Mapa vivo y flota ausente → la flota NO TIENE datos todavía,
+                // que es otra cosa y se dibuja distinto (cero ≠ ciego).
+                senales: senalesPmf === null ? null : senalesPmf.get(f.id) ?? SENALES_SIN_DATOS,
               }))}
             />
           )}

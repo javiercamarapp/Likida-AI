@@ -94,7 +94,9 @@ export default async function ActividadCodigoPage() {
 
                 <div className="card p-4">
                   <TituloSeccion>Últimos commits</TituloSeccion>
-                  <table className="w-full text-[12.5px] mt-2">
+                  {/* FE-19: un asunto de commit largo no estira la página. */}
+                  <div className="overflow-x-auto mt-2">
+                  <table className="w-full text-[12.5px]">
                     <tbody>
                       {a.recientes.map((c) => (
                         <tr key={c.sha} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
@@ -105,6 +107,7 @@ export default async function ActividadCodigoPage() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               </>
             );

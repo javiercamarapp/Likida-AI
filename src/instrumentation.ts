@@ -24,7 +24,12 @@ export async function register() {
   avisarConfiguracionSilenciosa();
 
   const { verificarMigracionesCriticas, verificarAvisoDePrivacidad } = await import('@/lib/likida/startup');
-  await verificarMigracionesCriticas();
+  // TAMPOCO SE ESPERA (auditoría prod 22-ago-2026, RES-2): eran once sondeos
+  // en serie contra la base, sin tope de consulta, y `register()` retenía la
+  // primera petición de la instancia fría hasta que todos contestaran. Ahora
+  // corren en paralelo, acotados, y el diagnóstico sale por el log sin
+  // bloquear el primer 200. Nunca lanza; el catch es por si acaso.
+  void verificarMigracionesCriticas().catch(() => { /* ya se reportó dentro */ });
 
   // Y si la liga del aviso de privacidad EXISTE. Es lo único que distingue un
   // dominio bien escrito de uno sin registrar, y hasta la auditoría 6 la función

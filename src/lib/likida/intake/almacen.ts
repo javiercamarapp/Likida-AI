@@ -18,6 +18,41 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { logger } from '@/lib/logger';
+import { alertarOperador, contadorDeFallos } from '@/lib/observability/alerta';
+
+/**
+ * Subidas fallidas SEGUIDAS antes de avisarle al operador del sistema
+ * (auditoría prod 22-ago-2026, RES-16).
+ *
+ * Tres, y no una: una subida suelta que falla es un blip de red y el gasto
+ * entra igual sin foto —eso es el diseño—; tres seguidas ya no son un blip,
+ * son el bucket que no existe, la llave sin permiso o Storage caído. Y el
+ * costo de no enterarse es caro y silencioso: cada comprobante entra SIN su
+ * imagen, el contralor pierde la prueba de un gasto que sí ocurrió, y el
+ * único rastro era un `warn` entre miles.
+ */
+export const UMBRAL_STORAGE_CAIDO = 3;
+const vigilante = contadorDeFallos(UMBRAL_STORAGE_CAIDO);
+
+/** El `statusCode` que trae el error de storage-js, cuando lo trae. */
+function codigoStorage(e: unknown): string | null {
+  const o = e as { statusCode?: unknown; status?: unknown; name?: unknown } | null;
+  if (typeof o?.statusCode === 'string' || typeof o?.statusCode === 'number') return String(o.statusCode);
+  if (typeof o?.status === 'number') return String(o.status);
+  if (typeof o?.name === 'string') return o.name;
+  return null;
+}
+
+/** Un fallo de subida: cuenta, y grita si ya van demasiados seguidos. */
+async function reportarFallo(viajeId: string, err: string, codigo: string | null): Promise<void> {
+  // `error` y no `warn`: Sentry agrupa por causa y este es un dato del
+  // camino del dinero que se estaba perdiendo, no una nota de color.
+  logger.error('comprobante.subida_falló', { viaje: viajeId, err, codigo });
+  if (!vigilante.fallo()) return;
+  await alertarOperador('storage.comprobantes_caido', {
+    fallosSeguidos: vigilante.seguidos, umbral: UMBRAL_STORAGE_CAIDO, codigo: codigo ?? 'sin código', error: err,
+  });
+}
 
 /** `image/jpeg` → `jpg`. Lo que Meta manda es jpeg o png. */
 function extension(dataUrl: string): string {
@@ -72,14 +107,17 @@ export async function subirComprobante(
         upsert: true,
       }), 'subirComprobante');
     if (error) {
-      logger.warn('comprobante.subida_falló', { viaje: viajeId, err: error.message });
+      await reportarFallo(viajeId, error.message, codigoStorage(error));
       return undefined;
     }
+    vigilante.exito();
     return ruta;
   } catch (e) {
     // Incluye el caso de que la 0039 no esté aplicada: el bucket no existe y el
-    // cliente lanza. El intake no se entera.
-    logger.warn('comprobante.subida_error', { err: e instanceof Error ? e.message : String(e) });
+    // cliente lanza. El intake no se entera —esa parte no cambia: el gasto
+    // sigue entrando sin foto—, pero el operador del sistema sí, a los tres
+    // seguidos.
+    await reportarFallo(viajeId, e instanceof Error ? e.message : String(e), codigoStorage(e));
     return undefined;
   }
 }

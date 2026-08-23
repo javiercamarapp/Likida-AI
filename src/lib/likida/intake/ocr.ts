@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { logger } from '@/lib/logger';
 import { generateStructured, StructuredError, TruncatedError, resumenCausa } from '@/lib/llm/openrouter';
+import { alertarOperador, contadorDeFallos } from '@/lib/observability/alerta';
 import { decodeCodigosFromImage, bufferFromDataUrl, esRfcValido, esUuidValido, rfcChecksumOk } from './cfdi';
 import { normalizarFecha } from './fecha';
 import { sanitizarFolio, sanitizarTexto, sanitizarProducto } from './sanitizar';
@@ -34,13 +35,43 @@ const ExtraccionSchema = z.object({
   // `sin_cfdi` que no existía. Hay un test que compara las dos listas.
   concepto: z.enum(CONCEPTOS_OCR),
   producto: z.string().nullable(),        // "Diesel", "Regular", "Premium", "GSuper", "Magna"
-  monto: z.number().nullable(),           // TOTAL
-  subtotal: z.number().nullable(),        // si viene desglosado
-  iva_monto: z.number().nullable(),       // IVA en pesos, TAL CUAL aparece (no lo calcules)
-  iva_tasa: z.number().nullable(),        // tasa LEÍDA en el ticket (0.16, 0.08), o null si no aparece
-  litros: z.number().nullable(),
-  precio_unitario: z.number().nullable(),
+  // ── DAT-18 · `.finite()` EN TODA CIFRA QUE SE VA A LA BASE ──────────────
+  //
+  // `z.number()` a secas ACEPTA `Infinity` (zod sólo rechaza `NaN` por
+  // defecto). Un `Infinity` en `monto` viajaba hasta `addGasto` y de ahí a un
+  // `numeric` de Postgres, que lo rechaza con un error críptico a mitad del
+  // intake — o peor, se sumaba al comprobado y volvía inútil toda la
+  // aritmética del cuadre.
+  //
+  // NO se pone un `.max()` de escala aquí a propósito: un tope duro en el
+  // schema haría que la extracción entera FALLE (zod rechaza → `fallo_tecnico`)
+  // y el comprobante acabaría en la sala de espera sin monto. La escala se
+  // juzga después, con el anticipo del viaje a la vista (`esMontoImplausible`),
+  // que es donde «grande» significa algo. Aquí sólo se cierra lo que no es un
+  // número usable en ninguna escala.
+  monto: z.number().finite().nullable(),           // TOTAL
+  subtotal: z.number().finite().nullable(),        // si viene desglosado
+  iva_monto: z.number().finite().nullable(),       // IVA en pesos, TAL CUAL aparece (no lo calcules)
+  iva_tasa: z.number().finite().nullable(),        // tasa LEÍDA en el ticket (0.16, 0.08), o null si no aparece
+  litros: z.number().finite().nullable(),
+  precio_unitario: z.number().finite().nullable(),
   forma_pago: z.enum(['efectivo', 'tarjeta', 'otro']).nullable(),
+  // ── DAT-19 · LA MONEDA, QUE NADIE LEÍA ─────────────────────────────────
+  //
+  // El monto entraba a una columna de PESOS sin preguntarse en qué moneda
+  // estaba impreso. Un ticket de USD 450 —frontera, casetas de EE. UU., un
+  // hotel que factura en dólares— se comprobaba como $450.00 MXN contra el
+  // anticipo: el operador salía debiendo la diferencia entera y la liquidación
+  // decía «cuadrada».
+  //
+  // `null` = el papel no declara moneda, que es el caso de la abrumadora
+  // mayoría de los tickets mexicanos y se trata como MXN (el comportamiento de
+  // siempre). Sólo una moneda DISTINTA y declarada cambia algo.
+  moneda: z.string().nullable(),
+  // El tipo de cambio impreso, si viene (un CFDI en USD lo trae obligado). NO
+  // se usa para convertir —el motor no inventa cifras— pero se conserva: es el
+  // dato que la persona que sí convierte necesita tener a la vista.
+  tipo_cambio: z.number().finite().nullable(),
   fecha: z.string().nullable(),
   // La fecha TAL CUAL está impresa, sin interpretar. NO es `fecha`: aquélla ya
   // pasó por la cabeza del modelo y sale normalizada, así que no sirve para
@@ -134,6 +165,11 @@ IMPUESTOS (crítico):
 - iva_tasa: la tasa que aparezca impresa (16% → 0.16; 8% → 0.08). Si el ticket NO muestra tasa ni desglose de IVA, devuelve null. En la franja fronteriza el IVA es 8%: respeta lo impreso.
 - subtotal: el que aparezca; si no viene, null.
 
+MONEDA (crítico — el monto se contabiliza en pesos mexicanos):
+- moneda ← el código de la moneda SOLO si el papel la declara ("MXN", "USD", "Moneda: USD", "DLLS", "US$", "Dólares"). Devuélvelo en código ISO de 3 letras en mayúsculas: MXN, USD, EUR, CAD. Un signo "$" a secas NO es una declaración de moneda: en México "$" es peso — devuelve null.
+- Si el ticket no dice nada de la moneda, devuelve null. No supongas.
+- tipo_cambio ← el tipo de cambio impreso, si viene ("TipoCambio: 18.75", "T.C. 18.75"). Solo el número. Si no viene, null.
+
 NO CONFUNDIR: "CLAVE PEMEX 32011" (o similar) es un código INTERNO de producto de la estación, NO el ClaveProdServ del SAT. No lo pongas como folio ni como clave fiscal.`;
 
 /**
@@ -204,7 +240,45 @@ export interface ExtraerResultado {
   /** Ausente cuando `legible` es true. */
   motivo?: MotivoFallo;
   // Costo de la llamada de visión (para el contador por liquidación).
-  costo: { modelo: string; tokensIn: number; tokensOut: number; costoUsd: number };
+  costo: {
+    modelo: string; tokensIn: number; tokensOut: number; costoUsd: number;
+    /** La llamada se ABORTÓ (presupuesto agotado) y el proveedor no devolvió
+     *  `usage`: el costo NO se midió. `costoUsd: 0` aquí no es "gratis" — es
+     *  "no se sabe" (auditoría prod, RES-4). */
+    noMedido?: true;
+  };
+}
+
+/** Fallos técnicos SEGUIDOS del OCR antes de escribirle al operador del
+ *  sistema. Cinco: una ráfaga de 20 fotos con el proveedor caído lo cruza en
+ *  la misma invocación; un 5xx suelto, no. */
+export const UMBRAL_OCR_CAIDO = 5;
+const vigilante = contadorDeFallos(UMBRAL_OCR_CAIDO);
+
+/**
+ * El `status` HTTP y el `code` del fallo, cavando en `.cause` como hace
+ * `resumenCausa` — pero como CAMPOS, no como texto: Sentry agrupa por mensaje
+ * y con todo en `err` los 25 fallos del 20-ago eran UN issue sin decir por qué.
+ */
+export function codigoYStatus(err: unknown, profundidad = 3): { status?: number; codigo?: string } {
+  let status: number | undefined;
+  let codigo: string | undefined;
+  let cur: unknown = err;
+  for (let i = 0; i < profundidad && cur && typeof cur === 'object'; i++) {
+    const o = cur as { status?: unknown; code?: unknown; cause?: unknown };
+    if (status === undefined && typeof o.status === 'number') status = o.status;
+    if (status === undefined && typeof o.status === 'string' && /^\d{3}$/.test(o.status)) status = Number(o.status);
+    if (codigo === undefined && typeof o.code === 'string') codigo = o.code;
+    cur = o.cause;
+  }
+  return { status, codigo };
+}
+
+/** ¿La llamada se cortó por NUESTRO presupuesto (señal abortada)? */
+function abortado(err: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true;
+  const e = err as { name?: unknown; cause?: { name?: unknown } } | null;
+  return e?.name === 'AbortError' || e?.cause?.name === 'AbortError';
 }
 
 /**
@@ -267,6 +341,8 @@ export async function extraerComprobante(
     // contabiliza (la llamada se cobró aunque no sirviera).
     const err = e as StructuredError;
     const truncado = e instanceof TruncatedError;
+    const { status, codigo } = codigoYStatus(e);
+    const fueAbortado = abortado(e, signal);
     logger.error('ocr.fallo_tecnico', {
       err: e instanceof Error ? e.message : String(e),
       // AUDITORÍA 1, CRÍTICO (Operabilidad): la causa real —401 por llave rota,
@@ -274,22 +350,44 @@ export async function extraerComprobante(
       // repetir el mensaje fijo. Es lo que faltó el 20-ago con las env en
       // "[SENSITIVE]": 25 fallos idénticos sin decir por qué.
       causa: resumenCausa(e),
+      // Y como CAMPOS (auditoría prod, RES-3): un 402 de saldo agotado y un
+      // 503 del proveedor son dos issues, no uno.
+      status, codigo, abortado: fueAbortado,
       truncado,
       ...(truncado ? { tope: (e as TruncatedError).tope, usados: (e as TruncatedError).tokensUsados } : {}),
     });
+    // 401/402/403 no son transitorios: llave rota, saldo agotado o llave sin
+    // permiso. Ningún fallback de proveedor lo arregla y cada foto que llegue
+    // va a fallar igual. Se avisa DE INMEDIATO, sin esperar al contador.
+    if (status === 401 || status === 402 || status === 403) {
+      await alertarOperador('ocr.credencial', { status, causa: resumenCausa(e) });
+    } else if (!fueAbortado && vigilante.fallo()) {
+      // Un abort es nuestro presupuesto, no el proveedor: no cuenta.
+      await alertarOperador('ocr.caido', {
+        fallosSeguidos: vigilante.seguidos, umbral: UMBRAL_OCR_CAIDO,
+        status: status ?? null, codigo: codigo ?? null, causa: resumenCausa(e),
+      });
+    }
     const u = err?.usage;
+    // Un abort sin `usage` no midió nada: el proveedor pudo haber cobrado la
+    // llamada (el corte es nuestro) y aquí no se sabe cuánto. Se dice, y la
+    // fila lleva la marca, en vez de un 0 que el tablero lee como "gratis".
+    const noMedido = fueAbortado && !u;
+    if (noMedido) logger.warn('ocr.costo_no_medido', { causa: resumenCausa(e) });
     return {
       gasto: { id: randomUUID(), concepto: 'otro', monto: 0, ocrConfianza: 0 },
       legible: false,
       motivo: 'fallo_tecnico',
       costo: {
-        modelo: u?.model ?? 'ocr',
+        modelo: u?.model ?? (noMedido ? 'ocr:no_medido' : 'ocr'),
         tokensIn: u?.tokensIn ?? 0,
         tokensOut: u?.tokensOut ?? 0,
         costoUsd: u?.cost ?? 0,
+        ...(noMedido ? { noMedido: true as const } : {}),
       },
     };
   }
+  vigilante.exito();
   const { data } = res;
 
   // Cruce con el QR del CFDI (gana sobre el OCR para campos fiscales).
@@ -373,6 +471,14 @@ export async function extraerComprobante(
   // equivocó — leyó exacto lo impreso—; son dos cadenas distintas, y la del QR
   // es la llave del deep-link del portal, no lo que una persona teclea en el
   // formulario. Pisar una con otra rompe justo el caso que se quería arreglar.
+  // DAT-19: el código de moneda, saneado. `sanitizarTexto` no basta —esto se
+  // COMPARA contra 'MXN' para decidir si el importe está en pesos— así que se
+  // normaliza a mayúsculas y se exige la forma ISO de tres letras. Un "$" o un
+  // "pesos m.n." mal leído no puede convertirse en una moneda extranjera
+  // fantasma que mande a revisar una liquidación sana.
+  const monedaCruda = (data.moneda ?? '').toUpperCase().replace(/[^A-Z]/g, '');
+  const monedaLeida = /^[A-Z]{3}$/.test(monedaCruda) ? monedaCruda : undefined;
+
   const folioRaw = sanitizarFolio(data.folio);
   const folioNorm = folioRaw ? folioRaw.replace(/^0+(?=\d)/, '') : undefined;
 
@@ -418,6 +524,14 @@ export async function extraerComprobante(
       emisor: sanitizarTexto(data.emisor),
       ivaMonto: data.iva_monto ?? undefined,
       ivaTasa: data.iva_tasa ?? undefined,
+      // DAT-19: normalizada a ISO en mayúsculas y SÓLO si el papel la declara.
+      // Un `undefined` significa «no dijo», que el motor trata como pesos —el
+      // comportamiento de siempre—; lo que cambia algo es una moneda distinta
+      // y explícita. La conversión NO se hace aquí ni en el motor: se declara
+      // y se manda a revisar, porque el tipo de cambio del día es un dato que
+      // una persona aporta y que el contralor tiene que poder reproducir.
+      moneda: monedaLeida,
+      tipoCambio: data.tipo_cambio ?? undefined,
       // Para el aviso de portal: con qué liga y con qué folio se timbra.
       urlFacturacion,
       // RFC con forma válida pero dígito verificador roto: mal leído, a revisión.

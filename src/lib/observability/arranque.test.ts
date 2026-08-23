@@ -24,6 +24,10 @@ function ponerTodo() {
   vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://likidaai.vercel.app');
   vi.stubEnv('ALERTA_EMAIL', 'operador@likida.ai');
   vi.stubEnv('LIKIDA_FLOTA_COOKIE_LLAVE', 'llave-de-prueba');
+  // Auditoría prod (SEG-1): sin las dos, el límite de tasa cuenta por
+  // instancia y el techo del login se multiplica por las lambdas abiertas.
+  vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://fake.upstash.io');
+  vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'tok-de-prueba');
 }
 
 describe('avisarConfiguracionSilenciosa', () => {
@@ -163,5 +167,35 @@ describe('avisarConfiguracionSilenciosa', () => {
     // Y sigue sin el ruido de las silenciosas ni del "todo bien".
     const todo = [...err.mock.calls, ...log.mock.calls].map((c) => String(c[0])).join('\n');
     expect(todo).not.toContain('startup.config_silenciosa');
+  });
+});
+
+// AUDITORÍA PROD (22-ago-2026) · SEG-1 — el límite de tasa sin Redis no es un
+// límite: `ratelimit.ts` cae a un Map por instancia y N intentos se vuelven
+// N × (instancias que el atacante consiga abrir en paralelo).
+describe('las credenciales de Upstash entraron a la lista silenciosa', () => {
+  it('grita si falta la URL, y nombra la consecuencia (no el valor)', async () => {
+    ponerTodo();
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { avisarConfiguracionSilenciosa } = await import('./arranque');
+
+    avisarConfiguracionSilenciosa();
+
+    const linea = spy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(linea).toContain('UPSTASH_REDIS_REST_URL');
+    expect(linea).toContain('memoria de CADA instancia');
+    expect(linea).not.toContain('fake.upstash.io');
+  });
+
+  it('y también si falta solo el TOKEN: media credencial es tan inútil como ninguna', async () => {
+    ponerTodo();
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', '');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { avisarConfiguracionSilenciosa } = await import('./arranque');
+
+    avisarConfiguracionSilenciosa();
+
+    expect(spy.mock.calls.map((c) => String(c[0])).join('\n')).toContain('UPSTASH_REDIS_REST_TOKEN');
   });
 });

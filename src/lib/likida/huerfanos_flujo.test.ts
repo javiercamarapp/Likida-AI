@@ -41,7 +41,7 @@ vi.mock('@/lib/likida/conv', async (original) => ({
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
   loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
   saveConversation: vi.fn(), claimMessage: vi.fn(async () => 'nuevo' as const),
-  acquireViajeLock: vi.fn(async () => true), releaseViajeLock: vi.fn(),
+  acquireViajeLock: vi.fn(async () => true), intentarLockViaje: vi.fn(async () => 'obtenido' as const), releaseViajeLock: vi.fn(),
   releaseMessageClaim: vi.fn(),
   intakeDelta: vi.fn(async () => 1), esperarIntake: vi.fn(async () => true),
 }));

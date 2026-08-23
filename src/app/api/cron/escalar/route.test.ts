@@ -13,6 +13,8 @@ const ejecutarCobranzaGlobal = vi.fn();
 
 vi.mock('@/lib/likida/escalar_viaje', () => ({
   escalarViajesSinAceptar: (...a: unknown[]) => escalarViajesSinAceptar(...a),
+  // ESC-3: el cron reparte su reloj entre los dos motores con esta constante.
+  PLAZO_ESCALACION_MS: 40_000,
 }));
 vi.mock('@/lib/likida/agentes/cobranza', () => ({
   ejecutarCobranzaGlobal: (...a: unknown[]) => ejecutarCobranzaGlobal(...a),
@@ -38,6 +40,17 @@ const ilegibles = new Set<string>();
 vi.mock('@/lib/likida/interruptores', () => ({
   leerInterruptor: async (nombre: string) =>
     ilegibles.has(nombre) ? 'ilegible' : (await estaApagado(nombre)) ? 'apagado' : 'encendido',
+}));
+
+// El latido (RES-7) se prueba en src/lib/admin/salud.test.ts; aquí se mockea
+// para que la racha de cortes (RES-6) sea observable sin tocar la base.
+const registrarLatido = vi.fn(async () => {});
+let latidoPrevio: { ultimoLatido: string; estado: string; detalle: Record<string, unknown> } | null = null;
+vi.mock('@/lib/admin/salud', () => ({
+  registrarLatido: (...a: unknown[]) => registrarLatido(...(a as [])),
+  leerLatido: async () => latidoPrevio,
+  puertaCron: async (_c: string, req: Request) =>
+    req.headers.get('authorization') === 'Bearer secreto-de-prueba' ? null : new Response(null, { status: 401 }),
 }));
 
 process.env.CRON_SECRET = 'secreto-de-prueba';
@@ -186,5 +199,54 @@ describe('el kill switch (0110)', () => {
     // reloj si el sistema está apagado.
     await GET(peticion('Bearer equivocado'));
     expect(estaApagado).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ESC-3 / ESC-4 / RES-6 — el reparto del reloj entre los dos motores, y la
+// racha de corridas que dejan trabajo sin hacer.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el reloj se reparte y los cortes repetidos se gritan', () => {
+  beforeEach(() => {
+    escalarViajesSinAceptar.mockReset().mockResolvedValue({ escalados: 0, cortadosPorReloj: 0 });
+    ejecutarCobranzaGlobal.mockReset().mockResolvedValue({ tenants: 0, contactados: 0, cortadosPorReloj: 0, fallos: [] });
+    alertarOperador.mockClear();
+    registrarLatido.mockClear();
+    latidoPrevio = null;
+    estaApagado.mockReset().mockResolvedValue(false);
+  });
+
+  it('a cada motor le pasa SU vencimiento, y el de la cobranza es más tarde', async () => {
+    await GET(peticion('Bearer secreto-de-prueba'));
+    const { venceEn: venceEscalacion } = escalarViajesSinAceptar.mock.calls[0][0] as { venceEn: number };
+    const { venceEn: venceCobranza } = ejecutarCobranzaGlobal.mock.calls[0][1] as { venceEn: number };
+    expect(venceEscalacion).toBeGreaterThan(Date.now());
+    // La escalación cede el resto: si se comiera los 120 s, la cobranza no
+    // llegaba ni a leer su cola — cada hora y sin una línea que lo dijera.
+    expect(venceCobranza).toBeGreaterThan(venceEscalacion);
+  });
+
+  it('una corrida con cortes lo dice y suma a la racha, sin molestar al operador', async () => {
+    ejecutarCobranzaGlobal.mockResolvedValue({ tenants: 3, contactados: 5, cortadosPorReloj: 2, fallos: [] });
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect((await res.json()).cortadosPorReloj).toBe(2);
+    expect(registrarLatido).toHaveBeenCalledWith('escalar', 'parcial', { cortesSeguidos: 1, cortados: 2 });
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+
+  it('TRES corridas seguidas con cortes: el trabajo ya no cabe en la cadencia, y se avisa', async () => {
+    latidoPrevio = { ultimoLatido: new Date().toISOString(), estado: 'parcial', detalle: { cortesSeguidos: 2 } };
+    ejecutarCobranzaGlobal.mockResolvedValue({ tenants: 9, contactados: 5, cortadosPorReloj: 4, fallos: [] });
+    await GET(peticion('Bearer secreto-de-prueba'));
+    expect(alertarOperador).toHaveBeenCalledWith('cron.escalar', expect.objectContaining({ codigo: 'corte_por_reloj_repetido' }));
+    expect(registrarLatido).toHaveBeenCalledWith('escalar', 'parcial', { cortesSeguidos: 3, cortados: 4 });
+  });
+
+  it('una corrida completa REINICIA la racha: el latido vuelve a `ok` en cero', async () => {
+    latidoPrevio = { ultimoLatido: new Date().toISOString(), estado: 'parcial', detalle: { cortesSeguidos: 5 } };
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(registrarLatido).toHaveBeenCalledWith('escalar', 'ok', { cortesSeguidos: 0, cortados: 0 });
+    expect(alertarOperador).not.toHaveBeenCalled();
   });
 });

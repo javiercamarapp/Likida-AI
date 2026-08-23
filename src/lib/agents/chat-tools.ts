@@ -21,6 +21,7 @@ import {
 import { getConfig } from '@/lib/likida/config';
 import { resolverPeriodo, getGastosFiscales, resumirPerdidas, opcionesDe } from '@/lib/likida/fiscal';
 import { ahoraMs } from '@/lib/saludo';
+import { hoyMx } from '@/lib/formato';
 
 const SIN_PARAMS = { type: 'object', properties: {}, additionalProperties: false } as const;
 
@@ -39,8 +40,29 @@ function modoDe(args: Record<string, unknown>): Modo {
   const m = args.modo;
   return m === 'mensual' || m === 'historico' ? m : 'semanal';
 }
+/** DAT-23 (auditoría prod): era el día UTC. El dueño que le pregunta al
+ *  copiloto a las 19:00 recibía las cifras de MAÑANA —y el 31 de diciembre,
+ *  las del ejercicio siguiente— porque las tres `*Series` de `analytics.ts`
+ *  cuelgan sus ventanas de este `hoy`. La flota, el contralor y el SAT están
+ *  todos en México. */
 function hoyIso(): string {
-  return new Date(ahoraMs()).toISOString().slice(0, 10);
+  return hoyMx(new Date(ahoraMs()));
+}
+
+/**
+ * El modo pedido, o LANZA.
+ *
+ * ESCALA 50k / FE-4 (22-ago-2026): las tres funciones `*Series` de
+ * `analytics.ts` pasaron a `Promise.allSettled` por modo — un modo que no se
+ * pudo cargar vale `null` en vez de tumbar los otros dos, que es lo que la
+ * PANTALLA necesita (pinta los que sí llegaron). El chat no: aquí el modo
+ * que se pide ES la respuesta, y un `null` convertido en "0 categorías" o
+ * "ninguna ruta" sería el modelo AFIRMÁNDOLE al dueño que su flota no gastó
+ * nada. Se lanza, y el ejecutor de tools reporta el fallo.
+ */
+function exigirModo<T>(v: T | null, tool: string, modo: Modo): T {
+  if (v === null) throw new Error(`${tool}: no se pudo cargar la vista "${modo}" (ver analytics.modo_caido)`);
+  return v;
 }
 
 registerTool('kpis_flota', {
@@ -150,7 +172,7 @@ registerTool('serie_gasto', {
     },
   },
   handler: async (args, ctx) => {
-    const s = (await getGastoPorSemanaSeries(ctx.tenantId, hoyIso()))[modoDe(args)];
+    const s = exigirModo((await getGastoPorSemanaSeries(ctx.tenantId, hoyIso()))[modoDe(args)], 'serie_gasto', modoDe(args));
     return { modo: modoDe(args), moneda: 'MXN', categorias: s.categorias, series: s.series };
   },
 });
@@ -165,7 +187,7 @@ registerTool('serie_liquidado', {
     },
   },
   handler: async (args, ctx) => {
-    const s = (await getLiquidadoPorSemanaSeries(ctx.tenantId, hoyIso()))[modoDe(args)];
+    const s = exigirModo((await getLiquidadoPorSemanaSeries(ctx.tenantId, hoyIso()))[modoDe(args)], 'serie_liquidado', modoDe(args));
     return { modo: modoDe(args), moneda: 'MXN', puntos: s.slice(0, 60) };
   },
 });
@@ -180,7 +202,7 @@ registerTool('top_rutas', {
     },
   },
   handler: async (args, ctx) => {
-    const s = (await getTopRutasPorGastoSeries(ctx.tenantId, 5, hoyIso()))[modoDe(args)];
+    const s = exigirModo((await getTopRutasPorGastoSeries(ctx.tenantId, 5, hoyIso()))[modoDe(args)], 'top_rutas', modoDe(args));
     return { modo: modoDe(args), moneda: 'MXN', rutas: s };
   },
 });
@@ -227,10 +249,10 @@ registerTool('proyectar_serie', {
   handler: async (args, ctx) => {
     const modo = modoDe(args);
     if (args.serie === 'liquidado') {
-      const s = (await getLiquidadoPorSemanaSeries(ctx.tenantId, hoyIso()))[modo];
+      const s = exigirModo((await getLiquidadoPorSemanaSeries(ctx.tenantId, hoyIso()))[modo], 'proyeccion/liquidado', modo);
       return { serie: 'liquidado', modo, moneda: 'MXN', ...proyectarPuntos(s.map((p) => p.valor)) };
     }
-    const g = (await getGastoPorSemanaSeries(ctx.tenantId, hoyIso()))[modo];
+    const g = exigirModo((await getGastoPorSemanaSeries(ctx.tenantId, hoyIso()))[modo], 'proyeccion/gasto', modo);
     // Total por corte = suma de todas las categorías en ese corte.
     const n = Math.max(...g.series.map((x) => x.valores.length), 0);
     const totales = Array.from({ length: n }, (_, i) => g.series.reduce((a, x) => a + (x.valores[i] ?? 0), 0));

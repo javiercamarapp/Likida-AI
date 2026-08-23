@@ -28,6 +28,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { processInbound } from '@/lib/likida/processor';
 import { logger } from '@/lib/logger';
+import { hoyMx } from '@/lib/formato';
+import { ahoraMs } from '@/lib/saludo';
 import {
   exigirTenantZZZ, exigirPrefijoQA, PREFIJO_QA, TOPE_CORRIDA_USD,
 } from '../../../scripts/qa-agentes/config.qa';
@@ -165,7 +167,10 @@ async function sembrarTenant(db: SupabaseClient, corrida: CorridaQA): Promise<{ 
   });
   if (uni.error) throw new Error(`no se pudo sembrar la unidad QA: ${uni.error.message}`);
 
-  const ayer = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+  // El AYER de México: `viaje.fecha_inicio` es `date` y la ventana del cuadre
+  // (`ventanaDelViaje`) la juzga en días de México. Sembrar el día UTC hacía
+  // que, corriendo QA de noche, el viaje sintético naciera fechado HOY.
+  const ayer = hoyMx(new Date(ahoraMs() - 24 * 3600 * 1000));
   const viaje = await db.from('viaje').insert({
     tenant_id: tenantId,
     operador_id: op.data.id,

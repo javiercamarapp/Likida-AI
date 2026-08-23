@@ -75,7 +75,11 @@ const { DatoInvalido } = await import('./errores');
 const P1 = '11111111-2222-4333-8444-555555555555';
 const V1 = '22222222-3333-4444-8555-666666666666';
 
-beforeEach(() => {
+beforeEach(async () => {
+  // RES-19: `leerInterruptor` cachea 5 s por instancia y este archivo usa el
+  // módulo REAL con una respuesta distinta por prueba — sin tirar la caché, la
+  // lectura de una contestaría por la siguiente.
+  (await import('@/lib/likida/interruptores')).olvidarInterruptores();
   llamadas.length = 0;
   respuestas.clear();
   provisionar.mockClear();

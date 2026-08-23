@@ -56,6 +56,8 @@ let lectura: { data: Record<string, unknown> | Record<string, unknown>[] | null;
 let resultadoUpdate: { error: { message: string } | null };
 /** Lo que devuelve el UPDATE que sella el intento. */
 let resultadoSello: { error: { message: string } | null };
+/** Lo que devuelve el UPDATE que pone/levanta la marca de "emisión en curso" (RES-10). */
+let resultadoMarca: { error: { message: string } | null };
 const filtros: Array<[string, unknown[]]> = [];
 const updates: Array<{ fila: Record<string, unknown>; por: Array<[string, unknown]> }> = [];
 
@@ -122,10 +124,15 @@ function cadenaUpdate(fila: Record<string, unknown>, resultado: () => { error: {
   return nodo;
 }
 
+/** La marca de RES-10: ponerla (motivo literal) o levantarla (las dos a null). */
+const esMarcaEnCurso = (f: Record<string, unknown>) =>
+  'autofactura_bloqueo' in f && (f.autofactura_bloqueo === BLOQUEO_EN_CURSO_TXT || f.autofactura_bloqueo === null);
+const BLOQUEO_EN_CURSO_TXT = (await import('./al_vuelo')).BLOQUEO_EMISION_EN_CURSO;
+
 const from = vi.fn((tabla: string) => ({
   select: (...a: unknown[]) => { filtros.push([`select ${tabla}`, a]); return cadenaLectura(); },
   update: (f: Record<string, unknown>) =>
-    cadenaUpdate(f, () => ('autofactura_intentada_en' in f ? resultadoSello : resultadoUpdate)),
+    cadenaUpdate(f, () => ('autofactura_intentada_en' in f ? resultadoSello : esMarcaEnCurso(f) ? resultadoMarca : resultadoUpdate)),
 }));
 
 vi.mock('@/lib/supabase/admin', () => ({
@@ -157,14 +164,17 @@ const ADAPTADOR = { comercio: 'enerser', portal: 'x', facturar: vi.fn() };
 /** El sello del intento, que va en CADA llamada que llega a decidir. */
 const AHORA = '2026-08-04T18:00:00.000Z';
 const SELLO = { autofactura_intentada_en: AHORA };
-/** Los updates que NO son el sello: es lo que las pruebas viejas medían. */
-const sinSello = () => updates.filter((u) => !('autofactura_intentada_en' in u.fila));
+/** Los updates que NO son el sello ni la marca de RES-10: es lo que las pruebas viejas medían. */
+const sinSello = () => updates.filter((u) => !('autofactura_intentada_en' in u.fila) && !esMarcaEnCurso(u.fila));
+/** Solo la marca de "emisión en curso": puesta (motivo) y levantada (null). */
+const marcas = () => updates.filter((u) => esMarcaEnCurso(u.fila));
 const sellos = () => updates.filter((u) => 'autofactura_intentada_en' in u.fila);
 
 beforeEach(() => {
   lectura = { data: g(), error: null };
   resultadoUpdate = { error: null };
   resultadoSello = { error: null };
+  resultadoMarca = { error: null };
   idsReclamados = null;
   filtros.length = 0;
   updates.length = 0;
@@ -642,6 +652,95 @@ describe('facturarAlVuelo · lo que pasa después del portal', () => {
     await expect(facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY }))
       .rejects.toThrow('playwright crashed');
     expect(sinSello()).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RES-10 — LA MARCA DE "EMISIÓN EN CURSO" (auditoría prod)
+//
+// Muerte a media sesión + claim de 10 min + cron cada 15 min = segundo CFDI.
+// La marca va ANTES de abrir el portal y se levanta SOLO con el UUID escrito.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('facturarAlVuelo · la marca de "emisión en curso" (RES-10)', () => {
+  it('en `emitir` la marca YA ESTÁ PUESTA cuando se abre el portal', async () => {
+    let marcasAlAbrir = -1;
+    facturarConAgente.mockImplementation(async () => {
+      marcasAlAbrir = marcas().length;
+      return { modo: 'emitir', ok: true, capturado: {}, cfdiUuid: 'B0800A68-1111-2222-3333-444455556666' };
+    });
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY, ahora: AHORA });
+
+    expect(marcasAlAbrir).toBe(1);
+    expect(marcas()[0]).toEqual({
+      fila: { autofactura_bloqueada_en: AHORA, autofactura_bloqueo: BLOQUEO_EN_CURSO_TXT },
+      por: [['id', ['g-1']], ['tenant_id', 't-1']],
+    });
+  });
+
+  it('se levanta SOLO DESPUÉS de escribir el UUID — y solo si era esa marca', async () => {
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY, ahora: AHORA });
+
+    const orden = updates.map((u) => ('cfdi_uuid' in u.fila ? 'uuid' : esMarcaEnCurso(u.fila) ? (u.fila.autofactura_bloqueo === null ? 'levanta' : 'marca') : 'otro'));
+    expect(orden.filter((x) => x !== 'otro')).toEqual(['marca', 'uuid', 'levanta']);
+    // Levanta ÚNICAMENTE su propia marca: un "YA SE EMITIÓ" puesto en medio no se toca.
+    expect(marcas()[1].por).toEqual([['id', 'g-1'], ['tenant_id', 't-1'], ['autofactura_bloqueo', BLOQUEO_EN_CURSO_TXT]]);
+  });
+
+  it('si el agente MUERE a media sesión, la marca se queda: el ticket no vuelve a la cola solo', async () => {
+    facturarConAgente.mockRejectedValue(new Error('función matada a los 300 s'));
+    await expect(facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY }))
+      .rejects.toThrow('matada');
+    expect(marcas()).toHaveLength(1);
+    expect(marcas()[0].fila.autofactura_bloqueo).toBe(BLOQUEO_EN_CURSO_TXT);
+  });
+
+  it('si el portal falló LIMPIO (sin apretar emitir), la marca se levanta y el ticket vuelve a la cola', async () => {
+    facturarConAgente.mockResolvedValue({ modo: 'emitir', ok: false, capturado: {}, error: 'el portal no cargó' });
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    expect(marcas().map((u) => u.fila.autofactura_bloqueo)).toEqual([BLOQUEO_EN_CURSO_TXT, null]);
+  });
+
+  it('si guardar el UUID falló, NO se levanta: queda el bloqueo de verdad ("YA SE EMITIÓ")', async () => {
+    resultadoUpdate = { error: { message: 'deadlock detected' } };
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    expect(r.bloqueado).toContain('YA SE EMITIÓ');
+    expect(marcas().map((u) => u.fila.autofactura_bloqueo)).toEqual([BLOQUEO_EN_CURSO_TXT]);
+  });
+
+  it('si la marca NO se pudo guardar, el portal NO se abre (falla cerrado)', async () => {
+    resultadoMarca = { error: { message: 'base caída' } };
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    expect(facturarConAgente).not.toHaveBeenCalled();
+    expect(r.facturado).toBe(false);
+    expect(r.detalle).toContain('emisión en curso');
+    expect(logger.error).toHaveBeenCalledWith('autofactura.marca_en_curso_sin_guardar', expect.anything());
+  });
+
+  it('en ENSAYO no hay marca: no se timbra nada y no se ensucia la pantalla', async () => {
+    facturarConAgente.mockResolvedValue({ modo: 'ensayo', ok: true, capturado: {} });
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', hoy: HOY });
+    expect(marcas()).toEqual([]);
+  });
+
+  it('por LOTE: una sola marca para todos los tickets, antes de la sesión; se levanta uno a uno con su UUID', async () => {
+    lectura = { data: [g({ id: 'g-1' }), g({ id: 'g-2' })], error: null };
+    let marcasAlAbrir = -1;
+    facturarLoteConAgente.mockImplementation(async () => {
+      marcasAlAbrir = marcas().length;
+      return {
+        modo: 'emitir', ok: true, capturado: {},
+        porGasto: [
+          { gastoId: 'g-1', incluido: true, cfdiUuid: 'B0800A68-1111-2222-3333-444455556666' },
+          { gastoId: 'g-2', incluido: true, cfdiUuid: 'B0800A68-1111-2222-3333-444455556666' },
+        ],
+      };
+    });
+    await facturarLoteAlVuelo({ tenantId: 't-1', comercio: 'enerser', gastoIds: ['g-1', 'g-2'], modo: 'emitir', hoy: HOY, ahora: AHORA });
+
+    expect(marcasAlAbrir).toBe(1);
+    expect(marcas()[0].por).toEqual([['id', ['g-1', 'g-2']], ['tenant_id', 't-1']]);
+    expect(marcas().slice(1).map((u) => u.por[0])).toEqual([['id', 'g-1'], ['id', 'g-2']]);
   });
 });
 

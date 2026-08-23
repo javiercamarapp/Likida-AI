@@ -37,6 +37,7 @@ const SUSCRIPCION_VIVA: Suscripcion = {
   periodoFin: '2026-08-31',
   stripeCustomerId: 'cus_viejo',
   stripeSubscriptionId: 'sub_viejo',
+  vencida: false,
 };
 
 interface Llamada { metodo: string; url: string; cuerpo?: string }

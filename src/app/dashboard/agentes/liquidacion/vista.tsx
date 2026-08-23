@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Route, ArrowRight, Inbox, Bot, BellRing, Flag, Link2, Settings } from 'lucide-react';
 import type { LiqRow, DashboardKpis, HechoSolo, DineroObservadoTipo } from '@/lib/likida/analytics';
 import { etiquetaConcepto, type PoliticaGasto } from '@/lib/likida/cuadre/engine';
-import { mxn, numero, fechaCorta } from '@/lib/formato';
+import { mxn, mxnCompacto, numero, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { CalendarHeatmap, HBars } from '@/app/admin/ui/graficas';
 import { Dona } from '@/app/admin/charts';
@@ -80,7 +80,10 @@ export function VistaAgenteLiquidacion({
         <div className="px-5 py-5 flex-1 space-y-4">
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi titulo="Monto comprobado" valor={mxn(kpis.montoComprobado)} nota="histórico" />
+            {/* FE-17: es el acumulado HISTÓRICO — a escala 50k son miles de millones y
+                `$9,000,000,000.00` no cabe en un cuarto de fila. `mxnCompacto`
+                abrevia SOLO a partir del millón; debajo es `mxn()` exacto. */}
+            <Kpi titulo="Monto comprobado" valor={mxnCompacto(kpis.montoComprobado)} nota="histórico" />
             <Kpi titulo="Tasa de cuadre" valor={`${numero(kpis.tasaCuadre)}%`} nota={`${numero(kpis.viajesLiquidados)} liquidaciones`} />
             <Kpi titulo="Por revisar" valor={numero(kpis.porRevisar)} tono={kpis.porRevisar > 0 ? 'warn' : undefined} />
             <Kpi titulo="Con diferencias" valor={numero(kpis.conDiferencias)} tono={kpis.conDiferencias > 0 ? 'bad' : undefined} />
@@ -94,7 +97,19 @@ export function VistaAgenteLiquidacion({
                 una solo, la vas a ver aquí.
               </EstadoVacio>
             ) : (
-              <TablaLiqs filas={cola} sufijo={sufijo} conVer />
+              <>
+                <TablaLiqs filas={cola} sufijo={sufijo} conVer />
+                {/* FE-13: la cola sale de las 50 liquidaciones más recientes,
+                    pero `porRevisar` lo cuenta la base sobre TODAS. Cuando no
+                    cuadran, se dice: una tabla de 12 filas bajo un KPI que
+                    marca 340 se lee como que faltan 328 sin explicación. */}
+                {kpis.porRevisar > cola.length && (
+                  <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
+                    Se listan {numero(cola.length)} de {numero(kpis.porRevisar)} — las más recientes.
+                    El resto está en el registro de viajes.
+                  </p>
+                )}
+              </>
             )}
           </section>
 

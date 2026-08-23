@@ -65,6 +65,44 @@ export async function guardarEventosPendientes(mensajes: InboundMessage[]): Prom
   }
 }
 
+/**
+ * ¿CUÁLES DE ESTOS WAMIDS YA ESTÁN EN LA BANDEJA? (DAT-34)
+ *
+ * El rate limit del webhook corría ANTES de cualquier deduplicación, y eso
+ * convertía el arreglo del 4-ago —aplazar en vez de descartar— en una trampa:
+ *
+ *   1. llega un POST con 45 mensajes; caben 40, se contesta 429 y los 5
+ *      restantes quedan para la reentrega;
+ *   2. Meta reentrega el POST COMPLETO (así funciona: el payload entero, no el
+ *      resto), y los 40 que ya están guardados vuelven a gastar los 40 cupos de
+ *      la ventana;
+ *   3. los 5 nuevos vuelven a diferirse. Y otra vez. Cada reentrega repite el
+ *      ciclo hasta que Meta se rinde, y ahí sí se pierden.
+ *
+ * Un mensaje que YA está en `wa_evento_pendiente` no cuesta trabajo nuevo: su
+ * fila existe, el cron la va a drenar, y el `claimMessage` del motor lo trata
+ * como duplicado. Cobrarle cupo a lo ya guardado es cobrarle dos veces por el
+ * mismo mensaje, y el que paga la cuenta es el comprobante nuevo.
+ *
+ * FAIL-OPEN: ante un error de lectura devuelve el conjunto VACÍO, o sea que el
+ * límite se aplica a todos, como antes. No poder deduplicar no puede convertir
+ * el techo en un permiso ilimitado — es la única dirección segura de fallar en
+ * un limitador.
+ */
+export async function pendientesYaConocidos(ids: string[]): Promise<Set<string>> {
+  const limpios = ids.filter(Boolean);
+  if (limpios.length === 0) return new Set();
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('wa_evento_pendiente')
+    .select('id')
+    .in('id', limpios), 'pendientesYaConocidos');
+  if (error) {
+    logger.warn('wa.dedup_previo_falló', { err: error.message, cuantos: limpios.length });
+    return new Set();
+  }
+  return new Set((data ?? []).map((f) => String((f as { id: unknown }).id)));
+}
+
 export interface PendienteReclamado {
   id: string;
   evento: InboundMessage;
@@ -74,17 +112,27 @@ export interface PendienteReclamado {
 /**
  * Los pendientes listos para drenar, en orden de llegada. LANZA ante error
  * de lectura: el cron debe reportar 500, no "no había nada".
+ *
+ * Trae `remitente` (el `from` del evento) porque el drenado paraleliza POR
+ * CHOFER (ESC-1): los mensajes de una misma persona se procesan en serie —una
+ * caption completa la foto anterior— y los de personas distintas, a la vez.
  */
-export async function pendientesPorDrenar(limite = 10): Promise<Array<{ id: string; intentos: number }>> {
+export async function pendientesPorDrenar(limite = 10): Promise<Array<{ id: string; intentos: number; remitente: string }>> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('wa_evento_pendiente')
-    .select('id, intentos')
+    .select('id, intentos, evento')
     .is('procesado_en', null)
     .lt('intentos', MAX_INTENTOS_PENDIENTE)
     .order('recibido_en', { ascending: true })
     .limit(limite), 'pendientesPorDrenar');
   if (error) throw new Error(`pendientesPorDrenar: ${error.message}`);
-  return ((data ?? []) as Array<{ id: string; intentos: number }>).map((f) => ({ id: String(f.id), intentos: Number(f.intentos) }));
+  return ((data ?? []) as Array<{ id: string; intentos: number; evento?: { from?: string } }>).map((f) => ({
+    id: String(f.id),
+    intentos: Number(f.intentos),
+    // Sin `from` legible, el evento va a su propia cadena (su id): peor que
+    // agrupar, nunca peor que mezclarlo con el de otro chofer.
+    remitente: typeof f.evento?.from === 'string' ? f.evento.from : String(f.id),
+  }));
 }
 
 /**
@@ -115,6 +163,26 @@ export async function marcarPendienteProcesado(id: string): Promise<void> {
     .update({ procesado_en: new Date().toISOString(), ultimo_error: null })
     .eq('id', id), 'marcarPendienteProcesado');
   if (error) logger.error('wa.pendiente_sin_sellar', { id, err: error.message });
+}
+
+/**
+ * DEVUELVE el intento que este claim consumió (ESC-1).
+ *
+ * `sin_tiempo` significa que la invocación se quedó sin presupuesto ANTES de
+ * empezar: el mensaje no se intentó, no falló. Contarlo como intento hacía que
+ * cinco corridas cargadas convirtieran en CARTA MUERTA —visible, con su
+ * `ultimo_error`, y jamás procesada— la foto de un chofer que nadie llegó a
+ * mirar. El intento se devuelve anclado (`eq('intentos', …)`): si otra corrida
+ * ya lo reclamó de nuevo, esta no le resta nada.
+ */
+export async function devolverIntentoPendiente(id: string, intentosDelClaim: number): Promise<void> {
+  const { error } = await acotada(supabaseAdmin()
+    .from('wa_evento_pendiente')
+    .update({ intentos: intentosDelClaim - 1 })
+    .eq('id', id)
+    .eq('intentos', intentosDelClaim)
+    .is('procesado_en', null), 'devolverIntentoPendiente');
+  if (error) logger.warn('wa.pendiente_intento_no_devuelto', { id, err: error.message });
 }
 
 /** Anota el fallo del intento (la fila sigue pendiente hasta el tope). */

@@ -12,6 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { rpcFalso0150 } from './analytics_rpc_0150.fixture';
 
 // ── Mock paginado por tabla ────────────────────────────────────────────────
 const TABLAS: Record<string, Array<Record<string, unknown>>> = {};
@@ -109,6 +110,11 @@ vi.mock('@/lib/supabase/admin', () => ({
           error: null,
         });
       }
+      // ESCALA 50k (mig. 0150): getStatsPorOperador/getGastoPorConcepto/
+      // getOperadoresDetalle leen RPC; el Postgres falso de la 0150 corre
+      // sobre las MISMAS `TABLAS` que antes alimentaban el builder.
+      const r0150 = rpcFalso0150(r, args, TABLAS);
+      if (r0150) return Promise.resolve(r0150);
       if (r === 'acreditables_liquidacion_tenant') {
         const filas = liquidacionDelTenant(args);
         return Promise.resolve({
@@ -129,7 +135,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('./cuadre/desde_db', () => ({ cuadrarDesdeDB: vi.fn(), ventanaDesdeDB: vi.fn() }));
 
 const {
-  getKpis, getStatsPorOperador, getValorAhorro, getViajesSinLiquidar,
+  getKpis, getStatsPorOperador, getValorAhorro,
   getViajes, getDocumentos, getGastoPorConcepto, getOperadoresDetalle, contarViajes,
 } = await import('./analytics');
 
@@ -202,17 +208,21 @@ describe('getStatsPorOperador — el diésel y los viajes por chofer', () => {
     expect(ana.diferencias).toBe(0);
   });
 
-  it('todas las lecturas filtran por tenant', async () => {
-    TABLAS.operador = []; TABLAS.viaje = []; TABLAS.gasto = [];
-    await getStatsPorOperador('t-1');
-    for (const t of ['operador', 'viaje', 'gasto']) {
-      const c = consultas.find((x) => x.tabla === t)!;
-      expect(c.filtros, `tabla ${t} sin filtro de tenant`).toContainEqual(['tenant_id', 't-1']);
-    }
+  it('la RPC recibe el tenant y no ve el diésel de otra flota', async () => {
+    TABLAS.operador = [{ tenant_id: 't-1', id: 'o-1', nombre: 'Ana' }, { tenant_id: 't-2', id: 'o-9', nombre: 'Ajena' }];
+    TABLAS.viaje = [{ tenant_id: 't-1', id: 'v-1', operador_id: 'o-1' }, { tenant_id: 't-2', id: 'v-9', operador_id: 'o-9' }];
+    TABLAS.gasto = [
+      { tenant_id: 't-1', viaje_id: 'v-1', concepto: 'diesel', monto: 100 },
+      { tenant_id: 't-2', viaje_id: 'v-9', concepto: 'diesel', monto: 9999 },
+    ];
+    const r = await getStatsPorOperador('t-1');
+    expect(llamadasRpc.find((l) => l.fn === 'stats_operador_tenant')?.args).toEqual({ p_tenant: 't-1' });
+    expect(r.map((x) => x.operadorId)).toEqual(['o-1']);
+    expect(r[0].dieselTotal).toBe(100);
   });
 });
 
-describe('contarViajes y getViajesSinLiquidar — la cola operativa', () => {
+describe('contarViajes — la cola operativa', () => {
   it('cuenta por estatus y por periodo', async () => {
     TABLAS.viaje = [
       { tenant_id: 't-1', estatus: 'abierto', created_at: '2026-08-01T10:00:00Z' },
@@ -221,17 +231,6 @@ describe('contarViajes y getViajesSinLiquidar — la cola operativa', () => {
     ];
     const r = await contarViajes('t-1');
     expect(r).toBe(3);
-  });
-
-  it('getViajesSinLiquidar devuelve el anticipo de los abiertos', async () => {
-    TABLAS.viaje = [
-      { tenant_id: 't-1', id: 'v-1', anticipo: 8000, estatus: 'abierto' },
-      { tenant_id: 't-1', id: 'v-2', anticipo: 5000, estatus: 'abierto' },
-      { tenant_id: 't-1', id: 'v-3', anticipo: 9999, estatus: 'liquidado' },
-    ];
-    const r = await getViajesSinLiquidar('t-1');
-    expect(r).toHaveLength(2);
-    expect(r.some((x) => x.anticipo === 8000)).toBe(true);
   });
 });
 

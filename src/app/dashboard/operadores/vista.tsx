@@ -1,9 +1,12 @@
+import Link from 'next/link';
 import { Users, Phone, PhoneOff, IdCard } from 'lucide-react';
 import { numero, fechaCorta } from '@/lib/formato';
 import { clasificarVigencia, DIAS_AVISO } from '@/lib/likida/vigencias';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../resumen-visual';
-import { FormaOperador, Plegable, type AccionForma } from './forma';
+import { paginarRegistro, urlRegistro, type ParamsRegistro } from '../paginar-registro';
+import { FiltroRegistro } from '../registro-filtro';
+import { FormaOperador, type AccionForma } from './forma';
 
 /** La fila del registro — SIN el dinero que `OperadorDetalle` trae (ver
  *  encabezado de page.tsx: la fuga del 4-ago). `licencia` y `rfc` SÍ viajan:
@@ -43,9 +46,26 @@ function diasParaVencer(vence: string, hoy: string): number {
  * "Sin registrar" se dice tal cual: inventar una fecha marcaría de vencido
  * (o de vigente) a quien no lo está.
  */
-export function VistaOperadores({ filas, hoy, puedeEditar, guardarOperador }: {
+/**
+ * FE-12 (22-ago-2026): pintaba TODOS los operadores activos y, por cada uno,
+ * un `<FormaOperador>` completo plegado. Con 7,500 choferes eso son 7,500
+ * formularios en el HTML de una pantalla donde se corrige UNO. Ahora `?q=` y
+ * `?p=` acotan lo que se pinta y la forma existe solo para `?editar=<id>`.
+ */
+export function VistaOperadores({
+  filas, hoy, puedeEditar, guardarOperador, ilegible = false, sp, sufijo, camposOcultos,
+}: {
   filas: FilaOperador[];
   hoy: string;
+  /** `?q=`/`?p=`/`?editar=` ya leídos por la página. */
+  sp: ParamsRegistro;
+  /** `?tenant=`/`?vista=`/`?rol=` del superadmin. */
+  sufijo: string;
+  camposOcultos: Array<[string, string]>;
+  /** La lectura del registro falló (FE-3). NO es lo mismo que una flota sin
+   *  operadores: se dice, en vez de pintar el vacío que invita a dar de alta
+   *  gente que quizá ya está dada de alta. */
+  ilegible?: boolean;
   /** `puedeAdministrar(rol)` — solo quien administra la flota corrige datos
    *  de un operador (auditoría 2, A2). Sin esto la fila de edición ni se
    *  pinta: la pantalla no ofrece un botón que el rol no puede usar. */
@@ -53,6 +73,14 @@ export function VistaOperadores({ filas, hoy, puedeEditar, guardarOperador }: {
   guardarOperador: AccionForma;
 }) {
   const activos = filas.filter((f) => f.activo);
+  // FE-12: qué se pinta. La búsqueda cubre nombre, teléfono y número de
+  // empleado — las tres formas en que alguien busca a un chofer.
+  const pag = paginarRegistro(
+    filas,
+    (f) => [f.nombre, f.telefono, f.numeroEmpleado].filter(Boolean).join(' '),
+    sp,
+    (f) => f.operadorId,
+  );
   const sinTelefono = activos.filter((f) => !f.telefono).length;
   const conVencida = activos.filter((f) => f.licenciaVence !== null && diasParaVencer(f.licenciaVence, hoy) < 0).length;
   const porVencer = activos.filter((f) => {
@@ -79,7 +107,13 @@ export function VistaOperadores({ filas, hoy, puedeEditar, guardarOperador }: {
 
           <section className="card p-4">
             <h2 className="font-display text-[15px] font-semibold mb-3">El registro</h2>
-            {filas.length === 0 ? (
+            {!ilegible && filas.length > 0 && (
+              <FiltroRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag}
+                sustantivo="operadores" camposOcultos={camposOcultos} />
+            )}
+            {ilegible ? (
+              <EstadoError mensaje="No pude leer el registro de operadores. No se enseña media lista: media lista se ve igual que la lista entera, solo que más corta." />
+            ) : filas.length === 0 ? (
               <EstadoVacio icono={<Users width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                 Aún no hay operadores dados de alta — el alta rápida vive en Despacho.
               </EstadoVacio>
@@ -97,12 +131,22 @@ export function VistaOperadores({ filas, hoy, puedeEditar, guardarOperador }: {
                     </tr>
                   </thead>
                   <tbody>
-                    {filas.map((f) => (
+                    {pag.filas.map((f) => (
                       <RenglonOperador key={f.operadorId} f={f} hoy={hoy}
-                        puedeEditar={puedeEditar} guardarOperador={guardarOperador} />
+                        puedeEditar={puedeEditar} guardarOperador={guardarOperador}
+                        editando={pag.editando === f.operadorId}
+                        hrefEditar={urlRegistro('/dashboard/operadores', sufijo, {
+                          q: pag.q || null, p: pag.pagina,
+                          editar: pag.editando === f.operadorId ? null : f.operadorId,
+                        })} />
                     ))}
                   </tbody>
                 </table>
+                {pag.filas.length === 0 && (
+                  <p className="text-[12.5px] pt-2" style={{ color: 'var(--muted)' }}>
+                    Ningún operador coincide con «{pag.q}».
+                  </p>
+                )}
               </div>
             )}
           </section>
@@ -120,11 +164,14 @@ export function VistaOperadores({ filas, hoy, puedeEditar, guardarOperador }: {
  * es falso, en vez de pintarlo deshabilitado, porque el rol de operación no
  * tiene ningún botón que darle.
  */
-function RenglonOperador({ f, hoy, puedeEditar, guardarOperador }: {
+function RenglonOperador({ f, hoy, puedeEditar, guardarOperador, editando, hrefEditar }: {
   f: FilaOperador;
   hoy: string;
   puedeEditar: boolean;
   guardarOperador: AccionForma;
+  /** FE-12: solo la fila que `?editar=` nombra trae su formulario. */
+  editando: boolean;
+  hrefEditar: string;
 }) {
   return (
     <>
@@ -158,10 +205,20 @@ function RenglonOperador({ f, hoy, puedeEditar, guardarOperador }: {
         </td>
         {puedeEditar && <td className="py-2" />}
       </tr>
-      {puedeEditar && (
+      {puedeEditar && !editando && (
+        <tr style={{ borderColor: 'var(--line2)' }}>
+          <td colSpan={6} className="pb-2">
+            <Link href={hrefEditar} className="text-[12px] underline hover:opacity-70 transition-opacity"
+              style={{ color: 'var(--muted)' }}>
+              Editar
+            </Link>
+          </td>
+        </tr>
+      )}
+      {puedeEditar && editando && (
         <tr style={{ borderColor: 'var(--line2)' }}>
           <td colSpan={6} className="pb-3">
-            <Plegable resumen="Editar">
+            <>
               <FormaOperador
                 accion={guardarOperador}
                 operadorId={f.operadorId}
@@ -179,7 +236,11 @@ function RenglonOperador({ f, hoy, puedeEditar, guardarOperador }: {
                   rfc: f.rfc ?? '',
                 }}
               />
-            </Plegable>
+              <Link href={hrefEditar} className="inline-block mt-2 text-[12px] underline hover:opacity-70 transition-opacity"
+                style={{ color: 'var(--muted)' }}>
+                Cerrar
+              </Link>
+            </>
           </td>
         </tr>
       )}

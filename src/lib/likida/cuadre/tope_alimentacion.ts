@@ -56,9 +56,17 @@ export interface ComprobanteAlimentacion {
   cfdiUuid?: string | null;
 }
 
+/**
+ * Los conceptos que cargan el tope, como LISTA: `getGastosFiscales` (fiscal.ts)
+ * se la manda a la RPC de agregados (mig. 0151) para que SQL agrupe por
+ * (viaje, día) SOLO estos conceptos — la decisión de cuáles sigue viviendo
+ * aquí, una vez, y `llevaTopeAlimentacion` lee de la misma lista.
+ */
+export const CONCEPTOS_CON_TOPE_ALIMENTACION: readonly string[] = ['alimentacion', 'viaticos'];
+
 /** ¿El concepto carga el tope? Solo alimentación; `'viaticos'` por compatibilidad (punto 1). */
 export function llevaTopeAlimentacion(concepto: string): boolean {
-  return concepto === 'alimentacion' || concepto === 'viaticos';
+  return CONCEPTOS_CON_TOPE_ALIMENTACION.includes(concepto);
 }
 
 export interface DiaSobreTope<G extends ComprobanteAlimentacion> {

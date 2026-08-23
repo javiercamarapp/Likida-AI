@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Plus } from 'lucide-react';
+import { ComboCatalogo, type BuscarCatalogo } from './combo-catalogo';
 
 /**
  * El formulario de NUEVO VIAJE — pieza REUSABLE a propósito (12-ago-2026):
@@ -14,6 +15,13 @@ import { Plus } from 'lucide-react';
  * Campos = los de `NuevoViaje` (operacion.ts). La unidad ya se ofrece aquí
  * (14-ago-2026): `viaje.unidad_id` es nullable, así que "Sin asignar todavía"
  * es una opción que la base sí admite — a diferencia del operador.
+ *
+ * FE-2 (22-ago-2026): los tres catálogos (operador, unidad, cliente) YA NO
+ * viajan como `<option>`. A 7,500 choferes y 5,000 unidades eran cientos de
+ * KB de HTML por carga — y encima recortados a 1,000 en silencio por
+ * PostgREST, así que el chofer 1,001 no se podía elegir. Ahora son
+ * `ComboCatalogo`: se busca en el servidor al escribir, 20 a la vez, y lo que
+ * se manda sigue siendo el id.
  */
 
 export type AccionCrearViaje = (
@@ -36,16 +44,21 @@ function BotonCrear() {
   );
 }
 
-export function FormaViaje({ action, operadores, clientes, unidades }: {
+export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClientes, totalUnidades }: {
   action: AccionCrearViaje;
-  operadores: Array<{ id: string; nombre: string }>;
+  /** La búsqueda de catálogos en el servidor (server action del host, con el
+   *  tenant por closure). Una sola referencia para los tres combos. */
+  buscarCatalogo: BuscarCatalogo;
+  /** Cuántos operadores activos hay — `count exact, head`, sin traer ninguno.
+   *  `0` = todavía no hay ninguno dado de alta, y se dice; `null` = no se pudo
+   *  contar, y entonces NO se afirma que falten (la base caída no es un
+   *  catálogo vacío). */
+  totalOperadores: number | null;
   /** Los clientes de la flota, para atar el viaje a quien paga el flete.
-   *  Vacío = todavía no hay ninguno dado de alta, y el bloque del ingreso lo
-   *  dice en vez de enseñar un `<select>` sin opciones. */
-  clientes: Array<{ id: string; nombre: string }>;
-  /** Las unidades activas de la flota. Mismo trato que los clientes: vacío =
-   *  una frase que dice dónde se dan de alta, nunca un `<select>` hueco. */
-  unidades: Array<{ id: string; numeroEconomico: string }>;
+   *  Mismo contrato que `totalOperadores`. */
+  totalClientes: number | null;
+  /** Las unidades activas de la flota. Mismo contrato. */
+  totalUnidades: number | null;
 }) {
   const [estado, dispatch] = useActionState(action, null);
 
@@ -84,32 +97,25 @@ export function FormaViaje({ action, operadores, clientes, unidades }: {
               con un 23502 y el usuario veía "No se pudo crear el viaje" sin
               saber por qué. Verificado contra producción el 14-ago-2026.
               Ofrecer una opción que la base rechaza es peor que no ofrecerla. */}
-          <select id="operadorId" name="operadorId" required className={CAMPO}
-            style={{ background: 'var(--surface)' }} defaultValue="">
-            <option value="" disabled>Elige un operador…</option>
-            {operadores.map((o) => (
-              <option key={o.id} value={o.id}>{o.nombre}</option>
-            ))}
-          </select>
+          <ComboCatalogo tipo="operador" name="operadorId" campoId="operadorId" buscar={buscarCatalogo} requerido
+            aria-label="Operador" etiquetaVacia="Escribe el nombre del chofer…"
+            total={totalOperadores} className={CAMPO} estilo={{ background: 'var(--surface)' }} />
           <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
-            {operadores.length === 0
+            {totalOperadores === 0
               ? 'Necesitas al menos un operador dado de alta: un viaje no puede existir sin quién lo maneje. El alta rápida está a la derecha.'
               : 'Likida le avisa por WhatsApp en cuanto el viaje exista.'}
           </p>
         </div>
         <div>
           <label htmlFor="unidadId" className={ETIQUETA}>Unidad</label>
-          {unidades.length === 0 ? (
+          {totalUnidades === 0 ? (
             <p className="text-[12px] py-2" style={{ color: 'var(--faint)' }}>
               Todavía no hay unidades dadas de alta. Se registran en Unidades.
             </p>
           ) : (
-            <select id="unidadId" name="unidadId" className={CAMPO} style={{ background: 'var(--surface)' }} defaultValue="">
-              <option value="">Sin asignar todavía</option>
-              {unidades.map((u) => (
-                <option key={u.id} value={u.id}>{u.numeroEconomico}</option>
-              ))}
-            </select>
+            <ComboCatalogo tipo="unidad" name="unidadId" campoId="unidadId" buscar={buscarCatalogo}
+              aria-label="Unidad" etiquetaVacia="Sin asignar todavía"
+              total={totalUnidades} className={`${CAMPO} cifra-mono`} estilo={{ background: 'var(--surface)' }} />
           )}
         </div>
       </div>
@@ -129,17 +135,14 @@ export function FormaViaje({ action, operadores, clientes, unidades }: {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           <div>
             <label htmlFor="clienteId" className={ETIQUETA}>Cliente</label>
-            {clientes.length === 0 ? (
+            {totalClientes === 0 ? (
               <p className="text-[12px] py-2" style={{ color: 'var(--faint)' }}>
                 Todavía no hay clientes dados de alta. Se registran en Clientes y tarifas.
               </p>
             ) : (
-              <select id="clienteId" name="clienteId" className={CAMPO} style={{ background: 'var(--surface)' }} defaultValue="">
-                <option value="">Sin asignar todavía</option>
-                {clientes.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nombre}</option>
-                ))}
-              </select>
+              <ComboCatalogo tipo="cliente" name="clienteId" campoId="clienteId" buscar={buscarCatalogo}
+                aria-label="Cliente" etiquetaVacia="Sin asignar todavía"
+                total={totalClientes} className={CAMPO} estilo={{ background: 'var(--surface)' }} />
             )}
           </div>
 

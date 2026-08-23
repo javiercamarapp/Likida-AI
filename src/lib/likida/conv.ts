@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import type { TenantContext } from '@/lib/agents/types';
 import { acotada, PRESUPUESTO_WEBHOOK_MS } from './presupuesto';
 import { violaIndice } from './pg_errores';
+import { destinatarioEnmascarado } from '@/lib/meta/client';
 
 export interface ResolvedOperador {
   tenantId: string;
@@ -129,7 +130,12 @@ export async function resolveOperador(telefono: string): Promise<ResolvedOperado
     // dato. No se elige uno "por si acaso" — adivinar aquí escribe dinero en la
     // flota equivocada y nadie lo nota hasta la conciliación.
     logger.error('operador.ambiguo', {
-      telefono,
+      // Enmascarado (SEG-7): el redactor del logger solo cacha los dígitos
+      // pegados, y este teléfono viene de la base tal como se capturó. Los
+      // cuatro últimos alcanzan para encontrar las filas que hay que arreglar
+      // —los ids de operador van completos aquí al lado—, y ninguna alerta
+      // vale filtrar el número entero de un chofer.
+      para: destinatarioEnmascarado(telefono),
       tenants: [...new Set(filas.map((f) => f.tenant_id as string))],
       operadores: filas.map((f) => f.id as string),
     });
@@ -179,6 +185,38 @@ export async function getOpenViaje(tenantId: string, operadorId: string): Promis
   if (error) throw new ConsultaFallida(`viaje abierto: ${error.message}`);
   if (!data) return null;
   return data.id as string;
+}
+
+/**
+ * DESDE CUÁNDO está abierto este viaje (epoch en ms), o `null` si no se supo.
+ *
+ * DAT-21 · es lo que permite reconocer un mensaje VIEJO. Un operador sólo puede
+ * tener UN viaje abierto a la vez (`uq_viaje_abierto_por_operador`, 0029), así
+ * que un texto que Meta recibió ANTES de que ESTE viaje se abriera pertenece,
+ * por construcción, al anterior — que ya está liquidado. Sin este dato no había
+ * forma de distinguirlo, y un "listo" rescatado por la bandeja durable dos
+ * vueltas de cron después cerraba el viaje EQUIVOCADO.
+ *
+ * FAIL-OPEN Y NUNCA LANZA, al revés que sus vecinas de este archivo: `null`
+ * significa "no se pudo saber", y con eso el llamador NO descarta nada — sigue
+ * el camino de siempre. Es lo correcto aquí porque el error de tirar un "listo"
+ * bueno (el chofer se queda sin cerrar y sin entender por qué) es peor que el de
+ * dejar pasar uno viejo, que además es rarísimo y que la re-verificación
+ * posterior al mutex todavía puede atrapar.
+ *
+ * Se consulta SÓLO cuando hace falta —un texto que parece cierre y que trae la
+ * hora de Meta—, no en cada mensaje.
+ */
+export async function viajeAbiertoDesdeMs(tenantId: string, viajeId: string): Promise<number | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('viaje')
+    .select('created_at')
+    .eq('id', viajeId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle(), 'viajeAbiertoDesdeMs');
+  if (error || !data?.created_at) return null;
+  const ms = Date.parse(data.created_at as string);
+  return Number.isFinite(ms) ? ms : null;
 }
 
 export async function getTenantContext(tenantId: string): Promise<TenantContext> {
@@ -282,7 +320,11 @@ export async function loadConversation(tenantId: string, telefono: string, viaje
   // devolver `id: ''` es exactamente lo que hacía perderse el historial en
   // silencio. Se lanza para que el llamador sepa que no hay dónde guardar.
   if (!ganadora) throw new ConsultaFallida('loadConversation: la conversación chocó con el índice único y no apareció al releerla');
-  logger.info('conv.carrera_insert', { telefono, viaje: viajeId });
+  // `para` y no `telefono` crudo (auditoría prod, SEG-7): el redactor del
+  // logger pide los dígitos pegados y aquí el número puede venir como lo
+  // guardó la base o como lo mandó Meta. Los últimos 4 alcanzan para cruzar
+  // con `operador` y no reconstruyen a nadie desde el log.
+  logger.info('conv.carrera_insert', { para: destinatarioEnmascarado(telefono), viaje: viajeId });
   return desdeFila(ganadora, viajeId, telefono);
 }
 
@@ -300,7 +342,7 @@ function desdeFila(
   const estado = (fila.estado as { turns?: ConvTurn[] } & MarcasConversacion) || {};
   const mismoViaje = viajeId !== null && fila.viaje_id === viajeId;
   if (!mismoViaje && (estado.turns?.length ?? 0) > 0) {
-    logger.info('conv.historial_descartado', { telefono, de: (fila.viaje_id as string | null) ?? null, a: viajeId });
+    logger.info('conv.historial_descartado', { para: destinatarioEnmascarado(telefono), de: (fila.viaje_id as string | null) ?? null, a: viajeId });
   }
   return {
     id: fila.id as string,
@@ -526,12 +568,74 @@ function rpcAusente(error: { code?: string; message?: string }): boolean {
 }
 
 /**
+ * Qué pasó al pedir el mutex del viaje. Tres estados, no dos, porque las
+ * respuestas correctas son distintas (DAT-21):
+ *
+ *   · 'obtenido'      — es tuyo, procede.
+ *   · 'ocupado'       — otro turno lo tiene VIGENTE. Ese otro va a responder a
+ *                       SU mensaje; éste se aplaza.
+ *   · 'indeterminado' — la RPC no contestó en toda la ventana. NO se sabe si
+ *                       está libre, y eso NO es lo mismo que estar ocupado:
+ *                       hay que decírselo al operador de otra manera.
+ */
+export type ResultadoLockViaje = 'obtenido' | 'ocupado' | 'indeterminado';
+
+/**
+ * CUÁNTO DURA EL LEASE DEL CIERRE.
+ *
+ * AUDITORÍA PROD 22-ago-2026, DAT-21: el default de 60 s es MENOR que el peor
+ * caso del cierre, y el cierre es lo único irreversible que hace este sistema.
+ * Sumado: el cuadre, DOS PDFs generados y subidos a storage, la RPC de guardado
+ * y el envío del documento por WhatsApp. Con el agente de por medio
+ * (`timeoutMs` acotado a 40 s) el turno completo cabe holgadamente por encima
+ * de los 60 s, y cuando el lease vence A MEDIO CIERRE el mutex deja de existir:
+ * un segundo "listo" entra, corre el agente otra vez y paga el LLM otra vez —
+ * exactamente lo que el mutex vino a impedir.
+ *
+ * 120 s es el `PRESUPUESTO_WEBHOOK_MS`: el lease dura lo que puede durar la
+ * invocación que lo tomó, ni más ni menos. Más sería dejar trabado un viaje
+ * cuyo dueño ya murió; menos es la ventana de arriba.
+ */
+export const TTL_LOCK_CIERRE_MS = PRESUPUESTO_WEBHOOK_MS;
+
+/**
  * Mutex por viaje (AL-1/CR-1): serializa el procesamiento de mensajes del mismo
  * viaje para que un "listo" no cierre la liquidación antes de que el OCR de la
- * última foto haya guardado su gasto. Reintenta con backoff hasta maxWaitMs;
- * devuelve false si no logró el lease (otro after() lo tiene vigente).
+ * última foto haya guardado su gasto. Reintenta con backoff hasta maxWaitMs.
+ *
+ * Booleano por compatibilidad con los llamadores a los que sólo les importa
+ * "¿lo tengo o no?" (`administracion.ts`, el brazo del XML). Quien necesite
+ * distinguir OCUPADO de NO SE SUPO usa `intentarLockViaje`.
  */
 export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number; maxWaitMs?: number }): Promise<boolean> {
+  return (await intentarLockViaje(viajeId, opts)) === 'obtenido';
+}
+
+/**
+ * El mutex con su resultado completo.
+ *
+ * ── DAT-21 · EL FAIL-OPEN SE QUEDA SÓLO DONDE ESTABA JUSTIFICADO ──────────
+ *
+ * Había DOS fail-open y sólo uno merecía serlo:
+ *
+ *   · RPC AUSENTE (la 0005 sin aplicar): reintentar no la hace aparecer y
+ *     bloquear dejaría al operador sin respuesta por un problema de despliegue.
+ *     Se abre — y el arranque ya falla ruidoso por esto. Se queda.
+ *
+ *   · ERROR PERSISTENTE (12 s de timeouts, pool agotado, 503): esto devolvía
+ *     `true`, o sea "el lock es tuyo", sobre una base que NO contestó. Y quien
+ *     recibe ese `true` en el camino del cierre se pone a cuadrar, generar los
+ *     PDFs y CERRAR — irreversiblemente— sin exclusividad ninguna. Con Supabase
+ *     degradado, los dos "listo" del operador impaciente cierran los dos: dos
+ *     ciclos de agente, dos PDFs, y la carrera que la 0158 tuvo que atrapar en
+ *     la base. Un mutex que se abre justo cuando la infraestructura está mal es
+ *     un mutex que no protege el caso para el que existe.
+ *
+ * Ahora eso es 'indeterminado' y decide el llamador. Fallar cerrado cuesta un
+ * mensaje de "vuelve a intentar" y un reintento de la bandeja durable; fallar
+ * abierto cuesta una liquidación cerrada dos veces.
+ */
+export async function intentarLockViaje(viajeId: string, opts?: { ttlMs?: number; maxWaitMs?: number }): Promise<ResultadoLockViaje> {
   const ttlMs = opts?.ttlMs ?? 60_000;
   const maxWaitMs = opts?.maxWaitMs ?? 12_000;
   const admin = supabaseAdmin();
@@ -545,7 +649,7 @@ export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number;
     // `maxDuration` sin tomar el lock ni cuadrar. Con `acotada` cada intento
     // corta en el tope de consulta y el bucle sí puede revisar su `maxWaitMs`.
     const { data, error } = await acotada(admin.rpc('try_lock_viaje', { p_viaje: viajeId, p_ttl_ms: ttlMs }), 'acquireViajeLock');
-    if (!error && data === true) return true;
+    if (!error && data === true) return 'obtenido';
     if (error) {
       ultimoError = error;
       // Se distingue el error PERMANENTE del TRANSITORIO. Antes los dos abrían
@@ -559,7 +663,7 @@ export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number;
       // (ver instrumentation.ts).
       if (rpcAusente(error)) {
         logger.error('viaje.lock_rpc_ausente', { code: error.code, msg: error.message });
-        return true;
+        return 'obtenido';
       }
       // TRANSITORIO (timeout, pool agotado, 503): un error no significa que el
       // lock esté libre, significa que no se supo. Abrir de golpe deja correr
@@ -569,15 +673,16 @@ export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number;
       logger.warn('viaje.lock_error_transitorio', { code: error.code, msg: error.message });
     }
     if (Date.now() - start >= maxWaitMs) {
-      // Se agotó la ventana. Ocupado de verdad → false (otro lo tiene, y ese
-      // otro va a responder). Fallando todo el rato → se abre para no dejar al
-      // operador colgado, pero después de haberlo intentado, no al primer
-      // tropiezo, y queda como ERROR.
+      // Se agotó la ventana. Ocupado de verdad → 'ocupado' (otro lo tiene, y
+      // ese otro va a responder). Fallando todo el rato → 'indeterminado':
+      // NO se sabe si está libre, y hasta hoy eso se devolvía como "es tuyo".
+      // Ver el bloque de arriba: abrirlo aquí es abrirlo justo cuando la base
+      // está mal, que es cuando el doble cierre es más probable.
       if (ultimoError) {
         logger.error('viaje.lock_error_persistente', { code: ultimoError.code, msg: ultimoError.message });
-        return true;
+        return 'indeterminado';
       }
-      return false;
+      return 'ocupado';
     }
     await sleep(delay);
     delay = Math.min(delay * 2, 1500);

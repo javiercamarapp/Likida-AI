@@ -750,6 +750,59 @@ function palabrasUtiles(t: string): string[] {
  * que separa a dos personas, y aquí el premio por acertar de más es mandarle el
  * viaje de uno al otro.
  */
+/**
+ * LA REGLA DE COINCIDENCIA, SIN BASE — para poder aplicarla sobre un catálogo
+ * que ya se trajo (el importador de viajes resuelve miles de nombres contra la
+ * MISMA lista y no puede pedirla una vez por nombre: FE-15).
+ *
+ * Se extrajo de `resolverOperadorPorNombre` y ésta la usa: la regla vive en UN
+ * solo sitio. Copiarla al importador habría dejado dos motores de amarre que
+ * se pueden separar sin que nadie se entere, y el premio por acertar de más
+ * aquí es mandarle el viaje —y su anticipo— a la persona equivocada.
+ *
+ * LANZA `OperadorNombreAmbiguo` igual que la versión con base: negarse ante la
+ * ambigüedad es parte de la regla, no del transporte.
+ */
+export function elegirOperadorPorNombre(
+  filas: ReadonlyArray<{ id: unknown; nombre: unknown }>,
+  texto: string,
+): CandidatoOperador | null {
+  const buscado = palabrasUtiles(typeof texto === 'string' ? texto : '');
+  if (buscado.length === 0) return null;
+
+  const q = buscado.join(' ');
+  const exactos: CandidatoOperador[] = [];
+  const parciales: CandidatoOperador[] = [];
+
+  for (const f of filas) {
+    const nombre = typeof f.nombre === 'string' ? f.nombre : '';
+    const id = typeof f.id === 'string' ? f.id : '';
+    if (!nombre || !id) continue;
+
+    const suyas = palabrasUtiles(nombre);
+    if (suyas.length === 0) continue;
+
+    const cand = { operadorId: id, nombre };
+    if (suyas.join(' ') === q) { exactos.push(cand); continue; }
+    if (buscado.every((p) => suyas.includes(p))) parciales.push(cand);
+  }
+
+  // EL EXACTO GANA SOBRE EL PARCIAL: con "Juan Pérez" y "Juan Pérez López" en la
+  // misma flota, escribir "Juan Pérez" no es ambiguo — es el nombre completo de
+  // uno de los dos. Sin esta precedencia el módulo se volvería inservible justo
+  // donde los apellidos se repiten, que es en todas las flotas.
+  const candidatos = exactos.length > 0 ? exactos : parciales;
+
+  if (candidatos.length === 0) return null;
+  if (candidatos.length > 1) {
+    throw new OperadorNombreAmbiguo(
+      `"${texto}" corresponde a ${candidatos.length} operadores activos`,
+      candidatos,
+    );
+  }
+  return candidatos[0];
+}
+
 export async function resolverOperadorPorNombre(
   tenantId: string,
   texto: string,
@@ -784,42 +837,21 @@ export async function resolverOperadorPorNombre(
     throw new ConsultaFallida(`operadores del tenant: ${(e as Error).message}`);
   }
 
-  const q = buscado.join(' ');
-  const exactos: CandidatoOperador[] = [];
-  const parciales: CandidatoOperador[] = [];
-
-  for (const f of filas) {
-    const nombre = typeof f.nombre === 'string' ? f.nombre : '';
-    const id = typeof f.id === 'string' ? f.id : '';
-    if (!nombre || !id) continue;
-
-    const suyas = palabrasUtiles(nombre);
-    if (suyas.length === 0) continue;
-
-    const cand = { operadorId: id, nombre };
-    if (suyas.join(' ') === q) { exactos.push(cand); continue; }
-    if (buscado.every((p) => suyas.includes(p))) parciales.push(cand);
+  // La REGLA vive en `elegirOperadorPorNombre` (arriba); aquí solo queda el
+  // transporte y el log — el `catch` es para poder anotar el tenant y los
+  // candidatos antes de dejar pasar la excepción tal cual.
+  try {
+    return elegirOperadorPorNombre(filas, texto);
+  } catch (e) {
+    if (e instanceof OperadorNombreAmbiguo) {
+      logger.error('operador.nombre_ambiguo', {
+        tenantId,
+        buscado: buscado.join(' '),
+        operadores: e.candidatos.map((c) => c.operadorId),
+      });
+    }
+    throw e;
   }
-
-  // EL EXACTO GANA SOBRE EL PARCIAL: con "Juan Pérez" y "Juan Pérez López" en la
-  // misma flota, escribir "Juan Pérez" no es ambiguo — es el nombre completo de
-  // uno de los dos. Sin esta precedencia el módulo se volvería inservible justo
-  // donde los apellidos se repiten, que es en todas las flotas.
-  const candidatos = exactos.length > 0 ? exactos : parciales;
-
-  if (candidatos.length === 0) return null;
-  if (candidatos.length > 1) {
-    logger.error('operador.nombre_ambiguo', {
-      tenantId,
-      buscado: q,
-      operadores: candidatos.map((c) => c.operadorId),
-    });
-    throw new OperadorNombreAmbiguo(
-      `"${texto}" corresponde a ${candidatos.length} operadores activos`,
-      candidatos,
-    );
-  }
-  return candidatos[0];
 }
 
 // ── Del número económico a la unidad ───────────────────────────────────────

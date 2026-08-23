@@ -9,6 +9,7 @@
 // del contralor puede traer montos, y este endpoint es alcanzable por POST
 // directo (el proxy no cubre /api).
 import { NextResponse, type NextRequest } from 'next/server';
+import { MAX_BASE64 } from './limites';
 import { getSessionTenant } from '@/lib/auth/session';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { leerArchivoUniversal, ArchivoNoSoportado } from '@/lib/likida/intake/archivo';
@@ -17,9 +18,6 @@ import { logger } from '@/lib/logger';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-/** ~12 MB ya en base64. Excel/PDF de oficina caben sobrados; un video no —
- *  y un video tampoco tendría lectura honesta aquí. */
-const MAX_BASE64 = 16_000_000;
 
 export async function POST(req: NextRequest) {
   const sesion = await getSessionTenant();
@@ -39,7 +37,9 @@ export async function POST(req: NextRequest) {
   }
   const base64 = contenido.includes('base64,') ? contenido.slice(contenido.indexOf('base64,') + 7) : contenido;
   if (base64.length > MAX_BASE64) {
-    return NextResponse.json({ error: 'archivo demasiado grande (máx ~12 MB)' }, { status: 413 });
+    return NextResponse.json({
+      error: 'El archivo pesa demasiado (máx ~3 MB). Mándame la parte que importa —una hoja, un rango de fechas— y la leo completa.',
+    }, { status: 413 });
   }
 
   try {

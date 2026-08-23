@@ -21,6 +21,7 @@
 //  3. Cada llamada deja su fila de costo: el tablero de /admin y el costo
 //     por flota la cuentan.
 import { NextResponse, type NextRequest } from 'next/server';
+import { MAX_DATAURL } from './limites';
 import { getSessionTenant } from '@/lib/auth/session';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { extraerComprobante } from '@/lib/likida/intake/ocr';
@@ -32,10 +33,6 @@ import { gastoSondaHoyUsd, topeSondaDiaUsd, SONDAS_POR_MINUTO } from './tope';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-/** ~6 MB de imagen ya como data-URL (base64 infla ~1.37×). El límite es de
- *  cortesía para el modelo de visión, no de seguridad: Vercel ya corta el
- *  cuerpo mucho más arriba. */
-const MAX_DATAURL = 9_000_000;
 
 export async function POST(req: NextRequest) {
   const sesion = await getSessionTenant();
@@ -57,7 +54,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'se espera una imagen (data URL)' }, { status: 400 });
   }
   if (imagen.length > MAX_DATAURL) {
-    return NextResponse.json({ error: 'imagen demasiado grande (máx ~6 MB)' }, { status: 413 });
+    return NextResponse.json({
+      error: 'La imagen pesa demasiado (máx ~3 MB de foto). Vuelve a tomarla en calidad normal o recórtala al ticket.',
+    }, { status: 413 });
   }
 
   // ── Tope diario ── se lee ANTES de gastar; fallar cerrado si no se pudo.

@@ -2,9 +2,9 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { traerTodo } from './pg';
-import { resolverOperadorPorNombre, OperadorNombreAmbiguo } from './crear_viaje_wa';
-import { ConsultaFallida } from './conv';
+import { elegirOperadorPorNombre, OperadorNombreAmbiguo } from './crear_viaje_wa';
 import { validarIngreso } from './ingreso_viaje';
+import { numero } from '@/lib/formato';
 import { DatoInvalido } from './errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -126,6 +126,21 @@ export function leerFechaImportada(v: unknown): string | null | 'ilegible' {
 }
 
 /**
+ * Cuántas filas de datos se leen de un archivo, COMO MÁXIMO.
+ *
+ * El tope existía desde siempre (`f <= 2000` incrustado en el bucle) y era
+ * MUDO: un export de 8 MB con 60,000 viajes importaba los primeros 2,000 y el
+ * acuse decía "creados: 2,000" sin una palabra de los 58,000 que se quedaron
+ * fuera. El contralor no tenía cómo enterarse de que su archivo entró a
+ * medias — que es la forma más cara de este bug, porque los viajes que faltan
+ * no se ven (FE-15).
+ *
+ * Ahora es una constante con nombre y, cuando el archivo la rebasa, la
+ * lectura lo DICE en la lista de descartadas, con la cifra.
+ */
+export const TOPE_FILAS_IMPORT = 2_000;
+
+/**
  * La matriz cruda del archivo (fila 0 = encabezados) → filas listas para
  * importar. PURA: la detección de columnas es por nombre de encabezado, y
  * sin columna de folio no hay importación — el dedup depende de él.
@@ -150,7 +165,7 @@ export function interpretarFilasViajes(matriz: unknown[][]): LecturaImportacion 
   const descartadas: Array<{ fila: number; motivo: string }> = [];
   const vistos = new Set<string>();
 
-  for (let f = 1; f < matriz.length && f <= 2000; f++) {
+  for (let f = 1; f < matriz.length && f <= TOPE_FILAS_IMPORT; f++) {
     const fila = matriz[f];
     if (!fila || fila.every((c) => c === null || c === undefined || String(c).trim() === '')) continue;
 
@@ -206,8 +221,24 @@ export function interpretarFilasViajes(matriz: unknown[][]): LecturaImportacion 
     });
   }
 
-  if (matriz.length - 1 > 2000) {
-    return { viajes, descartadas, error: `El archivo trae más de 2,000 filas — se leyeron las primeras 2,000. Pártelo y sube el resto aparte.` };
+  const filasDeDatos = matriz.length - 1;
+  if (filasDeDatos > TOPE_FILAS_IMPORT) {
+    // EL AVISO VA EN `descartadas`, NO SOLO EN `error`, y ahí está el arreglo
+    // (FE-15). `error` solo llega a la pantalla cuando NO se importó nada
+    // (`page.tsx`: `if (lectura.error && lectura.viajes.length === 0)`), que es
+    // justo el caso que aquí NO ocurre: se importaron 2,000. El aviso viajaba
+    // en el campo que nadie iba a leer, y el acuse decía "creados: 2,000" sin
+    // mencionar las 58,000 filas que se quedaron fuera.
+    //
+    // Va PRIMERO en la lista porque la vista enseña las cinco primeras
+    // descartadas: si fuera al final, lo taparían cinco folios ilegibles.
+    // `numero()` y no `toLocaleString`: el formato de cifras vive en un solo
+    // archivo, y hay una prueba que falla si aparece una segunda copia.
+    const tope = numero(TOPE_FILAS_IMPORT);
+    const aviso = `El archivo trae ${numero(filasDeDatos)} filas y el tope es ${tope}: `
+      + `se leyeron las primeras ${tope}. Pártelo y sube el resto aparte.`;
+    descartadas.unshift({ fila: TOPE_FILAS_IMPORT + 1, motivo: aviso });
+    return { viajes, descartadas, error: aviso };
   }
   return { viajes, descartadas };
 }
@@ -271,6 +302,19 @@ async function cargarCatalogo(
   return porLlave;
 }
 
+/** Filas creadas en UN import a partir de las cuales se pide ANALYZE (ESC-18). */
+export const UMBRAL_ANALYZE = 1_000;
+
+async function analizarTrasImport(tenantId: string, creados: number): Promise<void> {
+  try {
+    const { error } = await acotada(supabaseAdmin().rpc('analizar_tablas_operacion'), 'importarViajes.analyze');
+    if (error) logger.warn('importar_viajes.analyze_fallo', { tenantId, creados, err: error.message });
+    else logger.info('importar_viajes.analyze', { tenantId, creados });
+  } catch (e) {
+    logger.warn('importar_viajes.analyze_fallo', { tenantId, creados, err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 /** Inserta los viajes SIN avisar a nadie (ver encabezado). Anclado al tenant. */
 export async function importarViajes(tenantId: string, filas: FilaViajeImportada[]): Promise<ResultadoImportacion> {
   if (!tenantId) throw new Error('importarViajes: falta tenantId');
@@ -291,22 +335,59 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
   const saltados = filas.filter((f) => existentes.has(f.folio)).map((f) => f.folio);
   const nuevas = filas.filter((f) => !existentes.has(f.folio));
 
-  // El amarre de operador es por nombre EXACTO (mismo motor del despacho por
-  // WA); lo ambiguo o desconocido queda sin asignar y se reporta — importar
-  // no es el momento de adivinar a quién se le carga un viaje.
+  // ── EL AMARRE DE OPERADOR: UN CATÁLOGO POR CORRIDA, NO UNO POR NOMBRE ────
+  //
+  // Esto llamaba a `resolverOperadorPorNombre(tenantId, nombre)` una vez por
+  // nombre DISTINTO del archivo, y esa función se trae con `traerTodo` el
+  // catálogo ENTERO de operadores activos de la flota en CADA llamada (por
+  // qué se compara en memoria y no con `ilike`, lo explica su cabecera:
+  // Postgres es sensible a acentos y "Ramirez" no encontraría a "Ramírez").
+  //
+  // Con 2,000 filas y mil choferes distintos eran mil lecturas SECUENCIALES
+  // del mismo catálogo de 7,500 filas — ocho páginas de PostgREST cada una.
+  // El import se moría por reloj a media tanda y dejaba unos viajes creados y
+  // otros no, sin decir cuáles (FE-15).
+  //
+  // Ahora el catálogo se lee UNA vez y la MISMA regla de coincidencia se
+  // aplica en memoria (`elegirOperadorPorNombre`, extraída de aquella para no
+  // tener dos motores de amarre que se puedan separar sin que nadie lo note).
+  //
+  // FALLA CERRADO, como el catálogo de unidades y clientes: si la lectura no
+  // se puede completar, NO se importa nada. Amarrar "a lo que se alcanzó a
+  // leer" repartiría viajes —y anticipos— por una página perdida.
   const operadorPorNombre = new Map<string, string | null>();
   const operadoresSinAmarrar = new Set<string>();
-  for (const f of nuevas) {
-    if (!f.operadorNombre || operadorPorNombre.has(f.operadorNombre)) continue;
+  const necesitaOperadores = nuevas.some((f) => f.operadorNombre);
+  if (necesitaOperadores) {
+    let catalogoOperadores: Array<{ id: unknown; nombre: unknown }>;
     try {
-      const c = await resolverOperadorPorNombre(tenantId, f.operadorNombre);
-      operadorPorNombre.set(f.operadorNombre, c?.operadorId ?? null);
-      if (!c) operadoresSinAmarrar.add(f.operadorNombre);
+      catalogoOperadores = await traerTodo<{ id: unknown; nombre: unknown }>(
+        (d, h) => acotada(supabaseAdmin().from('operador').select('id, nombre')
+          .eq('tenant_id', tenantId).eq('activo', true).order('id').range(d, h),
+        'importarViajes.operador'),
+        'importarViajes.operador',
+      );
     } catch (e) {
-      if (e instanceof OperadorNombreAmbiguo || e instanceof ConsultaFallida) {
-        operadorPorNombre.set(f.operadorNombre, null);
-        operadoresSinAmarrar.add(f.operadorNombre);
-      } else throw e;
+      logger.error('importar_viajes.operadores_ilegible', { tenantId, err: e instanceof Error ? e.message : String(e) });
+      return {
+        ...vacio(), saltados,
+        error: 'No pude leer el catálogo de operadores — no importé nada. Vuelve a intentar.',
+      };
+    }
+    for (const f of nuevas) {
+      if (!f.operadorNombre || operadorPorNombre.has(f.operadorNombre)) continue;
+      try {
+        const c = elegirOperadorPorNombre(catalogoOperadores, f.operadorNombre);
+        operadorPorNombre.set(f.operadorNombre, c?.operadorId ?? null);
+        if (!c) operadoresSinAmarrar.add(f.operadorNombre);
+      } catch (e) {
+        // Lo ambiguo queda sin asignar y se reporta con su nombre: importar no
+        // es el momento de adivinar a quién se le carga un viaje.
+        if (e instanceof OperadorNombreAmbiguo) {
+          operadorPorNombre.set(f.operadorNombre, null);
+          operadoresSinAmarrar.add(f.operadorNombre);
+        } else throw e;
+      }
     }
   }
 
@@ -456,6 +537,15 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     sinOperador: sinOperador.length, operadorOcupado: operadorOcupado.length,
     sinUnidad: sinUnidad.length, sinCliente: sinCliente.length,
   });
+
+  // ESC-18 (escala 50k): un archivo mete hasta 2,000 viajes de golpe y
+  // autovacuum no analiza hasta que cambia el 10 % de la tabla — a 50k viajes
+  // son 5,000 filas, o sea varias importaciones planificando con estadísticas
+  // de cuando la flota tenía 300 viajes. Pasado el umbral se pide ANALYZE por
+  // la RPC de la 0157 (solo service_role). Best-effort y DESPUÉS del acuse:
+  // los viajes ya están; un ANALYZE que no corre se loguea, no tumba el import.
+  if (creados > UMBRAL_ANALYZE) await analizarTrasImport(tenantId, creados);
+
   return {
     creados, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar], sinOperador, operadorOcupado,
     unidadesSinAmarrar: [...unidadesSinAmarrar], sinUnidad,

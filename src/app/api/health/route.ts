@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { sentryActivo } from '@/lib/observability/sentry';
+import { estadoLatidos, type CronId, type SaludCron } from '@/lib/admin/salud';
+import { alertarOperador } from '@/lib/observability/alerta';
+import { logger } from '@/lib/logger';
+import { redisConfigurado } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,6 +25,21 @@ export const dynamic = 'force-dynamic';
 //    push con [deploy] de verdad llegó, contra el modo de falla silencioso
 //    del ignoreCommand);
 //  · si Sentry está configurado.
+//  · desde RES-7 (0155) SÍ mide el latido de cada cron (`cron_latido`): un
+//    cron que lleva más de su cadencia + 20 min sin latir sale `vencido` en
+//    `crons` y dispara UNA alerta al operador (piso de una hora). No baja el
+//    status a 503: el monitor externo mide la base; el cron muerto se avisa
+//    por correo, que es el canal que alguien lee. `sin_latido` (recién
+//    desplegado, tabla vacía) no alarma.
+//  · si Sentry está configurado;
+//  · con qué backend corre el LÍMITE DE TASA (auditoría prod, SEG-1). Sin
+//    Redis, `ratelimit.ts` cuenta en la memoria de cada instancia y el techo
+//    del login se multiplica por cuantas lambdas abra quien insiste. Eso se
+//    sabía SOLO leyendo la línea de arranque de una instancia que ya hubiera
+//    atendido algo; aquí se pregunta desde fuera y en cualquier momento.
+//    Decir `redis|memoria` no es filtrar nada: no revela host, credencial ni
+//    umbral — dice si una defensa conocida está encendida, igual que
+//    `sentry: sin_dsn` ya lo hacía.
 //  · NO mide la ausencia de corridas de cron: con la base en cero flotas,
 //    "no hubo corridas con trabajo" es lo normal y alarmaría siempre. Ese
 //    monitor llega cuando `agente_corrida` tenga tráfico real que fechar.
@@ -44,13 +63,36 @@ export async function GET() {
     db = 'fallo';
   }
 
+  // Solo los estados, sin detalle: el health es público y esto no filtra
+  // nada de negocio. Una lectura caída no tumba el pulso: se reporta `ilegible`.
+  let crons: Record<string, SaludCron['estado']> | 'ilegible' = 'ilegible';
+  try {
+    const latidos = await estadoLatidos();
+    crons = Object.fromEntries((Object.keys(latidos) as CronId[]).map((c) => [c, latidos[c].estado]));
+    const vencidos = (Object.keys(latidos) as CronId[]).filter((c) => latidos[c].estado === 'vencido');
+    if (vencidos.length > 0) {
+      logger.error('health.cron_vencido', { crons: vencidos, haceMin: vencidos.map((c) => latidos[c].haceMin) });
+      await alertarOperador('cron.sin_latido', {
+        error: `Sin latido: ${vencidos.map((c) => `${c} (hace ${latidos[c].haceMin} min)`).join(', ')}`,
+        codigo: 'cron_sin_latido',
+      });
+    }
+  } catch (e) {
+    logger.warn('health.latidos_ilegibles', { err: e instanceof Error ? e.message : String(e) });
+  }
+
   const cuerpo = {
     ok: db === 'ok',
     db,
     sentry: sentryActivo() ? 'configurado' : 'sin_dsn',
+    // Mide lo MISMO que decide `ratelimit.ts` (su propia función exportada),
+    // no una segunda lectura de las env: dos mediciones del mismo hecho se
+    // desincronizan al primer cambio.
+    ratelimit: redisConfigurado() ? 'redis' : 'memoria',
     // Vercel la inyecta en build; en local es "local" y eso también es verdad.
     version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'local',
     hora: new Date().toISOString(),
+    crons,
   };
   return NextResponse.json(cuerpo, { status: cuerpo.ok ? 200 : 503 });
 }

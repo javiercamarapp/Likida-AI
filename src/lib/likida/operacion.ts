@@ -18,6 +18,7 @@ import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { conteo, traerTodo } from './pg';
 import { DatoInvalido } from './errores';
+import { esNumero, esNumeroONulo, esObjeto, esTextoONulo, formaInesperada } from './comercial';
 
 /** Los tres estatus que `viaje` de verdad admite (`viaje_estatus_dominio`,
  *  0025). Un cuarto valor no se traduce ni se esconde: se cuenta aparte. */
@@ -40,72 +41,49 @@ export interface CargaOperador {
   incidenciasAbiertas: number;
 }
 
+/** Ventana de los viajes LIQUIDADOS que cuenta `getCargaOperadores`. Los
+ *  vivos no se acotan: son los que el encargado persigue hoy. */
+export const DIAS_LIQUIDADOS_CARGA = 90;
+
 /**
  * La foto que el encargado necesita para repartir el trabajo del día.
  *
  * Ordena por carga descendente a propósito: el que trae más sale arriba,
  * porque la pregunta que se contesta aquí es "¿a quién NO le cargo otro?".
+ *
+ * AGREGADO EN SQL DESDE EL 22-AGO-2026 (mig. 0152): traía `operador`, `viaje`,
+ * `pod` e `incidencia` ENTEROS para contar en JS — con 50k viajes/mes
+ * caducaba ~mes 2 (docs/escala-50k/MAPA.md #18). `carga_operadores_tenant`
+ * cuenta lo mismo (un POD rechazado NO es entregado; un viaje sin dueño no le
+ * cuenta a nadie). La forma se valida y LANZA si no encaja.
+ *
+ * ACOTADA POR PERIODO ADEMÁS DE AGREGADA (FE-3): los viajes VIVOS entran
+ * siempre; los LIQUIDADOS solo los de los últimos `DIAS_LIQUIDADOS_CARGA`
+ * días. O sea que `liquidados` es "los que cerró en esa ventana", NO el
+ * histórico del operador — hoy ninguna pantalla lo pinta (despacho enseña
+ * `enCurso`/`sinPod`, el tablero `incidenciasAbiertas`), y quien lo pinte
+ * tiene que decir la ventana en el rótulo.
  */
-export async function getCargaOperadores(tenantId: string): Promise<CargaOperador[]> {
-  const admin = supabaseAdmin();
-  const [ops, viajes, pods, incidencias] = await Promise.all([
-    traerTodo<{ id: unknown; nombre: unknown; telefono: unknown; activo: unknown }>(
-      (d, h) => admin.from('operador').select('id, nombre, telefono, activo', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h),
-      'getCargaOperadores.operador',
-    ),
-    traerTodo<{ id: unknown; operador_id: unknown; estatus: unknown }>(
-      (d, h) => admin.from('viaje').select('id, operador_id, estatus', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h),
-      'getCargaOperadores.viaje',
-    ),
-    traerTodo<{ viaje_id: unknown; estado: unknown }>(
-      (d, h) => admin.from('pod').select('viaje_id, estado', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h),
-      'getCargaOperadores.pod',
-    ),
-    traerTodo<{ viaje_id: unknown; estado: unknown }>(
-      (d, h) => admin.from('incidencia').select('viaje_id, estado', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h),
-      'getCargaOperadores.incidencia',
-    ),
-  ]);
-
-  // Un POD 'rechazado' NO cuenta como entregado: la evidencia existe pero no
-  // sirve, y es justo el caso que el encargado tiene que volver a pedir.
-  const conPod = new Set(pods.filter((p) => p.estado === 'subido').map((p) => p.viaje_id as string));
-  const incidenciaAbiertaPorViaje = new Set(
-    incidencias.filter((i) => i.estado !== 'resuelta').map((i) => i.viaje_id as string),
+export async function getCargaOperadores(tenantId: string, ahora = new Date()): Promise<CargaOperador[]> {
+  const desde = new Date(ahora.getTime() - DIAS_LIQUIDADOS_CARGA * 86_400_000).toISOString();
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('carga_operadores_tenant', { p_tenant: tenantId, p_desde: desde }),
+    'carga_operadores_tenant',
   );
-
-  const acum = new Map<string, Omit<CargaOperador, 'operadorId' | 'nombre' | 'telefono' | 'activo'>>();
-  const vacio = () => ({ enCurso: 0, abiertos: 0, enCuadre: 0, liquidados: 0, sinPod: 0, incidenciasAbiertas: 0 });
-
-  for (const v of viajes) {
-    const op = v.operador_id as string | null;
-    if (!op) continue;   // sin dueño: se cuenta en getViajesSinAsignar, no aquí
-    const a = acum.get(op) ?? vacio();
-    const estatus = v.estatus as string;
-    if (estatus === 'abierto') a.abiertos += 1;
-    else if (estatus === 'en_cuadre') a.enCuadre += 1;
-    else if (estatus === 'liquidado') a.liquidados += 1;
-    if (SIN_CERRAR.has(estatus)) {
-      a.enCurso += 1;
-      if (!conPod.has(v.id as string)) a.sinPod += 1;
+  if (error) throw new Error(`getCargaOperadores: ${error.message}`);
+  if (!Array.isArray(data)) throw formaInesperada('getCargaOperadores', 'carga_operadores_tenant', `llegó ${typeof data}`);
+  return (data as unknown[]).map((o, i) => {
+    if (!esObjeto(o) || typeof o.operadorId !== 'string' || typeof o.nombre !== 'string' || !esTextoONulo(o.telefono)
+      || typeof o.activo !== 'boolean' || !esNumero(o.enCurso) || !esNumero(o.abiertos) || !esNumero(o.enCuadre)
+      || !esNumero(o.liquidados) || !esNumero(o.sinPod) || !esNumero(o.incidenciasAbiertas)) {
+      throw formaInesperada('getCargaOperadores', 'carga_operadores_tenant', `operador #${i} fuera de forma`);
     }
-    if (incidenciaAbiertaPorViaje.has(v.id as string)) a.incidenciasAbiertas += 1;
-    acum.set(op, a);
-  }
-
-  return ops
-    .map((o) => ({
-      operadorId: o.id as string,
-      nombre: o.nombre as string,
-      telefono: (o.telefono as string) || null,
-      activo: Boolean(o.activo),
-      ...(acum.get(o.id as string) ?? vacio()),
-    }))
-    .sort((x, y) => y.enCurso - x.enCurso || x.nombre.localeCompare(y.nombre));
+    return {
+      operadorId: o.operadorId, nombre: o.nombre, telefono: o.telefono || null, activo: o.activo,
+      enCurso: o.enCurso, abiertos: o.abiertos, enCuadre: o.enCuadre, liquidados: o.liquidados,
+      sinPod: o.sinPod, incidenciasAbiertas: o.incidenciasAbiertas,
+    };
+  }).sort((x, y) => y.enCurso - x.enCurso || x.nombre.localeCompare(y.nombre));
 }
 
 // ── Viajes sin dueño ───────────────────────────────────────────────────────
@@ -122,11 +100,11 @@ export interface ViajeSinAsignar {
 /** Lo primero que el encargado abre en la mañana: qué está sin repartir. */
 export async function getViajesSinAsignar(tenantId: string): Promise<ViajeSinAsignar[]> {
   const filas = await traerTodo<Record<string, unknown>>(
-    (d, h) => supabaseAdmin().from('viaje')
+    (d, h) => acotada(supabaseAdmin().from('viaje')
       .select('id, folio, origen, destino, fecha_inicio, estatus', conteo(d))
       .eq('tenant_id', tenantId).is('operador_id', null)
       .neq('estatus', 'liquidado')
-      .order('id').range(d, h),
+      .order('id').range(d, h), 'getViajesSinAsignar'),
     'getViajesSinAsignar',
   );
   return filas.map((v) => ({
@@ -171,14 +149,14 @@ export async function getUnidades(tenantId: string, hoy = new Date()): Promise<U
   const admin = supabaseAdmin();
   const [unidades, ordenes] = await Promise.all([
     traerTodo<Record<string, unknown>>(
-      (d, h) => admin.from('unidad')
+      (d, h) => acotada(admin.from('unidad')
         .select('id, numero_economico, placas, marca, modelo, anio, estado, km_actual, poliza_vence, permiso_sict_vence, verificacion_vence, activo', conteo(d))
-        .eq('tenant_id', tenantId).order('numero_economico').range(d, h),
+        .eq('tenant_id', tenantId).order('numero_economico').range(d, h), 'getUnidades.unidad'),
       'getUnidades.unidad',
     ),
     traerTodo<{ unidad_id: unknown; estado: unknown }>(
-      (d, h) => admin.from('mantenimiento').select('unidad_id, estado', conteo(d))
-        .eq('tenant_id', tenantId).neq('estado', 'cerrada').order('id').range(d, h),
+      (d, h) => acotada(admin.from('mantenimiento').select('unidad_id, estado', conteo(d))
+        .eq('tenant_id', tenantId).neq('estado', 'cerrada').order('id').range(d, h), 'getUnidades.mantenimiento'),
       'getUnidades.mantenimiento',
     ),
   ]);
@@ -255,51 +233,53 @@ export interface IncidenciaRow {
   slaVencido: boolean;
 }
 
+/** Las resueltas se listan si se abrieron en los últimos N días; las abiertas, siempre. */
+export const DIAS_INCIDENCIAS_RESUELTAS = 90;
+/** Tope de renglones: el encargado no lee más; el total vivo está en el tablero. */
+export const LIMITE_INCIDENCIAS = 500;
+
+/**
+ * JOIN EN SQL DESDE EL 22-AGO-2026 (mig. 0152): traía TODOS los viajes y
+ * unidades del tenant para resolver el folio y el número económico de unas
+ * cuantas incidencias (docs/escala-50k/MAPA.md #19). `incidencias_tenant` los
+ * resuelve con un left join anclado por tenant — una incidencia que apunte a
+ * un viaje ajeno sale sin folio, igual que antes. Abiertas siempre; resueltas
+ * solo las de los últimos `DIAS_INCIDENCIAS_RESUELTAS` días; tope
+ * `LIMITE_INCIDENCIAS`. `ahora` es el mismo reloj para el corte y las horas.
+ */
 export async function getIncidencias(tenantId: string, ahora = new Date()): Promise<IncidenciaRow[]> {
-  const admin = supabaseAdmin();
-  const [incidencias, viajes, unidades] = await Promise.all([
-    traerTodo<Record<string, unknown>>(
-      (d, h) => admin.from('incidencia')
-        .select('id, viaje_id, unidad_id, tipo, prioridad, estado, descripcion, sla_horas, abierta_en, resuelta_en', conteo(d))
-        // `id` DESEMPATA. `abierta_en` sola no es única —dos incidencias
-        // abiertas en el mismo segundo empatan— y `range` pagina por posición:
-        // ante un empate en la frontera de página, Postgres puede devolver la
-        // misma fila dos veces y saltarse otra. Era la única consulta paginada
-        // de este módulo sin desempate.
-        .eq('tenant_id', tenantId).order('abierta_en', { ascending: false }).order('id').range(d, h),
-      'getIncidencias.incidencia',
-    ),
-    traerTodo<{ id: unknown; folio: unknown }>(
-      (d, h) => admin.from('viaje').select('id, folio', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h),
-      'getIncidencias.viaje',
-    ),
-    traerTodo<{ id: unknown; numero_economico: unknown }>(
-      (d, h) => admin.from('unidad').select('id, numero_economico', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h),
-      'getIncidencias.unidad',
-    ),
-  ]);
+  const desde = new Date(ahora.getTime() - DIAS_INCIDENCIAS_RESUELTAS * 86_400_000).toISOString();
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('incidencias_tenant', { p_tenant: tenantId, p_desde: desde, p_limite: LIMITE_INCIDENCIAS }),
+    'incidencias_tenant',
+  );
+  if (error) throw new Error(`getIncidencias: ${error.message}`);
+  if (!Array.isArray(data)) throw formaInesperada('getIncidencias', 'incidencias_tenant', `llegó ${typeof data}`);
 
-  const folioPorViaje = new Map(viajes.map((v) => [v.id as string, (v.folio as string) || null]));
-  const ecoPorUnidad = new Map(unidades.map((u) => [u.id as string, u.numero_economico as string]));
-
-  return incidencias.map((i) => {
-    const abiertaEn = String(i.abierta_en);
-    const fin = i.resuelta_en ? Date.parse(String(i.resuelta_en)) : ahora.getTime();
+  return (data as unknown[]).map((i, n) => {
+    if (!esObjeto(i) || typeof i.id !== 'string' || !esTextoONulo(i.viajeId) || !esTextoONulo(i.folio)
+      || !esTextoONulo(i.unidadId) || !esTextoONulo(i.numeroEconomico) || typeof i.tipo !== 'string'
+      || typeof i.prioridad !== 'string' || typeof i.estado !== 'string' || !esTextoONulo(i.descripcion)
+      || !esNumeroONulo(i.slaHoras) || typeof i.abiertaEn !== 'string' || !esTextoONulo(i.resueltaEn)) {
+      throw formaInesperada('getIncidencias', 'incidencias_tenant', `incidencia #${n} fuera de forma`);
+    }
+    const abiertaEn = i.abiertaEn;
+    const fin = i.resueltaEn ? Date.parse(i.resueltaEn) : ahora.getTime();
     const horas = Math.max(0, Math.round((fin - Date.parse(abiertaEn)) / 3_600_000));
-    const sla = i.sla_horas == null ? null : Number(i.sla_horas);
+    const sla = i.slaHoras;
     return {
-      id: i.id as string,
-      viajeId: (i.viaje_id as string) || null,
-      folio: i.viaje_id ? folioPorViaje.get(i.viaje_id as string) ?? null : null,
-      unidadId: (i.unidad_id as string) || null,
-      numeroEconomico: i.unidad_id ? ecoPorUnidad.get(i.unidad_id as string) ?? null : null,
-      tipo: i.tipo as string,
-      prioridad: i.prioridad as string,
-      estado: i.estado as string,
-      descripcion: (i.descripcion as string) || null,
+      id: i.id,
+      viajeId: i.viajeId || null,
+      folio: i.folio,
+      unidadId: i.unidadId || null,
+      numeroEconomico: i.numeroEconomico,
+      tipo: i.tipo,
+      prioridad: i.prioridad,
+      estado: i.estado,
+      descripcion: i.descripcion || null,
       slaHoras: sla,
       abiertaEn,
-      resueltaEn: (i.resuelta_en as string) || null,
+      resueltaEn: i.resueltaEn || null,
       horasAbierta: horas,
       slaVencido: sla !== null && i.estado !== 'resuelta' && horas > sla,
     };
@@ -333,18 +313,18 @@ export async function getPods(tenantId: string): Promise<PodRow[]> {
   const admin = supabaseAdmin();
   const [viajes, pods, operadores] = await Promise.all([
     traerTodo<{ id: unknown; folio: unknown; operador_id: unknown; estatus: unknown }>(
-      (d, h) => admin.from('viaje').select('id, folio, operador_id, estatus', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h),
+      (d, h) => acotada(admin.from('viaje').select('id, folio, operador_id, estatus', conteo(d))
+        .eq('tenant_id', tenantId).order('id').range(d, h), 'getPods.viaje'),
       'getPods.viaje',
     ),
     traerTodo<Record<string, unknown>>(
-      (d, h) => admin.from('pod').select('id, viaje_id, estado, nota, capturado_en', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h),
+      (d, h) => acotada(admin.from('pod').select('id, viaje_id, estado, nota, capturado_en', conteo(d))
+        .eq('tenant_id', tenantId).order('id').range(d, h), 'getPods.pod'),
       'getPods.pod',
     ),
     traerTodo<{ id: unknown; nombre: unknown; telefono: unknown }>(
-      (d, h) => admin.from('operador').select('id, nombre, telefono', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h),
+      (d, h) => acotada(admin.from('operador').select('id, nombre, telefono', conteo(d))
+        .eq('tenant_id', tenantId).order('id').range(d, h), 'getPods.operador'),
       'getPods.operador',
     ),
   ]);
@@ -454,38 +434,29 @@ export interface TableroOperacion {
  * `pod`: un viaje del que nadie creó el registro es exactamente el caso que se
  * está persiguiendo, y contar filas lo dejaría fuera — el peor tipo de cero,
  * el que se lee como "no falta ninguno".
+ *
+ * AGREGADO EN SQL DESDE EL 22-AGO-2026 (mig. 0152): leía `viaje` y `pod`
+ * enteros (docs/escala-50k/MAPA.md #17). `tablero_operacion_tenant` cuenta lo
+ * mismo; la forma se valida y LANZA si no encaja — un tablero en ceros sobre
+ * una respuesta rota se lee como "no hay nada pendiente".
  */
 export async function getTableroOperacion(tenantId: string): Promise<TableroOperacion> {
-  const admin = supabaseAdmin();
-  const [viajes, unidades, incidencias, pods] = await Promise.all([
-    traerTodo<{ id: unknown; unidad_id: unknown; estatus: unknown }>(
-      (d, h) => admin.from('viaje').select('id, unidad_id, estatus', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h),
-      'getTableroOperacion.viaje',
-    ),
-    traerTodo<{ estado: unknown }>(
-      (d, h) => admin.from('unidad').select('estado', conteo(d)).eq('tenant_id', tenantId).eq('activo', true).order('id').range(d, h),
-      'getTableroOperacion.unidad',
-    ),
-    traerTodo<{ estado: unknown }>(
-      (d, h) => admin.from('incidencia').select('estado', conteo(d)).eq('tenant_id', tenantId).neq('estado', 'resuelta').order('id').range(d, h),
-      'getTableroOperacion.incidencia',
-    ),
-    traerTodo<{ viaje_id: unknown; estado: unknown }>(
-      (d, h) => admin.from('pod').select('viaje_id, estado', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h),
-      'getTableroOperacion.pod',
-    ),
-  ]);
-
-  const conPod = new Set(pods.filter((p) => p.estado === 'subido').map((p) => p.viaje_id as string));
-  const enCurso = viajes.filter((v) => SIN_CERRAR.has(v.estatus as string));
-
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('tablero_operacion_tenant', { p_tenant: tenantId }),
+    'tablero_operacion_tenant',
+  );
+  if (error) throw new Error(`getTableroOperacion: ${error.message}`);
+  if (!esObjeto(data) || !esNumero(data.viajesActivos) || !esNumero(data.sinUnidad) || !esNumero(data.unidadesDisponibles)
+    || !esNumero(data.unidadesEnTaller) || !esNumero(data.incidenciasAbiertas) || !esNumero(data.podPendientes)) {
+    throw formaInesperada('getTableroOperacion', 'tablero_operacion_tenant', `llegó ${typeof data}`);
+  }
   return {
-    viajesActivos: enCurso.length,
-    sinUnidad: enCurso.filter((v) => !v.unidad_id).length,
-    unidadesDisponibles: unidades.filter((u) => u.estado === 'disponible').length,
-    unidadesEnTaller: unidades.filter((u) => u.estado === 'taller').length,
-    incidenciasAbiertas: incidencias.length,
-    podPendientes: enCurso.filter((v) => !conPod.has(v.id as string)).length,
+    viajesActivos: data.viajesActivos,
+    sinUnidad: data.sinUnidad,
+    unidadesDisponibles: data.unidadesDisponibles,
+    unidadesEnTaller: data.unidadesEnTaller,
+    incidenciasAbiertas: data.incidenciasAbiertas,
+    podPendientes: data.podPendientes,
   };
 }
 
@@ -545,8 +516,8 @@ export interface NuevoViaje {
  */
 async function unidadPropia(tenantId: string, unidadId: string): Promise<boolean> {
   const filas = await traerTodo<{ id: unknown }>(
-    (d, h) => supabaseAdmin().from('unidad').select('id', conteo(d))
-      .eq('tenant_id', tenantId).eq('id', unidadId).order('id').range(d, h),
+    (d, h) => acotada(supabaseAdmin().from('unidad').select('id', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', unidadId).order('id').range(d, h), 'unidadPropia'),
     'unidadPropia',
   );
   return filas.length > 0;
@@ -563,8 +534,8 @@ async function unidadPropia(tenantId: string, unidadId: string): Promise<boolean
  */
 async function clientePropioLocal(tenantId: string, clienteId: string): Promise<boolean> {
   const filas = await traerTodo<{ id: unknown }>(
-    (d, h) => supabaseAdmin().from('cliente').select('id', conteo(d))
-      .eq('tenant_id', tenantId).eq('id', clienteId).order('id').range(d, h),
+    (d, h) => acotada(supabaseAdmin().from('cliente').select('id', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', clienteId).order('id').range(d, h), 'clientePropioLocal'),
     'clientePropioLocal',
   );
   return filas.length > 0;
@@ -573,8 +544,8 @@ async function clientePropioLocal(tenantId: string, clienteId: string): Promise<
 /** Comprueba que un viaje sea del tenant (auditoría 12, MEDIO backend). */
 async function viajePropio(tenantId: string, viajeId: string): Promise<boolean> {
   const filas = await traerTodo<{ id: unknown }>(
-    (d, h) => supabaseAdmin().from('viaje').select('id', conteo(d))
-      .eq('tenant_id', tenantId).eq('id', viajeId).order('id').range(d, h),
+    (d, h) => acotada(supabaseAdmin().from('viaje').select('id', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', viajeId).order('id').range(d, h), 'viajePropio'),
     'viajePropio',
   );
   return filas.length > 0;
@@ -583,8 +554,8 @@ async function viajePropio(tenantId: string, viajeId: string): Promise<boolean> 
 /** Comprueba que un operador sea del tenant (auditoría 12, MEDIO backend). */
 async function operadorPropio(tenantId: string, operadorId: string): Promise<boolean> {
   const filas = await traerTodo<{ id: unknown }>(
-    (d, h) => supabaseAdmin().from('operador').select('id', conteo(d))
-      .eq('tenant_id', tenantId).eq('id', operadorId).order('id').range(d, h),
+    (d, h) => acotada(supabaseAdmin().from('operador').select('id', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', operadorId).order('id').range(d, h), 'operadorPropio'),
     'operadorPropio',
   );
   return filas.length > 0;
@@ -607,8 +578,8 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
   // ese viaje (y sus gastos y su liquidación) de la flota A en /chofer.
   if (v.operadorId) {
     const propio = await traerTodo<{ id: unknown }>(
-      (d, h) => supabaseAdmin().from('operador').select('id', conteo(d))
-        .eq('tenant_id', tenantId).eq('id', v.operadorId).order('id').range(d, h),
+      (d, h) => acotada(supabaseAdmin().from('operador').select('id', conteo(d))
+        .eq('tenant_id', tenantId).eq('id', v.operadorId).order('id').range(d, h), 'crearViaje.operadorPropio'),
       'crearViaje.operadorPropio',
     );
     if (propio.length === 0) throw new Error('crearViaje: el operador no pertenece a esta flota');
@@ -681,9 +652,9 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
   // acotada, pero el día que llegue de la entrada del usuario, un id de la flota
   // B le manda a un chofer de la flota A el anticipo de un viaje ajeno.
   const [{ data: op, error: errOp }, { data: viaje, error: errViaje }] = await Promise.all([
-    admin.from('operador').select('telefono').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(),
-    admin.from('viaje').select('folio, origen, destino, fecha_inicio, anticipo, unidad_id')
-      .eq('tenant_id', tenantId).eq('id', viajeId).maybeSingle(),
+    acotada(admin.from('operador').select('telefono').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(), 'avisarAlChofer.operador'),
+    acotada(admin.from('viaje').select('folio, origen, destino, fecha_inicio, anticipo, unidad_id')
+      .eq('tenant_id', tenantId).eq('id', viajeId).maybeSingle(), 'avisarAlChofer.viaje'),
   ]);
   const errLectura = errOp ?? errViaje;
   if (errLectura) {
@@ -704,8 +675,8 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
 
   let unidad: string | null = null;
   if (viaje.unidad_id) {
-    const { data: u, error: errUnidad } = await admin.from('unidad').select('numero_economico')
-      .eq('tenant_id', tenantId).eq('id', viaje.unidad_id).maybeSingle();
+    const { data: u, error: errUnidad } = await acotada(admin.from('unidad').select('numero_economico')
+      .eq('tenant_id', tenantId).eq('id', viaje.unidad_id).maybeSingle(), 'avisarAlChofer.unidad');
     // `unidad = null` imprime el aviso SIN número económico, o sea "no traes
     // unidad asignada" — y aquí se sabe que sí la trae, porque `viaje.unidad_id`
     // no es null. Mandar ese mensaje marcaría `avisado_en` (el viaje deja de
@@ -742,12 +713,12 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
 
   // Marca el arranque del reloj. Sin esto, `viajesSinAceptar()` no lo ve nunca:
   // filtra por `avisado_en no es null`.
-  const { error } = await admin
+  const { error } = await acotada(admin
     .from('viaje')
     .update({ avisado_en: new Date().toISOString(), avisos_enviados: 1 })
     .eq('id', viajeId)
     .eq('tenant_id', tenantId)
-    .is('avisado_en', null); // el primer aviso manda: un reaviso no reinicia el plazo
+    .is('avisado_en', null), 'avisarAlChofer.marcar'); // el primer aviso manda: un reaviso no reinicia el plazo
   if (error) logger.warn('viaje.avisado_en_no_se_marcó', { viajeId, err: error.message });
 }
 
@@ -995,8 +966,8 @@ export interface NuevaIncidencia {
  *  processor solo mandan ids propios, pero eso es el llamador, no el motor. */
 async function gastoPropio(tenantId: string, gastoId: string): Promise<boolean> {
   const filas = await traerTodo<{ id: unknown }>(
-    (d, h) => supabaseAdmin().from('gasto').select('id', conteo(d))
-      .eq('tenant_id', tenantId).eq('id', gastoId).order('id').range(d, h),
+    (d, h) => acotada(supabaseAdmin().from('gasto').select('id', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', gastoId).order('id').range(d, h), 'gastoPropio'),
     'gastoPropio',
   );
   return filas.length > 0;

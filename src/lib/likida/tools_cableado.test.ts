@@ -108,7 +108,12 @@ async function textoDelPdf(bytes: Uint8Array): Promise<string> {
     Buffer.from(hex, 'hex').toString('latin1'));
 }
 
-const CTX = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779' };
+// DAT-22: el cierre exige que el operador lo haya pedido EN ESTE TURNO
+// (`cierrePedidoPorTexto`, que el processor calcula con `pidioCerrar`). Estos
+// archivos prueban otras cosas del cierre, así que dan por hecho el escenario
+// normal —el chofer escribió "listo"— y el candado propio se prueba en
+// `tools_cierre_pedido.test.ts`.
+const CTX = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779', cierrePedidoPorTexto: true };
 const cerrar = () => executeTool('guardar_liquidacion', {}, CTX);
 
 beforeEach(() => { subidos.clear(); fallaEnRuta.clear(); saveLiquidacion.mockClear(); });
@@ -148,7 +153,9 @@ describe('guardar_liquidacion — el cierre genera DOS ejemplares y cada uno es 
 
   it('en `liquidacion.pdf_path` se guarda el ejemplar del CONTRALOR, que es el registro', async () => {
     await cerrar();
-    expect(saveLiquidacion).toHaveBeenCalledWith('t1', LIQ, 't1/v1.pdf');
+    // El 4º argumento es el conteo de comprobantes que la 0158 compara dentro
+    // del candado del viaje (DAT-02): el papel y la base cuentan lo mismo.
+    expect(saveLiquidacion).toHaveBeenCalledWith('t1', LIQ, 't1/v1.pdf', LIQ.gastos.length);
   });
 
   it('el resultado declara que el PDF del operador se generó (de eso depende el envío)', async () => {

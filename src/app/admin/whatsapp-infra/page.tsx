@@ -1,4 +1,4 @@
-import { getConversacionesActivas } from '@/lib/admin/negocio';
+import { getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES } from '@/lib/admin/negocio';
 import { Server, Smartphone, MessageCircle, ChevronDown, Info } from 'lucide-react';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { StatCard, EstadoVacio } from '../ui/kit';
@@ -36,7 +36,11 @@ const FUERA_DE_ALCANCE = [
  * lo dicen — solo cambió la envoltura.
  */
 export default async function WhatsappInfraPage() {
-  const conversaciones = await getConversacionesActivas();
+  // FE-9: el KPI decía "Conversaciones activas: N" con el N del TOPE (20).
+  const [conversaciones, total] = await Promise.all([
+    getConversacionesActivas(), contarConversacionesActivas(),
+  ]);
+  const recortado = total !== null && total > conversaciones.length;
 
   return (
     <main className="h-full">
@@ -67,24 +71,28 @@ export default async function WhatsappInfraPage() {
             </p>
           </div>
 
-          {/* Mismo conteo real de siempre (`getConversacionesActivas`); la
-              nota de la fuente (`wa_conversacion`, tope de 20 filas) va en el
-              pie de la StatCard, no como caption suelto. */}
+          {/* El conteo REAL de `wa_conversacion` (count exact, FE-9). Antes
+              esta tarjeta enseñaba el tamaño de la página —20— con una nota
+              que confesaba el tope: una cifra de infraestructura que se topa
+              en 20 no sirve para dimensionar infraestructura. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <StatCard icono={<MessageCircle {...ICONO_KPI} />}
-              etiqueta="Conversaciones activas" valor={conversaciones.length} formato="entero"
-              nota="Las más recientes (wa_conversacion, tope de 20 filas)"
+              etiqueta="Conversaciones activas" valor={total} formato="entero"
+              sinDato="no se pudo contar"
+              nota="Filas vivas en wa_conversacion (ventana rodante de turnos)"
             />
           </div>
 
           <section id="conversaciones" className="card p-3 scroll-mt-24">
-            <TituloSeccion>Conversaciones</TituloSeccion>
+            <TituloSeccion>
+              {recortado ? `Conversaciones — las ${TOPE_CONVERSACIONES} más recientes de ${total}` : 'Conversaciones'}
+            </TituloSeccion>
             {conversaciones.length === 0 ? (
               <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>Sin conversaciones activas.</p>
             ) : (
               <div className="space-y-1.5 mt-2">
                 {conversaciones.map((c) => (
-                  <details key={c.telefono} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
+                  <details key={`${c.tenantId ?? "sin-flota"}-${c.telefono}`} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
                     <summary className="px-3 py-2.5 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[var(--canvas)] transition-colors">
                       <div>
                         <div className="text-sm font-medium">{c.telefono}</div>

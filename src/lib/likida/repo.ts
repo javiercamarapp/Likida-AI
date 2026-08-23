@@ -9,11 +9,31 @@ import { acotada } from './presupuesto';
 import { traerTodo, conteo } from './pg';
 import type { Gasto, Liquidacion, Viaje, Operador } from '@/types/likida';
 import type { CodigoPendiente } from './intake/emparejar';
+import { violaIndice } from './pg_errores';
 
 // El tope de consulta vive en `presupuesto.ts`, con `TOPE_CONSULTA_MS` y el
 // resto del presupuesto de la invocación. Estuvo aquí hasta la auditoría 8, y
 // por eso solo protegía a este archivo: `costos.ts`, `conv.ts` y `config.ts`
 // llamaban a `supabaseAdmin()` en crudo — once de los trece pasos del cierre.
+
+/**
+ * EL UUID DEL CFDI, EN UNA SOLA ORTOGRAFÍA (auditoría 18, DAT-26).
+ *
+ * El SAT imprime el folio fiscal en MAYÚSCULAS —en el PDF y en el atributo
+ * `UUID` del timbre— y el OCR y los portales de facturación lo devuelven en
+ * minúsculas. `uq_gasto_cfdi_uuid` y `factura_cfdi_unico` son índices sobre
+ * `text`: con las dos ortografías vivas, el MISMO comprobante entraba dos
+ * veces y su IVA se acreditaba dos veces.
+ *
+ * Se normaliza en la ESCRITURA y no al comparar porque un índice no puede
+ * comparar «con criterio»: o el dato tiene una forma, o el índice no dice lo
+ * que cree decir. La migración 0158 lo hace cumplir con un CHECK en las cuatro
+ * tablas, así que esto no es la defensa —es no chocar contra ella.
+ */
+function uuidCfdi(u: string | null | undefined): string | null {
+  const t = (u ?? '').trim();
+  return t === '' ? null : t.toLowerCase();
+}
 
 /**
  * Conserva el XML CRUDO del CFDI (CFF art. 30). Best-effort: un fallo aquí NO
@@ -22,7 +42,7 @@ import type { CodigoPendiente } from './intake/emparejar';
 export async function saveCfdiXmlRaw(tenantId: string, cfdiUuid: string, gastoId: string | null, xml: string): Promise<void> {
   const { error } = await acotada(supabaseAdmin()
     .from('cfdi_xml')
-    .upsert({ tenant_id: tenantId, cfdi_uuid: cfdiUuid, gasto_id: gastoId, xml }, { onConflict: 'tenant_id,cfdi_uuid' }), 'saveCfdiXmlRaw');
+    .upsert({ tenant_id: tenantId, cfdi_uuid: uuidCfdi(cfdiUuid), gasto_id: gastoId, xml }, { onConflict: 'tenant_id,cfdi_uuid' }), 'saveCfdiXmlRaw');
   if (error) logger.warn('cfdi_xml.save', { err: error.message });
 }
 
@@ -88,22 +108,135 @@ export async function getOperador(operadorId: string, tenantId: string): Promise
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS CATÁLOGOS DEL PANEL, BUSCADOS EN EL SERVIDOR (FE-2, 22-ago-2026)
+//
+// `listOperadores` no tenía `.limit()`: a 7,500 choferes PostgREST recortaba a
+// 1,000 EN SILENCIO y el chofer 1,001 simplemente no existía para el despacho
+// — sin error, sin rótulo, sin manera de notarlo desde la pantalla. Los
+// catálogos de cliente y unidad de `/dashboard/despacho` tenían el mismo
+// hueco.
+//
+// Y el recorte era la MITAD del problema. La otra mitad es que ese catálogo
+// entero se pintaba UNA VEZ POR FILA: un `<select>` de operadores por cada
+// viaje por asignar y uno de unidades por cada viaje en curso. Doce filas ×
+// 7,500 `<option>` = ~1.5-2 MB de HTML por carga, todo para que se elija UNO.
+//
+// El arreglo es el mismo para los tres: NUNCA se manda el catálogo al
+// navegador. Se manda un buscador (`buscarCatalogo`, tope de 20) que la UI
+// llama al escribir — `ComboCatalogo` en `app/dashboard/combo-catalogo.tsx` —,
+// y el conteo real (`contarCatalogo`) para poder decir en pantalla cuántos
+// hay sin traerlos. El índice de trigramas de la 0160 es lo que hace que ese
+// `%q%` no sea un barrido del tenant.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Qué catálogo se busca. Los tres que el despacho necesita para crear y
+ *  amarrar un viaje; ninguno lleva dinero, así que el área `operacion` los
+ *  puede ver completa. */
+export type TipoCatalogo = 'operador' | 'cliente' | 'unidad';
+
+/** Cuántas opciones ve el usuario de una vez. 20 es lo que cabe en un
+ *  `<datalist>` sin volverse una lista para leer: si lo que busca no está
+ *  entre las 20, la respuesta es teclear una letra más, no bajar. Muy por
+ *  debajo del recorte de 1,000 de PostgREST — el tope aquí es una decisión de
+ *  pantalla, no un accidente del transporte. */
+export const TOPE_CATALOGO = 20;
+
+export interface OpcionCatalogo { id: string; etiqueta: string }
+
+/** La tabla, la columna que se enseña y por cuál se ordena/busca. Una sola
+ *  tabla de verdad para las tres consultas: tres copias del mismo `.eq(
+ *  'activo', true)` es la forma en que un catálogo se olvida de filtrar. */
+const CATALOGOS: Record<TipoCatalogo, { tabla: string; columna: string }> = {
+  operador: { tabla: 'operador', columna: 'nombre' },
+  cliente: { tabla: 'cliente', columna: 'nombre' },
+  unidad: { tabla: 'unidad', columna: 'numero_economico' },
+};
+
+/** Fuera los comodines de LIKE y las comas: `%` solo convertiría la búsqueda
+ *  en "todo", y `,`/`(`/`)` rompen el filtro de PostgREST. Mismo saneo que
+ *  `sanearBusqueda` del registro de viajes (viajes_registro.ts). */
+export function sanearCatalogo(q: string | undefined | null): string {
+  return (q ?? '').trim().replace(/[%_,()]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+}
+
+/**
+ * Hasta `limite` (≤ `TOPE_CATALOGO`) opciones ACTIVAS del catálogo, filtradas
+ * por `q` en la base. Sin `q` son las primeras por orden alfabético — el
+ * arranque del combo, no "todas".
+ *
+ * LANZA ante error, igual que `listOperadores` siempre hizo: una lista vacía
+ * se pinta "no hay choferes dados de alta", que con la base caída es falso y
+ * manda al usuario a dar de alta un operador que ya existe.
+ */
+export async function buscarCatalogo(
+  tenantId: string,
+  tipo: TipoCatalogo,
+  q?: string,
+  limite: number = TOPE_CATALOGO,
+): Promise<OpcionCatalogo[]> {
+  const cat = CATALOGOS[tipo];
+  if (!cat) throw new Error(`buscarCatalogo: tipo desconocido ${tipo}`);
+  const texto = sanearCatalogo(q);
+  const tope = Math.max(1, Math.min(TOPE_CATALOGO, limite));
+
+  let consulta = supabaseAdmin()
+    .from(cat.tabla)
+    .select(`id, ${cat.columna}`)
+    .eq('tenant_id', tenantId)
+    .eq('activo', true);
+  if (texto) consulta = consulta.ilike(cat.columna, `%${texto}%`);
+
+  const { data, error } = await acotada(consulta.order(cat.columna).limit(tope), `buscarCatalogo:${tipo}`);
+  if (error) throw new Error(`buscarCatalogo:${tipo}: ${error.message}`);
+  // `as unknown as` y no un cast directo: el `.select()` se arma con la
+  // columna en runtime, así que el tipo derivado de postgrest-js es un
+  // `ParserError`, no una fila. La FORMA se comprueba abajo, que es lo que
+  // importa.
+  return ((data ?? []) as unknown as Array<Record<string, unknown>>).map((f) => ({
+    id: f.id as string,
+    etiqueta: (f[cat.columna] as string) ?? '',
+  }));
+}
+
+/**
+ * Cuántos hay DE VERDAD en el catálogo (`count exact, head`), sin traer una
+ * sola fila. Es lo que permite que la pantalla diga "20 de 7,500" en vez de
+ * insinuar que 20 son todos — y distinguir "todavía no das de alta a nadie"
+ * (0, que sí es medición) de "no se pudo contar" (`null`).
+ */
+export async function contarCatalogo(tenantId: string, tipo: TipoCatalogo): Promise<number | null> {
+  const cat = CATALOGOS[tipo];
+  if (!cat) throw new Error(`contarCatalogo: tipo desconocido ${tipo}`);
+  const { count, error } = await acotada(supabaseAdmin()
+    .from(cat.tabla)
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .eq('activo', true), `contarCatalogo:${tipo}`);
+  if (error) {
+    logger.warn('contarCatalogo', { tenantId, tipo, err: error.message });
+    return null;
+  }
+  return count ?? null;
+}
+
 /**
  * Choferes activos del tenant, para el selector de "Reasignar chofer" del
  * panel (docs/superpowers/plans/2026-08-02-roles-flota.md, Task 3). Solo
  * `nombre` — la vista de asignación no necesita el teléfono.
+ *
+ * ACOTADO desde FE-2: devuelve a lo más `TOPE_CATALOGO`. Es el ARRANQUE del
+ * combo de búsqueda, no el catálogo — quien tenga más choferes que eso los
+ * encuentra escribiendo, y la pantalla dice cuántos hay en total
+ * (`contarCatalogo`). Antes no llevaba tope y PostgREST recortaba a 1,000 sin
+ * decirlo.
  */
-export async function listOperadores(tenantId: string): Promise<Array<{ id: string; nombre: string }>> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('operador')
-    .select('id, nombre')
-    .eq('tenant_id', tenantId)
-    .eq('activo', true)
-    .order('nombre'), 'listOperadores');
-  // Un error leído como lista vacía se pinta "no hay choferes" — falso, y
-  // esconde justo la sección que decide si "Reasignar" tiene sentido mostrarse.
-  if (error) throw new Error(`listOperadores: ${error.message}`);
-  return (data ?? []) as Array<{ id: string; nombre: string }>;
+export async function listOperadores(
+  tenantId: string,
+  opciones: { q?: string; limite?: number } = {},
+): Promise<Array<{ id: string; nombre: string }>> {
+  const opts = await buscarCatalogo(tenantId, 'operador', opciones.q, opciones.limite ?? TOPE_CATALOGO);
+  return opts.map((o) => ({ id: o.id, nombre: o.etiqueta }));
 }
 
 /**
@@ -150,7 +283,7 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     folio: g.folio ?? null,
     rfc_emisor: g.rfcEmisor ?? null,
     rfc_receptor: g.rfcReceptor ?? null,
-    cfdi_uuid: g.cfdiUuid ?? null,
+    cfdi_uuid: uuidCfdi(g.cfdiUuid),
     imagen_url: g.imagenUrl ?? null,
     ocr_confianza: g.ocrConfianza ?? null,
     cfdi_valido: g.cfdiValido ?? null,
@@ -170,6 +303,10 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     folio_norm: g.folioNorm ?? null,
     ocr_extra: g.ocrExtra ?? null,
     img_hash: g.imgHash ?? null,
+    // DAT-01: la llave del reproceso. Va aquí, en el MISMO insert, para que la
+    // unicidad y el alta sean el mismo acto: un `update` posterior dejaría
+    // abierta justo la ventana que este campo existe para cerrar.
+    wa_message_id: g.waMessageId ?? null,
   }), 'addGasto');
   if (error) {
     // Se preserva el código de Postgres para que el caller distinga un duplicado
@@ -290,7 +427,16 @@ export interface Huerfano {
   ofrecidoEn?: string;
 }
 
-/** Best-effort: si esto falla, se le dice al operador que no se pudo guardar. */
+/**
+ * Best-effort: si esto falla, se le dice al operador que no se pudo guardar.
+ *
+ * DAT-01 — EL DUPLICADO CUENTA COMO GUARDADO. `uq_huerfano_img_hash` (0164)
+ * impide que el MISMO papel ocupe dos filas en la sala de espera; ese 23505 no
+ * es un fallo: significa que el comprobante ya está esperando, que es
+ * exactamente lo que el llamador necesita saber para decirle al operador que no
+ * se perdió. Tratarlo como error le pediría reenviar una foto que ya está
+ * guardada — y cada reenvío que entra es otra oportunidad de duplicar el gasto.
+ */
 export async function guardarHuerfano(
   tenantId: string, operadorId: string,
   h: { gasto: Gasto; motivo: MotivoHuerfano; rutaImagen?: string },
@@ -299,6 +445,10 @@ export async function guardarHuerfano(
     tenant_id: tenantId, operador_id: operadorId,
     gasto: h.gasto, motivo: h.motivo, ruta_imagen: h.rutaImagen ?? null,
   }), 'guardarHuerfano');
+  if (violaIndice(error, 'uq_huerfano_img_hash')) {
+    logger.info('huerfano.ya_estaba', { tenant: tenantId, operador: operadorId });
+    return true;
+  }
   if (error) logger.error('huerfano.guardar_error', { err: error.message });
   return !error;
 }
@@ -506,10 +656,16 @@ export async function updateGastoCfdiXml(
        // Auditoría 12 (fiscal, ALTO): @Cantidad del concepto representativo,
        // litros cuando ClaveUnidad = LTR. El XML es la verdad de referencia del
        // ticket; si el OCR no leyó litros (o los leyó mal), este los llena.
-       cantidad?: number },
+       cantidad?: number;
+       // DAT-19: la moneda del CFDI y su tipo de cambio. Se MERGEAN en
+       // `ocr_extra` igual que los litros — el motor levanta
+       // `moneda_extranjera` desde ahí, y sin este paso un XML en USD pegado a
+       // un ticket dejaba el gasto con el importe extranjero en la columna de
+       // pesos y sin una sola señal de que no eran pesos.
+       moneda?: string; tipoCambio?: number },
 ): Promise<void> {
   const extra: Record<string, unknown> = {};
-  if (x.uuid) extra.cfdi_uuid = x.uuid;
+  if (x.uuid) extra.cfdi_uuid = uuidCfdi(x.uuid);
   if (x.rfcEmisor) extra.rfc_emisor = x.rfcEmisor;
   if (x.rfcReceptor) extra.rfc_receptor = x.rfcReceptor;
   // El monto del CFDI gana sobre el que leyó la visión: no pasó por OCR.
@@ -518,11 +674,17 @@ export async function updateGastoCfdiXml(
   // Litros del XML: se MERGEAN sobre ocr_extra (no se reemplaza el jsonb —
   // ahí viven producto, estacion, fechaImpresa… que una escritura a ciegas
   // borraría). Lectura + fusión + escritura, el patrón del resto del repo.
-  if (x.claveUnidad === 'LTR' && x.cantidad != null && x.cantidad > 0) {
+  const litrosDelXml = x.claveUnidad === 'LTR' && x.cantidad != null && x.cantidad > 0;
+  const monedaDelXml = !!x.moneda || x.tipoCambio != null;
+  if (litrosDelXml || monedaDelXml) {
     const { data: actual } = await acotada(supabaseAdmin().from('gasto')
       .select('ocr_extra').eq('id', gastoId).eq('tenant_id', tenantId).maybeSingle(), 'updateGastoCfdiXml.leerOcrExtra');
     const ocrExtra = { ...((actual?.ocr_extra as Record<string, unknown> | null) ?? {}) };
-    ocrExtra.litros = x.cantidad;
+    if (litrosDelXml) ocrExtra.litros = x.cantidad;
+    // El XML manda sobre lo que leyó la visión: el emisor declaró la moneda en
+    // un comprobante timbrado, el OCR la dedujo de un papel.
+    if (x.moneda) ocrExtra.moneda = x.moneda;
+    if (x.tipoCambio != null) ocrExtra.tipoCambio = x.tipoCambio;
     extra.ocr_extra = ocrExtra;
   }
   const { error } = await acotada(supabaseAdmin().from('gasto').update({
@@ -595,7 +757,7 @@ export async function enriquecerGastoConCodigo(
     p_gasto: gasto.id,
     p_tenant: tenantId,
     p_extra: extra,
-    p_cfdi_uuid: datos.cfdiUuid ?? null,
+    p_cfdi_uuid: uuidCfdi(datos.cfdiUuid),
   }), 'enriquecerGastoConCodigo');
   if (error) throw new Error(`enriquecerGastoConCodigo: ${error.message}`);
   return data === true;
@@ -618,8 +780,19 @@ export async function guardarCodigoPendiente(
     folio_portal: c.folioPortal ?? null,
     codigo_barras: c.codigoBarras ?? null,
     url_facturacion: c.urlFacturacion ?? null,
-    cfdi_uuid: c.cfdiUuid ?? null,
+    cfdi_uuid: uuidCfdi(c.cfdiUuid),
   }), 'guardarCodigoPendiente');
+  // DAT-37: el MISMO acercamiento apuntado dos veces (el operador que lo manda
+  // de nuevo, o nuestro reproceso de la bandeja durable) chocaba contra nada —
+  // la 0016 no tenía ninguna unicidad— y dejaba una segunda fila que jamás se
+  // empareja: `pegarCodigoEnEspera` consume una sola. Con los índices de la
+  // 0164 el choque es benigno y significa "ese código ya está esperando", que
+  // es exactamente lo que el llamador quería conseguir. Lanzar aquí lo mandaría
+  // al catch de ERROR del processor por un camino que salió bien.
+  if (violaIndice(error, 'uq_codigo_pendiente_folio') || violaIndice(error, 'uq_codigo_pendiente_barras')) {
+    logger.info('codigo_pendiente.ya_estaba', { tenant: tenantId, viaje: viajeId });
+    return;
+  }
   if (error) throw new Error(`guardarCodigoPendiente: ${error.message}`);
 }
 
@@ -698,10 +871,35 @@ export async function getGastos(viajeId: string, tenantId: string): Promise<Gast
   }));
 }
 
+/**
+ * SQLSTATE de la 0158: al cerrar, la base contó MÁS (o menos) comprobantes de
+ * los que el cuadre había fotografiado.
+ *
+ * No es un error de escritura: es la carrera de DAT-02 atrapada. Entre
+ * `computeCuadre` y este cierre pasan segundos —los dos PDF— y las fotos
+ * entrantes no toman el mutex del viaje: un ticket que entra en esa ventana
+ * queda fuera del papel que se archiva y huérfano para siempre (el viaje ya
+ * está liquidado y la 0036 no lo deja entrar después). La base se niega a
+ * emitir esa liquidación, y quien la llamó tiene que volver a fotografiar.
+ */
+export const CIERRE_CONTEO_CAMBIO = 'CU003';
+
+/** ¿El cierre rebotó porque entró un gasto entre el cuadre y el guardado? */
+export function conteoDeGastosCambio(e: unknown): boolean {
+  return !!e && typeof e === 'object' && (e as { code?: string }).code === CIERRE_CONTEO_CAMBIO;
+}
+
 export async function saveLiquidacion(
   tenantId: string,
   liq: Omit<Liquidacion, 'id' | 'creadaEn'>,
   pdfUrl?: string,
+  /**
+   * Cuántos comprobantes traía el cuadre que se está persistiendo. La base
+   * compara contra los que ve DENTRO del candado del viaje y se cae con
+   * CU003 si no coinciden (0158, DAT-02). `undefined` = no comprobar, que es
+   * lo que necesitan los llamadores que no fotografiaron gastos.
+   */
+  nGastos?: number,
 ): Promise<string> {
   const admin = supabaseAdmin();
   // CR-1 / AUDIT_V3 money-path CRÍTICO: cierre ATÓMICO e idempotente. Antes eran
@@ -723,8 +921,17 @@ export async function saveLiquidacion(
     p_iva: liq.ivaAcreditable,
     p_peaje: liq.peajeAcreditable,
     p_pdf_url: pdfUrl ?? null,
+    p_n_gastos: nGastos ?? null,
   }), 'saveLiquidacion');
-  if (error) throw new Error(`saveLiquidacion: ${error.message}`);
+  if (error) {
+    // SE PRESERVA `code`, como en `addGasto` y `updateGastoCfdiXml`: sin él,
+    // `cerrarLiquidacion` no puede distinguir el CU003 —que se resuelve
+    // volviendo a fotografiar— de un fallo cualquiera, y se rendiría en el
+    // único caso en el que reintentar es lo correcto.
+    const e = new Error(`saveLiquidacion: ${error.message}`) as Error & { code?: string };
+    e.code = (error as { code?: string }).code;
+    throw e;
+  }
   return data as string;
 }
 
@@ -1007,19 +1214,24 @@ export async function actualizarRfcOperador(tenantId: string, operadorId: string
  * la declaración del alta no se podía ver ni corregir.
  */
 export async function actualizarFacilidad15(tenantId: string, ded: boolean | undefined, reg: boolean | undefined): Promise<void> {
-  const admin = supabaseAdmin();
   // AUDITORÍA 15, MEDIO: sin comprobar el error, un bache de red se leía como
   // "la flota no tiene config" y se REEMPLAZABA la config entera por una sola
   // llave — perdiendo política, topes y estímulos en silencio.
-  const { data: fila, error: errLee } = await acotada(admin.from('tenant').select('config').eq('id', tenantId).maybeSingle(), 'actualizarFacilidad15.leer');
-  if (errLee) throw new Error(`actualizarFacilidad15.leer: ${errLee.message}`);
-  const actual = { ...((fila?.config as Record<string, unknown> | null) ?? {}) } as Record<string, unknown>;
-  if (ded !== undefined && reg !== undefined) {
-    actual.facilidadCombustibleEfectivo = { dedicacionExclusivaCarga: ded, regimenElegible: reg };
-  } else {
-    delete actual.facilidadCombustibleEfectivo;
-  }
-  const { error } = await acotada(admin.from('tenant').update({ config: actual }).eq('id', tenantId), 'actualizarFacilidad15');
+  //
+  // AUDITORÍA 18, DAT-20: aun comprobándolo, entre la lectura y la escritura
+  // cabía otra edición de `tenant.config` y se perdía sin ruido. La mezcla la
+  // hace ahora la base en UN solo UPDATE (`tenant_config_merge`, 0159), y
+  // "sin declarar" viaja como un BORRADO EXPLÍCITO de la llave: mandar `null`
+  // no serviría — `fusionarConfig` lo ignora y la declaración vieja seguiría
+  // en pie, que es justo lo contrario de lo que la flota pidió.
+  const declara = ded !== undefined && reg !== undefined;
+  const { error } = await acotada(supabaseAdmin().rpc('tenant_config_merge', {
+    p_tenant: tenantId,
+    p_parcial: declara
+      ? { facilidadCombustibleEfectivo: { dedicacionExclusivaCarga: ded, regimenElegible: reg } }
+      : {},
+    p_borrar: declara ? [] : ['facilidadCombustibleEfectivo'],
+  }), 'actualizarFacilidad15');
   if (error) throw new Error(`actualizarFacilidad15: ${error.message}`);
 }
 

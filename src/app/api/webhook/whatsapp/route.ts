@@ -10,7 +10,7 @@ import { logger } from '@/lib/logger';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { flushObservabilidad, codigoDeError } from '@/lib/observability/sentry';
 import { estaApagado } from '@/lib/likida/interruptores';
-import { guardarEventosPendientes, reclamarPendiente, marcarPendienteProcesado, anotarFalloPendiente } from '@/lib/likida/wa_pendientes';
+import { guardarEventosPendientes, pendientesYaConocidos, reclamarPendiente, marcarPendienteProcesado, anotarFalloPendiente } from '@/lib/likida/wa_pendientes';
 
 const MAX_BODY = 256 * 1024;   // 256 KB — un webhook de Meta es pequeño
 const MSGS_POR_MIN = 40;        // por teléfono (una ráfaga de 12 fotos cabe holgada)
@@ -154,9 +154,35 @@ export async function POST(req: NextRequest) {
   // LO QUE ESTO NO CIERRA: si Meta acaba dándose por vencido, el comprobante se
   // pierde y desde aquí no hay forma de enterarse. Por eso el log conserva el
   // `waMessageId` — es lo único que permite cruzarlo contra la base después.
+  //
+  // ── DAT-34 · DEDUPLICAR ANTES DE COBRAR EL CUPO ───────────────────────────
+  //
+  // El límite corría ANTES de cualquier deduplicación, y eso volvía trampa el
+  // arreglo de arriba. Meta reentrega el POST COMPLETO, no el resto: los
+  // mensajes que YA se guardaron en la bandeja durable en la entrega anterior
+  // vuelven a gastar sus cupos de la ventana, y los nuevos —que son los que
+  // traen el comprobante que falta— se vuelven a diferir. Cada reentrega repite
+  // el ciclo hasta que Meta se rinde, y ahí sí se pierden.
+  //
+  // Un mensaje que ya está en `wa_evento_pendiente` no cuesta trabajo nuevo: su
+  // fila existe, el cron la drena y `claimMessage` lo trata como duplicado.
+  // Cobrarle cupo es cobrarle dos veces por el mismo mensaje, y quien paga la
+  // cuenta es el comprobante nuevo. `pendientesYaConocidos` es FAIL-OPEN: si no
+  // se puede leer, el límite se aplica a todos, como antes.
+  const yaEnBandeja = await pendientesYaConocidos(
+    messages.map((m) => m.waMessageId ?? '').filter(Boolean),
+  );
   const permitidos: InboundMessage[] = [];
   const diferidos: InboundMessage[] = [];
   for (const m of messages) {
+    if (m.waMessageId && yaEnBandeja.has(m.waMessageId)) {
+      // Ya guardado en una entrega anterior: pasa sin cobrar cupo. Se procesa
+      // igual —es más rápido que esperar al cron— y el claim de su fila durable
+      // impide que se haga dos veces.
+      logger.info('wa.reentrega_ya_en_bandeja', { id: m.waMessageId });
+      permitidos.push(m);
+      continue;
+    }
     if (await rateLimit(`wa:${m.from}`, MSGS_POR_MIN, 60_000)) { permitidos.push(m); continue; }
     diferidos.push(m);
     // WARN y no ERROR: ya no es un comprobante perdido, es uno que vuelve. Con
@@ -392,6 +418,9 @@ interface WaWebhook {
           id: string;
           from: string;
           type: string;
+          /** UNIX en SEGUNDOS, como string. Es la hora en que META recibió el
+           *  mensaje, no la nuestra (DAT-38). Ver `extractMessages`. */
+          timestamp?: string;
           text?: { body: string };
           // `caption` es el rótulo que el chofer escribe AL PIE de la foto —
           // la única señal determinística de qué papel es ("carta porte",
@@ -436,7 +465,23 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
   for (const entry of p.entry ?? []) {
     for (const change of entry.changes ?? []) {
       for (const m of change.value?.messages ?? []) {
-        const base = { from: m.from, waMessageId: m.id };
+        // ── DAT-38 · LA HORA DEL MENSAJE ES LA DE META, NO LA NUESTRA ──────
+        //
+        // Meta manda `timestamp` (UNIX en segundos) en cada mensaje y aquí se
+        // tiraba. La diferencia no es cosmética: entre que el chofer aprieta
+        // enviar y que este código corre pueden pasar los reintentos de Meta,
+        // el aplazamiento del rate limit y hasta cinco minutos de la bandeja
+        // durable. Los hitos del viaje («llegué», «descargando», «de regreso»)
+        // se sellaban con `new Date()` — la hora de PROCESAMIENTO— y el acuse
+        // le decía al chofer «anotado: llegaste a las 14:32» sobre una hora que
+        // él no vivió. Es un dato de operación que la flota va a cruzar contra
+        // la bitácora del cliente.
+        //
+        // Se valida antes de creerle: un `timestamp` que no es un número
+        // razonable no puede sustituir a un reloj que sí funciona.
+        const ts = Number(m.timestamp);
+        const timestampMs = Number.isFinite(ts) && ts > 0 ? ts * 1000 : undefined;
+        const base = { from: m.from, waMessageId: m.id, timestampMs };
         if (m.type === 'text' && m.text) out.push({ ...base, type: 'text', text: m.text.body });
         // El caption viaja como `text` del mensaje de imagen: `InboundMessage`
         // ya tiene el campo y el processor decide con él (POD/talacha, F4).

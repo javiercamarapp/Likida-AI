@@ -27,7 +27,7 @@ import { ESTADOS_GEO, VIEWBOX_ESTADOS, type EstadoGeo } from './mexico-estados-g
 import {
   COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, TAMANOS, type DatosMapa, type Giro, type ProspectoMapa, type Tamano,
 } from '@/lib/admin/prospectos-mapa';
-import { fechaHoraMx, numero } from '@/lib/formato';
+import { fechaHoraMx, numero, hoyMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';
 import { useCountUp } from '../ui/use-count-up';
@@ -374,7 +374,9 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     const blob = new Blob([csvDe(ordenar(filtrados))], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `cerebro-prospectos-${new Date().toISOString().slice(0, 10)}.csv`;
+    // El día de México: descargado a las 19:00 el archivo se llamaba con la
+    // fecha de mañana, y el orden por nombre de dos exports seguidos mentía.
+    a.download = `cerebro-prospectos-${hoyMx()}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   };

@@ -3,7 +3,8 @@ import { logger } from '@/lib/logger';
 import { traerTodo, traerPorIds, conteo } from '../pg';
 import { avisarCorridasPorFlota } from './notificaciones';
 import { registrarCorrida } from './corridas';
-import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
+import { enviarTexto, sendTemplate, motivoDeFalloWhatsApp, esReintentableMeta } from '@/lib/meta/client';
+import { alertarOperador } from '@/lib/observability/alerta';
 import {
   CONFIG_COBRANZA_DEFAULT, validarConfigCobranza, dentroDeVentana,
   tierPendiente, armarMensajeCobranza, type ConfigCobranza,
@@ -190,7 +191,18 @@ export interface ResultadoCobranza {
   /** Cuántos quedaron SIN intentar porque el reloj de la corrida se agotó —
    *  se dicen, no se pierden: la siguiente corrida los levanta. */
   cortadosPorReloj: number;
+  /** Contactos que Meta rechazó por un motivo REINTENTABLE (RES-1) y cuyo
+   *  claim se BORRÓ: el tier queda libre para la corrida siguiente. */
+  rechazosReintentables?: number;
+  /** WhatsApp rechazó tantos seguidos que la corrida se detuvo (RES-1). La
+   *  corrida global lo lee para no seguir quemando flotas contra una pared. */
+  rechazoMasivo?: boolean;
 }
+
+/** Rechazos reintentables SEGUIDOS que detienen la corrida (RES-1). Un solo
+ *  número de WhatsApp atiende a todas las flotas: cinco seguidos no son cinco
+ *  teléfonos malos, es la cuenta limitada o bloqueada. */
+export const TOPE_RECHAZOS_META_COBRANZA = 5;
 
 /**
  * Corre la cobranza de UNA flota. `ignorarVentana` es para el botón
@@ -238,7 +250,9 @@ export async function ejecutarCobranza(
     sinTelefono: cola.sinTelefono.length,
     fallos: [],
     cortadosPorReloj: 0,
+    rechazosReintentables: 0,
   };
+  let rechazosSeguidos = 0;
 
   // Los sin teléfono TAMBIÉN quedan en bitácora (enviado=false, con el
   // motivo): la página los enseña y el tier no se reintenta cada corrida.
@@ -273,10 +287,14 @@ export async function ejecutarCobranza(
 
     let enviado = false;
     let detalle: string | null = null;
+    /** RES-1: el rechazo fue "vuelve más tarde" y el tier NO debe consumirse. */
+    let reintentable = false;
     try {
-      // sendText devuelve el id del mensaje de Meta, o null si rechazó.
-      const idMensaje = await sendText(v.operadorTelefono as string, armarMensajeCobranza(v.folio, v.dias, config));
-      enviado = idMensaje !== null;
+      // `enviarTexto` (RES-1): el mismo envío que `sendText`, con el código de
+      // Meta — que es lo único que distingue "este teléfono no sirve" de "vas
+      // demasiado rápido", y de eso depende si el tier se quema o no.
+      const envio = await enviarTexto(v.operadorTelefono as string, armarMensajeCobranza(v.folio, v.dias, config));
+      enviado = envio.ok;
       if (!enviado) {
         // LA PLANTILLA CUANDO EL TEXTO NO PUEDE SALIR (auditoría 3, AG-A2).
         // La población objetivo de este agente es el chofer que lleva DÍAS
@@ -298,11 +316,45 @@ export async function ejecutarCobranza(
           detalle = 'plantilla recordatorio_cierre (ventana de 24 h cerrada)';
         } else {
           detalle = `WhatsApp rechazó el texto libre y la plantilla también falló: ${motivoDeFalloWhatsApp(env.error, env.codigo)}`;
+          // ── RES-1: UN 429 NO ES UN TIER GASTADO ────────────────────────
+          // El claim es el INSERT con unique(viaje, tier): si se queda ahí
+          // ante un rate limit, ese tier NO SE REINTENTA NUNCA (`tierPendiente`
+          // lo cuenta como contacto hecho) y el chofer se queda sin uno de sus
+          // tres avisos sin que nadie haya podido mandárselo.
+          reintentable = esReintentableMeta(env.codigo) || esReintentableMeta(undefined, (envio as { status?: number }).status);
         }
       }
     } catch (e) {
       detalle = e instanceof Error ? e.message : 'error inesperado al enviar';
     }
+
+    if (reintentable) {
+      // El claim se BORRA: el unique queda libre y la corrida siguiente
+      // vuelve a intentar este mismo tier, entero.
+      await admin.from('cobranza_contacto')
+        .delete()
+        .eq('tenant_id', tenantId).eq('viaje_id', v.viajeId).eq('tier', v.tier)
+        .then(({ error }) => {
+          if (error) logger.error('cobranza.claim_no_liberado', { viaje: v.viajeId, err: error.message });
+        });
+      r.rechazosReintentables = (r.rechazosReintentables ?? 0) + 1;
+      rechazosSeguidos++;
+      r.fallos.push(`${v.folio ?? v.viajeId}: ${detalle} (se reintenta en la siguiente corrida)`);
+      logger.warn('cobranza.rechazo_reintentable', { tenantId, viaje: v.viajeId, tier: v.tier });
+      if (rechazosSeguidos >= TOPE_RECHAZOS_META_COBRANZA) {
+        r.rechazoMasivo = true;
+        r.cortadosPorReloj = cola.paraContactar.length - (r.contactados + r.fallos.length);
+        logger.error('cobranza.rechazo_masivo', { tenantId, rechazosSeguidos });
+        await alertarOperador('wa.rechazo_masivo', {
+          error: `WhatsApp rechazó ${rechazosSeguidos} cobranzas seguidas por un motivo reintentable (rate limit o bloqueo). La corrida se detuvo; los tiers quedaron sin consumir.`,
+          codigo: 'wa_rechazo_masivo',
+        });
+        break;
+      }
+      continue;
+    }
+
+    rechazosSeguidos = 0;
     if (enviado) r.contactados++;
     else r.fallos.push(`${v.folio ?? v.viajeId}: ${detalle}`);
 
@@ -337,7 +389,28 @@ export async function ejecutarCobranza(
  *  el resto es margen para la escalación que corre antes y el arranque. */
 export const PLAZO_COBRANZA_GLOBAL_MS = 90_000;
 
-export async function ejecutarCobranzaGlobal(ahora: Date = new Date()): Promise<{ tenants: number; contactados: number; cortadosPorReloj: number; fallos: string[] }> {
+/** Nadie puede llevarse más de la mitad del reloj de la corrida: sin este
+ *  piso, una flota grande consumía los 90 s y las demás no existían (ESC-4). */
+export const TOPE_POR_FLOTA_MS = 30_000;
+
+/**
+ * Rota el punto de arranque de la lista SEGÚN LA HORA (ESC-4 / RES-6).
+ *
+ * El orden salía de `[...new Set(...)]` sobre una consulta ordenada por `id`:
+ * determinista, o sea que las mismas flotas iban SIEMPRE primero y las de la
+ * cola del alfabeto no se cobraban jamás en cuanto el reloj empezaba a cortar.
+ * Rotar por hora reparte el privilegio: cada corrida arranca donde la anterior
+ * se quedaría, y en un día todas encabezan la lista varias veces. Es
+ * determinista dentro de la hora (dos corridas de la misma hora hacen lo mismo)
+ * y no depende de guardar estado en ningún lado.
+ */
+export function rotarPorHora<T>(lista: readonly T[], ahora: Date): T[] {
+  if (lista.length === 0) return [];
+  const desde = ahora.getUTCHours() % lista.length;
+  return [...lista.slice(desde), ...lista.slice(0, desde)];
+}
+
+export async function ejecutarCobranzaGlobal(ahora: Date = new Date(), opts: { venceEn?: number } = {}): Promise<{ tenants: number; contactados: number; cortadosPorReloj: number; fallos: string[]; rechazoMasivo?: boolean }> {
   // `traerTodo` y no el `.limit(1000)` que vivía aquí — que estaba EXACTAMENTE
   // en el tope de PostgREST, donde "hay 1,000" y "hay 90,000" son
   // indistinguibles (auditoría de escala 15k). Un solo cliente de 500
@@ -353,15 +426,18 @@ export async function ejecutarCobranzaGlobal(ahora: Date = new Date()): Promise<
       .order('id').range(d, h),
     'ejecutarCobranzaGlobal',
   );
-  const tenants = [...new Set(data.map((v) => v.tenant_id as string))];
+  // Orden estable (por id) y DESPUÉS rotado por hora: ver `rotarPorHora`.
+  const tenants = rotarPorHora([...new Set(data.map((v) => v.tenant_id as string))].sort(), ahora);
 
   // Un solo vencimiento para TODA la corrida (auditoría 3, REND-C2): a 750
   // camiones los envíos seriales nunca cabían en el maxDuration y el proceso
   // moría a la mitad, con claims consumidos. Ahora corta limpio, dice
   // cuántos quedaron, y la corrida de la siguiente hora los levanta.
-  const venceEn = Date.now() + PLAZO_COBRANZA_GLOBAL_MS;
+  // El vencimiento lo puede imponer el llamador (el cron le da lo que le
+  // quedó después de la escalación, ESC-3); si no, los 90 s de siempre.
+  const venceEn = opts.venceEn ?? Date.now() + PLAZO_COBRANZA_GLOBAL_MS;
 
-  const total = { tenants: tenants.length, contactados: 0, cortadosPorReloj: 0, fallos: [] as string[] };
+  const total = { tenants: tenants.length, contactados: 0, cortadosPorReloj: 0, fallos: [] as string[], rechazoMasivo: false };
   // Cómo le fue a CADA flota que sí alcanzó turno. El aviso se manda al final
   // y no aquí adentro por el reloj: los 90s están presupuestados para los
   // envíos de WhatsApp, y meter una escritura de notificación por flota dentro
@@ -379,10 +455,28 @@ export async function ejecutarCobranzaGlobal(ahora: Date = new Date()): Promise<
     }
     const inicioFlota = new Date();
     try {
-      const r = await ejecutarCobranza(t, ahora, { venceEn });
+      // ── PRESUPUESTO POR FLOTA (ESC-4 / RES-6) ──────────────────────────
+      // El reloj era UNO solo para toda la corrida, así que la primera flota
+      // podía consumirlo entero y las demás no llegaban ni a leer su cola. Se
+      // reparte lo que queda entre las que faltan, con un techo por flota: la
+      // grande avanza lo suyo cada hora y las chicas nunca se quedan sin turno.
+      const faltan = tenants.length - tenants.indexOf(t);
+      const restante = venceEn - Date.now();
+      const venceFlota = Date.now() + Math.min(TOPE_POR_FLOTA_MS, Math.max(5_000, Math.floor(restante / faltan)));
+      const r = await ejecutarCobranza(t, ahora, { venceEn: Math.min(venceEn, venceFlota) });
       total.contactados += r.contactados;
       total.cortadosPorReloj += r.cortadosPorReloj;
       total.fallos.push(...r.fallos);
+      // RES-1: si WhatsApp está rechazando en masa, el problema no es de esta
+      // flota — es del número que atiende a todas. Se para la corrida entera.
+      if (r.rechazoMasivo) {
+        total.rechazoMasivo = true;
+        total.cortadosPorReloj += tenants.length - tenants.indexOf(t) - 1;
+        logger.error('cobranza.global_corte_por_rechazo', { tenantsSinCorrer: tenants.length - tenants.indexOf(t) - 1 });
+        corridas.set(t, null);
+        paraBitacora.push({ tenant: t, inicio: inicioFlota, fin: new Date(), contactados: r.contactados, fallos: r.fallos.length });
+        break;
+      }
       corridas.set(t, null);
       paraBitacora.push({ tenant: t, inicio: inicioFlota, fin: new Date(), contactados: r.contactados, fallos: r.fallos.length });
     } catch (e) {

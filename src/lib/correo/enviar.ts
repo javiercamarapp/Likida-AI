@@ -26,6 +26,21 @@ import { LOGO_PNG_BASE64, LOGO_CID, LOGO_NOMBRE } from './logo';
 
 const API = 'https://api.resend.com/emails';
 
+/**
+ * Tope de la llamada a Resend (auditoría prod 22-ago-2026, RES-5).
+ *
+ * Este `fetch` no tenía señal, así que heredaba el default de undici —300 s—
+ * y SE ESPERA en caminos que tienen 120: el `after()` del webhook y los crons
+ * lo llaman a través de `alertarOperador`/`interruptores.ts`. O sea: el canal
+ * que existe para AVISAR de una avería podía ser el que se llevara la
+ * invocación entera, y con ella el trabajo que sí se había hecho.
+ *
+ * Cinco segundos: la API de Resend contesta en decenas de ms; 5 s ya es "está
+ * caído", no "está lento". Un correo que no sale cuesta un aviso; una
+ * invocación colgada cuesta la liquidación.
+ */
+export const TIMEOUT_CORREO_MS = Number(process.env.LIKIDA_TIMEOUT_CORREO_MS) || 5_000;
+
 export type ResultadoEnvio =
   | { ok: true; id: string }
   /** No hay llave: no es un error, es que no está encendido. */
@@ -119,6 +134,7 @@ export async function enviarCorreo(
           content_disposition: 'inline',
         }],
       }),
+      signal: AbortSignal.timeout(TIMEOUT_CORREO_MS),
     });
 
     if (!r.ok) {
@@ -134,10 +150,13 @@ export async function enviarCorreo(
     const json = (await r.json().catch(() => null)) as { id?: string } | null;
     return { ok: true, id: json?.id ?? '' };
   } catch (e) {
-    // Red caída o DNS: el aviso se pierde, pero la corrida del agente que lo
-    // generó NO se cae con él.
+    // Red caída, DNS o TOPE AGOTADO: el aviso se pierde, pero la corrida del
+    // agente que lo generó NO se cae con él. El timeout entra por aquí a
+    // propósito (un `TimeoutError` de `AbortSignal.timeout`): para el llamador
+    // es el mismo hecho que un DNS muerto —el correo no salió— y merece el
+    // mismo trato, con el motivo en el log para distinguirlos.
     const detalle = e instanceof Error ? e.message : String(e);
-    logger.error('correo.red', { detalle, asunto: correo.asunto });
+    logger.error('correo.red', { detalle, asunto: correo.asunto, topeMs: TIMEOUT_CORREO_MS });
     return { ok: false, motivo: 'red', detalle };
   }
 }
