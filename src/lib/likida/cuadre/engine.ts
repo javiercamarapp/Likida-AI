@@ -122,6 +122,45 @@ export type Cubeta = 'deducible' | 'no_deducible' | 'por_confirmar';
 export const MEDIOS_LISR_27_III = ['02', '03', '04', '05', '28', '29'] as const;
 /** '99 Por definir' = la contraprestación no se ha pagado (RMF 2.7.1.29 fr. II). */
 export const FORMA_PAGO_SIN_PAGAR = '99';
+
+/**
+ * ¿Este pago de COMBUSTIBLE se hizo con «un medio distinto» a los que la LISR
+ * 27-III admite? Si sí, entra al cubo del 15% de la RFA 2026 regla 2.9.
+ *
+ * AUDITORÍA 18-c3, FISC-C3-1 (CRÍTICO). La norma
+ * (`normas/rfa-2026-2.9.yaml`, verificado_fuente_primaria) define el cubo por
+ * EXCLUSIÓN: «cuando los pagos por consumo de combustible se realicen con
+ * medios distintos a cheque nominativo…; tarjeta de crédito, de débito o de
+ * servicios; o monederos electrónicos autorizados por el SAT». La regla del
+ * motor leía `formaPago === '01'`, o sea UN valor, y `'06' Dinero
+ * electrónico`, `'08' Vales`, `'12' Dación en pago`, `'17' Compensación` y
+ * `'23' Novación` salían «Deducible para ISR» en verde con su IVA acreditado.
+ *
+ * Dos fronteras que este predicado sostiene a propósito:
+ *
+ * - **Sin `formaPago` devuelve `false`.** Desconocido no es «medio distinto»:
+ *   suponerlo inflaría el no-deducible contra la flota. Mismo estándar que
+ *   `causasDe` en `fiscal.ts` y que `getAcumuladoCombustible` en `repo.ts`.
+ * - **`'99'` devuelve `false`.** No es un medio distinto: es que NO se pagó
+ *   (RMF 2.7.1.29 fr. II). Ese caso lo juzga la regla de pago efectivo, no
+ *   esta — y hoy no lo juzga nadie para efectos de ISR: queda anotado como
+ *   hallazgo abierto en `docs/auditoria-18/fiscal-c3.md`, no se resuelve aquí.
+ */
+export function medioNoAdmitidoCombustible(formaPago: string | null | undefined): boolean {
+  if (!formaPago) return false;
+  if (formaPago === FORMA_PAGO_SIN_PAGAR) return false;
+  return !(MEDIOS_LISR_27_III as readonly string[]).includes(formaPago);
+}
+
+/**
+ * Cómo se nombra el medio de pago en la nota que lee el contralor. Un rótulo
+ * tiene que ser verdad: con `'06'` la nota no puede decir «EFECTIVO».
+ */
+function comoSePago(formaPago: string | null | undefined): string {
+  return formaPago === '01'
+    ? 'pagado en EFECTIVO'
+    : `pagado con la forma de pago «${formaPago}», que no es de las que la LISR 27-III admite para combustible`;
+}
 /**
  * Medios que cuentan como "sistema electrónico de pago" para el estímulo de
  * PEAJE. `normas/rmf-2026-9.1.8.yaml` fr. III (verificado_fuente_primaria):
@@ -189,8 +228,8 @@ export const LECTURA_RFA_29_PRORRATEO =
   'la lectura literal del "siempre que" de la regla 2.9 negaría la facilidad a TODO el combustible en efectivo ' +
   'del ejercicio — confírmela con su contador.';
 
-const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
-const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'consumo_bar'];
+export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
+export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'consumo_bar'];
 
 /**
  * LA ÚNICA definición de en qué cubeta cae un gasto. Vive aquí, exportada, para
@@ -416,8 +455,10 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     //
     // En ningún caso acredita IEPS (la facilidad salva UN beneficio, no dos).
     const topeEfectivo = input.estimulos?.efectivoTopeMxn ?? 2000;
-    if (g.formaPago === '01' && esCombustible) {
+    if (medioNoAdmitidoCombustible(g.formaPago) && esCombustible) {
       const etiqueta = etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined);
+      // El rótulo tiene que ser verdad: «EFECTIVO» solo cuando lo fue.
+      const medio = comoSePago(g.formaPago);
       const elegible = input.facilidad15;
       if (elegible === true) {
         // AUDITORÍA 15, ALTO: fail-closed REAL — si el contador del ejercicio no
@@ -435,7 +476,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
             : `este comprobante es de ${anioComprobante} y la facilidad se mide contra el ejercicio ${input.anioEjercicio} — se revisa aparte`;
           diferencias.push({
             tipo: 'combustible_efectivo', concepto: g.concepto, monto: 0,
-            nota: `${etiqueta} pagado en EFECTIVO — ${motivo}. No se afirma deducible ni no deducible; no acredita IEPS.`,
+            nota: `${etiqueta} ${medio} — ${motivo}. No se afirma deducible ni no deducible; no acredita IEPS.`,
             gastoId: g.id,
           });
           continue;
@@ -462,26 +503,26 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
           const pct = total > 0 ? Math.round((acumulado / total) * 100) : 0;
           diferencias.push({
             tipo: 'combustible_efectivo_dentro15', concepto: g.concepto, monto: 0,
-            nota: `${etiqueta} pagado en EFECTIVO — deducible por la facilidad del 15% (RFA 2026 regla 2.9): el ejercicio lleva ${mxn(acumulado)} de ${mxn(total)} de combustible en efectivo (${pct}% del total, tope 15%). No acredita IEPS.`,
+            nota: `${etiqueta} ${medio} — deducible por la facilidad del 15% (RFA 2026 regla 2.9): el ejercicio lleva ${mxn(acumulado)} de ${mxn(total)} de combustible pagado con medios que la LISR 27-III no admite (${pct}% del total, tope 15%). No acredita IEPS.`,
             gastoId: g.id,
           });
         } else {
           diferencias.push({
             tipo: 'efectivo_sobre_15', concepto: g.concepto, monto: excedenteDeEste,
-            nota: `${etiqueta} pagado en EFECTIVO — el ejercicio lleva ${mxn(acumulado)} de combustible en efectivo contra un tope de ${mxn(tope)} (15% de ${mxn(total)}); el excedente de ${mxn(excedenteDeEste)} de ESTE comprobante NO se deduce (RFA 2026 regla 2.9). No acredita IEPS. ${LECTURA_RFA_29_PRORRATEO}`,
+            nota: `${etiqueta} ${medio} — el ejercicio lleva ${mxn(acumulado)} de combustible pagado con medios que la LISR 27-III no admite, contra un tope de ${mxn(tope)} (15% de ${mxn(total)}); el excedente de ${mxn(excedenteDeEste)} de ESTE comprobante NO se deduce (RFA 2026 regla 2.9). No acredita IEPS. ${LECTURA_RFA_29_PRORRATEO}`,
             gastoId: g.id,
           });
         }
       } else if (elegible === false) {
         diferencias.push({
           tipo: 'efectivo_no_elegible', concepto: g.concepto, monto: g.monto,
-          nota: `${etiqueta} pagado en EFECTIVO — la flota declaró que NO califica a la facilidad del 15% (dedicación exclusiva o régimen), así que el combustible exige pago electrónico (LISR 27-III) — no deducible.`,
+          nota: `${etiqueta} ${medio} — la flota declaró que NO califica a la facilidad del 15% (dedicación exclusiva o régimen), así que el combustible exige uno de los medios de la LISR 27-III (cheque nominativo, tarjeta de crédito/débito/servicios o monedero autorizado) — no deducible.`,
           gastoId: g.id,
         });
       } else {
         diferencias.push({
           tipo: 'combustible_efectivo', concepto: g.concepto, monto: 0,
-          nota: `${etiqueta} pagado en EFECTIVO — la facilidad del 15% (RFA 2026 regla 2.9) exige que la flota declare su dedicación y régimen al registrarla; sin esa declaración esto se revisa. No acredita IEPS.`,
+          nota: `${etiqueta} ${medio} — la facilidad del 15% (RFA 2026 regla 2.9) exige que la flota declare su dedicación y régimen al registrarla; sin esa declaración esto se revisa. No acredita IEPS.`,
           gastoId: g.id,
         });
       }
