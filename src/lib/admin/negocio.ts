@@ -36,12 +36,29 @@
 // la red UNA fila. Es CROSS-TENANT a propósito y revocada a anon/authenticated
 // — ver la cabecera de la migración antes de copiar el molde a otro lado.
 //
+// Y CON CACHÉ DE 60 SEGUNDOS DESDE EL 22-AGO-2026 (ESC-10). Agregar en SQL
+// bajó el payload, no el número de veces que se agrega: las ~17 páginas de
+// /admin llaman a `getResumenNegocio` en CADA carga, y cada llamada dispara
+// los dos recorridos completos (`llm_costo` y `viaje`+`gasto`). Navegar entre
+// cinco pantallas de la consola son diez agregaciones de la base entera para
+// enseñar cifras que no cambiaron en ese minuto.
+//
+// SE CACHEAN LAS DOS RPC, NO EL CATÁLOGO DE FLOTAS, y la distinción es de
+// producto: `llm_costo`, `viaje` y `gasto` los escribe el pipeline (nadie los
+// edita desde /admin), así que un minuto de retraso en esas cifras no
+// contradice a nadie. `tenant` SÍ se edita desde la consola —dar de alta una
+// flota, cambiar su plan, declarar la facilidad del 15%— y ahí un minuto de
+// caché haría que el `revalidatePath` de la acción se viera no hacer nada.
+// Por eso esa lectura sigue en vivo: la flota nueva aparece en el acto, con
+// sus cifras en cero, que es la verdad.
+//
 // Toda consulta de este archivo va envuelta en `acotada()` (presupuesto.ts):
 // la consola no tiene el presupuesto del webhook, pero un `Promise.all` de
 // dieciséis lecturas sin techo colgado en una sola es toda la página en blanco.
 // `acotada_guardiana.test.ts` lo exige archivo por archivo.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { unstable_cache } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, traerTodo } from '@/lib/likida/pg';
 import { acotada } from '@/lib/likida/presupuesto';
@@ -50,6 +67,38 @@ import { round2, TZ_MX, hoyMx } from '@/lib/formato';
 // módulo de corridas (que carga supabaseAdmin/logger al importarse) — aquí
 // nada más se quiere el dominio del CHECK de la 0102 escrito una vez.
 import type { AgenteConCorridas, EstadoCorrida } from '@/lib/likida/agentes/corridas';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA CACHÉ DE LA CONSOLA (ESC-10)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Sesenta segundos: lo que tarda Javier en pasar de una pantalla de /admin a
+ * otra, y menos de lo que tarda cualquiera en notar que una cifra de gasto de
+ * IA no se movió. No es un número de rendimiento, es un número de producto —
+ * más arriba empezaría a contradecir al reloj del sidebar.
+ */
+export const SEGUNDOS_CACHE_CONSOLA = 60;
+
+/**
+ * `unstable_cache` cuando hay un Next debajo, y la función PELADA cuando no.
+ *
+ * El guard no es cosmético: fuera de una petición de Next, `unstable_cache`
+ * lanza `Invariant: incrementalCache missing` — o sea, importar este módulo
+ * desde una prueba (o desde un script) reventaría en la primera llamada. El
+ * mismo interruptor que usa `instrumentation.ts` (`process.env.NEXT_RUNTIME`,
+ * que Next sustituye en tiempo de build) distingue los dos mundos.
+ *
+ * Consecuencia declarada: en las pruebas NO hay caché, y es lo correcto —
+ * memorizar entre casos haría que el fixture del segundo `it` no se leyera.
+ */
+function conCacheDeConsola<A extends unknown[], R>(
+  fn: (...args: A) => Promise<R>,
+  llaves: string[],
+): (...args: A) => Promise<R> {
+  if (process.env.NEXT_RUNTIME !== 'nodejs') return fn;
+  return unstable_cache(fn, llaves, { revalidate: SEGUNDOS_CACHE_CONSOLA, tags: ['admin-consola'] });
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA AGREGACIÓN DE `llm_costo`, EN SQL
@@ -89,9 +138,9 @@ interface ResumenCostoIa {
  * pintaría un cero que nadie midió. Por eso se valida la FORMA antes de leerla:
  * el modo de fallo que importa aquí no es "se cayó", es "bajó sola".
  */
-async function traerResumenCostoIa(
-  desde: string | null = null,
-  hasta: string | null = null,
+async function leerResumenCostoIa(
+  desde: string | null,
+  hasta: string | null,
 ): Promise<ResumenCostoIa> {
   const { data, error } = await acotada(
     supabaseAdmin().rpc('resumen_costo_ia', { p_desde: desde, p_hasta: hasta }),
@@ -114,6 +163,21 @@ async function traerResumenCostoIa(
     );
   }
   return r as ResumenCostoIa;
+}
+
+const resumenCostoIaCacheado = conCacheDeConsola(leerResumenCostoIa, ['admin', 'resumen_costo_ia']);
+
+/**
+ * La misma lectura, con 60 s de caché. El wrapper conserva los defaults a
+ * propósito: `unstable_cache` mete los argumentos en la llave, y llamarla
+ * unas veces con `()` y otras con `(null, null)` guardaría DOS entradas con
+ * el mismo contenido — dos recorridos de `llm_costo` en vez de uno.
+ */
+async function traerResumenCostoIa(
+  desde: string | null = null,
+  hasta: string | null = null,
+): Promise<ResumenCostoIa> {
+  return resumenCostoIaCacheado(desde, hasta);
 }
 
 /**
@@ -140,7 +204,7 @@ const esConteo = (v: unknown): v is number => typeof v === 'number' && Number.is
  * entero), también: un `?? 0` aquí pintaría "0 viajes procesados" como si
  * alguien los hubiera contado.
  */
-async function traerResumenNegocio(desde: string | null): Promise<ResumenNegocioSql> {
+async function leerResumenNegocio(desde: string | null): Promise<ResumenNegocioSql> {
   const { data, error } = await acotada(
     supabaseAdmin().rpc('resumen_negocio', { p_desde: desde }),
     'resumen_negocio',
@@ -159,6 +223,9 @@ async function traerResumenNegocio(desde: string | null): Promise<ResumenNegocio
   }
   return r as ResumenNegocioSql;
 }
+
+/** Misma lectura, 60 s de caché (ESC-10). Ver `conCacheDeConsola`. */
+const traerResumenNegocio = conCacheDeConsola(leerResumenNegocio, ['admin', 'resumen_negocio']);
 
 /**
  * El costo de IA del MES EN CURSO (mes de México) — alimenta el widget de
