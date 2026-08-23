@@ -44,7 +44,7 @@ vi.mock('@/lib/likida/conv', async (original) => ({
   loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
   saveConversation: vi.fn(),
   claimMessage: vi.fn(async () => 'nuevo' as const),
-  acquireViajeLock: vi.fn(async () => true), releaseViajeLock: vi.fn(),
+  acquireViajeLock: vi.fn(async () => true), intentarLockViaje: vi.fn(async () => 'obtenido' as const), releaseViajeLock: vi.fn(),
   releaseMessageClaim: vi.fn(),
   // ATÓMICO, como el de verdad: `+1` sube y `-1` baja. Devolver `1` siempre
   // —que es lo que había— modela un contador que NUNCA vuelve a 0, y con eso
