@@ -2,7 +2,10 @@ import { Truck, ShieldAlert, ShieldCheck, Clock, CircleDashed, Wrench } from 'lu
 import type { UnidadRow, UnidadCruda } from '@/lib/likida/operacion';
 import { clasificarVigencia, contarVigencias, avisoVigencias, type EstadoVigencia } from '@/lib/likida/vigencias';
 import { numero } from '@/lib/formato';
+import Link from 'next/link';
 import { EstadoVacio } from '@/app/admin/ui/kit';
+import { paginarRegistro, urlRegistro, type ParamsRegistro } from '../paginar-registro';
+import { FiltroRegistro } from '../registro-filtro';
 import { BarraPagina } from '../resumen-visual';
 // El Plegable es el mismo `<details>` de clientes — no hay una segunda
 // librería de UI, y un plegable propio sería su segunda copia.
@@ -62,11 +65,27 @@ const INICIAL_VACIO: UnidadCruda = {
   polizaVence: '', permisoSictVence: '', verificacionVence: '',
 };
 
-export function VistaUnidades({ unidades, puedeEditar, guardar }: {
+/**
+ * FE-12 (22-ago-2026): esta vista pintaba TODAS las unidades activas y, por
+ * cada una, un `<FormaUnidad>` completo dentro de un `<details>`. Con 5,000
+ * unidades eso son 5,000 formularios —ocho `<input>` cada uno— en el HTML de
+ * una pantalla donde se edita UNA: megabytes servidos para nada, sin búsqueda
+ * ni páginas por las que navegar.
+ *
+ * Ahora: `?q=` y `?p=` acotan lo que se pinta (`paginarRegistro`), y la forma
+ * de edición existe SOLO para la fila que `?editar=<id>` nombra. Las demás
+ * llevan un link — que es lo que un `<details>` cerrado siempre debió ser.
+ */
+export function VistaUnidades({ unidades, puedeEditar, guardar, sp, sufijo, camposOcultos }: {
   unidades: readonly UnidadRow[];
   /** Si se PINTA la captura. La puerta real vive dentro del server action. */
   puedeEditar: boolean;
   guardar: AccionForma;
+  /** `?q=`/`?p=`/`?editar=` ya leídos por la página. */
+  sp: ParamsRegistro;
+  /** `?tenant=`/`?vista=`/`?rol=` del superadmin. */
+  sufijo: string;
+  camposOcultos: Array<[string, string]>;
 }) {
   const activas = unidades.filter((u) => u.activo);
   const conteo = contarVigencias(activas);
@@ -83,6 +102,16 @@ export function VistaUnidades({ unidades, puedeEditar, guardar }: {
     // Dentro del mismo estado, lo más urgente primero.
     return (a.diasAlVencimiento ?? 1e9) - (b.diasAlVencimiento ?? 1e9);
   });
+
+  // FE-12: qué se pinta. El orden de arriba (lo vencido primero) se conserva
+  // dentro de la página; la búsqueda cubre económico, placas, marca y modelo,
+  // que es como un jefe de tráfico llama a una unidad.
+  const pag = paginarRegistro(
+    ordenadas,
+    (u) => [u.numeroEconomico, u.placas, u.marca, u.modelo].filter(Boolean).join(' '),
+    sp,
+    (u) => u.id,
+  );
 
   return (
     <main className="h-full">
@@ -143,7 +172,16 @@ export function VistaUnidades({ unidades, puedeEditar, guardar }: {
                 ))}
               </div>
 
-              {ordenadas.map((u) => {
+              <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
+                sustantivo="unidades" camposOcultos={camposOcultos} />
+
+              {pag.filas.length === 0 && (
+                <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+                  Ninguna unidad coincide con «{pag.q}».
+                </p>
+              )}
+
+              {pag.filas.map((u) => {
                 const v = clasificarVigencia(u.diasAlVencimiento, u.queVence);
                 const p = PILL[v.estado];
                 return (
@@ -187,12 +225,26 @@ export function VistaUnidades({ unidades, puedeEditar, guardar }: {
                           )}
                         </div>
 
+                        {/* UNA forma de edición por página, la de `?editar=`.
+                            Antes cada fila traía la suya plegada: 5,000
+                            formularios servidos para escribir en uno. */}
                         {puedeEditar && (
-                          <div className="mt-3">
-                            <Plegable resumen="Editar unidad">
+                          pag.editando === u.id ? (
+                            <div className="mt-3">
                               <FormaUnidad accion={guardar} id={u.id} inicial={aInicial(u)} idPrefijo={`u-${u.id}`} />
-                            </Plegable>
-                          </div>
+                              <Link href={urlRegistro('/dashboard/unidades', sufijo, { q: pag.q || null, p: pag.pagina, editar: null })}
+                                className="inline-block mt-2 text-[12px] underline hover:opacity-70 transition-opacity"
+                                style={{ color: 'var(--muted)' }}>
+                                Cerrar
+                              </Link>
+                            </div>
+                          ) : (
+                            <Link href={urlRegistro('/dashboard/unidades', sufijo, { q: pag.q || null, p: pag.pagina, editar: u.id })}
+                              className="inline-block mt-3 text-[12px] underline hover:opacity-70 transition-opacity"
+                              style={{ color: 'var(--muted)' }}>
+                              Editar unidad
+                            </Link>
+                          )
                         )}
                       </div>
                     </div>
