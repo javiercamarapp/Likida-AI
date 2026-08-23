@@ -44,7 +44,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('./presupuesto', () => ({ acotada: (q: unknown) => q }));
 
-const { registrarPago, cancelarFactura } = await import('./facturacion_escritura');
+const { registrarPago, cancelarFactura, crearFactura, marcarEmitida } = await import('./facturacion_escritura');
 const { DatoInvalido } = await import('./errores');
 
 const T = 't-1';
@@ -178,5 +178,99 @@ describe('cancelarFactura — cuenta los pagos ANTES de cancelar', () => {
   it('un id que no es uuid se rechaza antes de tocar la base', async () => {
     await expect(cancelarFactura(T, 'x')).rejects.toThrow(DatoInvalido);
     expect(escrituras).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RES-22 (auditoría prod, mig. 0166) — LA SERIE LLEGA A LA BASE, Y EL CHOQUE
+// DE FOLIO DICE CONTRA QUÉ SE COMPARÓ.
+//
+// La validación pura (normalizar, rechazar) se prueba en
+// `facturacion_escritura.test.ts` y la garantía del índice contra Postgres en
+// el bloque 138 de `verificaciones.sql`. Lo que falta —y es justo lo que se
+// rompe callado— es el CABLEADO: que `serie` viaje en el INSERT (borrarla de
+// ahí dejaría la suite verde y todas las facturas sin serie en producción) y
+// que el 23505 se traduzca con la llave completa.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const CLIENTE = '11111111-2222-3333-4444-555555555555';
+const factura = (over: Record<string, unknown> = {}) => ({
+  clienteId: CLIENTE, fecha: '2026-01-02', subtotal: 10000, iva: 1600, total: 11600,
+  serie: 'A' as string | null, folio: '1' as string | null, cfdiUuid: null,
+  estatus: 'borrador' as const, viajeIds: [] as string[], ...over,
+});
+
+describe('crearFactura — la serie viaja con el folio (RES-22)', () => {
+  it('el INSERT lleva `serie`, y en NULL cuando la flota no usa series', async () => {
+    respuestas.set('cliente', [{ data: { id: CLIENTE, dias_credito: null }, error: null }]);
+    respuestas.set('factura_emitida', [{ data: { id: FACTURA }, error: null }]);
+    await crearFactura(T, factura({ serie: null }));
+    const ins = escribioEn('factura_emitida');
+    expect(ins).toHaveLength(1);
+    expect(ins[0].fila).toMatchObject({ serie: null, folio: '1', tenant_id: T });
+  });
+
+  it('y con serie la manda tal como se capturó', async () => {
+    respuestas.set('cliente', [{ data: { id: CLIENTE, dias_credito: null }, error: null }]);
+    respuestas.set('factura_emitida', [{ data: { id: FACTURA }, error: null }]);
+    await crearFactura(T, factura({ serie: 'A' }));
+    expect(escribioEn('factura_emitida')[0].fila).toMatchObject({ serie: 'A' });
+  });
+
+  it('el 23505 del consecutivo se cuenta con serie, folio y ejercicio', async () => {
+    respuestas.set('cliente', [{ data: { id: CLIENTE, dias_credito: null }, error: null }]);
+    respuestas.set('factura_emitida', [{
+      data: null,
+      error: { message: 'duplicate key value violates unique constraint "factura_folio_unico"' },
+    }]);
+    const err = await crearFactura(T, factura({ serie: 'A', folio: '1', fecha: '2026-01-02' })).catch((e) => e);
+    expect(err).toBeInstanceOf(DatoInvalido);
+    expect(err.message).toContain('serie «A»');
+    expect(err.message).toContain('ejercicio 2026');
+    expect(err.message).toContain('«1»');
+  });
+
+  it('el CHECK de la serie se traduce, no sale como error crudo de Postgres', async () => {
+    respuestas.set('cliente', [{ data: { id: CLIENTE, dias_credito: null }, error: null }]);
+    respuestas.set('factura_emitida', [{
+      data: null,
+      error: { message: 'new row violates check constraint "factura_serie_btrim"' },
+    }]);
+    const err = await crearFactura(T, factura()).catch((e) => e);
+    expect(err).toBeInstanceOf(DatoInvalido);
+    expect(err.message).toMatch(/serie no puede ir vacía/);
+  });
+});
+
+describe('marcarEmitida — la serie sólo se toca si de verdad viene', () => {
+  it('sin serie en el sello, el UPDATE no la nombra: no borra la del borrador', async () => {
+    respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);
+    await marcarEmitida(T, FACTURA, { folio: '1', cfdiUuid: FACTURA });
+    const upd = escribioEn('factura_emitida');
+    expect(upd).toHaveLength(1);
+    expect(Object.keys(upd[0].fila)).not.toContain('serie');
+  });
+
+  it('con serie en el sello, la escribe normalizada (el CFDI manda)', async () => {
+    respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);
+    await marcarEmitida(T, FACTURA, { serie: '  A  ', folio: '1', cfdiUuid: FACTURA });
+    expect(escribioEn('factura_emitida')[0].fila).toMatchObject({ serie: 'A' });
+  });
+
+  it('con serie vacía la BORRA a propósito: el CFDI se timbró sin serie', async () => {
+    respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);
+    await marcarEmitida(T, FACTURA, { serie: '', folio: '1', cfdiUuid: FACTURA });
+    expect(escribioEn('factura_emitida')[0].fila).toMatchObject({ serie: null });
+  });
+
+  it('el choque al sellar NO inventa el ejercicio: la fecha no viaja en el sello', async () => {
+    respuestas.set('factura_emitida', [{
+      data: null,
+      error: { message: 'duplicate key value violates unique constraint "factura_folio_unico"' },
+    }]);
+    const err = await marcarEmitida(T, FACTURA, { folio: '1', cfdiUuid: FACTURA }).catch((e) => e);
+    expect(err).toBeInstanceOf(DatoInvalido);
+    expect(err.message).toContain('ese mismo ejercicio');
+    expect(err.message).not.toMatch(/ejercicio \d{4}/);
   });
 });
