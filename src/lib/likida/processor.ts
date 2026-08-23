@@ -454,6 +454,38 @@ function pareceCierre(texto: string): boolean {
 }
 
 /**
+ * ¿EL OPERADOR PIDIÓ CERRAR EN ESTE TURNO? (DAT-22)
+ *
+ * `guardar_liquidacion` estaba disponible en TODOS los turnos del agente, y es
+ * la única acción irreversible del sistema: los triggers 0036/0037 bloquean
+ * después cualquier alta o corrección sobre ese viaje. El único freno era el
+ * del cierre EN CEROS, o sea que un viaje con comprobantes se podía cerrar en
+ * el turno de un "¿cuánto llevo?" —bastaba que el modelo se adelantara— y el
+ * operador se quedaba sin poder mandar el resto de su fajo.
+ *
+ * ── POR QUÉ ES MÁS ANCHO QUE `pareceCierre` ─────────────────────────────────
+ *
+ * `pareceCierre` es el freno del cierre en ceros y es ESTRECHO a propósito: se
+ * equivoca hacia no frenar. Éste decide si la tool existe, y equivocarse aquí
+ * hacia el "no" le impide cerrar a quien sí lo pidió con otras palabras
+ * ("mándame mi liquidación", "no traigo más tickets") — un chofer atrapado en
+ * un viaje que no puede cerrar. Por eso cubre las formas largas además de las
+ * del freno.
+ *
+ * Lo que SÍ deja fuera es todo lo demás: una consulta, un saludo, el caption de
+ * una foto, un hito. Que es exactamente el turno en el que el modelo no tiene
+ * ningún derecho a cerrar.
+ *
+ * El prompt del agente ya trabaja así ("CIERRA en ese turno... NO le pidas que
+ * vuelva a confirmar"), así que esto no parte ningún flujo de dos turnos.
+ */
+export function pidioCerrar(texto: string | undefined): boolean {
+  if (typeof texto !== 'string' || !texto.trim()) return false;
+  if (pareceCierre(texto)) return true;
+  return /liquidaci[óo]n|liquid[ae]|ci[ée]rr|cerrar|cerramos|cu[áa]dra|cuadrar|finaliz|termin[éeoó]|acab[éeoó]|ya estuvo|ya fue|(no|sin)\s+(traigo|tengo|me\s+falta|falta)\s*(m[áa]s|nada|otro|ninguno)?|[úu]ltimo\s+(ticket|comprobante|recibo)|es\s+todo/iu.test(texto);
+}
+
+/**
  * Los mandos de OFICINA que caben en un texto: talacha, despacho, asignación,
  * informe (PDF o texto) y —solo cuando se pide— la pregunta libre al analista.
  *
@@ -2604,6 +2636,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // candado real vive en `guardar_liquidacion` (QA 16-ago: una frase
           // que `pareceCierre` no reconoce esquivaba el freno de arriba).
           cierreEnCerosConfirmado: conv.cierreSinComprobantes === true,
+          // DAT-22: el cierre lo pide el OPERADOR, no el modelo. Sin esta marca
+          // `guardar_liquidacion` se niega: es la única acción irreversible del
+          // sistema y estaba disponible en todos los turnos.
+          cierrePedidoPorTexto: pidioCerrar(msg.text),
         },
         history,
         timeoutMs: reloj.acotar(40_000),

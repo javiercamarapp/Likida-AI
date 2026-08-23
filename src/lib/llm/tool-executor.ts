@@ -26,6 +26,21 @@ export interface ToolContext {
    */
   cierreEnCerosConfirmado?: boolean;
   /**
+   * EL OPERADOR PIDIÓ CERRAR EN ESTE TURNO (DAT-22).
+   *
+   * `guardar_liquidacion` estaba disponible en TODOS los turnos del agente, y
+   * es la única acción irreversible del sistema (los triggers 0036/0037
+   * bloquean después cualquier alta o corrección sobre ese viaje). El único
+   * freno era el del cierre EN CEROS, así que un viaje CON comprobantes se
+   * podía cerrar en el turno de un "¿cuánto llevo?" —bastaba que el modelo se
+   * adelantara— y el chofer se quedaba sin poder mandar el resto de su fajo.
+   *
+   * La marca la calcula el processor sobre el texto del turno (`pidioCerrar`),
+   * no el modelo: el punto es justamente que la decisión de cerrar no dependa
+   * de lo que el modelo interprete. Sin ella la tool LANZA.
+   */
+  cierrePedidoPorTexto?: boolean;
+  /**
    * BAJO (auditoría 10, reincidente, sin resolver A PROPÓSITO). `run.ts` crea
    * un `AbortController` con `timeoutMs` y lo pasa aquí, pero NINGÚN handler de
    * `tools.ts` lo lee — ni `ctx.signal.throwIfAborted()` ni pasarlo a una
