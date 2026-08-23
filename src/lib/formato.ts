@@ -48,6 +48,42 @@ export function hoyMx(fecha: Date = new Date()): string {
 }
 
 /**
+ * El desfase fijo de México contra UTC, para armar un instante a partir de un
+ * día de calendario. Va en horas enteras y NO cambia en todo el año: México
+ * dejó el horario de verano en 2022 (por eso `TZ_MX` puede tratarse como
+ * UTC−6 sin ramas). Vive aquí, junto a `TZ_MX`, porque un `-06:00` tecleado
+ * en cada consulta es la misma clase de copia que ya divergió con `mxn()`.
+ */
+const OFFSET_MX = '-06:00';
+
+/**
+ * El PRIMER instante de un día de México, en ISO con offset:
+ * `'2026-12-31'` → `'2026-12-31T00:00:00-06:00'`.
+ *
+ * AUDITORÍA PROD, DAT-08/DAT-23 — el corte de una ventana se armaba con
+ * `${dia}T00:00:00Z`, que es la MEDIANOCHE DE LONDRES: las 18:00 del día
+ * ANTERIOR en México. Todo lo capturado entre las 18:00 y las 24:00 caía del
+ * lado equivocado del filtro, y el 31 de diciembre eso significa cifras del
+ * ejercicio fiscal que no es.
+ */
+export function inicioDiaMx(dia: string): string {
+  return `${dia}T00:00:00${OFFSET_MX}`;
+}
+
+/**
+ * El ÚLTIMO instante representable de un día de México:
+ * `'2026-12-31'` → `'2026-12-31T23:59:59.999-06:00'`.
+ *
+ * Para un `lte` inclusivo. Cuando el filtro admite media abierta es preferible
+ * `inicioDiaMx(díaSiguiente)` con `lt` —no deja el hueco del último
+ * milisegundo—, pero PostgREST no siempre permite reescribir el operador y
+ * este es el cierre que ya usaba el código, ahora en la zona correcta.
+ */
+export function finDiaMx(dia: string): string {
+  return `${dia}T23:59:59.999${OFFSET_MX}`;
+}
+
+/**
  * Redondea a dos decimales (centavos) sin creerle a la coma flotante.
  *
  * AUDITORÍA 9, ALTO REINCIDENTE (arquitectura) — reimplementado a mano en
@@ -104,6 +140,55 @@ export function mxn(n: number): string {
  */
 export function usd(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' }).replace('$', 'US$');
+}
+
+/**
+ * Dólares con CUATRO decimales — el costo de una corrida de IA, no dinero del
+ * cliente.
+ *
+ * AUDITORÍA PROD, FE-22 — /admin/qa imprimía `US$${n.toFixed(4)}` a mano en
+ * CINCO sitios (el gasto del día, la fila de cada corrida, el total y cada
+ * paso de la corrida viva, el aviso del tope). `toFixed` NO pone separador de
+ * millares: en cuanto el gasto acumulado pasa de mil, "US$1234.5678" es la
+ * misma cifra escrita distinto que el "US$1,234.57" de la tarjeta de al lado
+ * —exactamente el hallazgo que `mxn()`/`litros()` ya pagaron tres rondas—.
+ *
+ * Cuatro decimales y no dos porque una llamada al modelo cuesta fracciones de
+ * centavo: `usd(0.0003)` daría "US$0.00", que se lee como "gratis".
+ */
+export function usd4(n: number): string {
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 4, maximumFractionDigits: 4 }).replace('$', 'US$');
+}
+
+/** El corte a partir del cual `mxnCompacto` abrevia. Por debajo, la cifra se
+ *  imprime COMPLETA: un contralor lee "$999,999.00" sin esfuerzo, y abreviar
+ *  antes solo esconde centavos que sí caben. */
+const COMPACTO_DESDE = 1_000_000;
+
+/**
+ * Pesos ABREVIADOS para una tarjeta angosta: `$9,000 M` en vez de
+ * `$9,000,000,000.00`.
+ *
+ * AUDITORÍA PROD, FE-17 — a escala 50k una tarjeta de KPI enseña miles de
+ * millones, y veinte caracteres no caben: el número se desbordaba o se
+ * recortaba, y un monto recortado ("$9,000,000,00…") es peor que uno
+ * abreviado, porque parece completo.
+ *
+ * ES UNA CIFRA REDONDEADA, y por eso solo se usa donde el rótulo lo admite —
+ * nunca en el PDF, ni en una liquidación, ni en nada que el contralor cruce
+ * contra su contabilidad. La regla del producto no prohíbe redondear: prohíbe
+ * INVENTAR. Debajo de un millón devuelve exactamente lo mismo que `mxn()`,
+ * así que las pantallas de una flota real no cambian ni un carácter.
+ *
+ * `useGrouping` explícito: con `notation: 'compact'` el default de es-MX
+ * imprime "$9000 M", sin la coma de los millares.
+ */
+export function mxnCompacto(n: number): string {
+  if (Math.abs(n) < COMPACTO_DESDE) return mxn(n);
+  return n.toLocaleString('es-MX', {
+    style: 'currency', currency: 'MXN',
+    notation: 'compact', maximumFractionDigits: 1, useGrouping: true,
+  });
 }
 
 /** Un entero con separador de millares, sin moneda ni unidad — tokens, conteos. */

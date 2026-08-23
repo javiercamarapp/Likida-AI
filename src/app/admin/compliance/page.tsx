@@ -5,7 +5,8 @@ import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { revalidatePath } from 'next/cache';
 import { resolverSolicitudArco } from '@/lib/likida/repo';
-import { fechaMx } from '@/lib/formato';
+import { fechaMx, hoyMx } from '@/lib/formato';
+import { ahoraMs } from '@/lib/saludo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { traerTodo, conteo } from '@/lib/likida/pg';
 import { getSolicitudesArcoPendientes } from '@/lib/admin/escalaciones';
@@ -186,6 +187,10 @@ async function datosDeCompliance(): Promise<{ solicitudes: SolicitudArcoPanel[];
     operadorNombre: ((f.operador as { nombre?: string } | null)?.nombre) ?? null,
     flotaNombre: ((f.flota as { nombre?: string } | null)?.nombre) ?? '—',
   }));
-  const vence = pendientes.filter((p) => p.venceEn <= new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10)).length;
+  // DAT-08 (auditoría prod): el corte era el día UTC. De 18:00 a 24:00 hora de
+  // México el "dentro de 5 días" era en realidad dentro de 6, y el plazo del
+  // art. 31 de la LFPDPPP se cuenta en días de México.
+  const corte = hoyMx(new Date(ahoraMs() + 5 * 864e5));
+  const vence = pendientes.filter((p) => p.venceEn <= corte).length;
   return { solicitudes: mapeadas as SolicitudArcoPanel[], pendientesVencen: vence };
 }

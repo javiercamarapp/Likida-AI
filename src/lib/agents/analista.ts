@@ -24,7 +24,7 @@ import { toolSchemas, makeExecutor, registerTool, type ToolContext } from '@/lib
 import { getSystemPrompt } from './prompts';
 import { logger } from '@/lib/logger';
 import { ahoraMs } from '@/lib/saludo';
-import { TZ_MX } from '@/lib/formato';
+import { TZ_MX, hoyMx } from '@/lib/formato';
 import './chat-tools'; // registra las tools de lectura al importar
 
 // ── El contrato de bloques ──────────────────────────────────────────────────
@@ -341,7 +341,7 @@ export async function ejecutarAnalista(opts: {
     extraerNumeros(opts.mensajes.map((m) => m.texto).join(' '), respaldo);
     // La fecha y hora de HOY también respaldan: "el ejercicio 2026" o "son
     // las 6:15" no son invención, son calendario y reloj del sistema.
-    extraerNumeros(new Date(ahoraMs()).toISOString().slice(0, 10), respaldo);
+    extraerNumeros(hoyMx(new Date(ahoraMs())), respaldo);
     extraerNumeros(fechaLarga, respaldo);
     // Las cifras del documento adjunto también respaldan: analizarlo ES el
     // trabajo pedido.

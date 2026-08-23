@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { sinComentarios } from '@/lib/pruebas/codigo';
 import { fileURLToPath } from 'node:url';
 import { rotuloVentana, DIAS_POR_MODO, SEMANAS_POR_MODO_VISTA } from './ventana-periodo';
 
@@ -49,9 +50,16 @@ describe('los números del rótulo son los del origen de cada serie (guardia de 
     expect(src).toMatch(/getTopRutasPorGasto\(tenantId, top\)\s*$/m);
   });
 
-  it('Actividad bucketea 7 y 30 días', () => {
+  it('Actividad bucketea 7 y 30 días, con el `hoy` que le pasa el servidor', () => {
     const src = leer('./actividad.tsx');
-    expect(src).toMatch(/bucketsPorDia\(viajes, 7\)/);
-    expect(src).toMatch(/bucketsPorDia\(viajes, 30\)/);
+    // FE-20: el tercer argumento es el día de México resuelto en el servidor
+    // — sin él, `bucketsPorDia` volvía a leer `new Date()` en el cliente y el
+    // HTML hidratado se separaba del servido de 18:00 a 24:00.
+    expect(src).toMatch(/bucketsPorDia\(viajes, 7, hoy\)/);
+    expect(src).toMatch(/bucketsPorDia\(viajes, 30, hoy\)/);
+    // Y el reloj no se lee aquí: el guardia general vive en `formato.test.ts`
+    // ("nadie vuelve a cortar el día en UTC"); esto solo fija que el `hoy`
+    // que llega por prop es el que se usa.
+    expect(sinComentarios(src)).not.toMatch(/new Date\(\s*\)/);
   });
 });

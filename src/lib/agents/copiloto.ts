@@ -21,7 +21,7 @@ import { toolSchemas, makeExecutor, registerTool, type ToolContext } from '@/lib
 import { validarBloques, cifrasRespaldadas, extraerNumeros, type Bloque } from './analista';
 import { logger } from '@/lib/logger';
 import { ahoraMs } from '@/lib/saludo';
-import { TZ_MX } from '@/lib/formato';
+import { TZ_MX, hoyMx } from '@/lib/formato';
 import { TOOLS_COPILOTO_LECTURA } from './copiloto-tools';
 import { CATALOGO_ACCIONES, accionDelCatalogo } from './copiloto-acciones';
 import './copiloto-tools'; // registra las tools 🟢 al importar
@@ -216,7 +216,7 @@ export async function ejecutarCopiloto(opts: {
     const respaldo = new Set<number>();
     for (const t of res.toolCalls) extraerNumeros(t.result, respaldo);
     extraerNumeros(opts.mensajes.map((m) => m.texto).join(' '), respaldo);
-    extraerNumeros(new Date(ahoraMs()).toISOString().slice(0, 10), respaldo);
+    extraerNumeros(hoyMx(new Date(ahoraMs())), respaldo);
     extraerNumeros(fechaLarga, respaldo);
 
     let bloques = CAPTURAS.get(runId)
