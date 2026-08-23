@@ -10,6 +10,7 @@ import { traerTodo, conteo } from './pg';
 import type { Gasto, Liquidacion, Viaje, Operador } from '@/types/likida';
 import type { CodigoPendiente } from './intake/emparejar';
 import { violaIndice } from './pg_errores';
+import { declararUmbralPeaje } from './perfil/preguntas';
 
 // El tope de consulta vive en `presupuesto.ts`, con `TOPE_CONSULTA_MS` y el
 // resto del presupuesto de la invocación. Estuvo aquí hasta la auditoría 8, y
@@ -105,6 +106,43 @@ export async function getPerfilCrudo(tenantId: string): Promise<unknown> {
     .maybeSingle(), 'getPerfilCrudo');
   if (error) throw new Error(`perfil: ${error.message}`);
   return data?.perfil ?? {};
+}
+
+/**
+ * Escribe la declaración del umbral de peaje (LIF 2026 art. 20-A) en
+ * `tenant.perfil` + `perfil_actualizado_por` en el MISMO UPDATE — el trigger
+ * de 0169 lee `NEW.perfil_actualizado_por`. Sin el actor en el mismo
+ * statement, el historial sella al updater anterior.
+ *
+ * Lee-mezcla-escribe: `perfil` es jsonb y un `||` ciego pisaría otras
+ * llaves futuras. Las escrituras son humanas (un formulario, no el camino
+ * caliente). Un fallo de lectura LANZA: no se da por guardado lo que no se
+ * pudo mezclar.
+ */
+export async function guardarDeclaracionEstimuloPeaje(
+  tenantId: string,
+  ingresosMenoresA300M: boolean,
+  parteRelacionada: boolean,
+  actualizadoPor: string | null,
+): Promise<void> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('tenant')
+    .select('perfil')
+    .eq('id', tenantId)
+    .maybeSingle(), 'guardarDeclaracionEstimuloPeaje.leer');
+  if (error) throw new Error(`perfil: ${error.message}`);
+  if (!data) throw new Error('perfil: tenant no encontrado');
+  const actual = (data.perfil && typeof data.perfil === 'object' && !Array.isArray(data.perfil))
+    ? data.perfil as Record<string, unknown>
+    : {};
+  const { error: errW } = await acotada(supabaseAdmin()
+    .from('tenant')
+    .update({
+      perfil: { ...actual, ...declararUmbralPeaje(ingresosMenoresA300M, parteRelacionada) },
+      perfil_actualizado_por: actualizadoPor,
+    })
+    .eq('id', tenantId), 'guardarDeclaracionEstimuloPeaje.escribir');
+  if (errW) throw new Error(`perfil: ${errW.message}`);
 }
 
 export async function getOperador(operadorId: string, tenantId: string): Promise<Operador | null> {

@@ -26,6 +26,7 @@ import { StatCard, EstadoVacio } from '../../admin/ui/kit';
 import { MotorFiscalPeriodo } from '../motor-fiscal-periodo';
 import { AvisoSinFlota } from '../sin-flota';
 import { Bloque, Barra, EsqCifras } from '../bloque';
+import { EstimuloPeaje } from './estimulo-peaje';
 
 /** Resiliencia por sección: si una consulta falla, devuelve null y la
  *  tarjeta muestra un fallback en vez de tirar toda la pantalla. */
@@ -47,7 +48,7 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  * headless no puede montar el componente REAL sin sesión.
  */
 export async function InicioContador({
-  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '',
+  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', searchParams = {},
 }: {
   tenantId: string;
   tenantNombre: string | null;
@@ -60,6 +61,10 @@ export async function InicioContador({
    *  `?rol=` del superadmin) — mismo contrato que el sidebar; vacío para
    *  roles reales. Lo arma `page.tsx`, que es quien tiene los searchParams. */
   sufijo?: string;
+  /** Lo necesita el formulario del estímulo de peaje (server action) para
+   *  re-resolver el tenant igual que Políticas: el rol del render no es el
+   *  de la acción. */
+  searchParams?: { vista?: string; tenant?: string; rol?: string };
 }) {
   // El MISMO "cuándo" que el Resumen del dueño (auditoría de diseño,
   // 8-ago-2026): todo lo fiscal de esta pantalla se corta al ejercicio en
@@ -207,6 +212,11 @@ export async function InicioContador({
           {!tenantExiste && (
             <div className="mt-3"><AvisoSinFlota tenantId={tenantId} /></div>
           )}
+
+          {/* FASE 3: la pregunta del 50% de peaje va ANTES que las cifras.
+              Sin declaración el motor fail-open y pinta un estímulo que
+              quizá no toca — esa cifra no puede ser lo primero que se ve. */}
+          <EstimuloPeaje searchParams={searchParams} tenantExiste={tenantExiste} />
 
           {/* Condicional de verdad (solo si hay fuego): sin esqueleto, para no
               reservar un hueco que casi siempre queda vacío. */}
