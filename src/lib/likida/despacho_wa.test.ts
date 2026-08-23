@@ -193,6 +193,37 @@ describe('la confirmación', () => {
     expect(crearViaje).not.toHaveBeenCalled();
   });
 
+  // ── EL DUEÑO QUE MANEJA (auditoría 18-c2, AGEN-C2-1 / BACK-C2-2) ──────────
+  // `d432e89` habilitó que un mismo número sea chofer Y oficina, pero el único
+  // desempate por viaje abierto apagaba al analista, no al despacho. Con un
+  // pendiente vivo, ESTA rama se quedaba con TODO texto que no fuera sí/no ni
+  // petición nueva — y «listo» es exactamente eso: `esAfirmacion` lo excluye a
+  // propósito porque quiere decir "cierra mi viaje". El dueño despachaba a las
+  // 14:00, terminaba su ruta a las 14:12, escribía «listo» y recibía el resumen
+  // del viaje de Pedro. Treinta minutos sin poder liquidar el suyo.
+  it('con viaje abierto, el pendiente NO se come el «listo» del chofer', async () => {
+    await proponer();
+    const enRuta = { reengancharPendiente: false };
+    const r = await atenderDespachoOficina(JEFE, TEL, 'listo', new Date(AHORA.getTime() + 60_000), enRuta);
+    // null = "no es mío": el texto sigue su camino al cierre del viaje.
+    expect(r).toBeNull();
+    expect(crearViaje).not.toHaveBeenCalled();
+  });
+
+  it('y el pendiente sigue vivo: el «sí» que llegue después todavía crea el viaje', async () => {
+    await proponer();
+    await atenderDespachoOficina(JEFE, TEL, 'listo', new Date(AHORA.getTime() + 60_000), { reengancharPendiente: false });
+    const r = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 120_000));
+    expect(crearViaje).toHaveBeenCalledTimes(1);
+    expect(r).not.toBeNull();
+  });
+
+  it('sin viaje abierto (el default) se sigue re-enseñando el pendiente', async () => {
+    await proponer();
+    const r = await atenderDespachoOficina(JEFE, TEL, 'listo', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('esperando tu confirmación');
+  });
+
   it('si crearViaje truena, el pendiente SE CONSERVA para reintentar', async () => {
     await proponer();
     crearViaje.mockRejectedValueOnce(new Error('se cayó el insert'));

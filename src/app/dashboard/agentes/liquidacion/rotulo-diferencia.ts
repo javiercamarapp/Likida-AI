@@ -34,7 +34,11 @@ export const ROTULO_DIFERENCIA: Record<TipoDiferencia, string> = {
   monto_invalido: 'Monto inválido',
   complemento_hidrocarburos: 'Sin complemento de hidrocarburos',
   complemento_no_verificable: 'Complemento no verificable',
-  combustible_efectivo: 'Combustible en efectivo',
+  // AUDITORÍA 18-c3, FISC-C3-1: la regla dejó de ser «es efectivo» y pasó a ser
+  // «no es de los medios que la LISR 27-III admite» (RFA 2.9, por exclusión).
+  // La CLAVE no cambia —la escriben liquidaciones ya guardadas— pero el rótulo
+  // sí: con forma de pago '06' decir «en efectivo» era falso en pantalla.
+  combustible_efectivo: 'Combustible sin medio de pago admitido',
   efectivo_sobre_tope: 'Efectivo sobre el tope',
   ieps_no_desglosado: 'IEPS sin desglosar',
   viatico_excede_fiscal: 'Viático sobre el tope fiscal',
@@ -51,9 +55,9 @@ export const ROTULO_DIFERENCIA: Record<TipoDiferencia, string> = {
   comprobante_no_fiscal: 'Comprobante no fiscal',
   diesel_desviacion: 'Desviación de diésel',
   permiso_cre_no_verificable: 'Permiso CRE no verificable',
-  combustible_efectivo_dentro15: 'Combustible en efectivo (dentro del 15%)',
-  efectivo_sobre_15: 'Efectivo sobre el 15%',
-  efectivo_no_elegible: 'Efectivo no elegible',
+  combustible_efectivo_dentro15: 'Combustible sin medio admitido (dentro del 15%)',
+  efectivo_sobre_15: 'Combustible sin medio admitido, sobre el 15%',
+  efectivo_no_elegible: 'Combustible sin medio admitido, flota no elegible',
   oposicion_titular: 'Oposición del titular',
 };
 

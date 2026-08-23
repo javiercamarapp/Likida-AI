@@ -70,7 +70,10 @@ export interface Gasto {
   xmlVerificado?: boolean;         // true = se recibió y parseó el XML del CFDI
   // ── Acreditamiento (del XML) ────────────────────────────────────────────────
   formaPago?: string;              // c_FormaPago (01=efectivo…) — deducibilidad por medio de pago
-  subTotal?: number;               // @SubTotal (base del estímulo de peaje 50%)
+  subTotal?: number;               // @SubTotal (base BRUTA del estímulo de peaje 50%)
+  /** `@Descuento` del CFDI (opcional). La base del estímulo de peaje es
+   *  `subTotal - descuento`, no `subTotal` a secas. `undefined` = sin descuento. */
+  descuento?: number;
   iepsTraslado?: number;           // IEPS desglosado (Traslado 003) → acreditable vs ISR
   ivaTraslado?: number;            // IVA desglosado (Traslado 002) → acreditable
 }

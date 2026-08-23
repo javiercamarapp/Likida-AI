@@ -345,7 +345,10 @@ describe('DAT-33 · lo que se devuelve o se anula deja de estar cobrado', () => 
   it('`invoice.voided` cancela la factura', async () => {
     const r = await POST(req({ id: 'evt-v', type: 'invoice.voided', data: { object: { id: 'in-5' } } }));
     expect(r.status).toBe(200);
-    expect(cancelarFacturaDeStripe).toHaveBeenCalledWith('in-5', '02');
+    // BACK-C4-1: la anulación entra al ledger de orden. Estos eventos de prueba
+    // no traen `created`, así que viaja `undefined` — y eso también es contrato:
+    // sin marca de orden, `cancelarFacturaDeStripe` se comporta como siempre.
+    expect(cancelarFacturaDeStripe).toHaveBeenCalledWith('in-5', '02', undefined, undefined);
   });
 
   it('`charge.refunded` cancela por la factura del cargo, con lo reembolsado', async () => {
@@ -353,7 +356,7 @@ describe('DAT-33 · lo que se devuelve o se anula deja de estar cobrado', () => 
       id: 'evt-r', type: 'charge.refunded',
       data: { object: { id: 'ch-1', invoice: 'in-6', amount: 1160000, amount_refunded: 1160000 } },
     }));
-    expect(cancelarFacturaDeStripe).toHaveBeenCalledWith('in-6', '02', 11600);
+    expect(cancelarFacturaDeStripe).toHaveBeenCalledWith('in-6', '02', 11600, undefined);
   });
 
   it('un cargo suelto (sin factura nuestra) contesta 200 sin tocar nada', async () => {
@@ -370,6 +373,27 @@ describe('DAT-33 · lo que se devuelve o se anula deja de estar cobrado', () => 
       id: 'evt-cn', type: 'credit_note.created',
       data: { object: { id: 'cn-1', invoice: 'in-7', total: 116000 } },
     }));
-    expect(cancelarFacturaDeStripe).toHaveBeenCalledWith('in-7', '02', 1160);
+    expect(cancelarFacturaDeStripe).toHaveBeenCalledWith('in-7', '02', 1160, undefined);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 18-c4 · BACK-C4-1 — la guardia de orden de RES-11 llegó a la
+  // suscripción y no a la factura. El `switch` es quien tiene que obligar a
+  // cada rama a cruzarla, así que se fija AQUÍ, en el repartidor.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('el `created` del evento viaja a las DOS familias de factura, no solo a la suscripción', async () => {
+    await POST(req({
+      id: 'evt-p', type: 'invoice.paid', created: 1_755_801_600,
+      data: { object: { id: 'in-8', customer: 'cus-1', amount_paid: 1160000, currency: 'mxn' } },
+    }));
+    expect(aplicarFactura).toHaveBeenCalledWith(
+      expect.objectContaining({ stripeInvoiceId: 'in-8', eventoCreadoUnix: 1_755_801_600 }),
+    );
+
+    await POST(req({
+      id: 'evt-v2', type: 'invoice.voided', created: 1_755_801_700,
+      data: { object: { id: 'in-9' } },
+    }));
+    expect(cancelarFacturaDeStripe).toHaveBeenCalledWith('in-9', '02', undefined, 1_755_801_700);
   });
 });

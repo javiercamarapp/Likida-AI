@@ -1,4 +1,4 @@
--- 0170 — FISC-C2-4: clave 624 (Coordinados, LISR 72-73) en el dominio de
+-- 0172 — FISC-C2-4: clave 624 (Coordinados, LISR 72-73) en el dominio de
 -- `tenant.regimen_fiscal`. RFA 2026 regla 2.9 admite Título II Cap. VII
 -- (624) y Título IV Cap. II Secc. I (612). Sin 624, un coordinado real no
 -- podía declararse: la facilidad del 15% solo la alcanzaba una PF 612, y el
@@ -6,6 +6,8 @@
 --
 -- No se toca 0056: las migraciones ya aplicadas no se reescriben. Este CHECK
 -- reemplaza el de 0056 con las mismas claves más 624.
+-- Numerada 0172 porque origin/master ya usó 0170 (cerrar definer 0167) y 0171
+-- (`gasto.descuento`).
 --
 -- Sincronizado con `REGIMENES` en src/lib/saas/fiscal.ts. Si divergen, el
 -- formulario ofrece una opción que el insert rechaza.

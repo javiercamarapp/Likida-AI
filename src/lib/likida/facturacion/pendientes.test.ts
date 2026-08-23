@@ -101,8 +101,45 @@ describe('resumen', () => {
 });
 
 describe('validarUuidCfdi', () => {
-  it('acepta el folio fiscal como lo imprime el portal y lo normaliza a mayúsculas', () => {
-    expect(validarUuidCfdi(' a3bb189e-8bf9-3888-9912-ace4e6543002 ')).toBe('A3BB189E-8BF9-3888-9912-ACE4E6543002');
+  // ═════════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 18-c4, ARQ-C4-1 (CRÍTICO). Esta prueba AFIRMABA lo contrario
+  // —que el folio se normaliza a MAYÚSCULAS— y por eso el bug vivió en verde.
+  //
+  // La autoridad no es esta función: es el CHECK que la migración 0158 puso
+  // sobre las cuatro tablas que guardan folios fiscales
+  // (`0158_integridad_fiscal.sql:429`):
+  //
+  //     check (cfdi_uuid is null or cfdi_uuid = lower(cfdi_uuid))
+  //
+  // y el normalizador de escritura de `repo.ts:33`, que hace `.toLowerCase()`.
+  // La captura manual (`dashboard/agentes/facturas/page.tsx:69,78`) escribe a
+  // `gasto.cfdi_uuid` con `supabaseAdmin()` DIRECTO, sin pasar por `repo.ts`,
+  // así que lo que salga de aquí es lo que llega al CHECK.
+  //
+  // Con `.toUpperCase()` el CHECK rechaza SIEMPRE, y el manejador de errores
+  // de la página solo distingue el 23505 del folio repetido: todo lo demás
+  // cae en «No se pudo guardar. Inténtalo de nuevo.» El contralor teclea el
+  // folio bien y la pantalla le dice que reintente, para siempre.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('acepta el folio fiscal como lo imprime el portal y lo normaliza a MINÚSCULAS', () => {
+    expect(validarUuidCfdi(' A3BB189E-8BF9-3888-9912-ACE4E6543002 ')).toBe('a3bb189e-8bf9-3888-9912-ace4e6543002');
+    expect(validarUuidCfdi(' a3bb189e-8bf9-3888-9912-ace4e6543002 ')).toBe('a3bb189e-8bf9-3888-9912-ace4e6543002');
+  });
+
+  it('lo que devuelve cumple el CHECK de la 0158 — `x = lower(x)` — venga como venga', () => {
+    // El invariante, no el caso: cualquier ortografía de entrada tiene que
+    // salir en una forma que la base acepte. Es lo que no se puede verificar
+    // aquí contra Postgres, así que se verifica contra su regla.
+    for (const entrada of [
+      'A3BB189E-8BF9-3888-9912-ACE4E6543002',
+      'a3bb189e-8bf9-3888-9912-ace4e6543002',
+      'A3bb189E-8Bf9-3888-9912-aCe4E6543002',
+      '  3F2504E0-4F89-11D3-9A0C-0305E82C3301  ',
+    ]) {
+      const salida = validarUuidCfdi(entrada);
+      expect(salida, `entrada: ${entrada}`).not.toBeNull();
+      expect(salida, `entrada: ${entrada}`).toBe((salida as string).toLowerCase());
+    }
   });
 
   it('rechaza todo lo demás — un UUID inventado sería una fila fiscal falsa', () => {

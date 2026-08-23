@@ -77,8 +77,7 @@ interface Perfil {
   unidadesAlta?: CampoPerfil<Array<{ economico: string; placas?: string }>>;
   telefonoJefe?: CampoPerfil<string>;
   hazmat?: CampoPerfil<boolean>;
-  poliza?: CampoPerfil<{ aseguradora: string; numero?: string; telefono800?: string }>;
-}
+  poliza?: CampoPerfil<{ aseguradora: string; numero?: string; telefono800?: string }>;}
 
 /** El candado: NUNCA decide sobre un campo inferido NI sobre un default de
  *  Likida. `getConfig()` fusiona relleno de la demo; el perfil existe justo
@@ -235,8 +234,7 @@ export interface DatosOnboarding {
   unidadesAlta?: Array<{ economico: string; placas?: string }>;
   telefonoJefe?: string;
   hazmat?: boolean;
-  poliza?: { aseguradora: string; numero?: string; telefono800?: string };
-}
+  poliza?: { aseguradora: string; numero?: string; telefono800?: string };}
 
 export function declararOnboarding(d: DatosOnboarding): Record<string, unknown> {
   const patch: Record<string, unknown> = { ...declararUmbralPeaje(d.ingresosMenoresA300M, d.parteRelacionada) };
@@ -305,8 +303,7 @@ export function declararHechos(d: Partial<DatosOnboarding>): Record<string, unkn
   if (d.politicaDocumento) patch.politicaDocumento = campo(d.politicaDocumento);
   if (d.cobranzaVentana) patch.cobranzaVentana = campo(d.cobranzaVentana);
   if (d.ordenAviso && d.ordenAviso.length > 0) patch.ordenAviso = campo(d.ordenAviso);
-  Object.assign(patch, parcheHechosExtra(d));
-  return patch;
+  Object.assign(patch, parcheHechosExtra(d));  return patch;
 }
 
 /** El umbral de peaje ya está declarado (las dos preguntas). Es el corte
@@ -339,7 +336,6 @@ export function declararAusente(campos: string[]): Record<string, unknown> {
   for (const c of campos) patch[c] = { valor: null, procedencia: 'ausente' };
   return patch;
 }
-
 export function facilidad15Declarada(perfilCrudo: unknown): { dedicacionExclusivaCarga: boolean; regimenElegible: boolean } | null {
   const p = leerPerfil(perfilCrudo);
   const ded = decidir(p.dedicacionExclusivaCarga);

@@ -102,7 +102,18 @@ export interface CfdiXmlData {
   tipoComprobante?: string; // I | E | P | N | T
   fecha?: string;           // ISO del atributo Fecha del Comprobante
   formaPago?: string;       // c_FormaPago (01=efectivo, 03=transferencia, 04/28=tarjeta…)
-  subTotal?: number;        // @SubTotal (sin impuestos) — base del estímulo de peaje
+  subTotal?: number;        // @SubTotal (sin impuestos) — base BRUTA del estímulo de peaje
+  /**
+   * `@Descuento` del Comprobante. Es OPCIONAL en el CFDI 4.0 y este parser lo
+   * tiraba, así que el estímulo del 50% de peaje (RMF 9.1.8) se calculaba sobre
+   * el SubTotal íntegro aunque el emisor hubiera descontado parte. Sobre
+   * $120,000 de casetas con $18,000 de descuento eso son $60,000 acreditados
+   * donde procedían $51,000: nueve mil pesos de estímulo que no existen.
+   *
+   * `undefined` = el CFDI no lo trae (lo normal), y entonces la base es el
+   * SubTotal a secas.
+   */
+  descuento?: number;
   rfcEmisor?: string;
   rfcReceptor?: string;
   total?: number;
@@ -309,6 +320,7 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       fecha: (comp['@_Fecha'] as string) || undefined,
       formaPago: formaPagoSat(comp['@_FormaPago'] as string | undefined),
       subTotal: num(comp['@_SubTotal']),
+      descuento: num(comp['@_Descuento']),
       rfcEmisor: (emisor['@_Rfc'] as string)?.toUpperCase() || undefined,
       rfcReceptor: (receptor['@_Rfc'] as string)?.toUpperCase() || undefined,
       total: num(comp['@_Total']),

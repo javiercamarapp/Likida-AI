@@ -26,10 +26,19 @@ contextos gigantes).
 | `codigo` | Auditorías (HALLAZGOS, no diffs): auditor, migraciones, releases, rendimiento, seguridad, documentación | `openai/gpt-oss-120b` | 0.03 – 0.17 | flash-lite | `LIKIDA_MODEL_CODIGO` |
 | `codigo_escritura` | TODO diff que se aplica al repo (pruebas, fixes) | `anthropic/claude-sonnet-5` | 2 – 10 | GPT-5.6-terra | `LIKIDA_MODEL_CODIGO_ESCRITURA` → opus-5 |
 | `qa` | Vigilante de calidad + ejército QA (Fase 3) | `openai/gpt-oss-120b` | 0.03 – 0.17 | flash-lite | `LIKIDA_MODEL_QA` |
-| `ocr` | Lectura de comprobantes del CLIENTE | Gemini (medido 4-ago) | — | Haiku 4.5 (visión) | `LIKIDA_MODEL_OCR` |
+| `ocr` | Lectura de comprobantes del CLIENTE | `google/gemini-3.1-flash-lite` (medido 4-ago) | 0.25 – 1.50 | Haiku 4.5 (visión) | `LIKIDA_MODEL_OCR` |
 | `cuadre` | Conciliación con dinero del CLIENTE | Claude Sonnet 5 | 2 – 10 | GPT-5.6-terra | `LIKIDA_MODEL_CUADRE` |
 | `chat` | Analista del CLIENTE | Gemini flash-lite | — | GPT-5.6-luna | `LIKIDA_MODEL_CHAT` |
-| `chat_ligero` | Conserje del chat | gpt-5-nano | 0.05 – 0.40 | flash-lite | `LIKIDA_MODEL_CHAT_LIGERO` |
+
+**Retirados el 23-ago-2026.** `chat_ligero` (el conserje del chat del panel se
+colapsó el 12-ago) y `router` (la clasificación de mensajes es 100% regex; el
+agente `orchestrator` que lo pedía nunca llegó a ejecutarse — el único
+`runAgent` del repo pide `liquidacion`). No volver a declararlos sin un llamador.
+
+**Reservados, sin llamador todavía**: `cuadre_fallback` —la escalación por baja
+confianza o monto alto está decidida pero NO cableada—, y `extraccion`,
+`codigo`, `codigo_escritura` y `qa`, que son de agentes del catálogo que siguen
+en `disenado`.
 
 **El orquestador (runner) no usa modelo**: es determinista a propósito — las
 reglas calculan (candados de kill switch, techo, backpressure), el LLM solo

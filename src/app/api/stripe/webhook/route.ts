@@ -261,6 +261,11 @@ async function aplicar(evt: EventoStripe): Promise<void> {
         pagadaEn: (obj.status_transitions as { paid_at?: number } | null)?.paid_at
           ? new Date((obj.status_transitions as { paid_at: number }).paid_at * 1000).toISOString()
           : null,
+        // BACK-C4-1: la MISMA guardia de orden que la suscripción. Stripe
+        // reentrega hasta 3 días; sin esto, un `payment_failed` de las 10:02
+        // reentregado a las 11:05 devolvía a 'fallida' la mensualidad que se
+        // cobró a las 10:20, y las dos pantallas volvían a pedir el dinero.
+        eventoCreadoUnix: typeof evt.created === 'number' ? evt.created : undefined,
       });
       return;
     }
@@ -272,7 +277,7 @@ async function aplicar(evt: EventoStripe): Promise<void> {
     // fiscal en pie y el cliente deduciendo un gasto que ya no existe.
     case 'invoice.voided':
     case 'invoice.marked_uncollectible': {
-      await cancelarFacturaDeStripe(String(obj.id), '02');
+      await cancelarFacturaDeStripe(String(obj.id), '02', undefined, typeof evt.created === 'number' ? evt.created : undefined);
       return;
     }
 
@@ -284,7 +289,7 @@ async function aplicar(evt: EventoStripe): Promise<void> {
       }
       // Una nota de crédito PARCIAL no anula el comprobante: `cancelarFacturaDeStripe`
       // compara contra el total de la factura y solo avisa.
-      await cancelarFacturaDeStripe(invoiceId, '02', Number(obj.total ?? 0) / 100);
+      await cancelarFacturaDeStripe(invoiceId, '02', Number(obj.total ?? 0) / 100, typeof evt.created === 'number' ? evt.created : undefined);
       return;
     }
 
@@ -295,7 +300,7 @@ async function aplicar(evt: EventoStripe): Promise<void> {
         logger.info('stripe.reembolso_sin_factura', { evt: evt.id });
         return;
       }
-      await cancelarFacturaDeStripe(invoiceId, '02', Number(obj.amount_refunded ?? 0) / 100);
+      await cancelarFacturaDeStripe(invoiceId, '02', Number(obj.amount_refunded ?? 0) / 100, typeof evt.created === 'number' ? evt.created : undefined);
       return;
     }
 
