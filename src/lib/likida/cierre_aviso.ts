@@ -110,6 +110,14 @@ export const RUTA_DE_DIFERENCIA: Record<TipoDiferencia, RutaDeAviso> = {
   alimentacion_sin_soporte: 'decision', // LISR 28-V: falta el hospedaje o transporte que la ampare
   monto_invalido: 'decision',          // el comprobante NO entró en el total: la liquidación está incompleta
   monto_discrepante: 'decision',       // el código y el OCR dicen cifras distintas
+  // DAT-18: un solo comprobante que vale tres anticipos no lo puede dar por
+  // bueno la máquina. Es 'decision' y no 'panel' porque cambia la cifra que el
+  // operador recibe: si la lectura estaba mal, la diferencia entera está mal.
+  monto_implausible: 'decision',
+  // DAT-19: el importe NO son pesos y NADIE lo convirtió. Va a decisión porque
+  // el tipo de cambio del día es un dato humano — el motor no lo inventa — y
+  // hasta que alguien lo aplique la liquidación está midiendo en dos monedas.
+  moneda_extranjera: 'decision',
 
   // ── Dinero fiscal que se pierde si nadie hace algo ───────────────────────
   cfdi_cancelado: 'decision',

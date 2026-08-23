@@ -543,7 +543,13 @@ export async function updateGastoCfdiXml(
        // Auditoría 12 (fiscal, ALTO): @Cantidad del concepto representativo,
        // litros cuando ClaveUnidad = LTR. El XML es la verdad de referencia del
        // ticket; si el OCR no leyó litros (o los leyó mal), este los llena.
-       cantidad?: number },
+       cantidad?: number;
+       // DAT-19: la moneda del CFDI y su tipo de cambio. Se MERGEAN en
+       // `ocr_extra` igual que los litros — el motor levanta
+       // `moneda_extranjera` desde ahí, y sin este paso un XML en USD pegado a
+       // un ticket dejaba el gasto con el importe extranjero en la columna de
+       // pesos y sin una sola señal de que no eran pesos.
+       moneda?: string; tipoCambio?: number },
 ): Promise<void> {
   const extra: Record<string, unknown> = {};
   if (x.uuid) extra.cfdi_uuid = uuidCfdi(x.uuid);
@@ -555,11 +561,17 @@ export async function updateGastoCfdiXml(
   // Litros del XML: se MERGEAN sobre ocr_extra (no se reemplaza el jsonb —
   // ahí viven producto, estacion, fechaImpresa… que una escritura a ciegas
   // borraría). Lectura + fusión + escritura, el patrón del resto del repo.
-  if (x.claveUnidad === 'LTR' && x.cantidad != null && x.cantidad > 0) {
+  const litrosDelXml = x.claveUnidad === 'LTR' && x.cantidad != null && x.cantidad > 0;
+  const monedaDelXml = !!x.moneda || x.tipoCambio != null;
+  if (litrosDelXml || monedaDelXml) {
     const { data: actual } = await acotada(supabaseAdmin().from('gasto')
       .select('ocr_extra').eq('id', gastoId).eq('tenant_id', tenantId).maybeSingle(), 'updateGastoCfdiXml.leerOcrExtra');
     const ocrExtra = { ...((actual?.ocr_extra as Record<string, unknown> | null) ?? {}) };
-    ocrExtra.litros = x.cantidad;
+    if (litrosDelXml) ocrExtra.litros = x.cantidad;
+    // El XML manda sobre lo que leyó la visión: el emisor declaró la moneda en
+    // un comprobante timbrado, el OCR la dedujo de un papel.
+    if (x.moneda) ocrExtra.moneda = x.moneda;
+    if (x.tipoCambio != null) ocrExtra.tipoCambio = x.tipoCambio;
     extra.ocr_extra = ocrExtra;
   }
   const { error } = await acotada(supabaseAdmin().from('gasto').update({

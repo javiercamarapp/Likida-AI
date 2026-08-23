@@ -67,7 +67,7 @@ vi.mock('@/lib/likida/repo', () => ({
     razonSocial: 'FLOTA SA DE CV', domicilio: 'Calle 1, Mérida', urlAvisoIntegral: 'https://flota.mx/p',
   })),
   reclamarEnvioAviso: vi.fn(async () => false), liberarEnvioAviso: vi.fn(),
-  getViaje: vi.fn(async () => ({ id: 'v1', anticipo: 0 })),
+  getViaje: vi.fn(async () => ({ id: 'v1', anticipo: 10_000 })),
   getOperador: vi.fn(async () => ({ id: 'o1', nombre: 'Operador', telefono: '5219993700779' })),
   saveLiquidacion: vi.fn(async () => 'L1'),
   getAcumuladoCombustible: vi.fn(async () => { throw new Error('sin base en pruebas'); }),
@@ -108,26 +108,30 @@ function choque(indice: string): Error & { code?: string } {
   return e;
 }
 
-describe('DAT-01 · el mismo mensaje no da de alta el gasto dos veces', () => {
-  beforeEach(() => {
-    salientes.length = 0;
-    runAgent.mockReset(); addGasto.mockReset(); extraerComprobante.mockReset();
-    guardarHuerfano.mockReset(); guardarHuerfano.mockResolvedValue(true);
-    intakeDelta.mockReset(); intakeDelta.mockResolvedValue(1);
-    getGastos.mockReset(); getGastos.mockResolvedValue([]);
-    gastoExistePorHash.mockReset(); gastoExistePorHash.mockResolvedValue(false);
-    vi.stubGlobal('fetch', fetchSpy);
-    fetchSpy.mockClear();
-    process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
-    process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
-    // La bandera vieja NO se pone: el punto de la prueba es que ya no existe.
-    delete process.env.LIKIDA_DEDUP_FOTOS;
-    extraerComprobante.mockResolvedValue({
-      gasto: { concepto: 'diesel', monto: 8000, fecha: '2026-08-01', ocrExtra: {} },
-      costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
-      legible: true,
-    });
+// Arriba y no dentro de un `describe`: un `beforeEach` de bloque NO alcanza al
+// bloque de al lado, y un `addGasto` sin resetear deja que `mock.calls[0]` sea
+// la llamada de OTRA prueba — un verde que no prueba nada.
+beforeEach(() => {
+  salientes.length = 0;
+  runAgent.mockReset(); addGasto.mockReset(); extraerComprobante.mockReset();
+  guardarHuerfano.mockReset(); guardarHuerfano.mockResolvedValue(true);
+  intakeDelta.mockReset(); intakeDelta.mockResolvedValue(1);
+  getGastos.mockReset(); getGastos.mockResolvedValue([]);
+  gastoExistePorHash.mockReset(); gastoExistePorHash.mockResolvedValue(false);
+  vi.stubGlobal('fetch', fetchSpy);
+  fetchSpy.mockClear();
+  process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
+  process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
+  // La bandera vieja NO se pone: el punto de la prueba es que ya no existe.
+  delete process.env.LIKIDA_DEDUP_FOTOS;
+  extraerComprobante.mockResolvedValue({
+    gasto: { concepto: 'diesel', monto: 8000, fecha: '2026-08-01', ocrExtra: {} },
+    costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
+    legible: true,
   });
+});
+
+describe('DAT-01 · el mismo mensaje no da de alta el gasto dos veces', () => {
 
   it('SIN la bandera, el gasto entra CON su hash de imagen', async () => {
     // Era el hallazgo entero: en producción `img_hash` iba siempre en null y
@@ -183,5 +187,50 @@ describe('DAT-01 · el mismo mensaje no da de alta el gasto dos veces', () => {
     const h = guardarHuerfano.mock.calls[0][2] as { gasto: { imgHash?: string } };
     expect(h.gasto.imgHash, 'sin hash en el jsonb, uq_huerfano_img_hash no puede dispararse')
       .toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DAT-18 · LA MARCA DE ESCALA TIENE QUE LLEGAR AL GASTO.
+//
+// `esMontoImplausible` es pura y está probada aparte (cuadre/monto_y_moneda);
+// lo que este bloque prueba es el CABLEADO, que es donde este repo ya se ha
+// equivocado seis veces: una función correcta que nadie llama. Si la marca no
+// entra en `ocrExtra`, el motor no puede levantar la diferencia y el contralor
+// firma una cifra que nadie miró.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('DAT-18 · el monto fuera de escala se marca en el gasto', () => {
+  beforeEach(() => {
+    addGasto.mockResolvedValue(undefined);
+    runAgent.mockResolvedValue({ finalText: 'ok', toolCalls: [], model: 'm', tokensIn: 1, tokensOut: 1, costUsd: 0 });
+  });
+
+  it('un diésel de $850,000 en un viaje de $10,000 de anticipo entra MARCADO', async () => {
+    // El punto decimal perdido, con confianza 0.95: el OCR está igual de
+    // seguro de $850.00 que de $850,000.00.
+    extraerComprobante.mockResolvedValue({
+      gasto: { concepto: 'diesel', monto: 850_000, fecha: '2026-08-01', ocrConfianza: 0.95, ocrExtra: {} },
+      costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
+      legible: true,
+    });
+
+    await processInbound(foto);
+
+    const g = addGasto.mock.calls[0][2] as { ocrExtra?: Record<string, unknown>; monto: number };
+    expect(g.ocrExtra?.montoImplausible).toBe(true);
+    expect(g.monto, 'el gasto ENTRA: la cifra puede ser real y el papel es del operador').toBe(850_000);
+  });
+
+  it('CONTROL — el diésel de $8,000 del mismo viaje no lleva marca', async () => {
+    extraerComprobante.mockResolvedValue({
+      gasto: { concepto: 'diesel', monto: 8_000, fecha: '2026-08-01', ocrConfianza: 0.95, ocrExtra: {} },
+      costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
+      legible: true,
+    });
+
+    await processInbound(foto);
+
+    const g = addGasto.mock.calls[0][2] as { ocrExtra?: Record<string, unknown> };
+    expect(g.ocrExtra?.montoImplausible).toBeUndefined();
   });
 });

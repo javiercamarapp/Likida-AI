@@ -66,7 +66,8 @@ import { sendText, sendButtons, sendDocument, downloadMediaAsDataUrl, downloadMe
 import {
   decidirAcuse, mensajeConfirmar, mensajeRefoto, esPeticionDeFoto,
   mensajeCorregir, mensajeConfirmado, leerBoton, mensajeDemasiadasDudas,
-  MAX_CONFIRMACIONES_SEGUIDAS, type LecturaTicket,
+  MAX_CONFIRMACIONES_SEGUIDAS, esMontoImplausible, umbralMontoImplausible,
+  type LecturaTicket,
 } from './acuse_ticket';
 import { estadoDelViaje, responderConsulta } from './consulta_chofer';
 import { resolverCuentaOficina, telefonoJefeDe, type CuentaOficina } from './contactos';
@@ -1281,7 +1282,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         //
         // En paralelo para que cueste un viaje a la base y no tres. Al lado de
         // la llamada de visión que acaba de correr, es ruido.
-        const [yaRegistrados, ventana] = await Promise.all([
+        const [yaRegistrados, ventana, viajeDelGasto] = await Promise.all([
           extraccion.legible || EMPAREJAN.includes(extraccion.motivo ?? '')
             ? getGastos(viajeId, op.tenantId) : Promise.resolve([]),
           // FAIL-OPEN a propósito: si esto falla, `ventana` queda `undefined` y
@@ -1294,7 +1295,33 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
                 return undefined;
               })
             : Promise.resolve(undefined),
+          // DAT-18: el ANTICIPO, que es la escala contra la que se mide si una
+          // cifra tiene sentido en este viaje. Va en el mismo `Promise.all` para
+          // que no cueste un viaje más a la base; fail-open por el mismo motivo
+          // que la ventana —sin anticipo el umbral cae al piso de $50,000 y el
+          // intake se comporta como antes, no se pierde la foto—.
+          extraccion.legible
+            ? getViaje(viajeId, op.tenantId).catch((e) => {
+                logger.warn('foto.anticipo_no_disponible', { err: e instanceof Error ? e.message : String(e) });
+                return null;
+              })
+            : Promise.resolve(null),
         ]);
+        // ── DAT-18 · ¿ESTA CIFRA CABE EN ESTE VIAJE? ────────────────────────
+        //
+        // La marca viaja en `ocrExtra` (no en una columna): es una observación
+        // sobre la LECTURA, igual que `montoDiscrepante` y `textoSospechoso`, y
+        // el motor la levanta como diferencia al cuadrar. Se calcula una sola
+        // vez y con la MISMA función que usa el motor (`esMontoImplausible`),
+        // para que el chofer y el contralor no vean dos umbrales distintos.
+        const montoImplausible = esMontoImplausible(extraccion.gasto.monto, viajeDelGasto?.anticipo);
+        if (montoImplausible) {
+          logger.warn('foto.monto_implausible', {
+            viaje: viajeId, tenant: op.tenantId,
+            monto: extraccion.gasto.monto, umbral: umbralMontoImplausible(viajeDelGasto?.anticipo),
+          });
+          extraccion.gasto.ocrExtra = { ...(extraccion.gasto.ocrExtra ?? {}), montoImplausible: true };
+        }
         const decision = decidirFoto(extraccion, yaRegistrados, ventana);
 
         // Pedir reenvío SOLO cuando reenviar arregla algo. Si el fallo fue
@@ -1691,6 +1718,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             confianza: gasto.ocrConfianza ?? null,
             deCfdi: Boolean(gasto.cfdiUuid),
             esRepeticion: false,
+            // DAT-18: un $850,000 leído nítido salía por `silencio` con
+            // confianza 0.95 — la confianza mide qué tan claro se vio el papel,
+            // no si la cifra cabe en el viaje.
+            montoImplausible,
           };
           let d = decidirAcuse(lectura);
 
@@ -2040,8 +2071,17 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
                 // Auditoría 12 (fiscal, ALTO): el XML 1:1 trae la cantidad
                 // (Cantidad="113.00" ClaveUnidad="LTR") y sin esto el gasto
                 // nacía con 0 litros — el estímulo no se acreditaba.
-                ocrExtra: xml.claveUnidad === 'LTR' && xml.cantidad != null
-                  ? { litros: xml.cantidad } : undefined,
+                //
+                // Y DAT-19: la moneda del comprobante viaja con él. Sin esto,
+                // el `@Total` de una factura en USD entraba entero en la
+                // columna de pesos y el motor no tenía cómo enterarse.
+                ocrExtra: (() => {
+                  const extra: Record<string, unknown> = {};
+                  if (xml.claveUnidad === 'LTR' && xml.cantidad != null) extra.litros = xml.cantidad;
+                  if (xml.moneda) extra.moneda = xml.moneda;
+                  if (xml.tipoCambio != null) extra.tipoCambio = xml.tipoCambio;
+                  return Object.keys(extra).length ? extra : undefined;
+                })(),
               });
             } catch (e) {
               if (llegoTarde(e)) {

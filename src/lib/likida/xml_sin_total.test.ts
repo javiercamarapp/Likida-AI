@@ -112,18 +112,22 @@ function cfdi(total: number | undefined) {
   };
 }
 
+// El montaje es el mismo para los dos hallazgos de este archivo, así que vive
+// arriba: un `beforeEach` dentro de un `describe` no alcanza al de al lado, y
+// esa es justo la forma de que un mock se arrastre entre bloques.
+beforeEach(() => {
+  salientes.length = 0;
+  addGasto.mockReset(); addGasto.mockResolvedValue(undefined);
+  saveCfdiXmlRaw.mockReset(); saveCfdiXmlRaw.mockResolvedValue(undefined);
+  parseCfdiXml.mockReset();
+  intakeDelta.mockReset(); intakeDelta.mockResolvedValue(1);
+  vi.stubGlobal('fetch', fetchSpy);
+  fetchSpy.mockClear();
+  process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
+  process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
+});
+
 describe('DAT-37 · un CFDI sin Total no entra como gasto de $0.00', () => {
-  beforeEach(() => {
-    salientes.length = 0;
-    addGasto.mockReset(); addGasto.mockResolvedValue(undefined);
-    saveCfdiXmlRaw.mockReset(); saveCfdiXmlRaw.mockResolvedValue(undefined);
-    parseCfdiXml.mockReset();
-    intakeDelta.mockReset(); intakeDelta.mockResolvedValue(1);
-    vi.stubGlobal('fetch', fetchSpy);
-    fetchSpy.mockClear();
-    process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
-    process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
-  });
 
   it('sin @Total: NO se da de alta el gasto', async () => {
     parseCfdiXml.mockReturnValue(cfdi(undefined));
@@ -157,5 +161,39 @@ describe('DAT-37 · un CFDI sin Total no entra como gasto de $0.00', () => {
     const g = addGasto.mock.calls[0][2] as { monto: number; xmlVerificado?: boolean };
     expect(g.monto).toBe(1234.5);
     expect(g.xmlVerificado).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DAT-19 · el XML en dólares llega al gasto DICIENDO que es en dólares.
+//
+// Leer `@Moneda` en el parser no sirve de nada si el processor la tira al
+// construir el gasto: el motor levanta `moneda_extranjera` desde `ocrExtra`, y
+// sin este cableado el USD 450 volvería a comprobarse como $450.00 MXN.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('DAT-19 · la moneda del XML viaja hasta el gasto', () => {
+  beforeEach(() => {
+    parseCfdiXml.mockReturnValue({ ...cfdi(450), moneda: 'USD', tipoCambio: 18.75 });
+  });
+
+  it('el gasto nace con moneda y tipo de cambio en ocrExtra', async () => {
+    await processInbound(xmlMsg);
+    const g = addGasto.mock.calls[0][2] as { ocrExtra?: Record<string, unknown> };
+    expect(g.ocrExtra?.moneda).toBe('USD');
+    expect(g.ocrExtra?.tipoCambio).toBe(18.75);
+  });
+
+  it('el importe NO se convierte: la conversión la hace una persona', async () => {
+    await processInbound(xmlMsg);
+    const g = addGasto.mock.calls[0][2] as { monto: number };
+    expect(g.monto).toBe(450);
+  });
+
+  it('un XML en pesos no ensucia el gasto con llaves de más', async () => {
+    parseCfdiXml.mockReturnValue({ ...cfdi(450), moneda: 'MXN' });
+    await processInbound(xmlMsg);
+    const g = addGasto.mock.calls[0][2] as { ocrExtra?: Record<string, unknown> };
+    expect(g.ocrExtra?.moneda).toBe('MXN');
+    expect(g.ocrExtra?.tipoCambio).toBeUndefined();
   });
 });

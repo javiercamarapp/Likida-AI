@@ -99,6 +99,8 @@ export type TipoDiferencia =
   | 'fecha_sospechosa'     // fecha futura o muy anterior al viaje → periodo/plazo/complemento en riesgo
   | 'folio_verificar'      // folio leído con baja confianza en ticket con portal → verificar antes de facturar
   | 'monto_discrepante'    // el total del código y el del OCR no coinciden
+  | 'monto_implausible'    // un solo comprobante fuera de escala para el viaje (DAT-18) → revisar
+  | 'moneda_extranjera'    // el comprobante no está en MXN (DAT-19) → no se acredita como pesos
   | 'texto_sospechoso'     // el papel traía texto dirigido al extractor
   | 'alimentacion_sin_soporte' // comida sin hospedaje ni transporte que la ampare (LISR 28-V)
   | 'alimentacion_transporte_sin_tarjeta_credito' // comida amparada SOLO por transporte, pagada sin tarjeta de crédito (LISR 28-V 3er párrafo)
