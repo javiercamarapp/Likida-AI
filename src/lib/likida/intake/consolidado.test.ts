@@ -231,6 +231,7 @@ describe('resolverLineaAMano — la pantalla que faltaba, contra Supabase mockea
     filtrosVistos.length = 0;
     updatesVistos.length = 0;
     logger.error.mockClear();
+    logger.warn.mockClear();
   });
 
   it('elige un candidato ofrecido → liga el gasto Y cierra la línea como conciliada', async () => {
@@ -321,6 +322,27 @@ describe('resolverLineaAMano — la pantalla que faltaba, contra Supabase mockea
       clave_prod_serv: '15101505',
       ocr_extra: { producto: 'Diesel', estacion: 'PEMEX 4521', litros: 120.5 },
     });
+  });
+
+  it('FASE 1 — si leer ocr_extra falla, sella el uuid SIN pisar el jsonb (no se inventa un extra vacío)', async () => {
+    respLineaLectura = { data: filaLinea({ litros: 120.5, clave_prod_serv: '15101505' }), error: null };
+    // `acotada()` al tope resuelve `{ data: null, error }` — no lanza.
+    respGastoLectura = { data: null, error: { message: 'sin respuesta en 1500 ms (tope de consulta)' } };
+
+    const r = await resolverLineaAMano('t1', 'linea-1', { tipo: 'ligar', gastoId: 'g1' }, 'user-1');
+    expect(r).toEqual({ ok: true });
+
+    const updateGasto = updatesVistos.find((u) => u.tabla === 'gasto');
+    expect(updateGasto?.payload).toEqual({
+      cfdi_uuid: 'uuid-abc',
+      cfdi_orden: 2,
+      clave_prod_serv: '15101505',
+    });
+    expect(updateGasto?.payload).not.toHaveProperty('ocr_extra');
+    expect(logger.warn).toHaveBeenCalledWith(
+      'consolidado.ligar_ocr_extra_ilegible',
+      expect.objectContaining({ gasto: 'g1' }),
+    );
   });
 
   it('FASE 1 — una línea sin litros (p.ej. caseta) liga igual que siempre, sin tocar ocr_extra ni clave_prod_serv', async () => {

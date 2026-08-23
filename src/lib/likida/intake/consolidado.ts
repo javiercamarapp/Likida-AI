@@ -200,12 +200,24 @@ async function ligarLineaAGasto(
     // `updateGastoCfdiXml` en repo.ts (auditoría 12): el jsonb ya guarda
     // producto/estación/fechaImpresa del OCR y una escritura a ciegas lo
     // borraría.
-    const { data: actual } = await acotada(supabaseAdmin().from('gasto')
-      .select('ocr_extra').eq('id', gastoId).eq('tenant_id', tenantId).maybeSingle(), 'consolidado.ligar_leer_ocr_extra');
-    const ocrExtra = { ...((actual?.ocr_extra as Record<string, unknown> | null) ?? {}) };
-    ocrExtra.litros = diesel.litros;
-    cambios.ocr_extra = ocrExtra;
+    //
+    // `acotada()` NO lanza al agotar el tope: resuelve `{ data: null, error }`.
+    // Sin mirar `error`, un SELECT mudo se lee como "sin ocr_extra" y el
+    // UPDATE posterior borra producto/estación/fechaImpresa, dejando solo
+    // `{ litros }`. La clave SAT es columna, no jsonb: se puede escribir
+    // igual. Los litros esperan a poder fusionar.
+    const leido = await acotada(supabaseAdmin().from('gasto')
+      .select('ocr_extra').eq('id', gastoId).eq('tenant_id', tenantId).maybeSingle(), 'consolidado.ligar_leer_ocr_extra') as {
+        data: { ocr_extra?: unknown } | null; error: { message: string } | null;
+      };
     cambios.clave_prod_serv = diesel.claveProdServ;
+    if (leido.error) {
+      logger.warn('consolidado.ligar_ocr_extra_ilegible', { tenant: tenantId, gasto: gastoId, err: leido.error.message });
+    } else {
+      const ocrExtra = { ...((leido.data?.ocr_extra as Record<string, unknown> | null) ?? {}) };
+      ocrExtra.litros = diesel.litros;
+      cambios.ocr_extra = ocrExtra;
+    }
   }
   const { data, error } = await acotada(supabaseAdmin()
     .from('gasto')
