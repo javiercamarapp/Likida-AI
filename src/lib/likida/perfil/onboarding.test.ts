@@ -94,3 +94,13 @@ describe('declararOnboarding → el motor de peaje', () => {
     expect(stackDeclarado(patch).gps).toBeNull();
   });
 });
+
+describe('declararHechos — campo a campo, sin inventar el umbral', () => {
+  it('solo GPS no escribe ingresos ni parte relacionada', async () => {
+    const { declararHechos, onboardingFiscalListo } = await import('./preguntas');
+    const p = declararHechos({ gps: 'wialon' });
+    expect(p.ingresosMenoresA300M).toBeUndefined();
+    expect(p.parteRelacionada).toBeUndefined();
+    expect(onboardingFiscalListo(p)).toBe(false);
+  });
+});

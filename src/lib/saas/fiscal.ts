@@ -16,12 +16,17 @@ import { DatoInvalido } from '@/lib/likida/errores';
 // y no lo puede deducir.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Catálogo `c_RegimenFiscal` del SAT, acotado a lo que aplica aquí. */
+/** Catálogo `c_RegimenFiscal` del SAT, acotado a lo que aplica aquí.
+ *  624 (Coordinados, LISR 72-73) es el régimen para el que se escribió RFA 2.9:
+ *  sin él, un coordinado no puede declararse y la facilidad del 15% solo la
+ *  alcanzaba una PF 612. Es régimen del RECEPTOR cuando Likida le timbra la
+ *  mensualidad — no significa que Likida emita CFDIs de sus viajes. */
 export const REGIMENES = [
   { clave: '601', nombre: 'General de Ley Personas Morales' },
   { clave: '603', nombre: 'Personas Morales con Fines no Lucrativos' },
   { clave: '612', nombre: 'Personas Físicas con Actividades Empresariales' },
   { clave: '621', nombre: 'Incorporación Fiscal' },
+  { clave: '624', nombre: 'Coordinados' },
   { clave: '626', nombre: 'RESICO' },
 ] as const;
 
