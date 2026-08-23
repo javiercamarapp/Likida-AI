@@ -19,7 +19,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({ from: () => ({ update }) }),
 }));
 
-const { guardarDatosFiscales, estanCompletos, REGIMENES, USOS_CFDI } = await import('./fiscal');
+const { guardarDatosFiscales, estanCompletos, validarDatosFiscales, REGIMENES, USOS_CFDI } = await import('./fiscal');
 
 // RFC con dígito verificador VÁLIDO, el mismo que ya usan las pruebas de CFDI
 // del repo. No inventado: uno inventado casi nunca pasa el verificador.
@@ -37,12 +37,15 @@ describe('estanCompletos — se puede facturar o no, no hay a medias', () => {
   it('los cinco datos', () => {
     expect(estanCompletos({
       rfc: RFC_OK, razonSocial: 'X SA', regimenFiscal: '601', codigoPostal: '97000', usoCfdi: 'G03',
+      // El correo NO entra en `estanCompletos`: sin él se timbra igual, solo
+      // que el papel no le llega a nadie (DAT-33). Aquí va nulo a propósito.
+      email: null,
     })).toBe(true);
   });
 
   it('falta uno y NO se puede facturar', () => {
     expect(estanCompletos({
-      rfc: RFC_OK, razonSocial: 'X SA', regimenFiscal: '601', codigoPostal: null, usoCfdi: 'G03',
+      rfc: RFC_OK, razonSocial: 'X SA', regimenFiscal: '601', codigoPostal: null, usoCfdi: 'G03', email: null,
     })).toBe(false);
     expect(estanCompletos(null)).toBe(false);
   });
@@ -95,5 +98,27 @@ describe('guardarDatosFiscales', () => {
     // formulario ofrece una opción que el insert rechaza.
     expect(REGIMENES.map((r) => r.clave)).toEqual(['601', '603', '612', '621', '626']);
     expect(USOS_CFDI.map((u) => u.clave)).toEqual(['G03', 'G01', 'I04']);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA PROD (22-ago-2026) · DAT-40 — EL RFC GENÉRICO PASABA COMO CUALQUIERA.
+//
+// XAXX010101000 ("público en general") tiene dígito verificador correcto, así
+// que entraba tal cual. Un CFDI a ese RFC NO LO PUEDE DEDUCIR NADIE: el cliente
+// paga su mensualidad, recibe un papel válido ante el SAT y sin valor para su
+// contabilidad — y lo descubre en la declaración, meses después.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('validarDatosFiscales — el RFC genérico no es el de un cliente', () => {
+  it('rechaza XAXX010101000 (público en general) y XEXX010101000 (extranjero)', () => {
+    expect(() => validarDatosFiscales({ ...BASE, rfc: 'XAXX010101000' })).toThrow(/genérico/i);
+    expect(() => validarDatosFiscales({ ...BASE, rfc: 'XEXX010101000' })).toThrow(/genérico/i);
+  });
+
+  it('el correo del CFDI es opcional pero se valida si viene (ahí llega el papel)', () => {
+    expect(validarDatosFiscales({ ...BASE }).email_facturacion).toBeNull();
+    expect(validarDatosFiscales({ ...BASE, email: ' pagos@flota.mx ' }).email_facturacion).toBe('pagos@flota.mx');
+    expect(() => validarDatosFiscales({ ...BASE, email: 'pagos@flota' })).toThrow(/correo/i);
   });
 });

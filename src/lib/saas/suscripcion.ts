@@ -3,9 +3,12 @@ import { exigir } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import {
   leerPrecio, cambiarPriceDeSuscripcion, crearSuscripcionPorTransferencia,
+  suscripcionesDeCustomer, suscripcionVivaEnStripe,
   type DatosFiscales,
 } from './stripe';
+import { cancelarCfdi, facturapiConfigurado } from './facturapi';
 import { DatoInvalido } from '@/lib/likida/errores';
+import { hoyMx } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA SUSCRIPCIÓN DE UNA FLOTA A LIKIDA — lectura para el panel y escritura
@@ -51,6 +54,17 @@ export interface Suscripcion {
   periodoFin: string | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  /**
+   * `periodo_fin` ya pasó (día de México). Es lo que hace visible la PRUEBA
+   * QUE NUNCA VENCE (DAT-40): `getSuscripcion` devuelve como viva cualquier
+   * fila en 'prueba', tenga o no fecha de corte, así que una prueba con corte
+   * el mes pasado se seguía leyendo como cliente al corriente y nadie le
+   * cobraba nunca.
+   *
+   * SE ENSEÑA, NO BLOQUEA — el mismo criterio que el límite del plan: apagarle
+   * el producto a una flota por una fecha es el peor momento para descubrirla.
+   */
+  vencida: boolean;
 }
 
 export interface FacturaSaas {
@@ -128,7 +142,12 @@ export async function getSuscripcion(tenantId: string): Promise<Suscripcion | nu
   const planRel = s.plan as { nombre?: string } | Array<{ nombre?: string }> | null;
   const nombre = Array.isArray(planRel) ? planRel[0]?.nombre : planRel?.nombre;
 
+  const fin = (s.periodo_fin as string) || null;
   return {
+    // Se compara en día de México, no en UTC: entre las 18:00 y la medianoche
+    // de México, `new Date()` ya es el día siguiente en UTC y una suscripción
+    // con corte HOY se leería como vencida media tarde antes de tiempo.
+    vencida: fin !== null && fin < hoyMx(),
     id: s.id as string,
     tenantId: s.tenant_id as string,
     planClave: s.plan_clave as string,
@@ -250,6 +269,17 @@ export async function guardarPriceDePlan(
   if (!precio.activo) {
     throw new DatoInvalido('Ese price está archivado en Stripe: no se puede cobrar con él.');
   }
+  // UN PLAN DE $0 NO ES UN PLAN, ES UN REGALO SILENCIOSO (DAT-40). `precio_mensual`
+  // NULL ya significa "sin configurar" y la pantalla lo dice; un 0 se ve
+  // configurado, deja contratar, emite mensualidades de $0 —que ni siquiera se
+  // pueden timbrar— y la flota queda con plan activo sin cobro para siempre.
+  // Si algún día hay plan de cortesía, se asigna a mano, no se teclea un price.
+  if (!(precio.montoMensual > 0)) {
+    throw new DatoInvalido(
+      'Ese price cobra $0. Un plan en cero se ve contratado y no cobra nunca: si es cortesía, se asigna la ' +
+      'suscripción a mano; si es un error del price, corrígelo en Stripe.',
+    );
+  }
   if (precio.moneda !== 'MXN') {
     throw new DatoInvalido(
       `Ese price cobra en ${precio.moneda}, no en pesos. Todo el panel imprime con formato de peso mexicano, así que ` +
@@ -258,7 +288,46 @@ export async function guardarPriceDePlan(
     );
   }
 
-  const r = await supabaseAdmin()
+  const admin = supabaseAdmin();
+
+  // ── EL PRICE ANTERIOR NO SE PIERDE (DAT-11) ──────────────────────────────
+  //
+  // Cambiarle el price a un plan HUERFANABA a quien ya estaba suscrito con el
+  // viejo: sus eventos siguen trayendo el price anterior, `planDePrice`
+  // devolvía null y el webhook lanzaba para siempre — a la flota que paga no se
+  // le aplicaba un solo evento más (ni el pago, ni la cancelación).
+  //
+  // El histórico se escribe ANTES de mover `plan`: si esto falla, el plan sigue
+  // apuntando al price viejo (que sí está en la tabla o es el que ya cobraba) y
+  // nadie queda huérfano. Al revés, un fallo dejaría el price nuevo vigente y el
+  // viejo sin dueño.
+  const previo = await admin.from('plan').select('stripe_price_id').eq('clave', planClave).maybeSingle();
+  if (previo.error) throw new Error(`guardarPriceDePlan.previo: ${previo.error.message}`);
+  const priceViejo = (previo.data?.stripe_price_id as string) || null;
+
+  const h = await admin.from('plan_price').upsert(
+    {
+      stripe_price_id: precio.id,
+      plan_clave: planClave,
+      precio_mensual: precio.montoMensual,
+      moneda: precio.moneda,
+      precio_iva_incluido: precio.ivaIncluido,
+      reemplazado_en: null,
+    },
+    { onConflict: 'stripe_price_id' },
+  );
+  if (h.error) throw new Error(`guardarPriceDePlan.historico: ${h.error.message}`);
+
+  if (priceViejo && priceViejo !== precio.id) {
+    // La fila NO se borra: hay suscripciones cobrando con ese price. Solo se
+    // marca cuándo dejó de ser el vigente.
+    const m = await admin.from('plan_price')
+      .update({ reemplazado_en: new Date().toISOString() })
+      .eq('stripe_price_id', priceViejo);
+    if (m.error) logger.warn('plan_price.sin_marcar_reemplazo', { priceViejo, err: m.error.message });
+  }
+
+  const r = await admin
     .from('plan')
     .update({
       stripe_price_id: precio.id,
@@ -324,13 +393,145 @@ export async function cambiarPlan(opciones: {
     };
   }
 
+  // ── LO QUE STRIPE SABE Y LA BASE NO (auditoría prod, DAT-04) ─────────────
+  //
+  // Llegar aquí NO significa que no haya suscripción: significa que no hay
+  // FILA. Y la fila la escribe el webhook, así que entre el clic y el webhook
+  // —o para siempre, si el webhook falló o el evento se quedó sin aplicar— hay
+  // una suscripción VIVA en Stripe cobrando todos los meses que este código no
+  // ve. El segundo clic creaba la segunda, y la base solo se enteraba cuando el
+  // webhook de esa segunda reventaba contra `suscripcion_una_viva`: para
+  // entonces las dos ya habían cobrado.
+  //
+  // Se le pregunta a Stripe, que es el único que sabe.
+  const customerId = suscripcionActual?.stripeCustomerId ?? null;
+  if (customerId) {
+    const vivas = (await suscripcionesDeCustomer(customerId)).filter((s) => suscripcionVivaEnStripe(s.status));
+
+    if (vivas.length > 1) {
+      // Ya hay doble cobro EN CURSO. No se elige una y se le cambia el price:
+      // eso dejaría la otra cobrando y el problema escondido detrás de una
+      // pantalla que dice "listo". Se para y se dice, que es como se entera
+      // alguien que puede cancelar la sobrante en Stripe.
+      logger.error('stripe.suscripciones_duplicadas', {
+        tenantId, customerId, subs: vivas.map((s) => s.id),
+      });
+      throw new DatoInvalido(
+        `Esta flota tiene ${vivas.length} suscripciones vivas en Stripe al mismo tiempo, así que se le está `
+        + 'cobrando de más. No se toca ninguna desde aquí: escríbele a Likida para que cancele la que sobra antes '
+        + 'de cambiar de plan.',
+      );
+    }
+
+    if (vivas.length === 1) {
+      logger.warn('stripe.suscripcion_no_registrada', { tenantId, sub: vivas[0].id, customerId });
+      const r = await cambiarPriceDeSuscripcion({ subscriptionId: vivas[0].id, priceId });
+      await registrarSuscripcionProvisional({
+        tenantId, stripeSubscriptionId: r.subscriptionId, stripeCustomerId: customerId, priceId,
+      });
+      return {
+        subscriptionId: r.subscriptionId,
+        customerId,
+        urlFactura: null,
+        huboCambioDePrice: true,
+      };
+    }
+  }
+
   const r = await crearSuscripcionPorTransferencia({
     priceId,
     tenantId,
     fiscales,
-    customerId: suscripcionActual?.stripeCustomerId ?? undefined,
+    customerId: customerId ?? undefined,
   });
+
+  // LA FILA PROVISIONAL, EN CUANTO STRIPE CONTESTA. Sin ella, el siguiente clic
+  // vuelve a mirar una base vacía y vuelve a crear. No es adelantarse al
+  // webhook —el estado real lo sigue escribiendo él—: es dejar constancia de
+  // que ESTA suscripción de Stripe ya existe y es de esta flota.
+  await registrarSuscripcionProvisional({
+    tenantId, stripeSubscriptionId: r.subscriptionId, stripeCustomerId: r.customerId, priceId,
+  });
+
   return { subscriptionId: r.subscriptionId, customerId: r.customerId, urlFactura: r.urlFactura, huboCambioDePrice: false };
+}
+
+/**
+ * Deja constancia de una suscripción de Stripe recién creada, ANTES de que
+ * llegue su webhook (DAT-04).
+ *
+ * ESTADO 'prueba' A PROPÓSITO, no 'activa': todavía nadie ha pagado nada —la
+ * factura por transferencia vence en 15 días— y decir 'activa' sería afirmar un
+ * cobro que no ocurrió. El webhook la corrige en segundos con el estado real.
+ *
+ * NUNCA LANZA. La suscripción YA existe en Stripe en este punto; si además
+ * hiciéramos fallar la pantalla, el cliente vería un error de algo que sí quedó
+ * hecho y volvería a intentarlo. Se loguea fuerte y ya: el webhook escribe la
+ * fila de todos modos.
+ */
+export async function registrarSuscripcionProvisional(datos: {
+  tenantId: string;
+  stripeSubscriptionId: string;
+  stripeCustomerId: string | null;
+  priceId: string;
+}): Promise<void> {
+  try {
+    const admin = supabaseAdmin();
+    const ya = await admin
+      .from('suscripcion').select('id').eq('stripe_subscription_id', datos.stripeSubscriptionId).maybeSingle();
+    if (ya.error) throw new Error(ya.error.message);
+    // El webhook ganó la carrera: él tiene el estado real, no se le pisa.
+    if (ya.data) return;
+
+    const planClave = await planDePrice(datos.priceId);
+    if (!planClave) {
+      logger.error('stripe.provisional_sin_plan', { sub: datos.stripeSubscriptionId, priceId: datos.priceId });
+      return;
+    }
+
+    await cerrarSuscripcionSinStripe(datos.tenantId);
+
+    const r = await admin.from('suscripcion').insert({
+      tenant_id: datos.tenantId,
+      plan_clave: planClave,
+      estado: 'prueba',
+      periodo_fin: null,
+      stripe_customer_id: datos.stripeCustomerId,
+      stripe_subscription_id: datos.stripeSubscriptionId,
+      cancelada_en: null,
+    });
+    if (r.error) throw new Error(r.error.message);
+    logger.info('stripe.suscripcion_provisional', { tenantId: datos.tenantId, sub: datos.stripeSubscriptionId });
+  } catch (e) {
+    logger.error('stripe.provisional_no_registrada', {
+      tenantId: datos.tenantId, sub: datos.stripeSubscriptionId,
+      err: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
+
+/**
+ * Cierra la suscripción viva SIN id de Stripe (la de prueba que se crea a
+ * mano). El índice `suscripcion_una_viva` (0052) solo deja una viva por
+ * tenant: sin esto, el insert de la de Stripe choca.
+ */
+async function cerrarSuscripcionSinStripe(tenantId: string): Promise<void> {
+  const admin = supabaseAdmin();
+  const previa = await admin
+    .from('suscripcion')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .is('stripe_subscription_id', null)
+    .in('estado', ['prueba', 'activa', 'morosa', 'pausada'])
+    .maybeSingle();
+  if (previa.error) throw new Error(`cerrarSuscripcionSinStripe.buscar: ${previa.error.message}`);
+  if (!previa.data) return;
+
+  const c = await admin
+    .from('suscripcion')
+    .update({ estado: 'cancelada', cancelada_en: new Date().toISOString() })
+    .eq('id', (previa.data as { id: string }).id);
+  if (c.error) throw new Error(`cerrarSuscripcionSinStripe.cerrar: ${c.error.message}`);
 }
 
 // ── Escritura desde el webhook ─────────────────────────────────────────────
@@ -478,21 +679,7 @@ export async function aplicarSuscripcion(datos: {
     // Si la flota tenía una suscripción viva SIN id de Stripe (la de prueba que
     // se le creó a mano), se cierra: el índice único de la 0052 solo deja una
     // viva por tenant y sin esto el insert choca.
-    const previa = await admin
-      .from('suscripcion')
-      .select('id')
-      .eq('tenant_id', datos.tenantId)
-      .is('stripe_subscription_id', null)
-      .in('estado', ['prueba', 'activa', 'morosa', 'pausada'])
-      .maybeSingle();
-    if (previa.error) throw new Error(`aplicarSuscripcion.previa: ${previa.error.message}`);
-    if (previa.data && datos.estado !== 'cancelada') {
-      const c = await admin
-        .from('suscripcion')
-        .update({ estado: 'cancelada', cancelada_en: new Date().toISOString() })
-        .eq('id', (previa.data as { id: string }).id);
-      if (c.error) throw new Error(`aplicarSuscripcion.cerrar_previa: ${c.error.message}`);
-    }
+    if (datos.estado !== 'cancelada') await cerrarSuscripcionSinStripe(datos.tenantId);
 
     const r = await admin.from('suscripcion').insert(campos);
     if (r.error) throw new Error(`aplicarSuscripcion.insert: ${r.error.message}`);
@@ -501,7 +688,20 @@ export async function aplicarSuscripcion(datos: {
   // `tenant.plan` se mantiene a la par: existe desde la 0001 y varias pantallas
   // lo leen sin consultar `suscripcion`. Desincronizarlos haría que una flota
   // morosa siguiera viéndose como del plan que ya no paga.
-  const t = await admin.from('tenant').update({ plan: datos.planClave }).eq('id', datos.tenantId);
+  //
+  // Y AL CANCELAR SE BAJA (DAT-40). Antes se escribía `plan_clave` pasara lo que
+  // pasara: una flota que canceló su plan Empresa quedaba con `tenant.plan =
+  // 'empresa'` para siempre, o sea con las features del plan que ya no paga,
+  // sin una sola pantalla que lo contradijera. 'demo' es el default de la 0001
+  // y un plan real del catálogo, no un valor inventado.
+  let plan = datos.planClave;
+  if (datos.estado === 'cancelada') {
+    const otra = await otraSuscripcionViva(datos.tenantId, datos.stripeSubscriptionId);
+    // Si no se pudo leer, se deja como estaba: bajar el plan a ciegas le
+    // quitaría features a una flota que quizá acaba de recontratar.
+    if (otra.legible) plan = otra.planClave ?? 'demo';
+  }
+  const t = await admin.from('tenant').update({ plan }).eq('id', datos.tenantId);
   if (t.error) logger.warn('stripe.tenant_plan', { err: t.error.message });
 
   // El sello del orden va AL FINAL: si algo de arriba falló, la función lanzó
@@ -513,6 +713,33 @@ export async function aplicarSuscripcion(datos: {
   if (datos.eventoCreadoUnix !== undefined) {
     await sellarOrden(datos.stripeSubscriptionId, datos.eventoCreadoUnix);
   }
+}
+
+/**
+ * El plan de OTRA suscripción viva de la misma flota, si la hay (DAT-40).
+ *
+ * Cancelar una no siempre deja a la flota sin plan: puede haber recontratado y
+ * llegar tarde el `deleted` de la vieja. Bajar a 'demo' en ese caso le quitaría
+ * features a quien sí está pagando.
+ */
+async function otraSuscripcionViva(
+  tenantId: string,
+  exceptoSubId: string,
+): Promise<{ legible: boolean; planClave: string | null }> {
+  const { data, error } = await supabaseAdmin()
+    .from('suscripcion')
+    .select('plan_clave, stripe_subscription_id')
+    .eq('tenant_id', tenantId)
+    .in('estado', ['prueba', 'activa', 'morosa', 'pausada'])
+    .limit(5);
+  if (error) {
+    // En la duda NO se baja el plan: quitarle features a quien paga es peor que
+    // dejárselas un rato a quien canceló.
+    logger.warn('stripe.otra_viva_ilegible', { tenantId, err: error.message });
+    return { legible: false, planClave: null };
+  }
+  const otra = (data ?? []).find((s) => (s.stripe_subscription_id as string | null) !== exceptoSubId);
+  return { legible: true, planClave: (otra?.plan_clave as string) ?? null };
 }
 
 // ── EL LEDGER DE ORDEN, DENTRO DE `evento_stripe` ──────────────────────────
@@ -602,10 +829,100 @@ export async function aplicarFactura(datos: {
       pagada_en: datos.pagada ? (datos.pagadaEn ?? new Date().toISOString()) : null,
       stripe_invoice_id: datos.stripeInvoiceId,
       url_pago: datos.urlPago ?? null,
+      // ── EL MÉTODO, EXPLÍCITO (auditoría prod, DAT-12) ───────────────────
+      //
+      // `metodo_cobro` nace en 'transferencia' por el default de la 0057, y
+      // esta función —la que registra las facturas de STRIPE— no lo tocaba.
+      // Con eso la factura de Stripe entraba al índice
+      // `factura_saas_una_por_periodo`, que solo mira las de transferencia, y
+      // CHOCABA contra la mensualidad que /admin ya había emitido a mano para
+      // ese mes: 23505 → el webhook contesta 500 → Stripe reintenta hasta
+      // rendirse y el cobro real nunca queda registrado.
+      metodo_cobro: 'stripe',
     },
     { onConflict: 'stripe_invoice_id' },
   );
   if (error) throw new Error(`aplicarFactura: ${error.message}`);
+}
+
+/**
+ * Una factura de Stripe que se ANULÓ: reembolso total, `invoice.voided` o nota
+ * de crédito por el total (DAT-33).
+ *
+ * ANTES NO EXISTÍA: `charge.refunded`, `invoice.voided` y `credit_note.created`
+ * caían en el `default` del webhook —"no es un error, Stripe manda decenas de
+ * tipos"— y la factura se quedaba 'pagada' con su CFDI vivo. Es decir: dinero
+ * devuelto, papel fiscal en pie, y el cliente deduciendo un gasto que no
+ * existe.
+ *
+ * EL CFDI SE CANCELA, y por eso el motivo viaja hasta el PAC. Cancelar un CFDI
+ * es irreversible ante el SAT, así que:
+ *  · solo se cancela lo TOTAL (un reembolso parcial no anula el comprobante:
+ *    lo que corresponde ahí es una nota de crédito, y esa la emite quien
+ *    factura, no un webhook);
+ *  · la cancelación del PAC es best-effort y queda logueada — si falla, la
+ *    factura YA quedó marcada como cancelada en la base, que es lo que evita
+ *    que se siga contando como ingreso.
+ */
+export async function cancelarFacturaDeStripe(
+  stripeInvoiceId: string,
+  motivo: string,
+  /** Lo devuelto/acreditado, en la misma unidad que `monto` (pesos). Si es
+   *  menor al total de la factura, NO se anula nada: solo se deja el aviso. */
+  montoAnulado?: number,
+): Promise<'sin_factura' | 'parcial' | 'cancelada' | 'ya_cancelada'> {
+  const admin = supabaseAdmin();
+  const { data: f, error } = await admin
+    .from('factura_saas')
+    .select('id, monto, estado, cfdi_uuid, cfdi_proveedor_id, cfdi_cancelado_en')
+    .eq('stripe_invoice_id', stripeInvoiceId)
+    .maybeSingle();
+  if (error) throw new Error(`cancelarFacturaDeStripe.leer: ${error.message}`);
+
+  if (!f) {
+    // NO se lanza: puede ser el reembolso de un cobro que nunca registramos
+    // (una factura de Stripe anterior a que existiera esta tabla). Lanzar haría
+    // que Stripe reintentara para siempre algo que ningún reintento arregla.
+    logger.warn('stripe.anulacion_sin_factura', { stripeInvoiceId, motivo });
+    return 'sin_factura';
+  }
+  if (f.estado === 'cancelada') return 'ya_cancelada';
+
+  if (montoAnulado !== undefined && montoAnulado + 0.01 < Number(f.monto)) {
+    logger.warn('stripe.anulacion_parcial', {
+      stripeInvoiceId, motivo, montoAnulado, total: Number(f.monto),
+    });
+    return 'parcial';
+  }
+
+  const u = await admin
+    .from('factura_saas')
+    .update({ estado: 'cancelada', pagada_en: null })
+    .eq('id', f.id as string);
+  if (u.error) throw new Error(`cancelarFacturaDeStripe.marcar: ${u.error.message}`);
+  logger.warn('stripe.factura_cancelada', { stripeInvoiceId, motivo, facturaId: f.id });
+
+  const proveedorId = (f.cfdi_proveedor_id as string) || null;
+  if (f.cfdi_uuid && !f.cfdi_cancelado_en && proveedorId && facturapiConfigurado()) {
+    try {
+      await cancelarCfdi(proveedorId, motivo);
+      const c = await admin
+        .from('factura_saas')
+        .update({ cfdi_cancelado_en: new Date().toISOString() })
+        .eq('id', f.id as string);
+      if (c.error) logger.error('facturapi.cancelacion_sin_sello', { facturaId: f.id, err: c.error.message });
+    } catch (e) {
+      // El dinero ya se devolvió y la factura ya está marcada: lo que queda es
+      // un CFDI vivo que hay que cancelar A MANO en el PAC. Se grita.
+      logger.error('facturapi.cfdi_sin_cancelar', {
+        facturaId: f.id, uuid: f.cfdi_uuid, err: e instanceof Error ? e.message : String(e),
+      });
+    }
+  } else if (f.cfdi_uuid && !proveedorId) {
+    logger.error('facturapi.cfdi_sin_id_de_proveedor', { facturaId: f.id, uuid: f.cfdi_uuid });
+  }
+
+  return 'cancelada';
 }
 
 /** La flota dueña de un customer de Stripe, para los eventos que no traen metadata. */
@@ -621,7 +938,17 @@ export async function tenantDeCustomer(customerId: string): Promise<string | nul
   return s?.tenant_id ?? null;
 }
 
-/** El plan que corresponde a un price de Stripe. */
+/**
+ * El plan que corresponde a un price de Stripe.
+ *
+ * MIRA TAMBIÉN EL HISTÓRICO (auditoría prod, DAT-11). `plan.stripe_price_id`
+ * solo tiene el price VIGENTE: en cuanto alguien le sube el precio a un plan
+ * —price nuevo en Stripe, guardado desde /admin— los eventos de las
+ * suscripciones viejas siguen trayendo el price ANTERIOR. Con la consulta sola
+ * a `plan`, eso devolvía null, el webhook lanzaba, y a la flota que YA PAGA no
+ * se le aplicaba un solo evento más: ni el pago, ni la morosidad, ni la
+ * cancelación. La tabla `plan_price` (0163) conserva la respuesta para siempre.
+ */
 export async function planDePrice(priceId: string): Promise<string | null> {
   const r = await supabaseAdmin()
     .from('plan')
@@ -629,5 +956,17 @@ export async function planDePrice(priceId: string): Promise<string | null> {
     .eq('stripe_price_id', priceId)
     .maybeSingle();
   const p = fila<{ clave: string }>(r, 'planDePrice');
-  return p?.clave ?? null;
+  if (p?.clave) return p.clave;
+
+  const h = await supabaseAdmin()
+    .from('plan_price')
+    .select('plan_clave')
+    .eq('stripe_price_id', priceId)
+    .maybeSingle();
+  const viejo = fila<{ plan_clave: string }>(h, 'planDePrice.historico');
+  if (viejo?.plan_clave) {
+    logger.info('stripe.price_historico', { priceId, plan: viejo.plan_clave });
+    return viejo.plan_clave;
+  }
+  return null;
 }
