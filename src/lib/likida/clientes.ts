@@ -44,10 +44,11 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora, type EntidadBitacora } from '@/lib/likida/bitacora_escritura';
 import { conteo, traerTodo } from './pg';
 import { acotada } from './presupuesto';
-// `getCartera` ya resuelve viajes e ingreso por cliente, con su regla de
-// `null` ≠ 0 escrita y comentada. Reescribirla aquí sería una segunda
-// oportunidad de escribir mal exactamente el conteo que da la concentración.
-import { getCartera, type ClienteRow } from './comercial';
+// `leerCarteraRpc`/`armarCartera` (0152) ya resuelven viajes e ingreso por
+// cliente, con su regla de `null` ≠ 0 escrita y comentada. Reescribirlo aquí
+// sería una segunda oportunidad de escribir mal exactamente el conteo que da
+// la concentración.
+import { leerCarteraRpc, armarCartera, type ClienteRow } from './comercial';
 import { DatoInvalido } from './errores';
 import { esRfcValido, esUuidValido, rfcChecksumOk } from './intake/cfdi';
 import { round2, hoyMx } from '@/lib/formato';
@@ -602,40 +603,34 @@ export async function getPanelClientes(
 ): Promise<PanelClientes> {
   const admin = supabaseAdmin();
 
-  const [cartera, contactos, tarifasCrudas, saldos, sinIngresoCrudos, conIngreso] = await Promise.all([
-    getCartera(tenantId),
-    // Las tres columnas que `getCartera` no trae y el formulario de edición sí
-    // necesita. Sí, es una segunda pasada por `cliente`: reescribir `getCartera`
-    // para ahorrársela sería una segunda copia del conteo que da la
-    // concentración, y ése es el número que no puede tener dos versiones.
+  const [lectura, tarifasCrudas, sinIngresoCrudos, sinIngresoTotal] = await Promise.all([
+    // UNA lectura (`cartera_tenant`, 0152) trae por cliente los conteos de
+    // viajes e ingreso, el contacto y el saldo por cobrar: la concentración y
+    // el saldo de cada cliente no pueden salir de dos consultas distintas.
+    leerCarteraRpc(tenantId),
+    // El catálogo de tarifas: chico por naturaleza (se captura a mano), pero
+    // completo —`traerTodo` demuestra que no se recortó— y con techo de tiempo.
     traerTodo<Record<string, unknown>>(
-      (d, h) => admin.from('cliente').select('id, contacto, correo, telefono', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h),
-      'getPanelClientes.contacto',
-    ),
-    traerTodo<Record<string, unknown>>(
-      (d, h) => admin.from('tarifa')
+      (d, h) => acotada(admin.from('tarifa')
         .select('id, cliente_id, origen, destino, modo, precio, moneda, vigente_desde, vigente_hasta, activa, creada_en', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h),
+        .eq('tenant_id', tenantId).order('id').range(d, h), 'getPanelClientes.tarifa'),
       'getPanelClientes.tarifa',
     ),
-    traerTodo<Record<string, unknown>>(
-      (d, h) => admin.from('factura_saldo')
-        .select('factura_id, cliente_id, saldo, vencida, estatus', conteo(d))
-        .eq('tenant_id', tenantId).order('factura_id').range(d, h),
-      'getPanelClientes.saldo',
-    ),
-    // Solo los que NO tienen ingreso: es la lista que la pantalla enseña, y
-    // pedir la tabla entera para tirar el 90% es pagar por nada.
-    traerTodo<Record<string, unknown>>(
-      (d, h) => admin.from('viaje')
-        .select('id, folio, origen, destino, km_recorridos, cliente_id, fecha_inicio', conteo(d))
-        .eq('tenant_id', tenantId).is('ingreso_flete', null).order('id').range(d, h),
-      'getPanelClientes.viajeSinIngreso',
-    ),
-    contarViajesConIngreso(tenantId),
+    // Solo los `LIMITE_SIN_INGRESO` más recientes, ORDENADOS EN LA BASE (0152):
+    // antes se traían TODOS los viajes sin ingreso para quedarse con 50. Lo
+    // más reciente primero; un viaje sin fecha de inicio va al final (no se le
+    // inventa una fecha para poder ordenarlo); `id` desempata.
+    acotada(admin.from('viaje')
+      .select('id, folio, origen, destino, km_recorridos, cliente_id, fecha_inicio')
+      .eq('tenant_id', tenantId).is('ingreso_flete', null)
+      .order('fecha_inicio', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: false })
+      .limit(LIMITE_SIN_INGRESO), 'getPanelClientes.viajeSinIngreso'),
+    contarViajesSinIngreso(tenantId),
   ]);
+  if (sinIngresoCrudos.error) throw new Error(`getPanelClientes.viajeSinIngreso: ${sinIngresoCrudos.error.message}`);
 
+  const cartera = armarCartera(lectura);
   const nombrePorCliente = new Map(cartera.clientes.map((c) => [c.id, c.nombre]));
 
   const tarifas: TarifaRow[] = tarifasCrudas.map((t) => ({
@@ -655,55 +650,31 @@ export async function getPanelClientes(
   })).sort((a, b) => (a.clienteNombre ?? '').localeCompare(b.clienteNombre ?? '', 'es')
     || (a.origen ?? '').localeCompare(b.origen ?? '', 'es'));
 
-  // Saldo por cliente. Se ignoran canceladas y borradores, igual que
-  // `getCobranza`: una factura cancelada no es dinero que alguien deba.
-  const saldoPorCliente = new Map<string, { saldo: number; vencido: number; facturas: number }>();
-  for (const s of saldos) {
-    const estatus = String(s.estatus);
-    if (estatus === 'cancelada' || estatus === 'borrador') continue;
-    const cid = (s.cliente_id as string) ?? null;
-    if (!cid) continue;
-    const a = saldoPorCliente.get(cid) ?? { saldo: 0, vencido: 0, facturas: 0 };
-    const saldo = Number(s.saldo ?? 0);
-    a.saldo += saldo;
-    if (s.vencida === true) a.vencido += saldo;
-    a.facturas++;
-    saldoPorCliente.set(cid, a);
-  }
-
   const tarifasPorCliente = new Map<string, number>();
   for (const t of tarifas) {
     if (!t.clienteId) continue;
     tarifasPorCliente.set(t.clienteId, (tarifasPorCliente.get(t.clienteId) ?? 0) + 1);
   }
 
-  const contactoPorId = new Map(contactos.map((c) => [c.id as string, c]));
+  // El saldo por cliente ya viene de la RPC con el criterio de `getCobranza`
+  // (canceladas y borradores fuera): `null` cuando no hay factura viva.
+  const detallePorId = new Map(lectura.clientes.map((c) => [c.id, c]));
 
   const clientes: ClienteConMetricas[] = cartera.clientes.map((c) => {
-    const s = saldoPorCliente.get(c.id);
-    const d = contactoPorId.get(c.id);
+    const d = detallePorId.get(c.id);
     return {
       ...c,
-      contacto: (d?.contacto as string) ?? null,
-      correo: (d?.correo as string) ?? null,
-      telefono: (d?.telefono as string) ?? null,
-      saldoPorCobrar: s ? round2(s.saldo) : null,
-      vencido: s ? round2(s.vencido) : null,
-      facturas: s?.facturas ?? 0,
+      contacto: d?.contacto ?? null,
+      correo: d?.correo ?? null,
+      telefono: d?.telefono ?? null,
+      saldoPorCobrar: d?.saldoPorCobrar ?? null,
+      vencido: d?.vencido ?? null,
+      facturas: d?.facturas ?? 0,
       tarifas: tarifasPorCliente.get(c.id) ?? 0,
     };
   });
 
-  // Lo más reciente primero; un viaje sin fecha de inicio va al final (no se
-  // le inventa una fecha para poder ordenarlo).
-  const ordenados = [...sinIngresoCrudos].sort((a, b) => {
-    const fa = (a.fecha_inicio as string) ?? '';
-    const fb = (b.fecha_inicio as string) ?? '';
-    if (fa !== fb) return fa < fb ? 1 : -1;
-    return String(a.id) < String(b.id) ? 1 : -1;
-  });
-
-  const sinIngreso: ViajeSinIngreso[] = ordenados.slice(0, LIMITE_SIN_INGRESO).map((v) => {
+  const sinIngreso: ViajeSinIngreso[] = ((sinIngresoCrudos.data ?? []) as Record<string, unknown>[]).map((v) => {
     const clienteId = (v.cliente_id as string) ?? null;
     const km = v.km_recorridos == null ? null : Number(v.km_recorridos);
     return {
@@ -732,28 +703,28 @@ export async function getPanelClientes(
     viajesSinCliente: cartera.viajesSinCliente,
     tarifas,
     sinIngreso,
-    sinIngresoTotal: sinIngresoCrudos.length,
-    conIngreso,
+    sinIngresoTotal,
+    conIngreso: lectura.conIngreso,
     hoy,
   };
 }
 
 /**
- * Cuántos viajes traen `ingreso_flete` capturado.
+ * Cuántos viajes NO traen `ingreso_flete` — el total de la lista recortada.
  *
  * Con `head: true` no viaja ni una fila: solo el `count` de PostgREST. Y el
  * `count == null` se trata como FALLO, no como cero — un conteo que no llegó
- * no es un conteo de cero, y ese cero se leería en pantalla como "esta flota
- * nunca ha capturado un ingreso".
+ * no es un conteo de cero, y ese cero se leería en pantalla como "todos tus
+ * viajes tienen ingreso capturado".
  */
-async function contarViajesConIngreso(tenantId: string): Promise<number> {
+async function contarViajesSinIngreso(tenantId: string): Promise<number> {
   const { count, error } = await acotada(
     supabaseAdmin().from('viaje').select('id', { count: 'exact', head: true })
-      .eq('tenant_id', tenantId).not('ingreso_flete', 'is', null),
-    'contarViajesConIngreso',
+      .eq('tenant_id', tenantId).is('ingreso_flete', null),
+    'contarViajesSinIngreso',
   );
-  if (error) throw new Error(`contarViajesConIngreso: ${error.message}`);
-  if (count == null) throw new Error('contarViajesConIngreso: PostgREST no devolvió el conteo');
+  if (error) throw new Error(`contarViajesSinIngreso: ${error.message}`);
+  if (count == null) throw new Error('contarViajesSinIngreso: PostgREST no devolvió el conteo');
   return count;
 }
 
@@ -874,8 +845,8 @@ export async function editarCliente(
  */
 async function clientePropio(tenantId: string, clienteId: string): Promise<boolean> {
   const filas = await traerTodo<{ id: unknown }>(
-    (d, h) => supabaseAdmin().from('cliente').select('id', conteo(d))
-      .eq('tenant_id', tenantId).eq('id', clienteId).order('id').range(d, h),
+    (d, h) => acotada(supabaseAdmin().from('cliente').select('id', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', clienteId).order('id').range(d, h), 'clientePropio'),
     'clientePropio',
   );
   return filas.length > 0;

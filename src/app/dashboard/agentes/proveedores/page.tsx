@@ -73,7 +73,9 @@ export default async function PaginaAgenteProveedores({
   const sufijo = sufijoTenant(sp);
 
   // Primario sin catch: bandeja ciega = página caída, no "no hay facturas".
-  const facturas = await listarFacturasProveedor(tenantId);
+  // El tope va EXPLÍCITO y espeja `TOPE_FACTURAS` de la vista, que es quien
+  // lo declara en pantalla (FE-13). Antes viajaba como default silencioso.
+  const facturas = await listarFacturasProveedor(tenantId, 100);
   const fiscal = await getFiscalDeFlota(tenantId).catch(() => null);
   const rfcFlota = fiscal?.flota?.rfc || null;
 

@@ -190,6 +190,11 @@ export default async function SuscripcionPage({
         regimenFiscal: String(fd.get('regimenFiscal') ?? ''),
         codigoPostal: String(fd.get('codigoPostal') ?? ''),
         usoCfdi: String(fd.get('usoCfdi') ?? ''),
+        // A dónde llega el CFDI (DAT-33). Opcional a propósito: sin él se puede
+        // timbrar, solo que el papel no le llega a nadie — y eso lo dice la
+        // pantalla, en vez de bloquear la contratación por un dato que se puede
+        // capturar después.
+        email: String(fd.get('emailFacturacion') ?? ''),
       });
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'guardar los datos fiscales') };
@@ -227,6 +232,10 @@ export default async function SuscripcionPage({
           </span>
         </div>
         {sp.ok === 'contratado' && <StatusPill estado="ok">Pago recibido</StatusPill>}
+        {/* La fecha de corte ya pasó (DAT-40): una prueba con corte vencido se
+            leía como cliente al corriente y nadie le cobraba nunca. Se DICE, no
+            se apaga nada — el mismo criterio que el límite del plan. */}
+        {suscripcion?.vencida && <StatusPill estado="warn">Venció el {fechaMx(suscripcion.periodoFin!)}</StatusPill>}
         {pill && <StatusPill estado={pill.tono}>{pill.texto}</StatusPill>}
       </header>
 
@@ -375,6 +384,9 @@ export default async function SuscripcionPage({
                 valorInicial={fiscales?.usoCfdi ?? 'G03'}
                 opciones={USOS_CFDI.map((u) => ({ valor: u.clave, texto: `${u.clave} — ${u.nombre}` }))}
                 ayuda="G03 es como se deduce una suscripción de software." />
+              <Campo nombre="emailFacturacion" etiqueta="Correo para tu factura"
+                valorInicial={fiscales?.email ?? ''} placeholder="contabilidad@miflota.com"
+                ayuda="Ahí te llega el CFDI de cada mensualidad. Si lo dejas vacío, se timbra igual pero no te llega a nadie." />
             </FormaConAviso>
           )}
         </section>

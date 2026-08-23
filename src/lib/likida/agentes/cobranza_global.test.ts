@@ -23,9 +23,11 @@ const { avisarCorridasPorFlota, registrarCorrida } = vi.hoisted(() => ({
 vi.mock('./notificaciones', () => ({ avisarCorridasPorFlota }));
 vi.mock('./corridas', () => ({ registrarCorrida }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('@/lib/meta/client', () => ({
+vi.mock('@/lib/meta/client', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
   sendText: vi.fn(), sendTemplate: vi.fn(),
   motivoDeFalloWhatsApp: (error: string) => error,
+  enviarTexto: async () => ({ ok: false, error: 'rechazado', codigo: 131047, status: 400 }),
 }));
 
 /** El último tenant filtrado con `.eq('tenant_id', …)` — es lo que decide qué

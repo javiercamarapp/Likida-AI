@@ -23,6 +23,8 @@ const VIAJES = [
 
 const claims: unknown[] = [];
 const updates: { tabla: string; fila: unknown }[] = [];
+/** Cada `.delete()` sobre `cobranza_contacto` (RES-1: liberar el tier). */
+const borrados: string[] = [];
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
@@ -31,7 +33,8 @@ vi.mock('@/lib/supabase/admin', () => ({
       const chain = () => b;
       Object.assign(b, {
         select: chain, eq: chain, in: chain, not: chain, limit: chain, order: chain,
-        delete: chain, is: chain, lt: chain,
+        delete: () => { borrados.push(tabla); return b; },
+        is: chain, lt: chain,
         insert: (fila: unknown) => { claims.push(fila); return b; },
         update: (fila: unknown) => { updates.push({ tabla, fila }); return b; },
         maybeSingle: async () => ({ data: null, error: null }),
@@ -48,10 +51,19 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 const sendText = vi.fn<(...a: unknown[]) => Promise<string | null>>();
 const sendTemplate = vi.fn<(...a: unknown[]) => Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }>>();
-vi.mock('@/lib/meta/client', () => ({
+vi.mock('@/lib/meta/client', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
   sendText: (...a: unknown[]) => sendText(...a),
   sendTemplate: (...a: unknown[]) => sendTemplate(...a),
   motivoDeFalloWhatsApp: (error: string, codigo?: number) => (codigo ? `(${codigo}) ${error}` : error),
+  // RES-1: la cobranza pide el CÓDIGO de Meta para decidir si el tier se
+  // quema. El mock delega en `sendText` de siempre; el rechazo por defecto es
+  // la ventana de 24 h cerrada (131047), que NO es reintentable — para eso
+  // está el plan B de la plantilla.
+  enviarTexto: async (to: string, body: string) => {
+    const id = await sendText(to, body);
+    return id ? { ok: true, id } : { ok: false, error: 'rechazado', codigo: 131047, status: 400 };
+  },
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
@@ -61,6 +73,7 @@ const AHORA = new Date('2026-08-14T17:00:00Z');
 beforeEach(() => {
   claims.length = 0;
   updates.length = 0;
+  borrados.length = 0;
   sendText.mockReset();
   sendText.mockResolvedValue('wamid.OK');
   sendTemplate.mockReset();
@@ -125,5 +138,37 @@ describe('ejecutarCobranza — ventana de 24 h cerrada: habla la plantilla (AG-A
     const r = await ejecutarCobranza('t1', AHORA, { ignorarVentana: true });
     expect(r.contactados).toBe(2);
     expect(sendTemplate).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RES-1 (CRÍTICO) — el claim de cobranza es el INSERT con unique(viaje, tier).
+// Dejarlo puesto ante un rate limit de Meta quema ese tier PARA SIEMPRE: la
+// cola lo cuenta como contacto hecho y el chofer se queda sin uno de sus tres
+// avisos sin que nadie haya podido mandárselo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('un rechazo REINTENTABLE no consume el tier (RES-1)', () => {
+  it('429 en el texto y en la plantilla: el claim se BORRA y el fallo lo dice', async () => {
+    sendText.mockResolvedValue(null);
+    sendTemplate.mockResolvedValue({ ok: false, error: 'rate limit', codigo: 130429 });
+    const r = await ejecutarCobranza('t1', AHORA, { ignorarVentana: true });
+
+    expect(r.rechazosReintentables).toBe(2);
+    expect(r.contactados).toBe(0);
+    // El rescate de claims huérfanos borra una vez al entrar; los dos borrados
+    // extra son los tiers liberados.
+    expect(borrados.filter((t) => t === 'cobranza_contacto').length).toBeGreaterThanOrEqual(3);
+    expect(r.fallos[0]).toMatch(/se reintenta en la siguiente corrida/);
+  });
+
+  it('un rechazo NO reintentable (plantilla sin aprobar) SÍ consume el tier', async () => {
+    sendText.mockResolvedValue(null);
+    sendTemplate.mockResolvedValue({ ok: false, error: 'no aprobada', codigo: 132001 });
+    const r = await ejecutarCobranza('t1', AHORA, { ignorarVentana: true });
+
+    expect(r.rechazosReintentables).toBe(0);
+    // El resultado se anota (enviado=false con el motivo) y el tier no se
+    // reintenta: la alternativa es insistir para siempre en un número roto.
+    expect(updates.some((u) => u.tabla === 'cobranza_contacto')).toBe(true);
   });
 });

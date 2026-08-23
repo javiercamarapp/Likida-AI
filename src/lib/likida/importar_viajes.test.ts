@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { interpretarFilasViajes, leerCifraImportada, leerFechaImportada } from './importar_viajes';
+import { interpretarFilasViajes, leerCifraImportada, leerFechaImportada, TOPE_FILAS_IMPORT } from './importar_viajes';
 
 // Solo el motor PURO: la inserción por lotes y el dedup contra la base son
 // el patrón de siempre (folios existentes se consultan y se saltan).
@@ -132,5 +132,39 @@ describe('interpretarFilasViajes — el export del TMS', () => {
     const r = interpretarFilasViajes([ENC, ['', '', '', '', '', ''], ['V-9', 'GDL', 'MTY', '', '', '']]);
     expect(r.viajes).toHaveLength(1);
     expect(r.descartadas).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FE-15 — EL TOPE DE FILAS SE DICE, NO SE APLICA EN SILENCIO
+//
+// El tope existía (`f <= 2000` incrustado en el bucle) y el aviso viajaba en
+// `lectura.error`, que la pantalla SOLO lee cuando no se importó nada
+// (`dashboard/viajes/page.tsx`: `if (lectura.error && lectura.viajes.length
+// === 0)`). O sea: con 60,000 filas se importaban 2,000, el acuse decía
+// "creados: 2,000" y de las 58,000 restantes no se enteraba nadie.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('FE-15 — un archivo más largo que el tope lo DICE en las descartadas', () => {
+  const ENC2 = ['Folio', 'Origen', 'Destino', 'Fecha', 'Anticipo', 'Operador'];
+  const archivo = (n: number) => [
+    ENC2,
+    ...Array.from({ length: n }, (_, i) => [`V-${i}`, 'GDL', 'MTY', '', '', '']),
+  ];
+
+  it('lee exactamente el tope y avisa, con las dos cifras, en la lista que la pantalla SÍ enseña', () => {
+    const r = interpretarFilasViajes(archivo(TOPE_FILAS_IMPORT + 37));
+    expect(r.viajes).toHaveLength(TOPE_FILAS_IMPORT);
+    // Va PRIMERO: la vista solo enseña las cinco primeras descartadas.
+    expect(r.descartadas[0].motivo).toContain('2,037');
+    expect(r.descartadas[0].motivo).toContain('2,000');
+    // Y sigue en `error` para el caso en que no entrara ni una fila.
+    expect(r.error).toBe(r.descartadas[0].motivo);
+  });
+
+  it('justo en el tope no hay aviso: no se quedó nada fuera', () => {
+    const r = interpretarFilasViajes(archivo(TOPE_FILAS_IMPORT));
+    expect(r.viajes).toHaveLength(TOPE_FILAS_IMPORT);
+    expect(r.descartadas).toHaveLength(0);
+    expect(r.error).toBeUndefined();
   });
 });

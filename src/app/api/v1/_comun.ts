@@ -43,6 +43,7 @@ import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { llaveDelHeader, resolverLlave } from '@/lib/auth/llave-api';
 import { puedeVerArea, type Area } from '@/lib/auth/visibilidad';
 import { LecturaIncompleta } from '@/lib/likida/pg';
+import { vieneDeNuestroSitio, escribe } from '@/lib/auth/csrf';
 
 // ── El formato de error ────────────────────────────────────────────────────
 
@@ -227,6 +228,27 @@ export async function abrir(req: Request, area: Area): Promise<Acceso> {
     return { ok: true, tenantId: l.tenantId, rol: `llave:${l.area}` };
   }
 
+  // ── LA COOKIE ESCRIBE SOLO DESDE NUESTRO SITIO (auditoría prod, SEG-9) ──
+  //
+  // Debajo de esta línea la credencial es la COOKIE de sesión del panel, y
+  // /v1 no es solo lectura: `_escritura.ts` da de alta viajes y unidades. Una
+  // página ajena abierta en el mismo navegador podía pedirle al navegador que
+  // escribiera en la flota del contralor con su sesión. La rama de arriba —la
+  // de `Authorization: Bearer`— no necesita esto: esa cabecera no la pone el
+  // navegador por su cuenta, así que no hay CSRF posible con una llave.
+  //
+  // Solo sobre métodos que cambian algo: una lectura no tiene efecto que
+  // robar, y exigirlo en GET rompería a quien pega la URL en el navegador.
+  if (escribe(req.method) && !vieneDeNuestroSitio(req)) {
+    logger.warn('v1.origen_ajeno', {
+      metodo: req.method, origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site'),
+    });
+    return {
+      ok: false,
+      respuesta: errorApi('sin_permiso', 'Esta escritura no viene del sitio de Likida. Si integras un sistema, usa una llave de API (Authorization: Bearer) en vez de la sesión del panel.'),
+    };
+  }
+
   let t: Awaited<ReturnType<typeof resolverTenantApi>>;
   try {
     t = await resolverTenantApi(urlSinTenant(req.url));
@@ -335,7 +357,7 @@ export function leerPagina(url: string): LecturaPagina {
       ok: false,
       respuesta: errorApi(
         'parametro_invalido',
-        `\`desplazamiento\` + \`limite\` no puede pasar de ${VENTANA_MAXIMA} en una petición. Para recorrer un histórico más largo hace falta un cursor: pídenoslo antes de escribir el bucle.`,
+        `\`desplazamiento\` + \`limite\` no puede pasar de ${VENTANA_MAXIMA} en una petición. Para recorrer un histórico más largo usa el cursor: \`?despues=\` con el \`pagina.siguiente\` de la respuesta anterior (GET /v1/viajes).`,
       ),
     };
   }
@@ -351,11 +373,22 @@ export interface Sobre<T> {
     /** Cuántas filas trae ESTA respuesta. */
     devueltos: number;
     /** Cuántas hay en total del otro lado del filtro. `null` = NO SE PUDO
-     *  CONTAR, jamás 0: un 0 se leería como "esta flota no tiene nada". */
+     *  CONTAR (o no se pidió: `?conteo=1`), jamás 0: un 0 se leería como
+     *  "esta flota no tiene nada". */
     total: number | null;
     /** Si vale la pena pedir la siguiente página. */
     hayMas: boolean;
+    /** El cursor de la siguiente página, para `?despues=`. `null` = no hay
+     *  más. Solo lo emiten las rutas que paginan por cursor (`/viajes`). */
+    siguiente?: string | null;
   };
+}
+
+/** Lo que una ruta con cursor sabe de más que el `sobre` por posición. */
+export interface ExtraSobre {
+  /** `hayMas` EXACTO (la ruta pidió una fila de más). Gana sobre la derivación. */
+  hayMas?: boolean;
+  siguiente?: string | null;
 }
 
 /**
@@ -367,8 +400,9 @@ export interface Sobre<T> {
  *    a propósito: en la duda, decir que quizá falta hace que el integrador
  *    pida una página de más; decir que no falta le esconde el resto.
  */
-export function sobre<T>(datos: T[], pagina: Pagina, total: number | null): Sobre<T> {
+export function sobre<T>(datos: T[], pagina: Pagina, total: number | null, extra: ExtraSobre = {}): Sobre<T> {
   const devueltos = datos.length;
+  const hayMas = extra.hayMas ?? (total === null ? devueltos === pagina.limite : pagina.desplazamiento + devueltos < total);
   return {
     datos,
     pagina: {
@@ -376,9 +410,86 @@ export function sobre<T>(datos: T[], pagina: Pagina, total: number | null): Sobr
       desplazamiento: pagina.desplazamiento,
       devueltos,
       total,
-      hayMas: total === null ? devueltos === pagina.limite : pagina.desplazamiento + devueltos < total,
+      hayMas,
+      ...(extra.siguiente !== undefined ? { siguiente: extra.siguiente } : {}),
     },
   };
+}
+
+// ── Paginación por cursor (ESC-15, escala 50k) ─────────────────────────────
+//
+// `desplazamiento` + `rebanar` traía la ventana entera (hasta 1,000 filas) y
+// la cortaba en memoria: a 50k viajes/mes, 1,000 es menos de UN DÍA y el
+// integrador que quiera el histórico se topa con la ventana al segundo
+// request. El cursor es la pareja `(created_at, id)` de la ÚLTIMA fila
+// entregada: la siguiente página es `where (created_at, id) < cursor order
+// by created_at desc, id desc limit N`, un range scan sobre el índice
+// `viaje_tenant_created_id_idx` (0157) cueste lo que cueste el histórico.
+//
+// `desplazamiento`/`limite` SIGUEN funcionando para los clientes que ya los
+// usan (con `range` real en la base ahora, no rebanado). Las dos formas no
+// se mezclan: `despues` + `desplazamiento > 0` es 400.
+
+/** Las dos coordenadas de la última fila entregada, tal como las devolvió la
+ *  base: `creadoEn` se conserva como TEXTO para que el `eq` de la página
+ *  siguiente sea exacto (pasarlo por `Date` pierde los microsegundos). */
+export interface Cursor {
+  creadoEn: string;
+  id: string;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Opaco para el integrador (base64url de `creadoEn|id`): que nadie lo arme a
+ *  mano ni dependa de su forma — hoy es `(created_at, id)`, mañana puede no. */
+export function codificarCursor(c: Cursor): string {
+  return Buffer.from(`${c.creadoEn}|${c.id}`, 'utf8').toString('base64url');
+}
+
+export function decodificarCursor(crudo: string): Cursor | null {
+  if (!/^[A-Za-z0-9_-]{16,}$/.test(crudo)) return null;
+  const texto = Buffer.from(crudo, 'base64url').toString('utf8');
+  const sep = texto.lastIndexOf('|');
+  if (sep < 1) return null;
+  const creadoEn = texto.slice(0, sep);
+  const id = texto.slice(sep + 1);
+  if (!UUID.test(id) || Number.isNaN(Date.parse(creadoEn)) || /["(),]/.test(creadoEn)) return null;
+  return { creadoEn, id };
+}
+
+export type LecturaCursor =
+  | { ok: true; despues: Cursor | null; conteo: boolean }
+  | { ok: false; respuesta: NextResponse<CuerpoError> };
+
+/**
+ * Lee `?despues=` (cursor) y `?conteo=1` (pedir el total).
+ *
+ * El `count: exact` de PostgREST es un `count(*)` sobre el tenant EN CADA
+ * petición — a 50k viajes/mes, un bucle de sincronización lo pagaba mil
+ * veces por pasada para un número que solo cambia entre pasadas. Ahora se
+ * pide explícito; sin él, `total` viene `null` y `hayMas` sigue siendo
+ * exacto porque la ruta pide una fila de más.
+ */
+export function leerCursor(url: string, pagina: Pagina): LecturaCursor {
+  const q = new URL(url).searchParams;
+  const crudo = q.get('despues');
+  const conteoCrudo = q.get('conteo');
+
+  if (conteoCrudo !== null && conteoCrudo !== '1' && conteoCrudo !== '0' && conteoCrudo !== '') {
+    return { ok: false, respuesta: errorApi('parametro_invalido', '`conteo` solo acepta 1 (pedir el total) o 0.') };
+  }
+  const conteo = conteoCrudo === '1';
+
+  if (crudo === null || crudo === '') return { ok: true, despues: null, conteo };
+
+  if (pagina.desplazamiento > 0) {
+    return { ok: false, respuesta: errorApi('parametro_invalido', '`despues` (cursor) y `desplazamiento` no se combinan: el cursor ya dice desde dónde seguir.') };
+  }
+  const despues = decodificarCursor(crudo);
+  if (!despues) {
+    return { ok: false, respuesta: errorApi('parametro_invalido', '`despues` no es un cursor válido. Usa el `pagina.siguiente` de la respuesta anterior tal cual; no se arma a mano.') };
+  }
+  return { ok: true, despues, conteo };
 }
 
 /**

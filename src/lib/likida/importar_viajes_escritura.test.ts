@@ -15,13 +15,18 @@ vi.mock('@/lib/logger', () => ({ logger }));
 
 // Cada nombre amarra a un id determinista; devolver `null` simula al no
 // encontrado (los tests de sin-operador lo fuerzan por caso).
-const resolver = vi.fn(async (_tenant: string, nombre: string): Promise<{ operadorId: string } | null> =>
-  ({ operadorId: `op-${nombre}` }));
+//
+// FE-15: el amarre ya NO es `resolverOperadorPorNombre(tenant, nombre)` —esa
+// se traía el catálogo ENTERO de operadores en CADA llamada, o sea una vez por
+// nombre distinto del archivo—. Ahora el catálogo se lee UNA vez y la MISMA
+// regla se aplica en memoria con `elegirOperadorPorNombre(filas, texto)`, que
+// es SÍNCRONA. El mock refleja la firma nueva; el `resolver` de las pruebas
+// sigue decidiendo por nombre.
+const resolver = vi.fn((nombre: string): { operadorId: string } | null => ({ operadorId: `op-${nombre}` }));
 vi.mock('./crear_viaje_wa', () => ({
-  resolverOperadorPorNombre: (...a: unknown[]) => resolver(...(a as [string, string])),
+  elegirOperadorPorNombre: (_filas: unknown, texto: string) => resolver(texto),
   OperadorNombreAmbiguo: class OperadorNombreAmbiguo extends Error {},
 }));
-vi.mock('./conv', () => ({ ConsultaFallida: class ConsultaFallida extends Error {} }));
 
 type FilaInsert = {
   folio: string; operador_id: string | null;
@@ -36,6 +41,14 @@ let paginasLectura: Array<Array<{ folio: string }>>;
 let catalogoUnidades: Array<{ id: string; numero_economico: string }>;
 let catalogoClientes: Array<{ id: string; nombre: string }>;
 let catalogoError: { message: string } | null;
+/** El catálogo de OPERADORES, que desde FE-15 se lee UNA vez por corrida.
+ *  Va aparte de unidad/cliente porque su error es otro caso: sin operadores
+ *  legibles no se importa NADA, aunque el archivo no traiga unidad ni cliente. */
+let catalogoOperadores: Array<{ id: string; nombre: string }>;
+let operadorError: { message: string } | null;
+/** Cuántas veces se pidió el catálogo de operadores — la cifra del hallazgo:
+ *  una por corrida, no una por nombre distinto del archivo. */
+let lecturasOperador: number;
 /** Páginas ya servidas por catálogo (la 2a sale vacía: así termina traerTodo). */
 let catalogoServido: Record<string, number>;
 /** La "base": folios ya insertados, con el unique 0092 impuesto. */
@@ -48,12 +61,30 @@ let lotesUpsert: FilaInsert[][];
 let ocupadosResp: Array<Array<{ operador_id: string }>>;
 let ocupadosError: { message: string } | null;
 
+/** La RPC de ANALYZE (0157, ESC-18): se anota cada llamada; `rpcError` la
+ *  hace fallar para probar que el import NO se cae por ella. */
+const rpc = vi.fn(async (_nombre: string) => (rpcError ? { data: null, error: rpcError } : { data: null, error: null }));
+let rpcError: { message: string } | null;
+
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
+    rpc: (nombre: string) => rpc(nombre),
     from: (tabla: string) => {
       // Los catálogos de unidad/cliente van por SU camino: comparten cola con
       // nada — el amarre corre en paralelo (Promise.all) y una cola única
       // haría el orden de páginas una lotería.
+      if (tabla === 'operador') {
+        const nodo: Record<string, unknown> = {};
+        for (const m of ['eq', 'not', 'in', 'order', 'abortSignal', 'select']) nodo[m] = () => nodo;
+        nodo.range = () => {
+          if (operadorError) return Promise.resolve({ data: null, error: operadorError });
+          const vuelta = catalogoServido.operador ?? 0;
+          catalogoServido.operador = vuelta + 1;
+          if (vuelta === 0) lecturasOperador++;
+          return Promise.resolve({ data: vuelta === 0 ? catalogoOperadores : [], error: null });
+        };
+        return nodo;
+      }
       if (tabla === 'unidad' || tabla === 'cliente') {
         const nodo: Record<string, unknown> = {};
         for (const m of ['eq', 'not', 'in', 'order', 'abortSignal', 'select']) nodo[m] = () => nodo;
@@ -123,7 +154,7 @@ function fromViaje() {
   };
 }
 
-const { importarViajes } = await import('./importar_viajes');
+const { importarViajes, UMBRAL_ANALYZE } = await import('./importar_viajes');
 
 // Cada folio trae SU operador (distinto): desde el lateral AUD3 una fila sin
 // operador amarrado ya no se inserta (operador_id es NOT NULL), y dos filas
@@ -144,7 +175,12 @@ beforeEach(() => {
   catalogoUnidades = [];
   catalogoClientes = [];
   catalogoError = null;
+  catalogoOperadores = [];
+  operadorError = null;
+  lecturasOperador = 0;
   catalogoServido = {};
+  rpcError = null;
+  rpc.mockClear();
   resolver.mockClear();
   logger.error.mockClear();
 });
@@ -194,7 +230,7 @@ describe('importarViajes — el dedup aguanta la carrera porque vive en la base'
 
 describe('los candados de la base, respetados ANTES del insert (laterales AUD3)', () => {
   it('la fila sin operador amarrado NO va al insert — el resto del lote sí entra', async () => {
-    resolver.mockImplementation(async (_t: string, nombre: string) =>
+    resolver.mockImplementation((nombre: string) =>
       nombre === 'Fantasma' ? null : { operadorId: `op-${nombre}` });
     const r = await importarViajes('t1', [
       { ...fila('V-1') },
@@ -299,5 +335,80 @@ describe('unidad, cliente e ingreso del archivo (auditoría 4, A7)', () => {
     expect(r.error).toBeUndefined();
     expect(r.creados).toBe(1);
     expect(lotesUpsert.flat()[0]).toMatchObject({ unidad_id: null, cliente_id: null });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FE-15 — EL CATÁLOGO DE OPERADORES SE LEE UNA VEZ, NO UNA POR NOMBRE
+// ═══════════════════════════════════════════════════════════════════════════
+describe('FE-15 — el amarre de operador no pregunta fila a fila', () => {
+  it('con 50 nombres DISTINTOS, el catálogo de operadores se lee UNA sola vez', async () => {
+    const archivo = Array.from({ length: 50 }, (_, i) => fila(`V-${i}`));
+    const r = await importarViajes('t1', archivo);
+    expect(r.creados).toBe(50);
+    // Antes: 50 lecturas SECUENCIALES del catálogo entero (una por nombre).
+    expect(lecturasOperador).toBe(1);
+  });
+
+  it('sin ningún nombre de operador en el archivo, el catálogo NI SE CONSULTA', async () => {
+    operadorError = { message: 'no debería tocarse' };   // si se toca, truena
+    const r = await importarViajes('t1', [{ ...fila('V-1'), operadorNombre: null }]);
+    expect(r.error).toBeUndefined();
+    expect(lecturasOperador).toBe(0);
+    expect(r.sinOperador).toEqual(['V-1']);
+  });
+
+  it('si el catálogo de operadores no se puede leer, NO se importa nada (fallar cerrado)', async () => {
+    operadorError = { message: 'timeout' };
+    const r = await importarViajes('t1', [fila('V-1')]);
+    expect(r.creados).toBe(0);
+    expect(r.error).toMatch(/no importé nada/i);
+    expect(llamadasUpsert).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith('importar_viajes.operadores_ilegible', expect.anything());
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ESC-18 (escala 50k): tras un import que pasa de 1,000 filas se pide ANALYZE
+// por la RPC `analizar_tablas_operacion` (0157). Un import chico no la toca;
+// y si la RPC falla, el acuse sale igual: los viajes ya están en la base.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('ESC-18 — ANALYZE después de un import grande', () => {
+  const archivo = (n: number) => Array.from({ length: n }, (_, i) => fila(`V-${i}`));
+
+  it(`con más de ${UMBRAL_ANALYZE} filas creadas se llama analizar_tablas_operacion UNA vez, después de insertar`, async () => {
+    const r = await importarViajes('t1', archivo(UMBRAL_ANALYZE + 1));
+    expect(r.creados).toBe(UMBRAL_ANALYZE + 1);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('analizar_tablas_operacion');
+    expect(llamadasUpsert).toBe(11);
+  });
+
+  it(`con ${UMBRAL_ANALYZE} o menos NO se pide ANALYZE`, async () => {
+    await importarViajes('t1', archivo(UMBRAL_ANALYZE));
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('creados cuenta lo que ENTRÓ: 1,500 filas con 600 ya en la base no llegan al umbral', async () => {
+    enBase = new Set(Array.from({ length: 600 }, (_, i) => `V-${i}`));
+    const r = await importarViajes('t1', archivo(1_500));
+    expect(r.creados).toBe(900);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('si la RPC falla, el import ya quedó: mismo acuse, sin `error`, y se loguea como warn', async () => {
+    rpcError = { message: 'permission denied for function analizar_tablas_operacion' };
+    const r = await importarViajes('t1', archivo(UMBRAL_ANALYZE + 1));
+    expect(r.creados).toBe(UMBRAL_ANALYZE + 1);
+    expect(r.error).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith('importar_viajes.analyze_fallo', expect.objectContaining({ tenantId: 't1' }));
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('si la RPC LANZA (red, SDK), tampoco tumba el acuse', async () => {
+    rpc.mockRejectedValueOnce(new Error('fetch failed'));
+    const r = await importarViajes('t1', archivo(UMBRAL_ANALYZE + 1));
+    expect(r.creados).toBe(UMBRAL_ANALYZE + 1);
+    expect(r.error).toBeUndefined();
   });
 });

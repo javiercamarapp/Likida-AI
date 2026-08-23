@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { Receiver } from '@upstash/qstash';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { hoyMx } from '@/lib/formato';
 import { estaApagado } from '@/lib/likida/interruptores';
 import { procesarLoteEnCola, type FilaCola } from '../route';
 
@@ -90,7 +91,8 @@ export async function POST(req: NextRequest) {
   const vigentesIds = new Set((vigentes ?? []).map((v) => v.id));
   const loteVigente = lote.filter((g) => vigentesIds.has(g.id));
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  // RES-13: el día de México, no el UTC — mismo criterio que `../route.ts`.
+  const hoy = hoyMx();
   const inicio = Date.now();
   // QStash espera un 2xx para dar por procesado; un 5xx dispara el reintento
   // (retries: 2). El resultado del procesamiento es el de la función compartida.

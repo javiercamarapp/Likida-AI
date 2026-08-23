@@ -22,7 +22,27 @@ function crearBuilder(tabla: string) {
   b.order = () => b;
   b.eq = (col: string, val: unknown) => { filtros.push((f) => f[col] === val); return b; };
   b.in = (col: string, vals: unknown[]) => { filtros.push((f) => vals.includes(f[col])); return b; };
-  b.not = () => b;
+  // FE-9/FE-11: los conteos de la campana ya NO se derivan de `items.length`
+  // (las listas vienen acotadas), así que el mock tiene que FILTRAR de verdad
+  // en `not`/`lt`/`is` — con no-ops, un conteo mal filtrado pasaría verde.
+  b.not = (col: string, op: string, val: unknown) => {
+    if (op === 'in') {
+      // PostgREST lo recibe como `(a,b)`.
+      const vals = String(val).replace(/^\(|\)$/g, '').split(',').map((v) => v.trim());
+      filtros.push((f) => !vals.includes(String(f[col])));
+    } else if (op === 'is' && val === null) {
+      filtros.push((f) => f[col] !== null && f[col] !== undefined);
+    }
+    return b;
+  };
+  b.lt = (col: string, val: unknown) => {
+    filtros.push((f) => f[col] !== null && f[col] !== undefined && String(f[col]) < String(val));
+    return b;
+  };
+  b.is = (col: string, val: unknown) => {
+    filtros.push((f) => (f[col] ?? null) === val);
+    return b;
+  };
   b.limit = (n: number) => { tope = n; return b; };
   b.select = (_cols?: unknown, opts?: { count?: string; head?: boolean }) => {
     if (opts?.count === 'exact') pidioConteo = true;

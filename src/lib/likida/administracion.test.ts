@@ -22,8 +22,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const from = vi.fn();
+const rpc = vi.fn();
 vi.mock('@/lib/supabase/admin', () => ({
-  supabaseAdmin: () => ({ from: (...a: unknown[]) => from(...(a as [])) }),
+  supabaseAdmin: () => ({ from: (...a: unknown[]) => from(...(a as [])), rpc: (...a: unknown[]) => rpc(...a) }),
 }));
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -42,7 +43,7 @@ vi.mock('./conv', async (original) => ({
   releaseViajeLock: (...a: unknown[]) => releaseViajeLock(...a),
 }));
 
-const { crearFlota, crearOperador, actualizarOperador, guardarPolitica, reabrirViaje, DatoInvalido, armarPolitica, mensajeParaPantalla } =
+const { crearFlota, crearOperador, actualizarOperador, guardarPolitica, guardarAjustesOperativos, reabrirViaje, DatoInvalido, armarPolitica, mensajeParaPantalla } =
   await import('./administracion');
 
 /** Nodo encadenable: `.select().eq().in().limit().maybeSingle()` → `resultado`. */
@@ -56,6 +57,7 @@ function cadena(resultado: unknown) {
 
 beforeEach(() => {
   from.mockReset();
+  rpc.mockReset().mockResolvedValue({ data: null, error: null });
   for (const f of Object.values(logger)) f.mockReset();
   acquireViajeLock.mockReset().mockResolvedValue(true);
   releaseViajeLock.mockReset();
@@ -321,240 +323,197 @@ describe('actualizarOperador', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 18 · DAT-20 — la mezcla de `tenant.config` se mudó DENTRO del
+// UPDATE (`tenant_config_merge`, 0159).
+//
+// El bug viejo —escribir `{config: {politica}}` de golpe y llevarse por delante
+// estímulos e hidrocarburos— ya estaba cerrado leyendo-mezclando-escribiendo.
+// Lo que quedaba abierto es que esa mezcla se hacía contra el `config` que se
+// LEYÓ, no contra el que hay al escribir: dos ediciones a la vez y la de en
+// medio desaparece. Y ahí viven los topes fiscales.
+//
+// Por eso estas pruebas ya no miran el objeto que se escribe: miran que este
+// módulo NO arme la config, que mande su PARCIAL y deje la mezcla a la base.
+// Que la mezcla conserve a los hermanos y sea profunda se prueba contra
+// Postgres (bloque 131 de verificaciones.sql), que es quien la hace.
+// ═══════════════════════════════════════════════════════════════════════════
 describe('guardarPolitica', () => {
-  it('NO borra los hermanos de `config` — lee, modifica y escribe', async () => {
-    // El bug que esto fija: `update({config: {politica}})` se lleva por delante
-    // estimulos e hidrocarburos, y el motor los lee con `if (x != null)`. No
-    // truena: se salta el tope de $750/día de LISR 28-V y la liquidación sale
-    // declarando todo deducible.
-    const configPrevia = {
-      estimulos: { topeAlimentacionDiaMxn: 750, peajeFactor: 0.5 },
-      hidrocarburos: { claves: ['15101505'] },
-      politica: [{ concepto: 'diesel', topeMonto: 4000 }],
-    };
-    let escrito: Record<string, unknown> | undefined;
-
-    from.mockImplementation(() => ({
-      select: () => cadena({ data: { config: configPrevia }, error: null }),
-      update: (fila: Record<string, unknown>) => { escrito = fila; return cadena({ error: null }); },
-      insert: () => Promise.resolve({ error: null }),
-    }));
+  it('NO arma la config: manda el parcial y la base mezcla', async () => {
+    from.mockImplementation(() => ({ insert: () => Promise.resolve({ error: null }) }));
 
     await guardarPolitica('t-1', [{ concepto: 'caseta', topeMonto: 1500 }]);
 
-    const cfg = escrito?.config as Record<string, unknown>;
-    expect(cfg.politica).toEqual([{ concepto: 'caseta', topeMonto: 1500 }]);
-    // Lo que importa: los otros dos SIGUEN AHÍ.
-    expect(cfg.estimulos).toEqual(configPrevia.estimulos);
-    expect(cfg.hidrocarburos).toEqual(configPrevia.hidrocarburos);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc.mock.calls[0][0]).toBe('tenant_config_merge');
+    expect(rpc.mock.calls[0][1]).toEqual({
+      p_tenant: 't-1',
+      p_parcial: { politica: [{ concepto: 'caseta', topeMonto: 1500 }] },
+      p_borrar: [],
+    });
+    // Y NADIE lee `config` para armarla: esa lectura era la mitad de la carrera.
+    expect(from).not.toHaveBeenCalledWith('tenant');
   });
 
   it('rechaza un tope negativo', async () => {
     await expect(guardarPolitica('t-1', [{ concepto: 'diesel', topeMonto: -1 }]))
       .rejects.toThrow(DatoInvalido);
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('rechaza un renglón sin concepto', async () => {
     await expect(guardarPolitica('t-1', [{ concepto: '  ' }]))
       .rejects.toThrow(DatoInvalido);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('una flota que no existe (CU013) es dato de entrada, no una caída', async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: 'CU013', message: 'flota inexistente' } });
+    await expect(guardarPolitica('t-fantasma', [{ concepto: 'caseta' }]))
+      .rejects.toThrow(DatoInvalido);
+  });
+
+  it('la base caída NO se traga: lanza Error y no anota la bitácora', async () => {
+    const anotadas: unknown[] = [];
+    from.mockImplementation(() => ({ insert: (f: unknown) => { anotadas.push(f); return Promise.resolve({ error: null }); } }));
+    rpc.mockResolvedValue({ data: null, error: { message: 'timeout' } });
+
+    const err = await guardarPolitica('t-1', [{ concepto: 'caseta' }]).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(DatoInvalido);
+    expect(anotadas, 'una política que no se guardó no se anota como editada').toEqual([]);
+  });
+});
+
+describe('guardarAjustesOperativos', () => {
+  it('manda las TRES llaves de negocio como parcial, y ninguna más', async () => {
+    // El corte entre "parámetros del negocio" y "parámetros de la ley" es
+    // legal, no de interfaz: si aquí se colara una cuarta llave, la pantalla
+    // estaría editando topes fiscales.
+    from.mockImplementation(() => ({ insert: () => Promise.resolve({ error: null }) }));
+    const ajustes = {
+      tabulador: { rendimientoPorDefecto: 2.4 },
+      catalogoCuentas: { diesel: '601-01' },
+      salida: { formato: 'csv' },
+    };
+
+    await guardarAjustesOperativos('t-1', ajustes as never);
+
+    expect(rpc.mock.calls[0][0]).toBe('tenant_config_merge');
+    expect(Object.keys((rpc.mock.calls[0][1] as { p_parcial: object }).p_parcial).sort())
+      .toEqual(['catalogoCuentas', 'salida', 'tabulador']);
   });
 });
 
 describe('reabrirViaje', () => {
+  /** El `from` de siempre: el viaje se busca por folio, y el resto es plomería. */
+  const baseFrom = (viaje: unknown = { data: { id: 'v-1', estatus: 'liquidado' }, error: null }) => {
+    from.mockImplementation((tabla: string) => {
+      if (tabla === 'viaje') return { select: () => cadena(viaje) };
+      if (tabla === 'wa_conversacion') return { update: () => cadena({ error: null }) };
+      return { insert: () => Promise.resolve({ error: null }) };
+    });
+  };
+
   it('sin confirmar no hace nada: borra un PDF que ya pudo entregarse', async () => {
     await expect(reabrirViaje('t-1', 'VJ-2026-0848', false)).rejects.toThrow(DatoInvalido);
     expect(from).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('BORRA LA LIQUIDACIÓN antes de tocar el estatus — el trigger mira la fila, no el estatus', async () => {
-    // Los cuatro "ya lo reabrí" que no reabrían nada salían de hacer solo el
-    // update de estatus. El orden también importa: si el borrado falla, el
-    // viaje se queda liquidado y coherente en vez de abierto pero incapaz de
-    // recibir un gasto.
-    const orden: string[] = [];
-    from.mockImplementation((tabla: string) => {
-      if (tabla === 'viaje') {
-        return {
-          select: () => cadena({ data: { id: 'v-1', estatus: 'liquidado' }, error: null }),
-          update: () => { orden.push('viaje.update'); return cadena({ error: null }); },
-        };
-      }
-      if (tabla === 'liquidacion') {
-        return {
-          select: () => cadena({ data: { id: 'l-1', pdf_url: 'tenant/abc.pdf' }, error: null }),
-          delete: () => { orden.push('liquidacion.delete'); return cadena({ error: null }); },
-        };
-      }
-      if (tabla === 'wa_conversacion') {
-        return { update: () => { orden.push('conv.update'); return cadena({ error: null }); } };
-      }
-      return { insert: () => Promise.resolve({ error: null }) };
-    });
+  it('delega en el RPC atómico, anclado al tenant, y devuelve QUÉ PDF se perdió', async () => {
+    baseFrom();
+    rpc.mockResolvedValue({ data: { pdf_perdido: 'tenant/abc.pdf', hubo_liquidacion: true }, error: null });
 
     const r = await reabrirViaje('t-1', 'VJ-2026-0848', true);
 
-    expect(orden[0]).toBe('liquidacion.delete');
-    expect(orden[1]).toBe('viaje.update');
-    // Y devuelve QUÉ PDF se perdió, para poder decírselo a quien lo tenga.
+    expect(rpc.mock.calls[0][0]).toBe('reabrir_viaje_tx');
+    expect(rpc.mock.calls[0][1]).toEqual({ p_tenant: 't-1', p_viaje: 'v-1' });
     expect(r.pdfPerdido).toBe('tenant/abc.pdf');
   });
 
+  // ── DAT-06 — EL REBOTE QUE DEJABA UN VIAJE LIQUIDADO SIN LIQUIDACIÓN ──────
+  //
+  // El orden era: borrar la liquidación, luego abrir el viaje. El segundo paso
+  // puede fallar —`uq_viaje_abierto_por_operador` (0029) si el operador ya
+  // tiene otro viaje abierto— y para entonces la liquidación ya no existe. La
+  // transacción de la 0159 invierte el orden y revierte entera; aquí se prueba
+  // que ese 23505 llega a la pantalla como una instrucción, no como un 500.
+  it('el operador con otro viaje abierto: se explica qué hacer y se dice que la liquidación NO se tocó', async () => {
+    baseFrom();
+    rpc.mockResolvedValue({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "uq_viaje_abierto_por_operador"' } });
+
+    const err = await reabrirViaje('t-1', 'VJ-2026-0848', true).catch((e) => e);
+    expect(err).toBeInstanceOf(DatoInvalido);
+    expect(err.message).toMatch(/otro viaje abierto/);
+    expect(err.message).toMatch(/NO se tocó/);
+  });
+
   it('un folio de otra flota no se reabre', async () => {
-    from.mockImplementation(() => ({ select: () => cadena({ data: null, error: null }) }));
+    baseFrom({ data: null, error: null });
     await expect(reabrirViaje('t-1', 'VJ-DE-OTRA', true)).rejects.toThrow(/No existe el viaje/);
+    expect(rpc).not.toHaveBeenCalled();
   });
 
-  // ── El `error` que faltaba comprobar era el peor del archivo ──────────────
-  //
-  // Sin mirarlo, un fallo de red dejaba `liq` en `null` y a partir de ahí todo
-  // se leía al revés: el `if (liq)` se saltaba el borrado, el viaje SÍ pasaba a
-  // `abierto`, y se devolvía `pdfPerdido: null` —que en pantalla significa "no
-  // perdiste nada"— cuando lo que pasó es que no se pudo mirar. Queda un viaje
-  // abierto con su liquidación viva: la 0036 no deja entrar ni un gasto y con
-  // `liquidacion_viaje_uidx` (0005) el siguiente cierre choca.
-  it('si NO SE PUDO LEER la liquidación, no abre el viaje ni promete que no había PDF', async () => {
-    const tocadas: string[] = [];
-    from.mockImplementation((tabla: string) => {
-      if (tabla === 'viaje') {
-        return {
-          select: () => cadena({ data: { id: 'v-1', estatus: 'liquidado' }, error: null }),
-          update: () => { tocadas.push('viaje.update'); return cadena({ error: null }); },
-        };
-      }
-      if (tabla === 'liquidacion') {
-        return {
-          select: () => cadena({ data: null, error: { message: '57014 statement timeout' } }),
-          delete: () => { tocadas.push('liquidacion.delete'); return cadena({ error: null }); },
-        };
-      }
-      return { update: () => cadena({ error: null }), insert: () => Promise.resolve({ error: null }) };
-    });
+  it('un viaje que se esfumó entre la búsqueda y el RPC (CU012) también es dato, no caída', async () => {
+    baseFrom();
+    rpc.mockResolvedValue({ data: null, error: { code: 'CU012', message: 'viaje fuera de la flota' } });
+    await expect(reabrirViaje('t-1', 'VJ-2026-0848', true)).rejects.toThrow(/No existe el viaje/);
+  });
 
+  it('si el RPC truena, NO promete que no había PDF', async () => {
+    baseFrom();
+    rpc.mockResolvedValue({ data: null, error: { message: '57014 statement timeout' } });
     await expect(reabrirViaje('t-1', 'VJ-2026-0848', true)).rejects.toThrow(/57014/);
-    // Lo importante NO es que lance: es que el viaje siga liquidado y coherente.
-    expect(tocadas).toEqual([]);
   });
 
-  it('TODA escritura del reabrir lleva el tenant en el where, no solo el id del viaje', async () => {
-    // Hoy `viajeId` sale de una consulta ya acotada, así que no hay fuga. Pero
-    // un `.eq('id', viajeId)` a secas se lee como seguro sin serlo, y el día que
-    // ese id venga de la entrada del usuario, borra la liquidación de otra flota.
-    const filtros: Record<string, Array<[string, unknown]>> = {};
-    const cadenaConFiltros = (clave: string, resultado: unknown) => {
-      const nodo: Record<string, unknown> = {};
-      filtros[clave] = [];
-      nodo.select = () => nodo;
-      nodo.eq = (c: string, v: unknown) => { filtros[clave].push([c, v]); return nodo; };
-      nodo.maybeSingle = () => Promise.resolve(resultado);
-      nodo.then = (r: (v: unknown) => unknown) => Promise.resolve(resultado).then(r);
-      return nodo;
-    };
+  it('desligar la conversación de WhatsApp es best-effort: su fallo avisa pero no tumba el reabrir', async () => {
     from.mockImplementation((tabla: string) => {
-      if (tabla === 'viaje') {
-        return {
-          select: () => cadenaConFiltros('viaje.select', { data: { id: 'v-1', estatus: 'liquidado' }, error: null }),
-          update: () => cadenaConFiltros('viaje.update', { error: null }),
-        };
-      }
-      if (tabla === 'liquidacion') {
-        return {
-          select: () => cadenaConFiltros('liq.select', { data: { id: 'l-1', pdf_url: 'x.pdf' }, error: null }),
-          delete: () => cadenaConFiltros('liq.delete', { error: null }),
-        };
-      }
-      if (tabla === 'wa_conversacion') return { update: () => cadenaConFiltros('conv.update', { error: null }) };
+      if (tabla === 'viaje') return { select: () => cadena({ data: { id: 'v-1', estatus: 'liquidado' }, error: null }) };
+      if (tabla === 'wa_conversacion') return { update: () => cadena({ error: { message: 'caída' } }) };
       return { insert: () => Promise.resolve({ error: null }) };
     });
+    rpc.mockResolvedValue({ data: { pdf_perdido: null, hubo_liquidacion: false }, error: null });
 
-    await reabrirViaje('t-1', 'VJ-2026-0848', true);
-
-    for (const clave of ['viaje.select', 'liq.select', 'liq.delete', 'viaje.update', 'conv.update']) {
-      expect(filtros[clave], `${clave} sin tenant_id`).toContainEqual(['tenant_id', 't-1']);
-    }
+    await expect(reabrirViaje('t-1', 'VJ-2026-0848', true)).resolves.toEqual({ pdfPerdido: null });
+    expect(logger.warn).toHaveBeenCalled();
   });
 
-  // ── AUDITORÍA 10 — el mismo mutex que protege el resto del ciclo de vida ────
+  // ── AUDITORÍA 10 — el mutex sigue, y sigue haciendo falta ─────────────────
   //
-  // Sin `acquireViajeLock`, borrar la liquidación (paso 1) y poner el viaje en
-  // `abierto` (paso 2) son dos escrituras sueltas que un cierre en vuelo
-  // (`guardar_liquidacion_tx`) puede intercalar: si ese cierre inserta una
-  // liquidación NUEVA entre los dos pasos de aquí, el resultado es un viaje que
-  // la pantalla enseña como `abierto` pero con una liquidación viva — la 0036
-  // bloquea entonces cualquier gasto nuevo. El unique(viaje_id) no evita el
-  // intercalado borrar→re-crear, solo que convivan DOS liquidaciones a la vez.
-
-  it('toma el mutex del viaje ANTES de leer la liquidación y lo libera DESPUÉS de escribir', async () => {
+  // La transacción de la 0159 protege estas escrituras ENTRE SÍ, pero el cierre
+  // calcula el cuadre y genera el PDF FUERA de su transacción: sin el mutex, un
+  // "listo" en vuelo puede insertar una liquidación nueva justo después de que
+  // ésta se retire, y el viaje queda `abierto` con liquidación viva — la 0036
+  // no deja entrar entonces ni un gasto.
+  it('toma el mutex del viaje ANTES del RPC y lo libera DESPUÉS', async () => {
     const orden: string[] = [];
-    acquireViajeLock.mockImplementation(async (..._a: unknown[]) => { orden.push('lock'); return true; });
-    releaseViajeLock.mockImplementation(async (..._a: unknown[]) => { orden.push('unlock'); });
-    from.mockImplementation((tabla: string) => {
-      if (tabla === 'viaje') {
-        return {
-          select: () => cadena({ data: { id: 'v-1', estatus: 'liquidado' }, error: null }),
-          update: () => { orden.push('viaje.update'); return cadena({ error: null }); },
-        };
-      }
-      if (tabla === 'liquidacion') {
-        return {
-          select: () => { orden.push('liq.select'); return cadena({ data: { id: 'l-1', pdf_url: 'x.pdf' }, error: null }); },
-          delete: () => { orden.push('liq.delete'); return cadena({ error: null }); },
-        };
-      }
-      if (tabla === 'wa_conversacion') return { update: () => { orden.push('conv.update'); return cadena({ error: null }); } };
-      return { insert: () => Promise.resolve({ error: null }) };
-    });
+    acquireViajeLock.mockImplementation(async () => { orden.push('lock'); return true; });
+    releaseViajeLock.mockImplementation(async () => { orden.push('unlock'); });
+    baseFrom();
+    rpc.mockImplementation(async () => { orden.push('rpc'); return { data: { pdf_perdido: 'x.pdf' }, error: null }; });
 
     await reabrirViaje('t-1', 'VJ-2026-0848', true);
 
     expect(acquireViajeLock).toHaveBeenCalledWith('v-1');
-    expect(orden).toEqual(['lock', 'liq.select', 'liq.delete', 'viaje.update', 'conv.update', 'unlock']);
+    expect(orden).toEqual(['lock', 'rpc', 'unlock']);
   });
 
-  it('con el mutex OCUPADO, NO borra la liquidación ni toca el viaje — evita la carrera en vez de correrla', async () => {
+  it('con el mutex OCUPADO no se llama al RPC — se evita la carrera en vez de correrla', async () => {
     acquireViajeLock.mockResolvedValue(false);
-    let liqTocada = false;
-    from.mockImplementation((tabla: string) => {
-      if (tabla === 'viaje') {
-        return { select: () => cadena({ data: { id: 'v-1', estatus: 'liquidado' }, error: null }) };
-      }
-      if (tabla === 'liquidacion') {
-        return {
-          select: () => { liqTocada = true; return cadena({ data: { id: 'l-1', pdf_url: 'x.pdf' }, error: null }); },
-          delete: () => { liqTocada = true; return cadena({ error: null }); },
-        };
-      }
-      return { update: () => cadena({ error: null }), insert: () => Promise.resolve({ error: null }) };
-    });
+    baseFrom();
 
-    let capturado: unknown;
-    try {
-      await reabrirViaje('t-1', 'VJ-2026-0848', true);
-    } catch (e) {
-      capturado = e;
-    }
-    expect(capturado).toBeInstanceOf(DatoInvalido);
-    expect((capturado as Error).message).toMatch(/procesando|un momento|espera/i);
-    expect(liqTocada, 'sin exclusividad, ni siquiera leer la liquidación es seguro').toBe(false);
+    const err = await reabrirViaje('t-1', 'VJ-2026-0848', true).catch((e) => e);
+    expect(err).toBeInstanceOf(DatoInvalido);
+    expect((err as Error).message).toMatch(/procesando|un momento|espera/i);
+    expect(rpc).not.toHaveBeenCalled();
     expect(releaseViajeLock, 'nunca se tomó: no hay nada que soltar').not.toHaveBeenCalled();
   });
 
-  it('libera el mutex aunque una escritura truene a medio camino', async () => {
+  it('libera el mutex aunque el RPC truene', async () => {
     acquireViajeLock.mockResolvedValue(true);
-    from.mockImplementation((tabla: string) => {
-      if (tabla === 'viaje') {
-        return {
-          select: () => cadena({ data: { id: 'v-1', estatus: 'liquidado' }, error: null }),
-          update: () => cadena({ error: { message: 'timeout' } }),
-        };
-      }
-      if (tabla === 'liquidacion') {
-        return {
-          select: () => cadena({ data: { id: 'l-1', pdf_url: 'x.pdf' }, error: null }),
-          delete: () => cadena({ error: null }),
-        };
-      }
-      return { insert: () => Promise.resolve({ error: null }) };
-    });
+    baseFrom();
+    rpc.mockResolvedValue({ data: null, error: { message: 'timeout' } });
 
     await expect(reabrirViaje('t-1', 'VJ-2026-0848', true)).rejects.toThrow(/timeout/);
     expect(releaseViajeLock, 'un lock que no se suelta bloquea el próximo reabrir/cierre del mismo viaje').toHaveBeenCalledWith('v-1');

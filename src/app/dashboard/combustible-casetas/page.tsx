@@ -10,6 +10,7 @@ import {
 import { resolverLineaAMano, type ResolucionLineaManual } from '@/lib/likida/intake/consolidado';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn } from '@/lib/utils';
+import { numero } from '@/lib/formato';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -107,6 +108,13 @@ async function safeConciliacion(tenantId: string): Promise<{ ok: true; datos: Co
  * (ver `cfdi_xml.ts`) — la única resolución posible para ellas es "ninguno
  * aplica" o esperar a que alguien identifique el viaje por otro medio.
  */
+/** ESCALA 50k (22-ago-2026): la ventana de comprobantes sobre la que se
+ *  calcula "Sin CFDI". Eran 1,000 — a 300k gastos/mes, 1,000 es el 0.3 % del
+ *  mes y encima costaba 1,000 filas por carga. Con 100 la lectura es la misma
+ *  que la de `getDocumentos` en el resto del producto, y el rótulo DICE que
+ *  es una ventana ("de los últimos 100 comprobantes"), no un total. */
+const VENTANA_DOCUMENTOS = 100;
+
 export default async function CombustibleCasetasPage({
   searchParams,
 }: {
@@ -120,7 +128,7 @@ export default async function CombustibleCasetasPage({
     safe<GastoPorConcepto[]>(() => getGastoPorConcepto(tenantId)),
     safe<Acreditables>(() => getAcreditables(tenantId)),
     safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
-    safe<DocumentoRow[]>(() => getDocumentos(tenantId, 1000)),
+    safe<DocumentoRow[]>(() => getDocumentos(tenantId, VENTANA_DOCUMENTOS)),
     safeConciliacion(tenantId),
     safe<LineaPorConciliar[]>(() => getLineasPorConciliar(tenantId)),
   ]);
@@ -180,10 +188,10 @@ export default async function CombustibleCasetasPage({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
               <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Gastado en combustible" valor={diesel?.total ?? 0} formato="mxn"
-                nota={diesel ? `${diesel.n} cargas registradas` : 'Sin cargas registradas todavía'} />
+                nota={diesel ? `${numero(diesel.n)} cargas registradas` : 'Sin cargas registradas todavía'} />
               <KpiTile icono={<RouteIcon width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Gastado en casetas" valor={caseta?.total ?? 0} formato="mxn"
-                nota={caseta ? `${caseta.n} casetas registradas` : 'Sin casetas registradas todavía'} />
+                nota={caseta ? `${numero(caseta.n)} casetas registradas` : 'Sin casetas registradas todavía'} />
               <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Litros elegibles para el estímulo" valor={acred?.litrosDiesel ?? 0} formato="litros"
                 nota="LIF 2026, Art. 20-A" />
@@ -193,7 +201,7 @@ export default async function CombustibleCasetasPage({
                 // lee como "todo facturado" (buena noticia falsa en un vistazo).
                 etiqueta="Sin CFDI (combustible y casetas)" valor={pctSinCfdi} formato="porcentaje"
                 vacio={pctSinCfdi === null ? 'Sin comprobantes de estos conceptos todavía' : undefined}
-                nota={pctSinCfdi === null ? undefined : `${sinCfdi} de ${combustibleYCasetas.length} sin factura — es deducible que se pierde`} />
+                nota={pctSinCfdi === null ? undefined : `${sinCfdi} de ${combustibleYCasetas.length} sin factura entre los últimos ${numero(VENTANA_DOCUMENTOS)} comprobantes registrados — es deducible que se pierde`} />
             </div>
           )}
         </section>

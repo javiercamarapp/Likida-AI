@@ -26,15 +26,80 @@
 // puede calcular con una división. `resumen_costo_ia()` suma en la base y cruza
 // la red UNA fila: el tamaño del payload pasa a depender del número de GRUPOS
 // (fases, modelos, días, flotas), no del número de llamadas al modelo.
+//
+// Y `viaje`/`gasto` TAMBIÉN EN SQL DESDE EL 22-AGO-2026 (mig. 0153). El párrafo
+// de arriba decía que `gasto` "es la siguiente en la fila (~240 mil al año)";
+// con un cliente de 50,000 viajes/mes son 300,000 gastos AL MES: `traerTodo`
+// rebasaba sus 100,000 filas al **día ~10** y las ~17 páginas de /admin que
+// leen `getResumenNegocio` dejaban de cargar (docs/escala-50k/MAPA.md §/admin).
+// `resumen_negocio()` cuenta en la base (por flota, por día local MX) y cruza
+// la red UNA fila. Es CROSS-TENANT a propósito y revocada a anon/authenticated
+// — ver la cabecera de la migración antes de copiar el molde a otro lado.
+//
+// Y CON CACHÉ DE 60 SEGUNDOS DESDE EL 22-AGO-2026 (ESC-10). Agregar en SQL
+// bajó el payload, no el número de veces que se agrega: las ~17 páginas de
+// /admin llaman a `getResumenNegocio` en CADA carga, y cada llamada dispara
+// los dos recorridos completos (`llm_costo` y `viaje`+`gasto`). Navegar entre
+// cinco pantallas de la consola son diez agregaciones de la base entera para
+// enseñar cifras que no cambiaron en ese minuto.
+//
+// SE CACHEAN LAS DOS RPC, NO EL CATÁLOGO DE FLOTAS, y la distinción es de
+// producto: `llm_costo`, `viaje` y `gasto` los escribe el pipeline (nadie los
+// edita desde /admin), así que un minuto de retraso en esas cifras no
+// contradice a nadie. `tenant` SÍ se edita desde la consola —dar de alta una
+// flota, cambiar su plan, declarar la facilidad del 15%— y ahí un minuto de
+// caché haría que el `revalidatePath` de la acción se viera no hacer nada.
+// Por eso esa lectura sigue en vivo: la flota nueva aparece en el acto, con
+// sus cifras en cero, que es la verdad.
+//
+// Toda consulta de este archivo va envuelta en `acotada()` (presupuesto.ts):
+// la consola no tiene el presupuesto del webhook, pero un `Promise.all` de
+// dieciséis lecturas sin techo colgado en una sola es toda la página en blanco.
+// `acotada_guardiana.test.ts` lo exige archivo por archivo.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { unstable_cache } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import { conteo, traerTodo } from '@/lib/likida/pg';
+import { acotada } from '@/lib/likida/presupuesto';
 import { round2, TZ_MX, hoyMx } from '@/lib/formato';
 // Solo TIPOS: `import type` se borra al compilar, así que esto no arrastra el
 // módulo de corridas (que carga supabaseAdmin/logger al importarse) — aquí
 // nada más se quiere el dominio del CHECK de la 0102 escrito una vez.
 import type { AgenteConCorridas, EstadoCorrida } from '@/lib/likida/agentes/corridas';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA CACHÉ DE LA CONSOLA (ESC-10)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Sesenta segundos: lo que tarda Javier en pasar de una pantalla de /admin a
+ * otra, y menos de lo que tarda cualquiera en notar que una cifra de gasto de
+ * IA no se movió. No es un número de rendimiento, es un número de producto —
+ * más arriba empezaría a contradecir al reloj del sidebar.
+ */
+export const SEGUNDOS_CACHE_CONSOLA = 60;
+
+/**
+ * `unstable_cache` cuando hay un Next debajo, y la función PELADA cuando no.
+ *
+ * El guard no es cosmético: fuera de una petición de Next, `unstable_cache`
+ * lanza `Invariant: incrementalCache missing` — o sea, importar este módulo
+ * desde una prueba (o desde un script) reventaría en la primera llamada. El
+ * mismo interruptor que usa `instrumentation.ts` (`process.env.NEXT_RUNTIME`,
+ * que Next sustituye en tiempo de build) distingue los dos mundos.
+ *
+ * Consecuencia declarada: en las pruebas NO hay caché, y es lo correcto —
+ * memorizar entre casos haría que el fixture del segundo `it` no se leyera.
+ */
+function conCacheDeConsola<A extends unknown[], R>(
+  fn: (...args: A) => Promise<R>,
+  llaves: string[],
+): (...args: A) => Promise<R> {
+  if (process.env.NEXT_RUNTIME !== 'nodejs') return fn;
+  return unstable_cache(fn, llaves, { revalidate: SEGUNDOS_CACHE_CONSOLA, tags: ['admin-consola'] });
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA AGREGACIÓN DE `llm_costo`, EN SQL
@@ -74,12 +139,14 @@ interface ResumenCostoIa {
  * pintaría un cero que nadie midió. Por eso se valida la FORMA antes de leerla:
  * el modo de fallo que importa aquí no es "se cayó", es "bajó sola".
  */
-async function traerResumenCostoIa(
-  desde: string | null = null,
-  hasta: string | null = null,
+async function leerResumenCostoIa(
+  desde: string | null,
+  hasta: string | null,
 ): Promise<ResumenCostoIa> {
-  const { data, error } = await supabaseAdmin()
-    .rpc('resumen_costo_ia', { p_desde: desde, p_hasta: hasta });
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('resumen_costo_ia', { p_desde: desde, p_hasta: hasta }),
+    'resumen_costo_ia',
+  );
   if (error) throw new Error(`resumen_costo_ia: ${error.message}`);
 
   const r = data as Partial<ResumenCostoIa> | null;
@@ -99,6 +166,68 @@ async function traerResumenCostoIa(
   return r as ResumenCostoIa;
 }
 
+const resumenCostoIaCacheado = conCacheDeConsola(leerResumenCostoIa, ['admin', 'resumen_costo_ia']);
+
+/**
+ * La misma lectura, con 60 s de caché. El wrapper conserva los defaults a
+ * propósito: `unstable_cache` mete los argumentos en la llave, y llamarla
+ * unas veces con `()` y otras con `(null, null)` guardaría DOS entradas con
+ * el mismo contenido — dos recorridos de `llm_costo` en vez de uno.
+ */
+async function traerResumenCostoIa(
+  desde: string | null = null,
+  hasta: string | null = null,
+): Promise<ResumenCostoIa> {
+  return resumenCostoIaCacheado(desde, hasta);
+}
+
+/**
+ * Lo que devuelve `resumen_negocio()` (mig. 0153): los conteos de `viaje` y
+ * `gasto` de TODAS las flotas, en un solo `jsonb`. `facturasPorDia` viene
+ * DISPERSA (solo los días con actividad, día LOCAL de México) y acotada a
+ * `p_desde`; los dos totales son históricos a propósito (así los rotula la
+ * consola).
+ */
+interface ResumenNegocioSql {
+  viajesTotal: number;
+  viajesPorTenant: Array<{ tenantId: string; n: number }>;
+  facturasTotal: number;
+  facturasPorDia: Array<{ dia: string; n: number }>;
+}
+
+const esConteo = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+
+/**
+ * Llama a la agregación cross-tenant y **falla cerrado** — mismas dos
+ * comprobaciones que `traerResumenCostoIa`: el error por valor, y la FORMA.
+ * Si la 0153 no está aplicada, PostgREST responde 404 y se lanza; si
+ * responde otra cosa (un NULL donde iba un array, un conteo que no es
+ * entero), también: un `?? 0` aquí pintaría "0 viajes procesados" como si
+ * alguien los hubiera contado.
+ */
+async function leerResumenNegocio(desde: string | null): Promise<ResumenNegocioSql> {
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('resumen_negocio', { p_desde: desde }),
+    'resumen_negocio',
+  );
+  if (error) throw new Error(`resumen_negocio: ${error.message}`);
+  const r = data as Partial<ResumenNegocioSql> | null;
+  const tenantsOk = Array.isArray(r?.viajesPorTenant)
+    && r.viajesPorTenant.every((t) => typeof t?.tenantId === 'string' && esConteo(t?.n));
+  const diasOk = Array.isArray(r?.facturasPorDia)
+    && r.facturasPorDia.every((d) => typeof d?.dia === 'string' && esConteo(d?.n));
+  if (!r || !esConteo(r.viajesTotal) || !esConteo(r.facturasTotal) || !tenantsOk || !diasOk) {
+    throw new Error(
+      'resumen_negocio: la respuesta no tiene la forma esperada (¿migración 0153 sin aplicar?). '
+      + 'No se devuelve un resumen a medias: un cero aquí se lee como "no se ha procesado nada".',
+    );
+  }
+  return r as ResumenNegocioSql;
+}
+
+/** Misma lectura, 60 s de caché (ESC-10). Ver `conCacheDeConsola`. */
+const traerResumenNegocio = conCacheDeConsola(leerResumenNegocio, ['admin', 'resumen_negocio']);
+
 /**
  * El costo de IA del MES EN CURSO (mes de México) — alimenta el widget de
  * uso del sidebar de /admin (16-ago-2026, ref. shadcn-dashboard). Reusa la
@@ -113,6 +242,17 @@ export async function costoIaMesActual(): Promise<{ mesUsd: number; llamadas: nu
   const r = await traerResumenCostoIa(desde, null);
   const etiquetaMes = new Intl.DateTimeFormat('es-MX', { timeZone: TZ_MX, month: 'long' }).format(ahora);
   return { mesUsd: round2(r.totales.costoUsd), llamadas: r.totales.n, etiquetaMes };
+}
+
+/**
+ * El costo de IA de TODAS las flotas desde un instante — para el modelo de
+ * capacidad (capacidad.ts), que antes sumaba `llm_costo` en JS con un
+ * `.limit(10000)` que recortaba en silencio. Misma agregación, sin redondear
+ * (el llamador divide entre viajes antes de mostrar). LANZA si no se pudo leer.
+ */
+export async function costoIaDesde(desdeIso: string): Promise<{ n: number; costoUsd: number }> {
+  const r = await traerResumenCostoIa(desdeIso, null);
+  return { n: r.totales.n, costoUsd: r.totales.costoUsd };
 }
 
 /**
@@ -183,11 +323,6 @@ export interface ResumenNegocio {
  * cambiaría la cifra con la que se pone el precio del producto, y eso es un
  * cambio de producto, no de rendimiento. El día que se decida, es un argumento.
  */
-/** El DÍA DE MÉXICO de un timestamptz — el mismo patrón que `getSeriesKpiCards`
- *  (analytics.ts) y el chip de fecha de consola.tsx. `en-CA` da `YYYY-MM-DD`. */
-const diaMx = (iso: string): string =>
-  hoyMx(new Date(iso));
-
 export async function getResumenNegocio(
   // El día de MÉXICO, no `toISOString().slice(0, 10)` (que es el día UTC): a
   // las 6pm de CDMX ya es mañana en UTC, y la ventana de `facturasPorDia`
@@ -196,31 +331,35 @@ export async function getResumenNegocio(
   ventanaDias: number = 7,
 ): Promise<ResumenNegocio> {
   const admin = supabaseAdmin();
-  // `traerTodo` cubre los DOS bordes de PostgREST de una vez: el error que llega
-  // por valor (una base caída se leía "0 tenants, $0 gastados", indistinguible
-  // de que Likida de verdad no tenga nada) y el recorte silencioso a `max_rows`.
-  // Y si la lectura no se puede completar, LANZA — la consola de superadmin
-  // enseña su estado de error en vez de una cifra de gasto que no se midió.
-  //
-  // `llm_costo` YA NO SE TRAE: se agrega en la base (mig. 0062). Era la tabla
-  // que más rápido crece —una fila por llamada al modelo, ~790 mil al año— y la
-  // única de las cuatro que iba a rebasar las 100,000 filas de `traerTodo` en el
-  // primer par de meses. `gasto` es la siguiente en la fila (~240 mil al año) y
-  // sigue viniendo entera: cuando le toque, el camino ya está trazado.
-  const [tenantsData, viajesData, costoIa, gastosData] = await Promise.all([
+  // Las fechas de la ventana se calculan sobre `hoy` (día MX) en UTC puro —
+  // aritmética de calendario, sin zona— para que "hoy" sea inyectable en las
+  // pruebas en vez de depender del reloj real.
+  const cortes = (diasAtras: number) => {
+    const d = new Date(`${hoy}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - diasAtras);
+    return d.toISOString().slice(0, 10);
+  };
+  // El corte de `facturasPorDia`: la MEDIANOCHE DE MÉXICO del primer día de la
+  // ventana, como instante (`-06:00`: México no tiene horario de verano desde
+  // 2022 — el mismo supuesto que `costoIaMesActual`). La RPC bucketea por día
+  // local MX, así que lo que entra por este corte cae exactamente en las
+  // `ventanaDias` barras que se pintan abajo.
+  const desdeVentana = new Date(`${cortes(ventanaDias - 1)}T00:00:00-06:00`).toISOString();
+
+  // `tenant` SÍ se trae con `traerTodo` (una fila por flota — cientos, no
+  // cientos de miles): cubre el error por valor y el recorte a `max_rows`, y
+  // LANZA si no completa. `llm_costo` (0062) y `viaje`/`gasto` (0153) no se
+  // traen: se cuentan en la base. Ver la cabecera.
+  const [tenantsData, costoIa, negocio] = await Promise.all([
     traerTodo<{ id: string; nombre: string; plan: string; config: unknown }>(
-      (d, h) => admin.from('tenant').select('id, nombre, plan, config', conteo(d)).order('id').range(d, h),
+      (d, h) => acotada(
+        admin.from('tenant').select('id, nombre, plan, config', conteo(d)).order('id').range(d, h),
+        'getResumenNegocio/tenant',
+      ),
       'getResumenNegocio/tenant',
     ),
-    traerTodo<{ tenant_id: string }>(
-      (d, h) => admin.from('viaje').select('id, tenant_id', conteo(d)).order('id').range(d, h),
-      'getResumenNegocio/viaje',
-    ),
     traerResumenCostoIa(),
-    traerTodo<{ created_at: string }>(
-      (d, h) => admin.from('gasto').select('created_at', conteo(d)).order('id').range(d, h),
-      'getResumenNegocio/gasto',
-    ),
+    traerResumenNegocio(desdeVentana),
   ]);
   const costoIaUsd = costoIa.totales.costoUsd;
   const tokensIn = costoIa.totales.tokensIn;
@@ -243,11 +382,6 @@ export async function getResumenNegocio(
   // Tendencia real, no de adorno: si la ventana ANTERIOR está vacía (Likida
   // lleva menos de 7 días con actividad), "creció ∞%" no dice nada — se
   // calla en vez de inventar una flecha.
-  const cortes = (diasAtras: number) => {
-    const d = new Date(`${hoy}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - diasAtras);
-    return d.toISOString().slice(0, 10);
-  };
   const [inicioActual, inicioAnterior] = [cortes(7), cortes(14)];
   const sumaEnVentana = (desde: string, hasta: string, campo: 'costoUsd' | 'tokens') =>
     porDia.filter((d) => d.dia >= desde && d.dia < hasta).reduce((s, d) => s + d[campo], 0);
@@ -258,24 +392,23 @@ export async function getResumenNegocio(
     return round2(((actual - anterior) / anterior) * 100);
   };
 
-  const viajesPorTenant = new Map<string, number>();
-  for (const v of viajesData) {
-    viajesPorTenant.set(v.tenant_id, (viajesPorTenant.get(v.tenant_id) ?? 0) + 1);
-  }
-  // Últimos 7 días, siempre las 7 fechas (0 donde no hubo facturas) — el
-  // mismo criterio de `cortes()` de arriba, para que "hoy" sea inyectable
-  // en las pruebas en vez de depender del reloj real.
+  const viajesPorTenant = new Map<string, number>(
+    negocio.viajesPorTenant.map((t) => [t.tenantId, t.n]),
+  );
+  // Últimos `ventanaDias` días, SIEMPRE todas las fechas (0 donde no hubo
+  // facturas): la RPC manda la serie dispersa y aquí se rellena contra el
+  // calendario de `cortes()`. Un día sin fila es un CERO medido — la
+  // agregación corrió sobre la ventana entera—, no un hueco.
   //
-  // El bucket es el DÍA DE MÉXICO. `slice(0, 10)` sobre el timestamptz era el
-  // día UTC: una factura procesada a las 7pm de CDMX contaba en la barra de
-  // MAÑANA. (`porDia` del costo de IA sí se queda en UTC a propósito — su
-  // comentario de arriba explica por qué no se mueve la serie histórica.)
-  const facturasPorDiaMap = new Map<string, number>();
-  for (const g of gastosData) {
-    const dia = diaMx(g.created_at);
-    facturasPorDiaMap.set(dia, (facturasPorDiaMap.get(dia) ?? 0) + 1);
-  }
-  const facturasPorDia = Array.from({ length: ventanaDias }, (_, i) => {
+  // El bucket es el DÍA DE MÉXICO, calculado en SQL (`at time zone
+  // 'America/Mexico_City'`, mig. 0153) — el mismo corte que `diaMx` hacía en
+  // JS: una factura procesada a las 7pm de CDMX cuenta en la barra de HOY,
+  // no en la de mañana. (`porDia` del costo de IA sí se queda en UTC a
+  // propósito — su comentario de arriba explica por qué no se mueve la serie.)
+  const facturasPorDiaMap = new Map<string, number>(
+    negocio.facturasPorDia.map((d) => [d.dia, d.n]),
+  );
+  const facturasPorDia = [...new Array(ventanaDias).keys()].map((i) => {
     const dia = cortes(ventanaDias - 1 - i);
     return { dia, n: facturasPorDiaMap.get(dia) ?? 0 };
   });
@@ -295,7 +428,7 @@ export async function getResumenNegocio(
   return {
     tenants: flotas.length,
     flotas,
-    viajesProcesados: viajesData.length,
+    viajesProcesados: negocio.viajesTotal,
     costoIaUsd: round2(costoIaUsd),
     tokensIn,
     tokensOut,
@@ -303,7 +436,7 @@ export async function getResumenNegocio(
     porModelo,
     porDia,
     facturasPorDia,
-    facturasTotal: gastosData.length,
+    facturasTotal: negocio.facturasTotal,
     tendenciaCosto: tendencia('costoUsd'),
     tendenciaTokens: tendencia('tokens'),
   };
@@ -337,10 +470,19 @@ export interface TurnoConversacion { role: 'user' | 'assistant'; content: string
 
 export interface ConversacionActiva {
   telefono: string;
+  /** FE-23: `wa_conversacion` está anclada por (tenant, teléfono) — el mismo
+   *  número puede aparecer en dos flotas (un chofer que cambia de patrón, un
+   *  número de oficina compartido). Sin el tenant, la llave de React de la
+   *  lista se repetía y las dos filas se pisaban al renderizar. */
+  tenantId: string | null;
   tenantNombre: string;
   turns: TurnoConversacion[];
   actualizadaEn: string;
 }
+
+/** Cuántas conversaciones se listan. Es un TOPE, no un total: `contar
+ *  ConversacionesActivas` da el de verdad y la pantalla dice "20 de N". */
+export const TOPE_CONVERSACIONES = 20;
 
 /**
  * CORRECCIÓN (2-ago-2026, tras verla mal renderizada): `wa_conversacion.
@@ -352,21 +494,46 @@ export interface ConversacionActiva {
  */
 export async function getConversacionesActivas(): Promise<ConversacionActiva[]> {
   const admin = supabaseAdmin();
-  const { data, error } = await admin
+  const { data, error } = await acotada(admin
     .from('wa_conversacion')
-    .select('telefono, estado, updated_at, tenant:tenant_id(nombre)')
+    .select('telefono, tenant_id, estado, updated_at, tenant:tenant_id(nombre)')
     .order('updated_at', { ascending: false })
-    .limit(20);
+    .limit(TOPE_CONVERSACIONES), 'getConversacionesActivas');
   if (error) throw new Error(`getConversacionesActivas: ${error.message}`);
   return (data ?? []).map((c) => {
     const estado = (c.estado as { turns?: TurnoConversacion[] }) ?? {};
     return {
       telefono: c.telefono as string,
+      tenantId: (c.tenant_id as string | null) ?? null,
       tenantNombre: ((c.tenant as { nombre?: string } | null)?.nombre) ?? '—',
       turns: Array.isArray(estado.turns) ? estado.turns : [],
       actualizadaEn: c.updated_at as string,
     };
   });
+}
+
+/**
+ * Cuántas conversaciones hay DE VERDAD (`count exact, head`: cero filas de
+ * vuelta) — FE-9.
+ *
+ * `getConversacionesActivas` devuelve 20 y ese 20 se pintaba como KPI
+ * ("Conversaciones activas: 20"), como alerta de la campana ("20
+ * conversación(es) con actividad reciente") y como el total de la sección.
+ * Con 21 conversaciones vivas los tres decían 20; con 4,000, también. Es un
+ * tope disfrazado de medición.
+ *
+ * `null` = no se pudo contar. Nunca 0: un cero aquí se leería como "el bot no
+ * está hablando con nadie", que es la pregunta que esta pantalla contesta.
+ */
+export async function contarConversacionesActivas(): Promise<number | null> {
+  const { count, error } = await acotada(supabaseAdmin()
+    .from('wa_conversacion')
+    .select('telefono', { count: 'exact', head: true }), 'contarConversacionesActivas');
+  if (error) {
+    logger.warn('contarConversacionesActivas', { err: error.message });
+    return null;
+  }
+  return count ?? null;
 }
 
 export interface MiembroEquipo {
@@ -392,10 +559,10 @@ export async function getEquipo(): Promise<MiembroEquipo[]> {
   // el rol se repite muchísimo, y paginar por un campo con empates puede
   // repetir o saltarse filas entre páginas. `id` desempata.
   const data = await traerTodo<Record<string, unknown>>(
-    (d, h) => admin
+    (d, h) => acotada(admin
       .from('app_user')
       .select('id, tenant_id, rol, nombre, email, operador_id, tenant:tenant_id(nombre)', conteo(d))
-      .order('rol', { ascending: true }).order('id').range(d, h),
+      .order('rol', { ascending: true }).order('id').range(d, h), 'getEquipo'),
     'getEquipo',
   );
   return data.map((u) => ({
@@ -440,9 +607,9 @@ export interface ConteosPlataforma {
  * nadie midió — NULL no es 0, es "no se pudo contar".
  */
 async function contarFilas(tabla: 'operador' | 'liquidacion' | 'wa_conversacion'): Promise<number> {
-  const { count, error } = await supabaseAdmin()
+  const { count, error } = await acotada(supabaseAdmin()
     .from(tabla)
-    .select('id', { count: 'exact', head: true });
+    .select('id', { count: 'exact', head: true }), `getConteosPlataforma/${tabla}`);
   if (error) throw new Error(`getConteosPlataforma/${tabla}: ${error.message}`);
   if (typeof count !== 'number') {
     throw new Error(`getConteosPlataforma/${tabla}: PostgREST no devolvió el conteo — no se afirma un 0 que nadie midió.`);
@@ -462,7 +629,10 @@ export async function getConteosPlataforma(): Promise<ConteosPlataforma> {
     // muchísimo, así que `id` desempata la paginación (mismo porqué que
     // `getEquipo`).
     traerTodo<{ rol: string }>(
-      (d, h) => admin.from('app_user').select('rol', conteo(d)).order('rol', { ascending: true }).order('id').range(d, h),
+      (d, h) => acotada(
+        admin.from('app_user').select('rol', conteo(d)).order('rol', { ascending: true }).order('id').range(d, h),
+        'getConteosPlataforma/app_user',
+      ),
       'getConteosPlataforma/app_user',
     ),
   ]);
@@ -473,7 +643,7 @@ export async function getConteosPlataforma(): Promise<ConteosPlataforma> {
     liquidaciones,
     conversacionesWa,
     usuarios: usuariosData.length,
-    usuariosPorRol: Array.from(porRol, ([rol, n]) => ({ rol, n })),
+    usuariosPorRol: [...porRol].map(([rol, n]) => ({ rol, n })),
   };
 }
 
@@ -557,11 +727,11 @@ const COLUMNAS_CORRIDA = 'agente, estado, disparo, inicio, fin, tareas_hechas, t
  * `ultimasCorridas`).
  */
 export async function getCorridasRecientes(limite = 8): Promise<CorridaReciente[]> {
-  const { data, error } = await supabaseAdmin()
+  const { data, error } = await acotada(supabaseAdmin()
     .from('agente_corrida')
     .select(COLUMNAS_CORRIDA)
     .order('inicio', { ascending: false })
-    .limit(limite);
+    .limit(limite), 'getCorridasRecientes');
   if (error) throw new Error(`getCorridasRecientes: ${error.message}`);
   return (data ?? []).map((f) => {
     const r = f as Record<string, unknown>;
@@ -580,12 +750,12 @@ export async function getCorridasRecientes(limite = 8): Promise<CorridaReciente[
 export async function getUltimaCorridaPorAgente(): Promise<UltimaCorridaAgente[]> {
   const admin = supabaseAdmin();
   return Promise.all(AGENTES_BITACORA.map(async (agente) => {
-    const { data, error } = await admin
+    const { data, error } = await acotada(admin
       .from('agente_corrida')
       .select(COLUMNAS_CORRIDA)
       .eq('agente', agente)
       .order('inicio', { ascending: false })
-      .limit(1);
+      .limit(1), `getUltimaCorridaPorAgente/${agente}`);
     if (error) throw new Error(`getUltimaCorridaPorAgente/${agente}: ${error.message}`);
     const fila = (data ?? [])[0] as Record<string, unknown> | undefined;
     return { agente, ultima: fila ? mapearCorrida(fila) : null };
@@ -600,13 +770,36 @@ export async function getUltimaCorridaPorAgente(): Promise<UltimaCorridaAgente[]
  * pantallas); solo cambia el filtro. LANZA ante error de lectura — "0
  * fallos" sobre una base caída afirmaría que todo corrió bien.
  */
-export async function getCorridasFallidas(limite = 20): Promise<CorridaReciente[]> {
-  const { data, error } = await supabaseAdmin()
+export const TOPE_CORRIDAS_FALLIDAS = 20;
+
+/**
+ * Cuántas corridas en `fallo` hay DE VERDAD (`count exact, head`) — FE-9.
+ *
+ * `getCorridasFallidas(20)` devuelve 20 y ese 20 se pintaba como el conteo
+ * de la campana y de la bandeja de escalaciones: con 500 agentes caídos
+ * seguía diciendo 20, que es la cifra que decide si alguien va a mirar.
+ *
+ * `null` = no se pudo contar. Nunca 0: un cero afirmaría que todo corrió bien.
+ */
+export async function contarCorridasFallidas(): Promise<number | null> {
+  const { count, error } = await acotada(supabaseAdmin()
+    .from('agente_corrida')
+    .select('id', { count: 'exact', head: true })
+    .eq('estado', 'fallo'), 'contarCorridasFallidas');
+  if (error) {
+    logger.warn('contarCorridasFallidas', { err: error.message });
+    return null;
+  }
+  return count ?? null;
+}
+
+export async function getCorridasFallidas(limite = TOPE_CORRIDAS_FALLIDAS): Promise<CorridaReciente[]> {
+  const { data, error } = await acotada(supabaseAdmin()
     .from('agente_corrida')
     .select(COLUMNAS_CORRIDA)
     .eq('estado', 'fallo')
     .order('inicio', { ascending: false })
-    .limit(limite);
+    .limit(limite), 'getCorridasFallidas');
   if (error) throw new Error(`getCorridasFallidas: ${error.message}`);
   return (data ?? []).map((f) => {
     const r = f as Record<string, unknown>;
@@ -629,8 +822,24 @@ export interface LiquidacionEnRevision {
   tenantNombre: string;
 }
 
+/** Las N más recientes que trae la bandeja. Con un cliente de 50k viajes/mes
+ *  la cola humana puede tener miles; la bandeja pinta las últimas y el
+ *  TOTAL lo da `contarLiquidacionesEnRevisar` (count head, sin filas). */
+export const LIMITE_LIQUIDACIONES_REVISAR = 200;
+
+const COLUMNAS_LIQ_REVISAR = 'id, created_at, tenant_id, tenant:tenant_id(nombre), viaje:viaje_id(folio)';
+
 /**
- * Las liquidaciones que AHORA están en `revisar`, de todas las flotas.
+ * Las liquidaciones que AHORA están en `revisar`, de todas las flotas — las
+ * `limite` MÁS RECIENTES (`created_at desc`, `id desc` desempata).
+ *
+ * ACOTADA DESDE EL 22-AGO-2026 (escala 50k): antes era `traerTodo` cross-tenant
+ * sin fecha ni tope —toda la cola humana a JS en cada carga de /admin y de la
+ * bandeja—, con la misma fecha de caducidad que `getResumenNegocio`. Ahora son
+ * `limite` filas por el índice parcial de la 0153 (`where estatus =
+ * 'revisar'`), y el conteo real sale aparte, por `head`. La firma se conserva
+ * (el array); quien necesite el total, que lo CUENTE — `items.length` ya no
+ * lo es.
  *
  * HONESTIDAD DEL DATO: `liquidacion.estatus` (dominio de la 0025: cuadrada |
  * con_diferencias | revisar) es el estado ACTUAL, no una historia.
@@ -639,17 +848,18 @@ export interface LiquidacionEnRevision {
  * pantalla puede afirmar "cerrada sin haber pasado nunca por un humano" —
  * solo "hoy no está en la bandeja". El rótulo de la consola lo dice así.
  */
-export async function getLiquidacionesEnRevisar(): Promise<LiquidacionEnRevision[]> {
-  const admin = supabaseAdmin();
-  const filas = await traerTodo<Record<string, unknown>>(
-    (d, h) => admin
-      .from('liquidacion')
-      .select('id, created_at, tenant_id, tenant:tenant_id(nombre), viaje:viaje_id(folio)', conteo(d))
-      .eq('estatus', 'revisar')
-      .order('id').range(d, h),
-    'getLiquidacionesEnRevisar',
-  );
-  return filas.map((f) => ({
+export async function getLiquidacionesEnRevisar(
+  limite: number = LIMITE_LIQUIDACIONES_REVISAR,
+): Promise<LiquidacionEnRevision[]> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('liquidacion')
+    .select(COLUMNAS_LIQ_REVISAR)
+    .eq('estatus', 'revisar')
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limite), 'getLiquidacionesEnRevisar');
+  if (error) throw new Error(`getLiquidacionesEnRevisar: ${error.message}`);
+  return ((data ?? []) as Array<Record<string, unknown>>).map((f) => ({
     id: f.id as string,
     creadaEn: f.created_at as string,
     folio: ((f.viaje as { folio?: string | null } | null)?.folio) ?? null,
@@ -658,4 +868,22 @@ export async function getLiquidacionesEnRevisar(): Promise<LiquidacionEnRevision
     // `mapearCorrida`).
     tenantNombre: ((f.tenant as { nombre?: string } | null)?.nombre) ?? '—',
   }));
+}
+
+/**
+ * CUÁNTAS están en `revisar` ahora, todas las flotas — `head: true` +
+ * `count: 'exact'`: la base cuenta y no manda NI UNA fila (mismo patrón y
+ * misma exigencia que `contarFilas`: un `count` que no llega como número no
+ * es 0, es "no se pudo contar", y se lanza).
+ */
+export async function contarLiquidacionesEnRevisar(): Promise<number> {
+  const { count, error } = await acotada(supabaseAdmin()
+    .from('liquidacion')
+    .select('id', { count: 'exact', head: true })
+    .eq('estatus', 'revisar'), 'contarLiquidacionesEnRevisar');
+  if (error) throw new Error(`contarLiquidacionesEnRevisar: ${error.message}`);
+  if (typeof count !== 'number') {
+    throw new Error('contarLiquidacionesEnRevisar: PostgREST no devolvió el conteo — no se afirma un 0 que nadie midió.');
+  }
+  return count;
 }

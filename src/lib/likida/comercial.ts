@@ -8,18 +8,65 @@
 // medio capturar. Cuando falta la mitad del dato, se devuelve el conteo de lo
 // que falta para que la pantalla lo diga.
 //
-// `traerTodo` en todas: PostgREST recorta a 1,000 filas EN SILENCIO, y una
-// cartera recortada da una concentración que se ve razonable y está mal.
+// ── AGREGADOS EN SQL DESDE EL 22-AGO-2026 (mig. 0152) ──────────────────────
+// `getRentabilidad`, `getCartera` y `getCobranza` traían `viaje`,
+// `liquidacion`, `factura_emitida`+`factura_saldo` y `cliente` ENTERAS con
+// `traerTodo` para reducirlas en JS. `traerTodo` es correcto —lanza en vez de
+// truncar— pero lanza a las 100,000 filas: con 50k viajes/mes esas tres
+// pantallas caducaban ~mes 2 (docs/escala-50k/MAPA.md #12, #14, #16). Ahora
+// cada reducción es UNA RPC (`rentabilidad_tenant`, `cartera_tenant`,
+// `cobranza_tenant`) con el mismo criterio que antes —un `ingreso_flete`
+// NULL no es cero, una cancelada no es dinero que alguien deba— y el lado JS
+// valida la FORMA del jsonb y LANZA si no encaja: un `0` inventado sobre una
+// respuesta rota se ve idéntico a una flota sin actividad. Las pruebas de
+// equivalencia (comercial_equivalencia.test.ts) comparan la reducción JS
+// vieja contra la forma nueva sobre el mismo dataset sintético.
+//
+// Lo que sigue en JS (`getCotizaciones`, `getTickets`, `getEstadoRastreo`)
+// son catálogos chicos por naturaleza y van con `traerTodo` + `acotada()`:
+// PostgREST recorta a 1,000 filas EN SILENCIO y una lista recortada se ve
+// razonable y está mal; y una consulta sin techo de tiempo cuelga la página.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { traerTodo } from './pg';
+import { acotada } from './presupuesto';
 // `round2` se IMPORTA, no se reimplementa: hay una prueba en `formato.test.ts`
 // que falla si aparece otra copia. Dos redondeos distintos hacen que la misma
 // cifra fiscal se lea diferente en dos pantallas, y eso se lee como dos
 // cálculos distintos.
 import { round2 } from '@/lib/formato';
 import { DatoInvalido } from './errores';
+
+// ── Forma del jsonb: fail-closed ───────────────────────────────────────────
+
+/** Un número de verdad (PostgREST entrega `numeric` como número en jsonb). */
+export function esNumero(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+/** `null` o número: para los campos que la RPC deja en NULL a propósito. */
+export function esNumeroONulo(v: unknown): v is number | null {
+  return v === null || esNumero(v);
+}
+
+/** `null` o string. */
+export function esTextoONulo(v: unknown): v is string | null {
+  return v === null || typeof v === 'string';
+}
+
+export function esObjeto(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * El mensaje con el que TODAS las lecturas de la 0152 lanzan ante una forma
+ * inesperada. Nombra la RPC y la migración: es lo primero que hay que revisar
+ * (¿se aplicó la 0152 en ese entorno?).
+ */
+export function formaInesperada(funcion: string, rpc: string, detalle: string): Error {
+  return new Error(`${funcion}: ${rpc} devolvió otra forma (¿migración 0152 sin aplicar?): ${detalle}`);
+}
 
 // ── Clientes ───────────────────────────────────────────────────────────────
 
@@ -45,50 +92,88 @@ export interface Cartera {
   viajesSinCliente: number;
 }
 
-export async function getCartera(tenantId: string): Promise<Cartera> {
-  const admin = supabaseAdmin();
-  const [clientes, viajes] = await Promise.all([
-    traerTodo<{ id: unknown; nombre: unknown; rfc: unknown; dias_credito: unknown; activo: unknown }>(
-      (d, h) => admin.from('cliente').select('id, nombre, rfc, dias_credito, activo')
-        .eq('tenant_id', tenantId).order('id').range(d, h),
-      'getCartera.cliente',
-    ),
-    traerTodo<{ cliente_id: unknown; ingreso_flete: unknown }>(
-      (d, h) => admin.from('viaje').select('cliente_id, ingreso_flete')
-        .eq('tenant_id', tenantId).order('id').range(d, h),
-      'getCartera.viaje',
-    ),
-  ]);
+/**
+ * Lo que `cartera_tenant` (0152) devuelve por cliente, ya validado. Es un
+ * superconjunto de `ClienteRow`: `getCartera` se queda con la mitad comercial
+ * y `getPanelClientes` (clientes.ts) usa también el contacto y el saldo —
+ * de UNA sola lectura, para que la concentración y el saldo por cliente no
+ * puedan salir de dos consultas distintas.
+ */
+export interface ClienteCarteraRpc extends ClienteRow {
+  contacto: string | null;
+  correo: string | null;
+  telefono: string | null;
+  /** Facturas vivas (ni canceladas ni borradores) del cliente. */
+  facturas: number;
+  /** `null` cuando no tiene ninguna factura viva: saldo desconocido, no cero. */
+  saldoPorCobrar: number | null;
+  vencido: number | null;
+}
 
-  const acum = new Map<string, { viajes: number; ingreso: number; sinIngreso: number }>();
-  let viajesSinCliente = 0;
+export interface CarteraRpc {
+  clientes: ClienteCarteraRpc[];
+  viajesSinCliente: number;
+  /** Viajes de la flota CON `ingreso_flete` capturado. */
+  conIngreso: number;
+}
 
-  for (const v of viajes) {
-    const cid = v.cliente_id as string | null;
-    if (!cid) { viajesSinCliente++; continue; }
-    const a = acum.get(cid) ?? { viajes: 0, ingreso: 0, sinIngreso: 0 };
-    a.viajes++;
-    // `null` NO es cero. Un viaje sin ingreso capturado se cuenta aparte: si
-    // se sumara como 0, el ingreso del cliente saldría bajo y su margen
-    // negativo, y los dos números se verían plausibles.
-    if (v.ingreso_flete == null) a.sinIngreso++;
-    else a.ingreso += Number(v.ingreso_flete);
-    acum.set(cid, a);
+/**
+ * UNA llamada a `cartera_tenant` y la validación de su forma, campo por campo.
+ * Cualquier cosa que no encaje LANZA: una cartera a medias se ve igual que una
+ * cartera entera, solo que más chica.
+ */
+export async function leerCarteraRpc(tenantId: string): Promise<CarteraRpc> {
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('cartera_tenant', { p_tenant: tenantId }),
+    'cartera_tenant',
+  );
+  if (error) throw new Error(`getCartera: ${error.message}`);
+  if (!esObjeto(data) || !Array.isArray(data.clientes) || !esNumero(data.viajesSinCliente) || !esNumero(data.conIngreso)) {
+    throw formaInesperada('getCartera', 'cartera_tenant', `llegó ${typeof data}`);
   }
-
-  const filas: ClienteRow[] = clientes.map((c) => {
-    const a = acum.get(c.id as string) ?? { viajes: 0, ingreso: 0, sinIngreso: 0 };
+  const clientes = (data.clientes as unknown[]).map((c, i): ClienteCarteraRpc => {
+    if (!esObjeto(c) || typeof c.id !== 'string' || typeof c.nombre !== 'string'
+      || !esTextoONulo(c.rfc) || !esNumeroONulo(c.diasCredito) || typeof c.activo !== 'boolean'
+      || !esTextoONulo(c.contacto) || !esTextoONulo(c.correo) || !esTextoONulo(c.telefono)
+      || !esNumero(c.viajes) || !esNumero(c.ingreso) || !esNumero(c.viajesSinIngreso)
+      || !esNumero(c.facturas) || !esNumeroONulo(c.saldoPorCobrar) || !esNumeroONulo(c.vencido)) {
+      throw formaInesperada('getCartera', 'cartera_tenant', `cliente #${i} con campos fuera de forma`);
+    }
     return {
-      id: c.id as string,
-      nombre: c.nombre as string,
-      rfc: (c.rfc as string) ?? null,
-      diasCredito: c.dias_credito == null ? null : Number(c.dias_credito),
-      activo: Boolean(c.activo),
-      viajes: a.viajes,
-      ingreso: round2(a.ingreso),
-      viajesSinIngreso: a.sinIngreso,
+      id: c.id,
+      nombre: c.nombre,
+      rfc: c.rfc,
+      diasCredito: c.diasCredito,
+      activo: c.activo,
+      contacto: c.contacto,
+      correo: c.correo,
+      telefono: c.telefono,
+      viajes: c.viajes,
+      ingreso: round2(c.ingreso),
+      viajesSinIngreso: c.viajesSinIngreso,
+      facturas: c.facturas,
+      saldoPorCobrar: c.saldoPorCobrar === null ? null : round2(c.saldoPorCobrar),
+      vencido: c.vencido === null ? null : round2(c.vencido),
     };
-  }).sort((x, y) => y.ingreso - x.ingreso);
+  });
+  return { clientes, viajesSinCliente: data.viajesSinCliente, conIngreso: data.conIngreso };
+}
+
+/** La cartera comercial a partir de la lectura ya validada. Pura: es la que
+ *  prueba la equivalencia contra la reducción JS vieja. */
+export function armarCartera(lectura: CarteraRpc): Cartera {
+  // La RPC ya ordena por ingreso desc, nombre, id; se repite aquí para que el
+  // contrato no dependa del orden de un jsonb.
+  const filas: ClienteRow[] = lectura.clientes.map((c) => ({
+    id: c.id,
+    nombre: c.nombre,
+    rfc: c.rfc,
+    diasCredito: c.diasCredito,
+    activo: c.activo,
+    viajes: c.viajes,
+    ingreso: c.ingreso,
+    viajesSinIngreso: c.viajesSinIngreso,
+  })).sort((x, y) => y.ingreso - x.ingreso || x.nombre.localeCompare(y.nombre, 'es') || x.id.localeCompare(y.id));
 
   const ingresoTotal = round2(filas.reduce((s, f) => s + f.ingreso, 0));
   // Sin ingreso capturado no hay concentración que calcular. Devolver 0 se
@@ -97,7 +182,11 @@ export async function getCartera(tenantId: string): Promise<Cartera> {
     ? round2((filas[0].ingreso / ingresoTotal) * 100)
     : null;
 
-  return { clientes: filas, ingresoTotal, concentracion, viajesSinCliente };
+  return { clientes: filas, ingresoTotal, concentracion, viajesSinCliente: lectura.viajesSinCliente };
+}
+
+export async function getCartera(tenantId: string): Promise<Cartera> {
+  return armarCartera(await leerCarteraRpc(tenantId));
 }
 
 // ── Rentabilidad ───────────────────────────────────────────────────────────
@@ -124,42 +213,54 @@ export interface Rentabilidad {
   viajesSinIngreso: number;
 }
 
-/**
- * NO calcula el margen con el anticipo haciendo de ingreso. Es la tentación
- * obvia —`viaje.anticipo` siempre está lleno— y produce números que se ven
- * bien y están mal: el anticipo es lo que la empresa le ADELANTA al operador,
- * no lo que le paga el cliente.
- */
-export async function getRentabilidad(tenantId: string): Promise<Rentabilidad> {
-  const admin = supabaseAdmin();
-  const [viajes, liqs] = await Promise.all([
-    traerTodo<{ ingreso_flete: unknown }>(
-      (d, h) => admin.from('viaje').select('ingreso_flete')
-        .eq('tenant_id', tenantId).order('id').range(d, h),
-      'getRentabilidad.viaje',
-    ),
-    traerTodo<{ total_comprobado: unknown }>(
-      (d, h) => admin.from('liquidacion').select('total_comprobado')
-        .eq('tenant_id', tenantId).order('id').range(d, h),
-      'getRentabilidad.liquidacion',
-    ),
-  ]);
+/** La forma cruda que devuelve `rentabilidad_tenant`, ya validada. */
+export interface RentabilidadRpc {
+  ingreso: number;
+  viajesConIngreso: number;
+  viajesSinIngreso: number;
+  costoComprobado: number;
+}
 
-  let ingreso = 0, conIngreso = 0, sinIngreso = 0;
-  for (const v of viajes) {
-    if (v.ingreso_flete == null) sinIngreso++;
-    else { ingreso += Number(v.ingreso_flete); conIngreso++; }
-  }
-  const costoComprobado = liqs.reduce((s, l) => s + Number(l.total_comprobado ?? 0), 0);
-
+/** Pura: del agregado a la pantalla. El oráculo de la equivalencia. */
+export function armarRentabilidad(r: RentabilidadRpc): Rentabilidad {
+  const ingreso = r.ingreso;
+  const costoComprobado = r.costoComprobado;
   return {
     ingreso: round2(ingreso),
     costoComprobado: round2(costoComprobado),
     contribucion: round2(ingreso - costoComprobado),
     margenPct: ingreso > 0 ? round2(((ingreso - costoComprobado) / ingreso) * 100) : null,
-    viajesConIngreso: conIngreso,
-    viajesSinIngreso: sinIngreso,
+    viajesConIngreso: r.viajesConIngreso,
+    viajesSinIngreso: r.viajesSinIngreso,
   };
+}
+
+/**
+ * NO calcula el margen con el anticipo haciendo de ingreso. Es la tentación
+ * obvia —`viaje.anticipo` siempre está lleno— y produce números que se ven
+ * bien y están mal: el anticipo es lo que la empresa le ADELANTA al operador,
+ * no lo que le paga el cliente.
+ *
+ * `desde` (ISO) acota viajes y liquidaciones por `created_at`; `null` = todo
+ * el histórico, que es lo que la pantalla enseña hoy (su rótulo no dice
+ * "del periodo").
+ */
+export async function getRentabilidad(tenantId: string, desde: string | null = null): Promise<Rentabilidad> {
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('rentabilidad_tenant', { p_tenant: tenantId, p_desde: desde }),
+    'rentabilidad_tenant',
+  );
+  if (error) throw new Error(`getRentabilidad: ${error.message}`);
+  if (!esObjeto(data) || !esNumero(data.ingreso) || !esNumero(data.viajesConIngreso)
+    || !esNumero(data.viajesSinIngreso) || !esNumero(data.costoComprobado)) {
+    throw formaInesperada('getRentabilidad', 'rentabilidad_tenant', `llegó ${typeof data}`);
+  }
+  return armarRentabilidad({
+    ingreso: data.ingreso,
+    viajesConIngreso: data.viajesConIngreso,
+    viajesSinIngreso: data.viajesSinIngreso,
+    costoComprobado: data.costoComprobado,
+  });
 }
 
 // ── Cobranza ───────────────────────────────────────────────────────────────
@@ -177,62 +278,110 @@ export interface FacturaRow {
   vencida: boolean;
 }
 
+/** Tope de la página: es lo que cabe en una tabla sin que nadie la lea. */
+export const COBRANZA_POR_PAGINA = 100;
+
+export interface OpcionesCobranza {
+  /** Acota por `factura_emitida.fecha` (AAAA-MM-DD). `null` = sin cota. */
+  desde?: string | null;
+  hasta?: string | null;
+  /** Desde 1. */
+  pagina?: number;
+  /** ≤ `COBRANZA_POR_PAGINA`. */
+  porPagina?: number;
+}
+
 export interface Cobranza {
+  /**
+   * UNA PÁGINA, no todas (0152): `total` dice cuántas hay en el periodo y
+   * `pagina`/`porPagina` de cuál se trata. Orden estable: vencidas primero,
+   * luego saldo mayor, fecha más reciente, id. Los tres agregados de abajo
+   * son sobre TODO el periodo, no sobre la página.
+   */
   facturas: FacturaRow[];
+  total: number;
+  pagina: number;
+  porPagina: number;
   porCobrar: number;
   vencido: number;
   /** Facturas sin fecha de vencimiento porque su cliente no tiene crédito pactado. */
   sinCondiciones: number;
 }
 
-export async function getCobranza(tenantId: string): Promise<Cobranza> {
+/**
+ * CAMBIO DE CONTRATO (22-ago-2026, mig. 0152): antes devolvía TODAS las
+ * facturas del tenant; ahora devuelve una página (≤100) y el `total`. La vista
+ * de Rentabilidad pagina con `?pagina=`. Los agregados se calculan en SQL
+ * sobre todas las facturas vivas del periodo (`cobranza_tenant`), y el total
+ * sale de un `count` exacto con `head: true` (ni una fila viaja).
+ *
+ * El saldo se deriva de los pagos, NUNCA de una columna guardada: la vista
+ * `factura_saldo` (0049) es la única definición, y la RPC la lee.
+ */
+export async function getCobranza(tenantId: string, opciones: OpcionesCobranza = {}): Promise<Cobranza> {
+  const porPagina = Math.min(Math.max(Math.trunc(opciones.porPagina ?? COBRANZA_POR_PAGINA), 1), COBRANZA_POR_PAGINA);
+  const pagina = Math.max(Math.trunc(opciones.pagina ?? 1), 1);
+  const desde = opciones.desde ?? null;
+  const hasta = opciones.hasta ?? null;
   const admin = supabaseAdmin();
-  const [facturas, saldos, clientes] = await Promise.all([
-    traerTodo<{ id: unknown; folio: unknown; cliente_id: unknown; fecha: unknown; total: unknown; estatus: unknown; vence_en: unknown }>(
-      (d, h) => admin.from('factura_emitida').select('id, folio, cliente_id, fecha, total, estatus, vence_en')
-        .eq('tenant_id', tenantId).order('id').range(d, h),
-      'getCobranza.factura',
-    ),
-    // La vista deriva el saldo de los pagos. NO hay columna `saldo`: una
-    // guardada se desincroniza al cancelar un pago y entonces la pantalla y la
-    // suma de pagos dicen cosas distintas del mismo dinero.
-    traerTodo<{ factura_id: unknown; pagado: unknown; saldo: unknown; vencida: unknown }>(
-      (d, h) => admin.from('factura_saldo').select('factura_id, pagado, saldo, vencida')
-        .eq('tenant_id', tenantId).order('factura_id').range(d, h),
-      'getCobranza.saldo',
-    ),
-    traerTodo<{ id: unknown; nombre: unknown }>(
-      (d, h) => admin.from('cliente').select('id, nombre')
-        .eq('tenant_id', tenantId).order('id').range(d, h),
-      'getCobranza.cliente',
+
+  const [agregados, total] = await Promise.all([
+    acotada(admin.rpc('cobranza_tenant', {
+      p_tenant: tenantId,
+      p_desde: desde,
+      p_hasta: hasta,
+      p_limite: porPagina,
+      p_desplazamiento: (pagina - 1) * porPagina,
+    }), 'cobranza_tenant'),
+    // El MISMO filtro de fecha que la RPC; sin cota se pide el rango entero
+    // de `date` en vez de omitir el filtro, para que la consulta sea una sola
+    // y la guardiana de `acotada` la pueda leer.
+    acotada(
+      admin.from('factura_emitida').select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId)
+        .gte('fecha', desde ?? '0001-01-01')
+        .lte('fecha', hasta ?? '9999-12-31'),
+      'getCobranza.total',
     ),
   ]);
+  if (agregados.error) throw new Error(`getCobranza: ${agregados.error.message}`);
+  if (total.error) throw new Error(`getCobranza.total: ${total.error.message}`);
+  // Un conteo que no llegó NO es un conteo de cero.
+  if (total.count == null) throw new Error('getCobranza.total: PostgREST no devolvió el conteo');
 
-  const nombrePorId = new Map(clientes.map((c) => [c.id as string, c.nombre as string]));
-  const saldoPorId = new Map(saldos.map((s) => [s.factura_id as string, s]));
-
-  const filas: FacturaRow[] = facturas.map((f) => {
-    const s = saldoPorId.get(f.id as string);
+  const data = agregados.data;
+  if (!esObjeto(data) || !esNumero(data.porCobrar) || !esNumero(data.vencido)
+    || !esNumero(data.sinCondiciones) || !Array.isArray(data.facturas)) {
+    throw formaInesperada('getCobranza', 'cobranza_tenant', `llegó ${typeof data}`);
+  }
+  const facturas = (data.facturas as unknown[]).map((f, i): FacturaRow => {
+    if (!esObjeto(f) || typeof f.id !== 'string' || !esTextoONulo(f.folio) || typeof f.cliente !== 'string'
+      || typeof f.fecha !== 'string' || !esNumero(f.total) || !esNumero(f.pagado) || !esNumero(f.saldo)
+      || typeof f.estatus !== 'string' || !esTextoONulo(f.venceEn) || typeof f.vencida !== 'boolean') {
+      throw formaInesperada('getCobranza', 'cobranza_tenant', `factura #${i} con campos fuera de forma`);
+    }
     return {
-      id: f.id as string,
-      folio: (f.folio as string) ?? null,
-      cliente: nombrePorId.get(f.cliente_id as string) ?? '—',
-      fecha: String(f.fecha),
-      total: round2(Number(f.total ?? 0)),
-      pagado: round2(Number(s?.pagado ?? 0)),
-      saldo: round2(Number(s?.saldo ?? f.total ?? 0)),
-      estatus: String(f.estatus),
-      venceEn: (f.vence_en as string) ?? null,
-      vencida: Boolean(s?.vencida),
+      id: f.id,
+      folio: f.folio,
+      cliente: f.cliente,
+      fecha: f.fecha,
+      total: round2(f.total),
+      pagado: round2(f.pagado),
+      saldo: round2(f.saldo),
+      estatus: f.estatus,
+      venceEn: f.venceEn,
+      vencida: f.vencida,
     };
-  }).sort((a, b) => (b.vencida ? 1 : 0) - (a.vencida ? 1 : 0) || b.saldo - a.saldo);
+  });
 
-  const vivas = filas.filter((f) => f.estatus !== 'cancelada' && f.estatus !== 'borrador');
   return {
-    facturas: filas,
-    porCobrar: round2(vivas.reduce((s, f) => s + f.saldo, 0)),
-    vencido: round2(vivas.filter((f) => f.vencida).reduce((s, f) => s + f.saldo, 0)),
-    sinCondiciones: vivas.filter((f) => f.venceEn == null).length,
+    facturas,
+    total: total.count,
+    pagina,
+    porPagina,
+    porCobrar: round2(data.porCobrar),
+    vencido: round2(data.vencido),
+    sinCondiciones: data.sinCondiciones,
   };
 }
 
@@ -255,14 +404,14 @@ export async function getCotizaciones(tenantId: string): Promise<CotizacionRow[]
   const admin = supabaseAdmin();
   const [cots, clientes] = await Promise.all([
     traerTodo<Record<string, unknown>>(
-      (d, h) => admin.from('cotizacion')
+      (d, h) => acotada(admin.from('cotizacion')
         .select('id, folio, cliente_id, origen, destino, km, costo_estimado, precio, estado, vigente_hasta')
-        .eq('tenant_id', tenantId).order('id').range(d, h),
+        .eq('tenant_id', tenantId).order('id').range(d, h), 'getCotizaciones'),
       'getCotizaciones',
     ),
     traerTodo<{ id: unknown; nombre: unknown }>(
-      (d, h) => admin.from('cliente').select('id, nombre')
-        .eq('tenant_id', tenantId).order('id').range(d, h),
+      (d, h) => acotada(admin.from('cliente').select('id, nombre')
+        .eq('tenant_id', tenantId).order('id').range(d, h), 'getCotizaciones.cliente'),
       'getCotizaciones.cliente',
     ),
   ]);
@@ -299,9 +448,9 @@ export interface TicketRow {
 export async function getTickets(tenantId: string, ahoraMs: number): Promise<TicketRow[]> {
   const admin = supabaseAdmin();
   const filas = await traerTodo<Record<string, unknown>>(
-    (d, h) => admin.from('ticket_soporte')
+    (d, h) => acotada(admin.from('ticket_soporte')
       .select('id, asunto, categoria, prioridad, estado, abierto_en, vence_en')
-      .eq('tenant_id', tenantId).order('id').range(d, h),
+      .eq('tenant_id', tenantId).order('id').range(d, h), 'getTickets'),
     'getTickets',
   );
 
@@ -337,24 +486,26 @@ export interface EstadoRastreo {
  */
 export async function getEstadoRastreo(tenantId: string): Promise<EstadoRastreo> {
   const admin = supabaseAdmin();
-  const [creds, pos] = await Promise.all([
+  const [creds, rastreo] = await Promise.all([
+    // El catálogo de credenciales SÍ se trae: es una fila por proveedor
+    // (dos o tres), y de ella se pinta una lista, no un número.
     traerTodo<Record<string, unknown>>(
-      (d, h) => admin.from('rastreo_credencial')
+      (d, h) => acotada(admin.from('rastreo_credencial')
         .select('proveedor, token_ultimos4, activo, probada_en, ultimo_error')
-        .eq('tenant_id', tenantId).order('proveedor').range(d, h),
+        .eq('tenant_id', tenantId).order('proveedor').range(d, h), 'getEstadoRastreo.credencial'),
       'getEstadoRastreo.credencial',
     ),
-    traerTodo<{ unidad_id: unknown; medida_en: unknown }>(
-      (d, h) => admin.from('posicion').select('unidad_id, medida_en')
-        .eq('tenant_id', tenantId).order('id', { ascending: false }).range(d, h),
-      'getEstadoRastreo.posicion',
-    ),
+    // ── ESC-11 · DOS ESCALARES NO SE CALCULAN TRAYENDO LA TABLA ──────────
+    //
+    // Esto era un `traerTodo` de `posicion` ENTERA de la flota para sacar
+    // `count(distinct unidad_id)` y `max(medida_en)`. `posicion` recibe una
+    // fila por ping por unidad en cuanto el rastreo esté conectado, y
+    // `traerTodo` LANZA a las 100,000 filas: esta pantalla habría sido la
+    // primera del panel en dejar de cargar. La purga a 90 días y el índice
+    // `(tenant_id, medida_en)` ya los puso la 0155; lo que faltaba era no
+    // traerse las filas. `estado_rastreo_tenant()` (0162) agrega en la base.
+    traerEstadoRastreoSql(tenantId),
   ]);
-
-  const unidades = new Set(pos.map((p) => p.unidad_id as string));
-  const ultima = pos.length
-    ? pos.map((p) => String(p.medida_en)).sort().at(-1) ?? null
-    : null;
 
   return {
     proveedores: creds.map((c) => ({
@@ -364,9 +515,36 @@ export async function getEstadoRastreo(tenantId: string): Promise<EstadoRastreo>
       probadaEn: (c.probada_en as string) ?? null,
       ultimoError: (c.ultimo_error as string) ?? null,
     })),
-    unidadesConPosicion: unidades.size,
-    ultimaPosicion: ultima,
+    unidadesConPosicion: rastreo.unidadesConPosicion,
+    ultimaPosicion: rastreo.ultimaPosicion,
   };
+}
+
+/**
+ * `estado_rastreo_tenant()` (mig. 0162) y **fallar cerrado**: el error POR
+ * VALOR primero, y luego la FORMA — si la migración no está aplicada, `data`
+ * llega como cualquier otra cosa y un `?? 0` pintaría "0 unidades con
+ * posición", que es exactamente la mentira que este panel no puede decir.
+ */
+async function traerEstadoRastreoSql(
+  tenantId: string,
+): Promise<{ unidadesConPosicion: number; ultimaPosicion: string | null }> {
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('estado_rastreo_tenant', { p_tenant: tenantId }),
+    'getEstadoRastreo.posicion',
+  );
+  if (error) throw new Error(`getEstadoRastreo.posicion: ${error.message}`);
+  const r = data as Record<string, unknown> | null;
+  if (!esObjeto(r) || !esNumero(r.unidadesConPosicion) || !esTextoONulo(r.ultimaPosicion)) {
+    // No se reutiliza `formaInesperada`: ése nombra la 0152, y este RPC es de
+    // la 0162 — un mensaje que manda a revisar la migración equivocada cuesta
+    // más que no tenerlo.
+    throw new Error(
+      'getEstadoRastreo: estado_rastreo_tenant devolvió otra forma (¿migración 0162 sin aplicar?): '
+      + 'unidadesConPosicion/ultimaPosicion',
+    );
+  }
+  return { unidadesConPosicion: r.unidadesConPosicion, ultimaPosicion: r.ultimaPosicion };
 }
 
 // ── Abrir un ticket — LA PUERTA de la señal de PMF #3 ──────────────────────
@@ -400,14 +578,14 @@ export async function abrirTicket(
   }
   const descripcion = t.descripcion.trim();
 
-  const { data, error } = await supabaseAdmin().from('ticket_soporte').insert({
+  const { data, error } = await acotada(supabaseAdmin().from('ticket_soporte').insert({
     tenant_id: tenantId,
     abierto_por: abiertoPor,
     asunto,
     descripcion: descripcion === '' ? null : descripcion.slice(0, 4000),
     categoria: t.categoria,
     prioridad: t.prioridad,
-  }).select('id').single();
+  }).select('id').single(), 'abrirTicket');
   if (error) throw new Error(`abrirTicket: ${error.message}`);
   const id = (data as { id?: unknown } | null)?.id;
   if (!id) throw new Error('abrirTicket: el insert no devolvió id');

@@ -13,15 +13,17 @@ función SÍ, y se dice cuál.
 - **QStash entero**: `UPSTASH_QSTASH_TOKEN` + `QSTASH_CURRENT_SIGNING_KEY` +
   `QSTASH_NEXT_SIGNING_KEY` + URL — la cola de facturación firma y verifica.
 - **Resend** (envío + secret del webhook), **Sentry**, **CRON_SECRET** (los 5
-  crons), **cofre** (`LIKIDA_COFRE_LLAVE`), `LIKIDA_DEDUP_FOTOS`,
-  `NEXT_PUBLIC_APP_URL`.
+  crons), **cofre** (`LIKIDA_COFRE_LLAVE`), `NEXT_PUBLIC_APP_URL`.
+  (`LIKIDA_DEDUP_FOTOS` YA NO EXISTE: el hash de la foto se calcula siempre
+  desde DAT-01 —una protección de dinero que una env var podía apagar es una
+  protección que un despliegue apagó sin que nadie lo notara.)
 
 ## 🔴 Falta en Vercel y APAGA algo — dueño: Javier (minutos)
 
 | Var | Qué apaga | De dónde sale |
 |---|---|---|
 | `GITHUB_TOKEN` | `/admin/actividad-codigo` (el heatmap de puntitos) muere en prod | github.com → Settings → Developer settings → Fine-grained token, READ-only del repo likida.ai |
-| `UPSTASH_REDIS_REST_URL` + `_TOKEN` | El rate limit corre en modo LOCAL POR INSTANCIA (cada lambda cuenta por su lado — un atacante reparte y multiplica el techo) | upstash.com → Redis → Create database (free) → REST API |
+| ~~`UPSTASH_REDIS_REST_URL` + `_TOKEN`~~ | **YA ESTÁ EN PRODUCCIÓN** (verificado 22-ago-2026, auditoría prod SEG-1). Se deja el renglón tachado, no borrado, porque el estado se puede perder al recrear el proyecto: sin ellas el rate limit vuelve al modo LOCAL POR INSTANCIA (cada lambda cuenta por su lado — quien insiste reparte y multiplica el techo) y el piso de una hora de `alertarOperador` también. Cómo comprobarlo sin entrar a Vercel: `curl -s https://app.likida.ai/api/health` → `"ratelimit":"redis"`. | upstash.com → Redis → Create database (free) → REST API |
 
 Además, **no es env pero es config pendiente**: el webhook de entrega de
 Resend debe apuntar a `https://app.likida.ai/api/correo/eventos` (panel de

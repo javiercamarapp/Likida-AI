@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { hoyMx } from '@/lib/formato';
 import { extraerComprobante, CONCEPTOS_OCR, MOTIVOS_FALLO, type ExtraerResultado } from './intake/ocr';
 import { decidirFoto } from './intake/decidir';
 import { cuadrarViaje, cubetaDe, etiquetaConcepto } from './cuadre/engine';
@@ -67,7 +68,8 @@ import type { Gasto, Liquidacion } from '@/types/likida';
 // verdad — un viaje trae varios comprobantes, no uno.
 const GRUPOS = (process.env.TICKET_PATH ?? '')
   .split(';').map((g) => g.split(',').map((s) => s.trim()).filter(Boolean)).filter((g) => g.length);
-const HOY = process.env.TICKET_HOY ?? new Date().toISOString().slice(0, 10);
+// DAT-28: día de México (el mismo que juzga `ventanaDelViaje`), no el UTC.
+const HOY = process.env.TICKET_HOY ?? hoyMx();
 
 for (const l of GRUPOS.length ? readFileSync('.env.local', 'utf8').split('\n') : []) {
   const i = l.indexOf('=');

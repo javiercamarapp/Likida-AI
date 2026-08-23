@@ -4,6 +4,7 @@ import { listarInterruptores, apagar, encender } from '@/lib/likida/interruptore
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -62,6 +63,22 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  // ── DE DÓNDE VIENE, ANTES DE QUIÉN ES (auditoría prod, SEG-9) ───────────
+  //
+  // Esta ruta APAGA INTERRUPTORES: el kill switch global, el de WhatsApp, el
+  // de facturación. Se autentica con la cookie de sesión, así que sin esta
+  // comprobación una página cualquiera que Javier tuviera abierta podía
+  // pedirle al navegador que apagara el sistema en su nombre. `sameSite: lax`
+  // lo mitiga; esta línea lo decide. Va ANTES de mirar la sesión a propósito:
+  // a una petición de otro sitio no se le contesta si el usuario es
+  // superadmin o no.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('palette.origen_ajeno', {
+      origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site'),
+    });
+    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+  }
+
   const { error: puerta, sesion } = await sesionSuperadmin();
   if (!sesion) return puerta;
 

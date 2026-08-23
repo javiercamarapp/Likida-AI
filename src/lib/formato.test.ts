@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 import { execSync } from 'node:child_process';
-import { mxn, usd, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio, hoyMx } from './formato';
+import { mxn, usd, usd4, mxnCompacto, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio, hoyMx, inicioDiaMx, finDiaMx } from './formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 7 · MEDIO REINCIDENTE POR TERCERA RONDA — y el número CRECÍA:
@@ -261,6 +261,102 @@ describe('NO puede volver a haber una copia a mano', () => {
     // tree-shaking lo salva; un archivo sin imports no depende de la suerte.
     const fuente = readFileSync('src/lib/formato.ts', 'utf8');
     expect(fuente).not.toMatch(/^\s*import\s/m);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// B2 BIS (auditoría prod, DAT-08/DAT-23/DAT-28/FE-20) — el guardia de fechas
+// cubría las DOS ortografías de "hoy en México" ('en-CA' y la zona escrita a
+// mano) y dejaba pasar la tercera, que es la que de verdad mentía: NO calcular
+// el día de México en absoluto.
+//
+//     new Date().toISOString().slice(0, 10)
+//
+// Eso es el día de LONDRES. México va seis horas atrás, así que de las 18:00 a
+// las 24:00 hora local ese "hoy" es ya el de mañana. El peor caso tiene fecha:
+// el 31 de diciembre a las 19:00 devuelve el 1 de enero, y con él el panel
+// abría el ejercicio fiscal equivocado, la ventana "últimos 7 días" empezaba y
+// terminaba un día corrida, y el render del servidor no coincidía con el del
+// navegador del cliente (que sí está en México) — mismatch de hidratación.
+//
+// El guardia mira SOLO el patrón que toma el RELOJ y lo trunca en UTC
+// (`new Date()`, `Date.now()`, `ahoraMs()`). La aritmética de calendario sobre
+// un día ya resuelto —`new Date(\`${dia}T00:00:00Z\`)` para sumar días, o un
+// timestamp de Excel— NO es una conversión de zona y sigue permitida: es la
+// misma distinción que ya documenta `fechaMx` (un valor de solo fecha se
+// formatea en UTC justo para que no se mueva).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('nadie vuelve a cortar el día en UTC', () => {
+  // `new Date()` / `new Date(Date.now() ± …)` / `new Date(ahoraMs())` seguido,
+  // en la MISMA sentencia, de `.toISOString().slice(0, 10)`.
+  const PATRON = /new Date\(\s*(\)|Date\.now\(\)|ahoraMs\(\))[^;\n]*?\.toISOString\(\)\.slice\(0, *10\)/;
+
+  const candidatos = execSync(
+    `grep -rl "toISOString()\.slice(0, 10)" src/ --include='*.ts' --include='*.tsx' || true`,
+    { encoding: 'utf8' },
+  ).split('\n').filter(Boolean)
+    .filter((f) => !f.includes('lib/formato.ts') && !f.includes('.test.'));
+
+  it('el día de HOY se saca con hoyMx(), no truncando el reloj en UTC', () => {
+    const fuera = candidatos
+      .filter((f) => PATRON.test(sinComentarios(readFileSync(f, 'utf8'))));
+    expect(
+      fuera,
+      'estos archivos cortan el día en UTC en vez de usar hoyMx():\n' + fuera.join('\n'),
+    ).toEqual([]);
+  });
+});
+
+describe('el corte de un día de México (inicioDiaMx/finDiaMx)', () => {
+  it('la medianoche de México son las 06:00 UTC, no las 00:00', () => {
+    expect(inicioDiaMx('2026-12-31')).toBe('2026-12-31T00:00:00-06:00');
+    expect(new Date(inicioDiaMx('2026-12-31')).toISOString()).toBe('2026-12-31T06:00:00.000Z');
+  });
+
+  it('el cierre del día alcanza a lo capturado a las 19:00 hora local', () => {
+    // Las 19:00 del 31-dic en México son las 01:00 UTC del 1-ene: con el corte
+    // viejo (`T23:59:59.999Z`) esta liquidación quedaba FUERA de su ejercicio.
+    const cierre = new Date('2027-01-01T01:00:00Z').getTime();
+    expect(cierre).toBeLessThanOrEqual(new Date(finDiaMx('2026-12-31')).getTime());
+    expect(cierre).toBeGreaterThan(new Date(inicioDiaMx('2026-12-31')).getTime());
+    expect(cierre).toBeGreaterThan(new Date('2026-12-31T23:59:59.999Z').getTime());
+  });
+});
+
+describe('usd4 — el costo de una corrida de IA', () => {
+  it('cuatro decimales, para que una fracción de centavo no se lea como gratis', () => {
+    expect(usd4(0.0003)).toBe('US$0.0003');
+    expect(usd(0.0003)).toBe('US$0.00');
+  });
+
+  it('con separador de millares, que es lo que `toFixed(4)` no ponía', () => {
+    expect(usd4(1234.5678)).toBe('US$1,234.5678');
+    expect((1234.5678).toFixed(4)).toBe('1234.5678');
+  });
+
+  it('cero y negativos', () => {
+    expect(usd4(0)).toBe('US$0.0000');
+    expect(usd4(-1.5)).toContain('-');
+  });
+});
+
+describe('mxnCompacto — la cifra que no cabe en la tarjeta', () => {
+  it('debajo de un millón NO cambia nada: es `mxn()` tal cual', () => {
+    expect(mxnCompacto(839.7)).toBe(mxn(839.7));
+    expect(mxnCompacto(999_999)).toBe(mxn(999_999));
+  });
+
+  it('nueve mil millones caben en ocho caracteres', () => {
+    expect(mxn(9_000_000_000)).toBe('$9,000,000,000.00');
+    // El espacio es NO-SEPARABLE (U+00A0), el que pone Intl: la cifra y su
+    // magnitud nunca se parten en dos renglones dentro de la tarjeta.
+    expect(mxnCompacto(9_000_000_000)).toBe('$9,000\u00a0M');
+    expect(mxnCompacto(9_000_000_000).length).toBeLessThanOrEqual(9);
+  });
+
+  it('un millón y pico se abrevia con su decimal, y el signo se conserva', () => {
+    expect(mxnCompacto(1_234_567)).toBe('$1.2\u00a0M');
+    expect(mxnCompacto(-1_234_567)).toContain('-');
   });
 });
 

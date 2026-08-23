@@ -47,6 +47,60 @@ export const CONFIANZA_PROBADA = 0.9;
 /** Debajo de esto no se pide confirmar: se pide otra foto. */
 export const CONFIANZA_LEGIBLE = 0.65;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// DAT-18 · LA CONFIANZA NO MIRA LA ESCALA, Y ESE ERA EL AGUJERO.
+//
+// `decidirAcuse` callaba con `confianza >= 0.9`, y un OCR está igual de seguro
+// leyendo $850.00 que leyendo $850,000.00: la confianza mide qué tan nítido se
+// vio el papel, no si la cifra tiene sentido en un viaje de carga. Un punto
+// decimal perdido o un separador de miles mal leído multiplican por 1,000 con
+// la misma confianza, y el schema del OCR (`z.number()`, sin tope) los deja
+// pasar sin una sola señal.
+//
+// El daño va en las dos direcciones y ninguna es teórica: el monto entra al
+// comprobado, la diferencia contra el anticipo se calcula con él, y la
+// liquidación sale «a favor del operador» por una cifra que nadie tecleó.
+//
+// EL UMBRAL ES RELATIVO AL VIAJE, con un piso absoluto:
+//
+//   · 3 × anticipo — el anticipo es lo que la flota le entregó para gastar. Un
+//     solo comprobante que valga el triple no es un gasto del viaje, es una
+//     lectura mala (o algo que una persona tiene que ver). El factor 3 deja
+//     pasar holgadamente el caso legítimo del viaje que se pasó del anticipo.
+//   · $50,000 de piso — para el viaje con anticipo chico o sin capturar
+//     (anticipo 0, que es el default de la tabla), donde «3 × 0» convertiría
+//     en sospechoso hasta el primer ticket de casetas.
+//
+// Se toma el MAYOR de los dos: el piso nunca hace más estricto al umbral del
+// viaje grande, y el viaje grande nunca ablanda el piso.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Piso absoluto del umbral, para viajes sin anticipo capturado. */
+export const TOPE_MONTO_PISO_MXN = 50_000;
+
+/** Cuántas veces el anticipo puede valer UN comprobante antes de dudar. */
+export const FACTOR_ANTICIPO_IMPLAUSIBLE = 3;
+
+/** El umbral efectivo de este viaje. `anticipo` puede ser 0 o null. */
+export function umbralMontoImplausible(anticipo: number | null | undefined): number {
+  const a = typeof anticipo === 'number' && Number.isFinite(anticipo) && anticipo > 0 ? anticipo : 0;
+  return Math.max(FACTOR_ANTICIPO_IMPLAUSIBLE * a, TOPE_MONTO_PISO_MXN);
+}
+
+/**
+ * ¿Esta cifra está fuera de escala para este viaje?
+ *
+ * PURA y exportada porque la usan dos sitios que no se pueden separar: el
+ * intake (para marcar el gasto y preguntarle al chofer mientras tiene el
+ * ticket en la mano) y el motor (para que el contralor lo vea aunque el chofer
+ * no haya contestado). Una segunda definición del umbral en cualquiera de los
+ * dos sería exactamente el error que este repo ya pagó tres veces.
+ */
+export function esMontoImplausible(monto: number | null | undefined, anticipo: number | null | undefined): boolean {
+  if (typeof monto !== 'number' || !Number.isFinite(monto)) return false;
+  return monto > umbralMontoImplausible(anticipo);
+}
+
 /**
  * Tope de confirmaciones por ráfaga.
  *
@@ -70,6 +124,10 @@ export interface LecturaTicket {
   deCfdi: boolean;
   /** Ya se le pidió otra foto de este ticket y esta es la repetición. */
   esRepeticion: boolean;
+  /** DAT-18: el monto está fuera de escala para este viaje (ver
+   *  `esMontoImplausible`). No es un juicio sobre el chofer: es una cifra que
+   *  nadie puede dar por buena sin verla. */
+  montoImplausible?: boolean;
 }
 
 export interface Decision {
@@ -89,6 +147,18 @@ export function decidirAcuse(l: LecturaTicket): Decision {
   // Un CFDI trae el total en el documento. No hay nada que confirmar: pedirle
   // al chofer que valide una cifra que el SAT ya selló sería teatro.
   if (l.deCfdi) return { peldano: 'silencio', porque: 'el monto viene del CFDI' };
+
+  // DAT-18: FUERA DE ESCALA MANDA SOBRE LA CONFIANZA. Va aquí arriba, antes de
+  // la escalera de confianza, porque es justo el caso que la escalera dejaba
+  // pasar: un $850,000 leído nítido salía por `silencio` con confianza 0.95.
+  //
+  // Y va DESPUÉS del CFDI a propósito: el total de un comprobante timbrado
+  // viene sellado por el SAT, no leído por visión. Un CFDI grande es un CFDI
+  // grande, y pedirle al chofer que lo confirme sería el mismo teatro que ya
+  // se descartó arriba.
+  if (l.montoImplausible) {
+    return { peldano: 'confirmar', porque: 'el monto está fuera de escala para este viaje' };
+  }
 
   if (l.montoMxn === null || !Number.isFinite(l.montoMxn) || l.montoMxn <= 0) {
     return { peldano: 'refoto', porque: 'no se leyó el monto' };

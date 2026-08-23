@@ -175,6 +175,33 @@ export function validarPago(c: PagoCrudo): PagoValido {
  * `sumarDias` y esto son las dos reglas que el contralor va a cruzar contra su
  * papel; el resto de `registrarPago` es plomería.
  */
+export type MotivoRechazoAbono = 'cancelada' | 'borrador' | 'pagada' | 'sobrepago';
+
+/**
+ * La redacción de cada rechazo, en UN solo lugar.
+ *
+ * Existe porque desde la 0159 el veredicto lo da la base (`registrar_pago_tx`,
+ * bajo el `for update` de la factura) y el texto lo escribe TypeScript. Si cada
+ * uno redactara el suyo, el contralor vería dos mensajes distintos para el
+ * mismo rechazo según por dónde entrara — y el de la base, además, sin el monto
+ * formateado en pesos.
+ */
+export function mensajeRechazoAbono(motivo: MotivoRechazoAbono, saldo: number, monto: number): string {
+  switch (motivo) {
+    case 'cancelada':
+      return 'Esa factura está cancelada: no se le abonan pagos.';
+    case 'borrador':
+      return 'Esa factura sigue en borrador. Márcala como emitida (con su UUID) antes de registrarle pagos: un cobro sin CFDI es lo que el contralor no puede cruzar.';
+    case 'pagada':
+      return 'Esa factura ya está saldada. Si el cliente pagó de más, eso se aclara con él, no capturándolo aquí.';
+    case 'sobrepago':
+      return (
+        `Ese pago (${mxn(monto)}) rebasa el saldo de la factura (${mxn(saldo)}). ` +
+        'Revisa el monto; si el cliente de verdad pagó de más, se aclara con una nota de crédito, no capturando de más aquí.'
+      );
+  }
+}
+
 export function evaluarAbono(
   f: { estatus: string; total: number; pagado: number },
   monto: number,
@@ -182,26 +209,13 @@ export function evaluarAbono(
   // El `+ 0` mata el `-0` que deja la resta binaria: un saldo de "-$0.00" en
   // un mensaje es la clase de cifra que hace dudar de todas las demás.
   const saldo = Math.round((f.total - f.pagado) * 100) / 100 + 0;
-  if (f.estatus === 'cancelada') {
-    return { rechazo: 'Esa factura está cancelada: no se le abonan pagos.', saldo, quedaSaldada: false };
-  }
-  if (f.estatus === 'borrador') {
-    return {
-      rechazo: 'Esa factura sigue en borrador. Márcala como emitida (con su UUID) antes de registrarle pagos: un cobro sin CFDI es lo que el contralor no puede cruzar.',
-      saldo, quedaSaldada: false,
-    };
-  }
-  if (f.estatus === 'pagada') {
-    return { rechazo: 'Esa factura ya está saldada. Si el cliente pagó de más, eso se aclara con él, no capturándolo aquí.', saldo, quedaSaldada: false };
-  }
-  if (monto > saldo + 0.005) {
-    return {
-      rechazo:
-        `Ese pago (${mxn(monto)}) rebasa el saldo de la factura (${mxn(saldo)}). ` +
-        'Revisa el monto; si el cliente de verdad pagó de más, se aclara con una nota de crédito, no capturando de más aquí.',
-      saldo, quedaSaldada: false,
-    };
-  }
+  const rechazar = (motivo: MotivoRechazoAbono) =>
+    ({ rechazo: mensajeRechazoAbono(motivo, saldo, monto), saldo, quedaSaldada: false });
+
+  if (f.estatus === 'cancelada') return rechazar('cancelada');
+  if (f.estatus === 'borrador') return rechazar('borrador');
+  if (f.estatus === 'pagada') return rechazar('pagada');
+  if (monto > saldo + 0.005) return rechazar('sobrepago');
   return { rechazo: null, saldo, quedaSaldada: monto >= saldo - 0.005 };
 }
 
@@ -225,7 +239,41 @@ function traducirChoque(mensaje: string): DatoInvalido | null {
     return new DatoInvalido('Ese folio fiscal (UUID) ya está registrado en otra factura tuya. El mismo CFDI no se registra dos veces: el saldo del cliente saldría al doble.');
   }
   if (mensaje.includes('factura_folio_unico')) {
-    return new DatoInvalido('Ya registraste una factura con ese folio. Búscala en la lista en vez de capturarla otra vez.');
+    // ── RES-22 (auditoría prod): ESTE ÍNDICE ES MÁS ESTRECHO QUE EL SAT ────
+    //
+    // `factura_folio_unico` (mig. 0049:69) es `(tenant_id, folio) where folio
+    // is not null`: SIN serie y SIN ejercicio. Pero un CFDI se identifica por
+    // SERIE + FOLIO, y el folio se reinicia — por serie, y muy comúnmente cada
+    // año. O sea que hoy, para una misma flota:
+    //
+    //   · la factura A-1 de 2025 y la B-1 de 2026 chocan;
+    //   · el folio 1 de enero de 2026 choca con el 1 de enero de 2025.
+    //
+    // En los dos casos son facturas DISTINTAS y legítimas, y la base rechaza
+    // la segunda. A una flota al año le pasa una vez; a 50k tickets/mes y con
+    // varias flotas capturando su cobranza, deja de ser anecdótico.
+    //
+    // NO SE ARREGLA AQUÍ, y por eso esto es un comentario y no un cambio de
+    // esquema: `factura_emitida` no tiene columna `serie` en ninguna migración
+    // (verificado), así que arreglarlo de verdad es esquema + captura + UI, no
+    // un índice. LA MIGRACIÓN PROPUESTA, para cuando se decida:
+    //
+    //   alter table public.factura_emitida add column if not exists serie text;
+    //   drop index if exists factura_folio_unico;
+    //   create unique index if not exists factura_folio_unico
+    //     on public.factura_emitida
+    //        (tenant_id, coalesce(serie, ''), folio, extract(year from fecha))
+    //     where folio is not null;
+    //
+    // Se puede aplicar SIN limpiar nada: el índice nuevo AFLOJA el viejo (le
+    // agrega dimensiones), así que toda fila que hoy convive lo sigue
+    // cumpliendo. Lo que NO se puede hacer sin producto es capturar la serie:
+    // mientras `serie` viaje en NULL, `coalesce(serie,'')` deja el
+    // comportamiento de hoy salvo por el año, que es la mitad del problema.
+    //
+    // Mientras tanto, el mensaje dice la verdad sobre el alcance del choque en
+    // vez de mandar a buscar una factura que puede no ser la misma.
+    return new DatoInvalido('Ya tienes registrada una factura con ese folio. El folio se compara sin serie ni año, así que si ésta es de otra serie o de otro ejercicio, repórtalo: hoy la base no las distingue.');
   }
   return null;
 }
@@ -305,19 +353,35 @@ export async function crearFactura(
   const facturaId = String(id);
 
   // ── Las ligas a los viajes ───────────────────────────────────────────────
-  // PostgREST no da transacciones: si las ligas fallan, se intenta deshacer el
-  // alta y se reporta el fallo COMPLETO. Una factura sin sus ligas contaría el
+  // PostgREST no da transacciones: si las ligas fallan, se compensa el alta y
+  // se reporta el fallo COMPLETO. Una factura sin sus ligas contaría el
   // ingreso sin decir de qué viajes salió — peor que pedir que se recapture.
+  //
+  // LA COMPENSACIÓN CANCELA, NO BORRA (auditoría 18, DAT-27). Era un
+  // `.delete()`, y un DELETE sobre `factura_emitida` es exactamente lo que la
+  // 0158 dejó de permitir a la ligera: la FK de `pago_recibido` pasó a NO
+  // ACTION para que borrar una factura no se lleve por delante los abonos
+  // registrados. Esta factura acaba de nacer y no tiene abonos —el borrado
+  // habría funcionado— pero la asimetría es la que enseña: un folio que
+  // existió y se fue no deja rastro de haber existido, y en un consecutivo
+  // fiscal eso es justo lo que no se hace. `cancelada` es un estatus del
+  // dominio (0049) y la fila queda contando la verdad: se intentó, no se
+  // completó.
+  //
+  // CONSECUENCIA VISIBLE: recapturar la MISMA factura con el mismo folio
+  // choca ahora contra `factura_folio_unico` (la fila cancelada sigue ahí) y
+  // `traducirChoque` lo dice con su mensaje de folio repetido. Antes se podía
+  // reintentar a ciegas; ahora hay que mirar la cancelada y decidir.
   if (f.viajeIds.length > 0) {
     const { error: errLigas } = await supabaseAdmin().from('factura_viaje')
       .insert(f.viajeIds.map((v) => ({ factura_id: facturaId, viaje_id: v })));
     if (errLigas) {
       const { error: errDeshacer } = await supabaseAdmin().from('factura_emitida')
-        .delete().eq('id', facturaId).eq('tenant_id', tenantId);
+        .update({ estatus: 'cancelada' }).eq('id', facturaId).eq('tenant_id', tenantId);
       if (errDeshacer) {
         logger.error('facturacion.alta_a_medias', {
           tenantId, facturaId,
-          msg: `La factura quedó creada SIN sus ligas a viajes y no se pudo deshacer: ${errDeshacer.message}. Revisar a mano.`,
+          msg: `La factura quedó creada SIN sus ligas a viajes y no se pudo cancelar: ${errDeshacer.message}. Revisar a mano.`,
         });
       }
       throw new Error(`crearFactura: no se pudieron ligar los viajes: ${errLigas.message}`);
@@ -367,6 +431,36 @@ export async function marcarEmitida(
   await anotar(tenantId, 'factura.emitida', 'factura_emitida', facturaId, { cfdiUuid: uuid, folio: folio ?? null }, actor);
 }
 
+// ── Los SQLSTATE propios de `registrar_pago_tx` (0159) ─────────────────────
+//
+// Código propio y no un 23505, por la misma razón que el `CU001` de la 0036: lo
+// que hay que hacer es distinto. Un rechazo de regla se le cuenta al contralor
+// con sus palabras; cualquier otra cosa es un error y se grita.
+const FACTURA_FUERA_DE_FLOTA = 'CU010';
+const ABONO_RECHAZADO = 'CU011';
+
+/** El motivo y el saldo que manda la base, convertidos en el mensaje de siempre. */
+function traducirErrorDelPago(error: { code?: string; message?: string }, monto: number): Error {
+  if (error.code === FACTURA_FUERA_DE_FLOTA) {
+    return new DatoInvalido('Esa factura no está en tu flota. Recarga la pantalla.');
+  }
+  if (error.code === ABONO_RECHAZADO) {
+    const leido = /motivo=([a-z]+)\s+saldo=(-?[\d.]+)/.exec(error.message ?? '');
+    if (leido) {
+      return new DatoInvalido(
+        mensajeRechazoAbono(leido[1] as MotivoRechazoAbono, Number(leido[2]), monto),
+      );
+    }
+    // Un CU011 que no se puede leer sigue siendo un rechazo de negocio: se
+    // rechaza igual, sin inventar la cifra que no llegó.
+    return new DatoInvalido('Ese pago no se puede registrar contra esa factura. Revisa el estatus y el saldo antes de volver a intentarlo.');
+  }
+  // Todo lo demás —incluido el RPC ausente y el tope de consulta de `acotada`—
+  // es un error de verdad: nada de tragárselo como si la factura tuviera la
+  // culpa.
+  return new Error(`registrarPago: ${error.message}`);
+}
+
 /**
  * Registra un abono contra una factura EMITIDA.
  *
@@ -381,55 +475,38 @@ export async function registrarPago(
   p: PagoValido,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  const { data: fac, error: errF } = await acotada(
-    supabaseAdmin().from('factura_emitida').select('id, total, estatus')
-      .eq('id', p.facturaId).eq('tenant_id', tenantId).maybeSingle(),
-    'registrarPago.factura',
-  );
-  if (errF) throw new Error(`registrarPago: no se pudo leer la factura: ${errF.message}`);
-  if (!fac) throw new DatoInvalido('Esa factura no está en tu flota. Recarga la pantalla.');
-  const factura = fac as { id: string; total: number; estatus: string };
+  // ── DAT-05 · EL SALDO SE LEE CON LA FACTURA TRABADA, NO ANTES ────────────
+  //
+  // Esto eran cuatro viajes a la base: leer la factura, sumar los pagos,
+  // decidir aquí, insertar. Entre el segundo y el cuarto cabe otra petición —
+  // y a 50k viajes con dos pestañas abiertas, cabe. Dos abonos de $10,000
+  // simultáneos sobre un saldo de $11,600 pasaban LOS DOS, porque cada uno leyó
+  // $0 pagados: $20,000 cobrados contra $11,600 y `factura_saldo` en negativo,
+  // sin un solo error en el log.
+  //
+  // `registrar_pago_tx` (0159) hace lo mismo con la factura tomada `for
+  // update`: el segundo abono suma DESPUÉS del primero y ve el saldo de verdad.
+  // El estatus `pagada` entra en la misma transacción, así que también
+  // desaparece el estado "el pago quedó registrado pero la factura no pasó a
+  // pagada" que este archivo tenía que avisar a gritos.
+  //
+  // La decisión de dinero sigue siendo la de `evaluarAbono` —las mismas cuatro
+  // reglas, en el mismo orden, ahora también en SQL (bloque 131 de
+  // verificaciones.sql las corre contra Postgres)— y la REDACCIÓN sigue siendo
+  // de aquí: la base manda el motivo y el saldo, `mensajeRechazoAbono` escribe.
+  const { data, error } = await acotada(supabaseAdmin().rpc('registrar_pago_tx', {
+    p_tenant: tenantId,
+    p_factura: p.facturaId,
+    p_fecha: p.fecha,
+    p_monto: p.monto,
+    p_metodo: p.metodo,
+    p_referencia: p.referencia,
+  }), 'registrarPago');
 
-  // La suma de pagos se lee COMPLETA: una factura no acumula miles de abonos,
-  // y el tope de PostgREST (1,000 filas) queda lejísimos de cualquier caso real.
-  const { data: pagos, error: errP } = await acotada(
-    supabaseAdmin().from('pago_recibido').select('monto')
-      .eq('factura_id', p.facturaId).eq('tenant_id', tenantId),
-    'registrarPago.pagos',
-  );
-  if (errP) throw new Error(`registrarPago: no se pudieron leer los pagos previos: ${errP.message}`);
-  const pagado = (pagos ?? []).reduce((s, r) => s + Number((r as { monto: unknown }).monto ?? 0), 0);
+  if (error) throw traducirErrorDelPago(error, p.monto);
 
-  const abono = evaluarAbono({ estatus: factura.estatus, total: Number(factura.total), pagado }, p.monto);
-  if (abono.rechazo) throw new DatoInvalido(abono.rechazo);
-
-  const { data, error } = await acotada(supabaseAdmin().from('pago_recibido').insert({
-    tenant_id: tenantId,
-    factura_id: p.facturaId,
-    fecha: p.fecha,
-    monto: p.monto,
-    metodo: p.metodo,
-    referencia: p.referencia,
-  }).select('id').single(), 'registrarPago');
-  if (error) throw new Error(`registrarPago: ${error.message}`);
-  const pagoId = (data as { id?: unknown } | null)?.id;
-  if (!pagoId) throw new Error('registrarPago: el insert no devolvió id');
-
-  // ── El estatus solo alcanza `pagada` cuando el saldo llegó a cero ────────
-  // Si este UPDATE falla, el pago YA quedó registrado y la vista de saldo lo
-  // suma igual: se avisa fuerte y no se tira el pago.
-  if (abono.quedaSaldada) {
-    const { data: filas, error: errE } = await supabaseAdmin().from('factura_emitida')
-      .update({ estatus: 'pagada' })
-      .eq('id', p.facturaId).eq('tenant_id', tenantId).eq('estatus', 'emitida').select('id');
-    if (errE || !Array.isArray(filas) || filas.length === 0) {
-      logger.error('facturacion.estatus_pagada_no_escribio', {
-        tenantId, facturaId: p.facturaId,
-        err: errE?.message ?? 'update tocó 0 filas',
-        msg: 'El pago quedó registrado pero la factura no pasó a `pagada`. El saldo derivado sale bien; el estatus hay que corregirlo a mano.',
-      });
-    }
-  }
+  const pagoId = (data as { pago_id?: unknown } | null)?.pago_id;
+  if (!pagoId) throw new Error('registrarPago: el RPC no devolvió el id del pago');
 
   await anotar(tenantId, 'pago.registrado', 'pago_recibido', String(pagoId), {
     facturaId: p.facturaId, fecha: p.fecha, monto: p.monto, metodo: p.metodo, referencia: p.referencia,

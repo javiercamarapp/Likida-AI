@@ -229,3 +229,40 @@ describe('lo que el mensaje NO puede decir', () => {
     expect(fuente, 'el producto no puede entrar en el mensaje').not.toMatch(/\bproducto\b/);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DAT-28 (auditoría prod) — LA VENTANA SE CORRÍA UN DÍA DE NOCHE.
+//
+// `ventanaDelViaje` sacaba su "hoy" de `ahora.toISOString()`, que es el día
+// UTC. México va seis horas atrás: a partir de las 18:00 locales ese "hoy" ya
+// es el de mañana, y `fechaMax` —que existe para que un comprobante del
+// FUTURO no pase— dejaba entrar el ticket de mañana. El chofer que manda su
+// ticket a las 8 de la noche es el caso normal de este producto.
+//
+// El reloj va FIJO en la peor hora del peor día: 19:00 del 31 de diciembre en
+// México, que en UTC ya es el 1 de enero del año siguiente — un EJERCICIO
+// FISCAL de diferencia.
+// ═══════════════════════════════════════════════════════════════════════════
+const NOCHEVIEJA_19_MX = new Date('2027-01-01T01:00:00Z'); // 31-dic-2026, 19:00 CDMX
+
+describe('ventanaDelViaje a las 19:00 del 31 de diciembre (hora de México)', () => {
+  it('hoy es el 31 de diciembre, no el 1 de enero', () => {
+    const v = ventanaDelViaje('2026-12-28', 3, NOCHEVIEJA_19_MX);
+    expect(v.hoy).toBe('2026-12-31');
+    expect(v.fechaMax).toBe('2026-12-31');
+    expect(v.fechaMin).toBe('2026-12-25');
+  });
+
+  it('y un ticket fechado el 1 de enero sigue siendo del FUTURO', () => {
+    const v = ventanaDelViaje('2026-12-28', 3, NOCHEVIEJA_19_MX);
+    // Con el día UTC, `fechaMax` era '2027-01-01' y este ticket entraba como
+    // creíble: un comprobante del año que viene, dentro del cuadre de este.
+    expect(fechaDudosa('2027-01-01', v)).not.toBeNull();
+    expect(fechaDudosa('2026-12-31', v)).toBeNull();
+  });
+
+  it('sin fecha de inicio la ventana también se ancla en el día de México', () => {
+    const v = ventanaDelViaje(null, 3, NOCHEVIEJA_19_MX);
+    expect(v).toEqual({ fechaMin: '2026-12-28', fechaMax: '2026-12-31', hoy: '2026-12-31' });
+  });
+});

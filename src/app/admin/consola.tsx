@@ -5,7 +5,7 @@ import {
   LifeBuoy, UserPlus, Handshake, Bot,
 } from 'lucide-react';
 import {
-  getResumenNegocio, getConversacionesActivas, getConteosPlataforma,
+  getResumenNegocio, getConversacionesActivas, getConteosPlataforma, TOPE_CONVERSACIONES,
   getUltimaCorridaPorAgente, getCorridasRecientes,
 } from '@/lib/admin/negocio';
 import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
@@ -112,6 +112,12 @@ export async function ConsolaAdmin({
     getBandejaEscalaciones(ahoraMs()),
   ]);
 
+  // FE-9: el total REAL de conversaciones ya venía en los conteos de
+  // plataforma (`wa_conversacion` con head-count). `conversaciones` es solo la
+  // página de las 20 más recientes — usarla como cifra convertía un tope en
+  // una medición, aquí y en la campana.
+  const conversacionesTotal = conteos.conversacionesWa;
+
   // AUDITORÍA 10, ALTO — "Flota (solo el demo)" era texto fijo: con la base
   // en 0 tenants seguía diciendo que había una. "Solo el demo" es una
   // afirmación verificable: se comprueba contra el id real del tenant demo,
@@ -168,7 +174,7 @@ export async function ConsolaAdmin({
                   /dashboard (14-ago) se mudó aquí, junto al resto de las
                   señales del Resumen — mismo tradeoff que el cliente: las
                   alertas se miran donde se miran las cifras. */}
-              <Notificaciones alertas={calcularAlertas(r, conversaciones, bandeja.conteos)} />
+              <Notificaciones alertas={calcularAlertas(r, conversaciones, bandeja.conteos, conversacionesTotal)} />
               {/* El DÍA DE MÉXICO, no el UTC — mismo arreglo que los otros
                   inicios (a las 6pm de CDMX el chip decía mañana, 12-ago). */}
               <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaHoyMx}</ChipFecha>
@@ -541,7 +547,7 @@ export async function ConsolaAdmin({
                       <tr key={f.id} className="border-t transition-colors hover:bg-[var(--canvas)]" style={{ borderColor: 'var(--line2)' }}>
                         <td className="px-4 py-2.5 font-medium">{f.nombre}</td>
                         <td className="px-4 py-2.5" style={{ color: 'var(--muted)' }}>{f.plan}</td>
-                        <td className="px-4 py-2.5 text-right tabular">{f.viajes}</td>
+                        <td className="px-4 py-2.5 text-right tabular">{numero(f.viajes)}</td>
                         <td className="px-4 py-2.5 text-right tabular">{usd(f.costoIaUsd)}</td>
                         <td className="px-4 py-2.5 text-right">
                           {/* Los TRES paneles del cliente, con la sesión del
@@ -576,13 +582,18 @@ export async function ConsolaAdmin({
 
           {/* ── Conversaciones de WhatsApp (el detalle expandible) ────────── */}
           <section id="conversaciones" className="card p-3 scroll-mt-24">
-            <TituloSeccion>Conversaciones de WhatsApp</TituloSeccion>
+            {/* FE-9: la sección listaba 20 y no decía de cuántas. */}
+            <TituloSeccion>
+              {conversacionesTotal !== null && conversacionesTotal > conversaciones.length
+                ? `Conversaciones de WhatsApp — las ${TOPE_CONVERSACIONES} más recientes de ${conversacionesTotal}`
+                : 'Conversaciones de WhatsApp'}
+            </TituloSeccion>
             {conversaciones.length === 0 ? (
               <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>Sin conversaciones activas.</p>
             ) : (
               <div className="space-y-1.5 mt-2">
                 {conversaciones.map((c) => (
-                  <details key={c.telefono} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
+                  <details key={`${c.tenantId ?? "sin-flota"}-${c.telefono}`} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
                     <summary className="px-3 py-2.5 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[var(--canvas)] transition-colors">
                       <div>
                         <div className="text-sm font-medium">{c.telefono}</div>

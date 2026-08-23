@@ -195,3 +195,51 @@ describe('parseCfdiXml — CFDI consolidado (líneas)', () => {
     expect(suma).toBeCloseTo(2904.05 + 2308.5 + 2656.5, 2);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA PROD 22-ago-2026 · DAT-19 — EL PARSER TIRABA `@Moneda`.
+//
+// `@Moneda` es OBLIGATORIO en el CFDI 4.0 y este parser no lo leía, así que
+// `@Total` viajaba entero a la columna de PESOS. Una factura de USD 450 —una
+// caseta de EE. UU., un hotel de frontera— se comprobaba como $450.00 MXN
+// contra el anticipo, y su IVA se acreditaba sobre esa misma cifra: el
+// operador salía debiendo la diferencia y la liquidación decía «cuadrada».
+//
+// El parser NO convierte. Lee la moneda y el tipo de cambio declarado; quien
+// decide qué hacer con eso es el motor (diferencia `moneda_extranjera`) y, al
+// final, una persona con el tipo de cambio del día.
+// ═══════════════════════════════════════════════════════════════════════════
+const EN_DOLARES = `<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" TipoDeComprobante="I" Fecha="2026-04-25T10:00:00" Total="450.00" Moneda="USD" TipoCambio="18.75">
+  <cfdi:Emisor Rfc="est010101aaa"/>
+  <cfdi:Receptor Rfc="tin950101abc"/>
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="15101505" ClaveUnidad="LTR" Cantidad="40" Descripcion="Diesel"/>
+  </cfdi:Conceptos>
+</cfdi:Comprobante>`;
+
+describe('DAT-19 · la moneda del comprobante', () => {
+  it('lee Moneda y TipoCambio de un CFDI en dólares', () => {
+    const r = parseCfdiXml(EN_DOLARES)!;
+    expect(r.moneda).toBe('USD');
+    expect(r.tipoCambio).toBe(18.75);
+    expect(r.total, 'el total NO se convierte aquí: el parser lee, no calcula').toBe(450);
+  });
+
+  it('normaliza a ISO en mayúsculas (se COMPARA contra MXN, no se muestra)', () => {
+    const r = parseCfdiXml(EN_DOLARES.replace('Moneda="USD"', 'Moneda="usd"'))!;
+    expect(r.moneda).toBe('USD');
+  });
+
+  it('un valor que no es un código ISO se descarta en vez de inventar una moneda', () => {
+    // Un `undefined` significa «no dijo» y el motor lo trata como pesos; una
+    // moneda fantasma mandaría a revisión una liquidación sana.
+    expect(parseCfdiXml(EN_DOLARES.replace('Moneda="USD"', 'Moneda="$"'))!.moneda).toBeUndefined();
+  });
+
+  it('un CFDI sin el atributo (viejo o roto) queda en undefined, no en MXN inventado', () => {
+    const r = parseCfdiXml(base(''))!;
+    expect(r.moneda).toBeUndefined();
+    expect(r.tipoCambio).toBeUndefined();
+  });
+});

@@ -167,3 +167,71 @@ describe('StatCard — delta null (sin comparable) no afirma "0%"', () => {
     expect(html).not.toContain('sin movimiento');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ESCALA 50k (docs/escala-50k/MAPA.md §UI, 22-ago-2026) — `BannerInsight`
+// tenía `truncate` sobre un span que lleva un MONTO: "$12,345,6…" mutilado.
+// `StatCard`/`KpiTile`/`WidgetUso` no tenían regla de ancho: a ~1e14 se
+// desbordaban de la tarjeta. La prueba de ancho es con $999,999,999.00 (12
+// dígitos con separadores): la cifra entera tiene que llegar al HTML, el
+// contenedor tiene que recortar por ANCHO (no por valor) y el `title` tiene
+// que llevar la cifra completa para el hover y el lector de pantalla.
+// ═══════════════════════════════════════════════════════════════════════════
+import { BannerInsight, WidgetUso } from './kit';
+
+const GRANDE = 999_999_999;
+const GRANDE_TXT = '$999,999,999.00';
+
+describe('BannerInsight — el monto nunca se trunca', () => {
+  it('no lleva `truncate`; el monto completo está en el HTML', () => {
+    const html = renderToStaticMarkup(
+      <BannerInsight etiqueta="Esta semana" deltaPct={12.3} href="#estadisticas">
+        Tu flota liquidó <b className="tabular">{GRANDE_TXT}</b> en viajes cerrados
+      </BannerInsight>,
+    );
+    expect(html).not.toContain('truncate');
+    expect(html).toContain(GRANDE_TXT);
+    // El <b> del monto no se parte en dos líneas.
+    expect(html).toContain('whitespace-nowrap');
+  });
+});
+
+describe('KpiTile / StatCard / WidgetUso — prueba de ancho con $999,999,999.00', () => {
+  it('KpiTile: cifra completa en el HTML, recorte por ancho y `title` completo', () => {
+    const html = renderToStaticMarkup(
+      <KpiTile icono={ICONO} etiqueta="Monto comprobado" valor={GRANDE} formato="mxn" />,
+    );
+    expect(html).toContain(`>${GRANDE_TXT}<`);
+    expect(html).toContain(`title="${GRANDE_TXT}"`);
+    expect(html).toMatch(/min-w-0 overflow-hidden text-ellipsis whitespace-nowrap[^>]*title="\$999,999,999\.00"/);
+    // Sin `truncate` (la prueba de la auditoría 10 sigue valiendo para el rótulo).
+    expect(html).not.toContain('truncate');
+  });
+
+  it('StatCard: lo mismo', () => {
+    const html = renderToStaticMarkup(
+      <StatCard icono={ICONO} etiqueta="Gasto del periodo" valor={GRANDE} formato="mxn" />,
+    );
+    expect(html).toContain(`>${GRANDE_TXT}<`);
+    expect(html).toContain(`title="${GRANDE_TXT}"`);
+    expect(html).toMatch(/overflow-hidden text-ellipsis whitespace-nowrap[^>]*title="\$999,999,999\.00"/);
+  });
+
+  it('KpiTile/StatCard no medibles: el guion va SIN title (no hay cifra que completar)', () => {
+    const a = renderToStaticMarkup(<KpiTile icono={ICONO} etiqueta="x" valor={null} formato="mxn" vacio="sin dato" />);
+    const b = renderToStaticMarkup(<StatCard icono={ICONO} etiqueta="x" valor={null} formato="mxn" />);
+    expect(a).not.toContain('title="');
+    expect(b).not.toContain('title="');
+    expect(a).toContain('—');
+    expect(b).toContain('—');
+  });
+
+  it('WidgetUso: la cifra ya formateada se recorta por ancho con `title` completo', () => {
+    const html = renderToStaticMarkup(
+      <WidgetUso etiqueta="COSTO DE IA · AGOSTO" valor={`US${GRANDE_TXT}`} />,
+    );
+    expect(html).toContain(`US${GRANDE_TXT}`);
+    expect(html).toContain(`title="US${GRANDE_TXT}"`);
+    expect(html).toContain('overflow-hidden text-ellipsis whitespace-nowrap');
+  });
+});

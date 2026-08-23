@@ -63,7 +63,11 @@ export async function InicioContador({
   // 8-ago-2026): todo lo fiscal de esta pantalla se corta al ejercicio en
   // curso, y `getKpis`/`detectarAnomalias` van sin ventana — un pendiente no
   // deja de ser pendiente por ser viejo.
-  const hoy = new Date(ahoraMs()).toISOString().slice(0, 10);
+  // DAT-08/FE-20 (auditoría prod): era `toISOString().slice(0,10)`, el día
+  // UTC. De 18:00 a 24:00 hora de México el panel ya estaba en el día
+  // siguiente, y el 31 de diciembre el `resolverPeriodo` de abajo abría el
+  // ejercicio EQUIVOCADO: todo lo fiscal salía en ceros a las 6 de la tarde.
+  const hoy = hoyMx(new Date(ahoraMs()));
   const periodoFiscal = resolverPeriodo(undefined, hoy);
   const diasEjercicio = periodoFiscal.desde
     ? Math.floor((Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${periodoFiscal.desde}T00:00:00Z`)) / 86_400_000) + 1
@@ -212,10 +216,16 @@ export async function InicioContador({
                   sacar sus datos. Un `<a download>` a esa ruta, con el `?tenant=`
                   del sufijo del superadmin (vacío para roles reales, que usan su
                   sesión). Es la puerta que faltaba, no un endpoint nuevo. */}
-              <a href={`/api/export/liquidaciones${sufijo}`} download
+              {/* ESCALA 50k (22-ago-2026, ESC-8): la ruta ahora EXIGE ventana
+                  (máx. 3 meses) porque el CSV completo de un cliente grande no
+                  cabe en la respuesta de la plataforma. La puerta del contador
+                  se lleva el MES EN CURSO, que es su unidad de trabajo, y lo
+                  dice en el rótulo: un botón que promete "todo" y entrega un
+                  mes sería el recorte silencioso de siempre. */}
+              <a href={`/api/export/liquidaciones${sufijo}${sufijo ? '&' : '?'}desde=${hoy.slice(0, 8)}01&hasta=${hoy}`} download
                 className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85 border"
                 style={{ borderColor: 'var(--line)', color: 'var(--ink)' }}>
-                <Download width={15} height={15} strokeWidth={2} /> Exportar CSV
+                <Download width={15} height={15} strokeWidth={2} /> Exportar CSV del mes
               </a>
               <Link href={`/dashboard/facturacion${sufijo}`}
                 className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85"

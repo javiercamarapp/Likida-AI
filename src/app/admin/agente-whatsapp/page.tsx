@@ -1,4 +1,6 @@
-import { getResumenNegocio, getConversacionesActivas } from '@/lib/admin/negocio';
+import {
+  getResumenNegocio, getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES,
+} from '@/lib/admin/negocio';
 import { MessagesSquare, MessageCircle, ChevronDown, DollarSign } from 'lucide-react';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { StatCard, EstadoVacio } from '../ui/kit';
@@ -19,7 +21,11 @@ const ICONO_KPI = { width: 15, height: 15, strokeWidth: 1.75 } as const;
  * cero filas en `llm_costo` para la fase es cero gasto real, no un relleno.
  */
 export default async function AgenteWhatsappPage() {
-  const [r, conversaciones] = await Promise.all([getResumenNegocio(), getConversacionesActivas()]);
+  const [r, conversaciones, total] = await Promise.all([
+    getResumenNegocio(), getConversacionesActivas(), contarConversacionesActivas(),
+  ]);
+  // FE-9: "Conversaciones activas" listaba 20 sin decir que eran 20 de N.
+  const recortado = total !== null && total > conversaciones.length;
   const whatsapp = r.porFase.find((f) => f.fase === 'whatsapp');
 
   return (
@@ -44,13 +50,15 @@ export default async function AgenteWhatsappPage() {
           {/* Mismo render que la sección "Conversaciones de WhatsApp" de
               Inicio (consola.tsx) — misma fuente, más espacio para leerlas. */}
           <div className="card p-3">
-            <TituloSeccion>Conversaciones activas</TituloSeccion>
+            <TituloSeccion>
+              {recortado ? `Conversaciones activas — las ${TOPE_CONVERSACIONES} más recientes de ${total}` : 'Conversaciones activas'}
+            </TituloSeccion>
             {conversaciones.length === 0 ? (
               <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>Sin conversaciones activas.</p>
             ) : (
               <div className="space-y-1.5 mt-2">
                 {conversaciones.map((c) => (
-                  <details key={c.telefono} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
+                  <details key={`${c.tenantId ?? "sin-flota"}-${c.telefono}`} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
                     <summary className="px-3 py-2.5 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[var(--canvas)] transition-colors">
                       <div>
                         <div className="text-sm font-medium">{c.telefono}</div>

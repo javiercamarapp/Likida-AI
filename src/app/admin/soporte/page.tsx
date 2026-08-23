@@ -1,5 +1,11 @@
 import { LifeBuoy, AlertTriangle, Timer, CheckCircle2 } from 'lucide-react';
-import { getTicketsCruzados, ESTADOS_TICKET_CERRADO, type TicketCruzado } from '@/lib/admin/soporte';
+// Los estados terminales viven junto a la lectura (lib/admin/soporte.ts), y
+// desde FE-11 el conteo de abiertos/cerrados también: la pantalla ya no
+// reclasifica en memoria una lista que además viene acotada.
+import {
+  getTicketsCruzados, contarTickets, TOPE_TICKETS,
+  type TicketCruzado, type ConteosTickets,
+} from '@/lib/admin/soporte';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaMx, numero } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -17,10 +23,6 @@ const PILL_TICKET: Record<string, { estado: Estado; etiqueta: string }> = {
   resuelto: { estado: 'ok', etiqueta: 'Resuelto' },
   cerrado: { estado: 'ok', etiqueta: 'Cerrado' },
 };
-
-// Los estados terminales viven junto a la lectura (lib/admin/soporte.ts):
-// la bandeja de escalaciones usa el MISMO conjunto, no una copia.
-const CERRADOS = ESTADOS_TICKET_CERRADO;
 
 /** "hace 3 h" / "hace 2 d" — la edad del ticket contra el reloj del SERVIDOR
  *  (`ahoraMs()`), el mismo contra el que se resta el SLA: dos relojes en la
@@ -71,11 +73,16 @@ export default async function SoportePage() {
   } catch {
     tickets = null;
   }
-
-  const abiertos = tickets?.filter((t) => !CERRADOS.has(t.estado)) ?? [];
-  const vencidos = abiertos.filter((t) => t.horasRestantes != null && t.horasRestantes < 0);
-  const sinSla = abiertos.filter((t) => t.horasRestantes == null);
-  const resueltos = tickets?.filter((t) => CERRADOS.has(t.estado)) ?? [];
+  // FE-11: los cuatro KPIs eran `.filter().length` sobre la tabla ENTERA
+  // traída a memoria. Con la lista ya acotada a `TOPE_TICKETS`, ese mismo
+  // cálculo diría "200 tickets abiertos" hubiera 200 o 40,000: contarlos en la
+  // base es lo que permite acotar la lista sin mentir sobre la cola.
+  const conteos: ConteosTickets = await contarTickets(ahora)
+    .catch((): ConteosTickets => ({ abiertos: null, vencidos: null, sinSla: null, cerrados: null }));
+  const total = conteos.abiertos !== null && conteos.cerrados !== null
+    ? conteos.abiertos + conteos.cerrados
+    : null;
+  const recortado = total !== null && tickets !== null && total > tickets.length;
 
   const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
@@ -95,17 +102,21 @@ export default async function SoportePage() {
               {/* ── KPIs — conteos reales de la cola cross-tenant ─────────── */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <StatCard icono={<LifeBuoy {...ICONO} />}
-                  etiqueta="Tickets abiertos — todas las flotas" valor={abiertos.length} formato="entero"
+                  etiqueta="Tickets abiertos — todas las flotas" valor={conteos.abiertos} formato="entero"
+                  sinDato="no se pudo contar"
                 />
                 <StatCard icono={<AlertTriangle {...ICONO} />}
-                  etiqueta="Con SLA vencido" valor={vencidos.length} formato="entero"
+                  etiqueta="Con SLA vencido" valor={conteos.vencidos} formato="entero"
+                  sinDato="no se pudo contar"
                 />
                 <StatCard icono={<Timer {...ICONO} />}
-                  etiqueta="Sin SLA pactado" valor={sinSla.length} formato="entero"
+                  etiqueta="Sin SLA pactado" valor={conteos.sinSla} formato="entero"
                   nota="No están vencidos: nadie les puso plazo"
+                  sinDato="no se pudo contar"
                 />
                 <StatCard icono={<CheckCircle2 {...ICONO} />}
-                  etiqueta="Resueltos o cerrados — histórico" valor={resueltos.length} formato="entero"
+                  etiqueta="Resueltos o cerrados — histórico" valor={conteos.cerrados} formato="entero"
+                  sinDato="no se pudo contar"
                 />
               </div>
 
@@ -162,8 +173,10 @@ export default async function SoportePage() {
                     </table>
                   </div>
                   <p className="text-xs px-4 pt-2 pb-3" style={{ color: 'var(--muted)' }}>
-                    {numero(tickets.length)} {tickets.length === 1 ? 'ticket' : 'tickets'} en total, de todas
-                    las flotas. El reloj se deriva de <code className="font-mono">vence_en</code> contra el
+                    {recortado
+                      ? `Se listan los ${numero(TOPE_TICKETS)} más urgentes de ${numero(total!)} tickets de todas las flotas.`
+                      : `${numero(tickets.length)} ${tickets.length === 1 ? 'ticket' : 'tickets'} en total, de todas las flotas.`}
+                    {' '}El reloj se deriva de <code className="font-mono">vence_en</code> contra el
                     reloj del servidor — un ticket sin SLA pactado dice &quot;sin SLA&quot;, nunca &quot;vencido&quot;.
                   </p>
                 </div>

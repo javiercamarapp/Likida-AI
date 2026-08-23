@@ -22,11 +22,19 @@ const escrituras: Array<{ tabla: string; valores: Record<string, unknown> }> = [
 const consultas: string[] = [];
 
 function constructor(tabla: string) {
-  const _registro: Record<string, unknown> = {};
+  // `update(...)...select('id')` devuelve LAS FILAS TOCADAS, y de eso dependen
+  // los compare-and-set de DAT-13 (la reserva del timbrado y `conciliar`). Este
+  // doble no modela filtros —lo hace el fake de `transferencia_cas.test.ts`,
+  // que es donde se prueba la carrera—: aquí basta con que un update devuelva
+  // la fila y el camino feliz siga corriendo.
+  let huboUpdate = false;
   const api: Record<string, unknown> = {
     select: () => api,
     eq: () => api,
     in: () => api,
+    is: () => api,
+    or: () => api,
+    neq: () => api,
     maybeSingle: () => Promise.resolve({ data: (TABLAS[tabla] ?? [])[0] ?? null, error: null }),
     insert: (v: Record<string, unknown>) => {
       escrituras.push({ tabla, valores: v });
@@ -35,7 +43,15 @@ function constructor(tabla: string) {
       TABLAS[tabla] = [...(TABLAS[tabla] ?? []), { id: `${tabla}-nuevo`, ...v }];
       return api;
     },
-    update: () => api,
+    update: (v: Record<string, unknown>) => {
+      escrituras.push({ tabla, valores: v });
+      huboUpdate = true;
+      return api;
+    },
+    then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve({
+      data: huboUpdate ? (TABLAS[tabla] ?? []).map((f) => ({ id: f.id })) : null,
+      error: null,
+    }).then(res, rej),
   };
   return api;
 }
@@ -53,7 +69,7 @@ vi.mock('./facturapi', () => ({
 vi.mock('./fiscal', () => ({
   getDatosFiscales: vi.fn(async () => ({
     rfc: 'GMX0902279I1', razonSocial: 'Flota de Prueba SA de CV',
-    regimenFiscal: '601', codigoPostal: '36100', usoCfdi: 'G03',
+    regimenFiscal: '601', codigoPostal: '36100', usoCfdi: 'G03', email: 'pagos@flota.mx',
   })),
   estanCompletos: vi.fn(() => true),
 }));

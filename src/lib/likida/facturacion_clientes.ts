@@ -54,12 +54,10 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { conteo, traerTodo } from './pg';
-// `getCobranza` YA lee facturas + saldos + nombres de cliente, con su regla de
-// "el saldo no se guarda, se deriva" escrita y comentada. Reescribirlo aquí
-// sería una segunda oportunidad de escribir mal exactamente la cifra que el
-// contralor cruza contra su estado de cuenta.
-import { getCobranza, type FacturaRow } from './comercial';
+import { acotada } from './presupuesto';
+// Los validadores de forma de la 0152 viven en comercial.ts junto a las otras
+// RPC del lado del ingreso; `FacturaRow` es la forma que `armarCartera` recibe.
+import { esNumero, esNumeroONulo, esObjeto, esTextoONulo, formaInesperada, type FacturaRow } from './comercial';
 // Se importan, no se reimplementan. `diasEntre` ya rechaza cualquier cosa que no
 // sea `AAAA-MM-DD` a propósito (un `.slice(0,10)` sobre un `timestamptz` se
 // queda con el día UTC y CST es UTC−6), y `aNumero` es lo que impide que un
@@ -254,8 +252,11 @@ export interface ClienteCartera {
 }
 
 export interface CarteraAntiguedad {
-  /** TODAS, incluidos borradores y canceladas — la pantalla los distingue. */
+  /** Incluidos borradores y canceladas — la pantalla los distingue. Desde la
+   *  0152 es UNA PÁGINA (≤100, las más vencidas primero); `facturasTotal`
+   *  dice cuántas hay. Los agregados de abajo son sobre TODAS. */
   facturas: RenglonCartera[];
+  facturasTotal: number;
   /** Cuántas están vivas (emitidas o pagadas). */
   vivas: number;
   borradores: number;
@@ -414,6 +415,7 @@ export function armarCartera(facturas: ReadonlyArray<FacturaRow>, hoy: string): 
 
   return {
     facturas: orden,
+    facturasTotal: orden.length,
     vivas,
     borradores,
     canceladas,
@@ -482,6 +484,27 @@ export interface EnLaMesa {
   diasMasViejo: number | null;
 }
 
+/** Un viaje de la mesa, ya como renglón. Lo usan `armarEnLaMesa` (JS) y
+ *  `armarFacturacionClientes` (RPC): una sola forma de armar la ruta, el folio
+ *  de respaldo y los días. */
+export function renglonSinFacturar(v: ViajeLiquidado, soloBorrador: boolean, hoy: string): RenglonSinFacturar {
+  const ruta = v.origen && v.destino
+    ? `${v.origen} → ${v.destino}`
+    : v.origen ?? v.destino ?? null;
+  return {
+    viajeId: v.id,
+    // Mismo respaldo que `armarRenglon`: `viaje.folio` es nullable y un
+    // renglón sin encabezado no se puede citar por teléfono.
+    folio: v.folio ?? v.id.slice(0, 8),
+    ruta,
+    cliente: v.cliente,
+    ingreso: aNumero(v.ingresoFlete),
+    liquidadoEn: v.liquidadoEn,
+    diasSinFacturar: diasEntre(v.liquidadoEn, hoy),
+    soloBorrador,
+  };
+}
+
 /**
  * Los viajes ya liquidados que nadie facturó.
  *
@@ -509,23 +532,7 @@ export function armarEnLaMesa(entrada: {
 }): EnLaMesa {
   const pendientes = entrada.viajes.filter((v) => !entrada.conFacturaViva.has(v.id));
 
-  const filas: RenglonSinFacturar[] = pendientes.map((v) => {
-    const ruta = v.origen && v.destino
-      ? `${v.origen} → ${v.destino}`
-      : v.origen ?? v.destino ?? null;
-    return {
-      viajeId: v.id,
-      // Mismo respaldo que `armarRenglon`: `viaje.folio` es nullable y un
-      // renglón sin encabezado no se puede citar por teléfono.
-      folio: v.folio ?? v.id.slice(0, 8),
-      ruta,
-      cliente: v.cliente,
-      ingreso: aNumero(v.ingresoFlete),
-      liquidadoEn: v.liquidadoEn,
-      diasSinFacturar: diasEntre(v.liquidadoEn, entrada.hoy),
-      soloBorrador: entrada.conBorrador.has(v.id),
-    };
-  });
+  const filas: RenglonSinFacturar[] = pendientes.map((v) => renglonSinFacturar(v, entrada.conBorrador.has(v.id), entrada.hoy));
 
   // Los agregados se calculan sobre TODOS los pendientes, antes de recortar la
   // lista: una suma sobre los 25 listados con el rótulo del total sería la
@@ -563,26 +570,19 @@ export function armarEnLaMesa(entrada: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// PARTE CON BASE DE DATOS.
+// PARTE CON BASE DE DATOS — UNA RPC desde el 22-ago-2026 (mig. 0152).
+//
+// Antes: `getCobranza` (todas las facturas) + `factura_emitida` + TODOS los
+// viajes liquidados + TODAS las liquidaciones + `cliente` + `factura_viaje`
+// por lotes, y `armarCartera`/`armarEnLaMesa` reducían en JS. Con 50k
+// viajes/mes eso caducaba ~mes 2 (docs/escala-50k/MAPA.md #13).
+// `facturacion_clientes_tenant` hace las DOS reducciones en SQL con las
+// mismas reglas (un solo `hoy`, cubetas, borrador ≠ facturado, cierre en día
+// local MX) y devuelve los agregados completos + una página de facturas (≤100)
+// + los 25 viajes más viejos de la mesa. `armarCartera` y `armarEnLaMesa`
+// siguen aquí, PURAS: son el oráculo de la prueba de equivalencia
+// (facturacion_clientes_equivalencia.test.ts) y de las pruebas de bordes.
 // ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Cuántos ids caben en un `.in()`.
- *
- * PostgREST mete el `.in()` ENTERO en la query string. Con unos miles de uuids
- * (36 caracteres cada uno) la URL pasa del límite del servidor y la respuesta es
- * un 414 — que supabase-js reporta POR VALOR, no lanzando. Sin trocear, ese
- * fallo se leería como "ninguna factura ampara ningún viaje" y la pantalla
- * declararía que TODA la operación está sin facturar: la cifra más alarmante del
- * producto, producida por un error de red.
- */
-const LOTE_IN = 200;
-
-function trozos<T>(xs: readonly T[], tam: number): T[][] {
-  const salida: T[][] = [];
-  for (let i = 0; i < xs.length; i += tam) salida.push(xs.slice(i, i + tam));
-  return salida;
-}
 
 export interface FacturacionClientes {
   cartera: CarteraAntiguedad;
@@ -592,132 +592,171 @@ export interface FacturacionClientes {
   hoy: string;
 }
 
+export interface OpcionesFacturacion {
+  /** Acota las FACTURAS por `fecha` (AAAA-MM-DD). `null` = sin cota. La mesa nunca se acota. */
+  desde?: string | null;
+  hasta?: string | null;
+  /** Facturas en la página (≤100). */
+  limiteFacturas?: number;
+}
+
+const LIMITE_FACTURAS = 100;
+
+/**
+ * Del jsonb de `facturacion_clientes_tenant` a `FacturacionClientes`, validando
+ * la FORMA campo por campo. PURA: es la que prueba la equivalencia. Cualquier
+ * campo fuera de forma LANZA — una cartera a medias se ve igual que una entera.
+ */
+export function armarFacturacionClientes(data: unknown, hoy: string): FacturacionClientes {
+  const mal = (detalle: string) => formaInesperada('getFacturacionClientes', 'facturacion_clientes_tenant', detalle);
+  if (!esObjeto(data) || !esObjeto(data.cartera) || !esObjeto(data.enLaMesa) || !esNumero(data.viajesLiquidados)) {
+    throw mal(`llegó ${typeof data}`);
+  }
+  const c = data.cartera;
+  const m = data.enLaMesa;
+  if (!esNumero(c.facturasTotal) || !esNumero(c.vivas) || !esNumero(c.borradores) || !esNumero(c.canceladas)
+    || !esNumero(c.facturado) || !esNumero(c.cobrado) || !esNumero(c.porCobrar) || !esNumero(c.vencido)
+    || !esNumero(c.sinCondiciones) || !Array.isArray(c.cubetas) || !Array.isArray(c.clientes) || !Array.isArray(c.facturas)) {
+    throw mal('cartera con campos fuera de forma');
+  }
+  if (!esNumero(m.total) || !esNumero(m.ingresoCapturado) || !esNumero(m.sinIngreso) || !esNumero(m.conBorrador)
+    || !esNumeroONulo(m.diasMasViejo) || !Array.isArray(m.viajes)) {
+    throw mal('enLaMesa con campos fuera de forma');
+  }
+
+  const saldoPorCubeta = new Map<string, { saldo: number; facturas: number }>();
+  for (const b of c.cubetas as unknown[]) {
+    if (!esObjeto(b) || typeof b.clave !== 'string' || !esNumero(b.saldo) || !esNumero(b.facturas)) throw mal('cubeta fuera de forma');
+    saldoPorCubeta.set(b.clave, { saldo: round2(b.saldo), facturas: b.facturas });
+  }
+  // Las cinco, SIEMPRE, en el orden en que se pintan — y si falta una, se dice.
+  const cubetas: Cubeta[] = CUBETAS.map((k) => {
+    const b = saldoPorCubeta.get(k.clave);
+    if (!b) throw mal(`falta la cubeta ${k.clave}`);
+    return { clave: k.clave, rotulo: k.rotulo, ayuda: k.ayuda, saldo: b.saldo, facturas: b.facturas };
+  });
+
+  const leerCubetas = (v: unknown): Record<ClaveCubeta, number> => {
+    if (!esObjeto(v)) throw mal('porCubeta fuera de forma');
+    const salida = cubetasEnCero();
+    for (const k of CUBETAS) {
+      const x = v[k.clave];
+      if (!esNumero(x)) throw mal(`porCubeta.${k.clave} fuera de forma`);
+      salida[k.clave] = round2(x);
+    }
+    return salida;
+  };
+
+  const clientes: ClienteCartera[] = (c.clientes as unknown[]).map((x) => {
+    if (!esObjeto(x) || typeof x.cliente !== 'string' || !esNumero(x.facturado) || !esNumero(x.cobrado)
+      || !esNumero(x.saldo) || !esNumero(x.vencido) || !esNumero(x.facturas) || !esNumeroONulo(x.diasMasVencido)) {
+      throw mal('cliente fuera de forma');
+    }
+    return {
+      cliente: x.cliente,
+      facturado: round2(x.facturado),
+      cobrado: round2(x.cobrado),
+      saldo: round2(x.saldo),
+      vencido: round2(x.vencido),
+      facturas: x.facturas,
+      porCubeta: leerCubetas(x.porCubeta),
+      diasMasVencido: x.diasMasVencido,
+    };
+  });
+
+  const facturas: RenglonCartera[] = (c.facturas as unknown[]).map((f) => {
+    if (!esObjeto(f) || typeof f.id !== 'string' || !esTextoONulo(f.folio) || typeof f.cliente !== 'string'
+      || typeof f.fecha !== 'string' || !esNumero(f.total) || !esNumero(f.pagado) || !esNumero(f.saldo)
+      || typeof f.estatus !== 'string' || !esTextoONulo(f.venceEn)) {
+      throw mal('factura fuera de forma');
+    }
+    const saldo = round2(f.saldo);
+    return {
+      id: f.id,
+      folio: f.folio,
+      cliente: f.cliente,
+      fecha: f.fecha,
+      total: round2(f.total),
+      pagado: round2(f.pagado),
+      saldo,
+      estatus: f.estatus,
+      venceEn: f.venceEn,
+      viva: esFacturaViva(f.estatus),
+      conSaldo: saldo > TOLERANCIA_CENTAVO,
+      // El rótulo y los días salen del MISMO `hoy` con el que SQL clasificó.
+      antiguedad: clasificarAntiguedad(f.venceEn, hoy),
+    };
+  });
+
+  const viajes: RenglonSinFacturar[] = (m.viajes as unknown[]).map((v) => {
+    if (!esObjeto(v) || typeof v.id !== 'string' || !esTextoONulo(v.folio) || !esTextoONulo(v.origen)
+      || !esTextoONulo(v.destino) || !esTextoONulo(v.cliente) || !esTextoONulo(v.liquidadoEn)
+      || typeof v.soloBorrador !== 'boolean') {
+      throw mal('viaje en la mesa fuera de forma');
+    }
+    return renglonSinFacturar({
+      id: v.id, folio: v.folio, origen: v.origen, destino: v.destino, cliente: v.cliente,
+      ingresoFlete: v.ingresoFlete, liquidadoEn: v.liquidadoEn,
+    }, v.soloBorrador, hoy);
+  });
+
+  return {
+    cartera: {
+      facturas,
+      facturasTotal: c.facturasTotal,
+      vivas: c.vivas,
+      borradores: c.borradores,
+      canceladas: c.canceladas,
+      facturado: round2(c.facturado),
+      cobrado: round2(c.cobrado),
+      porCobrar: round2(c.porCobrar),
+      vencido: round2(c.vencido),
+      cubetas,
+      clientes,
+      sinCondiciones: c.sinCondiciones,
+      hoy,
+    },
+    enLaMesa: {
+      viajes,
+      total: m.total,
+      ingresoCapturado: round2(m.ingresoCapturado),
+      sinIngreso: m.sinIngreso,
+      conBorrador: m.conBorrador,
+      diasMasViejo: m.diasMasViejo,
+    },
+    viajesLiquidados: data.viajesLiquidados,
+    hoy,
+  };
+}
+
 /**
  * Todo lo que la pantalla de Facturación a clientes necesita, en una llamada.
  *
- * SIN CATCH POR DENTRO, igual que `getPanelClientes`. Un fallo de cualquiera de
- * estas lecturas tiene que subir: supabase-js reporta el error POR VALOR, así
- * que una base caída se leería como "esta flota no le ha facturado a nadie y no
- * tiene nada pendiente" — las dos conclusiones contrarias a las que esta
- * pantalla existe para dar. `traerTodo`/`exigir` ya traducen el error por valor
- * a excepción; la página decide si pinta el error o se cae.
+ * SIN CATCH POR DENTRO, igual que `getPanelClientes`. Un fallo tiene que
+ * subir: supabase-js reporta el error POR VALOR, así que una base caída se
+ * leería como "esta flota no le ha facturado a nadie y no tiene nada
+ * pendiente" — las dos conclusiones contrarias a las que esta pantalla existe
+ * para dar. La página decide si pinta el error o se cae.
  *
  * `hoy` entra por parámetro para poder fijarlo en una prueba sin congelar el
  * reloj, y su default es el día en HORA DE MÉXICO: la antigüedad de un saldo es
- * del cliente, no del servidor.
+ * del cliente, no del servidor. Es el MISMO `hoy` con el que SQL clasifica.
  */
 export async function getFacturacionClientes(
   tenantId: string,
   hoy: string = hoyMx(),
+  opciones: OpcionesFacturacion = {},
 ): Promise<FacturacionClientes> {
-  const admin = supabaseAdmin();
-
-  const [cobranza, facturas, viajes, liquidaciones, clientes] = await Promise.all([
-    // La cartera con su saldo derivado. Se reusa entero.
-    getCobranza(tenantId),
-    // Segunda pasada por `factura_emitida`, y sí es a propósito: `getCobranza`
-    // no devuelve `viaje_id` (no le hace falta para su cartera) y esta pantalla
-    // lo necesita para saber qué viaje ya está amparado. Reescribir `getCobranza`
-    // para colarle la columna sería una segunda copia del renglón que da el
-    // saldo, y ése es el número que no puede tener dos versiones.
-    traerTodo<{ id: unknown; viaje_id: unknown; estatus: unknown }>(
-      (d, h) => admin.from('factura_emitida').select('id, viaje_id, estatus', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h),
-      'getFacturacionClientes.factura',
-    ),
-    // Solo los LIQUIDADOS: es la lista que la pantalla contesta, y traer la
-    // tabla entera para tirar el resto es pagar por nada. `estatus` solo admite
-    // `abierto | en_cuadre | liquidado` (constraint `viaje_estatus_dominio`).
-    traerTodo<Record<string, unknown>>(
-      (d, h) => admin.from('viaje')
-        .select('id, folio, origen, destino, cliente_id, ingreso_flete, fecha_fin', conteo(d))
-        .eq('tenant_id', tenantId).eq('estatus', 'liquidado').order('id').range(d, h),
-      'getFacturacionClientes.viaje',
-    ),
-    // `created_at` es `timestamptz`: se convierte con `diaMx`, NUNCA con
-    // `.slice(0,10)` — CST es UTC−6 y las liquidaciones se cierran de noche.
-    traerTodo<{ viaje_id: unknown; created_at: unknown }>(
-      (d, h) => admin.from('liquidacion').select('viaje_id, created_at', conteo(d))
-        .eq('tenant_id', tenantId).order('viaje_id').range(d, h),
-      'getFacturacionClientes.liquidacion',
-    ),
-    traerTodo<{ id: unknown; nombre: unknown }>(
-      (d, h) => admin.from('cliente').select('id, nombre', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h),
-      'getFacturacionClientes.cliente',
-    ),
-  ]);
-
-  // ── Qué viaje está amparado por qué tipo de factura ──────────────────────
-  const estatusPorFactura = new Map<string, string>();
-  for (const f of facturas) estatusPorFactura.set(f.id as string, String(f.estatus));
-
-  const conFacturaViva = new Set<string>();
-  const conBorrador = new Set<string>();
-  const marcar = (viajeId: string, estatus: string) => {
-    if (estatus === 'borrador') conBorrador.add(viajeId);
-    else if (esFacturaViva(estatus)) conFacturaViva.add(viajeId);
-    // Una cancelada no marca nada: el viaje vuelve a estar sin facturar, que es
-    // justo el caso de refacturación que previó la 0049.
-  };
-
-  for (const f of facturas) {
-    const viajeId = (f.viaje_id as string) ?? null;
-    if (viajeId) marcar(viajeId, String(f.estatus));
-  }
-
-  // `factura_viaje` NO tiene `tenant_id` (hereda el de su factura, 0049), así
-  // que el filtro por flota se aplica AQUÍ: solo se preguntan los ids de
-  // facturas que ya vinieron acotadas por `tenant_id`. Un id de otra flota no
-  // puede entrar a esta consulta porque no está en la lista.
-  const idsFactura = [...estatusPorFactura.keys()];
-  for (const lote of trozos(idsFactura, LOTE_IN)) {
-    const ligas = await traerTodo<{ factura_id: unknown; viaje_id: unknown }>(
-      (d, h) => admin.from('factura_viaje').select('factura_id, viaje_id', conteo(d))
-        .in('factura_id', lote).order('factura_id').order('viaje_id').range(d, h),
-      'getFacturacionClientes.factura_viaje',
-    );
-    for (const l of ligas) {
-      const estatus = estatusPorFactura.get(l.factura_id as string);
-      if (estatus) marcar(l.viaje_id as string, estatus);
-    }
-  }
-
-  // ── Cuándo se liquidó cada viaje ─────────────────────────────────────────
-  const cierrePorViaje = new Map<string, string>();
-  for (const l of liquidaciones) {
-    const dia = diaMx(l.created_at);
-    if (dia === null) continue;
-    const viajeId = l.viaje_id as string;
-    // `liquidacion_viaje_uidx` (0005) admite UNA por viaje; si un día dejara de
-    // ser única, se queda la MÁS ANTIGUA — es la que mide de verdad cuánto lleva
-    // el dinero sin pedirse, y la más nueva lo haría ver más fresco de lo que es.
-    const previo = cierrePorViaje.get(viajeId);
-    if (previo === undefined || dia < previo) cierrePorViaje.set(viajeId, dia);
-  }
-
-  const nombrePorCliente = new Map(clientes.map((c) => [c.id as string, c.nombre as string]));
-
-  const liquidados: ViajeLiquidado[] = viajes.map((v) => {
-    const clienteId = (v.cliente_id as string) ?? null;
-    return {
-      id: v.id as string,
-      folio: (v.folio as string) ?? null,
-      origen: (v.origen as string) ?? null,
-      destino: (v.destino as string) ?? null,
-      cliente: clienteId ? nombrePorCliente.get(clienteId) ?? null : null,
-      ingresoFlete: v.ingreso_flete,
-      // El cierre de la liquidación manda; `fecha_fin` es el respaldo para un
-      // viaje marcado liquidado sin fila en `liquidacion`. Sin ninguno de los
-      // dos NO se inventa una fecha: el renglón sale sin días.
-      liquidadoEn: cierrePorViaje.get(v.id as string) ?? diaMx(v.fecha_fin),
-    };
-  });
-
-  return {
-    cartera: armarCartera(cobranza.facturas, hoy),
-    enLaMesa: armarEnLaMesa({ viajes: liquidados, conFacturaViva, conBorrador, hoy }),
-    viajesLiquidados: liquidados.length,
-    hoy,
-  };
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('facturacion_clientes_tenant', {
+      p_tenant: tenantId,
+      p_hoy: hoy,
+      p_desde: opciones.desde ?? null,
+      p_hasta: opciones.hasta ?? null,
+      p_limite_facturas: Math.min(Math.max(Math.trunc(opciones.limiteFacturas ?? LIMITE_FACTURAS), 1), LIMITE_FACTURAS),
+    }),
+    'facturacion_clientes_tenant',
+  );
+  if (error) throw new Error(`getFacturacionClientes: ${error.message}`);
+  return armarFacturacionClientes(data, hoy);
 }

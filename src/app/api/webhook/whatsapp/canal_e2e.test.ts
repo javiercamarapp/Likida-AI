@@ -17,8 +17,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import crypto from 'node:crypto';
 import type { Gasto, Viaje, Operador } from '@/types/likida';
+import { hoyMx } from '@/lib/formato';
 
-const HOY = new Date().toISOString().slice(0, 10);
+// DAT-28: el día de MÉXICO, como el que `ventanaDelViaje` usa desde el
+// arreglo. Con el día UTC, corriendo la prueba después de las 18:00 hora local
+// los comprobantes quedaban fechados MAÑANA y el motor los marcaba —con razón—
+// como del futuro.
+const HOY = hoyMx();
 const VIAJE: Viaje = { id: 'v1', folio: 'VJ-1', origen: 'Mérida', destino: 'Cancún', anticipo: 8000, fechaInicio: HOY };
 const OPERADOR: Operador = { id: 'o1', nombre: 'Juan Pérez', telefono: '5219993700779', terminal: 'Mérida' };
 const GASTOS: Gasto[] = [
@@ -80,7 +85,7 @@ vi.mock('@/lib/likida/conv', async (original) => ({
   loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
   saveConversation: vi.fn(),
   claimMessage: vi.fn(async () => 'nuevo'),
-  acquireViajeLock: vi.fn(async () => true),
+  acquireViajeLock: vi.fn(async () => true), intentarLockViaje: vi.fn(async () => 'obtenido' as const),
   releaseViajeLock: vi.fn(), releaseMessageClaim: vi.fn(),
   intakeDelta: vi.fn(async () => 0), esperarIntake: vi.fn(async () => true),
 }));
@@ -137,6 +142,9 @@ vi.mock('@/lib/observability/sentry', () => ({
 // (su propio contrato vive en apagado.test.ts + wa-pendientes).
 const { bandejaInbox } = vi.hoisted(() => ({ bandejaInbox: new Map<string, unknown>() }));
 vi.mock('@/lib/likida/wa_pendientes', () => ({
+  // DAT-34: la deduplicación previa al rate limit. Vacío = ninguno de estos
+  // wamids estaba ya en la bandeja, que es el caso de una entrega normal.
+  pendientesYaConocidos: async () => new Set<string>(),
   // El inbox general (16-ago-2026): el E2E pasa por persistir → reclamar →
   // procesar, como producción.
   guardarEventosPendientes: vi.fn(async (ms: Array<{ waMessageId?: string }>) => {
@@ -223,7 +231,8 @@ describe('E2E de canal: POST firmado de Meta → cierre → PDF → sobre de vue
     // Los DOS ejemplares del PDF son bytes reales en storage:
     expect([...subidos.keys()].sort()).toEqual([`${TENANT}/v1-operador.pdf`, `${TENANT}/v1.pdf`]);
     // La liquidación se persistió con el ejemplar del contralor:
-    expect(saveLiquidacion).toHaveBeenCalledWith(TENANT, expect.anything(), `${TENANT}/v1.pdf`);
+    // El 4º argumento es el conteo de comprobantes de la 0158 (DAT-02).
+    expect(saveLiquidacion).toHaveBeenCalledWith(TENANT, expect.anything(), `${TENANT}/v1.pdf`, expect.any(Number));
     // Y el sobre del documento salió a Meta, al número que Meta acepta:
     const documentos = salientes.filter((s) => s.body.type === 'document');
     expect(documentos).toHaveLength(1);

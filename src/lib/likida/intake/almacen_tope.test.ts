@@ -54,8 +54,11 @@ describe('subirComprobante tiene techo', () => {
   it('y agotar el tope entra por el MISMO camino que un error de storage', async () => {
     upload.mockImplementation(() => new Promise(() => {}));
     await subirComprobante('t1', 'v1', 'H', JPG);
-    // El contrato del módulo no cambia: un warn y `undefined`, nunca un throw.
-    expect(logger.warn).toHaveBeenCalledWith('comprobante.subida_falló', expect.anything());
+    // El contrato del módulo no cambia: se registra y se devuelve `undefined`,
+    // nunca un throw. El NIVEL sí subió a `error` (auditoría prod, RES-16): un
+    // comprobante que se pierde es del camino del dinero, no una nota de
+    // color, y como `warn` se quedaba enterrado entre miles.
+    expect(logger.error).toHaveBeenCalledWith('comprobante.subida_falló', expect.anything());
   });
 
   it('CONTROL — una subida normal sigue devolviendo su ruta', async () => {

@@ -68,6 +68,30 @@ function esNombreValido(nombre: string): nombre is NombreInterruptor {
  *  podido saberlo SÍ lo es (AUDITORÍA 18, A17). */
 export type LecturaInterruptor = 'encendido' | 'apagado' | 'ilegible';
 
+// ── CACHÉ DE LECTURA, 5 s POR INSTANCIA (auditoría prod, RES-19) ───────────
+//
+// El webhook pregunta `estaApagado('global')` en CADA `after()` y los crons lo
+// preguntan dos o tres veces por corrida: a 50k mensajes/día eso es una
+// consulta a `interruptor` por cada mensaje entrante, en el camino caliente,
+// para leer una fila que cambia tres veces al año.
+//
+// CINCO SEGUNDOS Y NO MÁS: la palanca existe para un incidente y su promesa es
+// "apaga en cinco segundos". Una caché larga la convertiría en "apaga cuando
+// se enfríen las instancias", que es justo lo que no puede pasar.
+//
+// LO ILEGIBLE NO SE CACHEA: un bache de red no puede dejar el sistema
+// fail-closed cinco segundos más de lo que dura el bache, y sobre todo no
+// puede saltarse el grito — cada lectura fallida tiene que alertar.
+// `apagar`/`encender` invalidan al vuelo: quien mueve la palanca en ESTA
+// instancia la ve aplicada al instante.
+const TTL_CACHE_INTERRUPTOR_MS = 5_000;
+const cache = new Map<NombreInterruptor, { valor: LecturaInterruptor; hasta: number }>();
+
+/** Tira la caché. La llaman `apagar`/`encender` y las pruebas. */
+export function olvidarInterruptores(): void {
+  cache.clear();
+}
+
 /**
  * Lee el interruptor y dice una de tres cosas. NUNCA lanza.
  *
@@ -79,6 +103,8 @@ export type LecturaInterruptor = 'encendido' | 'apagado' | 'ilegible';
  * crons verdes sin trabajo.
  */
 export async function leerInterruptor(nombre: NombreInterruptor): Promise<LecturaInterruptor> {
+  const guardado = cache.get(nombre);
+  if (guardado && Date.now() < guardado.hasta) return guardado.valor;
   try {
     // AUDITORÍA 2 (backend): el kill switch es la red de seguridad manual — no
     // puede colgarse. Con `acotada` un socket que Supabase acepta y no contesta
@@ -94,7 +120,9 @@ export async function leerInterruptor(nombre: NombreInterruptor): Promise<Lectur
       await gritarIlegible(nombre, error.message, codigoDeError(error));
       return 'ilegible';
     }
-    return data?.apagado === true ? 'apagado' : 'encendido';
+    const lectura: LecturaInterruptor = data?.apagado === true ? 'apagado' : 'encendido';
+    cache.set(nombre, { valor: lectura, hasta: Date.now() + TTL_CACHE_INTERRUPTOR_MS });
+    return lectura;
   } catch (e) {
     await gritarIlegible(nombre, e instanceof Error ? e.message : String(e), codigoDeError(e));
     return 'ilegible';
@@ -146,6 +174,7 @@ export async function apagar(nombre: string, motivo: string, userId: string): Pr
       { onConflict: 'id' },
     ), 'apagar');
   if (error) throw new Error(`apagar(${nombre}): ${error.message}`);
+  olvidarInterruptores();
   await anotarEnBitacora('interruptor.apagado', nombre, userId, { motivo: m });
 }
 
@@ -165,6 +194,7 @@ export async function encender(nombre: string, userId: string): Promise<void> {
       { onConflict: 'id' },
     ), 'encender');
   if (error) throw new Error(`encender(${nombre}): ${error.message}`);
+  olvidarInterruptores();
   await anotarEnBitacora('interruptor.encendido', nombre, userId, {});
 }
 

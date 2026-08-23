@@ -8,7 +8,7 @@ import { PanelPeriodo } from './panel-periodo';
 describe('PanelPeriodo — consulta caída no se pinta como vacío (A13)', () => {
   it('con las cuatro series en null ninguna tarjeta afirma ausencia', () => {
     const html = renderToStaticMarkup(
-      <PanelPeriodo viajes={[]} porMes={[]} seriesKpis={null} gastoSemanalSeries={null}
+      <PanelPeriodo porDia={[]} porMes={[]} seriesKpis={null} gastoSemanalSeries={null}
         liquidadoSemanalSeries={null} topRutasSeries={null} />,
     );
     expect(html).not.toContain('Aún no hay viajes registrados en este periodo');
@@ -21,7 +21,7 @@ describe('PanelPeriodo — consulta caída no se pinta como vacío (A13)', () =>
     const vacio = { semanal: [] as never[], mensual: [] as never[], historico: [] as never[] };
     const gastoVacio = { categorias: [] as string[], series: [] as Array<{ nombre: string; valores: number[] }> };
     const html = renderToStaticMarkup(
-      <PanelPeriodo viajes={[]} porMes={[]}
+      <PanelPeriodo porDia={[]} porMes={[]}
         seriesKpis={{ semanal: [{ gastoTotal: 0, totalViajes: 0, costoPorViaje: null, liquidado: 0, viajesLiquidados: 0 }], mensual: [], historico: [] } as never}
         gastoSemanalSeries={{ semanal: gastoVacio, mensual: gastoVacio, historico: gastoVacio }}
         liquidadoSemanalSeries={vacio} topRutasSeries={vacio} />,
@@ -37,7 +37,7 @@ describe('PanelPeriodo — consulta caída no se pinta como vacío (A13)', () =>
 describe('PanelPeriodo — cada tarjeta rotula su ventana real (A11)', () => {
   it('en el render inicial (Semanal) Viajes dice 7 días y Liquidado 5 semanas', () => {
     const html = renderToStaticMarkup(
-      <PanelPeriodo viajes={[]} porMes={[]} seriesKpis={null} gastoSemanalSeries={null}
+      <PanelPeriodo porDia={[]} porMes={[]} seriesKpis={null} gastoSemanalSeries={null}
         liquidadoSemanalSeries={null} topRutasSeries={null} />,
     );
     expect(html).toMatch(/Viajes[^<]*<span[^>]*>· últimos 7 días/);

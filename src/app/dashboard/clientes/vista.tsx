@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import {
   Handshake, Banknote, Wallet, Users, Route, TriangleAlert, CircleDashed,
 } from 'lucide-react';
@@ -9,7 +10,12 @@ import { StatCard, EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
 // otro archivo formatea moneda mexicana por su cuenta.
 import { mxn, numero, fechaMx } from '@/lib/formato';
 import { BarraPagina } from '../resumen-visual';
+import { paginarRegistro, urlRegistro, type ParamsRegistro } from '../paginar-registro';
+import { FiltroRegistro } from '../registro-filtro';
+import type { BuscarCatalogo } from '../combo-catalogo';
 import { FormaCliente, FormaTarifa, Plegable, type AccionForma, type OpcionModo } from './forma';
+
+const RUTA = '/dashboard/clientes';
 
 /**
  * CLIENTES Y TARIFAS — el lado del INGRESO, que hasta hoy no tenía pantalla.
@@ -29,12 +35,21 @@ import { FormaCliente, FormaTarifa, Plegable, type AccionForma, type OpcionModo 
  */
 export function VistaClientes({
   panel, puedeEditar, modos, guardarCliente, guardarTarifa,
+  buscarCliente, totalClientes, sp, sufijo, camposOcultos,
 }: {
   panel: PanelClientes | null;
   puedeEditar: boolean;
   modos: ReadonlyArray<OpcionModo>;
   guardarCliente: AccionForma;
   guardarTarifa: AccionForma;
+  /** FE-12/FE-2: el buscador de clientes del servidor, para el campo Cliente
+   *  de las tarifas — antes era el catálogo COMPLETO repetido en cada forma. */
+  buscarCliente: BuscarCatalogo;
+  totalClientes: number | null;
+  /** `?q=`/`?p=`/`?editar=` (clientes) y `?qt=`/`?pt=`/`?editarT=` (tarifas). */
+  sp: ParamsRegistro & { qt?: string; pt?: string; editarT?: string };
+  sufijo: string;
+  camposOcultos: Array<[string, string]>;
 }) {
   return (
     <main className="h-full">
@@ -50,8 +65,11 @@ export function VistaClientes({
           ) : (
             <>
               <BloqueCartera panel={panel} />
-              <BloqueClientes panel={panel} puedeEditar={puedeEditar} guardarCliente={guardarCliente} />
-              <BloqueTarifas panel={panel} puedeEditar={puedeEditar} modos={modos} guardarTarifa={guardarTarifa} />
+              <BloqueClientes panel={panel} puedeEditar={puedeEditar} guardarCliente={guardarCliente}
+                sp={sp} sufijo={sufijo} camposOcultos={camposOcultos} />
+              <BloqueTarifas panel={panel} puedeEditar={puedeEditar} modos={modos} guardarTarifa={guardarTarifa}
+                buscarCliente={buscarCliente} totalClientes={totalClientes}
+                sp={sp} sufijo={sufijo} camposOcultos={camposOcultos} />
               <BloqueSinIngreso panel={panel} />
               {!puedeEditar && (
                 <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
@@ -137,11 +155,22 @@ function BloqueCartera({ panel }: { panel: PanelClientes }) {
 
 // ── Clientes ───────────────────────────────────────────────────────────────
 
-function BloqueClientes({ panel, puedeEditar, guardarCliente }: {
+function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, camposOcultos }: {
   panel: PanelClientes;
   puedeEditar: boolean;
   guardarCliente: AccionForma;
+  sp: ParamsRegistro;
+  sufijo: string;
+  camposOcultos: Array<[string, string]>;
 }) {
+  // FE-12: la tabla pintaba TODOS los clientes con su formulario de edición
+  // plegado en cada fila. La búsqueda cubre nombre, RFC y contacto.
+  const pagClientes = paginarRegistro(
+    panel.clientes,
+    (c) => [c.nombre, c.rfc, c.contacto].filter(Boolean).join(' '),
+    sp,
+    (c) => c.id,
+  );
   const VACIO = {
     nombre: '', rfc: '', contacto: '', correo: '', telefono: '', diasCredito: '', activo: true,
   };
@@ -151,6 +180,11 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente }: {
       <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
         Clientes
       </h2>
+
+      {panel.clientes.length > 0 && (
+        <FiltroRegistro ruta={RUTA} sufijo={sufijo} pagina={pagClientes}
+          sustantivo="clientes" camposOcultos={camposOcultos} />
+      )}
 
       {panel.clientes.length === 0 ? (
         <EstadoVacio icono={<Handshake width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
@@ -174,8 +208,13 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente }: {
               </tr>
             </thead>
             <tbody>
-              {panel.clientes.map((c) => (
-                <RenglonCliente key={c.id} c={c} puedeEditar={puedeEditar} guardarCliente={guardarCliente} />
+              {pagClientes.filas.map((c) => (
+                <RenglonCliente key={c.id} c={c} puedeEditar={puedeEditar} guardarCliente={guardarCliente}
+                  editando={pagClientes.editando === c.id}
+                  hrefEditar={urlRegistro(RUTA, sufijo, {
+                    q: pagClientes.q || null, p: pagClientes.pagina,
+                    editar: pagClientes.editando === c.id ? null : c.id,
+                  })} />
               ))}
             </tbody>
           </table>
@@ -193,10 +232,14 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente }: {
   );
 }
 
-function RenglonCliente({ c, puedeEditar, guardarCliente }: {
+function RenglonCliente({ c, puedeEditar, guardarCliente, editando, hrefEditar }: {
   c: ClienteConMetricas;
   puedeEditar: boolean;
   guardarCliente: AccionForma;
+  /** FE-12: solo la fila que `?editar=` nombra trae su formulario — antes
+   *  cada cliente cargaba el suyo plegado. */
+  editando: boolean;
+  hrefEditar: string;
 }) {
   return (
     <>
@@ -248,10 +291,20 @@ function RenglonCliente({ c, puedeEditar, guardarCliente }: {
           {c.tarifas === 0 ? '—' : numero(c.tarifas)}
         </td>
       </tr>
-      {puedeEditar && (
+      {puedeEditar && !editando && (
+        <tr style={{ borderColor: 'var(--line2)' }}>
+          <td colSpan={7} className="px-3 pb-2">
+            <Link href={hrefEditar} className="text-[12px] underline hover:opacity-70 transition-opacity"
+              style={{ color: 'var(--muted)' }}>
+              Editar
+            </Link>
+          </td>
+        </tr>
+      )}
+      {puedeEditar && editando && (
         <tr style={{ borderColor: 'var(--line2)' }}>
           <td colSpan={7} className="px-3 pb-3">
-            <Plegable resumen="Editar">
+            <>
               <FormaCliente
                 accion={guardarCliente}
                 id={c.id}
@@ -270,7 +323,11 @@ function RenglonCliente({ c, puedeEditar, guardarCliente }: {
                   activo: c.activo,
                 }}
               />
-            </Plegable>
+              <Link href={hrefEditar} className="inline-block mt-2 text-[12px] underline hover:opacity-70 transition-opacity"
+                style={{ color: 'var(--muted)' }}>
+                Cerrar
+              </Link>
+            </>
           </td>
         </tr>
       )}
@@ -306,15 +363,30 @@ function rutaDe(t: { origen: string | null; destino: string | null }): string {
   return 'cualquier ruta';
 }
 
-function BloqueTarifas({ panel, puedeEditar, modos, guardarTarifa }: {
+function BloqueTarifas({
+  panel, puedeEditar, modos, guardarTarifa, buscarCliente, totalClientes, sp, sufijo, camposOcultos,
+}: {
   panel: PanelClientes;
   puedeEditar: boolean;
   modos: ReadonlyArray<OpcionModo>;
   guardarTarifa: AccionForma;
+  buscarCliente: BuscarCatalogo;
+  totalClientes: number | null;
+  sp: ParamsRegistro & { qt?: string; pt?: string; editarT?: string };
+  sufijo: string;
+  camposOcultos: Array<[string, string]>;
 }) {
   const rotuloModo = (v: string) => modos.find((m) => m.valor === v)?.rotulo ?? v;
   const unidadModo = (v: string) => modos.find((m) => m.valor === v)?.unidad ?? '';
-  const clientes = panel.clientes.filter((c) => c.activo).map((c) => ({ id: c.id, nombre: c.nombre }));
+  // FE-12: las tarifas tienen sus PROPIOS parámetros (`qt`/`pt`/`editarT`)
+  // para que buscar una tarifa no mueva la tabla de clientes de la misma
+  // pantalla — dos registros en una página son dos registros.
+  const pagTarifas = paginarRegistro(
+    panel.tarifas,
+    (t) => [t.clienteNombre, t.origen, t.destino, rotuloModo(t.modo)].filter(Boolean).join(' '),
+    { q: sp.qt, p: sp.pt, editar: sp.editarT },
+    (t) => t.id,
+  );
   const VACIA = {
     clienteId: '', origen: '', destino: '', modo: modos[0]?.valor ?? 'por_viaje',
     precio: '', moneda: 'MXN', vigenteDesde: panel.hoy, vigenteHasta: '', activa: true,
@@ -325,6 +397,11 @@ function BloqueTarifas({ panel, puedeEditar, modos, guardarTarifa }: {
       <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
         Tarifas
       </h2>
+
+      {panel.tarifas.length > 0 && (
+        <FiltroRegistro ruta={RUTA} sufijo={sufijo} pagina={pagTarifas} sustantivo="tarifas"
+          camposOcultos={camposOcultos} nombreQ="qt" nombreP="pt" nombreEditar="editarT" />
+      )}
 
       {panel.tarifas.length === 0 ? (
         <EstadoVacio icono={<Route width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
@@ -346,11 +423,17 @@ function BloqueTarifas({ panel, puedeEditar, modos, guardarTarifa }: {
               </tr>
             </thead>
             <tbody>
-              {panel.tarifas.map((t) => (
+              {pagTarifas.filas.map((t) => (
                 <RenglonTarifa
                   key={t.id} t={t} hoy={panel.hoy} puedeEditar={puedeEditar}
-                  clientes={clientes} modos={modos} guardarTarifa={guardarTarifa}
+                  buscarCliente={buscarCliente} totalClientes={totalClientes}
+                  modos={modos} guardarTarifa={guardarTarifa}
                   rotuloModo={rotuloModo} unidadModo={unidadModo}
+                  editando={pagTarifas.editando === t.id}
+                  hrefEditar={urlRegistro(RUTA, sufijo, {
+                    qt: pagTarifas.q || null, pt: pagTarifas.pagina,
+                    editarT: pagTarifas.editando === t.id ? null : t.id,
+                  })}
                 />
               ))}
             </tbody>
@@ -369,7 +452,8 @@ function BloqueTarifas({ panel, puedeEditar, modos, guardarTarifa }: {
           <Plegable resumen="+ Agregar una tarifa">
             <FormaTarifa
               accion={guardarTarifa} idPrefijo="alta-tarifa"
-              clientes={clientes} modos={modos} inicial={VACIA}
+              buscarCliente={buscarCliente} totalClientes={totalClientes}
+              modos={modos} inicial={VACIA}
             />
           </Plegable>
         </div>
@@ -379,16 +463,22 @@ function BloqueTarifas({ panel, puedeEditar, modos, guardarTarifa }: {
 }
 
 function RenglonTarifa({
-  t, hoy, puedeEditar, clientes, modos, guardarTarifa, rotuloModo, unidadModo,
+  t, hoy, puedeEditar, buscarCliente, totalClientes, modos, guardarTarifa,
+  rotuloModo, unidadModo, editando, hrefEditar,
 }: {
   t: TarifaRow;
   hoy: string;
   puedeEditar: boolean;
-  clientes: ReadonlyArray<{ id: string; nombre: string }>;
+  buscarCliente: BuscarCatalogo;
+  totalClientes: number | null;
   modos: ReadonlyArray<OpcionModo>;
   guardarTarifa: AccionForma;
   rotuloModo: (v: string) => string;
   unidadModo: (v: string) => string;
+  /** FE-12: solo la tarifa que `?editarT=` nombra trae su formulario — y con
+   *  él, el único buscador de clientes de la página. */
+  editando: boolean;
+  hrefEditar: string;
 }) {
   const p = PILL_TARIFA[estadoDe(t, hoy)];
   return (
@@ -415,15 +505,27 @@ function RenglonTarifa({
           </span>
         </td>
       </tr>
-      {puedeEditar && (
+      {puedeEditar && !editando && (
+        <tr style={{ borderColor: 'var(--line2)' }}>
+          <td colSpan={6} className="px-3 pb-2">
+            <Link href={hrefEditar} className="text-[12px] underline hover:opacity-70 transition-opacity"
+              style={{ color: 'var(--muted)' }}>
+              Editar
+            </Link>
+          </td>
+        </tr>
+      )}
+      {puedeEditar && editando && (
         <tr style={{ borderColor: 'var(--line2)' }}>
           <td colSpan={6} className="px-3 pb-3">
-            <Plegable resumen="Editar">
+            <>
               <FormaTarifa
                 accion={guardarTarifa}
                 id={t.id}
                 idPrefijo={`tarifa-${t.id}`}
-                clientes={clientes}
+                clienteNombre={t.clienteNombre ?? ''}
+                buscarCliente={buscarCliente}
+                totalClientes={totalClientes}
                 modos={modos}
                 inicial={{
                   clienteId: t.clienteId ?? '',
@@ -437,7 +539,11 @@ function RenglonTarifa({
                   activa: t.activa,
                 }}
               />
-            </Plegable>
+              <Link href={hrefEditar} className="inline-block mt-2 text-[12px] underline hover:opacity-70 transition-opacity"
+                style={{ color: 'var(--muted)' }}>
+                Cerrar
+              </Link>
+            </>
           </td>
         </tr>
       )}

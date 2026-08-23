@@ -69,6 +69,9 @@ vi.mock('next/server', async (orig) => {
 // el flujo feliz sin base real.
 const { bandejaInbox } = vi.hoisted(() => ({ bandejaInbox: new Map<string, unknown>() }));
 vi.mock('@/lib/likida/wa_pendientes', () => ({
+  // DAT-34: la deduplicación previa al rate limit. Vacío = ninguno de estos
+  // wamids estaba ya en la bandeja, que es el caso de una entrega normal.
+  pendientesYaConocidos: async () => new Set<string>(),
   guardarEventosPendientes: async (ms: Array<{ waMessageId?: string }>) => {
     const filas = ms.map((m, i) => {
       const id = m.waMessageId ?? `f-${i}`;
