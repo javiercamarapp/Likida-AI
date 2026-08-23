@@ -77,7 +77,12 @@ describe('la corrida', () => {
     const cuerpo = await res.json();
 
     expect(res.status).toBe(200);
-    expect(cuerpo).toEqual({ corrio: true, waPurgados: 3, llmCostoPurgado: false, vueltas: 1 });
+    // `storage` entró el 23-ago con el borrador de la cola de Storage: la purga
+    // MARCA archivos (Supabase no deja borrarlos desde SQL) y este paso los
+    // borra por la API. Se compara por campos y no con `toEqual` entero para
+    // que añadir un dato nuevo al informe no rompa esta prueba por su forma.
+    expect(cuerpo).toMatchObject({ corrio: true, waPurgados: 3, llmCostoPurgado: false, vueltas: 1 });
+    expect(cuerpo).toHaveProperty('storage');
     expect(rpc).toHaveBeenCalledWith('mantenimiento_de_datos', { p_dias_wa: 30 });
   });
 
