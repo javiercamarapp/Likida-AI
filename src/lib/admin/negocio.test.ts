@@ -136,7 +136,7 @@ const {
   getResumenNegocio, getCostoPorFaseModelo, getConversacionesActivas,
   getConteosPlataforma, getCorridasRecientes, getUltimaCorridaPorAgente, AGENTES_BITACORA,
   getCorridasFallidas, getLiquidacionesEnRevisar, contarLiquidacionesEnRevisar, LIMITE_LIQUIDACIONES_REVISAR,
-  costoIaMesActual, costoIaDeTenant,
+  costoIaMesActual, costoIaDeTenant, SEGUNDOS_CACHE_CONSOLA,
 } = await import('./negocio');
 
 describe('getResumenNegocio', () => {
@@ -299,6 +299,22 @@ describe('getResumenNegocio', () => {
       // verano desde 2022. La RPC bucketea por día local MX desde ahí.
       { fn: 'resumen_negocio', args: { p_desde: '2026-07-27T06:00:00.000Z' } },
     ]);
+  });
+
+  // ── ESC-10 · la caché de la consola ──────────────────────────────────────
+  it('las dos RPC se cachean 60 s; el catálogo de flotas NO — se edita desde /admin', async () => {
+    expect(SEGUNDOS_CACHE_CONSOLA).toBe(60);
+    await getResumenNegocio('2026-08-02');
+    // `tenant` SIGUE leyéndose en vivo, por páginas: si se cacheara, la flota
+    // recién dada de alta no aparecería hasta un minuto después y el
+    // `revalidatePath` de esa acción se vería no hacer nada.
+    expect(rangos.get('tenant')).toBeDefined();
+    // Y las dos RPC entran a la caché SIEMPRE con los mismos argumentos
+    // explícitos: `unstable_cache` mete los argumentos en la llave, así que
+    // llamar unas veces con `()` y otras con `(null, null)` guardaría DOS
+    // entradas idénticas — dos recorridos de `llm_costo` en vez de uno.
+    expect(llamadasRpc.filter((l) => l.fn === 'resumen_costo_ia'))
+      .toEqual([{ fn: 'resumen_costo_ia', args: { p_desde: null, p_hasta: null } }]);
   });
 
   it('la ventana de 30 días mueve `p_desde` 30 días atrás (hoy incluido)', async () => {
