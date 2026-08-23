@@ -7876,3 +7876,140 @@ begin
   raise exception E'DESCUENTO_0171  existe=%  nullable=%  sin_default=%  guarda=%  rechaza_negativo=%  cero_entra=%   (esperado t / t / t / 102000.00 / t / t)',
     existe, nullable, sin_default, guardado, rechaza_negativo, cero_entra;
 end $$;
+
+-- ── 143. NINGÚN RPC agregado ve datos de otra flota (prueba adversarial) ──
+--
+-- P0 de la auditoría externa (23-ago-2026): las "pruebas de equivalencia SQL"
+-- de `comercial_equivalencia.test.ts` comparan la reducción JS vieja contra un
+-- ESPEJO EN TYPESCRIPT del RPC (`espejo_0152.pruebas.ts`) — no ejecutan una
+-- línea de SQL. Quitarle `where tenant_id = p_tenant` a una función dejaba
+-- miles de pruebas en verde. Eso es falsa confianza, y este bloque existe para
+-- que deje de serlo.
+--
+-- CÓMO ATACA, y por qué no hace falta escribir un caso por función: se siembran
+-- DOS flotas con datos equivalentes, se pide cada RPC con `p_tenant = A` y se
+-- guarda el hash del resultado; luego se BORRA todo lo de B y se vuelve a
+-- pedir. Si algún hash cambia, esa función estaba leyendo del vecino. La lista
+-- se descubre del catálogo (`pg_proc`), así que un RPC nuevo entra a la prueba
+-- solo — no hay que acordarse de añadirlo.
+--
+-- Esperado: AISLAMIENTO_RPC  probados=>=15  contaminados=—  vacios_ambos=—
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; va uuid; vb uuid;
+  ca uuid; cb uuid; fa uuid; fb uuid;
+  f record;
+  h_antes text; h_despues text;
+  contaminados text := '';
+  sin_datos text := '';
+  probados int := 0;
+  caza_la_fuga boolean;
+begin
+  -- ── Dos flotas con la misma forma de datos ───────────────────────────────
+  insert into tenant (nombre) values ('ZZZ AISLA A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ AISLA B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta,'OA','+520000014301') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (tb,'OB','+520000014302') returning id into ob;
+
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo, origen, destino)
+    values (ta, oa, 'ZZZ-A-1','liquidado', current_date - 3, 5000,'CDMX','GDL') returning id into va;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo, origen, destino)
+    values (tb, ob, 'ZZZ-B-1','liquidado', current_date - 3, 9999,'MTY','QRO') returning id into vb;
+
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, folio, sub_total, forma_pago)
+    values (ta, va,'diesel', 1500, current_date - 2,'GA-1', 1293.10,'04'),
+           (ta, va,'caseta',  300, current_date - 2,'CA-1',  258.62,'04'),
+           (tb, vb,'diesel', 7777, current_date - 2,'GB-1', 6704.31,'04'),
+           (tb, vb,'caseta',  888, current_date - 2,'CB-1',  765.52,'04');
+
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia, estatus)
+    values (ta, va, 1800, 5000, 3200,'con_diferencias'), (tb, vb, 8665, 9999, 1334,'con_diferencias');
+
+  insert into cliente (tenant_id, nombre) values (ta,'CA') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (tb,'CB') returning id into cb;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total)
+    values (ta, ca, 10000, 1600, 11600) returning id into fa;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total)
+    values (tb, cb, 90000, 14400, 104400) returning id into fb;
+  insert into pago_recibido (tenant_id, factura_id, monto)
+    values (ta, fa, 1000), (tb, fb, 9000);
+
+  insert into incidencia (tenant_id, viaje_id, tipo) values (ta, va,'averia'), (tb, vb,'averia');
+  insert into llm_costo (tenant_id, viaje_id, fase, modelo)
+    values (ta, va,'ocr','m'), (tb, vb,'ocr','m');
+
+  -- ── 1ª pasada: con B poblado ─────────────────────────────────────────────
+  create temp table _hashes (fn text primary key, h text) on commit drop;
+  for f in
+    select p.proname as fn
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and pg_get_function_identity_arguments(p.oid) like 'p_tenant uuid%'
+       and p.provolatile in ('s','i')
+       and p.pronargs - p.pronargdefaults <= 1
+     order by 1
+  loop
+    begin
+      execute format(
+        'select md5(coalesce(string_agg(t::text, ''|'' order by t::text), ''SIN_FILAS'')) from %I($1) t',
+        f.fn) into h_antes using ta;
+      insert into _hashes values (f.fn, h_antes);
+    exception when others then
+      -- Una función que no se deja llamar así no se prueba, pero se NOMBRA:
+      -- callar aquí sería repetir el pecado que este bloque viene a corregir.
+      sin_datos := sin_datos || f.fn || ' ';
+    end;
+  end loop;
+
+  -- ── Se borra TODO lo de la flota B ───────────────────────────────────────
+  delete from llm_costo   where tenant_id = tb;
+  delete from incidencia  where tenant_id = tb;
+  delete from pago_recibido   where tenant_id = tb;
+  delete from factura_emitida where tenant_id = tb;
+  delete from cliente     where tenant_id = tb;
+  delete from liquidacion where tenant_id = tb;
+  delete from gasto       where tenant_id = tb;
+  delete from viaje       where tenant_id = tb;
+  delete from operador    where tenant_id = tb;
+
+  -- ── 2ª pasada: lo de A no puede haber cambiado ───────────────────────────
+  for f in select fn, h from _hashes order by fn loop
+    execute format(
+      'select md5(coalesce(string_agg(t::text, ''|'' order by t::text), ''SIN_FILAS'')) from %I($1) t',
+      f.fn) into h_despues using ta;
+    probados := probados + 1;
+    if h_despues is distinct from f.h then
+      contaminados := contaminados || f.fn || ' ';
+    end if;
+  end loop;
+
+  -- ── FALSIFICACIÓN: se le quita el filtro de tenant a un RPC y se comprueba
+  --    que este mismo bloque lo caza. Una prueba de aislamiento que no sabe
+  --    fallar no prueba nada — es justo el pecado que este bloque corrige.
+  execute $f$
+    create or replace function public.gasto_por_concepto_tenant(p_tenant uuid)
+    returns jsonb language sql stable parallel safe set search_path to 'public','pg_catalog'
+    as $roto$
+      select coalesce(jsonb_agg(jsonb_build_object('concepto', concepto, 'n', n, 'total', total)
+             order by total desc, concepto), '[]'::jsonb)
+      from (select coalesce(concepto,'otro') as concepto, count(*) as n, coalesce(sum(monto),0) as total
+              from gasto group by 1) t;
+    $roto$;
+  $f$;
+  -- B quedó vacía tras el borrado: se le devuelve un gasto para que HAYA algo
+  -- ajeno que la función sin filtro pueda sumar.
+  insert into operador (tenant_id, nombre, telefono) values (tb,'OB2','+520000014303') returning id into ob;
+  insert into viaje (tenant_id, operador_id) values (tb, ob) returning id into vb;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, folio)
+    values (tb, vb, 'diesel', 4242, current_date - 1, 'FUGA-B');
+  execute 'select md5(coalesce(string_agg(t::text, ''|'' order by t::text), ''SIN_FILAS'')) from gasto_por_concepto_tenant($1) t'
+    into h_despues using ta;
+  select h into h_antes from _hashes where fn = 'gasto_por_concepto_tenant';
+  caza_la_fuga := (h_despues is distinct from h_antes);
+
+  raise exception E'AISLAMIENTO_RPC  probados=%  contaminados=%  no_probados=%  FALSIFICADO (sin filtro de tenant): caza_la_fuga=%   (esperado >=15 / — / —)',
+    probados,
+    coalesce(nullif(trim(contaminados), ''), '—'),
+    coalesce(nullif(trim(sin_datos), ''), '—'),
+    caza_la_fuga;
+end $$;
