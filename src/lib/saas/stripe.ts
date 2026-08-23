@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { logger } from '@/lib/logger';
+import { DatoInvalido } from '@/lib/likida/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STRIPE — lo que Likida le cobra a la flota.
@@ -47,6 +48,63 @@ function llave(): string {
 }
 
 /**
+ * IMPIDE OPERAR EN PRODUCCIÓN CON UNA LLAVE DE PRUEBA (auditoría prod
+ * 22-ago-2026, DAT-32).
+ *
+ * Es el mismo candado que `facturapi.ts` ya tenía, y falta aquí por el mismo
+ * motivo por el que allá hacía falta: una `sk_test` pegada por error en
+ * producción NO falla. Crea customers, crea suscripciones, devuelve URLs de
+ * factura con la misma forma que las reales — y no cobra un peso. La flota ve
+ * "Suscripción creada", transfiere a una CLABE de sandbox que no existe, y
+ * nadie se entera hasta que alguien pregunta por qué no ha entrado dinero.
+ *
+ * `modoStripe()` ya sabía distinguirlas y solo lo usaba la pantalla para pintar
+ * un aviso amarillo. Un aviso se lee una vez y se cierra; esto se para.
+ */
+export function exigirLlaveCoherente(): void {
+  const entorno = process.env.VERCEL_ENV ?? process.env.NODE_ENV;
+  if (entorno === 'production' && modoStripe() === 'prueba') {
+    throw new DatoInvalido(
+      'La llave de Stripe en producción es de PRUEBA (sk_test). Con ella se crean suscripciones que se ven ' +
+      'reales y no cobran nada: la flota creería que ya contrató. No se opera hasta poner la llave sk_live.',
+    );
+  }
+}
+
+/**
+ * ¿El evento viene del MISMO modo (prueba/producción) que la llave con la que
+ * operamos? (DAT-32)
+ *
+ * La firma del webhook no lo contesta: el secreto es del ENDPOINT, y un mismo
+ * secreto pegado en los dos modos —o un endpoint de prueba apuntando a
+ * producción— entrega eventos de sandbox que la base no distingue de los
+ * reales. `livemode` es el único campo que lo dice, y un evento sin `livemode`
+ * no es un evento de Stripe: se rechaza igual.
+ *
+ * Sin llave no hay modo con el cual comparar, así que tampoco se aplica: no se
+ * escribe un cobro que nadie puede confirmar.
+ */
+export function eventoEnModoDeLaLlave(livemode: unknown): boolean {
+  const modo = modoStripe();
+  if (modo === null) return false;
+  if (typeof livemode !== 'boolean') return false;
+  return livemode === (modo === 'produccion');
+}
+
+/**
+ * El error de Stripe CON SU CÓDIGO. `pedir` lanzaba un Error pelón con el
+ * mensaje adentro, y quien lo atrapaba solo podía hacer `includes()` sobre un
+ * texto que Stripe puede reescribir cuando quiera. El código sí es contrato
+ * (`idempotency_error`, `resource_missing`, …).
+ */
+export class ErrorStripe extends Error {
+  constructor(mensaje: string, readonly codigo: string | null, readonly status: number) {
+    super(mensaje);
+    this.name = 'ErrorStripe';
+  }
+}
+
+/**
  * Stripe recibe form-encoded, incluidos los anidados: `line_items[0][price]`.
  * Se aplana aquí para no repetir el formato en cada llamada.
  */
@@ -84,6 +142,10 @@ async function pedir<T>(
   opciones: { metodo?: 'GET' | 'POST'; cuerpo?: Record<string, unknown>; idempotencia?: string } = {},
 ): Promise<T> {
   const { metodo = 'POST', cuerpo, idempotencia } = opciones;
+  // DAT-32: antes de hablar con Stripe, que la llave sea del modo del entorno.
+  // Va aquí y no en cada llamador porque el que se olvide de ponerlo es
+  // exactamente el camino que va a cobrar en falso.
+  exigirLlaveCoherente();
   const headers: Record<string, string> = {
     Authorization: `Bearer ${llave()}`,
     'Content-Type': 'application/x-www-form-urlencoded',
@@ -120,7 +182,11 @@ async function pedir<T>(
   if (!r.ok) {
     const err = (json as { error?: { message?: string; code?: string } }).error;
     logger.error('stripe.error', { ruta, status: r.status, code: err?.code });
-    throw new Error(`Stripe ${ruta}: ${err?.message ?? `HTTP ${r.status}`}`);
+    throw new ErrorStripe(
+      `Stripe ${ruta}: ${err?.message ?? `HTTP ${r.status}`}`,
+      err?.code ?? null,
+      r.status,
+    );
   }
   return json as T;
 }
@@ -278,7 +344,15 @@ export async function crearSuscripcionPorTransferencia(opciones: {
         tax_id_data: [{ type: 'mx_rfc', value: fiscales.rfc }],
         metadata: { tenant_id: opciones.tenantId, regimen_fiscal: fiscales.regimenFiscal },
       },
-      idempotencia: `customer-${opciones.tenantId}`,
+      // LA CLAVE INCLUYE LOS DATOS, no solo la flota (DAT-40). Era
+      // `customer-${tenantId}` a secas: un RFC mal tecleado se quedaba pegado
+      // 24 horas —lo que dura una clave en Stripe—, porque el reintento con el
+      // RFC corregido llega con la MISMA clave y parámetros distintos, y eso
+      // Stripe lo contesta con un error que nadie entiende ("Keys for
+      // idempotent requests can only be used with the same parameters").
+      // Con el hash adentro: mismo dato = misma clave (reintento seguro), dato
+      // corregido = clave nueva (pasa).
+      idempotencia: `customer-${opciones.tenantId}-${huella(fiscales)}`,
     });
     customerId = c.id;
   }
@@ -304,12 +378,86 @@ export async function crearSuscripcionPorTransferencia(opciones: {
       metadata: { tenant_id: opciones.tenantId },
       'expand[]': 'latest_invoice',
     },
-    idempotencia: `sub-transfer-${opciones.tenantId}-${opciones.priceId}`,
+    // ── LA CLAVE YA NO LLEVA EL PRICE (DAT-04) ──────────────────────────────
+    //
+    // Con el price adentro, "contratar Flota" y "contratar Empresa" eran dos
+    // claves distintas: el segundo clic —el de quien no vio reflejado el
+    // primero porque el webhook aún no llegaba— creaba una SEGUNDA suscripción
+    // VIVA en Stripe. Las dos cobran. La base ni se entera: la fila local nace
+    // con el webhook, y el de la segunda revienta contra `suscripcion_una_viva`.
+    //
+    // Sin el price, el segundo intento con otro plan choca contra la clave y
+    // Stripe lo RECHAZA en vez de duplicar el cobro; `crearSuscripcionPorTransferencia`
+    // traduce ese rechazo abajo a una frase que se entiende. Fallar cerrado en
+    // el peor caso es un mensaje; el bug era una mensualidad de más al mes,
+    // todos los meses, sin que nadie la viera.
+    idempotencia: `sub-transfer-${opciones.tenantId}`,
+  }).catch((e: unknown) => {
+    if (e instanceof ErrorStripe && e.codigo === 'idempotency_error') {
+      throw new DatoInvalido(
+        'Ya se mandó una contratación para esta flota hace un momento y todavía no se refleja. No se crea una ' +
+        'segunda suscripción: serían dos mensualidades cobrándose a la vez. Espera a que aparezca (o recarga) y, ' +
+        'si querías otro plan, cámbialo desde el plan que quede.',
+      );
+    }
+    throw e;
   });
 
   const inv = s.latest_invoice;
   const urlFactura = inv && typeof inv === 'object' ? (inv.hosted_invoice_url ?? null) : null;
   return { subscriptionId: s.id, customerId, urlFactura };
+}
+
+/** Los datos con los que se creó el customer, resumidos a 16 hex. Cambia si
+ *  cambia cualquiera: es lo que separa "reintento" de "corrección". */
+function huella(f: DatosFiscales): string {
+  const material = [f.rfc, f.razonSocial, f.regimenFiscal, f.codigoPostal, f.email].join('|');
+  return crypto.createHash('sha256').update(material).digest('hex').slice(0, 16);
+}
+
+// ── Lo que Stripe SÍ sabe y la base puede no saber ─────────────────────────
+
+export interface SuscripcionStripe {
+  id: string;
+  /** El estado crudo de Stripe (`active`, `canceled`, `incomplete`…). */
+  status: string;
+  priceId: string | null;
+}
+
+/** Los estados de Stripe en los que una suscripción SIGUE PUDIENDO COBRAR.
+ *  `incomplete` entra a propósito: todavía no cobró, pero puede hacerlo — y
+ *  crear otra al lado sería exactamente el doble cobro que esto evita. */
+const VIVAS = new Set(['trialing', 'active', 'past_due', 'unpaid', 'paused', 'incomplete']);
+
+export function suscripcionVivaEnStripe(status: string): boolean {
+  return VIVAS.has(status);
+}
+
+/**
+ * TODAS las suscripciones de un customer, vivas y muertas (DAT-04).
+ *
+ * LA BASE NO ES LA FUENTE DE LA VERDAD DE STRIPE. La fila local nace cuando
+ * llega el webhook, así que entre el clic y el webhook —o para siempre, si el
+ * webhook falló— hay una suscripción cobrando que aquí no existe. Decidir
+ * "crear o actualizar" mirando solo la base es decidirlo con los ojos cerrados:
+ * es lo que producía la segunda suscripción viva.
+ *
+ * `status=all` a propósito: filtrar por 'active' dejaría fuera `past_due` e
+ * `incomplete`, que también cobran o van a cobrar.
+ */
+export async function suscripcionesDeCustomer(customerId: string): Promise<SuscripcionStripe[]> {
+  const r = await pedir<{
+    data?: Array<{ id: string; status: string; items?: { data?: Array<{ price?: { id?: string } }> } }>;
+  }>('/subscriptions', {
+    metodo: 'GET',
+    cuerpo: { customer: customerId, status: 'all', limit: 100 },
+  });
+
+  return (r.data ?? []).map((s) => ({
+    id: s.id,
+    status: s.status,
+    priceId: s.items?.data?.[0]?.price?.id ?? null,
+  }));
 }
 
 /**
