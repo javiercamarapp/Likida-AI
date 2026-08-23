@@ -7,7 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { listarSolicitudesArco, resolverSolicitudArco } from '@/lib/likida/repo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
-import { fechaMx } from '@/lib/formato';
+import { fechaMx, hoyMx } from '@/lib/formato';
 import { venceDentroDe, yaVencio, DIAS_VENCE_PRONTO } from './vencimiento';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +29,13 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
   const { tenantId } = await resolverTenantEfectivo(RUTA, sp);
   // AUDITORÍA 16, ALTO (arquitectura): `Date.now()` en el render rompe la
   // puerta de pureza del repo; la fecha se inyecta desde el servidor.
-  const hoy = new Date().toISOString().slice(0, 10);
+  //
+  // DAT-08 (auditoría prod): y ese día tiene que ser el DE MÉXICO. Con el día
+  // UTC, a partir de las 18:00 una solicitud ARCO que vence HOY se pintaba
+  // como vencida —el plazo del art. 31 de la LFPDPPP corre en días hábiles de
+  // México, no de Londres— y la de mañana entraba en "vencen pronto" un día
+  // antes de tiempo.
+  const hoy = hoyMx();
 
   async function accionResponder(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';

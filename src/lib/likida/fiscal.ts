@@ -31,7 +31,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { traerTodo, conteo } from './pg';
 import { acotada } from './presupuesto';
-import { round2 } from '@/lib/formato';
+import { round2, hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
 import { identificarComercio } from './facturacion/identificar';
 import { COMERCIOS } from './facturacion/comercios';
 import { calcularCaducidad, type Plazo } from './facturacion/caducidad';
@@ -1081,7 +1081,7 @@ function aGastoFiscal(c: CeldaCruda, cortes: CortesPlazo): GastoFiscal {
 export async function getGastosFiscales(
   tenantId: string,
   periodo: Periodo,
-  hoy: string = new Date().toISOString().slice(0, 10),
+  hoy: string = hoyMx(),
   opciones?: OpcionesFiscales,
 ): Promise<GastoFiscal[]> {
   const o = opciones ?? opcionesDe(await getConfig(tenantId));
@@ -1124,7 +1124,7 @@ export interface GastosFiscalesSeries {
  */
 export async function getGastosFiscalesSeries(
   tenantId: string,
-  hoy: string = new Date().toISOString().slice(0, 10),
+  hoy: string = hoyMx(),
 ): Promise<GastosFiscalesSeries> {
   const haceNDias = (n: number): string => {
     const d = new Date(`${hoy}T00:00:00Z`);
@@ -1234,8 +1234,13 @@ export async function getLiquidacionesFiscales(
         .from('liquidacion')
         .select('id, created_at, total_comprobado, total_anticipo, diferencia, estatus, diferencias, pdf_url, iva_acreditable, ieps_acreditable, peaje_acreditable, litros_diesel_acreditables, viaje:viaje_id(folio, operador:operador_id(nombre))', conteo(desde))
         .eq('tenant_id', tenantId);
-      if (periodo.desde) q = q.gte('created_at', `${periodo.desde}T00:00:00Z`);
-      if (periodo.hasta) q = q.lte('created_at', `${periodo.hasta}T23:59:59.999Z`);
+      // DAT-08 (auditoría prod): el rango se armaba con `Z` —medianoche y
+      // último milisegundo de LONDRES—, así que el periodo real iba de las
+      // 18:00 del día anterior a las 17:59 del último día, en hora de México.
+      // Una liquidación cerrada el 31 de diciembre a las 19:00 se contaba en el
+      // ejercicio SIGUIENTE, y el rótulo seguía diciendo "del periodo".
+      if (periodo.desde) q = q.gte('created_at', inicioDiaMx(periodo.desde));
+      if (periodo.hasta) q = q.lte('created_at', finDiaMx(periodo.hasta));
       return acotada(q.order('id').range(desde, hasta), 'getLiquidacionesFiscales');
     },
     'getLiquidacionesFiscales',

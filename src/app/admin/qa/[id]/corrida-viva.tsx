@@ -18,7 +18,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Bug, Camera, FileText, MessageCircle } from 'lucide-react';
-import { fechaHoraMx } from '@/lib/formato';
+import { fechaHoraMx, usd4 } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../../dashboard/resumen-visual';
 import { StatusPill, type Estado } from '../../ui/kit';
 import { PILL_CORRIDA } from '../pantalla';
@@ -58,9 +58,31 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
   const [fotos, setFotos] = useState(fotosIniciales);
   const [pdfs, setPdfs] = useState(pdfsIniciales);
   const [errorLectura, setErrorLectura] = useState<string | null>(null);
-  const [ahora, setAhora] = useState(() => Date.now());
+  // FE-20: `useState(() => Date.now())` se evalúa en el SERVIDOR al pintar el
+  // HTML y otra vez en el NAVEGADOR al hidratar, con dos relojes distintos —
+  // React reporta mismatch y "lleva Ns sin dar señales" salta a otro número
+  // delante de quien lo está leyendo. `null` hasta que el efecto lo llene: en
+  // el primer render los dos lados coinciden porque ninguno tiene reloj, y el
+  // aviso de "pudo haber muerto" simplemente no se pinta todavía (no afirma
+  // nada en falso, que es la regla).
+  const [ahora, setAhora] = useState<number | null>(null);
 
   const viva = !TERMINALES.has(corrida.estado);
+
+  // El primer reloj, ya en el cliente. Va aparte del polling para que también
+  // lo tenga una corrida TERMINADA (donde el intervalo no arranca).
+  //
+  // Dentro de un `setTimeout` y no en el cuerpo del efecto: `setAhora(...)`
+  // síncrono ahí dispara un render en cascada y lo prohíbe
+  // `react-hooks/set-state-in-effect` — la regla pide que el estado se mueva
+  // desde el CALLBACK de la fuente externa, y aquí la fuente externa es el
+  // reloj. Cero de retraso: aterriza en el tick inmediatamente posterior a la
+  // hidratación, con el HTML ya idéntico al del servidor, que es todo lo que
+  // este arreglo necesita.
+  useEffect(() => {
+    const t = setTimeout(() => setAhora(Date.now()), 0);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     if (!viva) return;
@@ -86,6 +108,7 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
 
   const pill = PILL_CORRIDA[corrida.estado] ?? { estado: 'neutral' as Estado, etiqueta: corrida.estado };
   const sinLatidoS = useMemo(() => {
+    if (ahora === null) return null;   // todavía sin reloj del cliente
     const t = new Date(corrida.latidoEn).getTime();
     return Number.isFinite(t) ? Math.round((ahora - t) / 1000) : null;
   }, [corrida.latidoEn, ahora]);
@@ -133,7 +156,7 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
             </div>
             <div className="hairline rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)' }}>
               <div className="text-xs" style={{ color: 'var(--muted)' }}>Costo hasta ahora (real)</div>
-              <div className="mt-1 text-sm font-medium tabular">US${(corrida.costoUsdTotal ?? 0).toFixed(4)}</div>
+              <div className="mt-1 text-sm font-medium tabular">{usd4(corrida.costoUsdTotal ?? 0)}</div>
               <div className="text-[10px] mt-0.5" style={{ color: 'var(--muted)' }}>leído de llm_costo — nunca estimado</div>
             </div>
             <div className="hairline rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)' }}>
@@ -164,7 +187,7 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
                         {p.detalle && <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{p.detalle}</div>}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {p.costoUsd > 0 && <span className="text-xs tabular" style={{ color: 'var(--muted)' }}>US${p.costoUsd.toFixed(4)}</span>}
+                        {p.costoUsd > 0 && <span className="text-xs tabular" style={{ color: 'var(--muted)' }}>{usd4(p.costoUsd)}</span>}
                         <StatusPill estado={pp.estado}>{pp.etiqueta}</StatusPill>
                       </div>
                     </div>

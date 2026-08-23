@@ -6,6 +6,7 @@ import {
   esCombustible, esDieselConIeps,
   type GastoFiscal, type OpcionesFiscales,
 } from './fiscal';
+import { hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE SE PRUEBA AQUÍ Y POR QUÉ.
@@ -611,5 +612,44 @@ describe('celdas agregadas — la ley pesa una celda por sus n comprobantes', ()
 
   it('aFilasExport RECHAZA celdas: una celda no es una fila de Excel', () => {
     expect(() => aFilasExport([celda(2)], OPTS)).toThrow(/celdas agregadas/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DAT-08 (auditoría prod) — EL PEOR CASO DEL PRODUCTO, CON RELOJ FIJO.
+//
+// 31 de diciembre, 19:00 en México. En UTC ya es el 1 de enero. Todo lo que
+// cortaba el día con `toISOString()` o con un `T00:00:00Z` respondía con el
+// año equivocado, y "Tu motor fiscal" abría el EJERCICIO SIGUIENTE: la
+// pantalla que el contralor usa para su declaración anual se ponía en ceros a
+// las seis de la tarde del último día del año, sin decir nada.
+//
+// `hoyMx` es lo que las páginas server le pasan a `resolverPeriodo`, y
+// `inicioDiaMx`/`finDiaMx` son los cortes que `getLiquidacionesFiscales` le da
+// a PostgREST. Los tres se fijan aquí contra ese instante.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el ejercicio fiscal a las 19:00 del 31 de diciembre (hora de México)', () => {
+  const NOCHEVIEJA_19_MX = new Date('2027-01-01T01:00:00Z');
+
+  it('el ejercicio en curso es 2026, no 2027', () => {
+    const p = resolverPeriodo(undefined, hoyMx(NOCHEVIEJA_19_MX));
+    expect(p.desde).toBe('2026-01-01');
+    expect(p.hasta).toBe('2026-12-31');
+  });
+
+  it('con el día UTC —lo que había antes— habría abierto el ejercicio 2027 en ceros', () => {
+    const utc = NOCHEVIEJA_19_MX.toISOString().slice(0, 10);
+    expect(utc).toBe('2027-01-01');
+    expect(resolverPeriodo(undefined, utc).desde).toBe('2027-01-01');
+  });
+
+  it('y la liquidación cerrada en ese momento cae DENTRO del ejercicio 2026', () => {
+    const p = resolverPeriodo(undefined, hoyMx(NOCHEVIEJA_19_MX));
+    const cierre = NOCHEVIEJA_19_MX.getTime();
+    // Los mismos dos cortes que `getLiquidacionesFiscales` le pasa a PostgREST.
+    expect(cierre).toBeGreaterThanOrEqual(new Date(inicioDiaMx(p.desde!)).getTime());
+    expect(cierre).toBeLessThanOrEqual(new Date(finDiaMx(p.hasta!)).getTime());
+    // Con el corte viejo (`T23:59:59.999Z`) quedaba FUERA por seis horas.
+    expect(cierre).toBeGreaterThan(new Date(`${p.hasta}T23:59:59.999Z`).getTime());
   });
 });

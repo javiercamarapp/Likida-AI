@@ -33,10 +33,14 @@ const OPCIONES: Array<{ id: ModoPeriodo; etiqueta: string }> = [
  * comentario).
  */
 export function PanelPeriodo({
-  viajes, porMes, seriesKpis, gastoSemanalSeries, liquidadoSemanalSeries, topRutasSeries,
+  viajes, porMes, hoy, seriesKpis, gastoSemanalSeries, liquidadoSemanalSeries, topRutasSeries,
 }: {
   viajes: Array<{ fechaInicio: string | null }>;
   porMes: Array<{ dia: string; valor: number }>;
+  /** El día de México resuelto en el servidor. `Actividad` bucketea en el
+   *  cliente y sin esto el HTML del servidor (UTC) y el del navegador (MX)
+   *  se separan de 18:00 a 24:00 — FE-20. */
+  hoy: string;
   seriesKpis: SeriesKpiCards | null;
   gastoSemanalSeries: GastoSemanalSeries | null;
   liquidadoSemanalSeries: LiquidadoSemanalSeries | null;
@@ -95,7 +99,7 @@ export function PanelPeriodo({
         <div className="card p-3 md:col-span-2 h-full flex flex-col">
           <TituloSeccion>Actividad{ventana('actividad')}</TituloSeccion>
           <div className="mt-3 flex-1 flex flex-col">
-            <Actividad viajes={viajes} porMes={porMes} modo={modo} />
+            <Actividad viajes={viajes} porMes={porMes} modo={modo} hoy={hoy} />
           </div>
         </div>
       </div>
