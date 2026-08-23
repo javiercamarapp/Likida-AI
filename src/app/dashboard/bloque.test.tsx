@@ -251,6 +251,7 @@ const PANTALLAS: Array<{ nombre: string; archivo: string; minimo: number }> = [
   { nombre: 'Inicio de operación', archivo: 'src/app/dashboard/inicio-operacion.tsx', minimo: 6 },
   { nombre: 'Panel del contador', archivo: 'src/app/dashboard/contador/inicio-contador.tsx', minimo: 4 },
   { nombre: 'Agente de Liquidación', archivo: 'src/app/dashboard/agentes/liquidacion/vista.tsx', minimo: 6 },
+  { nombre: 'Agente de Conductores', archivo: 'src/app/dashboard/agentes/conductores/vista.tsx', minimo: 3 },
 ];
 
 describe('FE-14 — las pantallas pesadas siguen partidas en boundaries', () => {

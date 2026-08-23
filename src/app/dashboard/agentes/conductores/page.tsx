@@ -7,16 +7,17 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { ahoraMs } from '@/lib/saludo';
 import { sufijoTenant } from '../../sufijo';
-import { VistaAgenteConductores, type EsperaAceptar } from './vista';
+import { VistaAgenteConductores, type EsperaAceptar, type ConteosConductores, type ColaConductores } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import { ultimasCorridas } from '@/lib/likida/agentes/corridas';
 import { puedeAdministrar } from '@/lib/auth/permisos';
-import { getConfig } from '@/lib/likida/config';
+import { getConfig, type LikidaConfig } from '@/lib/likida/config';
 import { validarHorasEscalacion, guardarEstrategiaAgente } from '@/lib/likida/agentes/estrategia';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { revalidatePath } from 'next/cache';
 import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrategia-forma';
+import { Bloque, EsqTabla, vigilar } from '../../bloque';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,28 +82,52 @@ export default async function PaginaAgenteConductores({
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/conductores')) redirect('/dashboard');
 
-  const [
-    viajes, escalados, eventos, corridas, config,
-    nVivos, nAceptados, nEsperan, nSinAvisar,
-  ] = await Promise.all([
-    getViajes(tenantId),
-    contarEscalados(tenantId),
-    safe(() => getEventosConductores(tenantId)),
-    // La ficha de corridas (B3): null = no se pudo leer, y la ficha lo dice.
-    ultimasCorridas(tenantId, 'conductores').catch(() => null),
-    // La estrategia (B4): sin config legible no se pinta la forma — editar
-    // sobre un "valor actual" inventado guardaría a ciegas.
-    safe(() => getConfig(tenantId)),
-    // Los cuatro conteos REALES de la flota (FE-5) — ver `contarVivos`.
-    contarVivos(tenantId, (q) => q, 'conductores.vivos'),
-    contarVivos(tenantId, (q) => q.not('aceptado_en', 'is', null), 'conductores.aceptados'),
-    contarVivos(
-      tenantId,
-      (q) => q.not('avisado_en', 'is', null).is('aceptado_en', null).is('escalado_en', null),
-      'conductores.esperan',
-    ),
-    contarVivos(tenantId, (q) => q.is('avisado_en', null), 'conductores.sin_avisar'),
-  ]);
+  // ── FE-14: LANZADAS DE UNA, ESPERADAS POR TARJETA ──────────────────────
+  // Nueve lecturas en un solo `Promise.all` retenían el HTML hasta la última:
+  // hasta la carta "Lo que entiende por WhatsApp", que es TEXTO FIJO y no lee
+  // nada, esperaba a los cuatro `count` de la flota. Ahora la cáscara sale
+  // con el primer flush y cada tarjeta aterriza cuando su consulta contesta.
+  const pViajes = vigilar(getViajes(tenantId));
+  const pEscalados = vigilar(contarEscalados(tenantId));
+  const pEventos = safe(() => getEventosConductores(tenantId));
+  // La ficha de corridas (B3): null = no se pudo leer, y la ficha lo dice.
+  const pCorridas = ultimasCorridas(tenantId, 'conductores').catch(() => null);
+  // La estrategia (B4): sin config legible no se pinta la forma — editar
+  // sobre un "valor actual" inventado guardaría a ciegas.
+  const pConfig = safe(() => getConfig(tenantId));
+  // Los cuatro conteos REALES de la flota (FE-5) — ver `contarVivos`.
+  const pVivos = contarVivos(tenantId, (q) => q, 'conductores.vivos');
+  const pAceptados = contarVivos(tenantId, (q) => q.not('aceptado_en', 'is', null), 'conductores.aceptados');
+  const pEsperan = contarVivos(
+    tenantId,
+    (q) => q.not('avisado_en', 'is', null).is('aceptado_en', null).is('escalado_en', null),
+    'conductores.esperan',
+  );
+  const pSinAvisar = contarVivos(tenantId, (q) => q.is('avisado_en', null), 'conductores.sin_avisar');
+
+  const pConteos: Promise<ConteosConductores> = vigilar(
+    Promise.all([pVivos, pAceptados, pEsperan, pEscalados]).then(([vivos, aceptados, esperan, escalados]) =>
+      ({ vivos, aceptados, esperan, escalados })));
+
+  const ahora = ahoraMs();
+  // La cola honesta: avisados que no han dicho que sí (y aún no se escalan).
+  // Sale de los 100 viajes recientes porque "hace N horas" necesita la fila;
+  // `totalEsperan` es el conteo de la flota, y la vista declara la diferencia.
+  const pCola: Promise<ColaConductores> = vigilar(
+    Promise.all([pViajes, pEsperan, pSinAvisar]).then(([viajes, totalEsperan, sinAvisar]) => {
+      const vivos = viajes.filter((v) => v.estatus === 'abierto' || v.estatus === 'en_cuadre');
+      const esperan: EsperaAceptar[] = vivos
+        .filter((v) => v.avisadoEn !== null && v.aceptadoEn === null && v.escaladoEn === null)
+        .map((v) => ({
+          id: v.id,
+          folio: v.folio,
+          operadorNombre: v.operadorNombre,
+          horasDesdeAviso: Math.floor((ahora - Date.parse(v.avisadoEn as string)) / 3_600_000),
+          avisos: v.avisosEnviados,
+        }))
+        .sort((a, b) => b.horasDesdeAviso - a.horasDesdeAviso);
+      return { esperan, totalEsperan, sinAvisar };
+    }));
 
   async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
     'use server';
@@ -120,46 +145,47 @@ export default async function PaginaAgenteConductores({
     }
   }
 
-  const ahora = ahoraMs();
-  const vivos = viajes.filter((v) => v.estatus === 'abierto' || v.estatus === 'en_cuadre');
-
-  // La cola honesta: avisados que no han dicho que sí (y aún no se escalan).
-  const esperan: EsperaAceptar[] = vivos
-    .filter((v) => v.avisadoEn !== null && v.aceptadoEn === null && v.escaladoEn === null)
-    .map((v) => ({
-      id: v.id,
-      folio: v.folio,
-      operadorNombre: v.operadorNombre,
-      horasDesdeAviso: Math.floor((ahora - Date.parse(v.avisadoEn as string)) / 3_600_000),
-      avisos: v.avisosEnviados,
-    }))
-    .sort((a, b) => b.horasDesdeAviso - a.horasDesdeAviso);
-
-
   return (
     <VistaAgenteConductores
-      kpis={{ vivos: nVivos, aceptados: nAceptados, esperan: nEsperan, escalados }}
-      esperan={esperan}
-      // Cuántos se LISTAN de cuántos hay: la lista sale de los 100 viajes
-      // recientes (para poder decir "hace N horas" hay que traer la fila),
-      // pero la cifra de arriba es la de la flota entera. Si no cuadran, se
-      // dice — que es distinto de esconderlo.
-      esperanListados={esperan.length}
-      sinAvisar={nSinAvisar}
-      eventos={eventos}
+      kpis={pConteos}
+      cola={pCola}
+      eventos={pEventos}
       sufijo={sufijoTenant(sp)}
       notificaciones={
         <>
           {/* La estrategia (B4): solo el dueño la edita, y solo con la config
               actual legible — sin ella, la forma guardaría a ciegas. */}
-          {puedeAdministrar(rol) && config !== null && (
-            <FormaEstrategiaConductores accion={guardarEstrategia}
-              horasActuales={config.agentes.conductores.horasEscalacion} />
+          {puedeAdministrar(rol) && (
+            <Bloque mensaje="No se pudo leer la estrategia del agente." esqueleto={null}>
+              <BloqueEstrategia pConfig={pConfig} accion={guardarEstrategia} />
+            </Bloque>
           )}
-          <FichaCorridas corridas={corridas} />
-          <SeccionNotificaciones tenantId={tenantId} agenteId="conductores" />
+          <Bloque mensaje="No se pudo leer la bitácora de corridas." esqueleto={<EsqTabla filas={3} />}>
+            <BloqueCorridas pCorridas={pCorridas} />
+          </Bloque>
+          {/* Notificaciones hace SUS propias lecturas: en su propio boundary
+              no retiene a nadie. */}
+          <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
+            <SeccionNotificaciones tenantId={tenantId} agenteId="conductores" />
+          </Bloque>
         </>
       }
     />
   );
+}
+
+async function BloqueEstrategia({ pConfig, accion }: {
+  pConfig: Promise<LikidaConfig | null>;
+  accion: (previo: ResultadoEstrategia, fd: FormData) => Promise<ResultadoEstrategia>;
+}) {
+  const config = await pConfig;
+  if (config === null) return null;
+  return <FormaEstrategiaConductores accion={accion}
+    horasActuales={config.agentes.conductores.horasEscalacion} />;
+}
+
+async function BloqueCorridas({ pCorridas }: {
+  pCorridas: Promise<Awaited<ReturnType<typeof ultimasCorridas>> | null>;
+}) {
+  return <FichaCorridas corridas={await pCorridas} />;
 }
