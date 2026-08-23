@@ -75,7 +75,17 @@ function exigirLlaveCoherente(): void {
   }
 }
 
-async function pedir<T>(ruta: string, opciones: { metodo?: 'GET' | 'POST'; cuerpo?: unknown } = {}): Promise<T> {
+/** Tope por llamada al PAC. Mismo criterio que Stripe (RES-12): sin señal,
+ *  `fetch` hereda el default de undici —300 s— dentro de rutas que tienen 60, y
+ *  un PAC lento se lleva la invocación entera sin un solo log nuestro. Aquí
+ *  además el reloj corre contra la RESERVA del timbrado (DAT-13): mientras esta
+ *  llamada cuelga, nadie más puede timbrar esa factura. */
+export const TIMEOUT_FACTURAPI_MS = Number(process.env.LIKIDA_TIMEOUT_FACTURAPI_MS) || 30_000;
+
+async function pedir<T>(
+  ruta: string,
+  opciones: { metodo?: 'GET' | 'POST' | 'DELETE'; cuerpo?: unknown } = {},
+): Promise<T> {
   const { metodo = 'POST', cuerpo } = opciones;
   const r = await fetch(`${API}${ruta}`, {
     method: metodo,
@@ -84,6 +94,7 @@ async function pedir<T>(ruta: string, opciones: { metodo?: 'GET' | 'POST'; cuerp
       'Content-Type': 'application/json',
     },
     body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+    signal: AbortSignal.timeout(TIMEOUT_FACTURAPI_MS),
   });
 
   const texto = await r.text();
@@ -124,6 +135,13 @@ export interface CfdiTimbrado {
   /** Liga de verificación/descarga que Facturapi expone. */
   urlPdf: string | null;
   urlXml: string | null;
+  /**
+   * La liga con la que el CLIENTE comprueba su CFDI contra el SAT. La devuelve
+   * el PAC y no se guardaba en ningún lado (DAT-33): es justo lo que el
+   * contador del cliente pide, y sin ella el único rastro del papel era ocho
+   * caracteres de UUID en una tabla.
+   */
+  urlVerificacion: string | null;
   total: number;
 }
 
@@ -222,8 +240,42 @@ export async function timbrarMensualidad(datos: {
     uuid: factura.uuid,
     urlPdf: `${API}/invoices/${factura.id}/pdf`,
     urlXml: `${API}/invoices/${factura.id}/xml`,
+    urlVerificacion: factura.verification_url ?? null,
     total: factura.total,
   };
+}
+
+/** Motivos de cancelación del SAT (`c_MotivoCancelacion`). */
+export const MOTIVO_OPERACION_NO_REALIZADA = '02';
+
+/**
+ * CANCELA UN CFDI ANTE EL SAT (DAT-33).
+ *
+ * ES IRREVERSIBLE Y ES REAL: no "borra un registro", le dice al SAT que ese
+ * comprobante no ampara nada. Por eso el llamador decide cuándo —solo
+ * anulaciones TOTALES: reembolso completo, `invoice.voided`, nota de crédito
+ * por el total— y por eso el motivo viaja explícito en vez de tener default.
+ *
+ * `02` (comprobante emitido con errores sin relación) es el motivo con el que
+ * se cancela lo que no se va a sustituir por otro CFDI. El `01` exige el UUID
+ * del que lo sustituye y aquí no hay ninguno: el dinero se devolvió.
+ *
+ * SE PIDE POR EL ID DEL PAC, no por el UUID del SAT: la API de Facturapi
+ * direcciona por su propio id, y por eso la 0163 lo guarda — sin él, cancelar
+ * exige entrar al panel del PAC a buscar el papel a mano.
+ */
+export async function cancelarCfdi(
+  facturaProveedorId: string,
+  motivo: string = MOTIVO_OPERACION_NO_REALIZADA,
+): Promise<{ estado: string }> {
+  exigirLlaveCoherente();
+  const r = await pedir<{ status?: string; cancellation_status?: string }>(
+    `/invoices/${encodeURIComponent(facturaProveedorId)}?motive=${encodeURIComponent(motivo)}`,
+    { metodo: 'DELETE' },
+  );
+  const estado = r.cancellation_status ?? r.status ?? 'cancelada';
+  logger.warn('facturapi.cancelada', { facturaProveedorId, motivo, estado });
+  return { estado };
 }
 
 /**
@@ -236,6 +288,11 @@ export async function timbrarMensualidad(datos: {
  */
 export async function enviarPorCorreo(facturaId: string, email?: string): Promise<boolean> {
   try {
+    // SIN CORREO NO SE MANDA NADA, y decirlo importa (DAT-33): el timbrado se
+    // hacía con un customer sin email —los datos fiscales de la flota no lo
+    // incluían— y esta llamada se iba en silencio a ninguna parte. El cliente
+    // pagaba, el CFDI existía ante el SAT, y él no lo veía nunca.
+    if (!email) logger.warn('facturapi.correo_sin_destinatario', { facturaId });
     await pedir(`/invoices/${facturaId}/email`, { cuerpo: email ? { email } : {} });
     return true;
   } catch (e) {
