@@ -79,6 +79,7 @@ const FACTURA = {
   subtotal: 10000,
   iva: 1600,
   total: 11600,
+  serie: null,
   folio: 'F-1',
   cfdiUuid: null,
   estatus: 'borrador' as const,

@@ -1,0 +1,49 @@
+// LOS TEXTOS LARGOS, A PEDIDO (FE-16).
+//
+// El listado del Cerebro dejó de cargar `notas` y los mensajes redactados por
+// el agente experto: 15.3 MB de texto que solo se pintan en la ficha, en la
+// tarjeta abierta y en el popup de calles — decenas de prospectos a la vez, no
+// treinta y tres mil. Esta ruta los entrega por id.
+//
+// POST y no GET con `?ids=`: una tanda de mil UUIDs son 37 KB de URL y el
+// proxy la rebota mucho antes (el mismo techo que documenta `traerPorIds` en
+// pg.ts). Va en el cuerpo. Solo lectura; puerta propia, como el resto de la
+// familia — detrás hay la cartera comercial con sus teléfonos y decisores.
+import { NextResponse } from 'next/server';
+import { getTextosProspectos } from '@/lib/admin/prospectos-mapa';
+import { logger } from '@/lib/logger';
+import { sesionSuperadmin } from '../puerta';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+/** Cuántos ids se aceptan en UNA petición. El cliente parte en tandas de este
+ *  tamaño (la exportación del CSV puede pedir el universo entero); el
+ *  servidor las vuelve a partir de 200 en 200 contra PostgREST.
+ *  Sin `export`: un `route.ts` solo puede exportar los verbos y la config de
+ *  Next — cualquier otra exportación tumba el type-check del build. */
+const TOPE_IDS = 2_000;
+
+const ES_UUID = /^[0-9a-f-]{36}$/;
+
+export async function POST(req: Request) {
+  const { error } = await sesionSuperadmin();
+  if (error) return error;
+  const cuerpo = (await req.json().catch(() => null)) as { ids?: unknown } | null;
+  if (!Array.isArray(cuerpo?.ids)) {
+    return NextResponse.json({ error: 'Falta la lista de ids.' }, { status: 400 });
+  }
+  // Se filtra lo que no es un uuid en vez de rechazar la tanda entera: un id
+  // basura no debe apagar los otros mil novecientos noventa y nueve.
+  const ids = [...new Set(cuerpo.ids.filter((x): x is string => typeof x === 'string' && ES_UUID.test(x)))];
+  if (ids.length > TOPE_IDS) {
+    return NextResponse.json({ error: `Máximo ${TOPE_IDS} ids por petición.` }, { status: 400 });
+  }
+  try {
+    const textos = await getTextosProspectos(ids);
+    return NextResponse.json({ textos }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch (e) {
+    logger.error('mapa_prospectos.textos', { err: e instanceof Error ? e.message : String(e) });
+    return NextResponse.json({ error: 'No se pudieron leer los textos.' }, { status: 500 });
+  }
+}

@@ -72,22 +72,25 @@ export default async function PaginaAgenteProveedores({
   if (!puedeVerRuta(rol, '/dashboard/agentes/proveedores')) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
 
-  // Primario sin catch: bandeja ciega = página caída, no "no hay facturas".
-  // El tope va EXPLÍCITO y espeja `TOPE_FACTURAS` de la vista, que es quien
-  // lo declara en pantalla (FE-13). Antes viajaba como default silencioso.
-  const facturas = await listarFacturasProveedor(tenantId, 100);
-  const fiscal = await getFiscalDeFlota(tenantId).catch(() => null);
+  // FE-14 (22-ago-2026): estas cuatro lecturas iban EN SERIE, una tras otra,
+  // sin que ninguna dependiera de la anterior — cuatro viajes a la base
+  // sumados en el reloj de la página. Salen juntas y cada una conserva
+  // exactamente el trato que tenía.
+  const [facturas, fiscal, corridas, buzon] = await Promise.all([
+    // Primario sin catch: bandeja ciega = página caída, no "no hay facturas".
+    // El tope va EXPLÍCITO y espeja `TOPE_FACTURAS` de la vista, que es quien
+    // lo declara en pantalla (FE-13). Antes viajaba como default silencioso.
+    listarFacturasProveedor(tenantId, 100),
+    getFiscalDeFlota(tenantId).catch(() => null),
+    // La ficha de corridas es SECUNDARIA: si su lectura falla, la bandeja sigue
+    // y la ficha dice que no pudo leer — nunca "sin corridas" sobre una caída.
+    ultimasCorridas(tenantId, 'proveedores').catch((): CorridaRegistrada[] | null => null),
+    // El buzón es SECUNDARIO de esta página: si su lectura falla, la bandeja
+    // sigue sirviendo, y la sección dice "no se pudo leer" — nunca "sin buzón",
+    // que ofrecería generar (y rotar sin querer) encima del que quizá exista.
+    getBuzon(tenantId).catch(() => null),
+  ]);
   const rfcFlota = fiscal?.flota?.rfc || null;
-
-  // La ficha de corridas es SECUNDARIA: si su lectura falla, la bandeja sigue
-  // y la ficha dice que no pudo leer — nunca "sin corridas" sobre una caída.
-  const corridas: CorridaRegistrada[] | null =
-    await ultimasCorridas(tenantId, 'proveedores').catch(() => null);
-
-  // El buzón es SECUNDARIO de esta página: si su lectura falla, la bandeja
-  // sigue sirviendo, y la sección dice "no se pudo leer" — nunca "sin buzón",
-  // que ofrecería generar (y rotar sin querer) encima del que quizá exista.
-  const buzon = await getBuzon(tenantId).catch(() => null);
   const dominioConfigurado = dominioBuzon() !== null;
   const puedeAdministrarBuzon = puedeAdministrar(rol);
 

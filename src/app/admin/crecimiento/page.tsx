@@ -33,16 +33,22 @@ export const dynamic = 'force-dynamic';
  * tesis de la página — solo cambian de glass-panel a tarjeta.
  */
 export default async function CrecimientoPage() {
-  const r = await getResumenNegocio();
-  // El embudo de ADQUISICIÓN sí es real desde la 0105: los prospectos del
-  // censo por estado del kanban. Cae por su lado a null y se DICE — un
-  // embudo vacío por base caída afirmaría que no hay pipeline.
-  const prospectos = await listarProspectos().catch(() => null);
-  // Costo por lead + alertas de adquisición (panel-de-adquisicion §2/§5):
-  // cae por su lado a null y se DICE.
-  const adquisicion = await getAdquisicion(ahoraMs()).catch(() => null);
-  // El control de campañas (0123, §4) — leer y pausar; jamás crear ni subir.
-  const campanas = await listarCampanas().catch(() => null);
+  // FE-14 (22-ago-2026): las cuatro se pedían EN SERIE —cuatro viajes a la
+  // base sumados en el reloj de la página— sin que ninguna dependiera de la
+  // anterior. Salen juntas; cada una conserva su propio catch, o sea su
+  // propia leyenda honesta.
+  const [r, prospectos, adquisicion, campanas] = await Promise.all([
+    getResumenNegocio(),
+    // El embudo de ADQUISICIÓN sí es real desde la 0105: los prospectos del
+    // censo por estado del kanban. Cae por su lado a null y se DICE — un
+    // embudo vacío por base caída afirmaría que no hay pipeline.
+    listarProspectos().catch(() => null),
+    // Costo por lead + alertas de adquisición (panel-de-adquisicion §2/§5):
+    // cae por su lado a null y se DICE.
+    getAdquisicion(ahoraMs()).catch(() => null),
+    // El control de campañas (0123, §4) — leer y pausar; jamás crear ni subir.
+    listarCampanas().catch(() => null),
+  ]);
   const integracionAds = estadoIntegracionAds();
 
   async function accionPausarCampana(id: string): Promise<AccionCampana> {
