@@ -45,6 +45,17 @@ export interface Gasto {
   cfdiOrden?: number;
   imagenUrl?: string;
   imgHash?: string;        // SHA-256 del contenido de la foto (dedup de reenvíos)
+  /**
+   * El wamid del mensaje de WhatsApp que dio de alta este gasto (DAT-01).
+   *
+   * NO es un dato del comprobante: es la llave de idempotencia del REPROCESO.
+   * `imgHash` cubre que el OPERADOR reenvíe la misma foto (otro wamid); esto
+   * cubre que el reintento seamos NOSOTROS —el `say()` posterior al alta lanza,
+   * el claim se suelta y la bandeja durable vuelve a correr el MISMO mensaje,
+   * con otro `randomUUID()` de gasto y otro OCR—. `uq_gasto_wa_message_id`
+   * (0164) lo hace atómico. `undefined` en toda alta que no venga de WhatsApp.
+   */
+  waMessageId?: string;
   ocrConfianza?: number;   // 0–1
   cfdiValido?: boolean;
   estadoSat?: EstadoSat;   // resultado de ConsultaCFDIService (o 'pendiente' si SAT no respondió)
