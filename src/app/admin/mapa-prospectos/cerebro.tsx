@@ -19,19 +19,21 @@
 // mismas palabras del módulo que las calcula (CRITERIO_SCORES).
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { proyectar } from '../../dashboard/mapa/mexico-geo';
 import { ESTADOS_GEO, VIEWBOX_ESTADOS, type EstadoGeo } from './mexico-estados-geo';
 import {
-  COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, TAMANOS, type DatosMapa, type Giro, type ProspectoMapa, type Tamano,
+  COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, TAMANOS, desempacar,
+  type DatosMapa, type Giro, type ProspectoMapa, type Tamano, type TextosProspecto,
 } from '@/lib/admin/prospectos-mapa';
 import { fechaHoraMx, numero, hoyMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';
 import { useCountUp } from '../ui/use-count-up';
-import { hrefWa, hrefCorreo } from './mensajes';
+import { hrefWa, hrefCorreo, esperandoTextos } from './mensajes';
+import { arrancarLatido, visibilidadDelNavegador } from './latido';
 
 const Calles = dynamic(() => import('./calles'), { ssr: false });
 
@@ -55,6 +57,19 @@ const FUENTES = [
 /** Con más de este número de luces a nivel país, el DOM se arrastra: se
  *  enseñan las N más calientes y el pie lo DICE (nunca se recorta callado). */
 const TOPE_LUCES_PAIS = 2200;
+
+/** Cada cuánto pregunta el mapa por lo que cambió. Con el delta de FE-16 ya
+ *  no cuesta el universo, pero la cadencia se respeta: el Cerebro es un
+ *  tablero de venta, no un monitor de tiempo real. */
+const LATIDO_MS = 300_000;
+/** Cuántos ids por petición de textos — el mismo tope que acepta la ruta. */
+const IDS_POR_TANDA = 2_000;
+/** Referencia estable para "no hay estado elegido": un `[]` nuevo por render
+ *  invalida los `useMemo` que dependen de la lista. */
+const SIN_LISTA: ProspectoMapa[] = [];
+
+const SIN_TEXTOS = (id: string): TextosProspecto =>
+  ({ id, notas: null, mensajeWaIa: null, correoAsuntoIa: null, correoCuerpoIa: null });
 
 interface Filtros {
   giros: Set<Giro> | null;      // null = todas
@@ -98,14 +113,19 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
 }
 
 /** El CSV de la vista actual — columnas fijas, comillas escapadas, BOM para
- *  que Excel en español lo abra con acentos bien. */
-function csvDe(lista: ProspectoMapa[]): string {
+ *  que Excel en español lo abra con acentos bien.
+ *
+ *  `notas` ya no viaja en el listado (FE-16), así que la columna se llena con
+ *  los textos que el exportador pidió por id ANTES de armar el archivo: el
+ *  CSV sigue saliendo con las mismas dieciocho columnas, completas. */
+function csvDe(lista: ProspectoMapa[], textos: ReadonlyMap<string, TextosProspecto>): string {
   const cab = ['empresa', 'giro', 'etapa', 'urgencia_pct', 'cierre_pct', 'similitud_icp_pct', 'necesidad_pct', 'num_unidades', 'contacto', 'telefono', 'correo', 'ciudad', 'entidad', 'vacante', 'fuente', 'lat', 'lng', 'notas'];
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const filas = lista.map((p) => [
     p.empresa, NOMBRE_GIRO[p.giro], COLOR_EMBUDO[p.estado]?.nombre ?? p.estado, p.urgencia, p.cierre,
     p.similitudIcpPct, p.necesidadPct, p.numUnidades,
-    p.contacto, p.telefono, p.correo, p.ciudad, p.entidad, p.vacante, p.fuente, p.lat, p.lng, p.notas,
+    p.contacto, p.telefono, p.correo, p.ciudad, p.entidad, p.vacante, p.fuente, p.lat, p.lng,
+    textos.get(p.id)?.notas ?? null,
   ].map(esc).join(','));
   return '\ufeff' + [cab.join(','), ...filas].join('\n');
 }
@@ -196,13 +216,21 @@ function Reveal({ children, retraso = 0 }: { children: React.ReactNode; retraso?
   );
 }
 
-function TarjetaProspecto({ p, nuevo, afinando, onAfinar, onToque, plana }: {
-  p: ProspectoMapa; nuevo: boolean; afinando?: boolean; onAfinar?: (id: string) => void;
+export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, plana }: {
+  p: ProspectoMapa;
+  /** Los textos largos de ESTE prospecto (FE-16): llegan por su cuenta, poco
+   *  después de que la tarjeta se pinta. `undefined` = todavía en camino. */
+  t?: TextosProspecto;
+  nuevo: boolean; afinando?: boolean; onAfinar?: (id: string) => void;
   onToque?: (id: string, canal: 'whatsapp' | 'correo') => void;
   /** true = tarjeta de sección (plana, sin blur ni sombra — abajo del mapa
    *  no hay país sobre el que flotar). */
   plana?: boolean;
 }) {
+  // El mensaje del agente experto MANDA sobre la plantilla: mientras no
+  // llegue, el botón no se abre. Abrirlo con la plantilla mandaría el texto
+  // equivocado, firmado por Javier, y eso no se deshace.
+  const esperando = esperandoTextos(p, t);
   const c = COLOR_EMBUDO[p.estado] ?? COLOR_EMBUDO.nuevo;
   return (
     <article className={`rounded-2xl p-3.5 space-y-2 ${plana ? '' : 'backdrop-blur-md'} ${nuevo ? 'cerebro-recien' : ''}`}
@@ -231,7 +259,7 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar, onToque, plana }: {
         </div>
       )}
       {p.vacante && <p className="text-[11px] truncate" style={{ color: TENUE }}>Vacante: {p.vacante}</p>}
-      {p.notas && <p className="text-[11px] line-clamp-2" style={{ color: TENUE }} title={p.notas}>{p.notas}</p>}
+      {t?.notas && <p className="text-[11px] line-clamp-2" style={{ color: TENUE }} title={t.notas}>{t.notas}</p>}
       <Barra etiqueta="Urgencia" pct={p.urgencia} color="#f59e0b" />
       <Barra etiqueta="Cierre" pct={p.cierre} color="#34d399" />
       <Barra etiqueta="ICP" pct={p.similitudIcpPct} color="#8b5cf6" />
@@ -244,22 +272,34 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar, onToque, plana }: {
       )}
       {(p.telefono || p.correo || p.lat !== null) && (
         <div className="flex flex-wrap gap-2 pt-1">
-          {p.telefono && (
-            <a href={hrefWa(p)!} target="_blank" rel="noreferrer"
+          {p.telefono && (esperando ? (
+            <span aria-disabled className="px-2.5 py-1 rounded-lg text-[11px] font-medium"
+              title="El mensaje que redactó el agente experto viene en camino"
+              style={{ border: '1px solid #16a34a55', color: '#15803d', background: 'color-mix(in srgb, #16a34a 8%, var(--surface))', opacity: 0.5 }}>
+              WhatsApp …
+            </span>
+          ) : (
+            <a href={hrefWa(p, t)!} target="_blank" rel="noreferrer"
               onClick={() => onToque?.(p.id, 'whatsapp')}
               className="px-2.5 py-1 rounded-lg text-[11px] font-medium"
               style={{ border: '1px solid #16a34a55', color: '#15803d', background: 'color-mix(in srgb, #16a34a 8%, var(--surface))' }}>
               WhatsApp →
             </a>
-          )}
-          {p.correo && (
-            <a href={hrefCorreo(p)!}
+          ))}
+          {p.correo && (esperando ? (
+            <span aria-disabled className="px-2.5 py-1 rounded-lg text-[11px] font-medium"
+              title="El correo que redactó el agente experto viene en camino"
+              style={{ border: '1px solid #2563eb55', color: '#1d4ed8', background: 'color-mix(in srgb, #2563eb 8%, var(--surface))', opacity: 0.5 }}>
+              Correo …
+            </span>
+          ) : (
+            <a href={hrefCorreo(p, t)!}
               onClick={() => onToque?.(p.id, 'correo')}
               className="px-2.5 py-1 rounded-lg text-[11px] font-medium"
               style={{ border: '1px solid #2563eb55', color: '#1d4ed8', background: 'color-mix(in srgb, #2563eb 8%, var(--surface))' }}>
               Correo →
             </a>
-          )}
+          ))}
           {p.lat !== null && (
             <a href={`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`}
               target="_blank" rel="noreferrer"
@@ -284,14 +324,64 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar, onToque, plana }: {
 
 export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estadoInicial?: string }) {
   const reducido = usePrefersReducedMotion();
-  const [datos, setDatos] = useState<DatosMapa>(inicial);
+  // ── LA CARTERA, LIGERA (FE-16) ───────────────────────────────────────────
+  // Llega empacada en tuplas y sin los textos largos; se desempaca UNA vez.
+  // `listaRef` es la misma lista, accesible desde los manejadores sin
+  // arrastrar el valor viejo de un closure (el latido corre cada 5 min).
+  const [prospectos, setProspectos] = useState<ProspectoMapa[]>(() => inicial.filas.map(desempacar));
+  const listaRef = useRef<ProspectoMapa[]>(prospectos);
+  const ponerLista = useCallback((nueva: ProspectoMapa[]) => {
+    listaRef.current = nueva;
+    setProspectos(nueva);
+  }, []);
+  const [generadoEn, setGeneradoEn] = useState(inicial.generadoEn);
+  /** La marca de agua del delta: hasta aquí ya sabemos. */
+  const marca = useRef<string | null>(inicial.marca);
   const [seleccion, setSeleccion] = useState<EstadoGeo | null>(
     () => ESTADOS_GEO.find((e) => e.nombre === estadoInicial) ?? null,
   );
   const [hover, setHover] = useState<string | null>(null);
   const [calles, setCalles] = useState(false);
-  const conocidos = useRef<Set<string>>(new Set(inicial.prospectos.map((p) => p.id)));
+  const conocidos = useRef<Set<string>>(new Set(prospectos.map((p) => p.id)));
   const [recientes, setRecientes] = useState<Set<string>>(new Set());
+
+  // ── LOS TEXTOS LARGOS, A PEDIDO (FE-16) ──────────────────────────────────
+  // `notas` y los mensajes del agente experto son 15.3 MB del universo y solo
+  // se pintan en las tarjetas abiertas, el popup de calles y el CSV. Se piden
+  // por id y se guardan aquí. El ref es la verdad (el exportador de CSV lo lee
+  // en cuanto llega, sin esperar un render); el estado es la copia que hace
+  // repintar las tarjetas.
+  const textosRef = useRef<Map<string, TextosProspecto>>(new Map());
+  const [textos, setTextos] = useState<ReadonlyMap<string, TextosProspecto>>(() => new Map());
+  const pedidos = useRef<Set<string>>(new Set());
+  const pedirTextos = useCallback(async (ids: string[]): Promise<void> => {
+    const faltan = [...new Set(ids)].filter((id) => !pedidos.current.has(id));
+    if (faltan.length === 0) return;
+    faltan.forEach((id) => pedidos.current.add(id));
+    for (let i = 0; i < faltan.length; i += IDS_POR_TANDA) {
+      const tanda = faltan.slice(i, i + IDS_POR_TANDA);
+      try {
+        const r = await fetch('/api/admin/mapa-prospectos/textos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: tanda }),
+        });
+        if (!r.ok) throw new Error(String(r.status));
+        const { textos: llegaron } = (await r.json()) as { textos: TextosProspecto[] };
+        for (const t of llegaron) textosRef.current.set(t.id, t);
+        // Al que NO contestó (borrado entre el listado y esta pregunta) se le
+        // anota "sin textos": si no, la tarjeta lo esperaría para siempre y
+        // sus botones se quedarían apagados.
+        for (const id of tanda) if (!textosRef.current.has(id)) textosRef.current.set(id, SIN_TEXTOS(id));
+      } catch {
+        // Se sueltan para que un reintento (otro render, otro clic) los
+        // vuelva a pedir — un fallo de red no puede apagar la tarjeta para
+        // toda la sesión.
+        tanda.forEach((id) => pedidos.current.delete(id));
+      }
+    }
+    setTextos(new Map(textosRef.current));
+  }, []);
   // Pantalla completa nativa: en el Odyssey 49 la zona ES el monitor entero.
   const zonaRef = useRef<HTMLElement>(null);
   const [pantallaCompleta, setPantallaCompleta] = useState(false);
@@ -330,7 +420,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     (filtros.sinToqueDias ? 1 : 0) +
     (filtros.minSimilitud ? 1 : 0) + (filtros.minNecesidad ? 1 : 0) +
     (filtros.centro && filtros.radioKm ? 1 : 0);
-  const filtrados = useMemo(() => datos.prospectos.filter((p) =>
+  const filtrados = useMemo(() => prospectos.filter((p) =>
     (!filtros.giros || filtros.giros.has(p.giro))
     && (!filtros.etapas || filtros.etapas.has(p.estado))
     && (!filtros.fuentes || filtros.fuentes.has(p.fuente))
@@ -347,11 +437,11 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
       || (ahoraMs() - new Date(p.ultimoToque).getTime()) >= filtros.sinToqueDias * 86_400_000)
     && (!filtros.centro || filtros.radioKm === 0
       || (p.lat !== null && haversineKm(filtros.centro, { lat: p.lat, lng: p.lng! }) <= filtros.radioKm)),
-  ), [datos, filtros]);
+  ), [prospectos, filtros]);
   // Las plazas con coordenadas (centro del radio): promedio por ciudad.
   const plazas = useMemo(() => {
     const acc = new Map<string, { lat: number; lng: number; n: number }>();
-    for (const p of datos.prospectos) {
+    for (const p of prospectos) {
       if (p.lat === null || !p.ciudad) continue;
       const k = p.entidad ? `${p.ciudad}, ${p.entidad}` : p.ciudad;
       const a = acc.get(k) ?? { lat: 0, lng: 0, n: 0 };
@@ -361,7 +451,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
       .map(([nombre, a]) => ({ nombre, lat: a.lat / a.n, lng: a.lng / a.n, n: a.n }))
       .sort((x, y) => y.n - x.n)
       .slice(0, 250);
-  }, [datos]);
+  }, [prospectos]);
   const ordenar = useMemo(() => (lista: ProspectoMapa[]) => [...lista].sort((a, b) =>
     filtros.orden === 'urgencia' ? (b.urgencia - a.urgencia || b.cierre - a.cierre)
       : filtros.orden === 'recientes' ? 0 // ya vienen por created_at desc del servidor
@@ -370,15 +460,30 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
             : filtros.orden === 'necesidad' ? (b.necesidadPct - a.necesidadPct || b.similitudIcpPct - a.similitudIcpPct)
               : (b.cierre - a.cierre || b.urgencia - a.urgencia),
   ), [filtros.orden]);
-  const exportarCsv = () => {
-    const blob = new Blob([csvDe(ordenar(filtrados))], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    // El día de México: descargado a las 19:00 el archivo se llamaba con la
-    // fecha de mañana, y el orden por nombre de dos exports seguidos mentía.
-    a.download = `cerebro-prospectos-${hoyMx()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+  // Ordenar 33 mil filas es caro y el render lo pedía DOS veces (el ala y la
+  // rejilla de abajo). Una sola vez por cambio de filtro/orden.
+  const ordenados = useMemo(() => ordenar(filtrados), [ordenar, filtrados]);
+
+  const [exportando, setExportando] = useState(false);
+  const exportarCsv = async () => {
+    const lista = ordenados;
+    setExportando(true);
+    try {
+      // La columna `notas` ya no viene en el listado: se pide para las filas
+      // que se van a exportar (en tandas) ANTES de armar el archivo. El CSV
+      // sale igual de completo que antes; lo que cambió es cuándo se paga.
+      await pedirTextos(lista.map((p) => p.id));
+      const blob = new Blob([csvDe(lista, textosRef.current)], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      // El día de México: descargado a las 19:00 el archivo se llamaba con la
+      // fecha de mañana, y el orden por nombre de dos exports seguidos mentía.
+      a.download = `cerebro-prospectos-${hoyMx()}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } finally {
+      setExportando(false);
+    }
   };
 
   // ── El toque se registra solo (0130): al abrir WhatsApp/correo, fila al
@@ -389,10 +494,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, canal }),
     }).catch(() => undefined);
-    setDatos((d) => ({
-      ...d,
-      prospectos: d.prospectos.map((p) => (p.id === id ? { ...p, ultimoToque: new Date().toISOString() } : p)),
-    }));
+    ponerLista(listaRef.current.map((p) => (p.id === id ? { ...p, ultimoToque: new Date().toISOString() } : p)));
   };
 
   // ── El agente experto en vivo: afinar el mensaje de UNA tarjeta ──────────
@@ -406,33 +508,83 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         body: JSON.stringify({ id }),
       });
       if (!r.ok) return; // el botón sigue con la plantilla; el error ya quedó en el log del servidor
-      const m = (await r.json()) as Pick<ProspectoMapa, 'mensajeWaIa' | 'correoAsuntoIa' | 'correoCuerpoIa' | 'mensajesGeneradosEn'>;
-      setDatos((d) => ({
-        ...d,
-        prospectos: d.prospectos.map((p) => (p.id === id ? { ...p, ...m } : p)),
-      }));
+      const m = (await r.json()) as Pick<TextosProspecto, 'mensajeWaIa' | 'correoAsuntoIa' | 'correoCuerpoIa'>
+        & Pick<ProspectoMapa, 'mensajesGeneradosEn'>;
+      // El texto recién redactado entra al cache de textos (es lo que abre el
+      // botón) y la fila del listado solo se entera de la MARCA.
+      textosRef.current.set(id, {
+        id,
+        notas: textosRef.current.get(id)?.notas ?? null,
+        mensajeWaIa: m.mensajeWaIa, correoAsuntoIa: m.correoAsuntoIa, correoCuerpoIa: m.correoCuerpoIa,
+      });
+      pedidos.current.add(id);
+      setTextos(new Map(textosRef.current));
+      ponerLista(listaRef.current.map((p) => (p.id === id ? { ...p, mensajesGeneradosEn: m.mensajesGeneradosEn } : p)));
     } finally {
       setAfinando(null);
     }
   };
 
-  // El latido: cada 60 s el mapa pregunta por la cartera y lo nuevo se
-  // enciende con su animación de llegada.
-  useEffect(() => {
-    const t = setInterval(async () => {
-      try {
-        const r = await fetch('/api/admin/mapa-prospectos', { cache: 'no-store' });
-        if (!r.ok) return; // el mapa vigente sigue; no se pinta un fallo como vacío
-        const d = (await r.json()) as DatosMapa;
-        if (d.fallo) return;
-        const nuevos = new Set(d.prospectos.filter((p) => !conocidos.current.has(p.id)).map((p) => p.id));
-        d.prospectos.forEach((p) => conocidos.current.add(p.id));
-        setDatos(d);
-        if (nuevos.size) setRecientes(nuevos);
-      } catch { /* sin red: el mapa vigente sigue */ }
-    }, 300_000);
-    return () => clearInterval(t);
+  // ── EL LATIDO, POR DELTA Y CON LA PESTAÑA A LA VISTA (FE-16) ────────────
+  // Antes: cada 5 min, la cartera ENTERA (~33 MB), mirara alguien o no. Ahora
+  // se pide `?desde=` la última marca — en reposo, cero filas — y solo
+  // mientras la pestaña está visible (ver latido.ts).
+  const aplicar = useCallback((d: DatosMapa): number => {
+    if (d.marca) marca.current = d.marca;
+    setGeneradoEn(d.generadoEn);
+    const llegaron = d.filas.map(desempacar);
+    const antes = listaRef.current;
+    let siguiente: ProspectoMapa[];
+    if (!d.delta) {
+      siguiente = llegaron;
+    } else if (llegaron.length === 0) {
+      siguiente = antes;
+    } else {
+      // Los que ya estaban se reemplazan EN SU LUGAR (el orden del listado es
+      // created_at desc y el orden "recientes" vive de él); los que no
+      // estaban son altas y van hasta arriba, el más nuevo primero.
+      const cambios = new Map(llegaron.map((p) => [p.id, p]));
+      const conocidosYa = new Set(antes.map((p) => p.id));
+      const altas = llegaron.filter((p) => !conocidosYa.has(p.id)).reverse();
+      siguiente = [...altas, ...antes.map((p) => cambios.get(p.id) ?? p)];
+    }
+    const nuevos = new Set(llegaron.filter((p) => !conocidos.current.has(p.id)).map((p) => p.id));
+    llegaron.forEach((p) => conocidos.current.add(p.id));
+    ponerLista(siguiente);
+    if (nuevos.size) setRecientes(nuevos);
+    return siguiente.length;
+  }, [ponerLista]);
+
+  const pedirMapa = useCallback(async (desde: string | null): Promise<DatosMapa | null> => {
+    const url = desde
+      ? `/api/admin/mapa-prospectos?desde=${encodeURIComponent(desde)}`
+      : '/api/admin/mapa-prospectos';
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) return null; // el mapa vigente sigue; no se pinta un fallo como vacío
+    const d = (await r.json()) as DatosMapa;
+    return d.fallo ? null : d;
   }, []);
+
+  useEffect(() => arrancarLatido({
+    intervaloMs: LATIDO_MS,
+    ...visibilidadDelNavegador(),
+    latir: async () => {
+      try {
+        const d = await pedirMapa(marca.current);
+        if (!d) return;
+        const cuantos = aplicar(d);
+        // UN DELTA NO PUEDE VER UNA BAJA: una fila borrada no se actualiza,
+        // desaparece. El servidor manda su conteo y, cuando no cuadra con el
+        // nuestro, se pide la carga completa — que es exactamente lo que se
+        // dejó de hacer cada cinco minutos, y aquí solo pasa cuando de verdad
+        // se fue alguien.
+        if (d.delta && d.total !== null && d.total !== cuantos) {
+          const completo = await pedirMapa(null);
+          if (completo) aplicar(completo);
+        }
+      } catch { /* sin red: el mapa vigente sigue */ }
+    },
+  }), [aplicar, pedirMapa]);
 
   const porEstado = useMemo(() => {
     const m = new Map<string, ProspectoMapa[]>();
@@ -550,7 +702,19 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     arrastrando.current = null;
   };
 
-  const listaSeleccion = seleccion ? porEstado.get(seleccion.nombre) ?? [] : [];
+  const listaSeleccion = useMemo(
+    () => (seleccion ? porEstado.get(seleccion.nombre) ?? SIN_LISTA : SIN_LISTA),
+    [seleccion, porEstado],
+  );
+
+  // Los textos largos de LO QUE SE PINTA — 72 tarjetas como mucho, no 33 mil
+  // filas. Se piden en cuanto cambia el conjunto visible; el cache descarta
+  // lo ya pedido, así que volver a un estado no cuesta otra vuelta de red.
+  const idsVisibles = useMemo(
+    () => [...new Set([...ordenados.slice(0, 12), ...listaSeleccion.slice(0, 60)].map((p) => p.id))],
+    [ordenados, listaSeleccion],
+  );
+  useEffect(() => { void pedirTextos(idsVisibles); }, [idsVisibles, pedirTextos]);
   const conCoords = useMemo(() => filtrados.filter((p) => p.lat !== null && p.lng !== null), [filtrados]);
   const TOPE_LUCES_ESTADO = 1500;
   const lucesRecortadas = seleccion === null
@@ -640,7 +804,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 {GIROS.map((g) => (
                   <Chip key={g} activo={filtros.giros?.has(g) ?? false}
                     onClick={() => setFiltros((f) => ({ ...f, giros: alternarEnSet(f.giros, g) }))}>
-                    {NOMBRE_GIRO[g]} · {datos.prospectos.filter((p) => p.giro === g).length}
+                    {NOMBRE_GIRO[g]} · {prospectos.filter((p) => p.giro === g).length}
                   </Chip>
                 ))}
               </div>
@@ -792,14 +956,14 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                   ))}
                 </div>
               </div>
-              <button onClick={exportarCsv}
+              <button onClick={() => void exportarCsv()} disabled={exportando}
                 className="ml-auto px-3 py-1.5 rounded-lg text-[11px] font-medium"
-                style={{ background: 'var(--ink)', color: 'var(--canvas)' }}>
-                ⬇ Exportar CSV ({numero(filtrados.length)})
+                style={{ background: 'var(--ink)', color: 'var(--canvas)', opacity: exportando ? 0.6 : 1 }}>
+                {exportando ? 'preparando…' : `⬇ Exportar CSV (${numero(filtrados.length)})`}
               </button>
             </div>
             <p className="text-[11px]" style={{ color: TENUE }}>
-              {numero(filtrados.length)} de {numero(datos.prospectos.length)} prospectos pasan el filtro.
+              {numero(filtrados.length)} de {numero(prospectos.length)} prospectos pasan el filtro.
             </p>
           </div>
         )}
@@ -825,7 +989,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           <div className="rounded-2xl p-4 backdrop-blur-sm flex-1 min-h-0 overflow-y-auto" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
             <h3 className="text-[12px] font-semibold mb-2.5 uppercase tracking-wider" style={{ color: TENUE }}>Más cerrables</h3>
             <div className="space-y-2.5">
-              {ordenar(filtrados).slice(0, 7).map((p) => (
+              {ordenados.slice(0, 7).map((p) => (
                 <div key={p.id} className="text-[12px] leading-snug">
                   <p className="truncate font-medium" style={{ color: TINTA }}>{p.empresa}</p>
                   <p style={{ color: TENUE }}>
@@ -967,7 +1131,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               ) : (
                 <>
                   {listaSeleccion.slice(0, 60).map((p) => (
-                    <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} onToque={tocar} />
+                    <TarjetaProspecto key={p.id} p={p} t={textos.get(p.id)} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} onToque={tocar} />
                   ))}
                   {listaSeleccion.length > 60 && (
                     <p className="text-[11px] px-3.5 py-2 rounded-2xl backdrop-blur-sm"
@@ -983,7 +1147,9 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
 
         {/* El nivel calles */}
         {seleccion && calles && (
-          <Calles prospectos={listaSeleccion} titulo={seleccion.nombre} onCerrar={() => setCalles(false)} />
+          <Calles prospectos={listaSeleccion} titulo={seleccion.nombre}
+            obtenerTextos={(id) => textosRef.current.get(id)} pedirTextos={pedirTextos}
+            onCerrar={() => setCalles(false)} />
         )}
       </section>
 
@@ -1032,8 +1198,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         <section className="rounded-2xl p-4" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
           <h3 className="etiqueta-mono text-[10px] font-medium uppercase mb-3" style={{ color: TENUE }}>Los 12 más cerrables del país</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {ordenar(filtrados).slice(0, 12).map((p) => (
-              <TarjetaProspecto key={p.id} p={p} plana nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} onToque={tocar} />
+            {ordenados.slice(0, 12).map((p) => (
+              <TarjetaProspecto key={p.id} p={p} t={textos.get(p.id)} plana nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} onToque={tocar} />
             ))}
           </div>
         </section>
@@ -1046,7 +1212,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           <p>{CRITERIO_SCORES.datos}</p>
           <p>{CRITERIO_SCORES.similitud}</p>
           <p>{CRITERIO_SCORES.necesidad}</p>
-          <p suppressHydrationWarning>Puntos en el mapa: solo prospectos con dirección real (DENUE/INEGI). Actualizado {fechaHoraMx(datos.generadoEn)} · se refresca cada 5 min.</p>
+          <p suppressHydrationWarning>Puntos en el mapa: solo prospectos con dirección real (DENUE/INEGI). Actualizado {fechaHoraMx(generadoEn)} · se refresca cada 5 min (y no mientras la pestaña está oculta).</p>
         </footer>
       </Reveal>
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  validarFactura, validarPago, evaluarAbono, sumarDias,
+  validarFactura, validarPago, evaluarAbono, sumarDias, mensajeFolioRepetido,
   type FacturaCruda, type PagoCrudo,
 } from './facturacion_escritura';
 import { DatoInvalido } from './errores';
@@ -21,6 +21,7 @@ const FACTURA_OK: FacturaCruda = {
   fecha: '2026-08-14',
   subtotal: '10000',
   iva: '1600',
+  serie: '',
   folio: '',
   cfdiUuid: '',
   viajeIds: [],
@@ -150,37 +151,101 @@ describe('sumarDias — de aquí sale el vencimiento', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// RES-22 (auditoría prod) — EL ÍNDICE DE FOLIO ES MÁS ESTRECHO QUE EL SAT
+// RES-22 (auditoría prod) — UNA FACTURA SE IDENTIFICA POR SERIE + FOLIO +
+// EJERCICIO, y la migración 0166 lo puso en la base.
 //
-// `factura_folio_unico` (0049) es `(tenant_id, folio)`: sin serie y sin
-// ejercicio. Un CFDI se identifica por SERIE + FOLIO, y el folio se reinicia
-// cada año, así que A-1 de 2025 y B-1 de 2026 chocan siendo distintas.
+// Antes: `factura_folio_unico` (0049) = (tenant_id, folio) y
+// `factura_emitida_folio_upper_uidx` (0158) = (tenant_id, upper(folio)).
+// Ninguno miraba serie ni año, así que A-1 de 2025 y A-1 de 2026 chocaban
+// siendo dos CFDI distintos y la flota que reinicia folios cada enero no
+// podía capturar. La propuesta que este archivo tenía escrita dropeaba SÓLO
+// el índice de la 0049 — el de la 0158 habría seguido rechazando igual.
 //
-// No se arregla aquí —hace falta columna `serie`, captura y UI—, así que lo
-// que este guardia sostiene es lo único que hoy se puede sostener: que el
-// mensaje al cliente NO mienta sobre la causa, y que el día que alguien
-// cambie el índice esta prueba lo mande a revisar el mensaje.
+// Lo que la BASE garantiza se prueba contra Postgres (bloque 138 de
+// verificaciones.sql: A-1/2025 vs A-1/2026, A-1 vs B-1, la repetida que
+// rebota, la normalización). Aquí se prueba lo que es de TypeScript: que la
+// serie se normaliza antes de viajar, que el índice quedó como se documentó,
+// y que el mensaje del choque dice CONTRA QUÉ se comparó.
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe('el choque de folio dice la verdad sobre su alcance (RES-22)', () => {
-  const sql = readFileSync('supabase/migrations/0049_cobranza_factura_emitida_pago.sql', 'utf8');
-  const fuente = readFileSync('src/lib/likida/facturacion_escritura.ts', 'utf8');
-
-  it('el índice sigue siendo (tenant_id, folio), sin serie ni ejercicio', () => {
-    // Si esto se pone rojo es porque la migración propuesta YA se aplicó:
-    // entonces toca actualizar el mensaje de abajo, que dejó de ser cierto.
-    expect(sql).toMatch(/factura_folio_unico\s+on public\.factura_emitida \(tenant_id, folio\)/);
-    expect(sql).not.toMatch(/factura_emitida[\s\S]{0,400}\bserie\b/);
+describe('la serie viaja con el folio y se normaliza (RES-22)', () => {
+  it('una factura sin serie la manda en NULL, no en cadena vacía', () => {
+    // El índice usa `coalesce(serie,'')`: un '' guardado y un NULL guardado
+    // significarían lo mismo escritos de dos formas, y `factura_serie_btrim`
+    // (0166) rechaza el ''. La normalización tiene que pasar aquí.
+    expect(validarFactura(FACTURA_OK).serie).toBeNull();
+    expect(validarFactura({ ...FACTURA_OK, serie: '   ' }).serie).toBeNull();
   });
 
-  it('y el mensaje avisa que serie y año no se distinguen', () => {
-    // El texto anterior —«Búscala en la lista en vez de capturarla otra
-    // vez»— mandaba a buscar una factura que puede no ser la misma.
-    expect(fuente).toMatch(/El folio se compara sin serie ni año/);
+  it('la serie tecleada con espacios se guarda como se compara', () => {
+    expect(validarFactura({ ...FACTURA_OK, serie: '  A  ' }).serie).toBe('A');
+    expect(validarFactura({ ...FACTURA_OK, serie: '\tFAC\n' }).serie).toBe('FAC');
   });
 
-  it('la migración propuesta queda escrita donde se ve el problema', () => {
-    expect(fuente).toContain('add column if not exists serie text');
-    expect(fuente).toContain("(tenant_id, coalesce(serie, ''), folio, extract(year from fecha))");
+  it('la serie NO cambia de mayúsculas al guardarse: se guarda la del CFDI', () => {
+    // El índice compara `upper(serie)`, así que «a» y «A» chocan de todas
+    // formas. Guardar el texto en mayúsculas cambiaría lo que la flota ve
+    // impreso en su papel, y eso es inventar un dato.
+    expect(validarFactura({ ...FACTURA_OK, serie: 'a' }).serie).toBe('a');
+  });
+
+  it('una serie con espacio EN MEDIO se rechaza en vez de colarse', () => {
+    // `factura_serie_btrim` sólo mira los extremos; un «A B» pasaría el CHECK
+    // y sería una serie que ningún CFDI tiene.
+    expect(() => validarFactura({ ...FACTURA_OK, serie: 'A B' })).toThrow(DatoInvalido);
+  });
+
+  it('la serie no pasa del tope del SAT (25 caracteres)', () => {
+    expect(validarFactura({ ...FACTURA_OK, serie: 'A'.repeat(25) }).serie).toHaveLength(25);
+    expect(() => validarFactura({ ...FACTURA_OK, serie: 'A'.repeat(26) })).toThrow(DatoInvalido);
+  });
+});
+
+describe('el choque de folio dice CONTRA QUÉ se comparó (RES-22)', () => {
+  const mig = readFileSync('supabase/migrations/0166_factura_serie.sql', 'utf8');
+
+  it('el índice compara flota + serie + folio + ejercicio, sin mayúsculas', () => {
+    expect(mig).toContain(
+      "(tenant_id, upper(coalesce(serie, '')), upper(folio), extract(year from fecha))",
+    );
+    expect(mig).toMatch(/where folio is not null/);
+  });
+
+  it('y sustituye a LOS DOS índices viejos, no sólo al de la 0049', () => {
+    // Éste es el error que traía la propuesta original: con el de la 0158 vivo,
+    // la A-1 de 2026 seguía rebotando y el arreglo no arreglaba nada.
+    expect(mig).toContain('drop index if exists public.factura_folio_unico');
+    expect(mig).toContain('drop index if exists public.factura_emitida_folio_upper_uidx');
+  });
+
+  it('el índice conserva su nombre, que es por donde se reconoce el choque', () => {
+    // `traducirChoque` discrimina el 23505 por el nombre del índice.
+    expect(mig).toMatch(/create unique index if not exists factura_folio_unico/);
+  });
+
+  it('el mensaje nombra serie, folio y ejercicio', () => {
+    const m = mensajeFolioRepetido({ serie: 'A', folio: '1', fecha: '2026-01-02' });
+    expect(m).toContain('«1»');
+    expect(m).toContain('serie «A»');
+    expect(m).toContain('ejercicio 2026');
+    expect(m).toContain('OTRA serie');
+  });
+
+  it('sin serie lo dice, en vez de fingir una', () => {
+    const m = mensajeFolioRepetido({ serie: null, folio: 'SF-9', fecha: '2026-03-01' });
+    expect(m).toContain('sin serie');
+    expect(m).not.toContain('«null»');
+  });
+
+  it('sin fecha a la mano NO inventa el año', () => {
+    // `marcarEmitida` sella una fila cuya fecha no viaja en el formulario.
+    const m = mensajeFolioRepetido({ serie: 'A', folio: '1', fecha: null });
+    expect(m).toContain('ese mismo ejercicio');
+    expect(m).not.toMatch(/ejercicio \d{4}/);
+  });
+
+  it('avisa que la cancelada sigue ocupando su folio', () => {
+    expect(mensajeFolioRepetido({ serie: null, folio: '1', fecha: '2026-01-01' }))
+      .toContain('cancelada');
   });
 });

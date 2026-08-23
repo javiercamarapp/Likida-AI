@@ -76,6 +76,12 @@ export function Plegable({ resumen, children }: { resumen: string; children: Rea
  *    borrador le cobra a alguien.
  *  · Los montos son `type="text"` con `inputMode="decimal"`: un contralor pega
  *    "11,600.00" desde su Excel y un input numérico lo descarta ENTERO.
+ *
+ * Y una cuarta desde la 0166 (RES-22): SERIE y FOLIO son campos SEPARADOS.
+ * Iban juntos en «folio» porque la tabla no tenía dónde poner la serie, y el
+ * consecutivo se comparaba sin serie ni ejercicio: la flota que reinicia
+ * folios cada 1 de enero recibía «ya registraste una factura con ese folio» y
+ * no podía capturar. Ahora la base compara flota + serie + folio + año.
  */
 export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
   accion: AccionForma;
@@ -121,8 +127,19 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
         </div>
 
         <div>
+          <label htmlFor="ff-serie" className={ETIQUETA}>Serie</label>
+          <input id="ff-serie" name="serie" type="text" maxLength={25} placeholder="A (opcional)"
+            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+          <p className={AYUDA} style={{ color: 'var(--faint)' }}>
+            La del CFDI. Déjala vacía si tu flota no usa series. Con ella, el folio 1 de la serie A
+            y el folio 1 de la serie B son dos facturas distintas — y el folio se puede reiniciar
+            cada año sin que la captura se trabe.
+          </p>
+        </div>
+
+        <div>
           <label htmlFor="ff-folio" className={ETIQUETA}>Folio</label>
-          <input id="ff-folio" name="folio" type="text" maxLength={40} placeholder="A-1024 (opcional)"
+          <input id="ff-folio" name="folio" type="text" maxLength={40} placeholder="1024 (opcional)"
             className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
         </div>
 

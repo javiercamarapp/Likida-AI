@@ -26,6 +26,12 @@
 //  · EL SALDO NO SE GUARDA: lo deriva la vista `factura_saldo`. Aquí solo se
 //    decide el ESTATUS, y `pagada` se escribe únicamente cuando la suma de
 //    pagos cubre el total.
+//  · UNA FACTURA SE IDENTIFICA POR SERIE + FOLIO + EJERCICIO (RES-22, mig.
+//    0166). La 0049 dejó el consecutivo en `(tenant_id, folio)` y la 0158 le
+//    sumó `(tenant_id, upper(folio))`: ninguno miraba la serie ni el año, así
+//    que la flota que reinicia folios cada 1 de enero —lo normal en México—
+//    no podía capturar su cobranza. La 0166 sustituye los dos por
+//    `(tenant_id, upper(coalesce(serie,'')), upper(folio), año de la fecha)`.
 //
 // El `tenant_id` viene SIEMPRE por argumento desde la sesión del servidor, y
 // toda escritura sobre fila existente se ancla con `.eq('tenant_id', …)` Y
@@ -48,6 +54,8 @@ export interface FacturaCruda {
   fecha: string;
   subtotal: string;
   iva: string;
+  /** La SERIE del CFDI (0166, RES-22). Vacía = la flota no usa series. */
+  serie: string;
   folio: string;
   cfdiUuid: string;
   viajeIds: string[];
@@ -59,6 +67,7 @@ export interface FacturaValida {
   subtotal: number;
   iva: number;
   total: number;
+  serie: string | null;
   folio: string | null;
   cfdiUuid: string | null;
   estatus: 'borrador' | 'emitida';
@@ -98,6 +107,36 @@ function montoTecleado(crudo: string, campo: string, opciones: { obligatorio: bo
   return n;
 }
 
+/** Tope del atributo `Serie` del CFDI 4.0 en el SAT, y el del CHECK de la 0166. */
+const SERIE_MAX = 25;
+
+/**
+ * La SERIE, normalizada IGUAL que se compara (RES-22, mig. 0166).
+ *
+ * `factura_serie_btrim` (0166) exige que la serie guardada esté sin espacios
+ * de sobra y nunca vacía, con el mismo criterio que la 0158 (DAT-36) le puso
+ * al folio: si el texto guardado no es el texto comparado, «A », «A» y «» son
+ * tres series para la base y una sola para la flota. Aquí se hace la
+ * normalización; el CHECK es la red por si algún día entra por otro camino.
+ *
+ * Vacía → NULL, que en `factura_folio_unico` entra como `coalesce(serie,'')`:
+ * todas las facturas sin serie comparten consecutivo, que es lo que significa
+ * «no uso series».
+ */
+function normalizarSerie(crudo: string): string | null {
+  const s = crudo.trim();
+  if (s === '') return null;
+  if (s.length > SERIE_MAX) {
+    throw new DatoInvalido(`La serie no puede pasar de ${SERIE_MAX} caracteres: es el tope del atributo Serie del CFDI.`);
+  }
+  // Un salto de línea o un tabulador PEGADOS DE UN EXCEL sobreviven al trim de
+  // los extremos si van en medio, y no existen en ninguna serie del SAT.
+  if (/\s/.test(s)) {
+    throw new DatoInvalido('La serie no lleva espacios: cópiala tal como aparece en el CFDI (por ejemplo «A» o «FAC»).');
+  }
+  return s;
+}
+
 export function validarFactura(c: FacturaCruda): FacturaValida {
   if (!esUuidValido(c.clienteId)) {
     throw new DatoInvalido('Elige el cliente de la lista. Si no aparece, dalo de alta primero en Clientes.');
@@ -116,6 +155,7 @@ export function validarFactura(c: FacturaCruda): FacturaValida {
 
   const folio = c.folio.trim() === '' ? null : c.folio.trim();
   if (folio !== null && folio.length > 40) throw new DatoInvalido('El folio no puede pasar de 40 caracteres.');
+  const serie = normalizarSerie(c.serie);
 
   let cfdiUuid: string | null = null;
   if (c.cfdiUuid.trim() !== '') {
@@ -137,7 +177,7 @@ export function validarFactura(c: FacturaCruda): FacturaValida {
     if (!viajeIds.includes(id)) viajeIds.push(id);
   }
 
-  return { clienteId: c.clienteId, fecha, subtotal, iva, total, folio, cfdiUuid, estatus: cfdiUuid ? 'emitida' : 'borrador', viajeIds };
+  return { clienteId: c.clienteId, fecha, subtotal, iva, total, serie, folio, cfdiUuid, estatus: cfdiUuid ? 'emitida' : 'borrador', viajeIds };
 }
 
 export interface PagoCrudo {
@@ -233,47 +273,48 @@ async function anotar(
   );
 }
 
-/** Los índices únicos de la 0049, dichos en palabras de quien capturó. */
-function traducirChoque(mensaje: string): DatoInvalido | null {
+/** El contexto del choque, para que el mensaje diga QUÉ se comparó. */
+export interface LlaveFolio {
+  serie: string | null;
+  folio: string | null;
+  /** `YYYY-MM-DD`. NULL cuando quien traduce el choque no la tiene a mano
+   *  (`marcarEmitida` sella una fila que ya existe y cuya fecha no viaja en el
+   *  formulario): entonces el mensaje dice «ese mismo ejercicio» en vez de
+   *  inventar un año, que es la regla de la casa. */
+  fecha: string | null;
+}
+
+/**
+ * El folio duplicado, dicho con la llave COMPLETA contra la que se comparó.
+ *
+ * RES-22 (auditoría prod) · Desde la 0166 el consecutivo es
+ * `(tenant_id, upper(coalesce(serie,'')), upper(folio), año de la fecha)`, no
+ * `(tenant_id, folio)`. El mensaje viejo —«Ya tienes registrada una factura con
+ * ese folio»— mandaba a buscar una factura que podía ser de otra serie o de
+ * otro ejercicio, y para colmo era cierto: la base tampoco las distinguía.
+ * Ahora sí las distingue, y el mensaje nombra las tres dimensiones para que
+ * quien capturó sepa dónde está la gemela en vez de adivinar.
+ */
+export function mensajeFolioRepetido(k: LlaveFolio): string {
+  const ejercicio = k.fecha === null ? 'ese mismo ejercicio' : `el ejercicio ${k.fecha.slice(0, 4)}`;
+  const donde = k.serie === null ? 'sin serie' : `de la serie «${k.serie}»`;
+  return (
+    `Ya tienes registrada una factura con el folio «${k.folio ?? ''}» ${donde} en ${ejercicio}. ` +
+    'El folio se compara por flota, serie y año (sin distinguir mayúsculas), así que el mismo folio en OTRA serie o en OTRO ejercicio sí cabe: ' +
+    'revisa que la serie y la fecha sean las de este CFDI. Si la factura anterior está cancelada, su folio sigue ocupado — es un consecutivo fiscal, no una lista de pendientes.'
+  );
+}
+
+/** Los índices únicos de la 0049 y la 0166, dichos en palabras de quien capturó. */
+function traducirChoque(mensaje: string, llave: LlaveFolio): DatoInvalido | null {
   if (mensaje.includes('factura_cfdi_unico')) {
     return new DatoInvalido('Ese folio fiscal (UUID) ya está registrado en otra factura tuya. El mismo CFDI no se registra dos veces: el saldo del cliente saldría al doble.');
   }
+  if (mensaje.includes('factura_serie_btrim')) {
+    return new DatoInvalido('La serie no puede ir vacía ni con espacios: cópiala tal como aparece en el CFDI, o déjala en blanco si tu flota no usa series.');
+  }
   if (mensaje.includes('factura_folio_unico')) {
-    // ── RES-22 (auditoría prod): ESTE ÍNDICE ES MÁS ESTRECHO QUE EL SAT ────
-    //
-    // `factura_folio_unico` (mig. 0049:69) es `(tenant_id, folio) where folio
-    // is not null`: SIN serie y SIN ejercicio. Pero un CFDI se identifica por
-    // SERIE + FOLIO, y el folio se reinicia — por serie, y muy comúnmente cada
-    // año. O sea que hoy, para una misma flota:
-    //
-    //   · la factura A-1 de 2025 y la B-1 de 2026 chocan;
-    //   · el folio 1 de enero de 2026 choca con el 1 de enero de 2025.
-    //
-    // En los dos casos son facturas DISTINTAS y legítimas, y la base rechaza
-    // la segunda. A una flota al año le pasa una vez; a 50k tickets/mes y con
-    // varias flotas capturando su cobranza, deja de ser anecdótico.
-    //
-    // NO SE ARREGLA AQUÍ, y por eso esto es un comentario y no un cambio de
-    // esquema: `factura_emitida` no tiene columna `serie` en ninguna migración
-    // (verificado), así que arreglarlo de verdad es esquema + captura + UI, no
-    // un índice. LA MIGRACIÓN PROPUESTA, para cuando se decida:
-    //
-    //   alter table public.factura_emitida add column if not exists serie text;
-    //   drop index if exists factura_folio_unico;
-    //   create unique index if not exists factura_folio_unico
-    //     on public.factura_emitida
-    //        (tenant_id, coalesce(serie, ''), folio, extract(year from fecha))
-    //     where folio is not null;
-    //
-    // Se puede aplicar SIN limpiar nada: el índice nuevo AFLOJA el viejo (le
-    // agrega dimensiones), así que toda fila que hoy convive lo sigue
-    // cumpliendo. Lo que NO se puede hacer sin producto es capturar la serie:
-    // mientras `serie` viaje en NULL, `coalesce(serie,'')` deja el
-    // comportamiento de hoy salvo por el año, que es la mitad del problema.
-    //
-    // Mientras tanto, el mensaje dice la verdad sobre el alcance del choque en
-    // vez de mandar a buscar una factura que puede no ser la misma.
-    return new DatoInvalido('Ya tienes registrada una factura con ese folio. El folio se compara sin serie ni año, así que si ésta es de otra serie o de otro ejercicio, repórtalo: hoy la base no las distingue.');
+    return new DatoInvalido(mensajeFolioRepetido(llave));
   }
   return null;
 }
@@ -332,6 +373,9 @@ export async function crearFactura(
     // cuando la factura ampara EXACTAMENTE un viaje (el caso común y el que
     // `libro_viaje.ts:599` lee directo).
     viaje_id: f.viajeIds.length === 1 ? f.viajeIds[0] : null,
+    // RES-22 (0166): la serie es la mitad que le faltaba al folio. NULL cuando
+    // la flota no usa series, y así entra al índice como `coalesce(serie,'')`.
+    serie: f.serie,
     folio: f.folio,
     cfdi_uuid: f.cfdiUuid,
     fecha: f.fecha,
@@ -344,7 +388,7 @@ export async function crearFactura(
   }).select('id').single(), 'crearFactura');
 
   if (error) {
-    const choque = traducirChoque(error.message);
+    const choque = traducirChoque(error.message, { serie: f.serie, folio: f.folio, fecha: f.fecha });
     if (choque) throw choque;
     throw new Error(`crearFactura: ${error.message}`);
   }
@@ -368,10 +412,12 @@ export async function crearFactura(
   // dominio (0049) y la fila queda contando la verdad: se intentó, no se
   // completó.
   //
-  // CONSECUENCIA VISIBLE: recapturar la MISMA factura con el mismo folio
-  // choca ahora contra `factura_folio_unico` (la fila cancelada sigue ahí) y
-  // `traducirChoque` lo dice con su mensaje de folio repetido. Antes se podía
-  // reintentar a ciegas; ahora hay que mirar la cancelada y decidir.
+  // CONSECUENCIA VISIBLE: recapturar la MISMA factura con la misma serie, el
+  // mismo folio y el mismo ejercicio choca ahora contra `factura_folio_unico`
+  // (la fila cancelada sigue ahí) y `traducirChoque` lo dice con su mensaje de
+  // folio repetido. Antes se podía reintentar a ciegas; ahora hay que mirar la
+  // cancelada y decidir. Que la cancelada siga ocupando su lugar es
+  // deliberado (0166): es un consecutivo fiscal, no una lista de pendientes.
   if (f.viajeIds.length > 0) {
     const { error: errLigas } = await supabaseAdmin().from('factura_viaje')
       .insert(f.viajeIds.map((v) => ({ factura_id: facturaId, viaje_id: v })));
@@ -403,7 +449,7 @@ export async function crearFactura(
 export async function marcarEmitida(
   tenantId: string,
   facturaId: string,
-  sello: { folio: string; cfdiUuid: string },
+  sello: { serie?: string; folio: string; cfdiUuid: string },
   actor?: { id?: string; email?: string },
 ): Promise<void> {
   if (!esUuidValido(facturaId)) throw new DatoInvalido('No se reconoce esa factura. Recarga la pantalla.');
@@ -414,21 +460,36 @@ export async function marcarEmitida(
   const folio = sello.folio.trim() === '' ? undefined : sello.folio.trim();
   if (folio !== undefined && folio.length > 40) throw new DatoInvalido('El folio no puede pasar de 40 caracteres.');
 
+  // RES-22 (0166) · LA SERIE VIAJA CON EL FOLIO O NO VIAJA.
+  // El sello llega del CFDI ya timbrado, y ahí serie y folio son UNA sola
+  // identificación. Si esta función escribiera el folio y dejara la serie como
+  // estaba, la factura sellada quedaría diciendo «serie B, folio 1» cuando el
+  // PAC timbró «A-1»: el consecutivo de la 0166 se calcularía sobre una serie
+  // que no es la del papel. `undefined` (el campo ni se manda) deja la serie
+  // intacta; una cadena vacía la BORRA a propósito, para la flota que timbró
+  // sin serie un borrador que sí la traía.
+  const serie = sello.serie === undefined ? undefined : normalizarSerie(sello.serie);
+
   const { data, error } = await acotada(supabaseAdmin().from('factura_emitida').update({
     cfdi_uuid: uuid,
     estatus: 'emitida',
     ...(folio !== undefined ? { folio } : {}),
+    ...(serie !== undefined ? { serie } : {}),
   }).eq('id', facturaId).eq('tenant_id', tenantId).eq('estatus', 'borrador').select('id'), 'marcarEmitida');
 
   if (error) {
-    const choque = traducirChoque(error.message);
+    // La fecha de la factura no viaja en este formulario y NO se adivina: el
+    // mensaje dice «ese mismo ejercicio» en vez de inventar un año.
+    const choque = traducirChoque(error.message, { serie: serie ?? null, folio: folio ?? null, fecha: null });
     if (choque) throw choque;
     throw new Error(`marcarEmitida: ${error.message}`);
   }
   if (!Array.isArray(data) || data.length === 0) {
     throw new DatoInvalido('Esa factura no está en borrador en tu flota: puede que ya esté emitida o cancelada. Recarga la pantalla.');
   }
-  await anotar(tenantId, 'factura.emitida', 'factura_emitida', facturaId, { cfdiUuid: uuid, folio: folio ?? null }, actor);
+  await anotar(tenantId, 'factura.emitida', 'factura_emitida', facturaId, {
+    cfdiUuid: uuid, folio: folio ?? null, ...(serie !== undefined ? { serie } : {}),
+  }, actor);
 }
 
 // ── Los SQLSTATE propios de `registrar_pago_tx` (0159) ─────────────────────

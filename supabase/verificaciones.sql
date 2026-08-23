@@ -7550,3 +7550,191 @@ begin
   raise exception E'MANTENIMIENTO_0165  sobrevive=%  nombra_fallo=%  candidatos=%  no_borra_storage=%  anon=%   (esperado t / t / t / t / f)',
     sobrevive, nombra_fallo, candidatos_ok, no_borra, anon_ok;
 end $$;
+
+-- ── 138. Una factura se identifica por SERIE + FOLIO + EJERCICIO (mig. 0166) ──
+--
+-- RES-22 (auditoría prod): `factura_folio_unico` (0049) era (tenant_id, folio)
+-- y `factura_emitida_folio_upper_uidx` (0158) era (tenant_id, upper(folio)).
+-- Ninguno miraba la serie ni el año, así que la A-1 de 2025 y la A-1 de 2026
+-- —dos CFDI distintos, los dos timbrados— chocaban, y la flota que reinicia
+-- folios cada 1 de enero (lo normal en México) no podía capturar su cobranza.
+--
+-- Esto es de las cosas que SOLO la base puede demostrar: es un índice único
+-- sobre expresiones. Se ataca por los cuatro lados —el año, la serie, la
+-- repetición real y la normalización— y además se comprueba que arreglar
+-- RES-22 no REABRIÓ DAT-36 (0158: «a-1» y «A-1» siguen siendo el mismo folio)
+-- y que el índice viejo de la 0158 ya no está duplicando el candado.
+--
+-- Corrido el 22-ago-2026 contra Postgres 17.11 con las 163 migraciones
+-- aplicadas sobre base virgen. Salida REAL:
+--   SERIE_0166  mismo-folio-otro-anio=t  otra-serie-mismo-anio=t
+--               repetida-rebota=t  sin-serie-repetida-rebota=t
+--               sin-serie-otro-anio=t  mayusculas-siguen-chocando=t
+--               serie-con-espacios-rebota=t  serie-vacia-rebota=t
+--               otra-flota-entra=t  indice-0158-retirado=t
+do $$
+declare
+  ta uuid; tb uuid; cli uuid; clib uuid;
+  mismo_folio_otro_anio boolean := false;
+  otra_serie_mismo_anio boolean := false;
+  repetida_rebota boolean := false;
+  sin_serie_repetida_rebota boolean := false;
+  sin_serie_otro_anio boolean := false;
+  mayusculas_chocan boolean := false;
+  serie_espacios_rebota boolean := false;
+  serie_vacia_rebota boolean := false;
+  otra_flota_entra boolean := false;
+  indice_0158_retirado boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0166 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0166 B') returning id into tb;
+  insert into cliente (tenant_id, nombre, rfc) values (ta, 'ZZZ cli 0166 A', 'XAXX010101000') returning id into cli;
+  insert into cliente (tenant_id, nombre, rfc) values (tb, 'ZZZ cli 0166 B', 'XAXX010101000') returning id into clib;
+
+  -- ── EL CASO DEL HALLAZGO: A-1 de 2025 y A-1 de 2026 son dos facturas ─────
+  insert into factura_emitida (tenant_id, cliente_id, serie, folio, fecha, subtotal, iva, total, estatus)
+    values (ta, cli, 'A', '1', date '2025-01-02', 1000, 160, 1160, 'emitida');
+  begin
+    insert into factura_emitida (tenant_id, cliente_id, serie, folio, fecha, subtotal, iva, total, estatus)
+      values (ta, cli, 'A', '1', date '2026-01-02', 1000, 160, 1160, 'emitida');
+    mismo_folio_otro_anio := true;
+  exception when others then mismo_folio_otro_anio := false;
+  end;
+
+  -- ── Y B-1 del MISMO año tampoco es la A-1: otra serie, otro consecutivo ──
+  begin
+    insert into factura_emitida (tenant_id, cliente_id, serie, folio, fecha, subtotal, iva, total, estatus)
+      values (ta, cli, 'B', '1', date '2026-01-02', 1000, 160, 1160, 'emitida');
+    otra_serie_mismo_anio := true;
+  exception when others then otra_serie_mismo_anio := false;
+  end;
+
+  -- ── LO QUE SÍ TIENE QUE REBOTAR: la MISMA A-1 del MISMO ejercicio ────────
+  -- Aflojar el candado no puede significar quitarlo: dentro de una serie y de
+  -- un año, el folio sigue siendo irrepetible. Otro día del mismo 2026 y otro
+  -- monto, para que lo único compartido sea la llave.
+  begin
+    insert into factura_emitida (tenant_id, cliente_id, serie, folio, fecha, subtotal, iva, total, estatus)
+      values (ta, cli, 'A', '1', date '2026-11-30', 5000, 800, 5800, 'emitida');
+  exception when unique_violation then
+    repetida_rebota := position('factura_folio_unico' in sqlerrm) > 0;
+  end;
+
+  -- ── LA FLOTA SIN SERIES (todas las de hoy) sigue protegida ───────────────
+  -- `coalesce(serie,'')`: un NULL no colisiona con nada en un índice único, y
+  -- sin el coalesce estas dos filas se habrían colado.
+  insert into factura_emitida (tenant_id, cliente_id, folio, fecha, subtotal, iva, total, estatus)
+    values (ta, cli, 'SF-9', date '2026-03-01', 100, 16, 116, 'emitida');
+  begin
+    insert into factura_emitida (tenant_id, cliente_id, folio, fecha, subtotal, iva, total, estatus)
+      values (ta, cli, 'SF-9', date '2026-04-01', 100, 16, 116, 'emitida');
+  exception when unique_violation then sin_serie_repetida_rebota := true;
+  end;
+  begin
+    insert into factura_emitida (tenant_id, cliente_id, folio, fecha, subtotal, iva, total, estatus)
+      values (ta, cli, 'SF-9', date '2025-04-01', 100, 16, 116, 'emitida');
+    sin_serie_otro_anio := true;
+  exception when others then sin_serie_otro_anio := false;
+  end;
+
+  -- ── DAT-36 (0158) NO SE REABRIÓ ──────────────────────────────────────────
+  -- El índice nuevo compara upper() en serie Y en folio. Si comparara el texto
+  -- crudo, «a / x-1» y «A / X-1» volverían a ser dos facturas para la base y
+  -- una sola para la flota — el hallazgo que la 0158 cerró.
+  insert into factura_emitida (tenant_id, cliente_id, serie, folio, fecha, subtotal, iva, total, estatus)
+    values (ta, cli, 'A', 'X-1', date '2026-05-01', 100, 16, 116, 'emitida');
+  begin
+    insert into factura_emitida (tenant_id, cliente_id, serie, folio, fecha, subtotal, iva, total, estatus)
+      values (ta, cli, 'a', 'x-1', date '2026-06-01', 100, 16, 116, 'emitida');
+  exception when unique_violation then mayusculas_chocan := true;
+  end;
+
+  -- ── La serie se guarda tal como se compara (`factura_serie_btrim`) ───────
+  begin
+    insert into factura_emitida (tenant_id, cliente_id, serie, folio, fecha, subtotal, iva, total, estatus)
+      values (ta, cli, ' C ', '7', date '2026-07-01', 100, 16, 116, 'emitida');
+  exception when check_violation then
+    serie_espacios_rebota := position('factura_serie_btrim' in sqlerrm) > 0;
+  end;
+  begin
+    insert into factura_emitida (tenant_id, cliente_id, serie, folio, fecha, subtotal, iva, total, estatus)
+      values (ta, cli, '', '8', date '2026-07-01', 100, 16, 116, 'emitida');
+  exception when check_violation then serie_vacia_rebota := true;
+  end;
+
+  -- ── El consecutivo es DE CADA FLOTA ─────────────────────────────────────
+  begin
+    insert into factura_emitida (tenant_id, cliente_id, serie, folio, fecha, subtotal, iva, total, estatus)
+      values (tb, clib, 'A', '1', date '2026-01-02', 1000, 160, 1160, 'emitida');
+    otra_flota_entra := true;
+  exception when others then otra_flota_entra := false;
+  end;
+
+  -- ── Y el candado viejo de la 0158 ya no está encima ──────────────────────
+  -- Si sobreviviera, seguiría rechazando la A-1 de 2026 y todo lo de arriba
+  -- sería teatro: el arreglo tenía que sustituir a LOS DOS índices.
+  indice_0158_retirado := not exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and indexname = 'factura_emitida_folio_upper_uidx');
+
+  raise exception E'SERIE_0166  mismo-folio-otro-anio=%  otra-serie-mismo-anio=%  repetida-rebota=%  sin-serie-repetida-rebota=%  sin-serie-otro-anio=%  mayusculas-siguen-chocando=%  serie-con-espacios-rebota=%  serie-vacia-rebota=%  otra-flota-entra=%  indice-0158-retirado=%   (esperado t / t / t / t / t / t / t / t / t / t)',
+    mismo_folio_otro_anio, otra_serie_mismo_anio, repetida_rebota,
+    sin_serie_repetida_rebota, sin_serie_otro_anio, mayusculas_chocan,
+    serie_espacios_rebota, serie_vacia_rebota, otra_flota_entra,
+    indice_0158_retirado;
+end $$;
+
+-- ── 139. `updated_at` dice la verdad y un toque sella a su prospecto (mig. 0167) ──
+--
+-- El delta del Cerebro de ventas (FE-16) pregunta `updated_at > marca`. Esa
+-- pregunta solo sirve si la columna se mueve cuando la fila cambia, y hasta la
+-- 0167 NO se movía: `default now()` en el insert y nadie la tocaba después.
+-- Medido en producción el 22-ago-2026, antes de aplicar la migración:
+--
+--     select count(*) filter (where updated_at > created_at + interval '1 second')
+--     from prospecto;   →   0     (de 33,071 filas)
+--
+-- Un mapa que contesta "nada cambió" mientras el embudo avanza se ve
+-- EXACTAMENTE IGUAL que un mapa al día — por eso esto se comprueba contra la
+-- base y no con un mock. Tres garantías: (a) cualquier update sella la hora;
+-- (b) el valor que mande el llamador NO gana (un reloj de cliente adelantado
+-- escondería la fila de todas las lecturas siguientes); (c) insertar un toque
+-- —que vive en OTRA tabla— también sella al prospecto, o el filtro "sin
+-- contactar en N días" nunca llegaría a los demás Cerebros abiertos.
+-- Todo revierte con el RAISE final.
+do $$
+declare
+  v_p uuid;
+  t_alta timestamptz;
+  t_update timestamptz;
+  t_toque timestamptz;
+  sella_update boolean;
+  ignora_valor_ajeno boolean;
+  toque_sella boolean;
+  indice_ok boolean;
+begin
+  insert into prospecto (empresa, fuente, estado)
+    values ('VERIF-0167 SA de CV', 'manual', 'nuevo')
+    returning id, updated_at into v_p, t_alta;
+
+  -- (a) y (b) a la vez: se le manda a propósito una hora del año 2000 y el
+  -- trigger tiene que ignorarla y poner la de la base.
+  update prospecto set estado = 'contactado', updated_at = '2000-01-01T00:00:00Z' where id = v_p;
+  select updated_at into t_update from prospecto where id = v_p;
+  sella_update       := t_update > t_alta;
+  ignora_valor_ajeno := t_update > '2020-01-01T00:00:00Z'::timestamptz;
+
+  -- (c) el toque vive en prospecto_toque y aun así mueve la marca del padre.
+  insert into prospecto_toque (prospecto_id, canal, actor)
+    values (v_p, 'whatsapp', gen_random_uuid());
+  select updated_at into t_toque from prospecto where id = v_p;
+  toque_sella := t_toque > t_update;
+
+  indice_ok := exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and tablename = 'prospecto'
+       and indexname = 'idx_prospecto_updated_at');
+
+  raise exception E'DELTA_PROSPECTO_0167  sella_update=%  ignora_valor_ajeno=%  toque_sella=%  indice=%   (esperado t / t / t / t)',
+    sella_update, ignora_valor_ajeno, toque_sella, indice_ok;
+end $$;
