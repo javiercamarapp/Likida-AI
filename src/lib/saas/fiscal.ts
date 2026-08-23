@@ -38,6 +38,17 @@ export interface DatosFiscalesFlota {
   regimenFiscal: string | null;
   codigoPostal: string | null;
   usoCfdi: string | null;
+  /**
+   * A dónde se le manda el CFDI (0163, DAT-33).
+   *
+   * NO ENTRA EN `estanCompletos` A PROPÓSITO: los cinco datos de arriba los
+   * exige el SAT para timbrar, y sin ellos no hay papel. El correo no impide
+   * emitirlo — impide que llegue —, así que bloquear la contratación por él
+   * sería cobrar de menos por un dato que se puede pedir después. Lo que sí
+   * hace es gritar al timbrar: `timbrarFactura` avisa cuando el CFDI se emitió
+   * y no tiene a quién mandárselo.
+   */
+  email: string | null;
 }
 
 /** ¿Se puede facturar a esta flota? Los cinco datos o ninguno sirve. */
@@ -48,7 +59,7 @@ export function estanCompletos(d: DatosFiscalesFlota | null): boolean {
 export async function getDatosFiscales(tenantId: string): Promise<DatosFiscalesFlota | null> {
   const { data, error } = await supabaseAdmin()
     .from('tenant')
-    .select('rfc, razon_social, regimen_fiscal, codigo_postal_fiscal, uso_cfdi')
+    .select('rfc, razon_social, regimen_fiscal, codigo_postal_fiscal, uso_cfdi, email_facturacion')
     .eq('id', tenantId)
     .maybeSingle();
 
@@ -60,6 +71,7 @@ export async function getDatosFiscales(tenantId: string): Promise<DatosFiscalesF
     regimenFiscal: (data.regimen_fiscal as string) || null,
     codigoPostal: (data.codigo_postal_fiscal as string) || null,
     usoCfdi: (data.uso_cfdi as string) || null,
+    email: (data.email_facturacion as string) || null,
   };
 }
 
@@ -77,6 +89,8 @@ export async function getDatosFiscales(tenantId: string): Promise<DatosFiscalesF
  */
 export interface DatosFiscalesCapturados {
   rfc: string; razonSocial: string; regimenFiscal: string; codigoPostal: string; usoCfdi: string;
+  /** Opcional: a dónde llega el CFDI. Ver `DatosFiscalesFlota.email`. */
+  email?: string;
 }
 
 /** Las cinco columnas de `tenant`, ya normalizadas y listas para escribir. */
@@ -86,6 +100,7 @@ export interface FilaFiscalTenant {
   regimen_fiscal: string;
   codigo_postal_fiscal: string;
   uso_cfdi: string;
+  email_facturacion: string | null;
 }
 
 /**
@@ -104,6 +119,22 @@ export function validarDatosFiscales(d: DatosFiscalesCapturados): FilaFiscalTena
   if (!esRfcValido(rfc) || !rfcChecksumOk(rfc)) {
     throw new DatoInvalido(
       `El RFC "${d.rfc}" no pasa el dígito verificador. Con un RFC inválido el SAT rechaza el timbrado, y eso se descubre cuando ya cobramos y tu contador no tiene con qué deducir.`,
+    );
+  }
+
+  // ── EL RFC GENÉRICO NO ES UN RFC DE CLIENTE (auditoría prod, DAT-40) ─────
+  //
+  // XAXX010101000 ("público en general") y XEXX010101000 (extranjero) PASAN el
+  // dígito verificador, así que entraban como cualquier otro. Un CFDI a nombre
+  // del público en general NO LO PUEDE DEDUCIR NADIE: el cliente paga su
+  // mensualidad, recibe un papel válido ante el SAT y sin valor para su
+  // contabilidad — y lo descubre en la declaración, meses después. Además el
+  // SAT exige que ese RFC vaya con régimen 616 y uso S01, que no es nada de lo
+  // que este catálogo ofrece.
+  if (rfc === 'XAXX010101000' || rfc === 'XEXX010101000') {
+    throw new DatoInvalido(
+      'Ese es el RFC genérico (público en general). Un CFDI emitido a ese RFC no lo puede deducir nadie: pon el '
+      + 'RFC de tu empresa, tal como aparece en tu Constancia de Situación Fiscal.',
     );
   }
 
@@ -128,12 +159,18 @@ export function validarDatosFiscales(d: DatosFiscalesCapturados): FilaFiscalTena
     throw new DatoInvalido('Elige un uso de CFDI de la lista.');
   }
 
+  const email = (d.email ?? '').trim();
+  if (email && !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) {
+    throw new DatoInvalido(`El correo "${d.email}" no tiene forma de correo. Ahí es donde te va a llegar tu CFDI.`);
+  }
+
   return {
     rfc,
     razon_social: razonSocial,
     regimen_fiscal: d.regimenFiscal,
     codigo_postal_fiscal: cp,
     uso_cfdi: d.usoCfdi,
+    email_facturacion: email || null,
   };
 }
 
