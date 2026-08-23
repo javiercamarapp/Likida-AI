@@ -486,24 +486,26 @@ export interface EstadoRastreo {
  */
 export async function getEstadoRastreo(tenantId: string): Promise<EstadoRastreo> {
   const admin = supabaseAdmin();
-  const [creds, pos] = await Promise.all([
+  const [creds, rastreo] = await Promise.all([
+    // El catálogo de credenciales SÍ se trae: es una fila por proveedor
+    // (dos o tres), y de ella se pinta una lista, no un número.
     traerTodo<Record<string, unknown>>(
       (d, h) => acotada(admin.from('rastreo_credencial')
         .select('proveedor, token_ultimos4, activo, probada_en, ultimo_error')
         .eq('tenant_id', tenantId).order('proveedor').range(d, h), 'getEstadoRastreo.credencial'),
       'getEstadoRastreo.credencial',
     ),
-    traerTodo<{ unidad_id: unknown; medida_en: unknown }>(
-      (d, h) => acotada(admin.from('posicion').select('unidad_id, medida_en')
-        .eq('tenant_id', tenantId).order('id', { ascending: false }).range(d, h), 'getEstadoRastreo.posicion'),
-      'getEstadoRastreo.posicion',
-    ),
+    // ── ESC-11 · DOS ESCALARES NO SE CALCULAN TRAYENDO LA TABLA ──────────
+    //
+    // Esto era un `traerTodo` de `posicion` ENTERA de la flota para sacar
+    // `count(distinct unidad_id)` y `max(medida_en)`. `posicion` recibe una
+    // fila por ping por unidad en cuanto el rastreo esté conectado, y
+    // `traerTodo` LANZA a las 100,000 filas: esta pantalla habría sido la
+    // primera del panel en dejar de cargar. La purga a 90 días y el índice
+    // `(tenant_id, medida_en)` ya los puso la 0155; lo que faltaba era no
+    // traerse las filas. `estado_rastreo_tenant()` (0162) agrega en la base.
+    traerEstadoRastreoSql(tenantId),
   ]);
-
-  const unidades = new Set(pos.map((p) => p.unidad_id as string));
-  const ultima = pos.length
-    ? pos.map((p) => String(p.medida_en)).sort().at(-1) ?? null
-    : null;
 
   return {
     proveedores: creds.map((c) => ({
@@ -513,9 +515,36 @@ export async function getEstadoRastreo(tenantId: string): Promise<EstadoRastreo>
       probadaEn: (c.probada_en as string) ?? null,
       ultimoError: (c.ultimo_error as string) ?? null,
     })),
-    unidadesConPosicion: unidades.size,
-    ultimaPosicion: ultima,
+    unidadesConPosicion: rastreo.unidadesConPosicion,
+    ultimaPosicion: rastreo.ultimaPosicion,
   };
+}
+
+/**
+ * `estado_rastreo_tenant()` (mig. 0162) y **fallar cerrado**: el error POR
+ * VALOR primero, y luego la FORMA — si la migración no está aplicada, `data`
+ * llega como cualquier otra cosa y un `?? 0` pintaría "0 unidades con
+ * posición", que es exactamente la mentira que este panel no puede decir.
+ */
+async function traerEstadoRastreoSql(
+  tenantId: string,
+): Promise<{ unidadesConPosicion: number; ultimaPosicion: string | null }> {
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('estado_rastreo_tenant', { p_tenant: tenantId }),
+    'getEstadoRastreo.posicion',
+  );
+  if (error) throw new Error(`getEstadoRastreo.posicion: ${error.message}`);
+  const r = data as Record<string, unknown> | null;
+  if (!esObjeto(r) || !esNumero(r.unidadesConPosicion) || !esTextoONulo(r.ultimaPosicion)) {
+    // No se reutiliza `formaInesperada`: ése nombra la 0152, y este RPC es de
+    // la 0162 — un mensaje que manda a revisar la migración equivocada cuesta
+    // más que no tenerlo.
+    throw new Error(
+      'getEstadoRastreo: estado_rastreo_tenant devolvió otra forma (¿migración 0162 sin aplicar?): '
+      + 'unidadesConPosicion/ultimaPosicion',
+    );
+  }
+  return { unidadesConPosicion: r.unidadesConPosicion, ultimaPosicion: r.ultimaPosicion };
 }
 
 // ── Abrir un ticket — LA PUERTA de la señal de PMF #3 ──────────────────────
