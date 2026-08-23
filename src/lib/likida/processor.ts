@@ -1405,13 +1405,29 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // cualquiera cuente— hace que se pierda el aviso, no que se duplique.
           // Igual que con el acuse: perder uno es molesto, mandar tres es un
           // producto que se ve roto.
-          try {
-            const pendientes = await getCodigosPendientes(viajeId, op.tenantId);
-            if (pendientes.length <= 1) await say(pideOtroPapel);
-          } catch {
-            // Si no se puede contar, se avisa igual: es peor dejar al operador
-            // sin instrucción que repetírsela.
-            await say(pideOtroPapel);
+          //
+          // DAT-37 — EL `say()` NO PUEDE VIVIR DENTRO DEL `catch`. Aquí había
+          // un `await say(...)` como fallback del conteo, y esa es la forma de
+          // la que trata el hallazgo entero: una llamada de red en el camino de
+          // recuperación, sin nada que la atrape. Si `say` lanzaba (Meta 500,
+          // el registro del costo contra una base caída), el turno completo se
+          // caía DESPUÉS de haber guardado el código pendiente, el catch
+          // general soltaba el claim, y la bandeja durable reprocesaba el mismo
+          // mensaje: segunda fila en la bandeja de códigos. El índice de la
+          // 0164 ya impide la fila; esto impide el bucle que la provocaba.
+          //
+          // El criterio de fondo no cambia: si no se puede contar, se avisa
+          // igual —es peor dejar al operador sin instrucción que repetírsela—.
+          const primeroDelViaje = await getCodigosPendientes(viajeId, op.tenantId)
+            .then((p) => p.length <= 1)
+            .catch((e) => {
+              logger.warn('foto.codigos_no_contados', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+              return true;
+            });
+          if (primeroDelViaje) {
+            try { await say(pideOtroPapel); } catch (e) {
+              logger.warn('foto.codigo_aviso_falló', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+            }
           }
           return;
         }
@@ -1978,6 +1994,24 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             // `startsWith('15101') ? 'diesel' : 'factura'`, así que toda caseta
             // timbrada entraba como 'factura' y perdía el estímulo del 50% de peaje
             // (LIF 2026 Art. 20-A), que el motor sólo aplica a `concepto === 'caseta'`.
+            // ── DAT-37 · UN CFDI SIN TOTAL NO ES UN GASTO DE $0.00 ────────
+            //
+            // `monto: xml.total ?? 0` daba de alta un gasto de CERO PESOS con
+            // `xml_verificado: true`, que es la peor combinación posible: la
+            // marca de verificado es justo la que hace que el motor cuente sus
+            // litros y acredite su IVA/IEPS, y el renglón de $0.00 aparece en
+            // la liquidación del contralor como una cifra medida. `@Total` es
+            // obligatorio en CFDI 4.0, así que si no viene el archivo está
+            // roto o no es un CFDI — y de un papel roto no se afirma nada.
+            //
+            // El XML crudo SÍ se conserva (CFF 30, abajo): la evidencia no se
+            // tira; lo que no se hace es inventarle un importe.
+            if (xml.total == null || !(xml.total > 0)) {
+              logger.warn('xml.sin_total', { viaje: viajeId, uuid: xml.uuid });
+              await saveCfdiXmlRaw(op.tenantId, xml.uuid, null, xmlText!);
+              await sendText(msg.from, 'Recibí tu XML pero viene *sin el total* del comprobante 🤔, así que no lo puedo registrar como gasto — me saldría en $0.00. Guardé el archivo; mándame la foto del ticket para capturar el monto, o pídele a la gasolinera el XML completo. 📎');
+              return;
+            }
             gastoId = randomUUID();
             const cfg = await getConfig(op.tenantId);
             // AUDITORÍA 8, ALTO (agéntico): sin este try/catch, un XML sin foto
@@ -1988,7 +2022,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
               await addGasto(op.tenantId, viajeId, {
                 id: gastoId,
                 concepto: conceptoDesdeClave(xml.claveProdServ, cfg.hidrocarburos.claves, cfg.estimulos.clavesPeaje),
-                monto: xml.total ?? 0,
+                monto: xml.total,
                 fecha: xml.fecha,
                 rfcEmisor: xml.rfcEmisor,
                 rfcReceptor: xml.rfcReceptor,

@@ -657,6 +657,17 @@ export async function guardarCodigoPendiente(
     url_facturacion: c.urlFacturacion ?? null,
     cfdi_uuid: uuidCfdi(c.cfdiUuid),
   }), 'guardarCodigoPendiente');
+  // DAT-37: el MISMO acercamiento apuntado dos veces (el operador que lo manda
+  // de nuevo, o nuestro reproceso de la bandeja durable) chocaba contra nada —
+  // la 0016 no tenía ninguna unicidad— y dejaba una segunda fila que jamás se
+  // empareja: `pegarCodigoEnEspera` consume una sola. Con los índices de la
+  // 0164 el choque es benigno y significa "ese código ya está esperando", que
+  // es exactamente lo que el llamador quería conseguir. Lanzar aquí lo mandaría
+  // al catch de ERROR del processor por un camino que salió bien.
+  if (violaIndice(error, 'uq_codigo_pendiente_folio') || violaIndice(error, 'uq_codigo_pendiente_barras')) {
+    logger.info('codigo_pendiente.ya_estaba', { tenant: tenantId, viaje: viajeId });
+    return;
+  }
   if (error) throw new Error(`guardarCodigoPendiente: ${error.message}`);
 }
 
