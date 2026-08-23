@@ -216,7 +216,7 @@ function Reveal({ children, retraso = 0 }: { children: React.ReactNode; retraso?
   );
 }
 
-function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, plana }: {
+export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, plana }: {
   p: ProspectoMapa;
   /** Los textos largos de ESTE prospecto (FE-16): llegan por su cuenta, poco
    *  después de que la tarjeta se pinta. `undefined` = todavía en camino. */
