@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   plazaDe, giroDe, scoreUrgencia, scoreCierre, tamanoDe, completitudDe, COLOR_EMBUDO, CRITERIO_SCORES,
-  traerTodoEnParalelo,
+  traerTodoEnParalelo, empacar, desempacar, type ProspectoMapa,
 } from './prospectos-mapa';
 import { PAGINA, LecturaIncompleta } from '@/lib/likida/pg';
 
@@ -232,5 +232,45 @@ describe('traerTodoEnParalelo — el Cerebro no espera 33 vueltas de red en fila
     const filas = await traerTodoEnParalelo(async (d, h) =>
       ({ data: universo.slice(d, h + 1), error: null }), 'prueba');
     expect(filas).toEqual(universo);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FE-16 — LA FILA VIAJA EN TUPLA.
+//
+// Los nombres de los 22 campos son ~260 bytes por fila; con 33 mil filas eso
+// son 8.6 MB de payload que dicen veintidós veces "similitudIcpPct" y ni un
+// dato. En tupla ese costo es cero, y el precio es que un campo movido de
+// lugar pinta el teléfono en la columna del correo. Esta prueba es el
+// candado: si `empacar` y `desempacar` dejan de ser inversas, falla.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('empacar/desempacar — la fila compacta es reversible', () => {
+  const p: ProspectoMapa = {
+    id: 'a1', empresa: 'Fletes del Norte', ciudad: 'Escobedo', entidad: 'Nuevo León',
+    lat: 25.8, lng: -100.3, telefono: '8112345678', correo: 'dg@fletes.mx',
+    contacto: 'Ramón Treviño', vacante: 'Auxiliar de liquidaciones',
+    estado: 'negociacion', fuente: 'manual', giro: 'transportista',
+    urgencia: 85, cierre: 90, tamano: '51-100', completitud: 100,
+    ultimoToque: '2026-08-19T08:00:00.000Z', mensajesGeneradosEn: '2026-08-20T10:00:00.000Z',
+    numUnidades: 40, similitudIcpPct: 80, necesidadPct: 75,
+  };
+
+  it('ida y vuelta devuelve exactamente el mismo prospecto', () => {
+    expect(desempacar(empacar(p))).toEqual(p);
+  });
+
+  it('los nulos sobreviven como nulos (no se vuelven undefined ni cadena vacía)', () => {
+    const vacio: ProspectoMapa = {
+      ...p, ciudad: null, entidad: null, lat: null, lng: null, telefono: null,
+      correo: null, contacto: null, vacante: null, tamano: null,
+      ultimoToque: null, mensajesGeneradosEn: null, numUnidades: null,
+    };
+    expect(desempacar(empacar(vacio))).toEqual(vacio);
+  });
+
+  it('quitarle los nombres a la fila ahorra ~238 bytes — por 33 mil filas, 7.8 MB', () => {
+    const tupla = JSON.stringify(empacar(p)).length;
+    const objeto = JSON.stringify(p).length;
+    expect(objeto - tupla).toBeGreaterThan(230);
   });
 });
