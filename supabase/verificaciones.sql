@@ -6143,7 +6143,7 @@ end $$;
 --   (esperado 11/t/t/t/t y once `t`)
 do $$
 declare
-  ta uuid; tb uuid; oa1 uuid; oa2 uuid; ob uuid; va1 uuid; va2 uuid; va3 uuid; vb1 uuid; xa uuid;
+  ta uuid; tb uuid; oa1 uuid; oa2 uuid; ob uuid; va1 uuid; va2 uuid; va3 uuid; vb1 uuid; xa uuid; indice_impide_duplicado boolean;
   hoy_mx date := (now() at time zone 'America/Mexico_City')::date;
   ts_20 timestamptz := (hoy_mx::text || ' 20:00')::timestamp at time zone 'America/Mexico_City';
   n_funcs int; todas_invoker boolean; ninguna_anon boolean; ninguna_auth boolean; todas_svc boolean;
@@ -6162,20 +6162,49 @@ begin
   insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo, origen, destino)
     values (ta, oa2, 'ZZZ-0150-A3', 'liquidado', null, 300, 'Monterrey', null) returning id into va3;
 
+  -- 23-AGO-2026 · YA NO SE SIEMBRA UN CFDI DUPLICADO, PORQUE NO CABE.
+  -- La 0065 amplió `uq_gasto_cfdi_uuid` a (tenant, uuid, ORDEN) para admitir la
+  -- factura de CAPUFE —un CFDI que cubre varias casetas—, y con eso el mismo
+  -- (uuid, orden) en dos viajes de una flota pasó a ser IMPOSIBLE. Este bloque
+  -- llevaba desde entonces reventando en el INSERT sin llegar a su RAISE, o sea
+  -- sin verificar nada. Lo que se prueba ahora es la garantía que sí existe: que
+  -- el índice lo IMPIDE, que es más fuerte que detectarlo después. La rama
+  -- `cfdi_duplicado` del RPC se queda —sigue cubriendo datos anteriores a la
+  -- 0065 y el día que alguien toque el índice— pero ya no se le exige disparar.
   insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, folio, cfdi_uuid, cfdi_orden) values
     (ta, va1, 'diesel', 1500, hoy_mx - 3, 'D1', 'zzz-uuid-0150-a', 1),
-    (ta, va2, 'diesel',  800, hoy_mx - 1, 'D2', 'zzz-uuid-0150-a', 1),   -- mismo CFDI (minúsculas) en otro viaje
+    (ta, va2, 'diesel',  800, hoy_mx - 1, 'D2', 'zzz-uuid-0150-b', 1),   -- CFDI DISTINTO: el índice no deja repetir
     (ta, va1, 'caseta',  200, hoy_mx - 2, 'A-991', null, 1),
     (ta, va3, 'caseta',  200, hoy_mx - 2, 'A-991', null, 1),            -- mismo folio+concepto+monto, otro viaje
-    (ta, va1, null,       50, hoy_mx - 2, null, null, 1);              -- concepto NULL → 'otro'
+    -- `concepto` es NOT NULL desde la 0001 y su CHECK sólo admite el catálogo:
+    -- este bloque sembraba NULL y por eso reventaba en el INSERT sin llegar
+    -- NUNCA a su RAISE — o sea, llevaba desde que se escribió sin verificar
+    -- nada, en rojo, sin que nadie lo mirara. Se siembra 'otro' explícito, que
+    -- es lo que el `coalesce(concepto,'otro')` del RPC produce de todas formas.
+    (ta, va1, 'otro',     50, hoy_mx - 2, null, null, 1);
+
+  -- El índice hace imposible el duplicado que el RPC buscaría.
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, folio, cfdi_uuid, cfdi_orden)
+      values (ta, va3, 'diesel', 999, hoy_mx - 1, 'DX', 'zzz-uuid-0150-a', 1);
+    indice_impide_duplicado := false;   -- entró: el índice NO está protegiendo
+  exception when unique_violation then
+    indice_impide_duplicado := true;
+  end;
 
   insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia, estatus, diferencias, created_at)
-    values (ta, va1, 1500, 1500, -150, 'con_diferencias',
+    -- El CHECK `liquidacion_diferencia_cuadra` (posterior a este bloque) exige
+    -- diferencia = anticipo − comprobado; antes decía 1500/1500 con −150 y por
+    -- eso reventaba. Se mueve el ANTICIPO de la liquidación, no el comprobado:
+    -- `comprobadoTotal` (2200) y `anticipoTotal` (que sale de viaje.anticipo, no
+    -- de aquí) siguen siendo los mismos, así que el bloque mide lo que siempre
+    -- quiso medir.
+    values (ta, va1, 1500, 1650, 150, 'con_diferencias',
       '[{"tipo":"sobre_politica","monto":120},{"tipo":"duplicado","monto":-80},{"monto":0}]'::jsonb, ts_20);
   insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia, estatus, created_at)
     values (ta, va2, 700, 700, 0.005, 'cuadrada', ts_20);
 
-  insert into cfdi_xml (tenant_id, cfdi_uuid, xml) values (ta, 'ZZZ-CONS-0150-A', '<x/>') returning id into xa;
+  insert into cfdi_xml (tenant_id, cfdi_uuid, xml) values (ta, 'zzz-cons-0150-a', '<x/>') returning id into xa;
   insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, estatus) values
     (ta, xa, 1, 'ecc12', 10, 'conciliada'), (ta, xa, 2, 'ecc12', 20, 'por_conciliar'), (ta, xa, 3, 'ecc12', 30, 'sin_match');
 
@@ -6187,7 +6216,7 @@ begin
   insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, folio, cfdi_uuid, cfdi_orden)
     values (tb, vb1, 'diesel', 9999, hoy_mx - 2, 'A-991', 'zzz-uuid-0150-a', 1);  -- mismo uuid/folio, OTRA flota
   insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia, estatus, diferencias, created_at)
-    values (tb, vb1, 8888, 8888, 50, 'revisar', '[{"tipo":"duplicado","monto":50}]'::jsonb, ts_20);
+    values (tb, vb1, 8888, 8938, 50, 'revisar', '[{"tipo":"duplicado","monto":50}]'::jsonb, ts_20);
 
   -- ── 1. Catálogo ──────────────────────────────────────────────────────
   select count(*),
@@ -6204,13 +6233,14 @@ begin
                        'liquidaciones_por_dia_tenant', 'conciliacion_consolidado_tenant');
 
   -- ── 2+3. Anomalías: 1 cfdi (va1, va2) + 1 folio (va1, va3); B no entra ─
+  -- Queda UNA anomalía: la de folio. El duplicado de CFDI ya no puede existir
+  -- (lo impide el índice, probado arriba), y `folio_duplicado` sí — un ticket
+  -- sin UUID no tiene índice que lo detenga, y por eso el RPC hace falta.
   j := anomalias_gasto_tenant(ta);
-  ok_anom := jsonb_array_length(j) = 2
-    and j->0->>'tipo' = 'cfdi_duplicado' and (j->0->>'monto')::numeric = 1500
-    and j->0->>'detalle' = 'CFDI zzz-uuid… liquidado en 2 viajes'
+  ok_anom := jsonb_array_length(j) = 1
+    and j->0->>'tipo' = 'folio_duplicado' and (j->0->>'monto')::numeric = 200
+    and j->0->>'detalle' = 'Folio A-991 (caseta) liquidado en 2 viajes'
     and jsonb_array_length(j->0->'viajes') = 2
-    and j->1->>'tipo' = 'folio_duplicado' and (j->1->>'monto')::numeric = 200
-    and j->1->>'detalle' = 'Folio A-991 (caseta) liquidado en 2 viajes'
     and jsonb_array_length(anomalias_gasto_tenant(tb)) = 0;
 
   -- ── Gasto semanal (ventana de 7 días): suma por concepto = 2300/400/50 ─
@@ -6283,9 +6313,10 @@ begin
 
   delete from tenant where id in (ta, tb);
 
-  raise exception E'AGREGADOS_0150  funcs=%  invoker=%  ninguna_anon=%  ninguna_auth=%  todas_svc=%  anomalias_ok=%  semanal_ok=%  rutas_ok=%  concepto_ok=%  stats_ok=%  liquidado_ok=%  meses_ok=%  detalle_ok=%  dinero_ok=%  dias_ok=%  consolidado_ok=%   (esperado 11/t/t/t/t y once t)',
+  raise exception E'AGREGADOS_0150  funcs=%  invoker=%  ninguna_anon=%  ninguna_auth=%  todas_svc=%  anomalias_ok=%  semanal_ok=%  rutas_ok=%  concepto_ok=%  stats_ok=%  liquidado_ok=%  meses_ok=%  detalle_ok=%  dinero_ok=%  dias_ok=%  consolidado_ok=%  indice_impide_duplicado=%   (esperado 11/t/t/t/t y doce t)',
     n_funcs, todas_invoker, ninguna_anon, ninguna_auth, todas_svc,
-    ok_anom, ok_sem, ok_rutas, ok_conc, ok_stats, ok_liq, ok_meses, ok_det, ok_dinero, ok_dias, ok_cons;
+    ok_anom, ok_sem, ok_rutas, ok_conc, ok_stats, ok_liq, ok_meses, ok_det, ok_dinero, ok_dias, ok_cons,
+    indice_impide_duplicado;
 end $$;
 
 -- ── 124. Los 7 agregados de la 0152: existen, INVOKER, aislados y cuadran ───
@@ -7049,7 +7080,7 @@ end $$;
 --
 -- Esperado:
 --   PMF_STORAGE_0162  pmf_una=t  pmf_todas=t  pmf_sin_mezcla=t  demo_no_cuenta=t
---                     rastreo_n=2  rastreo_max=t  p95=19  consumo=t  storage_borrados=4
+--                     rastreo_n=2  rastreo_max=t  p95=19  consumo=t  storage_marcados=4
 --                     viva=t  reciente=t  sin_viaje=t  espera=t  historico=t
 --                     informe_vivo=t  anon=f
 do $$
@@ -7162,8 +7193,15 @@ begin
   insert into liquidacion_historico (liquidacion_id, tenant_id, viaje_id, pdf_url)
     values (gen_random_uuid(), v_t, v_vf, v_t::text || '/' || v_vf::text || '.pdf');
 
+  -- 23-AGO-2026 · SE LEE `marcados`, NO `borrados`. La 0165 cambió el contrato
+  -- a propósito: Supabase prohíbe `delete from storage.objects` con un trigger,
+  -- así que esta función dejó de BORRAR y pasó a MARCAR candidatos —devuelve
+  -- `borrados: 0` fijo—. Este bloque es de la 0162 y seguía exigiendo 4
+  -- borrados, así que llevaba desde entonces en rojo midiendo un contrato que
+  -- ya no existe. El borrado real ocurre fuera de SQL, por la API, en
+  -- `storage_borrado.ts` (que tiene sus propias pruebas).
   res := public.limpiar_storage_huerfano(7, 100000, now(), clock_timestamp() + interval '120 seconds');
-  storage_borrados := (res->>'borrados')::bigint;
+  storage_borrados := (res->>'marcados')::bigint;
 
   select exists (select 1 from storage.objects where name = v_t::text || '/' || v_v::text || '/viva.jpg')
     into queda_viva;
@@ -7186,7 +7224,7 @@ begin
       or has_function_privilege('anon', 'public.limpiar_storage_huerfano(integer, integer, timestamptz, timestamptz)', 'EXECUTE')
     into anon_ok;
 
-  raise exception E'PMF_STORAGE_0162  pmf_una=%  pmf_todas=%  pmf_sin_mezcla=%  demo_no_cuenta=%  rastreo_n=%  rastreo_max=%  p95=%  consumo=%  storage_borrados=%  viva=%  reciente=%  sin_viaje=%  espera=%  historico=%  informe_vivo=%  anon=%   (esperado t / t / t / t / 2 / t / 19 / t / 4 / t / t / t / t / t / t / f)',
+  raise exception E'PMF_STORAGE_0162  pmf_una=%  pmf_todas=%  pmf_sin_mezcla=%  demo_no_cuenta=%  rastreo_n=%  rastreo_max=%  p95=%  consumo=%  storage_marcados=%  viva=%  reciente=%  sin_viaje=%  espera=%  historico=%  informe_vivo=%  anon=%   (esperado t / t / t / t / 2 / t / 19 / t / 4 / t / t / t / t / t / t / f)',
     pmf_una, pmf_todas, pmf_sin_mezcla, demo_no_cuenta, rastreo_n, rastreo_max,
     p95, consumo_ok, storage_borrados,
     queda_viva, queda_reciente, queda_sin_viaje, queda_espera, queda_historico, queda_informe_vivo,
@@ -7555,8 +7593,27 @@ begin
      where p.proname = 'limpiar_storage_huerfano'
        and pg_get_functiondef(p.oid) ~ 'delete\s+from\s+storage\.objects');
 
+  -- 23-AGO-2026 · SE CORRIGE LO QUE MIDE. Antes preguntaba por el GRANT de
+  -- SELECT a `anon`, y eso en Supabase es SIEMPRE verdadero: el proyecto
+  -- concede `select` a `anon`/`authenticated` sobre todo `public` por defecto
+  -- —se comprobó contra producción: las 80 tablas lo tienen— y la puerta real
+  -- la cierra RLS. Preguntar por el grant hacía que este bloque reprobara para
+  -- siempre por algo que no depende del repo, y un bloque que no puede pasar es
+  -- un bloque que se acaba ignorando.
+  --
+  -- Lo que SÍ hay que exigir: que la tabla tenga RLS y que NINGUNA política le
+  -- abra la puerta a `anon`. Con RLS activa y cero políticas, nadie lee — que
+  -- es exactamente el estado de `storage_huerfano_candidato`: es una cola
+  -- interna del mantenimiento, no un dato de nadie.
   anon_ok := has_function_privilege('anon', 'public.mantenimiento_de_datos(integer, timestamptz)', 'EXECUTE')
-          or has_table_privilege('anon', 'public.storage_huerfano_candidato', 'SELECT');
+          or not exists (
+               select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                where n.nspname = 'public' and c.relname = 'storage_huerfano_candidato'
+                  and c.relrowsecurity)
+          or exists (
+               select 1 from pg_policies p
+                where p.schemaname = 'public' and p.tablename = 'storage_huerfano_candidato'
+                  and ('anon' = any(p.roles) or 'public' = any(p.roles)));
 
   raise exception E'MANTENIMIENTO_0165  sobrevive=%  nombra_fallo=%  candidatos=%  no_borra_storage=%  anon=%   (esperado t / t / t / t / f)',
     sobrevive, nombra_fallo, candidatos_ok, no_borra, anon_ok;
@@ -8083,4 +8140,60 @@ begin
   raise exception E'ARCO_0173  ok=%  seudonimo=%  tel_fuera=%  wa_fuera=%  foto_en_cola=%  gasto_vive=%  cfdi_vive=%  evidencia=%  cerrada=%  otra_flota_rebota=%  acceso_rebota=%   (esperado t / t / t / 0 / 1 / 1 / t / t / t / t / t)',
     ok, seudonimo_ok, tel_fuera, wa_quedan, foto_en_cola, gasto_vive, cfdi_vive,
     evidencia_ok, cerrada, otra_flota_rebota, acceso_rebota;
+end $$;
+
+-- ── 145. Un centavo de redondeo no es una diferencia del operador (mig. 0174) ──
+--
+-- `stats_operador_tenant` (0150) declara en su propio comentario que «centavos
+-- de redondeo no son una conversación», y filtraba con `abs(diferencia) >= 0.01`.
+-- Ese umbral no excluía NADA: `liquidacion.diferencia` es `numeric(12,2)`, así
+-- que cualquier valor distinto de cero ya vale ≥ 0.01 — medio centavo se
+-- redondea a un centavo AL GUARDARSE y cruzaba el filtro. Un operador cuya
+-- liquidación cuadró salvo por el IVA aparecía con una diferencia a su nombre.
+--
+-- La 0174 sube el umbral a `> 0.01`: más de un centavo. Este bloque prueba las
+-- dos orillas — que el centavo NO cuente y que dos centavos SÍ.
+--
+-- Esperado: REDONDEO_0174  columna_2dec=t  centavo_no_cuenta=0  dos_centavos_cuentan=1
+--                          real_cuenta=1  invoker=t  anon=f
+do $$
+declare
+  ta uuid; o1 uuid; o2 uuid; o3 uuid; v1 uuid; v2 uuid; v3 uuid;
+  j jsonb;
+  columna_2dec boolean; centavo int; dos_centavos int; real_cuenta int;
+  invoker boolean; anon_ok boolean;
+begin
+  select numeric_scale = 2 into columna_2dec
+    from information_schema.columns
+   where table_name = 'liquidacion' and column_name = 'diferencia';
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0174') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta,'UnCentavo','+520000017401') returning id into o1;
+  insert into operador (tenant_id, nombre, telefono) values (ta,'DosCentavos','+520000017402') returning id into o2;
+  insert into operador (tenant_id, nombre, telefono) values (ta,'Real','+520000017403') returning id into o3;
+  insert into viaje (tenant_id, operador_id) values (ta,o1) returning id into v1;
+  insert into viaje (tenant_id, operador_id) values (ta,o2) returning id into v2;
+  insert into viaje (tenant_id, operador_id) values (ta,o3) returning id into v3;
+
+  -- Los tres necesitan un gasto de diésel para aparecer en el agregado.
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha)
+    values (ta,v1,'diesel',100,current_date), (ta,v2,'diesel',100,current_date), (ta,v3,'diesel',100,current_date);
+
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia, estatus) values
+    (ta, v1, 1000, 1000.01,   0.01, 'cuadrada'),          -- redondeo: NO cuenta
+    (ta, v2, 1000, 1000.02,   0.02, 'con_diferencias'),   -- dos centavos: SÍ
+    (ta, v3, 1000, 1150,    150,    'con_diferencias');   -- diferencia real
+
+  j := stats_operador_tenant(ta);
+  select (x->>'diferencias')::int into centavo      from jsonb_array_elements(j) x where x->>'nombre' = 'UnCentavo';
+  select (x->>'diferencias')::int into dos_centavos from jsonb_array_elements(j) x where x->>'nombre' = 'DosCentavos';
+  select (x->>'diferencias')::int into real_cuenta  from jsonb_array_elements(j) x where x->>'nombre' = 'Real';
+
+  select p.prosecdef = false into invoker
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'stats_operador_tenant';
+  anon_ok := has_function_privilege('anon', 'public.stats_operador_tenant(uuid)', 'EXECUTE');
+
+  raise exception E'REDONDEO_0174  columna_2dec=%  centavo_no_cuenta=%  dos_centavos_cuentan=%  real_cuenta=%  invoker=%  anon=%   (esperado t / 0 / 1 / 1 / t / f)',
+    columna_2dec, centavo, dos_centavos, real_cuenta, invoker, anon_ok;
 end $$;
