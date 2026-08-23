@@ -110,6 +110,7 @@ const EXENTAS: Record<string, string> = {
 
   '0118': 'tabla `prospecto_contacto` con FKs y CHECKs de dominio que rebotan RUIDOSO (23514/23503, no corrupción silenciosa) y deny-all idéntico al de sus hermanas 0116/0117, cuyo patrón ya verifican los bloques 91-92. La garantía de USO (la cadencia no se duplica: consultar el historial antes de contactar) es de código, y se prueba en TS (cola.test.ts: marcarEnviada registra el contacto).',
   '0168': 'columnas nullable `litros`/`clave_prod_serv` en `cfdi_consolidado_linea` (Fase 1 de docs/asistencia/PLAN-FASES.md — los litros del ECC12 que se leían y se tiraban al persistir). Aditivas, sin CHECK ni garantía de unicidad/atomicidad que solo la base pueda demostrar: si faltan, el `upsert` de consolidado.ts falla ruidoso (columna inexistente), no corrompe en silencio. La decisión de qué línea es diésel y qué clave le corresponde (`claveProdServDeLinea`, concepto_base nativo vs ecc12 TipoCombustible="Diesel"→15101505) y su propagación a `gasto.ocr_extra.litros`/`gasto.clave_prod_serv` (`ligarLineaAGasto`) se prueban en TS contra un ECC12 real (cfdi_xml.test.ts, consolidado.test.ts — describe "FASE 1").',
+  '0172': 'recrea el CHECK `tenant_regimen_fiscal_dominio` con 624 Coordinados (c_RegimenFiscal, RFA 2.9). Que basura sigue rechazada lo prueba el patrón de CHECKs ya verificado; que 624 se acepta se prueba en TS (`fiscal.test.ts`: REGIMENES incluye 624 y guardarDatosFiscales lo persiste). Sin unicidad/atomicidad nueva. 0170/0171 ya estaban en master.',
 };
 
 const migraciones = readdirSync(DIR)

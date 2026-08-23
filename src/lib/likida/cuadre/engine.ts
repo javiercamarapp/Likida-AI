@@ -16,6 +16,7 @@ import { esRfcValido, rfcChecksumOk } from '../intake/cfdi';
 import { calcularCaducidad } from '../facturacion/caducidad';
 import { identificarComercio } from '../facturacion/identificar';
 import { NORMAS } from '../normas/indice';
+import { evidenciaMonedero, notaTicketMonedero, type LineaEccRef } from '../intake/evidencia_monedero';
 import type { Gasto, Diferencia, Liquidacion, EstatusLiquidacion, TipoDiferencia } from '@/types/likida';
 // `formato.ts` no importa NADA: el motor sigue siendo puro y sin I/O.
 import { mxn, round2 } from '@/lib/formato';
@@ -96,6 +97,10 @@ export interface CuadreInput {
   /** Combustible pagado en efectivo de la flota en el ejercicio ANTES de esta
    *  liquidación — el contador ya corrido. El motor suma el de ESTE viaje. */
   efectivoPrevEjercicio?: number;
+  /** FASE 2: líneas del complemento ECC ya persistidas (inyectadas por
+   *  `desde_db`). Sin ellas el camino B de `evidenciaMonedero` no afirma.
+   *  Puro: el motor no lee la base. */
+  lineasEcc?: LineaEccRef[];
   /** El año del ejercicio fiscal de esta liquidación (el de los comprobantes,
    *  no el del proceso). Un gasto de otro año no corre contra este contador. */
   anioEjercicio?: string;
@@ -229,7 +234,7 @@ export const LECTURA_RFA_29_PRORRATEO =
   'del ejercicio — confírmela con su contador.';
 
 export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
-export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'consumo_bar'];
+export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'consumo_bar', 'ticket_monedero'];
 
 /**
  * LA ÚNICA definición de en qué cubeta cae un gasto. Vive aquí, exportada, para
@@ -436,6 +441,21 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     }
     const h = input.hidrocarburos;
     const esCombustible = g.concepto === 'diesel' || (!!h && h.claves.includes(g.claveProdServ ?? ''));
+
+    // FASE 2 · RMF 3.3.1.7 — ticket de monedero no es factura de estación.
+    // Solo con evidencia (padrón o línea ECC día/estación/monto). Sin
+    // evidencia no se afirma: un diésel de PEMEX en efectivo sigue siendo
+    // un ticket que SÍ puede facturarse. Sin UUID: si ya está ligado al
+    // CFDI del emisor, el comprobante deducible ya llegó.
+    if (esCombustible && !g.cfdiUuid) {
+      const senal = evidenciaMonedero(g, input.lineasEcc);
+      if (senal.tipo !== 'ninguna') {
+        diferencias.push({
+          tipo: 'ticket_monedero', concepto: g.concepto, monto: g.monto,
+          nota: notaTicketMonedero(senal), gastoId: g.id,
+        });
+      }
+    }
 
     // ── REGLA 5 · RFA 2026 regla 2.9 — el 15% de combustible en EFECTIVO ─────
     //
@@ -1347,7 +1367,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // central del demo. El requisito sigue avisado —ahora con tono `condicionado`
   // en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
   // no puede bajar un estatus que nunca podría volver a subir.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'consumo_bar', 'oposicion_titular'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'consumo_bar', 'ticket_monedero', 'oposicion_titular'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';

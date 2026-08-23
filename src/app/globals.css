@@ -294,6 +294,9 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .likida-respira { animation: none; opacity: 0.6; }
 }
+/* El PNG del glifo es negro. En consola oscura hay que invertirlo para que
+   se vea; en claro se queda negro. */
+:root[data-theme="dark"] .logo-icono-negro { filter: invert(1); }
 
 /* ── Voces tipográficas (12-ago-2026) ────────
    Tres voces, cada una con su papel — pedido explícito: "tipografía más

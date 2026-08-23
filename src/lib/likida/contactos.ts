@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { variantesTelefono } from './conv';
 import { acotada } from './presupuesto';
+import { ordenAvisoDeclarado, type RolAviso } from './perfil/preguntas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // QUIÉN ES EL NÚMERO QUE ESCRIBE — Y A QUÉ NÚMERO SE LE ESCRIBE.
@@ -94,7 +95,10 @@ export async function resolverCuentaOficina(telefono: string): Promise<CuentaOfi
  * flota_admin es el dueño — avisarle a él de cada ticket por vencer lo entrena
  * a ignorar el canal. El contador no está: no despacha.
  */
-const ORDEN_AVISO: RolOficina[] = ['encargado', 'flota_admin'];
+/** Default de operación — el encargado primero. Paso 6: si el perfil
+ *  declaró otro orden, `telefonosJefe` lo usa; esto queda como fallback. */
+export const ORDEN_AVISO: RolOficina[] = ['encargado', 'flota_admin'];
+const ROLES_OFICINA_CONSULTA: RolOficina[] = ['encargado', 'flota_admin', 'contador'];
 
 /** E.164 sin `+`. `null` si esa flota no tiene a quién escribirle. */
 export async function telefonoJefeDe(tenantId: string): Promise<string | null> {
@@ -155,20 +159,45 @@ export async function telefonosJefe(tenantIds: string[]): Promise<Record<string,
     .from('app_user')
     .select('tenant_id, rol, telefono')
     .in('tenant_id', ids)
-    .in('rol', ORDEN_AVISO)
+    .in('rol', ROLES_OFICINA_CONSULTA)
     .not('telefono', 'is', null), 'telefonosJefe');
 
   if (error) throw new Error(`telefonosJefe: ${error.message}`);
 
+  const ordenPorTenant = await ordenesAvisoDe(ids);
+
   const mapa: Record<string, string> = {};
   // Se recorre en el orden de preferencia, no en el que devolvió la base: sin
   // esto, qué persona recibe el aviso dependería del orden de inserción.
-  for (const rol of ORDEN_AVISO) {
-    for (const u of data ?? []) {
-      const t = u.tenant_id as string | null;
-      const tel = u.telefono as string | null;
-      if (t && tel && u.rol === rol && !mapa[t]) mapa[t] = tel;
+  for (const tenantId of ids) {
+    const orden = ordenPorTenant[tenantId] ?? ORDEN_AVISO;
+    for (const rol of orden) {
+      const u = (data ?? []).find((f) => f.tenant_id === tenantId && f.rol === rol && f.telefono);
+      if (u) { mapa[tenantId] = u.telefono as string; break; }
     }
   }
   return mapa;
+}
+
+/** Perfil por flota. Best-effort: si no se puede leer, cada flota cae al
+ *  default. Un fallo aquí no puede silenciar un aviso de operación. */
+async function ordenesAvisoDe(ids: string[]): Promise<Record<string, RolAviso[]>> {
+  try {
+    const { data, error } = await acotada(
+      supabaseAdmin().from('tenant').select('id, perfil').in('id', ids),
+      'telefonosJefe.perfil',
+    );
+    if (error || !data) return {};
+    const out: Record<string, RolAviso[]> = {};
+    for (const t of data as Array<{ id: unknown; perfil: unknown }>) {
+      const id = typeof t.id === 'string' ? t.id : null;
+      if (!id) continue;
+      const orden = ordenAvisoDeclarado(t.perfil);
+      if (orden) out[id] = orden;
+    }
+    return out;
+  } catch (e) {
+    logger.warn('contactos.orden_aviso_perfil', { err: e instanceof Error ? e.message : String(e) });
+    return {};
+  }
 }

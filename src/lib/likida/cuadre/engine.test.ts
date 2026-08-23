@@ -1357,6 +1357,50 @@ describe('cubetaDe — la clasificación no depende de la política del tenant',
   });
 });
 
+describe('ticket_monedero — FASE 2 / RMF 3.3.1.7', () => {
+  const diesel = (over: Partial<Gasto> = {}): Gasto => ({
+    id: 'g-d', concepto: 'diesel', monto: 5000, fecha: '2026-07-20', ...over,
+  } as Gasto);
+
+  it('RFC de emisor en la semilla → diferencia ticket_monedero, cubeta por_confirmar', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v', anticipo: 5000, gastos: [diesel({ rfcEmisor: 'ASE930924SS7' })],
+      politica: [{ concepto: 'diesel' }],
+    });
+    const d = r.diferencias.find((x) => x.tipo === 'ticket_monedero');
+    expect(d).toBeTruthy();
+    expect(d?.nota).toMatch(/RMF 3\.3\.1\.7/);
+    expect(cubetaDe(diesel({ rfcEmisor: 'ASE930924SS7' }), r.diferencias.filter((x) => x.gastoId === 'g-d'))).toBe('por_confirmar');
+    expect(r.totalPorConfirmar).toBe(5000);
+  });
+
+  it('línea ECC mismo día/estación/monto, sin padrón → también ticket_monedero', () => {
+    const g = diesel({ rfcEmisor: 'EST010101AAA' });
+    const r = cuadrarViaje({
+      viajeId: 'v', anticipo: 5000, gastos: [g], politica: [{ concepto: 'diesel' }],
+      lineasEcc: [{ fecha: '2026-07-20', monto: 5000, estacionRfc: 'EST010101AAA' }],
+    });
+    expect(r.diferencias.some((x) => x.tipo === 'ticket_monedero')).toBe(true);
+  });
+
+  it('ticket de estación (PEMEX) sin ECC → NO se afirma monedero', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v', anticipo: 5000, gastos: [diesel({ rfcEmisor: 'PEM050101XXX' })],
+      politica: [{ concepto: 'diesel' }],
+    });
+    expect(r.diferencias.some((x) => x.tipo === 'ticket_monedero')).toBe(false);
+  });
+
+  it('si ya está ligado al CFDI del emisor, no se emite ticket_monedero', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v', anticipo: 5000,
+      gastos: [diesel({ rfcEmisor: 'ASE930924SS7', cfdiUuid: 'uuid-ecc' })],
+      politica: [{ concepto: 'diesel' }],
+    });
+    expect(r.diferencias.some((x) => x.tipo === 'ticket_monedero')).toBe(false);
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // UNA FECHA DE OTRO EJERCICIO ES SOSPECHOSA POR SÍ SOLA.
 //

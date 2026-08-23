@@ -64,6 +64,9 @@ export const NORMA_POR_DIFERENCIA: Partial<Record<TipoDiferencia, string[]>> = {
   permiso_cre_no_verificable: ['lisr-27-fr-III', 'rfa-2026-2.9'],
   // AUDITORÍA 18, M5: "en ningún caso los consumos en bares serán deducibles".
   consumo_bar: ['lisr-28-fr-XX'],
+  // FASE 2: el ticket de la bomba no es el CFDI de la estación — ella tiene
+  // prohibido expedirlo. El comprobante es el del emisor del monedero.
+  ticket_monedero: ['rmf-2026-3.3.1.7'],
 };
 
 /**

@@ -1,0 +1,48 @@
+id: rmf-2026-3.3.1.7
+tipo: regla_general
+jerarquia: 3
+instrumento: "Resolución Miscelánea Fiscal para 2026"
+articulo_o_regla: "3.3.1.7"
+titulo: "Comprobación de combustibles adquiridos con monedero electrónico autorizado — la estación no emite CFDI al adquirente"
+citas_en_codigo: ["RMF 3.3.1.7"]
+texto_vigente: >
+  …las personas físicas y morales que adquieran combustibles… a través de los
+  monederos electrónicos que al efecto autorice el SAT, podrán comprobar la
+  erogación de las comisiones y otros cargos que cobre el emisor del monedero
+  electrónico por sus servicios, así como el pago por la adquisición de
+  combustibles, con el CFDI y el "Complemento de Estado de Cuenta de Combustibles
+  para Monederos Electrónicos Autorizados por el SAT", respectivamente, que
+  expidan los emisores autorizados en términos de la regla 3.3.1.10., fracción
+  III, por lo que las estaciones de servicio no deberán emitir el CFDI a los
+  clientes adquirentes de combustibles, por las operaciones que se realicen a
+  través de monederos electrónicos autorizados por el SAT.
+
+  La deducción por la adquisición de combustibles, así como el acreditamiento de
+  los impuestos trasladados podrá realizarse hasta que el contribuyente
+  adquirente del combustible, cuente con el CFDI y el complemento a que se
+  refiere el párrafo anterior y hasta por el monto que ampare el citado
+  complemento.
+fecha_publicacion: 2025-12-28
+fecha_vigencia_desde: 2026-01-01
+fuente_url: "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rmf/rmf/RMF_2026-DOF-28122025.pdf"
+fuente_tipo: sat_oficial
+estado_verificacion: evidencia_corroborante
+nota_verificacion: >
+  Texto transcrito de docs/conocimiento/09-liquidacion.md ("texto literal" de la
+  RMF 2026, regla 3.3.1.7), verificado allí contra el PDF del SAT
+  (DOF 28-dic-2025). Esta ficha no re-descargó el PDF en la sesión que la creó
+  (23-ago-2026): por eso el estado es evidencia_corroborante, no
+  verificado_fuente_primaria. La Primera Resolución de Modificaciones
+  (DOF 09-jul-2026) no tocó esta regla (09-liquidacion.md:41).
+cambio_de_numero: false
+por_que_importa_al_producto: >
+  El ticket fotografiado en la bomba de una carga pagada con monedero NO es el
+  comprobante deducible: la gasolinera tiene prohibido facturarlo. El motor no
+  puede tratarlo como "todavía puede llegar su factura de estación". El
+  comprobante es el CFDI del emisor del monedero con el complemento ECC.
+verificado_por: "09-liquidacion.md (consultado 27-jul-2026); ficha creada 23-ago-2026"
+verificado_el: 2026-07-27
+usado_en_codigo:
+  - "intake/evidencia_monedero.ts — decide si un gasto es evidencia operativa de monedero"
+  - "cuadre/engine.ts — emite ticket_monedero; cubetaDe lo manda a por_confirmar"
+  - "normas/por_diferencia.ts — fundamento de ticket_monedero"
