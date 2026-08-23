@@ -16,10 +16,10 @@
 // ECC del mismo día/estación/monto (ver `consolidado.ts`).
 //
 // Cableado el 23-ago-2026 vía `evidencia_monedero.ts` → `engine.ts`.
-// Los tickets de bomba del Escritorio imprimen RFC DE ESTACIÓN (PEMEX,
-// ARCO), no el del emisor: el camino A (esta función) casi no pega contra
-// ellos. El camino B es la línea ECC del mismo día/estación/monto. Un
-// `false` de aquí sigue sin significar "no es monedero".
+// Los tickets de bomba imprimen RFC DE ESTACIÓN (PEMEX, ARCO), no el del
+// emisor: el camino A (esta función) casi no pega contra ellos. El camino B
+// es la línea ECC del mismo día/estación/monto. Un `false` de aquí sigue
+// sin significar "no es monedero".
 // ═══════════════════════════════════════════════════════════════════════════
 
 import padron from './padron_monederos.json';

@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { AlertTriangle, Check } from 'lucide-react';
 import { StatusPill, type Estado } from '@/app/admin/ui/kit';
 import { mxn, fechaHoraMx } from '@/lib/formato';
+// Las cubetas del motor, importadas — nunca copiadas. Ver `TIPOS_MALOS` abajo.
+import { NO_DEDUCIBLE_ISR, POR_CONFIRMAR } from '@/lib/likida/cuadre/engine';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS PIEZAS DEL DETALLE DE LIQUIDACIÓN v2 (22-ago-2026).
@@ -149,27 +151,53 @@ export function etiquetaFormaPago(clave?: string): string {
 
 export type EstadoRenglon = { estado: Estado; etiqueta: string; validado?: boolean };
 
-/** Tipos que el motor marca como NO deducibles de plano. */
-const TIPOS_MALOS = new Set([
-  'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'comprobante_no_fiscal',
-  'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_no_elegible',
-  'complemento_hidrocarburos', 'duplicado', 'monto_invalido',
-]);
+/**
+ * Los tipos que el motor declara NO deducibles. **No es una lista de aquí.**
+ *
+ * AUDITORÍA 18-c3, ARQ-C3-1 (CRÍTICO). `engine.ts` dice sobre `cubetaDe` que es
+ * «LA ÚNICA definición de en qué cubeta cae un gasto … vive aquí, exportada,
+ * para que nadie la reconstruya», y cuenta el bug que costó cuando `pdf.ts` la
+ * reconstruyó. Este archivo lo hizo otra vez: tenía un `Set` a mano que no
+ * coincidía con ninguna de las dos listas del motor. Le faltaba `rfc_receptor`
+ * (una factura al RFC del operador salía «Por revisar» en la tabla y «No
+ * deducible» doce centímetros arriba) y le sobraba `combustible_efectivo`, que
+ * el motor pone en POR CONFIRMAR porque es deducible hasta el 15% de la RFA
+ * 2.9 — el mismo error que `engine.ts` documenta haber corregido una vez.
+ *
+ * Se importa la constante del motor a propósito: una copia vuelve a divergir.
+ */
+const TIPOS_MALOS = new Set<string>(NO_DEDUCIBLE_ISR);
+/** El tercer estado del motor: no es pérdida, es que todavía no se puede afirmar. */
+const TIPOS_POR_CONFIRMAR = new Set<string>(POR_CONFIRMAR);
+/**
+ * Problemas del COMPROBANTE, no veredictos de deducibilidad. El motor no los
+ * pone en ninguna de sus dos cubetas, así que la tabla tampoco puede afirmar
+ * «No deducible» sobre ellos: se nombran por lo que son.
+ */
+const ETIQUETA_CAPTURA: Record<string, string> = {
+  duplicado: 'Duplicado',
+  monto_invalido: 'Monto inválido',
+  comprobante_no_fiscal: 'No es comprobante fiscal',
+};
 /** Tipos que son "sobre tope": política o tope fiscal. */
 export const TIPOS_TOPE = new Set(['sobre_politica', 'viatico_excede_fiscal', 'efectivo_sobre_15', 'efectivo_sobre_tope']);
 
 /**
  * El estado de UN renglón, a partir de las diferencias que el motor le
  * colgó (por `gastoId`) y de lo que el SAT dijo del CFDI. El orden es el de
- * gravedad: no deducible › sin CFDI › sobre tope › por revisar › validado.
+ * gravedad: no deducible › captura › sin CFDI › sobre tope › por confirmar ›
+ * por revisar › validado.
  */
 export function estadoRenglon(
   g: { cfdiUuid?: string; estadoSat?: string; cfdiValido?: boolean },
   tipos: string[],
 ): EstadoRenglon {
   if (tipos.some((t) => TIPOS_MALOS.has(t))) return { estado: 'bad', etiqueta: 'No deducible' };
+  const captura = tipos.find((t) => t in ETIQUETA_CAPTURA);
+  if (captura) return { estado: 'warn', etiqueta: ETIQUETA_CAPTURA[captura] };
   if (tipos.includes('sin_cfdi')) return { estado: 'warn', etiqueta: 'Sin CFDI' };
   if (tipos.some((t) => TIPOS_TOPE.has(t))) return { estado: 'warn', etiqueta: 'Sobre tope' };
+  if (tipos.some((t) => TIPOS_POR_CONFIRMAR.has(t))) return { estado: 'warn', etiqueta: 'Por confirmar' };
   if (tipos.length > 0) return { estado: 'warn', etiqueta: 'Por revisar' };
   if (g.estadoSat === 'vigente') return { estado: 'ok', etiqueta: 'CFDI vigente', validado: true };
   if (g.cfdiValido) return { estado: 'ok', etiqueta: 'CFDI validado', validado: true };

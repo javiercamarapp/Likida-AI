@@ -4,13 +4,6 @@
 import type { AgentConfig, AgentName } from './types';
 
 export const AGENT_REGISTRY: Record<AgentName, AgentConfig> = {
-  orchestrator: {
-    name: 'orchestrator',
-    role: 'router',
-    description: 'Clasifica el mensaje entrante y decide si arrancar una liquidación',
-    tools: [],
-    systemPromptKey: 'orchestrator',
-  },
   liquidacion: {
     name: 'liquidacion',
     role: 'cuadre', // Claude Sonnet — razonamiento con dinero de por medio

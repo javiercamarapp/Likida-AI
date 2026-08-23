@@ -31,7 +31,13 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       startsWith(github.event.workflow_run.head_branch, 'mejora/')
     steps:
-      - name: Mergear el PR de la rutina (auditoría verde)
+      # 23-AGO-2026: este job se disparaba con CI en verde y mergeaba SIN MIRAR
+      # los demás checks. "CI" no corre una sola migración: un PR podía entrar a
+      # master con TypeScript y build verdes y las migraciones, el RLS o las
+      # funciones SQL rotas — que es exactamente lo que CI Postgres existe para
+      # cazar. Ahora se exige que TODOS los checks del commit hayan terminado y
+      # ninguno haya fallado.
+      - name: Mergear el PR de la rutina (TODOS los checks en verde)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -39,7 +45,35 @@ jobs:
         run: |
           NUM=$(gh pr list --repo "$REPO" --head "$RAMA" --state open --json number,isDraft --jq '.[] | select(.isDraft==false) | .number' | head -1)
           if [ -z "$NUM" ]; then echo "Sin PR abierto no-draft para $RAMA — nada que mergear."; exit 0; fi
-          echo "Auditoría verde para $RAMA (PR #$NUM) → merge squash."
+
+          # `gh pr checks` sale con 0 solo si todo pasó; 8 = alguno sigue en
+          # curso; cualquier otro = alguno falló. Se espera a que terminen y se
+          # rechaza el merge si alguno está en rojo.
+          for i in $(seq 1 30); do
+            if gh pr checks "$NUM" --repo "$REPO" > /tmp/checks.txt 2>&1; then
+              echo "Todos los checks en verde para el PR #$NUM."
+              break
+            fi
+            CODE=$?
+            if [ "$CODE" = "8" ]; then
+              echo "Checks todavía en curso (intento $i/30) — esperando 20s…"
+              sleep 20
+              continue
+            fi
+            echo "🔴 Hay checks en ROJO — este PR NO se mergea:"
+            cat /tmp/checks.txt
+            gh pr comment "$NUM" --repo "$REPO" --body "🔴 No se mergea: hay checks en rojo (no basta con que CI pase — CI Postgres valida las migraciones y el aislamiento entre flotas). Revisa la pestaña de checks."
+            exit 1
+          done
+
+          # Si tras la espera siguen sin terminar, NO se mergea: mejor un PR
+          # abierto que un merge a ciegas.
+          if ! gh pr checks "$NUM" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Los checks no terminaron a tiempo — no se mergea. El siguiente push lo vuelve a evaluar."
+            exit 1
+          fi
+
+          echo "Todo verde para $RAMA (PR #$NUM) → merge squash."
           gh pr merge "$NUM" --repo "$REPO" --squash --delete-branch
 
   rojo-avisa:

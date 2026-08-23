@@ -1,6 +1,6 @@
 import type { ModelRole } from '@/lib/llm/models';
 
-export type AgentName = 'orchestrator' | 'liquidacion';
+export type AgentName = 'liquidacion';
 
 export interface AgentConfig {
   name: AgentName;
