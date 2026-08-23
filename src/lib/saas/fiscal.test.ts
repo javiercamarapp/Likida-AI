@@ -94,10 +94,15 @@ describe('guardarDatosFiscales', () => {
   });
 
   it('los catálogos que ofrece la pantalla son los que la base acepta', () => {
-    // La migración 0056 tiene un CHECK con estas mismas claves. Si divergen, el
-    // formulario ofrece una opción que el insert rechaza.
-    expect(REGIMENES.map((r) => r.clave)).toEqual(['601', '603', '612', '621', '626']);
+    // 0056 + 0170 (624 Coordinados). Si divergen, el formulario ofrece una
+    // opción que el insert rechaza.
+    expect(REGIMENES.map((r) => r.clave)).toEqual(['601', '603', '612', '621', '624', '626']);
     expect(USOS_CFDI.map((u) => u.clave)).toEqual(['G03', 'G01', 'I04']);
+  });
+
+  it('624 Coordinados entra al receptor CFDI 4.0 (RFA 2.9)', async () => {
+    await guardarDatosFiscales('t-1', { ...BASE, regimenFiscal: '624' });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ regimen_fiscal: '624' }));
   });
 });
 

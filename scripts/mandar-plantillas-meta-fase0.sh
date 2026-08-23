@@ -10,9 +10,15 @@
 # escalar_viaje.ts). Ninguna lleva botones: el texto invita a responder, que
 # es lo que reabre la ventana de 24 h (ver PLANO-TECNICO.md, "Ventana de 24h").
 #
-# Uso:  bash scripts/mandar-plantillas-meta-fase0.sh
-# Lee WHATSAPP_ACCESS_TOKEN y WHATSAPP_BUSINESS_ACCOUNT_ID de .env.local — el
-# token se usa SOLO en este proceso, nunca se imprime ni se escribe a archivo.
+# Uso:
+#   bash scripts/mandar-plantillas-meta-fase0.sh
+#   vercel env run --environment production -- bash scripts/mandar-plantillas-meta-fase0.sh
+#
+# Credenciales, en este orden (la primera que esté no-vacía gana):
+#   1. WHATSAPP_ACCESS_TOKEN / WHATSAPP_BUSINESS_ACCOUNT_ID del entorno
+#      (así `vercel env run --environment production` inyecta las de prod).
+#   2. las mismas llaves en .env.local, si el archivo existe.
+# El token se usa SOLO en este proceso, nunca se imprime ni se escribe a archivo.
 #
 # Después de correrlo: revisar el estado en Meta Business Manager → WhatsApp
 # Manager → Plantillas de mensaje (queda en PENDING hasta que Meta resuelva).
@@ -20,11 +26,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-TOKEN="$(grep '^WHATSAPP_ACCESS_TOKEN=' .env.local | head -1 | cut -d= -f2-)"
-WABA_ID="$(grep '^WHATSAPP_BUSINESS_ACCOUNT_ID=' .env.local | head -1 | cut -d= -f2-)"
+leer_env_local() {
+  local clave="$1"
+  [ -f .env.local ] || return 0
+  grep "^${clave}=" .env.local | head -1 | cut -d= -f2-
+}
 
-[ -n "$TOKEN" ] || { echo "Falta WHATSAPP_ACCESS_TOKEN en .env.local"; exit 2; }
-[ -n "$WABA_ID" ] || { echo "Falta WHATSAPP_BUSINESS_ACCOUNT_ID en .env.local"; exit 2; }
+TOKEN="${WHATSAPP_ACCESS_TOKEN:-$(leer_env_local WHATSAPP_ACCESS_TOKEN)}"
+WABA_ID="${WHATSAPP_BUSINESS_ACCOUNT_ID:-$(leer_env_local WHATSAPP_BUSINESS_ACCOUNT_ID)}"
+
+[ -n "$TOKEN" ] || { echo "Falta WHATSAPP_ACCESS_TOKEN (entorno o .env.local). En prod: vercel env run --environment production -- bash scripts/mandar-plantillas-meta-fase0.sh"; exit 2; }
+[ -n "$WABA_ID" ] || { echo "Falta WHATSAPP_BUSINESS_ACCOUNT_ID (entorno o .env.local). En prod: vercel env run --environment production -- bash scripts/mandar-plantillas-meta-fase0.sh"; exit 2; }
 
 mandar() {
   local nombre="$1" cuerpo="$2" ejemplo_json="$3"

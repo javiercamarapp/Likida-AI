@@ -54,6 +54,30 @@ interface Perfil {
   pagoOperador?: CampoPerfil<'viaje' | 'km' | 'sueldo'>;
   tanquePropio?: CampoPerfil<boolean>;
   politicaDocumento?: CampoPerfil<{ path: string; nombre: string; contentType: string }>;
+  /** Paso 6: ventana del agente de cobranza. Fuente: este campo. La tabla
+   *  `agente_cobranza_config` queda como legado / dual-write. */
+  cobranzaVentana?: CampoPerfil<{ horaInicio: number; horaFin: number; diasSemana: number[] }>;
+  /** Paso 6: a quién se avisa en operación, en orden. Default del código
+   *  (encargado → flota_admin) solo aplica si esto no está declarado. */
+  ordenAviso?: CampoPerfil<Array<'encargado' | 'flota_admin' | 'contador'>>;
+  rfcEmpresa?: CampoPerfil<string>;
+  razonSocial?: CampoPerfil<string>;
+  regimenSat?: CampoPerfil<string>;
+  codigoPostalFiscal?: CampoPerfil<string>;
+  usoCfdi?: CampoPerfil<string>;
+  emailFacturacion?: CampoPerfil<string>;
+  tarjetasANombreEmpresa?: CampoPerfil<boolean>;
+  pagoEnBomba?: CampoPerfil<'empresa' | 'chofer_reembolso' | 'mixto'>;
+  creditoEstacion?: CampoPerfil<boolean>;
+  casetasRedNacional?: CampoPerfil<boolean>;
+  tms?: CampoPerfil<string>;
+  portalFacturacion?: CampoPerfil<string>;
+  topesPolitica?: CampoPerfil<{ diesel?: number; caseta?: number; alimentacion?: number; hospedaje?: number }>;
+  operadoresAlta?: CampoPerfil<Array<{ nombre: string; telefono: string }>>;
+  unidadesAlta?: CampoPerfil<Array<{ economico: string; placas?: string }>>;
+  telefonoJefe?: CampoPerfil<string>;
+  hazmat?: CampoPerfil<boolean>;
+  poliza?: CampoPerfil<{ aseguradora: string; numero?: string; telefono800?: string }>;
 }
 
 /** El candado: NUNCA decide sobre un campo inferido NI sobre un default de
@@ -192,6 +216,26 @@ export interface DatosOnboarding {
   pagoOperador?: 'viaje' | 'km' | 'sueldo';
   tanquePropio?: boolean;
   politicaDocumento?: { path: string; nombre: string; contentType: string };
+  cobranzaVentana?: { horaInicio: number; horaFin: number; diasSemana: number[] };
+  ordenAviso?: Array<'encargado' | 'flota_admin' | 'contador'>;
+  rfcEmpresa?: string;
+  razonSocial?: string;
+  regimenSat?: string;
+  codigoPostalFiscal?: string;
+  usoCfdi?: string;
+  emailFacturacion?: string;
+  tarjetasANombreEmpresa?: boolean;
+  pagoEnBomba?: 'empresa' | 'chofer_reembolso' | 'mixto';
+  creditoEstacion?: boolean;
+  casetasRedNacional?: boolean;
+  tms?: string;
+  portalFacturacion?: string;
+  topesPolitica?: { diesel?: number; caseta?: number; alimentacion?: number; hospedaje?: number };
+  operadoresAlta?: Array<{ nombre: string; telefono: string }>;
+  unidadesAlta?: Array<{ economico: string; placas?: string }>;
+  telefonoJefe?: string;
+  hazmat?: boolean;
+  poliza?: { aseguradora: string; numero?: string; telefono800?: string };
 }
 
 export function declararOnboarding(d: DatosOnboarding): Record<string, unknown> {
@@ -208,6 +252,60 @@ export function declararOnboarding(d: DatosOnboarding): Record<string, unknown> 
   if (d.pagoOperador) patch.pagoOperador = campo(d.pagoOperador);
   if (d.tanquePropio !== undefined) patch.tanquePropio = campo(d.tanquePropio);
   if (d.politicaDocumento) patch.politicaDocumento = campo(d.politicaDocumento);
+  if (d.cobranzaVentana) patch.cobranzaVentana = campo(d.cobranzaVentana);
+  if (d.ordenAviso && d.ordenAviso.length > 0) patch.ordenAviso = campo(d.ordenAviso);
+  Object.assign(patch, parcheHechosExtra(d));
+  return patch;
+}
+
+function parcheHechosExtra(d: Partial<DatosOnboarding>): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  if (d.rfcEmpresa) patch.rfcEmpresa = campo(d.rfcEmpresa);
+  if (d.razonSocial) patch.razonSocial = campo(d.razonSocial);
+  if (d.regimenSat) patch.regimenSat = campo(d.regimenSat);
+  if (d.codigoPostalFiscal) patch.codigoPostalFiscal = campo(d.codigoPostalFiscal);
+  if (d.usoCfdi) patch.usoCfdi = campo(d.usoCfdi);
+  if (d.emailFacturacion) patch.emailFacturacion = campo(d.emailFacturacion);
+  if (d.tarjetasANombreEmpresa !== undefined) patch.tarjetasANombreEmpresa = campo(d.tarjetasANombreEmpresa);
+  if (d.pagoEnBomba) patch.pagoEnBomba = campo(d.pagoEnBomba);
+  if (d.creditoEstacion !== undefined) patch.creditoEstacion = campo(d.creditoEstacion);
+  if (d.casetasRedNacional !== undefined) patch.casetasRedNacional = campo(d.casetasRedNacional);
+  if (d.tms) patch.tms = campo(d.tms);
+  if (d.portalFacturacion) patch.portalFacturacion = campo(d.portalFacturacion);
+  if (d.topesPolitica) patch.topesPolitica = campo(d.topesPolitica);
+  if (d.operadoresAlta && d.operadoresAlta.length > 0) patch.operadoresAlta = campo(d.operadoresAlta);
+  if (d.unidadesAlta && d.unidadesAlta.length > 0) patch.unidadesAlta = campo(d.unidadesAlta);
+  if (d.telefonoJefe) patch.telefonoJefe = campo(d.telefonoJefe);
+  if (d.hazmat !== undefined) patch.hazmat = campo(d.hazmat);
+  if (d.poliza) patch.poliza = campo(d.poliza);
+  return patch;
+}
+
+/** Un hecho suelto — el chat declara campo a campo. No inventa el umbral
+ *  de peaje: si faltan ingresos o parte relacionada, no se escriben. */
+export function declararHechos(d: Partial<DatosOnboarding>): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  if (d.ingresosMenoresA300M !== undefined && d.parteRelacionada !== undefined) {
+    Object.assign(patch, declararUmbralPeaje(d.ingresosMenoresA300M, d.parteRelacionada));
+  } else {
+    if (d.ingresosMenoresA300M !== undefined) patch.ingresosMenoresA300M = campo(d.ingresosMenoresA300M);
+    if (d.parteRelacionada !== undefined) patch.parteRelacionada = campo(d.parteRelacionada);
+  }
+  if (d.dedicacionExclusivaCarga !== undefined) patch.dedicacionExclusivaCarga = campo(d.dedicacionExclusivaCarga);
+  if (d.regimenElegible !== undefined) patch.regimenElegible = campo(d.regimenElegible);
+  if (d.transporteDedicado !== undefined) patch.transporteDedicado = campo(d.transporteDedicado);
+  if (d.hombreCamion !== undefined) patch.hombreCamion = campo(d.hombreCamion);
+  if (d.gps) patch.gps = campo(d.gps);
+  if (d.erp) patch.erp = campo(d.erp);
+  if (d.tag) patch.tag = campo(d.tag);
+  if (d.monedero) patch.monedero = campo(d.monedero);
+  if (d.stackOtro) patch.stackOtro = campo(d.stackOtro);
+  if (d.pagoOperador) patch.pagoOperador = campo(d.pagoOperador);
+  if (d.tanquePropio !== undefined) patch.tanquePropio = campo(d.tanquePropio);
+  if (d.politicaDocumento) patch.politicaDocumento = campo(d.politicaDocumento);
+  if (d.cobranzaVentana) patch.cobranzaVentana = campo(d.cobranzaVentana);
+  if (d.ordenAviso && d.ordenAviso.length > 0) patch.ordenAviso = campo(d.ordenAviso);
+  Object.assign(patch, parcheHechosExtra(d));
   return patch;
 }
 
@@ -234,10 +332,32 @@ export function stackDeclarado(perfilCrudo: unknown): {
   };
 }
 
+/** El dueño dijo "no sé" en un campo opcional. `decidir()` lo trata como
+ *  no declarado (no actúa). La entrevista no lo vuelve a preguntar. */
+export function declararAusente(campos: string[]): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const c of campos) patch[c] = { valor: null, procedencia: 'ausente' };
+  return patch;
+}
+
 export function facilidad15Declarada(perfilCrudo: unknown): { dedicacionExclusivaCarga: boolean; regimenElegible: boolean } | null {
   const p = leerPerfil(perfilCrudo);
   const ded = decidir(p.dedicacionExclusivaCarga);
   const reg = decidir(p.regimenElegible);
   if (ded === undefined || reg === undefined) return null;
   return { dedicacionExclusivaCarga: ded, regimenElegible: reg };
+}
+
+export function ventanaCobranzaDeclarada(perfilCrudo: unknown): { horaInicio: number; horaFin: number; diasSemana: number[] } | null {
+  return decidir(leerPerfil(perfilCrudo).cobranzaVentana) ?? null;
+}
+
+const ROLES_AVISO = ['encargado', 'flota_admin', 'contador'] as const;
+export type RolAviso = typeof ROLES_AVISO[number];
+
+export function ordenAvisoDeclarado(perfilCrudo: unknown): RolAviso[] | null {
+  const v = decidir(leerPerfil(perfilCrudo).ordenAviso);
+  if (!v || v.length === 0) return null;
+  const limpios = v.filter((r): r is RolAviso => (ROLES_AVISO as readonly string[]).includes(r));
+  return limpios.length > 0 ? limpios : null;
 }

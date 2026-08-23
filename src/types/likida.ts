@@ -114,6 +114,7 @@ export type TipoDiferencia =
   | 'efectivo_sobre_15'      // efectivo que EXCEDE el 15% del ejercicio → el excedente no deducible
   | 'efectivo_no_elegible'   // flota declaró que NO califica (dedicación o régimen) → el efectivo no se deduce (LISR 27-III)
   | 'consumo_bar'           // la razón social o el producto del ticket de alimentación parece un BAR → LISR 28-XX lo hace 0% deducible — a confirmar, no se afirma
+  | 'ticket_monedero'       // foto de bomba de una carga de monedero: evidencia operativa, no factura de estación (RMF 3.3.1.7)
   | 'oposicion_titular';     // el operador ejerció su oposición a la decisión automatizada (LFPDPPP 26-II) → una persona DEBE cerrar esta liquidación
 
 /** Una diferencia detectada por el Módulo 2 (Cuadre). */
