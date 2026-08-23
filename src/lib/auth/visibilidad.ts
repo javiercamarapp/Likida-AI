@@ -175,6 +175,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/usuarios': 'administracion',
   '/dashboard/politicas': 'administracion',
   '/dashboard/configuracion': 'administracion',
+  // Perfil operativo de la flota (onboarding del dueño, Fase 3).
+  '/dashboard/onboarding': 'administracion',
 };
 
 /**

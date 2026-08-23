@@ -119,17 +119,16 @@ export async function getPerfilCrudo(tenantId: string): Promise<unknown> {
  * caliente). Un fallo de lectura LANZA: no se da por guardado lo que no se
  * pudo mezclar.
  */
-export async function guardarDeclaracionEstimuloPeaje(
+export async function guardarPerfilPatch(
   tenantId: string,
-  ingresosMenoresA300M: boolean,
-  parteRelacionada: boolean,
+  patch: Record<string, unknown>,
   actualizadoPor: string | null,
 ): Promise<void> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('tenant')
     .select('perfil')
     .eq('id', tenantId)
-    .maybeSingle(), 'guardarDeclaracionEstimuloPeaje.leer');
+    .maybeSingle(), 'guardarPerfilPatch.leer');
   if (error) throw new Error(`perfil: ${error.message}`);
   if (!data) throw new Error('perfil: tenant no encontrado');
   const actual = (data.perfil && typeof data.perfil === 'object' && !Array.isArray(data.perfil))
@@ -138,11 +137,20 @@ export async function guardarDeclaracionEstimuloPeaje(
   const { error: errW } = await acotada(supabaseAdmin()
     .from('tenant')
     .update({
-      perfil: { ...actual, ...declararUmbralPeaje(ingresosMenoresA300M, parteRelacionada) },
+      perfil: { ...actual, ...patch },
       perfil_actualizado_por: actualizadoPor,
     })
-    .eq('id', tenantId), 'guardarDeclaracionEstimuloPeaje.escribir');
+    .eq('id', tenantId), 'guardarPerfilPatch.escribir');
   if (errW) throw new Error(`perfil: ${errW.message}`);
+}
+
+export async function guardarDeclaracionEstimuloPeaje(
+  tenantId: string,
+  ingresosMenoresA300M: boolean,
+  parteRelacionada: boolean,
+  actualizadoPor: string | null,
+): Promise<void> {
+  await guardarPerfilPatch(tenantId, declararUmbralPeaje(ingresosMenoresA300M, parteRelacionada), actualizadoPor);
 }
 
 export async function getOperador(operadorId: string, tenantId: string): Promise<Operador | null> {

@@ -41,6 +41,19 @@ interface Perfil {
    *  alguien lo declara después. */
   ingresosMenoresA300M?: CampoPerfil<boolean>;
   parteRelacionada?: CampoPerfil<boolean>;
+  dedicacionExclusivaCarga?: CampoPerfil<boolean>;
+  regimenElegible?: CampoPerfil<boolean>;
+  transporteDedicado?: CampoPerfil<boolean>;
+  hombreCamion?: CampoPerfil<boolean>;
+  /** ids del catálogo de conectores, o `ninguno` / `otro`. */
+  gps?: CampoPerfil<string>;
+  erp?: CampoPerfil<string>;
+  tag?: CampoPerfil<string>;
+  monedero?: CampoPerfil<string>;
+  stackOtro?: CampoPerfil<string>;
+  pagoOperador?: CampoPerfil<'viaje' | 'km' | 'sueldo'>;
+  tanquePropio?: CampoPerfil<boolean>;
+  politicaDocumento?: CampoPerfil<{ path: string; nombre: string; contentType: string }>;
 }
 
 /** El candado: NUNCA decide sobre un campo inferido NI sobre un default de
@@ -151,10 +164,80 @@ export function umbralPeajeDeclarado(perfilCrudo: unknown): {
   };
 }
 
+function campo<T>(valor: T): CampoPerfil<T> {
+  return { valor, procedencia: 'declarado' };
+}
+
 export function declararUmbralPeaje(ingresosMenoresA300M: boolean, parteRelacionada: boolean): Record<string, unknown> {
-  const campo = <T,>(valor: T): CampoPerfil<T> => ({ valor, procedencia: 'declarado' });
   return {
     ingresosMenoresA300M: campo(ingresosMenoresA300M),
     parteRelacionada: campo(parteRelacionada),
   };
+}
+
+/** Lo que el dueño declara en el onboarding. Los opcionales se omiten si
+ *  no contestó: no se inventa un "no" por un select vacío. */
+export interface DatosOnboarding {
+  ingresosMenoresA300M: boolean;
+  parteRelacionada: boolean;
+  dedicacionExclusivaCarga?: boolean;
+  regimenElegible?: boolean;
+  transporteDedicado?: boolean;
+  hombreCamion?: boolean;
+  gps?: string;
+  erp?: string;
+  tag?: string;
+  monedero?: string;
+  stackOtro?: string;
+  pagoOperador?: 'viaje' | 'km' | 'sueldo';
+  tanquePropio?: boolean;
+  politicaDocumento?: { path: string; nombre: string; contentType: string };
+}
+
+export function declararOnboarding(d: DatosOnboarding): Record<string, unknown> {
+  const patch: Record<string, unknown> = { ...declararUmbralPeaje(d.ingresosMenoresA300M, d.parteRelacionada) };
+  if (d.dedicacionExclusivaCarga !== undefined) patch.dedicacionExclusivaCarga = campo(d.dedicacionExclusivaCarga);
+  if (d.regimenElegible !== undefined) patch.regimenElegible = campo(d.regimenElegible);
+  if (d.transporteDedicado !== undefined) patch.transporteDedicado = campo(d.transporteDedicado);
+  if (d.hombreCamion !== undefined) patch.hombreCamion = campo(d.hombreCamion);
+  if (d.gps) patch.gps = campo(d.gps);
+  if (d.erp) patch.erp = campo(d.erp);
+  if (d.tag) patch.tag = campo(d.tag);
+  if (d.monedero) patch.monedero = campo(d.monedero);
+  if (d.stackOtro) patch.stackOtro = campo(d.stackOtro);
+  if (d.pagoOperador) patch.pagoOperador = campo(d.pagoOperador);
+  if (d.tanquePropio !== undefined) patch.tanquePropio = campo(d.tanquePropio);
+  if (d.politicaDocumento) patch.politicaDocumento = campo(d.politicaDocumento);
+  return patch;
+}
+
+/** El umbral de peaje ya está declarado (las dos preguntas). Es el corte
+ *  que desbloquea el panel del dueño: lo demás del onboarding es opcional. */
+export function onboardingFiscalListo(perfilCrudo: unknown): boolean {
+  return calificaEstimuloPeaje(perfilCrudo).elegible !== null;
+}
+
+export function stackDeclarado(perfilCrudo: unknown): {
+  gps: string | null;
+  erp: string | null;
+  tag: string | null;
+  monedero: string | null;
+  pagoOperador: 'viaje' | 'km' | 'sueldo' | null;
+} {
+  const p = leerPerfil(perfilCrudo);
+  return {
+    gps: decidir(p.gps) ?? null,
+    erp: decidir(p.erp) ?? null,
+    tag: decidir(p.tag) ?? null,
+    monedero: decidir(p.monedero) ?? null,
+    pagoOperador: decidir(p.pagoOperador) ?? null,
+  };
+}
+
+export function facilidad15Declarada(perfilCrudo: unknown): { dedicacionExclusivaCarga: boolean; regimenElegible: boolean } | null {
+  const p = leerPerfil(perfilCrudo);
+  const ded = decidir(p.dedicacionExclusivaCarga);
+  const reg = decidir(p.regimenElegible);
+  if (ded === undefined || reg === undefined) return null;
+  return { dedicacionExclusivaCarga: ded, regimenElegible: reg };
 }

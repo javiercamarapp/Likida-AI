@@ -83,6 +83,7 @@ const RUTAS = [
   '/dashboard/soporte',
   '/dashboard/combustible-casetas', '/dashboard/suscripcion',
   '/dashboard/usuarios', '/dashboard/politicas', '/dashboard/configuracion',
+  '/dashboard/onboarding',
 ];
 
 describe('un chofer no entra a NINGUNA pantalla de /dashboard, ni tecleando la URL', () => {

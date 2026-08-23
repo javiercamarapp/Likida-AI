@@ -26,7 +26,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 
-const { guardarDeclaracionEstimuloPeaje } = await import('../repo');
+const { guardarDeclaracionEstimuloPeaje, guardarPerfilPatch } = await import('../repo');
 
 beforeEach(() => {
   updates.length = 0;
@@ -62,5 +62,15 @@ describe('guardarDeclaracionEstimuloPeaje', () => {
   it('un UPDATE caído LANZA', async () => {
     respEscritura = { data: null, error: { message: 'fk' } };
     await expect(guardarDeclaracionEstimuloPeaje('t-1', false, true, 'user-9')).rejects.toThrow(/perfil: fk/);
+  });
+});
+
+describe('guardarPerfilPatch', () => {
+  it('mezcla el patch sobre llaves ya existentes, no las borra', async () => {
+    await guardarPerfilPatch('t-1', { gps: { valor: 'wialon', procedencia: 'declarado' } }, 'user-9');
+    const perfil = updates[0].perfil as Record<string, unknown>;
+    expect(perfil.otraLlave).toBe(1);
+    expect(perfil.gps).toEqual({ valor: 'wialon', procedencia: 'declarado' });
+    expect(updates[0].perfil_actualizado_por).toBe('user-9');
   });
 });
