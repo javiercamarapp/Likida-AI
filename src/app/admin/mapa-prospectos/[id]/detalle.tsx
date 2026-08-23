@@ -85,8 +85,10 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
     }
   };
 
-  const linkWa = hrefWa(datos);
-  const linkCorreo = hrefCorreo(datos);
+  // La ficha SÍ trae los textos largos, así que se pasan explícitos (FE-16:
+  // sin ellos los href caerían a la plantilla determinista).
+  const linkWa = hrefWa(datos, datos);
+  const linkCorreo = hrefCorreo(datos, datos);
   const textoWa = datos.mensajeWaIa ?? mensajeWa(datos);
   const asuntoCorreo = datos.correoAsuntoIa ?? correoProspecto(datos).asunto;
   const cuerpoCorreo = datos.correoCuerpoIa ?? correoProspecto(datos).cuerpo;

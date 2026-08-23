@@ -5,7 +5,7 @@
 // diésel solo se habla en litros y eso no cabe en un primer toque), y el
 // mensaje se abre EDITABLE — Javier manda, no el sistema.
 
-import type { ProspectoMapa } from '@/lib/admin/prospectos-mapa';
+import type { ProspectoMapa, TextosProspecto } from '@/lib/admin/prospectos-mapa';
 
 export function mensajeWa(p: ProspectoMapa): string {
   const gancho = p.vacante
@@ -36,18 +36,35 @@ export function correoProspecto(p: ProspectoMapa): { asunto: string; cuerpo: str
   return { asunto, cuerpo };
 }
 
+// ── Los textos largos ya NO viajan en el listado (FE-16) ───────────────────
+// `t` es lo que devolvió `getTextosProspectos` para ESTE prospecto, o null si
+// todavía no ha llegado. Los dos href caen a la plantilla determinista cuando
+// no hay texto del agente — que es lo correcto para el prospecto que nadie ha
+// trabajado (`mensajesGeneradosEn === null`) y NO lo es para el que sí: por
+// eso `esperandoTextos` existe y la vista deshabilita el botón mientras tanto,
+// en vez de abrir WhatsApp con el mensaje equivocado en nombre de Javier.
+
+/** true = este prospecto TIENE mensaje del agente experto y todavía no llega:
+ *  el botón no debe abrirse con la plantilla. */
+export function esperandoTextos(
+  p: Pick<ProspectoMapa, 'mensajesGeneradosEn'>,
+  t: TextosProspecto | null | undefined,
+): boolean {
+  return p.mensajesGeneradosEn !== null && !t;
+}
+
 /** El href mailto completo. Manda el mensaje del AGENTE EXPERTO (0129) si ya
  *  existe; la plantilla determinista es solo el respaldo del no trabajado. */
-export function hrefCorreo(p: ProspectoMapa): string | null {
+export function hrefCorreo(p: ProspectoMapa, t?: TextosProspecto | null): string | null {
   if (!p.correo) return null;
-  const asunto = p.correoAsuntoIa ?? correoProspecto(p).asunto;
-  const cuerpo = p.correoCuerpoIa ?? correoProspecto(p).cuerpo;
+  const asunto = t?.correoAsuntoIa ?? correoProspecto(p).asunto;
+  const cuerpo = t?.correoCuerpoIa ?? correoProspecto(p).cuerpo;
   return `mailto:${p.correo}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
 }
 
 /** El href de WhatsApp (lada MX) — misma regla: el mensaje IA manda. */
-export function hrefWa(p: ProspectoMapa): string | null {
+export function hrefWa(p: ProspectoMapa, t?: TextosProspecto | null): string | null {
   if (!p.telefono) return null;
-  const texto = p.mensajeWaIa ?? mensajeWa(p);
+  const texto = t?.mensajeWaIa ?? mensajeWa(p);
   return `https://wa.me/52${p.telefono.replace(/^52/, '')}?text=${encodeURIComponent(texto)}`;
 }

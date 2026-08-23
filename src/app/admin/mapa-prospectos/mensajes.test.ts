@@ -2,17 +2,20 @@
 // prueba las FIJA: sin clientes inventados, sin cifras, el gancho es SU
 // vacante, y el texto del agente experto (0129) manda sobre la plantilla.
 import { describe, expect, it } from 'vitest';
-import type { ProspectoMapa } from '@/lib/admin/prospectos-mapa';
-import { mensajeWa, correoProspecto, hrefWa, hrefCorreo } from './mensajes';
+import type { ProspectoMapa, TextosProspecto } from '@/lib/admin/prospectos-mapa';
+import { mensajeWa, correoProspecto, hrefWa, hrefCorreo, esperandoTextos } from './mensajes';
 
 const base: ProspectoMapa = {
   id: 'x', empresa: 'Transportes Ejemplo', ciudad: 'Mérida', entidad: 'Yucatán',
   lat: 21, lng: -89.6, telefono: '9991234567', correo: 'dg@ejemplo.mx',
-  contacto: null, vacante: null, notas: null, estado: 'nuevo', fuente: 'censo',
+  contacto: null, vacante: null, estado: 'nuevo', fuente: 'censo',
   giro: 'transportista', urgencia: 50, cierre: 40, tamano: null, completitud: 45, ultimoToque: null,
-  mensajeWaIa: null, correoAsuntoIa: null, correoCuerpoIa: null, mensajesGeneradosEn: null,
+  mensajesGeneradosEn: null,
   numUnidades: null, similitudIcpPct: 0, necesidadPct: 0,
 };
+
+const textos = (t: Partial<TextosProspecto>): TextosProspecto =>
+  ({ id: 'x', notas: null, mensajeWaIa: null, correoAsuntoIa: null, correoCuerpoIa: null, ...t });
 
 describe('la plantilla determinista (el respaldo)', () => {
   it('con vacante, el gancho la CITA; sin vacante, habla del giro', () => {
@@ -37,10 +40,24 @@ describe('los href — el texto del agente experto manda', () => {
     expect(hrefCorreo({ ...base, correo: null })).toBeNull();
   });
   it('con mensaje IA guardado, el botón abre con ESE texto', () => {
-    const p = { ...base, mensajeWaIa: 'TEXTO-DEL-AGENTE', correoAsuntoIa: 'ASUNTO-IA', correoCuerpoIa: 'CUERPO-IA', mensajesGeneradosEn: '2026-08-17T00:00:00Z' };
-    expect(hrefWa(p)).toContain(encodeURIComponent('TEXTO-DEL-AGENTE'));
-    expect(hrefCorreo(p)).toContain(encodeURIComponent('ASUNTO-IA'));
-    expect(hrefCorreo(p)).toContain(encodeURIComponent('CUERPO-IA'));
+    const p = { ...base, mensajesGeneradosEn: '2026-08-17T00:00:00Z' };
+    const t = textos({ mensajeWaIa: 'TEXTO-DEL-AGENTE', correoAsuntoIa: 'ASUNTO-IA', correoCuerpoIa: 'CUERPO-IA' });
+    expect(hrefWa(p, t)).toContain(encodeURIComponent('TEXTO-DEL-AGENTE'));
+    expect(hrefCorreo(p, t)).toContain(encodeURIComponent('ASUNTO-IA'));
+    expect(hrefCorreo(p, t)).toContain(encodeURIComponent('CUERPO-IA'));
+  });
+
+  // FE-16: los textos largos ya no viajan en el listado. El respaldo de la
+  // plantilla es correcto para quien NO tiene mensaje redactado y sería un
+  // error para quien sí — mandaría el texto equivocado firmado por Javier.
+  it('sin mensaje redactado, la plantilla es la respuesta correcta (no se espera nada)', () => {
+    expect(esperandoTextos(base, undefined)).toBe(false);
+    expect(hrefWa(base)).toContain(encodeURIComponent(mensajeWa(base)));
+  });
+  it('CON mensaje redactado y sin los textos todavía, el botón NO se abre con la plantilla', () => {
+    const p = { ...base, mensajesGeneradosEn: '2026-08-17T00:00:00Z' };
+    expect(esperandoTextos(p, undefined)).toBe(true);
+    expect(esperandoTextos(p, textos({ mensajeWaIa: 'YA-LLEGÓ' }))).toBe(false);
   });
   it('la lada MX no se duplica: 52… no se vuelve 5252…', () => {
     expect(hrefWa({ ...base, telefono: '529991234567' })).toContain('wa.me/529991234567');

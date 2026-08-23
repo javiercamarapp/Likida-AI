@@ -16,16 +16,21 @@ import { useEffect, useRef } from 'react';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import { COLOR_EMBUDO, NOMBRE_GIRO, type ProspectoMapa } from '@/lib/admin/prospectos-mapa';
-import { hrefWa, hrefCorreo } from './mensajes';
+import { COLOR_EMBUDO, NOMBRE_GIRO, type ProspectoMapa, type TextosProspecto } from '@/lib/admin/prospectos-mapa';
+import { hrefWa, hrefCorreo, esperandoTextos } from './mensajes';
 
 function escapar(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-export default function Calles({ prospectos, titulo, onCerrar }: {
+export default function Calles({ prospectos, titulo, obtenerTextos, pedirTextos, onCerrar }: {
   prospectos: ProspectoMapa[];
   titulo: string;
+  /** Los textos largos que ya están en el cache del Cerebro (FE-16). */
+  obtenerTextos: (id: string) => TextosProspecto | undefined;
+  /** Pide los que falten. Se llama al ABRIR un popup, no al pintar el mapa:
+   *  un estado grande son dos mil marcadores y ninguno se está mirando. */
+  pedirTextos: (ids: string[]) => Promise<void>;
   onCerrar: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -61,11 +66,19 @@ export default function Calles({ prospectos, titulo, onCerrar }: {
           // Los href de WhatsApp/correo salen de hrefWa/hrefCorreo (URLs que
           // NOSOTROS construimos y codificamos) — lo único del prospecto que
           // entra crudo al HTML pasa por `escapar`.
-          const wa = hrefWa(p);
-          const correo = hrefCorreo(p);
           const boton = (href: string, texto: string, fondo: string, tinta: string) =>
             `<a href="${href}" target="_blank" rel="noreferrer" style="display:inline-block;margin:2px 4px 0 0;padding:3px 8px;border-radius:8px;background:${fondo};color:${tinta};text-decoration:none;font-weight:600">${texto}</a>`;
-          marcador.bindPopup(`
+          const apagado = (texto: string, fondo: string, tinta: string) =>
+            `<span title="El mensaje del agente experto viene en camino" style="display:inline-block;margin:2px 4px 0 0;padding:3px 8px;border-radius:8px;background:${fondo};color:${tinta};font-weight:600;opacity:.5">${texto}</span>`;
+          // El contenido se arma AL ABRIR (FE-16): las notas y el mensaje
+          // redactado son textos largos que ya no viajan en el listado, y
+          // armar dos mil popups por adelantado los pediría todos.
+          const contenido = () => {
+            const t = obtenerTextos(p.id);
+            const espera = esperandoTextos(p, t);
+            const wa = hrefWa(p, t);
+            const correo = hrefCorreo(p, t);
+            return `
             <div style="font: 13px/1.45 system-ui; min-width: 220px">
               <strong>${escapar(p.empresa)}</strong><br/>
               <span style="color:${c}">●</span> ${escapar(COLOR_EMBUDO[p.estado]?.nombre ?? p.estado)} · ${escapar(NOMBRE_GIRO[p.giro])}<br/>
@@ -74,13 +87,21 @@ export default function Calles({ prospectos, titulo, onCerrar }: {
               ${p.correo ? `✉️ ${escapar(p.correo)}<br/>` : ''}
               Urgencia <strong>${p.urgencia}%</strong> · Cierre <strong>${p.cierre}%</strong>
               <div style="color:#64748b;margin-top:4px">${escapar(p.ciudad ?? '')}</div>
-              ${p.notas ? `<div style="color:#64748b;margin-top:4px;font-size:11px;max-width:260px">${escapar(p.notas)}</div>` : ''}
+              ${t?.notas ? `<div style="color:#64748b;margin-top:4px;font-size:11px;max-width:260px">${escapar(t.notas)}</div>` : ''}
               <div style="margin-top:6px">
-                ${wa ? boton(wa, 'WhatsApp →', '#14532d', '#86efac') : ''}
-                ${correo ? boton(correo, 'Correo →', '#1e3a8a', '#bfdbfe') : ''}
+                ${wa && !espera ? boton(wa, 'WhatsApp →', '#14532d', '#86efac') : p.telefono ? apagado('WhatsApp …', '#14532d', '#86efac') : ''}
+                ${correo && !espera ? boton(correo, 'Correo →', '#1e3a8a', '#bfdbfe') : p.correo ? apagado('Correo …', '#1e3a8a', '#bfdbfe') : ''}
                 ${p.lat !== null ? boton(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`, 'Cómo llegar', '#1e293b', '#e2e8f0') : ''}
               </div>
-            </div>`);
+            </div>`;
+          };
+          marcador.bindPopup(contenido);
+          marcador.on('popupopen', () => {
+            if (obtenerTextos(p.id)) return;
+            void pedirTextos([p.id]).then(() => {
+              if (vivo && marcador.isPopupOpen()) marcador.setPopupContent(contenido());
+            });
+          });
           return marcador;
         }));
         racimos.addLayer(grupo);
@@ -91,7 +112,7 @@ export default function Calles({ prospectos, titulo, onCerrar }: {
       }
     })();
     return () => { vivo = false; mapa?.remove(); };
-  }, [prospectos]);
+  }, [prospectos, obtenerTextos, pedirTextos]);
 
   const conCoords = prospectos.filter((p) => p.lat !== null).length;
 
