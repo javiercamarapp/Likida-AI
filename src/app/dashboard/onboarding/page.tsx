@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { ClipboardList } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { CONECTORES } from '@/lib/likida/conectores/registro';
@@ -15,6 +14,8 @@ import { subirPoliticaPerfil } from '@/lib/likida/perfil/documentos';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { sufijoTenant } from '../sufijo';
 import { FormaOnboarding, type Opcion } from './forma';
+import { ChatEntrevista } from './chat';
+import { estadoEntrevista, mensajeBienvenida } from '@/lib/likida/perfil/entrevista';
 import type { ResultadoAccion } from '../../admin/ui/forma';
 
 export const dynamic = 'force-dynamic';
@@ -87,40 +88,49 @@ export default async function OnboardingFlotaPage({
     OTRO,
   ];
 
-  return (
-    <div className="flex flex-col gap-4 max-w-3xl">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <ClipboardList width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Perfil de la flota</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            {onboardingFiscalListo(perfil)
-              ? 'Puedes corregir lo declarado. El motor usa esto en el próximo cuadre.'
-              : 'Antes del primer cierre: cómo se maneja esta flota, con qué trabajan y sus políticas.'}
-          </span>
-        </div>
-      </header>
-      <div className="glass-panel px-5 py-5">
-        <FormaOnboarding
-          accion={accion}
-          gps={gps} erp={erp} tag={tag} monedero={monedero}
-          inicial={{
-            ingresos: umbral.ingresosMenoresA300M === null ? '' : umbral.ingresosMenoresA300M ? 'menor' : 'mayor',
-            parte: umbral.parteRelacionada === null ? '' : umbral.parteRelacionada ? 'si' : 'no',
-            gps: stack.gps ?? '',
-            erp: stack.erp ?? '',
-            tag: stack.tag ?? '',
-            monedero: stack.monedero ?? '',
-            pagoOperador: stack.pagoOperador ?? '',
-          }}
-        />
-      </div>
-      <p className="text-xs px-1" style={{ color: 'var(--muted)' }}>
-        Los topes numéricos (cuánto puede gastar un chofer en diésel, caseta, comida)
-        se capturan en <a href={`/dashboard/politicas${sufijo}`} className="underline">Políticas de gasto</a>.
-        Dedicación exclusiva y Red Nacional del estímulo de peaje siguen siendo
-        responsabilidad de la flota: Likida no las verifica.
+  const entrevista = estadoEntrevista(perfil);
+  const bien = mensajeBienvenida(entrevista);
+  const preguntaInicial = entrevista.siguiente?.pregunta ?? null;
+  const formulario = (
+    <details className="text-left">
+      <summary className="text-[12.5px] cursor-pointer text-center" style={{ color: 'var(--faint)' }}>
+        Prefiero el formulario
+      </summary>
+      <p className="text-[11px] mt-2 mb-4" style={{ color: 'var(--muted)' }}>
+        Las mismas declaraciones, sin conversación. Vacío no se inventa como no.
+        Los topes de gasto se capturan en{' '}
+        <a href={`/dashboard/politicas${sufijo}`} className="underline">Políticas</a>.
       </p>
-    </div>
+      <FormaOnboarding
+        accion={accion}
+        gps={gps} erp={erp} tag={tag} monedero={monedero}
+        inicial={{
+          ingresos: umbral.ingresosMenoresA300M === null ? '' : umbral.ingresosMenoresA300M ? 'menor' : 'mayor',
+          parte: umbral.parteRelacionada === null ? '' : umbral.parteRelacionada ? 'si' : 'no',
+          gps: stack.gps ?? '',
+          erp: stack.erp ?? '',
+          tag: stack.tag ?? '',
+          monedero: stack.monedero ?? '',
+          pagoOperador: stack.pagoOperador ?? '',
+        }}
+      />
+    </details>
+  );
+
+  return (
+    <main className="h-full">
+      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
+        <div className="flex-1 flex flex-col">
+          <ChatEntrevista
+            preguntaInicial={preguntaInicial}
+            chipsIniciales={bien.chips}
+            sustentoInicial={bien.sustento}
+            perfilListoInicial={entrevista.perfilListo || onboardingFiscalListo(perfil)}
+            sufijo={sufijo}
+            formulario={formulario}
+          />
+        </div>
+      </div>
+    </main>
   );
 }

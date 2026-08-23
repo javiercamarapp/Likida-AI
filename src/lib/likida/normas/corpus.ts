@@ -354,6 +354,21 @@ export const NORMAS: readonly Norma[] = [
     ]
   },
   {
+    "archivo": "rmf-2026-3.3.1.7.yaml",
+    "id": "rmf-2026-3.3.1.7",
+    "tipo": "regla_general",
+    "instrumento": "Resolución Miscelánea Fiscal para 2026",
+    "articulo_o_regla": "3.3.1.7",
+    "titulo": "Comprobación de combustibles adquiridos con monedero electrónico autorizado — la estación no emite CFDI al adquirente",
+    "estado_verificacion": "evidencia_corroborante",
+    "fuente_url": "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rmf/rmf/RMF_2026-DOF-28122025.pdf",
+    "verificado_el": "2026-07-27",
+    "jerarquia": 3,
+    "citasEnCodigo": [
+      "RMF 3.3.1.7"
+    ]
+  },
+  {
     "archivo": "rmf-2026-9.1.8.yaml",
     "id": "rmf-2026-9.1.8",
     "tipo": "regla_general",

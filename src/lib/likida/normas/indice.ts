@@ -345,6 +345,17 @@ export const NORMAS: Record<string, Norma> = {
     exigibleDesde: '2024-07-17',
     ficha: "normas/rmf-2026-2.7.7.yaml",
   },
+  'rmf-2026-3.3.1.7': {
+    id: 'rmf-2026-3.3.1.7',
+    instrumento: "Resolución Miscelánea Fiscal para 2026",
+    articulo: "3.3.1.7",
+    titulo: "Comprobación de combustibles adquiridos con monedero electrónico autorizado — la estación no emite CFDI al adquirente",
+    citas: ["RMF 3.3.1.7"],
+    jerarquia: 3,
+    estado: "evidencia_corroborante",
+    exigibleDesde: '2026-01-01',
+    ficha: "normas/rmf-2026-3.3.1.7.yaml",
+  },
 };
 
 /** Todas las normas conocidas. */

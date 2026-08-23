@@ -563,7 +563,7 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
           <div className="mt-2.5 text-sm max-w-[85%]">
             {h.r.pendiente ? (
               <div className="flex items-start gap-2.5">
-                <span className="likida-respira shrink-0 mt-0.5"><LogoIcono alto="h-[16px]" /></span>
+                <span className="likida-respira shrink-0 mt-0.5" style={{ color: 'var(--ink)' }}><LogoIcono alto="h-[16px]" /></span>
                 <div>
                   <div style={{ color: 'var(--muted)' }}>{fasePensando}</div>
                   {pasosVivos.length > 0 && (

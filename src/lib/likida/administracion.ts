@@ -190,11 +190,8 @@ export async function crearFlota(
   // Se falla cerrado a propósito: conceder de más imprime en el PDF, citando el
   // artículo, una deducción que la norma niega.
   //
-  // PENDIENTE que esto deja abierto (FISC-C2-4, ALTO): la 624 todavía no existe
-  // en `REGIMENES` (`saas/fiscal.ts`) ni en el CHECK `tenant_regimen_fiscal_dominio`
-  // de la migración 0056, así que un coordinado real —el contribuyente para el
-  // que la regla se escribió— no puede declararse como tal. Cerrarlo pide una
-  // migración; hoy la facilidad solo la alcanza una persona física 612.
+  // 624 entra en `REGIMENES` y en el CHECK (mig. 0170). Un coordinado ya puede
+  // declararse; la facilidad del 15% deja de ser solo para PF 612.
   const REGIMENES_ELEGIBLES = ['624', '612'];
   const regimenElegible = f.regimenFiscal ? REGIMENES_ELEGIBLES.includes(f.regimenFiscal) : undefined;
   const facilidad15 = (typeof f.dedicacionExclusivaCarga === 'boolean' && regimenElegible !== undefined)

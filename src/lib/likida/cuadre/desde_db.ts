@@ -6,9 +6,12 @@ import { cuadrarViaje } from './engine';
 import { ventanaDelViaje } from './fecha_dudosa';
 import { getViaje, getGastos, getOperador, getAcumuladoCombustible, getPerfilCrudo } from '../repo';
 import { getConfig } from '../config';
-import { calificaEstimuloPeaje } from '../perfil/preguntas';
+import { calificaEstimuloPeaje, facilidad15Declarada } from '../perfil/preguntas';
 import { logger } from '@/lib/logger';
-import type { Liquidacion } from '@/types/likida';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '../presupuesto';
+import type { Liquidacion, Gasto } from '@/types/likida';
+import type { LineaEccRef } from '../intake/evidencia_monedero';
 
 /**
  * La ventana de un viaje sin cuadrarlo entero.
@@ -73,10 +76,16 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
   //   3. el efectivo ya corrido ANTES de esta liquidación (el contador previo)
   // Los tres se calculan aquí —el motor es puro— con el mismo patrón de
   // agregación del resto del archivo.
+  // Paso 6: el perfil es la fuente. `tenant.config` queda como legado
+  // (el alta vieja escribía ahí) — si el dueño ya declaró en el perfil,
+  // esa declaración gana. No se inventa un no a partir de un config vacío.
+  const f15Perfil = facilidad15Declarada(perfilCrudo);
   const f15 = config.facilidadCombustibleEfectivo;
-  const facilidad15 = (f15 && f15.dedicacionExclusivaCarga !== undefined && f15.regimenElegible !== undefined)
-    ? (f15.dedicacionExclusivaCarga === true && f15.regimenElegible === true)
-    : undefined;
+  const facilidad15 = f15Perfil
+    ? (f15Perfil.dedicacionExclusivaCarga && f15Perfil.regimenElegible)
+    : (f15 && f15.dedicacionExclusivaCarga !== undefined && f15.regimenElegible !== undefined)
+      ? (f15.dedicacionExclusivaCarga === true && f15.regimenElegible === true)
+      : undefined;
   // AUDITORÍA 14, MEDIO: el ejercicio es el de los COMPROBANTES, no el del
   // proceso — una liquidación de diciembre cerrada en enero declaraba todo el
   // diésel en efectivo NO deducible contra un tope de $0 (año equivocado).
@@ -138,6 +147,10 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
     oposicionTitular,
     facilidad15,
     elegiblePeaje,
+    lineasEcc: await lineasEccParaCuadre(tenantId, gastos).catch((e) => {
+      logger.warn('desde_db.ecc_no_disponible', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+      return [] as LineaEccRef[];
+    }),
     totalCombustibleEjercicio,
     efectivoPrevEjercicio,
     anioEjercicio,
@@ -146,4 +159,33 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
     // correría en producción aunque sus pruebas estén verdes.
     hoy,
   });
+}
+
+/** Líneas ECC del tenant en la ventana de los gastos (±1 día). Best-effort
+ *  caller: un fallo no tumba el cuadre, solo apaga el camino B. */
+async function lineasEccParaCuadre(tenantId: string, gastos: Gasto[]): Promise<LineaEccRef[]> {
+  const fechas = gastos.map((g) => g.fecha?.slice(0, 10)).filter((f): f is string => !!f);
+  if (fechas.length === 0) return [];
+  const ordenadas = [...fechas].sort();
+  const shift = (iso: string, d: number): string => {
+    const x = new Date(`${iso}T00:00:00Z`);
+    x.setUTCDate(x.getUTCDate() + d);
+    return x.toISOString().slice(0, 10);
+  };
+  const { data, error } = await acotada(
+    supabaseAdmin().from('cfdi_consolidado_linea')
+      .select('fecha, monto, estacion_rfc')
+      .eq('tenant_id', tenantId)
+      .gte('fecha', shift(ordenadas[0], -1))
+      .lte('fecha', shift(ordenadas[ordenadas.length - 1], 1)),
+    'desde_db.lineas_ecc',
+  );
+  if (error) throw new Error(`lineas ecc: ${error.message}`);
+  return ((data ?? []) as Array<{ fecha: unknown; monto: unknown; estacion_rfc: unknown }>)
+    .map((r) => ({
+      fecha: typeof r.fecha === 'string' ? r.fecha : undefined,
+      monto: Number(r.monto),
+      estacionRfc: typeof r.estacion_rfc === 'string' ? r.estacion_rfc : undefined,
+    }))
+    .filter((l) => Number.isFinite(l.monto));
 }

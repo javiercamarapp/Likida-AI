@@ -1,5 +1,6 @@
-// El logo de Likida, en dos piezas y dos colores: el ícono en el naranja de
-// marca, el wordmark "LIKIDA" en la tinta.
+// El logo de Likida, en dos piezas: el ícono y el wordmark.
+// En las consolas (`tema-neutro`) --marca es tinta, no naranja. El glifo de
+// "pensando" (`LogoIcono`) usa --ink a propósito: negro/gris, nunca acento.
 //
 // Por qué no es una sola imagen: `public/images/logo.png` (726×149) trae ícono
 // y letras en un mismo PNG negro sobre transparente. Para teñirlo con la
@@ -36,7 +37,7 @@ export function Logo({ alto, className = '' }: { alto: string; className?: strin
         className="block h-full"
         style={{
           aspectRatio: '161 / 149',
-          background: 'var(--marca)',
+          background: 'var(--ink)',
           WebkitMaskImage: 'url(/images/logo-icono.png)',
           maskImage: 'url(/images/logo-icono.png)',
           ...MASCARA,
@@ -57,22 +58,18 @@ export function Logo({ alto, className = '' }: { alto: string; className?: strin
   );
 }
 
-/** Solo el ÍCONO de la marca — para el indicador de "pensando" del chat
- *  (13-ago: el logo se anima mientras la IA lee los registros).
- *  Misma máscara y mismo token que la pieza del logo completo. */
+/** El ícono negro del producto (`logo-icono.png`), sin teñir.
+ *  El PNG ya es negro sobre transparente. Una máscara con `--marca` lo
+ *  volvía naranja fuera de `tema-neutro`. Aquí se usa el archivo tal cual. */
 export function LogoIcono({ alto, className = '' }: { alto: string; className?: string }) {
   return (
-    <span
-      role="img"
-      aria-label="Likida pensando"
-      className={`block ${alto} ${className}`}
-      style={{
-        aspectRatio: '161 / 149',
-        background: 'var(--marca)',
-        WebkitMaskImage: 'url(/images/logo-icono.png)',
-        maskImage: 'url(/images/logo-icono.png)',
-        ...MASCARA,
-      }}
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/images/logo-icono.png"
+      alt=""
+      aria-hidden
+      className={`block ${alto} w-auto logo-icono-negro ${className}`}
+      style={{ aspectRatio: '161 / 149' }}
     />
   );
 }

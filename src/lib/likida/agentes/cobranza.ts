@@ -9,6 +9,8 @@ import {
   CONFIG_COBRANZA_DEFAULT, validarConfigCobranza, dentroDeVentana,
   tierPendiente, armarMensajeCobranza, type ConfigCobranza,
 } from './cobranza_pura';
+import { getPerfilCrudo } from '../repo';
+import { ventanaCobranzaDeclarada } from '../perfil/preguntas';
 
 // El motor PURO (config, ventana, tiers, mensaje) vive en cobranza_pura.ts
 // desde el 14-ago-2026 — la página del agente lo corre en el navegador para
@@ -40,22 +42,32 @@ export async function leerConfigCobranza(tenantId: string): Promise<ConfigCobran
     .eq('tenant_id', tenantId)
     .maybeSingle();
   if (error) throw new Error(`leerConfigCobranza: ${error.message}`);
-  if (!data) return CONFIG_COBRANZA_DEFAULT;
-  const v = validarConfigCobranza({
-    activo: data.activo as boolean,
-    tiers: (data.tiers as number[]) ?? undefined,
-    horaInicio: data.hora_inicio as number,
-    horaFin: data.hora_fin as number,
-    diasSemana: (data.dias_semana as number[]) ?? undefined,
-    instrucciones: (data.instrucciones as string) ?? '',
-    firma: (data.firma as string) ?? '',
-  });
-  // Una fila corrupta no tumba al agente: se cae a los defaults y se grita.
-  if ('error' in v) {
-    logger.error('cobranza.config_corrupta', { tenantId, err: v.error });
-    return CONFIG_COBRANZA_DEFAULT;
+  const base = (() => {
+    if (!data) return CONFIG_COBRANZA_DEFAULT;
+    const v = validarConfigCobranza({
+      activo: data.activo as boolean,
+      tiers: (data.tiers as number[]) ?? undefined,
+      horaInicio: data.hora_inicio as number,
+      horaFin: data.hora_fin as number,
+      diasSemana: (data.dias_semana as number[]) ?? undefined,
+      instrucciones: (data.instrucciones as string) ?? '',
+      firma: (data.firma as string) ?? '',
+    });
+    // Una fila corrupta no tumba al agente: se cae a los defaults y se grita.
+    if ('error' in v) {
+      logger.error('cobranza.config_corrupta', { tenantId, err: v.error });
+      return CONFIG_COBRANZA_DEFAULT;
+    }
+    return v.ok;
+  })();
+  // Paso 6: la ventana declarada en el perfil gana sobre la tabla.
+  try {
+    const ventana = ventanaCobranzaDeclarada(await getPerfilCrudo(tenantId));
+    if (ventana) return { ...base, ...ventana };
+  } catch (e) {
+    logger.warn('cobranza.perfil_ventana', { tenantId, err: e instanceof Error ? e.message : String(e) });
   }
-  return v.ok;
+  return base;
 }
 
 export async function guardarConfigCobranza(tenantId: string, cruda: Partial<ConfigCobranza>): Promise<{ error?: string }> {
