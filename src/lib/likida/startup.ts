@@ -223,6 +223,30 @@ export async function verificarMigracionesCriticas(): Promise<void> {
       // que nunca corrió el OCR. Regla que esto fija: la migración aditiva va
       // ANTES que el código que la lee, y el arranque lo comprueba.
       ...Object.entries(COLUMNAS_RECIENTES).map(([clave, c]) => columna(admin, c.tabla, c.columna, `FALTA la migración ${clave} (${c.tabla}.${c.columna}): ${c.consecuencia} Corre \`supabase db push\`.`)),
+
+      // 0172: CHECK tenant_regimen_fiscal_dominio con 624. No hay columna
+      // nueva que leer: se inserta un tenant throwaway y se borra. 23514 =
+      // el CHECK de 0056 sigue vigente y un coordinado no puede declararse.
+      async () => {
+        const PROBE = '__likida_probe_624__';
+        await acotada(admin.from('tenant').delete().eq('nombre', PROBE), 'startup.0172.cleanup');
+        const { data, error } = await acotada(
+          admin.from('tenant').insert({ nombre: PROBE, regimen_fiscal: '624' }).select('id'),
+          'startup.0172',
+        );
+        if (error) {
+          if (error.code === '23514' || /tenant_regimen_fiscal_dominio|regimen_fiscal/i.test(error.message ?? '')) {
+            reportarProbe(error, 'FALTA la migración 0172 (CHECK 624 Coordinados): el catálogo del código admite 624 y la base lo rechaza. Un coordinado no puede declararse. Corre `supabase db push`.');
+            return true;
+          }
+          if (error.code) reportarProbe(error, `Sondeo 0172 (CHECK 624) contestó ${error.code}: ${error.message ?? ''}`);
+          return false;
+        }
+        const id = Array.isArray(data) ? data[0]?.id : undefined;
+        if (id) await acotada(admin.from('tenant').delete().eq('id', id), 'startup.0172.cleanup');
+        else await acotada(admin.from('tenant').delete().eq('nombre', PROBE), 'startup.0172.cleanup');
+        return false;
+      },
     ];
 
     const resultados = await Promise.allSettled(sondeos.map((s) => s()));
@@ -262,6 +286,9 @@ export const COLUMNAS_RECIENTES: Record<string, { tabla: string; columna: string
   '0119': { tabla: 'wa_evento_pendiente', columna: 'id', consecuencia: 'el webhook de WhatsApp no puede encolar el mensaje y el cron de la bandeja no tiene de dónde drenar: un mensaje que no cupo en la invocación se pierde.' },
   '0132': { tabla: 'evento_stripe', columna: 'aplicado_en', consecuencia: 'el webhook de Stripe no puede marcar el evento y cada cobro real responde 500: Stripe reintenta hasta rendirse y el plan pagado no se activa.' },
   '0149': { tabla: 'wa_mensaje_procesado', columna: 'completado_en', consecuencia: 'el claim del mensaje no distingue reclamado de completado: el cron de la bandeja sella como procesado un mensaje cuyo OCR nunca corrió.' },
+  '0168': { tabla: 'cfdi_consolidado_linea', columna: 'litros', consecuencia: 'los litros del ECC se leen y se tiran: flota con monedero queda en cero IEPS.' },
+  '0169': { tabla: 'tenant', columna: 'perfil', consecuencia: 'el onboarding no tiene dónde guardar lo declarado; el motor sigue aplicando el 50% de peaje sin condición.' },
+  '0171': { tabla: 'gasto', columna: 'descuento', consecuencia: 'el estímulo de peaje se calcula sobre el SubTotal sin restar @Descuento del CFDI.' },
 };
 
 /** Sondeo por lectura de una columna: su ausencia ES la señal. */

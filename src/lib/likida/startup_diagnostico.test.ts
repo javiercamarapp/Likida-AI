@@ -32,7 +32,7 @@ const { verificarMigracionesCriticas } = await import('./startup');
 // las pruebas midan cualquier cosa menos lo que dicen medir.
 const tabla = (resultado: { error: unknown; data?: unknown } = { error: null }) => {
   const enlace: Record<string, unknown> = {};
-  for (const m of ['select', 'not', 'eq', 'limit']) enlace[m] = () => enlace;
+  for (const m of ['select', 'not', 'eq', 'limit', 'insert', 'delete']) enlace[m] = () => enlace;
   // `await` sobre el enlace resuelve al resultado (igual que el query builder real).
   enlace.then = (r: (v: unknown) => unknown) => Promise.resolve(resultado).then(r);
   return enlace;
@@ -358,7 +358,7 @@ describe('los sondeos corren en paralelo y cubren las migraciones recientes', ()
   it('sonda las columnas que nacen en 0119, 0132 y 0149', async () => {
     rpc.mockResolvedValue({ data: [], error: null });
     const { COLUMNAS_RECIENTES } = await import('./startup');
-    expect(Object.keys(COLUMNAS_RECIENTES)).toEqual(expect.arrayContaining(['0119', '0132', '0149']));
+    expect(Object.keys(COLUMNAS_RECIENTES)).toEqual(expect.arrayContaining(['0119', '0132', '0149', '0168', '0169', '0171']));
     await verificarMigracionesCriticas();
     const tablas = from.mock.calls.map((c) => c[0] as string);
     expect(tablas).toEqual(expect.arrayContaining(['wa_evento_pendiente', 'evento_stripe', 'wa_mensaje_procesado']));
