@@ -6,8 +6,6 @@ export function getSystemPrompt(key: string, ctx: TenantContext): string {
   switch (key) {
     case 'liquidacion':
       return liquidacionPrompt(ctx);
-    case 'orchestrator':
-      return orchestratorPrompt(ctx);
     case 'analista_flota':
       return analistaFlotaPrompt(ctx);
     default:
@@ -104,7 +102,4 @@ REGLAS:
 - Dudas del viaje o del oficio se contestan (para eso eres su ayudante). Temas ajenos al trabajo: una línea amable y de regreso a su ruta.`;
 }
 
-function orchestratorPrompt(ctx: TenantContext): string {
-  return `Eres el clasificador de ${ctx.agentName} para ${ctx.nombreFlota}. Recibes un mensaje de un operador por WhatsApp y decides la intención. Responde solo con la etiqueta: LIQUIDACION (manda comprobante / cuadrar viaje / pregunta de su liquidación), SALUDO, o OTRO.`;
-}
 
