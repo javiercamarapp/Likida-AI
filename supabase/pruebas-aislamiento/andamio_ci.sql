@@ -111,6 +111,15 @@ alter default privileges in schema public
 -- que es la forma real en que PostgREST pasa el JWT en cada request.
 create schema if not exists auth;
 
+-- ESCALA 50k (22-ago-2026): un proyecto de Supabase trae el esquema
+-- `extensions`, donde vive todo lo que no debe ensuciar `public` (el propio
+-- linter de Supabase lo marca: «Extension in Public»). La 0154 instala ahí
+-- `pg_trgm` para la búsqueda del Registro de Viajes, así que sin este esquema
+-- la migración falla en un Postgres vacío — el CI se cae en una diferencia
+-- del ANDAMIO, no del código, que es justo el ruido que este archivo existe
+-- para evitar.
+create schema if not exists extensions;
+
 -- USAGE en el esquema, no solo EXECUTE en la función: sin esto Postgres
 -- rechaza `select auth.uid()` con "permission denied for schema auth" ANTES
 -- de llegar a evaluar la función — se comprobó en vivo contra el contenedor
