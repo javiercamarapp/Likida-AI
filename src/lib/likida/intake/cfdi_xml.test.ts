@@ -161,6 +161,10 @@ describe('parseCfdiXml — CFDI consolidado (líneas)', () => {
     expect(l1).toMatchObject({
       indice: 1, fuente: 'ecc12', fecha: '2026-04-03T09:12:00', monto: 2904.05,
       estacionRfc: 'EST010101AAA', estacionClave: '4521', folioOperacion: 'OP-100234', cantidad: 120.5,
+      // FASE 1 (docs/asistencia/PLAN-FASES.md): ECC12 no da ClaveProdServ por
+      // línea, solo TipoCombustible — es lo que consolidado.ts traduce a
+      // 15101505 (ver claveProdServDeLinea). Antes se leía y se tiraba.
+      tipoCombustible: 'Diesel',
     });
     expect(l2.fecha).toBe('2026-04-11T18:47:00');
     expect(l3.estacionRfc).toBe('EST010101AAA'); // misma estación que l1, día distinto
@@ -187,6 +191,9 @@ describe('parseCfdiXml — CFDI consolidado (líneas)', () => {
     expect(r.lineas.every((l) => l.fecha === undefined)).toBe(true);
     expect(r.lineas.every((l) => l.fuente === 'concepto_base')).toBe(true);
     expect(r.lineas[1].descripcion).toBe('Cruce caseta Km 88');
+    // FASE 1: concepto_base SÍ trae ClaveProdServ nativo por línea (a
+    // diferencia de ecc12) — aquí es caseta (78101803), no diésel.
+    expect(r.lineas.every((l) => l.claveProdServ === '78101803')).toBe(true);
   });
 
   it('la suma de las líneas del ECC12 cuadra contra el SubTotal declarado por el complemento', () => {
