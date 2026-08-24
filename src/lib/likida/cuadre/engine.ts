@@ -13,7 +13,7 @@ import { diasSobreTope } from './tope_alimentacion';
 import { fechaDudosa } from './fecha_dudosa';
 import { sanitizarFolio } from '../intake/sanitizar';
 import { esRfcValido, rfcChecksumOk } from '../intake/cfdi';
-import { calcularCaducidad } from '../facturacion/caducidad';
+import { calcularCaducidad, type Plazo } from '../facturacion/caducidad';
 import { identificarComercio } from '../facturacion/identificar';
 import { NORMAS } from '../normas/indice';
 import { evidenciaMonedero, notaTicketMonedero, type LineaEccRef } from '../intake/evidencia_monedero';
@@ -604,6 +604,44 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       diferencias.push({ tipo: 'moneda_extranjera', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} viene en ${monedaGasto}${tc ? ` (tipo de cambio ${tc} declarado en el comprobante)` : ' y sin tipo de cambio declarado'}, no en pesos. La cifra ${mxn(g.monto)} NO está convertida: conviértela a mano con el tipo de cambio del día antes de liquidar. Su IVA no se acredita hasta entonces.`, gastoId: g.id });
     }
 
+    // ── LA CANASTA MIXTA: RENGLONES QUE NO SON DEL VIAJE ───────────────────
+    //
+    // Un ticket de autoservicio no es UN gasto, es una lista. Auditoría del
+    // 24-ago-2026 sobre cinco tickets reales: un Walmart de $640.49 traía $299
+    // de manguera de jardinería y $258 de dos tapetes —$557 de $640 que no son
+    // gasto de un viaje de carga— y entró completo, en silencio. Otro de
+    // $261.62 traía $140 de desodorante y crema. El motor marcó la comida de
+    // un restaurante por exceder el tope de política y no dijo una palabra de
+    // la manguera.
+    //
+    // ESTO NO DESCUENTA NADA. `monto: 0`, igual que el resto de las
+    // observaciones de este bloque: `ajenoAlViaje` es un JUICIO de un modelo
+    // de visión sobre qué es plausible en una ruta, no una medición. Un juicio
+    // puede señalar; solo una persona puede rechazar un gasto. Lo que sí hace
+    // es poner la cifra y los nombres de las partidas a la vista del
+    // contralor, que es lo único que le permite decidir en diez segundos.
+    const renglones = (g.ocrExtra as Record<string, unknown> | undefined)?.renglones;
+    if (Array.isArray(renglones)) {
+      const ajenos = renglones.filter((r): r is { descripcion: string; importe: number; ajenoAlViaje: boolean } =>
+        Boolean(r) && typeof r === 'object'
+        && (r as { ajenoAlViaje?: unknown }).ajenoAlViaje === true
+        && typeof (r as { importe?: unknown }).importe === 'number'
+        && Number.isFinite((r as { importe: number }).importe));
+      const sumaAjena = ajenos.reduce((t, r) => t + r.importe, 0);
+      // Un solo renglón de a peso no vale una observación: el ruido le quita
+      // autoridad a la señal. El umbral es relativo al propio ticket —lo que
+      // importa es qué PARTE del gasto no es del viaje, no el monto absoluto.
+      if (ajenos.length > 0 && sumaAjena > 0 && g.monto > 0 && sumaAjena / g.monto >= 0.15) {
+        const lista = ajenos.slice(0, 4).map((r) => `${r.descripcion} ${mxn(r.importe)}`).join(', ');
+        const mas = ajenos.length > 4 ? ` y ${ajenos.length - 4} más` : '';
+        diferencias.push({
+          tipo: 'renglones_ajenos', concepto: g.concepto, monto: 0,
+          nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} incluye ${mxn(sumaAjena)} en partidas que no parecen gasto de viaje: ${lista}${mas}. El ticket entró completo — decide si se le repone todo al operador y qué parte es deducible.`,
+          gastoId: g.id,
+        });
+      }
+    }
+
     if (extraOcr?.textoSospechoso) {
       diferencias.push({ tipo: 'texto_sospechoso', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} traía texto dirigido al lector automático. Se capturó el total impreso, pero conviene ver el papel original.`, gastoId: g.id });
     }
@@ -900,7 +938,20 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // El plazo del comercio se usa SOLO si está verificado contra su portal.
       // `plazoVerificado: false` es el default del catálogo a propósito: un plazo
       // inventado haría que el sistema jure que un ticket sigue vigente.
-      const plazo = comercio?.plazoVerificado ? comercio.plazo : 'mes_natural';
+      // EL PLAZO IMPRESO EN EL PAPEL GANA. Auditoría del 24-ago-2026 sobre
+      // cinco tickets reales: dos traían su plazo impreso —24 hrs y 72 horas—
+      // y este renglón, que no lo leía, aplicó `mes_natural` y le dijo al
+      // chofer que podía facturar hasta fin de mes. Los dos ya habían vencido.
+      //
+      // Es el mismo criterio de niveles que el resto del motor: un plazo que
+      // el comercio IMPRIME en su propio ticket es evidencia directa suya, y
+      // le gana tanto al catálogo como al default. El catálogo es una
+      // generalización sobre la cadena; esto es este comercio, este día.
+      const horasImpresas = (g.ocrExtra as Record<string, unknown> | undefined)?.plazoFacturacionHoras;
+      const plazo: Plazo = typeof horasImpresas === 'number' && Number.isFinite(horasImpresas) && horasImpresas > 0
+        ? { horas: horasImpresas }
+        : comercio?.plazoVerificado ? comercio.plazo : 'mes_natural';
+      const plazoDelTicket = typeof horasImpresas === 'number' && horasImpresas > 0;
       const c = calcularCaducidad({ fechaTicket: g.fecha.slice(0, 10), plazo, hoy: input.hoy });
       // NO se espera a que sea urgente. El umbral de 2 días viene de un panel que
       // alguien mira a diario; la liquidación es un documento de UNA sola vez, y
@@ -933,7 +984,11 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // depende de que YA se haya verificado el plazo de ESE comercio — es
       // información fiscal que aplica igual en los dos casos, así que ahora
       // se dice en los dos.
-      const cierreComercio = comercio?.plazoVerificado
+      const cierreComercio = plazoDelTicket
+        // El propio ticket lo imprime: es la fuente más fuerte que hay, y hay
+        // que decir que salió de ahí para que nadie lo confunda con la ley.
+        ? ` (plazo impreso en el propio ticket, no de la ley: legalmente puedes exigir la factura dentro del ejercicio)`
+        : comercio?.plazoVerificado
         ? ` (plazo del portal de ${comercio.nombre}, no de la ley: legalmente puedes exigir la factura dentro del ejercicio)`
         : ' (la ventana del comercio no está verificada y puede ser menor; de cualquier forma, legalmente puedes exigir la factura dentro del ejercicio)';
       // SI LA FECHA ESTÁ EN DUDA, EL PLAZO TAMBIÉN. Las dos observaciones salen

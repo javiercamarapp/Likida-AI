@@ -105,6 +105,7 @@ export type TipoDiferencia =
   | 'monto_implausible'    // un solo comprobante fuera de escala para el viaje (DAT-18) → revisar
   | 'moneda_extranjera'    // el comprobante no está en MXN (DAT-19) → no se acredita como pesos
   | 'texto_sospechoso'     // el papel traía texto dirigido al extractor
+  | 'renglones_ajenos'     // partidas del ticket que no son gasto de viaje (canasta mixta) → a revisión, NUNCA se descuenta solo
   | 'alimentacion_sin_soporte' // comida sin hospedaje ni transporte que la ampare (LISR 28-V)
   | 'alimentacion_transporte_sin_tarjeta_credito' // comida amparada SOLO por transporte, pagada sin tarjeta de crédito (LISR 28-V 3er párrafo)
   | 'viatico_rfc_operador'  // viático a nombre de una persona: válido si es el operador (RLISR 57)
