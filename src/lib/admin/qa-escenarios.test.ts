@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ESCENARIOS_QA, POLITICA_DEMO, escenarioPorId } from './qa-escenarios';
 
-describe('los escenarios de Fase A', () => {
-  test('son exactamente los dos del encargo — feliz y guion del demo', () => {
-    expect(ESCENARIOS_QA.map((e) => e.id).sort()).toEqual(['demo_guion', 'feliz']);
+describe('los escenarios del selector', () => {
+  test('el selector ofrece los que TIENEN guion, y `escenarioPorId` no inventa', () => {
+    expect(ESCENARIOS_QA.map((e) => e.id).sort()).toEqual(['demo_guion', 'feliz', 'foto_duplicada']);
     expect(escenarioPorId('demo_guion')?.nombre).toMatch(/demo/i);
     expect(escenarioPorId('inexistente')).toBeNull();
   });
@@ -50,5 +50,37 @@ describe('la política del demo no deriva de su fuente (api/demo/route.ts)', () 
 
   test('el RFC del demo también está en la fuente (empresaRfc del guion)', () => {
     expect(fuente).toContain("empresaRfc: 'GMX0902279I1'");
+  });
+});
+
+describe('el guion es el contrato — un invariante declarado tiene que estar atacado', () => {
+  test('todo escenario trae guion, y el guion siempre cierra', () => {
+    for (const e of ESCENARIOS_QA) {
+      expect(e.guion.length, e.id).toBeGreaterThan(0);
+      expect(e.guion.at(-1)?.tipo, e.id).toBe('cierre');
+      expect(e.minFotos, e.id).toBeGreaterThan(0);
+    }
+  });
+
+  test('#3 (dedup) SOLO lo declara quien repite una foto — nadie reporta un ataque que no hizo', () => {
+    for (const e of ESCENARIOS_QA) {
+      const repite = e.guion.some((p) => p.tipo === 'foto_repetida');
+      expect(e.invariantes.includes('#3'), `${e.id}: declara #3 sin repetir foto`).toBe(repite);
+    }
+  });
+
+  test('quien cruza de viaje pide el segundo chofer, y quien no, no lo siembra', () => {
+    for (const e of ESCENARIOS_QA) {
+      const cruza = e.guion.some((p) => p.tipo === 'foto_repetida' && p.comoOtroChofer);
+      expect(e.segundoChofer, e.id).toBe(cruza);
+    }
+  });
+
+  test('el guion no puede repetir una foto que el mínimo no garantiza', () => {
+    for (const e of ESCENARIOS_QA) {
+      for (const p of e.guion) {
+        if (p.tipo === 'foto_repetida') expect(p.indice, e.id).toBeLessThan(e.minFotos);
+      }
+    }
   });
 });

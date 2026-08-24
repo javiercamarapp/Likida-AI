@@ -8524,3 +8524,96 @@ begin
   raise exception E'CRM_0182  score_484110=%  score_999999=%  indice=%   (esperado 100 / 0 / t)',
     score_bueno, score_malo, indice;
 end $$;
+-- ── 152. El ledger del panel de QA es una tabla, con las garantías que el JSON no daba (mig. 0185) ──
+--
+-- La Fase A guardaba el banco de fotos y las corridas como JSON en Storage,
+-- por una razón que ya caducó (migraciones congeladas). Este bloque comprueba
+-- las TRES cosas que solo la base puede demostrar y que el archivo no podía:
+--
+--   · DEDUP POR CONSTRUCCIÓN. En el JSON, `subirFotos` leía el manifiesto,
+--     buscaba el hash y reescribía el archivo entero: dos subidas concurrentes
+--     leen lo mismo y la segunda pisa a la primera. El `unique` sobre el hash
+--     hace que la carrera no exista.
+--   · UN PASO N POR CORRIDA. El motor reescribe cada paso en cada transición
+--     (pendiente → corriendo → ok). Con PK compuesta el upsert cae siempre en
+--     la misma fila; sin ella, un reintento duplicaba el paso en la pantalla.
+--   · UNA CONFIRMACIÓN SIN FIRMA NO ES UNA CONFIRMACIÓN. `ocr_esperado` es el
+--     oráculo humano: si se pudiera escribir sin `confirmado_en`, existiría un
+--     "esperado" que nadie respalda — y el veredicto lo leería como verdad.
+--
+-- Y dos de higiene: el cascade no deja pasos huérfanos, y RLS deja ciego a
+-- anon (una foto de ticket real trae RFC y domicilio, LFPDPPP art. 2 fr. VI).
+do $$
+declare
+  v_corrida uuid; v_otra uuid; v_foto uuid;
+  hash_rebota boolean; carril_rebota boolean; confirmacion_rebota boolean;
+  n_pasos int; nombre_final text; n_tras_cascade int;
+  n_anon int; nota_anon text;
+begin
+  insert into qa_foto (hash, path, mime, etiqueta, bytes)
+    values ('zzz0185deadbeef', 'banco/zzz-0185.jpg', 'image/jpeg', 'ticket 0185', 100)
+    returning id into v_foto;
+
+  -- LA MISMA FOTO, OTRA VEZ: el banco no la admite dos veces.
+  begin
+    insert into qa_foto (hash, path, mime, etiqueta, bytes)
+      values ('zzz0185deadbeef', 'banco/zzz-0185-bis.jpg', 'image/jpeg', 'la misma', 100);
+    hash_rebota := false;
+  exception when unique_violation then
+    hash_rebota := true;
+  end;
+
+  -- UN "ESPERADO" SIN FIRMA: no se puede escribir.
+  begin
+    update qa_foto set ocr_esperado = '{"monto": 1200}'::jsonb where id = v_foto;
+    confirmacion_rebota := false;
+  exception when check_violation then
+    confirmacion_rebota := true;
+  end;
+
+  insert into qa_corrida (escenario, parametros, estado, tenant_nombre)
+    values ('feliz', '{"anticipo": 1000}'::jsonb, 'corriendo', 'ZZZ QA 0185')
+    returning id into v_corrida;
+
+  -- Un carril inventado no entra (y 'completo' sí — la Fase C no pide DDL).
+  begin
+    insert into qa_corrida (escenario, carril, parametros, estado, tenant_nombre)
+      values ('feliz', 'teletransporte', '{}'::jsonb, 'pendiente', 'ZZZ QA 0185')
+      returning id into v_otra;
+    carril_rebota := false;
+  exception when check_violation then
+    carril_rebota := true;
+  end;
+  insert into qa_corrida (escenario, carril, parametros, estado, tenant_nombre)
+    values ('feliz', 'completo', '{}'::jsonb, 'pendiente', 'ZZZ QA 0185')
+    returning id into v_otra;
+
+  -- EL MISMO PASO, TRES VECES: es una fila, con el último estado.
+  insert into qa_corrida_paso (corrida_id, n, nombre, estado)
+    values (v_corrida, 1, 'intake', 'pendiente');
+  insert into qa_corrida_paso (corrida_id, n, nombre, estado)
+    values (v_corrida, 1, 'intake', 'corriendo')
+    on conflict (corrida_id, n) do update set estado = excluded.estado, nombre = excluded.nombre;
+  insert into qa_corrida_paso (corrida_id, n, nombre, estado)
+    values (v_corrida, 1, 'intake · OCR', 'ok')
+    on conflict (corrida_id, n) do update set estado = excluded.estado, nombre = excluded.nombre;
+  select count(*) into n_pasos from qa_corrida_paso where corrida_id = v_corrida;
+  select nombre into nombre_final from qa_corrida_paso where corrida_id = v_corrida and n = 1;
+
+  begin
+    set local role anon;
+    select count(*) into n_anon from qa_foto where id = v_foto;
+    reset role;
+    nota_anon := case when n_anon = 0 then 'RLS lo deja a ciegas' else 'FUGA: anon LEE fotos de tickets' end;
+  exception when insufficient_privilege then
+    reset role;
+    n_anon := -1; nota_anon := 'denegado por privilegios de tabla';
+  end;
+
+  -- Borrar la corrida se lleva sus pasos: nada de filas colgando.
+  delete from qa_corrida where id = v_corrida;
+  select count(*) into n_tras_cascade from qa_corrida_paso where corrida_id = v_corrida;
+
+  raise exception E'QA_PANEL_0185  hash_rebota=%  confirmacion_rebota=%  carril_rebota=%  pasos=%  nombre_final=%  tras_cascade=%  anon=%  nota=%   (esperado t / t / t / 1 / intake · OCR / 0 / 0 / RLS lo deja a ciegas)',
+    hash_rebota, confirmacion_rebota, carril_rebota, n_pasos, nombre_final, n_tras_cascade, n_anon, nota_anon;
+end $$;

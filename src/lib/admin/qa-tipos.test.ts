@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest';
 import {
-  validarLanzar, estadoFinalDe, resumenVeredicto,
+  validarLanzar, estadoFinalDe, resumenVeredicto, ESCENARIOS_VALIDOS,
   MAX_FOTOS_CARRIL_RAPIDO, TOPE_DIA_USD,
   type FilaVeredicto,
 } from './qa-tipos';
@@ -27,11 +27,18 @@ describe('validarLanzar — el cliente no es frontera de confianza', () => {
     expect(r.datos.params.retencion).toBe('borrar_al_terminar');
   });
 
-  test('rechaza un escenario fuera de Fase A, con el motivo dicho', () => {
-    const r = validarLanzar({ ...BASE, escenario: 'duplicado' });
+  test('rechaza un escenario que no está en el selector, y DICE cuántos faltan del catálogo', () => {
+    const r = validarLanzar({ ...BASE, escenario: 'sobregiro' });
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.error).toMatch(/Fase B/);
+    expect(r.error).toMatch(/escenario desconocido/);
+    expect(r.error).toMatch(/restantes del catálogo/);
+  });
+
+  test('los escenarios del selector SÍ pasan — la lista y el tipo no pueden divergir', () => {
+    for (const id of ESCENARIOS_VALIDOS) {
+      expect(validarLanzar({ ...BASE, escenario: id }).ok, id).toBe(true);
+    }
   });
 
   test(`más de ${MAX_FOTOS_CARRIL_RAPIDO} fotos manda al carril completo — no entra al rápido`, () => {

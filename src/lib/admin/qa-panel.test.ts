@@ -81,6 +81,23 @@ describe('las identidades sintéticas respetan los guards del ejército', () => 
     expect(telefonoQa(id)).toBe(telefonoQa(id));
   });
 
+  test('el SEGUNDO chofer tiene teléfono propio, y sigue dentro del rango imposible', () => {
+    // El ataque de dedup necesita dos operadores del mismo tenant. Si el
+    // segundo reusara el número del primero, `resolveOperador` los cruzaría y
+    // la foto repetida entraría por el MISMO viaje: el pre-check la pararía y
+    // el índice de la base —lo único que este escenario vino a probar— nunca
+    // se ejercitaría.
+    for (const uuid of [id, '00000000-0000-4000-8000-000000000000', 'ffffffff-ffff-4fff-8fff-ffffffffffff']) {
+      const uno = telefonoQa(uuid, 0);
+      const dos = telefonoQa(uuid, 1);
+      expect(dos).not.toBe(uno);
+      expect(dos).toMatch(/^5215559\d{6}$/);
+      const sufijo = Number(dos.slice(7));
+      expect(sufijo).toBeGreaterThanOrEqual(100_000);
+      expect(sufijo).toBeLessThan(900_000);
+    }
+  });
+
   test('los waMessageId van bajo el PREFIJO_QA del ejército, con id de corrida propio', () => {
     const p = prefijoMensajes(id);
     expect(p.startsWith(PREFIJO_QA)).toBe(true);

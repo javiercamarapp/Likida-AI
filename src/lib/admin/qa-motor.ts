@@ -33,7 +33,8 @@ import { ahoraMs } from '@/lib/saludo';
 import {
   exigirTenantZZZ, exigirPrefijoQA, PREFIJO_QA, TOPE_CORRIDA_USD,
 } from '../../../scripts/qa-agentes/config.qa';
-import { correrOraculosFaseA } from './qa-oraculos';
+import { correrOraculos } from './qa-oraculos';
+import { escenarioPorId } from './qa-escenarios';
 import { dataUrlDeFoto, guardarCorrida, leerManifiesto } from './qa-storage';
 import {
   estadoFinalDe,
@@ -69,9 +70,9 @@ export function nombreTenantQa(corridaId: string): string {
  *  ni con ZZZ CARGA (000001..000200) ni con el ejército (9xxxxx). Determinista
  *  por corrida; corridas distintas casi nunca chocan y, si chocaran,
  *  `resolveOperador` lo diría (OperadorAmbiguo) en vez de cruzar tenants. */
-export function telefonoQa(corridaId: string): string {
+export function telefonoQa(corridaId: string, indice = 0): string {
   const hex = corridaId.replace(/-/g, '').slice(0, 10);
-  const n = 100_000 + (parseInt(hex, 16) % 800_000);
+  const n = 100_000 + ((parseInt(hex, 16) + indice) % 800_000);
   return `5215559${String(n).padStart(6, '0')}`;
 }
 
@@ -119,7 +120,10 @@ function capturarBitacora(): { eventos: EventoCapturado[]; restaurar: () => void
 
 // ── Siembra (mismo patrón que el orquestador del ejército) ──────────────────
 
-async function sembrarTenant(db: SupabaseClient, corrida: CorridaQA): Promise<{ tenantId: string; operadorId: string; viajeId: string; telefono: string }> {
+async function sembrarTenant(db: SupabaseClient, corrida: CorridaQA): Promise<{
+  tenantId: string; operadorId: string; viajeId: string; telefono: string;
+  operador2Id: string | null; viaje2Id: string | null; telefono2: string | null;
+}> {
   const tenantId = randomUUID();
   const p = corrida.parametros;
   const ins = await db.from('tenant').insert({
@@ -137,11 +141,36 @@ async function sembrarTenant(db: SupabaseClient, corrida: CorridaQA): Promise<{ 
   });
   if (ins.error) throw new Error(`no se pudo sembrar el tenant QA: ${ins.error.message}`);
 
-  const telefono = telefonoQa(corrida.id);
+  const chofer1 = await sembrarChofer(db, tenantId, corrida, 0);
+
+  // El segundo chofer SOLO si el guion lo usa: sembrar uno que nadie toca
+  // ensucia el tenant sintético y confunde la evidencia.
+  const def = escenarioPorId(corrida.escenario);
+  const chofer2 = def?.segundoChofer ? await sembrarChofer(db, tenantId, corrida, 1) : null;
+
+  return {
+    tenantId,
+    operadorId: chofer1.operadorId, viajeId: chofer1.viajeId, telefono: chofer1.telefono,
+    operador2Id: chofer2?.operadorId ?? null, viaje2Id: chofer2?.viajeId ?? null, telefono2: chofer2?.telefono ?? null,
+  };
+}
+
+/** Un chofer del tenant sintético con su unidad y su viaje ABIERTO. Se llama
+ *  una vez, o dos cuando el guion cruza de viaje (el ataque de dedup necesita
+ *  que la segunda foto entre por OTRO viaje: el pre-check del processor mira
+ *  uno solo, así que solo así se obliga al índice de la base a ser el que
+ *  rechace). */
+async function sembrarChofer(
+  db: SupabaseClient, tenantId: string, corrida: CorridaQA, indice: number,
+): Promise<{ operadorId: string; viajeId: string; telefono: string }> {
+  const p = corrida.parametros;
+  const sufijo = `${corrida.id.slice(0, 8)}${indice === 0 ? '' : `-${indice + 1}`}`;
+  const telefono = telefonoQa(corrida.id, indice);
+
   const op = await db.from('operador').insert({
-    tenant_id: tenantId, nombre: 'ZZZ QA Chofer 1', telefono, activo: true,
+    tenant_id: tenantId, nombre: `ZZZ QA Chofer ${indice + 1}`, telefono, activo: true,
   }).select('id').single();
-  if (op.error) throw new Error(`no se pudo sembrar el operador QA: ${op.error.message}`);
+  if (op.error) throw new Error(`no se pudo sembrar el operador QA ${indice + 1}: ${op.error.message}`);
 
   // LA CONSTANCIA DEL AVISO DE PRIVACIDAD, sembrada — el escenario modela un
   // operador YA onboardeado. Hallazgo REAL de la primera corrida del panel
@@ -163,7 +192,7 @@ async function sembrarTenant(db: SupabaseClient, corrida: CorridaQA): Promise<{ 
   if (constancia.error) throw new Error(`no se pudo sembrar la constancia del aviso: ${constancia.error.message}`);
 
   const uni = await db.from('unidad').insert({
-    tenant_id: tenantId, numero_economico: `ZZZ-QA-${corrida.id.slice(0, 8)}`, activo: true,
+    tenant_id: tenantId, numero_economico: `ZZZ-QA-${sufijo}`, activo: true,
   });
   if (uni.error) throw new Error(`no se pudo sembrar la unidad QA: ${uni.error.message}`);
 
@@ -174,7 +203,7 @@ async function sembrarTenant(db: SupabaseClient, corrida: CorridaQA): Promise<{ 
   const viaje = await db.from('viaje').insert({
     tenant_id: tenantId,
     operador_id: op.data.id,
-    folio: `ZZZQA-${corrida.id.slice(0, 8)}`,
+    folio: `ZZZQA-${sufijo}`,
     origen: p.ruta.origen,
     destino: p.ruta.destino,
     anticipo: p.anticipo,
@@ -188,7 +217,7 @@ async function sembrarTenant(db: SupabaseClient, corrida: CorridaQA): Promise<{ 
   }).select('id').single();
   if (viaje.error) throw new Error(`no se pudo sembrar el viaje QA: ${viaje.error.message}`);
 
-  return { tenantId, operadorId: op.data.id as string, viajeId: viaje.data.id as string, telefono };
+  return { operadorId: op.data.id as string, viajeId: viaje.data.id as string, telefono };
 }
 
 // ── Ledger: el costo REAL, leído de llm_costo (jamás un segundo medidor) ────
@@ -355,6 +384,11 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
   const bit = capturarBitacora();
   let viajeId = '';
   let telefono = '';
+  let viaje2Id: string | null = null;
+  let telefono2: string | null = null;
+  /** Se llena si el guion repitió una foto: es lo que habilita el oráculo #3. */
+  let dedup: { imgHash: string; viajeIntentoId: string } | undefined;
+  const TEXTO_CIERRE = 'listo, ya subí todo';
   try {
     // 1 — siembra
     const p1 = await paso(`sembrar tenant "${corrida.tenantNombre}" (operador, unidad, política, viaje)`);
@@ -363,6 +397,8 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
       corrida.tenantId = s.tenantId;
       viajeId = s.viajeId;
       telefono = s.telefono;
+      viaje2Id = s.viaje2Id;
+      telefono2 = s.telefono2;
       await cerrarPaso(p1, 'ok');
     } catch (e) {
       await cerrarPaso(p1, 'bad', e instanceof Error ? e.message : String(e));
@@ -374,7 +410,10 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
       return corrida;
     }
 
-    // 2..N — las fotos, por el camino REAL (processInbound + mediaDataUrlQA)
+    // 2..N — EL GUION DEL ESCENARIO, por el camino REAL (processInbound +
+    // mediaDataUrlQA). La Fase A mandaba siempre la misma secuencia; ahora la
+    // secuencia la dicta el escenario, que es lo que distingue un ataque de
+    // otro.
     const manifiesto = await leerManifiesto(db);
     if (!manifiesto.ok) {
       await abortar(`no se pudo leer el banco de fotos: ${manifiesto.error}`);
@@ -382,77 +421,125 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
     }
     const porId = new Map(manifiesto.datos.map((f) => [f.id, f]));
     const prefijo = prefijoMensajes(corrida.id);
-    let f = 0;
-    for (const fotoId of corrida.parametros.fotoIds) {
-      f += 1;
+    const guion = escenarioPorId(corrida.escenario)?.guion ?? [{ tipo: 'fotos' as const }, { tipo: 'cierre' as const }];
+    let msg = 0;
+
+    /** Manda UNA foto del banco por el camino real. Devuelve false si la
+     *  corrida ya no puede seguir (falta la foto, se acabó el tiempo). */
+    const mandarFoto = async (
+      fotoId: string, rotulo: string, desde: string,
+    ): Promise<boolean> => {
+      msg += 1;
       const foto = porId.get(fotoId);
-      const p = await paso(`foto ${f}/${corrida.parametros.fotoIds.length} — ${foto?.etiqueta ?? fotoId} → processInbound`);
+      const p = await paso(`${rotulo} — ${foto?.etiqueta ?? fotoId} → processInbound`);
       if (!foto) {
         await cerrarPaso(p, 'bad', `la foto ${fotoId} no está en el banco`);
         await abortar(`la foto ${fotoId} no está en el banco — corrida detenida`);
-        return corrida;
+        return false;
       }
       if (sinTiempo()) {
         await cerrarPaso(p, 'bad', 'sin tiempo para otro mensaje');
         await abortar(`techo de tiempo del carril rápido (${TECHO_CORRIDA_MS / 1000}s) — corrida con menos fotos, o carril completo (Fase C)`);
-        return corrida;
+        return false;
       }
       try {
         const dataUrl = await dataUrlDeFoto(db, foto);
         await processInbound({
-          from: telefono,
+          from: desde,
           type: 'image',
-          mediaId: `${prefijo}media-${f}`,   // jamás llega a Meta: mediaDataUrlQA lo sustituye
+          mediaId: `${prefijo}media-${msg}`,   // jamás llega a Meta: mediaDataUrlQA lo sustituye
           mediaDataUrlQA: dataUrl,
-          waMessageId: `${prefijo}f${f}`,
+          waMessageId: `${prefijo}f${msg}`,
         });
         await cerrarPaso(p, 'ok');
       } catch (e) {
         await cerrarPaso(p, 'bad', e instanceof Error ? e.message : String(e));
       }
+      return true;
+    };
+
+    const fotoIds = corrida.parametros.fotoIds;
+    for (const acto of guion) {
+      if (acto.tipo === 'fotos') {
+        let f = 0;
+        for (const fotoId of fotoIds) {
+          f += 1;
+          if (!(await mandarFoto(fotoId, `foto ${f}/${fotoIds.length}`, telefono))) return corrida;
+          if (excedeTope()) {
+            await abortar(`TOPE DE CORRIDA excedido: $${corrida.costoUsdTotal.toFixed(4)} > $${TOPE_CORRIDA_USD} (config.qa.ts del ejército)`);
+            return corrida;
+          }
+        }
+        continue;
+      }
+
+      if (acto.tipo === 'foto_repetida') {
+        const fotoId = fotoIds[acto.indice];
+        const foto = fotoId ? porId.get(fotoId) : undefined;
+        if (!foto) {
+          await abortar(`el escenario repite la foto #${acto.indice + 1} y la corrida no la trae — elige al menos ${acto.indice + 1} foto(s)`);
+          return corrida;
+        }
+        // El ataque de dedup vale SOLO cruzando de viaje: el pre-check del
+        // processor mira un viaje, así que mandarla desde el mismo chofer
+        // probaría el pre-check y no el índice de la base.
+        const desde = acto.comoOtroChofer ? telefono2 : telefono;
+        if (acto.comoOtroChofer && (!telefono2 || !viaje2Id)) {
+          await abortar('el escenario necesita un segundo chofer y la siembra no lo creó');
+          return corrida;
+        }
+        dedup = { imgHash: foto.hash, viajeIntentoId: (acto.comoOtroChofer ? viaje2Id : viajeId) as string };
+        const rotulo = acto.comoOtroChofer
+          ? `LA MISMA foto, desde el chofer 2 (otro viaje del mismo tenant)`
+          : `LA MISMA foto, otra vez`;
+        if (!(await mandarFoto(fotoId, rotulo, desde as string))) return corrida;
+        if (excedeTope()) {
+          await abortar(`TOPE DE CORRIDA excedido: $${corrida.costoUsdTotal.toFixed(4)} > $${TOPE_CORRIDA_USD}`);
+          return corrida;
+        }
+        continue;
+      }
+
+      // acto.tipo === 'cierre'
+      const pC = await paso(`cierre — el chofer escribe «${TEXTO_CIERRE}»`);
+      if (sinTiempo()) {
+        await cerrarPaso(pC, 'bad', 'sin tiempo para el cierre');
+        await abortar(`techo de tiempo del carril rápido (${TECHO_CORRIDA_MS / 1000}s) antes del cierre`);
+        return corrida;
+      }
+      try {
+        await processInbound({ from: telefono, type: 'text', text: TEXTO_CIERRE, waMessageId: `${prefijo}t1` });
+        if (!(await hayLiquidacion(db, corrida.tenantId!, viajeId)) && !sinTiempo() && !excedeTope()) {
+          pC.detalle = 'el primer «listo» no cerró; se insistió una vez (mismo criterio que el ejército)';
+          await processInbound({ from: telefono, type: 'text', text: TEXTO_CIERRE, waMessageId: `${prefijo}t2` });
+        }
+        await cerrarPaso(pC, 'ok', pC.detalle);
+      } catch (e) {
+        await cerrarPaso(pC, 'bad', e instanceof Error ? e.message : String(e));
+      }
       if (excedeTope()) {
-        await abortar(`TOPE DE CORRIDA excedido: $${corrida.costoUsdTotal.toFixed(4)} > $${TOPE_CORRIDA_USD} (config.qa.ts del ejército)`);
+        await abortar(`TOPE DE CORRIDA excedido: $${corrida.costoUsdTotal.toFixed(4)} > $${TOPE_CORRIDA_USD}`);
         return corrida;
       }
     }
 
-    // N+1 — el cierre ("listo"), con UNA insistencia si el agente pidió confirmación
-    const TEXTO_CIERRE = 'listo, ya subí todo';
-    const pC = await paso(`cierre — el chofer escribe «${TEXTO_CIERRE}»`);
-    if (sinTiempo()) {
-      await cerrarPaso(pC, 'bad', 'sin tiempo para el cierre');
-      await abortar(`techo de tiempo del carril rápido (${TECHO_CORRIDA_MS / 1000}s) antes del cierre`);
-      return corrida;
-    }
-    try {
-      await processInbound({ from: telefono, type: 'text', text: TEXTO_CIERRE, waMessageId: `${prefijo}t1` });
-      if (!(await hayLiquidacion(db, corrida.tenantId!, viajeId)) && !sinTiempo() && !excedeTope()) {
-        pC.detalle = 'el primer «listo» no cerró; se insistió una vez (mismo criterio que el ejército)';
-        await processInbound({ from: telefono, type: 'text', text: TEXTO_CIERRE, waMessageId: `${prefijo}t2` });
-      }
-      await cerrarPaso(pC, 'ok', pC.detalle);
-    } catch (e) {
-      await cerrarPaso(pC, 'bad', e instanceof Error ? e.message : String(e));
-    }
-    if (excedeTope()) {
-      await abortar(`TOPE DE CORRIDA excedido: $${corrida.costoUsdTotal.toFixed(4)} > $${TOPE_CORRIDA_USD}`);
-      return corrida;
-    }
-
     // N+2 — evidencia + oráculos (funciones puras del ejército, importadas)
-    const pO = await paso('oráculos — #1 cuadre_balancea · #5 cifras_con_fuente · #8 bitacora_registro');
+    const rotuloOraculos = ['#1 cuadre_balancea', '#5 cifras_con_fuente', dedup ? '#3 dedup_comprobante' : null, '#8 bitacora_registro']
+      .filter(Boolean).join(' · ');
+    const pO = await paso(`oráculos — ${rotuloOraculos}`);
     corrida.turnos = await turnosDelTenant(db, corrida.tenantId!);
     corrida.pdfs = await pdfsDelTenant(db, corrida.tenantId!);
     const filas = await filasDelTenant(db, corrida.tenantId!);
     const textosBot = corrida.turnos.filter((t) => t.rol === 'assistant').map((t) => t.texto);
     try {
-      corrida.veredicto = await correrOraculosFaseA({
+      corrida.veredicto = await correrOraculos({
         tenantId: corrida.tenantId!,
         viajeId,
         textosBot,
         fuentesRespaldo: [filas, corrida.parametros, [TEXTO_CIERRE]],
         eventosBitacora: bit.eventos,
         eventosEsperados: ['agent.run'],
+        dedup,
       });
       const final = estadoFinalDe(corrida.veredicto);
       await cerrarPaso(pO, final === 'ok' ? 'ok' : final === 'parcial' ? 'warn' : 'bad');

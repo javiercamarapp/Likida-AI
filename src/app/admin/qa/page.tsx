@@ -13,8 +13,8 @@ export const dynamic = 'force-dynamic';
  * Storage caído.
  *
  * Diseño completo: 00-PANEL-DE-QA.md (carpeta qa-autonomo/panel). El estado
- * vive en Storage (buckets qa-fotos / qa-evidencia) mientras las migraciones
- * de qa_corrida/qa_foto siguen congeladas — ver qa-tipos.ts, cabecera.
+ * vive en las tablas qa_foto / qa_corrida / qa_corrida_paso (mig. 0185); en
+ * Storage quedan solo los bytes — ver qa-tipos.ts, cabecera.
  */
 export default async function QaPage() {
   const db = supabaseAdmin();
