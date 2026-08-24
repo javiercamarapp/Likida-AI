@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { generateStructured } from '@/lib/llm/openrouter';
+import { createLlmBudget } from '@/lib/llm/budget';
+import { randomUUID } from 'node:crypto';
 import { logger } from '@/lib/logger';
 import type { AdaptadorPortal, ModoAgente, ResultadoAgente } from '../agente';
 import type { CampoListo } from '../pendientes';
@@ -90,6 +92,8 @@ type AccionPiloto = z.infer<typeof Accion>;
 const HUELE_A_EMITIR = /emitir|generar|timbrar|facturar|crear\s*(mi\s*)?(cfdi|factura)/i;
 
 export interface OpcionesPiloto {
+  /** Tenant de la corrida; sin él se mantiene el piloto en modo no persistido. */
+  tenantId?: string;
   comercio: Comercio;
   receptor: ReceptorPiloto;
   abrirPagina: FabricaDePagina;
@@ -370,6 +374,7 @@ async function decidir(
     images: captura?.startsWith('data:') ? [captura] : captura ? [await comoDataUri(captura)] : undefined,
     maxTokens: 700,
     temperature: 0,
+    budget: op.tenantId ? createLlmBudget(op.tenantId, randomUUID()) : undefined,
   });
   return data;
 }

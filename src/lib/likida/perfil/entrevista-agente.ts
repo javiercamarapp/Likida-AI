@@ -1,4 +1,6 @@
 import { generateResponse } from '@/lib/llm/openrouter';
+import { createLlmBudget } from '@/lib/llm/budget';
+import { randomUUID } from 'node:crypto';
 import { logger } from '@/lib/logger';
 import { CATALOGO, estadoEntrevista, mensajeBienvenida } from './entrevista';
 import { aplicarTurnoEntrevista, type ResultadoTurno, type PasoEntrevista } from './entrevista-aplicar';
@@ -52,6 +54,7 @@ export async function responderEntrevista(opts: {
         ],
         maxTokens: 400,
         temperature: 0.2,
+        budget: createLlmBudget(opts.tenantId, randomUUID()),
       });
       opts.onPaso?.({ fase: 'fin', tool: 'explicar_norma' });
       return {

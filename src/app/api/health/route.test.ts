@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
 // El pulso para el monitor externo (D4): la única promesa es que el status
-// HTTP diga la verdad — 200 solo con la base respondiendo, 503 si no — y que
-// el cuerpo no filtre un solo dato de negocio.
+// HTTP diga la verdad — 200 solo con base y crons sanos, 503 si falla/degrada —
+// y que el cuerpo no filtre un solo dato de negocio.
 
 let dbFalla = false;
 /** Las filas de `cron_latido` (RES-7). */
@@ -23,24 +23,37 @@ vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]
 const { GET } = await import('./route');
 
 describe('/api/health', () => {
-  it('con la base viva: 200, ok true, y el cuerpo solo trae pulso (nada de negocio)', async () => {
+  it('sin latidos todavía: degraded y el cuerpo solo trae pulso (nada de negocio)', async () => {
     dbFalla = false;
     const r = await GET();
-    expect(r.status).toBe(200);
+    expect(r.status).toBe(503);
     const c = await r.json();
-    expect(c.ok).toBe(true);
-    expect(c.db).toBe('ok');
-    expect(Object.keys(c).sort()).toEqual(['crons', 'db', 'hora', 'ok', 'ratelimit', 'sentry', 'version']);
-    // Sin latidos todavía no es un cron muerto: nada que alertar.
-    expect(c.crons['wa-pendientes']).toBe('sin_latido');
+    expect(c.ok).toBe(false);
+    expect(Object.keys(c).sort()).toEqual(['checks', 'hora', 'ok', 'status', 'version']);
+    expect(c.status).toBe('degraded');
+    expect(c.checks.crons).toBe('unknown');
+    expect(r.headers.get('cache-control')).toBe('no-store');
     expect(alertarOperador).not.toHaveBeenCalled();
     // Ni tablas, ni tenants, ni correos: el health es público a propósito.
     expect(JSON.stringify(c)).not.toMatch(/tenant_id|@|supabase/i);
   });
 
-  // RES-7: un cron que lleva 21 min sin latir (cada minuto + 20 de tolerancia)
-  // sale `vencido` y el operador recibe UNA alerta — antes era invisible.
-  it('un cron vencido se dice en `crons` y alerta al operador; el status sigue midiendo la base', async () => {
+  it('con todos los latidos frescos: 200 y ok true', async () => {
+    dbFalla = false;
+    const ahora = new Date().toISOString();
+    latidos = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps']
+      .map((id) => ({ id, ultimo_latido: ahora, estado: 'ok' }));
+    const r = await GET();
+    const c = await r.json();
+    expect(r.status).toBe(200);
+    expect(c).toMatchObject({ ok: true, status: 'ok', checks: { db: 'ok', crons: 'ok' } });
+  });
+
+  beforeEach(() => { latidos = []; });
+
+  // RES-7: un cron vencido degrada el monitor y el detalle de qué cron fue se
+  // queda en logs/alerta privados, no en el endpoint público.
+  it('un cron vencido degrada el health y alerta al operador sin fuga pública', async () => {
     dbFalla = false;
     alertarOperador.mockClear();
     latidos = [
@@ -49,18 +62,37 @@ describe('/api/health', () => {
       { id: 'escalar', ultimo_latido: new Date(Date.now() - 30 * 60_000).toISOString(), estado: 'ok' },
     ];
     const r = await GET();
-    expect(r.status).toBe(200);
+    expect(r.status).toBe(503);
     const c = await r.json();
-    expect(c.crons).toMatchObject({ 'wa-pendientes': 'vencido', escalar: 'ok', purgar: 'sin_latido' });
+    expect(c).toMatchObject({ ok: false, status: 'degraded', checks: { db: 'ok', crons: 'degraded' } });
+    expect(JSON.stringify(c)).not.toContain('wa-pendientes');
     expect(alertarOperador).toHaveBeenCalledWith('cron.sin_latido', expect.objectContaining({ codigo: 'cron_sin_latido' }));
     latidos = [];
   });
 
-  it('con la base caída: 503 y ok false — lo que un monitor entiende sin leer el cuerpo', async () => {
+  it('un latido fresco en fallo también degrada: frescura no oculta el resultado', async () => {
+    dbFalla = false;
+    alertarOperador.mockClear();
+    const ahora = new Date().toISOString();
+    latidos = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps']
+      .map((id) => ({ id, ultimo_latido: ahora, estado: id === 'runner' ? 'fallo' : 'ok' }));
+
+    const r = await GET();
+    const c = await r.json();
+
+    expect(r.status).toBe(503);
+    expect(c).toMatchObject({ ok: false, status: 'degraded', checks: { db: 'ok', crons: 'degraded' } });
+    expect(JSON.stringify(c)).not.toContain('runner');
+    expect(alertarOperador).toHaveBeenCalledWith('cron.estado_no_ok', expect.objectContaining({ codigo: 'cron_estado_no_ok' }));
+  });
+
+  it('con la base caída: 503 y fail — lo que un monitor entiende sin leer el cuerpo', async () => {
     dbFalla = true;
     const r = await GET();
     expect(r.status).toBe(503);
-    expect((await r.json()).ok).toBe(false);
+    const c = await r.json();
+    expect(c.ok).toBe(false);
+    expect(c.status).toBe('fail');
   });
 });
 
@@ -74,23 +106,14 @@ describe('/api/health', () => {
 // de arranque de una instancia que ya hubiera atendido algo. Ahora se pregunta
 // desde fuera, en cualquier momento.
 // ═══════════════════════════════════════════════════════════════════════════
-describe('/api/health — el backend del límite de tasa', () => {
+describe('/api/health — no expone configuración interna', () => {
   afterEach(() => { vi.unstubAllEnvs(); });
 
-  it('con credenciales de Upstash dice `redis`', async () => {
+  it('no expone Sentry, Redis ni nombres de infraestructura', async () => {
     dbFalla = false;
     vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://fake.upstash.io');
     vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'tok');
-    expect((await (await GET()).json()).ratelimit).toBe('redis');
-  });
-
-  it('sin ellas dice `memoria` — y lo dice en claro, no lo esconde', async () => {
-    dbFalla = false;
-    vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
-    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', '');
     const c = await (await GET()).json();
-    expect(c.ratelimit).toBe('memoria');
-    // No filtra host ni credencial: el health sigue siendo público.
-    expect(JSON.stringify(c)).not.toMatch(/upstash|tok/i);
+    expect(JSON.stringify(c)).not.toMatch(/upstash|sentry|token|wa-pendientes/i);
   });
 });

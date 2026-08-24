@@ -13,6 +13,7 @@ import OpenAI from 'openai';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { modelFor, type ModelRole } from './models';
+import { reserveLlmBudget, settleLlmBudget, type LlmBudget, type LlmBudgetReservation } from './budget';
 
 let _client: OpenAI | null = null;
 
@@ -322,26 +323,48 @@ export async function generateResponse(opts: {
   messages: { role: 'user' | 'assistant'; content: string }[];
   maxTokens?: number;
   temperature?: number;
+  signal?: AbortSignal;
+  budget?: LlmBudget;
 }) {
   const model = modelFor(opts.role);
   const fallback = FALLBACK[model] ?? null;
 
   const once = async (m: string) => {
-    const res = await getClient().chat.completions.create({
+    opts.signal?.throwIfAborted();
+    const body = {
       model: m,
       messages: [{ role: 'system', content: opts.system }, ...opts.messages],
       max_tokens: opts.maxTokens ?? 500,
       temperature: opts.temperature ?? 0.4,
       ...PROVIDER_OPTS,
-    });
-    const text = (res.choices[0]?.message?.content ?? '').trim();
-    return {
-      text,
-      model: res.model || m,
-      tokensIn: res.usage?.prompt_tokens ?? 0,
-      tokensOut: res.usage?.completion_tokens ?? 0,
-      cost: costoReal(res.usage as { cost?: number } | undefined, m, res.usage?.prompt_tokens ?? 0, res.usage?.completion_tokens ?? 0),
+    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
+    const reservation = opts.budget
+      ? await reserveLlmBudget(opts.budget, calcCost(m, Math.max(1, JSON.stringify(body.messages).length), Number(body.max_tokens ?? 500)))
+      : null;
+    let settled = false;
+    const settle = async (amount: number) => {
+      if (!reservation || settled) return;
+      settled = true;
+      try { await settleLlmBudget(opts.budget!, reservation, amount); }
+      catch (e) { logger.error('llm.presupuesto_no_liquidado', { runId: opts.budget?.runId, err: e instanceof Error ? e.message : String(e) }); }
     };
+    try {
+      const res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
+      const tokensIn = res.usage?.prompt_tokens ?? 0;
+      const tokensOut = res.usage?.completion_tokens ?? 0;
+      const costo = costoReal(res.usage as { cost?: number } | undefined, m, tokensIn, tokensOut);
+      const usageValido = Boolean(res.usage && (tokensIn > 0 || tokensOut > 0 || typeof (res.usage as { cost?: unknown }).cost === 'number'));
+      const costoContabilizado = usageValido ? costo : reservation?.amountUsd ?? costo;
+      await settle(costoContabilizado);
+      // Si el proveedor omite `usage`, el ledger conserva la reserva por
+      // seguridad. El resultado público debe reflejar lo mismo; devolver 0
+      // aquí haría que el Redactor/runner subestimara su gasto aunque la RPC
+      // central ya hubiera retenido la reserva.
+      return { text: (res.choices[0]?.message?.content ?? '').trim(), model: res.model || m, tokensIn, tokensOut, cost: costoContabilizado };
+    } catch (e) {
+      await settle(reservation?.amountUsd ?? 0);
+      throw e;
+    }
   };
 
   try {
@@ -418,6 +441,8 @@ export async function generateStructured<T>(opts: {
   images?: string[];
   maxTokens?: number;
   temperature?: number;
+  /** Reserva dura por corrida/tenant antes de cada intento, incluido fallback. */
+  budget?: LlmBudget;
 }): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number }> {
   const model = modelFor(opts.role);
   const fallback = FALLBACK[model] ?? null;
@@ -473,7 +498,7 @@ export async function generateStructured<T>(opts: {
     // Si el presupuesto ya se agotó, no se paga una llamada que se va a cortar a
     // media respuesta.
     opts.signal?.throwIfAborted();
-    const res = await getClient().chat.completions.create({
+    const body = {
       model: m,
       messages: msgs,
       max_tokens: maxTokens,
@@ -485,13 +510,32 @@ export async function generateStructured<T>(opts: {
       } as any,
       ...opcionesDeRazonamiento(opts.role),
       ...PROVIDER_OPTS,
-    }, opts.signal ? { signal: opts.signal } : undefined);
+    };
+    const reservation = opts.budget
+      ? await reserveLlmBudget(opts.budget, calcCost(m, Math.max(1, JSON.stringify(body.messages).length + JSON.stringify(jsonSchema).length), maxTokens))
+      : null;
+    let settled = false;
+    const settle = async (amount: number) => {
+      if (!reservation || settled) return;
+      settled = true;
+      try { await settleLlmBudget(opts.budget!, reservation, amount); }
+      catch (e) { logger.error('llm.presupuesto_no_liquidado', { runId: opts.budget?.runId, err: e instanceof Error ? e.message : String(e) }); }
+    };
+    let res: OpenAI.Chat.ChatCompletion;
+    try {
+      res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
+    } catch (e) {
+      await settle(reservation?.amountUsd ?? 0);
+      throw e;
+    }
     const raw = res.choices[0]?.message?.content || '';
     // La llamada se cobra aunque falle: el consumo viaja EN el error para que el
     // contador por liquidación no reporte $0 en los intentos fallidos.
     const tokIn = res.usage?.prompt_tokens ?? 0;
     const tokOut = res.usage?.completion_tokens ?? 0;
     const usage = { model: res.model || m, tokensIn: tokIn, tokensOut: tokOut, cost: costoReal(res.usage as { cost?: number } | undefined, m, tokIn, tokOut) };
+    const usageValido = Boolean(res.usage && (tokIn > 0 || tokOut > 0 || typeof (res.usage as { cost?: unknown }).cost === 'number'));
+    await settle(usageValido ? usage.cost : reservation?.amountUsd ?? usage.cost);
     // Se cobra AQUÍ, antes de cualquier salida: pase lo que pase debajo —
     // truncado, JSON roto, schema inválido— esta llamada ya se pagó.
     cobrar(usage);
@@ -580,7 +624,7 @@ export async function generateStructured<T>(opts: {
 
 // ── generateWithTools: ciclo agéntico completo ──────────────────────────────
 export type ToolExecResult = { success: boolean; result: unknown; error?: string; durationMs: number };
-export type ToolExecutor = (name: string, args: Record<string, unknown>) => Promise<ToolExecResult>;
+export type ToolExecutor = (name: string, args: Record<string, unknown>, signal?: AbortSignal) => Promise<ToolExecResult>;
 export type ToolCallRecord = { toolName: string; args: Record<string, unknown>; result: unknown; durationMs: number; error?: string };
 
 export class LoopGuardError extends Error {
@@ -695,6 +739,8 @@ export async function generateWithTools(opts: {
    * entrar a la caché entre rondas del turno.
    */
   readOnlyTools?: readonly string[];
+  /** Reserva monetaria antes de cada completion del ciclo. */
+  budget?: LlmBudget;
 }): Promise<{
   finalText: string;
   toolCalls: ToolCallRecord[];
@@ -785,6 +831,54 @@ export async function generateWithTools(opts: {
   // CR-5: completado con fallback cross-provider. Reintentar SÓLO la llamada de
   // completado (las tools se ejecutan DESPUÉS, en nuestro código) es seguro: una
   // caída del provider nunca re-ejecuta una mutación ni duplica una liquidación.
+  const reservarCompletion = async (body: Record<string, unknown>, modelForRequest: string): Promise<LlmBudgetReservation | null> => {
+    if (!opts.budget) return null;
+    const maxTokens = Number(body.max_tokens ?? DEFAULT_MAX_TOKENS);
+    // Cota conservadora: cada carácter puede representar un token en entradas
+    // JSON/URLs. Se sobre-reserva y luego se liquida al costo real; nunca se
+    // deja que un retry o fallback gaste sin autorización previa.
+    const inputUpperBound = Math.max(1, JSON.stringify(body.messages ?? '').length + JSON.stringify(body.tools ?? '').length);
+    return reserveLlmBudget(opts.budget, calcCost(modelForRequest, inputUpperBound, maxTokens));
+  };
+
+  const completion = async (body: Record<string, unknown>, signalOpt: { signal: AbortSignal } | undefined) => {
+    const reservation = await reservarCompletion(body, activeModel);
+    try {
+      const create = client.chat.completions.create as unknown as (
+        request: Record<string, unknown>,
+        options?: { signal?: AbortSignal },
+      ) => PromiseLike<OpenAI.Chat.ChatCompletion>;
+      const response = await create(body, signalOpt);
+      if (reservation) {
+        try {
+          const usage = response.usage as (typeof response.usage & { cost?: number }) | undefined;
+          const usageCompleta = usage
+            && Number.isFinite(usage.prompt_tokens)
+            && Number.isFinite(usage.completion_tokens)
+            && (usage.prompt_tokens > 0 || usage.completion_tokens > 0 || typeof usage.cost === 'number');
+          // Si el proveedor omite usage no conocemos el costo real. Conservar
+          // la reserva es la única opción segura: liquidar a cero abriría la
+          // puerta a que el siguiente completion rebase el tope duro.
+          const costo = usageCompleta
+            ? costoReal(usage as { cost?: number }, activeModel, usage.prompt_tokens, usage.completion_tokens)
+            : reservation.amountUsd;
+          await settleLlmBudget(opts.budget!, reservation, costo);
+        } catch (e) {
+          logger.error('llm.presupuesto_no_liquidado', { runId: opts.budget?.runId, err: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      return response;
+    } catch (err) {
+      // Ante un error de red se conserva la reserva completa: el proveedor pudo
+      // haber cobrado aunque la respuesta no llegara a la aplicación.
+      if (reservation) {
+        try { await settleLlmBudget(opts.budget!, reservation, reservation.amountUsd); }
+        catch (e) { logger.error('llm.presupuesto_no_liquidado', { runId: opts.budget?.runId, err: e instanceof Error ? e.message : String(e) }); }
+      }
+      throw err;
+    }
+  };
+
   const complete = async (msgs: OpenAI.Chat.ChatCompletionMessageParam[]) => {
     const body = () => ({
       model: activeModel,
@@ -804,12 +898,12 @@ export async function generateWithTools(opts: {
     });
     const signalOpt = opts.signal ? { signal: opts.signal } : undefined;
     try {
-      return await client.chat.completions.create(body(), signalOpt);
+      return await completion(body(), signalOpt);
     } catch (err) {
-      if (fallback && activeModel === model && isTransientError(err)) {
+      if (fallback && activeModel === model && !opts.signal?.aborted && isTransientError(err)) {
         logger.warn('llm.fallback', { fn: 'generateWithTools', from: model, to: fallback });
         activeModel = fallback;
-        return await client.chat.completions.create(body(), signalOpt);
+        return await completion(body(), signalOpt);
       }
       throw err;
     }
@@ -923,7 +1017,7 @@ export async function generateWithTools(opts: {
           if (!entry) {
             laCreo = true;
             opts.onTool?.({ fase: 'inicio', tool: call.function.name });
-            entry = { args, promise: opts.toolExecutor(call.function.name, args) };
+            entry = { args, promise: opts.toolExecutor(call.function.name, args, opts.signal) };
             inRound.set(key, entry);
           }
           const exec = await entry.promise;

@@ -8524,6 +8524,66 @@ begin
   raise exception E'CRM_0182  score_484110=%  score_999999=%  indice=%   (esperado 100 / 0 / t)',
     score_bueno, score_malo, indice;
 end $$;
+
+-- ── 153. El lease de herramientas usa el reloj de PostgreSQL (mig. 0188) ──
+-- El primer worker ejecuta, el segundo ve busy, solo el token vigente renueva
+-- y, tras vencer el lease en la base, un token nuevo cerca al anterior. El
+-- resultado completado se devuelve sin repetir el efecto y ningún rol cliente
+-- puede ejecutar las RPCs SECURITY DEFINER.
+-- Esperado: RUNTIME_CLOCK_0188 primero=execute busy=busy renueva=t ajeno=f reloj=t relevo=execute viejo=f nuevo=t cached=cached dato=true permisos=f
+do $$
+declare
+  t uuid;
+  token_1 uuid;
+  token_2 uuid;
+  primero text;
+  ocupado text;
+  relevo text;
+  cached text;
+  dato jsonb;
+  renueva boolean;
+  ajeno boolean;
+  reloj boolean;
+  viejo boolean;
+  nuevo boolean;
+  permisos boolean;
+begin
+  insert into public.tenant (nombre) values ('ZZZ RUNTIME CLOCK 0188') returning id into t;
+
+  select kind, token into primero, token_1
+    from public.claim_agente_mutacion(t, 'verif:0188', 'verificador', 90);
+  select kind into ocupado
+    from public.claim_agente_mutacion(t, 'verif:0188', 'verificador', 90);
+
+  ajeno := public.renew_agente_mutacion(t, 'verif:0188', gen_random_uuid(), 120);
+  renueva := public.renew_agente_mutacion(t, 'verif:0188', token_1, 120);
+  select lease_until > clock_timestamp() into reloj
+    from public.agente_mutacion_idempotencia
+   where tenant_id = t and effect_key = 'verif:0188';
+
+  update public.agente_mutacion_idempotencia
+     set lease_until = clock_timestamp() - interval '1 second'
+   where tenant_id = t and effect_key = 'verif:0188';
+  select kind, token into relevo, token_2
+    from public.claim_agente_mutacion(t, 'verif:0188', 'verificador', 90);
+
+  viejo := public.complete_agente_mutacion(t, 'verif:0188', token_1, '{"saved":false}'::jsonb);
+  nuevo := public.complete_agente_mutacion(t, 'verif:0188', token_2, '{"saved":true}'::jsonb);
+  select kind, result into cached, dato
+    from public.claim_agente_mutacion(t, 'verif:0188', 'verificador', 90);
+
+  permisos :=
+    has_function_privilege('anon', 'public.claim_agente_mutacion(uuid,text,text,integer)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.claim_agente_mutacion(uuid,text,text,integer)', 'EXECUTE')
+    or has_function_privilege('anon', 'public.renew_agente_mutacion(uuid,text,uuid,integer)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.complete_agente_mutacion(uuid,text,uuid,jsonb)', 'EXECUTE')
+    or has_function_privilege('anon', 'public.fail_agente_mutacion(uuid,text,uuid,text)', 'EXECUTE');
+
+  raise exception E'RUNTIME_CLOCK_0188 primero=% busy=% renueva=% ajeno=% reloj=% relevo=% viejo=% nuevo=% cached=% dato=% permisos=% (esperado execute/busy/t/f/t/execute/f/t/cached/true/f)',
+    primero, ocupado, renueva, ajeno, reloj, relevo, viejo, nuevo, cached,
+    dato->>'saved', permisos;
+end $$;
+
 -- ── 152. El ledger del panel de QA es una tabla, con las garantías que el JSON no daba (mig. 0185) ──
 --
 -- La Fase A guardaba el banco de fotos y las corridas como JSON en Storage,

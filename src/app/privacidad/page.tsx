@@ -1,4 +1,5 @@
 import { PaginaLegal, FaltaDato, type SeccionLegal } from '../legal/marco';
+import { estadoLegalProduccion, LEGAL_CONFIG } from '@/lib/legal/config';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA POLÍTICA DE PRIVACIDAD DE LIKIDA. 1-ago-2026.
@@ -37,9 +38,9 @@ const RESPONSABLE = {
   // 🔴 PENDIENTE: razón social y domicilio fiscal reales de la empresa que
   // opera Likida. Hasta que estén, la página lo DICE en vez de inventarlos —
   // mismo criterio que el aviso integral con el contacto del art. 29.
-  razonSocial: null as string | null,
-  domicilio: null as string | null,
-  contacto: 'likida.ai@gmail.com',
+  razonSocial: LEGAL_CONFIG.razonSocial,
+  domicilio: LEGAL_CONFIG.domicilio,
+  contacto: LEGAL_CONFIG.contacto,
 };
 
 const SECCIONES: SeccionLegal[] = [
@@ -138,17 +139,17 @@ const SECCIONES: SeccionLegal[] = [
 ];
 
 export default function Privacidad() {
-  const faltan = !RESPONSABLE.razonSocial || !RESPONSABLE.domicilio;
+  const estado = estadoLegalProduccion();
 
   return (
     <PaginaLegal
       etiqueta="Política de privacidad"
       bajada="Ley Federal de Protección de Datos Personales en Posesión de los Particulares"
       secciones={SECCIONES}
-      aviso={faltan ? (
+      aviso={!estado.listo ? (
         <FaltaDato>
-          Falta capturar la razón social y el domicilio fiscal de la empresa que opera Likida.
-          Aparece señalado en vez de quedar en blanco.
+          <strong>PRODUCCIÓN BLOQUEADA:</strong> faltan datos legales o anexos contractuales.
+          No debe presentarse como paquete enterprise hasta completar identidad, contacto y versiones contractuales.
         </FaltaDato>
       ) : undefined}
       pie={

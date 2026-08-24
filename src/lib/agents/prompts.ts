@@ -9,7 +9,7 @@ export function getSystemPrompt(key: string, ctx: TenantContext): string {
     case 'analista_flota':
       return analistaFlotaPrompt(ctx);
     default:
-      return liquidacionPrompt(ctx);
+      throw new Error(`prompt no registrado: ${key}`);
   }
 }
 
@@ -105,5 +105,4 @@ REGLAS:
 - Sé breve. En WhatsApp los mensajes largos no se leen.
 - Dudas del viaje o del oficio se contestan (para eso eres su ayudante). Temas ajenos al trabajo: una línea amable y de regreso a su ruta.`;
 }
-
 

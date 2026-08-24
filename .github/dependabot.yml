@@ -42,11 +42,10 @@ updates:
     commit-message:
       prefix: 'chore(deps)'
 
-  # Los workflows de este directorio (`ci.yml`, `ci-postgres.yml`,
-  # `codeql.yml`, `dependency-review.yml`) fijan sus Actions por versión
-  # mayor (`@v4`) — sin Dependabot, esas etiquetas quedan sin nadie
-  # vigilando si el upstream publica un parche de seguridad dentro de la
-  # misma mayor.
+  # Los workflows fijan las Actions a SHA completo (con comentario de versión)
+  # para impedir que un tag mutable cambie bajo el runner. Dependabot conserva
+  # la trazabilidad y abre el PR cuando aparece una nueva versión: el SHA se
+  # actualiza solo al pasar CI, nunca por una etiqueta flotante.
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -56,5 +55,6 @@ updates:
     groups:
       actions:
         patterns: ['*']
+    rebase-strategy: auto
     commit-message:
       prefix: 'chore(deps)'

@@ -68,7 +68,7 @@ permissions:
 jobs:
   aislamiento-postgres:
     name: Migraciones + aislamiento (Postgres efímero)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     # Contenedor de servicio: GitHub Actions lo levanta, espera su healthcheck
@@ -76,7 +76,7 @@ jobs:
     # de vida en los pasos del job.
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16.4@sha256:e62fbf9d3e2b49816a32c400ed2dba83e3b361e6833e624024309c35d334b412
         env:
           POSTGRES_PASSWORD: postgres
         ports:
@@ -112,6 +112,25 @@ jobs:
           fi
           psql --version
 
+      # pgTAP vive dentro del servidor, no solo en el runner. Se instala en
+      # el mismo Postgres efímero que recibió las migraciones y pg_prove queda
+      # en el runner para que un `not ok` haga fallar el job de forma real.
+      - name: pgTAP — extensión del servidor y runner TAP
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "$POSTGRES_CONTAINER_ID" bash -ceu '
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends postgresql-16-pgtap
+            rm -rf /var/lib/apt/lists/*
+          '
+          if ! command -v pg_prove >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends libtap-parser-sourcehandler-pgtap-perl
+          fi
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'create extension if not exists pgtap;'
+          pg_prove --version
+
       # ── El andamio, ANTES de la primera migración ──────────────────────
       # Roles anon/authenticated/service_role, los GRANT por default que
       # Supabase aplica al aprovisionar un proyecto, y un `auth`/`storage`
@@ -138,6 +157,20 @@ jobs:
             fi
           done
           echo "$n migraciones aplicadas limpias."
+
+      # ── Capa 0: contratos de leases/fencing en Postgres real ───────────
+      # Este archivo no es informativo: pg_prove interpreta el TAP y falla
+      # ante cualquier `not ok`, plan incompleto o error SQL.
+      - name: Capa 0 — pgTAP leases y fencing de WhatsApp/tools
+        run: |
+          pg_prove --dbname="$DATABASE_URL" --verbose supabase/tests/wa_leases_fencing.sql
+          # pgTAP instala dos vistas auxiliares en `public`. No pertenecen al
+          # esquema desplegable y harían que la auditoría auto-descubriente de
+          # la Capa 1 las confundiera con vistas del producto sin
+          # `security_invoker`. Tras ejecutar TAP ya no se necesitan: quitar
+          # la extensión restaura exactamente el esquema que irá a Supabase,
+          # sin debilitar ni exceptuar la regla de seguridad.
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'drop extension pgtap;'
 
       # ── Capa 1: la batería de aislamiento, contra Postgres real ────────
       # Dos archivos, un solo runner: la auditoría estática (schema-driven,

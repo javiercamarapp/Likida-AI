@@ -331,6 +331,12 @@ html, body {
    (que es el único camino de regreso). El logo vuelve al expandir. */
 :root[data-sidebar='min'] .sb-logo { display: none; }
 :root[data-sidebar='min'] .sb-aside .ml-auto { margin-left: 0; }
+.sb-aside a:focus-visible, .sb-aside button:focus-visible {
+  outline: 3px solid var(--accent, var(--marca));
+  outline-offset: 2px;
+  position: relative;
+  z-index: 1;
+}
 
 /* ── Textura punteada (16-ago-2026, ref. shadcn-dashboard) ─────────────────
    La convención nueva de la dirección visual: los DIVISORES INTERNOS de una

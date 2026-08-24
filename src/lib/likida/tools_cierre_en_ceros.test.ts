@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import type { Liquidacion } from '@/types/likida';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -57,6 +58,7 @@ const { executeTool } = await import('@/lib/llm/tool-executor');
 // normal —el chofer escribió "listo"— y el candado propio se prueba en
 // `tools_cierre_pedido.test.ts`.
 const BASE = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779', cierrePedidoPorTexto: true };
+const contexto = (extras: Record<string, unknown> = {}) => ({ ...BASE, ...extras, runId: randomUUID() });
 
 beforeEach(() => {
   saveLiquidacion.mockClear();
@@ -65,7 +67,7 @@ beforeEach(() => {
 
 describe('guardar_liquidacion se niega a cerrar en ceros sin confirmación expresa', () => {
   it('EL ATAQUE del QA: cero comprobantes y sin marca → la tool LANZA y nada persiste', async () => {
-    const r = await executeTool('guardar_liquidacion', {}, { ...BASE });
+    const r = await executeTool('guardar_liquidacion', {}, contexto());
     expect(r.success).toBe(false);
     expect(String(r.error)).toMatch(/comprobante/);
     expect(String(r.error)).toMatch(/irreversible/);
@@ -74,20 +76,20 @@ describe('guardar_liquidacion se niega a cerrar en ceros sin confirmación expre
 
   it('gastos que son puro $0 tampoco cuentan como comprobantes', async () => {
     liq = { ...enCeros(), gastos: [{ id: 'g0', concepto: 'diesel', monto: 0, ocrConfianza: 0.95 }] };
-    const r = await executeTool('guardar_liquidacion', {}, { ...BASE });
+    const r = await executeTool('guardar_liquidacion', {}, contexto());
     expect(r.success).toBe(false);
     expect(saveLiquidacion).not.toHaveBeenCalled();
   });
 
   it('con la confirmación del freno (el operador dijo "listo" dos veces) el cierre en ceros SÍ procede', async () => {
-    const r = await executeTool('guardar_liquidacion', {}, { ...BASE, cierreEnCerosConfirmado: true });
+    const r = await executeTool('guardar_liquidacion', {}, contexto({ cierreEnCerosConfirmado: true }));
     expect(r.success).toBe(true);
     expect(saveLiquidacion).toHaveBeenCalledTimes(1);
   });
 
   it('con comprobantes reales el candado ni se nota — cierra como siempre', async () => {
     liq = conComprobantes();
-    const r = await executeTool('guardar_liquidacion', {}, { ...BASE });
+    const r = await executeTool('guardar_liquidacion', {}, contexto());
     expect(r.success).toBe(true);
     expect(saveLiquidacion).toHaveBeenCalledTimes(1);
   });

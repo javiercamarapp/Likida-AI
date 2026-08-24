@@ -251,6 +251,7 @@ export function registrarPortales(op: OpcionesRegistro): ResultadoRegistro {
         continue;
       }
       registrarAdaptador(tenantId, crearPilotoVision({
+        tenantId,
         comercio,
         // Campo por campo, no spread: el tenantId no viaja dentro del receptor.
         receptor: {

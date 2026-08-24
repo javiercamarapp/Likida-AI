@@ -27,7 +27,7 @@ import { ESTADOS_GEO, VIEWBOX_ESTADOS, type EstadoGeo } from './mexico-estados-g
 import {
   COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, TAMANOS, desempacar,
   type DatosMapa, type Giro, type ProspectoMapa, type Tamano, type TextosProspecto,
-} from '@/lib/admin/prospectos-mapa';
+} from '@/lib/admin/prospectos-mapa-client';
 import { fechaHoraMx, numero, hoyMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';

@@ -57,6 +57,7 @@ vi.mock('./redactor', () => ({ redactarCorreoFrio: (...a: unknown[]) => redactar
 const { correrRunner } = await import('./runner');
 
 const REDACTOR = { id: 'redactor', presupuesto_dia_usd: 1.0 };
+const TENANT = 'tenant-runner-test';
 
 beforeEach(() => {
   respuestas.clear();
@@ -70,14 +71,14 @@ beforeEach(() => {
 describe('los cuatro candados', () => {
   it('global abajo: no corre nada y se dice', async () => {
     apagados.add('global');
-    const r = await correrRunner();
+    const r = await correrRunner(undefined, TENANT);
     expect(r.apagadoGlobal).toBe(true);
     expect(redactar).not.toHaveBeenCalled();
   });
 
   it('un agente habilitado SIN kill switch declarado no corre — inapagable = inexistente', async () => {
     respuestas.set('agente_definicion', [{ data: [{ id: 'fantasma', presupuesto_dia_usd: 1 }], error: null }]);
-    const r = await correrRunner();
+    const r = await correrRunner(undefined, TENANT);
     expect(r.agentes[0]).toMatchObject({ agente: 'fantasma', resultado: 'saltado' });
     expect(r.agentes[0].motivo).toMatch(/kill switch/);
   });
@@ -85,43 +86,41 @@ describe('los cuatro candados', () => {
   it('interruptor apagado o ILEGIBLE: no corre (fail closed)', async () => {
     apagados.add('agente:redactor');
     respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
-    let r = await correrRunner();
+    let r = await correrRunner(undefined, TENANT);
     expect(r.agentes[0].motivo).toMatch(/apagado/);
 
     apagados.clear();
     interruptorFalla = true;
     respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
-    r = await correrRunner();
+    r = await correrRunner(undefined, TENANT);
     expect(r.agentes[0].motivo).toMatch(/fail closed/);
     expect(redactar).not.toHaveBeenCalled();
   });
 
   it('sin techo declarado NO hay autonomía; techo agotado tampoco', async () => {
     respuestas.set('agente_definicion', [{ data: [{ id: 'redactor', presupuesto_dia_usd: null }], error: null }]);
-    let r = await correrRunner();
+    let r = await correrRunner(undefined, TENANT);
     expect(r.agentes[0].motivo).toMatch(/sin presupuesto/);
 
     respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
-    respuestas.set('rpc:reservar_presupuesto_agente', [{ data: [], error: null }]);
-    r = await correrRunner();
-    expect(r.agentes[0].motivo).toMatch(/agotado/);
+    r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0].resultado).toBe('corrio');
     expect(redactar).not.toHaveBeenCalled();
   });
 
-  it('con la reserva del día ILEGIBLE no se corre — el techo no se verifica a ciegas', async () => {
+  it('sin tenant explícito no se corre — el techo central no se verifica a ciegas', async () => {
     respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
-    respuestas.set('rpc:reservar_presupuesto_agente', [{ data: null, error: { message: 'db down' } }]);
     const r = await correrRunner();
-    expect(r.agentes[0].motivo).toMatch(/reservar el presupuesto/);
+    expect(r.agentes[0].motivo).toMatch(/tenant explícito/);
     expect(redactar).not.toHaveBeenCalled();
   });
 
   it('backpressure: la bandeja llena frena la fábrica', async () => {
     respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 25 }]);
-    const r = await correrRunner();
+    const r = await correrRunner(undefined, TENANT);
     expect(r.agentes[0].motivo).toMatch(/bandeja con 25/);
     expect(redactar).not.toHaveBeenCalled();
   });
@@ -139,24 +138,22 @@ describe('el lote', () => {
       if (id === 'pr-1') throw new Error('la cadencia lo protege');
       return { piezaId: 'p', asunto: 'x', aviso: null, costoUsd: 0.001 };
     });
-    const r = await correrRunner();
+    const r = await correrRunner(undefined, TENANT);
     expect(r.agentes[0].motivo).toBeUndefined();
     expect(r.agentes[0]).toMatchObject({ resultado: 'corrio', piezas: 5, saltados: 1 });
   });
 
-  it('el lote corta al agotar el presupuesto restante', async () => {
+  it('el lote recibe un único presupuesto central por toda la corrida', async () => {
     respuestas.set('agente_definicion', [{ data: [{ id: 'redactor', presupuesto_dia_usd: 0.005 }], error: null }]);
-    respuestas.set('rpc:reservar_presupuesto_agente', [{ data: [{ id: 'r-2', disponible_usd: 0.003 }], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
     respuestas.set('prospecto', [{
       data: Array.from({ length: 8 }, (_, i) => ({ id: `pr-${i}`, vendedor: null })), error: null,
     }]);
     redactar.mockResolvedValue({ piezaId: 'p', asunto: 'x', aviso: null, costoUsd: 0.002 });
-    const r = await correrRunner();
-    // disponible reservado = 0.003: cabe la 1a (0.002); tras acumular 0.002 aún < 0.003,
-    // cabe la 2a (0.004 acumulado) y la 3a ya no arranca.
+    const r = await correrRunner(undefined, TENANT);
     expect(r.agentes[0].motivo).toBeUndefined();
-    expect(r.agentes[0].piezas).toBe(2);
+    expect(r.agentes[0].piezas).toBe(5);
+    expect(redactar.mock.calls.every((call) => (call[3] as { tenantId?: string }).tenantId === TENANT)).toBe(true);
   });
 });
 
@@ -165,27 +162,24 @@ describe('M30 — correrRunner(soloAgente) acota la vuelta a UN agente', () => {
     respuestas.set('agente_definicion', [{ data: [REDACTOR, { id: 'cobranza', presupuesto_dia_usd: 1 }], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
     respuestas.set('prospecto', [{ data: [{ id: 'p1', vendedor: null }], error: null }]);
-    const r = await correrRunner('redactor');
+    const r = await correrRunner('redactor', TENANT);
     expect(r.agentes.map((a) => a.agente)).toEqual(['redactor']);
   });
 
   it('soloAgente que no está habilitado → vuelta vacía, sin despachar nada', async () => {
     respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
-    const r = await correrRunner('cobranza');
+    const r = await correrRunner('cobranza', TENANT);
     expect(r).toEqual({ apagadoGlobal: false, agentes: [] });
     expect(redactar).not.toHaveBeenCalled();
   });
 });
 
-describe('la reserva de presupuesto es atómica', () => {
-  it('no decide con un SELECT: reclama el saldo por RPC y lo cierra con el costo real', async () => {
+describe('el presupuesto central evita un ledger duplicado', () => {
+  it('no llama las RPC antiguas del runner', async () => {
     respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
     respuestas.set('prospecto', [{ data: [{ id: 'p1', vendedor: null }], error: null }]);
-    await correrRunner();
-    expect(llamadasRpc[0]).toMatchObject({
-      fn: 'reservar_presupuesto_agente', args: { p_agente: 'redactor', p_tope_usd: 1 },
-    });
-    expect(llamadasRpc.some((x) => x.fn === 'cerrar_reserva_presupuesto_agente')).toBe(true);
+    await correrRunner(undefined, TENANT);
+    expect(llamadasRpc).toEqual([]);
   });
 });

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import type { Liquidacion } from '@/types/likida';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -52,6 +53,7 @@ const { executeTool } = await import('@/lib/llm/tool-executor');
 const { pidioCerrar } = await import('./processor');
 
 const BASE = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779' };
+const contexto = (extras: Record<string, unknown> = {}) => ({ ...BASE, ...extras, runId: randomUUID() });
 
 describe('DAT-22 · el cierre solo corre si el operador lo pidió en este turno', () => {
   beforeEach(() => { saveLiquidacion.mockClear(); });
@@ -59,7 +61,7 @@ describe('DAT-22 · el cierre solo corre si el operador lo pidió en este turno'
   it('EL HALLAZGO: sin la marca, la tool se niega y NO persiste nada', async () => {
     // El turno de un "¿cuánto llevo?" con el modelo adelantándose. Antes esto
     // cerraba el viaje del chofer con la mitad de su fajo sin mandar.
-    const r = await executeTool('guardar_liquidacion', {}, { ...BASE });
+    const r = await executeTool('guardar_liquidacion', {}, contexto());
     expect(r.success).toBe(false);
     expect(r.error).toMatch(/no pidió cerrar/i);
     expect(saveLiquidacion, 'nada irreversible puede haber ocurrido').not.toHaveBeenCalled();
@@ -68,19 +70,19 @@ describe('DAT-22 · el cierre solo corre si el operador lo pidió en este turno'
   it('el error le dice al modelo QUÉ hacer, no solo que no', async () => {
     // El texto viaja al modelo como resultado de la tool y él se lo explica al
     // operador. Un "no" pelón lo deja reintentando la misma tool.
-    const r = await executeTool('guardar_liquidacion', {}, { ...BASE });
+    const r = await executeTool('guardar_liquidacion', {}, contexto());
     expect(r.error).toMatch(/listo/i);
     expect(r.error).toMatch(/contéstale/i);
   });
 
   it('`false` explícito tampoco cuela (no es solo "undefined")', async () => {
-    const r = await executeTool('guardar_liquidacion', {}, { ...BASE, cierrePedidoPorTexto: false });
+    const r = await executeTool('guardar_liquidacion', {}, contexto({ cierrePedidoPorTexto: false }));
     expect(r.success).toBe(false);
     expect(saveLiquidacion).not.toHaveBeenCalled();
   });
 
   it('CONTROL — con la marca, el cierre corre completo', async () => {
-    const r = await executeTool('guardar_liquidacion', {}, { ...BASE, cierrePedidoPorTexto: true });
+    const r = await executeTool('guardar_liquidacion', {}, contexto({ cierrePedidoPorTexto: true }));
     expect(r.success, r.error).toBe(true);
     expect(saveLiquidacion).toHaveBeenCalledTimes(1);
   });

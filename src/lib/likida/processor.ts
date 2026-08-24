@@ -18,6 +18,7 @@ import { resumenCuadre } from '@/lib/likida/cuadre/resumen';
 import { PartialExecutionError, isTransientError, type ToolCallRecord } from '@/lib/llm/openrouter';
 import type { Gasto } from '@/types/likida';
 import { extraerComprobante } from '@/lib/likida/intake/ocr';
+import { createLlmBudget } from '@/lib/llm/budget';
 import { hashImagen } from '@/lib/likida/intake/hash';
 import { subirComprobante } from '@/lib/likida/intake/almacen';
 import {
@@ -61,6 +62,7 @@ import {
   releaseViajeLock, releaseMessageClaim, completarMessageClaim,
   intakeDelta, esperarIntake, ConsultaFallida, OperadorAmbiguo, type ConvTurn,
   buscarTenantPorTelefono,
+  iniciarRenovacionMessageClaim,
 } from '@/lib/likida/conv';
 import { registrarCosto, registrarCostoWhatsApp, faseDeModelo, vincularCostosALiquidacion } from '@/lib/likida/costos';
 import { sendText, sendButtons, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText } from '@/lib/meta/client';
@@ -696,7 +698,17 @@ export async function processInbound(msg: InboundMessage, opts: OpcionesInbound 
   }
 
   // Idempotencia: si Meta reintenta el webhook, no re-procesar (no duplicar gasto).
-  const claim = msg.waMessageId ? await claimMessage(msg.waMessageId) : 'nuevo';
+  const claimOwner = `wa-message:${randomUUID()}`;
+  const rawClaim = msg.waMessageId
+    ? await claimMessage(msg.waMessageId, claimOwner, true)
+    : 'nuevo';
+  // Tests and older in-process callers may still mock the compatibility
+  // overload that returns the status string. Production uses the fenced
+  // handle returned by the RPC.
+  const messageClaim = typeof rawClaim === 'string'
+    ? { status: rawClaim, owner: claimOwner, token: undefined }
+    : rawClaim;
+  const claim = messageClaim.status;
   if (claim === 'duplicado') {
     logger.info('wa.duplicate', { id: msg.waMessageId });
     return 'duplicado';
@@ -720,13 +732,26 @@ export async function processInbound(msg: InboundMessage, opts: OpcionesInbound 
   let claimLiberado = false;
   const soltarClaim = async (): Promise<void> => {
     claimLiberado = true;
-    if (msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
+    if (msg.waMessageId) {
+      if (messageClaim.token) await releaseMessageClaim(msg.waMessageId, messageClaim.token, messageClaim.owner);
+      else await releaseMessageClaim(msg.waMessageId);
+    }
   };
 
-  await procesarTurno(msg, reloj, soltarClaim);
+  const detenerRenovacionMessage = msg.waMessageId && messageClaim.token && typeof iniciarRenovacionMessageClaim === 'function'
+    ? iniciarRenovacionMessageClaim(msg.waMessageId, messageClaim.token, messageClaim.owner)
+    : () => {};
+  try {
+    await procesarTurno(msg, reloj, soltarClaim);
+  } finally {
+    detenerRenovacionMessage();
+  }
 
   if (claimLiberado) return 'reintentable';
-  if (msg.waMessageId) await completarMessageClaim(msg.waMessageId);
+  if (msg.waMessageId) {
+    if (messageClaim.token) await completarMessageClaim(msg.waMessageId, messageClaim.token, messageClaim.owner);
+    else await completarMessageClaim(msg.waMessageId);
+  }
   return 'procesado';
 }
 
@@ -1018,7 +1043,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // la segunda.
           const imgHash = await hashImagen(dataUrl);
           const ruta = await subirComprobante(op.tenantId, 'sin-viaje', imgHash, dataUrl);
-          const ex = await extraerComprobante(dataUrl, reloj.senal(25_000));
+          const ex = await extraerComprobante(dataUrl, reloj.senal(25_000), createLlmBudget(op.tenantId, randomUUID()));
           await registrarCosto({ tenantId: op.tenantId, viajeId: null, fase: 'ocr', modelo: ex.costo.modelo, tokensIn: ex.costo.tokensIn, tokensOut: ex.costo.tokensOut, costoUsd: ex.costo.costoUsd });
           // ── FALLO NUESTRO: AQUÍ TAMPOCO SE PIERDE EL COMPROBANTE ────────────
           //
@@ -1305,7 +1330,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // (~$0.015/ticket de dos fotos) no justificaba ese riesgo a 5 días del
         // demo — decisión explícita de Javier, 1-ago-2026. Cada foto vuelve a
         // pagar su propia visión, como antes de la auditoría 8.
-        const extraccion = await extraerComprobante(dataUrl, reloj.senal(25_000));
+        const extraccion = await extraerComprobante(dataUrl, reloj.senal(25_000), createLlmBudget(op.tenantId, randomUUID()));
         const { gasto, costo } = extraccion;
         await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
 

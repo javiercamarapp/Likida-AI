@@ -113,7 +113,9 @@ export async function ConsolaVendedores({
     const s = await getSessionTenant();
     if (s?.rol !== 'superadmin') return { ok: false, error: 'Solo el superadmin administra la zona de vendedores.' };
     try {
-      const r = await redactarCorreoFrio(String(id), s.nombre ?? 'Javier');
+      const r = await redactarCorreoFrio(String(id), s.nombre ?? 'Javier', 'manual', {
+        tenantId: s.tenantId,
+      });
       revalidatePath(RUTA);
       return {
         ok: true,

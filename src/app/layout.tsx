@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, Inter_Tight, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
+import { exigirLegalEnProduccion } from '@/lib/legal/config';
 
 // Inter de default en todo el sitio. El 12-ago-2026
 // Javier pidió una tipografía más corporativa para los
@@ -51,10 +52,11 @@ export const viewport = { width: 'device-width', initialScale: 1 };
 const SCRIPT_TEMA = `(function(){try{if(location.pathname.indexOf('/dashboard')!==0)return;var t=localStorage.getItem('likida-tema');var d=t==='oscuro'||(t==='sistema'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}})()`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  exigirLegalEnProduccion();
   return (
     <html lang="es" className={`${inter.variable} ${interTight.variable} ${plexMono.variable}`}>
       <body>
-        <script dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA }} />
+        <script id="likida-theme-init" dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA }} />
         {children}
       </body>
     </html>

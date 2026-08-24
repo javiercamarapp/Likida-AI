@@ -13,10 +13,11 @@
 # una rama de trabajo en curso. Semanal además, por si algo nuevo en las
 # consultas de CodeQL encuentra algo en código que no cambió esta semana.
 #
-# 24-AGO-2026 — el repositorio de la app sigue PRIVADO en la API de GitHub.
-# CodeQL automático requiere GitHub Advanced Security y responde 422 sin esa
-# licencia. Se conserva manual para activarlo al comprar GHAS o hacer público
-# este repositorio; el lint de seguridad continúa obligatorio en cada PR.
+# 24-AGO-2026 — El preflight de abajo hace verificable el supuesto de licencia:
+# un repo privado solo continúa si la API de GitHub confirma
+# `advanced_security.status=enabled`. Si no puede comprobarlo, el job falla con
+# un mensaje accionable; nunca se presenta un CodeQL verde cuando GHAS está
+# apagado o el token no puede verificarlo.
 #
 # NO SUSTITUYE al análisis del lint, lo complementa: `eslint-plugin-security`
 # (reglas elegidas una por una en `eslint.config.mjs`) corre en cada push y es
@@ -37,7 +38,7 @@ permissions:
 jobs:
   analyze:
     name: Analizar (JavaScript/TypeScript)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       security-events: write # para publicar los hallazgos en la pestaña Security
@@ -48,8 +49,30 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Verificar GHAS para repositorio privado
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo_json=$(gh api "repos/${GITHUB_REPOSITORY}")
+          visibility=$(printf '%s' "$repo_json" | jq -r '.visibility // "unknown"')
+          ghas=$(printf '%s' "$repo_json" | jq -r '.security_and_analysis.advanced_security.status // "unknown"')
+          {
+            echo "### CodeQL / GHAS"
+            echo "- Visibilidad: \`$visibility\`"
+            echo "- Advanced Security: \`$ghas\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$visibility" = "private" ] && [ "$ghas" != "enabled" ]; then
+            echo "::error::El repositorio es privado pero GitHub Advanced Security no está confirmado como enabled (estado: $ghas). Habilita GHAS o corrige el permiso del token antes de confiar en CodeQL."
+            exit 1
+          fi
+          if [ "$visibility" = "unknown" ]; then
+            echo "::error::No se pudo verificar la visibilidad del repositorio; CodeQL no puede continuar a ciegas."
+            exit 1
+          fi
+
       - name: Inicializar CodeQL
-        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
+        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           languages: javascript-typescript
           queries: security-and-quality
@@ -58,6 +81,7 @@ jobs:
       # proyecto compile (a diferencia de Java/Go/C#) — lee el fuente
       # directamente. `autobuild` existe para otros lenguajes; aquí sobra.
       - name: Analizar
-        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           category: '/language:javascript-typescript'
+          wait-for-processing: true

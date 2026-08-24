@@ -19,38 +19,18 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, exigir, traerTodo, traerPorIds, PAGINA, LecturaIncompleta, type RespuestaPg } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
+import {
+  type DatosMapa, type DetalleProspecto, type FilaCompacta, type Giro,
+  type ProspectoMapa, type Tamano, type TextosProspecto,
+} from './prospectos-mapa-client';
+export { COLOR_EMBUDO, CRITERIO_SCORES, NOMBRE_GIRO, TAMANOS, desempacar } from './prospectos-mapa-client';
+export type {
+  DatosMapa, DetalleProspecto, FilaCompacta, Giro, PersonaProspecto,
+  ProspectoMapa, Tamano, TextosProspecto,
+} from './prospectos-mapa-client';
 
 // ── El embudo → color. UNA fuente para pines SVG, marcadores de calle,
 // leyenda y tarjetas — dos paletas del mismo estado se desincronizan. ──────
-export const COLOR_EMBUDO: Record<string, { color: string; nombre: string }> = {
-  nuevo: { color: '#64748b', nombre: 'Sin contactar' },
-  contactado: { color: '#d97706', nombre: 'Contactado' },
-  demo: { color: '#7c3aed', nombre: 'Demo dado' },
-  negociacion: { color: '#ea580c', nombre: 'En negociación' },
-  cerrado: { color: '#16a34a', nombre: 'Cliente' },
-  perdido: { color: '#94a3b8', nombre: 'Perdido' },
-  appointment: { color: '#2563eb', nombre: 'Cita agendada' },
-  rescheduled: { color: '#0891b2', nombre: 'Cita reprogramada' },
-  cancelled: { color: '#be123c', nombre: 'Cita cancelada' },
-  'no-show': { color: '#9f1239', nombre: 'No se presentó' },
-  proposal: { color: '#c026d3', nombre: 'Propuesta' },
-  pilot: { color: '#0f766e', nombre: 'Piloto' },
-  won: { color: '#15803d', nombre: 'Ganado' },
-  lost: { color: '#64748b', nombre: 'Perdido' },
-};
-
-export type Giro =
-  | 'transportista' | 'embotelladora' | 'abarrotes_mayoreo'
-  | 'flota_propia' | 'logistica' | 'otro';
-
-export const NOMBRE_GIRO: Record<Giro, string> = {
-  transportista: 'Transportista',
-  embotelladora: 'Embotelladora',
-  abarrotes_mayoreo: 'Abarrotes / Mayoreo',
-  flota_propia: 'Flota propia',
-  logistica: 'Logística',
-  otro: 'Otro giro',
-};
 
 // ── Normalización y plaza ───────────────────────────────────────────────────
 
@@ -169,9 +149,6 @@ export function esScianCarga(scian: string | null | undefined): boolean {
 }
 
 // ── Tamaño de flota (el estrato DENUE viaja en notas) ──────────────────────
-
-export const TAMANOS = ['11-30', '31-50', '51-100', '101-250', '250+'] as const;
-export type Tamano = (typeof TAMANOS)[number];
 
 export function tamanoDe(notas: string | null): Tamano | null {
   const m = (notas ?? '').match(/·\s*(\d+) a (\d+) personas|·\s*251 y más personas/);
@@ -328,15 +305,8 @@ function unidadesMinimas(rango: string | null | undefined): number | null {
   return match ? Number(match[1]) : null;
 }
 
-/** El criterio, en una línea por score — el pie del mapa lo enseña TAL CUAL
- *  (misma fuente que el cálculo, no una copia que se desincronice). */
-export const CRITERIO_SCORES = {
-  urgencia: 'Urgencia = lo que él DECLARA manda sobre lo que inferimos: si contestó «ya, este mes nos está costando» en /getdemo vale 100, y si contestó «estoy explorando» queda con techo aunque su vacante grite. Sin declaración se infiere: la vacante que nombra la liquidación (+45), cuántos anuncios (+4 c/u, tope 20), qué tan reciente el último (+20 si es de hoy) y la ficha trabajada (+15). Estimación determinista, no medición.',
-  cierre: 'Cierre = alcanzabilidad (tel +20, correo +15, decisor +20, +10 por decisor con contacto VERIFICADO —el inferido no cuenta—), quién llegó a quién (landing/campaña +20, anuncio pagado +25), fit del giro (transportista +15), tamaño de flota (+4 a +12 sin mezclarlo con urgencia), etapa del embudo (cita +18 … piloto +40; cliente ganado=100, perdido=0) y ficha a mano (+10). Estimación determinista, no medición: esto ORDENA la cola, no predice el cierre.',
-  datos: 'Datos = qué tan completo está el expediente para salir a venderle: teléfono +30, correo +25, decisor +20, ubicación +15, sitio web VERIFICADO +10. El tamaño (11-30 … 250+) es el personal ocupado que reporta la DENUE.',
-  similitud: 'Similitud con el ICP (0140, GENERADA — nadie la escribe a mano) = SCIAN de transporte objetivo (prefijo 484/485/488, aunque llegue en 6 dígitos) +40, vacante publicada +25, flota investigada ≥10 unidades +20, sitio web verificado +15.',
-  necesidad: 'Necesidad (0140, GENERADA) = vacante de liquidación/cuadre/auxiliar administrativo +50 (cualquier otra vacante +25), flota investigada ≥20 unidades +25.',
-} as const;
+/** El criterio se importa del contrato client-safe: cálculo y UI comparten
+ *  exactamente el mismo texto y no pueden divergir por bundling. */
 
 // ── EL LISTADO LIGERO Y LOS TEXTOS LARGOS (FE-16) ──────────────────────────
 //
@@ -353,61 +323,6 @@ export const CRITERIO_SCORES = {
 // `completitudDe` y el filtro de duplicados viven de ella. Lo que cambia es
 // que se queda de este lado.
 
-export interface ProspectoMapa {
-  id: string;
-  empresa: string;
-  ciudad: string | null;
-  entidad: string | null;
-  lat: number | null;
-  lng: number | null;
-  telefono: string | null;
-  correo: string | null;
-  contacto: string | null;
-  vacante: string | null;
-  estado: string;
-  fuente: string;
-  giro: Giro;
-  urgencia: number;
-  cierre: number;
-  /** Estrato DENUE de personal ocupado — null cuando la fuente no lo trae. */
-  tamano: Tamano | null;
-  /** 0-100: qué tan completo está el expediente (ver CRITERIO_SCORES.datos). */
-  completitud: number;
-  /** El último contacto registrado (0130) — null = nunca tocado. */
-  ultimoToque: string | null;
-  /** Cuándo redactó el agente experto el primer toque (0129) — null hasta que
-   *  se genera. Es una MARCA, no el texto: el filtro "solo con mensaje IA" y
-   *  el sello de la tarjeta se resuelven con ella, y el texto se pide aparte. */
-  mensajesGeneradosEn: string | null;
-  /** Los tres hechos/derivados de la 0140 que SÍ hacen falta a nivel mapa
-   *  (filtrar y ordenar) — historia y viajes_mes_estimado se quedan en la
-   *  ficha, son de lectura, no de criba. */
-  numUnidades: number | null;
-  /** 0-100, GENERADA (scian+vacante+num_unidades+sitio_verificado) — se lee,
-   *  nunca se recalcula aquí (ver CRITERIO_SCORES.similitud). */
-  similitudIcpPct: number;
-  /** 0-100, GENERADA — ver CRITERIO_SCORES.necesidad. */
-  necesidadPct: number;
-}
-
-/**
- * Los TEXTOS LARGOS de un prospecto — lo que el listado deliberadamente NO
- * trae. Se piden por id al abrir una ficha, una tarjeta o un popup.
- *
- * El mensaje del agente experto (0129) manda sobre la plantilla determinista,
- * así que el botón de WhatsApp/correo NO puede abrirse con la plantilla
- * "mientras llega" el texto bueno: mandaría el mensaje equivocado en nombre de
- * Javier. Por eso `mensajesGeneradosEn` viaja en el listado — dice si hay algo
- * que esperar — y el texto llega por aquí.
- */
-export interface TextosProspecto {
-  id: string;
-  notas: string | null;
-  mensajeWaIa: string | null;
-  correoAsuntoIa: string | null;
-  correoCuerpoIa: string | null;
-}
-
 /**
  * La fila TAL COMO VIAJA: una tupla, no un objeto.
  *
@@ -421,31 +336,6 @@ export interface TextosProspecto {
  * baja de 33 MB (objetos, con los textos largos) a ~15 MB (objetos, ya sin
  * ellos) a ~8.5 MB (tuplas).
  */
-export type FilaCompacta = [
-  id: string,
-  empresa: string,
-  ciudad: string | null,
-  entidad: string | null,
-  lat: number | null,
-  lng: number | null,
-  telefono: string | null,
-  correo: string | null,
-  contacto: string | null,
-  vacante: string | null,
-  estado: string,
-  fuente: string,
-  giro: Giro,
-  urgencia: number,
-  cierre: number,
-  tamano: Tamano | null,
-  completitud: number,
-  ultimoToque: string | null,
-  mensajesGeneradosEn: string | null,
-  numUnidades: number | null,
-  similitudIcpPct: number,
-  necesidadPct: number,
-];
-
 export function empacar(p: ProspectoMapa): FilaCompacta {
   return [
     p.id, p.empresa, p.ciudad, p.entidad, p.lat, p.lng, p.telefono, p.correo,
@@ -453,43 +343,6 @@ export function empacar(p: ProspectoMapa): FilaCompacta {
     p.tamano, p.completitud, p.ultimoToque, p.mensajesGeneradosEn,
     p.numUnidades, p.similitudIcpPct, p.necesidadPct,
   ];
-}
-
-export function desempacar(f: FilaCompacta): ProspectoMapa {
-  const [
-    id, empresa, ciudad, entidad, lat, lng, telefono, correo, contacto, vacante,
-    estado, fuente, giro, urgencia, cierre, tamano, completitud, ultimoToque,
-    mensajesGeneradosEn, numUnidades, similitudIcpPct, necesidadPct,
-  ] = f;
-  return {
-    id, empresa, ciudad, entidad, lat, lng, telefono, correo, contacto, vacante,
-    estado, fuente, giro, urgencia, cierre, tamano, completitud, ultimoToque,
-    mensajesGeneradosEn, numUnidades, similitudIcpPct, necesidadPct,
-  };
-}
-
-export interface DatosMapa {
-  /** El universo (carga completa) o SOLO lo que cambió (delta). */
-  filas: FilaCompacta[];
-  generadoEn: string;
-  /** true = la lectura falló y la lista viene vacía POR ESO (no hay cero). */
-  fallo: boolean;
-  /**
-   * La marca de agua para el siguiente latido: el `updated_at` MÁS ALTO de lo
-   * que se acaba de leer. Sale del reloj de la BASE y no del servidor web —
-   * con dos reloj distintos, unos milisegundos de desfase se comen los
-   * cambios de esa ventana para siempre. null = no llegó ninguna fila (el
-   * cliente conserva la marca que ya tenía).
-   */
-  marca: string | null;
-  /** true = esta respuesta es un delta: `filas` son altas y cambios, y lo que
-   *  no viene NO desapareció, simplemente no cambió. */
-  delta: boolean;
-  /** Cuántos prospectos hay del otro lado tras el filtro del mapa. El delta
-   *  no puede enterarse de una BAJA (una fila borrada no se actualiza, se va),
-   *  así que el cliente compara este conteo de SERVIDOR contra el suyo y
-   *  recarga completo cuando no cuadran. null = el conteo no se pudo hacer. */
-  total: number | null;
 }
 
 interface FilaProspecto {
@@ -758,31 +611,7 @@ export async function getTextosProspectos(ids: string[]): Promise<TextosProspect
 // se leen, jamás se calculan aquí, para no desincronizarse de la fórmula de
 // la migración) y las personas investigadas (0138, prospecto_persona).
 
-export interface PersonaProspecto {
-  id: string;
-  nombre: string;
-  puesto: string | null;
-  correo: string | null;
-  telefono: string | null;
-  linkedin: string | null;
-  origen: string;
-  confianza: 'alta' | 'media' | 'baja';
-  evidencia: string | null;
-}
-
-/** La ficha SÍ trae los textos largos — es la pantalla que los pinta. */
-export interface DetalleProspecto extends ProspectoMapa, TextosProspecto {
-  sitio: string | null;
-  sitioVerificado: boolean;
-  numUnidades: number | null;
-  historia: string | null;
-  similitudIcpPct: number;
-  necesidadPct: number;
-  viajesMesEstimado: number | null;
-  fuenteCruda: string;
-  creadoEn: string;
-  personas: PersonaProspecto[];
-}
+/** La ficha y sus personas comparten el contrato client-safe reexportado. */
 
 interface FilaDetalle extends FilaProspecto {
   mensaje_wa: string | null;

@@ -5,6 +5,7 @@ import { TZ_MX } from '@/lib/formato';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import type { TenantContext } from '@/lib/agents/types';
+import { randomUUID } from 'crypto';
 import { acotada, PRESUPUESTO_WEBHOOK_MS } from './presupuesto';
 import { violaIndice } from './pg_errores';
 import { destinatarioEnmascarado } from '@/lib/meta/client';
@@ -410,48 +411,50 @@ export const LEASE_CLAIM_MS = PRESUPUESTO_WEBHOOK_MS + 30_000;
  *   · sin completar y fresca → 'en_curso': otra invocación lo está procesando;
  *     el llamador no lo procesa ni lo da por hecho, lo deja para después.
  */
-export async function claimMessage(waMessageId: string): Promise<Claim> {
-  if (!waMessageId) return 'nuevo';
-  const { error } = await acotada(supabaseAdmin()
-    .from('wa_mensaje_procesado')
-    .insert({ wa_message_id: waMessageId }), 'claimMessage');
-  if (!error) return 'nuevo';
-  // 23505 = unique_violation → ya existía. Falta saber si completado o huérfano.
-  if (error.code === '23505') return retomarClaimHuerfano(waMessageId);
-  logger.error('wa.claim_error', { code: error.code, msg: error.message });
-  return 'indeterminado';
+export interface MessageClaimHandle {
+  status: Claim;
+  token?: string;
+  owner: string;
 }
 
-async function retomarClaimHuerfano(waMessageId: string): Promise<Claim> {
-  const ahora = Date.now();
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('wa_mensaje_procesado')
-    .update({ created_at: new Date(ahora).toISOString() })
-    .eq('wa_message_id', waMessageId)
-    .is('completado_en', null)
-    .lt('created_at', new Date(ahora - LEASE_CLAIM_MS).toISOString())
-    .select('wa_message_id'), 'claimMessage.retomar');
-  if (error) {
-    // No se pudo saber. NI se procesa (podría ser un duplicado real y
-    // duplicar un gasto) NI se da por hecho (podría ser el huérfano): se deja
-    // para la siguiente vuelta de la bandeja durable, que es lo único seguro.
-    logger.error('wa.claim_relectura_fallo', { id: waMessageId, code: error.code, msg: error.message });
-    return 'en_curso';
+const leaseSeconds = Math.ceil(LEASE_CLAIM_MS / 1000);
+
+export function crearMessageLeaseOwner(): string {
+  return `wa-message:${randomUUID()}`;
+}
+
+export async function claimMessage(waMessageId: string): Promise<Claim>;
+export async function claimMessage(waMessageId: string, owner: string, detailed: true): Promise<MessageClaimHandle>;
+export async function claimMessage(
+  waMessageId: string,
+  owner = crearMessageLeaseOwner(),
+  detailed = false,
+): Promise<Claim | MessageClaimHandle> {
+  if (!waMessageId) return detailed ? { status: 'nuevo', owner } : 'nuevo';
+  try {
+    const { data, error } = await acotada(supabaseAdmin().rpc('claim_wa_mensaje_procesado', {
+      p_wa_message_id: waMessageId,
+      p_lease_owner: owner,
+      p_lease_seconds: leaseSeconds,
+    }), 'claimMessage');
+    if (error) throw error;
+    const fila = (Array.isArray(data) ? data : data ? [data] : [])[0] as {
+      estado?: Claim; lease_token?: string | null;
+    } | undefined;
+    const status: Claim = fila?.estado === 'nuevo' || fila?.estado === 'duplicado' || fila?.estado === 'en_curso'
+      ? fila.estado
+      : 'indeterminado';
+    const result: MessageClaimHandle = {
+      status,
+      token: fila?.lease_token ? String(fila.lease_token) : undefined,
+      owner,
+    };
+    return detailed ? result : status;
+  } catch (e) {
+    logger.error('wa.claim_error', { id: waMessageId, err: e instanceof Error ? e.message : String(e) });
+    const result: MessageClaimHandle = { status: 'indeterminado', owner };
+    return detailed ? result : result.status;
   }
-  if ((data ?? []).length === 1) {
-    logger.warn('wa.claim_retomado', { id: waMessageId, leaseMs: LEASE_CLAIM_MS });
-    return 'nuevo';
-  }
-  const { data: fila, error: errFila } = await acotada(supabaseAdmin()
-    .from('wa_mensaje_procesado')
-    .select('completado_en')
-    .eq('wa_message_id', waMessageId)
-    .maybeSingle(), 'claimMessage.relectura');
-  if (errFila || !fila) {
-    logger.warn('wa.claim_relectura_vacia', { id: waMessageId, err: errFila?.message ?? 'sin fila' });
-    return 'en_curso';
-  }
-  return fila.completado_en ? 'duplicado' : 'en_curso';
 }
 
 /**
@@ -460,17 +463,47 @@ async function retomarClaimHuerfano(waMessageId: string): Promise<Claim> {
  * respuesta ya salió; fallar aquí solo hace que un reintento futuro espere el
  * lease en vez de rebotar de inmediato.
  */
-export async function completarMessageClaim(waMessageId: string): Promise<void> {
+export async function completarMessageClaim(waMessageId: string, leaseToken?: string, leaseOwner?: string): Promise<void> {
   if (!waMessageId) return;
   try {
-    const { error } = await acotada(supabaseAdmin()
-      .from('wa_mensaje_procesado')
-      .update({ completado_en: new Date().toISOString() })
-      .eq('wa_message_id', waMessageId), 'completarMessageClaim');
-    if (error) logger.warn('wa.claim_sin_completar', { id: waMessageId, err: error.message });
+    if (!leaseToken || !leaseOwner) {
+      logger.warn('wa.claim_sin_token', { id: waMessageId, operacion: 'complete' });
+      return;
+    }
+    const { data, error } = await acotada(supabaseAdmin().rpc('complete_wa_mensaje_procesado', {
+      p_wa_message_id: waMessageId, p_lease_token: leaseToken, p_lease_owner: leaseOwner,
+    }), 'completarMessageClaim');
+    if (error) throw error;
+    if (data !== true && !(Array.isArray(data) && data[0] === true)) logger.warn('wa.claim_complete_fenced', { id: waMessageId });
   } catch (e) {
     logger.warn('wa.claim_sin_completar', { id: waMessageId, err: e instanceof Error ? e.message : String(e) });
   }
+}
+
+/** Renueva el claim downstream mientras OCR/LLM siguen vivos. */
+export async function renovarMessageClaim(waMessageId: string, leaseToken: string, leaseOwner: string): Promise<boolean> {
+  try {
+    const { data, error } = await acotada(supabaseAdmin().rpc('renew_wa_mensaje_procesado', {
+      p_wa_message_id: waMessageId, p_lease_token: leaseToken,
+      p_lease_owner: leaseOwner, p_lease_seconds: Math.ceil(LEASE_CLAIM_MS / 1000),
+    }), 'renovarMessageClaim');
+    if (error) throw error;
+    return data === true || (Array.isArray(data) && data[0] === true);
+  } catch (e) {
+    logger.warn('wa.claim_lease_no_renovado', { id: waMessageId, err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+}
+
+export function iniciarRenovacionMessageClaim(waMessageId: string, leaseToken: string, leaseOwner: string): () => void {
+  let enVuelo = false;
+  const timer = setInterval(() => {
+    if (enVuelo) return;
+    enVuelo = true;
+    void renovarMessageClaim(waMessageId, leaseToken, leaseOwner).finally(() => { enVuelo = false; });
+  }, 60_000);
+  timer.unref?.();
+  return () => clearInterval(timer);
 }
 
 // AUDITORÍA 8, ALTO: no lanza a propósito — para cuando esto corre, la
@@ -848,10 +881,18 @@ export async function releaseViajeLock(viajeId: string): Promise<void> {
  * Libera el claim de idempotencia de un mensaje (CR-2): si el procesamiento
  * crashea, se borra la marca para que el retry de Meta lo reprocese (at-least-once).
  */
-export async function releaseMessageClaim(waMessageId: string): Promise<void> {
+export async function releaseMessageClaim(waMessageId: string, leaseToken?: string, leaseOwner?: string): Promise<void> {
   if (!waMessageId) return;
   try {
-    await acotada(supabaseAdmin().from('wa_mensaje_procesado').delete().eq('wa_message_id', waMessageId), 'releaseMessageClaim');
+    if (!leaseToken || !leaseOwner) {
+      logger.warn('wa.release_claim_sin_token', { id: waMessageId });
+      return;
+    }
+    const { data, error } = await acotada(supabaseAdmin().rpc('fail_wa_mensaje_procesado', {
+      p_wa_message_id: waMessageId, p_lease_token: leaseToken, p_lease_owner: leaseOwner,
+    }), 'releaseMessageClaim');
+    if (error) throw error;
+    if (data !== true && !(Array.isArray(data) && data[0] === true)) logger.warn('wa.release_claim_fenced', { id: waMessageId });
   } catch (e) {
     logger.warn('wa.release_claim', { err: e instanceof Error ? e.message : String(e) });
   }

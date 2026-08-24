@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { logger } from '@/lib/logger';
 import { generateStructured, StructuredError, TruncatedError, resumenCausa } from '@/lib/llm/openrouter';
+import type { LlmBudget } from '@/lib/llm/budget';
 import { alertarOperador, contadorDeFallos } from '@/lib/observability/alerta';
 import { decodeCodigosFromImage, bufferFromDataUrl, esRfcValido, esUuidValido, rfcChecksumOk } from './cfdi';
 import { normalizarFecha } from './fecha';
@@ -343,6 +344,7 @@ export async function extraerComprobante(
    * que sí venía bien presupuestado. Y Meta ya recibió su 200: no reintenta.
    */
   signal?: AbortSignal,
+  budget?: LlmBudget,
 ): Promise<ExtraerResultado> {
   const fotos = (Array.isArray(imagenes) ? imagenes : [imagenes]).filter(Boolean);
 
@@ -368,6 +370,7 @@ export async function extraerComprobante(
       schema: ExtraccionSchema,
       schemaName: 'comprobante',
       signal,
+      budget,
     });
   } catch (e) {
     // OJO: a este catch NO se llega por una foto mala. Un ticket ilegible sí

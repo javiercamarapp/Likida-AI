@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { sentryActivo, reportar } from './sentry';
+import { sentryActivo, reportar, sanitizarEventoSentry, tasaTrazas } from './sentry';
 
 // La telemetría NUNCA puede costar una liquidación. Estos casos fijan que sin
 // DSN no se carga nada y que un fallo interno no sale del módulo.
@@ -26,6 +26,21 @@ describe('sentry — opcional y silencioso', () => {
     // Nada de eso puede propagarse al turno del operador.
     vi.stubEnv('SENTRY_DSN', 'no-es-un-dsn');
     expect(() => reportar('warn', 'algo.raro')).not.toThrow();
+  });
+
+  it('acota el muestreo de trazas y elimina contexto sensible', () => {
+    vi.stubEnv('SENTRY_TRACES_SAMPLE_RATE', '9');
+    expect(tasaTrazas()).toBe(1);
+    const limpio = sanitizarEventoSentry({
+      request: { url: 'https://app.likida.ai/api/x?token=secreto', headers: { authorization: 'Bearer secreto' }, cookies: 'x', data: 'body' },
+      user: { email: 'persona@example.com' },
+      breadcrumbs: [{ message: 'ok', data: { telefono: '9991234567' } }],
+    }) as { user?: unknown; request: Record<string, unknown>; breadcrumbs: Array<Record<string, unknown>> };
+    expect(limpio.user).toBeUndefined();
+    expect(limpio.request.url).toBe('https://app.likida.ai/api/x');
+    expect(limpio.request.headers).toBeUndefined();
+    expect(limpio.request.cookies).toBeUndefined();
+    expect(limpio.breadcrumbs[0].data).toBeUndefined();
   });
 });
 
