@@ -80,6 +80,8 @@ interface Bandeja {
   incidencias: Incidencia[];
   /** Confirmaciones con botón YA enviadas en esta ráfaga (tope de acuse_ticket). */
   confirmaciones: number;
+  /** Acuses de las fotos que entraron bien, pendientes de decidir si se mandan. */
+  acuses: string[];
 }
 
 /**
@@ -108,7 +110,7 @@ function abrir(viajeId: string): Bandeja {
       const vieja = bandejas.keys().next();
       if (!vieja.done) bandejas.delete(vieja.value);
     }
-    b = { vistas: 0, incidencias: [], confirmaciones: 0 };
+    b = { vistas: 0, incidencias: [], confirmaciones: 0, acuses: [] };
     bandejas.set(viajeId, b);
   }
   return b;
@@ -129,6 +131,23 @@ function abrir(viajeId: string): Bandeja {
 export function anotarFoto(viajeId: string, empiezaRafaga = false): void {
   if (empiezaRafaga) bandejas.delete(viajeId);
   abrir(viajeId).vistas += 1;
+}
+
+/**
+ * El acuse de una foto que entró bien: «Anotado ✅ …».
+ *
+ * SE ANOTA, NO SE MANDA. Si la foto vino sola, al cerrar se envía y el chofer
+ * sabe que su ticket llegó — que es el agujero que se midió el 24-ago-2026:
+ * fotos espaciadas 10–35 s, cada una cerrando su propia ráfaga de UNA, cada
+ * una en silencio, y el chofer preguntando «Que pasó?».
+ *
+ * Si vino en ráfaga NO se manda ninguno: el resumen consolidado ya dice
+ * cuántos comprobantes lleva y por cuánto, y seis acuses más un resumen son
+ * los siete mensajes que este módulo entero existe para no mandar.
+ */
+export function anotarAcuse(viajeId: string, texto: string): void {
+  const b = abrir(viajeId);
+  if (b.acuses.length < MAX_INCIDENCIAS) b.acuses.push(texto);
 }
 
 /** Algo que hay que contarle al operador AL CERRAR, no ahora. */
@@ -152,13 +171,15 @@ export function pedirTurnoDeConfirmacion(viajeId: string): number {
 export interface RafagaCerrada {
   vistas: number;
   incidencias: Incidencia[];
+  /** Los acuses anotados. Solo se usan si NO hubo ráfaga. */
+  acuses: string[];
 }
 
 /** Cierra la ráfaga: devuelve lo anotado y OLVIDA el viaje. */
 export function cerrarRafaga(viajeId: string): RafagaCerrada {
   const b = bandejas.get(viajeId);
   bandejas.delete(viajeId);
-  return { vistas: b?.vistas ?? 0, incidencias: b?.incidencias ?? [] };
+  return { vistas: b?.vistas ?? 0, incidencias: b?.incidencias ?? [], acuses: b?.acuses ?? [] };
 }
 
 /** Solo para pruebas: el Map es de módulo y se comparte entre casos. */

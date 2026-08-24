@@ -140,6 +140,7 @@ export const RUTA_DE_DIFERENCIA: Record<TipoDiferencia, RutaDeAviso> = {
   diesel_desviacion: 'decision',       // consumo fuera de rango: puede ser robo
   fecha_sospechosa: 'decision',        // un ticket de otro viaje cobrado aquí es dinero mal asignado
   texto_sospechoso: 'decision',        // el papel traía texto dirigido al extractor: lo ve una persona
+  renglones_ajenos: 'decision',        // canasta mixta: ¿se le repone todo al operador y qué parte es deducible? Solo el jefe decide
 
   // ── Al panel, por las tres razones del bloque de arriba ──────────────────
   anticipo: 'panel',                   // la diferencia global ya encabeza el mensaje; repetirla es ruido

@@ -48,6 +48,7 @@ export const ROTULO_DIFERENCIA: Record<TipoDiferencia, string> = {
   monto_implausible: 'Monto fuera de escala',
   moneda_extranjera: 'Comprobante en moneda extranjera',
   texto_sospechoso: 'Texto sospechoso en el comprobante',
+  renglones_ajenos: 'Incluye partidas que no son del viaje',
   alimentacion_sin_soporte: 'Alimentación sin soporte',
   alimentacion_transporte_sin_tarjeta_credito: 'Alimentación sin tarjeta de crédito',
   viatico_rfc_operador: 'Viático a nombre del operador',

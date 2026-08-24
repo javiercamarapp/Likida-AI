@@ -84,6 +84,11 @@ export const SIN_NORMA: Partial<Record<TipoDiferencia, string>> = {
   duplicado: 'Calidad del dato: el mismo comprobante dos veces.',
   anticipo: 'Aritmética del viaje, no una regla fiscal.',
   ocr_baja_confianza: 'Calidad de la lectura.',
+  // Un juicio sobre qué es plausible en una ruta, no una regla. La ley no dice
+  // que un tapete no sea deducible: dice que el gasto tiene que ser
+  // estrictamente indispensable (LISR 27-I), y si ESTE lo es o no lo decide la
+  // flota mirando el renglón, no el motor. Por eso señala y no descuenta.
+  renglones_ajenos: 'Composición del ticket: partidas que no parecen del viaje. Quién decide es la flota.',
   // No es que la ley diga nada: es que NO PODEMOS aplicarla. El RFC de la flota
   // está mal capturado, así que el receptor del CFDI no se puede confirmar ni
   // descartar. Citar LISR 27-III aquí sería fingir un veredicto legal sobre un
