@@ -169,6 +169,18 @@ export function FormaAjustes({ inicial, ejemploKm, guardar }: {
             Una por línea: <span className="cifra-mono">concepto=cuenta</span>. Puedes pegar el bloque
             entero desde tu Excel.
           </p>
+          {/* Sin estas cuatro, el export de póliza para CONTPAQi y SAP no puede
+              cuadrar el asiento y devuelve 409 diciendo cuál falta. Se listan
+              aquí, con el nombre EXACTO que hay que teclear, porque antes el
+              error mandaba a una pantalla que no existía. */}
+          <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
+            Para exportar la póliza a tu ERP hacen falta, además de tus conceptos de gasto, estas
+            cuatro cuentas de balance:{' '}
+            <span className="cifra-mono">iva_acreditable</span>,{' '}
+            <span className="cifra-mono">anticipo_operador</span>,{' '}
+            <span className="cifra-mono">por_cobrar_operador</span> y{' '}
+            <span className="cifra-mono">por_pagar_operador</span>.
+          </p>
         </fieldset>
 
         {!revision.ok && (

@@ -25,7 +25,8 @@ import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { puedeExportar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { acotada } from '@/lib/likida/presupuesto';
-import { polizaDeLiquidacion, type CatalogoContable, type LiquidacionParaPoliza } from '@/lib/likida/contabilidad/poliza';
+import { polizaDeLiquidacion, type LiquidacionParaPoliza } from '@/lib/likida/contabilidad/poliza';
+import { catalogoDeclarado, CUENTAS_BALANCE } from '@/lib/likida/contabilidad/catalogo';
 import { aContpaqi, aSapB1 } from '@/lib/likida/contabilidad/formatos';
 import type { ConceptoGasto } from '@/types/likida';
 
@@ -71,30 +72,34 @@ export async function GET(req: Request) {
     return new NextResponse('desde y hasta son obligatorios en formato AAAA-MM-DD', { status: 400 });
 
   // ── EL CATÁLOGO DE LA FLOTA ────────────────────────────────────────────
-  const { data: fila, error: errPerfil } = await acotada(
-    supabaseAdmin().from('tenant').select('perfil').eq('id', tenantId).maybeSingle(),
-    'export.poliza.perfil',
-  );
-  if (errPerfil) {
-    logger.error('export.poliza.perfil', { tenantId, err: errPerfil.message });
+  // Se lee lo DECLARADO (`tenant.config.catalogoCuentas`, la pantalla de
+  // Configuración), nunca `getConfig()`: ése fusiona `DEMO_CONFIG`, cuyas
+  // cuentas están marcadas 🔴 demo en el código, y las asentaría en el ERP de
+  // la flota como si fueran suyas.
+  let catalogo;
+  try {
+    const lectura = await catalogoDeclarado(tenantId);
+    if (!lectura.ok) {
+      return NextResponse.json(
+        {
+          error: 'sin_catalogo_contable',
+          detalle:
+            'Esta flota todavía no declaró su catálogo de cuentas. Sin él no se puede armar una póliza: ' +
+            'la cuenta de cada concepto la decide tu contador, y una cuenta inventada no se nota al ' +
+            'importar — se nota en la auditoría del año siguiente.',
+          comoResolverlo:
+            'Captúralo en Configuración → Catálogo de cuentas de tu contador, una por línea como ' +
+            '`concepto=cuenta`. Además de los conceptos de gasto, la póliza necesita las cuentas de ' +
+            'balance: ' + Object.keys(CUENTAS_BALANCE).join(', ') + '.',
+          donde: '/dashboard/configuracion',
+        },
+        { status: 409 },
+      );
+    }
+    catalogo = lectura.catalogo;
+  } catch (e) {
+    logger.error('export.poliza.catalogo', { tenantId, err: e instanceof Error ? e.message : String(e) });
     return new NextResponse('No se pudo leer la configuración contable', { status: 503 });
-  }
-
-  const contab = (fila?.perfil as { contabilidad?: { cuentas?: CatalogoContable; tipoPoliza?: string } } | null)
-    ?.contabilidad;
-  const catalogo = contab?.cuentas;
-  if (!catalogo || !catalogo.gastos) {
-    return NextResponse.json(
-      {
-        error: 'sin_catalogo_contable',
-        detalle:
-          'Esta flota todavía no declaró su catálogo de cuentas. Sin él no se puede armar una póliza: ' +
-          'la cuenta de cada concepto la decide tu contador, y una cuenta inventada no se nota al ' +
-          'importar — se nota en la auditoría del año siguiente.',
-        comoResolverlo: 'Configúralo en Ajustes → Contabilidad, o pídeselo a tu contador con tu catálogo.',
-      },
-      { status: 409 },
-    );
   }
 
   const { data, error } = await acotada(
@@ -151,7 +156,9 @@ export async function GET(req: Request) {
 
   const nombre = `poliza-${desde}_${hasta}`;
   if (formato === 'contpaqi') {
-    const tipo = contab?.tipoPoliza ?? 'Dr';
+    // 'Dr' (diario) es el tipo por defecto de CONTPAQi; no es una cuenta,
+    // es el cajón donde entra el asiento, y el contador lo reasigna al importar.
+    const tipo = 'Dr';
     // La numeración la lleva la contabilidad de la flota; aquí se numera de 1
     // en adelante DENTRO del archivo y se dice en el nombre, para que quien
     // importe sepa que no son folios suyos.
