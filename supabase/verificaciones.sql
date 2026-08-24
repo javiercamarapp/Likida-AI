@@ -8265,3 +8265,91 @@ begin
   raise exception E'POLIZA_0175  n=%  diesel=%  caseta=%  iva=%  anticipo=%  base_estimada=%  ajena_no_entra=%  invoker=%  anon=%  auth=%   (esperado 1 / 3000.00 / 1000.00 / 640.00 / 5000.00 / 1 / t / t / f / f)',
     n, diesel, caseta, iva, anticipo, base_est, ajena_no_entra, invoker, anon_ok, auth_ok;
 end $$;
+
+-- ── 147. El GPS de la flota entra de verdad, y sin duplicar (mig. 0176) ───
+-- GPS_0176 — la ingesta de posiciones: que se pueda ligar un camión a su GPS,
+-- que dos camiones no compartan dispositivo, y que la MISMA última posición
+-- entre corridas no se duplique.
+--
+-- El poller corre cada 5 minutos y el proveedor devuelve la ÚLTIMA posición
+-- conocida: con el camión parado, dos corridas seguidas traen la misma lectura
+-- con la misma `medida_en`. Sin `uq_posicion_lectura` la tabla se llena de
+-- copias y cualquier conteo por unidad miente.
+--
+-- Y el único va SIN predicado a propósito: uno PARCIAL no se puede inferir
+-- desde `on_conflict=`, y el upsert del poller reventaría en producción con un
+-- error que aquí no se vería. Por eso se prueba el `on conflict` DE VERDAD, no
+-- sólo la existencia del índice.
+--
+-- Esperado: GPS_0176  dup_unidad_rechazado=t  otra_flota_ok=t  repetida_ignorada=t
+--                     n_posiciones=1  idx_lectura=t  parcial=f  idx_consulta=t  cron_gps=t
+do $$
+declare
+  ta uuid; tb uuid; ua uuid; ub uuid; uotro uuid;
+  dup_unidad_rechazado boolean := false;
+  otra_flota_ok boolean := false;
+  repetida_ignorada boolean := true;
+  n_pos int; idx_lectura boolean; parcial boolean; idx_consulta boolean; cron_gps boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ GPS A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ GPS B') returning id into tb;
+  insert into unidad (tenant_id,numero_economico,gps_proveedor,gps_device_id)
+    values (ta,'C2-01','samsara','DEV-1') returning id into ua;
+  insert into unidad (tenant_id,numero_economico) values (ta,'C2-02') returning id into ub;
+
+  -- Dos unidades de la MISMA flota no pueden apuntar al mismo dispositivo: las
+  -- posiciones de un camión se repartirían entre dos y ninguna serie sería cierta.
+  begin
+    update unidad set gps_proveedor='samsara', gps_device_id='DEV-1' where id = ub;
+  exception when unique_violation then
+    dup_unidad_rechazado := true;
+  end;
+
+  -- Pero el mismo número EN OTRA FLOTA sí: dos proveedores distintos numeran
+  -- sus dispositivos por su cuenta, y una flota no le reserva ids a la otra.
+  begin
+    insert into unidad (tenant_id,numero_economico,gps_proveedor,gps_device_id)
+      values (tb,'C2-01','samsara','DEV-1') returning id into uotro;
+    otra_flota_ok := true;
+  exception when unique_violation then
+    otra_flota_ok := false;
+  end;
+
+  insert into posicion (tenant_id,unidad_id,lat,lng,medida_en,proveedor)
+    values (ta,ua,20.9674,-89.5926,'2026-08-23T18:00:00Z','samsara');
+
+  -- La MISMA lectura otra vez, como la trae la corrida siguiente. Se hace con
+  -- la forma exacta que manda PostgREST: `on conflict (cols) do nothing`, sin
+  -- predicado. Si el índice fuera parcial, esto lanzaría 42P10 aquí mismo.
+  begin
+    insert into posicion (tenant_id,unidad_id,lat,lng,medida_en,proveedor)
+      values (ta,ua,20.9674,-89.5926,'2026-08-23T18:00:00Z','samsara')
+      on conflict (tenant_id, unidad_id, medida_en) do nothing;
+  exception when others then
+    repetida_ignorada := false;
+  end;
+
+  select count(*) into n_pos from posicion where tenant_id = ta and unidad_id = ua;
+
+  select true, i.indpred is not null into idx_lectura, parcial
+    from pg_class c join pg_index i on i.indexrelid = c.oid
+   where c.relname = 'uq_posicion_lectura';
+  idx_lectura := coalesce(idx_lectura, false);
+  parcial := coalesce(parcial, true);
+
+  select exists (select 1 from pg_class where relname = 'posicion_unidad_medida_idx')
+    into idx_consulta;
+
+  -- El cron nuevo tiene que caber en el dominio de `cron_latido` (0155), o el
+  -- primer latido reventaría y el panel de salud lo daría por muerto.
+  begin
+    insert into cron_latido (id, ultimo_latido, estado) values ('gps', now(), 'ok')
+      on conflict (id) do update set ultimo_latido = excluded.ultimo_latido;
+    cron_gps := true;
+  exception when check_violation then
+    cron_gps := false;
+  end;
+
+  raise exception E'GPS_0176  dup_unidad_rechazado=%  otra_flota_ok=%  repetida_ignorada=%  n_posiciones=%  idx_lectura=%  parcial=%  idx_consulta=%  cron_gps=%   (esperado t / t / t / 1 / t / f / t / t)',
+    dup_unidad_rechazado, otra_flota_ok, repetida_ignorada, n_pos, idx_lectura, parcial, idx_consulta, cron_gps;
+end $$;
