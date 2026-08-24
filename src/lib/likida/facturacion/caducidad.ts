@@ -12,8 +12,14 @@
 // ANTES, cuando todavía se puede hacer algo.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Cuánto tiempo da el comercio para facturar. */
-export type Plazo = { dias: number } | 'mes_natural' | 'mes_siguiente';
+/** Cuánto tiempo da el comercio para facturar.
+ *
+ *  `{ horas }` existe porque los tickets lo imprimen así y no en días: Boston's
+ *  dice "solo 72 horas para emitir su factura" y una ferretería de Mérida "plazo
+ *  máximo de 24 hrs". Convertirlo a días redondeando hacia arriba habría dado
+ *  un día de más justo en los plazos más cortos, que son los únicos donde la
+ *  diferencia decide si se alcanza o no. */
+export type Plazo = { dias: number } | { horas: number } | 'mes_natural' | 'mes_siguiente';
 
 export interface Caducidad {
   /** Último día en que el comercio acepta facturar (ISO, inclusive). */
@@ -66,7 +72,22 @@ export function calcularCaducidad(args: {
           // la fecha de emisión", así que vence el 31-AGO, no el 31-jul.
           // Avisarle "te quedan 3 días" habría sido falso.
           Date.UTC(c.getUTCFullYear(), c.getUTCMonth() + 2, 0)
-        : compra + args.plazo.dias * DIA_MS;
+        : 'horas' in args.plazo
+          // HORAS → DÍA LÍMITE. El OCR guarda la FECHA del ticket, no la hora,
+          // así que el instante exacto de vencimiento no se puede reconstruir:
+          // 24 h desde el 19 a las 12:44 vencen el 20 a las 12:44, y aquí solo
+          // se puede decir "el 20".
+          //
+          // Se trunca hacia abajo (floor) y NO se redondea hacia arriba: con
+          // `ceil`, un plazo de 12 h se convertiría en un día completo y el
+          // aviso prometería una tarde que ya no existe.
+          //
+          // El último día puede ser PARCIAL y eso no se oculta: el mensaje del
+          // motor ya cierra con que la ventana del comercio puede ser menor.
+          // Lo que importa es que el orden de magnitud sea el del papel —24 h,
+          // no doce días—, que es justo lo que fallaba.
+          ? compra + Math.floor(args.plazo.horas / 24) * DIA_MS
+          : compra + args.plazo.dias * DIA_MS;
 
   const hoyMs = aUtc(args.hoy);
   // El plazo vence al FINAL del día límite: el mismo día todavía se puede facturar.

@@ -73,18 +73,18 @@ describe('DAT-18 · el acuse deja de callar sobre una cifra fuera de escala', ()
   };
 
   it('con confianza 0.99 y fuera de escala: se PIDE confirmación, no se calla', () => {
-    // Era exactamente el camino del hallazgo: `confianza >= 0.9` → 'silencio'.
+    // Era exactamente el camino del hallazgo: `confianza >= 0.9` → 'acusar'.
     expect(decidirAcuse({ ...lectura, montoImplausible: true }).peldano).toBe('confirmar');
   });
 
   it('CONTROL — la misma lectura sin la marca sigue callando', () => {
-    expect(decidirAcuse(lectura).peldano).toBe('silencio');
+    expect(decidirAcuse(lectura).peldano).toBe('acusar');
   });
 
   it('un CFDI grande NO se le pregunta al chofer: el total lo selló el SAT', () => {
     // Pedirle que valide una cifra timbrada es el mismo teatro que el módulo ya
     // descarta para cualquier CFDI.
-    expect(decidirAcuse({ ...lectura, deCfdi: true, montoImplausible: true }).peldano).toBe('silencio');
+    expect(decidirAcuse({ ...lectura, deCfdi: true, montoImplausible: true }).peldano).toBe('acusar');
   });
 });
 

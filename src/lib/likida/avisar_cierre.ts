@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { sendText, sendDocument } from '@/lib/meta/client';
+import { variantesTelefono } from './conv';
 import { armarAvisoJefe, type ResumenLiquidacion, type DiferenciaResumen } from './cierre_aviso';
 import { telefonoParaDineroDe } from './contactos';
 
@@ -99,6 +100,9 @@ export async function avisarCierreAlJefe(args: {
   tenantId: string;
   viajeId: string;
   urlPdf?: string | null;
+  /** El teléfono del CHOFER que acaba de cerrar. Si el jefe resulta ser el
+   *  mismo número, este aviso no se manda: ya lo recibió por el otro lado. */
+  telefonoOperador?: string | null;
 }): Promise<ResultadoAvisoCierre> {
   // A QUIEN VE DINERO, no al primer teléfono de oficina (auditoría 18, A28):
   // este aviso lleva anticipo, comprobado, diferencia y el PDF completo. El
@@ -109,6 +113,28 @@ export async function avisarCierreAlJefe(args: {
     // alguien capture el teléfono, y no hay otro lugar donde se note.
     logger.error('cierre.sin_telefono_de_jefe', { tenantId: args.tenantId, viaje: args.viajeId });
     return { enviado: false, motivo: 'Esa flota no tiene un teléfono de oficina registrado.' };
+  }
+
+  // ── DUEÑO-OPERADOR: UN SOLO NÚMERO, UN SOLO AVISO ───────────────────────
+  //
+  // Que un número sea a la vez chofer y oficina es correcto por diseño
+  // (`contactos.ts` lo documenta, y `variantesTelefono` normaliza 52/521).
+  // Lo que NO es correcto es lo que pasaba entonces: al cerrar, esa persona
+  // recibía su liquidación en PDF por el camino del chofer y, un segundo
+  // después, OTRO PDF del mismo cierre con distinto nombre de archivo más un
+  // "necesita tu decisión" dirigido a sí misma. Visto en producción el
+  // 24-ago-2026, y se lee como que el sistema se duplicó.
+  //
+  // No es un caso raro: el dueño que también maneja es un cliente entero de
+  // este producto. Se detecta con las MISMAS variantes que usa el resolutor de
+  // operadores, no comparando cadenas crudas — con 52/521 de por medio, la
+  // comparación literal habría dicho "son distintos" casi siempre.
+  if (args.telefonoOperador) {
+    const delChofer = new Set(variantesTelefono(args.telefonoOperador));
+    if (variantesTelefono(tel).some((v) => delChofer.has(v))) {
+      logger.info('cierre.jefe_es_el_chofer', { viaje: args.viajeId });
+      return { enviado: true, motivo: 'el jefe y el chofer son el mismo número: ya lo recibió por su propio hilo' };
+    }
   }
 
   const resumen = await resumenDeCierre(args.tenantId, args.viajeId);
