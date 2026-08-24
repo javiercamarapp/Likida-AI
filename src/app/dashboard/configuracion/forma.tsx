@@ -29,7 +29,6 @@ function Boton() {
     </button>
   );
 }
-
 /**
  * Los ajustes operativos de la flota, EDITABLES.
  *

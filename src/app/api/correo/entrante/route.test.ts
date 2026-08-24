@@ -9,12 +9,11 @@ let errorFlota: { message: string } | null = null;
 let errorDedup: { code?: string; message: string } | null = null;
 let errorBorrado: { message: string } | null = null;
 const tablasTocadas: string[] = [];
-// `correo_procesado` CON ESTADO: el insert imita a la llave primaria (repetir
-// el mismo email_id es 23505) y el delete la libera. Sin esto, el test del
-// reintento tras un 503 no probaría nada — la ruta borra la fila justamente
-// para que el segundo insert sí entre.
+// `correo_procesado` CON ESTADO: el RPC imita el lease durable. La entrega
+// concurrente recibe `busy` (503), no el falso 200 que perdió el correo A/B.
 const correosRegistrados = new Set<string>();
 const borrados: string[] = [];
+const rpcs: string[] = [];
 /** El kill switch (0110), con el módulo `interruptores` REAL: la ruta lo
  *  consulta antes de consumir el correo, y este doble programa la fila —
  *  incluida la lectura reventada, que por fail-closed vale como apagado. */
@@ -22,6 +21,24 @@ let interruptorResp: { data: { apagado: boolean } | null; error: { message: stri
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
+    rpc(nombre: string, args: Record<string, unknown>) {
+      rpcs.push(nombre);
+      const emailId = String(args.p_email_id ?? '');
+      if (nombre === 'reclamar_correo') {
+        if (errorDedup) return Promise.resolve({ data: null, error: errorDedup });
+        if (correosRegistrados.has(emailId)) {
+          return Promise.resolve({ data: [{ resultado: 'applied', token: null }], error: null });
+        }
+        correosRegistrados.add(emailId);
+        return Promise.resolve({ data: [{ resultado: 'claimed', token: `claim:${emailId}` }], error: null });
+      }
+      if (nombre === 'finalizar_correo') {
+        if (errorBorrado) return Promise.resolve({ data: false, error: errorBorrado });
+        if (!args.p_ok) { correosRegistrados.delete(emailId); borrados.push(emailId); }
+        return Promise.resolve({ data: true, error: null });
+      }
+      return Promise.resolve({ data: null, error: { message: `rpc inesperada: ${nombre}` } });
+    },
     from(tabla: string) {
       tablasTocadas.push(tabla);
       if (tabla === 'interruptor') {
@@ -30,20 +47,6 @@ vi.mock('@/lib/supabase/admin', () => ({
       return {
         select: () => ({
           eq: () => ({ maybeSingle: async () => ({ data: flotaDevuelta, error: errorFlota }) }),
-        }),
-        insert: async (fila: { email_id: string }) => {
-          if (errorDedup) return { error: errorDedup };
-          if (correosRegistrados.has(fila.email_id)) return { error: { code: '23505', message: 'duplicate key' } };
-          correosRegistrados.add(fila.email_id);
-          return { error: null };
-        },
-        delete: () => ({
-          eq: async (_col: string, valor: string) => {
-            if (errorBorrado) return { error: errorBorrado };
-            correosRegistrados.delete(valor);
-            borrados.push(valor);
-            return { error: null };
-          },
         }),
       };
     },
@@ -103,6 +106,7 @@ beforeEach(async () => {
   errorFlota = null; errorDedup = null; errorBorrado = null;
   interruptorResp = { data: null, error: null }; // sin fila = ENCENDIDO
   tablasTocadas.length = 0;
+  rpcs.length = 0;
   correosRegistrados.clear();
   borrados.length = 0;
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
@@ -177,7 +181,7 @@ describe('la flota sale del DESTINATARIO, nunca del remitente', () => {
 
 describe('idempotencia: un reintento no duplica la factura', () => {
   it('el segundo intento del MISMO correo se ignora con 200', async () => {
-    errorDedup = { code: '23505', message: 'duplicate key' };
+    correosRegistrados.add('em_1');
     const r = await POST(pedir(evento()));
     expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ ignorado: 'ya_procesado' });
@@ -191,8 +195,8 @@ describe('idempotencia: un reintento no duplica la factura', () => {
 
   it('se registra ANTES de procesar', async () => {
     await POST(pedir(evento()));
-    expect(tablasTocadas.indexOf('correo_procesado')).toBeGreaterThan(-1);
-    expect(tablasTocadas.indexOf('correo_procesado')).toBeGreaterThan(tablasTocadas.indexOf('tenant'));
+    expect(rpcs.indexOf('reclamar_correo')).toBeGreaterThan(-1);
+    expect(tablasTocadas.indexOf('tenant')).toBeGreaterThan(-1);
   });
 
   it('sin llave del canal, 503 SIN consumir el correo', async () => {
@@ -202,7 +206,7 @@ describe('idempotencia: un reintento no duplica la factura', () => {
     delete process.env.RESEND_API_KEY;
     const r = await POST(pedir(evento()));
     expect(r.status).toBe(503);
-    expect(tablasTocadas).not.toContain('correo_procesado');
+    expect(rpcs).not.toContain('reclamar_correo');
   });
 });
 
@@ -299,7 +303,7 @@ describe('una descarga caída NO consume el correo (F6)', () => {
     return new Response('resend caído', { status: 500 });
   }));
 
-  it('descarga caída → 503 y la fila de correo_procesado se libera', async () => {
+  it('descarga caída → 503 y el claim de correo se libera', async () => {
     // Con la fila puesta, el reintento de Resend saldría "ya_procesado" sin
     // haber guardado nada y ese CFDI no volvería jamás.
     fetchCaido();
@@ -357,15 +361,13 @@ describe('una descarga caída NO consume el correo (F6)', () => {
     expect(borrados).toEqual(['em_1']);
   });
 
-  it('si el DELETE de liberación falla, 503 igual y log fuerte', async () => {
-    // Best-effort: sin liberar, el reintento va a salir "ya_procesado" y esos
-    // adjuntos SÍ se pierden — lo mínimo es que quede gritado en el log.
+  it('si finalizar el claim falla, 503 igual y log fuerte', async () => {
     fetchCaido();
     errorBorrado = { message: 'conexión perdida' };
     const r = await POST(pedir(evento()));
     expect(r.status).toBe(503);
     expect(borrados).toEqual([]);
-    expect(logger.error).toHaveBeenCalledWith('correo_entrante.liberar_dedup', expect.objectContaining({ emailId: 'em_1' }));
+    expect(logger.error).toHaveBeenCalledWith('correo_entrante.finalizar_claim', expect.objectContaining({ emailId: 'em_1' }));
   });
 });
 

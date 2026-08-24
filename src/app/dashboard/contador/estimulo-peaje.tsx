@@ -15,8 +15,8 @@ import { FormaConAviso, Selector, type ResultadoAccion } from '../../admin/ui/fo
  * FASE 3 — la pregunta que cierra el hueco H6 (LIF 2026 art. 20-A).
  *
  * Sin este formulario el candado de `calificaEstimuloPeaje` nunca se gira:
- * `elegiblePeaje` queda `undefined` y el motor sigue acreditando el 50%
- * (fail-open, conducta de siempre). Vive en el panel del contador porque
+ * `elegiblePeaje` queda `undefined` y el motor deja el estímulo en $0
+ * (fail-closed). Vive en el panel del contador porque
  * el dato es fiscal y esa ruta es `dinero` (contador, dueño, superadmin).
  *
  * La pregunta es binaria a propósito: pedir un monto exacto invita a
@@ -88,7 +88,7 @@ export async function EstimuloPeaje({
           <p className="text-sm font-medium">Estímulo de peaje (LIF 2026 art. 20-A)</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
             {pendiente
-              ? 'Hoy se aplica el 50% sin esta declaración. Una flota grande o una parte relacionada está recibiendo un estímulo que no le toca. Contéstalo antes del primer cierre.'
+              ? 'Sin esta declaración el estímulo queda en $0. Contéstalo antes del primer cierre; una flota grande o una parte relacionada no puede acreditarlo.'
               : elegible
                 ? 'Declarado: ingresos menores a $300M y no parte relacionada. El motor acredita el 50% en casetas de pago electrónico. Dedicación exclusiva y Red Nacional siguen siendo responsabilidad de la flota.'
                 : 'Declarado: esta flota no califica (ingresos de $300M o más, o parte relacionada). El estímulo de peaje queda en $0.'}

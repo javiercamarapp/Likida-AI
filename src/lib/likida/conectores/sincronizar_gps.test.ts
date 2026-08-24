@@ -32,6 +32,7 @@ let credenciales: Array<Record<string, unknown>> = [];
 let filtroProveedores: string[] | null = null;
 let errorUnidades: { message: string } | null = null;
 let errorInsert: { message: string } | null = null;
+let errorCredenciales: { message: string } | null = null;
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
@@ -67,7 +68,7 @@ vi.mock('@/lib/supabase/admin', () => ({
         }
         if (tabla === 'conector_credencial') {
           filtroProveedores = (dentroDe?.vals as string[]) ?? null;
-          return { data: credenciales, error: null };
+          return { data: errorCredenciales ? null : credenciales, error: errorCredenciales };
         }
         return { data: [], error: null };
       };
@@ -111,7 +112,7 @@ const httpQue = (estado: number, cuerpo: string): Http => async () => ({ estado,
 
 beforeEach(() => {
   escrituras = []; sellos = []; credenciales = []; filtroProveedores = null;
-  errorUnidades = null; errorInsert = null;
+  errorUnidades = null; errorInsert = null; errorCredenciales = null;
 });
 
 describe('la posición aterriza en la unidad correcta, o en ninguna', () => {
@@ -241,5 +242,10 @@ describe('la corrida de todas las flotas', () => {
     expect(r[0].error).toContain('descifrar');
     expect(r[1].error).toBeUndefined();
     expect(r[1].guardadas).toBe(1);
+  });
+
+  it('si NO se puede leer el universo de credenciales, falla el cron: [] sería un verde falso', async () => {
+    errorCredenciales = { message: 'db down' };
+    await expect(sincronizarGpsTodas(httpQue(200, cuerpoSamsara([])))).rejects.toThrow('gps.credenciales');
   });
 });

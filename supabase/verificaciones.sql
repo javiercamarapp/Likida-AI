@@ -8075,26 +8075,28 @@ begin
     caza_la_fuga;
 end $$;
 
--- ── 144. El ejecutor ARCO cancela de verdad, y NO se lleva la contabilidad (mig. 0173) ──
+-- ── 144. ARCO separa oposición/cancelación y conserva evidencia fiscal (migs. 0173 + 0178) ──
 --
 -- P0-6 de la auditoría externa: `solicitud_arco` sólo registraba. Ahora
--- `ejecutar_arco_cancelacion` (0173) anonimiza al titular, borra lo que es sólo
--- suyo, marca sus fotos para Storage y deja evidencia — sin tocar el gasto con
--- CFDI, que es contabilidad de la flota y el CFF art. 30 obliga a conservar
--- cinco años.
+-- `ejecutar_arco_cancelacion` anonimiza al titular y borra sólo lo conversacional.
+-- La 0178 corrige el comportamiento previo: una imagen de gasto/CFDI NO se manda
+-- a Storage; queda retenida por CFF art. 30. Además, oposición no es cancelación:
+-- la primera exige revisión humana y no toca identidad ni evidencia fiscal.
 --
--- Esperado: ARCO_0173  ok=t  seudonimo=t  tel_fuera=t  wa_fuera=0  foto_en_cola=1
+-- Esperado: ARCO_0178  ok=t  seudonimo=t  tel_fuera=t  wa_fuera=0  foto_en_cola=0
 --                      gasto_vive=1  cfdi_vive=t  evidencia=t  cerrada=t
---                      otra_flota_rebota=t  acceso_rebota=t
+--                      otra_flota_rebota=t  acceso_rebota=t  oposicion_no_cancela=t
+--                      oposicion_revision=t  retencion_fiscal=t
 do $$
 declare
-  ta uuid; tb uuid; oa uuid; ob uuid; va uuid; sa uuid; sb uuid; s_acc uuid;
+  ta uuid; tb uuid; oa uuid; ob uuid; va uuid; sa uuid; sb uuid; s_acc uuid; s_opp uuid;
   conv uuid; g_id uuid;
   r jsonb;
   ok boolean; seudonimo_ok boolean; tel_fuera boolean;
   wa_quedan int; foto_en_cola int; gasto_vive int; cfdi_vive boolean;
   evidencia_ok boolean; cerrada boolean;
-  otra_flota_rebota boolean; acceso_rebota boolean;
+  otra_flota_rebota boolean; acceso_rebota boolean; oposicion_no_cancela boolean;
+  oposicion_revision boolean; retencion_fiscal boolean;
 begin
   insert into tenant (nombre) values ('ZZZ ARCO A') returning id into ta;
   insert into tenant (nombre) values ('ZZZ ARCO B') returning id into tb;
@@ -8108,6 +8110,12 @@ begin
             'https://x.supabase.co/storage/v1/object/public/comprobantes/ta/foto-arco.jpg')
     returning id into g_id;
 
+  -- La defensa de Storage también clasifica por referencia viva: aunque un
+  -- llamador intente ofrecer la foto como operativa, el trigger la retiene.
+  insert into storage_huerfano_candidato (bucket, nombre, motivo, clase_retencion)
+    values ('comprobantes', 'ta/foto-arco.jpg', 'verificacion_0178', 'operativa')
+  returning clase_retencion = 'fiscal_cff_30' into retencion_fiscal;
+
   -- Conversación de WhatsApp: es sólo suya, se va.
   insert into wa_conversacion (tenant_id, operador_id, telefono) values (ta, oa,'+520000017301') returning id into conv;
 
@@ -8117,6 +8125,8 @@ begin
     values (tb, ob,'cancelacion','whatsapp', current_date + 15) returning id into sb;
   insert into solicitud_arco (tenant_id, operador_id, tipo, canal, vence_en)
     values (ta, oa,'acceso','whatsapp', current_date + 15) returning id into s_acc;
+  insert into solicitud_arco (tenant_id, operador_id, tipo, canal, vence_en)
+    values (tb, ob,'oposicion','whatsapp', current_date + 15) returning id into s_opp;
 
   r := public.ejecutar_arco_cancelacion(ta, sa);
   ok := (r->>'ok')::boolean;
@@ -8131,7 +8141,8 @@ begin
   select count(*) into gasto_vive from gasto where id = g_id;
   select cfdi_uuid = 'zzz-arco-cfdi-1' into cfdi_vive from gasto where id = g_id;
 
-  select evidencia is not null and evidencia ? 'operador_anonimizado',
+  select evidencia is not null and evidencia ? 'operador_anonimizado'
+         and evidencia ? 'evidencia_fiscal_retenida',
          estado = 'resuelta' and resuelta_en is not null and ejecutada_en is not null
     into evidencia_ok, cerrada
     from solicitud_arco where id = sa;
@@ -8140,10 +8151,18 @@ begin
   otra_flota_rebota := not ((public.ejecutar_arco_cancelacion(ta, sb))->>'ok')::boolean;
   -- Un ACCESO no se ejecuta solo: lo contesta una persona.
   acceso_rebota := not ((public.ejecutar_arco_cancelacion(ta, s_acc))->>'ok')::boolean;
+  -- Una OPOSICIÓN tampoco pasa por cancelación; queda en revisión humana.
+  oposicion_no_cancela := not ((public.ejecutar_arco_cancelacion(tb, s_opp))->>'ok')::boolean;
+  r := public.ejecutar_arco_oposicion(tb, s_opp);
+  select (r->>'ok')::boolean and estado = 'en_proceso'
+         and coalesce((evidencia->>'oposicion_automatizada_vigente')::boolean, false)
+    into oposicion_revision
+    from solicitud_arco where id = s_opp;
 
-  raise exception E'ARCO_0173  ok=%  seudonimo=%  tel_fuera=%  wa_fuera=%  foto_en_cola=%  gasto_vive=%  cfdi_vive=%  evidencia=%  cerrada=%  otra_flota_rebota=%  acceso_rebota=%   (esperado t / t / t / 0 / 1 / 1 / t / t / t / t / t)',
+  raise exception E'ARCO_0178  ok=%  seudonimo=%  tel_fuera=%  wa_fuera=%  foto_en_cola=%  gasto_vive=%  cfdi_vive=%  evidencia=%  cerrada=%  otra_flota_rebota=%  acceso_rebota=%  oposicion_no_cancela=%  oposicion_revision=%  retencion_fiscal=%   (esperado t / t / t / 0 / 0 / 1 / t / t / t / t / t / t / t / t)',
     ok, seudonimo_ok, tel_fuera, wa_quedan, foto_en_cola, gasto_vive, cfdi_vive,
-    evidencia_ok, cerrada, otra_flota_rebota, acceso_rebota;
+    evidencia_ok, cerrada, otra_flota_rebota, acceso_rebota, oposicion_no_cancela,
+    oposicion_revision, retencion_fiscal;
 end $$;
 
 -- ── 145. Un centavo de redondeo no es una diferencia del operador (mig. 0174) ──
@@ -8202,7 +8221,7 @@ begin
     columna_2dec, centavo, dos_centavos, real_cuenta, invoker, anon_ok;
 end $$;
 
--- ── 146. Los datos para asentar una póliza salen agregados de SQL (mig. 0175) ──
+-- ── 146. La póliza conserva una base desconocida como desconocida (migs. 0175 + 0178) ──
 --
 -- La landing promete «el formato que SAP Business One o CONTPAQi ya sabe
 -- importar». Para eso hace falta el desglose POR CONCEPTO de cada liquidación,
@@ -8211,18 +8230,22 @@ end $$;
 -- los gastos de un mes a memoria es el patrón que revienta a 50k viajes/mes.
 --
 -- Lo que se prueba: que el desglose sea correcto, que un gasto SIN `sub_total`
--- se cuente en `baseEstimada` (quien importe tiene que saber que ese renglón
--- trae el total y no la base), que la flota vecina no aparezca, y que la
+-- quede con base nula y `baseConocida=false` (nunca se sustituye por el total),
+-- que la flota vecina no aparezca, y que la
 -- función esté cerrada a `anon` y a `authenticated`.
 --
--- Esperado: POLIZA_0175  n=1  diesel=3000  caseta=1000  iva=640  anticipo=5000
---                        base_estimada=1  ajena_no_entra=t  invoker=t  anon=f  auth=f
+-- Esperado: POLIZA_0178  n=1  diesel=3000  caseta=1000  iva=640  anticipo=5000
+--                        base_desconocida=1  otro_base_conocida=f  otro_subtotal_nulo=t
+--                        ajena_no_entra=t  invoker=t  anon=f  auth=f
+--                        erp_confirmado=t  erp_sin_confirmar_rechazado=t  erp_rls=t
 do $$
 declare
   ta uuid; tb uuid; oa uuid; ob uuid; va uuid; vb uuid;
   j jsonb; fila jsonb;
-  n int; diesel numeric; caseta numeric; iva numeric; anticipo numeric; base_est int;
+  n int; diesel numeric; caseta numeric; iva numeric; anticipo numeric; base_desconocida int;
+  otro_base_conocida boolean; otro_subtotal_nulo boolean;
   ajena_no_entra boolean; invoker boolean; anon_ok boolean; auth_ok boolean;
+  erp_confirmado boolean; erp_sin_confirmar_rechazado boolean := false; erp_rls boolean;
 begin
   insert into tenant (nombre) values ('ZZZ POLIZA A') returning id into ta;
   insert into tenant (nombre) values ('ZZZ POLIZA B') returning id into tb;
@@ -8234,7 +8257,7 @@ begin
   insert into gasto (tenant_id,viaje_id,concepto,monto,sub_total,fecha) values
     (ta,va,'diesel',3480,3000,current_date),
     (ta,va,'caseta',1160,1000,current_date),
-    -- Sin `sub_total`: cae a `monto` y tiene que ROTULARSE, no callarse.
+    -- Sin `sub_total`: no puede hacerse pasar por base.
     (ta,va,'otro',200,null,current_date),
     (tb,vb,'diesel',7777,6704,current_date);
 
@@ -8247,11 +8270,14 @@ begin
   fila := j->0;
   anticipo := (fila->>'anticipo')::numeric;
   iva      := (fila->>'ivaAcreditable')::numeric;
-  base_est := (fila->>'baseEstimada')::int;
+  base_desconocida := (fila->>'baseDesconocida')::int;
   select (x->>'subtotal')::numeric into diesel
     from jsonb_array_elements(fila->'porConcepto') x where x->>'concepto' = 'diesel';
   select (x->>'subtotal')::numeric into caseta
     from jsonb_array_elements(fila->'porConcepto') x where x->>'concepto' = 'caseta';
+  select (x->>'baseConocida')::boolean, (x->>'subtotal') is null
+    into otro_base_conocida, otro_subtotal_nulo
+    from jsonb_array_elements(fila->'porConcepto') x where x->>'concepto' = 'otro';
 
   -- La flota vecina no entra ni por el desglose ni por el conteo.
   ajena_no_entra := (n = 1) and not (j::text like '%VJ-POL-B%');
@@ -8262,8 +8288,29 @@ begin
   anon_ok := has_function_privilege('anon',          'public.poliza_datos_tenant(uuid, date, date)', 'EXECUTE');
   auth_ok := has_function_privilege('authenticated', 'public.poliza_datos_tenant(uuid, date, date)', 'EXECUTE');
 
-  raise exception E'POLIZA_0175  n=%  diesel=%  caseta=%  iva=%  anticipo=%  base_estimada=%  ajena_no_entra=%  invoker=%  anon=%  auth=%   (esperado 1 / 3000.00 / 1000.00 / 640.00 / 5000.00 / 1 / t / t / f / f)',
-    n, diesel, caseta, iva, anticipo, base_est, ajena_no_entra, invoker, anon_ok, auth_ok;
+  -- El perfil ERP se almacena por flota y exige una confirmación fechada. La
+  -- validación de columnas exactas vive en la ruta TS, porque cada instancia
+  -- tiene una plantilla distinta; SQL no inventa un layout genérico.
+  insert into erp_export_perfil (tenant_id, sistema, plantilla, confirmado_en)
+    values (ta, 'contpaqi', '{"tipo":"Dr","numeroInicial":1,"separador":",","encabezado":["A","B","C","D","E","F","G","H","I"]}'::jsonb, now());
+  select exists (
+    select 1 from erp_export_perfil
+     where tenant_id = ta and sistema = 'contpaqi' and confirmado_en is not null
+  ) into erp_confirmado;
+  begin
+    insert into erp_export_perfil (tenant_id, sistema, plantilla, confirmado_en)
+      values (ta, 'sap_b1', '{}'::jsonb, null);
+  exception when not_null_violation then
+    erp_sin_confirmar_rechazado := true;
+  end;
+  select relrowsecurity into erp_rls
+    from pg_class c join pg_namespace nn on nn.oid = c.relnamespace
+   where nn.nspname = 'public' and c.relname = 'erp_export_perfil';
+
+  raise exception E'POLIZA_0178  n=%  diesel=%  caseta=%  iva=%  anticipo=%  base_desconocida=%  otro_base_conocida=%  otro_subtotal_nulo=%  ajena_no_entra=%  invoker=%  anon=%  auth=%  erp_confirmado=%  erp_sin_confirmar_rechazado=%  erp_rls=%   (esperado 1 / 3000.00 / 1000.00 / 640.00 / 5000.00 / 1 / f / t / t / t / f / f / t / t / t)',
+    n, diesel, caseta, iva, anticipo, base_desconocida, otro_base_conocida,
+    otro_subtotal_nulo, ajena_no_entra, invoker, anon_ok, auth_ok, erp_confirmado,
+    erp_sin_confirmar_rechazado, erp_rls;
 end $$;
 
 -- ── 147. El GPS de la flota entra de verdad, y sin duplicar (mig. 0176) ───
@@ -8352,4 +8399,128 @@ begin
 
   raise exception E'GPS_0176  dup_unidad_rechazado=%  otra_flota_ok=%  repetida_ignorada=%  n_posiciones=%  idx_lectura=%  parcial=%  idx_consulta=%  cron_gps=%   (esperado t / t / t / 1 / t / f / t / t)',
     dup_unidad_rechazado, otra_flota_ok, repetida_ignorada, n_pos, idx_lectura, parcial, idx_consulta, cron_gps;
+end $$;
+
+-- ── 148. Claims de correo y WhatsApp son leases exclusivos (0177) ─────────
+-- Esperado: CLAIMS_0177 correo=t busy=t relevo=t aplicado=t viejo=f wa=t lease=t segundo=0 permisos=f
+do $$
+declare a text; b text; c text; d text; t1 uuid; t2 uuid; tw uuid; n int;
+  correo boolean; busy boolean; relevo boolean; aplicado boolean; viejo boolean;
+  wa boolean; lease boolean; permisos boolean;
+begin
+  delete from public.correo_procesado where email_id='zzz-verif-0177-correo';
+  select resultado,token into a,t1 from public.reclamar_correo('zzz-verif-0177-correo',90);
+  select resultado into b from public.reclamar_correo('zzz-verif-0177-correo',90);
+  perform public.finalizar_correo('zzz-verif-0177-correo',t1,false,'transitorio');
+  select resultado,token into c,t2 from public.reclamar_correo('zzz-verif-0177-correo',90);
+  viejo := public.finalizar_correo('zzz-verif-0177-correo',t1,true,null);
+  perform public.finalizar_correo('zzz-verif-0177-correo',t2,true,null);
+  select resultado into d from public.reclamar_correo('zzz-verif-0177-correo',90);
+  correo := a='claimed' and t1 is not null; busy := b='busy'; relevo := c='claimed' and t2<>t1; aplicado := d='applied';
+
+  delete from public.wa_evento_pendiente where id='zzz-verif-0177-wa';
+  insert into public.wa_evento_pendiente(id,evento) values ('zzz-verif-0177-wa','{"from":"521000000000","type":"text"}');
+  select claim_token into tw from public.reclamar_wa_pendiente('zzz-verif-0177-wa',0,'verif',90);
+  select count(*) into n from public.reclamar_wa_pendiente('zzz-verif-0177-wa',0,'otro',90);
+  select lease_expires_at>now() into lease from public.wa_evento_pendiente where id='zzz-verif-0177-wa'; wa := tw is not null and n=0;
+  permisos := has_function_privilege('anon','public.reclamar_correo(text,integer)','EXECUTE')
+    or has_function_privilege('authenticated','public.finalizar_correo(text,uuid,boolean,text)','EXECUTE')
+    or has_function_privilege('anon','public.reclamar_wa_pendiente(text,integer,text,integer)','EXECUTE');
+  raise exception E'CLAIMS_0177 correo=% busy=% relevo=% aplicado=% viejo=% wa=% lease=% segundo=% permisos=% (esperado t/t/t/t/f/t/t/0/f)',correo,busy,relevo,aplicado,viejo,wa,lease,n,permisos;
+end $$;
+
+-- ── 149. Outbox y presupuesto se reclaman una sola vez (0180) ────────────
+-- Esperado: OUTBOX_RESERVA_0180 claim=t exclusivo=t retry=t sent=t cerrado=t reserva=t segunda=f reabre=t permisos=f
+do $$
+declare o uuid; l1 uuid; l2 uuid; r1 uuid; r2 uuid; r3 uuid; x int; monto numeric;
+  claim boolean; exclusivo boolean; retry boolean; sent boolean; cerrado boolean;
+  reserva boolean; segunda boolean; reabre boolean; permisos boolean;
+begin
+  insert into public.wa_outbox(payload) values ('{"type":"text","to":"529990000000","text":{"body":"verif"}}') returning id into o;
+  select id,lease_token into o,l1 from public.reclamar_wa_outbox(1,90) where id=o; claim := l1 is not null;
+  select count(*) into x from public.reclamar_wa_outbox(1,90) where id=o; exclusivo := x=0;
+  perform public.finalizar_wa_outbox(o,l1,null,'transitorio'); update public.wa_outbox set proximo_intento_en=now() where id=o;
+  select lease_token into l2 from public.reclamar_wa_outbox(1,90) where id=o; retry := l2 is not null and l2<>l1;
+  perform public.finalizar_wa_outbox(o,l2,'wamid.verif.0180',null);
+  select estado='sent' and provider_message_id='wamid.verif.0180' into sent from public.wa_outbox where id=o;
+  cerrado := not has_table_privilege('anon','public.wa_outbox','SELECT') and not has_table_privilege('authenticated','public.wa_outbox','INSERT');
+
+  select id,disponible_usd into r1,monto from public.reservar_presupuesto_agente('zzz-verif-0180',current_date,1,90); reserva := r1 is not null and monto=1;
+  select id into r2 from public.reservar_presupuesto_agente('zzz-verif-0180',current_date,1,90); segunda := r2 is not null;
+  perform public.cerrar_reserva_presupuesto_agente(r1,0);
+  select id into r3 from public.reservar_presupuesto_agente('zzz-verif-0180',current_date,1,90); reabre := r3 is not null;
+  perform public.cerrar_reserva_presupuesto_agente(r3,0);
+  permisos := has_function_privilege('anon','public.reclamar_wa_outbox(integer,integer)','EXECUTE')
+    or has_function_privilege('authenticated','public.reservar_presupuesto_agente(text,date,numeric,integer)','EXECUTE')
+    or has_function_privilege('anon','public.cerrar_reserva_presupuesto_agente(uuid,numeric)','EXECUTE');
+  raise exception E'OUTBOX_RESERVA_0180 claim=% exclusivo=% retry=% sent=% cerrado=% reserva=% segunda=% reabre=% permisos=% (esperado t/t/t/t/t/t/f/t/f)',claim,exclusivo,retry,sent,cerrado,reserva,segunda,reabre,permisos;
+end $$;
+
+-- ── 150. El CRM deduplica leads y conserva un ledger idempotente (mig. 0181) ─
+-- 0181: la clave natural parcial evita que dos instancias creen el mismo lead,
+-- y `comercial_evento` es la bitácora única para citas y cierres. Se comprueba
+-- la colisión REAL, el webhook repetido, y RLS deny-all para clientes.
+do $$
+declare
+  p uuid;
+  clave_rebota boolean := false;
+  evento_repite boolean := false;
+  fila_eventos int;
+  idx_lead boolean;
+  idx_evento boolean;
+  rls_evento boolean;
+  policies_evento int;
+begin
+  select exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'prospecto_lead_clave_unica') into idx_lead;
+  select exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'comercial_evento_clave_unica') into idx_evento;
+  select c.relrowsecurity into rls_evento
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'comercial_evento';
+  select count(*) into policies_evento
+    from pg_policies where schemaname = 'public' and tablename = 'comercial_evento';
+
+  insert into public.prospecto (empresa, correo, lead_clave, fuente)
+    values ('__V181 CRM__', '__v181__@example.invalid', 'correo:__v181__', 'landing') returning id into p;
+  begin
+    insert into public.prospecto (empresa, correo, lead_clave, fuente)
+      values ('__V181 CRM duplicado__', '__v181__@example.invalid', 'correo:__v181__', 'landing');
+  exception when unique_violation then
+    clave_rebota := true;
+  end;
+
+  insert into public.comercial_evento (clave_idempotencia, fuente, tipo, prospecto_id, externo_id, payload)
+    values ('__V181_EVENTO__', 'test', 'booking.created', p, '__v181-booking__', '{"test":true}');
+  begin
+    insert into public.comercial_evento (clave_idempotencia, fuente, tipo, prospecto_id, externo_id, payload)
+      values ('__V181_EVENTO__', 'test', 'booking.created', p, '__v181-booking__', '{"test":true}');
+  exception when unique_violation then
+    evento_repite := true;
+  end;
+  select count(*) into fila_eventos from public.comercial_evento where clave_idempotencia = '__V181_EVENTO__';
+
+  raise exception E'CRM_0181  clave_rebota=%  evento_repite=%  fila_eventos=%  idx_lead=%  idx_evento=%  rls=%  policies=%   (esperado t / t / 1 / t / t / t / 0)',
+    clave_rebota, evento_repite, fila_eventos, idx_lead, idx_evento, rls_evento, policies_evento;
+end $$;
+
+-- ── 151. El score ICP interpreta SCIAN de seis dígitos (mig. 0182) ────────
+-- 484xxx/485xxx/488xxx son transporte de carga; un giro 999xxx no recibe los
+-- 40 puntos SCIAN. Se comprueba el valor generado y el índice de vivos.
+do $$
+declare
+  p_bueno uuid;
+  p_malo uuid;
+  score_bueno int;
+  score_malo int;
+  indice boolean;
+begin
+  select exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'idx_prospecto_similitud') into indice;
+  insert into public.prospecto (empresa, scian, vacante, num_unidades, sitio_verificado, fuente)
+    values ('__V182 SCIAN bueno__', '484110', 'Operador', 10, true, 'denue') returning id into p_bueno;
+  insert into public.prospecto (empresa, scian, fuente)
+    values ('__V182 SCIAN malo__', '999999', 'denue') returning id into p_malo;
+  select similitud_icp_pct into score_bueno from public.prospecto where id = p_bueno;
+  select similitud_icp_pct into score_malo from public.prospecto where id = p_malo;
+
+  raise exception E'CRM_0182  score_484110=%  score_999999=%  indice=%   (esperado 100 / 0 / t)',
+    score_bueno, score_malo, indice;
 end $$;

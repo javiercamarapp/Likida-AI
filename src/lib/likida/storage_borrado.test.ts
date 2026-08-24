@@ -15,15 +15,19 @@ const sellados: Array<{ bucket: string; nombres: string[] }> = [];
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => ({
-      select: () => ({
-        is: () => ({
-          order: () => ({
-            order: () => ({ limit: () => Promise.resolve({ data: colaDevuelta, error: null }) }),
-          }),
-        }),
-        // el conteo final de pendientes
-        eq: () => Promise.resolve({ count: 0, error: null }),
-      }),
+      select: (_columnas: string, opciones?: { head?: boolean }) => opciones?.head
+        ? {
+            is: () => ({ eq: () => Promise.resolve({ count: 0, error: null }) }),
+          }
+        : {
+            is: () => ({
+              eq: () => ({
+                order: () => ({
+                  order: () => ({ limit: () => Promise.resolve({ data: colaDevuelta, error: null }) }),
+                }),
+              }),
+            }),
+          },
       update: () => ({
         eq: (_c: string, bucket: string) => ({
           in: (_col: string, nombres: string[]) => {

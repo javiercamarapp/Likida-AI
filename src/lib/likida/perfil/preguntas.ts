@@ -112,12 +112,9 @@ export const PREGUNTA_ESTIMULO_PEAJE =
   '¿Los ingresos totales anuales de la flota en el último ejercicio fueron menores a $300 millones, y es parte relacionada de otra empresa (LISR art. 179)? De eso depende el estímulo de peaje del 50% (LIF 2026 art. 20-A). Likida no verifica la dedicación exclusiva ni que las casetas sean de la Red Nacional.';
 
 export interface ElegibilidadEstimuloPeaje {
-  /** `null` = el perfil todavía no lo declara — NO se le quita el estímulo
-   *  a nadie por default; sigue aplicando con el aviso de siempre
-   *  (`CONDICIONES_ESTIMULO_PEAJE`, liquidacion/acreditable.ts). Fail-OPEN
-   *  con aviso, no fail-closed: esa ya era la conducta documentada antes de
-   *  esta fase, y quitarle un estímulo real a quien no ha contestado sería
-   *  peor que el hueco que esto cierra. */
+  /** `null` = el perfil todavía no lo declara. El motor lo trata como no
+   *  elegible para acreditar: falta una declaración no es una autorización
+   *  para aplicar un estímulo fiscal. */
   elegible: boolean | null;
 }
 

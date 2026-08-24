@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const respuestas = new Map<string, Array<{ data?: unknown; error?: { message: string } | null; count?: number }>>();
+const llamadasRpc: Array<{ fn: string; args: Record<string, unknown> }> = [];
 function builder(tabla: string) {
   const responder = () => {
     const cola = respuestas.get(tabla);
@@ -19,14 +20,24 @@ function builder(tabla: string) {
   };
   const b: Record<string, unknown> = {};
   Object.assign(b, {
-    select: () => b, eq: () => b, not: () => b, gte: () => b, order: () => b,
+    select: () => b, eq: () => b, is: () => b, not: () => b, gte: () => b, order: () => b,
     limit: () => b, range: () => b,
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve().then(responder).then(res, rej),
   });
   return b;
 }
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => builder(t) }) }));
+vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({
+  from: (t: string) => builder(t),
+  rpc: (fn: string, args: Record<string, unknown>) => {
+    llamadasRpc.push({ fn, args });
+    const cola = respuestas.get(`rpc:${fn}`);
+    return Promise.resolve(cola && cola.length ? cola.shift()! :
+      (fn === 'reservar_presupuesto_agente'
+        ? { data: [{ id: 'reserva-1', disponible_usd: 1 }], error: null }
+        : { data: true, error: null }));
+  },
+}) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 
@@ -49,6 +60,7 @@ const REDACTOR = { id: 'redactor', presupuesto_dia_usd: 1.0 };
 
 beforeEach(() => {
   respuestas.clear();
+  llamadasRpc.length = 0;
   apagados = new Set();
   interruptorFalla = false;
   redactar.mockClear();
@@ -90,23 +102,24 @@ describe('los cuatro candados', () => {
     expect(r.agentes[0].motivo).toMatch(/sin presupuesto/);
 
     respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
-    respuestas.set('agente_corrida', [{ data: [{ costo_usd: 1.5 }], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
+    respuestas.set('rpc:reservar_presupuesto_agente', [{ data: [], error: null }]);
     r = await correrRunner();
     expect(r.agentes[0].motivo).toMatch(/agotado/);
     expect(redactar).not.toHaveBeenCalled();
   });
 
-  it('con el gasto del día ILEGIBLE no se corre — el techo no se verifica a ciegas', async () => {
+  it('con la reserva del día ILEGIBLE no se corre — el techo no se verifica a ciegas', async () => {
     respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
-    respuestas.set('agente_corrida', [{ data: null, error: { message: 'db down' } }]);
+    respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
+    respuestas.set('rpc:reservar_presupuesto_agente', [{ data: null, error: { message: 'db down' } }]);
     const r = await correrRunner();
-    expect(r.agentes[0].motivo).toMatch(/gasto del día/);
+    expect(r.agentes[0].motivo).toMatch(/reservar el presupuesto/);
     expect(redactar).not.toHaveBeenCalled();
   });
 
   it('backpressure: la bandeja llena frena la fábrica', async () => {
     respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
-    respuestas.set('agente_corrida', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 25 }]);
     const r = await correrRunner();
     expect(r.agentes[0].motivo).toMatch(/bandeja con 25/);
@@ -117,7 +130,6 @@ describe('los cuatro candados', () => {
 describe('el lote', () => {
   it('fabrica hasta el tope de piezas y un rebote de guarda NO tumba el lote', async () => {
     respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
-    respuestas.set('agente_corrida', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
     respuestas.set('prospecto', [{
       data: Array.from({ length: 8 }, (_, i) => ({ id: `pr-${i}`, vendedor: null })), error: null,
@@ -128,20 +140,22 @@ describe('el lote', () => {
       return { piezaId: 'p', asunto: 'x', aviso: null, costoUsd: 0.001 };
     });
     const r = await correrRunner();
+    expect(r.agentes[0].motivo).toBeUndefined();
     expect(r.agentes[0]).toMatchObject({ resultado: 'corrio', piezas: 5, saltados: 1 });
   });
 
   it('el lote corta al agotar el presupuesto restante', async () => {
     respuestas.set('agente_definicion', [{ data: [{ id: 'redactor', presupuesto_dia_usd: 0.005 }], error: null }]);
-    respuestas.set('agente_corrida', [{ data: [{ costo_usd: 0.002 }], error: null }]);
+    respuestas.set('rpc:reservar_presupuesto_agente', [{ data: [{ id: 'r-2', disponible_usd: 0.003 }], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
     respuestas.set('prospecto', [{
       data: Array.from({ length: 8 }, (_, i) => ({ id: `pr-${i}`, vendedor: null })), error: null,
     }]);
     redactar.mockResolvedValue({ piezaId: 'p', asunto: 'x', aviso: null, costoUsd: 0.002 });
     const r = await correrRunner();
-    // restante = 0.003: cabe la 1a (0.002); tras acumular 0.002 aún < 0.003,
+    // disponible reservado = 0.003: cabe la 1a (0.002); tras acumular 0.002 aún < 0.003,
     // cabe la 2a (0.004 acumulado) y la 3a ya no arranca.
+    expect(r.agentes[0].motivo).toBeUndefined();
     expect(r.agentes[0].piezas).toBe(2);
   });
 });
@@ -149,7 +163,6 @@ describe('el lote', () => {
 describe('M30 — correrRunner(soloAgente) acota la vuelta a UN agente', () => {
   it('con dos habilitados y soloAgente="redactor", el otro ni se evalúa', async () => {
     respuestas.set('agente_definicion', [{ data: [REDACTOR, { id: 'cobranza', presupuesto_dia_usd: 1 }], error: null }]);
-    respuestas.set('agente_corrida', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
     respuestas.set('prospecto', [{ data: [{ id: 'p1', vendedor: null }], error: null }]);
     const r = await correrRunner('redactor');
@@ -161,5 +174,18 @@ describe('M30 — correrRunner(soloAgente) acota la vuelta a UN agente', () => {
     const r = await correrRunner('cobranza');
     expect(r).toEqual({ apagadoGlobal: false, agentes: [] });
     expect(redactar).not.toHaveBeenCalled();
+  });
+});
+
+describe('la reserva de presupuesto es atómica', () => {
+  it('no decide con un SELECT: reclama el saldo por RPC y lo cierra con el costo real', async () => {
+    respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
+    respuestas.set('prospecto', [{ data: [{ id: 'p1', vendedor: null }], error: null }]);
+    await correrRunner();
+    expect(llamadasRpc[0]).toMatchObject({
+      fn: 'reservar_presupuesto_agente', args: { p_agente: 'redactor', p_tope_usd: 1 },
+    });
+    expect(llamadasRpc.some((x) => x.fn === 'cerrar_reserva_presupuesto_agente')).toBe(true);
   });
 });

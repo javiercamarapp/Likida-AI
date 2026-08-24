@@ -1230,8 +1230,9 @@ export async function getAcumuladoCombustible(
 /**
  * Registra una solicitud ARCO (auditoría 12, ALTO legal). El aviso promete
  * "queda registrada tu solicitud" y la tabla `solicitud_arco` (0053) existía
- * sin un solo insert — la flota, que es la responsable con 15 días hábiles
- * para contestar (LFPDPPP art. 32), no tenía NADA que ver.
+ * sin un solo insert — la flota, que es la responsable con 20 días hábiles
+ * para comunicar su determinación (LFPDPPP vigente art. 31), no tenía NADA
+ * que ver.
  *
  * Best-effort con rastro ruidoso: un fallo aquí no puede tumbar la respuesta
  * al titular, pero el log de error es lo que permite saber a la mañana

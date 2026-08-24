@@ -22,11 +22,11 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type EstadoIntegracion =
-  /** Medido para ESTA flota: hay credenciales guardadas y en uso. */
+  /** Medido para ESTA flota: hay una conexión comprobada en uso. */
   | 'conectada'
   /** Funciona hoy y completo, pero el dato entra por archivo, no en vivo. */
   | 'por_archivo'
-  /** Construido; falta que la flota entregue sus accesos. */
+  /** Construido; falta que la flota entregue o pruebe sus accesos. */
   | 'por_credencial'
   /** Existe el camino, pero el último tramo necesita una instancia real de un
    *  cliente firmado. No se promete antes de tenerla. */
@@ -89,19 +89,19 @@ export function catalogoIntegraciones(s: SenalesIntegracion): Integracion[] {
       id: 'sap_b1',
       nombre: 'SAP Business One',
       categoria: 'Contabilidad y ERP',
-      queHace: 'Que las facturas de proveedores dejen de capturarse a mano: el Agente de Proveedores las extrae y las deja listas para el asiento.',
+      queHace: 'Genera archivos DTW de pólizas únicamente después de que tu contador confirma la plantilla de su instancia.',
       estado: 'por_piloto',
-      comoConectaHoy: 'Hoy sale por el archivo de arriba, que SAP B1 sabe importar con sus plantillas estándar.',
-      paraSubirDeEscalon: 'La escritura directa (Service Layer) necesita credenciales de una instancia real. No se promete integración viva antes de tener accesos de prueba: el escalón del archivo funciona mientras tanto.',
+      comoConectaHoy: 'No hay una plantilla universal declarada lista. El export pide una plantilla DTW confirmada de ESTA flota y devuelve “no listo” hasta tenerla.',
+      paraSubirDeEscalon: 'Confirma con tu contador el archivo DTW de su versión/instancia y prueba una importación en ambiente controlado. La escritura directa (Service Layer) requiere accesos de prueba y no se promete antes de ello.',
     },
     {
       id: 'contpaqi_aspel',
       nombre: 'CONTPAQi · Aspel COI',
       categoria: 'Contabilidad y ERP',
       queHace: 'El layout de póliza que tu contador importa sin retecleo.',
-      estado: 'no_construida',
-      comoConectaHoy: 'Por ahora, el CSV genérico.',
-      paraSubirDeEscalon: 'Se escribe contra el archivo de ejemplo de la primera flota que lo use. Un layout adivinado no falla ruidosamente: importa mal y ensucia el cierre.',
+      estado: 'por_piloto',
+      comoConectaHoy: 'El export solo genera CONTPAQi con el tipo, separador y encabezado confirmados por tu contador; sin ese perfil devuelve “no listo”.',
+      paraSubirDeEscalon: 'Entrega una póliza de ejemplo y el esquema de carga de tu instalación. Un layout adivinado no falla ruidosamente: importa mal y ensucia el cierre.',
     },
 
     // ── Rastreo ───────────────────────────────────────────────────────────
@@ -110,11 +110,16 @@ export function catalogoIntegraciones(s: SenalesIntegracion): Integracion[] {
       nombre: 'Rastreo GPS de tu proveedor',
       categoria: 'Rastreo',
       queHace: 'Que el mapa pinte posiciones reales y los tiempos de espera se midan solos, en vez de trayectos ilustrativos.',
-      estado: rastreo,
+      // Una credencial guardada NO es una posición recibida ni una sincronía
+      // exitosa. Esta pantalla no lee un latido/última posición, así que no
+      // usa el verde de “conectada” aunque exista una fila de credencial.
+      estado: rastreo === 'conectada' ? 'por_credencial' : rastreo,
       comoConectaHoy: rastreo === 'conectada'
-        ? 'Con las credenciales que ya guardaste.'
+        ? 'Hay una credencial registrada, pero esta pantalla no puede comprobar aquí que el proveedor esté entregando posiciones. Confírmalo con una sincronización y una posición reciente.'
         : 'Sin conectar: el mapa dibuja el trayecto entre origen y destino y lo declara como ilustrativo — nunca como posición actual.',
-      paraSubirDeEscalon: rastreo === 'conectada' ? null : 'Los accesos de tu proveedor de rastreo, en Conexiones.',
+      paraSubirDeEscalon: rastreo === 'conectada'
+        ? 'Ejecuta una sincronización y confirma una posición reciente antes de tratar el GPS como conectado.'
+        : 'Los accesos de tu proveedor de rastreo, en Conexiones.',
     },
 
     // ── Combustible y casetas ─────────────────────────────────────────────
@@ -134,18 +139,18 @@ export function catalogoIntegraciones(s: SenalesIntegracion): Integracion[] {
       nombre: 'WhatsApp (comprobantes de chofer)',
       categoria: 'Documentos',
       queHace: 'El operador manda la foto del ticket y entra al viaje con su OCR, sin app que instalar.',
-      estado: 'conectada',
-      comoConectaHoy: 'Ya funciona: es el canal principal de Likida.',
-      paraSubirDeEscalon: null,
+      estado: 'por_credencial',
+      comoConectaHoy: 'La disponibilidad real del canal se mide en Conexiones; este catálogo no tiene acceso a sus credenciales ni a una prueba de entrega por flota.',
+      paraSubirDeEscalon: 'Configura y prueba el canal de WhatsApp en Conexiones; una clave guardada no equivale a una entrega confirmada.',
     },
     {
       id: 'intake_correo',
       nombre: 'Buzón de correo para facturas de proveedores',
       categoria: 'Documentos',
       queHace: 'Una dirección propia de tu flota a la que reenvías —o a la que llegan solas— las facturas de talleres, refaccionarias y diésel.',
-      estado: 'no_construida',
-      comoConectaHoy: 'Por ahora se suben a mano desde la bandeja del Agente de Proveedores.',
-      paraSubirDeEscalon: 'Es la pieza que más multiplica a los agentes de Peajes y Proveedores, porque en la vida real esas facturas llegan por correo, no por WhatsApp.',
+      estado: 'por_credencial',
+      comoConectaHoy: 'La disponibilidad se mide en Conexiones con el buzón de ESTA flota. Esta ficha no presupone que el dominio ni la recepción estén configurados.',
+      paraSubirDeEscalon: 'Configura el buzón y prueba la recepción de un XML real; una variable de correo saliente no prueba la entrada.',
     },
   ];
 }

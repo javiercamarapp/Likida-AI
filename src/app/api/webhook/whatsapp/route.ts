@@ -15,6 +15,28 @@ import { guardarEventosPendientes, pendientesYaConocidos, reclamarPendiente, mar
 const MAX_BODY = 256 * 1024;   // 256 KB — un webhook de Meta es pequeño
 const MSGS_POR_MIN = 40;        // por teléfono (una ráfaga de 12 fotos cabe holgada)
 
+/** `content-length` se puede omitir con chunked. Leer con contador evita que
+ * un POST firmado o no firmado materialice un cuerpo ilimitado antes del HMAC. */
+async function leerCuerpoAcotado(req: Request, maxBytes: number): Promise<string | null> {
+  if (!req.body) return '';
+  const lector = req.body.getReader();
+  const partes: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await lector.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) { await lector.cancel(); return null; }
+      partes.push(value);
+    }
+  } finally { lector.releaseLock(); }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const parte of partes) { bytes.set(parte, offset); offset += parte.byteLength; }
+  return new TextDecoder().decode(bytes);
+}
+
 // ── CUÁNTOS MENSAJES SE PROCESAN A LA VEZ ───────────────────────────────────
 //
 // NADA ACOTABA ESTO. Era `Promise.all(permitidos.map(processInbound))`: si Meta
@@ -104,8 +126,8 @@ export async function POST(req: NextRequest) {
   // CAP DE BODY antes de leer/HMAC: evita DoS por cuerpo enorme sin firma.
   if (bodyExcede(req, MAX_BODY)) return new NextResponse('Payload too large', { status: 413 });
 
-  const raw = await req.text();
-  if (raw.length > MAX_BODY) return new NextResponse('Payload too large', { status: 413 }); // por si falta content-length
+  const raw = await leerCuerpoAcotado(req, MAX_BODY);
+  if (raw === null) return new NextResponse('Payload too large', { status: 413 }); // por si falta content-length
   if (!verifySignature(raw, req.headers.get('x-hub-signature-256'))) {
     void registrarEventoSeguridad({ origen: 'wa_webhook', tipo: 'firma_invalida', severidad: 'alta' });
     return new NextResponse('Invalid signature', { status: 401 });
@@ -324,21 +346,30 @@ export async function POST(req: NextRequest) {
             // saltaría los mensajes SIGUIENTES del mismo chofer — que es
             // justamente el orden que este bucle existe para respetar.
             if (!claim) continue; // el cron (u otra entrega) ya lo tiene.
+            // La fila real reclamada por 0177 siempre trae token. Mantener la
+            // llamada de dos argumentos para el contrato previo evita que un
+            // adapter/mock sin token se rompa, sin aflojar el lease real.
+            const sellar = () => claim.claimToken
+              ? marcarPendienteProcesado(f.id, claim.claimToken)
+              : marcarPendienteProcesado(f.id);
+            const anotar = (error: string) => claim.claimToken
+              ? anotarFalloPendiente(f.id, error, claim.claimToken)
+              : anotarFalloPendiente(f.id, error);
             try {
               const resultado = await processInbound(claim.evento, { inicioInvocacionMs: inicioInvocacion });
               if (quedoPendiente(resultado)) {
                 logger.warn('wa.pendiente_pospuesto', { id: f.id, resultado });
-                await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`);
+                await anotar(`pospuesto: ${resultado}`);
                 // Sin presupuesto para éste tampoco lo hay para el que sigue, y
                 // procesar el «listo» sin sus fotos es peor que posponerlo: se
                 // corta la cadena y el cron la retoma entera. Mismo criterio
                 // que el drenado (ESC-1).
                 if (resultado === 'sin_tiempo') return;
               } else {
-                await marcarPendienteProcesado(f.id);
+                await sellar();
               }
             } catch (e) {
-              await anotarFalloPendiente(f.id, e instanceof Error ? e.message : String(e));
+              await anotar(e instanceof Error ? e.message : String(e));
               // `codigo` (AUDITORÍA 18, M14): sin él este catch era UN solo issue
               // de Sentry para todos los fallos de procesamiento de todas las
               // flotas, para siempre — la causa nueva no notificaba.

@@ -650,10 +650,9 @@ export function tipoDeSolicitudArco(texto: string): 'acceso' | 'rectificacion' |
   return 'acceso';
 }
 
-/** 20 días hábiles: lo que el aviso promete (privacidad.ts:538 y la página).
- *  La LFPDPPP art. 32 fija 15, pero el DOCUMENTO —la promesa que el titular
- *  leyó— dice 20; `vence_en` tiene que rastrear la promesa, no un número que
- *  la contradiga. Si el aviso cambia a 15, que este número lo siga. */
+/** LFPDPPP vigente, art. 31: 20 días hábiles para comunicar la determinación.
+ *  La ejecución, cuando procede, tiene otros 15 días hábiles. `vence_en` mide
+ *  solo el primer plazo, que es el que la solicitud puede vigilar. */
 const DIAS_HABILES_ARCO = 20;
 
 /** Suma `n` días hábiles a `desde` (lunes a viernes). */

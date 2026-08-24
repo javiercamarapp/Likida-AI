@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   plazaDe, giroDe, scoreUrgencia, scoreCierre, tamanoDe, completitudDe, COLOR_EMBUDO, CRITERIO_SCORES,
+  normalizarScian, esScianCarga,
   traerTodoEnParalelo, empacar, desempacar, type ProspectoMapa,
 } from './prospectos-mapa';
 import { PAGINA, LecturaIncompleta } from '@/lib/likida/pg';
@@ -62,6 +63,21 @@ describe('giroDe — transportista o qué', () => {
     expect(giroDe('Grupo Surtidor', null, 'UNIVERSO DENUE: Comercio al por mayor de abarrotes')).toBe('abarrotes_mayoreo');
     // La embotelladora gana al mayoreo cuando ambas señales aparecen: fabrica ella.
     expect(giroDe('Embotelladora X', null, 'comercio al por mayor de bebidas · elaboración de refrescos')).toBe('embotelladora');
+  });
+});
+
+describe('SCIAN completo — el código de DENUE no se trunca', () => {
+  it('normaliza seis dígitos y conserva el prefijo de sector', () => {
+    expect(normalizarScian(' 484121 ')).toBe('484');
+    expect(normalizarScian('SCIAN 484121')).toBe('484');
+    expect(esScianCarga('484121')).toBe(true);
+    expect(esScianCarga('485111')).toBe(false);
+  });
+
+  it('la flota investigada suma ajuste comercial sin contaminar urgencia', () => {
+    const base = { telefono: '55', correo: 'a@b.mx', contacto_nombre: 'Ana', estado: 'nuevo', fuente: 'censo', empresa: 'X', vacante: null, notas: null };
+    expect(scoreCierre({ ...base, numUnidades: 250 })).toBeGreaterThan(scoreCierre(base));
+    expect(scoreUrgencia({ vacante: null, notas: null, urgenciaDeclarada: 'explorando' })).toBe(0);
   });
 });
 

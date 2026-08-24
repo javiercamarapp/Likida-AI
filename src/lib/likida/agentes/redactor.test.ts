@@ -18,7 +18,7 @@ function builder(tabla: string) {
   };
   const b: Record<string, unknown> = {};
   Object.assign(b, {
-    select: () => b, eq: () => b, gte: () => b, limit: () => b,
+    select: () => b, eq: () => b, is: () => b, gte: () => b, limit: () => b,
     maybeSingle: () => b, order: () => b, range: () => b, insert: () => b,
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve().then(responder).then(res, rej),

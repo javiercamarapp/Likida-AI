@@ -19,6 +19,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import type { InboundMessage } from './processor';
+import { randomUUID } from 'node:crypto';
 
 /** Al tope de intentos la fila deja de reclamarse: carta muerta VISIBLE con
  *  su ultimo_error. 5 corridas del cron son ~25 min de reintentos. */
@@ -107,6 +108,7 @@ export interface PendienteReclamado {
   id: string;
   evento: InboundMessage;
   intentos: number;
+  claimToken: string;
 }
 
 /**
@@ -123,6 +125,7 @@ export async function pendientesPorDrenar(limite = 10): Promise<Array<{ id: stri
     .select('id, intentos, evento')
     .is('procesado_en', null)
     .lt('intentos', MAX_INTENTOS_PENDIENTE)
+    .or(`lease_expires_at.is.null,lease_expires_at.lt.${new Date().toISOString()}`)
     .order('recibido_en', { ascending: true })
     .limit(limite), 'pendientesPorDrenar');
   if (error) throw new Error(`pendientesPorDrenar: ${error.message}`);
@@ -142,26 +145,23 @@ export async function pendientesPorDrenar(limite = 10): Promise<Array<{ id: stri
  * revienta a media corrida, el conteo ya quedó.
  */
 export async function reclamarPendiente(id: string, intentosLeidos: number): Promise<PendienteReclamado | null> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('wa_evento_pendiente')
-    .update({ intentos: intentosLeidos + 1 })
-    .eq('id', id)
-    .eq('intentos', intentosLeidos)
-    .is('procesado_en', null)
-    .select('id, evento, intentos'), 'reclamarPendiente');
+  const { data, error } = await acotada(supabaseAdmin().rpc('reclamar_wa_pendiente', {
+    p_id: id, p_intentos: intentosLeidos, p_owner: randomUUID(), p_lease_seconds: 180,
+  }), 'reclamarPendiente');
   if (error) throw new Error(`reclamarPendiente: ${error.message}`);
-  const fila = (data ?? [])[0] as { id: string; evento: InboundMessage; intentos: number } | undefined;
-  return fila ? { id: String(fila.id), evento: fila.evento, intentos: Number(fila.intentos) } : null;
+  const fila = (data ?? [])[0] as { id: string; evento: InboundMessage; intentos: number; claim_token: string } | undefined;
+  return fila ? { id: String(fila.id), evento: fila.evento, intentos: Number(fila.intentos), claimToken: fila.claim_token } : null;
 }
 
 /** Sella el evento como procesado. Best-effort CON GRITO: el mensaje ya se
  *  procesó — si el sello falla, el reintento del cron rebotará aguas abajo
  *  en claimMessage (0002), no duplicará gastos. */
-export async function marcarPendienteProcesado(id: string): Promise<void> {
+export async function marcarPendienteProcesado(id: string, claimToken?: string): Promise<void> {
   const { error } = await acotada(supabaseAdmin()
     .from('wa_evento_pendiente')
-    .update({ procesado_en: new Date().toISOString(), ultimo_error: null })
-    .eq('id', id), 'marcarPendienteProcesado');
+    .update({ procesado_en: new Date().toISOString(), ultimo_error: null, lease_expires_at: null })
+    .eq('id', id)
+    .eq('claim_token', claimToken ?? ''), 'marcarPendienteProcesado');
   if (error) logger.error('wa.pendiente_sin_sellar', { id, err: error.message });
 }
 
@@ -175,22 +175,26 @@ export async function marcarPendienteProcesado(id: string): Promise<void> {
  * mirar. El intento se devuelve anclado (`eq('intentos', …)`): si otra corrida
  * ya lo reclamó de nuevo, esta no le resta nada.
  */
-export async function devolverIntentoPendiente(id: string, intentosDelClaim: number): Promise<void> {
+export async function devolverIntentoPendiente(id: string, intentosDelClaim: number, claimToken?: string): Promise<void> {
   const { error } = await acotada(supabaseAdmin()
     .from('wa_evento_pendiente')
-    .update({ intentos: intentosDelClaim - 1 })
+    // También libera el lease: sin presupuesto no es trabajo en curso y dejar
+    // sus 180 s vivos convierte cada vuelta cargada en latencia artificial.
+    .update({ intentos: intentosDelClaim - 1, lease_expires_at: new Date().toISOString() })
     .eq('id', id)
     .eq('intentos', intentosDelClaim)
+    .eq('claim_token', claimToken ?? '')
     .is('procesado_en', null), 'devolverIntentoPendiente');
   if (error) logger.warn('wa.pendiente_intento_no_devuelto', { id, err: error.message });
 }
 
 /** Anota el fallo del intento (la fila sigue pendiente hasta el tope). */
-export async function anotarFalloPendiente(id: string, err: string): Promise<void> {
+export async function anotarFalloPendiente(id: string, err: string, claimToken?: string): Promise<void> {
   const { error } = await acotada(supabaseAdmin()
     .from('wa_evento_pendiente')
-    .update({ ultimo_error: err.slice(0, 500) })
-    .eq('id', id), 'anotarFalloPendiente');
+    .update({ ultimo_error: err.slice(0, 500), lease_expires_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('claim_token', claimToken ?? ''), 'anotarFalloPendiente');
   if (error) logger.warn('wa.pendiente_fallo_sin_anotar', { id, err: error.message });
 }
 

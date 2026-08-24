@@ -42,7 +42,10 @@ const TENUE = 'var(--muted)';
 const LINEA = 'var(--line)';
 const SUPERFICIE = 'var(--surface)';
 
-const ORDEN_EMBUDO = ['negociacion', 'demo', 'contactado', 'nuevo', 'cerrado', 'perdido'] as const;
+const ORDEN_EMBUDO = [
+  'negociacion', 'proposal', 'pilot', 'demo', 'appointment', 'rescheduled',
+  'no-show', 'cancelled', 'contactado', 'nuevo', 'won', 'cerrado', 'lost', 'perdido',
+] as const;
 const GIROS: Giro[] = ['transportista', 'embotelladora', 'abarrotes_mayoreo', 'flota_propia', 'logistica', 'otro'];
 const FUENTES = [
   { clave: 'censo', nombre: 'Censo (vacantes)' },
@@ -52,6 +55,10 @@ const FUENTES = [
   { clave: 'aaag', nombre: 'Padrón AAAG' },
   { clave: 'scribd-tampico', nombre: 'Directorio Tampico' },
   { clave: 'manual', nombre: 'Cuentas a mano' },
+  { clave: 'landing', nombre: 'Landing orgánica' },
+  { clave: 'campana', nombre: 'Campaña directa' },
+  { clave: 'ads-meta', nombre: 'Ads Meta' },
+  { clave: 'ads-google', nombre: 'Ads Google' },
 ] as const;
 
 /** Con más de este número de luces a nivel país, el DOM se arrastra: se
@@ -144,7 +151,7 @@ function Chip({ activo, color, onClick, children }: {
   activo: boolean; color?: string; onClick: () => void; children: React.ReactNode;
 }) {
   return (
-    <button onClick={onClick}
+    <button type="button" aria-pressed={activo} onClick={onClick}
       className={`px-2.5 py-1 rounded-full text-[11px] transition-all ${activo ? 'font-medium' : ''}`}
       style={{
         // Activo SIN color de embudo: tinta SUAVE, no relleno negro — con
@@ -352,6 +359,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
   // en cuanto llega, sin esperar un render); el estado es la copia que hace
   // repintar las tarjetas.
   const textosRef = useRef<Map<string, TextosProspecto>>(new Map());
+  const obtenerTextos = useCallback((id: string) => textosRef.current.get(id), []);
   const [textos, setTextos] = useState<ReadonlyMap<string, TextosProspecto>>(() => new Map());
   const pedidos = useRef<Set<string>>(new Set());
   const pedirTextos = useCallback(async (ids: string[]): Promise<void> => {
@@ -492,9 +500,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     void fetch('/api/admin/mapa-prospectos/toque', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, canal }),
-    }).catch(() => undefined);
-    ponerLista(listaRef.current.map((p) => (p.id === id ? { ...p, ultimoToque: new Date().toISOString() } : p)));
+      body: JSON.stringify({ id, canal, estado: 'iniciado' }),
+    });
   };
 
   // ── El agente experto en vivo: afinar el mensaje de UNA tarjeta ──────────
@@ -1148,7 +1155,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         {/* El nivel calles */}
         {seleccion && calles && (
           <Calles prospectos={listaSeleccion} titulo={seleccion.nombre}
-            obtenerTextos={(id) => textosRef.current.get(id)} pedirTextos={pedirTextos}
+            obtenerTextos={obtenerTextos} pedirTextos={pedirTextos}
             onCerrar={() => setCalles(false)} />
         )}
       </section>

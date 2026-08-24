@@ -19,18 +19,18 @@ describe('el catálogo dice CÓMO conecta cada cosa hoy', () => {
     }
   });
 
-  it('lo que ya está en su tope no promete un escalón siguiente', () => {
+  it('WhatsApp no se pinta conectado sin una comprobación por flota', () => {
     const wa = catalogoIntegraciones(SIN_GPS).find((i) => i.id === 'whatsapp_docs')!;
-    expect(wa.estado).toBe('conectada');
-    expect(wa.paraSubirDeEscalon).toBeNull();
+    expect(wa.estado).toBe('por_credencial');
+    expect(wa.paraSubirDeEscalon).toMatch(/prueba/i);
   });
 });
 
-describe('el GPS es el estado que SÍ se mide por flota', () => {
-  it('con credenciales guardadas sale conectada y sin siguiente escalón', () => {
+describe('el GPS no confunde credencial con posición', () => {
+  it('con credenciales guardadas sigue pendiente de una sincronización comprobada', () => {
     const gps = catalogoIntegraciones(CON_GPS).find((i) => i.id === 'gps')!;
-    expect(gps.estado).toBe('conectada');
-    expect(gps.paraSubirDeEscalon).toBeNull();
+    expect(gps.estado).toBe('por_credencial');
+    expect(gps.comoConectaHoy).toMatch(/no puede comprobar/i);
   });
 
   it('sin credenciales dice que el mapa es ILUSTRATIVO, no posición actual', () => {
@@ -48,25 +48,24 @@ describe('el GPS es el estado que SÍ se mide por flota', () => {
   });
 });
 
-describe('SAP no se promete antes de tener accesos', () => {
-  it('va como piloto y explica que el escalón del archivo YA funciona', () => {
+describe('ERP y correo no se prometen antes de una prueba real', () => {
+  it('SAP va como piloto y exige una plantilla por flota', () => {
     const sap = catalogoIntegraciones(SIN_GPS).find((i) => i.id === 'sap_b1')!;
     expect(sap.estado).toBe('por_piloto');
-    expect(sap.comoConectaHoy).toMatch(/archivo/i);
-    expect(sap.paraSubirDeEscalon).toMatch(/credenciales/i);
+    expect(sap.comoConectaHoy).toMatch(/plantilla/i);
+    expect(sap.paraSubirDeEscalon).toMatch(/accesos/i);
   });
 
-  it('CONTPAQi y Aspel se declaran NO construidas — coherente con el export', () => {
-    // `validarAjustes` rechaza esos formatos; si aquí dijeran "disponible", la
-    // página de integraciones contradiría a la de configuración.
+  it('CONTPAQi no se declara listo sin perfil confirmado', () => {
     const c = catalogoIntegraciones(SIN_GPS).find((i) => i.id === 'contpaqi_aspel')!;
-    expect(c.estado).toBe('no_construida');
+    expect(c.estado).toBe('por_piloto');
+    expect(c.comoConectaHoy).toMatch(/no listo/i);
   });
 
-  it('el intake por correo se declara pendiente, no se esconde', () => {
+  it('el intake por correo se declara pendiente de su buzón y una prueba', () => {
     const i = catalogoIntegraciones(SIN_GPS).find((x) => x.id === 'intake_correo')!;
-    expect(i.estado).toBe('no_construida');
-    expect(i.comoConectaHoy).toMatch(/a mano/i);
+    expect(i.estado).toBe('por_credencial');
+    expect(i.comoConectaHoy).toMatch(/ESTA flota/i);
   });
 });
 

@@ -29,15 +29,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   verificar:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -57,8 +60,11 @@ jobs:
       #   · tooling                → Dependabot lo va subiendo; no bloquea
       # Sin `audit fix --force` ciego jamás: un fallo aquí se resuelve
       # mirando el path (`npm audit --omit=dev`) y subiendo el paquete real.
-      - name: Auditoría de dependencias de RUNTIME
-        run: npm audit --omit=dev --audit-level=high
+      - name: Auditoría completa de dependencias
+        run: npm audit --audit-level=high
+
+      - name: Chromium para las pruebas de navegador
+        run: npx playwright install --with-deps chromium
 
       - name: Typecheck
         run: npm run typecheck

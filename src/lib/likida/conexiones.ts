@@ -13,7 +13,7 @@ import { correoConfigurado } from '@/lib/correo/enviar';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface Conector {
-  id: 'whatsapp' | 'correo' | 'fiscal' | 'portales' | 'rastreo' | 'timbrado';
+  id: 'whatsapp' | 'correo' | 'fiscal' | 'sat' | 'portales' | 'rastreo' | 'timbrado';
   nombre: string;
   estado: 'listo' | 'incompleto' | 'sin_configurar' | 'ensayo';
   /** La verdad medida, en una línea — con su fuente. */
@@ -51,9 +51,9 @@ export async function getConexiones(tenantId: string): Promise<Conector[]> {
   conectores.push({
     id: 'whatsapp',
     nombre: 'WhatsApp (choferes y oficina)',
-    estado: waConfigurado ? 'listo' : 'sin_configurar',
+    estado: waConfigurado ? 'incompleto' : 'sin_configurar',
     detalle: waConfigurado
-      ? 'Canal configurado en el sistema — comprobantes, hitos y despacho entran por aquí.'
+      ? 'Variables del canal presentes en este entorno. Esto no prueba una entrega reciente de Meta ni una sesión por flota.'
       : 'El canal de WhatsApp no está configurado en este entorno.',
     falta: [],
   });
@@ -79,9 +79,9 @@ export async function getConexiones(tenantId: string): Promise<Conector[]> {
   conectores.push({
     id: 'correo',
     nombre: 'Correo de avisos',
-    estado: correoListo ? 'listo' : 'sin_configurar',
+    estado: correoListo ? 'incompleto' : 'sin_configurar',
     detalle: `${correoListo
-      ? `Los avisos salen de avisos@${process.env.RESEND_EMAIL_DOMAIN} — dominio verificado con SPF y DKIM.`
+      ? `El envío está configurado hacia avisos@${process.env.RESEND_EMAIL_DOMAIN}; esta comprobación no verifica entrega, SPF ni DKIM.`
       : 'Sin configurar: los avisos por correo no salen. WhatsApp sigue funcionando.'} ${intake}`,
     // Lo que este renglón NO puede afirmar: que el correo LLEGUE. Un dominio
     // verificado y una llave válida solo prueban que se puede mandar; que no
@@ -104,6 +104,16 @@ export async function getConexiones(tenantId: string): Promise<Conector[]> {
     falta: fiscal?.falta ?? [],
   });
 
+  // Datos fiscales completos permiten construir/contrastar CFDI, pero no
+  // constituyen una conexión al SAT ni prueban una consulta reciente.
+  conectores.push({
+    id: 'sat',
+    nombre: 'SAT (validación de CFDI)',
+    estado: 'ensayo',
+    detalle: 'Likida no guarda e.firma ni credenciales del SAT para esta flota. La presencia de datos fiscales no prueba una consulta SAT reciente; cualquier estado de CFDI se muestra con su propia fecha/respuesta.',
+    falta: ['probar una consulta de CFDI real antes de tratar la validación como disponible'],
+  });
+
   // Portales de facturación — el catálogo que el agente sabe operar.
   const vivos = portalesVivos(tenantId).length;
   conectores.push({
@@ -119,12 +129,12 @@ export async function getConexiones(tenantId: string): Promise<Conector[]> {
   conectores.push({
     id: 'rastreo',
     nombre: 'Rastreo GPS (credenciales del proveedor)',
-    estado: rastreo === null ? 'sin_configurar' : rastreo > 0 ? 'listo' : 'sin_configurar',
+    estado: rastreo === null ? 'sin_configurar' : rastreo > 0 ? 'incompleto' : 'sin_configurar',
     detalle: rastreo === null
       ? 'No se pudo leer el estado ahora mismo.'
       : rastreo > 0
-        ? `${rastreo} credencial${rastreo === 1 ? '' : 'es'} de rastreo conectada${rastreo === 1 ? '' : 's'}.`
-        : 'Sin conectar — el mapa pinta trayectos ilustrativos; con credenciales pinta posiciones reales.',
+        ? `${rastreo} credencial${rastreo === 1 ? '' : 'es'} de rastreo registrada${rastreo === 1 ? '' : 's'}; esta lectura no prueba una sincronización ni una posición reciente.`
+        : 'Sin conectar — el mapa pinta trayectos ilustrativos. Capturar credenciales es solo el primer paso: se necesitan una sincronización correcta y una posición reciente para afirmar rastreo real.',
     falta: [],
   });
 

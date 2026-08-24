@@ -17,9 +17,9 @@ import { logger } from '@/lib/logger';
 // valor está en el que NO agenda. Si esto corriera al confirmar la cita, se
 // perdería exactamente al prospecto que se quiere recuperar.
 //
-// NUNCA ROMPE EL FLUJO DEL VISITANTE. Cualquier fallo aquí devuelve 200: el
-// calendario tiene que aparecer aunque la base esté caída. Un lead perdido
-// cuesta menos que un formulario que se traba y pierde al prospecto Y a la cita.
+// El calendario puede abrirse independientemente, pero la persistencia NO
+// devuelve un 200 falso: un 503 permite al formulario reintentar y evita
+// perder el lead detrás de una respuesta aparentemente exitosa.
 //
 // LA LANDING VIVE EN OTRO DOMINIO (likida.ai) que la app (app.likida.ai), así
 // que esto necesita CORS. La lista de orígenes es cerrada a propósito: un `*`
@@ -75,6 +75,13 @@ function texto(v: unknown, max: number): string | null {
   if (typeof v !== 'string') return null;
   const t = v.trim().slice(0, max);
   return t.length ? t : null;
+}
+
+/** The value used by the durable unique index (0181). */
+function claveNatural(empresa: string, correo: string | null): string {
+  const valor = (correo ?? empresa).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim().toLowerCase().replace(/\s+/g, ' ');
+  return `${correo ? 'correo:' : 'empresa:'}${valor}`;
 }
 
 function deDominio(v: unknown, dominio: Set<string>): string | null {
@@ -151,7 +158,7 @@ export async function POST(req: Request) {
   const empresa = texto(body.empresa, 200);
   // `empresa` es lo único que hace a un prospecto un prospecto: la tabla lo
   // exige no vacío y sin él la fila no sirve para llamar a nadie.
-  if (!empresa) return ok();
+  if (!empresa) return NextResponse.json({ error: 'Falta la empresa.' }, { status: 400, headers: cabeceras });
 
   const atr = atribucion(body.atribucion);
 
@@ -180,6 +187,8 @@ export async function POST(req: Request) {
     atribucion: atr,
     updated_at: new Date().toISOString(),
   };
+  const clave = claveNatural(empresa, campos.correo as string | null);
+  campos.lead_clave = clave;
 
   try {
     const db = supabaseAdmin();
@@ -210,14 +219,36 @@ export async function POST(req: Request) {
       return ok();
     }
 
-    await escribir(db, 'insert', { ...campos, fuente: canal(atr), estado: 'nuevo' });
+    try {
+      await escribir(db, 'insert', { ...campos, fuente: canal(atr), estado: 'nuevo' });
+    } catch (err) {
+      // Two instances can both miss the read above.  The 0181 unique index
+      // is the durable winner; reconcile the losing request against the row
+      // that won instead of creating a second lead.
+      if (!esViolacionUnica(err)) throw err;
+      const { data: ganadores, error: eGanador } = await db.from('prospecto')
+        .select('*').eq('lead_clave', clave).limit(1);
+      if (eGanador) throw new Error(eGanador.message);
+      const ganador = (ganadores as Array<Record<string, unknown>> | null)?.[0];
+      if (!ganador?.id) throw new Error('lead: la llave única chocó, pero no se pudo leer el prospecto ganador');
+      const { parche, pisados } = mezclaQueSoloRellena(ganador, campos);
+      if (pisados.length) parche.notas = notaConLoNoAplicado(ganador.notas, pisados);
+      await escribir(db, 'update', parche, String(ganador.id));
+      logger.info('lead.duplicado_durable', { empresa, canal: canal(atr) });
+    }
     logger.info('lead.nuevo', { empresa, canal: canal(atr), urgencia: campos.urgencia });
     return ok();
   } catch (err) {
-    // 200 a propósito: ver el encabezado. El visitante sigue a su calendario.
     logger.error('lead.fallo', { err: String(err) });
-    return ok();
+    // A failed write must be observable and retryable. The landing can still
+    // open its calendar independently; a false 200 would lose the lead.
+    return NextResponse.json({ error: 'No se pudo registrar el lead. Intenta de nuevo.' }, { status: 503, headers: cabeceras });
   }
+}
+
+function esViolacionUnica(err: unknown): boolean {
+  const texto = err instanceof Error ? err.message : String(err);
+  return /duplicate key|unique constraint|23505|prospecto_lead_clave_unica/i.test(texto);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

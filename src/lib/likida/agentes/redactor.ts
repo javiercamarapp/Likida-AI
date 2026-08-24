@@ -127,6 +127,7 @@ export async function redactarCorreoFrio(
   const { data: p, error } = await acotada(supabaseAdmin()
     .from('prospecto')
     .select('id, empresa, contacto_nombre, correo, ciudad, estado, fuente, notas')
+    .is('duplicado_de', null)
     .eq('id', prospectoId).maybeSingle(), 'redactor.prospecto');
   if (error) throw new Error(`redactarCorreoFrio: ${error.message}`);
   if (!p) throw new DatoInvalido('Ese prospecto no existe — recarga el tablero.');

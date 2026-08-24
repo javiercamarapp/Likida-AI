@@ -127,7 +127,6 @@ function Casilla({ estado, texto, href, accion }: {
     </div>
   );
 }
-
 /**
  * Flotas / Clientes — versión dedicada y con más aire de la sección
  * "Flotas" de Inicio. Misma tabla real (`resumen.flotas`: nombre, plan,

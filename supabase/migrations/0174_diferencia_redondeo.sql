@@ -53,3 +53,4 @@ $$;
 
 revoke all on function public.stats_operador_tenant(uuid) from public, anon, authenticated;
 grant execute on function public.stats_operador_tenant(uuid) to service_role;
+

@@ -170,7 +170,6 @@ describe('la ráfaga de un POST se procesa con techo de concurrencia', () => {
     expect(pico).toBe(3);
   });
 });
-
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE PASA DEL TECHO SE APLAZA — NO SE DESCARTA (4-ago-2026).
 //

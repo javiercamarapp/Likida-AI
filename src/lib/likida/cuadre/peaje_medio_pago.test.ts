@@ -23,7 +23,10 @@ const caseta = (formaPago: string | undefined): Gasto => ({
 });
 
 const peajeDe = (g: Gasto) =>
-  cuadrarViaje({ viajeId: 'v1', anticipo: 1160, politica, estimulos: EST, gastos: [g] }).peajeAcreditable;
+  // Estos casos aíslan el requisito de FORMA DE PAGO; la elegibilidad de la
+  // flota ya está declarada positivamente. El caso sin declaración se prueba
+  // arriba y debe cerrar la puerta.
+  cuadrarViaje({ viajeId: 'v1', anticipo: 1160, politica, estimulos: EST, gastos: [g], elegiblePeaje: true }).peajeAcreditable;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FASE 3 (perfil/preguntas.ts, calificaEstimuloPeaje) — el estímulo también
@@ -31,12 +34,12 @@ const peajeDe = (g: Gasto) =>
 // normas/lif-2026-20-A.yaml hallazgo H6). Antes de esta fase el motor no
 // conocía ninguno de los dos y lo aplicaba sin condición.
 // ═══════════════════════════════════════════════════════════════════════════
-describe('FASE 3 — elegiblePeaje: el perfil puede apagar el estímulo, nunca inventarlo', () => {
+describe('FASE 3 — elegiblePeaje: el perfil debe autorizar el estímulo', () => {
   const peajeConElegibilidad = (elegiblePeaje: boolean | undefined) =>
     cuadrarViaje({ viajeId: 'v1', anticipo: 1160, politica, estimulos: EST, gastos: [caseta('03')], elegiblePeaje }).peajeAcreditable;
 
-  it('sin declarar (undefined) → se sigue acreditando, conducta de siempre (fail-open con aviso)', () => {
-    expect(peajeConElegibilidad(undefined)).toBe(500);
+  it('sin declarar (undefined) → 0: no se concede un estímulo fiscal por omisión', () => {
+    expect(peajeConElegibilidad(undefined)).toBe(0);
   });
 
   it('perfil confirma que SÍ califica (true) → se acredita igual', () => {

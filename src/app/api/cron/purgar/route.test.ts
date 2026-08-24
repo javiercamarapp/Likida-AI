@@ -70,7 +70,6 @@ describe('GET /api/cron/purgar — la puerta', () => {
     expect(estaApagado).not.toHaveBeenCalled();
   });
 });
-
 describe('la corrida', () => {
   it('con la base sana responde 200 y el detalle de la RPC tal cual', async () => {
     const res = await GET(peticion('Bearer secreto-de-prueba'));

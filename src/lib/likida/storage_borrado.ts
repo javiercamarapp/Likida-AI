@@ -45,6 +45,11 @@ export async function borrarStorageMarcado(): Promise<ResultadoBorradoStorage> {
     db.from('storage_huerfano_candidato')
       .select('bucket, nombre, motivo')
       .is('borrado_en', null)
+      // Defensa en profundidad: la migración 0178 clasifica referencias a
+      // comprobantes/CFDI/PDF como fiscal_cff_30. Aunque una cola vieja o una
+      // inserción manual la alcance, el ejecutor HTTP nunca borra evidencia
+      // fiscal solo porque haya llegado a esta tabla.
+      .eq('clase_retencion', 'operativa')
       // Los de ARCO primero: tienen un plazo legal detrás (15 días hábiles),
       // los huérfanos ordinarios solo ocupan espacio.
       .order('motivo', { ascending: true })
@@ -106,7 +111,8 @@ export async function borrarStorageMarcado(): Promise<ResultadoBorradoStorage> {
 
   const { count } = await db.from('storage_huerfano_candidato')
     .select('nombre', { count: 'exact', head: true })
-    .is('borrado_en', null);
+    .is('borrado_en', null)
+    .eq('clase_retencion', 'operativa');
 
   logger.info('storage.borrado', { intentados: filas.length, borrados, fallidos, pendientes: count });
   return { intentados: filas.length, borrados, fallidos, pendientes: count ?? null };

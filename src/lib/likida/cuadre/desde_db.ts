@@ -36,19 +36,17 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
     getViaje(viajeId, tenantId),
     getGastos(viajeId, tenantId),
     getConfig(tenantId),
-    // Best-effort a propósito, mismo criterio que `totalesEjercicio` más abajo:
-    // el perfil es CONTEXTO (¿ya sabemos si el estímulo de peaje aplica?), no
-    // un requisito para cerrar el viaje. Un fallo aquí no puede tumbar la
-    // liquidación — sin perfil, `calificaEstimuloPeaje({})` da `elegible: null`
-    // y el motor preserva la conducta de siempre.
+    // El perfil solo gobierna un BENEFICIO fiscal. Si no se puede leer, el
+    // viaje puede cerrarse, pero el estímulo no se concede: `null` llega al
+    // motor como `undefined` y la puerta del estímulo es fail-closed.
     getPerfilCrudo(tenantId).catch((e) => {
       logger.warn('desde_db.perfil_no_disponible', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
       return {};
     }),
   ]);
   if (!viaje) throw new Error('viaje no encontrado');
-  // FASE 3: `elegible: null` (perfil sin declarar) se traduce a `undefined`
-  // — el motor preserva la conducta de siempre (acredita con el aviso).
+  // `elegible: null` (perfil sin declarar o ilegible) se traduce a
+  // `undefined`; el motor no acredita estímulo sin una declaración positiva.
   const { elegible: elegiblePeajeODeclarado } = calificaEstimuloPeaje(perfilCrudo);
   const elegiblePeaje = elegiblePeajeODeclarado ?? undefined;
   // AUDITORÍA 12, MEDIO (fiscal): `operadorRfc` no tenía productor — la rama

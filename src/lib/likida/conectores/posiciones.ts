@@ -69,44 +69,44 @@ export async function leerPosicionesSamsara(
   const token = (valores.token ?? '').trim();
   if (!token) return { ok: false, motivo: 'falta el token de Samsara' };
 
-  let r;
-  try {
-    r = await http({
-      url: 'https://api.samsara.com/fleet/vehicles/stats?types=gps',
-      metodo: 'GET',
-      encabezados: { Authorization: `Bearer ${token}`, accept: 'application/json' },
-    });
-  } catch (e) {
-    return { ok: false, motivo: `no se pudo llamar a Samsara: ${e instanceof Error ? e.message : String(e)}` };
-  }
-
-  if (r.estado === 401) return { ok: false, motivo: 'Samsara rechazó el token (401). Hay que regenerarlo.' };
-  if (r.estado === 403) return { ok: false, motivo: 'El token no tiene permiso de lectura de flota (403). Faltan scopes.' };
-  if (r.estado !== 200) return { ok: false, motivo: `Samsara contestó ${r.estado}.` };
-
-  let json: { data?: Array<{ id?: string; gps?: { latitude?: number; longitude?: number; time?: string; speedMilesPerHour?: number; headingDegrees?: number } }> };
-  try {
-    json = JSON.parse(r.cuerpo);
-  } catch {
-    return { ok: false, motivo: 'Samsara contestó 200 con un cuerpo que no es JSON.' };
-  }
-
   const posiciones: PosicionLeida[] = [];
-  for (const v of json.data ?? []) {
-    const g = v.gps;
-    if (!v.id || !g || !coordenadaValida(g.latitude, g.longitude) || !g.time) continue;
-    posiciones.push({
-      deviceId: String(v.id),
-      lat: g.latitude as number,
-      lng: g.longitude as number,
-      medidaEn: g.time,
-      // Samsara reporta en MILLAS por hora y aquí todo va en km/h. Guardar el
-      // número tal cual sería un camión "a 60" que en realidad va a 97.
-      velocidad: typeof g.speedMilesPerHour === 'number'
-        ? Math.round(g.speedMilesPerHour * 1.609344 * 10) / 10
-        : null,
-      rumbo: typeof g.headingDegrees === 'number' ? g.headingDegrees : null,
-    });
+  let cursor: string | null = null;
+  // El adaptador soporta paginación cuando el proveedor la expone. No seguir
+  // el cursor silenciosamente deja fuera justo a las flotas grandes; el tope
+  // protege la duración aunque un proveedor devuelva cursores cíclicos.
+  for (let pagina = 0; pagina < 10; pagina++) {
+    let r;
+    try {
+      const url = new URL('https://api.samsara.com/fleet/vehicles/stats?types=gps');
+      if (cursor) url.searchParams.set('after', cursor);
+      r = await http({
+        url: url.toString(), metodo: 'GET',
+        encabezados: { Authorization: `Bearer ${token}`, accept: 'application/json' },
+      });
+    } catch (e) {
+      return { ok: false, motivo: `no se pudo llamar a Samsara: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    if (r.estado === 401) return { ok: false, motivo: 'Samsara rechazó el token (401). Hay que regenerarlo.' };
+    if (r.estado === 403) return { ok: false, motivo: 'El token no tiene permiso de lectura de flota (403). Faltan scopes.' };
+    if (r.estado !== 200) return { ok: false, motivo: `Samsara contestó ${r.estado}.` };
+
+    let json: {
+      data?: Array<{ id?: string; gps?: { latitude?: number; longitude?: number; time?: string; speedMilesPerHour?: number; headingDegrees?: number } }>;
+      pagination?: { hasNextPage?: boolean; endCursor?: string | null };
+    };
+    try { json = JSON.parse(r.cuerpo); } catch { return { ok: false, motivo: 'Samsara contestó 200 con un cuerpo que no es JSON.' }; }
+    for (const v of json.data ?? []) {
+      const g = v.gps;
+      if (!v.id || !g || !coordenadaValida(g.latitude, g.longitude) || !g.time) continue;
+      posiciones.push({
+        deviceId: String(v.id), lat: g.latitude as number, lng: g.longitude as number, medidaEn: g.time,
+        velocidad: typeof g.speedMilesPerHour === 'number' ? Math.round(g.speedMilesPerHour * 1.609344 * 10) / 10 : null,
+        rumbo: typeof g.headingDegrees === 'number' ? g.headingDegrees : null,
+      });
+    }
+    const siguiente = json.pagination?.hasNextPage ? json.pagination.endCursor : null;
+    if (!siguiente || siguiente === cursor) break;
+    cursor = siguiente;
   }
 
   return { ok: true, posiciones };

@@ -38,6 +38,20 @@ Resend → Webhooks) — sin eso `entrega_estado` de la cola nunca se llena.
 | `META_ADS_TOKEN` | Tener campañas de ads | Solo lectura de gasto + pausar |
 | `FACTURACION_MODO` + `FACTURACION_MANDATO_ACEPTADO` | Mandato firmado con revisión legal | **Ausentes = emisión APAGADA = correcto por diseño** (el candado de dos llaves) |
 
+## 🔵 Cal.com — integración CRM (configuración explícita)
+
+| Var | Uso | Nota operativa |
+|---|---|---|
+| `CALCOM_API_URL` | Provisioning y reconciliación de reservas | Default `https://api.cal.com`; cambiar solo para un endpoint compatible |
+| `CALCOM_API_KEY` | Provisionar webhooks y leer `/v2/bookings` | Llave solo servidor; sin ella provisioning/reconciliación quedan reportando configuración faltante |
+| `CALCOM_WEBHOOK_SECRET` | Verificar HMAC del endpoint `/api/webhook/calcom` | Obligatoria para aceptar eventos; no sustituir por la API key |
+| `CALCOM_EVENT_TYPE_ID` | Limitar provisioning y reconciliación al event type | Opcional; si está vacía se procesan todos los event types |
+
+El webhook registra cada evento una sola vez en `comercial_evento`. Para evitar
+una mutación cross-tenant, el metadata del event type debe incluir un UUID
+`tenant_id` (o `tenantId`); un lead público sin esa asignación se conserva en el
+ledger, pero no cambia el prospecto hasta que exista un mapeo verificable.
+
 ## ⚪ Ausentes con DEFAULT en código (opcionales, cero urgencia)
 
 Los tunables `LIKIDA_TOPE_*` (7 de tiempos + correo frío + runner ×2),

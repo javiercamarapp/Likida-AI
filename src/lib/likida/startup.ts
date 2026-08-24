@@ -266,7 +266,6 @@ export async function verificarMigracionesCriticas(): Promise<void> {
     logger.warn('startup.migraciones_skip', { err: e instanceof Error ? e.message : String(e) });
   }
 }
-
 const INDICES = {
   uq_gasto_cfdi_uuid: 'migración 0019: sin ella el mismo CFDI se liquida dos veces, con su IVA acreditado por duplicado',
   uq_operador_telefono_activo: 'migración 0024: sin ella un mismo teléfono puede resolver a dos operadores y el gasto se le carga a quien no fue',
