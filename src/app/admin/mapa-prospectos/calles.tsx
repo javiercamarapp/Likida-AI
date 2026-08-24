@@ -16,7 +16,7 @@ import { useEffect, useRef } from 'react';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import { COLOR_EMBUDO, NOMBRE_GIRO, type ProspectoMapa, type TextosProspecto } from '@/lib/admin/prospectos-mapa';
+import { COLOR_EMBUDO, NOMBRE_GIRO, type ProspectoMapa, type TextosProspecto } from '@/lib/admin/prospectos-mapa-client';
 import { hrefWa, hrefCorreo, esperandoTextos } from './mensajes';
 
 function escapar(s: string): string {

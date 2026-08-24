@@ -8,16 +8,16 @@
 //
 // Modelo: rol `marketing` de models.ts (hoy gpt-5.6-luna, ~$0.10/M — stack
 // 100% USA, regla legal). El costo por mensaje es ~décimas de centavo y se
-// deja en el logger con tokens y modelo; no entra a llm_costo porque su
-// dominio de fases (ocr/cuadre/chat/…) es del producto por-tenant y este
-// gasto es de la plataforma — inventarle una fase ahí partiría el tablero
-// de consumo en dos vocabularios. Si el gasto de marketing crece, la fase
-// se agrega por migración, no por colado.
+// registra en el ledger transaccional de presupuesto del tenant explícito
+// de la sesión superadmin. Sin tenant no se llama al proveedor: el control
+// de gasto falla cerrado y nunca cae en un presupuesto global implícito.
 // ═══════════════════════════════════════════════════════════════════════════
 import { NextResponse } from 'next/server';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { generateStructured } from '@/lib/llm/openrouter';
+import { createLlmBudget } from '@/lib/llm/budget';
 import { giroDe, NOMBRE_GIRO } from '@/lib/admin/prospectos-mapa';
 import { pieAvisoProspectos } from '@/lib/likida/privacidad';
 import { lineaDecisor, notasSinPersona, reponerDecisor, MARCADOR_DECISOR } from './seudonimo';
@@ -48,6 +48,13 @@ Reglas DURAS (violarlas invalida el mensaje):
 export async function POST(req: Request) {
   const { error, sesion } = await sesionSuperadmin();
   if (error) return error;
+  if (!sesion.tenantId) {
+    logger.warn('cerebro.presupuesto_sin_tenant', { userId: sesion.userId });
+    return NextResponse.json({
+      error: 'El redactor requiere un tenant explícito de presupuesto asignado a la sesión superadmin.',
+      codigo: 'redactor_presupuesto_sin_tenant',
+    }, { status: 503 });
+  }
   // Techo de ráfaga, no de negocio: 120/hora cubre una sesión intensa de
   // prospección y frena un loop de UI descontrolado.
   if (!(await rateLimit('cerebro:mensaje', 120, 3_600_000))) {
@@ -94,6 +101,7 @@ export async function POST(req: Request) {
       maxTokens: 900,
       temperature: 0.7,
       signal: AbortSignal.timeout(30_000),
+      budget: createLlmBudget(sesion.tenantId, randomUUID()),
     });
     const ahora = new Date().toISOString();
     // El nombre vuelve aquí, sin haber salido; y cada toque cierra con la

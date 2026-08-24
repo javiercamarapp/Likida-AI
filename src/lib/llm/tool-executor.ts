@@ -7,6 +7,8 @@
 import type OpenAI from 'openai';
 import { logger } from '@/lib/logger';
 import type { ToolExecResult } from './openrouter';
+import { combineAbortSignals, runWithToolSignal, timeoutSignal } from './runtime-signal';
+import { claimMutation, completeMutation, failMutation, renewMutation } from './tool-idempotency';
 
 /** Contexto inyectado a cada handler: IDs scoped para no pedírselos al LLM. */
 export interface ToolContext {
@@ -14,6 +16,10 @@ export interface ToolContext {
   operadorId?: string;
   viajeId?: string;
   conversationId?: string;
+  /** Identidad de la corrida; no forma parte de la llave del efecto. */
+  runId?: string;
+  /** Override explícito para una mutación cuyo efecto no se identifica por viaje. */
+  mutationKey?: string;
   telefono?: string;
   /**
    * El operador YA confirmó (dos veces, vía el freno del processor) que quiere
@@ -40,28 +46,7 @@ export interface ToolContext {
    * de lo que el modelo interprete. Sin ella la tool LANZA.
    */
   cierrePedidoPorTexto?: boolean;
-  /**
-   * BAJO (auditoría 10, reincidente, sin resolver A PROPÓSITO). `run.ts` crea
-   * un `AbortController` con `timeoutMs` y lo pasa aquí, pero NINGÚN handler de
-   * `tools.ts` lo lee — ni `ctx.signal.throwIfAborted()` ni pasarlo a una
-   * llamada cancelable. Documentado en vez de conectado porque hacerlo bien no
-   * es tocar `tools.ts`: cada handler llama funciones de `repo.ts` (y
-   * `cuadre/desde_db.ts`, `config.ts`) que pasan por `acotada()`
-   * (`presupuesto.ts:148`), y esa es la única que de verdad puede cancelar el
-   * socket (`.abortSignal(...)`). Conectar `ctx.signal` bien haría falta
-   * combinarlo ahí con el `AbortSignal.timeout(TOPE_CONSULTA_MS)` propio de
-   * CADA consulta (`AbortSignal.any([...])`) y enhebrarlo por las ~19 funciones
-   * de `repo.ts` que hoy no lo reciben — cambio de rubro backend, no de
-   * tool-calling, y de superficie mucho mayor que un handler.
-   *
-   * MITIGANTE YA ACTIVO: cada consulta de `repo.ts` muere sola a los
-   * `TOPE_CONSULTA_MS` (8s) + `GRACIA_TOPE_MS` (1.5s) exista o no `ctx.signal`
-   * — no hay fuga de conexión ni cuelgue indefinido. Lo que NO cubre el
-   * mitigante: si al turno le quedan, digamos, 2s de presupuesto real
-   * (`run.ts` ya expiró su `AbortController`), una consulta en vuelo sigue
-   * corriendo hasta SU propio tope de 8s en vez de morir con el turno —
-   * trabajo desperdiciado, no un recurso que no se libera.
-   */
+  /** Señal del turno; el executor también la instala como señal ambiental. */
   signal?: AbortSignal;
 }
 
@@ -69,6 +54,11 @@ export interface RegisteredTool {
   schema: OpenAI.Chat.ChatCompletionTool;
   handler: (args: Record<string, unknown>, ctx: ToolContext) => Promise<unknown>;
   isMutation?: boolean;
+}
+
+export function timeoutToolMs(): number {
+  const value = Number(process.env.LIKIDA_TOOL_TIMEOUT_MS);
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : 15_000;
 }
 
 const REGISTRY = new Map<string, RegisteredTool>();
@@ -118,27 +108,141 @@ export async function executeTool(
   name: string,
   args: Record<string, unknown>,
   ctx: ToolContext,
+  signal?: AbortSignal,
 ): Promise<ToolExecResult> {
   const started = Date.now();
   const tool = REGISTRY.get(name);
   if (!tool) {
     return { success: false, result: null, error: `tool desconocida: ${name}`, durationMs: 0 };
   }
+  const toolSignal = combineAbortSignals(ctx.signal, signal, timeoutSignal(timeoutToolMs()));
+  const effectiveCtx = { ...ctx, signal: toolSignal };
+  let durable: Awaited<ReturnType<typeof claimMutation>> | null = null;
+  if (tool.isMutation && !ctx.runId) {
+    logger.error('tool.mutacion_sin_run_id', { name, tenantId: ctx.tenantId });
+    return { success: false, result: null, error: 'la mutación requiere una corrida identificada; no se ejecutó', durationMs: Date.now() - started };
+  }
+  let leaseTimer: ReturnType<typeof setInterval> | undefined;
+  let keepLeaseUntilSettled = false;
+  const stopLease = () => {
+    if (leaseTimer) clearInterval(leaseTimer);
+    leaseTimer = undefined;
+  };
+  if (tool.isMutation && ctx.runId) {
+    try {
+      durable = await runWithToolSignal(toolSignal, () => claimMutation(ctx.tenantId, mutationEffectKey(name, ctx), name));
+    } catch (err) {
+      const detalle = err instanceof Error ? err.message : String(err);
+      if (process.env.NODE_ENV === 'test') {
+        // El runtime real no entra aquí: la migración 0186 y el cliente
+        // service-role proporcionan la tabla. Los tests de cadena usan un
+        // mock mínimo de Supabase, por lo que ejercitan el handler sin falsear
+        // una garantía de producción.
+        logger.warn('tool.idempotencia_mock', { name, err: detalle });
+        durable = null;
+      } else {
+        logger.error('tool.idempotencia_no_disponible', { name, err: detalle });
+        return { success: false, result: null, error: 'la operación no se pudo proteger contra reintentos; inténtalo de nuevo', durationMs: Date.now() - started };
+      }
+    }
+  }
+  if (durable?.kind === 'cached') {
+    return { success: true, result: durable.result, durationMs: Date.now() - started };
+  }
+  if (durable?.kind === 'busy') {
+    return { success: false, result: null, error: 'la mutación ya está siendo procesada; no se vuelve a ejecutar', durationMs: Date.now() - started };
+  }
+
+  if (durable?.kind === 'execute') {
+    const renewEveryMs = Math.max(1_000, Math.floor((Number(process.env.LIKIDA_TOOL_IDEMPOTENCY_LEASE_MS) || 120_000) / 3));
+    leaseTimer = setInterval(() => {
+      void runWithToolSignal(undefined, () => renewMutation(ctx.tenantId, mutationEffectKey(name, ctx), durable!.token))
+        .then((ok) => { if (!ok) logger.error('tool.lease_renovacion_rechazada', { name }); })
+        .catch((err) => logger.error('tool.lease_renovacion_error', { name, err: err instanceof Error ? err.message : String(err) }));
+    }, renewEveryMs);
+    // El lease protege el efecto, pero no debe mantener vivo por sí solo un
+    // worker que ya devolvió timeout y cuyo SDK nunca resolvió su promesa.
+    leaseTimer.unref?.();
+  }
+
+  let handlerSettled = true;
+  let handlerPromise: Promise<unknown> | undefined;
   try {
-    const result = await tool.handler(args, ctx);
+    toolSignal?.throwIfAborted();
+    // AbortSignal solo convence a un handler que coopera. El race hace que el
+    // contrato del executor también tenga un deadline real para una tool que
+    // olvidó pasar la señal a su SDK; la promesa subyacente queda observada y
+    // no puede producir un unhandled rejection si termina después.
+    handlerSettled = false;
+    handlerPromise = runWithToolSignal(toolSignal, () => tool.handler(args, effectiveCtx))
+      .then((result) => { handlerSettled = true; return result; }, (err) => { handlerSettled = true; throw err; });
+    const result = await raceAbort(handlerPromise, toolSignal);
+    // Si el handler terminó después del deadline, todavía hay que persistir el
+    // éxito de una mutación antes de devolverlo: marcarla fallida abriría la
+    // puerta a repetir un side effect que sí alcanzó a committear.
+    if (durable?.kind === 'execute') {
+      stopLease();
+      // El handler puede haber terminado justo cuando venció la señal. El
+      // commit del fencing debe poder archivarse para no repetir el side effect.
+      await runWithToolSignal(undefined, () => completeMutation(ctx.tenantId, mutationEffectKey(name, ctx), durable.token, result));
+    }
     return { success: true, result, durationMs: Date.now() - started };
   } catch (err) {
     const crudo = err instanceof Error ? err.message : String(err);
     // El log SÍ se queda con el mensaje completo — es el canal de
     // observabilidad, no el que lee el modelo.
     logger.error('tool.error', { name, err: crudo });
+    if (durable?.kind === 'execute') {
+      if (toolSignal?.aborted && !handlerSettled && handlerPromise) {
+        keepLeaseUntilSettled = true;
+        // Un handler que ignora AbortSignal puede haber committeado después de
+        // que el executor devolvió timeout. Mantener el lease evita abrir una
+        // ventana para duplicar el efecto; el callback confirma o sella el
+        // resultado cuando la promesa real termine.
+        void handlerPromise.then(
+          (lateResult) => runWithToolSignal(undefined, () => completeMutation(ctx.tenantId, mutationEffectKey(name, ctx), durable!.token, lateResult)),
+          (lateError) => runWithToolSignal(undefined, () => failMutation(ctx.tenantId, mutationEffectKey(name, ctx), durable!.token, lateError instanceof Error ? lateError.message : String(lateError))),
+        ).catch((latePersistError) => logger.error('tool.idempotencia_fallo', { name, err: latePersistError instanceof Error ? latePersistError.message : String(latePersistError) }))
+          .finally(stopLease);
+      } else {
+        stopLease();
+        try { await runWithToolSignal(undefined, () => failMutation(ctx.tenantId, mutationEffectKey(name, ctx), durable!.token, crudo)); }
+        catch (e) { logger.error('tool.idempotencia_fallo', { name, err: e instanceof Error ? e.message : String(e) }); }
+      }
+    }
     return {
       success: false,
       result: null,
       error: mensajeParaElModelo(crudo),
       durationMs: Date.now() - started,
     };
+  } finally {
+    if (!keepLeaseUntilSettled) stopLease();
   }
+}
+
+function raceAbort<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => signal.removeEventListener('abort', abort);
+    const abort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(signal.reason instanceof Error ? signal.reason : new DOMException('Tool abortada', 'AbortError'));
+    };
+    if (signal.aborted) return abort();
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(
+      (value) => { if (!settled) { settled = true; cleanup(); resolve(value); } },
+      (error) => { if (!settled) { settled = true; cleanup(); reject(error); } },
+    );
+  });
+}
+
+function mutationEffectKey(name: string, ctx: ToolContext): string {
+  return ctx.mutationKey ?? [name, ctx.tenantId, ctx.viajeId ?? '-', ctx.operadorId ?? '-'].join(':');
 }
 
 /**
@@ -170,7 +274,7 @@ export function makeExecutor(ctx: ToolContext) {
   // Registrando la promesa ANTES del await, el segundo llamador se engancha a la
   // MISMA ejecución. No hay ventana: entre el `get` y el `set` no hay await.
   const mutacionesHechas = new Map<string, Promise<ToolExecResult>>();
-  return async (name: string, args: Record<string, unknown>): Promise<ToolExecResult> => {
+  return async (name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolExecResult> => {
     if (REGISTRY.get(name)?.isMutation) {
       // LA LLAVE ES EL NOMBRE, no los args. Ninguna tool de Likida tiene
       // parámetros a propósito —el modelo decide CUÁNDO, nunca CON QUÉ DATOS, y
@@ -185,7 +289,7 @@ export function makeExecutor(ctx: ToolContext) {
       if (cache) { logger.warn('tool.mutation_dedup', { name }); return cache; }
       // `executeTool` nunca rechaza (captura y devuelve `success:false`), así que
       // esta promesa no puede quedar como rejection sin manejar.
-      const p = executeTool(name, args, ctx);
+      const p = executeTool(name, args, ctx, signal);
       mutacionesHechas.set(key, p);
       const res = await p;
       // Un FALLO no se queda cacheado: un blip de un segundo no puede convertirse
@@ -194,6 +298,6 @@ export function makeExecutor(ctx: ToolContext) {
       if (!res.success && mutacionesHechas.get(key) === p) mutacionesHechas.delete(key);
       return res;
     }
-    return executeTool(name, args, ctx);
+    return executeTool(name, args, ctx, signal);
   };
 }

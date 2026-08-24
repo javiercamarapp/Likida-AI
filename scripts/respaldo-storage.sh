@@ -1,123 +1,146 @@
 #!/usr/bin/env bash
-# ════════════════════════════════════════════════════════════════════════════
-# RESPALDO DE STORAGE (RES-8).
+# Respaldo verificable de Supabase Storage.
 #
-# `scripts/respaldo.sh` respalda la BASE. Los ARCHIVOS —las fotos de los
-# comprobantes y los PDF de las liquidaciones— no los respaldaba nada, y son
-# justo la parte que la ley obliga a conservar CINCO AÑOS (CFF art. 30). Un
-# `pg_dump` sin ellos deja las filas apuntando a rutas de un bucket vacío: la
-# liquidación existe, el papel que el contralor tiene que cruzar no.
+# Solo lee del origen, nunca borra origen ni destino remoto, verifica tamaño y
+# SHA-256 de cada objeto y publica tres artefactos atómicos:
+# MANIFIESTO.json (máquina), MANIFIESTO.tsv (humano) y MANIFIESTO.sha256.
+# Falla ante errores de API, rutas inseguras o un respaldo vacío no declarado.
 #
-# El plan de Supabase de este proyecto NO trae respaldo automático ni PITR
-# (verificado contra la Management API el 4-ago-2026; ver la cabecera de
-# `respaldo.sh`), y **el PITR de Supabase, cuando existe, es de la BASE, no de
-# Storage** — o sea que este script sigue haciendo falta aunque se contrate.
+# Variables:
+#   NEXT_PUBLIC_SUPABASE_URL       URL del proyecto (obligatoria)
+#   SUPABASE_SERVICE_ROLE_KEY      llave de respaldo (obligatoria)
+#   RESPALDO_BUCKETS               buckets separados por espacios
+#   RESPALDO_S3_DESTINO             s3://.../prefijo
+#   RESPALDO_ALLOW_EMPTY=true      permite explícitamente un respaldo vacío
+#   RESPALDO_REQUIRE_REMOTE=true   exige destino remoto (CI)
 #
-# ── LO QUE HACE ─────────────────────────────────────────────────────────────
-#   1. Lista, bucket por bucket y carpeta por carpeta, TODOS los objetos, con
-#      la API de Storage y la service role.
-#   2. Descarga a `$DESTINO/<bucket>/<ruta>` lo que no esté ya ahí con el
-#      mismo tamaño — IDEMPOTENTE: correrlo dos veces no vuelve a bajar nada,
-#      y una corrida cortada se retoma donde se quedó.
-#   3. Compara CONTEO listado vs CONTEO en disco y falla si no cuadra. Un
-#      respaldo que no se comprueba no es un respaldo (misma regla que el de
-#      la base: un dump vacío se ve igual de exitoso que uno bueno).
-#   4. Deja `MANIFIESTO.tsv` (bucket, ruta, bytes, sha256) para poder probar
-#      la restauración sin adivinar.
-#
-# ── LO QUE **NO** HACE, DICHO ───────────────────────────────────────────────
-#   · NO borra nada, ni del origen ni del destino. Un script de respaldo que
-#     borra es un script de pérdida de datos esperando su turno.
-#   · NO sube a ningún lado por su cuenta: si `RESPALDO_S3_DESTINO` está
-#     puesto, hace el `aws s3 sync` AL FINAL y solo entonces; si no, se queda
-#     en disco y lo dice. Sincronizar a ciegas contra un bucket mal escrito es
-#     el modo de fallo caro.
-#   · NO restaura. La restauración es una decisión humana y va en el runbook
-#     (docs/conocimiento/DEPLOY.md).
-#
-# ── USO ─────────────────────────────────────────────────────────────────────
-#   bash scripts/respaldo-storage.sh                 # → ~/Desktop/likida-storage
-#   bash scripts/respaldo-storage.sh /ruta/destino
-#
-#   Variables (de `.env.local` si existe, o del entorno):
-#     NEXT_PUBLIC_SUPABASE_URL     obligatoria
-#     SUPABASE_SERVICE_ROLE_KEY    obligatoria — es la llave que salta RLS.
-#     RESPALDO_BUCKETS             opcional, separados por espacio.
-#                                  Default: comprobantes liquidaciones bus
-#     RESPALDO_S3_DESTINO          opcional, p. ej. s3://likida-respaldos/storage
-#                                  (funciona igual con R2 vía AWS_ENDPOINT_URL)
-#
-# NUNCA se ejecuta solo. No hay cron que lo llame: se corre a mano o desde una
-# máquina de respaldo. Contra producción, con la service role, y eso se decide
-# a conciencia.
-# ════════════════════════════════════════════════════════════════════════════
+# Uso: bash scripts/respaldo-storage.sh /ruta/backup
 set -euo pipefail
+# RESPALDO_BUCKETS es configuración, no un patrón de archivos local.
+set -f
 cd "$(dirname "$0")/.."
 
-DESTINO="${1:-$HOME/Desktop/likida-storage}"
+DESTINO="${1:-${RESPALDO_ROOT:-./.backups/storage}}"
+BUCKETS="${RESPALDO_BUCKETS:-comprobantes liquidaciones avatares bus}"
+REQUIRE_REMOTE="${RESPALDO_REQUIRE_REMOTE:-false}"
+ALLOW_EMPTY="${RESPALDO_ALLOW_EMPTY:-false}"
+URL="${NEXT_PUBLIC_SUPABASE_URL:-}"
+LLAVE="${SUPABASE_SERVICE_ROLE_KEY:-}"
 
-# `.env.local` solo si existe y SIN volcar el archivo entero al entorno: se
-# leen las dos llaves que hacen falta, nada más.
-leer_env() {
+leer_env_local() {
   local clave="$1"
   if [ -n "${!clave:-}" ]; then printf '%s' "${!clave}"; return; fi
   [ -f .env.local ] || return
-  grep -m1 "^${clave}=" .env.local | cut -d= -f2- | tr -d '"' | tr -d "'"
+  sed -n "s/^${clave}=//p" .env.local | head -n1 | sed "s/^['\"]//;s/['\"]$//"
 }
 
-URL="$(leer_env NEXT_PUBLIC_SUPABASE_URL)"
-LLAVE="$(leer_env SUPABASE_SERVICE_ROLE_KEY)"
-BUCKETS="${RESPALDO_BUCKETS:-comprobantes liquidaciones bus}"
+URL="${URL:-$(leer_env_local NEXT_PUBLIC_SUPABASE_URL)}"
+LLAVE="${LLAVE:-$(leer_env_local SUPABASE_SERVICE_ROLE_KEY)}"
+[ -n "$URL" ] || { echo "ERROR: falta NEXT_PUBLIC_SUPABASE_URL." >&2; exit 2; }
+[ -n "$LLAVE" ] || { echo "ERROR: falta SUPABASE_SERVICE_ROLE_KEY." >&2; exit 2; }
+command -v jq >/dev/null || { echo "ERROR: falta jq." >&2; exit 2; }
+command -v curl >/dev/null || { echo "ERROR: falta curl." >&2; exit 2; }
 
-if [ -z "$URL" ] || [ -z "$LLAVE" ]; then
-  echo "✗ Faltan NEXT_PUBLIC_SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY (entorno o .env.local)." >&2
-  exit 2
-fi
-command -v jq >/dev/null || { echo "✗ Falta jq (brew install jq)." >&2; exit 2; }
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    echo "ERROR: se necesita sha256sum o shasum." >&2
+    exit 2
+  fi
+}
+
+validar_bucket() {
+  local bucket="$1"
+  case "$bucket" in
+    ''|.|..|*[!A-Za-z0-9._-]*)
+      echo "ERROR: nombre de bucket inseguro: $bucket" >&2
+      exit 2
+      ;;
+  esac
+}
+
+codificar_ruta_url() {
+  jq -rn --arg ruta "$1" '$ruta | split("/") | map(@uri) | join("/")'
+}
+
+ruta_dentro() {
+  local candidata="$1" raiz="${2%/}"
+  [[ "$candidata" == "$raiz" || "$candidata" == "$raiz/"* ]]
+}
+
+crear_directorio_confinado() {
+  local raiz="$1" relativa="$2" actual="$1" parte
+  local -a partes
+  IFS='/' read -r -a partes <<< "$relativa"
+  for parte in "${partes[@]}"; do
+    [ -n "$parte" ] && [ "$parte" != "." ] && [ "$parte" != ".." ] || {
+      echo "ERROR: componente de ruta inseguro: $relativa" >&2
+      return 1
+    }
+    actual="$actual/$parte"
+    [ ! -L "$actual" ] || { echo "ERROR: directorio destino es symlink: $actual" >&2; return 1; }
+    if [ -e "$actual" ]; then
+      [ -d "$actual" ] || { echo "ERROR: componente destino no es directorio: $actual" >&2; return 1; }
+    else
+      mkdir -- "$actual"
+    fi
+  done
+  actual="$(cd "$actual" && pwd -P)"
+  ruta_dentro "$actual" "$raiz" || { echo "ERROR: directorio fuera del backup: $actual" >&2; return 1; }
+  printf '%s' "$actual"
+}
 
 URL="${URL%/}"
-MANIFIESTO="$DESTINO/MANIFIESTO.tsv"
 mkdir -p "$DESTINO"
-: > "$MANIFIESTO.tmp"
+DESTINO="$(cd "$DESTINO" && pwd -P)"
+TMP_BASE="${TMPDIR:-/tmp}"
+TMP_DIR="$(mktemp -d "${TMP_BASE%/}/likida-respaldo.XXXXXX")"
+trap 'rm -rf "$TMP_DIR"' EXIT
+OBJETOS="$TMP_DIR/objetos.tsv"
+: > "$OBJETOS"
 
-# `list` de Storage devuelve UNA carpeta por llamada y pagina de a 100 por
-# default. Se recorre en anchura con una pila explícita: recursión en bash con
-# miles de carpetas es una forma cara de descubrir el límite de la pila.
-# Un objeto se distingue de una carpeta por `id != null` (una "carpeta" en
-# Storage es un prefijo sintético: viene con `id: null`).
 listar_bucket() {
-  local bucket="$1"
-  # Cola con ÍNDICE, no `${cola[@]:1}`: esa forma revienta con `set -u` en el
-  # bash 3.2 que trae macOS cuando la cola queda con un solo elemento, y este
-  # script tiene que correr también desde una máquina de respaldo cualquiera.
-  local pendientes=("")
+  local bucket="$1" prefijo respuesta offset n nombre id bytes ruta
+  local -a pendientes=("")
   local cabeza=0
-  local prefijo respuesta offset n
   while [ "$cabeza" -lt "${#pendientes[@]}" ]; do
     prefijo="${pendientes[$cabeza]}"
     cabeza=$((cabeza + 1))
     offset=0
     while :; do
-      respuesta="$(curl -sS -X POST "$URL/storage/v1/object/list/$bucket" \
+      respuesta="$(curl -sS -f --retry 3 --retry-delay 1 -X POST \
+        "$URL/storage/v1/object/list/$bucket" \
         -H "Authorization: Bearer $LLAVE" -H "apikey: $LLAVE" \
         -H 'Content-Type: application/json' \
         -d "$(jq -nc --arg p "$prefijo" --argjson o "$offset" \
-              '{prefix:$p, limit:1000, offset:$o, sortBy:{column:"name",order:"asc"}}')")"
-      # Un error de la API llega como objeto con `error`/`message`, no como
-      # arreglo: sin esta comprobación, `jq` devolvería vacío y el respaldo
-      # se declararía completo con cero archivos.
-      if [ "$(jq -r 'type' <<<"$respuesta")" != "array" ]; then
-        echo "✗ $bucket: la API no devolvió una lista: $(jq -c . <<<"$respuesta")" >&2
+          '{prefix:$p,limit:1000,offset:$o,sortBy:{column:"name",order:"asc"}}')")" \
+        || { echo "ERROR: falló el listado de $bucket/$prefijo." >&2; exit 1; }
+      [ "$(jq -r 'type' <<<"$respuesta")" = "array" ] || {
+        echo "ERROR: Storage devolvió un error al listar $bucket: $(jq -c . <<<"$respuesta")" >&2
         exit 1
-      fi
+      }
+      jq -e 'all(.[]; (.name | type) == "string" and (.name | length) > 0 and ((.name | test("[\\t\\n\\r]")) | not))' \
+        <<<"$respuesta" >/dev/null || {
+        echo "ERROR: Storage devolvió un nombre no representable en $bucket/$prefijo." >&2
+        exit 1
+      }
       n="$(jq 'length' <<<"$respuesta")"
       [ "$n" -eq 0 ] && break
       while IFS=$'\t' read -r nombre id bytes; do
-        local ruta="${prefijo:+$prefijo/}$nombre"
+        ruta="${prefijo:+$prefijo/}$nombre"
+        case "/$ruta/" in
+          *'//'*|*'/../'*|*'/./'*|*$'\t'*|*$'\n'*|*$'\r'*)
+            echo "ERROR: ruta de Storage insegura o no representable: $bucket/$ruta" >&2
+            exit 1
+            ;;
+        esac
         if [ "$id" = "null" ]; then
           pendientes+=("$ruta")
         else
-          printf '%s\t%s\t%s\n' "$bucket" "$ruta" "$bytes" >> "$MANIFIESTO.tmp"
+          printf '%s\t%s\t%s\n' "$bucket" "$ruta" "$bytes" >> "$OBJETOS"
         fi
       done < <(jq -r '.[] | [.name, (.id // "null"), (.metadata.size // 0)] | @tsv' <<<"$respuesta")
       offset=$((offset + n))
@@ -126,57 +149,89 @@ listar_bucket() {
   done
 }
 
-echo "→ Listando buckets: $BUCKETS"
-for b in $BUCKETS; do listar_bucket "$b"; done
-TOTAL="$(wc -l < "$MANIFIESTO.tmp" | tr -d ' ')"
-echo "  $TOTAL objeto(s) en el origen."
-
-if [ "$TOTAL" -eq 0 ]; then
-  # Cero puede ser la verdad (la base está en cero hasta que haya clientes),
-  # pero también es exactamente lo que se ve cuando la llave no sirve. Se dice
-  # y se sale con 0: no se escribe un manifiesto vacío encima del bueno.
-  echo "⚠ Cero objetos. Si esperabas archivos, revisa la service role y RESPALDO_BUCKETS."
-  rm -f "$MANIFIESTO.tmp"
-  exit 0
+echo "Listando buckets: $BUCKETS"
+for bucket in $BUCKETS; do
+  validar_bucket "$bucket"
+  listar_bucket "$bucket"
+done
+TOTAL="$(wc -l < "$OBJETOS" | tr -d '[:space:]')"
+if [ "$TOTAL" -eq 0 ] && [ "$ALLOW_EMPTY" != "true" ]; then
+  echo "ERROR: Storage devolvió cero objetos. Usa RESPALDO_ALLOW_EMPTY=true solo si es intencional." >&2
+  exit 3
 fi
 
-BAJADOS=0; SALTADOS=0
-: > "$MANIFIESTO.nuevo"
+TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+TSV_TMP="$TMP_DIR/MANIFIESTO.tsv"
+JSON_TMP="$TMP_DIR/MANIFIESTO.json"
+SHA_TMP="$TMP_DIR/MANIFIESTO.sha256"
+: > "$TSV_TMP"; : > "$SHA_TMP"
+BAJADOS=0
+VERIFICADOS=0
 while IFS=$'\t' read -r bucket ruta bytes; do
+  validar_bucket "$bucket"
+  case "$bytes" in ''|*[!0-9]*) echo "ERROR: tamaño inválido: $bucket/$ruta" >&2; exit 1 ;; esac
   destino="$DESTINO/$bucket/$ruta"
-  mkdir -p "$(dirname "$destino")"
-  # IDEMPOTENTE: si ya está con el mismo tamaño, no se vuelve a bajar. El
-  # tamaño basta porque el nombre de un comprobante ES el hash de su
-  # contenido (intake/almacen.ts) y un PDF se reescribe entero o no cambia.
-  if [ -f "$destino" ] && [ "$(wc -c < "$destino" | tr -d ' ')" = "$bytes" ]; then
-    SALTADOS=$((SALTADOS + 1))
-  else
-    curl -sS -f -o "$destino" \
-      -H "Authorization: Bearer $LLAVE" -H "apikey: $LLAVE" \
-      "$URL/storage/v1/object/$bucket/$ruta" \
-      || { echo "✗ No pude bajar $bucket/$ruta" >&2; exit 1; }
-    BAJADOS=$((BAJADOS + 1))
-  fi
-  printf '%s\t%s\t%s\t%s\n' "$bucket" "$ruta" "$bytes" "$(shasum -a 256 "$destino" | cut -d' ' -f1)" >> "$MANIFIESTO.nuevo"
-done < "$MANIFIESTO.tmp"
+  destino_padre="$(crear_directorio_confinado "$DESTINO" "$(dirname "$bucket/$ruta")")"
+  destino="$destino_padre/$(basename "$ruta")"
+  [ ! -L "$destino" ] || { echo "ERROR: destino local es symlink: $bucket/$ruta" >&2; exit 1; }
+  [ ! -e "$destino" ] || [ -f "$destino" ] || { echo "ERROR: destino local no es archivo: $bucket/$ruta" >&2; exit 1; }
 
-# LA COMPROBACIÓN, que es la parte que convierte esto en un respaldo: tantos
-# archivos en disco como objetos listó el origen.
-EN_DISCO="$(wc -l < "$MANIFIESTO.nuevo" | tr -d ' ')"
-if [ "$EN_DISCO" != "$TOTAL" ]; then
-  echo "✗ El origen listó $TOTAL objeto(s) y en disco quedaron $EN_DISCO. NO es un respaldo completo." >&2
-  exit 1
-fi
-mv "$MANIFIESTO.nuevo" "$MANIFIESTO"
-rm -f "$MANIFIESTO.tmp"
-echo "✓ $TOTAL objeto(s) verificados en $DESTINO ($BAJADOS nuevo(s), $SALTADOS ya estaban)."
-echo "  Manifiesto: $MANIFIESTO"
+  # Nunca se reutiliza un archivo solo porque tiene el mismo tamaño: dos
+  # versiones distintas pueden medir lo mismo. Se descarga a temporal, se
+  # verifica y recién entonces se reemplaza atómicamente la copia local.
+  temporal="$(mktemp "$TMP_DIR/objeto.XXXXXX")"
+  ruta_url="$(codificar_ruta_url "$ruta")"
+  curl -sS -f --retry 3 --retry-delay 1 -o "$temporal" \
+    -H "Authorization: Bearer $LLAVE" -H "apikey: $LLAVE" \
+    "$URL/storage/v1/object/$bucket/$ruta_url" \
+    || { echo "ERROR: no se pudo descargar $bucket/$ruta." >&2; exit 1; }
+  actual_bytes="$(wc -c < "$temporal" | tr -d '[:space:]')"
+  actual_sha="$(sha256_file "$temporal")"
+  [ "$actual_bytes" = "$bytes" ] || { echo "ERROR: tamaño inconsistente: $bucket/$ruta" >&2; exit 1; }
+  mv "$temporal" "$destino"
+  BAJADOS=$((BAJADOS + 1))
+  printf '%s\t%s\t%s\t%s\n' "$bucket" "$ruta" "$bytes" "$actual_sha" >> "$TSV_TMP"
+  printf '%s  %s\n' "$actual_sha" "$bucket/$ruta" >> "$SHA_TMP"
+  VERIFICADOS=$((VERIFICADOS + 1))
+done < "$OBJETOS"
+
+jq -Rn --arg created "$TS" --arg source "$URL" --argjson count "$VERIFICADOS" \
+  '[inputs | select(length > 0) | split("\t") | {bucket:.[0],path:.[1],bytes:(.[2]|tonumber),sha256:.[3]}] |
+   {format:"likida-storage-manifest",version:1,created_at:$created,source:$source,object_count:$count,objects:.}' \
+  < "$TSV_TMP" > "$JSON_TMP"
+
+mv "$TSV_TMP" "$DESTINO/MANIFIESTO.tsv"
+mv "$JSON_TMP" "$DESTINO/MANIFIESTO.json"
+mv "$SHA_TMP" "$DESTINO/MANIFIESTO.sha256"
+printf '%s\n' "$TS" > "$DESTINO/RESPALDO_COMPLETADO_UTC"
 
 if [ -n "${RESPALDO_S3_DESTINO:-}" ]; then
-  command -v aws >/dev/null || { echo "✗ RESPALDO_S3_DESTINO está puesto y no hay aws CLI." >&2; exit 2; }
-  echo "→ Sincronizando a $RESPALDO_S3_DESTINO (sin --delete: esto no borra nada allá)"
-  aws s3 sync "$DESTINO" "$RESPALDO_S3_DESTINO"
-  echo "✓ Sincronizado."
+  command -v aws >/dev/null || { echo "ERROR: falta aws CLI para RESPALDO_S3_DESTINO." >&2; exit 2; }
+  REMOTE_BASE="${RESPALDO_S3_DESTINO%/}"
+  case "$REMOTE_BASE" in
+    s3://?*) ;;
+    *) echo "ERROR: RESPALDO_S3_DESTINO debe ser una URI s3:// explícita." >&2; exit 2 ;;
+  esac
+  echo "Sincronizando respaldo remoto sin --delete: $REMOTE_BASE"
+  # Los controles se publican después de los objetos y la marca va AL FINAL:
+  # nunca existe un respaldo remoto declarado completo con objetos a medias.
+  aws s3 sync "$DESTINO/" "$REMOTE_BASE/" --no-progress \
+    --exclude 'MANIFIESTO.*' --exclude 'RESPALDO_COMPLETADO_UTC'
+  aws s3 cp "$DESTINO/MANIFIESTO.tsv" "$REMOTE_BASE/MANIFIESTO.tsv" --no-progress
+  aws s3 cp "$DESTINO/MANIFIESTO.json" "$REMOTE_BASE/MANIFIESTO.json" --no-progress
+  aws s3 cp "$DESTINO/MANIFIESTO.sha256" "$REMOTE_BASE/MANIFIESTO.sha256" --no-progress
+  REMOTE_CHECK="$TMP_DIR/manifiesto-remoto.json"
+  aws s3 cp "$REMOTE_BASE/MANIFIESTO.json" "$REMOTE_CHECK" --no-progress
+  cmp -s "$DESTINO/MANIFIESTO.json" "$REMOTE_CHECK" || {
+    echo "ERROR: el manifiesto remoto no coincide con el local." >&2
+    exit 1
+  }
+  aws s3 cp "$DESTINO/RESPALDO_COMPLETADO_UTC" "$REMOTE_BASE/RESPALDO_COMPLETADO_UTC" --no-progress
+elif [ "$REQUIRE_REMOTE" = "true" ]; then
+  echo "ERROR: RESPALDO_REQUIRE_REMOTE=true exige RESPALDO_S3_DESTINO." >&2
+  exit 2
 else
-  echo "  (Sin RESPALDO_S3_DESTINO: el respaldo se queda en disco. Súbelo tú, o pon la variable.)"
+  echo "ADVERTENCIA: no se configuró destino remoto; solo existe copia local." >&2
 fi
+
+echo "OK: $VERIFICADOS objeto(s), $BAJADOS descarga(s), manifiesto y hashes verificados en $DESTINO."

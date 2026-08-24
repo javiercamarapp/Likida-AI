@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import type { Liquidacion } from '@/types/likida';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -81,7 +82,7 @@ const { executeTool } = await import('@/lib/llm/tool-executor');
 // normal —el chofer escribió "listo"— y el candado propio se prueba en
 // `tools_cierre_pedido.test.ts`.
 const CTX = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779', cierrePedidoPorTexto: true };
-const cerrar = () => executeTool('guardar_liquidacion', {}, CTX);
+const cerrar = () => executeTool('guardar_liquidacion', {}, { ...CTX, runId: randomUUID() });
 
 beforeEach(async () => {
   // RES-19: `leerInterruptor` cachea 5 s por instancia y este archivo usa el

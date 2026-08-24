@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import type { Liquidacion } from '@/types/likida';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -78,6 +79,7 @@ const { executeTool } = await import('@/lib/llm/tool-executor');
 // normal —el chofer escribió "listo"— y el candado propio se prueba en
 // `tools_cierre_pedido.test.ts`.
 const BASE = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779', cierrePedidoPorTexto: true };
+const contexto = (extras: Record<string, unknown> = {}) => ({ ...BASE, ...extras, runId: randomUUID() });
 
 /** El error tal como llega de `saveLiquidacion` cuando la 0158 rechaza. */
 const cu003 = () => Object.assign(new Error('saveLiquidacion: contó otra cosa'), { code: 'CU003' });
@@ -92,7 +94,7 @@ beforeEach(() => {
 
 describe('el cierre le dice a la base cuántos comprobantes archivó', () => {
   it('manda el conteo de la MISMA fotografía que se imprimió', async () => {
-    const r = await executeTool('guardar_liquidacion', {}, { ...BASE });
+    const r = await executeTool('guardar_liquidacion', {}, contexto());
     expect(r.success).toBe(true);
     expect(saveLiquidacion).toHaveBeenCalledTimes(1);
     expect(saveLiquidacion.mock.calls[0][3]).toBe(5);
@@ -106,7 +108,7 @@ describe('si un gasto entra en la ventana, se vuelve a fotografiar UNA vez', () 
     fotos = [conNGastos(5), conNGastos(6)];
     saveLiquidacion.mockRejectedValueOnce(cu003());
 
-    const r = await executeTool('guardar_liquidacion', {}, { ...BASE });
+    const r = await executeTool('guardar_liquidacion', {}, contexto());
 
     expect(r.success).toBe(true);
     expect(cuadrarDesdeDB).toHaveBeenCalledTimes(2);
@@ -127,7 +129,7 @@ describe('si un gasto entra en la ventana, se vuelve a fotografiar UNA vez', () 
     fotos = [conNGastos(5), conNGastos(6)];
     saveLiquidacion.mockRejectedValueOnce(cu003()).mockRejectedValueOnce(cu003());
 
-    const r = await executeTool('guardar_liquidacion', {}, { ...BASE });
+    const r = await executeTool('guardar_liquidacion', {}, contexto());
 
     expect(r.success).toBe(false);
     expect(saveLiquidacion).toHaveBeenCalledTimes(2);
@@ -137,7 +139,7 @@ describe('si un gasto entra en la ventana, se vuelve a fotografiar UNA vez', () 
     // Reintentar un fallo cualquiera sería generar dos veces los PDF y dos
     // veces la carga contra la base por algo que no va a cambiar.
     saveLiquidacion.mockRejectedValue(new Error('se cayó la red'));
-    const r = await executeTool('guardar_liquidacion', {}, { ...BASE });
+    const r = await executeTool('guardar_liquidacion', {}, contexto());
     expect(r.success).toBe(false);
     expect(saveLiquidacion).toHaveBeenCalledTimes(1);
     expect(cuadrarDesdeDB).toHaveBeenCalledTimes(1);

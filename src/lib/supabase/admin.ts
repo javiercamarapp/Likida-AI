@@ -3,6 +3,7 @@
 // sesión de usuario. NUNCA importar en código de cliente.
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { combineAbortSignals, currentToolSignal } from '@/lib/llm/runtime-signal';
 
 // AUDITORÍA 1, CRÍTICO (Rendimiento): SIN un tope, un socket que Supabase acepta
 // y no contesta cuelga hasta el default de undici (300 s). Los crons de escalación
@@ -26,9 +27,15 @@ export function supabaseAdmin(): SupabaseClient {
     auth: { persistSession: false, autoRefreshToken: false },
     global: {
       // Respeta una señal ya puesta (la de `acotada`, más estrecha); si no hay,
-      // aplica el backstop. Así ninguna consulta puede colgar más que esto.
+      // hereda la señal de la tool y aplica el backstop. Así una tool abortada
+      // cancela también sus consultas directas, Storage y RPCs profundos.
       fetch: (input: RequestInfo | URL, init?: RequestInit) =>
-        fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(BACKSTOP_MS) }),
+        fetch(input, {
+          ...init,
+          signal: init?.signal && !currentToolSignal()
+            ? init.signal
+            : combineAbortSignals(init?.signal ?? undefined, currentToolSignal(), AbortSignal.timeout(BACKSTOP_MS)),
+        }),
     },
   });
   return _admin;

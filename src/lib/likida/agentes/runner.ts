@@ -12,8 +12,8 @@
 //   2. Opt-in `runner_habilitado` + estado 'vivo' + disparador 'cron'
 //      (agente_definicion 0123) — apagable en la base sin deploy.
 //   3. TECHO DE DINERO: presupuesto_dia_usd DECLARADO (NULL = no corre
-//      solo) contra el gasto MEDIDO del día (SUM agente_corrida.costo_usd,
-//      día de México). Sin lectura del gasto, no se corre.
+//      solo) y reservado de forma atómica en el ledger central por tenant.
+//      Sin tenant explícito o sin reserva durable, no se corre.
 //   4. BACKPRESSURE: si la bandeja de aprobación ya acumula piezas sin
 //      resolver, el runner no fabrica más — un humano que no aprueba es la
 //      señal de parar, no de insistir.
@@ -22,10 +22,12 @@
 // jamás toca un canal de envío. El tope de ENVÍO diario vive aparte, en la
 // única puerta de salida (cola.ts).
 // ═══════════════════════════════════════════════════════════════════════════
+import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { estaApagado, INTERRUPTORES, type NombreInterruptor } from '../interruptores';
 import { hoyMx } from '@/lib/formato';
+import { LlmBudgetExceededError, createLlmBudget, type LlmBudget } from '@/lib/llm/budget';
 import { redactarCorreoFrio } from './redactor';
 import { logger } from '@/lib/logger';
 
@@ -73,41 +75,11 @@ export async function gastoDelDiaUsd(agente: string): Promise<number> {
   return ((data ?? []) as Array<{ costo_usd: unknown }>).reduce((s, f) => s + Number(f.costo_usd ?? 0), 0);
 }
 
-interface ReservaPresupuesto { id: string; disponibleUsd: number }
-
-/**
- * Aparta de forma atómica el saldo del agente para ESTA vuelta. No se usa el
- * `SELECT` de `gastoDelDiaUsd` para decidir: dos crons pueden leer el mismo
- * saldo y gastar ambos antes de que cualquiera escriba su corrida. La RPC 0180
- * toma un advisory lock por agente/día e incluye reservas vivas en el cálculo.
- */
-async function reservarPresupuesto(agente: string, topeUsd: number): Promise<ReservaPresupuesto | null> {
-  const { data, error } = await supabaseAdmin().rpc('reservar_presupuesto_agente', {
-    p_agente: agente, p_dia: hoyMx(), p_tope_usd: topeUsd, p_lease_seconds: 300,
-  });
-  if (error) throw new Error(`reservarPresupuesto: ${error.message}`);
-  const fila = (data ?? [])[0] as { id?: string; disponible_usd?: number } | undefined;
-  if (!fila?.id || !Number.isFinite(Number(fila.disponible_usd)) || Number(fila.disponible_usd) <= 0) return null;
-  return { id: fila.id, disponibleUsd: Number(fila.disponible_usd) };
-}
-
-async function cerrarReserva(id: string, costoRealUsd: number): Promise<void> {
-  const { data, error } = await supabaseAdmin().rpc('cerrar_reserva_presupuesto_agente', {
-    p_id: id, p_costo_real_usd: costoRealUsd,
-  });
-  if (error || data !== true) {
-    // Dejar el lease vivo es conservador: bloquea temporalmente saldo antes de
-    // permitir un doble gasto. Expira en cinco minutos y la corrida ya quedó
-    // medida en agente_corrida para la siguiente reserva.
-    logger.error('runner.reserva_no_cerrada', { reserva: id, err: error?.message ?? 'no se cerró la reserva' });
-  }
-}
-
 /** El lote del Redactor: fabrica hasta N piezas para prospectos en `nuevo`
- *  (los más viejos primero — los del SLA), cortando por presupuesto restante.
+ *  (los más viejos primero — los del SLA), cortando por la reserva/run central.
  *  Las guardas por prospecto (cadencia 48h, pieza pendiente, estado) viven
  *  DENTRO de redactarCorreoFrio — aquí solo se seleccionan candidatos. */
-async function loteRedactor(restanteUsd: number): Promise<{ piezas: number; saltados: number; costoUsd: number }> {
+async function loteRedactor(budget: LlmBudget): Promise<{ piezas: number; saltados: number; costoUsd: number }> {
   const tope = topePiezasPorCorrida();
   // Overfetch ×4: varios candidatos rebotan en las guardas del redactor
   // (pieza pendiente, cadencia) y eso NO es fallo — es la guarda operando.
@@ -124,12 +96,18 @@ async function loteRedactor(restanteUsd: number): Promise<{ piezas: number; salt
   let piezas = 0, saltados = 0, costoUsd = 0;
   for (const c of candidatos) {
     if (piezas >= tope) break;
-    if (costoUsd >= restanteUsd) break;
+    if (budget.reservadoRunUsd >= budget.maxRunUsd) break;
     try {
-      const r = await redactarCorreoFrio(c.id, c.vendedor?.nombre?.trim() || 'Javier', 'cron');
+      const r = await redactarCorreoFrio(c.id, c.vendedor?.nombre?.trim() || 'Javier', 'cron', {
+        tenantId: budget.tenantId,
+        budget,
+      });
       piezas += 1;
       costoUsd += r.costoUsd;
     } catch (e) {
+      // La RPC central ya hizo la decisión atómica. No se trata como un
+      // prospecto inválido ni se sigue fabricando: el techo es de la corrida.
+      if (e instanceof LlmBudgetExceededError) break;
       // Guarda legítima o fallo puntual: se cuenta y se sigue — un prospecto
       // atorado no puede parar el lote entero. El detalle ya quedó en la
       // corrida/log del redactor.
@@ -152,6 +130,9 @@ export async function correrRunner(
    * argumento sigue siendo la vuelta completa del cron.
    */
   soloAgente?: string,
+  /** Tenant autenticado/explicitamente asignado que paga esta corrida.
+   *  `null`/ausente bloquea al Redactor; nunca se usa un env global. */
+  budgetTenantId?: string | null,
 ): Promise<ResultadoRunner> {
   if (await estaApagado('global')) {
     return { apagadoGlobal: true, agentes: [] };
@@ -194,6 +175,10 @@ export async function correrRunner(
     }
     // Candado 4 — backpressure de la bandeja (solo agentes que encolan).
     if (a.id === 'redactor') {
+      if (!budgetTenantId) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'sin tenant explícito para presupuesto central — fail closed' });
+        continue;
+      }
       const { count, error: errPend } = await supabaseAdmin()
         .from('cola_aprobacion')
         .select('id', { count: 'exact', head: true })
@@ -208,23 +193,13 @@ export async function correrRunner(
         continue;
       }
 
-      let reserva: ReservaPresupuesto | null;
       try {
-        reserva = await reservarPresupuesto(a.id, a.presupuesto_dia_usd);
-      } catch {
-        agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'no se pudo reservar el presupuesto del día — fail closed' });
-        continue;
-      }
-      if (!reserva) {
-        agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'presupuesto del día agotado o reservado por otra corrida' });
-        continue;
-      }
-      try {
-        const r = await loteRedactor(reserva.disponibleUsd);
-        await cerrarReserva(reserva.id, r.costoUsd);
+        const budget = createLlmBudget(budgetTenantId, randomUUID(), {
+          maxTenantDailyUsd: a.presupuesto_dia_usd,
+        });
+        const r = await loteRedactor(budget);
         agentes.push({ agente: a.id, resultado: 'corrio', ...r });
       } catch (e) {
-        await cerrarReserva(reserva.id, 0);
         agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del lote' });
       }
       continue;

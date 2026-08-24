@@ -21,11 +21,12 @@
 //    ejecutar); las 'confirma' ejecutan con uno. Determinista, sin modelo
 //    (copiloto-acciones.ts).
 //
-// COSTO: se loguea por turno (copiloto.costo). NO va a llm_costo a propósito:
-// esa tabla exige tenant_id (0003) y el copiloto es gasto de LIKIDA, no de
-// una flota — cargárselo a un tenant mentiría en su pantalla de costos.
-// Decisión anotada en el reporte de fase; si el gasto crece, la salida es
-// una columna nullable o un tenant interno, no un tenant real de relleno.
+// COSTO: cada completion reserva y liquida contra el ledger monetario central
+// (0186), además del log por turno (`copiloto.costo`). El tenant de cobro sale
+// EXCLUSIVAMENTE de la sesión: si el superadmin no tiene uno asignado, el chat
+// falla cerrado antes del modelo. No existe fallback por env ni tenant de
+// relleno. `llm_costo` sigue siendo la telemetría operativa de las flotas;
+// `llm_presupuesto_reserva` es la frontera dura de gasto compartida.
 // ═══════════════════════════════════════════════════════════════════════════
 import { NextResponse } from 'next/server';
 import { rateLimit } from '@/lib/ratelimit';
@@ -62,14 +63,10 @@ function validarMensajes(crudo: unknown): Array<{ rol: 'usuario' | 'asistente'; 
   return out;
 }
 
-/** Techo diario de TURNOS del copiloto. El mapeo del 16-ago encontró que
- *  este era el ÚNICO camino de LLM sin freno de gasto: el chat del cliente
- *  tiene topeDiaUsd, y aquí una sesión secuestrada o un bucle de la UI
- *  gastaba sin techo. No se mide en USD porque el costo del copiloto no va
- *  a llm_costo (decisión de arriba: es gasto de Likida, no de un tenant),
- *  así que el freno cuenta TURNOS con el rate limiter persistente: 300/día
- *  ≈ un día PESADO de dirección × margen; a ~$0.01/turno son ~$3/día de
- *  techo. Override: LIKIDA_COPILOTO_TOPE_TURNOS_DIA. */
+/** Defensa adicional por TURNOS del copiloto. El ledger 0186 pone el techo
+ *  monetario atómico; este rate limit corta antes los bucles o una sesión
+ *  secuestrada: 300/día ≈ un día pesado de dirección con margen.
+ *  Override: LIKIDA_COPILOTO_TOPE_TURNOS_DIA. */
 function topeTurnosDia(): number {
   const v = Number(process.env.LIKIDA_COPILOTO_TOPE_TURNOS_DIA);
   return Number.isFinite(v) && v > 0 ? v : 300;
@@ -105,16 +102,6 @@ export async function POST(req: Request) {
   const { error: puerta, sesion } = await sesionSuperadmin();
   if (!sesion) return puerta;
 
-  // Anti-bucle (20/min) + techo diario de turnos. Por userId: el freno es
-  // contra el bucle y el secuestro, no contra Javier — y se le DICE cuál
-  // tope pegó, porque un freno silencioso se depura como si fuera un bug.
-  if (!(await rateLimit(`copiloto:min:${sesion.userId}`, 20, 60_000))) {
-    return NextResponse.json({ error: 'tope por minuto del copiloto (20/min) — espera un momento' }, { status: 429 });
-  }
-  if (!(await rateLimit(`copiloto:dia:${sesion.userId}`, topeTurnosDia(), DIA_MS))) {
-    return NextResponse.json({ error: `tope diario del copiloto (${topeTurnosDia()} turnos) — sube LIKIDA_COPILOTO_TOPE_TURNOS_DIA si es a propósito` }, { status: 429 });
-  }
-
   let cuerpo: Record<string, unknown>;
   try { cuerpo = await req.json() as Record<string, unknown>; } catch {
     return NextResponse.json({ error: 'cuerpo inválido' }, { status: 400 });
@@ -122,6 +109,11 @@ export async function POST(req: Request) {
 
   // ── Camino 2: ejecutar una acción con su INTENT (sin modelo, sin stream) ─
   if (cuerpo.accion !== undefined || cuerpo.intentId !== undefined) {
+    // Las acciones no consumen LLM ni presupuesto diario de turnos, pero sí
+    // conservan el freno corto contra replay/bucles de cliente.
+    if (!(await rateLimit(`copiloto:min:${sesion.userId}`, 20, 60_000))) {
+      return NextResponse.json({ error: 'tope por minuto del copiloto (20/min) — espera un momento' }, { status: 429 });
+    }
     const a = cuerpo.accion as { id?: unknown; objetivo?: unknown; motivo?: unknown } | null;
     const accionId = typeof a?.id === 'string' ? a.id : '';
     const objetivo = typeof a?.objetivo === 'string' ? a.objetivo : '';
@@ -192,6 +184,24 @@ export async function POST(req: Request) {
   // ── Camino 1: el chat (streaming NDJSON, patrón de /dashboard/chat) ──────
   const mensajes = validarMensajes(cuerpo.mensajes);
   if (!mensajes) return NextResponse.json({ error: 'mensajes inválidos' }, { status: 400 });
+  // El commit 0c5d3de elimina deliberadamente el tenant global por env. Esta
+  // comprobación hace el fail-closed visible ANTES del rate limit y del
+  // stream: no se quema un turno ni se devuelve un NDJSON condenado.
+  if (!sesion.tenantId) {
+    logger.warn('copiloto.presupuesto_sin_tenant', { userId: sesion.userId });
+    return NextResponse.json({
+      error: 'El Copiloto requiere un tenant explícito de presupuesto asignado a la sesión superadmin.',
+      codigo: 'copiloto_presupuesto_sin_tenant',
+    }, { status: 503 });
+  }
+  // Anti-bucle (20/min) + techo diario de turnos, ambos por el userId de la
+  // sesión. El ledger 0186 aplica además el límite monetario atómico.
+  if (!(await rateLimit(`copiloto:min:${sesion.userId}`, 20, 60_000))) {
+    return NextResponse.json({ error: 'tope por minuto del copiloto (20/min) — espera un momento' }, { status: 429 });
+  }
+  if (!(await rateLimit(`copiloto:dia:${sesion.userId}`, topeTurnosDia(), DIA_MS))) {
+    return NextResponse.json({ error: `tope diario del copiloto (${topeTurnosDia()} turnos) — sube LIKIDA_COPILOTO_TOPE_TURNOS_DIA si es a propósito` }, { status: 429 });
+  }
   // El id de conversación al que anexar (historial 0121). Inválido o ajeno →
   // conversación nueva, jamás la de otro (el anclaje vive en el módulo).
   const conversacionPedida = validarConversacionId(cuerpo.conversacionId);
@@ -205,6 +215,9 @@ export async function POST(req: Request) {
       try {
         const r = await ejecutarCopiloto({
           userId: sesion.userId,
+          // Ya estrechado arriba: proviene de la sesión autenticada y nunca
+          // de un env global ni de un tenant de relleno.
+          budgetTenantId: sesion.tenantId,
           mensajes,
           onPaso: (p) => manda({ t: 'paso', fase: p.fase, tool: p.tool }),
         });

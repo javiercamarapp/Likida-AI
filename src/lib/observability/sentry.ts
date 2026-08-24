@@ -48,6 +48,46 @@ function entorno(): string {
   return process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? 'development';
 }
 
+/** Muestreo acotado: trazas útiles sin convertir datos de negocio en telemetría. */
+export function tasaTrazas(): number {
+  const valor = Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? '0.05');
+  return Number.isFinite(valor) ? Math.min(1, Math.max(0, valor)) : 0.05;
+}
+
+/** Elimina query, headers, cookies, body, usuario y extras de eventos automáticos. */
+export function sanitizarEventoSentry(evento: unknown): unknown {
+  if (!evento || typeof evento !== 'object') return evento;
+  const salida = { ...(evento as Record<string, unknown>) };
+  delete salida.user;
+  delete salida.extra;
+  const request = salida.request;
+  if (request && typeof request === 'object') {
+    const r = { ...(request as Record<string, unknown>) };
+    const originalUrl = r.url;
+    if (typeof originalUrl === 'string') {
+      try {
+        const url = new URL(originalUrl);
+        r.url = `${url.origin}${url.pathname}`;
+      } catch {
+        r.url = originalUrl.split('?')[0];
+      }
+    }
+    delete r.headers;
+    delete r.cookies;
+    delete r.data;
+    salida.request = r;
+  }
+  if (Array.isArray(salida.breadcrumbs)) {
+    salida.breadcrumbs = salida.breadcrumbs.map((crumb) => {
+      if (!crumb || typeof crumb !== 'object') return crumb;
+      const c = { ...(crumb as Record<string, unknown>) };
+      delete c.data;
+      return c;
+    });
+  }
+  return salida;
+}
+
 /**
  * Deja constancia en el arranque de si hay observabilidad o no.
  *
@@ -82,12 +122,13 @@ async function cargar(): Promise<void> {
     mod.init({
       dsn: process.env.SENTRY_DSN,
       environment: entorno(),
-      // Sin trazas: aquí interesan los errores, y el muestreo de performance
-      // sobre un webhook de 60s no dice nada que el reloj no diga mejor.
-      tracesSampleRate: 0,
+      // Muestreo bajo, configurable y acotado; `sendDefaultPii:false` y
+      // `beforeSend` impiden que request context lleve query/cookies/body.
+      tracesSampleRate: tasaTrazas(),
       // Nada de PII automática: el enriquecimiento de Sentry adjunta IP y
       // cabeceras, y el pipeline del logger no las ha visto para redactarlas.
       sendDefaultPii: false,
+      beforeSend: (evento: unknown) => sanitizarEventoSentry(evento),
     });
     sentry = mod;
   } catch (e) {

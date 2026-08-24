@@ -3,8 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 // EL LEAD DE /getdemo — lo que se fija:
 //  · CORS cerrado: solo likida.ai recibe la cabecera. Este endpoint ESCRIBE.
-//  · Un fallo de persistencia NO se disfraza de 200: la landing puede abrir su
-//    calendario por separado y el caller reintenta el lead con un 503.
+//  · Un lead confirmado devuelve `accepted: true`; una base caída devuelve
+//    503 explícito para que la landing muestre reintento/fallback y no invente
+//    una conversión.
 //  · `unidades` y `urgencia` son dominios cerrados y se filtran AQUÍ: un valor
 //    fuera de dominio no puede tirar el insert entero y llevarse el prospecto.
 //  · El canal se deduce de la atribución, y un click id manda sobre el utm_*
@@ -246,17 +247,17 @@ describe('la red de seguridad de la 0137', () => {
       { data: null, error: { message: 'column "empresa" of relation "prospecto" does not exist' } },
     );
     const r = await postear(LEAD);
-    expect(r.status).toBe(503); // el caller reintenta y el fallo queda visible
+    expect(r.status).toBe(503);
     expect(llamadas).toHaveLength(1); // …pero no se reintentó una fila coja
   });
 });
 
-describe('fallos de persistencia son observables y reintentables', () => {
-  it('si la base falla, contesta 503 para no perder el lead en silencio', async () => {
+describe('el lead nunca falla en silencio', () => {
+  it('si la base falla, contesta 503 y obliga a mostrar reintento/fallback', async () => {
     respuestas.push({ data: null, error: { message: 'db down' } });
     const r = await postear(LEAD);
     expect(r.status).toBe(503);
-    expect(await r.json()).toEqual({ error: 'No se pudo registrar el lead. Intenta de nuevo.' });
+    expect(await r.json()).toMatchObject({ ok: false, accepted: false, retryable: true });
   });
 
   it('sin empresa es un payload inválido y no se escribe nada', async () => {

@@ -1,0 +1,40 @@
+name: Vercel rollback production
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: URL o ID exacto del deployment estable al que volver
+        required: true
+        type: string
+      confirmation:
+        description: Escribe ROLLBACK_PRODUCTION para habilitar la acción
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    name: Rollback aprobado y explícito
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Validar guardas fail-closed
+        env:
+          URL: ${{ inputs.deployment_url }}
+          CONFIRM: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          case "$URL" in https://*) ;; *) echo "::error::deployment_url debe ser HTTPS y explícito."; exit 1 ;; esac
+          [ "$CONFIRM" = "ROLLBACK_PRODUCTION" ] || { echo "::error::Confirmación incorrecta; no se toca producción."; exit 1; }
+      - name: Rollback al deployment especificado
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          URL: ${{ inputs.deployment_url }}
+        run: |
+          set -euo pipefail
+          [ -n "$VERCEL_TOKEN" ] || { echo "::error::Falta VERCEL_TOKEN."; exit 1; }
+          npx --yes vercel@41.7.3 rollback "$URL" --token "$VERCEL_TOKEN"

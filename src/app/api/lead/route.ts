@@ -131,7 +131,20 @@ function canal(atr: Record<string, string> | null): string {
 
 export async function POST(req: Request) {
   const cabeceras = cors(req.headers.get('origin'));
-  const ok = () => NextResponse.json({ ok: true }, { headers: cabeceras });
+  // La cita y el lead son dos resultados distintos. Un 200 solo significa
+  // `accepted: true` cuando la fila fue insertada o actualizada (incluido un
+  // duplicado legítimo); nunca se usa para esconder una caída de la base.
+  const ok = () => NextResponse.json({ ok: true, accepted: true }, { headers: cabeceras });
+  const noConfirmado = () => NextResponse.json(
+    {
+      ok: false,
+      accepted: false,
+      retryable: true,
+      error: 'lead_no_confirmado',
+      message: 'No se pudo registrar el lead. Intenta de nuevo.',
+    },
+    { status: 503, headers: cabeceras },
+  );
 
   if (bodyExcede(req, MAX_BODY)) {
     return NextResponse.json({ error: 'payload muy grande' }, { status: 413, headers: cabeceras });
@@ -239,10 +252,11 @@ export async function POST(req: Request) {
     logger.info('lead.nuevo', { empresa, canal: canal(atr), urgencia: campos.urgencia });
     return ok();
   } catch (err) {
+    // El calendario puede seguir siendo visible, pero el cliente debe saber
+    // que el lead NO quedó confirmado y ofrecer reintento/fallback. Ocultar
+    // este error producía una conversión falsa y pérdida silenciosa.
     logger.error('lead.fallo', { err: String(err) });
-    // A failed write must be observable and retryable. The landing can still
-    // open its calendar independently; a false 200 would lose the lead.
-    return NextResponse.json({ error: 'No se pudo registrar el lead. Intenta de nuevo.' }, { status: 503, headers: cabeceras });
+    return noConfirmado();
   }
 }
 
