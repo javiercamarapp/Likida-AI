@@ -29,23 +29,62 @@ export const LEGAL_PLACEHOLDERS = {
   subencargados: '[COMPLETAR Y APROBAR: versión del anexo de subencargados]',
 } as const;
 
-const REQUISITOS: Array<[keyof typeof LEGAL_CONFIG, string]> = [
+/**
+ * QUIÉN ES LA ENTIDAD. Sin esto no se puede publicar un aviso de privacidad ni
+ * unos términos: son los datos que la ley obliga a exhibir. Bloquean el build.
+ */
+const REQUISITOS_ENTIDAD: Array<[keyof typeof LEGAL_CONFIG, string]> = [
   ['razonSocial', 'LEGAL_ENTITY_NAME'],
   ['domicilio', 'LEGAL_ENTITY_ADDRESS'],
   ['jurisdiccion', 'LEGAL_JURISDICTION'],
   ['contactoConfigurado', 'LEGAL_CONTACT_EMAIL'],
+];
+
+/**
+ * LOS CUATRO DOCUMENTOS. NO bloquean el build — se reportan como faltantes.
+ *
+ * ── POR QUÉ SE SEPARARON (24-ago-2026) ──────────────────────────────────
+ *
+ * Estos cuatro estaban en la misma lista que los de arriba, y el resultado fue
+ * que un producto sin DPA firmado NO PODÍA DESPLEGARSE EN ABSOLUTO. El día que
+ * se midió, eso significó: (a) no poder publicar el arreglo de un bug de nueve
+ * días, y (b) no poder revertir un cambio propio que había tumbado el OCR en
+ * producción — hubo que hacer `vercel promote` al deployment anterior porque
+ * era la única vía que no exigía build.
+ *
+ * Un guardarraíl que también bloquea las REPARACIONES no protege: amplifica.
+ * Convirtió un error de diez minutos en uno de horas.
+ *
+ * La protección real de estos cuatro no es impedir el deploy — es no AFIRMAR
+ * que existen documentos que no existen. Eso lo resuelve `LEGAL_PLACEHOLDERS`,
+ * que ya estaba escrito para exactamente esto y no lo usaba ninguna página.
+ * `estadoLegalProduccion()` los sigue reportando en `faltantes`, así que quien
+ * quiera un gate de venta enterprise lo tiene con el dato a la mano.
+ *
+ * Si algún día se quiere volver al comportamiento anterior, existe la palanca:
+ * `LEGAL_ENFORCE_DOCS=true` los vuelve bloqueantes.
+ */
+const REQUISITOS_DOCUMENTOS: Array<[keyof typeof LEGAL_CONFIG, string]> = [
   ['dpaVersion', 'LEGAL_DPA_VERSION'],
   ['slaVersion', 'LEGAL_SLA_VERSION'],
   ['seguridadVersion', 'LEGAL_SECURITY_ANNEX_VERSION'],
   ['subencargadosVersion', 'LEGAL_SUBPROCESSORS_VERSION'],
 ];
 
+const faltan = (reqs: typeof REQUISITOS_ENTIDAD) =>
+  reqs.filter(([campo]) => !LEGAL_CONFIG[campo]).map(([, env]) => env);
+
 export function estadoLegalProduccion() {
-  const faltantes = REQUISITOS.filter(([campo]) => !LEGAL_CONFIG[campo]).map(([, env]) => env);
+  const faltantesEntidad = faltan(REQUISITOS_ENTIDAD);
+  const faltantesDocumentos = faltan(REQUISITOS_DOCUMENTOS);
+  const faltantes = [...faltantesEntidad, ...faltantesDocumentos];
   return {
     listo: faltantes.length === 0,
     faltantes,
-    bloqueado: faltantes.length > 0,
+    faltantesEntidad,
+    faltantesDocumentos,
+    /** Lo único que impide construir producción. */
+    bloqueado: faltantesEntidad.length > 0,
   };
 }
 
@@ -53,7 +92,9 @@ export function estadoLegalProduccion() {
 export function exigirLegalEnProduccion(): void {
   if (process.env.VERCEL_ENV !== 'production' && process.env.LEGAL_ENFORCE_PRODUCTION !== 'true') return;
   const estado = estadoLegalProduccion();
-  if (!estado.listo) {
-    throw new Error(`LEGAL_PRODUCTION_BLOCKED: faltan ${estado.faltantes.join(', ')}`);
+  const exigirDocs = process.env.LEGAL_ENFORCE_DOCS === 'true';
+  const bloqueantes = exigirDocs ? estado.faltantes : estado.faltantesEntidad;
+  if (bloqueantes.length > 0) {
+    throw new Error(`LEGAL_PRODUCTION_BLOCKED: faltan ${bloqueantes.join(', ')}`);
   }
 }
