@@ -57,37 +57,23 @@ const ExtraccionSchema = z.object({
   litros: z.number().finite().nullable(),
   precio_unitario: z.number().finite().nullable(),
   forma_pago: z.enum(['efectivo', 'tarjeta', 'otro']).nullable(),
-  // ── EL PLAZO QUE EL TICKET IMPRIME ─────────────────────────────────────
+  // ── DOS CAMPOS RETIRADOS DEL ESQUEMA (24-ago-2026, en producción) ──────
   //
-  // Auditoría del 24-ago-2026 sobre cinco tickets reales: DOS traían el plazo
-  // impreso —"plazo máximo de 24 hrs para facturar este ticket" y "usted tiene
-  // solo 72 horas para emitir su factura"— y el motor, que no lo leía, aplicó
-  // su default `mes_natural` y le dijo al chofer que tenía hasta fin de mes.
-  // Los dos plazos YA habían vencido.
+  // `plazo_facturacion_horas` y `renglones` se agregaron esta mañana y
+  // TUMBARON EL OCR EN PRODUCCIÓN: OpenRouter devolvió `400 Provider returned
+  // error` de inmediato, sin consumir un token, en cada foto. La firma es
+  // inconfundible — `llm_costo` con `tokens_in/out = 0` — y coincide exacto
+  // con el despliegue que los introdujo: a las 14:20 el mismo modelo leía
+  // bien, a las 17:16 ya no.
   //
-  // Un plazo impreso por el propio comercio es evidencia DIRECTA y le gana a
-  // cualquier suposición del catálogo. En horas porque así lo imprimen; los
-  // que vienen en días se convierten aquí.
-  plazo_facturacion_horas: z.number().finite().positive().nullable(),
-  // ── LOS RENGLONES ──────────────────────────────────────────────────────
+  // El sospechoso es `renglones`: un array de objetos con `maxItems`, que el
+  // structured output de Gemini vía OpenRouter no acepta. No se reintroducen
+  // a ciegas — antes hay que probar el esquema contra el proveedor, no contra
+  // el tipo de TypeScript, que fue justo el paso que faltó.
   //
-  // Un ticket de autoservicio no es UN gasto: es una canasta. En la misma
-  // auditoría, un Walmart de $640.49 traía $299 de manguera de jardinería y
-  // $258 de dos tapetes —$557 de $640 que no son gasto de viaje— y entró
-  // entero como gasto del viaje sin que nadie dijera nada. Otro de $261.62
-  // traía $140 de desodorante y crema.
-  //
-  // Obligar a UNA categoría por ticket es lo que hacía imposible verlo, y
-  // además explica por qué dos tickets del MISMO Walmart salieron con
-  // conceptos distintos: el modelo elegía el renglón que le pareciera dominante.
-  //
-  // `ajeno_al_viaje` es un JUICIO, no una cifra: nunca descuenta nada solo, y
-  // el motor lo convierte en una observación para que una persona la resuelva.
-  renglones: z.array(z.object({
-    descripcion: z.string(),
-    importe: z.number().finite(),
-    ajeno_al_viaje: z.boolean(),
-  })).max(60).nullable(),
+  // El motor los sigue leyendo si algún día vuelven (`plazoFacturacionHoras`,
+  // `renglones` en ocr_extra): su ausencia hace que caiga al catálogo y que la
+  // observación de canasta mixta no se levante. Degrada, no rompe.
   // ── DAT-19 · LA MONEDA, QUE NADIE LEÍA ─────────────────────────────────
   //
   // El monto entraba a una columna de PESOS sin preguntarse en qué moneda
@@ -173,11 +159,6 @@ MAPEO DE ETIQUETAS (mapea el CONCEPTO, no la etiqueta literal; varían por estac
 - estacion ← "ESTACION" / "EST" / "EST.".
 - litros ← "LITROS" / "CANTIDAD" / "CANT-LTS" / "CANT/LTS" / "U.M." (la cantidad en litros).
 - forma_pago ← "FORMA DE PAGO" / "TIPO OPER" / "TIPO DE OPERACION" → 'efectivo' o 'tarjeta'.
-- plazo_facturacion_horas ← el plazo que el TICKET IMPRIME para poder facturarlo, convertido a HORAS. Aparece al pie, en letra chica: "plazo máximo de 24 hrs para facturar este ticket" → 24. "usted tiene solo 72 horas para emitir su factura" → 72. "tiene 5 días para facturar" → 120. "solo el mismo día" → 24. Si el ticket NO imprime ningún plazo, null — no lo deduzcas del comercio ni de lo que sueles ver: el catálogo ya tiene una suposición y este campo existe para GANARLE con evidencia del papel.
-- renglones ← la lista de PARTIDAS del ticket, una por producto comprado, con su importe TAL CUAL aparece en la columna de la derecha. Solo en tickets que desglosan partidas (autoservicio, restaurante, ferretería); en un ticket de gasolinera con un solo despacho, o si no se lee el desglose, null.
-  · descripcion: el texto del renglón, tal cual, recortado a lo legible.
-  · importe: el importe de ESE renglón. No lo calcules ni lo prorratees.
-  · ajeno_al_viaje: true si ese producto NO es un gasto plausible de un viaje de carga. El que viaja es un OPERADOR de camión en ruta: comida, bebida, combustible, casetas, hospedaje, refacciones, herramienta y consumibles del camión son PROPIOS del viaje. Artículos de casa (muebles, tapetes, jardinería, línea blanca, decoración), despensa para llevar a casa, ropa que no es de trabajo, juguetes, electrónica personal, y artículos de tocador o cosméticos son AJENOS. Ante la duda, false: marcar de más manda a revisión un gasto legítimo y le quita valor a la señal.
 - precio_unitario ← "PRECIO" (por litro).
 - rfc_emisor ← el RFC de QUIEN EXPIDE el ticket. Casi nunca viene etiquetado "RFC": suele ir pegado a la razón social del encabezado y CON GUIONES o entre paréntesis ("Cadena Comercial Ejemplo, S.A. de C.V. (AAA-860523-1N4)", "RFC: AAA8605231N4"). Cópialo tal cual lo veas —los guiones se quitan después—; si hay varios RFC impresos, el del EMISOR es el del encabezado, no el del cliente.
 - emisor ← la RAZÓN SOCIAL completa del encabezado, tal cual ("Cadena Comercial Ejemplo, S.A. de C.V."). Es el nombre legal, no el de la sucursal ni el eslogan.
@@ -563,19 +544,6 @@ export async function extraerComprobante(
       emisor: sanitizarTexto(data.emisor),
       ivaMonto: data.iva_monto ?? undefined,
       ivaTasa: data.iva_tasa ?? undefined,
-      // El plazo IMPRESO en el papel. El motor lo prefiere sobre el catálogo:
-      // es el comercio diciéndolo él mismo, no una suposición sobre su cadena.
-      plazoFacturacionHoras: data.plazo_facturacion_horas ?? undefined,
-      // Las partidas del ticket. `sanitizarTexto` en la descripción como todo
-      // lo que viene de visión — es texto de una foto y puede traer cualquier
-      // cosa, incluida una instrucción dirigida al modelo.
-      renglones: data.renglones?.length
-        ? data.renglones.map((r) => ({
-            descripcion: sanitizarTexto(r.descripcion)?.slice(0, 80) ?? '',
-            importe: r.importe,
-            ajenoAlViaje: r.ajeno_al_viaje,
-          }))
-        : undefined,
       // DAT-19: normalizada a ISO en mayúsculas y SÓLO si el papel la declara.
       // Un `undefined` significa «no dijo», que el motor trata como pesos —el
       // comportamiento de siempre—; lo que cambia algo es una moneda distinta
