@@ -26,7 +26,7 @@ import {
 } from '@/lib/likida/intake/huerfanos';
 import { decidirFoto } from '@/lib/likida/intake/decidir';
 import {
-  anotarFoto, anotarIncidencia, pedirTurnoDeConfirmacion, cerrarRafaga, lineaIncidencias,
+  anotarFoto, anotarIncidencia, anotarAcuse, pedirTurnoDeConfirmacion, cerrarRafaga, lineaIncidencias,
 } from '@/lib/likida/intake/rafaga';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/likida/privacidad';
 import { interpretarHito, sellarHito, mensajeHito } from '@/lib/likida/hitos_viaje';
@@ -65,7 +65,7 @@ import {
 import { registrarCosto, registrarCostoWhatsApp, faseDeModelo, vincularCostosALiquidacion } from '@/lib/likida/costos';
 import { sendText, sendButtons, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText } from '@/lib/meta/client';
 import {
-  decidirAcuse, mensajeConfirmar, mensajeRefoto, esPeticionDeFoto,
+  decidirAcuse, mensajeConfirmar, mensajeAcuse, mensajeRefoto, esPeticionDeFoto,
   mensajeCorregir, mensajeConfirmado, leerBoton, mensajeDemasiadasDudas,
   MAX_CONFIRMACIONES_SEGUIDAS, esMontoImplausible, umbralMontoImplausible,
   type LecturaTicket,
@@ -1776,7 +1776,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // respuesta: si se le pidió otra foto, se le contesta aunque la
           // segunda salga perfecta. Callar tras un "mándame otra" se lee como
           // "volvió a fallar", y manda una tercera.
-          if (d.peldano === 'silencio' && !lectura.deCfdi) {
+          if (d.peldano === 'acusar' && !lectura.deCfdi) {
             const conv = await loadConversation(op.tenantId, msg.from, viajeId);
             const ultimo = [...conv.turns].reverse().find((t) => t.role === 'assistant');
             if (ultimo && esPeticionDeFoto(String(ultimo.content ?? ''))) {
@@ -1786,7 +1786,18 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           }
           logger.info('foto.acuse', { viaje: viajeId, peldano: d.peldano, porque: d.porque });
 
-          if (d.peldano === 'confirmar') {
+          if (d.peldano === 'acusar') {
+            // SE LE CONTESTA SIEMPRE que el ticket entró. Antes esto era
+            // `silencio` y no se mandaba nada; el 24-ago-2026 se midió lo que
+            // eso produce: cuatro tickets leídos bien, cero mensajes, y el
+            // chofer preguntando «Que pasó?» dos minutos después.
+            //
+            // NO consume el tope de confirmaciones por ráfaga: ese tope existe
+            // para los mensajes con BOTÓN, que son los que exigen algo del
+            // chofer. Un acuse no le pide nada.
+            const estado = await estadoDelViaje(op.tenantId, viajeId);
+            anotarAcuse(viajeId, mensajeAcuse(lectura, estado));
+          } else if (d.peldano === 'confirmar') {
             // ── EL TOPE ESTABA ESCRITO Y NO ESTABA CABLEADO ────────────────────
             //
             // `MAX_CONFIRMACIONES_SEGUIDAS` existía desde que se escribió este
@@ -1928,7 +1939,12 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // para que siga contando su costo de WhatsApp, igual que cuando lo
           // mandaba el camino de la foto.
           if (ultima && rafaga && !huboRafaga) {
-            if (unicaEntera) await say(unicaEntera);
+            // Una incidencia entera manda sobre el acuse: si hay algo que
+            // resolver, eso es lo que el chofer tiene que leer, no un «ya
+            // quedó». Si no hubo nada que decir, sale el acuse — que es el
+            // mensaje que faltaba y por el que el silencio se leía como falla.
+            const solo = unicaEntera ?? rafaga.acuses[0];
+            if (solo) await say(solo);
           }
           const incidencias = rafaga
             ? (unicaEntera ?? lineaIncidencias(rafaga.vistas, rafaga.incidencias))
@@ -3035,7 +3051,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             urlPdfJefe = firma.data.signedUrl;
           }
         }
-        const rj = await avisarCierreAlJefe({ tenantId: op.tenantId, viajeId, urlPdf: urlPdfJefe });
+        const rj = await avisarCierreAlJefe({ tenantId: op.tenantId, viajeId, urlPdf: urlPdfJefe, telefonoOperador: msg.from });
         if (!rj.enviado) logger.warn('cierre.jefe_no_avisado', { viaje: viajeId, motivo: rj.motivo });
       } catch (e) {
         logger.error('cierre.aviso_jefe_falló', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });

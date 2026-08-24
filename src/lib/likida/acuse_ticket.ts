@@ -7,8 +7,9 @@ import type { EstadoViaje } from './consulta_chofer';
 // Antes se le acusaba todo igual. Ahora hay tres peldaños, y cuál toca depende
 // de UNA sola pregunta: ¿podemos probar el monto que leímos?
 //
-//   silencio   → sí. El monto es un hecho (viene del CFDI) o la lectura es
-//                sólida. No se le escribe nada: se cuenta y ya.
+//   acusar     → se leyó sólido (o el monto viene del CFDI). Se le contesta
+//                con QUÉ se leyó: monto, tipo, fecha y cómo va su saldo. Sin
+//                botón: no hay nada que confirmar, es un acuse.
 //   confirmar  → se leyó, pero no se puede probar. Se le enseña monto, tipo y
 //                fecha, y un BOTÓN para que lo confirme.
 //   refoto     → no se leyó con seguridad. Se le pide otra foto. NO se le pide
@@ -20,6 +21,22 @@ import type { EstadoViaje } from './consulta_chofer';
 // deja de leer al quinto — y entonces el que SÍ importaba, el del monto dudoso,
 // se pierde entre los que no. Callar en los buenos es lo que hace que el
 // mensaje del malo se lea. El silencio no es ahorro, es contraste.
+//
+// ── POR QUÉ EL SILENCIO SE RETIRÓ (24-ago-2026, decisión de Javier) ───────
+//
+// El argumento de arriba es bueno Y ASUME DOS COSAS que hoy no se cumplen:
+// que el viaje trae ~22 comprobantes, y que el chofer ya confía en el sistema
+// lo suficiente para leer "sin noticias" como "todo bien".
+//
+// Medido en producción esa mañana: el chofer mandó 4 tickets, los cuatro se
+// leyeron sólidos, el sistema calló, y él escribió «Que pasó?». Desde su
+// teléfono el silencio del éxito es INDISTINGUIBLE del silencio de la falla —
+// y ése es el defecto de fondo: se estaba usando el mismo canal (nada) para
+// decir "todo bien" y para "me morí".
+//
+// El contraste se conserva donde de verdad importa: `confirmar` sigue siendo
+// el único peldaño con BOTÓN, y sigue teniendo su tope por ráfaga. Lo que se
+// pierde es el silencio, no la jerarquía.
 //
 // ── POR QUÉ NO SE PIDE CONFIRMAR UN MONTO DUDOSO ─────────────────────────
 //
@@ -111,7 +128,7 @@ export function esMontoImplausible(monto: number | null | undefined, anticipo: n
  */
 export const MAX_CONFIRMACIONES_SEGUIDAS = 4;
 
-export type Peldano = 'silencio' | 'confirmar' | 'refoto';
+export type Peldano = 'acusar' | 'confirmar' | 'refoto';
 
 export interface LecturaTicket {
   montoMxn: number | null;
@@ -146,7 +163,7 @@ export interface Decision {
 export function decidirAcuse(l: LecturaTicket): Decision {
   // Un CFDI trae el total en el documento. No hay nada que confirmar: pedirle
   // al chofer que valide una cifra que el SAT ya selló sería teatro.
-  if (l.deCfdi) return { peldano: 'silencio', porque: 'el monto viene del CFDI' };
+  if (l.deCfdi) return { peldano: 'acusar', porque: 'el monto viene del CFDI' };
 
   // DAT-18: FUERA DE ESCALA MANDA SOBRE LA CONFIANZA. Va aquí arriba, antes de
   // la escalera de confianza, porque es justo el caso que la escalera dejaba
@@ -179,7 +196,7 @@ export function decidirAcuse(l: LecturaTicket): Decision {
   }
 
   if (l.confianza >= CONFIANZA_PROBADA && l.concepto) {
-    return { peldano: 'silencio', porque: 'lectura sólida' };
+    return { peldano: 'acusar', porque: 'lectura sólida' };
   }
   return {
     peldano: 'confirmar',
@@ -201,6 +218,28 @@ export function lineaDeSaldo(e: EstadoViaje | null): string {
       ? `, ${mxn(-falta)} por encima`
       : ', vas justo';
   return `Llevas ${mxn(e.comprobado)} de ${mxn(e.anticipo)}${cola}.`;
+}
+
+/**
+ * EL ACUSE: qué se leyó, sin pedir nada.
+ *
+ * Deliberadamente parecido a `mensajeConfirmar` pero SIN botones y sin
+ * pregunta: el chofer tiene que poder distinguir de un vistazo "ya quedó" de
+ * "necesito que me confirmes esto". Si los dos mensajes se leyeran igual, el
+ * botón dejaría de significar algo.
+ *
+ * La cifra sale de `formato.ts` como todas — una cifra que se lee distinto en
+ * dos pantallas se lee como dos cálculos.
+ */
+export function mensajeAcuse(l: LecturaTicket, estado: EstadoViaje | null): string {
+  const partes = [
+    l.concepto ?? 'Comprobante',
+    mxn(l.montoMxn ?? 0),
+    l.fecha ? fechaMx(l.fecha) : null,
+  ].filter(Boolean);
+
+  const saldo = lineaDeSaldo(estado);
+  return [`Anotado ✅ ${partes.join(' · ')}`, saldo].filter(Boolean).join('\n');
 }
 
 export interface MensajeConBotones {

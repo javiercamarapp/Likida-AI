@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  anotarFoto, anotarIncidencia, pedirTurnoDeConfirmacion, cerrarRafaga,
+  anotarFoto, anotarIncidencia, pedirTurnoDeConfirmacion, cerrarRafaga, anotarAcuse,
   lineaIncidencias, olvidarRafagas,
 } from './rafaga';
 
@@ -20,13 +20,13 @@ describe('la libreta de la ráfaga', () => {
     anotarFoto('v1'); anotarIncidencia('v1', { tipo: 'ilegible' });
     cerrarRafaga('v1');
     const r = cerrarRafaga('v1');
-    expect(r).toEqual({ vistas: 0, incidencias: [] });
+    expect(r).toEqual({ vistas: 0, incidencias: [], acuses: [] });
   });
 
   it('cada viaje lleva su propia libreta (dos choferes a la vez)', () => {
     anotarFoto('v1'); anotarIncidencia('v1', { tipo: 'ilegible' });
     anotarFoto('v2'); anotarFoto('v2');
-    expect(cerrarRafaga('v2')).toEqual({ vistas: 2, incidencias: [] });
+    expect(cerrarRafaga('v2')).toEqual({ vistas: 2, incidencias: [], acuses: [] });
     expect(cerrarRafaga('v1').incidencias).toHaveLength(1);
   });
 
@@ -166,5 +166,32 @@ describe('lineaIncidencias — la instrucción no puede contradecir al diagnóst
     const t = lineaIncidencias(3, [{ tipo: 'fallo_tecnico' }])!;
     expect(t).toMatch(/no tu foto/);
     expect(t).not.toMatch(/no tus fotos/);
+  });
+});
+
+describe('los acuses: se anotan, y solo salen si la foto vino sola', () => {
+  // El agujero medido el 24-ago-2026: las fotos llegaron espaciadas 10–35 s,
+  // así que cada una cerró su propia ráfaga de UNA — y el camino de la foto
+  // sola no mandaba nada. El chofer preguntó «Que pasó?» dos minutos después.
+  it('anotarAcuse los guarda en orden y cerrarRafaga los entrega', () => {
+    anotarAcuse('v1', 'Anotado ✅ Diésel · $1,000.00');
+    anotarAcuse('v1', 'Anotado ✅ Caseta · $120.00');
+    expect(cerrarRafaga('v1').acuses).toEqual([
+      'Anotado ✅ Diésel · $1,000.00',
+      'Anotado ✅ Caseta · $120.00',
+    ]);
+  });
+
+  it('cerrar OLVIDA también los acuses', () => {
+    anotarAcuse('v1', 'Anotado ✅ Diésel · $1,000.00');
+    cerrarRafaga('v1');
+    expect(cerrarRafaga('v1').acuses).toEqual([]);
+  });
+
+  it('cada viaje lleva los suyos', () => {
+    anotarAcuse('v1', 'del uno');
+    anotarAcuse('v2', 'del dos');
+    expect(cerrarRafaga('v1').acuses).toEqual(['del uno']);
+    expect(cerrarRafaga('v2').acuses).toEqual(['del dos']);
   });
 });
