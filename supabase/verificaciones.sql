@@ -8201,3 +8201,67 @@ begin
   raise exception E'REDONDEO_0174  columna_2dec=%  centavo_no_cuenta=%  dos_centavos_cuentan=%  real_cuenta=%  invoker=%  anon=%   (esperado t / 0 / 1 / 1 / t / f)',
     columna_2dec, centavo, dos_centavos, real_cuenta, invoker, anon_ok;
 end $$;
+
+-- ── 146. Los datos para asentar una póliza salen agregados de SQL (mig. 0175) ──
+--
+-- La landing promete «el formato que SAP Business One o CONTPAQi ya sabe
+-- importar». Para eso hace falta el desglose POR CONCEPTO de cada liquidación,
+-- que no salía de ningún lado: `liquidacion` guarda totales e IVA, y los
+-- subtotales viven en `gasto`. `poliza_datos_tenant` los agrega en SQL —traer
+-- los gastos de un mes a memoria es el patrón que revienta a 50k viajes/mes.
+--
+-- Lo que se prueba: que el desglose sea correcto, que un gasto SIN `sub_total`
+-- se cuente en `baseEstimada` (quien importe tiene que saber que ese renglón
+-- trae el total y no la base), que la flota vecina no aparezca, y que la
+-- función esté cerrada a `anon` y a `authenticated`.
+--
+-- Esperado: POLIZA_0175  n=1  diesel=3000  caseta=1000  iva=640  anticipo=5000
+--                        base_estimada=1  ajena_no_entra=t  invoker=t  anon=f  auth=f
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; va uuid; vb uuid;
+  j jsonb; fila jsonb;
+  n int; diesel numeric; caseta numeric; iva numeric; anticipo numeric; base_est int;
+  ajena_no_entra boolean; invoker boolean; anon_ok boolean; auth_ok boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ POLIZA A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ POLIZA B') returning id into tb;
+  insert into operador (tenant_id,nombre,telefono) values (ta,'Juan Perez','+520000017501') returning id into oa;
+  insert into operador (tenant_id,nombre,telefono) values (tb,'Otro','+520000017502') returning id into ob;
+  insert into viaje (tenant_id,operador_id,folio,anticipo) values (ta,oa,'VJ-POL-A',5000) returning id into va;
+  insert into viaje (tenant_id,operador_id,folio,anticipo) values (tb,ob,'VJ-POL-B',9999) returning id into vb;
+
+  insert into gasto (tenant_id,viaje_id,concepto,monto,sub_total,fecha) values
+    (ta,va,'diesel',3480,3000,current_date),
+    (ta,va,'caseta',1160,1000,current_date),
+    -- Sin `sub_total`: cae a `monto` y tiene que ROTULARSE, no callarse.
+    (ta,va,'otro',200,null,current_date),
+    (tb,vb,'diesel',7777,6704,current_date);
+
+  insert into liquidacion (tenant_id,viaje_id,total_comprobado,total_anticipo,diferencia,estatus,iva_acreditable) values
+    (ta,va,4640,5000,360,'con_diferencias',640),
+    (tb,vb,6704,9999,3295,'con_diferencias',1073);
+
+  j := poliza_datos_tenant(ta, current_date - 1, current_date + 1);
+  n := jsonb_array_length(j);
+  fila := j->0;
+  anticipo := (fila->>'anticipo')::numeric;
+  iva      := (fila->>'ivaAcreditable')::numeric;
+  base_est := (fila->>'baseEstimada')::int;
+  select (x->>'subtotal')::numeric into diesel
+    from jsonb_array_elements(fila->'porConcepto') x where x->>'concepto' = 'diesel';
+  select (x->>'subtotal')::numeric into caseta
+    from jsonb_array_elements(fila->'porConcepto') x where x->>'concepto' = 'caseta';
+
+  -- La flota vecina no entra ni por el desglose ni por el conteo.
+  ajena_no_entra := (n = 1) and not (j::text like '%VJ-POL-B%');
+
+  select p.prosecdef = false into invoker
+    from pg_proc p join pg_namespace nn on nn.oid = p.pronamespace
+   where nn.nspname = 'public' and p.proname = 'poliza_datos_tenant';
+  anon_ok := has_function_privilege('anon',          'public.poliza_datos_tenant(uuid, date, date)', 'EXECUTE');
+  auth_ok := has_function_privilege('authenticated', 'public.poliza_datos_tenant(uuid, date, date)', 'EXECUTE');
+
+  raise exception E'POLIZA_0175  n=%  diesel=%  caseta=%  iva=%  anticipo=%  base_estimada=%  ajena_no_entra=%  invoker=%  anon=%  auth=%   (esperado 1 / 3000.00 / 1000.00 / 640.00 / 5000.00 / 1 / t / t / f / f)',
+    n, diesel, caseta, iva, anticipo, base_est, ajena_no_entra, invoker, anon_ok, auth_ok;
+end $$;
