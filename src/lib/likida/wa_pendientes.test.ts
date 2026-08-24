@@ -9,16 +9,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const upsert = vi.fn();
+const rpc = vi.fn();
 const from = vi.fn((_t: string) => ({ upsert: (...a: unknown[]) => upsert(...a) }));
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => from(t) }) }));
+vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => from(t), rpc: (...a: unknown[]) => rpc(...a) }) }));
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
 
-const { guardarEventosPendientes } = await import('./wa_pendientes');
+const { guardarEventosPendientes, pendientesPorDrenar } = await import('./wa_pendientes');
 
 const msgs = Array.from({ length: 22 }, (_, i) => ({ from: '521999', type: 'image' as const, mediaId: `m${i}`, waMessageId: `wamid.${i}` }));
 
-beforeEach(() => { vi.clearAllMocks(); upsert.mockResolvedValue({ data: null, error: null }); });
+beforeEach(() => { vi.clearAllMocks(); upsert.mockResolvedValue({ data: null, error: null }); rpc.mockResolvedValue({ data: [], error: null }); });
 
 describe('guardarEventosPendientes', () => {
   it('22 mensajes = UN viaje de red, no 22', async () => {
@@ -50,5 +51,37 @@ describe('guardarEventosPendientes', () => {
   it('con lote vacío no toca la base', async () => {
     await guardarEventosPendientes([]);
     expect(from).not.toHaveBeenCalled();
+  });
+});
+
+describe('leases/fencing del inbox', () => {
+  it('lista por RPC con reloj PostgreSQL y conserva remitente para serializar', async () => {
+    rpc.mockResolvedValue({ data: [{ id: 'wamid.1', intentos: 2, remitente: '521999' }], error: null });
+    await expect(pendientesPorDrenar(999)).resolves.toEqual([
+      { id: 'wamid.1', intentos: 2, remitente: '521999' },
+    ]);
+    expect(rpc).toHaveBeenCalledWith('listar_wa_pendientes', { p_limite: 200 });
+  });
+
+  it('reclama mediante la RPC compatible de 0177 y devuelve token y owner', async () => {
+    rpc.mockResolvedValue({ data: [{ id: 'wamid.1', evento: msgs[0], intentos: 1, claim_token: 'tok-1' }], error: null });
+    const { reclamarPendiente } = await import('./wa_pendientes');
+    await expect(reclamarPendiente('wamid.1', 0, 'worker-1')).resolves.toMatchObject({
+      id: 'wamid.1', intentos: 1, leaseToken: 'tok-1', leaseOwner: 'worker-1',
+    });
+    expect(rpc).toHaveBeenCalledWith('reclamar_wa_pendiente', expect.objectContaining({
+      p_id: 'wamid.1', p_intentos: 0, p_owner: 'worker-1',
+    }));
+  });
+
+  it('complete, fail y renew siempre llevan el token', async () => {
+    const { marcarPendienteProcesado, anotarFalloPendiente, renovarLeasePendiente } = await import('./wa_pendientes');
+    rpc.mockResolvedValue({ data: true, error: null });
+    await marcarPendienteProcesado('wamid.1', 'tok-1', 'worker-1');
+    await anotarFalloPendiente('wamid.1', 'fallo', 'tok-1', 'worker-1');
+    await expect(renovarLeasePendiente('wamid.1', 'tok-1', 'worker-1')).resolves.toBe(true);
+    expect(rpc).toHaveBeenNthCalledWith(1, 'completar_wa_pendiente', expect.objectContaining({ p_claim_token: 'tok-1', p_owner: 'worker-1' }));
+    expect(rpc).toHaveBeenNthCalledWith(2, 'fallar_wa_pendiente', expect.objectContaining({ p_claim_token: 'tok-1', p_owner: 'worker-1' }));
+    expect(rpc).toHaveBeenNthCalledWith(3, 'renovar_wa_pendiente', expect.objectContaining({ p_claim_token: 'tok-1', p_owner: 'worker-1' }));
   });
 });

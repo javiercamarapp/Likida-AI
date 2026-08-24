@@ -50,8 +50,8 @@ describe('la política de Likida', () => {
     // Mismo criterio que el aviso integral con el contacto del art. 29. Una
     // razón social inventada en una política de privacidad es peor que una que
     // falta, porque la que falta se nota.
-    expect(P).toMatch(/razonSocial: null/);
-    expect(P).toMatch(/Falta capturar la razón social/);
+    expect(P).toMatch(/LEGAL_CONFIG\.razonSocial/);
+    expect(P).toMatch(/PRODUCCIÓN BLOQUEADA/);
   });
 
   it('el silencio no cuenta como aceptar una transferencia futura', () => {

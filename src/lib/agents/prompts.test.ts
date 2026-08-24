@@ -44,4 +44,8 @@ describe('prompt de liquidación', () => {
     expect(p).toContain('nunca inventes ni narres los números'); // usa las tools
     expect(p).toContain('modo administrador');                    // sin acceso a otros viajes
   });
+
+  it('falla cerrado ante una clave de prompt desconocida', () => {
+    expect(() => getSystemPrompt('prompt_inexistente', ctx)).toThrow(/prompt no registrado/);
+  });
 });

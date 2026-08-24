@@ -5,7 +5,7 @@
 // diésel solo se habla en litros y eso no cabe en un primer toque), y el
 // mensaje se abre EDITABLE — Javier manda, no el sistema.
 
-import type { ProspectoMapa, TextosProspecto } from '@/lib/admin/prospectos-mapa';
+import type { ProspectoMapa, TextosProspecto } from '@/lib/admin/prospectos-mapa-client';
 
 export function mensajeWa(p: ProspectoMapa): string {
   const gancho = p.vacante

@@ -25,6 +25,8 @@ import { MAX_DATAURL } from './limites';
 import { getSessionTenant } from '@/lib/auth/session';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { extraerComprobante } from '@/lib/likida/intake/ocr';
+import { createLlmBudget } from '@/lib/llm/budget';
+import { randomUUID } from 'node:crypto';
 import { registrarCosto } from '@/lib/likida/costos';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
@@ -75,7 +77,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // 45s de tope: por debajo del maxDuration para alcanzar a responder.
-    const r = await extraerComprobante(imagen, AbortSignal.timeout(45_000));
+    const r = await extraerComprobante(imagen, AbortSignal.timeout(45_000), createLlmBudget(tenantId, randomUUID()));
     // La fila de costo: sin viaje (es una sonda) y con la fase del OCR — es
     // lo que el tope de arriba lee y lo que el tablero de costo de IA suma.
     await registrarCosto({

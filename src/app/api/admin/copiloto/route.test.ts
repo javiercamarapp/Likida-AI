@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // proponer → intent → ejecutar a través del route.
 // ═══════════════════════════════════════════════════════════════════════════
 
-let sesion: { userId: string; rol: string } | null = null;
+let sesion: { userId: string; tenantId: string | null; rol: string } | null = null;
 vi.mock('@/lib/auth/session', () => ({ getSessionTenant: async () => sesion }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 // El step-up (fase 7): por default pasa (usuario sin factor); cada prueba
@@ -88,7 +88,7 @@ async function proponer(): Promise<Record<string, unknown>> {
 }
 
 beforeEach(() => {
-  sesion = { userId: 'u-javier', rol: 'superadmin' };
+  sesion = { userId: 'u-javier', tenantId: 'tenant-plataforma', rol: 'superadmin' };
   ejecutarAccionCopiloto.mockClear();
   ejecutarCopiloto.mockClear();
   guardarIntercambioCopiloto.mockClear();
@@ -96,6 +96,8 @@ beforeEach(() => {
   _vaciarIntentsParaPruebas();
   stepUp.mockClear();
   stepUp.mockImplementation(async () => ({ ok: true }));
+  rateLimit.mockReset();
+  rateLimit.mockImplementation(async () => true);
 });
 
 describe('la puerta', () => {
@@ -107,7 +109,7 @@ describe('la puerta', () => {
   });
 
   it('con sesión de flota_admin: 403 — el copiloto es SOLO del superadmin', async () => {
-    sesion = { userId: 'u-cliente', rol: 'flota_admin' };
+    sesion = { userId: 'u-cliente', tenantId: 'tenant-cliente', rol: 'flota_admin' };
     const r = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));
     expect(r.status).toBe(403);
     expect(ejecutarCopiloto).not.toHaveBeenCalled();
@@ -306,6 +308,15 @@ describe('el historial (0121)', () => {
 });
 
 describe('el freno de gasto (16-ago) — el único camino LLM que no tenía techo', () => {
+  it('superadmin sin tenant de presupuesto: 503 temprano, sin modelo ni rate limit', async () => {
+    sesion = { userId: 'u-javier', tenantId: null, rol: 'superadmin' };
+    const res = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toMatchObject({ codigo: 'copiloto_presupuesto_sin_tenant' });
+    expect(rateLimit).not.toHaveBeenCalled();
+    expect(ejecutarCopiloto).not.toHaveBeenCalled();
+  });
+
   it('tope por minuto: 429 y se DICE cuál tope pegó, sin ejecutar el modelo', async () => {
     rateLimit.mockImplementationOnce(async () => false); // el de :min es la primera llamada
     const res = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));

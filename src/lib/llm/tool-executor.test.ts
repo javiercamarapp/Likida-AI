@@ -11,7 +11,7 @@ describe('makeExecutor — idempotencia de mutaciones (1.5)', () => {
   it('una mutación NO se re-ejecuta en el mismo run (dedup)', async () => {
     let calls = 0;
     registerTool('test_mut', { isMutation: true, schema: schema('test_mut'), handler: async () => ({ n: ++calls }) });
-    const exec = makeExecutor({ tenantId: 't' });
+    const exec = makeExecutor({ tenantId: 't', runId: 'test-run' });
     const r1 = await exec('test_mut', {});
     const r2 = await exec('test_mut', {});
     expect(calls).toBe(1);                 // segunda llamada → cache
@@ -21,7 +21,7 @@ describe('makeExecutor — idempotencia de mutaciones (1.5)', () => {
   it('un read-only SÍ puede correr varias veces (no se dedupea aquí)', async () => {
     let calls = 0;
     registerTool('get_test', { schema: schema('get_test'), handler: async () => ({ n: ++calls }) });
-    const exec = makeExecutor({ tenantId: 't' });
+    const exec = makeExecutor({ tenantId: 't', runId: 'test-run' });
     await exec('get_test', {});
     await exec('get_test', {});
     expect(calls).toBe(2);
@@ -33,7 +33,7 @@ describe('makeExecutor — idempotencia de mutaciones (1.5)', () => {
       isMutation: true, schema: schema('test_mut_fail'),
       handler: async () => { calls++; if (calls === 1) throw new Error('fallo transitorio'); return { ok: true }; },
     });
-    const exec = makeExecutor({ tenantId: 't' });
+    const exec = makeExecutor({ tenantId: 't', runId: 'test-run' });
     const r1 = await exec('test_mut_fail', {});
     const r2 = await exec('test_mut_fail', {});
     expect(r1.success).toBe(false);
@@ -61,7 +61,7 @@ describe('la dedup de mutaciones mira el EFECTO, no cómo se escribió la llamad
   it('args distintos NO autorizan una segunda ejecución', async () => {
     let calls = 0;
     registerTool('test_mut_args', { isMutation: true, schema: schema('test_mut_args'), handler: async () => ({ n: ++calls }) });
-    const exec = makeExecutor({ tenantId: 't' });
+    const exec = makeExecutor({ tenantId: 't', runId: 'test-run' });
     const r1 = await exec('test_mut_args', {});
     const r2 = await exec('test_mut_args', { confirmar: true });
     expect(calls).toBe(1);
@@ -71,7 +71,7 @@ describe('la dedup de mutaciones mira el EFECTO, no cómo se escribió la llamad
   it('ni el mismo objeto con las claves en otro orden', async () => {
     let calls = 0;
     registerTool('test_mut_orden', { isMutation: true, schema: schema('test_mut_orden'), handler: async () => ({ n: ++calls }) });
-    const exec = makeExecutor({ tenantId: 't' });
+    const exec = makeExecutor({ tenantId: 't', runId: 'test-run' });
     await exec('test_mut_orden', { a: 1, b: 2 });
     await exec('test_mut_orden', { b: 2, a: 1 });
     expect(calls).toBe(1);
@@ -80,7 +80,7 @@ describe('la dedup de mutaciones mira el EFECTO, no cómo se escribió la llamad
   it('ni `null`, que es JSON válido y llegaba como llave propia', async () => {
     let calls = 0;
     registerTool('test_mut_null', { isMutation: true, schema: schema('test_mut_null'), handler: async () => ({ n: ++calls }) });
-    const exec = makeExecutor({ tenantId: 't' });
+    const exec = makeExecutor({ tenantId: 't', runId: 'test-run' });
     await exec('test_mut_null', {});
     await exec('test_mut_null', null as unknown as Record<string, unknown>);
     expect(calls).toBe(1);
@@ -92,7 +92,7 @@ describe('la dedup de mutaciones mira el EFECTO, no cómo se escribió la llamad
       isMutation: true, schema: schema('test_mut_args_fail'),
       handler: async () => { calls++; if (calls === 1) throw new Error('blip'); return { ok: true }; },
     });
-    const exec = makeExecutor({ tenantId: 't' });
+    const exec = makeExecutor({ tenantId: 't', runId: 'test-run' });
     expect((await exec('test_mut_args_fail', {})).success).toBe(false);
     expect((await exec('test_mut_args_fail', { otro: 1 })).success).toBe(true);
     expect(calls).toBe(2);

@@ -14,6 +14,7 @@ import { processInbound, type ResultadoInbound } from '@/lib/likida/processor';
 import {
   pendientesPorDrenar, reclamarPendiente, marcarPendienteProcesado,
   anotarFalloPendiente, devolverIntentoPendiente, cartasMuertas,
+  crearLeaseOwner, iniciarRenovacionLease,
 } from '@/lib/likida/wa_pendientes';
 import { conPool } from '@/lib/likida/lotes';
 import { logger } from '@/lib/logger';
@@ -64,6 +65,7 @@ export async function drenarBandeja(inicioInvocacion: number, req: Request, vuel
   let huboFalloDeCron = false;
   let tomados = 0;
   let encolado: string | undefined;
+  const leaseOwner = crearLeaseOwner('wa-cron');
   try {
     const lote = await pendientesPorDrenar(LOTE);
     tomados = lote.length;
@@ -82,20 +84,18 @@ export async function drenarBandeja(inicioInvocacion: number, req: Request, vuel
 
     await conPool([...porChofer.values()], ANCHO_POOL, async (cadena) => {
       for (const p of cadena) {
-        const claim = await reclamarPendiente(p.id, p.intentos);
-        if (!claim) continue; // otra corrida lo tomó — resultado esperado
-        // Los doubles y callers anteriores a 0177 no tienen token. Omitir el
-        // tercer argumento conserva ese contrato; producción siempre recibe un
-        // token y por ello conserva el sellado anclado al lease.
-        const sellar = () => claim.claimToken
-          ? marcarPendienteProcesado(claim.id, claim.claimToken)
-          : marcarPendienteProcesado(claim.id);
-        const anotar = (error: string) => claim.claimToken
-          ? anotarFalloPendiente(claim.id, error, claim.claimToken)
-          : anotarFalloPendiente(claim.id, error);
-        const devolver = () => claim.claimToken
-          ? devolverIntentoPendiente(claim.id, claim.intentos, claim.claimToken)
-          : devolverIntentoPendiente(claim.id, claim.intentos);
+        const claim = await reclamarPendiente(p.id, p.intentos, leaseOwner);
+        if (!claim) {
+          // Otra corrida tomó un mensaje ANTERIOR de esta conversación. Seguir
+          // con el siguiente permitiría que dos invocaciones solapadas
+          // procesaran a2 mientras la otra todavía trabaja a1, rompiendo el
+          // orden por chofer que este agrupamiento promete. La cadena se retoma
+          // completa en la siguiente vuelta; otros choferes siguen en paralelo.
+          break;
+        }
+        const detenerRenovacion = claim.leaseToken && claim.leaseOwner
+          ? iniciarRenovacionLease(claim.id, claim.leaseToken, claim.leaseOwner)
+          : () => {};
         try {
           // El reloj es el de ESTA invocación, compartido por todo el lote
           // (auditoría 18, C4): el mensaje 7 pide lo que queda, no 120s nuevos.
@@ -111,21 +111,38 @@ export async function drenarBandeja(inicioInvocacion: number, req: Request, vuel
               // mensaje ni se miró. Contarlo convertía en carta muerta, a las
               // cinco corridas cargadas, una foto que nadie llegó a procesar.
               // El resto de los pospuestos SÍ consumen: ahí el motor trabajó.
-              await devolver();
+              if (claim.leaseToken && claim.leaseOwner) await devolverIntentoPendiente(claim.id, claim.intentos, claim.leaseToken, claim.leaseOwner);
+              else await devolverIntentoPendiente(claim.id, claim.intentos);
               // Sin presupuesto para este mensaje tampoco lo hay para el
               // siguiente de la cadena: se corta y la vuelta siguiente sigue.
               return;
             }
-            await anotar(`pospuesto: ${resultado}`);
-            continue;
+            if (claim.leaseToken && claim.leaseOwner) await anotarFalloPendiente(claim.id, `pospuesto: ${resultado}`, claim.leaseToken, claim.leaseOwner);
+            else await anotarFalloPendiente(claim.id, `pospuesto: ${resultado}`);
+            // Un mensaje no terminado bloquea los posteriores de la misma
+            // conversación. Procesar el siguiente rompería el orden por chofer.
+            break;
           }
-          await sellar();
+          const sellado = claim.leaseToken && claim.leaseOwner
+            ? await marcarPendienteProcesado(claim.id, claim.leaseToken, claim.leaseOwner)
+            : await marcarPendienteProcesado(claim.id);
+          // undefined mantiene compatibilidad con mocks/implementaciones
+          // antiguas; false significa fencing perdido o fallo de DB.
+          if (sellado === false) {
+            pospuestos++;
+            break;
+          }
           procesados++;
         } catch (e) {
           fallidos++;
           const err = e instanceof Error ? e.message : String(e);
           logger.error('cron.wa_pendientes.evento_fallo', { id: claim.id, intento: claim.intentos, err });
-          await anotar(err);
+          if (claim.leaseToken && claim.leaseOwner) await anotarFalloPendiente(claim.id, err, claim.leaseToken, claim.leaseOwner);
+          else await anotarFalloPendiente(claim.id, err);
+          break;
+        }
+        finally {
+          detenerRenovacion();
         }
       }
     });

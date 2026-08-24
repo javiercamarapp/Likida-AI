@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const llamadas: Array<{ system: string; messages: Array<{ content: string }> }> = [];
 const escrituras: Array<Record<string, unknown>> = [];
+const estadoSesion = vi.hoisted(() => ({ tenantId: '22222222-2222-2222-2222-222222222222' as string | null }));
 
 const PROSPECTO = {
   id: '11111111-1111-1111-1111-111111111111',
@@ -46,7 +47,12 @@ vi.mock('@/lib/llm/openrouter', () => ({
 }));
 vi.mock('@/lib/ratelimit', () => ({ rateLimit: () => Promise.resolve(true) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('../puerta', () => ({ sesionSuperadmin: () => Promise.resolve({ error: null, sesion: { userId: 'u-1' } }) }));
+vi.mock('../puerta', () => ({
+  sesionSuperadmin: () => Promise.resolve({
+    error: null,
+    sesion: { userId: 'u-1', tenantId: estadoSesion.tenantId },
+  }),
+}));
 
 const { POST } = await import('./route');
 
@@ -56,9 +62,26 @@ function postear() {
   }));
 }
 
-beforeEach(() => { llamadas.length = 0; escrituras.length = 0; process.env.NEXT_PUBLIC_APP_URL = 'https://app.likida.ai'; });
+beforeEach(() => {
+  llamadas.length = 0;
+  escrituras.length = 0;
+  estadoSesion.tenantId = '22222222-2222-2222-2222-222222222222';
+  process.env.NEXT_PUBLIC_APP_URL = 'https://app.likida.ai';
+});
 
 describe('POST /api/admin/mapa-prospectos/mensaje — la persona no sale', () => {
+  it('falla cerrado antes de llamar al modelo cuando la sesión no tiene tenant de presupuesto', async () => {
+    estadoSesion.tenantId = null;
+
+    const r = await postear();
+    const j = await r.json() as { codigo: string };
+
+    expect(r.status).toBe(503);
+    expect(j.codigo).toBe('redactor_presupuesto_sin_tenant');
+    expect(llamadas).toHaveLength(0);
+    expect(escrituras).toHaveLength(0);
+  });
+
   it('ni el nombre, ni el correo, ni el teléfono del decisor llegan al modelo', async () => {
     const r = await postear();
     expect(r.status).toBe(200);

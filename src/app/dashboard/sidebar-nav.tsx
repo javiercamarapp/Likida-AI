@@ -26,11 +26,14 @@ function estiloItem(activo: boolean) {
 function estiloIcono(activo: boolean) {
   return { width: 16, height: 16, strokeWidth: 1.75, color: activo ? 'var(--marca-fg)' : 'var(--muted)' } as const;
 }
+function idSeccion(titulo: string): string {
+  return `nav-seccion-${titulo.toLowerCase().split(' ').join('-')}`;
+}
 
 function Fila({ item, sufijo, pathname }: { item: Item; sufijo: string; pathname: string }) {
   const activo = pathname === item.href;
   return (
-    <Link href={`${item.href}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)} title={item.nombre}>
+    <Link href={`${item.href}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)} title={item.nombre} aria-label={item.nombre}>
       <item.Icono {...estiloIcono(activo)} /> <span className="sb-texto truncate">{item.nombre}</span>
     </Link>
   );
@@ -48,8 +51,10 @@ function Seccion({ titulo, items, sufijo, pathname, abierta, onAbrir }: {
   // debajo le anuncia al usuario justo lo que no puede ver.
   if (items.length === 0) return null;
   return (
-    <div>
+    <div id={idSeccion(titulo)}>
       <button type="button" onClick={() => onAbrir(titulo)}
+        aria-expanded={!plegada}
+        aria-controls={`${idSeccion(titulo)}-items`}
         className="w-full flex items-center justify-between px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wide sb-texto transition-opacity hover:opacity-70"
         style={{ color: 'var(--muted)' }}>
         {titulo}
@@ -57,7 +62,9 @@ function Seccion({ titulo, items, sufijo, pathname, abierta, onAbrir }: {
           ? <ChevronRight width={13} height={13} strokeWidth={2} />
           : <ChevronDown width={13} height={13} strokeWidth={2} />}
       </button>
-      {!plegada && items.map((it) => <Fila key={it.href} item={it} sufijo={sufijo} pathname={pathname} />)}
+      <div id={`${idSeccion(titulo)}-items`}>
+        {!plegada && items.map((it) => <Fila key={it.href} item={it} sufijo={sufijo} pathname={pathname} />)}
+      </div>
     </div>
   );
 }
@@ -129,14 +136,14 @@ export default function SidebarNav({ rol }: { rol: string }) {
     <>
       {hrefResumen && (
         <div>
-          <Link href={`${hrefResumen}${sufijo}`} className={claseItem(resumenActivo)} style={estiloItem(resumenActivo)} title="Resumen">
+          <Link href={`${hrefResumen}${sufijo}`} className={claseItem(resumenActivo)} style={estiloItem(resumenActivo)} title="Resumen" aria-label="Resumen">
             <LayoutGrid {...estiloIcono(resumenActivo)} /> <span className="sb-texto truncate">Resumen</span>
           </Link>
           {/* El chat a PRIMER NIVEL (17-ago-2026): es el mismo cerebro que
               atiende por WhatsApp — el panel es el espejo del canal, y la
               segunda casa del cliente es preguntar, no navegar menús. */}
           {puedeVerRuta(rolMenu, '/dashboard/chat') && (
-            <Link href={`/dashboard/chat${sufijo}`} className={claseItem(pathname === '/dashboard/chat')} style={estiloItem(pathname === '/dashboard/chat')} title="Pregunta a tus datos">
+            <Link href={`/dashboard/chat${sufijo}`} className={claseItem(pathname === '/dashboard/chat')} style={estiloItem(pathname === '/dashboard/chat')} title="Pregunta a tus datos" aria-label="Pregunta a tus datos">
               <MessageCircle {...estiloIcono(pathname === '/dashboard/chat')} /> <span className="sb-texto truncate">Pregunta a tus datos</span>
             </Link>
           )}

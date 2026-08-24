@@ -1,0 +1,240 @@
+name: Vercel preview -> smoke -> promote
+
+# Deliberadamente manual: un PR no recibe secretos ni crea una Preview antes
+# de CI. Este workflow vuelve a correr calidad sobre un SHA inmutable, exige el
+# dry-run de migraciones en staging y solo entonces despliega ese mismo SHA.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: SHA o rama revisada que se desplegará en Preview
+        required: true
+        default: master
+        type: string
+      promote:
+        description: Promover Preview validada a producción (requiere approval)
+        required: true
+        default: false
+        type: boolean
+      production_confirmation:
+        description: Para promover, escribe APPLY_MIGRATIONS_AND_PROMOTE
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-preview-${{ github.event.pull_request.number || inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  VERCEL_CLI_VERSION: '41.7.3'
+  SUPABASE_CLI_VERSION: '2.115.0'
+  NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+
+jobs:
+  preflight:
+    name: Preflight fail-closed
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+      - id: resolve
+        name: Fijar el ref a un SHA inmutable
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse HEAD)
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::No se resolvió un SHA válido."; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Commit inmutable: \`$sha\`" >> "$GITHUB_STEP_SUMMARY"
+      - name: Validar intención de producción
+        env:
+          PROMOTE: ${{ inputs.promote }}
+          CONFIRM: ${{ inputs.production_confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$PROMOTE" = "true" ] && [ "$CONFIRM" != "APPLY_MIGRATIONS_AND_PROMOTE" ]; then
+            echo "::error::La promoción exige la confirmación APPLY_MIGRATIONS_AND_PROMOTE."
+            exit 1
+          fi
+
+  quality:
+    name: Calidad completa antes de desplegar
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.preflight.outputs.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npx playwright install --with-deps chromium
+      - run: npm run typecheck
+      - run: npm run lint:ratchet
+      - run: bash scripts/test-resiliencia.sh
+      - run: npm run test:coverage
+      - name: Build reproducible
+        run: npm run build
+        env:
+          OPENROUTER_API_KEY: ci-placeholder
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+
+  supabase-dry-run:
+    name: Supabase staging — migraciones dry-run
+    needs: [preflight, quality]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: staging
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.preflight.outputs.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - name: Verificar staging y simular migraciones
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF_STAGING }}
+        run: |
+          set -euo pipefail
+          [ -n "$SUPABASE_ACCESS_TOKEN" ] || { echo "::error::Falta SUPABASE_ACCESS_TOKEN en staging."; exit 1; }
+          [ -n "$SUPABASE_DB_PASSWORD" ] || { echo "::error::Falta SUPABASE_DB_PASSWORD en staging."; exit 1; }
+          [ -n "$SUPABASE_PROJECT_REF" ] || { echo "::error::Falta SUPABASE_PROJECT_REF_STAGING."; exit 1; }
+          npx --yes "supabase@${SUPABASE_CLI_VERSION}" link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          npx --yes "supabase@${SUPABASE_CLI_VERSION}" db push --dry-run
+
+  preview:
+    name: Crear Preview inmutable
+    needs: [preflight, quality, supabase-dry-run]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: preview
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.preflight.outputs.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Verificar credenciales Vercel del environment Preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          [ -n "$VERCEL_TOKEN" ] || { echo "::error::Falta VERCEL_TOKEN en preview."; exit 1; }
+          [ -n "$VERCEL_ORG_ID" ] || { echo "::error::Falta VERCEL_ORG_ID en preview."; exit 1; }
+          [ -n "$VERCEL_PROJECT_ID" ] || { echo "::error::Falta VERCEL_PROJECT_ID en preview."; exit 1; }
+      - name: Link, pull y build Preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          npx --yes "vercel@${VERCEL_CLI_VERSION}" link --yes --project "$VERCEL_PROJECT_ID" --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN"
+          npx --yes "vercel@${VERCEL_CLI_VERSION}" pull --yes --environment=preview --token "$VERCEL_TOKEN"
+          npx --yes "vercel@${VERCEL_CLI_VERSION}" build --token "$VERCEL_TOKEN"
+      - id: deploy
+        name: Deploy prebuilt a Preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          url="$(npx --yes "vercel@${VERCEL_CLI_VERSION}" deploy --prebuilt --token "$VERCEL_TOKEN" | tail -n1)"
+          case "$url" in https://*) ;; *) echo "::error::Vercel no devolvió una URL HTTPS: $url"; exit 1 ;; esac
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Preview: $url" >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    name: Smoke público de Preview
+    needs: [preflight, preview]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.preflight.outputs.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Smoke de rutas públicas
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ needs.preview.outputs.url }}
+        run: npm run test:smoke
+
+  production_migrations:
+    name: Producción — aplicar migraciones reales
+    needs: [preflight, preview, smoke]
+    if: github.event_name == 'workflow_dispatch' && inputs.promote == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.preflight.outputs.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - name: Dry-run final y aplicación real
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF_PRODUCTION }}
+          CONFIRM: ${{ inputs.production_confirmation }}
+        run: |
+          set -euo pipefail
+          [ "$CONFIRM" = "APPLY_MIGRATIONS_AND_PROMOTE" ] || { echo "::error::Confirmación de producción incorrecta."; exit 1; }
+          [ -n "$SUPABASE_ACCESS_TOKEN" ] || { echo "::error::Falta SUPABASE_ACCESS_TOKEN en production."; exit 1; }
+          [ -n "$SUPABASE_DB_PASSWORD" ] || { echo "::error::Falta SUPABASE_DB_PASSWORD en production."; exit 1; }
+          [ -n "$SUPABASE_PROJECT_REF" ] || { echo "::error::Falta SUPABASE_PROJECT_REF_PRODUCTION."; exit 1; }
+          npx --yes "supabase@${SUPABASE_CLI_VERSION}" link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          npx --yes "supabase@${SUPABASE_CLI_VERSION}" db push --dry-run
+          npx --yes "supabase@${SUPABASE_CLI_VERSION}" db push
+
+  promote:
+    name: Promote aprobado a producción
+    needs: [preflight, preview, smoke, production_migrations]
+    if: github.event_name == 'workflow_dispatch' && inputs.promote == true
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+      url: ${{ needs.preview.outputs.url }}
+    steps:
+      - name: Guardas de promoción
+        env:
+          URL: ${{ needs.preview.outputs.url }}
+          CONFIRM: ${{ inputs.promote }}
+          MIGRATIONS: ${{ needs.production_migrations.result }}
+        run: |
+          set -euo pipefail
+          case "$URL" in https://*) ;; *) echo "::error::URL de Preview inválida."; exit 1 ;; esac
+          [ "$CONFIRM" = "true" ] || { echo "::error::Promoción no confirmada."; exit 1; }
+          [ "$MIGRATIONS" = "success" ] || { echo "::error::Las migraciones reales no terminaron en verde."; exit 1; }
+      - name: Promover exactamente la Preview testeada
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          URL: ${{ needs.preview.outputs.url }}
+        run: npx --yes "vercel@${VERCEL_CLI_VERSION}" promote "$URL" --token "$VERCEL_TOKEN"

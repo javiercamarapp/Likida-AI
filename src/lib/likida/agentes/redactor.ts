@@ -18,11 +18,13 @@
 // COSTO: al log (`redactor.costo`), NO a `llm_costo` — misma decisión que el
 // copiloto: esa tabla exige tenant y el Redactor es gasto de LIKIDA.
 // ═══════════════════════════════════════════════════════════════════════════
+import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { DatoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
 import { generateResponse } from '@/lib/llm/openrouter';
+import { createLlmBudget, type LlmBudget } from '@/lib/llm/budget';
 import { encolarPieza } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
 import { logger } from '@/lib/logger';
@@ -82,6 +84,31 @@ export interface PiezaRedactada {
 
 interface Variante { asunto: string; cuerpo: string }
 
+/** Contexto de cobro del Redactor. Nunca se obtiene de un env global: el
+ * caller autenticado o el runner debe entregar explícitamente el tenant que
+ * paga la corrida. `budget` permite compartir una única reserva/run entre
+ * varias piezas del mismo lote, sin reiniciar la contabilidad por prospecto.
+ */
+export interface RedactorExecutionContext {
+  tenantId: string | null | undefined;
+  budget?: LlmBudget;
+  runId?: string;
+  maxTenantDailyUsd?: number;
+}
+
+function presupuestoDelRedactor(contexto: RedactorExecutionContext | undefined): LlmBudget {
+  if (contexto?.budget) {
+    if (contexto.tenantId !== undefined && contexto.tenantId !== null
+      && contexto.tenantId !== contexto.budget.tenantId) {
+      throw new DatoInvalido('El presupuesto del Redactor no coincide con el tenant autenticado.');
+    }
+    return contexto.budget;
+  }
+  return createLlmBudget(contexto?.tenantId, contexto?.runId ?? randomUUID(), {
+    maxTenantDailyUsd: contexto?.maxTenantDailyUsd,
+  });
+}
+
 /** Parsea la salida markdown del modelo. LANZA si la variante A no se puede
  *  extraer — una pieza malformada no entra a la cola. Exportada para su
  *  prueba: el parser es la frontera entre el modelo y la cola. */
@@ -115,6 +142,7 @@ export async function redactarCorreoFrio(
   /** 'manual' = botón del tablero; 'cron' = el runner nivel 2 (0123) — la
    *  corrida dice la verdad de quién la disparó. */
   disparo: DisparoCorrida = 'manual',
+  contexto?: RedactorExecutionContext,
 ): Promise<PiezaRedactada> {
   const inicio = new Date();
 
@@ -122,6 +150,11 @@ export async function redactarCorreoFrio(
   if (await estaApagado('agente:redactor')) {
     throw new DatoInvalido('El Redactor está apagado — se enciende desde /admin/observabilidad o ⌘K.');
   }
+
+  // El presupuesto se resuelve ANTES de leer/gastar el modelo. Un Redactor
+  // sin tenant explícito no puede caer a un tenant global ni a un env de
+  // plataforma: en producción se detiene cerrado.
+  const budget = presupuestoDelRedactor(contexto);
 
   // 2) El prospecto REAL — el dossier es su fila, nada más (prohibición #2).
   const { data: p, error } = await acotada(supabaseAdmin()
@@ -181,6 +214,7 @@ export async function redactarCorreoFrio(
       messages: [{ role: 'user', content: `DOSSIER:\n${dossier}\n\nVENDEDOR (remitente): ${vendedorNombre}` }],
       maxTokens: 900,
       temperature: 0.5,
+      budget,
     });
     texto = r.text;
     costoUsd = r.cost;

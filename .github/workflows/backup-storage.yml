@@ -1,0 +1,59 @@
+name: Backup Supabase Storage
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: storage-backup-production
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Backup Storage + manifest + SHA-256
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: production-backup
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Fail closed si faltan secretos o destino remoto
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          REMOTE: ${{ secrets.RESPALDO_S3_DESTINO }}
+        run: |
+          set -euo pipefail
+          [ -n "$SUPABASE_URL" ] || { echo "::error::Falta NEXT_PUBLIC_SUPABASE_URL en el environment production-backup."; exit 1; }
+          [ -n "$SUPABASE_KEY" ] || { echo "::error::Falta SUPABASE_SERVICE_ROLE_KEY en el environment production-backup."; exit 1; }
+          [ -n "$REMOTE" ] || { echo "::error::Falta RESPALDO_S3_DESTINO; no se permite declarar backup local como exitoso."; exit 1; }
+          command -v jq >/dev/null || { echo "::error::jq no está disponible en el runner."; exit 1; }
+          command -v aws >/dev/null || { echo "::error::AWS CLI no está disponible en el runner."; exit 1; }
+
+      - name: Ejecutar backup verificable
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESPALDO_S3_DESTINO: ${{ secrets.RESPALDO_S3_DESTINO }}
+          RESPALDO_BUCKETS: ${{ vars.RESPALDO_BUCKETS || 'comprobantes liquidaciones avatares bus' }}
+          RESPALDO_REQUIRE_REMOTE: 'true'
+          RESPALDO_ALLOW_EMPTY: ${{ vars.RESPALDO_ALLOW_EMPTY || 'false' }}
+          RESPALDO_ROOT: ${{ runner.temp }}/likida-storage-backup-${{ github.run_id }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+          AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL }}
+        run: bash scripts/respaldo-storage.sh "$RESPALDO_ROOT"
+
+      - name: Publicar resumen sin datos de clientes
+        if: success()
+        run: |
+          echo '### Backup Storage' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Resultado: **OK**' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Manifiesto y SHA-256 sincronizados al destino remoto configurado.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- El contenido de Storage no se publica como artifact de GitHub.' >> "$GITHUB_STEP_SUMMARY"

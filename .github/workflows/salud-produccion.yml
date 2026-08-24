@@ -28,18 +28,18 @@ permissions:
 
 jobs:
   pulso:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: /api/health contesta 200 con ok:true
+      - name: /api/health está healthy (cron stale degrada y falla)
         run: |
           set -u
           cuerpo=$(curl -sS --max-time 20 -w '\n%{http_code}' https://app.likida.ai/api/health) || { echo "::error::/api/health no contestó"; exit 1; }
           status=$(echo "$cuerpo" | tail -n1)
           json=$(echo "$cuerpo" | sed '$d')
-          echo "status=$status cuerpo=$json"
-          [ "$status" = "200" ] || { echo "::error::/api/health devolvió $status: $json"; exit 1; }
-          echo "$json" | grep -q '"ok":true' || { echo "::error::/api/health sin ok:true: $json"; exit 1; }
+          estado=$(printf '%s' "$json" | node -e "let s=''; process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(String(JSON.parse(s).status||''))}catch{process.stdout.write('invalid')}})")
+          echo "http=$status estado=$estado"
+          [ "$status" = "200" ] && [ "$estado" = "ok" ] || { echo "::error::/api/health no está healthy (http=$status estado=$estado); un cron stale se reporta como degraded."; exit 1; }
 
       - name: El sha desplegado es el que se pusheó (solo push con [deploy] en el asunto)
         if: github.event_name == 'push'
