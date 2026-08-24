@@ -36,7 +36,16 @@ export interface OpcionesContpaqi {
   tipo: string;
   /** Número de póliza. Lo asigna la contabilidad, no nosotros. */
   numero: number;
+  /** Separador del esquema confirmado en la instancia del cliente. */
+  separador?: ',' | '\t' | '|';
+  /** Encabezado exacto del esquema confirmado. */
+  encabezado?: string[];
 }
+
+export const ENCABEZADO_CONTPAQI = [
+  'Tipo', 'Numero', 'Fecha', 'Concepto', 'Cuenta', 'TipoMovimiento',
+  'Importe', 'Referencia', 'ConceptoMovimiento',
+] as const;
 
 /**
  * Póliza en el layout de importación de CONTPAQi: una línea POR MOVIMIENTO,
@@ -45,14 +54,10 @@ export interface OpcionesContpaqi {
  * `tipoMovimiento`: 0 = cargo, 1 = abono. Es la convención del formato, no una
  * elección nuestra.
  */
-export function aContpaqi(poliza: Poliza, opts: OpcionesContpaqi): string {
-  const SEP = ',';
-  const cab = [
-    'Tipo', 'Numero', 'Fecha', 'Concepto',
-    'Cuenta', 'TipoMovimiento', 'Importe', 'Referencia', 'ConceptoMovimiento',
-  ].join(SEP);
+export function filasContpaqi(poliza: Poliza, opts: OpcionesContpaqi): string[] {
+  const SEP = opts.separador ?? ',';
 
-  const lineas = poliza.movimientos.map((m) =>
+  return poliza.movimientos.map((m) =>
     [
       opts.tipo,
       opts.numero,
@@ -67,8 +72,23 @@ export function aContpaqi(poliza: Poliza, opts: OpcionesContpaqi): string {
       .map((c) => celda(c, SEP))
       .join(SEP),
   );
+}
 
-  return `${cab}\n${lineas.join('\n')}\n`;
+/** Una póliza aislada. Para periodos use `archivoContpaqi`: un solo encabezado. */
+export function aContpaqi(poliza: Poliza, opts: OpcionesContpaqi): string {
+  const sep = opts.separador ?? ',';
+  const cab = opts.encabezado ?? [...ENCABEZADO_CONTPAQI];
+  return `${cab.map((c) => celda(c, sep)).join(sep)}\n${filasContpaqi(poliza, opts).join('\n')}\n`;
+}
+
+export function archivoContpaqi(
+  polizas: Poliza[],
+  opts: Omit<OpcionesContpaqi, 'numero'> & { numeroInicial?: number },
+): string {
+  const sep = opts.separador ?? ',';
+  const cab = opts.encabezado ?? [...ENCABEZADO_CONTPAQI];
+  const filas = polizas.flatMap((p, i) => filasContpaqi(p, { ...opts, numero: (opts.numeroInicial ?? 1) + i }));
+  return `${cab.map((c) => celda(c, sep)).join(sep)}\n${filas.join('\n')}\n`;
 }
 
 export interface ArchivosSapB1 {
@@ -77,6 +97,30 @@ export interface ArchivosSapB1 {
   /** Renglones del asiento. */
   lineas: string;
 }
+
+export interface PerfilSapB1 {
+  /** Nombres técnicos de la plantilla DTW confirmada por la flota. */
+  cabeceraTecnica: string[];
+  /** Segunda fila descriptiva de esa misma plantilla. */
+  cabeceraVisible: string[];
+  lineasTecnica: string[];
+  lineasVisible: string[];
+}
+
+/**
+ * Base OJDT/JDT1 del DTW. `JdtNum` y `Line_ID` son los campos técnicos del
+ * asiento; `RecordKey` era un identificador inventado por la primera versión
+ * de este export y no pertenece a esos objetos. Una flota puede necesitar
+ * columnas adicionales o encabezados de otra versión: por eso el export real
+ * exige un `PerfilSapB1` confirmado, en lugar de presentar esta base como una
+ * plantilla universal.
+ */
+export const SAP_B1_BASE: PerfilSapB1 = {
+  cabeceraTecnica: ['JdtNum', 'RefDate', 'DueDate', 'TaxDate', 'Memo'],
+  cabeceraVisible: ['JdtNum', 'RefDate', 'DueDate', 'TaxDate', 'Memo'],
+  lineasTecnica: ['JdtNum', 'Line_ID', 'Account', 'Debit', 'Credit', 'LineMemo', 'Ref1'],
+  lineasVisible: ['JdtNum', 'Line_ID', 'Account', 'Debit', 'Credit', 'LineMemo', 'Ref1'],
+};
 
 /**
  * Asiento en el layout del Data Transfer Workbench de SAP Business One, que
@@ -87,27 +131,41 @@ export interface ArchivosSapB1 {
  * común al armar estos archivos a mano — el importador la consume como si
  * fuera un registro y descarta el primer renglón real.
  */
-export function aSapB1(poliza: Poliza, recordKey = 1): ArchivosSapB1 {
+export function aSapB1(poliza: Poliza, jdtNum = 1, perfil: PerfilSapB1 = SAP_B1_BASE): ArchivosSapB1 {
   const SEP = '\t';
 
   const cabecera = [
-    ['RecordKey', 'ReferenceDate', 'DueDate', 'TaxDate', 'Memo'].join(SEP),
-    ['RecordKey', 'ReferenceDate', 'DueDate', 'TaxDate', 'Memo'].join(SEP),
-    [recordKey, poliza.fecha, poliza.fecha, poliza.fecha, poliza.concepto]
+    perfil.cabeceraTecnica.join(SEP),
+    perfil.cabeceraVisible.join(SEP),
+    [jdtNum, poliza.fecha, poliza.fecha, poliza.fecha, poliza.concepto]
       .map((c) => celda(c, SEP))
       .join(SEP),
   ].join('\n');
 
-  const encLineas = ['RecordKey', 'LineNum', 'AccountCode', 'Debit', 'Credit', 'LineMemo', 'Reference1'];
   const lineas = [
-    encLineas.join(SEP),
-    encLineas.join(SEP),
+    perfil.lineasTecnica.join(SEP),
+    perfil.lineasVisible.join(SEP),
     ...poliza.movimientos.map((m, i) =>
-      [recordKey, i, m.cuenta, pesos(m.cargo), pesos(m.abono), m.concepto, m.referencia]
+      [jdtNum, i, m.cuenta, pesos(m.cargo), pesos(m.abono), m.concepto, m.referencia]
         .map((c) => celda(c, SEP))
         .join(SEP),
     ),
   ].join('\n');
 
   return { cabecera: `${cabecera}\n`, lineas: `${lineas}\n` };
+}
+
+/** Varias pólizas DTW: DOS archivos y un solo doble encabezado por archivo. */
+export function archivoSapB1(polizas: Poliza[], perfil: PerfilSapB1): ArchivosSapB1 {
+  const sep = '\t';
+  const cabecera = [perfil.cabeceraTecnica.join(sep), perfil.cabeceraVisible.join(sep)];
+  const lineas = [perfil.lineasTecnica.join(sep), perfil.lineasVisible.join(sep)];
+  for (const [i, poliza] of polizas.entries()) {
+    const jdtNum = i + 1;
+    cabecera.push([jdtNum, poliza.fecha, poliza.fecha, poliza.fecha, poliza.concepto].map((c) => celda(c, sep)).join(sep));
+    for (const [linea, m] of poliza.movimientos.entries()) {
+      lineas.push([jdtNum, linea, m.cuenta, pesos(m.cargo), pesos(m.abono), m.concepto, m.referencia].map((c) => celda(c, sep)).join(sep));
+    }
+  }
+  return { cabecera: `${cabecera.join('\n')}\n`, lineas: `${lineas.join('\n')}\n` };
 }

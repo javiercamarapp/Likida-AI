@@ -268,10 +268,10 @@ export default function CommandPalette() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] px-4"
-      style={{ background: 'rgba(0,0,0,0.5)' }}
+      role="presentation" style={{ background: 'rgba(0,0,0,0.5)' }}
       onClick={() => setAbierto(false)}
     >
-      <div className="w-full rounded-2xl overflow-hidden glass-panel" style={{ maxWidth: 480 }}
+      <div className="w-full rounded-2xl overflow-hidden glass-panel" role="dialog" aria-modal="true" aria-label="Buscar en administración" style={{ maxWidth: 480 }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2.5 px-4 py-3 border-b" style={{ borderColor: 'var(--line)' }}>
@@ -280,6 +280,8 @@ export default function CommandPalette() {
             : <Search width={16} height={16} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
           <input
             ref={inputRef}
+            aria-label={modo === 'motivo' ? 'Motivo de la acción' : 'Buscar una acción, interruptor o flota'}
+            aria-controls="command-palette-results"
             value={consulta}
             onChange={(e) => setConsulta(e.target.value)}
             onKeyDown={onInputKeyDown}
@@ -304,7 +306,7 @@ export default function CommandPalette() {
           </div>
         )}
 
-        <div className="max-h-80 overflow-y-auto py-1.5">
+        <div id="command-palette-results" role="listbox" aria-label="Resultados" className="max-h-80 overflow-y-auto py-1.5">
           {modo === 'motivo' ? (
             <div className="px-4 py-4 text-sm" style={{ color: 'var(--muted)' }}>
               Vas a apagar <span className="font-medium" style={{ color: 'var(--ink)' }}>{motivoPara ? etiquetaInterruptor(motivoPara) : ''}</span>.
@@ -320,7 +322,7 @@ export default function CommandPalette() {
             resultados.map((item, i) => {
               const { key, etiqueta, detalle, Icono, apagado, correr } = item;
               return (
-                <button key={key} type="button" onClick={correr} disabled={enviando}
+                <button key={key} type="button" role="option" aria-selected={i === activo} onClick={correr} disabled={enviando}
                   className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-left transition-colors disabled:opacity-60"
                   style={i === activo ? { background: 'var(--marca)', color: 'white' } : undefined}
                   onMouseEnter={() => setActivo(i)}

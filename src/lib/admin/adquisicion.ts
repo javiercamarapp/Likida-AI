@@ -55,6 +55,7 @@ const COSTO_CERO: Record<string, string> = {
   aaag: '$0 por diseño — padrón público de transportistas de la Asociación de Agentes Aduanales de Guadalajara',
   bolsa: '$0 por diseño — bolsas de trabajo públicas (histórico)',
   'scribd-tampico': '$0 por diseño — directorio público del corredor Tampico-Madero',
+  landing: '$0 por diseño — formulario orgánico de la landing',
 };
 const SIN_INTEGRACION: Record<string, string> = {
   maps: 'falta integración con el consumo de la API de Google Cloud',
@@ -67,6 +68,8 @@ const SIN_INTEGRACION: Record<string, string> = {
   // "proyección con cara de medición" que la regla de arriba prohíbe.
   canacar: 'directorio comprado (~$800 MXN, pago único, 17-ago-2026) — sin integración de gasto que reparta el costo por lead',
 };
+
+const CANALES_PAGADOS = new Set(['ads', 'ads-meta', 'ads-google']);
 
 const DIAS_FUENTE_MUERTA = 7;
 const HORAS_SLA_PRIMER_TOQUE = 48;
@@ -105,7 +108,7 @@ export async function getAdquisicion(ahoraMs: number): Promise<Adquisicion> {
       leads: filas.length,
       ultimoCapturado: ultimo,
       costo: cero ? { usd: 0 } : null,
-      costoNota: cero ?? SIN_INTEGRACION[fuente] ?? 'sin regla de costo declarada para esta fuente',
+      costoNota: cero ?? (CANALES_PAGADOS.has(fuente) ? SIN_INTEGRACION.ads : SIN_INTEGRACION[fuente]) ?? 'sin regla de costo declarada para esta fuente',
     };
   }).sort((a, b) => b.leads - a.leads);
 

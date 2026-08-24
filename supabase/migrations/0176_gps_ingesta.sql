@@ -77,3 +77,4 @@ comment on index uq_posicion_lectura is
 alter table public.cron_latido drop constraint if exists cron_latido_id_dominio;
 alter table public.cron_latido add constraint cron_latido_id_dominio
   check (id in ('wa-pendientes', 'escalar', 'facturar', 'purgar', 'runner', 'gps'));
+

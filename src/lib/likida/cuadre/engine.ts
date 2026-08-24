@@ -85,9 +85,8 @@ export interface CuadreInput {
   /** FASE 3 (perfil/preguntas.ts, `calificaEstimuloPeaje`) — LIF 2026 art.
    *  20-A exige ingresos < $300M y no ser parte relacionada (LISR art. 179)
    *  para el estímulo de peaje; `config.ts:127` lo aplicaba sin condición.
-   *  `undefined` = el perfil no lo declaró todavía: se sigue acreditando con
-   *  el aviso de siempre (`CONDICIONES_ESTIMULO_PEAJE`, liquidacion/
-   *  acreditable.ts) — no se le quita el estímulo a nadie por default.
+   *  `undefined` = el perfil no lo declaró todavía: NO se acredita. El
+   *  estímulo no se concede por omisión; falta la declaración de elegibilidad.
    *  `false` = el perfil YA CONFIRMÓ que no califica: deja de acreditarse,
    *  no solo de avisarse. */
   elegiblePeaje?: boolean;
@@ -1228,13 +1227,14 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     //
     //   1. QUIÉN puede acreditar. `elegiblePeaje === false` es el perfil
     //      confirmando que esta flota no califica (ingresos ≥ $300M o parte
-    //      relacionada). `undefined`/`true` preservan la conducta de siempre.
+    //      relacionada). Solo `true` es una declaración suficiente;
+    //      `undefined` también cierra la puerta.
     //   2. SOBRE QUÉ se acredita. La base es lo que quedó DESPUÉS del
     //      `@Descuento` del emisor — un atributo opcional del CFDI 4.0 que
     //      antes no se leía en ninguna capa, así que una factura de casetas
     //      con descuento acreditaba sobre el SubTotal íntegro. Se acota a 0
     //      por si llega un CFDI mal formado: una base negativa no existe.
-    const elegiblePeaje = input.elegiblePeaje ?? true;
+    const elegiblePeaje = input.elegiblePeaje === true;
     if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0 && peajePagadoElectronicamente && elegiblePeaje) {
       const baseDelEstimulo = Math.max(0, (g.subTotal as number) - (g.descuento ?? 0));
       peajeAcreditable += baseDelEstimulo * peajeFactor;

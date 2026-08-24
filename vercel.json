@@ -7,6 +7,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/wa-outbox",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/runner",
       "schedule": "0 */4 * * *"
     },

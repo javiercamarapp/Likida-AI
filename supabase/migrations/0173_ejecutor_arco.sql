@@ -145,3 +145,4 @@ end $$;
 
 revoke all on function public.ejecutar_arco_cancelacion(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.ejecutar_arco_cancelacion(uuid, uuid) to service_role;
+

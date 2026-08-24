@@ -68,6 +68,10 @@ const PROCESABLES = /\.(xml|pdf)$/i;
  *  factura grande. Sin esto, un correo hostil con un adjunto gigante se
  *  materializaría entero en memoria. */
 const MAX_ADJUNTO_BYTES = 4 * 1024 * 1024;
+/** El webhook no necesita un JSON enorme: Resend solo entrega metadatos y la
+ * descarga de los adjuntos va por otra URL. Limitarlo ANTES de verificar HMAC
+ * evita que un POST sin firma nos haga materializar decenas de MB. */
+const MAX_WEBHOOK_BYTES = 256 * 1024;
 
 
 // El tope de la función, DECLARADO: de él sale el presupuesto de las descargas
@@ -75,10 +79,42 @@ const MAX_ADJUNTO_BYTES = 4 * 1024 * 1024;
 // calcularía contra un default de la plataforma que puede cambiar sin avisar.
 export const maxDuration = 60;
 
+/** Lee sin sobrepasar el tope incluso si el emisor omitió Content-Length. */
+async function cuerpoAcotado(req: Request, maxBytes: number): Promise<string | null> {
+  const declarado = Number(req.headers.get('content-length') ?? 0);
+  if (Number.isFinite(declarado) && declarado > maxBytes) return null;
+  if (!req.body) return '';
+  const lector = req.body.getReader();
+  const partes: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await lector.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await lector.cancel();
+        return null;
+      }
+      partes.push(value);
+    }
+  } finally {
+    lector.releaseLock();
+  }
+  const combinado = new Uint8Array(total);
+  let offset = 0;
+  for (const parte of partes) { combinado.set(parte, offset); offset += parte.byteLength; }
+  return new TextDecoder().decode(combinado);
+}
+
 export async function POST(req: Request) {
   // El cuerpo CRUDO: `JSON.parse` + `stringify` reordena llaves y la firma
   // dejaría de cuadrar. Ver `firma_entrante.ts`.
-  const crudo = await req.text();
+  const crudo = await cuerpoAcotado(req, MAX_WEBHOOK_BYTES);
+  if (crudo === null) {
+    logger.warn('correo_entrante.cuerpo_excede', { maxBytes: MAX_WEBHOOK_BYTES });
+    return new NextResponse('Payload too large', { status: 413 });
+  }
 
   const firma = verificarFirma(
     crudo,
@@ -178,27 +214,41 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'canal no configurado' }, { status: 503 });
   }
 
-  // ── IDEMPOTENCIA, ANTES DE PROCESAR NADA ─────────────────────────────────
-  //
-  // El insert ES la comprobación: si el `email_id` ya está, la llave primaria
-  // lo rechaza y sabemos que este correo ya se procesó. Preguntar primero y
-  // escribir después dejaría una ventana entre las dos operaciones por la que
-  // se cuelan dos entregas simultáneas — el mismo patrón que `conv.ts` usa
-  // para WhatsApp desde la mig. 0002.
-  const { error: errDedup } = await supabaseAdmin()
-    .from('correo_procesado').insert({ email_id: emailId });
+  // ── CLAIM DURABLE, ANTES DE PROCESAR NADA ────────────────────────────────
+  // `insert` + `delete` parecía idempotencia, pero pierde el correo con dos
+  // entregas concurrentes: A toma la fila, B ve duplicado y recibe 200; si A
+  // muere antes del delete/finalize, Meta ya no volverá a mandar B. La RPC 0177
+  // entrega un token con lease. `busy` devuelve 503 para que B siga viva hasta
+  // que A aplique o el lease venza; solo `applied` es un acuse definitivo.
+  const { data: datosClaim, error: errClaim } = await supabaseAdmin().rpc('reclamar_correo', {
+    p_email_id: emailId, p_lease_seconds: 90,
+  });
+  if (errClaim) {
+    logger.error('correo_entrante.claim', { emailId, err: errClaim.message });
+    return NextResponse.json({ error: 'no se pudo reclamar el correo' }, { status: 503 });
+  }
+  const claim = (datosClaim ?? [])[0] as { resultado?: string; token?: string | null } | undefined;
+  if (claim?.resultado === 'applied') {
+    logger.info('correo_entrante.repetido', { emailId, tenantId: flota.id });
+    return NextResponse.json({ ok: true, ignorado: 'ya_procesado' });
+  }
+  if (claim?.resultado !== 'claimed' || !claim.token) {
+    logger.info('correo_entrante.en_curso', { emailId, tenantId: flota.id });
+    return NextResponse.json({ error: 'correo en proceso' }, { status: 503, headers: { 'Retry-After': '15' } });
+  }
+  const claimToken = claim.token;
 
-  if (errDedup) {
-    // 23505 = unique_violation: ya lo procesamos. Es un reintento de Resend, no
-    // un error — se contesta 200 para que deje de reintentar.
-    if (errDedup.code === '23505') {
-      logger.info('correo_entrante.repetido', { emailId, tenantId: flota.id });
-      return NextResponse.json({ ok: true, ignorado: 'ya_procesado' });
+  async function finalizar(ok: boolean, error?: string): Promise<boolean> {
+    const { data, error: errFinalizar } = await supabaseAdmin().rpc('finalizar_correo', {
+      p_email_id: emailId, p_token: claimToken, p_ok: ok, p_error: error ?? null,
+    });
+    if (errFinalizar || data !== true) {
+      logger.error('correo_entrante.finalizar_claim', {
+        emailId, ok, err: errFinalizar?.message ?? 'el claim ya no pertenece a esta entrega',
+      });
+      return false;
     }
-    // Cualquier otro fallo SÍ es nuestro y transitorio: que reintente, porque
-    // procesar sin poder marcar es lo que duplica facturas.
-    logger.error('correo_entrante.dedup', { emailId, err: errDedup.message });
-    return NextResponse.json({ error: 'no se pudo registrar el correo' }, { status: 503 });
+    return true;
   }
 
   // ── LOS ADJUNTOS ─────────────────────────────────────────────────────────
@@ -305,30 +355,9 @@ export async function POST(req: Request) {
   }
 
   if (caidas > 0) {
-    // ── EL CORREO NO QUEDA CONSUMIDO ─────────────────────────────────────
-    // Registrar-antes-de-procesar sigue siendo la regla (ver arriba); pero con
-    // una descarga caída, dejar la fila perdería el CFDI PARA SIEMPRE: Resend
-    // no reintenta un 200, y el reintento de un 503 chocaría con la llave
-    // primaria y saldría "ya_procesado" sin haber guardado nada. Se libera la
-    // fila y se contesta 503 para que Resend reintente.
-    //
-    // Y si ALGUNOS adjuntos ya se guardaron, el 503 sigue siendo seguro:
-    // `factura_proveedor` tiene unique(tenant_id, cfdi_uuid) (mig. 0091) y
-    // `guardarFacturaProveedor` convierte ese choque en `duplicada` — el
-    // reintento recupera los caídos y los ya guardados rebotan sin segunda
-    // fila.
-    //
-    // CARRERA ACEPTADA: entre este DELETE y el reintento puede colarse otra
-    // entrega concurrente del mismo correo; su insert vuelve a tomar la llave
-    // primaria y la que llegue después sale por "ya_procesado". Inofensivo:
-    // alguien procesa, nadie duplica.
-    const { error: errLiberar } = await supabaseAdmin()
-      .from('correo_procesado').delete().eq('email_id', emailId);
-    if (errLiberar) {
-      // Best-effort: sin liberar, el reintento va a salir "ya_procesado" y
-      // estos adjuntos SÍ se pierden — por eso es error y no warn.
-      logger.error('correo_entrante.liberar_dedup', { emailId, err: errLiberar.message });
-    }
+    // Libera el claim que NOS pertenece. A diferencia del DELETE anterior, si
+    // una entrega posterior ya tomó el lease no puede borrar su estado.
+    await finalizar(false, 'no se pudieron descargar todos los adjuntos');
     logger.warn('correo_entrante.descarga_caida', {
       emailId, tenantId: flota.id, caidas, guardadas, ignoradas, total: adjuntos.length,
     });
@@ -350,6 +379,13 @@ export async function POST(req: Request) {
     tareasTotal: adjuntos.length,
     resumen: { accion: 'correo_entrante', guardadas, ignoradas },
   });
+
+  // Sellar después de todos los efectos. Si el proceso muere antes, el lease
+  // vence y Resend puede reintentar; los únicos fiscales vuelven inocuo el
+  // at-least-once. Si falla el sello, tampoco mentimos con un 200.
+  if (!await finalizar(true)) {
+    return NextResponse.json({ error: 'no se pudo finalizar el correo' }, { status: 503 });
+  }
 
   logger.info('correo_entrante.procesado', {
     emailId, tenantId: flota.id, guardadas, ignoradas, total: adjuntos.length,

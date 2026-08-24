@@ -356,6 +356,8 @@ describe('cuadrarViaje', () => {
   it('1.6: peaje acreditable = 50% del SubTotal de casetas', () => {
     const r = cuadrarViaje({
       viajeId: 'a3', anticipo: 1160, politica, estimulos: EST,
+      // La prueba aísla la base del estímulo; la flota ya declaró elegibilidad.
+      elegiblePeaje: true,
       gastos: [g({ concepto: 'caseta', monto: 1160, cfdiUuid: 'u', xmlVerificado: true, formaPago: '04', subTotal: 1000, ivaTraslado: 160 })],
     });
     expect(r.peajeAcreditable).toBe(500); // 1000 * 0.5

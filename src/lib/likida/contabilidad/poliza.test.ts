@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { describe, it, expect } from 'vitest';
 import { polizaDeLiquidacion, type CatalogoContable, type LiquidacionParaPoliza } from './poliza';
-import { aContpaqi, aSapB1 } from './formatos';
+import { aContpaqi, aSapB1, archivoContpaqi, archivoSapB1, SAP_B1_BASE } from './formatos';
 
 const CATALOGO: CatalogoContable = {
   gastos: { diesel: '5010-001', caseta: '5010-002', alimentacion: '5010-003' },
@@ -123,7 +123,13 @@ describe('los formatos que la landing nombra', () => {
     expect(aContpaqi(poliza, { tipo: 'Dr', numero: 1 })).toContain('20/08/2026');
   });
 
-  it('SAP B1: dos archivos ligados por RecordKey, con DOBLE encabezado', () => {
+  it('CONTPAQi: un periodo lleva UN encabezado, nunca uno por póliza', () => {
+    const txt = archivoContpaqi([poliza, poliza], { tipo: 'Dr', numeroInicial: 20 });
+    expect(txt.match(/TipoMovimiento/g)).toHaveLength(1);
+    expect(txt.trim().split('\n')).toHaveLength(1 + poliza.movimientos.length * 2);
+  });
+
+  it('SAP B1: dos archivos ligados por JdtNum, con DOBLE encabezado técnico', () => {
     const { cabecera, lineas } = aSapB1(poliza, 7);
     const filasCab = cabecera.trim().split('\n');
     const filasLin = lineas.trim().split('\n');
@@ -133,9 +139,11 @@ describe('los formatos que la landing nombra', () => {
     expect(filasLin[0]).toBe(filasLin[1]);
     expect(filasCab).toHaveLength(3);
     expect(filasLin).toHaveLength(2 + poliza.movimientos.length);
-    // La llave que une los dos archivos.
+    // La llave técnica que une los dos archivos.
     expect(filasCab[2].startsWith('7\t')).toBe(true);
     expect(filasLin[2].startsWith('7\t')).toBe(true);
+    expect(filasCab[0]).toContain('JdtNum');
+    expect(filasLin[0]).toContain('Line_ID');
   });
 
   it('SAP B1: cada renglón trae Debit y Credit, uno de los dos en 0.00', () => {
@@ -145,5 +153,11 @@ describe('los formatos que la landing nombra', () => {
       expect(Number(debit) === 0 || Number(credit) === 0).toBe(true);
       expect(Number(debit) + Number(credit)).toBeGreaterThan(0);
     }
+  });
+
+  it('SAP B1: varias pólizas conservan un único doble encabezado por archivo', () => {
+    const { cabecera, lineas } = archivoSapB1([poliza, poliza], SAP_B1_BASE);
+    expect(cabecera.trim().split('\n')).toHaveLength(4);
+    expect(lineas.trim().split('\n')).toHaveLength(2 + poliza.movimientos.length * 2);
   });
 });

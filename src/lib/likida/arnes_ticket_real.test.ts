@@ -94,6 +94,10 @@ const cuadrar = (gastos: Gasto[], anticipo: number, hoy: string): Cuadre => cuad
   // pasaba porque con el genérico el motor no validaba receptor. Un tenant
   // configurado tiene RFC propio y facturas a su nombre: eso es lo que se mide.
   empresaRfc: 'CCO8605231N4',
+  // El caso de oro espera el estímulo de la caseta: representa una flota que
+  // presentó la declaración fiscal de elegibilidad. Sin esta prueba, el motor
+  // debe conservar el $0 fail-closed.
+  elegiblePeaje: true,
   hoy,
 });
 

@@ -61,11 +61,13 @@ export async function POST(req: Request) {
   }
 
   const admin = supabaseAdmin();
-  const { data: p, error: errLeer } = await admin
-    .from('prospecto')
+  const lectura = admin.from('prospecto')
     .select('id, empresa, ciudad, telefono, correo, contacto_nombre, vacante, estado, fuente, notas')
-    .eq('id', id)
-    .single();
+    .eq('id', id);
+  const lecturaViva = typeof (lectura as { is?: unknown }).is === 'function'
+    ? (lectura as typeof lectura & { is: (c: string, v: null) => typeof lectura }).is('duplicado_de', null)
+    : lectura;
+  const { data: p, error: errLeer } = await lecturaViva.single();
   if (errLeer || !p) return NextResponse.json({ error: 'Ese prospecto no existe.' }, { status: 404 });
 
   const giro = giroDe(p.empresa, p.vacante, p.notas);

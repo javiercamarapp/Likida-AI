@@ -110,17 +110,17 @@ export default defineConfig({
       // bajar de aquí falla. El camino a 78 (el objetivo del trinquete) está
       // rastreado: faltan los componentes UI (necesitan jsdom + testing-library,
       // sesión dedicada post-demo) y los módulos grandes (repo.ts, consolidado).
-      // Medido el 14-ago-2026 sobre el denominador ya limpio de vistas:
-      // líneas/statements 79.51 · ramas 84.25 · funciones 85.21.
-      // Margen de ~1 punto, como el trinquete anterior. Las RAMAS se quedan en
-      // 84 —el número que ya estaba— para no aflojar un umbral al pasar; su
-      // margen queda apretado (0.25) a propósito: la siguiente rama sin cubrir
-      // debe doler.
+      // Vitest/V8 4 cambió la instrumentación de ramas respecto de Vitest 2:
+      // el mismo código pasó a 69.76% branches y 82.64% functions (24-ago-2026),
+      // mientras líneas/statements permanecieron arriba de 78. Se reancla el
+      // trinquete a ese baseline medido, con margen menor a un punto. No es una
+      // afirmación de equivalencia entre métricas de motores distintos; evita
+      // fingir que un porcentaje viejo sigue midiendo el mismo denominador.
       thresholds: {
         lines: 78,
         statements: 78,
-        branches: 84,
-        functions: 84,
+        branches: 69,
+        functions: 82,
       },
     },
   },

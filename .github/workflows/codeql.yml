@@ -13,10 +13,10 @@
 # una rama de trabajo en curso. Semanal además, por si algo nuevo en las
 # consultas de CodeQL encuentra algo en código que no cambió esta semana.
 #
-# 23-AGO-2026 — REACTIVADO. Estuvo unas horas desactivado porque en repo
-# PRIVADO exige GitHub Advanced Security comprada (la API contesta 422). Al
-# volverse público el análisis de código es gratis, así que vuelve a correr en
-# cada push y en cada PR.
+# 24-AGO-2026 — el repositorio de la app sigue PRIVADO en la API de GitHub.
+# CodeQL automático requiere GitHub Advanced Security y responde 422 sin esa
+# licencia. Se conserva manual para activarlo al comprar GHAS o hacer público
+# este repositorio; el lint de seguridad continúa obligatorio en cada PR.
 #
 # NO SUSTITUYE al análisis del lint, lo complementa: `eslint-plugin-security`
 # (reglas elegidas una por una en `eslint.config.mjs`) corre en cada push y es
@@ -26,12 +26,6 @@ name: CodeQL
 
 on:
   workflow_dispatch:
-  push:
-    branches: [master, main]
-  pull_request:
-    branches: [master, main]
-  schedule:
-    - cron: '17 4 * * 1' # lunes, hora de bajo tráfico — el minuto 17 evita la estampida de "en punto" que satura los runners compartidos de GitHub
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -52,10 +46,10 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Inicializar CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
         with:
           languages: javascript-typescript
           queries: security-and-quality
@@ -64,6 +58,6 @@ jobs:
       # proyecto compile (a diferencia de Java/Go/C#) — lee el fuente
       # directamente. `autobuild` existe para otros lenguajes; aquí sobra.
       - name: Analizar
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
         with:
           category: '/language:javascript-typescript'

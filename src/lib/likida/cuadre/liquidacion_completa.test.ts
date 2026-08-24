@@ -66,6 +66,7 @@ describe('liquidación completa de 20 comprobantes', () => {
   const esperado = gastos.filter((x) => x.folio !== 'CAS-100' || x.id === 'g4').reduce((s, x) => s + x.monto, 0);
   const r = cuadrarViaje({
     viajeId: 'VJ-REAL', anticipo: esperado, politica, estimulos: EST, hidrocarburos: HC,
+    elegiblePeaje: true,
     // RFC con DÍGITO VERIFICADOR válido a propósito: desde el 28-jul un RFC de
     // empresa mal formado deja el receptor SIN VERIFICAR (ni deducible ni
     // rechazado), y con el fixture inventado esta prueba medía otra cosa.

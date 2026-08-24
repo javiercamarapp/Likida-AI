@@ -5,6 +5,7 @@
 
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
+import { encolarSalidaWhatsApp } from '@/lib/likida/wa_outbox';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const DOWNLOAD_TIMEOUT_MS = 15_000;
@@ -164,17 +165,19 @@ export function esReintentableMeta(codigo?: number, status?: number): boolean {
  * escalación, para no consumir un tier por un 429— lo tiene.
  */
 export async function enviarTexto(to: string, body: string): Promise<EnvioWhatsApp> {
+  const payload = { messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'text', text: { body } };
   let res: Response;
   try {
     res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'text', text: { body } }),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     logger.error('wa.sendText.red', { para: destinatarioEnmascarado(to), error });
+    await encolarSalidaWhatsApp(payload, error);
     // Un timeout o un socket caído NO es un veredicto sobre el destinatario:
     // se marca como reintentable con el status que lo dice.
     return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}`, status: 503 };
@@ -188,6 +191,7 @@ export async function enviarTexto(to: string, body: string): Promise<EnvioWhatsA
     const crudo = await res.text().catch(() => '');
     const { codigo, mensaje } = errorDeMeta(crudo);
     logger.error('wa.sendText', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
+    if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
     return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
   }
   // El ÉXITO también deja rastro. Sin esta línea, "se envió" y "nunca se llamó"
@@ -292,37 +296,44 @@ function motivoBotonesInvalidos(cuerpo: string, botones: BotonAcuse[]): Record<s
  * ya diagnosticado.
  */
 export async function sendButtons(to: string, cuerpo: string, botones: BotonAcuse[]): Promise<string | null> {
-  const invalido = motivoBotonesInvalidos(cuerpo, botones);
-  if (invalido) { logger.error('wa.sendButtons.invalido', invalido); return null; }
+  let payload: Record<string, unknown> | null = null;
+  try {
+    // La frontera es pública en tiempo de ejecución aunque TypeScript diga
+    // BotonAcuse. Un adapter o feature flag roto no puede tirar el processor
+    // solo porque `titulo` vino null: este helper promete nunca lanzar.
+    const invalido = motivoBotonesInvalidos(cuerpo, botones);
+    if (invalido) { logger.error('wa.sendButtons.invalido', invalido); return null; }
 
-  const res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to: destinatarioWhatsApp(to),   // el "1" mexicano rebota igual aquí
-      type: 'interactive',
+    payload = {
+      messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'interactive',
       interactive: {
-        type: 'button',
-        body: { text: cuerpo },
-        action: { buttons: botones.map((b) => ({ type: 'reply', reply: { id: b.id, title: b.titulo } })) },
+        type: 'button', body: { text: cuerpo },
+        action: { buttons: botones.map((b) => ({ type: 'reply' as const, reply: { id: b.id, title: b.titulo } })) },
       },
-    }),
-    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    // Mismo trato que `sendText` (AUD3 OP-A2): destinatario enmascarado y código
-    // de Meta; el tenant/viaje va en el log del llamador.
-    const crudo = await res.text().catch(() => '');
-    const { codigo } = errorDeMeta(crudo);
-    logger.error('wa.sendButtons', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
+    };
+    const res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload), signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      const crudo = await res.text().catch(() => '');
+      const { codigo } = errorDeMeta(crudo);
+      logger.error('wa.sendButtons', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
+      if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+      return null;
+    }
+    const id = await idDeRespuesta(res);
+    logger.info('wa.sendButtons.ok', { id, botones: botones.length });
+    return id ?? null;
+  } catch (e) {
+    logger.error('wa.sendButtons', {
+      para: destinatarioEnmascarado(to), status: 0, codigo: 'network',
+      body: e instanceof Error ? e.message.slice(0, 400) : String(e).slice(0, 400),
+    });
+    if (payload) await encolarSalidaWhatsApp(payload, e instanceof Error ? e.message : String(e));
     return null;
   }
-  // El ÉXITO también deja rastro (misma lección que `sendText`): sin esta línea,
-  // "se envió" y "nunca se llamó" se ven igual en los logs.
-  const id = await idDeRespuesta(res);
-  logger.info('wa.sendButtons.ok', { id, botones: botones.length });
-  return id ?? null;
 }
 
 /**
@@ -356,22 +367,22 @@ export async function sendTemplate(
     ? [{ type: 'body', parameters: parametros.map((t) => ({ type: 'text', text: t })) }]
     : undefined;
 
+  const payload = {
+    messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'template',
+    template: { name: plantilla, language: { code: idioma }, components: componentes },
+  };
   let res: Response;
   try {
     res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: destinatarioWhatsApp(to),
-        type: 'template',
-        template: { name: plantilla, language: { code: idioma }, components: componentes },
-      }),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     logger.error('wa.sendTemplate.red', { plantilla, para: destinatarioEnmascarado(to), error });
+    await encolarSalidaWhatsApp(payload, error);
     return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}` };
   }
 
@@ -379,6 +390,7 @@ export async function sendTemplate(
     const crudo = await res.text().catch(() => '');
     const { codigo, mensaje } = errorDeMeta(crudo);
     logger.error('wa.sendTemplate', { plantilla, para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
+    if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
     return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo };
   }
 
@@ -444,22 +456,22 @@ export async function sendDocument(
   filename: string,
   caption?: string,
 ): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }> {
+  const payload = {
+    messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'document',
+    document: { link, filename, caption },
+  };
   let res: Response;
   try {
     res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: destinatarioWhatsApp(to),   // el PDF rebotaba igual que el texto
-        type: 'document',
-        document: { link, filename, caption },
-      }),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     logger.error('wa.sendDocument.red', { filename, para: destinatarioEnmascarado(to), error });
+    await encolarSalidaWhatsApp(payload, error);
     return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}` };
   }
 
@@ -467,6 +479,7 @@ export async function sendDocument(
     const crudo = await res.text().catch(() => '');
     const { codigo, mensaje } = errorDeMeta(crudo);
     logger.error('wa.sendDocument', { filename, para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
+    if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
     return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo };
   }
 

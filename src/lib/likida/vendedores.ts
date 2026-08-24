@@ -77,6 +77,46 @@ export const ESTADOS_PROSPECTO = [
   { valor: 'perdido', rotulo: 'Perdido' },
 ] as const;
 
+/** Canonical commercial funnel used by new integrations. Legacy labels above
+ * remain readable so historical rows and existing screens do not silently
+ * change meaning during migration. */
+export const ESTADOS_FUNNEL = [
+  { valor: 'nuevo', rotulo: 'Nuevo' },
+  { valor: 'contactado', rotulo: 'Contactado' },
+  { valor: 'appointment', rotulo: 'Cita agendada' },
+  { valor: 'rescheduled', rotulo: 'Cita reprogramada' },
+  { valor: 'cancelled', rotulo: 'Cita cancelada' },
+  { valor: 'no-show', rotulo: 'No se presentó' },
+  { valor: 'demo', rotulo: 'Demo' },
+  { valor: 'proposal', rotulo: 'Propuesta' },
+  { valor: 'pilot', rotulo: 'Piloto' },
+  { valor: 'won', rotulo: 'Ganado' },
+  { valor: 'lost', rotulo: 'Perdido' },
+] as const;
+export type EstadoFunnel = (typeof ESTADOS_FUNNEL)[number]['valor'];
+
+export function esEstadoFunnel(v: string): v is EstadoFunnel {
+  return ESTADOS_FUNNEL.some((e) => e.valor === v);
+}
+
+export const TRANSICIONES_FUNNEL: Record<EstadoFunnel, readonly EstadoFunnel[]> = {
+  nuevo: ['contactado', 'lost'],
+  contactado: ['appointment', 'lost'],
+  appointment: ['rescheduled', 'cancelled', 'demo', 'lost'],
+  rescheduled: ['appointment', 'cancelled', 'demo', 'lost'],
+  cancelled: ['contactado', 'appointment', 'lost'],
+  'no-show': ['contactado', 'appointment', 'lost'],
+  demo: ['proposal', 'pilot', 'no-show', 'lost'],
+  proposal: ['pilot', 'won', 'lost'],
+  pilot: ['won', 'lost'],
+  won: [],
+  lost: ['contactado'],
+};
+
+export function puedeTransicionarFunnel(de: string, a: string): boolean {
+  return esEstadoFunnel(de) && esEstadoFunnel(a) && TRANSICIONES_FUNNEL[de].includes(a);
+}
+
 export type EstadoProspecto = (typeof ESTADOS_PROSPECTO)[number]['valor'];
 
 export function esEstadoProspecto(v: string): v is EstadoProspecto {
@@ -295,6 +335,41 @@ export interface FiltroProspectos {
   estado?: EstadoProspecto;
 }
 
+export interface PaginaProspectos {
+  q?: string;
+  pagina?: number;
+  porPagina?: number;
+}
+
+/** Small server-side search window for command palettes and admin tables.
+ * The full pipeline reader remains available for the kanban, while callers
+ * that need a search never download the entire census. */
+export async function buscarProspectos(opciones: PaginaProspectos = {}): Promise<{
+  filas: ProspectoRow[]; total: number | null; pagina: number; porPagina: number;
+}> {
+  const pagina = Math.max(1, Math.floor(opciones.pagina ?? 1));
+  const porPagina = Math.min(100, Math.max(1, Math.floor(opciones.porPagina ?? 25)));
+  const qTexto = opciones.q?.trim().slice(0, 120) ?? '';
+  let query = supabaseAdmin().from('prospecto')
+    .select('id, empresa, contacto_nombre, telefono, correo, ciudad, vacante, fuente, estado, vendedor_id, tenant_id, notas, cerrado_en, created_at', { count: 'exact' })
+    .is('duplicado_de', null)
+    .order('created_at', { ascending: false }).order('id')
+    .range((pagina - 1) * porPagina, pagina * porPagina - 1);
+  if (qTexto) query = query.ilike('empresa', `%${qTexto.replace(/[%_]/g, '')}%`);
+  const { data, error, count } = await acotada(query, 'buscarProspectos');
+  if (error) throw new Error(`buscarProspectos: ${error.message}`);
+  const filas = ((data ?? []) as Array<Record<string, unknown>>).map((f) => ({
+    id: String(f.id), empresa: String(f.empresa), contactoNombre: (f.contacto_nombre as string) ?? null,
+    telefono: (f.telefono as string) ?? null, correo: (f.correo as string) ?? null,
+    ciudad: (f.ciudad as string) ?? null, vacante: (f.vacante as string) ?? null,
+    fuente: String(f.fuente ?? 'censo'), estado: f.estado as EstadoProspecto,
+    vendedorId: (f.vendedor_id as string) ?? null, tenantId: (f.tenant_id as string) ?? null,
+    notas: (f.notas as string) ?? null, cerradoEn: (f.cerrado_en as string) ?? null,
+    createdAt: String(f.created_at),
+  }));
+  return { filas, total: typeof count === 'number' ? count : null, pagina, porPagina };
+}
+
 /**
  * SIN CATCH POR DENTRO, como `getPanelClientes`: una base caída tiene que
  * subir como error — "no se pudo leer el pipeline" — y no como un tablero
@@ -304,7 +379,8 @@ export async function listarProspectos(filtro: FiltroProspectos = {}): Promise<P
   const admin = supabaseAdmin();
   const filas = await traerTodo<Record<string, unknown>>((d, h) => {
     let q = admin.from('prospecto')
-      .select('id, empresa, contacto_nombre, telefono, correo, ciudad, vacante, fuente, estado, vendedor_id, tenant_id, notas, cerrado_en, created_at', conteo(d));
+      .select('id, empresa, contacto_nombre, telefono, correo, ciudad, vacante, fuente, estado, vendedor_id, tenant_id, notas, cerrado_en, created_at', conteo(d))
+      .is('duplicado_de', null);
     // `.is` para null y `.eq` para un id: `.eq('vendedor_id', null)` NO
     // matchea filas NULL en Postgres — devolvería siempre vacío, en silencio.
     if (filtro.vendedorId === null) q = q.is('vendedor_id', null);
@@ -361,7 +437,7 @@ export async function listarVendedores(): Promise<VendedorRow[]> {
     ),
     traerTodo<Record<string, unknown>>(
       (d, h) => admin.from('prospecto').select('id, vendedor_id, estado', conteo(d))
-        .order('id').range(d, h),
+        .is('duplicado_de', null).order('id').range(d, h),
       'listarVendedores.prospectos',
     ),
   ]);
@@ -454,7 +530,7 @@ export async function asignarProspecto(prospectoId: string, vendedorId: string |
 
   const { data, error } = await acotada(supabaseAdmin().from('prospecto')
     .update({ vendedor_id: vendedorId, updated_at: new Date().toISOString() })
-    .eq('id', prospectoId).select('id'), 'asignarProspecto');
+    .eq('id', prospectoId).is('duplicado_de', null).select('id'), 'asignarProspecto');
   if (error) throw new Error(`asignarProspecto: ${error.message}`);
   // Un UPDATE de cero filas no es éxito (patrón `editarCliente`).
   if (!Array.isArray(data) || data.length === 0) {
@@ -483,7 +559,7 @@ export async function cambiarEstadoProspecto(
   if (!esEstadoProspecto(estadoNuevo)) throw new DatoInvalido('Ese estado no existe en el embudo.');
   const notas = opts.notas === undefined ? undefined : opcional(opts.notas, 'Las notas', 2000);
 
-  let lectura = supabaseAdmin().from('prospecto').select('id, estado').eq('id', prospectoId);
+  let lectura = supabaseAdmin().from('prospecto').select('id, estado').eq('id', prospectoId).is('duplicado_de', null);
   if (opts.soloDeVendedor) lectura = lectura.eq('vendedor_id', opts.soloDeVendedor);
   const { data: fila, error: errLee } = await acotada(lectura.maybeSingle(), 'cambiarEstadoProspecto.lee');
   if (errLee) throw new Error(`cambiarEstadoProspecto: ${errLee.message}`);
@@ -509,7 +585,7 @@ export async function cambiarEstadoProspecto(
   if (notas !== undefined) cambios.notas = notas;
 
   let up = supabaseAdmin().from('prospecto').update(cambios)
-    .eq('id', prospectoId).eq('estado', actual);
+    .eq('id', prospectoId).is('duplicado_de', null).eq('estado', actual);
   if (opts.soloDeVendedor) up = up.eq('vendedor_id', opts.soloDeVendedor);
   const { data, error } = await acotada(up.select('id'), 'cambiarEstadoProspecto');
   if (error) throw new Error(`cambiarEstadoProspecto: ${error.message}`);
@@ -530,7 +606,7 @@ export async function actualizarNotasProspecto(
 
   let up = supabaseAdmin().from('prospecto')
     .update({ notas: valor, updated_at: new Date().toISOString() })
-    .eq('id', prospectoId);
+    .eq('id', prospectoId).is('duplicado_de', null);
   if (opts.soloDeVendedor) up = up.eq('vendedor_id', opts.soloDeVendedor);
   const { data, error } = await acotada(up.select('id'), 'actualizarNotasProspecto');
   if (error) throw new Error(`actualizarNotasProspecto: ${error.message}`);
@@ -581,7 +657,7 @@ export async function asignarPendientes(): Promise<ResultadoReparto> {
   const vendedores = await listarVendedores();
   const pendientesFilas = await traerTodo<Record<string, unknown>>(
     (d, h) => supabaseAdmin().from('prospecto').select('id', conteo(d))
-      .is('vendedor_id', null).eq('estado', 'nuevo')
+      .is('vendedor_id', null).is('duplicado_de', null).eq('estado', 'nuevo')
       // Los más viejos primero: el orden de llegada es el orden de reparto, y
       // con el desempate por id el plan es reproducible.
       .order('created_at', { ascending: true }).order('id').range(d, h),

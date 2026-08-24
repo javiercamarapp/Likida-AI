@@ -111,3 +111,4 @@ export function armarCatalogo(declarado: Record<string, unknown>): CatalogoConta
   }
   return catalogo;
 }
+

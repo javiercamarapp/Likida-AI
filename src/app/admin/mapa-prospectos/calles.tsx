@@ -34,6 +34,10 @@ export default function Calles({ prospectos, titulo, obtenerTextos, pedirTextos,
   onCerrar: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const obtenerTextosRef = useRef(obtenerTextos);
+  const pedirTextosRef = useRef(pedirTextos);
+  useEffect(() => { obtenerTextosRef.current = obtenerTextos; }, [obtenerTextos]);
+  useEffect(() => { pedirTextosRef.current = pedirTextos; }, [pedirTextos]);
 
   useEffect(() => {
     let vivo = true;
@@ -74,7 +78,7 @@ export default function Calles({ prospectos, titulo, obtenerTextos, pedirTextos,
           // redactado son textos largos que ya no viajan en el listado, y
           // armar dos mil popups por adelantado los pediría todos.
           const contenido = () => {
-            const t = obtenerTextos(p.id);
+            const t = obtenerTextosRef.current(p.id);
             const espera = esperandoTextos(p, t);
             const wa = hrefWa(p, t);
             const correo = hrefCorreo(p, t);
@@ -97,8 +101,8 @@ export default function Calles({ prospectos, titulo, obtenerTextos, pedirTextos,
           };
           marcador.bindPopup(contenido);
           marcador.on('popupopen', () => {
-            if (obtenerTextos(p.id)) return;
-            void pedirTextos([p.id]).then(() => {
+            if (obtenerTextosRef.current(p.id)) return;
+            void pedirTextosRef.current([p.id]).then(() => {
               if (vivo && marcador.isPopupOpen()) marcador.setPopupContent(contenido());
             });
           });
@@ -112,7 +116,7 @@ export default function Calles({ prospectos, titulo, obtenerTextos, pedirTextos,
       }
     })();
     return () => { vivo = false; mapa?.remove(); };
-  }, [prospectos, obtenerTextos, pedirTextos]);
+  }, [prospectos]);
 
   const conCoords = prospectos.filter((p) => p.lat !== null).length;
 

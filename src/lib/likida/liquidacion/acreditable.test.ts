@@ -123,6 +123,9 @@ describe('filasAcreditables — el peaje deja de afirmarse solo', () => {
     const cuadre = cuadrarViaje({
       viajeId: 'v-peaje', anticipo: 1160, politica: [{ concepto: 'caseta' }],
       estimulos: { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000 },
+      // El motor es fail-closed: este escenario dorado representa una flota
+      // que sí presentó la declaración de elegibilidad, no una inferencia.
+      elegiblePeaje: true,
       gastos: [{
         id: 'g1', concepto: 'caseta', monto: 1160, fecha: '2026-07-20', cfdiUuid: 'u-caseta',
         // AUDITORÍA 8: CFDI ya verificado — receptor presente a propósito.

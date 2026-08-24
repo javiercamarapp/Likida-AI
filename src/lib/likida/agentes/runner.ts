@@ -73,6 +73,36 @@ export async function gastoDelDiaUsd(agente: string): Promise<number> {
   return ((data ?? []) as Array<{ costo_usd: unknown }>).reduce((s, f) => s + Number(f.costo_usd ?? 0), 0);
 }
 
+interface ReservaPresupuesto { id: string; disponibleUsd: number }
+
+/**
+ * Aparta de forma atómica el saldo del agente para ESTA vuelta. No se usa el
+ * `SELECT` de `gastoDelDiaUsd` para decidir: dos crons pueden leer el mismo
+ * saldo y gastar ambos antes de que cualquiera escriba su corrida. La RPC 0180
+ * toma un advisory lock por agente/día e incluye reservas vivas en el cálculo.
+ */
+async function reservarPresupuesto(agente: string, topeUsd: number): Promise<ReservaPresupuesto | null> {
+  const { data, error } = await supabaseAdmin().rpc('reservar_presupuesto_agente', {
+    p_agente: agente, p_dia: hoyMx(), p_tope_usd: topeUsd, p_lease_seconds: 300,
+  });
+  if (error) throw new Error(`reservarPresupuesto: ${error.message}`);
+  const fila = (data ?? [])[0] as { id?: string; disponible_usd?: number } | undefined;
+  if (!fila?.id || !Number.isFinite(Number(fila.disponible_usd)) || Number(fila.disponible_usd) <= 0) return null;
+  return { id: fila.id, disponibleUsd: Number(fila.disponible_usd) };
+}
+
+async function cerrarReserva(id: string, costoRealUsd: number): Promise<void> {
+  const { data, error } = await supabaseAdmin().rpc('cerrar_reserva_presupuesto_agente', {
+    p_id: id, p_costo_real_usd: costoRealUsd,
+  });
+  if (error || data !== true) {
+    // Dejar el lease vivo es conservador: bloquea temporalmente saldo antes de
+    // permitir un doble gasto. Expira en cinco minutos y la corrida ya quedó
+    // medida en agente_corrida para la siguiente reserva.
+    logger.error('runner.reserva_no_cerrada', { reserva: id, err: error?.message ?? 'no se cerró la reserva' });
+  }
+}
+
 /** El lote del Redactor: fabrica hasta N piezas para prospectos en `nuevo`
  *  (los más viejos primero — los del SLA), cortando por presupuesto restante.
  *  Las guardas por prospecto (cadencia 48h, pieza pendiente, estado) viven
@@ -84,6 +114,7 @@ async function loteRedactor(restanteUsd: number): Promise<{ piezas: number; salt
   const { data, error } = await acotada(supabaseAdmin()
     .from('prospecto')
     .select('id, vendedor:vendedor_id(nombre)')
+    .is('duplicado_de', null)
     .eq('estado', 'nuevo')
     .order('created_at', { ascending: true })
     .limit(tope * 4), 'runner.candidatos');
@@ -161,19 +192,6 @@ export async function correrRunner(
       agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'sin presupuesto_dia_usd declarado — el runner no corre agentes sin techo' });
       continue;
     }
-    let gastado: number;
-    try {
-      gastado = await gastoDelDiaUsd(a.id);
-    } catch {
-      agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'no se pudo leer el gasto del día — sin la medición, el techo no se verifica y no se corre' });
-      continue;
-    }
-    const restante = a.presupuesto_dia_usd - gastado;
-    if (restante <= 0) {
-      agentes.push({ agente: a.id, resultado: 'saltado', motivo: `presupuesto del día agotado (${gastado.toFixed(4)} de ${a.presupuesto_dia_usd} USD)` });
-      continue;
-    }
-
     // Candado 4 — backpressure de la bandeja (solo agentes que encolan).
     if (a.id === 'redactor') {
       const { count, error: errPend } = await supabaseAdmin()
@@ -190,10 +208,23 @@ export async function correrRunner(
         continue;
       }
 
+      let reserva: ReservaPresupuesto | null;
       try {
-        const r = await loteRedactor(restante);
+        reserva = await reservarPresupuesto(a.id, a.presupuesto_dia_usd);
+      } catch {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'no se pudo reservar el presupuesto del día — fail closed' });
+        continue;
+      }
+      if (!reserva) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'presupuesto del día agotado o reservado por otra corrida' });
+        continue;
+      }
+      try {
+        const r = await loteRedactor(reserva.disponibleUsd);
+        await cerrarReserva(reserva.id, r.costoUsd);
         agentes.push({ agente: a.id, resultado: 'corrio', ...r });
       } catch (e) {
+        await cerrarReserva(reserva.id, 0);
         agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del lote' });
       }
       continue;

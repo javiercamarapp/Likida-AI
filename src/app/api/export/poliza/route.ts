@@ -27,7 +27,8 @@ import { logger } from '@/lib/logger';
 import { acotada } from '@/lib/likida/presupuesto';
 import { polizaDeLiquidacion, type LiquidacionParaPoliza } from '@/lib/likida/contabilidad/poliza';
 import { catalogoDeclarado, CUENTAS_BALANCE } from '@/lib/likida/contabilidad/catalogo';
-import { aContpaqi, aSapB1 } from '@/lib/likida/contabilidad/formatos';
+import { archivoContpaqi, archivoSapB1 } from '@/lib/likida/contabilidad/formatos';
+import { perfilExportacionDeclarado } from '@/lib/likida/contabilidad/perfiles';
 import type { ConceptoGasto } from '@/types/likida';
 
 export const runtime = 'nodejs';
@@ -43,8 +44,21 @@ interface FilaPoliza {
   anticipo: number;
   diferencia: number;
   ivaAcreditable: number;
-  porConcepto: Array<{ concepto: ConceptoGasto; subtotal: number }>;
-  baseEstimada: number;
+  porConcepto: Array<{ concepto: ConceptoGasto; subtotal: number | null; baseConocida?: boolean }>;
+  baseDesconocida: number;
+}
+
+const DIAS_MAXIMO = 92;
+const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+
+function fechaValida(iso: string): boolean {
+  if (!FECHA_ISO.test(iso)) return false;
+  const d = new Date(`${iso}T00:00:00.000Z`);
+  return !Number.isNaN(d.valueOf()) && d.toISOString().slice(0, 10) === iso;
+}
+
+function diasEntre(desde: string, hasta: string): number {
+  return Math.floor((Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86_400_000) + 1;
 }
 
 export async function GET(req: Request) {
@@ -68,8 +82,18 @@ export async function GET(req: Request) {
 
   const desde = url.searchParams.get('desde');
   const hasta = url.searchParams.get('hasta');
-  if (!desde || !hasta || !/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(hasta))
+  if (!desde || !hasta || !fechaValida(desde) || !fechaValida(hasta))
     return new NextResponse('desde y hasta son obligatorios en formato AAAA-MM-DD', { status: 400 });
+  if (hasta < desde) return new NextResponse('hasta no puede ser anterior a desde', { status: 400 });
+  const dias = diasEntre(desde, hasta);
+  if (dias > DIAS_MAXIMO) {
+    return NextResponse.json({
+      error: 'rango_demasiado_grande',
+      detalle: `El export de pólizas admite como máximo ${DIAS_MAXIMO} días por archivo; pediste ${dias}. Divide el periodo para que el archivo se revise e importe de forma controlada.`,
+      maximoDias: DIAS_MAXIMO,
+    }, { status: 413 });
+  }
+  const preflight = url.searchParams.get('preflight') === '1';
 
   // ── EL CATÁLOGO DE LA FLOTA ────────────────────────────────────────────
   // Se lee lo DECLARADO (`tenant.config.catalogoCuentas`, la pantalla de
@@ -102,6 +126,25 @@ export async function GET(req: Request) {
     return new NextResponse('No se pudo leer la configuración contable', { status: 503 });
   }
 
+  // Cada ERP usa la plantilla que confirmó ESTA flota. No hay una plantilla
+  // universal segura: versiones, segmentos y campos obligatorios cambian. Una
+  // credencial guardada tampoco prueba que el archivo importe, así que este
+  // perfil es una confirmación separada y explícita.
+  let perfil;
+  try {
+    perfil = await perfilExportacionDeclarado(tenantId, formato);
+  } catch (e) {
+    logger.error('export.poliza.perfil_erp', { tenantId, formato, err: e instanceof Error ? e.message : String(e) });
+    return new NextResponse('No se pudo leer el perfil de exportación ERP', { status: 503 });
+  }
+  if (!perfil) {
+    return NextResponse.json({
+      error: 'perfil_erp_sin_confirmar',
+      detalle: `No hay una plantilla ${formato === 'contpaqi' ? 'CONTPAQi' : 'SAP Business One DTW'} confirmada para esta flota. No se genera un layout supuesto: pide a tu contador que confirme una plantilla de importación de su instancia.`,
+      estado: 'no_listo',
+    }, { status: 409 });
+  }
+
   const { data, error } = await acotada(
     supabaseAdmin().rpc('poliza_datos_tenant', { p_tenant: tenantId, p_desde: desde, p_hasta: hasta }),
     'export.poliza.datos',
@@ -122,6 +165,14 @@ export async function GET(req: Request) {
   const bloqueos: Array<{ folio: string; falta: string[] }> = [];
 
   for (const f of filas) {
+    const sinBase = (f.porConcepto ?? []).filter((c) => c.baseConocida !== true || c.subtotal === null);
+    if (sinBase.length > 0) {
+      bloqueos.push({
+        folio: f.folioViaje,
+        falta: [`base gravable desconocida para ${sinBase.map((c) => `«${c.concepto}»`).join(', ')}. El XML no informó SubTotal; no se sustituye por el total porque duplicaría o mezclaría IVA en la póliza.`],
+      });
+      continue;
+    }
     const liq: LiquidacionParaPoliza = {
       folioViaje: f.folioViaje,
       operador: f.operador,
@@ -150,55 +201,62 @@ export async function GET(req: Request) {
     );
   }
 
-  // Cuántos renglones traen el TOTAL en vez de la base imponible: quien
-  // importa tiene que saberlo, porque ahí el IVA no viene separado.
-  const conBaseEstimada = filas.reduce((s, f) => s + Number(f.baseEstimada ?? 0), 0);
+  const conBaseDesconocida = filas.reduce((s, f) => s + Number(f.baseDesconocida ?? 0), 0);
+
+  if (preflight) {
+    return NextResponse.json({
+      listo: true,
+      formato,
+      plantillaConfirmadaEn: perfil.confirmadoEn,
+      polizas: polizas.length,
+      rango: { desde, hasta, dias, maximoDias: DIAS_MAXIMO },
+      advertencias: conBaseDesconocida > 0
+        ? [`${conBaseDesconocida} renglón(es) no tienen base gravable conocida y bloquearon el export; carga o corrige el XML antes de importar.`]
+        : [],
+      estado: 'listo_para_generar_no_importado',
+    });
+  }
 
   const nombre = `poliza-${desde}_${hasta}`;
   if (formato === 'contpaqi') {
-    // 'Dr' (diario) es el tipo por defecto de CONTPAQi; no es una cuenta,
-    // es el cajón donde entra el asiento, y el contador lo reasigna al importar.
-    const tipo = 'Dr';
-    // La numeración la lleva la contabilidad de la flota; aquí se numera de 1
-    // en adelante DENTRO del archivo y se dice en el nombre, para que quien
-    // importe sepa que no son folios suyos.
-    const cuerpo = polizas
-      .map((p, i) => (p.poliza.ok ? aContpaqi(p.poliza.poliza, { tipo, numero: i + 1 }) : ''))
-      .join('');
+    if (perfil.sistema !== 'contpaqi') return new NextResponse('Perfil ERP inconsistente', { status: 500 });
+    // `archivoContpaqi`, no `aContpaqi` por póliza: el importador recibe UN
+    // encabezado por archivo. Repetirlo entre movimientos se interpreta como
+    // un asiento corrupto en varios esquemas.
+    const cuerpo = archivoContpaqi(polizas.map((p) => p.poliza.ok ? p.poliza.poliza : null).filter((p): p is NonNullable<typeof p> => p !== null), {
+      ...perfil.opciones,
+      numeroInicial: perfil.opciones.numero,
+    });
     return new NextResponse(cuerpo, {
       status: 200,
       headers: {
         'content-type': 'text/csv; charset=utf-8',
         'content-disposition': `attachment; filename="${nombre}-contpaqi.csv"`,
         'x-likida-polizas': String(polizas.length),
-        'x-likida-base-estimada': String(conBaseEstimada),
+        'x-likida-base-desconocida': String(conBaseDesconocida),
+        'x-likida-estado': 'generado_no_importado',
       },
     });
   }
 
-  // SAP B1 son DOS archivos ligados por RecordKey. Se devuelven juntos en JSON
-  // porque separarlos en dos descargas es la forma más fácil de que alguien
-  // importe uno sin el otro.
-  const cabeceras: string[] = [];
-  const lineas: string[] = [];
-  polizas.forEach((p, i) => {
-    if (!p.poliza.ok) return;
-    const { cabecera, lineas: ln } = aSapB1(p.poliza.poliza, i + 1);
-    // Solo el primero conserva el doble encabezado del DTW.
-    cabeceras.push(i === 0 ? cabecera : cabecera.split('\n').slice(2).join('\n'));
-    lineas.push(i === 0 ? ln : ln.split('\n').slice(2).join('\n'));
-  });
+  if (perfil.sistema !== 'sap_b1') return new NextResponse('Perfil ERP inconsistente', { status: 500 });
+  // SAP B1 DTW son DOS archivos ligados por JdtNum. Ambos llevan un único
+  // doble encabezado de la plantilla confirmada; devolverlos juntos evita que
+  // se importe un hijo sin su cabecera.
+  const sap = archivoSapB1(polizas.map((p) => p.poliza.ok ? p.poliza.poliza : null).filter((p): p is NonNullable<typeof p> => p !== null), perfil.plantilla);
 
   return NextResponse.json({
     formato: 'sap_b1_dtw',
     archivos: {
-      'oJournalEntries.txt': cabeceras.join(''),
-      'JournalEntries_Lines.txt': lineas.join(''),
+      'oJournalEntries.txt': sap.cabecera,
+      'JournalEntries_Lines.txt': sap.lineas,
     },
     polizas: polizas.length,
-    baseEstimada: conBaseEstimada,
+    baseDesconocida: conBaseDesconocida,
     nota:
-      'Son DOS archivos y el Data Transfer Workbench los importa juntos, ligados por RecordKey. ' +
-      'Importar solo uno deja asientos sin renglones o renglones sin asiento.',
+      'Son DOS archivos y el Data Transfer Workbench los importa juntos, ligados por JdtNum. ' +
+      'El archivo está generado desde una plantilla confirmada para esta flota; Likida no puede afirmar que ya fue importado hasta que tu contador lo pruebe en su instancia.',
+    estado: 'generado_no_importado',
+    plantillaConfirmadaEn: perfil.confirmadoEn,
   });
 }

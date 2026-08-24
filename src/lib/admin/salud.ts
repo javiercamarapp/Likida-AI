@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'escalar', 'facturar', 'purgar', 'runner', 'gps'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -33,6 +33,7 @@ export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
  *  `salud.test.ts` compara las dos. */
 export const CADENCIA_MS: Record<CronId, number> = {
   'wa-pendientes': 60_000,
+  'wa-outbox': 60_000,
   escalar: 3_600_000,
   // ESC-5: la cola de facturación pasó de un lote global por hora a encolar
   // por flota cada 15 minutos. Esta tabla espeja vercel.json y su prueba lo

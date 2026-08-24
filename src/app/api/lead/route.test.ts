@@ -3,9 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 // EL LEAD DE /getdemo — lo que se fija:
 //  · CORS cerrado: solo likida.ai recibe la cabecera. Este endpoint ESCRIBE.
-//  · NUNCA rompe al visitante: base caída, columna ausente o campo raro → 200
-//    y el lead se guarda igual. Si esto se traba se pierde la CITA, que vale
-//    más que el lead.
+//  · Un fallo de persistencia NO se disfraza de 200: la landing puede abrir su
+//    calendario por separado y el caller reintenta el lead con un 503.
 //  · `unidades` y `urgencia` son dominios cerrados y se filtran AQUÍ: un valor
 //    fuera de dominio no puede tirar el insert entero y llevarse el prospecto.
 //  · El canal se deduce de la atribución, y un click id manda sobre el utm_*
@@ -247,22 +246,22 @@ describe('la red de seguridad de la 0137', () => {
       { data: null, error: { message: 'column "empresa" of relation "prospecto" does not exist' } },
     );
     const r = await postear(LEAD);
-    expect(r.status).toBe(200); // el visitante nunca se entera…
+    expect(r.status).toBe(503); // el caller reintenta y el fallo queda visible
     expect(llamadas).toHaveLength(1); // …pero no se reintentó una fila coja
   });
 });
 
-describe('nunca rompe el flujo del visitante', () => {
-  it('si la base falla, contesta 200: la cita vale más que el lead', async () => {
+describe('fallos de persistencia son observables y reintentables', () => {
+  it('si la base falla, contesta 503 para no perder el lead en silencio', async () => {
     respuestas.push({ data: null, error: { message: 'db down' } });
     const r = await postear(LEAD);
-    expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ ok: true });
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: 'No se pudo registrar el lead. Intenta de nuevo.' });
   });
 
-  it('sin empresa no se escribe nada, pero tampoco se protesta', async () => {
+  it('sin empresa es un payload inválido y no se escribe nada', async () => {
     const r = await postear({ ...LEAD, empresa: '   ' });
-    expect(r.status).toBe(200);
+    expect(r.status).toBe(400);
     expect(llamadas).toHaveLength(0);
   });
 

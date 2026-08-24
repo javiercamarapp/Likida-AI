@@ -235,7 +235,9 @@ export default async function CrecimientoPage() {
                   <ControlCampanas
                     campanas={campanas}
                     integracion={integracionAds}
-                    leadsAds={adquisicion.porFuente.find((f) => f.fuente === 'ads')?.leads ?? 0}
+                    leadsAds={adquisicion.porFuente
+                      .filter((f) => f.fuente === 'ads' || f.fuente === 'ads-meta' || f.fuente === 'ads-google')
+                      .reduce((n, f) => n + f.leads, 0)}
                     pausar={accionPausarCampana}
                     refrescar={accionRefrescarGasto}
                   />

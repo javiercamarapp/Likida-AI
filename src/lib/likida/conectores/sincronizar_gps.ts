@@ -25,9 +25,13 @@ import { acotada } from '../presupuesto';
 import { descifrar } from './cofre';
 import { lectorDe, LECTORES_POSICION } from './posiciones';
 import type { Http } from './tipos';
+import { conPool } from '../lotes';
 
 /** Cuántas lecturas se escriben por corrida y flota. */
 const TOPE_POR_FLOTA = 500;
+/** Evita que una instalación con muchas flotas abra una ráfaga ilimitada de
+ * conexiones contra proveedores y PostgREST. */
+const ANCHO_FANOUT_FLOTAS = 4;
 
 export interface ResultadoSync {
   tenantId: string;
@@ -37,6 +41,19 @@ export interface ResultadoSync {
   /** Lecturas cuyo dispositivo no lo reclama ninguna unidad. Se reportan. */
   huerfanas: number;
   error?: string;
+}
+
+/** La frontera entre un proveedor ajeno y nuestra tabla es estricta: un id
+ * vacío, una fecha inválida o números fuera de dominio no llegan a Postgres.
+ * El lector valida su JSON, pero esta segunda barrera protege adaptadores
+ * futuros y evita escribir NaN/fechas locales ambiguas. */
+function posicionValida(p: { deviceId: string; lat: number; lng: number; medidaEn: string; velocidad: number | null; rumbo: number | null }): boolean {
+  const fecha = Date.parse(p.medidaEn);
+  return p.deviceId.trim().length > 0 && p.deviceId.length <= 200 &&
+    Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.lat >= -90 && p.lat <= 90 && p.lng >= -180 && p.lng <= 180 &&
+    !(p.lat === 0 && p.lng === 0) && Number.isFinite(fecha) &&
+    (p.velocidad === null || (Number.isFinite(p.velocidad) && p.velocidad >= 0 && p.velocidad <= 300)) &&
+    (p.rumbo === null || (Number.isFinite(p.rumbo) && p.rumbo >= 0 && p.rumbo < 360));
 }
 
 /** El `Http` real. Se inyecta para poder probar sin red. */
@@ -79,14 +96,15 @@ export async function sincronizarGpsDeFlota(
 
   const r = await lector(valores, http);
   if (!r.ok) return { ...base, error: r.motivo };
-  base.leidas = r.posiciones.length;
-  if (r.posiciones.length === 0) return base;
+  const posiciones = r.posiciones.filter(posicionValida).slice(0, TOPE_POR_FLOTA);
+  base.leidas = posiciones.length;
+  if (posiciones.length === 0) return base;
 
   // ── DEVICE ID → UNIDAD, filtrando por flota ───────────────────────────
   // El `.eq('tenant_id', …)` no es decorativo: `supabaseAdmin` salta RLS, así
   // que sin él una lectura podría asentarse en la unidad de otra flota que
   // usara el mismo número de dispositivo con otro proveedor.
-  const ids = [...new Set(r.posiciones.map((p) => p.deviceId))].slice(0, TOPE_POR_FLOTA);
+  const ids = [...new Set(posiciones.map((p) => p.deviceId))];
   const { data: unidades, error: errU } = await acotada(
     supabaseAdmin().from('unidad')
       .select('id, gps_device_id')
@@ -104,7 +122,7 @@ export async function sincronizarGpsDeFlota(
 
   const filas: Array<Record<string, unknown>> = [];
   const unidadesVistas = new Set<string>();
-  for (const p of r.posiciones.slice(0, TOPE_POR_FLOTA)) {
+  for (const p of posiciones) {
     const unidadId = porDevice.get(p.deviceId);
     if (!unidadId) { base.huerfanas += 1; continue; }
     unidadesVistas.add(unidadId);
@@ -164,26 +182,22 @@ export async function sincronizarGpsTodas(http: Http = httpReal): Promise<Result
     'gps.credenciales',
   );
   if (error) {
-    logger.error('gps.credenciales_ilegibles', { err: error.message });
-    return [];
+    // Esta lectura define el universo entero de la corrida. Devolver [] la
+    // pintaba verde con «0 flotas», ocultando una base caída durante días.
+    throw new Error(`gps.credenciales: ${error.message}`);
   }
 
-  const salida: ResultadoSync[] = [];
-  for (const c of data ?? []) {
-    try {
-      salida.push(
-        await sincronizarGpsDeFlota(
-          String(c.tenant_id), String(c.conector_id), String(c.valores_cifrados), http,
-        ),
-      );
-    } catch (e) {
-      // Una flota que revienta no se lleva a las demás.
-      salida.push({
-        tenantId: String(c.tenant_id), proveedor: String(c.conector_id),
-        leidas: 0, guardadas: 0, huerfanas: 0,
-        error: e instanceof Error ? e.message : String(e),
-      });
-    }
-  }
-  return salida;
+  const credenciales = data ?? [];
+  const resultados = await conPool(credenciales, ANCHO_FANOUT_FLOTAS, async (c) =>
+    sincronizarGpsDeFlota(String(c.tenant_id), String(c.conector_id), String(c.valores_cifrados), http),
+  );
+  return resultados.map((r, i) => {
+    if ('ok' in r) return r.ok;
+    const c = credenciales[i];
+    return {
+      tenantId: String(c.tenant_id), proveedor: String(c.conector_id),
+      leidas: 0, guardadas: 0, huerfanas: 0,
+      error: r.error instanceof Error ? r.error.message : String(r.error),
+    };
+  });
 }

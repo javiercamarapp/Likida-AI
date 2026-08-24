@@ -142,3 +142,4 @@ describe('las llaves reservadas son las que la pantalla enseña', () => {
     expect(Object.keys(c.gastos)).toHaveLength(0);
   });
 });
+

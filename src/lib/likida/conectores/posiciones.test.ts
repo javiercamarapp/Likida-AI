@@ -73,6 +73,24 @@ describe('las lecturas que mienten se descartan', () => {
     if (!r.ok) throw new Error('debería leer');
     expect(r.posiciones.map((p) => p.deviceId)).toEqual(['con']);
   });
+
+  it('un cursor de una página siguiente se sigue: no se deja fuera a la flota grande', async () => {
+    const llamadas: string[] = [];
+    const http: Http = async ({ url }) => {
+      llamadas.push(url);
+      if (url.includes('after=cursor-1')) {
+        return { estado: 200, cuerpo: JSON.stringify({ data: [{ id: 'dos', gps: { latitude: 20.8, longitude: -89.4, time: '2026-08-23T18:01:00Z' } }] }) };
+      }
+      return { estado: 200, cuerpo: JSON.stringify({
+        data: [{ id: 'uno', gps: { latitude: 20.9, longitude: -89.5, time: '2026-08-23T18:00:00Z' } }],
+        pagination: { hasNextPage: true, endCursor: 'cursor-1' },
+      }) };
+    };
+    const r = await leerPosicionesSamsara({ token: 't' }, http);
+    if (!r.ok) throw new Error('debería leer');
+    expect(r.posiciones.map((p) => p.deviceId)).toEqual(['uno', 'dos']);
+    expect(llamadas).toHaveLength(2);
+  });
 });
 
 describe('los fallos se dicen, no se tragan', () => {

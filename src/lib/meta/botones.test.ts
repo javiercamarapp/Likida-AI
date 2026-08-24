@@ -205,4 +205,9 @@ describe('cuando Meta lo rechaza', () => {
     fetchSpy.mockResolvedValue(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }));
     await expect(sendButtons('5219993700779', 'hola', CERRAR)).resolves.toBeNull();
   });
+
+  it('nunca lanza aunque un llamador JavaScript entregue botones malformados', async () => {
+    await expect(sendButtons('5219993700779', 'hola', [{ id: null, titulo: null }] as unknown as BotonAcuse[])).resolves.toBeNull();
+    expect(logger.error).toHaveBeenCalledWith('wa.sendButtons', expect.objectContaining({ status: 0 }));
+  });
 });

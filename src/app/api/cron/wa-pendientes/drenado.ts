@@ -84,6 +84,18 @@ export async function drenarBandeja(inicioInvocacion: number, req: Request, vuel
       for (const p of cadena) {
         const claim = await reclamarPendiente(p.id, p.intentos);
         if (!claim) continue; // otra corrida lo tomó — resultado esperado
+        // Los doubles y callers anteriores a 0177 no tienen token. Omitir el
+        // tercer argumento conserva ese contrato; producción siempre recibe un
+        // token y por ello conserva el sellado anclado al lease.
+        const sellar = () => claim.claimToken
+          ? marcarPendienteProcesado(claim.id, claim.claimToken)
+          : marcarPendienteProcesado(claim.id);
+        const anotar = (error: string) => claim.claimToken
+          ? anotarFalloPendiente(claim.id, error, claim.claimToken)
+          : anotarFalloPendiente(claim.id, error);
+        const devolver = () => claim.claimToken
+          ? devolverIntentoPendiente(claim.id, claim.intentos, claim.claimToken)
+          : devolverIntentoPendiente(claim.id, claim.intentos);
         try {
           // El reloj es el de ESTA invocación, compartido por todo el lote
           // (auditoría 18, C4): el mensaje 7 pide lo que queda, no 120s nuevos.
@@ -99,21 +111,21 @@ export async function drenarBandeja(inicioInvocacion: number, req: Request, vuel
               // mensaje ni se miró. Contarlo convertía en carta muerta, a las
               // cinco corridas cargadas, una foto que nadie llegó a procesar.
               // El resto de los pospuestos SÍ consumen: ahí el motor trabajó.
-              await devolverIntentoPendiente(claim.id, claim.intentos);
+              await devolver();
               // Sin presupuesto para este mensaje tampoco lo hay para el
               // siguiente de la cadena: se corta y la vuelta siguiente sigue.
               return;
             }
-            await anotarFalloPendiente(claim.id, `pospuesto: ${resultado}`);
+            await anotar(`pospuesto: ${resultado}`);
             continue;
           }
-          await marcarPendienteProcesado(claim.id);
+          await sellar();
           procesados++;
         } catch (e) {
           fallidos++;
           const err = e instanceof Error ? e.message : String(e);
           logger.error('cron.wa_pendientes.evento_fallo', { id: claim.id, intento: claim.intentos, err });
-          await anotarFalloPendiente(claim.id, err);
+          await anotar(err);
         }
       }
     });

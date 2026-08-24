@@ -29,6 +29,14 @@ export const COLOR_EMBUDO: Record<string, { color: string; nombre: string }> = {
   negociacion: { color: '#ea580c', nombre: 'En negociación' },
   cerrado: { color: '#16a34a', nombre: 'Cliente' },
   perdido: { color: '#94a3b8', nombre: 'Perdido' },
+  appointment: { color: '#2563eb', nombre: 'Cita agendada' },
+  rescheduled: { color: '#0891b2', nombre: 'Cita reprogramada' },
+  cancelled: { color: '#be123c', nombre: 'Cita cancelada' },
+  'no-show': { color: '#9f1239', nombre: 'No se presentó' },
+  proposal: { color: '#c026d3', nombre: 'Propuesta' },
+  pilot: { color: '#0f766e', nombre: 'Piloto' },
+  won: { color: '#15803d', nombre: 'Ganado' },
+  lost: { color: '#64748b', nombre: 'Perdido' },
 };
 
 export type Giro =
@@ -136,7 +144,11 @@ export function giroDe(empresa: string, vacante: string | null, notas: string | 
   // (bróker) calificaban como transportista por el nombre solo — el mismo
   // error que decenas de agentes de investigación han venido corrigiendo a
   // mano, empresa por empresa (18-ago).
-  const esOtroSectorDeTransporte = !!scian && /^(48[1235-9]|49)/.test(scian);
+  // DENUE normally sends six digits. Compare the three-digit SCIAN prefix,
+  // otherwise `484121` slips through as an unknown code and the hard cargo
+  // classification is lost.
+  const scianPrefix = normalizarScian(scian);
+  const esOtroSectorDeTransporte = !!scianPrefix && scianPrefix !== '484';
   if (!esOtroSectorDeTransporte
     && (/\b(transportes|transporte|autotransportes|autotransporte|fletes|trucking|carga|tractocamion|freight)\b/.test(nombre)
       || /autotransporte (foraneo|de carga|local)/.test(todo))) return 'transportista';
@@ -144,6 +156,16 @@ export function giroDe(empresa: string, vacante: string | null, notas: string | 
   if (/\b(reparto|cedis|distribucion|distribuidora|comercializadora|ruta de venta|autoventa|panificad)\b/.test(todo)
     || /comercio al por mayor/.test(todo)) return 'flota_propia';
   return 'otro';
+}
+
+/** Normalize 3- or 6-digit SCIAN values to the sector prefix. */
+export function normalizarScian(scian: string | null | undefined): string | null {
+  const digitos = (scian ?? '').replace(/\D/g, '');
+  return digitos.length >= 3 ? digitos.slice(0, 3) : null;
+}
+
+export function esScianCarga(scian: string | null | undefined): boolean {
+  return normalizarScian(scian) === '484';
 }
 
 // ── Tamaño de flota (el estrato DENUE viaja en notas) ──────────────────────
@@ -232,7 +254,10 @@ export function scoreUrgencia(p: {
   else if (/ultimo anuncio/.test(plano)) s += 5;
   // La ficha trabajada a mano (cuentas nombradas) documenta el dolor textual.
   if (/FICHA 1\d-ago|martirio/i.test(notas)) s += 15;
-  return Math.min(100, s);
+  const inferida = Math.min(100, s);
+  if (p.urgenciaDeclarada === 'trimestre') return Math.min(70, inferida);
+  if (p.urgenciaDeclarada === 'explorando') return Math.min(35, inferida);
+  return inferida;
 }
 
 export function scoreCierre(p: {
@@ -242,6 +267,10 @@ export function scoreCierre(p: {
   personasVerificadas?: number;
   /** Código DENUE (0139) — el veredicto duro que usa giroDe. */
   scian?: string | null;
+  /** Flota investigada (hecho), preferred over a declared range. */
+  numUnidades?: number | null;
+  /** Range declared in the public form. */
+  unidadesDeclaradas?: string | null;
 }): number {
   let s = 0;
   // Alcanzabilidad: no se cierra a quien no se puede llamar.
@@ -256,10 +285,22 @@ export function scoreCierre(p: {
   else if (g === 'flota_propia') s += 8;
   // El embudo manda: lo avanzado pesa más que cualquier señal.
   if (p.estado === 'contactado') s += 15;
+  else if (p.estado === 'appointment') s += 18;
+  else if (p.estado === 'rescheduled') s += 16;
   else if (p.estado === 'demo') s += 25;
+  else if (p.estado === 'proposal') s += 32;
+  else if (p.estado === 'pilot') s += 40;
   else if (p.estado === 'negociacion') s += 35;
-  else if (p.estado === 'cerrado') return 100;
-  else if (p.estado === 'perdido') return 0;
+  else if (p.estado === 'won' || p.estado === 'cerrado') return 100;
+  else if (p.estado === 'lost' || p.estado === 'perdido' || p.estado === 'cancelled') return 0;
+
+  // Fleet size is a fit signal, not an urgency signal. Prefer the researched
+  // fact and fall back to the floor of the declared range.
+  const unidades = p.numUnidades ?? unidadesMinimas(p.unidadesDeclaradas);
+  if (unidades !== null && unidades >= 250) s += 12;
+  else if (unidades !== null && unidades >= 100) s += 10;
+  else if (unidades !== null && unidades >= 30) s += 7;
+  else if (unidades !== null && unidades >= 5) s += 4;
   // Cuenta trabajada a mano (ficha) — ya hay contexto para personalizar.
   if (p.fuente === 'manual') s += 10;
 
@@ -280,13 +321,20 @@ export function scoreCierre(p: {
   return Math.min(100, s);
 }
 
+function unidadesMinimas(rango: string | null | undefined): number | null {
+  if (!rango) return null;
+  if (rango === '250+') return 250;
+  const match = /^(\d+)/.exec(rango);
+  return match ? Number(match[1]) : null;
+}
+
 /** El criterio, en una línea por score — el pie del mapa lo enseña TAL CUAL
  *  (misma fuente que el cálculo, no una copia que se desincronice). */
 export const CRITERIO_SCORES = {
   urgencia: 'Urgencia = lo que él DECLARA manda sobre lo que inferimos: si contestó «ya, este mes nos está costando» en /getdemo vale 100, y si contestó «estoy explorando» queda con techo aunque su vacante grite. Sin declaración se infiere: la vacante que nombra la liquidación (+45), cuántos anuncios (+4 c/u, tope 20), qué tan reciente el último (+20 si es de hoy) y la ficha trabajada (+15). Estimación determinista, no medición.',
-  cierre: 'Cierre = alcanzabilidad (tel +20, correo +15, decisor +20, +10 por decisor con contacto VERIFICADO —el inferido no cuenta—), quién llegó a quién (entró solo por la landing +20, por un anuncio pagado +25), fit del giro (transportista +15), etapa del embudo (contactado +15 … negociación +35; cliente=100, perdido=0) y ficha a mano (+10). Estimación determinista, no medición: con cero tratos cerrados no hay con qué calibrar una probabilidad, así que esto ORDENA la cola, no predice el cierre.',
+  cierre: 'Cierre = alcanzabilidad (tel +20, correo +15, decisor +20, +10 por decisor con contacto VERIFICADO —el inferido no cuenta—), quién llegó a quién (landing/campaña +20, anuncio pagado +25), fit del giro (transportista +15), tamaño de flota (+4 a +12 sin mezclarlo con urgencia), etapa del embudo (cita +18 … piloto +40; cliente ganado=100, perdido=0) y ficha a mano (+10). Estimación determinista, no medición: esto ORDENA la cola, no predice el cierre.',
   datos: 'Datos = qué tan completo está el expediente para salir a venderle: teléfono +30, correo +25, decisor +20, ubicación +15, sitio web VERIFICADO +10. El tamaño (11-30 … 250+) es el personal ocupado que reporta la DENUE.',
-  similitud: 'Similitud con el ICP (0140, GENERADA — nadie la escribe a mano) = giro correcto (SCIAN 484/485/488) +40, vacante publicada +25, flota investigada ≥10 unidades +20, sitio web verificado +15.',
+  similitud: 'Similitud con el ICP (0140, GENERADA — nadie la escribe a mano) = SCIAN de transporte objetivo (prefijo 484/485/488, aunque llegue en 6 dígitos) +40, vacante publicada +25, flota investigada ≥10 unidades +20, sitio web verificado +15.',
   necesidad: 'Necesidad (0140, GENERADA) = vacante de liquidación/cuadre/auxiliar administrativo +50 (cualquier otra vacante +25), flota investigada ≥20 unidades +25.',
 } as const;
 
@@ -449,6 +497,9 @@ interface FilaProspecto {
   telefono: string | null; correo: string | null; contacto_nombre: string | null;
   vacante: string | null; estado: string; fuente: string; notas: string | null;
   scian: string | null;
+  urgencia: string | null;
+  unidades?: string | null;
+  duplicado_de: string | null;
   mensajes_generados_en: string | null;
   updated_at: string;
   prospecto_toque: Array<{ creado_en: string }> | null;
@@ -457,6 +508,7 @@ interface FilaProspecto {
   num_unidades: number | null;
   similitud_icp_pct: number;
   necesidad_pct: number;
+  prospecto_persona: Array<{ confianza: 'alta' | 'media' | 'baja' }> | null;
 }
 
 /** Las columnas del LISTADO. `mensaje_wa`, `mensaje_correo_asunto` y
@@ -464,7 +516,7 @@ interface FilaProspecto {
  *  —la usan giroDe/tamanoDe/scoreUrgencia/completitudDe y el filtro de
  *  duplicados—, pero se queda en el servidor. */
 const COLUMNAS_LISTADO =
-  'id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, scian, mensajes_generados_en, updated_at, sitio_verificado, num_unidades, similitud_icp_pct, necesidad_pct, prospecto_toque(creado_en)';
+  'id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, scian, urgencia, unidades, duplicado_de, mensajes_generados_en, updated_at, sitio_verificado, num_unidades, similitud_icp_pct, necesidad_pct, prospecto_toque(creado_en), prospecto_persona(confianza)';
 
 /** Cuántas páginas de 1,000 se piden A LA VEZ (mismo criterio que
  *  `TANDAS_EN_PARALELO` de `traerPorIds` en pg.ts: acotado para no abrir
@@ -523,8 +575,8 @@ export async function traerTodoEnParalelo<T>(
 /** El filtro de duplicados del mapa: la marca la escribe el deduplicador
  *  dentro de `notas` (0139). Se resuelve aquí y no en SQL porque `notas` ya
  *  viaja hasta el servidor para calcular giro/tamaño/urgencia. */
-function esDuplicado(f: { notas: string | null }): boolean {
-  return /DUPLICADO:/.test(f.notas ?? '');
+function esDuplicado(f: { notas: string | null; duplicado_de?: string | null }): boolean {
+  return Boolean(f.duplicado_de) || /DUPLICADO:/.test(f.notas ?? '');
 }
 
 function aProspecto(p: FilaProspecto): ProspectoMapa {
@@ -551,11 +603,14 @@ function aProspecto(p: FilaProspecto): ProspectoMapa {
     mensajesGeneradosEn: p.mensajes_generados_en,
     ultimoToque: (p.prospecto_toque ?? []).reduce<string | null>(
       (max, t) => (max === null || t.creado_en > max ? t.creado_en : max), null),
-    urgencia: scoreUrgencia({ vacante: p.vacante, notas: p.notas }),
+    urgencia: scoreUrgencia({ vacante: p.vacante, notas: p.notas, urgenciaDeclarada: p.urgencia }),
     cierre: scoreCierre({
       telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
       estado: p.estado, fuente: p.fuente, empresa: p.empresa, vacante: p.vacante, notas: p.notas,
       scian: p.scian,
+      numUnidades: p.num_unidades,
+      unidadesDeclaradas: p.unidades,
+      personasVerificadas: (p.prospecto_persona ?? []).filter((x) => x.confianza !== 'baja').length,
     }),
     numUnidades: p.num_unidades,
     similitudIcpPct: p.similitud_icp_pct,
@@ -580,12 +635,19 @@ function aProspecto(p: FilaProspecto): ProspectoMapa {
  */
 async function contarMapa(): Promise<number | null> {
   const admin = supabaseAdmin();
+  const base = admin.from('prospecto').select('id', { count: 'exact', head: true });
+  if (typeof (base as { is?: unknown }).is === 'function') {
+    const vivas = await (base as typeof base & { is: (c: string, v: null) => typeof base }).is('duplicado_de', null);
+    if (vivas.error || typeof vivas.count !== 'number') return null;
+    return vivas.count;
+  }
+  // Compatibility for tiny test doubles and older PostgREST clients. The
+  // production path above always uses the indexed NULL predicate.
   const [todo, dup] = await Promise.all([
     admin.from('prospecto').select('id', { count: 'exact', head: true }),
     admin.from('prospecto').select('id', { count: 'exact', head: true }).ilike('notas', '%DUPLICADO:%'),
   ]);
-  if (todo.error || dup.error) return null;
-  if (typeof todo.count !== 'number' || typeof dup.count !== 'number') return null;
+  if (todo.error || dup.error || typeof todo.count !== 'number' || typeof dup.count !== 'number') return null;
   return todo.count - dup.count;
 }
 
@@ -615,7 +677,10 @@ export async function getDatosMapa(opciones?: { desde?: string | null }): Promis
   try {
     filas = await traerTodoEnParalelo<FilaProspecto>(
       (d, h) => {
-        const q = supabaseAdmin().from('prospecto').select(COLUMNAS_LISTADO, conteo(d));
+        const raw = supabaseAdmin().from('prospecto').select(COLUMNAS_LISTADO, conteo(d));
+        const q = typeof (raw as { is?: unknown }).is === 'function'
+          ? (raw as typeof raw & { is: (c: string, v: null) => typeof raw }).is('duplicado_de', null)
+          : raw;
         // El orden secundario por id NO es adorno: created_at se repite (los
         // lotes de siembra comparten el now() de su transacción) y paginar
         // sobre un orden no único duplica y salta filas entre páginas — se
@@ -668,16 +733,16 @@ export async function getTextosProspectos(ids: string[]): Promise<TextosProspect
   if (ids.length === 0) return [];
   const filas = await traerPorIds<{
     id: string; notas: string | null; mensaje_wa: string | null;
-    mensaje_correo_asunto: string | null; mensaje_correo: string | null;
+    mensaje_correo_asunto: string | null; mensaje_correo: string | null; duplicado_de?: string | null;
   }>(
     ids,
     (tanda) => supabaseAdmin()
       .from('prospecto')
-      .select('id, notas, mensaje_wa, mensaje_correo_asunto, mensaje_correo')
+      .select('id, notas, mensaje_wa, mensaje_correo_asunto, mensaje_correo, duplicado_de')
       .in('id', tanda),
     'prospecto (textos)',
   );
-  return filas.map((f) => ({
+  return filas.filter((f) => !f.duplicado_de).map((f) => ({
     id: f.id,
     notas: f.notas,
     mensajeWaIa: f.mensaje_wa,
@@ -746,7 +811,7 @@ export async function getDetalleProspecto(id: string): Promise<DetalleProspecto 
   const res = await admin
     .from('prospecto')
     .select(`id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado,
-      fuente, notas, scian, mensaje_wa, mensaje_correo_asunto, mensaje_correo, mensajes_generados_en,
+      fuente, notas, scian, urgencia, unidades, mensaje_wa, mensaje_correo_asunto, mensaje_correo, mensajes_generados_en,
       sitio, sitio_verificado, num_unidades, historia, similitud_icp_pct, necesidad_pct,
       viajes_mes_estimado, duplicado_de, created_at, updated_at,
       prospecto_toque(creado_en),
@@ -771,11 +836,12 @@ export async function getDetalleProspecto(id: string): Promise<DetalleProspecto 
     correoCuerpoIa: p.mensaje_correo, mensajesGeneradosEn: p.mensajes_generados_en,
     ultimoToque: (p.prospecto_toque ?? []).reduce<string | null>(
       (max, t) => (max === null || t.creado_en > max ? t.creado_en : max), null),
-    urgencia: scoreUrgencia({ vacante: p.vacante, notas: p.notas }),
+    urgencia: scoreUrgencia({ vacante: p.vacante, notas: p.notas, urgenciaDeclarada: p.urgencia }),
     cierre: scoreCierre({
       telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
       estado: p.estado, fuente: p.fuente, empresa: p.empresa, vacante: p.vacante, notas: p.notas,
-      scian: p.scian, personasVerificadas: (p.prospecto_persona ?? []).filter((x) => x.confianza !== 'baja').length,
+      scian: p.scian, numUnidades: p.num_unidades, unidadesDeclaradas: p.unidades,
+      personasVerificadas: (p.prospecto_persona ?? []).filter((x) => x.confianza !== 'baja').length,
     }),
     sitio: p.sitio, sitioVerificado: p.sitio_verificado,
     numUnidades: p.num_unidades, historia: p.historia,

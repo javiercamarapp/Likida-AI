@@ -68,3 +68,4 @@ $$;
 
 revoke all on function public.poliza_datos_tenant(uuid, date, date) from public, anon, authenticated;
 grant execute on function public.poliza_datos_tenant(uuid, date, date) to service_role;
+
