@@ -2,9 +2,12 @@
 // ciclo de tool-calling con el contexto del tenant/operador.
 
 import type OpenAI from 'openai';
+import { randomUUID } from 'crypto';
 import { generateWithTools, type ToolCallRecord } from '@/lib/llm/openrouter';
 import { ROLE_PARAMS } from '@/lib/llm/models';
 import { toolSchemas, makeExecutor, type ToolContext } from '@/lib/llm/tool-executor';
+import { combineAbortSignals } from '@/lib/llm/runtime-signal';
+import { createLlmBudget } from '@/lib/llm/budget';
 import { AGENT_REGISTRY } from './registry';
 import { getSystemPrompt } from './prompts';
 import type { AgentName, TenantContext } from './types';
@@ -38,20 +41,29 @@ export function maxRondasCuadre(): number {
   return Number.isFinite(v) && v > 0 ? Math.round(v) : 6;
 }
 
+export function timeoutAgenteMs(): number {
+  const v = Number(process.env.LIKIDA_AGENT_TIMEOUT_MS);
+  return Number.isFinite(v) && v > 0 ? Math.round(v) : 40_000;
+}
+
 export async function runAgent(opts: {
   agent: AgentName;
   tenant: TenantContext;
   ctx: ToolContext;
   history: OpenAI.Chat.ChatCompletionMessageParam[];
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<RunAgentResult> {
   const config = AGENT_REGISTRY[opts.agent];
   const system = getSystemPrompt(config.systemPromptKey, opts.tenant);
   const tools = toolSchemas(config.tools);
 
   const controller = new AbortController();
-  const timer = opts.timeoutMs ? setTimeout(() => controller.abort(), opts.timeoutMs) : null;
-  const ctx: ToolContext = { ...opts.ctx, signal: controller.signal };
+  const timer = setTimeout(() => controller.abort(new DOMException('Timeout', 'TimeoutError')), opts.timeoutMs ?? timeoutAgenteMs());
+  const signal = combineAbortSignals(opts.signal, opts.ctx.signal, controller.signal)!;
+  const runId = opts.ctx.runId ?? randomUUID();
+  const budget = createLlmBudget(opts.ctx.tenantId, runId);
+  const ctx: ToolContext = { ...opts.ctx, runId, signal };
 
   // ME-1: aplicar los parámetros por rol (temp 0 + reasoning donde importa), en
   // vez del default mudo de 0.3. El cuadre orquesta dinero → determinístico.
@@ -65,7 +77,8 @@ export async function runAgent(opts: {
       toolExecutor: makeExecutor(ctx),
       temperature: params.temperature,
       reasoning: params.reasoning,
-      signal: controller.signal,
+      signal,
+      budget,
       // M21 (auditoría 18): el techo del cuadre era el default mudo de
       // openrouter.ts (4,000 × 6 rondas) y ningún lugar lo declaraba — el rol
       // más caro del repo era el único ciclo sin techo propio. Se declara
@@ -86,6 +99,6 @@ export async function runAgent(opts: {
       costoPorModelo: res.costoPorModelo,
     };
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
   }
 }

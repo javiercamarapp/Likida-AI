@@ -41,7 +41,7 @@ describe('makeExecutor — mutaciones concurrentes', () => {
         return { liquidacion_id: `L-${ejecuciones}` };
       },
     });
-    const exec = makeExecutor({ tenantId: 't1', viajeId: 'v1' });
+    const exec = makeExecutor({ tenantId: 't1', viajeId: 'v1', runId: 'run-concurrente-args' });
 
     // Es el caso para el que existe `inRound`, con el segundo argumento que el
     // modelo puede inventar porque el schema no lo prohíbe.
@@ -62,7 +62,7 @@ describe('makeExecutor — mutaciones concurrentes', () => {
       schema: schema('guardar_concurrente_igual'),
       handler: async () => { ejecuciones++; await new Promise((r) => setTimeout(r, 5)); return { ok: true }; },
     });
-    const exec = makeExecutor({ tenantId: 't1' });
+    const exec = makeExecutor({ tenantId: 't1', runId: 'run-concurrente-igual' });
     await Promise.all([exec('guardar_concurrente_igual', {}), exec('guardar_concurrente_igual', {})]);
     expect(ejecuciones).toBe(1);
   });
@@ -74,7 +74,7 @@ describe('makeExecutor — mutaciones concurrentes', () => {
       schema: schema('guardar_concurrente_tres'),
       handler: async () => { ejecuciones++; await new Promise((r) => setTimeout(r, 5)); return { n: ejecuciones }; },
     });
-    const exec = makeExecutor({ tenantId: 't1' });
+    const exec = makeExecutor({ tenantId: 't1', runId: 'run-concurrente-tres' });
     await Promise.all([
       exec('guardar_concurrente_tres', {}),
       exec('guardar_concurrente_tres', { a: 1 }),
@@ -99,7 +99,7 @@ describe('makeExecutor — mutaciones concurrentes', () => {
         return { ok: true };
       },
     });
-    const exec = makeExecutor({ tenantId: 't1' });
+    const exec = makeExecutor({ tenantId: 't1', runId: 'run-concurrente-falla' });
     const primera = await exec('guardar_concurrente_falla', {});
     expect(primera.success).toBe(false);
     const segunda = await exec('guardar_concurrente_falla', {});
@@ -119,7 +119,7 @@ describe('makeExecutor — mutaciones concurrentes', () => {
         return { ok: true };
       },
     });
-    const exec = makeExecutor({ tenantId: 't1' });
+    const exec = makeExecutor({ tenantId: 't1', runId: 'run-concurrente-falla-par' });
     const [a, b] = await Promise.all([
       exec('guardar_concurrente_falla_par', {}),
       exec('guardar_concurrente_falla_par', { x: 1 }),

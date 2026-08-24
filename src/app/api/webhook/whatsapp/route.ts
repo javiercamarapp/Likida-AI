@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
+import { randomUUID } from 'crypto';
 // `sendText` ya no se importa aquí: el único envío que salía de esta ruta era
 // el aviso de rate limit, y ese aviso desapareció con el 429 (los mensajes
 // vuelven solos). Esta ruta solo recibe; quien contesta es el processor.
@@ -10,7 +11,11 @@ import { logger } from '@/lib/logger';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { flushObservabilidad, codigoDeError } from '@/lib/observability/sentry';
 import { estaApagado } from '@/lib/likida/interruptores';
-import { guardarEventosPendientes, pendientesYaConocidos, reclamarPendiente, marcarPendienteProcesado, anotarFalloPendiente } from '@/lib/likida/wa_pendientes';
+import {
+  guardarEventosPendientes, pendientesYaConocidos, reclamarPendiente,
+  marcarPendienteProcesado, anotarFalloPendiente,
+  iniciarRenovacionLease,
+} from '@/lib/likida/wa_pendientes';
 
 const MAX_BODY = 256 * 1024;   // 256 KB — un webhook de Meta es pequeño
 const MSGS_POR_MIN = 40;        // por teléfono (una ráfaga de 12 fotos cabe holgada)
@@ -123,6 +128,7 @@ export async function POST(req: NextRequest) {
   // mensaje. Se le pasa a cada `processInbound` del pool para que la foto 6
   // pida lo que queda y no los 120s enteros (auditoría 18, C4).
   const inicioInvocacion = Date.now();
+  const leaseOwner = `wa-webhook:${randomUUID()}`;
   // CAP DE BODY antes de leer/HMAC: evita DoS por cuerpo enorme sin firma.
   if (bodyExcede(req, MAX_BODY)) return new NextResponse('Payload too large', { status: 413 });
 
@@ -341,39 +347,40 @@ export async function POST(req: NextRequest) {
       await conPool([...porChofer.values()], MAX_EN_PARALELO, async (cadena) => {
         for (const f of cadena) {
           try {
-            const claim = await reclamarPendiente(f.id, 0);
-            // `continue` y NO `return`: dentro de la cadena, salir aquí se
-            // saltaría los mensajes SIGUIENTES del mismo chofer — que es
-            // justamente el orden que este bucle existe para respetar.
-            if (!claim) continue; // el cron (u otra entrega) ya lo tiene.
-            // La fila real reclamada por 0177 siempre trae token. Mantener la
-            // llamada de dos argumentos para el contrato previo evita que un
-            // adapter/mock sin token se rompa, sin aflojar el lease real.
-            const sellar = () => claim.claimToken
-              ? marcarPendienteProcesado(f.id, claim.claimToken)
-              : marcarPendienteProcesado(f.id);
-            const anotar = (error: string) => claim.claimToken
-              ? anotarFalloPendiente(f.id, error, claim.claimToken)
-              : anotarFalloPendiente(f.id, error);
+            const claim = await reclamarPendiente(f.id, 0, leaseOwner);
+            // Si otra invocación tiene el mensaje anterior, esta cadena se
+            // detiene: avanzar al siguiente rompería el orden por chofer.
+            if (!claim) break;
+            const detenerRenovacion = claim.leaseToken && claim.leaseOwner
+              ? iniciarRenovacionLease(claim.id, claim.leaseToken, claim.leaseOwner)
+              : () => {};
             try {
               const resultado = await processInbound(claim.evento, { inicioInvocacionMs: inicioInvocacion });
               if (quedoPendiente(resultado)) {
                 logger.warn('wa.pendiente_pospuesto', { id: f.id, resultado });
-                await anotar(`pospuesto: ${resultado}`);
+                if (claim.leaseToken && claim.leaseOwner) await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`, claim.leaseToken, claim.leaseOwner);
+                else await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`);
                 // Sin presupuesto para éste tampoco lo hay para el que sigue, y
                 // procesar el «listo» sin sus fotos es peor que posponerlo: se
                 // corta la cadena y el cron la retoma entera. Mismo criterio
                 // que el drenado (ESC-1).
-                if (resultado === 'sin_tiempo') return;
+                break;
               } else {
-                await sellar();
+                const sellado = claim.leaseToken && claim.leaseOwner
+                  ? await marcarPendienteProcesado(f.id, claim.leaseToken, claim.leaseOwner)
+                  : await marcarPendienteProcesado(f.id);
+                if (sellado === false) break;
               }
             } catch (e) {
-              await anotar(e instanceof Error ? e.message : String(e));
+              if (claim.leaseToken && claim.leaseOwner) await anotarFalloPendiente(f.id, e instanceof Error ? e.message : String(e), claim.leaseToken, claim.leaseOwner);
+              else await anotarFalloPendiente(f.id, e instanceof Error ? e.message : String(e));
               // `codigo` (AUDITORÍA 18, M14): sin él este catch era UN solo issue
               // de Sentry para todos los fallos de procesamiento de todas las
               // flotas, para siempre — la causa nueva no notificaba.
               logger.error('processInbound', { id: f.id, err: e instanceof Error ? e.message : String(e), codigo: codigoDeError(e) });
+              break;
+            } finally {
+              detenerRenovacion();
             }
           } catch (e) {
             // Ni el claim se pudo leer: la fila sigue pendiente y el cron la

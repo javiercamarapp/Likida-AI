@@ -13,7 +13,7 @@ vi.mock('@/lib/llm/tool-executor', () => ({ toolSchemas: () => [], makeExecutor:
 vi.mock('./prompts', () => ({ getSystemPrompt: () => 'sistema' }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { runAgent, maxTokensCuadre, maxRondasCuadre } = await import('./run');
+const { runAgent, maxTokensCuadre, maxRondasCuadre, timeoutAgenteMs } = await import('./run');
 
 const TENANT = { tenantId: 't-1' } as never;
 const correr = () => runAgent({ agent: 'liquidacion', tenant: TENANT, ctx: { tenantId: 't-1' } as never, history: [] });
@@ -43,5 +43,22 @@ describe('M21 — el techo del cuadre se declara, no se hereda', () => {
     vi.stubEnv('LIKIDA_CUADRE_MAX_RONDAS', '-3');
     expect(maxTokensCuadre()).toBe(4000);
     expect(maxRondasCuadre()).toBe(6);
+  });
+
+  it('si no se especifica timeout, el agente conserva un backstop efectivo', () => {
+    vi.stubEnv('LIKIDA_AGENT_TIMEOUT_MS', '');
+    expect(timeoutAgenteMs()).toBe(40_000);
+    vi.stubEnv('LIKIDA_AGENT_TIMEOUT_MS', '2500');
+    expect(timeoutAgenteMs()).toBe(2500);
+  });
+
+  it('combina la señal externa y entrega una identidad de corrida al runtime', async () => {
+    const externo = new AbortController();
+    await runAgent({ agent: 'liquidacion', tenant: TENANT, ctx: { tenantId: 't-1' } as never, history: [], signal: externo.signal });
+    const opts = generateWithTools.mock.calls.at(-1)?.[0] as { signal: AbortSignal; budget: { tenantId: string; runId: string } };
+    expect(opts.signal).not.toBe(externo.signal);
+    expect(opts.signal.aborted).toBe(false);
+    expect(opts.budget.tenantId).toBe('t-1');
+    expect(opts.budget.runId).toMatch(/^[0-9a-f-]{36}$/);
   });
 });

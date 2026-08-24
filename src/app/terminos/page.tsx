@@ -25,6 +25,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { PaginaLegal, FaltaDato, type SeccionLegal } from '../legal/marco';
+import { estadoLegalProduccion, LEGAL_CONFIG } from '@/lib/legal/config';
 
 export const metadata = {
   title: 'Términos de servicio — Likida',
@@ -34,11 +35,11 @@ export const metadata = {
 const PRESTADOR = {
   // 🔴 PENDIENTE: los mismos datos que faltan en /privacidad. Un contrato sin
   // la razón social de quien se obliga no obliga a nadie.
-  razonSocial: null as string | null,
-  domicilio: null as string | null,
+  razonSocial: LEGAL_CONFIG.razonSocial,
+  domicilio: LEGAL_CONFIG.domicilio,
   // 🔴 PENDIENTE: la plaza que decide la competencia (§19).
-  jurisdiccion: null as string | null,
-  contacto: 'likida.ai@gmail.com',
+  jurisdiccion: LEGAL_CONFIG.jurisdiccion,
+  contacto: LEGAL_CONFIG.contacto,
 };
 
 const SECCIONES: SeccionLegal[] = [
@@ -205,19 +206,17 @@ const SECCIONES: SeccionLegal[] = [
 ];
 
 export default function Terminos() {
-  const faltan = !PRESTADOR.razonSocial || !PRESTADOR.domicilio || !PRESTADOR.jurisdiccion;
+  const estado = estadoLegalProduccion();
 
   return (
     <PaginaLegal
       etiqueta="Términos de servicio"
       bajada="Condiciones de uso del servicio de liquidación de viáticos"
       secciones={SECCIONES}
-      aviso={faltan ? (
+      aviso={!estado.listo ? (
         <FaltaDato>
-          Faltan por capturar la <strong>razón social</strong>, el <strong>domicilio fiscal</strong> y
-          la <strong>plaza competente</strong> de la empresa que presta Likida, además de la lista de
-          precios. Aparecen señalados con 🔴 dentro del texto en vez de quedar en blanco: un contrato
-          sin la razón social de quien se obliga no obliga a nadie.
+          <strong>PRODUCCIÓN BLOQUEADA:</strong> faltan datos de identidad o anexos contractuales.
+          No debe usarse como contrato enterprise hasta completar identidad, contacto y versiones contractuales.
         </FaltaDato>
       ) : undefined}
       pie={

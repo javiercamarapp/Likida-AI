@@ -1,5 +1,10 @@
 # Runbook de producción
 
+La operación de resiliencia/deploy automatizada vive en
+[`docs/operacion/RESILIENCIA-DEPLOY.md`](../operacion/RESILIENCIA-DEPLOY.md):
+backup programado de Storage, manifiestos y hashes, restore drill seguro,
+Preview→smoke→promote, rollback aprobado y objetivos RPO/RTO.
+
 Producción: **https://app.likida.ai** — proyecto `likida/likida.ai` en Vercel,
 plan Pro. Ya está desplegado y sirviendo WhatsApp real; este documento es para
 **operarlo**, no para levantarlo. El apartado de despliegue está al final porque

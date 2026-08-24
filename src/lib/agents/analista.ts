@@ -23,6 +23,8 @@ import { generateWithTools, PartialExecutionError } from '@/lib/llm/openrouter';
 import { toolSchemas, makeExecutor, registerTool, type ToolContext } from '@/lib/llm/tool-executor';
 import { getSystemPrompt } from './prompts';
 import { logger } from '@/lib/logger';
+import { combineAbortSignals } from '@/lib/llm/runtime-signal';
+import { createLlmBudget } from '@/lib/llm/budget';
 import { ahoraMs } from '@/lib/saludo';
 import { TZ_MX, hoyMx } from '@/lib/formato';
 import './chat-tools'; // registra las tools de lectura al importar
@@ -272,13 +274,15 @@ export async function ejecutarAnalista(opts: {
   documento?: { nombre: string; extracto: string } | null;
   mensajes: Array<{ rol: 'usuario' | 'asistente'; texto: string }>;
   timeoutMs?: number;
+  signal?: AbortSignal;
   /** Aviso EN VIVO de cada tool que el agente ejecuta — la secuencia de
    *  pensamiento del chat (13-ago). Pasos REALES del ciclo, jamás una
    *  animación inventada. */
   onPaso?: (ev: { fase: 'inicio' | 'fin'; tool: string }) => void;
 }): Promise<RespuestaAnalista> {
   const runId = randomUUID();
-  const ctx: ToolContext = { tenantId: opts.tenantId, conversationId: runId };
+  const budget = createLlmBudget(opts.tenantId, runId);
+  const ctx: ToolContext = { tenantId: opts.tenantId, conversationId: runId, runId };
   const ROL_LEGIBLE: Record<string, string> = {
     flota_admin: 'dueño/administrador de la flota',
     contador: 'contador de la flota (enfócate en lo fiscal y financiero)',
@@ -311,7 +315,8 @@ export async function ejecutarAnalista(opts: {
   // chinga"). flash-lite conversa Y analiza; el rol chat_ligero queda como
   // palanca reservada en models.ts por si un día vuelve a convenir.
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 40_000);
+  const timer = setTimeout(() => controller.abort(new DOMException('Timeout', 'TimeoutError')), opts.timeoutMs ?? 40_000);
+  const signal = combineAbortSignals(opts.signal, controller.signal)!;
   try {
     const res = await generateWithTools({
       role: 'chat',
@@ -325,7 +330,8 @@ export async function ejecutarAnalista(opts: {
       maxToolRounds: 5,
       maxTokens: 900,
       temperature: 0.2,
-      signal: controller.signal,
+      signal,
+      budget,
       onTool: opts.onPaso,
       // A30: la entrega por canal lateral NO la corta el loop-guard, y en
       // cuanto corre el ciclo termina. B17: las lecturas por sustantivo
@@ -378,7 +384,8 @@ export async function ejecutarAnalista(opts: {
         maxToolRounds: 4,
         maxTokens: 900,
         temperature: 0,
-        signal: controller.signal,
+        signal,
+        budget,
         onTool: opts.onPaso,
         terminalTools: ['entregar_respuesta'],
         readOnlyTools: TOOLS_LECTURA,

@@ -27,6 +27,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import type { Liquidacion, Viaje, Operador } from '@/types/likida';
 
 // El cuadre que el cierre va a imprimir. Trae un veredicto SOLO-CONTRALOR (EFOS)
@@ -114,7 +115,7 @@ async function textoDelPdf(bytes: Uint8Array): Promise<string> {
 // normal —el chofer escribió "listo"— y el candado propio se prueba en
 // `tools_cierre_pedido.test.ts`.
 const CTX = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779', cierrePedidoPorTexto: true };
-const cerrar = () => executeTool('guardar_liquidacion', {}, CTX);
+const cerrar = () => executeTool('guardar_liquidacion', {}, { ...CTX, runId: randomUUID() });
 
 beforeEach(() => { subidos.clear(); fallaEnRuta.clear(); saveLiquidacion.mockClear(); });
 

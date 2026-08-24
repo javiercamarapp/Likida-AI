@@ -59,6 +59,7 @@ const registrarCorrida = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock('./corridas', () => ({ registrarCorrida: (...a: unknown[]) => registrarCorrida(...a) }));
 
 const { redactarCorreoFrio, parsearVariantes } = await import('./redactor');
+const CONTEXTO = { tenantId: 'tenant-redactor-a', runId: '00000000-0000-4000-8000-000000000001' };
 const { DatoInvalido } = await import('../errores');
 
 const PROSPECTO = {
@@ -90,9 +91,14 @@ describe('parsearVariantes — la frontera entre el modelo y la cola', () => {
 });
 
 describe('redactarCorreoFrio', () => {
+  it('sin tenant explícito falla cerrado antes de leer prospectos o llamar al modelo', async () => {
+    await expect(redactarCorreoFrio('pr-1', 'Javier')).rejects.toThrow(/tenant requerido/);
+    expect(generateResponse).not.toHaveBeenCalled();
+  });
+
   it('apagado (kill switch): no gasta en el modelo ni encola', async () => {
     apagado = true;
-    await expect(redactarCorreoFrio('pr-1', 'Javier')).rejects.toThrow(/apagado/);
+    await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/apagado/);
     expect(generateResponse).not.toHaveBeenCalled();
     expect(encolarPieza).not.toHaveBeenCalled();
   });
@@ -100,14 +106,14 @@ describe('redactarCorreoFrio', () => {
   it('contactado hace <48h: la cadencia frena ANTES del modelo (censo finito)', async () => {
     respuestas.set('prospecto', [{ data: PROSPECTO, error: null }]);
     respuestas.set('prospecto_contacto', [{ data: [{ ocurrio_en: 'ayer' }], error: null }]);
-    await expect(redactarCorreoFrio('pr-1', 'Javier')).rejects.toThrow(/48 horas/);
+    await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/48 horas/);
     expect(generateResponse).not.toHaveBeenCalled();
   });
 
   it('con el historial ILEGIBLE no se redacta — fail closed, como el envío', async () => {
     respuestas.set('prospecto', [{ data: PROSPECTO, error: null }]);
     respuestas.set('prospecto_contacto', [{ data: null, error: { message: 'db down' } }]);
-    await expect(redactarCorreoFrio('pr-1', 'Javier')).rejects.toThrow(/historial/);
+    await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/historial/);
     expect(generateResponse).not.toHaveBeenCalled();
   });
 
@@ -115,13 +121,13 @@ describe('redactarCorreoFrio', () => {
     respuestas.set('prospecto', [{ data: PROSPECTO, error: null }]);
     respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: [{ id: 'pieza-vieja' }], error: null }]);
-    await expect(redactarCorreoFrio('pr-1', 'Javier')).rejects.toThrow(/esperando aprobación/);
+    await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/esperando aprobación/);
     expect(generateResponse).not.toHaveBeenCalled();
   });
 
   it('a un cerrado/perdido no se le redacta correo frío', async () => {
     respuestas.set('prospecto', [{ data: { ...PROSPECTO, estado: 'perdido' }, error: null }]);
-    await expect(redactarCorreoFrio('pr-1', 'Javier')).rejects.toThrow(/perdido/);
+    await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/perdido/);
     expect(generateResponse).not.toHaveBeenCalled();
   });
 
@@ -129,7 +135,7 @@ describe('redactarCorreoFrio', () => {
     respuestas.set('prospecto', [{ data: PROSPECTO, error: null }]);
     respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
-    const r = await redactarCorreoFrio('pr-1', 'Javier');
+    const r = await redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO);
     expect(r).toMatchObject({ piezaId: 'pieza-1', asunto: 'El cierre del viaje, sin liquidador', aviso: null });
 
     expect(encolarPieza).toHaveBeenCalledTimes(1);
@@ -142,13 +148,14 @@ describe('redactarCorreoFrio', () => {
     expect(pieza.cuerpo).not.toContain('Variante B');
     expect(pieza.fuentes.variante_b).toBeTruthy();
     expect(registrarCorrida).toHaveBeenCalledWith(null, 'redactor', expect.objectContaining({ estado: 'ok' }));
+    expect(generateResponse).toHaveBeenCalledWith(expect.objectContaining({ budget: expect.objectContaining({ tenantId: 'tenant-redactor-a' }) }));
   });
 
   it('sin correo capturado: la pieza entra IGUAL pero el aviso viaja con ella', async () => {
     respuestas.set('prospecto', [{ data: { ...PROSPECTO, correo: null }, error: null }]);
     respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
-    const r = await redactarCorreoFrio('pr-1', 'Javier');
+    const r = await redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO);
     expect(r.aviso).toMatch(/no tiene correo capturado/);
     const pieza = encolarPieza.mock.calls[0][0] as { fuentes: Record<string, unknown> };
     expect(String(pieza.fuentes.aviso)).toMatch(/correo/);
@@ -159,7 +166,7 @@ describe('redactarCorreoFrio', () => {
     respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
     generateResponse.mockRejectedValueOnce(new Error('timeout'));
-    await expect(redactarCorreoFrio('pr-1', 'Javier')).rejects.toThrow(/no pudo escribir/);
+    await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/no pudo escribir/);
     expect(encolarPieza).not.toHaveBeenCalled();
     expect(registrarCorrida).toHaveBeenCalledWith(null, 'redactor', expect.objectContaining({ estado: 'fallo' }));
   });

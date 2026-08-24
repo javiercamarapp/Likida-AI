@@ -1,5 +1,6 @@
 import type OpenAI from 'openai';
 import { generateWithTools } from '@/lib/llm/openrouter';
+import type { LlmBudget } from '@/lib/llm/budget';
 import { logger } from '@/lib/logger';
 import type { CampoListo } from '../pendientes';
 import type { AdaptadorPortal, ModoAgente, ResultadoAgente } from '../agente';
@@ -87,6 +88,8 @@ export interface OpcionesComputerUse {
   /** Tope de vueltas. Se baja en pruebas; en producción manda `MAX_VUELTAS`. */
   maxVueltas?: number;
   signal?: AbortSignal;
+  /** Presupuesto persistido de la corrida; nunca se inventa un tenant aquí. */
+  budget?: LlmBudget;
 }
 
 /** Lo que el modelo puede escribir: clave → valor. Nunca texto libre. */
@@ -278,6 +281,7 @@ Inventario inicial: ${await inventario(p)}`,
         },
         maxToolRounds: this.op.maxVueltas ?? MAX_VUELTAS,
         signal: this.op.signal,
+        budget: this.op.budget,
       });
 
       // El UUID se busca en lo que el modelo leyó Y en la página, no solo en su

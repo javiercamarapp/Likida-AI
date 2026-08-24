@@ -13,8 +13,8 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import type { DetalleProspecto } from '@/lib/admin/prospectos-mapa';
-import { COLOR_EMBUDO, NOMBRE_GIRO } from '@/lib/admin/prospectos-mapa';
+import type { DetalleProspecto } from '@/lib/admin/prospectos-mapa-client';
+import { COLOR_EMBUDO, NOMBRE_GIRO } from '@/lib/admin/prospectos-mapa-client';
 import { hrefWa, hrefCorreo, mensajeWa, correoProspecto } from '../mensajes';
 import { fechaHoraMx, numero } from '@/lib/formato';
 

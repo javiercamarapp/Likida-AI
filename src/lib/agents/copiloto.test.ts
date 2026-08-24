@@ -43,6 +43,12 @@ beforeEach(() => {
 });
 
 describe('la guardia de cifras en el camino del copiloto', () => {
+  it('sin tenant de presupuesto falla cerrado antes de llamar al modelo', async () => {
+    await expect(ejecutarCopiloto({ userId: 'u-1', mensajes: [{ rol: 'usuario', texto: '¿cómo vamos?' }] }))
+      .rejects.toThrow(/tenant requerido/);
+    expect(generateWithTools).not.toHaveBeenCalled();
+  });
+
   it('una cifra que ninguna tool devolvió SE TUMBA, y la red final entrega lo que las tools sí leyeron', async () => {
     const llamada = {
       toolCalls: [{ toolName: 'bandeja', result: { conteos: { arco: 2 }, enCola: 2 }, error: null }],
@@ -51,7 +57,7 @@ describe('la guardia de cifras en el camino del copiloto', () => {
       finalText: 'Tienes 3847 asuntos pendientes en la bandeja.',
     };
     guiones = [llamada, llamada]; // el turno + su reintento correctivo, ambos inventando
-    const r = await ejecutarCopiloto({ userId: 'u-1', mensajes: [{ rol: 'usuario', texto: '¿qué espera decisión hoy?' }] });
+    const r = await ejecutarCopiloto({ userId: 'u-1', budgetTenantId: 'tenant-test-a', mensajes: [{ rol: 'usuario', texto: '¿qué espera decisión hoy?' }] });
 
     const todoElTexto = JSON.stringify(r.bloques);
     expect(todoElTexto).not.toContain('3847');
@@ -63,7 +69,7 @@ describe('la guardia de cifras en el camino del copiloto', () => {
   it('con las tools mudas y el texto inventando, sale el aviso honesto — nunca el número', async () => {
     const llamada = { toolCalls: [], finalText: 'El MRR es de $840,000.' };
     guiones = [llamada, llamada];
-    const r = await ejecutarCopiloto({ userId: 'u-1', mensajes: [{ rol: 'usuario', texto: '¿cómo vamos?' }] });
+    const r = await ejecutarCopiloto({ userId: 'u-1', budgetTenantId: 'tenant-test-a', mensajes: [{ rol: 'usuario', texto: '¿cómo vamos?' }] });
     const texto = JSON.stringify(r.bloques);
     expect(texto).not.toContain('840');
     expect(texto).toMatch(/no pude armar esa respuesta/i);
@@ -74,7 +80,7 @@ describe('la guardia de cifras en el camino del copiloto', () => {
       toolCalls: [{ toolName: 'metrica_negocio', result: { flotas: 4, costoIaUsd: 123.45 }, error: null }],
       finalText: 'Tienes 4 flotas dadas de alta y el costo de IA va en 123.45 USD.',
     }];
-    const r = await ejecutarCopiloto({ userId: 'u-1', mensajes: [{ rol: 'usuario', texto: '¿cómo va el negocio?' }] });
+    const r = await ejecutarCopiloto({ userId: 'u-1', budgetTenantId: 'tenant-test-a', mensajes: [{ rol: 'usuario', texto: '¿cómo va el negocio?' }] });
     expect(JSON.stringify(r.bloques)).toContain('123.45');
   });
 });
