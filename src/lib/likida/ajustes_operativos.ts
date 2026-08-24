@@ -59,11 +59,21 @@ export const FORMATOS: ReadonlyArray<{
   },
   {
     valor: 'contpaqi_txt', rotulo: 'CONTPAQi (TXT)', implementado: false,
-    detalle: 'Layout de póliza para CONTPAQi. Todavía no se escribe: se hará contra el archivo de ejemplo de la primera flota que lo use, no adivinando el formato.',
+    // ── ESTE RÓTULO SE QUEDÓ ATRÁS DE LO QUE EL PRODUCTO HACE (23-ago-2026) ──
+    // Decía «todavía no se escribe» a secas, y desde el export de póliza eso
+    // subestima: `/api/export/poliza?formato=contpaqi` SÍ escribe el asiento
+    // en layout de CONTPAQi, probado. Lo que sigue sin escribirse es ESTE
+    // selector —el del resumen de liquidaciones—, que es otra cosa.
+    //
+    // Un rótulo que promete de menos también es un rótulo falso: quien lo lee
+    // concluye que el producto no exporta a CONTPAQi, y hoy sí lo hace. Se
+    // dice dónde está cada cosa en vez de dejar que una pantalla desmienta a
+    // la otra.
+    detalle: 'Este selector cambia el RESUMEN de liquidaciones, y ese layout todavía no se escribe: se hará contra el archivo de ejemplo de la primera flota que lo use, no adivinando el formato. La PÓLIZA contable sí sale ya en formato CONTPAQi desde el export de póliza — necesita tu catálogo de cuentas, aquí abajo.',
   },
   {
     valor: 'aspel_xls', rotulo: 'Aspel (XLS)', implementado: false,
-    detalle: 'Hoja para Aspel COI. Mismo criterio que CONTPAQi.',
+    detalle: 'Hoja para Aspel COI. Mismo criterio que el resumen de CONTPAQi: contra un archivo de ejemplo real, no adivinando.',
   },
 ];
 
