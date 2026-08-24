@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'escalar', 'facturar', 'purgar', 'runner'] as const;
+export const CRONS = ['wa-pendientes', 'escalar', 'facturar', 'purgar', 'runner', 'gps'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -41,6 +41,9 @@ export const CADENCIA_MS: Record<CronId, number> = {
   facturar: 15 * 60_000,
   purgar: 86_400_000,
   runner: 4 * 3_600_000,
+  // El poller de posiciones (23-ago-2026). 5 minutos es el grano al que un
+  // mapa de flota deja de mentir sin castigar la cuota del proveedor.
+  gps: 300_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */
