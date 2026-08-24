@@ -39,8 +39,10 @@ const RAIZ = join(process.cwd(), 'src/app');
 
 function paginas(dir: string): string[] {
   const salida: string[] = [];
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- recorre el árbol de FUENTE del propio repo en tiempo de prueba; la ruta no viene de ninguna entrada de usuario.
   for (const nombre of readdirSync(dir)) {
     const ruta = join(dir, nombre);
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- recorre el árbol de FUENTE del propio repo en tiempo de prueba; la ruta no viene de ninguna entrada de usuario.
     if (statSync(ruta).isDirectory()) salida.push(...paginas(ruta));
     else if (/^(page|layout)\.tsx$/.test(nombre)) salida.push(ruta);
   }
@@ -108,6 +110,7 @@ describe('las server actions no capturan funciones locales', () => {
     const culpables: string[] = [];
 
     for (const archivo of archivos) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- recorre el árbol de FUENTE del propio repo en tiempo de prueba; la ruta no viene de ninguna entrada de usuario.
       const fuente = readFileSync(archivo, 'utf8');
       if (!fuente.includes("'use server';")) continue;
 
