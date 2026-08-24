@@ -42,6 +42,21 @@ const TOPE_BYTES = 2 * 1024 * 1024;
  * venga del formulario. El modo de falla #1 del código escrito por agentes es
  * IDOR, y un perfil editable es exactamente donde aparecería.
  */
+/**
+ * El destino de vuelta, conservando el `?tenant=` del superadmin.
+ *
+ * A NIVEL DE MÓDULO, no dentro del componente: las acciones inline de esta
+ * página la usan, y una función capturada por closure de un `'use server'`
+ * tiene que serializarse en `encryptActionBoundArgs` — que no puede con
+ * funciones. Es el mismo defecto que rompió /dashboard/despacho (ver la nota
+ * de `guardiaDespacho` en su page.tsx): reventaba en CADA render con un
+ * rechazo no manejado, y el síntoma visible no se parecía en nada a la causa.
+ * Recibiendo `sufijo` por parámetro, lo capturado es un string.
+ */
+function volverAMiPerfil(sufijo: string, estado: string): string {
+  return `/dashboard/mi-perfil${sufijo ? `${sufijo}&` : '?'}${estado}`;
+}
+
 export default async function MiPerfilFlota({
   searchParams,
 }: {
@@ -77,31 +92,27 @@ export default async function MiPerfilFlota({
     }
   }
 
-  /** El destino de vuelta, conservando el `?tenant=` del superadmin. */
-  function volverA(estado: string) {
-    return `/dashboard/mi-perfil${sufijo ? `${sufijo}&` : '?'}${estado}`;
-  }
 
   async function actualizarNombre(formData: FormData) {
     'use server';
     // Re-gateo adentro: el `s` de arriba es del render, no de esta llamada.
     const { userId } = await requireSessionTenant('/dashboard/mi-perfil');
     const nombre = String(formData.get('nombre') ?? '').trim();
-    if (!nombre) redirect(volverA('error=nombre'));
+    if (!nombre) redirect(volverAMiPerfil(sufijo, 'error=nombre'));
     // Tope de 80: la misma medida que la firma del Agente de Cobranza. Un
     // nombre de 4,000 caracteres rompe el sidebar y el PDF.
-    if (nombre.length > 80) redirect(volverA('error=largo'));
+    if (nombre.length > 80) redirect(volverAMiPerfil(sufijo, 'error=largo'));
     await supabaseAdmin().from('app_user').update({ nombre }).eq('id', userId);
-    redirect(volverA('ok=nombre'));
+    redirect(volverAMiPerfil(sufijo, 'ok=nombre'));
   }
 
   async function subirAvatar(formData: FormData) {
     'use server';
     const { userId } = await requireSessionTenant('/dashboard/mi-perfil');
     const archivo = formData.get('avatar');
-    if (!(archivo instanceof File) || archivo.size === 0) redirect(volverA('error=avatar'));
-    if (!TIPOS.has(archivo.type)) redirect(volverA('error=tipo'));
-    if (archivo.size > TOPE_BYTES) redirect(volverA('error=peso'));
+    if (!(archivo instanceof File) || archivo.size === 0) redirect(volverAMiPerfil(sufijo, 'error=avatar'));
+    if (!TIPOS.has(archivo.type)) redirect(volverAMiPerfil(sufijo, 'error=tipo'));
+    if (archivo.size > TOPE_BYTES) redirect(volverAMiPerfil(sufijo, 'error=peso'));
 
     const admin = supabaseAdmin();
     // La extensión sale del TIPO validado, no del nombre del archivo: un
@@ -112,13 +123,13 @@ export default async function MiPerfilFlota({
     const ruta = `${userId}/avatar.${ext}`;
     const { error } = await admin.storage.from('avatares')
       .upload(ruta, archivo, { upsert: true, contentType: archivo.type });
-    if (error) redirect(volverA('error=avatar'));
+    if (error) redirect(volverAMiPerfil(sufijo, 'error=avatar'));
 
     const { data: pub } = admin.storage.from('avatares').getPublicUrl(ruta);
     // `?t=` revienta el caché: la ruta pública no cambia entre subidas.
     await admin.from('app_user')
       .update({ avatar_url: `${pub.publicUrl}?t=${Date.now()}` }).eq('id', userId);
-    redirect(volverA('ok=avatar'));
+    redirect(volverAMiPerfil(sufijo, 'ok=avatar'));
   }
 
   async function verificarMfa(formData: FormData) {
@@ -127,12 +138,12 @@ export default async function MiPerfilFlota({
     const sb2 = await supabaseServer();
     const factorId = String(formData.get('factorId') ?? '');
     const codigo = String(formData.get('codigo') ?? '').trim();
-    if (!factorId || !/^\d{6}$/.test(codigo)) redirect(volverA('error=mfa_codigo'));
+    if (!factorId || !/^\d{6}$/.test(codigo)) redirect(volverAMiPerfil(sufijo, 'error=mfa_codigo'));
     const reto = await sb2.auth.mfa.challenge({ factorId });
-    if (reto.error || !reto.data) redirect(volverA('error=mfa'));
+    if (reto.error || !reto.data) redirect(volverAMiPerfil(sufijo, 'error=mfa'));
     const v = await sb2.auth.mfa.verify({ factorId, challengeId: reto.data.id, code: codigo });
-    if (v.error) redirect(volverA('error=mfa_codigo'));
-    redirect(volverA('ok=mfa'));
+    if (v.error) redirect(volverAMiPerfil(sufijo, 'error=mfa_codigo'));
+    redirect(volverAMiPerfil(sufijo, 'ok=mfa'));
   }
 
   async function quitarMfa(formData: FormData) {
@@ -140,18 +151,18 @@ export default async function MiPerfilFlota({
     await requireSessionTenant('/dashboard/mi-perfil');
     const sb2 = await supabaseServer();
     const factorId = String(formData.get('factorId') ?? '');
-    if (!factorId) redirect(volverA('error=mfa'));
+    if (!factorId) redirect(volverAMiPerfil(sufijo, 'error=mfa'));
     // Quitar el factor EXIGE el código vigente: sin esto, una sesión robada
     // en AAL1 podría bajarle la protección al dueño de la cuenta.
     const codigo = String(formData.get('codigo') ?? '').trim();
-    if (!/^\d{6}$/.test(codigo)) redirect(volverA('error=mfa_codigo'));
+    if (!/^\d{6}$/.test(codigo)) redirect(volverAMiPerfil(sufijo, 'error=mfa_codigo'));
     const reto = await sb2.auth.mfa.challenge({ factorId });
-    if (reto.error || !reto.data) redirect(volverA('error=mfa'));
+    if (reto.error || !reto.data) redirect(volverAMiPerfil(sufijo, 'error=mfa'));
     const v = await sb2.auth.mfa.verify({ factorId, challengeId: reto.data.id, code: codigo });
-    if (v.error) redirect(volverA('error=mfa_codigo'));
+    if (v.error) redirect(volverAMiPerfil(sufijo, 'error=mfa_codigo'));
     const r = await sb2.auth.mfa.unenroll({ factorId });
-    if (r.error) redirect(volverA('error=mfa'));
-    redirect(volverA('ok=mfa_fuera'));
+    if (r.error) redirect(volverAMiPerfil(sufijo, 'error=mfa'));
+    redirect(volverAMiPerfil(sufijo, 'ok=mfa_fuera'));
   }
 
   const OK: Record<string, string> = {
@@ -265,7 +276,7 @@ export default async function MiPerfilFlota({
                   <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                     Un código de tu teléfono además de tu correo. Al activarlo, las acciones sensibles lo van a exigir.
                   </p>
-                  <a href={volverA('mfa=inscribir')}
+                  <a href={volverAMiPerfil(sufijo, 'mfa=inscribir')}
                     className="inline-block text-[12.5px] px-3.5 py-2 rounded-lg font-medium hairline transition-colors hover:bg-[var(--canvas)]">
                     Activar segundo factor
                   </a>

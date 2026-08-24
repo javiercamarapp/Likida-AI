@@ -18,6 +18,40 @@ import { validarIngreso } from '@/lib/likida/ingreso_viaje';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * El chequeo que TODA action repite: sesión viva, rol que asigna, y que la
+ * flota de la sesión sea la del render (superadmin exento: su tenant efectivo
+ * es el del demo/`?tenant=`).
+ *
+ * ── POR QUÉ VIVE AQUÍ Y NO DENTRO DEL COMPONENTE ──────────────────────────
+ *
+ * Estaba declarada dentro de la página, y las seis acciones inline la
+ * capturaban por closure. Next tiene que serializar las variables capturadas
+ * de un `'use server'` inline (`encryptActionBoundArgs`), y UNA FUNCIÓN NO ES
+ * SERIALIZABLE: el bundle compilado quedaba
+ *
+ *     I = z.bind(null, encryptActionBoundArgs("709f…", H, c))
+ *                                                       ↑ guardia
+ *
+ * y producía, en CADA render de /dashboard/despacho, un rechazo no manejado
+ * con «Functions cannot be passed directly to Client Components». Sentry lo
+ * registró 204 veces en nueve días y su mensaje mostraba literalmente el array
+ * de argumentos capturados: `[function H, ..., ...]`.
+ *
+ * El síntoma visible era otro y por eso costó: el combo de Operador contestaba
+ * «No se pudo buscar en el catálogo» — la acción nunca llegaba al servidor, así
+ * que no había ni una consulta en los logs de Postgres que mirar.
+ *
+ * A nivel de módulo no es una variable capturada, es una referencia del módulo.
+ * Las acciones ahora solo cierran sobre `tenantId` y `destino`, dos strings.
+ */
+async function guardiaDespacho(tenantId: string): Promise<string | null> {
+  const sesion = await requireSessionTenant('/dashboard/despacho');
+  if (!puedeAsignar(sesion.rol)) return 'Tu rol no puede despachar viajes.';
+  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Este despacho no es de tu flota.';
+  return null;
+}
+
 function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   return fn().catch(() => null);
 }
@@ -67,15 +101,6 @@ export default async function PaginaDespacho({
     contarCatalogo(tenantId, 'unidad'),
   ]);
 
-  /** El chequeo que TODA action repite: sesión viva, rol que asigna, y que
-   *  la flota de la sesión sea la del render (superadmin exento: su tenant
-   *  efectivo es el del demo/`?tenant=`). */
-  async function guardia(): Promise<string | null> {
-    const sesion = await requireSessionTenant('/dashboard/despacho');
-    if (!puedeAsignar(sesion.rol)) return 'Tu rol no puede despachar viajes.';
-    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Este despacho no es de tu flota.';
-    return null;
-  }
 
   /**
    * La búsqueda de catálogo del panel, como server action: el `tenantId` va
@@ -93,7 +118,7 @@ export default async function PaginaDespacho({
    */
   async function buscarCatalogoAccion(tipo: TipoCatalogo, q: string): Promise<OpcionCatalogo[]> {
     'use server';
-    const rechazo = await guardia();
+    const rechazo = await guardiaDespacho(tenantId);
     if (rechazo) throw new Error(rechazo);
     if (tipo !== 'operador' && tipo !== 'cliente' && tipo !== 'unidad') {
       throw new Error('Catálogo desconocido.');
@@ -108,7 +133,7 @@ export default async function PaginaDespacho({
 
   async function crear(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const rechazo = await guardia();
+    const rechazo = await guardiaDespacho(tenantId);
     if (rechazo) return { error: rechazo };
 
     const texto = (n: string, max: number) => {
@@ -168,7 +193,7 @@ export default async function PaginaDespacho({
 
   async function asignarYAvisar(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const rechazo = await guardia();
+    const rechazo = await guardiaDespacho(tenantId);
     if (rechazo) return { error: rechazo };
 
     const viajeId = typeof fd.get('viajeId') === 'string' ? (fd.get('viajeId') as string).trim().slice(0, 64) : '';
@@ -195,7 +220,7 @@ export default async function PaginaDespacho({
 
   async function asignarUnidadViaje(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const rechazo = await guardia();
+    const rechazo = await guardiaDespacho(tenantId);
     if (rechazo) return { error: rechazo };
 
     const viajeId = typeof fd.get('viajeId') === 'string' ? (fd.get('viajeId') as string).trim().slice(0, 64) : '';
@@ -217,7 +242,7 @@ export default async function PaginaDespacho({
 
   async function reenviarAviso(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const rechazo = await guardia();
+    const rechazo = await guardiaDespacho(tenantId);
     if (rechazo) return { error: rechazo };
 
     const viajeId = typeof fd.get('viajeId') === 'string' ? (fd.get('viajeId') as string).trim().slice(0, 64) : '';
@@ -242,7 +267,7 @@ export default async function PaginaDespacho({
 
   async function altaOperador(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const rechazo = await guardia();
+    const rechazo = await guardiaDespacho(tenantId);
     if (rechazo) return { error: rechazo };
 
     const nombre = typeof fd.get('nombre') === 'string' ? (fd.get('nombre') as string).trim().slice(0, 120) : '';
