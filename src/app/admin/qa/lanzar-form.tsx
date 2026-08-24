@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EL FORMULARIO DE LANZAR — /admin/qa (Fase A).
+// EL FORMULARIO DE LANZAR — /admin/qa.
 //
 // Sube N fotos DE GOLPE (input multiple + arrastrar y soltar: el pedido
 // literal es "cantidad obscena de tickets"), elige escenario (feliz / guion
@@ -177,10 +177,20 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
               : { background: 'var(--surface)' }}>
             <div className="text-sm font-semibold">{e.nombre}</div>
             <div className="text-xs mt-1 opacity-80">{e.descripcion}</div>
-            <div className="text-[10px] mt-1.5 font-mono opacity-70">invariantes {e.invariantes.join(' · ')} — los otros 9 escenarios del catálogo son Fase B</div>
+            <div className="text-[10px] mt-1.5 font-mono opacity-70">
+              invariantes {e.invariantes.join(' · ')}
+              {e.minFotos > 1 ? ` — mínimo ${e.minFotos} fotos` : ''}
+            </div>
           </button>
         ))}
       </div>
+      {/* Lo que falta se dice, con número: el catálogo del diseño tiene 11 y
+          el selector no los ofrece todos. Callarlo haría creer que esto es
+          toda la cobertura que existe. */}
+      <p className="text-[11px] m-0" style={{ color: 'var(--faint)' }}>
+        {ESCENARIOS_QA.length} de los 11 escenarios del catálogo. Los {11 - ESCENARIOS_QA.length} restantes
+        —y el oráculo #4, que necesita saber cuánto dice cada ticket— siguen pendientes.
+      </p>
 
       {/* ── Fotos: arrastrar N de golpe + el banco ─────────────────────────── */}
       <div>

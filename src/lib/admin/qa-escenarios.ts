@@ -1,8 +1,19 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// PANEL DE QA — Fase A: los DOS escenarios del selector.
+// PANEL DE QA — los escenarios del selector.
 //
-// Catálogo completo (11 escenarios) en escenarios-catalogo.md del diseño; los
-// otros 9 son Fase B. Los defaults del "guion del demo" son los del guion REAL
+// CADA ESCENARIO ES UN GUION, no solo unos defaults. La Fase A tenía dos
+// escenarios que se distinguían únicamente por el anticipo y la política: el
+// motor mandaba siempre la misma secuencia (todas las fotos → «listo»), así
+// que dos de los cinco oráculos del ejército quedaban importados y sin
+// disparar nunca. Un oráculo que no corre no es una garantía, es un archivo.
+//
+// El `guion` arregla eso: es la secuencia de mensajes que el chofer sintético
+// manda, y de ella se deduce qué invariantes puede juzgar la corrida. Un
+// escenario NO declara un oráculo que su guion no ejercita — reportar "ok"
+// sobre un invariante que nadie atacó es un veredicto inventado.
+//
+// Catálogo completo (11 escenarios) en escenarios-catalogo.md del diseño. Los
+// defaults del "guion del demo" son los del guion REAL
 // (src/app/api/demo/route.ts y src/app/demo): la pregunta que ese escenario
 // responde es "¿lo que el demo le enseña a un prospecto es lo que el producto
 // de verdad hace?" — por eso los valores se copian de ahí, y una prueba
@@ -27,10 +38,34 @@ export const POLITICA_DEMO: PoliticaGasto[] = [
   { concepto: 'factura', requiereCfdi: true },
 ];
 
+/** Un paso del guion: lo que el chofer sintético hace, en orden. */
+export type PasoGuion =
+  /** Todas las fotos elegidas del banco, una por mensaje, en orden. */
+  | { tipo: 'fotos' }
+  /** LA MISMA foto otra vez, byte a byte. `comoOtroChofer` la manda desde un
+   *  segundo operador del mismo tenant — que es el caso que importa: el
+   *  pre-check del processor mira UN viaje, así que solo cruzando de viaje se
+   *  obliga al índice `uq_gasto_img_hash` (unique por TENANT) a ser el que
+   *  rechace. */
+  | { tipo: 'foto_repetida'; indice: number; comoOtroChofer: boolean }
+  /** «listo, ya subí todo», con UNA insistencia si el agente pidió confirmar. */
+  | { tipo: 'cierre' };
+
 export interface EscenarioQaDef {
   id: EscenarioId;
   nombre: string;
   descripcion: string;
+  /** La secuencia de mensajes. Sin él no hay escenario: es lo que distingue a
+   *  uno de otro, no los defaults del formulario. */
+  guion: PasoGuion[];
+  /** ¿La siembra necesita un SEGUNDO operador con su propio viaje abierto?
+   *  Solo los guiones que cruzan de viaje. Sembrar uno que nadie usa es
+   *  ensuciar el tenant sintético sin motivo. */
+  segundoChofer: boolean;
+  /** Cuántas fotos exige el guion como MÍNIMO. El formulario lo dice antes de
+   *  lanzar; lanzar con menos daría un veredicto sobre un ataque que no
+   *  ocurrió. */
+  minFotos: number;
   /** null = no hay default honesto: Javier lo fija (p. ej. "feliz" exige que
    *  el anticipo sume EXACTO lo que traen sus fotos — inventarle un número
    *  sería inventar una cifra). */
@@ -38,7 +73,8 @@ export interface EscenarioQaDef {
   rfcEmpresaDefault: string | null;
   rutaDefault: { origen: string; destino: string };
   politicaDefault: PoliticaGasto[];
-  /** Los invariantes que el catálogo le asigna (para el rótulo del selector). */
+  /** Los invariantes que este guion DE VERDAD ejercita (rótulo del selector y
+   *  contrato con qa-oraculos: solo estos se corren). */
   invariantes: string[];
 }
 
@@ -53,6 +89,9 @@ export const ESCENARIOS_QA: EscenarioQaDef[] = [
     rfcEmpresaDefault: 'GMX0902279I1', // el RFC de la flota demo (api/demo/route.ts, empresaRfc)
     rutaDefault: { origen: 'Silao', destino: 'Nuevo Laredo' }, // la ruta del guion ('Silao-Laredo')
     politicaDefault: POLITICA_DEMO,
+    guion: [{ tipo: 'fotos' }, { tipo: 'cierre' }],
+    segundoChofer: false,
+    minFotos: 1,
     invariantes: ['#1', '#5', '#8'],
   },
   {
@@ -65,7 +104,30 @@ export const ESCENARIOS_QA: EscenarioQaDef[] = [
     rfcEmpresaDefault: null,
     rutaDefault: { origen: 'Silao', destino: 'Nuevo Laredo' },
     politicaDefault: POLITICA_DEMO,
+    guion: [{ tipo: 'fotos' }, { tipo: 'cierre' }],
+    segundoChofer: false,
+    minFotos: 1,
     invariantes: ['#1', '#5', '#8'],
+  },
+  {
+    id: 'foto_duplicada',
+    nombre: 'La misma foto, dos veces',
+    descripcion:
+      'La primera foto se manda otra vez, byte a byte, desde un SEGUNDO chofer del mismo tenant. ' +
+      'Responde: ¿se puede cobrar dos veces el mismo ticket? El pre-check del processor solo mira ' +
+      'un viaje, así que cruzando de viaje el que tiene que rechazar es el índice de la base.',
+    anticipoDefault: null,   // el mismo criterio que "feliz": el monto lo pone Javier
+    rfcEmpresaDefault: 'GMX0902279I1',
+    rutaDefault: { origen: 'Silao', destino: 'Nuevo Laredo' },
+    politicaDefault: POLITICA_DEMO,
+    guion: [
+      { tipo: 'fotos' },
+      { tipo: 'foto_repetida', indice: 0, comoOtroChofer: true },
+      { tipo: 'cierre' },
+    ],
+    segundoChofer: true,
+    minFotos: 1,
+    invariantes: ['#1', '#3', '#5', '#8'],
   },
 ];
 

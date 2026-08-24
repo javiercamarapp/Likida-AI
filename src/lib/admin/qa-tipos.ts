@@ -7,15 +7,13 @@
 // Fase 1 del ejército de QA) — no se reescribe la semántica, solo se le da
 // forma de fila de tabla para la pantalla.
 //
-// MODELO DE DATOS, decisión de Fase A (16-ago-2026): el diseño
-// (00-PANEL-DE-QA.md §4) pide tablas `qa_corrida`/`qa_corrida_paso`/`qa_foto`,
-// pero las migraciones están CONGELADAS (0115-0125 sin aplicar, esperando el
-// token de Supabase). Para no bloquear el panel, el estado vive en Supabase
-// STORAGE como JSON (bucket `qa-evidencia`: corridas/<id>/corrida.json; bucket
-// `qa-fotos`: banco/manifiesto.json) — sigue siendo Supabase (el lector y el
-// escritor son procesos distintos, §1.7 del diseño), solo que sin DDL. Las
-// tablas quedan declaradas como FASE B: cuando el token vuelva, la migración
-// las crea con el esquema literal del diseño §4 y estos JSON se importan.
+// MODELO DE DATOS (Fase B, 24-ago-2026): las tablas `qa_corrida` /
+// `qa_corrida_paso` / `qa_foto` del diseño (00-PANEL-DE-QA.md §4) YA EXISTEN
+// — migración 0185. La Fase A había guardado el estado como JSON en Storage
+// porque las migraciones estaban congeladas esperando el token de Supabase;
+// ese motivo caducó y el ledger se importó con
+// `scripts/qa/importar-ledger.ts`. En Storage solo quedan los BYTES: las
+// imágenes en `qa-fotos` y los PDF del cierre en `qa-evidencia`.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type { PoliticaGasto } from '@/lib/likida/cuadre/engine';
@@ -23,11 +21,18 @@ import type { PoliticaGasto } from '@/lib/likida/cuadre/engine';
 export type EstadoCorrida = 'pendiente' | 'corriendo' | 'ok' | 'parcial' | 'fallo' | 'abortada';
 export type EstadoPaso = 'pendiente' | 'corriendo' | 'ok' | 'warn' | 'bad';
 export type Retencion = 'borrar_al_terminar' | 'conservar';
-export type EscenarioId = 'feliz' | 'demo_guion';
+export type EscenarioId = 'feliz' | 'demo_guion' | 'foto_duplicada';
 
-/** Una foto del banco (manifiesto banco/manifiesto.json del bucket qa-fotos).
- *  `ocrEsperado` existe desde ya para que el manifiesto no cambie de forma en
- *  Fase B — en Fase A siempre es null (la confirmación humana es de esa fase). */
+/** Los escenarios que el selector ofrece HOY. Vive aquí (client-safe) porque
+ *  el validador del servidor y el formulario tienen que estar de acuerdo, y
+ *  qa-escenarios.ts importa este tipo — no al revés. El catálogo del diseño
+ *  tiene 11; los que faltan no se ofrecen, y el rechazo lo DICE. */
+export const ESCENARIOS_VALIDOS: readonly EscenarioId[] = ['feliz', 'demo_guion', 'foto_duplicada'];
+
+/** Una foto del banco (tabla `qa_foto`, mig. 0185; los bytes en el bucket
+ *  qa-fotos). `ocrEsperado` sigue siendo `null` en el tipo hasta que la
+ *  pantalla del oráculo humano exista — la columna ya lo admite, y su CHECK
+ *  impide un "esperado" sin quién lo firmó. */
 export interface FotoBanco {
   id: string;
   /** sha256 de los BYTES del archivo — el mismo criterio que `img_hash` de
@@ -36,7 +41,7 @@ export interface FotoBanco {
   hash: string;
   path: string;          // ruta dentro del bucket qa-fotos
   mime: string;
-  etiqueta: string;      // en Fase A: el nombre original del archivo (nadie etiquetó aún)
+  etiqueta: string;      // hoy: el nombre original del archivo (nadie etiquetó aún)
   bytes: number;
   subidoEn: string;
   ocrEsperado: null;
@@ -79,6 +84,8 @@ export interface CorridaQA {
   id: string;
   escenario: EscenarioId;
   carril: 'rapido';      // el carril completo (GitHub Actions) es Fase C
+  // (la columna de la 0185 ya admite 'completo': la Fase C no pide DDL, solo
+  //  abrir este literal y escribir el workflow.)
   parametros: ParametrosCorrida;
   estado: EstadoCorrida;
   /** Por qué se abortó / qué motivo tiene el estado — dicho, nunca en silencio. */
@@ -127,9 +134,9 @@ export function validarLanzar(crudo: unknown): { ok: true; datos: LanzarValidado
   const b = crudo as Record<string, unknown> | null;
   if (!b || typeof b !== 'object') return { ok: false, error: 'body inválido' };
 
-  const escenario = b.escenario;
-  if (escenario !== 'feliz' && escenario !== 'demo_guion') {
-    return { ok: false, error: 'escenario desconocido — Fase A trae "feliz" y "demo_guion"; los otros 9 del catálogo son Fase B' };
+  const escenario = b.escenario as EscenarioId;
+  if (!ESCENARIOS_VALIDOS.includes(escenario)) {
+    return { ok: false, error: `escenario desconocido — los del selector son ${ESCENARIOS_VALIDOS.map((e) => `"${e}"`).join(', ')}; los ${11 - ESCENARIOS_VALIDOS.length} restantes del catálogo siguen pendientes` };
   }
 
   const fotoIds = b.fotoIds;

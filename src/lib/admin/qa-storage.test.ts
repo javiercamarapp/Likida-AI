@@ -4,40 +4,143 @@ import {
   hashBytes, duplicadaPorHash, extensionDe, mismoDiaMx, asegurarBuckets,
   leerManifiesto, subirFotos, dataUrlDeFoto, firmarRuta,
   guardarCorrida, leerCorrida, listarCorridas, gastoHoyUsd,
-  BUCKET_QA_FOTOS, BUCKET_QA_EVIDENCIA,
+  _olvidarBuckets, BUCKET_QA_FOTOS,
 } from './qa-storage';
 import type { CorridaQA, FotoBanco } from './qa-tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LA CAPA DE ALMACENAMIENTO DEL PANEL DE QA — la auditoría del 16-ago la
-// encontró con 4 de 16 funciones cubiertas. El arnés es un Storage EN MEMORIA
-// con la misma superficie que usa el módulo (getBucket/createBucket/upload/
-// download/list/createSignedUrl); lo que se fija es el CONTRATO: banco sin
-// estrenar = 0 fotos DE VERDAD, cualquier otro fallo se dice (jamás un "0"
-// sobre una base ilegible), dedup por el MISMO sha256 de producción, un HEIC
-// rechazado no tira el lote, y el gasto diario suma solo el día de México.
+// LA CAPA DE ALMACENAMIENTO DEL PANEL DE QA — ahora contra TABLAS (mig. 0185).
+//
+// El arnés cambió con el módulo: la Fase A guardaba JSON en Storage y el
+// doble era un Storage en memoria; hoy el índice vive en la base y el doble
+// es un Postgres de juguete que RESPETA LAS RESTRICCIONES QUE IMPORTAN —el
+// `unique` de qa_foto.hash y la PK (corrida_id, n)—, porque son justamente la
+// garantía que la migración vino a dar. Un doble que las ignorara probaría el
+// doble, no el contrato.
+//
+// Lo que se fija sigue siendo el CONTRATO: banco sin estrenar = 0 fotos DE
+// VERDAD, cualquier otro fallo se dice (jamás un "0" sobre una base
+// ilegible), dedup por el MISMO sha256 de producción, un HEIC rechazado no
+// tira el lote, y el gasto diario suma solo el día de México. Se le suman los
+// dos casos que el JSON no podía tener: la CARRERA de dos subidas de la misma
+// foto, y el paso reescrito que no se duplica.
 // ═══════════════════════════════════════════════════════════════════════════
 
-type Objeto = { bytes: Buffer; contentType: string };
-let objetos: Map<string, Objeto>;      // `${bucket}/${path}` → objeto
+type Fila = Record<string, unknown>;
+type ErrPg = { code?: string; message: string } | null;
+
+let tablas: Record<string, Fila[]>;
+let objetos: Map<string, { bytes: Buffer; contentType: string }>;
 let buckets: Set<string>;
-let fallaDescarga: string | null;      // mensaje de error a inyectar en download
-let fallaSubida: boolean;
+let fallaTabla: string | null;          // tabla cuya lectura debe reventar
+let alInsertarFoto: (() => void) | null; // gancho para provocar la carrera
+let errorInsertFoto: ErrPg;              // error que devuelve el insert de qa_foto
+let errorTabla: ErrPg;                   // error que devuelve CUALQUIER lectura
+let seq: number;
+
+/** Las restricciones que la 0185 declara y este doble tiene que respetar. */
+const UNICO: Record<string, string[]> = {
+  qa_foto: ['hash'],
+  qa_corrida: ['id'],
+  qa_corrida_paso: ['corrida_id', 'n'],
+};
+
+const llaveDe = (tabla: string, f: Fila) => UNICO[tabla].map((c) => String(f[c])).join('|');
+
+function insertarFila(tabla: string, f: Fila): ErrPg {
+  const fila = { ...f };
+  if (tabla === 'qa_foto') {
+    fila.id ??= `foto-${++seq}`;
+    fila.subido_en ??= new Date().toISOString();
+    fila.ocr_esperado ??= null;
+  }
+  if (tabla === 'qa_corrida') {
+    fila.creada_en ??= new Date().toISOString();
+    fila.latido_en ??= new Date().toISOString();
+    fila.carril ??= 'rapido';
+  }
+  const llave = llaveDe(tabla, fila);
+  if (tablas[tabla].some((r) => llaveDe(tabla, r) === llave)) {
+    return { code: '23505', message: `duplicate key value violates unique constraint on ${tabla}` };
+  }
+  tablas[tabla].push(fila);
+  return null;
+}
 
 function dbFalsa(): SupabaseClient {
+  const from = (tabla: string) => {
+    tablas[tabla] ??= [];
+    let filas: Fila[] | null = null;      // resultado a devolver
+    let error: ErrPg = null;
+    let seleccionando = false;
+    let orden: { col: string; asc: boolean } | null = null;
+    let tope: number | null = null;
+    const preds: Array<(f: Fila) => boolean> = [];
+
+    const b: Record<string, unknown> = {};
+    const yo = () => b;
+
+    b.select = () => { seleccionando = true; return yo(); };
+    b.eq = (c: string, v: unknown) => { preds.push((f) => f[c] === v); return yo(); };
+    b.in = (c: string, vs: unknown[]) => { preds.push((f) => vs.includes(f[c])); return yo(); };
+    b.gte = (c: string, v: string) => { preds.push((f) => String(f[c]) >= v); return yo(); };
+    b.lte = (c: string, v: string) => { preds.push((f) => String(f[c]) <= v); return yo(); };
+    b.order = (col: string, o?: { ascending?: boolean }) => { orden = { col, asc: o?.ascending !== false }; return yo(); };
+    b.limit = (n: number) => { tope = n; return yo(); };
+
+    b.insert = (f: Fila) => {
+      if (tabla === 'qa_foto') alInsertarFoto?.();
+      if (tabla === 'qa_foto' && errorInsertFoto) {
+        error = errorInsertFoto; filas = []; return yo();
+      }
+      const antes = tablas[tabla].length;
+      error = insertarFila(tabla, f);
+      filas = error ? [] : tablas[tabla].slice(antes);
+      return yo();
+    };
+
+    b.upsert = (f: Fila | Fila[], o?: { onConflict?: string; ignoreDuplicates?: boolean }) => {
+      for (const fila of Array.isArray(f) ? f : [f]) {
+        const llave = llaveDe(tabla, fila);
+        const i = tablas[tabla].findIndex((r) => llaveDe(tabla, r) === llave);
+        if (i >= 0) {
+          if (!o?.ignoreDuplicates) tablas[tabla][i] = { ...tablas[tabla][i], ...fila };
+          continue;
+        }
+        const err = insertarFila(tabla, fila);
+        if (err) { error = err; break; }
+      }
+      filas = [];
+      return yo();
+    };
+
+    b.then = (res: (r: { data: unknown; error: ErrPg }) => void) => {
+      if (errorTabla) return res({ data: null, error: errorTabla });
+      if (fallaTabla === tabla) return res({ data: null, error: { message: 'fetch failed' } });
+      if (error || filas !== null) return res({ data: filas, error });
+      let out = tablas[tabla].filter((f) => preds.every((p) => p(f)));
+      if (orden) {
+        const { col, asc } = orden;
+        out = [...out].sort((x, y) => String(x[col]).localeCompare(String(y[col])) * (asc ? 1 : -1));
+      }
+      if (tope !== null) out = out.slice(0, tope);
+      return res({ data: seleccionando ? out : [], error: null });
+    };
+    return b;
+  };
+
   const storage = {
-    getBucket: async (b: string) => ({ data: buckets.has(b) ? { name: b } : null, error: null }),
-    createBucket: async (b: string) => { buckets.add(b); return { data: { name: b }, error: null }; },
+    getBucket: async (bk: string) => ({ data: buckets.has(bk) ? { name: bk } : null, error: null }),
+    createBucket: async (bk: string) => { buckets.add(bk); return { data: { name: bk }, error: null }; },
     from: (bucket: string) => ({
       upload: async (path: string, bytes: Buffer, opts?: { upsert?: boolean; contentType?: string }) => {
-        if (fallaSubida) return { error: { message: 'storage caído' } };
         const llave = `${bucket}/${path}`;
         if (!opts?.upsert && objetos.has(llave)) return { error: { message: 'The resource already exists' } };
         objetos.set(llave, { bytes: Buffer.from(bytes), contentType: opts?.contentType ?? '' });
         return { error: null };
       },
+      remove: async (paths: string[]) => { paths.forEach((p) => objetos.delete(`${bucket}/${p}`)); return { error: null }; },
       download: async (path: string) => {
-        if (fallaDescarga) return { data: null as never, error: { message: fallaDescarga } };
         const o = objetos.get(`${bucket}/${path}`);
         if (!o) return { data: null as never, error: { message: 'Object not found' } };
         return {
@@ -48,15 +151,6 @@ function dbFalsa(): SupabaseClient {
           error: null,
         };
       },
-      list: async (prefijo: string) => {
-        const nombres = new Set<string>();
-        for (const llave of objetos.keys()) {
-          if (!llave.startsWith(`${bucket}/${prefijo}/`)) continue;
-          nombres.add(llave.slice(`${bucket}/${prefijo}/`.length).split('/')[0]);
-        }
-        // carpeta = entrada sin id (el contrato que usa listarCorridas)
-        return { data: [...nombres].map((name) => ({ name, id: null })), error: null };
-      },
       createSignedUrl: async (path: string, _s: number) => (
         objetos.has(`${bucket}/${path}`)
           ? { data: { signedUrl: `https://firmada.example/${bucket}/${path}` }, error: null }
@@ -64,21 +158,28 @@ function dbFalsa(): SupabaseClient {
       ),
     }),
   };
-  return { storage } as unknown as SupabaseClient;
+  return { from, storage } as unknown as SupabaseClient;
 }
 
 const foto = (p: Partial<FotoBanco>): FotoBanco => ({
   id: 'f1', hash: 'h1', path: 'banco/f1.jpg', mime: 'image/jpeg',
   etiqueta: 'ticket', bytes: 10, subidoEn: '2026-08-16T12:00:00Z', ocrEsperado: null, ...p,
 });
+
 const corrida = (p: Partial<CorridaQA>): CorridaQA => ({
-  id: p.id ?? 'c1', escenario: 'feliz', estado: 'terminada', creadaEn: p.creadaEn ?? new Date().toISOString(),
-  latidoEn: null, params: {}, pasos: [], veredictos: [], costoUsdTotal: p.costoUsdTotal ?? 0,
-  tenant: null, error: null, limpieza: null,
-} as unknown as CorridaQA);
+  id: 'c1', escenario: 'feliz', carril: 'rapido',
+  parametros: { anticipo: 1000, rfcEmpresa: null, ruta: { origen: 'A', destino: 'B' }, politica: [], fotoIds: [], retencion: 'conservar' },
+  estado: 'ok', motivo: null, tenantId: null, tenantNombre: 'ZZZ QA',
+  creadaEn: new Date().toISOString(), inicio: null, fin: null,
+  latidoEn: new Date().toISOString(), pasos: [], costoUsdTotal: 0,
+  veredicto: null, turnos: [], pdfs: [], limpieza: null, ...p,
+});
 
 beforeEach(() => {
-  objetos = new Map(); buckets = new Set(); fallaDescarga = null; fallaSubida = false;
+  tablas = { qa_foto: [], qa_corrida: [], qa_corrida_paso: [] };
+  objetos = new Map(); buckets = new Set();
+  fallaTabla = null; alInsertarFoto = null; errorInsertFoto = null; errorTabla = null; seq = 0;
+  _olvidarBuckets();
 });
 
 describe('los puros', () => {
@@ -106,17 +207,29 @@ describe('los puros', () => {
 });
 
 describe('el banco de fotos', () => {
-  it('banco sin estrenar = 0 fotos DE VERDAD (objeto inexistente no es error)', async () => {
+  it('banco sin estrenar = 0 fotos DE VERDAD (tabla vacía no es error)', async () => {
     const r = await leerManifiesto(dbFalsa());
     expect(r).toEqual({ ok: true, datos: [] });
-    expect(buckets.has(BUCKET_QA_FOTOS)).toBe(true); // asegurarBuckets corrió
   });
 
   it('cualquier OTRO fallo se dice — jamás un "0" sobre una base ilegible', async () => {
-    fallaDescarga = 'fetch failed';
+    fallaTabla = 'qa_foto';
     const r = await leerManifiesto(dbFalsa());
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain('fetch failed');
+  });
+
+  it('si la migración 0185 no está aplicada, lo DICE con el número — no un error de Postgres', async () => {
+    // Un panel abierto antes de aplicar la migración diría `relation
+    // "public.qa_foto" does not exist` y parecería roto. Lo único que pasa es
+    // que falta un paso conocido, y el panel tiene que poder nombrarlo.
+    errorTabla = { code: '42P01', message: 'relation "public.qa_foto" does not exist' };
+    const r = await leerManifiesto(dbFalsa());
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toMatch(/migración 0185/);
+      expect(r.error).toMatch(/qa_foto/);
+    }
   });
 
   it('subirFotos: nueva + duplicada + HEIC rechazado en UN lote — el rechazo no tira el resto', async () => {
@@ -140,13 +253,53 @@ describe('el banco de fotos', () => {
       expect(vacia.error).toMatch(/vac/);
       expect(lote.datos.fotos).toHaveLength(2); // a.jpg + nueva.png; nada más entró
     }
+    expect(tablas.qa_foto).toHaveLength(2);
+  });
+
+  it('LA CARRERA: si otro proceso inserta la misma foto entre la lectura y el insert, se reporta duplicado — no se pierde ni revienta', async () => {
+    // Esto es exactamente lo que el manifiesto en JSON no podía hacer: allí la
+    // segunda escritura pisaba a la primera y una foto desaparecía del índice.
+    const db = dbFalsa();
+    const bytes = Buffer.from('la-misma-foto');
+    const hash = hashBytes(bytes);
+    alInsertarFoto = () => {
+      alInsertarFoto = null;                        // solo la primera vez
+      insertarFila('qa_foto', { hash, path: `banco/${hash}.jpg`, mime: 'image/jpeg', etiqueta: 'la ganadora', bytes: bytes.length });
+    };
+    const r = await subirFotos(db, [{ nombre: 'la-perdedora.jpg', mime: 'image/jpeg', bytes }]);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.datos.resultados[0].error).toBeNull();
+      expect(r.datos.resultados[0].duplicadoDe).toBe('la ganadora');
+    }
+    expect(tablas.qa_foto).toHaveLength(1);   // una foto, una fila
+  });
+
+  it('si el registro en tabla falla, los bytes recién subidos NO se quedan huérfanos en el bucket', async () => {
+    // Subir bytes y no poder registrarlos deja un objeto que nadie referencia:
+    // basura que el barrido de la 0165 tendría que ir a cazar después. Se
+    // retira en el momento, por la Storage API (el único camino que Supabase
+    // permite).
+    const db = dbFalsa();
+    const bytes = Buffer.from('bytes-sin-dueno');
+    const path = `banco/${hashBytes(bytes)}.jpg`;
+    errorInsertFoto = { code: '23502', message: 'null value in column "etiqueta"' };
+
+    const r = await subirFotos(db, [{ nombre: 'x.jpg', mime: 'image/jpeg', bytes }]);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.datos.resultados[0].id).toBeNull();
+      expect(r.datos.resultados[0].error).toMatch(/no se pudo registrar en el banco/);
+    }
+    expect(tablas.qa_foto).toHaveLength(0);
+    expect(objetos.has(`${BUCKET_QA_FOTOS}/${path}`)).toBe(false);   // retirado
   });
 
   it('dataUrlDeFoto arma el data-URL desde los bytes del banco (jamás del cliente)', async () => {
     const db = dbFalsa();
     await subirFotos(db, [{ nombre: 't.jpg', mime: 'image/jpeg', bytes: Buffer.from('pixeles') }]);
     const m = await leerManifiesto(db);
-    if (!m.ok) throw new Error('manifiesto ilegible');
+    if (!m.ok) throw new Error('banco ilegible');
     const url = await dataUrlDeFoto(db, m.datos[0]);
     expect(url).toBe(`data:image/jpeg;base64,${Buffer.from('pixeles').toString('base64')}`);
   });
@@ -161,25 +314,63 @@ describe('el banco de fotos', () => {
   });
 });
 
-describe('las corridas (el ledger en archivos de Fase A)', () => {
-  it('guardar → leer: el roundtrip conserva la corrida y sella latidoEn', async () => {
+describe('las corridas (el ledger en tablas, mig. 0185)', () => {
+  it('guardar → leer: el roundtrip conserva la corrida con sus pasos y sella latidoEn', async () => {
     const db = dbFalsa();
-    await guardarCorrida(db, corrida({ id: 'c-round' }));
+    await guardarCorrida(db, corrida({
+      id: 'c-round',
+      pasos: [
+        { n: 2, nombre: 'cuadre', estado: 'ok', costoUsd: 0.02 },
+        { n: 1, nombre: 'intake', estado: 'ok', costoUsd: 0.01, detalle: 'dos fotos' },
+      ],
+    }));
     const r = await leerCorrida(db, 'c-round');
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.datos?.id).toBe('c-round');
       expect(typeof r.datos?.latidoEn).toBe('string');
+      expect(r.datos?.pasos.map((p) => p.n)).toEqual([1, 2]);   // ordenados por n
+      expect(r.datos?.pasos[0].detalle).toBe('dos fotos');
     }
+  });
+
+  it('EL PASO REESCRITO NO SE DUPLICA: pendiente → corriendo → ok es UNA fila', async () => {
+    // El motor guarda la corrida entera en cada transición. Con el ledger en
+    // JSON eso reescribía el archivo; en tabla, la PK (corrida_id, n) es la
+    // que impide que el historial de la pantalla muestre el paso tres veces.
+    const db = dbFalsa();
+    const c = corrida({ id: 'c-pasos', pasos: [{ n: 1, nombre: 'intake', estado: 'pendiente', costoUsd: 0 }] });
+    await guardarCorrida(db, c);
+    c.pasos[0].estado = 'corriendo';
+    await guardarCorrida(db, c);
+    c.pasos[0].estado = 'ok';
+    c.pasos[0].costoUsd = 0.05;
+    await guardarCorrida(db, c);
+
+    expect(tablas.qa_corrida_paso).toHaveLength(1);
+    const r = await leerCorrida(db, 'c-pasos');
+    if (!r.ok || !r.datos) throw new Error('ilegible');
+    expect(r.datos.pasos).toHaveLength(1);
+    expect(r.datos.pasos[0].estado).toBe('ok');
+    expect(r.datos.pasos[0].costoUsd).toBe(0.05);
   });
 
   it('corrida inexistente = null honesto; fallo de lectura = error dicho', async () => {
     const db = dbFalsa();
     const nada = await leerCorrida(db, 'no-existe');
     expect(nada).toEqual({ ok: true, datos: null });
-    fallaDescarga = 'timeout';
+    fallaTabla = 'qa_corrida';
     const rota = await leerCorrida(db, 'da-igual');
     expect(rota.ok).toBe(false);
+  });
+
+  it('los pasos ilegibles NO se leen como "corrida sin pasos"', async () => {
+    const db = dbFalsa();
+    await guardarCorrida(db, corrida({ id: 'c-x', pasos: [{ n: 1, nombre: 'intake', estado: 'ok', costoUsd: 0 }] }));
+    fallaTabla = 'qa_corrida_paso';
+    const r = await leerCorrida(db, 'c-x');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/pasos/);
   });
 
   it('listarCorridas: más nuevas primero, respetando el límite', async () => {
@@ -202,16 +393,20 @@ describe('las corridas (el ledger en archivos de Fase A)', () => {
     const r = await gastoHoyUsd(db);
     expect(r).toEqual({ ok: true, datos: 0.0422 });
   });
+
+  it('el gasto del día NO se lee como $0 si la base falla — el tope diario no puede fallar abierto', async () => {
+    const db = dbFalsa();
+    fallaTabla = 'qa_corrida';
+    const r = await gastoHoyUsd(db);
+    expect(r.ok).toBe(false);
+  });
 });
 
 describe('asegurarBuckets', () => {
   it('es idempotente y jamás truena — el flag de módulo hace no-op las llamadas siguientes', async () => {
-    // La CREACIÓN real ya quedó afirmada en el primer test del banco (el
-    // manifiesto la dispara y el Set la observó); aquí se fija que repetirla
-    // no lanza aunque el estado externo cambie — el `bucketsListos` de módulo
-    // absorbe la llamada, que es exactamente su trabajo.
     const db = dbFalsa();
     await expect(asegurarBuckets(db)).resolves.toBeUndefined();
+    expect(buckets.has(BUCKET_QA_FOTOS)).toBe(true);
     await expect(asegurarBuckets(db)).resolves.toBeUndefined();
   });
 });

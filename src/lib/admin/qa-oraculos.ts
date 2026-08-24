@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// PANEL DE QA — los oráculos de Fase A. SOLO servidor.
+// PANEL DE QA — los oráculos. SOLO servidor.
 //
 // NO se reescribe ni un oráculo: se IMPORTAN los de la Fase 1 del ejército
 // (scripts/qa-agentes/oraculos/*) — el mismo código juzga la corrida del
@@ -8,13 +8,22 @@
 // con los MISMOS valores que INVARIANTE_DE del orquestador (no se puede
 // importar de ahí: orquestador.qa.ts es un archivo de vitest).
 //
-// dedup_comprobante (#3) y huerfano_post_cierre (#4) quedan importados y
-// listos, pero los dos escenarios de Fase A no los disparan (necesitan la
-// siembra especial de sus ataques — Fase B): correrlos aquí y reportar "ok"
-// sobre un escenario que no los ejercita sería un veredicto inventado.
+// QUÉ SE CORRE Y QUÉ NO. #1, #5 y #8 los ejercita cualquier corrida (todas
+// cuadran, hablan y registran). #3 (dedup) solo lo ejercita el escenario cuyo
+// guion REPITE una foto — por eso llega por `dedup`, y sin ese dato no se
+// corre. Correrlo sobre un escenario que no lo ataca y reportar "ok" sería un
+// veredicto inventado, que es exactamente lo que este panel existe para no
+// hacer.
+//
+// huerfano_post_cierre (#4) sigue importado y sin disparar: su oráculo exige
+// el MONTO del ticket que llegó tarde, y el banco de fotos todavía no sabe
+// cuánto dice cada foto. Ese dato es el oráculo humano (`qa_foto.ocr_esperado`,
+// mig. 0185), y hasta que exista, #4 no se puede juzgar sin inventarle una
+// cifra al ticket.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { oraculoCuadreBalancea } from '../../../scripts/qa-agentes/oraculos/cuadre_balancea.oraculo';
+import { oraculoDedupComprobante } from '../../../scripts/qa-agentes/oraculos/dedup_comprobante.oraculo';
 import { oraculoCifrasConFuente, respaldoDesdeFuentes } from '../../../scripts/qa-agentes/oraculos/cifras_con_fuente.oraculo';
 import { oraculoBitacoraRegistro } from '../../../scripts/qa-agentes/oraculos/bitacora_registro.oraculo';
 import type { VeredictoOraculo } from '../../../scripts/qa-agentes/config.qa';
@@ -45,7 +54,7 @@ export function filaDesdeVeredicto(v: VeredictoOraculo): FilaVeredicto {
   };
 }
 
-export interface EntradaOraculosFaseA {
+export interface EntradaOraculos {
   tenantId: string;
   viajeId: string;
   /** Lo que el sistema le contestó al chofer (turnos assistant de
@@ -58,12 +67,15 @@ export interface EntradaOraculosFaseA {
   eventosBitacora: Array<{ msg: string }>;
   /** Qué eventos DEBIERON emitirse en este escenario. */
   eventosEsperados: string[];
+  /** Solo si el guion repitió una foto: el hash de esa foto y el viaje al que
+   *  intentó entrar la segunda vez. Sin esto, #3 no se corre. */
+  dedup?: { imgHash: string; viajeIntentoId: string };
 }
 
-/** Corre los 3 oráculos que los escenarios de Fase A disparan (#1, #5, #8) y
- *  devuelve las filas para el veredicto. Funciones puras sobre la DB — el LLM
- *  explora, el código juzga. */
-export async function correrOraculosFaseA(e: EntradaOraculosFaseA): Promise<FilaVeredicto[]> {
+/** Corre los oráculos que la corrida DE VERDAD ejercitó y devuelve las filas
+ *  del veredicto. Funciones puras sobre la DB — el LLM explora, el código
+ *  juzga. */
+export async function correrOraculos(e: EntradaOraculos): Promise<FilaVeredicto[]> {
   const filas: FilaVeredicto[] = [];
 
   filas.push(filaDesdeVeredicto(
@@ -72,6 +84,12 @@ export async function correrOraculosFaseA(e: EntradaOraculosFaseA): Promise<Fila
 
   const respaldo = respaldoDesdeFuentes(e.fuentesRespaldo);
   filas.push(filaDesdeVeredicto(oraculoCifrasConFuente(e.textosBot, respaldo)));
+
+  if (e.dedup) {
+    filas.push(filaDesdeVeredicto(
+      await oraculoDedupComprobante(e.tenantId, e.dedup.viajeIntentoId, e.dedup.imgHash),
+    ));
+  }
 
   filas.push(filaDesdeVeredicto(oraculoBitacoraRegistro(
     // El oráculo solo mira `msg`; el resto del evento es evidencia.
