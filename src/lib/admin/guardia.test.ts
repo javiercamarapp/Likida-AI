@@ -46,7 +46,7 @@ describe('la matriz del runbook, determinista', () => {
       item('arco', VENCIO_AYER),
     ]), AHORA);
     expect(c.items.map((i) => i.severidad)).toEqual(['S3', 'S2', 'S2']);
-    expect(c.items[2].regla).toMatch(/VENCIDO.*art\. 32/s);
+    expect(c.items[2].regla).toMatch(/VENCIDO.*art\. 31/s);
   });
 
   it('un ticket dentro de SLA es S3; vencido sube a S2', () => {

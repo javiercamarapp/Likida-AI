@@ -53,12 +53,23 @@ jobs:
           # `gh pr checks` sale con 0 solo si todo pasó; 8 = alguno sigue en
           # curso; cualquier otro = alguno falló. Se espera a que terminen y se
           # rechaza el merge si alguno está en rojo.
+          #
+          # PRUEBAS (barrido MEDIO/BAJO): `CODE=$?` vivía DESPUÉS del `fi` de
+          # un `if COMANDO; then …; fi` sin `else` — cuando la condición salía
+          # falsa (sin rama que la maneje), el propio `if` devuelve 0 por
+          # definición de POSIX, así que `$?` NUNCA veía el 8 real de `gh pr
+          # checks`. La rama de "checks en curso, reintenta" era código
+          # muerto: cualquier corrida con checks pendientes (no rojos, solo
+          # sin terminar) caía derecho al "🔴 no se mergea" en el primer
+          # intento. Se separa el comando del `if` para capturar su código de
+          # verdad.
           for i in $(seq 1 30); do
-            if gh pr checks "$NUM" --repo "$REPO" > /tmp/checks.txt 2>&1; then
+            gh pr checks "$NUM" --repo "$REPO" > /tmp/checks.txt 2>&1
+            CODE=$?
+            if [ "$CODE" = "0" ]; then
               echo "Todos los checks en verde para el PR #$NUM."
               break
             fi
-            CODE=$?
             if [ "$CODE" = "8" ]; then
               echo "Checks todavía en curso (intento $i/30) — esperando 20s…"
               sleep 20
