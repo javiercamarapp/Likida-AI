@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   registrarPortales,
   olvidarPortales,
@@ -6,6 +6,8 @@ import {
   exigirTenantRegistrado,
   tenantRegistrado,
   portalesVivos,
+  portalesOperables,
+  pilotoHabilitado,
   PORTALES_CONOCIDOS,
   type FlotaFiscal,
 } from './registro';
@@ -249,5 +251,39 @@ describe('la lista de portales conocidos', () => {
     // Son dos preguntas distintas y se responden distinto: "qué sé hacer" contra
     // "qué puedo hacer ahora con la flota que está cargada".
     expect(portalesVivos('tenant-a')).toEqual([]);
+  });
+});
+
+// PRUEBAS (barrido MEDIO/BAJO): `FACTURACION_PILOTO=si` no tenía ni una
+// prueba — la palanca que decide si el cron intenta el piloto de visión
+// contra un portal SIN adaptador escrito (o lo manda con el encargado como
+// siempre) estaba completamente sin cubrir.
+describe('el piloto de visión: FACTURACION_PILOTO=si', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('apagado por default: portalesOperables() es exactamente PORTALES_CONOCIDOS', () => {
+    vi.stubEnv('FACTURACION_PILOTO', '');
+    expect(pilotoHabilitado()).toBe(false);
+    expect(portalesOperables()).toEqual(PORTALES_CONOCIDOS);
+  });
+
+  it('cualquier valor que no sea "si" exacto se trata como apagado', () => {
+    vi.stubEnv('FACTURACION_PILOTO', 'true');
+    expect(pilotoHabilitado()).toBe(false);
+    vi.stubEnv('FACTURACION_PILOTO', 'SI');
+    expect(pilotoHabilitado()).toBe(false);
+  });
+
+  it('encendido: suma los pilotables a los que ya tienen adaptador escrito', () => {
+    vi.stubEnv('FACTURACION_PILOTO', 'si');
+    expect(pilotoHabilitado()).toBe(true);
+    const operables = portalesOperables();
+    expect(operables).toEqual(expect.arrayContaining([...PORTALES_CONOCIDOS]));
+    // 'oxxo_gas' no tiene adaptador escrito (no está en PORTALES_CONOCIDOS) —
+    // si esto falla, alguien le escribió adaptador y debería salir de
+    // COMERCIOS_PILOTABLES o esta prueba debe apuntar a otro comercio.
+    expect(PORTALES_CONOCIDOS).not.toContain('oxxo_gas');
+    expect(operables).toContain('oxxo_gas');
+    expect(operables.length).toBeGreaterThan(PORTALES_CONOCIDOS.length);
   });
 });

@@ -10,7 +10,8 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('./budget', () => ({ reserveLlmBudget: reserve, settleLlmBudget: settle }));
 process.env.OPENROUTER_API_KEY = 'test-key';
 
-const { executeTool, generateWithTools, registerTool } = await import('./runtime_guards_imports');
+const { executeTool, registerTool } = await import('./tool-executor');
+const { generateWithTools } = await import('./openrouter');
 
 describe('runtime del agente', () => {
   it('una tool abortada no entra al handler', async () => {
