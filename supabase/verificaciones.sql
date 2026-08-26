@@ -5739,30 +5739,42 @@ begin
     coalesce(publico, true), coalesce(anon_si, true), coalesce(auth_si, true), coalesce(svc_si, false);
 end $$;
 
--- ── 120. Las personas de prospectos fríos se purgan; las de tratos vivos y las frenadas no (mig. 0148) ──
+-- ── 120. Las personas de prospectos fríos se purgan COMPLETAS; las de tratos vivos y las frenadas no (mig. 0148 + 0191) ──
 --
 -- /aviso/prospectos promete "a los 12 meses sin ningún contacto se borran".
 -- Aquí se comprueba que algo lo ejecuta y que NO borra de más: un prospecto
 -- con toque reciente conserva a su gente, uno en `negociacion` también, y
 -- `conservar_hasta` en el futuro frena la purga aunque el prospecto esté
--- frío. `contacto_nombre` del prospecto frío se anula. La llave
--- `prospectoPersonasPurgadas` sale en el jsonb del mantenimiento, y `anon`
--- no puede ejecutar la purga. Todo revierte con el RAISE final.
+-- frío. `anon` no puede ejecutar la purga. Todo revierte con el RAISE final.
 --
--- PENDIENTE DE CORRER CONTRA PRODUCCIÓN (auditoría 18, C2). Esperado:
---   RETENCION_0148  purgadas=1  quedan=3  frio_sin_contacto=t  reciente_con_contacto=t  llave=t  anon=f
+-- AUDITORÍA 19 (legal C4, CRÍTICO): la 0148 solo anulaba `contacto_nombre` —
+-- `telefono`/`correo`/`notas`/`lead_clave` de la MISMA persona quedaban
+-- intactos. La 0191 los anula los cinco, y el bloque ahora siembra los
+-- cinco en el frío para probarlo. `empresa` (el NEGOCIO, no la persona) se
+-- queda a propósito: se comprueba que sigue viva.
+--
+-- Y el caso que la 0148 no cubría: un prospecto del censo puede nacer SIN
+-- `contacto_nombre` pero CON teléfono/correo — antes la condición del
+-- UPDATE (`contacto_nombre is not null`) nunca lo tocaba. `sin_nombre`
+-- simula justo eso.
+--
+-- Esperado:
+--   RETENCION_0148_0191  purgadas=1  quedan=3  frio_limpio=t  sin_nombre_limpio=t  empresa_viva=t  reciente_con_datos=t  llave=t  anon=f
 do $$
 declare
-  frio uuid; reciente uuid; trato uuid; res jsonb; purgadas bigint; quedan bigint;
-  frio_sin_contacto boolean; reciente_con_contacto boolean; tiene_llave boolean; anon_ok boolean;
+  frio uuid; sin_nombre uuid; reciente uuid; trato uuid; res jsonb; purgadas bigint; quedan bigint;
+  frio_limpio boolean; sin_nombre_limpio boolean; empresa_viva boolean; reciente_con_datos boolean;
+  tiene_llave boolean; anon_ok boolean;
 begin
-  insert into public.prospecto (empresa, estado, contacto_nombre, created_at)
-    values ('__verif_0148_frio__', 'contactado', 'Ing. Prueba Frío', now() - interval '400 days') returning id into frio;
-  insert into public.prospecto (empresa, estado, contacto_nombre, created_at)
-    values ('__verif_0148_reciente__', 'contactado', 'Lic. Prueba Reciente', now() - interval '400 days') returning id into reciente;
+  insert into public.prospecto (empresa, estado, contacto_nombre, telefono, correo, notas, lead_clave, created_at)
+    values ('__verif_0148_frio__', 'contactado', 'Ing. Prueba Frío', '5219990000001', 'frio@verif.test', 'notas del vendedor', 'frio@verif.test', now() - interval '400 days') returning id into frio;
+  insert into public.prospecto (empresa, estado, contacto_nombre, telefono, correo, created_at)
+    values ('__verif_0148_sinnombre__', 'nuevo', null, '5219990000002', 'sinnombre@verif.test', now() - interval '400 days') returning id into sin_nombre;
+  insert into public.prospecto (empresa, estado, contacto_nombre, telefono, correo, created_at)
+    values ('__verif_0148_reciente__', 'contactado', 'Lic. Prueba Reciente', '5219990000003', 'reciente@verif.test', now() - interval '400 days') returning id into reciente;
   insert into public.prospecto (empresa, estado, contacto_nombre, created_at)
     values ('__verif_0148_trato__', 'negociacion', 'Prueba Trato', now() - interval '400 days') returning id into trato;
-  -- El reciente tuvo un toque hace 10 días; el frío, ninguno.
+  -- El reciente tuvo un toque hace 10 días; los otros dos fríos, ninguno.
   insert into public.prospecto_contacto (prospecto_id, canal, direccion, resumen, ocurrio_en)
     values (reciente, 'correo', 'salida', '__verif_0148__', now() - interval '10 days');
   insert into public.prospecto_persona (prospecto_id, nombre, origen, created_at) values
@@ -5776,12 +5788,16 @@ begin
   res := public.mantenimiento_de_datos(30);
   purgadas := (res->>'prospectoPersonasPurgadas')::bigint;
   select count(*) into quedan from public.prospecto_persona where nombre like '__V148%';
-  select contacto_nombre is null into frio_sin_contacto from public.prospecto where id = frio;
-  select contacto_nombre is not null into reciente_con_contacto from public.prospecto where id = reciente;
+  select (contacto_nombre is null and telefono is null and correo is null and notas is null and lead_clave is null)
+    into frio_limpio from public.prospecto where id = frio;
+  select (telefono is null and correo is null) into sin_nombre_limpio from public.prospecto where id = sin_nombre;
+  select (empresa = '__verif_0148_frio__') into empresa_viva from public.prospecto where id = frio;
+  select (contacto_nombre is not null and telefono is not null and correo is not null)
+    into reciente_con_datos from public.prospecto where id = reciente;
   tiene_llave := res ? 'prospectoPersonasPurgadas';
   select has_function_privilege('anon', 'public.purgar_prospecto_persona(integer, timestamptz)', 'EXECUTE') into anon_ok;
-  raise exception E'RETENCION_0148  purgadas=%  quedan=%  frio_sin_contacto=%  reciente_con_contacto=%  llave=%  anon=%   (esperado 1/3/t/t/t/f)',
-    purgadas, quedan, frio_sin_contacto, reciente_con_contacto, tiene_llave, anon_ok;
+  raise exception E'RETENCION_0148_0191  purgadas=%  quedan=%  frio_limpio=%  sin_nombre_limpio=%  empresa_viva=%  reciente_con_datos=%  llave=%  anon=%   (esperado 1/3/t/t/t/t/t/f)',
+    purgadas, quedan, frio_limpio, sin_nombre_limpio, empresa_viva, reciente_con_datos, tiene_llave, anon_ok;
 end $$;
 
 -- ── 121. El claim huérfano se retoma; el completado no (mig. 0149) ──────────
