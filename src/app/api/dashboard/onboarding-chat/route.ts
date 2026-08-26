@@ -4,10 +4,20 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getPerfilCrudo } from '@/lib/likida/repo';
 import { responderEntrevista } from '@/lib/likida/perfil/entrevista-agente';
 import { tenantEfectivoChat } from '@/app/api/dashboard/chat/tenant';
+import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
+
+// BACKEND-19C2-2 — el tope diario en USD (`createLlmBudget`, dentro de
+// `responderEntrevista`) ya frena el gasto agregado, pero nada frenaba la
+// TASA: un usuario podía golpear esta ruta decenas de veces por segundo,
+// agotando el presupuesto compartido del tenant (bloqueando OCR/cuadre del
+// resto de la flota) o saturando el servidor con streams concurrentes.
+// Mismo patrón que `../ingesta/tope.ts` (SONDAS_POR_MINUTO): un humano
+// conversando no pasa de un puñado por minuto.
+const TURNOS_POR_MINUTO = 12;
 
 interface Mensaje { rol: 'usuario' | 'asistente'; texto: string }
 
@@ -33,6 +43,10 @@ export async function POST(req: NextRequest) {
 
   const efectivo = await tenantEfectivoChat(sesion, req.nextUrl.searchParams.get('tenant'));
   if (!efectivo) return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
+
+  if (!(await rateLimit(`onboarding-chat:${sesion.userId}`, TURNOS_POR_MINUTO, 60_000))) {
+    return NextResponse.json({ error: 'demasiados turnos seguidos; espera un minuto' }, { status: 429 });
+  }
 
   let cuerpo: unknown;
   try { cuerpo = await req.json(); } catch { return NextResponse.json({ error: 'cuerpo inválido' }, { status: 400 }); }

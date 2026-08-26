@@ -3,12 +3,13 @@ import { z } from 'zod';
 
 const create = vi.hoisted(() => vi.fn());
 const rpc = vi.hoisted(() => vi.fn());
+const loggerError = vi.hoisted(() => vi.fn());
 vi.mock('openai', () => ({
   default: class { chat = { completions: { create } }; },
 }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ rpc }) }));
 vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (query: unknown) => query }));
-vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: loggerError } }));
 
 process.env.OPENROUTER_API_KEY = 'test-key';
 const { generateStructured } = await import('./openrouter');
@@ -106,5 +107,25 @@ describe('generateStructured — el data-URL de una foto no se cobra por byte', 
     // 40_000 * 0.25 / 1e6 = $0.010, más la salida. Muy por encima de lo que
     // costaría contarlos a ~4 caracteres por token.
     expect(reserva!.p_reserva_usd).toBeGreaterThan(0.01);
+  });
+
+  it('BACKEND-19C2-1: si el proveedor truena, NO liquida al monto reservado', async () => {
+    create.mockReset();
+    loggerError.mockReset();
+    create.mockRejectedValueOnce(new Error('el modelo rechazó la petición (dato de negocio, no red)'));
+    const budget = createLlmBudget('tenant-error-ocr', '00000000-0000-4000-8000-00000000c204');
+
+    await expect(generateStructured({
+      role: 'ocr',
+      system: 'extrae',
+      messages: [{ role: 'user', content: 'este ticket' }],
+      schema: z.object({ monto: z.number() }),
+      schemaName: 'comprobante',
+      budget,
+    })).rejects.toThrow();
+
+    expect(rpc).toHaveBeenCalledWith('reservar_presupuesto_llm', expect.objectContaining({ p_tenant_id: 'tenant-error-ocr' }));
+    expect(rpc).not.toHaveBeenCalledWith('liquidar_presupuesto_llm', expect.anything());
+    expect(loggerError).toHaveBeenCalledWith('llm.reserva_sin_liquidar_por_error', expect.objectContaining({ reservaId: expect.any(String) }));
   });
 });
