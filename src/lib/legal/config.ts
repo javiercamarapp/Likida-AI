@@ -1,7 +1,22 @@
-/** Datos legales que solo puede proporcionar la entidad operadora. */
+/** El valor ENTERO (no una palabra dentro de él) es uno de estos placeholders sueltos. */
+const PLACEHOLDERS_SUELTOS = new Set(['completar', 'pendiente', 'todo', 'tbd']);
+
+/**
+ * Datos legales que solo puede proporcionar la entidad operadora.
+ *
+ * LEGAL-19C2-A7: antes rechazaba cualquier valor que trajera "completar",
+ * "pendiente", "todo" o "tbd" como PALABRA SUELTA en CUALQUIER PARTE del
+ * texto — una razón social real como "Grupo Todo Carga SA de CV" se leía
+ * como placeholder sin llenar y se descartaba en silencio. Ahora exige que
+ * el valor COMPLETO (recortado) sea uno de esos placeholders, o el
+ * marcador `[COMPLETAR...]` de `LEGAL_PLACEHOLDERS`, no que la palabra
+ * aparezca en cualquier parte de un valor más largo.
+ */
 export function datoLegal(valorCrudo: string | undefined): string | null {
   const valor = valorCrudo?.trim();
-  if (!valor || /\b(?:completar|pendiente|todo|tbd)\b/i.test(valor)) return null;
+  if (!valor) return null;
+  if (/^\[completar\b/i.test(valor)) return null;
+  if (PLACEHOLDERS_SUELTOS.has(valor.toLowerCase())) return null;
   return valor;
 }
 

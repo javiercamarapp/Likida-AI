@@ -1,8 +1,14 @@
 name: Backup Supabase Storage
 
 on:
-  schedule:
-    - cron: '17 3 * * *'
+  # OPERABILIDAD-19C2-2: el `schedule` fallaba TODAS las noches (03:17 UTC,
+  # confirmado en `gh api .../actions/workflows/backup-storage.yml/runs`)
+  # porque el entorno `production-backup` (secretos + bucket remoto) sigue
+  # sin configurarse — ver docs/operacion/RESILIENCIA-DEPLOY.md, "Primera
+  # configuración externa pendiente". Un fallo diario sobre el único buzón
+  # de alertas es ruido que entrena a ignorarlo, no una señal útil. Se
+  # queda solo `workflow_dispatch` hasta la primera corrida MANUAL verde;
+  # ahí se vuelve a agregar `schedule` (y se actualiza este comentario).
   workflow_dispatch:
 
 permissions:
