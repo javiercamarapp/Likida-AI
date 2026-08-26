@@ -176,7 +176,10 @@ function sqlAgregadoEquivalente(filas: Fila[], a: ArgsRpc): unknown[] {
       concepto: b.concepto, claveProdServ: b.clave_prod_serv, formaPago: b.forma_pago, efos: b.efos, efosRevisar: b.efos_revisar,
       estadoSat: b.estado_sat, tieneCfdi: b.tiene_cfdi, sinFecha: b.fecha === null, ivaEstado: b.iva_estado, sobreTopeEfectivo: b.sobre_tope,
       banda, rfcEmisor: sinCfdi ? b.rfc_emisor : null, host: sinCfdi ? hostDe(b.ocr_extra?.urlFacturacion) : null,
-      emisor: sinCfdi ? nz((b.ocr_extra?.emisor as string | undefined) ?? null) : null,
+      // AUDITORÍA 19 (REND-19c2-2, mig. 0192): normalizado — mismo criterio
+      // que `identificarComercio` (.toUpperCase() sobre textoTicket), para
+      // que "OXXO"/"Oxxo"/" OXXO " dejen de ser tres celdas.
+      emisor: sinCfdi ? nz(((b.ocr_extra?.emisor as string | undefined)?.trim().toUpperCase()) ?? null) : null,
       diaViaje: enDia ? b.viaje_id : null, diaDia: enDia ? b.dia : null,
       totalTimbradoDia: enDia ? dias.get(`${b.viaje_id}|${b.dia}`)! : null,
     };
@@ -326,6 +329,26 @@ describe('getGastosFiscales — equivalencia: la ley sobre filas crudas vs sobre
     const celdas = await getGastosFiscales('nadie', resolverPeriodo('todo', HOY), HOY, OPTS);
     expect(celdas).toEqual([]);
     expect(resumirFiscal(celdas, OPTS).n).toBe(0);
+  });
+
+  it('AUDITORÍA 19 (REND-19c2-2, mig. 0192): "OXXO", "Oxxo" y " OXXO " son UNA celda, no tres', async () => {
+    // `emisor` no se expone en `GastoFiscal` (solo alimenta `plazoVencido`
+    // internamente — ver `aGastoFiscal`), así que lo observable es el
+    // AGRUPAMIENTO: sin normalizar, las 3 filas de abajo habrían salido
+    // como 3 celdas de n=1; con la 0192, salen como UNA de n=3. La cuarta
+    // fila (emisor real distinto) confirma que no se está fusionando de más.
+    const sinCfdi = { cfdi_uuid: null, estado_sat: null, efos: null, forma_pago: null, cfdi_valido: null, xml_verificado: null };
+    servidor.filas = [
+      fila({ tenant_id: T, monto: 100, ...sinCfdi, ocr_extra: { emisor: 'OXXO' } }),
+      fila({ tenant_id: T, monto: 200, ...sinCfdi, ocr_extra: { emisor: 'Oxxo' } }),
+      fila({ tenant_id: T, monto: 300, ...sinCfdi, ocr_extra: { emisor: ' OXXO ' } }),
+      fila({ tenant_id: T, monto: 400, ...sinCfdi, ocr_extra: { emisor: 'GASOLINERA LA ESQUINA' } }),
+    ];
+    const celdas = await getGastosFiscales(T, resolverPeriodo('todo', HOY), HOY, OPTS);
+    expect(celdas).toHaveLength(2);
+    const fundida = celdas.find((c) => c.monto === 600)!;
+    expect(fundida.celda?.n).toBe(3);
+    expect(celdas.some((c) => c.monto === 400 && c.celda?.n === 1)).toBe(true);
   });
 });
 
