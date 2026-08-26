@@ -345,14 +345,21 @@ export async function POST(req: NextRequest) {
       }
 
       await conPool([...porChofer.values()], MAX_EN_PARALELO, async (cadena) => {
-        // AUDITORÍA 19 (AGEN-19C2-1): `cadena.length` es el tamaño REAL de
-        // esta cadena, conocido de antemano — la señal que `processInbound`
-        // necesita para saber que hubo ráfaga sin depender de que dos fotos
-        // se solapen en el tiempo (ya no se solapan, por diseño, desde el
-        // 23-ago: "en serie dentro de cada chofer"). Ver la nota en
-        // `processor.ts` (OpcionesInbound.cadenaTotal).
+        // AUDITORÍA 19 (AGEN-19C2-1, corregido tras auditoría Fable-5): la
+        // cadena completa de este chofer ya se conoce de antemano — la señal
+        // que `processInbound` necesita para saber que hubo ráfaga sin
+        // depender de que dos fotos se solapen en el tiempo (ya no se
+        // solapan, por diseño, desde el 23-ago: "en serie dentro de cada
+        // chofer"). Se cuenta SOLO por FOTOS (`type === 'image'`), no por
+        // cualquier mensaje: una cadena `[foto, foto, "listo"]` antes hacía
+        // que la ÚLTIMA foto se creyera "no soy la última del lote" porque el
+        // "listo" venía después, y como el cierre de ráfaga solo vive en el
+        // camino de la foto, la libreta nunca se cerraba. Ver la nota en
+        // `processor.ts` (OpcionesInbound.hayFotoAntesEnCadena).
         for (const [posicion, f] of cadena.entries()) {
           try {
+            const hayFotoAntesEnCadena = cadena.slice(0, posicion).some((x) => x.evento.type === 'image');
+            const hayFotoDespuesEnCadena = cadena.slice(posicion + 1).some((x) => x.evento.type === 'image');
             const claim = await reclamarPendiente(f.id, 0, leaseOwner);
             // Si otra invocación tiene el mensaje anterior, esta cadena se
             // detiene: avanzar al siguiente rompería el orden por chofer.
@@ -363,8 +370,8 @@ export async function POST(req: NextRequest) {
             try {
               const resultado = await processInbound(claim.evento, {
                 inicioInvocacionMs: inicioInvocacion,
-                cadenaTotal: cadena.length,
-                cadenaPosicion: posicion,
+                hayFotoAntesEnCadena,
+                hayFotoDespuesEnCadena,
               });
               if (quedoPendiente(resultado)) {
                 logger.warn('wa.pendiente_pospuesto', { id: f.id, resultado });

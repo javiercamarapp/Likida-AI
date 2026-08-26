@@ -56,15 +56,25 @@ export interface RegisteredTool {
   isMutation?: boolean;
 }
 
+function timeoutGenericoMs(): number {
+  const value = Number(process.env.LIKIDA_TOOL_TIMEOUT_MS);
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : 15_000;
+}
+
 export function timeoutToolMs(isMutation?: boolean): number {
-  const value = Number(isMutation ? process.env.LIKIDA_TOOL_MUTATION_TIMEOUT_MS : process.env.LIKIDA_TOOL_TIMEOUT_MS);
+  if (!isMutation) return timeoutGenericoMs();
+  const value = Number(process.env.LIKIDA_TOOL_MUTATION_TIMEOUT_MS);
   if (Number.isFinite(value) && value > 0) return Math.round(value);
-  // AGEN-19C2-3: una tool marcada `isMutation` (p.ej. `guardar_liquidacion`)
-  // hace 2 generaciones de PDF + 2 subidas + 2 RPCs en serie — del mismo
-  // orden de magnitud que el deadline genérico de 15s, y no se puede
-  // reintentar sin riesgo de duplicar efectos si el timeout la corta a
-  // medio camino. Se le da más margen que a una tool de sólo lectura.
-  return isMutation ? 40_000 : 15_000;
+  // AGEN-19C2-3 (corregido tras auditoría Fable-5): una tool marcada
+  // `isMutation` (p.ej. `guardar_liquidacion`) hace 2 generaciones de PDF +
+  // 2 subidas + 2 RPCs en serie — del mismo orden de magnitud que el
+  // deadline genérico, y no se puede reintentar sin riesgo de duplicar
+  // efectos si el timeout la corta a medio camino. Sin
+  // `LIKIDA_TOOL_MUTATION_TIMEOUT_MS`, el piso es el MAYOR entre el genérico
+  // y 40s — no un 40s fijo que podía darle MENOS margen que una tool de
+  // sólo lectura si un deployment ya traía `LIKIDA_TOOL_TIMEOUT_MS` subido
+  // por encima de eso.
+  return Math.max(timeoutGenericoMs(), 40_000);
 }
 
 const REGISTRY = new Map<string, RegisteredTool>();

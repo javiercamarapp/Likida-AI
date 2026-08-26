@@ -55,12 +55,21 @@ describe('guardarEventosPendientes', () => {
 });
 
 describe('leases/fencing del inbox', () => {
-  it('lista por RPC con reloj PostgreSQL y conserva remitente para serializar', async () => {
-    rpc.mockResolvedValue({ data: [{ id: 'wamid.1', intentos: 2, remitente: '521999' }], error: null });
+  it('lista por RPC con reloj PostgreSQL y conserva remitente Y tipo para armar la cadena', async () => {
+    // `tipo` (mig. 0194, AGEN-19C2-1 corregido): el drenado lo necesita para
+    // saber cuáles mensajes de la cadena de un chofer son FOTOS.
+    rpc.mockResolvedValue({ data: [{ id: 'wamid.1', intentos: 2, remitente: '521999', tipo: 'image' }], error: null });
     await expect(pendientesPorDrenar(999)).resolves.toEqual([
-      { id: 'wamid.1', intentos: 2, remitente: '521999' },
+      { id: 'wamid.1', intentos: 2, remitente: '521999', tipo: 'image' },
     ]);
     expect(rpc).toHaveBeenCalledWith('listar_wa_pendientes', { p_limite: 200 });
+  });
+
+  it('sin `tipo` en la fila (RPC vieja o base de mock antigua), cae a "other" en vez de reventar', async () => {
+    rpc.mockResolvedValue({ data: [{ id: 'wamid.2', intentos: 0, remitente: '521999' }], error: null });
+    await expect(pendientesPorDrenar(999)).resolves.toEqual([
+      { id: 'wamid.2', intentos: 0, remitente: '521999', tipo: 'other' },
+    ]);
   });
 
   it('reclama mediante la RPC compatible de 0177 y devuelve token y owner', async () => {

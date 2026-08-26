@@ -24,6 +24,16 @@ describe('idempotencia durable de mutaciones', () => {
     expect(timeoutToolMs(false)).not.toBe(7777);
   });
 
+  it('AGEN-19C2-3 (Fable-5): sin LIKIDA_TOOL_MUTATION_TIMEOUT_MS, una mutación nunca tiene MENOS margen que el genérico', () => {
+    // Un deployment que ya subió el timeout genérico por encima de 40s (y no
+    // toca la variable nueva) no debe darle a una mutación MENOS margen que
+    // a una tool de sólo lectura — el bug real: antes caía a un 40_000 fijo
+    // sin mirar el genérico.
+    vi.stubEnv('LIKIDA_TOOL_TIMEOUT_MS', '60000');
+    expect(timeoutToolMs(true)).toBeGreaterThanOrEqual(timeoutToolMs(false));
+    expect(timeoutToolMs(true)).toBe(60_000);
+  });
+
   it('reclama y confirma el efecto con fencing token', async () => {
     claim.mockResolvedValueOnce({ kind: 'execute', token: 'token-1' });
     complete.mockResolvedValueOnce(undefined);
