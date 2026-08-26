@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 import { reclamarSalidasWhatsApp, finalizarSalidaWhatsApp } from '@/lib/likida/wa_outbox';
 import { conPool } from '@/lib/likida/lotes';
+import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { alertarOperador } from '@/lib/observability/alerta';
 
@@ -37,6 +38,29 @@ async function finalizarYAvisarSiMurio(s: Awaited<ReturnType<typeof reclamarSali
 export async function GET(req: Request) {
   const puerta = await puertaCron('wa-outbox', req, 'El outbox de WhatsApp no se drena sin CRON_SECRET.');
   if (puerta) return puerta;
+
+  // AUDITORÍA 19, BACK-19-1 (CRÍTICO): este cron era el ÚNICO que no
+  // preguntaba por la palanca, y es el que de verdad manda — no encola,
+  // hace POST a graph.facebook.com. Con el kill switch abajo, `wa-pendientes`
+  // dejaba de encolar y este seguía vaciando a teléfonos reales lo que ya
+  // estaba dentro, cada minuto. La compuerta va ANTES de reclamar: un lease
+  // tomado con el sistema apagado secuestra la salida hasta que expire.
+  // Mismo contrato que `wa-pendientes`, palabra por palabra — dos formas de
+  // obedecer la misma palanca es una palanca que no se puede razonar.
+  const global = await leerInterruptor('global');
+  if (global === 'ilegible') {
+    return NextResponse.json({
+      corrio: false,
+      error: 'No se pudo leer el interruptor global: el outbox no se drena sin saber si está apagado.',
+      codigo: 'interruptor_ilegible',
+      interruptor: 'global',
+    }, { status: 500 });
+  }
+  if (global === 'apagado') {
+    logger.warn('cron.wa_outbox.saltado', { interruptor: 'global' });
+    return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
+  }
+
   try {
     const salidas = await reclamarSalidasWhatsApp();
     let enviadas = 0;

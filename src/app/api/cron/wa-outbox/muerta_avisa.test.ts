@@ -26,6 +26,12 @@ vi.mock('@/lib/likida/wa_outbox', () => ({
 const alertarOperador = vi.fn(async (_e: string, _d: Record<string, unknown>) => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (e: string, d: Record<string, unknown>) => alertarOperador(e, d) }));
 
+// BACK-19-1 (CRÍTICO, cherry-pick de dae7f640): el cron ahora consulta el
+// kill switch antes de reclamar. Este archivo prueba otra cosa (el aviso de
+// muerte), así que el interruptor se mantiene 'encendido' — la puerta no es
+// lo que se ejercita aquí, ver route.test.ts para esa garantía.
+vi.mock('@/lib/likida/interruptores', () => ({ leerInterruptor: async () => 'encendido' as const }));
+
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const { GET } = await import('./route');
