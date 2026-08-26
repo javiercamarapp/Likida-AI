@@ -17,6 +17,12 @@ import { esperarIntake } from './conv';
 // Y lo peor: `intakeOk` salía `true`, así que tampoco se le avisaba. Es el único
 // camino en el que la liquidación sale corta SIN decírselo a nadie.
 
+// Ver la nota en `barrera.test.ts`: `esperarIntake` duerme de verdad (gracia
+// 2_000ms + sondeos de 500ms), y contra el default de vitest (5_000ms) eso se
+// vuelve intermitente bajo la suite completa por contención del event loop,
+// no por un error de lógica.
+const HOLGURA_MS = 15_000;
+
 describe('la barrera no se abre por un error de consulta', () => {
   it('un sondeo que falla NO cuenta como "no hay nada en vuelo"', async () => {
     // `null` es lo que ahora devuelve `intakeDelta` cuando la RPC falla.
@@ -24,21 +30,21 @@ describe('la barrera no se abre por un error de consulta', () => {
     // Vence el tope y devuelve false → el operador RECIBE el aviso de que se
     // cuadró con lo que se alcanzó. Antes devolvía true y nadie se enteraba.
     expect(ok).toBe(false);
-  });
+  }, HOLGURA_MS);
 
   it('un contador de verdad en cero SÍ abre la barrera', async () => {
     expect(await esperarIntake('v1', 2000, async () => 0)).toBe(true);
-  });
+  }, HOLGURA_MS);
 
   it('con fotos en vuelo espera, y si no se vacían avisa', async () => {
     expect(await esperarIntake('v1', 120, async () => 2)).toBe(false);
-  });
+  }, HOLGURA_MS);
 
   it('se abre en cuanto el contador llega a cero de verdad', async () => {
     let n = 2;
     const ok = await esperarIntake('v1', 5000, async () => { n -= 1; return n; });
     expect(ok).toBe(true);
-  });
+  }, HOLGURA_MS);
 
   // El límite: un error INTERMITENTE no debe bloquear para siempre si el
   // contador después responde y está en cero.
@@ -46,5 +52,5 @@ describe('la barrera no se abre por un error de consulta', () => {
     let i = 0;
     const ok = await esperarIntake('v1', 5000, async () => (i++ === 0 ? null : 0));
     expect(ok).toBe(true);
-  });
+  }, HOLGURA_MS);
 });

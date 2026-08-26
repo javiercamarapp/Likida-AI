@@ -422,6 +422,42 @@ export class TruncatedError extends StructuredError {
   }
 }
 
+/**
+ * Cota superior de tokens de entrada para RESERVAR antes de llamar al proveedor.
+ *
+ * Se sigue contando el texto a razón de UN token por carácter: es una cota
+ * conservadora deliberada (~4× de más) que evita que un retry o un fallback
+ * gasten sin autorización previa, y liquidar al costo real la corrige después.
+ *
+ * Lo que NO se puede contar así es una imagen. `generateStructured` mete el
+ * data-URL base64 completo dentro de `messages`, y un modelo de visión cobra
+ * una imagen a TARIFA FIJA de unos cientos de tokens, no por byte. Contarla por
+ * carácter hacía que una foto de 3 MB —la que `api/dashboard/ingesta/limites.ts`
+ * admite por escrito diciendo «una foto de celular normal cabe»— pidiera una
+ * reserva de $0.75 contra un techo de $0.50 y muriera ANTES de tocar al
+ * proveedor. El chofer mandaba su ticket y leía «fallo técnico»; el costo real
+ * de esa llamada, medido en las tarifas de arriba, es ~$0.0016.
+ *
+ * `TOKENS_POR_IMAGEN` es holgado a propósito: los modelos de visión que este
+ * repo usa cobran del orden de cientos de tokens por imagen, así que 4,000
+ * sigue sobre-reservando sin volver a hacerlo por byte.
+ */
+const TOKENS_POR_IMAGEN = 4_000;
+
+export function cotaEntradaEnTokens(messages: unknown): number {
+  let imagenes = 0;
+  const sinDataUrl = JSON.stringify(messages, (clave, valor) => {
+    // Solo el `url` de una parte `image_url`; cualquier otro string se cuenta
+    // entero, que es lo que mantiene la cota conservadora para el texto.
+    if (clave === 'url' && typeof valor === 'string' && valor.startsWith('data:')) {
+      imagenes += 1;
+      return '';
+    }
+    return valor;
+  });
+  return (sinDataUrl?.length ?? 0) + imagenes * TOKENS_POR_IMAGEN;
+}
+
 export async function generateStructured<T>(opts: {
   role: ModelRole;
   system: string;
@@ -512,7 +548,7 @@ export async function generateStructured<T>(opts: {
       ...PROVIDER_OPTS,
     };
     const reservation = opts.budget
-      ? await reserveLlmBudget(opts.budget, calcCost(m, Math.max(1, JSON.stringify(body.messages).length + JSON.stringify(jsonSchema).length), maxTokens))
+      ? await reserveLlmBudget(opts.budget, calcCost(m, Math.max(1, cotaEntradaEnTokens(body.messages) + JSON.stringify(jsonSchema).length), maxTokens))
       : null;
     let settled = false;
     const settle = async (amount: number) => {
