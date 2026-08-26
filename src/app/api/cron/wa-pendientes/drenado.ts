@@ -83,7 +83,15 @@ export async function drenarBandeja(inicioInvocacion: number, req: Request, vuel
     }
 
     await conPool([...porChofer.values()], ANCHO_POOL, async (cadena) => {
-      for (const p of cadena) {
+      // AGEN-19C2-1 (corrección tras auditoría Fable-5 post-merge del
+      // PR #72): el drenado también agrupa por chofer (ESC-1), así que
+      // también necesita decirle a `processInbound` si hay otra FOTO
+      // antes/después en la cadena — sin esto, un fajo que cae al cron
+      // (recuperación, no el camino feliz) seguía produciendo un acuse por
+      // foto en vez del resumen consolidado. `p.tipo` viene de la 0194.
+      for (const [posicion, p] of cadena.entries()) {
+        const hayFotoAntesEnCadena = cadena.slice(0, posicion).some((x) => x.tipo === 'image');
+        const hayFotoDespuesEnCadena = cadena.slice(posicion + 1).some((x) => x.tipo === 'image');
         const claim = await reclamarPendiente(p.id, p.intentos, leaseOwner);
         if (!claim) {
           // Otra corrida tomó un mensaje ANTERIOR de esta conversación. Seguir
@@ -99,7 +107,11 @@ export async function drenarBandeja(inicioInvocacion: number, req: Request, vuel
         try {
           // El reloj es el de ESTA invocación, compartido por todo el lote
           // (auditoría 18, C4): el mensaje 7 pide lo que queda, no 120s nuevos.
-          const resultado = await processInbound(claim.evento, { inicioInvocacionMs: inicioInvocacion });
+          const resultado = await processInbound(claim.evento, {
+            inicioInvocacionMs: inicioInvocacion,
+            hayFotoAntesEnCadena,
+            hayFotoDespuesEnCadena,
+          });
           if (quedoPendiente(resultado)) {
             // NO SE SELLA (A3/A27): el motor no lo terminó — sin presupuesto,
             // en vuelo en otra invocación, o abandonado por un fallo nuestro.

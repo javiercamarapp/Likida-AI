@@ -125,17 +125,25 @@ export interface PendienteReclamado {
  * Trae `remitente` (el `from` del evento) porque el drenado paraleliza POR
  * CHOFER (ESC-1): los mensajes de una misma persona se procesan en serie —una
  * caption completa la foto anterior— y los de personas distintas, a la vez.
+ *
+ * Trae también `tipo` (mig. 0194, AGEN-19C2-1 corregido): el drenado necesita
+ * saber cuáles mensajes de la cadena de un chofer son FOTOS para poder
+ * armar `hayFotoAntesEnCadena`/`hayFotoDespuesEnCadena` — sin esto el fajo
+ * que cae al cron (recuperación tras `sin_tiempo`, un claim perdido, la
+ * bandeja apagada un rato) seguía produciendo un acuse por foto en vez de
+ * un resumen, aunque el camino en vivo (route.ts) ya estuviera arreglado.
  */
-export async function pendientesPorDrenar(limite = 10): Promise<Array<{ id: string; intentos: number; remitente: string }>> {
+export async function pendientesPorDrenar(limite = 10): Promise<Array<{ id: string; intentos: number; remitente: string; tipo: string }>> {
   const seguro = Math.max(1, Math.min(200, Math.floor(limite)));
   const { data, error } = await acotada(supabaseAdmin().rpc('listar_wa_pendientes', {
     p_limite: seguro,
   }), 'pendientesPorDrenar');
   if (error) throw new Error(`pendientesPorDrenar: ${error.message}`);
-  return ((data ?? []) as Array<{ id: string; intentos: number; remitente?: string }>).map((f) => ({
+  return ((data ?? []) as Array<{ id: string; intentos: number; remitente?: string; tipo?: string }>).map((f) => ({
     id: String(f.id),
     intentos: Number(f.intentos),
     remitente: typeof f.remitente === 'string' && f.remitente ? f.remitente : String(f.id),
+    tipo: typeof f.tipo === 'string' ? f.tipo : 'other',
   }));
 }
 
