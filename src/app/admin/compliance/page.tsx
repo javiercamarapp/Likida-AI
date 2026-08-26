@@ -31,7 +31,7 @@ const PILL_ARCO: Record<string, { estado: Estado; etiqueta: string }> = {
  * Compliance & Datos — la flota ve sus solicitudes ARCO (registradas cuando un
  * operador escribe PRIVACIDAD por WhatsApp) y responde la que le toca. AUDITORÍA
  * 14: las solicitudes se registraban pero nadie podía verlas; la responsable
- * obligada a contestar en 20 días hábiles (LFPDPPP art. 32) estaba ciega.
+ * obligada a contestar en 20 días hábiles (LFPDPPP art. 31) estaba ciega.
  */
 export default async function CompliancePage() {
   async function accionResolver(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {

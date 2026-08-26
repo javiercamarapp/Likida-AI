@@ -230,7 +230,7 @@ async function atenderPrivacidad(tenantId: string, operadorId: string | null, te
     // AUDITORÍA 12, ALTO (legal): el aviso promete "queda registrada tu
     // solicitud" y antes NO se registraba nada — `solicitud_arco` (0053)
     // existía sin un solo insert y la flota (la responsable, 15 días hábiles
-    // para contestar, LFPDPPP art. 32) no tenía constancia que atender. El
+    // para contestar, LFPDPPP art. 31) no tenía constancia que atender. El
     // tipo se clasifica del texto; la flota decide la calificación exacta.
     //
     // AUDITORÍA 18, ALTO (A10): el registro vivía DENTRO del `if (datos)`

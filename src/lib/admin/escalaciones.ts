@@ -269,7 +269,7 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
     arco: 'error' in arco ? fuente(arco) : leida(arco.ok.map((s) => ({
       fuente: 'arco',
       titulo: `Solicitud ARCO — ${s.tipo}`,
-      detalle: 'El titular tiene derecho a respuesta en 20 días hábiles (LFPDPPP art. 32).',
+      detalle: 'El titular tiene derecho a respuesta en 20 días hábiles (LFPDPPP art. 31).',
       tenantNombre: s.flotaNombre,
       desde: s.recibidaEn,
       vence: s.venceEn,
