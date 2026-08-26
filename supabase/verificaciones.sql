@@ -8699,6 +8699,10 @@ begin
   select count(*) into n_pasos from qa_corrida_paso where corrida_id = v_corrida;
   select nombre into nombre_final from qa_corrida_paso where corrida_id = v_corrida and n = 1;
 
+  -- DATOS-19C2 (barrido MEDIO/BAJO, mig. 0196): antes solo RLS dejaba a
+  -- `anon` a ciegas (0 filas); ahora ni siquiera tiene el GRANT de tabla —
+  -- el intento rebota en el privilegio, antes de que RLS entre a evaluar.
+  -- Más estricto (doble candado), por eso el `esperado` cambió de 0 a -1.
   begin
     set local role anon;
     select count(*) into n_anon from qa_foto where id = v_foto;
@@ -8713,7 +8717,7 @@ begin
   delete from qa_corrida where id = v_corrida;
   select count(*) into n_tras_cascade from qa_corrida_paso where corrida_id = v_corrida;
 
-  raise exception E'QA_PANEL_0185  hash_rebota=%  confirmacion_rebota=%  carril_rebota=%  pasos=%  nombre_final=%  tras_cascade=%  anon=%  nota=%   (esperado t / t / t / 1 / intake · OCR / 0 / 0 / RLS lo deja a ciegas)',
+  raise exception E'QA_PANEL_0185  hash_rebota=%  confirmacion_rebota=%  carril_rebota=%  pasos=%  nombre_final=%  tras_cascade=%  anon=%  nota=%   (esperado t / t / t / 1 / intake · OCR / 0 / -1 / denegado por privilegios de tabla)',
     hash_rebota, confirmacion_rebota, carril_rebota, n_pasos, nombre_final, n_tras_cascade, n_anon, nota_anon;
 end $$;
 
@@ -8777,4 +8781,48 @@ begin
 
   raise exception 'PRESUPUESTO_LLM_0193  formula_dia_mx_ok=%  fn_usa_mx=%  fn_usa_expira=%  acepta_tras_expirada=%  acepta_tras_vigente=%   (esperado t / t / t / t / f)',
     formula_ok, fn_usa_mx, fn_usa_expira, acepta_tras_expirada, acepta_tras_vigente;
+end $$;
+
+-- ── 155. El panel de QA sin grants directos, y `escenario` con dominio cerrado (mig. 0196) ──
+-- La 0185 dejó `qa_foto`/`qa_corrida`/`qa_corrida_paso` solo protegidas por
+-- RLS, sin el `revoke` que ya usan sus hermanas de 0186. Un banco de fotos
+-- que guarda OCR con RFC/domicilio real se merece el mismo doble candado.
+-- `escenario` en `qa_corrida` tampoco tenía CHECK, a diferencia de `carril`
+-- y `estado` en la misma tabla.
+do $$
+declare
+  v_id uuid; n_anon int; n_auth int; escenario_malo_rebota boolean; escenario_bueno_entra boolean;
+begin
+  -- (a) Sin grant directo: ni anon ni authenticated pueden leer, con o sin RLS de por medio.
+  begin
+    set local role anon;
+    select count(*) into n_anon from qa_foto;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_anon := -1;
+  end;
+  begin
+    set local role authenticated;
+    select count(*) into n_auth from qa_corrida;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_auth := -1;
+  end;
+
+  -- (b) El dominio cerrado de `escenario`: un valor fuera del catálogo actual rebota.
+  begin
+    insert into qa_corrida (escenario, parametros, estado, tenant_nombre)
+      values ('escenario_inventado', '{}'::jsonb, 'pendiente', 'ZZZ VERIF 0196');
+    escenario_malo_rebota := false;
+  exception when check_violation then
+    escenario_malo_rebota := true;
+  end;
+  insert into qa_corrida (escenario, parametros, estado, tenant_nombre)
+    values ('demo_guion', '{}'::jsonb, 'pendiente', 'ZZZ VERIF 0196')
+    returning id into v_id;
+  escenario_bueno_entra := v_id is not null;
+  delete from qa_corrida where id = v_id;
+
+  raise exception 'QA_PANEL_GRANTS_0196  anon=%  authenticated=%  escenario_malo_rebota=%  escenario_bueno_entra=%   (esperado -1 / -1 / t / t)',
+    n_anon, n_auth, escenario_malo_rebota, escenario_bueno_entra;
 end $$;

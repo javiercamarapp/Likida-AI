@@ -66,10 +66,12 @@ jobs:
       - name: Chromium para las pruebas de navegador
         run: npx playwright install --with-deps chromium
 
-      # La auditoría anterior omitía devDependencies y hacía invisibles las
-      # vulnerabilidades de Vitest/Vite/esbuild. No bloquea todavía la entrega
-      # porque la deuda histórica se está reduciendo gradualmente, pero deja
-      # resumen en el job y JSON descargable en cada push/PR.
+      # OPERABILIDAD-19C2-5: comentario corregido — es AL REVÉS de como decía.
+      # La auditoría de ARRIBA (`--omit=dev`) es la que omite devDependencies
+      # y hacía invisibles las vulnerabilidades de Vitest/Vite/esbuild; ESTA
+      # SÍ las incluye. No bloquea todavía la entrega porque la deuda
+      # histórica se está reduciendo gradualmente, pero deja resumen en el
+      # job y JSON descargable en cada push/PR.
       - name: Auditoría de dependencias de DESARROLLO (visible, no bloqueante)
         id: audit-dev
         continue-on-error: true

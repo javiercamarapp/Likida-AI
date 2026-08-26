@@ -13,7 +13,7 @@ import { flushObservabilidad, codigoDeError } from '@/lib/observability/sentry';
 import { estaApagado } from '@/lib/likida/interruptores';
 import {
   guardarEventosPendientes, pendientesYaConocidos, reclamarPendiente,
-  marcarPendienteProcesado, anotarFalloPendiente,
+  marcarPendienteProcesado, anotarFalloPendiente, devolverIntentoPendiente,
   iniciarRenovacionLease,
 } from '@/lib/likida/wa_pendientes';
 
@@ -375,8 +375,20 @@ export async function POST(req: NextRequest) {
               });
               if (quedoPendiente(resultado)) {
                 logger.warn('wa.pendiente_pospuesto', { id: f.id, resultado });
-                if (claim.leaseToken && claim.leaseOwner) await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`, claim.leaseToken, claim.leaseOwner);
-                else await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`);
+                if (resultado === 'sin_tiempo') {
+                  // BACKEND-19C2-4 (barrido MEDIO/BAJO): quedarse sin
+                  // presupuesto NO es un intento fallido — el mensaje ni se
+                  // miró. Contarlo como fallo (`anotarFalloPendiente`)
+                  // convertía en carta muerta, a los 5 golpes de una ráfaga
+                  // cargada, una foto que nadie llegó a procesar. Mismo
+                  // criterio que ya usa el drenado del cron (ESC-1) — este
+                  // camino en vivo no lo aplicaba.
+                  if (claim.leaseToken && claim.leaseOwner) await devolverIntentoPendiente(f.id, claim.intentos, claim.leaseToken, claim.leaseOwner);
+                  else await devolverIntentoPendiente(f.id, claim.intentos);
+                } else {
+                  if (claim.leaseToken && claim.leaseOwner) await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`, claim.leaseToken, claim.leaseOwner);
+                  else await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`);
+                }
                 // Sin presupuesto para éste tampoco lo hay para el que sigue, y
                 // procesar el «listo» sin sus fotos es peor que posponerlo: se
                 // corta la cadena y el cron la retoma entera. Mismo criterio

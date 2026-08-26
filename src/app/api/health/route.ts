@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { estadoLatidos, type CronId } from '@/lib/admin/salud';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { logger } from '@/lib/logger';
+import { rateLimit, clientIp } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,8 +40,18 @@ export const dynamic = 'force-dynamic';
 // degradación — que es lo que un monitor entiende sin leer el cuerpo.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const iniciado = Date.now();
+  // OPERABILIDAD-19C2-3 (barrido MEDIO/BAJO): sin auth a propósito (ver
+  // arriba), esta ruta hace 2 consultas reales a Supabase por petición, sin
+  // ningún techo. 30/min por IP deja de sobra a un monitor externo (que le
+  // pega "cada minuto", según el comentario original) y frena un scraper.
+  if (!(await rateLimit(`health:${clientIp(req)}`, 30, 60_000))) {
+    return NextResponse.json({ ok: false, status: 'fail', error: 'demasiadas peticiones' }, {
+      status: 429,
+      headers: { 'cache-control': 'no-store' },
+    });
+  }
   let db: 'ok' | 'fallo' = 'fallo';
   try {
     const { error } = await acotada(

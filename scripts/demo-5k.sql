@@ -36,6 +36,20 @@ begin
     raise exception 'TPS ya existe: corre scripts/demo-5k-limpiar.sql primero';
   end if;
 
+  -- OPERABILIDAD-19C2-4 (barrido MEDIO/BAJO): las dos notas de abajo vivían
+  -- COMO `--` DENTRO del literal `'{...}'::jsonb` del INSERT — no eran
+  -- comentarios SQL de verdad, eran texto crudo metido en medio del JSON,
+  -- así que este INSERT moría con un error de sintaxis JSON en cuanto
+  -- alguien corría el script. Se mueven aquí, fuera del literal.
+  --
+  -- (1) "caseta":{"topeMonto":5000} — una línea del estado del TAG por viaje.
+  -- (2) AUDITORÍA 19 (fiscal F4): `regimenElegible` decía `true`, pero este
+  --     tenant declara `regimen_fiscal='601'` (General de Ley PM) unas
+  --     líneas arriba, y `REGIMENES_ELEGIBLES` (administracion.ts) es la
+  --     lista CERRADA ['624','612'] — 601 NO califica. El seed afirmaba una
+  --     elegibilidad que el motor real nunca produciría para este régimen,
+  --     sin que nadie lo validara. Corregido a lo que 601 de verdad da: no
+  --     elegible (`"regimenElegible":false`).
   insert into tenant (id, nombre, rfc, ciudad, plan, razon_social, domicilio_fiscal,
                       url_aviso_privacidad, contacto_privacidad, regimen_fiscal,
                       codigo_postal_fiscal, uso_cfdi, config)
@@ -45,7 +59,7 @@ begin
           'https://app.likida.ai/aviso/' || t, 'privacidad@tps-demo.mx', '601', '66600', 'G03',
           '{"empresa":{"rfc":"TPE150812AB3"},
             "politica":[{"concepto":"diesel","topeMonto":4000,"requiereCfdi":true},
-                        {"concepto":"caseta","topeMonto":5000},   -- una línea del estado del TAG por viaje
+                        {"concepto":"caseta","topeMonto":5000},
                         {"concepto":"alimentacion","topeMonto":450},
                         {"concepto":"viaticos","topeMonto":450},
                         {"concepto":"hospedaje","topeMonto":900,"requiereCfdi":true},
@@ -55,13 +69,6 @@ begin
                         {"concepto":"otro","topeMonto":1500}],
             "tabulador":{"rendimientoPorDefecto":2.2,"precioDieselPorDefecto":24,"umbralDesviacion":0.06},
             "estimulos":{"efectivoTopeMxn":2000,"viaticosTopeFiscalDiarioMxn":750},
-            -- AUDITORÍA 19 (fiscal F4): `regimenElegible` decía `true`, pero
-            -- este tenant declara `regimen_fiscal='601'` (General de Ley PM)
-            -- unas líneas arriba, y `REGIMENES_ELEGIBLES` (administracion.ts)
-            -- es la lista CERRADA ['624','612'] — 601 NO califica. El seed
-            -- afirmaba una elegibilidad que el motor real nunca produciría
-            -- para este régimen, sin que nadie lo validara. Corregido a lo
-            -- que 601 de verdad da: no elegible.
             "facilidadCombustibleEfectivo":{"dedicacionExclusivaCarga":true,"regimenElegible":false}}'::jsonb);
 
   for i in 1..25 loop
