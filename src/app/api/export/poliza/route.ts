@@ -23,6 +23,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { puedeExportar } from '@/lib/auth/permisos';
+import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
 import { acotada } from '@/lib/likida/presupuesto';
 import { polizaDeLiquidacion, type LiquidacionParaPoliza } from '@/lib/likida/contabilidad/poliza';
@@ -72,6 +73,19 @@ export async function GET(req: Request) {
   if (!(await rateLimit(`export:tenant:${tenantId}`, 10, 60_000)))
     return new NextResponse('Demasiadas peticiones', { status: 429 });
 
+  // AUDITORÍA 19, SEG-19-1 (ALTO): faltaba el guarda de ÁREA, y son dos
+  // preguntas distintas. `puedeExportar` incluye al `encargado`
+  // (`permisos.ts:17`) porque el jefe de tráfico sí descarga documentos de
+  // operación; pero sus áreas son `['operacion']` a secas
+  // (`visibilidad.ts:41`), así que no ve finanzas. Con un solo guarda se
+  // bajaba el asiento contable completo de su flota —anticipo, IVA
+  // acreditable y diferencia de cada liquidación— en el formato que su ERP
+  // importa. Las tres hermanas de `export/` preguntan las dos cosas; el
+  // encabezado de este archivo ya prometía «los mismos guardas que el resto».
+  if (!puedeVerArea(t.rol, 'dinero')) {
+    logger.warn('export.poliza_area_sin_permiso', { rol: t.rol });
+    return new NextResponse('Tu rol no ve las cifras de dinero de la flota.', { status: 403 });
+  }
   if (!puedeExportar(t.rol))
     return new NextResponse('Tu rol no puede exportar la contabilidad', { status: 403 });
 

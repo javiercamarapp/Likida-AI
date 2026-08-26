@@ -45,12 +45,24 @@ export default async function DashboardInicio({
   // $0 que probablemente no es el número real de la flota.
   // Un bache leyendo el perfil NO atrapa: mejor el panel a medias que la
   // puerta cerrada. El superadmin no se redirige — está viendo, no onboarding.
+  //
+  // AUDITORÍA 19, FE-19-1 (CRÍTICO): el `redirect()` NO puede vivir dentro
+  // del `try`. Next lo implementa LANZANDO un `NEXT_REDIRECT` que el
+  // framework atrapa arriba (docs empaquetados, `redirect.md:53`: «redirect
+  // throws an error so it should be called **outside** the try block»), y el
+  // `catch` desnudo que protege el bache de lectura se lo tragaba igual: la
+  // compuerta no disparó nunca y el dueño aterrizaba SIEMPRE en el Resumen.
+  // Por eso el `try` ahora envuelve SOLO la lectura, y la decisión sale
+  // fuera: el bache sigue sin cerrar la puerta (`faltaOnboarding` se queda
+  // en `false`), pero el redirect ya no tiene quién se lo coma.
+  let faltaOnboarding = false;
   if (rol === 'flota_admin' && tenantExiste) {
     try {
       const perfil = await getPerfilCrudo(tenantId);
-      if (!onboardingFiscalListo(perfil)) redirect(`/dashboard/onboarding${sufijo}`);
+      faltaOnboarding = !onboardingFiscalListo(perfil);
     } catch { /* sigue al resumen */ }
   }
+  if (faltaOnboarding) redirect(`/dashboard/onboarding${sufijo}`);
 
   if (!puedeVerArea(rol, 'dinero')) {
     return <InicioOperacion tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijo} />;
