@@ -1021,73 +1021,14 @@ export async function getViajes(tenantId: string, limite = 100): Promise<ViajeRo
   }));
 }
 
-/**
- * El Registro de Viajes v2 (22-ago-2026): una PÁGINA del registro, ordenada
- * por inicio del viaje (el más reciente arriba; sin fecha, al final) y con
- * búsqueda por folio, origen o destino. Se pide una fila de más que
- * `porPagina` para saber si hay otra página sin contar la tabla entera —
- * `hayMas` es eso, no un total.
- *
- * La búsqueda va a la base, no sobre las 100 cargadas: si el contralor busca
- * un folio de hace tres meses, tiene que encontrarlo aunque no esté entre
- * los recientes. El texto entra escapado (`%`, `_` y `,` fuera), porque
- * `.or()` de PostgREST arma el filtro en una sola cadena separada por comas.
- */
+// ARQUITECTURA-19C2-5 (barrido MEDIO/BAJO): la versión original de
+// `getViajesRegistro` vivía aquí, con paginación OFFSET (`.range(desde,
+// hasta)`) — la página 1000 le pedía a Postgres leer y tirar 100,000 filas.
+// Se reemplazó por completo por la de `viajes_registro.ts` (RPC
+// `viajes_registro_tenant`, keyset — ver la cabecera de ese archivo), que es
+// la única que cualquier ruta de la app importa hoy. `FiltroRegistro` se
+// queda aquí porque ese archivo todavía la importa como tipo compartido.
 export type FiltroRegistro = 'todos' | 'abiertos' | 'en_cuadre' | 'liquidados' | 'escalados';
-
-export async function getViajesRegistro(
-  tenantId: string,
-  opciones: { q?: string; pagina?: number; porPagina?: number; filtro?: FiltroRegistro } = {},
-): Promise<{ filas: ViajeRow[]; hayMas: boolean }> {
-  const porPagina = Math.max(1, Math.min(100, opciones.porPagina ?? 100));
-  const pagina = Math.max(1, opciones.pagina ?? 1);
-  const desde = (pagina - 1) * porPagina;
-  let consulta = supabaseAdmin()
-    .from('viaje')
-    .select('id, folio, origen, destino, estatus, anticipo, fecha_inicio, intake_pendientes, avisado_en, aceptado_en, escalado_en, avisos_enviados, unidad_id, operador:operador_id(nombre), unidad:unidad_id(numero_economico)')
-    .eq('tenant_id', tenantId);
-  // El filtro de estatus va a la base por la misma razón que la búsqueda:
-  // filtrar en memoria sobre una página de 100 dejaría "Liquidados" con 3
-  // filas y una página 2 que sí tiene más.
-  if (opciones.filtro === 'abiertos') consulta = consulta.eq('estatus', 'abierto');
-  else if (opciones.filtro === 'en_cuadre') consulta = consulta.eq('estatus', 'en_cuadre');
-  else if (opciones.filtro === 'liquidados') consulta = consulta.eq('estatus', 'liquidado');
-  else if (opciones.filtro === 'escalados') {
-    consulta = consulta.in('estatus', ['abierto', 'en_cuadre']).not('escalado_en', 'is', null).is('aceptado_en', null);
-  }
-  const q = (opciones.q ?? '').trim().replace(/[%_,()]/g, ' ').replace(/\s+/g, ' ').trim();
-  if (q) {
-    const patron = `%${q}%`;
-    consulta = consulta.or(`folio.ilike.${patron},origen.ilike.${patron},destino.ilike.${patron}`);
-  }
-  const res = await acotada(
-    consulta
-    .order('fecha_inicio', { ascending: false, nullsFirst: false })
-    .order('created_at', { ascending: false })
-    .range(desde, desde + porPagina),
-    'getViajesRegistro',
-  );
-  const crudas = exigir(res, 'getViajesRegistro') ?? [];
-  const hayMas = crudas.length > porPagina;
-  const filas = crudas.slice(0, porPagina).map((v) => ({
-    id: v.id as string,
-    folio: (v.folio as string) || (v.id as string).slice(0, 8),
-    origen: (v.origen as string) || null,
-    destino: (v.destino as string) || null,
-    estatus: v.estatus as string,
-    anticipo: Number(v.anticipo ?? 0),
-    operadorNombre: ((v.operador as { nombre?: string } | null)?.nombre) ?? null,
-    fechaInicio: (v.fecha_inicio as string) || null,
-    intakePendientes: Number(v.intake_pendientes ?? 0),
-    unidadId: (v.unidad_id as string) || null,
-    unidadEco: ((v.unidad as { numero_economico?: string } | null)?.numero_economico) ?? null,
-    avisadoEn: (v.avisado_en as string) || null,
-    aceptadoEn: (v.aceptado_en as string) || null,
-    escaladoEn: (v.escalado_en as string) || null,
-    avisosEnviados: Number(v.avisos_enviados ?? 0),
-  }));
-  return { filas, hayMas };
-}
 
 export interface LiquidacionDeViaje {
   id: string; viajeId: string; estatus: string; comprobado: number; diferencia: number;

@@ -20,12 +20,21 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const alertarOperador = vi.fn(async () => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [])) }));
 
+// OPERABILIDAD-19C2-3: permitido por default en todas las pruebas de este
+// archivo — el rate limit tiene su propio caso dedicado abajo.
+let permitido = true;
+vi.mock('@/lib/ratelimit', () => ({
+  rateLimit: async () => permitido,
+  clientIp: () => '203.0.113.5',
+}));
+
 const { GET } = await import('./route');
+const peticion = () => new Request('https://app.likida.ai/api/health') as never;
 
 describe('/api/health', () => {
   it('sin latidos todavía: degraded y el cuerpo solo trae pulso (nada de negocio)', async () => {
     dbFalla = false;
-    const r = await GET();
+    const r = await GET(peticion());
     expect(r.status).toBe(503);
     const c = await r.json();
     expect(c.ok).toBe(false);
@@ -43,13 +52,21 @@ describe('/api/health', () => {
     const ahora = new Date().toISOString();
     latidos = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps']
       .map((id) => ({ id, ultimo_latido: ahora, estado: 'ok' }));
-    const r = await GET();
+    const r = await GET(peticion());
     const c = await r.json();
     expect(r.status).toBe(200);
     expect(c).toMatchObject({ ok: true, status: 'ok', checks: { db: 'ok', crons: 'ok' } });
   });
 
-  beforeEach(() => { latidos = []; });
+  beforeEach(() => { latidos = []; permitido = true; });
+
+  it('OPERABILIDAD-19C2-3: excedido el límite de tasa por IP, 429 sin tocar la base', async () => {
+    permitido = false;
+    const r = await GET(peticion());
+    expect(r.status).toBe(429);
+    const c = await r.json();
+    expect(c.ok).toBe(false);
+  });
 
   // RES-7: un cron vencido degrada el monitor y el detalle de qué cron fue se
   // queda en logs/alerta privados, no en el endpoint público.
@@ -61,7 +78,7 @@ describe('/api/health', () => {
       { id: 'wa-pendientes', ultimo_latido: new Date(Date.now() - 180 * 60_000).toISOString(), estado: 'ok' },
       { id: 'escalar', ultimo_latido: new Date(Date.now() - 30 * 60_000).toISOString(), estado: 'ok' },
     ];
-    const r = await GET();
+    const r = await GET(peticion());
     expect(r.status).toBe(503);
     const c = await r.json();
     expect(c).toMatchObject({ ok: false, status: 'degraded', checks: { db: 'ok', crons: 'degraded' } });
@@ -77,7 +94,7 @@ describe('/api/health', () => {
     latidos = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps']
       .map((id) => ({ id, ultimo_latido: ahora, estado: id === 'runner' ? 'fallo' : 'ok' }));
 
-    const r = await GET();
+    const r = await GET(peticion());
     const c = await r.json();
 
     expect(r.status).toBe(503);
@@ -88,7 +105,7 @@ describe('/api/health', () => {
 
   it('con la base caída: 503 y fail — lo que un monitor entiende sin leer el cuerpo', async () => {
     dbFalla = true;
-    const r = await GET();
+    const r = await GET(peticion());
     expect(r.status).toBe(503);
     const c = await r.json();
     expect(c.ok).toBe(false);
@@ -113,7 +130,7 @@ describe('/api/health — no expone configuración interna', () => {
     dbFalla = false;
     vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://fake.upstash.io');
     vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'tok');
-    const c = await (await GET()).json();
+    const c = await (await GET(peticion())).json();
     expect(JSON.stringify(c)).not.toMatch(/upstash|sentry|token|wa-pendientes/i);
   });
 });

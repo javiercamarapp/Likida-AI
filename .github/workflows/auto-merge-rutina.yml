@@ -26,10 +26,14 @@ permissions:
 jobs:
   verde-mergea:
     runs-on: ubuntu-24.04
+    # BACKEND-19C2-9 (barrido MEDIO/BAJO): sin `head_repository.full_name`,
+    # cualquier fork público de este repo podía abrir un `mejora/*` con un
+    # `workflow_run` que este gate auto-mergeara con permisos de escritura.
     if: >
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success' &&
-      startsWith(github.event.workflow_run.head_branch, 'mejora/')
+      startsWith(github.event.workflow_run.head_branch, 'mejora/') &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     steps:
       # 23-AGO-2026: este job se disparaba con CI en verde y mergeaba SIN MIRAR
       # los demás checks. "CI" no corre una sola migración: un PR podía entrar a

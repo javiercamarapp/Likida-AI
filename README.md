@@ -78,8 +78,9 @@ WhatsApp Cloud API → webhook → intake (OCR + CFDI) → cuadre (motor fiscal 
 | **Observabilidad** | `src/lib/observability` | Logger redactado, Sentry, arranque que grita la config ausente |
 
 Paneles: **`/dashboard`** (la flota: resumen, despacho, fiscal, operadores,
-ARCO), **`/admin`** (consola de negocio del operador del SaaS), **`/chofer`**
-(portal del operador) y **`/demo`** (simulador de la conversación).
+ARCO), **`/admin`** (consola de negocio del operador del SaaS) y **`/demo`**
+(simulador de la conversación). El operador en carretera no tiene panel
+propio — todo su flujo es por WhatsApp (`/api/webhook/whatsapp`).
 
 > **No reemplaza el ERP: lo alimenta.** Likida hace la captura que hoy es
 > manual y escribe en el sistema que la flota ya usa.
