@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { modelFor, type ModelRole } from './models';
 import { reserveLlmBudget, settleLlmBudget, type LlmBudget, type LlmBudgetReservation } from './budget';
+import { runWithToolSignal } from './runtime-signal';
 
 let _client: OpenAI | null = null;
 
@@ -888,7 +889,10 @@ export async function generateWithTools(opts: {
     // data-URL de la misma forma en que lo hacía `generateStructured` antes
     // del fix de AGEN-19C2-4/OCR.
     const inputUpperBound = Math.max(1, cotaEntradaEnTokens(body.messages ?? '') + JSON.stringify(body.tools ?? '').length);
-    return reserveLlmBudget(opts.budget, calcCost(modelForRequest, inputUpperBound, maxTokens));
+    // RENDIMIENTO-19C2-1: dentro de `runWithToolSignal` para que un cliente
+    // de red profundo (Supabase) herede la señal — sin esto, esta RPC podía
+    // seguir corriendo después de que el reloj de la invocación ya se acabó.
+    return runWithToolSignal(opts.signal, () => reserveLlmBudget(opts.budget!, calcCost(modelForRequest, inputUpperBound, maxTokens)));
   };
 
   const completion = async (body: Record<string, unknown>, signalOpt: { signal: AbortSignal } | undefined) => {
@@ -924,7 +928,10 @@ export async function generateWithTools(opts: {
           const costo = usageCompleta
             ? costoReal(usage as { cost?: number }, activeModel, usage.prompt_tokens, usage.completion_tokens)
             : reservation.amountUsd;
-          await settleLlmBudget(opts.budget!, reservation, costo);
+          // RENDIMIENTO-19C2-1: mismo motivo que `reservarCompletion` — la
+          // RPC de liquidación hereda la señal en vez de poder seguir
+          // corriendo sola después de que el reloj de la invocación terminó.
+          await runWithToolSignal(opts.signal, () => settleLlmBudget(opts.budget!, reservation, costo));
         } catch (e) {
           logger.error('llm.presupuesto_no_liquidado', { runId: opts.budget?.runId, err: e instanceof Error ? e.message : String(e) });
         }
@@ -934,7 +941,7 @@ export async function generateWithTools(opts: {
       // Ante un error de red se conserva la reserva completa: el proveedor pudo
       // haber cobrado aunque la respuesta no llegara a la aplicación.
       if (reservation) {
-        try { await settleLlmBudget(opts.budget!, reservation, reservation.amountUsd); }
+        try { await runWithToolSignal(opts.signal, () => settleLlmBudget(opts.budget!, reservation, reservation.amountUsd)); }
         catch (e) { logger.error('llm.presupuesto_no_liquidado', { runId: opts.budget?.runId, err: e instanceof Error ? e.message : String(e) }); }
       }
       throw err;
@@ -973,6 +980,10 @@ export async function generateWithTools(opts: {
 
   try {
     for (let round = 0; round < maxRounds; round++) {
+      // RENDIMIENTO-19C2-1: si la señal ya se disparó mientras corría la
+      // ronda anterior (ejecución de tools, sobre todo), no arrancar una
+      // completion completa más — cortar aquí y no después de pagarla.
+      opts.signal?.throwIfAborted();
       const res = await complete(convo);
       const rIn = res.usage?.prompt_tokens ?? 0;
       const rOut = res.usage?.completion_tokens ?? 0;
