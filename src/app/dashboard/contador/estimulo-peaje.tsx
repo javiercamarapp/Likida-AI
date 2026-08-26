@@ -9,6 +9,7 @@ import {
 } from '@/lib/likida/perfil/preguntas';
 import { getPerfilCrudo, guardarDeclaracionEstimuloPeaje } from '@/lib/likida/repo';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
+import { logger } from '@/lib/logger';
 import { FormaConAviso, Selector, type ResultadoAccion } from '../../admin/ui/forma';
 
 /**
@@ -32,11 +33,20 @@ export async function EstimuloPeaje({
   if (!tenantExiste) return null;
 
   const { tenantId } = await resolverTenantEfectivo('/dashboard/contador', searchParams);
+  // FRONTEND-19C2-5: antes un error de LECTURA (`perfil = {}`) se volvía
+  // indistinguible de "nunca declaró" — el contador veía "sin esta
+  // declaración el estímulo queda en $0" cuando en realidad Likida no pudo
+  // ni preguntar, y si contestaba de nuevo confundido reescribía una
+  // declaración real como "$0" por las puras. `leyoOk` conserva la
+  // distinción, mismo patrón que `safe()` en `inicio-contador.tsx`.
   let perfil: unknown = {};
+  let leyoOk = true;
   try {
     perfil = await getPerfilCrudo(tenantId);
-  } catch {
+  } catch (e) {
+    leyoOk = false;
     perfil = {};
+    logger.warn('estimulo_peaje.perfil_no_leido', { tenantId, err: e instanceof Error ? e.message : String(e) });
   }
   const { elegible } = calificaEstimuloPeaje(perfil);
   const pendiente = preguntaPendienteEstimuloPeaje(perfil);
@@ -87,39 +97,46 @@ export async function EstimuloPeaje({
         <div className="min-w-0">
           <p className="text-sm font-medium">Estímulo de peaje (LIF 2026 art. 20-A)</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-            {pendiente
-              ? 'Sin esta declaración el estímulo queda en $0. Contéstalo antes del primer cierre; una flota grande o una parte relacionada no puede acreditarlo.'
-              : elegible
-                ? 'Declarado: ingresos menores a $300M y no parte relacionada. El motor acredita el 50% en casetas de pago electrónico. Dedicación exclusiva y Red Nacional siguen siendo responsabilidad de la flota.'
-                : 'Declarado: esta flota no califica (ingresos de $300M o más, o parte relacionada). El estímulo de peaje queda en $0.'}
+            {!leyoOk
+              ? 'No pude leer si esta flota ya declaró — esto NO significa que no haya declaración. Recarga la página; si sigue igual, avísanos antes de volver a contestar.'
+              : pendiente
+                ? 'Sin esta declaración el estímulo queda en $0. Contéstalo antes del primer cierre; una flota grande o una parte relacionada no puede acreditarlo.'
+                : elegible
+                  ? 'Declarado: ingresos menores a $300M y no parte relacionada. El motor acredita el 50% en casetas de pago electrónico. Dedicación exclusiva y Red Nacional siguen siendo responsabilidad de la flota.'
+                  : 'Declarado: esta flota no califica (ingresos de $300M o más, o parte relacionada). El estímulo de peaje queda en $0.'}
           </p>
         </div>
       </div>
-      <FormaConAviso accion={accion} boton={pendiente ? 'Declarar' : 'Corregir declaración'} columnas="md:grid-cols-2">
-        <Selector
-          nombre="ingresos"
-          etiqueta="Ingresos totales anuales del último ejercicio"
-          requerido
-          valorInicial={umbralInicial}
-          opciones={[
-            { valor: '', texto: 'Elige una' },
-            { valor: 'menor', texto: 'Menores a $300 millones' },
-            { valor: 'mayor', texto: '$300 millones o más' },
-          ]}
-          ayuda="El umbral legal es estricto: $300 millones exactos ya no califican."
-        />
-        <Selector
-          nombre="parte"
-          etiqueta="¿Es parte relacionada de otra empresa? (LISR art. 179)"
-          requerido
-          valorInicial={parteInicial}
-          opciones={[
-            { valor: '', texto: 'Elige una' },
-            { valor: 'no', texto: 'No' },
-            { valor: 'si', texto: 'Sí' },
-          ]}
-        />
-      </FormaConAviso>
+      {/* No se ofrece el formulario si no se pudo leer el estado real: dejar
+          contestar aquí es exactamente lo que reescribiría una declaración
+          real existente como "$0" por confusión del usuario. */}
+      {leyoOk && (
+        <FormaConAviso accion={accion} boton={pendiente ? 'Declarar' : 'Corregir declaración'} columnas="md:grid-cols-2">
+          <Selector
+            nombre="ingresos"
+            etiqueta="Ingresos totales anuales del último ejercicio"
+            requerido
+            valorInicial={umbralInicial}
+            opciones={[
+              { valor: '', texto: 'Elige una' },
+              { valor: 'menor', texto: 'Menores a $300 millones' },
+              { valor: 'mayor', texto: '$300 millones o más' },
+            ]}
+            ayuda="El umbral legal es estricto: $300 millones exactos ya no califican."
+          />
+          <Selector
+            nombre="parte"
+            etiqueta="¿Es parte relacionada de otra empresa? (LISR art. 179)"
+            requerido
+            valorInicial={parteInicial}
+            opciones={[
+              { valor: '', texto: 'Elige una' },
+              { valor: 'no', texto: 'No' },
+              { valor: 'si', texto: 'Sí' },
+            ]}
+          />
+        </FormaConAviso>
+      )}
     </section>
   );
 }
