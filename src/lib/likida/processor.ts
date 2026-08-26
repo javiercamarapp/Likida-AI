@@ -18,7 +18,7 @@ import { resumenCuadre } from '@/lib/likida/cuadre/resumen';
 import { PartialExecutionError, isTransientError, type ToolCallRecord } from '@/lib/llm/openrouter';
 import type { Gasto } from '@/types/likida';
 import { extraerComprobante } from '@/lib/likida/intake/ocr';
-import { createLlmBudget } from '@/lib/llm/budget';
+import { createLlmBudget, LlmBudgetExceededError } from '@/lib/llm/budget';
 import { hashImagen } from '@/lib/likida/intake/hash';
 import { subirComprobante } from '@/lib/likida/intake/almacen';
 import {
@@ -2778,8 +2778,18 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       } else {
         // Con tenant y viaje: sin ellos, a las 3am el log dice que algo falló
         // pero no qué liquidación, y hay que cruzarlo a mano con la hora.
-        const transitorio = isTransientError(e);
-        logger.error('agent.fail', { tenant: op.tenantId, viaje: viajeId, operador: op.operadorId, transitorio, err: e instanceof Error ? e.message : String(e) });
+        //
+        // AUDITORÍA 19 (tool-calling, CRÍTICO): el tope de $/día apagaba el
+        // producto EN SILENCIO. `LlmBudgetExceededError` no es un error de
+        // red — `isTransientError` no lo clasifica como transitorio, así que
+        // el degradado de abajo (RES-15) nunca corría, y encima el chofer
+        // recibía el mismo "se me trabó" que un bug de programación real.
+        // No es lo mismo agotar el presupuesto (el motor SÍ puede cuadrar
+        // solo, con las cifras reales de la base) que un error de código (ahí
+        // sí hay que decir "se me trabó" y no inventar que se resolvió).
+        const agotoPresupuesto = e instanceof LlmBudgetExceededError;
+        const transitorio = isTransientError(e) || agotoPresupuesto;
+        logger.error('agent.fail', { tenant: op.tenantId, viaje: viajeId, operador: op.operadorId, transitorio, agotoPresupuesto, err: e instanceof Error ? e.message : String(e) });
         reply = 'Perdón, se me trabó el sistema tantito. ¿Me reenvías tu último mensaje?';
 
         // ── EL MOTOR NO NECESITA AL LLM PARA CUADRAR (RES-15) ─────────────

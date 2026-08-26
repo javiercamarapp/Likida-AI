@@ -145,6 +145,7 @@ vi.mock('@/lib/likida/cuadre/resumen', () => ({
   resumenCuadre: (_liq: unknown, cerrado: boolean) => `CUADRE REAL (cerrado=${cerrado})`,
 }));
 
+const { LlmBudgetExceededError } = await import('@/lib/llm/budget');
 const { processInbound } = await import('./processor');
 const listo = { from: '5219993700779', type: 'text' as const, text: 'listo', waMessageId: 'wa1' };
 
@@ -206,6 +207,17 @@ describe('RES-15 — el LLM caído no puede dejar al operador sin su cuadre', ()
     expect(cuadrarDesdeDB).not.toHaveBeenCalled();
     expect(textos().join(' | ')).toContain('reenvías');
     expect(logger.error).toHaveBeenCalledWith('agent.fail', expect.objectContaining({ transitorio: false }));
+  });
+
+  it('AUDITORÍA 19 (tool-calling CRÍTICO): el tope de $/día agotado también degrada — no es un bug, es un freno de dinero, y el motor puede cuadrar solo', async () => {
+    runAgent.mockRejectedValue(new LlmBudgetExceededError('tenant', 5.2, 5.0));
+    await processInbound(listo);
+
+    expect(cuadrarDesdeDB).toHaveBeenCalledWith('t1', 'v1');
+    const dichos = textos().join(' | ');
+    expect(dichos).toContain('CUADRE REAL');
+    expect(dichos).not.toContain('reenvías');
+    expect(logger.error).toHaveBeenCalledWith('agent.fail', expect.objectContaining({ transitorio: true, agotoPresupuesto: true }));
   });
 
   it('si ni el cuadre se puede calcular, queda el mensaje honesto de antes', async () => {
