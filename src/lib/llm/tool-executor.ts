@@ -184,7 +184,25 @@ export async function executeTool(
       stopLease();
       // El handler puede haber terminado justo cuando venció la señal. El
       // commit del fencing debe poder archivarse para no repetir el side effect.
-      await runWithToolSignal(undefined, () => completeMutation(ctx.tenantId, mutationEffectKey(name, ctx), durable.token, result));
+      //
+      // Y su fallo NO puede tener la misma voz que el fallo del efecto. Cuando
+      // esto vivía dentro del `try` que decide el éxito de la tool, un
+      // `complete_agente_mutacion` que se pasaba del tope de 8 s de `acotada`
+      // —o un fencing token que otro worker se llevó— hacía que
+      // `guardar_liquidacion` respondiera `success: false` sobre un viaje que
+      // ya estaba `liquidado` e irreversible por los triggers 0036/0037: el
+      // PDF no se mandaba, el jefe no recibía aviso, y el modelo le explicaba
+      // al chofer que su cierre no se pudo. El camino de ERROR de abajo ya
+      // protegía `failMutation` así (`:208`); el de éxito era el que no.
+      //
+      // Perder el sello degrada a repetir trabajo, no a perder el efecto: el
+      // reintento vuelve a entrar por `claim` y el backstop de dinero sigue
+      // siendo la DB (`unique(viaje_id)` + upsert).
+      try {
+        await runWithToolSignal(undefined, () => completeMutation(ctx.tenantId, mutationEffectKey(name, ctx), durable.token, result));
+      } catch (e) {
+        logger.error('tool.idempotencia_sello_fallido', { name, err: e instanceof Error ? e.message : String(e) });
+      }
     }
     return { success: true, result, durationMs: Date.now() - started };
   } catch (err) {

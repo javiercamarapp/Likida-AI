@@ -83,8 +83,33 @@ function dbFalsa(): SupabaseClient {
     b.select = () => { seleccionando = true; return yo(); };
     b.eq = (c: string, v: unknown) => { preds.push((f) => f[c] === v); return yo(); };
     b.in = (c: string, vs: unknown[]) => { preds.push((f) => vs.includes(f[c])); return yo(); };
-    b.gte = (c: string, v: string) => { preds.push((f) => String(f[c]) >= v); return yo(); };
-    b.lte = (c: string, v: string) => { preds.push((f) => String(f[c]) <= v); return yo(); };
+    // Comparación por INSTANTE, no por texto: `creada_en` sale de
+    // `new Date().toISOString()` (siempre en 'Z') y `gastoHoyUsd` filtra con
+    // fronteras en '-06:00' (`inicioDiaMx`/`finDiaMx`). Dos ISO válidos del
+    // MISMO instante se ven distintos como texto en cuanto el offset difiere,
+    // y la comparación lexicográfica los ordena mal — se rompía sola pasadas
+    // las 18:00 hora MX, en cuanto el día de UTC ya había rodado. `Date.parse`
+    // entiende el offset; comparar los epoch resultantes es correcto siempre.
+    const comoInstante = (v: unknown) => {
+      const t = Date.parse(String(v));
+      return Number.isNaN(t) ? null : t;
+    };
+    b.gte = (c: string, v: string) => {
+      const limite = comoInstante(v);
+      preds.push((f) => {
+        const t = comoInstante(f[c]);
+        return limite === null || t === null ? String(f[c]) >= v : t >= limite;
+      });
+      return yo();
+    };
+    b.lte = (c: string, v: string) => {
+      const limite = comoInstante(v);
+      preds.push((f) => {
+        const t = comoInstante(f[c]);
+        return limite === null || t === null ? String(f[c]) <= v : t <= limite;
+      });
+      return yo();
+    };
     b.order = (col: string, o?: { ascending?: boolean }) => { orden = { col, asc: o?.ascending !== false }; return yo(); };
     b.limit = (n: number) => { tope = n; return yo(); };
 
