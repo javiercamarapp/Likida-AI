@@ -125,7 +125,10 @@ export const COMERCIOS: Comercio[] = [
   {
     clave: 'enerser',
     nombre: 'Enerser (gasolineras: Efigas, Palmira, Bahía Asunción…)',
-    portal: 'http://facturacion.enerser.com.mx/',
+    // SEGURIDAD (Auditoría 19): era http:// — la credencial de la flota
+    // viajaba en claro. Verificado en vivo (26-ago-2026): el mismo host y
+    // ruta responde 200 con TLS válido en el puerto estándar.
+    portal: 'https://facturacion.enerser.com.mx/',
     requiereCuenta: false, // permite "continuar sin registro"
     plazo: 'mes_natural',
     plazoVerificado: false,
@@ -192,6 +195,14 @@ export const COMERCIOS: Comercio[] = [
     // de la red se conserva como fallback porque no todas las estaciones son
     // del sureste; cuando aparezca un ticket de otra región, esto pide un campo
     // `portalPorRegion` en vez de una lista de dominios.
+    //
+    // SEGURIDAD (Auditoría 19) — investigado, NO se pudo arreglar cambiando
+    // el esquema: el puerto 8029 no habla TLS (verificado en vivo, 26-ago-2026
+    // — la conexión ni siquiera hace el handshake). El puerto 443 estándar del
+    // mismo dominio SÍ responde HTTPS, pero sirve el sitio de WordPress de
+    // Megasur (marketing), NO el sistema de facturación — apuntar ahí rompería
+    // el piloto en silencio, no lo protegería. Riesgo residual aceptado: viaja
+    // el RFC en claro (sin contraseña real, ver nota de abajo).
     portal: 'http://megasur.com.mx:8029/',
     // NO ES "CUENTA" EN EL SENTIDO HABITUAL. Se entra con el RFC y nada más:
     // sin contraseña. Si el RFC no está dado de alta hay un "Regístrate", pero
@@ -380,6 +391,10 @@ export const COMERCIOS: Comercio[] = [
     // El catálogo apuntaba a `g500network.com` y NO es donde se factura: G500 es
     // red de franquicias y el sureste opera su propio sistema. Tres saltos hasta
     // el portal real, y los directorios se quedaban en el primero.
+    //
+    // SEGURIDAD (Auditoría 19) — mismo host que la entrada de arriba: el
+    // puerto 8029 no habla TLS y el 443 del dominio es un sitio distinto
+    // (marketing). Ver la nota completa en la primera aparición de este portal.
     portal: 'http://megasur.com.mx:8029/',
     // Se entra con el RFC y NADA MÁS: sin contraseña. Hay alta para un RFC
     // nuevo, pero los datos fiscales quedan guardados y después solo se
@@ -448,7 +463,11 @@ export const COMERCIOS: Comercio[] = [
     //
     // Un alta cubre las 17 con los MISMOS campos. Exige registro previo, pero es
     // UNA cuenta de la flota, no una por operador: encaja con sesión delegada.
-    portal: 'http://www.pinfrafacturacion.com.mx/',
+    // SEGURIDAD (Auditoría 19): era http:// — esta es una cuenta CON
+    // CONTRASEÑA real de la flota (`requiereCuenta: true`), viajaba en
+    // claro. Verificado en vivo (26-ago-2026): TLS válido en el puerto
+    // estándar, mismo host y ruta.
+    portal: 'https://www.pinfrafacturacion.com.mx/',
     requiereCuenta: true,
     plazo: 'mes_natural',
     plazoVerificado: false,
@@ -741,6 +760,13 @@ export const COMERCIOS: Comercio[] = [
     // de facturar esas autopistas, pero es exactamente el caso donde el
     // reconocimiento por dominio se rompe solo — y por eso existe la tabla de
     // permisos CRE.
+    //
+    // SEGURIDAD (Auditoría 19) — investigado, NO se pudo verificar: el host no
+    // respondió ni por HTTP ni por HTTPS al probarlo en vivo (26-ago-2026),
+    // consistente con ser DNS dinámico detrás de un router de oficina que
+    // puede estar apagado o haber cambiado de IP. Esta cuenta SÍ lleva
+    // contraseña real (`requiereCuenta: true`) — riesgo aceptado hasta poder
+    // confirmar si el portal ofrece HTTPS cuando esté disponible.
     portal: 'http://supercarreteras.ddns.net/',
     requiereCuenta: true,
     plazo: 'mes_natural',

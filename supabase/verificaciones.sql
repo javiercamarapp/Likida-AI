@@ -1230,7 +1230,7 @@ begin
   end;
 end $$;
 
--- ── 32. La bitácora no se corrige ni se borra (mig. 0053) ────────────────────
+-- ── 32. La bitácora no se corrige ni se borra, y no se planta (mig. 0053 + 0195) ──
 -- Un registro de auditoría que su propio dueño puede editar no sirve como
 -- evidencia ante nadie: ni ante el INAI, ni ante un cliente que pregunta quién
 -- tocó su dato. La 0053 le da a `bitacora_auditoria` policies de SELECT e
@@ -1239,15 +1239,27 @@ end $$;
 --
 -- Es fácil de romper sin querer: basta que alguien añada un `for all` "para
 -- que se pueda limpiar" y la tabla deja de ser prueba de nada, en silencio.
--- Esperado: 0 filas modificadas y 0 borradas por un flota_admin.
+--
+-- AUDITORÍA 19 (SEGURIDAD, mig. 0195): la política de INSERT de la 0086 solo
+-- exigía `tenant_id` propio, SIN filtro de rol — cualquier `app_user` de
+-- CUALQUIER rol (no solo `flota_admin`) podía plantar una entrada falsa vía
+-- PostgREST directo. La 0195 revoca `insert` de `authenticated`/`anon` y
+-- quita la política — el único escritor real (`bitacora_escritura.ts`) usa
+-- `service_role`, que bypassa RLS y estos grants por completo.
+--
+-- Esperado: 0 filas modificadas, 0 borradas por un flota_admin, y un
+-- INSERT directo de un `encargado` (rol SIN privilegios de administración)
+-- rebota por falta de privilegio — ni siquiera llega a evaluar la policy.
 do $$
 declare
-  v_t uuid; v_admin uuid := gen_random_uuid();
-  n_lee int; n_upd int; n_del int;
+  v_t uuid; v_admin uuid := gen_random_uuid(); v_encargado uuid := gen_random_uuid();
+  n_lee int; n_upd int; n_del int; planto_encargado boolean;
 begin
   insert into tenant (nombre) values ('ZZZ VERIF BITACORA') returning id into v_t;
   insert into app_user (id, tenant_id, email, rol)
     values (v_admin, v_t, 'zzz-verif-bitacora@likida.test', 'flota_admin');
+  insert into app_user (id, tenant_id, email, rol)
+    values (v_encargado, v_t, 'zzz-verif-bitacora-2@likida.test', 'encargado');
   insert into bitacora_auditoria (tenant_id, actor_id, accion, entidad)
     values (v_t, v_admin, 'liquidacion.emitida', 'liquidacion');
 
@@ -1263,10 +1275,21 @@ begin
   with d as (delete from bitacora_auditoria where tenant_id = v_t returning 1)
   select count(*) into n_del from d;
 
+  -- El plante: un `encargado` (SIN administra_flota()) intenta insertar una
+  -- entrada falsa atribuida a otra persona, en su propio tenant.
+  perform set_config('request.jwt.claims', json_build_object('sub', v_encargado)::text, true);
+  begin
+    insert into bitacora_auditoria (tenant_id, actor_id, accion, entidad)
+      values (v_t, v_admin, 'liquidacion.aprobada.FALSIFICADO', 'liquidacion');
+    planto_encargado := true;
+  exception when insufficient_privilege then
+    planto_encargado := false;
+  end;
+
   reset role;
 
-  raise exception E'BITACORA  lee=%  modifica=%  borra=%   (esperado 1 / 0 / 0 — si modifica o borra pasan de 0, la bitacora ya no prueba nada)',
-    n_lee, n_upd, n_del;
+  raise exception E'BITACORA  lee=%  modifica=%  borra=%  planto_encargado=%   (esperado 1 / 0 / 0 / f — si modifica, borra o planto_encargado pasan de su esperado, la bitacora ya no prueba nada)',
+    n_lee, n_upd, n_del, planto_encargado;
 end $$;
 
 -- ── 33. La vista de saldos respeta el RLS de quien pregunta (mig. 0054) ──────

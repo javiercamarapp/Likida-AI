@@ -1,0 +1,36 @@
+-- 0195 · SEGURIDAD (Auditoría 19, hallazgo recuperado del barrido MEDIO/BAJO)
+-- — `bitacora_auditoria` es el registro de auditoría legal de la empresa
+-- ("evidencia", ver 0053), pero cualquier `app_user` autenticado de CUALQUIER
+-- rol podía insertar filas directo vía PostgREST: el aprovisionamiento de
+-- Supabase concede insert/select/update/delete a `authenticated`/`anon` en
+-- toda tabla nueva por default (ver `supabase/pruebas-aislamiento/andamio_ci.sql`),
+-- y la política `bitacora_insercion` (0086) solo exige `tenant_id` propio —
+-- sin filtro de rol, a diferencia de `bitacora_lectura`, que sí exige
+-- `administra_flota()`.
+--
+-- Escenario: un encargado (rol sin privilegios de administración) con su
+-- JWT de sesión hace un INSERT directo a `/rest/v1/bitacora_auditoria`
+-- fijando `actor_id`, `accion`, `detalle` y hasta `ocurrio_en` a lo que
+-- quiera, mientras `tenant_id` sea el suyo — planta una entrada falsa,
+-- atribuida a otra persona, fechada en el pasado, en la tabla que se supone
+-- que es evidencia inmutable.
+--
+-- El único escritor legítimo (`src/lib/likida/bitacora_escritura.ts`) usa
+-- `supabaseAdmin()` (service_role), que bypassa RLS y grants de
+-- `authenticated`/`anon` por completo — hay además un test estructural
+-- (`bitacora_escritura.test.ts`) que impide que cualquier otro archivo de
+-- producción escriba a esta tabla. Revocar la escritura de `authenticated`/
+-- `anon` no afecta ningún camino real de la app.
+--
+-- Nótese que NO hay política de UPDATE/DELETE para ningún rol de la app —
+-- el registro ya era append-only en ese sentido: con RLS activo y sin
+-- policy para esos comandos, un UPDATE/DELETE de `authenticated` ya no
+-- tocaba ninguna fila (0 filas, en silencio, RLS deniega por default) — el
+-- bloque 32 de verificaciones.sql ya lo confirmaba antes de esta migración.
+-- Por eso SOLO se revoca `insert`: revocar también update/delete cambiaría
+-- ese "0 filas silencioso" por un "permission denied" — mismo resultado
+-- práctico (nada se modifica), pero una migración más grande de la que el
+-- hallazgo pide. El hueco real era únicamente la inserción sin gate de rol.
+
+revoke insert on public.bitacora_auditoria from authenticated, anon;
+drop policy if exists bitacora_insercion on public.bitacora_auditoria;
