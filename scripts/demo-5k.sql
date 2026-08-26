@@ -55,7 +55,14 @@ begin
                         {"concepto":"otro","topeMonto":1500}],
             "tabulador":{"rendimientoPorDefecto":2.2,"precioDieselPorDefecto":24,"umbralDesviacion":0.06},
             "estimulos":{"efectivoTopeMxn":2000,"viaticosTopeFiscalDiarioMxn":750},
-            "facilidadCombustibleEfectivo":{"dedicacionExclusivaCarga":true,"regimenElegible":true}}'::jsonb);
+            -- AUDITORÍA 19 (fiscal F4): `regimenElegible` decía `true`, pero
+            -- este tenant declara `regimen_fiscal='601'` (General de Ley PM)
+            -- unas líneas arriba, y `REGIMENES_ELEGIBLES` (administracion.ts)
+            -- es la lista CERRADA ['624','612'] — 601 NO califica. El seed
+            -- afirmaba una elegibilidad que el motor real nunca produciría
+            -- para este régimen, sin que nadie lo validara. Corregido a lo
+            -- que 601 de verdad da: no elegible.
+            "facilidadCombustibleEfectivo":{"dedicacionExclusivaCarga":true,"regimenElegible":false}}'::jsonb);
 
   for i in 1..25 loop
     insert into terminal (id, tenant_id, nombre, ciudad)
