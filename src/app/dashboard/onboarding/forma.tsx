@@ -52,8 +52,9 @@ export function FormaOnboarding({
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium">Fiscal — lo que ningún comprobante revela</h2>
         <p className="text-xs" style={{ color: 'var(--muted)' }}>
-          Estas dos son las únicas obligatorias. Sin ellas el motor aplica el 50% de peaje
-          a cualquier flota. El resto se puede dejar en blanco y completarlo después.
+          Estas dos son las únicas obligatorias. Sin ellas el estímulo de peaje queda en
+          $0 hasta que las contestes — el motor nunca lo acredita sin esta declaración.
+          El resto se puede dejar en blanco y completarlo después.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Selector nombre="ingresos" etiqueta="Ingresos anuales del último ejercicio" requerido

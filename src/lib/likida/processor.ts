@@ -1845,6 +1845,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             // confianza 0.95 — la confianza mide qué tan claro se vio el papel,
             // no si la cifra cabe en el viaje.
             montoImplausible,
+            // FISCAL-19C2-3: sin esto, un ticket en USD se anunciaba como si
+            // fueran pesos — el motor ya lo excluye del acreditamiento
+            // (`moneda_extranjera` en engine.ts), pero el acuse mentía la cifra.
+            moneda: typeof extraAcuse.moneda === 'string' ? extraAcuse.moneda : undefined,
           };
           let d = decidirAcuse(lectura);
 

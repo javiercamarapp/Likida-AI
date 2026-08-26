@@ -124,7 +124,7 @@ export const NORMAS: Record<string, Norma> = {
     id: 'criterio-1-CFF-PI',
     instrumento: "Anexo 3 de la Resolución Miscelánea Fiscal para 2026 (criterios no vinculativos)",
     articulo: "1/CFF/PI",
-    titulo: ">",
+    titulo: "Entrega o puesta a disposición del CFDI. No se cumple con la obligación cuando el emisor únicamente remite a una página de Internet.",
     citas: ["1/CFF/PI", "CFF art. 89", "artículo 52 del Código Fiscal"],
     jerarquia: 5,
     estado: "evidencia_corroborante",

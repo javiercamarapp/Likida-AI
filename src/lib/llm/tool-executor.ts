@@ -166,12 +166,34 @@ export async function executeTool(
     return { success: true, result: durable.result, durationMs: Date.now() - started };
   }
   if (durable?.kind === 'busy') {
-    return { success: false, result: null, error: 'la mutación ya está siendo procesada; no se vuelve a ejecutar', durationMs: Date.now() - started };
+    // AGEN-19C2-8 (barrido MEDIO/BAJO): este texto es el `content` del
+    // mensaje `role:'tool'` que el MODELO lee para decidir cómo
+    // parafrasearlo — no un log técnico. El lease dura hasta 120s
+    // (`LIKIDA_TOOL_IDEMPOTENCY_LEASE_MS`); redactado para que el modelo lo
+    // traduzca a "espera un minuto y vuelve a intentar", no a un error crudo.
+    return { success: false, result: null, error: 'esto ya se está procesando en otro turno tuyo; dile al operador que espere un minuto y vuelva a intentar, no que hubo un error', durationMs: Date.now() - started };
   }
 
   if (durable?.kind === 'execute') {
-    const renewEveryMs = Math.max(1_000, Math.floor((Number(process.env.LIKIDA_TOOL_IDEMPOTENCY_LEASE_MS) || 120_000) / 3));
+    const leaseMs = Number(process.env.LIKIDA_TOOL_IDEMPOTENCY_LEASE_MS) || 120_000;
+    const renewEveryMs = Math.max(1_000, Math.floor(leaseMs / 3));
+    // TOOL-CALLING-19C2-2 (barrido MEDIO/BAJO): si el handler NUNCA asienta
+    // su promesa (no un timeout — de verdad colgado), el `.finally(stopLease)`
+    // encadenado más abajo nunca corre, y este `setInterval` (con `.unref()`,
+    // así que no sostiene el proceso él solo) sigue renovando el lease en la
+    // base mientras el proceso viva por OTRA razón — un contenedor caliente
+    // reusado deja ese viaje en `busy` para siempre. 10 renovaciones (~10
+    // leases de margen) es un techo absoluto independiente de si el handler
+    // llegó a asentar.
+    const MAX_RENOVACIONES = 10;
+    let renovaciones = 0;
     leaseTimer = setInterval(() => {
+      renovaciones += 1;
+      if (renovaciones > MAX_RENOVACIONES) {
+        logger.error('tool.lease_renovacion_techo', { name, renovaciones });
+        stopLease();
+        return;
+      }
       void runWithToolSignal(undefined, () => renewMutation(ctx.tenantId, mutationEffectKey(name, ctx), durable!.token))
         .then((ok) => { if (!ok) logger.error('tool.lease_renovacion_rechazada', { name }); })
         .catch((err) => logger.error('tool.lease_renovacion_error', { name, err: err instanceof Error ? err.message : String(err) }));

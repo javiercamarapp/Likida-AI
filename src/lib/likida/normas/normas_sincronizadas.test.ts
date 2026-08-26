@@ -21,6 +21,29 @@ function campo(txt: string, n: string): string | undefined {
   return v && v !== 'null' ? v : undefined;
 }
 
+/**
+ * El `titulo` de la ficha: inline entre comillas (el caso común) o un escalar
+ * YAML plegado (`titulo: >`, líneas indentadas debajo). FISCAL (barrido
+ * MEDIO/BAJO): `criterio-1-CFF-PI.yaml` usa la forma plegada, y quien copió el
+ * título al índice pegó el literal ">" en vez de las líneas de abajo — el
+ * plegado las junta con un espacio, sin el salto de línea.
+ */
+function tituloDeFicha(txt: string): string | undefined {
+  const idx = txt.search(/^titulo:/m);
+  if (idx === -1) return undefined;
+  const resto = txt.slice(idx);
+  const primeraLinea = resto.split('\n')[0].replace(/^titulo:\s*/, '').trim();
+  if (!primeraLinea.startsWith('>') && !primeraLinea.startsWith('|')) {
+    return primeraLinea.replace(/^["']|["']$/g, '');
+  }
+  const partes: string[] = [];
+  for (const linea of resto.split('\n').slice(1)) {
+    if (!/^\s+\S/.test(linea)) break;
+    partes.push(linea.trim());
+  }
+  return partes.join(' ');
+}
+
 const archivos = readdirSync(DIR).filter((f) => f.endsWith('.yaml'));
 const fichas = archivos.map((f) => {
   const txt = readFileSync(new URL(f, DIR), 'utf8');
@@ -74,6 +97,15 @@ describe('índice de normas vs fichas', () => {
       let lista: string[] = [];
       try { lista = JSON.parse(enFicha.replace(/'/g, '"')); } catch { /* mal formada → [] */ }
       expect(NORMAS[f.id!].citas, `citas distintas en ${f.archivo}`).toEqual(lista);
+    }
+  });
+
+  it('el título coincide con la ficha, incluida la forma plegada', () => {
+    // FISCAL (barrido MEDIO/BAJO): `criterio-1-CFF-PI` tenía `titulo: ">"` en
+    // el índice — el literal del plegado YAML, no el texto de abajo — porque
+    // nada cotejaba este campo.
+    for (const f of fichas) {
+      expect(NORMAS[f.id!].titulo, `título distinto en ${f.archivo}`).toBe(tituloDeFicha(f.txt));
     }
   });
 

@@ -12,7 +12,7 @@
   --color-bg: #fbfbfd;
   --color-surface: #ffffff;
   --color-ink: #17100d;      /* negro cálido: sigue siendo tinta, ya no es azulado */
-  --color-muted: #6b7280;
+  --color-muted: #616876;
   --color-line: #ececef;
   /* NARANJA DE MARCA. Un solo tono para las dos cosas que tiene que hacer:
      rellenar (con texto blanco encima) y ser tinta sobre blanco. #c2410c mide
@@ -74,10 +74,18 @@
      contralor puede necesitar leer (la cita "LIF 2026, Art. 20-A", "Sin
      capturar", "plazo sin verificar"), no relleno decorativo — no hay una
      intención distinta entre "nota de KpiTile" y "cita legal" que justifique
-     dos tokens. #73737c pasa AA contra blanco (4.70:1) y contra --bg
-     (4.54:1) con margen, y se queda MÁS CLARO que --muted (#6b7280, 4.83:1)
-     para conservar el orden de la jerarquía: ink > ink2 > muted > faint. */
-  --faint: #73737c;
+     dos tokens.
+     BARRIDO MEDIO/BAJO (auditoría 19): #73737c/#6b7280 pasaban AA contra
+     blanco y --bg, pero --g1 es el fondo de TODA la consola (el div raíz de
+     cada página de /admin y /dashboard pinta background: var(--g1) sobre
+     el layout completo, no solo barras de gráfica) y ninguno de los dos se
+     había medido ahí: #73737c daba 4.04:1 contra el --g1 claro por defecto
+     (#fdebd9) y 4.27:1 contra el de `.tema-neutro` (#f4f4f5) — los dos por
+     debajo del 4.5:1 de AA. #6a6a73/#616876 pasan AA contra blanco, --bg y
+     los dos --g1 claros, y #6a6a73 se queda MÁS CLARO que --muted (#616876,
+     ver contraste exacto en contraste.test.ts) para conservar el orden de
+     la jerarquía: ink > ink2 > muted > faint. */
+  --faint: #6a6a73;
   --line2: #e4e4e7;
 
   --g1: #fdebd9;
@@ -154,7 +162,7 @@
   --g1: #1b1b1f; --g2: #2a2a30; --g3: #707078; --g4: #d4d4d8; --g5: #f4f4f5;
 }
 :root[data-theme="light"] {
-  --bg: #fbfbfd; --surface: #ffffff; --ink: #17100d; --muted: #6b7280; --line: #ececef; --accent: #c2410c; --accent-fg: #ffffff;
+  --bg: #fbfbfd; --surface: #ffffff; --ink: #17100d; --muted: #616876; --line: #ececef; --accent: #c2410c; --accent-fg: #ffffff;
   --color-bad: #d70015;   /* 5.38:1 sobre blanco */
   --color-ok: #14602c;    /* 7.67:1 sobre blanco */
 }

@@ -361,7 +361,16 @@ export async function generateResponse(opts: {
       // seguridad. El resultado público debe reflejar lo mismo; devolver 0
       // aquí haría que el Redactor/runner subestimara su gasto aunque la RPC
       // central ya hubiera retenido la reserva.
-      return { text: (res.choices[0]?.message?.content ?? '').trim(), model: res.model || m, tokensIn, tokensOut, cost: costoContabilizado };
+      //
+      // TOOL-CALLING-19C2-1 (barrido MEDIO/BAJO): `costoContabilizado` en
+      // ese caso es la RESERVA (una cota conservadora), no lo medido de
+      // verdad — mismo patrón que `noMedido` en `intake/ocr.ts`. Sin la
+      // marca, un consumidor (p.ej. `redactor.ts`) lo escribía en
+      // `llm_costo` como si fuera una cifra real.
+      return {
+        text: (res.choices[0]?.message?.content ?? '').trim(), model: res.model || m, tokensIn, tokensOut, cost: costoContabilizado,
+        ...(usageValido ? {} : { noMedido: true as const }),
+      };
     } catch (e) {
       // BACKEND-19C2-1: antes se liquidaba aquí al monto RESERVADO (el
       // estimado, no lo que de verdad se gastó) — una racha de

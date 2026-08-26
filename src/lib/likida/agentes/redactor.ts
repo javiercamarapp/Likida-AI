@@ -256,7 +256,15 @@ export async function redactarCorreoFrio(
     });
     texto = r.text;
     costoUsd = r.cost;
-    logger.info('redactor.costo', { costoUsd: r.cost, tokensIn: r.tokensIn, tokensOut: r.tokensOut, modelo: r.model });
+    // TOOL-CALLING-19C2-1 (barrido MEDIO/BAJO): `r.cost` sin `usage` real del
+    // proveedor es la RESERVA conservadora, no lo medido — mismo criterio
+    // que `noMedido` en `intake/ocr.ts`. Sin la marca, esta fila de costo se
+    // veía igual de confiable que una medida de verdad.
+    logger.info('redactor.costo', {
+      costoUsd: r.cost, tokensIn: r.tokensIn, tokensOut: r.tokensOut,
+      modelo: r.noMedido ? `${r.model}:no_medido` : r.model,
+    });
+    if (r.noMedido) logger.warn('redactor.costo_no_medido', { prospecto: prospectoId });
   } catch (e) {
     await registrarCorrida(null, 'redactor', {
       inicio, fin: new Date(), estado: 'fallo', disparo,

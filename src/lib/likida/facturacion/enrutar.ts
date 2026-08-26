@@ -157,10 +157,17 @@ export function mensajeParaEncargado(t: TicketPorFacturar, ruta: Extract<Ruta, {
   const lineas: string[] = [];
   const c = t.caducidad;
 
+  // FISCAL-19C2-8 (barrido MEDIO/BAJO): "VENCE HOY" a secas se leía como el
+  // plazo LEGAL, cuando en la mayoría de los comercios (`plazoVerificado:
+  // false` es el default del catálogo, ver engine.ts) es el plazo IMPRESO
+  // en el ticket — legalmente se puede exigir la factura dentro del
+  // ejercicio. Mismo matiz que ya usa engine.ts, en versión corta para un
+  // mensaje de WhatsApp.
+  const notaPlazo = t.plazoVerificado ? '' : ' (plazo del comercio, no de la ley)';
   const urgencia = c.desconocido
     ? 'sin fecha legible'
     : c.urgente
-      ? (c.diasRestantes === 0 ? '⚠️ VENCE HOY' : `⚠️ vence en ${c.diasRestantes} día(s)`)
+      ? (c.diasRestantes === 0 ? `⚠️ VENCE HOY${notaPlazo}` : `⚠️ vence en ${c.diasRestantes} día(s)${notaPlazo}`)
       : `${c.diasRestantes} días para facturar`;
 
   lineas.push(`Falta la factura de un ${t.concepto} — ${urgencia}`);
