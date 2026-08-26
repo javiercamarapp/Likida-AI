@@ -1,44 +1,72 @@
-fecha: 2026-08-10
+fecha: 2026-08-24
 
 ## Bloque 1 — Tests intermitentes
-5/5 corridas verdes. 3157 passed | 1 skipped (3158 total), 252 archivos, cada corrida.
+5/5 corridas verdes, idénticas: 501 archivos, 6434 passed | 1 skipped (6435 total) cada vez.
 Sin intermitencia, sin roto. Sano.
 
 ## Bloque 2 — Dependencias
-- MECÁNICO (9 paquetes + 5 transitivos vía audit fix): PR #10, rama claude/salud-2026-08-10.
-  next 16.2.11→16.3.0, @sentry/nextjs 10.68.0→10.70.0, @supabase/supabase-js 2.110.8→2.112.2,
-  lucide-react 1.26.0→1.31.0, eslint-config-next 16.2.12→16.3.0, @types/react 19.2.17→19.2.18,
-  @types/react-dom 19.2.3→19.2.4, react/react-dom 19.2.4→19.2.8; + brace-expansion, fast-uri,
-  js-yaml, nanoid, postcss (transitivos, npm audit fix sin --force).
-  Verificado en la rama: tsc limpio, eslint limpio (0 errores), vitest 3157/1/3158 verde.
-- NECESITA LECTURA (1): issue #11 — sharp 0.34.5, CVE en libvips, camino real confirmado
-  (cfdi.ts:249, decodeCodigosFromImage procesa fotos de WhatsApp sin filtrar).
-- RUIDO (6, descartado con razón): vitest/vite/esbuild/@vitest-mocker/vite-node/@vitest-coverage-v8
-  — CVEs requieren servidor de UI de Vitest o dev-server de Vite, que este repo no expone
-  (se corre `vitest run`, sin --ui). Dependencia de desarrollo, ruta no ejecutada.
+`npm audit --json`: 0 vulnerabilidades (0 críticas/altas/medias/bajas). `npm outdated --json`: 13 paquetes.
+
+- MECÁNICO (7): PR #53, rama claude/salud-2026-08-24.
+  @supabase/ssr 0.12.4→0.12.5, @supabase/supabase-js 2.101.0(rango)→2.112.4,
+  fast-xml-parser 5.10.1→5.11.0, lucide-react 1.31.0→1.34.0, next 16.2.4(rango)→16.3.2,
+  @types/react-dom 19.2.4→19.2.5, eslint-config-next 16.3.1→16.3.2.
+  Verificado en la rama: tsc limpio, eslint limpio (0 errores), vitest 6434/1/6435 verde,
+  npm run build verde.
+  NOTA: #53 se solapa con dos PRs de Dependabot ya abiertos (#50 grupo "produccion", #51
+  eslint-config-next) — no se tocaron ni cerraron, es decisión del dueño del repo cuál se
+  mergea.
+
+- NECESITA LECTURA (3):
+  - issue #54 — zxing-wasm 3.1.2→3.1.3 (patch, pero rompe la suite): decodeQrFromImage
+    deja de leer el QR en fotos grandes con orientación EXIF
+    (src/lib/likida/intake/codigos.test.ts). Camino real: lectura de QR en comprobantes
+    por WhatsApp. Se avisó también en el PR #50 de Dependabot, que incluye este mismo
+    bump en su grupo — no debe mergearse tal cual.
+  - issue #55 — openai 6.49.0→7.5.0 (mayor). Usado directo en el loop de agentes
+    (src/lib/agents/run.ts, analista.ts, copiloto.ts), tool-executor, openrouter.ts,
+    computer_use.ts (portales de autofactura). Riesgo de romper tool-calling en runtime
+    sin que lo detecte tsc.
+  - issue #56 — tailwind-merge 2.6.1→3.6.0 (mayor). cn() en src/lib/utils.ts sin config
+    extendida, reexportado a todo /admin y /dashboard vía ui/kit. v3 cambió la resolución
+    por defecto de clases en conflicto — riesgo de regresión visual silenciosa (no hay
+    pruebas de snapshot visual en el repo).
+
+- RUIDO (3, descartado con razón, sin issue):
+  typescript 5.9.3→7.0.2, eslint 9.39.5→10.9.0, @types/node 22.20.1→26.2.0 — los tres son
+  herramientas de desarrollo (no corren en producción), sin CVE asociado. Cualquier
+  incompatibilidad se detecta de inmediato en las puertas de calidad obligatorias
+  (`npx tsc --noEmit`, `npx eslint src/`) antes de que llegue a nadie — no hay camino
+  silencioso. No urgente; no genera issue.
 
 ## Bloque 3 — Deriva de documentación
-4 hallazgos verificables:
-- README.md:17 — dice "3,149 pruebas verdes"; hoy son 3,157 (3,158 con el skip). También dice
-  "build limpio", que ya no es cierto (ver bonus abajo / issue #12).
-- PROMPT-SESION-NUEVA.md:37 — dice "van 1,670 verdes"; muy atrás de las 3,158 actuales.
-- PROMPT-SESION-NUEVA.md:39-42 — describe que "cada push a master dispara un build de
-  producción en Vercel"; contradice vercel.json (ignoreCommand con bandera [deploy]) y el
-  propio CLAUDE.md, que documenta esa decisión como ya tomada el 5-ago-2026.
-- PROMPT-SESION-NUEVA.md:159 — dice "No hay forma de cobrar: sin Stripe... Sin planes ni
-  suscripción"; contradicho por src/lib/saas/stripe.ts, suscripcion.ts y
-  src/app/api/stripe/webhook/route.ts, que ya existen con código real.
-Sin issue abierto para esto (no lo pidió el super prompt para Bloque 3); reportado en el
-resumen de la sesión.
+Revisados: CLAUDE.md, README.md, DESIGN.md, MARCA.md, AUDITORIA-PROD-REGLAS.md (los únicos
+.md en la raíz — DOCUMENTO_MAESTRO/ROADMAP/DEPLOY/GUIA_BUILD/ESTADO_FINAL/DECISIONES_PENDIENTES
+no existen en este repo).
+
+1 hallazgo verificable:
+- CLAUDE.md:75 — dice "~2,880 pruebas (la cifra crece; no la cites de memoria)". Hoy son
+  6,434 passed + 1 skipped = 6,435 — más del doble. El hedge ("no la cites de memoria")
+  ya avisa que crece, pero la brecha es grande como para seguir sirviendo de referencia.
+  No se abrió PR para esto — el super prompt no lo pide para Bloque 3, se reporta aquí y
+  en el resumen de la sesión.
+
+Verificado y SIN drift: reglas de negocio de CLAUDE.md (ocr_raw muerta, toLocaleString
+solo en formato.ts, requireSessionTenant/sufijo.ts, vercel.json ignoreCommand con
+[deploy] en la primera línea, facturacion_escritura.ts con insert real a factura_emitida
+—la línea exacta corrió de :279 a :368 por ediciones normales, el hecho que cita sigue
+siendo cierto—); referencias de archivo en DESIGN.md y MARCA.md (kit.tsx, charts.tsx,
+graficas.tsx, resumen-visual.tsx, marco.ts, sidebar-nav.tsx, rutas.ts, barra-acciones.tsx,
+visibilidad.ts, globals.css, logo.tsx — todos existen); "0 errores" de tsc y eslint
+(confirmado: tsc 0 errores, eslint 0 errores/157 warnings preexistentes);
+`npm run build` limpio (exit 0 — el issue #12 de la semana pasada, build roto en master,
+ya no reproduce).
 
 ## Bloque 4 — Costo por liquidación
-Saltado. Sin credenciales ni datos de producción en este entorno (.env.local no existe,
-sin variables de Supabase/OpenRouter en el ambiente). No se estimó nada.
-
-## Bonus — fuera de los cuatro bloques
-`npm run build` está roto en master (confirmado en checkout limpio, sin relación con el PR
-mecánico): 7 páginas exportan Contenido/InicioContenido y el chequeo de rutas de Next.js
-lo rechaza. Issue #12.
+Saltado. Sin credenciales ni datos de producción en este entorno (sin .env.local, sin
+variables de Supabase/OpenRouter/OpenAI en el ambiente). No se estimó nada.
 
 ## Estado: OK
-Los cuatro bloques corrieron. Bloque 4 se saltó por falta de datos, como indica su propia regla.
+Los cuatro bloques corrieron. Bloque 4 se saltó por falta de datos, como indica su propia
+regla. 1 PR abierto (#53), 3 issues abiertos (#54, #55, #56), 1 comentario de aviso en un
+PR de Dependabot (#50).
