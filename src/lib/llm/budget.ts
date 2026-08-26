@@ -40,11 +40,23 @@ function positiveEnv(value: string | undefined, fallback: number): number {
  * central recibe `uuid`; en tests aceptamos identificadores cortos para que
  * cada caso pueda inyectar su propio tenant sin levantar Postgres.
  */
+// Mismo patrón que `esUuidValido` (`intake/cfdi.ts`) y el resto del repo
+// (`viajes_registro.ts`, `operacion.ts`, `qa-tipos.ts`…): solo la FORMA
+// 8-4-4-4-12 en hex. NO exigir el nibble de versión/variante RFC4122
+// ([1-5].../[89ab]...) — `tenant.id` de G3M, la única flota en producción,
+// es `11111111-1111-1111-1111-111111111111`, un UUID a propósito (ver
+// `seed.sql`) que NO trae esos nibbles. La versión estricta de este check
+// (añadida en el endurecimiento «Enterprise», 24-ago) rechazaba ese ID en
+// producción con `NODE_ENV=production`, así que TODA llamada al agente que
+// pidiera presupuesto de IA para G3M fallaba con "tenant inválido" y el
+// operador recibía el genérico "se me trabó el sistema" — verificado en
+// logs de producción el 25-ago (`agent.fail`, err "presupuesto_llm: tenant
+// inválido", huella de tenant igual a `huellaId('11111111-...-111111111111')`).
 export function requireLlmBudgetTenant(tenantId: string | null | undefined): string {
   const value = typeof tenantId === 'string' ? tenantId.trim() : '';
   if (!value) throw new Error('presupuesto_llm: tenant requerido');
   if (process.env.NODE_ENV === 'production'
-    && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
     throw new Error('presupuesto_llm: tenant inválido');
   }
   return value;

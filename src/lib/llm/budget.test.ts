@@ -4,7 +4,7 @@ const rpc = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ rpc }) }));
 vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (query: unknown) => query }));
 
-const { createLlmBudget, reserveLlmBudget, settleLlmBudget, LlmBudgetExceededError } = await import('./budget');
+const { createLlmBudget, reserveLlmBudget, settleLlmBudget, LlmBudgetExceededError, requireLlmBudgetTenant } = await import('./budget');
 
 describe('presupuesto monetario duro del runtime', () => {
   beforeEach(() => { rpc.mockReset(); rpc.mockResolvedValue({ data: true, error: null }); vi.unstubAllEnvs(); });
@@ -54,5 +54,36 @@ describe('presupuesto monetario duro del runtime', () => {
     await settleLlmBudget(budget, reservation, 0.04);
     await settleLlmBudget(budget, reservation, 0.04);
     expect(rpc.mock.calls.filter(([name]) => name === 'liquidar_presupuesto_llm')).toHaveLength(1);
+  });
+});
+
+describe('requireLlmBudgetTenant en NODE_ENV=production', () => {
+  // Regresión de producción, 25-ago-2026: el regex exigía los nibbles de
+  // versión/variante RFC4122 ([1-5].../[89ab]...), y `tenant.id` de G3M —la
+  // ÚNICA flota en producción— es `11111111-1111-1111-1111-111111111111`, un
+  // UUID a propósito (`seed.sql`) que no los trae. Con `NODE_ENV=production`
+  // TODA llamada al agente para G3M lanzaba "tenant inválido" y el operador
+  // recibía el genérico "se me trabó el sistema" — confirmado contra el log
+  // real de `agent.fail` en producción. Ningún test hasta hoy corría esta
+  // rama: los de arriba usan tenants como `'tenant-1'`, que ni siquiera
+  // entran al regex porque nada fuerza `NODE_ENV=production` en la suite.
+  beforeEach(() => { vi.stubEnv('NODE_ENV', 'production'); });
+
+  it('acepta el UUID real de G3M, la flota en producción', () => {
+    expect(requireLlmBudgetTenant('11111111-1111-1111-1111-111111111111')).toBe('11111111-1111-1111-1111-111111111111');
+  });
+
+  it('acepta cualquier forma 8-4-4-4-12 en hex, sin exigir versión/variante RFC4122', () => {
+    expect(requireLlmBudgetTenant('00000000-0000-0000-0000-000000000000')).toBe('00000000-0000-0000-0000-000000000000');
+  });
+
+  it('sigue rechazando lo que no tiene forma de UUID', () => {
+    expect(() => requireLlmBudgetTenant('tenant-1')).toThrow(/tenant inválido/);
+    expect(() => requireLlmBudgetTenant('11111111-1111-1111-1111-11111111111g')).toThrow(/tenant inválido/);
+  });
+
+  it('sigue rechazando vacío o null antes de llegar al regex', () => {
+    expect(() => requireLlmBudgetTenant('')).toThrow(/tenant requerido/);
+    expect(() => requireLlmBudgetTenant(null)).toThrow(/tenant requerido/);
   });
 });
