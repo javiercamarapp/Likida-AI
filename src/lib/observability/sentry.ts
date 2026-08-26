@@ -60,6 +60,34 @@ export function sanitizarEventoSentry(evento: unknown): unknown {
   const salida = { ...(evento as Record<string, unknown>) };
   delete salida.user;
   delete salida.extra;
+  // BACKEND-19C2-3 (revisión): un evento de TRANSACCIÓN lleva la query en dos
+  // sitios que un evento de error no tiene y que este saneador no tocaba:
+  // `spans[].data` y `contexts.trace.data`. La instrumentación de fetch del
+  // SDK (@sentry/core `getFetchSpanAttributes`) mete ahí `url`, `http.url`,
+  // `url.full` —la URL COMPLETA, query incluida— y `http.query` aparte. O sea:
+  // este mismo saneador recortaba `request.url` a origin+path, y la misma URL
+  // con `?token=…` o los filtros de PostgREST (`rfc=eq.…`, `tenant_id=eq.…`)
+  // salía intacta en los spans de cada fetch a Supabase/Upstash/OpenRouter.
+  // Mismo criterio que breadcrumbs: los `data` se tiran enteros; op,
+  // description (ya sin query — el SDK la recorta del nombre) y tiempos se
+  // quedan, que es lo que hace útil la traza de performance.
+  if (Array.isArray(salida.spans)) {
+    salida.spans = salida.spans.map((span) => {
+      if (!span || typeof span !== 'object') return span;
+      const s = { ...(span as Record<string, unknown>) };
+      delete s.data;
+      return s;
+    });
+  }
+  const contexts = salida.contexts;
+  if (contexts && typeof contexts === 'object') {
+    const trace = (contexts as Record<string, unknown>).trace;
+    if (trace && typeof trace === 'object') {
+      const t = { ...(trace as Record<string, unknown>) };
+      delete t.data;
+      salida.contexts = { ...(contexts as Record<string, unknown>), trace: t };
+    }
+  }
   const request = salida.request;
   if (request && typeof request === 'object') {
     const r = { ...(request as Record<string, unknown>) };
@@ -129,6 +157,15 @@ async function cargar(): Promise<void> {
       // cabeceras, y el pipeline del logger no las ha visto para redactarlas.
       sendDefaultPii: false,
       beforeSend: (evento: unknown) => sanitizarEventoSentry(evento),
+      // BACKEND-19C2-3 — el SDK trata `beforeSend`/`beforeSendTransaction`
+      // como hooks INDEPENDIENTES: con `tracesSampleRate` > 0 (default 0.05),
+      // 1 de cada 20 transacciones de performance salía sin pasar por el
+      // saneador — mismo `.request`/`.breadcrumbs`/`.user`/`.extra` que un
+      // evento de error, mismo riesgo de fuga (RFC, domicilio, cookies de
+      // sesión). `sanitizarEventoSentry` opera genérico sobre esas formas
+      // compartidas Y sobre las propias de una transacción (`spans[].data`,
+      // `contexts.trace.data` — ver la nota dentro del saneador).
+      beforeSendTransaction: (evento: unknown) => sanitizarEventoSentry(evento),
     });
     sentry = mod;
   } catch (e) {

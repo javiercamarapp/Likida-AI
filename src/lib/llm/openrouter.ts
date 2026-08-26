@@ -362,7 +362,13 @@ export async function generateResponse(opts: {
       // central ya hubiera retenido la reserva.
       return { text: (res.choices[0]?.message?.content ?? '').trim(), model: res.model || m, tokensIn, tokensOut, cost: costoContabilizado };
     } catch (e) {
-      await settle(reservation?.amountUsd ?? 0);
+      // BACKEND-19C2-1: antes se liquidaba aquí al monto RESERVADO (el
+      // estimado, no lo que de verdad se gastó) — una racha de
+      // timeouts/red inestable podía agotar el tope diario del tenant sin
+      // que se hubiera consumido nada real. Ahora se deja la fila en
+      // 'reservado': la 0193 (expira_en) la excluye sola del tope diario
+      // tras el margen de gracia si de verdad nunca hubo uso.
+      if (reservation) logger.error('llm.reserva_sin_liquidar_por_error', { runId: opts.budget?.runId, reservaId: reservation.id, err: e instanceof Error ? e.message : String(e) });
       throw e;
     }
   };
@@ -561,7 +567,10 @@ export async function generateStructured<T>(opts: {
     try {
       res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
     } catch (e) {
-      await settle(reservation?.amountUsd ?? 0);
+      // BACKEND-19C2-1: ver el mismo fix en `generateResponse` — no liquidar
+      // al monto reservado en error/abort, dejar la fila 'reservado' para
+      // que la 0193 (expira_en) la excluya sola del tope diario.
+      if (reservation) logger.error('llm.reserva_sin_liquidar_por_error', { runId: opts.budget?.runId, reservaId: reservation.id, err: e instanceof Error ? e.message : String(e) });
       throw e;
     }
     const raw = res.choices[0]?.message?.content || '';
