@@ -32,9 +32,22 @@ export async function reclamarSalidasWhatsApp(limite = 25): Promise<SalidaOutbox
   }));
 }
 
-export async function finalizarSalidaWhatsApp(s: SalidaOutbox, messageId?: string, error?: string): Promise<void> {
+/**
+ * `muerta: true` cuando esta salida agotó sus 8 reintentos (0180) y quedó en
+ * `estado='dead'` — nadie la va a volver a intentar. AUDITORÍA 19 (OP-19c2-3):
+ * antes de la 0189 esto no se podía saber desde la app (la RPC devolvía solo
+ * `boolean`), así que un mensaje que muere aquí se perdía en silencio: el cron
+ * seguía en verde porque procesó la fila con éxito, solo que el resultado fue
+ * enterrarla. El llamador (`route.ts`) es quien decide avisar.
+ */
+export async function finalizarSalidaWhatsApp(s: SalidaOutbox, messageId?: string, error?: string): Promise<{ muerta: boolean }> {
   const { data, error: err } = await acotada(supabaseAdmin().rpc('finalizar_wa_outbox', {
     p_id: s.id, p_token: s.leaseToken, p_message_id: messageId ?? null, p_error: error ?? null,
   }), 'wa.outbox.finalizar');
-  if (err || data !== true) logger.error('wa.outbox_no_finalizado', { id: s.id, err: err?.message ?? 'claim perdido' });
+  const fila = (data as Array<{ ok: boolean; muerta: boolean }> | null)?.[0];
+  if (err || !fila?.ok) {
+    logger.error('wa.outbox_no_finalizado', { id: s.id, err: err?.message ?? 'claim perdido' });
+    return { muerta: false };
+  }
+  return { muerta: fila.muerta === true };
 }

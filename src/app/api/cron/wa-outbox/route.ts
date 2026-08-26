@@ -3,12 +3,31 @@ import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 import { reclamarSalidasWhatsApp, finalizarSalidaWhatsApp } from '@/lib/likida/wa_outbox';
 import { conPool } from '@/lib/likida/lotes';
 import { logger } from '@/lib/logger';
+import { alertarOperador } from '@/lib/observability/alerta';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
+
+/**
+ * AUDITORÍA 19 (OP-19c2-3): antes de la 0189 esta llamada no distinguía "va a
+ * reintentar sola" de "murió, nadie la va a volver a intentar". Un mensaje al
+ * chofer o al jefe que agota sus 8 reintentos (0180) se perdía en silencio: el
+ * cron seguía en verde porque procesó la fila con éxito, solo que el
+ * resultado fue enterrarla. Mismo patrón que los otros cinco crons
+ * (gps/escalar/purgar/facturar/wa-pendientes), que sí avisan.
+ */
+async function finalizarYAvisarSiMurio(s: Awaited<ReturnType<typeof reclamarSalidasWhatsApp>>[number], messageId?: string, error?: string): Promise<void> {
+  const { muerta } = await finalizarSalidaWhatsApp(s, messageId, error);
+  if (muerta) {
+    await alertarOperador('cron.wa_outbox', {
+      error: `Un mensaje de WhatsApp agotó sus reintentos y no se va a volver a enviar: ${error ?? 'sin detalle'}`,
+      codigo: 'salida_muerta',
+    });
+  }
+}
 
 /** Drena el outbox durable. Solo reintenta la misma carga serializada; el
  * lease hace que dos crons solapados no la envíen simultáneamente. */
@@ -24,7 +43,7 @@ export async function GET(req: Request) {
       const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
       if (!token || !phoneId) {
         fallidas++;
-        await finalizarSalidaWhatsApp(s, undefined, 'canal de WhatsApp no configurado');
+        await finalizarYAvisarSiMurio(s, undefined, 'canal de WhatsApp no configurado');
         return;
       }
       try {
@@ -35,17 +54,17 @@ export async function GET(req: Request) {
         const body = await r.text();
         if (!r.ok) {
           fallidas++;
-          await finalizarSalidaWhatsApp(s, undefined, `HTTP ${r.status}: ${body.slice(0, 300)}`);
+          await finalizarYAvisarSiMurio(s, undefined, `HTTP ${r.status}: ${body.slice(0, 300)}`);
           return;
         }
         let id: string | undefined;
         try { id = (JSON.parse(body) as { messages?: Array<{ id?: string }> }).messages?.[0]?.id; } catch { /* no wamid */ }
-        if (!id) { fallidas++; await finalizarSalidaWhatsApp(s, undefined, 'Meta aceptó sin wamid'); return; }
+        if (!id) { fallidas++; await finalizarYAvisarSiMurio(s, undefined, 'Meta aceptó sin wamid'); return; }
         enviadas++;
         await finalizarSalidaWhatsApp(s, id);
       } catch (e) {
         fallidas++;
-        await finalizarSalidaWhatsApp(s, undefined, e instanceof Error ? e.message : String(e));
+        await finalizarYAvisarSiMurio(s, undefined, e instanceof Error ? e.message : String(e));
       }
     });
     await registrarLatido('wa-outbox', fallidas ? 'parcial' : 'ok', { enviadas, fallidas });
