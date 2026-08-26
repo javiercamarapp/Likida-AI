@@ -345,7 +345,13 @@ export async function POST(req: NextRequest) {
       }
 
       await conPool([...porChofer.values()], MAX_EN_PARALELO, async (cadena) => {
-        for (const f of cadena) {
+        // AUDITORÍA 19 (AGEN-19C2-1): `cadena.length` es el tamaño REAL de
+        // esta cadena, conocido de antemano — la señal que `processInbound`
+        // necesita para saber que hubo ráfaga sin depender de que dos fotos
+        // se solapen en el tiempo (ya no se solapan, por diseño, desde el
+        // 23-ago: "en serie dentro de cada chofer"). Ver la nota en
+        // `processor.ts` (OpcionesInbound.cadenaTotal).
+        for (const [posicion, f] of cadena.entries()) {
           try {
             const claim = await reclamarPendiente(f.id, 0, leaseOwner);
             // Si otra invocación tiene el mensaje anterior, esta cadena se
@@ -355,7 +361,11 @@ export async function POST(req: NextRequest) {
               ? iniciarRenovacionLease(claim.id, claim.leaseToken, claim.leaseOwner)
               : () => {};
             try {
-              const resultado = await processInbound(claim.evento, { inicioInvocacionMs: inicioInvocacion });
+              const resultado = await processInbound(claim.evento, {
+                inicioInvocacionMs: inicioInvocacion,
+                cadenaTotal: cadena.length,
+                cadenaPosicion: posicion,
+              });
               if (quedoPendiente(resultado)) {
                 logger.warn('wa.pendiente_pospuesto', { id: f.id, resultado });
                 if (claim.leaseToken && claim.leaseOwner) await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`, claim.leaseToken, claim.leaseOwner);

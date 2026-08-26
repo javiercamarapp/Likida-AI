@@ -121,6 +121,22 @@ const rafaga = (n: number) => Promise.all(
     processInbound({ from: '5219993700779', type: 'image' as const, mediaId: `m${i}`, waMessageId: `wa${i}` })),
 );
 
+/**
+ * Una ráfaga de `n` fotos como route.ts las procesa DE VERDAD desde el
+ * 23-ago-2026: una cadena por chofer, en SERIE dentro de la cadena, con
+ * `cadenaTotal`/`cadenaPosicion` — nunca `Promise.all`. `rafaga()` de arriba
+ * simula el modelo VIEJO (concurrente), que ya no es cómo corre production;
+ * esta es la que reproduce el bug real de AUDITORÍA 19 (AGEN-19C2-1).
+ */
+const rafagaSerial = async (n: number) => {
+  for (let i = 0; i < n; i++) {
+    await processInbound(
+      { from: '5219993700779', type: 'image' as const, mediaId: `m${i}`, waMessageId: `wa${i}` },
+      { cadenaTotal: n, cadenaPosicion: i },
+    );
+  }
+};
+
 beforeEach(() => {
   salientes.length = 0; botones.length = 0; contador = 0;
   olvidarRafagas();
@@ -259,6 +275,63 @@ describe('22 fotos que fallan NO son 22 mensajes', () => {
     let n = 0;
     extraerComprobante.mockImplementation(async () => bueno(100 * (n += 1)));
     await rafaga(5);
+
+    const todo = salientes.join('\n');
+    expect(todo).not.toMatch(/no las pude leer|de mi lado|fecha dudosa/i);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 19 (agéntico AGEN-19C2-1) — el 23-ago-2026 route.ts pasó a
+// procesar las fotos de UN chofer en SERIE (antes paralelizaba por mensaje,
+// y un "listo" podía cerrar la liquidación antes de que terminaran las
+// fotos). Bajo esa serialización, el contador de intake vuelve a 0 después
+// de CADA foto —nunca hay dos en vuelo—, así que la libreta de la ráfaga se
+// abría y cerraba en cada una: 22 comprobantes volvían a ser 22 mensajes,
+// exactamente el antipatrón que este archivo entero existe para evitar.
+//
+// Las pruebas de arriba (`rafaga()`) usan `Promise.all` y por eso NO
+// reproducen el bug: siguen viendo concurrencia real. Estas usan
+// `rafagaSerial()`, que procesa una por una CON `cadenaTotal`/
+// `cadenaPosicion` — la señal que route.ts manda de verdad desde el 23-ago.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('AUDITORÍA 19 — la misma ráfaga, pero procesada EN SERIE (route.ts real desde el 23-ago)', () => {
+  it('22 fotos en serie con fallo técnico: SIGUE siendo un solo mensaje, no 22', async () => {
+    extraerComprobante.mockResolvedValue(FALLO_TECNICO);
+    await rafagaSerial(22);
+
+    expect(salientes.length, `el chofer recibió ${salientes.length} mensajes: ${JSON.stringify(salientes)}`).toBe(1);
+    const todo = salientes.join('\n');
+    expect(todo).toContain('De tus 22 fotos');
+    expect(todo).toMatch(/\*22\*/);
+  });
+
+  it('6 fotos buenas en serie: un solo acuse consolidado, no 6 acuses sueltos', async () => {
+    let n = 0;
+    extraerComprobante.mockImplementation(async () => bueno(100 * (n += 1)));
+    await rafagaSerial(6);
+
+    // Sin el fix, cada foto habría cerrado su propia libreta de tamaño 1 y
+    // el peldaño `acusar` (silencio en ráfaga, "Anotado" si viene sola) las
+    // habría contestado las 6 por separado.
+    expect(salientes.length, JSON.stringify(salientes)).toBeLessThanOrEqual(1);
+  });
+
+  it('sin cadenaTotal/cadenaPosicion (caller que no sabe de la cadena): sigue como una foto suelta, sin romperse', async () => {
+    // Control de compatibilidad: un llamador viejo (pruebas, el simulador
+    // del demo) que no manda las opciones nuevas se comporta EXACTAMENTE
+    // como antes de esta ronda — la ausencia de `cadenaTotal` es un no-op.
+    extraerComprobante.mockResolvedValue(ILEGIBLE);
+    await processInbound({ from: '5219993700779', type: 'image', mediaId: 'm1', waMessageId: 'wa1' });
+
+    expect(salientes).toHaveLength(1);
+    expect(salientes[0]).toMatch(/difícil de leer/i);
+  });
+
+  it('CONTROL — una ráfaga serial que sale bien no manda nada de más', async () => {
+    let n = 0;
+    extraerComprobante.mockImplementation(async () => bueno(100 * (n += 1)));
+    await rafagaSerial(5);
 
     const todo = salientes.join('\n');
     expect(todo).not.toMatch(/no las pude leer|de mi lado|fecha dudosa/i);

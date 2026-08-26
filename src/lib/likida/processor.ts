@@ -668,6 +668,35 @@ export interface OpcionesInbound {
    *  (no este mensaje). Sin esto el presupuesto cree que los 120s son suyos
    *  aunque la invocación lleve 60 gastados en los mensajes anteriores (C4). */
   inicioInvocacionMs?: number;
+  /**
+   * AUDITORÍA 19 (agéntico AGEN-19C2-1): cuántos mensajes trae la cadena de
+   * ESTE chofer en esta invocación (route.ts ya la conoce por adelantado,
+   * `porChofer`), y en qué posición va este mensaje (0-based).
+   *
+   * Hace falta porque el 23-ago (`EN PARALELO POR CHOFER, EN SERIE DENTRO DE
+   * CADA CHOFER`) el `for` de route.ts dejó de correr las fotos de un mismo
+   * chofer al mismo tiempo — y la barrera de ráfaga (`intakeDelta`,
+   * `esperarIntake`, este mismo archivo más abajo) detecta "hubo ráfaga"
+   * mirando si otra foto sigue EN VUELO cuando ésta termina. Bajo ejecución
+   * serial nunca hay dos en vuelo: cada foto termina —con su `finally`
+   * decrementando el contador a 0— antes de que la siguiente arranque. El
+   * contador ve una foto sola, veintidós veces seguidas, y la "libreta" de
+   * la ráfaga (`anotarFoto`/`cerrarRafaga`) se abre y se cierra en cada una
+   * en vez de una sola vez para todo el fajo: 22 comprobantes se volvían 22
+   * acuses sueltos, y el resumen consolidado (`mensajeDemasiadasDudas`, el
+   * conteo de comprobantes) nunca disparaba.
+   *
+   * Con `cadenaTotal` > 1 se sabe que SÍ hubo ráfaga sin depender de que se
+   * solapen en el tiempo, y con `cadenaPosicion` se sabe cuál es la ÚLTIMA
+   * (la única que debe cerrar la libreta y mandar el resumen — las demás
+   * deben dejarla abierta, aunque el contador de intake ya haya vuelto a 0
+   * por su cuenta). No toca el candado que sí depende de la concurrencia
+   * real entre invocaciones distintas (`esperarIntake`, el "listo" que
+   * espera a que las fotos terminen) — ese sigue siendo el contador de la
+   * base, correcto tal cual está.
+   */
+  cadenaTotal?: number;
+  cadenaPosicion?: number;
 }
 
 /**
@@ -742,7 +771,7 @@ export async function processInbound(msg: InboundMessage, opts: OpcionesInbound 
     ? iniciarRenovacionMessageClaim(msg.waMessageId, messageClaim.token, messageClaim.owner)
     : () => {};
   try {
-    await procesarTurno(msg, reloj, soltarClaim);
+    await procesarTurno(msg, reloj, soltarClaim, opts);
   } finally {
     detenerRenovacionMessage();
   }
@@ -757,7 +786,7 @@ export async function processInbound(msg: InboundMessage, opts: OpcionesInbound 
 
 /** El turno propiamente: todo lo que había en `processInbound` menos el
  *  claim y el reloj. Nunca lanza (el `catch` general vive aquí). */
-async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClaim: () => Promise<void>): Promise<void> {
+async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClaim: () => Promise<void>, opts: OpcionesInbound): Promise<void> {
   let lockedViaje: string | null = null;
   // Contexto para el `catch` general. Vive FUERA del `try` a propósito: sin esto
   // el log de un fallo salía como `{ id, de, err }` — sin tenant, sin viaje y sin
@@ -1232,7 +1261,16 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // `incrementado === 1` marca además el ARRANQUE de una ráfaga: no había
       // nada en vuelo, así que lo que quedara anotado es de una anterior que
       // murió sin cerrarse y no puede sumarse a ésta.
-      anotarFoto(viajeId, incrementado === 1);
+      //
+      // AUDITORÍA 19 (AGEN-19C2-1): bajo ejecución SERIAL por chofer,
+      // `incrementado === 1` es cierto para CADA foto del fajo (nunca hay dos
+      // en vuelo), así que sin el freno de abajo esta línea BORRABA la
+      // libreta de las fotos anteriores en cuanto llegaba la siguiente —
+      // `anotarFoto(viajeId, true)` empieza descartando lo que hubiera. Si
+      // `cadenaPosicion` dice que esta foto NO es la primera de su cadena,
+      // ya se sabe que lo anotado es de ESTA MISMA ráfaga, no de una muerta.
+      const siguienteDeLaMismaCadena = (opts.cadenaPosicion ?? 0) > 0;
+      anotarFoto(viajeId, incrementado === 1 && !siguienteDeLaMismaCadena);
       // AQUÍ VIVÍA `llegoSola = incrementado === 1`, y era falso justo cuando
       // más importaba. `1` no significa «llegó sola»: significa «es la primera
       // en vuelo», y toda ráfaga tiene una primera. El incremento es atómico,
@@ -1928,17 +1966,31 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // más es un resumen partido en dos mensajes; el de no cerrar es el
         // silencio, que es exactamente lo que esta ronda vino a quitar.
         try {
-          const ultima = quedan === 0 || quedan === null;
+          // AUDITORÍA 19 (AGEN-19C2-1): bajo ejecución SERIAL por chofer
+          // (23-ago), `quedan` vuelve a 0 después de CADA foto —nunca hay dos
+          // en vuelo—, así que sin este freno la libreta se cerraría (y
+          // resumiría) foto por foto en vez de una sola vez para todo el
+          // fajo. `masEnEstaCadena` lo sabe de antemano (route.ts ya conoce
+          // el tamaño de la cadena de este chofer) y frena el cierre SOLO
+          // cuando de verdad vienen más mensajes detrás en esta misma
+          // cadena. El fail-safe de `quedan === null` (RPC caída) NO se
+          // toca: sigue cerrando de inmediato pase lo que pase, porque
+          // dejar la libreta abierta sobre un contador ilegible es tragarse
+          // el aviso, que es peor que un resumen partido.
+          const masEnEstaCadena = quedan !== null
+            && (opts.cadenaTotal ?? 1) > 1
+            && (opts.cadenaPosicion ?? 0) < (opts.cadenaTotal! - 1);
+          const ultima = (quedan === 0 || quedan === null) && !masEnEstaCadena;
           // Lo que se anotó mientras la ráfaga corría. Se cierra SIEMPRE que
           // ésta sea la última —aunque no haya nada anotado— para no dejar la
           // libreta viva sobre un viaje cuya ráfaga ya terminó.
           const rafaga = ultima ? cerrarRafaga(viajeId) : null;
-          // HUBO RÁFAGA si por aquí pasó más de una foto (`vistas`) o si el
-          // contador vio más de una en vuelo (`incrementado`). Se miran las dos
-          // porque cada una ve una mitad: `incrementado` es el instante en que
-          // ESTA foto se registró —la primera de una ráfaga simultánea ve 1— y
-          // `vistas` es todo lo que pasó por este proceso.
-          const huboRafaga = !!rafaga && (rafaga.vistas > 1 || incrementado > 1);
+          // HUBO RÁFAGA si por aquí pasó más de una foto (`vistas`), si el
+          // contador vio más de una en vuelo (`incrementado`), o si route.ts
+          // ya sabía que esta foto viene en una cadena de más de un mensaje
+          // del mismo chofer (AUDITORÍA 19: bajo ejecución serial nunca hay
+          // solape temporal que las dos primeras señales puedan ver).
+          const huboRafaga = !!rafaga && (rafaga.vistas > 1 || incrementado > 1 || (opts.cadenaTotal ?? 1) > 1);
 
           // UNA SOLA COSA QUE CONTAR SE CUENTA ENTERA.
           //
