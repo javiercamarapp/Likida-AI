@@ -1,9 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { traerTodo, conteo } from './pg';
 import type { CfdiXmlData } from './intake/cfdi_xml';
 import { consultarCFDI, type EstadoSat } from './intake/sat';
+import { createLlmBudget } from '@/lib/llm/budget';
 import type { Gasto } from '@/types/likida';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -204,7 +206,10 @@ export async function ingresarFacturaDesdeFoto(
   rfcFlota: string | null,
 ): Promise<ResultadoIngestaFoto> {
   const { extraerComprobante } = await import('./intake/ocr');
-  const r = await extraerComprobante(imagenes);
+  // ARQ-19C2-2: sin `signal`/`budget`, la visión caía al default del SDK
+  // (10 min) y no gastaba contra el tope diario del tenant — mismo patrón
+  // que `api/dashboard/ingesta/route.ts:80`.
+  const r = await extraerComprobante(imagenes, AbortSignal.timeout(45_000), createLlmBudget(tenantId, randomUUID()));
   const puerta = validarFotoParaIngreso(r.gasto, r.legible);
   if (!puerta.ok) return puerta;
 

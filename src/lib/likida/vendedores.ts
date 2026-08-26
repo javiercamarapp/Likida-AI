@@ -398,7 +398,13 @@ export async function listarProspectos(filtro: FiltroProspectos = {}): Promise<P
     ciudad: (f.ciudad as string) ?? null,
     vacante: (f.vacante as string) ?? null,
     fuente: String(f.fuente ?? 'censo'),
-    // `prospecto_estado_dominio` (0105) garantiza el dominio.
+    // FRONTEND-19C2-4: este cast YA NO es cierto sin más. `prospecto_estado_dominio`
+    // (0105) garantizaba el dominio cuando `EstadoProspecto` tenía las mismas 6
+    // llaves que el CHECK — pero la 0181 amplió el CHECK con los 11 estados del
+    // embudo de Cal.com sin ampliar este tipo. La base puede devolver un valor
+    // que NO está en `EstadoProspecto`; quien consuma `estado` debe validar con
+    // `esEstadoProspecto` antes de indexar un `Record<EstadoProspecto, ...>`
+    // con él (ver `agruparConteos`) — no asumir el cast a ciegas.
     estado: f.estado as EstadoProspecto,
     vendedorId: (f.vendedor_id as string) ?? null,
     tenantId: (f.tenant_id as string) ?? null,
