@@ -89,7 +89,9 @@ export async function POST(req: NextRequest) {
           guardado: r.guardado,
         });
       } catch (e) {
-        logger.error('onboarding_chat.turno', { err: e instanceof Error ? e.message : String(e) });
+        // OPERABILIDAD-19C2-6: sin tenantId/userId, un fallo aquí es un
+        // issue de log genérico sin forma de saber a qué flota afectó.
+        logger.error('onboarding_chat.turno', { tenantId: efectivo.tenantId, userId: sesion.userId, err: e instanceof Error ? e.message : String(e) });
         manda({ t: 'error', error: 'no pude guardar esa declaración' });
       } finally {
         try { controlador.close(); } catch { /* ya cerrado */ }

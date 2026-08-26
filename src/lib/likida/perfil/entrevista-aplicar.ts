@@ -143,6 +143,11 @@ async function nutrirDesdeHechos(
       });
       notas.push('Los cinco datos del receptor CFDI 4.0 ya están en la flota (uso G03).');
     } catch (e) {
+      // OPERABILIDAD-19C2-6: sin este log, un fallo de escritura fiscal
+      // durante el onboarding era invisible para observabilidad — solo
+      // quedaba la nota que el chofer/dueño ve en el chat, sin tenantId ni
+      // rastro en logs para diagnosticar por qué falló.
+      logger.error('entrevista.fiscal', { tenantId, err: e instanceof Error ? e.message : String(e) });
       notas.push(e instanceof Error ? e.message : 'No pude guardar los datos fiscales.');
     }
   }
@@ -175,6 +180,7 @@ async function nutrirDesdeHechos(
       await crearOperador(tenantId, { nombre: o.nombre, telefono: o.telefono }, actor);
       notas.push(`Operador listo para WhatsApp: ${o.nombre}.`);
     } catch (e) {
+      logger.error('entrevista.operador_alta', { tenantId, err: e instanceof Error ? e.message : String(e) });
       notas.push(e instanceof Error ? e.message : `No pude dar de alta a ${o.nombre}.`);
     }
   }
@@ -184,6 +190,7 @@ async function nutrirDesdeHechos(
       await crearUnidad(tenantId, { numeroEconomico: u.economico, placas: u.placas ?? null });
       notas.push(`Unidad ${u.economico} dada de alta.`);
     } catch (e) {
+      logger.error('entrevista.unidad_alta', { tenantId, err: e instanceof Error ? e.message : String(e) });
       notas.push(e instanceof Error ? `Unidad ${u.economico}: ${e.message}` : `No pude dar de alta ${u.economico}.`);
     }
   }

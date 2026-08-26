@@ -9,9 +9,15 @@ import { registrarLatido, puertaCron } from '@/lib/admin/salud';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 // Una llamada HTTP por flota con GPS conectado, cada una acotada a 15 s dentro
-// de `httpReal`. 60 s cubre una decena de flotas con margen; el día que sean
-// más, lo que hay que partir es la corrida por flota, no subir este número.
-export const maxDuration = 60;
+// de `httpReal`.
+//
+// RENDIMIENTO-19C2-4: el supuesto de "60s cubre una decena de flotas" ya NO
+// se cumple — medido tomando 174-188s reales contra los 60s declarados, con
+// las flotas de HOY, no una proyección a futuro. Subir el techo (mismo valor
+// que ya usa `facturar/route.ts`, el otro cron cuyo trabajo escala por
+// flota) es el parche de margen; partir la corrida por flota sigue siendo
+// el fix de fondo cuando haga falta escalar más allá de esto.
+export const maxDuration = 300;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON QUE HACE VERDAD «el GPS de tu flota».

@@ -7,7 +7,10 @@ import { alertarOperador } from '@/lib/observability/alerta';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+// RENDIMIENTO-19C2-6: medido en 155.5s reales contra los 60s declarados —
+// mismo ajuste de margen que `gps/route.ts` (ver esa nota para el porqué de
+// 300 y no una redistribución de fondo).
+export const maxDuration = 300;
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 
