@@ -64,4 +64,49 @@ describe('runtime del agente', () => {
     });
     expect(settle).toHaveBeenCalledWith(budget, { id: 'reservation-1', amountUsd: 0.25 }, 0.25);
   });
+
+  it('RENDIMIENTO-19C2-1: reservar y liquidar heredan la señal (un cliente de red profundo puede cancelarse con ella)', async () => {
+    const { currentToolSignal } = await import('./runtime-signal');
+    create.mockResolvedValueOnce({
+      choices: [{ message: { content: 'listo', tool_calls: [] } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 }, model: 'm',
+    });
+    let signalAlReservar: AbortSignal | undefined;
+    let signalAlLiquidar: AbortSignal | undefined;
+    reserve.mockImplementationOnce(async () => { signalAlReservar = currentToolSignal(); return { id: 'r-1', amountUsd: 0.1 }; });
+    settle.mockImplementationOnce(async () => { signalAlLiquidar = currentToolSignal(); });
+    const controller = new AbortController();
+    const budget = { tenantId: 't', runId: 'r', maxRunUsd: 1, maxTenantDailyUsd: 5, reservadoRunUsd: 0 };
+    await generateWithTools({
+      role: 'chat', system: 's', messages: [{ role: 'user', content: 'x' }],
+      tools: [], toolExecutor: async () => ({ success: true, result: {}, durationMs: 1 }),
+      budget, signal: controller.signal,
+    });
+    expect(signalAlReservar).toBe(controller.signal);
+    expect(signalAlLiquidar).toBe(controller.signal);
+  });
+
+  it('RENDIMIENTO-19C2-1: la señal ya disparada corta ANTES de pagar la siguiente ronda de completion', async () => {
+    const llamadasAntes = create.mock.calls.length;
+    const controller = new AbortController();
+    create.mockResolvedValueOnce({
+      choices: [{ message: { content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'runtime_corta_luego', arguments: '{}' } }] } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 }, model: 'm',
+    });
+    registerTool('runtime_corta_luego', {
+      schema: { type: 'function', function: { name: 'runtime_corta_luego', parameters: { type: 'object', properties: {} } } },
+      handler: async () => ({ ok: true }),
+    });
+    await expect(generateWithTools({
+      role: 'chat', system: 's', messages: [{ role: 'user', content: 'x' }],
+      tools: [{ type: 'function', function: { name: 'runtime_corta_luego', parameters: { type: 'object', properties: {} } } }],
+      toolExecutor: async () => {
+        controller.abort(); // la tool "gasta" el resto del tiempo y dispara la señal
+        return { success: true, result: {}, durationMs: 1 };
+      },
+      signal: controller.signal,
+      maxToolRounds: 3,
+    })).rejects.toThrow();
+    expect(create.mock.calls.length - llamadasAntes).toBe(1); // nunca llegó a pedir la segunda ronda
+  });
 });
