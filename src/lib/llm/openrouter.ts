@@ -339,7 +339,7 @@ export async function generateResponse(opts: {
       ...PROVIDER_OPTS,
     } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
     const reservation = opts.budget
-      ? await reserveLlmBudget(opts.budget, calcCost(m, Math.max(1, JSON.stringify(body.messages).length), Number(body.max_tokens ?? 500)))
+      ? await reserveLlmBudget(opts.budget, calcCost(m, Math.max(1, cotaEntradaEnTokens(body.messages)), Number(body.max_tokens ?? 500)))
       : null;
     let settled = false;
     const settle = async (amount: number) => {
@@ -873,7 +873,12 @@ export async function generateWithTools(opts: {
     // Cota conservadora: cada carácter puede representar un token en entradas
     // JSON/URLs. Se sobre-reserva y luego se liquida al costo real; nunca se
     // deja que un retry o fallback gaste sin autorización previa.
-    const inputUpperBound = Math.max(1, JSON.stringify(body.messages ?? '').length + JSON.stringify(body.tools ?? '').length);
+    // `cotaEntradaEnTokens` (no el largo crudo del JSON) para que, si algún día
+    // este ciclo de tools carga una imagen (p.ej. un adaptador de facturación
+    // con captura de pantalla), la reserva no infle por el base64 de la
+    // data-URL de la misma forma en que lo hacía `generateStructured` antes
+    // del fix de AGEN-19C2-4/OCR.
+    const inputUpperBound = Math.max(1, cotaEntradaEnTokens(body.messages ?? '') + JSON.stringify(body.tools ?? '').length);
     return reserveLlmBudget(opts.budget, calcCost(modelForRequest, inputUpperBound, maxTokens));
   };
 

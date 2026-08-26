@@ -7,11 +7,22 @@ const renew = vi.hoisted(() => vi.fn());
 vi.mock('./tool-idempotency', () => ({ claimMutation: claim, completeMutation: complete, failMutation: fail, renewMutation: renew }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { executeTool, registerTool } = await import('./tool-executor');
+const { executeTool, registerTool, timeoutToolMs } = await import('./tool-executor');
 
 describe('idempotencia durable de mutaciones', () => {
   beforeEach(() => { claim.mockReset(); complete.mockReset(); fail.mockReset(); renew.mockReset(); });
   afterEach(() => { vi.unstubAllEnvs(); });
+
+  it('AGEN-19C2-3: una mutación tiene más margen de timeout que una tool de sólo lectura', () => {
+    expect(timeoutToolMs(true)).toBeGreaterThan(timeoutToolMs(false));
+    expect(timeoutToolMs()).toBe(timeoutToolMs(false));
+  });
+
+  it('AGEN-19C2-3: LIKIDA_TOOL_MUTATION_TIMEOUT_MS solo afecta a las mutaciones', () => {
+    vi.stubEnv('LIKIDA_TOOL_MUTATION_TIMEOUT_MS', '7777');
+    expect(timeoutToolMs(true)).toBe(7777);
+    expect(timeoutToolMs(false)).not.toBe(7777);
+  });
 
   it('reclama y confirma el efecto con fencing token', async () => {
     claim.mockResolvedValueOnce({ kind: 'execute', token: 'token-1' });
@@ -113,7 +124,9 @@ describe('idempotencia durable de mutaciones', () => {
   });
 
   it('mantiene el fencing de una mutación que termina después del timeout', async () => {
-    vi.stubEnv('LIKIDA_TOOL_TIMEOUT_MS', '5');
+    // AGEN-19C2-3: una tool `isMutation` usa LIKIDA_TOOL_MUTATION_TIMEOUT_MS
+    // (con más margen por defecto), no LIKIDA_TOOL_TIMEOUT_MS.
+    vi.stubEnv('LIKIDA_TOOL_MUTATION_TIMEOUT_MS', '5');
     claim.mockResolvedValueOnce({ kind: 'execute', token: 'token-late' });
     complete.mockResolvedValueOnce(undefined);
     registerTool('mutacion_lenta_no_cooperante', {
