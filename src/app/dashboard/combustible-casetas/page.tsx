@@ -89,7 +89,8 @@ async function safeConciliacion(tenantId: string): Promise<{ ok: true; datos: Co
  * entre viajes (`detectarAnomalias`, probada).
  *
  * ── AUDITORÍA 10 — EL CRUCE DEL CFDI CONSOLIDADO YA EXISTE (5-ago-2026) ────
- * Diésel por monedero y peaje por TAG (~54% del gasto real, INEGI EAT 2024)
+ * Diésel por monedero y peaje por TAG (una fracción grande del gasto real,
+ * por estimación interna SIN FUENTE CONFIRMADA — ver `intake/cfdi_xml.ts`)
  * llegan como UN CFDI que ampara muchos días de consumo, no un ticket por
  * transacción. `intake/consolidado.ts` recibe ese XML por el MISMO WhatsApp
  * por el que ya llega cualquier otro CFDI, separa sus líneas y las liga por

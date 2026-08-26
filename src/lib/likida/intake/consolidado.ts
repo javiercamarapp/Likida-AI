@@ -1,8 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // EL JOIN DEL CFDI CONSOLIDADO — auditoría 10, hallazgo CRÍTICO fiscal.
 //
-// Diésel por monedero y peaje por TAG son ~54% del gasto real de una flota
-// (INEGI EAT 2024) y NUNCA generan un ticket por transacción: llegan como UN
+// Diésel por monedero y peaje por TAG son, por estimación interna SIN FUENTE
+// CONFIRMADA (ver la nota en `intake/cfdi_xml.ts`), una fracción grande del
+// gasto real de una flota, y NUNCA generan un ticket por transacción: llegan como UN
 // CFDI que ampara muchos días de consumo. `cfdi_xml.ts` ya sabe extraer esas
 // líneas (`CfdiLineaXml[]`, ver ese archivo). Este módulo hace lo que falta:
 // decidir a qué `gasto` ya capturado pertenece cada línea, o admitir que no
