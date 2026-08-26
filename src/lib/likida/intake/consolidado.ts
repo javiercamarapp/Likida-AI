@@ -195,7 +195,22 @@ async function ligarLineaAGasto(
   // (caseta, gasolina, …) liga igual que siempre, sin tocar ocr_extra.
   diesel?: { litros: number; claveProdServ: string },
 ): Promise<boolean> {
-  const cambios: Record<string, unknown> = { cfdi_uuid: cfdiUuid, cfdi_orden: orden };
+  // AUDITORÍA 19 (fiscal, CRÍTICO F1): sin esto, un gasto ligado a un CFDI
+  // consolidado nunca marcaba `xml_verificado`, y `cuadre/engine.ts:1248`
+  // (`if (!g.xmlVerificado) continue;`) gatea TODO el bloque de acreditamiento
+  // — no solo el IVA, también el estímulo de peaje y los litros de diésel que
+  // la Fase 1 ya captura en `ocr_extra.litros`. El resultado: el litro se
+  // guardaba y nunca se usaba, y el IVA/estímulo de un monedero o TAG salían
+  // en $0 sin avisar — la MISMA garantía que ya vale para el CFDI 1:1
+  // (`repo.ts:updateGastoCfdiXml`, `processor.ts` al crear desde XML), porque
+  // el match monto+fecha contra la línea del CFDI (`conciliarLineas`, o un
+  // humano vía `resolverLineaAMano`) es la misma verificación que un CFDI
+  // suelto. NO se copian `iva_traslado`/`ieps_traslado` del documento: el
+  // estándar (ECC12/concepto_base) no los da POR LÍNEA, solo en el total del
+  // CFDI completo, y asignarle el total del documento a una sola transacción
+  // sería inventar un desglose que no existe — se deja `null`, que es lo que
+  // hace que el motor avise "IEPS no desglosado" en vez de acreditar de más.
+  const cambios: Record<string, unknown> = { cfdi_uuid: cfdiUuid, cfdi_orden: orden, xml_verificado: true };
   if (diesel) {
     // Lectura + fusión + escritura sobre `ocr_extra` — mismo patrón que
     // `updateGastoCfdiXml` en repo.ts (auditoría 12): el jsonb ya guarda

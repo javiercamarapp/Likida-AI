@@ -321,6 +321,7 @@ describe('resolverLineaAMano — la pantalla que faltaba, contra Supabase mockea
       cfdi_orden: 2,
       clave_prod_serv: '15101505',
       ocr_extra: { producto: 'Diesel', estacion: 'PEMEX 4521', litros: 120.5 },
+      xml_verificado: true,
     });
   });
 
@@ -337,6 +338,7 @@ describe('resolverLineaAMano — la pantalla que faltaba, contra Supabase mockea
       cfdi_uuid: 'uuid-abc',
       cfdi_orden: 2,
       clave_prod_serv: '15101505',
+      xml_verificado: true,
     });
     expect(updateGasto?.payload).not.toHaveProperty('ocr_extra');
     expect(logger.warn).toHaveBeenCalledWith(
@@ -351,9 +353,24 @@ describe('resolverLineaAMano — la pantalla que faltaba, contra Supabase mockea
     expect(r).toEqual({ ok: true });
 
     const updateGasto = updatesVistos.find((u) => u.tabla === 'gasto');
-    expect(updateGasto?.payload).toEqual({ cfdi_uuid: 'uuid-abc', cfdi_orden: 2 });
+    expect(updateGasto?.payload).toEqual({ cfdi_uuid: 'uuid-abc', cfdi_orden: 2, xml_verificado: true });
     // Y ni siquiera se leyó `gasto.ocr_extra`: no hay litros que fusionar.
     expect(filtrosVistos.some((f) => f.tabla === 'gasto' && f.op === 'select')).toBe(false);
+  });
+
+  it('AUDITORÍA 19 (fiscal CRÍTICO F1): TODA línea ligada marca xml_verificado — sin esto, engine.ts:1248 nunca acredita IVA/estímulo/litros de un consolidado', async () => {
+    // Sin litros/clave (p.ej. una caseta) es el caso más fácil de olvidar:
+    // no hay ningún otro campo fiscal que delate que esto es un CFDI
+    // verificado, así que si `xml_verificado` faltara aquí nadie más lo notaría.
+    respLineaLectura = { data: filaLinea({ litros: null, clave_prod_serv: null }), error: null };
+    await resolverLineaAMano('t1', 'linea-1', { tipo: 'ligar', gastoId: 'g1' }, 'user-1');
+
+    const updateGasto = updatesVistos.find((u) => u.tabla === 'gasto');
+    expect(updateGasto?.payload).toMatchObject({ xml_verificado: true });
+    // Y NO se le inventa un desglose que el estándar no da por línea: el motor
+    // debe seguir viendo iva_traslado/ieps_traslado ausentes, no en $0 falso.
+    expect(updateGasto?.payload).not.toHaveProperty('iva_traslado');
+    expect(updateGasto?.payload).not.toHaveProperty('ieps_traslado');
   });
 });
 

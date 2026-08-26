@@ -2,7 +2,7 @@
 // Fuente única de verdad del cuadre; la usan las tools del agente Y la guardia
 // determinística del processor (para no depender de que el LLM llame la tool).
 
-import { cuadrarViaje } from './engine';
+import { cuadrarViaje, medioNoAdmitidoCombustible } from './engine';
 import { ventanaDelViaje } from './fecha_dudosa';
 import { getViaje, getGastos, getOperador, getAcumuladoCombustible, getPerfilCrudo } from '../repo';
 import { getConfig } from '../config';
@@ -111,9 +111,16 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
   // el motor; sumarlos doblaría el contador). AUDITORÍA 16, ALTO (datos): solo
   // los del MISMO ejercicio — un gasto de otro año (o sin fecha) no está en el
   // contador y restarlo fabricaba un previo negativo.
+  //
+  // AUDITORÍA 19 (fiscal F2, CRÍTICO): `formaPago === '01'` era la MISMA
+  // frontera equivocada que `sumar_combustible_ejercicio` (mig. 0190) —
+  // `medioNoAdmitidoCombustible` es el predicado real, ya verificado contra
+  // la LISR 27-III. Sin este cambio, restar solo el '01' de este viaje contra
+  // un total SQL que ahora sí cuenta los demás medios habría dejado el
+  // "previo" con la porción no-'01' de ESTE viaje contada DOS veces.
   const efectivoDeEsteViaje = gastos
     .filter((g) => (g.fecha?.slice(0, 4) ?? anioEjercicio) === anioEjercicio
-      && g.formaPago === '01' && (g.concepto === 'diesel' || clavesCombustible.includes(g.claveProdServ ?? '')))
+      && medioNoAdmitidoCombustible(g.formaPago) && (g.concepto === 'diesel' || clavesCombustible.includes(g.claveProdServ ?? '')))
     .reduce((s, g) => s + Number(g.monto ?? 0), 0);
   const efectivoPrevEjercicio = Math.max(0, totalesEjercicio.efectivo - efectivoDeEsteViaje);
   const totalCombustibleEjercicio = totalesEjercicio.totalCombustible;

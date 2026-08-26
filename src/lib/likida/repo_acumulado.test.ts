@@ -81,15 +81,20 @@ function round2(n: number): number {
 
 /**
  * EL REDUCTOR SQL — escrito de forma INDEPENDIENTE a `legacyAcumuladoJs`,
- * espejando `sumar_combustible_ejercicio` (0084, corregida por la 0112)
- * línea por línea: mismo `where` (incluido el `monto > 0` que la RPC NO
- * tenía antes de la 0112), mismo `sum(monto) filter (where forma_pago =
- * '01')`. Simula lo que la RPC devolvería sobre el MISMO dataset — es lo que
- * el mock de `.rpc()` usa como respuesta, para que la prueba de equivalencia
- * compare dos IMPLEMENTACIONES DISTINTAS del mismo cálculo, no la misma
- * copiada dos veces. Devuelve `{ total, efectivo }` — los nombres de columna
- * REALES de `returns table (total numeric, efectivo numeric)`.
+ * espejando `sumar_combustible_ejercicio` (0084, corregida por la 0112, y por
+ * la 0190 — AUDITORÍA 19 fiscal F2) línea por línea: mismo `where` (incluido
+ * el `monto > 0` que la RPC NO tenía antes de la 0112), y desde la 0190 el
+ * numerador ya NO es `forma_pago = '01'` sino la lista CERRADA que la LISR
+ * 27-III admite (`medioNoAdmitidoCombustible`, engine.ts:153) — dinero
+ * electrónico, vales, dación en pago, compensación y novación también
+ * cuentan como "medio distinto", no solo efectivo. Simula lo que la RPC
+ * devolvería sobre el MISMO dataset — es lo que el mock de `.rpc()` usa como
+ * respuesta, para que la prueba de equivalencia compare dos
+ * IMPLEMENTACIONES DISTINTAS del mismo cálculo, no la misma copiada dos
+ * veces. Devuelve `{ total, efectivo }` — los nombres de columna REALES de
+ * `returns table (total numeric, efectivo numeric)`.
  */
+const MEDIOS_ADMITIDOS_LISR_27_III = ['02', '03', '04', '05', '28', '29'];
 function sqlEquivalente(
   filas: Fila[],
   tenantId: string,
@@ -102,7 +107,9 @@ function sqlEquivalente(
     && g.monto > 0
     && (g.concepto === 'diesel' || (claves !== null && claves.length > 0 && claves.includes(g.clave_prod_serv ?? ''))));
   const total = candidatas.reduce((s, g) => s + g.monto, 0);
-  const efectivo = candidatas.filter((g) => g.forma_pago === '01').reduce((s, g) => s + g.monto, 0);
+  const efectivo = candidatas
+    .filter((g) => g.forma_pago != null && g.forma_pago !== '99' && !MEDIOS_ADMITIDOS_LISR_27_III.includes(g.forma_pago))
+    .reduce((s, g) => s + g.monto, 0);
   return { total, efectivo };
 }
 
@@ -238,5 +245,31 @@ describe('getAcumuladoCombustible — el tenant viaja como argumento de la RPC',
     await getAcumuladoCombustible('t1', 2026, ['15101505']);
     const llamada = llamadasRpc.find((l) => l.fn === 'sumar_combustible_ejercicio')!;
     expect(llamada.args).toEqual({ p_tenant: 't1', p_anio: 2026, p_claves: ['15101505'] });
+  });
+});
+
+describe('AUDITORÍA 19 (fiscal F2, CRÍTICO): el numerador ya no es solo forma_pago=01', () => {
+  it('vales, dinero electrónico, dación en pago, compensación y novación TAMBIÉN cuentan como "medio distinto" (LISR 27-III)', async () => {
+    servidor.filas = [
+      { tenant_id: 't1', ejercicio: 2026, monto: 1_000, forma_pago: '01', concepto: 'diesel' }, // efectivo de toda la vida
+      { tenant_id: 't1', ejercicio: 2026, monto: 500, forma_pago: '06', concepto: 'diesel' },   // dinero electrónico
+      { tenant_id: 't1', ejercicio: 2026, monto: 300, forma_pago: '08', concepto: 'diesel' },   // vales — el caso del hallazgo
+      { tenant_id: 't1', ejercicio: 2026, monto: 200, forma_pago: '12', concepto: 'diesel' },   // dación en pago
+      { tenant_id: 't1', ejercicio: 2026, monto: 150, forma_pago: '17', concepto: 'diesel' },   // compensación
+      { tenant_id: 't1', ejercicio: 2026, monto: 120, forma_pago: '23', concepto: 'diesel' },   // novación
+      { tenant_id: 't1', ejercicio: 2026, monto: 4_000, forma_pago: '04', concepto: 'diesel' }, // tarjeta de crédito: admitido, NO cuenta
+    ];
+    const r = await getAcumuladoCombustible('t1', 2026);
+    // 1000+500+300+200+150+120 = 2270 "medio distinto"; la tarjeta (04) queda fuera.
+    expect(r).toEqual({ efectivo: 2_270, totalCombustible: 6_270 });
+  });
+
+  it("'99' (no pagado, RMF 2.7.1.29 fr. II) NO cuenta como medio distinto — no es que se pagó mal, es que no se ha pagado", async () => {
+    servidor.filas = [
+      { tenant_id: 't1', ejercicio: 2026, monto: 1_000, forma_pago: '99', concepto: 'diesel' },
+      { tenant_id: 't1', ejercicio: 2026, monto: 500, forma_pago: '04', concepto: 'diesel' },
+    ];
+    const r = await getAcumuladoCombustible('t1', 2026);
+    expect(r).toEqual({ efectivo: 0, totalCombustible: 1_500 });
   });
 });
