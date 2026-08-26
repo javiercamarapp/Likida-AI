@@ -50,6 +50,7 @@ REGLAS DE ESCRITURA:
 - Termina SIEMPRE con una pregunta de agenda concreta: "¿le vienen bien 15 minutos el jueves?" — no "¿le interesaría platicar?".
 - Remitente: el vendedor humano indicado, una persona. Nunca "el equipo de Likida".
 - Español mexicano directo. Prohibido "revolucionario", "innovador", "inteligente", "de vanguardia", "solución integral". Sin emojis, sin negritas de venta, sin postdata de urgencia falsa.
+- Si el dossier trae un Contacto, para dirigirte a él por su nombre escribe EXACTAMENTE el token \`{{NOMBRE}}\` (con las llaves dobles, tal cual) donde iría su nombre de pila — nunca inventes ni copies un nombre distinto. Ese token se reemplaza fuera de este modelo. Si el dossier dice "no capturado", no uses el token: saluda sin nombre ("Hola,").
 
 LAS TRES PROHIBICIONES (romper cualquiera invalida el correo entero):
 1. NO CITES LA VACANTE ni menciones que la viste. El dolor se alude por OFICIO: "liquidar viajes a mano", "el cierre administrativo del viaje", "la comprobación de gastos del operador".
@@ -107,6 +108,32 @@ function presupuestoDelRedactor(contexto: RedactorExecutionContext | undefined):
   return createLlmBudget(contexto?.tenantId, contexto?.runId ?? randomUUID(), {
     maxTenantDailyUsd: contexto?.maxTenantDailyUsd,
   });
+}
+
+const MARCADOR_NOMBRE = '{{NOMBRE}}';
+
+/** El nombre de pila del contacto — lo único que se sustituye de vuelta, y
+ *  SOLO fuera del modelo (ver la nota de AUDITORÍA 19 legal C2 en el
+ *  dossier). `null` si no hay contacto capturado: sin nombre no hay nada
+ *  que sustituir, y el SYSTEM le pide al modelo no usar el marcador en ese
+ *  caso. Exportada para su prueba. */
+export function primerNombreDelContacto(contactoNombre: string | null): string | null {
+  const primero = contactoNombre?.trim().split(/\s+/)[0];
+  return primero || null;
+}
+
+/**
+ * Reemplaza el marcador por el nombre de pila real DESPUÉS de la completion
+ * — el modelo nunca ve `nombre`. Si no hay nombre (el dossier decía "no
+ * capturado" y aun así el modelo usó el marcador, o lo usó mal), se limpia
+ * el saludo a secas en vez de dejar "Hola {{NOMBRE}}," visible en la pieza
+ * que un humano va a aprobar.
+ */
+export function sustituirMarcador(texto: string, nombre: string | null): string {
+  if (nombre) return texto.split(MARCADOR_NOMBRE).join(nombre);
+  return texto
+    .replace(new RegExp(`\\s*${MARCADOR_NOMBRE.replace(/[{}]/g, '\\$&')}\\s*,`, 'g'), ',')
+    .split(MARCADOR_NOMBRE).join('');
 }
 
 /** Parsea la salida markdown del modelo. LANZA si la variante A no se puede
@@ -192,9 +219,20 @@ export async function redactarCorreoFrio(
   }
 
   // 4) El dossier: SOLO los hechos de la fila, declarados como tales.
+  //
+  // AUDITORÍA 19 (legal C2, CRÍTICO): el aviso de privacidad del Cerebro de
+  // ventas promete «tu nombre no sale de Likida: la ficha que recibe el
+  // modelo de lenguaje lleva un marcador en lugar de tu nombre... tu nombre
+  // de pila se pone después, dentro de Likida» (privacidad.ts:757) — pero
+  // este archivo mandaba `prospecto.contacto_nombre` COMPLETO, tal cual, a
+  // un modelo externo (OpenRouter). El aviso describía un mecanismo que
+  // nunca se construyó. `primerNombreDelContacto` se queda LOCAL: el modelo
+  // solo ve el marcador `{{NOMBRE}}` (instrucción en SYSTEM); el nombre de
+  // pila real se sustituye DESPUÉS de la completion, en `sustituirMarcador`.
+  const primerNombre = primerNombreDelContacto(prospecto.contacto_nombre);
   const dossier = [
     `Empresa: ${prospecto.empresa}`,
-    prospecto.contacto_nombre ? `Contacto: ${prospecto.contacto_nombre}` : 'Contacto: no capturado',
+    primerNombre ? 'Contacto: {{NOMBRE}}' : 'Contacto: no capturado',
     prospecto.ciudad ? `Ciudad: ${prospecto.ciudad}` : 'Ciudad: no capturada',
     `Etapa del pipeline: ${prospecto.estado}`,
     prospecto.notas ? `Notas del vendedor: ${prospecto.notas.slice(0, 500)}` : 'Notas: ninguna',
@@ -229,24 +267,31 @@ export async function redactarCorreoFrio(
     throw new DatoInvalido('El Redactor no pudo escribir en este momento — inténtalo de nuevo.');
   }
 
-  // 6) Parsear y ENCOLAR. La pieza jamás sale de aquí hacia ningún correo.
+  // 6) Parsear, SUSTITUIR el marcador por el nombre de pila real (nunca visto
+  // por el modelo — AUDITORÍA 19 legal C2), y ENCOLAR. La pieza jamás sale de
+  // aquí hacia ningún correo.
   let pieza: PiezaRedactada;
   try {
     const v = parsearVariantes(texto);
+    const con = (s: string) => sustituirMarcador(s, primerNombre);
+    const asuntoA = con(v.a.asunto);
+    const cuerpoA = con(v.a.cuerpo);
+    const varianteB = v.b ? { asunto: con(v.b.asunto), cuerpo: con(v.b.cuerpo) } : null;
+    const varianteC = v.c ? con(v.c) : null;
     const aviso = prospecto.correo?.trim()
       ? null
       : 'El prospecto no tiene correo capturado — conseguir el contacto ANTES de aprobar.';
     const piezaId = await encolarPieza({
       tipo: 'correo_frio', prioridad: 'normal', agente: 'redactor',
-      prospectoId, titulo: v.a.asunto,
-      cuerpo: v.a.cuerpo,
+      prospectoId, titulo: asuntoA,
+      cuerpo: cuerpoA,
       fuentes: {
-        variante_b: v.b, variante_c: v.c, datos_usados: v.datosUsados,
+        variante_b: varianteB, variante_c: varianteC, datos_usados: v.datosUsados,
         dossier: { empresa: prospecto.empresa, ciudad: prospecto.ciudad, etapa: prospecto.estado, fuente: prospecto.fuente },
         ...(aviso ? { aviso } : {}),
       },
     });
-    pieza = { piezaId, asunto: v.a.asunto, aviso, costoUsd };
+    pieza = { piezaId, asunto: asuntoA, aviso, costoUsd };
   } catch (e) {
     // El modelo YA gastó: el costo se registra aunque la pieza no entrara —
     // tirarlo dejaría al techo diario ciego al modo de falla que más gasta.
