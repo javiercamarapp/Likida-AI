@@ -8693,3 +8693,65 @@ begin
   raise exception E'QA_PANEL_0185  hash_rebota=%  confirmacion_rebota=%  carril_rebota=%  pasos=%  nombre_final=%  tras_cascade=%  anon=%  nota=%   (esperado t / t / t / 1 / intake · OCR / 0 / 0 / RLS lo deja a ciegas)',
     hash_rebota, confirmacion_rebota, carril_rebota, n_pasos, nombre_final, n_tras_cascade, n_anon, nota_anon;
 end $$;
+
+-- ── 154. El tope diario de presupuesto de IA usa el día de México, y una reserva muerta vence (mig. 0193) ──
+--
+-- AGEN-19C2-4 — el tope diario reiniciaba en medianoche UTC (18:00 hora de
+-- México), y una reserva de una invocación que muere sin liquidarse (crash,
+-- deploy, OOM) contaba contra el tope para siempre — no vencía.
+--
+-- (a)/(b) prueban la fórmula de "medianoche MX" contra un instante FIJO
+-- (2027-01-01T02:00:00-06:00), no contra `now()` — así el bloque da el mismo
+-- resultado sin importar a qué hora real corra en CI — y confirman que la
+-- función DESPLEGADA (no solo la fórmula en abstracto) la usa.
+-- (c)/(d) prueban que una reserva vencida (`expira_en` en el pasado) deja de
+-- contar contra el tope del tenant, pero una vigente sigue contando igual
+-- que antes — el fix no perdona presupuesto real, solo el fantasma de una
+-- invocación muerta.
+do $$
+declare
+  t uuid;
+  r_expirada uuid := gen_random_uuid();
+  r_nueva_c  uuid := gen_random_uuid();
+  r_vigente  uuid := gen_random_uuid();
+  r_nueva_d  uuid := gen_random_uuid();
+  ejemplo_mx timestamptz;
+  formula_ok boolean;
+  def_fn text;
+  fn_usa_mx boolean;
+  fn_usa_expira boolean;
+  acepta_tras_expirada boolean;
+  acepta_tras_vigente boolean;
+begin
+  insert into public.tenant (nombre) values ('ZZZ VERIF 0193') returning id into t;
+
+  -- (a) 2027-01-01T02:00:00-06:00 es la 01:00 del 1-ene en MX; su medianoche
+  -- MX es el 1-ene 00:00 hora MX = 2027-01-01T00:00:00-06:00 en UTC.
+  ejemplo_mx := date_trunc('day', timestamptz '2027-01-01T02:00:00-06:00' at time zone 'America/Mexico_City')
+                  at time zone 'America/Mexico_City';
+  formula_ok := ejemplo_mx = timestamptz '2027-01-01T00:00:00-06:00';
+
+  -- (b) La función desplegada de verdad usa esa fórmula (y la columna de
+  -- expiración), no `date_trunc('day', now())` a secas.
+  def_fn := pg_get_functiondef('public.reservar_presupuesto_llm(uuid,uuid,uuid,numeric,numeric,numeric)'::regprocedure);
+  fn_usa_mx := def_fn ilike '%America/Mexico_City%';
+  fn_usa_expira := def_fn ilike '%expira_en%';
+
+  -- (c) Una reserva YA EXPIRADA no cuenta contra el tope del tenant.
+  insert into public.llm_presupuesto_reserva (id, tenant_id, run_id, reservado_usd, estado, expira_en)
+    values (r_expirada, t, gen_random_uuid(), 0.90, 'reservado', now() - interval '1 minute');
+  acepta_tras_expirada := public.reservar_presupuesto_llm(r_nueva_c, t, gen_random_uuid(), 0.50, 10.00, 1.00);
+  delete from public.llm_presupuesto_reserva where id in (r_expirada, r_nueva_c);
+
+  -- (d) Pero una reserva VIGENTE (no vencida) SÍ sigue contando: 0.90 + 0.50
+  -- > 1.00 de tope, así que esta debe RECHAZARSE.
+  insert into public.llm_presupuesto_reserva (id, tenant_id, run_id, reservado_usd, estado, expira_en)
+    values (r_vigente, t, gen_random_uuid(), 0.90, 'reservado', now() + interval '10 minutes');
+  acepta_tras_vigente := public.reservar_presupuesto_llm(r_nueva_d, t, gen_random_uuid(), 0.50, 10.00, 1.00);
+
+  delete from public.llm_presupuesto_reserva where tenant_id = t;
+  delete from public.tenant where id = t;
+
+  raise exception 'PRESUPUESTO_LLM_0193  formula_dia_mx_ok=%  fn_usa_mx=%  fn_usa_expira=%  acepta_tras_expirada=%  acepta_tras_vigente=%   (esperado t / t / t / t / f)',
+    formula_ok, fn_usa_mx, fn_usa_expira, acepta_tras_expirada, acepta_tras_vigente;
+end $$;

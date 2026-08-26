@@ -56,9 +56,15 @@ export interface RegisteredTool {
   isMutation?: boolean;
 }
 
-export function timeoutToolMs(): number {
-  const value = Number(process.env.LIKIDA_TOOL_TIMEOUT_MS);
-  return Number.isFinite(value) && value > 0 ? Math.round(value) : 15_000;
+export function timeoutToolMs(isMutation?: boolean): number {
+  const value = Number(isMutation ? process.env.LIKIDA_TOOL_MUTATION_TIMEOUT_MS : process.env.LIKIDA_TOOL_TIMEOUT_MS);
+  if (Number.isFinite(value) && value > 0) return Math.round(value);
+  // AGEN-19C2-3: una tool marcada `isMutation` (p.ej. `guardar_liquidacion`)
+  // hace 2 generaciones de PDF + 2 subidas + 2 RPCs en serie — del mismo
+  // orden de magnitud que el deadline genérico de 15s, y no se puede
+  // reintentar sin riesgo de duplicar efectos si el timeout la corta a
+  // medio camino. Se le da más margen que a una tool de sólo lectura.
+  return isMutation ? 40_000 : 15_000;
 }
 
 const REGISTRY = new Map<string, RegisteredTool>();
@@ -115,7 +121,7 @@ export async function executeTool(
   if (!tool) {
     return { success: false, result: null, error: `tool desconocida: ${name}`, durationMs: 0 };
   }
-  const toolSignal = combineAbortSignals(ctx.signal, signal, timeoutSignal(timeoutToolMs()));
+  const toolSignal = combineAbortSignals(ctx.signal, signal, timeoutSignal(timeoutToolMs(tool.isMutation)));
   const effectiveCtx = { ...ctx, signal: toolSignal };
   let durable: Awaited<ReturnType<typeof claimMutation>> | null = null;
   if (tool.isMutation && !ctx.runId) {
