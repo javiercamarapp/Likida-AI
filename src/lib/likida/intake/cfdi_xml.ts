@@ -13,9 +13,10 @@
 // ═══ AUDITORÍA 10, CRÍTICO FISCAL — LÍNEAS DE UN CONSOLIDADO ══════════════
 //
 // Diésel por monedero (Edenred, Efectivale…) y peaje por TAG (IAVE, PASE,
-// TeleVía) son ~54% del gasto real de una flota (INEGI EAT 2024) y llegan
-// como UN SOLO CFDI que ampara MUCHAS transacciones de MUCHOS días — no un
-// ticket por transacción. Hasta hoy este parser asumía 1 CFDI = 1 concepto
+// TeleVía) son, por estimación interna SIN FUENTE CONFIRMADA (no verificado
+// contra INEGI, SICT ni CANACAR — no citar la cifra hacia afuera), una
+// fracción grande del gasto real de una flota, y llegan como UN SOLO CFDI que
+// ampara MUCHAS transacciones de MUCHOS días — no un ticket por transacción. Hasta hoy este parser asumía 1 CFDI = 1 concepto
 // "representativo" (`claveProdServ`/`complementoHidrocarburos` de arriba), que
 // es correcto para un ticket suelto pero tira al piso la granularidad de un
 // consolidado.
