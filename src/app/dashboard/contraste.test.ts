@@ -102,6 +102,31 @@ describe('modo claro: lo que se proyecta en la sala', () => {
     const muted = token('@theme', '--color-muted');
     expect(contraste(faint, SUPERFICIE)).toBeLessThan(contraste(muted, SUPERFICIE));
   });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // BARRIDO MEDIO/BAJO (auditoría 19) — `--g1` no es solo el fondo de una
+  // barra de gráfica: es el `<div style={{ background: 'var(--g1)' }}>` que
+  // envuelve TODA la consola en /admin y /dashboard (decenas de páginas), y
+  // ninguna prueba lo había medido como fondo de texto. `--faint` y `--muted`
+  // pasaban contra blanco y --bg pero medían 4.04:1 y 4.16:1 contra el --g1
+  // claro por defecto (#fdebd9) — por debajo del 4.5:1 de AA. `.tema-neutro`
+  // (el que de hecho usan /admin y /dashboard, ver chrome.tsx) sobreescribe
+  // --g1 a #f4f4f5 pero NO --faint/--muted, así que ese fondo también cuenta.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('--faint y --muted pasan AA contra --g1 (el fondo de la consola, no solo de una barra)', () => {
+    const faint = token(':root', '--faint');
+    const muted = token('@theme', '--color-muted');
+    const g1Default = token(':root', '--g1');
+    // '\n.tema-neutro' (con el salto de línea) y no '.tema-neutro' a secas:
+    // ese substring también aparece dentro de ':root[data-theme="dark"]
+    // .tema-neutro {' —el override del modo oscuro que hoy no se sirve—, y
+    // `indexOf` se hubiera quedado con ESE bloque (otro --g1, otro problema).
+    const g1Neutro = token('\n.tema-neutro', '--g1');
+    for (const g1 of [g1Default, g1Neutro]) {
+      expect(contraste(faint, g1)).toBeGreaterThanOrEqual(AA_TEXTO);
+      expect(contraste(muted, g1)).toBeGreaterThanOrEqual(AA_TEXTO);
+    }
+  });
 });
 
 describe('modo oscuro: el mismo token, el otro color', () => {

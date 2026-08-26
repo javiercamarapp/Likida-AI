@@ -497,11 +497,14 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
   // ── El toque se registra solo (0130): al abrir WhatsApp/correo, fila al
   // historial — fuego y olvido, el link abre igual aunque la red falle. ────
   const tocar = (id: string, canal: 'whatsapp' | 'correo') => {
-    void fetch('/api/admin/mapa-prospectos/toque', {
+    // .catch() porque "la red falle" (el comentario de arriba) sin uno deja
+    // una promesa rechazada sin atrapar — ruido de "Uncaught (in promise)" en
+    // la consola del que use esto, por algo que a propósito no debe avisar.
+    fetch('/api/admin/mapa-prospectos/toque', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, canal, estado: 'iniciado' }),
-    });
+    }).catch(() => undefined);
   };
 
   // ── El agente experto en vivo: afinar el mensaje de UNA tarjeta ──────────

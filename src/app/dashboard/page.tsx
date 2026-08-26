@@ -39,8 +39,10 @@ export default async function DashboardInicio({
   const base = sp.tenant ? `?tenant=${sp.tenant}` : sp.vista ? `?vista=${sp.vista}` : '';
   const sufijo = sp.rol ? `${base}${base ? '&' : '?'}rol=${sp.rol}` : base;
 
-  // El dueño declara el perfil ANTES de ver cifras. Sin el umbral de peaje
-  // el motor fail-open y el Resumen pintaría un 50% que quizá no le toca.
+  // El dueño declara el perfil ANTES de ver cifras. Sin el umbral de peaje el
+  // motor es fail-closed: el estímulo queda en $0 hasta declarar (FISCAL
+  // 19C2, forma.tsx), así que sin este paso el Resumen abriría mostrando un
+  // $0 que probablemente no es el número real de la flota.
   // Un bache leyendo el perfil NO atrapa: mejor el panel a medias que la
   // puerta cerrada. El superadmin no se redirige — está viendo, no onboarding.
   if (rol === 'flota_admin' && tenantExiste) {

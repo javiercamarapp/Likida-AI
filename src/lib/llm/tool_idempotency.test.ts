@@ -5,12 +5,13 @@ const complete = vi.hoisted(() => vi.fn());
 const fail = vi.hoisted(() => vi.fn());
 const renew = vi.hoisted(() => vi.fn());
 vi.mock('./tool-idempotency', () => ({ claimMutation: claim, completeMutation: complete, failMutation: fail, renewMutation: renew }));
-vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+const loggerError = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: loggerError } }));
 
 const { executeTool, registerTool, timeoutToolMs } = await import('./tool-executor');
 
 describe('idempotencia durable de mutaciones', () => {
-  beforeEach(() => { claim.mockReset(); complete.mockReset(); fail.mockReset(); renew.mockReset(); });
+  beforeEach(() => { claim.mockReset(); complete.mockReset(); fail.mockReset(); renew.mockReset(); loggerError.mockReset(); });
   afterEach(() => { vi.unstubAllEnvs(); });
 
   it('AGEN-19C2-3: una mutación tiene más margen de timeout que una tool de sólo lectura', () => {
@@ -149,5 +150,33 @@ describe('idempotencia durable de mutaciones', () => {
     await new Promise((resolve) => setTimeout(resolve, 25));
     expect(complete).toHaveBeenCalledWith('t', 'mutacion_lenta_no_cooperante:t:v:-', 'token-late', { committed: true });
     expect(fail).not.toHaveBeenCalled();
+  });
+
+  it('TOOL-CALLING-19C2-2: un handler que nunca asienta su promesa deja de renovar el lease tras el techo', async () => {
+    // Un timeout de tool enorme (nunca dispara en esta ventana de prueba)
+    // aísla la señal que se quiere probar: el TECHO de renovaciones, no el
+    // deadline del executor. El lease se ajusta al piso real (1s) para no
+    // necesitar minutos de tiempo simulado.
+    vi.stubEnv('LIKIDA_TOOL_MUTATION_TIMEOUT_MS', '100000000');
+    vi.stubEnv('LIKIDA_TOOL_IDEMPOTENCY_LEASE_MS', '100');
+    claim.mockResolvedValueOnce({ kind: 'execute', token: 'token-colgado' });
+    renew.mockResolvedValue(true);
+    registerTool('mutacion_colgada', {
+      isMutation: true,
+      schema: { type: 'function', function: { name: 'mutacion_colgada', parameters: { type: 'object', properties: {} } } },
+      handler: async () => new Promise(() => undefined), // nunca resuelve ni rechaza
+    });
+
+    vi.useFakeTimers();
+    try {
+      void executeTool('mutacion_colgada', {}, { tenantId: 't', viajeId: 'v', runId: 'r' });
+      await vi.advanceTimersByTimeAsync(0); // deja correr el claim (microtask) antes del primer tick
+      await vi.advanceTimersByTimeAsync(1000 * 11); // 11 ticks de 1s (el piso real de renewEveryMs)
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(renew).toHaveBeenCalledTimes(10); // el 11º tick ya no renueva: hit el techo
+    expect(loggerError).toHaveBeenCalledWith('tool.lease_renovacion_techo', expect.objectContaining({ renovaciones: 11 }));
   });
 });

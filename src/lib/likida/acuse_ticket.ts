@@ -145,6 +145,19 @@ export interface LecturaTicket {
    *  `esMontoImplausible`). No es un juicio sobre el chofer: es una cifra que
    *  nadie puede dar por buena sin verla. */
   montoImplausible?: boolean;
+  /** FISCAL-19C2-3 (barrido MEDIO/BAJO): la moneda que el OCR leyó del
+   *  comprobante (`ocrExtra.moneda`). `undefined`/`'MXN'` no cambia nada —
+   *  cualquier otro valor evita anunciar un monto extranjero como si fueran
+   *  pesos (el motor ya lo excluye del acreditamiento vía `moneda_extranjera`
+   *  en `engine.ts`, pero el acuse inmediato mostraba la cifra cruda). */
+  moneda?: string;
+}
+
+/** El monto del acuse, con el código de moneda al frente si NO es MXN —
+ *  nunca formatearlo como pesos cuando el comprobante dice otra cosa. */
+function montoDelAcuse(l: LecturaTicket): string {
+  const monto = mxn(l.montoMxn ?? 0);
+  return l.moneda && l.moneda !== 'MXN' ? `${l.moneda} ${monto.replace(/^\$/, '')}` : monto;
 }
 
 export interface Decision {
@@ -234,7 +247,7 @@ export function lineaDeSaldo(e: EstadoViaje | null): string {
 export function mensajeAcuse(l: LecturaTicket, estado: EstadoViaje | null): string {
   const partes = [
     l.concepto ?? 'Comprobante',
-    mxn(l.montoMxn ?? 0),
+    montoDelAcuse(l),
     l.fecha ? fechaMx(l.fecha) : null,
   ].filter(Boolean);
 
@@ -260,7 +273,7 @@ export function mensajeConfirmar(
 ): MensajeConBotones {
   const partes = [
     l.concepto ?? 'Comprobante',
-    mxn(l.montoMxn ?? 0),
+    montoDelAcuse(l),
     l.fecha ? fechaMx(l.fecha) : null,
   ].filter(Boolean);
 
