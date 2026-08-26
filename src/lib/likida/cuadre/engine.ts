@@ -233,7 +233,7 @@ export const LECTURA_RFA_29_PRORRATEO =
   'del ejercicio — confírmela con su contador.';
 
 export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
-export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'consumo_bar', 'ticket_monedero'];
+export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'consumo_bar', 'ticket_monedero', 'renglones_ajenos'];
 
 /**
  * LA ÚNICA definición de en qué cubeta cae un gasto. Vive aquí, exportada, para
@@ -522,14 +522,21 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
           const pct = total > 0 ? Math.round((acumulado / total) * 100) : 0;
           diferencias.push({
             tipo: 'combustible_efectivo_dentro15', concepto: g.concepto, monto: 0,
+            // FISCAL-19C2-4: `esperado` es lo que `derivoLaConfig` (analytics.ts)
+            // compara contra el `acumulado` recalculado del panel para detectar
+            // deriva — sin él, si `totalCombustibleEjercicio` cambia después de
+            // archivar esta liquidación, el TIPO sigue igual en ambos lados y la
+            // deriva pasa desapercibida.
             nota: `${etiqueta} ${medio} — deducible por la facilidad del 15% (RFA 2026 regla 2.9): el ejercicio lleva ${mxn(acumulado)} de ${mxn(total)} de combustible pagado con medios que la LISR 27-III no admite (${pct}% del total, tope 15%). No acredita IEPS.`,
             gastoId: g.id,
+            esperado: acumulado,
           });
         } else {
           diferencias.push({
             tipo: 'efectivo_sobre_15', concepto: g.concepto, monto: excedenteDeEste,
             nota: `${etiqueta} ${medio} — el ejercicio lleva ${mxn(acumulado)} de combustible pagado con medios que la LISR 27-III no admite, contra un tope de ${mxn(tope)} (15% de ${mxn(total)}); el excedente de ${mxn(excedenteDeEste)} de ESTE comprobante NO se deduce (RFA 2026 regla 2.9). No acredita IEPS. ${LECTURA_RFA_29_PRORRATEO}`,
             gastoId: g.id,
+            esperado: excedenteDeEste,
           });
         }
       } else if (elegible === false) {
@@ -1422,7 +1429,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // central del demo. El requisito sigue avisado —ahora con tono `condicionado`
   // en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
   // no puede bajar un estatus que nunca podría volver a subir.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'consumo_bar', 'ticket_monedero', 'oposicion_titular'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'consumo_bar', 'ticket_monedero', 'oposicion_titular', 'renglones_ajenos'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';

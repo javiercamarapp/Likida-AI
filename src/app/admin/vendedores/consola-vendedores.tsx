@@ -8,7 +8,7 @@ import {
 import { getSessionTenant } from '@/lib/auth/session';
 import {
   ESTADOS_PROSPECTO, ESTADOS_VIVOS, TRANSICIONES_PROSPECTO,
-  conteosVacios, filtrarProspectosTexto, reglaComision,
+  conteosVacios, esEstadoProspecto, filtrarProspectosTexto, reglaComision,
   validarProspecto, crearProspecto, listarProspectos, listarVendedores,
   asignarProspecto, cambiarEstadoProspecto, actualizarNotasProspecto,
   invitarVendedor, asignarPendientes,
@@ -207,7 +207,13 @@ export async function ConsolaVendedores({
   const totales = conteosVacios();
   let vivosSinVendedor = 0;
   if (prospectos !== null) {
-    for (const p of prospectos) totales[p.estado]++;
+    // FRONTEND-19C2-4 / DATOS-19C2-6: la mig. 0181 amplió el CHECK de
+    // `prospecto.estado` con los 11 valores del embudo de Cal.com
+    // (`appointment`, `rescheduled`, ...), pero `conteosVacios()` sigue
+    // devolviendo solo las 6 llaves de `ESTADOS_PROSPECTO` — sin la guardia,
+    // `totales['appointment']++` es `undefined++` → `NaN` en el tablero.
+    // Mismo guardia que `agruparConteos` ya usa para el mismo dato.
+    for (const p of prospectos) if (esEstadoProspecto(p.estado)) totales[p.estado]++;
     vivosSinVendedor = prospectos.filter((p) => p.vendedorId === null && (ESTADOS_VIVOS as readonly string[]).includes(p.estado)).length;
 
     const porTexto = filtrarProspectosTexto(prospectos, sp.q);

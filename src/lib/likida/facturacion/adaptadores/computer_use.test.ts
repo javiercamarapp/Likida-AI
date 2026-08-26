@@ -136,7 +136,8 @@ describe('el botón de emitir', () => {
     const r = await armar().facturar(CAMPOS, 'emitir');
 
     expect(r.ok).toBe(true);
-    expect(r.cfdiUuid).toBe('B0800A68-8565-47D9-90E0-CDA7803C50E4');
+    // ARQ-19C2-5: normalizado a minúsculas, igual que `repo.ts`.
+    expect(r.cfdiUuid).toBe('b0800a68-8565-47d9-90e0-cda7803c50e4');
   });
 });
 
@@ -202,9 +203,11 @@ describe('un fallo del portal no revienta el ciclo', () => {
 });
 
 describe('extraerUuid', () => {
-  it('lo encuentra donde sea y lo normaliza a mayúsculas', () => {
-    expect(extraerUuid('folio b0800a68-8565-47d9-90e0-cda7803c50e4 ok'))
-      .toBe('B0800A68-8565-47D9-90E0-CDA7803C50E4');
+  // ARQ-19C2-5: `repo.ts` normaliza a MINÚSCULAS antes de comparar/guardar
+  // (`.toLowerCase()`) — este adaptador debe entregar el mismo formato.
+  it('lo encuentra donde sea y lo normaliza a minúsculas', () => {
+    expect(extraerUuid('folio B0800A68-8565-47D9-90E0-CDA7803C50E4 ok'))
+      .toBe('b0800a68-8565-47d9-90e0-cda7803c50e4');
   });
   it('sin UUID devuelve null en vez de inventar uno', () => {
     expect(extraerUuid('se emitió correctamente')).toBeNull();
