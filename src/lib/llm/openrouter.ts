@@ -880,7 +880,19 @@ export async function generateWithTools(opts: {
   const completion = async (body: Record<string, unknown>, signalOpt: { signal: AbortSignal } | undefined) => {
     const reservation = await reservarCompletion(body, activeModel);
     try {
-      const create = client.chat.completions.create as unknown as (
+      // AUDITORÍA prod 25-ago-2026, CRÍTICO: extraer `create` sin `.bind()`
+      // pierde el `this` del método — el SDK de OpenAI guarda su cliente en
+      // `this._client` dentro de cada `APIResource` (`chat.completions` es
+      // uno) y lo usa para hacer la petición HTTP. Llamando a la función
+      // suelta, `this` es `undefined` en modo estricto y revienta con
+      // "Cannot read properties of undefined (reading '_client')" — DESPUÉS
+      // de reservar presupuesto y ANTES de tocar la red, así que cae en
+      // `agent.fail` como cualquier otro error no transitorio. Invisible a la
+      // suite: los mocks de prueba son funciones sueltas que no leen `this`,
+      // así que ninguna prueba con el cliente MOCKEADO puede reproducirlo —
+      // solo el SDK real lo revienta. Verificado en logs reales de producción
+      // el 25-ago mandando "Hola" por WhatsApp.
+      const create = client.chat.completions.create.bind(client.chat.completions) as unknown as (
         request: Record<string, unknown>,
         options?: { signal?: AbortSignal },
       ) => PromiseLike<OpenAI.Chat.ChatCompletion>;
