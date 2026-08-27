@@ -9616,3 +9616,91 @@ begin
   raise exception 'COORDINACION_0213  fk_cruzada=%  duplicada_rebota=%  descartada_libera=%  confirmada_bloquea=%  eta_cero_rebota=%  precio_cero_rebota=%  snapshot_queda=%  cerrado=%   (esperado t / t / t / t / t / t / t / t)',
     fk_cruzada, duplicada_rebota, descartada_libera, confirmada_bloquea, eta_cero_rebota, precio_cero_rebota, snapshot_queda, cerrado;
 end $$;
+
+-- ── 172. Los 4 agentes financieros vivos y su idempotencia por periodo (mig. 0215) ──
+-- Lo que solo la base demuestra: (a) UN parte por (agente, periodo) — dos
+-- corridas del runner que compitan por el mismo título lo resuelve el índice
+-- único parcial, gana exactamente una; (b) la parcialidad es real: el
+-- Redactor SÍ puede repetir título entre piezas (dos prospectos con el mismo
+-- asunto son legítimos); (c) `finanzas_config` es UNA fila (el segundo INSERT
+-- rebota por PK anclada a true) y el saldo sin fecha rebota (viajan juntos);
+-- (d) el interruptor acepta `agente:control_costos` y sigue rechazando
+-- basura; (e) los cuatro quedaron vivos, habilitados en el runner y CON
+-- techo declarado — el candado 3 del runner es comprobable como fila; (f) el
+-- doble candado: ni anon ni authenticated tocan `finanzas_config`.
+do $$
+declare
+  parte_duplicado_rebota boolean; redactor_repite_ok boolean;
+  segunda_config_rebota boolean; saldo_sin_fecha_rebota boolean;
+  interruptor_acepta boolean; interruptor_rechaza boolean;
+  vivos_con_techo int; cerrado boolean;
+begin
+  -- (a) El mismo periodo, dos veces: la segunda rebota.
+  insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+    values ('parte_costos', 'control_costos', 'Costos — 2099-01-01', 'parte de prueba');
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('parte_costos', 'control_costos', 'Costos — 2099-01-01', 'parte repetido');
+    parte_duplicado_rebota := false;
+  exception when unique_violation then
+    parte_duplicado_rebota := true;
+  end;
+
+  -- (b) La parcialidad: el Redactor repite título sin rebotar.
+  insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+    values ('correo_frio', 'redactor', 'Asunto repetible 0215', 'pieza 1');
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('correo_frio', 'redactor', 'Asunto repetible 0215', 'pieza 2');
+    redactor_repite_ok := true;
+  exception when unique_violation then
+    redactor_repite_ok := false;
+  end;
+
+  -- (c) Una sola config; y saldo sin fecha rebota.
+  --     (id=true explícito en el duplicado: el default ya es true — el
+  --     rebote debe venir de la PK, no de una casualidad.)
+  insert into finanzas_config (saldo_mxn, saldo_fecha) values (100000, '2099-01-01')
+    on conflict (id) do nothing;
+  begin
+    insert into finanzas_config (id, fijos_mxn) values (true, 6500);
+    segunda_config_rebota := false;
+  exception when unique_violation then
+    segunda_config_rebota := true;
+  end;
+  begin
+    update finanzas_config set saldo_mxn = 5, saldo_fecha = null where id;
+    saldo_sin_fecha_rebota := false;
+  exception when check_violation then
+    saldo_sin_fecha_rebota := true;
+  end;
+
+  -- (d) El dominio del interruptor, en las dos direcciones.
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:control_costos', true, 'prueba 0215');
+    interruptor_acepta := true;
+    delete from interruptor where id = 'agente:control_costos' and motivo = 'prueba 0215';
+  exception when check_violation then
+    interruptor_acepta := false;
+  end;
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:inventado_0215', true, 'basura');
+    interruptor_rechaza := false;
+  exception when check_violation then
+    interruptor_rechaza := true;
+  end;
+
+  -- (e) Los cuatro, vivos + habilitados + con techo (candado 3 del runner).
+  select count(*) into vivos_con_techo from agente_definicion
+    where id in ('analista_metricas', 'control_costos', 'tesoreria', 'cierre_mensual')
+      and estado = 'vivo' and runner_habilitado and presupuesto_dia_usd > 0;
+
+  -- (f) El doble candado.
+  cerrado := not has_table_privilege('anon', 'public.finanzas_config', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.finanzas_config', 'SELECT')
+    and has_table_privilege('service_role', 'public.finanzas_config', 'SELECT');
+
+  raise exception 'FINANZAS_0215  parte_duplicado_rebota=%  redactor_repite_ok=%  segunda_config_rebota=%  saldo_sin_fecha_rebota=%  interruptor_acepta=%  interruptor_rechaza=%  vivos_con_techo=%  cerrado=%   (esperado t / t / t / t / t / t / 4 / t)',
+    parte_duplicado_rebota, redactor_repite_ok, segunda_config_rebota, saldo_sin_fecha_rebota,
+    interruptor_acepta, interruptor_rechaza, vivos_con_techo, cerrado;
+end $$;

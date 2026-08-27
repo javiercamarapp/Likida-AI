@@ -270,6 +270,25 @@ export async function costoIaDeTenant(tenantId: string): Promise<{ historicoUsd:
   return { historicoUsd: round2(de(historico)), d30Usd: round2(de(d30)) };
 }
 
+export interface CostoIaVentana {
+  totales: { n: number; costoUsd: number; tokensIn: number; tokensOut: number };
+  porFase: Array<{ fase: string; n: number; costoUsd: number }>;
+  porTenant: Array<{ tenantId: string; costoUsd: number }>;
+}
+
+/**
+ * El costo de IA ACOTADO a una ventana [desde, hasta) — para el cierre
+ * mensual (agentes financieros, 0215), que cierra el mes ANTERIOR y no puede
+ * usar los totales históricos de `getResumenNegocio`. Es la MISMA agregación
+ * de siempre (RPC 0062, que sí acepta la ventana; `llm_costo` NO se purga —
+ * 0072 la consolida sin borrar, así que el mes anterior está completo);
+ * LANZA si la base no responde — el cierre no se arma con la base ciega.
+ */
+export async function costoIaVentana(desdeIso: string, hastaIso: string): Promise<CostoIaVentana> {
+  const r = await traerResumenCostoIa(desdeIso, hastaIso);
+  return { totales: r.totales, porFase: r.porFase, porTenant: r.porTenant };
+}
+
 export interface ResumenNegocio {
   tenants: number;
   flotas: Array<{
