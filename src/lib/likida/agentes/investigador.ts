@@ -24,6 +24,7 @@
 // Enviador usa como lista de copias de la empresa.
 // ═══════════════════════════════════════════════════════════════════════════
 import { z } from 'zod';
+import { lookup } from 'node:dns/promises';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { DatoInvalido } from '../errores';
@@ -107,21 +108,108 @@ export function enlacesInstitucionales(html: string, base: URL): string[] {
   return [...urls];
 }
 
+/** Redirects máximos que se siguen — validando el host de CADA salto. */
+const MAX_REDIRECTS = 3;
+
+/** ¿La IP es privada/loopback/link-local? (c5-11: sin esto, un `sitio_web`
+ *  hostil — o un redirect — apuntaba el fetch del investigador a la red
+ *  interna). Exportada para su prueba: es la frontera SSRF. */
+export function esIpPrivada(ip: string): boolean {
+  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a >= 224) return true; // multicast/reservado
+    return false;
+  }
+  const v6 = ip.toLowerCase();
+  return v6 === '::1' || v6 === '::' || v6.startsWith('fc') || v6.startsWith('fd')
+    || v6.startsWith('fe8') || v6.startsWith('fe9') || v6.startsWith('fea') || v6.startsWith('feb')
+    || v6.startsWith('::ffff:127.') || v6.startsWith('::ffff:10.') || v6.startsWith('::ffff:192.168.');
+}
+
+/** Resuelve el host y rechaza lo que no sea una IP pública. Un DNS que no
+ *  contesta cuenta como no-permitido: fail closed. */
+async function hostPublico(hostname: string): Promise<boolean> {
+  if (esIpPrivada(hostname)) return false;
+  if (/^localhost$/i.test(hostname)) return false;
+  try {
+    const { address } = await lookup(hostname);
+    return !esIpPrivada(address);
+  } catch {
+    return false;
+  }
+}
+
+/** Lee el cuerpo POR STREAM con corte real en `maxBytes` (c5-11: el
+ *  `r.text()` anterior materializaba el cuerpo ENTERO en memoria y el tope
+ *  de 300KB solo recortaba después — un servidor rápido metía cientos de MB
+ *  dentro de los 8s). */
+async function leerAcotado(r: Response, maxBytes: number): Promise<string> {
+  if (!r.body) return '';
+  const lector = r.body.getReader();
+  const partes: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await lector.read();
+      if (done) break;
+      total += value.byteLength;
+      partes.push(value);
+      if (total >= maxBytes) {
+        await lector.cancel();
+        break;
+      }
+    }
+  } finally {
+    lector.releaseLock();
+  }
+  const combinado = new Uint8Array(Math.min(total, maxBytes));
+  let offset = 0;
+  for (const parte of partes) {
+    const cabe = Math.min(parte.byteLength, combinado.length - offset);
+    if (cabe <= 0) break;
+    combinado.set(parte.subarray(0, cabe), offset);
+    offset += cabe;
+  }
+  return new TextDecoder().decode(combinado);
+}
+
 async function bajarPagina(url: string): Promise<Pagina | null> {
   try {
-    const r = await fetch(url, {
-      signal: AbortSignal.timeout(TIMEOUT_PAGINA_MS),
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LikidaBot/1.0; +https://likida.ai)' },
-      redirect: 'follow',
-    });
-    if (!r.ok) {
-      logger.info('investigador.pagina_no_ok', { url, status: r.status });
-      return null;
+    // Redirects A MANO (c5-11): `redirect: 'follow'` no deja validar los
+    // saltos — un sitio inocente podía redirigir a la red interna.
+    let actual = new URL(url);
+    for (let salto = 0; salto <= MAX_REDIRECTS; salto++) {
+      if (!/^https?:$/.test(actual.protocol)) return null;
+      if (!(await hostPublico(actual.hostname))) {
+        logger.warn('investigador.host_no_publico', { url: actual.origin });
+        return null;
+      }
+      const r = await fetch(actual.href, {
+        signal: AbortSignal.timeout(TIMEOUT_PAGINA_MS),
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LikidaBot/1.0; +https://likida.ai)' },
+        redirect: 'manual',
+      });
+      if (r.status >= 300 && r.status < 400) {
+        const destino = r.headers.get('location');
+        if (!destino || salto === MAX_REDIRECTS) return null;
+        actual = new URL(destino, actual);
+        continue;
+      }
+      if (!r.ok) {
+        logger.info('investigador.pagina_no_ok', { url: actual.href, status: r.status });
+        return null;
+      }
+      const tipo = r.headers.get('content-type') ?? '';
+      if (!/text\/html|text\/plain|application\/xhtml/i.test(tipo)) return null;
+      const cuerpo = await leerAcotado(r, MAX_BYTES_PAGINA);
+      return { url: actual.href, texto: cuerpo };
     }
-    const tipo = r.headers.get('content-type') ?? '';
-    if (!/text\/html|text\/plain|application\/xhtml/i.test(tipo)) return null;
-    const cuerpo = await r.text();
-    return { url, texto: cuerpo.slice(0, MAX_BYTES_PAGINA) };
+    return null;
   } catch (e) {
     logger.info('investigador.pagina_caida', { url, err: e instanceof Error ? e.message : String(e) });
     return null;
@@ -161,6 +249,45 @@ export function correosVerificados(
 export function cosecharCorreosDeNotas(notas: string | null): string[] {
   if (!notas) return [];
   return [...new Set((notas.match(RE_CORREO) ?? []).map((c) => c.toLowerCase()))];
+}
+
+/** Tope de correos que entran a la lista de envío por empresa (c5-4): un
+ *  sitio hostil con cientos de direcciones impresas no convierte la campaña
+ *  en spam masivo. Los que sobren quedan en el dossier, dichos. */
+export const MAX_CORREOS_EMPRESA = 15;
+
+/** El dominio pelón de un correo o un hostname, sin el `www.`. */
+function dominioDe(valor: string): string {
+  const host = valor.includes('@') ? valor.split('@')[1] : valor;
+  return host.toLowerCase().replace(/^www\./, '');
+}
+
+/**
+ * LA COMPUERTA DE DOMINIO (c5-4): la compuerta literal prueba que el correo
+ * APARECE en la página — no que sea DE LA EMPRESA. El `webmaster@agencia.com`
+ * del pie "Diseñado por…", el correo de un proveedor citado o una dirección
+ * plantada por un sitio hostil pasaban y recibían la campaña como si fueran
+ * la empresa. Solo entran a la lista de envío los correos cuyo dominio
+ * coincide con el del sitio investigado o con el del correo principal; el
+ * resto se devuelve como AJENO — va al dossier para revisión humana, jamás
+ * a `prospecto_correo`. Exportada para su prueba.
+ */
+export function separarPorDominio(
+  correos: ExtraccionInvestigador['correos'],
+  sitio: string | null,
+  principal: string | null,
+): { propios: ExtraccionInvestigador['correos']; ajenos: ExtraccionInvestigador['correos'] } {
+  const permitidos = new Set<string>();
+  if (sitio) {
+    try { permitidos.add(dominioDe(new URL(sitio).hostname)); } catch { /* sitio ilegible: sin dominio que permitir */ }
+  }
+  if (principal?.includes('@')) permitidos.add(dominioDe(principal));
+  const propios: ExtraccionInvestigador['correos'] = [];
+  const ajenos: ExtraccionInvestigador['correos'] = [];
+  for (const c of correos) {
+    (permitidos.has(dominioDe(c.correo)) ? propios : ajenos).push(c);
+  }
+  return { propios, ajenos };
 }
 
 export interface ResultadoInvestigacion {
@@ -249,25 +376,52 @@ export async function investigarProspecto(
     }
   }
 
-  // ── 3. La compuerta literal + la cosecha de notas ─────────────────────
-  const correos = correosVerificados(extraccion.correos, paginas, prospecto.notas);
+  // ── 3. La compuerta literal + la cosecha de notas + la de dominio ─────
+  const literales = correosVerificados(extraccion.correos, paginas, prospecto.notas);
   for (const c of cosecharCorreosDeNotas(prospecto.notas)) {
-    if (!correos.some((x) => x.correo === c)) {
-      correos.push({ correo: c, contacto_nombre: null, puesto: null, fuente: 'notas del prospecto' });
+    if (!literales.some((x) => x.correo === c)) {
+      literales.push({ correo: c, contacto_nombre: null, puesto: null, fuente: 'notas del prospecto' });
     }
   }
-  // El correo principal ya capturado no se duplica en la lista de copias.
+  // La compuerta de DOMINIO (c5-4): a la lista de envío solo entran correos
+  // de la empresa (dominio del sitio o del principal); los ajenos quedan en
+  // el dossier para revisión humana. Y el tope por empresa: los que sobren
+  // también quedan dichos, no enviados.
   const principal = prospecto.correo?.trim().toLowerCase() ?? '';
+  const { propios, ajenos } = separarPorDominio(literales, sitio && /^https?:\/\//i.test(sitio) ? sitio : null, principal || null);
+  const recortados = propios.slice(MAX_CORREOS_EMPRESA);
+  const correos = propios.slice(0, MAX_CORREOS_EMPRESA);
+  if (ajenos.length > 0 || recortados.length > 0) {
+    const detalle = [
+      ajenos.length > 0 ? `${ajenos.length} con dominio ajeno (revisión humana)` : null,
+      recortados.length > 0 ? `${recortados.length} sobre el tope de ${MAX_CORREOS_EMPRESA}` : null,
+    ].filter(Boolean).join(' · ');
+    aviso = aviso ? `${aviso} Correos fuera de la lista de envío: ${detalle}.` : `Correos fuera de la lista de envío: ${detalle}.`;
+  }
+  // El correo principal ya capturado no se duplica en la lista de copias.
   const nuevos = correos.filter((c) => c.correo !== principal);
 
   // ── 4. Persistir: dossier (último gana) + correos (unique rebota) ─────
+  // Los correos AJENOS y los recortados viajan en el dossier con su fuente
+  // — hallados y dichos, jamás enviados (c5-4).
+  const hallazgosConAjenos = [
+    ...extraccion.hallazgos,
+    ...ajenos.map((c) => ({
+      dato: `Correo hallado con dominio ajeno (NO entra a la lista de envío — revisión humana): ${c.correo}`,
+      fuente: c.fuente,
+    })),
+    ...recortados.map((c) => ({
+      dato: `Correo sobre el tope de ${MAX_CORREOS_EMPRESA} por empresa (NO entra a la lista de envío): ${c.correo}`,
+      fuente: c.fuente,
+    })),
+  ];
   const { error: errDossier } = await supabaseAdmin().from('prospecto_dossier').upsert({
     prospecto_id: prospectoId,
     historia: extraccion.historia,
     empleados: extraccion.empleados,
     flotilla: extraccion.flotilla,
     telefonos: extraccion.telefonos,
-    datos: extraccion.hallazgos,
+    datos: hallazgosConAjenos,
     fuentes: paginas.map((pg) => pg.url),
     investigado_en: new Date().toISOString(),
     costo_usd: costoUsd || null,

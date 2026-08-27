@@ -33,6 +33,7 @@ function builder(tabla: string) {
     neq: () => b,
     not: () => b,
     is: (c: string, v: unknown) => { r.is.push([c, v]); return b; },
+    in: () => b,
     gte: () => b,
     lte: () => b,
     order: () => b,
@@ -340,5 +341,144 @@ describe('el tope diario de correo frío (Fase 2: 20-40/día, configurable)', ()
     ]);
     await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/tope diario/i);
     expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA FABLE CICLO 5 — los bordes de la puerta de salida.
+// ═══════════════════════════════════════════════════════════════════════════
+const { porQueLoRecibes, verificarFormatoCampana } = await import('./cola');
+
+describe('c5-1 — la lista de bajas EN LA PUERTA (camino humano incluido)', () => {
+  const FILA_B = {
+    id: 'p-1', tipo: 'correo_frio', titulo: 'Correo día 0', cuerpo: 'Hola.', cuerpo_final: null,
+    agente: 'redactor', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'contacto@x.mx' },
+  };
+
+  it('el principal suprimido: la pieza NO sale, el claim se revierte y se dice por qué', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_B], error: null },   // el claim
+      { data: null, error: null },       // la reversión
+    ]);
+    respuestas.set('correo_suprimido', [{ data: [{ correo: 'contacto@x.mx' }], error: null }]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/lista de bajas/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+    const reversion = de('cola_aprobacion', 'update')[1];
+    expect(reversion.payload).toMatchObject({ enviado_en: null });
+  });
+
+  it('la lista ilegible = NO se manda (fail closed), también en el camino humano', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_B], error: null },
+      { data: null, error: null },
+    ]);
+    respuestas.set('correo_suprimido', [{ data: null, error: { message: 'base caída' } }]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/lista de bajas/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+
+  it('una copia suprimida se cae del envío sin frenar al principal', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_B], error: null },
+      { data: null, error: null },       // la prueba (provider id)
+    ]);
+    respuestas.set('correo_suprimido', [{ data: [{ correo: 'muerto@x.mx' }], error: null }]);
+    const r = await enviarPiezaPorCorreo('p-1', 'u-1', ['muerto@x.mx', 'vivo@x.mx']);
+    expect(r.ok).toBe(true);
+    const [para] = enviarCorreo.mock.calls[0] as unknown as [string[]];
+    expect(para).toContain('vivo@x.mx');
+    expect(para).not.toContain('muerto@x.mx');
+  });
+});
+
+describe('c5-3 — el timeout de Resend es AMBIGUO: ni reversión ni reenvío automático', () => {
+  const FILA_R = {
+    id: 'p-1', tipo: 'correo_frio', titulo: 'Correo día 0', cuerpo: 'Hola.', cuerpo_final: null,
+    agente: 'redactor', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'contacto@x.mx' },
+  };
+
+  it("motivo 'red': el claim se QUEDA, la reserva de cadencia NO se borra, y el error dice 'verificar en Resend'", async () => {
+    resultadoEnvio = { ok: false, motivo: 'red', detalle: 'The operation was aborted due to timeout' };
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_R], error: null },   // el claim
+      { data: null, error: null },       // la anotación del ambiguo (envio_error)
+    ]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/verificar en resend/i);
+    // La reserva de la RPC NO se compensó: cero deletes sobre el historial.
+    expect(de('prospecto_contacto', 'delete')).toHaveLength(0);
+    // El segundo update anota el ambiguo SIN tocar enviado_en (el claim vive).
+    const anotacion = de('cola_aprobacion', 'update')[1];
+    expect(anotacion.payload).not.toHaveProperty('enviado_en');
+    expect(String((anotacion.payload as { envio_error: string }).envio_error)).toMatch(/AMBIGUO/);
+  });
+
+  it('la llave de idempotencia viaja con el envío (el reintento humano es seguro)', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_R], error: null },
+      { data: null, error: null },
+    ]);
+    await enviarPiezaPorCorreo('p-1', 'u-1');
+    const opciones = enviarCorreo.mock.calls[0][2] as { idempotencyKey?: string };
+    expect(opciones?.idempotencyKey).toBe('pieza-p-1');
+  });
+});
+
+describe('c5-5 — el pie dice POR QUÉ según la fuente real, jamás una vacante que no consta', () => {
+  it('con vacante capturada, la vacante; sin ella, jamás', () => {
+    expect(porQueLoRecibes('censo', 'Liquidador de viajes')).toMatch(/vacante/);
+    expect(porQueLoRecibes('censo', null)).not.toMatch(/vacante/);
+    expect(porQueLoRecibes('censo', null)).toMatch(/directorios públicos/);
+    expect(porQueLoRecibes('landing', null)).toMatch(/calculadora/);
+    expect(porQueLoRecibes('landing', null)).not.toMatch(/vacante/);
+    // La instrucción de BAJA va SIEMPRE.
+    for (const pie of [porQueLoRecibes('censo', 'x'), porQueLoRecibes('landing', null), porQueLoRecibes(null, null)]) {
+      expect(pie).toMatch(/BAJA/);
+    }
+  });
+
+  it('el envío usa la fuente del prospecto (landing → calculadora, sin vacante inventada)', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [{
+        id: 'p-1', tipo: 'correo_frio', titulo: 'T', cuerpo: 'C', cuerpo_final: null, agente: 'redactor',
+        prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'c@x.mx', fuente: 'landing', vacante: null },
+      }], error: null },
+      { data: null, error: null },
+    ]);
+    await enviarPiezaPorCorreo('p-1', 'u-1');
+    const correo = enviarCorreo.mock.calls[0][1] as { porQueLoRecibes: string };
+    expect(correo.porQueLoRecibes).toMatch(/calculadora/);
+    expect(correo.porQueLoRecibes).not.toMatch(/vacante/);
+  });
+});
+
+describe('c5-14 — el formato de campaña se verifica también EN LA PUERTA', () => {
+  it('un cuerpo_final editado con guion largo NO sale: claim revertido y dicho', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [{
+        id: 'p-1', tipo: 'correo_frio', titulo: 'T', cuerpo: 'C', cuerpo_final: 'Edición humana — con guion largo.',
+        agente: 'redactor', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'c@x.mx' },
+      }], error: null },
+      { data: null, error: null },
+    ]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/guion largo/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+
+  it('una pieza que NO es de campaña no pasa por el verificador (los partes financieros llevan guiones)', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [{
+        id: 'p-1', tipo: 'parte_costos', titulo: 'Costos — 2026-08-27', cuerpo: 'Parte — con guiones.', cuerpo_final: null,
+        agente: 'control_costos', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'c@x.mx' },
+      }], error: null },
+      { data: null, error: null },
+    ]);
+    const r = await enviarPiezaPorCorreo('p-1', 'u-1');
+    expect(r.ok).toBe(true);
+  });
+
+  it('verificarFormatoCampana vive en la cola y caza los dos guardarraíles', () => {
+    expect(() => verificarFormatoCampana('nuestros clientes reales')).toThrow(/clientes reales/);
+    expect(() => verificarFormatoCampana('texto — con raya')).toThrow(/guion largo/);
+    expect(() => verificarFormatoCampana('en pláticas con transportistas')).not.toThrow();
   });
 });

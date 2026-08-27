@@ -13,19 +13,23 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rateLimit, clientIp, bodyExcede } from '@/lib/ratelimit';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { articuloPorSlug } from '@/lib/likida/marketing/articulos';
 import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
 // Validación LINEAL en dos pasos (el ratchet veta grupos opcionales
-// cuantificados): base cerrada, y si hay sufijo, forma de slug acotada.
+// cuantificados): base cerrada, y si hay sufijo, el slug contra el CATÁLOGO
+// real de artículos (c5-13) — la forma sola dejaba insertar filas de basura
+// para páginas que no existen, 30 por minuto por IP, directo al embudo.
 function paginaValida(p: string): boolean {
   const [base, ...resto] = p.split(':');
   if (base !== 'blog' && base !== 'calculadora') return false;
   if (resto.length === 0) return true;
-  if (resto.length > 1) return false;
+  if (resto.length > 1 || base !== 'blog') return false;
   const slug = resto[0];
-  return slug.length >= 1 && slug.length <= 60 && /^[a-z0-9-]+$/.test(slug);
+  if (slug.length < 1 || slug.length > 60 || !/^[a-z0-9-]+$/.test(slug)) return false;
+  return articuloPorSlug(slug) !== null;
 }
 
 export async function POST(req: Request) {

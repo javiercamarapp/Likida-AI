@@ -56,3 +56,22 @@ describe('POST /api/marketing/evento', () => {
     expect(eventos).toHaveLength(0);
   });
 });
+
+describe('c5-13 — el slug del blog se valida contra el CATÁLOGO, no solo la forma', () => {
+  it('un slug con buena forma pero que no existe NO inserta fila', async () => {
+    const res = await POST(pedir({ pagina: 'blog:articulo-que-no-existe', evento: 'pageview' }));
+    expect(res.status).toBe(204);
+    expect(eventos).toHaveLength(0);
+  });
+
+  it('un slug del catálogo real sí entra', async () => {
+    const res = await POST(pedir({ pagina: 'blog:ieps-diesel-litros-no-pesos', evento: 'pageview' }));
+    expect(res.status).toBe(204);
+    expect(eventos).toHaveLength(1);
+  });
+
+  it('calculadora con sufijo no existe como página', async () => {
+    await POST(pedir({ pagina: 'calculadora:extra', evento: 'pageview' }));
+    expect(eventos).toHaveLength(0);
+  });
+});

@@ -46,6 +46,7 @@ function builder(tabla: string) {
   b.eq = (c: string, v: unknown) => { r.eq.push([c, v]); return b; };
   b.is = (c: string, v: unknown) => { r.is.push([c, v]); return b; };
   b.in = (c: string, v: unknown) => { r.dentro.push([c, v]); return b; };
+  b.ilike = (c: string, v: unknown) => { r.eq.push([c, v]); return b; };
   b.order = () => b;
   b.range = () => b;
   b.limit = () => b;
@@ -237,7 +238,9 @@ describe('la comisión tiene UNA fuente', () => {
 
 describe('crearProspecto', () => {
   it('inserta lo validado con su fuente y devuelve el id', async () => {
-    respuestas.set('prospecto', [{ data: { id: 'p-1' }, error: null }]);
+    // c5-7: la primera respuesta es el dedup por empresa (sin correo no hay
+    // consulta por correo); la segunda, el insert.
+    respuestas.set('prospecto', [{ data: [], error: null }, { data: { id: 'p-1' }, error: null }]);
     const id = await crearProspecto({
       empresa: 'TDN', contactoNombre: null, telefono: null, correo: null,
       ciudad: 'Nuevo Laredo', vacante: 'Analista de liquidaciones', notas: null, vendedorId: null,
@@ -252,7 +255,7 @@ describe('crearProspecto', () => {
   });
 
   it('un error del insert LANZA — supabase reporta POR VALOR', async () => {
-    respuestas.set('prospecto', [{ data: null, error: { message: 'boom' } }]);
+    respuestas.set('prospecto', [{ data: [], error: null }, { data: null, error: { message: 'boom' } }]);
     await expect(crearProspecto({
       empresa: 'TDN', contactoNombre: null, telefono: null, correo: null,
       ciudad: null, vacante: null, notas: null, vendedorId: null,
@@ -495,5 +498,53 @@ describe('asignarPendientes — el agente asignador', () => {
     ]);
     const r = await asignarPendientes();
     expect(r.apagado).toBeUndefined();
+  });
+});
+
+describe('c5-7 — el dedup de crearProspecto: la misma empresa no abre dos hilos de campaña', () => {
+  const VALIDO = {
+    empresa: 'Transportes Duplicados', contactoNombre: null, telefono: null,
+    correo: 'contacto@dup.mx', ciudad: null, vacante: null, notas: null, vendedorId: null,
+  };
+
+  it('con un prospecto existente por CORREO, la fila nueva nace marcada duplicado_de', async () => {
+    respuestas.set('prospecto', [
+      { data: [{ id: 'pr-original' }], error: null },       // dedup por correo: lo encuentra
+      { data: { id: 'pr-nuevo' }, error: null },            // el insert
+    ]);
+    const id = await crearProspecto(VALIDO, 'landing');
+    expect(id).toBe('pr-nuevo');
+    const insert = llamadas.find((l) => l.tabla === 'prospecto' && l.op === 'insert');
+    expect(insert?.payload).toMatchObject({ duplicado_de: 'pr-original' });
+  });
+
+  it('sin coincidencia por correo NI empresa, entra limpio (duplicado_de null)', async () => {
+    respuestas.set('prospecto', [
+      { data: [], error: null },                            // correo: nada
+      { data: [], error: null },                            // empresa: nada
+      { data: { id: 'pr-nuevo' }, error: null },            // el insert
+    ]);
+    await crearProspecto(VALIDO, 'censo');
+    const insert = llamadas.find((l) => l.tabla === 'prospecto' && l.op === 'insert');
+    expect(insert?.payload).toMatchObject({ duplicado_de: null });
+  });
+
+  it('la lectura de dedup caída LANZA — crear a ciegas es crear el duplicado', async () => {
+    respuestas.set('prospecto', [
+      { data: null, error: { message: 'base caída' } },
+    ]);
+    await expect(crearProspecto(VALIDO, 'landing')).rejects.toThrow(/dedup/);
+    expect(llamadas.filter((l) => l.tabla === 'prospecto' && l.op === 'insert')).toHaveLength(0);
+  });
+
+  it('el dedup busca solo entre NO-duplicados (duplicado_de is null) y sin importar mayúsculas', async () => {
+    respuestas.set('prospecto', [
+      { data: [], error: null },
+      { data: [], error: null },
+      { data: { id: 'x' }, error: null },
+    ]);
+    await crearProspecto(VALIDO, 'manual');
+    const porCorreo = llamadas.find((l) => l.tabla === 'prospecto' && l.eq.some(([c]) => c === 'correo'));
+    expect(porCorreo?.is).toContainEqual(['duplicado_de', null]);
   });
 });

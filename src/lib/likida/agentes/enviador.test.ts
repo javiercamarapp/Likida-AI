@@ -19,7 +19,7 @@ function builder(tabla: string) {
   };
   const b: Record<string, unknown> = {};
   Object.assign(b, {
-    select: () => b, eq: () => b, is: () => b, in: () => b, lte: () => b,
+    select: () => b, eq: () => b, is: () => b, in: () => b, lte: () => b, or: () => b,
     limit: () => b, order: () => b, update: () => b, insert: () => b,
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve().then(responder).then(res, rej),
@@ -39,6 +39,18 @@ const enviarPiezaPorCorreo = vi.fn(async (..._a: unknown[]) => ({ ok: true, dest
 vi.mock('./cola', () => ({
   enviarPiezaPorCorreo: (...a: unknown[]) => enviarPiezaPorCorreo(...a),
   topeCorreoFrioDia: () => 30,
+  TIPOS_CAMPANA: ['correo_frio', 'correo_seguimiento'],
+  // La réplica del filtrado real (que ahora vive en cola.ts, c5-1 — y allá
+  // tiene sus propias pruebas): misma normalización, mismo fail-closed.
+  filtrarSuprimidos: async (correos: string[]) => {
+    const limpios = [...new Set(correos.map((c) => c.trim().toLowerCase()).filter(Boolean))];
+    if (limpios.length === 0) return [];
+    const cola = respuestas.get('correo_suprimido');
+    const r = cola && cola.length > 0 ? cola.shift()! : { data: [], error: null };
+    if (r.error) throw new Error(`filtrarSuprimidos: ${r.error.message}`);
+    const fuera = new Set(((r.data ?? []) as Array<{ correo: string }>).map((f) => f.correo));
+    return limpios.filter((c) => !fuera.has(c));
+  },
 }));
 const registrarCorrida = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock('./corridas', () => ({ registrarCorrida: (...a: unknown[]) => registrarCorrida(...a) }));
@@ -46,7 +58,7 @@ vi.mock('./corridas', () => ({ registrarCorrida: (...a: unknown[]) => registrarC
 const { correrEnviador, filtrarSuprimidos, suprimirCorreo } = await import('./enviador');
 
 const PIEZA = {
-  id: 'pieza-0000-1111', tipo: 'correo_frio', prospecto_id: 'pr-1',
+  id: 'pieza-0000-1111', tipo: 'correo_frio', estado: 'pendiente', prospecto_id: 'pr-1',
   prospecto: { empresa: 'Transportes X', correo: 'c@x.mx' },
 };
 
@@ -146,5 +158,31 @@ describe('suprimirCorreo — idempotente y sin lanzar', () => {
   });
   it('un formato roto se ignora sin tocar la base', async () => {
     await expect(suprimirCorreo('no-es-correo', 'rebote')).resolves.toBeUndefined();
+  });
+});
+
+describe('c5-6 — las aprobadas automáticas SIN enviar se retoman ("sale mañana" tiene que ser verdad)', () => {
+  it('una pieza ya aprobada por la máquina se envía sin re-aprobar', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [{ ...PIEZA, estado: 'aprobado' }], error: null },   // candidatas
+    ]);
+    respuestas.set('prospecto_correo', [{ data: [], error: null }]);
+    respuestas.set('correo_suprimido', [{ data: [], error: null }]);
+    const r = await correrEnviador();
+    expect(r.piezasEnviadas).toBe(1);
+    // Sin update de auto-aprobación: la única escritura sobre cola la hace
+    // enviarPiezaPorCorreo (mockeado) — el paso de aprobar se saltó.
+    expect(enviarPiezaPorCorreo).toHaveBeenCalledWith(PIEZA.id, null, []);
+  });
+
+  it('una pendiente madura sigue pasando por la auto-aprobación anclada', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [{ ...PIEZA, estado: 'pendiente' }], error: null }, // candidatas
+      { data: [{ id: PIEZA.id }], error: null },                  // la auto-aprobación
+    ]);
+    respuestas.set('prospecto_correo', [{ data: [], error: null }]);
+    respuestas.set('correo_suprimido', [{ data: [], error: null }]);
+    const r = await correrEnviador();
+    expect(r.piezasEnviadas).toBe(1);
   });
 });

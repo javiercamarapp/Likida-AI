@@ -317,8 +317,14 @@ async function correrControlCostos(disparo: DisparoCorrida, hoy: string): Promis
       return { piezas: 0, motivo: 'el parte de hoy ya está en la bandeja' };
     }
 
+    // U1 mira una ventana de 7 días, no el histórico (c5-8): una migración
+    // legítima de modelo dejaba las filas viejas disparando ROJO en cada
+    // parte diario, para siempre — la alerta que grita por ruido se deja de
+    // leer. Siete días delatan el override caído Y el cambio a mitad de
+    // camino sin arrastrar la historia entera.
+    const desde7d = new Date(Date.parse(`${hoy}T12:00:00Z`) - 7 * 86_400_000).toISOString();
     const [r, porFaseModelo, cfg] = await Promise.all([
-      getResumenNegocio(hoy), getCostoPorFaseModelo(), leerConfigFinanzas(),
+      getResumenNegocio(hoy), getCostoPorFaseModelo(desde7d), leerConfigFinanzas(),
     ]);
     const hallazgos = evaluarUmbralesCostos(r, porFaseModelo, cfg, modelFor, hoy);
 

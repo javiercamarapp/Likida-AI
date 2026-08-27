@@ -53,6 +53,54 @@ export const maxDuration = 120;
 // entre eso y un teléfono sonando de madrugada.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── EL REINTENTO ÚNICO ANTE TIMEOUT (c5-CRON, 27-ago-2026) ────────────────
+//
+// Tres corridas de esta semana fallaron por la MISMA clase transitoria: un
+// TimeoutError de una consulta (la estampida de crons + el tope de 8 s de
+// `acotada`). El reintento en caliente es correcto SOLO donde repetir no
+// duplica efectos:
+//
+//   · Las lecturas de interruptor: puras — gratis reintentarlas.
+//   · Los dos motores claim-first (`escalarViajesSinAceptar` estampa
+//     `escalado_en` ANTES de mandar; `ejecutarCobranzaGlobal` reclama con
+//     unique(viaje, tier)): lo ya reclamado queda fuera de la segunda
+//     pasada — el reintento no re-manda WhatsApp.
+//
+// Y donde NO va, EXPLÍCITAMENTE: `avisarRelojesLegales` y
+// `avisarVencimientos` sellan DESPUÉS de mandar (patrón 0202) — un timeout
+// ahí es ambiguo (el WhatsApp pudo haber salido sin sello) y reintentar en
+// caliente REENVÍA a personas reales. Su reintento natural es la corrida
+// horaria siguiente, que re-barre lo no sellado.
+
+/** ¿El error tiene forma de timeout? Cubre el abort de `AbortSignal.timeout`
+ *  y el mensaje del tope de `acotada` ("sin respuesta en N ms"). */
+function esTimeout(e: unknown): boolean {
+  const msj = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+  return /timeouterror|aborted|abort|timed?\s*out|sin respuesta en \d+ ms/i.test(msj);
+}
+
+/** Un solo reintento con backoff corto, SOLO ante timeout. */
+async function conReintentoDeTimeout<T>(fn: () => Promise<T>, etiqueta: string): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (!esTimeout(e)) throw e;
+    logger.warn('cron.escalar.reintento_timeout', { etiqueta });
+    await new Promise((r) => setTimeout(r, 1_500));
+    return await fn();
+  }
+}
+
+/** La lectura del interruptor, con su reintento: `leerInterruptor` no lanza
+ *  (devuelve 'ilegible'), así que el reintento va sobre el VALOR. */
+async function leerInterruptorConReintento(nombre: NombreInterruptor): Promise<Awaited<ReturnType<typeof leerInterruptor>>> {
+  const primero = await leerInterruptor(nombre);
+  if (primero !== 'ilegible') return primero;
+  logger.warn('cron.escalar.reintento_timeout', { etiqueta: `interruptor:${nombre}` });
+  await new Promise((r) => setTimeout(r, 1_500));
+  return leerInterruptor(nombre);
+}
+
 /** Cuerpo de respuesta cuando el interruptor no se pudo leer. `codigo`
  *  estable para que el fingerprint y el tablero lo separen de un motor caído. */
 function ilegible(interruptor: NombreInterruptor) {
@@ -85,7 +133,7 @@ export async function GET(req: Request) {
   // el apagado a propósito. `ilegible` es un FALLO y contesta 500 con
   // `codigo`, para que Vercel pinte el cron rojo: cinco crons saltándose
   // corridas sobre una base con hipo se veían como cinco crons verdes.
-  const global = await leerInterruptor('global');
+  const global = await leerInterruptorConReintento('global');
   if (global === 'ilegible') return NextResponse.json(ilegible('global'), { status: 500 });
   if (global === 'apagado') {
     logger.warn('cron.escalar.saltado', { interruptor: 'global' });
@@ -118,7 +166,7 @@ export async function GET(req: Request) {
   // preguntaba — era decorativo). Un comentario aquí decía que la escalación
   // "no es un agente del catálogo y no hay nombre honesto que darle": quedó
   // viejo en cuanto la B3 le dio bitácora con nombre propio.
-  const conductores = await leerInterruptor('agente:conductores');
+  const conductores = await leerInterruptorConReintento('agente:conductores');
   if (conductores === 'ilegible') {
     // El grito y el correo ya salieron de `leerInterruptor`; aquí solo se
     // cuenta como fallo para que la corrida NO salga en verde (A17).
@@ -129,7 +177,7 @@ export async function GET(req: Request) {
     resultado.aceptacion = { saltado: 'interruptor agente:conductores' };
   } else {
     try {
-      const r = await escalarViajesSinAceptar({ venceEn: venceEscalacion });
+      const r = await conReintentoDeTimeout(() => escalarViajesSinAceptar({ venceEn: venceEscalacion }), 'escalarViajesSinAceptar');
       logger.info('cron.escalar.ok', { ...r });
       resultado.aceptacion = r;
     } catch (e) {
@@ -149,7 +197,7 @@ export async function GET(req: Request) {
 
   // El segundo motor ES el Agente de Cobranza, con su propia palanca por la
   // misma razón que el primero.
-  const cobranza = await leerInterruptor('agente:cobranza');
+  const cobranza = await leerInterruptorConReintento('agente:cobranza');
   if (cobranza === 'ilegible') {
     resultado.comprobacion = ilegible('agente:cobranza');
     huboFallo = true;
@@ -158,7 +206,7 @@ export async function GET(req: Request) {
     resultado.comprobacion = { saltado: 'interruptor agente:cobranza' };
   } else {
     try {
-      const r = await ejecutarCobranzaGlobal(new Date(), { venceEn: venceCobranza });
+      const r = await conReintentoDeTimeout(() => ejecutarCobranzaGlobal(new Date(), { venceEn: venceCobranza }), 'ejecutarCobranzaGlobal');
       logger.info('cron.cobranza.ok', { ...r });
       resultado.comprobacion = r;
     } catch (e) {

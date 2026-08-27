@@ -20,7 +20,7 @@ import { acotada } from '../presupuesto';
 import { DatoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
 import { generateResponse } from '@/lib/llm/openrouter';
-import { encolarPieza } from './cola';
+import { encolarPieza, verificarFormatoCampana } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
 import { primerNombreDelContacto, sustituirMarcador } from './redactor';
 import { logger } from '@/lib/logger';
@@ -132,14 +132,19 @@ async function fabricarSeguimiento(c: CandidatoSdr): Promise<number> {
   const asunto = r.text.match(/\*\*Asunto:\*\*\s*(.+)/i)?.[1]?.trim();
   const cuerpo = r.text.split(/\*\*Asunto:\*\*.*\n/i)[1]?.trim();
   if (!asunto || !cuerpo) throw new DatoInvalido('El SDR devolvió una salida ilegible — no se encoló nada.');
-  if (/clientes reales/i.test(cuerpo) || cuerpo.includes('—')) {
-    throw new DatoInvalido('El seguimiento violó el formato de campaña (clientes reales / guion largo) — descartado.');
-  }
+  // c5-14: el verificador estructural corre sobre el TEXTO FINAL — asunto
+  // incluido (el del SDR sale tal cual) y DESPUÉS de sustituir el nombre: la
+  // verificación previa miraba solo el cuerpo crudo y un guion largo en el
+  // subject salía igual.
+  const tituloFinal = sustituirMarcador(asunto, primerNombre).slice(0, 120);
+  const cuerpoFinal = sustituirMarcador(cuerpo, primerNombre);
+  verificarFormatoCampana(tituloFinal);
+  verificarFormatoCampana(cuerpoFinal);
   await encolarPieza({
     tipo: 'correo_seguimiento', prioridad: 'normal', agente: 'sdr',
     prospectoId: c.id,
-    titulo: sustituirMarcador(asunto, primerNombre).slice(0, 120),
-    cuerpo: sustituirMarcador(cuerpo, primerNombre),
+    titulo: tituloFinal,
+    cuerpo: cuerpoFinal,
     fuentes: { seguimiento: c.numeroSeguimiento, de: CADENCIA_SDR_DIAS.length },
   });
   return r.cost;

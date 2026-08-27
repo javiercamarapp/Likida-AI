@@ -25,12 +25,21 @@ function builder(tabla: string) {
 }
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => builder(t) }) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('../interruptores', () => ({ estaApagado: async () => false }));
-vi.mock('@/lib/llm/openrouter', () => ({ generateResponse: vi.fn() }));
-vi.mock('./cola', () => ({ encolarPieza: vi.fn() }));
+const generar = vi.fn();
+vi.mock('@/lib/llm/openrouter', () => ({ generateResponse: (...a: unknown[]) => generar(...(a as [])) }));
+const encolar = vi.fn(async () => 'pieza-1');
+vi.mock('./cola', () => ({
+  encolarPieza: (...a: unknown[]) => encolar(...(a as [])),
+  // El verificador real vive en cola.ts (c5-14); aquí su réplica mínima.
+  verificarFormatoCampana: (t: string) => {
+    if (/clientes?\s+reales/i.test(t)) throw new Error('clientes reales');
+    if (t.includes('—')) throw new Error('guion largo');
+  },
+}));
 vi.mock('./corridas', () => ({ registrarCorrida: vi.fn() }));
+vi.mock('../interruptores', () => ({ estaApagado: async () => false }));
 
-const { candidatosDeSeguimiento } = await import('./sdr');
+const { candidatosDeSeguimiento, correrSdr } = await import('./sdr');
 
 const PROSPECTO = { id: 'pr-1', empresa: 'Transportes X', contacto_nombre: null };
 const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000).toISOString();
@@ -88,5 +97,33 @@ describe('candidatosDeSeguimiento', () => {
     respuestas.set('prospecto', [{ data: [PROSPECTO], error: null }]);
     respuestas.set('prospecto_contacto', [{ data: null, error: { message: 'db down' } }]);
     await expect(candidatosDeSeguimiento(5)).rejects.toThrow(/historial/);
+  });
+});
+
+describe('c5-14 — el formato se verifica sobre el TEXTO FINAL, asunto incluido', () => {
+  const candidato = () => {
+    respuestas.set('prospecto', [{ data: [PROSPECTO], error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: [{ direccion: 'salida', ocurrio_en: hace(4) }], error: null }]);
+    respuestas.set('cola_aprobacion', [
+      { data: [], error: null },   // sin rebote/queja
+      { data: [], error: null },   // sin pieza pendiente
+    ]);
+  };
+
+  it('un guion largo en el ASUNTO descarta la pieza — antes salía igual', async () => {
+    candidato();
+    generar.mockResolvedValue({ text: '**Asunto:** Seguimiento — liquidación\nLe escribí hace unos días. ¿Le vienen bien 15 minutos?', cost: 0.001 });
+    const r = await correrSdr('cron', 5);
+    expect(r.piezas).toBe(0);
+    expect(r.saltados).toBe(1);
+    expect(encolar).not.toHaveBeenCalled();
+  });
+
+  it('el asunto y cuerpo limpios sí encolan', async () => {
+    candidato();
+    generar.mockResolvedValue({ text: '**Asunto:** Sobre la liquidacion de viajes\nLe escribí hace unos días sobre la liquidación. ¿Le vienen bien 15 minutos esta semana?', cost: 0.001 });
+    const r = await correrSdr('cron', 5);
+    expect(r.piezas).toBe(1);
+    expect(encolar).toHaveBeenCalledWith(expect.objectContaining({ tipo: 'correo_seguimiento' }));
   });
 });

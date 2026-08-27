@@ -116,11 +116,24 @@ describe('los cuatro candados', () => {
     expect(redactar).not.toHaveBeenCalled();
   });
 
-  it('sin tenant explícito no se corre — el techo central no se verifica a ciegas', async () => {
+  it('sin tenant explícito, la corrida es de PLATAFORMA (c5-10): gasto medido vs techo, y el lote corre', async () => {
     respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
+    respuestas.set('agente_corrida', [{ data: [{ costo_usd: 0.01 }], error: null }]);   // gasto del día
+    respuestas.set('prospecto', [{ data: [{ id: 'pr-1', vendedor: null }], error: null }]);
     const r = await correrRunner();
-    expect(r.agentes[0].motivo).toMatch(/tenant explícito/);
+    expect(r.agentes[0].resultado).toBe('corrio');
+    // El redactor recibió el contexto de plataforma, no un tenant inventado.
+    expect(redactar).toHaveBeenCalledWith('pr-1', 'Javier', 'cron', { plataforma: true });
+  });
+
+  it('plataforma con el techo diario ya gastado: saltado con el motivo (c5-10)', async () => {
+    respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
+    respuestas.set('agente_corrida', [{ data: [{ costo_usd: 99 }], error: null }]);
+    const r = await correrRunner();
+    expect(r.agentes[0].resultado).toBe('saltado');
+    expect(r.agentes[0].motivo).toMatch(/techo diario/);
     expect(redactar).not.toHaveBeenCalled();
   });
 

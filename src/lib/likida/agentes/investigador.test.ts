@@ -83,3 +83,62 @@ describe('textoVisible y enlacesInstitucionales — el rastreo mínimo', () => {
     expect(r).toEqual(['https://x.mx/contacto', 'https://x.mx/nosotros']);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA FABLE CICLO 5 — c5-4 (compuerta de dominio) y c5-11 (SSRF).
+// ═══════════════════════════════════════════════════════════════════════════
+const { separarPorDominio, esIpPrivada, MAX_CORREOS_EMPRESA } = await import('./investigador');
+
+describe('c5-4 — la compuerta de dominio: correos de terceros JAMÁS entran a la lista de envío', () => {
+  const correo = (c: string) => ({ correo: c, contacto_nombre: null, puesto: null, fuente: 'https://www.empresa.mx/contacto' });
+
+  it('el webmaster de la agencia del pie NO es de la empresa — va a ajenos', () => {
+    const { propios, ajenos } = separarPorDominio(
+      [correo('ventas@empresa.mx'), correo('webmaster@agenciadigital.com')],
+      'https://www.empresa.mx', 'contacto@empresa.mx',
+    );
+    expect(propios.map((c) => c.correo)).toEqual(['ventas@empresa.mx']);
+    expect(ajenos.map((c) => c.correo)).toEqual(['webmaster@agenciadigital.com']);
+  });
+
+  it('el dominio del correo PRINCIPAL también permite (pymes con gmail)', () => {
+    const { propios } = separarPorDominio(
+      [correo('otro@gmail.com')],
+      'https://www.empresa.mx', 'dueno@gmail.com',
+    );
+    expect(propios.map((c) => c.correo)).toEqual(['otro@gmail.com']);
+  });
+
+  it('sin sitio ni principal, TODO es ajeno — nada entra a ciegas', () => {
+    const { propios, ajenos } = separarPorDominio([correo('x@y.mx')], null, null);
+    expect(propios).toHaveLength(0);
+    expect(ajenos).toHaveLength(1);
+  });
+
+  it('www. no estorba la coincidencia', () => {
+    const { propios } = separarPorDominio([correo('a@empresa.com.mx')], 'https://www.empresa.com.mx/inicio', null);
+    expect(propios).toHaveLength(1);
+  });
+
+  it('el tope por empresa existe y es finito (sitio hostil con cientos de correos)', () => {
+    expect(MAX_CORREOS_EMPRESA).toBeGreaterThan(0);
+    expect(MAX_CORREOS_EMPRESA).toBeLessThanOrEqual(30);
+  });
+});
+
+describe('c5-11 — la frontera SSRF: IPs privadas jamás se visitan', () => {
+  it('clasifica las privadas/loopback/link-local como privadas', () => {
+    for (const ip of ['127.0.0.1', '10.0.0.5', '172.16.9.1', '172.31.255.255', '192.168.1.1', '169.254.169.254', '0.0.0.0', '::1', 'fd00::1', 'fe80::1']) {
+      expect(esIpPrivada(ip), ip).toBe(true);
+    }
+  });
+  it('las públicas pasan', () => {
+    for (const ip of ['8.8.8.8', '104.18.32.7', '201.150.36.1', '2607:f8b0::1']) {
+      expect(esIpPrivada(ip), ip).toBe(false);
+    }
+  });
+  it('172.15 y 172.32 NO son privadas (el /12 es exacto)', () => {
+    expect(esIpPrivada('172.15.0.1')).toBe(false);
+    expect(esIpPrivada('172.32.0.1')).toBe(false);
+  });
+});

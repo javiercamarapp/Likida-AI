@@ -593,7 +593,10 @@ async function leerDatosKpi(dia: string, esLunes: boolean): Promise<{ datos: Dat
   const ayerFuePeriodoLunes = esLunes ? false : lunesDe(ayer) === ayer;
   const ayerSalio = await porValor('reporte de ayer', async () => {
     const r = await leerReporte('kpi_whatsapp', ayerFuePeriodoLunes ? `lun-${ayer}` : `dia-${ayer}`);
-    return r !== null;
+    // Con la reserva-antes-de-enviar (c5-15), "existe la fila" ya no implica
+    // "salió": solo la FECHA de envío cuenta — un ayer ambiguo se reporta
+    // como no-salido, que es exactamente decirlo en el siguiente reporte.
+    return r?.enviadoEn != null;
   });
   const datos: DatosKpi = {
     dia, interruptores, resumen, conteos, revisar, bandeja,
@@ -622,8 +625,12 @@ async function leerDatosCiclo(lunes: string): Promise<{ datos: DatosCiclo; ciega
   const [prospectos, facturas, piezas, pendientes, conteos, revisar, prev] = await Promise.all([
     porValor('prospectos por estado', () => contarPorEstado('prospecto', ESTADOS_PROSPECTO, 'direccion.prospectos')),
     porValor('facturas SaaS por estado', () => contarPorEstado('factura_saas', ESTADOS_FACTURA_SAAS, 'direccion.factura_saas')),
+    // c5-9: la columna de cola_aprobacion es `creado_en` (0117) — con
+    // `created_at` PostgREST devolvía 42703 y esta fuente nacía MUERTA: el
+    // reporte semanal decía «sin dato» todas las semanas. Hay una prueba
+    // estructural que veta `created_at` en este archivo.
     porValor('piezas fabricadas esta semana', () => contarExacto('cola_aprobacion', 'direccion.piezas_semana', (b) =>
-      (b as { gte: (c: string, v: string) => unknown }).gte('created_at', inicioSemana))),
+      (b as { gte: (c: string, v: string) => unknown }).gte('creado_en', inicioSemana))),
     porValor('piezas pendientes de aprobación', () => contarExacto('cola_aprobacion', 'direccion.pendientes', (b) =>
       (b as { eq: (c: string, v: string) => unknown }).eq('estado', 'pendiente'))),
     porValor('conteos de plataforma', () => getConteosPlataforma()),
@@ -670,9 +677,9 @@ export interface CorridaDireccion {
 
 const PIE_CANAL = 'Canal interino: correo del operador — el WhatsApp de Javier espera el número verificado de Meta.';
 
-async function enviarReporte(asunto: string, titulo: string, cuerpo: string): Promise<{ ok: true } | { ok: false; motivo: string }> {
+async function enviarReporte(asunto: string, titulo: string, cuerpo: string): Promise<{ ok: true } | { ok: false; motivo: string; definitivo: boolean }> {
   const para = process.env.ALERTA_EMAIL;
-  if (!para) return { ok: false, motivo: 'ALERTA_EMAIL sin configurar — el reporte no tiene canal' };
+  if (!para) return { ok: false, motivo: 'ALERTA_EMAIL sin configurar — el reporte no tiene canal', definitivo: true };
   const r = await enviarCorreo(para, {
     asunto,
     avance: cuerpo.split('\n').find((l) => l.trim().length > 0)?.slice(0, 120) ?? titulo,
@@ -682,7 +689,30 @@ async function enviarReporte(asunto: string, titulo: string, cuerpo: string): Pr
     porQueLoRecibes: `Recibes este reporte porque ALERTA_EMAIL apunta a esta dirección: es el canal del operador del sistema. ${PIE_CANAL}`,
   });
   if (r.ok) return { ok: true };
-  return { ok: false, motivo: `el correo no salió (${r.motivo})` };
+  // 'red' incluye el timeout: AMBIGUO — el correo pudo haber salido con la
+  // respuesta perdida (c5-15). El llamador NO reintenta un ambiguo: reenvía
+  // solo lo definitivamente no-enviado.
+  return { ok: false, motivo: `el correo no salió (${r.motivo})`, definitivo: r.motivo !== 'red' };
+}
+
+/** Sella el envío de un reporte YA reservado (c5-15): el INSERT del periodo
+ *  va ANTES del correo — la carrera de dos pasadas la gana una — y este
+ *  UPDATE pone la fecha solo tras la aceptación del canal. */
+async function marcarReporteEnviado(agente: AgenteDireccion, periodo: string): Promise<void> {
+  const { error } = await supabaseAdmin().from('reporte_direccion')
+    .update({ enviado_en: new Date().toISOString() })
+    .eq('agente', agente).eq('periodo', periodo).is('enviado_en', null);
+  if (error) logger.error('direccion.sello_no_escrito', { agente, periodo, err: error.message });
+}
+
+/** Borra la reserva de un periodo cuyo envío falló DEFINITIVAMENTE (el canal
+ *  dijo que no; nada salió): la siguiente pasada vuelve a intentar. Jamás se
+ *  llama tras un fallo ambiguo — ahí la reserva se queda como "generado,
+ *  envío por confirmar" precisamente para que nadie reenvíe. */
+async function borrarReservaReporte(agente: AgenteDireccion, periodo: string): Promise<void> {
+  const { error } = await supabaseAdmin().from('reporte_direccion')
+    .delete().eq('agente', agente).eq('periodo', periodo).is('enviado_en', null);
+  if (error) logger.error('direccion.reserva_no_borrada', { agente, periodo, err: error.message });
 }
 
 /** Registra la corrida del agente — jamás lanza (contrato de corridas.ts). */
@@ -718,7 +748,14 @@ export async function correrAgenteDireccion(
     if (agente === 'desempeno_startup' || agente === 'orquestador_semanal') {
       if (!esLunes) return { resultado: 'saltado', motivo: 'corre los lunes (día de México)' };
       const previo = await leerReporte(agente, periodoSemanal);
-      if (previo) return { resultado: 'saltado', motivo: 'el artefacto de esta semana ya está generado' };
+      if (previo) {
+        // c5-15: el artefacto puede haberlo fabricado OTRO agente (el kpi del
+        // lunes lo arma vía obtenerOArmarArtefacto). Sin esta corrida, el
+        // detector del orquestador acusaba «NO CORRIÓ» a un productor cuyo
+        // trabajo de la semana SÍ está hecho — recogerlo también es correr.
+        await anotar(agente, inicio, 'ok', disparo, { periodo: periodoSemanal, recogido: 'el artefacto de esta semana ya estaba generado' });
+        return { resultado: 'saltado', motivo: 'el artefacto de esta semana ya está generado' };
+      }
       const armado = agente === 'desempeno_startup'
         ? await (async () => {
           const { datos, ciegas } = await leerDatosDiagnostico(dia);
@@ -734,7 +771,10 @@ export async function correrAgenteDireccion(
           };
         })();
       const guardado = await guardarReporte(agente, periodoSemanal, armado.cuerpo, armado.resumen, armado.ciegas, null);
-      if (guardado === 'ya_existia') return { resultado: 'saltado', motivo: 'otra corrida generó el artefacto primero (unique)' };
+      if (guardado === 'ya_existia') {
+        await anotar(agente, inicio, 'ok', disparo, { periodo: periodoSemanal, recogido: 'otra corrida generó el artefacto primero (unique)' });
+        return { resultado: 'saltado', motivo: 'otra corrida generó el artefacto primero (unique)' };
+      }
       await anotar(agente, inicio, 'ok', disparo, { periodo: periodoSemanal, fuentes_ciegas: armado.ciegas });
       return { resultado: 'corrio', piezas: 1, costoUsd: 0 };
     }
@@ -748,18 +788,29 @@ export async function correrAgenteDireccion(
       if (!esLunes) return { resultado: 'saltado', motivo: 'corre los lunes (día de México)' };
       const sello = await leerReporte(agente, periodoSemanal);
       if (sello?.enviadoEn) return { resultado: 'saltado', motivo: 'el parte de esta semana ya salió' };
+      // c5-15: una reserva SIN fecha de envío es un intento previo AMBIGUO
+      // (el correo pudo haber salido) — no se reenvía; se dice.
+      if (sello) return { resultado: 'saltado', motivo: 'el parte de esta semana quedó generado con envío por confirmar (fallo ambiguo del canal) — no se reenvía solo' };
       const ciclo = await obtenerOArmarArtefacto('orquestador_semanal', periodoSemanal, async () => {
         const { datos, ciegas } = await leerDatosCiclo(lunes);
         return { cuerpo: armarSeccionesCiclo(datos), resumen: { prospectos: datos.prospectos.valor }, ciegas };
       });
       const { datos, ciegas } = await leerDatosOperativo(lunes, ciclo.cuerpo);
       const cuerpo = armarParteOperativo(datos, ahora.getTime());
+      // LA RESERVA VA ANTES DEL CORREO (c5-15): dos pasadas solapadas ya no
+      // mandan el parte dos veces — el unique de (agente, periodo) elige una.
+      const reserva = await guardarReporte(agente, periodoSemanal, cuerpo, null, ciegas, null);
+      if (reserva === 'ya_existia') return { resultado: 'saltado', motivo: 'otra pasada reservó el parte primero (unique)' };
       const envio = await enviarReporte(`[Likida] Parte operativo · semana del ${lunes}`, 'El parte operativo del lunes', cuerpo);
       if (!envio.ok) {
-        await anotar(agente, inicio, 'fallo', disparo, { periodo: periodoSemanal }, envio.motivo);
+        // Definitivo (el canal dijo que no): la reserva se libera y la
+        // siguiente pasada reintenta. Ambiguo (timeout): la reserva se QUEDA
+        // — reenviar un "no sé" duplica el correo; el estado es visible.
+        if (envio.definitivo) await borrarReservaReporte(agente, periodoSemanal);
+        await anotar(agente, inicio, 'fallo', disparo, { periodo: periodoSemanal, ambiguo: !envio.definitivo }, envio.motivo);
         return { resultado: 'corrio', piezas: 0, motivo: envio.motivo };
       }
-      await guardarReporte(agente, periodoSemanal, cuerpo, null, ciegas, new Date().toISOString());
+      await marcarReporteEnviado(agente, periodoSemanal);
       await anotar(agente, inicio, 'ok', disparo, { periodo: periodoSemanal, canal: 'correo', fuentes_ciegas: ciegas });
       return { resultado: 'corrio', piezas: 1, costoUsd: 0 };
     }
@@ -768,6 +819,8 @@ export async function correrAgenteDireccion(
     const periodo = esLunes ? periodoSemanal : `dia-${dia}`;
     const sello = await leerReporte('kpi_whatsapp', periodo);
     if (sello?.enviadoEn) return { resultado: 'saltado', motivo: 'el reporte de este periodo ya salió' };
+    // c5-15: reserva sin fecha = intento previo ambiguo — no se reenvía.
+    if (sello) return { resultado: 'saltado', motivo: 'el reporte de este periodo quedó generado con envío por confirmar (fallo ambiguo del canal) — no se reenvía solo' };
 
     let cuerpo: string;
     let ciegas: string[];
@@ -790,13 +843,18 @@ export async function correrAgenteDireccion(
     }
 
     const asunto = esLunes ? `[Likida] La semana, en un correo · ${lunes}` : `[Likida] El día en 10 segundos · ${dia}`;
+    // LA RESERVA VA ANTES DEL CORREO (c5-15): el unique de (agente, periodo)
+    // resuelve la carrera de dos pasadas — el correo doble a Javier era el
+    // bug; la FECHA de envío se estampa solo tras la aceptación (c2-1/0202).
+    const reserva = await guardarReporte('kpi_whatsapp', periodo, cuerpo, null, ciegas, null);
+    if (reserva === 'ya_existia') return { resultado: 'saltado', motivo: 'otra pasada reservó el reporte primero (unique)' };
     const envio = await enviarReporte(asunto, esLunes ? 'El reporte del lunes' : 'El reporte del día', cuerpo);
     if (!envio.ok) {
-      await anotar('kpi_whatsapp', inicio, 'fallo', disparo, { periodo }, envio.motivo);
+      if (envio.definitivo) await borrarReservaReporte('kpi_whatsapp', periodo);
+      await anotar('kpi_whatsapp', inicio, 'fallo', disparo, { periodo, ambiguo: !envio.definitivo }, envio.motivo);
       return { resultado: 'corrio', piezas: 0, motivo: envio.motivo };
     }
-    // El sello, DESPUÉS de que el canal aceptó (lección c2-1 / patrón 0202).
-    await guardarReporte('kpi_whatsapp', periodo, cuerpo, null, ciegas, new Date().toISOString());
+    await marcarReporteEnviado('kpi_whatsapp', periodo);
     await anotar('kpi_whatsapp', inicio, 'ok', disparo, { periodo, canal: 'correo', fuentes_ciegas: ciegas });
     return { resultado: 'corrio', piezas: 1, costoUsd: 0 };
   } catch (e) {

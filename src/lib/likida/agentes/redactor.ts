@@ -25,7 +25,7 @@ import { DatoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
 import { generateResponse } from '@/lib/llm/openrouter';
 import { createLlmBudget, type LlmBudget } from '@/lib/llm/budget';
-import { encolarPieza } from './cola';
+import { encolarPieza, verificarFormatoCampana } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
 import { logger } from '@/lib/logger';
 
@@ -93,13 +93,27 @@ interface Variante { asunto: string; cuerpo: string }
  * varias piezas del mismo lote, sin reiniciar la contabilidad por prospecto.
  */
 export interface RedactorExecutionContext {
-  tenantId: string | null | undefined;
+  tenantId?: string | null | undefined;
   budget?: LlmBudget;
   runId?: string;
   maxTenantDailyUsd?: number;
+  /**
+   * AUDITORÍA FABLE CICLO 5 (c5-10): el gasto es de LIKIDA (tenant null) —
+   * el mismo contrato que investigador/SDR/enviador desde la 0217. El techo
+   * NO desaparece: lo vigila el runner comparando el gasto MEDIDO del día
+   * (agente_corrida.costo_usd, que cada corrida escribe) contra el
+   * `presupuesto_dia_usd` declarado del agente. Sin este modo, la corrida
+   * cron del runner no tenía ningún tenant que darle y el Redactor quedaba
+   * "saltado — fail closed" en TODA pasada: la cadena cron→redactor→
+   * enviador→SDR estaba muerta y la máquina solo trabajaba a mano.
+   */
+  plataforma?: boolean;
 }
 
-function presupuestoDelRedactor(contexto: RedactorExecutionContext | undefined): LlmBudget {
+function presupuestoDelRedactor(contexto: RedactorExecutionContext | undefined): LlmBudget | undefined {
+  // El modo plataforma no lleva ledger por-tenant: su techo es el gasto
+  // medido contra el presupuesto declarado, en el runner (c5-10).
+  if (contexto?.plataforma) return undefined;
   if (contexto?.budget) {
     if (contexto.tenantId !== undefined && contexto.tenantId !== null
       && contexto.tenantId !== contexto.budget.tenantId) {
@@ -119,19 +133,11 @@ const MARCADOR_NOMBRE = '{{NOMBRE}}';
  *  se impone en CÓDIGO tras el parseo, no se le confía al modelo. */
 export const ASUNTO_CAMPANA = 'Automatizar la liquidación de viajes, antes de contratar para el puesto';
 
-/** El verificador ESTRUCTURAL del formato de campaña — los dos guardarraíles
- *  cazados en vivo en la campaña real: jamás "clientes reales" (ninguna
- *  empresa ha firmado; la frase permitida es "en pláticas con...") y sin
- *  guiones largos. Es código, no prompt: un correo que los viole NO entra a
- *  la cola. Exportado para su prueba. */
-export function verificarFormatoCampana(texto: string): void {
-  if (/clientes?\s+reales/i.test(texto)) {
-    throw new DatoInvalido('El correo dice "clientes reales" — ninguna empresa ha firmado; la frase permitida es "en pláticas con transportistas como...". Pieza descartada.');
-  }
-  if (texto.includes('—')) {
-    throw new DatoInvalido('El correo trae guion largo (—) — el formato de campaña los prohíbe. Pieza descartada.');
-  }
-}
+// El verificador ESTRUCTURAL del formato de campaña vive ahora en cola.ts
+// (c5-14): la PUERTA de salida también lo aplica — una edición humana o una
+// pieza retomada que lo viole tampoco sale. Se re-exporta para los
+// llamadores y pruebas que lo importaban de aquí.
+export { verificarFormatoCampana };
 
 /** El nombre de pila del contacto — lo único que se sustituye de vuelta, y
  *  SOLO fuera del modelo (ver la nota de AUDITORÍA 19 legal C2 en el
