@@ -151,6 +151,10 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // que el jefe de tráfico no ve.
   '/dashboard/clientes': 'dinero',
   '/dashboard/facturacion': 'dinero',
+  // El cotizador (0225, A8): costos, márgenes y precio sugerido — la
+  // definición misma de lo que el encargado no ve. Espejo de la RLS
+  // `ve_finanzas()` que la 0051 le puso a `cotizacion`.
+  '/dashboard/cotizaciones': 'dinero',
   // Preguntar a la IA — reconstruida el 12-ago-2026 (la primera de las 17).
   // Es `dinero` porque responde montos comprobados/IVA/peaje (§12: las
   // cifras se piden DESPUÉS de este gateo).
