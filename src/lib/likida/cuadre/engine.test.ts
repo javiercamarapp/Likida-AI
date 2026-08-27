@@ -1423,7 +1423,9 @@ describe('cuadrarViaje — comprobante de otro ejercicio', () => {
       viajeId: 'v1', anticipo: 1000, politica: pol, hoy: '2026-07-28',
       gastos: [g({ concepto: 'diesel', monto: 714.75, fecha: '2024-07-27', cfdiUuid: 'u1' })],
     });
-    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(true);
+    // FISCAL (rutina-fiscal-wip): tipo propio desde ahora — antes era
+    // `fecha_sospechosa` y no excluía el gasto de `totalDeducible`.
+    expect(r.diferencias.some((d) => d.tipo === 'gasto_otro_ejercicio')).toBe(true);
     expect(r.estatus).toBe('revisar');
   });
 
@@ -1432,7 +1434,7 @@ describe('cuadrarViaje — comprobante de otro ejercicio', () => {
       viajeId: 'v1', anticipo: 1000, politica: pol, hoy: '2026-07-28',
       gastos: [g({ concepto: 'diesel', monto: 714.75, fecha: '2026-01-15', cfdiUuid: 'u1' })],
     });
-    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(false);
+    expect(r.diferencias.some((d) => d.tipo === 'gasto_otro_ejercicio')).toBe(false);
   });
 
   it('tampoco se marca uno de diciembre pasado si estamos en enero', () => {
@@ -1442,7 +1444,7 @@ describe('cuadrarViaje — comprobante de otro ejercicio', () => {
       viajeId: 'v1', anticipo: 1000, politica: pol, hoy: '2026-01-05',
       gastos: [g({ concepto: 'diesel', monto: 714.75, fecha: '2025-12-30', cfdiUuid: 'u1' })],
     });
-    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(false);
+    expect(r.diferencias.some((d) => d.tipo === 'gasto_otro_ejercicio')).toBe(false);
   });
 
   it('sin `hoy` no inventa un veredicto', () => {
@@ -1450,7 +1452,7 @@ describe('cuadrarViaje — comprobante de otro ejercicio', () => {
       viajeId: 'v1', anticipo: 1000, politica: pol,
       gastos: [g({ concepto: 'diesel', monto: 714.75, fecha: '2024-07-27', cfdiUuid: 'u1' })],
     });
-    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(false);
+    expect(r.diferencias.some((d) => d.tipo === 'gasto_otro_ejercicio')).toBe(false);
   });
 });
 

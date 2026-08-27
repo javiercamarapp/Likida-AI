@@ -232,7 +232,7 @@ export const LECTURA_RFA_29_PRORRATEO =
   'la lectura literal del "siempre que" de la regla 2.9 negaría la facilidad a TODO el combustible en efectivo ' +
   'del ejercicio — confírmela con su contador.';
 
-export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
+export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible', 'gasto_otro_ejercicio'];
 export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'consumo_bar', 'ticket_monedero', 'renglones_ajenos'];
 
 /**
@@ -666,7 +666,13 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       const motivo = fechaDudosa(f, { fechaMin: input.fechaMin, fechaMax: input.fechaMax, hoy: input.hoy });
       if (motivo === 'otro_ejercicio') {
         const ejercicioHoy = input.hoy ? Number(input.hoy.slice(0, 4)) : null;
-        diferencias.push({ tipo: 'fecha_sospechosa', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} está fechado en ${Number(f.slice(0, 4))} y estamos en ${ejercicioHoy}: un gasto de otro ejercicio no se deduce en este. Puede ser un error de lectura — verifica la fecha impresa.`, gastoId: g.id });
+        // FISCAL (rescatado de rutina-fiscal-wip, 26-ago-2026): iba con el
+        // mismo `tipo` que el gasto simplemente "fuera de rango" de abajo —
+        // ninguno de los dos buckets de deducibilidad lo excluía, así que
+        // `totalDeducible` lo sumaba de todas formas mientras la nota decía
+        // "no se deduce en este [ejercicio]". La frase y el dinero no
+        // coincidían. Tipo propio, en NO_DEDUCIBLE_ISR.
+        diferencias.push({ tipo: 'gasto_otro_ejercicio', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} está fechado en ${Number(f.slice(0, 4))} y estamos en ${ejercicioHoy}: un gasto de otro ejercicio no se deduce en este. Puede ser un error de lectura — verifica la fecha impresa.`, gastoId: g.id });
       } else if (motivo === 'fuera_de_rango') {
         diferencias.push({ tipo: 'fecha_sospechosa', concepto: g.concepto, monto: 0, nota: `La fecha del comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} (${f}) está fuera del rango esperado del viaje — verifícala (afecta periodo fiscal y plazo de facturación).`, gastoId: g.id });
       }
@@ -1010,7 +1016,8 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       //
       // Dudar de un dato y a la vez actuar sobre él es peor que no dudar: el
       // aviso lleva la autoridad de un cálculo y la fragilidad de una lectura.
-      const fechaEnDuda = diferencias.some((d) => d.tipo === 'fecha_sospechosa' && d.gastoId === g.id);
+      const fechaEnDuda = diferencias.some((d) =>
+        (d.tipo === 'fecha_sospechosa' || d.tipo === 'gasto_otro_ejercicio') && d.gastoId === g.id);
       const cuerpo = fechaEnDuda
         ? `no se puede calcular el plazo de facturación: su fecha no cuadra con el viaje y hay que verificarla primero en el papel`
         : c.vencido
@@ -1429,7 +1436,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // central del demo. El requisito sigue avisado —ahora con tono `condicionado`
   // en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
   // no puede bajar un estatus que nunca podría volver a subir.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'consumo_bar', 'ticket_monedero', 'oposicion_titular', 'renglones_ajenos'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'gasto_otro_ejercicio', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'consumo_bar', 'ticket_monedero', 'oposicion_titular', 'renglones_ajenos'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';

@@ -1,0 +1,88 @@
+id: red-nacional-autopistas
+tipo: ley
+jerarquia: 1
+instrumento: "Ley de Ingresos de la Federación 2026 / Ley de Caminos, Puentes y Autotransporte Federal / catálogos oficiales"
+articulo_o_regla: "LIF 2026 art. 20 ap. A fr. V; LCPAF art. 2o. fr. I"
+titulo: "Qué es la Red Nacional de Autopistas de Cuota — y por qué NO se puede resolver con una lista blanca de casetas"
+citas_en_codigo: ["Red Nacional de Autopistas de Cuota"]
+texto_vigente: >
+  LIF 2026, art. 20, apartado A, fracción V: "Se otorga un estímulo fiscal a las
+  personas contribuyentes que se dediquen exclusivamente al transporte terrestre
+  público y privado, de carga o pasaje, así como el turístico, QUE UTILIZAN LA RED
+  NACIONAL DE AUTOPISTAS DE CUOTA [...]"
+  ---
+  Ley de Caminos, Puentes y Autotransporte Federal, art. 2o. fr. I, define
+  "Caminos o carreteras": "los que en su totalidad o en su mayor parte sean
+  construidos por la Federación; con fondos federales o mediante concesión federal
+  por particulares, estados o municipios."
+fecha_publicacion: 2025-11-07
+fecha_vigencia_desde: 2026-01-01
+fuente_url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIF_2026.pdf"
+fuente_tipo: diputados_oficial
+estado_verificacion: verificado_fuente_primaria
+
+el_hallazgo_central: >
+  "RED NACIONAL DE AUTOPISTAS DE CUOTA" ES UN TÉRMINO EXCLUSIVAMENTE FISCAL,
+  ACUÑADO POR LA LIF, SIN CORRELATO EN LA LEGISLACIÓN SECTORIAL. No existe
+  definición legal. La Ley de Caminos, Puentes y Autotransporte Federal NI
+  SIQUIERA DEFINE "AUTOPISTA". Lo único que define es "caminos o carreteras", y
+  con una lógica INCLUSIVA que abarca lo construido por la Federación, con fondos
+  federales, o por concesión a particulares, estados o municipios — la misma
+  lógica que la regla 9.1.7 de la RMF.
+
+catalogos_oficiales_localizados:
+  nota: "Ninguna autoridad publica una tabla puente entre los tres universos. El matching CFDI→plaza tiene que ser difuso."
+  plazas_de_cobro_rnc: >
+    Shapefile `05_plaza_cobro` de la Red Nacional de Caminos (IMT/SICT), espejo en
+    https://rnc.imt.mx/recursos/ShapeFiles/Plaza_cobro_shapefiles2025.zip
+    (licencia CC-BY 4.0; rnc.imt.mx da 403 a bots pero 200 a curl con UA de
+    navegador). 1,376 registros. Campo `ADMINISTRA`: CAPUFE 725, Concesionado 507,
+    Estatal 141, Municipal 3.
+  segmentos_con_peaje: >
+    Capa `01_red_vial` de la RNC, 4,349,691 registros, campo booleano `PEAJE`:
+    19,396 segmentos con peaje (Federal 15,290, Estatal 3,812, N/A 286,
+    Municipal 8). Es el clasificador a nivel SEGMENTO.
+  sict_datos_viales: >
+    "Datos Viales 2025", fascículo 33, SOLO PDF (195 pp., sin CSV ni API):
+    1,770 entradas, 843 números distintos, 336 casetas base.
+
+trampa_de_la_llave_id_plaza: >
+  `ID_PLAZA` NO ES UN IDENTIFICADOR DE CASETA: es un identificador de OBJETO
+  ESPACIAL. El diccionario oficial dice "un número secuencial que se incrementa
+  con cada ocurrencia del objeto espacial". Hay 1,376 registros para sólo 574
+  nombres únicos — una caseta física aparece varias veces, por carril o por
+  sentido ("La Carbonera" con ID_PLAZA 2 y 3). REGLA: úsalo como llave por
+  feature DENTRO de una edición; deduplica por NOMBRE + SECCION + SUBSECCION para
+  obtener la caseta; y guarda una llave interna propia, porque al ser secuencial
+  no hay garantía de estabilidad entre ediciones anuales.
+
+caso_borde_que_rompe_un_filtro_ingenuo: >
+  HAY PUENTES DE CUOTA SOBRE CARRETERA LIBRE (Puente Zacatal, Puente Grijalva,
+  puentes internacionales). El índice de SICT los marca "(LIBRE)" y SÍ GENERAN
+  PEAJE ACREDITABLE. No descartarlos por estar sobre vía libre.
+
+no_uses_el_rfc_emisor_como_discriminante: >
+  El portal de autofacturación de CAPUFE ofrece los emisores CPF6307036N8 (CAPUFE)
+  y FNI970829JR9 (FONADIN). Es un artefacto de aplicación, no un documento
+  normativo. Y las concesionadas y estatales emiten con cientos de RFC propios.
+  Además las etiquetas de CAPUFE (`red capufe` 30 tramos, `red fonadin` 43) NO
+  equivalen a la Red del estímulo: dejan fuera las 507 plazas concesionadas y las
+  141 estatales.
+
+no_existe_complemento_del_sat_para_peaje: >
+  Verificado sobre el XSD `catCartaPorte_30.xsd` y el XLS `CatalogosCartaPorte31`
+  (21.2 MB): grep de "caseta", "peaje" y "plaza de cobro" en los XSD da CERO. El
+  catálogo `c_FiguraTransporte` sólo tiene 01, 02, 03 y 04 (operador, propietario,
+  arrendador, notificado) y no tiene nada que ver con casetas.
+
+la_regla_de_negocio: >
+  NO CONSTRUIR LISTA BLANCA DE CASETAS. Prácticamente toda plaza del RNC cae
+  dentro de la Red; lo que hay que filtrar NO es la geografía sino el medio de
+  pago y la trazabilidad. La condición es:
+  es_de_cuota AND pago_con_TAG_o_sistema_electrónico (RMF 9.1.8 fr. III)
+  AND bitácora_origen_destino_conciliada_con_estado_de_cuenta (fr. II),
+  y luego factor 0.5 uniforme sobre el importe SIN IVA (fr. IV),
+  más el aviso de marzo con inventario vehicular (fr. I).
+
+verificado_el: 2026-08-20
+usado_en_codigo: []
