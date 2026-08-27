@@ -9066,3 +9066,61 @@ begin
   raise exception 'AVISO_VIGENCIA_0202  anon=%  authenticated=%  duplicado_rebota=%  renovacion_entra=%  umbral_malo_rebota=%   (esperado -1 / -1 / t / t / t)',
     n_anon, n_auth, duplicado_rebota, renovacion_entra, umbral_malo_rebota;
 end $$;
+
+-- ── 160. El agregado GPS cuenta por unidad y día de MÉXICO, sin fugas (mig. 0205) ──
+-- La evidencia GPS de los cruces de peaje se mide por día de America/Mexico_City
+-- (UTC-6 fijo desde 2022): una posición a las 05:59 UTC es del día ANTERIOR en
+-- México y a las 06:00 UTC ya es del día que corre. Se comprueba además que el
+-- margen de ±1 día del filtro por timestamptz NO deja salir días fuera del rango
+-- pedido, que las posiciones de otra unidad no prestan conteo, que el tenant
+-- ajeno no aparece ni pasando su unidad en el arreglo, y que anon/authenticated
+-- no pueden ejecutar el RPC (solo service_role).
+do $$
+declare
+  ta uuid; tb uuid; ua uuid; ub uuid; ux uuid;
+  dia20 bigint; dia21 bigint;
+  fuera boolean; tenant_ajeno boolean;
+  puede_anon boolean; puede_auth boolean; puede_service boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ GPS 0205 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ GPS 0205 B') returning id into tb;
+  insert into unidad (tenant_id, numero_economico, estado) values (ta, 'ZZZ-0205-A', 'disponible') returning id into ua;
+  insert into unidad (tenant_id, numero_economico, estado) values (ta, 'ZZZ-0205-B', 'disponible') returning id into ub;
+  insert into unidad (tenant_id, numero_economico, estado) values (tb, 'ZZZ-0205-X', 'disponible') returning id into ux;
+
+  insert into posicion (tenant_id, unidad_id, lat, lng, medida_en, proveedor) values
+    -- frontera de zona horaria: 05:59 UTC = 23:59 del día 20 en México
+    (ta, ua, 19.6, -99.2, '2026-08-21 05:59:00+00', 'verificacion'),
+    -- 06:00 UTC = 00:00 del día 21 en México
+    (ta, ua, 19.6, -99.2, '2026-08-21 06:00:00+00', 'verificacion'),
+    (ta, ua, 20.1, -99.8, '2026-08-21 18:00:00+00', 'verificacion'),
+    -- día 19 MX: dentro del margen ±1 del filtro, FUERA del rango pedido
+    (ta, ua, 19.6, -99.2, '2026-08-19 12:00:00+00', 'verificacion'),
+    -- otra unidad del mismo tenant, mismo día: no presta conteo a la unidad A
+    (ta, ub, 19.6, -99.2, '2026-08-21 12:00:00+00', 'verificacion'),
+    -- tenant ajeno: no aparece ni pidiéndolo en el arreglo
+    (tb, ux, 19.6, -99.2, '2026-08-21 12:00:00+00', 'verificacion');
+
+  select coalesce(max(n) filter (where dia = '2026-08-20'), 0),
+         coalesce(max(n) filter (where dia = '2026-08-21'), 0)
+    into dia20, dia21
+    from posiciones_por_unidad_dia(ta, array[ua], '2026-08-20', '2026-08-21')
+   where unidad_id = ua;
+
+  select exists (
+    select 1 from posiciones_por_unidad_dia(ta, array[ua], '2026-08-20', '2026-08-21')
+     where dia not between '2026-08-20' and '2026-08-21'
+  ) into fuera;
+
+  select exists (
+    select 1 from posiciones_por_unidad_dia(ta, array[ua, ux], '2026-08-20', '2026-08-21')
+     where unidad_id = ux
+  ) into tenant_ajeno;
+
+  puede_anon := has_function_privilege('anon', 'public.posiciones_por_unidad_dia(uuid, uuid[], date, date)', 'execute');
+  puede_auth := has_function_privilege('authenticated', 'public.posiciones_por_unidad_dia(uuid, uuid[], date, date)', 'execute');
+  puede_service := has_function_privilege('service_role', 'public.posiciones_por_unidad_dia(uuid, uuid[], date, date)', 'execute');
+
+  raise exception 'GPS_POR_DIA_0205  dia20=%  dia21=%  fuera=%  tenant_ajeno=%  anon=%  auth=%  service=%   (esperado 1 / 2 / f / f / f / f / t)',
+    dia20, dia21, fuera, tenant_ajeno, puede_anon, puede_auth, puede_service;
+end $$;

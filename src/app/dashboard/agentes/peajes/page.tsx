@@ -10,6 +10,7 @@ import { guardarYConciliarConsolidado, barrerPorConciliar, type ResumenBarrido }
 import {
   importarDesglose, conciliarDesglose, listarDesgloses, detalleDesglose,
 } from '@/lib/likida/intake/desglose_peaje';
+import { evidenciaGpsDeDesglose } from '@/lib/likida/peajes/evidencia_gps';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../../sufijo';
 import { avisoAgentePeajesApagado } from './apagado';
@@ -74,6 +75,17 @@ export default async function PaginaAgentePeajes({
     ?? null;
   const detalleSel = desgloseSel
     ? await safe(() => detalleDesglose(tenantId, desgloseSel.desgloseId))
+    : null;
+  // La evidencia GPS del desglose seleccionado (post-plan-maestro #1). Se
+  // computa al leer — no escribe nada — y `safe()` la degrada a "no se pudo
+  // leer" igual que el detalle: un resumen a medias diría "sin evidencia" de
+  // cruces que sí la tienen.
+  const evidenciaSel = desgloseSel
+    ? await safe(async () => {
+        const e = await evidenciaGpsDeDesglose(tenantId, desgloseSel.desgloseId);
+        // El Map → objeto plano: la vista solo anota las líneas visibles.
+        return { resumen: e.resumen, porLinea: Object.fromEntries(e.porLinea) };
+      })
     : null;
 
   async function subirDesglose(
@@ -246,6 +258,7 @@ export default async function PaginaAgentePeajes({
       desglosesProveedor={desglosesProveedor}
       desgloseSeleccionado={desgloseSel}
       detalleSeleccionado={detalleSel}
+      evidenciaGps={evidenciaSel}
       importarDesglose={importarYCruzarDesglose}
       conciliarDesglose={conciliarDesgloseAhora}
       notificaciones={
