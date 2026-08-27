@@ -78,6 +78,7 @@ import {
 import { estadoDelViaje, responderConsulta } from './consulta_chofer';
 import { resolverCuentaOficina, telefonoJefeDe, type CuentaOficina } from './contactos';
 import { atenderConfirmacion, aceptarPorActividad } from './confirmar_viaje';
+import { enviarBriefingInicio } from './briefing_inicio_wa';
 import { avisarCierreAlJefe } from './avisar_cierre';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
@@ -2592,6 +2593,20 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       if (c.mensaje) {
         logger.info('viaje.inicio', { viaje: c.viajeConfirmado ?? viajeId, intento, estado: c.estado });
         const entregado = await say(c.mensaje);
+
+        // EL SEGUNDO DISPARO DEL BRIEFING (0208): el chofer acaba de escribir,
+        // así que la ventana de 24 h está ABIERTA — es el momento en que el
+        // texto libre sí entra. Idempotente por el sello: si el intento del
+        // despacho ya llegó, esto devuelve `ya_enviado` y no manda nada.
+        // Mejor esfuerzo: la confirmación ya quedó registrada arriba y un
+        // briefing que no salió no puede deshacerla.
+        if (c.estado === 'confirmado' && c.viajeConfirmado) {
+          await enviarBriefingInicio(op.tenantId, c.viajeConfirmado).catch((e) => {
+            logger.warn('briefing.confirmacion_fallo', {
+              viaje: c.viajeConfirmado, err: e instanceof Error ? e.message : String(e),
+            });
+          });
+        }
         // ── EL TURNO SE GUARDA ───────────────────────────────────────────────
         //
         // Mismo criterio que el cierre del agente: los turnos del OPERADOR se
