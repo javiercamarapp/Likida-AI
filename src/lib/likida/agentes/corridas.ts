@@ -33,7 +33,15 @@ export type AgenteConCorridas = 'liquidacion' | 'facturas' | 'cobranza' | 'condu
   // El back office restante (0219): auditan, documentan, vigilan los relojes
   // legales de la EMPRESA y registran talento. Todas sus corridas son de
   // Likida (tenant null), igual que las de los financieros.
-  | 'vigilante_calidad' | 'documentacion' | 'legal_compliance' | 'talento';
+  | 'vigilante_calidad' | 'documentacion' | 'legal_compliance' | 'talento'
+  // Éxito del cliente (0218). Sus corridas van con `tenant_id` NULL como las
+  // de arriba: cada pasada barre TODAS las flotas de una vez (el parte de
+  // onboarding lista a las atoradas, el de retención a las que se enfrían),
+  // así que la corrida no es de ninguna flota en particular. Las PIEZAS que
+  // produce sí llevan tenant cuando son de una flota concreta — esa es la
+  // trazabilidad que la bandeja enseña.
+  | 'onboarding_cliente' | 'exito_cliente' | 'retencion'
+  | 'cobranza_saas' | 'soporte' | 'atencion_faq';
 export type EstadoCorrida = 'ok' | 'parcial' | 'fallo';
 /** `correo` (0108): el agente de Proveedores no corre por reloj — corre
  *  cuando llega un correo al buzón. Registrarlo como 'cron' pintaría

@@ -9892,6 +9892,102 @@ begin
     dup_rebota, otra_empresa_entra, formato_rebota, fuente_vacia_rebota, baja_doble_es_una, mayusculas_rebota, dossier_unico, switch_nuevo_entra, switch_inventado_rebota, cerrado;
 end $$;
 
+-- ── 176. Éxito del cliente: una pieza por periodo, y los seis con palanca, reloj y techo (mig. 0218) ──
+-- Lo que solo la base demuestra: (a) UNA pieza por (agente, título) — dos
+-- pasadas del runner que compitan por el mismo parte las resuelve el índice
+-- único parcial, gana exactamente una; (b) la parcialidad es real: el
+-- Redactor SÍ puede repetir título entre piezas (dos prospectos con el mismo
+-- asunto de campaña son legítimos); (c) el interruptor acepta los seis kill
+-- switches nuevos Y SIGUE aceptando los de las olas anteriores — recrear el
+-- CHECK enumerando solo los propios habría borrado en silencio las palancas
+-- de la 0215/0216/0217, que es el modo de falla que este bloque existe para
+-- cazar; (d) y sigue rechazando un id inventado; (e) los seis quedaron
+-- vivos, habilitados, disparados por reloj y CON techo declarado: el candado
+-- 3 del runner, comprobable como fila; (f) una pieza de un agente NO
+-- declarado no entra a la cola — la FK contra agente_definicion es la
+-- trazabilidad mínima de quién preparó qué.
+do $$
+declare
+  pieza_duplicada_rebota boolean; redactor_repite_ok boolean;
+  switches_nuevos_entran boolean; switches_previos_siguen boolean;
+  switch_inventado_rebota boolean; agente_no_declarado_rebota boolean;
+  vivos_con_techo int; en_cron int;
+  s text;
+begin
+  -- (a) Dos partes del mismo agente y periodo: el segundo rebota.
+  insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+    values ('parte_onboarding', 'onboarding_cliente', 'Onboarding — 2026-08-27', 'cuerpo');
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('parte_onboarding', 'onboarding_cliente', 'Onboarding — 2026-08-27', 'otro cuerpo');
+    pieza_duplicada_rebota := false;
+  exception when unique_violation then
+    pieza_duplicada_rebota := true;
+  end;
+
+  -- (b) El Redactor NO entra al índice parcial: repetir asunto es legítimo.
+  insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+    values ('correo_frio', 'redactor', 'Mismo asunto de campaña', 'uno');
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('correo_frio', 'redactor', 'Mismo asunto de campaña', 'dos');
+    redactor_repite_ok := true;
+  exception when unique_violation then
+    redactor_repite_ok := false;
+  end;
+
+  -- (c) Los seis nuevos entran…
+  switches_nuevos_entran := true;
+  foreach s in array array['agente:onboarding_cliente', 'agente:exito_cliente', 'agente:retencion',
+                           'agente:cobranza_saas', 'agente:soporte', 'agente:atencion_faq'] loop
+    begin
+      insert into interruptor (id, apagado, motivo) values (s, true, 'prueba 0218');
+    exception when check_violation then
+      switches_nuevos_entran := false;
+    end;
+  end loop;
+
+  -- …y las palancas de las olas anteriores siguen vivas.
+  switches_previos_siguen := true;
+  foreach s in array array['agente:liquidacion', 'agente:redactor', 'agente:control_costos',
+                           'agente:orquestador_semanal', 'agente:enviador'] loop
+    begin
+      insert into interruptor (id, apagado, motivo) values (s, true, 'prueba 0218');
+    exception when check_violation then
+      switches_previos_siguen := false;
+    end;
+  end loop;
+
+  -- (d) Un id fuera del catálogo sigue rebotando.
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:inventado_0218', true, 'basura');
+    switch_inventado_rebota := false;
+  exception when check_violation then
+    switch_inventado_rebota := true;
+  end;
+
+  -- (e) Los seis: vivos + habilitados + con techo, y por reloj.
+  select count(*) into vivos_con_techo from agente_definicion
+    where id in ('onboarding_cliente', 'exito_cliente', 'retencion', 'cobranza_saas', 'soporte', 'atencion_faq')
+      and estado = 'vivo' and runner_habilitado and presupuesto_dia_usd > 0;
+  select count(*) into en_cron from agente_definicion
+    where id in ('onboarding_cliente', 'exito_cliente', 'retencion', 'cobranza_saas', 'soporte', 'atencion_faq')
+      and disparador = 'cron';
+
+  -- (f) Un agente sin declarar no deja pieza en la cola.
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('parte_onboarding', 'agente_fantasma_0218', 'sin autor declarado', 'y');
+    agente_no_declarado_rebota := false;
+  exception when foreign_key_violation then
+    agente_no_declarado_rebota := true;
+  end;
+
+  raise exception 'EXITO_CLIENTE_0218  pieza_duplicada_rebota=%  redactor_repite_ok=%  switches_nuevos_entran=%  switches_previos_siguen=%  switch_inventado_rebota=%  vivos_con_techo=%  en_cron=%  agente_no_declarado_rebota=%   (esperado t / t / t / t / t / 6 / 6 / t)',
+    pieza_duplicada_rebota, redactor_repite_ok, switches_nuevos_entran, switches_previos_siguen,
+    switch_inventado_rebota, vivos_con_techo, en_cron, agente_no_declarado_rebota;
+end $$;
+
 -- ── 177. El back office restante: un parte por periodo, el registro de talento y sus candados (mig. 0219) ──
 -- Lo que solo la base demuestra del flip de los cuatro últimos del back
 -- office: (a) `cola_parte_backoffice_por_periodo` — dos pasadas del runner
@@ -10007,8 +10103,8 @@ begin
 end $$;
 
 -- ── 178. El cotizador: costos declarados con candados, y la cotización decidida UNA vez (mig. 0225) ──
--- (Los bloques 175-176 quedaron reservados a olas paralelas — hueco a
--- propósito, como el 165, 167-169 y 171. El 177 lo ocupó la 0219.)
+-- (El bloque 175 sigue reservado a una ola paralela — hueco a propósito,
+-- como el 165, 167-169 y 171. El 176 lo tomó la 0218 y el 177 la 0219.)
 -- Lo que solo la base demuestra: (a) `cotizador_config` es UNA fila por
 -- flota — la segunda rebota por PK; (b) los CHECKs de sanidad rebotan el
 -- factor de regreso fuera de 1–3 y el margen fuera de 0–90 (un factor 4 o
