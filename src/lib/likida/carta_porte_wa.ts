@@ -196,8 +196,9 @@ function leerBotonCcp(texto: string): { pisa: boolean; viajeId: string } | null 
 }
 
 /** El comando del radio: «radio F-123 25» (km opcionalmente con decimal y
- *  sufijo "km"). El folio es del viaje, no un uuid — se resuelve con LOOKUP
- *  acotado al tenant. */
+ *  sufijo "km"). El identificador es el folio del viaje — o el prefijo del
+ *  UUID cuando el viaje no tiene folio, que es lo que `rotuloViaje` dicta en
+ *  el aviso (c2-5) — y se resuelve con LOOKUP acotado al tenant. */
 function leerComandoRadio(texto: string): { folio: string; km: string } | null {
   // Por partes y con regex PLANOS (sin cuantificador anidado, que el linter
   // de seguridad marca como backtracking potencial): «radio <folio> <km>»,
@@ -300,7 +301,26 @@ export async function atenderCcpOficina(cuenta: CuentaCcp, texto: string): Promi
     logger.error('ccp.folio_ilegible', { err: error.message });
     return 'No pude buscar ese viaje ahorita — inténtalo de nuevo en un momento.';
   }
-  const filas = data ?? [];
+  let filas = data ?? [];
+  // AUDITORÍA FABLE CICLO 2 (c2-5): para un viaje SIN folio, `rotuloViaje`
+  // dicta el prefijo del UUID («radio 1a2b3c4d 25») — y este lookup lo
+  // buscaba como folio, o sea que el comando que el propio bot dictó no podía
+  // funcionar jamás. Si el folio no matcheó y el token parece prefijo de
+  // UUID, se resuelve contra los ids de los viajes en curso (acotados al
+  // tenant); la ambigüedad se dice, nunca se adivina.
+  if (filas.length === 0 && /^[0-9a-f][0-9a-f-]{7,35}$/i.test(cmd.folio)) {
+    const prefijo = cmd.folio.toLowerCase();
+    const { data: porId, error: errId } = await acotada(supabaseAdmin().from('viaje')
+      .select('id, folio, ccp_pisa_federal')
+      .eq('tenant_id', tenantId)
+      .in('estatus', ['abierto', 'en_cuadre'])
+      .limit(500), 'ccp.buscarPorId');
+    if (errId) {
+      logger.error('ccp.buscarPorId_ilegible', { err: errId.message });
+      return 'No pude buscar ese viaje ahorita — inténtalo de nuevo en un momento.';
+    }
+    filas = (porId ?? []).filter((f) => String(f.id).toLowerCase().startsWith(prefijo));
+  }
   if (filas.length === 0) return `No encontré un viaje en curso con folio «${cmd.folio}» en tu flota.`;
   if (filas.length > 1) return `Hay más de un viaje en curso con folio «${cmd.folio}» — decláralo desde el panel → Carta Porte para no confundirlos.`;
   const fila = filas[0] as { id: string; ccp_pisa_federal: boolean | null };

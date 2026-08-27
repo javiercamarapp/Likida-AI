@@ -345,12 +345,21 @@ export function auditarViaje(v: ViajeParaAuditar, tarifas: readonly TarifaRow[],
   }
 
   // ── Facturado sin POD ────────────────────────────────────────────────────
+  // AUDITORÍA FABLE CICLO 2 (c2-2): estas dos cubetas atribuían el saldo
+  // COMPLETO de una factura compartida a CADA viaje que amparaba — el mismo
+  // saldo pintado N veces, ordenado arriba por monto, mientras la cubeta de
+  // `factura_compartida` decía al lado que no se puede atribuir. Con importes
+  // compartidos el monto es null y la nota manda a revisar POR FACTURA, el
+  // mismo criterio que ya regía el cruce facturado-vs-pactado.
   if (vivas.length > 0 && !v.podSubido) {
     // El dinero en juego es el SALDO (lo que va a atorarse), no el total: lo
     // ya pagado no se atora.
-    const monto = cobro.saldo;
+    const monto = cobro.importesCompartidos ? null : cobro.saldo;
+    const cifraSaldo = cobro.importesCompartidos
+      ? '. La factura ampara varios viajes: el saldo que depende de ese papel se revisa por factura, no se atribuye a este viaje'
+      : (monto !== null && monto > TOLERANCIA_CENTAVO ? `: ${mxn(monto)} de saldo dependen de ese papel` : '');
     anotar('facturado_sin_pod', monto,
-      `Hay factura viva y el POD no está subido${v.descargaEn !== null ? ' (el hito de descarga sí está sellado: llegó, pero falta el papel)' : ''}. El cliente va a pedir la prueba de entrega para pagar${monto !== null && monto > TOLERANCIA_CENTAVO ? `: ${mxn(monto)} de saldo dependen de ese papel` : ''}. Pídesela al operador.`);
+      `Hay factura viva y el POD no está subido${v.descargaEn !== null ? ' (el hito de descarga sí está sellado: llegó, pero falta el papel)' : ''}. El cliente va a pedir la prueba de entrega para pagar${cifraSaldo}. Pídesela al operador.`);
   }
 
   // ── Cobrado parcial ──────────────────────────────────────────────────────
@@ -358,8 +367,13 @@ export function auditarViaje(v: ViajeParaAuditar, tarifas: readonly TarifaRow[],
     const vencidaDesde = cobro.diasVencida !== null
       ? ` y la más atrasada lleva ${cobro.diasVencida === 1 ? '1 día vencida' : `${cobro.diasVencida} días vencida`}`
       : '';
-    anotar('cobrado_parcial', cobro.saldo,
-      `El cliente abonó ${cobro.totalCobrado !== null ? mxn(cobro.totalCobrado) : 'una parte'} y quedan ${cobro.saldo !== null ? mxn(cobro.saldo) : 'un saldo'} por cobrar${vencidaDesde}. Un pago parcial sin seguimiento se vuelve el saldo que nadie reclama.`);
+    if (cobro.importesCompartidos) {
+      anotar('cobrado_parcial', null,
+        `Hay un pago parcial sobre una factura que ampara varios viajes${vencidaDesde}: los importes no se atribuyen a este viaje solo — revisa el saldo por factura. Un pago parcial sin seguimiento se vuelve el saldo que nadie reclama.`);
+    } else {
+      anotar('cobrado_parcial', cobro.saldo,
+        `El cliente abonó ${cobro.totalCobrado !== null ? mxn(cobro.totalCobrado) : 'una parte'} y quedan ${cobro.saldo !== null ? mxn(cobro.saldo) : 'un saldo'} por cobrar${vencidaDesde}. Un pago parcial sin seguimiento se vuelve el saldo que nadie reclama.`);
+    }
   }
 
   // ── Margen real — el argumento del margen fijo ───────────────────────────

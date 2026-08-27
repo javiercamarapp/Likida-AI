@@ -9265,6 +9265,66 @@ begin
     fk_cruzada, cantidad_cero_rebota, clave_corta_rebota, cp_formato_rebota, carta_porte_entra, no_declarado_rebota, cerrado;
 end $$;
 
+-- ── 163. Un expediente de asistencia por unidad sin chofer (mig. 0206) ──
+-- El espejo del 0201 para el caso de cámara sin viaje vigente: dos eventos
+-- graves de la misma unidad en corridas solapadas no pueden abrir DOS
+-- incidencias con DOS 🚨. Se comprueba además que NO compite con el candado
+-- por chofer (operador_id puesto → rige el 0201, no este), que resolver
+-- libera a la unidad, y que dos incidencias de oficina sin unidad ni
+-- operador siguen sin chocar.
+do $$
+declare
+  t uuid; v_op uuid; u uuid; inc1 uuid;
+  segundo_rebota boolean; con_chofer_no_compite boolean;
+  resuelta_libera boolean; sin_unidad_no_choca boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ UNIDAD 0206') returning id into t;
+  insert into operador (tenant_id, nombre, telefono) values (t, 'P', '+520000000206') returning id into v_op;
+  insert into unidad (tenant_id, numero_economico, estado) values (t, 'ZZZ-0206-U1', 'disponible') returning id into u;
+
+  -- (a) El segundo expediente abierto de la misma unidad SIN chofer rebota.
+  insert into incidencia (tenant_id, unidad_id, tipo, prioridad)
+    values (t, u, 'siniestro', 'critica') returning id into inc1;
+  begin
+    insert into incidencia (tenant_id, unidad_id, tipo, prioridad)
+      values (t, u, 'siniestro', 'critica');
+    segundo_rebota := false;
+  exception when unique_violation then
+    segundo_rebota := true;
+  end;
+
+  -- (b) Con chofer identificado NO compite: ahí rige el 0201 (por operador).
+  begin
+    insert into incidencia (tenant_id, unidad_id, operador_id, tipo, prioridad)
+      values (t, u, v_op, 'siniestro', 'critica');
+    con_chofer_no_compite := true;
+  exception when unique_violation then
+    con_chofer_no_compite := false;
+  end;
+
+  -- (c) Resolver el expediente libera a la unidad para el siguiente.
+  update incidencia set estado = 'resuelta', resuelta_en = now() where id = inc1;
+  begin
+    insert into incidencia (tenant_id, unidad_id, tipo, prioridad)
+      values (t, u, 'varado', 'alta');
+    resuelta_libera := true;
+  exception when unique_violation then
+    resuelta_libera := false;
+  end;
+
+  -- (d) Dos incidencias de oficina (sin unidad NI operador) no chocan.
+  insert into incidencia (tenant_id, tipo, prioridad) values (t, 'bloqueo', 'alta');
+  begin
+    insert into incidencia (tenant_id, tipo, prioridad) values (t, 'bloqueo', 'alta');
+    sin_unidad_no_choca := true;
+  exception when unique_violation then
+    sin_unidad_no_choca := false;
+  end;
+
+  raise exception 'UNIDAD_UNICA_0206  segundo_rebota=%  con_chofer_no_compite=%  resuelta_libera=%  sin_unidad_no_choca=%   (esperado t / t / t / t)',
+    segundo_rebota, con_chofer_no_compite, resuelta_libera, sin_unidad_no_choca;
+end $$;
+
 -- ── 164. El pacto de detención no cruza flotas y la presencia se mide con aritmética verificable (mig. 0207) ──
 -- Lo que solo la base demuestra: (a) la FK COMPUESTA de `politica_detencion`
 -- rebota un pacto colgado del cliente de OTRA flota; (b) los únicos parciales
