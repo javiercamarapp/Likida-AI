@@ -9704,3 +9704,74 @@ begin
     parte_duplicado_rebota, redactor_repite_ok, segunda_config_rebota, saldo_sin_fecha_rebota,
     interruptor_acepta, interruptor_rechaza, vivos_con_techo, cerrado;
 end $$;
+
+-- ── 173. La dirección: un reporte por (agente, periodo), sellado y cerrado (mig. 0216) ──
+-- Lo que solo la base demuestra del sello de los reportes de dirección:
+--   (a) el catálogo manda — un reporte de un agente NO declarado rebota (FK
+--       a agente_definicion, patrón 0116);
+--   (b) la idempotencia es el unique (agente, periodo): la carrera de dos
+--       pasadas del runner la gana exactamente una;
+--   (c) el periodo tiene forma fija ('dia-'/'lun-' + fecha) — dos ortografías
+--       del mismo día serían dos sellos y el candado dejaría pasar el doble
+--       correo que existe para impedir;
+--   (d) los cuatro agentes de dirección quedaron VIVOS con techo declarado y
+--       palanca en el dominio del interruptor (candados 1 y 3 del runner);
+--   (e) la tabla está en deny-all: RLS activa, cero policies — solo el
+--       servidor la toca, como prospecto (0105) y cola_aprobacion (0117).
+do $$
+declare
+  fk_rebota boolean; dup_rebota boolean; periodo_rebota boolean;
+  vivos_con_techo boolean; palancas_en_dominio boolean; rls_cerrada boolean;
+begin
+  -- (a) Un autor no declarado no sella nada.
+  begin
+    insert into reporte_direccion (agente, periodo, cuerpo)
+      values ('agente_fantasma_0216', 'dia-2026-01-01', 'x');
+    fk_rebota := false;
+  exception when foreign_key_violation then
+    fk_rebota := true;
+  end;
+
+  -- (b) El mismo periodo del mismo agente sella UNA vez.
+  insert into reporte_direccion (agente, periodo, cuerpo)
+    values ('kpi_whatsapp', 'dia-2026-01-01', 'reporte de prueba 0216');
+  begin
+    insert into reporte_direccion (agente, periodo, cuerpo)
+      values ('kpi_whatsapp', 'dia-2026-01-01', 'el doble que no debe salir');
+    dup_rebota := false;
+  exception when unique_violation then
+    dup_rebota := true;
+  end;
+
+  -- (c) Un periodo con forma libre no entra.
+  begin
+    insert into reporte_direccion (agente, periodo, cuerpo)
+      values ('orquestador', 'semana-1', 'x');
+    periodo_rebota := false;
+  exception when check_violation then
+    periodo_rebota := true;
+  end;
+
+  -- (d) El flip de la 0216: vivos, habilitados, con techo — y con palanca.
+  select count(*) = 4 into vivos_con_techo
+    from agente_definicion
+    where id in ('kpi_whatsapp', 'desempeno_startup', 'orquestador', 'orquestador_semanal')
+      and estado = 'vivo' and runner_habilitado and presupuesto_dia_usd > 0;
+  begin
+    insert into interruptor (id, apagado, motivo)
+      values ('agente:orquestador', true, 'prueba 0216');
+    palancas_en_dominio := true;
+  exception when check_violation then
+    palancas_en_dominio := false;
+  end;
+
+  -- (e) Deny-all de verdad: RLS activa y cero policies.
+  select c.relrowsecurity
+      and not exists (select 1 from pg_policy p where p.polrelid = c.oid)
+    into rls_cerrada
+    from pg_class c
+    where c.oid = 'public.reporte_direccion'::regclass;
+
+  raise exception 'REPORTE_DIRECCION_0216  fk_rebota=%  dup_rebota=%  periodo_rebota=%  vivos_con_techo=%  palancas_en_dominio=%  rls_cerrada=%   (esperado t / t / t / t / t / t)',
+    fk_rebota, dup_rebota, periodo_rebota, vivos_con_techo, palancas_en_dominio, rls_cerrada;
+end $$;

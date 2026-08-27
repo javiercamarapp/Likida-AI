@@ -42,6 +42,9 @@ export const INTERRUPTORES = [
   // kill switch declarado el runner ni los despacha (candado 1).
   'agente:analista_metricas', 'agente:control_costos',
   'agente:tesoreria', 'agente:cierre_mensual',
+  // Los cuatro de dirección (0216) — mismo candado.
+  'agente:kpi_whatsapp', 'agente:desempeno_startup',
+  'agente:orquestador', 'agente:orquestador_semanal',
 ] as const;
 
 export type NombreInterruptor = (typeof INTERRUPTORES)[number];

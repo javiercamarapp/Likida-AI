@@ -220,6 +220,21 @@ export async function correrRunner(
       continue;
     }
 
+    // ── Dirección (0216): los cuatro reporteros deterministas ──────────────
+    // Import dinámico a propósito: el módulo arrastra los lectores de /admin
+    // (negocio, escalaciones, salud) y solo se paga cuando de verdad se
+    // despacha un agente de dirección — no en cada carga del runner.
+    if (['kpi_whatsapp', 'desempeno_startup', 'orquestador', 'orquestador_semanal'].includes(a.id)) {
+      try {
+        const { correrAgenteDireccion } = await import('../direccion/reportes');
+        const r = await correrAgenteDireccion(a.id as 'kpi_whatsapp' | 'desempeno_startup' | 'orquestador' | 'orquestador_semanal');
+        agentes.push({ agente: a.id, resultado: r.resultado, motivo: r.motivo, piezas: r.piezas, costoUsd: r.costoUsd });
+      } catch (e) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del motor de dirección' });
+      }
+      continue;
+    }
+
     // Un agente habilitado sin motor despachable: se dice, no se finge.
     agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'sin motor despachable en el runner todavía — habilitarlo aquí exige su rama de despacho' });
   }

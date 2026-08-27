@@ -44,7 +44,7 @@ vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 let apagados = new Set<string>();
 let interruptorFalla = false;
 vi.mock('../interruptores', () => ({
-  INTERRUPTORES: ['global', 'agente:redactor'],
+  INTERRUPTORES: ['global', 'agente:redactor', 'agente:kpi_whatsapp'],
   estaApagado: async (n: string) => {
     if (interruptorFalla && n !== 'global') throw new Error('base caída');
     return apagados.has(n);
@@ -53,6 +53,11 @@ vi.mock('../interruptores', () => ({
 
 const redactar = vi.fn(async (..._a: unknown[]) => ({ piezaId: 'p', asunto: 'x', aviso: null, costoUsd: 0.001 }));
 vi.mock('./redactor', () => ({ redactarCorreoFrio: (...a: unknown[]) => redactar(...a) }));
+
+// El motor de dirección (0216) se despacha por import dinámico; el mock
+// aplica igual y evita arrastrar los lectores reales de /admin.
+const correrDireccion = vi.fn(async (_a: unknown) => ({ resultado: 'corrio' as const, piezas: 1, costoUsd: 0 }));
+vi.mock('../direccion/reportes', () => ({ correrAgenteDireccion: (...a: unknown[]) => correrDireccion(...(a as [unknown])) }));
 
 const { correrRunner } = await import('./runner');
 
@@ -66,6 +71,8 @@ beforeEach(() => {
   interruptorFalla = false;
   redactar.mockClear();
   redactar.mockResolvedValue({ piezaId: 'p', asunto: 'x', aviso: null, costoUsd: 0.001 });
+  correrDireccion.mockClear();
+  correrDireccion.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
 });
 
 describe('los cuatro candados', () => {
@@ -171,6 +178,29 @@ describe('M30 — correrRunner(soloAgente) acota la vuelta a UN agente', () => {
     const r = await correrRunner('cobranza', TENANT);
     expect(r).toEqual({ apagadoGlobal: false, agentes: [] });
     expect(redactar).not.toHaveBeenCalled();
+  });
+});
+
+describe('el despacho de dirección (0216)', () => {
+  it('un agente de dirección habilitado se despacha a su motor, con su resultado tal cual', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'kpi_whatsapp', presupuesto_dia_usd: 0.1 }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrDireccion).toHaveBeenCalledWith('kpi_whatsapp');
+    expect(r.agentes).toEqual([{ agente: 'kpi_whatsapp', resultado: 'corrio', motivo: undefined, piezas: 1, costoUsd: 0 }]);
+  });
+
+  it('el motor que lanza NO tumba la vuelta: el agente queda saltado con su motivo', async () => {
+    correrDireccion.mockRejectedValueOnce(new Error('el sello no se pudo leer'));
+    respuestas.set('agente_definicion', [{ data: [{ id: 'kpi_whatsapp', presupuesto_dia_usd: 0.1 }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'kpi_whatsapp', resultado: 'saltado', motivo: 'el sello no se pudo leer' });
+  });
+
+  it('sin techo declarado, dirección tampoco corre — el candado 3 no distingue rubros', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'kpi_whatsapp', presupuesto_dia_usd: null }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrDireccion).not.toHaveBeenCalled();
+    expect(r.agentes[0].motivo).toContain('sin presupuesto_dia_usd');
   });
 });
 
