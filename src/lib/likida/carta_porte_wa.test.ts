@@ -10,15 +10,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let filaViaje: Record<string, unknown> | null = null;
 let filasFolio: Array<Record<string, unknown>> = [];
+// Los viajes en curso que el fallback por prefijo de UUID (c2-5) recorre
+// cuando el folio no matcheó — la consulta SIN ilike.
+let filasPorId: Array<Record<string, unknown>> = [];
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => {
       if (tabla !== 'viaje') throw new Error(`carta_porte_wa solo lee viaje; pidió ${tabla}`);
+      let usoIlike = false;
       const b = {
-        select: () => b, eq: () => b, in: () => b, ilike: () => b,
+        select: () => b, eq: () => b, in: () => b,
+        ilike: () => { usoIlike = true; return b; },
         maybeSingle: async () => ({ data: filaViaje, error: null }),
-        limit: async () => ({ data: filasFolio, error: null }),
+        limit: async () => ({ data: usoIlike ? filasFolio : filasPorId, error: null }),
       };
       return b;
     },
@@ -75,6 +80,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   filaViaje = null;
   filasFolio = [];
+  filasPorId = [];
   getBorradorViaje.mockResolvedValue(viajeCcp());
   telefonoJefe.mockResolvedValue('5215550000001');
 });
@@ -164,6 +170,42 @@ describe('atenderCcpOficina — «radio F-123 25»', () => {
     filasFolio = [{ id: VIAJE_ID, folio: 'F-123', ccp_pisa_federal: true }];
     const r = await atenderCcpOficina(JEFE, 'radio F-123 9000');
     expect(r).toContain('RADIO');
+    expect(declararCcp).not.toHaveBeenCalled();
+  });
+
+  // ── AUDITORÍA FABLE CICLO 2 (c2-5) ─────────────────────────────────────────
+
+  it('c2-5: el viaje SIN folio se declara con el prefijo de UUID que el bot mismo dictó', async () => {
+    // `rotuloViaje` sin folio = viajeId.slice(0, 8): el comando que preguntaRadio
+    // dicta es «radio 11111111 25» — y tiene que funcionar.
+    filasFolio = [];
+    filasPorId = [{ id: VIAJE_ID, folio: null, ccp_pisa_federal: true }];
+    getBorradorViaje.mockResolvedValue(viajeCcp({
+      folio: null,
+      declarado: { pisaFederal: true, radioKm: 25 },
+      decision: { necesita: 'no', motivo: 'Radio de 25 km dentro de la excepción.', fundamento: 'RMF 2.7.7.2.8', pendientes: [] },
+    }));
+    const r = await atenderCcpOficina(JEFE, `radio ${VIAJE_ID.slice(0, 8)} 25`);
+    expect(declararCcp).toHaveBeenCalledWith('t-1', VIAJE_ID, { pisaFederal: true, radioKm: 25 }, { id: 'u-1' });
+    expect(r).toContain('según lo declarado');
+  });
+
+  it('c2-5: dos viajes cuyo UUID comparte el prefijo — ambigüedad dicha, nada escrito', async () => {
+    filasFolio = [];
+    filasPorId = [
+      { id: VIAJE_ID, folio: null, ccp_pisa_federal: true },
+      { id: '11111111-9999-4333-8444-555555555555', folio: null, ccp_pisa_federal: true },
+    ];
+    const r = await atenderCcpOficina(JEFE, 'radio 11111111 25');
+    expect(r).toContain('más de un viaje');
+    expect(declararCcp).not.toHaveBeenCalled();
+  });
+
+  it('c2-5: un token corto que no es prefijo de UUID no dispara el fallback — «no encontré» honesto', async () => {
+    filasFolio = [];
+    filasPorId = [{ id: VIAJE_ID, folio: null, ccp_pisa_federal: true }];
+    const r = await atenderCcpOficina(JEFE, 'radio F-999 25');
+    expect(r).toContain('No encontré');
     expect(declararCcp).not.toHaveBeenCalled();
   });
 });

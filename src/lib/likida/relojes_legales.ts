@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
+import { traerTodo, conteo } from './pg';
 import { sendText } from '@/lib/meta/client';
 import { telefonoJefeDe, telefonoParaDineroDe } from './contactos';
 import { anotarEventoIncidencia } from './asistencia_wa';
@@ -375,20 +376,37 @@ export async function avisarVencimientos(ahora: Date = new Date()): Promise<Resu
   // de la flota no se recorre. `lte` sobre fecha usa los índices existentes.
   const horizonte = new Date(Date.parse(`${hoy}T12:00:00Z`) + DIAS_AVISO * 86_400_000)
     .toISOString().slice(0, 10);
+  // AUDITORÍA FABLE CICLO 2 (c2-7): las consultas llevaban `limit(500)` sin
+  // `order` ni piso — con los años, las 500 filas se llenarían de vencidos
+  // históricos (ya avisados y sellados) y los vencimientos NUEVOS quedarían
+  // fuera del corte sin declararlo. El piso corta el arrastre: un documento
+  // vencido hace más de un año ya recibió su aviso de umbral 0 en su momento
+  // (el sello 0202 lo prueba), y el recordatorio hourly dejó de ser la
+  // herramienta — eso vive en el panel de Unidades/Operadores.
+  const piso = new Date(Date.parse(`${hoy}T12:00:00Z`) - 366 * 86_400_000)
+    .toISOString().slice(0, 10);
 
   const [unidades, operadores, polizas] = await Promise.all([
     acotada(admin.from('unidad')
       .select('id, tenant_id, numero_economico, poliza_vence, permiso_sict_vence, verificacion_vence')
       .eq('activo', true)
-      .or(`poliza_vence.lte.${horizonte},permiso_sict_vence.lte.${horizonte},verificacion_vence.lte.${horizonte}`)
+      .or([
+        `and(poliza_vence.gte.${piso},poliza_vence.lte.${horizonte})`,
+        `and(permiso_sict_vence.gte.${piso},permiso_sict_vence.lte.${horizonte})`,
+        `and(verificacion_vence.gte.${piso},verificacion_vence.lte.${horizonte})`,
+      ].join(','))
       .limit(500), 'vencimientos.unidades'),
     acotada(admin.from('operador')
       .select('id, tenant_id, nombre, licencia_vence')
+      .gte('licencia_vence', piso)
       .lte('licencia_vence', horizonte)
+      .order('licencia_vence', { ascending: true })
       .limit(500), 'vencimientos.operadores'),
     acotada(admin.from('flota_poliza')
       .select('id, tenant_id, aseguradora, vigencia_hasta')
+      .gte('vigencia_hasta', piso)
       .lte('vigencia_hasta', horizonte)
+      .order('vigencia_hasta', { ascending: true })
       .limit(500), 'vencimientos.polizas'),
   ]);
   for (const r of [unidades, operadores, polizas]) {
@@ -424,12 +442,26 @@ export async function avisarVencimientos(ahora: Date = new Date()): Promise<Resu
   if (candidatos.length === 0) return r;
 
   // ¿Cuáles ya se avisaron? Una consulta por corrida, no una por candidato.
-  const { data: sellos, error: errSellos } = await acotada(admin
-    .from('aviso_vigencia')
-    .select('tenant_id, objeto, objeto_id, documento, umbral, vence')
-    .in('tenant_id', [...new Set(candidatos.map((c) => c.tenantId))]), 'vencimientos.sellos');
-  if (errSellos) throw new Error(`vencimientos.sellos: ${errSellos.message}`);
-  const sellados = new Set((sellos ?? []).map((s) =>
+  // AUDITORÍA FABLE CICLO 2 (c2-4): esto era un select plano — PostgREST lo
+  // recorta a 1,000 filas EN SILENCIO (el riesgo que pg.ts documenta), y los
+  // sellos solo crecen: al pasar el corte, `sellados` quedaba incompleto y
+  // los vencimientos ya avisados se RE-avisaban por WhatsApp cada hora — lo
+  // exacto que la 0202 existe para impedir. `traerTodo` pagina y lanza si la
+  // lectura sale corta, y el filtro por los `vence` de los candidatos acota
+  // el conjunto a lo que esta corrida de verdad va a consultar.
+  const fechasVence = [...new Set(candidatos.map((c) => c.vence))];
+  const tenantsConCandidato = [...new Set(candidatos.map((c) => c.tenantId))];
+  const sellos = await traerTodo<{ tenant_id: unknown; objeto: unknown; objeto_id: unknown; documento: unknown; umbral: unknown; vence: unknown }>(
+    (d, h) => acotada(admin
+      .from('aviso_vigencia')
+      .select('tenant_id, objeto, objeto_id, documento, umbral, vence', conteo(d))
+      .in('tenant_id', tenantsConCandidato)
+      .in('vence', fechasVence)
+      .order('tenant_id').order('objeto_id').order('documento').order('umbral').order('vence')
+      .range(d, h), 'vencimientos.sellos'),
+    'vencimientos.sellos',
+  );
+  const sellados = new Set(sellos.map((s) =>
     `${s.tenant_id}|${s.objeto}|${s.objeto_id}|${s.documento}|${s.umbral}|${String(s.vence).slice(0, 10)}`));
   const porAvisar = candidatos.filter((c) =>
     !sellados.has(`${c.tenantId}|${c.objeto}|${c.objetoId}|${c.documento}|${c.umbral}|${c.vence}`));

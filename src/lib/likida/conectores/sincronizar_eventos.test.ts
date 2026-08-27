@@ -24,9 +24,13 @@ const UNIDADES = vi.hoisted(() => [
   { id: 'u-ajena', tenant_id: 't-OTRO', gps_proveedor: 'samsara', gps_device_id: 'dev-1' },
 ]);
 
-// La "tabla" evento_seguridad_flota: unicidad (tenant, proveedor, evento).
+// La "tabla" evento_seguridad_flota: unicidad (tenant, proveedor, evento) y,
+// desde c2-1, el estado de sellado — el barrido lee lo grave NO sellado, así
+// que el mock lo simula de verdad: `sellados` marca las llaves ya procesadas
+// y el select de pendientes filtra contra él.
 const estado = vi.hoisted(() => ({
   guardados: new Map<string, Record<string, unknown>>(),
+  sellados: new Set<string>(),
   sellos: [] as Array<Record<string, unknown>>,
   credenciales: [] as Array<Record<string, unknown>>,
   errorCredenciales: null as string | null,
@@ -38,9 +42,14 @@ vi.mock('@/lib/supabase/admin', () => ({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const api: any = {};
       const filtros: Record<string, unknown> = {};
+      let esUpdate = false;
       api.select = () => api;
       api.eq = (col: string, val: unknown) => { filtros[col] = val; return api; };
       api.in = (col: string, vals: unknown[]) => { filtros[`in:${col}`] = vals; return api; };
+      api.not = () => api;
+      api.is = () => api;
+      api.order = () => api;
+      api.limit = () => api;
       if (tabla === 'unidad') {
         api.then = (res: (v: unknown) => unknown) => res({
           data: UNIDADES.filter((u) =>
@@ -59,10 +68,23 @@ vi.mock('@/lib/supabase/admin', () => ({
           },
         });
         api.update = (cambios: Record<string, unknown>) => {
+          esUpdate = true;
           estado.sellos.push(cambios);
           return api;
         };
-        api.then = (res: (v: unknown) => unknown) => res({ data: null, error: null });
+        api.then = (res: (v: unknown) => unknown) => {
+          if (esUpdate) {
+            estado.sellados.add(`${filtros.tenant_id}|${filtros.proveedor}|${filtros.evento_id_externo}`);
+            return res({ data: null, error: null });
+          }
+          // El barrido de graves pendientes: grave, con unidad, sin sellar.
+          const pendientes = [...estado.guardados.entries()]
+            .filter(([llave, f]) =>
+              f.tenant_id === filtros.tenant_id && f.proveedor === filtros.proveedor &&
+              f.grave === true && f.unidad_id !== null && !estado.sellados.has(llave))
+            .map(([, f]) => f);
+          return res({ data: pendientes, error: null });
+        };
       } else if (tabla === 'conector_credencial') {
         api.then = (res: (v: unknown) => unknown) => res(
           estado.errorCredenciales
@@ -105,6 +127,7 @@ describe('sincronizarEventosDeFlota', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     estado.guardados.clear();
+    estado.sellados.clear();
     estado.sellos = [];
     estado.credenciales = [];
     estado.errorCredenciales = null;
@@ -161,12 +184,50 @@ describe('sincronizarEventosDeFlota', () => {
       samsaraCon([{ ...CHOQUE, location: { latitude: 999, longitude: -89.62 } }]), AHORA);
     expect(r).toMatchObject({ leidos: 0, guardados: 0, disparos: 0 });
   });
+
+  // ── AUDITORÍA FABLE CICLO 2 (c2-1) ─────────────────────────────────────────
+
+  it('c2-1: un disparo que FALLA no se sella — la siguiente corrida lo rebarre y el 🚨 sale', async () => {
+    disparar.mockResolvedValueOnce({ resultado: 'fallo' } as never);
+    const primera = await sincronizarEventosDeFlota('t-1', 'samsara', CRED, samsaraCon([CHOQUE]), AHORA);
+    // El fallo transitorio: nada sellado, nada contado como disparado.
+    expect(primera).toMatchObject({ guardados: 1, disparos: 0 });
+    expect(estado.sellos).toHaveLength(0);
+    // Segunda corrida, misma ventana: el upsert es duplicado (guardados 0)
+    // pero el BARRIDO encuentra la fila grave sin sellar y reintenta.
+    const segunda = await sincronizarEventosDeFlota('t-1', 'samsara', CRED, samsaraCon([CHOQUE]), AHORA);
+    expect(segunda).toMatchObject({ guardados: 0, disparos: 1 });
+    expect(disparar).toHaveBeenCalledTimes(2);
+    expect(estado.sellos).toHaveLength(1);
+  });
+
+  it('c2-1: el barrido corre aunque la ventana venga VACÍA — el pendiente de hace dos corridas no se queda mudo', async () => {
+    disparar.mockResolvedValueOnce({ resultado: 'fallo' } as never);
+    await sincronizarEventosDeFlota('t-1', 'samsara', CRED, samsaraCon([CHOQUE]), AHORA);
+    // El proveedor ya no re-entrega el evento (salió de la ventana), pero la
+    // fila grave sin sellar sigue en la tabla: el barrido la levanta igual.
+    const r = await sincronizarEventosDeFlota('t-1', 'samsara', CRED, samsaraCon([]), AHORA);
+    expect(r).toMatchObject({ leidos: 0, guardados: 0, disparos: 1 });
+    expect(disparar).toHaveBeenCalledTimes(2);
+    expect(estado.sellos).toHaveLength(1);
+    expect(estado.sellos[0]).toMatchObject({ incidencia_id: 'inc-1' });
+  });
+
+  it('c2-1: el sello solo se escribe tras un disparo que NO falló — jamás miente', async () => {
+    await sincronizarEventosDeFlota('t-1', 'samsara', CRED, samsaraCon([CHOQUE]), AHORA);
+    expect(estado.sellos).toHaveLength(1);
+    // Tercera corrida: ya sellado, el barrido no lo vuelve a levantar.
+    const r = await sincronizarEventosDeFlota('t-1', 'samsara', CRED, samsaraCon([]), AHORA);
+    expect(r.disparos).toBe(0);
+    expect(disparar).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('sincronizarEventosTodas', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     estado.guardados.clear();
+    estado.sellados.clear();
     estado.sellos = [];
     estado.credenciales = [];
     estado.errorCredenciales = null;

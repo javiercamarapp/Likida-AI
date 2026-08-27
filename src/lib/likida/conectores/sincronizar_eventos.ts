@@ -18,8 +18,17 @@
 // TODO evento entra a `evento_seguridad_flota` (el futuro agente de coaching
 // leerá de ahí — fuera de alcance hoy, documentado en el plan maestro). Solo
 // los GRAVES (`esEventoGrave`: crash/impacto/volcadura) disparan el circuito
-// de asistencia, y solo los RECIÉN INSERTADOS: un evento que ya estaba en la
-// tabla ya disparó (o ya se decidió que no) — reprocesarlo duplicaría el 🚨.
+// de asistencia — y el disparo es un BARRIDO idempotente sobre las filas
+// `grave` con unidad y `procesado_en` NULL, no un efecto del INSERT.
+//
+// AUDITORÍA FABLE CICLO 2 (c2-1): antes se disparaba solo la fila recién
+// insertada y se sellaba `procesado_en` INCONDICIONALMENTE — un disparo que
+// fallaba (timeout de Supabase, kill de Vercel a mitad del loop: el cron trae
+// maxDuration=300 y las posiciones solas ya toman ~180 s) dejaba el evento
+// sellado-o-huérfano para siempre: el 🚨 de una colisión real jamás salía y
+// nada lo rebarrería. Ahora el sello dice la verdad (solo tras un disparo que
+// NO falló) y la siguiente corrida rebarre lo pendiente. La dedupe del 🚨 no
+// vive aquí: vive en los índices 0201/0206 y en `expedienteAbierto`.
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
@@ -95,7 +104,9 @@ export async function sincronizarEventosDeFlota(
 
   const eventos = r.eventos.filter(eventoValido).slice(0, TOPE_POR_FLOTA);
   base.leidos = eventos.length;
-  if (eventos.length === 0) return base;
+  // OJO: una ventana vacía NO regresa temprano — el barrido de graves
+  // pendientes (abajo) tiene que correr aunque hoy no haya eventos nuevos:
+  // ahí es donde se reintenta el disparo que falló hace dos corridas.
 
   // ── ASSET → UNIDAD, filtrando por flota (mismo candado que posiciones) ──
   const ids = [...new Set(eventos.map((e) => e.assetId).filter((x): x is string => x !== null))];
@@ -121,9 +132,9 @@ export async function sincronizarEventosDeFlota(
 
     // El INSERT decide si el evento es nuevo: `ignoreDuplicates` con la
     // unicidad de la 0203 hace que la reentrega de la ventana traslapada no
-    // cuente ni dispare dos veces. Se inserta UNO POR UNO a propósito: el
-    // disparo depende de saber cuál fila es nueva, y un upsert masivo con
-    // ignoreDuplicates no devuelve cuáles entraron.
+    // cuente dos veces. Se inserta UNO POR UNO a propósito: `guardados` mide
+    // filas que de verdad entraron, y un upsert masivo con ignoreDuplicates
+    // no devuelve cuáles.
     const { data: fila, error: errIns } = await acotada(
       supabaseAdmin().from('evento_seguridad_flota')
         .upsert({
@@ -146,35 +157,60 @@ export async function sincronizarEventosDeFlota(
       logger.warn('eventos.no_guardado', { tenantId, evento: e.eventoId, err: errIns.message });
       continue;
     }
-    const esNuevo = (fila ?? []).length > 0;
-    if (!esNuevo) continue;
-    base.guardados += 1;
+    if ((fila ?? []).length > 0) base.guardados += 1;
+  }
 
-    // Solo los graves, solo los nuevos, y solo con unidad: sin unidad no se
-    // sabe de quién es la emergencia y un 🚨 sin unidad ni chofer no le da al
-    // jefe nada que atender (queda el huérfano reportado y la fila guardada).
-    if (unidadId && esEventoGrave(e.etiquetas)) {
-      const disparo = await dispararAsistenciaPorEventoCamara({
-        tenantId,
-        unidadId,
-        proveedor: conectorId,
-        eventoIdExterno: e.eventoId,
-        etiquetas: e.etiquetas,
-        lat: e.lat,
-        lng: e.lng,
-        ocurridoEn: e.ocurridoEn,
-        urlEvento: e.urlEvento,
-        maxG: e.maxG,
-      });
-      if (disparo.resultado !== 'fallo') base.disparos += 1;
-      // Sellar el procesamiento en la fila — la bitácora del expediente ya
-      // llevó el detalle; esto deja el rastro en la tabla de eventos.
-      await acotada(
-        supabaseAdmin().from('evento_seguridad_flota')
-          .update({ procesado_en: new Date().toISOString(), incidencia_id: disparo.incidenciaId ?? null })
-          .eq('tenant_id', tenantId).eq('proveedor', conectorId).eq('evento_id_externo', e.eventoId),
-        'eventos.sellar',
-      );
+  // ── EL BARRIDO DE GRAVES PENDIENTES (c2-1) ────────────────────────────────
+  // Se dispara sobre lo que la TABLA dice que falta (`grave`, con unidad, sin
+  // sellar), no sobre lo recién insertado: así el evento cuyo disparo falló
+  // —o cuya corrida murió a mitad— se reintenta solo, en la siguiente pasada.
+  // El sello se escribe ÚNICAMENTE tras un disparo que no falló; la dedupe
+  // del 🚨 la garantizan los índices 0201/0206, no este cursor.
+  const { data: pendientes, error: errPend } = await acotada(
+    supabaseAdmin().from('evento_seguridad_flota')
+      .select('evento_id_externo, unidad_id, etiquetas, lat, lng, ocurrido_en, url_evento, max_g')
+      .eq('tenant_id', tenantId)
+      .eq('proveedor', conectorId)
+      .eq('grave', true)
+      .not('unidad_id', 'is', null)
+      .is('procesado_en', null)
+      .order('ocurrido_en', { ascending: true })
+      .limit(TOPE_POR_FLOTA),
+    'eventos.pendientes',
+  );
+  if (errPend) {
+    logger.error('eventos.pendientes_ilegibles', { tenantId, proveedor: conectorId, err: errPend.message });
+    return { ...base, error: `no se pudieron leer los graves pendientes: ${errPend.message}` };
+  }
+  for (const p of pendientes ?? []) {
+    const disparo = await dispararAsistenciaPorEventoCamara({
+      tenantId,
+      unidadId: String(p.unidad_id),
+      proveedor: conectorId,
+      eventoIdExterno: String(p.evento_id_externo),
+      etiquetas: (p.etiquetas as string[]) ?? [],
+      lat: p.lat === null ? null : Number(p.lat),
+      lng: p.lng === null ? null : Number(p.lng),
+      ocurridoEn: String(p.ocurrido_en),
+      urlEvento: (p.url_evento as string | null) ?? null,
+      maxG: p.max_g === null ? null : Number(p.max_g),
+    });
+    if (disparo.resultado === 'fallo') {
+      // SIN sello: la fila queda pendiente y la siguiente corrida la rebarre.
+      logger.warn('eventos.disparo_fallido', { tenantId, evento: p.evento_id_externo });
+      continue;
+    }
+    base.disparos += 1;
+    const { error: errSello } = await acotada(
+      supabaseAdmin().from('evento_seguridad_flota')
+        .update({ procesado_en: new Date().toISOString(), incidencia_id: disparo.incidenciaId ?? null })
+        .eq('tenant_id', tenantId).eq('proveedor', conectorId).eq('evento_id_externo', String(p.evento_id_externo)),
+      'eventos.sellar',
+    );
+    if (errSello) {
+      // El disparo YA salió; sin sello la siguiente corrida lo reintentará y
+      // los índices 0201/0206 lo convertirán en anotación, no en segundo 🚨.
+      logger.warn('eventos.sello_fallo', { tenantId, evento: p.evento_id_externo, err: errSello.message });
     }
   }
 

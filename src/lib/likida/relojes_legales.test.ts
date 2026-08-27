@@ -17,7 +17,11 @@ const sendText = vi.hoisted(() => vi.fn(async () => 'wamid.OK'));
 const telefonoJefeDe = vi.hoisted(() => vi.fn(async () => '5210000000001'));
 const telefonoParaDineroDe = vi.hoisted(() => vi.fn(async () => '5210000000002'));
 const anotarEventoIncidencia = vi.hoisted(() => vi.fn(async () => 'anotado' as const));
-const tablas = vi.hoisted(() => ({ respuestas: new Map<string, unknown[]>(), upserts: [] as Array<{ tabla: string; filas: unknown }> }));
+const tablas = vi.hoisted(() => ({
+  respuestas: new Map<string, unknown[]>(),
+  upserts: [] as Array<{ tabla: string; filas: unknown }>,
+  llamadas: [] as Array<{ tabla: string; metodo: string; args: unknown[] }>,
+}));
 
 vi.mock('@/lib/meta/client', () => ({ sendText }));
 vi.mock('./contactos', () => ({ telefonoJefeDe, telefonoParaDineroDe }));
@@ -29,15 +33,24 @@ vi.mock('@/lib/supabase/admin', () => ({
     from: (tabla: string) => {
       // Builder encadenable que resuelve con la respuesta preparada para esa
       // tabla. `thenable` para que el await funcione en cualquier punto de la
-      // cadena — el módulo encadena select/eq/in/gte/neq/lte/or/limit/maybeSingle.
-      const respuesta = () => ({ data: tablas.respuestas.get(tabla) ?? [], error: null });
+      // cadena — el módulo encadena select/eq/in/gte/neq/lte/or/limit/order/
+      // range/maybeSingle. `range` REBANA (traerTodo pagina de verdad — c2-4)
+      // y cada método queda registrado en `llamadas` para poder asegurar los
+      // filtros de fecha (c2-7) sin fingir un PostgREST completo.
+      let rango: [number, number] | null = null;
+      const respuesta = () => {
+        const todos = tablas.respuestas.get(tabla) ?? [];
+        if (rango === null) return { data: todos, error: null };
+        return { data: todos.slice(rango[0], rango[1] + 1), error: null, count: todos.length };
+      };
       const api: Record<string, unknown> = {
         upsert: (filas: unknown) => { tablas.upserts.push({ tabla, filas }); return Promise.resolve({ error: null }); },
         maybeSingle: () => Promise.resolve({ data: (tablas.respuestas.get(tabla) ?? [])[0] ?? null, error: null }),
+        range: (d: number, h: number) => { rango = [d, h]; return api; },
         then: (res: (v: unknown) => unknown) => Promise.resolve(respuesta()).then(res),
       };
-      for (const m of ['select', 'eq', 'in', 'gte', 'lte', 'neq', 'or', 'not', 'limit']) {
-        api[m] = () => api;
+      for (const m of ['select', 'eq', 'in', 'gte', 'lte', 'neq', 'or', 'not', 'limit', 'order']) {
+        api[m] = (...args: unknown[]) => { tablas.llamadas.push({ tabla, metodo: m, args }); return api; };
       }
       return api;
     },
@@ -53,6 +66,7 @@ const {
 beforeEach(() => {
   tablas.respuestas.clear();
   tablas.upserts.length = 0;
+  tablas.llamadas.length = 0;
   sendText.mockClear();
   sendText.mockResolvedValue('wamid.OK');
   telefonoJefeDe.mockClear();
@@ -197,6 +211,48 @@ describe('avisarVencimientos — un aviso por umbral, sellado después de mandar
     const r = await avisarVencimientos(AHORA);
     expect(r.fallos).toBe(1);
     expect(sendText).not.toHaveBeenCalled();
+  });
+
+  // ── AUDITORÍA FABLE CICLO 2 ────────────────────────────────────────────────
+
+  it('c2-4: los sellos se leen COMPLETOS aunque pasen de mil — el sello 1,400 sigue tapando su aviso', async () => {
+    // Un select plano PostgREST lo recorta a 1,000 filas en silencio y el
+    // vencimiento ya avisado se re-avisaría cada hora. Con traerTodo el mock
+    // pagina de verdad (range rebana): el sello en la posición ~1,400 se lee.
+    const relleno = Array.from({ length: 1400 }, (_, i) => ({
+      tenant_id: 't1', objeto: 'unidad', objeto_id: `relleno-${i}`, documento: 'poliza', umbral: 30, vence: '2026-09-01',
+    }));
+    tablas.respuestas.set('unidad', [
+      { id: 'u1', tenant_id: 't1', numero_economico: 'C2-08', poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null },
+    ]);
+    tablas.respuestas.set('operador', []);
+    tablas.respuestas.set('flota_poliza', []);
+    tablas.respuestas.set('aviso_vigencia', [
+      ...relleno,
+      { tenant_id: 't1', objeto: 'unidad', objeto_id: 'u1', documento: 'poliza', umbral: 7, vence: '2026-09-01' },
+    ]);
+
+    const r = await avisarVencimientos(AHORA);
+    expect(r.avisados).toBe(0);
+    expect(sendText).not.toHaveBeenCalled();
+  });
+
+  it('c2-7: las consultas de vencimientos llevan PISO de fecha — lo vencido hace años no come el corte de 500', async () => {
+    tablas.respuestas.set('unidad', []);
+    tablas.respuestas.set('operador', []);
+    tablas.respuestas.set('flota_poliza', []);
+    tablas.respuestas.set('aviso_vigencia', []);
+
+    await avisarVencimientos(AHORA); // hoyMx = 2026-08-26 → piso = 2025-08-25
+    const gteOperador = tablas.llamadas.find((l) => l.tabla === 'operador' && l.metodo === 'gte');
+    expect(gteOperador?.args).toEqual(['licencia_vence', '2025-08-25']);
+    const gtePoliza = tablas.llamadas.find((l) => l.tabla === 'flota_poliza' && l.metodo === 'gte');
+    expect(gtePoliza?.args).toEqual(['vigencia_hasta', '2025-08-25']);
+    // La de unidades va en el `or` (tres columnas): cada rama con su piso.
+    const orUnidad = tablas.llamadas.find((l) => l.tabla === 'unidad' && l.metodo === 'or');
+    expect(String(orUnidad?.args[0])).toContain('poliza_vence.gte.2025-08-25');
+    expect(String(orUnidad?.args[0])).toContain('permiso_sict_vence.gte.2025-08-25');
+    expect(String(orUnidad?.args[0])).toContain('verificacion_vence.gte.2025-08-25');
   });
 });
 

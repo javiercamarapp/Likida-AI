@@ -137,7 +137,7 @@ export function tipoDeAsistencia(texto: string, nivel: NivelAsistencia): TipoAsi
  * `siniestro` empatan a propósito: un "chocamos" seguido de "hay un herido"
  * no cambia el tipo del expediente — sube `hay_lesionados`, que viaja aparte.
  */
-const RANGO_TIPO: Record<TipoAsistencia, number> = {
+export const RANGO_TIPO: Record<TipoAsistencia, number> = {
   robo: 4,
   emergencia_medica: 3,
   siniestro: 3,

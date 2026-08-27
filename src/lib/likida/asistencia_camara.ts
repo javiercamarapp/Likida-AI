@@ -17,20 +17,26 @@
 //
 // ── POR QUÉ NO SE DUPLICA CON EL REPORTE DEL CHOFER ───────────────────────
 // El expediente es ÚNICO por chofer (0201): si el chofer YA reportó, el
-// evento de cámara se anota en su expediente (evidencia, no un segundo 🚨);
-// si la cámara llega primero y el chofer escribe después, su mensaje cae en
+// evento de cámara se anota en su expediente (evidencia, no un segundo 🚨) —
+// y si ese expediente era MENOS grave que un choque (un varado, un bloqueo),
+// la detección lo ESCALA en la misma fila y el jefe recibe el 🚨 nuevo, igual
+// que el circuito de WhatsApp post-0201 (auditoría Fable ciclo 2, c2-3: antes
+// solo se anotaba en la bitácora y una colisión real quedaba muda). Si la
+// cámara llega primero y el chofer escribe después, su mensaje cae en
 // `atenderConExpedienteAbierto` de asistencia_wa y se reenvía al jefe como
-// siempre. Sin operador identificable (unidad sin viaje abierto), el
-// expediente se ata a la UNIDAD y la dedupe es por incidencia abierta de esa
-// unidad — dos labels graves del mismo choque no abren dos filas.
+// siempre. Sin operador identificable (unidad sin viaje vigente), el
+// expediente se ata a la UNIDAD y el índice parcial de la 0206 (espejo del
+// 0201) garantiza UNA incidencia abierta por unidad — la carrera de dos
+// labels graves del mismo choque la gana exactamente uno y el perdedor anota.
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { crearIncidencia } from './operacion';
-import { anotarEventoIncidencia, TIPOS_ASISTENCIA } from './asistencia_wa';
+import { anotarEventoIncidencia, TIPOS_ASISTENCIA, RANGO_TIPO, type TipoAsistencia } from './asistencia_wa';
 import { telefonoJefeDe } from './contactos';
 import { sendButtons } from '@/lib/meta/client';
+import { hoyMx } from '@/lib/formato';
 
 export interface EventoCamaraGrave {
   tenantId: string;
@@ -53,21 +59,52 @@ export interface ResultadoDisparo {
   avisado?: boolean;
 }
 
-/** El viaje ABIERTO de la unidad, si lo hay — es la ruta al operador. */
-async function viajeAbiertoDeUnidad(
-  tenantId: string, unidadId: string,
+/**
+ * El viaje VIGENTE de la unidad AL MOMENTO del evento — es la ruta al operador.
+ *
+ * AUDITORÍA FABLE CICLO 2 (c2-6): antes se tomaba el viaje abierto más
+ * reciente AL MOMENTO DEL POLL, y la ventana traslapada procesa eventos hasta
+ * 30 minutos tarde — si en ese lapso el viaje del choque se cerró y se abrió
+ * otro con la misma unidad y otro chofer, la incidencia crítica se colgaba
+ * del operador y folio EQUIVOCADOS (y el índice 0201 le bloqueaba al chofer
+ * equivocado su propio expediente). Ahora:
+ *   · se buscan los viajes cuyo RANGO DE FECHAS (día de México) cubre el
+ *     `ocurridoEn`, entre los no liquidados (`abierto`/`en_cuadre` — el que
+ *     se cerró hace minutos sigue visible);
+ *   · si TODOS los candidatos apuntan al mismo operador, ese es;
+ *   · si hay operadores DISTINTOS entre los candidatos, es AMBIGUO y se cae
+ *     al expediente-por-unidad (operador null): un 🚨 sin chofer nombrado es
+ *     mejor que un 🚨 colgado del chofer equivocado.
+ */
+async function viajeVigenteDeUnidad(
+  tenantId: string, unidadId: string, ocurridoEn: string,
 ): Promise<{ viajeId: string; operadorId: string | null; folio: string | null } | null> {
+  // Las fechas del viaje son `date` capturadas en México: comparar contra el
+  // día UTC correría un evento de madrugada al día equivocado.
+  const dia = hoyMx(new Date(ocurridoEn));
   const { data, error } = await acotada(supabaseAdmin()
     .from('viaje')
-    .select('id, operador_id, folio')
+    .select('id, operador_id, folio, estatus, fecha_inicio, fecha_fin')
     .eq('tenant_id', tenantId)
     .eq('unidad_id', unidadId)
-    .eq('estatus', 'abierto')
+    .in('estatus', ['abierto', 'en_cuadre'])
+    .or(`fecha_inicio.is.null,fecha_inicio.lte.${dia}`)
+    .or(`fecha_fin.is.null,fecha_fin.gte.${dia}`)
     .order('created_at', { ascending: false })
-    .limit(1), 'asistencia_camara.viaje');
+    .limit(10), 'asistencia_camara.viaje');
   if (error) throw new Error(`asistencia_camara.viaje: ${error.message}`);
-  const f = (data ?? [])[0];
-  if (!f) return null;
+  const filas = data ?? [];
+  if (filas.length === 0) return null;
+
+  const operadores = new Set(filas.map((f) => String(f.operador_id ?? '')));
+  if (operadores.size > 1) {
+    // Dos choferes posibles para el mismo instante: no se adivina.
+    logger.warn('asistencia_camara.viaje_ambiguo', { tenant: tenantId, unidad: unidadId, candidatos: filas.length });
+    return null;
+  }
+  // Un solo operador posible: el viaje que se reporta es el abierto si lo
+  // hay (es donde el jefe va a mirar), o el más reciente que cubre el día.
+  const f = filas.find((x) => x.estatus === 'abierto') ?? filas[0];
   return {
     viajeId: f.id as string,
     operadorId: (f.operador_id as string | null) ?? null,
@@ -81,12 +118,18 @@ async function viajeAbiertoDeUnidad(
  * por UNIDAD — el caso de la unidad sin viaje, donde dos labels graves del
  * mismo choque llegan en la misma corrida.
  */
+interface ExpedienteAbierto {
+  id: string;
+  tipo: string;
+  prioridad: string;
+}
+
 async function expedienteAbierto(
   tenantId: string, operadorId: string | null, unidadId: string,
-): Promise<string | null> {
+): Promise<ExpedienteAbierto | null> {
   const consulta = supabaseAdmin()
     .from('incidencia')
-    .select('id')
+    .select('id, tipo, prioridad')
     .eq('tenant_id', tenantId)
     .in('tipo', [...TIPOS_ASISTENCIA])
     .neq('estado', 'resuelta')
@@ -98,7 +141,8 @@ async function expedienteAbierto(
   );
   if (error) throw new Error(`asistencia_camara.abierta: ${error.message}`);
   const f = (data ?? [])[0];
-  return f ? (f.id as string) : null;
+  if (!f) return null;
+  return { id: f.id as string, tipo: f.tipo as string, prioridad: f.prioridad as string };
 }
 
 /** Rótulo de la unidad para el aviso. Best-effort: es un rótulo. */
@@ -131,7 +175,7 @@ function descripcionDelEvento(e: EventoCamaraGrave): string {
  */
 export async function dispararAsistenciaPorEventoCamara(e: EventoCamaraGrave): Promise<ResultadoDisparo> {
   try {
-    const viaje = await viajeAbiertoDeUnidad(e.tenantId, e.unidadId);
+    const viaje = await viajeVigenteDeUnidad(e.tenantId, e.unidadId, e.ocurridoEn);
     const operadorId = viaje?.operadorId ?? null;
 
     const abierta = await expedienteAbierto(e.tenantId, operadorId, e.unidadId);
@@ -139,12 +183,49 @@ export async function dispararAsistenciaPorEventoCamara(e: EventoCamaraGrave): P
       // El chofer ya reportó (o un evento anterior ya abrió): la detección se
       // suma como EVIDENCIA a su expediente — un segundo 🚨 por el mismo
       // choque entrena al jefe a ignorar el primero.
-      await anotarEventoIncidencia(e.tenantId, abierta, 'deteccion_camara', {
+      await anotarEventoIncidencia(e.tenantId, abierta.id, 'deteccion_camara', {
         proveedor: e.proveedor, evento: e.eventoIdExterno, etiquetas: e.etiquetas,
         lat: e.lat, lng: e.lng, maxG: e.maxG, urlEvento: e.urlEvento,
       });
-      logger.info('asistencia_camara.anotada', { incidencia: abierta, evento: e.eventoIdExterno });
-      return { resultado: 'anotada_en_existente', incidenciaId: abierta };
+      // AUDITORÍA FABLE CICLO 2 (c2-3): si el expediente previo era MENOS
+      // grave que un choque (el varado de ayer, un bloqueo), la detección lo
+      // ESCALA en la misma fila — espejo del circuito WA post-0201. Anotar en
+      // silencio convertía una colisión detectada en una nota de bitácora que
+      // nadie leía hasta el post-mortem.
+      const rangoCamara = RANGO_TIPO.siniestro;
+      const rangoAbierto = RANGO_TIPO[abierta.tipo as TipoAsistencia] ?? 0;
+      const escala = rangoCamara > rangoAbierto || abierta.prioridad !== 'critica';
+      if (escala) {
+        const { error: errEsc } = await acotada(supabaseAdmin()
+          .from('incidencia')
+          .update({
+            // El robo (rango 4) no se degrada a siniestro: la violencia manda
+            // el protocolo; solo se le sube la prioridad si no era crítica.
+            ...(rangoCamara > rangoAbierto ? { tipo: 'siniestro' } : {}),
+            prioridad: 'critica',
+            // El reconocimiento anterior era del incidente menor: dejarlo
+            // puesto le diría a la Fase 5 que la colisión ya está atendida.
+            reconocida_en: null,
+            reconocida_por: null,
+          })
+          .eq('id', abierta.id).eq('tenant_id', e.tenantId)
+          .neq('estado', 'resuelta'), 'asistencia_camara.escalar');
+        if (errEsc) {
+          // Sin escalada no hay verdad que sellar: se reporta fallo para que
+          // el barrido del poller lo reintente en la siguiente corrida.
+          logger.error('asistencia_camara.escalada_fallo', { incidencia: abierta.id, err: errEsc.message });
+          return { resultado: 'fallo' };
+        }
+        await anotarEventoIncidencia(e.tenantId, abierta.id, 'escalada', {
+          de: abierta.tipo, a: rangoCamara > rangoAbierto ? 'siniestro' : abierta.tipo, fuente: 'camara', evento: e.eventoIdExterno,
+        });
+        const avisado = await avisarAlJefePorCamara(e, abierta.id, viaje?.folio ?? null);
+        await anotarEventoIncidencia(e.tenantId, abierta.id, avisado ? 'aviso_jefe_enviado' : 'aviso_jefe_fallido', { fuente: 'camara' });
+        logger.info('asistencia_camara.escalada', { incidencia: abierta.id, de: abierta.tipo, evento: e.eventoIdExterno, avisado });
+        return { resultado: 'anotada_en_existente', incidenciaId: abierta.id, avisado };
+      }
+      logger.info('asistencia_camara.anotada', { incidencia: abierta.id, evento: e.eventoIdExterno });
+      return { resultado: 'anotada_en_existente', incidenciaId: abierta.id };
     }
 
     let incidenciaId: string;
@@ -164,16 +245,17 @@ export async function dispararAsistenciaPorEventoCamara(e: EventoCamaraGrave): P
     } catch (err) {
       const msj = err instanceof Error ? err.message : String(err);
       // La carrera contra el reporte del chofer (o contra otro evento grave
-      // de la misma corrida): el índice 0201 deja UN ganador. El perdedor
-      // anota su detección en el expediente del ganador.
-      if (/incidencia_asistencia_abierta_unica|duplicate key/i.test(msj)) {
+      // de la misma corrida): el índice 0201 (por chofer) o el 0206 (por
+      // unidad sin chofer) dejan UN ganador. El perdedor anota su detección
+      // en el expediente del ganador.
+      if (/incidencia_asistencia_abierta_unica|incidencia_asistencia_unidad_unica|duplicate key/i.test(msj)) {
         const ganadora = await expedienteAbierto(e.tenantId, operadorId, e.unidadId);
         if (ganadora) {
-          await anotarEventoIncidencia(e.tenantId, ganadora, 'deteccion_camara', {
+          await anotarEventoIncidencia(e.tenantId, ganadora.id, 'deteccion_camara', {
             proveedor: e.proveedor, evento: e.eventoIdExterno, etiquetas: e.etiquetas,
             lat: e.lat, lng: e.lng, maxG: e.maxG, urlEvento: e.urlEvento,
           });
-          return { resultado: 'anotada_en_existente', incidenciaId: ganadora };
+          return { resultado: 'anotada_en_existente', incidenciaId: ganadora.id };
         }
       }
       throw err;

@@ -182,6 +182,31 @@ describe('factura compartida', () => {
     // Aunque 50,000 ≠ 10,000, la diferencia NO se afirma: no es de este viaje.
     expect(cubetas(v)).not.toContain('facturado_mayor');
   });
+
+  // ── AUDITORÍA FABLE CICLO 2 (c2-2) ─────────────────────────────────────────
+
+  it('c2-2: facturado_sin_pod con factura compartida NO atribuye el saldo — monto null, revisar por factura', () => {
+    const v = auditarViaje(viaje({
+      ingresoFlete: 10_000, podSubido: false,
+      facturas: [factura({ subtotal: 100_000, total: 116_000, pagado: 40_000, saldo: 76_000, amparaVarios: true })],
+    }), [], HOY);
+    const h = v.hallazgos.find((x) => x.cubeta === 'facturado_sin_pod');
+    expect(h?.monto).toBeNull();
+    expect(h?.nota).toContain('por factura');
+    expect(h?.nota).not.toContain('76,000');
+  });
+
+  it('c2-2: cobrado_parcial con factura compartida NO atribuye ni cifra — monto null, revisar por factura', () => {
+    const v = auditarViaje(viaje({
+      ingresoFlete: 10_000, podSubido: true,
+      facturas: [factura({ subtotal: 100_000, total: 116_000, pagado: 40_000, saldo: 76_000, amparaVarios: true })],
+    }), [], HOY);
+    const h = v.hallazgos.find((x) => x.cubeta === 'cobrado_parcial');
+    expect(h?.monto).toBeNull();
+    expect(h?.nota).toContain('por factura');
+    expect(h?.nota).not.toContain('76,000');
+    expect(h?.nota).not.toContain('40,000');
+  });
 });
 
 describe('entregado sin facturar — el dinero dormido', () => {
