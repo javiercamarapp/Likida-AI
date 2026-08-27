@@ -61,3 +61,48 @@ describe('un comprobante de otro ejercicio no se cuenta como deducible en este',
     expect((r.diferencias ?? []).some((d) => d.tipo === 'gasto_otro_ejercicio')).toBe(false);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA FABLE CICLO 1 (90-A) — el arreglo de arriba quedó A MEDIAS.
+//
+// `gasto_otro_ejercicio` entró a NO_DEDUCIBLE_ISR pero no a
+// SIN_ACREDITAMIENTO: un diésel del ejercicio pasado con CFDI válido y XML
+// verificado salía con totalDeducible $0... y aun así acreditaba su IVA
+// completo, su peaje y sus litros. LIVA 5-I (que el propio bloque de
+// acreditamiento cita) exige acreditar "en la proporción en que las
+// erogaciones sean deducibles" — y la proporción aquí es CERO.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('el IVA y los estímulos de un gasto de otro ejercicio tampoco se acreditan (90-A)', () => {
+  const conIva = (fecha: string): Gasto => g({
+    concepto: 'diesel', fecha, monto: 1160,
+    subTotal: 1000, ivaTraslado: 160,
+    xmlVerificado: true, formaPago: '04',
+    clave_prod_serv: '15101505',
+  } as Partial<Gasto>);
+
+  it('el caso reproducido por el auditor: diésel 2025 con hoy 2026 → ivaAcreditable 0', () => {
+    const r = cuadre(conIva('2025-08-01'));
+    expect(r.totalDeducible).toBe(0);
+    expect(r.ivaAcreditable).toBe(0);
+  });
+
+  it('control: el mismo comprobante DENTRO del ejercicio acredita sus $160', () => {
+    const r = cuadre(conIva('2026-08-01'));
+    expect(r.ivaAcreditable).toBe(160);
+  });
+
+  it('el peaje de otro ejercicio tampoco genera estímulo del 50%', () => {
+    // El estímulo exige elegibilidad declarada (perfil) — se declara en ambos
+    // casos para que la ÚNICA variable sea el ejercicio del comprobante.
+    const caseta = (fecha: string) => cuadrarViaje({
+      viajeId: 'v1', anticipo: 3000, elegiblePeaje: true,
+      gastos: [g({ concepto: 'caseta', fecha, monto: 500, subTotal: 431.03, ivaTraslado: 68.97, xmlVerificado: true, formaPago: '04' } as Partial<Gasto>)],
+      politica: DEMO_CONFIG.politica, estimulos: DEMO_CONFIG.estimulos,
+      hidrocarburos: DEMO_CONFIG.hidrocarburos,
+      empresaRfc: 'GMX0902279I1', hoy: '2026-08-01',
+    });
+    expect(caseta('2025-08-01').peajeAcreditable).toBe(0);
+    expect(caseta('2026-08-01').peajeAcreditable).toBeGreaterThan(0);
+  });
+});

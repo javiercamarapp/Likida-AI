@@ -1865,8 +1865,9 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // El gasto YA ENTRÓ y se queda: la fecha dudosa no lo invalida, y no
         // registrarlo por una fecha sospechosa le costaría al operador un gasto
         // que sí hizo. Si manda la foto buena, `corregir_fecha` la re-fecha; si
-        // no la manda, el cuadre levanta `fecha_sospechosa` como siempre. Los
-        // dos caminos siguen cerrados.
+        // no la manda, el cuadre levanta `fecha_sospechosa` (o
+        // `gasto_otro_ejercicio` si el año es de otro ejercicio) como siempre.
+        // Los dos caminos siguen cerrados.
         const dudosa = ventana ? fechaDudosa(gasto.fecha, ventana) : null;
         if (dudosa) {
           const extra = (gasto.ocrExtra ?? {}) as Record<string, unknown>;
