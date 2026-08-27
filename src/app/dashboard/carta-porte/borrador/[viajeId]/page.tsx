@@ -5,6 +5,7 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getBorradorViaje, type ViajeCcp } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
 import { sufijoTenant } from '../../../sufijo';
+import { SeccionTimbrado } from './timbrar';
 
 export const dynamic = 'force-dynamic';
 
@@ -179,6 +180,11 @@ export default async function PaginaBorradorCcp({
           </ul>
         )}
       </section>
+
+      {/* FASE D vía PAC (0226): el timbre directo — con el PAC configurado y
+          los datos completos, el humano timbra desde aquí; sin ellos, la
+          sección dice la verdad de qué falta. */}
+      <SeccionTimbrado v={v} searchParams={sp} />
     </main>
   );
 }

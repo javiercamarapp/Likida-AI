@@ -73,7 +73,20 @@ const dec = (n: number): string => {
  * rechazo seguro NO hay XML — se devuelven los motivos en el idioma de quien
  * los va a resolver, que son los mismos que la página del borrador ya enseña.
  */
-export function generarXmlCcp(v: ViajeCcp, idCcp: string): ResultadoXml {
+/**
+ * El nodo `<cfdi:Complemento>` con la Carta Porte 3.1, extraído para que lo
+ * compartan las DOS vías de la Fase D: el export (este archivo) y el CFDI
+ * timbrable (carta_porte_cfdi.ts, 0226). Un solo constructor del complemento
+ * = una sola verdad de cómo se arma; dos copias serían dos complementos que
+ * se desfasan en silencio.
+ *
+ * Trae sus propios candados (borrador validado, IdCCP con forma, fecha de
+ * salida legible, Origen/Destino con distancia) porque NINGÚN camino debe
+ * poder armarlo a medias.
+ */
+export function nodoComplementoCcp(v: ViajeCcp, idCcp: string):
+  | { ok: true; lineas: string[] }
+  | { ok: false; motivos: string[] } {
   const b = v.borrador.borrador;
   if (b === null) {
     return { ok: false, motivos: ['El borrador aún no se puede armar.', ...v.borrador.faltantes] };
@@ -98,44 +111,16 @@ export function generarXmlCcp(v: ViajeCcp, idCcp: string): ResultadoXml {
     return { ok: false, motivos: ['La fecha de salida del viaje no se pudo leer como fecha — corrígela antes de exportar.'] };
   }
 
-  // Lo que el XML NO trae, dicho por nombre — va como comentario dentro del
-  // archivo (citable por el facturador) y en el resultado (para la bitácora).
-  const omitidos: string[] = [
-    'Fecha, Sello, NoCertificado y Certificado del Comprobante — los pone tu facturador al emitir con el CSD.',
-    'SubTotal, Total, Moneda, FormaPago, MetodoPago, LugarExpedicion, Exportacion y los Conceptos (el flete y sus impuestos) — se capturan en tu facturador.',
-    'Emisor (RFC, nombre y régimen del transportista) — sale de tu CSD y tu perfil fiscal en el facturador.',
-    'FechaHoraSalidaLlegada del Destino — es estimada y se declara al emitir.',
-  ];
-  if (cc.transpInternac === null) omitidos.push('TranspInternac — sin declarar en el viaje; decláralo antes de emitir.');
-  if (cc.transpInternac === true) omitidos.push('EntradaSalidaMerc, PaisOrigenDestino y ViaEntradaSalida — el viaje se declaró internacional y esos datos se capturan al emitir.');
-
-  const receptorNota = d.clienteRfc === null
-    ? []
-    : ['Receptor: Nombre, DomicilioFiscalReceptor, RegimenFiscalReceptor y UsoCFDI — se completan en tu facturador con la constancia fiscal de tu cliente.'];
-  omitidos.push(...receptorNota);
+  const origen = b.ubicaciones.find((x) => x.tipo === 'Origen');
+  const destino = b.ubicaciones.find((x) => x.tipo === 'Destino');
+  // El validador ya exigió Origen y Destino CON distancia; si aún así faltan,
+  // el XML no se arma a medias — se dice, jamás se rellena con un cero.
+  if (!origen || !destino || destino.distanciaRecorrida == null) {
+    return { ok: false, motivos: ['El borrador no trae Origen y Destino con distancia — vuelve a armar el borrador.'] };
+  }
 
   const lineas: string[] = [];
   const abre = (s: string) => lineas.push(s);
-
-  abre('<?xml version="1.0" encoding="UTF-8"?>');
-  abre('<!--');
-  abre('  DOCUMENTO DE TRABAJO GENERADO POR LIKIDA — PRE-CFDI, NO TIMBRADO.');
-  abre('  No ampara ningún traslado. Se importa/captura en el facturador de la');
-  abre('  flota, que completa lo que aquí falta y timbra. Falta a propósito:');
-  for (const o of omitidos) abre(`    · ${escaparComentario(o)}`);
-  abre('-->');
-  abre('<cfdi:Comprobante');
-  abre('  xmlns:cfdi="http://www.sat.gob.mx/cfd/4"');
-  abre('  xmlns:cartaporte31="http://www.sat.gob.mx/CartaPorte31"');
-  abre('  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"');
-  abre('  xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd http://www.sat.gob.mx/CartaPorte31 http://www.sat.gob.mx/sitio_internet/cfd/CartaPorte/CartaPorte31.xsd"');
-  const folio = v.folio === null ? '' : ` Folio="${escaparXml(v.folio)}"`;
-  abre(`  Version="4.0" TipoDeComprobante="I"${folio}>`);
-
-  if (d.clienteRfc !== null) {
-    const nombre = v.clienteNombre === null ? '' : ` Nombre="${escaparXml(v.clienteNombre)}"`;
-    abre(`  <cfdi:Receptor Rfc="${escaparXml(d.clienteRfc)}"${nombre}/>`);
-  }
 
   abre('  <cfdi:Complemento>');
   const transp = cc.transpInternac === null ? '' : ` TranspInternac="${cc.transpInternac ? 'Sí' : 'No'}"`;
@@ -144,13 +129,6 @@ export function generarXmlCcp(v: ViajeCcp, idCcp: string): ResultadoXml {
   // ── Ubicaciones ── el RFC del remitente/destinatario y las fechas son los
   // del borrador validado; el domicilio (CP + estado) solo si el cliente los
   // dio — un CP ausente es un hueco del cliente, no un "00000".
-  const origen = b.ubicaciones.find((x) => x.tipo === 'Origen');
-  const destino = b.ubicaciones.find((x) => x.tipo === 'Destino');
-  // El validador ya exigió Origen y Destino CON distancia; si aún así faltan,
-  // el XML no se arma a medias — se dice, jamás se rellena con un cero.
-  if (!origen || !destino || destino.distanciaRecorrida == null) {
-    return { ok: false, motivos: ['El borrador no trae Origen y Destino con distancia — vuelve a armar el borrador.'] };
-  }
   abre('      <cartaporte31:Ubicaciones>');
   abre(`        <cartaporte31:Ubicacion TipoUbicacion="Origen" IDUbicacion="OR000001" RFCRemitenteDestinatario="${escaparXml(origen.rfc)}" FechaHoraSalidaLlegada="${salida}">`);
   abre(domicilio(cc.origenCp, cc.origenEstado, cc.transpInternac));
@@ -210,6 +188,57 @@ export function generarXmlCcp(v: ViajeCcp, idCcp: string): ResultadoXml {
 
   abre('    </cartaporte31:CartaPorte>');
   abre('  </cfdi:Complemento>');
+
+  return { ok: true, lineas };
+}
+
+export function generarXmlCcp(v: ViajeCcp, idCcp: string): ResultadoXml {
+  const comp = nodoComplementoCcp(v, idCcp);
+  if (!comp.ok) return { ok: false, motivos: comp.motivos };
+
+  const d = v.datos;
+  const cc = v.datosCliente;
+
+  // Lo que el XML NO trae, dicho por nombre — va como comentario dentro del
+  // archivo (citable por el facturador) y en el resultado (para la bitácora).
+  const omitidos: string[] = [
+    'Fecha, Sello, NoCertificado y Certificado del Comprobante — los pone tu facturador al emitir con el CSD.',
+    'SubTotal, Total, Moneda, FormaPago, MetodoPago, LugarExpedicion, Exportacion y los Conceptos (el flete y sus impuestos) — se capturan en tu facturador.',
+    'Emisor (RFC, nombre y régimen del transportista) — sale de tu CSD y tu perfil fiscal en el facturador.',
+    'FechaHoraSalidaLlegada del Destino — es estimada y se declara al emitir.',
+  ];
+  if (cc.transpInternac === null) omitidos.push('TranspInternac — sin declarar en el viaje; decláralo antes de emitir.');
+  if (cc.transpInternac === true) omitidos.push('EntradaSalidaMerc, PaisOrigenDestino y ViaEntradaSalida — el viaje se declaró internacional y esos datos se capturan al emitir.');
+
+  const receptorNota = d.clienteRfc === null
+    ? []
+    : ['Receptor: Nombre, DomicilioFiscalReceptor, RegimenFiscalReceptor y UsoCFDI — se completan en tu facturador con la constancia fiscal de tu cliente.'];
+  omitidos.push(...receptorNota);
+
+  const lineas: string[] = [];
+  const abre = (s: string) => lineas.push(s);
+
+  abre('<?xml version="1.0" encoding="UTF-8"?>');
+  abre('<!--');
+  abre('  DOCUMENTO DE TRABAJO GENERADO POR LIKIDA — PRE-CFDI, NO TIMBRADO.');
+  abre('  No ampara ningún traslado. Se importa/captura en el facturador de la');
+  abre('  flota, que completa lo que aquí falta y timbra. Falta a propósito:');
+  for (const o of omitidos) abre(`    · ${escaparComentario(o)}`);
+  abre('-->');
+  abre('<cfdi:Comprobante');
+  abre('  xmlns:cfdi="http://www.sat.gob.mx/cfd/4"');
+  abre('  xmlns:cartaporte31="http://www.sat.gob.mx/CartaPorte31"');
+  abre('  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"');
+  abre('  xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd http://www.sat.gob.mx/CartaPorte31 http://www.sat.gob.mx/sitio_internet/cfd/CartaPorte/CartaPorte31.xsd"');
+  const folio = v.folio === null ? '' : ` Folio="${escaparXml(v.folio)}"`;
+  abre(`  Version="4.0" TipoDeComprobante="I"${folio}>`);
+
+  if (d.clienteRfc !== null) {
+    const nombre = v.clienteNombre === null ? '' : ` Nombre="${escaparXml(v.clienteNombre)}"`;
+    abre(`  <cfdi:Receptor Rfc="${escaparXml(d.clienteRfc)}"${nombre}/>`);
+  }
+
+  lineas.push(...comp.lineas);
   abre('</cfdi:Comprobante>');
 
   const rotulo = v.folio ?? v.viajeId.slice(0, 8);
