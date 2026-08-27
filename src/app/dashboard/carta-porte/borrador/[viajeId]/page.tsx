@@ -1,11 +1,10 @@
 import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { getBorradorViaje, type ViajeCcp } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
 import { sufijoTenant } from '../../../sufijo';
-import { SeccionTimbrado } from './timbrar';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +12,9 @@ export const dynamic = 'force-dynamic';
 // usa la llave de su padre — misma área, mismos datos, mismo criterio que
 // /dashboard/<uuid> gateando su área a mano (ver visibilidad.ts).
 const RUTA_PADRE = '/dashboard/carta-porte';
+/** El timbre se emite del otro lado, en `dinero` (0227 — auditoría Fable
+ *  c6-3). Aquí solo se pinta el link, y solo para quien ve esa área. */
+const RUTA_TIMBRADO = '/dashboard/timbrado';
 
 /**
  * EL ENTREGABLE DE LA FASE C: la vista imprimible del borrador — los 37 datos
@@ -181,10 +183,30 @@ export default async function PaginaBorradorCcp({
         )}
       </section>
 
-      {/* FASE D vía PAC (0226): el timbre directo — con el PAC configurado y
-          los datos completos, el humano timbra desde aquí; sin ellos, la
-          sección dice la verdad de qué falta. */}
-      <SeccionTimbrado v={v} searchParams={sp} />
+      {/* FASE D vía PAC (0226/0227): el timbre NO se emite desde aquí. Esta
+          pantalla es del jefe de tráfico (área `operacion`) y el CFDI —con el
+          flete, el IVA y la retención— es del contador (área `dinero`). Solo
+          se pinta el camino, y solo para quien ve esa área: al encargado esta
+          sección no le aparece, que es exactamente el punto. */}
+      {puedeVerArea(rol, 'dinero') && (
+        <section className="space-y-1 print:hidden">
+          <h2 className="font-display text-[15px] font-semibold">Timbre</h2>
+          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            El CFDI con este complemento se emite desde Timbrado, con los importes del flete y el
+            perfil fiscal de la flota enfrente — el botón vive ahí porque timbrar es un acto fiscal,
+            no un acto de despacho.
+          </p>
+          <p>
+            <Link
+              href={`${RUTA_TIMBRADO}/${v.viajeId}${sufijoTenant(sp)}`}
+              className="text-[12.5px] font-medium hover:opacity-75"
+              style={{ color: 'var(--marca)' }}
+            >
+              Ir a Timbrado de este viaje →
+            </Link>
+          </p>
+        </section>
+      )}
     </main>
   );
 }

@@ -38,7 +38,11 @@ vi.mock('./corridas', () => ({ registrarCorrida: (...a: unknown[]) => registrarC
 // y así la cola de la bandeja se observa sin arrastrar los cinco motores.
 const piezaExistente = vi.fn(async (..._a: unknown[]) => false);
 const encolarPiezaExito = vi.fn(async (..._a: unknown[]) => 'encolada' as const);
-vi.mock('./exito', () => ({
+// Parcial: se doblan las DOS escrituras a la bandeja y se deja lo puro tal
+// cual — `cuentaComoRespuesta` es la definición compartida de «sin respuesta»
+// (c6-5) y doblarla probaría el doble, no la regla.
+vi.mock('./exito', async (orig) => ({
+  ...(await orig() as object),
   piezaExistente: (...a: unknown[]) => piezaExistente(...a),
   encolarPiezaExito: (...a: unknown[]) => encolarPiezaExito(...a),
 }));
@@ -178,7 +182,8 @@ describe('la pieza que llega a la bandeja', () => {
 
 function sembrarTicket(t = TICKET) {
   respuestas.set('ticket_soporte', [{ data: [{ id: t.id, tenant_id: t.tenantId, asunto: t.asunto, descripcion: t.descripcion, categoria: t.categoria }], error: null }]);
-  respuestas.set('ticket_mensaje', [{ data: null, count: 0, error: null }]);
+  // El hilo se LEE (autor_id + interna) desde c6-5, ya no se cuenta.
+  respuestas.set('ticket_mensaje', [{ data: [], error: null }]);
 }
 
 describe('la corrida de atencion_faq', () => {
@@ -191,11 +196,30 @@ describe('la corrida de atencion_faq', () => {
   });
 
   it('un ticket que YA tiene respuesta en el hilo no se toca', async () => {
-    respuestas.set('ticket_soporte', [{ data: [{ id: TICKET.id, tenant_id: 'f', asunto: 'x', descripcion: null, categoria: 'otro' }], error: null }]);
-    respuestas.set('ticket_mensaje', [{ data: null, count: 3, error: null }]);
+    respuestas.set('ticket_soporte', [{ data: [{ id: TICKET.id, tenant_id: 'f', asunto: 'x', descripcion: null, categoria: 'otro', abierto_por: 'u-cliente' }], error: null }]);
+    respuestas.set('ticket_mensaje', [{ data: [{ autor_id: 'u-soporte', interna: false }], error: null }]);
     const r = await correrAtencionFaq('cron', '2026-08-27');
     expect(r.piezas).toBe(0);
     expect(encolarPiezaExito).not.toHaveBeenCalled();
+  });
+
+  // c6-5: lo que NO cuenta como respuesta y por tanto NO saca al ticket de
+  // la cola. Los dos casos que la versión vieja dejaba escapar.
+  it('el propio solicitante insistiendo NO es una respuesta', async () => {
+    respuestas.set('ticket_soporte', [{ data: [{ id: TICKET.id, tenant_id: 'f', asunto: 'CFDI cancelado', descripcion: null, categoria: 'facturacion', abierto_por: 'u-cliente' }], error: null }]);
+    respuestas.set('ticket_mensaje', [{ data: [
+      { autor_id: 'u-cliente', interna: false },
+      { autor_id: 'u-cliente', interna: false },
+    ], error: null }]);
+    await correrAtencionFaq('cron', '2026-08-27');
+    expect(piezaExistente).toHaveBeenCalled();  // el ticket SIGUE en la cola
+  });
+
+  it('una nota INTERNA del equipo tampoco es una respuesta', async () => {
+    respuestas.set('ticket_soporte', [{ data: [{ id: TICKET.id, tenant_id: 'f', asunto: 'CFDI cancelado', descripcion: null, categoria: 'facturacion', abierto_por: 'u-cliente' }], error: null }]);
+    respuestas.set('ticket_mensaje', [{ data: [{ autor_id: 'u-soporte', interna: true }], error: null }]);
+    await correrAtencionFaq('cron', '2026-08-27');
+    expect(piezaExistente).toHaveBeenCalled();
   });
 
   it('un ticket del corpus produce borrador con modelo, con el tenant del ticket y su costo medido', async () => {
@@ -264,7 +288,7 @@ describe('la corrida de atencion_faq', () => {
       ],
       error: null,
     }]);
-    respuestas.set('ticket_mensaje', [{ data: null, count: 0, error: null }, { data: null, count: 0, error: null }]);
+    respuestas.set('ticket_mensaje', [{ data: [], error: null }, { data: [], error: null }]);
     piezaExistente.mockRejectedValueOnce(new Error('la bandeja no contesta'));
     const r = await correrAtencionFaq('cron', '2026-08-27');
     expect(r.piezas).toBe(1); // el segundo sí entró

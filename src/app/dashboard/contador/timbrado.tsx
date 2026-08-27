@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { Stamp } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -30,9 +31,11 @@ const t = (v: FormDataEntryValue | null): string | null => {
   return s === '' ? null : s;
 };
 
-export async function Timbrado({ searchParams, tenantExiste }: {
+export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
   searchParams: { vista?: string; tenant?: string; rol?: string };
   tenantExiste: boolean;
+  /** El `?tenant=`/`?vista=`/`?rol=` del superadmin; vacío para roles reales. */
+  sufijo?: string;
 }) {
   if (!tenantExiste) return null;
 
@@ -90,6 +93,20 @@ export async function Timbrado({ searchParams, tenantExiste }: {
           ? `PAC conectado: ${pac.proveedor?.toUpperCase()} — ambiente ${pac.pareceSandbox ? 'de PRUEBAS (los timbres no amparan nada)' : 'de PRODUCCIÓN'}.`
           : 'Sin PAC configurado: el timbrado está apagado. Se enciende con las variables LIKIDA_PAC_* en el servidor (contrato con el PAC + credenciales) — sin eso, Likida no timbra y jamás simula un timbre.'}
         {' '}El CSD de la flota vive en la bóveda del PAC (se carga en SU portal), nunca en Likida.
+      </p>
+
+      {/* 0227 (auditoría Fable c6-3): el camino del contador AL BOTÓN. Antes
+          el único acceso al timbre era el borrador de Carta Porte, que es del
+          área `operacion` — o sea, la pantalla donde este rol rebota. Declarar
+          el perfil aquí y no poder usarlo era la mitad de un flujo. */}
+      <p className="text-[12.5px]">
+        <Link href={`/dashboard/timbrado${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
+          Ir a la cola de Timbrado →
+        </Link>
+        <span style={{ color: 'var(--muted)' }}>
+          {' '}Ahí se emite el CFDI de cada viaje con su complemento. El borrador (los 37 datos y la
+          declaración de ruta) lo trabaja el jefe de tráfico en Carta Porte; emitirlo es de este lado.
+        </span>
       </p>
 
       {!leyoOk ? (

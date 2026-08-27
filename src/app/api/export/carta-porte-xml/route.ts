@@ -55,14 +55,29 @@ export async function GET(req: Request) {
   // devolvió el PAC — el comprobante, no el borrador. Solo existe si el viaje
   // tiene timbre vigente; sin él, 404 honesto (no se genera nada al vuelo).
   if (url.searchParams.get('timbrado') === '1') {
+    // PUERTA PROPIA (0227, c6-3): el XML TIMBRADO es el CFDI, con el flete, el
+    // IVA y la retención adentro — no es el pre-CFDI del borrador. Se gatea
+    // contra el área del TIMBRADO (`dinero`), no contra la de Carta Porte:
+    // el jefe de tráfico no descarga comprobantes fiscales con importes.
+    if (!puedeVerRuta(t.rol, '/dashboard/timbrado')) {
+      logger.warn('export.ccp_xml_timbrado_area_sin_permiso', { rol: t.rol });
+      return new NextResponse('Tu rol no ve el timbrado de la flota.', { status: 403 });
+    }
     try {
       const timbre = await leerXmlTimbrado(t.tenantId, viajeId);
       if (timbre === null) return new NextResponse('Este viaje no tiene timbre vigente.', { status: 404 });
-      logger.info('export.ccp_xml_timbrado', { viajeId, uuid: timbre.uuid, rol: t.rol });
+      logger.info('export.ccp_xml_timbrado', { viajeId, uuid: timbre.uuid, modo: timbre.modo, rol: t.rol });
+      // El nombre del archivo GRITA la prueba (c6-10): un XML sandbox
+      // reenviado por correo llega sin la pantalla que lo rotulaba, y
+      // `ccp-timbrada-<uuid>.xml` se lee como un comprobante real. El aviso
+      // también va DENTRO del archivo (`marcarXmlSandbox`).
+      const nombre = timbre.modo === 'sandbox'
+        ? `ccp-SANDBOX-${timbre.uuid}.xml`
+        : `ccp-timbrada-${timbre.uuid}.xml`;
       return new NextResponse(timbre.xml, {
         headers: {
           'Content-Type': 'application/xml; charset=utf-8',
-          'Content-Disposition': `attachment; filename="ccp-timbrada-${timbre.uuid}.xml"`,
+          'Content-Disposition': `attachment; filename="${nombre}"`,
         },
       });
     } catch (e) {

@@ -151,6 +151,20 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // que el jefe de tráfico no ve.
   '/dashboard/clientes': 'dinero',
   '/dashboard/facturacion': 'dinero',
+  // TIMBRADO (0227, auditoría Fable c6-3). El botón que emite el CFDI vivía
+  // dentro del borrador de Carta Porte, que es `operacion`: el ENCARGADO
+  // podía timbrar —un acto fiscal irreversible— y para poder hacerlo la
+  // pantalla le pintaba flete, IVA, retención y total. Los dos errores son el
+  // mismo error: el timbre no es operación, es dinero.
+  //
+  // Ruta propia y no una excepción dentro de `/dashboard/carta-porte`: el mapa
+  // de este archivo asigna UN área por ruta, y una pantalla que hubiera que
+  // gatear "para unos sí y para otros no" rompe esa regla justo donde más
+  // caro es. El borrador sigue siendo del jefe de tráfico (la declaración de
+  // ruta es suya, regla 2.7.7.2.1) y desde ahí solo hay un LINK — el dinero y
+  // el botón viven de este lado. `/dashboard/timbrado/<uuid>` es dinámica y
+  // gatea a mano contra esta misma llave, como `/dashboard/<uuid>`.
+  '/dashboard/timbrado': 'dinero',
   // El cotizador (0225, A8): costos, márgenes y precio sugerido — la
   // definición misma de lo que el encargado no ve. Espejo de la RLS
   // `ve_finanzas()` que la 0051 le puso a `cotizacion`.

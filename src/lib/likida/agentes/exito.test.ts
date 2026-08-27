@@ -57,7 +57,7 @@ const {
   PASOS_ONBOARDING, casillaHecha, detectarAtoros, avisosDeHoy, armarParteOnboarding,
   enSilencio, armarParteSilencio, armarReporteValor, tocaReporteMensual,
   evaluarGatillos, armarParteRetencion,
-  toquesDeHoy, tituloToque, textoDelToque, armarPropuestaCobranza, armarParteCobranzaSaas,
+  toquesDeHoy, esToqueAtrasado, tituloToque, textoDelToque, armarPropuestaCobranza, armarParteCobranzaSaas,
   semaforoTicket, armarParteSoporte,
   esAgenteExito, correrAgenteExito, AGENTES_EXITO,
 } = await import('./exito');
@@ -393,11 +393,30 @@ const FACTURA = {
 };
 
 describe('cobranza SaaS — la cadencia propone, nadie envía', () => {
-  it('solo cae toque en los cinco hitos exactos', () => {
+  it('un hito ALCANZADO cuenta aunque su día exacto ya haya pasado (c6-14)', () => {
+    // Antes del primer hito no hay nada que proponer.
+    expect(toquesDeHoy([FACTURA], '2026-07-25')).toEqual([]);
+    // El día exacto de cada hito, ese hito y los anteriores.
     expect(toquesDeHoy([FACTURA], '2026-07-29').map((t) => t.hito)).toEqual([-3]);
-    expect(toquesDeHoy([FACTURA], '2026-08-01').map((t) => t.hito)).toEqual([0]);
-    expect(toquesDeHoy([FACTURA], '2026-08-16').map((t) => t.hito)).toEqual([15]);
-    expect(toquesDeHoy([FACTURA], '2026-08-05')).toEqual([]);
+    expect(toquesDeHoy([FACTURA], '2026-08-01').map((t) => t.hito)).toEqual([-3, 0]);
+    // Y un día que no es hito de nadie YA NO se queda mudo: recupera los que
+    // se perdieron (el cron pudo no correr esos días).
+    expect(toquesDeHoy([FACTURA], '2026-08-05').map((t) => t.hito)).toEqual([-3, 0, 3]);
+    expect(toquesDeHoy([FACTURA], '2026-08-16').map((t) => t.hito)).toEqual([-3, 0, 3, 7, 15]);
+  });
+
+  it('el toque atrasado se marca y su texto habla del HOY real, no del hito', () => {
+    const tarde = toquesDeHoy([FACTURA], '2026-08-21').find((t) => t.hito === -3)!;
+    expect(esToqueAtrasado(tarde)).toBe(true);
+    expect(tarde.diasVsVencimiento).toBe(20);
+    // Nada de "faltan 3 días para el corte" sobre una factura de 20 días.
+    expect(textoDelToque(tarde)).not.toContain('faltan');
+    expect(textoDelToque(tarde)).toContain('20 días desde el corte');
+    const cuerpo = armarPropuestaCobranza(tarde, '2026-08-21');
+    expect(cuerpo).toContain('TOQUE ATRASADO');
+    expect(cuerpo).toContain('lleva 20 días vencida');
+    // El SELLO sigue siendo el del hito: una propuesta por (factura, hito).
+    expect(tituloToque(tarde)).toBe('Cobranza SaaS — LKAAAA202608 — D-3');
   });
 
   it('el título del toque es determinista por factura y hito', () => {
@@ -442,7 +461,9 @@ describe('cobranza SaaS — la cadencia propone, nadie envía', () => {
       { data: null, count: 0, error: null },  // el toque no existe
       { data: null, count: 0, error: null },  // el parte tampoco
     ]);
-    const r = await correrAgenteExito('cobranza_saas', 'cron', '2026-08-08');
+    // 2026-07-29 = D−3 exacto: UN solo hito alcanzado, que es lo que este
+    // caso quiere medir (el catch-up tiene su propia prueba arriba).
+    const r = await correrAgenteExito('cobranza_saas', 'cron', '2026-07-29');
     expect(r.piezas).toBe(2);
     const tipos = encolarPieza.mock.calls.map((c) => (c[0] as { tipo: string }).tipo);
     expect(tipos).toEqual(['recordatorio_cobranza', 'parte_cobranza_saas']);
@@ -456,7 +477,7 @@ describe('cobranza SaaS — la cadencia propone, nadie envía', () => {
       { data: null, count: 1, error: null },  // el toque YA existe
       { data: null, count: 1, error: null },  // el parte también
     ]);
-    const r = await correrAgenteExito('cobranza_saas', 'cron', '2026-08-08');
+    const r = await correrAgenteExito('cobranza_saas', 'cron', '2026-07-29');
     expect(r.piezas).toBe(0);
     expect(encolarPieza).not.toHaveBeenCalled();
   });
@@ -465,7 +486,7 @@ describe('cobranza SaaS — la cadencia propone, nadie envía', () => {
     getPorCobrar.mockResolvedValue([FACTURA]);
     respuestas.set('cola_aprobacion', [{ data: null, count: 0, error: null }, { data: null, count: 1, error: null }]);
     encolarPieza.mockRejectedValueOnce(new Error('duplicate key value violates unique constraint "cola_parte_exito_por_periodo"'));
-    const r = await correrAgenteExito('cobranza_saas', 'cron', '2026-08-08');
+    const r = await correrAgenteExito('cobranza_saas', 'cron', '2026-07-29');
     expect(r.resultado).toBe('corrio');
     expect(r.piezas).toBe(0);
   });
@@ -477,7 +498,9 @@ const TICKET = {
   id: 'tttttttt-1111-2222-3333-444444444444', tenantId: FLOTA.id,
   asunto: 'No me llegó el CFDI de la mensualidad', categoria: 'facturacion',
   prioridad: 'alta', estado: 'abierto', abiertoEn: '2026-08-26T10:00:00Z',
-  venceEn: '2026-08-27T10:00:00Z', mensajes: 0,
+  // `respuestas` y no `mensajes` desde c6-14/c6-5: cuenta SOLO los mensajes
+  // públicos de alguien distinto del solicitante.
+  venceEn: '2026-08-27T10:00:00Z', respuestas: 0,
 };
 const AHORA = '2026-08-27T18:00:00Z';
 
@@ -508,7 +531,8 @@ describe('soporte — el reloj se deriva, y «sin SLA» no es «vencido»', () =
 
   it('el SLA vencido escala al operador ANTES de encolar', async () => {
     respuestas.set('ticket_soporte', [{ data: [{ id: TICKET.id, tenant_id: FLOTA.id, asunto: TICKET.asunto, categoria: 'facturacion', prioridad: 'alta', estado: 'abierto', abierto_en: TICKET.abiertoEn, vence_en: TICKET.venceEn }], error: null }]);
-    respuestas.set('ticket_mensaje', [{ data: null, count: 0, error: null }]);
+    // El hilo se LEE (autor_id + interna), ya no se cuenta de cabecera.
+    respuestas.set('ticket_mensaje', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: null, count: 0, error: null }]);
     const r = await correrAgenteExito('soporte', 'cron', '2026-08-27', new Date(AHORA));
     expect(alertarOperador).toHaveBeenCalledWith('exito.soporte_sla', expect.objectContaining({ codigo: 'exito_soporte_sla_vencido' }));

@@ -81,6 +81,7 @@ vi.mock('@/lib/logger', () => ({ logger }));
 const {
   getConfigCotizador, guardarConfigCotizador, casetasMedidasPorRuta,
   getPanelCotizador, crearCotizacion, marcarEnviada, marcarPerdida, convertirEnViaje,
+  falloDefinitivoAlCrearViaje,
 } = await import('./lector');
 
 beforeEach(() => {
@@ -93,6 +94,7 @@ beforeEach(() => {
 // Lo mínimo que crearCotizacion consulta en el camino feliz.
 function prepararCotizar() {
   respuestas['cotizador_config'] = [{ data: { diesel_por_km: 10, salario_dia: 500, viaticos_dia: 100, fijos_por_km: 2, factor_regreso_vacio: 2, margen_objetivo_pct: 10 }, error: null }];
+  respuestas['liquidacion'] = [{ data: [], error: null }];    // nada liquidado en la ventana
   respuestas['viaje'] = [{ data: [], error: null }];          // sin histórico de la ruta
   respuestas['tarifa'] = [{ data: [], error: null }];         // sin catálogo
   respuestas['cotizacion'] = [{ data: { id: 'q-1' }, error: null }];
@@ -151,6 +153,11 @@ describe('la config declarada', () => {
 
 describe('las casetas medidas de la ruta', () => {
   it('promedia SOLO los viajes con gasto caseta, con la ruta normalizada', async () => {
+    // La ventana se recorre por LIQUIDACIÓN (c6-13): `v1` con dos
+    // liquidaciones sigue contando UNA vez.
+    respuestas['liquidacion'] = [{ data: [
+      { viaje_id: 'v1' }, { viaje_id: 'v1' }, { viaje_id: 'v2' }, { viaje_id: 'v3' },
+    ], error: null }];
     respuestas['viaje'] = [{ data: [
       { id: 'v1', origen: 'León', destino: 'CDMX' },
       { id: 'v2', origen: 'leon ', destino: ' cdmx' },
@@ -164,9 +171,26 @@ describe('las casetas medidas de la ruta', () => {
     expect(m).toEqual({ promedio: 1000, viajes: 1 });
   });
 
-  it('sin viajes de la ruta o sin casetas registradas → null, jamás $0', async () => {
-    respuestas['viaje'] = [{ data: [], error: null }];
+  it('la ventana la marca la FECHA DE LIQUIDACIÓN, no el alta del viaje (c6-13)', async () => {
+    respuestas['liquidacion'] = [{ data: [{ viaje_id: 'v1' }], error: null }];
+    respuestas['viaje'] = [{ data: [{ id: 'v1', origen: 'León', destino: 'CDMX' }], error: null }];
+    respuestas['gasto'] = [{ data: [{ viaje_id: 'v1', monto: 800 }], error: null }];
+    await casetasMedidasPorRuta('t1', 'León', 'CDMX', '2026-08-27');
+
+    // El `gte` de la ventana cuelga de `liquidacion.created_at`…
+    const liq = escrituras.find((e) => e.tabla === 'liquidacion');
+    expect(liq?.filtros.some((f) => f.startsWith('gte:"created_at"'))).toBe(true);
+    // …y la consulta de viajes ya NO filtra por su propia fecha de alta: solo
+    // resuelve la ruta de los ids que la ventana ya eligió.
+    const viajes = escrituras.find((e) => e.tabla === 'viaje');
+    expect(viajes?.filtros.some((f) => f.startsWith('gte:'))).toBe(false);
+    expect(viajes?.filtros.some((f) => f.startsWith('in:"id"'))).toBe(true);
+  });
+
+  it('sin nada liquidado en la ventana, o sin casetas registradas → null, jamás $0', async () => {
+    respuestas['liquidacion'] = [{ data: [], error: null }];
     expect(await casetasMedidasPorRuta('t1', 'León', 'CDMX', '2026-08-27')).toBeNull();
+    respuestas['liquidacion'] = [{ data: [{ viaje_id: 'v1' }], error: null }];
     respuestas['viaje'] = [{ data: [{ id: 'v1', origen: 'León', destino: 'CDMX' }], error: null }];
     respuestas['gasto'] = [{ data: [], error: null }];
     expect(await casetasMedidasPorRuta('t1', 'León', 'CDMX', '2026-08-27')).toBeNull();
@@ -218,6 +242,8 @@ describe('crearCotizacion — los candados de entrada', () => {
 
   it('la medición GANA sobre la captura manual, y el desglose persistido lo dice', async () => {
     prepararCotizar();
+    // La ventana la abre `liquidacion` desde c6-13.
+    respuestas['liquidacion'] = [{ data: [{ viaje_id: 'v1' }], error: null }];
     respuestas['viaje'] = [{ data: [{ id: 'v1', origen: 'León', destino: 'CDMX' }], error: null }];
     respuestas['gasto'] = [{ data: [{ viaje_id: 'v1', monto: 800 }], error: null }];
     await crearCotizacion('t1', { ...base, casetasManual: 999 }, 'u1');
@@ -309,16 +335,66 @@ describe('convertirEnViaje — claim, viaje y compensación', () => {
     expect(gana?.payload).toMatchObject({ estado: 'ganada', viaje_id: 'viaje-9' });
   });
 
-  it('si crearViaje falla, el claim se SUELTA — el reintento queda en manos del humano', async () => {
+  // ── c6-4: el claim SOLO se suelta con prueba de que no hay viaje ─────────
+
+  it('fallo DEFINITIVO y viaje inexistente: el claim se SUELTA', async () => {
     respuestas['cotizacion'] = [
       { data: { origen: 'A', destino: 'B', km: 100, precio: 500, cliente_id: null, estado: 'borrador' }, error: null },
       { data: [{ id: 'q1' }], error: null },   // claim ganado
       { data: null, error: null },             // soltar claim
     ];
+    respuestas['viaje'] = [{ data: [], error: null }];   // se COMPROBÓ que no existe
     crearViaje.mockRejectedValue(new Error('el operador no pertenece a esta flota'));
     await expect(convertirEnViaje('t1', 'q1', 'u1')).rejects.toThrow(/no pertenece/);
     const suelta = escrituras.filter((e) => e.tabla === 'cotizacion' && e.op === 'update').at(-1);
     expect(suelta?.payload).toEqual({ decidida_en: null, decidida_por: null });
     expect(suelta?.filtros).toContainEqual('neq:"estado","ganada"');
+  });
+
+  it('fallo AMBIGUO (timeout): el claim NO se suelta — la cotización queda «decidiéndose»', async () => {
+    respuestas['cotizacion'] = [
+      { data: { origen: 'A', destino: 'B', km: 100, precio: 500, cliente_id: null, estado: 'borrador' }, error: null },
+      { data: [{ id: 'q1' }], error: null },   // claim ganado
+    ];
+    respuestas['viaje'] = [{ data: [], error: null }];   // no aparece el viaje
+    crearViaje.mockRejectedValue(new Error('crearViaje: sin respuesta en 8000 ms (tope de consulta)'));
+    await expect(convertirEnViaje('t1', 'q1', 'u1')).rejects.toThrow(/No se pudo confirmar/);
+    // Ni un solo UPDATE después del claim: soltar habilitaría un SEGUNDO viaje.
+    const updates = escrituras.filter((e) => e.tabla === 'cotizacion' && e.op === 'update');
+    expect(updates).toHaveLength(1);   // solo el claim
+    expect(logger.error).toHaveBeenCalledWith('cotizador.conversion_ambigua', expect.objectContaining({ definitivo: false }));
+  });
+
+  it('si NO se pudo comprobar la existencia del viaje, tampoco se suelta', async () => {
+    respuestas['cotizacion'] = [
+      { data: { origen: 'A', destino: 'B', km: 100, precio: 500, cliente_id: null, estado: 'borrador' }, error: null },
+      { data: [{ id: 'q1' }], error: null },
+    ];
+    respuestas['viaje'] = [{ data: null, error: { message: 'red caída' } }];
+    crearViaje.mockRejectedValue(new Error('el operador no pertenece a esta flota'));
+    await expect(convertirEnViaje('t1', 'q1', 'u1')).rejects.toThrow(/No se pudo confirmar/);
+    expect(escrituras.filter((e) => e.tabla === 'cotizacion' && e.op === 'update')).toHaveLength(1);
+  });
+
+  it('el viaje SÍ se creó pese al error: se consolida como ganada y se devuelve su id', async () => {
+    respuestas['cotizacion'] = [
+      { data: { origen: 'A', destino: 'B', km: 100, precio: 500, cliente_id: null, estado: 'borrador' }, error: null },
+      { data: [{ id: 'q1' }], error: null },   // claim
+      { data: null, error: null },             // update a ganada
+    ];
+    respuestas['viaje'] = [{ data: [{ id: 'viaje-fantasma' }], error: null }];
+    crearViaje.mockRejectedValue(new Error('crearViaje: el insert no devolvió id'));
+    await expect(convertirEnViaje('t1', 'q1', 'u1')).resolves.toBe('viaje-fantasma');
+    const gana = escrituras.filter((e) => e.tabla === 'cotizacion' && e.op === 'update').at(-1);
+    expect(gana?.payload).toMatchObject({ estado: 'ganada', viaje_id: 'viaje-fantasma' });
+  });
+
+  it('la clasificación del fallo: pertenencia y constraint son definitivos; timeout no', () => {
+    expect(falloDefinitivoAlCrearViaje(new Error('el cliente no pertenece a esta flota'))).toBe(true);
+    expect(falloDefinitivoAlCrearViaje(new Error('violates check constraint "x"'))).toBe(true);
+    expect(falloDefinitivoAlCrearViaje(new Error('duplicate key value'))).toBe(true);
+    expect(falloDefinitivoAlCrearViaje(new Error('sin respuesta en 8000 ms (tope de consulta)'))).toBe(false);
+    expect(falloDefinitivoAlCrearViaje(new Error('el insert no devolvió id'))).toBe(false);
+    expect(falloDefinitivoAlCrearViaje('algo raro')).toBe(false);
   });
 });

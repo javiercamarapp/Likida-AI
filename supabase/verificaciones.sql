@@ -10272,3 +10272,110 @@ begin
     segundo_vigente_rebota, recancelado_entra, uuid_repetido_rebota, cruzado_rebota,
     rfc_torcido_rebota, regimen_corto_rebota, modo_basura_rebota, cerrado;
 end $$;
+
+-- ── 180. La RESERVA del timbre (claim-then-act) y el dominio del interruptor repuesto (mig. 0227) ──
+-- Lo que solo la base demuestra, y que es EL arreglo de c6-1: (a) la reserva
+-- ('pendiente', sin uuid/fecha/xml) ENTRA — sin eso no hay claim que tomar
+-- antes de llamar al PAC; (b) una SEGUNDA reserva del mismo viaje rebota
+-- contra `ccp_timbre_vigente_unico`, que desde la 0227 cubre 'pendiente': ese
+-- rebote es lo que impide que el perdedor llame al PAC y emita un segundo
+-- CFDI real; (c) una reserva tampoco convive con un timbre vigente del mismo
+-- viaje, ni al revés; (d) el CHECK de coherencia: un 'vigente' SIN uuid/fecha/
+-- xml rebota — relajar los NOT NULL no aflojó la garantía, la condicionó;
+-- (e) la reserva puede llevar uuid a medias (el PAC contestó, la
+-- consolidación no cerró) — es el caso que evita perder un folio fiscal;
+-- (f) `fecha_timbrado_origen` solo admite tfd/pac/servidor; (g) las cuatro
+-- palancas del back office SIGUEN en el dominio del interruptor (la trampa de
+-- c6-11: la 0218 aplicada después de la 0219 las borraba).
+do $$
+declare
+  ta uuid; va uuid; vb uuid; op_a uuid; op_b uuid;
+  reserva_entra boolean; segunda_reserva_rebota boolean;
+  reserva_sobre_vigente_rebota boolean; vigente_incompleto_rebota boolean;
+  reserva_con_uuid_entra boolean; origen_basura_rebota boolean;
+  palancas int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0227') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'Op 0227 A', '+5215550002271') returning id into op_a;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'Op 0227 B', '+5215550002272') returning id into op_b;
+  insert into viaje (tenant_id, operador_id) values (ta, op_a) returning id into va;
+  insert into viaje (tenant_id, operador_id) values (ta, op_b) returning id into vb;
+
+  -- (a) La reserva entra sin uuid, sin fecha y sin xml.
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, estado, proveedor, modo, reservado_en)
+      values (ta, va, 'pendiente', 'sw', 'sandbox', now());
+    reserva_entra := true;
+  exception when others then
+    reserva_entra := false;
+  end;
+
+  -- (b) La SEGUNDA reserva del mismo viaje rebota: es el claim arbitrando.
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, estado, proveedor, modo, reservado_en)
+      values (ta, va, 'pendiente', 'sw', 'sandbox', now());
+    segunda_reserva_rebota := false;
+  exception when unique_violation then
+    segunda_reserva_rebota := true;
+  end;
+
+  -- (c) Un timbre vigente y una reserva del mismo viaje tampoco conviven.
+  insert into ccp_timbre (tenant_id, viaje_id, uuid_fiscal, proveedor, modo, fecha_timbrado, xml)
+    values (ta, vb, 'cccccccc-bbbb-4ccc-8ddd-000000000001', 'sw', 'sandbox', now(), '<xml/>');
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, estado, proveedor, modo, reservado_en)
+      values (ta, vb, 'pendiente', 'sw', 'sandbox', now());
+    reserva_sobre_vigente_rebota := false;
+  exception when unique_violation then
+    reserva_sobre_vigente_rebota := true;
+  end;
+
+  -- (d) Un 'vigente' incompleto rebota: el hecho del timbre sigue siendo
+  -- obligatorio en cuanto la fila deja de ser una reserva.
+  begin
+    update ccp_timbre set estado = 'vigente'
+      where tenant_id = ta and viaje_id = va and estado = 'pendiente';
+    vigente_incompleto_rebota := false;
+  exception when check_violation then
+    vigente_incompleto_rebota := true;
+  end;
+
+  -- (e) La reserva SÍ puede llevar el uuid a medias — el folio no se pierde
+  -- aunque la consolidación falle.
+  begin
+    update ccp_timbre set uuid_fiscal = 'cccccccc-bbbb-4ccc-8ddd-000000000002'
+      where tenant_id = ta and viaje_id = va and estado = 'pendiente';
+    reserva_con_uuid_entra := true;
+  exception when others then
+    reserva_con_uuid_entra := false;
+  end;
+
+  -- (f) El origen de la fecha es un dominio cerrado: 'inventado' no existe.
+  begin
+    update ccp_timbre set fecha_timbrado_origen = 'inventado'
+      where tenant_id = ta and viaje_id = vb;
+    origen_basura_rebota := false;
+  exception when check_violation then
+    origen_basura_rebota := true;
+  end;
+
+  -- (g) c6-11: las cuatro palancas del back office siguen en el dominio.
+  palancas := 0;
+  begin
+    insert into interruptor (id, apagado) values ('agente:vigilante_calidad', false);
+    palancas := palancas + 1;
+    insert into interruptor (id, apagado) values ('agente:documentacion', false);
+    palancas := palancas + 1;
+    insert into interruptor (id, apagado) values ('agente:legal_compliance', false);
+    palancas := palancas + 1;
+    insert into interruptor (id, apagado) values ('agente:talento', false);
+    palancas := palancas + 1;
+  exception when check_violation then
+    -- palancas se queda en cuántas alcanzaron a entrar: el número dice cuál.
+    null;
+  end;
+
+  raise exception 'TIMBRE_CLAIM_0227  reserva_entra=%  segunda_reserva_rebota=%  reserva_sobre_vigente_rebota=%  vigente_incompleto_rebota=%  reserva_con_uuid_entra=%  origen_basura_rebota=%  palancas_backoffice=%   (esperado t / t / t / t / t / t / 4)',
+    reserva_entra, segunda_reserva_rebota, reserva_sobre_vigente_rebota,
+    vigente_incompleto_rebota, reserva_con_uuid_entra, origen_basura_rebota, palancas;
+end $$;

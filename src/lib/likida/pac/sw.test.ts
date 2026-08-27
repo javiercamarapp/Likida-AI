@@ -70,6 +70,30 @@ describe('crearProveedorSw — timbrar', () => {
     expect(r.mensaje).toContain('Detalle del PAC.');
   });
 
+  // c6-2: `success` sin uuid/cfdi legibles es AMBIGUO, jamás un rechazo. El
+  // PAC dijo que sí: tratarlo como "no pasó nada" invitaría al reintento y a
+  // un SEGUNDO CFDI real que nadie va a cancelar.
+  it('éxito SIN uuid ni XML legibles = clase red («verifica en el panel»), nunca rechazado', async () => {
+    for (const data of [
+      null,
+      { uuid: 'fd53505e-d737-43ab-815c-8090edec3655' },        // sin cfdi
+      { cfdi: '<timbrado/>' },                                  // sin uuid
+      { uuid: 12345, cfdi: '<timbrado/>' },                     // uuid no-texto
+    ]) {
+      _limpiarTokenSw();
+      fetchMock.mockResolvedValueOnce(respAuth()).mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: 'success', data }), { status: 200 }),
+      );
+      const r = await crearProveedorSw(CFG).timbrar('<cfdi/>');
+      expect(r.ok).toBe(false);
+      if (r.ok) continue;
+      expect(r.clase).toBe('red');
+      expect(r.clase).not.toBe('rechazado');
+      expect(r.mensaje).toContain('NO reintentes');
+      expect(r.mensaje).toContain('panel del PAC');
+    }
+  });
+
   it('timeout del timbre = clase red, con la advertencia de verificar antes de reintentar', async () => {
     fetchMock.mockResolvedValueOnce(respAuth()).mockRejectedValueOnce(new Error('The operation was aborted due to timeout'));
     const r = await crearProveedorSw(CFG).timbrar('<cfdi/>');

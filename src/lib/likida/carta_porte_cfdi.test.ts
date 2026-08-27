@@ -169,6 +169,33 @@ describe('armarCfdiTimbrable — el CFDI completo sin sellar', () => {
     expect(junto).toContain('TranspInternac');
   });
 
+  // ── Auditoría Fable ciclo 6 ───────────────────────────────────────────────
+
+  it('c6-8: PUE con forma 99 se rebota AQUÍ, con el porqué — no en el PAC', () => {
+    const r = armarCfdiTimbrable(viajeDe(datosCompletos()), ID, EMISOR, RECEPTOR_MORAL, 10000,
+      { metodoPago: 'PUE', formaPago: '99' }, AHORA);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    const junto = r.faltantes.join(' | ');
+    expect(junto).toContain('PUE con forma de pago 99');
+    // El mensaje explica la contradicción, no solo la prohíbe.
+    expect(junto).toContain('el pago YA se hizo');
+  });
+
+  it('c6-9: el RFC genérico (XAXX/XEXX) entra a faltantes con su motivo, no rebota en el PAC', () => {
+    for (const rfc of ['XAXX010101000', 'XEXX010101000', 'xaxx010101000']) {
+      const r = armarCfdiTimbrable(viajeDe(datosCompletos()), ID, EMISOR,
+        { ...RECEPTOR_MORAL, rfc }, 10000, EMI, AHORA);
+      expect(r.ok).toBe(false);
+      if (r.ok) continue;
+      const junto = r.faltantes.join(' | ');
+      expect(junto).toContain('InformacionGlobal');
+      expect(junto).toContain('no soportado aún');
+    }
+    // Y un RFC normal de 12 no se confunde con uno genérico.
+    expect(armarCfdiTimbrable(viajeDe(datosCompletos()), ID, EMISOR, RECEPTOR_MORAL, 10000, EMI, AHORA).ok).toBe(true);
+  });
+
   it('los centavos se redondean a 2 decimales coherentes entre sí', () => {
     const r = armarCfdiTimbrable(viajeDe(datosCompletos()), ID, EMISOR, RECEPTOR_MORAL, 3333.33, EMI, AHORA);
     expect(r.ok).toBe(true);

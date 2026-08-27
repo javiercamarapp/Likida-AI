@@ -109,6 +109,15 @@ export function armarCfdiTimbrable(
   if (receptor.regimenFiscal === null) faltantes.push('Régimen fiscal del cliente (clave de 3 dígitos).');
   if (receptor.usoCfdi === null) faltantes.push('Uso CFDI que pide el cliente (S01, G03…).');
   if (receptor.cpFiscal === null) faltantes.push('CP del domicilio fiscal del cliente.');
+  // RFC GENÉRICOS (c6-9): XAXX010101000 (público en general nacional) y
+  // XEXX010101000 (residente en el extranjero). El SAT los admite, pero SOLO
+  // con el nodo InformacionGlobal (periodicidad, meses, año) que Likida no
+  // arma todavía. Detectarlo AQUÍ convierte un rechazo del PAC sin explicación
+  // en un faltante con su porqué; el RFC se compara sin importar mayúsculas
+  // porque en la captura entra de las dos formas.
+  if (receptor.rfc !== null && /^X[AE]XX010101000$/i.test(receptor.rfc.trim())) {
+    faltantes.push('El RFC del cliente es genérico (público en general / residente en el extranjero): ese CFDI requiere el nodo InformacionGlobal, que Likida todavía no arma — no soportado aún. Captura el RFC real del cliente o timbra ese viaje en tu facturador.');
+  }
 
   // ── El precio ────────────────────────────────────────────────────────────
   if (ingresoFlete === null || !Number.isFinite(ingresoFlete) || ingresoFlete <= 0) {
@@ -121,6 +130,13 @@ export function armarCfdiTimbrable(
   }
   if (emision.metodoPago === 'PUE' && !/^[0-9]{2}$/.test(emision.formaPago)) {
     faltantes.push('Con PUE la forma de pago es la clave real de 2 dígitos (01 efectivo, 03 transferencia…).');
+  }
+  // PUE + 99 (c6-8): «Por definir» es la forma de un pago que TODAVÍA no
+  // ocurrió, y PUE declara que el pago ya se hizo en una sola exhibición. La
+  // combinación se contradice y el PAC la rebota (CFDI40158); decirlo aquí
+  // ahorra el viaje y explica el porqué, que el código del PAC no explica.
+  if (emision.metodoPago === 'PUE' && emision.formaPago === '99') {
+    faltantes.push('PUE con forma de pago 99 «Por definir» se contradice: PUE dice que el pago YA se hizo en una exhibición, y 99 dice que aún no se sabe cómo se pagará. Captura la forma real (01 efectivo, 03 transferencia…) o cambia el método a PPD.');
   }
 
   // ── Lo que el TIMBRE exige y el pre-CFDI dejaba como comentario ──────────

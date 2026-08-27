@@ -271,11 +271,18 @@ export function evaluarCalidad(
         });
       }
     }
-    if (sinCosto > 0 && conCosto.length > 0) {
+    // LA NOTA SALE AUNQUE NINGUNA CORRIDA HAYA MEDIDO (c6-12). El `&&
+    // conCosto.length > 0` de antes callaba justo el caso peor: un agente que
+    // dejó de anotar su gasto POR COMPLETO desaparecía de esta nota y el
+    // parte no decía nada — se leía como «sin novedad en costos», que es
+    // exactamente la lectura falsa que NULL ≠ 0 existe para impedir.
+    if (sinCosto > 0) {
       hallazgos.push({
         semaforo: 'NOTA', codigo: 'V3', agente,
         detalle: `${numero(sinCosto)} de ${numero(lista.length)} corrida(s) no anotaron costo.`,
-        evidencia: 'costo_usd NULL se excluye del promedio; NO se cuenta como $0 — el costo por corrida de arriba se calcula solo sobre las medidas.',
+        evidencia: conCosto.length === 0
+          ? 'NINGUNA corrida de este agente midió su gasto en la ventana: no hay costo por corrida que comparar contra su historia. costo_usd NULL es «no se midió», NUNCA $0 — este parte no afirma que no gastó.'
+          : 'costo_usd NULL se excluye del promedio; NO se cuenta como $0 — el costo por corrida de arriba se calcula solo sobre las medidas.',
       });
     }
   }
@@ -309,9 +316,17 @@ export function evaluarCalidad(
 
 /** El parte de calidad, PURO. Sin hallazgos es corto a propósito: media
  *  página para decir «todo bien» enseña a no leerlo. */
+/** Corridas que UNA ventana de auditoría lee como máximo. Si se llena, el
+ *  parte lo DICE (c6-12): un parte de calidad sobre una ventana recortada en
+ *  silencio afirma «nadie falló» sobre las corridas que sí leyó y calla las
+ *  que no miró — y las que no miró son, por el `order` descendente, las más
+ *  viejas de la semana. */
+export const TOPE_CORRIDAS_AUDITADAS = 5000;
+
 export function armarParteCalidad(
   hallazgos: HallazgoCalidad[], desde: string, hasta: string,
   corridas: number, agentes: number, piezas: number,
+  truncado = false,
 ): string {
   const rojos = hallazgos.filter((h) => h.semaforo === 'ROJO');
   const ambar = hallazgos.filter((h) => h.semaforo === 'AMBAR');
@@ -322,6 +337,10 @@ export function armarParteCalidad(
     `Hallazgos: ${numero(rojos.length)} ROJO · ${numero(ambar.length)} ÁMBAR · ${numero(hallazgos.length - rojos.length - ambar.length)} nota(s).`,
     '',
   ];
+  if (truncado) {
+    lineas.push(`VENTANA TRUNCADA A ${numero(TOPE_CORRIDAS_AUDITADAS)} CORRIDAS: la semana tuvo más de las que este parte alcanzó a leer, y las que faltan son las MÁS VIEJAS de la ventana (se lee en orden descendente). Todo lo de abajo se afirma sobre las ${numero(corridas)} leídas — un fallo, un verde vacío o un rechazo que viva en las no leídas NO aparece aquí.`);
+    lineas.push('');
+  }
   if (hallazgos.length === 0) {
     lineas.push('Nada disparó umbral: ningún fallo, ningún verde vacío, ningún costo fuera de su propia banda y ningún rechazo humano en la ventana.');
   } else {
@@ -339,16 +358,24 @@ export function armarParteCalidad(
 
 /** Las corridas de una ventana. LANZA si la bitácora no se puede leer: un
  *  parte de calidad sobre una bitácora ciega afirmaría «nadie falló». */
-async function leerCorridas(desdeIso: string, hastaIso: string): Promise<CorridaAuditada[]> {
-  const { data, error } = await acotada(supabaseAdmin()
+async function leerCorridas(desdeIso: string, hastaIso: string): Promise<{ corridas: CorridaAuditada[]; truncado: boolean }> {
+  const { data, error, count } = await acotada(supabaseAdmin()
     .from('agente_corrida')
-    .select('agente, estado, inicio, tareas_hechas, tareas_total, costo_usd, error')
+    // `count: 'exact'` y no un `length === tope`: PostgREST recorta a
+    // `max_rows` sin avisar (la lección ESC-8 de proveedores.ts), así que
+    // comparar el largo contra el `.limit()` no detecta NADA. El total real
+    // viene en la misma respuesta y no cuesta un viaje extra.
+    .select('agente, estado, inicio, tareas_hechas, tareas_total, costo_usd, error', { count: 'exact' })
     .gte('inicio', desdeIso)
     .lt('inicio', hastaIso)
     .order('inicio', { ascending: false })
-    .limit(5000), 'backoffice.calidad_corridas');
+    .limit(TOPE_CORRIDAS_AUDITADAS), 'backoffice.calidad_corridas');
   if (error) throw new Error(`leerCorridas: ${error.message}`);
-  return ((data ?? []) as Array<Record<string, unknown>>).map((f) => ({
+  const filas = (data ?? []) as Array<Record<string, unknown>>;
+  // Sin `count` no se puede afirmar que esté completa: se declara truncada si
+  // el lote llegó lleno. No saber nunca se lee como "sí, está todo".
+  const truncado = typeof count === 'number' ? count > filas.length : filas.length >= TOPE_CORRIDAS_AUDITADAS;
+  const corridas = filas.map((f) => ({
     agente: String(f.agente),
     estado: f.estado as CorridaAuditada['estado'],
     inicio: String(f.inicio),
@@ -356,7 +383,8 @@ async function leerCorridas(desdeIso: string, hastaIso: string): Promise<Corrida
     tareasTotal: f.tareas_total === null || f.tareas_total === undefined ? null : Number(f.tareas_total),
     costoUsd: f.costo_usd === null || f.costo_usd === undefined ? null : Number(f.costo_usd),
     error: (f.error as string | null) ?? null,
-  }));
+  })) as CorridaAuditada[];
+  return { corridas, truncado };
 }
 
 /** La vara: costo por corrida de cada agente en los 28 días ANTERIORES a la
@@ -411,14 +439,15 @@ async function correrVigilanteCalidad(disparo: DisparoCorrida, hoy: string): Pro
     }
     const desdeIso = inicioDia(desde);
     const hastaIso = inicioDia(lunes);
-    const [corridas, base, piezas] = await Promise.all([
+    const [lote, base, piezas] = await Promise.all([
       leerCorridas(desdeIso, hastaIso),
       leerBaseCosto(inicioDia(masDias(desde, -28)), desdeIso),
       leerPiezasResueltas(desdeIso, hastaIso),
     ]);
+    const { corridas, truncado } = lote;
     const hallazgos = evaluarCalidad(corridas, base, piezas);
     const agentesVistos = new Set(corridas.map((c) => c.agente)).size;
-    const cuerpo = armarParteCalidad(hallazgos, desde, masDias(lunes, -1), corridas.length, agentesVistos, piezas.length);
+    const cuerpo = armarParteCalidad(hallazgos, desde, masDias(lunes, -1), corridas.length, agentesVistos, piezas.length, truncado);
 
     // El ROJO no espera a que alguien abra la bandeja (mismo criterio 0215).
     const rojos = hallazgos.filter((h) => h.semaforo === 'ROJO');
@@ -429,7 +458,7 @@ async function correrVigilanteCalidad(disparo: DisparoCorrida, hoy: string): Pro
       });
     }
     const res = await encolarParte(agente, 'parte_calidad', titulo, cuerpo, {
-      ventana: { desde, hasta: lunes },
+      ventana: { desde, hasta: lunes }, truncado,
       hallazgos: hallazgos.map((h) => ({ semaforo: h.semaforo, codigo: h.codigo, agente: h.agente })),
       consultas: ['agente_corrida (ventana)', 'agente_corrida (historia 28d)', 'cola_aprobacion (resueltas)'],
     });
@@ -1107,10 +1136,16 @@ async function correrTalento(disparo: DisparoCorrida, hoy: string): Promise<Resu
       }, { tareasHechas: 0, tareasTotal: 0 });
       return { piezas: 0, motivo: 'sin vacantes abiertas — el agente despierta cuando declares una (tabla `vacante`)' };
     }
-    if (await parteExistente(agente, titulo)) {
-      await anotar(agente, inicio, 'ok', disparo, { parte: 'ya_existia', titulo });
-      return { piezas: 0, motivo: 'el parte de talento de esta semana ya está en la bandeja' };
-    }
+    // ── LA CRIBA CORRE SIEMPRE (c6-6) ────────────────────────────────────
+    //
+    // Antes, `parteExistente` cortaba la corrida ENTERA: fabricado el parte
+    // del lunes, los candidatos que llegaban de martes a domingo se quedaban
+    // en 'recibido' hasta la semana siguiente — el agente se declaraba «ok»
+    // sin haber mirado a nadie. Lo SEMANAL es la fabricación del parte, no el
+    // trabajo. La criba es idempotente por estado (`guardarCriba` ancla el
+    // UPDATE en `estado='recibido'`, y `leerCandidatosPorCribar` solo pide
+    // esos), así que correrla de más no re-evalúa a nadie ni pisa una criba
+    // hecha: toca cero filas.
     const porCribar = await leerCandidatosPorCribar(vacantes.map((v) => v.id), TOPE_CRIBA_POR_CORRIDA + 1);
     const lote = porCribar.slice(0, TOPE_CRIBA_POR_CORRIDA);
     const reqPorVacante = new Map(vacantes.map((v) => [v.id, v.requisitos]));
@@ -1120,6 +1155,22 @@ async function correrTalento(disparo: DisparoCorrida, hoy: string): Promise<Resu
       await guardarCriba(c.id, criba);
       cribados.push({ ...c, criba });
     }
+
+    // Y AHORA sí, lo semanal: el parte. Si el de esta semana ya está, la
+    // corrida no fue en balde — cribó lo que llegó desde entonces, y eso es
+    // lo que se anota.
+    if (await parteExistente(agente, titulo)) {
+      await anotar(agente, inicio, 'ok', disparo,
+        { parte: 'ya_existia', titulo, cribados: cribados.length },
+        { tareasHechas: cribados.length, tareasTotal: cribados.length });
+      return {
+        piezas: 0,
+        motivo: cribados.length === 0
+          ? 'el parte de talento de esta semana ya está en la bandeja y no había candidatos nuevos por cribar'
+          : `el parte de talento de esta semana ya está en la bandeja; se cribaron ${numero(cribados.length)} candidato(s) nuevo(s) — entran al parte de la semana que viene`,
+      };
+    }
+
     const cuerpo = armarParteTalento(vacantes, cribados, Math.max(0, porCribar.length - lote.length), lunes);
     const res = await encolarParte(agente, 'parte_talento', titulo, cuerpo, {
       vacantes: vacantes.map((v) => v.clave),

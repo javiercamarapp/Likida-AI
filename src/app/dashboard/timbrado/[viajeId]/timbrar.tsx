@@ -1,17 +1,21 @@
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { puedeTimbrar } from '@/lib/auth/permisos';
 import type { ViajeCcp } from '@/lib/likida/carta_porte_datos';
 import { armarCfdiTimbrable } from '@/lib/likida/carta_porte_cfdi';
 import { generarIdCcp } from '@/lib/likida/carta_porte';
-import { leerContextoTimbre, timbrarViaje, guardarReceptorFiscal } from '@/lib/likida/carta_porte_timbre';
+import {
+  leerContextoTimbre, timbrarViaje, guardarReceptorFiscal, motivoDeReservaViva,
+} from '@/lib/likida/carta_porte_timbre';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
-import { sufijoTenant } from '../../../sufijo';
-import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../../../admin/ui/forma';
+import { sufijoTenant } from '../../sufijo';
+import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../../admin/ui/forma';
 
 /**
- * LA SECCIÓN DE TIMBRE del borrador (0226) — el botón que convierte el
- * borrador validado en CFDI timbrado, con TODAS sus verdades a la vista:
+ * LA SECCIÓN DE TIMBRE (0226; mudada al área `dinero` por la 0227 — auditoría
+ * Fable c6-3) — el botón que convierte el borrador validado en CFDI timbrado,
+ * con TODAS sus verdades a la vista:
  *
  *   · Sin PAC configurado la sección lo dice y no hay botón — jamás se
  *     simula un timbre.
@@ -20,8 +24,15 @@ import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../../.
  *     mismo porque el cliente es de este viaje).
  *   · El timbre sandbox se rotula como lo que es: una prueba que no ampara
  *     nada.
- *   · El botón lo aprieta un humano; la acción re-lee y re-valida todo — el
- *     estado de esta pantalla pudo envejecer.
+ *   · El botón lo aprieta un humano CON EL VERBO (`puedeTimbrar`: dueño o
+ *     contador, nunca el jefe de tráfico); la acción re-lee y re-valida todo
+ *     — el estado de esta pantalla pudo envejecer.
+ *   · Una RESERVA viva (0227) se dice en pantalla: hay un timbrado en curso o
+ *     uno que quedó ambiguo, y el botón no aparece.
+ *
+ * LAS DOS PUERTAS DE CADA ACCIÓN: el ÁREA (`puedeVerRuta` sobre esta ruta de
+ * `dinero`) y el VERBO (`puedeTimbrar`). El área sola no bastaba: dejaba
+ * timbrar a cualquiera que viera la pantalla.
  */
 
 const t = (v: FormDataEntryValue | null): string | null => {
@@ -33,20 +44,26 @@ export async function SeccionTimbrado({ v, searchParams }: {
   v: ViajeCcp;
   searchParams: { tenant?: string; rol?: string; vista?: string };
 }) {
-  const RUTA_PADRE = '/dashboard/carta-porte';
-  const { tenantId } = await resolverTenantEfectivo(RUTA_PADRE, searchParams);
+  const RUTA = '/dashboard/timbrado';
+  const { tenantId, rol } = await resolverTenantEfectivo(RUTA, searchParams);
 
   // Un error de lectura aquí LANZA (error boundary de la página): operar el
   // timbre a ciegas es peor que no pintar la sección.
   const ctx = await leerContextoTimbre(tenantId, v.viajeId);
   if (ctx === null) return null;
 
-  const rutaActual = `${RUTA_PADRE}/borrador/${v.viajeId}`;
+  const rutaActual = `${RUTA}/${v.viajeId}`;
+  const puedeEmitir = puedeTimbrar(rol);
 
   async function timbrar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA_PADRE, searchParams);
-    if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { error: 'Tu rol no puede timbrar.' };
+    const s = await resolverTenantEfectivo(RUTA, searchParams);
+    // El ÁREA y el VERBO, en ese orden y los dos: el rol del render no es el
+    // de la acción, y ver la pantalla nunca fue permiso para emitir un CFDI.
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
+    if (!puedeTimbrar(s.rol)) {
+      return { error: 'Tu rol no puede timbrar: emitir un CFDI es del dueño de la flota o del contador.' };
+    }
     const metodo = String(fd.get('metodoPago')) === 'PUE' ? 'PUE' as const : 'PPD' as const;
     // Con PPD la forma ES 99 (Anexo 20) — el selector de forma solo aplica a PUE.
     const forma = metodo === 'PPD' ? '99' : (t(fd.get('formaPago')) ?? '');
@@ -65,8 +82,14 @@ export async function SeccionTimbrado({ v, searchParams }: {
 
   async function guardarReceptor(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA_PADRE, searchParams);
-    if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { error: 'Tu rol no puede capturar los datos fiscales del cliente.' };
+    const s = await resolverTenantEfectivo(RUTA, searchParams);
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
+    // Mismo verbo que timbrar: la razón social, el régimen y el uso CFDI del
+    // receptor VAN DENTRO del comprobante. Capturarlos es declarar, y quien
+    // declara es quien firma.
+    if (!puedeTimbrar(s.rol)) {
+      return { error: 'Tu rol no puede capturar los datos fiscales del cliente: van dentro del CFDI.' };
+    }
     const clienteId = t(fd.get('clienteId'));
     if (clienteId === null) return { error: 'El viaje no tiene cliente asignado — asígnalo antes de capturar sus datos fiscales.' };
     try {
@@ -104,6 +127,25 @@ export async function SeccionTimbrado({ v, searchParams }: {
     );
   }
 
+  // ── Reserva viva (0227): un intento en curso, o uno ambiguo ──────────────
+  // Sin botón a propósito: volver a llamar al PAC podría emitir un SEGUNDO
+  // CFDI real. El bloqueo real es el unique de la base; esto solo lo explica.
+  if (ctx.reservaPendiente !== null) {
+    return (
+      <section className="space-y-2 print:hidden">
+        <h2 className="font-display text-[15px] font-semibold">Timbre</h2>
+        <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+          {motivoDeReservaViva(ctx.reservaPendiente)}
+        </p>
+        {ctx.reservaPendiente.reservadoEn !== null && (
+          <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+            Apartado desde {ctx.reservaPendiente.reservadoEn}.
+          </p>
+        )}
+      </section>
+    );
+  }
+
   // ── Sin PAC: la verdad y cero botones ────────────────────────────────────
   if (!ctx.pac.configurado) {
     return (
@@ -111,8 +153,8 @@ export async function SeccionTimbrado({ v, searchParams }: {
         <h2 className="font-display text-[15px] font-semibold">Timbre</h2>
         <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
           Sin PAC configurado: el timbrado directo está apagado (se enciende con las variables
-          LIKIDA_PAC_* del servidor). Mientras tanto, el XML de arriba se descarga y se timbra en tu
-          facturador — Likida jamás simula un timbre.
+          LIKIDA_PAC_* del servidor). Mientras tanto, el XML del borrador se descarga y se timbra en
+          tu facturador — Likida jamás simula un timbre.
         </p>
       </section>
     );
@@ -138,7 +180,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
         </div>
       )}
 
-      {ctx.clienteId !== null && (
+      {ctx.clienteId !== null && puedeEmitir && (
         <details className="rounded-lg hairline px-3 py-2">
           <summary className="text-[12.5px] font-medium cursor-pointer">Datos fiscales del cliente (receptor)</summary>
           <div className="pt-2">
@@ -153,7 +195,14 @@ export async function SeccionTimbrado({ v, searchParams }: {
         </details>
       )}
 
-      {ensayo.ok && (
+      {ensayo.ok && !puedeEmitir && (
+        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          El comprobante está listo para emitirse, pero timbrar es del dueño de la flota o del
+          contador: emitir un CFDI es un acto fiscal irreversible y lo firma quien responde por él.
+        </p>
+      )}
+
+      {ensayo.ok && puedeEmitir && (
         <div className="space-y-1">
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             Flete {String(ensayo.subTotal)} + IVA 16% {String(ensayo.iva)}
@@ -165,7 +214,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
               { valor: 'PPD', texto: 'PPD — pago en parcialidades/diferido (forma 99)' },
               { valor: 'PUE', texto: 'PUE — pago en una exhibición' },
             ]} />
-            <Campo nombre="formaPago" etiqueta="Forma de pago (solo con PUE)" placeholder="03 transferencia · 01 efectivo" ayuda="Con PPD se envía 99 «Por definir» (Anexo 20)." />
+            <Campo nombre="formaPago" etiqueta="Forma de pago (solo con PUE)" placeholder="03 transferencia · 01 efectivo" ayuda="Con PPD se envía 99 «Por definir» (Anexo 20). PUE con 99 se rechaza aquí mismo: se contradicen." />
           </FormaConAviso>
         </div>
       )}
