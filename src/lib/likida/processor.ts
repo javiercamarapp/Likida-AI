@@ -36,6 +36,7 @@ import { atenderDespachoOficina } from '@/lib/likida/despacho_wa';
 import { interpretarTalacha, atenderTalachaChofer, atenderAutorizacionTalacha } from '@/lib/likida/talacha_wa';
 import { atenderCcpOficina } from '@/lib/likida/carta_porte_wa';
 import { interpretarAsistencia, atenderAsistenciaChofer, atenderReconocimientoAsistencia, atenderAsistenciaOficina } from '@/lib/likida/asistencia_wa';
+import { atenderCoordinacionOficina, atenderMensajeProveedor } from '@/lib/likida/asistencia_coordinacion';
 import { esCaptionPod, guardarPodDelChofer, mensajePod } from '@/lib/likida/pod_wa';
 import { atenderInformeOficina } from '@/lib/likida/informes_wa';
 import { pideInformePdf, mandarInformePdf, atenderPreguntaLibre } from '@/lib/likida/oficina_wa';
@@ -585,6 +586,24 @@ async function atenderTextoOficina(
     logger.error('oficina.ccp_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
   }
 
+  // La COORDINACIÓN con proveedores (Capa D, 0213) va junto a sus hermanos de
+  // botón: `coo_ir:`/`coo_si:`/`coo_no:` responden a avisos concretos que
+  // mandamos, y «contactar» es un mandato cerrado — con un despacho activo,
+  // cualquiera de ellos acabaría en el intérprete de viajes como si fuera una
+  // orden nueva.
+  try {
+    const rCoo = await atenderCoordinacionOficina(
+      { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId }, texto,
+    );
+    if (rCoo) {
+      logger.info('oficina.coordinacion', { user: cuenta.userId, rol: cuenta.rol });
+      await sendText(from, rCoo);
+      return true;
+    }
+  } catch (e) {
+    logger.error('oficina.coordinacion_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+  }
+
   // Sin flota no hay nada que despachar ni sobre qué informar. Es el caso del
   // superadmin, que no pertenece a ninguna.
   if (!cuenta.tenantId) return false;
@@ -976,6 +995,22 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             : '') +
           `Para el detalle completo, entra a ${appUrl()}.`);
         return;
+      }
+
+      // ── ¿ES UN PROVEEDOR CONTACTADO POR LA CAPA D? (0213) ────────────────
+      // Rama propia y aislada por teléfono-de-proveedor-con-gestión-viva: no
+      // toca el camino del chofer ni el de oficina. Su respuesta ("40 min,
+      // $1,200") avanza la coordinación y le llega al jefe con botones; sin
+      // gestión viva, este número sigue siendo un desconocido y cae abajo.
+      if (msg.type === 'text' && msg.text) {
+        const rProveedor = await atenderMensajeProveedor(msg.from, msg.text).catch((e) => {
+          logger.error('proveedor.mensaje_error', { err: e instanceof Error ? e.message : String(e) });
+          return null;
+        });
+        if (rProveedor) {
+          await sendText(msg.from, rProveedor);
+          return;
+        }
       }
 
       await sendText(msg.from, 'Hola, no te tengo registrado como operador. Pídele a tu flota que te dé de alta en Likida. 🚛');

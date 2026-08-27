@@ -9513,3 +9513,106 @@ begin
   raise exception 'TALLER_0209  fk_cruzada=%  segunda_orden_rebota=%  rutina_sin_reloj_rebota=%  cadencia_cero_rebota=%  doble_abierta_rebota=%  tras_cierre_entra=%  nombre_duplicado_rebota=%  fiscal_vivo=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t)',
     fk_cruzada, segunda_orden_rebota, rutina_sin_reloj_rebota, cadencia_cero_rebota, doble_abierta_rebota, tras_cierre_entra, nombre_duplicado_rebota, fiscal_vivo, cerrado;
 end $$;
+
+-- ── 170. La coordinación con el proveedor: una viva por emergencia, y el expediente sobrevive al directorio (mig. 0213) ──
+-- (Los bloques 167-169 quedaron reservados a fases paralelas que no
+-- necesitaron SQL — hueco a propósito, como el 165.)
+-- Lo que solo la base demuestra: (a) la FK COMPUESTA rebota una coordinación
+-- colgada de la incidencia de OTRA flota; (b) el único parcial deja UNA
+-- gestión viva por incidencia — el duplicado rebota, la descartada libera, y
+-- la CONFIRMADA sigue bloqueando (dos servicios comprometidos para la misma
+-- emergencia sería el bug caro); (c) los CHECKs rebotan eta en cero y precio
+-- en cero (un ETA de 0 min o un servicio de $0 no son datos, son inventos);
+-- (d) borrar el proveedor del directorio NO borra el expediente — el set
+-- null acotado deja el snapshot citable; (e) el doble candado: ni anon ni
+-- authenticated tocan la tabla.
+do $$
+declare
+  ta uuid; tb uuid; inc_a uuid; inc_a2 uuid; inc_b uuid; prov uuid; coord uuid;
+  fk_cruzada boolean; duplicada_rebota boolean; descartada_libera boolean;
+  confirmada_bloquea boolean; eta_cero_rebota boolean; precio_cero_rebota boolean;
+  snapshot_queda boolean; cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ COORDINACION A 0213') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ COORDINACION B 0213') returning id into tb;
+  -- Incidencias "de oficina" (sin unidad ni operador): los candados 0201/0206
+  -- no compiten aquí (el bloque 164 ya lo demostró).
+  insert into incidencia (tenant_id, tipo, prioridad) values (ta, 'varado', 'alta') returning id into inc_a;
+  insert into incidencia (tenant_id, tipo, prioridad) values (ta, 'varado', 'alta') returning id into inc_a2;
+  insert into incidencia (tenant_id, tipo, prioridad) values (tb, 'varado', 'alta') returning id into inc_b;
+  insert into proveedor_emergencia (tenant_id, tipo, nombre, telefono)
+    values (ta, 'grua', 'Gruas Prueba 0213', '5299911122233') returning id into prov;
+
+  -- (a) La coordinación de la flota A no puede colgarse de la incidencia de B.
+  begin
+    insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_nombre, proveedor_telefono, mensaje_preparado)
+      values (ta, inc_b, 'Gruas Prueba 0213', '5299911122233', 'msj');
+    fk_cruzada := false;
+  exception when foreign_key_violation then
+    fk_cruzada := true;
+  end;
+
+  -- La legítima sí entra (si esto truena, el bloque entero truena — bien).
+  insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_id, proveedor_nombre, proveedor_telefono, mensaje_preparado)
+    values (ta, inc_a, prov, 'Gruas Prueba 0213', '5299911122233', 'msj') returning id into coord;
+
+  -- (b) Una gestión viva por incidencia: el duplicado rebota...
+  begin
+    insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_nombre, proveedor_telefono, mensaje_preparado)
+      values (ta, inc_a, 'Otra Grua', '5299900000000', 'msj');
+    duplicada_rebota := false;
+  exception when unique_violation then
+    duplicada_rebota := true;
+  end;
+  -- ...la descartada libera para el siguiente candidato...
+  update coordinacion_proveedor set estado = 'descartada', decidida_en = now() where id = coord;
+  begin
+    insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_id, proveedor_nombre, proveedor_telefono, mensaje_preparado)
+      values (ta, inc_a, prov, 'Otra Grua', '5299900000000', 'msj') returning id into coord;
+    descartada_libera := true;
+  exception when unique_violation then
+    descartada_libera := false;
+  end;
+  -- ...y la CONFIRMADA sigue bloqueando.
+  update coordinacion_proveedor set estado = 'confirmada', decidida_en = now() where id = coord;
+  begin
+    insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_nombre, proveedor_telefono, mensaje_preparado)
+      values (ta, inc_a, 'Tercera Grua', '5299900000001', 'msj');
+    confirmada_bloquea := false;
+  exception when unique_violation then
+    confirmada_bloquea := true;
+  end;
+
+  -- (c) Los CHECKs: cifras en cero no son datos.
+  begin
+    insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_nombre, proveedor_telefono, mensaje_preparado, eta_min)
+      values (ta, inc_a2, 'Gruas Prueba 0213', '5299911122233', 'msj', 0);
+    eta_cero_rebota := false;
+  exception when check_violation then
+    eta_cero_rebota := true;
+  end;
+  begin
+    insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_nombre, proveedor_telefono, mensaje_preparado, precio)
+      values (ta, inc_a2, 'Gruas Prueba 0213', '5299911122233', 'msj', 0);
+    precio_cero_rebota := false;
+  exception when check_violation then
+    precio_cero_rebota := true;
+  end;
+
+  -- (d) Borrar el proveedor del directorio deja el expediente con su snapshot
+  -- (la confirmada apuntaba a `prov` — el set null acotado suelta la
+  -- referencia y el nombre/teléfono capturados quedan).
+  delete from proveedor_emergencia where id = prov;
+  select (proveedor_id is null and proveedor_nombre = 'Otra Grua')
+    into snapshot_queda
+    from coordinacion_proveedor
+    where tenant_id = ta and incidencia_id = inc_a and estado = 'confirmada';
+
+  -- (e) El doble candado.
+  cerrado := not has_table_privilege('anon', 'public.coordinacion_proveedor', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.coordinacion_proveedor', 'SELECT')
+    and has_table_privilege('service_role', 'public.coordinacion_proveedor', 'SELECT');
+
+  raise exception 'COORDINACION_0213  fk_cruzada=%  duplicada_rebota=%  descartada_libera=%  confirmada_bloquea=%  eta_cero_rebota=%  precio_cero_rebota=%  snapshot_queda=%  cerrado=%   (esperado t / t / t / t / t / t / t / t)',
+    fk_cruzada, duplicada_rebota, descartada_libera, confirmada_bloquea, eta_cero_rebota, precio_cero_rebota, snapshot_queda, cerrado;
+end $$;

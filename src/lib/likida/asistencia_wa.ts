@@ -344,6 +344,11 @@ async function avisarAlJefe(args: {
     `\nMárcale en cuanto puedas${args.modoMudo ? ' a un tercero cercano (base, otro chofer de la zona), no a él' : ''} y aprieta el botón para que sepamos que ya lo estás atendiendo.`;
   const enviado = await sendButtons(telefono, cuerpo, [
     { id: `asi_ok:${args.incidenciaId}`, titulo: 'Ya lo atiendo' },
+    // Capa D (0213): el botón que AUTORIZA a Likida a escribirle al primer
+    // proveedor VERIFICADO de la lista de arriba. En modo mudo no existe —
+    // en violencia no se coordina nada (mismo candado que la cascada), y el
+    // handler re-verifica tipo y directorio al apretarlo.
+    ...(args.modoMudo ? [] : [{ id: `coo_ir:${args.incidenciaId}`, titulo: 'Contactar proveedor' }]),
   ]);
   return Boolean(enviado);
 }
