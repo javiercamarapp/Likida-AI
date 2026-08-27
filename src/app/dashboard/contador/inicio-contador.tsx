@@ -27,6 +27,7 @@ import { MotorFiscalPeriodo } from '../motor-fiscal-periodo';
 import { AvisoSinFlota } from '../sin-flota';
 import { Bloque, Barra, EsqCifras } from '../bloque';
 import { EstimuloPeaje } from './estimulo-peaje';
+import { PerfilErp } from './perfil-erp';
 
 /** Resiliencia por sección: si una consulta falla, devuelve null y la
  *  tarjeta muestra un fallback en vez de tirar toda la pantalla. */
@@ -217,6 +218,12 @@ export async function InicioContador({
               Sin declaración el motor fail-open y pinta un estímulo que
               quizá no toca — esa cifra no puede ser lo primero que se ve. */}
           <EstimuloPeaje searchParams={searchParams} tenantExiste={tenantExiste} />
+
+          {/* PLAN MAESTRO 26-ago, sección B: la plantilla que desbloquea el
+              export a SAP B1/CONTPAQi. Sin ella el export responde 409 para
+              cualquier flota — el lector existía desde la 0178, el escritor
+              es este formulario. */}
+          <PerfilErp searchParams={searchParams} tenantExiste={tenantExiste} />
 
           {/* Condicional de verdad (solo si hay fuego): sin esqueleto, para no
               reservar un hueco que casi siempre queda vacío. */}
