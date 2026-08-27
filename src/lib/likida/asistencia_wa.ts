@@ -48,16 +48,41 @@ function limpiar(texto: string): string {
 
 // Alternancia EXPLÍCITA, no raíz con comodín: `choc\w*` atraparía "chocolate".
 // Cada palabra nueva = una línea en la lista y un caso en el test.
+//
+// AUDITORÍA FABLE CICLO 1 (92-A/92-B): la primera lista omitía las formas más
+// comunes del habla real mexicana ("nos volteamos", "se quemó la unidad",
+// "nos están disparando", "hubo un accidente", "se murió un señor" — todas
+// seguían su camino como charla), y a la vez `\brobo\b` a secas disparaba el
+// protocolo completo de violencia con "es un robo" como queja de precio —
+// la talacha del chofer se tragaba y al jefe se le ordenaba NO contactarlo.
+// El robo ahora exige contexto VERBAL o de DESPOJO; el resto de la lista se
+// amplió con las conjugaciones reales, cada una con su caso en el test.
 const VIOLENCIA =
-  /\b(asalto|asaltaron|asaltando|robaron|robo|secuestro|secuestraron|balacera|disparos|disparan|reten)\b/;
+  /\b(asalto|asaltaron|asaltando|secuestro|secuestraron|balacera|disparos|disparan|disparando|balazos|armados|pistola|pistolas|encanonaron)\b|\b(nos|me|lo|la|los|las) (estan |esta |acaban de )?(roban|robando|robaron)\b|\brobo con violencia\b|\brobaron (el |la |un |una )?(camion|trailer|tracto|torton|unidad|caja|carga|diesel|remolque)\b|\bbajaron (del camion|de la unidad|del trailer|del tracto)\b/;
+// El retén va aparte: "hay un retén raro" es ROJO mudo, pero "ya pasamos el
+// retén sin problema" es un all-clear — tratarlo como violencia en curso le
+// ordenaba al jefe no contactar a un chofer que iba bien (92-B).
+const RETEN = /\breten\b/;
+const RETEN_LIBRADO =
+  /\b(ya )?(pasamos|pase|cruzamos|libramos|salimos)\b.*\breten\b|\breten\b.*\bsin (problema|problemas|novedad|pedo|bronca)\b/;
 const LESIONADOS =
-  /\b(lesionado|lesionados|herido|heridos|sangre|muerto|muertos)\b/;
+  /\b(lesionado|lesionados|herido|heridos|sangre|muerto|muertos|murio|murieron|fallecio|fallecieron)\b/;
+// "accidente"/"volteo" pueden ser de un tercero o una maniobra — el falso
+// positivo aquí es un 🚨 que el jefe descarta; el negativo, una emergencia
+// tratada como charla. La asimetría del manifiesto manda: entran.
 const SINIESTRO =
-  /\b(choque|choques|chocamos|choco|chocaron|volcadura|volcamos|volco|atropelle|atropellamos|atropello|incendio|fuego|derrame)\b|\bse (esta )?quema(ndo)?\b/;
+  /\b(choque|choques|chocamos|choco|chocaron|volcadura|volcamos|volco|volteamos|volteo|atropelle|atropellamos|atropello|incendio|fuego|derrame|accidente|accidentamos|estrellamos|estrelle|estampe|estampamos)\b|\bse (esta )?quema(ndo)?\b|\bse (quemo|quemaron|prendio|incendio)\b|\b(me|nos) pegaron (por|de) (atras|adelante|frente|lado|un lado)\b|\ble di a (un|una|otro|otra)\b|\b(me di|nos dimos) un llegue\b/;
 const VIA_BLOQUEADA = /\b(bloqueo|bloqueada|bloqueado)\b/;
 const EMERGENCIA_SUELTA = /\b911\b/;
 const AMBAR =
   /\b(varado|varados|varada)\b|\bno (arranca|enciende|prende)\b|\bse salio del camino\b|\bse me fue el freno\b|\bsin frenos\b|\bhumo\b|\bse (sobre)?calento\b/;
+
+/** ¿El texto trae violencia activa? El retén cuenta salvo que el propio
+ *  mensaje diga que ya quedó atrás. */
+function esViolencia(t: string): boolean {
+  if (VIOLENCIA.test(t)) return true;
+  return RETEN.test(t) && !RETEN_LIBRADO.test(t);
+}
 
 export type NivelAsistencia = 'rojo' | 'ambar';
 
@@ -76,7 +101,7 @@ export interface Asistencia {
 export function interpretarAsistencia(texto: string | undefined): Asistencia | null {
   if (typeof texto !== 'string' || !texto.trim()) return null;
   const t = limpiar(texto);
-  if (VIOLENCIA.test(t)) return { nivel: 'rojo', modoMudo: true };
+  if (esViolencia(t)) return { nivel: 'rojo', modoMudo: true };
   if (LESIONADOS.test(t) || SINIESTRO.test(t) || VIA_BLOQUEADA.test(t) || EMERGENCIA_SUELTA.test(t)) {
     return { nivel: 'rojo', modoMudo: false };
   }
@@ -97,7 +122,7 @@ export type TipoAsistencia = typeof TIPOS_ASISTENCIA[number];
 export function tipoDeAsistencia(texto: string, nivel: NivelAsistencia): TipoAsistencia {
   const t = limpiar(texto);
   if (nivel === 'ambar') return 'varado';
-  if (VIOLENCIA.test(t)) return 'robo';
+  if (esViolencia(t)) return 'robo';
   if (SINIESTRO.test(t)) return 'siniestro';
   if (LESIONADOS.test(t) || EMERGENCIA_SUELTA.test(t)) return 'emergencia_medica';
   if (VIA_BLOQUEADA.test(t)) return 'bloqueo';
@@ -105,6 +130,20 @@ export function tipoDeAsistencia(texto: string, nivel: NivelAsistencia): TipoAsi
   // la verdad más conservadora en severidad.
   return 'siniestro';
 }
+
+/**
+ * Qué tan grave es cada tipo, para decidir si un reporte nuevo ESCALA el
+ * expediente abierto (auditoría Fable ciclo 1, 92-C). `emergencia_medica` y
+ * `siniestro` empatan a propósito: un "chocamos" seguido de "hay un herido"
+ * no cambia el tipo del expediente — sube `hay_lesionados`, que viaja aparte.
+ */
+const RANGO_TIPO: Record<TipoAsistencia, number> = {
+  robo: 4,
+  emergencia_medica: 3,
+  siniestro: 3,
+  bloqueo: 2,
+  varado: 1,
+};
 
 /** `true` SOLO si el texto lo dice; si no, NULL (no preguntado). JAMÁS false:
  *  un false es un parte médico que solo el chofer puede dar. */
@@ -150,33 +189,75 @@ export async function anotarEventoIncidencia(
 interface AbiertaExistente {
   id: string;
   tipo: string;
+  prioridad: string;
+  hayLesionados: boolean | null;
+  abiertaEn: string;
 }
 
 /**
- * La incidencia de asistencia ABIERTA de este chofer, si la hay. Por viaje
- * cuando lo hay; por operador cuando no (0198 añadió `operador_id` justo para
- * esto: sin él, dos choferes sin viaje compartirían "la abierta" de la flota
- * y el segundo accidente no avisaría a nadie). Lanza ante error de base:
- * crear a ciegas duplicaría el 🚨 al jefe.
+ * El EXPEDIENTE de asistencia abierto de este chofer, si lo hay — POR
+ * OPERADOR, sin importar el viaje (auditoría Fable ciclo 1, 92-C/92-E).
+ *
+ * Antes se buscaba por viaje cuando lo había, y eso dejaba dos agujeros: un
+ * varado del viaje pasado sin resolver se volvía invisible para el reporte
+ * del viaje nuevo (dos filas, dos protocolos, un chofer), y la carrera
+ * check-then-create podía abrir dos expedientes del mismo chofer. Ahora la
+ * semántica es la del índice único parcial de la 0201: UN expediente abierto
+ * por chofer; la severidad sube EN el mismo, no en una fila nueva.
+ *
+ * Lanza ante error de base: crear a ciegas duplicaría el 🚨 al jefe.
  */
 async function abiertaDelChofer(
-  tenantId: string, viajeId: string | null, operadorId: string | null,
+  tenantId: string, operadorId: string | null,
 ): Promise<AbiertaExistente | null> {
-  let q = supabaseAdmin()
+  if (!operadorId) return null; // el camino de oficina tiene su propia búsqueda
+  const { data, error } = await acotada(supabaseAdmin()
     .from('incidencia')
-    .select('id, tipo')
+    .select('id, tipo, prioridad, hay_lesionados, abierta_en')
     .eq('tenant_id', tenantId)
+    .eq('operador_id', operadorId)
     .in('tipo', [...TIPOS_ASISTENCIA])
     .neq('estado', 'resuelta')
     .order('abierta_en', { ascending: false })
-    .limit(1);
-  if (viajeId) q = q.eq('viaje_id', viajeId);
-  else if (operadorId) q = q.eq('operador_id', operadorId).is('viaje_id', null);
-  else return null; // sin viaje NI operador no hay a quién atarla — el llamador no debería llegar aquí
-  const { data, error } = await acotada(q, 'asistencia.abiertaDelChofer');
+    .limit(1), 'asistencia.abiertaDelChofer');
   if (error) throw new Error(`asistencia.abiertaDelChofer: ${error.message}`);
   const f = (data ?? [])[0];
-  return f ? { id: f.id as string, tipo: f.tipo as string } : null;
+  if (!f) return null;
+  return {
+    id: f.id as string,
+    tipo: f.tipo as string,
+    prioridad: f.prioridad as string,
+    hayLesionados: (f.hay_lesionados as boolean | null) ?? null,
+    abiertaEn: f.abierta_en as string,
+  };
+}
+
+/**
+ * 72 horas: más que cualquier emergencia real sigue "en curso" (una grúa
+ * tarda horas, un siniestro con ajustador un día), menos que el olvido — el
+ * caso que esta ventana corta es el varado del lunes que nadie marcó
+ * resuelto en el panel tragándose el choque del viernes (92-C). Al llegar
+ * un reporte nuevo sobre un expediente más viejo que esto, el viejo se
+ * RESUELVE con nota y el nuevo abre limpio con su propio 🚨.
+ */
+const VENTANA_EXPEDIENTE_MS = 72 * 3600 * 1000;
+
+/** Cierra por antigüedad. Best-effort: si el UPDATE falla se sigue con el
+ *  expediente viejo (peor duplicar el 🚨 que reusar una fila vieja). */
+async function resolverPorAntiguedad(tenantId: string, incidenciaId: string): Promise<boolean> {
+  const { error } = await acotada(supabaseAdmin()
+    .from('incidencia')
+    .update({ estado: 'resuelta', resuelta_en: new Date().toISOString() })
+    .eq('id', incidenciaId).eq('tenant_id', tenantId)
+    .neq('estado', 'resuelta'), 'asistencia.resolverAntigua');
+  if (error) {
+    logger.warn('asistencia.antigua_no_resuelta', { incidencia: incidenciaId, err: error.message });
+    return false;
+  }
+  await anotarEventoIncidencia(tenantId, incidenciaId, 'resuelta_por_antiguedad', {
+    nota: 'cerrada por antigüedad (>72 h) al llegar un reporte nuevo del mismo chofer',
+  });
+  return true;
 }
 
 /** Rótulos del aviso. Best-effort declarado: si la lectura falla, "tu chofer"
@@ -290,7 +371,7 @@ export async function atenderAsistenciaChofer(args: {
 
   let abierta: AbiertaExistente | null;
   try {
-    abierta = await abiertaDelChofer(args.tenantId, args.viajeId, args.operadorId);
+    abierta = await abiertaDelChofer(args.tenantId, args.operadorId);
   } catch (e) {
     logger.error('asistencia.abierta_ilegible', { operador: args.operadorId, err: e instanceof Error ? e.message : String(e) });
     // Fallar cerrado en la VERDAD, no en la atención: no se sabe si el jefe ya
@@ -304,15 +385,15 @@ export async function atenderAsistenciaChofer(args: {
     };
   }
 
+  // El expediente más viejo que la ventana se cierra con nota y el reporte
+  // nuevo abre limpio (92-C). Si el cierre falla, se sigue con el viejo:
+  // reusar una fila rancia es menos malo que arriesgar un 🚨 duplicado.
+  if (abierta && Date.now() - Date.parse(abierta.abiertaEn) > VENTANA_EXPEDIENTE_MS) {
+    if (await resolverPorAntiguedad(args.tenantId, abierta.id)) abierta = null;
+  }
+
   if (abierta) {
-    const anotado = await anotarEventoIncidencia(args.tenantId, abierta.id, 'mensaje_adicional', { texto: args.texto.slice(0, 500) }, args.waMessageId);
-    logger.info('asistencia.mensaje_adicional', { incidencia: abierta.id, anotado });
-    return {
-      atendida: true,
-      respuesta: asistencia.modoMudo
-        ? RESPUESTA_MUDA
-        : 'Sigo aquí y tu jefe ya tiene tu reporte 🚨 — le acabo de anotar este mensaje también. Si algo cambia (lesionados, ubicación), escríbelo y se lo paso.',
-    };
+    return atenderConExpedienteAbierto(args, abierta, tipo, hayLesionados);
   }
 
   let incidenciaId: string;
@@ -326,7 +407,19 @@ export async function atenderAsistenciaChofer(args: {
       hayLesionados,
     });
   } catch (e) {
-    logger.error('asistencia.crear_fallo', { operador: args.operadorId, err: e instanceof Error ? e.message : String(e) });
+    const msj = e instanceof Error ? e.message : String(e);
+    // LA CARRERA (92-E): dos webhooks concurrentes del mismo chofer pasan
+    // ambos el check de arriba; el índice único parcial de la 0201 deja
+    // ganar exactamente a uno. El perdedor NO es un error — es el segundo
+    // mensaje de la misma emergencia: se relee el expediente que el ganador
+    // abrió y se sigue por el camino de siempre.
+    if (/incidencia_asistencia_abierta_unica|duplicate key/i.test(msj)) {
+      try {
+        const ganadora = await abiertaDelChofer(args.tenantId, args.operadorId);
+        if (ganadora) return atenderConExpedienteAbierto(args, ganadora, tipo, hayLesionados);
+      } catch { /* cae al mensaje honesto de abajo */ }
+    }
+    logger.error('asistencia.crear_fallo', { operador: args.operadorId, err: msj });
     return {
       atendida: true,
       respuesta: asistencia.modoMudo
@@ -371,6 +464,117 @@ export async function atenderAsistenciaChofer(args: {
     respuesta: asistencia.nivel === 'rojo'
       ? 'Tu jefe ya tiene tu reporte 🚨 y le pedimos atenderlo YA. Si hay lesionados marca al 911 primero. Mándame tu ubicación (el clip 📎 → Ubicación) para pasársela también.'
       : 'Anotado ⚠️ — le avisé a tu jefe que estás varado para que te resuelvan. Mándame tu ubicación (el clip 📎 → Ubicación) y se la paso.',
+  };
+}
+
+/**
+ * El reporte que llega SOBRE un expediente ya abierto (auditoría Fable ciclo
+ * 1, 92-C y 92-D — antes este camino solo anotaba en la bitácora del panel
+ * mientras le decía al chofer "se lo paso": el "hay dos heridos" posterior a
+ * un "chocamos" jamás llegaba al jefe, y un varado viejo se tragaba un choque
+ * nuevo sin subirle la prioridad a nadie).
+ *
+ * Dos caminos:
+ *  · ESCALA (el tipo nuevo es más grave, o un ROJO cae sobre un expediente
+ *    ámbar): se ACTUALIZA la misma fila —tipo, prioridad, lesionados— y el
+ *    jefe recibe un 🚨 NUEVO con botón. El reconocimiento anterior se borra:
+ *    era del incidente menor, y dejarlo puesto le diría a la Fase 5 que la
+ *    emergencia nueva ya está atendida.
+ *  · NO escala: se anota el evento y el texto SE REENVÍA al jefe (sendText,
+ *    sin botón) — en una emergencia real el jefe quiere cada mensaje, y la
+ *    respuesta al chofer solo promete lo que de verdad pasó. Si además el
+ *    texto trae lesionados por primera vez, la columna sube a true.
+ */
+async function atenderConExpedienteAbierto(
+  args: { tenantId: string; viajeId: string | null; operadorId: string; texto: string; asistencia: Asistencia; waMessageId?: string | null },
+  abierta: AbiertaExistente,
+  tipo: TipoAsistencia,
+  hayLesionados: true | null,
+): Promise<ResultadoAsistencia> {
+  const { asistencia } = args;
+  const rangoNuevo = RANGO_TIPO[tipo];
+  const rangoAbierto = RANGO_TIPO[abierta.tipo as TipoAsistencia] ?? 0;
+  const escala = rangoNuevo > rangoAbierto
+    || (asistencia.nivel === 'rojo' && abierta.prioridad !== 'critica');
+  const lesionadosNuevos = hayLesionados === true && abierta.hayLesionados !== true;
+
+  if (escala) {
+    const { error } = await acotada(supabaseAdmin()
+      .from('incidencia')
+      .update({
+        tipo,
+        prioridad: 'critica',
+        ...(lesionadosNuevos ? { hay_lesionados: true } : {}),
+        reconocida_en: null,
+        reconocida_por: null,
+      })
+      .eq('id', abierta.id).eq('tenant_id', args.tenantId)
+      .neq('estado', 'resuelta'), 'asistencia.escalar');
+    if (error) {
+      // No se pudo subir la severidad: se dice la verdad y se da la salida
+      // que no depende de nosotros — jamás un "ya lo sabe" sin respaldo.
+      logger.error('asistencia.escalada_fallo', { incidencia: abierta.id, err: error.message });
+      return {
+        atendida: true,
+        respuesta: asistencia.modoMudo
+          ? RESPUESTA_MUDA
+          : 'No pude actualizar tu reporte ahorita 😕 — márcale DIRECTO a tu jefe, esto suena más grave que lo anterior.',
+      };
+    }
+    await anotarEventoIncidencia(args.tenantId, abierta.id, 'escalada', {
+      de: abierta.tipo, a: tipo, texto: args.texto.slice(0, 500),
+    }, args.waMessageId);
+    const etiquetas = await etiquetasAviso(args.tenantId, args.viajeId, args.operadorId);
+    const avisado = await avisarAlJefe({
+      tenantId: args.tenantId,
+      incidenciaId: abierta.id,
+      tipo,
+      nivel: 'rojo',
+      modoMudo: asistencia.modoMudo,
+      hayLesionados: lesionadosNuevos ? true : abierta.hayLesionados === true ? true : null,
+      chofer: etiquetas.chofer,
+      folio: etiquetas.folio,
+      descripcion: args.texto,
+    });
+    await anotarEventoIncidencia(args.tenantId, abierta.id, avisado ? 'aviso_jefe_enviado' : 'aviso_jefe_fallido');
+    logger.info('asistencia.escalada', { incidencia: abierta.id, de: abierta.tipo, a: tipo, avisado });
+    if (asistencia.modoMudo) return { atendida: true, respuesta: RESPUESTA_MUDA };
+    return {
+      atendida: true,
+      respuesta: avisado
+        ? 'Subí la gravedad de tu reporte 🚨 y tu jefe acaba de recibir el aviso nuevo. Si hay lesionados marca al 911 primero.'
+        : 'Subí la gravedad de tu reporte 🚨 pero NO pude avisarle a tu jefe por WhatsApp — márcale DIRECTO ahora mismo.',
+    };
+  }
+
+  // No escala: evento + reenvío del texto al jefe. La columna de lesionados
+  // sube si este mensaje los menciona por primera vez (92-D).
+  const anotado = await anotarEventoIncidencia(args.tenantId, abierta.id, 'mensaje_adicional', { texto: args.texto.slice(0, 500) }, args.waMessageId);
+  if (lesionadosNuevos) {
+    const { error } = await acotada(supabaseAdmin()
+      .from('incidencia')
+      .update({ hay_lesionados: true })
+      .eq('id', abierta.id).eq('tenant_id', args.tenantId), 'asistencia.lesionados');
+    if (error) logger.warn('asistencia.lesionados_no_sellados', { incidencia: abierta.id, err: error.message });
+  }
+  let reenviado = false;
+  try {
+    const telefono = await telefonoJefeDe(args.tenantId);
+    if (telefono) {
+      const etiquetas = await etiquetasAviso(args.tenantId, args.viajeId, args.operadorId);
+      const texto = `${lesionadosNuevos ? '⛑️ Ahora menciona LESIONADOS.\n' : ''}${etiquetas.chofer} sigue reportando sobre su emergencia:\n«${args.texto.replace(/\s+/g, ' ').trim().slice(0, 220)}»`;
+      reenviado = Boolean(await sendText(telefono, texto));
+    }
+  } catch (e) {
+    logger.warn('asistencia.adicional_no_reenviado', { incidencia: abierta.id, err: e instanceof Error ? e.message : String(e) });
+  }
+  logger.info('asistencia.mensaje_adicional', { incidencia: abierta.id, anotado, reenviado, lesionadosNuevos });
+  if (asistencia.modoMudo) return { atendida: true, respuesta: RESPUESTA_MUDA };
+  return {
+    atendida: true,
+    respuesta: reenviado
+      ? 'Le acabo de pasar este mensaje a tu jefe también 🚨 — sigue escribiendo aquí lo que cambie.'
+      : 'Quedó anotado en tu reporte, pero NO pude reenviárselo a tu jefe por WhatsApp — si es urgente, márcale directo.',
   };
 }
 

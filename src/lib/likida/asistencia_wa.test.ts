@@ -75,11 +75,23 @@ const {
 const INC = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const JEFE = { tenantId: 't1', rol: 'flota_admin' as const, userId: 'u-jefe' };
 
+const SELECT_ABIERTA = 'incidencia.select:id, tipo, prioridad, hay_lesionados, abierta_en';
+
+/** Una fila de expediente abierto, fresca por default (ahora mismo). */
+function filaAbierta(over: Record<string, unknown> = {}) {
+  return {
+    id: INC, tipo: 'siniestro', prioridad: 'critica',
+    hay_lesionados: null, abierta_en: new Date().toISOString(),
+    ...over,
+  };
+}
+
 /** El caso común: nada abierto, hay jefe, todo se puede leer y escribir. */
 function baseFeliz() {
   respuestas = {
-    'incidencia.select:id, tipo': { data: [], error: null },
+    [SELECT_ABIERTA]: { data: [], error: null },
     'incidencia.select:id': { data: [], error: null },
+    'incidencia.claim': { data: [], error: null },
     'incidencia_evento.insert': { error: null },
     'operador.select:nombre': { data: { nombre: 'Juan Pérez' }, error: null },
     'viaje.select:folio': { data: { folio: 'VJ-0847' }, error: null },
@@ -144,6 +156,48 @@ describe('interpretarAsistencia — ROJO por familia', () => {
     expect(interpretarAsistencia('¿cuánto llevo?')).toBeNull();
     // "chocolate" no es "choque": la alternancia es explícita, no raíz.
     expect(interpretarAsistencia('me compré un chocolate en el oxxo')).toBeNull();
+  });
+
+  // ── AUDITORÍA FABLE CICLO 1 (92-A): las formas del habla real que la
+  //    primera lista NO reconocía — cada mensaje es textual del reporte. ──
+  it.each([
+    ['nos volteamos en la curva', false],
+    ['me pegaron por atras', false],
+    ['le di a un coche', false],
+    ['me di un llegue', false],
+    ['nos estrellamos', false],
+    ['me estampe', false],
+    ['se prendio la caja', false],
+    ['se quemo la unidad', false],
+    ['hubo un accidente', false],
+    ['tuve un accidente en la federal', false],
+    ['se murio un señor en el accidente', false],
+    ['nos estan disparando', true],
+    ['nos pararon unos tipos armados', true],
+    ['traen pistolas', true],
+    ['nos encañonaron', true],
+    ['me bajaron del camion a la fuerza', true],
+  ])('92-A: "%s" ahora es ROJO (mudo=%s)', (texto, mudo) => {
+    expect(interpretarAsistencia(texto)).toEqual({ nivel: 'rojo', modoMudo: mudo });
+  });
+
+  // ── AUDITORÍA FABLE CICLO 1 (92-B): "es un robo" como queja de precio
+  //    disparaba el protocolo de violencia completo — la talacha del chofer
+  //    se tragaba y al jefe se le ordenaba NO contactarlo. ──
+  it.each([
+    'la talacha me cobra 800, es un robo',
+    'esa caseta es un robo',
+    'el diesel esta por los cielos, un robo',
+    'ya pasamos el reten sin problema',
+  ])('92-B: "%s" NO dispara violencia — sigue su camino', (texto) => {
+    expect(interpretarAsistencia(texto)).toBeNull();
+  });
+
+  it('92-B: los robos DE VERDAD siguen siendo mudos', () => {
+    expect(interpretarAsistencia('nos estan robando')).toEqual({ nivel: 'rojo', modoMudo: true });
+    expect(interpretarAsistencia('me robaron el trailer')).toEqual({ nivel: 'rojo', modoMudo: true });
+    expect(interpretarAsistencia('robaron la unidad anoche')).toEqual({ nivel: 'rojo', modoMudo: true });
+    expect(interpretarAsistencia('hay un reten raro adelante')).toEqual({ nivel: 'rojo', modoMudo: true });
   });
 });
 
@@ -238,9 +292,9 @@ describe('atenderAsistenciaChofer', () => {
     expect(r.respuesta).toContain('márcale DIRECTO');
   });
 
-  it('la segunda llamada de la misma emergencia NO duplica: evento sí, 🚨 no', async () => {
+  it('la segunda llamada de la misma emergencia NO duplica el 🚨: evento + REENVÍO al jefe (92-D)', async () => {
     baseFeliz();
-    respuestas['incidencia.select:id, tipo'] = { data: [{ id: INC, tipo: 'siniestro' }], error: null };
+    respuestas[SELECT_ABIERTA] = { data: [filaAbierta()], error: null };
     const r = await atenderAsistenciaChofer({
       tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
       texto: 'sigue el choque, ya llegó la ambulancia',
@@ -251,7 +305,107 @@ describe('atenderAsistenciaChofer', () => {
     expect(sendButtons).not.toHaveBeenCalled();
     expect(escrituras.some((e) => e.clave === 'incidencia_evento.insert'
       && (e.payload as { tipo?: string }).tipo === 'mensaje_adicional')).toBe(true);
-    expect(r.respuesta).toContain('ya tiene tu reporte');
+    // 92-D: la bitácora del panel NO basta — el texto se le reenvía al jefe
+    // de verdad (antes se prometía "se lo paso" sin pasar nada).
+    const [telJefe, textoJefe] = sendText.mock.calls[0] as [string, string];
+    expect(telJefe).toBe('5215550000009');
+    expect(textoJefe).toContain('sigue el choque');
+    expect(r.respuesta).toContain('Le acabo de pasar este mensaje a tu jefe');
+  });
+
+  it('92-D: si el reenvío al jefe falla, al chofer NO se le miente', async () => {
+    baseFeliz();
+    respuestas[SELECT_ABIERTA] = { data: [filaAbierta()], error: null };
+    sendText.mockResolvedValue(null);   // Meta rechazó el reenvío
+    const r = await atenderAsistenciaChofer({
+      tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
+      texto: 'sigue el choque',
+      asistencia: { nivel: 'rojo', modoMudo: false },
+    });
+    expect(r.respuesta).toContain('NO pude reenviárselo');
+  });
+
+  it('92-D: "hay dos heridos" tras un "chocamos" sella hay_lesionados y el jefe SÍ se entera', async () => {
+    baseFeliz();
+    respuestas[SELECT_ABIERTA] = { data: [filaAbierta({ hay_lesionados: null })], error: null };
+    await atenderAsistenciaChofer({
+      tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
+      texto: 'hay dos heridos',
+      asistencia: { nivel: 'rojo', modoMudo: false },
+    });
+    // La columna sube a true (antes el parte médico moría en la bitácora)…
+    expect(escrituras.some((e) => e.clave === 'incidencia.claim'
+      && (e.payload as { hay_lesionados?: boolean }).hay_lesionados === true)).toBe(true);
+    // …y el reenvío al jefe lo dice con todas sus letras.
+    const textoJefe = String(sendText.mock.calls[0][1]);
+    expect(textoJefe).toContain('LESIONADOS');
+  });
+
+  it('92-C: un ROJO sobre un expediente ámbar ESCALA la misma fila y el jefe recibe 🚨 nuevo', async () => {
+    baseFeliz();
+    respuestas[SELECT_ABIERTA] = { data: [filaAbierta({ tipo: 'varado', prioridad: 'alta' })], error: null };
+    const r = await atenderAsistenciaChofer({
+      tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
+      texto: 'chocamos, hay un herido',
+      asistencia: { nivel: 'rojo', modoMudo: false },
+    });
+    // No una fila nueva: el MISMO expediente sube de severidad…
+    expect(crearIncidencia).not.toHaveBeenCalled();
+    const escalada = escrituras.find((e) => e.clave === 'incidencia.claim'
+      && (e.payload as { prioridad?: string }).prioridad === 'critica');
+    expect(escalada).toBeDefined();
+    expect((escalada!.payload as { tipo?: string }).tipo).toBe('siniestro');
+    // …el reconocimiento anterior se borra (era del incidente menor)…
+    expect((escalada!.payload as { reconocida_en?: unknown }).reconocida_en).toBeNull();
+    // …y el jefe recibe un 🚨 NUEVO con botón (no un eco en la bitácora).
+    expect(sendButtons).toHaveBeenCalled();
+    expect(r.respuesta).toContain('Subí la gravedad');
+  });
+
+  it('92-C: el expediente con más de 72 h se cierra por antigüedad y el reporte nuevo abre limpio', async () => {
+    baseFeliz();
+    const hace4Dias = new Date(Date.now() - 4 * 24 * 3600 * 1000).toISOString();
+    respuestas[SELECT_ABIERTA] = { data: [filaAbierta({ tipo: 'varado', prioridad: 'alta', abierta_en: hace4Dias })], error: null };
+    await atenderAsistenciaChofer({
+      tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
+      texto: 'chocamos con un trailer',
+      asistencia: { nivel: 'rojo', modoMudo: false },
+    });
+    // El varado del lunes que nadie resolvió NO se traga el choque del
+    // viernes: se resuelve con nota y el choque abre SU incidencia con SU 🚨.
+    expect(escrituras.some((e) => e.clave === 'incidencia.claim'
+      && (e.payload as { estado?: string }).estado === 'resuelta')).toBe(true);
+    expect(crearIncidencia).toHaveBeenCalledWith('t1', expect.objectContaining({ tipo: 'siniestro', prioridad: 'critica' }));
+    expect(sendButtons).toHaveBeenCalled();
+  });
+
+  it('92-E: si la carrera la ganó otro webhook (unique de la 0201), el perdedor relee y anota — sin segundo 🚨', async () => {
+    baseFeliz();
+    // Primer read: nada abierto. El insert rebota con el unique del índice…
+    crearIncidencia.mockRejectedValueOnce(new Error('crearIncidencia: duplicate key value violates unique constraint "incidencia_asistencia_abierta_unica"'));
+    let lecturas = 0;
+    const conCarrera = { ...respuestas };
+    respuestas = new Proxy(conCarrera, {
+      get(obj, clave: string) {
+        if (clave === SELECT_ABIERTA) {
+          lecturas += 1;
+          // …y la relectura encuentra el expediente que el ganador abrió.
+          return lecturas === 1
+            ? { data: [], error: null }
+            : { data: [filaAbierta()], error: null };
+        }
+        return obj[clave];
+      },
+    }) as typeof respuestas;
+    const r = await atenderAsistenciaChofer({
+      tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
+      texto: 'chocamos feo',
+      asistencia: { nivel: 'rojo', modoMudo: false },
+    });
+    expect(sendButtons).not.toHaveBeenCalled();   // el 🚨 ya lo mandó el ganador
+    expect(escrituras.some((e) => e.clave === 'incidencia_evento.insert'
+      && (e.payload as { tipo?: string }).tipo === 'mensaje_adicional')).toBe(true);
+    expect(r.respuesta).not.toContain('No pude registrar');
   });
 
   it('sin viaje, la incidencia se ata al operador (punto C): la búsqueda no revienta y crea', async () => {
@@ -266,7 +420,7 @@ describe('atenderAsistenciaChofer', () => {
 
   it('si no se puede saber si ya hay abierta, NO se crea a ciegas y la salida no depende de nosotros', async () => {
     baseFeliz();
-    respuestas['incidencia.select:id, tipo'] = { data: null, error: { message: 'timeout' } };
+    respuestas[SELECT_ABIERTA] = { data: null, error: { message: 'timeout' } };
     const r = await atenderAsistenciaChofer({
       tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
       texto: 'chocamos',

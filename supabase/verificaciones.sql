@@ -8944,3 +8944,62 @@ begin
   raise exception 'REP_CFDI_PAGO_0199  anon=%  authenticated=%  duplicado_rebota=%  metodo_malo_rebota=%   (esperado -1 / -1 / t / t)',
     n_anon, n_auth, duplicado_rebota, metodo_malo_rebota;
 end $$;
+
+-- ── 158. Un expediente de asistencia por chofer (mig. 0201) ──
+-- La carrera check-then-create del webhook: dos mensajes ROJO concurrentes
+-- del mismo chofer no pueden abrir dos expedientes con dos 🚨 al jefe. El
+-- índice único parcial deja ganar a uno; se comprueba además que NO compite
+-- con la talacha (`averia` está fuera del predicado), que resolver libera al
+-- chofer para el siguiente expediente, y que las incidencias de oficina
+-- (operador NULL) no chocan entre sí.
+do $$
+declare
+  t uuid; v_op uuid; inc1 uuid;
+  segundo_rebota boolean; talacha_no_compite boolean;
+  resuelta_libera boolean; oficina_no_choca boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ EXPEDIENTE 0201') returning id into t;
+  insert into operador (tenant_id, nombre, telefono) values (t, 'P', '+520000000201') returning id into v_op;
+
+  -- (a) El segundo expediente abierto del mismo chofer rebota.
+  insert into incidencia (tenant_id, operador_id, tipo, prioridad)
+    values (t, v_op, 'varado', 'alta') returning id into inc1;
+  begin
+    insert into incidencia (tenant_id, operador_id, tipo, prioridad)
+      values (t, v_op, 'siniestro', 'critica');
+    segundo_rebota := false;
+  exception when unique_violation then
+    segundo_rebota := true;
+  end;
+
+  -- (b) La talacha del mismo chofer NO compite: `averia` está fuera del predicado.
+  begin
+    insert into incidencia (tenant_id, operador_id, tipo, prioridad)
+      values (t, v_op, 'averia', 'alta');
+    talacha_no_compite := true;
+  exception when unique_violation then
+    talacha_no_compite := false;
+  end;
+
+  -- (c) Resolver el expediente libera al chofer para el siguiente.
+  update incidencia set estado = 'resuelta', resuelta_en = now() where id = inc1;
+  begin
+    insert into incidencia (tenant_id, operador_id, tipo, prioridad)
+      values (t, v_op, 'siniestro', 'critica');
+    resuelta_libera := true;
+  exception when unique_violation then
+    resuelta_libera := false;
+  end;
+
+  -- (d) Dos incidencias de oficina (operador NULL) no chocan entre sí.
+  insert into incidencia (tenant_id, tipo, prioridad) values (t, 'siniestro', 'critica');
+  begin
+    insert into incidencia (tenant_id, tipo, prioridad) values (t, 'robo', 'critica');
+    oficina_no_choca := true;
+  exception when unique_violation then
+    oficina_no_choca := false;
+  end;
+
+  raise exception 'EXPEDIENTE_UNICO_0201  segundo_rebota=%  talacha_no_compite=%  resuelta_libera=%  oficina_no_choca=%   (esperado t / t / t / t)',
+    segundo_rebota, talacha_no_compite, resuelta_libera, oficina_no_choca;
+end $$;

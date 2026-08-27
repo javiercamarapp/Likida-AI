@@ -940,8 +940,8 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // manda a la oficina a buscar algo que no existe.
       if (!liga && !comercio) continue;
       if (!g.fecha) continue; // sin fecha no se afirma nada
-      // Un comprobante de otro EJERCICIO ya lleva su `fecha_sospechosa`, que dice
-      // que no se deduce en este año. Añadirle el aviso de facturación produce
+      // Un comprobante de otro EJERCICIO ya lleva su `gasto_otro_ejercicio`,
+      // que dice que no se deduce en este año. Añadirle el aviso de facturación produce
       // dos frases que se contradicen sobre el mismo ticket: una dice que no se
       // deduce, y la otra ofrece "exigirlo dentro del ejercicio" — un remedio que
       // para un ticket de 2019 mirado en 2026 no existe. Salió sobre cinco
@@ -1236,7 +1236,13 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // `cfdi_pendiente`: el importe de la columna NO son pesos, así que acreditar
   // su IVA sería acreditar una cifra que nadie convirtió. Es el tercer estado
   // de siempre —«no se pudo verificar»— y nunca se resuelve en verde solo.
-  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'rfc_receptor_no_verificable', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'combustible_efectivo_dentro15', 'efectivo_sobre_15', 'efectivo_no_elegible', 'efectivo_sobre_tope', 'monto_invalido', 'cfdi_pendiente', 'consumo_bar', 'moneda_extranjera'];
+  // `gasto_otro_ejercicio` entra desde la auditoría Fable ciclo 1 (90-A): el
+  // tipo nació en NO_DEDUCIBLE_ISR pero no aquí, así que un diésel del
+  // ejercicio pasado con CFDI válido salía con deducible $0 y aun así
+  // acreditaba su IVA completo, su peaje y sus litros — contra la LIVA 5-I
+  // que este mismo bloque cita ("en la proporción en que las erogaciones
+  // sean deducibles": la proporción es cero).
+  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'rfc_receptor_no_verificable', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'combustible_efectivo_dentro15', 'efectivo_sobre_15', 'efectivo_no_elegible', 'efectivo_sobre_tope', 'monto_invalido', 'cfdi_pendiente', 'consumo_bar', 'moneda_extranjera', 'gasto_otro_ejercicio'];
   // AUDITORÍA 12, ALTO (fiscal, reincidente de la 11): `cfdi_pendiente` entra
   // aquí y en POR_CONFIRMAR — con el SAT caído o en timeout, "no se pudo
   // verificar" es el MISMO tercer estado que el motor ya aplica a EFOS, al RFC
