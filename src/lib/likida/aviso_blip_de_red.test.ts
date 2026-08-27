@@ -27,6 +27,7 @@ const sendText = vi.fn(async (_to: string, t: string) => { salientes.push(t); re
 
 vi.mock('@/lib/likida/tools', () => ({}));
 vi.mock('@/lib/meta/client', () => ({
+  MAX_CUERPO_BOTONES: 1024,
   sendText: (...a: unknown[]) => sendText(...(a as [string, string])),
   sendButtons: vi.fn(), sendDocument: vi.fn(),
   downloadMediaAsDataUrl: vi.fn(async () => 'data:image/jpeg;base64,AAAA'),

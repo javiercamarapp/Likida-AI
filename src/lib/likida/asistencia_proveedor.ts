@@ -257,48 +257,87 @@ const PLACES_NO_DISPONIBLE = {
   motivo: 'búsqueda pública (Google Places) sin configurar — requiere la cuenta de Google Cloud',
 };
 
+/** Un nombre comercial no tiene tope en la captura (120), pero en el 🚨 sí:
+ *  el aviso ENTERO tiene que caber en los 1024 de Meta (c4-1). */
+function nombreCorto(nombre: string): string {
+  const limpio = nombre.trim();
+  return limpio.length <= 40 ? limpio : `${limpio.slice(0, 39)}…`;
+}
+
 /**
  * El bloque de texto que se APPENDEA al 🚨 del jefe. Compacto: el jefe está
  * leyendo una emergencia, no un catálogo. `null` = no hay nada que decir
  * (cascada omitida, o ningún escalón produjo dato).
+ *
+ * AUDITORÍA FABLE CICLO 4 (c4-1): `maxChars` es el presupuesto que le queda
+ * al aviso después de la parte fija — pasarse hacía que Meta rechazara el
+ * mensaje ENTERO y el jefe no recibiera NI el 🚨 justo cuando el directorio
+ * estaba bien poblado. Aquí se recorta el ADORNO (opciones del directorio de
+ * atrás hacia adelante, luego nacionales) hasta caber; si ni una línea cabe,
+ * se devuelve null y el aviso sale sin cascada — la recomendación jamás puede
+ * costar el 🚨.
  */
-export function textoCascadaParaJefe(c: CascadaProveedor): string | null {
+export function textoCascadaParaJefe(c: CascadaProveedor, maxChars?: number): string | null {
   if (c.omitida) return null;
-  const lineas: string[] = [];
 
+  const lineasDirectorio: string[] = [];
+  let notaSinOrden: string | null = null;
   if (c.directorio.estado === 'con_opciones') {
     for (const p of c.directorio.opciones) {
       const partes = [
-        `${p.nombre} (${p.tipo}) ${p.telefono}`,
+        `${nombreCorto(p.nombre)} (${p.tipo}) ${p.telefono}`,
         p.verificado ? null : 'SIN confirmar',
         p.distanciaKm != null ? `~${p.distanciaKm} km` : null,
         p.fueraDeRadio ? 'fuera de su radio declarado' : null,
       ].filter(Boolean);
-      lineas.push(`· ${partes.join(' — ')}`);
+      lineasDirectorio.push(`· ${partes.join(' — ')}`);
     }
     if (!c.directorio.ordenadoPorDistancia) {
-      lineas.push('  (sin ubicación del incidente: la lista no está ordenada por cercanía)');
+      notaSinOrden = '  (sin ubicación del incidente: la lista no está ordenada por cercanía)';
     }
   } else if (c.directorio.estado === 'sin_proveedores') {
-    lineas.push('· Tu directorio no tiene proveedores de este tipo — captúralos en Emergencias.');
+    lineasDirectorio.push('· Tu directorio no tiene proveedores de este tipo — captúralos en Emergencias.');
   }
 
+  let lineaPoliza: string | null = null;
   if (c.poliza.estado === 'vigente' || c.poliza.estado === 'sin_vigencia_capturada') {
-    lineas.push(
-      `· Siniestros ${c.poliza.aseguradora}: ${c.poliza.telefono} (póliza ${c.poliza.numeroPoliza}${c.poliza.estado === 'sin_vigencia_capturada' ? ', vigencia sin capturar' : ''})`,
-    );
+    lineaPoliza = `· Siniestros ${c.poliza.aseguradora}: ${c.poliza.telefono} (póliza ${c.poliza.numeroPoliza}${c.poliza.estado === 'sin_vigencia_capturada' ? ', vigencia sin capturar' : ''})`;
   } else if (c.poliza.estado === 'vencida') {
-    lineas.push(
-      `· ⚠️ Tu póliza ${c.poliza.aseguradora} VENCIÓ el ${c.poliza.venceEl} — el ${c.poliza.telefono} podría no cubrir. Revísala.`,
-    );
+    lineaPoliza = `· ⚠️ Tu póliza ${c.poliza.aseguradora} VENCIÓ el ${c.poliza.venceEl} — el ${c.poliza.telefono} podría no cubrir. Revísala.`;
   }
 
-  for (const r of c.nacionales) {
-    lineas.push(`· ${r.nombre} ${r.telefono} — ${r.nota}`);
-  }
+  const lineasNacionales = c.nacionales.map((r) => `· ${r.nombre} ${r.telefono} — ${r.nota}`);
 
-  if (lineas.length === 0) return null;
-  return `\nA quién marcarle (marca un humano, no Likida):\n${lineas.join('\n')}`;
+  const armar = (dir: string[], nota: string | null, nac: string[]): string | null => {
+    const lineas = [...dir, ...(nota ? [nota] : []), ...(lineaPoliza ? [lineaPoliza] : []), ...nac];
+    if (lineas.length === 0) return null;
+    return `\nA quién marcarle (marca un humano, no Likida):\n${lineas.join('\n')}`;
+  };
+
+  let texto = armar(lineasDirectorio, notaSinOrden, lineasNacionales);
+  if (texto === null || maxChars == null || texto.length <= maxChars) return texto;
+
+  // El orden del recorte es el del VALOR en una emergencia: la nota de "sin
+  // orden" primero (es un matiz), luego opciones del directorio de atrás
+  // hacia adelante (la primera es la mejor), luego nacionales de atrás hacia
+  // adelante (la lista ya viene filtrada por tipo). La póliza no se recorta:
+  // en un siniestro es el escalón que más paga.
+  const dir = [...lineasDirectorio];
+  const nac = [...lineasNacionales];
+  let nota = notaSinOrden;
+  const pasos: Array<() => boolean> = [
+    () => { if (nota) { nota = null; return true; } return false; },
+    () => { if (dir.length > 1) { dir.pop(); return true; } return false; },
+    () => { if (nac.length > 1) { nac.pop(); return true; } return false; },
+    () => { if (dir.length === 1) { dir.pop(); return true; } return false; },
+    () => { if (nac.length === 1) { nac.pop(); return true; } return false; },
+  ];
+  for (;;) {
+    texto = armar(dir, nota, nac);
+    if (texto === null || texto.length <= maxChars) return texto;
+    const recorto = pasos.some((p) => p());
+    if (!recorto) return null; // ya solo queda la póliza y ni así cabe: sin cascada
+  }
 }
 
 /**
@@ -312,6 +351,7 @@ export async function recomendacionCascada(
   incidenciaId: string,
   tipo: TipoAsistencia,
   hoy: string,
+  maxChars?: number,
 ): Promise<string | null> {
   try {
     if (tipo === 'robo') return null; // ni siquiera leer: el protocolo manda
@@ -333,7 +373,7 @@ export async function recomendacionCascada(
       poliza,
       hoy,
     });
-    return textoCascadaParaJefe(cascada);
+    return textoCascadaParaJefe(cascada, maxChars);
   } catch (e) {
     logger.warn('cascada.no_disponible', {
       incidencia: incidenciaId,

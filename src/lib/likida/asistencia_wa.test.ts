@@ -62,6 +62,7 @@ vi.mock('./contactos', () => ({ telefonoJefeDe: (...a: unknown[]) => telefonoJef
 const sendText = vi.fn();
 const sendButtons = vi.fn();
 vi.mock('@/lib/meta/client', () => ({
+  MAX_CUERPO_BOTONES: 1024,
   sendText: (...a: unknown[]) => sendText(...a),
   sendButtons: (...a: unknown[]) => sendButtons(...a),
 }));
@@ -75,6 +76,7 @@ vi.mock('./asistencia_proveedor', () => ({ recomendacionCascada: (...a: unknown[
 const {
   interpretarAsistencia, tipoDeAsistencia, lesionadosSegunTexto,
   atenderAsistenciaChofer, atenderReconocimientoAsistencia, atenderAsistenciaOficina,
+  cerrarCoordinacionesDeIncidencia, anclarUbicacionIncidencia,
 } = await import('./asistencia_wa');
 
 const INC = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
@@ -257,7 +259,7 @@ describe('atenderAsistenciaChofer', () => {
       texto: 'volcadura en la curva del km 40',
       asistencia: { nivel: 'rojo', modoMudo: false },
     });
-    expect(recomendacionCascada).toHaveBeenCalledWith('t1', INC, 'siniestro', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    expect(recomendacionCascada).toHaveBeenCalledWith('t1', INC, 'siniestro', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), expect.any(Number));
     const cuerpo = (sendButtons.mock.calls[0] as [string, string])[1];
     expect(cuerpo).toContain('Grúas García');
     expect(cuerpo).toContain('marca un humano, no Likida');
@@ -312,6 +314,7 @@ describe('atenderAsistenciaChofer', () => {
   it('modo mudo NO revela el fallo del aviso: la misma línea neutra aunque el jefe no recibiera', async () => {
     baseFeliz();
     sendButtons.mockResolvedValue(null);   // Meta rechazó
+    sendText.mockResolvedValue(null);      // y el fallback de texto (c4-1) también
     const r = await atenderAsistenciaChofer({
       tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
       texto: 'nos están asaltando',
@@ -326,6 +329,7 @@ describe('atenderAsistenciaChofer', () => {
   it('fuera del modo mudo, el aviso fallido se dice con la verdad: "márcale DIRECTO"', async () => {
     baseFeliz();
     sendButtons.mockResolvedValue(null);
+    sendText.mockResolvedValue(null);      // botones Y texto caídos: recién ahí es fallo (c4-1)
     const r = await atenderAsistenciaChofer({
       tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
       texto: 'chocamos',
@@ -532,5 +536,99 @@ describe('atenderAsistenciaOficina', () => {
 
   it('el ámbar de oficina NO es de este circuito (el analista puede con "el camión no arranca")', async () => {
     expect(await atenderAsistenciaOficina(JEFE, 'no arranca la 12', { nivel: 'ambar', modoMudo: false })).toBeNull();
+  });
+});
+
+// ── AUDITORÍA FABLE CICLO 4 ────────────────────────────────────────────────
+
+describe('c4-1: el 🚨 JAMÁS se pierde por la cascada', () => {
+  it('la cascada recibe un presupuesto y el cuerpo con botones nunca rebasa 1024', async () => {
+    baseFeliz();
+    // Una cascada que IGNORA su presupuesto (el peor caso): el cinturón la
+    // tira y el aviso sale igual, dentro del límite de Meta.
+    recomendacionCascada.mockResolvedValue(`\nA quién marcarle:\n${'· Grúas de nombre larguísimo — 5215550000001\n'.repeat(30)}`);
+    const r = await atenderAsistenciaChofer({
+      tenantId: 't1', viajeId: 'v1', operadorId: 'op1',
+      texto: `chocamos y hay heridos ${'x'.repeat(220)}`,
+      asistencia: { nivel: 'rojo', modoMudo: false },
+    });
+    expect(r.atendida).toBe(true);
+    // El presupuesto viajó como 5º argumento y es lo que queda de 1024.
+    const args = recomendacionCascada.mock.calls[0] as unknown[];
+    expect(typeof args[4]).toBe('number');
+    expect(args[4] as number).toBeGreaterThan(0);
+    expect(args[4] as number).toBeLessThan(1024);
+    // Y el cuerpo mandado cupo — la cascada desobediente no costó el aviso.
+    const cuerpo = sendButtons.mock.calls[0][1] as string;
+    expect(cuerpo.length).toBeLessThanOrEqual(1024);
+    expect(cuerpo).toContain('chocamos');
+  });
+
+  it('si los botones fallan, el aviso viaja en texto plano con las salidas dichas', async () => {
+    baseFeliz();
+    recomendacionCascada.mockResolvedValue(null);
+    sendButtons.mockResolvedValue(null);   // Meta rechazó los botones
+    sendText.mockResolvedValue('wamid.TXT');
+    const r = await atenderAsistenciaChofer({
+      tenantId: 't1', viajeId: 'v1', operadorId: 'op1',
+      texto: 'chocamos en la carretera',
+      asistencia: { nivel: 'rojo', modoMudo: false },
+    });
+    // El chofer recibe el "tu jefe ya tiene tu reporte" — porque lo tiene.
+    expect(r.respuesta).toContain('Tu jefe ya tiene tu reporte');
+    const alJefe = sendText.mock.calls.find((c) => c[0] === '5215550000009');
+    expect(alJefe).toBeTruthy();
+    expect(alJefe![1] as string).toContain('Mesa de control');
+  });
+});
+
+describe('c4-2: cerrarCoordinacionesDeIncidencia', () => {
+  it('cierra las vivas, avisa SOLO al que sí fue contactado y deja la bitácora', async () => {
+    respuestas = {
+      'coordinacion_proveedor.claim': {
+        data: [
+          { id: 'c1', estado: 'descartada', proveedor_nombre: 'Grúas A', proveedor_telefono: '525510000001', contactado_en: '2026-08-27T01:00:00Z' },
+          { id: 'c2', estado: 'descartada', proveedor_nombre: 'Grúas B', proveedor_telefono: '525510000002', contactado_en: null },
+        ],
+        error: null,
+      },
+      'incidencia_evento.insert': { error: null },
+    };
+    sendText.mockResolvedValue('wamid.TXT');
+    await cerrarCoordinacionesDeIncidencia('t1', INC, 'resuelta_desde_mesa');
+    // Al contactado se le dice que la emergencia quedó atendida; al de
+    // pendiente_plantilla (nunca le escribimos) no se le inicia conversación.
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect((sendText.mock.calls[0] as [string, string])[0]).toBe('525510000001');
+    expect((sendText.mock.calls[0] as [string, string])[1]).toContain('quedó atendida');
+  });
+
+  it('el fallo de lectura no lanza — cerrar el expediente no puede fallar por su limpieza', async () => {
+    respuestas = { 'coordinacion_proveedor.claim': { data: null, error: { message: 'timeout' } } };
+    await expect(cerrarCoordinacionesDeIncidencia('t1', INC, 'x')).resolves.toBeUndefined();
+    expect(sendText).not.toHaveBeenCalled();
+  });
+});
+
+describe('c4-6: anclarUbicacionIncidencia', () => {
+  it('el pin se ancla al expediente vivo del chofer y queda en la bitácora', async () => {
+    respuestas = {
+      'incidencia.claim': { data: [{ id: INC }], error: null },
+      'incidencia_evento.insert': { error: null },
+    };
+    const id = await anclarUbicacionIncidencia('t1', 'op1', 19.4326, -99.1332);
+    expect(id).toBe(INC);
+    const ancla = escrituras.find((e) => e.clave === 'incidencia.claim');
+    expect(ancla!.payload).toEqual({ lat: 19.4326, lng: -99.1332 });
+  });
+
+  it('sin expediente vivo devuelve null y no inventa nada', async () => {
+    respuestas = { 'incidencia.claim': { data: [], error: null } };
+    expect(await anclarUbicacionIncidencia('t1', 'op1', 19.4, -99.1)).toBeNull();
+  });
+
+  it('el fallo de base devuelve null — el flujo de posición no depende del ancla', async () => {
+    respuestas = { 'incidencia.claim': { data: null, error: { message: 'timeout' } } };
+    expect(await anclarUbicacionIncidencia('t1', 'op1', 19.4, -99.1)).toBeNull();
   });
 });

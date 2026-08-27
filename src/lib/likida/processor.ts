@@ -35,8 +35,8 @@ import { puedeAsignar } from '@/lib/auth/permisos';
 import { atenderDespachoOficina } from '@/lib/likida/despacho_wa';
 import { interpretarTalacha, atenderTalachaChofer, atenderAutorizacionTalacha } from '@/lib/likida/talacha_wa';
 import { atenderCcpOficina } from '@/lib/likida/carta_porte_wa';
-import { interpretarAsistencia, atenderAsistenciaChofer, atenderReconocimientoAsistencia, atenderAsistenciaOficina } from '@/lib/likida/asistencia_wa';
-import { atenderCoordinacionOficina, atenderMensajeProveedor } from '@/lib/likida/asistencia_coordinacion';
+import { interpretarAsistencia, atenderAsistenciaChofer, atenderReconocimientoAsistencia, atenderAsistenciaOficina, anclarUbicacionIncidencia } from '@/lib/likida/asistencia_wa';
+import { atenderCoordinacionOficina, atenderMensajeProveedor, atenderMedioProveedorSinTexto } from '@/lib/likida/asistencia_coordinacion';
 import { esCaptionPod, guardarPodDelChofer, mensajePod } from '@/lib/likida/pod_wa';
 import { atenderInformeOficina } from '@/lib/likida/informes_wa';
 import { pideInformePdf, mandarInformePdf, atenderPreguntaLibre } from '@/lib/likida/oficina_wa';
@@ -1012,6 +1012,20 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           return;
         }
       }
+      // El gruero que contesta con NOTA DE VOZ —como contesta medio México—
+      // caía al "no te tengo registrado como operador" con la cotización en
+      // la mano (c4-5). No se transcribe (la E1 es solo-chofer a propósito):
+      // se le pide el texto y la constancia queda en el expediente.
+      if (msg.type === 'audio' || msg.type === 'image' || msg.type === 'location' || msg.type === 'document') {
+        const rMedio = await atenderMedioProveedorSinTexto(msg.from, msg.type).catch((e) => {
+          logger.error('proveedor.medio_error', { err: e instanceof Error ? e.message : String(e) });
+          return null;
+        });
+        if (rMedio) {
+          await sendText(msg.from, rMedio);
+          return;
+        }
+      }
 
       await sendText(msg.from, 'Hola, no te tengo registrado como operador. Pídele a tu flota que te dé de alta en Likida. 🚛');
       return;
@@ -1340,6 +1354,25 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           await sendText(msg.from, 'Se me trabó tantito al recibir tu foto 😕. ¿Me la reenvías?');
           return;
         }
+      }
+      // ── EL PIN DE UNA EMERGENCIA SIN VIAJE (c4-6) ──────────────────────
+      // El chofer varado SIN viaje al que el bot le pidió su ubicación la
+      // mandaba y recibía "no tienes un viaje abierto para liquidar 👍" —
+      // grosero en una emergencia, y el pin se tiraba. Si tiene expediente de
+      // asistencia vivo, el pin se ancla ahí y el jefe recibe el link.
+      if (msg.type === 'location' && typeof msg.lat === 'number' && typeof msg.lng === 'number') {
+        const anclada = await anclarUbicacionIncidencia(op.tenantId, op.operadorId, msg.lat, msg.lng);
+        if (anclada) {
+          try {
+            const jefe = await telefonoJefeDe(op.tenantId);
+            if (jefe) await sendText(jefe, `📍 ${op.nombre} compartió su ubicación (emergencia en curso).\nhttps://maps.google.com/?q=${msg.lat},${msg.lng}`);
+          } catch (e) {
+            logger.error('ubicacion.aviso_jefe', { operador: op.operadorId, err: e instanceof Error ? e.message : String(e) });
+          }
+          await sendText(msg.from, '📍 Recibida tu ubicación — quedó en tu reporte de emergencia y ya se la pasé a tu jefe.');
+          return;
+        }
+        // Sin expediente vivo, el pin sin viaje sigue al mensaje de abajo.
       }
       // ── ¿VARADO SIN VIAJE? (0198, punto C) ─────────────────────────────
       // "Estoy varado" sin viaje abierto merecía algo mejor que "no tienes un
@@ -2516,7 +2549,13 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // respuesta creyendo que nadie la vio es peor.
     if (msg.type === 'location' && typeof msg.lat === 'number' && typeof msg.lng === 'number') {
       await registrarUbicacionChofer(op, viajeId, msg.lat, msg.lng);
-      await say('📍 Recibida tu ubicación — queda registrada en tu viaje y ya se la pasé a tu jefe.');
+      // c4-6: el pin que el propio bot pide ("mándame tu ubicación") ahora SÍ
+      // llega a donde la cascada y el mensaje al proveedor lo van a usar — el
+      // expediente de asistencia vivo del chofer, si lo hay. Best-effort.
+      const anclada = await anclarUbicacionIncidencia(op.tenantId, op.operadorId, msg.lat, msg.lng);
+      await say(anclada
+        ? '📍 Recibida tu ubicación — quedó en tu viaje Y en tu reporte de emergencia, y ya se la pasé a tu jefe.'
+        : '📍 Recibida tu ubicación — queda registrada en tu viaje y ya se la pasé a tu jefe.');
       return;
     }
 

@@ -93,11 +93,21 @@ export function variantesTelefono(telefono: string): string[] {
   // 52 + 10 dígitos → también con el 1.
   const sin1 = /^52(\d{10})$/.exec(limpio);
   if (sin1) nums.add(`521${sin1[1]}`);
+  // AUDITORÍA FABLE CICLO 4 (c4-4): la forma NACIONAL de 10 dígitos — lo que
+  // el placeholder de captura invita a teclear ("10 dígitos"). El wa_id de
+  // Meta siempre trae lada de país, así que el gruero capturado como
+  // `5512345678` no matcheaba ninguna variante y recibía "no te tengo
+  // registrado" con su cotización en la mano. Las dos direcciones:
+  if (con1) nums.add(con1[1]);
+  if (sin1) nums.add(sin1[1]);
+  const nacional = /^(\d{10})$/.exec(limpio);
+  if (nacional) { nums.add(`52${nacional[1]}`); nums.add(`521${nacional[1]}`); }
   // Cada forma, con y sin "+": la columna tiene una y el webhook trae la otra.
   const vistas = new Set<string>([telefono]);
   for (const n of nums) { vistas.add(n); vistas.add(`+${n}`); }
   return [...vistas];
 }
+
 
 /** Resuelve el operador (y su flota) por número de WhatsApp. */
 export async function resolveOperador(telefono: string): Promise<ResolvedOperador | null> {

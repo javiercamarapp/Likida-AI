@@ -113,6 +113,7 @@ vi.mock('@/lib/likida/costos', () => ({
   faseDeModelo: vi.fn(() => 'cuadre'), vincularCostosALiquidacion: vi.fn(),
 }));
 vi.mock('@/lib/meta/client', () => ({
+  MAX_CUERPO_BOTONES: 1024,
   sendText: (...a: unknown[]) => sendText(...a),
   sendButtons: (...a: unknown[]) => sendButtons(...a),
   sendDocument: vi.fn(async () => 'wamid.DOC'),

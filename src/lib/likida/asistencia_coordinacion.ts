@@ -8,9 +8,9 @@ import type { RolOficina } from './contactos';
 import { sendText, sendButtons } from '@/lib/meta/client';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { mxn, hoyMx } from '@/lib/formato';
-import { listarProveedoresEmergencia, type TipoProveedor } from './emergencias';
+import { listarProveedoresEmergencia, telefonoE164Mx, type TipoProveedor } from './emergencias';
 import { armarCascada, type ProveedorRecomendado } from './asistencia_proveedor';
-import { anotarEventoIncidencia, TIPOS_ASISTENCIA, type TipoAsistencia } from './asistencia_wa';
+import { anotarEventoIncidencia, cerrarCoordinacionesDeIncidencia, TIPOS_ASISTENCIA, type TipoAsistencia } from './asistencia_wa';
 import { extraerMonto } from './talacha_wa';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -60,6 +60,20 @@ function limpiar(texto: string): string {
  */
 export function leerEtaMin(texto: string): number | null {
   const t = limpiar(texto);
+  // AUDITORÍA FABLE CICLO 4 (c4-7): el rango y la alternativa son AMBIGUOS
+  // por definición — "de 40 a 50 minutos" no es 50, y "1 hora si acaso 2" no
+  // es 60. Antes solo el número pegado a la unidad contaba y el otro se
+  // ignoraba: el contrato ("dos cifras distintas = null") se violaba justo en
+  // la forma más común de cotizar. Un número suelto adyacente a uno con
+  // unidad (antes o después) también anula la lectura.
+  if (/\b\d{1,3}\s*(?:a|o|u|-)\s*\d{1,3}\s*(?:min|mins|minutos|horas?|hrs?|hr)\b/.test(t)) return null;
+  // La alternativa dicha DESPUÉS de la unidad ("1 hora si acaso 2", "2 horas
+  // o 3"). Conectores en lista cerrada a propósito: un "cobro 1 500" tras el
+  // "min" es un PRECIO (lo lee extraerMonto), no una segunda lectura de ETA.
+  // Tras `limpiar` el espacio es SIEMPRE uno solo — espacios literales (sin
+  // \s+ ni cuantificadores anidados: el ratchet de regex insegura tiene razón
+  // en que aquí no hacen falta).
+  if (/\b(?:min|mins|minutos|hr|hrs|hora|horas) (?:o|u|si acaso|a lo mucho|a lo mejor|hasta|maximo|quiza|quizas|igual y) (?:una |unas |como )?\d{1,2}\b/.test(t)) return null;
   const vistos = new Set<number>();
   for (const m of t.matchAll(/\b(\d{1,3})\s*(?:min|mins|minutos)\b/g)) {
     const n = Number(m[1]);
@@ -302,6 +316,11 @@ async function iniciarContacto(
     lng: inc.lng,
     telefonoJefe: rotulos.telefonoJefe,
   });
+  // A E.164 (c4-4): el directorio puede traer el número a 10 dígitos (lo que
+  // el placeholder de captura invita) — así Meta lo rechaza y el rechazo se
+  // diagnosticaba como "falta la plantilla". El snapshot y el envío van con
+  // lada; el matching de la respuesta ya acepta ambas formas.
+  const telefonoEnvio = telefonoE164Mx(elegido.telefono);
 
   // La fila nace ANTES del envío (pendiente_plantilla es el estado honesto de
   // "autorizado pero aún no sale"). El índice único resuelve la carrera de
@@ -312,7 +331,7 @@ async function iniciarContacto(
       incidencia_id: incidenciaId,
       proveedor_id: proveedorIdPorTelefono.get(elegido.telefono) ?? null,
       proveedor_nombre: elegido.nombre,
-      proveedor_telefono: elegido.telefono,
+      proveedor_telefono: telefonoEnvio,
       autorizada_por: cuenta.userId,
       mensaje_preparado: mensaje,
     }).select('id').single(), 'coordinacion.crear');
@@ -341,7 +360,7 @@ async function iniciarContacto(
   // El envío. El sello `contactado` SOLO tras aceptación de Meta (lección
   // c2-1); el rechazo (ventana de 24 h cerrada — falta la plantilla) deja el
   // estado honesto y al jefe con el texto listo para reenviarlo él.
-  const enviado = await sendText(elegido.telefono, mensaje);
+  const enviado = await sendText(telefonoEnvio, mensaje);
   if (enviado) {
     const { error: errSello } = await acotada(supabaseAdmin()
       .from('coordinacion_proveedor')
@@ -357,7 +376,7 @@ async function iniciarContacto(
   logger.info('coordinacion.pendiente_plantilla', { coordinacion: coordinacionId, incidencia: incidenciaId });
   return (
     `No puedo iniciar yo la conversación con ${elegido.nombre} todavía — WhatsApp exige una plantilla aprobada que está pendiente de configuración. ` +
-    `Aquí está el mensaje listo para que se lo reenvíes tú a ${elegido.telefono}:\n\n${mensaje}\n\n` +
+    `Aquí está el mensaje listo para que se lo reenvíes tú a ${telefonoEnvio}:\n\n${mensaje}\n\n` +
     `Si el proveedor nos escribe a este número, yo sigo la gestión desde ahí.`
   );
 }
@@ -368,6 +387,34 @@ async function decidirCotizacion(
   cuenta: CuentaCoordina, coordinacionId: string, decision: 'confirmada' | 'descartada',
 ): Promise<string> {
   const tenantId = cuenta.tenantId!;
+  // Candado (c4-3): la firma solo opera sobre una emergencia VIVA. El tap del
+  // backlog del jefe sobre una cotización de una incidencia ya resuelta
+  // comprometía dinero y despachaba un proveedor a una emergencia muerta —
+  // cinturón y tirantes con el cierre de coordinaciones al resolver (c4-2).
+  try {
+    const { data: coo, error: errCoo } = await acotada(supabaseAdmin()
+      .from('coordinacion_proveedor').select('incidencia_id')
+      .eq('id', coordinacionId).eq('tenant_id', tenantId)
+      .maybeSingle(), 'coordinacion.incidenciaDe');
+    if (errCoo) throw new Error(errCoo.message);
+    const incidenciaId = (coo?.incidencia_id as string) ?? null;
+    if (incidenciaId) {
+      const { data: inc, error: errInc } = await acotada(supabaseAdmin()
+        .from('incidencia').select('estado')
+        .eq('id', incidenciaId).eq('tenant_id', tenantId)
+        .maybeSingle(), 'coordinacion.estadoIncidencia');
+      if (errInc) throw new Error(errInc.message);
+      if ((inc?.estado as string) === 'resuelta') {
+        await cerrarCoordinacionesDeIncidencia(tenantId, incidenciaId, 'incidencia_ya_resuelta');
+        return 'Esa emergencia ya está resuelta — no confirmé ni desperté nada. La gestión quedó cerrada en el expediente.';
+      }
+    }
+  } catch (e) {
+    // Sin lectura no se firma: comprometer dinero sin saber si la emergencia
+    // vive sería exactamente el bug que este candado tapa.
+    logger.error('coordinacion.candado_ilegible', { coordinacion: coordinacionId, err: e instanceof Error ? e.message : String(e) });
+    return 'No pude verificar el estado de la emergencia — inténtalo de nuevo en un momento.';
+  }
   const { data, error } = await acotada(supabaseAdmin()
     .from('coordinacion_proveedor')
     .update({ estado: decision, decidida_por: cuenta.userId, decidida_en: new Date().toISOString() })
@@ -466,6 +513,44 @@ interface CoordinacionActiva {
 }
 
 /**
+ * Las gestiones VIVAS de un teléfono: no descartadas Y de una incidencia no
+ * resuelta (c4-2/c4-3 — una gestión de una emergencia muerta no debe capturar
+ * los mensajes de ese número para siempre). Las que quedaron huérfanas de una
+ * incidencia ya resuelta se cierran aquí mismo, de paso (autolimpieza de filas
+ * de antes del cierre-al-resolver). Lanza ante lectura ilegible.
+ */
+async function activasDeTelefono(from: string): Promise<CoordinacionActiva[]> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('coordinacion_proveedor')
+    .select('id, tenant_id, incidencia_id, estado, proveedor_nombre, mensaje_preparado')
+    .in('proveedor_telefono', variantesTelefono(from))
+    .neq('estado', 'descartada')
+    .order('created_at', { ascending: false })
+    .limit(3), 'coordinacion.porTelefono');
+  if (error) throw new Error(error.message);
+  const todas: CoordinacionActiva[] = (data ?? []).map((f) => ({
+    id: f.id as string,
+    tenantId: f.tenant_id as string,
+    incidenciaId: f.incidencia_id as string,
+    estado: f.estado as string,
+    proveedorNombre: f.proveedor_nombre as string,
+    mensajePreparado: f.mensaje_preparado as string,
+  }));
+  if (todas.length === 0) return todas;
+  const { data: incs, error: errInc } = await acotada(supabaseAdmin()
+    .from('incidencia').select('id, estado')
+    .in('tenant_id', [...new Set(todas.map((c) => c.tenantId))])
+    .in('id', [...new Set(todas.map((c) => c.incidenciaId))]), 'coordinacion.incidenciasVivas');
+  if (errInc) throw new Error(errInc.message);
+  const resueltas = new Set((incs ?? []).filter((i) => i.estado === 'resuelta').map((i) => i.id as string));
+  const vivas = todas.filter((c) => !resueltas.has(c.incidenciaId));
+  for (const muerta of todas.filter((c) => resueltas.has(c.incidenciaId))) {
+    await cerrarCoordinacionesDeIncidencia(muerta.tenantId, muerta.incidenciaId, 'incidencia_ya_resuelta');
+  }
+  return vivas;
+}
+
+/**
  * El turno de un número DESCONOCIDO que puede ser un proveedor contactado.
  * `null` = este teléfono no tiene ninguna gestión viva y el processor sigue
  * su camino ("no te tengo registrado"). La rama es SOLO por teléfono-de-
@@ -478,22 +563,7 @@ export async function atenderMensajeProveedor(
   if (!texto?.trim()) return null;
   let activas: CoordinacionActiva[];
   try {
-    const { data, error } = await acotada(supabaseAdmin()
-      .from('coordinacion_proveedor')
-      .select('id, tenant_id, incidencia_id, estado, proveedor_nombre, mensaje_preparado')
-      .in('proveedor_telefono', variantesTelefono(from))
-      .neq('estado', 'descartada')
-      .order('created_at', { ascending: false })
-      .limit(3), 'coordinacion.porTelefono');
-    if (error) throw new Error(error.message);
-    activas = (data ?? []).map((f) => ({
-      id: f.id as string,
-      tenantId: f.tenant_id as string,
-      incidenciaId: f.incidencia_id as string,
-      estado: f.estado as string,
-      proveedorNombre: f.proveedor_nombre as string,
-      mensajePreparado: f.mensaje_preparado as string,
-    }));
+    activas = await activasDeTelefono(from);
   } catch (e) {
     // Fail-closed en la ATRIBUCIÓN, no en la respuesta: sin lectura no se
     // afirma que el número no es de nadie — pero tampoco se le contesta como
@@ -614,4 +684,34 @@ export async function atenderMensajeProveedor(
   return reenviado
     ? 'Anotado — se lo pasé al jefe de tráfico. 🙏'
     : 'Anotado. El jefe de tráfico le da seguimiento.';
+}
+
+/**
+ * El medio SIN TEXTO (audio, foto, ubicación, documento) de un número con
+ * gestión viva — AUDITORÍA FABLE CICLO 4 (c4-5): el gruero carretero contesta
+ * con nota de voz como medio México, y recibía "no te tengo registrado como
+ * operador" con la cotización en la mano. La transcripción E1 es SOLO para
+ * choferes a propósito (presupuesto del tenant, léxico de emergencia); aquí
+ * el mínimo honesto: pedirle el texto y dejar constancia en el expediente.
+ * `null` = sin gestión viva y el processor sigue su camino.
+ */
+export async function atenderMedioProveedorSinTexto(
+  from: string,
+  tipoMsg: string,
+): Promise<string | null> {
+  let activas: CoordinacionActiva[];
+  try {
+    activas = await activasDeTelefono(from);
+  } catch (e) {
+    logger.error('coordinacion.telefono_ilegible', { err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+  if (activas.length === 0) return null;
+  for (const c of activas) {
+    await anotarEventoIncidencia(c.tenantId, c.incidenciaId, 'proveedor_mensaje', {
+      coordinacionId: c.id, sinTexto: true, tipo: tipoMsg,
+    });
+  }
+  logger.info('coordinacion.proveedor_medio_sin_texto', { tipo: tipoMsg, gestiones: activas.length });
+  return '¿Me lo escribe por texto, por favor? 🙏 Así le paso su tiempo y precio tal cual al jefe de tráfico.';
 }

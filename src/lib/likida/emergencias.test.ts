@@ -85,7 +85,9 @@ describe('crearProveedorEmergencia — capturar no es verificar', () => {
   it('nace SIN verificado_en, con el teléfono limpio', async () => {
     await crearProveedorEmergencia('t-1', { tipo: 'grua', nombre: 'Grúas García', telefono: '999 123 4567' });
     const [, fila] = insertado.mock.calls[0] as unknown as [string, Record<string, unknown>];
-    expect(fila.telefono).toBe('9991234567');
+    // c4-4: el 10 dígitos que el placeholder invita se guarda en E.164 — a
+    // 10 dígitos Meta rechazaba el mensaje inicial de la coordinación.
+    expect(fila.telefono).toBe('529991234567');
     expect('verificado_en' in fila).toBe(false);
   });
 

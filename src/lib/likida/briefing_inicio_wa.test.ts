@@ -12,7 +12,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const sendText = vi.hoisted(() =>
   vi.fn(async (_to: string, _body: string): Promise<string | null> => 'wamid.brf'));
-vi.mock('@/lib/meta/client', () => ({ sendText }));
+vi.mock('@/lib/meta/client', () => ({
+  MAX_CUERPO_BOTONES: 1024, sendText }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('./presupuesto', async (importOriginal) => {
   // Solo se neutraliza `acotada`; el resto (PRESUPUESTO_WEBHOOK_MS y compañía)

@@ -234,7 +234,10 @@ export async function sendText(to: string, body: string): Promise<string | null>
 const MAX_BOTONES = 3;
 const MAX_TITULO_BOTON = 20;    // caracteres del rótulo que ve el chofer
 const MAX_ID_BOTON = 256;       // el id que nos devuelve el webhook al apretarlo
-const MAX_CUERPO_BOTONES = 1024;
+// Exportado (c4-1): quien arma un cuerpo con partes variables (el 🚨 con la
+// cascada de proveedores) necesita presupuestar CONTRA este límite antes de
+// mandar — pasarse hace que Meta rechace el mensaje entero, no que lo recorte.
+export const MAX_CUERPO_BOTONES = 1024;
 
 export interface BotonAcuse { id: string; titulo: string }
 

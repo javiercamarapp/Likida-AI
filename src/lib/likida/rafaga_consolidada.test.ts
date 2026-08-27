@@ -41,6 +41,7 @@ const intakeDelta = vi.fn(async (_v: string, d: number) => {
 
 vi.mock('@/lib/likida/tools', () => ({}));
 vi.mock('@/lib/meta/client', () => ({
+  MAX_CUERPO_BOTONES: 1024,
   sendText: vi.fn(async (_to: string, t: string) => { salientes.push(t); return 'wamid.1'; }),
   sendButtons: vi.fn(async (_to: string, cuerpo: string) => { botones.push(cuerpo); return 'wamid.b'; }),
   sendDocument: vi.fn(),
