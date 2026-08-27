@@ -21,6 +21,7 @@ import {
 import { getConfig } from '@/lib/likida/config';
 import { getEstadoCartaPorte } from '@/lib/likida/carta_porte_datos';
 import { NORMAS, esVinculante } from '@/lib/likida/normas/indice';
+import { TEMAS_NORMATIVOS, normasPorTema } from '@/lib/likida/normas/consulta';
 import { resolverPeriodo, getGastosFiscales, resumirPerdidas, opcionesDe } from '@/lib/likida/fiscal';
 import { ahoraMs } from '@/lib/saludo';
 import { hoyMx } from '@/lib/formato';
@@ -316,6 +317,55 @@ registerTool('consultar_carta_porte', {
         verificada: n.estado !== 'sin_verificar',
         vinculante: esVinculante(n.jerarquia),
       }],
+    };
+  },
+});
+
+// ── El experto fiscal del chat (Fase 9) ────────────────────────────────────
+// Abre el corpus de `normas/` completo, por TEMAS CERRADOS (la doctrina de
+// este archivo: nada de texto libre). El candado duro no vive aquí sino en
+// `guardiaFundamento`: el modelo solo puede citar una norma que esta tool le
+// devolvió en el turno — lo demás se quita del texto. Aquí lo que viaja es
+// la HONESTIDAD de cada ficha: jerarquía (una política de portal no es una
+// obligación fiscal), estado de verificación y si el producto puede afirmarla.
+registerTool('consultar_normas', {
+  schema: {
+    type: 'function',
+    function: {
+      name: 'consultar_normas',
+      description: 'El corpus normativo verificado de Likida, por tema: qué normas fundan lo que el producto mide (deducibilidad, IVA, peajes, carta porte, IMSS, privacidad). Devuelve cada norma con su cita, jerarquía (ley > reglamento > RMF/RFA > criterio > política de tercero), estado de verificación y si es afirmable. ÚSALA antes de responder cualquier pregunta con fondo legal o fiscal — solo puedes citar lo que esta tool te devuelva.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tema: {
+            type: 'string',
+            enum: [...TEMAS_NORMATIVOS],
+            description: 'El tema de la pregunta. Si toca varios, llama la tool una vez por tema.',
+          },
+        },
+        required: ['tema'],
+        additionalProperties: false,
+      },
+    },
+  },
+  handler: async (args) => {
+    const tema = String(args.tema ?? '');
+    const normas = normasPorTema(tema);
+    const sinVerificar = normas.filter((n) => !n.afirmable);
+    return {
+      tema,
+      normas,
+      // Las reglas de uso viajan CON el dato, no solo en el prompt: el turno
+      // que las necesita las tiene enfrente.
+      reglas: [
+        'Cita SOLO estas normas, con su campo "cita" textual. Nada de memoria.',
+        'jerarquia 5-6 NO obliga (criterio no vinculativo / política de un tercero): preséntala como orientación, jamás como obligación fiscal.',
+        ...(sinVerificar.length > 0
+          ? [`SIN AFIRMAR (ficha sin verificar contra fuente primaria): ${sinVerificar.map((n) => n.cita).join(', ')} — decláralo como pendiente de verificación.`]
+          : []),
+        'Si el tema de la pregunta no está cubierto por estas fichas, dilo tal cual y recomienda validarlo con su contador o fiscalista — no rellenes el hueco.',
+        'Esto es el corpus del motor de reglas, no un dictamen: toda respuesta fiscal cierra recomendando validarla con su contador.',
+      ],
     };
   },
 });

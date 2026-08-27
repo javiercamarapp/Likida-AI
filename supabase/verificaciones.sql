@@ -9415,3 +9415,101 @@ begin
   raise exception 'DETENCION_0207  fk_cruzada=%  flota_duplicada_rebota=%  cliente_duplicado_rebota=%  horas_negativas_rebotan=%  tarifa_cero_rebota=%  n_presencia=%  primera_ok=%  cerrado=%   (esperado t / t / t / t / t / 2 / t / t)',
     fk_cruzada, flota_duplicada_rebota, cliente_duplicado_rebota, horas_negativas_rebotan, tarifa_cero_rebota, n_presencia, primera_ok, cerrado;
 end $$;
+
+-- ── 166. El taller escribe con candados: una orden por avería, una abierta por rutina+unidad, y el experto fiscal vivo (mig. 0209) ──
+-- Lo que solo la base demuestra: (a) la FK COMPUESTA rebota una orden colgada
+-- de la avería de OTRA flota; (b) una avería abre a lo más UNA orden — el
+-- reintento del webhook rebota; (c) una rutina sin ninguna cadencia rebota
+-- (sin reloj no hay rutina), y la cadencia en cero también; (d) una rutina
+-- con orden NO cerrada en una unidad no abre otra, y al cerrar la primera la
+-- siguiente SÍ entra (el reloj continúa); (e) el nombre de rutina no se
+-- duplica ni cambiando mayúsculas o espacios; (f) `experto_fiscal` quedó
+-- 'vivo' en el catálogo — la Fase 9 encendida es una fila comprobable, no un
+-- comentario; (g) el doble candado: ni anon ni authenticated tocan
+-- `rutina_mantenimiento`.
+do $$
+declare
+  ta uuid; tb uuid; u_a uuid; inc_a uuid; inc_b uuid; rut uuid;
+  fk_cruzada boolean; segunda_orden_rebota boolean;
+  rutina_sin_reloj_rebota boolean; cadencia_cero_rebota boolean;
+  doble_abierta_rebota boolean; tras_cierre_entra boolean;
+  nombre_duplicado_rebota boolean; fiscal_vivo boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ TALLER A 0209') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ TALLER B 0209') returning id into tb;
+  insert into unidad (tenant_id, numero_economico) values (ta, 'ECO-0209') returning id into u_a;
+  insert into incidencia (tenant_id, tipo, descripcion) values (ta, 'averia', 'se tronó la marcha') returning id into inc_a;
+  insert into incidencia (tenant_id, tipo, descripcion) values (tb, 'averia', 'ajena') returning id into inc_b;
+
+  -- (a) La orden de la flota A no puede colgarse de la avería de la flota B.
+  begin
+    insert into mantenimiento (tenant_id, unidad_id, tipo, incidencia_id)
+      values (ta, u_a, 'correctivo', inc_b);
+    fk_cruzada := false;
+  exception when foreign_key_violation then
+    fk_cruzada := true;
+  end;
+
+  -- La legítima entra; (b) el reintento de la MISMA avería rebota.
+  insert into mantenimiento (tenant_id, unidad_id, tipo, incidencia_id)
+    values (ta, u_a, 'correctivo', inc_a);
+  begin
+    insert into mantenimiento (tenant_id, unidad_id, tipo, incidencia_id)
+      values (ta, u_a, 'correctivo', inc_a);
+    segunda_orden_rebota := false;
+  exception when unique_violation then
+    segunda_orden_rebota := true;
+  end;
+
+  -- (c) Sin reloj no hay rutina; y un reloj de 0 días tampoco es reloj.
+  begin
+    insert into rutina_mantenimiento (tenant_id, nombre) values (ta, 'Sin reloj');
+    rutina_sin_reloj_rebota := false;
+  exception when check_violation then
+    rutina_sin_reloj_rebota := true;
+  end;
+  begin
+    insert into rutina_mantenimiento (tenant_id, nombre, cada_dias) values (ta, 'Cero', 0);
+    cadencia_cero_rebota := false;
+  exception when check_violation then
+    cadencia_cero_rebota := true;
+  end;
+
+  -- (d) Una abierta por rutina+unidad; cerrada la primera, la nueva entra.
+  insert into rutina_mantenimiento (tenant_id, nombre, cada_dias) values (ta, 'Servicio de motor', 180) returning id into rut;
+  insert into mantenimiento (tenant_id, unidad_id, tipo, rutina_id) values (ta, u_a, 'preventivo', rut);
+  begin
+    insert into mantenimiento (tenant_id, unidad_id, tipo, rutina_id) values (ta, u_a, 'preventivo', rut);
+    doble_abierta_rebota := false;
+  exception when unique_violation then
+    doble_abierta_rebota := true;
+  end;
+  update mantenimiento set estado = 'cerrada', cerrada_en = now(), km_servicio = 80000
+    where tenant_id = ta and rutina_id = rut and estado <> 'cerrada';
+  begin
+    insert into mantenimiento (tenant_id, unidad_id, tipo, rutina_id) values (ta, u_a, 'preventivo', rut);
+    tras_cierre_entra := true;
+  exception when unique_violation then
+    tras_cierre_entra := false;
+  end;
+
+  -- (e) El nombre no se duplica ni disfrazado.
+  begin
+    insert into rutina_mantenimiento (tenant_id, nombre, cada_km) values (ta, '  servicio DE motor ', 10000);
+    nombre_duplicado_rebota := false;
+  exception when unique_violation then
+    nombre_duplicado_rebota := true;
+  end;
+
+  -- (f) La Fase 9 encendida es una fila, no un comentario.
+  select (estado = 'vivo') into fiscal_vivo from agente_definicion where id = 'experto_fiscal';
+
+  -- (g) Doble candado.
+  cerrado := not has_table_privilege('anon', 'public.rutina_mantenimiento', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.rutina_mantenimiento', 'INSERT')
+    and has_table_privilege('service_role', 'public.rutina_mantenimiento', 'SELECT');
+
+  raise exception 'TALLER_0209  fk_cruzada=%  segunda_orden_rebota=%  rutina_sin_reloj_rebota=%  cadencia_cero_rebota=%  doble_abierta_rebota=%  tras_cierre_entra=%  nombre_duplicado_rebota=%  fiscal_vivo=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t)',
+    fk_cruzada, segunda_orden_rebota, rutina_sin_reloj_rebota, cadencia_cero_rebota, doble_abierta_rebota, tras_cierre_entra, nombre_duplicado_rebota, fiscal_vivo, cerrado;
+end $$;

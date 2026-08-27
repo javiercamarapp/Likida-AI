@@ -8,6 +8,7 @@ import { getUnidades, validarUnidad, crearUnidad, editarUnidad } from '@/lib/lik
 import { sufijoTenant } from '../sufijo';
 import { camposDeSufijo } from '../paginar-campos';
 import { VistaUnidades } from './vista';
+import { BloqueTaller } from './taller';
 import type { ResultadoForma } from './forma';
 
 export const dynamic = 'force-dynamic';
@@ -104,15 +105,20 @@ export default async function PaginaUnidades({
   }
 
   return (
-    <VistaUnidades
-      unidades={unidades}
-      sp={sp}
-      sufijo={sufijo}
-      camposOcultos={camposOcultos}
-      // El gateo de la UI solo decide si la forma SE PINTA; la puerta real se
-      // re-comprueba adentro del action (alcanzable por POST directo).
-      puedeEditar={puedeAdministrar(rol)}
-      guardar={guardarUnidad}
-    />
+    <>
+      <VistaUnidades
+        unidades={unidades}
+        sp={sp}
+        sufijo={sufijo}
+        camposOcultos={camposOcultos}
+        // El gateo de la UI solo decide si la forma SE PINTA; la puerta real se
+        // re-comprueba adentro del action (alcanzable por POST directo).
+        puedeEditar={puedeAdministrar(rol)}
+        guardar={guardarUnidad}
+      />
+      {/* Fase 9 (0209): el taller — órdenes de mantenimiento y rutinas
+          preventivas de las mismas unidades de arriba. */}
+      <BloqueTaller sp={sp} />
+    </>
   );
 }

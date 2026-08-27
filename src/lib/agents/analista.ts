@@ -42,6 +42,7 @@ const TOOLS_LECTURA = [
   'kpis_flota', 'acreditables_periodo', 'motor_fiscal', 'viajes_flota',
   'liquidaciones_flota', 'serie_gasto', 'serie_liquidado', 'top_rutas',
   'duplicados_detectados', 'proyectar_serie', 'consultar_carta_porte',
+  'consultar_normas',
 ];
 
 /** Valida y recorta lo que el modelo entregó — nunca se confía en la forma.
