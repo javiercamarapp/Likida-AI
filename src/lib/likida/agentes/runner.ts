@@ -29,6 +29,7 @@ import { estaApagado, INTERRUPTORES, type NombreInterruptor } from '../interrupt
 import { hoyMx } from '@/lib/formato';
 import { LlmBudgetExceededError, createLlmBudget, type LlmBudget } from '@/lib/llm/budget';
 import { redactarCorreoFrio } from './redactor';
+import { correrAgenteFinanciero, esAgenteFinanciero } from './finanzas';
 import { logger } from '@/lib/logger';
 
 /** Piezas que una corrida del runner fabrica como máximo por agente. */
@@ -201,6 +202,20 @@ export async function correrRunner(
         agentes.push({ agente: a.id, resultado: 'corrio', ...r });
       } catch (e) {
         agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del lote' });
+      }
+      continue;
+    }
+
+    // Los 4 financieros (0215): deterministas, gasto de modelo $0 (el techo
+    // declarado queda como candado formal). Su backpressure vive DENTRO del
+    // motor — un parte del periodo sin resolver frena al siguiente — y su
+    // salida es la misma bandeja que la del Redactor.
+    if (esAgenteFinanciero(a.id)) {
+      try {
+        const r = await correrAgenteFinanciero(a.id, 'cron');
+        agentes.push({ agente: a.id, resultado: 'corrio', piezas: r.piezas, costoUsd: 0, ...(r.motivo ? { motivo: r.motivo } : {}) });
+      } catch (e) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo de la corrida financiera' });
       }
       continue;
     }

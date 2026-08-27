@@ -20,7 +20,11 @@ import { acotada } from '../presupuesto';
  *  más `ventas` (0105): el asignador de prospectos, que corre para LIKIDA y
  *  no para una flota — sus corridas van con `tenant_id` null y solo las ve
  *  el superadmin (la policy `tenant_lee` no alcanza filas sin tenant). */
-export type AgenteConCorridas = 'liquidacion' | 'facturas' | 'cobranza' | 'conductores' | 'peajes' | 'proveedores' | 'ventas' | 'redactor' | 'carta_porte';
+export type AgenteConCorridas = 'liquidacion' | 'facturas' | 'cobranza' | 'conductores' | 'peajes' | 'proveedores' | 'ventas' | 'redactor' | 'carta_porte'
+  // Los 4 financieros del back office (0215) — corren para LIKIDA (tenant
+  // null, como `ventas`/`redactor`): sus cifras son del negocio, no de una
+  // flota. En base la FK contra agente_definicion (0116) ya los admite.
+  | 'analista_metricas' | 'control_costos' | 'tesoreria' | 'cierre_mensual';
 export type EstadoCorrida = 'ok' | 'parcial' | 'fallo';
 /** `correo` (0108): el agente de Proveedores no corre por reloj — corre
  *  cuando llega un correo al buzón. Registrarlo como 'cron' pintaría

@@ -38,6 +38,10 @@ export const INTERRUPTORES = [
   'agente:liquidacion', 'agente:facturas', 'agente:cobranza',
   'agente:conductores', 'agente:peajes', 'agente:proveedores',
   'agente:ventas', 'agente:redactor',
+  // Los 4 financieros del back office (0215) — autónomos del runner: sin
+  // kill switch declarado el runner ni los despacha (candado 1).
+  'agente:analista_metricas', 'agente:control_costos',
+  'agente:tesoreria', 'agente:cierre_mensual',
 ] as const;
 
 export type NombreInterruptor = (typeof INTERRUPTORES)[number];
@@ -204,8 +208,8 @@ export async function encender(nombre: string, userId: string): Promise<void> {
  * esta lista es de PANEL, y pintar "todo encendido" sobre una base caída
  * afirmaría que nada está apagado sin haber podido mirar.
  *
- * Sin paginar a propósito: la tabla tiene a lo sumo 8 filas (el CHECK del
- * dominio lo garantiza).
+ * Sin paginar a propósito: la tabla tiene a lo sumo las filas del catálogo
+ * (el CHECK del dominio lo garantiza).
  */
 export async function listarInterruptores(): Promise<EstadoInterruptor[]> {
   const { data, error } = await acotada(supabaseAdmin()
