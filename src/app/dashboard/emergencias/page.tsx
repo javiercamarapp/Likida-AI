@@ -89,6 +89,8 @@ export default async function PaginaEmergencias({
         tipo: String(fd.get('tipo') ?? ''),
         nombre: String(fd.get('nombre') ?? ''),
         telefono: String(fd.get('telefono') ?? ''),
+        lat: fd.get('lat') ? Number(fd.get('lat')) : null,
+        lng: fd.get('lng') ? Number(fd.get('lng')) : null,
         radioKm: fd.get('radioKm') ? Number(fd.get('radioKm')) : null,
         notas: String(fd.get('notas') ?? '') || null,
       });
@@ -258,6 +260,13 @@ export default async function PaginaEmergencias({
               <Campo nombre="nombre" etiqueta="Nombre" requerido placeholder="Grúas García" />
               <Campo nombre="telefono" etiqueta="Teléfono" requerido placeholder="10 dígitos" />
               <Campo nombre="radioKm" etiqueta="Radio de cobertura (km)" tipo="number" />
+              {/* Posición del proveedor (Capa C): con ella la cascada mide la
+                  cercanía real al incidente. Opcional en pareja — sin las dos,
+                  el proveedor se lista sin ordenar y el aviso lo dice. Campos
+                  de texto a propósito: el tipo number de Campo trae min=0 y
+                  las longitudes de México son negativas. */}
+              <Campo nombre="lat" etiqueta="Latitud (opcional)" placeholder="19.4326" />
+              <Campo nombre="lng" etiqueta="Longitud (opcional)" placeholder="-99.1332" />
               <Campo nombre="notas" etiqueta="Notas" placeholder="Zona, horario, condiciones" />
             </FormaConAviso>
           </section>

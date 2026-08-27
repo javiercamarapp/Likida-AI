@@ -66,6 +66,11 @@ vi.mock('@/lib/meta/client', () => ({
   sendButtons: (...a: unknown[]) => sendButtons(...a),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+// Capa C: la cascada se mockea para probar el CABLEADO (que viaja en el 🚨 y
+// que en mudo ni se consulta); el motor tiene sus pruebas propias en
+// asistencia_proveedor.test.ts.
+const recomendacionCascada = vi.fn();
+vi.mock('./asistencia_proveedor', () => ({ recomendacionCascada: (...a: unknown[]) => recomendacionCascada(...a) }));
 
 const {
   interpretarAsistencia, tipoDeAsistencia, lesionadosSegunTexto,
@@ -242,6 +247,44 @@ describe('atenderAsistenciaChofer', () => {
     expect(cuerpo).toContain('LESIONADOS');
     expect(botones[0].id).toBe(`asi_ok:${INC}`);
     expect(r.respuesta).toContain('911');
+  });
+
+  it('Capa C: la cascada del proveedor correcto viaja EN el 🚨 al jefe', async () => {
+    baseFeliz();
+    recomendacionCascada.mockResolvedValue('\nA quién marcarle (marca un humano, no Likida):\n· Grúas García (grua) 5511112222 — ~12 km');
+    await atenderAsistenciaChofer({
+      tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
+      texto: 'volcadura en la curva del km 40',
+      asistencia: { nivel: 'rojo', modoMudo: false },
+    });
+    expect(recomendacionCascada).toHaveBeenCalledWith('t1', INC, 'siniestro', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    const cuerpo = (sendButtons.mock.calls[0] as [string, string])[1];
+    expect(cuerpo).toContain('Grúas García');
+    expect(cuerpo).toContain('marca un humano, no Likida');
+  });
+
+  it('Capa C: en modo mudo (violencia) la cascada NI SE CONSULTA — el protocolo manda', async () => {
+    baseFeliz();
+    await atenderAsistenciaChofer({
+      tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
+      texto: 'nos asaltaron en la caseta',
+      asistencia: { nivel: 'rojo', modoMudo: true },
+    });
+    expect(recomendacionCascada).not.toHaveBeenCalled();
+    expect(sendButtons).toHaveBeenCalled();
+  });
+
+  it('Capa C: si la cascada no tiene nada (null), el 🚨 sale igual y completo', async () => {
+    baseFeliz();
+    recomendacionCascada.mockResolvedValue(null);
+    await atenderAsistenciaChofer({
+      tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
+      texto: 'volcadura en la curva del km 40',
+      asistencia: { nivel: 'rojo', modoMudo: false },
+    });
+    const cuerpo = (sendButtons.mock.calls[0] as [string, string])[1];
+    expect(cuerpo).toContain('🚨');
+    expect(cuerpo).toContain('aprieta el botón');
   });
 
   it('sin mención de lesionados, hayLesionados viaja NULL — no false', async () => {

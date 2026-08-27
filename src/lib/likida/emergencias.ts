@@ -28,6 +28,10 @@ export interface ProveedorEmergencia {
   tipo: TipoProveedor;
   nombre: string;
   telefono: string;
+  /** Posición del proveedor (Capa C): con ella y la del incidente, la cascada
+   *  mide cercanía real. NULL = sin capturar — se lista sin ordenar y se dice. */
+  lat: number | null;
+  lng: number | null;
   radioKm: number | null;
   /** NULL = capturado pero SIN confirmar por teléfono — el rótulo lo dice. */
   verificadoEn: string | null;
@@ -65,7 +69,7 @@ const limpiarTel = (t: string): string => t.replace(/[\s-]/g, '');
 export async function listarProveedoresEmergencia(tenantId: string): Promise<ProveedorEmergencia[]> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('proveedor_emergencia')
-    .select('id, tipo, nombre, telefono, radio_km, verificado_en, notas')
+    .select('id, tipo, nombre, telefono, lat, lng, radio_km, verificado_en, notas')
     .eq('tenant_id', tenantId)
     .order('tipo').order('nombre'), 'emergencias.proveedores');
   if (error) throw new Error(`listarProveedoresEmergencia: ${error.message}`);
@@ -74,6 +78,8 @@ export async function listarProveedoresEmergencia(tenantId: string): Promise<Pro
     tipo: f.tipo as TipoProveedor,
     nombre: f.nombre as string,
     telefono: f.telefono as string,
+    lat: f.lat == null ? null : Number(f.lat),
+    lng: f.lng == null ? null : Number(f.lng),
     radioKm: f.radio_km == null ? null : Number(f.radio_km),
     verificadoEn: (f.verificado_en as string) ?? null,
     notas: (f.notas as string) ?? null,
@@ -81,7 +87,7 @@ export async function listarProveedoresEmergencia(tenantId: string): Promise<Pro
 }
 
 export async function crearProveedorEmergencia(tenantId: string, p: {
-  tipo: string; nombre: string; telefono: string; radioKm?: number | null; notas?: string | null;
+  tipo: string; nombre: string; telefono: string; lat?: number | null; lng?: number | null; radioKm?: number | null; notas?: string | null;
 }): Promise<string> {
   if (!(TIPOS_PROVEEDOR as readonly string[]).includes(p.tipo)) {
     throw new Error('Ese tipo de proveedor no existe.');
@@ -89,11 +95,25 @@ export async function crearProveedorEmergencia(tenantId: string, p: {
   const nombre = p.nombre.trim();
   if (!nombre || nombre.length > 120) throw new Error('El nombre es obligatorio (máx. 120 caracteres).');
   if (!telefonoValido(p.telefono)) throw new Error('El teléfono no se ve completo — 10 dígitos mínimo, solo números.');
+  // La posición viaja en pareja o no viaja: una lat sin lng no ubica nada, y
+  // guardarla a medias haría que la cascada "midiera" contra media coordenada.
+  // Lo capturado-pero-ilegible se RECHAZA, no se descarta en silencio.
+  if ((p.lat != null && !Number.isFinite(p.lat)) || (p.lng != null && !Number.isFinite(p.lng))) {
+    throw new Error('La posición no se ve como números — usa decimales, ej. 19.4326 y -99.1332.');
+  }
+  const conLat = p.lat != null;
+  const conLng = p.lng != null;
+  if (conLat !== conLng) throw new Error('La posición necesita latitud Y longitud (o ninguna de las dos).');
+  if (conLat && (Math.abs(p.lat as number) > 90 || Math.abs(p.lng as number) > 180)) {
+    throw new Error('Esa posición no existe en el mapa — revisa latitud y longitud.');
+  }
   const { data, error } = await acotada(supabaseAdmin().from('proveedor_emergencia').insert({
     tenant_id: tenantId,
     tipo: p.tipo,
     nombre,
     telefono: limpiarTel(p.telefono),
+    lat: conLat ? p.lat : null,
+    lng: conLng ? p.lng : null,
     radio_km: p.radioKm ?? null,
     notas: p.notas?.trim() || null,
     // `verificado_en` queda NULL a propósito: capturar no es verificar. La
