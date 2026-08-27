@@ -29,7 +29,11 @@ export type AgenteConCorridas = 'liquidacion' | 'facturas' | 'cobranza' | 'condu
   // de los que ESCRIBEN corridas.
   | 'kpi_whatsapp' | 'desempeno_startup' | 'orquestador' | 'orquestador_semanal'
   // La máquina de prospección (0217) — también de LIKIDA (tenant null).
-  | 'enriquecedor' | 'sdr' | 'enviador';
+  | 'enriquecedor' | 'sdr' | 'enviador'
+  // El back office restante (0219): auditan, documentan, vigilan los relojes
+  // legales de la EMPRESA y registran talento. Todas sus corridas son de
+  // Likida (tenant null), igual que las de los financieros.
+  | 'vigilante_calidad' | 'documentacion' | 'legal_compliance' | 'talento';
 export type EstadoCorrida = 'ok' | 'parcial' | 'fallo';
 /** `correo` (0108): el agente de Proveedores no corre por reloj — corre
  *  cuando llega un correo al buzón. Registrarlo como 'cron' pintaría

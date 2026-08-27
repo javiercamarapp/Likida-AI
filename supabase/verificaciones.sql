@@ -9892,9 +9892,123 @@ begin
     dup_rebota, otra_empresa_entra, formato_rebota, fuente_vacia_rebota, baja_doble_es_una, mayusculas_rebota, dossier_unico, switch_nuevo_entra, switch_inventado_rebota, cerrado;
 end $$;
 
+-- ── 177. El back office restante: un parte por periodo, el registro de talento y sus candados (mig. 0219) ──
+-- Lo que solo la base demuestra del flip de los cuatro últimos del back
+-- office: (a) `cola_parte_backoffice_por_periodo` — dos pasadas del runner
+-- que compitan por el parte de la misma semana las resuelve el índice único
+-- parcial: gana exactamente una; (b) la parcialidad es real y el índice es
+-- por (agente, titulo): DOS agentes distintos con el MISMO título entran los
+-- dos, y el Redactor sigue pudiendo repetir asunto; (c) los cuatro quedaron
+-- vivos, habilitados, con techo y disparando por reloj — los candados 2 y 3
+-- del runner, comprobables como fila; (d) el CHECK del interruptor acepta las
+-- cuatro palancas nuevas y sigue rechazando el nombre inventado; (e) el
+-- pendiente societario se siembra SIN fecha objetivo (la migración no
+-- inventa un compromiso) y su coherencia de cierre rebota el 'cerrado' sin
+-- fecha; (f) `candidato` no admite el mismo correo dos veces en la misma
+-- vacante, ni un puntaje fuera de 0-100, ni un estado avanzado sin
+-- `cribado_en`; (g) el doble candado sobre las tres tablas nuevas: ni anon ni
+-- authenticated las tocan, service_role sí.
+do $$
+declare
+  v uuid;
+  parte_duplicado_rebota boolean; otro_agente_mismo_titulo_ok boolean;
+  vivos_listos int; switch_nuevo_entra boolean; switch_inventado_rebota boolean;
+  societarios_sin_fecha int; cierre_sin_fecha_rebota boolean;
+  correo_repetido_rebota boolean; puntaje_fuera_rebota boolean; criba_incoherente_rebota boolean;
+  cerrado boolean;
+begin
+  -- (a) El mismo parte de la misma semana, dos veces: la segunda rebota.
+  insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+    values ('parte_calidad', 'vigilante_calidad', 'Calidad — semana del 2099-01-05', 'parte de prueba');
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('parte_calidad', 'vigilante_calidad', 'Calidad — semana del 2099-01-05', 'el doble');
+    parte_duplicado_rebota := false;
+  exception when unique_violation then
+    parte_duplicado_rebota := true;
+  end;
+
+  -- (b) El índice es por (agente, titulo): otro agente con el mismo título sí.
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('parte_documentacion', 'documentacion', 'Calidad — semana del 2099-01-05', 'otro autor');
+    otro_agente_mismo_titulo_ok := true;
+  exception when unique_violation then
+    otro_agente_mismo_titulo_ok := false;
+  end;
+
+  -- (c) El flip de la 0219: vivos, habilitados, con techo y por reloj.
+  select count(*) into vivos_listos from agente_definicion
+    where id in ('vigilante_calidad', 'documentacion', 'legal_compliance', 'talento')
+      and estado = 'vivo' and runner_habilitado and disparador = 'cron'
+      and presupuesto_dia_usd > 0;
+
+  -- (d) El dominio del interruptor, en las dos direcciones.
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:legal_compliance', true, 'prueba 0219');
+    switch_nuevo_entra := true;
+  exception when check_violation then
+    switch_nuevo_entra := false;
+  end;
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:inventado_0219', true, 'basura');
+    switch_inventado_rebota := false;
+  exception when check_violation then
+    switch_inventado_rebota := true;
+  end;
+
+  -- (e) Los societarios sembrados van SIN fecha; y cerrar sin fecha rebota.
+  select count(*) into societarios_sin_fecha from pendiente_societario
+    where id in ('sapi', 'marca_impi') and fecha_objetivo is null;
+  begin
+    update pendiente_societario set estado = 'cerrado' where id = 'sapi';
+    cierre_sin_fecha_rebota := false;
+  exception when check_violation then
+    cierre_sin_fecha_rebota := true;
+  end;
+
+  -- (f) El registro de talento y sus tres candados.
+  insert into vacante (clave, titulo) values ('contador-0219', 'Contador de prueba') returning id into v;
+  insert into candidato (vacante_id, nombre, correo) values (v, 'Ana', 'ana@ejemplo.mx');
+  begin
+    insert into candidato (vacante_id, nombre, correo) values (v, 'Ana otra vez', 'ana@ejemplo.mx');
+    correo_repetido_rebota := false;
+  exception when unique_violation then
+    correo_repetido_rebota := true;
+  end;
+  begin
+    insert into candidato (vacante_id, nombre, correo, puntaje) values (v, 'Beto', 'beto@ejemplo.mx', 140);
+    puntaje_fuera_rebota := false;
+  exception when check_violation then
+    puntaje_fuera_rebota := true;
+  end;
+  begin
+    insert into candidato (vacante_id, nombre, correo, estado) values (v, 'Ceci', 'ceci@ejemplo.mx', 'cribado');
+    criba_incoherente_rebota := false;
+  exception when check_violation then
+    criba_incoherente_rebota := true;
+  end;
+
+  -- (g) El doble candado sobre las tres tablas nuevas.
+  cerrado := not has_table_privilege('anon', 'public.vacante', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.vacante', 'SELECT')
+    and has_table_privilege('service_role', 'public.vacante', 'SELECT')
+    and not has_table_privilege('anon', 'public.candidato', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.candidato', 'SELECT')
+    and has_table_privilege('service_role', 'public.candidato', 'SELECT')
+    and not has_table_privilege('anon', 'public.pendiente_societario', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.pendiente_societario', 'SELECT')
+    and has_table_privilege('service_role', 'public.pendiente_societario', 'SELECT');
+
+  raise exception 'BACKOFFICE_0219  parte_duplicado_rebota=%  otro_agente_mismo_titulo_ok=%  vivos_listos=%  switch_nuevo_entra=%  switch_inventado_rebota=%  societarios_sin_fecha=%  cierre_sin_fecha_rebota=%  correo_repetido_rebota=%  puntaje_fuera_rebota=%  criba_incoherente_rebota=%  cerrado=%   (esperado t / t / 4 / t / t / 2 / t / t / t / t / t)',
+    parte_duplicado_rebota, otro_agente_mismo_titulo_ok, vivos_listos,
+    switch_nuevo_entra, switch_inventado_rebota, societarios_sin_fecha, cierre_sin_fecha_rebota,
+    correo_repetido_rebota, puntaje_fuera_rebota, criba_incoherente_rebota, cerrado;
+end $$;
+
 -- ── 178. El cotizador: costos declarados con candados, y la cotización decidida UNA vez (mig. 0225) ──
--- (Los bloques 175-177 quedaron reservados a olas paralelas — hueco a
--- propósito, como el 165, 167-169 y 171.)
+-- (Los bloques 175-176 quedaron reservados a olas paralelas — hueco a
+-- propósito, como el 165, 167-169 y 171. El 177 lo ocupó la 0219.)
 -- Lo que solo la base demuestra: (a) `cotizador_config` es UNA fila por
 -- flota — la segunda rebota por PK; (b) los CHECKs de sanidad rebotan el
 -- factor de regreso fuera de 1–3 y el margen fuera de 0–90 (un factor 4 o

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL RUNNER NIVEL 2 (0123) — los cuatro candados, todos fail-closed:
@@ -44,7 +45,8 @@ vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 let apagados = new Set<string>();
 let interruptorFalla = false;
 vi.mock('../interruptores', () => ({
-  INTERRUPTORES: ['global', 'agente:redactor', 'agente:kpi_whatsapp'],
+  INTERRUPTORES: ['global', 'agente:redactor', 'agente:kpi_whatsapp',
+    'agente:vigilante_calidad', 'agente:documentacion', 'agente:legal_compliance', 'agente:talento'],
   estaApagado: async (n: string) => {
     if (interruptorFalla && n !== 'global') throw new Error('base caída');
     return apagados.has(n);
@@ -58,6 +60,16 @@ vi.mock('./redactor', () => ({ redactarCorreoFrio: (...a: unknown[]) => redactar
 // aplica igual y evita arrastrar los lectores reales de /admin.
 const correrDireccion = vi.fn(async (_a: unknown) => ({ resultado: 'corrio' as const, piezas: 1, costoUsd: 0 }));
 vi.mock('../direccion/reportes', () => ({ correrAgenteDireccion: (...a: unknown[]) => correrDireccion(...(a as [unknown])) }));
+
+// El back office restante (0219) entra por el mismo camino: import dinámico
+// dentro de su rama. El predicado NO se mockea — es la lista real del motor
+// contra la que se compara la literal del runner.
+const correrBackOffice = vi.fn(async (_a: unknown) => ({ piezas: 1 }));
+const { AGENTES_BACK_OFFICE, esAgenteBackOffice } = await import('./backoffice');
+vi.mock('./backoffice', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./backoffice')>()),
+  correrAgenteBackOffice: (...a: unknown[]) => correrBackOffice(...(a as [unknown])),
+}));
 
 const { correrRunner } = await import('./runner');
 
@@ -73,6 +85,8 @@ beforeEach(() => {
   redactar.mockResolvedValue({ piezaId: 'p', asunto: 'x', aviso: null, costoUsd: 0.001 });
   correrDireccion.mockClear();
   correrDireccion.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
+  correrBackOffice.mockClear();
+  correrBackOffice.mockResolvedValue({ piezas: 1 });
 });
 
 describe('los cuatro candados', () => {
@@ -224,5 +238,53 @@ describe('el presupuesto central evita un ledger duplicado', () => {
     respuestas.set('prospecto', [{ data: [{ id: 'p1', vendedor: null }], error: null }]);
     await correrRunner(undefined, TENANT);
     expect(llamadasRpc).toEqual([]);
+  });
+});
+
+describe('el despacho del back office restante (0219)', () => {
+  // Los ids viven DOS veces: literal en el runner (para no cargar el motor en
+  // cada vuelta) y en `AGENTES_BACK_OFFICE`. Si divergen, un agente vivo se
+  // queda sin rama de despacho y el runner lo reporta como «sin motor». Esta
+  // prueba es la costura que impide que la duplicación se pudra.
+  it('la lista literal del runner y la del motor son la misma', () => {
+    const fuente = readFileSync('src/lib/likida/agentes/runner.ts', 'utf8');
+    const linea = /const BACK_OFFICE_RESTANTE: readonly string\[\] = \[([^\]]*)\]/.exec(fuente);
+    expect(linea, 'la lista literal del runner debe seguir existiendo').not.toBeNull();
+    const ids = (linea as RegExpExecArray)[1].split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean);
+    expect(ids).toEqual([...AGENTES_BACK_OFFICE]);
+    for (const id of ids) expect(esAgenteBackOffice(id)).toBe(true);
+  });
+
+  it('un agente de back office habilitado se despacha a su motor con su resultado tal cual', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'vigilante_calidad', presupuesto_dia_usd: 0.1 }], error: null }]);
+    // El techo se mide contra el gasto REAL del día: sin corridas, $0.
+    respuestas.set('agente_corrida', [{ data: [], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrBackOffice).toHaveBeenCalledWith('vigilante_calidad', 'cron');
+    expect(r.agentes).toEqual([{ agente: 'vigilante_calidad', resultado: 'corrio', piezas: 1, costoUsd: 0 }]);
+  });
+
+  it('techo diario alcanzado: no se despacha y el motivo trae las dos cifras', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'documentacion', presupuesto_dia_usd: 0.1 }], error: null }]);
+    respuestas.set('agente_corrida', [{ data: [{ costo_usd: 0.5 }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrBackOffice).not.toHaveBeenCalled();
+    expect(r.agentes[0].motivo).toContain('techo diario alcanzado (0.50 de 0.1 USD)');
+  });
+
+  it('gasto del día ilegible: fail closed y dicho', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'legal_compliance', presupuesto_dia_usd: 0.1 }], error: null }]);
+    respuestas.set('agente_corrida', [{ data: null, error: { message: 'base caída' } }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrBackOffice).not.toHaveBeenCalled();
+    expect(r.agentes[0].motivo).toContain('fail closed');
+  });
+
+  it('el motor que lanza NO tumba la vuelta', async () => {
+    correrBackOffice.mockRejectedValueOnce(new Error('la bitácora no se pudo leer'));
+    respuestas.set('agente_definicion', [{ data: [{ id: 'talento', presupuesto_dia_usd: 0.1 }], error: null }]);
+    respuestas.set('agente_corrida', [{ data: [], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'talento', resultado: 'saltado', motivo: 'la bitácora no se pudo leer' });
   });
 });
