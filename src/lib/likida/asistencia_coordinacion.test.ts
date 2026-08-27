@@ -65,6 +65,7 @@ vi.mock('./contactos', () => ({ telefonoJefeDe: (...a: unknown[]) => telefonoJef
 const sendText = vi.fn();
 const sendButtons = vi.fn();
 vi.mock('@/lib/meta/client', () => ({
+  MAX_CUERPO_BOTONES: 1024,
   sendText: (...a: unknown[]) => sendText(...a),
   sendButtons: (...a: unknown[]) => sendButtons(...a),
 }));
@@ -73,12 +74,16 @@ const listarProveedoresEmergencia = vi.fn();
 vi.mock('./emergencias', () => ({
   listarProveedoresEmergencia: (...a: unknown[]) => listarProveedoresEmergencia(...a),
   polizaVigenteDe: vi.fn().mockResolvedValue(null),
+  // La real: normalizar el teléfono ES lo que el c4-4 prueba.
+  telefonoE164Mx: (t: string) => { const d = t.replace(/[^\d]/g, ''); return /^\d{10}$/.test(d) ? `52${d}` : d; },
 }));
 // El motor de la cascada (armarCascada) es REAL: la lista que el handler
 // recorre es la misma que el jefe vio en el 🚨 — mockearla probaría otra cosa.
 const anotarEventoIncidencia = vi.fn().mockResolvedValue('anotado');
+const cerrarCoordinacionesDeIncidencia = vi.fn().mockResolvedValue(undefined);
 vi.mock('./asistencia_wa', () => ({
   anotarEventoIncidencia: (...a: unknown[]) => anotarEventoIncidencia(...a),
+  cerrarCoordinacionesDeIncidencia: (...a: unknown[]) => cerrarCoordinacionesDeIncidencia(...a),
   TIPOS_ASISTENCIA: ['siniestro', 'robo', 'emergencia_medica', 'varado', 'bloqueo'] as const,
 }));
 // talacha_wa se importa por extraerMonto (real); sus dependencias pesadas se
@@ -88,7 +93,7 @@ vi.mock('./mantenimiento', () => ({ abrirOrdenPorAveria: vi.fn() }));
 
 const {
   leerEtaMin, armarMensajeProveedor, leerComandoCoordinacion,
-  atenderCoordinacionOficina, atenderMensajeProveedor,
+  atenderCoordinacionOficina, atenderMensajeProveedor, atenderMedioProveedorSinTexto,
 } = await import('./asistencia_coordinacion');
 
 const INC = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
@@ -126,6 +131,11 @@ beforeEach(() => {
   escrituras = [];
   vi.clearAllMocks();
   anotarEventoIncidencia.mockResolvedValue('anotado');
+  // c4-2/c4-3: el lado del proveedor y la firma ahora verifican que la
+  // incidencia siga VIVA — el default de las pruebas es que sí lo está.
+  respuestas['incidencia.select:id, estado'] = { data: [{ id: INC, estado: 'abierta' }], error: null };
+  respuestas['coordinacion_proveedor.select:incidencia_id'] = { data: { incidencia_id: INC }, error: null };
+  respuestas['incidencia.select:estado'] = { data: { estado: 'abierta' }, error: null };
 });
 
 // ── Los puros ──────────────────────────────────────────────────────────────
@@ -142,6 +152,14 @@ describe('leerEtaMin — el ETA es el que DIJO, o null', () => {
     ['puedo en 20 min o hasta en 1 hora', null], // dos lecturas distintas: no se adivina
     ['voy para allá', null],
     ['', null],
+    // AUDITORÍA FABLE CICLO 4 (c4-7): el rango y la alternativa son ambiguos
+    // — antes "de 40 a 50 minutos" leía 50 y "1 hora si acaso 2" leía 60.
+    ['de 40 a 50 minutos', null],
+    ['40 o 50 min', null],
+    ['como 1 hora si acaso 2', null],
+    ['2 horas o 3', null],
+    // Y el precio después de la unidad NO es una segunda lectura de ETA.
+    ['llego en 40 min, cobro $1,500', 40],
   ])('«%s» → %s', (texto, esperado) => {
     expect(leerEtaMin(texto)).toBe(esperado);
   });
@@ -237,6 +255,18 @@ describe('atenderCoordinacionOficina — el contacto', () => {
     expect(escrituras.some((e) => e.clave === 'coordinacion_proveedor.claim')).toBe(false);
   });
 
+  it('c4-4: el proveedor capturado a 10 dígitos se contacta y snapshotea en E.164', async () => {
+    baseIniciar();
+    listarProveedoresEmergencia.mockResolvedValue([proveedorVerificado({ telefono: '5512345678' })]);
+    const r = await atenderCoordinacionOficina(JEFE, `coo_ir:${INC}`);
+    expect(r).toContain('Le escribí a Grúas El Güero');
+    // El envío va CON lada — a 10 dígitos Meta lo rechazaba y el rechazo se
+    // diagnosticaba (falso) como "falta la plantilla".
+    expect((sendText.mock.calls[0] as [string, string])[0]).toBe('525512345678');
+    const alta = escrituras.find((e) => e.clave === 'coordinacion_proveedor.insert');
+    expect((alta!.payload as { proveedor_telefono: string }).proveedor_telefono).toBe('525512345678');
+  });
+
   it('doble autorización: el índice único deja UNA gestión viva y el segundo recibe la verdad', async () => {
     baseIniciar();
     respuestas['coordinacion_proveedor.insert'] = { data: null, error: { message: 'duplicate key value violates unique constraint "coordinacion_viva_unica"' } };
@@ -305,6 +335,36 @@ describe('atenderMensajeProveedor', () => {
     expect((claims[1].payload as { estado: string }).estado).toBe('cotizada');
   });
 
+  it('c4-2/c4-3: la gestión de una incidencia YA RESUELTA no captura al número — se cierra y el processor sigue', async () => {
+    respuestas[SEL_ACTIVAS] = {
+      data: [{ id: COO, tenant_id: 't1', incidencia_id: INC, estado: 'pendiente_plantilla', proveedor_nombre: 'Grúas El Güero', mensaje_preparado: 'EL MENSAJE PREPARADO' }],
+      error: null,
+    };
+    respuestas['incidencia.select:id, estado'] = { data: [{ id: INC, estado: 'resuelta' }], error: null };
+    const r = await atenderMensajeProveedor('5299911122233', 'bueno, ¿quién habla?');
+    // NO se autorrepara nada sobre una emergencia muerta, y la gestión
+    // huérfana queda cerrada de paso.
+    expect(r).toBeNull();
+    expect(sendText).not.toHaveBeenCalled();
+    expect(cerrarCoordinacionesDeIncidencia).toHaveBeenCalledWith('t1', INC, 'incidencia_ya_resuelta');
+  });
+
+  it('c4-5: la nota de voz de un proveedor con gestión viva recibe "¿me lo escribe?" y queda en el expediente', async () => {
+    respuestas[SEL_ACTIVAS] = {
+      data: [{ id: COO, tenant_id: 't1', incidencia_id: INC, estado: 'contactado', proveedor_nombre: 'Grúas El Güero', mensaje_preparado: 'msj' }],
+      error: null,
+    };
+    const r = await atenderMedioProveedorSinTexto('5299911122233', 'audio');
+    expect(r).toContain('¿Me lo escribe por texto');
+    expect(anotarEventoIncidencia).toHaveBeenCalledWith('t1', INC, 'proveedor_mensaje',
+      expect.objectContaining({ sinTexto: true, tipo: 'audio' }));
+  });
+
+  it('c4-5: el audio de un número SIN gestión viva no es de este circuito', async () => {
+    respuestas[SEL_ACTIVAS] = { data: [], error: null };
+    expect(await atenderMedioProveedorSinTexto('5215559999999', 'audio')).toBeNull();
+  });
+
   it('dos gestiones vivas con el mismo teléfono: no se adivina — bitácora y jefe de CADA una', async () => {
     respuestas[SEL_ACTIVAS] = {
       data: [
@@ -360,6 +420,25 @@ describe('decidir la cotización — firma atómica', () => {
     const r = await atenderCoordinacionOficina(JEFE, `coo_si:${COO}`);
     expect(r).toContain('ya estaba confirmada');
     expect(sendText).not.toHaveBeenCalled(); // nadie recibe un segundo aviso
+  });
+
+  it('c4-3: el tap del backlog sobre una emergencia YA RESUELTA no firma ni despierta a nadie', async () => {
+    baseDecidir();
+    respuestas['incidencia.select:estado'] = { data: { estado: 'resuelta' }, error: null };
+    const r = await atenderCoordinacionOficina(JEFE, `coo_si:${COO}`);
+    expect(r).toContain('ya está resuelta');
+    // Ni firma, ni WhatsApp al proveedor o al chofer.
+    expect(escrituras.filter((e) => e.clave === 'coordinacion_proveedor.claim')).toHaveLength(0);
+    expect(sendText).not.toHaveBeenCalled();
+    expect(cerrarCoordinacionesDeIncidencia).toHaveBeenCalledWith('t1', INC, 'incidencia_ya_resuelta');
+  });
+
+  it('c4-3: sin poder leer el estado de la emergencia, NO se firma (fail-closed en dinero)', async () => {
+    baseDecidir();
+    respuestas['incidencia.select:estado'] = { data: null, error: { message: 'timeout' } };
+    const r = await atenderCoordinacionOficina(JEFE, `coo_si:${COO}`);
+    expect(r).toContain('No pude verificar');
+    expect(escrituras.filter((e) => e.clave === 'coordinacion_proveedor.claim')).toHaveLength(0);
   });
 
   it('descartar libera y lo dice — al proveedor se le agradece con la verdad', async () => {

@@ -23,7 +23,8 @@ const telefonoJefeDe = vi.hoisted(() => vi.fn(async () => '+5215512345678'));
 vi.mock('./contactos', () => ({ telefonoJefeDe }));
 
 const sendButtons = vi.hoisted(() => vi.fn(async () => 'wamid.1'));
-vi.mock('@/lib/meta/client', () => ({ sendButtons }));
+vi.mock('@/lib/meta/client', () => ({
+  MAX_CUERPO_BOTONES: 1024, sendButtons }));
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('./presupuesto', () => ({ acotada: (q: unknown) => q }));

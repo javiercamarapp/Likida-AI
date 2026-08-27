@@ -5,10 +5,13 @@ import { strip_accents } from './cuadre/util';
 import { crearIncidencia } from './operacion';
 import { telefonoJefeDe } from './contactos';
 import type { RolOficina } from './contactos';
-import { sendText, sendButtons } from '@/lib/meta/client';
+import { sendText, sendButtons, MAX_CUERPO_BOTONES } from '@/lib/meta/client';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { recomendacionCascada } from './asistencia_proveedor';
 import { hoyMx } from '@/lib/formato';
+
+/** El techo del 🚨 con botones — el de Meta, no una preferencia (c4-1). */
+const MAX_CUERPO_AVISO = MAX_CUERPO_BOTONES;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ASISTENCIA EN CARRETERA Y SINIESTROS (0198, Fase 4 — núcleo).
@@ -259,7 +262,86 @@ async function resolverPorAntiguedad(tenantId: string, incidenciaId: string): Pr
   await anotarEventoIncidencia(tenantId, incidenciaId, 'resuelta_por_antiguedad', {
     nota: 'cerrada por antigüedad (>72 h) al llegar un reporte nuevo del mismo chofer',
   });
+  await cerrarCoordinacionesDeIncidencia(tenantId, incidenciaId, 'resuelta_por_antiguedad');
   return true;
+}
+
+/**
+ * Cierra las coordinaciones de proveedor (0213) que la incidencia dejó vivas
+ * al resolverse — AUDITORÍA FABLE CICLO 4 (c4-2): sin esto, una `confirmada`
+ * vivía para siempre, el mismo gruero jamás volvía a matchear una gestión
+ * nueva sin ambigüedad, y sus mensajes se reenviaban al jefe eternamente.
+ *
+ * El estado terminal es `descartada` (la máquina de la 0213 no tiene otro y
+ * agregar uno cambiaría CHECK, índices y lectores por igual valor): la VERDAD
+ * de cómo terminó — "cerrada al resolver la incidencia, estaba confirmada" —
+ * queda en la bitácora, que es lo citable. Al proveedor que sí fue contactado
+ * se le avisa que la emergencia quedó atendida (best-effort: el cierre ya
+ * está firmado aunque el aviso no salga). Nunca lanza: cerrar el expediente
+ * no puede fallar por su limpieza.
+ */
+export async function cerrarCoordinacionesDeIncidencia(
+  tenantId: string, incidenciaId: string, motivo: string,
+): Promise<void> {
+  try {
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('coordinacion_proveedor')
+      .update({ estado: 'descartada', decidida_en: new Date().toISOString() })
+      .eq('tenant_id', tenantId).eq('incidencia_id', incidenciaId)
+      .neq('estado', 'descartada')
+      .select('id, estado, proveedor_nombre, proveedor_telefono, contactado_en'), 'asistencia.cerrarCoordinaciones');
+    if (error) throw new Error(error.message);
+    for (const f of (data ?? []) as Array<{ id: string; proveedor_nombre: string; proveedor_telefono: string; contactado_en: string | null }>) {
+      await anotarEventoIncidencia(tenantId, incidenciaId, 'coordinacion_cerrada', {
+        coordinacionId: f.id, proveedor: f.proveedor_nombre, motivo,
+      });
+      // Solo al que de verdad recibió nuestro mensaje (contactado_en sellado):
+      // al de pendiente_plantilla nunca le escribimos y escribirle ahora sería
+      // iniciar una conversación para decir "ya no".
+      if (f.contactado_en) {
+        try {
+          await sendText(f.proveedor_telefono, 'La emergencia quedó atendida — gracias por responder. Si ya va en camino, márquele al jefe de tráfico. 🙏');
+        } catch (e) {
+          logger.warn('asistencia.coordinacion_cierre_no_avisado', { coordinacion: f.id, err: e instanceof Error ? e.message : String(e) });
+        }
+      }
+    }
+  } catch (e) {
+    logger.warn('asistencia.coordinaciones_no_cerradas', { incidencia: incidenciaId, err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/**
+ * Ancla el pin del chofer a su expediente de asistencia VIVO (c4-6): la
+ * cascada promete "cercanía real" y el mensaje al proveedor promete el link
+ * del mapa — pero la incidencia del chofer nacía sin lat/lng y el pin que
+ * Likida misma le pide ("mándame tu ubicación") solo llegaba al jefe como
+ * texto. El pin más reciente PISA al anterior a propósito: el chofer que
+ * reenvía su ubicación está corrigiendo la vieja.
+ *
+ * Best-effort: devuelve el id del expediente anclado o null — nunca lanza
+ * (el flujo de posición/aviso al jefe no depende de esto).
+ */
+export async function anclarUbicacionIncidencia(
+  tenantId: string, operadorId: string, lat: number, lng: number,
+): Promise<string | null> {
+  try {
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('incidencia')
+      .update({ lat, lng })
+      .eq('tenant_id', tenantId)
+      .eq('operador_id', operadorId)
+      .in('tipo', [...TIPOS_ASISTENCIA])
+      .neq('estado', 'resuelta')
+      .select('id'), 'asistencia.anclarUbicacion');
+    if (error) throw new Error(error.message);
+    const id = ((data ?? [])[0]?.id as string) ?? null;
+    if (id) await anotarEventoIncidencia(tenantId, id, 'ubicacion_anclada', { lat, lng });
+    return id;
+  } catch (e) {
+    logger.warn('asistencia.ubicacion_no_anclada', { operador: operadorId, err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
 }
 
 /** Rótulos del aviso. Best-effort declarado: si la lectura falla, "tu chofer"
@@ -326,14 +408,11 @@ async function avisarAlJefe(args: {
   }
   const desc = args.descripcion.replace(/\s+/g, ' ').trim().slice(0, 220);
   const encabezado = args.nivel === 'rojo' ? '🚨' : '⚠️';
-  // Capa C: la cascada del proveedor correcto (directorio verificado → 800 de
-  // la póliza → recursos nacionales) viaja EN el mismo aviso — el jefe decide
-  // y marca, Likida jamás. Best-effort adentro (devuelve null si algo falla o
-  // en robo/violencia): la recomendación nunca puede costar el 🚨.
-  const cascada = args.modoMudo
-    ? null
-    : await recomendacionCascada(args.tenantId, args.incidenciaId, args.tipo, hoyMx());
-  const cuerpo =
+  // La parte FIJA del aviso se arma primero: lo que quede de los 1024 de Meta
+  // es el presupuesto de la cascada (c4-1). Antes la cascada se pegaba sin
+  // medir y con un directorio bien poblado el cuerpo rebasaba el límite —
+  // Meta rechaza el mensaje ENTERO, así que el adorno se comía el 🚨.
+  const armarCuerpo = (cascada: string | null): string =>
     `${encabezado} ${args.chofer} reporta ${ROTULO_TIPO[args.tipo]}${args.folio ? ` en el viaje ${args.folio}` : ''}:\n` +
     `«${desc}»\n` +
     (args.hayLesionados === true ? '\n⛑️ Menciona LESIONADOS.\n' : '') +
@@ -342,6 +421,19 @@ async function avisarAlJefe(args: {
       : '') +
     (cascada ?? '') +
     `\nMárcale en cuanto puedas${args.modoMudo ? ' a un tercero cercano (base, otro chofer de la zona), no a él' : ''} y aprieta el botón para que sepamos que ya lo estás atendiendo.`;
+  // Capa C: la cascada del proveedor correcto (directorio verificado → 800 de
+  // la póliza → recursos nacionales) viaja EN el mismo aviso — el jefe decide
+  // y marca, Likida jamás. Best-effort adentro (devuelve null si algo falla o
+  // en robo/violencia): la recomendación nunca puede costar el 🚨.
+  const presupuestoCascada = MAX_CUERPO_AVISO - armarCuerpo(null).length;
+  const cascada = args.modoMudo || presupuestoCascada <= 0
+    ? null
+    : await recomendacionCascada(args.tenantId, args.incidenciaId, args.tipo, hoyMx(), presupuestoCascada);
+  let cuerpo = armarCuerpo(cascada);
+  // Cinturón: si aun presupuestada la cascada no cupo (no debería pasar — el
+  // recorte de textoCascadaParaJefe la deja caber o la anula), el aviso sale
+  // SIN ella antes que no salir.
+  if (cuerpo.length > MAX_CUERPO_AVISO) cuerpo = armarCuerpo(null);
   const enviado = await sendButtons(telefono, cuerpo, [
     { id: `asi_ok:${args.incidenciaId}`, titulo: 'Ya lo atiendo' },
     // Capa D (0213): el botón que AUTORIZA a Likida a escribirle al primer
@@ -350,7 +442,18 @@ async function avisarAlJefe(args: {
     // handler re-verifica tipo y directorio al apretarlo.
     ...(args.modoMudo ? [] : [{ id: `coo_ir:${args.incidenciaId}`, titulo: 'Contactar proveedor' }]),
   ]);
-  return Boolean(enviado);
+  if (enviado) return true;
+  // Tirantes (c4-1): si los botones fallaron por lo que sea, el AVISO viaja en
+  // texto plano (límite 4096) — sin botones, pero con las salidas que ya
+  // existen dichas: la palabra «contactar» y la mesa de control del panel.
+  const enviadoTexto = await sendText(telefono,
+    `${cuerpo}\n\n(No pude mandarte los botones — atiéndela desde la Mesa de control del panel` +
+    `${args.modoMudo ? '' : ', o escríbeme «contactar 1» para que le escriba yo al primer proveedor de la lista'}.)`);
+  if (enviadoTexto) {
+    logger.warn('asistencia.aviso_sin_botones', { incidencia: args.incidenciaId });
+    return true;
+  }
+  return false;
 }
 
 /** Un solo mensaje corto y neutro. Nada de instrucciones, nada de preguntas:

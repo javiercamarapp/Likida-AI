@@ -1,18 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// AUDITORÍA FABLE CICLO 3 (c3-2) — el briefing y la aceptación POR ACTIVIDAD.
+// AUDITORÍA FABLE CICLO 4 — el cableado del pin (c4-6) y del proveedor que
+// manda audio (c4-5) en el dispatcher.
 //
-// El chofer que ignora la pregunta de confirmación y manda su primera foto
-// acepta el viaje por actividad ("una foto es una aceptación más fuerte que un
-// va") — y su mensaje ACABA de abrir la ventana de 24 h. Antes de este cableado
-// el reintento del briefing solo vivía en `atenderConfirmacion`, así que para
-// ese chofer el briefing fallido del despacho no se reintentaba jamás: salía a
-// carretera sin avisos de papeles ni teléfonos verificados, permanentemente.
+// c4-6: el pin que el propio bot pide ("mándame tu ubicación") no llegaba
+// nunca a la incidencia — la cascada juraba "sin ubicación del incidente" con
+// el pin ya en el sistema, y el chofer varado SIN viaje recibía "no tienes un
+// viaje abierto para liquidar 👍" en plena emergencia.
 //
-// Lo que estas pruebas fijan es el CABLEADO en el dispatcher (la unidad de
-// `enviarBriefingInicio` ya prueba el sello): la foto que acepta dispara el
-// briefing, y un briefing que truena no rompe el camino del comprobante.
+// c4-5: el gruero con gestión viva que contesta con nota de voz caía al
+// "no te tengo registrado como operador" — la cotización se perdía en
+// silencio. Las unidades de cada módulo ya prueban la lógica; esto fija que
+// el dispatcher las llama en el orden correcto.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const resolveOperador = vi.fn();
@@ -28,6 +28,18 @@ const sendText = vi.fn();
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 
 vi.mock('@/lib/agents/run', () => ({ runAgent: vi.fn() }));
+const anclarUbicacionIncidencia = vi.fn();
+vi.mock('@/lib/likida/asistencia_wa', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  anclarUbicacionIncidencia: (...a: unknown[]) => anclarUbicacionIncidencia(...a),
+}));
+const atenderMedioProveedorSinTexto = vi.fn();
+const atenderMensajeProveedor = vi.fn();
+vi.mock('@/lib/likida/asistencia_coordinacion', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  atenderMensajeProveedor: (...a: unknown[]) => atenderMensajeProveedor(...a),
+  atenderMedioProveedorSinTexto: (...a: unknown[]) => atenderMedioProveedorSinTexto(...a),
+}));
 vi.mock('@/lib/likida/briefing_inicio_wa', () => ({
   enviarBriefingInicio: (...a: unknown[]) => enviarBriefingInicio(...a),
 }));
@@ -107,39 +119,61 @@ vi.mock('@/lib/logger', () => ({ logger }));
 const { processInbound } = await import('./processor');
 
 const CHOFER_TEL = '5219993700779';
+const GRUERO_TEL = '5299911122233';
 let n = 0;
-function foto(from: string, caption?: string) {
-  return { from, type: 'image' as const, mediaId: 'media-1', text: caption, waMessageId: `wa-${n++}` };
+function pin(from: string) {
+  return { from, type: 'location' as const, lat: 19.4326, lng: -99.1332, waMessageId: `wa-${n++}` };
+}
+function audio(from: string) {
+  return { from, type: 'audio' as const, mediaId: 'media-a', waMessageId: `wa-${n++}` };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  resolveOperador.mockResolvedValue({ tenantId: 't1', operadorId: 'o1' });
+  resolveOperador.mockResolvedValue({ tenantId: 't1', operadorId: 'o1', nombre: 'Juan' });
   resolverCuentaOficina.mockResolvedValue(null);
   sendText.mockResolvedValue('wamid.TXT');
   intakeDelta.mockResolvedValue(1);
-  subirComprobante.mockResolvedValue('comprobantes/t1/v1/x.jpg');
-  extraerComprobante.mockResolvedValue({
-    legible: true,
-    gasto: { id: 'g-ocr', concepto: 'otro', monto: 950, ocrConfianza: 0.9 },
-    costo: { modelo: 'vision', tokensIn: 10, tokensOut: 5, costoUsd: 0.001 },
-  });
-  decidirFoto.mockReturnValue({ accion: 'registrar' });
   aceptarPorActividad.mockResolvedValue(undefined);
   enviarBriefingInicio.mockResolvedValue('enviado');
+  anclarUbicacionIncidencia.mockResolvedValue(null);
+  atenderMensajeProveedor.mockResolvedValue(null);
+  atenderMedioProveedorSinTexto.mockResolvedValue(null);
 });
 
-describe('el briefing en la aceptación por actividad (c3-2)', () => {
-  it('la primera foto del chofer dispara el briefing del viaje que aceptó', async () => {
-    await processInbound(foto(CHOFER_TEL));
-    expect(aceptarPorActividad).toHaveBeenCalledWith('t1', 'v1', 'o1');
-    expect(enviarBriefingInicio).toHaveBeenCalledWith('t1', 'v1');
+describe('c4-6: el pin del chofer se ancla a su expediente vivo', () => {
+  it('con viaje: el pin intenta el ancla y la confirmación dice la verdad completa', async () => {
+    anclarUbicacionIncidencia.mockResolvedValue('inc-1');
+    await processInbound(pin(CHOFER_TEL));
+    expect(anclarUbicacionIncidencia).toHaveBeenCalledWith('t1', 'o1', 19.4326, -99.1332);
+    const alChofer = sendText.mock.calls.filter((c) => c[0] === CHOFER_TEL).map((c) => String(c[1]));
+    expect(alChofer.some((t) => t.includes('reporte de emergencia'))).toBe(true);
   });
 
-  it('un briefing que truena NO rompe el camino del comprobante — se anota y sigue', async () => {
-    enviarBriefingInicio.mockRejectedValue(new Error('meta caída'));
-    await processInbound(foto(CHOFER_TEL));
-    expect(addGasto).toHaveBeenCalled();          // el comprobante entró igual
-    expect(logger.warn).toHaveBeenCalledWith('briefing.actividad_fallo', expect.objectContaining({ viaje: 'v1' }));
+  it('con viaje pero sin expediente vivo: la confirmación de siempre, sin inventar emergencia', async () => {
+    anclarUbicacionIncidencia.mockResolvedValue(null);
+    await processInbound(pin(CHOFER_TEL));
+    const alChofer = sendText.mock.calls.filter((c) => c[0] === CHOFER_TEL).map((c) => String(c[1]));
+    expect(alChofer.some((t) => t.includes('queda registrada en tu viaje'))).toBe(true);
+    expect(alChofer.some((t) => t.includes('reporte de emergencia'))).toBe(false);
+  });
+});
+
+describe('c4-5: el proveedor que manda audio no es "un desconocido"', () => {
+  it('con gestión viva recibe el "¿me lo escribe?" y NO el "no te tengo registrado"', async () => {
+    resolveOperador.mockResolvedValue(null);
+    atenderMedioProveedorSinTexto.mockResolvedValue('¿Me lo escribe por texto, por favor? 🙏');
+    await processInbound(audio(GRUERO_TEL));
+    expect(atenderMedioProveedorSinTexto).toHaveBeenCalledWith(GRUERO_TEL, 'audio');
+    const respuestas = sendText.mock.calls.map((c) => String(c[1]));
+    expect(respuestas.some((t) => t.includes('¿Me lo escribe por texto'))).toBe(true);
+    expect(respuestas.some((t) => t.includes('no te tengo registrado'))).toBe(false);
+  });
+
+  it('sin gestión viva sigue el camino de siempre', async () => {
+    resolveOperador.mockResolvedValue(null);
+    await processInbound(audio(GRUERO_TEL));
+    const respuestas = sendText.mock.calls.map((c) => String(c[1]));
+    expect(respuestas.some((t) => t.includes('no te tengo registrado'))).toBe(true);
   });
 });

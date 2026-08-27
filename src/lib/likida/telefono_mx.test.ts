@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { variantesTelefono } from './conv';
+import { telefonoE164Mx } from './emergencias';
 
 // EL FALLO QUE ESTO EVITA — detectado antes de la primera prueba real por
 // WhatsApp (28-jul-2026), no después.
@@ -54,5 +55,31 @@ describe('variantes de teléfono mexicano', () => {
 
   it('no inventa variantes cuando la longitud no cuadra', () => {
     expect(variantesTelefono('52999').sort()).toEqual(['+52999', '52999']);
+  });
+});
+
+// ── AUDITORÍA FABLE CICLO 4 (c4-4) ─────────────────────────────────────────
+
+describe('la forma nacional de 10 dígitos (c4-4)', () => {
+  it('el número guardado a 10 dígitos matchea el wa_id con lada', () => {
+    expect(variantesTelefono('5215512345678')).toContain('5512345678');
+    expect(variantesTelefono('525512345678')).toContain('5512345678');
+  });
+  it('el número capturado a 10 dígitos genera sus formas con lada', () => {
+    const v = variantesTelefono('5512345678');
+    expect(v).toContain('525512345678');
+    expect(v).toContain('5215512345678');
+  });
+});
+
+describe('telefonoE164Mx', () => {
+  it('a 10 dígitos le antepone la lada de México', () => {
+    expect(telefonoE164Mx('5512345678')).toBe('525512345678');
+    expect(telefonoE164Mx('55 1234 5678')).toBe('525512345678');
+  });
+  it('lo que ya trae lada pasa limpio de símbolos, sin adivinar', () => {
+    expect(telefonoE164Mx('+525512345678')).toBe('525512345678');
+    expect(telefonoE164Mx('5215512345678')).toBe('5215512345678');
+    expect(telefonoE164Mx('15556596430')).toBe('15556596430'); // no es de México: no se toca
   });
 });

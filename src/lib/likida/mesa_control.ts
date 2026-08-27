@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { traerTodo } from './pg';
-import { anotarEventoIncidencia, TIPOS_ASISTENCIA } from './asistencia_wa';
+import { anotarEventoIncidencia, cerrarCoordinacionesDeIncidencia, TIPOS_ASISTENCIA } from './asistencia_wa';
 import { NIVEL_MAXIMO } from './asistencia_escalamiento';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -260,6 +260,17 @@ export async function resolverDesdeMesa(
   if (limpia.length < 5) {
     return { error: 'La nota de cierre es obligatoria: di cómo terminó (quién atendió, con qué resultado).' };
   }
+  // La NOTA va ANTES del cierre (c4-8): si la bitácora no la pudo escribir,
+  // la incidencia NO se cierra — "cerrada con su nota" tiene que ser verdad
+  // literal, no best-effort disfrazado. El costo de este orden es que un
+  // cierre que pierda la carrera deje una nota extra en el expediente — una
+  // nota de más es citable; una incidencia "resuelta" sin cómo, no.
+  const anotado = await anotarEventoIncidencia(tenantId, incidenciaId, 'resuelta_desde_mesa', {
+    por: userId, nota: limpia.slice(0, 500),
+  });
+  if (anotado === 'fallo') {
+    return { error: 'No pude escribir la nota en el expediente — la incidencia sigue abierta. Inténtalo de nuevo.' };
+  }
   const { data, error } = await acotada(supabaseAdmin()
     .from('incidencia')
     .update({ estado: 'resuelta', resuelta_en: new Date().toISOString() })
@@ -267,11 +278,12 @@ export async function resolverDesdeMesa(
     .eq('tenant_id', tenantId)
     .neq('estado', 'resuelta')
     .select('id'), 'mesa.resolver');
-  if (error) return { error: `No pude cerrar la incidencia: ${error.message}` };
+  if (error) return { error: `Tu nota quedó en el expediente, pero el cierre no se aplicó: ${error.message}. Inténtalo de nuevo.` };
   if ((data ?? []).length === 0) return { error: 'Esa incidencia ya estaba resuelta — recarga la mesa.' };
-  await anotarEventoIncidencia(tenantId, incidenciaId, 'resuelta_desde_mesa', {
-    por: userId, nota: limpia.slice(0, 500),
-  });
+  // Y sus coordinaciones de proveedor (0213) se cierran con ella (c4-2): una
+  // gestión viva de una emergencia muerta bloquea al mismo gruero para la
+  // siguiente y le reenvía sus mensajes al jefe para siempre.
+  await cerrarCoordinacionesDeIncidencia(tenantId, incidenciaId, 'resuelta_desde_mesa');
   return { ok: 'Incidencia cerrada con su nota en el expediente.' };
 }
 
@@ -321,4 +333,14 @@ export const ROTULO_EVENTO: Record<string, string> = {
   control_tomado: 'La mesa de control tomó la incidencia',
   resuelta_desde_mesa: 'Cerrada desde la mesa de control (con nota)',
   reescalada_manual: 'Nivel de escalamiento subido a mano desde la mesa',
+  ubicacion_anclada: 'El chofer compartió su ubicación y quedó en el expediente',
+  coordinacion_autorizada: 'El jefe autorizó contactar a un proveedor',
+  contacto_enviado: 'Mensaje enviado al proveedor',
+  contacto_pendiente_plantilla: 'El mensaje al proveedor quedó preparado (falta la plantilla de Meta)',
+  cotizacion_recibida: 'El proveedor respondió con su cotización',
+  cotizacion_confirmada: 'El jefe confirmó la cotización del proveedor',
+  cotizacion_descartada: 'El jefe descartó la cotización del proveedor',
+  chofer_avisado_proveedor: 'Al chofer se le avisó que el proveedor va en camino',
+  proveedor_mensaje: 'Mensaje del proveedor agregado al expediente',
+  coordinacion_cerrada: 'La gestión con el proveedor se cerró al resolver la incidencia',
 };

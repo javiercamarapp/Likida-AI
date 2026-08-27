@@ -64,6 +64,22 @@ export function telefonoValido(t: unknown): t is string {
 
 const limpiarTel = (t: string): string => t.replace(/[\s-]/g, '');
 
+/**
+ * La forma E.164 (dígitos, con lada de país) de un teléfono MEXICANO
+ * capturado a mano: `5512345678` → `525512345678`. Lo que ya trae lada (o no
+ * es un número nacional de 10 dígitos) pasa limpio de símbolos, sin adivinar.
+ *
+ * AUDITORÍA FABLE CICLO 4 (c4-4): el snapshot de la coordinación mandaba el
+ * mensaje inicial AL NÚMERO TAL CUAL — a 10 dígitos Meta lo rechaza, y el
+ * rechazo se diagnosticaba como "falta la plantilla" (falso). Vive aquí (y no
+ * en conv.ts) para que el módulo de captura no arrastre el grafo entero de la
+ * conversación.
+ */
+export function telefonoE164Mx(telefono: string): string {
+  const limpio = telefono.replace(/[^\d]/g, '');
+  return /^\d{10}$/.test(limpio) ? `52${limpio}` : limpio;
+}
+
 // ── Proveedores ────────────────────────────────────────────────────────────
 
 export async function listarProveedoresEmergencia(tenantId: string): Promise<ProveedorEmergencia[]> {
@@ -111,7 +127,10 @@ export async function crearProveedorEmergencia(tenantId: string, p: {
     tenant_id: tenantId,
     tipo: p.tipo,
     nombre,
-    telefono: limpiarTel(p.telefono),
+    // A E.164 (c4-4): capturado a 10 dígitos —lo que el placeholder invita—
+    // el mensaje inicial de la coordinación salía a un número que Meta
+    // rechaza, y el gruero que respondía no matcheaba su gestión.
+    telefono: telefonoE164Mx(limpiarTel(p.telefono)),
     lat: conLat ? p.lat : null,
     lng: conLng ? p.lng : null,
     radio_km: p.radioKm ?? null,

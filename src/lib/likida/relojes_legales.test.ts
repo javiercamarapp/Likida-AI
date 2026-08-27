@@ -23,7 +23,8 @@ const tablas = vi.hoisted(() => ({
   llamadas: [] as Array<{ tabla: string; metodo: string; args: unknown[] }>,
 }));
 
-vi.mock('@/lib/meta/client', () => ({ sendText }));
+vi.mock('@/lib/meta/client', () => ({
+  MAX_CUERPO_BOTONES: 1024, sendText }));
 vi.mock('./contactos', () => ({ telefonoJefeDe, telefonoParaDineroDe }));
 vi.mock('./asistencia_wa', () => ({ anotarEventoIncidencia }));
 vi.mock('./presupuesto', () => ({ acotada: (q: unknown) => q }));

@@ -13,8 +13,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const anotarEventoIncidencia = vi.hoisted(() => vi.fn(async () => 'anotado' as const));
+const cerrarCoordinacionesDeIncidencia = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock('./asistencia_wa', () => ({
   anotarEventoIncidencia,
+  cerrarCoordinacionesDeIncidencia,
   TIPOS_ASISTENCIA: ['siniestro', 'robo', 'emergencia_medica', 'varado', 'bloqueo'],
 }));
 
@@ -100,6 +102,7 @@ beforeEach(() => {
   selects.unidad = [];
   selects.viaje = [];
   anotarEventoIncidencia.mockClear();
+  cerrarCoordinacionesDeIncidencia.mockClear();
 });
 
 describe('listarMesaAsistencia — orden y verdad', () => {
@@ -169,20 +172,31 @@ describe('resolverDesdeMesa — sin nota no hay cierre', () => {
     expect(anotarEventoIncidencia).not.toHaveBeenCalled();
   });
 
-  it('con nota real cierra y la nota queda en el expediente', async () => {
+  it('con nota real cierra, la nota queda en el expediente y las coordinaciones se cierran (c4-2)', async () => {
     const r = await resolverDesdeMesa('t1', 'inc-1', 'u-yo', 'Grúa de López llegó, unidad en el taller.');
     expect('ok' in r).toBe(true);
     expect(updates.incidencia[0].estado).toBe('resuelta');
     expect(anotarEventoIncidencia).toHaveBeenCalledWith('t1', 'inc-1', 'resuelta_desde_mesa', {
       por: 'u-yo', nota: 'Grúa de López llegó, unidad en el taller.',
     });
+    expect(cerrarCoordinacionesDeIncidencia).toHaveBeenCalledWith('t1', 'inc-1', 'resuelta_desde_mesa');
   });
 
   it('la que ya estaba resuelta lo dice — no finge un segundo cierre', async () => {
     updates.filas = [];
     const r = await resolverDesdeMesa('t1', 'inc-1', 'u-yo', 'Nota perfectamente válida.');
     expect('error' in r && /ya estaba resuelta/.test(r.error)).toBe(true);
-    expect(anotarEventoIncidencia).not.toHaveBeenCalled();
+    // La nota SÍ quedó (va antes del cierre desde c4-8): una nota de más es
+    // citable; una incidencia "resuelta" sin cómo, no.
+    expect(anotarEventoIncidencia).toHaveBeenCalled();
+    expect(cerrarCoordinacionesDeIncidencia).not.toHaveBeenCalled();
+  });
+
+  it('c4-8: si la nota NO se puede escribir, la incidencia NO se cierra — y se dice', async () => {
+    anotarEventoIncidencia.mockResolvedValueOnce('fallo' as never);
+    const r = await resolverDesdeMesa('t1', 'inc-1', 'u-yo', 'Nota perfectamente válida.');
+    expect('error' in r && /sigue abierta/.test(r.error)).toBe(true);
+    expect(updates.incidencia).toHaveLength(0); // ni un UPDATE: el cierre sin nota no existe
   });
 });
 

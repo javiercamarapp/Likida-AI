@@ -84,7 +84,8 @@ vi.mock('./agentes/cobranza', () => ({ leerConfigCobranza: vi.fn(async () => ({ 
 vi.mock('./agentes/cobranza_pura', () => ({ dentroDeVentana: () => enVentana.valor }));
 
 const sendButtons = vi.hoisted(() => vi.fn(async (): Promise<string | null> => 'wamid.esc'));
-vi.mock('@/lib/meta/client', () => ({ sendButtons: (...a: unknown[]) => sendButtons(...(a as [])) }));
+vi.mock('@/lib/meta/client', () => ({
+  MAX_CUERPO_BOTONES: 1024, sendButtons: (...a: unknown[]) => sendButtons(...(a as [])) }));
 
 const alertarOperador = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [])) }));

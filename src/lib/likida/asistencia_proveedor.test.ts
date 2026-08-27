@@ -181,3 +181,47 @@ describe('distanciaKm', () => {
     expect(d).toBeLessThan(115);
   });
 });
+
+// ── AUDITORÍA FABLE CICLO 4 (c4-1): el presupuesto del 🚨 ──────────────────
+
+describe('textoCascadaParaJefe con maxChars — el adorno cabe o se recorta, jamás cuesta el aviso', () => {
+  const cargada = (): EntradaCascada => base({
+    tipo: 'siniestro',
+    lat: 19.4, lng: -99.1,
+    proveedores: [
+      prov({ nombre: 'Grúas y Plataformas Especializadas del Sureste Peninsular S.A. de C.V. Unidad Carretera', lat: 19.41, lng: -99.11 }),
+      prov({ nombre: 'Servicio Integral de Auxilio Vial y Arrastre Pesado Hermanos Rodríguez de Yucatán', lat: 19.42, lng: -99.12 }),
+      prov({ nombre: 'Grúas Veinticuatro Horas María Auxiliadora de la Península y Anexas', lat: 19.43, lng: -99.13 }),
+    ],
+    poliza: poliza(),
+  });
+
+  it('sin presupuesto se comporta igual que siempre (compatibilidad)', () => {
+    const t = textoCascadaParaJefe(armarCascada(cargada()));
+    expect(t).toContain('A quién marcarle');
+  });
+
+  it('los nombres largos van truncados con … incluso sin apretar', () => {
+    const t = textoCascadaParaJefe(armarCascada(cargada()))!;
+    expect(t).toContain('…');
+    expect(t).not.toContain('Unidad Carretera'); // la cola del nombre de 90 chars no viaja
+  });
+
+  it('con presupuesto apretado recorta opciones pero conserva lo que paga (la póliza)', () => {
+    const t = textoCascadaParaJefe(armarCascada(cargada()), 260)!;
+    expect(t).not.toBeNull();
+    expect(t.length).toBeLessThanOrEqual(260);
+    expect(t).toContain('Qualitas'); // el escalón que más paga en un siniestro no se recorta
+  });
+
+  it('el escenario del hallazgo: directorio poblado + póliza + nacionales SIEMPRE cabe en lo que quede', () => {
+    for (const presupuesto of [150, 300, 500, 700]) {
+      const t = textoCascadaParaJefe(armarCascada(cargada()), presupuesto);
+      if (t !== null) expect(t.length).toBeLessThanOrEqual(presupuesto);
+    }
+  });
+
+  it('presupuesto imposible → null: el aviso sale sin cascada, no se pierde', () => {
+    expect(textoCascadaParaJefe(armarCascada(cargada()), 10)).toBeNull();
+  });
+});
