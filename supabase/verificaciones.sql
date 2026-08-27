@@ -8826,3 +8826,65 @@ begin
   raise exception 'QA_PANEL_GRANTS_0196  anon=%  authenticated=%  escenario_malo_rebota=%  escenario_bueno_entra=%   (esperado -1 / -1 / t / t)',
     n_anon, n_auth, escenario_malo_rebota, escenario_bueno_entra;
 end $$;
+
+-- ── 156. Asistencia en carretera: tipos/prioridad nuevos, candados y bitácora (mig. 0198) ──
+-- El circuito de siniestros amplía `incidencia` (siniestro/robo/emergencia_
+-- medica/varado/bloqueo, prioridad critica) y trae cuatro tablas nuevas.
+-- `flota_poliza` guarda el 800 de siniestros de la aseguradora — un dato que
+-- ni anon ni authenticated deben poder leer (doble candado 0186/0196). Y la
+-- unicidad `(incidencia_id, wa_message_id)` es la idempotencia de la bitácora:
+-- el mismo WhatsApp reentregado no puede duplicar el evento.
+do $$
+declare
+  t uuid; inc uuid; n_anon int;
+  tipo_nuevo_entra boolean; tipo_basura_rebota boolean; critica_entra boolean;
+  evento_repetido_rebota boolean; sin_wa_no_compiten boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ ASISTENCIA 0198') returning id into t;
+
+  -- (a) Los tipos nuevos entran con prioridad crítica; la basura sigue rebotando.
+  begin
+    insert into incidencia (tenant_id, tipo, prioridad, descripcion, hay_lesionados)
+      values (t, 'siniestro', 'critica', 'volcadura km 40', null)
+      returning id into inc;
+    tipo_nuevo_entra := inc is not null;
+    critica_entra := true;
+  exception when check_violation then
+    tipo_nuevo_entra := false; critica_entra := false;
+  end;
+  begin
+    insert into incidencia (tenant_id, tipo) values (t, 'tipo_inventado');
+    tipo_basura_rebota := false;
+  exception when check_violation then
+    tipo_basura_rebota := true;
+  end;
+
+  -- (b) La bitácora: mismo wa_message_id → una sola fila; sin wa_message_id
+  --     los eventos del sistema no compiten entre sí.
+  insert into incidencia_evento (tenant_id, incidencia_id, tipo, wa_message_id)
+    values (t, inc, 'abierta', 'wamid.PRUEBA-0198');
+  begin
+    insert into incidencia_evento (tenant_id, incidencia_id, tipo, wa_message_id)
+      values (t, inc, 'mensaje_adicional', 'wamid.PRUEBA-0198');
+    evento_repetido_rebota := false;
+  exception when unique_violation then
+    evento_repetido_rebota := true;
+  end;
+  insert into incidencia_evento (tenant_id, incidencia_id, tipo) values (t, inc, 'aviso_jefe_enviado');
+  insert into incidencia_evento (tenant_id, incidencia_id, tipo) values (t, inc, 'reconocida');
+  select count(*) = 3 into sin_wa_no_compiten
+    from incidencia_evento where incidencia_id = inc;
+
+  -- (c) El 800 de siniestros fuera del alcance de anon: rebota por privilegio
+  --     de tabla (-1), no "0 filas por RLS" — el doble candado de 0196.
+  begin
+    set local role anon;
+    select count(*) into n_anon from flota_poliza;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_anon := -1;
+  end;
+
+  raise exception 'ASISTENCIA_0198  tipo_nuevo=%  critica=%  basura_rebota=%  evento_repetido_rebota=%  bitacora=%  anon=%   (esperado t / t / t / t / t / -1)',
+    tipo_nuevo_entra, critica_entra, tipo_basura_rebota, evento_repetido_rebota, sin_wa_no_compiten, n_anon;
+end $$;
