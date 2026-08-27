@@ -16,7 +16,7 @@
     },
     {
       "path": "/api/cron/escalar",
-      "schedule": "0 * * * *"
+      "schedule": "7 * * * *"
     },
     {
       "path": "/api/cron/facturar",

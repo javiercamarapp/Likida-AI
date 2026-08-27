@@ -76,7 +76,7 @@ describe('CADENCIA_MS espeja vercel.json', () => {
     const cfg = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: Array<{ path: string; schedule: string }> };
     const esperada: Record<string, number> = {
       '* * * * *': 60_000, '*/5 * * * *': 300_000, '*/15 * * * *': 900_000,
-      '0 * * * *': 3_600_000, '30 * * * *': 3_600_000,
+      '0 * * * *': 3_600_000, '7 * * * *': 3_600_000, '30 * * * *': 3_600_000,
       '0 */4 * * *': 4 * 3_600_000, '15 4 * * *': 86_400_000,
     };
     for (const c of cfg.crons) {
