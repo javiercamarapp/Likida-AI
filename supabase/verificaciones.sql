@@ -9003,3 +9003,66 @@ begin
   raise exception 'EXPEDIENTE_UNICO_0201  segundo_rebota=%  talacha_no_compite=%  resuelta_libera=%  oficina_no_choca=%   (esperado t / t / t / t)',
     segundo_rebota, talacha_no_compite, resuelta_libera, oficina_no_choca;
 end $$;
+
+-- ── 159. El sello de avisos de vencimiento: una vez por umbral, ciego para la app (mig. 0202) ──
+-- `aviso_vigencia` es la memoria de "este WhatsApp ya salió": sin la unicidad
+-- de su llave, el barrido horario mandaría el mismo aviso 24 veces al día. Y
+-- como guarda qué papeles de qué flota están por vencer, ni anon ni
+-- authenticated deben poder leerla (doble candado 0196/0198). Los dominios de
+-- objeto/documento/umbral rechazan basura: un sello con umbral inventado
+-- jamás casaría con lo que el barrido busca y el aviso saldría doble.
+do $$
+declare
+  t uuid; u uuid; n_anon int; n_auth int;
+  duplicado_rebota boolean; umbral_malo_rebota boolean; renovacion_entra boolean;
+begin
+  -- (a) Sin grant directo.
+  begin
+    set local role anon;
+    select count(*) into n_anon from aviso_vigencia;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_anon := -1;
+  end;
+  begin
+    set local role authenticated;
+    select count(*) into n_auth from aviso_vigencia;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_auth := -1;
+  end;
+
+  -- (b) El mismo (objeto, documento, umbral, fecha) dos veces rebota…
+  insert into tenant (nombre) values ('ZZZ VIGENCIA 0202') returning id into t;
+  u := gen_random_uuid();
+  insert into aviso_vigencia (tenant_id, objeto, objeto_id, documento, umbral, vence)
+    values (t, 'unidad', u, 'verificacion', 7, '2026-09-15');
+  begin
+    insert into aviso_vigencia (tenant_id, objeto, objeto_id, documento, umbral, vence)
+      values (t, 'unidad', u, 'verificacion', 7, '2026-09-15');
+    duplicado_rebota := false;
+  exception when unique_violation then
+    duplicado_rebota := true;
+  end;
+
+  -- …pero el documento RENOVADO (fecha nueva) SÍ entra: es un ciclo nuevo.
+  begin
+    insert into aviso_vigencia (tenant_id, objeto, objeto_id, documento, umbral, vence)
+      values (t, 'unidad', u, 'verificacion', 7, '2027-09-15');
+    renovacion_entra := true;
+  exception when others then
+    renovacion_entra := false;
+  end;
+
+  -- (c) Umbral fuera del dominio rebota.
+  begin
+    insert into aviso_vigencia (tenant_id, objeto, objeto_id, documento, umbral, vence)
+      values (t, 'unidad', u, 'poliza', 15, '2026-09-15');
+    umbral_malo_rebota := false;
+  exception when check_violation then
+    umbral_malo_rebota := true;
+  end;
+
+  raise exception 'AVISO_VIGENCIA_0202  anon=%  authenticated=%  duplicado_rebota=%  renovacion_entra=%  umbral_malo_rebota=%   (esperado -1 / -1 / t / t / t)',
+    n_anon, n_auth, duplicado_rebota, renovacion_entra, umbral_malo_rebota;
+end $$;

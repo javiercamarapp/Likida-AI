@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { escalarViajesSinAceptar, PLAZO_ESCALACION_MS } from '@/lib/likida/escalar_viaje';
 import { ejecutarCobranzaGlobal } from '@/lib/likida/agentes/cobranza';
 import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
+import { avisarRelojesLegales, avisarVencimientos } from '@/lib/likida/relojes_legales';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
@@ -170,6 +171,34 @@ export async function GET(req: Request) {
       resultado.comprobacion = { error };
       huboFallo = true;
     }
+  }
+
+  // ── EL TERCER BARRIDO: LOS RELOJES LEGALES (Fase 6) ─────────────────────
+  // Vencimientos de flota (30/7/0 días, un aviso por umbral — el sello es la
+  // 0202) y los relojes colgados de una incidencia de siniestro/robo/bloqueo
+  // (sustitución de CFDI, matpel, retén). Va en ESTE cron y no en el de
+  // asistencia de 5 min a propósito: los plazos son de días hábiles, no de
+  // minutos, y cada corrida extra del barrido de vencimientos son consultas
+  // que no cambian nada. Sin palanca propia: no es un agente del catálogo,
+  // es un reloj — la global lo apaga con todo lo demás.
+  // Mismo criterio de aislamiento que los dos motores: su try/catch propio,
+  // su fallo pinta la corrida en 500, y no le quita el turno a nadie (corre
+  // al final, con lo que quede del presupuesto).
+  try {
+    const [relojes, vencimientos] = [
+      await avisarRelojesLegales(new Date()),
+      await avisarVencimientos(new Date()),
+    ];
+    logger.info('cron.relojes.ok', { ...relojes, vencimientos });
+    resultado.relojes = { incidencias: relojes, vencimientos };
+    if (relojes.fallos > 0 || vencimientos.fallos > 0) huboFallo = true;
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    const codigo = codigoDeError(e);
+    logger.error('cron.relojes.falló', { error, codigo });
+    await alertarOperador('cron.relojes', { error, codigo });
+    resultado.relojes = { error };
+    huboFallo = true;
   }
 
   // Los fallos van en la RESPUESTA, no solo en el log. "Esa flota no tiene
