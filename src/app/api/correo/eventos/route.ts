@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { suprimirCorreo } from '@/lib/likida/agentes/enviador';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -108,6 +109,18 @@ export async function POST(req: Request) {
   }
   if (estado !== 'entregado') {
     logger.warn('correo.eventos.mala_noticia', { pieza: (data[0] as { id: string }).id, estado, emailId });
+    // LA BAJA AUTOMÁTICA (0217): un rebote o una queja suprimen las
+    // direcciones del envío para siempre — insistirle a un buzón que rebotó
+    // (o que nos marcó spam) quema la reputación del dominio, que es el
+    // activo finito de toda la campaña. `to` viene del payload de Resend;
+    // best-effort deliberado: el evento ya quedó escrito arriba, y perderlo
+    // por no poder anotar la baja sería el peor intercambio.
+    const to = evento.data?.to;
+    const correos = (Array.isArray(to) ? to : typeof to === 'string' ? [to] : [])
+      .filter((c): c is string => typeof c === 'string');
+    for (const c of correos) {
+      await suprimirCorreo(c, estado === 'rebotado' ? 'rebote (webhook Resend)' : 'queja de spam (webhook Resend)');
+    }
   }
   return NextResponse.json({ pieza: (data[0] as { id: string }).id, estado });
 }

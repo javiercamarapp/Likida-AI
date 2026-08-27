@@ -30,6 +30,9 @@ import { hoyMx } from '@/lib/formato';
 import { LlmBudgetExceededError, createLlmBudget, type LlmBudget } from '@/lib/llm/budget';
 import { redactarCorreoFrio } from './redactor';
 import { correrAgenteFinanciero, esAgenteFinanciero } from './finanzas';
+import { candidatosSinDossier, investigarProspecto } from './investigador';
+import { correrSdr } from './sdr';
+import { correrEnviador } from './enviador';
 import { logger } from '@/lib/logger';
 
 /** Piezas que una corrida del runner fabrica como máximo por agente. */
@@ -231,6 +234,54 @@ export async function correrRunner(
         agentes.push({ agente: a.id, resultado: r.resultado, motivo: r.motivo, piezas: r.piezas, costoUsd: r.costoUsd });
       } catch (e) {
         agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del motor de dirección' });
+      }
+      continue;
+    }
+
+    // ── LA MÁQUINA DE PROSPECCIÓN (0217) — investigador, SDR y enviador ──
+    // Los tres corren para LIKIDA (tenant null), así que su techo de dinero
+    // no pasa por el ledger por-tenant del Redactor: se compara el gasto
+    // MEDIDO del día (agente_corrida.costo_usd, que sus corridas escriben)
+    // contra el presupuesto declarado. Menos fino que la reserva atómica —
+    // dos vueltas simultáneas podrían leer el mismo gasto — pero el cron
+    // corre cada 4 horas y cada corrida anota su costo: la ventana real es
+    // minutos, y el fallo es visible en la ficha, no silencioso. Fail
+    // closed: si el gasto del día no se puede leer, el agente no corre.
+    if (a.id === 'enriquecedor' || a.id === 'sdr' || a.id === 'enviador') {
+      try {
+        const gastado = await gastoDelDiaUsd(a.id);
+        if (gastado >= a.presupuesto_dia_usd) {
+          agentes.push({ agente: a.id, resultado: 'saltado', motivo: `techo diario alcanzado (${gastado.toFixed(2)} de ${a.presupuesto_dia_usd} USD)` });
+          continue;
+        }
+      } catch (e) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: `no se pudo leer el gasto del día — fail closed (${e instanceof Error ? e.message.slice(0, 120) : 'error'})` });
+        continue;
+      }
+      try {
+        if (a.id === 'enriquecedor') {
+          const ids = await candidatosSinDossier(topePiezasPorCorrida());
+          let piezas = 0, saltados = 0, costoUsd = 0;
+          for (const id of ids) {
+            try {
+              const r = await investigarProspecto(id, 'cron');
+              piezas += 1;
+              costoUsd += r.costoUsd;
+            } catch (e) {
+              saltados += 1;
+              logger.info('runner.investigador.saltado', { prospecto: id, motivo: e instanceof Error ? e.message.slice(0, 160) : String(e) });
+            }
+          }
+          agentes.push({ agente: a.id, resultado: 'corrio', piezas, saltados, costoUsd });
+        } else if (a.id === 'sdr') {
+          const r = await correrSdr('cron', topePiezasPorCorrida());
+          agentes.push({ agente: a.id, resultado: 'corrio', piezas: r.piezas, saltados: r.saltados, costoUsd: r.costoUsd });
+        } else {
+          const r = await correrEnviador('cron', topePiezasPorCorrida() * 2);
+          agentes.push({ agente: a.id, resultado: 'corrio', piezas: r.piezasEnviadas, saltados: r.saltadas, costoUsd: 0 });
+        }
+      } catch (e) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del lote' });
       }
       continue;
     }

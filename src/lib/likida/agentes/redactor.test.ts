@@ -136,7 +136,8 @@ describe('redactarCorreoFrio', () => {
     respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
     const r = await redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO);
-    expect(r).toMatchObject({ piezaId: 'pieza-1', asunto: 'El cierre del viaje, sin liquidador', aviso: null });
+    // 0217: el asunto de la campaña se IMPONE en código — el del modelo no sale.
+    expect(r).toMatchObject({ piezaId: 'pieza-1', asunto: 'Automatizar la liquidación de viajes, antes de contratar para el puesto', aviso: null });
 
     expect(encolarPieza).toHaveBeenCalledTimes(1);
     const pieza = encolarPieza.mock.calls[0][0] as {
@@ -262,5 +263,39 @@ No aplica: la variante C solo se usa después de un sí.
 
     const llamada = generateResponse.mock.calls[0][0] as { messages: Array<{ content: string }> };
     expect(llamada.messages[0].content).toContain('Contacto: no capturado');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL FORMATO DE CAMPAÑA (0217) — los guardarraíles cazados EN VIVO en la
+// campaña real, ahora código: jamás "clientes reales" (nadie ha firmado),
+// jamás guion largo, y el asunto único de la campaña se impone tras el parseo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('verificarFormatoCampana — los guardarraíles son código, no prompt', () => {
+  it('rechaza "clientes reales" — ninguna empresa ha firmado', async () => {
+    const { verificarFormatoCampana } = await import('./redactor');
+    expect(() => verificarFormatoCampana('Trabajamos con clientes reales como GAL.')).toThrow(DatoInvalido);
+  });
+
+  it('rechaza el guion largo', async () => {
+    const { verificarFormatoCampana } = await import('./redactor');
+    expect(() => verificarFormatoCampana('Liquidamos viajes — sin liquidador.')).toThrow(/guion largo/);
+  });
+
+  it('deja pasar la frase permitida ("en pláticas con transportistas como...")', async () => {
+    const { verificarFormatoCampana } = await import('./redactor');
+    expect(() => verificarFormatoCampana('Estamos en pláticas con transportistas como Grupo GAL y Transportes Innovativos.')).not.toThrow();
+  });
+
+  it('un correo del modelo que viole el formato NO entra a la cola y la corrida queda en fallo', async () => {
+    respuestas.set('prospecto', [{ data: PROSPECTO, error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    generateResponse.mockResolvedValueOnce({
+      text: SALIDA_MODELO.replace('trabajamos el cierre administrativo del viaje.', 'ya lo usan clientes reales.'),
+      model: 'prueba', tokensIn: 100, tokensOut: 200, cost: 0.001,
+    });
+    await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/clientes reales/);
+    expect(encolarPieza).not.toHaveBeenCalled();
   });
 });

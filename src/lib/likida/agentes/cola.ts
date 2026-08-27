@@ -300,7 +300,18 @@ export interface ResultadoEnvioPieza {
   providerId: string;
 }
 
-export async function enviarPiezaPorCorreo(id: string, actorId: string): Promise<ResultadoEnvioPieza> {
+export async function enviarPiezaPorCorreo(
+  id: string,
+  /** `null` = envío AUTOMÁTICO del Enviador (0217, orden del 27-ago): la
+   *  reserva de cadencia queda sin actor humano — la pieza ya dice qué
+   *  agente la fabricó y la resolución quién (o qué) la aprobó. */
+  actorId: string | null,
+  /** Copias del MISMO correo a los demás correos hallados de la empresa
+   *  (prospecto_correo, ya filtrados de suprimidos por el llamador). Van en
+   *  el mismo envío y bajo la misma reserva de cadencia: para la empresa es
+   *  UN toque, no uno por buzón. */
+  copias: string[] = [],
+): Promise<ResultadoEnvioPieza> {
   // 1) EL CLAIM — anclado y con todo lo necesario para mandar en el RETURNING:
   //    releer después del claim abriría la ventana que el claim cierra.
   const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
@@ -386,14 +397,21 @@ export async function enviarPiezaPorCorreo(id: string, actorId: string): Promise
     reservaId = String(reserva);
   }
 
-  // 2) EL PROVEEDOR. Sale la versión FINAL (la edición humana manda).
+  // 2) EL PROVEEDOR. Sale la versión FINAL (la edición humana manda). Las
+  // copias van en el MISMO envío (Resend acepta lista) — deduplicadas contra
+  // el principal; el formato lo re-valida enviarCorreo destinatario por
+  // destinatario. La instrucción de BAJA va en el pie de todos: la honra el
+  // procesamiento de respuestas y la lista `correo_suprimido` (0217).
   const cuerpo = String(fila.cuerpo_final ?? fila.cuerpo);
-  const r = await enviarCorreo(destinatario, {
+  const paraTodos = [destinatario, ...copias
+    .map((c) => c.trim().toLowerCase())
+    .filter((c, i, arr) => c && c !== destinatario.toLowerCase() && arr.indexOf(c) === i)];
+  const r = await enviarCorreo(paraTodos, {
     asunto: String(fila.titulo),
     avance: cuerpo.slice(0, 90),
     titulo: String(fila.titulo),
     parrafos: cuerpo.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).slice(0, 12),
-    porQueLoRecibes: 'Recibes este correo porque tu empresa publicó una vacante relacionada con liquidación de viajes.',
+    porQueLoRecibes: 'Recibes este correo porque tu empresa publicó una vacante relacionada con liquidación de viajes. Si prefieres no recibir estos correos, responde con la palabra BAJA y no volveremos a escribirte.',
   });
   if (!r.ok) {
     const motivo = r.motivo === 'sin_configurar'

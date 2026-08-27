@@ -46,7 +46,9 @@ ESCRIBE 3 VARIANTES:
 - Variante C — confirmación de demo (SOLO si el dossier trae un sí previo; si no, escribe exactamente: "No aplica: la variante C solo se usa después de un sí.")
 
 REGLAS DE ESCRITURA:
-- Máximo 5 líneas por correo. Asunto de máximo 6 palabras, sin signos de admiración.
+- Máximo 5 líneas por correo. Asunto de máximo 6 palabras, sin signos de admiración. (El asunto de la variante A se sustituye después por el asunto fijo de la campaña — escríbelo igual: el de las variantes B/C sí sale.)
+- PROHIBIDO el guion largo (—) en cualquier parte del correo.
+- Si mencionas tracción, la ÚNICA frase permitida es "en pláticas con transportistas como Grupo GAL y Transportes Innovativos". PROHIBIDO decir "clientes reales" o llamar cliente a cualquier empresa: ninguna ha firmado.
 - Termina SIEMPRE con una pregunta de agenda concreta: "¿le vienen bien 15 minutos el jueves?" — no "¿le interesaría platicar?".
 - Remitente: el vendedor humano indicado, una persona. Nunca "el equipo de Likida".
 - Español mexicano directo. Prohibido "revolucionario", "innovador", "inteligente", "de vanguardia", "solución integral". Sin emojis, sin negritas de venta, sin postdata de urgencia falsa.
@@ -111,6 +113,25 @@ function presupuestoDelRedactor(contexto: RedactorExecutionContext | undefined):
 }
 
 const MARCADOR_NOMBRE = '{{NOMBRE}}';
+
+/** El asunto ÚNICO de la campaña de frío (plantilla asentada en la campaña
+ *  real y ratificada el 27-ago-2026). La variante A siempre sale con él —
+ *  se impone en CÓDIGO tras el parseo, no se le confía al modelo. */
+export const ASUNTO_CAMPANA = 'Automatizar la liquidación de viajes, antes de contratar para el puesto';
+
+/** El verificador ESTRUCTURAL del formato de campaña — los dos guardarraíles
+ *  cazados en vivo en la campaña real: jamás "clientes reales" (ninguna
+ *  empresa ha firmado; la frase permitida es "en pláticas con...") y sin
+ *  guiones largos. Es código, no prompt: un correo que los viole NO entra a
+ *  la cola. Exportado para su prueba. */
+export function verificarFormatoCampana(texto: string): void {
+  if (/clientes?\s+reales/i.test(texto)) {
+    throw new DatoInvalido('El correo dice "clientes reales" — ninguna empresa ha firmado; la frase permitida es "en pláticas con transportistas como...". Pieza descartada.');
+  }
+  if (texto.includes('—')) {
+    throw new DatoInvalido('El correo trae guion largo (—) — el formato de campaña los prohíbe. Pieza descartada.');
+  }
+}
 
 /** El nombre de pila del contacto — lo único que se sustituye de vuelta, y
  *  SOLO fuera del modelo (ver la nota de AUDITORÍA 19 legal C2 en el
@@ -230,12 +251,41 @@ export async function redactarCorreoFrio(
   // solo ve el marcador `{{NOMBRE}}` (instrucción en SYSTEM); el nombre de
   // pila real se sustituye DESPUÉS de la completion, en `sustituirMarcador`.
   const primerNombre = primerNombreDelContacto(prospecto.contacto_nombre);
+
+  // LA INVESTIGACIÓN (0217): si el investigador ya dejó dossier, sus hechos
+  // — cada uno leído del sitio real de la empresa, con fuente — SON hechos
+  // verificados y entran al contexto permitido. Es la única ampliación de la
+  // prohibición #2: personalizar con lo investigado, jamás con lo imaginado.
+  // Lectura best-effort deliberada: sin dossier (o con la lectura caída) el
+  // correo sale genérico honesto, que siempre fue el piso del Redactor.
+  const lineasInvestigadas: string[] = [];
+  try {
+    const { data: d, error: errD } = await supabaseAdmin()
+      .from('prospecto_dossier')
+      .select('historia, empleados, flotilla, datos')
+      .eq('prospecto_id', prospectoId).maybeSingle();
+    if (errD) {
+      logger.info('redactor.dossier_ilegible', { prospecto: prospectoId, err: errD.message });
+    } else if (d) {
+      const dd = d as { historia: string | null; empleados: string | null; flotilla: string | null; datos: Array<{ dato?: string }> | null };
+      if (dd.historia) lineasInvestigadas.push(`Historia (de su sitio): ${dd.historia.slice(0, 300)}`);
+      if (dd.empleados) lineasInvestigadas.push(`Tamaño (de su sitio): ${dd.empleados.slice(0, 150)}`);
+      if (dd.flotilla) lineasInvestigadas.push(`Flota (de su sitio): ${dd.flotilla.slice(0, 150)}`);
+      for (const h of (dd.datos ?? []).slice(0, 4)) {
+        if (h?.dato) lineasInvestigadas.push(`Hallazgo (de su sitio): ${h.dato.slice(0, 200)}`);
+      }
+    }
+  } catch (e) {
+    logger.info('redactor.dossier_ilegible', { prospecto: prospectoId, err: e instanceof Error ? e.message : String(e) });
+  }
+
   const dossier = [
     `Empresa: ${prospecto.empresa}`,
     primerNombre ? 'Contacto: {{NOMBRE}}' : 'Contacto: no capturado',
     prospecto.ciudad ? `Ciudad: ${prospecto.ciudad}` : 'Ciudad: no capturada',
     `Etapa del pipeline: ${prospecto.estado}`,
     prospecto.notas ? `Notas del vendedor: ${prospecto.notas.slice(0, 500)}` : 'Notas: ninguna',
+    ...lineasInvestigadas,
     '(No hay más hechos verificados. Lo que no esté aquí, NO existe.)',
   ].join('\n');
 
@@ -282,8 +332,13 @@ export async function redactarCorreoFrio(
   try {
     const v = parsearVariantes(texto);
     const con = (s: string) => sustituirMarcador(s, primerNombre);
-    const asuntoA = con(v.a.asunto);
+    // El asunto de la campaña se IMPONE (no se le confía al modelo), y el
+    // cuerpo pasa por el verificador estructural: "clientes reales" o un
+    // guion largo descartan la pieza entera — mejor cero correo que uno que
+    // rompa los guardarraíles cazados en vivo.
+    const asuntoA = ASUNTO_CAMPANA;
     const cuerpoA = con(v.a.cuerpo);
+    verificarFormatoCampana(cuerpoA);
     const varianteB = v.b ? { asunto: con(v.b.asunto), cuerpo: con(v.b.cuerpo) } : null;
     const varianteC = v.c ? con(v.c) : null;
     const aviso = prospecto.correo?.trim()
