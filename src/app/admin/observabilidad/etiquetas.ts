@@ -19,6 +19,10 @@ export const ETIQUETA_INTERRUPTOR: Record<string, string> = {
   'agente:proveedores': 'Agente de Proveedores',
   'agente:ventas': 'Agente de Ventas',
   'agente:redactor': 'Redactor de Primer Contacto',
+  'agente:kpi_whatsapp': 'KPI a WhatsApp (hoy por correo)',
+  'agente:desempeno_startup': 'Desempeño de la startup',
+  'agente:orquestador': 'Orquestador 80/20',
+  'agente:orquestador_semanal': 'Orquestador semanal del ciclo',
 };
 
 export function etiquetaInterruptor(id: string): string {

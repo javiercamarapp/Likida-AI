@@ -24,7 +24,10 @@ export type AgenteConCorridas = 'liquidacion' | 'facturas' | 'cobranza' | 'condu
   // Los 4 financieros del back office (0215) — corren para LIKIDA (tenant
   // null, como `ventas`/`redactor`): sus cifras son del negocio, no de una
   // flota. En base la FK contra agente_definicion (0116) ya los admite.
-  | 'analista_metricas' | 'control_costos' | 'tesoreria' | 'cierre_mensual';
+  | 'analista_metricas' | 'control_costos' | 'tesoreria' | 'cierre_mensual'
+  // Dirección (0216): mismo contrato — tenant null; este tipo es el espejo
+  // de los que ESCRIBEN corridas.
+  | 'kpi_whatsapp' | 'desempeno_startup' | 'orquestador' | 'orquestador_semanal';
 export type EstadoCorrida = 'ok' | 'parcial' | 'fallo';
 /** `correo` (0108): el agente de Proveedores no corre por reloj — corre
  *  cuando llega un correo al buzón. Registrarlo como 'cron' pintaría
