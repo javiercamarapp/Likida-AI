@@ -15,6 +15,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { notificarAsignacion } from './notificar';
 import { evaluarYAvisarCcpDespacho } from './carta_porte_wa';
+import { enviarBriefingInicio } from './briefing_inicio_wa';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { conteo, traerTodo } from './pg';
@@ -639,6 +640,16 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
   await evaluarYAvisarCcpDespacho(tenantId, id as string).catch((e) => {
     logger.warn('ccp.disparo_fallo', { viaje: id, err: e instanceof Error ? e.message : String(e) });
   });
+
+  // EL BRIEFING DE INICIO (0208): primer intento, mejor esfuerzo. Es texto
+  // libre — solo entra si la ventana de 24 h del chofer está abierta; si no,
+  // el sello queda en NULL y el reintento sale cuando el chofer confirme
+  // (processor). Un `fallo` aquí es lo esperado, no una emergencia.
+  if (v.operadorId) {
+    await enviarBriefingInicio(tenantId, id as string).catch((e) => {
+      logger.warn('briefing.disparo_fallo', { viaje: id, err: e instanceof Error ? e.message : String(e) });
+    });
+  }
 
   return id as string;
 }
