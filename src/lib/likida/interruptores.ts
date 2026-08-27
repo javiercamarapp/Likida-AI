@@ -55,6 +55,13 @@ export const INTERRUPTORES = [
   // el registro de talento. Mismo candado 1 — sin palanca no se despachan.
   'agente:vigilante_calidad', 'agente:documentacion',
   'agente:legal_compliance', 'agente:talento',
+  // Éxito del cliente (0218) — los seis que vigilan a la flota que YA firmó.
+  // Ninguno escribe al cliente: todos dejan el parte o el borrador en la
+  // bandeja. Aun así llevan palanca, porque el candado 1 del runner no
+  // distingue entre "manda correos" y "solo propone": un autónomo que no se
+  // puede apagar no corre, punto.
+  'agente:onboarding_cliente', 'agente:exito_cliente', 'agente:retencion',
+  'agente:cobranza_saas', 'agente:soporte', 'agente:atencion_faq',
 ] as const;
 
 export type NombreInterruptor = (typeof INTERRUPTORES)[number];

@@ -57,6 +57,18 @@ export function topePendientesBandeja(): number {
  *  motor: si divergen, falla. */
 const BACK_OFFICE_RESTANTE: readonly string[] = ['vigilante_calidad', 'documentacion', 'legal_compliance', 'talento'];
 
+/** Los seis del departamento de éxito del cliente (0218). La lista se repite
+ *  aquí como literal —en vez de importar `AGENTES_EXITO` de `./exito`— por lo
+ *  mismo que la de dirección: importar el catálogo arrastraría el módulo
+ *  entero al bundle del runner y la gracia del despacho es que solo se cargue
+ *  cuando de verdad toca. La verdad de quién existe la manda `agente_definicion`. */
+const AGENTES_EXITO_CLIENTE: readonly string[] = [
+  'onboarding_cliente', 'exito_cliente', 'retencion',
+  'cobranza_saas', 'soporte', 'atencion_faq',
+];
+type AgenteDeExito = 'onboarding_cliente' | 'exito_cliente' | 'retencion'
+  | 'cobranza_saas' | 'soporte' | 'atencion_faq';
+
 export interface AgenteDelRunner {
   agente: string;
   resultado: 'corrio' | 'saltado';
@@ -295,6 +307,36 @@ export async function correrRunner(
         agentes.push({ agente: a.id, resultado: 'corrio', piezas: r.piezas, costoUsd: 0, ...(r.motivo ? { motivo: r.motivo } : {}) });
       } catch (e) {
         agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del motor de back office' });
+      }
+      continue;
+    }
+
+    // ── ÉXITO DEL CLIENTE (0218): los seis de la flota que ya firmó ───────
+    // Cinco son deterministas (gasto de modelo $0, el techo declarado es el
+    // candado formal); `atencion_faq` SÍ redacta con LLM, así que se le
+    // aplica el mismo candado de gasto MEDIDO que a la máquina de
+    // prospección. Import dinámico por la misma razón que dirección: el
+    // módulo arrastra los lectores de /admin y, en la rama del FAQ, el corpus
+    // de normas y el cliente del modelo — no se paga en cada carga del runner.
+    if (AGENTES_EXITO_CLIENTE.includes(a.id)) {
+      if (a.id === 'atencion_faq') {
+        try {
+          const gastado = await gastoDelDiaUsd(a.id);
+          if (gastado >= a.presupuesto_dia_usd) {
+            agentes.push({ agente: a.id, resultado: 'saltado', motivo: `techo diario alcanzado (${gastado.toFixed(2)} de ${a.presupuesto_dia_usd} USD)` });
+            continue;
+          }
+        } catch (e) {
+          agentes.push({ agente: a.id, resultado: 'saltado', motivo: `no se pudo leer el gasto del día — fail closed (${e instanceof Error ? e.message.slice(0, 120) : 'error'})` });
+          continue;
+        }
+      }
+      try {
+        const { correrAgenteExito } = await import('./exito');
+        const r = await correrAgenteExito(a.id as AgenteDeExito, 'cron');
+        agentes.push({ agente: a.id, resultado: r.resultado, motivo: r.motivo, piezas: r.piezas, costoUsd: r.costoUsd });
+      } catch (e) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del motor de éxito del cliente' });
       }
       continue;
     }

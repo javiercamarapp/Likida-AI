@@ -23,6 +23,13 @@ export const ETIQUETA_INTERRUPTOR: Record<string, string> = {
   'agente:desempeno_startup': 'Desempeño de la startup',
   'agente:orquestador': 'Orquestador 80/20',
   'agente:orquestador_semanal': 'Orquestador semanal del ciclo',
+  // Éxito del cliente (0218) — los seis que vigilan a la flota ya firmada.
+  'agente:onboarding_cliente': 'Onboarding del cliente',
+  'agente:exito_cliente': 'Éxito del cliente',
+  'agente:retencion': 'Retención',
+  'agente:cobranza_saas': 'Cobranza SaaS (mensualidades de Likida)',
+  'agente:soporte': 'Soporte (SLA de tickets)',
+  'agente:atencion_faq': 'Atención y FAQ (borradores de ticket)',
 };
 
 export function etiquetaInterruptor(id: string): string {
