@@ -36,7 +36,7 @@
 
 import { envPuesta } from '../env';
 
-export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto';
+export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto' | 'transcripcion';
 
 const DEFAULTS: Record<ModelRole, string> = {
   // OCR de comprobantes (visión + JSON en una sola llamada).
@@ -138,6 +138,15 @@ const DEFAULTS: Record<ModelRole, string> = {
   // piloto_vision.ts), pero un selector mal elegido quema una corrida entera.
   // Se paga por PASO (~8-14 por portal), solo cuando FACTURACION_PILOTO=si.
   piloto: 'anthropic/claude-sonnet-5',         // $2/$10
+  // TRANSCRIPCIÓN de notas de voz de WhatsApp (Capa E1 de asistencia). El
+  // mismo Gemini barato del chat y no un servicio de voz aparte: acepta el
+  // OGG/Opus que manda Meta, transcribe español mexicano coloquial, y viaja
+  // por la MISMA cuenta OpenRouter con el mismo presupuesto por tenant que el
+  // OCR — cero proveedores nuevos, cero API keys nuevas. OJO con el override:
+  // el fallback de red (openrouter.ts) puede caer a un modelo SIN oído
+  // (Anthropic no recibe audio); ahí la llamada falla y el chofer recibe el
+  // "¿me lo escribes?" honesto — fallar hacia pedir texto, no hacia inventar.
+  transcripcion: 'google/gemini-3.5-flash-lite', // $0.3/$2.5
 
   // ── QUÉ ROL CORRE HOY Y CUÁL NO (verificado el 23-ago-2026) ──────────────
   // Tienen llamador en producción: ocr, cuadre, chat, analisis, marketing,
@@ -172,6 +181,7 @@ const ENV_KEY: Record<ModelRole, string> = {
   codigo_escritura: 'LIKIDA_MODEL_CODIGO_ESCRITURA',
   qa: 'LIKIDA_MODEL_QA',
   piloto: 'LIKIDA_MODEL_PILOTO',
+  transcripcion: 'LIKIDA_MODEL_TRANSCRIPCION',
 };
 
 /** Devuelve el slug del modelo para un rol, respetando override por env.
@@ -199,4 +209,5 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
   codigo_escritura: { temperature: 0, reasoning: 'high' }, // el diff no se improvisa
   qa: { temperature: 0.3 },                   // adversarial, no caótico
   piloto: { temperature: 0 },                 // un formulario fiscal no se improvisa
+  transcripcion: { temperature: 0 },          // se escribe lo que se oye, no se redacta
 };

@@ -201,12 +201,23 @@ describe('el webhook entrega al procesador lo que Meta manda', () => {
     });
   });
 
-  it('un tipo que no manejamos (audio) llega como other, no se pierde', async () => {
-    // Se procesa igual para poder contestarle al operador "mándamelo en foto".
+  it('la nota de voz llega como audio con su mediaId (capa E1) — ya no cae a other', async () => {
+    // Hasta la capa E1 el audio caía a 'other' y el chofer en apuros recibía
+    // "solo proceso texto y fotos". Ahora viaja con su mediaId para que el
+    // processor lo transcriba (la descarga y el presupuesto son de él).
     const c = payload('5219990000014', { id: 'wamid.A1', type: 'audio', audio: { id: 'MEDIA-AUD' } });
     await postear(c, firmar(c));
+    expect(processInbound).toHaveBeenCalledWith(expect.objectContaining({
+      from: '5219990000014', waMessageId: 'wamid.A1', type: 'audio', mediaId: 'MEDIA-AUD',
+    }));
+  });
+
+  it('un tipo que no manejamos (sticker) llega como other, no se pierde', async () => {
+    // Se procesa igual para poder contestarle al operador "mándamelo en foto".
+    const c = payload('5219990000014', { id: 'wamid.S1', type: 'sticker' });
+    await postear(c, firmar(c));
     expect(processInbound).toHaveBeenCalledWith({
-      from: '5219990000014', waMessageId: 'wamid.A1', type: 'other',
+      from: '5219990000014', waMessageId: 'wamid.S1', type: 'other',
     });
   });
 

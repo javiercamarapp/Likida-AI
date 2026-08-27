@@ -533,6 +533,12 @@ interface WaWebhook {
           // en emergencia manda su posición y el sistema la registra y se la
           // pasa al jefe. Meta la manda como `type: 'location'`.
           location?: { latitude?: number; longitude?: number };
+          // La nota de voz del chofer (Capa E1). Meta manda `type: 'audio'`
+          // tanto para la nota grabada en el chat (`voice: true`) como para un
+          // audio reenviado — se tratan igual: ambos se transcriben. El mime
+          // no viaja en InboundMessage a propósito: la descarga de media (que
+          // el transcriptor reutiliza) lo trae en los metadatos de Meta.
+          audio?: { id: string };
           // El chofer apretó un botón. Meta manda `type: 'interactive'` y dentro
           // un `interactive.type` que dice CUÁL de los interactivos fue:
           // `button_reply` (botones de respuesta rápida) o `list_reply` (lista
@@ -589,6 +595,12 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
         // `|| undefined` para que un caption vacío no se distinga de ninguno.
         else if (m.type === 'image' && m.image) out.push({ ...base, type: 'image', mediaId: m.image.id, text: m.image.caption || undefined });
         else if (m.type === 'document' && m.document) out.push({ ...base, type: 'document', mediaId: m.document.id });
+        // La nota de voz llega con su mediaId y NADA más: la descarga y la
+        // transcripción son del processor (Capa E1), que es quien sabe si el
+        // remitente es un chofer y qué presupuesto la paga. Antes de esto el
+        // audio caía a 'other' y el chofer en apuros recibía "solo proceso
+        // texto y fotos" — el bug señalado por el blueprint 19.
+        else if (m.type === 'audio' && m.audio) out.push({ ...base, type: 'audio', mediaId: m.audio.id });
         // UBICACIÓN → lat/lng planos. Solo con AMBAS coordenadas numéricas:
         // un pin a medias no es una posición, es ruido.
         else if (m.type === 'location' && typeof m.location?.latitude === 'number' && typeof m.location?.longitude === 'number') {
