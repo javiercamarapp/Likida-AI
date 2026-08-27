@@ -14,6 +14,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { notificarAsignacion } from './notificar';
+import { evaluarYAvisarCcpDespacho } from './carta_porte_wa';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { conteo, traerTodo } from './pg';
@@ -629,6 +630,15 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
   // de despacho. El fallo se loguea y el aviso se puede reintentar desde el
   // panel.
   if (v.operadorId) await avisarAlChofer(tenantId, v.operadorId, id as string).catch(() => {});
+
+  // EL DISPARO DE CARTA PORTE (Fase B, hueco H1): en cuanto el viaje existe se
+  // corre el clasificador legal y el jefe recibe lo que falta declarar (o el
+  // veredicto con fundamento). Mismo best-effort que el aviso al chofer: el
+  // viaje YA está creado; un WhatsApp caído no lo deshace, y el semáforo del
+  // panel sigue diciendo la verdad. El fallo queda logueado adentro.
+  await evaluarYAvisarCcpDespacho(tenantId, id as string).catch((e) => {
+    logger.warn('ccp.disparo_fallo', { viaje: id, err: e instanceof Error ? e.message : String(e) });
+  });
 
   return id as string;
 }

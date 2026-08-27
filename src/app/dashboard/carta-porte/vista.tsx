@@ -1,11 +1,12 @@
-import { ScrollText, TriangleAlert, CircleCheck, CircleHelp } from 'lucide-react';
+import Link from 'next/link';
+import { ScrollText, TriangleAlert, CircleCheck, CircleHelp, Package, Printer } from 'lucide-react';
 import type { EstadoCartaPorte, ViajeCcp } from '@/lib/likida/carta_porte_datos';
 import type { EstadoCampoCcp } from '@/lib/likida/carta_porte';
 import { AVISO_VALOR_MERCANCIA } from '@/lib/likida/relojes_legales';
 import { EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
 import { numero } from '@/lib/formato';
 import { BarraPagina } from '../resumen-visual';
-import { FormaDeclaracion, type AccionForma } from './forma';
+import { FormaDeclaracion, FormaMercancia, FormaDatosCliente, BotonBorrarMercancia, type AccionForma } from './forma';
 
 /**
  * CARTA PORTE — la pregunta del minuto tres de cualquier demo (hallazgo A3,
@@ -24,10 +25,23 @@ import { FormaDeclaracion, type AccionForma } from './forma';
  *
  * Pura props, para poder mirarla con fixtures sin sesión.
  */
-export function VistaCartaPorte({ datos, declarar = null }: {
+export interface AccionesCcp {
+  declarar: AccionForma | null;
+  agregarMercancia: AccionForma | null;
+  quitarMercancia: AccionForma | null;
+  guardarDatosCliente: AccionForma | null;
+}
+
+export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = null, quitarMercancia = null, guardarDatosCliente = null, sufijo = '' }: {
   datos: EstadoCartaPorte | null;
   declarar?: AccionForma | null;
+  agregarMercancia?: AccionForma | null;
+  quitarMercancia?: AccionForma | null;
+  guardarDatosCliente?: AccionForma | null;
+  /** El `?tenant=&rol=` que se arrastra en cada link interno (ver sufijo.ts). */
+  sufijo?: string;
 }) {
+  const acciones: AccionesCcp = { declarar, agregarMercancia, quitarMercancia, guardarDatosCliente };
   return (
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
@@ -60,6 +74,20 @@ export function VistaCartaPorte({ datos, declarar = null }: {
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{AVISO_VALOR_MERCANCIA.fundamento}</p>
           </section>
 
+          {datos !== null && datos.hazmatDeclarado === true && (
+            <p className="text-[12px] px-3.5 py-2.5 rounded-lg max-w-3xl" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
+              Tu flota declaró que mueve <strong>material peligroso</strong>: la carga es materia excluida
+              y el complemento es obligatorio SIEMPRE — ninguna facilidad aplica (regla 2.7.7.2.1, cuarto párrafo).
+              El semáforo de abajo ya lo refleja.
+            </p>
+          )}
+          {datos !== null && datos.dedicadoDeclarado === true && (
+            <p className="text-[12px] px-3.5 py-2.5 rounded-lg max-w-3xl" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
+              Tu flota declaró <strong>transporte dedicado</strong>: la regla 2.7.7.1.3 invierte los roles
+              y el complemento puede tocarle emitirlo a tu cliente con CFDI de traslado. Confírmalo con tu
+              contador — Likida lo advierte, no lo decide.
+            </p>
+          )}
           {datos === null ? (
             <EstadoError mensaje="No pude leer los viajes en curso ni sus datos de unidad y operador. No se pinta un semáforo a medias: un «no necesita» sobre datos incompletos vale una presunción de contrabando." />
           ) : datos.viajes.length === 0 ? (
@@ -71,7 +99,7 @@ export function VistaCartaPorte({ datos, declarar = null }: {
             </EstadoVacio>
           ) : (
             <>
-              {datos.viajes.map((v) => <TarjetaViaje key={v.viajeId} v={v} declarar={declarar} />)}
+              {datos.viajes.map((v) => <TarjetaViaje key={v.viajeId} v={v} acciones={acciones} sufijo={sufijo} />)}
               {datos.viajes.length < datos.total && (
                 <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                   Se evalúan los {numero(datos.viajes.length)} viajes más próximos de {numero(datos.total)} en curso.
@@ -91,10 +119,11 @@ const PILL: Record<string, { rotulo: string; fg: string; bg: string }> = {
   falta_declarar: { rotulo: 'Falta declarar', fg: 'var(--bad)', bg: 'var(--badbg)' },
 };
 
-function TarjetaViaje({ v, declarar }: { v: ViajeCcp; declarar: AccionForma | null }) {
+function TarjetaViaje({ v, acciones, sufijo }: { v: ViajeCcp; acciones: AccionesCcp; sufijo: string }) {
   const pill = PILL[v.decision.necesita];
   const c = v.checklist;
   const listos = 18 - c.faltanTransportista;
+  const b = v.borrador;
 
   return (
     <section className="card p-4 space-y-3">
@@ -151,17 +180,81 @@ function TarjetaViaje({ v, declarar }: { v: ViajeCcp; declarar: AccionForma | nu
         </div>
       </details>
 
-      {declarar && (
+      {acciones.declarar && (
         <details>
           <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
             style={{ color: 'var(--marca)' }}>
             Declarar la ruta de este viaje
           </summary>
           <div className="pt-3">
-            <FormaDeclaracion accion={declarar} viajeId={v.viajeId} inicial={v.declarado} />
+            <FormaDeclaracion accion={acciones.declarar} viajeId={v.viajeId} inicial={v.declarado} />
           </div>
         </details>
       )}
+
+      <details>
+        <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
+          style={{ color: 'var(--marca)' }}>
+          <Package width={13} height={13} strokeWidth={1.75} />
+          Mercancía del viaje ({numero(v.mercancias.length)} {v.mercancias.length === 1 ? 'renglón' : 'renglones'})
+        </summary>
+        <div className="pt-3 space-y-3">
+          {v.mercancias.length > 0 && (
+            <ul className="space-y-1 text-[12px]">
+              {v.mercancias.map((m) => (
+                <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                  <span>{m.descripcion}</span>
+                  <span className="cifra-mono" style={{ color: 'var(--muted)' }}>
+                    {m.bienesTransp ?? <em style={{ color: 'var(--warn)' }}>sin clave SAT</em>}
+                    {' · '}{numero(m.cantidad)} {m.claveUnidad ?? <em style={{ color: 'var(--warn)' }}>sin unidad</em>}
+                    {' · '}{m.pesoKg !== null ? `${numero(m.pesoKg)} kg` : <em style={{ color: 'var(--warn)' }}>sin peso</em>}
+                  </span>
+                  {m.materialPeligroso === true && <span className="text-[11px]" style={{ color: 'var(--warn)' }}>material peligroso</span>}
+                  {m.materialPeligroso === null && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>peligroso sin declarar</span>}
+                  {acciones.quitarMercancia && <BotonBorrarMercancia accion={acciones.quitarMercancia} mercanciaId={m.id} />}
+                </li>
+              ))}
+            </ul>
+          )}
+          {acciones.agregarMercancia && <FormaMercancia accion={acciones.agregarMercancia} viajeId={v.viajeId} />}
+        </div>
+      </details>
+
+      {acciones.guardarDatosCliente && (
+        <details>
+          <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
+            style={{ color: 'var(--marca)' }}>
+            Datos del cliente (CPs, RFC del destinatario)
+          </summary>
+          <div className="pt-3">
+            <FormaDatosCliente accion={acciones.guardarDatosCliente} viajeId={v.viajeId} inicial={v.datosCliente} />
+          </div>
+        </details>
+      )}
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]">
+        {b.borrador !== null ? (
+          b.fallas.length === 0 ? (
+            <span style={{ color: 'var(--ok)' }}>
+              Borrador armado y SIN fallas del validador — listo para que tu PAC lo timbre.
+            </span>
+          ) : (
+            <span style={{ color: 'var(--warn)' }}>
+              Borrador armado con {numero(b.fallas.length)} {b.fallas.length === 1 ? 'falla' : 'fallas'} que el PAC rechazaría: {b.fallas.map((f) => f.campo).join(', ')}.
+            </span>
+          )
+        ) : (
+          <span style={{ color: 'var(--muted)' }}>
+            Borrador aún no armable — faltan {numero(b.faltantes.length)} {b.faltantes.length === 1 ? 'dato' : 'datos'}.
+          </span>
+        )}
+        <Link href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijo}`}
+          className="inline-flex items-center gap-1 font-medium hover:opacity-75"
+          style={{ color: 'var(--marca)' }}>
+          <Printer width={13} height={13} strokeWidth={1.75} />
+          Ver borrador imprimible
+        </Link>
+      </div>
     </section>
   );
 }

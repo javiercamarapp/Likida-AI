@@ -41,7 +41,7 @@ export type Bloque =
 const TOOLS_LECTURA = [
   'kpis_flota', 'acreditables_periodo', 'motor_fiscal', 'viajes_flota',
   'liquidaciones_flota', 'serie_gasto', 'serie_liquidado', 'top_rutas',
-  'duplicados_detectados', 'proyectar_serie',
+  'duplicados_detectados', 'proyectar_serie', 'consultar_carta_porte',
 ];
 
 /** Valida y recorta lo que el modelo entregó — nunca se confía en la forma.

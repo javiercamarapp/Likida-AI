@@ -38,10 +38,11 @@ function entrada(sobre: Partial<EntradaDecision> = {}): EntradaDecision {
 // ── EL CATÁLOGO ────────────────────────────────────────────────────────────
 
 describe('el catálogo declara agentes reales, no una lista suelta', () => {
-  it('son los seis agentes y sus llaves no se repiten', () => {
-    expect(AGENTES_NOTIFICABLES).toHaveLength(6);
+  it('son los siete agentes y sus llaves no se repiten', () => {
+    // Siete desde las Fases B-C de Carta Porte (25-ago-2026).
+    expect(AGENTES_NOTIFICABLES).toHaveLength(7);
     const ids = AGENTES_NOTIFICABLES.map((a) => a.id);
-    expect(new Set(ids).size).toBe(6);
+    expect(new Set(ids).size).toBe(7);
   });
 
   it('la ruta de cada agente es una que el panel sabe gatear', () => {

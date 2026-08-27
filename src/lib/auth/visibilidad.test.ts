@@ -84,14 +84,20 @@ describe('el contador — su panel volvió, y la operación le sigue cerrada', (
       '/dashboard/agentes/peajes',
       // Proveedores (F6): la bandeja de facturas del taller — dinero.
       '/dashboard/agentes/proveedores',
+      // Carta Porte (Fases B-C, 25-ago-2026): cero pesos y la declaración de
+      // ruta es del jefe de tráfico — operación, como su pantalla.
+      '/dashboard/agentes/carta-porte',
     ]);
     const DINERO = [
       '/dashboard/agentes/liquidacion', '/dashboard/agentes/facturas',
       '/dashboard/agentes/cobranza', '/dashboard/agentes/peajes', '/dashboard/agentes/proveedores',
     ];
+    const OPERACION_AGENTES = ['/dashboard/agentes/conductores', '/dashboard/agentes/carta-porte'];
     for (const href of DINERO) expect(puedeVerRuta('contador', href)).toBe(true);
-    expect(puedeVerRuta('contador', '/dashboard/agentes/conductores')).toBe(false);
-    expect(puedeVerRuta('encargado', '/dashboard/agentes/conductores')).toBe(true);
+    for (const href of OPERACION_AGENTES) {
+      expect(puedeVerRuta('contador', href), href).toBe(false);
+      expect(puedeVerRuta('encargado', href), href).toBe(true);
+    }
     for (const href of DINERO) expect(puedeVerRuta('encargado', href)).toBe(false);
   });
 

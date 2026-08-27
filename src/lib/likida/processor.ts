@@ -34,6 +34,7 @@ import { interpretarHito, sellarHito, mensajeHito } from '@/lib/likida/hitos_via
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { atenderDespachoOficina } from '@/lib/likida/despacho_wa';
 import { interpretarTalacha, atenderTalachaChofer, atenderAutorizacionTalacha } from '@/lib/likida/talacha_wa';
+import { atenderCcpOficina } from '@/lib/likida/carta_porte_wa';
 import { interpretarAsistencia, atenderAsistenciaChofer, atenderReconocimientoAsistencia, atenderAsistenciaOficina } from '@/lib/likida/asistencia_wa';
 import { esCaptionPod, guardarPodDelChofer, mensajePod } from '@/lib/likida/pod_wa';
 import { atenderInformeOficina } from '@/lib/likida/informes_wa';
@@ -563,6 +564,23 @@ async function atenderTextoOficina(
     }
   } catch (e) {
     logger.error('oficina.talacha_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+  }
+
+  // La CARTA PORTE va aquí por la misma razón que la talacha: el botón
+  // `ccp_si:<uuid>` y el comando «radio F-123 25» responden a una pregunta
+  // concreta que le mandamos al jefe al despachar — con despacho activo, ese
+  // texto acabaría en el intérprete de viajes como si fuera una orden nueva.
+  try {
+    const rCcp = await atenderCcpOficina(
+      { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId }, texto,
+    );
+    if (rCcp) {
+      logger.info('oficina.ccp_declaracion', { user: cuenta.userId, rol: cuenta.rol });
+      await sendText(from, rCcp);
+      return true;
+    }
+  } catch (e) {
+    logger.error('oficina.ccp_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
   }
 
   // Sin flota no hay nada que despachar ni sobre qué informar. Es el caso del

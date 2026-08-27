@@ -39,6 +39,9 @@ export const AUTOMATIZACIONES: Item[] = [
   { href: '/dashboard/agentes/peajes', nombre: 'Conciliación de peajes', Icono: Scale },
   // F6: la factura del taller que hoy se captura a mano en el ERP.
   { href: '/dashboard/agentes/proveedores', nombre: 'Facturas de proveedores', Icono: Building2 },
+  // Fases B-C del blueprint de Carta Porte (25-ago-2026): al despachar,
+  // pregunta por WhatsApp lo que falta declarar y arma el borrador validado.
+  { href: '/dashboard/agentes/carta-porte', nombre: 'Carta Porte en automático', Icono: ScrollText },
 ];
 
 export const OPERACION: Item[] = [
