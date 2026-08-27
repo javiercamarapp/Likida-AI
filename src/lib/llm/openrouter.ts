@@ -491,6 +491,16 @@ export async function generateStructured<T>(opts: {
   signal?: AbortSignal;
   /** Data-URLs de imágenes (OCR de comprobantes). Se adjuntan al último mensaje user. */
   images?: string[];
+  /**
+   * Audios en base64 (transcripción de notas de voz, Capa E1). Mismo viaje que
+   * `images`: se adjuntan al último mensaje user como partes `input_audio`.
+   * `format` es el de OpenRouter ('ogg', 'mp3', 'wav', 'mp4'…) — el tipo del
+   * SDK de OpenAI solo enumera wav/mp3, pero OpenRouter pasa el formato al
+   * proveedor tal cual (Gemini acepta el OGG/Opus de WhatsApp); por eso el
+   * cast de abajo. Un modelo sin oído devuelve 400 — no transitorio, no hay
+   * fallback: el llamador decide qué decirle al usuario.
+   */
+  audios?: { data: string; format: string }[];
   maxTokens?: number;
   temperature?: number;
   /** Reserva dura por corrida/tenant antes de cada intento, incluido fallback. */
@@ -517,11 +527,14 @@ export async function generateStructured<T>(opts: {
     { role: 'system', content: opts.system },
     ...opts.messages.map((m) => ({ role: m.role, content: m.content })),
   ];
-  if (opts.images?.length) {
+  if (opts.images?.length || opts.audios?.length) {
     const lastUserIdx = [...built].map((m) => m.role).lastIndexOf('user');
     const parts: OpenAI.Chat.ChatCompletionContentPart[] = [
       { type: 'text', text: typeof built[lastUserIdx]?.content === 'string' ? (built[lastUserIdx].content as string) : 'Extrae los datos de estas imágenes.' },
-      ...opts.images.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
+      ...(opts.images ?? []).map((url) => ({ type: 'image_url' as const, image_url: { url } })),
+      // El cast: el SDK de OpenAI enumera solo wav/mp3 en `format`, pero
+      // OpenRouter reenvía el formato al proveedor (Gemini sí recibe 'ogg').
+      ...(opts.audios ?? []).map((a) => ({ type: 'input_audio', input_audio: { data: a.data, format: a.format } }) as unknown as OpenAI.Chat.ChatCompletionContentPart),
     ];
     if (lastUserIdx >= 0) built[lastUserIdx] = { role: 'user', content: parts };
     else built.push({ role: 'user', content: parts });

@@ -79,6 +79,7 @@ import { estadoDelViaje, responderConsulta } from './consulta_chofer';
 import { resolverCuentaOficina, telefonoJefeDe, type CuentaOficina } from './contactos';
 import { atenderConfirmacion, aceptarPorActividad } from './confirmar_viaje';
 import { enviarBriefingInicio } from './briefing_inicio_wa';
+import { transcribirNotaDeVoz, RESPUESTA_NO_ENTENDI, RESPUESTA_SIN_PRESUPUESTO } from './voz_transcrita';
 import { avisarCierreAlJefe } from './avisar_cierre';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
@@ -86,7 +87,7 @@ import { codigoDeError } from '@/lib/observability/sentry';
 
 export interface InboundMessage {
   from: string;               // teléfono E.164
-  type: 'text' | 'image' | 'document' | 'location' | 'other';
+  type: 'text' | 'image' | 'document' | 'location' | 'audio' | 'other';
   /** El cuerpo del texto — o, en una imagen, su CAPTION (el rótulo que el
    *  chofer escribe al pie de la foto; F4: así se distingue la carta porte
    *  y la nota de talacha de un comprobante cualquiera). */
@@ -979,6 +980,42 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
 
       await sendText(msg.from, 'Hola, no te tengo registrado como operador. Pídele a tu flota que te dé de alta en Likida. 🚛');
       return;
+    }
+    // ── CAPA E1: LA NOTA DE VOZ DEL CHOFER SE VUELVE TEXTO, AQUÍ Y SOLO AQUÍ ─
+    //
+    // El chofer asustado manda audio, no escribe (blueprint 19). La conversión
+    // vive en ESTE punto —ya se sabe que el remitente es un chofer, ya hay
+    // tenant para el presupuesto, y todavía no arranca ningún camino— para que
+    // TODO lo de abajo (ARCO, ROJO, talacha, hitos, confirmación) reciba el
+    // texto transcrito por el mismo canal que un mensaje escrito. Ningún
+    // reconocedor se relaja: si la transcripción no dice "chocamos", el
+    // protocolo ROJO no dispara — el léxico cerrado sigue mandando.
+    //
+    // Fail-closed en la verdad: no entender es respuesta, adivinar no. La nota
+    // ininteligible, el presupuesto agotado y el fallo nuestro terminan todos
+    // en un "¿me lo escribes?" — jamás en silencio.
+    if (msg.type === 'audio') {
+      if (!msg.mediaId) {
+        await sendText(msg.from, RESPUESTA_NO_ENTENDI);
+        return;
+      }
+      const t = await transcribirNotaDeVoz({
+        tenantId: op.tenantId,
+        mediaId: msg.mediaId,
+        senal: reloj.senal(30_000),
+      });
+      if (!t.ok) {
+        await sendText(msg.from, t.motivo === 'presupuesto' ? RESPUESTA_SIN_PRESUPUESTO : RESPUESTA_NO_ENTENDI);
+        return;
+      }
+      // La transcripción queda citable en el log con su marca de origen; el
+      // texto que sigue el camino es el LIMPIO — un prefijo rompería los
+      // comandos exactos («va», «radio F-123 25») que el chofer sí puede decir.
+      logger.info('voz.transcrita', {
+        operador: op.operadorId, id: msg.waMessageId ?? null,
+        texto: `🎤 (transcrito): ${t.texto}`,
+      });
+      msg = { ...msg, type: 'text', text: t.texto };
     }
     // ── El medio ARCO responde SIEMPRE, haya viaje o no ──────────────────────
     // Va ANTES del corte por "sin viaje abierto". El aviso de privacidad le
