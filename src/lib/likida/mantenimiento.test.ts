@@ -63,6 +63,28 @@ describe('rutinasVencidas — el reloj de kilómetros y su honestidad', () => {
     expect(r[0].motivo).toBe('sin_odometro');
   });
 
+  // AUDITORÍA FABLE CICLO 3 (c3-3): el escenario del flujo NORMAL — la orden
+  // se cierra con la lectura fresca del tablero (130,000) y nadie vuelve a la
+  // forma de unidades (km_actual se quedó en 100,000). La resta negativa
+  // dejaba la rutina "verde para siempre".
+  it('c3-3: km de la unidad ATRÁS del km del servicio → odometro_desactualizado, jamás verde en silencio', () => {
+    const r = rutinasVencidas(
+      [rutina({ cadaKm: 10_000 })], [unidad({ kmActual: 100_000 })],
+      [servicio({ cerradaEn: '2026-08-01T00:00:00Z', kmServicio: 130_000 })], HOY,
+    );
+    expect(r).toHaveLength(1);
+    expect(r[0].motivo).toBe('odometro_desactualizado');
+    expect(r[0].kmDesdeServicio).toBeNull();   // una resta negativa no es un dato
+  });
+
+  it('c3-3: con reloj de días de respaldo, el odómetro desactualizado no grita — decide el de días', () => {
+    const r = rutinasVencidas(
+      [rutina({ cadaDias: 90, cadaKm: 10_000 })], [unidad({ kmActual: 100_000 })],
+      [servicio({ cerradaEn: '2026-08-01T00:00:00Z', kmServicio: 130_000 })], HOY, // 26 días: al día
+    );
+    expect(r).toHaveLength(0);
+  });
+
   it('con reloj de días de respaldo, la falta de odómetro no grita: decide el reloj de días', () => {
     const alDia = rutinasVencidas(
       [rutina({ cadaDias: 90, cadaKm: 10_000 })], [unidad({ kmActual: null })],

@@ -125,7 +125,13 @@ export type MotivoPropuesta =
   | 'vencida_por_dias'
   | 'vencida_por_km'
   | 'sin_historial'       // nunca se le ha hecho esta rutina a esta unidad
-  | 'sin_odometro';       // rutina SOLO por km y la unidad no declara km_actual
+  | 'sin_odometro'        // rutina SOLO por km y la unidad no declara km_actual
+  // El km declarado de la unidad quedó ATRÁS del km del último servicio: el
+  // reloj es contradictorio y no se puede leer. AUDITORÍA FABLE CICLO 3
+  // (c3-3): este estado es el resultado NORMAL de cerrar una orden con la
+  // lectura fresca del tablero cuando nadie vuelve a la forma de unidades —
+  // callarlo dejaba la rutina "verde para siempre".
+  | 'odometro_desactualizado';
 
 export interface PropuestaRutina {
   rutinaId: string;
@@ -194,6 +200,14 @@ export function rutinasVencidas(
           // El reloj de km no se puede leer. Si no hay reloj de días que
           // cubra, se declara — jamás se calla como "al día".
           if (r.cadaDias === null) out.push(base('sin_odometro'));
+          continue;
+        }
+        if (u.kmActual < ult.kmServicio) {
+          // c3-3: la resta saldría negativa — el reloj no está "al día", está
+          // ILEGIBLE (el km de la unidad es más viejo que el del servicio).
+          // Mismo criterio que sin_odometro: se declara si no hay reloj de
+          // días que rescate.
+          if (r.cadaDias === null) out.push(base('odometro_desactualizado'));
           continue;
         }
         if (u.kmActual - ult.kmServicio >= r.cadaKm) out.push(base('vencida_por_km'));
@@ -393,7 +407,23 @@ export async function cerrarOrden(tenantId: string, ordenId: string, kmServicio:
   const { data, error } = await acotada(supabaseAdmin().from('mantenimiento')
     .update({ estado: 'cerrada', cerrada_en: new Date().toISOString(), km_servicio: kmServicio })
     .eq('id', ordenId).eq('tenant_id', tenantId).neq('estado', 'cerrada')
-    .select('id'), 'mantenimiento.cerrar');
+    .select('id, unidad_id'), 'mantenimiento.cerrar');
   if (error) throw new Error(`cerrarOrden: ${error.message}`);
-  if (!data || data.length === 0) throw new DatoInvalido('Esa orden ya estaba cerrada o no existe en tu flota.');
+  const fila = (data ?? [])[0] as { id: string; unidad_id: string | null } | undefined;
+  if (!fila) throw new DatoInvalido('Esa orden ya estaba cerrada o no existe en tu flota.');
+
+  // c3-3 (segunda mitad): la lectura del tablero al cerrar es MÁS FRESCA que
+  // el km declarado en la forma de unidades — que rara vez se vuelve a tocar.
+  // Sin esto, el siguiente ciclo de la rutina nacía con el reloj contradictorio
+  // (km_actual < km_servicio) que la propuesta ahora declara como ilegible.
+  // Solo se ADELANTA (el WHERE deja fuera un km_actual ya mayor): un odómetro
+  // jamás retrocede por cerrar una orden. Mejor esfuerzo con la falla dicha:
+  // la orden ya quedó cerrada y eso no se revierte por no poder avanzar el km.
+  if (kmServicio !== null && fila.unidad_id) {
+    const { error: errKm } = await acotada(supabaseAdmin().from('unidad')
+      .update({ km_actual: kmServicio })
+      .eq('id', fila.unidad_id).eq('tenant_id', tenantId)
+      .or(`km_actual.is.null,km_actual.lt.${kmServicio}`), 'mantenimiento.avanzar_odometro');
+    if (errKm) logger.warn('mantenimiento.odometro_no_avanzo', { orden: ordenId, err: errKm.message });
+  }
 }
