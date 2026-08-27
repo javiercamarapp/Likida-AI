@@ -7,6 +7,8 @@ import { telefonoJefeDe } from './contactos';
 import type { RolOficina } from './contactos';
 import { sendText, sendButtons } from '@/lib/meta/client';
 import { puedeAsignar } from '@/lib/auth/permisos';
+import { recomendacionCascada } from './asistencia_proveedor';
+import { hoyMx } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ASISTENCIA EN CARRETERA Y SINIESTROS (0198, Fase 4 — núcleo).
@@ -324,6 +326,13 @@ async function avisarAlJefe(args: {
   }
   const desc = args.descripcion.replace(/\s+/g, ' ').trim().slice(0, 220);
   const encabezado = args.nivel === 'rojo' ? '🚨' : '⚠️';
+  // Capa C: la cascada del proveedor correcto (directorio verificado → 800 de
+  // la póliza → recursos nacionales) viaja EN el mismo aviso — el jefe decide
+  // y marca, Likida jamás. Best-effort adentro (devuelve null si algo falla o
+  // en robo/violencia): la recomendación nunca puede costar el 🚨.
+  const cascada = args.modoMudo
+    ? null
+    : await recomendacionCascada(args.tenantId, args.incidenciaId, args.tipo, hoyMx());
   const cuerpo =
     `${encabezado} ${args.chofer} reporta ${ROTULO_TIPO[args.tipo]}${args.folio ? ` en el viaje ${args.folio}` : ''}:\n` +
     `«${desc}»\n` +
@@ -331,6 +340,7 @@ async function avisarAlJefe(args: {
     (args.modoMudo
       ? '\n⚠️ Puede ser violencia EN CURSO: NO le marques ni le escribas hasta saber que está seguro — un teléfono sonando lo puede poner en riesgo. Nosotros tampoco le vamos a escribir más.\n'
       : '') +
+    (cascada ?? '') +
     `\nMárcale en cuanto puedas${args.modoMudo ? ' a un tercero cercano (base, otro chofer de la zona), no a él' : ''} y aprieta el botón para que sepamos que ya lo estás atendiendo.`;
   const enviado = await sendButtons(telefono, cuerpo, [
     { id: `asi_ok:${args.incidenciaId}`, titulo: 'Ya lo atiendo' },
