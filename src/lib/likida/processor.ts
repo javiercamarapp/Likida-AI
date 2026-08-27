@@ -34,6 +34,7 @@ import { interpretarHito, sellarHito, mensajeHito } from '@/lib/likida/hitos_via
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { atenderDespachoOficina } from '@/lib/likida/despacho_wa';
 import { interpretarTalacha, atenderTalachaChofer, atenderAutorizacionTalacha } from '@/lib/likida/talacha_wa';
+import { interpretarAsistencia, atenderAsistenciaChofer, atenderReconocimientoAsistencia, atenderAsistenciaOficina } from '@/lib/likida/asistencia_wa';
 import { esCaptionPod, guardarPodDelChofer, mensajePod } from '@/lib/likida/pod_wa';
 import { atenderInformeOficina } from '@/lib/likida/informes_wa';
 import { pideInformePdf, mandarInformePdf, atenderPreguntaLibre } from '@/lib/likida/oficina_wa';
@@ -518,10 +519,38 @@ async function atenderTextoOficina(
   texto: string,
   opciones: { incluirPreguntaLibre: boolean; incluirDespacho: boolean },
 ): Promise<boolean> {
-  // La talacha va PRIMERO: el botón `tal_si:<uuid>` responde a una pregunta
-  // concreta que le mandamos, y con un viaje pendiente de despacho ese módulo
-  // se quedaría con todo lo que no sea sí/no — un id crudo de botón acabaría en
-  // el resumen del viaje. El tenant sale del LOOKUP, jamás del texto.
+  // La ASISTENCIA va antes que todo (0198, punto D del plano): el botón
+  // `asi_ok:<uuid>` del 🚨 responde a una pregunta nuestra, y un ROJO escrito
+  // por el dueño ("chocamos") no puede caer al analista como si fuera una
+  // pregunta de negocio. El tenant sale del LOOKUP, jamás del texto.
+  try {
+    const rReconoce = await atenderReconocimientoAsistencia(
+      { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId }, texto,
+    );
+    if (rReconoce) {
+      logger.info('oficina.asistencia_reconocida', { user: cuenta.userId, rol: cuenta.rol });
+      await sendText(from, rReconoce);
+      return true;
+    }
+    const emergenciaOficina = interpretarAsistencia(texto);
+    if (emergenciaOficina?.nivel === 'rojo') {
+      const rOficina = await atenderAsistenciaOficina(
+        { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId }, texto, emergenciaOficina,
+      );
+      if (rOficina) {
+        logger.info('oficina.asistencia_rojo', { user: cuenta.userId });
+        await sendText(from, rOficina);
+        return true;
+      }
+    }
+  } catch (e) {
+    logger.error('oficina.asistencia_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+  }
+
+  // La talacha va DESPUÉS de la asistencia y antes del resto: el botón
+  // `tal_si:<uuid>` responde a una pregunta concreta que le mandamos, y con un
+  // viaje pendiente de despacho ese módulo se quedaría con todo lo que no sea
+  // sí/no — un id crudo de botón acabaría en el resumen del viaje.
   try {
     const rTalacha = await atenderAutorizacionTalacha(
       { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId }, texto,
@@ -936,6 +965,41 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     const viajeId = await getOpenViaje(op.tenantId, op.operadorId);
     ctxViaje = viajeId;
 
+    // ── EMERGENCIA ROJA, POR ENCIMA DE TODO (0198, Fase 4) ──────────────────
+    //
+    // Va ANTES del gate de privacidad A PROPÓSITO (punto E del plano técnico,
+    // mismo precedente por el que el medio ARCO se izó arriba): un chofer que
+    // aún no aceptó el aviso y escribe "chocamos, hay un herido" recibe
+    // TRATAMIENTO MÍNIMO — incidencia + aviso al jefe, sin foto, sin OCR, sin
+    // modelo. Bloquear una emergencia de vida detrás de un trámite de aviso
+    // sería lo contrario de lo que la LFPDPPP protege. Decisión consciente de
+    // producto+legal, no un default.
+    //
+    // Y va antes del check de oficina y de talacha: ROJO le gana a todo —
+    // "chocamos y la talacha cobra 800" es un choque, no una talacha. Cubre
+    // texto E imagen por su caption (punto B): la foto de un camión volcado
+    // NO paga visión ni entra como comprobante — hoy pagaba OCR y el chofer
+    // recibía "esa foto salió difícil de leer" mientras su unidad ardía.
+    // También cubre al chofer SIN viaje (punto C): `viajeId` puede ser null y
+    // la incidencia se ata al operador (columna `operador_id` de la 0198).
+    // Ámbar NO pasa por aquí: no es riesgo de vida y respeta el gate.
+    if ((msg.type === 'text' || msg.type === 'image') && msg.text) {
+      const emergencia = interpretarAsistencia(msg.text);
+      if (emergencia?.nivel === 'rojo') {
+        const r = await atenderAsistenciaChofer({
+          tenantId: op.tenantId,
+          viajeId,
+          operadorId: op.operadorId,
+          texto: msg.text,
+          asistencia: emergencia,
+          waMessageId: msg.waMessageId ?? null,
+        });
+        logger.info('asistencia.rojo', { viaje: viajeId, tipoMsg: msg.type, mudo: emergencia.modoMudo });
+        await sendText(msg.from, r.respuesta);
+        return;
+      }
+    }
+
     // ── EL DUEÑO QUE MANEJA TAMBIÉN DESPACHA ────────────────────────────────
     //
     // `resolveOperador` acertó, así que hasta aquí este mensaje era del chofer y
@@ -1155,6 +1219,26 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         } catch (e) {
           logger.error('huerfano.error', { err: e instanceof Error ? e.message : String(e) });
           await sendText(msg.from, 'Se me trabó tantito al recibir tu foto 😕. ¿Me la reenvías?');
+          return;
+        }
+      }
+      // ── ¿VARADO SIN VIAJE? (0198, punto C) ─────────────────────────────
+      // "Estoy varado" sin viaje abierto merecía algo mejor que "no tienes un
+      // viaje abierto para liquidar". El ROJO ya se atendió arriba (antes del
+      // gate); aquí se ata el ámbar al operador, con viaje_id null.
+      if (msg.type === 'text' && msg.text) {
+        const ambar = interpretarAsistencia(msg.text);
+        if (ambar) {
+          const r = await atenderAsistenciaChofer({
+            tenantId: op.tenantId,
+            viajeId: null,
+            operadorId: op.operadorId,
+            texto: msg.text,
+            asistencia: ambar,
+            waMessageId: msg.waMessageId ?? null,
+          });
+          logger.info('asistencia.sin_viaje', { operador: op.operadorId, nivel: ambar.nivel });
+          await sendText(msg.from, r.respuesta);
           return;
         }
       }
@@ -2304,6 +2388,29 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         logger.warn('acuse.rechazado', { viaje: viajeId, gasto: boton.gastoId });
         await say(mensajeCorregir());
       }
+      return;
+    }
+
+    // ── ¿EMERGENCIA DE CARRETERA? (0198, punto A del plano) ──────────────────
+    //
+    // Entre el botón y la consulta A PROPÓSITO: el botón responde a una
+    // pregunta nuestra (un id crudo no es un reporte); todo lo demás puede
+    // comerse una emergencia — "¿cuánto llevo?" jamás trae "volcadura", pero
+    // el orden documenta la intención. El ROJO normalmente ya se atendió
+    // ARRIBA (antes del gate de privacidad); este check es la red redundante
+    // —el mismo patrón que el ARCO— y el camino titular del ÁMBAR con viaje.
+    const emergenciaConViaje = interpretarAsistencia(msg.text);
+    if (emergenciaConViaje) {
+      const rEmergencia = await atenderAsistenciaChofer({
+        tenantId: op.tenantId,
+        viajeId,
+        operadorId: op.operadorId,
+        texto: msg.text,
+        asistencia: emergenciaConViaje,
+        waMessageId: msg.waMessageId ?? null,
+      });
+      logger.info('asistencia.con_viaje', { viaje: viajeId, nivel: emergenciaConViaje.nivel });
+      await say(rEmergencia.respuesta);
       return;
     }
 

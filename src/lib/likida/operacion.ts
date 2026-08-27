@@ -959,6 +959,15 @@ export interface NuevaIncidencia {
    *  ('autorizada'/'rechazada') NUNCA se escribe al crear: la firma un humano
    *  después, con quién y cuándo (constraint `incidencia_decision_firmada`). */
   autorizacion?: 'pendiente' | null;
+
+  // ── El circuito de asistencia/siniestros (0198, Fase 4) ────────────────────
+  /** De quién es la emergencia — imprescindible cuando NO hay viaje abierto
+   *  (punto C del plano): sin esto dos choferes sin viaje compartirían "la
+   *  incidencia abierta" de la flota. */
+  operadorId?: string | null;
+  /** NULL = NO PREGUNTADO — jamás false por defecto (comentario de la 0198):
+   *  un false aquí es un parte médico que solo el chofer puede dar. */
+  hayLesionados?: boolean | null;
 }
 
 /** Comprueba que un gasto sea del tenant, ANTES de enlazarlo a una incidencia.
@@ -989,6 +998,10 @@ export async function crearIncidencia(tenantId: string, i: NuevaIncidencia): Pro
   if (i.gastoId && !(await gastoPropio(tenantId, i.gastoId))) {
     throw new Error('crearIncidencia: el gasto no pertenece a esta flota');
   }
+  // Y el cuarto, para la emergencia sin viaje (0198): mismo candado.
+  if (i.operadorId && !(await operadorPropio(tenantId, i.operadorId))) {
+    throw new Error('crearIncidencia: el operador no pertenece a esta flota');
+  }
   const { data, error } = await acotada(supabaseAdmin().from('incidencia').insert({
     tenant_id: tenantId,
     viaje_id: i.viajeId || null,
@@ -1004,6 +1017,8 @@ export async function crearIncidencia(tenantId: string, i: NuevaIncidencia): Pro
     evidencia_path: i.evidenciaPath ?? null,
     gasto_id: i.gastoId ?? null,
     autorizacion: i.autorizacion ?? null,
+    operador_id: i.operadorId ?? null,
+    hay_lesionados: i.hayLesionados ?? null,
   }).select('id').single(), 'crearIncidencia');
   if (error) throw new Error(`crearIncidencia: ${error.message}`);
   const id = (data as { id?: unknown } | null)?.id;
