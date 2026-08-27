@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getBorradorViaje } from '@/lib/likida/carta_porte_datos';
 import { generarXmlCcp } from '@/lib/likida/carta_porte_xml';
 import { generarIdCcp } from '@/lib/likida/carta_porte';
+import { leerXmlTimbrado } from '@/lib/likida/carta_porte_timbre';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { getSessionTenant } from '@/lib/auth/session';
@@ -46,8 +47,29 @@ export async function GET(req: Request) {
     return new NextResponse('Tu rol no puede descargar este documento.', { status: 403 });
   }
 
-  const viajeId = new URL(req.url).searchParams.get('viaje')?.trim() ?? '';
+  const url = new URL(req.url);
+  const viajeId = url.searchParams.get('viaje')?.trim() ?? '';
   if (!viajeId) return new NextResponse('Falta el viaje (?viaje=…).', { status: 400 });
+
+  // FASE D vía PAC (0226): `&timbrado=1` descarga el XML TIMBRADO tal cual lo
+  // devolvió el PAC — el comprobante, no el borrador. Solo existe si el viaje
+  // tiene timbre vigente; sin él, 404 honesto (no se genera nada al vuelo).
+  if (url.searchParams.get('timbrado') === '1') {
+    try {
+      const timbre = await leerXmlTimbrado(t.tenantId, viajeId);
+      if (timbre === null) return new NextResponse('Este viaje no tiene timbre vigente.', { status: 404 });
+      logger.info('export.ccp_xml_timbrado', { viajeId, uuid: timbre.uuid, rol: t.rol });
+      return new NextResponse(timbre.xml, {
+        headers: {
+          'Content-Type': 'application/xml; charset=utf-8',
+          'Content-Disposition': `attachment; filename="ccp-timbrada-${timbre.uuid}.xml"`,
+        },
+      });
+    } catch (e) {
+      logger.error('export.ccp_xml_timbrado_fallo', { viajeId, error: e instanceof Error ? e.message : String(e) });
+      return new NextResponse('No se pudo leer el XML timbrado. Intenta de nuevo.', { status: 500 });
+    }
+  }
 
   try {
     const v = await getBorradorViaje(t.tenantId, viajeId);

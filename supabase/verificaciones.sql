@@ -9962,3 +9962,103 @@ begin
   raise exception 'COTIZADOR_0225  segunda_config_rebota=%  factor_alto_rebota=%  margen_alto_rebota=%  ganada_incompleta_rebota=%  desglose_entra=%  cerrado=%   (esperado t / t / t / t / t / t)',
     segunda_config_rebota, factor_alto_rebota, margen_alto_rebota, ganada_incompleta_rebota, desglose_entra, cerrado;
 end $$;
+
+-- ── 179. El timbre: uno vigente por viaje, uuid único, formas y doble candado (mig. 0226) ──
+-- Lo que solo la base demuestra: (a) UN timbre vigente por viaje — el doble
+-- clic lo resuelve el índice parcial, gana exactamente uno; (b) cancelado
+-- LIBERA: tras cancelar, el re-timbre de la corrección entra; (c) el mismo
+-- uuid fiscal no entra dos veces (ni cambiando mayúsculas) — el reintento de
+-- un timbre ya aceptado rebota en la base; (d) la FK compuesta: un timbre no
+-- se cuelga del viaje de OTRA flota; (e) las formas del perfil fiscal: RFC
+-- torcido y régimen de 2 dígitos rebotan, y el modo solo admite
+-- sandbox/produccion; (f) el doble candado en las dos tablas nuevas.
+do $$
+declare
+  ta uuid; tb uuid; va uuid; vb uuid; op_a uuid; op_b uuid;
+  segundo_vigente_rebota boolean; recancelado_entra boolean;
+  uuid_repetido_rebota boolean; cruzado_rebota boolean;
+  rfc_torcido_rebota boolean; regimen_corto_rebota boolean; modo_basura_rebota boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0226 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0226 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'Op 0226 A', '+5215550002261') returning id into op_a;
+  -- Dos operadores: `uq_viaje_abierto_por_operador` no admite dos viajes
+  -- abiertos del mismo chofer, y este bloque necesita dos viajes vivos.
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'Op 0226 B', '+5215550002262') returning id into op_b;
+  insert into viaje (tenant_id, operador_id) values (ta, op_a) returning id into va;
+  insert into viaje (tenant_id, operador_id) values (ta, op_b) returning id into vb;
+
+  -- (a) Dos timbres vigentes del mismo viaje: el segundo rebota.
+  insert into ccp_timbre (tenant_id, viaje_id, uuid_fiscal, proveedor, modo, fecha_timbrado, xml)
+    values (ta, va, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001', 'sw', 'sandbox', now(), '<xml/>');
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, uuid_fiscal, proveedor, modo, fecha_timbrado, xml)
+      values (ta, va, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000002', 'sw', 'sandbox', now(), '<xml/>');
+    segundo_vigente_rebota := false;
+  exception when unique_violation then
+    segundo_vigente_rebota := true;
+  end;
+
+  -- (b) Cancelar libera el viaje para el re-timbre de la corrección.
+  update ccp_timbre set estado = 'cancelado'
+    where tenant_id = ta and viaje_id = va and uuid_fiscal = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001';
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, uuid_fiscal, proveedor, modo, fecha_timbrado, xml)
+      values (ta, va, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000002', 'sw', 'sandbox', now(), '<xml/>');
+    recancelado_entra := true;
+  exception when unique_violation then
+    recancelado_entra := false;
+  end;
+
+  -- (c) El mismo uuid fiscal, en mayúsculas, en otro viaje: rebota igual.
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, uuid_fiscal, proveedor, modo, fecha_timbrado, xml)
+      values (ta, vb, 'AAAAAAAA-BBBB-4CCC-8DDD-000000000002', 'sw', 'sandbox', now(), '<xml/>');
+    uuid_repetido_rebota := false;
+  exception when unique_violation then
+    uuid_repetido_rebota := true;
+  end;
+
+  -- (d) El timbre de la flota B sobre el viaje de la flota A: la FK compuesta
+  -- lo rebota (foreign_key_violation, no un filtro de app).
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, uuid_fiscal, proveedor, modo, fecha_timbrado, xml)
+      values (tb, va, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000003', 'sw', 'sandbox', now(), '<xml/>');
+    cruzado_rebota := false;
+  exception when foreign_key_violation then
+    cruzado_rebota := true;
+  end;
+
+  -- (e) Las formas del perfil del emisor y el dominio del modo.
+  begin
+    insert into flota_fiscal (tenant_id, rfc) values (tb, 'no-es-rfc');
+    rfc_torcido_rebota := false;
+  exception when check_violation then
+    rfc_torcido_rebota := true;
+  end;
+  begin
+    insert into flota_fiscal (tenant_id, regimen_fiscal) values (tb, '61');
+    regimen_corto_rebota := false;
+  exception when check_violation then
+    regimen_corto_rebota := true;
+  end;
+  begin
+    insert into flota_fiscal (tenant_id, modo) values (tb, 'demo');
+    modo_basura_rebota := false;
+  exception when check_violation then
+    modo_basura_rebota := true;
+  end;
+
+  -- (f) El doble candado en las dos tablas nuevas.
+  cerrado := not has_table_privilege('anon', 'public.flota_fiscal', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.flota_fiscal', 'SELECT')
+    and has_table_privilege('service_role', 'public.flota_fiscal', 'SELECT')
+    and not has_table_privilege('anon', 'public.ccp_timbre', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.ccp_timbre', 'SELECT')
+    and has_table_privilege('service_role', 'public.ccp_timbre', 'SELECT');
+
+  raise exception 'TIMBRE_0226  segundo_vigente_rebota=%  recancelado_entra=%  uuid_repetido_rebota=%  cruzado_rebota=%  rfc_torcido_rebota=%  regimen_corto_rebota=%  modo_basura_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t / t)',
+    segundo_vigente_rebota, recancelado_entra, uuid_repetido_rebota, cruzado_rebota,
+    rfc_torcido_rebota, regimen_corto_rebota, modo_basura_rebota, cerrado;
+end $$;

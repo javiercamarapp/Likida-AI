@@ -28,6 +28,7 @@ import { AvisoSinFlota } from '../sin-flota';
 import { Bloque, Barra, EsqCifras } from '../bloque';
 import { EstimuloPeaje } from './estimulo-peaje';
 import { PerfilErp } from './perfil-erp';
+import { Timbrado } from './timbrado';
 
 /** Resiliencia por sección: si una consulta falla, devuelve null y la
  *  tarjeta muestra un fallback en vez de tirar toda la pantalla. */
@@ -224,6 +225,8 @@ export async function InicioContador({
               cualquier flota — el lector existía desde la 0178, el escritor
               es este formulario. */}
           <PerfilErp searchParams={searchParams} tenantExiste={tenantExiste} />
+
+          <Timbrado searchParams={searchParams} tenantExiste={tenantExiste} />
 
           {/* Condicional de verdad (solo si hay fuego): sin esqueleto, para no
               reservar un hueco que casi siempre queda vacío. */}
