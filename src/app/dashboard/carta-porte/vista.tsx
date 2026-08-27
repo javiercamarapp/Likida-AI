@@ -1,6 +1,7 @@
 import { ScrollText, TriangleAlert, CircleCheck, CircleHelp } from 'lucide-react';
 import type { EstadoCartaPorte, ViajeCcp } from '@/lib/likida/carta_porte_datos';
 import type { EstadoCampoCcp } from '@/lib/likida/carta_porte';
+import { AVISO_VALOR_MERCANCIA } from '@/lib/likida/relojes_legales';
 import { EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
 import { numero } from '@/lib/formato';
 import { BarraPagina } from '../resumen-visual';
@@ -44,6 +45,20 @@ export function VistaCartaPorte({ datos, declarar = null }: {
             ninguna facilidad aplica. Likida no timbra ni garantiza cumplimiento: prepara, valida y
             deja rastro de quién declaró qué.
           </p>
+
+          {/* FASE 6 (relojes legales): el aviso que nadie da ANTES del
+              siniestro. Es incondicional a propósito — Likida hoy no captura
+              ValorMercancia, así que no hay un "por viaje" que evaluar: el
+              dato correcto es que se declara AL EMITIR con el PAC, y la
+              consecuencia de no hacerlo es una cifra concreta, no un regaño. */}
+          <section className="card p-4 max-w-3xl space-y-1.5" style={{ borderLeft: '3px solid var(--warn)' }}>
+            <p className="text-[12.5px] font-medium flex items-start gap-1.5">
+              <TriangleAlert width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
+              {AVISO_VALOR_MERCANCIA.titulo}
+            </p>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{AVISO_VALOR_MERCANCIA.cuerpo}</p>
+            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{AVISO_VALOR_MERCANCIA.fundamento}</p>
+          </section>
 
           {datos === null ? (
             <EstadoError mensaje="No pude leer los viajes en curso ni sus datos de unidad y operador. No se pinta un semáforo a medias: un «no necesita» sobre datos incompletos vale una presunción de contrabando." />

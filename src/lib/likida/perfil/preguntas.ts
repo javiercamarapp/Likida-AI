@@ -345,6 +345,14 @@ export function ventanaCobranzaDeclarada(perfilCrudo: unknown): { horaInicio: nu
   return decidir(leerPerfil(perfilCrudo).cobranzaVentana) ?? null;
 }
 
+/** ¿La flota DECLARÓ mover materiales peligrosos? `null` = no declarado —
+ *  que para los relojes matpel (Fase 6) significa NO disparar plazos de
+ *  SICT/ASEA que quizá no aplican: un reloj legal inventado entrena a
+ *  ignorar los reales. Solo una declaración (o detección) enciende el reloj. */
+export function hazmatDeclarado(perfilCrudo: unknown): boolean | null {
+  return decidir(leerPerfil(perfilCrudo).hazmat) ?? null;
+}
+
 const ROLES_AVISO = ['encargado', 'flota_admin', 'contador'] as const;
 export type RolAviso = typeof ROLES_AVISO[number];
 
