@@ -12,6 +12,7 @@ import {
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { mxn } from '@/lib/formato';
 import { VistaFacturacion, type CapturaFacturacion } from './vista';
+import { BloqueEstadias } from './estadias';
 import type { ResultadoForma } from './forma';
 
 export const dynamic = 'force-dynamic';
@@ -187,5 +188,12 @@ export default async function PaginaFacturacion({
     cancelar,
   };
 
-  return <VistaFacturacion datos={datos} captura={captura} auditoria={auditoria} />;
+  return (
+    <>
+      <VistaFacturacion datos={datos} captura={captura} auditoria={auditoria} />
+      {/* Estadías y detención (0207): sección independiente — sus lecturas y
+          su fallo no tocan la cartera ni el auditor. */}
+      <BloqueEstadias sp={sp} />
+    </>
+  );
 }

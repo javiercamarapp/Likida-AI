@@ -9264,3 +9264,94 @@ begin
   raise exception 'CCP_MERCANCIA_0204  fk_cruzada=%  cantidad_cero_rebota=%  clave_corta_rebota=%  cp_formato_rebota=%  carta_porte_entra=%  no_declarado_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t)',
     fk_cruzada, cantidad_cero_rebota, clave_corta_rebota, cp_formato_rebota, carta_porte_entra, no_declarado_rebota, cerrado;
 end $$;
+
+-- ── 164. El pacto de detención no cruza flotas y la presencia se mide con aritmética verificable (mig. 0207) ──
+-- Lo que solo la base demuestra: (a) la FK COMPUESTA de `politica_detencion`
+-- rebota un pacto colgado del cliente de OTRA flota; (b) los únicos parciales
+-- dejan UN pacto de flota y UNO por cliente — el duplicado rebota, que es lo
+-- que permite al escritor resolver la carrera con update; (c) los CHECKs
+-- rebotan horas negativas y tarifa en cero (un pacto de $0/h no es un pacto,
+-- es un invento); (d) `presencia_en_sitios` cuenta SOLO las posiciones dentro
+-- del radio y de la ventana — la posición a 5 km o fuera de horario no
+-- fabrica presencia; (e) el doble candado: ni anon ni authenticated tocan la
+-- tabla ni ejecutan la función.
+do $$
+declare
+  ta uuid; tb uuid; ca uuid; cb uuid; v_uni uuid; v_via uuid; v_op uuid;
+  fk_cruzada boolean; flota_duplicada_rebota boolean; cliente_duplicado_rebota boolean;
+  horas_negativas_rebotan boolean; tarifa_cero_rebota boolean;
+  n_presencia bigint; primera_ok boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ DETENCION A 0207') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ DETENCION B 0207') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'CEDIS A') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (tb, 'CEDIS B') returning id into cb;
+
+  -- (a) El pacto de la flota A no puede colgarse del cliente de la flota B.
+  begin
+    insert into politica_detencion (tenant_id, cliente_id, horas_libres, tarifa_hora)
+      values (ta, cb, 2, 500);
+    fk_cruzada := false;
+  exception when foreign_key_violation then
+    fk_cruzada := true;
+  end;
+
+  -- Los legítimos sí entran (si esto truena, el bloque entero truena — bien).
+  insert into politica_detencion (tenant_id, cliente_id, horas_libres, tarifa_hora) values (ta, null, 4, 300);
+  insert into politica_detencion (tenant_id, cliente_id, horas_libres, tarifa_hora) values (ta, ca, 2, 500);
+
+  -- (b) Un solo pacto vigente por alcance: el duplicado rebota.
+  begin
+    insert into politica_detencion (tenant_id, cliente_id, horas_libres) values (ta, null, 8);
+    flota_duplicada_rebota := false;
+  exception when unique_violation then
+    flota_duplicada_rebota := true;
+  end;
+  begin
+    insert into politica_detencion (tenant_id, cliente_id, horas_libres) values (ta, ca, 8);
+    cliente_duplicado_rebota := false;
+  exception when unique_violation then
+    cliente_duplicado_rebota := true;
+  end;
+
+  -- (c) Los CHECKs.
+  begin
+    insert into politica_detencion (tenant_id, cliente_id, horas_libres) values (tb, cb, -1);
+    horas_negativas_rebotan := false;
+  exception when check_violation then
+    horas_negativas_rebotan := true;
+  end;
+  begin
+    insert into politica_detencion (tenant_id, cliente_id, tarifa_hora) values (tb, cb, 0);
+    tarifa_cero_rebota := false;
+  exception when check_violation then
+    tarifa_cero_rebota := true;
+  end;
+
+  -- (d) La presencia medida: dos posiciones dentro del radio (≈22 m y ≈55 m
+  --     del centro), una a ≈5.5 km y una dentro del radio pero FUERA de la
+  --     ventana. Esperado: n=2 y la primera es la de las 10:05.
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'O', '+520000002071') returning id into v_op;
+  insert into unidad (tenant_id, numero_economico) values (ta, 'ECO-0207') returning id into v_uni;
+  insert into viaje (tenant_id, operador_id, unidad_id) values (ta, v_op, v_uni) returning id into v_via;
+  insert into posicion (tenant_id, unidad_id, lat, lng, medida_en, proveedor) values
+    (ta, v_uni, 21.0002, -89.0000, '2026-08-25T10:05:00Z', 'prueba'),
+    (ta, v_uni, 21.0005, -89.0000, '2026-08-25T11:00:00Z', 'prueba'),
+    (ta, v_uni, 21.0500, -89.0000, '2026-08-25T12:00:00Z', 'prueba'),
+    (ta, v_uni, 21.0002, -89.0000, '2026-08-25T09:00:00Z', 'prueba');
+  select n, (primera = '2026-08-25T10:05:00Z'::timestamptz) into n_presencia, primera_ok
+    from presencia_en_sitios(ta, jsonb_build_array(jsonb_build_object(
+      'viaje_id', v_via, 'unidad_id', v_uni,
+      'desde', '2026-08-25T10:00:00Z', 'hasta', '2026-08-25T16:00:00Z',
+      'lat', 21.0, 'lng', -89.0, 'radio_m', 200)));
+
+  cerrado := not has_table_privilege('anon', 'public.politica_detencion', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.politica_detencion', 'INSERT')
+    and has_table_privilege('service_role', 'public.politica_detencion', 'SELECT')
+    and not has_function_privilege('authenticated', 'public.presencia_en_sitios(uuid, jsonb)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.presencia_en_sitios(uuid, jsonb)', 'EXECUTE');
+
+  raise exception 'DETENCION_0207  fk_cruzada=%  flota_duplicada_rebota=%  cliente_duplicado_rebota=%  horas_negativas_rebotan=%  tarifa_cero_rebota=%  n_presencia=%  primera_ok=%  cerrado=%   (esperado t / t / t / t / t / 2 / t / t)',
+    fk_cruzada, flota_duplicada_rebota, cliente_duplicado_rebota, horas_negativas_rebotan, tarifa_cero_rebota, n_presencia, primera_ok, cerrado;
+end $$;
