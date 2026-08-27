@@ -29,6 +29,10 @@
     {
       "path": "/api/cron/gps",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/asistencia",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
