@@ -50,6 +50,11 @@ export const INTERRUPTORES = [
   // único de los tres que toca un canal real, y por eso el primero que se
   // apaga si algo huele mal.
   'agente:enriquecedor', 'agente:sdr', 'agente:enviador',
+  // El back office restante (0219): el vigilante que audita a los otros, el
+  // que caza el drift del catálogo, los relojes legales de Likida-empresa y
+  // el registro de talento. Mismo candado 1 — sin palanca no se despachan.
+  'agente:vigilante_calidad', 'agente:documentacion',
+  'agente:legal_compliance', 'agente:talento',
 ] as const;
 
 export type NombreInterruptor = (typeof INTERRUPTORES)[number];

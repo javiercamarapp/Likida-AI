@@ -49,6 +49,14 @@ export function topePendientesBandeja(): number {
   return Number.isFinite(v) && v > 0 ? Math.floor(v) : 20;
 }
 
+/** Los cuatro del back office restante (0219). La lista se escribe AQUÍ como
+ *  literal —y no importando `AGENTES_BACK_OFFICE`— por la misma razón que la
+ *  de dirección: el módulo del motor se carga por import dinámico dentro de
+ *  su rama, y un import estático para leer cuatro cadenas lo traería en cada
+ *  vuelta del runner. `runner.test.ts` compara esta lista contra la del
+ *  motor: si divergen, falla. */
+const BACK_OFFICE_RESTANTE: readonly string[] = ['vigilante_calidad', 'documentacion', 'legal_compliance', 'talento'];
+
 export interface AgenteDelRunner {
   agente: string;
   resultado: 'corrio' | 'saltado';
@@ -252,6 +260,41 @@ export async function correrRunner(
         agentes.push({ agente: a.id, resultado: r.resultado, motivo: r.motivo, piezas: r.piezas, costoUsd: r.costoUsd });
       } catch (e) {
         agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del motor de dirección' });
+      }
+      continue;
+    }
+
+    // ── EL BACK OFFICE RESTANTE (0219) — vigilante, documentación, legal
+    // y talento. Deterministas (gasto de modelo $0), pero el techo se mide
+    // igual contra el gasto REAL del día: si algún día uno de ellos redacta
+    // con modelo, el candado ya está puesto y no hay que acordarse de ponerlo.
+    // Fail closed: si el gasto no se puede leer, el agente no corre.
+    // Import dinámico por la misma razón que el de dirección: el módulo
+    // arrastra los lectores legales y de la cola, y solo se paga cuando de
+    // verdad se despacha uno de estos cuatro.
+    if (BACK_OFFICE_RESTANTE.includes(a.id)) {
+      try {
+        const gastado = await gastoDelDiaUsd(a.id);
+        if (gastado >= a.presupuesto_dia_usd) {
+          agentes.push({ agente: a.id, resultado: 'saltado', motivo: `techo diario alcanzado (${gastado.toFixed(2)} de ${a.presupuesto_dia_usd} USD)` });
+          continue;
+        }
+      } catch (e) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: `no se pudo leer el gasto del día — fail closed (${e instanceof Error ? e.message.slice(0, 120) : 'error'})` });
+        continue;
+      }
+      try {
+        const { correrAgenteBackOffice, esAgenteBackOffice } = await import('./backoffice');
+        // El estrechamiento de verdad lo hace el predicado del motor, no la
+        // lista literal de arriba: si alguna vez divergen, aquí se ve.
+        if (!esAgenteBackOffice(a.id)) {
+          agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'la lista del runner y la del motor de back office divergen — no se despacha a ciegas' });
+          continue;
+        }
+        const r = await correrAgenteBackOffice(a.id, 'cron');
+        agentes.push({ agente: a.id, resultado: 'corrio', piezas: r.piezas, costoUsd: 0, ...(r.motivo ? { motivo: r.motivo } : {}) });
+      } catch (e) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del motor de back office' });
       }
       continue;
     }
