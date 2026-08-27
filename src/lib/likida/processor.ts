@@ -1926,6 +1926,23 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // llamador nuevo de marcar como aceptado el viaje de un compañero.
         await aceptarPorActividad(op.tenantId, viajeId, op.operadorId);
 
+        // EL TERCER DISPARO DEL BRIEFING (0208). AUDITORÍA FABLE CICLO 3
+        // (c3-2): el chofer que acepta POR FOTO —el camino que este mismo
+        // archivo llama "una aceptación más fuerte que un va"— nunca pasa por
+        // `atenderConfirmacion` con estado 'confirmado', así que el reintento
+        // del briefing de ese gancho jamás corría para él: si el intento del
+        // despacho falló (ventana de 24 h cerrada, lo normal), salía a
+        // carretera sin los avisos de papeles ni los teléfonos verificados —
+        // permanentemente. Su foto acaba de abrir la ventana: es exactamente
+        // el momento del segundo gancho. Idempotente por el sello (una
+        // lectura extra por foto — barato contra un briefing perdido para
+        // siempre) y mejor esfuerzo: el comprobante ya quedó registrado.
+        await enviarBriefingInicio(op.tenantId, viajeId).catch((e) => {
+          logger.warn('briefing.actividad_fallo', {
+            viaje: viajeId, err: e instanceof Error ? e.message : String(e),
+          });
+        });
+
         // ── ¿LA FOTO VENÍA ROTULADA COMO TALACHA? (F4, 0107) ─────────────────
         //
         // "se me ponchó una llanta, son 800" como caption de la foto de la

@@ -58,6 +58,24 @@ describe('normasPorTema', () => {
     }
   });
 
+  // AUDITORÍA FABLE CICLO 3 (c3-6): `citas_en_codigo` de la ficha mezcla citas
+  // de verdad con identificadores del repo ("plazoVerificado"); un token de
+  // código servido como cita se leería como si fuera una norma.
+  it('c3-6: ningún tema sirve un identificador de código como cita', () => {
+    for (const tema of TEMAS_NORMATIVOS) {
+      for (const n of normasPorTema(tema)) {
+        expect(n.cita, `"${n.norma_id}" sirve "${n.cita}"`).not.toMatch(/^[a-z][a-zA-Z0-9]*$/);
+      }
+    }
+  });
+
+  it('c3-6: la ficha de portales cae a su instrumento legible', () => {
+    const facturacion = normasPorTema('cfdi_y_facturacion');
+    const portales = facturacion.find((n) => n.norma_id === 'politica-portales-plazos-facturacion');
+    expect(portales).toBeDefined();
+    expect(portales!.cita).toBe('Portales de autofacturación de comercios (varios)');
+  });
+
   it('un tema desconocido LANZA — vacío se leería como "no hay norma"', () => {
     expect(() => normasPorTema('tema_inventado')).toThrow(/tema desconocido/);
   });

@@ -15,6 +15,7 @@ let escrituras: Array<{ clave: string; payload: unknown; eqs: unknown[][] }>;
 
 function claveDe(tabla: string, verbo: string, selectArg: string | null): string {
   if (verbo === 'update') return selectArg ? `${tabla}.claim` : `${tabla}.update`;
+  if (verbo === 'insert') return `${tabla}.insert`;
   return `${tabla}.select:${selectArg ?? ''}`;
 }
 
@@ -27,7 +28,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       const eqs: unknown[][] = [];
       const responder = (): Resp => {
         const clave = claveDe(tabla, verbo, selectArg);
-        if (verbo === 'update') escrituras.push({ clave, payload, eqs });
+        if (verbo === 'update' || verbo === 'insert') escrituras.push({ clave, payload, eqs });
         const r = respuestas[clave];
         if (!r) throw new Error(`sin respuesta preparada para ${clave}`);
         return r;
@@ -35,6 +36,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       const b = {
         select: (arg: string) => { selectArg = arg; return b; },
         update: (fila: unknown) => { verbo = 'update'; payload = fila; return b; },
+        insert: (fila: unknown) => { verbo = 'insert'; payload = fila; return b; },
         eq: (...a: unknown[]) => { eqs.push(a); return b; },
         order: () => b,
         limit: () => b,
@@ -304,6 +306,36 @@ describe('atenderAutorizacionTalacha — la decisión del jefe', () => {
     const r = await atenderAutorizacionTalacha(JEFE, `tal_no:${INC}`, AHORA);
     expect(r).toContain('ya estaba autorizada');
     expect(sendText).not.toHaveBeenCalled();
+  });
+
+  // AUDITORÍA FABLE CICLO 3 (c3-4): el crash entre la firma y la orden.
+  it('c3-4: el reintento tras un crash abre la orden de taller que faltaba', async () => {
+    // El proceso murió después de firmar y antes de abrir la orden; Meta
+    // reintenta y el claim ya no encuentra pendiente — pero la orden no existe.
+    respuestas['incidencia.claim'] = { data: [], error: null };
+    respuestas['incidencia.select:autorizacion'] = { data: { autorizacion: 'autorizada' }, error: null };
+    respuestas['incidencia.select:id, viaje_id, unidad_id, descripcion'] = {
+      data: { id: INC, viaje_id: 'v1', unidad_id: 'u-77', descripcion: 'llanta ponchada' }, error: null,
+    };
+    respuestas['mantenimiento.insert'] = { data: null, error: null };
+    const r = await atenderAutorizacionTalacha(JEFE, `tal_si:${INC}`, AHORA);
+    expect(escrituras.some((e) => e.clave === 'mantenimiento.insert')).toBe(true);
+    expect(r).toContain('ya quedó abierta');
+  });
+
+  it('c3-4: si la orden YA existía (reintento normal), el mensaje no inventa nada', async () => {
+    respuestas['incidencia.claim'] = { data: [], error: null };
+    respuestas['incidencia.select:autorizacion'] = { data: { autorizacion: 'autorizada' }, error: null };
+    respuestas['incidencia.select:id, viaje_id, unidad_id, descripcion'] = {
+      data: { id: INC, viaje_id: 'v1', unidad_id: 'u-77', descripcion: 'llanta ponchada' }, error: null,
+    };
+    // El candado de la 0209: el duplicado no es fallo.
+    respuestas['mantenimiento.insert'] = {
+      data: null, error: { message: 'duplicate key value violates unique constraint "mantenimiento_incidencia_unica"' },
+    };
+    const r = await atenderAutorizacionTalacha(JEFE, `tal_si:${INC}`, AHORA);
+    expect(r).toContain('ya estaba autorizada — no cambié nada');
+    expect(r).not.toContain('quedó abierta');
   });
 
   it('un id que no es de esta flota recibe "no encontré", nunca toca otra flota', async () => {

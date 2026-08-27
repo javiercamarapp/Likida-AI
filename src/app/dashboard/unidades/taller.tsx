@@ -36,6 +36,7 @@ const MOTIVO: Record<PropuestaRutina['motivo'], string> = {
   vencida_por_km: 'vencida por kilómetros',
   sin_historial: 'sin historial — nunca se le ha hecho; propuesta de arranque',
   sin_odometro: 'sin odómetro declarado — la rutina es por km y la unidad no tiene km capturado: no se puede evaluar',
+  odometro_desactualizado: 'odómetro desactualizado — el km de la unidad quedó atrás del km del último servicio: captura el km actual en la unidad para poder leer el reloj',
 };
 
 function Origen({ o }: { o: OrdenTaller }) {
@@ -120,7 +121,11 @@ export async function BloqueTaller({
         <h3 className="text-[13px] font-medium">Órdenes abiertas ({taller.ordenesAbiertas.length})</h3>
         {taller.ordenesAbiertas.length === 0 ? (
           <p className="text-xs" style={{ color: 'var(--muted)' }}>
-            Sin órdenes abiertas. Las averías que tu jefe de patio autoriza por WhatsApp abren la suya solas.
+            {/* c3-5: la promesa completa. Los viajes dados de alta por WhatsApp no
+                traen unidad asignada (0047) y su avería NO puede abrir orden — para
+                una flota 100 % WhatsApp el texto anterior era mentira permanente. */}
+            Sin órdenes abiertas. Las averías que tu jefe de patio autoriza por WhatsApp abren la suya solas
+            cuando el viaje tiene unidad asignada; sin unidad, la orden se abre aquí a mano.
           </p>
         ) : (
           taller.ordenesAbiertas.map((o) => (
@@ -171,7 +176,9 @@ export async function BloqueTaller({
                 {p.diasDesdeServicio !== null && ` · ${p.diasDesdeServicio} días del último servicio`}
                 {p.kmDesdeServicio !== null && ` · ${numero(p.kmDesdeServicio)} km recorridos`}
               </span>
-              {opera && p.motivo !== 'sin_odometro' && (
+              {/* Los motivos de dato faltante piden capturar el dato, no abrir
+                  una orden que nadie sabe si toca. */}
+              {opera && p.motivo !== 'sin_odometro' && p.motivo !== 'odometro_desactualizado' && (
                 <form action={accionAbrirOrden} className="ml-auto">
                   <input type="hidden" name="rutinaId" value={p.rutinaId} />
                   <input type="hidden" name="unidadId" value={p.unidadId} />

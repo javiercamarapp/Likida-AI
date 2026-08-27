@@ -94,10 +94,25 @@ export interface NormaConsultada {
   exigible_desde: string | null;
 }
 
+/**
+ * La cita que se le enseña al chat. `n.citas` viene de `citas_en_codigo` de la
+ * ficha YAML, y ahí conviven citas de verdad ("LIVA art. 5") con
+ * IDENTIFICADORES DE CÓDIGO que marcan dónde vive la norma en el repo
+ * ("plazoVerificado"). AUDITORÍA FABLE CICLO 3 (c3-6): la ficha de portales
+ * solo trae el identificador, y salía al chat como cita textual — el contralor
+ * podía leer "plazoVerificado — pendiente de verificación" como si fuera una
+ * norma. Un token camelCase de una sola palabra no es una cita: se cae al
+ * instrumento, que sí es legible.
+ */
+function citaLegible(n: Norma): string {
+  const legible = n.citas.find((c) => !/^[a-z][a-zA-Z0-9]*$/.test(c));
+  return legible ?? n.instrumento ?? n.id;
+}
+
 function aConsultada(n: Norma): NormaConsultada {
   return {
     norma_id: n.id,
-    cita: n.citas[0] ?? n.id,
+    cita: citaLegible(n),
     titulo: n.titulo ?? null,
     jerarquia: n.jerarquia,
     vinculante: esVinculante(n.jerarquia),

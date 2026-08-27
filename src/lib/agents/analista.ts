@@ -27,6 +27,7 @@ import { combineAbortSignals } from '@/lib/llm/runtime-signal';
 import { createLlmBudget } from '@/lib/llm/budget';
 import { ahoraMs } from '@/lib/saludo';
 import { TZ_MX, hoyMx } from '@/lib/formato';
+import { guardiaFundamento, normasDeToolCalls } from '@/lib/likida/normas/fundamento';
 import './chat-tools'; // registra las tools de lectura al importar
 
 // ── El contrato de bloques ──────────────────────────────────────────────────
@@ -262,6 +263,47 @@ export interface RespuestaAnalista {
 
 const AVISO_SIN_RESPALDO = 'No pude armar esa respuesta con cifras respaldadas por el sistema, y prefiero no darte números que no pueda sostener. Reformúlala o pregúntame por una de las lecturas del catálogo de Consulta.';
 
+/**
+ * La guardia de FUNDAMENTO sobre los bloques del panel — el candado gemelo de
+ * la guardia de cifras, para citas legales en vez de números.
+ *
+ * AUDITORÍA FABLE CICLO 3 (c3-1, ALTO): la 0209 y el comentario de
+ * `chat-tools.ts` afirmaban que "guardiaFundamento sigue siendo el candado"
+ * también en el panel, y era falso — solo corría en el agente de WhatsApp
+ * (`processor.ts`). Con `consultar_normas` invitando preguntas legales a este
+ * canal, el modelo podía teclear "el artículo 28 de la LISR" de memoria y el
+ * texto salía entero: la fracción no es cifra, y el número de artículo suele
+ * tener respaldo casual (fechas, derivadas). El prompt era la única defensa —
+ * exactamente "una esperanza sobre el prompt".
+ *
+ * PURA para que la prueba diga la verdad sin LLM (el molde de
+ * `cifrasRespaldadas`). Mismo contrato que el llamado de WhatsApp: las normas
+ * permitidas salen de lo que las tools DEVOLVIERON (no de lo que el modelo
+ * diga), y el historial de turnos `asistente` habilita la memoria por tema —
+ * repetir una cita ya entregada no es alucinar.
+ */
+export function fundamentarBloques(
+  bloques: Bloque[],
+  resultadosTools: unknown[],
+  historialAsistente: string,
+): { bloques: Bloque[]; quitadas: string[] } {
+  const permitidas = normasDeToolCalls(resultadosTools);
+  const quitadas: string[] = [];
+  const out: Bloque[] = [];
+  for (const b of bloques) {
+    if (b.tipo !== 'texto') { out.push(b); continue; }
+    const f = guardiaFundamento(b.texto, permitidas, historialAsistente);
+    if (f.forzado) quitadas.push(...f.quitadas);
+    // La guardia puede dejar el bloque vacío (era pura cita inventada): un
+    // bloque de texto vacío no se pinta — se omite, como en validarBloques.
+    if (f.reply.trim()) out.push(f.forzado ? { tipo: 'texto', texto: f.reply } : b);
+  }
+  return {
+    bloques: out.length > 0 ? out : [{ tipo: 'texto', texto: AVISO_SIN_RESPALDO }],
+    quitadas,
+  };
+}
+
 export async function ejecutarAnalista(opts: {
   tenantId: string;
   nombreFlota: string;
@@ -432,6 +474,20 @@ export async function ejecutarAnalista(opts: {
       } else {
         bloques = [{ tipo: 'texto', texto: AVISO_SIN_RESPALDO }];
       }
+    }
+
+    // El candado de fundamento corre AL FINAL, sobre lo que de verdad va a
+    // salir (bloques del modelo, del reintento o de la red determinística —
+    // estos últimos no traen citas, así que la guardia les es neutra). En
+    // try/catch como en WhatsApp: un tropiezo de la guardia no debe tumbar un
+    // turno ya resuelto, pero sí quedar en el log.
+    try {
+      const historialAsistente = opts.mensajes.filter((m) => m.rol === 'asistente').map((m) => m.texto).join('\n');
+      const g = fundamentarBloques(bloques, res.toolCalls.filter((t) => !t.error).map((t) => t.result), historialAsistente);
+      if (g.quitadas.length > 0) logger.warn('chat.fundamento_forzado', { tenantId: opts.tenantId, quitadas: g.quitadas });
+      bloques = g.bloques;
+    } catch (e) {
+      logger.warn('chat.guardia_fundamento_fail', { err: e instanceof Error ? e.message : String(e) });
     }
 
     return {
