@@ -21,10 +21,11 @@ exactamente lo que esta nota existe para no hacer.
 | `/api/cron/wa-outbox` | `* * * * *` (cada minuto) | 300 s | **43,200** |
 | `/api/cron/facturar` | `*/15 * * * *` | 300 s | **2,880** |
 | `/api/cron/gps` | `*/5 * * * *` | 300 s | **8,640** |
+| `/api/cron/asistencia` | `*/5 * * * *` | 120 s | **8,640** |
 | `/api/cron/escalar` | `0 * * * *` | 120 s | **720** |
 | `/api/cron/runner` | `0 */4 * * *` | 120 s | **180** |
 | `/api/cron/purgar` | `15 4 * * *` | 120 s | **30** |
-| | | | **98,850 fijas** |
+| | | | **107,490 fijas** |
 
 Las dos primeras cambiaron en esta ronda y son las que mueven la cuenta:
 wa-pendientes pasó de cada 5 minutos a cada minuto (**×5**), y facturar de cada
@@ -40,6 +41,11 @@ real tarda 174–188 s y el `wa-outbox` 155.5 s contra el tope viejo de 60 s —
 ver S5 en §2, esa duración medida NO es la misma cosa que "duración media"
 (es lo que se observó en las corridas con trabajo real, no un promedio sobre
 todas las invocaciones, la mayoría de las cuales no tienen nada que hacer).
+
+**Fase 5 (26-ago-2026): se añade `/api/cron/asistencia`** (el reloj muerto de
+emergencias, cada 5 min, +8,640/mes — el total de arriba ya lo incluye). Sin
+incidencias abiertas la corrida es una consulta corta por índice parcial y
+nada más; su GB-h real entra al mismo cajón S5 hasta medirlo.
 
 Las 47,010 son el **piso**: se pagan aunque no haya un solo cliente. A eso se
 le suman las vueltas encadenadas por QStash, que sí dependen del tráfico:

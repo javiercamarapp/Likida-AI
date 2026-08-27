@@ -171,6 +171,10 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // ella se lee desde fuera, sin sesión, todo lo que su área permita. Mismo
   // criterio que la RLS de la 0093 (`administra_flota()`): ni el contador ni
   // el encargado la ven, solo el dueño y el superadmin.
+  // Directorio de emergencia (Fase 5): grúas, póliza y contactos del
+  // operador. Es `operacion` — el jefe de tráfico es quien conoce a los
+  // proveedores de carretera y quien captura; el dueño también entra.
+  '/dashboard/emergencias': 'operacion',
   '/dashboard/llaves-api': 'administracion',
   '/dashboard/usuarios': 'administracion',
   '/dashboard/politicas': 'administracion',

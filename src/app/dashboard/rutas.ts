@@ -5,6 +5,7 @@ import {
   ScrollText,
   UsersRound,
   ShieldCheck,
+  Siren,
 } from 'lucide-react';
 
 /**
@@ -56,6 +57,9 @@ export const OPERACION: Item[] = [
   // complemento y qué dato falta — partido 19 del cliente / 18 del
   // transportista, que es como la ley parte la responsabilidad.
   { href: '/dashboard/carta-porte', nombre: 'Carta Porte', Icono: ScrollText },
+  // Fase 5: el directorio que el escalamiento de emergencias consulta — la
+  // grúa, la póliza con su 800 de siniestros y los contactos del operador.
+  { href: '/dashboard/emergencias', nombre: 'Emergencias', Icono: Siren },
 ];
 
 export const DINERO_FISCAL: Item[] = [

@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -45,6 +45,10 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // El poller de posiciones (23-ago-2026). 5 minutos es el grano al que un
   // mapa de flota deja de mentir sin castigar la cuota del proveedor.
   gps: 300_000,
+  // El reloj muerto de emergencias (Fase 5, 26-ago-2026): un ROJO sin
+  // reconocer escala cada 5 min — el cron de escalar (cada hora) no sirve
+  // para una emergencia.
+  asistencia: 300_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */

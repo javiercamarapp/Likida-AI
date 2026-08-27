@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { CRONS } from '@/lib/admin/salud';
 
 // El pulso para el monitor externo (D4): la única promesa es que el status
 // HTTP diga la verdad — 200 solo con base y crons sanos, 503 si falla/degrada —
@@ -50,8 +51,9 @@ describe('/api/health', () => {
   it('con todos los latidos frescos: 200 y ok true', async () => {
     dbFalla = false;
     const ahora = new Date().toISOString();
-    latidos = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps']
-      .map((id) => ({ id, ultimo_latido: ahora, estado: 'ok' }));
+    // La lista REAL de crons, no una copia: la copia se quedó vieja al nacer
+    // `asistencia` (Fase 5) y esta prueba llamó enfermo a un sistema sano.
+    latidos = [...CRONS].map((id) => ({ id, ultimo_latido: ahora, estado: 'ok' }));
     const r = await GET(peticion());
     const c = await r.json();
     expect(r.status).toBe(200);
