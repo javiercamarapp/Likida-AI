@@ -4,6 +4,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getFacturacionClientes, type FacturacionClientes } from '@/lib/likida/facturacion_clientes';
+import { getAuditoriaCobranza, ventanaAuditor, type AuditoriaCobranza } from '@/lib/likida/auditor_cobranza';
 import { hoyMx } from '@/lib/formato';
 import {
   validarFactura, crearFactura, validarPago, registrarPago, marcarEmitida, cancelarFactura,
@@ -55,6 +56,19 @@ export default async function PaginaFacturacion({
     datos = await getFacturacionClientes(tenantId);
   } catch {
     datos = null;
+  }
+
+  // El auditor de cobranza: el cruce pactado/entregado/facturado/cobrado de
+  // los viajes iniciados en la ventana (§8.2). Su fallo NO tumba la cartera
+  // —son lecturas independientes— y `null` hace que la sección pinte el
+  // error dicho, no una auditoría vacía que se leería como "sin hallazgos".
+  let auditoria: AuditoriaCobranza | null;
+  try {
+    const hoy = hoyMx();
+    const { desde, hasta } = ventanaAuditor(hoy);
+    auditoria = await getAuditoriaCobranza(tenantId, { desde, hasta, hoy });
+  } catch {
+    auditoria = null;
   }
 
   // El catálogo de clientes para el formulario. `catch → []` es honesto aquí:
@@ -173,5 +187,5 @@ export default async function PaginaFacturacion({
     cancelar,
   };
 
-  return <VistaFacturacion datos={datos} captura={captura} />;
+  return <VistaFacturacion datos={datos} captura={captura} auditoria={auditoria} />;
 }
