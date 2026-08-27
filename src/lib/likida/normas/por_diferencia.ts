@@ -106,6 +106,7 @@ export const SIN_NORMA: Partial<Record<TipoDiferencia, string>> = {
   // veredicto sobre lo que en realidad es un dato pendiente de capturar.
   moneda_extranjera: 'Calidad del dato: el importe no está en pesos y la conversión la hace una persona.',
   fecha_sospechosa: 'Calidad del dato.',
+  gasto_otro_ejercicio: 'Calidad del dato: la fecha, no un veredicto de qué norma exacta rige el periodo fiscal.',
   folio_verificar: 'Calidad del dato.',
   texto_sospechoso: 'Seguridad, no fiscalidad.',
   diesel_desviacion: 'Señal operativa contra el rendimiento esperado.',

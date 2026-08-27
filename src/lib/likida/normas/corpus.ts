@@ -75,7 +75,7 @@ export const NORMAS: readonly Norma[] = [
     "instrumento": "Anexo 3 de la Resolución Miscelánea Fiscal para 2026 (criterios no vinculativos)",
     "articulo_o_regla": "1/CFF/PI",
     "titulo": "Entrega o puesta a disposición del CFDI. No se cumple con la obligación cuando el emisor únicamente remite a una página de Internet.",
-    "estado_verificacion": "evidencia_corroborante",
+    "estado_verificacion": "verificado_fuente_primaria",
     "fuente_url": "https://www.sat.gob.mx/",
     "verificado_el": "2026-07-27",
     "jerarquia": 5,
@@ -97,6 +97,22 @@ export const NORMAS: readonly Norma[] = [
     "jerarquia": 5,
     "citasEnCodigo": [
       "1/LIF/PI"
+    ]
+  },
+  {
+    "archivo": "criterios-imss-sbc.yaml",
+    "id": "criterios-imss-sbc",
+    "tipo": "criterio",
+    "instrumento": "Criterios Normativos en materia de Seguridad Social del H. Consejo Técnico del IMSS",
+    "articulo_o_regla": "01/2024/NV/SBC-LSS-27-I y 02/2024/NV/SBC-LSS-27-V",
+    "titulo": "Los dos criterios del IMSS que deciden si un anticipo de ruta integra salario base de cotización — y el que alcanza a quien presta el servicio",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://dof.gob.mx/nota_detalle.php?codigo=5733018&fecha=11/07/2024",
+    "verificado_el": "2026-08-20",
+    "jerarquia": 5,
+    "citasEnCodigo": [
+      "criterio IMSS 01/2024",
+      "criterio IMSS 02/2024"
     ]
   },
   {
@@ -249,6 +265,23 @@ export const NORMAS: readonly Norma[] = [
     ]
   },
   {
+    "archivo": "lss-27.yaml",
+    "id": "lss-27",
+    "tipo": "ley",
+    "instrumento": "Ley del Seguro Social",
+    "articulo_o_regla": "27",
+    "titulo": "Salario base de cotización — y el hallazgo de que los VIÁTICOS no están entre las exclusiones",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSS.pdf",
+    "verificado_el": "2026-08-20",
+    "jerarquia": 1,
+    "citasEnCodigo": [
+      "LSS 27",
+      "art. 27 LSS",
+      "salario base de cotización"
+    ]
+  },
+  {
     "archivo": "politica-portales-plazos.yaml",
     "id": "politica-portales-plazos-facturacion",
     "tipo": "politica_comercio",
@@ -259,6 +292,21 @@ export const NORMAS: readonly Norma[] = [
     "jerarquia": 6,
     "citasEnCodigo": [
       "plazoVerificado"
+    ]
+  },
+  {
+    "archivo": "red-nacional-autopistas.yaml",
+    "id": "red-nacional-autopistas",
+    "tipo": "ley",
+    "instrumento": "Ley de Ingresos de la Federación 2026 / Ley de Caminos, Puentes y Autotransporte Federal / catálogos oficiales",
+    "articulo_o_regla": "LIF 2026 art. 20 ap. A fr. V; LCPAF art. 2o. fr. I",
+    "titulo": "Qué es la Red Nacional de Autopistas de Cuota — y por qué NO se puede resolver con una lista blanca de casetas",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIF_2026.pdf",
+    "verificado_el": "2026-08-20",
+    "jerarquia": 1,
+    "citasEnCodigo": [
+      "Red Nacional de Autopistas de Cuota"
     ]
   },
   {
@@ -369,6 +417,22 @@ export const NORMAS: readonly Norma[] = [
     ]
   },
   {
+    "archivo": "rmf-2026-9.1.7.yaml",
+    "id": "rmf-2026-9.1.7",
+    "tipo": "regla_general",
+    "instrumento": "Resolución Miscelánea Fiscal para 2026",
+    "articulo_o_regla": "9.1.7 (Título 9, Capítulo 9.1)",
+    "titulo": "Carreteras o caminos para acreditamiento del estímulo — la regla cuya remisión apunta a un párrafo inexistente",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rmf/rmf/RMF_2026-DOF-28122025.pdf",
+    "verificado_el": "2026-08-20",
+    "jerarquia": 3,
+    "citasEnCodigo": [
+      "RMF 9.1.7",
+      "regla 9.1.7"
+    ]
+  },
+  {
     "archivo": "rmf-2026-9.1.8.yaml",
     "id": "rmf-2026-9.1.8",
     "tipo": "regla_general",
@@ -382,6 +446,25 @@ export const NORMAS: readonly Norma[] = [
     "citasEnCodigo": [
       "RMF 9.1.8",
       "regla 9.1.8"
+    ]
+  },
+  {
+    "archivo": "tesis-autotransporte.yaml",
+    "id": "tesis-autotransporte",
+    "tipo": "criterio",
+    "instrumento": "Semanario Judicial de la Federación / Revista del Tribunal Federal de Justicia Administrativa",
+    "articulo_o_regla": "Tesis y precedentes aplicables al autotransporte de carga federal",
+    "titulo": "Lo que los tribunales SÍ han resuelto — y los dos vacíos donde no hay criterio en ningún acervo publicado de México",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://sjf2.scjn.gob.mx/services/sjftesismicroservice/api/public/tesis",
+    "verificado_el": "2026-08-20",
+    "jerarquia": 5,
+    "citasEnCodigo": [
+      "2a./J. 54/2022",
+      "VI-P-1aS-383",
+      "VII-TASR-1NOI-18",
+      "VII-CASR-NCIV-18",
+      "1a./J. 49/2019"
     ]
   }
 ] as const;

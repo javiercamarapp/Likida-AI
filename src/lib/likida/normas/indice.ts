@@ -127,7 +127,10 @@ export const NORMAS: Record<string, Norma> = {
     titulo: "Entrega o puesta a disposición del CFDI. No se cumple con la obligación cuando el emisor únicamente remite a una página de Internet.",
     citas: ["1/CFF/PI", "CFF art. 89", "artículo 52 del Código Fiscal"],
     jerarquia: 5,
-    estado: "evidencia_corroborante",
+    // Subido de evidencia_corroborante el 26-ago-2026: texto completo
+    // transcrito y cotejado contra el Anexo 3 (DOF 9-ene-2026), rescatado de
+    // `rutina-fiscal-wip` (investigación del 20-ago-2026, nunca mergeada).
+    estado: "verificado_fuente_primaria",
     ficha: "normas/criterio-1-CFF-PI.yaml",
   },
   'criterio-1-LIF-PI': {
@@ -355,6 +358,66 @@ export const NORMAS: Record<string, Norma> = {
     estado: "evidencia_corroborante",
     exigibleDesde: '2026-01-01',
     ficha: "normas/rmf-2026-3.3.1.7.yaml",
+  },
+  // Rescatadas de `rutina-fiscal-wip` (rama huérfana del 21-ago, nunca
+  // mergeada): investigación legal verificada contra fuente primaria que
+  // nadie más había escrito. No cambian ningún veredicto del motor —
+  // `usado_en_codigo: []` en las cinco fichas— son evidencia para decisiones
+  // pendientes (anticipo de ruta vs. salario base de cotización, catálogo de
+  // la Red Nacional de Autopistas de Cuota) y corpus de referencia.
+  'lss-27': {
+    id: 'lss-27',
+    instrumento: "Ley del Seguro Social",
+    articulo: "27",
+    titulo: "Salario base de cotización — y el hallazgo de que los VIÁTICOS no están entre las exclusiones",
+    citas: ["LSS 27", "art. 27 LSS", "salario base de cotización"],
+    jerarquia: 1,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: '2009-01-16',
+    ficha: "normas/lss-27.yaml",
+  },
+  'red-nacional-autopistas': {
+    id: 'red-nacional-autopistas',
+    instrumento: "Ley de Ingresos de la Federación 2026 / Ley de Caminos, Puentes y Autotransporte Federal",
+    articulo: "LIF 2026 art. 20 ap. A fr. V; LCPAF art. 2o. fr. I",
+    titulo: "Qué es la Red Nacional de Autopistas de Cuota — y por qué NO se puede resolver con una lista blanca de casetas",
+    citas: ["Red Nacional de Autopistas de Cuota"],
+    jerarquia: 1,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: '2026-01-01',
+    ficha: "normas/red-nacional-autopistas.yaml",
+  },
+  'tesis-autotransporte': {
+    id: 'tesis-autotransporte',
+    instrumento: "Semanario Judicial de la Federación / Revista del Tribunal Federal de Justicia Administrativa",
+    articulo: "Tesis y precedentes aplicables al autotransporte de carga federal",
+    titulo: "Lo que los tribunales SÍ han resuelto — y los dos vacíos donde no hay criterio en ningún acervo publicado de México",
+    citas: ["2a./J. 54/2022", "VI-P-1aS-383", "VII-TASR-1NOI-18", "VII-CASR-NCIV-18", "1a./J. 49/2019"],
+    jerarquia: 5,
+    estado: "verificado_fuente_primaria",
+    ficha: "normas/tesis-autotransporte.yaml",
+  },
+  'rmf-2026-9.1.7': {
+    id: 'rmf-2026-9.1.7',
+    instrumento: "Resolución Miscelánea Fiscal para 2026",
+    articulo: "9.1.7",
+    titulo: "Carreteras o caminos para acreditamiento del estímulo — la regla cuya remisión apunta a un párrafo inexistente",
+    citas: ["RMF 9.1.7", "regla 9.1.7"],
+    jerarquia: 3,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: '2026-01-01',
+    ficha: "normas/rmf-2026-9.1.7.yaml",
+  },
+  'criterios-imss-sbc': {
+    id: 'criterios-imss-sbc',
+    instrumento: "Criterios Normativos en materia de Seguridad Social del H. Consejo Técnico del IMSS",
+    articulo: "01/2024/NV/SBC-LSS-27-I y 02/2024/NV/SBC-LSS-27-V",
+    titulo: "Los dos criterios del IMSS que deciden si un anticipo de ruta integra salario base de cotización — y el que alcanza a quien presta el servicio",
+    citas: ["criterio IMSS 01/2024", "criterio IMSS 02/2024"],
+    jerarquia: 5,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: '2024-07-11',
+    ficha: "normas/criterios-imss-sbc.yaml",
   },
 };
 

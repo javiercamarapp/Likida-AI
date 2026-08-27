@@ -67,8 +67,10 @@ describe('un comprobante de otro ejercicio no recibe aviso de facturación', () 
   it('un ticket de 2019 mirado en 2026 no promete un remedio que no existe', () => {
     const d = viejo('2019-08-26');
     expect(d.filter((x) => x.tipo === 'factura_por_vencer')).toHaveLength(0);
-    // Y lo que SÍ sale es lo cierto: es de otro ejercicio.
-    expect(d.filter((x) => x.tipo === 'fecha_sospechosa')).toHaveLength(1);
+    // Y lo que SÍ sale es lo cierto: es de otro ejercicio (tipo propio desde
+    // FISCAL rutina-fiscal-wip: antes era `fecha_sospechosa` y no excluía el
+    // gasto de `totalDeducible` pese a decir que no se deducía).
+    expect(d.filter((x) => x.tipo === 'gasto_otro_ejercicio')).toHaveLength(1);
   });
 
   it('pero uno de este año sigue recibiéndolo', () => {

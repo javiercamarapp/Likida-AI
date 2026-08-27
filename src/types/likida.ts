@@ -100,6 +100,7 @@ export type TipoDiferencia =
   | 'ieps_no_desglosado'   // CFDI de diésel sin IEPS desglosado → no acreditable (se pierde el estímulo)
   | 'viatico_excede_fiscal' // viático de alimentación > tope fiscal $750/día (LISR 28-V) → porción no deducible
   | 'fecha_sospechosa'     // fecha futura o muy anterior al viaje → periodo/plazo/complemento en riesgo
+  | 'gasto_otro_ejercicio' // comprobante fechado en un ejercicio fiscal anterior → NO deducible en éste (rescatado de rutina-fiscal-wip, 26-ago-2026)
   | 'folio_verificar'      // folio leído con baja confianza en ticket con portal → verificar antes de facturar
   | 'monto_discrepante'    // el total del código y el del OCR no coinciden
   | 'monto_implausible'    // un solo comprobante fuera de escala para el viaje (DAT-18) → revisar

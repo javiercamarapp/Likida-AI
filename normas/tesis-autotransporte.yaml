@@ -1,0 +1,107 @@
+id: tesis-autotransporte
+tipo: criterio
+jerarquia: 5
+instrumento: "Semanario Judicial de la Federación / Revista del Tribunal Federal de Justicia Administrativa"
+articulo_o_regla: "Tesis y precedentes aplicables al autotransporte de carga federal"
+titulo: "Lo que los tribunales SÍ han resuelto — y los dos vacíos donde no hay criterio en ningún acervo publicado de México"
+citas_en_codigo: ["2a./J. 54/2022", "VI-P-1aS-383", "VII-TASR-1NOI-18", "VII-CASR-NCIV-18", "1a./J. 49/2019"]
+fecha_publicacion: 2026-04-30
+fuente_url: "https://sjf2.scjn.gob.mx/services/sjftesismicroservice/api/public/tesis"
+fuente_tipo: scjn_oficial
+estado_verificacion: verificado_fuente_primaria
+nota_verificacion: >
+  Búsqueda del 20-ago-2026 contra las APIs de fuente primaria: Buscador Jurídico
+  de la SCJN (bj.scjn.gob.mx/api/v1/bj/busqueda) y Semanario Judicial
+  (sjf2.scjn.gob.mx/.../tesis), sobre un corpus de 311,838 tesis; más el buscador
+  del TFJA (tfja.gob.mx/cesmdfa/sctj/sctj-busqueda/, 48,226 tesis, Épocas I-IX).
+  Cada rubro, clave, época y localización citados se leyeron en el endpoint de
+  detalle o en el PDF de la Revista. NO se usó ningún blog ni despacho.
+
+requisitos_formales_de_estimulos:
+  a_favor:
+    - "Registro 2025263 · 2a./J. 54/2022 (11a.) · Segunda Sala · JURISPRUDENCIA. Una ficha de trámite del Anexo 1-A que condiciona un derecho transgrede reserva de ley y subordinación jerárquica: ni la regla ni la ficha pueden 'incorporar requisitos o reglas que superen lo previsto en el marco legal del cual derivan'. ES LA MÁS APLICABLE AL AVISO DE MARZO."
+    - "Registro 2032007 · VII.2o.A.3 A (12a.) · abril 2026 · sobre el estímulo de diésel de la LIF: 'si el legislador no estableció restricción en ese aspecto, LA AUTORIDAD NO DEBE HACERLO', y la normativa del estímulo 'debe interpretarse de manera estricta, por tratarse de una excepción'."
+    - "Registro 175339 · 2a./J. 52/2006 · JURISPRUDENCIA. Sancionar la presentación extemporánea con el NO SURTIMIENTO DE EFECTOS excede la sanción que la ley prevé (multa): crea 'una sanción nueva y mayor'."
+    - "TFJA VIII-CASE-REF-31 · Novena Época, feb-2022, p. 250: el cumplimiento tardío 'NO DEBE SER LA ÚNICA RAZÓN NI LA RAZÓN PREPONDERANTE' para negar un derecho sustantivo."
+    - "TFJA VIII-CASE-REF-22 y -25 · dic-2021, pp. 145 y 151: elementos para juzgar cuándo el efecto atribuido al incumplimiento formal es excesivo o desproporcionado."
+  en_contra:
+    - "Registro 161235 · VI.3o.A. J/79 · JURISPRUDENCIA. Un requisito de la RMF para acceder al estímulo de IEPS no rebasa la LIF, y 'en todo caso, PODRÍA ESTIMARSE LA PÉRDIDA DE ESE DERECHO, pero ello no hace ilegal la regla'. Hay que anticiparla."
+    - "TFJA VII-CASR-PA-71 · feb-2018, p. 299: un escrito presentado fuera de plazo hizo perder el beneficio de un Decreto."
+  el_vacio_exacto: >
+    NO EXISTE tesis ni precedente sobre el supuesto de que la autoridad NUNCA
+    PUBLICÓ el formato o la ficha del aviso. Verificado con términos exactos en
+    los dos motores de la SCJN y en el TFJA. Lo más cercano (registro 174685) es
+    el caso INVERSO: declara que no hay imposibilidad de cumplir PORQUE el
+    formato sí estaba publicado.
+
+noventa_por_ciento_de_exclusividad:
+  hallazgo: >
+    TFJA VI-P-1aS-383 · PRIMERA SECCIÓN DE SALA SUPERIOR · Sexta Época, ene-2011,
+    p. 95: "NO ES NECESARIO REVISAR LA TOTALIDAD DE LOS INGRESOS de un ejercicio
+    fiscal para determinar si la empresa se dedicó exclusivamente al autotransporte
+    de carga federal terrestre, ya que BASTA OBTENER UNA MUESTRA que indique la
+    habitualidad de los ingresos obtenidos."
+  complementos:
+    - "TFJA VIII-P-1aS-566 · may-2019, p. 220: el coordinado cumple en forma GLOBAL, tomando ingresos y deducciones de cada integrante. Es el ÚNICO precedente del TFJA que aplica la Resolución de Facilidades Administrativas del autotransporte."
+    - "Registro 182969 · I.12o.A.43 A: los requisitos para tributar en el régimen son ÚNICAMENTE los de la ley; no puede imponerse ninguno que la ley no contemple."
+    - "Registro 2014555 · XV.4o.3 A (10a.): por analogía (art. 74 LISR, redacción gemela), la exclusividad puede acreditarse de forma DIVERSA al 90%, porque el precepto no limita la prueba a ese supuesto."
+  lo_que_sigue_sin_resolverse: "Ningún órgano ha fijado si el 90% se mide por ejercicio, por mes o acumulado, más allá de la regla de muestreo."
+
+viaticos_y_faja_de_50_km:
+  hallazgo: >
+    TFJA VII-CASR-NCIV-18 · Octava Época, sep-2018, p. 395: los 50 kilómetros son
+    PERIMETRALES — radio en cualquier dirección en línea recta desde el
+    establecimiento — NO diámetro.
+  complemento: "TFJA VIII-P-SS-123 · PLENO JURISDICCIONAL DE SALA SUPERIOR · sep-2017, p. 123: requisitos de procedencia de la deducción de viáticos, interpretando a contrario sensu el art. 32-V."
+  el_vacio: >
+    TERRENO VIRGEN. En el TFJA "50 kilómetros" da 5 resultados en 48,226 tesis;
+    "establecimiento del contribuyente" da 7; "operador" en materia LISR da CERO.
+    NO HAY UN SOLO CRITERIO sobre el art. 57 del RLISR. Nadie ha definido qué es
+    el "establecimiento" de un operador de largo recorrido sin lugar fijo.
+
+diesel_cuota_integra_vs_disminuida:
+  no_hay_criterio_directo: "'cuota disminuida' da CERO en ambos motores de la SCJN y CERO en el TFJA."
+  la_ratio_analoga_a_favor_de_la_disminuida: >
+    Registro 2007576 · 2a. XCIX/2014 (10a.) · Segunda Sala: el estímulo "se
+    estructuró de forma que SÓLO SE DEVUELVE PARTE DEL IMPUESTO CAUSADO por la
+    enajenación de diésel que se traslada al último comprador, lo que se actualiza
+    CUANDO LAS TASAS APLICABLES RESULTEN POSITIVAS... pues, en caso contrario, no
+    se incluye en el precio final el IEPS causado y, por ende, el consumidor final
+    no soporta esa carga". Vincula el estímulo al impuesto REALMENTE causado.
+  el_anclaje_textual_a_favor_de_la_integra: >
+    Registro 2018312 · 1a. CXXXVII/2018 (10a.): describe el beneficio de la
+    fracción IV como acreditar el IEPS causado "en términos del artículo 2o.,
+    fracción I, inciso D), numeral 1, subinciso c)" de la LIEPS.
+
+ptu_y_la_deduccion_del_8:
+  no_existe: "CERO tesis y CERO precedentes sobre si el 8% reduce la renta gravable de PTU. Verificado con diez búsquedas distintas en la SCJN y siete en el TFJA."
+  el_marco_con_el_que_hay_que_argumentarlo:
+    - "Registro 2020097 · 1a./J. 49/2019 (10a.) · JURISPRUDENCIA: la renta gravable del art. 123-A-IX-e) constitucional se replica en la UTILIDAD FISCAL, que es 'el resultado de restar a los ingresos acumulables LAS DEDUCCIONES AUTORIZADAS del ejercicio'."
+    - "Registro 2017164 · 2a./J. 59/2018 (10a.) · JURISPRUDENCIA · LA DISTINCIÓN DECISIVA: la Corte separa la DEDUCCIÓN AUTORIZADA, que se resta de ingresos acumulables y forma la utilidad fiscal, de la FIGURA AMINORATIVA DISTINTA, que reduce la utilidad ya calculada y no opera como deducción. El 8% de la RFA está redactado como deducción de ingresos propios, no como reducción posterior — ése es el eje del argumento."
+    - "Registro 237283 · Segunda Sala · Séptima Época: analogía histórica — el importe de los certificados de promoción fiscal NO integra la base de reparto."
+  en_contra: "TFJA IV-TASR-XV-98 · mar-1999, p. 199: en régimen simplificado la renta gravable de PTU no necesariamente coincide con la base del ISR."
+
+aviso_de_opcion_extemporaneo:
+  hallazgo_favorable: >
+    TFJA VII-TASR-1NOI-18 · Séptima Época, feb-2013, p. 522: el precepto "NO
+    CONTIENE SANCIÓN ALGUNA al contribuyente que presente el aviso de opción de
+    manera extemporánea", y NO PUEDE CONSIDERARSE QUE LA SANCIÓN SEA LA PÉRDIDA DE
+    LA OPCIÓN, porque ésta "no es sino una forma de hacer valer las deducciones que
+    se permiten a los gobernados" y "sólo al legislador compete coartar un derecho
+    que el propio legislativo otorgó".
+  complemento: "Registro 2007171 · II.3o.A.138 A (10a.): las facilidades administrativas son optativas y su primer acto de aplicación se concreta 'al momento en que SE ELIGE la alternativa'."
+  en_contra: "Registro 182000 · VII.2o.A.T.56 A: la opción elegida no puede variarse en el mismo ejercicio. Matiz aprovechable: exige 'la ELECCIÓN MATERIALIZADA del contribuyente'."
+
+articulo_89_fraccion_I_del_cff:
+  no_existe_nada: >
+    CERO en el Semanario (311,838 tesis) y CERO en el TFJA (48,226 tesis), en
+    ningún sentido. Verificado con once combinaciones de términos exactos en la
+    SCJN y nueve en el TFJA. NO HAY NADA sobre proveedores de software o sistemas,
+    ni sobre la eximente de la manifestación por escrito del último párrafo.
+  diagnostico: >
+    Las multas del art. 89 se imponen al asesor y su impugnación rara vez genera
+    precedente publicado. Si Likida llegara a litigar ese punto, escribiría sobre
+    página en blanco. Razón de más para que la manifestación esté impecable.
+
+verificado_el: 2026-08-20
+usado_en_codigo: []

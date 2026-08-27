@@ -1,0 +1,66 @@
+id: rmf-2026-9.1.7
+tipo: regla_general
+jerarquia: 3
+instrumento: "Resolución Miscelánea Fiscal para 2026"
+articulo_o_regla: "9.1.7 (Título 9, Capítulo 9.1)"
+titulo: "Carreteras o caminos para acreditamiento del estímulo — la regla cuya remisión apunta a un párrafo inexistente"
+citas_en_codigo: ["RMF 9.1.7", "regla 9.1.7"]
+texto_vigente: >
+  9.1.7. Para los efectos del artículo 20, apartado A, fracción V, último párrafo de
+  la LIF, quedan comprendidos en el término de carreteras o caminos, los que en su
+  totalidad o parcialmente hubieran sido construidos por la Federación, las entidades
+  federativas, los municipios y las alcaldías, ya sea con fondos federales o locales,
+  así como los que hubieran sido construidos por concesionarios.
+fecha_publicacion: 2025-12-28
+fecha_vigencia_desde: 2026-01-01
+fuente_url: "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rmf/rmf/RMF_2026-DOF-28122025.pdf"
+fuente_tipo: sat_oficial
+estado_verificacion: verificado_fuente_primaria
+nota_verificacion: >
+  Transcrita el 20-ago-2026 del PDF oficial de la RMF 2026 (DOF 28-dic-2025), texto
+  íntegro extraído a texto plano y leído en su contexto (reglas 9.1.6 a 9.1.8).
+
+por_que_existe_esta_ficha: >
+  Porque la regla se venía citando como si AMPLIARA el estímulo de peaje a autopistas
+  concesionadas y estatales, generando una supuesta "tensión" con la LIF. Esa tensión
+  NO EXISTE, y creerla llevaba a acreditar de más.
+
+la_remision_esta_rota:
+  hallazgo: >
+    La regla remite al "artículo 20, apartado A, fracción V, ÚLTIMO PÁRRAFO de la LIF"
+    y define el término "carreteras o caminos". Ninguna de las dos cosas encaja.
+  verificacion_1: >
+    La fracción V de la LIF 2026 no tiene ningún párrafo que use la expresión
+    "carreteras o caminos". Sus párrafos son: el que otorga el estímulo (Red Nacional
+    de Autopistas de Cuota, < $300M, no partes relacionadas), el del acreditamiento
+    contra el ISR del ejercicio, y el que faculta al SAT a fijar porcentajes máximos
+    por tramo carretero.
+  verificacion_2: >
+    La expresión "carreteras o caminos" aparece UNA SOLA VEZ en el texto completo de
+    la LIF 2026, al final de la FRACCIÓN III: "Los derechos previstos en esta fracción
+    y en la fracción II de este apartado no serán aplicables a las personas
+    contribuyentes que utilicen el diésel o el biodiésel y sus mezclas en bienes
+    destinados al autotransporte de personas o efectos a través de carreteras o
+    caminos". Es la exclusión del beneficio AGROPECUARIO de diésel, no el peaje.
+  verificacion_3: >
+    Arrastre histórico confirmado: se descargaron y revisaron las LIF 2017, 2020, 2024
+    y 2025. En las cuatro, "carreteras o caminos" vive en la fracción de diésel y
+    nunca en la de peaje. La remisión lleva años apuntando al lugar equivocado.
+  metodo: >
+    PDF oficial de diputados.gob.mx por año, extraído a texto plano, búsqueda literal
+    de la cadena "carreteras o caminos" y lectura del articulado circundante.
+
+consecuencia_operativa: >
+  La 9.1.7 define un término que la fracción V no emplea. NO extiende el estímulo de
+  peaje a autopistas concesionadas ni estatales, porque no toca la expresión que sí
+  usa la ley: "Red Nacional de Autopistas de Cuota". El motor debe seguir el texto
+  legal, y una caseta fuera de esa Red no genera estímulo. Ver H5 de lif-2026-20-A.
+
+que_falta_para_cerrarlo: >
+  No se localizó una definición oficial de qué autopistas integran la "Red Nacional de
+  Autopistas de Cuota" (SICT / CAPUFE). Sin ese catálogo, el motor no puede clasificar
+  una caseta por sí solo: hoy aplica el 50% a todo gasto con concepto "caseta", que es
+  el hallazgo H5 todavía abierto. PREGUNTA PARA EL FISCALISTA.
+
+verificado_el: 2026-08-20
+usado_en_codigo: []

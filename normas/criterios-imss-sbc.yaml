@@ -1,0 +1,84 @@
+id: criterios-imss-sbc
+tipo: criterio
+jerarquia: 5
+instrumento: "Criterios Normativos en materia de Seguridad Social del H. Consejo Técnico del IMSS"
+articulo_o_regla: "01/2024/NV/SBC-LSS-27-I y 02/2024/NV/SBC-LSS-27-V"
+titulo: "Los dos criterios del IMSS que deciden si un anticipo de ruta integra salario base de cotización — y el que alcanza a quien presta el servicio"
+citas_en_codigo: ["criterio IMSS 01/2024", "criterio IMSS 02/2024"]
+texto_vigente: >
+  01/2024/NV/SBC-LSS-27-I (Acuerdo ACDO.AS2.HCT.270224/37.P.DIR, DOF 22-03-2024):
+  "[...] no deben formar parte de los conceptos que integran el SBC las
+  prestaciones [...] que previamente se estableció en el contrato y que, además,
+  se acredite como un GASTO DEBIDAMENTE IDENTIFICADO EN LA NÓMINA Y NO COMO
+  REMUNERACIÓN, con independencia del acreditamiento que se establezca para
+  efectos del Impuesto sobre la Renta."
+  ---
+  Y su fracción de cierre: "se considera que realiza una PRÁCTICA FISCAL INDEBIDA
+  EN MATERIA DE SEGURIDAD SOCIAL: Quien entregue a las personas trabajadoras
+  cantidades en efectivo, vía nómina o POR CUALQUIER MEDIO, simulando que se
+  trata de prestaciones [...] INDEPENDIENTEMENTE DE LA DENOMINACIÓN QUE SE
+  UTILICE EN LOS REGISTROS CONTABLES, con la finalidad de excluirlas como parte
+  del SBC [...] Quien asesore, aconseje, PRESTE SERVICIOS o participe en la
+  realización o implementación de las prácticas señaladas."
+  ---
+  02/2024/NV/SBC-LSS-27-V (Acuerdo ACDO.AS2.HCT.250624/204.P.DIR, DOF 11-07-2024)
+  — el test de cuatro requisitos: "únicamente podrán excluirse del SBC [...] si se
+  acredita que: a. Fueron entregadas EN ESPECIE Y NO EN EFECTIVO ni mediante
+  depósitos a la cuenta de las personas trabajadoras; b. Se otorgaron de forma
+  onerosa [...]; c. Se encuentran DEBIDAMENTE REGISTRADAS EN LA CONTABILIDAD del
+  patrón; y d. FUERON EFECTIVAMENTE UTILIZADAS PARA LOS FINES [...]"
+  Y añade el fundamento de por qué el efectivo es sospechoso: "la entrega de
+  dinero a las personas trabajadoras implica un beneficio económico [...] Y NO
+  PERMITE IDENTIFICAR EL DESTINO QUE SE DARÁ A LOS RECURSOS."
+fecha_publicacion: 2024-07-11
+fecha_vigencia_desde: 2024-07-11
+fuente_url: "https://dof.gob.mx/nota_detalle.php?codigo=5733018&fecha=11/07/2024"
+fuente_tipo: dof_oficial
+estado_verificacion: verificado_fuente_primaria
+nota_verificacion: >
+  Leídos el 20-ago-2026 en el DOF (el portal imss.gob.mx está tras Incapsula y
+  devuelve 403). Son los ÚNICOS cinco criterios normativos de SBC publicados:
+  01/2023, 02/2023, 01/2024, 02/2024 y 03/2024. Ninguno de 2025 ni de 2026, y
+  NINGUNO versa sobre viáticos.
+
+por_que_nos_toca_a_nosotros: >
+  PRECISIÓN IMPORTANTE, porque la primera redacción de esta ficha lo decía mal:
+  LIKIDA NO DISPERSA DINERO. No paga anticipos ni a operadores — así lo declaran
+  los términos del servicio ("Likida tampoco mueve dinero") y así es el código:
+  el anticipo es una CIFRA REGISTRADA en el viaje contra la cual se concilian los
+  comprobantes. Quien entrega el dinero es la flota.
+
+  Pero eso NO nos saca del criterio, lo mueve de lugar. La fracción de cierre del
+  01/2024 alcanza a "quien asesore, aconseje, PRESTE SERVICIOS o participe" — la
+  misma estructura del criterio 1/LIF/PI del Anexo 3. Likida es EL RASTRO
+  PROBATORIO de esos anticipos: es el sistema que documenta cuánto se entregó,
+  contra qué se comprobó y qué quedó sin comprobar.
+
+  Y ahí está el punto: lo ÚNICO que distingue un anticipo legítimo de la
+  simulación que el criterio castiga es la COMPROBACIÓN DEL DESTINO (requisito
+  "d" del 02/2024). Ese es exactamente el producto. Un diseño que deje pasar
+  anticipos sin comprobar, o que los rotule de forma que no cuadre con la
+  contabilidad, construye la prueba en contra del cliente en lugar de a favor.
+
+el_estandar_probatorio_que_si_protege:
+  nota: >
+    No existe norma que diga "si registras el anticipo así, no integra SBC". Lo
+    que existe es este estándar, construido por el propio IMSS y replicable por
+    analogía. Los cinco requisitos, todos con anclaje en texto leído:
+  requisitos:
+    - "1. QUE NO SEA REMUNERACIÓN. Documentar en contrato, reglamento o política de ruta que el anticipo es provisión de fondos del patrón para gastos de operación del vehículo, no contraprestación. Base: LSS art. 27 primer párrafo + criterio 01/2024."
+    - "2. REGISTRO EN CUENTA DE GASTO DE OPERACIÓN (diésel, casetas), no en cuenta de sueldos. Base: LSS art. 27 penúltimo párrafo + RACERF art. 166 fr. IV. OJO: el criterio 01/2024 advierte que la denominación contable POR SÍ SOLA no salva nada."
+    - "3. TRAZABILIDAD DEL DESTINO: comprobación efectiva por el operador, comprobante a comprobante, ligado al anticipo, al viaje y al operador. Es el requisito (d) del criterio 02/2024. AQUÍ ES DONDE EL SOFTWARE ES LA PRUEBA."
+    - "4. REINTEGRO DEL REMANENTE. Sin reintegro, lo no comprobado se vuelve cantidad entregada al trabajador (LSS art. 27 primer párrafo). Análogo federal: RLISR art. 152."
+    - "5. REGISTRO INDIVIDUALIZADO en nómina (LSS art. 15 fr. II + RACERF art. 9 fr. IV) y reflejo en el CFDI de nómina."
+
+la_trampa_de_la_conciliacion: >
+  RACERF art. 166 fr. IV obliga, en el dictamen, a la "Conciliación del total de
+  percepciones de trabajadores en REGISTROS CONTABLES contra la BASE DE SALARIOS
+  manifestados para el Instituto; así como contra lo declarado para efectos del
+  IMPUESTO SOBRE LA RENTA". Si el anticipo va como gasto de ruta en contabilidad
+  pero aparece en el CFDI de nómina como "OtroPago 003 Viáticos", la conciliación
+  tiene que cuadrar sola. Son tres libros que deben contar la misma historia.
+
+verificado_el: 2026-08-20
+usado_en_codigo: []
