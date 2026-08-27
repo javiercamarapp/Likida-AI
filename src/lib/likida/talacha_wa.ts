@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { strip_accents } from './cuadre/util';
 import { crearIncidencia } from './operacion';
+import { abrirOrdenPorAveria } from './mantenimiento';
 import { telefonoJefeDe } from './contactos';
 import type { RolOficina } from './contactos';
 import { sendText, sendButtons } from '@/lib/meta/client';
@@ -418,9 +419,17 @@ async function firmarDecision(
   const cifra = monto !== null ? ` · ${mxn(monto)}` : '';
   const quien = r.chofer ?? 'tu chofer';
   if (decision === 'autorizada') {
+    // Fase 9: la avería firmada abre su orden de taller. DESPUÉS de la firma
+    // — un tropiezo aquí no puede leerse como "no se autorizó" — y con la
+    // falla dicha: la orden que no se pudo abrir se pide en el panel, no se
+    // finge abierta ni se calla.
+    const orden = await abrirOrdenPorAveria(cuenta.tenantId!, incidenciaId);
+    const notaOrden = orden === 'fallo'
+      ? ' Ojo: NO pude abrir la orden de taller — ábrela en el panel de unidades.'
+      : '';
     return r.avisado
-      ? `Autorizada ✅${cifra} — ya le avisé a ${quien}. El gasto llegará a la liquidación con tu autorización firmada.`
-      : `Autorizada ✅${cifra} y quedó firmada, pero NO le pude avisar a ${quien} por WhatsApp — márcale tú.`;
+      ? `Autorizada ✅${cifra} — ya le avisé a ${quien}. El gasto llegará a la liquidación con tu autorización firmada.${notaOrden}`
+      : `Autorizada ✅${cifra} y quedó firmada, pero NO le pude avisar a ${quien} por WhatsApp — márcale tú.${notaOrden}`;
   }
   return r.avisado
     ? `Rechazada ❌${cifra} — ya le avisé a ${quien}.`
