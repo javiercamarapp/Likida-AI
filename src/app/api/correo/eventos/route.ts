@@ -61,7 +61,18 @@ export async function POST(req: Request) {
     return new NextResponse('Invalid signature', { status: 401 });
   }
 
-  let evento: { type?: string; data?: { email_id?: string; to?: unknown } };
+  let evento: {
+    type?: string;
+    data?: {
+      email_id?: string;
+      to?: unknown;
+      /** Campos donde el payload de un rebote PUEDE identificar la dirección
+       *  exacta que rebotó (c5-12) — se leen todos los candidatos conocidos. */
+      bounce?: { email?: unknown; recipient?: unknown } | null;
+      email?: unknown;
+      recipient?: unknown;
+    };
+  };
   try {
     evento = JSON.parse(cuerpo);
   } catch {
@@ -109,17 +120,36 @@ export async function POST(req: Request) {
   }
   if (estado !== 'entregado') {
     logger.warn('correo.eventos.mala_noticia', { pieza: (data[0] as { id: string }).id, estado, emailId });
-    // LA BAJA AUTOMÁTICA (0217): un rebote o una queja suprimen las
-    // direcciones del envío para siempre — insistirle a un buzón que rebotó
-    // (o que nos marcó spam) quema la reputación del dominio, que es el
-    // activo finito de toda la campaña. `to` viene del payload de Resend;
-    // best-effort deliberado: el evento ya quedó escrito arriba, y perderlo
-    // por no poder anotar la baja sería el peor intercambio.
+    // LA BAJA AUTOMÁTICA (0217): un rebote o una queja suprimen para siempre
+    // — insistirle a un buzón que rebotó (o que nos marcó spam) quema la
+    // reputación del dominio. Best-effort deliberado: el evento ya quedó
+    // escrito arriba, y perderlo por no poder anotar la baja sería el peor
+    // intercambio.
+    //
+    // AUDITORÍA FABLE CICLO 5 (c5-12): antes un rebote suprimía TODO el `to`
+    // — un info@ muerto en copia vetaba para siempre al correo principal
+    // válido y a las demás copias que sí entregaron. Ahora:
+    //   · REBOTE: solo la(s) dirección(es) que el payload identifica; si no
+    //     identifica ninguna y el envío tenía UN destinatario, ese (no hay
+    //     ambigüedad); con varios sin identificar, NINGUNA se suprime y se
+    //     grita para que un humano decida — suprimir a ciegas mata la
+    //     campaña a una empresa viva.
+    //   · QUEJA: el barrido completo se conserva — quien marca spam no
+    //     quiere NADA nuestro en ningún buzón de su empresa.
     const to = evento.data?.to;
     const correos = (Array.isArray(to) ? to : typeof to === 'string' ? [to] : [])
       .filter((c): c is string => typeof c === 'string');
-    for (const c of correos) {
-      await suprimirCorreo(c, estado === 'rebotado' ? 'rebote (webhook Resend)' : 'queja de spam (webhook Resend)');
+    if (estado === 'queja') {
+      for (const c of correos) await suprimirCorreo(c, 'queja de spam (webhook Resend)');
+    } else {
+      const candidatos = [evento.data?.bounce?.email, evento.data?.bounce?.recipient, evento.data?.email, evento.data?.recipient]
+        .filter((c): c is string => typeof c === 'string' && c.includes('@'));
+      const rebotadas = candidatos.length > 0 ? candidatos
+        : correos.length === 1 ? correos : [];
+      if (rebotadas.length === 0 && correos.length > 1) {
+        logger.warn('correo.eventos.rebote_sin_direccion', { emailId, destinatarios: correos.length });
+      }
+      for (const c of rebotadas) await suprimirCorreo(c, 'rebote (webhook Resend)');
     }
   }
   return NextResponse.json({ pieza: (data[0] as { id: string }).id, estado });

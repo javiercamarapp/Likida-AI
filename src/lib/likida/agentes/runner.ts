@@ -83,7 +83,7 @@ export async function gastoDelDiaUsd(agente: string): Promise<number> {
  *  (los más viejos primero — los del SLA), cortando por la reserva/run central.
  *  Las guardas por prospecto (cadencia 48h, pieza pendiente, estado) viven
  *  DENTRO de redactarCorreoFrio — aquí solo se seleccionan candidatos. */
-async function loteRedactor(budget: LlmBudget): Promise<{ piezas: number; saltados: number; costoUsd: number }> {
+async function loteRedactor(budget: LlmBudget | null): Promise<{ piezas: number; saltados: number; costoUsd: number }> {
   const tope = topePiezasPorCorrida();
   // Overfetch ×4: varios candidatos rebotan en las guardas del redactor
   // (pieza pendiente, cadencia) y eso NO es fallo — es la guarda operando.
@@ -100,12 +100,15 @@ async function loteRedactor(budget: LlmBudget): Promise<{ piezas: number; saltad
   let piezas = 0, saltados = 0, costoUsd = 0;
   for (const c of candidatos) {
     if (piezas >= tope) break;
-    if (budget.reservadoRunUsd >= budget.maxRunUsd) break;
+    if (budget && budget.reservadoRunUsd >= budget.maxRunUsd) break;
     try {
-      const r = await redactarCorreoFrio(c.id, c.vendedor?.nombre?.trim() || 'Javier', 'cron', {
+      // Sin budget = modo PLATAFORMA (c5-10): gasto de Likida, techo vigilado
+      // por el runner contra el gasto medido del día — el mismo contrato que
+      // investigador/SDR/enviador.
+      const r = await redactarCorreoFrio(c.id, c.vendedor?.nombre?.trim() || 'Javier', 'cron', budget ? {
         tenantId: budget.tenantId,
         budget,
-      });
+      } : { plataforma: true });
       piezas += 1;
       costoUsd += r.costoUsd;
     } catch (e) {
@@ -179,10 +182,6 @@ export async function correrRunner(
     }
     // Candado 4 — backpressure de la bandeja (solo agentes que encolan).
     if (a.id === 'redactor') {
-      if (!budgetTenantId) {
-        agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'sin tenant explícito para presupuesto central — fail closed' });
-        continue;
-      }
       const { count, error: errPend } = await supabaseAdmin()
         .from('cola_aprobacion')
         .select('id', { count: 'exact', head: true })
@@ -197,10 +196,29 @@ export async function correrRunner(
         continue;
       }
 
+      // AUDITORÍA FABLE CICLO 5 (c5-10): sin tenant explícito, la corrida es
+      // de PLATAFORMA (gasto de Likida) — antes este camino era "saltado —
+      // fail closed" en toda pasada del cron y del copiloto, así que ninguna
+      // pieza se fabricaba sola y la máquina completa dependía del botón
+      // manual. El techo sigue: gasto MEDIDO del día vs presupuesto
+      // declarado, el mismo candado que investigador/SDR/enviador.
+      if (!budgetTenantId) {
+        try {
+          const gastado = await gastoDelDiaUsd(a.id);
+          if (gastado >= a.presupuesto_dia_usd) {
+            agentes.push({ agente: a.id, resultado: 'saltado', motivo: `techo diario alcanzado (${gastado.toFixed(2)} de ${a.presupuesto_dia_usd} USD)` });
+            continue;
+          }
+        } catch (e) {
+          agentes.push({ agente: a.id, resultado: 'saltado', motivo: `no se pudo leer el gasto del día — fail closed (${e instanceof Error ? e.message.slice(0, 120) : 'error'})` });
+          continue;
+        }
+      }
+
       try {
-        const budget = createLlmBudget(budgetTenantId, randomUUID(), {
-          maxTenantDailyUsd: a.presupuesto_dia_usd,
-        });
+        const budget = budgetTenantId
+          ? createLlmBudget(budgetTenantId, randomUUID(), { maxTenantDailyUsd: a.presupuesto_dia_usd })
+          : null;
         const r = await loteRedactor(budget);
         agentes.push({ agente: a.id, resultado: 'corrio', ...r });
       } catch (e) {

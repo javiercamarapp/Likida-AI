@@ -54,7 +54,18 @@ const generateResponse = vi.fn(async (..._a: unknown[]) => ({
 vi.mock('@/lib/llm/openrouter', () => ({ generateResponse: (...a: unknown[]) => generateResponse(...a) }));
 
 const encolarPieza = vi.fn(async (..._a: unknown[]) => 'pieza-1');
-vi.mock('./cola', () => ({ encolarPieza: (...a: unknown[]) => encolarPieza(...a) }));
+vi.mock('./cola', async () => {
+  const { DatoInvalido: DI } = await import('../errores');
+  return {
+    encolarPieza: (...a: unknown[]) => encolarPieza(...(a as [])),
+    // La réplica del verificador (el real vive en cola.ts desde c5-14 y
+    // tiene sus pruebas allá): mismos guardarraíles, mismo tipo de error.
+    verificarFormatoCampana: (texto: string) => {
+      if (/clientes?\s+reales/i.test(texto)) throw new DI('El correo dice "clientes reales" — Pieza descartada.');
+      if (texto.includes('—')) throw new DI('El correo trae guion largo (—) — Pieza descartada.');
+    },
+  };
+});
 const registrarCorrida = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock('./corridas', () => ({ registrarCorrida: (...a: unknown[]) => registrarCorrida(...a) }));
 

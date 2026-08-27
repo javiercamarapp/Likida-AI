@@ -113,9 +113,10 @@ export async function ConsolaVendedores({
     const s = await getSessionTenant();
     if (s?.rol !== 'superadmin') return { ok: false, error: 'Solo el superadmin administra la zona de vendedores.' };
     try {
-      const r = await redactarCorreoFrio(String(id), s.nombre ?? 'Javier', 'manual', {
-        tenantId: s.tenantId,
-      });
+      // El superadmin de LIKIDA no tiene tenant: su gasto es de plataforma
+      // (c5-10), con el techo del runner sobre el gasto medido del día.
+      const r = await redactarCorreoFrio(String(id), s.nombre ?? 'Javier', 'manual',
+        s.tenantId ? { tenantId: s.tenantId } : { plataforma: true });
       revalidatePath(RUTA);
       return {
         ok: true,

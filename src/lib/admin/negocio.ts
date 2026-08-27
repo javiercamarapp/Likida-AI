@@ -478,8 +478,16 @@ export interface CostoPorFaseModelo { fase: string; modelo: string; n: number; c
  * sola pantalla. Ahora el corte (fase, modelo) sale del recorrido que ya se
  * estaba pagando; el costo extra es una llave de hash más sobre ~60 grupos.
  */
-export async function getCostoPorFaseModelo(): Promise<CostoPorFaseModelo[]> {
-  const { porFaseModelo } = await traerResumenCostoIa();
+export async function getCostoPorFaseModelo(
+  /** AUDITORÍA FABLE CICLO 5 (c5-8): sin ventana, el corte es el HISTÓRICO
+   *  completo — y el umbral U1 de control_costos comparaba TODA la historia
+   *  contra el modelo esperado de hoy: cualquier migración legítima de
+   *  modelo disparaba ROJO en cada parte diario, para siempre. El agente
+   *  pasa una ventana reciente; las pantallas que quieren el histórico
+   *  siguen llamando sin argumento. */
+  desdeIso: string | null = null,
+): Promise<CostoPorFaseModelo[]> {
+  const { porFaseModelo } = await traerResumenCostoIa(desdeIso, null);
   // Ya viene ordenado por costo desc (y fase, modelo como desempate estable):
   // aquí solo se redondea a centavos.
   return porFaseModelo.map((v) => ({ ...v, costoUsd: round2(v.costoUsd) }));

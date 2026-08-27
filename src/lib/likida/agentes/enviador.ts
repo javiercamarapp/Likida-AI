@@ -26,9 +26,14 @@ import { acotada } from '../presupuesto';
 import { DatoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
 import { correoConfigurado } from '@/lib/correo/enviar';
-import { enviarPiezaPorCorreo, topeCorreoFrioDia } from './cola';
+import { enviarPiezaPorCorreo, topeCorreoFrioDia, filtrarSuprimidos, TIPOS_CAMPANA } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
 import { logger } from '@/lib/logger';
+
+// La lista de bajas vive ahora en la PUERTA (cola.ts, c5-1) para que el
+// camino humano también la consulte; se re-exporta para los llamadores y
+// pruebas existentes.
+export { filtrarSuprimidos };
 
 /** El email con el que el enviador firma sus resoluciones automáticas — la
  *  bandeja lo enseña tal cual, para que nadie confunda un tap humano con la
@@ -42,8 +47,6 @@ export function ventanaRevisionMin(): number {
   return Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
 }
 
-const TIPOS_CAMPANA = ['correo_frio', 'correo_seguimiento'] as const;
-
 export interface ResultadoEnviador {
   piezasEnviadas: number;
   destinatarios: number;
@@ -51,23 +54,10 @@ export interface ResultadoEnviador {
   motivos: string[];
 }
 
-/** La lista de bajas, FAIL-CLOSED: si no se puede leer, LANZA — mandar sin
- *  consultar las bajas es escribirle a quien pidió que no. */
-export async function filtrarSuprimidos(correos: string[]): Promise<string[]> {
-  const limpios = [...new Set(correos.map((c) => c.trim().toLowerCase()).filter(Boolean))];
-  if (limpios.length === 0) return [];
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('correo_suprimido')
-    .select('correo')
-    .in('correo', limpios), 'enviador.suprimidos');
-  if (error) throw new Error(`filtrarSuprimidos: ${error.message}`);
-  const fuera = new Set(((data ?? []) as Array<{ correo: string }>).map((f) => f.correo));
-  return limpios.filter((c) => !fuera.has(c));
-}
-
 interface PiezaCandidata {
   id: string;
   tipo: string;
+  estado: 'pendiente' | 'aprobado';
   prospecto_id: string | null;
   prospecto: { empresa?: string; correo?: string } | null;
 }
@@ -91,13 +81,20 @@ export async function correrEnviador(disparo: DisparoCorrida = 'cron', limite = 
     return { piezasEnviadas: 0, destinatarios: 0, saltadas: 0, motivos: ['canal sin configurar'] };
   }
 
+  // Las candidatas son DOS clases (c5-6): las pendientes maduras (la ventana
+  // de revisión ya pasó) y las que ESTA máquina ya aprobó pero cuyo envío
+  // rebotó en un candado (tope diario, cadencia, fallo definitivo de Resend)
+  // — sin retomarlas, "la pieza sigue aprobada; sale mañana" era mentira en
+  // el camino automático: ninguna corrida futura las volvía a mirar. Solo se
+  // retoman las del propio enviador (resuelto_por_email) — una aprobada por
+  // HUMANO sin enviar es suya y vive en el panel. Las ambiguas (c5-3) traen
+  // enviado_en puesto, así que no entran aquí: jamás reenvío automático.
   const corte = new Date(Date.now() - ventanaRevisionMin() * 60_000).toISOString();
   const { data, error } = await acotada(supabaseAdmin()
     .from('cola_aprobacion')
-    .select('id, tipo, prospecto_id, prospecto:prospecto_id(empresa, correo)')
-    .eq('estado', 'pendiente')
+    .select('id, tipo, estado, prospecto_id, prospecto:prospecto_id(empresa, correo)')
+    .or(`and(estado.eq.pendiente,creado_en.lte.${corte}),and(estado.eq.aprobado,enviado_en.is.null,resuelto_por_email.eq.${RESOLUTOR_AUTOMATICO})`)
     .in('tipo', [...TIPOS_CAMPANA])
-    .lte('creado_en', corte)
     .order('creado_en', { ascending: true })
     .limit(Math.min(limite, topeCorreoFrioDia())), 'enviador.candidatas');
   if (error) throw new Error(`correrEnviador: ${error.message}`);
@@ -128,19 +125,23 @@ export async function correrEnviador(disparo: DisparoCorrida = 'cron', limite = 
       }
 
       // Auto-APROBAR, anclado a pendiente (si un humano la resolvió en la
-      // ventana, cero filas y la pieza es suya, no nuestra).
-      const { data: ap, error: errAp } = await supabaseAdmin()
-        .from('cola_aprobacion')
-        .update({
-          estado: 'aprobado',
-          resuelto_por: null,
-          resuelto_por_email: RESOLUTOR_AUTOMATICO,
-          resuelto_en: new Date().toISOString(),
-        })
-        .eq('id', pieza.id).eq('estado', 'pendiente')
-        .select('id');
-      if (errAp) throw new Error(`auto-aprobación fallida: ${errAp.message}`);
-      if (!Array.isArray(ap) || ap.length === 0) throw new DatoInvalido('un humano la resolvió durante la ventana');
+      // ventana, cero filas y la pieza es suya, no nuestra). Las retomadas
+      // (c5-6) ya vienen aprobadas por esta máquina: se saltan este paso y
+      // van directo a la puerta de envío, que re-aplica tope/cadencia/bajas.
+      if (pieza.estado === 'pendiente') {
+        const { data: ap, error: errAp } = await supabaseAdmin()
+          .from('cola_aprobacion')
+          .update({
+            estado: 'aprobado',
+            resuelto_por: null,
+            resuelto_por_email: RESOLUTOR_AUTOMATICO,
+            resuelto_en: new Date().toISOString(),
+          })
+          .eq('id', pieza.id).eq('estado', 'pendiente')
+          .select('id');
+        if (errAp) throw new Error(`auto-aprobación fallida: ${errAp.message}`);
+        if (!Array.isArray(ap) || ap.length === 0) throw new DatoInvalido('un humano la resolvió durante la ventana');
+      }
 
       // ENVIAR por la puerta de siempre (claim + tope + cadencia + CHECK).
       const r = await enviarPiezaPorCorreo(pieza.id, null, vivos.filter((c) => c !== principal));

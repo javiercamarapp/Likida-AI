@@ -31,6 +31,61 @@ export function topeCorreoFrioDia(): number {
   return Number.isFinite(v) && v > 0 ? Math.floor(v) : 30;
 }
 
+/** Los tipos de pieza que son CAMPAÑA de prospección — los únicos que el
+ *  enviador auto-resuelve y los únicos cuyo texto pasa por el verificador
+ *  estructural también al ENVIAR (c5-14: la edición humana no lo esquiva). */
+export const TIPOS_CAMPANA = ['correo_frio', 'correo_seguimiento'] as const;
+
+/** El verificador ESTRUCTURAL del formato de campaña — los dos guardarraíles
+ *  cazados en vivo: jamás "clientes reales" (ninguna empresa ha firmado; la
+ *  frase permitida es "en pláticas con...") y sin guiones largos. Es código,
+ *  no prompt. Vive AQUÍ (y no en redactor.ts, que lo re-exporta) porque la
+ *  puerta de salida también lo aplica (c5-14): una edición humana o una
+ *  variante guardada que lo viole tampoco sale. */
+export function verificarFormatoCampana(texto: string): void {
+  if (/clientes?\s+reales/i.test(texto)) {
+    throw new DatoInvalido('El correo dice "clientes reales" — ninguna empresa ha firmado; la frase permitida es "en pláticas con transportistas como...". Pieza descartada.');
+  }
+  if (texto.includes('—')) {
+    throw new DatoInvalido('El correo trae guion largo (—) — el formato de campaña los prohíbe. Pieza descartada.');
+  }
+}
+
+/** La lista de bajas, FAIL-CLOSED: si no se puede leer, LANZA — mandar sin
+ *  consultar las bajas es escribirle a quien pidió que no. Vive AQUÍ (c5-1)
+ *  porque la consulta pertenece a la PUERTA de salida, no a un llamador: el
+ *  camino humano de /admin/aprobaciones la ignoraba y un correo suprimido
+ *  por queja de spam podía volver a recibir campaña con un click. */
+export async function filtrarSuprimidos(correos: string[]): Promise<string[]> {
+  const limpios = [...new Set(correos.map((c) => c.trim().toLowerCase()).filter(Boolean))];
+  if (limpios.length === 0) return [];
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('correo_suprimido')
+    .select('correo')
+    .in('correo', limpios), 'cola.suprimidos');
+  if (error) throw new Error(`filtrarSuprimidos: ${error.message}`);
+  const fuera = new Set(((data ?? []) as Array<{ correo: string }>).map((f) => f.correo));
+  return limpios.filter((c) => !fuera.has(c));
+}
+
+/**
+ * El pie "por qué recibes esto", derivado de la FUENTE REAL del prospecto
+ * (c5-5): el texto anterior afirmaba «tu empresa publicó una vacante» a TODO
+ * destinatario — incluido el que llegó por la calculadora y el del censo sin
+ * vacante capturada. Afirmar una vacante que no consta es inventar un hecho.
+ * Exportada para su prueba.
+ */
+export function porQueLoRecibes(fuente: string | null, vacante: string | null): string {
+  const baja = 'Si prefieres no recibir estos correos, responde con la palabra BAJA y no volveremos a escribirte.';
+  if (vacante?.trim()) {
+    return `Recibes este correo porque tu empresa publicó una vacante relacionada con liquidación de viajes. ${baja}`;
+  }
+  if (fuente === 'landing') {
+    return `Recibes este correo porque usaste nuestra calculadora de recuperación fiscal en likida.ai. ${baja}`;
+  }
+  return `Recibes este correo porque tu empresa aparece en directorios públicos del autotransporte en México. ${baja}`;
+}
+
 export type PrioridadPieza = 'normal' | 'urgente';
 
 export interface PiezaNueva {
@@ -317,14 +372,15 @@ export async function enviarPiezaPorCorreo(
   const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
     .update({ enviado_en: new Date().toISOString(), envio_error: null })
     .eq('id', id).eq('estado', 'aprobado').is('enviado_en', null)
-    .select('id, titulo, cuerpo, cuerpo_final, agente, prioridad, prospecto_id, prospecto:prospecto_id(empresa, correo)'), 'enviarPiezaPorCorreo.claim');
+    .select('id, tipo, titulo, cuerpo, cuerpo_final, agente, prioridad, prospecto_id, prospecto:prospecto_id(empresa, correo, fuente, vacante)'), 'enviarPiezaPorCorreo.claim');
   if (error) throw new Error(`enviarPiezaPorCorreo: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
     throw new DatoInvalido('Solo una pieza APROBADA y aún no enviada se puede enviar — puede que otro click le ganara a este. Recarga.');
   }
   const fila = data[0] as Record<string, unknown>;
-  const prospecto = fila.prospecto as { empresa?: string; correo?: string } | null;
+  const prospecto = fila.prospecto as { empresa?: string; correo?: string; fuente?: string; vacante?: string } | null;
   const destinatario = prospecto?.correo?.trim() ?? '';
+  const esCampana = (TIPOS_CAMPANA as readonly string[]).includes(String(fila.tipo));
 
   const revertir = async (motivo: string) => {
     const { error: errRevertir } = await supabaseAdmin().from('cola_aprobacion')
@@ -338,6 +394,38 @@ export async function enviarPiezaPorCorreo(
   if (!destinatario) {
     await revertir('El prospecto no tiene correo capturado.');
     throw new DatoInvalido('El prospecto de esta pieza no tiene correo capturado — captúralo en Vendedores y vuelve a enviar.');
+  }
+
+  // ── EL FORMATO DE CAMPAÑA, EN LA PUERTA (c5-14) ──────────────────────────
+  // El texto que de verdad va a salir (la edición humana manda) se verifica
+  // AQUÍ, no solo al fabricarse: un `cuerpo_final` editado a mano con
+  // "clientes reales" o un guion largo tampoco sale.
+  const cuerpo = String(fila.cuerpo_final ?? fila.cuerpo);
+  if (esCampana) {
+    try {
+      verificarFormatoCampana(String(fila.titulo));
+      verificarFormatoCampana(cuerpo);
+    } catch (e) {
+      const motivo = e instanceof Error ? e.message : String(e);
+      await revertir(motivo);
+      throw new DatoInvalido(motivo);
+    }
+  }
+
+  // ── LA LISTA DE BAJAS, EN LA PUERTA Y FAIL-CLOSED (c5-1) ─────────────────
+  // Cubre el camino humano Y el automático: si la lista no se puede leer, no
+  // se manda; si el principal está suprimido, la pieza no sale y SE DICE.
+  // Las copias suprimidas simplemente se caen del envío.
+  let vivos: string[];
+  try {
+    vivos = await filtrarSuprimidos([destinatario, ...copias]);
+  } catch {
+    await revertir('No se pudo leer la lista de bajas.');
+    throw new DatoInvalido('No se pudo leer la lista de bajas — sin esa lectura no se manda (escribirle a quien pidió baja quema el dominio). Reintenta.');
+  }
+  if (!vivos.includes(destinatario.trim().toLowerCase())) {
+    await revertir('El correo principal está en la lista de bajas.');
+    throw new DatoInvalido('El correo principal de este prospecto está en la lista de bajas — pidió que no se le escribiera (o rebotó). No se envía.');
   }
 
   // ── EL TOPE DIARIO (Fase 2: "20–40 correos aprobados/día, máximo") ──
@@ -398,29 +486,49 @@ export async function enviarPiezaPorCorreo(
   }
 
   // 2) EL PROVEEDOR. Sale la versión FINAL (la edición humana manda). Las
-  // copias van en el MISMO envío (Resend acepta lista) — deduplicadas contra
-  // el principal; el formato lo re-valida enviarCorreo destinatario por
-  // destinatario. La instrucción de BAJA va en el pie de todos: la honra el
-  // procesamiento de respuestas y la lista `correo_suprimido` (0217).
-  const cuerpo = String(fila.cuerpo_final ?? fila.cuerpo);
-  const paraTodos = [destinatario, ...copias
-    .map((c) => c.trim().toLowerCase())
-    .filter((c, i, arr) => c && c !== destinatario.toLowerCase() && arr.indexOf(c) === i)];
+  // copias van en el MISMO envío (Resend acepta lista) — la lista ya pasó
+  // por bajas (c5-1) y se deduplica contra el principal. La instrucción de
+  // BAJA va en el pie de todos: la honra el procesamiento de respuestas
+  // (correo/entrante) y la lista `correo_suprimido` (0217). El pie dice POR
+  // QUÉ recibe el correo según la fuente real del prospecto (c5-5) — jamás
+  // una vacante que no consta. La llave de idempotencia es el id de la pieza
+  // (c5-3): un reintento tras timeout ambiguo no duplica el correo.
+  const paraTodos = [destinatario, ...vivos
+    .filter((c) => c !== destinatario.trim().toLowerCase())];
   const r = await enviarCorreo(paraTodos, {
     asunto: String(fila.titulo),
     avance: cuerpo.slice(0, 90),
     titulo: String(fila.titulo),
     parrafos: cuerpo.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).slice(0, 12),
-    porQueLoRecibes: 'Recibes este correo porque tu empresa publicó una vacante relacionada con liquidación de viajes. Si prefieres no recibir estos correos, responde con la palabra BAJA y no volveremos a escribirte.',
-  });
+    porQueLoRecibes: porQueLoRecibes(prospecto?.fuente ?? null, prospecto?.vacante ?? null),
+  }, { idempotencyKey: `pieza-${id}` });
   if (!r.ok) {
+    // ── LA AMBIGÜEDAD DE RED (c5-3) ────────────────────────────────────────
+    // 'red' incluye el timeout: el POST pudo haber sido ACEPTADO con la
+    // respuesta perdida. Revertir aquí trataría "no sé" como "no salió" y el
+    // reintento mandaría el MISMO correo frío otra vez al mismo contacto.
+    // La pieza queda con su claim puesto y el motivo a la vista ("verificar
+    // en Resend"): jamás reenvío automático; el humano verifica y, si de
+    // verdad no salió, el reintento es seguro por la Idempotency-Key.
+    // La reserva de cadencia TAMPOCO se borra: bloquear 48h de más es el
+    // lado seguro cuando no se sabe si el correo llegó.
+    if (r.motivo === 'red') {
+      const detalle = `AMBIGUO: el proveedor no contestó a tiempo (${'detalle' in r ? r.detalle : 'timeout'}) — el correo PUDO haber salido. Verificar en Resend antes de cualquier reenvío.`;
+      const { error: errAmb } = await supabaseAdmin().from('cola_aprobacion')
+        .update({ envio_error: detalle.slice(0, 300) })
+        .eq('id', id);
+      if (errAmb) logger.error('cola.ambiguo_sin_anotar', { pieza: id, err: errAmb.message });
+      logger.warn('cola.envio_ambiguo', { pieza: id, detalle });
+      throw new DatoInvalido(`${detalle} La pieza queda marcada como enviada-por-confirmar en el panel.`);
+    }
     const motivo = r.motivo === 'sin_configurar'
       ? 'El canal de correo no está configurado (RESEND_API_KEY/RESEND_EMAIL_DOMAIN).'
       : `Resend no aceptó el envío (${r.motivo}: ${'detalle' in r ? r.detalle : ''}).`;
-    // La COMPENSACIÓN de la reserva (0124): el proveedor rechazó, así que el
-    // contacto reservado se borra — dejarlo bloquearía 48h de cadencia por
-    // un correo que nunca salió. Si NI borrarla se puede, queda del lado
-    // seguro (bloquea de más, jamás de menos) y se grita.
+    // La COMPENSACIÓN de la reserva (0124), SOLO ante rechazo DEFINITIVO: el
+    // proveedor dijo que no, así que el contacto reservado se borra —
+    // dejarlo bloquearía 48h de cadencia por un correo que nunca salió. Si
+    // NI borrarla se puede, queda del lado seguro (bloquea de más, jamás de
+    // menos) y se grita.
     if (reservaId) {
       const { error: errComp } = await supabaseAdmin()
         .from('prospecto_contacto').delete().eq('id', reservaId);

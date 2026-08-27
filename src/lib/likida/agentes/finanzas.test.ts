@@ -51,7 +51,7 @@ const RESUMEN_VACIO = {
   tendenciaCosto: null as number | null,
 };
 const getResumenNegocio = vi.fn(async (..._a: unknown[]): Promise<unknown> => RESUMEN_VACIO);
-const getCostoPorFaseModelo = vi.fn(async (): Promise<unknown[]> => []);
+const getCostoPorFaseModelo = vi.fn(async (..._a: unknown[]): Promise<unknown[]> => []);
 const getConteosPlataforma = vi.fn(async (): Promise<unknown> => ({
   operadores: 0, liquidaciones: 0, conversacionesWa: 0, usuarios: 0, usuariosPorRol: [],
 }));
@@ -62,7 +62,7 @@ const costoIaVentana = vi.fn(async (..._a: unknown[]) => ({
 }));
 vi.mock('@/lib/admin/negocio', () => ({
   getResumenNegocio: (...a: unknown[]) => getResumenNegocio(...a),
-  getCostoPorFaseModelo: () => getCostoPorFaseModelo(),
+  getCostoPorFaseModelo: (...a: unknown[]) => getCostoPorFaseModelo(...a),
   getConteosPlataforma: () => getConteosPlataforma(),
   costoIaMesActual: () => costoIaMesActual(),
   costoIaVentana: (...a: unknown[]) => costoIaVentana(...a),
@@ -385,5 +385,22 @@ describe('las corridas — fail closed, idempotencia y el ROJO que no espera', (
     expect(pieza.titulo).toBe('Cierre — 2026-08');
     expect(pieza.cuerpo).toContain('Flota Uno');
     expect(pieza.cuerpo).toContain('$9,500.00');
+  });
+});
+
+describe('c5-8 — U1 mira una VENTANA de 7 días, no el histórico', () => {
+  it('el parte de costos pide el desglose fase×modelo acotado (una migración legítima de modelo no grita ROJO para siempre)', async () => {
+    respuestas.set('cola_aprobacion', [
+      { count: 0, error: null },                // ¿parte del día ya existe?
+      { data: { id: 'pieza-1' }, error: null }, // el encolado
+    ]);
+    await correrAgenteFinanciero('control_costos', 'cron');
+    expect(getCostoPorFaseModelo).toHaveBeenCalledTimes(1);
+    const [desde] = getCostoPorFaseModelo.mock.calls[0] as [string];
+    expect(typeof desde).toBe('string');
+    // ~7 días atrás (con margen por el mediodía UTC del cálculo).
+    const dias = (Date.now() - Date.parse(desde)) / 86_400_000;
+    expect(dias).toBeGreaterThan(6);
+    expect(dias).toBeLessThan(8.5);
   });
 });

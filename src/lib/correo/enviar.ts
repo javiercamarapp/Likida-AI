@@ -78,6 +78,15 @@ export interface OpcionesEnvio {
    * legibilidad para quien recibe, no un canal nuevo que verificar.
    */
   remitenteLocal?: string;
+  /**
+   * AUDITORÍA FABLE CICLO 5 (c5-3): la llave de idempotencia que Resend
+   * deduplica de su lado. Un timeout de red es AMBIGUO — el POST pudo haber
+   * sido aceptado con la respuesta perdida — y sin esta llave un reintento
+   * mandaba el MISMO correo frío dos veces al mismo contacto. Quien envía
+   * piezas de campaña la pasa (la llave es el id de la pieza); los avisos
+   * del operador no la necesitan.
+   */
+  idempotencyKey?: string;
 }
 
 /** Un destinatario que no parece correo no se manda: la API lo rechazaría
@@ -114,6 +123,10 @@ export async function enviarCorreo(
       headers: {
         Authorization: `Bearer ${llave}`,
         'Content-Type': 'application/json',
+        // La llave viaja solo si el llamador la dio (c5-3): Resend rechaza
+        // el duplicado de una llave ya usada, volviendo seguro el reintento
+        // tras un timeout ambiguo.
+        ...(op.idempotencyKey ? { 'Idempotency-Key': op.idempotencyKey } : {}),
       },
       body: JSON.stringify({
         from,

@@ -45,9 +45,14 @@ const estaApagado = vi.fn(async (nombre: string) => nombre === '__ninguno_apagad
  *  apagado de ILEGIBLE. `estaApagado` sigue siendo la palanca de las pruebas
  *  viejas (true = apagado); `ilegibles` marca qué lecturas fallan. */
 const ilegibles = new Set<string>();
+// c5-CRON: fallos TRANSITORIOS — la primera lectura sale ilegible y la
+// segunda (el reintento del cron) ya contesta.
+const ilegiblesUnaVez = new Set<string>();
 vi.mock('@/lib/likida/interruptores', () => ({
-  leerInterruptor: async (nombre: string) =>
-    ilegibles.has(nombre) ? 'ilegible' : (await estaApagado(nombre)) ? 'apagado' : 'encendido',
+  leerInterruptor: async (nombre: string) => {
+    if (ilegiblesUnaVez.has(nombre)) { ilegiblesUnaVez.delete(nombre); return 'ilegible'; }
+    return ilegibles.has(nombre) ? 'ilegible' : (await estaApagado(nombre)) ? 'apagado' : 'encendido';
+  },
 }));
 
 // El latido (RES-7) se prueba en src/lib/admin/salud.test.ts; aquí se mockea
@@ -257,4 +262,48 @@ describe('el reloj se reparte y los cortes repetidos se gritan', () => {
     expect(registrarLatido).toHaveBeenCalledWith('escalar', 'ok', { cortesSeguidos: 0, cortados: 0 });
     expect(alertarOperador).not.toHaveBeenCalled();
   });
+});
+
+describe('c5-CRON — el reintento único ante timeout, solo donde es idempotente', () => {
+  beforeEach(() => {
+    escalarViajesSinAceptar.mockReset().mockResolvedValue({ escalados: 0 });
+    ejecutarCobranzaGlobal.mockReset().mockResolvedValue({ tenants: 0, contactados: 0, fallos: [] });
+    alertarOperador.mockClear();
+    estaApagado.mockReset().mockResolvedValue(false);
+    ilegibles.clear();
+    ilegiblesUnaVez.clear();
+  });
+
+  it('el interruptor ilegible UNA vez (la estampida) se reintenta y el cron corre — el fallo 11:07 muere aquí', async () => {
+    ilegiblesUnaVez.add('global');
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(escalarViajesSinAceptar).toHaveBeenCalledTimes(1);
+  }, 15_000);
+
+  it('un TimeoutError del motor de escalación se reintenta UNA vez (claim-first: lo reclamado no se repite)', async () => {
+    escalarViajesSinAceptar
+      .mockRejectedValueOnce(Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }))
+      .mockResolvedValueOnce({ escalados: 2 });
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(escalarViajesSinAceptar).toHaveBeenCalledTimes(2);
+    expect(alertarOperador).not.toHaveBeenCalled();
+  }, 15_000);
+
+  it('un error que NO es timeout jamás se reintenta: 500 a la primera', async () => {
+    escalarViajesSinAceptar.mockRejectedValue(new Error('column does not exist'));
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(500);
+    expect(escalarViajesSinAceptar).toHaveBeenCalledTimes(1);
+  });
+
+  it('el timeout del tope de acotada ("sin respuesta en N ms") también cuenta como timeout', async () => {
+    ejecutarCobranzaGlobal
+      .mockRejectedValueOnce(new Error('ejecutarCobranzaGlobal: sin respuesta en 8000 ms (tope de consulta)'))
+      .mockResolvedValueOnce({ tenants: 1, contactados: 1, fallos: [] });
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(ejecutarCobranzaGlobal).toHaveBeenCalledTimes(2);
+  }, 15_000);
 });

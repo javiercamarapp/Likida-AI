@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { verificarFirma, mensajeDeRechazo } from '@/lib/correo/firma_entrante';
 import { tokenDeDestinatarios } from '@/lib/correo/buzon';
+import { direccionDeCampana, esRespuestaACampana, procesarRespuestaCampana } from '@/lib/correo/respuesta_campana';
 import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
 import { parseRepXml, ingerirRep } from '@/lib/likida/intake/rep';
 import { guardarFacturaProveedor, estadoSatDeCfdi } from '@/lib/likida/proveedores';
@@ -54,6 +55,11 @@ interface EventoCorreo {
     to?: string[];
     cc?: string[];
     subject?: string;
+    /** El cuerpo de la respuesta — Resend lo entrega en el payload del
+     *  email.received; lo lee SOLO el circuito de respuestas de campaña
+     *  (c5-2) para detectar la BAJA. */
+    text?: string;
+    html?: string;
     attachments?: AdjuntoEntrante[];
   };
 }
@@ -157,8 +163,25 @@ export async function POST(req: Request) {
   // ── A QUÉ FLOTA ──────────────────────────────────────────────────────────
   // Del DESTINATARIO, jamás del remitente. Y se miran `to` y `cc` porque un
   // reenvío suele poner nuestro buzón en copia.
-  const token = tokenDeDestinatarios([...(d.to ?? []), ...(d.cc ?? [])]);
+  const destinatarios = [...(d.to ?? []), ...(d.cc ?? [])];
+  const token = tokenDeDestinatarios(destinatarios);
   if (!token) {
+    // ── LA RESPUESTA DE CAMPAÑA (c5-2) ─────────────────────────────────────
+    // Antes de descartar como sin_buzon: si el destinatario es el buzón del
+    // que SALE la campaña (avisos@), esto es una respuesta a un correo de
+    // prospección — la BAJA se honra, la respuesta va al historial (detiene
+    // al SDR) y el operador recibe el aviso. Un fallo al escribir contesta
+    // 503 para que Resend reintente: perder la respuesta deja a la máquina
+    // insistiéndole a quien ya contestó.
+    const buzonCampana = direccionDeCampana();
+    if (buzonCampana && esRespuestaACampana(destinatarios, buzonCampana)) {
+      const r = await procesarRespuestaCampana(d);
+      if (!r.ok) {
+        logger.error('correo_entrante.respuesta_campana', { emailId, motivo: r.motivo });
+        return NextResponse.json({ error: 'no se pudo registrar la respuesta' }, { status: 503 });
+      }
+      return NextResponse.json({ ok: true, campana: r.resultado });
+    }
     // No se registra el correo del remitente: es un dato personal y este log no
     // es el lugar. El `email_id` alcanza para rastrearlo en Resend.
     logger.warn('correo_entrante.sin_buzon', { emailId });

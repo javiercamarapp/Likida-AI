@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA DIRECCIÓN (0216) — lo que estas pruebas fijan:
@@ -14,6 +15,8 @@ import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 
 const respuestas = new Map<string, Array<{ data?: unknown; error?: { message: string; code?: string } | null; count?: number | null }>>();
 const inserts: Array<{ tabla: string; fila: Record<string, unknown> }> = [];
+const updates: Array<{ tabla: string; fila: Record<string, unknown> }> = [];
+const deletes: string[] = [];
 function builder(tabla: string) {
   const responder = () => {
     const cola = respuestas.get(tabla);
@@ -30,6 +33,8 @@ function builder(tabla: string) {
           Promise.resolve().then(responder).then(res, rej),
       };
     },
+    update: (fila: Record<string, unknown>) => { updates.push({ tabla, fila }); return b; },
+    delete: () => { deletes.push(tabla); return b; },
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve().then(responder).then(res, rej),
   });
@@ -99,6 +104,8 @@ afterAll(() => {
 beforeEach(() => {
   respuestas.clear();
   inserts.length = 0;
+  updates.length = 0;
+  deletes.length = 0;
   registrar.mockClear();
   enviar.mockClear();
   enviar.mockResolvedValue({ ok: true as const, id: 'correo-1' });
@@ -315,18 +322,22 @@ describe('el reloj y el sello mandan sobre la corrida', () => {
   });
 
   it('correr dos veces produce UN solo correo: el sello del periodo lo frena', async () => {
-    // Primera corrida: sin sello → arma, envía y sella.
+    // Primera corrida (c5-15): la RESERVA del periodo va ANTES del correo
+    // (enviado_en null — el unique arbitra la carrera) y el sello es un
+    // UPDATE que solo corre tras la aceptación del canal.
     respuestas.set('reporte_direccion', [
       { data: [], error: null },              // leerReporte (sello)
       { data: [], error: null },              // leerReporte (¿ayer salió?)
-      { data: null, error: null },            // insert del sello
+      { data: null, error: null },            // insert de la RESERVA
     ]);
     const r1 = await correrAgenteDireccion('kpi_whatsapp', MARTES_10AM);
     expect(r1).toMatchObject({ resultado: 'corrio', piezas: 1 });
     expect(enviar).toHaveBeenCalledTimes(1);
     const sello = inserts.find((i) => i.tabla === 'reporte_direccion');
     expect(sello?.fila.periodo).toBe('dia-2026-08-25');
-    expect(sello?.fila.enviado_en).toBeTruthy();
+    expect(sello?.fila.enviado_en).toBeNull();
+    const selloUpdate = updates.find((u) => u.tabla === 'reporte_direccion');
+    expect(selloUpdate?.fila.enviado_en).toBeTruthy();
 
     // Segunda corrida: el sello existe con enviado_en → no se manda de nuevo.
     enviar.mockClear();
@@ -338,29 +349,59 @@ describe('el reloj y el sello mandan sobre la corrida', () => {
     expect(enviar).not.toHaveBeenCalled();
   });
 
-  it('el canal que no acepta NO sella: corrida en fallo y reintento posible', async () => {
+  it("el timeout del canal es AMBIGUO (c5-15): la reserva se queda, nadie reenvía, y se dice", async () => {
     enviar.mockResolvedValue({ ok: false, motivo: 'red', detalle: 'timeout' } as never);
     respuestas.set('reporte_direccion', [
       { data: [], error: null },              // sello
       { data: [], error: null },              // ayer
+      { data: null, error: null },            // insert de la RESERVA
     ]);
     const r = await correrAgenteDireccion('kpi_whatsapp', MARTES_10AM);
     expect(r).toMatchObject({ resultado: 'corrio', piezas: 0 });
-    // Sin sello escrito — la siguiente pasada reintenta.
-    expect(inserts.filter((i) => i.tabla === 'reporte_direccion')).toHaveLength(0);
-    // Y la corrida quedó anotada como FALLO, no como éxito.
+    // La reserva EXISTE (enviado_en null), no se selló ni se borró: el
+    // correo pudo haber salido — reenviar un "no sé" duplica.
+    expect(inserts.filter((i) => i.tabla === 'reporte_direccion')).toHaveLength(1);
+    expect(updates.filter((u) => u.tabla === 'reporte_direccion')).toHaveLength(0);
+    expect(deletes).not.toContain('reporte_direccion');
+    expect(registrar).toHaveBeenCalledWith(null, 'kpi_whatsapp', expect.objectContaining({ estado: 'fallo' }));
+
+    // Y la pasada siguiente NO reenvía: ve la reserva y lo dice.
+    enviar.mockClear();
+    respuestas.set('reporte_direccion', [
+      { data: [{ cuerpo: 'x', resumen: null, enviado_en: null }], error: null },
+    ]);
+    const r2 = await correrAgenteDireccion('kpi_whatsapp', MARTES_10AM);
+    expect(r2.resultado).toBe('saltado');
+    expect(r2.motivo).toMatch(/por confirmar/);
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it('el rechazo DEFINITIVO del canal libera la reserva: la siguiente pasada reintenta', async () => {
+    enviar.mockResolvedValue({ ok: false, motivo: 'rechazado', detalle: 'HTTP 422' } as never);
+    respuestas.set('reporte_direccion', [
+      { data: [], error: null },
+      { data: [], error: null },
+      { data: null, error: null },            // insert de la RESERVA
+      { data: null, error: null },            // delete de la reserva
+    ]);
+    const r = await correrAgenteDireccion('kpi_whatsapp', MARTES_10AM);
+    expect(r).toMatchObject({ resultado: 'corrio', piezas: 0 });
+    expect(deletes).toContain('reporte_direccion');
     expect(registrar).toHaveBeenCalledWith(null, 'kpi_whatsapp', expect.objectContaining({ estado: 'fallo' }));
   });
 
-  it('sin ALERTA_EMAIL el reporte no tiene canal, y la corrida lo dice como fallo', async () => {
+  it('sin ALERTA_EMAIL el reporte no tiene canal, la reserva se libera y la corrida lo dice como fallo', async () => {
     delete process.env.ALERTA_EMAIL;
     respuestas.set('reporte_direccion', [
       { data: [], error: null },
       { data: [], error: null },
+      { data: null, error: null },            // insert de la RESERVA
+      { data: null, error: null },            // delete de la reserva (definitivo)
     ]);
     const r = await correrAgenteDireccion('kpi_whatsapp', MARTES_10AM);
     expect(r.motivo).toContain('ALERTA_EMAIL');
     expect(enviar).not.toHaveBeenCalled();
+    expect(deletes).toContain('reporte_direccion');
     expect(registrar).toHaveBeenCalledWith(null, 'kpi_whatsapp', expect.objectContaining({ estado: 'fallo' }));
   });
 
@@ -393,14 +434,37 @@ describe('el reloj y el sello mandan sobre la corrida', () => {
       { data: [{ cuerpo: '[DIAGNÓSTICO · mes 0 del plan]\nx', resumen: null, enviado_en: null }], error: null }, // artefacto desempeño
       { data: [{ cuerpo: '1. VENTAS — nuevo 1', resumen: null, enviado_en: null }], error: null },               // artefacto ciclo
       { data: [], error: null },                                                     // ¿ayer salió?
-      { data: null, error: null },                                                   // insert del sello
+      { data: null, error: null },                                                   // insert de la RESERVA
     ]);
     const r = await correrAgenteDireccion('kpi_whatsapp', LUNES_10AM);
     expect(r).toMatchObject({ resultado: 'corrio', piezas: 1 });
     const sello = inserts.find((i) => i.tabla === 'reporte_direccion');
+    expect(updates.find((u) => u.tabla === 'reporte_direccion')?.fila.enviado_en).toBeTruthy();
     expect(sello?.fila.periodo).toBe('lun-2026-08-24');
     expect(String(sello?.fila.cuerpo)).toContain('[DIAGNÓSTICO');
     expect(String(sello?.fila.cuerpo)).toContain('1. VENTAS');
     expect(String(sello?.fila.cuerpo)).toContain('[ESTA SEMANA DECIDES]');
+  });
+});
+
+describe('c5-9 — la columna real de cola_aprobacion es creado_en (estructural)', () => {
+  it('este archivo jamás consulta created_at — esa fuente nacía muerta (42703)', () => {
+    const fuente = readFileSync('src/lib/likida/direccion/reportes.ts', 'utf8');
+    expect(fuente).not.toMatch(/gte\('created_at'/);
+    expect(fuente).toMatch(/gte\('creado_en'/);
+  });
+});
+
+describe('c5-15 — el productor registra corrida al RECOGER su periodo (el detector no acusa en falso)', () => {
+  it('artefacto ya generado (p. ej. por el kpi del lunes): saltado, pero CON corrida ok', async () => {
+    respuestas.set('reporte_direccion', [
+      { data: [{ cuerpo: 'ya estaba', resumen: null, enviado_en: null }], error: null },
+    ]);
+    const r = await correrAgenteDireccion('desempeno_startup', LUNES_10AM);
+    expect(r.resultado).toBe('saltado');
+    expect(registrar).toHaveBeenCalledWith(null, 'desempeno_startup', expect.objectContaining({
+      estado: 'ok',
+      resumen: expect.objectContaining({ recogido: expect.stringMatching(/ya estaba generado/) }),
+    }));
   });
 });
