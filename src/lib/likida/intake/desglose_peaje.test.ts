@@ -6,6 +6,7 @@ import {
   filasBitacora, bitacoraACsv, LEYENDAS_BITACORA_RMF_918,
   type GastoCaseta, type BitacoraRmf918,
 } from './desglose_peaje';
+import { llaveUnidadDia } from '../peajes/evidencia_gps';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL PARSEO — layouts reales de proveedor, en puro (sin archivos ni base).
@@ -282,34 +283,56 @@ describe('cruzarLineasDesglose', () => {
 
 describe('filasBitacora', () => {
   const viajes = new Map([
-    ['v1', { folio: 'F-001', origen: 'CDMX', destino: 'Querétaro' }],
-    ['v2', { folio: null, origen: null, destino: null }],
+    ['v1', { folio: 'F-001', origen: 'CDMX', destino: 'Querétaro', unidadId: 'u1' }],
+    ['v2', { folio: null, origen: null, destino: null, unidadId: null }],
   ]);
+  const posiciones = new Map([[llaveUnidadDia('u1', '2026-08-05'), 87]]);
 
-  it('arma la fila con viaje, ruta, caseta y monto conciliado', () => {
+  it('arma la fila con viaje, ruta, caseta, monto conciliado y evidencia GPS', () => {
     const filas = filasBitacora(
       [{ fecha: '2026-08-05', caseta: 'Tepotzotlán', monto: 189, tag: 'IMDM12345678', viajeId: 'v1' }],
       viajes,
+      posiciones,
     );
     expect(filas).toEqual([{
       viajeFolio: 'F-001', origen: 'CDMX', destino: 'Querétaro',
       fechaCruce: '2026-08-05', caseta: 'Tepotzotlán', tag: 'IMDM12345678', montoConciliado: 189,
+      posicionesGpsDia: 87,
     }]);
   });
 
-  it('lo que el viaje no tiene queda VACÍO — jamás inventado', () => {
+  it('lo que el viaje no tiene queda VACÍO — jamás inventado (y GPS null, no 0)', () => {
     const [fila] = filasBitacora(
       [{ fecha: '2026-08-05', caseta: null, monto: 189, tag: null, viajeId: 'v2' }],
       viajes,
+      posiciones,
     );
     expect(fila).toEqual({
       viajeFolio: '', origen: '', destino: '',
       fechaCruce: '2026-08-05', caseta: '', tag: '', montoConciliado: 189,
+      posicionesGpsDia: null,
     });
   });
 
   it('una línea sin viaje no entra a la bitácora', () => {
     expect(filasBitacora([{ fecha: '2026-08-05', caseta: 'X', monto: 1, tag: null, viajeId: null }], viajes)).toEqual([]);
+  });
+
+  it('unidad con cero posiciones ese día → null («sin datos»), nunca un 0 que afirme quietud', () => {
+    const [fila] = filasBitacora(
+      [{ fecha: '2026-08-06', caseta: 'T', monto: 10, tag: null, viajeId: 'v1' }],
+      viajes,
+      posiciones, // u1 solo tiene posiciones el 05, no el 06
+    );
+    expect(fila.posicionesGpsDia).toBeNull();
+  });
+
+  it('sin mapa de posiciones (llamador viejo) toda la columna es null — compatible hacia atrás', () => {
+    const [fila] = filasBitacora(
+      [{ fecha: '2026-08-05', caseta: 'T', monto: 10, tag: null, viajeId: 'v1' }],
+      viajes,
+    );
+    expect(fila.posicionesGpsDia).toBeNull();
   });
 });
 
@@ -336,7 +359,7 @@ describe('la leyenda de la bitácora — dice qué cumple y qué NO afirma', () 
 describe('bitacoraACsv', () => {
   const bitacora: BitacoraRmf918 = {
     desgloseId: 'd-1', proveedor: 'IAVE', periodoDesde: '2026-08-01', periodoHasta: '2026-08-10',
-    filas: [{ viajeFolio: 'F-001', origen: 'CDMX', destino: 'Querétaro', fechaCruce: '2026-08-05', caseta: 'Tepotzotlán', tag: 'IMDM12345678', montoConciliado: 189 }],
+    filas: [{ viajeFolio: 'F-001', origen: 'CDMX', destino: 'Querétaro', fechaCruce: '2026-08-05', caseta: 'Tepotzotlán', tag: 'IMDM12345678', montoConciliado: 189, posicionesGpsDia: 87 }],
     leyendas: LEYENDAS_BITACORA_RMF_918,
   };
 
@@ -348,10 +371,20 @@ describe('bitacoraACsv', () => {
     expect(posTabla).toBeGreaterThan(posLeyenda);
   });
 
-  it('las filas llevan sus siete columnas con el monto tal cual', () => {
+  it('las filas llevan sus ocho columnas con el monto tal cual', () => {
     const csv = bitacoraACsv(bitacora);
-    expect(csv).toContain('viaje,origen,destino,fecha_cruce,caseta,tag,monto_conciliado');
-    expect(csv).toContain('F-001,CDMX,Querétaro,2026-08-05,Tepotzotlán,IMDM12345678,189');
+    expect(csv).toContain('viaje,origen,destino,fecha_cruce,caseta,tag,monto_conciliado,posiciones_gps_dia');
+    expect(csv).toContain('F-001,CDMX,Querétaro,2026-08-05,Tepotzotlán,IMDM12345678,189,87');
+  });
+
+  it('sin conteo GPS la columna dice «sin datos» — y la leyenda explica que no invalida el cruce', () => {
+    const csv = bitacoraACsv({
+      ...bitacora,
+      filas: [{ ...bitacora.filas[0], posicionesGpsDia: null }],
+    });
+    expect(csv).toContain('F-001,CDMX,Querétaro,2026-08-05,Tepotzotlán,IMDM12345678,189,sin datos');
+    expect(csv).toContain('no invalida el cruce conciliado');
+    expect(csv).toContain('posiciones_gps_dia');
   });
 
   it('sin líneas conciliadas el CSV lo dice — no manda una tabla vacía muda', () => {

@@ -3,6 +3,7 @@ import { Scale, ArrowRight, Inbox, CircleCheck, CircleAlert, CircleSlash, FileDo
 import type { ConciliacionConsolidado, LineaPorConciliar, DesgloseRecibido } from '@/lib/likida/analytics';
 // SOLO tipos: el módulo importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ResumenDesglose, DetalleDesglose, LineaDesgloseVista } from '@/lib/likida/intake/desglose_peaje';
+import type { ResumenEvidenciaGps, EvidenciaGpsLinea } from '@/lib/likida/peajes/evidencia_gps';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { EstadoVacio } from '@/app/admin/ui/kit';
@@ -39,7 +40,7 @@ import { BotonConciliar, type AccionConciliar } from './conciliar-desglose';
  */
 export function VistaAgentePeajes({
   conciliacion, lineas, desgloses, peajeAcreditable, sufijo, subirDesglose, ejecutarAhora,
-  desglosesProveedor, desgloseSeleccionado, detalleSeleccionado, importarDesglose, conciliarDesglose,
+  desglosesProveedor, desgloseSeleccionado, detalleSeleccionado, evidenciaGps, importarDesglose, conciliarDesglose,
   notificaciones,
 }: {
   conciliacion: ConciliacionConsolidado | null;
@@ -55,6 +56,9 @@ export function VistaAgentePeajes({
   desglosesProveedor: ResumenDesglose[] | null;
   desgloseSeleccionado: ResumenDesglose | null;
   detalleSeleccionado: DetalleDesglose | null;
+  /** Evidencia GPS del desglose seleccionado (post-plan-maestro #1). null =
+   *  no se pudo leer — y se dice, en vez de un cero que parecería medición. */
+  evidenciaGps: { resumen: ResumenEvidenciaGps; porLinea: Record<string, EvidenciaGpsLinea> } | null;
   importarDesglose: AccionImportar;
   conciliarDesglose: AccionConciliar;
   /** La sección de Notificaciones, ya renderizada en el servidor
@@ -267,6 +271,7 @@ export function VistaAgentePeajes({
                           nota="ligadas a su gasto de viaje"
                           tono="ok"
                           lineas={detalleSeleccionado.cuadra}
+                          evidencia={evidenciaGps?.porLinea}
                         />
                         <CubetaDesglose
                           titulo="No cuadran"
@@ -274,15 +279,18 @@ export function VistaAgentePeajes({
                           nota="discrepancia o ambigüedad — el porqué, línea a línea"
                           tono="warn"
                           lineas={detalleSeleccionado.noCuadra}
+                          evidencia={evidenciaGps?.porLinea}
                         />
                         <CubetaDesglose
                           titulo="Sin contraparte"
                           total={desgloseSeleccionado.sinContraparte}
                           nota="cruces que ningún gasto de caseta respalda"
                           lineas={detalleSeleccionado.sinContraparte}
+                          evidencia={evidenciaGps?.porLinea}
                         />
                       </div>
                     )}
+                    <EvidenciaGpsResumen resumen={evidenciaGps?.resumen ?? null} />
                   </div>
                 )}
               </div>
@@ -336,15 +344,29 @@ const MOTIVO_LEGIBLE: Record<string, string> = {
   monto_distinto: 'el monto no coincide',
 };
 
-/** El renglón chico bajo cada línea: viaje, diferencia medida y porqué —
- *  separados por «·» SOLO entre partes presentes (sin separadores colgantes). */
-function MetaLinea({ linea }: { linea: LineaDesgloseVista }) {
+/** Rótulos de la evidencia GPS por línea. El de «con evidencia» AFIRMA
+ *  (posiciones de esa unidad ese día); los demás nombran el dato que falta. */
+const EVIDENCIA_LEGIBLE: Record<string, string> = {
+  sin_fecha: 'GPS: sin fecha contra qué mirar',
+  sin_viaje: 'GPS: sin viaje ligado — unidad desconocida',
+  viaje_sin_unidad: 'GPS: el viaje no tiene unidad asignada',
+  sin_posiciones_dia: 'GPS: sin posiciones ese día (¿GPS sin conectar?)',
+};
+
+/** El renglón chico bajo cada línea: viaje, diferencia medida, porqué y
+ *  evidencia GPS — separados por «·» SOLO entre partes presentes. */
+function MetaLinea({ linea, evidencia }: { linea: LineaDesgloseVista; evidencia?: EvidenciaGpsLinea }) {
   const partes: React.ReactNode[] = [];
   if (linea.viajeFolio) partes.push(<span key="v">viaje {linea.viajeFolio}</span>);
   if (linea.diferencia !== null && linea.diferencia !== 0) {
     partes.push(<span key="d" style={{ color: 'var(--warn)' }}>dif. {mxn(linea.diferencia)}</span>);
   }
   if (linea.motivo) partes.push(<span key="m">{MOTIVO_LEGIBLE[linea.motivo] ?? linea.motivo}</span>);
+  if (evidencia) {
+    partes.push(evidencia.estatus === 'con_evidencia'
+      ? <span key="g" style={{ color: 'var(--ok)' }}>GPS: {numero(evidencia.posicionesDia)} posiciones ese día</span>
+      : <span key="g">{EVIDENCIA_LEGIBLE[evidencia.motivo]}</span>);
+  }
   if (partes.length === 0) return null;
   return (
     <div className="text-[10.5px]" style={{ color: 'var(--faint)' }}>
@@ -356,16 +378,63 @@ function MetaLinea({ linea }: { linea: LineaDesgloseVista }) {
 }
 
 /**
+ * El resumen de evidencia GPS del desglose completo. Tres verdades y ninguna
+ * de más: cuántos cruces tienen posiciones de su unidad ese día, cuántos no
+ * (con el motivo desglosado), y que la cubeta "inconsistente" (unidad LEJOS
+ * de la caseta) NO existe todavía — exige la posición de las casetas, que no
+ * tiene catálogo oficial (ficha red-nacional-autopistas). Prometerla sin ese
+ * dato sería acusar con evidencia a medias.
+ */
+function EvidenciaGpsResumen({ resumen }: { resumen: ResumenEvidenciaGps | null }) {
+  if (resumen === null) {
+    return (
+      <p className="text-[11px] mt-3" style={{ color: 'var(--faint)' }}>
+        La evidencia GPS de este desglose no se pudo leer ahora mismo.
+      </p>
+    );
+  }
+  const m = resumen.porMotivo;
+  const huecos: string[] = [];
+  if (m.sin_viaje > 0) huecos.push(`${numero(m.sin_viaje)} sin viaje ligado`);
+  if (m.viaje_sin_unidad > 0) huecos.push(`${numero(m.viaje_sin_unidad)} con viaje sin unidad`);
+  if (m.sin_posiciones_dia > 0) huecos.push(`${numero(m.sin_posiciones_dia)} sin posiciones ese día`);
+  if (m.sin_fecha > 0) huecos.push(`${numero(m.sin_fecha)} sin fecha legible`);
+  return (
+    <div className="rounded-xl hairline p-3 mt-3" style={{ background: 'var(--surface)' }}>
+      <div className="flex items-baseline gap-2">
+        <span className="text-[12.5px] font-semibold">Evidencia GPS del periodo</span>
+        <span className="cifra-mono text-[13px] ml-auto">
+          {numero(resumen.conEvidencia)} de {numero(resumen.total)} cruces con posiciones de su unidad ese día
+        </span>
+      </div>
+      {huecos.length > 0 && (
+        <p className="text-[10.5px] mt-1" style={{ color: 'var(--faint)' }}>
+          Sin evidencia: {huecos.join(' · ')}. «Sin posiciones» casi siempre significa GPS sin
+          conectar — el conector (Samsara, Wialon, Geotab, Navixy) se activa en Conexiones.
+        </p>
+      )}
+      <p className="text-[10.5px] mt-1" style={{ color: 'var(--faint)' }}>
+        Esto AFIRMA que la unidad anduvo ese día; no afirma cercanía a la caseta — eso exige la
+        posición de cada plaza de cobro, sin catálogo oficial hoy. Un cruce sin evidencia no es
+        un cruce falso: es un dato que falta, y esta tarjeta dice cuál.
+      </p>
+    </div>
+  );
+}
+
+/**
  * Una cubeta del desglose del proveedor: el conteo COMPLETO (viene del
  * agregado, no de las filas enseñadas) y hasta 12 líneas de muestra con su
  * porqué. Si hay más de las que caben, se dice cuántas.
  */
-function CubetaDesglose({ titulo, total, nota, tono, lineas }: {
+function CubetaDesglose({ titulo, total, nota, tono, lineas, evidencia }: {
   titulo: string;
   total: number;
   nota: string;
   tono?: 'ok' | 'warn';
   lineas: LineaDesgloseVista[];
+  /** id de línea → evidencia GPS, para el renglón chico de cada línea. */
+  evidencia?: Record<string, EvidenciaGpsLinea>;
 }) {
   return (
     <div className="rounded-xl hairline p-3" style={{ background: 'var(--surface)' }}>
@@ -386,7 +455,7 @@ function CubetaDesglose({ titulo, total, nota, tono, lineas }: {
                 <span className="truncate" title={l.caseta ?? undefined}>{l.caseta ?? 'sin caseta'}</span>
                 <span className="ml-auto shrink-0 cifra-mono">{mxn(l.monto)}</span>
               </div>
-              <MetaLinea linea={l} />
+              <MetaLinea linea={l} evidencia={evidencia?.[l.id]} />
             </div>
           ))}
           {total > lineas.length && (
