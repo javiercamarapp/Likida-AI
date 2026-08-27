@@ -78,6 +78,11 @@ export const TOPE_FLOTAS = 500;
 export const TOPE_LIQUIDACIONES_MES = 2_000;
 /** Tickets que una corrida de soporte revisa. */
 export const TOPE_TICKETS = 200;
+/** Mensajes que se miran por ticket para decidir si hay respuesta (c6-5).
+ *  Un hilo de soporte son decenas de filas; 500 es techo, no expectativa —
+ *  y con 500 mensajes públicos la pregunta «¿alguien contestó?» ya está
+ *  contestada por cualquiera de los primeros. */
+export const TOPE_MENSAJES_POR_TICKET = 500;
 
 /** Días sin NINGUNA señal de vida a partir de los cuales una flota entra al
  *  parte de silencio. Dos semanas: una flota que liquida viajes toca el
@@ -852,6 +857,12 @@ async function contarFallosDeFlota(tenantId: string, desdeIso: string): Promise<
 // pieza a la bandeja con el texto listo; no hay canal de correo al cliente
 // aprobado, así que nada sale solo — y el cuerpo de cada propuesta lo dice.
 //
+// CON CATCH-UP (c6-14): un hito se considera alcanzado con `>=`, no con
+// igualdad. La igualdad ataba la cadencia al calendario del cron y perdía en
+// silencio el toque de cualquier día que no hubiera corrida. El árbitro
+// contra la duplicación no es la fecha: es el sello por (factura, hito) que
+// el índice único de la 0218 ya impone.
+//
 // EL VENCIMIENTO: `factura_saas` no declara una fecha de vencimiento propia.
 // Se toma `periodo_inicio` porque la mensualidad se cobra por adelantado (la
 // referencia `LK…AAAAMM` se arma con `periodo_inicio`, transferencia.ts). Es
@@ -866,16 +877,38 @@ export interface ToqueCobranza {
   hito: number;
 }
 
-/** Los toques que corresponden HOY: una factura por cobrar cuyo día contra el
- *  vencimiento cae EXACTAMENTE en un hito de la cadencia. PURA. */
+/**
+ * Los toques que TOCAN hoy — con CATCH-UP (c6-14).
+ *
+ * Antes se pedía igualdad exacta (`dias === hito`) y eso ataba la cadencia al
+ * calendario del cron: una corrida que no pasó ese día —cron caído, palanca
+ * apagada, despliegue, la factura dada de alta con retraso— perdía el toque
+ * PARA SIEMPRE, en silencio. Una factura registrada con 9 días de vencida no
+ * recibía −3, ni 0, ni +3, ni +7: su primera propuesta llegaba el día 15.
+ *
+ * Ahora se devuelven todos los hitos ALCANZADOS (`dias >= hito`). No duplica
+ * nada porque el árbitro ya existe y es una constraint: el título es
+ * determinista por (factura, hito) y `piezaExistente` + el índice único de la
+ * 0218 dejan pasar exactamente una propuesta por par, para siempre.
+ *
+ * `diasVsVencimiento` viaja aparte del `hito` a propósito: el hito es la
+ * llave del sello, y los días son la verdad de HOY — el texto se escribe con
+ * los días, nunca con el hito (ver `textoDelToque`).
+ */
 export function toquesDeHoy(facturas: FacturaPorCobrar[], hoy: string): ToqueCobranza[] {
   const toques: ToqueCobranza[] = [];
   for (const f of facturas) {
     const dias = diasEntreDias(f.periodoInicio, hoy);
-    const hito = HITOS_COBRANZA.find((h) => h === dias);
-    if (hito !== undefined) toques.push({ factura: f, diasVsVencimiento: dias, hito });
+    for (const hito of HITOS_COBRANZA) {
+      if (dias >= hito) toques.push({ factura: f, diasVsVencimiento: dias, hito });
+    }
   }
   return toques;
+}
+
+/** ¿Este toque llega TARDE a su propio hito? (c6-14) */
+export function esToqueAtrasado(t: ToqueCobranza): boolean {
+  return t.diasVsVencimiento !== t.hito;
 }
 
 /** La clave del toque: una propuesta por (factura, hito), para siempre. La
@@ -888,11 +921,15 @@ export function tituloToque(t: ToqueCobranza): string {
 
 export function armarPropuestaCobranza(t: ToqueCobranza, hoy: string): string {
   const f = t.factura;
-  const cuando = t.hito < 0
-    ? `faltan ${numero(-t.hito)} días para el corte`
-    : t.hito === 0
+  // El estado se escribe con los DÍAS REALES, no con el hito: un toque de
+  // catch-up (c6-14) que dijera "faltan 3 días para el corte" sobre una
+  // factura de 20 días vencida sería una mentira con firma de agente.
+  const d = t.diasVsVencimiento;
+  const cuando = d < 0
+    ? `faltan ${numero(-d)} días para el corte`
+    : d === 0
       ? 'hoy es el día del corte'
-      : `lleva ${numero(t.hito)} días vencida`;
+      : `lleva ${numero(d)} días vencida`;
   const desglose = f.subtotal === null || f.iva === null
     ? 'SIN desglose de IVA guardado — esta factura no se puede timbrar y el recordatorio no debe prometer factura'
     : `${mxn(f.subtotal)} + IVA ${mxn(f.iva)}`;
@@ -900,6 +937,9 @@ export function armarPropuestaCobranza(t: ToqueCobranza, hoy: string): string {
     `COBRANZA SAAS — ${f.tenantNombre} — día ${t.hito >= 0 ? `+${t.hito}` : t.hito}`,
     '',
     `Estado: ${cuando} (vencimiento tomado como periodo_inicio ${f.periodoInicio}; factura_saas no declara fecha de vencimiento propia).`,
+    ...(esToqueAtrasado(t)
+      ? [`TOQUE ATRASADO: es el D${t.hito >= 0 ? `+${t.hito}` : t.hito} de la cadencia y no salió el día que le tocaba (hoy la factura lleva ${numero(t.diasVsVencimiento)} días desde el corte). Sale ahora para no perderlo; el borrador de abajo habla del hoy real, no del día del hito.`]
+      : []),
     `Periodo: ${f.periodoInicio} a ${f.periodoFin} · estado de la factura: ${f.estado}`,
     `A transferir: ${mxn(f.monto)}  (${desglose})`,
     `Referencia del concepto: ${f.referencia ?? 'SIN REFERENCIA — el cliente no tiene qué escribir en el concepto; revísalo antes de mandar nada'}`,
@@ -918,6 +958,16 @@ export function armarPropuestaCobranza(t: ToqueCobranza, hoy: string): string {
  *  flota por una fecha es una decisión de Javier, no de un agente. */
 export function textoDelToque(t: ToqueCobranza): string {
   const f = t.factura;
+  // CATCH-UP (c6-14): el hito manda para el SELLO —una propuesta por (factura,
+  // hito)— pero no para lo que se le dice al cliente. Los textos de la
+  // cadencia están escritos para su día exacto; usarlos tarde produciría un
+  // "el 3 de agosto vence" sobre algo vencido hace tres semanas.
+  if (esToqueAtrasado(t)) {
+    const d = t.diasVsVencimiento;
+    return d < 0
+      ? `Recordatorio: el ${f.periodoInicio} vence la mensualidad de Likida por ${mxn(f.monto)} (faltan ${numero(-d)} días). La referencia del concepto es ${f.referencia ?? '(pendiente de asignar)'}.`
+      : `La mensualidad de Likida por ${mxn(f.monto)} del periodo ${f.periodoInicio} a ${f.periodoFin} lleva ${numero(d)} días desde el corte y sigue pendiente. ¿Hay algo que necesiten de mi lado para poder pagarla?`;
+  }
   switch (t.hito) {
     case -3: return `Recordatorio: el ${f.periodoInicio} vence la mensualidad de Likida por ${mxn(f.monto)}. La referencia del concepto es ${f.referencia ?? '(pendiente de asignar)'}.`;
     case 0: return `Hoy vence la mensualidad de Likida por ${mxn(f.monto)}. Si ya la transfirieron, mándame la referencia del banco y la concilio.`;
@@ -944,9 +994,10 @@ export function armarParteCobranzaSaas(
       lineas.push(`  ${f.tenantNombre}: ${mxn(f.monto)} · periodo ${f.periodoInicio} a ${f.periodoFin} · ${dias >= 0 ? `${numero(dias)} días desde el corte` : `faltan ${numero(-dias)} días`} · ${f.estado}`);
     }
     lineas.push('');
+    const atrasados = toques.filter(esToqueAtrasado).length;
     lineas.push(toques.length === 0
-      ? 'Hoy no cae ningún toque de la cadencia −3/0/+3/+7/+15: no se propuso ningún recordatorio.'
-      : `Toques de la cadencia que caen hoy: ${numero(toques.length)} · propuestas NUEVAS a la bandeja: ${numero(propuestas)} (el resto ya estaban propuestas — una por factura y por hito, y el índice único es el árbitro).`);
+      ? 'Ninguna factura ha alcanzado todavía un hito de la cadencia −3/0/+3/+7/+15: no se propuso ningún recordatorio.'
+      : `Hitos ya alcanzados: ${numero(toques.length)}${atrasados > 0 ? ` (${numero(atrasados)} de recuperación — hitos que no salieron el día que tocaban)` : ''} · propuestas NUEVAS a la bandeja: ${numero(propuestas)} (el resto ya estaban propuestas — una por factura y por hito, y el índice único es el árbitro).`);
   }
   lineas.push('');
   lineas.push('El vencimiento se toma como periodo_inicio: factura_saas no declara una fecha propia y la mensualidad se cobra por adelantado (la referencia LK…AAAAMM se arma con periodo_inicio). Es una interpretación DECLARADA [DECISIÓN DE JAVIER].');
@@ -1017,8 +1068,34 @@ export interface TicketVigilado {
   estado: string;
   abiertoEn: string;
   venceEn: string | null;
-  /** Mensajes del hilo. 0 = nadie ha contestado todavía. */
-  mensajes: number;
+  /**
+   * RESPUESTAS de verdad: mensajes del hilo que NO son internos y que NO
+   * escribió el propio solicitante (c6-5). 0 = nadie le ha contestado.
+   *
+   * Contar el hilo entero —lo que se hacía antes— apagaba la alarma sola: el
+   * cliente que insiste ("¿alguna novedad?") y la nota interna que un agente
+   * se deja a sí mismo subían el contador y el ticket dejaba de salir en «sin
+   * una sola respuesta» sin que nadie hubiera contestado nada.
+   */
+  respuestas: number;
+}
+
+/**
+ * ¿Este mensaje CUENTA como respuesta al solicitante? PURA (c6-5).
+ *
+ * Fail-closed hacia el lado que hace ruido: un mensaje de autor DESCONOCIDO
+ * (la cuenta se borró y el `on delete set null` dejó `autor_id` en NULL) no
+ * cuenta como respuesta. El error de más deja un ticket en la lista de «sin
+ * respuesta» y alguien lo mira; el error de menos deja a un cliente esperando
+ * sin que nadie se entere, que es el fallo que este agente existe para evitar.
+ */
+export function cuentaComoRespuesta(
+  m: { autorId: string | null; interna: boolean },
+  solicitanteId: string | null,
+): boolean {
+  if (m.interna) return false;
+  if (m.autorId === null) return false;
+  return m.autorId !== solicitanteId;
 }
 
 export type SemaforoTicket = 'VENCIDO' | 'POR_VENCER' | 'SIN_SLA' | 'EN_TIEMPO';
@@ -1038,7 +1115,7 @@ export function armarParteSoporte(tickets: TicketVigilado[], ahoraIso: string, h
   const vencidos = tickets.filter((t) => semaforoTicket(t, ahoraIso) === 'VENCIDO');
   const porVencer = tickets.filter((t) => semaforoTicket(t, ahoraIso) === 'POR_VENCER');
   const sinSla = tickets.filter((t) => semaforoTicket(t, ahoraIso) === 'SIN_SLA');
-  const sinRespuesta = tickets.filter((t) => t.mensajes === 0);
+  const sinRespuesta = tickets.filter((t) => t.respuestas === 0);
 
   const lineas = [`SOPORTE — ${hoy}`, ''];
   if (tickets.length === 0) {
@@ -1051,7 +1128,7 @@ export function armarParteSoporte(tickets: TicketVigilado[], ahoraIso: string, h
       const reloj = t.venceEn === null
         ? 'sin SLA pactado (no es «vencido»: es que nadie pactó un plazo)'
         : `vence ${fechaMx(t.venceEn)}`;
-      lineas.push(`[${s}]  ${t.asunto.slice(0, 90)} · ${t.categoria}/${t.prioridad} · abierto ${fechaMx(t.abiertoEn)} · ${reloj} · ${t.mensajes === 0 ? 'SIN RESPUESTA' : `${numero(t.mensajes)} mensajes`}`);
+      lineas.push(`[${s}]  ${t.asunto.slice(0, 90)} · ${t.categoria}/${t.prioridad} · abierto ${fechaMx(t.abiertoEn)} · ${reloj} · ${t.respuestas === 0 ? 'SIN RESPUESTA' : `${numero(t.respuestas)} respuesta(s)`}`);
     }
     if (vencidos.length > 0) {
       lineas.push('');
@@ -1059,7 +1136,7 @@ export function armarParteSoporte(tickets: TicketVigilado[], ahoraIso: string, h
     }
   }
   lineas.push('');
-  lineas.push('Fuentes: ticket_soporte (estados vivos, vence_en escrito al abrir) · ticket_mensaje (conteo del hilo por ticket). El reloj se DERIVA contra ahora, no se guarda (0051).');
+  lineas.push('Fuentes: ticket_soporte (estados vivos, vence_en escrito al abrir) · ticket_mensaje (respuestas por ticket). «Sin respuesta» cuenta SOLO mensajes públicos (interna=false) de un autor distinto del solicitante: ni la nota interna del equipo ni el «¿alguna novedad?» del propio cliente apagan la alarma. El reloj se DERIVA contra ahora, no se guarda (0051).');
   lineas.push('Este agente no contesta tickets: los vigila y los pone enfrente. El borrador de respuesta lo prepara el agente de Atención y FAQ, y aprobarlo es humano.');
   return { cuerpo: lineas.join('\n'), vencidos, sinRespuesta };
 }
@@ -1068,7 +1145,9 @@ export function armarParteSoporte(tickets: TicketVigilado[], ahoraIso: string, h
 export async function leerTicketsVivos(): Promise<{ tickets: TicketVigilado[]; truncado: boolean }> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('ticket_soporte')
-    .select('id, tenant_id, asunto, categoria, prioridad, estado, abierto_en, vence_en')
+    // `abierto_por` es el SOLICITANTE: sin él no se puede decir si el hilo
+    // tiene respuesta o solo tiene al cliente insistiendo (c6-5).
+    .select('id, tenant_id, asunto, categoria, prioridad, estado, abierto_en, vence_en, abierto_por')
     .in('estado', ['abierto', 'en_proceso', 'esperando'])
     .order('abierto_en', { ascending: true })
     .limit(TOPE_TICKETS + 1), 'exito.soporte.tickets');
@@ -1079,12 +1158,21 @@ export async function leerTicketsVivos(): Promise<{ tickets: TicketVigilado[]; t
   const tickets: TicketVigilado[] = [];
   for (const f of filas.slice(0, TOPE_TICKETS)) {
     const id = String(f.id);
-    const { count, error: errMsj } = await acotada(supabaseAdmin()
+    // Ya no es un `count` de cabecera: hace falta MIRAR cada mensaje para
+    // saber si es interno y de quién es. Se acota igual y el hilo de un
+    // ticket es de decenas de filas, no de miles.
+    const { data: msj, error: errMsj } = await acotada(supabaseAdmin()
       .from('ticket_mensaje')
-      .select('id', { count: 'exact', head: true })
-      .eq('ticket_id', id), 'exito.soporte.mensajes');
+      .select('autor_id, interna')
+      .eq('ticket_id', id)
+      .limit(TOPE_MENSAJES_POR_TICKET), 'exito.soporte.mensajes');
     if (errMsj) throw new Error(`leerTicketsVivos(mensajes): ${errMsj.message}`);
-    if (typeof count !== 'number') throw new Error('leerTicketsVivos(mensajes): PostgREST no devolvió el conteo.');
+    if (!Array.isArray(msj)) throw new Error('leerTicketsVivos(mensajes): PostgREST no devolvió el hilo.');
+    const solicitante = (f.abierto_por as string | null) ?? null;
+    const respuestas = (msj as Array<Record<string, unknown>>).filter((m) => cuentaComoRespuesta(
+      { autorId: (m.autor_id as string | null) ?? null, interna: m.interna === true },
+      solicitante,
+    )).length;
     tickets.push({
       id,
       tenantId: String(f.tenant_id),
@@ -1094,7 +1182,7 @@ export async function leerTicketsVivos(): Promise<{ tickets: TicketVigilado[]; t
       estado: String(f.estado),
       abiertoEn: String(f.abierto_en),
       venceEn: (f.vence_en as string | null) ?? null,
-      mensajes: count,
+      respuestas,
     });
   }
   return { tickets, truncado };

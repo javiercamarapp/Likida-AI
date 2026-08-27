@@ -356,3 +356,23 @@ describe('las rutas de la cuenta/persona las ve TODO rol conocido (16-ago-2026)'
     expect(puedeVerRuta('encargado', '/dashboard/facturacion')).toBe(false);
   });
 });
+
+// ── El timbrado, en `dinero` (0227 — auditoría Fable c6-3) ─────────────────
+
+describe('/dashboard/timbrado vive en dinero, no en operación', () => {
+  it('el CONTADOR y el dueño la ven — es su papel fiscal', () => {
+    expect(puedeVerRuta('contador', '/dashboard/timbrado')).toBe(true);
+    expect(puedeVerRuta('flota_admin', '/dashboard/timbrado')).toBe(true);
+    expect(puedeVerRuta('superadmin', '/dashboard/timbrado')).toBe(true);
+  });
+
+  it('el ENCARGADO no: el CFDI lleva flete, IVA y retención adentro', () => {
+    expect(puedeVerRuta('encargado', '/dashboard/timbrado')).toBe(false);
+    expect(areaDeRuta('/dashboard/timbrado')).toBe('dinero');
+  });
+
+  it('el borrador de Carta Porte SIGUE siendo del jefe de tráfico: la ruta la declara quien la conoce', () => {
+    expect(puedeVerRuta('encargado', '/dashboard/carta-porte')).toBe(true);
+    expect(areaDeRuta('/dashboard/carta-porte')).toBe('operacion');
+  });
+});

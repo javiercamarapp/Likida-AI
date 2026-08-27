@@ -226,7 +226,7 @@ export async function InicioContador({
               es este formulario. */}
           <PerfilErp searchParams={searchParams} tenantExiste={tenantExiste} />
 
-          <Timbrado searchParams={searchParams} tenantExiste={tenantExiste} />
+          <Timbrado searchParams={searchParams} tenantExiste={tenantExiste} sufijo={sufijo} />
 
           {/* Condicional de verdad (solo si hay fuego): sin esqueleto, para no
               reservar un hueco que casi siempre queda vacío. */}

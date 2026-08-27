@@ -183,7 +183,10 @@ export function armarDesglose(e: EntradaCotizacion): Desglose {
         lineas.push({
           concepto: 'Casetas',
           monto: round2(prom),
-          supuesto: `MEDIDO: promedio de ${e.casetas.viajes} viajes liquidados de esta ruta (últimos 12 meses)`,
+          // El supuesto DICE de qué fecha habla (c6-13): "últimos 12 meses" a
+        // secas dejaba a quien lo cita adivinando si contaba desde el alta del
+        // viaje, desde su fin o desde el cierre — y cada una da otro número.
+        supuesto: `MEDIDO: promedio de ${e.casetas.viajes} viajes de esta ruta LIQUIDADOS en los últimos 12 meses (ventana por fecha de liquidación, no por alta del viaje)`,
         });
       }
       break;

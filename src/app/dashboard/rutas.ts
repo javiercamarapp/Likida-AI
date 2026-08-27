@@ -8,6 +8,7 @@ import {
   Siren,
   RadioTower,
   Calculator,
+  Stamp,
 } from 'lucide-react';
 
 /**
@@ -86,6 +87,11 @@ export const DINERO_FISCAL: Item[] = [
   // declarados + casetas MEDIDAS en los viajes liquidados de la ruta.
   { href: '/dashboard/cotizaciones', nombre: 'Cotizador', Icono: Calculator },
   { href: '/dashboard/facturacion', nombre: 'Facturación a clientes', Icono: FileText },
+  // 0227 (auditoría Fable c6-3): el botón que EMITE el CFDI con complemento
+  // Carta Porte. Estaba dentro del borrador, que es `operacion` — así que el
+  // jefe de tráfico podía timbrar y el contador ni siquiera llegaba. Aquí es
+  // donde le toca vivir: es papel fiscal con el flete adentro.
+  { href: '/dashboard/timbrado', nombre: 'Timbrado (Carta Porte)', Icono: Stamp },
 ];
 
 export const SISTEMA: Item[] = [

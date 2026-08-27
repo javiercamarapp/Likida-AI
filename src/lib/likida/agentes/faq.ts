@@ -49,7 +49,10 @@ import { normasPorTema, TEMAS_NORMATIVOS, type NormaConsultada, type TemaNormati
 import { guardiaFundamento } from '../normas/fundamento';
 import { cifrasRespaldadas, extraerNumeros } from '@/lib/agents/analista';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
-import { encolarPiezaExito, piezaExistente, type ResultadoExito } from './exito';
+import {
+  encolarPiezaExito, piezaExistente, cuentaComoRespuesta, TOPE_MENSAJES_POR_TICKET,
+  type ResultadoExito,
+} from './exito';
 import { logger } from '@/lib/logger';
 
 /** Borradores que una corrida fabrica como máximo. El techo de dinero lo pone
@@ -111,12 +114,21 @@ export interface TicketParaFaq {
   categoria: string;
 }
 
-/** Tickets vivos SIN una sola respuesta en el hilo — los que de verdad
- *  esperan a alguien. LANZA ante error de lectura. */
+/**
+ * Tickets vivos SIN una sola respuesta en el hilo — los que de verdad esperan
+ * a alguien. LANZA ante error de lectura.
+ *
+ * «Sin respuesta» = ningún mensaje PÚBLICO (interna=false) de un autor
+ * distinto del solicitante (c6-5). Contar el hilo entero dejaba fuera de la
+ * cola justo los tickets que más la necesitan: aquel donde el cliente escribió
+ * dos veces sin que nadie contestara, y aquel donde el equipo se dejó una nota
+ * interna. Se comparte el criterio con el vigilante de soporte —una sola
+ * definición de «sin respuesta» en toda la compañía agente.
+ */
 export async function leerTicketsSinRespuesta(limite: number): Promise<TicketParaFaq[]> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('ticket_soporte')
-    .select('id, tenant_id, asunto, descripcion, categoria')
+    .select('id, tenant_id, asunto, descripcion, categoria, abierto_por')
     .in('estado', ['abierto', 'en_proceso'])
     .order('abierto_en', { ascending: true })
     // Sobre-lectura ×4: varios candidatos ya tienen borrador o ya tienen
@@ -127,12 +139,17 @@ export async function leerTicketsSinRespuesta(limite: number): Promise<TicketPar
   const salida: TicketParaFaq[] = [];
   for (const f of (data ?? []) as Array<Record<string, unknown>>) {
     const id = String(f.id);
-    const { count, error: errMsj } = await acotada(supabaseAdmin()
-      .from('ticket_mensaje').select('id', { count: 'exact', head: true })
-      .eq('ticket_id', id), 'faq.mensajes');
+    const { data: msj, error: errMsj } = await acotada(supabaseAdmin()
+      .from('ticket_mensaje').select('autor_id, interna')
+      .eq('ticket_id', id).limit(TOPE_MENSAJES_POR_TICKET), 'faq.mensajes');
     if (errMsj) throw new Error(`leerTicketsSinRespuesta(mensajes): ${errMsj.message}`);
-    if (typeof count !== 'number') throw new Error('leerTicketsSinRespuesta(mensajes): PostgREST no devolvió el conteo.');
-    if (count > 0) continue;
+    if (!Array.isArray(msj)) throw new Error('leerTicketsSinRespuesta(mensajes): PostgREST no devolvió el hilo.');
+    const solicitante = (f.abierto_por as string | null) ?? null;
+    const contestado = (msj as Array<Record<string, unknown>>).some((m) => cuentaComoRespuesta(
+      { autorId: (m.autor_id as string | null) ?? null, interna: m.interna === true },
+      solicitante,
+    ));
+    if (contestado) continue;
     salida.push({
       id,
       tenantId: String(f.tenant_id),

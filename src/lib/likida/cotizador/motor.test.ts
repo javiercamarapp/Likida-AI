@@ -47,7 +47,9 @@ describe('armarDesglose — el camino completo', () => {
     // La fuente de la medición viaja EN la línea, con el conteo de viajes.
     const casetas = d.lineas.find((l) => l.concepto === 'Casetas')!;
     expect(casetas.supuesto).toContain('MEDIDO');
-    expect(casetas.supuesto).toContain('7 viajes liquidados');
+    expect(casetas.supuesto).toContain('7 viajes de esta ruta LIQUIDADOS');
+    // c6-13: el supuesto citable dice DE QUÉ FECHA habla.
+    expect(casetas.supuesto).toContain('ventana por fecha de liquidación');
     // Cada línea con monto trae su supuesto no vacío.
     for (const l of d.lineas) expect(l.supuesto.length).toBeGreaterThan(0);
   });

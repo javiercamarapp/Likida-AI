@@ -4,7 +4,8 @@
 //
 // Tres verdades de este archivo:
 //   1. Las casetas MEDIDAS se computan AL LEER desde los gastos 'caseta' de
-//      viajes liquidados de la misma ruta — no se persisten (serían una
+//      los viajes de la misma ruta LIQUIDADOS en la ventana (por fecha de
+//      liquidación, c6-13) — no se persisten (serían una
 //      segunda verdad que se desactualiza con cada viaje nuevo, criterio
 //      0207). Lo que SÍ se persiste es el desglose de cada cotización: la
 //      cita de con qué números se armó (0225).
@@ -14,7 +15,9 @@
 //   3. La conversión a viaje es claim-then-act: `decidida_en` se estampa con
 //      un UPDATE condicional sobre NULL (patrón talacha/0201) ANTES de crear
 //      el viaje — el doble clic de "ganada" lo resuelve la base. Si crear el
-//      viaje falla, el claim se suelta (compensación dicha en el log).
+//      viaje falla, el claim SOLO se suelta cuando se comprueba que el viaje
+//      no existe Y el fallo era definitivo (c6-4): con un timeout, soltarlo
+//      habilitaría un segundo clic y un segundo viaje.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -114,11 +117,20 @@ export function viajesDeMismaRuta<T extends { origen: string | null; destino: st
 export interface CasetasMedidas { promedio: number; viajes: number }
 
 /**
- * El promedio de casetas de los viajes LIQUIDADOS de esta ruta en los
- * últimos 12 meses. `null` = sin viajes medibles (y el motor lo dice, no lo
- * rellena). Solo cuentan viajes con al menos un gasto 'caseta': un viaje
- * liquidado sin casetas registradas no distingue "ruta libre" de "no se
- * capturó", y promediar ceros ambiguos bajaría el costo con cara de medición.
+ * El promedio de casetas de los viajes de esta ruta LIQUIDADOS en los últimos
+ * 12 meses. `null` = sin viajes medibles (y el motor lo dice, no lo rellena).
+ * Solo cuentan viajes con al menos un gasto 'caseta': un viaje liquidado sin
+ * casetas registradas no distingue "ruta libre" de "no se capturó", y
+ * promediar ceros ambiguos bajaría el costo con cara de medición.
+ *
+ * ── DE QUÉ FECHA HABLA LA VENTANA (c6-13) ─────────────────────────────────
+ * De la FECHA DE LIQUIDACIÓN (`liquidacion.created_at`), no de la de alta del
+ * viaje. `viaje.created_at` es cuándo se dio de alta la FILA en Likida, y eso
+ * no es cuándo ocurrió el gasto: un viaje capturado hace 13 meses y liquidado
+ * la semana pasada quedaba FUERA (su caseta más reciente y más real), y una
+ * carga histórica de filas viejas entraba entera con fecha de ayer. El
+ * criterio es el mismo `liquidado_en` que la 0152 ya usa para la mesa de
+ * facturación — una sola definición de "cuándo se cerró este viaje".
  */
 export async function casetasMedidasPorRuta(
   tenantId: string,
@@ -128,15 +140,36 @@ export async function casetasMedidasPorRuta(
 ): Promise<CasetasMedidas | null> {
   const admin = supabaseAdmin();
   const piso = new Date(Date.parse(`${hoy}T12:00:00Z`) - 366 * 86_400_000).toISOString();
-  const viajes = await traerTodo<{ id: unknown; origen: unknown; destino: unknown }>(
-    (d, h) => acotada(admin.from('viaje')
-      .select('id, origen, destino', conteo(d))
-      .eq('tenant_id', tenantId).eq('estatus', 'liquidado')
+
+  // 1. QUÉ SE LIQUIDÓ EN LA VENTANA. Un viaje con dos liquidaciones aparece
+  //    dos veces aquí y una sola en el Set — el promedio es POR VIAJE.
+  const liquidados = await traerTodo<{ viaje_id: unknown }>(
+    (d, h) => acotada(admin.from('liquidacion')
+      .select('viaje_id', conteo(d))
+      .eq('tenant_id', tenantId)
       .gte('created_at', piso)
-      .not('origen', 'is', null).not('destino', 'is', null)
-      .order('id').range(d, h), 'cotizador.viajesRuta'),
-    'cotizador.viajesRuta',
+      .order('id').range(d, h), 'cotizador.liquidadasVentana'),
+    'cotizador.liquidadasVentana',
   );
+  const idsLiquidados = [...new Set(liquidados.map((l) => String(l.viaje_id)))];
+  if (idsLiquidados.length === 0) return null;
+
+  // 2. LA RUTA DE ESOS VIAJES, en tandas por el largo de la URL de PostgREST.
+  const viajes: Array<{ id: unknown; origen: unknown; destino: unknown }> = [];
+  for (let i = 0; i < idsLiquidados.length; i += 100) {
+    const tanda = idsLiquidados.slice(i, i + 100);
+    const lote = await traerTodo<{ id: unknown; origen: unknown; destino: unknown }>(
+      (d, h) => acotada(admin.from('viaje')
+        .select('id, origen, destino', conteo(d))
+        .eq('tenant_id', tenantId).eq('estatus', 'liquidado')
+        .in('id', tanda)
+        .not('origen', 'is', null).not('destino', 'is', null)
+        .order('id').range(d, h), 'cotizador.viajesRuta'),
+      'cotizador.viajesRuta',
+    );
+    viajes.push(...lote);
+  }
+
   const deRuta = viajesDeMismaRuta(
     viajes.map((v) => ({ id: String(v.id), origen: (v.origen as string) ?? null, destino: (v.destino as string) ?? null })),
     origen, destino,
@@ -437,10 +470,79 @@ export async function marcarPerdida(
 }
 
 /**
+ * Los fallos de `crearViaje` que PRUEBAN que el viaje no se creó (c6-4).
+ *
+ * Los tres candados de pertenencia corren ANTES del insert, y un rechazo de
+ * constraint es el propio Postgres diciendo que la fila no entró. Todo lo
+ * demás —un timeout de `acotada`, un socket roto, "el insert no devolvió
+ * id"— es AMBIGUO: el INSERT pudo haber llegado. La lista es de lo que se
+ * sabe seguro; lo que no está aquí se trata como ambiguo, que es el lado
+ * caro pero seguro.
+ */
+const FALLOS_DEFINITIVOS = [
+  'no pertenece a esta flota',
+  'violates check constraint',
+  'violates foreign key constraint',
+  'violates not-null constraint',
+  'duplicate key value',
+  'invalid input syntax',
+];
+
+export function falloDefinitivoAlCrearViaje(e: unknown): boolean {
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return FALLOS_DEFINITIVOS.some((f) => msg.includes(f));
+}
+
+/**
+ * ¿Se creó el viaje a pesar del error? Se busca por lo que la conversión
+ * escribe y por el instante en que empezó — no hay id que preguntar, porque
+ * el error se comió la respuesta del insert.
+ *
+ * `null` = no se pudo mirar (y entonces NO se suelta el claim: no saber no
+ * es evidencia de que no exista). `undefined` no se usa a propósito: los tres
+ * estados son «existe / no existe / no se pudo saber», y colapsar el tercero
+ * en el segundo es exactamente el error que esto evita.
+ */
+async function viajeYaCreado(
+  tenantId: string,
+  cot: { origen: unknown; destino: unknown; precio: unknown },
+  desdeIso: string,
+): Promise<{ id: string | null } | null> {
+  const { data, error } = await acotada(supabaseAdmin().from('viaje')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('origen', cot.origen as string)
+    .eq('destino', cot.destino as string)
+    .eq('ingreso_flete', Number(cot.precio))
+    .gte('created_at', desdeIso)
+    .order('created_at', { ascending: false })
+    .limit(1), 'cotizador.viajeYaCreado');
+  if (error) {
+    logger.warn('cotizador.verificacion_viaje_fallo', { err: error.message });
+    return null;
+  }
+  const filas = (data ?? []) as Array<{ id: unknown }>;
+  return { id: filas.length === 0 ? null : String(filas[0].id) };
+}
+
+/**
  * La conversión: cotización → viaje. Claim primero (el doble clic lo
  * resuelve la base), luego `crearViaje` con la ruta/cliente/precio de la
- * cotización — el ingreso del viaje ES el precio cotizado. Si crear el viaje
- * falla, el claim se suelta para que el humano pueda reintentar.
+ * cotización — el ingreso del viaje ES el precio cotizado.
+ *
+ * ── QUÉ PASA SI `crearViaje` FALLA (c6-4) ─────────────────────────────────
+ * La versión anterior soltaba el claim SIEMPRE. Con un timeout eso es lo
+ * peor que se puede hacer: el INSERT pudo haber llegado, así que soltar
+ * habilita un segundo clic y un SEGUNDO viaje por la misma cotización. Ahora:
+ *
+ *   1. se COMPRUEBA si el viaje existe (misma ruta, mismo precio, después de
+ *      empezar). Si existe, se consolida como ganada — es lo que el humano
+ *      pidió y ya está hecho;
+ *   2. si se comprueba que NO existe Y el error era definitivo (pertenencia,
+ *      constraint), se suelta el claim y el humano reintenta;
+ *   3. en cualquier otro caso —ambiguo, o no se pudo comprobar— el claim SE
+ *      QUEDA: la cotización aparece «decidiéndose», visible, y una persona
+ *      verifica. Prefiere el estorbo a la duplicación.
  */
 export async function convertirEnViaje(
   tenantId: string,
@@ -473,6 +575,11 @@ export async function convertirEnViaje(
     throw new DatoInvalido('Alguien ya está decidiendo esta cotización.');
   }
 
+  // El instante ANTES del intento: la ventana en la que un viaje creado por
+  // esta conversión pudo aparecer. Un minuto de gracia hacia atrás cubre la
+  // deriva entre el reloj de Node y el `now()` de Postgres.
+  const desdeIso = new Date(Date.now() - 60_000).toISOString();
+
   let viajeId: string;
   try {
     // Import dinámico (patrón del runner): `operacion.ts` arrastra los
@@ -487,16 +594,42 @@ export async function convertirEnViaje(
       kmRecorridos: cot.km === null ? null : Number(cot.km),
     });
   } catch (e) {
-    // COMPENSACIÓN: el viaje no existe, así que la decisión tampoco. Soltar
-    // el claim deja el reintento en manos del humano; si esto también falla,
-    // el log lo dice y la cotización queda "decidiéndose" — visible, no rota.
-    await acotada(supabaseAdmin().from('cotizacion')
-      .update({ decidida_en: null, decidida_por: null })
-      .eq('tenant_id', tenantId).eq('id', id).neq('estado', 'ganada'), 'cotizador.soltarClaim')
-      .then(({ error: e2 }) => {
-        if (e2) logger.warn('cotizador.claim_huerfano', { id, err: e2.message });
+    const definitivo = falloDefinitivoAlCrearViaje(e);
+    const existe = await viajeYaCreado(tenantId, cot, desdeIso);
+
+    // (1) El viaje SÍ está: el error se comió la respuesta, no el trabajo.
+    if (existe?.id != null) {
+      logger.warn('cotizador.viaje_creado_pese_al_error', {
+        id, viajeId: existe.id, err: e instanceof Error ? e.message : String(e),
       });
-    throw e;
+      const { error: errGana } = await acotada(supabaseAdmin().from('cotizacion')
+        .update({ estado: 'ganada', viaje_id: existe.id })
+        .eq('tenant_id', tenantId).eq('id', id), 'cotizador.ganada');
+      if (errGana) logger.warn('cotizador.ganada_sin_marcar', { id, viajeId: existe.id, err: errGana.message });
+      return existe.id;
+    }
+
+    // (2) Se COMPROBÓ que no existe y el fallo era definitivo: compensa.
+    if (definitivo && existe !== null) {
+      const { error: e2 } = await acotada(supabaseAdmin().from('cotizacion')
+        .update({ decidida_en: null, decidida_por: null })
+        .eq('tenant_id', tenantId).eq('id', id).neq('estado', 'ganada'), 'cotizador.soltarClaim');
+      if (e2) logger.warn('cotizador.claim_huerfano', { id, err: e2.message });
+      throw e;
+    }
+
+    // (3) Ambiguo, o no se pudo comprobar. El claim SE QUEDA: soltarlo
+    // habilitaría un segundo clic que podría crear un SEGUNDO viaje por la
+    // misma cotización. Queda «decidiéndose», que es visible y reversible a
+    // mano; un viaje duplicado no lo es.
+    logger.error('cotizador.conversion_ambigua', {
+      id, definitivo, verificado: existe !== null,
+      err: e instanceof Error ? e.message : String(e),
+    });
+    throw new DatoInvalido(
+      'No se pudo confirmar si el viaje se creó. La cotización queda marcada como «decidiéndose» a propósito: '
+      + 'busca el viaje en el Registro antes de volver a convertirla — si aparece, ya está hecho; si no, avisa a soporte para liberarla.',
+    );
   }
 
   const { error: errGana } = await acotada(supabaseAdmin().from('cotizacion')

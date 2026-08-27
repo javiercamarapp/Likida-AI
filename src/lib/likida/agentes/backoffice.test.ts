@@ -123,7 +123,14 @@ describe('vigilante de calidad: los cuatro detectores, con evidencia', () => {
     expect(v1[0].semaforo).toBe('AMBAR'); // 1 de 3 no llega al corte de ROJO
     expect(v1[0].detalle).toContain('1 de 3');
     expect(v1[0].evidencia).toContain('OpenRouter 429');
-    expect(h.some((x) => x.agente === 'redactor')).toBe(false);
+    // El `redactor` no dispara NINGÚN semáforo: sus corridas son ok. Desde
+    // c6-12 sí aparece con la NOTA de «no anotó costo» —esa nota ya no exige
+    // que alguna corrida haya medido—, y eso es lo que se quería: un agente
+    // que dejó de medir del todo no puede desaparecer del parte.
+    expect(h.some((x) => x.agente === 'redactor' && x.semaforo !== 'NOTA')).toBe(false);
+    const nota = h.find((x) => x.agente === 'redactor');
+    expect(nota?.codigo).toBe('V3');
+    expect(nota?.evidencia).toContain('NINGUNA corrida');
   });
 
   it('V1 es ROJO cuando la mitad o más de las corridas fallan', () => {
@@ -201,6 +208,17 @@ describe('vigilante de calidad: los cuatro detectores, con evidencia', () => {
     expect(cuerpo).toContain('Nada disparó umbral');
     expect(cuerpo).toContain('LO QUE ESTE PARTE NO AUDITA: el código');
     expect(cuerpo.split('\n').length).toBeLessThan(15);
+    // Sin truncar, el parte NO menciona una ventana recortada.
+    expect(cuerpo).not.toContain('VENTANA TRUNCADA');
+  });
+
+  // c6-12: una ventana recortada en silencio hace que «nadie falló» signifique
+  // «nadie falló entre las que alcancé a leer».
+  it('la ventana truncada se DICE, con el tope y con qué corridas faltan', () => {
+    const cuerpo = armarParteCalidad([], '2026-08-17', '2026-08-23', 5000, 9, 3, true);
+    expect(cuerpo).toContain('VENTANA TRUNCADA A 5,000 CORRIDAS');
+    expect(cuerpo).toContain('MÁS VIEJAS');
+    expect(cuerpo).toContain('NO aparece aquí');
   });
 });
 
@@ -224,6 +242,22 @@ describe('vigilante de calidad: la corrida', () => {
     const corridaAnotada = registrarCorrida.mock.calls[0][2] as Record<string, unknown>;
     expect(corridaAnotada.estado).toBe('ok');
     expect(corridaAnotada.tareasHechas).toBe(1);
+  });
+
+  it('c6-12: si el `count` de la base supera lo leído, el parte lo declara', async () => {
+    encolarRespuesta('cola_aprobacion', { count: 0, error: null }); // parteExistente
+    encolarRespuesta('agente_corrida', {
+      data: [{ agente: 'sdr', estado: 'ok', inicio: '2026-08-18T10:00:00Z', tareas_hechas: 1, tareas_total: 1, costo_usd: 0.01, error: null }],
+      count: 7321,   // la semana tuvo 7,321 y solo llegó 1: la ventana se cortó
+      error: null,
+    });
+    encolarRespuesta('agente_corrida', { data: [], error: null });
+    encolarRespuesta('cola_aprobacion', { data: [], error: null });
+
+    await correrAgenteBackOffice('vigilante_calidad', 'cron', '2026-08-27');
+    const pieza = encolarPieza.mock.calls[0][0] as Record<string, unknown>;
+    expect(String(pieza.cuerpo)).toContain('VENTANA TRUNCADA');
+    expect((pieza.fuentes as Record<string, unknown>).truncado).toBe(true);
   });
 
   it('el parte del periodo ya en la bandeja no se fabrica dos veces', async () => {
@@ -435,6 +469,8 @@ describe('legal: los relojes de Likida-empresa', () => {
 
 // ── 4 · Talento ───────────────────────────────────────────────────────────
 
+const correlerTalento = () => correrAgenteBackOffice('talento', 'cron', '2026-08-27');
+
 describe('talento: el registro y la criba', () => {
   it('normalizar ignora acentos y mayúsculas', () => {
     expect(normalizar('Camión Logístico')).toBe('camion logistico');
@@ -522,6 +558,45 @@ describe('talento: el registro y la criba', () => {
     const cuerpo = armarParteTalento([{ id: 'v1', clave: 'k', titulo: 'T', requisitos: null }], [], 0, '2026-08-24');
     expect(cuerpo).toContain('SIN REQUISITOS DECLARADOS');
     expect(cuerpo).toContain('Sin candidatos nuevos por cribar');
+  });
+
+  // ── c6-6: la criba corre en TODA corrida; lo semanal es el parte ────────
+
+  it('con el parte de la semana YA fabricado, la criba SIGUE corriendo', async () => {
+    encolarRespuesta('vacante', {
+      data: [{ id: 'v1', clave: 'contador', titulo: 'Contador', requisitos: { obligatorios: ['SAT'], deseables: [] } }],
+      error: null,
+    });
+    encolarRespuesta('candidato', {
+      data: [{ id: 'c1', vacante_id: 'v1', nombre: 'Ana', correo: 'ana@x.mx', perfil: 'Auditorías ante el SAT' }],
+      error: null,
+    });
+    encolarRespuesta('candidato', { data: null, error: null });      // el UPDATE de la criba
+    encolarRespuesta('cola_aprobacion', { count: 1, error: null });  // el parte YA existe
+
+    const r = await correlerTalento();
+    // Cero piezas (el parte ya estaba) pero UNA criba escrita: antes de c6-6
+    // la corrida se cortaba antes y Ana se quedaba en 'recibido' una semana.
+    expect(r.piezas).toBe(0);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].fila.estado).toBe('cribado');
+    expect(r.motivo).toContain('se cribaron 1 candidato(s) nuevo(s)');
+    // Y la corrida NO se anota como trabajo vacío: hizo 1 de 1.
+    const anotada = registrarCorrida.mock.calls[0][2] as Record<string, unknown>;
+    expect(anotada.tareasHechas).toBe(1);
+    expect(anotada.tareasTotal).toBe(1);
+  });
+
+  it('con el parte ya fabricado y NADIE nuevo, la corrida es 0/0 — no dispara «verde vacío»', async () => {
+    encolarRespuesta('vacante', { data: [{ id: 'v1', clave: 'k', titulo: 'T', requisitos: null }], error: null });
+    encolarRespuesta('candidato', { data: [], error: null });
+    encolarRespuesta('cola_aprobacion', { count: 1, error: null });
+    const r = await correlerTalento();
+    expect(r.piezas).toBe(0);
+    expect(r.motivo).toContain('no había candidatos nuevos por cribar');
+    const anotada = registrarCorrida.mock.calls[0][2] as Record<string, unknown>;
+    expect(anotada.tareasHechas).toBe(0);
+    expect(anotada.tareasTotal).toBe(0);
   });
 
   it('una escritura de criba que falla tumba la corrida — no se encola un parte sobre datos a medias', async () => {

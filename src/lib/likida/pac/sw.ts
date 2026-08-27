@@ -162,6 +162,24 @@ export function crearProveedorSw(cfg: ConfigSw): ProveedorPac {
         };
       }
 
+      // ── ÉXITO SIN TIMBRE LEGIBLE = AMBIGUO, JAMÁS RECHAZO (c6-2) ────────
+      // El PAC dijo `success`: el CFDI muy probablemente SÍ se timbró y el
+      // folio existe ante el SAT. Que no se pueda leer el uuid o el XML es un
+      // problema de la respuesta, no del comprobante. Devolver 'rechazado'
+      // aquí sería invitar al reintento —y a un segundo CFDI real—, así que
+      // se devuelve 'red': la clase que en este repo significa "no sabemos, y
+      // no se toca hasta verificar en el panel del PAC".
+      if (cuerpo.status === 'success') {
+        logger.error('pac.sw.exito_ilegible', {
+          uuid: typeof cuerpo.data?.uuid,
+          cfdi: typeof cuerpo.data?.cfdi,
+        });
+        return {
+          ok: false, clase: 'red', codigo: null,
+          mensaje: 'El PAC contestó ÉXITO pero sin un folio fiscal ni un XML timbrado legibles — el CFDI casi seguro SÍ se emitió. NO reintentes: verifica en el panel del PAC y avisa a soporte para registrarlo a mano.',
+        };
+      }
+
       // Rechazo del PAC: mensaje TAL CUAL, con el código separado si viene en
       // la forma "CFDI40147 - …" que SW usa.
       const msg = typeof cuerpo.message === 'string' ? cuerpo.message : `El PAC contestó ${String(cuerpo.status ?? res.status)} sin mensaje.`;
