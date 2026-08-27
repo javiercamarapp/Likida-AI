@@ -9775,3 +9775,119 @@ begin
   raise exception 'REPORTE_DIRECCION_0216  fk_rebota=%  dup_rebota=%  periodo_rebota=%  vivos_con_techo=%  palancas_en_dominio=%  rls_cerrada=%   (esperado t / t / t / t / t / t)',
     fk_rebota, dup_rebota, periodo_rebota, vivos_con_techo, palancas_en_dominio, rls_cerrada;
 end $$;
+
+-- ── 174. La máquina de prospección: correos con fuente y sin duplicar, la lista de bajas y sus candados (mig. 0217) ──
+-- (El 171 quedó reservado a una ola paralela que no necesitó SQL — hueco a
+-- propósito, como el 165 y los 167-169.)
+-- Lo que solo la base demuestra: (a) `prospecto_correo_unico` — el mismo
+-- correo de la misma empresa entra UNA vez sin importar mayúsculas (el
+-- investigador corre a diario; su duplicado rebota en el índice, no en un
+-- `if`), y el mismo correo en OTRA empresa sí entra; (b) el CHECK de formato
+-- rebota lo que no es un correo, y el de fuente rebota la fuente vacía — un
+-- correo sin fuente es un correo inventado; (c) `correo_suprimido` es PK (la
+-- baja doble es una) y el CHECK de minúsculas rebota la variante en
+-- mayúsculas que se colaría como "otra" dirección; (d) el dossier es UNO por
+-- prospecto (PK): el segundo insert rebota — el último gana por upsert, no
+-- por duplicado; (e) el CHECK de interruptores acepta los tres kill switches
+-- nuevos y sigue rebotando el nombre inventado; (f) el doble candado: ni
+-- anon ni authenticated tocan las tres tablas nuevas.
+do $$
+declare
+  pra uuid; prb uuid;
+  dup_rebota boolean; otra_empresa_entra boolean; formato_rebota boolean;
+  fuente_vacia_rebota boolean; baja_doble_es_una boolean; mayusculas_rebota boolean;
+  dossier_unico boolean; switch_nuevo_entra boolean; switch_inventado_rebota boolean;
+  cerrado boolean;
+begin
+  insert into prospecto (empresa) values ('ZZZ PROSPECCION A 0217') returning id into pra;
+  insert into prospecto (empresa) values ('ZZZ PROSPECCION B 0217') returning id into prb;
+
+  -- (a) El mismo correo, la misma empresa, dos grafías: una sola fila.
+  insert into prospecto_correo (prospecto_id, correo, fuente)
+    values (pra, 'ventas@zzz0217.mx', 'https://zzz0217.mx/contacto');
+  begin
+    insert into prospecto_correo (prospecto_id, correo, fuente)
+      values (pra, 'VENTAS@zzz0217.mx', 'https://zzz0217.mx/nosotros');
+    dup_rebota := false;
+  exception when unique_violation then
+    dup_rebota := true;
+  end;
+  begin
+    insert into prospecto_correo (prospecto_id, correo, fuente)
+      values (prb, 'ventas@zzz0217.mx', 'https://zzz0217.mx/contacto');
+    otra_empresa_entra := true;
+  exception when unique_violation then
+    otra_empresa_entra := false;
+  end;
+
+  -- (b) Formato y fuente: lo roto y lo sin-fuente no entran.
+  begin
+    insert into prospecto_correo (prospecto_id, correo, fuente)
+      values (pra, 'no-es-correo', 'https://zzz0217.mx');
+    formato_rebota := false;
+  exception when check_violation then
+    formato_rebota := true;
+  end;
+  begin
+    insert into prospecto_correo (prospecto_id, correo, fuente)
+      values (pra, 'otro@zzz0217.mx', '   ');
+    fuente_vacia_rebota := false;
+  exception when check_violation then
+    fuente_vacia_rebota := true;
+  end;
+
+  -- (c) La lista de bajas: la doble es una, y solo minúsculas.
+  insert into correo_suprimido (correo, motivo) values ('baja@zzz0217.mx', 'rebote (prueba)');
+  begin
+    insert into correo_suprimido (correo, motivo) values ('baja@zzz0217.mx', 'queja (prueba)');
+    baja_doble_es_una := false;
+  exception when unique_violation then
+    baja_doble_es_una := true;
+  end;
+  begin
+    insert into correo_suprimido (correo, motivo) values ('BAJA2@zzz0217.mx', 'rebote (prueba)');
+    mayusculas_rebota := false;
+  exception when check_violation then
+    mayusculas_rebota := true;
+  end;
+
+  -- (d) Un dossier por prospecto: el segundo INSERT rebota (el último gana
+  -- por upsert, no acumulando filas).
+  insert into prospecto_dossier (prospecto_id, fuentes) values (pra, '["https://zzz0217.mx"]'::jsonb);
+  begin
+    insert into prospecto_dossier (prospecto_id, fuentes) values (pra, '[]'::jsonb);
+    dossier_unico := false;
+  exception when unique_violation then
+    dossier_unico := true;
+  end;
+
+  -- (e) Los kill switches nuevos entran; el inventado sigue rebotando.
+  begin
+    insert into interruptor (id) values ('agente:enviador');
+    insert into interruptor (id) values ('agente:enriquecedor');
+    insert into interruptor (id) values ('agente:sdr');
+    switch_nuevo_entra := true;
+  exception when check_violation then
+    switch_nuevo_entra := false;
+  end;
+  begin
+    insert into interruptor (id) values ('agente:inventado');
+    switch_inventado_rebota := false;
+  exception when check_violation then
+    switch_inventado_rebota := true;
+  end;
+
+  -- (f) El doble candado en las tres tablas nuevas.
+  cerrado := not has_table_privilege('anon', 'public.prospecto_correo', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.prospecto_correo', 'SELECT')
+    and has_table_privilege('service_role', 'public.prospecto_correo', 'SELECT')
+    and not has_table_privilege('anon', 'public.prospecto_dossier', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.prospecto_dossier', 'SELECT')
+    and has_table_privilege('service_role', 'public.prospecto_dossier', 'SELECT')
+    and not has_table_privilege('anon', 'public.correo_suprimido', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.correo_suprimido', 'SELECT')
+    and has_table_privilege('service_role', 'public.correo_suprimido', 'SELECT');
+
+  raise exception 'PROSPECCION_0217  dup_rebota=%  otra_empresa_entra=%  formato_rebota=%  fuente_vacia_rebota=%  baja_doble_es_una=%  mayusculas_rebota=%  dossier_unico=%  switch_nuevo_entra=%  switch_inventado_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t)',
+    dup_rebota, otra_empresa_entra, formato_rebota, fuente_vacia_rebota, baja_doble_es_una, mayusculas_rebota, dossier_unico, switch_nuevo_entra, switch_inventado_rebota, cerrado;
+end $$;

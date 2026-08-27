@@ -45,6 +45,11 @@ export const INTERRUPTORES = [
   // Los cuatro de dirección (0216) — mismo candado.
   'agente:kpi_whatsapp', 'agente:desempeno_startup',
   'agente:orquestador', 'agente:orquestador_semanal',
+  // La máquina de prospección (0217): el investigador (id histórico
+  // `enriquecedor`), el SDR de seguimientos y el enviador de campaña — el
+  // único de los tres que toca un canal real, y por eso el primero que se
+  // apaga si algo huele mal.
+  'agente:enriquecedor', 'agente:sdr', 'agente:enviador',
 ] as const;
 
 export type NombreInterruptor = (typeof INTERRUPTORES)[number];

@@ -1,0 +1,193 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// EL ENVIADOR DE CAMPAÑA — la puerta de salida AUTOMÁTICA (0217).
+//
+// La orden del 27-ago-2026, literal: "agentes de venta expertos que envían
+// correos automáticamente todos los días a la base de datos... y después
+// procede a mandar correo a todos los correos que consigue de esa empresa".
+// Este módulo es esa orden con los candados puestos:
+//
+//   · SOLO piezas de campaña (`correo_frio` / `correo_seguimiento`) — nada
+//     más se auto-resuelve; el resto de la cola sigue siendo humano.
+//   · VENTANA DE REVISIÓN opcional (LIKIDA_ENVIADOR_VENTANA_MIN): las piezas
+//     esperan N minutos en la bandeja antes de auto-aprobarse, para que un
+//     humano pueda vetar. 0 = inmediato (el default de la orden).
+//   · La resolución automática es LEGAL en el esquema: el CHECK 0120 exige
+//     `resuelto_por_email`, no el uuid — queda 'enviador@automatico', visible
+//     en la bandeja como cualquier resolución.
+//   · El ENVÍO no estrena puerta: pasa por `enviarPiezaPorCorreo` con su
+//     claim anclado, su CHECK enviar-solo-aprobado, el tope diario de frío y
+//     la cadencia atómica 48h (0124). Las copias son los correos hallados por
+//     el investigador MENOS los suprimidos — y la lista de bajas se lee
+//     FAIL-CLOSED: si no se puede leer, no sale nada.
+//   · Kill switch propio (`agente:enviador`) y techo de gasto en el runner.
+// ═══════════════════════════════════════════════════════════════════════════
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '../presupuesto';
+import { DatoInvalido } from '../errores';
+import { estaApagado } from '../interruptores';
+import { correoConfigurado } from '@/lib/correo/enviar';
+import { enviarPiezaPorCorreo, topeCorreoFrioDia } from './cola';
+import { registrarCorrida, type DisparoCorrida } from './corridas';
+import { logger } from '@/lib/logger';
+
+/** El email con el que el enviador firma sus resoluciones automáticas — la
+ *  bandeja lo enseña tal cual, para que nadie confunda un tap humano con la
+ *  máquina. */
+export const RESOLUTOR_AUTOMATICO = 'enviador@automatico';
+
+/** Minutos que una pieza espera en la bandeja antes de auto-aprobarse — la
+ *  ventana en la que un humano puede editarla o rechazarla. 0 = inmediato. */
+export function ventanaRevisionMin(): number {
+  const v = Number(process.env.LIKIDA_ENVIADOR_VENTANA_MIN);
+  return Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+}
+
+const TIPOS_CAMPANA = ['correo_frio', 'correo_seguimiento'] as const;
+
+export interface ResultadoEnviador {
+  piezasEnviadas: number;
+  destinatarios: number;
+  saltadas: number;
+  motivos: string[];
+}
+
+/** La lista de bajas, FAIL-CLOSED: si no se puede leer, LANZA — mandar sin
+ *  consultar las bajas es escribirle a quien pidió que no. */
+export async function filtrarSuprimidos(correos: string[]): Promise<string[]> {
+  const limpios = [...new Set(correos.map((c) => c.trim().toLowerCase()).filter(Boolean))];
+  if (limpios.length === 0) return [];
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('correo_suprimido')
+    .select('correo')
+    .in('correo', limpios), 'enviador.suprimidos');
+  if (error) throw new Error(`filtrarSuprimidos: ${error.message}`);
+  const fuera = new Set(((data ?? []) as Array<{ correo: string }>).map((f) => f.correo));
+  return limpios.filter((c) => !fuera.has(c));
+}
+
+interface PiezaCandidata {
+  id: string;
+  tipo: string;
+  prospecto_id: string | null;
+  prospecto: { empresa?: string; correo?: string } | null;
+}
+
+/**
+ * UNA corrida del enviador (la llama el runner): auto-aprueba y envía hasta
+ * `limite` piezas de campaña maduras. Cada pieza falla POR SU LADO — un
+ * prospecto sin correo no detiene el lote, y el motivo queda dicho.
+ */
+export async function correrEnviador(disparo: DisparoCorrida = 'cron', limite = 10): Promise<ResultadoEnviador> {
+  const inicio = new Date();
+  if (await estaApagado('agente:enviador')) {
+    throw new DatoInvalido('El enviador está apagado — se enciende desde /admin/observabilidad o ⌘K.');
+  }
+  // Sin canal no hay envío, y la corrida LO DICE en vez de reportar 0/0 verde.
+  if (!correoConfigurado()) {
+    await registrarCorrida(null, 'enviador', {
+      inicio, fin: new Date(), estado: 'fallo', disparo,
+      error: 'El canal de correo no está configurado (RESEND_API_KEY/RESEND_EMAIL_DOMAIN).',
+    });
+    return { piezasEnviadas: 0, destinatarios: 0, saltadas: 0, motivos: ['canal sin configurar'] };
+  }
+
+  const corte = new Date(Date.now() - ventanaRevisionMin() * 60_000).toISOString();
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('cola_aprobacion')
+    .select('id, tipo, prospecto_id, prospecto:prospecto_id(empresa, correo)')
+    .eq('estado', 'pendiente')
+    .in('tipo', [...TIPOS_CAMPANA])
+    .lte('creado_en', corte)
+    .order('creado_en', { ascending: true })
+    .limit(Math.min(limite, topeCorreoFrioDia())), 'enviador.candidatas');
+  if (error) throw new Error(`correrEnviador: ${error.message}`);
+  const candidatas = (data ?? []) as unknown as PiezaCandidata[];
+
+  let piezasEnviadas = 0, destinatarios = 0, saltadas = 0;
+  const motivos: string[] = [];
+  for (const pieza of candidatas) {
+    try {
+      const principal = pieza.prospecto?.correo?.trim().toLowerCase() ?? '';
+      if (!principal) throw new DatoInvalido('el prospecto no tiene correo principal capturado');
+
+      // Las copias: TODOS los correos hallados de la empresa (0217), menos
+      // el principal — y todo el conjunto pasa por la lista de bajas.
+      let copias: string[] = [];
+      if (pieza.prospecto_id) {
+        const { data: extra, error: errExtra } = await supabaseAdmin()
+          .from('prospecto_correo')
+          .select('correo')
+          .eq('prospecto_id', pieza.prospecto_id)
+          .limit(50);
+        if (errExtra) throw new Error(`correos de la empresa ilegibles: ${errExtra.message}`);
+        copias = ((extra ?? []) as Array<{ correo: string }>).map((f) => f.correo);
+      }
+      const vivos = await filtrarSuprimidos([principal, ...copias]);
+      if (!vivos.includes(principal)) {
+        throw new DatoInvalido('el correo principal está en la lista de bajas — no se le escribe');
+      }
+
+      // Auto-APROBAR, anclado a pendiente (si un humano la resolvió en la
+      // ventana, cero filas y la pieza es suya, no nuestra).
+      const { data: ap, error: errAp } = await supabaseAdmin()
+        .from('cola_aprobacion')
+        .update({
+          estado: 'aprobado',
+          resuelto_por: null,
+          resuelto_por_email: RESOLUTOR_AUTOMATICO,
+          resuelto_en: new Date().toISOString(),
+        })
+        .eq('id', pieza.id).eq('estado', 'pendiente')
+        .select('id');
+      if (errAp) throw new Error(`auto-aprobación fallida: ${errAp.message}`);
+      if (!Array.isArray(ap) || ap.length === 0) throw new DatoInvalido('un humano la resolvió durante la ventana');
+
+      // ENVIAR por la puerta de siempre (claim + tope + cadencia + CHECK).
+      const r = await enviarPiezaPorCorreo(pieza.id, null, vivos.filter((c) => c !== principal));
+      piezasEnviadas += 1;
+      destinatarios += vivos.length;
+      logger.info('enviador.pieza_enviada', { pieza: pieza.id, tipo: pieza.tipo, destinatarios: vivos.length, providerId: r.providerId });
+
+      // El prospecto pasa a 'contactado' (anclado a 'nuevo': los demás
+      // estados los mueve el vendedor, no la máquina).
+      if (pieza.prospecto_id) {
+        const { error: errEstado } = await supabaseAdmin()
+          .from('prospecto')
+          .update({ estado: 'contactado', updated_at: new Date().toISOString() })
+          .eq('id', pieza.prospecto_id).eq('estado', 'nuevo');
+        if (errEstado) logger.warn('enviador.estado_no_movido', { prospecto: pieza.prospecto_id, err: errEstado.message });
+      }
+    } catch (e) {
+      saltadas += 1;
+      const motivo = e instanceof Error ? e.message.slice(0, 160) : String(e);
+      motivos.push(`${pieza.id.slice(0, 8)}: ${motivo}`);
+      logger.info('enviador.pieza_saltada', { pieza: pieza.id, motivo });
+    }
+  }
+
+  await registrarCorrida(null, 'enviador', {
+    inicio, fin: new Date(), estado: saltadas > 0 && piezasEnviadas === 0 && candidatas.length > 0 ? 'parcial' : 'ok',
+    disparo,
+    tareasHechas: piezasEnviadas, tareasTotal: candidatas.length,
+    resumen: { piezas: piezasEnviadas, destinatarios, saltadas, motivos: motivos.slice(0, 10) },
+  });
+  return { piezasEnviadas, destinatarios, saltadas, motivos };
+}
+
+/** El registro de una BAJA o un rebote: suprime la dirección para siempre.
+ *  Idempotente por PK — suprimir dos veces es una vez. Jamás lanza hacia el
+ *  webhook que la llama: perder un evento de entrega por no poder anotar la
+ *  baja sería peor; se grita en el log. */
+export async function suprimirCorreo(correo: string, motivo: string): Promise<void> {
+  const c = correo.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c)) return;
+  try {
+    const { error } = await supabaseAdmin().from('correo_suprimido')
+      .insert({ correo: c, motivo: motivo.trim() || 'sin motivo declarado' });
+    if (error && error.code !== '23505') {
+      logger.error('enviador.baja_no_registrada', { motivo, err: error.message });
+    }
+  } catch (e) {
+    logger.error('enviador.baja_no_registrada', { motivo, err: e instanceof Error ? e.message : String(e) });
+  }
+}
