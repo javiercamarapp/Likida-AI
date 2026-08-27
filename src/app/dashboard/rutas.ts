@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   Siren,
   RadioTower,
+  Calculator,
 } from 'lucide-react';
 
 /**
@@ -81,6 +82,9 @@ export const DINERO_FISCAL: Item[] = [
   { href: '/dashboard/rentabilidad', nombre: 'Rentabilidad y cobranza', Icono: ChartNoAxesCombined },
   // El lado del ingreso: quién paga el flete y cuánto debe.
   { href: '/dashboard/clientes', nombre: 'Clientes y tarifas', Icono: Handshake },
+  // A8 (27-ago-2026): la ganancia real ANTES de aceptar el viaje — costos
+  // declarados + casetas MEDIDAS en los viajes liquidados de la ruta.
+  { href: '/dashboard/cotizaciones', nombre: 'Cotizador', Icono: Calculator },
   { href: '/dashboard/facturacion', nombre: 'Facturación a clientes', Icono: FileText },
 ];
 

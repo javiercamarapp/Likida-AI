@@ -9891,3 +9891,74 @@ begin
   raise exception 'PROSPECCION_0217  dup_rebota=%  otra_empresa_entra=%  formato_rebota=%  fuente_vacia_rebota=%  baja_doble_es_una=%  mayusculas_rebota=%  dossier_unico=%  switch_nuevo_entra=%  switch_inventado_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t)',
     dup_rebota, otra_empresa_entra, formato_rebota, fuente_vacia_rebota, baja_doble_es_una, mayusculas_rebota, dossier_unico, switch_nuevo_entra, switch_inventado_rebota, cerrado;
 end $$;
+
+-- ── 178. El cotizador: costos declarados con candados, y la cotización decidida UNA vez (mig. 0225) ──
+-- (Los bloques 175-177 quedaron reservados a olas paralelas — hueco a
+-- propósito, como el 165, 167-169 y 171.)
+-- Lo que solo la base demuestra: (a) `cotizador_config` es UNA fila por
+-- flota — la segunda rebota por PK; (b) los CHECKs de sanidad rebotan el
+-- factor de regreso fuera de 1–3 y el margen fuera de 0–90 (un factor 4 o
+-- un margen 200 cotizarían fantasía con cara de política); (c) el CHECK
+-- `cotizacion_ganada_completa` de la 0051 sigue vivo con las columnas
+-- nuevas: 'ganada' sin precio o sin viaje rebota; (d) el desglose jsonb y el
+-- claim `decidida_en` existen y aceptan escritura; (e) el doble candado:
+-- ni anon ni authenticated tocan `cotizador_config`.
+do $$
+declare
+  ta uuid;
+  segunda_config_rebota boolean; factor_alto_rebota boolean; margen_alto_rebota boolean;
+  ganada_incompleta_rebota boolean; desglose_entra boolean; cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ COTIZADOR 0225') returning id into ta;
+
+  -- (a) Una config por flota.
+  insert into cotizador_config (tenant_id, diesel_por_km) values (ta, 12.5);
+  begin
+    insert into cotizador_config (tenant_id, salario_dia) values (ta, 800);
+    segunda_config_rebota := false;
+  exception when unique_violation then
+    segunda_config_rebota := true;
+  end;
+
+  -- (b) Los CHECKs de sanidad.
+  begin
+    update cotizador_config set factor_regreso_vacio = 4 where tenant_id = ta;
+    factor_alto_rebota := false;
+  exception when check_violation then
+    factor_alto_rebota := true;
+  end;
+  begin
+    update cotizador_config set margen_objetivo_pct = 200 where tenant_id = ta;
+    margen_alto_rebota := false;
+  exception when check_violation then
+    margen_alto_rebota := true;
+  end;
+
+  -- (c) 'ganada' exige precio Y viaje — el candado de la 0051, intacto.
+  begin
+    insert into cotizacion (tenant_id, origen, destino, estado)
+      values (ta, 'León', 'CDMX', 'ganada');
+    ganada_incompleta_rebota := false;
+  exception when check_violation then
+    ganada_incompleta_rebota := true;
+  end;
+
+  -- (d) El desglose citable y el claim entran.
+  begin
+    insert into cotizacion (tenant_id, origen, destino, estado, desglose, decidida_en)
+      values (ta, 'León', 'CDMX', 'borrador',
+              '{"lineas":[{"concepto":"Diésel","monto":100,"supuesto":"prueba"}],"costoTotal":100,"faltantes":[],"precioSugerido":120,"notas":[]}'::jsonb,
+              now());
+    desglose_entra := true;
+  exception when others then
+    desglose_entra := false;
+  end;
+
+  -- (e) El doble candado.
+  cerrado := not has_table_privilege('anon', 'public.cotizador_config', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.cotizador_config', 'SELECT')
+    and has_table_privilege('service_role', 'public.cotizador_config', 'SELECT');
+
+  raise exception 'COTIZADOR_0225  segunda_config_rebota=%  factor_alto_rebota=%  margen_alto_rebota=%  ganada_incompleta_rebota=%  desglose_entra=%  cerrado=%   (esperado t / t / t / t / t / t)',
+    segunda_config_rebota, factor_alto_rebota, margen_alto_rebota, ganada_incompleta_rebota, desglose_entra, cerrado;
+end $$;
