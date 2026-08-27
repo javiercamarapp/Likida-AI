@@ -484,8 +484,12 @@ async function esVendedor(vendedorId: string): Promise<boolean> {
 
 export async function crearProspecto(
   p: ProspectoValido,
-  /** El censo se importa con 'censo'; el alta del panel es 'manual'. */
-  fuente: 'manual' | 'censo' = 'manual',
+  /** El censo se importa con 'censo'; el alta del panel es 'manual';
+   *  'landing' es el visitante que levantó la mano en la calculadora pública
+   *  (blueprint del lead magnet: la unión se amplía AQUÍ antes de escribir la
+   *  primera fila — un valor fuera del dominio declarado rompe tableros sin
+   *  avisar; el comentario de la columna lo amplía la migración 0223). */
+  fuente: 'manual' | 'censo' | 'landing' = 'manual',
 ): Promise<string> {
   if (p.vendedorId !== null && !(await esVendedor(p.vendedorId))) {
     throw new DatoInvalido('Esa cuenta no es un vendedor. Vuelve a elegirlo de la lista.');
