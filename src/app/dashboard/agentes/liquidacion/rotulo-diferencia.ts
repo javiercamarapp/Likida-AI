@@ -44,6 +44,7 @@ export const ROTULO_DIFERENCIA: Record<TipoDiferencia, string> = {
   viatico_excede_fiscal: 'Viático sobre el tope fiscal',
   fecha_sospechosa: 'Fecha sospechosa',
   gasto_otro_ejercicio: 'Gasto de otro ejercicio',
+  iva_mes_del_pago: 'IVA se acredita en el mes del pago',
   folio_verificar: 'Folio por verificar',
   monto_discrepante: 'Monto discrepante',
   monto_implausible: 'Monto fuera de escala',

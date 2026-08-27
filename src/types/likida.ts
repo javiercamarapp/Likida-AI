@@ -70,6 +70,14 @@ export interface Gasto {
   xmlVerificado?: boolean;         // true = se recibió y parseó el XML del CFDI
   // ── Acreditamiento (del XML) ────────────────────────────────────────────────
   formaPago?: string;              // c_FormaPago (01=efectivo…) — deducibilidad por medio de pago
+  metodoPago?: string;             // c_MetodoPago (PUE/PPD) — PPD espera un REP (Fase 7, mig. 0199)
+  /** Fecha de pago del REP que liquidó este CFDI POR COMPLETO. NULL = sin REP
+   *  o pago parcial: el IVA a crédito sigue excluido (LIVA 5-III). Solo lo
+   *  escribe la ingesta del REP (intake/rep.ts) — jamás se infiere. */
+  pagadoEn?: string;
+  /** FormaDePagoP del REP — el medio con el que DE VERDAD se pagó (el 99 del
+   *  CFDI original solo decía "por definir"). */
+  pagadoForma?: string;
   subTotal?: number;               // @SubTotal (base BRUTA del estímulo de peaje 50%)
   /** `@Descuento` del CFDI (opcional). La base del estímulo de peaje es
    *  `subTotal - descuento`, no `subTotal` a secas. `undefined` = sin descuento. */
@@ -101,6 +109,7 @@ export type TipoDiferencia =
   | 'viatico_excede_fiscal' // viático de alimentación > tope fiscal $750/día (LISR 28-V) → porción no deducible
   | 'fecha_sospechosa'     // fecha futura o muy anterior al viaje → periodo/plazo/complemento en riesgo
   | 'gasto_otro_ejercicio' // comprobante fechado en un ejercicio fiscal anterior → NO deducible en éste (rescatado de rutina-fiscal-wip, 26-ago-2026)
+  | 'iva_mes_del_pago'     // CFDI a crédito liquidado por un REP: el IVA se acredita en el MES DEL PAGO (LIVA 5-III), no en el del comprobante (Fase 7, mig. 0199)
   | 'folio_verificar'      // folio leído con baja confianza en ticket con portal → verificar antes de facturar
   | 'monto_discrepante'    // el total del código y el del OCR no coinciden
   | 'monto_implausible'    // un solo comprobante fuera de escala para el viaje (DAT-18) → revisar

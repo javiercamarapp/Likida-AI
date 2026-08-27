@@ -1283,14 +1283,41 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // IVA trasladado pero NO acreditable aún. Se excluye igual que ya se hace
     // con peaje/diésel en la lógica de forma de pago. Un '99' se acreditará el
     // mes en que se pague (con su complemento de pago), no éste.
-    if ((g.ivaTraslado ?? 0) > 0 && g.formaPago !== '99') ivaAcreditable += (g.ivaTraslado as number) * proporcion;
+    //
+    // FASE 7 (mig. 0199): ese complemento de pago YA SE INGIERE. `pagadoEn`
+    // solo lo escribe intake/rep.ts cuando un REP liquidó este CFDI POR
+    // COMPLETO (ImpSaldoInsoluto = 0) — jamás se infiere. Con el sello, el
+    // '99' deja de cerrar la puerta del IVA; sin él, todo queda EXACTAMENTE
+    // como antes (el REP solo abre). Y `pagadoForma` (FormaDePagoP del REP,
+    // el medio con el que DE VERDAD se pagó) sustituye al '99' en las
+    // puertas que juzgan el MEDIO: peaje electrónico e IEPS de diésel. Si el
+    // REP no trajo FormaDePagoP legible, esas puertas siguen cerradas —
+    // "pagado" no implica "pagado con un medio admitido".
+    const pagadoConRep = g.formaPago === FORMA_PAGO_SIN_PAGAR && !!g.pagadoEn;
+    const formaPagoEfectiva = pagadoConRep ? g.pagadoForma : g.formaPago;
+    if ((g.ivaTraslado ?? 0) > 0 && (g.formaPago !== '99' || pagadoConRep)) {
+      ivaAcreditable += (g.ivaTraslado as number) * proporcion;
+      // La verdad fiscal completa, no solo la cifra: LIVA 5-III lo acredita
+      // EN EL MES DEL PAGO. Si ese mes no es el del comprobante, el contralor
+      // tiene que asentarlo en el periodo correcto — esconderlo dejaría una
+      // declaración con el IVA en el mes equivocado, firmada por el sistema.
+      if (pagadoConRep && g.pagadoEn!.slice(0, 7) !== (g.fecha ?? '').slice(0, 7)) {
+        diferencias.push({
+          tipo: 'iva_mes_del_pago', concepto: g.concepto, monto: 0,
+          nota: `El CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} era a crédito (forma de pago 99) y su complemento de pago llegó: se pagó el ${g.pagadoEn}. Su IVA se acredita en ESE mes (LIVA 5-III), no en el del comprobante (${g.fecha ?? 'sin fecha'}) — asiéntalo en el periodo del pago.`,
+          gastoId: g.id,
+        });
+      }
+    }
     // Peaje (1.6): 50% del SubTotal (sin IVA) de casetas, SOLO con pago
     // electrónico. AUDITORÍA 2 (fiscal): sin forma de pago o con '99' (Por
     // definir = no pagado) no se afirma el estímulo — es el tercer estado, "no se
     // pudo verificar" nunca es "sí". Mismo criterio que diésel e IVA.
     // AUDITORÍA 18, A7: y "electrónico" es la lista cerrada de la RMF 9.1.8
     // fr. III (`MEDIOS_ELECTRONICOS_PEAJE`), no "todo lo que no sea efectivo".
-    const peajePagadoElectronicamente = !!g.formaPago && (MEDIOS_ELECTRONICOS_PEAJE as readonly string[]).includes(g.formaPago);
+    // FASE 7: la forma EFECTIVA — con un REP que liquidó el CFDI, el medio
+    // real es el FormaDePagoP del pago, no el '99' del comprobante.
+    const peajePagadoElectronicamente = !!formaPagoEfectiva && (MEDIOS_ELECTRONICOS_PEAJE as readonly string[]).includes(formaPagoEfectiva);
     // Dos condiciones distintas, ambas necesarias — se arreglaron el mismo día
     // por caminos separados y aquí conviven:
     //
@@ -1336,7 +1363,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       const litros = Number((g.ocrExtra as Record<string, unknown> | undefined)?.litros ?? 0);
       // AUDITORÍA 2 (fiscal): lista CERRADA de la LIF 20-A-IV, no "cualquiera !=
       // 01". Antes admitía 06, 08, 30, 31 y 99 (no pagado), que la ley no cubre.
-      const pagoElectronico = !!g.formaPago && (MEDIOS_LISR_27_III as readonly string[]).includes(g.formaPago);
+      const pagoElectronico = !!formaPagoEfectiva && (MEDIOS_LISR_27_III as readonly string[]).includes(formaPagoEfectiva);
       if (pagoElectronico && Number.isFinite(litros) && litros > 0) {
         // AUDITORÍA 8, CRÍTICO: los litros salen del OCR y nada los cotejaba —
         // ni contra el XML (no siempre trae la cantidad desglosada), ni contra
@@ -1436,7 +1463,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // central del demo. El requisito sigue avisado —ahora con tono `condicionado`
   // en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
   // no puede bajar un estatus que nunca podría volver a subir.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'gasto_otro_ejercicio', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'consumo_bar', 'ticket_monedero', 'oposicion_titular', 'renglones_ajenos'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'gasto_otro_ejercicio', 'iva_mes_del_pago', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'consumo_bar', 'ticket_monedero', 'oposicion_titular', 'renglones_ajenos'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';
