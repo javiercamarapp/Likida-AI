@@ -103,6 +103,14 @@ export interface CfdiXmlData {
   tipoComprobante?: string; // I | E | P | N | T
   fecha?: string;           // ISO del atributo Fecha del Comprobante
   formaPago?: string;       // c_FormaPago (01=efectivo, 03=transferencia, 04/28=tarjeta…)
+  /**
+   * `@MetodoPago` (PUE = pago en una sola exhibición, PPD = pago en
+   * parcialidades o diferido). Fase 7: es el atributo que dice si este CFDI
+   * ESPERA un complemento de pago — un PPD con FormaPago 99 no acredita su
+   * IVA hasta que llegue el REP que lo liquida (LIVA 5-III). Este parser lo
+   * tiraba, así que nadie podía distinguir "a crédito" de "sin dato".
+   */
+  metodoPago?: string;
   subTotal?: number;        // @SubTotal (sin impuestos) — base BRUTA del estímulo de peaje
   /**
    * `@Descuento` del Comprobante. Es OPCIONAL en el CFDI 4.0 y este parser lo
@@ -210,6 +218,17 @@ export function formaPagoSat(bruto: string | undefined | null): string | undefin
   const v = String(bruto ?? '').trim();
   if (!/^\d{1,2}$/.test(v)) return undefined;
   return v.padStart(2, '0');
+}
+
+/**
+ * `@MetodoPago` normalizado al catálogo c_MetodoPago (PUE/PPD) o descartado.
+ * Mismo criterio que `formaPagoSat`: perder un dato accesorio es mejor que
+ * perder el CFDI — cualquier valor fuera del catálogo va a `undefined`, que
+ * el CHECK de la 0199 acepta como NULL. La verdad queda en el XML crudo.
+ */
+export function metodoPagoSat(bruto: string | undefined | null): string | undefined {
+  const v = String(bruto ?? '').trim().toUpperCase();
+  return v === 'PUE' || v === 'PPD' ? v : undefined;
 }
 
 export function parseCfdiXml(xml: string): CfdiXmlData | null {
@@ -320,6 +339,7 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       tipoComprobante: (comp['@_TipoDeComprobante'] as string) || undefined,
       fecha: (comp['@_Fecha'] as string) || undefined,
       formaPago: formaPagoSat(comp['@_FormaPago'] as string | undefined),
+      metodoPago: metodoPagoSat(comp['@_MetodoPago'] as string | undefined),
       subTotal: num(comp['@_SubTotal']),
       descuento: num(comp['@_Descuento']),
       rfcEmisor: (emisor['@_Rfc'] as string)?.toUpperCase() || undefined,

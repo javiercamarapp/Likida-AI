@@ -48,6 +48,7 @@ import { conceptoDesdeClave } from '@/lib/likida/intake/concepto';
 import { getConfig } from '@/lib/likida/config';
 import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/likida/intake/emparejar';
 import { parseCfdiXml, esConsolidado } from '@/lib/likida/intake/cfdi_xml';
+import { parseRepXml, ingerirRep, mensajeRepRecibido } from '@/lib/likida/intake/rep';
 import { guardarYConciliarConsolidado, mensajeConsolidadoRecibido } from '@/lib/likida/intake/consolidado';
 import {
   addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash, gastoPorHash, ubicarGastoPorHash, corregirFechaGasto,
@@ -894,6 +895,21 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           try {
             const xmlText = await downloadMediaAsText(msg.mediaId);
             const xml = xmlText ? parseCfdiXml(xmlText) : null;
+            // ── FASE 7 (mig. 0199): el REP entra por CUALQUIER puerta ──────
+            // Un complemento de pago no es "el ticket de un viaje": libera el
+            // IVA a crédito de la flota entera. La oficina es de hecho quien
+            // más probablemente lo reenvía (se lo manda la estación por
+            // correo). Va ANTES del camino 1:1, que con Total=0 lo rebotaría
+            // con "viene sin el total".
+            if (xml?.tipoComprobante === 'P' && xmlText) {
+              const rep = parseRepXml(xmlText);
+              if (rep) {
+                const resumen = await ingerirRep(cuenta.tenantId, rep, xmlText);
+                logger.info('oficina.rep', { tenant: cuenta.tenantId, rep: rep.uuid, ...resumen });
+                await sendText(msg.from, mensajeRepRecibido(resumen));
+                return;
+              }
+            }
             if (xml?.uuid && esConsolidado(xml)) {
               logger.info('oficina.xml_consolidado', { tenant: cuenta.tenantId, user: cuenta.userId, uuid: xml.uuid, lineas: xml.lineas.length });
               const resumen = await guardarYConciliarConsolidado(cuenta.tenantId, xml, xmlText!);
@@ -1097,6 +1113,18 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       if (msg.type === 'document' && msg.mediaId) {
         const xmlText = await downloadMediaAsText(msg.mediaId);
         const xml = xmlText ? parseCfdiXml(xmlText) : null;
+        // ── FASE 7 (mig. 0199): REP sin viaje abierto — el caso NATURAL ─────
+        // El pago de un CFDI a crédito llega semanas después del viaje, casi
+        // siempre con el viaje ya cerrado. No necesita viaje de contexto.
+        if (xml?.tipoComprobante === 'P' && xmlText) {
+          const rep = parseRepXml(xmlText);
+          if (rep) {
+            const resumen = await ingerirRep(op.tenantId, rep, xmlText);
+            logger.info('rep.sin_viaje', { tenant: op.tenantId, rep: rep.uuid, ...resumen });
+            await sendText(msg.from, mensajeRepRecibido(resumen));
+            return;
+          }
+        }
         // ── AUDITORÍA 10, CRÍTICO FISCAL — CONSOLIDADO SIN VIAJE ABIERTO ────
         // Un CFDI de monedero/TAG ampara MUCHOS días y MUCHOS viajes — nunca
         // pertenece a "el viaje abierto de este operador", así que esta rama
@@ -2188,6 +2216,27 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           return;
         }
 
+        // ── FASE 7 (mig. 0199): ¿es un COMPLEMENTO DE PAGO? ─────────────────
+        // Un REP (TipoDeComprobante=P) trae Total=0 por estándar: el camino
+        // 1:1 de abajo lo rebotaría con "viene sin el total" — que es cierto
+        // del atributo y falso del documento. Se ingiere aparte: registra los
+        // pagos y sella `pagado_en` en los CFDI PPD que liquida, que es lo
+        // que libera su IVA (LIVA 5-III) en el motor.
+        if (xml.tipoComprobante === 'P') {
+          const rep = parseRepXml(xmlText!);
+          if (rep) {
+            const resumen = await ingerirRep(op.tenantId, rep, xmlText!);
+            logger.info('rep.con_viaje', { tenant: op.tenantId, viaje: viajeId, rep: rep.uuid, ...resumen });
+            await say(mensajeRepRecibido(resumen));
+            return;
+          }
+          // Es tipo P pero sin un solo pago legible: decir la verdad, no
+          // intentar registrarlo como gasto de $0.
+          logger.warn('rep.ilegible', { tenant: op.tenantId, uuid: xml.uuid });
+          await say('Recibí un complemento de pago pero no pude leer ningún pago adentro 🤔. Verifica que sea el XML timbrado completo y reenvíalo.');
+          return;
+        }
+
         // ── AUDITORÍA 10, CRÍTICO FISCAL — CONSOLIDADO, NO TICKET 1:1 ───────
         // Un CFDI de monedero/TAG ampara MUCHAS transacciones de MUCHOS días
         // — nunca es "el ticket de este viaje". El camino de abajo
@@ -2308,6 +2357,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
                 complementoHidrocarburos: xml.complementoHidrocarburos,
                 cfdiEsquemaAlterno: xml.esquemaAlterno,
                 formaPago: xml.formaPago,
+                metodoPago: xml.metodoPago,
                 subTotal: xml.subTotal,
                 descuento: xml.descuento,
                 iepsTraslado: xml.iepsTraslado,

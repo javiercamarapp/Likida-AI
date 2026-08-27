@@ -33,6 +33,9 @@ export const NORMA_POR_DIFERENCIA: Partial<Record<TipoDiferencia, string[]>> = {
   // consumo no lo trae, y lo declara ella misma.
   comprobante_no_fiscal: ['cff-29-A'],
   combustible_efectivo: ['lisr-27-fr-III', 'rfa-2026-2.9'],
+  // Fase 7 (mig. 0199): el REP liberó el IVA a crédito — la regla del mes
+  // del pago es exactamente la fracción III del art. 5 de la LIVA.
+  iva_mes_del_pago: ['liva-art-5'],
   // RFA 2026 regla 2.9 (deber ser, docs/fiscal/rfa-2.9-deber-ser.md):
   // dentro del 15% y elegible → informativo con la misma ficha; el excedente y
   // la flota no elegible son el mismo 27-III sin excepción.

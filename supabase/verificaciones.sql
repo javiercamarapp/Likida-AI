@@ -8888,3 +8888,59 @@ begin
   raise exception 'ASISTENCIA_0198  tipo_nuevo=%  critica=%  basura_rebota=%  evento_repetido_rebota=%  bitacora=%  anon=%   (esperado t / t / t / t / t / -1)',
     tipo_nuevo_entra, critica_entra, tipo_basura_rebota, evento_repetido_rebota, sin_wa_no_compiten, n_anon;
 end $$;
+
+-- ── 157. El REP libera el IVA a crédito con rastro e idempotencia (mig. 0199) ──
+-- `cfdi_pago` es el registro de cada DoctoRelacionado de cada complemento de
+-- pago ingerido: sin grants directos (solo service_role — mismo doble candado
+-- que 0196), y con unicidad por (tenant, REP, docto) para que el mismo REP
+-- reenviado no duplique. Y `gasto.metodo_pago` con dominio cerrado PUE/PPD:
+-- un valor inventado del OCR o de un XML roto rebota, no se guarda.
+do $$
+declare
+  t uuid; v_op uuid; n_anon int; n_auth int; duplicado_rebota boolean; metodo_malo_rebota boolean;
+begin
+  -- (a) Sin grant directo: ni anon ni authenticated pueden leer cfdi_pago.
+  begin
+    set local role anon;
+    select count(*) into n_anon from cfdi_pago;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_anon := -1;
+  end;
+  begin
+    set local role authenticated;
+    select count(*) into n_auth from cfdi_pago;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_auth := -1;
+  end;
+
+  -- (b) La idempotencia: el mismo (tenant, REP, docto) dos veces rebota.
+  insert into tenant (nombre) values ('ZZZ REP 0199') returning id into t;
+  insert into cfdi_pago (tenant_id, cfdi_uuid, fecha_pago, docto_relacionado_uuid, imp_pagado, imp_saldo_insoluto)
+    values (t, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeee0199', '2026-08-01', '11111111-2222-3333-4444-555555550199', 1160.00, 0);
+  begin
+    insert into cfdi_pago (tenant_id, cfdi_uuid, fecha_pago, docto_relacionado_uuid, imp_pagado, imp_saldo_insoluto)
+      values (t, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeee0199', '2026-08-01', '11111111-2222-3333-4444-555555550199', 1160.00, 0);
+    duplicado_rebota := false;
+  exception when unique_violation then
+    duplicado_rebota := true;
+  end;
+
+  -- (c) El dominio de metodo_pago: basura rebota.
+  begin
+    -- Un UPDATE de 0 filas no evalúa el CHECK: se prueba con un INSERT real.
+    -- `viaje.operador_id` es NOT NULL: se crea un operador de andamiaje antes
+    -- (el fallo original de este bloque en CI fue exactamente ese NOT NULL).
+    insert into operador (tenant_id, nombre, telefono) values (t, 'P', '+520000000199') returning id into v_op;
+    insert into viaje (tenant_id, operador_id, folio) values (t, v_op, 'ZZZ-REP');
+    insert into gasto (tenant_id, viaje_id, concepto, monto, metodo_pago)
+      select t, v.id, 'diesel', 100, 'XXX' from viaje v where v.tenant_id = t limit 1;
+    metodo_malo_rebota := false;
+  exception when check_violation then
+    metodo_malo_rebota := true;
+  end;
+
+  raise exception 'REP_CFDI_PAGO_0199  anon=%  authenticated=%  duplicado_rebota=%  metodo_malo_rebota=%   (esperado -1 / -1 / t / t)',
+    n_anon, n_auth, duplicado_rebota, metodo_malo_rebota;
+end $$;

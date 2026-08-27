@@ -362,6 +362,7 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     cfdi_esquema_alterno: g.cfdiEsquemaAlterno ?? null,
     xml_verificado: g.xmlVerificado ?? null,
     forma_pago: g.formaPago ?? null,
+    metodo_pago: g.metodoPago ?? null,
     sub_total: g.subTotal ?? null,
     descuento: g.descuento ?? null,
     ieps_traslado: g.iepsTraslado ?? null,
@@ -715,7 +716,7 @@ export async function corregirFechaGasto(
 export async function updateGastoCfdiXml(
   tenantId: string,
   gastoId: string,
-  x: { claveProdServ?: string; claveUnidad?: string; tipoComprobante?: string; complementoHidrocarburos?: boolean; esquemaAlterno?: boolean; formaPago?: string; subTotal?: number; descuento?: number; iepsTraslado?: number; ivaTraslado?: number;
+  x: { claveProdServ?: string; claveUnidad?: string; tipoComprobante?: string; complementoHidrocarburos?: boolean; esquemaAlterno?: boolean; formaPago?: string; metodoPago?: string; subTotal?: number; descuento?: number; iepsTraslado?: number; ivaTraslado?: number;
        // Cuando el XML se pega a un TICKET (que no traía UUID), estos tres campos
        // pasan a ser autoritativos: vienen del comprobante timbrado, no del OCR.
        uuid?: string; rfcEmisor?: string; rfcReceptor?: string; total?: number; fecha?: string;
@@ -761,6 +762,7 @@ export async function updateGastoCfdiXml(
     complemento_hidrocarburos: x.complementoHidrocarburos ?? null,
     cfdi_esquema_alterno: x.esquemaAlterno ?? null,
     forma_pago: x.formaPago ?? null,
+    metodo_pago: x.metodoPago ?? null,
     sub_total: x.subTotal ?? null,
     descuento: x.descuento ?? null,
     ieps_traslado: x.iepsTraslado ?? null,
@@ -903,7 +905,7 @@ export async function reclamarCodigoPendiente(tenantId: string, id: string): Pro
 export async function getGastos(viajeId: string, tenantId: string): Promise<Gasto[]> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('gasto')
-    .select('id, concepto, monto, fecha, folio, folio_norm, ocr_extra, rfc_emisor, rfc_receptor, cfdi_uuid, cfdi_orden, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos, efos_revisar, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos, cfdi_esquema_alterno, xml_verificado, forma_pago, sub_total, descuento, ieps_traslado, iva_traslado')
+    .select('id, concepto, monto, fecha, folio, folio_norm, ocr_extra, rfc_emisor, rfc_receptor, cfdi_uuid, cfdi_orden, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos, efos_revisar, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos, cfdi_esquema_alterno, xml_verificado, forma_pago, metodo_pago, pagado_en, pagado_forma, sub_total, descuento, ieps_traslado, iva_traslado')
     .eq('tenant_id', tenantId)
     .eq('viaje_id', viajeId), 'getGastos');
   if (error) throw new Error(`getGastos: ${error.message}`);
@@ -932,6 +934,9 @@ export async function getGastos(viajeId: string, tenantId: string): Promise<Gast
     cfdiEsquemaAlterno: r.cfdi_esquema_alterno != null ? Boolean(r.cfdi_esquema_alterno) : undefined,
     xmlVerificado: r.xml_verificado != null ? Boolean(r.xml_verificado) : undefined,
     formaPago: (r.forma_pago as string) || undefined,
+    metodoPago: (r.metodo_pago as string) || undefined,
+    pagadoEn: (r.pagado_en as string) || undefined,
+    pagadoForma: (r.pagado_forma as string) || undefined,
     subTotal: r.sub_total != null ? Number(r.sub_total) : undefined,
     descuento: r.descuento != null ? Number(r.descuento) : undefined,
     iepsTraslado: r.ieps_traslado != null ? Number(r.ieps_traslado) : undefined,

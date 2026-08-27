@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { verificarFirma, mensajeDeRechazo } from '@/lib/correo/firma_entrante';
 import { tokenDeDestinatarios } from '@/lib/correo/buzon';
 import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
+import { parseRepXml, ingerirRep } from '@/lib/likida/intake/rep';
 import { guardarFacturaProveedor, estadoSatDeCfdi } from '@/lib/likida/proveedores';
 import { estaApagado } from '@/lib/likida/interruptores';
 import { registrarCorrida } from '@/lib/likida/agentes/corridas';
@@ -337,6 +338,23 @@ export async function POST(req: Request) {
       // ignora: extraerle el CFDI es OCR, y eso ya tiene su propio camino.
       const xml = parseCfdiXml(texto);
       if (!xml) { ignoradas++; continue; }
+
+      // ── FASE 7 (mig. 0199): un REP adjunto en el correo no es una factura
+      // de proveedor — es el complemento que libera el IVA a crédito de un
+      // gasto ya capturado. Sin este corte entraba a `guardarFacturaProveedor`
+      // con Total=0 y se perdía su único propósito.
+      if (xml.tipoComprobante === 'P') {
+        const rep = parseRepXml(texto);
+        if (rep) {
+          const resumen = await ingerirRep(flota.id as string, rep, texto);
+          logger.info('correo_entrante.rep', { emailId, tenantId: flota.id, rep: rep.uuid, ...resumen });
+          guardadas++;
+        } else {
+          logger.warn('correo_entrante.rep_ilegible', { emailId, tenantId: flota.id });
+          ignoradas++;
+        }
+        continue;
+      }
 
       // El estatus SAT se consulta AQUÍ, con el adjunto ya en la mano:
       // `consultarCFDI` jamás lanza (timeout 4s → 'pendiente'), así que un
