@@ -170,11 +170,11 @@ export const SAMSARA: Conector = {
   formaDeConectar: 'api_en_vivo',
   comoConectaHoy: 'Con un token de API que generas en tu tablero de Samsara. Es el único de los cuatro que no necesita abrir sesión: el token viaja en cada petición.',
   paraSubirDeEscalon: null,
-  capacidades: ['leer_posiciones', 'leer_recorrido', 'leer_unidades'],
+  capacidades: ['leer_posiciones', 'leer_recorrido', 'leer_unidades', 'leer_eventos_seguridad'],
   claveAlmacen: 'samsara',
   fuente: {
     url: 'https://developers.samsara.com/docs/authentication',
-    queConfirma: 'La API vive en https://api.samsara.com y el token se manda como `Authorization: Bearer <token>`. Los tokens llevan scopes granulares; los nuevos nacen con permisos de lectura. `GET /me` devuelve la organización dueña del token (https://developers.samsara.com/changelog/me-api-endpoint).',
+    queConfirma: 'La API vive en https://api.samsara.com y el token se manda como `Authorization: Bearer <token>`. Los tokens llevan scopes granulares; los nuevos nacen con permisos de lectura. `GET /me` devuelve la organización dueña del token (https://developers.samsara.com/changelog/me-api-endpoint). Los eventos de seguridad viven en `GET /safety-events/stream` y exigen el scope «Read Safety Events & Scores» (https://developers.samsara.com/reference/getsafetyeventsv2stream, consultada 26-ago-2026) — sin ese scope las posiciones entran y los eventos no, y el poller lo reporta con nombre.',
     consultadaEn: '2026-08-14',
   },
   credenciales: [

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { sincronizarGpsTodas } from '@/lib/likida/conectores/sincronizar_gps';
+import { sincronizarGpsTodas, httpReal } from '@/lib/likida/conectores/sincronizar_gps';
+import { sincronizarEventosTodas } from '@/lib/likida/conectores/sincronizar_eventos';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
@@ -61,29 +62,50 @@ export async function GET(req: Request) {
   try {
     const resultados = await sincronizarGpsTodas();
 
+    // Los EVENTOS DE SEGURIDAD de las cámaras del cliente van en la MISMA
+    // corrida — mismo proveedor, misma credencial, misma cadencia; un cron
+    // aparte duplicaría las 8,640 invocaciones/mes por nada (la lección de
+    // COSTO-VERCEL-50K). Un evento grave (crash/volcadura) abre el expediente
+    // de asistencia y avisa al jefe ANTES de que el chofer pueda escribir.
+    const eventos = await sincronizarEventosTodas(httpReal);
+
     const conError = resultados.filter((r) => r.error);
     const guardadas = resultados.reduce((s, r) => s + r.guardadas, 0);
     const huerfanas = resultados.reduce((s, r) => s + r.huerfanas, 0);
+    const eventosConError = eventos.filter((r) => r.error && !r.sinPermiso);
+    const eventosGuardados = eventos.reduce((s, r) => s + r.guardados, 0);
+    const disparos = eventos.reduce((s, r) => s + r.disparos, 0);
 
     // Las huérfanas no son un error de la corrida, pero tampoco son ruido: son
     // camiones que el proveedor reporta y que ninguna unidad reclama. Van en el
-    // cuerpo para que se vean desde el panel sin abrir los logs.
+    // cuerpo para que se vean desde el panel sin abrir los logs. Lo mismo el
+    // `sinPermisoEventos`: la credencial sirve para posiciones pero no trae el
+    // scope de eventos — el dueño tiene que enterarse de que sus cámaras
+    // detectan cosas que Likida no puede ver.
     const cuerpo = {
       corrio: true,
       flotas: resultados.length,
       guardadas,
       huerfanas,
       conError: conError.length,
+      eventos: {
+        flotas: eventos.length,
+        guardados: eventosGuardados,
+        disparosAsistencia: disparos,
+        sinPermiso: eventos.filter((r) => r.sinPermiso).map((r) => ({ tenantId: r.tenantId, proveedor: r.proveedor })),
+        conError: eventosConError.length,
+        errores: eventosConError.map((r) => ({ tenantId: r.tenantId, proveedor: r.proveedor, error: r.error })),
+      },
       // El detalle SIN la credencial: aquí solo viaja el id del proveedor.
       errores: conError.map((r) => ({ tenantId: r.tenantId, proveedor: r.proveedor, error: r.error })),
     };
 
-    if (conError.length > 0) {
+    if (conError.length > 0 || eventosConError.length > 0) {
       logger.warn('cron.gps.parcial', cuerpo);
-      await registrarLatido('gps', 'parcial', { flotas: resultados.length, conError: conError.length });
+      await registrarLatido('gps', 'parcial', { flotas: resultados.length, conError: conError.length + eventosConError.length });
     } else {
       logger.info('cron.gps.ok', cuerpo);
-      await registrarLatido('gps', 'ok', { flotas: resultados.length, guardadas });
+      await registrarLatido('gps', 'ok', { flotas: resultados.length, guardadas, disparos });
     }
     return NextResponse.json(cuerpo);
   } catch (e) {
