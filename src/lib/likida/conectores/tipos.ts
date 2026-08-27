@@ -183,6 +183,11 @@ export type Capacidad =
   | 'leer_recorrido'
   /** El catálogo de unidades del proveedor, para casarlo con `unidad`. */
   | 'leer_unidades'
+  /** Los eventos que las cámaras/sensores del PROVEEDOR DEL CLIENTE detectan
+   *  (colisión, volcadura, frenado brusco). Solo lectura: Likida no construye
+   *  cámaras — lee las del cliente y monta el circuito de asistencia encima.
+   *  Un evento grave abre expediente; el resto se registra para coaching. */
+  | 'leer_eventos_seguridad'
   // ── ERP y sistemas de operación ──
   /** Los viajes que la flota ya capturó en su TMS, para no recapturarlos. */
   | 'leer_viajes'
@@ -221,6 +226,7 @@ export const CAPACIDADES: readonly Capacidad[] = [
   'leer_posiciones',
   'leer_recorrido',
   'leer_unidades',
+  'leer_eventos_seguridad',
   'leer_viajes',
   'leer_catalogo_cuentas',
   'leer_proveedores',

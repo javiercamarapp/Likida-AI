@@ -968,6 +968,10 @@ export interface NuevaIncidencia {
   /** NULL = NO PREGUNTADO — jamás false por defecto (comentario de la 0198):
    *  un false aquí es un parte médico que solo el chofer puede dar. */
   hayLesionados?: boolean | null;
+  /** Coordenadas del incidente cuando la fuente las trae (el pin del chofer o
+   *  el evento de cámara del proveedor). Columnas de la 0198. */
+  lat?: number | null;
+  lng?: number | null;
 }
 
 /** Comprueba que un gasto sea del tenant, ANTES de enlazarlo a una incidencia.
@@ -1019,6 +1023,8 @@ export async function crearIncidencia(tenantId: string, i: NuevaIncidencia): Pro
     autorizacion: i.autorizacion ?? null,
     operador_id: i.operadorId ?? null,
     hay_lesionados: i.hayLesionados ?? null,
+    lat: i.lat ?? null,
+    lng: i.lng ?? null,
   }).select('id').single(), 'crearIncidencia');
   if (error) throw new Error(`crearIncidencia: ${error.message}`);
   const id = (data as { id?: unknown } | null)?.id;

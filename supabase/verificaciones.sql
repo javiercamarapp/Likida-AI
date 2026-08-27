@@ -9124,3 +9124,63 @@ begin
   raise exception 'GPS_POR_DIA_0205  dia20=%  dia21=%  fuera=%  tenant_ajeno=%  anon=%  auth=%  service=%   (esperado 1 / 2 / f / f / f / f / t)',
     dia20, dia21, fuera, tenant_ajeno, puede_anon, puede_auth, puede_service;
 end $$;
+
+-- ── 161. Eventos de cámara del cliente: idempotencia y doble candado (mig. 0203) ──
+-- `evento_seguridad_flota` guarda lo que las cámaras del CLIENTE detectan.
+-- La unicidad (tenant, proveedor, evento externo) es la idempotencia del
+-- poller de ventana traslapada: releer no duplica NI vuelve a disparar el 🚨.
+-- Y como toda tabla nueva con datos de flota: RLS deny-all + sin grants —
+-- anon/authenticated rebotan por privilegio (-1), no "0 filas".
+do $$
+declare
+  t uuid; v_op uuid; v_uni uuid; n_anon int; n_auth int;
+  duplicado_rebota boolean; unidad_ajena_rebota boolean;
+begin
+  -- (a) Sin grant directo.
+  begin
+    set local role anon;
+    select count(*) into n_anon from evento_seguridad_flota;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_anon := -1;
+  end;
+  begin
+    set local role authenticated;
+    select count(*) into n_auth from evento_seguridad_flota;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_auth := -1;
+  end;
+
+  -- (b) La idempotencia: el mismo (tenant, proveedor, evento) dos veces rebota.
+  insert into tenant (nombre) values ('ZZZ EVENTOS 0203') returning id into t;
+  insert into operador (tenant_id, nombre, telefono) values (t, 'P', '+520000000203') returning id into v_op;
+  insert into unidad (tenant_id, numero_economico) values (t, 'ECO-0203') returning id into v_uni;
+  insert into evento_seguridad_flota (tenant_id, proveedor, evento_id_externo, unidad_id, etiquetas, grave, ocurrido_en)
+    values (t, 'samsara', 'evt-0203-a', v_uni, array['Crash'], true, now());
+  begin
+    insert into evento_seguridad_flota (tenant_id, proveedor, evento_id_externo, unidad_id, etiquetas, grave, ocurrido_en)
+      values (t, 'samsara', 'evt-0203-a', v_uni, array['Crash'], true, now());
+    duplicado_rebota := false;
+  exception when unique_violation then
+    duplicado_rebota := true;
+  end;
+
+  -- (c) La FK compuesta (unidad_id, tenant_id): una unidad de OTRA flota no
+  --     se puede colgar aquí — el candado de la 0028/0145 en la tabla nueva.
+  declare
+    t2 uuid;
+  begin
+    insert into tenant (nombre) values ('ZZZ EVENTOS 0203 B') returning id into t2;
+    begin
+      insert into evento_seguridad_flota (tenant_id, proveedor, evento_id_externo, unidad_id, etiquetas, ocurrido_en)
+        values (t2, 'samsara', 'evt-0203-b', v_uni, array['Crash'], now());
+      unidad_ajena_rebota := false;
+    exception when foreign_key_violation then
+      unidad_ajena_rebota := true;
+    end;
+  end;
+
+  raise exception 'EVENTOS_CAMARA_0203  anon=%  authenticated=%  duplicado_rebota=%  unidad_ajena_rebota=%   (esperado -1 / -1 / t / t)',
+    n_anon, n_auth, duplicado_rebota, unidad_ajena_rebota;
+end $$;
