@@ -54,6 +54,11 @@ export interface ViajeCcp {
   datosCliente: DatosClienteCcp;
   mercancias: MercanciaFila[];
   borrador: ResultadoBorrador;
+  /** Lo capturado tal cual (unidad, operador, CCP del viaje) — la fuente del
+   *  checklist Y del XML exportable (Fase D): el generador necesita los datos
+   *  crudos (permiso SICT, póliza RC, año del vehículo…) que el
+   *  `ComplementoBorrador` no acarrea porque el validador no los juzga. */
+  datos: DatosChecklist;
 }
 
 export interface EstadoCartaPorte {
@@ -168,6 +173,7 @@ function filaAViajeCcp(f: unknown, materiaExcluida: boolean): ViajeCcp {
     datosCliente,
     mercancias,
     borrador: armarBorrador(datos),
+    datos,
   };
 }
 

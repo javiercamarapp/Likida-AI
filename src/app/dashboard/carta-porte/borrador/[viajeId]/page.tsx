@@ -140,11 +140,29 @@ export default async function PaginaBorradorCcp({
             </ul>
           </>
         ) : b.fallas.length === 0 ? (
-          <p className="text-[12.5px]" style={{ color: 'var(--ok)' }}>
-            El borrador pasa las validaciones aritméticas y estructurales del Estándar CCP 3.1
-            (sección 8) que el PAC rechaza seguro. Peso bruto total: {numero(b.borrador.pesoBrutoTotal)} kg
-            · {numero(b.borrador.numTotalMercancias)} mercancía(s) · distancia {numero(b.borrador.totalDistRec)} km.
-          </p>
+          <div className="space-y-2">
+            <p className="text-[12.5px]" style={{ color: 'var(--ok)' }}>
+              El borrador pasa las validaciones aritméticas y estructurales del Estándar CCP 3.1
+              (sección 8) que el PAC rechaza seguro. Peso bruto total: {numero(b.borrador.pesoBrutoTotal)} kg
+              · {numero(b.borrador.numTotalMercancias)} mercancía(s) · distancia {numero(b.borrador.totalDistRec)} km.
+            </p>
+            {/* FASE D (export): el XML solo se ofrece con el borrador validado —
+                la ruta vuelve a validar de todos modos (fail-closed doble). */}
+            <p className="print:hidden">
+              <a
+                href={`/api/export/carta-porte-xml${sufijoTenant(sp) ? `${sufijoTenant(sp)}&` : '?'}viaje=${v.viajeId}`}
+                className="inline-block text-[12.5px] font-medium px-3 py-1.5 rounded-lg hairline hover:opacity-80"
+                style={{ color: 'var(--marca)' }}
+              >
+                Descargar XML para timbrar ↓
+              </a>
+              <span className="block text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
+                Este XML se timbra en tu facturador — Likida no timbra. Lo que el archivo no trae
+                (sello, importes del flete, datos del emisor) lo completa tu facturador; el propio
+                archivo lo lista en su encabezado.
+              </span>
+            </p>
+          </div>
         ) : (
           <>
             <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>

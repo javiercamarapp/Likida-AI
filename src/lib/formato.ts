@@ -307,3 +307,31 @@ export function fechaHoraMx(iso?: string | null): string {
     timeZone: TZ_MX,
   });
 }
+
+/**
+ * Fecha-hora en el formato del SAT (`AAAA-MM-DDThh:mm:ss`, sin zona), en hora
+ * de México. Es el formato de `FechaHoraSalidaLlegada` del complemento Carta
+ * Porte y de `Fecha` del CFDI: el estándar NO lleva offset — la zona la da el
+ * código postal del emisor, y para una flota mexicana esa hora es la de
+ * `TZ_MX` (fijo UTC−6 desde 2022, ver `OFFSET_MX`).
+ *
+ * Vive aquí y no en carta_porte_xml.ts por el guardia de fechas de
+ * formato.test.ts: toda conversión a hora de México pasa por este archivo,
+ * o dos pantallas terminan afirmando dos horas para el mismo instante.
+ *
+ * `null` para entrada inválida — el llamador decide si eso es faltante o
+ * error; jamás se inventa una fecha.
+ */
+export function fechaHoraSat(iso: string): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const partes = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: TZ_MX,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    }).formatToParts(d).map((p) => [p.type, p.value]),
+  );
+  // `h23` explícito por la misma razón que fechaHoraMx: "24:00" no existe.
+  return `${partes.year}-${partes.month}-${partes.day}T${partes.hour}:${partes.minute}:${partes.second}`;
+}
