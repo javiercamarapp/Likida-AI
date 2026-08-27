@@ -19,6 +19,8 @@ import {
   getGastoPorSemanaSeries, getLiquidadoPorSemanaSeries, getTopRutasPorGastoSeries,
 } from '@/lib/likida/analytics';
 import { getConfig } from '@/lib/likida/config';
+import { getEstadoCartaPorte } from '@/lib/likida/carta_porte_datos';
+import { NORMAS, esVinculante } from '@/lib/likida/normas/indice';
 import { resolverPeriodo, getGastosFiscales, resumirPerdidas, opcionesDe } from '@/lib/likida/fiscal';
 import { ahoraMs } from '@/lib/saludo';
 import { hoyMx } from '@/lib/formato';
@@ -272,5 +274,48 @@ registerTool('duplicados_detectados', {
   handler: async (_a, ctx) => {
     const as = await detectarAnomalias(ctx.tenantId);
     return { total: as.length, moneda: 'MXN', anomalias: as.slice(0, 10) };
+  },
+});
+
+registerTool('consultar_carta_porte', {
+  schema: {
+    type: 'function',
+    function: {
+      name: 'consultar_carta_porte',
+      description: 'El semáforo de Carta Porte de los viajes en curso: si cada uno necesita el complemento (o qué falta declarar), y cuántos de los 37 datos del Apéndice 3 faltan por responsable. SOLO LECTURA — las declaraciones se firman en el panel o por WhatsApp, nunca desde el chat.',
+      parameters: SIN_PARAMS,
+    },
+  },
+  handler: async (_a, ctx) => {
+    const e = await getEstadoCartaPorte(ctx.tenantId);
+    const n = NORMAS['rmf-2026-2.7.7'];
+    return {
+      total_en_curso: e.total,
+      evaluados: e.viajes.length,
+      // Declarado en el PERFIL, nunca inferido; null = sin declarar.
+      hazmat_declarado: e.hazmatDeclarado,
+      transporte_dedicado_declarado: e.dedicadoDeclarado,
+      // Recortado a lo que una respuesta usa: el veredicto con fundamento y
+      // los conteos. El detalle campo por campo vive en el panel.
+      viajes: e.viajes.map((v) => ({
+        folio: v.folio,
+        ruta: v.origen && v.destino ? `${v.origen} → ${v.destino}` : null,
+        necesita_complemento: v.decision.necesita,
+        fundamento: v.decision.fundamento,
+        pendientes_para_decidir: v.decision.pendientes,
+        faltan_datos_transportista: v.checklist.faltanTransportista,
+        faltan_datos_cliente: v.checklist.faltanCliente,
+        borrador_armable: v.borrador.borrador !== null,
+        fallas_validador: v.borrador.fallas.map((f) => f.campo),
+      })),
+      advertencia: 'Likida no timbra ni afirma exenciones: un «no necesita» requiere la declaración firmada de la flota (el veredicto de arriba ya la refleja si existe).',
+      fundamentos: [{
+        norma_id: n.id,
+        cita: n.citas[0],
+        jerarquia: n.jerarquia,
+        verificada: n.estado !== 'sin_verificar',
+        vinculante: esVinculante(n.jerarquia),
+      }],
+    };
   },
 });

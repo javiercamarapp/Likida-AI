@@ -3505,7 +3505,9 @@ begin
 
   begin
     insert into agente_notificacion_config (tenant_id, agente) values (t, 'liquidacionn');
-  exception when check_violation then agente_malo := true;
+  -- Desde la 0204 el candado es una FK a `agente_definicion` (la mudanza
+  -- CHECK → FK del bloque 162); la garantía es la misma — el typo rebota.
+  exception when check_violation or foreign_key_violation then agente_malo := true;
   end;
 
   begin
@@ -9183,4 +9185,82 @@ begin
 
   raise exception 'EVENTOS_CAMARA_0203  anon=%  authenticated=%  duplicado_rebota=%  unidad_ajena_rebota=%   (esperado -1 / -1 / t / t)',
     n_anon, n_auth, duplicado_rebota, unidad_ajena_rebota;
+end $$;
+
+-- ── 162. La mercancía de Carta Porte no cruza flotas, y el catálogo de agentes manda (mig. 0204) ──
+-- Tres garantías que solo la base demuestra: (a) la FK COMPUESTA de
+-- `viaje_mercancia` rebota una mercancía colgada del viaje de OTRA flota
+-- aunque el insert traiga un viaje_id real; (b) los CHECKs de captura
+-- (cantidad > 0, clave de 8 dígitos, CP de 5) rebotan basura antes de que un
+-- borrador la tome por dato; (c) la mudanza CHECK → FK de las notificaciones
+-- deja entrar a `carta_porte` (sembrado por la 0204) y rebota a un agente que
+-- NADIE declaró en `agente_definicion`. De paso, el doble candado de permisos:
+-- ni anon ni authenticated tocan `viaje_mercancia` directo.
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; va uuid; vb uuid;
+  fk_cruzada boolean; cantidad_cero_rebota boolean; clave_corta_rebota boolean;
+  cp_formato_rebota boolean; carta_porte_entra boolean; no_declarado_rebota boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ CCP A 0204') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ CCP B 0204') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'A', '+520000002041') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'B', '+520000002042') returning id into ob;
+  insert into viaje (tenant_id, operador_id) values (ta, oa) returning id into va;
+  insert into viaje (tenant_id, operador_id) values (tb, ob) returning id into vb;
+
+  -- (a) La flota A no puede colgar mercancía del viaje de la flota B.
+  begin
+    insert into viaje_mercancia (tenant_id, viaje_id, descripcion, cantidad)
+      values (ta, vb, 'ajena', 1);
+    fk_cruzada := false;
+  exception when foreign_key_violation then
+    fk_cruzada := true;
+  end;
+
+  -- La legítima sí entra (si esto truena, el bloque entero truena — bien).
+  insert into viaje_mercancia (tenant_id, viaje_id, descripcion, bienes_transp, cantidad, clave_unidad, peso_kg, material_peligroso)
+    values (ta, va, 'Cajas de aguacate', '50301700', 120, 'XBX', 1200, false);
+
+  -- (b) Los CHECKs de captura.
+  begin
+    insert into viaje_mercancia (tenant_id, viaje_id, descripcion, cantidad) values (ta, va, 'cero', 0);
+    cantidad_cero_rebota := false;
+  exception when check_violation then
+    cantidad_cero_rebota := true;
+  end;
+  begin
+    insert into viaje_mercancia (tenant_id, viaje_id, descripcion, bienes_transp, cantidad) values (ta, va, 'clave corta', '1234', 1);
+    clave_corta_rebota := false;
+  exception when check_violation then
+    clave_corta_rebota := true;
+  end;
+  begin
+    update viaje set ccp_origen_cp = '6400' where id = va;
+    cp_formato_rebota := false;
+  exception when check_violation then
+    cp_formato_rebota := true;
+  end;
+
+  -- (c) La FK de notificaciones: el declarado entra, el inventado no.
+  begin
+    insert into agente_notificacion_config (tenant_id, agente) values (ta, 'carta_porte');
+    carta_porte_entra := true;
+  exception when foreign_key_violation then
+    carta_porte_entra := false;
+  end;
+  begin
+    insert into agente_notificacion_config (tenant_id, agente) values (ta, 'agente_inventado');
+    no_declarado_rebota := false;
+  exception when foreign_key_violation then
+    no_declarado_rebota := true;
+  end;
+
+  cerrado := not has_table_privilege('anon', 'public.viaje_mercancia', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.viaje_mercancia', 'INSERT')
+    and has_table_privilege('service_role', 'public.viaje_mercancia', 'SELECT');
+
+  raise exception 'CCP_MERCANCIA_0204  fk_cruzada=%  cantidad_cero_rebota=%  clave_corta_rebota=%  cp_formato_rebota=%  carta_porte_entra=%  no_declarado_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t)',
+    fk_cruzada, cantidad_cero_rebota, clave_corta_rebota, cp_formato_rebota, carta_porte_entra, no_declarado_rebota, cerrado;
 end $$;

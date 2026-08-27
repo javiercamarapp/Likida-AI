@@ -96,10 +96,16 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // de ruta ("¿pisa federal?") es del jefe de tráfico — la regla 2.7.7.2.1
   // exige plena certeza de quien CONOCE la ruta, no del que ve el dinero.
   '/dashboard/carta-porte': 'operacion',
-  // El Agente de Conductores (F4) es el ÚNICO agente de operación: no toca
-  // un peso y su usuario diario es el jefe de tráfico. Sus hermanos
+  // El Agente de Conductores (F4) es agente de operación: no toca un peso y
+  // su usuario diario es el jefe de tráfico. Sus hermanos
   // (liquidación/facturas/cobranza) siguen en dinero.
   '/dashboard/agentes/conductores': 'operacion',
+  // El Agente de Carta Porte (Fases B-C, 25-ago-2026): mismo criterio que su
+  // pantalla /dashboard/carta-porte — cero pesos, y la declaración de ruta es
+  // del jefe de tráfico. La página del borrador
+  // (/dashboard/carta-porte/borrador/<uuid>) es dinámica y se gatea con la
+  // llave de su padre, como /dashboard/<uuid> gatea su área a mano.
+  '/dashboard/agentes/carta-porte': 'operacion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
   // Notificaciones (14-ago-2026) — el "alertas primero". Su VISIBILIDAD la
