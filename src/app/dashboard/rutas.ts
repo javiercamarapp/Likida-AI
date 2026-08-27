@@ -6,6 +6,7 @@ import {
   UsersRound,
   ShieldCheck,
   Siren,
+  RadioTower,
 } from 'lucide-react';
 
 /**
@@ -63,6 +64,9 @@ export const OPERACION: Item[] = [
   // Fase 5: el directorio que el escalamiento de emergencias consulta — la
   // grúa, la póliza con su 800 de siniestros y los contactos del operador.
   { href: '/dashboard/emergencias', nombre: 'Emergencias', Icono: Siren },
+  // Capa F del agente de ayuda en ruta: las incidencias vivas con su timeline
+  // y los botones de intervención — el humano siempre puede tomar el control.
+  { href: '/dashboard/asistencia', nombre: 'Mesa de control', Icono: RadioTower },
 ];
 
 export const DINERO_FISCAL: Item[] = [

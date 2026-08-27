@@ -181,6 +181,10 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // operador. Es `operacion` — el jefe de tráfico es quien conoce a los
   // proveedores de carretera y quien captura; el dueño también entra.
   '/dashboard/emergencias': 'operacion',
+  // Mesa de control (Capa F): las incidencias de asistencia vivas y los
+  // botones de intervención. `operacion` por la misma razón que Emergencias —
+  // quien decide sobre una grúa a las 3 a.m. es el jefe de tráfico o el dueño.
+  '/dashboard/asistencia': 'operacion',
   '/dashboard/llaves-api': 'administracion',
   '/dashboard/usuarios': 'administracion',
   '/dashboard/politicas': 'administracion',
