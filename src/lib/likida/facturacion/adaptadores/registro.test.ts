@@ -83,9 +83,24 @@ describe('registrarPortales', () => {
 
     const r = registrarPortales({ flota: FLOTA_A, abrirPagina });
 
-    expect(r.registrados).toEqual(['capufe']);
-    expect(r.problemas).toEqual([]);
-    expect(portalesVivos('tenant-a')).toEqual(['capufe']);
+    // Se compara contra `portalesOperables()` y NO contra una lista escrita a
+    // mano ni contra `PORTALES_CONOCIDOS`, y las dos cosas importan:
+    //
+    //  · No una lista literal, porque la tabla ya no es una entrada — es
+    //    CAPUFE más los guiones declarativos de `portales.ts` —, y escribirla
+    //    a mano obligaría a tocar esta prueba cada vez que alguien agregue una
+    //    tabla de selectores, que es justo el trabajo que se volvió barato.
+    //  · No `PORTALES_CONOCIDOS`, porque ese es «qué sé hacer» e incluye los
+    //    guiones que todavía no se han medido contra su portal. Esos quedan
+    //    como CENTINELA a propósito (ver `bloqueado` en la TABLA): el ticket
+    //    sigue yendo con el encargado en vez de quedarse en una cola donde
+    //    nadie lo va a facturar. Por eso salen en `problemas` y no en
+    //    `registrados`.
+    expect(r.registrados).toEqual([...portalesOperables()]);
+    expect(portalesVivos('tenant-a')).toEqual([...portalesOperables()]);
+    // Los que no se han medido dicen POR QUÉ, uno por uno.
+    expect(r.problemas).toHaveLength(PORTALES_CONOCIDOS.length - portalesOperables().length);
+    for (const p of r.problemas) expect(p).toContain('NO se ha medido');
     expect(portalesAutomatizados('tenant-a')).toContain('capufe');
     expect(adaptadorDe('tenant-a', 'capufe')?.portal).toContain('facturacionrapida');
   });
@@ -196,12 +211,12 @@ describe('exigirTenantRegistrado', () => {
 describe('conPortales', () => {
   it('registra, corre y desregistra', async () => {
     const dentro = await conPortales({ flota: FLOTA_A, abrirPagina }, async (registro) => {
-      expect(registro.registrados).toEqual(['capufe']);
+      expect(registro.registrados).toEqual([...portalesOperables()]);
       expect(tenantRegistrado()).toBe('tenant-a');
       return portalesVivos('tenant-a');
     });
 
-    expect(dentro).toEqual(['capufe']);
+    expect(dentro).toEqual([...portalesOperables()]);
     expect(tenantRegistrado()).toBeNull();
     expect(portalesVivos('tenant-a')).toEqual([]);
   });
@@ -230,7 +245,7 @@ describe('conPortales', () => {
     await conPortales({ flota: FLOTA_A, abrirPagina }, async () => {});
 
     expect(portalesVivos('tenant-a')).toEqual([]);
-    expect(portalesVivos('tenant-b')).toEqual(['capufe']);
+    expect(portalesVivos('tenant-b')).toEqual([...portalesOperables()]);
   });
 
   it('después del lote, facturar falla CERRADO y dice qué falta', async () => {
@@ -264,7 +279,15 @@ describe('el piloto de visión: FACTURACION_PILOTO=si', () => {
   it('apagado por default: portalesOperables() es exactamente PORTALES_CONOCIDOS', () => {
     vi.stubEnv('FACTURACION_PILOTO', '');
     expect(pilotoHabilitado()).toBe(false);
-    expect(portalesOperables()).toEqual(PORTALES_CONOCIDOS);
+    // Con el piloto apagado, `portalesOperables()` son los portales ESCRITOS
+    // que de verdad pueden emitir — que ya NO es lo mismo que
+    // `PORTALES_CONOCIDOS`. La rama de portales declarativos abrió esa brecha
+    // a propósito: un guion cuyos selectores nunca se midieron se CONOCE (está
+    // en la tabla, se puede ensayar, el panel lo cuenta) pero no OPERA, porque
+    // contarlo como operable le quitaría el ticket al encargado para no
+    // facturarlo nunca. Ver `bloqueado` en la TABLA de registro.ts.
+    expect(portalesOperables()).toEqual(['capufe']);
+    expect(PORTALES_CONOCIDOS.length).toBeGreaterThan(portalesOperables().length);
   });
 
   it('cualquier valor que no sea "si" exacto se trata como apagado', () => {
