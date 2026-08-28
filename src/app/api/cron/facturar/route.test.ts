@@ -1027,7 +1027,8 @@ describe('cuando la base no contesta', () => {
 //   2. al terminar bien se vuelve a guardar (cookies rotadas);
 //   3. si el portal nos sacó, la sesión se APAGA en la misma corrida — no en
 //      la siguiente, que volvería a estrellarse con la misma cookie muerta;
-//   4. lo que el pre-cheque de EDAD descartó se apaga sin abrir navegador.
+//   4. lo que el pre-cheque de EDAD descartó NO se apaga: el pre-cheque decide
+//      si vale la pena intentarla, jamás si está muerta (c7-9).
 // ═══════════════════════════════════════════════════════════════════════════
 describe('la sesión persistente de portales', () => {
   const ESTADO = JSON.stringify({ cookies: [{ name: 's', value: '1', domain: 'capufe.gob.mx', path: '/' }], origins: [] });
@@ -1094,11 +1095,59 @@ describe('la sesión persistente de portales', () => {
     expect(arg.portales.size).toBe(0);
   });
 
-  it('lo que el pre-cheque de EDAD descartó se apaga sin gastar un navegador', async () => {
-    vigentes = { porComercio: new Map(), storageState: null, vencidasPorEdad: ['capufe'] };
+  // ═════════════════════════════════════════════════════════════════════════
+  // c7-9 · LAS PRUEBAS QUE FALTABAN: «esta sesión caducó» ≠ «esta vuelta no
+  // había trabajo».
+  //
+  // Hasta el ciclo 7 aquí vivía una sola prueba —«lo que el pre-cheque de EDAD
+  // descartó se apaga sin gastar un navegador»— que CONSAGRABA el bug: usaba
+  // el pre-cheque de edad como veredicto, que es exactamente lo que el
+  // encabezado de `sesion_portal.ts` prohíbe. Y lo probaba con el portal que
+  // SÍ tenía tickets, así que nunca vio el caso real: el portal ocioso.
+  // ═════════════════════════════════════════════════════════════════════════
+
+  it('c7-9 · una sesión vieja de un portal SIN tickets esta vuelta NO se destruye', async () => {
+    // La flota tiene G500 y La Gas vinculados y esta vuelta solo llegaron
+    // tickets de CAPUFE. `porPortal` se arma desde la cola de gastos y
+    // `refrescarSesiones` solo toca los portales que tuvieron trabajo, así que
+    // los otros dos envejecen sin que nadie los use. Antes, a los 31 minutos
+    // entraban en `vencidasPorEdad` y SE DESTRUÍAN LAS DOS — cada media hora,
+    // para siempre, con su «tu portal caducó, vuelve a entrar» al contralor.
+    // La sesión la vincula una persona pasando un captcha: es lo más caro que
+    // tiene este circuito, y se tiraba sola por no haber tenido trabajo.
+    vigentes = { porComercio: new Map(), storageState: null, vencidasPorEdad: ['g500', 'la_gas'] };
+
     await pedir();
+
+    expect(invalidarVinculo, 'nadie intentó esas sesiones: no hay veredicto que sellar').not.toHaveBeenCalled();
+  });
+
+  it('c7-9 · tampoco se apaga la del portal CON tickets antes de intentarla: el veredicto lo da el portal', async () => {
+    // El lote corre y el portal NO nos sacó (`vinculo` ausente). Que la sesión
+    // guardada fuera vieja no autoriza a matarla: la única prueba de que una
+    // sesión murió es que el portal la rechace.
+    vigentes = { porComercio: new Map(), storageState: null, vencidasPorEdad: ['capufe'] };
+
+    await pedir();
+
+    expect(invalidarVinculo).not.toHaveBeenCalled();
+  });
+
+  it('c7-9 · cuando el portal SÍ nos manda al login, entonces sí se apaga — con la clase REAL', async () => {
+    vigentes = { porComercio: new Map(), storageState: null, vencidasPorEdad: ['capufe'] };
+    facturarLoteAlVuelo.mockImplementationOnce(async (a: { gastoIds: string[] }) => ({
+      porGasto: a.gastoIds.map((gastoId) => ({ gastoId, intentado: true, facturado: false, motivo: 'bloqueado' })),
+      facturados: 0, bloqueados: [],
+      vinculo: { clase: 'requiere_vinculacion' as const, motivo: 'el portal enseña la pantalla de login' },
+    }));
+
+    await pedir();
+
+    // La clase la dice el intento, no el reloj: `requiere_vinculacion` es lo
+    // que dispara el re-login de la 0233, y `sesion_caducada` inventada por el
+    // pre-cheque lo habría tapado.
     expect(invalidarVinculo).toHaveBeenCalledWith(expect.objectContaining({
-      comercio: 'capufe', clase: 'sesion_caducada',
+      comercio: 'capufe', clase: 'requiere_vinculacion',
     }));
   });
 });

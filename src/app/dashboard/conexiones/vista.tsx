@@ -1,4 +1,4 @@
-import { Plug, CircleCheck, CircleAlert, CircleDashed, FlaskConical } from 'lucide-react';
+import { Plug, CircleCheck, CircleAlert, CircleDashed, CircleHelp, FlaskConical } from 'lucide-react';
 import type { Conector } from '@/lib/likida/conexiones';
 import { BarraPagina } from '../resumen-visual';
 
@@ -6,6 +6,12 @@ const ESTADO: Record<Conector['estado'], { rotulo: string; fg: string; bg: strin
   listo: { rotulo: 'Listo', fg: 'var(--ok)', bg: 'var(--okbg)', Icono: CircleCheck },
   incompleto: { rotulo: 'Incompleto', fg: 'var(--warn)', bg: 'var(--warnbg)', Icono: CircleAlert },
   sin_configurar: { rotulo: 'Sin conectar', fg: 'var(--muted)', bg: 'var(--canvas)', Icono: CircleDashed },
+  // «No se pudo medir» tiene rótulo y tono PROPIOS (c7-28). Pintarlo con el
+  // gris de «Sin conectar» decía sobre la flota lo que solo se sabía de la
+  // consulta, y mandaba a recapturar credenciales que ya existían. Va en
+  // ámbar y con el icono de la pregunta, no con el del hueco: aquí no falta
+  // nada, falta la lectura.
+  no_medible: { rotulo: 'No se pudo medir', fg: 'var(--warn)', bg: 'var(--warnbg)', Icono: CircleHelp },
   ensayo: { rotulo: 'En ensayo', fg: 'var(--warn)', bg: 'var(--warnbg)', Icono: FlaskConical },
 };
 

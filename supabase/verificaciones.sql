@@ -12168,3 +12168,153 @@ begin
     prefijo_indexado, abono_a_cancelada_rebota, saldo_de_cancelada_sigue,
     set_null_por_columna, fk_rep_tres_columnas;
 end $$;
+
+-- ── 193. La correctiva del ciclo 7: el top de plazas contado ENTERO y el sello de peaje como reserva (mig. 0238) ──
+-- Los bloques 189-192 los toman las otras ramas de esta ola (ingeniería,
+-- dirección+leads, SAT y portal de pago); ésta toma el 193.
+--
+-- Lo que SOLO la base puede demostrar de la 0238:
+--
+--  (a) EL TOP-5 ES EL TOP-5. Es el hallazgo c7-4 escrito como prueba: se
+--      siembran ~1,000 prospectos donde la plaza REALMENTE más grande —Nuevo
+--      Laredo— se inserta AL FINAL, así que una lectura truncada por orden
+--      físico se la pierde. Eso es exactamente lo que pasaba: el motor traía
+--      5,000 de 33,071 filas sin `order` y Nuevo Laredo, Manzanillo y Puebla
+--      desaparecían del parte que Javier le enseña a un gremio, mientras
+--      entraban tres plazas que no eran del top. La función cuenta EN LA BASE,
+--      así que el orden de inserción no puede cambiar el resultado — y un
+--      `.order()` del lado del cliente no habría arreglado nada: ordenar una
+--      muestra sesgada da una muestra sesgada ordenada.
+--  (b) EL CRITERIO DE «VIVO» ES EL DEL PARTE. Un duplicado (`duplicado_de`
+--      puesto) y un `perdido` NO cuentan — contarlos inflaría el censo que el
+--      parte afirma, y aquí los dos son de una plaza que si contara ganaría.
+--  (c) LOS SIN CIUDAD SE DICEN, NO SE REPARTEN. Un prospecto sin ciudad (NULL
+--      o cadena de puros espacios) no vive en ninguna plaza; sumarlo a la más
+--      grande sería inventar dónde está.
+--  (d) EL EMPATE ES DETERMINISTA (por nombre de ciudad, ascendente): dos
+--      corridas sobre el mismo censo tienen que producir el MISMO parte, o el
+--      «material del acercamiento» cambiaría de orden sin que nada cambiara.
+--  (e) `p_top` RECORTA DE VERDAD, y un `p_top` absurdo (0 o NULL) ni revienta
+--      ni devuelve el censo entero por accidente.
+--  (f) EL DOBLE CANDADO DE LA FUNCIÓN: ni `anon` ni `authenticated` la pueden
+--      ejecutar, y `service_role` sí. Lee el pipeline comercial de Likida
+--      ENTERO, sin filtro de flota: una sesión de navegador no tiene por qué
+--      poder contarlo.
+--  (g) EL SELLO DEL AVISO DE PEAJE ES UNA RESTRICCIÓN, NO UN `if` (c7-17). La
+--      PK `(tenant_id, periodo, umbral)` rebota la segunda reserva: es lo que
+--      hace que de dos invocaciones solapadas del cron solo UNA mande el
+--      WhatsApp. Antes se preguntaba, se mandaba y se sellaba al final, y el
+--      mensaje duplicado ya estaba en el teléfono cuando el 23505 llegaba.
+--  (h) Y SOLTAR LA RESERVA LA DEJA LIBRE: borrar la fila permite volver a
+--      reservar el MISMO (flota, mes, umbral). Sin esto, un envío fallido
+--      enterraría el aviso del mes — y el umbral es un día exacto que no
+--      vuelve, porque PASE extingue el derecho a facturar el último día del
+--      mes en curso.
+--  (i) DOS UMBRALES DEL MISMO MES SON DOS AVISOS LEGÍTIMOS (el de «faltan 7» y
+--      el de «hoy vence»): el segundo entra, no rebota.
+do $$
+declare
+  mapa jsonb;
+  top1 text; top1_n bigint; top2 text; empate_1 text; empate_2 text;
+  total bigint; sin_ciudad bigint; cuantas_plazas int;
+  top_cero int; top_nulo int;
+  cerrado boolean;
+  ta uuid; original uuid;
+  reserva_repetida_rebota boolean; reserva_tras_soltar_entra boolean;
+  otro_umbral_entra boolean;
+  i int;
+begin
+  -- Tijuana va PRIMERO y con menos; Nuevo Laredo va al FINAL y con más.
+  for i in 1..300 loop
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 tij ' || i, 'Tijuana');
+  end loop;
+  for i in 1..100 loop
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 gdl ' || i, 'Guadalajara');
+  end loop;
+  -- (c) Sin ciudad: NULL y cadena de puros espacios. Ninguno vive en una plaza.
+  for i in 1..50 loop
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 nada ' || i, null);
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 blanco ' || i, '   ');
+  end loop;
+  -- (d) Empate exacto entre dos plazas: el desempate tiene que ser por nombre.
+  for i in 1..7 loop
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 emp_b ' || i, 'Bbb');
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 emp_a ' || i, 'Aaa');
+  end loop;
+  -- (b) Perdidos y duplicados de una plaza que, si contaran, ganaría.
+  for i in 1..400 loop
+    insert into prospecto (empresa, ciudad, estado) values ('ZZZ VERIF 0238 perd ' || i, 'Monterrey', 'perdido');
+  end loop;
+  insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 mty original', 'Monterrey')
+    returning id into original;
+  for i in 1..400 loop
+    insert into prospecto (empresa, ciudad, duplicado_de) values ('ZZZ VERIF 0238 dup ' || i, 'Monterrey', original);
+  end loop;
+  -- El último en entrar, y el más grande de verdad. Con espacios de sobra: la
+  -- misma plaza escrita con holgura no puede volverse otra plaza.
+  for i in 1..500 loop
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 nvl ' || i, ' Nuevo Laredo ');
+  end loop;
+
+  mapa := public.prospecto_mapa_ciudades(5);
+  top1       := mapa -> 'top' -> 0 ->> 'ciudad';
+  top1_n     := (mapa -> 'top' -> 0 ->> 'n')::bigint;
+  top2       := mapa -> 'top' -> 1 ->> 'ciudad';
+  total      := (mapa ->> 'total')::bigint;
+  sin_ciudad := (mapa ->> 'sin_ciudad')::bigint;
+  cuantas_plazas := jsonb_array_length(mapa -> 'top');
+
+  -- (d) El empate, mirado sobre el top completo: Aaa antes que Bbb.
+  mapa := public.prospecto_mapa_ciudades(50);
+  select c ->> 'ciudad' into empate_1
+    from jsonb_array_elements(mapa -> 'top') with ordinality t(c, orden)
+    where c ->> 'ciudad' in ('Aaa', 'Bbb') order by orden limit 1;
+  select c ->> 'ciudad' into empate_2
+    from jsonb_array_elements(mapa -> 'top') with ordinality t(c, orden)
+    where c ->> 'ciudad' in ('Aaa', 'Bbb') order by orden offset 1 limit 1;
+
+  -- (e) Un tope absurdo no revienta ni devuelve el censo entero.
+  top_cero := jsonb_array_length(public.prospecto_mapa_ciudades(0) -> 'top');
+  top_nulo := jsonb_array_length(public.prospecto_mapa_ciudades(null) -> 'top');
+
+  -- (f) El doble candado de la función.
+  cerrado := not has_function_privilege('anon', 'public.prospecto_mapa_ciudades(integer)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.prospecto_mapa_ciudades(integer)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.prospecto_mapa_ciudades(integer)', 'EXECUTE');
+
+  -- (g) La reserva del sello: la PK arbitra la carrera.
+  insert into tenant (nombre) values ('ZZZ VERIF 0238') returning id into ta;
+  insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+    values (ta, date '2026-09-01', 7, 12);
+  begin
+    insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+      values (ta, date '2026-09-01', 7, 12);
+    reserva_repetida_rebota := false;
+  exception when unique_violation then
+    reserva_repetida_rebota := true;
+  end;
+
+  -- (h) Soltarla la deja libre para el reintento de la corrida siguiente.
+  delete from peaje_cierre_aviso where tenant_id = ta and periodo = date '2026-09-01' and umbral = 7;
+  begin
+    insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+      values (ta, date '2026-09-01', 7, 12);
+    reserva_tras_soltar_entra := true;
+  exception when others then
+    reserva_tras_soltar_entra := false;
+  end;
+
+  -- (i) El otro umbral del mismo mes es otro aviso, y entra.
+  begin
+    insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+      values (ta, date '2026-09-01', 0, 12);
+    otro_umbral_entra := true;
+  exception when others then
+    otro_umbral_entra := false;
+  end;
+
+  raise exception 'CORRECTIVA_0238  top1=%  top1_n=%  top2=%  total=%  sin_ciudad=%  plazas=%  empate_1=%  empate_2=%  top_cero=%  top_nulo=%  cerrado=%  reserva_repetida_rebota=%  reserva_tras_soltar_entra=%  otro_umbral_entra=%   (esperado Nuevo Laredo / 500 / Tijuana / 1015 / 100 / 5 / Aaa / Bbb / 0 / 5 / t / t / t / t)',
+    top1, top1_n, top2, total, sin_ciudad, cuantas_plazas, empate_1, empate_2,
+    top_cero, top_nulo, cerrado,
+    reserva_repetida_rebota, reserva_tras_soltar_entra, otro_umbral_entra;
+end $$;

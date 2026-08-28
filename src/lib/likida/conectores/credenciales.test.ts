@@ -22,6 +22,10 @@ type Registro = {
   eq: Array<[string, unknown]>;
   select: string | null;
   orden: Array<[string, unknown]>;
+  /** Los `.not(col, op, valor)` de la consulta. Se registran —y no se ignoran
+   *  como hace el mock compartido del repo— porque de uno de ellos depende que
+   *  las filas `#sesion` del cofre no se pinten como credenciales (c7-21). */
+  not: Array<[string, string, unknown]>;
 };
 
 const llamadas: Registro[] = [];
@@ -35,7 +39,7 @@ const respuestas = new Map<string, { data: unknown; error: { message: string } |
 const respuestasPorOp = new Map<string, { data: unknown; error: { message: string } | null }>();
 
 function builder(tabla: string) {
-  const r: Registro = { tabla, op: null, payload: null, opts: null, eq: [], select: null, orden: [] };
+  const r: Registro = { tabla, op: null, payload: null, opts: null, eq: [], select: null, orden: [], not: [] };
   llamadas.push(r);
   const respuesta = () => respuestasPorOp.get(`${tabla}:${r.op}`)
     ?? respuestas.get(tabla) ?? { data: null, error: null };
@@ -45,6 +49,7 @@ function builder(tabla: string) {
   b.update = (p: unknown) => { r.op = 'update'; r.payload = p; return b; };
   b.select = (cols: string) => { r.select = cols; if (!r.op) r.op = 'select'; return b; };
   b.eq = (c: string, v: unknown) => { r.eq.push([c, v]); return b; };
+  b.not = (c: string, op: string, v: unknown) => { r.not.push([c, op, v]); return b; };
   b.order = (c: string, o: unknown) => { r.orden.push([c, o]); return b; };
   b.single = async () => respuesta();
   // `leerCredencial` usa `maybeSingle`: «no hay fila» tiene que poder llegar
@@ -62,7 +67,7 @@ vi.mock('@/lib/logger', () => ({ logger: logs }));
 
 const {
   guardarCredencial, listarCredenciales, desactivarCredencial,
-  leerCredencial, marcarProbada, probarCredencial,
+  leerCredencial, marcarProbada, probarCredencial, SUFIJO_SESION_PORTAL,
 } = await import('./credenciales');
 const { descifrar, cifrar } = await import('./cofre');
 const { DatoInvalido } = await import('../errores');
@@ -235,6 +240,42 @@ describe('listarCredenciales — lo cifrado no viaja al panel', () => {
   it('un error de lectura LANZA — no se disfraza de "no tienes credenciales"', async () => {
     respuestas.set('conector_credencial', { data: null, error: { message: 'fetch failed' } });
     await expect(listarCredenciales(TENANT)).rejects.toThrow(/listarCredenciales: fetch failed/);
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // c7-21 · LA PRUEBA QUE FALTABA: la sesión de un portal NO es una credencial.
+  //
+  // `seccion-credenciales.test.tsx` alimentaba la lista con filas fabricadas a
+  // mano; nadie metía una fila `#sesion` por el camino real. Por ahí se coló:
+  // en cuanto una flota vinculaba un portal, Conexiones pintaba un renglón
+  // fantasma «portal_facturacion:g500#sesion» con un botón **Desactivar** que
+  // SÍ funcionaba y apagaba la sesión del portal sin decirlo.
+  // ═════════════════════════════════════════════════════════════════════════
+
+  it('c7-21 · las filas `#sesion` no salen de aquí — ni por la consulta ni por el mapeo', async () => {
+    respuestas.set('conector_credencial', {
+      data: [
+        { conector_id: 'portal_facturacion:g500#sesion', pistas: {}, activo: true, probada_en: null, ultimo_error: null, creada_en: '2026-08-27T10:00:00Z' },
+        { conector_id: 'samsara', pistas: { token: '…argo' }, activo: true, probada_en: null, ultimo_error: null, creada_en: '2026-08-26T10:00:00Z' },
+      ],
+      error: null,
+    });
+
+    const r = await listarCredenciales(TENANT);
+
+    // (1) El filtro va en la BASE: lo que no viaja no se puede pintar.
+    const [sel] = toquesDeCredencial();
+    expect(sel.not).toContainEqual(['conector_id', 'like', '%#sesion']);
+    // (2) Y el cinturón sobre el tirante: aunque la fila llegue, no sale.
+    expect(r.map((c) => c.conectorId)).toEqual(['samsara']);
+  });
+
+  it('c7-21 · el sufijo declarado aquí es el MISMO con el que se guarda la sesión', async () => {
+    // Dos constantes en dos módulos que tienen que coincidir o el filtro deja
+    // de filtrar en silencio. Se comparan contra la función pública que las
+    // usa, no copiando el literal.
+    const { idSesion } = await import('../facturacion/sesion_portal');
+    expect(idSesion('portal_facturacion:g500')).toBe(`portal_facturacion:g500${SUFIJO_SESION_PORTAL}`);
   });
 });
 
@@ -416,6 +457,73 @@ describe('probarCredencial — el ciclo completo, sin red', () => {
     const r = await probarCredencial(TENANT, 'samsara', undefined, http);
     expect(r.ok).toBe(false);
     expect(r.detalle).toMatch(/NO dice nada sobre la credencial/);
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // c7-12 · LA PRUEBA QUE FALTABA: un fallo NUESTRO no se sella como un
+  // veredicto sobre la credencial del cliente.
+  //
+  // La prueba del 503 de aquí arriba solo miraba el TEXTO del `detalle`, nunca
+  // que la fila no se tocara — y no había ni un caso donde `http` lanzara. Por
+  // ahí se coló el bug: `marcarProbada` con `ok: false` escribe `probada_en:
+  // null`, así que un 503 o un timeout de VPN BORRABAN la fecha de la última
+  // verificación buena y pintaban el badge en «la última prueba FALLÓ», en
+  // rojo, como si el cliente hubiera hecho algo mal.
+  // ═════════════════════════════════════════════════════════════════════════
+
+  it('c7-12 · el 503 del proveedor NO toca la fila: `probada_en` conserva su fecha', async () => {
+    respuestasPorOp.set('conector_credencial:select', { data: { valores_cifrados: cifrar({ token: 'tok-samsara-largo' }) }, error: null });
+    respuestasPorOp.set('conector_credencial:update', { data: [{ id: 'cred-1' }], error: null });
+    const { http } = httpFalso(503, 'maintenance');
+
+    const r = await probarCredencial(TENANT, 'samsara', undefined, http);
+
+    expect(r.sobreLaCredencial).toBe('no_se_sabe');
+    expect(
+      toquesDeCredencial().some((l) => l.op === 'update'),
+      'el servicio del proveedor está caído: eso no dice nada de la credencial',
+    ).toBe(false);
+    expect(logs.warn).toHaveBeenCalledWith('conector.prueba_sin_veredicto', expect.anything());
+  });
+
+  it('c7-12 · un error de RED (el `http` lanza) tampoco se sella', async () => {
+    respuestasPorOp.set('conector_credencial:select', { data: { valores_cifrados: cifrar({ token: 'tok-samsara-largo' }) }, error: null });
+    respuestasPorOp.set('conector_credencial:update', { data: [{ id: 'cred-1' }], error: null });
+    const http = async () => { throw new Error('fetch failed'); };
+
+    const r = await probarCredencial(TENANT, 'samsara', undefined, http);
+
+    expect(r.ok).toBe(false);
+    expect(r.detalle).toMatch(/Un error de red NO significa que la credencial sea mala/);
+    expect(r.sobreLaCredencial).toBe('no_se_sabe');
+    expect(toquesDeCredencial().some((l) => l.op === 'update')).toBe(false);
+  });
+
+  it('c7-12 · un 200 con basura («no se puede afirmar que la credencial sirva») tampoco se sella', async () => {
+    respuestasPorOp.set('conector_credencial:select', { data: { valores_cifrados: cifrar({ token: 'tok-wialon-largo', base_url: 'https://hst-api.wialon.com' }) }, error: null });
+    respuestasPorOp.set('conector_credencial:update', { data: [{ id: 'cred-1' }], error: null });
+    const { http } = httpFalso(200, '<html>portal de login</html>');
+
+    const r = await probarCredencial(TENANT, 'wialon', undefined, http);
+
+    expect(r.detalle).toMatch(/NO se puede afirmar que la credencial sirva/);
+    expect(toquesDeCredencial().some((l) => l.op === 'update')).toBe(false);
+  });
+
+  it('c7-12 · pero un RECHAZO de verdad SÍ se sella: el badge tiene que poder ponerse rojo', async () => {
+    // El otro lado del candado. Si el arreglo hubiera sido «no sellar nunca un
+    // fallo», el cliente jamás vería que su token caducó.
+    respuestasPorOp.set('conector_credencial:select', { data: { valores_cifrados: cifrar({ token: 'tok-wialon-largo', base_url: 'https://hst-api.wialon.com' }) }, error: null });
+    respuestasPorOp.set('conector_credencial:update', { data: [{ id: 'cred-1' }], error: null });
+    // Wialon contesta 200 con `{"error":8}` cuando el token no sirve.
+    const { http } = httpFalso(200, '{"error":8}');
+
+    const r = await probarCredencial(TENANT, 'wialon', undefined, http);
+
+    expect(r.sobreLaCredencial).toBe('no_sirve');
+    const update = toquesDeCredencial().find((l) => l.op === 'update')!;
+    expect((update.payload as { probada_en: unknown }).probada_en).toBeNull();
+    expect((update.payload as { ultimo_error: string }).ultimo_error).toBe(r.detalle);
   });
 
   it('sin credencial activa dice que hay que capturarla y NO toca la fila', async () => {

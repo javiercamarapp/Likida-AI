@@ -46,6 +46,8 @@
 // pruebas editoriales lo vuelven a revisar. Publicar sigue siendo un merge.
 // ═══════════════════════════════════════════════════════════════════════════
 import { numero } from '@/lib/formato';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '../presupuesto';
 import { generateResponse } from '@/lib/llm/openrouter';
 import { normasPorTema, TEMAS_NORMATIVOS, type NormaConsultada, type TemaNormativo } from '../normas/consulta';
 import { guardiaFundamento } from '../normas/fundamento';
@@ -70,17 +72,44 @@ export interface TemaCandidato {
   motivo: string | null;
 }
 
+/** Un tema cuyo borrador una PERSONA ya rechazó, con el motivo que escribió
+ *  (la 0117 lo exige: un rechazo sin motivo no es un rechazo). */
+export interface TemaRechazado {
+  tema: TemaNormativo;
+  motivo: string;
+}
+
 /**
  * El siguiente tema a escribir, PURO. Recorre el catálogo en su orden
  * declarado —determinista, para que dos pasadas propongan lo mismo— y devuelve
- * el primero que nadie ha cubierto. `null` cuando el blog ya cubrió los diez:
+ * el primero que nadie ha cubierto. `null` cuando el blog ya resolvió los diez:
  * eso es una noticia buena, no un hueco que rellenar con un tema inventado.
+ *
+ * ── POR QUÉ EXISTE `temasRechazados` ──────────────────────────────────────
+ *
+ * AUDITORÍA CICLO 7, c7-10 (alto): rechazar un borrador dejaba a este agente
+ * MUDO PARA SIEMPRE. El título es determinista por tema (`Borrador de artículo
+ * — T`) y el índice `cola_pieza_crecimiento_por_periodo (agente, titulo)` no
+ * mira el estado, así que la pieza rechazada seguía ocupando su título; la
+ * pasada siguiente veía «ya existe» y reportaba `0 piezas — ya está en la
+ * bandeja». Falso: no estaba en la bandeja, estaba RECHAZADA. Y como T seguía
+ * sin artículo publicado, el selector nunca avanzaba a T+1. El único de los
+ * diez que gasta modelo quedaba apagado de facto, con un motivo mentiroso e
+ * indistinguible de la operación normal en cualquier tablero.
+ *
+ * Un rechazo es un JUICIO HUMANO sobre ese tema, así que el tema queda
+ * resuelto —igual que si estuviera publicado— y el catálogo avanza. Lo que NO
+ * se hace es volver a redactarlo solo: eso sería gastar modelo en repetir lo
+ * que una persona ya dijo que no. Para reabrirlo, se borra la pieza de la
+ * bandeja o se publica el artículo; las dos son acciones de una persona, que
+ * es exactamente de quien fue la decisión de rechazarlo.
  */
 export function siguienteTema(
   temasCubiertos: readonly TemaNormativo[],
   fichasDe: (tema: TemaNormativo) => NormaConsultada[],
+  temasRechazados: readonly TemaNormativo[] = [],
 ): TemaCandidato | null {
-  const cubiertos = new Set(temasCubiertos);
+  const cubiertos = new Set([...temasCubiertos, ...temasRechazados]);
   for (const tema of TEMAS_NORMATIVOS) {
     if (cubiertos.has(tema)) continue;
     const fichas = fichasDe(tema).filter((n) => n.afirmable);
@@ -234,6 +263,43 @@ export function armarPiezaContenido(
 }
 
 /**
+ * Los temas cuyo borrador una persona ya RECHAZÓ, con su motivo.
+ *
+ * El tema se lee de `fuentes->>'tema'` y NO del título: parsear
+ * `Borrador de artículo — X` para recuperar X ataría el catálogo a una cadena
+ * de presentación, y el día que el título cambie el agente volvería a quedarse
+ * mudo sin que nada lo diga. `fuentes.tema` es el dato que el propio agente
+ * escribió al encolar.
+ *
+ * LANZA si no se puede leer, por la misma razón que `piezaExistente`: sin
+ * saber qué se rechazó, proponer sería reproponer a ciegas justo lo que una
+ * persona acaba de rechazar.
+ */
+export async function temasRechazados(): Promise<TemaRechazado[]> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('cola_aprobacion')
+    .select('fuentes, motivo_rechazo')
+    .eq('agente', 'contenido_fiscal')
+    .eq('estado', 'rechazado')
+    .limit(TEMAS_NORMATIVOS.length * 4), 'contenido.temas_rechazados');
+  if (error) throw new Error(`temasRechazados: ${error.message}`);
+
+  const validos = new Set<string>(TEMAS_NORMATIVOS);
+  const vistos = new Map<TemaNormativo, string>();
+  for (const f of (data ?? []) as Array<{ fuentes?: unknown; motivo_rechazo?: unknown }>) {
+    const tema = (f.fuentes as { tema?: unknown } | null)?.tema;
+    if (typeof tema !== 'string' || !validos.has(tema)) continue;
+    // El motivo lo exige el CHECK `cola_rechazo_con_motivo` (0117), pero si
+    // llegara vacío se dice así y NO se inventa uno.
+    const motivo = typeof f.motivo_rechazo === 'string' && f.motivo_rechazo.trim() !== ''
+      ? f.motivo_rechazo.trim()
+      : 'sin motivo registrado';
+    if (!vistos.has(tema as TemaNormativo)) vistos.set(tema as TemaNormativo, motivo);
+  }
+  return [...vistos.entries()].map(([tema, motivo]) => ({ tema, motivo }));
+}
+
+/**
  * UNA corrida de `contenido_fiscal`. Propone y redacta UN borrador. El costo
  * MEDIDO se anota en la corrida incluso si la pieza no entra — es lo que el
  * runner compara contra el techo declarado, y tirarlo dejaría al techo ciego
@@ -245,15 +311,31 @@ export async function correrContenidoFiscal(
 ): Promise<ResultadoCrecimiento> {
   const inicio = new Date();
   const agente = 'contenido_fiscal';
-  let costoUsd = 0;
+  /** `null` = se llamó al modelo y NO se pudo medir el gasto (c7-11). Nunca 0
+   *  por descarte: un costo desconocido no es gratis. */
+  let costoUsd: number | null = 0;
 
   try {
-    const candidato = siguienteTema(ARTICULOS.map((a) => a.tema), normasPorTema);
+    const rechazados = await temasRechazados();
+    const candidato = siguienteTema(
+      ARTICULOS.map((a) => a.tema), normasPorTema, rechazados.map((r) => r.tema),
+    );
     if (candidato === null) {
-      await anotarCorrida(agente, inicio, 'ok', disparo, { pieza: 'ninguna', temas_cubiertos: ARTICULOS.length });
+      await anotarCorrida(agente, inicio, 'ok', disparo, {
+        pieza: 'ninguna',
+        temas_cubiertos: ARTICULOS.length,
+        temas_rechazados: rechazados.map((r) => r.tema),
+      });
+      // El motivo dice la verdad de POR QUÉ no queda tema, y son dos verdades
+      // distintas: cubierto en /blog no es lo mismo que rechazado en la
+      // bandeja, y confundirlas es lo que hacía c7-10 (el agente reportaba
+      // «ya está en la bandeja» sobre una pieza rechazada).
+      const cerrado = `los ${numero(TEMAS_NORMATIVOS.length)} temas citables del corpus ya están resueltos`;
       return {
         resultado: 'corrio', piezas: 0, costoUsd: 0,
-        motivo: `los ${numero(TEMAS_NORMATIVOS.length)} temas citables del corpus ya están cubiertos en /blog — el siguiente artículo necesita una ficha nueva del corpus, no otra pasada de este agente`,
+        motivo: rechazados.length === 0
+          ? `${cerrado}: todos cubiertos en /blog — el siguiente artículo necesita una ficha nueva del corpus, no otra pasada de este agente`
+          : `${cerrado}: ${numero(ARTICULOS.length)} cubierto(s) en /blog y ${numero(rechazados.length)} con el borrador RECHAZADO (${rechazados.map((r) => `«${r.tema}»: ${r.motivo}`).join(' · ')}). Este agente no vuelve a redactar lo que una persona ya rechazó; para reabrir uno, borra su pieza de la bandeja o publica el artículo`,
       };
     }
 
@@ -296,8 +378,26 @@ export async function correrContenidoFiscal(
         messages: [{ role: 'user', content: contexto }],
         maxTokens: 1_400, temperature: 0.5,
       });
-      costoUsd += r.cost;
-      if (r.noMedido) logger.warn('contenido.costo_no_medido', { tema: candidato.tema });
+      // c7-11: `noMedido` significa que el proveedor omitió `usage` y el
+      // `cost` que viene es la RESERVA (una cota), no lo medido. Anotarlo como
+      // cifra —o peor, como el 0 que llega en modo plataforma, donde no hay
+      // reserva— dejaba ciego al techo diario: `gastoDelDiaUsd` sumaba ceros,
+      // nunca llegaba a $1.00 y el candado del runner NUNCA cortaba mientras
+      // el agente seguía gastando de verdad. Un costo desconocido se guarda
+      // como desconocido (NULL en `agente_corrida.costo_usd`) y el runner lo
+      // trata como desconocido, no como gratis. Es pegajoso: una sola llamada
+      // sin medir vuelve incierta la corrida entera.
+      if (r.noMedido) {
+        costoUsd = null;
+        logger.warn('contenido.costo_no_medido', { tema: candidato.tema });
+      } else if (costoUsd !== null) {
+        // Sin `round2` a propósito: el costo de una llamada al modelo vive en
+        // la cuarta cifra decimal ($0.0002 la corrida medida del 28-ago), y
+        // redondear a centavos aquí lo convertiría en cero. `round2` es para
+        // dinero de la flota; esto es gasto interno en USD, que el panel
+        // enseña con `usd4`.
+        costoUsd = costoUsd + r.cost;
+      }
       const g = guardarBorrador(r.text, candidato.fichas, contexto);
       redactado = g.texto;
       motivoSinModelo = g.motivo;

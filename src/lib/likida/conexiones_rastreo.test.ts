@@ -18,8 +18,18 @@ import { renglonRastreo } from './conexiones';
 describe('renglonRastreo — cuatro estados, y ninguno se pinta verde de adorno', () => {
   it('no se pudo leer: lo dice, y NO es «sin conectar»', () => {
     const r = renglonRastreo({ conectores: null, ligadas: null, vistas: null });
-    expect(r.detalle).toMatch(/No se pudo leer/);
+    expect(r.detalle).toMatch(/NO SE PUDO LEER/);
     expect(r.falta).toEqual([]);
+    // LA PRUEBA QUE FALTABA (auditoría ciclo 7, c7-28). Ésta miraba el
+    // `detalle` y NUNCA el `estado`, así que no vio que el renglón devolvía
+    // `'sin_configurar'`: la píldora decía **«Sin conectar»**, con el mismo
+    // rótulo y el mismo gris que una flota que jamás capturó un GPS. Con la
+    // base caída eso afirma «no tienes GPS» y manda al contralor a recapturar
+    // una credencial que sí existe. El estado tiene que ser el suyo propio.
+    expect(r.estado, 'no se pudo medir NO es «sin conectar»').toBe('no_medible');
+    expect(r.estado).not.toBe('sin_configurar');
+    // Y el texto no puede afirmar nada sobre la flota.
+    expect(r.detalle).toMatch(/NO dice que no tengas GPS/i);
   });
 
   it('sin credencial: manda a la sección de captura de ESTA misma pantalla', () => {

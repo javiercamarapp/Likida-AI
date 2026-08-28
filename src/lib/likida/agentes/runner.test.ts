@@ -96,7 +96,7 @@ vi.mock('./exito', () => ({ correrAgenteExito: (...a: unknown[]) => correrExito(
 // runner y el predicado REAL (no mockeado), que es contra el que se compara la
 // lista literal del despacho. Mockear el motor evita arrastrar la calculadora
 // y el índice de normas a esta suite.
-const correrCrecimiento = vi.fn(async (..._a: unknown[]) => ({ resultado: 'corrio' as const, piezas: 1, costoUsd: 0 }));
+const correrCrecimiento = vi.fn(async (..._a: unknown[]) => ({ resultado: 'corrio' as const, piezas: 1, costoUsd: 0 as number | null }));
 const { AGENTES_CRECIMIENTO, esAgenteCrecimiento } = await import('./crecimiento');
 vi.mock('./crecimiento', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./crecimiento')>()),
@@ -737,15 +737,74 @@ describe('el despacho de crecimiento (0230)', () => {
 
   it('contenido_fiscal SÍ mide el gasto: techo alcanzado, no se despacha, y el motivo trae las dos cifras', async () => {
     respuestas.set('agente_definicion', [{ data: [{ id: 'contenido_fiscal', presupuesto_dia_usd: 1 }], error: null }]);
-    respuestas.set('agente_corrida', [{ data: [{ costo_usd: 1.2 }], error: null }]);
+    // DOS preguntas, en este orden: ¿hay algo que NO se pudo medir? y ¿cuánto
+    // suma lo medido? (c7-11 partió la segunda de la primera).
+    respuestas.set('agente_corrida', [
+      { count: 0, error: null },
+      { data: [{ costo_usd: 1.2 }], error: null },
+    ]);
     const r = await correrRunner(undefined, TENANT);
     expect(correrCrecimiento).not.toHaveBeenCalled();
     expect(r.agentes[0].motivo).toContain('techo diario alcanzado (1.20 de 1 USD)');
   });
 
-  it('contenido_fiscal con el gasto ILEGIBLE: fail closed y dicho', async () => {
+  it('c7-11 · una corrida de hoy SIN costo medido apaga el despacho: un costo desconocido no es cero', async () => {
+    // LA PRUEBA QUE FALTABA. `gastoDelDiaUsd` filtra `.not(costo_usd, is,
+    // null)` —no puede sumar lo que no sabe—, así que una corrida sin medir
+    // era INVISIBLE para el techo, no incierta: con el proveedor omitiendo
+    // `usage` una tarde, el agente redactaba, gastaba de verdad, y el techo
+    // comparaba $0.00 contra $1.00 y nunca cortaba.
+    respuestas.set('agente_definicion', [{ data: [{ id: 'contenido_fiscal', presupuesto_dia_usd: 1 }], error: null }]);
+    respuestas.set('agente_corrida', [
+      { count: 2, error: null },
+      // Lo medido está muy por debajo del techo, y aun así NO se despacha:
+      // el gasto real del día es desconocido.
+      { data: [{ costo_usd: 0.01 }], error: null },
+    ]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrCrecimiento).not.toHaveBeenCalled();
+    expect(r.agentes[0]).toMatchObject({ agente: 'contenido_fiscal', resultado: 'saltado' });
+    expect(r.agentes[0].motivo).toContain('costo NO MEDIDO');
+    expect(r.agentes[0].motivo).toContain('un costo desconocido no es cero');
+  });
+
+  it('c7-11 · sin corridas sin medir, el techo se compara y el agente corre', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'contenido_fiscal', presupuesto_dia_usd: 1 }], error: null }]);
+    respuestas.set('agente_corrida', [
+      { count: 0, error: null },
+      { data: [{ costo_usd: 0.01 }], error: null },
+    ]);
+    correrCrecimiento.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0.02 });
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrCrecimiento).toHaveBeenCalledWith('contenido_fiscal', 'cron');
+    expect(r.agentes[0]).toMatchObject({ resultado: 'corrio', costoUsd: 0.02 });
+  });
+
+  it('c7-11 · el costo NULL del motor viaja NULL al parte del runner, no como 0', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'contenido_fiscal', presupuesto_dia_usd: 1 }], error: null }]);
+    respuestas.set('agente_corrida', [
+      { count: 0, error: null },
+      { data: [], error: null },
+    ]);
+    correrCrecimiento.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: null });
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0].costoUsd).toBeNull();
+  });
+
+  it('contenido_fiscal con el conteo de lo NO medido ILEGIBLE: fail closed y dicho', async () => {
     respuestas.set('agente_definicion', [{ data: [{ id: 'contenido_fiscal', presupuesto_dia_usd: 1 }], error: null }]);
     respuestas.set('agente_corrida', [{ data: null, error: { message: 'base caída' } }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrCrecimiento).not.toHaveBeenCalled();
+    expect(r.agentes[0].motivo).toMatch(/fail closed/);
+  });
+
+  it('contenido_fiscal con el gasto ILEGIBLE: fail closed y dicho', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'contenido_fiscal', presupuesto_dia_usd: 1 }], error: null }]);
+    respuestas.set('agente_corrida', [
+      { count: 0, error: null },
+      { data: null, error: { message: 'base caída' } },
+    ]);
     const r = await correrRunner(undefined, TENANT);
     expect(correrCrecimiento).not.toHaveBeenCalled();
     expect(r.agentes[0].motivo).toMatch(/fail closed/);

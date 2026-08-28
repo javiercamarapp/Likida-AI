@@ -6,7 +6,7 @@ import {
   PREFIJO_TOKEN, DIAS_VIGENCIA_DEFAULT, TEXTO_LIGA_NO_VALIDA,
   type PropuestaCruda, type ContextoFactura,
 } from './portal_pago';
-import { TOLERANCIA_ABONO_MXN } from '@/lib/formato';
+import { TOLERANCIA_ABONO_MXN, round2 } from '@/lib/formato';
 import { DatoInvalido } from './errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -207,6 +207,31 @@ describe('validarPropuesta — el monto', () => {
   it('redondea a centavos con `round2`, no a mano', () => {
     expect(validarPropuesta({ ...BASE, monto: '0.1' }, CTX).monto).toBe(0.1);
     expect(validarPropuesta({ ...BASE, monto: '0.05' }, CTX).monto).toBe(0.05);
+  });
+
+  it('c7-33 · el redondeo de la casa sigue puesto donde SÍ se puede llegar', () => {
+    // ESTA PRUEBA CAMBIÓ DE FORMA AL REBASAR, y vale la pena decir por qué.
+    //
+    // Nació para cubrir `c7-33` con la familia de los `.005` que
+    // `Math.round(n*100)/100` tira hacia abajo (`1.005` → `1`, no `1.01`,
+    // porque 1.005 se guarda como 1.00499999…). La prueba vieja de arriba
+    // probaba `100.005` y PASABA incluso con el redondeo a mano, porque
+    // `100.005*100` da exactamente `10000.5`: había elegido, sin saberlo, el
+    // único valor de la familia que no falla.
+    //
+    // Pero `c7-14` (#156) llegó después y cerró la puerta ANTES del redondeo:
+    // tres decimales ya no son un monto, son una duda, y se rechazan diciendo
+    // cómo escribirlo (ver «más de dos decimales se rechaza» más abajo). O sea
+    // que la familia `.005` ya no es alcanzable desde el formulario, y una
+    // prueba que la exigiera contradiría al filtro. Lo que sí sigue siendo
+    // cierto —y es lo que se fija aquí— es que el importe que sale es
+    // EXACTO en centavos: `round2` normaliza la representación flotante en
+    // lugar de arrastrarla hasta la base.
+    for (const [tecleado, esperado] of [['1160.10', 1160.1], ['0.07', 0.07], ['1,234.56', 1234.56]] as const) {
+      const monto = validarPropuesta({ ...BASE, monto: tecleado }, { ...CTX, saldo: 10_000 }).monto;
+      expect(monto, `un centavo de más o de menos es un centavo que nadie concilia (${tecleado})`).toBe(esperado);
+      expect(round2(monto), 'el importe ya viene redondeado: `round2` es idempotente sobre él').toBe(monto);
+    }
   });
 
   it('cero y negativo se rechazan', () => {

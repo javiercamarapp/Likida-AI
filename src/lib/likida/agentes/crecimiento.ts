@@ -64,7 +64,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { hoyMx, numero, inicioDiaMx, fechaMx } from '@/lib/formato';
+import { hoyMx, numero, inicioDiaMx, fechaMx, mxn, porcentaje } from '@/lib/formato';
 import { appUrl } from '@/lib/env';
 import { ARTICULOS, type Articulo } from '../marketing/articulos';
 import { calcularEstimacion, CUOTA_DOF } from '../marketing/calculadora';
@@ -93,8 +93,19 @@ export interface ResultadoCrecimiento {
   piezas: number;
   /** Por qué no se fabricó, cuando piezas = 0 y no es un fallo. */
   motivo?: string;
-  /** Gasto de modelo MEDIDO. $0 en las nueve deterministas de este archivo. */
-  costoUsd: number;
+  /**
+   * Gasto de modelo MEDIDO. $0 en las nueve deterministas de este archivo —
+   * un cero que sí se midió, porque no llamaron a ningún modelo.
+   *
+   * `null` = NO SE PUDO MEDIR, que no es cero (regla 2). AUDITORÍA CICLO 7,
+   * c7-11: cuando el proveedor omite `usage`, `generateResponse` devuelve
+   * `{ cost: 0, noMedido: true }` y aquí se anotaba ese 0 como si fuera una
+   * cifra. Ese 0 llegaba a `agente_corrida.costo_usd`, que es exactamente la
+   * columna con la que el runner compara el techo de $1/día de
+   * `contenido_fiscal`: el agente redactaba, gastaba de verdad, anotaba $0, y
+   * el techo NUNCA cortaba.
+   */
+  costoUsd: number | null;
 }
 
 // ── Aritmética de fechas (el día de México lo da `hoyMx`) ──────────────────
@@ -161,12 +172,17 @@ export async function encolarPiezaCrecimiento(
  *  no son de ninguna flota. */
 export async function anotarCorrida(
   agente: AgenteCrecimiento, inicio: Date, estado: 'ok' | 'fallo', disparo: DisparoCorrida,
-  resumen: Record<string, unknown>, extra?: { costoUsd?: number; error?: string },
+  resumen: Record<string, unknown>,
+  /** `costoUsd` OMITIDO y `costoUsd: null` son cosas distintas y aquí se
+   *  distinguen: omitirlo es «esta corrida no llamó a ningún modelo» (0
+   *  medido, que es la verdad de las nueve deterministas), y `null` es «llamó
+   *  y NO se pudo medir cuánto gastó» (c7-11). Un `?? 0` los aplastaba en el
+   *  mismo cero, y ese cero dejaba ciego al único techo de gasto de los diez. */
+  extra?: { costoUsd?: number | null; error?: string },
 ): Promise<void> {
   await registrarCorrida(null, agente, {
     inicio, fin: new Date(), estado, disparo,
-    // 0 MEDIDO, no NULL: estas corridas sí saben lo que gastaron (nada).
-    costoUsd: extra?.costoUsd ?? 0,
+    costoUsd: extra === undefined || !('costoUsd' in extra) ? 0 : extra.costoUsd,
     ...(estado === 'ok' ? { tareasHechas: 1, tareasTotal: 1 } : { tareasHechas: 0, tareasTotal: 1 }),
     resumen,
     ...(extra?.error ? { error: extra.error } : {}),
@@ -323,7 +339,7 @@ export function armarParteLeadMagnet(
     for (const e of embudo) {
       const tasa = e.tasaPct === null
         ? 'tasa: SIN VISTAS, indefinida (no es 0%)'
-        : `tasa: ${e.tasaPct.toFixed(1)}%`;
+        : `tasa: ${porcentaje(e.tasaPct, 1)}`;
       l.push(`  · ${e.pagina} — ${numero(e.vistas)} vista(s) · ${numero(e.conversiones)} conversión(es) · ${tasa}`);
     }
     l.push('');
@@ -619,7 +635,11 @@ export function beneficiosVerificados(hoy: string): BeneficioVerificado[] {
       copy: 'El 50% del peaje de la Red Nacional de Autopistas de Cuota es acreditable. Lo que tumba el estímulo no es la caseta: es la bitácora. Likida arma la bitácora conciliada.',
       respaldo: {
         simbolo: 'marketing/calculadora.ts → calcularEstimacion().peaje',
-        medido: `con $${numero(CASETAS_SONDA)} de casetas el motor devuelve $${numero(sonda.peaje.subtotalEstimadoMes)} de subtotal y $${numero(sonda.peaje.estimuloMesMxn)} de estímulo, o sea un factor de ${(factor * 100).toFixed(0)}%`,
+        // c7-34 (regla 10): `mxn()` y `porcentaje()`, no `$` + `numero()` ni
+        // `toFixed`. Esta línea NO se queda en la bandeja: `copyPorCanal` la
+        // pega tal cual en el texto de LinkedIn, así que un formato divergente
+        // sale a la calle con la marca encima.
+        medido: `con ${mxn(CASETAS_SONDA)} de casetas el motor devuelve ${mxn(sonda.peaje.subtotalEstimadoMes)} de subtotal y ${mxn(sonda.peaje.estimuloMesMxn)} de estímulo, o sea un factor de ${porcentaje(factor * 100, 0)}`,
       },
       fundamento: ['LIF 2026 art. 20 apartado A', 'RMF 2026 regla 9.1.8'],
     });
@@ -1278,11 +1298,36 @@ export interface MapaCiudades {
   total: number;
   /** Cuántos NO traen ciudad capturada — se dice, no se reparte. */
   sinCiudad: number;
-  top: Array<{ ciudad: string; n: number }>;
+  /**
+   * El ranking de plazas.
+   *
+   *  · `[…]` = el top REAL, contado sobre el censo entero.
+   *  · `[]`  = no hay ni una ciudad capturada. Es un hecho medido.
+   *  · `null` = NO SE PUEDE AFIRMAR UN RANKING, y el parte lo dice en vez de
+   *    publicar uno. Los tres valores son distintos y el parte los distingue.
+   *
+   * AUDITORÍA CICLO 7, c7-4 (crítico): esto era `Array<…>` a secas y se
+   * calculaba sobre una rebanada arbitraria de 5,000 de 33,071 prospectos.
+   * Nuevo Laredo, Manzanillo y Puebla —tres de las cinco plazas reales—
+   * desaparecían del parte, y entraban tres que no lo eran. La línea «LECTURA
+   * TRUNCADA … las cifras de arriba son un PISO» era cierta para el total y
+   * FALSA para el orden: un ranking derivado de una muestra arbitraria no es
+   * el piso de nada, es otro ranking.
+   */
+  top: Array<{ ciudad: string; n: number }> | null;
   truncado: boolean;
 }
 
-/** El mapa por ciudad, PURO sobre las filas ya leídas. */
+/**
+ * El mapa por ciudad, PURO sobre las filas ya leídas.
+ *
+ * SOLO se usa en el camino de respaldo (ver `leerMapaCiudades`): el camino
+ * normal cuenta en la base. Y por eso lo primero que hace es lo más
+ * importante: si la lectura vino TRUNCADA, el ranking se declara imposible
+ * (`top: null`) en vez de devolver el orden de la rebanada. Contar sobre
+ * 5,000 de 33,071 filas tomadas en orden físico produce un orden que se
+ * parece a un dato y no lo es.
+ */
 export function armarMapaCiudades(filas: Array<{ ciudad: string | null }>, truncado: boolean): MapaCiudades {
   const acc = new Map<string, number>();
   let sinCiudad = 0;
@@ -1291,7 +1336,7 @@ export function armarMapaCiudades(filas: Array<{ ciudad: string | null }>, trunc
     if (!c) { sinCiudad += 1; continue; }
     acc.set(c, (acc.get(c) ?? 0) + 1);
   }
-  const top = [...acc.entries()]
+  const top = truncado ? null : [...acc.entries()]
     .map(([ciudad, n]) => ({ ciudad, n }))
     .sort((a, b) => b.n - a.n || a.ciudad.localeCompare(b.ciudad))
     .slice(0, TOP_CIUDADES);
@@ -1353,13 +1398,15 @@ export function armarParteAlianzas(
     if (mapa.sinCiudad > 0) {
       l.push(`    · ${numero(mapa.sinCiudad)} de ellos NO traen ciudad capturada. No se reparten entre las demás: un prospecto sin ciudad no vive en ninguna.`);
     }
-    if (mapa.top.length === 0) {
+    if (mapa.top === null) {
+      // c7-4: lo que va aquí NO es un ranking peor, es la ausencia de ranking
+      // dicha entera. El total sí se afirma (viene de un `count` exacto); el
+      // orden no, porque salió de una rebanada arbitraria del censo.
+      l.push(`    · NO SE PUBLICA UN RANKING DE PLAZAS: la lectura se truncó a ${numero(TOPE_PROSPECTOS_MAPA)} prospectos de los ${numero(mapa.total)} vivos, y un orden sacado de una rebanada arbitraria del censo NO es el top real ni un piso de él. El conteo por plaza se hace en la base y esta corrida no lo pudo hacer, así que este agente prefiere no decir nada a decir un orden que no puede sostener.`);
+    } else if (mapa.top.length === 0) {
       l.push('    · Ni una sola ciudad capturada: el mapa por plaza no se puede armar todavía.');
     } else {
-      l.push(`    · Plazas con más prospectos capturados: ${mapa.top.map((c) => `${c.ciudad} (${numero(c.n)})`).join(' · ')}.`);
-    }
-    if (mapa.truncado) {
-      l.push(`    · LECTURA TRUNCADA a ${numero(TOPE_PROSPECTOS_MAPA)} prospectos: las cifras de arriba son un PISO, no el total.`);
+      l.push(`    · Plazas con más prospectos capturados: ${mapa.top.map((c) => `${c.ciudad} (${numero(c.n)})`).join(' · ')}. Es el top REAL: contado sobre el censo entero en la base, no sobre una muestra.`);
     }
   }
   l.push('');
@@ -1389,18 +1436,81 @@ async function leerAliados(): Promise<AliadoObjetivo[]> {
   }));
 }
 
-/** El directorio ya capturado, agregado por ciudad. LANZA ante error. */
+/**
+ * El directorio ya capturado, agregado por ciudad. LANZA ante error.
+ *
+ * SE CUENTA EN LA BASE, no en JS. AUDITORÍA CICLO 7, c7-4 (crítico): esto
+ * traía 5,000 filas de `prospecto` SIN `order` y contaba las ciudades sobre
+ * esa rebanada. Con 33,071 prospectos vivos en producción eso es el 15% del
+ * censo, contiguo por orden de importación, y el «top-5» que salía al parte no
+ * tenía nada que ver con el real:
+ *
+ *   parte : Tijuana 159 · Aguascalientes 142 · Guadalajara 110 · Apodaca 86 · Mexicali 77
+ *   real  : Tijuana 928 · Nuevo Laredo 689 · Manzanillo 629 · Guadalajara 561 · Puebla 537
+ *
+ * Un `.order()` no lo arreglaba —ordenar una muestra sesgada da una muestra
+ * sesgada ordenada—, así que la agregación se mudó a `prospecto_mapa_ciudades`
+ * (mig. 0238), que cuenta las 33,071 y devuelve total, sin-ciudad y top-N sobre
+ * la MISMA foto.
+ *
+ * EL CAMINO DE RESPALDO, y por qué no es un fail-open: si la función todavía no
+ * existe en esta base (un despliegue que se adelantó a su migración), se cae al
+ * lector viejo — pero declarando `truncado`, con lo que `armarMapaCiudades`
+ * devuelve `top: null` y el parte dice que NO puede publicar un ranking. O sea
+ * que el respaldo degrada a «no lo sé», nunca a «aquí está un ranking». Y
+ * cualquier otro error de base sigue LANZANDO: un parte de alianzas sobre una
+ * tabla ciega diría cifras de un censo que no leyó.
+ */
 async function leerMapaCiudades(): Promise<MapaCiudades> {
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('prospecto_mapa_ciudades', { p_top: TOP_CIUDADES }),
+    'crecimiento.mapa_ciudades',
+  );
+  if (error) {
+    // 42883 = `undefined_function` de Postgres; PGRST202 = PostgREST no la
+    // encontró en su caché de esquema. Son las DOS formas en que se manifiesta
+    // «la 0238 todavía no está aplicada aquí», y ninguna otra.
+    const codigo = String((error as { code?: unknown }).code ?? '');
+    if (codigo !== '42883' && codigo !== 'PGRST202') {
+      throw new Error(`leerMapaCiudades: ${error.message}`);
+    }
+    logger.warn('crecimiento.mapa_ciudades_sin_rpc', { err: error.message.slice(0, 160) });
+    return await leerMapaCiudadesTruncado();
+  }
+  const m = (data ?? {}) as { total?: unknown; sin_ciudad?: unknown; top?: unknown };
+  const total = Number(m.total ?? NaN);
+  const sinCiudad = Number(m.sin_ciudad ?? NaN);
+  if (!Number.isFinite(total) || !Number.isFinite(sinCiudad) || !Array.isArray(m.top)) {
+    // La función contestó algo que no es su contrato. No se rellena con ceros:
+    // «no se pudo medir» no es «no hay prospectos».
+    throw new Error('leerMapaCiudades: `prospecto_mapa_ciudades` no devolvió el objeto esperado — no se afirma un censo que nadie contó.');
+  }
+  return {
+    total,
+    sinCiudad,
+    top: (m.top as Array<{ ciudad?: unknown; n?: unknown }>).map((c) => ({ ciudad: String(c.ciudad), n: Number(c.n) })),
+    truncado: false,
+  };
+}
+
+/** El lector viejo, degradado a propósito: trae el conteo exacto (que sí se
+ *  puede afirmar) y marca `truncado`, lo que APAGA el ranking. Solo se usa
+ *  cuando la RPC de la 0238 no está en esta base. */
+async function leerMapaCiudadesTruncado(): Promise<MapaCiudades> {
   const { data, error, count } = await acotada(supabaseAdmin()
     .from('prospecto')
     .select('ciudad', { count: 'exact' })
     .is('duplicado_de', null)
     .neq('estado', 'perdido')
-    .limit(TOPE_PROSPECTOS_MAPA), 'crecimiento.mapa_ciudades');
+    .limit(TOPE_PROSPECTOS_MAPA), 'crecimiento.mapa_ciudades_respaldo');
   if (error) throw new Error(`leerMapaCiudades: ${error.message}`);
   const filas = (data ?? []) as Array<{ ciudad: string | null }>;
+  const total = typeof count === 'number' ? count : filas.length;
   const truncado = typeof count === 'number' ? count > filas.length : filas.length >= TOPE_PROSPECTOS_MAPA;
-  return armarMapaCiudades(filas, truncado);
+  // El TOTAL sí se puede afirmar: viene de un `count: 'exact'` sobre el censo
+  // entero. Lo que no se puede afirmar es el ORDEN, y de eso se encarga
+  // `truncado`.
+  return { ...armarMapaCiudades(filas, truncado), total };
 }
 
 async function correrAlianzas(disparo: DisparoCorrida, hoy: string): Promise<ResultadoCrecimiento> {
@@ -1421,7 +1531,11 @@ async function correrAlianzas(disparo: DisparoCorrida, hoy: string): Promise<Res
       siguiente_toque: toque?.id ?? null,
       con_contacto: toque?.contactoNota !== null && toque?.contactoNota !== undefined,
       prospectos_leidos: mapa.total, truncado: mapa.truncado,
-      consultas: ['aliado_objetivo', 'prospecto (agregado por ciudad)'],
+      // Queda ESCRITO en la pieza si el ranking se publicó o no: quien la lea
+      // dentro de un año tiene que poder distinguir «esta semana no había
+      // ciudades» de «esta semana no se pudo contar el censo» (c7-4).
+      ranking_publicado: mapa.top !== null,
+      consultas: ['aliado_objetivo', 'prospecto_mapa_ciudades (conteo por ciudad en la base, mig. 0238)'],
     });
     await anotarCorrida(agente, inicio, 'ok', disparo, { pieza: res, aliados: aliados.length, toque: toque?.id ?? null });
     return { resultado: 'corrio', piezas: res === 'encolada' ? 1 : 0, motivo: res === 'ya_existia' ? 'otra corrida ganó la semana' : undefined, costoUsd: 0 };

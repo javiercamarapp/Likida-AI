@@ -836,14 +836,51 @@ export async function procesarLoteEnCola(
       const vigentes = await sesionesVigentes(tenantId, Date.now());
       const conSesion = new Set(vigentes.porComercio.keys());
 
-      // Lo que el pre-cheque de EDAD descartó se apaga y se dice, sin abrir
-      // navegador: es gratis, y sin esto la pantalla seguiría diciendo
-      // «vinculado» sobre una sesión que este código ya no piensa usar.
-      for (const comercio of vigentes.vencidasPorEdad) {
-        await invalidarVinculo({
-          tenantId, comercio, clase: 'sesion_caducada',
-          motivo: 'la sesión guardada pasó de su edad máxima antes de intentarla; hay que volver a entrar una vez.',
-          ahora: new Date().toISOString(),
+      // LO QUE EL PRE-CHEQUE DE EDAD DESCARTÓ **NO SE APAGA**. Se dice en el
+      // log y ahí se queda.
+      //
+      // AUDITORÍA CICLO 7, c7-9 (alto). Hasta el 27-ago-2026 esto recorría
+      // `vigentes.vencidasPorEdad` llamando a `invalidarVinculo({ clase:
+      // 'sesion_caducada' })`, que apaga la fila del cofre (`activo = false`)
+      // y deja `portal_estado = 'caducada'`. O sea que usaba el pre-cheque
+      // como VEREDICTO, justo lo que el encabezado de `sesion_portal.ts`
+      // prohíbe con todas sus letras: «se usa como PRE-cheque, no como
+      // veredicto; la única prueba REAL de que una sesión sigue viva es
+      // intentar usarla».
+      //
+      // El daño concreto: `porPortal` se construye desde la COLA DE GASTOS, y
+      // `refrescarSesiones` solo toca los portales que tuvieron tickets. Una
+      // flota con G500, CAPUFE y La Gas vinculados que esta vuelta solo recibe
+      // tickets de CAPUFE nunca refresca los otros dos; a los 31 minutos
+      // entraban en `vencidasPorEdad` y SE DESTRUÍAN LAS DOS SESIONES — cada
+      // media hora, para siempre, con su «tu portal caducó, vuelve a entrar»
+      // al contralor. La sesión de portal la vincula UNA PERSONA pasando un
+      // captcha: es lo más caro que tiene este circuito, y se tiraba sola por
+      // no haber tenido trabajo ese rato. La promesa del PR («un toque humano
+      // cuando la sesión caduca») se volvía «un toque humano cada 30 minutos
+      // por portal ocioso».
+      //
+      // LA DISTINCIÓN QUE FALTABA: «esta sesión caducó» ≠ «esta vuelta no
+      // había trabajo». La primera solo la puede afirmar el portal, y ya
+      // tiene su camino — `correrLote` devuelve `r.vinculo` con la clase real
+      // y ESE sí invalida (y dispara el re-login de la 0233). La segunda no es
+      // un hecho sobre la sesión: es un hecho sobre la cola de gastos.
+      //
+      // Qué se conserva del pre-cheque, que sigue siendo útil: la sesión vieja
+      // NO entra al `storageState` del contexto (eso lo decide `porComercio`,
+      // arriba), así que no se gasta un intento contra una cookie que
+      // probablemente ya no sirve. Lo único que se quita es el poder de
+      // MATARLA sin haberlo intentado.
+      //
+      // Y `portal_estado` se queda en 'vinculado', que es la verdad: una
+      // persona vinculó ese portal y nadie ha demostrado lo contrario. Pintar
+      // 'caducada' sobre una sesión que jamás se intentó es la afirmación
+      // falsa, no la honesta.
+      if (vigentes.vencidasPorEdad.length > 0) {
+        logger.info('cron.facturar.sesion_vieja_no_restaurada', {
+          tenant: tenantId,
+          portales: vigentes.vencidasPorEdad.join(','),
+          conTicketsEstaVuelta: vigentes.vencidasPorEdad.filter((c) => porPortal.has(c)).join(','),
         });
       }
 

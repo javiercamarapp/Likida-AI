@@ -63,6 +63,20 @@ export async function GET(req: Request) {
     }
   }
 
+  // EL RELOJ DE LA VUELTA, fijado ANTES del primer trabajo (patrón #152 y de
+  // la ruta del runner). `avisarCierrePeaje` itera flota por flota con un
+  // WhatsApp de por medio y corre DESPUÉS de `correrDescargaSat`, que se lleva
+  // el tiempo que quiera: sin un instante límite absoluto, el barrido del peaje
+  // hereda lo que sobre y se lo come entero, y Vercel corta la función dentro
+  // del bucle sin que se escriba el latido. Es el modo de falla que dejó al
+  // runner mudo el 25-ago-2026 y el 28-ago-2026.
+  //
+  // El margen protege lo que va DESPUÉS del barrido: el latido y la respuesta.
+  // Es lo último de la fila, o sea lo primero que se pierde — y es justo lo
+  // único que haría visible el problema en un tablero.
+  const MARGEN_MS = 20_000;
+  const venceEn = Date.now() + maxDuration * 1000 - MARGEN_MS;
+
   try {
     const descarga = await correrDescargaSat(new Date());
     // El aviso de peaje va DESPUÉS y en su propio try: si la descarga tropieza
@@ -71,7 +85,7 @@ export async function GET(req: Request) {
     let peaje: Awaited<ReturnType<typeof avisarCierrePeaje>> | null = null;
     let peajeError: string | null = null;
     try {
-      peaje = await avisarCierrePeaje(new Date());
+      peaje = await avisarCierrePeaje(new Date(), { venceEn });
     } catch (e) {
       peajeError = e instanceof Error ? e.message : String(e);
       logger.error('cron.descarga-sat.peaje_falló', { error: peajeError });
@@ -88,11 +102,21 @@ export async function GET(req: Request) {
     // adentro es la clase de mentira que este panel no se permite. "No
     // configurado" TAMBIÉN es parcial — el circuito no está haciendo su
     // trabajo, y llamarlo 'ok' escondería que falta el contrato del PAC.
-    const sano = descarga.corrio && errores === 0 && peajeError === null;
+    //
+    // UN BARRIDO CORTADO POR EL RELOJ, O UNA LECTURA TRUNCADA, TAMPOCO SON
+    // 'ok'. Las dos significan flotas que no recibieron su aviso —y el aviso
+    // de peaje no admite postergarse: el derecho a facturar el cruce se
+    // extingue el último día del mes—. Un latido verde encima de eso es
+    // exactamente la clase de mentira que este panel no se permite, y es la
+    // única señal que haría visible el problema.
+    const peajeParcial = (peaje?.sinTurno ?? 0) > 0 || (peaje?.truncado ?? false);
+    const sano = descarga.corrio && errores === 0 && peajeError === null && !peajeParcial;
     await registrarLatido('descarga-sat', sano ? 'ok' : 'parcial', {
       flotas: descarga.flotas, cfdis, casados, errores,
       motivo: descarga.motivo ?? null,
       peajeAvisadas: peaje?.avisadas ?? null,
+      peajeSinTurno: peaje?.sinTurno ?? null,
+      peajeTruncado: peaje?.truncado ?? null,
     });
 
     return NextResponse.json({

@@ -70,6 +70,24 @@ function ultimasFuentes(): Record<string, unknown> {
   return (encolar.mock.calls.at(-1)?.[0] as { fuentes: Record<string, unknown> } | undefined)?.fuentes ?? {};
 }
 
+/**
+ * La cola de respuestas de `cola_aprobacion`, EN EL ORDEN en que la corrida
+ * pregunta: primero `temasRechazados` (qué temas ya juzgó una persona) y
+ * después `piezaExistente` (¿ya hay pieza de este periodo?). Existe desde la
+ * correctiva del ciclo 7 (c7-10): antes había una sola consulta y las pruebas
+ * ponían un solo `{count}`, que es exactamente por qué nadie notó que una
+ * pieza RECHAZADA se leía como «ya está en la bandeja».
+ */
+function colaAprobacion(
+  { rechazados = [], existe = 0 }:
+  { rechazados?: Array<{ fuentes: unknown; motivo_rechazo: string }>; existe?: number | undefined },
+) {
+  respuestas.set('cola_aprobacion', [
+    { data: rechazados, error: null },
+    { count: existe, error: null },
+  ]);
+}
+
 beforeEach(() => {
   respuestas.clear();
   encolar.mockClear();
@@ -244,7 +262,7 @@ describe('los cuerpos dicen la verdad de cómo se hicieron', () => {
 
 describe('la corrida completa', () => {
   it('redacta, guarda y encola el borrador con el costo MEDIDO', async () => {
-    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    colaAprobacion({});
     generar.mockResolvedValue({ text: 'Un borrador limpio y sin cifras.', cost: 0.031, noMedido: false });
     const r = await correrContenidoFiscal('cron', HOY);
     expect(r).toMatchObject({ resultado: 'corrio', piezas: 1 });
@@ -255,14 +273,14 @@ describe('la corrida completa', () => {
   });
 
   it('usa el rol `marketing`, que es prosa con voz y cifras del guion', async () => {
-    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    colaAprobacion({});
     generar.mockResolvedValue({ text: 'Texto.', cost: 0.01, noMedido: false });
     await correrContenidoFiscal('cron', HOY);
     expect((generar.mock.calls[0][0] as { role: string }).role).toBe('marketing');
   });
 
   it('el prompt del sistema PROHÍBE citar fuera de FUENTES y nombrar clientes', async () => {
-    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    colaAprobacion({});
     generar.mockResolvedValue({ text: 'Texto.', cost: 0, noMedido: false });
     await correrContenidoFiscal('cron', HOY);
     const sys = (generar.mock.calls[0][0] as { system: string }).system;
@@ -272,7 +290,7 @@ describe('la corrida completa', () => {
   });
 
   it('un borrador que rompe la marca NO llega a la bandeja: sale el esqueleto', async () => {
-    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    colaAprobacion({});
     generar.mockResolvedValue({ text: 'Cientos de flotas confían y son clientes reales.', cost: 0.02, noMedido: false });
     const r = await correrContenidoFiscal('cron', HOY);
     expect(r.piezas).toBe(1);
@@ -285,7 +303,7 @@ describe('la corrida completa', () => {
   });
 
   it('el modelo caído NO tumba la corrida: la pieza sale con el esqueleto', async () => {
-    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    colaAprobacion({});
     generar.mockRejectedValue(new Error('502 del proveedor'));
     const r = await correrContenidoFiscal('cron', HOY);
     expect(r.piezas).toBe(1);
@@ -293,7 +311,7 @@ describe('la corrida completa', () => {
   });
 
   it('si el borrador del tema ya está en la bandeja, NO se propone el siguiente', async () => {
-    respuestas.set('cola_aprobacion', [{ count: 1, error: null }]);
+    colaAprobacion({ existe: 1 });
     const r = await correrContenidoFiscal('cron', HOY);
     expect(r.piezas).toBe(0);
     expect(generar).not.toHaveBeenCalled();
@@ -301,14 +319,19 @@ describe('la corrida completa', () => {
   });
 
   it('la bandeja ilegible: fail closed, ni se llama al modelo', async () => {
-    respuestas.set('cola_aprobacion', [{ count: undefined, error: null }]);
+    // El `count` que NO llega: `piezaExistente` no puede afirmar un 0 que
+    // nadie midió. Se arma a mano porque `colaAprobacion` tiene default.
+    respuestas.set('cola_aprobacion', [
+      { data: [], error: null },
+      { count: undefined, error: null },
+    ]);
     await expect(correrContenidoFiscal('cron', HOY)).rejects.toThrow(/no devolvió el conteo/);
     expect(generar).not.toHaveBeenCalled();
     expect(registrar.mock.calls.at(-1)?.[2]).toMatchObject({ estado: 'fallo' });
   });
 
   it('el costo gastado ANTES de un fallo se anota igual: el techo no puede quedar ciego', async () => {
-    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    colaAprobacion({});
     generar.mockResolvedValue({ text: 'Texto.', cost: 0.05, noMedido: false });
     encolar.mockRejectedValue(new Error('la cola no aceptó'));
     await expect(correrContenidoFiscal('cron', HOY)).rejects.toThrow(/la cola no aceptó/);
@@ -316,11 +339,124 @@ describe('la corrida completa', () => {
   });
 
   it('un duplicado que rebota en el índice único NO es un fallo', async () => {
-    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    colaAprobacion({});
     generar.mockResolvedValue({ text: 'Texto.', cost: 0, noMedido: false });
     encolar.mockRejectedValue(new Error('duplicate key value violates unique constraint'));
     const r = await correrContenidoFiscal('cron', HOY);
     expect(r).toMatchObject({ resultado: 'corrio', piezas: 0 });
     expect(r.motivo).toContain('otra corrida ganó el tema');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LAS PRUEBAS QUE FALTABAN — auditoría adversarial del ciclo 7.
+//
+// Las dos de abajo son los dos hallazgos ALTOS de este archivo escritos como
+// prueba. Las dos pasaban por debajo de la suite en verde porque el mock
+// llegaba SIEMPRE en el caso feliz: nunca una pieza rechazada, nunca un
+// `noMedido: true`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('c7-10 · un borrador RECHAZADO no deja mudo al agente, y el motivo no miente', () => {
+  /** El tema que el agente propondría hoy sin nada rechazado: el primero del
+   *  catálogo que /blog no cubre. Se calcula, no se escribe: publicar un
+   *  artículo nuevo movería la respuesta y una constante mentiría. */
+  const primerTema = siguienteTema(ARTICULOS.map((a) => a.tema), normasPorTema)!.tema;
+
+  it('rechazado NO es «ya está en la bandeja»: el catálogo avanza al siguiente tema', async () => {
+    // El primer tema del catálogo tiene su borrador rechazado, y su fila sigue
+    // ocupando el título en `cola_aprobacion` (el índice único de la 0230 no
+    // mira el estado). Antes de este arreglo: `piezaExistente` contaba 1 →
+    // «0 piezas, ya está en la bandeja» → y como el tema seguía sin artículo
+    // publicado, el selector NUNCA avanzaba. El agente quedaba apagado de
+    // facto para siempre, con un motivo falso.
+    colaAprobacion({
+      rechazados: [{ fuentes: { tema: primerTema }, motivo_rechazo: 'muy genérico, cita mal la RMF' }],
+      existe: 0,
+    });
+    generar.mockResolvedValue({ text: 'Texto.', cost: 0.01, noMedido: false });
+
+    const r = await correrContenidoFiscal('cron', HOY);
+
+    expect(r.piezas, 'el agente tiene que seguir produciendo, no callarse').toBe(1);
+    expect(r.motivo).toBeUndefined();
+    // Y la pieza es de OTRO tema: el rechazado no se vuelve a redactar solo.
+    expect(ultimasFuentes().tema).not.toBe(primerTema);
+  });
+
+  it('con TODOS los temas cubiertos o rechazados, el motivo dice cuál es cuál y trae el motivo humano', async () => {
+    // Todo el catálogo rechazado: no queda tema. El agente no puede fingir que
+    // «ya está todo cubierto en /blog» — son dos hechos distintos y el que
+    // desatasca es el segundo.
+    colaAprobacion({
+      rechazados: TEMAS_NORMATIVOS.map((t) => ({
+        fuentes: { tema: t }, motivo_rechazo: `no me gustó ${t}`,
+      })),
+      existe: 0,
+    });
+
+    const r = await correrContenidoFiscal('cron', HOY);
+
+    expect(r.piezas).toBe(0);
+    expect(generar, 'sin tema no se gasta un peso de modelo').not.toHaveBeenCalled();
+    expect(r.motivo).toContain('con el borrador RECHAZADO');
+    expect(r.motivo).toContain(`no me gustó ${primerTema}`);
+    expect(r.motivo).toContain('borra su pieza de la bandeja o publica el artículo');
+    expect(r.motivo, 'no se puede afirmar que estén cubiertos en /blog').not.toContain('todos cubiertos en /blog');
+  });
+
+  it('una fila rechazada de otro agente o sin tema legible NO cuenta como tema juzgado', async () => {
+    colaAprobacion({
+      rechazados: [
+        { fuentes: null, motivo_rechazo: 'sin fuentes' },
+        { fuentes: { tema: 'tema_que_no_existe_en_el_catalogo' }, motivo_rechazo: 'basura' },
+      ],
+      existe: 0,
+    });
+    generar.mockResolvedValue({ text: 'Texto.', cost: 0.01, noMedido: false });
+
+    const r = await correrContenidoFiscal('cron', HOY);
+    // El catálogo NO se recorta por filas que no dicen de qué tema hablan.
+    expect(ultimasFuentes().tema).toBe(primerTema);
+    expect(r.piezas).toBe(1);
+  });
+
+  it('la lista de rechazados ilegible: fail closed, ni se llama al modelo', async () => {
+    respuestas.set('cola_aprobacion', [{ data: null, error: { message: 'fetch failed' } }]);
+    await expect(correrContenidoFiscal('cron', HOY)).rejects.toThrow(/temasRechazados: fetch failed/);
+    expect(generar).not.toHaveBeenCalled();
+  });
+});
+
+describe('c7-11 · un costo NO MEDIDO se anota como desconocido, jamás como $0', () => {
+  it('noMedido: la corrida anota costo NULL, no cero', async () => {
+    colaAprobacion({});
+    // El proveedor omitió `usage`. Antes esto anotaba `costo_usd = 0` —el
+    // `cost: 0` que llega en modo plataforma, donde no hay reserva—, y ese cero
+    // entraba a la columna con la que el runner compara el techo de $1/día:
+    // `gastoDelDiaUsd` sumaba ceros, nunca llegaba a $1.00 y el candado NUNCA
+    // cortaba mientras el agente seguía gastando de verdad.
+    generar.mockResolvedValue({ text: 'Texto.', cost: 0, noMedido: true });
+
+    const r = await correrContenidoFiscal('cron', HOY);
+
+    expect(r.costoUsd, 'un costo desconocido no es cero').toBeNull();
+    expect(registrar.mock.calls.at(-1)?.[2]).toMatchObject({ estado: 'ok', costoUsd: null });
+  });
+
+  it('medido: se anota el número, y un 0 medido sigue siendo un 0', async () => {
+    colaAprobacion({});
+    generar.mockResolvedValue({ text: 'Texto.', cost: 0, noMedido: false });
+    const r = await correrContenidoFiscal('cron', HOY);
+    expect(r.costoUsd, 'este 0 SÍ se midió: no es lo mismo que null').toBe(0);
+    expect(registrar.mock.calls.at(-1)?.[2]).toMatchObject({ costoUsd: 0 });
+  });
+
+  it('el costo desconocido se arrastra hasta el latido de FALLO: tampoco ahí se vuelve 0', async () => {
+    colaAprobacion({});
+    generar.mockResolvedValue({ text: 'Texto.', cost: 0, noMedido: true });
+    encolar.mockRejectedValue(new Error('la cola no aceptó'));
+    await expect(correrContenidoFiscal('cron', HOY)).rejects.toThrow(/la cola no aceptó/);
+    expect(registrar.mock.calls.at(-1)?.[2]).toMatchObject({ estado: 'fallo', costoUsd: null });
   });
 });

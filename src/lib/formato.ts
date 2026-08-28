@@ -233,6 +233,33 @@ export function numero(n: number): string {
 }
 
 /**
+ * Un porcentaje YA CALCULADO, como lo lee una persona: `42.9%`, `50%`.
+ *
+ * Recibe el número EN PUNTOS PORCENTUALES (42.9 → `"42.9%"`), no la fracción:
+ * es lo que devuelven `pctCambio` y las tasas del repo, y convertir aquí
+ * invitaría a que la mitad de los llamadores pasara `0.429` y la otra mitad
+ * `42.9` sin que nada lo notara.
+ *
+ * AUDITORÍA CICLO 7, c7-34 (regla 10 — formato SOLO por este archivo): el
+ * parte del embudo escribía `${e.tasaPct.toFixed(1)}%` y la promo diaria
+ * `${(factor * 100).toFixed(0)}%` a mano. `toFixed` NO es `toLocaleString`:
+ * no pone separador de millares y ancla el punto decimal del inglés, así que
+ * un `1234.5` salía `1234.5%` en un texto que se pega en LinkedIn con la marca
+ * encima. Aquí se formatea una vez, con la misma configuración regional que el
+ * resto del producto.
+ *
+ * `decimales` fija los decimales EXACTOS (no un máximo): una tasa que se
+ * publica con un decimal tiene que enseñar `50.0%` y no `50%`, porque la
+ * ausencia del decimal en una columna que sí los lleva se lee como otra
+ * precisión.
+ */
+export function porcentaje(n: number, decimales = 1): string {
+  return `${n.toLocaleString('es-MX', {
+    minimumFractionDigits: decimales, maximumFractionDigits: decimales,
+  })}%`;
+}
+
+/**
  * Litros con separador de millares y hasta dos decimales, sin rellenar ceros.
  *
  * El motor redondea a dos decimales, así que el tope no puede recortar
