@@ -13,6 +13,7 @@ import {
   ScanEye,
   CloudDownload,
   CalendarClock,
+  Scale3d,
 } from 'lucide-react';
 
 /**
@@ -110,6 +111,10 @@ export const DINERO_FISCAL: Item[] = [
   // declara un RFC, consume el tope diario de ese contribuyente ante el SAT y
   // deja gastos facturados.
   { href: '/dashboard/descarga-sat', nombre: 'Descarga del SAT', Icono: CloudDownload },
+  // 0243: la bandeja donde el contralor DECIDE sobre lo que bajó y no cuadró
+  // solo. Entrada propia y no un enlace dentro de la de arriba porque son dos
+  // trabajos distintos: aquélla se declara una vez, ésta se abre a diario.
+  { href: '/dashboard/descarga-sat/bandeja', nombre: 'Conciliación del SAT', Icono: Scale3d },
 ];
 
 export const SISTEMA: Item[] = [

@@ -58,6 +58,13 @@ export type EntidadBitacora =
   // consume el tope diario que ese RFC tiene ante el SAT.
   | 'sat_descarga_config'
   | 'sat_descarga_solicitud'
+  // 0243: la bandeja de conciliación. Ligar un CFDI a un gasto, archivarlo o
+  // DESHACER cualquiera de las dos cosas son afirmaciones sobre dinero
+  // deducible: «este comprobante ampara este gasto» es lo que el contador va a
+  // defender ante el SAT. La anotación vive además EN LA FILA
+  // (`resuelto_por_email`) y en el expediente `sat_cfdi_resolucion`; esto es la
+  // copia cross-tenant que /admin reconstruye — mismo reparto que `jornada_dia`.
+  | 'sat_cfdi_descargado'
   // El permiso de la flota para que Likida guarde su contraseña de portal y
   // reconecte sola (0233). Es un CONSENTIMIENTO: quién lo dio, cuándo, quién
   // lo revocó, y cada vez que la máquina lo ejerció. Sin esto, «reconecté

@@ -1,5 +1,6 @@
 import { revalidatePath } from 'next/cache';
-import { Archive, CloudDownload, FileCheck2, FileQuestion, Link2, ShieldCheck, TriangleAlert } from 'lucide-react';
+import Link from 'next/link';
+import { Archive, CloudDownload, FileCheck2, FileQuestion, Link2, Scale3d, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
@@ -255,6 +256,26 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
               <StatCard icono={<Archive width={15} height={15} strokeWidth={1.75} />}
                 etiqueta="Archivados a propósito" valor={c?.ignorados ?? null}
                 sinDato="no se pudo leer" nota="Consolidados que ya entraron por su propio camino — no se pierden, se archivan" />
+            </div>
+
+            {/* ── LA PUERTA A LAS FILAS (0243) ─────────────────────────────
+                Hasta hoy estas cinco tarjetas eran el final del camino: la
+                tercera decía «Esperan que tú decidas» y no había dónde decidir.
+                Los cuatro cubos que SÍ son colas de trabajo llevan ahora a su
+                lista, filtrada — el conteo deja de ser una cifra huérfana. */}
+            <div className="mt-2.5 flex items-center gap-2 flex-wrap text-[12.5px]">
+              <span style={{ color: 'var(--muted)' }}>Ver las filas:</span>
+              {([
+                ['ambiguo', 'los que esperan tu decisión'],
+                ['disponible', 'los que ningún gasto reclama'],
+                ['casado', 'los que ya cuadraron'],
+                ['ignorado', 'los archivados'],
+              ] as const).map(([e, texto]) => (
+                <Link key={e} href={`/dashboard/descarga-sat/bandeja?estatus=${e}`}
+                  className="inline-flex items-center gap-1.5 font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
+                  <Scale3d width={13} height={13} strokeWidth={1.75} /> {texto}
+                </Link>
+              ))}
             </div>
           </section>
 
