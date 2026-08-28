@@ -115,18 +115,38 @@ export default async function PaginaPago({ params }: { params: Promise<{ token: 
         />
       );
     }
+    if (vista.motivo === 'no_cobrable') {
+      // NO se colapsa en el texto único de los tokens muertos, y no es un
+      // descuido: quien llega aquí trae un token BUENO —no está probando
+      // enlaces, es el cliente— y lo que necesita saber es que ese papel ya no
+      // se paga, no que "pida otro enlace". Tampoco se pinta el saldo: sobre un
+      // CFDI cancelado no hay cifra que cobrar, y enseñarla invitaría a pagarla
+      // por fuera. Se dice lo que pasó y a quién preguntarle.
+      await anotarAcceso(liga, 'vista', { motivo: 'no_cobrable', estatus: vista.estatus });
+      return (
+        <Aviso
+          titulo="Esta factura ya no se puede pagar aquí"
+          texto={
+            vista.estatus === 'cancelada'
+              ? 'Esta factura fue cancelada, así que aquí ya no se registra ningún pago. Si ya la pagaste, o si esperas una factura nueva que la reemplace, escríbele directamente a quien te la emitió: esa aclaración no se puede hacer desde esta página.'
+              : 'Esta factura todavía no está emitida, así que aquí no se puede registrar ningún pago. Escríbele a quien te compartió el enlace para que te confirme cómo va.'
+          }
+        />
+      );
+    }
     return <Aviso titulo="Enlace no disponible" texto={TEXTO_LIGA_NO_VALIDA} />;
   }
 
   const v = vista.vista;
 
   // Los sellos van DESPUÉS del hecho, y ninguno puede tumbar la página: los
-  // tres tragan su propio error. El del REP solo escribe la PRIMERA vez.
+  // tres tragan su propio error. El del REP solo escribe la PRIMERA vez, y solo
+  // sobre los complementos que esta página SÍ está enseñando (`c7-16`).
   await anotarAcceso(liga, 'vista');
   await sellarUltimoAcceso(liga);
-  if (v.rep) {
-    await anotarAcceso(liga, 'rep_mostrado', { cfdiUuid: v.rep.cfdiUuid });
-    await sellarRepEntregado(v.tenantId, v.facturaId);
+  if (v.reps.length > 0) {
+    await anotarAcceso(liga, 'rep_mostrado', { cfdiUuids: v.reps.map((r) => r.cfdiUuid) });
+    await sellarRepEntregado(v.tenantId, v.facturaId, v.reps.map((r) => r.cfdiUuid));
   }
 
   return <Contenido v={v} token={token} />;
@@ -232,24 +252,32 @@ function Contenido({ v, token }: { v: VistaPortal; token: string }) {
           Tu complemento de pago (REP)
         </h2>
         <p className="mt-2 text-[14px] break-words">{textoDelRep(
-          v.rep ? { cfdi_uuid: v.rep.cfdiUuid, xml: v.rep.tieneXml ? 'sí' : null } : null,
+          v.reps.map((r) => ({ cfdi_uuid: r.cfdiUuid, tieneXml: r.tieneXml })),
         )}</p>
-        {v.rep && (
-          <div className="mt-3 text-[14px]">
-            <Renglon etiqueta="Folio fiscal del REP" valor={v.rep.cfdiUuid} />
-            <Renglon etiqueta="Fecha del pago" valor={fechaMx(v.rep.fechaPago)} />
-            <Renglon etiqueta="Importe pagado" valor={mxn(v.rep.impPagado)} />
-            {v.rep.tieneXml && (
+        {/* TODOS los complementos, uno por bloque, cada uno con su descarga.
+            Con parcialidades son varios y el contador del cliente necesita
+            todos: cada uno acredita el IVA de su mes (`c7-16`). */}
+        {v.reps.map((rep) => (
+          <div key={rep.cfdiUuid} className="mt-4 text-[14px]">
+            <Renglon etiqueta="Folio fiscal del REP" valor={rep.cfdiUuid} />
+            <Renglon etiqueta="Fecha del pago" valor={fechaMx(rep.fechaPago)} />
+            <Renglon etiqueta="Importe pagado" valor={mxn(rep.impPagado)} />
+            {rep.tieneXml ? (
               <a
-                className="mt-3 inline-block underline"
+                className="mt-2 inline-block underline"
                 style={{ color: 'var(--ink)' }}
-                href={`/pago/${encodeURIComponent(token)}/complemento`}
+                href={`/pago/${encodeURIComponent(token)}/complemento/${encodeURIComponent(rep.cfdiUuid)}`}
               >
-                Descargar el XML
+                Descargar el XML de este complemento
               </a>
+            ) : (
+              <p className="mt-2 text-[13px]">
+                De este complemento no hay archivo cargado en Likida: pídeselo a
+                {' '}{v.flota} citando ese folio fiscal.
+              </p>
             )}
           </div>
-        )}
+        ))}
       </section>
 
       <footer className="pt-6 text-[12px]" style={{ borderTop: '1px solid var(--line)', color: 'var(--muted)' }}>

@@ -104,6 +104,32 @@ export function round2(n: number): number {
   return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * 100) / 100;
 }
 
+/**
+ * MEDIO CENTAVO: la holgura con la que se decide si un abono cabe en el saldo.
+ *
+ * AUDITORÍA 7, `c7-6` — el portal de pago usaba `saldo + 0.01` y
+ * `registrar_pago_tx` (0159) usa `v_saldo + 0.005`. Dos verdades sobre el mismo
+ * peso, y el hueco entre ellas era un agujero por el que caía dinero real: con
+ * un saldo de $1,160.00 el cliente teclea $1,160.01 —una comisión, un redondeo
+ * del banco—, el portal lo ACEPTA (1160.01 > 1160.01 es falso) y la RPC lo
+ * RECHAZA (1160.01 > 1160.005 es cierto). La propuesta se registraba, salía el
+ * correo al contralor, y al apretar «Conciliar» rebotaba con
+ * `CU011 motivo=sobrepago` para siempre: el cliente veía «por confirmar»
+ * indefinidamente sobre un depósito que ya había hecho.
+ *
+ * Ahora la constante vive UNA vez y la importan los dos lados de TypeScript
+ * (`evaluarAbono` y el validador del portal). La tercera copia es la de SQL, y
+ * no se puede importar: el bloque 192 de `verificaciones.sql` la compara
+ * ejecutando la RPC contra el valor de aquí, que es la única forma de que las
+ * dos no vuelvan a separarse en silencio.
+ *
+ * NO es `TOLERANCIA_CENTAVO` (0.01, en `libro_viaje.ts`): aquélla es la holgura
+ * con la que se PINTA una factura como saldada, la misma que `factura_saldo`.
+ * Ésta decide si un abono ENTRA. Son dos preguntas distintas y por eso son dos
+ * constantes distintas, cada una espejando lo que la base hace en su caso.
+ */
+export const TOLERANCIA_ABONO_MXN = 0.005;
+
 /** % de cambio de `actual` contra `base`, o `null` si no se puede calcular
  *  honesto: sin base (0 o desconocida) un "+100%" o un "$0 → $500" como
  *  "∞%" no dicen nada real — es la MISMA regla que `costoPorViaje` (en

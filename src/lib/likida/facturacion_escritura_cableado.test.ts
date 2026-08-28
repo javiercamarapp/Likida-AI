@@ -28,6 +28,11 @@ function builder(tabla: string) {
   Object.assign(b, {
     select: () => b,
     eq: (c: string, v: unknown) => { filtros.push([c, v]); return b; },
+    // `.is('revocada_en', null)` es un filtro con su propia semántica y cuenta
+    // como tal: sin él, cancelar una factura pisaría el sello de una liga ya
+    // revocada.
+    is: (c: string, v: unknown) => { filtros.push([c, v]); return b; },
+    lte: (c: string, v: unknown) => { filtros.push([c, v]); return b; },
     in: () => b,
     maybeSingle: () => b,
     single: () => b,
@@ -45,7 +50,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('./presupuesto', () => ({ acotada: (q: unknown) => q }));
 
 const { registrarPago, cancelarFactura, crearFactura, marcarEmitida } = await import('./facturacion_escritura');
-const { DatoInvalido } = await import('./errores');
+const { DatoInvalido, AbonoYaRegistrado } = await import('./errores');
 
 const T = 't-1';
 const FACTURA = 'ad662d33-6934-459c-a128-bdf0393f0f44';
@@ -71,7 +76,7 @@ beforeEach(() => { respuestas.clear(); escrituras.length = 0; rpc.mockReset(); }
 // haya sobrevivido a la mudanza.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('registrarPago — la decisión la toma la base; aquí se traduce', () => {
-  it('el pago que entra: un solo RPC con los seis parámetros, y la bitácora con el id que devolvió la base', async () => {
+  it('el pago que entra: un solo RPC con los siete parámetros, y la bitácora con el id que devolvió la base', async () => {
     rpc.mockResolvedValue({ data: { pago_id: 'pago-1', saldada: true, saldo_previo: 1600 }, error: null });
 
     await registrarPago(T, pago(1600), { id: 'u-conta' });
@@ -81,10 +86,38 @@ describe('registrarPago — la decisión la toma la base; aquí se traduce', () 
     expect(rpc.mock.calls[0][1]).toEqual({
       p_tenant: T, p_factura: FACTURA, p_fecha: '2026-08-20',
       p_monto: 1600, p_metodo: 'transferencia', p_referencia: null,
+      // El pago TECLEADO no nace de ninguna propuesta y no compite por la
+      // llave de idempotencia: `null` explícito, no ausencia.
+      p_propuesta: null,
     });
     expect(escribioEn('bitacora_auditoria')[0].fila).toMatchObject({
       accion: 'pago.registrado', actor_id: 'u-conta', entidad_id: 'pago-1',
     });
+  });
+
+  // ── `c7-5` · LA LLAVE DE IDEMPOTENCIA LLEGA HASTA LA BASE ───────────────
+  it('la propuesta viaja al RPC, que es donde el índice único la vigila', async () => {
+    rpc.mockResolvedValue({ data: { pago_id: 'pago-1', saldada: false }, error: null });
+    await registrarPago(T, pago(1600), undefined, 'prop-9');
+    expect((rpc.mock.calls[0][1] as { p_propuesta: unknown }).p_propuesta).toBe('prop-9');
+    expect(escribioEn('bitacora_auditoria')[0].fila).toMatchObject({ accion: 'pago.registrado' });
+  });
+
+  it('el 23505 con propuesta es `AbonoYaRegistrado`, y NO se anota un pago que no nació', async () => {
+    // Es la base diciendo «ese abono ya está»: quien concilia tiene que poder
+    // colgarse del que existe en vez de crear un segundo. Si esto se leyera
+    // como un error genérico, la carrera de `c7-5` volvería con otra cara.
+    rpc.mockResolvedValue({ data: null, error: { code: '23505', message: 'duplicate key' } });
+    const err = await registrarPago(T, pago(1600), undefined, 'prop-9').catch((e) => e);
+    expect(err).toBeInstanceOf(AbonoYaRegistrado);
+    expect(escrituras).toEqual([]);
+  });
+
+  it('un 23505 SIN propuesta no se disfraza: no hay abono del que colgarse', async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: '23505', message: 'duplicate key' } });
+    const err = await registrarPago(T, pago(1600)).catch((e) => e);
+    expect(err).not.toBeInstanceOf(AbonoYaRegistrado);
+    expect(err).toBeInstanceOf(Error);
   });
 
   it('NINGUNA escritura suelta sobrevivió: ni el insert del pago ni el update del estatus salen de aquí', async () => {
@@ -154,11 +187,45 @@ describe('cancelarFactura — cuenta los pagos ANTES de cancelar', () => {
   it('sin pagos cancela, acotado a tenant, y anota la bitácora', async () => {
     respuestas.set('pago_recibido', [{ data: null, error: null, count: 0 }]);
     respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);
+    respuestas.set('portal_pago_liga', [{ data: [], error: null }]);
     await cancelarFactura(T, FACTURA, { id: 'u-1' });
     const upd = escribioEn('factura_emitida');
     expect(upd).toHaveLength(1);
     expect(upd[0].fila).toEqual({ estatus: 'cancelada' });
     expect(upd[0].filtros).toEqual(expect.arrayContaining([['tenant_id', T], ['id', FACTURA]]));
+    expect(escribioEn('bitacora_auditoria')[0].fila).toMatchObject({ accion: 'factura.cancelada' });
+  });
+
+  // ── `c7-7` · CANCELAR APAGA EL ENLACE PÚBLICO DE ESA FACTURA ────────────
+  it('cancelar REVOCA las ligas vivas: un CFDI cancelado no puede seguir cobrando', async () => {
+    // Sin esto, el cliente abría el mismo link y veía «Saldo pendiente
+    // $34,800.00» con el formulario activo sobre una factura que ante el SAT ya
+    // no existe — `factura_saldo` calcula total − pagos sin mirar el estatus.
+    respuestas.set('pago_recibido', [{ data: null, error: null, count: 0 }]);
+    respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);
+    respuestas.set('portal_pago_liga', [{ data: [{ id: 'liga-1' }], error: null }]);
+    await cancelarFactura(T, FACTURA, { id: 'u-1' });
+
+    const rev = escribioEn('portal_pago_liga');
+    expect(rev).toHaveLength(1);
+    expect(rev[0].fila).toMatchObject({ revocada_por: 'u-1' });
+    expect(rev[0].filtros).toEqual(expect.arrayContaining([
+      ['tenant_id', T], ['factura_id', FACTURA], ['revocada_en', null],
+    ]));
+    // El orden importa: la factura se cancela ANTES de matar el enlace. Al
+    // revés, un update fallido dejaría muerta la liga de una factura viva.
+    expect(escrituras.findIndex((e) => e.tabla === 'factura_emitida'))
+      .toBeLessThan(escrituras.findIndex((e) => e.tabla === 'portal_pago_liga'));
+    expect(escribioEn('bitacora_auditoria').map((e) => e.fila.accion))
+      .toContain('portal_pago.liga_revocada');
+  });
+
+  it('si la revocación falla, se LANZA: no se deja un enlace suelto en silencio', async () => {
+    respuestas.set('pago_recibido', [{ data: null, error: null, count: 0 }]);
+    respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);
+    respuestas.set('portal_pago_liga', [{ data: null, error: { message: 'sin red' } }]);
+    await expect(cancelarFactura(T, FACTURA)).rejects.toThrow(/SÍ quedó cancelada/);
+    // Y la cancelación queda anotada: pasó de verdad.
     expect(escribioEn('bitacora_auditoria')[0].fila).toMatchObject({ accion: 'factura.cancelada' });
   });
 

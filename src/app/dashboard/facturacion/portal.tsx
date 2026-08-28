@@ -204,15 +204,34 @@ function Bandeja({ panel, conciliar, descartar }: {
               <strong>{p.saldo === null ? 'sin dato' : mxn(p.saldo)}</strong>
               {p.saldo === null && ' — no se pudo leer; no es cero.'}
             </span>
+            {/* La factura que no se pudo resolver NO se concilia (`c7-23`): sin
+                saber sobre qué papel es, "Conciliar" sería mover dinero a
+                ciegas. Y una cancelada rebotaría en `registrar_pago_tx`: se
+                dice antes de apretar, no después. */}
+            {!p.identificada ? (
+              <span style={{ color: 'var(--bad)' }}>
+                No pude identificar la factura de este registro (id {p.facturaId}). No se
+                puede conciliar a ciegas: revísala en la cartera de arriba antes de decidir.
+                Descartarlo sí se puede, con tu motivo escrito.
+              </span>
+            ) : p.estatus === 'cancelada' ? (
+              <span style={{ color: 'var(--bad)' }}>
+                Esa factura está CANCELADA: un abono contra ella se rechaza, y este registro
+                no se puede conciliar. Aclara con tu cliente a qué factura entra ese depósito
+                y descarta este registro con el motivo.
+              </span>
+            ) : null}
             <span>
               Cruza la referencia contra tu estado de cuenta ANTES de conciliar. Conciliar
               crea el abono de verdad sobre la factura, con las mismas reglas que un pago
               tecleado a mano (rechaza el sobrepago y sella la factura como pagada si la salda).
             </span>
             <div className="flex flex-col gap-3">
-              <FormaConAviso accion={conciliar} boton={`Conciliar ${mxn(p.monto)}`} columnas="md:grid-cols-1">
-                <input type="hidden" name="propuestaId" value={p.id} />
-              </FormaConAviso>
+              {p.identificada && p.estatus !== 'cancelada' && (
+                <FormaConAviso accion={conciliar} boton={`Conciliar ${mxn(p.monto)}`} columnas="md:grid-cols-1">
+                  <input type="hidden" name="propuestaId" value={p.id} />
+                </FormaConAviso>
+              )}
               <FormaConAviso accion={descartar} boton="Descartar este registro" columnas="md:grid-cols-1">
                 <input type="hidden" name="propuestaId" value={p.id} />
                 <Campo

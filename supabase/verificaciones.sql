@@ -6809,7 +6809,11 @@ begin
   borrado_explicito := not (cfg ? 'facilidadCombustibleEfectivo') and cfg ? 'estimulos';
 
   -- ── Permisos: nada de esto se ejecuta desde internet ──────────────────────
-  select has_function_privilege('anon', 'public.registrar_pago_tx(uuid, uuid, date, numeric, text, text)', 'EXECUTE')
+  -- La firma lleva SIETE argumentos desde la 0237: el séptimo (`p_propuesta`,
+  -- con default null) es la llave de idempotencia del abono conciliado. La
+  -- firma de seis ya no existe, y preguntar por ella aquí haría fallar el
+  -- bloque con «function does not exist» en vez de medir el permiso.
+  select has_function_privilege('anon', 'public.registrar_pago_tx(uuid, uuid, date, numeric, text, text, uuid)', 'EXECUTE')
       or has_function_privilege('anon', 'public.reabrir_viaje_tx(uuid, uuid)', 'EXECUTE')
       or has_function_privilege('anon', 'public.tenant_config_merge(uuid, jsonb, text[])', 'EXECUTE')
     into anon_ok;
@@ -11756,4 +11760,221 @@ begin
     borrar_solicitud_ok, cfdi_sin_solicitud, borrar_flota_ok,
     paquetes_objeto_rebota, paquetes_arreglo_entra,
     traslape_rebota, pegado_entra, cerrado_reentra, conteos_exactos, conteos_cerrados;
+end $$;
+
+-- ── 192. La corrección del portal de pago: el abono no se puede duplicar, el REP no se puede colgar de otra factura, y un CFDI cancelado no cobra (mig. 0237) ──
+-- Los bloques 189-191 los toman ramas paralelas de esta misma ola (ingeniería,
+-- dirección+leads y SAT); aquí se toma el 192.
+--
+-- Lo que SOLO la base puede demostrar, y que la auditoría del ciclo 7 encontró
+-- abierto:
+--
+--  (a) `c7-5` — CONCILIAR DOS VECES NO PUEDE CREAR DOS ABONOS. Es el hallazgo
+--      caro: dinero duplicado en la cartera de un cliente real. Se ataca como
+--      pasaba de verdad —la misma propuesta conciliada dos veces— y se exige
+--      que rebote LA BASE (`unique_violation` contra
+--      `pago_recibido_propuesta_unica`), no un `if` de TypeScript. Un `if`
+--      previo no se puede probar aquí, y ese es justamente el punto: lo que no
+--      es una restricción no es una garantía.
+--  (b) El pago TECLEADO a mano no compite por esa llave: `propuesta_id` es NULL
+--      y el índice es parcial, así que dos abonos manuales sobre la misma
+--      factura siguen entrando (los pagos parciales son la norma).
+--  (c) `c7-25` — un REP no se puede colgar del abono de OTRA factura. Con las
+--      FK de dos columnas de la 0228 esto pasaba: solo garantizaban la misma
+--      flota. Ahora la llave es de tres.
+--  (d) Lo mismo para la propuesta conciliada: su `pago_id` tiene que ser un
+--      abono de SU factura.
+--  (e) `c7-18` — la idempotencia de la bandeja es PARCIAL sobre las pendientes:
+--      dos pendientes idénticas chocan, pero una DESCARTADA ya no bloquea que
+--      el cliente vuelva a registrar su depósito (antes la página le contestaba
+--      «ya estaba registrado, no hace falta hacer nada más», que era falso). Y
+--      la llave es por FACTURA, no por liga: revocar el enlace y generar otro
+--      ya no deja entrar la misma referencia dos veces.
+--  (f) `c7-15` — existe un índice que EMPIEZA por `token_prefijo`, que es la
+--      columna por la que busca cada visita de la ruta pública.
+--  (g) `c7-7` — un abono contra una factura CANCELADA rebota en la propia RPC,
+--      y `factura_saldo` SIGUE reportando saldo sobre ella: eso último es la
+--      razón por la que la puerta tiene que estar además en la lectura pública
+--      (`vistaDelPortal` → `no_cobrable`, probado en
+--      `portal_pago_lectura.test.ts`). La vista no miente: calcula total menos
+--      pagos, que es lo suyo; quien no puede confiarse es la página.
+--  (h) La forma de las llaves nuevas: la FK compuesta a la propuesta anula SOLO
+--      su columna (`on delete set null (propuesta_id)`, patrón 0145 — `set
+--      null` a secas reventaría el DELETE contra un `tenant_id` NOT NULL), y la
+--      del REP es de tres columnas.
+do $$
+declare
+  ta uuid; ca uuid; fa uuid; fb uuid; fc uuid;
+  liga_a uuid; liga_b uuid; prop uuid; prop2 uuid;
+  pago_a uuid; pago_b uuid; res jsonb;
+  segundo_abono_rebota boolean := false;
+  abonos_de_la_propuesta int;
+  manuales_entran boolean := false;
+  rep_de_otra_factura_rebota boolean := false;
+  rep_correcto_entra boolean := false;
+  propuesta_con_pago_ajeno_rebota boolean := false;
+  pendiente_repetida_rebota boolean := false;
+  descartada_permite_reintento boolean := false;
+  llave_por_factura_no_por_liga boolean := false;
+  prefijo_indexado boolean;
+  abono_a_cancelada_rebota boolean := false;
+  saldo_de_cancelada_sigue boolean;
+  set_null_por_columna boolean;
+  fk_rep_tres_columnas boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0237') returning id into ta;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ cli 0237') returning id into ca;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, ca, 30000, 4800, 34800, 'emitida') returning id into fa;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, ca, 500, 80, 580, 'emitida') returning id into fb;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, ca, 1000, 160, 1160, 'emitida') returning id into fc;
+  insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+    values (ta, fa, repeat('a', 64), 'pgo_aaaa', now() + interval '90 days')
+    returning id into liga_a;
+
+  -- (a) EL HALLAZGO c7-5, tal como pasaba: dos pestañas del contralor sobre la
+  -- MISMA propuesta de $5,000 contra un saldo de $34,800. Ninguna es sobrepago,
+  -- así que el `for update` de la RPC no rechaza a ninguna: lo único que puede
+  -- impedir el segundo abono es la restricción.
+  insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+    values (ta, liga_a, fa, current_date, 5000, 'SPEI-8891') returning id into prop;
+  res := registrar_pago_tx(ta, fa, current_date, 5000, 'transferencia', 'SPEI-8891', prop);
+  pago_a := (res->>'pago_id')::uuid;
+  begin
+    perform registrar_pago_tx(ta, fa, current_date, 5000, 'transferencia', 'SPEI-8891', prop);
+    segundo_abono_rebota := false;
+  exception when unique_violation then
+    segundo_abono_rebota := true;
+  end;
+  select count(*) into abonos_de_la_propuesta from pago_recibido where propuesta_id = prop;
+
+  -- (b) El pago tecleado a mano NO nace de una propuesta y no compite: dos
+  -- abonos parciales idénticos sobre la misma factura siguen entrando.
+  begin
+    perform registrar_pago_tx(ta, fa, current_date, 1000, 'efectivo', null);
+    perform registrar_pago_tx(ta, fa, current_date, 1000, 'efectivo', null);
+    manuales_entran := true;
+  exception when others then
+    manuales_entran := false;
+  end;
+
+  -- (c) c7-25: el REP de la factura B colgado del abono de la factura A. Con la
+  -- FK de dos columnas de la 0228 esto entraba —ambos son de la misma flota— y
+  -- el portal del cliente enseñaba un importe que fue a otro papel.
+  begin
+    insert into rep_emitido (tenant_id, factura_id, pago_id, cfdi_uuid, fecha_pago, imp_pagado)
+      values (ta, fb, pago_a, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001', current_date, 5000);
+    rep_de_otra_factura_rebota := false;
+  exception when foreign_key_violation then
+    rep_de_otra_factura_rebota := true;
+  end;
+  begin
+    insert into rep_emitido (tenant_id, factura_id, pago_id, cfdi_uuid, fecha_pago, imp_pagado)
+      values (ta, fa, pago_a, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000002', current_date, 5000);
+    rep_correcto_entra := true;
+  exception when others then
+    rep_correcto_entra := false;
+  end;
+
+  -- (d) Y la propuesta conciliada tampoco puede apuntar al abono de otra
+  -- factura. Se arma la fila COMPLETA y coherente (estado + resuelta_en) para
+  -- que lo único que pueda rebotar sea la llave, no el CHECK de estados.
+  insert into pago_recibido (tenant_id, factura_id, monto) values (ta, fb, 100) returning id into pago_b;
+  begin
+    update portal_pago_propuesta
+       set estado = 'conciliada', pago_id = pago_b, resuelta_en = now()
+     where id = prop;
+    propuesta_con_pago_ajeno_rebota := false;
+  exception when foreign_key_violation then
+    propuesta_con_pago_ajeno_rebota := true;
+  end;
+  -- Con SU abono sí se sella.
+  update portal_pago_propuesta
+     set estado = 'conciliada', pago_id = pago_a, resuelta_en = now()
+   where id = prop;
+
+  -- (e) c7-18: dos PENDIENTES idénticas chocan…
+  insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+    values (ta, liga_a, fa, current_date, 700, 'REF-PARCIAL') returning id into prop2;
+  begin
+    insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+      values (ta, liga_a, fa, current_date, 700, 'ref-parcial');
+    pendiente_repetida_rebota := false;
+  exception when unique_violation then
+    pendiente_repetida_rebota := true;
+  end;
+
+  -- … pero una DESCARTADA ya no bloquea. El contralor descarta, el cliente
+  -- revisa su banco, ve que sí pagó y vuelve a registrar: eso tiene que poder
+  -- volver a la bandeja, no recibir un «ya estaba registrado» que era mentira.
+  update portal_pago_propuesta set estado = 'descartada', resuelta_en = now(), nota = 'no aparece en el estado de cuenta'
+   where id = prop2;
+  begin
+    insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+      values (ta, liga_a, fa, current_date, 700, 'REF-PARCIAL');
+    descartada_permite_reintento := true;
+  exception when unique_violation then
+    descartada_permite_reintento := false;
+  end;
+
+  -- Y la llave es por FACTURA, no por liga: se revoca el enlace, se genera otro
+  -- —el flujo normal cuando el link se pierde— y la misma referencia sigue sin
+  -- poder entrar dos veces.
+  update portal_pago_liga set revocada_en = now() where id = liga_a;
+  insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+    values (ta, fa, repeat('b', 64), 'pgo_bbbb', now() + interval '90 days')
+    returning id into liga_b;
+  begin
+    insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+      values (ta, liga_b, fa, current_date, 700, 'REF-PARCIAL');
+    llave_por_factura_no_por_liga := false;
+  exception when unique_violation then
+    llave_por_factura_no_por_liga := true;
+  end;
+
+  -- (f) c7-15: la ruta pública busca por prefijo en cada visita.
+  prefijo_indexado := exists (
+    select 1 from pg_indexes
+    where schemaname = 'public' and tablename = 'portal_pago_liga'
+      and indexdef like '%(token_prefijo%'
+  );
+
+  -- (g) c7-7: la base rechaza el abono contra una cancelada…
+  update factura_emitida set estatus = 'cancelada' where id = fc;
+  begin
+    perform registrar_pago_tx(ta, fc, current_date, 100, 'transferencia', 'X');
+    abono_a_cancelada_rebota := false;
+  exception when others then
+    abono_a_cancelada_rebota := (sqlerrm like '%cancelada%');
+  end;
+  -- … y AUN ASÍ la vista sigue diciendo que esa factura debe $1,160.00. No es
+  -- un defecto de la vista —calcula total menos pagos, que es lo suyo—: es la
+  -- prueba de que la página pública no puede fiarse del saldo para decidir si
+  -- cobra, y de ahí el `no_cobrable` de `vistaDelPortal`.
+  select coalesce((select saldo from factura_saldo where factura_id = fc), -1) = 1160
+    into saldo_de_cancelada_sigue;
+
+  -- (h) La forma de las llaves nuevas.
+  select exists (
+    select 1 from pg_constraint
+    where conname = 'pago_recibido_propuesta_tenant_fkey'
+      and conrelid = 'public.pago_recibido'::regclass
+      and confdeltype = 'n'
+      and array_length(confdelsetcols, 1) = 1
+  ) into set_null_por_columna;
+  select exists (
+    select 1 from pg_constraint
+    where conname = 'rep_emitido_pago_factura_tenant_fkey'
+      and conrelid = 'public.rep_emitido'::regclass
+      and array_length(conkey, 1) = 3
+  ) into fk_rep_tres_columnas;
+
+  raise exception 'PORTAL_PAGO_0237  segundo_abono_rebota=%  abonos_de_la_propuesta=%  manuales_entran=%  rep_de_otra_factura_rebota=%  rep_correcto_entra=%  propuesta_con_pago_ajeno_rebota=%  pendiente_repetida_rebota=%  descartada_permite_reintento=%  llave_por_factura_no_por_liga=%  prefijo_indexado=%  abono_a_cancelada_rebota=%  saldo_de_cancelada_sigue=%  set_null_por_columna=%  fk_rep_tres_columnas=%   (esperado t / 1 / t / t / t / t / t / t / t / t / t / t / t / t)',
+    segundo_abono_rebota, abonos_de_la_propuesta, manuales_entran,
+    rep_de_otra_factura_rebota, rep_correcto_entra, propuesta_con_pago_ajeno_rebota,
+    pendiente_repetida_rebota, descartada_permite_reintento, llave_por_factura_no_por_liga,
+    prefijo_indexado, abono_a_cancelada_rebota, saldo_de_cancelada_sigue,
+    set_null_por_columna, fk_rep_tres_columnas;
 end $$;

@@ -28,7 +28,30 @@ import { estadoLiga, hashDeToken, prefijoDeToken, type EstadoLiga } from './port
 //                     enlace". Colapsarlo en `no_valida` haría que un bache de
 //                     red le dijera a un cliente legítimo que su enlace murió,
 //                     y saldría a pedir uno nuevo que no necesita.
+//   `no_cobrable`   — la liga vale y la factura existe, pero ese CFDI ya no
+//                     cobra: está CANCELADA (o es un borrador). Ver abajo.
 //   `ok`            — la factura, su saldo REAL y lo que haya de REP.
+//
+// ── POR QUÉ `no_cobrable` ES UN DESENLACE Y NO UNA BANDERA MÁS ────────────
+//
+// AUDITORÍA 7, `c7-7` (alto). La liga se emite sobre una factura `emitida`; el
+// cliente pide refacturación y el contralor la cancela. `cancelarFactura` solo
+// exige que no haya pagos y NO tocaba `portal_pago_liga`, así que la liga
+// seguía con `revocada_en IS NULL` y `estadoLiga` la reportaba VIGENTE. El
+// cliente abría el mismo link y veía «Saldo pendiente $34,800.00» —la vista
+// `factura_saldo` calcula `total − pagos` sin mirar el estatus—, el formulario
+// activo, y al enviar recibía «Listo. Tu pago quedó registrado…». Le estábamos
+// cobrando por un CFDI que ante el SAT ya no existe; y cuando el contralor
+// intentara conciliar, `registrar_pago_tx` rebotaría con `motivo=cancelada`,
+// dejando la propuesta inconciliable con el dinero real ya depositado.
+//
+// La corrección tiene dos capas y las dos hacen falta: `cancelarFactura` ahora
+// revoca las ligas vivas de esa factura, y ESTE archivo degrada a
+// `no_cobrable` mirando el `estatus` que ya leía y descartaba. La segunda capa
+// es la que vale cuando la primera falla —una revocación que no se pudo
+// escribir, una factura cancelada por fuera— y por eso la puerta que decide si
+// se cobra está aquí, del lado de la lectura pública, y no solo en el verbo del
+// contralor.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Cuántas candidatas del mismo prefijo se traen. Colisionar los 8 caracteres
@@ -75,6 +98,11 @@ export interface RepDelPortal {
   tieneXml: boolean;
 }
 
+/** Cuántos complementos de pago se listan. Una factura pagada en parcialidades
+ *  tiene uno por parcialidad; 50 es un techo generoso y declarado, no una
+ *  ventana silenciosa como la que dejaba el `.limit(1)` anterior. */
+const MAX_REPS = 50;
+
 export interface VistaPortal {
   ligaId: string;
   tenantId: string;
@@ -85,13 +113,23 @@ export interface VistaPortal {
   cliente: string;
   factura: FacturaDelPortal;
   propuestas: PropuestaDelPortal[];
-  rep: RepDelPortal | null;
+  /** TODOS los complementos de esta factura, del más reciente al más viejo.
+   *  Con parcialidades son varios y el cliente necesita todos: cada uno
+   *  acredita el IVA de su mes. */
+  reps: RepDelPortal[];
 }
+
+/** Los estatus en los que este portal NO pide dinero. Lista cerrada y con el
+ *  sentido invertido a propósito: se enumera lo que SÍ cobra (`emitida`,
+ *  `pagada`) y todo lo demás cae a `no_cobrable`. Un estatus nuevo en
+ *  `factura_emitida` entra por omisión al lado seguro. */
+const ESTATUS_QUE_COBRAN = new Set(['emitida', 'pagada']);
 
 export type ResolucionPortal =
   | { ok: true; vista: VistaPortal }
   | { ok: false; motivo: 'no_valida' }
-  | { ok: false; motivo: 'no_disponible' };
+  | { ok: false; motivo: 'no_disponible' }
+  | { ok: false; motivo: 'no_cobrable'; estatus: string };
 
 /**
  * Del token en la URL a la liga, o nada.
@@ -166,7 +204,7 @@ export async function resolverLiga(token: string): Promise<
 export async function vistaDelPortal(liga: LigaResuelta): Promise<ResolucionPortal> {
   const sb = supabaseAdmin();
 
-  const [factura, tenant, propuestas, rep] = await Promise.all([
+  const [factura, tenant, propuestas, rep, repsConXml] = await Promise.all([
     sb.from('factura_emitida')
       .select('id, cliente_id, serie, folio, cfdi_uuid, fecha, vence_en, estatus, total, moneda')
       .eq('id', liga.facturaId).eq('tenant_id', liga.tenantId).maybeSingle(),
@@ -175,10 +213,20 @@ export async function vistaDelPortal(liga: LigaResuelta): Promise<ResolucionPort
       .select('fecha, monto, referencia, estado, registrada_en')
       .eq('liga_id', liga.ligaId).eq('tenant_id', liga.tenantId)
       .order('registrada_en', { ascending: false }).limit(50),
+    // TODOS los complementos, no el último: ver `c7-16` en la cabecera de
+    // `textoDelRep`.
     sb.from('rep_emitido')
-      .select('cfdi_uuid, fecha_pago, imp_pagado, xml')
+      .select('cfdi_uuid, fecha_pago, imp_pagado')
       .eq('factura_id', liga.facturaId).eq('tenant_id', liga.tenantId)
-      .order('fecha_pago', { ascending: false }).limit(1),
+      .order('fecha_pago', { ascending: false }).limit(MAX_REPS),
+    // CUÁLES tienen XML, sin traer un solo byte de XML. La columna guarda hasta
+    // 500 KB por fila y la pregunta de esta página es «¿hay archivo?», no «dame
+    // el archivo»: pedir `xml` para mirarle el largo cargaría hasta 25 MB de
+    // documentos fiscales en cada render para no enseñar ninguno.
+    sb.from('rep_emitido')
+      .select('cfdi_uuid')
+      .eq('factura_id', liga.facturaId).eq('tenant_id', liga.tenantId)
+      .not('xml', 'is', null).limit(MAX_REPS),
   ]);
 
   if (factura.error) {
@@ -197,6 +245,17 @@ export async function vistaDelPortal(liga: LigaResuelta): Promise<ResolucionPort
   }
 
   const f = factura.data as Record<string, unknown>;
+
+  // ── LA PUERTA DEL CFDI CANCELADO (`c7-7`) ────────────────────────────────
+  // Antes de leer un saldo y de armar un formulario: si ese CFDI ya no cobra,
+  // esta página no cobra. Se decide sobre el `estatus` REAL de la factura y no
+  // sobre el estado de la liga, porque cancelar una factura no revocaba (ni
+  // revocará siempre, si la escritura falla) su enlace. Fail-closed: lo que no
+  // está en la lista de los que cobran, no cobra.
+  const estatus = String(f.estatus);
+  if (!ESTATUS_QUE_COBRAN.has(estatus)) {
+    return { ok: false, motivo: 'no_cobrable', estatus };
+  }
 
   // El saldo: su propia lectura, y su propio modo de falla.
   let saldo: number | null = null;
@@ -230,9 +289,17 @@ export async function vistaDelPortal(liga: LigaResuelta): Promise<ResolucionPort
   if (rep.error) {
     logger.error('portal_pago.rep', { err: rep.error.message });
   }
+  if (repsConXml.error) {
+    logger.error('portal_pago.rep_con_xml', { err: repsConXml.error.message });
+  }
 
   const t = (tenant.data ?? {}) as { nombre?: unknown; razon_social?: unknown };
-  const filaRep = (rep.data ?? [])[0] as Record<string, unknown> | undefined;
+  // Si la segunda lectura falló, NINGÚN complemento se anuncia como
+  // descargable. Un botón que no baja nada es peor que no ofrecerlo, y esta es
+  // la degradación que respeta esa regla: el cliente ve el folio citable.
+  const conXml = new Set(
+    (repsConXml.data ?? []).map((r) => String((r as { cfdi_uuid: unknown }).cfdi_uuid)),
+  );
 
   return {
     ok: true,
@@ -248,7 +315,7 @@ export async function vistaDelPortal(liga: LigaResuelta): Promise<ResolucionPort
         cfdiUuid: (f.cfdi_uuid as string | null) ?? null,
         fecha: String(f.fecha),
         venceEn: (f.vence_en as string | null) ?? null,
-        estatus: String(f.estatus),
+        estatus,
         total: Number(f.total),
         moneda: String(f.moneda ?? 'MXN'),
         saldo,
@@ -264,14 +331,15 @@ export async function vistaDelPortal(liga: LigaResuelta): Promise<ResolucionPort
           registradaEn: String(r.registrada_en),
         };
       }),
-      rep: filaRep
-        ? {
-            cfdiUuid: String(filaRep.cfdi_uuid),
-            fechaPago: String(filaRep.fecha_pago),
-            impPagado: Number(filaRep.imp_pagado),
-            tieneXml: typeof filaRep.xml === 'string' && filaRep.xml.length > 0,
-          }
-        : null,
+      reps: (rep.data ?? []).map((fila) => {
+        const r = fila as Record<string, unknown>;
+        return {
+          cfdiUuid: String(r.cfdi_uuid),
+          fechaPago: String(r.fecha_pago),
+          impPagado: Number(r.imp_pagado),
+          tieneXml: conXml.has(String(r.cfdi_uuid)),
+        };
+      }),
     },
   };
 }
@@ -347,7 +415,25 @@ export interface PropuestaEnBandeja {
    *  la pantalla lo dice: conciliar a ciegas contra un cero inventado es
    *  exactamente lo que esta columna existe para impedir. */
   saldo: number | null;
+  /** false = la factura de esta propuesta NO se pudo resolver, y entonces
+   *  `factura` y `cliente` traen el texto que lo dice en vez de un rótulo
+   *  inventado. La pantalla apaga el botón de conciliar. */
+  identificada: boolean;
+  /** El estatus REAL de la factura, o `null` si no se pudo resolver. Conciliar
+   *  contra una cancelada rebota en `registrar_pago_tx`: verlo antes de
+   *  apretar es la diferencia entre decidir y adivinar. */
+  estatus: string | null;
 }
+
+/** Lo que se pinta cuando la factura de una propuesta no se pudo resolver.
+ *
+ *  AUDITORÍA 7, `c7-23`: antes decía «sin folio · Cliente», que son dos textos
+ *  con dueño. «sin folio» es la VERDAD de `identificaFactura` cuando una
+ *  factura no tiene ni folio ni UUID; usarlo aquí lo convertía en «no la pude
+ *  resolver», y «Cliente» aparecía donde hay una razón social real. El
+ *  contralor decidía sobre dinero mirando una fila que no identificaba nada.
+ */
+const NO_IDENTIFICADA = 'no se pudo identificar';
 
 export interface LigaEnPanel {
   id: string;
@@ -400,8 +486,35 @@ export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
   // dirá «sin dato» en vez de un cero que invitaría a conciliar a ciegas.
   if (saldos.error) logger.error('portal_pago.panel_saldos', { err: saldos.error.message });
 
+  // ── LAS FACTURAS QUE LA PRIMERA LECTURA NO ALCANZÓ (`c7-23`) ─────────────
+  //
+  // La consulta de arriba trae las 300 más recientes y SOLO las `emitida` /
+  // `pagada`, porque es la lista de candidatas a generar enlace. Pero la
+  // bandeja y los enlaces vivos pueden apuntar a facturas fuera de ese corte:
+  // una que se canceló después de registrar la propuesta, o cualquiera más
+  // vieja que las 300. Esas se resuelven aquí, POR ID y sin filtro de estatus.
+  // Lo que no aparezca ni así se pinta como «no se pudo identificar» — nunca
+  // con un rótulo inventado.
+  const filasFactura = [...(facturas.data ?? [])];
+  const yaResueltas = new Set(filasFactura.map((f) => String((f as { id: unknown }).id)));
+  const faltantes = [...new Set([
+    ...(prop.data ?? []).map((p) => String((p as { factura_id: unknown }).factura_id)),
+    ...(ligas.data ?? []).map((l) => String((l as { factura_id: unknown }).factura_id)),
+  ])].filter((id) => !yaResueltas.has(id));
+
+  if (faltantes.length > 0) {
+    const extra = await sb.from('factura_emitida')
+      .select('id, serie, folio, cfdi_uuid, cliente_id, estatus')
+      .eq('tenant_id', tenantId).in('id', faltantes.slice(0, 400)).limit(400);
+    // Se degrada, no se lanza: sin estas filas la bandeja sigue sirviendo y los
+    // renglones afectados DICEN que no se pudieron identificar. Tirar la
+    // pantalla entera por una factura vieja sería peor.
+    if (extra.error) logger.error('portal_pago.panel_facturas_extra', { err: extra.error.message });
+    else filasFactura.push(...(extra.data ?? []));
+  }
+
   const clientes = new Map<string, string>();
-  const idsCliente = [...new Set((facturas.data ?? []).map((f) => String((f as { cliente_id: unknown }).cliente_id)))];
+  const idsCliente = [...new Set(filasFactura.map((f) => String((f as { cliente_id: unknown }).cliente_id)))];
   if (idsCliente.length > 0) {
     const cli = await sb.from('cliente').select('id, nombre, razon_social')
       .eq('tenant_id', tenantId).in('id', idsCliente).limit(1000);
@@ -412,12 +525,16 @@ export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
     }
   }
 
-  const porFactura = new Map<string, { rotulo: string; cliente: string }>();
-  for (const f of facturas.data ?? []) {
+  const porFactura = new Map<string, { rotulo: string; cliente: string; estatus: string }>();
+  for (const f of filasFactura) {
     const r = f as Record<string, unknown>;
     porFactura.set(String(r.id), {
       rotulo: rotuloFactura(r),
+      // El cliente sí puede caer a «Cliente»: ahí el `null` significa que esa
+      // fila de `cliente` no trae ni razón social ni nombre, no que no se haya
+      // podido resolver la factura.
       cliente: clientes.get(String(r.cliente_id)) ?? 'Cliente',
+      estatus: String(r.estatus),
     });
   }
 
@@ -437,14 +554,16 @@ export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
       return {
         id: String(r.id),
         facturaId: fid,
-        factura: meta?.rotulo ?? 'sin folio',
-        cliente: meta?.cliente ?? 'Cliente',
+        factura: meta?.rotulo ?? NO_IDENTIFICADA,
+        cliente: meta?.cliente ?? NO_IDENTIFICADA,
         fecha: String(r.fecha),
         monto: Number(r.monto),
         referencia: String(r.referencia),
         metodo: (r.metodo as string | null) ?? null,
         registradaEn: String(r.registrada_en),
         saldo: saldoDe.get(fid) ?? null,
+        identificada: meta !== undefined,
+        estatus: meta?.estatus ?? null,
       };
     }),
     ligasVivas: (ligas.data ?? []).map((l) => {
@@ -454,8 +573,8 @@ export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
       return {
         id: String(r.id),
         facturaId: fid,
-        factura: meta?.rotulo ?? 'sin folio',
-        cliente: meta?.cliente ?? 'Cliente',
+        factura: meta?.rotulo ?? NO_IDENTIFICADA,
+        cliente: meta?.cliente ?? NO_IDENTIFICADA,
         prefijo: String(r.token_prefijo),
         expiraEn: String(r.expira_en),
         ultimoAccesoEn: (r.ultimo_acceso_en as string | null) ?? null,
@@ -489,27 +608,61 @@ function rotuloFactura(r: Record<string, unknown>): string {
   return uuid ?? 'sin folio';
 }
 
+export type XmlDelRep =
+  | { ok: true; uuid: string; xml: string }
+  /** No hay XML para ese folio: o el REP no existe en esta factura, o existe y
+   *  la flota no cargó el archivo. Es un HECHO comprobado. */
+  | { ok: false; motivo: 'sin_xml' }
+  /** No se pudo PREGUNTAR. No es lo mismo, y por eso no comparte desenlace. */
+  | { ok: false; motivo: 'no_disponible' };
+
 /**
- * El XML del REP, solo para quien trae el token de ESA factura.
+ * El XML de UN complemento, solo para quien trae el token de ESA factura.
  *
  * Vive aquí y no en la vista porque un documento fiscal no tiene por qué
- * viajar en cada render de la página. `null` cubre los dos casos honestos —no
- * hay REP, o el REP no trae XML— y ninguno de los dos es un error.
+ * viajar en cada render de la página.
+ *
+ * ── EL FOLIO VIENE DE LA URL, Y NO AMPLÍA NADA (`c7-16`) ─────────────────
+ *
+ * Con parcialidades hay varios REP y el cliente necesita bajar cada uno, así
+ * que la ruta lleva el folio del que se pide. Ese folio NO es una llave de
+ * alcance: la consulta sigue anclada al `factura_id` y al `tenant_id` de la
+ * liga resuelta, y el folio solo elige DENTRO de eso. Un UUID de otra flota (o
+ * de otra factura de la misma) no encuentra fila; se contesta `sin_xml`, que es
+ * lo mismo que contestaría un folio inventado.
+ *
+ * ── Y EL ERROR DE LA BASE NO SE DISFRAZA DE «NO HAY» (`c7-24`) ───────────
+ *
+ * Antes esto devolvía `null` tanto cuando no había XML como cuando Supabase
+ * reportaba un error, y la ruta contestaba 404 con «Todavía no hay un XML de
+ * complemento para esta factura» — una afirmación de hecho FALSA por un hipo
+ * de la base, que manda al cliente a molestar a la flota por un archivo que sí
+ * está ahí. Los dos desenlaces van separados y la ruta contesta distinto.
  */
-export async function xmlDelRep(liga: LigaResuelta): Promise<{ uuid: string; xml: string } | null> {
+export async function xmlDelRep(liga: LigaResuelta, cfdiUuid: string): Promise<XmlDelRep> {
+  const uuid = cfdiUuid.trim().toLowerCase();
+  // Sin forma de UUID ni se consulta: es la misma economía que `prefijoDeToken`
+  // sobre la ruta pública, y de paso no se manda a la base lo que un visitante
+  // quiera escribir.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(uuid)) {
+    return { ok: false, motivo: 'sin_xml' };
+  }
+
   const { data, error } = await supabaseAdmin()
     .from('rep_emitido')
     .select('cfdi_uuid, xml')
     .eq('factura_id', liga.facturaId).eq('tenant_id', liga.tenantId)
+    .eq('cfdi_uuid', uuid)
     .not('xml', 'is', null)
-    .order('fecha_pago', { ascending: false })
     .limit(1);
 
   if (error) {
     logger.error('portal_pago.xml_rep', { err: error.message });
-    return null;
+    return { ok: false, motivo: 'no_disponible' };
   }
   const fila = (data ?? [])[0] as { cfdi_uuid?: unknown; xml?: unknown } | undefined;
-  if (!fila || typeof fila.xml !== 'string' || fila.xml.length === 0) return null;
-  return { uuid: String(fila.cfdi_uuid), xml: fila.xml };
+  if (!fila || typeof fila.xml !== 'string' || fila.xml.length === 0) {
+    return { ok: false, motivo: 'sin_xml' };
+  }
+  return { ok: true, uuid: String(fila.cfdi_uuid), xml: fila.xml };
 }

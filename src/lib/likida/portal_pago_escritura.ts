@@ -1,12 +1,13 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { appUrl } from '@/lib/env';
+import { mxn, round2, TOLERANCIA_ABONO_MXN } from '@/lib/formato';
 import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora, type EntidadBitacora } from './bitacora_escritura';
-import { DatoInvalido } from './errores';
+import { DatoInvalido, AbonoYaRegistrado } from './errores';
 import { esUuidValido } from './intake/cfdi';
 import { registrarPago } from './facturacion_escritura';
-import { expiracionDesde, generarTokenPortal, diasDeVigencia } from './portal_pago';
+import { expiracionDesde, generarTokenPortal, diasDeVigencia, montoTecleado } from './portal_pago';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL PORTAL DE PAGO — LAS ESCRITURAS DEL CONTRALOR.
@@ -96,8 +97,43 @@ export async function crearLigaPago(
     throw new DatoInvalido('Esa factura está cancelada. No se puede abrir un enlace de pago sobre ella.');
   }
 
+  // ── LA LIGA CADUCADA NO OCUPA EL LUGAR DE LA VIVA (`c7-26`) ──────────────
+  //
+  // `portal_pago_liga_viva_unica` es `unique (factura_id) where revocada_en is
+  // null`: no mira `expira_en`. Una liga generada el 1-may y caducada el 30-jul
+  // sigue ocupando el lugar en agosto, así que «generar link» rebotaba con
+  // «Esa factura ya tiene un enlace vigente. Revócalo antes de generar uno
+  // nuevo» — un mensaje FALSO sobre un enlace que el propio `estadoLiga` ya
+  // clasifica como `expirada` y que `resolverLiga` ya rechaza. El contralor
+  // tenía que revocar un cadáver, guiado por una afirmación que el código sabía
+  // que no era cierta.
+  //
+  // El índice no se puede arreglar (`now()` no es IMMUTABLE y Postgres no
+  // admite un predicado que dependa del reloj — ver la 0237), así que se
+  // arregla aquí: la caducada se revoca SOLA, con su constancia en la bitácora,
+  // y el lugar queda libre. Es la misma decisión que ya tomó `estadoLiga` —
+  // caducada es caducada—, ahora también en la tabla.
+  //
+  // `revocada_por` queda NULL a propósito: no lo revocó una persona, lo revocó
+  // el calendario. El CHECK `portal_pago_liga_revocacion_coherente` lo permite
+  // (exige lo contrario: autor sin fecha es lo que no puede existir).
+  const ahora = new Date();
+  const { data: caducadas, error: errCad } = await acotada(supabaseAdmin().from('portal_pago_liga')
+    .update({ revocada_en: ahora.toISOString() })
+    .eq('tenant_id', tenantId).eq('factura_id', facturaId)
+    .is('revocada_en', null).lte('expira_en', ahora.toISOString())
+    .select('id'), 'crearLigaPago.caducadas');
+  // No se traga: si esta limpieza falla, el insert de abajo puede rebotar con
+  // el mensaje equivocado, y prefiero decir que no se pudo a mentir.
+  if (errCad) throw new Error(`crearLigaPago: no se pudieron revisar los enlaces caducados: ${errCad.message}`);
+  for (const c of (caducadas ?? []) as Array<{ id: unknown }>) {
+    await anotar(tenantId, 'portal_pago.liga_caducada_revocada', 'portal_pago_liga', String(c.id), {
+      facturaId, nota: 'La liga ya había caducado por fecha. Se revocó sola para dejar sitio a la nueva; nadie la revocó a mano.',
+    }, actor);
+  }
+
   const token = generarTokenPortal();
-  const expiraEn = expiracionDesde(new Date(), diasDeVigencia());
+  const expiraEn = expiracionDesde(ahora, diasDeVigencia());
 
   const { data, error } = await acotada(supabaseAdmin().from('portal_pago_liga').insert({
     tenant_id: tenantId,
@@ -161,7 +197,7 @@ export async function revocarLigaPago(
 // ── 3. LA CONCILIACIÓN (el humano confirma) ────────────────────────────────
 
 /**
- * Convierte una propuesta en un pago de verdad.
+ * Convierte una propuesta en un pago de verdad. IDEMPOTENTE POR RESTRICCIÓN.
  *
  * EL ORDEN IMPORTA Y ESTÁ ESCRITO: primero nace el pago (por
  * `registrar_pago_tx`, con la factura trabada, que es quien puede rechazar el
@@ -170,9 +206,29 @@ export async function revocarLigaPago(
  * mientras el abono se rechaza por sobrepago, y el contralor tendría una
  * factura que se ve cobrada sin un peso encima.
  *
- * El sello de la propuesta va condicionado a `estado = 'pendiente'`: dos
- * pestañas conciliando la misma fila dejan que la segunda toque 0 filas y lo
- * diga, en vez de crear dos abonos por el mismo depósito.
+ * ── LO QUE ESTABA MAL, Y POR QUÉ UN `if` NO PODÍA ARREGLARLO (`c7-5`) ────
+ *
+ * Aquí se leía la propuesta, se comprobaba `estado === 'pendiente'` y DESPUÉS
+ * se llamaba a `registrarPago`. Entre la lectura y el insert cabe el segundo
+ * clic: dos pestañas del contralor sobre la misma propuesta de $5,000 contra un
+ * saldo de $34,800 pasaban las dos —ninguna es sobrepago, así que el `for
+ * update` de la RPC no rechaza ninguna— y `pago_recibido` acababa con DOS
+ * abonos por UN depósito. La cartera del cliente quedaba $5,000 abajo de la
+ * realidad. El código lo sabía: tenía escrita la compensación («deja dicho que
+ * hubo un abono huérfano para que el contralor lo cancele a mano»), que es la
+ * confesión de que la carrera existía.
+ *
+ * Un "consulto y luego inserto" NO es idempotencia. La de esta casa es un
+ * índice único: `pago_recibido_propuesta_unica` (0237), sobre la propuesta que
+ * originó el abono, y `registrar_pago_tx` escribe esa columna DENTRO de la
+ * misma transacción que traba la factura. La segunda pestaña ya no crea nada:
+ * choca con un 23505 y este código lo lee como «ese abono ya existe», se cuelga
+ * del que está y termina de sellar. Conciliar dos veces es exactamente
+ * conciliar una vez, y no hay ventana porque no hay dos pasos.
+ *
+ * El `if` de arriba se queda, pero cambia de oficio: ya no es el candado —es el
+ * mensaje amable para el caso normal («recarga, ya estaba resuelto»). El
+ * candado es la base.
  */
 export async function conciliarPropuesta(
   tenantId: string,
@@ -194,22 +250,44 @@ export async function conciliarPropuesta(
     throw new DatoInvalido('Ese registro ya estaba resuelto. Recarga la pantalla para ver en qué quedó.');
   }
 
-  // ── EL CANDADO DE LA CARRERA, ANTES DE CREAR EL PAGO ──────────────────
-  // Se toma el turno marcando la propuesta como conciliada SIN pago todavía —
-  // no se puede, el CHECK de la 0228 lo prohíbe. Así que el turno se toma al
-  // revés: `registrarPago` primero, y el UPDATE condicionado a 'pendiente'
-  // después. Si dos pestañas llegan a la vez, las DOS crean un abono y la
-  // segunda no puede sellar. Por eso la segunda pasada COMPENSA: deja dicho en
-  // la bitácora que hubo un abono huérfano, con su id, para que el contralor
-  // lo pueda cancelar a mano. Nada se borra en silencio.
   const monto = Number(fila.monto);
-  const pagoId = await registrarPago(tenantId, {
-    facturaId: String(fila.factura_id),
-    fecha: String(fila.fecha),
-    monto,
-    metodo: (fila.metodo as string | null) ?? null,
-    referencia: (fila.referencia as string | null) ?? null,
-  }, actor);
+  const facturaId = String(fila.factura_id);
+
+  // El abono, con la propuesta como llave de idempotencia. Si otra sesión ya lo
+  // creó, `registrarPago` lanza `AbonoYaRegistrado` en vez de duplicarlo.
+  let pagoId: string;
+  let yaExistia = false;
+  try {
+    pagoId = await registrarPago(tenantId, {
+      facturaId,
+      fecha: String(fila.fecha),
+      monto,
+      metodo: (fila.metodo as string | null) ?? null,
+      referencia: (fila.referencia as string | null) ?? null,
+    }, actor, propuestaId);
+  } catch (e) {
+    if (!(e instanceof AbonoYaRegistrado)) throw e;
+    // El abono de esta propuesta ya está en la base. NO se crea otro: se busca
+    // el que hay y se sigue como si lo hubiéramos creado nosotros, que es lo
+    // que hace que esta función sea idempotente de verdad y no solo "reporta
+    // bonito el destrozo". Este camino también rescata el caso feo: una sesión
+    // que se murió DESPUÉS de crear el abono y ANTES de sellar la propuesta —
+    // sin esto, esa propuesta se quedaba pendiente para siempre con su dinero
+    // ya registrado, y ningún reintento podía cerrarla.
+    yaExistia = true;
+    const { data: existente, error: errE } = await acotada(supabaseAdmin().from('pago_recibido')
+      .select('id')
+      .eq('tenant_id', tenantId).eq('propuesta_id', propuestaId)
+      .limit(1), 'conciliarPropuesta.abono_existente');
+    if (errE) throw new Error(`conciliarPropuesta: el abono de esta propuesta ya existe, pero no se pudo leer su id: ${errE.message}`);
+    const id = (Array.isArray(existente) ? existente[0] : null) as { id?: unknown } | null;
+    if (!id?.id) {
+      // La base dijo que ya existe y no aparece: no se inventa un id ni se
+      // reintenta el abono. Se dice qué pasó.
+      throw new Error('conciliarPropuesta: la base rechazó el abono por duplicado pero no encuentro el original. No se creó nada; revisa `pago_recibido` de esta propuesta antes de reintentar.');
+    }
+    pagoId = String(id.id);
+  }
 
   const { data, error } = await acotada(supabaseAdmin().from('portal_pago_propuesta')
     .update({
@@ -223,15 +301,33 @@ export async function conciliarPropuesta(
 
   if (error) throw new Error(`conciliarPropuesta: el pago ${pagoId} SÍ se registró, pero el sello falló: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    await anotar(tenantId, 'portal_pago.conciliacion_duplicada', 'pago_recibido', pagoId, {
-      propuestaId, monto,
-      nota: 'Otra sesión concilió esta propuesta primero. Este abono quedó registrado y SIN dueño: revísalo y cancélalo si duplica al otro.',
+    // El sello no tocó nada. Ya NO puede ser un abono duplicado —de eso se
+    // encarga el índice—, así que solo quedan dos casos y los dos son ciertos:
+    // otra sesión selló primero con ESTE MISMO abono (nada que arreglar), o
+    // alguien descartó la propuesta entre medias. Se lee el estado real en vez
+    // de suponer cuál de los dos fue.
+    const { data: ahora } = await acotada(supabaseAdmin().from('portal_pago_propuesta')
+      .select('estado, pago_id')
+      .eq('id', propuestaId).eq('tenant_id', tenantId).maybeSingle(), 'conciliarPropuesta.releer');
+    const f2 = (ahora ?? {}) as { estado?: unknown; pago_id?: unknown };
+    if (String(f2.estado) === 'conciliada' && String(f2.pago_id) === pagoId) {
+      // Idempotencia completa: el resultado es el mismo que si hubiéramos
+      // ganado la carrera, y el dinero se registró UNA vez.
+      await anotar(tenantId, 'portal_pago.conciliacion_repetida', 'portal_pago_propuesta', propuestaId, {
+        pagoId, monto, facturaId,
+        nota: 'Otra sesión concilió esta misma propuesta con este mismo abono. No se duplicó nada.',
+      }, actor);
+      return { pagoId, monto };
+    }
+    await anotar(tenantId, 'portal_pago.conciliacion_sin_sello', 'pago_recibido', pagoId, {
+      propuestaId, monto, estadoAhora: String(f2.estado ?? 'ilegible'), abonoYaExistia: yaExistia,
+      nota: 'El abono está registrado pero la propuesta cambió de estado antes de sellarla (la descartaron, o no se pudo releer). Revisa a mano antes de tocar la cartera.',
     }, actor);
-    throw new DatoInvalido(`Alguien más concilió este registro primero, y el abono de ${monto} que acabas de crear quedó DUPLICADO sobre la factura. Está anotado en la bitácora con el id ${pagoId} — revísalo antes de seguir.`);
+    throw new DatoInvalido(`El abono de ${mxn(monto)} quedó registrado con el id ${pagoId}, pero este registro cambió de estado antes de poder sellarlo — puede que alguien lo haya descartado. Está anotado en la bitácora: revísalo antes de seguir.`);
   }
 
   await anotar(tenantId, 'portal_pago.propuesta_conciliada', 'portal_pago_propuesta', propuestaId, {
-    pagoId, monto, facturaId: String(fila.factura_id),
+    pagoId, monto, facturaId, abonoYaExistia: yaExistia,
   }, actor);
 
   return { pagoId, monto };
@@ -321,8 +417,12 @@ export async function registrarRepEmitido(
   if (!RE_FECHA.test(fechaPago) || Number.isNaN(Date.parse(`${fechaPago}T00:00:00Z`))) {
     throw new DatoInvalido('La fecha del pago del complemento no se entiende.');
   }
-  const imp = Math.round(Number(c.impPagado.replace(/[$\s,]/g, '')) * 100) / 100;
-  if (!Number.isFinite(imp) || imp <= 0) {
+  // El MISMO lector de montos que el formulario del cliente, y por la misma
+  // razón (`c7-14`/`c7-33`): esto era `Math.round(Number(crudo.replace(...)))`
+  // y un «1.234,50» pegado del acuse del PAC entraba como `imp_pagado = 1.23`.
+  // El portal se lo enseñaba al cliente junto a su complemento fiscal.
+  const imp = montoTecleado(c.impPagado, 'el importe pagado del complemento');
+  if (imp <= 0) {
     throw new DatoInvalido('El importe pagado del complemento tiene que ser mayor que cero.');
   }
   const forma = c.formaPago.trim();
@@ -332,6 +432,39 @@ export async function registrarRepEmitido(
   const xml = c.xml.trim();
   if (xml.length > XML_MAX) {
     throw new DatoInvalido('Ese XML es demasiado grande. Registra el complemento sin archivo y compártelo por tu canal de siempre.');
+  }
+
+  // ── EL ABONO QUE AMPARA TIENE QUE SER DE ESTA FACTURA (`c7-25`) ──────────
+  //
+  // El formulario manda `facturaId` y `pagoId` como dos cadenas independientes,
+  // y las FK compuestas de la 0228 solo garantizaban que las dos fueran de la
+  // MISMA FLOTA. Un contralor con dos facturas del mismo cliente en pestañas
+  // pegaba el `pagoId` de la otra y el portal enseñaba «Importe pagado
+  // $12,000.00» sobre un abono que fue a otra factura, con un XML que decía
+  // otra cosa.
+  //
+  // La 0237 lo cierra por esquema (FK de tres columnas contra
+  // `pago_recibido (id, factura_id, tenant_id)`), y eso es lo que de verdad lo
+  // impide. Esta lectura existe para dos cosas que una FK no puede dar: DECIR
+  // qué pasó con palabras en vez de un mensaje de Postgres, y comparar el
+  // IMPORTE — que no es una llave y que ninguna restricción puede vigilar.
+  const { data: pago, error: errPago } = await acotada(supabaseAdmin().from('pago_recibido')
+    .select('id, factura_id, monto')
+    .eq('id', c.pagoId).eq('tenant_id', tenantId).maybeSingle(), 'registrarRepEmitido.pago');
+  if (errPago) throw new Error(`registrarRepEmitido: no se pudo leer el abono que ampara: ${errPago.message}`);
+  if (!pago) {
+    throw new DatoInvalido('Ese abono no existe en tu flota. Copia el id del renglón «pago.registrado» de tu bitácora.');
+  }
+  const filaPago = pago as { factura_id: unknown; monto: unknown };
+  if (String(filaPago.factura_id) !== c.facturaId) {
+    throw new DatoInvalido('Ese abono es de OTRA factura. Un complemento de pago ampara el abono de la factura que dice amparar: revisa el id, o registra el complemento sobre la factura a la que de verdad entró ese dinero.');
+  }
+  const montoPago = round2(Number(filaPago.monto));
+  if (!Number.isFinite(montoPago)) {
+    throw new Error('registrarRepEmitido: el abono no trae un monto legible; no se registra un complemento contra una cifra que no se pudo leer.');
+  }
+  if (Math.abs(montoPago - imp) > TOLERANCIA_ABONO_MXN) {
+    throw new DatoInvalido(`El importe del complemento (${mxn(imp)}) no cuadra con el abono que dice amparar (${mxn(montoPago)}). Si el complemento cubre varias parcialidades, regístralo contra el abono que le corresponde; si el que está mal es el abono, corrígelo primero.`);
   }
 
   const { data, error } = await acotada(supabaseAdmin().from('rep_emitido').insert({
@@ -365,18 +498,35 @@ export async function registrarRepEmitido(
 }
 
 /**
- * SELLO TRAS EL HECHO: cuándo el cliente vio su complemento por primera vez.
+ * SELLO TRAS EL HECHO: cuándo el cliente vio SUS complementos por primera vez.
  *
  * `.is('entregado_en', null)` para que sea el PRIMER momento y no el último —
  * la constancia de entrega es una fecha, no un contador de visitas. Best-effort
  * y nunca lanza: no poder anotar el sello no puede impedirle al cliente ver su
  * REP, que es justo lo que el sello está registrando.
+ *
+ * ── SE SELLAN LOS QUE SE ENSEÑARON, UNO POR UNO (`c7-16`) ────────────────
+ *
+ * Antes esto sellaba TODOS los REP de la factura sin mirar cuál se había
+ * enseñado, mientras la página solo era capaz de mostrar el más reciente. En
+ * una factura pagada en tres parcialidades, abrir el enlace dejaba escrito
+ * «entregado» sobre dos documentos que nadie vio y que ninguna ruta podía
+ * entregar. La 0228 dice de esa columna que es «la constancia de entrega, no
+ * una intención de entregar»: una constancia falsa es peor que ninguna.
+ *
+ * Ahora recibe los folios que de verdad se pusieron delante del cliente. Lista
+ * vacía = no hay nada que sellar, y no se toca la tabla.
  */
-export async function sellarRepEntregado(tenantId: string, facturaId: string): Promise<void> {
+export async function sellarRepEntregado(
+  tenantId: string, facturaId: string, cfdiUuids: string[],
+): Promise<void> {
+  const uuids = [...new Set(cfdiUuids.map((u) => u.trim().toLowerCase()).filter((u) => u !== ''))];
+  if (uuids.length === 0) return;
   try {
     const { error } = await supabaseAdmin().from('rep_emitido')
       .update({ entregado_en: new Date().toISOString() })
       .eq('tenant_id', tenantId).eq('factura_id', facturaId)
+      .in('cfdi_uuid', uuids)
       .is('entregado_en', null);
     if (error) logger.warn('portal_pago.sello_rep', { err: error.message });
   } catch (e) {
