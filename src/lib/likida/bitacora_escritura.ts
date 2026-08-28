@@ -45,7 +45,13 @@ export type EntidadBitacora =
   // A19 (0229): las vigilancias que la flota declara en lenguaje natural.
   // Quién confirmó una regla que manda WhatsApps —y quién la pausó— es
   // exactamente la clase de acto que esta tabla existe para recordar.
-  | 'regla_vigilancia';
+  | 'regla_vigilancia'
+  // A18 (0228): el portal de pago del cliente. Quién emitió el enlace de una
+  // factura, quién lo revocó, y quién decidió sobre lo que un tercero afirmó
+  // haber pagado — los tres son actos que hay que poder reconstruir.
+  | 'portal_pago_liga'
+  | 'portal_pago_propuesta'
+  | 'rep_emitido';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una

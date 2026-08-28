@@ -530,12 +530,19 @@ function traducirErrorDelPago(error: { code?: string; message?: string }, monto:
  * Un pago que rebasa el saldo también: los pagos parciales son la norma, los
  * sobrepagos son casi siempre un dedazo, y el que no lo es se captura cuando
  * exista la nota de crédito que lo explique.
+ *
+ * DEVUELVE EL ID DEL PAGO. Antes devolvía `void` y el id se calculaba aquí
+ * dentro solo para la bitácora. Lo necesita quien concilia una propuesta del
+ * portal de pago (0228): esa fila tiene que quedar APUNTANDO al pago real, y
+ * sin el id la única alternativa era volver a consultar `pago_recibido`
+ * adivinando cuál de los abonos de la factura acababa de nacer — una carrera
+ * en el peor lugar posible. Los llamadores que no lo usan no cambian.
  */
 export async function registrarPago(
   tenantId: string,
   p: PagoValido,
   actor?: { id?: string; email?: string },
-): Promise<void> {
+): Promise<string> {
   // ── DAT-05 · EL SALDO SE LEE CON LA FACTURA TRABADA, NO ANTES ────────────
   //
   // Esto eran cuatro viajes a la base: leer la factura, sumar los pagos,
@@ -572,6 +579,8 @@ export async function registrarPago(
   await anotar(tenantId, 'pago.registrado', 'pago_recibido', String(pagoId), {
     facturaId: p.facturaId, fecha: p.fecha, monto: p.monto, metodo: p.metodo, referencia: p.referencia,
   }, actor);
+
+  return String(pagoId);
 }
 
 /**
