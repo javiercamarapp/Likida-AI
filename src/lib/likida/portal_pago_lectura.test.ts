@@ -27,6 +27,7 @@ vi.mock('@/lib/logger', () => ({
 import { hashDeToken, generarTokenPortal } from './portal_pago';
 import {
   resolverLiga, vistaDelPortal, anotarAcceso, sellarUltimoAcceso, xmlDelRep, panelDelPortal,
+  TOPE_REPS_PANEL,
 } from './portal_pago_lectura';
 
 type Resultado = { data: unknown; error: { message: string; code?: string } | null };
@@ -422,6 +423,107 @@ describe('panelDelPortal — una propuesta huérfana se DICE, no se rotula', () 
     });
     const panel = await panelDelPortal('t-1');
     expect(panel.pendientes[0].identificada).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS REP QUE EL CONTRALOR REGISTRA Y NUNCA VOLVÍA A VER.
+//
+// `rep_emitido` sólo se leía del lado del PAGADOR (`vistaDelPortal`).
+// `panelDelPortal` no la consultaba ni una vez: quien registra el complemento
+// lo hacía a ciegas y no tenía cómo contestar «¿ya le mandé el de esta
+// factura?» antes de emitir otro — y el texto de la pantalla ya prometía «con
+// el sello de cuándo lo abrió», que tampoco se pintaba.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('panelDelPortal — los complementos ya registrados', () => {
+  const REP = {
+    id: 'r-1', factura_id: 'f-1', cfdi_uuid: 'AAAA-BBBB', fecha_pago: '2026-08-22',
+    imp_pagado: 5000, forma_pago_p: '03',
+    registrado_en: '2026-08-22T18:00:00Z', entregado_en: null,
+  };
+  const FACTURA = { id: 'f-1', serie: 'A', folio: '77', cfdi_uuid: null, cliente_id: 'c-1', estatus: 'pagada' };
+
+  it('los trae con su factura y su cliente resueltos', async () => {
+    conTablas({
+      portal_pago_propuesta: [OK([])], portal_pago_liga: [OK([])],
+      factura_emitida: [OK([FACTURA]), OK([])], factura_saldo: [OK([])],
+      cliente: [OK([{ id: 'c-1', nombre: 'Cemex', razon_social: 'CEMENTOS DEL NORTE SA' }])],
+      rep_emitido: [OK([REP])],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.reps).toHaveLength(1);
+    expect(panel.reps[0]).toMatchObject({
+      factura: 'A-77', cliente: 'CEMENTOS DEL NORTE SA',
+      cfdiUuid: 'AAAA-BBBB', impPagado: 5000, formaPago: '03',
+    });
+    // `null` = NUNCA lo abrió. Es la pregunta que este bloque contesta.
+    expect(panel.reps[0].entregadoEn).toBeNull();
+    expect(panel.repsTruncados).toBe(false);
+  });
+
+  it('un REP sobre una factura vieja se resuelve POR ID, no se pinta huérfano', async () => {
+    // Un complemento se registra sobre una factura que YA se pagó, así que cae
+    // fuera de las 300 recientes con altísima frecuencia. Sin meter sus ids en
+    // la segunda lectura, la lista entera salía «no se pudo identificar».
+    conTablas({
+      portal_pago_propuesta: [OK([])], portal_pago_liga: [OK([])],
+      factura_emitida: [OK([]), OK([FACTURA])], factura_saldo: [OK([])],
+      cliente: [OK([{ id: 'c-1', nombre: 'Cemex', razon_social: 'CEMENTOS DEL NORTE SA' }])],
+      rep_emitido: [OK([REP])],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.reps[0].factura).toBe('A-77');
+    expect(panel.reps[0].cliente).toBe('CEMENTOS DEL NORTE SA');
+  });
+
+  it('el importe ilegible es null, JAMÁS 0 — un REP no ampara cero pesos', async () => {
+    conTablas({
+      portal_pago_propuesta: [OK([])], portal_pago_liga: [OK([])],
+      factura_emitida: [OK([FACTURA]), OK([])], factura_saldo: [OK([])],
+      cliente: [OK([])],
+      rep_emitido: [OK([{ ...REP, imp_pagado: null, forma_pago_p: null }])],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.reps[0].impPagado).toBeNull();
+    expect(panel.reps[0].formaPago).toBeNull();
+  });
+
+  it('el sello de entrega viaja cuando existe', async () => {
+    conTablas({
+      portal_pago_propuesta: [OK([])], portal_pago_liga: [OK([])],
+      factura_emitida: [OK([FACTURA]), OK([])], factura_saldo: [OK([])],
+      cliente: [OK([])],
+      rep_emitido: [OK([{ ...REP, entregado_en: '2026-08-23T09:15:00Z' }])],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.reps[0].entregadoEn).toBe('2026-08-23T09:15:00Z');
+  });
+
+  it('el tope se DECLARA truncado en vez de callarlo', async () => {
+    // Un `.limit()` que recorta sin decirlo es una cifra inventada (c7-4). Se
+    // piden TOPE+1 justo para poder afirmar «hay más» sin traerlos todos.
+    const muchos = Array.from({ length: TOPE_REPS_PANEL + 1 }, (_, i) => ({ ...REP, id: `r-${i}` }));
+    conTablas({
+      portal_pago_propuesta: [OK([])], portal_pago_liga: [OK([])],
+      factura_emitida: [OK([FACTURA]), OK([])], factura_saldo: [OK([])],
+      cliente: [OK([])],
+      rep_emitido: [OK(muchos)],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.reps).toHaveLength(TOPE_REPS_PANEL);
+    expect(panel.repsTruncados).toBe(true);
+  });
+
+  it('si la consulta de REPs falla, LANZA — no una lista vacía', async () => {
+    // Una lista vacía por una consulta caída se leería como «no hemos emitido
+    // ninguno», que es justo la conclusión que haría emitir uno repetido.
+    conTablas({
+      portal_pago_propuesta: [OK([])], portal_pago_liga: [OK([])],
+      factura_emitida: [OK([]), OK([])], factura_saldo: [OK([])],
+      cliente: [OK([])],
+      rep_emitido: [FALLA()],
+    });
+    await expect(panelDelPortal('t-1')).rejects.toThrow(/reps/);
   });
 });
 

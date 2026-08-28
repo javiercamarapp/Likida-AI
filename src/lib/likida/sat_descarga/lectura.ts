@@ -42,6 +42,18 @@ export interface ConteosVista {
   casados: number;
   ambiguos: number;
   disponibles: number;
+  /**
+   * Los que el motor archivó a propósito: hoy, los consolidados ECC que ya
+   * entraron por su propio camino (`ciclo.ts:283`).
+   *
+   * `sat_descarga_conteos` (0236) SIEMPRE devolvió esta quinta cifra y este
+   * tipo no la declaraba, así que se tiraba al mapear. El efecto no era que
+   * faltara un dato bonito: era que las cuatro tarjetas NO SUMABAN el total
+   * de arriba y nadie podía saber por qué. Un contralor que ve «100 bajados»
+   * y debajo 40 + 5 + 20 tiene 35 comprobantes desaparecidos y ninguna
+   * pantalla que le diga a dónde fueron.
+   */
+  ignorados: number;
 }
 
 export interface VistaDescargaSat {
@@ -127,6 +139,7 @@ export async function leerDescargaSat(tenantId: string): Promise<VistaDescargaSa
       casados: Number(fila.casados),
       ambiguos: Number(fila.ambiguos),
       disponibles: Number(fila.disponibles),
+      ignorados: Number(fila.ignorados),
     };
   } catch (e) {
     incompleta = true;

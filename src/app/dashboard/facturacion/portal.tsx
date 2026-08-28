@@ -6,11 +6,13 @@ import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { mxn, fechaMx, fechaHoraMx } from '@/lib/formato';
 import { diasDeVigencia } from '@/lib/likida/portal_pago';
-import { panelDelPortal, type PanelPortal } from '@/lib/likida/portal_pago_lectura';
+import { panelDelPortal, TOPE_REPS_PANEL, type PanelPortal } from '@/lib/likida/portal_pago_lectura';
 import {
   crearLigaPago, revocarLigaPago, conciliarPropuesta, descartarPropuesta, registrarRepEmitido,
 } from '@/lib/likida/portal_pago_escritura';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
+import { EstadoVacio } from '../../admin/ui/kit';
+import { TituloSeccion } from '../resumen-visual';
 
 /**
  * EL PORTAL DE PAGO — la sección del contralor (0228).
@@ -371,7 +373,77 @@ function Complemento({ panel, anotarRep }: {
               ayuda="Pégalo si lo tienes a la mano. Vacío = tu cliente verá el folio citable, no una descarga vacía." />
           </FormaConAviso>
         )}
+
+        <ListaReps reps={panel.reps} truncados={panel.repsTruncados} />
       </div>
     </details>
+  );
+}
+
+/**
+ * LOS COMPLEMENTOS YA REGISTRADOS.
+ *
+ * Se exporta como componente propio —y no inline dentro de `Complemento`— por
+ * la razón de la casa: así el preview headless puede montar ESTO, el
+ * componente REAL, en vez de una copia de su markup. Una copia verifica la
+ * copia.
+ */
+export function ListaReps({ reps, truncados }: { reps: PanelPortal['reps']; truncados: boolean }) {
+  // LO QUE YA SE REGISTRÓ. El bloque del complemento era sólo un formulario de
+  // alta: se registraba y no se volvía a ver nunca — ni siquiera para
+  // contestar «¿ya le mandamos el de esta factura?» antes de emitir otro. Y el
+  // texto de esa sección ya prometía «con el sello de cuándo lo abrió», un
+  // sello (`entregado_en`) que no se pintaba en ninguna parte.
+  return (
+      <div className="mt-1">
+        <TituloSeccion>Complementos ya registrados</TituloSeccion>
+        {reps.length === 0 ? (
+          <EstadoVacio>
+            Todavía no has registrado ningún complemento. El primero aparecerá aquí en
+            cuanto lo captures arriba — con el folio fiscal y el sello de cuándo lo abrió
+            tu cliente.
+          </EstadoVacio>
+        ) : (
+          <>
+            <ul className="mt-2 flex flex-col gap-1.5">
+              {reps.map((r) => (
+                <li key={r.id} className="hairline rounded-lg px-3 py-2 text-xs">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span>
+                      <strong>{r.factura}</strong>
+                      <span style={{ color: 'var(--muted)' }}> · {r.cliente}</span>
+                    </span>
+                    <span className="tabular-nums">
+                      {/* null ≠ 0: un importe que no se pudo leer no es un
+                          complemento por cero pesos. */}
+                      {r.impPagado === null
+                        ? <span style={{ color: 'var(--muted)' }}>importe sin dato</span>
+                        : mxn(r.impPagado)}
+                      {r.formaPago !== null && (
+                        <span style={{ color: 'var(--muted)' }}> · forma {r.formaPago}</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="mt-0.5" style={{ color: 'var(--muted)' }}>
+                    Folio fiscal <code className="cifra-mono">{r.cfdiUuid}</code>
+                    {' · '}pagado el {fechaMx(r.fechaPago)}
+                    {' · '}registrado el {fechaHoraMx(r.registradoEn)}
+                  </div>
+                  <div className="mt-0.5">
+                    {r.entregadoEn === null
+                      ? <span style={{ color: 'var(--muted)' }}>Tu cliente todavía no lo ha abierto.</span>
+                      : <span style={{ color: 'var(--color-ok)' }}>Tu cliente lo abrió el {fechaHoraMx(r.entregadoEn)}.</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {truncados && (
+              <p className="mt-1.5 text-xs" style={{ color: 'var(--muted)' }}>
+                Se muestran los {TOPE_REPS_PANEL} más recientes; hay más.
+              </p>
+            )}
+          </>
+        )}
+      </div>
   );
 }

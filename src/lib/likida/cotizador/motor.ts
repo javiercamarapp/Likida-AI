@@ -240,3 +240,54 @@ export function armarDesglose(e: EntradaCotizacion): Desglose {
 
   return { lineas, costoTotal, faltantes: faltantesUnicos, precioSugerido, notas };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA GANANCIA — el número que la pantalla lleva prometiendo desde el día uno.
+//
+// `/dashboard/cotizaciones` se titula «La ganancia real del viaje antes de
+// aceptarlo» y hasta hoy no pintaba una sola cifra de ganancia: enseñaba el
+// COSTO y el PRECIO, uno al lado del otro, y dejaba la resta al ojo del que
+// mira. Un rótulo que promete un número que no está es exactamente lo que la
+// casa prohíbe — y aquí duele el doble, porque el viaje que se acepta con la
+// resta mal hecha se factura igual.
+//
+// POR QUÉ NO VIVE EN `armarDesglose`: el desglose se calcula ANTES de que
+// exista un precio (su trabajo es proponer uno). La ganancia sólo existe
+// cuando alguien ya puso un precio, que puede no ser el sugerido — casi nunca
+// lo es. Son dos momentos distintos, y mezclarlos obligaría a recalcular el
+// desglose entero cada vez que cambia el precio.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface Ganancia {
+  /** Precio menos costo. NEGATIVO cuando el viaje pierde — se enseña igual. */
+  pesos: number;
+  /**
+   * Margen sobre el PRECIO (`pesos / precio × 100`), en puntos porcentuales.
+   *
+   * Sobre el precio y no sobre el costo a propósito: es la convención con la
+   * que un transportista lee «margen», y la misma base que usa
+   * `margenObjetivoPct` para proponer el precio sugerido. Dos definiciones de
+   * margen en la misma pantalla serían dos cálculos.
+   *
+   * `null` cuando el precio es 0: no hay margen que afirmar sobre nada, y un
+   * Infinity pintado como cifra es peor que una raya.
+   */
+  margenPct: number | null;
+}
+
+/**
+ * La ganancia real de una cotización: lo que se cobra menos lo que cuesta.
+ *
+ * `null` si falta cualquiera de los dos —o si alguno no es finito—, JAMÁS 0:
+ * un costo incompleto con ganancia «$0.00» se leería como un viaje que sale
+ * a mano, cuando lo que pasa es que todavía no se puede saber.
+ */
+export function gananciaReal(precio: number | null, costoTotal: number | null): Ganancia | null {
+  if (precio === null || costoTotal === null) return null;
+  if (!Number.isFinite(precio) || !Number.isFinite(costoTotal)) return null;
+  const pesos = round2(precio - costoTotal);
+  return {
+    pesos,
+    margenPct: precio === 0 ? null : round2((pesos / precio) * 100),
+  };
+}

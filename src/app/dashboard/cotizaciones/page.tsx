@@ -5,7 +5,8 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { mxn, fechaHoraMx } from '@/lib/formato';
+import { mxn, porcentaje, fechaHoraMx } from '@/lib/formato';
+import { gananciaReal } from '@/lib/likida/cotizador/motor';
 import {
   getPanelCotizador, guardarConfigCotizador, crearCotizacion, marcarEnviada, marcarPerdida,
   convertirEnViaje, type PanelCotizador, type CotizacionRow,
@@ -230,6 +231,10 @@ function Fila({
   convertir: (fd: FormData) => Promise<void>;
 }) {
   const viva = q.estado === 'borrador' || q.estado === 'enviada';
+  // EL NÚMERO QUE EL TÍTULO DE ESTA PANTALLA PROMETE. `null` = todavía no se
+  // puede afirmar (falta el precio o falta un renglón del costo), y entonces
+  // se dice eso — nunca "$0.00", que se leería como un viaje que sale a mano.
+  const g = gananciaReal(q.precio, q.costoEstimado);
   return (
     <li className="rounded-md border p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -242,6 +247,21 @@ function Fila({
         <div className="text-sm">
           <span className="mr-3">costo: {q.costoEstimado !== null ? mxn(q.costoEstimado) : 'incompleto'}</span>
           <span className="mr-3 font-medium">precio: {q.precio !== null ? mxn(q.precio) : 'a medias — sin precio'}</span>
+          <span className="mr-3 font-medium">
+            ganancia:{' '}
+            {g === null ? (
+              <span className="font-normal text-neutral-500">
+                {q.precio === null ? 'falta el precio' : 'falta un dato del costo'}
+              </span>
+            ) : (
+              <span style={{ color: g.pesos < 0 ? 'var(--color-bad)' : 'var(--color-ok)' }}>
+                {mxn(g.pesos)}
+                {g.margenPct !== null && (
+                  <span className="font-normal"> ({porcentaje(g.margenPct)})</span>
+                )}
+              </span>
+            )}
+          </span>
           <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs uppercase dark:bg-neutral-800">{q.estado}</span>
         </div>
       </div>

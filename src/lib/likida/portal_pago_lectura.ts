@@ -446,12 +446,43 @@ export interface LigaEnPanel {
   ultimoAccesoEn: string | null;
 }
 
+/**
+ * Un REP ya registrado, como lo ve el CONTRALOR (no el pagador).
+ *
+ * `rep_emitido` sólo se leía del lado del cliente (`vistaDelPortal`): quien
+ * registra el complemento lo hacía a ciegas y no volvía a verlo nunca. La
+ * pantalla incluso prometía lo contrario. Sin esta lista no había forma de
+ * contestar «¿ya le mandamos el complemento a este cliente?» sin abrir la
+ * base — y menos «¿ya lo abrió?», que es lo que `entregadoEn` responde.
+ */
+export interface RepEnPanel {
+  id: string;
+  facturaId: string;
+  factura: string;
+  cliente: string;
+  cfdiUuid: string;
+  fechaPago: string;
+  impPagado: number | null;
+  formaPago: string | null;
+  registradoEn: string;
+  /** `null` = el cliente NUNCA lo ha abierto. No se lee como "hace mucho". */
+  entregadoEn: string | null;
+}
+
 export interface PanelPortal {
   pendientes: PropuestaEnBandeja[];
   ligasVivas: LigaEnPanel[];
   /** Facturas emitidas sin liga viva: las candidatas a generar enlace. */
   facturasSinLiga: Array<{ id: string; factura: string; cliente: string; saldo: number | null }>;
+  /** Los últimos REPs registrados por esta flota, del más nuevo al más viejo. */
+  reps: RepEnPanel[];
+  /** `true` si hay más REPs de los que cupieron: un tope callado es una cifra
+   *  inventada, así que la pantalla lo DICE (hallazgo c7-4). */
+  repsTruncados: boolean;
 }
+
+/** Cuántos REPs trae el panel. Se declara para poder decir "hay más". */
+export const TOPE_REPS_PANEL = 50;
 
 /**
  * Todo lo del portal para UNA flota. Falla POR VALOR hacia arriba (lanza), como
@@ -461,7 +492,7 @@ export interface PanelPortal {
 export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
   const sb = supabaseAdmin();
 
-  const [prop, ligas, facturas, saldos] = await Promise.all([
+  const [prop, ligas, facturas, saldos, reps] = await Promise.all([
     sb.from('portal_pago_propuesta')
       .select('id, factura_id, fecha, monto, referencia, metodo, registrada_en')
       .eq('tenant_id', tenantId).eq('estado', 'pendiente')
@@ -477,11 +508,24 @@ export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
     sb.from('factura_saldo')
       .select('factura_id, saldo')
       .eq('tenant_id', tenantId).limit(1000),
+    // NO se selecciona `xml`: son 50 blobs de CFDI que la lista no pinta.
+    // Se pide UNO más que el tope para saber si hay más sin traerlos todos.
+    // `.order()` va SIEMPRE con `.limit()` — un tope sin orden alimentando una
+    // lista publicada es una lista inventada (c7-4).
+    sb.from('rep_emitido')
+      .select('id, factura_id, cfdi_uuid, fecha_pago, imp_pagado, forma_pago_p, registrado_en, entregado_en')
+      .eq('tenant_id', tenantId)
+      .order('registrado_en', { ascending: false })
+      .limit(TOPE_REPS_PANEL + 1),
   ]);
 
   if (prop.error) throw new Error(`panelDelPortal: propuestas: ${prop.error.message}`);
   if (ligas.error) throw new Error(`panelDelPortal: ligas: ${ligas.error.message}`);
   if (facturas.error) throw new Error(`panelDelPortal: facturas: ${facturas.error.message}`);
+  // Los REPs LANZAN como las otras tres: una lista vacía por una consulta
+  // caída se leería como «no hemos emitido ninguno», que es justo la
+  // conclusión que haría emitir uno repetido.
+  if (reps.error) throw new Error(`panelDelPortal: reps: ${reps.error.message}`);
   // El saldo se degrada: sin él la bandeja sigue sirviendo, y cada renglón
   // dirá «sin dato» en vez de un cero que invitaría a conciliar a ciegas.
   if (saldos.error) logger.error('portal_pago.panel_saldos', { err: saldos.error.message });
@@ -500,6 +544,10 @@ export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
   const faltantes = [...new Set([
     ...(prop.data ?? []).map((p) => String((p as { factura_id: unknown }).factura_id)),
     ...(ligas.data ?? []).map((l) => String((l as { factura_id: unknown }).factura_id)),
+    // Los REPs entran a la misma resolución: un complemento se registra sobre
+    // una factura que a menudo YA se pagó y cayó fuera de las 300 recientes.
+    // Sin esto, la lista de REPs se pintaría entera «no se pudo identificar».
+    ...(reps.data ?? []).map((r) => String((r as { factura_id: unknown }).factura_id)),
   ])].filter((id) => !yaResueltas.has(id));
 
   if (faltantes.length > 0) {
@@ -597,6 +645,24 @@ export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
       // «no sé» no es «ya pagó».
       .filter((f) => f.saldo === null || f.saldo > 0.01)
       .slice(0, 50),
+    reps: (reps.data ?? []).slice(0, TOPE_REPS_PANEL).map((f) => {
+      const r = f as Record<string, unknown>;
+      const fid = String(r.factura_id);
+      const meta = porFactura.get(fid);
+      return {
+        id: String(r.id),
+        facturaId: fid,
+        factura: meta?.rotulo ?? NO_IDENTIFICADA,
+        cliente: meta?.cliente ?? NO_IDENTIFICADA,
+        cfdiUuid: String(r.cfdi_uuid),
+        fechaPago: String(r.fecha_pago),
+        impPagado: numeroONull(r.imp_pagado),
+        formaPago: (r.forma_pago_p as string | null) ?? null,
+        registradoEn: String(r.registrado_en),
+        entregadoEn: (r.entregado_en as string | null) ?? null,
+      };
+    }),
+    repsTruncados: (reps.data ?? []).length > TOPE_REPS_PANEL,
   };
 }
 

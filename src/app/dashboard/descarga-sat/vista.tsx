@@ -1,5 +1,5 @@
 import { revalidatePath } from 'next/cache';
-import { CloudDownload, FileCheck2, FileQuestion, Link2, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { Archive, CloudDownload, FileCheck2, FileQuestion, Link2, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
@@ -233,7 +233,12 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
               </>
             )}
 
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+            {/* CINCO cubos, no cuatro: `descargados` se reparte ENTERO entre
+                los otros cuatro (casado + ambiguo + disponible + ignorado son
+                el dominio completo del CHECK de la 0231). Con cuatro tarjetas
+                las cifras no sumaban el total de la primera y el contralor no
+                tenía dónde averiguar a dónde se fue la diferencia. */}
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2">
               {/* null ≠ 0: si la consulta se cayó, la tarjeta lo dice. */}
               <StatCard icono={<CloudDownload width={15} height={15} strokeWidth={1.75} />}
                 etiqueta="CFDI bajados del buzón" valor={c?.descargados ?? null}
@@ -247,6 +252,9 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
               <StatCard icono={<FileCheck2 width={15} height={15} strokeWidth={1.75} />}
                 etiqueta="Sin gasto que les corresponda" valor={c?.disponibles ?? null}
                 sinDato="no se pudo leer" nota="Puede ser un gasto que nadie reportó — eso también es hallazgo" />
+              <StatCard icono={<Archive width={15} height={15} strokeWidth={1.75} />}
+                etiqueta="Archivados a propósito" valor={c?.ignorados ?? null}
+                sinDato="no se pudo leer" nota="Consolidados que ya entraron por su propio camino — no se pierden, se archivan" />
             </div>
           </section>
 
