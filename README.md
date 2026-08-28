@@ -35,11 +35,60 @@ proves it is the most expensive document in the company to turn into
 verified data. All of that work is data entry — and data entry shouldn't
 exist.
 
-The sector is large and structurally fragmented into small, independent
-carriers. This document doesn't state a specific market-size or fleet-count
-figure, because we haven't confirmed one against an official source
-(INEGI/SICT/CANACAR) — the same discipline the product enforces on a
-customer's numbers, applied to our own.
+## Market
+
+Built bottom-up from Mexico's official federal transport statistics (SICT's
+Estadística Básica del Autotransporte Federal), not a trade-press headline —
+and cross-validated two independent ways within 2% of each other.
+
+| | Companies | MXN/year | USD/year |
+|---|---:|---:|---:|
+| **TAM** — federal cargo carriers (public + private) plus passenger, tourism, transfer, tow, and parcel, >5 vehicles | 55,506 | $3,369.8M | ~$182.2M |
+| **SAM** — the slice reachable today: public + private cargo and parcel, medium/large fleets (>30 vehicles), on WhatsApp, inside our known channels (census + CANACAR/ANTP) | 6,743 | $1,392.9M | ~$75.3M |
+| **SOM, Year 1 / 3 / 5** | 6 → 63 → 218 clients | $1.09M → $12.83M → $59.43M | ~$59K → ~$694K → ~$3.21M |
+
+Two things about this number that matter more than the number itself:
+
+- **The TAM and SAM grew 4.3× and 3.5× over an earlier internal estimate —
+  because the earlier one undercounted the universe by ~2.7× and left out six
+  whole segments, not because the market grew.** We caught our own error and
+  rebuilt the funnel filter by filter, each one named, sourced, and defensible
+  on its own (informality rate from three independent press citations of
+  SICT/IMCP data; fleet-size cutoffs from SICT's own published brackets;
+  WhatsApp penetration from Sinch/DataReportal). We also explicitly did
+  **not** size two adjacent segments (field-service fleets, and
+  no-fleet expense management) because the data to back a number honestly
+  doesn't exist yet — sizing them anyway would inflate the total with a
+  market we have no edge in.
+- **The Year-1 SOM is intentionally small, and doesn't move with the TAM/SAM
+  correction.** It's gated by one concrete, named blocker: WhatsApp Business
+  is still running on Meta's test number, not a production one — no driver
+  can message the bot in the wild until that clears. SOM tracks selling
+  capacity (one founder, no reps yet, WhatsApp not yet productive), not
+  market size. Year 3 and 5 assume WhatsApp goes live and 3 then 9 hires
+  accumulate in sales and customer success.
+
+### We didn't just estimate demand — we read it
+
+Instead of a market-size guess, we ran a census of live Mexican job postings
+(Indeed, Computrabajo, LinkedIn, OCC): over 5,000 full descriptions
+downloaded and read one by one, screenshotted, and classified.
+
+- **828 companies** have a hiring post that names, in its own words, exactly
+  the manual work this product eliminates — reconciling trip expenses
+  against an advance by hand.
+- **63 active postings** put it directly in the job title
+  ("liquidador de viajes," "auxiliar de liquidaciones").
+- The role being hired for carries a **median salary of $11,129–$14,500
+  MXN/month** (31 of those postings publish pay) — that's the recurring
+  headcount cost per fleet that a WhatsApp number replaces.
+- The postings span the three buyer profiles the product is built for:
+  **dedicated carriers** (transportistas), **shippers running a private
+  fleet** with their own in-house logistics staff, and **3PL operators**
+  managing fleets on someone else's behalf.
+
+This is primary research, not a citation — the row-level data, screenshots,
+and methodology are kept on file and reconciled against the CRM.
 
 ## Why now
 
