@@ -47,6 +47,9 @@ export interface ResultadoSdr {
   piezas: number;
   saltados: number;
   costoUsd: number;
+  /** Los candidatos que el RELOJ de la vuelta dejó sin turno (c7-1). 0 cuando
+   *  el lote cupo entero o cuando el llamador no impuso reloj. */
+  sinTurno: number;
 }
 
 interface CandidatoSdr {
@@ -151,14 +154,34 @@ async function fabricarSeguimiento(c: CandidatoSdr): Promise<number> {
 }
 
 /** UNA corrida del SDR (la llama el runner). */
-export async function correrSdr(disparo: DisparoCorrida = 'cron', limite = 5): Promise<ResultadoSdr> {
+export async function correrSdr(
+  disparo: DisparoCorrida = 'cron',
+  limite = 5,
+  /** EL RELOJ DE LA VUELTA (epoch ms), cuando el llamador impone uno. Ver la
+   *  nota del `for`. Sin él el lote corre completo, como siempre. */
+  venceEn?: number,
+): Promise<ResultadoSdr> {
   const inicio = new Date();
   if (await estaApagado('agente:sdr')) {
     throw new DatoInvalido('El SDR está apagado — se enciende desde /admin/observabilidad o ⌘K.');
   }
   const candidatos = await candidatosDeSeguimiento(limite);
-  let piezas = 0, saltados = 0, costoUsd = 0;
-  for (const c of candidatos) {
+  let piezas = 0, saltados = 0, costoUsd = 0, sinTurno = 0;
+  for (let i = 0; i < candidatos.length; i++) {
+    // ── EL RELOJ, ADENTRO DEL MOTOR (auditoría ciclo 7, c7-1) ───────────────
+    // El SDR gasta modelo (`llamaAlModelo` lo tiene en la lista de caros) y
+    // este `for` iteraba hasta el final sin mirar nada más que su propio
+    // límite. Es el mismo modo de falla que mató al runner el 25-ago-2026 y el
+    // 28-ago-2026 dentro del lote del Redactor: Vercel corta la función DENTRO
+    // del bucle y la ruta no alcanza a escribir su latido. Se pregunta ANTES
+    // de cada candidato, no después, porque lo que se protege es el tiempo de
+    // latir. Lo que no alcanzó turno se DICE en `sinTurno` — no desaparece.
+    if (venceEn !== undefined && Date.now() >= venceEn) {
+      sinTurno = candidatos.length - i;
+      logger.warn('sdr.corte_por_reloj', { sinTurno, piezas, saltados });
+      break;
+    }
+    const c = candidatos[i];
     try {
       costoUsd += await fabricarSeguimiento(c);
       piezas += 1;
@@ -170,8 +193,8 @@ export async function correrSdr(disparo: DisparoCorrida = 'cron', limite = 5): P
   await registrarCorrida(null, 'sdr', {
     inicio, fin: new Date(), estado: 'ok', disparo,
     tareasHechas: piezas, tareasTotal: candidatos.length,
-    resumen: { candidatos: candidatos.length, piezas, saltados },
+    resumen: { candidatos: candidatos.length, piezas, saltados, sinTurno },
     costoUsd: costoUsd || undefined,
   });
-  return { candidatos: candidatos.length, piezas, saltados, costoUsd };
+  return { candidatos: candidatos.length, piezas, saltados, costoUsd, sinTurno };
 }

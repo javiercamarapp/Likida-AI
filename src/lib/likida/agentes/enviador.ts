@@ -52,6 +52,9 @@ export interface ResultadoEnviador {
   destinatarios: number;
   saltadas: number;
   motivos: string[];
+  /** Las candidatas que el RELOJ de la vuelta dejó sin turno (c7-1). 0 cuando
+   *  el lote cupo entero o cuando el llamador no impuso reloj. */
+  sinTurno: number;
 }
 
 interface PiezaCandidata {
@@ -67,7 +70,13 @@ interface PiezaCandidata {
  * `limite` piezas de campaña maduras. Cada pieza falla POR SU LADO — un
  * prospecto sin correo no detiene el lote, y el motivo queda dicho.
  */
-export async function correrEnviador(disparo: DisparoCorrida = 'cron', limite = 10): Promise<ResultadoEnviador> {
+export async function correrEnviador(
+  disparo: DisparoCorrida = 'cron',
+  limite = 10,
+  /** EL RELOJ DE LA VUELTA (epoch ms), cuando el llamador impone uno. Ver la
+   *  nota del `for`. Sin él el lote corre completo, como siempre. */
+  venceEn?: number,
+): Promise<ResultadoEnviador> {
   const inicio = new Date();
   if (await estaApagado('agente:enviador')) {
     throw new DatoInvalido('El enviador está apagado — se enciende desde /admin/observabilidad o ⌘K.');
@@ -78,7 +87,7 @@ export async function correrEnviador(disparo: DisparoCorrida = 'cron', limite = 
       inicio, fin: new Date(), estado: 'fallo', disparo,
       error: 'El canal de correo no está configurado (RESEND_API_KEY/RESEND_EMAIL_DOMAIN).',
     });
-    return { piezasEnviadas: 0, destinatarios: 0, saltadas: 0, motivos: ['canal sin configurar'] };
+    return { piezasEnviadas: 0, destinatarios: 0, saltadas: 0, motivos: ['canal sin configurar'], sinTurno: 0 };
   }
 
   // Las candidatas son DOS clases (c5-6): las pendientes maduras (la ventana
@@ -100,9 +109,23 @@ export async function correrEnviador(disparo: DisparoCorrida = 'cron', limite = 
   if (error) throw new Error(`correrEnviador: ${error.message}`);
   const candidatas = (data ?? []) as unknown as PiezaCandidata[];
 
-  let piezasEnviadas = 0, destinatarios = 0, saltadas = 0;
+  let piezasEnviadas = 0, destinatarios = 0, saltadas = 0, sinTurno = 0;
   const motivos: string[] = [];
-  for (const pieza of candidatas) {
+  for (let i = 0; i < candidatas.length; i++) {
+    // ── EL RELOJ, ADENTRO DEL MOTOR (auditoría ciclo 7, c7-1) ───────────────
+    // El enviador no gasta modelo, pero cada candidata son varios viajes de
+    // red EN SERIE (los correos de la empresa, la lista de bajas, la
+    // auto-aprobación y el envío por Resend) y el `for` iteraba hasta el final
+    // sin mirar el reloj de la vuelta: el mismo modo de falla que mató al
+    // runner el 25-ago-2026 y el 28-ago-2026 dentro del lote del Redactor.
+    // Cortar aquí es especialmente barato: lo que no se envió sigue en la cola,
+    // aprobado, y la propia corrida lo retoma en la pasada siguiente (c5-6).
+    if (venceEn !== undefined && Date.now() >= venceEn) {
+      sinTurno = candidatas.length - i;
+      logger.warn('enviador.corte_por_reloj', { sinTurno, piezasEnviadas, saltadas });
+      break;
+    }
+    const pieza = candidatas[i];
     try {
       const principal = pieza.prospecto?.correo?.trim().toLowerCase() ?? '';
       if (!principal) throw new DatoInvalido('el prospecto no tiene correo principal capturado');
@@ -170,9 +193,9 @@ export async function correrEnviador(disparo: DisparoCorrida = 'cron', limite = 
     inicio, fin: new Date(), estado: saltadas > 0 && piezasEnviadas === 0 && candidatas.length > 0 ? 'parcial' : 'ok',
     disparo,
     tareasHechas: piezasEnviadas, tareasTotal: candidatas.length,
-    resumen: { piezas: piezasEnviadas, destinatarios, saltadas, motivos: motivos.slice(0, 10) },
+    resumen: { piezas: piezasEnviadas, destinatarios, saltadas, sinTurno, motivos: motivos.slice(0, 10) },
   });
-  return { piezasEnviadas, destinatarios, saltadas, motivos };
+  return { piezasEnviadas, destinatarios, saltadas, motivos, sinTurno };
 }
 
 /** El registro de una BAJA o un rebote: suprime la dirección para siempre.
