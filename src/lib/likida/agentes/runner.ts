@@ -21,6 +21,11 @@
 // La SALIDA de todo agente del runner es la cola de aprobación — el runner
 // jamás toca un canal de envío. El tope de ENVÍO diario vive aparte, en la
 // única puerta de salida (cola.ts).
+//
+// Los cuatro candados son de DINERO y de SEGURIDAD. Aparte de ellos, y desde
+// el 25-ago-2026, la vuelta trae un PRESUPUESTO DE TIEMPO (ver
+// `MARGEN_RELOJ_MS` más abajo): no decide si un agente puede correr, decide si
+// TODAVÍA CABE en la invocación. Lo que no cabe se dice; no se muere.
 // ═══════════════════════════════════════════════════════════════════════════
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -81,6 +86,58 @@ export interface AgenteDelRunner {
 export interface ResultadoRunner {
   apagadoGlobal: boolean;
   agentes: AgenteDelRunner[];
+  /** Los que NO alcanzaron turno porque el reloj de la corrida se agotó. La
+   *  lista, no el conteo: el operador necesita saber CUÁLES se quedaron sin
+   *  correr, no cuántos. Vacía en una vuelta que cupo entera. */
+  saltadosPorReloj: string[];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PRESUPUESTO DE TIEMPO (alerta de prod 25-ago-2026, 18:46 — "Sin latido:
+// runner hace 286 min").
+//
+// Con 34 agentes habilitados, la pasada de las 18:00 despachó ~15 EN SERIE y
+// Vercel la mató en el `maxDuration` de 120 s: los agentes del final ni
+// corrieron, y —lo grave— la ruta murió ANTES de `registrarLatido`, así que
+// el orquestador quedó MUDO. Cuatro horas después la alerta de latido vencido
+// fue la primera noticia. El mismo modo de falla que la cobranza global ya
+// había resuelto (REND-C2/ESC-3): trabajo serial sin reloj bajo un
+// `maxDuration` que nadie mira.
+//
+// La cura es la misma que allá: un vencimiento ÚNICO para toda la vuelta, que
+// se consulta ANTES de despachar cada agente. Si no alcanza, se corta LIMPIO
+// —los que faltan quedan dichos, no desaparecidos— y la ruta alcanza a
+// escribir su latido `'parcial'`. Una pasada cortada con latido es
+// infinitamente mejor que una pasada completa que muere muda.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Lo que se le deja a la ruta para responder y ESCRIBIR EL LATIDO después
+ *  del corte. 20 s: el latido es un upsert (tope de `acotada`, 8 s) más el
+ *  `leerLatido` de la racha y el correo del tercer corte seguido. */
+export const MARGEN_RELOJ_MS = 20_000;
+
+/** El reloj por default cuando el llamador no impone uno: el `maxDuration`
+ *  de 300 s del cron menos el margen. El cron pasa el suyo explícito —esta
+ *  constante es la red para el copiloto y las pruebas. */
+export const PLAZO_RUNNER_MS = 300_000 - MARGEN_RELOJ_MS;
+
+/** Los agentes que GASTAN MODELO. Se despachan AL FINAL a propósito: si el
+ *  reloj corta, lo que se sacrifica es lo caro y lo lento, no los partes
+ *  deterministas (financieros, dirección, back office, éxito) que salen en
+ *  milisegundos y son los que Javier lee cada mañana. Antes el orden era
+ *  `ORDER BY id` —o sea, el alfabeto— y `atencion_faq` con `enriquecedor`
+ *  encabezaban la vuelta comiéndose el reloj de los otros treinta. */
+export function llamaAlModelo(agente: string): boolean {
+  return agente === 'redactor' || agente === 'enriquecedor'
+    || agente === 'sdr' || agente === 'atencion_faq';
+}
+
+/** El orden de despacho: baratos primero, caros al final, y DENTRO de cada
+ *  grupo el orden estable que ya traía la consulta (`ORDER BY id`) — `sort`
+ *  es estable por spec desde ES2019, así que dos vueltas con los mismos
+ *  agentes despachan en el mismo orden. */
+export function ordenarPorCosto<T extends { id: string }>(agentes: readonly T[]): T[] {
+  return [...agentes].sort((a, b) => Number(llamaAlModelo(a.id)) - Number(llamaAlModelo(b.id)));
 }
 
 /** El gasto MEDIDO del agente hoy (día de México), USD. LANZA si la base no
@@ -160,9 +217,13 @@ export async function correrRunner(
   /** Tenant autenticado/explicitamente asignado que paga esta corrida.
    *  `null`/ausente bloquea al Redactor; nunca se usa un env global. */
   budgetTenantId?: string | null,
+  /** El presupuesto de TIEMPO de esta vuelta. `venceEn` es el instante
+   *  (epoch ms) a partir del cual ya no se despacha a nadie más — el cron le
+   *  pasa su `maxDuration` menos `MARGEN_RELOJ_MS`. */
+  opts: { venceEn?: number } = {},
 ): Promise<ResultadoRunner> {
   if (await estaApagado('global')) {
-    return { apagadoGlobal: true, agentes: [] };
+    return { apagadoGlobal: true, agentes: [], saltadosPorReloj: [] };
   }
 
   const { data, error } = await acotada(supabaseAdmin()
@@ -173,11 +234,31 @@ export async function correrRunner(
     .eq('disparador', 'cron')
     .order('id'), 'runner.agentes');
   if (error) throw new Error(`correrRunner: ${error.message}`);
-  const habilitados = ((data ?? []) as Array<{ id: string; presupuesto_dia_usd: number | null }>)
-    .filter((a) => !soloAgente || a.id === soloAgente);
+  const habilitados = ordenarPorCosto(((data ?? []) as Array<{ id: string; presupuesto_dia_usd: number | null }>)
+    .filter((a) => !soloAgente || a.id === soloAgente));
 
+  const venceEn = opts.venceEn ?? Date.now() + PLAZO_RUNNER_MS;
   const agentes: AgenteDelRunner[] = [];
-  for (const a of habilitados) {
+  const saltadosPorReloj: string[] = [];
+  for (let i = 0; i < habilitados.length; i++) {
+    const a = habilitados[i];
+    // Candado 0 — EL RELOJ. Se pregunta ANTES de despachar, no después: la
+    // gracia es que el corte deje a la ruta tiempo de escribir el latido. Los
+    // que faltan se dicen uno por uno —con nombre— en vez de desaparecer con
+    // la invocación, que es exactamente lo que pasó el 25-ago.
+    if (Date.now() >= venceEn) {
+      for (const pendiente of habilitados.slice(i)) {
+        saltadosPorReloj.push(pendiente.id);
+        agentes.push({
+          agente: pendiente.id,
+          resultado: 'saltado',
+          motivo: 'saltado por reloj — la vuelta se quedó sin presupuesto de tiempo; le toca en la próxima pasada',
+        });
+      }
+      logger.warn('runner.corte_por_reloj', { saltados: saltadosPorReloj.length, desde: a.id });
+      break;
+    }
+
     // Candado 1 — el kill switch. Sin interruptor declarado NO corre: un
     // agente autónomo que no se puede apagar no existe en este producto.
     const interruptor = `agente:${a.id}`;
@@ -393,5 +474,5 @@ export async function correrRunner(
     agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'sin motor despachable en el runner todavía — habilitarlo aquí exige su rama de despacho' });
   }
 
-  return { apagadoGlobal: false, agentes };
+  return { apagadoGlobal: false, agentes, saltadosPorReloj };
 }
