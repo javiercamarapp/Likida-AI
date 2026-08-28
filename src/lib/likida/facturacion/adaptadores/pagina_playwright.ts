@@ -129,6 +129,18 @@ export const TOPE_LANZAR_MS = Number(process.env.LIKIDA_TOPE_LANZAR_MS) || 30_00
  */
 export const TOPE_CERRAR_MS = Number(process.env.LIKIDA_TOPE_CERRAR_MS) || 5_000;
 
+/**
+ * BAJAR EL XML del CFDI ya emitido.
+ *
+ * Más largo que una acción normal (8 s) y por una razón concreta: el portal no
+ * tiene el archivo hecho cuando se aprieta el botón — lo pide al PAC, lo arma y
+ * lo entrega. Y quedarse corto AQUÍ es distinto de quedarse corto en cualquier
+ * otro paso: para cuando esto corre el CFDI YA EXISTE y el UUID ya se
+ * confirmó, así que un tope agotado no cuesta un timbrado de más, cuesta que
+ * alguien tenga que entrar al portal a bajar un archivo que ya está ahí.
+ */
+export const TOPE_DESCARGA_MS = Number(process.env.LIKIDA_TOPE_DESCARGA_MS) || 30_000;
+
 /** Margen sobre el tope antes de que dispare la red de seguridad. Igual que en `presupuesto.ts`. */
 const GRACIA_TOPE_MS = 1_500;
 
@@ -756,6 +768,57 @@ export class PaginaPlaywright implements PaginaPortal {
   }
 
   /**
+   * APRIETA Y SE QUEDA CON EL ARCHIVO QUE EL PORTAL ENTREGUE.
+   *
+   * Es el paso que hace verdad la regla de la casa: EL CFDI SE BAJA, NO SE
+   * FABRICA. Lo único que este método sabe hacer es esperar el evento
+   * `download` de Playwright y guardar lo que venga. No compone XML, no
+   * rellena huecos, no reconstruye un comprobante con lo que se capturó — un
+   * CFDI fabricado es un delito fiscal DEL CLIENTE.
+   *
+   * ── POR QUÉ SE ARMA EL ESPERADOR ANTES DEL CLIC ──────────────────────
+   *
+   * `waitForEvent('download')` engancha el oyente cuando se llama, y en un
+   * portal rápido la descarga puede dispararse ANTES de que el `await` del
+   * clic vuelva. Enganchando después se perdería el evento y el diagnóstico
+   * sería «el portal no entregó el XML» sobre un archivo que sí llegó. Por eso
+   * las dos promesas se crean juntas y se esperan juntas.
+   *
+   * ── DÓNDE CAE EL ARCHIVO ────────────────────────────────────────────
+   *
+   * En `directorioCapturas` si está puesto —para poder MIRARLO en la Mac— y si
+   * no, en la ruta temporal que Playwright eligió. En Vercel eso es `/tmp` y no
+   * sobrevive a la invocación: quien quiera conservarlo tiene que subirlo
+   * dentro de la misma corrida. Se dice aquí porque una ruta que se evapora es
+   * peor que ninguna si nadie lo sabe.
+   */
+  async descargar(selector: string, topeMs = TOPE_DESCARGA_MS): Promise<string> {
+    const loc = await this.uno(selector, 'descargar');
+    return acotar(async () => {
+      const esperando = this.page.waitForEvent('download', { timeout: topeMs });
+      await loc.click({ timeout: this.topes.accion });
+      const bajada = await esperando;
+
+      // `suggestedFilename()` viene del portal: se usa SOLO para la extensión y
+      // se le antepone un nombre nuestro. Un nombre de archivo elegido por un
+      // sitio ajeno no se escribe tal cual en disco — es por donde entra un
+      // `../` o un nombre de 300 caracteres.
+      const sugerido = bajada.suggestedFilename();
+      const ext = /\.([A-Za-z0-9]{1,5})$/.exec(sugerido)?.[1]?.toLowerCase() ?? 'xml';
+      const nombre = `cfdi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+      if (this.op.directorioCapturas) {
+        const ruta = join(this.op.directorioCapturas, nombre);
+        await bajada.saveAs(ruta);
+        return ruta;
+      }
+      const ruta = await bajada.path();
+      if (!ruta) throw new Error('la descarga no dejó archivo en disco');
+      return ruta;
+    }, topeMs, `descargar con \`${selector}\``);
+  }
+
+  /**
    * ¿Está el selector en la página? NO ESPERA, y esa es una decisión.
    *
    * `abortarSiCaptcha()` de `capufe.ts` pregunta por SEIS selectores de captcha
@@ -1098,6 +1161,13 @@ export class SesionNavegador {
         // Un portal de facturación no necesita nada de esto y cada permiso es
         // una razón más para que el navegador pida algo y se quede esperando.
         permissions: [],
+        // EL XML DEL CFDI SE BAJA, NO SE FABRICA — y sin esto no se puede
+        // bajar: con `acceptDownloads: false` Chromium CANCELA la descarga y el
+        // evento `download` nunca llega, así que `PaginaPlaywright.descargar()`
+        // agotaría su tope y reportaría «el portal no entregó el XML» sobre un
+        // portal que sí lo entregó. Es el default de Playwright, pero se pone
+        // explícito porque de él depende un paso de la facturación.
+        acceptDownloads: true,
         // Las cookies del login que ya hizo una persona. Sin esto, el resto de
         // `sesion_portal.ts` no sirve de nada.
         ...(estado ? { storageState: estado } : {}),

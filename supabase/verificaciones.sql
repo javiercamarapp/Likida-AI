@@ -12318,3 +12318,171 @@ begin
     top_cero, top_nulo, cerrado,
     reserva_repetida_rebota, reserva_tras_soltar_entra, otro_umbral_entra;
 end $$;
+
+-- ── 195. Los portales declarativos y su renglón en `portal_estado` (mig. 0232, sin migración nueva) ──
+-- Los bloques 189-194 los tomaron las ramas paralelas de esta ola; esta toma
+-- el 195. NO trae migración propia: la Fase A de portales es código —el motor
+-- declarativo de `adaptadores/guion.ts` y las tablas de selectores de
+-- `adaptadores/portales.ts`—, y el sitio donde ese motor DICE por qué un
+-- portal no avanzó ya existe: `portal_estado`, de la 0232.
+--
+-- Precisamente por eso hace falta este bloque. La 0232 se escribió cuando el
+-- único portal automatizado era CAPUFE y el único escritor era la vinculación
+-- asistida. Ahora escriben cuatro portales más y un motor que produce mensajes
+-- MUCHO más largos (el de captcha, el de «el portal cambió su HTML» con los
+-- selectores dentro). Lo que se verifica es que los candados de la 0232 sigan
+-- siendo verdad CONTRA ESOS MENSAJES, y no contra los de hace tres semanas:
+--
+--  (a) LAS CUATRO CLAVES NUEVAS CABEN. `portal_estado.comercio` es texto
+--      acotado a 64 y no vacío, a propósito (el catálogo vive en TypeScript y
+--      un enum obligaría a una migración por gasolinera). Se comprueba que
+--      'office_depot', 'controlnet', 'enerser' y 'autozone' entran.
+--  (b) Y CONVIVEN CON CAPUFE EN LA MISMA FLOTA. `portal_estado_unico` es por
+--      (tenant, comercio): cinco portales de una flota son cinco renglones,
+--      no cinco flotas peleándose uno.
+--  (c) EL MOTIVO DEL MOTOR ENTRA TAL CUAL. El mensaje de «el portal cambió su
+--      HTML» lleva DENTRO los selectores que faltaron —«`#folio` ni
+--      `input[name="folio"]`»— con backticks, comillas y corchetes de
+--      atributo. Que un mensaje así entre no es obvio: el CHECK
+--      `portal_estado_motivo_sin_json` rebota lo que EMPIECE por `{` o `[`, y
+--      un selector de atributo empieza por `[`. Si el motor llegara a escribir
+--      un motivo que arranque con el selector, la anotación se perdería EN
+--      SILENCIO (`anotarVinculo` es best-effort y no lanza) y el contralor
+--      vería «caducada» sin motivo. Aquí se fija que el mensaje real entra Y
+--      que uno que empieza por `[` NO.
+--  (d) UNA BOLSA DE COOKIES SIGUE REBOTANDO. Es el candado de la 0232 y no se
+--      relaja porque haya más escritores: esta columna la lee el panel sin
+--      descifrar nada.
+--  (e) EL MENSAJE DE CAPTCHA NO CABE EN 400, Y POR ESO `anotarVinculo`
+--      RECORTA. Se demuestra las dos mitades: el texto entero rebota contra
+--      `portal_estado_motivo_acotado`, y recortado a 400 —lo que hace el
+--      escritor— entra. Sin esta prueba, alguien que suba el mensaje de
+--      captcha rompería la anotación de todos los portales a la vez.
+--  (f) LOS DOS CANDADOS DE FECHA siguen puestos con las claves nuevas:
+--      'vinculado' sin `vinculada_en` y 'caducada' sin `caducada_en` rebotan.
+--      Una píldora sin fecha no se puede pintar.
+--  (g) EL AISLAMIENTO POR FLOTA. El mismo portal, dos flotas, dos renglones.
+--  (h) El doble candado de la casa: RLS deny-all + solo service_role.
+do $$
+declare
+  ta uuid; tb uuid;
+  claves text[] := array['office_depot', 'controlnet', 'enerser', 'autozone'];
+  c text;
+  cuatro_entran boolean := true;
+  conviven integer;
+  motivo_del_motor boolean; motivo_que_empieza_corchete_rebota boolean;
+  cookies_rebotan boolean;
+  captcha_entero_rebota boolean; captcha_recortado_entra boolean;
+  vinculado_sin_fecha_rebota boolean; caducada_sin_fecha_rebota boolean;
+  otra_flota_entra boolean;
+  cerrado boolean;
+  -- El mensaje LITERAL que produce `guion.ts` cuando el pre-vuelo encuentra
+  -- selectores idos. Se escribe entero y no resumido: la mitad del valor de
+  -- este bloque es que el texto de verdad entre, no uno parecido.
+  msg_cambio text := 'https://facturacion.officedepot.com.mx/ ya no tiene estos selectores: el campo "Monto" -> `input[formcontrolname="monto"]` ni `input[name*="monto" i]`. Hay que actualizar el mapeo de "office_depot". La sesion sigue viva: esto NO se arregla volviendo a entrar, lo corrige Likida rehaciendo la tabla del guion.';
+  -- Y el de captcha, que es el largo. `mensajeCaptcha` en `pasos.ts`.
+  msg_captcha text := 'https://facturacion.officedepot.com.mx/ pidio CAPTCHA al abrir el formulario (selector `.g-recaptcha`): hay que facturarlo a mano. No se intento resolverlo - rodear un CAPTCHA es operar contra los terminos del portal y la cuenta que se bloquea es la del CLIENTE, no la de Likida. Esto NO es "no pude", es "no se puede": reintentar no va a cambiar nada, tiene que entrar una persona. Se le deja la pantalla con todo lo leido del ticket para que solo teclee lo que falta.';
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 195 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 195 B') returning id into tb;
+
+  -- (a) Las cuatro claves nuevas entran.
+  foreach c in array claves loop
+    begin
+      insert into portal_estado (tenant_id, comercio, estado, vinculada_en)
+        values (ta, c, 'vinculado', now());
+    exception when others then
+      cuatro_entran := false;
+    end;
+  end loop;
+
+  -- (b) Y conviven con CAPUFE en la MISMA flota: cinco renglones, no uno.
+  insert into portal_estado (tenant_id, comercio, estado, vinculada_en)
+    values (ta, 'capufe', 'vinculado', now());
+  select count(*) into conviven from portal_estado where tenant_id = ta;
+
+  -- (c) El motivo que escribe el motor cuando el portal cambió, tal cual.
+  begin
+    update portal_estado
+      set estado = 'caducada', caducada_en = now(), motivo = left(msg_cambio, 400)
+      where tenant_id = ta and comercio = 'office_depot';
+    motivo_del_motor := true;
+  exception when others then
+    motivo_del_motor := false;
+  end;
+
+  -- … pero uno que EMPIEZA por un selector de atributo rebota. Es la trampa:
+  -- `[` es lo que el CHECK usa para cazar un volcado JSON.
+  begin
+    update portal_estado
+      set motivo = '[data-sitekey] aparecio en la pagina'
+      where tenant_id = ta and comercio = 'controlnet';
+    motivo_que_empieza_corchete_rebota := false;
+  exception when check_violation then
+    motivo_que_empieza_corchete_rebota := true;
+  end;
+
+  -- (d) Una bolsa de cookies sigue sin poder entrar.
+  begin
+    update portal_estado
+      set motivo = '{"cookies":[{"name":"SESSION","value":"abc"}]}'
+      where tenant_id = ta and comercio = 'enerser';
+    cookies_rebotan := false;
+  exception when check_violation then
+    cookies_rebotan := true;
+  end;
+
+  -- (e) El mensaje de captcha ENTERO no cabe; recortado a 400 sí. Las dos
+  -- mitades, porque juntas son las que justifican el `slice` del escritor.
+  begin
+    update portal_estado set motivo = msg_captcha
+      where tenant_id = ta and comercio = 'autozone';
+    captcha_entero_rebota := false;
+  exception when check_violation then
+    captcha_entero_rebota := true;
+  end;
+  begin
+    update portal_estado set motivo = left(msg_captcha, 400)
+      where tenant_id = ta and comercio = 'autozone';
+    captcha_recortado_entra := true;
+  exception when others then
+    captcha_recortado_entra := false;
+  end;
+
+  -- (f) Los dos candados de fecha, con una clave nueva.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado)
+      values (tb, 'office_depot', 'vinculado');
+    vinculado_sin_fecha_rebota := false;
+  exception when check_violation then
+    vinculado_sin_fecha_rebota := true;
+  end;
+  begin
+    insert into portal_estado (tenant_id, comercio, estado)
+      values (tb, 'controlnet', 'caducada');
+    caducada_sin_fecha_rebota := false;
+  exception when check_violation then
+    caducada_sin_fecha_rebota := true;
+  end;
+
+  -- (g) El mismo portal, otra flota: renglón propio.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado, vinculada_en)
+      values (tb, 'office_depot', 'vinculado', now());
+    otra_flota_entra := true;
+  exception when others then
+    otra_flota_entra := false;
+  end;
+
+  -- (h) El doble candado de la casa.
+  cerrado := not has_table_privilege('anon', 'public.portal_estado', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.portal_estado', 'SELECT')
+    and has_table_privilege('service_role', 'public.portal_estado', 'SELECT')
+    and has_table_privilege('service_role', 'public.portal_estado', 'INSERT')
+    and (select relrowsecurity from pg_class where oid = 'public.portal_estado'::regclass);
+
+  raise exception 'PORTALES_FASE_A_195  cuatro_entran=%  conviven=%  motivo_del_motor=%  motivo_que_empieza_corchete_rebota=%  cookies_rebotan=%  captcha_entero_rebota=%  captcha_recortado_entra=%  vinculado_sin_fecha_rebota=%  caducada_sin_fecha_rebota=%  otra_flota_entra=%  cerrado=%   (esperado t / 5 / t / t / t / t / t / t / t / t / t)',
+    cuatro_entran, conviven, motivo_del_motor, motivo_que_empieza_corchete_rebota,
+    cookies_rebotan, captcha_entero_rebota, captcha_recortado_entra,
+    vinculado_sin_fecha_rebota, caducada_sin_fecha_rebota, otra_flota_entra, cerrado;
+end $$;

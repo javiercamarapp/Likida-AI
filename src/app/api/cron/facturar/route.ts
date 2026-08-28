@@ -888,7 +888,21 @@ export async function procesarLoteEnCola(
       try {
         await conNavegador(async (abrirPagina, navegador) => {
           arranco = true;
-          await conPortales({ flota, abrirPagina, sesiones: conSesion }, async (registro) => {
+          // ── EL RELOJ, HASTA DENTRO DEL LOTE (PR #152) ──────────────────
+          //
+          // Los dos cortes de arriba —por flota y por portal— miran el reloj
+          // ANTES de empezar algo, y eso deja un hueco: dentro del lote de UN
+          // portal puede haber ocho tickets en serie de 10-60 s cada uno, y
+          // nadie vuelve a mirar el reloj entre uno y otro. El octavo arranca
+          // sin presupuesto y muere a media emisión — una muerte AMBIGUA (¿se
+          // fue el formulario antes de reventar?), que es exactamente como se
+          // acaba con dos CFDI por el mismo consumo.
+          //
+          // Se pasa el MISMO instante de corte que usan los dos cortes de
+          // arriba, no uno propio: dos relojes distintos para la misma corrida
+          // se desincronizan el día que alguien ajuste uno.
+          const venceEn = inicioLote + PRESUPUESTO_LOTE_MS - MARGEN_LOTE_MS;
+          await conPortales({ flota, abrirPagina, sesiones: conSesion, venceEn }, async (registro) => {
             flotas.push({
               tenantId,
               tickets: tickets.length,
