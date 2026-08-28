@@ -5,6 +5,7 @@ import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { StatCard, StatusPill, EstadoVacio, type Estado } from '../ui/kit';
 import { resumenVeredicto, type CorridaQA, type EstadoCorrida } from '@/lib/admin/qa-tipos';
 import { LanzarForm, type FotoConUrl } from './lanzar-form';
+import { BancoVerdad, type UltimaLectura } from './banco-verdad';
 
 const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
@@ -24,7 +25,10 @@ export const PILL_CORRIDA: Record<EstadoCorrida, { estado: Estado; etiqueta: str
  * (molde: escalaciones/page.tsx): BarraPagina + tarjetas sobre --g1, errores
  * POR FUENTE dichos — jamás un 0 sobre una lectura que falló.
  */
-export function PantallaQa({ fotos, bancoError, corridas, historialError, gastoHoy, gastoError, topeDiaUsd, topeCorridaUsd }: {
+export function PantallaQa({
+  fotos, bancoError, corridas, historialError, gastoHoy, gastoError, topeDiaUsd, topeCorridaUsd,
+  lecturasIniciales = {}, lecturasError = null,
+}: {
   fotos: FotoConUrl[];
   bancoError: string | null;
   corridas: CorridaQA[];
@@ -36,6 +40,10 @@ export function PantallaQa({ fotos, bancoError, corridas, historialError, gastoH
    *  servidor porque ese módulo trae `node:path` y no puede cruzar a 'use
    *  client'. */
   topeCorridaUsd: number;
+  /** La última medición del OCR por foto (mig. 0239). Con default para que el
+   *  preview de verificación visual pueda montar la pantalla sin base. */
+  lecturasIniciales?: Record<string, UltimaLectura>;
+  lecturasError?: string | null;
 }) {
   return (
     <main className="h-full">
@@ -87,6 +95,15 @@ export function PantallaQa({ fotos, bancoError, corridas, historialError, gastoH
             gastoError={gastoError}
             topeDiaUsd={topeDiaUsd}
             topeCorridaUsd={topeCorridaUsd}
+          />
+
+          {/* ── El banco de comprobantes reales: la ficha de cada foto y la
+                 medición del OCR contra ella ─────────────────────────────── */}
+          <BancoVerdad
+            fotos={fotos}
+            bancoError={bancoError}
+            lecturasIniciales={lecturasIniciales}
+            lecturasError={lecturasError}
           />
 
           {/* ── El historial ───────────────────────────────────────────────── */}

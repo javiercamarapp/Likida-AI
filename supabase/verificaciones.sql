@@ -13055,3 +13055,138 @@ begin
     jornada_late, asistencia_late, sat_late, cron_inventado_rebota,
     cero_horas_rebota, nan_rebota, mas_de_24_rebota, dos_politicas_rebotan, cerrado;
 end $$;
+-- ── 194. La verdad-de-terreno del banco de QA y sus lecturas (mig. 0239) ────
+-- ═══════════════════════════════════════════════════════════════════════════
+-- CORRECTIVA 0239 — LA VERDAD-DE-TERRENO ES UN CONTRATO DE LA BASE, Y CADA
+-- LECTURA DEL OCR QUEDA ESCRITA CON SU MEDICIÓN
+--
+-- El ordinal es el 194, que el fork del carril completo (#173, bloque 196)
+-- dejó reservado para esta rama al escribir el suyo. El número
+-- del título es lo ÚNICO que `migraciones_verificadas.test.ts` sabe leer para
+-- contestar "¿está comprobada la 0239?", así que tiene que existir aunque el
+-- cuerpo se identifique por el número de migración.
+--
+-- Qué se prueba, y por qué cada punto importa:
+--
+--  (a) EL CONTRATO ACEPTA LA ETIQUETA BIEN FORMADA. Sin esto la migración
+--      podría ser un CHECK que rebota todo, y "nada entra" también es un
+--      contrato — uno inútil.
+--  (b) UN `null` SIN CLASIFICAR REBOTA. Es el caso central: en la etiqueta,
+--      `null` significa "el papel no lo imprime" o "el papel lo imprime y no
+--      se ve", y las dos dan veredictos OPUESTOS al medir el OCR (alucinación
+--      vs campo sin medir). Un null sin clasificar obliga al motor a elegir a
+--      ciegas entre las dos, y el porcentaje que sale se cita en una decisión.
+--  (c) LA MISMA CLAVE EN LAS DOS LISTAS REBOTA: son afirmaciones que se
+--      contradicen, y quedarse con cualquiera de las dos sería inventar.
+--  (d) UN VALOR NO NULO LISTADO COMO ILEGIBLE REBOTA. Ese campo se
+--      descontaría del denominador teniendo un esperado perfectamente bueno:
+--      el porcentaje saldría inflado sobre menos campos de los que se midieron.
+--  (e) LAS 7 CLAVES TIENEN QUE ESTAR PRESENTES, aunque valgan null. Una clave
+--      AUSENTE se leería como null sin que nadie la haya considerado nunca.
+--  (f) EL CHECK DE LA TABLA REBOTA DE VERDAD (no solo la función suelta), y
+--      la etiqueta buena entra con su firma.
+--  (g) LOS TRES CONTADORES DE `qa_foto_lectura` SUMAN 7. Si no suman, la fila
+--      describe una medición que no ocurrió — y es justo el número que luego
+--      se agrega en un porcentaje.
+--  (h) BORRAR LA FOTO SE LLEVA SUS LECTURAS (`on delete cascade`): una lectura
+--      sin su foto no tiene ni imagen que revisar ni etiqueta contra la cual
+--      entenderse.
+--  (i) EL DOBLE CANDADO: RLS activo y `anon`/`authenticated` sin un solo
+--      privilegio sobre `qa_foto_lectura`, que guarda RFC, razón social y
+--      sucursal de comprobantes REALES (art. 2 fr. VI LFPDPPP). Solo
+--      `service_role`.
+do $$
+declare
+  buena jsonb;
+  acepta_buena boolean;
+  null_sin_clasificar boolean; en_las_dos boolean; valor_listado boolean;
+  clave_ausente boolean;
+  check_tabla_rebota boolean; etiqueta_buena_entra boolean;
+  contadores_rebotan boolean;
+  fid uuid; lecturas_tras_borrar bigint;
+  rls_activo boolean; cerrado boolean;
+begin
+  buena := jsonb_build_object(
+    'comercioClave', 'capufe',
+    'emisor', 'Caminos y Puentes Federales',
+    'rfcEmisor', 'CPF890101AAA',
+    'folio', '000123',
+    'monto', 1234.50,
+    'fecha', '2026-07-31',
+    'sucursal', 'Caseta Palmillas',
+    'dominioFacturacion', 'facturacioncapufe.com.mx',
+    'ilegibles', '[]'::jsonb,
+    'noAplica', '[]'::jsonb,
+    'clase', 'ticket',
+    'notas', null
+  );
+
+  -- (a)
+  acepta_buena := public.qa_verdad_terreno_valida(buena);
+
+  -- (b) folio en null y en NINGUNA de las dos listas.
+  null_sin_clasificar := public.qa_verdad_terreno_valida(buena || jsonb_build_object('folio', null));
+
+  -- (c) folio en null y en LAS DOS listas.
+  en_las_dos := public.qa_verdad_terreno_valida(
+    buena || jsonb_build_object('folio', null, 'ilegibles', '["folio"]'::jsonb, 'noAplica', '["folio"]'::jsonb));
+
+  -- (d) folio CON valor, pero listado como ilegible.
+  valor_listado := public.qa_verdad_terreno_valida(buena || jsonb_build_object('ilegibles', '["folio"]'::jsonb));
+
+  -- (e) la clave `sucursal` quitada del objeto entero.
+  clave_ausente := public.qa_verdad_terreno_valida(buena - 'sucursal');
+
+  -- (f) el CHECK de la tabla, con una foto de verdad.
+  insert into qa_foto (hash, path, mime, etiqueta, bytes)
+    values ('zzz-verif-0239-hash', 'banco/zzz-verif-0239.jpg', 'image/jpeg', 'ZZZ VERIF 0239', 100)
+    returning id into fid;
+
+  begin
+    update qa_foto
+      set ocr_esperado = buena || jsonb_build_object('folio', null),
+          confirmado_en = now()
+      where id = fid;
+    check_tabla_rebota := false;
+  exception when check_violation then
+    check_tabla_rebota := true;
+  end;
+
+  begin
+    update qa_foto set ocr_esperado = buena, confirmado_en = now() where id = fid;
+    etiqueta_buena_entra := true;
+  exception when others then
+    etiqueta_buena_entra := false;
+  end;
+
+  -- (g) los contadores que no suman 7 no describen ninguna medición real.
+  begin
+    insert into qa_foto_lectura (foto_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos)
+      values (fid, 'zzz-verif', '{}'::jsonb, '{}'::jsonb, 3, 1, 1);
+    contadores_rebotan := false;
+  exception when check_violation then
+    contadores_rebotan := true;
+  end;
+
+  insert into qa_foto_lectura (foto_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos, costo_usd)
+    values (fid, 'zzz-verif', '{}'::jsonb, '{}'::jsonb, 7, 0, 0, 0.0031);
+
+  -- (h) el cascade.
+  delete from qa_foto where id = fid;
+  select count(*) into lecturas_tras_borrar from qa_foto_lectura where foto_id = fid;
+
+  -- (i) el doble candado.
+  select relrowsecurity into rls_activo from pg_class where oid = 'public.qa_foto_lectura'::regclass;
+  cerrado :=
+    not has_table_privilege('anon', 'public.qa_foto_lectura', 'SELECT')
+    and not has_table_privilege('anon', 'public.qa_foto_lectura', 'INSERT')
+    and not has_table_privilege('authenticated', 'public.qa_foto_lectura', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.qa_foto_lectura', 'INSERT')
+    and has_table_privilege('service_role', 'public.qa_foto_lectura', 'SELECT')
+    and has_table_privilege('service_role', 'public.qa_foto_lectura', 'INSERT');
+
+  raise exception 'CORRECTIVA_0239  acepta_buena=%  null_sin_clasificar=%  en_las_dos=%  valor_listado=%  clave_ausente=%  check_tabla_rebota=%  etiqueta_buena_entra=%  contadores_rebotan=%  lecturas_tras_borrar=%  rls_activo=%  cerrado=%   (esperado t / f / f / f / f / t / t / t / 0 / t / t)',
+    acepta_buena, null_sin_clasificar, en_las_dos, valor_listado, clave_ausente,
+    check_tabla_rebota, etiqueta_buena_entra, contadores_rebotan,
+    lecturas_tras_borrar, rls_activo, cerrado;
+end $$;

@@ -408,7 +408,33 @@ describe('cortesDePlazo — reproduce calcularCaducidad día por día, para cada
     }
   });
 
-  it('hay un corte por plazo distinto (mes_natural y mes_siguiente hoy)', () => {
-    expect(cortesDePlazo('2026-08-22').cortes).toEqual(['2026-07-01', '2026-08-01']);
+  it('hay un corte por plazo distinto (los cinco del catálogo hoy)', () => {
+    // Este bloque es el CANARIO del catálogo: se dispara en cuanto entra un
+    // plazo de una forma que no existía, para que alguien mire si la dimensión
+    // agrupable sigue teniendo sentido en vez de que crezca sola.
+    //
+    // Y se disparó. Hasta el banco de tickets reales el catálogo solo conocía
+    // dos formas —'mes_natural' y 'mes_siguiente'—, ambas con corte a día 1 de
+    // algún mes. Los comprobantes fotografiados en campo trajeron tres plazos
+    // que están IMPRESOS EN EL PAPEL y que no caen en día 1:
+    //
+    //   2026-06-23 → { dias: 60 }   Home Depot: "USTED TIENE 60 DIAS PARA ESTE
+    //                               TRAMITE", literal en los siete tickets.
+    //   2026-07-01 → 'mes_siguiente'
+    //   2026-08-01 → 'mes_natural'
+    //   2026-08-19 → { horas: 72 }  BPT Group / Boston's Pizza.
+    //   2026-08-21 → { horas: 24 }  Conekta 360, el plazo más corto que se ha
+    //                               visto: un ticket de ayer ya venció.
+    //
+    // NO hace falta migración por esto: `cortesDePlazo` calcula los cortes con
+    // el reloj real a partir del catálogo y se los pasa a SQL como parámetro
+    // —la RPC solo cuenta cuántos cortes quedan por encima de la fecha—, así
+    // que la base nunca supo cuáles eran ni cuántos. Que las cinco formas
+    // sigan coincidiendo con `calcularCaducidad` día por día lo prueba el
+    // bloque `hoy=%s` de arriba, que es la garantía de verdad; esto solo fija
+    // el número y el orden para que el próximo plazo nuevo vuelva a avisar.
+    expect(cortesDePlazo('2026-08-22').cortes).toEqual([
+      '2026-06-23', '2026-07-01', '2026-08-01', '2026-08-19', '2026-08-21',
+    ]);
   });
 });
