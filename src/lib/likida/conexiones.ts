@@ -94,7 +94,21 @@ export function renglonRastreo(s: SenalesRastreo): Conector {
   const base = { id: 'rastreo' as const, nombre: 'Rastreo GPS (credenciales del proveedor)' };
 
   if (s.conectores === null) {
-    return { ...base, estado: 'sin_configurar', detalle: 'No se pudo leer el estado del rastreo ahora mismo.', falta: [] };
+    // AUDITORÍA CICLO 7, c7-28: esto devolvía `'sin_configurar'`, y la píldora
+    // decía **«Sin conectar»** —el mismo rótulo y el mismo color gris que una
+    // flota que nunca capturó un GPS— cuando la verdad era que la consulta no
+    // contestó. La cabecera de este módulo prometía `'no_medible'` desde el
+    // primer día y ese estado NO EXISTÍA en la unión: la promesa estaba en un
+    // comentario y no en el código. Afirmar «no tienes GPS» con la base caída
+    // es lo que manda a un contralor a recapturar una credencial que ya existe,
+    // que es exactamente el fallo que #143 dijo haber cerrado un escalón más
+    // abajo.
+    return {
+      ...base,
+      estado: 'no_medible',
+      detalle: 'NO SE PUDO LEER el estado del rastreo ahora mismo — la consulta a la base no contestó. Esto NO dice que no tengas GPS conectado: dice que en este momento no se puede saber. Vuelve a cargar la pantalla en un minuto.',
+      falta: [],
+    };
   }
 
   if (s.conectores.length === 0) {
@@ -139,7 +153,14 @@ export function renglonRastreo(s: SenalesRastreo): Conector {
 export interface Conector {
   id: 'whatsapp' | 'correo' | 'fiscal' | 'sat' | 'portales' | 'rastreo' | 'timbrado';
   nombre: string;
-  estado: 'listo' | 'incompleto' | 'sin_configurar' | 'ensayo';
+  /**
+   * `no_medible` = LA MEDICIÓN NO SE PUDO HACER, y es un estado propio con
+   * rótulo y tono propios en `vista.tsx` — nunca se dobla sobre
+   * `sin_configurar`. La cabecera de este módulo lo prometía desde el primer
+   * día y hasta el ciclo 7 no existía (c7-28): «no se pudo medir» se pintaba
+   * «Sin conectar», que es una afirmación sobre la flota y no sobre la lectura.
+   */
+  estado: 'listo' | 'incompleto' | 'sin_configurar' | 'no_medible' | 'ensayo';
   /** La verdad medida, en una línea — con su fuente. */
   detalle: string;
   /** Lo que falta, en palabras de persona (solo cuando aplica). */

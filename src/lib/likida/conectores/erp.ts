@@ -62,6 +62,7 @@ function cuerpoIlegible(endpoint: string, nombre: string): ResultadoPrueba {
     ok: false,
     detalle: `${nombre} contestó 200 pero no con la respuesta que documenta su API. Suele ser un portal web o un proxy en medio, no el endpoint. NO se puede afirmar que la credencial sirva.`,
     verificadoContra: endpoint,
+    sobreLaCredencial: 'no_se_sabe',
   };
 }
 
@@ -232,7 +233,7 @@ export const SAP_B1: Conector = {
     } catch {
       // Que no se pueda cerrar no invalida lo que ya se comprobó.
     }
-    return { ok: true, detalle: 'SAP Business One aceptó las credenciales y abrió sesión (y se cerró enseguida).', verificadoContra: endpoint };
+    return { ok: true, detalle: 'SAP Business One aceptó las credenciales y abrió sesión (y se cerró enseguida).', verificadoContra: endpoint, sobreLaCredencial: 'sirve' };
   }),
 };
 
@@ -408,6 +409,7 @@ export const ORACLE_FUSION: Conector = {
         ok: false,
         detalle: `Oracle no encontró el módulo «${recurso}» en tu instancia. Eso NO dice que la credencial sea mala: dice que ese módulo no está ahí. Prueba con otro que sí tengas.`,
         verificadoContra: endpoint,
+        sobreLaCredencial: 'no_se_sabe',
       };
     }
     const veredicto = veredictoHttp(r, endpoint, 'Oracle Fusion');
@@ -512,6 +514,7 @@ export const ODOO: Conector = {
         ok: false,
         detalle: 'Tu Odoo no reconoce la API JSON-2, lo que casi siempre significa que es versión 18 o anterior. Ese camino es el XML-RPC viejo y se conecta, pero se escribe contra tu instancia — dinos qué versión tienes.',
         verificadoContra: endpoint,
+        sobreLaCredencial: 'no_se_sabe',
       };
     }
     return veredicto;

@@ -145,7 +145,10 @@ export interface AgenteDelRunner {
   motivo?: string;
   piezas?: number;
   saltados?: number;
-  costoUsd?: number;
+  /** `null` = el agente llamó al modelo y NO se pudo medir cuánto gastó
+   *  (c7-11). No es 0: el 0 significa «no gastó», y confundirlos dejaba ciego
+   *  al único techo de gasto de los diez de crecimiento. */
+  costoUsd?: number | null;
 }
 
 export interface ResultadoRunner {
@@ -324,6 +327,39 @@ export async function gastoDelDiaUsd(agente: string): Promise<number> {
     .limit(1000), 'runner.gasto_dia');
   if (error) throw new Error(`gastoDelDiaUsd: ${error.message}`);
   return ((data ?? []) as Array<{ costo_usd: unknown }>).reduce((s, f) => s + Number(f.costo_usd ?? 0), 0);
+}
+
+/**
+ * Cuántas corridas de HOY de este agente NO tienen costo medido (`costo_usd`
+ * NULL). LANZA si la base no responde, por lo mismo que su hermana.
+ *
+ * AUDITORÍA CICLO 7, c7-11 (alto). `gastoDelDiaUsd` filtra `.not('costo_usd',
+ * 'is', null)` —correcto: no puede sumar lo que no sabe—, pero eso hace que un
+ * gasto no medido sea INVISIBLE para el techo, no incierto. Con el proveedor
+ * omitiendo `usage` una tarde, el agente redactaba, gastaba de verdad, y el
+ * techo comparaba $0.00 contra $1.00 y nunca cortaba.
+ *
+ * Va aparte y no dentro de `gastoDelDiaUsd` a propósito: aquella devuelve una
+ * SUMA y esto es otra pregunta —«¿hay algo que no pude sumar?»—. Meterlas en
+ * el mismo número obligaría a inventar un valor para lo desconocido, que es
+ * justo el error que este hallazgo describe. El llamador decide qué hacer con
+ * la duda; hoy, el único que la consulta es `contenido_fiscal` (el único de
+ * los diez de crecimiento que anota NULL), y falla cerrado.
+ */
+export async function corridasSinCostoMedidoHoy(agente: string): Promise<number> {
+  const diaMx = hoyMx();
+  const inicioDia = new Date(`${diaMx}T00:00:00-06:00`).toISOString();
+  const { count, error } = await acotada(supabaseAdmin()
+    .from('agente_corrida')
+    .select('id', { count: 'exact', head: true })
+    .eq('agente', agente)
+    .is('costo_usd', null)
+    .gte('inicio', inicioDia), 'runner.gasto_dia_sin_medir');
+  if (error) throw new Error(`corridasSinCostoMedidoHoy: ${error.message}`);
+  if (typeof count !== 'number') {
+    throw new Error('corridasSinCostoMedidoHoy: PostgREST no devolvió el conteo — no se afirma un 0 que nadie midió.');
+  }
+  return count;
 }
 
 /** El lote del Redactor: fabrica hasta N piezas para prospectos en `nuevo`
@@ -698,6 +734,18 @@ export async function correrRunner(
     if (CRECIMIENTO.includes(a.id)) {
       if (a.id === 'contenido_fiscal') {
         try {
+          // EL TECHO SE COMPARA CONTRA GASTO MEDIDO, y una corrida sin medir
+          // NO es una corrida gratis (c7-11). Se pregunta ANTES de sumar: con
+          // una sola corrida de hoy sin costo, el gasto real del día es
+          // desconocido y comparar la suma de lo demás contra $1.00 afirmaría
+          // un techo que nadie verificó. Se salta hasta el día siguiente —el
+          // agente propone UN borrador por pasada, así que el costo de esperar
+          // es un artículo, y el de no esperar es gastar sin tope.
+          const sinMedir = await corridasSinCostoMedidoHoy(a.id);
+          if (sinMedir > 0) {
+            agentes.push({ agente: a.id, resultado: 'saltado', motivo: `${sinMedir} corrida(s) de hoy con costo NO MEDIDO: el gasto real del día es desconocido y un costo desconocido no es cero — no se despacha contra un techo que no se puede verificar` });
+            continue;
+          }
           const gastado = await gastoDelDiaUsd(a.id);
           if (gastado >= a.presupuesto_dia_usd) {
             agentes.push({ agente: a.id, resultado: 'saltado', motivo: `techo diario alcanzado (${gastado.toFixed(2)} de ${a.presupuesto_dia_usd} USD)` });

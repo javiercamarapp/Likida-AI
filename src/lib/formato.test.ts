@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 import { execSync } from 'node:child_process';
-import { mxn, usd, usd4, mxnCompacto, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio, hoyMx, inicioDiaMx, finDiaMx } from './formato';
+import { mxn, usd, usd4, mxnCompacto, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio, porcentaje, hoyMx, inicioDiaMx, finDiaMx } from './formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 7 · MEDIO REINCIDENTE POR TERCERA RONDA — y el número CRECÍA:
@@ -254,6 +254,37 @@ describe('NO puede volver a haber una copia a mano', () => {
     ).toEqual([]);
   });
 
+  // ── c7-34 · EL COPY QUE SALE A LA CALLE NO FORMATEA A MANO ──────────────
+  //
+  // El guardia de arriba mira `toLocaleString('es-MX')`, que es la ortografía
+  // CORRECTA usada fuera de sitio. Le faltaba la incorrecta: `toFixed`, que ni
+  // pone separador de millares ni respeta la coma decimal del español, y que
+  // el ciclo 7 encontró DENTRO del texto que `copyPorCanal` pega en LinkedIn,
+  // Instagram y TikTok (`crecimiento.ts:622`, `$${numero(...)}` armado a mano
+  // más `(factor*100).toFixed(0)`). Un formato divergente ahí sale con la
+  // marca encima.
+  //
+  // El guardia es ESTRECHO a propósito: los diez agentes de crecimiento, que
+  // son los que producen material para publicar. Extenderlo al repo entero
+  // sería otra decisión y otro PR — un ratchet que nace fallando no se
+  // respeta, se desactiva.
+  it('c7-34 · ningún agente de crecimiento formatea cifras con toFixed', () => {
+    // Rutas LITERALES (y no un `readdirSync` sobre el directorio) por el
+    // ratchet de eslint: `detect-non-literal-fs-filename` cuenta warnings y un
+    // guardia nuevo no puede subir esa cuenta.
+    const deCrecimiento: Array<[string, string]> = [
+      ['src/lib/likida/agentes/crecimiento.ts', readFileSync('src/lib/likida/agentes/crecimiento.ts', 'utf8')],
+      ['src/lib/likida/agentes/contenido.ts', readFileSync('src/lib/likida/agentes/contenido.ts', 'utf8')],
+    ];
+    const fuera = deCrecimiento
+      .filter(([, fuente]) => /\.toFixed\(/.test(sinComentarios(fuente)))
+      .map(([f]) => f);
+    expect(
+      fuera,
+      `estos agentes formatean a mano en vez de usar mxn()/numero()/porcentaje() de formato.ts:\n${fuera.join('\n')}`,
+    ).toEqual([]);
+  });
+
   it('y `formato.ts` no importa NADA, para que el motor pueda usarlo', () => {
     // `engine.ts` es puro y sin I/O, y `pdf.ts` viaja en el bundle del webhook.
     // Si el formato viviera en `utils.ts` —que importa clsx y tailwind-merge
@@ -368,5 +399,34 @@ describe('hoyMx', () => {
   });
   it('sin argumento usa ahora y tiene forma ISO', () => {
     expect(hoyMx()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// c7-34 · `porcentaje()` — el formato que faltaba en la caja de herramientas.
+//
+// Sin él, cada llamador escribía `${n.toFixed(1)}%` y el repo tenía tantas
+// ortografías del porcentaje como sitios que lo imprimen.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('porcentaje — puntos porcentuales, no fracción', () => {
+  it('recibe el número YA en puntos porcentuales', () => {
+    expect(porcentaje(42.9)).toBe('42.9%');
+    expect(porcentaje(50, 0)).toBe('50%');
+  });
+
+  it('los decimales son EXACTOS, no un máximo: 50.0% y 50% dicen precisiones distintas', () => {
+    expect(porcentaje(50, 1)).toBe('50.0%');
+    expect(porcentaje(50, 2)).toBe('50.00%');
+  });
+
+  it('lleva separador de millares — que es lo que `toFixed` NO hace', () => {
+    expect(porcentaje(1234.5, 1)).toBe('1,234.5%');
+    // La ortografía vieja, para que se vea la diferencia que salía a LinkedIn.
+    expect((1234.5).toFixed(1)).toBe('1234.5');
+  });
+
+  it('un negativo se escribe como negativo', () => {
+    expect(porcentaje(-12.34, 2)).toBe('-12.34%');
   });
 });

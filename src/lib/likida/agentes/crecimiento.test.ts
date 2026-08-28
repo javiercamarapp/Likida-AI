@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // tienen rutina local en la Mac lo declaran en su cuerpo.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const respuestas = new Map<string, Array<{ data?: unknown; error?: { message: string } | null; count?: number }>>();
+const respuestas = new Map<string, Array<{ data?: unknown; error?: { message: string; code?: string } | null; count?: number }>>();
 function builder(tabla: string) {
   const responder = () => {
     const cola = respuestas.get(tabla);
@@ -24,7 +24,12 @@ function builder(tabla: string) {
   });
   return b;
 }
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => builder(t) }) }));
+// `rpc` comparte la cola de `respuestas` con la clave `rpc:<función>`: desde la
+// correctiva del ciclo 7 el mapa de plazas se cuenta EN LA BASE
+// (`prospecto_mapa_ciudades`, mig. 0238) y no trayendo filas (c7-4).
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => ({ from: (t: string) => builder(t), rpc: (fn: string) => builder(`rpc:${fn}`) }),
+}));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 
@@ -512,6 +517,18 @@ describe('alianzas: el siguiente toque, sin inventar un solo contacto', () => {
     expect(m.top).toEqual([{ ciudad: 'Monterrey', n: 2 }]);
   });
 
+  it('c7-4 · con la lectura TRUNCADA no hay ranking: `top` es null, no un orden de la rebanada', () => {
+    // El hallazgo crítico, escrito como prueba. Contar las ciudades de 5,000
+    // filas tomadas en orden físico de 33,071 producía un orden que se parecía
+    // a un dato: Nuevo Laredo, Manzanillo y Puebla —tres de las cinco plazas
+    // reales— desaparecían del parte y entraban tres que no lo eran.
+    const filas = [{ ciudad: 'Aguascalientes' }, { ciudad: 'Aguascalientes' }, { ciudad: 'Tijuana' }];
+    const m = armarMapaCiudades(filas, true);
+    expect(m.top, 'un orden sacado de una rebanada arbitraria NO es un top-5').toBeNull();
+    // Lo que SÍ se puede afirmar se sigue afirmando.
+    expect(m.sinCiudad).toBe(0);
+  });
+
   it('el turno pone primero a los que NUNCA se tocaron, luego al toque más viejo', () => {
     const base = { nombre: 'x', tipo: 'gremio', estado: 'sin_contacto', contactoNota: null, notas: null };
     const t = siguienteToque([
@@ -542,11 +559,34 @@ describe('alianzas: el siguiente toque, sin inventar un solo contacto', () => {
 
   it('la tracción se cuenta con la frase honesta de la casa, no con clientes', () => {
     const aliado = { id: 'anpact', nombre: 'ANPACT', tipo: 'gremio', estado: 'sin_contacto', ultimoToqueEn: null, contactoNota: 'mesa de afiliación publicada', notas: 'nota' };
-    const cuerpo = armarParteAlianzas([aliado], aliado, { total: 5, sinCiudad: 1, top: [{ ciudad: 'CDMX', n: 4 }], truncado: true }, LUNES);
+    const cuerpo = armarParteAlianzas([aliado], aliado, { total: 5, sinCiudad: 1, top: [{ ciudad: 'CDMX', n: 4 }], truncado: false }, LUNES);
     expect(cuerpo).toContain('en pláticas con transportistas como Grupo GAL y Transportes Innovativos');
     expect(cuerpo).toContain('NINGUNA empresa ha firmado');
-    expect(cuerpo).toContain('LECTURA TRUNCADA');
     expect(cuerpo).toContain('mesa de afiliación publicada');
+  });
+
+  it('c7-4 · el parte NO publica un ranking que no puede sostener, y lo dice con todas sus letras', () => {
+    const aliado = { id: 'anpact', nombre: 'ANPACT', tipo: 'gremio', estado: 'sin_contacto', ultimoToqueEn: null, contactoNota: 'mesa', notas: null };
+    const cuerpo = armarParteAlianzas([aliado], aliado, { total: 33_071, sinCiudad: 412, top: null, truncado: true }, LUNES);
+
+    expect(cuerpo).toContain('NO SE PUBLICA UN RANKING DE PLAZAS');
+    expect(cuerpo).toContain('rebanada arbitraria del censo');
+    // El total SÍ se afirma: sale de un conteo exacto.
+    expect(cuerpo).toContain('33,071 prospecto(s) vivos');
+    // Y NO se cuela ni el rótulo del ranking ni la frase vieja, que era cierta
+    // para el total y falsa para el orden.
+    expect(cuerpo).not.toContain('Plazas con más prospectos capturados');
+    expect(cuerpo).not.toContain('las cifras de arriba son un PISO');
+  });
+
+  it('c7-4 · con el conteo de la base, el parte dice que el top es el REAL', () => {
+    const aliado = { id: 'canacar', nombre: 'CANACAR', tipo: 'gremio', estado: 'sin_contacto', ultimoToqueEn: null, contactoNota: 'mesa', notas: null };
+    const cuerpo = armarParteAlianzas([aliado], aliado, {
+      total: 33_071, sinCiudad: 412, truncado: false,
+      top: [{ ciudad: 'Tijuana', n: 928 }, { ciudad: 'Nuevo Laredo', n: 689 }],
+    }, LUNES);
+    expect(cuerpo).toContain('Tijuana (928) · Nuevo Laredo (689)');
+    expect(cuerpo).toContain('contado sobre el censo entero en la base, no sobre una muestra');
   });
 
   it('con la lista vacía lo dice, en vez de proponer un aliado inventado', () => {
@@ -559,16 +599,44 @@ describe('alianzas: el siguiente toque, sin inventar un solo contacto', () => {
   it('la corrida lee las dos fuentes y encola el parte de la semana', async () => {
     respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
     respuestas.set('aliado_objetivo', [{ data: [{ id: 'canacar', nombre: 'CANACAR', tipo: 'gremio', estado: 'sin_contacto', ultimo_toque_en: null, contacto_nota: null, notas: null }], error: null }]);
-    respuestas.set('prospecto', [{ data: [{ ciudad: 'Monterrey' }], error: null, count: 1 }]);
+    respuestas.set('rpc:prospecto_mapa_ciudades', [{
+      data: { total: 3, sin_ciudad: 1, top: [{ ciudad: 'Monterrey', n: 2 }] }, error: null,
+    }]);
     const r = await correrAgenteCrecimiento('alianzas', 'cron', HOY);
     expect(r.piezas).toBe(1);
     expect(ultimoTitulo()).toBe(`Alianzas — semana del ${LUNES}`);
-    expect(ultimoCuerpo()).toContain('Monterrey');
+    expect(ultimoCuerpo()).toContain('Monterrey (2)');
+    // Y NO se leyó `prospecto` fila por fila: el conteo se hace en la base.
+    expect(ultimoCuerpo()).not.toContain('NO SE PUBLICA UN RANKING');
+  });
+
+  it('c7-4 · si la RPC del mapa no contesta, la corrida FALLA: no se publica un censo que nadie contó', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('aliado_objetivo', [{ data: [{ id: 'canacar', nombre: 'CANACAR', tipo: 'gremio', estado: 'sin_contacto', ultimo_toque_en: null, contacto_nota: null, notas: null }], error: null }]);
+    respuestas.set('rpc:prospecto_mapa_ciudades', [{ data: null, error: { message: 'sin respuesta en 8000 ms (tope de consulta)' } }]);
+    await expect(correrAgenteCrecimiento('alianzas', 'cron', HOY)).rejects.toThrow(/tope de consulta/);
+    expect(encolar).not.toHaveBeenCalled();
+  });
+
+  it('c7-4 · sin la 0238 aplicada se cae al lector viejo, pero DEGRADADO: total exacto y ranking apagado', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('aliado_objetivo', [{ data: [{ id: 'canacar', nombre: 'CANACAR', tipo: 'gremio', estado: 'sin_contacto', ultimo_toque_en: null, contacto_nota: null, notas: null }], error: null }]);
+    // 42883 = `undefined_function`: la migración todavía no llegó a esta base.
+    respuestas.set('rpc:prospecto_mapa_ciudades', [{ data: null, error: { message: 'function does not exist', code: '42883' } }]);
+    // El lector viejo: trae 1 fila y el conteo exacto dice que hay 33,071.
+    respuestas.set('prospecto', [{ data: [{ ciudad: 'Aguascalientes' }], error: null, count: 33_071 }]);
+
+    const r = await correrAgenteCrecimiento('alianzas', 'cron', HOY);
+    expect(r.piezas).toBe(1);
+    expect(ultimoCuerpo()).toContain('33,071 prospecto(s) vivos');
+    expect(ultimoCuerpo(), 'el respaldo degrada a «no lo sé», nunca a un ranking').toContain('NO SE PUBLICA UN RANKING DE PLAZAS');
+    expect(ultimoCuerpo()).not.toContain('Aguascalientes');
   });
 
   it('la lista de aliados ilegible: la corrida FALLA en vez de decir que no hay a quién tocar', async () => {
     respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
     respuestas.set('aliado_objetivo', [{ data: null, error: { message: 'base caída' } }]);
+    respuestas.set('rpc:prospecto_mapa_ciudades', [{ data: { total: 0, sin_ciudad: 0, top: [] }, error: null }]);
     await expect(correrAgenteCrecimiento('alianzas', 'cron', HOY)).rejects.toThrow(/base caída/);
     expect(encolar).not.toHaveBeenCalled();
   });
@@ -584,7 +652,7 @@ describe('la regla que gobierna al departamento', () => {
       encolar.mockClear();
       respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
       respuestas.set('aliado_objetivo', [{ data: [{ id: 'canacar', nombre: 'CANACAR', tipo: 'gremio', estado: 'sin_contacto', ultimo_toque_en: null, contacto_nota: null, notas: null }], error: null }]);
-      respuestas.set('prospecto', [{ data: [], error: null, count: 0 }]);
+      respuestas.set('rpc:prospecto_mapa_ciudades', [{ data: { total: 0, sin_ciudad: 0, top: [] }, error: null }]);
       respuestas.set('sitio_evento', [{ data: [], error: null, count: 0 }]);
       await correrAgenteCrecimiento(agente, 'cron', HOY);
       expect(encolar, agente).toHaveBeenCalledTimes(1);

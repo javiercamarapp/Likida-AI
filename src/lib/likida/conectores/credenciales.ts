@@ -1,10 +1,11 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '../presupuesto';
 import { DatoInvalido } from '../errores';
 import { cifrar, descifrar, pistasDe, cofreConfigurado } from './cofre';
 import { conectorPorId } from './registro';
-import { faltantes, httpReal, type Http, type ResultadoPrueba, type ValoresCredencial } from './tipos';
+import { faltantes, httpReal, veredictoDe, type Http, type ResultadoPrueba, type ValoresCredencial } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CREDENCIALES DE CONECTOR — la escritura que la 0094 dejó prometida.
@@ -127,22 +128,56 @@ export interface CredencialListada {
 }
 
 /**
+ * El sufijo con el que `sesion_portal.ts` guarda la SESIÓN de un portal en el
+ * mismo cofre (`portal_facturacion:g500#sesion`). Se declara aquí —y no se
+ * importa de allá— para no arrastrar Playwright ni el módulo de facturación a
+ * la pantalla de Conexiones; el valor está fijado por la 0232 y hay una prueba
+ * que compara los dos.
+ */
+export const SUFIJO_SESION_PORTAL = '#sesion';
+
+/**
  * Las credenciales de la flota, nuevas primero.
  *
  * `valores_cifrados` NO se selecciona — ni cifrado tiene por qué viajar a la
  * capa de pantalla. Y un error de lectura LANZA en vez de devolver `[]`: una
  * base caída pintada como "no tienes credenciales" invitaría a capturarlas
  * de nuevo encima de las que sí existen.
+ *
+ * LAS FILAS `#sesion` NO SON CREDENCIALES Y NO SALEN DE AQUÍ.
+ *
+ * AUDITORÍA CICLO 7, c7-21: `guardarSesionPortal` guarda la sesión de
+ * Playwright en esta misma tabla bajo `conector_id = '<portal>#sesion'`, y
+ * esto las traía todas. En cuanto una flota vinculaba un portal, Conexiones
+ * pintaba un renglón fantasma titulado `portal_facturacion:g500#sesion` —el id
+ * crudo, porque no está en el catálogo— «guardada, sin probar», con botones
+ * **Probar** y **Desactivar**. Probar no hacía nada (corta en `conectorPorId`),
+ * pero DESACTIVAR SÍ FUNCIONABA: apagaba la sesión del portal sin decir que
+ * eso era lo que hacía. El dueño creería que borró una credencial huérfana y
+ * se quedaría sin autofacturación hasta volver a pasar un captcha.
+ *
+ * El estado de esas sesiones ya tiene su pantalla y su tabla en claro
+ * (`portal_estado`, 0232), que es donde se cuenta sin acercarse al cofre. El
+ * filtro va en el SERVIDOR y no en la vista: así ninguna pantalla futura las
+ * hereda por olvido.
  */
 export async function listarCredenciales(tenantId: string): Promise<CredencialListada[]> {
   const { data, error } = await acotada(supabaseAdmin().from('conector_credencial')
     .select('conector_id, pistas, activo, probada_en, ultimo_error, creada_en')
     .eq('tenant_id', tenantId)
+    // `not.like` en la base y no un `filter` en JS: lo que no viaja no se
+    // puede pintar por accidente.
+    .not('conector_id', 'like', `%${SUFIJO_SESION_PORTAL}`)
     .order('creada_en', { ascending: false }), 'listarCredenciales');
 
   if (error) throw new Error(`listarCredenciales: ${error.message}`);
 
-  return (data ?? []).map((f) => ({
+  return (data ?? [])
+    // Cinturón sobre el tirante: si el `not.like` se cayera en un refactor de
+    // la consulta, esta línea sigue impidiendo que una sesión se pinte como
+    // credencial con un botón que la apaga.
+    .filter((f) => !String(f.conector_id).endsWith(SUFIJO_SESION_PORTAL))
+    .map((f) => ({
     conectorId: String(f.conector_id),
     pistas: (f.pistas ?? {}) as Record<string, string>,
     activo: Boolean(f.activo),
@@ -311,6 +346,39 @@ export async function probarCredencial(
   // cuenta (`probarConGuardas`): no hace falta —ni se debe— envolverlo en un
   // catch que invente un "conectado".
   const resultado = await conector.probar(valores, http);
+
+  // SOLO SE SELLA LO QUE SEA UN VEREDICTO SOBRE LA CREDENCIAL.
+  //
+  // AUDITORÍA CICLO 7, c7-12 (alto): esto sellaba TODO resultado, y
+  // `marcarProbada` con `ok: false` escribe `probada_en: null`. O sea que un
+  // 503 de Samsara, un DNS caído o el `AbortSignal.timeout(15_000)` de una VPN
+  // lenta BORRABAN `probada_en` —el único registro de que esa credencial se
+  // verificó alguna vez— y pintaban el badge de la pantalla en «la última
+  // prueba FALLÓ», en `var(--bad)`, como si el cliente hubiera hecho algo mal.
+  // `probarConGuardas` ya devolvía el texto correcto («Un error de red NO
+  // significa que la credencial sea mala») y el sello lo ignoraba,
+  // contradiciendo el docstring de esta misma función tres párrafos más
+  // arriba: «sellar un fallo nuestro como si el proveedor hubiera rechazado la
+  // credencial mandaría al cliente a regenerar un token que está bien».
+  //
+  // `verificadoContra` no bastaba para separar los casos: `veredictoHttp` lo
+  // llena TAMBIÉN en el 5xx, cuyo propio texto dice «esto NO dice nada sobre la
+  // credencial». Por eso el veredicto se declara como dato
+  // (`sobreLaCredencial`) y no se deduce de una frase. Sin veredicto la fila NO
+  // se toca: `probada_en` conserva su fecha, `ultimo_error` conserva lo último
+  // que sí dijo el proveedor, y el detalle del fallo se devuelve igual para que
+  // la pantalla lo enseñe EN EL MOMENTO, sin convertirlo en historia.
+  if (veredictoDe(resultado) === 'no_se_sabe') {
+    logger.warn('conector.prueba_sin_veredicto', {
+      tenant: tenantId, conectorId,
+      verificadoContra: resultado.verificadoContra,
+      // El `detalle` ya viene saneado por `probarConGuardas`/`veredictoHttp`:
+      // nunca trae el cuerpo crudo de la respuesta ni un token.
+      detalle: resultado.detalle.slice(0, 200),
+    });
+    return resultado;
+  }
+
   await marcarProbada(tenantId, conectorId, resultado, actor);
   return resultado;
 }
