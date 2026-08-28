@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INGENIERÍA (0234) — los cuatro que miran la BASE: migraciones, seguridad,
@@ -61,6 +61,7 @@ const {
   AGENTES_INGENIERIA, esAgenteIngenieria, correrAgenteIngenieria,
   MIGRACIONES_EXIGIDAS, lunesDe, masDias, muestra, recortar, pintarHallazgos,
   prefijoDe, aplicadaEn, inversionesDeOrden, nombresRepetidos, prefijosChocados,
+  verificarExigidas, hallazgosDeExigidas,
   huecosDeNumeracion, evaluarMigraciones, armarParteMigraciones,
   evaluarSeguridad, armarParteSeguridad,
   evaluarRendimiento, armarParteRendimiento, mb,
@@ -89,6 +90,16 @@ const POSTURA_LIMPIA = {
   vistas: [{ vista: 'factura_saldo', security_invoker: true }],
   columnas_sensibles: [],
 };
+
+/** La respuesta de postura_seguridad() cuyas tablas cubren el contrato entero:
+ *  el HECHO presente, para las corridas que no ejercitan la faltante. */
+const POSTURA_CONTRATO = () => ({
+  tablas: MIGRACIONES_EXIGIDAS.flatMap((m) => [...m.tablas]).map((t) => ({
+    tabla: t, rls: true, politicas: 0, tiene_tenant_id: false,
+    anon_lee: false, auth_lee: false, anon_escribe: false, auth_escribe: false,
+  })),
+  funciones: [], vistas: [], columnas_sensibles: [],
+});
 
 const PERFIL_LIMPIO = {
   tablas: [{ tabla: 'viaje', bytes: 2_000_000, filas_estimadas: 1000, seq_scan: 5, seq_tup_read: 10, idx_scan: 900, indices: 3 }],
@@ -156,11 +167,26 @@ describe('el contrato de migraciones que este bundle exige', () => {
     const archivos = new Set(readdirSync('supabase/migrations')
       .filter((f) => f.endsWith('.sql'))
       .map((f) => f.replace(/\.sql$/, '')));
-    for (const m of MIGRACIONES_EXIGIDAS) expect(archivos.has(m), `${m} no existe en supabase/migrations`).toBe(true);
+    for (const m of MIGRACIONES_EXIGIDAS) expect(archivos.has(m.nombre), `${m.nombre} no existe en supabase/migrations`).toBe(true);
   });
 
   it('la ola de ingeniería se exige a sí misma: sin la 0234 no hay ni funciones ni despliegue_visto', () => {
-    expect(MIGRACIONES_EXIGIDAS).toContain('0234_agentes_ingenieria');
+    expect(MIGRACIONES_EXIGIDAS.map((m) => m.nombre)).toContain('0234_agentes_ingenieria');
+  });
+
+  // El incidente del 28-ago-2026: el contrato dejó de ser una lista de rótulos.
+  it('cada exigida declara su prefijo (coherente con su nombre) y al menos una tabla que crea — el HECHO contra el que se acusa', () => {
+    for (const m of MIGRACIONES_EXIGIDAS) {
+      expect(prefijoDe(m.nombre), `${m.nombre} sin prefijo legible`).toBe(m.prefijo);
+      expect(m.tablas.length, `${m.nombre} sin tablas declaradas`).toBeGreaterThan(0);
+      // Y la tabla declarada de verdad se crea en ese archivo: la evidencia
+      // del ROJO no puede apuntar a una tabla que la migración no crea.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- lee las migraciones del propio repo en tiempo de prueba; el nombre sale de la constante MIGRACIONES_EXIGIDAS, no de ninguna entrada de usuario.
+      const sql = readFileSync(`supabase/migrations/${m.nombre}.sql`, 'utf8');
+      for (const t of m.tablas) {
+        expect(sql, `${m.nombre} no crea ${t}`).toMatch(new RegExp(`create table( if not exists)? (public\\.)?${t}\\b`));
+      }
+    }
   });
 });
 
@@ -210,9 +236,10 @@ describe('la aritmética de migraciones', () => {
     ])).toEqual([]);
   });
 
-  it('caza el nombre aplicado dos veces y el número que dos ramas se pelearon', () => {
+  it('caza el nombre aplicado dos veces y el número que dos ramas se pelearon (intercalado)', () => {
     const filas = [
-      { version: '4', nombre: '0231_una' },
+      { version: '5', nombre: '0231_una' },
+      { version: '4', nombre: '0232_ajena' }, // intercalada: esto SÍ es choque de ramas
       { version: '3', nombre: '0231_otra' },
       { version: '2', nombre: '0230_x' },
       { version: '1', nombre: '0230_x' },
@@ -221,12 +248,61 @@ describe('la aritmética de migraciones', () => {
     expect(prefijosChocados(filas)).toEqual(['0231: 0231_otra + 0231_una']);
   });
 
+  // La corrección del 28-ago-2026: la 0150 y la 0155 se aplicaron partidas en
+  // piezas contiguas Y ESO NO ES UN CHOQUE — el detector viejo las acusaba.
+  it('una migración aplicada en PIEZAS CONTIGUAS no es un choque de prefijos', () => {
+    const filas = [
+      { version: '20260822235122', nombre: '0155_purgas_permisos' },
+      { version: '20260822235040', nombre: '0155_resumen_costo_ia_latido_bucket' },
+      { version: '20260822235020', nombre: '0155_purgas_parte2' },
+      { version: '20260822234956', nombre: '0155_purgas_parte1' },
+      { version: '20260822234647', nombre: '0150_agregados_analytics_permisos' },
+      { version: '20260822234558', nombre: '0150_agregados_analytics_cuerpo2' },
+      { version: '20260822234446', nombre: '0150_agregados_analytics_cuerpo' },
+    ];
+    expect(prefijosChocados(filas)).toEqual([]);
+  });
+
   it('los huecos se listan pero NO se afirman como migración faltante', () => {
     expect(huecosDeNumeracion([
       { version: '3', nombre: '0005_c' },
       { version: '1', nombre: '0002_a' },
     ])).toEqual([3, 4]);
     expect(huecosDeNumeracion([])).toEqual([]);
+  });
+});
+
+describe('la verificación por hecho de las exigidas (incidente 28-ago-2026)', () => {
+  const TABLAS = MIGRACIONES_EXIGIDAS.flatMap((m) => [...m.tablas]);
+
+  it('cruza rótulo y hecho: nombre exacto, piezas por prefijo, o ausente — y el hecho manda', () => {
+    const filas = [
+      { version: '3', nombre: '0155_purgas_parte1' },
+      { version: '2', nombre: '0155_purgas_parte2' },
+      { version: '1', nombre: '0234_agentes_ingenieria' },
+    ];
+    const v = verificarExigidas(filas, TABLAS);
+    const por = new Map(v.map((x) => [x.exigida.nombre, x]));
+    expect(por.get('0234_agentes_ingenieria')).toMatchObject({ registro: 'nombre', hecho: 'objetos_presentes' });
+    expect(por.get('0155_purgas_y_bucket_comprobantes')).toMatchObject({
+      registro: 'prefijo', hecho: 'objetos_presentes', piezas: ['0155_purgas_parte1', '0155_purgas_parte2'],
+    });
+    expect(por.get('0102_agente_corrida')).toMatchObject({ registro: 'ausente', hecho: 'objetos_presentes' });
+  });
+
+  it('el catálogo en null es «no se pudo mirar», no «no hay tablas»', () => {
+    const v = verificarExigidas([], null);
+    expect(v.every((x) => x.hecho === 'sin_catalogo')).toBe(true);
+    // Y con eso, cero ROJOS: sin hecho verificado no hay acusación.
+    expect(hallazgosDeExigidas(v, 'G1').every((h) => h.semaforo !== 'ROJO')).toBe(true);
+  });
+
+  it('registrada por NOMBRE pero con la tabla borrada sigue siendo ROJO: el rótulo no salva al hecho', () => {
+    const filas = MIGRACIONES_EXIGIDAS.map((m, i) => ({ version: String(i), nombre: m.nombre }));
+    const sinCorrida = TABLAS.filter((t) => t !== 'agente_corrida');
+    const h = hallazgosDeExigidas(verificarExigidas(filas, sinCorrida), 'G1');
+    const rojo = h.find((x) => x.semaforo === 'ROJO');
+    expect(rojo?.evidencia).toContain('agente_corrida');
   });
 });
 
@@ -244,13 +320,17 @@ describe('el detector de migraciones', () => {
   // La función devuelve `version` DESCENDENTE (lo más reciente primero) y el
   // orden de aplicación coincide con el numérico: el caso sano.
   const filasSanas = MIGRACIONES_EXIGIDAS
-    .map((n, i) => ({ version: String(20260101000000 + i), nombre: n })).reverse();
+    .map((m, i) => ({ version: String(20260101000000 + i), nombre: m.nombre })).reverse();
   const aplicadasCompletas = { valor: { disponible: true, motivo: null, filas: filasSanas }, error: null };
+  /** El HECHO completo: todas las tablas que el contrato exige, presentes. */
+  const TABLAS_OK = MIGRACIONES_EXIGIDAS.flatMap((m) => [...m.tablas]);
+  const tablasCompletas = { valor: TABLAS_OK, error: null };
+  const tablasCiegas = { valor: null, error: 'tablas del catálogo (postura_seguridad)' };
 
   it('sin registro de migraciones NO afirma que el esquema esté al día', () => {
     const h = evaluarMigraciones(
       { valor: { disponible: false, motivo: 'no existe el esquema', filas: [] }, error: null },
-      contratoLimpio, catalogoLimpio,
+      contratoLimpio, catalogoLimpio, tablasCompletas,
     );
     const g0 = h.find((x) => x.codigo === 'G0');
     expect(g0?.semaforo).toBe('NOTA');
@@ -259,20 +339,66 @@ describe('el detector de migraciones', () => {
     expect(h.some((x) => x.codigo === 'G1')).toBe(false);
   });
 
-  it('una migración exigida y NO aplicada es ROJO con su nombre', () => {
-    const filas = MIGRACIONES_EXIGIDAS.slice(1)
-      .map((n, i) => ({ version: String(20260101000000 + i), nombre: n })).reverse();
-    const h = evaluarMigraciones({ valor: { disponible: true, motivo: null, filas }, error: null }, contratoLimpio, catalogoLimpio);
+  it('una exigida sin rótulo Y con su tabla AUSENTE del catálogo es ROJO, citando la tabla', () => {
+    const filas = filasSanas.filter((f) => f.nombre !== MIGRACIONES_EXIGIDAS[0].nombre);
+    const tablas = TABLAS_OK.filter((t) => !MIGRACIONES_EXIGIDAS[0].tablas.includes(t));
+    const h = evaluarMigraciones({ valor: { disponible: true, motivo: null, filas }, error: null },
+      contratoLimpio, catalogoLimpio, { valor: tablas, error: null });
     const g1 = h.find((x) => x.codigo === 'G1');
     expect(g1?.semaforo).toBe('ROJO');
-    expect(g1?.evidencia).toContain(MIGRACIONES_EXIGIDAS[0]);
+    expect(g1?.evidencia).toContain(MIGRACIONES_EXIGIDAS[0].nombre);
+    expect(g1?.evidencia).toContain(MIGRACIONES_EXIGIDAS[0].tablas[0]);
+    expect(g1?.evidencia).toContain('VERIFICADO CONTRA EL ESQUEMA');
+  });
+
+  // ── LA PRUEBA QUE FALTABA (incidente 28-ago-2026, correos 1 y 2) ─────────
+  it('una migración aplicada EN PIEZAS con otros nombres NO se reporta como faltante', () => {
+    // El caso real de producción: la 0155 entró como cuatro piezas.
+    const filas = [
+      ...filasSanas.filter((f) => f.nombre !== '0155_purgas_y_bucket_comprobantes'),
+      { version: '20260822235122', nombre: '0155_purgas_permisos' },
+      { version: '20260822235040', nombre: '0155_resumen_costo_ia_latido_bucket' },
+      { version: '20260822235020', nombre: '0155_purgas_parte2' },
+      { version: '20260822234956', nombre: '0155_purgas_parte1' },
+    ];
+    const h = evaluarMigraciones({ valor: { disponible: true, motivo: null, filas }, error: null },
+      contratoLimpio, catalogoLimpio, tablasCompletas);
+    expect(h.filter((x) => x.codigo === 'G1')).toEqual([]);
+    // Y las piezas contiguas tampoco se acusan como choque de prefijos (G4).
+    expect(h.some((x) => x.codigo === 'G4')).toBe(false);
+  });
+
+  it('una migración registrada BAJO OTRO NOMBRE (sin prefijo) con su tabla presente es NOTA de bookkeeping, jamás ROJO', () => {
+    // El caso real: 0102/0116/0117/0123 constan como 'agente_corrida',
+    // 'agente_definicion', 'cola_aprobacion' y 'runner_y_campanas'.
+    const filas = [
+      ...filasSanas.filter((f) => f.nombre !== '0102_agente_corrida'),
+      { version: '20260814202259', nombre: 'agente_corrida' },
+    ];
+    const h = evaluarMigraciones({ valor: { disponible: true, motivo: null, filas }, error: null },
+      contratoLimpio, catalogoLimpio, tablasCompletas);
+    const g1 = h.filter((x) => x.codigo === 'G1');
+    expect(g1).toHaveLength(1);
+    expect(g1[0].semaforo).toBe('NOTA');
+    expect(g1[0].detalle).toContain('APLICADAS');
+    expect(g1[0].evidencia).toContain('bookkeeping');
+  });
+
+  it('rótulo ausente + catálogo CIEGO = ÁMBAR que manda verificar, nunca ROJO por el rótulo solo', () => {
+    const filas = filasSanas.filter((f) => f.nombre !== MIGRACIONES_EXIGIDAS[0].nombre);
+    const h = evaluarMigraciones({ valor: { disponible: true, motivo: null, filas }, error: null },
+      contratoLimpio, catalogoLimpio, tablasCiegas);
+    const g1 = h.filter((x) => x.codigo === 'G1');
+    expect(g1).toHaveLength(1);
+    expect(g1[0].semaforo).toBe('AMBAR');
+    expect(g1[0].evidencia).toContain('NO se acusa');
   });
 
   it('un agente vivo fuera del dominio del interruptor es ROJO — candado 1 lo saltaría siempre', () => {
     const h = evaluarMigraciones(aplicadasCompletas, {
       valor: { interruptor_check: "CHECK (id = ANY (ARRAY['global'::text]))", tenant_sin_rls: [], fks_simples_entre_tenantizadas: [], indices_unicos_parciales_cola: [] },
       error: null,
-    }, catalogoLimpio);
+    }, catalogoLimpio, tablasCompletas);
     const g6 = h.find((x) => x.codigo === 'G6');
     expect(g6?.semaforo).toBe('ROJO');
     expect(g6?.objeto).toContain('migraciones');
@@ -282,7 +408,7 @@ describe('el detector de migraciones', () => {
     const h = evaluarMigraciones(aplicadasCompletas, {
       valor: { interruptor_check: null, tenant_sin_rls: [], fks_simples_entre_tenantizadas: [], indices_unicos_parciales_cola: [] },
       error: null,
-    }, catalogoLimpio);
+    }, catalogoLimpio, tablasCompletas);
     expect(h.find((x) => x.codigo === 'G6')?.detalle).toContain('NO EXISTE');
   });
 
@@ -297,7 +423,7 @@ describe('el detector de migraciones', () => {
         ],
         indices_unicos_parciales_cola: [],
       }, error: null,
-    }, catalogoLimpio);
+    }, catalogoLimpio, tablasCompletas);
     expect(h.find((x) => x.codigo === 'G7')?.semaforo).toBe('ROJO');
     const g8 = h.filter((x) => x.codigo === 'G8');
     expect(g8).toHaveLength(2);
@@ -306,7 +432,7 @@ describe('el detector de migraciones', () => {
   });
 
   it('todo en orden: ni un ROJO ni un ÁMBAR — solo la nota de huecos, que es ambigua a propósito', () => {
-    const h = evaluarMigraciones(aplicadasCompletas, contratoLimpio, catalogoLimpio);
+    const h = evaluarMigraciones(aplicadasCompletas, contratoLimpio, catalogoLimpio, tablasCompletas);
     expect(h.filter((x) => x.semaforo !== 'NOTA')).toEqual([]);
     // Los huecos existen SIEMPRE (la lista exigida es curada, no un rango) y
     // por eso son NOTA: afirmar «falta la 0103» sin el repo sería inventar.
@@ -324,8 +450,9 @@ describe('la corrida de migraciones', () => {
   function prepararOk() {
     respuestas.set('cola_aprobacion', [{ data: [], error: null, count: 0 }]);
     respuestas.set('agente_definicion', [{ data: CATALOGO_OK, error: null }]);
-    rpcs.set('migraciones_aplicadas', [{ data: { disponible: true, motivo: null, filas: MIGRACIONES_EXIGIDAS.map((n, i) => ({ version: String(20260101000000 + i), nombre: n })).reverse() }, error: null }]);
+    rpcs.set('migraciones_aplicadas', [{ data: { disponible: true, motivo: null, filas: MIGRACIONES_EXIGIDAS.map((m, i) => ({ version: String(20260101000000 + i), nombre: m.nombre })).reverse() }, error: null }]);
     rpcs.set('contrato_de_esquema', [{ data: { interruptor_check: "ARRAY['agente:migraciones'::text]", tenant_sin_rls: [], fks_simples_entre_tenantizadas: [], indices_unicos_parciales_cola: [] }, error: null }]);
+    rpcs.set('postura_seguridad', [{ data: POSTURA_CONTRATO(), error: null }]);
   }
 
   it('fabrica el parte de la semana, lo anota con costo 0 MEDIDO y no alerta sin ROJOS', async () => {
@@ -355,6 +482,9 @@ describe('la corrida de migraciones', () => {
     respuestas.set('agente_definicion', [{ data: CATALOGO_OK, error: null }]);
     rpcs.set('migraciones_aplicadas', [{ data: { disponible: true, motivo: null, filas: [] }, error: null }]);
     rpcs.set('contrato_de_esquema', [{ data: { interruptor_check: 'ARRAY[]', tenant_sin_rls: [], fks_simples_entre_tenantizadas: [], indices_unicos_parciales_cola: [] }, error: null }]);
+    // El catálogo contesta SIN las tablas del contrato: la faltante es un
+    // HECHO verificado, no un rótulo — por eso el ROJO y el correo proceden.
+    rpcs.set('postura_seguridad', [{ data: { tablas: [], funciones: [], vistas: [], columnas_sensibles: [] }, error: null }]);
     await correrAgenteIngenieria('migraciones', 'cron', HOY);
     expect(alertar).toHaveBeenCalled();
   });
@@ -610,34 +740,50 @@ describe('el despliegue que este servidor ve', () => {
 describe('el detector de releases', () => {
   const DESPLIEGUE = { sha: 'abc1234', entorno: 'production', rama: 'master', primeraVista: '2026-08-20T00:00:00Z', ultimaVista: '2026-08-27T00:00:00Z', vistas: 20 };
   const APLICADAS_OK = {
-    valor: { disponible: true, motivo: null, filas: MIGRACIONES_EXIGIDAS.map((n, i) => ({ version: String(20260810000000 + i), nombre: n })) },
+    valor: { disponible: true, motivo: null, filas: MIGRACIONES_EXIGIDAS.map((m, i) => ({ version: String(20260810000000 + i), nombre: m.nombre })) },
     error: null,
   };
+  const TABLAS_OK = { valor: MIGRACIONES_EXIGIDAS.flatMap((m) => [...m.tablas]), error: null };
 
   it('sin SHA lo dice y no afirma qué código corre', () => {
-    const h = evaluarReleases(null, APLICADAS_OK);
+    const h = evaluarReleases(null, APLICADAS_OK, TABLAS_OK);
     expect(h.find((x) => x.codigo === 'D0')?.evidencia).toContain('NO se inventa un SHA');
   });
 
-  it('el código exige una migración que la base no tiene: ROJO, la mitad cara de «mergeado ≠ desplegado»', () => {
-    const filas = MIGRACIONES_EXIGIDAS.slice(1).map((n, i) => ({ version: String(20260810000000 + i), nombre: n }));
-    const h = evaluarReleases(DESPLIEGUE, { valor: { disponible: true, motivo: null, filas }, error: null });
-    expect(h.find((x) => x.codigo === 'D2')?.semaforo).toBe('ROJO');
+  it('el código exige una migración cuyo objeto la base NO tiene: ROJO, la mitad cara de «mergeado ≠ desplegado»', () => {
+    const filas = MIGRACIONES_EXIGIDAS.slice(1).map((m, i) => ({ version: String(20260810000000 + i), nombre: m.nombre }));
+    const tablas = { valor: MIGRACIONES_EXIGIDAS.slice(1).flatMap((m) => [...m.tablas]), error: null };
+    const h = evaluarReleases(DESPLIEGUE, { valor: { disponible: true, motivo: null, filas }, error: null }, tablas);
+    const d2 = h.find((x) => x.codigo === 'D2');
+    expect(d2?.semaforo).toBe('ROJO');
+    expect(d2?.evidencia).toContain(MIGRACIONES_EXIGIDAS[0].tablas[0]);
+  });
+
+  // La prueba que faltaba (correo en falso #1 del 28-ago-2026): el registro
+  // sin el rótulo canónico Y el hecho presente no es un despliegue roto.
+  it('una exigida aplicada en piezas o bajo otro nombre, con sus tablas presentes, NO es D2 ROJO', () => {
+    const filas = [
+      ...MIGRACIONES_EXIGIDAS.slice(1).map((m, i) => ({ version: String(20260810000000 + i), nombre: m.nombre })),
+      { version: '20260814202259', nombre: 'agente_corrida' }, // la 0102 real de producción
+    ];
+    const h = evaluarReleases(DESPLIEGUE, { valor: { disponible: true, motivo: null, filas }, error: null }, TABLAS_OK);
+    const d2 = h.filter((x) => x.codigo === 'D2');
+    expect(d2.every((x) => x.semaforo === 'NOTA')).toBe(true);
   });
 
   it('una migración aplicada DESPUÉS de la primera vista del SHA es la otra mitad: el esquema se movió y el código no', () => {
     const filas = [
-      ...MIGRACIONES_EXIGIDAS.map((n, i) => ({ version: String(20260810000000 + i), nombre: n })),
+      ...MIGRACIONES_EXIGIDAS.map((m, i) => ({ version: String(20260810000000 + i), nombre: m.nombre })),
       { version: '20260825120000', nombre: '9999_posterior' },
     ];
-    const h = evaluarReleases(DESPLIEGUE, { valor: { disponible: true, motivo: null, filas }, error: null });
+    const h = evaluarReleases(DESPLIEGUE, { valor: { disponible: true, motivo: null, filas }, error: null }, TABLAS_OK);
     const d3 = h.find((x) => x.codigo === 'D3');
     expect(d3?.semaforo).toBe('AMBAR');
     expect(d3?.evidencia).toContain('9999_posterior');
   });
 
   it('sin registro de migraciones no se compara nada y se dice', () => {
-    const h = evaluarReleases(DESPLIEGUE, { valor: { disponible: false, motivo: 'no existe', filas: [] }, error: null });
+    const h = evaluarReleases(DESPLIEGUE, { valor: { disponible: false, motivo: 'no existe', filas: [] }, error: null }, TABLAS_OK);
     expect(h).toHaveLength(1);
     expect(h[0].codigo).toBe('D1');
   });
@@ -674,7 +820,8 @@ describe('la corrida de releases', () => {
       { data: [], error: null },  // leerDespliegues
     ]);
     respuestas.set('cola_aprobacion', [{ data: [], error: null, count: 0 }]);
-    rpcs.set('migraciones_aplicadas', [{ data: { disponible: true, motivo: null, filas: MIGRACIONES_EXIGIDAS.map((n, i) => ({ version: String(20260810000000 + i), nombre: n })) }, error: null }]);
+    rpcs.set('migraciones_aplicadas', [{ data: { disponible: true, motivo: null, filas: MIGRACIONES_EXIGIDAS.map((m, i) => ({ version: String(20260810000000 + i), nombre: m.nombre })) }, error: null }]);
+    rpcs.set('postura_seguridad', [{ data: POSTURA_CONTRATO(), error: null }]);
     const r = await correrAgenteIngenieria('releases', 'cron', HOY);
     expect(r.piezas).toBe(1);
     expect(ultimo().fuentes.sha).toBe('abc1234');

@@ -144,9 +144,37 @@ export type LecturaInterruptor = 'encendido' | 'apagado' | 'ilegible';
 const TTL_CACHE_INTERRUPTOR_MS = 5_000;
 const cache = new Map<NombreInterruptor, { valor: LecturaInterruptor; hasta: number }>();
 
-/** Tira la caché. La llaman `apagar`/`encender` y las pruebas. */
+// ── LA RACHA ANTES DEL CORREO (incidente 28-ago-2026) ──────────────────────
+//
+// Esa noche UN TimeoutError aislado leyendo `agente:facturas` mandó un correo
+// «Urgente» — y llegó junto a otros cuatro que resultaron falsos. El sistema
+// se portó bien (falló cerrado, el runner se saltó al agente y reintentó a la
+// vuelta siguiente), así que el correo pedía mirar algo que ya se había
+// resuelto solo. Un bache aislado no es un incidente; una RACHA sí: la base
+// caída, la llave vencida, el socket que nadie contesta.
+//
+// Desde entonces el correo espera la MISMA vara que el corte por reloj del
+// runner (`cortesSeguidos >= 3`, RES-6): tres lecturas ilegibles CONSECUTIVAS
+// —de cualquier interruptor: una pasada del runner lee decenas, y una base
+// caída las tumba en fila— y a partir de ahí grita en cada fallo, con el piso
+// de una hora de `alertarOperador` limitando los envíos reales. Lo que NO
+// cambia: cada lectura ilegible sigue gritando en el log con su código (Sentry
+// notifica por causa nueva) y sigue siendo fail-closed. El contador vive por
+// instancia (mejor esfuerzo, mismo trato que RES-3/RES-16): la alerta puede
+// subcontar entre instancias frías, jamás inventar. Es un `let` propio y no
+// el `contadorDeFallos` de alerta.ts a propósito: este módulo se carga en el
+// camino caliente del webhook y media docena de suites mockean
+// `@/lib/observability/alerta` con solo `alertarOperador` — una dependencia
+// nueva en el init del módulo las tumbaría a todas.
+export const LECTURAS_ILEGIBLES_PARA_ALERTA = 3;
+let lecturasIlegiblesSeguidas = 0;
+
+/** Tira la caché Y la racha de lecturas ilegibles. La llaman `apagar` y
+ *  `encender` —que acaban de ESCRIBIR con éxito en la misma base: si la
+ *  escritura entró, la base contesta y la racha ya no es racha— y las pruebas. */
 export function olvidarInterruptores(): void {
   cache.clear();
+  lecturasIlegiblesSeguidas = 0;
 }
 
 /**
@@ -178,6 +206,8 @@ export async function leerInterruptor(nombre: NombreInterruptor): Promise<Lectur
       return 'ilegible';
     }
     const lectura: LecturaInterruptor = data?.apagado === true ? 'apagado' : 'encendido';
+    // Una lectura fresca que contesta corta la racha: el bache terminó.
+    lecturasIlegiblesSeguidas = 0;
     cache.set(nombre, { valor: lectura, hasta: Date.now() + TTL_CACHE_INTERRUPTOR_MS });
     return lectura;
   } catch (e) {
@@ -188,11 +218,20 @@ export async function leerInterruptor(nombre: NombreInterruptor): Promise<Lectur
 
 /** Se GRITA: el salto por fail-closed no puede pasar desapercibido — un cron
  *  saltándose corridas por una base con hipo se parece demasiado a un cron
- *  sano sin trabajo. Log con código (Sentry notifica por causa nueva) Y correo
- *  al operador (`alertarOperador` nunca lanza y ya trae su piso de una hora). */
+ *  sano sin trabajo. SIEMPRE al log con código (Sentry notifica por causa
+ *  nueva). El CORREO, en cambio, espera la racha (28-ago-2026): un timeout
+ *  aislado se resuelve solo con el reintento del cron y no amerita despertar
+ *  a nadie; tres seguidos ya son la base caída o la llave vencida, y entonces
+ *  sí sale (`alertarOperador` nunca lanza y ya trae su piso de una hora). */
 async function gritarIlegible(nombre: NombreInterruptor, err: string, codigo: string): Promise<void> {
-  logger.error('interruptores.lectura_fallo', { interruptor: nombre, err, codigo });
-  await alertarOperador('interruptores.lectura_fallo', { interruptor: nombre, error: err, codigo });
+  lecturasIlegiblesSeguidas += 1;
+  const lecturasSeguidas = lecturasIlegiblesSeguidas;
+  logger.error('interruptores.lectura_fallo', { interruptor: nombre, err, codigo, lecturasSeguidas });
+  if (lecturasSeguidas >= LECTURAS_ILEGIBLES_PARA_ALERTA) {
+    await alertarOperador('interruptores.lectura_fallo', {
+      interruptor: nombre, error: err, codigo, lecturasSeguidas,
+    });
+  }
 }
 
 /**

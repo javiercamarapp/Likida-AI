@@ -120,13 +120,47 @@ describe('estaApagado — sin fila = encendido, error = apagado', () => {
   });
 
   // AUDITORÍA 18, A17: el fail-closed dejaba cinco crons en verde y sin correo.
-  it('la lectura ilegible GRITA con código estable de la causa Y alerta al operador', async () => {
+  // Y EL 28-ago-2026, EL PÉNDULO DE VUELTA: un TimeoutError AISLADO leyendo
+  // `agente:facturas` mandó un «Urgente» de madrugada por algo que el reintento
+  // del cron ya había resuelto solo. Desde entonces el correo espera la racha
+  // (3 seguidas, la misma vara que cortesSeguidos en el runner); el LOG con
+  // código sigue saliendo en CADA lectura ilegible — Sentry no se pierde nada.
+  it('UNA lectura ilegible aislada GRITA en el log con su código pero NO manda correo', async () => {
     colas.set('interruptor', [{ data: null, error: { message: 'fetch failed', code: 'ECONNRESET' } }]);
     expect(await estaApagado('global')).toBe(true);
     expect(logs.error).toHaveBeenCalledWith('interruptores.lectura_fallo',
-      expect.objectContaining({ interruptor: 'global', codigo: 'ECONNRESET' }));
+      expect.objectContaining({ interruptor: 'global', codigo: 'ECONNRESET', lecturasSeguidas: 1 }));
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+
+  it('TRES lecturas ilegibles seguidas —aunque sean de interruptores distintos— sí alertan al operador, con la racha', async () => {
+    // Lo ilegible no se cachea, así que cada lectura toca la base.
+    colas.set('interruptor', [
+      { data: null, error: { message: 'fetch failed', code: 'ECONNRESET' } },
+      { data: null, error: { message: 'fetch failed', code: 'ECONNRESET' } },
+      { data: null, error: { message: 'fetch failed', code: 'ECONNRESET' } },
+    ]);
+    expect(await estaApagado('global')).toBe(true);
+    expect(await estaApagado('agente:facturas')).toBe(true);
+    expect(alertarOperador).not.toHaveBeenCalled();
+    expect(await estaApagado('agente:cobranza')).toBe(true);
     expect(alertarOperador).toHaveBeenCalledWith('interruptores.lectura_fallo',
-      expect.objectContaining({ interruptor: 'global', codigo: 'ECONNRESET' }));
+      expect.objectContaining({ interruptor: 'agente:cobranza', codigo: 'ECONNRESET', lecturasSeguidas: 3 }));
+  });
+
+  it('una lectura sana EN MEDIO corta la racha: dos baches separados no suman un incidente', async () => {
+    colas.set('interruptor', [
+      { data: null, error: { message: 'fetch failed', code: 'ECONNRESET' } },
+      { data: null, error: { message: 'fetch failed', code: 'ECONNRESET' } },
+      { data: { apagado: false }, error: null },
+      { data: null, error: { message: 'fetch failed', code: 'ECONNRESET' } },
+    ]);
+    await estaApagado('global');
+    await estaApagado('agente:facturas');
+    await estaApagado('agente:cobranza');   // sana: resetea
+    olvidarInterruptores();                 // tira la caché para que la 4ª vaya a la base
+    await estaApagado('agente:peajes');     // ilegible otra vez: racha 1
+    expect(alertarOperador).not.toHaveBeenCalled();
   });
 
   it('una lectura sana NO alerta ni grita', async () => {

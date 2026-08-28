@@ -128,21 +128,65 @@ describe('el detector de pruebas', () => {
   const sinCatalogo = { valor: null, error: 'catálogo' };
   const sinLatidos = { valor: null, error: 'latidos' };
   const AHORA = Date.parse('2026-08-24T00:00:00Z');
+  const VENTANA = { desde: '2026-08-17', hasta: '2026-08-23' };
+  // Un corte ANTERIOR a la ventana: no excluye nada (el código no cambió).
+  const CORTE_VIEJO = { sha: 'abc1234def', primeraVista: '2026-08-10T00:00:00Z' };
 
-  it('fallos absolutos primero; la mayoría en fallo es ROJO', () => {
+  it('fallos absolutos primero; la mayoría en fallo es ROJO, y el conteo lleva su periodo', () => {
     const h = evaluarPruebas([
       { agente: 'x', estado: 'fallo', inicio: '2026-08-20T00:00:00Z', tareasHechas: 0, tareasTotal: 1, error: 'tronó' },
       { agente: 'x', estado: 'fallo', inicio: '2026-08-19T00:00:00Z', tareasHechas: 0, tareasTotal: 1, error: 'tronó' },
-    ], false, sinCatalogo, sinLatidos, AHORA);
+    ], false, sinCatalogo, sinLatidos, AHORA, VENTANA, CORTE_VIEJO);
     const t1 = h.find((x) => x.codigo === 'T1');
     expect(t1?.semaforo).toBe('ROJO');
     expect(t1?.evidencia).toContain('prueba de regresión');
+    // Nunca un conteo sin periodo: la fecha inicial y la final van escritas.
+    expect(t1?.detalle).toContain('entre el 2026-08-17 y el 2026-08-23');
+  });
+
+  // ── LA PRUEBA QUE FALTABA (correo en falso #3 del 28-ago-2026) ───────────
+  it('un fallo ANTERIOR a la primera vista del SHA vigente NO se cuenta: es historia, y se declara como nota', () => {
+    const corte = { sha: 'abc1234def', primeraVista: '2026-08-21T00:00:00Z' };
+    const fallo = { estado: 'fallo' as const, tareasHechas: 0, tareasTotal: 1, error: 'firma vieja del bug ya arreglado' };
+    const h = evaluarPruebas([
+      // 12 fallos del código anterior — el caso real: cerrados por PR y desplegados.
+      ...Array.from({ length: 12 }, (_, i) => ({ agente: 'redactor', inicio: `2026-08-18T0${i % 10}:00:00Z`, ...fallo })),
+      // Bajo el código vigente, el agente corre en ok.
+      { agente: 'redactor', estado: 'ok' as const, inicio: '2026-08-22T00:00:00Z', tareasHechas: 1, tareasTotal: 1, error: null },
+    ], false, sinCatalogo, sinLatidos, AHORA, VENTANA, corte);
+    // Ni T1 ni T3: ningún fallo es del código vigente.
+    expect(h.some((x) => x.codigo === 'T1')).toBe(false);
+    expect(h.some((x) => x.codigo === 'T3')).toBe(false);
+    // Pero la historia NO desaparece: queda como nota con su conteo y el corte.
+    const t6 = h.find((x) => x.codigo === 'T6');
+    expect(t6?.semaforo).toBe('NOTA');
+    expect(t6?.objeto).toContain('12 fallo(s)');
+    expect(t6?.detalle).toContain('abc1234');
+  });
+
+  it('el mismo fallo DESPUÉS del corte sí cuenta: la firma reaparecida vuelve sola', () => {
+    const corte = { sha: 'abc1234def', primeraVista: '2026-08-21T00:00:00Z' };
+    const fallo = { estado: 'fallo' as const, tareasHechas: 0, tareasTotal: 1, error: 'firma que volvió' };
+    const h = evaluarPruebas([
+      { agente: 'x', inicio: '2026-08-22T00:00:00Z', ...fallo },
+      { agente: 'x', inicio: '2026-08-22T01:00:00Z', ...fallo },
+    ], false, sinCatalogo, sinLatidos, AHORA, VENTANA, corte);
+    expect(h.some((x) => x.codigo === 'T1')).toBe(true);
+    const t3 = h.find((x) => x.codigo === 'T3');
+    expect(t3?.detalle).toContain('entre el 2026-08-21 y el 2026-08-23');
+  });
+
+  it('sin corte de despliegue los conteos no se acotan Y el parte lo declara (T6)', () => {
+    const h = evaluarPruebas([], false, sinCatalogo, sinLatidos, AHORA, VENTANA, null);
+    const t6 = h.find((x) => x.codigo === 'T6');
+    expect(t6?.semaforo).toBe('NOTA');
+    expect(t6?.detalle).toContain('no se pudo saber desde cuándo corre el código vigente');
   });
 
   it('VERDE VACÍO es ROJO aunque no haya un solo fallo — es la lección de las 216 corridas verdes', () => {
     const h = evaluarPruebas([
       { agente: 'y', estado: 'ok', inicio: '2026-08-20T00:00:00Z', tareasHechas: 0, tareasTotal: 5, error: null },
-    ], false, sinCatalogo, sinLatidos, AHORA);
+    ], false, sinCatalogo, sinLatidos, AHORA, VENTANA, CORTE_VIEJO);
     const t2 = h.find((x) => x.codigo === 'T2');
     expect(t2?.semaforo).toBe('ROJO');
     expect(t2?.evidencia).toContain('afirma el EFECTO');
@@ -151,17 +195,17 @@ describe('el detector de pruebas', () => {
   it('una corrida ok con 0 de 0 tareas NO es verde vacío: no se propuso nada', () => {
     const h = evaluarPruebas([
       { agente: 'y', estado: 'ok', inicio: '2026-08-20T00:00:00Z', tareasHechas: 0, tareasTotal: 0, error: null },
-    ], false, sinCatalogo, sinLatidos, AHORA);
+    ], false, sinCatalogo, sinLatidos, AHORA, VENTANA, CORTE_VIEJO);
     expect(h.some((x) => x.codigo === 'T2')).toBe(false);
   });
 
   it('la ventana truncada se DICE, y se dice cuáles faltan (las más viejas)', () => {
-    const h = evaluarPruebas([], true, sinCatalogo, sinLatidos, AHORA);
+    const h = evaluarPruebas([], true, sinCatalogo, sinLatidos, AHORA, VENTANA, CORTE_VIEJO);
     expect(h.find((x) => x.codigo === 'T0')?.evidencia).toContain('MÁS VIEJAS');
   });
 
   it('un agente vivo SIN una sola corrida no se lee como «no falló»', () => {
-    const h = evaluarPruebas([], false, { valor: [ficha('mudo')], error: null }, sinLatidos, AHORA);
+    const h = evaluarPruebas([], false, { valor: [ficha('mudo')], error: null }, sinLatidos, AHORA, VENTANA, CORTE_VIEJO);
     const t4 = h.find((x) => x.codigo === 'T4');
     expect(t4?.objeto).toBe('mudo');
     expect(t4?.evidencia).toContain('no consta que se hayan intentado');
@@ -170,7 +214,7 @@ describe('el detector de pruebas', () => {
   it('un cron mudo hace que TODO conteo de la ventana sea un piso, y el parte lo dice', () => {
     const h = evaluarPruebas([], false, sinCatalogo, {
       valor: [{ id: 'runner', estado: 'ok', ultimo: '2026-08-20T00:00:00Z' }], error: null,
-    }, AHORA);
+    }, AHORA, VENTANA, CORTE_VIEJO);
     const t5 = h.find((x) => x.codigo === 'T5');
     expect(t5?.semaforo).toBe('ROJO');
     expect(t5?.evidencia).toContain('un piso, no una medida');
@@ -179,7 +223,7 @@ describe('el detector de pruebas', () => {
   it('un cron con latido fresco y estado ok no dispara nada', () => {
     const h = evaluarPruebas([], false, sinCatalogo, {
       valor: [{ id: 'runner', estado: 'ok', ultimo: '2026-08-23T23:00:00Z' }], error: null,
-    }, AHORA);
+    }, AHORA, VENTANA, CORTE_VIEJO);
     expect(h.some((x) => x.codigo === 'T5')).toBe(false);
   });
 });
@@ -209,6 +253,15 @@ describe('el parte de pruebas', () => {
   it('sin hallazgos NO afirma que la suite pase: afirma que producción no se quejó', () => {
     const cuerpo = armarPartePruebas([], 10, 3, SEMANA_AUDITADA, '2026-08-23', null, null);
     expect(cuerpo).toContain('Eso NO dice que la suite pase');
+  });
+
+  it('con corte declara desde qué SHA cuenta; sin corte declara que no se acotó', () => {
+    const con = armarPartePruebas([], 10, 3, SEMANA_AUDITADA, '2026-08-23', 'abc1234def', null,
+      { sha: 'abc1234def', primeraVista: '2026-08-21T05:00:00Z' });
+    expect(con).toContain('SE CUENTAN DESDE EL DESPLIEGUE VIGENTE');
+    expect(con).toContain('abc1234');
+    const sin = armarPartePruebas([], 10, 3, SEMANA_AUDITADA, '2026-08-23', null, null, null);
+    expect(sin).toContain('VENTANA SIN ACOTAR AL DESPLIEGUE');
   });
 });
 
@@ -303,9 +356,11 @@ describe('el auditor del artefacto desplegado', () => {
     expect(c5?.evidencia).toContain('parecen encendidos y no producen nada');
   });
 
-  it('sin el CHECK de la base es ROJO por sí solo: no hay contra qué comparar', () => {
+  it('sin el CHECK de la base NO se grita: es fuente ciega (NOTA), no un drift verificado — 28-ago-2026', () => {
     const h = evaluarAuditorCodigo([ficha('migraciones')], ['migraciones'], null);
-    expect(h.find((x) => x.codigo === 'C3')?.semaforo).toBe('ROJO');
+    const c3 = h.find((x) => x.codigo === 'C3');
+    expect(c3?.semaforo).toBe('NOTA');
+    expect(c3?.evidencia).toContain('NO se afirma que haya drift');
   });
 
   it('todo alineado: ni un hallazgo', () => {
@@ -360,7 +415,9 @@ describe('el traductor de señal a backlog', () => {
       { agente: 'a', estado: 'rechazado', titulo: 't2', motivo: 'tono' },
     ], error: null }, vacio, vacio, vacio, null, AHORA);
     const p1 = dos.find((x) => x.codigo === 'P1');
-    expect(p1?.semaforo).toBe('ROJO');
+    // ÁMBAR como techo (28-ago-2026): una PROPUESTA no es urgente por
+    // definición — jamás correo de medianoche por revisar un criterio.
+    expect(p1?.semaforo).toBe('AMBAR');
     expect(p1?.evidencia).toContain('PROPUESTA');
     expect(p1?.evidencia).toContain('cifra sin fuente');
   });
@@ -375,6 +432,14 @@ describe('el traductor de señal a backlog', () => {
     expect(p2?.evidencia).toContain('parte_legal: 2');
     expect(p2?.evidencia).not.toContain('correo_frio');
     expect(p2?.evidencia).toContain('decisiones de producto, no de este agente');
+  });
+
+  it('ni la bandeja MUY atorada escala a ROJO: la señal es que el humano no está urgido (28-ago-2026)', () => {
+    const muchas = Array.from({ length: 25 }, (_, i) => ({
+      tipo: 'parte_legal', agente: 'legal_compliance', creado: `2026-08-0${(i % 9) + 1}T00:00:00Z`,
+    }));
+    const h = evaluarProducto(vacio, { valor: muchas, error: null }, vacio, vacio, null, AHORA);
+    expect(h.find((x) => x.codigo === 'P2')?.semaforo).toBe('AMBAR');
   });
 
   it('las incidencias se agregan por tipo y sin un solo dato de ninguna flota', () => {
@@ -448,13 +513,28 @@ describe('el catálogo de preguntas del negocio', () => {
     expect(new Set(PREGUNTAS.map((p) => p.id)).size).toBe(PREGUNTAS.length);
   });
 
-  it('la fuente que NO existe es ROJO y trae la spec del evento mínimo', () => {
+  // ── LA PRUEBA QUE FALTABA (correo en falso #4 del 28-ago-2026) ───────────
+  it('la fuente que NUNCA ha existido es HUECO CONOCIDO (ÁMBAR, backlog) con la spec del evento — no un rojo que despierte a nadie', () => {
     const perfil = { tablas: [], consultas: { disponible: false, motivo: null, filas: [] } };
     const h = evaluarInstrumentacion(estadoDeFuentes(perfil, PREGUNTAS), PREGUNTAS);
     const q3 = h.find((x) => x.codigo === 'Q3');
-    expect(q3?.semaforo).toBe('ROJO');
+    expect(q3?.semaforo).toBe('AMBAR');
     expect(q3?.detalle).toContain('NO EXISTE');
+    expect(q3?.detalle).toContain('HUECO CONOCIDO');
     expect(q3?.evidencia).toContain('EVENTO MÍNIMO PROPUESTO');
+    // El parte lo sigue diciendo entero — lo que cambia es que no escala.
+    expect(h.every((x) => x.semaforo !== 'ROJO')).toBe(true);
+  });
+
+  it('la fuente que el censo anterior vio EXISTIR y desapareció sí es ROJO: eso es una rotura, no backlog', () => {
+    const perfil = { tablas: [], consultas: { disponible: false, motivo: null, filas: [] } };
+    const previas = new Map([['sitio_evento', { tabla: 'sitio_evento', existe: true, filas: 120 }]]);
+    const h = evaluarInstrumentacion(estadoDeFuentes(perfil, PREGUNTAS), PREGUNTAS, previas);
+    const q1 = h.find((x) => x.codigo === 'Q1'); // Q1 lee sitio_evento
+    expect(q1?.semaforo).toBe('ROJO');
+    expect(q1?.detalle).toContain('REGRESIÓN');
+    // Y producto_evento, que nunca existió, sigue siendo ámbar aunque haya censo.
+    expect(h.find((x) => x.codigo === 'Q3')?.semaforo).toBe('AMBAR');
   });
 
   it('la tabla que existe y está VACÍA es una respuesta distinta de «no hay dato»', () => {

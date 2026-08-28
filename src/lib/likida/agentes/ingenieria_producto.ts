@@ -43,8 +43,9 @@ import {
   type FichaAgente, type ModuloRunner, type Perfil,
   lunesDe, masDias, inicioDia, muestra, recortar, pintarHallazgos,
   porValor, lineaFuentesCiegas, type Lectura,
-  parteExistente, encolarParte, anotar, alertarRojos,
+  parteExistente, encolarParte, anotar, alertarRojos, censoPrevio,
   leerCatalogo, autonomos, leerPerfil, PIE_ALCANCE, shaDesplegado, entornoDesplegado,
+  leerDespliegueVisto,
 } from './ingenieria';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -165,12 +166,22 @@ export async function leerLatidos(): Promise<LatidoCron[]> {
   }));
 }
 
+/** El corte de despliegue que acota los conteos de fallos: desde cuándo corre
+ *  el SHA vigente, según `despliegue_visto`. `null` = no se pudo acotar (sin
+ *  SHA, o el SHA aún no consta) y el parte LO DICE. */
+export interface CorteDespliegue { sha: string; primeraVista: string }
+
+/** La ventana declarada del parte, en fechas 'YYYY-MM-DD' (cerrada en hasta). */
+export interface VentanaPruebas { desde: string; hasta: string }
+
 export function evaluarPruebas(
   corridas: CorridaVista[],
   truncado: boolean,
   catalogo: Lectura<FichaAgente[]>,
   latidos: Lectura<LatidoCron[]>,
   ahoraMs: number,
+  ventana: VentanaPruebas,
+  corte: CorteDespliegue | null,
 ): Hallazgo[] {
   const hallazgos: Hallazgo[] = [];
 
@@ -182,14 +193,42 @@ export function evaluarPruebas(
     });
   }
 
+  // ── LA VENTANA SE ACOTA AL DESPLIEGUE VIGENTE (incidente 28-ago-2026) ────
+  //
+  // La noche del 28-ago este agente mandó un «Urgente» por 12 fallos con la
+  // misma firma… que eran historia ya arreglada: los PR que los cerraron
+  // estaban mergeados y desplegados, y en las últimas 24 h el agente acusado
+  // llevaba todas sus corridas en ok. Un fallo del CÓDIGO ANTERIOR no es una
+  // herida: es un cadáver, y reportarlo como herida enseña a ignorar el canal.
+  //
+  // Desde entonces T1/T2/T3 solo cuentan corridas INICIADAS DESPUÉS de la
+  // primera vista del SHA vigente (`despliegue_visto`, que `releases` ya
+  // escribe). Lo anterior al corte no desaparece: se declara como NOTA (T6),
+  // con su conteo — si la firma reaparece bajo el código vigente, vuelve a
+  // contar sola. T4 (agentes mudos) y T5 (latidos) siguen sobre la ventana
+  // completa: la AUSENCIA de corridas necesita la ventana larga para
+  // significar algo, y el latido se mide contra el reloj de ahora.
+  const corteMs = corte === null ? null : Date.parse(corte.primeraVista);
+  const hayCorte = corteMs !== null && !Number.isNaN(corteMs);
+  const vigentes = !hayCorte ? corridas : corridas.filter((c) => {
+    const t = Date.parse(c.inicio);
+    // Un inicio ilegible se queda DENTRO: excluirlo callaría un fallo real.
+    return Number.isNaN(t) || t >= corteMs;
+  });
+  const desdeEfectivo = hayCorte && corte !== null && corte.primeraVista.slice(0, 10) > ventana.desde
+    ? corte.primeraVista.slice(0, 10) : ventana.desde;
+  const periodo = `entre el ${desdeEfectivo} y el ${ventana.hasta}`;
+
   const porAgente = new Map<string, CorridaVista[]>();
-  for (const c of corridas) {
+  for (const c of vigentes) {
     const l = porAgente.get(c.agente) ?? [];
     l.push(c);
     porAgente.set(c.agente, l);
   }
 
   // T1 — fallos por agente, absolutos primero y la tasa solo como contexto.
+  // El conteo SIEMPRE lleva su periodo: un número sin fechas no se puede
+  // refutar, y lo irrefutable no es evidencia.
   for (const agente of [...porAgente.keys()].sort()) {
     const lista = porAgente.get(agente) as CorridaVista[];
     const fallos = lista.filter((c) => c.estado === 'fallo');
@@ -198,7 +237,7 @@ export function evaluarPruebas(
     hallazgos.push({
       semaforo: tasa >= 0.5 && lista.length >= 2 ? 'ROJO' : 'AMBAR',
       codigo: 'T1', objeto: agente,
-      detalle: `${numero(fallos.length)} de ${numero(lista.length)} corrida(s) en fallo.`,
+      detalle: `${numero(fallos.length)} de ${numero(lista.length)} corrida(s) en fallo ${periodo}${hayCorte && corte !== null ? ` (bajo el SHA vigente ${corte.sha.slice(0, 7)})` : ''}.`,
       evidencia: `la más reciente: ${fallos[0].inicio.slice(0, 10)} — «${recortar(fallos[0].error, 180) || 'sin texto de error anotado'}». Una prueba de regresión sobre este camino es exactamente lo que falta.`,
     });
   }
@@ -211,23 +250,51 @@ export function evaluarPruebas(
     if (vacias.length === 0) continue;
     hallazgos.push({
       semaforo: 'ROJO', codigo: 'T2', objeto: agente,
-      detalle: `${numero(vacias.length)} corrida(s) VERDE VACÍO: dijeron ok y produjeron 0 tareas de las que se propusieron.`,
+      detalle: `${numero(vacias.length)} corrida(s) VERDE VACÍO ${periodo}: dijeron ok y produjeron 0 tareas de las que se propusieron.`,
       evidencia: `${muestra(vacias.slice(0, 3).map((c) => `${c.inicio.slice(0, 10)} (0 de ${c.tareasTotal})`), 3)}. Una suite que solo mira el estado de salida no ve esto: la prueba que falta es la que afirma el EFECTO, no el «ok».`,
     });
   }
 
-  // T3 — patrones repetidos: el bug que ya se ganó su prueba.
-  for (const p of patronesDeError(corridas).slice(0, 5)) {
+  // T3 — patrones repetidos: el bug que ya se ganó su prueba. Solo sobre las
+  // corridas del código vigente, y con el periodo escrito en el detalle.
+  for (const p of patronesDeError(vigentes).slice(0, 5)) {
     hallazgos.push({
       semaforo: p.veces >= 5 ? 'ROJO' : 'AMBAR',
       codigo: 'T3', objeto: muestra(p.agentes, 4),
-      detalle: `${numero(p.veces)} fallos con la MISMA firma de error.`,
+      detalle: `${numero(p.veces)} fallos con la MISMA firma de error ${periodo}.`,
       evidencia: `«${recortar(p.ejemplo, 200)}». Repetido ${numero(p.veces)} veces no es un bache: es un camino sin prueba.`,
     });
   }
 
-  // T4 — el agente vivo que no corrió NUNCA en la ventana. Distinto de fallar:
-  // no hay ni el dato de que se intentó.
+  // T6 — lo que quedó FUERA del conteo y por qué. No es un hallazgo contra
+  // nadie: es la constancia de que la historia del código anterior existe y
+  // de que NO se contó como alerta.
+  if (hayCorte && corte !== null) {
+    const excluidos = corridas.length - vigentes.length;
+    const fallosExcluidos = corridas.filter((c) => {
+      const t = Date.parse(c.inicio);
+      return c.estado === 'fallo' && !Number.isNaN(t) && t < corteMs;
+    }).length;
+    if (fallosExcluidos > 0) {
+      hallazgos.push({
+        semaforo: 'NOTA', codigo: 'T6', objeto: `${numero(fallosExcluidos)} fallo(s) anteriores al despliegue vigente`,
+        detalle: `quedaron FUERA del conteo de T1/T3: ocurrieron antes de que este servidor viera el SHA ${corte.sha.slice(0, 7)} (${corte.primeraVista.slice(0, 19).replace('T', ' ')} UTC).`,
+        evidencia: `${numero(excluidos)} corrida(s) de la ventana son del código anterior. Un fallo ya arreglado y desplegado no es una alerta — es historia; si su firma reaparece bajo el código vigente, T3 la vuelve a contar sola. (Es la corrección del incidente del 28-ago-2026: 12 fallos ya cerrados por PR salieron como «Urgente».)`,
+      });
+    }
+  } else {
+    hallazgos.push({
+      semaforo: 'NOTA', codigo: 'T6', objeto: 'ventana sin acotar al despliegue',
+      detalle: corte === null
+        ? 'no se pudo saber desde cuándo corre el código vigente: los conteos de arriba pueden incluir fallos de código anterior ya arreglado.'
+        : 'la primera vista del SHA vigente no trae un instante legible: los conteos no se acotaron.',
+      evidencia: 'sin SHA declarado o sin fila en despliegue_visto (la escribe el agente releases). Se dice para que ningún conteo se lea como «reproducible hoy» sin serlo.',
+    });
+  }
+
+  // T4 — el agente vivo que no corrió NUNCA en la ventana COMPLETA. Distinto
+  // de fallar: no hay ni el dato de que se intentó. (A propósito sin acotar
+  // al despliegue: la ausencia necesita la ventana larga para ser señal.)
   if (catalogo.valor) {
     const vistos = new Set(corridas.map((c) => c.agente));
     const mudos = autonomos(catalogo.valor).filter((f) => !vistos.has(f.id)).map((f) => f.id);
@@ -279,12 +346,15 @@ export function encargoLocal(sha: string | null): string[] {
 
 export function armarPartePruebas(
   hallazgos: Hallazgo[], corridas: number, agentes: number, desde: string, hasta: string,
-  sha: string | null, ciegas: string | null,
+  sha: string | null, ciegas: string | null, corte: CorteDespliegue | null = null,
 ): string {
   const lineas = [
     `PRUEBAS — semana del ${desde} (ventana: ${desde} a ${hasta}, cerrada)`,
     '',
     `Observado: ${numero(agentes)} agente(s) con corrida · ${numero(corridas)} corrida(s) en la ventana.`,
+    corte
+      ? `LOS FALLOS SE CUENTAN DESDE EL DESPLIEGUE VIGENTE: SHA ${corte.sha.slice(0, 7)}, visto por primera vez el ${corte.primeraVista.slice(0, 19).replace('T', ' ')} UTC. Lo anterior a esa marca es historia del código anterior y va como nota, no como alerta (incidente 28-ago-2026).`
+      : 'VENTANA SIN ACOTAR AL DESPLIEGUE: no consta desde cuándo corre el código vigente, así que los conteos pueden incluir fallos ya arreglados — y se dice en vez de callarse.',
     '',
   ];
   if (ciegas) { lineas.push(ciegas, ''); }
@@ -295,7 +365,7 @@ export function armarPartePruebas(
   lineas.push('LO QUE ESTE AGENTE NO HIZO, TAL CUAL: no corrió una sola prueba. Desde una función serverless de Vercel no hay repo, no hay vitest y no hay tsc — este parte mide la CONDUCTA de producción, que es la otra mitad, y deja escrito el encargo de la mitad que vive en la Mac. Un parte que dijera «la suite pasa» sería mentira.');
   lineas.push('DIFERENCIA CON EL VIGILANTE DE CALIDAD (0219): aquél audita a los agentes como PRODUCTO (rechazos humanos, costo fuera de banda). Éste mira lo mismo desde el lado de la INGENIERÍA: qué camino no tiene prueba.');
   lineas.push(PIE_ALCANCE);
-  lineas.push('Fuentes: agente_corrida (ventana cerrada) · agente_definicion (los habilitados) · cron_latido.');
+  lineas.push('Fuentes: agente_corrida (ventana cerrada) · agente_definicion (los habilitados) · cron_latido · despliegue_visto (desde cuándo corre el SHA vigente).');
   return lineas.join('\n');
 }
 
@@ -311,23 +381,34 @@ async function correrPruebas(disparo: DisparoCorrida, hoy: string): Promise<Resu
       return { resultado: 'saltado', piezas: 0, costoUsd: 0, motivo: 'el parte de la semana auditada ya está en la bandeja' };
     }
     const lote = await leerCorridas(inicioDia(desde), inicioDia(lunes));
-    const [catalogo, latidos] = await Promise.all([
+    const sha = shaDesplegado();
+    const [catalogo, latidos, despliegue] = await Promise.all([
       porValor('catálogo de agentes', leerCatalogo),
       porValor('latido de los crons', leerLatidos),
+      // Desde cuándo corre el SHA vigente (lo escribe `releases`; aquí SOLO se
+      // lee). Es el corte que separa herida de cadáver: sin él, este agente
+      // volvió a acusar como «Urgente» 12 fallos ya arreglados (28-ago-2026).
+      porValor('despliegue vigente (despliegue_visto)', async () => (sha ? leerDespliegueVisto(sha) : null)),
     ]);
-    const sha = shaDesplegado();
-    const hallazgos = evaluarPruebas(lote.corridas, lote.truncado, catalogo, latidos, Date.now());
+    const corte: CorteDespliegue | null = sha && despliegue.valor
+      ? { sha, primeraVista: despliegue.valor.primeraVista }
+      : null;
+    const hallazgos = evaluarPruebas(
+      lote.corridas, lote.truncado, catalogo, latidos, Date.now(),
+      { desde, hasta: masDias(lunes, -1) }, corte,
+    );
     const agentesVistos = new Set(lote.corridas.map((c) => c.agente)).size;
     const cuerpo = armarPartePruebas(
       hallazgos, lote.corridas.length, agentesVistos, desde, masDias(lunes, -1), sha,
-      lineaFuentesCiegas([catalogo, latidos]),
+      lineaFuentesCiegas([catalogo, latidos, despliegue]), corte,
     );
     await alertarRojos(agente, hallazgos);
     const res = await encolarParte(agente, 'parte_pruebas', titulo, cuerpo, {
       ventana: { desde, hasta: lunes },
+      corte: corte ? { sha: corte.sha, primera_vista: corte.primeraVista } : null,
       corridas: lote.corridas.length, truncado: lote.truncado, sha: sha ?? null,
       hallazgos: hallazgos.map((h) => ({ semaforo: h.semaforo, codigo: h.codigo, objeto: h.objeto })),
-      consultas: ['agente_corrida (ventana)', 'agente_definicion', 'cron_latido'],
+      consultas: ['agente_corrida (ventana)', 'agente_definicion', 'cron_latido', 'despliegue_visto (el corte)'],
     });
     await anotar(agente, inicio, 'ok', disparo,
       { parte: res, hallazgos: hallazgos.length, corridas: lote.corridas.length },
@@ -422,10 +503,14 @@ export function evaluarAuditorCodigo(
   // tienen que decir lo mismo: el runner exige que el interruptor esté en la
   // lista del bundle (candado 1) y la base rebota lo que no esté en el CHECK.
   if (palancasBase === null) {
+    // NOTA y no ROJO (28-ago-2026, el mismo criterio que C0): no poder LEER el
+    // CHECK no es un drift verificado — es una fuente ciega, y una fuente
+    // ciega se declara, no se grita. El drift real (abajo) sí escala, porque
+    // ese está comparado contra el texto que la base devolvió.
     hallazgos.push({
-      semaforo: 'ROJO', codigo: 'C3', objeto: 'interruptor_id_dominio',
+      semaforo: 'NOTA', codigo: 'C3', objeto: 'interruptor_id_dominio',
       detalle: 'no se pudo leer el dominio del CHECK del interruptor desde la base.',
-      evidencia: 'sin él no hay contra qué comparar la lista INTERRUPTORES del bundle, y el drift de palancas es el que deja un kill switch que rebota el día del incidente.',
+      evidencia: 'sin él no hay contra qué comparar la lista INTERRUPTORES del bundle. NO se afirma que haya drift ni que no lo haya — no se pudo mirar (fail-closed y dicho); si la lectura sigue ciega la próxima semana, eso sí es una avería de la función contrato_de_esquema().',
     });
   } else {
     const enCodigo = new Set<string>(INTERRUPTORES as readonly string[]);
@@ -628,8 +713,12 @@ export function evaluarProducto(
       const lista = porAgente.get(agente) as PiezaResuelta[];
       const rechazadas = lista.filter((p) => p.estado === 'rechazado');
       if (rechazadas.length < MIN_RECHAZOS_BACKLOG) continue;
+      // ÁMBAR como techo (28-ago-2026): este agente PROPONE, y una propuesta
+      // no es urgente por definición. Un ROJO aquí mandaba correo «Urgente»
+      // por una señal que es backlog — revisar un criterio se decide el lunes
+      // en la bandeja, no a medianoche en el teléfono.
       hallazgos.push({
-        semaforo: rechazadas.length / lista.length >= 0.5 ? 'ROJO' : 'AMBAR',
+        semaforo: 'AMBAR',
         codigo: 'P1', objeto: agente,
         detalle: `${numero(rechazadas.length)} de ${numero(lista.length)} pieza(s) resueltas fueron RECHAZADAS por un humano.`,
         evidencia: `${muestra(rechazadas.slice(0, 3).map((p) => `«${recortar(p.titulo, 50)}»: ${recortar(p.motivo, 100) || 'sin motivo anotado'}`), 3)}. PROPUESTA: revisar el criterio de este agente antes de subirle el volumen; lo que produce se está tirando.`,
@@ -647,8 +736,11 @@ export function evaluarProducto(
     if (viejas.length > 0) {
       const porTipo = new Map<string, number>();
       for (const p of viejas) porTipo.set(p.tipo, (porTipo.get(p.tipo) ?? 0) + 1);
+      // Mismo techo ÁMBAR que P1 (28-ago-2026): la bandeja atorada es la señal
+      // de que el humano NO está urgido — mandarla como correo urgente sería
+      // exactamente el contrasentido.
       hallazgos.push({
-        semaforo: viejas.length >= 20 ? 'ROJO' : 'AMBAR',
+        semaforo: 'AMBAR',
         codigo: 'P2', objeto: `${numero(viejas.length)} pieza(s) sin resolver`,
         detalle: `hay piezas pendientes de más de ${numero(DIAS_BANDEJA_ATORADA)} días en la bandeja.`,
         evidencia: `${muestra([...porTipo.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t}: ${numero(n)}`), 6)}. PROPUESTA: o el tipo que más se acumula no le sirve a nadie y hay que apagarlo, o le falta la pantalla para resolverlo rápido. Las dos son decisiones de producto, no de este agente.`,
@@ -875,16 +967,36 @@ export async function leerCoberturaSitio(desdeIso: string): Promise<CoberturaSit
 export function evaluarInstrumentacion(
   fuentes: Map<string, EstadoFuente>,
   preguntas: readonly PreguntaDeNegocio[] = PREGUNTAS,
+  /** El censo de fuentes del parte ANTERIOR de este agente (`null` = no hay).
+   *  Separa el hueco CONOCIDO de la REGRESIÓN — ver el comentario de abajo. */
+  previas: Map<string, EstadoFuente> | null = null,
 ): Hallazgo[] {
   const hallazgos: Hallazgo[] = [];
   for (const p of preguntas) {
     const f = fuentes.get(p.fuente);
     if (!f || !f.existe) {
-      hallazgos.push({
-        semaforo: 'ROJO', codigo: p.id, objeto: p.fuente,
-        detalle: `SIN DATO: «${p.pregunta}» no se puede contestar — la fuente ${p.fuente} NO EXISTE en la base.`,
-        evidencia: `EVENTO MÍNIMO PROPUESTO: ${p.eventoPropuesto} Dónde: ${p.donde}`,
-      });
+      // ── HUECO CONOCIDO ≠ FALLO ROJO (incidente 28-ago-2026) ──────────────
+      // La primera versión marcaba ROJO toda fuente inexistente, y la primera
+      // noche mandó un «Urgente» por producto_evento — una tabla que NUNCA ha
+      // existido, que este mismo catálogo declara como «el hueco más grande
+      // del tablero», y que seguirá sin existir hasta que alguien la
+      // construya. Un hueco declarado es BACKLOG: el parte lo sigue diciendo
+      // entero (eso está bien y no se toca), pero escalarlo cada noche
+      // entrena a ignorar el canal. ROJO queda reservado para la REGRESIÓN:
+      // una fuente que el parte anterior vio EXISTIR y que ya no está — eso
+      // sí es «algo se rompió», con la evidencia del censo previo.
+      const existiaAntes = previas?.get(p.fuente)?.existe === true;
+      hallazgos.push(existiaAntes
+        ? {
+          semaforo: 'ROJO', codigo: p.id, objeto: p.fuente,
+          detalle: `REGRESIÓN: la fuente ${p.fuente} EXISTÍA en el censo del parte anterior y YA NO ESTÁ — «${p.pregunta}» se quedó sin dato por una rotura, no por backlog.`,
+          evidencia: 'el censo previo de este agente la registró con existe=true y perfil_almacenamiento() ya no la devuelve: alguien la borró o una migración la tumbó. Esto sí es un incidente, no un hueco conocido.',
+        }
+        : {
+          semaforo: 'AMBAR', codigo: p.id, objeto: p.fuente,
+          detalle: `SIN DATO (HUECO CONOCIDO): «${p.pregunta}» no se puede contestar — la fuente ${p.fuente} NO EXISTE en la base. Es backlog de instrumentación, no un fallo: nada que existiera se rompió.`,
+          evidencia: `EVENTO MÍNIMO PROPUESTO: ${p.eventoPropuesto} Dónde: ${p.donde}`,
+        });
       continue;
     }
     if (f.filas === null) {
@@ -929,6 +1041,7 @@ export function armarParteInstrumentacion(
   lineas.push(...pintarHallazgos(hallazgos, 'Todas las preguntas del catálogo tienen fuente con datos. (Si esto sale así, el catálogo se quedó corto: la siguiente tarea es ampliarlo, no celebrarlo.)'));
   lineas.push('');
   lineas.push('EL HUECO MÁS GRANDE, DICHO SIN ADORNO: no existe analítica de producto DENTRO de la app. sitio_evento (0223) cubre el blog y la calculadora del sitio público; de lo que hace un operador adentro —qué pantalla abre, qué acción completa, dónde se atora— no queda un solo registro. Sin eso no hay cohortes, no hay activación medida y no hay forma de saber qué parte del producto sobra.');
+  lineas.push('CÓMO SE CLASIFICA UN HUECO (desde el 28-ago-2026): una fuente que NUNCA ha existido es BACKLOG de instrumentación (ámbar) — el parte lo dice completo, pero no despierta a nadie. El rojo queda reservado para la REGRESIÓN: una fuente que el censo del parte anterior vio existir y que desapareció. Eso sí es «algo se rompió».');
   lineas.push('LO QUE ESTE AGENTE NO HACE: no instrumenta nada, no crea tablas y no emite eventos. Propone la spec mínima —qué evento, dónde, con qué campos— y la deja en la bandeja. Cada evento nuevo es dato personal potencial: el diseño de la tabla pasa por la misma minimización que sitio_evento y por RLS por tenant.');
   lineas.push(PIE_ALCANCE);
   lineas.push('Fuentes: perfil_almacenamiento() (existencia y volumen estimado de cada fuente) · sitio_evento (cobertura real) · el catálogo de preguntas declarado en el código.');
@@ -946,10 +1059,21 @@ async function correrInstrumentacion(disparo: DisparoCorrida, hoy: string): Prom
       return { resultado: 'saltado', piezas: 0, costoUsd: 0, motivo: 'el parte de esta semana ya está en la bandeja' };
     }
     const perfil = await leerPerfil(1);
-    const cobertura = await porValor('cobertura de sitio_evento', () => leerCoberturaSitio(inicioDia(masDias(lunes, -28))));
+    const [cobertura, previo] = await Promise.all([
+      porValor('cobertura de sitio_evento', () => leerCoberturaSitio(inicioDia(masDias(lunes, -28)))),
+      // El censo del parte anterior: es lo que separa «hueco conocido» (ámbar,
+      // backlog) de «la fuente existía y desapareció» (rojo, incidente). Sin
+      // él, todo hueco se trata como conocido — el lado que no grita en falso.
+      porValor('censo de fuentes del parte anterior', () => censoPrevio<EstadoFuente[]>(agente, 'parte_instrumentacion', 'fuentes')),
+    ]);
+    const previas = Array.isArray(previo.valor?.censo)
+      ? new Map(previo.valor.censo
+        .filter((f): f is EstadoFuente => !!f && typeof f === 'object' && typeof (f as EstadoFuente).tabla === 'string')
+        .map((f) => [f.tabla, f]))
+      : null;
     const fuentes = estadoDeFuentes(perfil, PREGUNTAS);
-    const hallazgos = evaluarInstrumentacion(fuentes, PREGUNTAS);
-    const cuerpo = armarParteInstrumentacion(hallazgos, cobertura, lunes, lineaFuentesCiegas([cobertura]));
+    const hallazgos = evaluarInstrumentacion(fuentes, PREGUNTAS, previas);
+    const cuerpo = armarParteInstrumentacion(hallazgos, cobertura, lunes, lineaFuentesCiegas([cobertura, previo]));
     await alertarRojos(agente, hallazgos);
     const res = await encolarParte(agente, 'parte_instrumentacion', titulo, cuerpo, {
       semana: lunes,
@@ -958,7 +1082,9 @@ async function correrInstrumentacion(disparo: DisparoCorrida, hoy: string): Prom
       consultas: ['perfil_almacenamiento()', 'sitio_evento'],
     });
     await anotar(agente, inicio, 'ok', disparo,
-      { parte: res, preguntas: PREGUNTAS.length, sin_fuente: hallazgos.filter((h) => h.semaforo === 'ROJO').length },
+      // `sin_fuente` cuenta HUECOS (fuente inexistente), no rojos: desde el
+      // 28-ago-2026 el rojo está reservado a la regresión.
+      { parte: res, preguntas: PREGUNTAS.length, sin_fuente: [...fuentes.values()].filter((f) => !f.existe).length },
       { tareasHechas: 1, tareasTotal: 1 });
     return {
       resultado: 'corrio', piezas: res === 'encolada' ? 1 : 0, costoUsd: 0,
