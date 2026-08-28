@@ -139,20 +139,33 @@ function comillas(texto: string): string {
 // ═══════════════════════════════════════════════════════════════════════════
 export const OFFICE_DEPOT: GuionPortal = {
   comercio: 'office_depot',
-  portal: 'https://facturacion.officedepot.com.mx/',
+  portal: 'https://facturacion.officedepot.com.mx/#/generaF',
   verificado: null,
   campos: {
+    // `#ituTxt` es el `id` real, leído del DOM el 28-ago-2026; el
+    // `formcontrolname` se conserva como segundo candidato porque es el que no
+    // depende de que el `id` sobreviva a un rediseño de Angular.
     numeroTicket: {
-      selector: ['input[formcontrolname="itu"]', porEtiqueta('ticket'), 'input[name*="itu" i]'],
+      selector: ['#ituTxt', 'input[formcontrolname="itu"]', porEtiqueta('ITU')],
       formato: 'mayusculas',
     },
-    sucursal: { selector: [porEtiqueta('Tienda'), 'input[formcontrolname="tienda"]', 'select[name*="tienda" i]'] },
-    monto: { selector: [porEtiqueta('Monto'), 'input[formcontrolname="monto"]', 'input[name*="monto" i]'], formato: 'monto' },
+    // ⚠️ `sucursal` SALIÓ DE AQUÍ, y no por limpieza. El recon abrió el
+    // desplegable: `Tienda` no es una sucursal, es el CANAL DE COMPRA
+    // (`Tienda` · `Sitio Web y APP Movil` · `Telemarketing` · `Mercado Libre`).
+    // No se lee del ticket — para un ticket de papel siempre vale `Tienda` —, así
+    // que es una constante del portal y no un campo del comprobante. Declararlo
+    // aquí mandaba al extractor a buscar en el papel algo que nunca está.
+    monto: {
+      selector: ['#inlineFormInputName3', 'input[formcontrolname="monto"]', porEtiqueta('MONTO')],
+      formato: 'monto',
+    },
   },
   receptor: {
     rfc: { selector: ['input[formcontrolname="rfc"]', porEtiqueta('RFC'), '#rfc'], formato: 'mayusculas' },
     correo: { selector: ['input[formcontrolname="correo"]', porEtiqueta('Correo'), 'input[type="email"]'] },
   },
+  // El paso 4 del asistente se llama literalmente `Descarga`: el CFDI se baja en
+  // el navegador. No hace falta esperar un correo.
   botonEmitir: [botonQueDice('Facturar'), botonQueDice('Generar')],
   uuid: '.uuid, [class*="folio-fiscal" i], [data-uuid]',
   error: '.alert-danger, .invalid-feedback, mat-error, .error-message',
@@ -174,20 +187,30 @@ export const OFFICE_DEPOT: GuionPortal = {
 // ═══════════════════════════════════════════════════════════════════════════
 export const CONTROLNET: GuionPortal = {
   comercio: 'controlnet',
-  portal: 'https://www.controlnet.com.mx/',
+  // La raíz redirige (302) al sitio corporativo, sin un solo campo. El portal
+  // está en `/Factura`.
+  portal: 'https://www.controlnet.com.mx/Factura',
   verificado: null,
   campos: {
-    numeroTicket: { selector: [porEtiqueta('ticket'), 'input[name*="ticket" i]', '#ticket'] },
-    fecha: { selector: [porEtiqueta('Fecha'), 'input[type="date"]', 'input[name*="fecha" i]'], formato: 'fecha_dmy' },
-    monto: { selector: [porEtiqueta('Monto'), 'input[name*="monto" i]', 'input[name*="total" i]'], formato: 'monto' },
+    // ⚠️ UN CAMPO, NO TRES. Este guion declaraba `fecha` y `monto` porque la
+    // ficha del catálogo los afirmaba; el recon leyó el formulario y solo existe
+    // `IDTran` (`#txtNumeroTicket01`, maxlength=24, placeholder
+    // `0000.0000.0000.0000.0000`). Buscar los otros dos habría hecho fallar el
+    // pre-vuelo por selectores que no pueden existir.
+    numeroTicket: {
+      selector: ['#txtNumeroTicket01', 'input[name="txtNumeroTicket01"]', porEtiqueta('IDTran')],
+    },
   },
   receptor: {
     rfc: { selector: [porEtiqueta('RFC'), 'input[name*="rfc" i]', '#rfc'], formato: 'mayusculas' },
     correo: { selector: [porEtiqueta('Correo'), 'input[type="email"]', 'input[name*="mail" i]'] },
   },
   buscar: {
-    boton: [botonQueDice('Buscar'), botonQueDice('Consultar')],
-    que: 'el botón de buscar el ticket',
+    // `#btnConsultarTicket` es el `id` real leído del DOM. El formulario aparece
+    // detrás de `#btnFacturarTicket` («Factura tu Ticket(s)»), que solo abre un
+    // panel — no envía nada.
+    boton: ['#btnConsultarTicket', botonQueDice('Consultar'), botonQueDice('Buscar')],
+    que: 'el botón de consultar el ticket',
     esperar: '.resultado, table tbody tr, [class*="resultado" i]',
     sinResultados: '.alert-warning, .sin-resultados, .no-results',
   },
@@ -211,10 +234,16 @@ export const CONTROLNET: GuionPortal = {
 // ═══════════════════════════════════════════════════════════════════════════
 export const ENERSER: GuionPortal = {
   comercio: 'enerser',
-  portal: 'https://facturacion.enerser.com.mx/',
+  // La raíz es el LOGIN. El camino de invitado se abre con un BOTÓN («Facturar
+  // sin registro»), no con un enlace, así que se guarda la URL de destino: un
+  // adaptador que buscara un `<a href>` no la encontraría.
+  portal: 'https://facturacion.enerser.com.mx/invitado/facturacion-lote',
   verificado: null,
   campos: {
-    referencia: { selector: [porEtiqueta('referencia'), 'input[name*="referencia" i]', '#referencia'] },
+    // El campo de la referencia es el 2.º `input` del bloque «COLA DE TICKETS» y
+    // NO trae `id` ni `formcontrolname` — por eso el primer candidato va por
+    // etiqueta, que es lo único estable que se le observó.
+    referencia: { selector: [porEtiqueta('REFERENCIA'), 'input[name*="referencia" i]', '#referencia'] },
   },
   receptor: {
     rfc: { selector: [porEtiqueta('RFC'), 'input[name*="rfc" i]', '#rfc'], formato: 'mayusculas' },

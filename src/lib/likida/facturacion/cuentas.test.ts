@@ -112,12 +112,63 @@ describe('cuántos comercios exigen cuenta', () => {
     expect(conCuenta.length / COMERCIOS.length).toBeLessThan(0.5);
   });
 
-  it('los que la exigen son sobre todo de peaje', () => {
-    // El peaje no se factura ticket por ticket: el TAG factura mensual contra la
-    // cuenta. Por eso concentra los casos con cuenta y por eso, entre lo que un
-    // chofer fotografía, la proporción sin cuenta es aún mayor.
-    const peaje = conCuenta.filter((c) => /peaje|autopista|iave|pase|telev|pinfra|carretera/i.test(`${c.nombre} ${c.clave}`));
-    expect(peaje.length).toBeGreaterThanOrEqual(conCuenta.length / 2);
+  // ── ESTA AFIRMACIÓN DEJÓ DE SER CIERTA, Y EL RECON ES POR QUÉ ─────────────
+  //
+  // Hasta el 28-ago-2026 esta prueba exigía que **la mitad o más** de los
+  // comercios con cuenta fueran de peaje, y pasaba. El reconocimiento de campo
+  // visitó los portales y movió cuatro fichas en las DOS direcciones:
+  //
+  //   SALIERON del grupo "exige cuenta" — los dos son de PEAJE:
+  //     · `red_estatal_autopistas` — su portal ofrece «Factura Express … sin
+  //       necesidad de registro». El flag estaba INVERTIDO.
+  //     · `supercarreteras` — su portal nuevo no pide login ni captcha.
+  //   ENTRARON al grupo — las dos son GASOLINERAS:
+  //     · `shell` — la ruta "sin usuario" devuelve pantalla de error.
+  //     · `bp`    — esa misma ruta devuelve 404, y además hay captcha.
+  //
+  // O sea que la generalización «los que exigen cuenta son sobre todo de peaje»
+  // era un artefacto de fichas sin verificar. Se sustituye por lo que sigue
+  // siendo cierto y sí está medido: **la mayoría se factura sin cuenta** (la
+  // prueba de arriba, que es la que decide la arquitectura) y **el peaje sigue
+  // sobrerrepresentado** respecto de su peso en el catálogo, aunque ya no sea
+  // mayoría absoluta.
+  //
+  // Se prefiere bajar el listón con la razón escrita antes que borrar la prueba:
+  // el día que alguien vuelva a "arreglar" un flag sin visitar el portal, esta
+  // proporción se mueve y hay que pasar por aquí a explicarlo.
+  it('el peaje sigue sobrerrepresentado entre los que exigen cuenta', () => {
+    const esPeaje = (c: { nombre: string; clave: string }) =>
+      /peaje|autopista|iave|pase|telev|pinfra|carretera|caseta/i.test(`${c.nombre} ${c.clave}`);
+
+    const peajeConCuenta = conCuenta.filter(esPeaje).length;
+    const peajeEnTodo = COMERCIOS.filter(esPeaje).length;
+
+    // La proporción de peaje entre los que piden cuenta tiene que ser MAYOR que
+    // su proporción en el catálogo entero. Eso es lo que "sobrerrepresentado"
+    // significa, y se mide en vez de afirmarse.
+    expect(peajeConCuenta / conCuenta.length).toBeGreaterThan(peajeEnTodo / COMERCIOS.length);
+  });
+
+  it('los dos portales de peaje que el recon liberó ya no piden cuenta', () => {
+    // La regresión concreta: los dos tenían `requiereCuenta: true` y su portal
+    // real no la pide. Cada uno vale un comercio entero movido de la columna
+    // "asistido" a la de "automatizable".
+    for (const clave of ['red_estatal_autopistas', 'supercarreteras']) {
+      const c = COMERCIOS.find((x) => x.clave === clave);
+      expect(c, clave).toBeDefined();
+      expect(c!.requiereCuenta, `${clave}: su portal factura sin registro`).toBe(false);
+    }
+  });
+
+  it('Shell y BP sí la piden, aunque su plataforma hermana no', () => {
+    // El contrapeso, y la razón por la que no se puede inferir de la plataforma:
+    // los tres corren ControlGAS® con los mismos `id`, pero solo FacturaGAS
+    // expone el camino "sin usuario". En Shell devuelve error y en BP, 404.
+    for (const clave of ['shell', 'bp']) {
+      const c = COMERCIOS.find((x) => x.clave === clave);
+      expect(c, clave).toBeDefined();
+      expect(c!.requiereCuenta, `${clave}: no hay camino sin registro`).toBe(true);
+    }
   });
 
   it('el encabezado AFIRMA el hecho correcto, no el invertido', async () => {
