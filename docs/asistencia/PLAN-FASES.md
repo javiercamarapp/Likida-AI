@@ -19,6 +19,18 @@ que reabre la ventana de 24 h.
 ## FASE 1 — Los litros que hoy se tiran  *(2-3 días, sin integración)*
 El arreglo con mejor relación esfuerzo/dinero de todo el sistema.
 
+> **ESTADO AL 28-ago-2026.** Los puntos 1 y 2 están **hechos y en `master`**
+> (mig. `0168`: `litros` + `clave_prod_serv`; `litrosDeLinea` /
+> `claveProdServDeLinea` / `ligarLineaAGasto` en `intake/consolidado.ts`).
+> El punto 3 está hecho **sobre un fixture sintético, no sobre un ECC real**:
+> el repo no tiene un solo `.xml` y los tres fixtures ECC son el mismo string
+> de relleno. Los puntos **4 y 5 siguen abiertos a propósito**, con el
+> análisis y la recomendación escritos y **pendientes de decisión de Javier**
+> en `docs/asistencia/ECC-FORMAPAGO-99.md`. Ojo con el punto 4: el motor **no
+> apaga hoy** los litros por el `99` del ECC —el camino de consolidado nunca
+> copia `forma_pago` del encabezado—, así que el riesgo real es otro y está
+> descrito en ese documento.
+
 `cfdi_xml.ts:87` ya parsea `cantidad` de cada línea ECC, pero `cfdi_consolidado_linea` (mig. 0076)
 **no tiene columna para litros** — se leen y se tiran al persistir. Consecuencia: toda flota con
 monedero obtiene conciliación de gastos y **cero litros acreditables de IEPS**, que es justo el
@@ -35,6 +47,19 @@ segmento donde el estímulo vale más.
    hoy sólo valida `^[0-9]{2}$` y un `'77'` inventado por el OCR entra.
 
 ## FASE 2 — Que el ticket de monedero deje de contarse dos veces  *(2 días, sin integración)*
+
+> **ESTADO AL 28-ago-2026 — el párrafo de abajo YA NO ES CIERTO y se conserva
+> como el diagnóstico del 23-ago.** RMF 3.3.1.7 **sí se aplica** desde esa
+> misma noche: `intake/padron_monederos.ts` (semilla de 13 RFC con su fuente)
+> + `intake/evidencia_monedero.ts` (los dos caminos: padrón, o línea ECC del
+> mismo día/estación/monto) → `cuadre/engine.ts` (diferencia
+> `ticket_monedero`) y `sat_descarga/cruce.ts` (un CFDI de emisor de monedero
+> nunca se cruza 1:1). Al chofer no se le cobra nada por esto:
+> `ticket_monedero` **no** está en la lista de "no entró en tu cuenta" de
+> `cierre_aviso.ts`, y se rutea a `'panel'`, no a una decisión del jefe.
+> Sigue abierto el **punto 3** (vigilancia de la ficha 7/ISR): no hay cron ni
+> aviso, y la ventana de renovación está abierta ahora mismo.
+
 RMF 3.3.1.7 **no se aplica en ningún lado** del código (sólo se menciona en el ROADMAP).
 La gasolinera tiene PROHIBIDO facturar una carga de monedero, así que el ticket que el chofer
 fotografía no vale fiscalmente — pero el dedup no lo ve como copia (el ticket no trae UUID y su
