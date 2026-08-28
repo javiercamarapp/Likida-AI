@@ -16,7 +16,13 @@ export interface ToolContext {
   operadorId?: string;
   viajeId?: string;
   conversationId?: string;
-  /** Identidad de la corrida; no forma parte de la llave del efecto. */
+  /**
+   * Identidad de la corrida. SÍ forma parte de la llave del efecto (D.21,
+   * frente de escala): sin ella, la fila `succeeded` de un
+   * `guardar_liquidacion` vivía para siempre y un viaje REABIERTO
+   * (`reabrirViaje` → `reabrir_viaje_tx`, 0159) no se podía volver a liquidar
+   * NUNCA — el segundo cierre recibía `cached` con el PDF viejo, en silencio.
+   */
   runId?: string;
   /** Override explícito para una mutación cuyo efecto no se identifica por viaje. */
   mutationKey?: string;
@@ -297,8 +303,34 @@ function raceAbort<T>(promise: Promise<T>, signal: AbortSignal | undefined): Pro
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LA LLAVE DEL EFECTO LLEVA `runId` — D.21 (frente de escala, 28-ago-2026).
+//
+// Sin él, la llave era (tool, tenant, viaje, operador) y la fila `succeeded`
+// de `agente_mutacion_idempotencia` no vence nunca: un viaje que se REABRE
+// (`reabrirViaje`) no se podía volver a liquidar JAMÁS — el claim devolvía
+// `cached` con el resultado del cierre anterior (PDF viejo, cifras viejas) y
+// el handler ni corría. En silencio, que es lo peor.
+//
+// Por qué `runId` en la llave y no un vencimiento de la fila:
+//   · La propiedad que la llave protege es "un reintento del MISMO run no
+//     cobra dos veces" — y `runId` es idéntico dentro de un run, así que esa
+//     propiedad queda INTACTA (claim/lease/fencing por corrida, igual que hoy).
+//   · Un TTL largo sigue bloqueando el caso real (se reabre hoy para corregir
+//     y se cierra HOY); un TTL corto ya no protege ni al reintento tardío del
+//     mismo run. El vencimiento no conserva ninguna de las dos propiedades.
+//   · Entre corridas DISTINTAS el dinero nunca dependió de esta rejilla: lo
+//     protege la base (`liquidacion_viaje_uidx` unique(viaje_id) + el upsert
+//     de `guardar_liquidacion_tx`, invariante de la casa), y la concurrencia
+//     real la serializa `acquireViajeLock` (processor/reabrirViaje).
+// Se consideró también borrar la fila al reabrir (`reabrir_viaje_tx`): casaría
+// la base con el formato de esta llave TS — un acoplamiento que se rompe en
+// silencio el día que la llave cambie. Descartado por eso mismo.
+//
+// El executor ya rechaza mutaciones sin `runId` (arriba, fail-closed), así que
+// el `?? '-'` de aquí no ocurre en una mutación real.
 function mutationEffectKey(name: string, ctx: ToolContext): string {
-  return ctx.mutationKey ?? [name, ctx.tenantId, ctx.viajeId ?? '-', ctx.operadorId ?? '-'].join(':');
+  return ctx.mutationKey ?? [name, ctx.tenantId, ctx.viajeId ?? '-', ctx.operadorId ?? '-', ctx.runId ?? '-'].join(':');
 }
 
 /**

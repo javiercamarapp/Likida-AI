@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // 45s de tope: por debajo del maxDuration para alcanzar a responder.
-    const r = await extraerComprobante(imagen, AbortSignal.timeout(45_000), createLlmBudget(tenantId, randomUUID()));
+    const r = await extraerComprobante(imagen, AbortSignal.timeout(45_000), createLlmBudget(tenantId, randomUUID(), 'interactivo'));
     // La fila de costo: sin viaje (es una sonda) y con la fase del OCR — es
     // lo que el tope de arriba lee y lo que el tablero de costo de IA suma.
     await registrarCosto({

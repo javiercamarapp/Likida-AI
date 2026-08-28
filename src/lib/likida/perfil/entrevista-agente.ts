@@ -54,7 +54,7 @@ export async function responderEntrevista(opts: {
         ],
         maxTokens: 400,
         temperature: 0.2,
-        budget: createLlmBudget(opts.tenantId, randomUUID()),
+        budget: createLlmBudget(opts.tenantId, randomUUID(), 'interactivo'),
       });
       opts.onPaso?.({ fase: 'fin', tool: 'explicar_norma' });
       return {

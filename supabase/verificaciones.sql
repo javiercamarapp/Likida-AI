@@ -13479,3 +13479,91 @@ begin
     borrar_gasto_ok, degradado_limpia_firma, degradado_anotado,
     expediente_nombra_gasto_muerto, ligado_sobrevive, borrar_flota_ok, expediente_barrido;
 end $$;
+
+-- ── 200. El anti-join de anomalías por IGUALDAD y el presupuesto de IA por propósito (mig. 0244) ──
+--
+-- (Renumerado de 199 a 200 al rebasar: la 0243 —bandeja SAT— tomó el 199.)
+--
+-- D.20: `anomalias_gasto_tenant` descartaba "folios que en realidad son un
+-- CFDI conocido" con `position()` contra todos los UUID del tenant — un
+-- escaneo O(grupos × UUIDs) que cinco auditorías señalaron. Ahora es igualdad
+-- contra `uq_gasto_cfdi_uuid` (medido: anti-join de 934 ms → ~1.5 ms con 20k
+-- UUIDs y 110 grupos; la función completa 2 633 → 310 ms).
+--   (a) un folio repetido en 2 viajes cuyo texto ES un UUID timbrado del
+--       tenant NO se reporta como folio_duplicado (ya vive en el mundo CFDI);
+--   (b) un folio repetido normal SÍ se reporta — la igualdad no se comió la
+--       detección;
+--   (c) el cuerpo desplegado ya no contiene `position(` — el pin que evita
+--       que una migración futura lo regrese sin querer.
+--
+-- D.23: la reserva del camino interactivo. El fondo ('ocr_lote'/'fondo') solo
+-- gasta hasta (tope_tenant − reserva_interactivo); el interactivo usa el
+-- techo completo. Un lote de OCR ya no puede dejar al chofer sin servicio.
+--   (d) fondo dentro de su parte → 'ok';
+--   (e) fondo tocando la reserva → 'tope_proposito' (falla cerrado, con
+--       nombre);
+--   (f) interactivo entra HASTA el techo aunque el fondo esté en su límite;
+--   (g) un propósito fuera del dominio LANZA (no se cuela a una cubeta);
+--   (h) anon/authenticated sin execute sobre la RPC de 8 args; service_role sí.
+do $$
+declare
+  t uuid; op1 uuid; op2 uuid; v1 uuid; v2 uuid;
+  j jsonb;
+  folio_uuid_descartado boolean; folio_normal_reportado boolean;
+  sin_position boolean;
+  fondo_ok text; fondo_rebota text; interactivo_entra text;
+  proposito_malo_rebota boolean;
+  rpc_oid oid;
+  anon_ciego boolean; auth_ciego boolean; svc_puede boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0244') returning id into t;
+  insert into operador (tenant_id, nombre, telefono) values (t, 'ZZZ 0244 A', '5215559990244') returning id into op1;
+  insert into operador (tenant_id, nombre, telefono) values (t, 'ZZZ 0244 B', '5215559990245') returning id into op2;
+  insert into viaje (tenant_id, operador_id, folio, estatus, anticipo) values (t, op1, 'ZZZ-0244-1', 'abierto', 100) returning id into v1;
+  insert into viaje (tenant_id, operador_id, folio, estatus, anticipo) values (t, op2, 'ZZZ-0244-2', 'abierto', 100) returning id into v2;
+
+  -- El CFDI timbrado del tenant, y dos tickets sin uuid cuyo FOLIO impreso ES
+  -- ese UUID (mismo concepto y monto, viajes distintos) — el caso que el
+  -- anti-join existe para descartar. Más un folio repetido normal de control.
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, folio, cfdi_uuid, cfdi_orden) values
+    (t, v1, 'diesel', 900, current_date - 3, 'D1', 'deadbeef-0000-4000-8000-000000000244', 1),
+    (t, v1, 'caseta', 333, current_date - 2, 'DEADBEEF-0000-4000-8000-000000000244', null, 1),
+    (t, v2, 'caseta', 333, current_date - 2, 'DEADBEEF-0000-4000-8000-000000000244', null, 1),
+    (t, v1, 'caseta', 200, current_date - 2, 'A-991', null, 1),
+    (t, v2, 'caseta', 200, current_date - 2, 'A-991', null, 1);
+
+  j := anomalias_gasto_tenant(t);
+  folio_uuid_descartado := not exists (
+    select 1 from jsonb_array_elements(j) e
+    where e->>'tipo' = 'folio_duplicado' and e->>'detalle' ilike '%DEADBEEF%');
+  folio_normal_reportado := exists (
+    select 1 from jsonb_array_elements(j) e
+    where e->>'tipo' = 'folio_duplicado' and e->>'detalle' like '%A-991%');
+  sin_position := pg_get_functiondef('public.anomalias_gasto_tenant(uuid)'::regprocedure)
+    not ilike '%position(%';
+
+  -- ── D.23: tope tenant 1.00, reserva interactivo 0.40 → fondo llega a 0.60 ─
+  fondo_ok := public.reservar_presupuesto_llm(gen_random_uuid(), t, gen_random_uuid(), 0.50, 5.00, 1.00, 'ocr_lote', 0.40);
+  fondo_rebota := public.reservar_presupuesto_llm(gen_random_uuid(), t, gen_random_uuid(), 0.20, 5.00, 1.00, 'fondo', 0.40);
+  interactivo_entra := public.reservar_presupuesto_llm(gen_random_uuid(), t, gen_random_uuid(), 0.45, 5.00, 1.00, 'interactivo', 0.40);
+
+  begin
+    perform public.reservar_presupuesto_llm(gen_random_uuid(), t, gen_random_uuid(), 0.01, 5.00, 1.00, 'marketing', 0.40);
+    proposito_malo_rebota := false;
+  exception when others then
+    proposito_malo_rebota := true;
+  end;
+
+  select p.oid into rpc_oid
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'reservar_presupuesto_llm' and p.pronargs = 8;
+  anon_ciego := not has_function_privilege('anon', rpc_oid, 'execute');
+  auth_ciego := not has_function_privilege('authenticated', rpc_oid, 'execute');
+  svc_puede := has_function_privilege('service_role', rpc_oid, 'execute');
+
+  delete from llm_presupuesto_reserva where tenant_id = t;
+  delete from tenant where id = t;
+
+  raise exception 'ANTIJOIN_Y_PROPOSITO_0244  folio_uuid_descartado=%  folio_normal_reportado=%  sin_position=%  fondo_ok=%  fondo_rebota=%  interactivo_entra=%  proposito_malo_rebota=%  anon=%  auth=%  svc=%   (esperado t / t / t / ok / tope_proposito / ok / t / t / t / t)',
+    folio_uuid_descartado, folio_normal_reportado, sin_position, fondo_ok, fondo_rebota, interactivo_entra, proposito_malo_rebota, anon_ciego, auth_ciego, svc_puede;
+end $$;
