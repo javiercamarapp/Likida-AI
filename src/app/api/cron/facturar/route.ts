@@ -7,9 +7,11 @@ import { getFiscalDeFlota } from '@/lib/likida/facturacion/flota_fiscal';
 import { avisarPorFacturar } from '@/lib/likida/facturacion/avisar';
 import { telefonoJefeDe } from '@/lib/likida/contactos';
 import { conPortales, PORTALES_CONOCIDOS, portalesOperables } from '@/lib/likida/facturacion/adaptadores/registro';
-import { invalidarVinculo, refrescarSesiones, sesionesVigentes } from '@/lib/likida/facturacion/vinculo_portal';
+import { anotarVinculo, invalidarVinculo, refrescarSesiones, sesionesVigentes, type ClaseDeFallo } from '@/lib/likida/facturacion/vinculo_portal';
 import { comercio as fichaComercio } from '@/lib/likida/facturacion/comercios';
+import { reconectarPortal } from '@/lib/likida/facturacion/relogin';
 import { conNavegador } from '@/lib/likida/facturacion/adaptadores/pagina_playwright';
+import type { PaginaConInventario, PaginaPortal } from '@/lib/likida/facturacion/adaptadores/playwright_base';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
@@ -305,6 +307,86 @@ function sinCapturas(renglones: Renglon[], req: Request): unknown[] {
       capturaComoVerla: 'vuelve a llamar con ?captura=1 para que venga el JPEG, o pon LIKIDA_CAPTURAS_DIR para que se escriba en disco',
     };
   });
+}
+
+/** ¿Esta página sabe describirse? Sin inventario no hay re-login posible. */
+function tieneInventario(p: PaginaPortal): p is PaginaConInventario {
+  return typeof (p as PaginaConInventario).inventario === 'function';
+}
+
+/**
+ * VOLVER A ENTRAR SOLA, si la flota lo autorizó (0233).
+ *
+ * Todo lo que decide vive en `relogin.ts` y `relogin_portal.ts` —el
+ * consentimiento, el candado de intentos, los cinco cortes que solo un humano
+ * pasa—; aquí solo se le da una pestaña del MISMO contexto del lote, que es lo
+ * que hace que las cookies nuevas caigan donde sirven.
+ *
+ * NUNCA TUMBA LA CORRIDA. Los tickets de este portal ya se despacharon y su
+ * estado ya se anotó: un fallo reconectando es una molestia (alguien entra a
+ * mano, como hasta ayer), no una razón para perder el resto del lote de la
+ * flota. Y no toma una sola captura — ver la higiene del secreto en
+ * `relogin.ts`.
+ */
+async function reconectar(
+  tenantId: string,
+  comercio: string,
+  /** Con qué clase llegó aquí. Decide qué estado se re-anota si tampoco pudo. */
+  clase: ClaseDeFallo,
+  abrirPagina: () => Promise<PaginaPortal>,
+  navegador: { estadoDeSesion(): Promise<string | null> },
+): Promise<void> {
+  let pagina: PaginaPortal | undefined;
+  try {
+    pagina = await abrirPagina();
+    if (!tieneInventario(pagina)) {
+      // Hueco de plataforma, no del portal: se dice y se sigue.
+      logger.warn('cron.facturar.relogin_sin_inventario', { tenant: tenantId, comercio });
+      return;
+    }
+
+    const r = await reconectarPortal({
+      tenantId, comercio,
+      entorno: { pagina, estadoDeSesion: () => navegador.estadoDeSesion() },
+    });
+
+    if (r.ok) {
+      logger.info('cron.facturar.relogin_ok', { tenant: tenantId, comercio, cookies: r.cookies });
+      return;
+    }
+
+    // `sin_consentimiento` es el camino de siempre y no se grita: la flota no
+    // pidió esto, y llenarle el log de avisos por no haberlo pedido sería
+    // ruido. Todo lo demás SÍ se cuenta.
+    if (r.clase === 'sin_consentimiento') return;
+
+    logger.warn('cron.facturar.relogin_corte', { tenant: tenantId, comercio, clase: r.clase });
+
+    // EL AVISO AL CONTRALOR, donde ya está mirando: el motivo exacto se escribe
+    // en `portal_estado`, que es lo que pinta la pantalla de portales junto al
+    // botón que lleva a la vinculación. El estado sigue siendo `caducada` —lo
+    // dejó `invalidarVinculo` hace un momento— y lo que se agrega es POR QUÉ
+    // la máquina tampoco pudo. Sin esto, el contralor vería «caducada» sin
+    // saber que ya se intentó y que hay un CAPTCHA esperándolo.
+    if (r.pideHumano) {
+      // El estado se re-anota como llegó, no como «caducada» siempre: un
+      // portal que nadie ha vinculado nunca sigue siendo `sin_vincular`, y
+      // decirle «se te cayó la sesión» al contralor lo mandaría a buscar algo
+      // que nunca existió. Es el mismo mapeo que hace `invalidarVinculo`.
+      await anotarVinculo({
+        tenantId, comercio,
+        estado: clase === 'sesion_caducada' ? 'caducada' : 'sin_vincular',
+        motivo: `Likida intentó volver a entrar sola y no pudo: ${r.motivo}`,
+        ahora: new Date().toISOString(),
+      });
+    }
+  } catch (e) {
+    logger.warn('cron.facturar.relogin_fallo', {
+      tenant: tenantId, comercio, err: e instanceof Error ? e.message : String(e),
+    });
+  } finally {
+    await pagina?.cerrar?.().catch(() => undefined);
+  }
 }
 
 export async function GET(req: Request) {
@@ -810,6 +892,38 @@ export async function procesarLoteEnCola(
               const ficha = fichaComercio(comercio);
               if (conSesion.has(comercio) && !r.vinculo && ficha) {
                 siguenDentro.set(comercio, ficha.portal);
+              }
+
+              // ── EL RE-LOGIN AUTOMÁTICO (0233). Se intenta AQUÍ y en ningún
+              // otro sitio: es el único punto del sistema donde ya consta que
+              // el portal pide entrar y todavía hay un navegador abierto en el
+              // que hacerlo.
+              //
+              // LAS DOS CLASES CUENTAN, y hace falta decir por qué: la sesión
+              // que el portal RECHAZA llega como `sesion_caducada`, pero la
+              // que el pre-cheque de EDAD descartó antes de arrancar Chromium
+              // deja al lote sin sesión, y entonces el login se ve como
+              // `requiere_vinculacion` —«nadie ha entrado nunca»— aunque sea
+              // la misma caducidad. Mirar solo la primera dejaría fuera el
+              // caso más común. `portal_cambio` NO entra: ahí la sesión está
+              // viva y lo que falla es nuestro mapeo; volver a entrar no
+              // arregla nada y le gastaría un intento a la cuenta del cliente.
+              //
+              // UNA VEZ POR CADUCIDAD, no una por ticket: esto corre después
+              // del lote entero de ese portal, y el candado de
+              // `relogin_portal.ts` (tope diario + backoff) lo hace verdad
+              // aunque alguien lo llame de más.
+              //
+              // Y NO SE REPITE EL LOTE en esta corrida aunque la reconexión
+              // salga bien. Los tickets ya se despacharon y se sellaron; volver
+              // a pasarlos por `facturarLoteAlVuelo` con la sesión nueva sería
+              // meterle un segundo intento de emisión a un ticket que ya tiene
+              // su marca, y esa es exactamente la clase de duda que
+              // `emisionSinConfirmar` existe para no crear. La sesión queda
+              // guardada y la corrida siguiente —minutos después— los factura
+              // sin que nadie haya tenido que entrar.
+              if (r.vinculo && r.vinculo.clase !== 'portal_cambio') {
+                await reconectar(tenantId, comercio, r.vinculo.clase, abrirPagina, navegador);
               }
             }
 

@@ -11217,3 +11217,169 @@ begin
     gasto_cruzado_rebota, aviso_repetido_rebota, mes_nuevo_entra,
     periodo_a_media_rebota, cerrado;
 end $$;
+
+-- ── 188. El permiso para reconectar sola: consentimiento firmado, candado con motivo, y ni una contraseña en claro (mig. 0233) ──
+-- Los bloques 183-187 los tomaron ramas paralelas de esta misma ola; esta toma
+-- el 188. Se escribió como 187 sobre el master de esa mañana y el rebase lo
+-- encontró ocupado por la 0231 (descarga masiva del SAT): renumerado al
+-- reencontrarse con master, que es el momento en que un número de bloque se
+-- puede afirmar de verdad.
+--
+-- Lo que SOLO la base puede demostrar del permiso de re-login automático:
+--
+--  (a) UN CONSENTIMIENTO SIN FIRMA NO ENTRA. `permitido = true` sin saber
+--      QUIÉN lo dio y CUÁNDO es un permiso que nadie dio, y es exactamente el
+--      dato que hay que poder enseñar un año después ("¿quién autorizó que
+--      guardáramos la contraseña de esta cuenta?"). `autorizarRelogin` lo
+--      comprueba también en TypeScript — pero comprobarlo en el escritor no
+--      sirve si la base admite la fila que llegue por cualquier otro camino.
+--  (b) Y CON FIRMA ENTRA: el candado condiciona, no prohíbe.
+--  (c) EL «NO» NO NECESITA FIRMA. `permitido = false` sin autor es el estado
+--      normal de todo portal, y es lo que significa no tener fila. Si el CHECK
+--      exigiera autor siempre, revocar sería imposible.
+--  (d) UN CANDADO SIN MOTIVO REBOTA. `bloqueado = true` sin `ultima_clase`
+--      sería un re-login detenido que nadie sabe cómo reabrir.
+--  (e) EL CATÁLOGO DE CORTES ES CERRADO. La pantalla enseña un texto distinto
+--      por clase; una clase inventada se pintaría como un hueco. Las nueve del
+--      catálogo entran, cualquier otra rebota.
+--  (f) NI UNA CONTRASEÑA NI UNA COOKIE. Igual que en la 0232: `ultimo_motivo`
+--      es una frase para una persona y esta columna la lee el panel EN CLARO.
+--      Un valor que empiece por `{` o `[` sería un volcado.
+--  (g) EL CONTADOR NO PUEDE IR AL REVÉS. Un `intentos_dia` negativo apagaría
+--      el freno antibloqueo — el que impide que Likida le queme los intentos
+--      a la cuenta del cliente. Mejor que reviente ruidoso.
+--  (h) UNA FILA POR (FLOTA, PORTAL): de eso depende el UPSERT del escritor.
+--  (i) Y LA MISMA CLAVE SÍ ENTRA PARA OTRA FLOTA: el candado es por tenant.
+--  (j) EL BORRADO DE LA FLOTA SE LLEVA SUS PERMISOS (cascade).
+--  (k) La llave `(id, tenant_id)` de la casa (0028/0145).
+--  (l) El doble candado: RLS deny-all + solo service_role. Esta tabla decide
+--      si una contraseña se descifra; que `anon` no la pueda ni leer es la
+--      diferencia entre un permiso y una sugerencia.
+do $$
+declare
+  ta uuid; tb uuid;
+  sin_firma_rebota boolean; con_firma_entra boolean; no_sin_firma_entra boolean;
+  bloqueo_sin_clase_rebota boolean; clase_inventada_rebota boolean;
+  clase_catalogo_entra boolean; motivo_json_rebota boolean;
+  intentos_negativos_rebotan boolean; duplicado_rebota boolean;
+  otra_flota_entra boolean; cascade_limpia boolean; llave_compuesta boolean;
+  cerrado boolean;
+  quedan integer;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0233 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0233 B') returning id into tb;
+
+  -- (a) Permiso sin autor ni fecha: no entra.
+  begin
+    insert into portal_relogin (tenant_id, comercio, permitido)
+      values (ta, 'g500', true);
+    sin_firma_rebota := false;
+  exception when check_violation then
+    sin_firma_rebota := true;
+  end;
+
+  -- (b) Con quién y cuándo, sí.
+  begin
+    insert into portal_relogin (tenant_id, comercio, permitido, permitido_por, permitido_en)
+      values (ta, 'g500', true, 'contralor@flota.mx', now());
+    con_firma_entra := true;
+  exception when others then
+    con_firma_entra := false;
+  end;
+
+  -- (c) El «no» no necesita firma: es el estado de todo portal sin autorizar.
+  begin
+    insert into portal_relogin (tenant_id, comercio, permitido)
+      values (ta, 'la_gas', false);
+    no_sin_firma_entra := true;
+  exception when others then
+    no_sin_firma_entra := false;
+  end;
+
+  -- (d) Un candado sin motivo: no entra.
+  begin
+    insert into portal_relogin (tenant_id, comercio, bloqueado)
+      values (ta, 'capufe', true);
+    bloqueo_sin_clase_rebota := false;
+  exception when check_violation then
+    bloqueo_sin_clase_rebota := true;
+  end;
+
+  -- (e) El catálogo cerrado de cortes.
+  begin
+    insert into portal_relogin (tenant_id, comercio, ultima_clase)
+      values (ta, 'capufe', 'resolvi_el_captcha');
+    clase_inventada_rebota := false;
+  exception when check_violation then
+    clase_inventada_rebota := true;
+  end;
+
+  begin
+    insert into portal_relogin (tenant_id, comercio, bloqueado, ultima_clase, ultimo_motivo)
+      values (ta, 'capufe', true, 'credencial_invalida',
+              'El portal rechazó el usuario o la contraseña guardados. NO se vuelve a intentar.');
+    clase_catalogo_entra := true;
+  exception when others then
+    clase_catalogo_entra := false;
+  end;
+
+  -- (f) Ni una cookie ni una contraseña: un JSON en `ultimo_motivo` rebota.
+  begin
+    insert into portal_relogin (tenant_id, comercio, ultima_clase, ultimo_motivo)
+      values (ta, 'megasur', 'captcha', '{"contrasena":"hunter2"}');
+    motivo_json_rebota := false;
+  exception when check_violation then
+    motivo_json_rebota := true;
+  end;
+
+  -- (g) El contador del freno no puede ir al revés.
+  begin
+    insert into portal_relogin (tenant_id, comercio, intentos_dia)
+      values (ta, 'megasur', -1);
+    intentos_negativos_rebotan := false;
+  exception when check_violation then
+    intentos_negativos_rebotan := true;
+  end;
+
+  -- (h) Una fila por (flota, portal): de eso depende el UPSERT.
+  begin
+    insert into portal_relogin (tenant_id, comercio) values (ta, 'la_gas');
+    duplicado_rebota := false;
+  exception when unique_violation then
+    duplicado_rebota := true;
+  end;
+
+  -- (i) Pero la misma clave para OTRA flota sí entra.
+  begin
+    insert into portal_relogin (tenant_id, comercio, permitido, permitido_por, permitido_en)
+      values (tb, 'la_gas', true, 'otro@flota.mx', now());
+    otra_flota_entra := true;
+  exception when others then
+    otra_flota_entra := false;
+  end;
+
+  -- (j) Borrar la flota se lleva sus permisos.
+  delete from tenant where id = tb;
+  select count(*) into quedan from portal_relogin where tenant_id = tb;
+  cascade_limpia := (quedan = 0);
+
+  -- (k) La llave que hace posibles las FK compuestas de la casa.
+  llave_compuesta := exists (
+    select 1 from pg_constraint
+    where conname = 'portal_relogin_id_tenant_key'
+      and conrelid = 'public.portal_relogin'::regclass
+      and contype = 'u'
+  );
+
+  -- (l) El doble candado.
+  cerrado := not has_table_privilege('anon', 'public.portal_relogin', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.portal_relogin', 'SELECT')
+    and has_table_privilege('service_role', 'public.portal_relogin', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.portal_relogin'::regclass);
+
+  raise exception 'PORTAL_RELOGIN_0233  sin_firma_rebota=%  con_firma_entra=%  no_sin_firma_entra=%  bloqueo_sin_clase_rebota=%  clase_inventada_rebota=%  clase_catalogo_entra=%  motivo_json_rebota=%  intentos_negativos_rebotan=%  duplicado_rebota=%  otra_flota_entra=%  cascade_limpia=%  llave_compuesta=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t / t)',
+    sin_firma_rebota, con_firma_entra, no_sin_firma_entra, bloqueo_sin_clase_rebota,
+    clase_inventada_rebota, clase_catalogo_entra, motivo_json_rebota,
+    intentos_negativos_rebotan, duplicado_rebota, otra_flota_entra,
+    cascade_limpia, llave_compuesta, cerrado;
+end $$;

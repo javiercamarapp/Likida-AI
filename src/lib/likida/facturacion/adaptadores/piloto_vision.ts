@@ -7,7 +7,7 @@ import { logger } from '@/lib/logger';
 import type { AdaptadorPortal, ModoAgente, ResultadoAgente } from '../agente';
 import type { CampoListo } from '../pendientes';
 import type { Comercio } from '../comercios';
-import { clasificarFallo, pantallaDeLogin } from '../vinculo_senales';
+import { clasificarFallo, escrituraPermitida, pantallaDeLogin } from '../vinculo_senales';
 import type { FabricaDePagina, InventarioPagina, PaginaConInventario, PaginaPortal } from './playwright_base';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -350,12 +350,14 @@ async function ejecutar(
 
   if (a.valor === null || a.valor === '') return `La acción ${a.tipo} en ${a.selector} vino sin valor.`;
 
-  // REGLA 3, LA GUARDA DURA. Un campo `type="password"` no se escribe NUNCA,
-  // venga el valor de donde venga. Se mira el INVENTARIO —lo que la página de
-  // verdad declaró— y no el texto del selector ni la palabra del modelo: un
-  // portal puede llamarle `#txt3` a su campo de contraseña, y el `type` es lo
-  // único que no miente.
-  if (esCampoDeContrasena(a.selector, inv)) {
+  // REGLA 3, LA GUARDA DURA. Un campo `type="password"` no se escribe NUNCA
+  // DESDE AQUÍ, venga el valor de donde venga. La guarda vive en
+  // `vinculo_senales.ts` (una sola copia, probable sin navegador) y admite UNA
+  // puerta —`permitirCampoPassword`— que este camino NO pasa y no puede pasar:
+  // el piloto factura tickets, y facturar dejó de tener acceso al cofre en el
+  // #146. Quien la pasa es `reconectarPortal`, que corre aparte, a lo sumo una
+  // vez por caducidad y solo con el consentimiento escrito de la flota.
+  if (!escrituraPermitida(a.selector, inv)) {
     logger.warn('piloto.contrasena_rechazada', { comercio: op.comercio.clave, selector: a.selector, modo });
     return CONTRASENA_NO;
   }
@@ -372,13 +374,6 @@ async function ejecutar(
 
 /** El código que `volar` reconoce para el rechazo de la regla 3. */
 const CONTRASENA_NO = 'contrasena_no_se_teclea';
-
-/** ¿El selector apunta a un campo que la PÁGINA declaró como contraseña? */
-function esCampoDeContrasena(selector: string, inv: InventarioPagina): boolean {
-  return inv.campos.some(
-    (c) => c.type === 'password' && ((c.id && selector.includes(c.id)) || (c.name && selector.includes(c.name))),
-  );
-}
 
 /** ¿El selector usa un id/name que la página de verdad tiene? */
 function selectorDelInventario(selector: string, inv: InventarioPagina): boolean {

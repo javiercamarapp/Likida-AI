@@ -57,7 +57,12 @@ export type EntidadBitacora =
   // el primero decide de qué contribuyente se lee el buzón, y el segundo
   // consume el tope diario que ese RFC tiene ante el SAT.
   | 'sat_descarga_config'
-  | 'sat_descarga_solicitud';
+  | 'sat_descarga_solicitud'
+  // El permiso de la flota para que Likida guarde su contraseña de portal y
+  // reconecte sola (0233). Es un CONSENTIMIENTO: quién lo dio, cuándo, quién
+  // lo revocó, y cada vez que la máquina lo ejerció. Sin esto, «reconecté
+  // sola el 9 de agosto» sería una frase sin respaldo.
+  | 'portal_relogin';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una
