@@ -19,6 +19,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { logger } from '@/lib/logger';
 import { alertarOperador, contadorDeFallos } from '@/lib/observability/alerta';
+import { conReintentoDeSaturacion, esSaturacionStorage } from '@/lib/supabase/reintento';
 
 /**
  * Subidas fallidas SEGUIDAS antes de avisarle al operador del sistema
@@ -97,17 +98,40 @@ export async function subirComprobante(
     // pero la invocación deja de esperarlo, que es lo que cuesta dinero. Lo
     // otro se arregla dándole un `fetch` propio al cliente admin, y eso vive
     // fuera de este archivo.
-    const { error } = await acotada(supabaseAdmin().storage
-      .from('comprobantes')
-      .upload(ruta, bytes(dataUrl), {
-        contentType: dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/jpeg',
-        // El mismo contenido produce la misma ruta: reenviar la foto reescribe
-        // su propio objeto. Sin esto, el segundo intento falla con 409 y el
-        // gasto se queda sin imagen por un motivo que no es un error.
-        upsert: true,
-      }), 'subirComprobante');
+    // ── REINTENTO DECLARADO CONTRA LA SATURACIÓN DE STORAGE ──────────────
+    //
+    // El 28-ago-2026 el pool de Storage API se saturó a ratos (las firmas en
+    // ráfaga del panel de QA — ver supabase/reintento.ts) y toda petición que
+    // cayera dentro del pico rebotaba con «Too many connections issued to the
+    // database». Aquí ese rebote cuesta un COMPROBANTE: el gasto entra sin su
+    // imagen (art. 30 CFF, cinco años de conservación) y la prueba del papel
+    // se pierde por un blip de 2 segundos. Un chofer que manda 25 fotos
+    // seguidas (incidente del 20-ago) atraviesa cualquier pico con hasta 5 de
+    // estas subidas en vuelo (el pool del webhook): reintentar SOLO esa firma,
+    // con espera exponencial y contándolo, convierte el blip en un warn en
+    // vez de en un comprobante perdido. Un 404 o un permiso negado NO se
+    // reintentan — fallarían igual y solo esconderían el error real.
+    const { resultado: { error }, reintentos } = await conReintentoDeSaturacion(
+      () => acotada(supabaseAdmin().storage
+        .from('comprobantes')
+        .upload(ruta, bytes(dataUrl), {
+          contentType: dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/jpeg',
+          // El mismo contenido produce la misma ruta: reenviar la foto reescribe
+          // su propio objeto. Sin esto, el segundo intento falla con 409 y el
+          // gasto se queda sin imagen por un motivo que no es un error.
+          upsert: true,
+        }), 'subirComprobante'),
+      (r) => r.error !== null && esSaturacionStorage(r.error.message),
+      {
+        alReintentar: (intento, esperaMs) =>
+          logger.warn('comprobante.subida_reintentada', { viaje: viajeId, intento, esperaMs, motivo: 'saturación de Storage' }),
+      },
+    );
     if (error) {
-      await reportarFallo(viajeId, error.message, codigoStorage(error));
+      const err = reintentos > 0
+        ? `${error.message} (tras ${reintentos + 1} intentos con espera exponencial)`
+        : error.message;
+      await reportarFallo(viajeId, err, codigoStorage(error));
       return undefined;
     }
     vigilante.exito();
