@@ -111,18 +111,22 @@ export async function leerDescargaSat(tenantId: string): Promise<VistaDescargaSa
 
   let conteos: ConteosVista | null = null;
   try {
+    // SE CUENTA EN LA BASE, NO EN JAVASCRIPT (0236, c7-27). Antes se traían
+    // hasta 20,000 `estatus` y se contaban aquí: una flota con 45,000
+    // comprobantes —y la 0231 dice que el modo webservice trae 200,000 CFDI
+    // por petición— leía las CUATRO cifras falsas, con `incompleta` en false
+    // porque no había habido ningún error. Sólo un `.limit()`. Una cifra
+    // truncada que no se declara truncada es una cifra inventada.
     const { data, error } = await acotada(supabaseAdmin()
-      .from('sat_cfdi_descargado')
-      .select('estatus')
-      .eq('tenant_id', tenantId)
-      .limit(20_000), 'sat_descarga.conteos');
+      .rpc('sat_descarga_conteos', { p_tenant: tenantId }), 'sat_descarga.conteos');
     if (error) throw new Error(error.message);
-    const filas = data ?? [];
+    const fila = Array.isArray(data) ? data[0] : data;
+    if (fila === undefined || fila === null) throw new Error('la consulta de conteos no devolvió ninguna fila');
     conteos = {
-      descargados: filas.length,
-      casados: filas.filter((f) => f.estatus === 'casado').length,
-      ambiguos: filas.filter((f) => f.estatus === 'ambiguo').length,
-      disponibles: filas.filter((f) => f.estatus === 'disponible').length,
+      descargados: Number(fila.descargados),
+      casados: Number(fila.casados),
+      ambiguos: Number(fila.ambiguos),
+      disponibles: Number(fila.disponibles),
     };
   } catch (e) {
     incompleta = true;
