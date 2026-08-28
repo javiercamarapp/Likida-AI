@@ -407,10 +407,20 @@ function EvidenciaGpsResumen({ resumen }: { resumen: ResumenEvidenciaGps | null 
           {numero(resumen.conEvidencia)} de {numero(resumen.total)} cruces con posiciones de su unidad ese día
         </span>
       </div>
+      {/* LA FRASE, EXACTA (arreglo de agosto-2026). Decía que el conector
+          «se activa en Conexiones» cuando los cinco de GPS estaban FUERA de
+          esa pantalla: era falso y mandaba a buscar un botón que no existía.
+          Ahora sí se capturan ahí, así que la primera mitad es verdad — y se
+          agrega la segunda, que también hace falta: sin ligar la unidad a su
+          dispositivo las lecturas llegan huérfanas, y de los cuatro solo
+          Samsara tiene lector de posiciones escrito hoy (`LECTORES_POSICION`). */}
       {huecos.length > 0 && (
         <p className="text-[10.5px] mt-1" style={{ color: 'var(--faint)' }}>
           Sin evidencia: {huecos.join(' · ')}. «Sin posiciones» casi siempre significa GPS sin
-          conectar — el conector (Samsara, Wialon, Geotab, Navixy) se activa en Conexiones.
+          conectar: la credencial de tu proveedor se captura y se prueba en Conexiones, y cada
+          unidad se liga a su número de dispositivo en Unidades. De los cuatro, el que hoy trae
+          posiciones es Samsara; de Wialon, Geotab y Navixy se prueba la credencial y su lectura
+          de posiciones está pendiente.
         </p>
       )}
       <p className="text-[10.5px] mt-1" style={{ color: 'var(--faint)' }}>

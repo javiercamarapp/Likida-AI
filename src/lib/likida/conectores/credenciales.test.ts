@@ -26,11 +26,19 @@ type Registro = {
 
 const llamadas: Registro[] = [];
 const respuestas = new Map<string, { data: unknown; error: { message: string } | null }>();
+/** Respuestas por `tabla:operacion`. Existe desde que `probarCredencial` hace
+ *  DOS viajes a la misma tabla en una sola llamada —un SELECT para leer la
+ *  credencial y un UPDATE para sellar el veredicto— y cada uno espera una
+ *  forma distinta (`{…}` contra `[{id}]`). Sin esto, una sola respuesta por
+ *  tabla obligaría a que la lectura y la escritura mintieran la una por la
+ *  otra. Cae de vuelta a `respuestas` cuando no hay entrada específica. */
+const respuestasPorOp = new Map<string, { data: unknown; error: { message: string } | null }>();
 
 function builder(tabla: string) {
   const r: Registro = { tabla, op: null, payload: null, opts: null, eq: [], select: null, orden: [] };
   llamadas.push(r);
-  const respuesta = () => respuestas.get(tabla) ?? { data: null, error: null };
+  const respuesta = () => respuestasPorOp.get(`${tabla}:${r.op}`)
+    ?? respuestas.get(tabla) ?? { data: null, error: null };
   const b: Record<string, unknown> = {};
   b.insert = (p: unknown) => { r.op = 'insert'; r.payload = p; return b; };
   b.upsert = (p: unknown, o: unknown) => { r.op = 'upsert'; r.payload = p; r.opts = o; return b; };
@@ -39,6 +47,10 @@ function builder(tabla: string) {
   b.eq = (c: string, v: unknown) => { r.eq.push([c, v]); return b; };
   b.order = (c: string, o: unknown) => { r.orden.push([c, o]); return b; };
   b.single = async () => respuesta();
+  // `leerCredencial` usa `maybeSingle`: «no hay fila» tiene que poder llegar
+  // como `data: null` SIN error, que es el caso que distingue «esta flota no
+  // capturó ese sistema» de «la base falló».
+  b.maybeSingle = async () => respuesta();
   b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
     Promise.resolve(respuesta()).then(res, rej);
   return b;
@@ -48,8 +60,11 @@ const logs = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => builder(t) }) }));
 vi.mock('@/lib/logger', () => ({ logger: logs }));
 
-const { guardarCredencial, listarCredenciales, desactivarCredencial } = await import('./credenciales');
-const { descifrar } = await import('./cofre');
+const {
+  guardarCredencial, listarCredenciales, desactivarCredencial,
+  leerCredencial, marcarProbada, probarCredencial,
+} = await import('./credenciales');
+const { descifrar, cifrar } = await import('./cofre');
 const { DatoInvalido } = await import('../errores');
 
 const TENANT = 't-flota-1';
@@ -70,6 +85,7 @@ const llaveOriginal = process.env.LIKIDA_COFRE_LLAVE;
 beforeEach(() => {
   llamadas.length = 0;
   respuestas.clear();
+  respuestasPorOp.clear();
   logs.info.mockClear();
   logs.warn.mockClear();
   logs.error.mockClear();
@@ -258,5 +274,175 @@ describe('desactivarCredencial — 0 filas no es éxito', () => {
     const sesion = updates.find((u) => u.eq.some(([c, v]) => c === 'conector_id' && v === 'portal_facturacion:g500#sesion'));
     expect(sesion, 'debe haber un update sobre la fila #sesion').toBeTruthy();
     expect((sesion!.payload as Record<string, unknown>).activo).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROBAR DE VERDAD — el tramo que faltaba (agosto-2026).
+//
+// `probar()` estaba escrito en los 19 conectores y NADIE lo llamaba: no había
+// quien leyera la credencial guardada ni quien sellara el veredicto, así que
+// `probada_en` se quedaba en null para siempre. Lo que se fija aquí:
+//   · leer devuelve los valores DESCIFRADOS, y `null` solo significa «no hay
+//     fila» — un error de base LANZA, nunca se aplasta a null;
+//   · un fallo BORRA la `probada_en` anterior (fail-closed) y guarda el motivo
+//     TAL CUAL lo escribió el adaptador;
+//   · un veredicto nuestro («no está en el catálogo») NO se sella como si el
+//     proveedor hubiera rechazado la credencial;
+//   · el secreto no entra a la bitácora.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Un `Http` de mentira que devuelve lo que se le diga y apunta lo que le
+ *  pidieron. Es el mismo truco que usan los tests de los adaptadores: se
+ *  ejercita el ciclo entero sin red y sin una cuenta real. */
+function httpFalso(estado: number, cuerpo: string) {
+  const vistas: Array<{ url: string; encabezados?: Record<string, string> }> = [];
+  const http = async (p: { url: string; encabezados?: Record<string, string> }) => {
+    vistas.push({ url: p.url, encabezados: p.encabezados });
+    return { estado, cuerpo };
+  };
+  return { http, vistas };
+}
+
+describe('leerCredencial — el único lugar donde el secreto vuelve a existir', () => {
+  it('descifra lo guardado y ancla tenant, conector y activo', async () => {
+    respuestas.set('conector_credencial', { data: { valores_cifrados: cifrar(VALORES_SAP) }, error: null });
+    const v = await leerCredencial(TENANT, 'sap_b1');
+    expect(v).toEqual(VALORES_SAP);
+
+    const [lectura] = toquesDeCredencial();
+    expect(lectura.select).toBe('valores_cifrados');
+    expect(lectura.eq).toEqual([['tenant_id', TENANT], ['conector_id', 'sap_b1'], ['activo', true]]);
+  });
+
+  it('sin fila devuelve null — que NO es lo mismo que «no se pudo leer»', async () => {
+    respuestas.set('conector_credencial', { data: null, error: null });
+    expect(await leerCredencial(TENANT, 'sap_b1')).toBeNull();
+  });
+
+  it('un error de base LANZA: aplastarlo a null diría «nunca capturaste eso»', async () => {
+    respuestas.set('conector_credencial', { data: null, error: { message: 'fetch failed' } });
+    await expect(leerCredencial(TENANT, 'sap_b1')).rejects.toThrow(/leerCredencial: fetch failed/);
+  });
+
+  it('un cifrado que el cofre no puede abrir se dice, no se devuelve a medias', async () => {
+    respuestas.set('conector_credencial', { data: { valores_cifrados: 'v1.aa.bb.cc' }, error: null });
+    await expect(leerCredencial(TENANT, 'sap_b1')).rejects.toBeInstanceOf(DatoInvalido);
+    await expect(leerCredencial(TENANT, 'sap_b1')).rejects.toThrow(/capturar el acceso de nuevo/);
+  });
+});
+
+describe('marcarProbada — el sello que convierte «se probó» en algo legible mañana', () => {
+  it('éxito: fecha en probada_en y ultimo_error LIMPIO', async () => {
+    respuestas.set('conector_credencial', { data: [{ id: 'cred-1' }], error: null });
+    await marcarProbada(TENANT, 'sap_b1', { ok: true, detalle: 'SAP contestó 200.', verificadoContra: 'https://x/Login' });
+
+    const [w] = toquesDeCredencial();
+    expect(w.op).toBe('update');
+    const p = w.payload as { probada_en: unknown; ultimo_error: unknown };
+    expect(typeof p.probada_en).toBe('string');
+    expect(p.ultimo_error).toBeNull();
+  });
+
+  it('fallo: BORRA la probada_en anterior y guarda el motivo TAL CUAL', async () => {
+    respuestas.set('conector_credencial', { data: [{ id: 'cred-1' }], error: null });
+    const motivo = 'Samsara rechazó la credencial (401). Hay que revisarla o generarla de nuevo.';
+    await marcarProbada(TENANT, 'samsara', { ok: false, detalle: motivo, verificadoContra: null });
+
+    const p = toquesDeCredencial()[0].payload as { probada_en: unknown; ultimo_error: unknown };
+    // Fail-closed: una credencial que ayer sirvió y hoy la rechazan no puede
+    // seguir diciendo «probada el …». La columna cuenta la ÚLTIMA prueba.
+    expect(p.probada_en).toBeNull();
+    expect(p.ultimo_error).toBe(motivo);
+  });
+
+  it('un motivo larguísimo se recorta: la columna se pinta en un renglón', async () => {
+    respuestas.set('conector_credencial', { data: [{ id: 'cred-1' }], error: null });
+    await marcarProbada(TENANT, 'samsara', { ok: false, detalle: 'x'.repeat(900) });
+    const p = toquesDeCredencial()[0].payload as { ultimo_error: string };
+    expect(p.ultimo_error).toHaveLength(500);
+  });
+
+  it('0 filas tocadas NO es éxito: el conector de otra flota no sella nada', async () => {
+    respuestas.set('conector_credencial', { data: [], error: null });
+    await expect(marcarProbada(TENANT, 'sap_b1', { ok: true, detalle: 'ok' }))
+      .rejects.toBeInstanceOf(DatoInvalido);
+  });
+
+  it('a la bitácora van el veredicto y el endpoint, jamás el secreto', async () => {
+    respuestas.set('conector_credencial', { data: [{ id: 'cred-1' }], error: null });
+    await marcarProbada(TENANT, 'sap_b1', { ok: true, detalle: 'ok', verificadoContra: 'https://sap/Login' });
+    const bitacora = llamadas.filter((l) => l.tabla === 'bitacora_auditoria');
+    const texto = JSON.stringify(bitacora);
+    expect(texto).not.toContain(SECRETO);
+  });
+});
+
+describe('probarCredencial — el ciclo completo, sin red', () => {
+  it('llama al proveedor con la credencial guardada y sella el éxito', async () => {
+    // `samsara` porque su `probar()` es un GET con Bearer: se ve el token
+    // viajando en la cabecera, que es la prueba de que NO es un ping falso.
+    respuestasPorOp.set('conector_credencial:select', { data: { valores_cifrados: cifrar({ token: 'tok-samsara-largo' }) }, error: null });
+    respuestasPorOp.set('conector_credencial:update', { data: [{ id: 'cred-1' }], error: null });
+    const { http, vistas } = httpFalso(200, '{"data":{"id":"org-1"}}');
+
+    const r = await probarCredencial(TENANT, 'samsara', { id: 'u-1' }, http);
+    expect(r.ok).toBe(true);
+    expect(r.verificadoContra).toBe('https://api.samsara.com/me');
+    expect(vistas[0].encabezados?.Authorization).toBe('Bearer tok-samsara-largo');
+
+    // Y el sello: el UPDATE existe y trae fecha.
+    const update = toquesDeCredencial().find((l) => l.op === 'update')!;
+    expect((update.payload as { probada_en: unknown }).probada_en).toBeTruthy();
+  });
+
+  it('un 401 del proveedor se devuelve TAL CUAL y se sella como fallo', async () => {
+    respuestasPorOp.set('conector_credencial:select', { data: { valores_cifrados: cifrar({ token: 'tok-samsara-largo' }) }, error: null });
+    respuestasPorOp.set('conector_credencial:update', { data: [{ id: 'cred-1' }], error: null });
+    const { http } = httpFalso(401, 'unauthorized');
+
+    const r = await probarCredencial(TENANT, 'samsara', undefined, http);
+    expect(r.ok).toBe(false);
+    expect(r.detalle).toMatch(/rechazó la credencial \(401\)/);
+
+    const update = toquesDeCredencial().find((l) => l.op === 'update')!;
+    expect((update.payload as { ultimo_error: string }).ultimo_error).toBe(r.detalle);
+  });
+
+  it('un 500 dice que NO se puede afirmar nada de la credencial — no manda a regenerar el token', async () => {
+    respuestasPorOp.set('conector_credencial:select', { data: { valores_cifrados: cifrar({ token: 'tok-samsara-largo' }) }, error: null });
+    respuestasPorOp.set('conector_credencial:update', { data: [{ id: 'cred-1' }], error: null });
+    const { http } = httpFalso(503, 'maintenance');
+    const r = await probarCredencial(TENANT, 'samsara', undefined, http);
+    expect(r.ok).toBe(false);
+    expect(r.detalle).toMatch(/NO dice nada sobre la credencial/);
+  });
+
+  it('sin credencial activa dice que hay que capturarla y NO toca la fila', async () => {
+    respuestas.set('conector_credencial', { data: null, error: null });
+    const { http, vistas } = httpFalso(200, '{}');
+    const r = await probarCredencial(TENANT, 'samsara', undefined, http);
+
+    expect(r.ok).toBe(false);
+    expect(r.detalle).toMatch(/Captúrala antes de probar/);
+    // Ni se llamó al proveedor ni se selló nada: un fallo NUESTRO no se
+    // escribe como si el proveedor hubiera rechazado la credencial.
+    expect(vistas).toHaveLength(0);
+    expect(toquesDeCredencial().some((l) => l.op === 'update')).toBe(false);
+  });
+
+  it('un conector fuera del catálogo no toca la base', async () => {
+    const { http } = httpFalso(200, '{}');
+    const r = await probarCredencial(TENANT, 'sap_hana_inventado', undefined, http);
+    expect(r.ok).toBe(false);
+    expect(toquesDeCredencial()).toHaveLength(0);
+  });
+
+  it('un conector que no pide credenciales lo dice en vez de fingir una prueba', async () => {
+    const { http } = httpFalso(200, '{}');
+    const r = await probarCredencial(TENANT, 'iave', undefined, http);
+    expect(r.ok).toBe(false);
+    expect(r.detalle).toMatch(/no hay nada que probar/);
+    expect(toquesDeCredencial()).toHaveLength(0);
   });
 });

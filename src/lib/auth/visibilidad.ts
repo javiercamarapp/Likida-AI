@@ -195,9 +195,11 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // Administración de la cuenta — solo el dueño
   // Conexiones (F7): la configuración de conectores de la cuenta.
   '/dashboard/conexiones': 'administracion',
-  // Integraciones (chasis de agentes, 14-ago-2026): con qué sistemas del cliente
-  // conecta Likida y CÓMO conecta hoy con cada uno. Es `administracion` —
-  // decidir conectar el ERP o el GPS es del dueño, no del jefe de tráfico.
+  // Integraciones: fusionada en Conexiones (agosto-2026). La ruta sobrevive
+  // como REDIRECT —hay enlaces guardados y correos que apuntan aquí— y por eso
+  // sigue declarada: una ruta sin área es una ruta que `puedeVerRuta` no sabe
+  // gatear, y aunque el destino vuelva a comprobar, dejarla huérfana rompería
+  // la invariante de que toda ruta del panel tiene dueño.
   '/dashboard/integraciones': 'administracion',
   // Llaves de API (A6, 14-ago-2026): una llave es CONTROL, no dato — con
   // ella se lee desde fuera, sin sesión, todo lo que su área permita. Mismo

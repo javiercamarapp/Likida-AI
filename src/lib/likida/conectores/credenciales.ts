@@ -2,9 +2,9 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '../presupuesto';
 import { DatoInvalido } from '../errores';
-import { cifrar, pistasDe, cofreConfigurado } from './cofre';
+import { cifrar, descifrar, pistasDe, cofreConfigurado } from './cofre';
 import { conectorPorId } from './registro';
-import { faltantes, type ValoresCredencial } from './tipos';
+import { faltantes, httpReal, type Http, type ResultadoPrueba, type ValoresCredencial } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CREDENCIALES DE CONECTOR — la escritura que la 0094 dejó prometida.
@@ -150,6 +150,169 @@ export async function listarCredenciales(tenantId: string): Promise<CredencialLi
     ultimoError: f.ultimo_error == null ? null : String(f.ultimo_error),
     creadaEn: String(f.creada_en),
   }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROBAR DE VERDAD — el tramo que faltaba entre `probar()` y la pantalla.
+//
+// Los 19 conectores traen su `probar()` escrito y verificado contra la
+// documentación del fabricante, y `probada_en`/`ultimo_error` existen desde la
+// 0094 y SE RENDERIZAN. Lo que no existía era el camino de en medio: nadie
+// leía la credencial guardada, nadie llamaba a `probar()` y nadie sellaba el
+// resultado. `probar()` era código muerto y la pantalla enseñaba para siempre
+// «guardada — sin probar contra el sistema real».
+//
+// La regla que manda aquí: la prueba es CONTRA EL PROVEEDOR, no un ping falso.
+// No hay un camino que devuelva «ok» sin que alguien de fuera haya contestado
+// — `probarConGuardas` y `veredictoHttp` (tipos.ts) ya lo garantizan, y aquí
+// no se agrega ninguna rama que los esquive.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Los valores DESCIFRADOS de una credencial activa, o `null` si no hay ninguna.
+ *
+ * `null` significa exactamente una cosa —no hay fila activa de ese conector en
+ * esta flota— y NUNCA "no se pudo leer": un error de base LANZA. Aplastar los
+ * dos casos en `null` haría que una base caída se leyera como "nunca
+ * capturaste esa credencial", que es justo el mensaje que manda a recapturar.
+ *
+ * El descifrado también lanza: un texto alterado o una llave cambiada tienen
+ * que parar aquí y no producir un objeto a medias que acabe intentando
+ * autenticarse contra el sistema del cliente (ver `descifrar` en cofre.ts).
+ *
+ * Este es el ÚNICO lugar de la capa de pantalla donde un secreto vuelve a
+ * existir en claro, y vive solo el tiempo de la llamada a `probar()`: no se
+ * devuelve al navegador, no se anota en la bitácora, no entra a un log.
+ */
+export async function leerCredencial(
+  tenantId: string,
+  conectorId: string,
+): Promise<ValoresCredencial | null> {
+  const { data, error } = await acotada(supabaseAdmin().from('conector_credencial')
+    .select('valores_cifrados')
+    .eq('tenant_id', tenantId)
+    .eq('conector_id', conectorId)
+    .eq('activo', true)
+    .maybeSingle(), 'leerCredencial');
+
+  if (error) throw new Error(`leerCredencial: ${error.message}`);
+  const cifrado = (data as { valores_cifrados?: unknown } | null)?.valores_cifrados;
+  if (typeof cifrado !== 'string' || cifrado === '') return null;
+
+  try {
+    return descifrar(cifrado);
+  } catch (e) {
+    // Se dice qué pasó SIN reintentar ni adivinar: si el cofre no puede abrir
+    // lo guardado, la credencial hay que capturarla de nuevo, y afirmar otra
+    // cosa mandaría a buscar el problema al proveedor.
+    throw new DatoInvalido(
+      `No se pudo abrir la credencial guardada de ese sistema: ${e instanceof Error ? e.message : String(e)}. Suele significar que la llave del cofre cambió en este entorno; hay que capturar el acceso de nuevo.`,
+    );
+  }
+}
+
+/** Tope de lo que se guarda en `ultimo_error`. La frase la escribimos nosotros
+ *  y es corta; el tope existe para que el mensaje de una excepción rara no
+ *  llene la columna que la pantalla pinta en un renglón. */
+const TOPE_ULTIMO_ERROR = 500;
+
+/**
+ * SELLA el resultado de una prueba en la fila. Es lo que convierte «se probó»
+ * en algo que la pantalla y la auditoría pueden leer mañana.
+ *
+ *   · Salió bien → `probada_en = ahora` y `ultimo_error = null`.
+ *   · Salió mal  → `probada_en = null` y `ultimo_error = <el motivo>`.
+ *
+ * Que un fallo BORRE la `probada_en` anterior es deliberado y es la mitad
+ * fail-closed de esto: una credencial que ayer sirvió y hoy la rechazan no
+ * puede seguir diciendo «probada el 12 de agosto» — eso pintaría de verde una
+ * conexión muerta, que es el modo de falla que la 0094 escribió para evitar.
+ * La columna dice el estado de la ÚLTIMA prueba, no el de la mejor.
+ *
+ * Qué se guarda en `ultimo_error`: el `detalle` del `ResultadoPrueba`, TAL
+ * CUAL. Ese detalle es una frase nuestra que ya incluye lo que contestó el
+ * proveedor (su código, su mensaje de error) porque `probarConGuardas` y
+ * `veredictoHttp` la arman así — y NUNCA el cuerpo crudo de la respuesta, que
+ * puede traer el token. Reescribirla aquí perdería el dato accionable.
+ *
+ * El UPDATE comprueba las filas tocadas por la misma razón que
+ * `desactivarCredencial`: con el conector de otra flota toca cero filas y
+ * Postgres no lo considera un error.
+ */
+export async function marcarProbada(
+  tenantId: string,
+  conectorId: string,
+  resultado: Pick<ResultadoPrueba, 'ok' | 'detalle'> & { verificadoContra?: string | null },
+  actor?: { id?: string; email?: string },
+): Promise<void> {
+  const { data, error } = await acotada(supabaseAdmin().from('conector_credencial')
+    .update(resultado.ok
+      ? { probada_en: new Date().toISOString(), ultimo_error: null }
+      : { probada_en: null, ultimo_error: resultado.detalle.slice(0, TOPE_ULTIMO_ERROR) })
+    .eq('tenant_id', tenantId)
+    .eq('conector_id', conectorId)
+    .eq('activo', true)
+    .select('id'), 'marcarProbada');
+
+  if (error) throw new Error(`marcarProbada: ${error.message}`);
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new DatoInvalido('No hay una credencial activa de ese sistema en tu flota — no se pudo sellar el resultado de la prueba. Recarga la pantalla.');
+  }
+
+  await anotar(tenantId, 'conector_credencial.probada', String((data[0] as { id: unknown }).id), {
+    // La bitácora se lee del panel: van el veredicto y CONTRA QUÉ se habló,
+    // nunca los valores. `verificadoContra` es el endpoint, no un secreto.
+    conectorId, ok: resultado.ok, verificadoContra: resultado.verificadoContra ?? null,
+  }, actor);
+}
+
+/**
+ * El ciclo completo: leer la credencial guardada, llamar al proveedor DE VERDAD
+ * y sellar lo que contestó.
+ *
+ * Vive aquí y no dentro de la server action para que se pueda probar entera sin
+ * Next: la action es un envoltorio de cinco líneas. `http` se inyecta por la
+ * misma razón que en `probar()` — el adaptador se ejercita sin red.
+ *
+ * Lo que NO hace: inventar un veredicto. Si el conector no está en el catálogo,
+ * si no pide credenciales o si no hay fila activa, devuelve `ok: false` con el
+ * motivo y NO toca la fila — sellar un fallo nuestro como si el proveedor
+ * hubiera rechazado la credencial mandaría al cliente a regenerar un token que
+ * está bien.
+ */
+export async function probarCredencial(
+  tenantId: string,
+  conectorId: string,
+  actor?: { id?: string; email?: string },
+  http: Http = httpReal(),
+): Promise<ResultadoPrueba> {
+  const conector = conectorPorId(conectorId);
+  if (!conector) {
+    return { ok: false, detalle: 'Ese sistema no está en el catálogo de conectores.', verificadoContra: null };
+  }
+  if (conector.credenciales.length === 0) {
+    return {
+      ok: false,
+      detalle: `${conector.nombre} no pide credenciales — su camino de conexión no las usa, así que no hay nada que probar.`,
+      verificadoContra: null,
+    };
+  }
+
+  const valores = await leerCredencial(tenantId, conectorId);
+  if (valores === null) {
+    return {
+      ok: false,
+      detalle: `No hay una credencial activa de ${conector.nombre} en tu flota. Captúrala antes de probar.`,
+      verificadoContra: null,
+    };
+  }
+
+  // Aquí es donde se habla con el proveedor. `probar()` ya falla cerrado por su
+  // cuenta (`probarConGuardas`): no hace falta —ni se debe— envolverlo en un
+  // catch que invente un "conectado".
+  const resultado = await conector.probar(valores, http);
+  await marcarProbada(tenantId, conectorId, resultado, actor);
+  return resultado;
 }
 
 /**

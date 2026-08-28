@@ -1,7 +1,8 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
   BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel, Building2, Plug,
-  ChartNoAxesCombined, UserRound, BookOpen, Container, Blocks, Handshake, FileText, KeyRound,
+  // `Blocks` se fue con la entrada de «Integraciones», fusionada en Conexiones.
+  ChartNoAxesCombined, UserRound, BookOpen, Container, Handshake, FileText, KeyRound,
   ScrollText,
   UsersRound,
   ShieldCheck,
@@ -104,11 +105,15 @@ export const SISTEMA: Item[] = [
   // El corpus de `normas/` consultable: de dónde sale el fundamento de cada
   // cifra fiscal, con su estado de verificación a la vista.
   { href: '/dashboard/conocimiento', nombre: 'Conocimiento normativo', Icono: BookOpen },
-  // F7 (chasis de agentes): la salud MEDIDA de cada conector de la flota.
+  // F7 (chasis de agentes): la salud MEDIDA de cada conector de la flota, el
+  // catálogo de sistemas y la captura de accesos — las tres en una pantalla.
+  //
+  // «Integraciones» ERA una entrada aparte y se quitó del menú en agosto-2026:
+  // contestaba la misma pregunta que ésta con otra consulta y otro texto, y dos
+  // renglones del sidebar para un solo trabajo obligan a adivinar cuál abrir.
+  // La ruta sigue viva como redirect (los enlaces guardados no se rompen), pero
+  // no se ofrece dos veces.
   { href: '/dashboard/conexiones', nombre: 'Conexiones', Icono: Plug },
-  // La otra mitad del chasis: los SISTEMAS del cliente (ERP, GPS, TAG), separados
-  // de las CREDENCIALES que vive en Conexiones.
-  { href: '/dashboard/integraciones', nombre: 'Integraciones', Icono: Blocks },
   // A6 (auditoría 4, 14-ago-2026): la emisión y revocación de las llaves de
   // /v1. El openapi prometía "se emite desde el panel" sin que el panel
   // existiera — `tenant_api_key` no tenía un solo INSERT en src/.

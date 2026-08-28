@@ -5,6 +5,7 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { getUnidades, validarUnidad, crearUnidad, editarUnidad } from '@/lib/likida/operacion';
+import { CONECTORES_GPS } from '@/lib/likida/conectores/gps';
 import { sufijoTenant } from '../sufijo';
 import { camposDeSufijo } from '../paginar-campos';
 import { VistaUnidades } from './vista';
@@ -77,6 +78,11 @@ export default async function PaginaUnidades({
         polizaVence: String(fd.get('polizaVence') ?? ''),
         permisoSictVence: String(fd.get('permisoSictVence') ?? ''),
         verificacionVence: String(fd.get('verificacionVence') ?? ''),
+        // El amarre con el GPS (0176). `validarAmarreGps` comprueba que el
+        // proveedor esté en el catálogo y que los dos campos vayan juntos:
+        // uno solo de los dos produce una unidad que el poller nunca casa.
+        gpsProveedor: String(fd.get('gpsProveedor') ?? ''),
+        gpsDeviceId: String(fd.get('gpsDeviceId') ?? ''),
       });
 
       if (id) await editarUnidad(s.tenantId, id, valores);
@@ -100,6 +106,12 @@ export default async function PaginaUnidades({
       if (e instanceof Error && e.message.includes('unidad_economico_unico')) {
         return { ok: false, error: `Ya tienes una unidad con el número económico "${eco}". Búscala en la lista en vez de darla de alta otra vez.` };
       }
+      // El otro índice que un alta puede chocar desde la 0176: `uq_unidad_gps`
+      // (un dispositivo = un camión por flota). `crearUnidad` tampoco lo
+      // traduce, por el mismo motivo que el anterior.
+      if (e instanceof Error && e.message.includes('uq_unidad_gps')) {
+        return { ok: false, error: 'Ese número de dispositivo de GPS ya está ligado a otra unidad de tu flota con el mismo proveedor. Un dispositivo solo puede pertenecer a un camión.' };
+      }
       return { ok: false, error: mensajeParaPantalla(e, id ? 'guardar la unidad' : 'dar de alta la unidad') };
     }
   }
@@ -115,6 +127,9 @@ export default async function PaginaUnidades({
         // re-comprueba adentro del action (alcanzable por POST directo).
         puedeEditar={puedeAdministrar(rol)}
         guardar={guardarUnidad}
+        // Al cliente viaja SOLO id+nombre: el catálogo trae los `probar()` y
+        // las fuentes de cada fabricante, y nada de eso va al navegador.
+        proveedoresGps={CONECTORES_GPS.map((c) => ({ id: c.id, nombre: c.nombre }))}
       />
       {/* Fase 9 (0209): el taller — órdenes de mantenimiento y rutinas
           preventivas de las mismas unidades de arriba. */}

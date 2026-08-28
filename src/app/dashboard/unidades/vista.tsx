@@ -1,4 +1,4 @@
-import { Truck, ShieldAlert, ShieldCheck, Clock, CircleDashed, Wrench } from 'lucide-react';
+import { Truck, ShieldAlert, ShieldCheck, Clock, CircleDashed, Wrench, Satellite } from 'lucide-react';
 import type { UnidadRow, UnidadCruda } from '@/lib/likida/operacion';
 import { clasificarVigencia, contarVigencias, avisoVigencias, type EstadoVigencia } from '@/lib/likida/vigencias';
 import { numero } from '@/lib/formato';
@@ -10,7 +10,7 @@ import { BarraPagina } from '../resumen-visual';
 // El Plegable es el mismo `<details>` de clientes — no hay una segunda
 // librería de UI, y un plegable propio sería su segunda copia.
 import { Plegable } from '../clientes/forma';
-import { FormaUnidad, type AccionForma } from './forma';
+import { FormaUnidad, type AccionForma, type ProveedorGps } from './forma';
 
 const PILL: Record<EstadoVigencia, { fg: string; bg: string; Icono: typeof ShieldCheck }> = {
   vencido: { fg: 'var(--bad)', bg: 'var(--badbg)', Icono: ShieldAlert },
@@ -57,12 +57,15 @@ function aInicial(u: UnidadRow): UnidadCruda {
     polizaVence: u.polizaVence ?? '',
     permisoSictVence: u.permisoSictVence ?? '',
     verificacionVence: u.verificacionVence ?? '',
+    gpsProveedor: u.gpsProveedor ?? '',
+    gpsDeviceId: u.gpsDeviceId ?? '',
   };
 }
 
 const INICIAL_VACIO: UnidadCruda = {
   numeroEconomico: '', placas: '', marca: '', modelo: '', anio: '',
   polizaVence: '', permisoSictVence: '', verificacionVence: '',
+  gpsProveedor: '', gpsDeviceId: '',
 };
 
 /**
@@ -76,11 +79,13 @@ const INICIAL_VACIO: UnidadCruda = {
  * de edición existe SOLO para la fila que `?editar=<id>` nombra. Las demás
  * llevan un link — que es lo que un `<details>` cerrado siempre debió ser.
  */
-export function VistaUnidades({ unidades, puedeEditar, guardar, sp, sufijo, camposOcultos }: {
+export function VistaUnidades({ unidades, puedeEditar, guardar, sp, sufijo, camposOcultos, proveedoresGps }: {
   unidades: readonly UnidadRow[];
   /** Si se PINTA la captura. La puerta real vive dentro del server action. */
   puedeEditar: boolean;
   guardar: AccionForma;
+  /** El catálogo de rastreo, ya recortado a `{id, nombre}` en el servidor. */
+  proveedoresGps: ProveedorGps[];
   /** `?q=`/`?p=`/`?editar=` ya leídos por la página. */
   sp: ParamsRegistro;
   /** `?tenant=`/`?vista=`/`?rol=` del superadmin. */
@@ -144,7 +149,7 @@ export function VistaUnidades({ unidades, puedeEditar, guardar, sp, sufijo, camp
                 Con sus vigencias capturadas, Likida avisa qué papel vence primero.
               </p>
               <Plegable resumen="Capturar unidad">
-                <FormaUnidad accion={guardar} inicial={INICIAL_VACIO} idPrefijo="alta" />
+                <FormaUnidad accion={guardar} inicial={INICIAL_VACIO} idPrefijo="alta" proveedoresGps={proveedoresGps} />
               </Plegable>
             </section>
           )}
@@ -223,6 +228,21 @@ export function VistaUnidades({ unidades, puedeEditar, guardar, sp, sufijo, camp
                               {numero(u.kmActual)} km
                             </span>
                           )}
+                          {/* El GPS a la vista en la fila: «ligada» y «entrando»
+                              son cosas distintas y se pintan distinto. Sin
+                              dispositivo no se dice nada — no toda flota tiene
+                              rastreo y un «sin GPS» en cada renglón sería ruido. */}
+                          {u.gpsDeviceId && (
+                            <span className="text-[11px] inline-flex items-center gap-1"
+                              style={{ color: u.gpsVistoEn ? 'var(--ok)' : 'var(--muted)' }}>
+                              <Satellite width={11} height={11} strokeWidth={2} />
+                              {u.gpsProveedor}
+                              {/* La FECHA y no «al día»: `gps_visto_en` puede ser
+                                  de hace tres semanas, y «conectado» a secas
+                                  taparía justo a la unidad que dejó de reportar. */}
+                              {u.gpsVistoEn ? ` · última posición ${u.gpsVistoEn.slice(0, 10)}` : ' · ligada, sin posición todavía'}
+                            </span>
+                          )}
                         </div>
 
                         {/* UNA forma de edición por página, la de `?editar=`.
@@ -231,7 +251,8 @@ export function VistaUnidades({ unidades, puedeEditar, guardar, sp, sufijo, camp
                         {puedeEditar && (
                           pag.editando === u.id ? (
                             <div className="mt-3">
-                              <FormaUnidad accion={guardar} id={u.id} inicial={aInicial(u)} idPrefijo={`u-${u.id}`} />
+                              <FormaUnidad accion={guardar} id={u.id} inicial={aInicial(u)} idPrefijo={`u-${u.id}`}
+                                proveedoresGps={proveedoresGps} gpsVistoEn={u.gpsVistoEn} />
                               <Link href={urlRegistro('/dashboard/unidades', sufijo, { q: pag.q || null, p: pag.pagina, editar: null })}
                                 className="inline-block mt-2 text-[12px] underline hover:opacity-70 transition-opacity"
                                 style={{ color: 'var(--muted)' }}>
