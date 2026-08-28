@@ -82,6 +82,22 @@ export function enrutar(t: TicketPorFacturar, sabeOperarlo: boolean, cuentaCompa
     falta.push(t.urlTicket ? 'el portal no está en el registro todavía' : 'el ticket no trae liga de facturación');
     return { via: 'incompleto', falta };
   }
+
+  // SE SABE DE QUIÉN ES EL TICKET, PERO NO A DÓNDE MANDARLO.
+  //
+  // Va aquí arriba, antes que cualquier otra rama, porque todas las de abajo
+  // —`mensaje` y `automatico`— llevan `portal` en la respuesta, y el portal de
+  // un comercio con `portalPendiente` es la cadena vacía. Dejarlo pasar
+  // mandaría al encargado un WhatsApp con un renglón en blanco donde va la
+  // liga, o al robot a `pagina.abrir('')`. Fail-closed y DICHO, con el nombre
+  // del comercio: es más accionable que el "el portal no está en el registro
+  // todavía" de arriba, porque aquí sí se sabe a quién hay que ir a buscarle
+  // la página de facturación.
+  if (t.comercio.portalPendiente) {
+    falta.push(`${t.comercio.nombre}: su ticket no imprime liga y su portal de facturación todavía no se ha verificado`);
+    return { via: 'incompleto', falta };
+  }
+
   if (t.camposPendientes) {
     falta.push('no se han leído los campos que pide ese portal');
     return { via: 'incompleto', falta };

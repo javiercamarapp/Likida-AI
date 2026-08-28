@@ -4,9 +4,11 @@ import {
   hashBytes, duplicadaPorHash, extensionDe, mismoDiaMx, asegurarBuckets,
   leerManifiesto, subirFotos, dataUrlDeFoto, firmarRuta,
   guardarCorrida, leerCorrida, listarCorridas, gastoHoyUsd,
+  confirmarVerdadTerreno, guardarLectura, leerUltimasLecturas, gastoLecturasHoyUsd,
   _olvidarBuckets, BUCKET_QA_FOTOS,
 } from './qa-storage';
-import type { CorridaQA, FotoBanco } from './qa-tipos';
+import type { CorridaQA, FotoBanco, VerdadTerreno } from './qa-tipos';
+import { medir, ocrVacio, type OcrLeido } from './qa-verdad';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CAPA DE ALMACENAMIENTO DEL PANEL DE QA — ahora contra TABLAS (mig. 0185).
@@ -36,6 +38,7 @@ let fallaTabla: string | null;          // tabla cuya lectura debe reventar
 let alInsertarFoto: (() => void) | null; // gancho para provocar la carrera
 let errorInsertFoto: ErrPg;              // error que devuelve el insert de qa_foto
 let errorTabla: ErrPg;                   // error que devuelve CUALQUIER lectura
+let errorUpdateFoto: ErrPg;              // error que devuelve el update de qa_foto
 let seq: number;
 
 /** Las restricciones que la 0185 declara y este doble tiene que respetar. */
@@ -43,6 +46,7 @@ const UNICO: Record<string, string[]> = {
   qa_foto: ['hash'],
   qa_corrida: ['id'],
   qa_corrida_paso: ['corrida_id', 'n'],
+  qa_foto_lectura: ['id'],
 };
 
 const llaveDe = (tabla: string, f: Fila) => UNICO[tabla].map((c) => String(f[c])).join('|');
@@ -53,6 +57,10 @@ function insertarFila(tabla: string, f: Fila): ErrPg {
     fila.id ??= `foto-${++seq}`;
     fila.subido_en ??= new Date().toISOString();
     fila.ocr_esperado ??= null;
+  }
+  if (tabla === 'qa_foto_lectura') {
+    fila.id ??= `lec-${++seq}`;
+    fila.corrida_en ??= new Date().toISOString();
   }
   if (tabla === 'qa_corrida') {
     fila.creada_en ??= new Date().toISOString();
@@ -75,6 +83,10 @@ function dbFalsa(): SupabaseClient {
     let seleccionando = false;
     let orden: { col: string; asc: boolean } | null = null;
     let tope: number | null = null;
+    // El UPDATE es PEREZOSO: en postgrest los filtros llegan DESPUÉS
+    // (`.update(x).eq('id', …).select()`), así que aquí sólo se guarda el
+    // parche y se aplica en `then`, cuando los predicados ya están puestos.
+    let parche: Fila | null = null;
     const preds: Array<(f: Fila) => boolean> = [];
 
     const b: Record<string, unknown> = {};
@@ -113,6 +125,12 @@ function dbFalsa(): SupabaseClient {
     b.order = (col: string, o?: { ascending?: boolean }) => { orden = { col, asc: o?.ascending !== false }; return yo(); };
     b.limit = (n: number) => { tope = n; return yo(); };
 
+    b.update = (f: Fila) => {
+      if (tabla === 'qa_foto' && errorUpdateFoto) { error = errorUpdateFoto; filas = []; }
+      parche = f;
+      return yo();
+    };
+
     b.insert = (f: Fila) => {
       if (tabla === 'qa_foto') alInsertarFoto?.();
       if (tabla === 'qa_foto' && errorInsertFoto) {
@@ -144,6 +162,7 @@ function dbFalsa(): SupabaseClient {
       if (fallaTabla === tabla) return res({ data: null, error: { message: 'fetch failed' } });
       if (error || filas !== null) return res({ data: filas, error });
       let out = tablas[tabla].filter((f) => preds.every((p) => p(f)));
+      if (parche) out = out.map((f) => Object.assign(f, parche));
       if (orden) {
         const { col, asc } = orden;
         out = [...out].sort((x, y) => String(x[col]).localeCompare(String(y[col])) * (asc ? 1 : -1));
@@ -188,7 +207,8 @@ function dbFalsa(): SupabaseClient {
 
 const foto = (p: Partial<FotoBanco>): FotoBanco => ({
   id: 'f1', hash: 'h1', path: 'banco/f1.jpg', mime: 'image/jpeg',
-  etiqueta: 'ticket', bytes: 10, subidoEn: '2026-08-16T12:00:00Z', ocrEsperado: null, ...p,
+  etiqueta: 'ticket', bytes: 10, subidoEn: '2026-08-16T12:00:00Z',
+  ocrEsperado: null, confirmadoEn: null, ...p,
 });
 
 const corrida = (p: Partial<CorridaQA>): CorridaQA => ({
@@ -203,9 +223,10 @@ const corrida = (p: Partial<CorridaQA>): CorridaQA => ({
 });
 
 beforeEach(() => {
-  tablas = { qa_foto: [], qa_corrida: [], qa_corrida_paso: [] };
+  tablas = { qa_foto: [], qa_corrida: [], qa_corrida_paso: [], qa_foto_lectura: [] };
   objetos = new Map(); buckets = new Set();
   fallaTabla = null; alInsertarFoto = null; errorInsertFoto = null; errorTabla = null; seq = 0;
+  errorUpdateFoto = null;
   _olvidarBuckets();
 });
 
@@ -435,5 +456,228 @@ describe('asegurarBuckets', () => {
     await expect(asegurarBuckets(db)).resolves.toBeUndefined();
     expect(buckets.has(BUCKET_QA_FOTOS)).toBe(true);
     await expect(asegurarBuckets(db)).resolves.toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL ORÁCULO HUMANO Y LAS LECTURAS DEL OCR (mig. 0239)
+//
+// Lo que se fija:
+//  · confirmar escribe las TRES columnas juntas (`ocr_esperado`,
+//    `confirmado_por`, `confirmado_en`): el CHECK de la 0185 hace rebotar la
+//    fila si falta la firma, así que separarlas no es una opción.
+//  · una etiqueta que NO cumple el contrato se rechaza ANTES de tocar la base,
+//    con el motivo largo — no con el mensaje de un CHECK de Postgres.
+//  · leer una etiqueta corrupta que ya estuviera guardada la degrada a null
+//    ("no se puede medir"), jamás mide contra algo que no cumple el contrato.
+//  · una foto que no existe NO es un éxito silencioso.
+//  · las lecturas son un apéndice; la última por foto es la más nueva; y el
+//    gasto de lecturas del día se suma acotado al día de México.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const VERDAD: VerdadTerreno = {
+  comercioClave: 'capufe',
+  emisor: 'Caminos y Puentes Federales',
+  rfcEmisor: 'CPF890101AAA',
+  folio: '000123',
+  monto: 1234.5,
+  fecha: '2026-07-31',
+  sucursal: 'Caseta Palmillas',
+  dominioFacturacion: 'facturacioncapufe.com.mx',
+  ilegibles: [],
+  noAplica: [],
+  clase: 'ticket',
+  notas: null,
+};
+
+const LEIDO: OcrLeido = {
+  emisor: 'Caminos y Puentes Federales', rfcEmisor: 'CPF890101AAA', folio: '000123',
+  monto: 1234.5, fecha: '2026-07-31', sucursal: 'Caseta Palmillas',
+  dominioFacturacion: 'facturacioncapufe.com.mx',
+};
+
+/** Mete una foto directamente en la tabla del doble. */
+function sembrarFoto(id = 'foto-1', extra: Record<string, unknown> = {}) {
+  tablas.qa_foto.push({
+    id, hash: `h-${id}`, path: `banco/${id}.jpg`, mime: 'image/jpeg',
+    etiqueta: `${id}.jpg`, bytes: 10, subido_en: '2026-08-16T12:00:00Z',
+    ocr_esperado: null, confirmado_en: null, ...extra,
+  });
+}
+
+describe('confirmarVerdadTerreno — el oráculo humano', () => {
+  it('escribe la etiqueta, el firmante y el instante EN EL MISMO update', async () => {
+    sembrarFoto();
+    const db = dbFalsa();
+    const r = await confirmarVerdadTerreno(db, 'foto-1', VERDAD, 'u-javier');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.datos.ocrEsperado).toEqual(VERDAD);
+    expect(r.datos.confirmadoEn).not.toBeNull();
+    const fila = tablas.qa_foto[0];
+    expect(fila.confirmado_por).toBe('u-javier');
+    // El CHECK qa_foto_confirmacion_completa exige los dos: ni uno solo.
+    expect(fila.ocr_esperado).not.toBeNull();
+    expect(fila.confirmado_en).not.toBeNull();
+  });
+
+  it('un firmante null es un dato honesto (ingesta por script), no un inventado', async () => {
+    sembrarFoto();
+    const r = await confirmarVerdadTerreno(dbFalsa(), 'foto-1', VERDAD, null);
+    expect(r.ok).toBe(true);
+    expect(tablas.qa_foto[0].confirmado_por).toBeNull();
+    expect(tablas.qa_foto[0].confirmado_en).not.toBeNull();
+  });
+
+  it('una etiqueta que rompe el invariante se rechaza SIN tocar la base', async () => {
+    sembrarFoto();
+    const mala = { ...VERDAD, folio: null } as VerdadTerreno;   // null sin clasificar
+    const r = await confirmarVerdadTerreno(dbFalsa(), 'foto-1', mala, 'u-javier');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/no cumple el contrato/);
+    expect(tablas.qa_foto[0].ocr_esperado).toBeNull();
+  });
+
+  it('una foto que no está en el banco NO es un éxito silencioso', async () => {
+    const r = await confirmarVerdadTerreno(dbFalsa(), 'foto-que-no-existe', VERDAD, null);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/no está en el banco/);
+  });
+
+  it('el rebote del CHECK de la 0239 se traduce a algo accionable', async () => {
+    sembrarFoto();
+    errorUpdateFoto = { code: '23514', message: 'new row violates check constraint "qa_foto_verdad_terreno_completa"' };
+    const r = await confirmarVerdadTerreno(dbFalsa(), 'foto-1', VERDAD, null);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toMatch(/0239/);
+      expect(r.error).toMatch(/ilegibles/);
+    }
+  });
+
+  it('el rebote del CHECK de la 0185 (firma faltante) también se explica', async () => {
+    sembrarFoto();
+    errorUpdateFoto = { code: '23514', message: 'violates check constraint "qa_foto_confirmacion_completa"' };
+    const r = await confirmarVerdadTerreno(dbFalsa(), 'foto-1', VERDAD, null);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/0185/);
+  });
+});
+
+describe('leer la verdad-de-terreno del banco', () => {
+  it('la etiqueta buena viaja tipada, con confirmadoEn', async () => {
+    sembrarFoto('foto-1', { ocr_esperado: VERDAD, confirmado_en: '2026-08-20T10:00:00Z' });
+    const r = await leerManifiesto(dbFalsa());
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.datos[0].ocrEsperado).toEqual(VERDAD);
+    expect(r.datos[0].confirmadoEn).toBe('2026-08-20T10:00:00Z');
+  });
+
+  it('una etiqueta CORRUPTA guardada se degrada a null: no se mide contra ella', async () => {
+    // Un `folio: null` sin clasificar — el caso exacto que corrompería la
+    // medición si se leyera como si fuera bueno.
+    sembrarFoto('foto-1', {
+      ocr_esperado: { ...VERDAD, folio: null },
+      confirmado_en: '2026-08-20T10:00:00Z',
+    });
+    const r = await leerManifiesto(dbFalsa());
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.datos[0].ocrEsperado).toBeNull();
+  });
+
+  it('sin etiqueta, ocrEsperado y confirmadoEn son null (no "está bien")', async () => {
+    sembrarFoto();
+    const r = await leerManifiesto(dbFalsa());
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.datos[0].ocrEsperado).toBeNull();
+    expect(r.datos[0].confirmadoEn).toBeNull();
+  });
+});
+
+describe('qa_foto_lectura — la historia de la medición', () => {
+  it('guarda la lectura con sus tres contadores derivados de la medición', async () => {
+    sembrarFoto();
+    const medicion = medir(VERDAD, LEIDO);
+    const r = await guardarLectura(dbFalsa(), {
+      fotoId: 'foto-1', modelo: 'google/gemini-flash', ocrLeido: LEIDO,
+      medicion, costoUsd: 0.0031, motivo: null,
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.datos.camposOk).toBe(7);
+    expect(r.datos.camposMal).toBe(0);
+    expect(r.datos.camposNoMedidos).toBe(0);
+    expect(r.datos.costoUsd).toBeCloseTo(0.0031, 6);
+    // Y los tres suman 7, igual que el CHECK de la 0239.
+    expect(r.datos.camposOk + r.datos.camposMal + r.datos.camposNoMedidos).toBe(7);
+  });
+
+  it('es un APÉNDICE: dos corridas de la misma foto son dos filas, no un upsert', async () => {
+    sembrarFoto();
+    const db = dbFalsa();
+    const medicion = medir(VERDAD, LEIDO);
+    await guardarLectura(db, { fotoId: 'foto-1', modelo: 'm1', ocrLeido: LEIDO, medicion, costoUsd: 0.001, motivo: null });
+    await guardarLectura(db, { fotoId: 'foto-1', modelo: 'm2', ocrLeido: LEIDO, medicion, costoUsd: 0.002, motivo: null });
+    expect(tablas.qa_foto_lectura).toHaveLength(2);
+  });
+
+  it('la tabla ausente manda a la 0239, no a la 0185', async () => {
+    errorTabla = { code: 'PGRST205', message: "Could not find the table 'public.qa_foto_lectura' in the schema cache" };
+    const r = await guardarLectura(dbFalsa(), {
+      fotoId: 'foto-1', modelo: 'm', ocrLeido: ocrVacio(),
+      medicion: medir(VERDAD, ocrVacio()), costoUsd: 0, motivo: null,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toMatch(/0239/);
+      expect(r.error).not.toMatch(/0185/);
+    }
+  });
+
+  it('leerUltimasLecturas se queda con la MÁS NUEVA de cada foto', async () => {
+    sembrarFoto('foto-1');
+    sembrarFoto('foto-2');
+    tablas.qa_foto_lectura.push(
+      { id: 'l1', foto_id: 'foto-1', corrida_en: '2026-08-20T10:00:00Z', modelo: 'viejo', ocr_leido: LEIDO, medicion: medir(VERDAD, LEIDO), campos_ok: 7, campos_mal: 0, campos_no_medidos: 0, costo_usd: 0.001, motivo: null },
+      { id: 'l2', foto_id: 'foto-1', corrida_en: '2026-08-21T10:00:00Z', modelo: 'nuevo', ocr_leido: LEIDO, medicion: medir(VERDAD, LEIDO), campos_ok: 7, campos_mal: 0, campos_no_medidos: 0, costo_usd: 0.002, motivo: null },
+      { id: 'l3', foto_id: 'foto-2', corrida_en: '2026-08-19T10:00:00Z', modelo: 'otro', ocr_leido: LEIDO, medicion: medir(VERDAD, LEIDO), campos_ok: 7, campos_mal: 0, campos_no_medidos: 0, costo_usd: 0.003, motivo: null },
+    );
+    const r = await leerUltimasLecturas(dbFalsa());
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.datos.size).toBe(2);
+    expect(r.datos.get('foto-1')!.modelo).toBe('nuevo');
+    expect(r.datos.get('foto-2')!.modelo).toBe('otro');
+  });
+
+  it('sin lecturas = mapa vacío DE VERDAD; base caída se dice', async () => {
+    const vacio = await leerUltimasLecturas(dbFalsa());
+    expect(vacio.ok).toBe(true);
+    if (vacio.ok) expect(vacio.datos.size).toBe(0);
+
+    fallaTabla = 'qa_foto_lectura';
+    const caida = await leerUltimasLecturas(dbFalsa());
+    expect(caida.ok).toBe(false);
+  });
+
+  it('el gasto de lecturas suma SOLO el día de México y falla por valor', async () => {
+    // El instante ACTUAL cae siempre dentro del día de México en curso —
+    // fijar una hora UTC concreta se rompe sola pasadas las 18:00 hora MX,
+    // que es el mismo error que el comentario de `comoInstante` documenta.
+    tablas.qa_foto_lectura.push(
+      { id: 'l1', foto_id: 'f', corrida_en: new Date().toISOString(), modelo: 'm', ocr_leido: {}, medicion: {}, campos_ok: 0, campos_mal: 0, campos_no_medidos: 7, costo_usd: 0.25, motivo: null },
+      { id: 'l2', foto_id: 'f', corrida_en: '2020-01-01T18:00:00Z', modelo: 'm', ocr_leido: {}, medicion: {}, campos_ok: 0, campos_mal: 0, campos_no_medidos: 7, costo_usd: 99, motivo: null },
+    );
+    const r = await gastoLecturasHoyUsd(dbFalsa());
+    expect(r).toEqual({ ok: true, datos: 0.25 });
+
+    fallaTabla = 'qa_foto_lectura';
+    const caida = await gastoLecturasHoyUsd(dbFalsa());
+    expect(caida.ok).toBe(false);
+    // Jamás un 0 sobre una lectura que falló: eso autorizaría a gastar a ciegas.
+    if (!caida.ok) expect(caida.error).toMatch(/gasto de lecturas/);
   });
 });

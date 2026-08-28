@@ -33,11 +33,12 @@ import { hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
-  resumirAvance, PASADA_MUERTA_MS,
+  resumirAvance, PASADA_MUERTA_MS, validarVerdadTerreno,
   type CorridaQA, type FotoBanco, type PasoQA, type EstadoCorrida, type EscenarioId,
   type FotoDeCorrida, type EstadoFotoCorrida, type MemoriaCorrida, type Carril,
-  type FaseCorrida, type CorteCorrida,
+  type FaseCorrida, type CorteCorrida, type VerdadTerreno,
 } from './qa-tipos';
+import type { Medicion, OcrLeido } from './qa-verdad';
 
 export const BUCKET_QA_FOTOS = 'qa-fotos';
 export const BUCKET_QA_EVIDENCIA = 'qa-evidencia';
@@ -101,16 +102,36 @@ type Resultado<T> = { ok: true; datos: T } | { ok: false; error: string };
 interface FilaFoto {
   id: string; hash: string; path: string; mime: string; etiqueta: string;
   bytes: number; subido_en: string; ocr_esperado: unknown;
+  confirmado_en?: string | null;
 }
 
+/** Las columnas del banco. Una sola constante para que la lectura del panel,
+ *  la del dedup y la de la confirmación no se desincronicen — que fue justo lo
+ *  que pasó cuando `confirmado_en` entró al tipo y tres `select` distintos
+ *  seguían sin pedirlo. */
+const COLS_FOTO = 'id, hash, path, mime, etiqueta, bytes, subido_en, ocr_esperado, confirmado_en';
+
 function fotoDeFila(f: FilaFoto): FotoBanco {
+  // LA VERDAD-DE-TERRENO SE RE-VALIDA AL LEERLA, no solo al escribirla.
+  //
+  // La columna es `jsonb` y la 0239 le puso el CHECK, pero el panel puede
+  // correr contra una base donde esa migración todavía no se aplicó, y las
+  // primeras etiquetas se escribieron a mano. Una etiqueta mal formada que
+  // pase de largo aquí no da un error: da una medición con un campo contado en
+  // el bando equivocado. Se degrada a `null` —"esta foto no se puede medir",
+  // que la pantalla dice— en vez de medir contra algo que no cumple el
+  // contrato.
+  const crudo = f.ocr_esperado ?? null;
+  let ocrEsperado: VerdadTerreno | null = null;
+  if (crudo !== null) {
+    const v = validarVerdadTerreno(crudo);
+    ocrEsperado = v.ok ? v.datos : null;
+  }
   return {
     id: f.id, hash: f.hash, path: f.path, mime: f.mime, etiqueta: f.etiqueta,
     bytes: Number(f.bytes), subidoEn: f.subido_en,
-    // El tipo declara `null` mientras el oráculo humano (Fase B pieza 2) no
-    // exista en la pantalla. La columna ya lo admite; leerlo como otra cosa
-    // sería adelantarse al contrato.
-    ocrEsperado: (f.ocr_esperado ?? null) as null,
+    ocrEsperado,
+    confirmadoEn: f.confirmado_en ?? null,
   };
 }
 
@@ -232,7 +253,7 @@ function tabla(error: { code?: string; message?: string } | null, prefijo: strin
 export async function leerManifiesto(db: SupabaseClient): Promise<Resultado<FotoBanco[]>> {
   try {
     const { data, error } = await db.from('qa_foto')
-      .select('id, hash, path, mime, etiqueta, bytes, subido_en, ocr_esperado')
+      .select(COLS_FOTO)
       .order('subido_en', { ascending: true });
     if (error) return { ok: false, error: tabla(error, 'no se pudo leer el banco de fotos') };
     return { ok: true, datos: ((data ?? []) as FilaFoto[]).map(fotoDeFila) };
@@ -243,7 +264,7 @@ export async function leerManifiesto(db: SupabaseClient): Promise<Resultado<Foto
 
 async function fotoPorHash(db: SupabaseClient, hash: string): Promise<FotoBanco | null> {
   const { data, error } = await db.from('qa_foto')
-    .select('id, hash, path, mime, etiqueta, bytes, subido_en, ocr_esperado')
+    .select(COLS_FOTO)
     .eq('hash', hash).limit(1);
   if (error || !data || data.length === 0) return null;
   return fotoDeFila(data[0] as FilaFoto);
@@ -317,7 +338,7 @@ export async function subirFotos(
       bytes: a.bytes.length,
     };
     const { data, error } = await db.from('qa_foto').insert(fila)
-      .select('id, hash, path, mime, etiqueta, bytes, subido_en, ocr_esperado').limit(1);
+      .select(COLS_FOTO).limit(1);
 
     if (error) {
       if (esDuplicado(error)) {
@@ -361,6 +382,213 @@ export async function firmarRuta(db: SupabaseClient, bucket: string, path: strin
   const { data, error } = await db.storage.from(bucket).createSignedUrl(path, 60);
   if (error || !data?.signedUrl) return null;
   return data.signedUrl;
+}
+
+// ── El oráculo humano: escribir la verdad-de-terreno ────────────────────────
+
+/**
+ * Firma la verdad-de-terreno de UNA foto: qué dice el comprobante de verdad,
+ * según una persona que lo miró.
+ *
+ * Las tres cosas que van juntas o no va ninguna, y por qué:
+ *
+ *  · `ocr_esperado` — la etiqueta. Se RE-VALIDA aquí aunque quien llama ya la
+ *    haya validado: es la última frontera antes de la base, y una etiqueta mal
+ *    formada no rompe nada visiblemente, solo desvía una medición.
+ *  · `confirmado_por` — quién la firmó. Puede ser `null` (una ingesta por
+ *    script no tiene sesión de usuario), y eso es un dato honesto: no se
+ *    inventa un autor.
+ *  · `confirmado_en` — cuándo. NO es opcional: el CHECK
+ *    `qa_foto_confirmacion_completa` de la 0185 exige que un `ocr_esperado`
+ *    no nulo venga con su `confirmado_en` no nulo. Escribirlos por separado
+ *    hace rebotar la fila entera, así que van en el mismo UPDATE.
+ *
+ * El error de supabase se reporta POR VALOR, incluidos los dos rebotes que
+ * esta función puede provocar de verdad (el CHECK de la 0185 y el de la 0239),
+ * traducidos a algo que se pueda leer sin abrir el SQL.
+ */
+export async function confirmarVerdadTerreno(
+  db: SupabaseClient,
+  fotoId: string,
+  verdad: VerdadTerreno,
+  confirmadoPor: string | null,
+): Promise<Resultado<FotoBanco>> {
+  const v = validarVerdadTerreno(verdad);
+  if (!v.ok) return { ok: false, error: `la verdad-de-terreno no cumple el contrato — ${v.error}` };
+
+  try {
+    const { data, error } = await db.from('qa_foto')
+      .update({
+        ocr_esperado: v.datos,
+        confirmado_por: confirmadoPor,
+        // El instante lo pone ESTA capa, no un default de columna: la columna
+        // no tiene default y el CHECK la exige, así que un update que solo
+        // tocara `ocr_esperado` rebotaría.
+        confirmado_en: new Date().toISOString(),
+      })
+      .eq('id', fotoId)
+      .select(COLS_FOTO);
+
+    if (error) {
+      if (/qa_foto_verdad_terreno_completa/.test(error.message)) {
+        return { ok: false, error: `la base rechazó la etiqueta (CHECK qa_foto_verdad_terreno_completa, mig. 0239): algún campo en null no está clasificado en "ilegibles" ni en "noAplica", o está en los dos. Detalle: ${error.message}` };
+      }
+      if (/qa_foto_confirmacion_completa/.test(error.message)) {
+        return { ok: false, error: `la base rechazó la confirmación (CHECK qa_foto_confirmacion_completa, mig. 0185): un "esperado" sin firma no existe. Detalle: ${error.message}` };
+      }
+      return { ok: false, error: tabla(error, `no se pudo confirmar la foto ${fotoId}`) };
+    }
+
+    const filas = (data ?? []) as FilaFoto[];
+    // Cero filas actualizadas NO es éxito: el id no existe en el banco. Sin
+    // este chequeo la pantalla diría "confirmada" sobre una foto que nadie
+    // tocó, que es la peor mentira posible en la superficie que produce la
+    // vara de medir.
+    if (filas.length === 0) return { ok: false, error: `la foto ${fotoId} no está en el banco — nada se confirmó` };
+    return { ok: true, datos: fotoDeFila(filas[0]) };
+  } catch (e) {
+    return { ok: false, error: `no se pudo confirmar la foto ${fotoId}: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+// ── Las lecturas del OCR (mig. 0239) ────────────────────────────────────────
+
+export interface LecturaFoto {
+  id: string;
+  fotoId: string;
+  corridaEn: string;
+  modelo: string;
+  ocrLeido: OcrLeido;
+  medicion: Medicion;
+  camposOk: number;
+  camposMal: number;
+  camposNoMedidos: number;
+  costoUsd: number;
+  motivo: string | null;
+}
+
+interface FilaLectura {
+  id: string; foto_id: string; corrida_en: string; modelo: string;
+  ocr_leido: unknown; medicion: unknown;
+  campos_ok: number; campos_mal: number; campos_no_medidos: number;
+  costo_usd: number | string; motivo: string | null;
+}
+
+const COLS_LECTURA =
+  'id, foto_id, corrida_en, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos, costo_usd, motivo';
+
+function lecturaDeFila(l: FilaLectura): LecturaFoto {
+  return {
+    id: l.id,
+    fotoId: l.foto_id,
+    corridaEn: l.corrida_en,
+    modelo: l.modelo,
+    ocrLeido: (l.ocr_leido ?? {}) as OcrLeido,
+    medicion: (l.medicion ?? { campos: [], camposOk: 0, camposMal: 0, camposNoMedidos: 0 }) as Medicion,
+    camposOk: Number(l.campos_ok),
+    camposMal: Number(l.campos_mal),
+    camposNoMedidos: Number(l.campos_no_medidos),
+    costoUsd: Number(l.costo_usd),
+    motivo: l.motivo,
+  };
+}
+
+export interface LecturaNueva {
+  fotoId: string;
+  modelo: string;
+  ocrLeido: OcrLeido;
+  medicion: Medicion;
+  costoUsd: number;
+  motivo: string | null;
+}
+
+/** Escribe UNA lectura del OCR contra una foto. Es un apéndice puro: nada se
+ *  actualiza, cada corrida es una fila nueva — la pregunta que la tabla
+ *  contesta ("¿mejoró el modelo?") se responde comparando dos instantes, y un
+ *  upsert borraría justo la mitad de esa comparación. */
+export async function guardarLectura(db: SupabaseClient, l: LecturaNueva): Promise<Resultado<LecturaFoto>> {
+  try {
+    const { data, error } = await db.from('qa_foto_lectura').insert({
+      foto_id: l.fotoId,
+      modelo: l.modelo,
+      ocr_leido: l.ocrLeido,
+      medicion: l.medicion,
+      campos_ok: l.medicion.camposOk,
+      campos_mal: l.medicion.camposMal,
+      campos_no_medidos: l.medicion.camposNoMedidos,
+      costo_usd: l.costoUsd,
+      motivo: l.motivo,
+    }).select(COLS_LECTURA).limit(1);
+    if (error) return { ok: false, error: tablaLectura(error, `no se pudo guardar la lectura de la foto ${l.fotoId}`) };
+    const filas = (data ?? []) as FilaLectura[];
+    if (filas.length === 0) return { ok: false, error: `la lectura de la foto ${l.fotoId} no devolvió fila` };
+    return { ok: true, datos: lecturaDeFila(filas[0]) };
+  } catch (e) {
+    return { ok: false, error: `no se pudo guardar la lectura de la foto ${l.fotoId}: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+/** Igual que `tabla`, pero apuntando a la migración que de verdad falta. Decir
+ *  "aplica la 0185" cuando lo que falta es la 0239 manda a arreglar lo que ya
+ *  está bien. */
+function tablaLectura(error: { code?: string; message?: string } | null, prefijo: string): string {
+  const msg = error?.message ?? 'error sin mensaje';
+  const falta = error?.code === '42P01' || error?.code === 'PGRST205'
+    || /does not exist|schema cache/i.test(msg);
+  return falta
+    ? `${prefijo}: falta aplicar la migración 0239 (qa_foto_lectura). Sin ella el OCR se puede correr pero su medición no se guarda — el detalle: ${msg}`
+    : `${prefijo}: ${msg}`;
+}
+
+/**
+ * La ÚLTIMA lectura de cada foto — lo que la pantalla enseña sin pedir una
+ * corrida nueva.
+ *
+ * Se traen las N más recientes de todo el banco y se queda la primera por foto:
+ * el índice `(foto_id, corrida_en desc)` de la 0239 hace barata la consulta, y
+ * el orden descendente garantiza que la primera que se ve de cada foto es la
+ * suya más nueva. `limite` acota lo que viaja; que se quede corto no inventa
+ * nada — simplemente algunas fotos salen sin lectura, que es lo mismo que
+ * "todavía sin medir".
+ */
+export async function leerUltimasLecturas(db: SupabaseClient, limite = 600): Promise<Resultado<Map<string, LecturaFoto>>> {
+  try {
+    const { data, error } = await db.from('qa_foto_lectura').select(COLS_LECTURA)
+      .order('corrida_en', { ascending: false }).limit(limite);
+    if (error) return { ok: false, error: tablaLectura(error, 'no se pudieron leer las lecturas del OCR') };
+    const ultimas = new Map<string, LecturaFoto>();
+    for (const f of (data ?? []) as FilaLectura[]) {
+      if (!ultimas.has(f.foto_id)) ultimas.set(f.foto_id, lecturaDeFila(f));
+    }
+    return { ok: true, datos: ultimas };
+  } catch (e) {
+    return { ok: false, error: `no se pudieron leer las lecturas del OCR: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+/**
+ * Lo que las lecturas del OCR llevan gastado HOY (día de México).
+ *
+ * Existe porque el tope diario del panel (`TOPE_DIA_USD`) se calculaba solo
+ * sobre `qa_corrida`, y correr el OCR contra el banco gasta dinero de modelo
+ * que ninguna corrida registra: sin esto, apretar el botón 91 veces se salta
+ * el candado entero sin tocarlo. Falla POR VALOR — un tope que no se puede
+ * leer no autoriza a gastar (fallar cerrado).
+ */
+export async function gastoLecturasHoyUsd(db: SupabaseClient): Promise<Resultado<number>> {
+  try {
+    const dia = hoyMx();
+    const { data, error } = await db.from('qa_foto_lectura').select('costo_usd')
+      .gte('corrida_en', inicioDiaMx(dia)).lte('corrida_en', finDiaMx(dia));
+    if (error) return { ok: false, error: tablaLectura(error, 'no se pudo leer el gasto de lecturas del día') };
+    const total = ((data ?? []) as Array<{ costo_usd: number | string }>).reduce((s, l) => {
+      const v = Number(l.costo_usd);
+      return s + (Number.isFinite(v) ? v : 0);
+    }, 0);
+    return { ok: true, datos: Math.round(total * 10_000) / 10_000 };
+  } catch (e) {
+    return { ok: false, error: `no se pudo leer el gasto de lecturas del día: ${e instanceof Error ? e.message : String(e)}` };
+  }
 }
 
 // ── Corridas ────────────────────────────────────────────────────────────────

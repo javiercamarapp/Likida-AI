@@ -78,8 +78,15 @@ describe('registro de comercios', () => {
     }
   });
 
+  // MISMO INVARIANTE QUE ANTES, con la excepción DECLARADA que trajo el banco
+  // de tickets reales: un comercio o tiene portal, o lleva `portalPendiente` y
+  // entonces `enrutar` lo devuelve como incompleto sin mandar a nadie a una
+  // liga en blanco. Lo que sigue prohibido —y es lo que esta prueba cuida— es
+  // un portal vacío SIN la marca. Los dos sentidos del ⟺ y la lista cerrada de
+  // pendientes están en el bloque del final del archivo.
   it('ningún comercio se anuncia sin portal a dónde mandar al operador', () => {
     for (const c of COMERCIOS) {
+      if (c.portalPendiente) continue;
       expect(c.portal, `${c.clave} no tiene portal`).toMatch(/^https?:\/\//);
     }
   });
@@ -223,23 +230,81 @@ describe('lo verificado se distingue de la hipótesis', () => {
   // comprobó, así que la lista de verificados es cerrada y esta prueba la fija:
   // meter uno nuevo obliga a pasar por aquí, y a decir cómo se verificó.
   //
-  // Y hay dos grados de "verificado", que conviene no confundir:
+  // Y hay TRES grados de "verificado", que conviene no confundir:
   //   · FACTURANDO — megasur y la_gas: se timbró un CFDI real.
   //   · LEYENDO EL PORTAL — office_depot (maxlength del campo) y g500 (el plazo
   //     impreso en el ticket). Es evidencia de primera mano, pero no probó que
   //     el portal acepte el ticket de punta a punta.
-  const VERIFICADOS = ['g500', 'la_gas', 'megasur', 'office_depot'];
+  //   · LEYENDO EL TICKET REAL (27-ago-2026) — home_depot, tim_hortons,
+  //     conekta360 y bptgroup: el plazo viene IMPRESO en el comprobante que un
+  //     chofer fotografió, y se leyó mirando la foto. Es el grado más débil de
+  //     los tres —no dice nada de si el portal lo respeta— pero es más fuerte
+  //     que el default 'mes_natural', que no lo dice NADIE.
+  //
+  //     Y no es un matiz cosmético: los cuatro contradicen ese default. Home
+  //     Depot da 60 DÍAS (el default lo habría dado por vencido semanas antes),
+  //     y Boston's y la ferretería de Conekta 360 dan 72 y 24 HORAS (el default
+  //     habría jurado que seguían vigentes cuando ya no). Un plazo supuesto
+  //     falla en las dos direcciones, y las dos cuestan dinero.
+  //
+  //     Los otros 14 comercios que entraron en esa misma tanda NO están aquí:
+  //     sus tickets no imprimen plazo, y no imprimirlo no es dar un mes.
+  const VERIFICADOS = [
+    'g500', 'la_gas', 'megasur', 'office_depot',
+    'home_depot', 'tim_hortons', 'conekta360', 'bptgroup',
+  ];
   const FACTURADOS = ['la_gas', 'megasur'];
+  /** Los que se verificaron mirando la foto de un ticket real, no el portal. */
+  const VERIFICADOS_EN_TICKET = ['bptgroup', 'conekta360', 'home_depot', 'tim_hortons'];
 
   it('la lista de verificados es exactamente ésta', () => {
     const conPlazo = COMERCIOS.filter((c) => c.plazoVerificado).map((c) => c.clave).sort();
     expect(conPlazo).toEqual([...VERIFICADOS].sort());
   });
 
-  it('los 29 restantes NO se anuncian como verificados', () => {
+  it('todos los demás NO se anuncian como verificados', () => {
     const sin = COMERCIOS.filter((c) => !c.plazoVerificado);
     expect(sin.length).toBe(COMERCIOS.length - VERIFICADOS.length);
     for (const c of sin) expect(c.plazoVerificado, c.clave).toBe(false);
+  });
+
+  // TRES DE LOS CUATRO CONTRADICEN EL DEFAULT, y ése es el hallazgo: el
+  // catálogo venía suponiendo 'mes_natural' para todos, y en cuanto se leyeron
+  // comprobantes de verdad resultó falso en tres de cuatro casos — y falso en
+  // las DOS direcciones, que es lo caro. Home Depot da 60 días: con el default
+  // el sistema habría dado por vencido semanas antes un ticket todavía
+  // facturable. Boston's da 72 horas y la ferretería de Conekta 360 da 24: con
+  // el default habría jurado que seguían vigentes cuando ya no.
+  //
+  // Esta prueba fija esa asimetría para que nadie "normalice" estas entradas de
+  // vuelta al default dejándoles la marca de verificadas puesta.
+  const CONTRADICEN_EL_DEFAULT = ['home_depot', 'conekta360', 'bptgroup'];
+
+  it('lo leído en un ticket real desmiente el default en tres de cuatro', () => {
+    for (const k of CONTRADICEN_EL_DEFAULT) {
+      const c = comercio(k);
+      expect(c, `${k} no está en el catálogo`).toBeDefined();
+      expect(c!.plazoVerificado, k).toBe(true);
+      expect(c!.plazo, `${k}: se marcó verificado pero quedó con el default`).not.toBe('mes_natural');
+    }
+    // El cuarto es el caso contrario y por eso vale la pena nombrarlo aparte:
+    // el ticket de Tim Hortons dice "podrá facturarse hasta el último día del
+    // mes", o sea CONFIRMA 'mes_natural'. Es la primera vez que el default de
+    // este catálogo aparece respaldado por un papel en vez de supuesto — y un
+    // default confirmado y un default supuesto valen distinto aunque el valor
+    // que guardan sea idéntico. Eso es justo lo que `plazoVerificado` distingue.
+    expect(comercio('tim_hortons')!.plazo).toBe('mes_natural');
+    expect(comercio('tim_hortons')!.plazoVerificado).toBe(true);
+    expect(VERIFICADOS_EN_TICKET).toEqual([...CONTRADICEN_EL_DEFAULT, 'tim_hortons'].sort());
+  });
+
+  // Dos de los cuatro se miden en HORAS, y ése es el caso por el que
+  // `caducidad.ts` admite `{ horas }`: redondear 24 h a "un día" da por vigente
+  // un ticket que ya venció.
+  it('hay plazos en HORAS, y salieron de un comprobante en la mano', () => {
+    const enHoras = COMERCIOS.filter((c) => typeof c.plazo === 'object' && 'horas' in c.plazo);
+    expect(enHoras.map((c) => c.clave).sort()).toEqual(['bptgroup', 'conekta360']);
+    for (const c of enHoras) expect(c.plazoVerificado, c.clave).toBe(true);
   });
 
   it('los facturados de verdad son dos, y hay que poder nombrarlos', () => {
@@ -266,5 +331,64 @@ describe('lo verificado se distingue de la hipótesis', () => {
     for (const k of ['sucursal', 'fecha', 'hora', 'referencia', 'caja', 'transaccion', 'monto']) {
       expect(cs, `PINFRA sin ${k}`).toContain(k);
     }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PORTAL QUE NO SE HA VERIFICADO SE DECLARA, NO SE INVENTA
+//
+// `portal` se usa para ABRIR una página: `vinculacion_asistida.ts` hace
+// `pagina.abrir(ficha.portal)` y `mensajeParaEncargado` la manda por WhatsApp
+// para que una persona la teclee. Una URL supuesta no falla de forma visible —
+// lleva a alguien a un sitio que nadie comprobó.
+//
+// Por eso el catálogo admite exactamente dos estados, y esta prueba fija que no
+// haya un tercero: o el comercio tiene una URL de verdad, o lleva
+// `portalPendiente: true` y `portal` vacío. Lo que NO puede existir es un
+// portal en blanco sin la marca (un descuido que se leería como "no hay
+// portal") ni la marca con una URL puesta (que diría dos cosas contrarias a la
+// vez).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el portal sin verificar se declara con portalPendiente', () => {
+  it('portal vacío ⟺ portalPendiente, en los dos sentidos', () => {
+    for (const c of COMERCIOS) {
+      if (c.portalPendiente) {
+        expect(c.portal, `${c.clave}: lleva portalPendiente y además una URL — di una sola cosa`).toBe('');
+      } else {
+        expect(c.portal, `${c.clave}: portal vacío sin portalPendiente`).not.toBe('');
+        expect(c.portal.startsWith('https://') || c.portal.startsWith('http://'), `${c.clave}: ${c.portal} no es una URL`).toBe(true);
+      }
+    }
+  });
+
+  // La lista es CERRADA a propósito: meter un comercio sin portal obliga a
+  // pasar por aquí y a decir por qué no se pudo verificar, en vez de que el
+  // hueco crezca callado. Los tres salieron del banco de 91 fotos y comparten
+  // la causa: su ticket no imprime liga de facturación.
+  it('son exactamente estos tres, y ninguno finge tener campos leídos', () => {
+    const pendientes = COMERCIOS.filter((c) => c.portalPendiente).map((c) => c.clave).sort();
+    expect(pendientes).toEqual(['amg_hospitality', 'vaquero_montejo', 'walmart']);
+    for (const k of pendientes) {
+      const c = comercio(k)!;
+      // Sin portal no se pudo leer el formulario: `campos` vacío y la marca
+      // puesta. Un campo declarado aquí estaría inventado por definición.
+      expect(c.campos, `${k}`).toEqual([]);
+      expect(c.camposPendientes, `${k}`).toBe(true);
+      expect(c.plazoVerificado, `${k}: sin portal no hay plazo verificado`).toBe(false);
+      // Y nada de `dominios`: el dominio es la señal que sale de la liga
+      // impresa, y estos justamente no la imprimen. Un dominio aquí sería la
+      // URL inventada entrando por la puerta de atrás.
+      expect(c.reconocer.dominios, `${k}: no imprime liga, no puede tener dominio`).toBeUndefined();
+    }
+  });
+
+  it('el emisor más fotografiado del banco va en UNA entrada, no en tres', () => {
+    // Walmart, Sam's Club y Bodega Aurrera son marcas del MISMO contribuyente
+    // (NWM9709244W4). Tres entradas con el mismo RFC serían tres candidatos
+    // empatados para el mismo ticket, y `identificarComercio` no adivina ante
+    // un empate: los once tickets se quedarían sin comercio.
+    const porRfc = COMERCIOS.filter((c) => c.reconocer.rfc?.includes('NWM9709244W4'));
+    expect(porRfc.map((c) => c.clave)).toEqual(['walmart']);
+    expect(identificarComercio({ rfcEmisor: 'NWM9709244W4' })?.clave).toBe('walmart');
   });
 });
