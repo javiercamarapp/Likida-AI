@@ -199,6 +199,54 @@ export const NORMAS: Record<string, Norma> = {
     estado: "verificado_fuente_primaria",
     ficha: "normas/lft-110-111-263.yaml",
   },
+  // El registro de jornada (mig. 0241). La fracción XXXIV del 132 es NUEVA —
+  // la adicionó el decreto del DOF del 01-05-2026, el mismo de la reducción de
+  // jornada— y por eso `exigibleDesde` sí trae fecha: la obligación es
+  // exigible, no latente. Los topes de los arts. 61 y 68 son los únicos números
+  // de horas que el producto puede citar, y el motor los cita SIEMPRE con su
+  // artículo.
+  'lft-132-XXXIV-jornada': {
+    id: 'lft-132-XXXIV-jornada',
+    instrumento: "Ley Federal del Trabajo",
+    articulo: "132 fr. XXXIV, 58 a 69, 784, 804, 805 y 994 fr. IV Bis",
+    titulo: "El registro electrónico de la jornada, los topes de horas, y qué pasa si el patrón no lo exhibe",
+    citas: ["LFT 132-XXXIV", "LFT 58", "LFT 60", "LFT 61", "LFT 63", "LFT 64", "LFT 68", "LFT 69", "LFT 784", "LFT 804", "LFT 805", "LFT 994-IV Bis"],
+    jerarquia: 1,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: "2026-05-01",
+    ficha: "normas/lft-132-XXXIV-jornada.yaml",
+  },
+  // Nivel 3: una NOM la emite una Secretaría, no el legislador. Está en el
+  // índice para que el producto pueda DECIR que no la evalúa —mide conducción,
+  // y Likida registra jornada— citando la norma que se está absteniendo de
+  // aplicar. Callarse sin nombrar lo que uno calla no es transparencia.
+  'nom-087-sct-2-2017': {
+    id: 'nom-087-sct-2-2017',
+    instrumento: "NOM-087-SCT-2-2017 (Norma Oficial Mexicana)",
+    articulo: "numerales 4.1 a 4.7, 8.2.1, 8.3.2 y 8.5",
+    titulo: "Tiempos de conducción y pausas del autotransporte federal — y por qué Likida no los evalúa",
+    citas: ["NOM-087-SCT-2-2017", "NOM-087 4.1", "NOM-087 4.6", "NOM-087 4.7", "NOM-087 8.5"],
+    jerarquia: 3,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: "2018-08-27",
+    ficha: "normas/nom-087-sct-2-2017.yaml",
+  },
+  // `exigibleDesde: null` A PROPÓSITO: la reforma del 25-05-2026 sí se verificó,
+  // pero el texto CONSOLIDADO del reglamento no se pudo leer (las URLs
+  // oficiales devolvieron error), así que no se puede afirmar que no haya
+  // reformas intermedias. La regla de la casa manda null cuando nadie lo
+  // confirmó — ver la ficha.
+  'reglamento-transito-83': {
+    id: 'reglamento-transito-83',
+    instrumento: "Reglamento de Tránsito en Carreteras y Puentes de Jurisdicción Federal",
+    articulo: "83",
+    titulo: "La bitácora de horas de servicio y sus diez campos obligatorios",
+    citas: ["Reglamento de Tránsito 83", "RTCPJF 83"],
+    jerarquia: 2,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: null,
+    ficha: "normas/reglamento-transito-83.yaml",
+  },
   'lif-2026-art-20-A': {
     id: 'lif-2026-art-20-A',
     instrumento: "Ley de Ingresos de la Federación para el Ejercicio Fiscal de 2026",

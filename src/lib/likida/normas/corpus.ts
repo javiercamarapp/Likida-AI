@@ -191,6 +191,32 @@ export const NORMAS: readonly Norma[] = [
     ]
   },
   {
+    "archivo": "lft-132-XXXIV-jornada.yaml",
+    "id": "lft-132-XXXIV-jornada",
+    "tipo": "ley",
+    "instrumento": "Ley Federal del Trabajo",
+    "articulo_o_regla": "132 fr. XXXIV, 58 a 69, 784, 804, 805 y 994 fr. IV Bis",
+    "titulo": "El registro electrónico de la jornada, los topes de horas, y qué pasa si el patrón no lo exhibe",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFT.pdf",
+    "verificado_el": "2026-08-27",
+    "jerarquia": 1,
+    "citasEnCodigo": [
+      "LFT 132-XXXIV",
+      "LFT 58",
+      "LFT 60",
+      "LFT 61",
+      "LFT 63",
+      "LFT 64",
+      "LFT 68",
+      "LFT 69",
+      "LFT 784",
+      "LFT 804",
+      "LFT 805",
+      "LFT 994-IV Bis"
+    ]
+  },
+  {
     "archivo": "lif-2026-20-A.yaml",
     "id": "lif-2026-art-20-A",
     "tipo": "ley",
@@ -282,6 +308,25 @@ export const NORMAS: readonly Norma[] = [
     ]
   },
   {
+    "archivo": "nom-087-sct-2-2017.yaml",
+    "id": "nom-087-sct-2-2017",
+    "tipo": "regla_general",
+    "instrumento": "NOM-087-SCT-2-2017 (Norma Oficial Mexicana)",
+    "articulo_o_regla": "numerales 4.1 a 4.7, 8.2.1, 8.3.2 y 8.5",
+    "titulo": "Tiempos de conducción y pausas del autotransporte federal — y por qué Likida no los evalúa",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://dof.gob.mx/nota_detalle.php?codigo=5529381&fecha=28/06/2018",
+    "verificado_el": "2026-08-27",
+    "jerarquia": 3,
+    "citasEnCodigo": [
+      "NOM-087-SCT-2-2017",
+      "NOM-087 4.1",
+      "NOM-087 4.6",
+      "NOM-087 4.7",
+      "NOM-087 8.5"
+    ]
+  },
+  {
     "archivo": "politica-portales-plazos.yaml",
     "id": "politica-portales-plazos-facturacion",
     "tipo": "politica_comercio",
@@ -307,6 +352,22 @@ export const NORMAS: readonly Norma[] = [
     "jerarquia": 1,
     "citasEnCodigo": [
       "Red Nacional de Autopistas de Cuota"
+    ]
+  },
+  {
+    "archivo": "reglamento-transito-83.yaml",
+    "id": "reglamento-transito-83",
+    "tipo": "reglamento",
+    "instrumento": "Reglamento de Tránsito en Carreteras y Puentes de Jurisdicción Federal",
+    "articulo_o_regla": "83",
+    "titulo": "La bitácora de horas de servicio y sus diez campos obligatorios",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://www.diputados.gob.mx/LeyesBiblio/regla/n354.pdf",
+    "verificado_el": "2026-08-27",
+    "jerarquia": 2,
+    "citasEnCodigo": [
+      "Reglamento de Tránsito 83",
+      "RTCPJF 83"
     ]
   },
   {

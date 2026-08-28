@@ -80,6 +80,15 @@ export const PALABRAS_POR_TEMA: Record<TemaNormativo, readonly string[]> = {
   privacidad_de_datos: ['privacidad', 'datos personales', 'arco', 'aviso de privacidad', 'lfpdppp'],
   contabilidad_y_multas: ['contabilidad', 'multa', 'multas', 'conservacion de la contabilidad', 'plazo de conservacion'],
   regimen_de_autotransporte: ['regimen', 'autotransporte', 'facilidades', 'rfa', 'coordinado'],
+  // OJO CON «bitacora»: lleva a este tema a propósito, aunque la bitácora de
+  // horas de servicio (Reglamento de Tránsito art. 83) NO sea el registro de
+  // jornada de la LFT. Quien pregunta por una casi siempre está confundiendo
+  // las dos, y el tema trae las tres fichas justamente para deshacer el nudo.
+  jornada_y_horas_de_trabajo: [
+    'jornada', 'horas de trabajo', 'horas extra', 'horas extras', 'tiempo extraordinario',
+    'registro de jornada', 'checador', 'reloj checador', 'bitacora', 'bitacora de horas',
+    'horas de servicio', 'tiempos de conduccion', 'descanso', 'nom-087', 'nom 087',
+  ],
 };
 
 /** Minúsculas y sin acentos — para que «diésel» y «diesel» sean la misma

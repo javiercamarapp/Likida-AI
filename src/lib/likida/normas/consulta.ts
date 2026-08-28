@@ -33,6 +33,7 @@ export const TEMAS_NORMATIVOS = [
   'privacidad_de_datos',
   'contabilidad_y_multas',
   'regimen_de_autotransporte',
+  'jornada_y_horas_de_trabajo',
 ] as const;
 
 export type TemaNormativo = (typeof TEMAS_NORMATIVOS)[number];
@@ -71,7 +72,18 @@ export const TEMAS: Record<TemaNormativo, readonly string[]> = {
   contabilidad_y_multas: ['cff-30', 'cff-89-90'],
   regimen_de_autotransporte: [
     'rfa-2026-2.2', 'tesis-autotransporte', 'red-nacional-autopistas',
-    'rmf-2026-9.1.7',
+    'rmf-2026-9.1.7', 'nom-087-sct-2-2017', 'reglamento-transito-83',
+  ],
+  // El tema del registro de jornada (mig. 0241). Las tres fichas conviven a
+  // propósito y NO dicen lo mismo: la LFT manda registrar la jornada y pone los
+  // topes que el motor sí puede citar; la NOM-087 mide CONDUCCIÓN, que es otra
+  // magnitud y que Likida no registra —está aquí para que el chat pueda nombrar
+  // lo que el producto se abstiene de evaluar—; y el art. 83 del Reglamento de
+  // Tránsito es la bitácora de horas de servicio, un documento DISTINTO, con
+  // otra autoridad y otro plazo de conservación. Quien pregunte por horas de un
+  // operador tiene que ver las tres para no confundir una con otra.
+  jornada_y_horas_de_trabajo: [
+    'lft-132-XXXIV-jornada', 'reglamento-transito-83', 'nom-087-sct-2-2017',
   ],
 };
 

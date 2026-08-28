@@ -85,6 +85,13 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // `dinero_por_area.test.ts` los escanea).
   '/dashboard/viajes': 'operacion',
   '/dashboard/operadores': 'operacion',
+  // El registro de jornada (LFT 132 fr. XXXIV, mig. 0241). Es `operacion` y no
+  // `dinero` por dos razones: no enseña un peso, y el usuario natural es el
+  // jefe de tráfico —él sabe a qué hora salió cada quien y es el único que
+  // puede corregirlo con conocimiento. Corregir, en cambio, exige
+  // `puedeAdministrar`: mover la hora registrada de un trabajador es un acto
+  // con consecuencia jurídica (LFT 805).
+  '/dashboard/jornada': 'operacion',
   // El Registro de Unidades (14-ago-2026): el activo que produce el dinero y
   // sus vigencias de ley. Es `operacion` porque el jefe de tráfico es
   // exactamente quien debe enterarse de que una unidad no puede salir, y la
