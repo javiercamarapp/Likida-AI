@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'fs';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS 4 AGENTES FINANCIEROS (0215) — los contratos que el código sostiene:
@@ -14,21 +15,83 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //    declarado no hay runway; churn sin base es SIN DATO.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// EL MOCK QUE NO FABRICA LA FUENTE (primera pasada real del runner, 18:03).
+//
+// `leerSuscripcionesActivas` pedía `suscripcion.plan` — una columna que NO
+// existe (la real es `plan_clave`, 0052) — y producción contestó 42703: el
+// parte de métricas nacía muerto en TODAS las corridas. La suite pasaba
+// porque este `select()` ignoraba sus argumentos y devolvía filas felices;
+// es el mismo pecado del hallazgo c5-9.
+//
+// Desde aquí el mock LEE EL ESQUEMA REAL de la migración y se comporta como
+// Postgres: una columna que la tabla no tiene devuelve el 42703 de verdad.
+// Una consulta inventada ya no puede pasar verde.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Columnas declaradas por `create table public.<tabla>` en una migración. */
+function columnasDeMigracion(sql: string, tabla: string): Set<string> {
+  const inicio = sql.indexOf(`create table if not exists public.${tabla} (`);
+  if (inicio < 0) throw new Error(`No se encontró el create table de ${tabla} en la migración`);
+  const cuerpo = sql.slice(sql.indexOf('(', inicio) + 1, sql.indexOf('\n);', inicio));
+  const cols = new Set<string>();
+  for (const linea of cuerpo.split('\n')) {
+    const l = linea.replace(/--.*$/, '').trim();
+    const m = l.match(/^([a-z_][a-z0-9_]*)\s+(uuid|text|int|integer|boolean|date|timestamptz|numeric|jsonb)\b/i);
+    if (m) cols.add(m[1]);
+  }
+  if (cols.size === 0) throw new Error(`Esquema vacío para ${tabla} — el parser de la migración se rompió`);
+  return cols;
+}
+
+/** El esquema REAL de las tablas que este módulo consulta por nombre de
+ *  columna. Se lee del SQL, no de una lista escrita a mano que se desincroniza. */
+const ESQUEMA_REAL: Record<string, Set<string>> = {
+  suscripcion: columnasDeMigracion(
+    readFileSync('supabase/migrations/0052_saas_plan_suscripcion.sql', 'utf8'), 'suscripcion'),
+};
+
+/** Las columnas de un `.select(...)` de PostgREST, sin embebidos ni alias. */
+function columnasPedidas(expr: string): string[] {
+  return expr
+    .replace(/\([^)]*\)/g, '')          // embebidos: plan(nombre)
+    .split(',')
+    .map((c) => c.split(':').pop()!.trim())
+    .filter((c) => c && c !== '*');
+}
+
 // Una cola de respuestas por tabla: cada elemento es la respuesta COMPLETA
 // ({ data, error } o { count, error }) que la siguiente consulta a esa tabla
 // se lleva. Vacía ⇒ éxito sin filas (y conteo 0), para no fallar por omisión.
 const respuestas = new Map<string, Array<Record<string, unknown>>>();
+/** Cada `.select()` que corrió, para las pruebas estructurales. */
+const selects: Array<{ tabla: string; columnas: string }> = [];
 function responderDe(tabla: string) {
   const cola = respuestas.get(tabla);
   return cola && cola.length > 0 ? cola.shift()! : { data: [], count: 0, error: null };
 }
 function builder(tabla: string) {
   const b: Record<string, unknown> = {};
+  let error42703: { message: string; code: string } | null = null;
   Object.assign(b, {
-    select: () => b, eq: () => b, is: () => b, gte: () => b, lt: () => b,
+    select: (expr?: string) => {
+      if (typeof expr === 'string') {
+        selects.push({ tabla, columnas: expr });
+        const esquema = ESQUEMA_REAL[tabla];
+        if (esquema) {
+          const fantasma = columnasPedidas(expr).find((c) => !esquema.has(c));
+          // El mensaje EXACTO de Postgres: es el que salió en producción.
+          if (fantasma) error42703 = { message: `column ${tabla}.${fantasma} does not exist`, code: '42703' };
+        }
+      }
+      return b;
+    },
+    eq: () => b, is: () => b, gte: () => b, lt: () => b,
     in: () => b, limit: () => b, maybeSingle: () => b, order: () => b,
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
-      Promise.resolve().then(() => responderDe(tabla)).then(res, rej),
+      Promise.resolve()
+        .then(() => (error42703 ? { data: null, count: null, error: error42703 } : responderDe(tabla)))
+        .then(res, rej),
   });
   return b;
 }
@@ -80,6 +143,7 @@ const {
 
 beforeEach(() => {
   respuestas.clear();
+  selects.length = 0;
   vi.clearAllMocks();
   getResumenNegocio.mockResolvedValue(RESUMEN_VACIO);
   getCostoPorFaseModelo.mockResolvedValue([]);
@@ -402,5 +466,60 @@ describe('c5-8 — U1 mira una VENTANA de 7 días, no el histórico', () => {
     const dias = (Date.now() - Date.parse(desde)) / 86_400_000;
     expect(dias).toBeGreaterThan(6);
     expect(dias).toBeLessThan(8.5);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PRIMERA PASADA REAL DEL RUNNER (18:03, producción) — el analista de métricas
+// murió con «leerSuscripcionesActivas: column suscripcion.plan does not exist».
+// La columna de la 0052 es `plan_clave`; `plan` a secas vive en `tenant`.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el analista de métricas consulta las columnas REALES de suscripcion', () => {
+  const CON_ACTIVAS = () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('suscripcion', [{
+      data: [{ plan_clave: 'flota' }, { plan_clave: 'flota' }, { plan_clave: 'empresa' }],
+      error: null,
+    }]);
+    respuestas.set('prospecto', Array.from({ length: 6 }, () => ({ count: 0, error: null })));
+    getPlanes.mockResolvedValue([
+      { clave: 'flota', precioMensual: 9_500 },
+      { clave: 'empresa', precioMensual: null },
+    ]);
+  };
+
+  it('el esquema de la migración es el que manda: `plan_clave` sí, `plan` no', () => {
+    const cols = ESQUEMA_REAL.suscripcion;
+    expect(cols.has('plan_clave')).toBe(true);
+    expect(cols.has('plan')).toBe(false);
+    expect(cols.has('estado')).toBe(true);
+  });
+
+  it('la corrida arma el parte y el select pedido existe en la tabla', async () => {
+    CON_ACTIVAS();
+    const r = await correrAgenteFinanciero('analista_metricas', 'cron', '2026-08-27');
+    expect(r.piezas).toBe(1);
+    const s = selects.find((x) => x.tabla === 'suscripcion');
+    expect(s?.columnas).toBe('plan_clave');
+  });
+
+  it('el MRR se calcula cruzando plan_clave con el precio del plan (2 × $9,500; 1 sin precio ⇒ SIN CIFRA)', async () => {
+    CON_ACTIVAS();
+    await correrAgenteFinanciero('analista_metricas', 'cron', '2026-08-27');
+    const pieza = encolarPieza.mock.calls[0][0] as { cuerpo: string };
+    expect(pieza.cuerpo).toContain('MRR: SIN CIFRA COMPLETA');
+    expect(pieza.cuerpo).toContain('3 activas pero 1 sin precio configurado');
+  });
+
+  it('LA REGRESIÓN: pedir una columna fantasma devuelve el 42703 real y la corrida queda en FALLO, sin parte', async () => {
+    // El mock ya no fabrica la fuente: se comporta como Postgres. Esta es la
+    // consulta que corría en producción antes del arreglo.
+    respuestas.set('suscripcion', [{ data: [{ plan_clave: 'flota' }], error: null }]);
+    const consulta = builder('suscripcion') as unknown as {
+      select: (e: string) => PromiseLike<{ error: { message: string; code: string } | null }>;
+    };
+    const { error } = await consulta.select('plan');
+    expect(error?.code).toBe('42703');
+    expect(error?.message).toBe('column suscripcion.plan does not exist');
   });
 });

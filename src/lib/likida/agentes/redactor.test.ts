@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'fs';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL REDACTOR (C5) — los contratos que el código debe sostener:
@@ -31,27 +32,46 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 let apagado = false;
 vi.mock('../interruptores', () => ({ estaApagado: async () => apagado }));
 
-const SALIDA_MODELO = `## Variante A — por el costo
-**Asunto:** El cierre del viaje, sin liquidador
+// La salida REALISTA del modelo: desde la primera pasada real del runner el
+// Redactor pide JSON por schema, no markdown parseado con regex.
+const SALIDA_MODELO = {
+  variante_a: {
+    asunto: 'El cierre del viaje, sin liquidador',
+    cuerpo: 'Buen día. Le escribo de Likida: trabajamos el cierre administrativo del viaje.\n¿Le vienen bien 15 minutos el jueves?',
+  },
+  variante_b: {
+    asunto: 'El IEPS del diésel y el peaje',
+    cuerpo: 'Buen día. ¿Hoy están recuperando el IEPS del diésel y el 50% del peaje?\n¿Le vienen bien 15 minutos el jueves?',
+  },
+  variante_c: 'No aplica: la variante C solo se usa después de un sí.',
+  datos_usados: 'ninguno específico de esta empresa.',
+};
+const respuestaModelo = (data: unknown) => ({
+  data, raw: JSON.stringify(data), model: 'prueba', tokensIn: 100, tokensOut: 200, cost: 0.001,
+});
 
-Buen día. Le escribo de Likida: trabajamos el cierre administrativo del viaje.
-¿Le vienen bien 15 minutos el jueves?
+// La réplica de los errores de `openrouter` (el módulo entero está mockeado,
+// así que la clase del `instanceof` del redactor es ESTA — misma forma que la
+// real: mensaje, raw y usage).
+class StructuredError extends Error {
+  constructor(
+    message: string,
+    public cause?: unknown,
+    public raw?: string,
+    public usage?: { model: string; tokensIn: number; tokensOut: number; cost: number },
+  ) { super(message); this.name = 'StructuredError'; }
+}
+class TruncatedError extends StructuredError {
+  constructor(message: string, raw?: string, usage?: { model: string; tokensIn: number; tokensOut: number; cost: number }) {
+    super(message, undefined, raw, usage); this.name = 'TruncatedError';
+  }
+}
 
-## Variante B — por el dinero fiscal
-**Asunto:** El IEPS del diésel y el peaje
-
-Buen día. ¿Hoy están recuperando el IEPS del diésel y el 50% del peaje?
-¿Le vienen bien 15 minutos el jueves?
-
-## Variante C — confirmación de demo
-No aplica: la variante C solo se usa después de un sí.
-
-**Datos usados:** ninguno específico de esta empresa.`;
-
-const generateResponse = vi.fn(async (..._a: unknown[]) => ({
-  text: SALIDA_MODELO, model: 'prueba', tokensIn: 100, tokensOut: 200, cost: 0.001,
+const generateStructured = vi.fn(async (..._a: unknown[]) => respuestaModelo(SALIDA_MODELO));
+vi.mock('@/lib/llm/openrouter', () => ({
+  generateStructured: (...a: unknown[]) => generateStructured(...a),
+  StructuredError,
 }));
-vi.mock('@/lib/llm/openrouter', () => ({ generateResponse: (...a: unknown[]) => generateResponse(...a) }));
 
 const encolarPieza = vi.fn(async (..._a: unknown[]) => 'pieza-1');
 vi.mock('./cola', async () => {
@@ -69,7 +89,7 @@ vi.mock('./cola', async () => {
 const registrarCorrida = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock('./corridas', () => ({ registrarCorrida: (...a: unknown[]) => registrarCorrida(...a) }));
 
-const { redactarCorreoFrio, parsearVariantes, primerNombreDelContacto, sustituirMarcador } = await import('./redactor');
+const { redactarCorreoFrio, variantesDeSalida, primerNombreDelContacto, sustituirMarcador } = await import('./redactor');
 const CONTEXTO = { tenantId: 'tenant-redactor-a', runId: '00000000-0000-4000-8000-000000000001' };
 const { DatoInvalido } = await import('../errores');
 
@@ -81,14 +101,14 @@ const PROSPECTO = {
 beforeEach(() => {
   respuestas.clear();
   apagado = false;
-  generateResponse.mockClear();
+  generateStructured.mockClear();
   encolarPieza.mockClear();
   registrarCorrida.mockClear();
 });
 
-describe('parsearVariantes — la frontera entre el modelo y la cola', () => {
-  it('extrae A/B/C y los datos usados', () => {
-    const v = parsearVariantes(SALIDA_MODELO);
+describe('variantesDeSalida — la frontera entre el modelo y la cola', () => {
+  it('toma A/B/C y los datos usados del schema', () => {
+    const v = variantesDeSalida(SALIDA_MODELO, JSON.stringify(SALIDA_MODELO));
     expect(v.a.asunto).toBe('El cierre del viaje, sin liquidador');
     expect(v.a.cuerpo).toContain('cierre administrativo');
     expect(v.b?.asunto).toContain('IEPS');
@@ -96,21 +116,51 @@ describe('parsearVariantes — la frontera entre el modelo y la cola', () => {
     expect(v.datosUsados).toContain('ninguno específico');
   });
 
-  it('sin variante A legible, LANZA — una pieza malformada no entra a la cola', () => {
-    expect(() => parsearVariantes('bla bla sin formato')).toThrow(DatoInvalido);
+  it('B/C ausentes son null, no un hueco: la pieza sale igual con solo la A', () => {
+    const v = variantesDeSalida(
+      { ...SALIDA_MODELO, variante_b: null, variante_c: null, datos_usados: null },
+      '{}',
+    );
+    expect(v.b).toBeNull();
+    expect(v.c).toBeNull();
+    expect(v.datosUsados).toBeNull();
+    expect(v.a.cuerpo).toContain('cierre administrativo');
+  });
+
+  // ── PRIMERA PASADA REAL DEL RUNNER (18:03): los 3 fallos del Redactor ──
+  it('sin variante A legible, LANZA — y el error trae el texto EXACTO del modelo', () => {
+    const crudo = '{"variante_a":{"asunto":"","cuerpo":""}}';
+    expect(() => variantesDeSalida(
+      { ...SALIDA_MODELO, variante_a: { asunto: '', cuerpo: '' } }, crudo,
+    )).toThrow(DatoInvalido);
+    expect(() => variantesDeSalida(
+      { ...SALIDA_MODELO, variante_a: { asunto: '', cuerpo: '' } }, crudo,
+    )).toThrow(crudo);
+  });
+
+  it('un cuerpo en blanco cumple el schema pero NO se encola: correo vacío no es correo', () => {
+    expect(() => variantesDeSalida(
+      { ...SALIDA_MODELO, variante_a: { asunto: 'Un asunto', cuerpo: '   \n  ' } }, 'crudo-del-modelo',
+    )).toThrow(/sin variante A legible/);
+  });
+
+  it('el modelo que no devolvió NADA se dice con palabras, no con un error mudo', () => {
+    expect(() => variantesDeSalida(
+      { ...SALIDA_MODELO, variante_a: { asunto: '', cuerpo: '' } }, '',
+    )).toThrow(/vacío — el modelo no devolvió texto/);
   });
 });
 
 describe('redactarCorreoFrio', () => {
   it('sin tenant explícito falla cerrado antes de leer prospectos o llamar al modelo', async () => {
     await expect(redactarCorreoFrio('pr-1', 'Javier')).rejects.toThrow(/tenant requerido/);
-    expect(generateResponse).not.toHaveBeenCalled();
+    expect(generateStructured).not.toHaveBeenCalled();
   });
 
   it('apagado (kill switch): no gasta en el modelo ni encola', async () => {
     apagado = true;
     await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/apagado/);
-    expect(generateResponse).not.toHaveBeenCalled();
+    expect(generateStructured).not.toHaveBeenCalled();
     expect(encolarPieza).not.toHaveBeenCalled();
   });
 
@@ -118,14 +168,14 @@ describe('redactarCorreoFrio', () => {
     respuestas.set('prospecto', [{ data: PROSPECTO, error: null }]);
     respuestas.set('prospecto_contacto', [{ data: [{ ocurrio_en: 'ayer' }], error: null }]);
     await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/48 horas/);
-    expect(generateResponse).not.toHaveBeenCalled();
+    expect(generateStructured).not.toHaveBeenCalled();
   });
 
   it('con el historial ILEGIBLE no se redacta — fail closed, como el envío', async () => {
     respuestas.set('prospecto', [{ data: PROSPECTO, error: null }]);
     respuestas.set('prospecto_contacto', [{ data: null, error: { message: 'db down' } }]);
     await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/historial/);
-    expect(generateResponse).not.toHaveBeenCalled();
+    expect(generateStructured).not.toHaveBeenCalled();
   });
 
   it('una pieza PENDIENTE del mismo prospecto frena la duplicada', async () => {
@@ -133,13 +183,13 @@ describe('redactarCorreoFrio', () => {
     respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: [{ id: 'pieza-vieja' }], error: null }]);
     await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/esperando aprobación/);
-    expect(generateResponse).not.toHaveBeenCalled();
+    expect(generateStructured).not.toHaveBeenCalled();
   });
 
   it('a un cerrado/perdido no se le redacta correo frío', async () => {
     respuestas.set('prospecto', [{ data: { ...PROSPECTO, estado: 'perdido' }, error: null }]);
     await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/perdido/);
-    expect(generateResponse).not.toHaveBeenCalled();
+    expect(generateStructured).not.toHaveBeenCalled();
   });
 
   it('el camino feliz: encola la variante A como cuerpo, B/C en fuentes, agente redactor — y corrida ok', async () => {
@@ -160,7 +210,7 @@ describe('redactarCorreoFrio', () => {
     expect(pieza.cuerpo).not.toContain('Variante B');
     expect(pieza.fuentes.variante_b).toBeTruthy();
     expect(registrarCorrida).toHaveBeenCalledWith(null, 'redactor', expect.objectContaining({ estado: 'ok' }));
-    expect(generateResponse).toHaveBeenCalledWith(expect.objectContaining({ budget: expect.objectContaining({ tenantId: 'tenant-redactor-a' }) }));
+    expect(generateStructured).toHaveBeenCalledWith(expect.objectContaining({ budget: expect.objectContaining({ tenantId: 'tenant-redactor-a' }) }));
   });
 
   it('sin correo capturado: la pieza entra IGUAL pero el aviso viaja con ella', async () => {
@@ -177,7 +227,7 @@ describe('redactarCorreoFrio', () => {
     respuestas.set('prospecto', [{ data: PROSPECTO, error: null }]);
     respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
-    generateResponse.mockRejectedValueOnce(new Error('timeout'));
+    generateStructured.mockRejectedValueOnce(new Error('timeout'));
     await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/no pudo escribir/);
     expect(encolarPieza).not.toHaveBeenCalled();
     expect(registrarCorrida).toHaveBeenCalledWith(null, 'redactor', expect.objectContaining({ estado: 'fallo' }));
@@ -219,32 +269,28 @@ describe('sustituirMarcador — el modelo nunca ve el nombre real', () => {
 });
 
 describe('redactarCorreoFrio — el modelo NUNCA ve el nombre real del contacto', () => {
-  const SALIDA_CON_MARCADOR = `## Variante A — por el costo
-**Asunto:** El cierre del viaje, sin liquidador
-
-Hola {{NOMBRE}}, le escribo de Likida sobre el cierre administrativo del viaje.
-¿Le vienen bien 15 minutos el jueves?
-
-## Variante B — por el dinero fiscal
-**Asunto:** El IEPS del diésel y el peaje
-
-Hola {{NOMBRE}}, ¿hoy están recuperando el IEPS del diésel?
-¿Le vienen bien 15 minutos el jueves?
-
-## Variante C — confirmación de demo
-No aplica: la variante C solo se usa después de un sí.
-
-**Datos usados:** ninguno específico de esta empresa.`;
+  const SALIDA_CON_MARCADOR = {
+    variante_a: {
+      asunto: 'El cierre del viaje, sin liquidador',
+      cuerpo: 'Hola {{NOMBRE}}, le escribo de Likida sobre el cierre administrativo del viaje.\n¿Le vienen bien 15 minutos el jueves?',
+    },
+    variante_b: {
+      asunto: 'El IEPS del diésel y el peaje',
+      cuerpo: 'Hola {{NOMBRE}}, ¿hoy están recuperando el IEPS del diésel?\n¿Le vienen bien 15 minutos el jueves?',
+    },
+    variante_c: 'No aplica: la variante C solo se usa después de un sí.',
+    datos_usados: 'ninguno específico de esta empresa.',
+  };
 
   it('el dossier que recibe el modelo lleva el marcador, NUNCA el nombre real', async () => {
     respuestas.set('prospecto', [{ data: { ...PROSPECTO, contacto_nombre: 'Juan Pérez López' }, error: null }]);
     respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
-    generateResponse.mockResolvedValueOnce({ text: SALIDA_CON_MARCADOR, model: 'prueba', tokensIn: 100, tokensOut: 200, cost: 0.001 });
+    generateStructured.mockResolvedValueOnce(respuestaModelo(SALIDA_CON_MARCADOR));
 
     await redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO);
 
-    const llamada = generateResponse.mock.calls[0][0] as { messages: Array<{ content: string }> };
+    const llamada = generateStructured.mock.calls[0][0] as { messages: Array<{ content: string }> };
     const dossierEnviado = llamada.messages[0].content;
     expect(dossierEnviado).toContain('{{NOMBRE}}');
     expect(dossierEnviado).not.toContain('Juan');
@@ -255,7 +301,7 @@ No aplica: la variante C solo se usa después de un sí.
     respuestas.set('prospecto', [{ data: { ...PROSPECTO, contacto_nombre: 'Juan Pérez López' }, error: null }]);
     respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
-    generateResponse.mockResolvedValueOnce({ text: SALIDA_CON_MARCADOR, model: 'prueba', tokensIn: 100, tokensOut: 200, cost: 0.001 });
+    generateStructured.mockResolvedValueOnce(respuestaModelo(SALIDA_CON_MARCADOR));
 
     await redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO);
 
@@ -272,7 +318,7 @@ No aplica: la variante C solo se usa después de un sí.
 
     await redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO);
 
-    const llamada = generateResponse.mock.calls[0][0] as { messages: Array<{ content: string }> };
+    const llamada = generateStructured.mock.calls[0][0] as { messages: Array<{ content: string }> };
     expect(llamada.messages[0].content).toContain('Contacto: no capturado');
   });
 });
@@ -302,11 +348,100 @@ describe('verificarFormatoCampana — los guardarraíles son código, no prompt'
     respuestas.set('prospecto', [{ data: PROSPECTO, error: null }]);
     respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
     respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
-    generateResponse.mockResolvedValueOnce({
-      text: SALIDA_MODELO.replace('trabajamos el cierre administrativo del viaje.', 'ya lo usan clientes reales.'),
-      model: 'prueba', tokensIn: 100, tokensOut: 200, cost: 0.001,
-    });
+    generateStructured.mockResolvedValueOnce(respuestaModelo({
+      ...SALIDA_MODELO,
+      variante_a: { ...SALIDA_MODELO.variante_a, cuerpo: 'Buen día. Ya lo usan clientes reales.' },
+    }));
     await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/clientes reales/);
     expect(encolarPieza).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PRIMERA PASADA REAL DEL RUNNER (18:03, producción) — el Redactor falló las
+// TRES veces con «devolvió una salida sin variante A legible». La causa: pedía
+// markdown y lo desarmaba con regex, mientras el rol `back_office` corre con
+// un modelo de razonamiento que se comía los 900 tokens de tope antes de
+// escribir la primera letra visible. Un regex no distingue "truncado" de
+// "ilegible", y la corrida no guardaba NADA de lo que el modelo contestó: el
+// fallo era indiagnosticable desde la bandeja.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el Redactor pide SCHEMA, no markdown (los 3 fallos de la primera pasada)', () => {
+  const listo = () => {
+    respuestas.set('prospecto', [{ data: PROSPECTO, error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+  };
+
+  it('la llamada lleva schema, nombre de schema y tope holgado para los tokens de razonamiento', async () => {
+    listo();
+    await redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO);
+    const llamada = generateStructured.mock.calls[0][0] as {
+      schema: unknown; schemaName: string; maxTokens: number; role: string; system: string;
+    };
+    expect(llamada.schemaName).toBe('variantes_correo_frio');
+    expect(llamada.schema).toBeTruthy();
+    expect(llamada.role).toBe('back_office');
+    // 900 era el tope que mató las tres corridas: no alcanzaba ni para abrir
+    // la llave del JSON después del razonamiento invisible.
+    expect(llamada.maxTokens).toBeGreaterThan(900);
+    // El prompt ya no puede pedir markdown: sería un contrato contra el otro.
+    expect(llamada.system).not.toContain('## Variante A');
+    expect(llamada.system).toContain('JSON');
+  });
+
+  it('el archivo ya no parsea markdown con regex — esa frontera se fue al schema (estructural)', () => {
+    const fuente = readFileSync('src/lib/likida/agentes/redactor.ts', 'utf8');
+    expect(fuente).not.toMatch(/\\\*\\\*Asunto:\\\*\\\*/);
+    expect(fuente).not.toMatch(/generateResponse/);
+    expect(fuente).toMatch(/generateStructured/);
+  });
+
+  it('TRUNCADO (el fallo real): corrida en FALLO con el texto EXACTO del modelo, y NADA encolado', async () => {
+    listo();
+    generateStructured.mockRejectedValueOnce(new TruncatedError(
+      'Respuesta truncada: se agotaron los 900 tokens de salida (usó 900) antes de cerrar el JSON',
+      '{"variante_a":{"asunto":"El cierre del via',
+      { model: 'openai/gpt-oss-120b', tokensIn: 1200, tokensOut: 900, cost: 0.0007 },
+    ));
+
+    await expect(redactarCorreoFrio('pr-1', 'Javier', 'cron', CONTEXTO)).rejects.toThrow(/no pudo escribir/);
+    expect(encolarPieza).not.toHaveBeenCalled();
+    const corrida = registrarCorrida.mock.calls[0][2] as { estado: string; error: string; costoUsd: number };
+    expect(corrida.estado).toBe('fallo');
+    // Lo que contestó el modelo, TAL CUAL — es lo único que permite el diagnóstico.
+    expect(corrida.error).toContain('{"variante_a":{"asunto":"El cierre del via');
+    // Y el gasto de la llamada fallida NO se tira: el techo diario lo vigila.
+    expect(corrida.costoUsd).toBe(0.0007);
+  });
+
+  it('el modelo que contesta VACÍO se registra como vacío, no como un misterio', async () => {
+    listo();
+    generateStructured.mockRejectedValueOnce(new StructuredError('JSON parse falló', undefined, '', {
+      model: 'openai/gpt-oss-120b', tokensIn: 1200, tokensOut: 0, cost: 0.0004,
+    }));
+    await expect(redactarCorreoFrio('pr-1', 'Javier', 'cron', CONTEXTO)).rejects.toThrow(/no pudo escribir/);
+    const corrida = registrarCorrida.mock.calls[0][2] as { error: string };
+    expect(corrida.error).toContain('vacío — el modelo no devolvió texto');
+    expect(encolarPieza).not.toHaveBeenCalled();
+  });
+
+  it('una variante A vacía que SÍ cumple el schema tampoco se encola — jamás basura en la cola', async () => {
+    listo();
+    generateStructured.mockResolvedValueOnce(respuestaModelo({
+      ...SALIDA_MODELO, variante_a: { asunto: '', cuerpo: '' },
+    }));
+    await expect(redactarCorreoFrio('pr-1', 'Javier', 'cron', CONTEXTO)).rejects.toThrow(/sin variante A legible/);
+    expect(encolarPieza).not.toHaveBeenCalled();
+    expect(registrarCorrida).toHaveBeenCalledWith(null, 'redactor', expect.objectContaining({ estado: 'fallo' }));
+  });
+
+  it('modo PLATAFORMA (c5-10): sin ledger por tenant, pero la pieza se encola igual', async () => {
+    listo();
+    const r = await redactarCorreoFrio('pr-1', 'Javier', 'cron', { plataforma: true });
+    expect(r.piezaId).toBe('pieza-1');
+    const llamada = generateStructured.mock.calls[0][0] as { budget: unknown };
+    expect(llamada.budget).toBeUndefined();
+    expect(encolarPieza).toHaveBeenCalledTimes(1);
   });
 });

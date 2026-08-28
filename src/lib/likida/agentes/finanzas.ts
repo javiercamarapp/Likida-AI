@@ -368,13 +368,22 @@ async function correrControlCostos(disparo: DisparoCorrida, hoy: string): Promis
 // fuente en la misma línea.
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface SuscripcionActiva { plan: string }
+interface SuscripcionActiva { plan_clave: string }
 
-/** Suscripciones activas (todas las flotas). LANZA si no se puede leer. */
+/** Suscripciones activas (todas las flotas). LANZA si no se puede leer.
+ *
+ *  PRIMERA PASADA REAL DEL RUNNER (18:03, producción): esta consulta pedía
+ *  `plan` y Postgres contestó `column suscripcion.plan does not exist` (42703)
+ *  — el parte semanal de métricas nacía muerto en TODAS las corridas. La
+ *  columna real de la 0052 es `plan_clave` (FK a `plan.clave`); `plan` a secas
+ *  existe, pero en `tenant`, que es otra tabla. La suite pasaba porque el mock
+ *  de `select()` ignoraba sus argumentos y fabricaba la fuente (mismo patrón
+ *  que el hallazgo c5-9 en reportes.ts). La prueba estructural de abajo lee el
+ *  esquema REAL de la migración y compara: una columna inventada ya no pasa. */
 async function leerSuscripcionesActivas(): Promise<SuscripcionActiva[]> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('suscripcion')
-    .select('plan')
+    .select('plan_clave')
     .eq('estado', 'activa')
     .limit(1000), 'finanzas.suscripciones');
   if (error) throw new Error(`leerSuscripcionesActivas: ${error.message}`);
@@ -461,7 +470,7 @@ async function correrAnalistaMetricas(disparo: DisparoCorrida, hoy: string): Pro
     const precioPorPlan = new Map(planes.map((p) => [p.clave, p.precioMensual]));
     let mrr = 0; let sinPrecio = 0;
     for (const s of activasFilas) {
-      const precio = precioPorPlan.get(s.plan) ?? null;
+      const precio = precioPorPlan.get(s.plan_clave) ?? null;
       if (precio === null) sinPrecio += 1; else mrr += precio;
     }
     const cifras: CifrasMetricas = {
