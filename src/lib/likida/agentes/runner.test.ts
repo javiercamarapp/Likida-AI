@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -47,7 +47,11 @@ let interruptorFalla = false;
 vi.mock('../interruptores', () => ({
   INTERRUPTORES: ['global', 'agente:redactor', 'agente:kpi_whatsapp',
     'agente:vigilante_calidad', 'agente:documentacion', 'agente:legal_compliance', 'agente:talento',
-    'agente:onboarding_cliente', 'agente:atencion_faq'],
+    'agente:onboarding_cliente', 'agente:atencion_faq',
+    // Los dos de abajo solo los usan las pruebas del reloj (25-ago-2026):
+    // el corte necesita TRES agentes deterministas seguidos para que haya un
+    // «antes del tercero» que verificar.
+    'agente:exito_cliente', 'agente:soporte'],
   estaApagado: async (n: string) => {
     if (interruptorFalla && n !== 'global') throw new Error('base caída');
     return apagados.has(n);
@@ -78,7 +82,7 @@ vi.mock('./backoffice', async (importOriginal) => ({
 const correrExito = vi.fn(async (..._a: unknown[]) => ({ resultado: 'corrio' as const, piezas: 1, costoUsd: 0 }));
 vi.mock('./exito', () => ({ correrAgenteExito: (...a: unknown[]) => correrExito(...a) }));
 
-const { correrRunner } = await import('./runner');
+const { correrRunner, ordenarPorCosto, llamaAlModelo, MARGEN_RELOJ_MS, PLAZO_RUNNER_MS } = await import('./runner');
 
 const REDACTOR = { id: 'redactor', presupuesto_dia_usd: 1.0 };
 const TENANT = 'tenant-runner-test';
@@ -212,7 +216,7 @@ describe('M30 — correrRunner(soloAgente) acota la vuelta a UN agente', () => {
   it('soloAgente que no está habilitado → vuelta vacía, sin despachar nada', async () => {
     respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
     const r = await correrRunner('cobranza', TENANT);
-    expect(r).toEqual({ apagadoGlobal: false, agentes: [] });
+    expect(r).toEqual({ apagadoGlobal: false, agentes: [], saltadosPorReloj: [] });
     expect(redactar).not.toHaveBeenCalled();
   });
 });
@@ -345,5 +349,116 @@ describe('el despacho del back office restante (0219)', () => {
     respuestas.set('agente_corrida', [{ data: [], error: null }]);
     const r = await correrRunner(undefined, TENANT);
     expect(r.agentes[0]).toMatchObject({ agente: 'talento', resultado: 'saltado', motivo: 'la bitácora no se pudo leer' });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PRESUPUESTO DE TIEMPO (alerta de prod 25-ago-2026: "Sin latido: runner
+// hace 286 min"). Con 34 agentes en serie la pasada de las 18:00 murió en el
+// `maxDuration` con ~15 corridos y sin escribir latido. Lo que se fija aquí:
+//  · el reloj se pregunta ANTES de despachar y corta LIMPIO;
+//  · los que no alcanzaron turno se DICEN con nombre, no desaparecen;
+//  · el orden sacrifica lo caro: los deterministas van primero.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el reloj de la vuelta', () => {
+  /** Un `Date.now` de mentiras que solo avanza cuando la prueba lo dice. */
+  function relojFalso(inicio: number) {
+    let ahora = inicio;
+    vi.spyOn(Date, 'now').mockImplementation(() => ahora);
+    return { avanzar: (ms: number) => { ahora += ms; }, leer: () => ahora };
+  }
+
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('corta ANTES del tercer agente y los saltados salen con nombre y motivo', async () => {
+    const reloj = relojFalso(1_000_000);
+    // Cada motor se come 40 s del reloj; la vuelta tiene 60 s.
+    correrExito.mockImplementation(async () => { reloj.avanzar(40_000); return { resultado: 'corrio' as const, piezas: 1, costoUsd: 0 }; });
+    respuestas.set('agente_definicion', [{ data: [
+      { id: 'onboarding_cliente', presupuesto_dia_usd: 0.1 },
+      { id: 'exito_cliente', presupuesto_dia_usd: 0.1 },
+      { id: 'soporte', presupuesto_dia_usd: 0.1 },
+    ], error: null }]);
+
+    const r = await correrRunner(undefined, TENANT, { venceEn: reloj.leer() + 60_000 });
+
+    // Dos alcanzaron turno; el tercero no se despachó — ni se le preguntó al motor.
+    expect(correrExito.mock.calls.map((c) => c[0])).toEqual(['onboarding_cliente', 'exito_cliente']);
+    expect(r.saltadosPorReloj).toEqual(['soporte']);
+    expect(r.agentes.map((a) => a.agente)).toEqual(['onboarding_cliente', 'exito_cliente', 'soporte']);
+    expect(r.agentes[2]).toMatchObject({ resultado: 'saltado' });
+    expect(r.agentes[2].motivo).toMatch(/saltado por reloj/);
+  });
+
+  it('con el reloj ya vencido no se despacha a NADIE, y los 34 se dicen', async () => {
+    const reloj = relojFalso(2_000_000);
+    respuestas.set('agente_definicion', [{ data: [
+      { id: 'onboarding_cliente', presupuesto_dia_usd: 0.1 },
+      { id: 'exito_cliente', presupuesto_dia_usd: 0.1 },
+    ], error: null }]);
+    const r = await correrRunner(undefined, TENANT, { venceEn: reloj.leer() - 1 });
+    expect(correrExito).not.toHaveBeenCalled();
+    expect(r.saltadosPorReloj).toEqual(['onboarding_cliente', 'exito_cliente']);
+  });
+
+  it('una vuelta que cabe entera no reporta ningún saltado por reloj', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'onboarding_cliente', presupuesto_dia_usd: 0.1 }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.saltadosPorReloj).toEqual([]);
+    expect(r.agentes[0].resultado).toBe('corrio');
+  });
+
+  it('sin `venceEn` del llamador, el default deja margen para el latido', () => {
+    // 300 s de `maxDuration` del cron menos los 20 s que la ruta necesita para
+    // leer la racha, alertar y escribir el latido.
+    expect(MARGEN_RELOJ_MS).toBe(20_000);
+    expect(PLAZO_RUNNER_MS).toBe(280_000);
+  });
+});
+
+describe('el orden de despacho — lo barato primero, lo caro al final', () => {
+  it('los que llaman al modelo se van al final; dentro del grupo, orden estable', () => {
+    const entrada = [
+      { id: 'atencion_faq' }, { id: 'documentacion' }, { id: 'enriquecedor' },
+      { id: 'kpi_whatsapp' }, { id: 'redactor' }, { id: 'sdr' }, { id: 'talento' },
+    ];
+    expect(ordenarPorCosto(entrada).map((a) => a.id)).toEqual([
+      'documentacion', 'kpi_whatsapp', 'talento',
+      'atencion_faq', 'enriquecedor', 'redactor', 'sdr',
+    ]);
+  });
+
+  it('sabe cuáles gastan modelo y cuáles no', () => {
+    for (const caro of ['redactor', 'enriquecedor', 'sdr', 'atencion_faq']) expect(llamaAlModelo(caro)).toBe(true);
+    for (const barato of ['kpi_whatsapp', 'talento', 'soporte', 'enviador', 'cobranza_saas']) expect(llamaAlModelo(barato)).toBe(false);
+  });
+
+  it('con el alfabeto en contra, el determinista corre ANTES que el que gasta modelo', async () => {
+    // Así llega la lista de la base: `ORDER BY id`, o sea `atencion_faq` primero.
+    respuestas.set('agente_definicion', [{ data: [
+      { id: 'atencion_faq', presupuesto_dia_usd: 1 },
+      { id: 'onboarding_cliente', presupuesto_dia_usd: 0.1 },
+    ], error: null }]);
+    respuestas.set('agente_corrida', [{ data: [], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrExito.mock.calls.map((c) => c[0])).toEqual(['onboarding_cliente', 'atencion_faq']);
+    expect(r.agentes.map((a) => a.agente)).toEqual(['onboarding_cliente', 'atencion_faq']);
+  });
+
+  it('el corte de reloj sacrifica lo CARO: el parte determinista sale, el del modelo no', async () => {
+    let ahora = 3_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => ahora);
+    correrExito.mockImplementation(async () => { ahora += 40_000; return { resultado: 'corrio' as const, piezas: 1, costoUsd: 0 }; });
+    respuestas.set('agente_definicion', [{ data: [
+      { id: 'atencion_faq', presupuesto_dia_usd: 1 },
+      { id: 'onboarding_cliente', presupuesto_dia_usd: 0.1 },
+    ], error: null }]);
+    respuestas.set('agente_corrida', [{ data: [], error: null }]);
+
+    const r = await correrRunner(undefined, TENANT, { venceEn: ahora + 30_000 });
+
+    expect(correrExito.mock.calls.map((c) => c[0])).toEqual(['onboarding_cliente']);
+    expect(r.saltadosPorReloj).toEqual(['atencion_faq']);
+    vi.restoreAllMocks();
   });
 });
