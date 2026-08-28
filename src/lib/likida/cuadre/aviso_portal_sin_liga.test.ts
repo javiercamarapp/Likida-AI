@@ -52,9 +52,21 @@ describe('aviso de facturación sin liga impresa', () => {
 
   it('dice a qué portal ir y qué datos va a pedir', () => {
     const nota = avisos(base({ rfcEmisor: 'CCO8605231N4' }))[0].nota ?? '';
-    expect(nota).toContain('https://www4.oxxo.com:9443/facturacionElectronica-web/');
+
+    // ⚠️ LA RUTA IMPORTA, y el recon del 28-ago-2026 es por qué. La URL que
+    // había —`…/facturacionElectronica-web/`— responde **200 OK** con un cuerpo
+    // de JSF sin procesar y CERO campos: mandaba al contralor a una página en
+    // blanco, y cualquier chequeo de salud por código HTTP la daba por sana.
+    // La buena es `/views/layout/inicio.do`, verificada con sus 56 campos.
+    expect(nota).toContain('https://www4.oxxo.com:9443/facturacionElectronica-web/views/layout/inicio.do');
+
     // Los cuatro campos requeridos del portal de OXXO, que el OCR ya extrae.
-    for (const campo of ['Fecha del ticket', 'Folio de venta', 'ID de venta', 'Monto total con IVA']) {
+    // Las etiquetas son ahora las LITERALES de la página —se leyeron del DOM—,
+    // y no las parafraseadas del directorio: esta nota se le enseña a una
+    // persona que va a buscar esos rótulos en la pantalla, así que decirle
+    // "Fecha del ticket" cuando el portal rotula "Fecha de venta" la manda a
+    // buscar un campo que no existe.
+    for (const campo of ['Fecha de venta', 'Folio de venta', 'ID de venta', 'Total (2 Decimales)']) {
       expect(nota).toContain(campo);
     }
   });

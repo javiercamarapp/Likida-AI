@@ -98,9 +98,26 @@ describe('registrarPortales', () => {
     //    `registrados`.
     expect(r.registrados).toEqual([...portalesOperables()]);
     expect(portalesVivos('tenant-a')).toEqual([...portalesOperables()]);
-    // Los que no se han medido dicen POR QUÉ, uno por uno.
+    // Los que no entran dicen POR QUÉ, uno por uno — y desde el recon del
+    // 28-ago-2026 hay DOS motivos distintos, que es el punto:
+    //
+    //   · «NO se ha medido» — no hemos corrido el pre-vuelo contra ese portal.
+    //     Se arregla con una visita de lectura de dos segundos.
+    //   · el portal no se puede automatizar y no por falta de código: no habla
+    //     TLS, no factura por ticket, o bloquea robots. Eso NO se arregla
+    //     corriendo el pre-vuelo, y mandar a alguien a correrlo sería mandarlo a
+    //     estrellarse contra un 403.
     expect(r.problemas).toHaveLength(PORTALES_CONOCIDOS.length - portalesOperables().length);
-    for (const p of r.problemas) expect(p).toContain('NO se ha medido');
+    for (const p of r.problemas) {
+      expect(p, `motivo poco claro: ${p}`).toMatch(/NO se ha medido|no ofrece HTTPS|no se factura ticket por ticket|bloquea navegadores automatizados/);
+    }
+
+    // AutoZone es el caso concreto: tiene guion escrito, así que antes salía con
+    // «corre el pre-vuelo». El recon midió 403 en tres intentos con tres
+    // configuraciones — correr el pre-vuelo ahí no mide nada, choca.
+    const deAutozone = r.problemas.find((p) => p.startsWith('autozone'));
+    expect(deAutozone, 'autozone debe declarar su bloqueo, no pedir un pre-vuelo').toContain('bloquea navegadores automatizados');
+    expect(deAutozone).not.toContain('NO se ha medido');
     expect(portalesAutomatizados('tenant-a')).toContain('capufe');
     expect(adaptadorDe('tenant-a', 'capufe')?.portal).toContain('facturacionrapida');
   });
@@ -301,7 +318,16 @@ describe('el piloto de visión: FACTURACION_PILOTO=si', () => {
     vi.stubEnv('FACTURACION_PILOTO', 'si');
     expect(pilotoHabilitado()).toBe(true);
     const operables = portalesOperables();
-    expect(operables).toEqual(expect.arrayContaining([...PORTALES_CONOCIDOS]));
+
+    // ⚠️ YA NO SE PUEDE PEDIR QUE ESTÉN **TODOS** LOS CONOCIDOS. Con el piloto
+    // encendido, `operables` es "lo que la máquina va a intentar esta vuelta", y
+    // desde el recon del 28-ago-2026 hay portales que sabemos operar y que aun
+    // así NO se intentan nunca — AutoZone devuelve 403 a cualquier navegador
+    // automatizado. Que el piloto esté encendido no derriba un muro anti-bot.
+    const conocidosSinBloqueo = PORTALES_CONOCIDOS.filter((p) => p !== 'autozone');
+    expect(operables).toEqual(expect.arrayContaining([...conocidosSinBloqueo]));
+    expect(operables, 'el piloto no puede saltarse un bloqueo del catálogo').not.toContain('autozone');
+
     // 'oxxo_gas' no tiene adaptador escrito (no está en PORTALES_CONOCIDOS) —
     // si esto falla, alguien le escribió adaptador y debería salir de
     // COMERCIOS_PILOTABLES o esta prueba debe apuntar a otro comercio.

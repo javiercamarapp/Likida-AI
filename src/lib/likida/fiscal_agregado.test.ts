@@ -408,7 +408,7 @@ describe('cortesDePlazo — reproduce calcularCaducidad día por día, para cada
     }
   });
 
-  it('hay un corte por plazo distinto (los cinco del catálogo hoy)', () => {
+  it('hay un corte por plazo distinto (los siete del catálogo hoy)', () => {
     // Este bloque es el CANARIO del catálogo: se dispara en cuanto entra un
     // plazo de una forma que no existía, para que alguien mire si la dimensión
     // agrupable sigue teniendo sentido en vez de que crezca sola.
@@ -429,12 +429,64 @@ describe('cortesDePlazo — reproduce calcularCaducidad día por día, para cada
     // NO hace falta migración por esto: `cortesDePlazo` calcula los cortes con
     // el reloj real a partir del catálogo y se los pasa a SQL como parámetro
     // —la RPC solo cuenta cuántos cortes quedan por encima de la fecha—, así
-    // que la base nunca supo cuáles eran ni cuántos. Que las cinco formas
+    // que la base nunca supo cuáles eran ni cuántos. Que todas las formas
     // sigan coincidiendo con `calcularCaducidad` día por día lo prueba el
     // bloque `hoy=%s` de arriba, que es la garantía de verdad; esto solo fija
     // el número y el orden para que el próximo plazo nuevo vuelva a avisar.
+    //
+    // ── VOLVIÓ A DISPARARSE: EL RECON DE PORTALES (28-ago-2026) ─────────────
+    //
+    // Se visitaron los 37 portales y nueve declaran su plazo con palabras
+    // propias en la página. Dos formas NUEVAS entran a la dimensión:
+    //
+    //   2025-08-22 → { dias: 365 }  Red Vía Corta: "los tickets […] tienen
+    //                               vigencia dentro del año fiscal al cruce o
+    //                               compra". Es el corte más antiguo del
+    //                               catálogo y por eso aparece primero.
+    //   2026-07-23 → { dias: 30 }   Circuito Exterior: "cuentas con 30 días a
+    //                               partir de la fecha de emisión de tu ticket".
+    //
+    // Y DOS FORMAS NUEVAS QUE HOY **NO** AÑADEN CORTE, lo cual es en sí el dato
+    // interesante y conviene no leerlo como que dan igual:
+    //
+    //   · `{ mesDeCompraMas: { dias: 7 } }`  (ADO)
+    //   · `{ mesDeCompraMas: { horas: 72 } }` (Primera Plus)
+    //
+    //     Un 22 de agosto los dos colapsan en el corte de 'mes_natural'
+    //     (2026-08-01): a mitad de mes, "el mes de compra" y "el mes de compra
+    //     más una cola" no se distinguen todavía. **Se separan del 1 al 7 de
+    //     septiembre**, que es justo la ventana donde el plazo decide algo: un
+    //     boleto de agosto sigue siendo facturable el 5-sep y 'mes_natural' lo
+    //     habría dado por muerto. El bloque `hoy=%s` de arriba recorre 200 días
+    //     hacia atrás desde seis fechas distintas, así que esa separación sí
+    //     está cubierta — aquí solo no se ve porque este día no la muestra.
+    //
+    //   · `{ dias: 3 }` (Grupo Centra, el plazo más corto del catálogo) tampoco
+    //     añade corte: coincide exactamente con `{ horas: 72 }` de Boston's, que
+    //     es el mismo plazo dicho en otras unidades. Que colapsen es correcto.
     expect(cortesDePlazo('2026-08-22').cortes).toEqual([
-      '2026-06-23', '2026-07-01', '2026-08-01', '2026-08-19', '2026-08-21',
+      '2025-08-22', '2026-06-23', '2026-07-01', '2026-07-23',
+      '2026-08-01', '2026-08-19', '2026-08-21',
     ]);
+  });
+
+  // El comentario de arriba afirma que ADO y Primera Plus se SEPARAN de
+  // 'mes_natural' en los primeros días de septiembre. Eso se mide, no se
+  // asegura: es la única ventana del año donde la variante nueva cambia una
+  // respuesta, y por tanto la única donde un error se vería.
+  it('la cola de ADO se separa del mes natural justo cuando decide algo', () => {
+    const HOY = '2026-09-05';
+    const c = cortesDePlazo(HOY);
+
+    // Un boleto de ADO comprado el 20-ago: el portal lo acepta hasta el 7-sep.
+    const boleto = '2026-08-20';
+    const banda = c.cortes.filter((x) => boleto < x).length;
+
+    expect(c.vencido({ mesDeCompraMas: { dias: 7 } }, banda), 'el 5-sep todavía se puede facturar').toBe(false);
+    expect(c.vencido('mes_natural', banda), 'con el default se habría dado por muerto el 31-ago').toBe(true);
+
+    // Y coincide con el reloj de verdad, que es la garantía que importa.
+    expect(calcularCaducidad({ fechaTicket: boleto, plazo: { mesDeCompraMas: { dias: 7 } }, hoy: HOY }).vencido).toBe(false);
+    expect(calcularCaducidad({ fechaTicket: boleto, plazo: 'mes_natural', hoy: HOY }).vencido).toBe(true);
   });
 });

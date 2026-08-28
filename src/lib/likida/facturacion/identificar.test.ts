@@ -108,8 +108,19 @@ describe('registro de comercios', () => {
   //
   // Pedirle al operador un dato que el portal no necesita es fricción inventada,
   // y en carretera con el celular la fricción es lo que hace que no facture.
-  it('a G500 le basta el Web ID: lo demás lo resuelve el portal', () => {
-    const requeridos = comercio('g500')!.campos.filter((x) => x.requerido).map((x) => x.clave);
+  // ⚠️ ESTA PRUEBA CAMBIÓ DE SUJETO EL 28-ago-2026, y el porqué es el bug.
+  //
+  // Lo de arriba se midió facturando un ticket de G500 MEGASUR, o sea del
+  // SURESTE — y se asentó en la ficha `g500`, la de la RED. El recon visitó las
+  // dos fichas por separado con contexto limpio y devolvieron LA MISMA PÁGINA:
+  // `g500` seguía apuntando a `megasur.com.mx:8029` aunque su propio comentario
+  // ya dijera que esa entrada era para la red. La prueba estaba certificando
+  // sobre `g500` un hecho que solo es cierto de `megasur`.
+  //
+  // Así que la afirmación se muda a la ficha que sí se facturó, y `g500` pasa a
+  // afirmar lo único que se sabe de la red: que NO se sabe.
+  it('a MEGASUR le basta el Web ID: lo demás lo resuelve el portal', () => {
+    const requeridos = comercio('megasur')!.campos.filter((x) => x.requerido).map((x) => x.clave);
     expect(requeridos).toEqual(['webId']);
   });
 
@@ -117,8 +128,26 @@ describe('registro de comercios', () => {
     // El portal devuelve el folio DENTRO de la descripción de la línea
     // ("1000724 - GASOLINA CONTENIDO MIN. 91 OCTANOS"), así que sirve para
     // confirmar que la línea que trajo es la del ticket que tiene en la mano.
-    const opcionales = comercio('g500')!.campos.filter((x) => !x.requerido).map((x) => x.clave);
+    const opcionales = comercio('megasur')!.campos.filter((x) => !x.requerido).map((x) => x.clave);
     expect(opcionales).toContain('folio');
+  });
+
+  it('G500 (la red) NO hereda ni el portal ni los campos del sureste', () => {
+    // La regresión exacta que se arregló: mientras `portal` apuntara a
+    // `megasur.com.mx:8029`, cualquier ticket G500 de otra región mandaba al
+    // operador a Mérida, donde su WebID no existe. Y las dos fichas declaraban
+    // `requiereCuenta` OPUESTO para la misma página.
+    const red = comercio('g500')!;
+    const sureste = comercio('megasur')!;
+    expect(red.portal).not.toBe(sureste.portal);
+    expect(red.portal).not.toContain('megasur');
+    // Del portal de la red solo se comprobó que responde: ni se abrió ni se
+    // leyó. `camposPendientes` es la forma honesta de decirlo.
+    expect(red.campos).toEqual([]);
+    expect(red.camposPendientes).toBe(true);
+    // Y el plazo verificado era del SURESTE: sostenerlo aquí sería heredar la
+    // prueba de otra página, que es justo lo que creó el bug.
+    expect(red.plazoVerificado).toBe(false);
   });
 
   it('el ITU de Office Depot trae su restricción de largo', () => {
@@ -249,9 +278,30 @@ describe('lo verificado se distingue de la hipótesis', () => {
   //
   //     Los otros 14 comercios que entraron en esa misma tanda NO están aquí:
   //     sus tickets no imprimen plazo, y no imprimirlo no es dar un mes.
+  //   · LEYENDO EL PLAZO EN LA PÁGINA DEL PORTAL (28-ago-2026) — la tanda que
+  //     trajo el reconocimiento de campo. Hasta ese día este catálogo no tenía
+  //     NI UNO de este grado: los plazos "verificados" salían de un ticket de
+  //     papel o del HTML de un campo, nunca de que el portal dijera su plazo con
+  //     sus propias palabras. Ahora hay nueve, cada uno con su cita literal en la
+  //     ficha:
+  //       enerser · sevafusa · arco_chihuahua («mes en curso o últimas 72 h»)
+  //       tag_pase · circuito_exterior (30 días) · redviacorta (año fiscal)
+  //       grupo_centra (3 DÍAS — el más corto del catálogo)
+  //       ado y primera_plus (mes de compra + cola; obligaron a ampliar `Plazo`)
+  //
+  //     Y CONTRADICEN EL DEFAULT EN LAS DOS DIRECCIONES, igual que la tanda de
+  //     tickets: Grupo Centra da 3 días donde suponíamos un mes, y Circuito
+  //     Exterior da 30 donde habríamos avisado "vence el 31".
+  //
+  // ⚠️ `g500` SALIÓ DE ESTA LISTA. Su `plazoVerificado: true` venía de leer el
+  // plazo del portal DEL SURESTE, que ya no es el suyo — la ficha apuntaba al
+  // portal equivocado. La prueba lo heredaba sin notarlo.
   const VERIFICADOS = [
-    'g500', 'la_gas', 'megasur', 'office_depot',
+    'la_gas', 'megasur', 'office_depot',
     'home_depot', 'tim_hortons', 'conekta360', 'bptgroup',
+    // Leídos en la página del portal, recon del 28-ago-2026.
+    'enerser', 'sevafusa', 'arco_chihuahua', 'tag_pase',
+    'circuito_exterior', 'redviacorta', 'grupo_centra', 'ado', 'primera_plus',
   ];
   const FACTURADOS = ['la_gas', 'megasur'];
   /** Los que se verificaron mirando la foto de un ticket real, no el portal. */
@@ -363,11 +413,44 @@ describe('el portal sin verificar se declara con portalPendiente', () => {
 
   // La lista es CERRADA a propósito: meter un comercio sin portal obliga a
   // pasar por aquí y a decir por qué no se pudo verificar, en vez de que el
-  // hueco crezca callado. Los tres salieron del banco de 91 fotos y comparten
-  // la causa: su ticket no imprime liga de facturación.
-  it('son exactamente estos tres, y ninguno finge tener campos leídos', () => {
+  // hueco crezca callado.
+  //
+  // ── HAY DOS CAUSAS DISTINTAS, Y CONVIENE NO MEZCLARLAS ────────────────────
+  //
+  // 1. EL TICKET NO IMPRIME LIGA. Los tres del banco de 91 fotos. No hay
+  //    dominio que reconocer porque el papel no lo trae, así que estos NO
+  //    pueden tener `reconocer.dominios`: un dominio aquí sería la URL
+  //    inventada entrando por la puerta de atrás.
+  //
+  // 2. LA LIGA EXISTE PERO NO LLEVA A UN PORTAL (recon del 28-ago-2026). Los
+  //    tres que trajo el reconocimiento de campo. Aquí el dominio SÍ está
+  //    impreso y SÍ sirve para reconocer al emisor —es lo único verificado de
+  //    ellos— pero no hay URL honesta que guardar en `portal`:
+  //      · `facturacion_estacion` — el apex es una página de aparcamiento de
+  //        GoDaddy. La plataforma existe, pero solo por subdominio de comercio,
+  //        así que la entrada correcta es un PATRÓN, no una URL.
+  //      · `mobil` — no es un portal: es un directorio de nueve operadores, y
+  //        además responde 403 de Akamai.
+  //      · `pemex_franquicia` — `cargogas.com` sirve un 403 con `noindex`, y su
+  //        contenido real es otro directorio por estación.
+  //
+  //    Guardar la URL vieja en cualquiera de los tres mandaba al robot —o a una
+  //    persona— a una página de venta de dominios o a un 403. Vaciarla y marcar
+  //    el pendiente dice la verdad y conserva la capacidad de NOMBRAR al emisor.
+  // 3. LA LIGA ESTÁ IMPRESA PERO NADIE HA ABIERTO SU FORMULARIO (corrida de
+  //    producción del 28-ago-2026, 90 fotos). Los detectó el OCR leyendo el
+  //    dominio del propio ticket, así que el dominio SÍ está verificado — lo que
+  //    falta es visitar la página. Es el estado más temprano de una ficha: se
+  //    sabe a quién nombrar y no a dónde mandarlo.
+  const SIN_LIGA_EN_EL_TICKET = ['amg_hospitality', 'vaquero_montejo', 'walmart'];
+  const LIGA_QUE_NO_ES_PORTAL = ['facturacion_estacion', 'mobil', 'pemex_franquicia'];
+  const LIGA_IMPRESA_SIN_VISITAR = ['gasolineria_mallorca', 'los_taquitos_pm'];
+
+  it('son exactamente estos ocho, y ninguno finge tener campos leídos', () => {
     const pendientes = COMERCIOS.filter((c) => c.portalPendiente).map((c) => c.clave).sort();
-    expect(pendientes).toEqual(['amg_hospitality', 'vaquero_montejo', 'walmart']);
+    expect(pendientes).toEqual(
+      [...SIN_LIGA_EN_EL_TICKET, ...LIGA_QUE_NO_ES_PORTAL, ...LIGA_IMPRESA_SIN_VISITAR].sort(),
+    );
     for (const k of pendientes) {
       const c = comercio(k)!;
       // Sin portal no se pudo leer el formulario: `campos` vacío y la marca
@@ -375,9 +458,50 @@ describe('el portal sin verificar se declara con portalPendiente', () => {
       expect(c.campos, `${k}`).toEqual([]);
       expect(c.camposPendientes, `${k}`).toBe(true);
       expect(c.plazoVerificado, `${k}: sin portal no hay plazo verificado`).toBe(false);
-      // Y nada de `dominios`: el dominio es la señal que sale de la liga
-      // impresa, y estos justamente no la imprimen. Un dominio aquí sería la
-      // URL inventada entrando por la puerta de atrás.
+    }
+  });
+
+  // ── NINGÚN `portal` PUEDE SER LA URL DE UN LOGIN ──────────────────────────
+  //
+  // Regresión REAL, cazada el 28-ago-2026 al actualizar el catálogo con el
+  // recon. Se cambió `la_gas` de la raíz a `…/auth/login` con la lógica de "es
+  // la URL final, así no dependemos del redirect" — y rompió la vinculación
+  // asistida en silencio.
+  //
+  // El mecanismo: `pantallaDeLogin` decide si la persona YA ENTRÓ comparando la
+  // URL contra `RUTAS_DE_LOGIN`. Con `/auth/login` guardado en la ficha, la
+  // condición «seguimos en la pantalla de entrar» se vuelve permanentemente
+  // verdadera: el contralor inicia sesión de verdad, el sistema no lo reconoce,
+  // la vinculación expira y la sesión no se guarda. Nadie habría sabido por qué.
+  //
+  // La regla general: `portal` es la página donde se quiere TERMINAR, no la
+  // puerta. Los portales con cuenta ya redirigen solos al login cuando hace
+  // falta; guardarlo a mano solo rompe la señal de "ya entré".
+  it('ningún portal apunta a una pantalla de entrar', () => {
+    // El mismo patrón que usa `vinculo_senales.ts`. Se repite en vez de
+    // importarlo a propósito: si allá lo relajan, esta prueba tiene que seguir
+    // midiendo lo que hoy sabemos que rompe.
+    const RUTAS_DE_LOGIN = /\/(account\/login|login|signin|sign-in|iniciar-?sesion|inicio-?sesion|acceso|autenticar)(\/|\?|#|$)/i;
+    const culpables = COMERCIOS
+      .filter((c) => c.portal && RUTAS_DE_LOGIN.test(c.portal))
+      .map((c) => `${c.clave} → ${c.portal}`);
+    expect(culpables, 'un portal que apunta al login hace que "ya entré" nunca sea cierto').toEqual([]);
+  });
+
+  it('los que SÍ imprimen liga la conservan como dominio, que es lo verificado', () => {
+    // El complemento de la prueba de abajo, y lo que hace que `portalPendiente`
+    // no sea "borrar la ficha": de estos comercios se conoce el dominio impreso
+    // —es como se detectaron— aunque no se conozca su formulario. Perderlo
+    // convertiría un emisor identificable en "emisor desconocido".
+    for (const k of [...LIGA_QUE_NO_ES_PORTAL, ...LIGA_IMPRESA_SIN_VISITAR]) {
+      const c = comercio(k)!;
+      expect(c.reconocer.dominios?.length, `${k}: su liga está impresa y verificada`).toBeGreaterThan(0);
+    }
+  });
+
+  it('los que no imprimen liga tampoco pueden declarar un dominio', () => {
+    for (const k of SIN_LIGA_EN_EL_TICKET) {
+      const c = comercio(k)!;
       expect(c.reconocer.dominios, `${k}: no imprime liga, no puede tener dominio`).toBeUndefined();
     }
   });

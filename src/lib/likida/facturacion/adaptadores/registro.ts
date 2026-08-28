@@ -78,6 +78,40 @@ import type { FabricaDePagina } from './playwright_base';
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
+ * POR QUÉ ESTE COMERCIO NO LO PUEDE HACER LA MÁQUINA, en una frase, o `null`.
+ *
+ * Lee `noAutomatizable` del catálogo y lo convierte en el mismo tipo de motivo
+ * que ya usa `bloqueado()`. Es lo que hace que la marca del catálogo sea una
+ * RESTRICCIÓN y no un comentario: sin esto, el piloto de visión encendido
+ * volaría el portal sin TLS con la credencial de una flota, e intentaría sacar
+ * campos de ticket de tres portales de TAG que no facturan por ticket.
+ *
+ * El texto lleva la razón Y la medición, porque quien lo lea en un log va a
+ * querer discutirlo con el dato delante, no con nuestra conclusión.
+ */
+export function motivoNoAutomatizable(comercio: string): string | null {
+  const ficha = COMERCIOS.find((c) => c.clave === comercio);
+  if (!ficha?.noAutomatizable) return null;
+
+  const { razon, nota } = ficha.noAutomatizable;
+  // Sin prefijo de comercio: quien llama ya lo antepone, y repetirlo producía
+  // «autozone: autozone: …» en el registro.
+  const encabezado: Record<typeof razon, string> = {
+    sin_tls:
+      'el portal no ofrece HTTPS y ahí se teclea una contraseña. ' +
+      'No se automatiza hasta que exponga TLS — y al cliente se le dice por qué.',
+    factura_mensual_por_cuenta:
+      'no se factura ticket por ticket. El CFDI se emite mensual contra la ' +
+      'cuenta, así que no hay formulario de ticket que llenar ni adaptador que escribir.',
+    muro_anti_bot:
+      'el sitio bloquea navegadores automatizados por decisión suya. ' +
+      'No se rodea: es el control de acceso de un tercero.',
+  };
+
+  return `${encabezado[razon]} (${nota})`;
+}
+
+/**
  * Los datos con los que se factura A NOMBRE de la flota.
  *
  * Los cinco fiscales son los mismos de `saas/fiscal.ts` (`tenant.rfc`,
@@ -213,7 +247,18 @@ const TABLA: ReadonlyArray<{
   // hoy: ninguno de los cuatro primeros guiones pide régimen.
   ...GUIONES.map((guion) => ({
     comercio: guion.comercio,
-    bloqueado: () => (guion.verificado === null ? motivoSinVerificar(guion) : null),
+    // DOS BLOQUEOS, Y EL DEL CATÁLOGO VA PRIMERO A PROPÓSITO.
+    //
+    // `motivoNoAutomatizable` dice que este portal no lo puede hacer la máquina
+    // por una razón del MUNDO —no habla TLS, no factura por ticket, bloquea
+    // robots—; `motivoSinVerificar` dice que no lo hemos MEDIDO. Si se
+    // preguntara primero por el segundo, un guion sin verificar de un portal que
+    // además bloquea robots reportaría "corre el pre-vuelo", y quien lo corriera
+    // se estrellaría contra un 403 sin entender por qué. El orden hace que el
+    // motivo que sale sea el que de verdad manda.
+    bloqueado: () =>
+      motivoNoAutomatizable(guion.comercio) ??
+      (guion.verificado === null ? motivoSinVerificar(guion) : null),
     revisar: (op: OpcionesRegistro) => revisarDatosDeGuion(guion, op.flota),
     registrar: (op: OpcionesRegistro) => {
       registrarAdaptador(op.flota.tenantId, new AdaptadorDeclarativo({
@@ -295,7 +340,23 @@ export const COMERCIOS_PILOTABLES: readonly Comercio[] = COMERCIOS.filter(
   // antes de esta rama esos cuatro comercios sí eran pilotables—. Lo que
   // saca a un comercio del piloto es que ya haya alguien que lo facture de
   // verdad, no que alguien haya empezado a escribirlo.
-  (c) => c.campos.length > 0 && !c.camposPendientes && !portalesQueEmiten().includes(c.clave),
+  //
+  // `!c.noAutomatizable` es la condición que el recon del 28-ago-2026 obligó a
+  // añadir, y es la que de verdad muerde: las otras tres filtran por lo que NO
+  // SABEMOS, y esta por lo que SÍ sabemos y es malo.
+  //
+  // Sin ella, el piloto encendido tomaba fichas COMPLETAS —campos leídos, sin
+  // pendientes, así que pasaban los tres filtros de arriba— y las volaba igual.
+  // En concreto habría: tecleado la contraseña de una flota en un portal que la
+  // manda en claro por HTTP (megasur), y gastado visión buscando en el papel un
+  // folio que tres portales de TAG nunca van a pedir porque facturan mensual
+  // contra la cuenta. Un comentario en el catálogo no habría parado ninguna de
+  // las dos cosas.
+  (c) =>
+    c.campos.length > 0 &&
+    !c.camposPendientes &&
+    !c.noAutomatizable &&
+    !portalesQueEmiten().includes(c.clave),
 );
 
 /**
