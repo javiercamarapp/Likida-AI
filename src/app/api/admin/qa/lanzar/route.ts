@@ -66,20 +66,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `foto(s) fuera del banco: ${faltantes.join(', ')}` }, { status: 400 });
   }
 
-  const corrida = crearCorrida(v.datos.escenario, v.datos.params);
+  const corrida = crearCorrida(v.datos.escenario, v.datos.params, v.datos.carril);
   try {
     await guardarCorrida(db, corrida);
   } catch (e) {
     return NextResponse.json({ error: `no se pudo registrar la corrida: ${e instanceof Error ? e.message : e}` }, { status: 502 });
   }
 
-  logger.info('qa.corrida_lanzada', { corrida: corrida.id, escenario: corrida.escenario, fotos: corrida.parametros.fotoIds.length, por: sesion.userId ?? null });
+  logger.info('qa.corrida_lanzada', { corrida: corrida.id, escenario: corrida.escenario, carril: corrida.carril, fotos: corrida.parametros.fotoIds.length, por: sesion.userId ?? null });
 
-  // El motor corre DESPUÉS de responder — nunca lanza (todo fallo queda
-  // escrito en la corrida, que es lo que el panel pollea).
-  after(async () => {
-    await ejecutarCorridaRapida(corrida);
-  });
+  // ── EL CARRIL DECIDE QUIÉN CORRE ────────────────────────────────────────
+  // Rápido: el motor corre DESPUÉS de responder, en esta misma invocación —
+  // nunca lanza (todo fallo queda escrito en la corrida, que es lo que el
+  // panel pollea).
+  //
+  // Completo: aquí NO se corre nada. Una corrida de 91 fotos no cabe en los
+  // 120 s de esta ruta, y arrancarla acá daría exactamente lo que la Fase C
+  // vino a evitar: una corrida muerta a la mitad. La mueve
+  // `POST /api/admin/qa/<id>/continuar`, pasada por pasada, con su
+  // `maxDuration` de 300 s y su reloj duro — el MISMO camino para la primera
+  // pasada que para la última, que es lo que hace que la continuación esté
+  // probada de verdad y no sólo el caso feliz.
+  if (corrida.carril === 'rapido') {
+    after(async () => {
+      await ejecutarCorridaRapida(corrida);
+    });
+  }
 
-  return NextResponse.json({ id: corrida.id });
+  return NextResponse.json({ id: corrida.id, carril: corrida.carril });
 }

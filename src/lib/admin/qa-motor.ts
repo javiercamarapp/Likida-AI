@@ -33,12 +33,19 @@ import { ahoraMs } from '@/lib/saludo';
 import {
   exigirTenantZZZ, exigirPrefijoQA, PREFIJO_QA, TOPE_CORRIDA_USD,
 } from '../../../scripts/qa-agentes/config.qa';
+import { relojAgotado } from '@/lib/likida/agentes/runner';
 import { correrOraculos } from './qa-oraculos';
 import { escenarioPorId } from './qa-escenarios';
-import { dataUrlDeFoto, guardarCorrida, leerManifiesto } from './qa-storage';
 import {
-  estadoFinalDe,
+  dataUrlDeFoto, guardarCorrida, leerManifiesto, leerCorrida, gastoHoyUsd,
+  tomarPasada, soltarPasada, tomarFoto, cerrarFoto, leerFotosDeCorrida,
+  marcarInterrumpidas,
+} from './qa-storage';
+import {
+  estadoFinalDe, resumirAvance, carrilPara, reservaPorFotoMs,
+  motivoTopeDinero, motivoCorteReloj, MAX_EVENTOS_MEMORIA, TOPE_DIA_USD,
   type CorridaQA, type EscenarioId, type ParametrosCorrida, type PasoQA, type TurnoConversacion,
+  type Carril, type CorteCorrida, type MemoriaCorrida, type AvanceFotos, type FotoBanco,
 } from './qa-tipos';
 
 // El tope DIARIO vive en qa-tipos.ts (client-safe, el botón lo enseña); el
@@ -82,16 +89,22 @@ export function prefijoMensajes(corridaId: string): string {
   return `${PREFIJO_QA}P${corridaId.slice(0, 8)}-`;
 }
 
-/** La corrida recién nacida, lista para guardarse antes de ejecutar. */
-export function crearCorrida(escenario: EscenarioId, params: ParametrosCorrida): CorridaQA {
+/** La corrida recién nacida, lista para guardarse antes de ejecutar. El carril
+ *  se pasa explícito (el validador ya lo decidió); sin él, el que le toque al
+ *  número de fotos — la MISMA función que usa el formulario. */
+export function crearCorrida(
+  escenario: EscenarioId, params: ParametrosCorrida, carril?: Carril,
+): CorridaQA {
   const id = randomUUID();
   const ahora = new Date().toISOString();
   return {
-    id, escenario, carril: 'rapido', parametros: params,
+    id, escenario, carril: carril ?? carrilPara(params.fotoIds.length), parametros: params,
     estado: 'pendiente', motivo: null,
     tenantId: null, tenantNombre: nombreTenantQa(id),
     creadaEn: ahora, inicio: null, fin: null, latidoEn: ahora,
     pasos: [], costoUsdTotal: 0, veredicto: null, turnos: [], pdfs: [], limpieza: null,
+    fase: 'siembra', corte: null, pasadas: 0, pasadaEnVuelo: null, memoria: null,
+    avance: null,
   };
 }
 
@@ -239,6 +252,30 @@ async function costoNuevoUsd(db: SupabaseClient, tenantId: string, vistos: Set<s
   return Math.round(suma * 1_000_000) / 1_000_000;
 }
 
+/** El costo ACUMULADO del tenant, USD, leído entero de `llm_costo`.
+ *
+ *  El carril rápido puede llevar el acumulado en memoria (`costoNuevoUsd` con
+ *  su `Set` de ids ya vistos) porque vive en UNA invocación. El completo no: el
+ *  `Set` nace vacío en cada pasada, así que sumar "lo nuevo" volvería a contar
+ *  todo lo de las pasadas anteriores y el tope de $2 saltaría a la tercera
+ *  pasada por una cifra que nadie gastó. Aquí se lee el TOTAL, que es
+ *  idempotente por construcción y sigue siendo lo que reportó el proveedor del
+ *  modelo — nunca una estimación ni un segundo medidor. */
+async function costoTotalUsd(db: SupabaseClient, tenantId: string): Promise<number> {
+  const { data, error } = await db.from('llm_costo')
+    .select('fase, costo_usd').eq('tenant_id', tenantId);
+  if (error) throw new Error(`no se pudo leer llm_costo: ${error.message}`);
+  let suma = 0;
+  for (const fila of data ?? []) {
+    // 'whatsapp' fuera del ledger, mismo criterio que el carril rápido: en QA
+    // los envíos rebotan en la allowed-list del número de prueba.
+    if (fila.fase === 'whatsapp') continue;
+    const v = Number(fila.costo_usd);
+    if (Number.isFinite(v)) suma += v;
+  }
+  return Math.round(suma * 1_000_000) / 1_000_000;
+}
+
 // ── Lecturas de evidencia ───────────────────────────────────────────────────
 
 async function turnosDelTenant(db: SupabaseClient, tenantId: string): Promise<TurnoConversacion[]> {
@@ -373,6 +410,10 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
     corrida.estado = 'abortada';
     corrida.motivo = motivo;
     corrida.fin = new Date().toISOString();
+    // La fase también se cierra: una corrida abortada que dijera `fase:
+    // 'fotos'` invitaría a que alguien intentara continuarla, y el carril
+    // rápido no admite continuación.
+    corrida.fase = 'terminada';
     // Un aborto por tope o por tiempo es EVIDENCIA: el tenant se queda para
     // inspección, no se borra (encargo Fase A, regla del tope).
     corrida.limpieza = `tenant "${corrida.tenantNombre}" CONSERVADO para inspección (aborto): límpialo a mano cuando termines de mirar`;
@@ -399,12 +440,14 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
       telefono = s.telefono;
       viaje2Id = s.viaje2Id;
       telefono2 = s.telefono2;
+      corrida.fase = 'fotos';
       await cerrarPaso(p1, 'ok');
     } catch (e) {
       await cerrarPaso(p1, 'bad', e instanceof Error ? e.message : String(e));
       corrida.estado = 'fallo';
       corrida.motivo = `la siembra falló: ${e instanceof Error ? e.message : e}`;
       corrida.fin = new Date().toISOString();
+      corrida.fase = 'terminada';
       corrida.limpieza = await limpiarTenant(db, corrida);
       await guardarCorrida(db, corrida);
       return corrida;
@@ -563,6 +606,7 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
     }
 
     corrida.fin = new Date().toISOString();
+    corrida.fase = 'terminada';
     await guardarCorrida(db, corrida);
     return corrida;
   } catch (e) {
@@ -570,6 +614,7 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
     corrida.estado = 'fallo';
     corrida.motivo = `error no anticipado: ${e instanceof Error ? e.message : String(e)}`;
     corrida.fin = new Date().toISOString();
+    corrida.fase = 'terminada';
     if (!corrida.limpieza) {
       corrida.limpieza = `tenant "${corrida.tenantNombre}" posiblemente sembrado — revisar y limpiar a mano`;
     }
@@ -577,5 +622,555 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
     return corrida;
   } finally {
     bit.restaurar();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL CARRIL COMPLETO (Fase C, 27-ago-2026) — la corrida que NO cabe en una
+// invocación.
+//
+// EL PROBLEMA, Y POR QUÉ NO ERA SUBIR UN NÚMERO. `MAX_FOTOS_CARRIL_RAPIDO`
+// eran diez y el tope era honesto: el carril rápido corre entero dentro de una
+// función serverless con `maxDuration`, así que subir la constante a 91 no
+// daría 91 fotos procesadas — daría una corrida MUERTA A LA MITAD, que además
+// mentiría (estado 'corriendo' para siempre y nadie sabiendo cuántas se
+// midieron). Lo que faltaba era el otro carril, y es esto.
+//
+// LA FORMA: PASADAS. Cada pasada es una invocación con su propio reloj.
+// Procesa las fotos que le alcancen, deja escrito CUÁLES, y suelta la llave.
+// La siguiente continúa desde ahí. Lo que el número de fotos deja de limitar
+// lo siguen limitando el reloj y el dinero, que es lo que de verdad se acaba.
+//
+// EL RELOJ, CON EL PATRÓN DEL PR #152 («El reloj entra a los motores»). Se
+// pregunta `relojAgotado(...)` ANTES de empezar cada foto y NUNCA a la mitad de
+// una, y las que no alcanzaron turno se CUENTAN y se DICEN. Esto no es
+// decoración: el runner de producción murió mudo dos veces (25-ago-2026 18:46
+// y 28-ago-2026 00:03 UTC, con correo de alerta de por medio) por motores que
+// iteraban sin mirar el reloj. `relojAgotado` se IMPORTA de agentes/runner.ts
+// en vez de reescribirse: tenerla escrita una sola vez es lo que hace que
+// buscarla en el fuente encuentre a todos los que preguntan — y a los que no.
+// La red de abajo es `conRelojDuro` en la ruta, que tampoco se copia.
+//
+// LA IDEMPOTENCIA ES UNA RESTRICCIÓN, NO UN `if`. Cada foto se TOMA con un
+// insert contra la PK `(corrida_id, foto_id)` de `qa_corrida_foto` ANTES de
+// mandarla. Dos pasadas solapadas piden la misma foto: una entra, la otra
+// rebota con 23505 y sigue de largo. Un `if (yaProcesada)` leído antes sería
+// una carrera, y perderla aquí significa mandar el mismo ticket dos veces al
+// modelo — dinero real — y contarlo dos veces — una cifra inventada.
+//
+// LOS TOPES DE DINERO SE QUEDAN ENTEROS. `TOPE_DIA_USD` se vuelve a preguntar
+// al principio de CADA pasada (una corrida larga puede cruzar el día), y
+// `TOPE_CORRIDA_USD` después de cada foto, siempre contra el costo MEDIDO que
+// reportó el proveedor (llm_costo). Cuando topa: para, lo dice con la cifra, y
+// CONSERVA el tenant — un aborto por tope es evidencia, no basura.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Los estados de los que ya no se sale. */
+export const ESTADOS_TERMINALES: ReadonlySet<string> = new Set(['ok', 'parcial', 'fallo', 'abortada']);
+
+export interface ResultadoPasada {
+  /** `false` = no se pudo ni intentar y el motivo lo dice (base ilegible,
+   *  corrida inexistente, carril equivocado). */
+  ok: boolean;
+  /** `true` sólo si esta invocación llegó a tomar la corrida y trabajar. */
+  corrio: boolean;
+  pasada: number | null;
+  /** SIEMPRE dicho. Ni un solo camino de esta función devuelve un `false` mudo. */
+  motivo: string;
+  /** Fotos que ESTA pasada procesó (ok o bad). No incluye las que ya estaban. */
+  fotosProcesadas: number;
+  corte: CorteCorrida | null;
+  /** Ya no queda nada por hacer: la corrida llegó a un estado terminal. */
+  terminada: boolean;
+  /** El avance al cerrar la pasada, para que quien llama no tenga que releer. */
+  avance: AvanceFotos | null;
+  corrida: CorridaQA | null;
+}
+
+/** Une los mensajes de bitácora de esta pasada con los que la corrida ya
+ *  recordaba, sin repetir y con tope. Puro. */
+export function mezclarEventos(previos: string[] | undefined, nuevos: string[]): string[] {
+  const vistos = new Set(previos ?? []);
+  for (const m of nuevos) {
+    if (vistos.size >= MAX_EVENTOS_MEMORIA) break;
+    vistos.add(m);
+  }
+  return [...vistos];
+}
+
+/**
+ * UNA pasada del carril completo. Nunca lanza: todo fallo termina ESCRITO en la
+ * corrida, que es lo que la pantalla pollea.
+ *
+ * `venceEn` es el instante en que esta pasada tiene que haber dejado de
+ * trabajar — el MISMO que la ruta le pasa a `conRelojDuro`, para que el corte
+ * duro sea la red y no el freno normal.
+ */
+export async function ejecutarPasada(corridaId: string, venceEn: number): Promise<ResultadoPasada> {
+  const db = supabaseAdmin();
+  const pasadaId = randomUUID();
+
+  const sinCorrer = (motivo: string, ok: boolean, corrida: CorridaQA | null): ResultadoPasada => ({
+    ok, corrio: false, pasada: null, motivo, fotosProcesadas: 0, corte: null,
+    terminada: corrida ? ESTADOS_TERMINALES.has(corrida.estado) : false,
+    avance: corrida?.avance ?? null, corrida,
+  });
+
+  const leida = await leerCorrida(db, corridaId);
+  if (!leida.ok) return sinCorrer(leida.error, false, null);
+  if (!leida.datos) return sinCorrer('corrida no encontrada — el id puede ser viejo', false, null);
+  if (leida.datos.carril !== 'completo') {
+    return sinCorrer('esta corrida es del carril rápido: corre entera en su propia invocación y no admite pasadas', false, leida.datos);
+  }
+  if (ESTADOS_TERMINALES.has(leida.datos.estado)) {
+    return sinCorrer(`la corrida ya terminó (${leida.datos.estado}) — no hay más pasadas que dar`, true, leida.datos);
+  }
+
+  // ── LA LLAVE ─────────────────────────────────────────────────────────────
+  // Un UPDATE condicional, no un `if` sobre lo que acabamos de leer: dos
+  // pestañas abiertas piden a la vez, Postgres serializa, una gana y la otra
+  // se va sin gastar un peso.
+  const toma = await tomarPasada(db, corridaId, pasadaId);
+  if (!toma.ok) return sinCorrer(toma.error, false, leida.datos);
+  if (!toma.tomada) return sinCorrer(toma.motivo, true, leida.datos);
+  const pasada = toma.pasada;
+
+  // Se relee DESPUÉS de tener la llave: entre la primera lectura y la toma
+  // pudo haber corrido una pasada entera, y trabajar sobre el estado viejo
+  // sería reescribirlo.
+  const fresca = await leerCorrida(db, corridaId);
+  if (!fresca.ok || !fresca.datos) {
+    await soltarPasada(db, corridaId, pasadaId).catch(() => {});
+    return sinCorrer(fresca.ok ? 'la corrida desapareció entre la toma y la relectura' : fresca.error, false, null);
+  }
+  const corrida = fresca.datos;
+  corrida.pasadas = pasada;
+  corrida.pasadaEnVuelo = pasadaId;
+
+  const bit = capturarBitacora();
+  let fotosProcesadas = 0;
+  let corte: CorteCorrida | null = null;
+
+  /** Guarda la corrida ACORDÁNDOSE de la bitácora. `guardarCorrida` refresca
+   *  `latido_en`, así que cada llamada es también el latido de la pasada. */
+  const guardar = async () => {
+    if (corrida.memoria) {
+      corrida.memoria.eventos = mezclarEventos(corrida.memoria.eventos, bit.eventos.map((e) => e.msg));
+    }
+    await guardarCorrida(db, corrida);
+  };
+
+  let n = corrida.pasos.reduce((m, p) => Math.max(m, p.n), 0);
+  const paso = async (nombre: string): Promise<PasoQA> => {
+    const p: PasoQA = { n: ++n, nombre, estado: 'corriendo', costoUsd: 0, inicio: new Date().toISOString() };
+    corrida.pasos.push(p);
+    await guardar().catch(() => { /* el ledger en vivo es best-effort; el cierre sí exige escribirse */ });
+    return p;
+  };
+  const cerrarPaso = async (p: PasoQA, estado: PasoQA['estado'], costoUsd: number | null, detalle?: string | null) => {
+    p.estado = estado;
+    p.fin = new Date().toISOString();
+    // `costoUsd` null = NO SE MIDIÓ. La columna `qa_corrida_paso.costo_usd` es
+    // NOT NULL, así que aquí va 0 — y por eso el detalle lo DICE en palabras:
+    // un 0 sin explicación se leería como "salió gratis".
+    p.costoUsd = costoUsd ?? 0;
+    const nota = costoUsd === null && estado !== 'pendiente'
+      ? `${detalle ? `${detalle} · ` : ''}costo NO medido (no es cero: no se pudo leer)`
+      : detalle ?? undefined;
+    if (nota) p.detalle = nota;
+    await guardar().catch(() => {});
+  };
+
+  const cerrarPasada = (motivo: string, avance: AvanceFotos | null): ResultadoPasada => ({
+    ok: true, corrio: true, pasada, motivo, fotosProcesadas, corte,
+    terminada: ESTADOS_TERMINALES.has(corrida.estado), avance, corrida,
+  });
+
+  /** El avance MEDIDO ahora mismo, releído de la base. Si la lectura falla se
+   *  devuelve `null` y quien lo use lo dice — jamás un avance inventado. */
+  const avanceAhora = async (): Promise<AvanceFotos | null> => {
+    const r = await leerFotosDeCorrida(db, corridaId);
+    if (!r.ok) return null;
+    const av = resumirAvance(corrida.parametros.fotoIds, r.datos);
+    corrida.avance = av;
+    return av;
+  };
+
+  const abortarPorDinero = async (cual: 'corrida' | 'dia', gastado: number, tope: number): Promise<ResultadoPasada> => {
+    corte = 'dinero';
+    const av = await avanceAhora();
+    corrida.estado = 'abortada';
+    corrida.corte = 'dinero';
+    corrida.fin = new Date().toISOString();
+    corrida.motivo = av
+      ? motivoTopeDinero(cual, gastado, tope, av)
+      : `${cual === 'corrida' ? 'TOPE DE CORRIDA' : 'TOPE DIARIO DEL PANEL'} alcanzado: $${gastado.toFixed(4)} USD medidos contra un tope de $${tope.toFixed(2)}. La corrida PARA aquí; el avance foto por foto no se pudo releer para decir cuántas quedaron — revísalo en la pantalla.`;
+    // El tenant se CONSERVA: un aborto por tope es evidencia (regla del motor
+    // desde la Fase A, respetada tal cual).
+    corrida.limpieza = `tenant "${corrida.tenantNombre}" CONSERVADO para inspección (aborto por tope de dinero): límpialo a mano cuando termines de mirar`;
+    await guardar();
+    logger.warn('qa.pasada.tope_dinero', { corrida: corridaId, pasada, cual, gastado, tope });
+    return cerrarPasada(corrida.motivo, av);
+  };
+
+  try {
+    // ── EL TOPE DEL DÍA, RE-PREGUNTADO EN CADA PASADA ────────────────────
+    // Una corrida de 91 fotos dura varias pasadas y puede cruzar la
+    // medianoche de México; preguntarlo sólo al lanzar dejaría al panel
+    // gastando el resto de la noche contra un candado que ya se movió.
+    const gasto = await gastoHoyUsd(db);
+    if (!gasto.ok) {
+      corrida.motivo = `pasada ${pasada} no arrancó: no se pudo leer el gasto del día (${gasto.error}) — a ciegas no se gasta. La corrida sigue viva; reintenta.`;
+      await guardar();
+      return cerrarPasada(corrida.motivo, corrida.avance);
+    }
+    if (gasto.datos >= TOPE_DIA_USD) return await abortarPorDinero('dia', gasto.datos, TOPE_DIA_USD);
+
+    // ── FASE 1: LA SIEMBRA ───────────────────────────────────────────────
+    if (corrida.fase === 'siembra' || corrida.memoria === null) {
+      if (relojAgotado(venceEn)) {
+        corte = 'reloj';
+        corrida.corte = 'reloj';
+        corrida.motivo = `pasada ${pasada}: el reloj venció antes de poder sembrar el tenant sintético — no se hizo nada y nada se perdió; la siguiente pasada arranca de cero.`;
+        await guardar();
+        return cerrarPasada(corrida.motivo, corrida.avance);
+      }
+      const p1 = await paso(`sembrar tenant "${corrida.tenantNombre}" (operador, unidad, política, viaje) — pasada ${pasada}`);
+      try {
+        const s = await sembrarTenant(db, corrida);
+        corrida.tenantId = s.tenantId;
+        corrida.memoria = {
+          tenantId: s.tenantId, viajeId: s.viajeId, telefono: s.telefono,
+          viaje2Id: s.viaje2Id, telefono2: s.telefono2,
+        };
+        corrida.estado = 'corriendo';
+        corrida.inicio ??= new Date().toISOString();
+        corrida.fase = 'fotos';
+        corrida.corte = null;
+        await cerrarPaso(p1, 'ok', 0);
+      } catch (e) {
+        await cerrarPaso(p1, 'bad', null, e instanceof Error ? e.message : String(e));
+        corrida.estado = 'fallo';
+        corrida.motivo = `la siembra falló: ${e instanceof Error ? e.message : e}`;
+        corrida.fin = new Date().toISOString();
+        corrida.fase = 'terminada';
+        corrida.limpieza = await limpiarTenant(db, corrida);
+        await guardar();
+        return cerrarPasada(corrida.motivo, corrida.avance);
+      }
+    }
+
+    const memoria = corrida.memoria as MemoriaCorrida;
+    const prefijo = prefijoMensajes(corrida.id);
+    const fotoIds = corrida.parametros.fotoIds;
+
+    // ── FASE 2: LAS FOTOS, UNA POR UNA, CON EL RELOJ EN LA MANO ──────────
+    if (corrida.fase === 'fotos') {
+      const manifiesto = await leerManifiesto(db);
+      if (!manifiesto.ok) {
+        corrida.motivo = `pasada ${pasada} no pudo leer el banco de fotos (${manifiesto.error}) — la corrida sigue viva; reintenta.`;
+        await guardar();
+        return cerrarPasada(corrida.motivo, corrida.avance);
+      }
+      const porId = new Map<string, FotoBanco>(manifiesto.datos.map((f) => [f.id, f]));
+
+      // Lo que una pasada MUERTA dejó en vuelo. Ni acierto ni fallo: se dice.
+      const inter = await marcarInterrumpidas(db, corridaId, pasada);
+      if (inter.ok && inter.datos > 0) {
+        logger.warn('qa.pasada.fotos_interrumpidas', { corrida: corridaId, pasada, cuantas: inter.datos });
+      }
+
+      const previas = await leerFotosDeCorrida(db, corridaId);
+      if (!previas.ok) {
+        corrida.motivo = `pasada ${pasada} no pudo leer el avance (${previas.error}) — no se manda una foto sin saber si ya se mandó. La corrida sigue viva; reintenta.`;
+        await guardar();
+        return cerrarPasada(corrida.motivo, corrida.avance);
+      }
+      const conDueno = new Set(previas.datos.map((f) => f.fotoId));
+      // Las duraciones MEDIDAS de esta misma corrida: son las que dimensionan
+      // la reserva de tiempo por foto (ver `reservaPorFotoMs`).
+      const duraciones: number[] = previas.datos
+        .filter((f) => f.fin !== null)
+        .map((f) => Date.parse(f.fin as string) - Date.parse(f.inicio))
+        .filter((d) => Number.isFinite(d) && d > 0);
+
+      for (let i = 0; i < fotoIds.length; i++) {
+        const fotoId = fotoIds[i];
+        // CINTURÓN 1 (ahorra red, NO es la garantía): lo que ya tiene dueño no
+        // se vuelve a pedir.
+        if (conDueno.has(fotoId)) continue;
+
+        // ── EL RELOJ, ANTES DE EMPEZAR LA FOTO Y NUNCA A LA MITAD ────────
+        if (relojAgotado(venceEn - reservaPorFotoMs(duraciones))) {
+          corte = 'reloj';
+          break;
+        }
+
+        // CINTURÓN 2 — LA GARANTÍA: la PK de qa_corrida_foto.
+        const tomaFoto = await tomarFoto(db, corridaId, fotoId, i + 1, pasada);
+        if (!tomaFoto.ok) {
+          corrida.motivo = `pasada ${pasada} se detuvo: no se pudo registrar la toma de una foto (${tomaFoto.error}) — sin ese registro no se manda nada, porque no habría cómo saber que ya se mandó.`;
+          await guardar();
+          return cerrarPasada(corrida.motivo, await avanceAhora());
+        }
+        if (!tomaFoto.tomada) continue;   // otra pasada la tiene: no es error
+
+        const foto = porId.get(fotoId);
+        const p = await paso(`foto ${i + 1}/${fotoIds.length} — ${foto?.etiqueta ?? fotoId} → processInbound (pasada ${pasada})`);
+        if (!foto) {
+          // Una foto que salió del banco no puede detener a las otras 90: se
+          // marca, se dice, y la corrida sigue.
+          await cerrarFoto(db, corridaId, fotoId, 'bad', null, `la foto ${fotoId} ya no está en el banco`);
+          await cerrarPaso(p, 'bad', null, `la foto ${fotoId} ya no está en el banco`);
+          fotosProcesadas += 1;
+          continue;
+        }
+
+        const t0Foto = Date.now();
+        let estadoFoto: 'ok' | 'bad' = 'ok';
+        let detalle: string | null = null;
+        try {
+          const dataUrl = await dataUrlDeFoto(db, foto);
+          await processInbound({
+            from: memoria.telefono,
+            type: 'image',
+            mediaId: `${prefijo}media-${i + 1}`,   // jamás llega a Meta: mediaDataUrlQA lo sustituye
+            mediaDataUrlQA: dataUrl,
+            // Determinista por foto: si una pasada muriera después de mandarla,
+            // un reenvío caería en el mismo claim de `wa_mensaje_procesado`.
+            waMessageId: `${prefijo}f${i + 1}`,
+          });
+        } catch (e) {
+          estadoFoto = 'bad';
+          detalle = e instanceof Error ? e.message : String(e);
+        }
+        duraciones.push(Date.now() - t0Foto);
+
+        // EL COSTO MEDIDO de esta foto: el delta del total leído de llm_costo.
+        let costoFoto: number | null = null;
+        try {
+          const antes = corrida.costoUsdTotal;
+          const total = await costoTotalUsd(db, memoria.tenantId);
+          corrida.costoUsdTotal = total;
+          costoFoto = Math.round((total - antes) * 1_000_000) / 1_000_000;
+        } catch (e) {
+          costoFoto = null;   // NO SE MIDIÓ. Jamás 0.
+          detalle = `${detalle ? `${detalle} · ` : ''}costo no leído: ${e instanceof Error ? e.message : e}`;
+        }
+        await cerrarFoto(db, corridaId, fotoId, estadoFoto, costoFoto, detalle);
+        await cerrarPaso(p, estadoFoto === 'ok' ? 'ok' : 'bad', costoFoto, detalle);
+        fotosProcesadas += 1;
+
+        if (corrida.costoUsdTotal > TOPE_CORRIDA_USD) {
+          return await abortarPorDinero('corrida', corrida.costoUsdTotal, TOPE_CORRIDA_USD);
+        }
+      }
+
+      const av = await avanceAhora();
+      if (corte === 'reloj') {
+        corrida.corte = 'reloj';
+        corrida.motivo = av
+          ? motivoCorteReloj(pasada, fotosProcesadas, av)
+          : `RELOJ DE LA PASADA ${pasada} agotado tras ${fotosProcesadas} foto(s); el avance no se pudo releer para decir cuántas faltan.`;
+        await guardar();
+        logger.warn('qa.pasada.corte_por_reloj', { corrida: corridaId, pasada, fotosProcesadas, sinTurno: av?.sinTurno ?? null });
+        return cerrarPasada(corrida.motivo, av);
+      }
+      if (av === null) {
+        corrida.motivo = `pasada ${pasada}: las fotos se mandaron pero el avance no se pudo releer — no se afirma que estén todas. Reintenta.`;
+        await guardar();
+        return cerrarPasada(corrida.motivo, null);
+      }
+      if (av.sinTurno > 0 || av.enVuelo > 0) {
+        // Quedaron fotos que otra pasada tiene tomadas: no se sigue al cierre
+        // con el viaje a medio llenar, porque el cuadre juzgaría un viaje
+        // incompleto y ese veredicto sería mentira.
+        corrida.motivo = `pasada ${pasada}: van ${av.ok} de ${av.total}; ${av.sinTurno} sin turno y ${av.enVuelo} tomadas por otra pasada. El cierre espera a que estén todas.`;
+        await guardar();
+        return cerrarPasada(corrida.motivo, av);
+      }
+      corrida.fase = 'cierre';
+      corrida.corte = null;
+      await guardar();
+    }
+
+    // ── FASE 3: EL RESTO DEL GUION (foto repetida, cierre) ────────────────
+    const guion = escenarioPorId(corrida.escenario)?.guion ?? [{ tipo: 'fotos' as const }, { tipo: 'cierre' as const }];
+    const TEXTO_CIERRE = 'listo, ya subí todo';
+    if (corrida.fase === 'cierre') {
+      if (relojAgotado(venceEn - reservaPorFotoMs([]))) {
+        corte = 'reloj';
+        corrida.corte = 'reloj';
+        corrida.motivo = `pasada ${pasada}: las ${fotoIds.length} fotos están, pero no quedó reloj para el cierre. La siguiente pasada lo hace — nada se repite.`;
+        await guardar();
+        return cerrarPasada(corrida.motivo, corrida.avance);
+      }
+      for (const acto of guion) {
+        if (acto.tipo === 'fotos') continue;   // ya quedó en la fase anterior
+
+        if (acto.tipo === 'foto_repetida') {
+          const fotoId = fotoIds[acto.indice];
+          const manifiesto = await leerManifiesto(db);
+          const foto = manifiesto.ok && fotoId ? manifiesto.datos.find((f) => f.id === fotoId) : undefined;
+          if (!foto || (acto.comoOtroChofer && (!memoria.telefono2 || !memoria.viaje2Id))) {
+            const p = await paso(`ataque de dedup — pasada ${pasada}`);
+            await cerrarPaso(p, 'bad', null, foto
+              ? 'el escenario necesita un segundo chofer y la siembra no lo creó'
+              : `el escenario repite la foto #${acto.indice + 1} y la corrida no la trae`);
+            corrida.estado = 'fallo';
+            corrida.motivo = foto
+              ? 'el escenario necesita un segundo chofer y la siembra no lo creó'
+              : `el escenario repite la foto #${acto.indice + 1} y la corrida no la trae — elige al menos ${acto.indice + 1} foto(s)`;
+            corrida.fase = 'terminada';
+            corrida.fin = new Date().toISOString();
+            await guardar();
+            return cerrarPasada(corrida.motivo, corrida.avance);
+          }
+          memoria.dedup = {
+            imgHash: foto.hash,
+            viajeIntentoId: (acto.comoOtroChofer ? memoria.viaje2Id : memoria.viajeId) as string,
+          };
+          const desde = (acto.comoOtroChofer ? memoria.telefono2 : memoria.telefono) as string;
+          const p = await paso(acto.comoOtroChofer
+            ? `LA MISMA foto, desde el chofer 2 (otro viaje del mismo tenant) — pasada ${pasada}`
+            : `LA MISMA foto, otra vez — pasada ${pasada}`);
+          let detalle: string | null = null;
+          let estado: PasoQA['estado'] = 'ok';
+          try {
+            const dataUrl = await dataUrlDeFoto(db, foto);
+            await processInbound({
+              from: desde, type: 'image',
+              mediaId: `${prefijo}media-r1`, mediaDataUrlQA: dataUrl, waMessageId: `${prefijo}r1`,
+            });
+          } catch (e) {
+            estado = 'bad';
+            detalle = e instanceof Error ? e.message : String(e);
+          }
+          let costo: number | null = null;
+          try {
+            const antes = corrida.costoUsdTotal;
+            corrida.costoUsdTotal = await costoTotalUsd(db, memoria.tenantId);
+            costo = Math.round((corrida.costoUsdTotal - antes) * 1_000_000) / 1_000_000;
+          } catch (e) {
+            detalle = `${detalle ? `${detalle} · ` : ''}costo no leído: ${e instanceof Error ? e.message : e}`;
+          }
+          await cerrarPaso(p, estado, costo, detalle);
+          if (corrida.costoUsdTotal > TOPE_CORRIDA_USD) {
+            return await abortarPorDinero('corrida', corrida.costoUsdTotal, TOPE_CORRIDA_USD);
+          }
+          continue;
+        }
+
+        // acto.tipo === 'cierre'
+        const pC = await paso(`cierre — el chofer escribe «${TEXTO_CIERRE}» (pasada ${pasada})`);
+        let detalleC: string | null = null;
+        let estadoC: PasoQA['estado'] = 'ok';
+        try {
+          await processInbound({ from: memoria.telefono, type: 'text', text: TEXTO_CIERRE, waMessageId: `${prefijo}t1` });
+          if (!(await hayLiquidacion(db, memoria.tenantId, memoria.viajeId)) && !relojAgotado(venceEn)) {
+            detalleC = 'el primer «listo» no cerró; se insistió una vez (mismo criterio que el ejército)';
+            await processInbound({ from: memoria.telefono, type: 'text', text: TEXTO_CIERRE, waMessageId: `${prefijo}t2` });
+          }
+        } catch (e) {
+          estadoC = 'bad';
+          detalleC = `${detalleC ? `${detalleC} · ` : ''}${e instanceof Error ? e.message : String(e)}`;
+        }
+        let costoC: number | null = null;
+        try {
+          const antes = corrida.costoUsdTotal;
+          corrida.costoUsdTotal = await costoTotalUsd(db, memoria.tenantId);
+          costoC = Math.round((corrida.costoUsdTotal - antes) * 1_000_000) / 1_000_000;
+        } catch (e) {
+          detalleC = `${detalleC ? `${detalleC} · ` : ''}costo no leído: ${e instanceof Error ? e.message : e}`;
+        }
+        await cerrarPaso(pC, estadoC, costoC, detalleC);
+        if (corrida.costoUsdTotal > TOPE_CORRIDA_USD) {
+          return await abortarPorDinero('corrida', corrida.costoUsdTotal, TOPE_CORRIDA_USD);
+        }
+      }
+      corrida.fase = 'oraculos';
+      await guardar();
+    }
+
+    // ── FASE 4: LOS ORÁCULOS ─────────────────────────────────────────────
+    if (corrida.fase === 'oraculos') {
+      const rotulo = ['#1 cuadre_balancea', '#5 cifras_con_fuente', memoria.dedup ? '#3 dedup_comprobante' : null, '#8 bitacora_registro']
+        .filter(Boolean).join(' · ');
+      const pO = await paso(`oráculos — ${rotulo} (pasada ${pasada})`);
+      corrida.turnos = await turnosDelTenant(db, memoria.tenantId);
+      corrida.pdfs = await pdfsDelTenant(db, memoria.tenantId);
+      const filas = await filasDelTenant(db, memoria.tenantId);
+      const textosBot = corrida.turnos.filter((t) => t.rol === 'assistant').map((t) => t.texto);
+      try {
+        // LA BITÁCORA DE TODAS LAS PASADAS, no la de ésta. El oráculo #8 sólo
+        // mira `msg`, así que el conjunto de mensajes que la corrida fue
+        // recordando (`memoria.eventos`) es exactamente su material — juzgarlo
+        // con los eventos de la última pasada diría "la bitácora registró lo
+        // ocurrido" sabiendo nada más el final.
+        const eventos = mezclarEventos(memoria.eventos, bit.eventos.map((e) => e.msg));
+        memoria.eventos = eventos;
+        corrida.veredicto = await correrOraculos({
+          tenantId: memoria.tenantId,
+          viajeId: memoria.viajeId,
+          textosBot,
+          fuentesRespaldo: [filas, corrida.parametros, [TEXTO_CIERRE]],
+          eventosBitacora: eventos.map((msg) => ({ msg })),
+          eventosEsperados: ['agent.run'],
+          dedup: memoria.dedup,
+        });
+        const final = estadoFinalDe(corrida.veredicto);
+        await cerrarPaso(pO, final === 'ok' ? 'ok' : final === 'parcial' ? 'warn' : 'bad', 0);
+        corrida.estado = final;
+        if (final === 'parcial') corrida.motivo = 'al menos un oráculo quedó NO VERIFICADO — no se afirma que pasó';
+        if (final === 'fallo') corrida.motivo = 'al menos un invariante FALLÓ — abre el veredicto';
+        if (final === 'ok') corrida.motivo = null;
+      } catch (e) {
+        await cerrarPaso(pO, 'bad', 0, e instanceof Error ? e.message : String(e));
+        corrida.estado = 'fallo';
+        corrida.motivo = `los oráculos no pudieron correr: ${e instanceof Error ? e.message : e}`;
+      }
+      corrida.fase = 'limpieza';
+      await guardar();
+    }
+
+    // ── FASE 5: LA LIMPIEZA ──────────────────────────────────────────────
+    if (corrida.fase === 'limpieza') {
+      const pL = await paso(`limpieza del tenant sintético (pasada ${pasada})`);
+      if (corrida.parametros.retencion === 'conservar') {
+        corrida.limpieza = `tenant "${corrida.tenantNombre}" (${corrida.tenantId}) CONSERVADO a pedido (retencion=conservar)`;
+        await cerrarPaso(pL, 'warn', 0, 'conservado a pedido');
+      } else {
+        corrida.limpieza = await limpiarTenant(db, corrida);
+        await cerrarPaso(pL, corrida.limpieza.startsWith('✅') ? 'ok' : 'warn', 0, corrida.limpieza);
+      }
+      corrida.fase = 'terminada';
+      corrida.fin = new Date().toISOString();
+      await guardar();
+    }
+
+    const avFinal = await avanceAhora();
+    await guardar();
+    return cerrarPasada(
+      corrida.motivo ?? `corrida terminada en ${corrida.pasadas} pasada(s): ${avFinal?.ok ?? '?'} de ${avFinal?.total ?? corrida.parametros.fotoIds.length} fotos procesadas`,
+      avFinal,
+    );
+  } catch (e) {
+    // Red final: nada de este motor debe tumbar la invocación sin dejar rastro.
+    corrida.estado = 'fallo';
+    corrida.fase = 'terminada';
+    corrida.motivo = `error no anticipado en la pasada ${pasada}: ${e instanceof Error ? e.message : String(e)}`;
+    corrida.fin = new Date().toISOString();
+    if (!corrida.limpieza) {
+      corrida.limpieza = `tenant "${corrida.tenantNombre}" posiblemente sembrado — revisar y limpiar a mano`;
+    }
+    await guardar().catch(() => {});
+    return cerrarPasada(corrida.motivo, corrida.avance);
+  } finally {
+    bit.restaurar();
+    // La llave SIEMPRE se suelta, y sólo si sigue siendo nuestra. Si esto no
+    // corre (Vercel mató la invocación), `PASADA_MUERTA_MS` la libera sola.
+    await soltarPasada(db, corridaId, pasadaId).catch((err) => {
+      logger.warn('qa.pasada.no_solto_llave', { corrida: corridaId, pasada, error: String(err) });
+    });
   }
 }

@@ -24,7 +24,7 @@ export const PILL_CORRIDA: Record<EstadoCorrida, { estado: Estado; etiqueta: str
  * (molde: escalaciones/page.tsx): BarraPagina + tarjetas sobre --g1, errores
  * POR FUENTE dichos — jamás un 0 sobre una lectura que falló.
  */
-export function PantallaQa({ fotos, bancoError, corridas, historialError, gastoHoy, gastoError, topeDiaUsd }: {
+export function PantallaQa({ fotos, bancoError, corridas, historialError, gastoHoy, gastoError, topeDiaUsd, topeCorridaUsd }: {
   fotos: FotoConUrl[];
   bancoError: string | null;
   corridas: CorridaQA[];
@@ -32,6 +32,10 @@ export function PantallaQa({ fotos, bancoError, corridas, historialError, gastoH
   gastoHoy: number | null;
   gastoError: string | null;
   topeDiaUsd: number;
+  /** El tope POR corrida ($2, config.qa.ts del ejército). Baja desde el
+   *  servidor porque ese módulo trae `node:path` y no puede cruzar a 'use
+   *  client'. */
+  topeCorridaUsd: number;
 }) {
   return (
     <main className="h-full">
@@ -82,6 +86,7 @@ export function PantallaQa({ fotos, bancoError, corridas, historialError, gastoH
             gastoHoyUsd={gastoHoy}
             gastoError={gastoError}
             topeDiaUsd={topeDiaUsd}
+            topeCorridaUsd={topeCorridaUsd}
           />
 
           {/* ── El historial ───────────────────────────────────────────────── */}

@@ -12486,3 +12486,219 @@ begin
     cookies_rebotan, captcha_entero_rebota, captcha_recortado_entra,
     vinculado_sin_fecha_rebota, caducada_sin_fecha_rebota, otra_flota_entra, cerrado;
 end $$;
+
+-- ── 196. El carril completo del panel de QA: la foto no se procesa dos veces y la pasada la arbitra la base (mig. 0240) ──
+-- El bloque 194 lo toma el fork de tickets de esta ola; éste toma el 196 (el
+-- 195 ya estaba escrito).
+--
+-- POR QUÉ ESTE BLOQUE EXISTE. Una corrida de 91 comprobantes no cabe en una
+-- invocación de Vercel, así que avanza en PASADAS. Todo lo que impide que eso
+-- cueste dinero de más vive en la base y no en TypeScript, y un test con
+-- supabase-js mockeado probaría el mock:
+--
+--  (a) LA MISMA FOTO NO SE PUEDE TOMAR DOS VECES. Es la PK
+--      `(corrida_id, foto_id)`. Dos pasadas solapadas —el navegador reintenta,
+--      alguien abre la pantalla en dos pestañas, una pasada que Vercel dio por
+--      muerta sigue viva unos segundos— piden la misma foto: una entra y la
+--      otra rebota con 23505. Un `if (yaProcesada)` leído antes de mandar sería
+--      una carrera, y perderla significa mandar el mismo ticket dos veces al
+--      modelo (dinero real) y contarlo dos veces (una cifra inventada).
+--  (b) PERO LA MISMA FOTO EN OTRA CORRIDA SÍ ENTRA. La llave es por corrida,
+--      no por foto: el banco se reusa entre corridas y una PK demasiado
+--      estrecha convertiría el segundo día de pruebas en un rebote perpetuo.
+--  (c) LA LLAVE DE LA PASADA LA ARBITRA POSTGRES. `tomarPasada` es un UPDATE
+--      con `pasada_en_vuelo is null` en el WHERE. Dos pasadas simultáneas
+--      piden; una toca 1 fila y la otra 0, y la que tocó 0 se va SIN GASTAR.
+--      Se comprueba también el fencing al soltar: quien ya fue relevado no le
+--      quita la llave a quien la tiene (`eq('pasada_en_vuelo', <la mía>)`).
+--  (d) BORRAR UNA FOTO DEL BANCO QUE UNA CORRIDA CITA REBOTA
+--      (`on delete restrict`), en contra del reflejo de poner cascade: lo que
+--      NO puede pasar es que desaparezca en silencio la prueba de que esta
+--      corrida procesó ese ticket y cuánto costó. Fallar cerrado y decirlo.
+--  (e) BORRAR LA CORRIDA SÍ SE LLEVA SU AVANCE (`on delete cascade`): el
+--      avance no significa nada sin la corrida que lo produjo.
+--  (f) `costo_usd` ADMITE NULL Y RECHAZA NEGATIVOS. NULL = NO SE MIDIÓ, y es
+--      distinto de 0: un 0 afirmaría que la foto salió gratis. La columna es
+--      NULL-able a propósito y el CHECK sólo prohíbe lo imposible.
+--  (g) LOS DOMINIOS SE CIERRAN: `estado` de la foto admite los cuatro
+--      —incluido 'interrumpida', que es "no se sabe cómo acabó" y no es ni
+--      acierto ni fallo— y rechaza cualquier otro; `fase` admite las seis y
+--      `corte` sólo 'reloj', 'dinero' o NULL. NULL en `corte` es "no se cortó",
+--      que no es lo mismo que "se cortó por nada".
+--  (h) `n` Y `pasada` SON 1-BASED y `pasadas` no puede ser negativo: la
+--      pantalla dice «foto 47 de 91» leyendo `n`, y un 0 ahí sería un renglón
+--      que ninguna foto ocupa.
+--  (i) EL DOBLE CANDADO DE LA CASA: RLS deny-all + grants sólo a service_role.
+do $$
+declare
+  co1 uuid; co2 uuid; f1 uuid; f2 uuid;
+  p_a uuid := gen_random_uuid(); p_b uuid := gen_random_uuid();
+  segunda_toma_rebota boolean; misma_foto_otra_corrida_entra boolean;
+  gano integer; perdio integer;
+  suelta_ajena integer; suelta_propia integer;
+  borrar_foto_citada_rebota boolean; borrar_corrida_se_lleva_avance integer;
+  costo_nulo_entra boolean; costo_negativo_rebota boolean;
+  cuatro_estados integer := 0; estado_inventado_rebota boolean;
+  seis_fases integer := 0; fase_inventada_rebota boolean;
+  corte_nulo_entra boolean; corte_inventado_rebota boolean;
+  n_cero_rebota boolean; pasadas_negativas_rebotan boolean;
+  cerrado boolean;
+  e text;
+begin
+  insert into qa_foto (hash, path, mime, etiqueta, bytes)
+    values ('zzz-verif-196-a', 'banco/zzz-a.jpg', 'image/jpeg', 'ZZZ VERIF 196 a', 100)
+    returning id into f1;
+  insert into qa_foto (hash, path, mime, etiqueta, bytes)
+    values ('zzz-verif-196-b', 'banco/zzz-b.jpg', 'image/jpeg', 'ZZZ VERIF 196 b', 100)
+    returning id into f2;
+  insert into qa_corrida (escenario, parametros, estado, tenant_nombre, carril)
+    values ('demo_guion', '{"fotoIds":[]}'::jsonb, 'corriendo', 'ZZZ QA VERIF 196 A', 'completo')
+    returning id into co1;
+  insert into qa_corrida (escenario, parametros, estado, tenant_nombre, carril)
+    values ('demo_guion', '{"fotoIds":[]}'::jsonb, 'corriendo', 'ZZZ QA VERIF 196 B', 'completo')
+    returning id into co2;
+
+  -- (a) La misma foto, dos veces en la MISMA corrida: la segunda rebota.
+  insert into qa_corrida_foto (corrida_id, foto_id, n, estado, pasada)
+    values (co1, f1, 1, 'corriendo', 1);
+  begin
+    insert into qa_corrida_foto (corrida_id, foto_id, n, estado, pasada)
+      values (co1, f1, 1, 'corriendo', 2);
+    segunda_toma_rebota := false;
+  exception when unique_violation then
+    segunda_toma_rebota := true;
+  end;
+
+  -- (b) La misma foto en OTRA corrida sí entra: la llave es por corrida.
+  begin
+    insert into qa_corrida_foto (corrida_id, foto_id, n, estado, pasada)
+      values (co2, f1, 1, 'ok', 1);
+    misma_foto_otra_corrida_entra := true;
+  exception when others then
+    misma_foto_otra_corrida_entra := false;
+  end;
+
+  -- (c) La llave de la pasada: dos UPDATE condicionales, uno gana.
+  update qa_corrida set pasada_en_vuelo = p_a
+    where id = co1 and pasada_en_vuelo is null;
+  get diagnostics gano = row_count;
+  update qa_corrida set pasada_en_vuelo = p_b
+    where id = co1 and pasada_en_vuelo is null;
+  get diagnostics perdio = row_count;
+
+  -- Y el fencing al soltar: quien ya fue relevado no suelta la llave ajena.
+  update qa_corrida set pasada_en_vuelo = null
+    where id = co1 and pasada_en_vuelo = p_b;
+  get diagnostics suelta_ajena = row_count;
+  update qa_corrida set pasada_en_vuelo = null
+    where id = co1 and pasada_en_vuelo = p_a;
+  get diagnostics suelta_propia = row_count;
+
+  -- (f) NULL = no se midió; negativo es imposible.
+  begin
+    insert into qa_corrida_foto (corrida_id, foto_id, n, estado, pasada, costo_usd)
+      values (co2, f2, 2, 'interrumpida', 1, null);
+    costo_nulo_entra := true;
+  exception when others then
+    costo_nulo_entra := false;
+  end;
+  begin
+    update qa_corrida_foto set costo_usd = -0.0001 where corrida_id = co2 and foto_id = f2;
+    costo_negativo_rebota := false;
+  exception when check_violation then
+    costo_negativo_rebota := true;
+  end;
+
+  -- (g) Los dominios. Los cuatro estados de la foto entran…
+  foreach e in array array['corriendo', 'ok', 'bad', 'interrumpida'] loop
+    begin
+      update qa_corrida_foto set estado = e where corrida_id = co1 and foto_id = f1;
+      cuatro_estados := cuatro_estados + 1;
+    exception when others then
+      null;
+    end;
+  end loop;
+  begin
+    update qa_corrida_foto set estado = 'pendiente' where corrida_id = co1 and foto_id = f1;
+    estado_inventado_rebota := false;
+  exception when check_violation then
+    estado_inventado_rebota := true;
+  end;
+
+  foreach e in array array['siembra', 'fotos', 'cierre', 'oraculos', 'limpieza', 'terminada'] loop
+    begin
+      update qa_corrida set fase = e where id = co1;
+      seis_fases := seis_fases + 1;
+    exception when others then
+      null;
+    end;
+  end loop;
+  begin
+    update qa_corrida set fase = 'a-medias' where id = co1;
+    fase_inventada_rebota := false;
+  exception when check_violation then
+    fase_inventada_rebota := true;
+  end;
+
+  -- NULL en `corte` = no se cortó. Es un valor legítimo, no un hueco.
+  begin
+    update qa_corrida set corte = null where id = co1;
+    update qa_corrida set corte = 'reloj' where id = co1;
+    update qa_corrida set corte = 'dinero' where id = co1;
+    corte_nulo_entra := true;
+  exception when others then
+    corte_nulo_entra := false;
+  end;
+  begin
+    update qa_corrida set corte = 'cansancio' where id = co1;
+    corte_inventado_rebota := false;
+  exception when check_violation then
+    corte_inventado_rebota := true;
+  end;
+
+  -- (h) 1-based, y las pasadas no cuentan hacia atrás.
+  begin
+    insert into qa_corrida_foto (corrida_id, foto_id, n, estado, pasada)
+      values (co2, f2, 0, 'ok', 1);
+    n_cero_rebota := false;
+  exception when check_violation then
+    n_cero_rebota := true;
+  when unique_violation then
+    n_cero_rebota := null;   -- no debería pasar: f2 ya está en co2 con n=2
+  end;
+  begin
+    update qa_corrida set pasadas = -1 where id = co1;
+    pasadas_negativas_rebotan := false;
+  exception when check_violation then
+    pasadas_negativas_rebotan := true;
+  end;
+
+  -- (d) Borrar del banco una foto que una corrida cita: rebota.
+  begin
+    delete from qa_foto where id = f1;
+    borrar_foto_citada_rebota := false;
+  exception when foreign_key_violation then
+    borrar_foto_citada_rebota := true;
+  end;
+
+  -- (e) Borrar la corrida se lleva su avance.
+  delete from qa_corrida where id = co2;
+  select count(*) into borrar_corrida_se_lleva_avance
+    from qa_corrida_foto where corrida_id = co2;
+
+  -- (i) El doble candado de la casa.
+  cerrado := not has_table_privilege('anon', 'public.qa_corrida_foto', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.qa_corrida_foto', 'SELECT')
+    and not has_table_privilege('anon', 'public.qa_corrida_foto', 'INSERT')
+    and has_table_privilege('service_role', 'public.qa_corrida_foto', 'SELECT')
+    and has_table_privilege('service_role', 'public.qa_corrida_foto', 'INSERT')
+    and has_table_privilege('service_role', 'public.qa_corrida_foto', 'UPDATE')
+    and (select relrowsecurity from pg_class where oid = 'public.qa_corrida_foto'::regclass);
+
+  raise exception 'QA_CARRIL_COMPLETO_0240  segunda_toma_rebota=%  misma_foto_otra_corrida_entra=%  gano=%  perdio=%  suelta_ajena=%  suelta_propia=%  costo_nulo_entra=%  costo_negativo_rebota=%  cuatro_estados=%  estado_inventado_rebota=%  seis_fases=%  fase_inventada_rebota=%  corte_nulo_entra=%  corte_inventado_rebota=%  n_cero_rebota=%  pasadas_negativas_rebotan=%  borrar_foto_citada_rebota=%  avance_tras_borrar_corrida=%  cerrado=%   (esperado t / t / 1 / 0 / 0 / 1 / t / t / 4 / t / 6 / t / t / t / t / t / t / 0 / t)',
+    segunda_toma_rebota, misma_foto_otra_corrida_entra, gano, perdio,
+    suelta_ajena, suelta_propia, costo_nulo_entra, costo_negativo_rebota,
+    cuatro_estados, estado_inventado_rebota, seis_fases, fase_inventada_rebota,
+    corte_nulo_entra, corte_inventado_rebota, n_cero_rebota, pasadas_negativas_rebotan,
+    borrar_foto_citada_rebota, borrar_corrida_se_lleva_avance, cerrado;
+end $$;
