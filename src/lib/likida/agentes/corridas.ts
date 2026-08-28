@@ -56,7 +56,19 @@ export type AgenteConCorridas = 'liquidacion' | 'facturas' | 'cobranza' | 'condu
   // son de ninguna flota. Los ocho son DETERMINISTAS y no llaman a ningún
   // modelo, así que anotan costo 0 MEDIDO — que no es lo mismo que NULL.
   | 'migraciones' | 'seguridad' | 'rendimiento' | 'pruebas'
-  | 'auditor_codigo' | 'releases' | 'producto' | 'datos_instrumentacion';
+  | 'auditor_codigo' | 'releases' | 'producto' | 'datos_instrumentacion'
+  // Los tres de dirección que van a la BANDEJA (0235) — los otros cuatro de
+  // dirección (0216) mandan correo y ya estaban arriba. Tenant NULL: la
+  // automejora mira la telemetría de TODA la compañía agente y el fundraising
+  // cuenta la plataforma entera. `especialistas_incidente` es el caso
+  // interesante: su PIEZA sí lleva el tenant de la flota del incidente (esa es
+  // la trazabilidad que la bandeja enseña), pero su CORRIDA no — una pasada
+  // barre los expedientes de todas las flotas de una vez.
+  | 'automejora' | 'especialistas_incidente' | 'fundraising'
+  // Los seis de leads (0235). Tenant NULL por la razón más vieja del repo: el
+  // CRM es de LIKIDA y no de ninguna flota (0105), igual que `ventas` y
+  // `redactor`.
+  | 'scorer' | 'dossier' | 'vigia' | 'demo_prep' | 'propuestas' | 'cazador';
 export type EstadoCorrida = 'ok' | 'parcial' | 'fallo';
 /** `correo` (0108): el agente de Proveedores no corre por reloj — corre
  *  cuando llega un correo al buzón. Registrarlo como 'cron' pintaría

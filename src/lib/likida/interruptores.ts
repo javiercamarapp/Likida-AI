@@ -84,6 +84,17 @@ export const INTERRUPTORES = [
   'agente:migraciones', 'agente:seguridad', 'agente:rendimiento',
   'agente:pruebas', 'agente:auditor_codigo', 'agente:releases',
   'agente:producto', 'agente:datos_instrumentacion',
+  // LOS NUEVE QUE CIERRAN LA COMPAÑÍA AGENTE (0235). Tres de dirección y seis
+  // de leads: con ellos las 60 filas de `agente_definicion` quedan vivas y no
+  // queda una sola promesa sin motor. Ninguno de los nueve escribe a nadie —
+  // los nueve dejan su pieza en la bandeja—, y aun así llevan palanca por el
+  // candado 1 del runner y por una razón propia de cada mitad: los de leads
+  // preparan lo que después se le manda a una empresa real, y los de dirección
+  // producen el parte que Javier lee para decidir. Si uno empieza a fabricar
+  // ruido, apagarlo tiene que ser un click y no un deploy.
+  'agente:automejora', 'agente:especialistas_incidente', 'agente:fundraising',
+  'agente:scorer', 'agente:dossier', 'agente:vigia',
+  'agente:demo_prep', 'agente:propuestas', 'agente:cazador',
 ] as const;
 
 export type NombreInterruptor = (typeof INTERRUPTORES)[number];
