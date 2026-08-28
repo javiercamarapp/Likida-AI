@@ -681,8 +681,12 @@ export async function correrRunner(
           agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'la lista del runner y la del motor de back office divergen — no se despacha a ciegas' });
           continue;
         }
-        const r = await correrAgenteBackOffice(a.id, 'cron');
+        const r = await correrAgenteBackOffice(a.id, 'cron', undefined, venceEn);
         agentes.push({ agente: a.id, resultado: 'corrio', piezas: r.piezas, costoUsd: 0, ...(r.motivo ? { motivo: r.motivo } : {}) });
+        // El reloj le quitó trabajo a este agente: sube a `saltadosPorReloj` por
+        // lo mismo que el `sinTurno` del Redactor, el SDR, dirección y leads —
+        // el latido tiene que decir `'parcial'`, no pintar la vuelta completa.
+        if (r.sinTurno) saltadosPorReloj.push(a.id);
       } catch (e) {
         agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del motor de back office' });
       }
@@ -711,8 +715,15 @@ export async function correrRunner(
       }
       try {
         const { correrAgenteExito } = await import('./exito');
-        const r = await correrAgenteExito(a.id as AgenteDeExito, 'cron');
+        // `undefined` en `hoy` y `ahora` = sus defaults de siempre; el cuarto y
+        // el quinto argumento son posicionales y el reloj es el quinto.
+        const r = await correrAgenteExito(a.id as AgenteDeExito, 'cron', undefined, undefined, venceEn);
         agentes.push({ agente: a.id, resultado: r.resultado, motivo: r.motivo, piezas: r.piezas, costoUsd: r.costoUsd });
+        // Igual que arriba: un agente de éxito cortado a la mitad es trabajo que
+        // el reloj le quitó, y el latido tiene que decirlo. `atencion_faq` es el
+        // que más lo necesita — gasta modelo por ticket y `ordenarPorCosto` lo
+        // despacha AL FINAL, o sea que hereda el presupuesto de tiempo que quede.
+        if (r.sinTurno) saltadosPorReloj.push(a.id);
       } catch (e) {
         agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del motor de éxito del cliente' });
       }

@@ -39,8 +39,9 @@ const correrDescargaSat = vi.fn(async () => ({
   resumenes: [{
     tenantId: 't1', verificadas: 1, descargadas: 1, solicitadas: 1,
     cfdisNuevos: 12, cfdisRepetidos: 3,
-    casados: 9, ambiguos: 1, disponibles: 2, consolidados: 0, errores: [] as string[],
+    casados: 9, ambiguos: 1, disponibles: 2, consolidados: 0, errores: [] as string[], sinTurno: 0,
   }],
+  sinTurno: 0,
 }));
 vi.mock('@/lib/likida/sat_descarga/ciclo', () => ({
   correrDescargaSat: (...a: unknown[]) => correrDescargaSat(...(a as [])),
@@ -134,8 +135,9 @@ describe('cron descarga-sat — la corrida', () => {
       resumenes: [{
         tenantId: 't1', verificadas: 1, descargadas: 0, solicitadas: 0,
         cfdisNuevos: 0, cfdisRepetidos: 0, casados: 0, ambiguos: 0, disponibles: 0,
-        consolidados: 0, errores: ['5002 - Se agotó el límite de solicitudes'],
+        consolidados: 0, errores: ['5002 - Se agotó el límite de solicitudes'], sinTurno: 0,
       }],
+      sinTurno: 0,
     });
     const res = await GET(new Request(URL_CRON, CON_SECRETO));
     expect(res.status).toBe(200);
@@ -145,7 +147,7 @@ describe('cron descarga-sat — la corrida', () => {
 
   it('NO CONFIGURADO también es parcial: el circuito no está haciendo su trabajo', async () => {
     correrDescargaSat.mockResolvedValueOnce({
-      corrio: false, motivo: 'La descarga masiva no está configurada…', flotas: 0, resumenes: [],
+      corrio: false, motivo: 'La descarga masiva no está configurada…', flotas: 0, resumenes: [], sinTurno: 0,
     });
     const res = await GET(new Request(URL_CRON, CON_SECRETO));
     expect(res.status).toBe(200);
@@ -153,11 +155,48 @@ describe('cron descarga-sat — la corrida', () => {
     expect(registrarLatido).toHaveBeenCalledWith('descarga-sat', 'parcial', expect.anything());
   });
 
+  // ── EL RELOJ ENTRA TAMBIÉN A LA DESCARGA (c7-1; deuda del fork del #160) ──
+  //
+  // Antes, `venceEn` se calculaba en esta ruta y SOLO se le pasaba a
+  // `avisarCierrePeaje`. El barrido del SAT corría sin reloj propio, así que
+  // cuando se comía la vuelta el síntoma era el aviso de peaje saliendo con
+  // `sinTurno` alto: el problema era visible y no estaba arreglado, y quien
+  // pagaba la factura era el trabajo que sí se había portado bien.
+
+  it('la descarga RECIBE el reloj de la vuelta, el mismo instante que el aviso de peaje', async () => {
+    await GET(new Request(URL_CRON, CON_SECRETO));
+    const venceDescarga = (correrDescargaSat.mock.calls[0] as unknown[])[1] as { venceEn: number };
+    const vencePeaje = (avisarCierrePeaje.mock.calls[0] as unknown[])[1] as { venceEn: number };
+    expect(venceDescarga.venceEn).toEqual(expect.any(Number));
+    // QUE SEA EL MISMO instante es lo que hace que el reparto del tiempo sea
+    // una regla y no una carrera entre los dos trabajos.
+    expect(venceDescarga.venceEn).toBe(vencePeaje.venceEn);
+  });
+
+  it('un barrido del SAT cortado por reloj hace el latido PARCIAL — son CFDI que no entraron', async () => {
+    correrDescargaSat.mockResolvedValueOnce({
+      corrio: true, motivo: undefined, flotas: 1,
+      resumenes: [{
+        tenantId: 't1', verificadas: 1, descargadas: 0, solicitadas: 0,
+        cfdisNuevos: 0, cfdisRepetidos: 0, casados: 0, ambiguos: 0, disponibles: 0,
+        consolidados: 0, errores: [] as string[], sinTurno: 3,
+      }],
+      sinTurno: 3,
+    });
+    const res = await GET(new Request(URL_CRON, CON_SECRETO));
+    expect(res.status).toBe(200);
+    // Sin errores y con `corrio: true`, la versión vieja habría dicho 'ok'
+    // sobre una pasada que dejó tres unidades de trabajo del SAT sin hacer.
+    expect(await res.json()).toMatchObject({ errores: 0 });
+    expect(registrarLatido).toHaveBeenCalledWith('descarga-sat', 'parcial',
+      expect.objectContaining({ descargaSinTurno: 3 }));
+  });
+
   it('sin descarga configurada, EL AVISO DE PEAJE CORRE IGUAL', async () => {
     // Es la distinción entera: el derecho a facturar caseta se vence aunque
     // la flota no tenga e.firma ni contrato de PAC.
     correrDescargaSat.mockResolvedValueOnce({
-      corrio: false, motivo: 'no configurada', flotas: 0, resumenes: [],
+      corrio: false, motivo: 'no configurada', flotas: 0, resumenes: [], sinTurno: 0,
     });
     await GET(new Request(URL_CRON, CON_SECRETO));
     expect(avisarCierrePeaje).toHaveBeenCalledTimes(1);

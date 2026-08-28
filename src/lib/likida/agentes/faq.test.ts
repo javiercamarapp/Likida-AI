@@ -300,3 +300,86 @@ describe('la corrida de atencion_faq', () => {
     expect(registrarCorrida).toHaveBeenCalledWith(null, 'atencion_faq', expect.objectContaining({ estado: 'fallo', costoUsd: 0 }));
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RELOJ DE LA VUELTA (auditoría ciclo 7, c7-1).
+//
+// ESTE ES EL MOTOR MÁS PARECIDO AL QUE CAUSÓ LOS DOS SILENCIOS DE PRODUCCIÓN.
+// Igual que `loteRedactor`, itera una lista de trabajo llamando al MODELO por
+// elemento; e igual que él, `ordenarPorCosto` lo despacha AL FINAL de la vuelta
+// (`llamaAlModelo('atencion_faq')` es `true`), o sea que hereda todo el
+// presupuesto de tiempo que quede. Y sin embargo sus únicas salidas eran el
+// tope de cinco borradores y el final de la lista: ninguna miraba el reloj.
+//
+// El auditor lo dijo así: la suite no atrapaba c7-1 porque «no hay una sola
+// prueba en la que un agente ya despachado se pase del presupuesto». Éstas son
+// esas pruebas.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('el reloj de la vuelta corta el lote del FAQ, y lo DICE (c7-1)', () => {
+  const RELOJ_VENCIDO = () => Date.now() - 1;
+
+  it('con el reloj vencido no llama al modelo ni una vez, y el corte NO se disfraza de «no había nada que redactar»', async () => {
+    sembrarTicket();
+    const r = await correrAtencionFaq('cron', '2026-08-27', RELOJ_VENCIDO());
+
+    // CORTA: cero llamadas al modelo, que es lo caro y lo lento (decenas de
+    // segundos cada una) y lo que se comía el presupuesto de la ruta para latir.
+    expect(generateResponse).not.toHaveBeenCalled();
+    expect(encolarPiezaExito).not.toHaveBeenCalled();
+    // CUENTA: `sinTurno` sube. Sin él, el runner no mete al agente en
+    // `saltadosPorReloj` y el latido diría 'ok' sobre una pasada agonizante —
+    // el 28-ago-2026 en una línea.
+    expect(r).toMatchObject({ resultado: 'corrio', piezas: 0, sinTurno: true });
+    // Y el motivo NO puede ser el del estado sano: «ningún ticket vivo sin
+    // respuesta» es lo que se lee cuando todo está bien.
+    expect(r.motivo).toMatch(/reloj de la vuelta/);
+    expect(r.motivo).not.toMatch(/ningún ticket vivo/);
+  });
+
+  it('cortado A LA MITAD: el borrador ya hecho queda, el siguiente no se paga, y el resto se cuenta', async () => {
+    // Dos tickets del corpus: una lista de trabajo real sobre la que cortar.
+    respuestas.set('ticket_soporte', [{ data: [
+      { id: 'aaaaaaaa-0000-0000-0000-000000000001', tenant_id: 'flota-1', asunto: TICKET.asunto, descripcion: TICKET.descripcion, categoria: 'facturacion' },
+      { id: 'bbbbbbbb-0000-0000-0000-000000000002', tenant_id: 'flota-2', asunto: TICKET.asunto, descripcion: TICKET.descripcion, categoria: 'facturacion' },
+    ], error: null }]);
+    respuestas.set('ticket_mensaje', [{ data: [], error: null }, { data: [], error: null }]);
+
+    // EL RELOJ QUE SE AGOTA DENTRO DEL BUCLE: vivo al entrar, vencido en cuanto
+    // la primera llamada al modelo termina. Es la reproducción honesta del
+    // incidente — la función se muere DENTRO del lote, no antes de entrar.
+    let ahora = 1_000_000;
+    const vence = ahora + 10_000;
+    const reloj = vi.spyOn(Date, 'now').mockImplementation(() => ahora);
+    generateResponse.mockImplementation(async () => {
+      ahora = vence + 1;
+      return { text: 'Revisa el CFF art. 29-A.', cost: 0.004, tokensIn: 1, tokensOut: 1, model: 'm', noMedido: false };
+    });
+    try {
+      const r = await correrAtencionFaq('cron', '2026-08-27', vence);
+
+      // CORTA: el segundo ticket no se pagó.
+      expect(generateResponse).toHaveBeenCalledTimes(1);
+      // NO DEJA EL ESTADO A MEDIAS: el borrador que sí se fabricó ENTRÓ a la
+      // bandeja. Cortar entre la llamada al modelo y el encolado habría tirado
+      // un borrador ya pagado — dinero gastado y trabajo perdido.
+      expect(encolarPiezaExito).toHaveBeenCalledTimes(1);
+      expect(r.piezas).toBe(1);
+      expect(r.costoUsd).toBeCloseTo(0.004, 6);
+      // CUENTA: el que no alcanzó turno se dice, y se dice AUNQUE se haya
+      // fabricado una pieza — un `piezas: 1` mudo es el parte limpio sobre una
+      // pasada que dejó trabajo sin hacer.
+      expect(r.sinTurno).toBe(true);
+      expect(r.motivo).toMatch(/1 ticket\(s\) sin turno/);
+    } finally {
+      reloj.mockRestore();
+    }
+  });
+
+  it('sin reloj el lote corre entero — el parámetro es opcional a propósito', async () => {
+    sembrarTicket();
+    const r = await correrAtencionFaq('cron', '2026-08-27');
+    expect(r.piezas).toBe(1);
+    expect(r.sinTurno).toBeUndefined();
+  });
+});

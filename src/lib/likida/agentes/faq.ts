@@ -51,6 +51,7 @@ import { cifrasRespaldadas, extraerNumeros } from '@/lib/agents/analista';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
 import {
   encolarPiezaExito, piezaExistente, cuentaComoRespuesta, TOPE_MENSAJES_POR_TICKET,
+  relojAgotado,
   type ResultadoExito,
 } from './exito';
 import { logger } from '@/lib/logger';
@@ -125,7 +126,7 @@ export interface TicketParaFaq {
  * interna. Se comparte el criterio con el vigilante de soporte —una sola
  * definición de «sin respuesta» en toda la compañía agente.
  */
-export async function leerTicketsSinRespuesta(limite: number): Promise<TicketParaFaq[]> {
+export async function leerTicketsSinRespuesta(limite: number, venceEnVuelta?: number): Promise<TicketParaFaq[]> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('ticket_soporte')
     .select('id, tenant_id, asunto, descripcion, categoria, abierto_por')
@@ -138,6 +139,19 @@ export async function leerTicketsSinRespuesta(limite: number): Promise<TicketPar
 
   const salida: TicketParaFaq[] = [];
   for (const f of (data ?? []) as Array<Record<string, unknown>>) {
+    // EL RELOJ, EN LA BÚSQUEDA DE CANDIDATOS (c7-1). La sobre-lectura ×4 de
+    // arriba significa que para cinco borradores se pueden mirar veinte hilos,
+    // uno por consulta; con la cola llena, BUSCAR cuesta más que el trabajo.
+    //
+    // Cortar aquí es seguro y no necesita `sinTurno` propio: esta función SOLO
+    // LEE, no sella ni escribe nada, y devolver menos candidatos es
+    // exactamente lo que el llamador ya sabe manejar (la lista corta o vacía es
+    // el caso normal cuando todos tienen borrador). Quien cuenta el corte para
+    // el latido es `correrAtencionFaq`, que sí sabe cuánto trabajo quedó.
+    if (relojAgotado(venceEnVuelta)) {
+      logger.warn('faq.busqueda.corte_por_reloj', { encontrados: salida.length });
+      break;
+    }
     const id = String(f.id);
     const { data: msj, error: errMsj } = await acotada(supabaseAdmin()
       .from('ticket_mensaje').select('autor_id, interna')
@@ -288,6 +302,10 @@ export function armarPiezaFaq(
 export async function correrAtencionFaq(
   disparo: DisparoCorrida = 'cron',
   hoy: string = hoyMx(),
+  /** EL RELOJ DE LA VUELTA del runner (epoch ms). Ver `relojAgotado` en
+   *  `exito.ts`: en esa familia de archivos `venceEn` a secas ya significa el
+   *  SLA de un ticket, así que el de la vuelta lleva apellido. */
+  venceEnVuelta?: number,
 ): Promise<ResultadoExito> {
   const inicio = new Date();
   const agente = 'atencion_faq';
@@ -295,18 +313,67 @@ export async function correrAtencionFaq(
   let piezas = 0;
   let escalados = 0;
   let saltados = 0;
+  let sinTurno = 0;
 
   try {
-    const tickets = await leerTicketsSinRespuesta(TOPE_BORRADORES_FAQ);
+    const tickets = await leerTicketsSinRespuesta(TOPE_BORRADORES_FAQ, venceEnVuelta);
+
+    // EL CORTE DE LA BÚSQUEDA NO PUEDE SER MUDO. Si el reloj se agotó DENTRO de
+    // `leerTicketsSinRespuesta`, la lista vuelve corta o VACÍA — y una lista
+    // vacía caía por el `if` de aquí abajo con el motivo «ningún ticket vivo sin
+    // respuesta», que es el estado sano y normal. O sea: la vuelta se quedó sin
+    // tiempo, el runner leía `sinTurno` ausente, no metía al agente en
+    // `saltadosPorReloj`, y el latido decía `'ok'`. Exactamente el modo de falla
+    // del 28-ago-2026 —32 corridas todas en `ok` y ni un latido— trasplantado a
+    // este agente. Se pregunta la hora AQUÍ, entre la búsqueda y el lote, para
+    // que el corte tenga siempre a quién nombrar.
+    const busquedaCortada = relojAgotado(venceEnVuelta);
+    if (busquedaCortada) sinTurno = Math.max(1, tickets.length);
+
     if (tickets.length === 0) {
       await registrarCorrida(null, agente, {
-        inicio, fin: new Date(), estado: 'ok', disparo, costoUsd: 0, resumen: { tickets: 0 },
+        inicio, fin: new Date(), estado: 'ok', disparo, costoUsd: 0,
+        resumen: { tickets: 0, ...(busquedaCortada ? { sin_turno: sinTurno } : {}) },
       });
-      return { resultado: 'corrio', piezas: 0, motivo: 'ningún ticket vivo sin respuesta — no hay nada que redactar', costoUsd: 0 };
+      return busquedaCortada
+        ? {
+            resultado: 'corrio', piezas: 0, costoUsd: 0, sinTurno: true,
+            motivo: 'el reloj de la vuelta se agotó BUSCANDO tickets sin respuesta — no se alcanzó a mirar la cola entera; le toca en la próxima pasada',
+          }
+        : { resultado: 'corrio', piezas: 0, motivo: 'ningún ticket vivo sin respuesta — no hay nada que redactar', costoUsd: 0 };
     }
 
-    for (const t of tickets) {
+    for (let i = 0; i < tickets.length; i++) {
+      const t = tickets[i];
       if (piezas + escalados >= TOPE_BORRADORES_FAQ) break;
+      // ── EL RELOJ, ANTES DE CADA TICKET (auditoría ciclo 7, c7-1) ──────────
+      // ESTE ES EL MOTOR MÁS PARECIDO AL QUE CAUSÓ LOS DOS SILENCIOS. Igual que
+      // `loteRedactor`, itera una lista de trabajo llamando al MODELO por
+      // elemento; e igual que él, `ordenarPorCosto` lo despacha AL FINAL de la
+      // vuelta —`llamaAlModelo('atencion_faq')` es `true`—, o sea que hereda
+      // todo el presupuesto de tiempo que quede. Sus únicas salidas eran el
+      // tope de cinco borradores y el final de la lista: ninguna mira el reloj.
+      //
+      // Y una llamada al modelo no es barata en tiempo: `generateResponse`
+      // puede tardar decenas de segundos, y en la pasada del 28-ago-2026 los
+      // fallos del Redactor se midieron en 20.96 s, 24.21 s y 26.95 s. Cinco de
+      // ésas en serie se comen 130 s del presupuesto de 270 sin que nadie
+      // pregunte la hora — y cuando Vercel corta, la ruta no escribe latido:
+      // exactamente el 25-ago-2026 («Sin latido: runner hace 286 min») y el
+      // 28-ago-2026 00:03 UTC (32 corridas, todas en `ok`, ni un latido).
+      //
+      // EL PUNTO SEGURO ES ÉSTE: antes de `piezaExistente`, que es la sonda del
+      // sello, y por tanto antes de gastar la llamada al modelo. Cortar más
+      // adelante —entre la sonda y `encolarPiezaExito`— dejaría pagado el
+      // borrador y sin encolar la pieza: dinero gastado y trabajo tirado, que es
+      // la versión de este agente del «sello puesto sobre una acción que no
+      // ocurrió» del aviso de peaje. Cada borrador es su propia pieza con
+      // título propio, así que cortar entre tickets no deja nada a medias.
+      if (relojAgotado(venceEnVuelta)) {
+        sinTurno = tickets.length - i;
+        logger.warn('faq.corte_por_reloj', { sinTurno, piezas, escalados, saltados });
+        break;
+      }
       const titulo = `FAQ — ticket ${t.id.slice(0, 8)}`;
       try {
         if (await piezaExistente(agente, titulo)) { saltados += 1; continue; }
@@ -370,13 +437,20 @@ export async function correrAtencionFaq(
     await registrarCorrida(null, agente, {
       inicio, fin: new Date(), estado: 'ok', disparo, costoUsd,
       tareasHechas: piezas + escalados, tareasTotal: tickets.length,
-      resumen: { borradores: piezas, escalados, saltados, dia: hoy },
+      resumen: { borradores: piezas, escalados, saltados, dia: hoy, ...(sinTurno > 0 ? { sin_turno: sinTurno } : {}) },
     });
     return {
       resultado: 'corrio',
       piezas: piezas + escalados,
-      motivo: piezas + escalados === 0 ? `${numero(saltados)} tickets ya tenían borrador` : undefined,
       costoUsd,
+      ...(sinTurno > 0 ? { sinTurno: true } : {}),
+      // El motivo del corte gana al de «ya tenían borrador» y se dice AUNQUE se
+      // hayan fabricado piezas: un `resultado: 'corrio', piezas: 3` mudo es
+      // justo el parte limpio sobre una pasada agonizante que el hallazgo c7-1
+      // describe.
+      motivo: sinTurno > 0
+        ? `el reloj de la vuelta cortó el lote con ${numero(sinTurno)} ticket(s) sin turno — los borradores hechos quedan; el resto le toca en la próxima pasada`
+        : (piezas + escalados === 0 ? `${numero(saltados)} tickets ya tenían borrador` : undefined),
     };
   } catch (e) {
     // El modelo pudo haber gastado antes del fallo: el costo se anota aunque
