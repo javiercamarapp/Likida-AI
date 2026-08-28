@@ -11,6 +11,7 @@ import {
   Calculator,
   Stamp,
   ScanEye,
+  CloudDownload,
 } from 'lucide-react';
 
 /**
@@ -99,6 +100,11 @@ export const DINERO_FISCAL: Item[] = [
   // los topes de gasto y la cartera vencida; el canal de cada aviso lo decide
   // la plantilla, no el menú.
   { href: '/dashboard/reglas', nombre: 'Mis reglas', Icono: ScanEye },
+  // 0231: los CFDI que el comercio YA timbró al RFC de la flota, bajados del
+  // buzón del SAT y cruzados solos contra el ticket. Va en DINERO porque
+  // declara un RFC, consume el tope diario de ese contribuyente ante el SAT y
+  // deja gastos facturados.
+  { href: '/dashboard/descarga-sat', nombre: 'Descarga del SAT', Icono: CloudDownload },
 ];
 
 export const SISTEMA: Item[] = [

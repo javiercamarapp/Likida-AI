@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -49,6 +49,11 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // reconocer escala cada 5 min — el cron de escalar (cada hora) no sirve
   // para una emergencia.
   asistencia: 300_000,
+  // La descarga masiva del SAT (0231). La cadencia la fija el SAT: una
+  // solicitud tarda hasta 6 días en madurar y su paquete vive 72 h. Cada 6 h
+  // recoge el paquete el mismo día que queda listo, con margen de sobra antes
+  // de que caduque, sin quemar cuota preguntando "¿ya?" cada minuto.
+  'descarga-sat': 6 * 3_600_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */

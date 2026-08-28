@@ -33,6 +33,10 @@
     {
       "path": "/api/cron/asistencia",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/descarga-sat",
+      "schedule": "25 */6 * * *"
     }
   ]
 }

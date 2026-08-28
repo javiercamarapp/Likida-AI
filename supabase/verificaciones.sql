@@ -10991,3 +10991,229 @@ begin
     vinculado_con_fecha_entra, motivo_json_rebota, motivo_frase_entra,
     duplicado_rebota, otra_flota_entra, cascade_limpia, llave_compuesta, cerrado;
 end $$;
+
+-- ── 187. La descarga masiva del SAT: la credencial que no cabe, el sello de dedup y el cruce que no puede mentir (mig. 0231) ──
+-- Los bloques 183 y 186 los tomaron las olas de crecimiento (0230) y de
+-- sesión de portal (0232), paralelas a ésta; aquí se toma el 187.
+--
+-- Lo que SOLO la base puede demostrar de esta feature, y que es donde vive
+-- toda su promesa:
+--
+--  (a) LA e.firma NO CABE EN LA TABLA. El diseño entero descansa en que
+--      Likida jamás custodia la firma electrónica del cliente: la FIEL vive
+--      en la bóveda del PAC y aquí solo se guarda una REFERENCIA de 20
+--      dígitos. Si este valor sale `f`, alguien puede pegar una llave privada
+--      en base64 en la columna del certificado y el producto habría roto su
+--      promesa de seguridad sin que ninguna prueba de código se enterara.
+--      Una referencia legítima (20 dígitos) sí entra: el candado acota, no
+--      prohíbe.
+--  (b) EL SELLO DE DEDUP. El mismo folio fiscal no entra dos veces por flota
+--      —dos rangos traslapados, el cron repetido, o el ticket que ya había
+--      llegado por WhatsApp con su XML—. Es la idempotencia por constraint de
+--      toda la ingesta.
+--  (c) Pero la MISMA flota SÍ puede tener muchos folios distintos, y DOS
+--      FLOTAS pueden tener el mismo folio: un CFDI que le timbraron a dos
+--      razones sociales distintas es un caso real, y un unique global lo
+--      rompería.
+--  (d) EL UUID EN MINÚSCULAS Y CON FORMA DE UUID (regla 0158, extendida): un
+--      folio en mayúsculas sería el MISMO comprobante entrando otra vez, y el
+--      unique no lo vería.
+--  (e) EL CRUCE NO PUEDE MENTIR: 'casado' EXIGE con qué gasto casó, y
+--      cualquier otro estatus NO puede traer gasto. Sin este CHECK, una fila
+--      podría afirmar un cruce inexistente — que es exactamente la cifra
+--      inventada que este producto no se permite.
+--  (f) UN SOLO TRÁMITE VIVO POR RANGO. El cron corre cada 6 h y el SAT tarda
+--      hasta 6 días: sin el índice parcial, cada corrida volvería a pedir el
+--      mismo rango y quemaría el tope diario del RFC contra el mismo periodo.
+--      Un rango YA CERRADO (descargada/error/expirada) sí se puede volver a
+--      pedir: un reintento deliberado es legítimo.
+--  (g) LA FK COMPUESTA: el comprobante de la flota A no puede casar con un
+--      gasto de la flota B.
+--  (h) EL CICLO DEL AVISO DE PEAJE (patrón 0202): el mismo (flota, mes,
+--      umbral) no avisa dos veces, pero un MES NUEVO sí — es la diferencia
+--      entre un reloj y un spam. Y el periodo tiene que ser el día 1: guardar
+--      el 15 le daría dos ciclos al mismo mes.
+--  (i) El doble candado (RLS deny-all + solo service_role) en las cuatro.
+do $$
+declare
+  ta uuid; tb uuid; ua uuid; oa uuid; va uuid; ga uuid; gb uuid;
+  sol_a uuid;
+  llave_no_cabe boolean; referencia_entra boolean;
+  folio_repetido_rebota boolean; otro_folio_entra boolean; otra_flota_entra boolean;
+  mayusculas_rebota boolean; no_uuid_rebota boolean;
+  casado_sin_gasto_rebota boolean; disponible_con_gasto_rebota boolean;
+  rango_vivo_repetido_rebota boolean; rango_cerrado_reentra boolean;
+  gasto_cruzado_rebota boolean;
+  aviso_repetido_rebota boolean; mes_nuevo_entra boolean; periodo_a_media_rebota boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0231 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0231 B') returning id into tb;
+  insert into app_user (id, tenant_id, email, rol)
+    values (gen_random_uuid(), ta, 'zzz-verif-0231@likida.test', 'contador') returning id into ua;
+  insert into operador (tenant_id, nombre, telefono)
+    values (ta, 'ZZZ 0231', '+520000000230') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio) values (ta, oa, 'ZZZ-0231') returning id into va;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha)
+    values (ta, va, 'caseta', 300, current_date) returning id into ga;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha)
+    values (ta, va, 'diesel', 600, current_date) returning id into gb;
+
+  insert into sat_descarga_config (tenant_id, rfc) values (ta, 'EKU9003173C9');
+  insert into sat_descarga_config (tenant_id, rfc) values (tb, 'AAA010101AAA');
+
+  -- (a) LA PRUEBA MADRE: una llave privada no cabe donde va la referencia.
+  -- El valor de ataque se ARMA aquí en vez de escribirse literal: un blob con
+  -- prefijo de certificado real hace que los escáneres de secretos marquen
+  -- este archivo para siempre, y lo que el CHECK vigila es la FORMA (20
+  -- dígitos), no un prefijo concreto. Cualquier base64 largo lo demuestra
+  -- igual de bien.
+  begin
+    update sat_descarga_config
+      set certificado_numero = repeat('QUJDZGVmZ2hpams', 30) || '=='
+      where tenant_id = ta;
+    llave_no_cabe := false;
+  exception when check_violation then
+    llave_no_cabe := true;
+  end;
+  begin
+    update sat_descarga_config set certificado_numero = '30001000000500003282' where tenant_id = ta;
+    referencia_entra := true;
+  exception when others then
+    referencia_entra := false;
+  end;
+
+  insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado, request_id)
+    values (ta, 'recibidos', current_date - 30, current_date, 'en_proceso', 'req-0231-a')
+    returning id into sol_a;
+
+  -- (b) El sello de dedup.
+  insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, solicitud_id, total, fecha)
+    values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000230', sol_a, 300, current_date);
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, total)
+      values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000230', 300);
+    folio_repetido_rebota := false;
+  exception when unique_violation then
+    folio_repetido_rebota := true;
+  end;
+
+  -- (c) Pero otro folio sí, y la MISMA cadena en OTRA flota también.
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, total)
+      values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000231', 600);
+    otro_folio_entra := true;
+  exception when others then
+    otro_folio_entra := false;
+  end;
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, total)
+      values (tb, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000230', 300);
+    otra_flota_entra := true;
+  exception when others then
+    otra_flota_entra := false;
+  end;
+
+  -- (d) Minúsculas y forma de UUID.
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid)
+      values (ta, 'AAAAAAAA-BBBB-4CCC-8DDD-000000000232');
+    mayusculas_rebota := false;
+  exception when check_violation then
+    mayusculas_rebota := true;
+  end;
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid) values (ta, 'no-soy-un-uuid');
+    no_uuid_rebota := false;
+  exception when check_violation then
+    no_uuid_rebota := true;
+  end;
+
+  -- (e) El cruce no puede mentir, en los DOS sentidos.
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus)
+      values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000233', 'casado');
+    casado_sin_gasto_rebota := false;
+  exception when check_violation then
+    casado_sin_gasto_rebota := true;
+  end;
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus, gasto_id)
+      values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000234', 'disponible', ga);
+    disponible_con_gasto_rebota := false;
+  exception when check_violation then
+    disponible_con_gasto_rebota := true;
+  end;
+
+  -- (f) Un solo trámite vivo por rango; uno cerrado sí se vuelve a pedir.
+  begin
+    insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado)
+      values (ta, 'recibidos', current_date - 30, current_date, 'solicitada');
+    rango_vivo_repetido_rebota := false;
+  exception when unique_violation then
+    rango_vivo_repetido_rebota := true;
+  end;
+  update sat_descarga_solicitud set estado = 'descargada' where id = sol_a;
+  begin
+    insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado)
+      values (ta, 'recibidos', current_date - 30, current_date, 'solicitada');
+    rango_cerrado_reentra := true;
+  exception when unique_violation then
+    rango_cerrado_reentra := false;
+  end;
+
+  -- (g) La FK compuesta: el comprobante de B no casa con un gasto de A.
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus, gasto_id)
+      values (tb, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000235', 'casado', ga);
+    gasto_cruzado_rebota := false;
+  exception when foreign_key_violation then
+    gasto_cruzado_rebota := true;
+  end;
+
+  -- (h) El ciclo del aviso de peaje.
+  insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+    values (ta, date_trunc('month', current_date)::date, 7, 3);
+  begin
+    insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+      values (ta, date_trunc('month', current_date)::date, 7, 5);
+    aviso_repetido_rebota := false;
+  exception when unique_violation then
+    aviso_repetido_rebota := true;
+  end;
+  begin
+    insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+      values (ta, (date_trunc('month', current_date) + interval '1 month')::date, 7, 2);
+    mes_nuevo_entra := true;
+  exception when unique_violation then
+    mes_nuevo_entra := false;
+  end;
+  begin
+    insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+      values (ta, (date_trunc('month', current_date) + interval '14 days')::date, 7, 1);
+    periodo_a_media_rebota := false;
+  exception when check_violation then
+    periodo_a_media_rebota := true;
+  end;
+
+  -- (i) El doble candado, en las CUATRO tablas nuevas.
+  cerrado := not has_table_privilege('anon', 'public.sat_descarga_config', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.sat_descarga_config', 'SELECT')
+    and has_table_privilege('service_role', 'public.sat_descarga_config', 'SELECT')
+    and not has_table_privilege('anon', 'public.sat_descarga_solicitud', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.sat_descarga_solicitud', 'SELECT')
+    and not has_table_privilege('anon', 'public.sat_cfdi_descargado', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.sat_cfdi_descargado', 'SELECT')
+    and has_table_privilege('service_role', 'public.sat_cfdi_descargado', 'INSERT')
+    and not has_table_privilege('anon', 'public.peaje_cierre_aviso', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.peaje_cierre_aviso', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.sat_descarga_config'::regclass)
+    and (select relrowsecurity from pg_class where oid = 'public.sat_cfdi_descargado'::regclass);
+
+  raise exception 'DESCARGA_SAT_0231  llave_no_cabe=%  referencia_entra=%  folio_repetido_rebota=%  otro_folio_entra=%  otra_flota_entra=%  mayusculas_rebota=%  no_uuid_rebota=%  casado_sin_gasto_rebota=%  disponible_con_gasto_rebota=%  rango_vivo_repetido_rebota=%  rango_cerrado_reentra=%  gasto_cruzado_rebota=%  aviso_repetido_rebota=%  mes_nuevo_entra=%  periodo_a_media_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t)',
+    llave_no_cabe, referencia_entra, folio_repetido_rebota, otro_folio_entra,
+    otra_flota_entra, mayusculas_rebota, no_uuid_rebota, casado_sin_gasto_rebota,
+    disponible_con_gasto_rebota, rango_vivo_repetido_rebota, rango_cerrado_reentra,
+    gasto_cruzado_rebota, aviso_repetido_rebota, mes_nuevo_entra,
+    periodo_a_media_rebota, cerrado;
+end $$;
