@@ -79,7 +79,7 @@ vi.mock('../direccion/reportes', () => ({ correrAgenteDireccion: (...a: unknown[
 // El back office restante (0219) entra por el mismo camino: import dinámico
 // dentro de su rama. El predicado NO se mockea — es la lista real del motor
 // contra la que se compara la literal del runner.
-const correrBackOffice = vi.fn(async (_a: unknown) => ({ piezas: 1 }));
+const correrBackOffice = vi.fn(async (..._a: unknown[]): Promise<{ piezas: number; motivo?: string; sinTurno?: boolean }> => ({ piezas: 1 }));
 const { AGENTES_BACK_OFFICE, esAgenteBackOffice } = await import('./backoffice');
 vi.mock('./backoffice', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./backoffice')>()),
@@ -89,7 +89,7 @@ vi.mock('./backoffice', async (importOriginal) => ({
 // Éxito del cliente (0218): mismo trato que dirección — import dinámico en el
 // runner, mock aquí, y así la vuelta no arrastra los lectores de /admin ni el
 // corpus de normas.
-const correrExito = vi.fn(async (..._a: unknown[]) => ({ resultado: 'corrio' as const, piezas: 1, costoUsd: 0 }));
+const correrExito = vi.fn(async (..._a: unknown[]): Promise<{ resultado: 'corrio' | 'saltado'; piezas: number; costoUsd: number; motivo?: string; sinTurno?: boolean }> => ({ resultado: 'corrio', piezas: 1, costoUsd: 0 }));
 vi.mock('./exito', () => ({ correrAgenteExito: (...a: unknown[]) => correrExito(...a) }));
 
 // Crecimiento (0230): mismo trato que el back office — import dinámico en el
@@ -311,11 +311,37 @@ describe('el despacho de éxito del cliente (0218)', () => {
   it('un determinista se despacha a su motor y su resultado sale tal cual', async () => {
     respuestas.set('agente_definicion', [{ data: [{ id: 'onboarding_cliente', presupuesto_dia_usd: 0.1 }], error: null }]);
     const r = await correrRunner(undefined, TENANT);
-    expect(correrExito).toHaveBeenCalledWith('onboarding_cliente', 'cron');
+    // El reloj de la vuelta va como quinto argumento (c7-1): `hoy` y `ahora`
+    // quedan en su default y el motor recibe el instante límite. Sin esto, el
+    // agente entraba por la puerta del reloj UNA vez y ya no volvía a mirarlo.
+    expect(correrExito).toHaveBeenCalledWith('onboarding_cliente', 'cron', undefined, undefined, expect.any(Number));
     expect(r.agentes).toEqual([{ agente: 'onboarding_cliente', resultado: 'corrio', motivo: undefined, piezas: 1, costoUsd: 0 }]);
     // Los cinco deterministas NO pasan por el gasto del día: su gasto de
     // modelo es $0 y leerlo sería una consulta que no decide nada.
     expect(respuestas.get('agente_corrida')).toBeUndefined();
+  });
+
+  // ── EL LATIDO SE ENTERA DEL CORTE (c7-1) ─────────────────────────────────
+  // Un motor que corta tiene que DECIRLO. Si `sinTurno` no subiera a
+  // `saltadosPorReloj`, la ruta calcularía `cortoElReloj = false` y escribiría
+  // un latido 'ok' sobre una pasada que dejó trabajo sin hacer. Eso es
+  // literalmente el 28-ago-2026: 32 corridas, todas en 'ok', y ni un latido
+  // que dijera que algo iba mal.
+  it('un agente de éxito cortado por reloj sube a saltadosPorReloj — si no, el latido diría «ok»', async () => {
+    correrExito.mockResolvedValueOnce({
+      resultado: 'corrio', piezas: 0, costoUsd: 0, sinTurno: true,
+      motivo: 'el reloj de la vuelta se agotó con 2 flota(s) sin mirar',
+    });
+    respuestas.set('agente_definicion', [{ data: [{ id: 'onboarding_cliente', presupuesto_dia_usd: 0.1 }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'onboarding_cliente', resultado: 'corrio' });
+    expect(r.saltadosPorReloj).toEqual(['onboarding_cliente']);
+  });
+
+  it('sin corte, saltadosPorReloj queda vacío — no se inventa un corte que no hubo', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'onboarding_cliente', presupuesto_dia_usd: 0.1 }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.saltadosPorReloj).toEqual([]);
   });
 
   it('el motor que lanza NO tumba la vuelta', async () => {
@@ -336,7 +362,9 @@ describe('el despacho de éxito del cliente (0218)', () => {
     respuestas.set('agente_definicion', [{ data: [{ id: 'atencion_faq', presupuesto_dia_usd: 1 }], error: null }]);
     respuestas.set('agente_corrida', [{ data: [{ costo_usd: 0.02 }], error: null }]);
     const r = await correrRunner(undefined, TENANT);
-    expect(correrExito).toHaveBeenCalledWith('atencion_faq', 'cron');
+    // `atencion_faq` es el que MÁS necesita el reloj de los seis: gasta modelo
+    // por ticket y `ordenarPorCosto` lo despacha al final de la vuelta.
+    expect(correrExito).toHaveBeenCalledWith('atencion_faq', 'cron', undefined, undefined, expect.any(Number));
     expect(r.agentes[0].resultado).toBe('corrio');
   });
 
@@ -368,6 +396,21 @@ describe('el presupuesto central evita un ledger duplicado', () => {
 });
 
 describe('el despacho del back office restante (0219)', () => {
+  // Misma costura del latido que en éxito: talento es el único de los cuatro
+  // que itera una lista de trabajo (un UPDATE de criba por candidato), así que
+  // es el único que puede cortar — y cortar sin decirlo dejaría al latido
+  // pintando de verde una pasada que dejó candidatos sin mirar.
+  it('un agente de back office cortado por reloj sube a saltadosPorReloj', async () => {
+    correrBackOffice.mockResolvedValueOnce({
+      piezas: 0, sinTurno: true,
+      motivo: 'el reloj de la vuelta cortó la criba con 2 candidato(s) sin mirar',
+    });
+    respuestas.set('agente_definicion', [{ data: [{ id: 'vigilante_calidad', presupuesto_dia_usd: 0.1 }], error: null }]);
+    respuestas.set('agente_corrida', [{ data: [], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.saltadosPorReloj).toEqual(['vigilante_calidad']);
+  });
+
   // Los ids viven DOS veces: literal en el runner (para no cargar el motor en
   // cada vuelta) y en `AGENTES_BACK_OFFICE`. Si divergen, un agente vivo se
   // queda sin rama de despacho y el runner lo reporta como «sin motor». Esta
@@ -386,7 +429,7 @@ describe('el despacho del back office restante (0219)', () => {
     // El techo se mide contra el gasto REAL del día: sin corridas, $0.
     respuestas.set('agente_corrida', [{ data: [], error: null }]);
     const r = await correrRunner(undefined, TENANT);
-    expect(correrBackOffice).toHaveBeenCalledWith('vigilante_calidad', 'cron');
+    expect(correrBackOffice).toHaveBeenCalledWith('vigilante_calidad', 'cron', undefined, expect.any(Number));
     expect(r.agentes).toEqual([{ agente: 'vigilante_calidad', resultado: 'corrio', piezas: 1, costoUsd: 0 }]);
   });
 

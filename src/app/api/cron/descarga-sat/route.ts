@@ -78,7 +78,15 @@ export async function GET(req: Request) {
   const venceEn = Date.now() + maxDuration * 1000 - MARGEN_MS;
 
   try {
-    const descarga = await correrDescargaSat(new Date());
+    // EL RELOJ ENTRA TAMBIÉN A LA DESCARGA (c7-1; deuda anotada por el fork del
+    // #160). Antes `venceEn` se calculaba aquí arriba y solo se le pasaba a
+    // `avisarCierrePeaje`: el barrido del SAT corría sin reloj propio, y cuando
+    // se comía la vuelta el síntoma era el aviso de peaje saliendo con
+    // `sinTurno` alto — o sea que el trabajo que se sacrificaba era el del OTRO,
+    // el que sí se había portado bien. El problema era visible y no estaba
+    // arreglado. Ahora los dos comparten el MISMO instante límite, que es lo
+    // que hace que el reparto del tiempo sea una regla y no una carrera.
+    const descarga = await correrDescargaSat(new Date(), { venceEn });
     // El aviso de peaje va DESPUÉS y en su propio try: si la descarga tropieza
     // con el proveedor, el reloj del cierre de mes sigue corriendo igual y el
     // contralor merece su aviso.
@@ -109,11 +117,18 @@ export async function GET(req: Request) {
     // extingue el último día del mes—. Un latido verde encima de eso es
     // exactamente la clase de mentira que este panel no se permite, y es la
     // única señal que haría visible el problema.
+    // Y LA DESCARGA CORTADA POR RELOJ TAMPOCO ES 'ok'. Es la mitad que faltaba:
+    // el latido ya sabía leer un barrido de peaje cortado, pero un barrido del
+    // SAT cortado —flotas sin abrir, solicitudes sin verificar, paquetes listos
+    // sin bajar— se reportaba verde. Son CFDI que no entraron: el gasto sigue
+    // sin su comprobante y nadie se entera hasta que alguien cuadra a mano.
     const peajeParcial = (peaje?.sinTurno ?? 0) > 0 || (peaje?.truncado ?? false);
-    const sano = descarga.corrio && errores === 0 && peajeError === null && !peajeParcial;
+    const descargaParcial = descarga.sinTurno > 0;
+    const sano = descarga.corrio && errores === 0 && peajeError === null && !peajeParcial && !descargaParcial;
     await registrarLatido('descarga-sat', sano ? 'ok' : 'parcial', {
       flotas: descarga.flotas, cfdis, casados, errores,
       motivo: descarga.motivo ?? null,
+      descargaSinTurno: descarga.sinTurno,
       peajeAvisadas: peaje?.avisadas ?? null,
       peajeSinTurno: peaje?.sinTurno ?? null,
       peajeTruncado: peaje?.truncado ?? null,

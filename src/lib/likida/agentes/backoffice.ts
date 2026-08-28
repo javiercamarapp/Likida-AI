@@ -59,6 +59,41 @@ export interface ResultadoBackOffice {
   piezas: number;
   /** Por qué no se fabricó, cuando piezas = 0 y no es un fallo. */
   motivo?: string;
+  /** EL RELOJ DE LA VUELTA se agotó a media faena y quedó trabajo sin hacer.
+   *  No es fallo ni es «no había nada»: es la tercera cosa. El runner la sube a
+   *  `saltadosPorReloj` (regla de la #152) y por eso el latido dice `'parcial'`
+   *  en vez de `'ok'` — que es toda la diferencia entre enterarse y no. */
+  sinTurno?: boolean;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RELOJ DE LA VUELTA — Y POR QUÉ AQUÍ TAMPOCO SE LLAMA `venceEn`
+// (auditoría ciclo 7, c7-1).
+//
+// Mismo choque de nombres que en `exito.ts`, con otra tabla: en este módulo
+// `venceEn` YA SIGNIFICA la fecha límite legal de una SOLICITUD ARCO
+// (`solicitud_arco.vence_en`, 0053) — los 20 días hábiles que la LFPDPPP le da
+// a la empresa para contestarle a un titular. Es un plazo de CALENDARIO, en
+// días, y con consecuencias legales.
+//
+// Lo que este archivo no tenía es el otro reloj: el presupuesto de tiempo de
+// ESTA INVOCACIÓN de Vercel, un epoch en milisegundos que se apaga a los
+// ~270 s. Para que nadie los mezcle se llama `venceEnVuelta`. Poner un
+// `venceEn: number` al lado de un `venceEn: string` que significa un plazo
+// legal es sembrar el bug para el siguiente que toque el archivo.
+//
+// Los dos incidentes que lo justifican: 25-ago-2026 («Sin latido: runner hace
+// 286 min») y 28-ago-2026 00:03 UTC (32 corridas, todas en `ok`, y ni un
+// latido escrito). En los dos, un motor que iteraba por dentro entró UNA vez
+// por la puerta del reloj del despacho y no volvió a mirarlo.
+//
+// Se redefine aquí en vez de importarlo de `runner.ts` por lo mismo que en
+// `direccion.ts` y `leads.ts` (#158): el runner carga este módulo por import
+// dinámico justo para no arrastrarlo en cada vuelta, y un import de vuelta
+// cerraría el ciclo.
+// ═══════════════════════════════════════════════════════════════════════════
+function relojAgotado(venceEnVuelta: number | undefined): boolean {
+  return venceEnVuelta !== undefined && Date.now() >= venceEnVuelta;
 }
 
 // ── Aritmética de fechas (UTC pura; el día de México lo da `hoyMx`) ────────
@@ -1119,7 +1154,7 @@ async function guardarCriba(id: string, c: Criba): Promise<void> {
   if (error) throw new Error(`guardarCriba(${id}): ${error.message}`);
 }
 
-async function correrTalento(disparo: DisparoCorrida, hoy: string): Promise<ResultadoBackOffice> {
+async function correrTalento(disparo: DisparoCorrida, hoy: string, venceEnVuelta?: number): Promise<ResultadoBackOffice> {
   const inicio = new Date();
   const agente = 'talento';
   const lunes = lunesDe(hoy);
@@ -1150,10 +1185,47 @@ async function correrTalento(disparo: DisparoCorrida, hoy: string): Promise<Resu
     const lote = porCribar.slice(0, TOPE_CRIBA_POR_CORRIDA);
     const reqPorVacante = new Map(vacantes.map((v) => [v.id, v.requisitos]));
     const cribados: CandidatoCribado[] = [];
-    for (const c of lote) {
+    let sinCribar = 0;
+    for (let i = 0; i < lote.length; i++) {
+      const c = lote[i];
+      // ── EL RELOJ, ANTES DE ESCRIBIR LA CRIBA (c7-1 + criterio #160) ────────
+      // Un UPDATE por candidato, hasta 25 por corrida, en serie. Talento es el
+      // último de los cuatro del back office por orden alfabético, así que
+      // llega con el presupuesto de la vuelta ya mordido por los otros tres.
+      //
+      // El punto seguro es ANTES de `guardarCriba`, nunca después de evaluar y
+      // antes de escribir: `evaluarCandidato` es puro y tirarlo no cuesta nada,
+      // pero cortar entre la evaluación y su escritura perdería el veredicto
+      // sin dejar rastro. Cortar aquí no deja nada a medias — `guardarCriba`
+      // ancla el UPDATE en `estado='recibido'` (idempotente por estado, c6-6),
+      // así que los ya cribados quedan cribados y los que faltan siguen
+      // esperando exactamente igual que antes de esta corrida.
+      if (relojAgotado(venceEnVuelta)) {
+        sinCribar = lote.length - i;
+        logger.warn('backoffice.talento.corte_por_reloj', { sinCribar, cribados: cribados.length });
+        break;
+      }
       const criba = evaluarCandidato(c.perfil, reqPorVacante.get(c.vacanteId) ?? null);
       await guardarCriba(c.id, criba);
       cribados.push({ ...c, criba });
+    }
+
+    // EL PARTE SEMANAL NO SE SELLA CON LA CRIBA A MEDIAS. `armarParteTalento`
+    // presenta a los cribados como los candidatos de la semana, y el título
+    // `Talento — semana del <lunes>` es idempotente por SIETE DÍAS: un parte
+    // armado con 6 de 25 candidatos no lo corrige la pasada de dentro de cuatro
+    // horas ni la de mañana — se queda así hasta el lunes que viene, y los
+    // candidatos que no entraron quedan invisibles una semana entera. Las
+    // cribas ya escritas NO se pierden (son idempotentes por estado) y entran
+    // al parte en cuanto una pasada alcance a terminar la lista.
+    if (sinCribar > 0) {
+      await anotar(agente, inicio, 'ok', disparo,
+        { parte: 'sin_turno', cribados: cribados.length, sin_cribar: sinCribar },
+        { tareasHechas: cribados.length, tareasTotal: lote.length });
+      return {
+        piezas: 0, sinTurno: true,
+        motivo: `el reloj de la vuelta cortó la criba con ${numero(sinCribar)} candidato(s) sin mirar — lo cribado queda; el parte SEMANAL no se selló a medias (dejaría fuera a esos candidatos hasta el lunes que viene) y sale completo en la próxima pasada`,
+      };
     }
 
     // Y AHORA sí, lo semanal: el parte. Si el de esta semana ya está, la
@@ -1196,12 +1268,23 @@ export async function correrAgenteBackOffice(
   id: AgenteBackOffice,
   disparo: DisparoCorrida,
   hoy: string = hoyMx(),
+  /** EL RELOJ DE LA VUELTA del runner (epoch ms) — no el plazo legal de una
+   *  solicitud ARCO; ver la nota de `relojAgotado`. Opcional: sin él los cuatro
+   *  se comportan igual que siempre, que es lo que quieren el copiloto y las
+   *  pruebas. Solo el cron corre contra un `maxDuration`.
+   *
+   *  De los cuatro, hoy únicamente `talento` itera una lista de trabajo con I/O
+   *  por elemento; los otros tres arman su parte con un juego fijo de consultas
+   *  (`Promise.all`) y no tienen bucle que cronometrar. El parámetro se recibe
+   *  para los cuatro de todas formas para que el día que uno crezca un bucle,
+   *  el reloj ya esté a la mano y no haya que acordarse de cablearlo. */
+  venceEnVuelta?: number,
 ): Promise<ResultadoBackOffice> {
   logger.info('backoffice.corrida', { agente: id, disparo });
   switch (id) {
     case 'vigilante_calidad': return correrVigilanteCalidad(disparo, hoy);
     case 'documentacion': return correrDocumentacion(disparo, hoy);
     case 'legal_compliance': return correrLegalCompliance(disparo, hoy);
-    case 'talento': return correrTalento(disparo, hoy);
+    case 'talento': return correrTalento(disparo, hoy, venceEnVuelta);
   }
 }

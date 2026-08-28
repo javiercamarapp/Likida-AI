@@ -609,3 +609,67 @@ describe('talento: el registro y la criba', () => {
     expect((registrarCorrida.mock.calls[0][2] as Record<string, unknown>).estado).toBe('fallo');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RELOJ DE LA VUELTA EN TALENTO (auditoría ciclo 7, c7-1).
+//
+// `correrTalento` es el único de los cuatro del back office que itera una lista
+// de trabajo con I/O por elemento: un UPDATE por candidato, hasta 25 por
+// corrida, en serie. Los otros tres arman su parte con un juego fijo de
+// consultas y no tienen bucle que cronometrar.
+//
+// El auditor señaló que la suite no atrapaba c7-1 porque «no hay una sola
+// prueba en la que un agente ya despachado se pase del presupuesto». Ésta es
+// esa prueba para el back office.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('el reloj de la vuelta corta la criba de talento, y lo DICE (c7-1)', () => {
+  const RELOJ_VENCIDO = () => Date.now() - 1;
+
+  it('con el reloj vencido no escribe ni una criba y NO sella el parte semanal con la lista a medias', async () => {
+    encolarRespuesta('vacante', {
+      data: [{ id: 'v1', clave: 'contador', titulo: 'Contador', requisitos: { obligatorios: ['SAT'], deseables: ['Excel'] } }],
+      error: null,
+    });
+    encolarRespuesta('cola_aprobacion', { count: 0, error: null }); // parteExistente
+    encolarRespuesta('candidato', {
+      data: [
+        { id: 'c1', vacante_id: 'v1', nombre: 'Ana', correo: 'ana@x.mx', perfil: 'Auditorías ante el SAT y Excel' },
+        { id: 'c2', vacante_id: 'v1', nombre: 'Beto', correo: 'beto@x.mx', perfil: 'Ventas' },
+      ],
+      error: null,
+    });
+
+    const r = await correrAgenteBackOffice('talento', 'cron', '2026-08-27', RELOJ_VENCIDO());
+
+    // CORTA: ni un UPDATE de criba.
+    expect(updates).toHaveLength(0);
+    // CUENTA: `sinTurno` sube y con él el runner mete al agente en
+    // `saltadosPorReloj`, que es lo que hace que el latido diga 'parcial'.
+    expect(r).toMatchObject({ piezas: 0, sinTurno: true });
+    expect(r.motivo).toMatch(/2 candidato\(s\) sin mirar/);
+    expect(r.motivo).toMatch(/SEMANAL/);
+    // NO DEJA EL ESTADO A MEDIAS: el título de la semana NO queda sellado. Si
+    // se sellara, los candidatos que no entraron quedarían invisibles hasta el
+    // lunes que viene — el índice único haría «ya_existia» en cada pasada.
+    expect(encolarPieza).not.toHaveBeenCalled();
+  });
+
+  it('sin reloj la criba corre entera — el parámetro es opcional a propósito', async () => {
+    encolarRespuesta('vacante', {
+      data: [{ id: 'v1', clave: 'contador', titulo: 'Contador', requisitos: { obligatorios: ['SAT'], deseables: ['Excel'] } }],
+      error: null,
+    });
+    encolarRespuesta('cola_aprobacion', { count: 0, error: null });
+    encolarRespuesta('candidato', {
+      data: [{ id: 'c1', vacante_id: 'v1', nombre: 'Ana', correo: 'ana@x.mx', perfil: 'Auditorías ante el SAT y Excel' }],
+      error: null,
+    });
+    encolarRespuesta('candidato', { data: null, error: null });
+
+    const r = await correrAgenteBackOffice('talento', 'cron', '2026-08-27');
+    expect(r.piezas).toBe(1);
+    expect(r.sinTurno).toBeUndefined();
+    expect(updates).toHaveLength(1);
+  });
+});

@@ -63,7 +63,7 @@ interface CandidatoSdr {
  *  rebote/queja, con la primera salida hace ≥3 (o ≥7) días y 1 (o 2) salidas
  *  en el historial. Exportada para su prueba. LANZA ante lecturas caídas —
  *  una cadencia decidida a ciegas manda correos de más. */
-export async function candidatosDeSeguimiento(limite: number): Promise<CandidatoSdr[]> {
+export async function candidatosDeSeguimiento(limite: number, venceEn?: number): Promise<CandidatoSdr[]> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('prospecto')
     .select('id, empresa, contacto_nombre')
@@ -77,6 +77,24 @@ export async function candidatosDeSeguimiento(limite: number): Promise<Candidato
   const elegidos: CandidatoSdr[] = [];
   for (const f of filas) {
     if (elegidos.length >= limite) break;
+    // ── EL RELOJ, TAMBIÉN EN LA BÚSQUEDA (c7-1) ──────────────────────────────
+    // El `for` de `correrSdr` ya preguntaba la hora al FABRICAR, pero la
+    // BÚSQUEDA que lo alimenta no la preguntaba nunca — y cuesta: la
+    // sobre-lectura es ×5 (25 filas para 5 candidatos) y cada fila son DOS idas
+    // a la base (el historial de contactos y la revisión de rebote/queja). Con
+    // la cola llena de prospectos que ya contestaron o ya rebotaron, esas 50
+    // consultas se gastan enteras ANTES de que el reloj del lote llegue
+    // siquiera a preguntar por primera vez. Es el mismo hueco que la #158 cerró
+    // en `candidatoFicha` de `leads.ts`, y aquí seguía abierto.
+    //
+    // Cortar aquí es seguro y no necesita `sinTurno` propio: esta función SOLO
+    // LEE —no encola, no sella, no escribe—, y devolver menos candidatos es el
+    // caso normal que el llamador ya maneja. Quien cuenta el corte para el
+    // latido es `correrSdr`, que es quien sabe cuánto trabajo quedó.
+    if (venceEn !== undefined && Date.now() >= venceEn) {
+      logger.warn('sdr.busqueda.corte_por_reloj', { encontrados: elegidos.length });
+      break;
+    }
     const { data: hist, error: errHist } = await supabaseAdmin()
       .from('prospecto_contacto')
       .select('direccion, ocurrio_en')
@@ -165,8 +183,20 @@ export async function correrSdr(
   if (await estaApagado('agente:sdr')) {
     throw new DatoInvalido('El SDR está apagado — se enciende desde /admin/observabilidad o ⌘K.');
   }
-  const candidatos = await candidatosDeSeguimiento(limite);
-  let piezas = 0, saltados = 0, costoUsd = 0, sinTurno = 0;
+  const candidatos = await candidatosDeSeguimiento(limite, venceEn);
+  // EL CORTE DE LA BÚSQUEDA NO PUEDE SER MUDO. Si el reloj se agotó DENTRO de
+  // `candidatosDeSeguimiento`, la lista vuelve corta —o vacía—, y entonces el
+  // `for` de abajo o no entra nunca o corta en su primera vuelta con
+  // `sinTurno = candidatos.length`. Con la lista vacía eso da CERO, o sea un
+  // `resultado: 'corrio', piezas: 0, sinTurno: 0`: indistinguible de «no había
+  // a quién darle seguimiento hoy», que es el estado normal y sano. Sería un
+  // corte silencioso —el latido diría `'ok'`— y un corte silencioso es peor que
+  // no cortar, porque el runner reportaría una pasada limpia dejando trabajo sin
+  // hacer. Así que se pregunta la hora AQUÍ, entre la búsqueda y el lote, y el
+  // piso de 1 deja constancia de que la vuelta se quedó a medias aunque no haya
+  // un candidato concreto que nombrar.
+  const busquedaCortada = venceEn !== undefined && Date.now() >= venceEn;
+  let piezas = 0, saltados = 0, costoUsd = 0, sinTurno = busquedaCortada ? Math.max(1, candidatos.length) : 0;
   for (let i = 0; i < candidatos.length; i++) {
     // ── EL RELOJ, ADENTRO DEL MOTOR (auditoría ciclo 7, c7-1) ───────────────
     // El SDR gasta modelo (`llamaAlModelo` lo tiene en la lista de caros) y

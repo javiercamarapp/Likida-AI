@@ -549,3 +549,158 @@ describe('soporte — el reloj se deriva, y «sin SLA» no es «vencido»', () =
     expect(encolarPieza).not.toHaveBeenCalled();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RELOJ DE LA VUELTA, ADENTRO DE LOS MOTORES (auditoría ciclo 7, c7-1).
+//
+// LA PRUEBA QUE FALTABA. El auditor lo dijo con todas sus letras: la suite no
+// atrapaba c7-1 porque «no hay una sola prueba en la que un agente ya
+// despachado se pase del presupuesto». Los cinco motores de este archivo
+// iteran listas de trabajo con I/O por elemento y ninguno miraba el reloj: el
+// candado 0 del runner preguntaba la hora ANTES de despachar y ya no se volvía
+// a preguntar nunca. Resultado en producción, dos veces: Vercel mató la
+// función DENTRO del bucle, sin `try` ni `catch` de la ruta y por lo tanto SIN
+// LATIDO — el silencio del 25-ago-2026 («Sin latido: runner hace 286 min») y
+// el del 28-ago-2026 00:03 UTC, donde la pasada hizo 32 corridas TODAS en `ok`
+// y aun así no escribió latido.
+//
+// Cada prueba de aquí abajo afirma las TRES cosas que separan un corte bueno
+// de uno peligroso:
+//   1. CORTA — no se come el presupuesto de la vuelta.
+//   2. CUENTA — `sinTurno` sube, y por él el runner mete al agente en
+//      `saltadosPorReloj` y el latido dice `'parcial'` en vez de `'ok'`. Un
+//      corte silencioso es PEOR que no cortar: el runner reportaría una pasada
+//      limpia mientras deja trabajo sin hacer.
+//   3. NO DEJA EL ESTADO A MEDIAS — y aquí está lo fino: los partes de este
+//      archivo son idempotentes POR TÍTULO, así que encolar uno armado con
+//      media lista SELLA el periodo y la pasada siguiente encontraría
+//      «ya_existia». Un corte a mitad de un parte no puede publicarlo.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Un instante que YA PASÓ: el reloj de la vuelta agotado antes de empezar. */
+const RELOJ_VENCIDO = () => Date.now() - 1;
+
+const OTRA_FLOTA = { ...FLOTA, id: 'bbbbbbbb-1111-2222-3333-444444444444', nombre: 'Fletes del Bajío' };
+const DOS_FLOTAS = {
+  data: [
+    { id: FLOTA.id, nombre: FLOTA.nombre, created_at: '2026-07-01T00:00:00Z', config: null },
+    { id: OTRA_FLOTA.id, nombre: OTRA_FLOTA.nombre, created_at: '2026-07-01T00:00:00Z', config: null },
+  ],
+  error: null,
+};
+
+describe('el reloj de la vuelta corta los motores de éxito, y lo DICE (c7-1)', () => {
+  it('onboarding: con el reloj vencido no consulta ni una flota, no encola el parte a medias y cuenta las que no miró', async () => {
+    respuestas.set('cola_aprobacion', [{ data: null, count: 0, error: null }]);
+    respuestas.set('tenant', [DOS_FLOTAS]);
+    // Si el bucle corriera, se comería esta respuesta de `viaje`.
+    respuestas.set('viaje', [{ data: null, count: 0, error: null }]);
+
+    const r = await correrAgenteExito('onboarding_cliente', 'cron', '2026-08-27', new Date(), RELOJ_VENCIDO());
+
+    expect(r).toMatchObject({ resultado: 'corrio', piezas: 0, sinTurno: true });
+    expect(r.motivo).toMatch(/2 flota\(s\) sin mirar/);
+    // CORTA de verdad: la consulta por flota NO se gastó.
+    expect(respuestas.get('viaje')).toHaveLength(1);
+    // NO DEJA EL ESTADO A MEDIAS: el título del día no queda sellado con una
+    // lista de 0 flotas, así que la próxima pasada sí puede fabricarlo entero.
+    expect(encolarPieza).not.toHaveBeenCalled();
+    // Y tampoco escala un «rojo» calculado sobre flotas que no se miraron.
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+
+  it('éxito del cliente: el parte de silencio NO se encola con media lista, y el reporte de valor ni se intenta', async () => {
+    respuestas.set('tenant', [DOS_FLOTAS]);
+    respuestas.set('cola_aprobacion', [{ data: null, count: 0, error: null }]);
+    respuestas.set('viaje', [{ data: null, count: 0, error: null }]);
+
+    const r = await correrAgenteExito('exito_cliente', 'cron', '2026-08-05', new Date(), RELOJ_VENCIDO());
+
+    expect(r).toMatchObject({ resultado: 'corrio', piezas: 0, sinTurno: true });
+    expect(r.motivo).toMatch(/sin mirar/);
+    expect(r.motivo).toMatch(/reporte de valor ni se intentó/);
+    expect(respuestas.get('viaje')).toHaveLength(1);
+    expect(encolarPieza).not.toHaveBeenCalled();
+  });
+
+  it('retención: el parte SEMANAL no se sella a medias — apagaría los gatillos de las flotas no miradas una semana entera', async () => {
+    respuestas.set('cola_aprobacion', [{ data: null, count: 0, error: null }]);
+    respuestas.set('tenant', [DOS_FLOTAS]);
+    respuestas.set('viaje', [{ data: null, count: 0, error: null }]);
+
+    const r = await correrAgenteExito('retencion', 'cron', '2026-08-27', new Date(), RELOJ_VENCIDO());
+
+    expect(r).toMatchObject({ resultado: 'corrio', piezas: 0, sinTurno: true });
+    expect(r.motivo).toMatch(/2 flota\(s\) sin mirar/);
+    expect(r.motivo).toMatch(/SEMANAL/);
+    expect(respuestas.get('viaje')).toHaveLength(1);
+    expect(encolarPieza).not.toHaveBeenCalled();
+  });
+
+  it('soporte: un censo de tickets incompleto NI escala NI se encola — una alerta a la baja tranquiliza con un dato falso', async () => {
+    respuestas.set('ticket_soporte', [{
+      data: [{
+        id: TICKET.id, tenant_id: FLOTA.id, asunto: TICKET.asunto, categoria: 'facturacion',
+        prioridad: 'alta', estado: 'abierto', abierto_en: TICKET.abiertoEn, vence_en: TICKET.venceEn,
+      }],
+      error: null,
+    }]);
+    // El hilo de cada ticket es una consulta por ticket: con el reloj vencido
+    // no se gasta ninguna.
+    respuestas.set('ticket_mensaje', [{ data: [], error: null }]);
+
+    const r = await correrAgenteExito('soporte', 'cron', '2026-08-27', new Date(AHORA), RELOJ_VENCIDO());
+
+    expect(r).toMatchObject({ resultado: 'corrio', piezas: 0, sinTurno: true });
+    expect(r.motivo).toMatch(/cortó la lectura de tickets/);
+    expect(respuestas.get('ticket_mensaje')).toHaveLength(1);
+    // El ticket del fixture está VENCIDO: sin el corte, esto habría escalado.
+    // Escalar «1 vencido» sobre un censo truncado consumiría el piso de la
+    // alerta y podría CALLAR la alerta correcta de la pasada que sí termine.
+    expect(alertarOperador).not.toHaveBeenCalled();
+    expect(encolarPieza).not.toHaveBeenCalled();
+  });
+
+  it('cobranza SaaS: las propuestas ya encoladas QUEDAN, pero el parte del día no se sella con las cuentas a medias', async () => {
+    getPorCobrar.mockResolvedValue([FACTURA]);
+    // 2026-08-01 = dos hitos alcanzados (D−3 y D+0): dos toques, o sea una
+    // lista de trabajo de verdad sobre la que se puede cortar A LA MITAD.
+    expect(toquesDeHoy([FACTURA], '2026-08-01')).toHaveLength(2);
+
+    // EL RELOJ QUE SE AGOTA A LA MITAD: arranca vivo y se vence en cuanto la
+    // primera propuesta entra a la bandeja. Es la forma honesta de reproducir
+    // el incidente — la vuelta se muere DENTRO del bucle, no antes de entrar.
+    let ahora = 1_000_000;
+    const vence = ahora + 10_000;
+    const reloj = vi.spyOn(Date, 'now').mockImplementation(() => ahora);
+    encolarPieza.mockImplementation(async () => { ahora = vence + 1; return 'pieza-1'; });
+    try {
+      const r = await correrAgenteExito('cobranza_saas', 'cron', '2026-08-01', new Date(), vence);
+
+      // CORTA y CUENTA.
+      expect(r).toMatchObject({ resultado: 'corrio', sinTurno: true });
+      expect(r.motivo).toMatch(/1 toque\(s\) sin mirar/);
+      // NO DEJA EL ESTADO A MEDIAS, en sus dos mitades:
+      //  · lo ya fabricado QUEDA — cada propuesta tiene su propio título, así
+      //    que no estorba a nadie y no hay que rehacerla;
+      //  · y lo único que se encoló es esa propuesta: NI el segundo toque NI
+      //    el parte del día, que habría sellado la fecha diciendo «de 2 toques
+      //    se prepararon 1» como si ése fuera el total.
+      const tipos = encolarPieza.mock.calls.map((c) => (c[0] as { tipo: string }).tipo);
+      expect(tipos).toEqual(['recordatorio_cobranza']);
+      expect(tipos).not.toContain('parte_cobranza_saas');
+      expect(r.piezas).toBe(1);
+    } finally {
+      reloj.mockRestore();
+    }
+  });
+
+  it('sin reloj los cinco se comportan igual que siempre — el parámetro es opcional a propósito', async () => {
+    respuestas.set('cola_aprobacion', [{ data: null, count: 0, error: null }]);
+    respuestas.set('tenant', [{ data: [{ id: FLOTA.id, nombre: FLOTA.nombre, created_at: '2026-07-01T00:00:00Z', config: null }], error: null }]);
+    respuestas.set('viaje', [{ data: null, count: 4, error: null }]);
+    const r = await correrAgenteExito('onboarding_cliente', 'cron', '2026-08-27');
+    expect(r.piezas).toBe(1);
+    expect(r.sinTurno).toBeUndefined();
+  });
+});

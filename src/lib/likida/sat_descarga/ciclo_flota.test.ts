@@ -342,3 +342,101 @@ describe('paquetesYaBajados — reanudar sobre basura sería peor que empezar', 
     expect(paquetesYaBajados(['p1', 3, '', 'p2'])).toEqual(['p1', 'p2']);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RELOJ DE LA VUELTA, ADENTRO DEL CICLO DEL SAT (auditoría ciclo 7, c7-1;
+// deuda anotada por el fork del #160).
+//
+// `correrDescargaSat` corría SIN RELOJ PROPIO. La ruta ya calculaba un
+// `venceEn` y se lo pasaba a `avisarCierrePeaje`, que corre DESPUÉS — así que
+// cuando la descarga se comía la vuelta, el síntoma era el aviso de peaje
+// saliendo con `sinTurno` alto y el latido diciendo 'parcial': el problema era
+// VISIBLE pero no estaba arreglado, y quien pagaba la factura era el otro
+// trabajo, el que sí se había portado bien.
+//
+// Y aquí el corte tiene un filo que ningún otro motor tiene: BAJAR UN PAQUETE
+// GASTA CUOTA DEL SAT. Un paquete se puede bajar dos veces y a la tercera el
+// proveedor lo rechaza. Cortar entre `descargar` y el UPDATE del avance
+// quemaría el derecho a bajarlo para tirar su contenido.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('c7-1 · el reloj de la vuelta corta el ciclo del SAT sin quemar cuota ni saltar días', () => {
+  const VENCIDO = () => Date.now() - 1;
+
+  it('con el reloj vencido no le pregunta NADA al SAT y cuenta las solicitudes sin turno', async () => {
+    const db = base([solicitudViva()]);
+    const { prov, llamadas } = proveedor(['p1']);
+
+    const r = await correrFlota(CFG(), prov, '2026-08-27', AHORA, VENCIDO());
+
+    // CORTA: ni una llamada de red, ni de verificar ni de descargar.
+    expect(llamadas.verificar).toBe(0);
+    expect(llamadas.descargar).toEqual([]);
+    // Y tampoco abre trabajo NUEVO: sin tiempo no se pide otro rango.
+    expect(llamadas.solicitar).toBe(0);
+    // CUENTA: la solicitud que no se miró se dice.
+    expect(r.sinTurno).toBe(1);
+    // NO DEJA EL ESTADO A MEDIAS: la solicitud queda exactamente como estaba.
+    expect(db.solicitudes[0].estado).toBe('en_proceso');
+    expect(db.solicitudes[0].paquetes_bajados).toBeNull();
+  });
+
+  it('EL CORTE A MITAD DE PAQUETES NO AVANZA EL CALENDARIO — un día saltado no vuelve nunca', async () => {
+    // EL PELIGRO QUE ESTA PRUEBA EXISTE PARA CERRAR. Si el corte por reloj
+    // dejara `todoBien` en true, la solicitud se marcaría 'descargada' y
+    // `ultima_descarga_hasta` avanzaría a 2026-07-31 con paquetes SIN BAJAR.
+    // Ese calendario no retrocede jamás: los CFDI de esos días quedarían fuera
+    // para siempre y nadie se enteraría — el gasto sin su comprobante, la
+    // deducción perdida, y ni un error en ningún log.
+    const db = base([solicitudViva()]);
+    let ahora = 1_000_000;
+    const vence = ahora + 10_000;
+    const reloj = vi.spyOn(Date, 'now').mockImplementation(() => ahora);
+    try {
+      const llamadas = { descargar: [] as string[] };
+      const prov: ProveedorDescargaSat = {
+        nombre: 'sw',
+        async solicitar() { return { ok: true, requestId: 'req-x' }; },
+        async verificar() { return { ok: true, estado: 'lista', paquetes: ['p1', 'p2', 'p3'], cfdis: null, mensaje: null }; },
+        async descargar(p: string) {
+          llamadas.descargar.push(p);
+          // El reloj se agota EN CUANTO el primer paquete termina de bajar:
+          // la vuelta se muere DENTRO del bucle, que es el caso real.
+          ahora = vence + 1;
+          return { ok: true, xmls: [`${p}-cfdi-1`, `${p}-cfdi-2`] };
+        },
+        async credencial() { return { ok: true, numero: '3'.repeat(20), venceEn: null }; },
+      };
+
+      const r = await correrFlota(CFG(), prov, '2026-08-27', AHORA, vence);
+
+      // CORTA: solo se bajó el primero; p2 y p3 no gastaron cuota del SAT.
+      expect(llamadas.descargar).toEqual(['p1']);
+      // NO DEJA EL ESTADO A MEDIAS, y aquí está lo que de verdad importa:
+      //  · lo que SÍ se bajó quedó ANOTADO, así que la próxima corrida reanuda
+      //    en p2 y no vuelve a pedir p1 (que sería quemar cuota otra vez);
+      expect(db.solicitudes[0].paquetes_bajados).toEqual(['p1']);
+      expect(db.cfdis).toHaveLength(2);
+      //  · la solicitud NO se cierra…
+      expect(db.solicitudes[0].estado).not.toBe('descargada');
+      expect(r.descargadas).toBe(0);
+      //  · …y por lo tanto EL CALENDARIO NO AVANZA. Éste es el aserto que
+      //    protege contra la pérdida silenciosa de datos fiscales.
+      const avances = db.solicitudes.filter((s) => s.estado === 'descargada');
+      expect(avances).toHaveLength(0);
+      // CUENTA: los dos paquetes que no alcanzaron turno se dicen.
+      expect(r.sinTurno).toBe(2);
+    } finally {
+      reloj.mockRestore();
+    }
+  });
+
+  it('sin reloj el ciclo se comporta igual que siempre — el parámetro es opcional', async () => {
+    const db = base([solicitudViva()]);
+    const { prov, llamadas } = proveedor(['p1']);
+    const r = await correrFlota(CFG(), prov, '2026-08-27', AHORA);
+    expect(llamadas.descargar).toEqual(['p1']);
+    expect(r.sinTurno).toBe(0);
+    expect(db.solicitudes[0].estado).toBe('descargada');
+  });
+});

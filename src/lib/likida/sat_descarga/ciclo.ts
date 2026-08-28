@@ -109,6 +109,14 @@ export interface ResumenFlota {
   consolidados: number;
   /** Lo que NO se pudo hacer, con el mensaje del proveedor TAL CUAL. */
   errores: string[];
+  /** Unidades de trabajo de ESTA flota que el RELOJ DE LA VUELTA dejó sin
+   *  mirar: solicitudes vivas sin verificar y paquetes listos sin bajar.
+   *
+   *  NO son errores y por eso no van en `errores`: nada falló, simplemente no
+   *  alcanzó el tiempo. Pero tampoco es una corrida limpia, y la ruta las suma
+   *  para que el latido diga `'parcial'`. Un 0 aquí significa «esta flota se
+   *  atendió completa», no «no se sabe». */
+  sinTurno: number;
 }
 
 interface ConfigFlota {
@@ -122,6 +130,7 @@ function vacio(tenantId: string): ResumenFlota {
     tenantId, verificadas: 0, descargadas: 0, solicitadas: 0,
     cfdisNuevos: 0, cfdisRepetidos: 0,
     casados: 0, ambiguos: 0, disponibles: 0, consolidados: 0, errores: [],
+    sinTurno: 0,
   };
 }
 
@@ -402,12 +411,17 @@ async function soltarSolicitudAtorada(
   return true;
 }
 
-/** Empuja UN paso del ciclo para UNA flota. */
+/** Empuja UN paso del ciclo para UNA flota.
+ *
+ *  `venceEn` es EL RELOJ DE LA VUELTA (epoch ms) — el instante a partir del
+ *  cual esta invocación de Vercel ya no cabe. Ver la nota grande de
+ *  `correrDescargaSat`. Sin él la flota se atiende entera, como siempre. */
 export async function correrFlota(
   cfg: ConfigFlota,
   prov: ProveedorDescargaSat,
   hoy: string,
   ahora: Date = new Date(),
+  venceEn?: number,
 ): Promise<ResumenFlota> {
   const r = vacio(cfg.tenantId);
 
@@ -424,7 +438,29 @@ export async function correrFlota(
   let paquetesBajados = 0;
   /** Las que este barrido soltó: dejan de contar como vivas para el paso 2. */
   const soltadas = new Set<string>();
-  for (const s of vivas ?? []) {
+  const listaVivas = vivas ?? [];
+  for (let iv = 0; iv < listaVivas.length; iv++) {
+    const s = listaVivas[iv];
+    // ── EL RELOJ, ANTES DE PREGUNTARLE AL PROVEEDOR (c7-1) ──────────────────
+    // Cada vuelta de aquí es una llamada de RED al PAC (`prov.verificar`) más
+    // uno o dos UPDATE, por hasta `MAX_VERIFICAR` solicitudes, en serie — y eso
+    // multiplicado por cada flota del barrido de afuera.
+    //
+    // El punto seguro es ÉSTE: antes de `prov.verificar`, cuando todavía no se
+    // ha tocado nada de esta solicitud. Cortar más adelante —entre la
+    // verificación y el UPDATE que la anota— tiraría el resultado de una
+    // llamada ya pagada y dejaría la solicitud con un `intentos` que no
+    // corresponde. Cortar aquí no deja nada a medias: el ciclo entero está
+    // diseñado para retomarse (el estado vive en `sat_descarga_solicitud`, no
+    // en memoria), así que una solicitud sin verificar hoy se verifica en la
+    // pasada de dentro de seis horas exactamente igual.
+    if (venceEn !== undefined && Date.now() >= venceEn) {
+      r.sinTurno += listaVivas.length - iv;
+      logger.warn('sat.flota.corte_por_reloj', {
+        tenantId: cfg.tenantId, sinVerificar: listaVivas.length - iv, verificadas: r.verificadas,
+      });
+      return r;
+    }
     const requestId = s.request_id as string | null;
     if (requestId === null) {
       // Un intento sin trámite no se puede verificar: no hay qué preguntar.
@@ -491,8 +527,41 @@ export async function correrFlota(
     let repetidosDeLaSolicitud = Number(s.cfdis_repetidos ?? 0);
 
     let todoBien = true;
-    for (const p of pendientes) {
+    for (let ip = 0; ip < pendientes.length; ip++) {
+      const p = pendientes[ip];
       if (paquetesBajados >= MAX_PAQUETES) { todoBien = false; break; }
+      // ── EL RELOJ, ANTES DE QUEMAR CUOTA DEL SAT (c7-1 + criterio #160) ─────
+      // ÉSTE ES EL CORTE MÁS DELICADO DEL ARCHIVO, y el que mejor ilustra la
+      // regla de «se pregunta antes de reservar el sello, nunca entre reservar
+      // y actuar». Aquí el sello no es una fila nuestra: es la CUOTA DEL SAT.
+      // Un paquete se puede bajar DOS veces y a la tercera el proveedor lo
+      // RECHAZA. Si el reloj cortara después de `prov.descargar` y antes del
+      // UPDATE de `paquetes_bajados`, el paquete quedaría bajado para el SAT y
+      // pendiente para nosotros: la próxima corrida lo volvería a pedir, y la
+      // siguiente se llevaría el rechazo. Habríamos gastado el derecho a bajar
+      // un paquete para tirar su contenido — el equivalente exacto de la
+      // reserva tomada y no usada que enterraba el aviso de peaje del mes.
+      //
+      // Así que se pregunta AQUÍ: antes de contar el paquete, antes de la
+      // llamada, cuando todavía no se le debe nada a nadie. Y NO se corta
+      // dentro de `ingerir`: un paquete es la unidad atómica de este ciclo —se
+      // baja, se ingiere y se anota— y partirlo por la mitad dejaría CFDI
+      // ingeridos dentro de un paquete que no figura como bajado.
+      //
+      // `todoBien = false` NO ES OPCIONAL, y es la parte que de verdad muerde:
+      // sin él, la solicitud se marcaría 'descargada' y `ultima_descarga_hasta`
+      // AVANZARÍA con paquetes sin bajar. Ese calendario no retrocede nunca, así
+      // que los CFDI de esos días quedarían fuera para siempre — el modo de
+      // falla silencioso que el comentario de abajo ya declaraba inaceptable.
+      // Un corte por reloj no puede convertirse en pérdida de datos fiscales.
+      if (venceEn !== undefined && Date.now() >= venceEn) {
+        todoBien = false;
+        r.sinTurno += pendientes.length - ip;
+        logger.warn('sat.paquetes.corte_por_reloj', {
+          tenantId: cfg.tenantId, requestId, sinBajar: pendientes.length - ip, bajadosEnEstaVuelta: paquetesBajados,
+        });
+        break;
+      }
       paquetesBajados++;
       const d = await prov.descargar(p);
       if (!d.ok) {
@@ -621,16 +690,48 @@ export interface ResumenCorrida {
   motivo?: string;
   flotas: number;
   resumenes: ResumenFlota[];
+  /** Unidades de trabajo que el RELOJ DE LA VUELTA dejó sin mirar en TODO el
+   *  barrido: las flotas a las que no se llegó, más lo que quedó pendiente
+   *  dentro de las que sí (`ResumenFlota.sinTurno`).
+   *
+   *  La ruta la mira para decidir el latido: `> 0` es `'parcial'`, nunca `'ok'`.
+   *  Un barrido cortado que se reporta verde es la clase de mentira que dejó al
+   *  runner mudo el 25 y el 28 de agosto de 2026. */
+  sinTurno: number;
 }
 
-/** El barrido de todas las flotas con descarga encendida. */
-export async function correrDescargaSat(ahora: Date = new Date()): Promise<ResumenCorrida> {
+/**
+ * El barrido de todas las flotas con descarga encendida.
+ *
+ * ── EL RELOJ DE LA VUELTA (auditoría ciclo 7, c7-1; deuda anotada por el fork
+ * del #160) ─────────────────────────────────────────────────────────────────
+ *
+ * Este barrido corría SIN RELOJ PROPIO. La ruta ya calculaba un `venceEn` y se
+ * lo pasaba a `avisarCierrePeaje`, que corre DESPUÉS — así que cuando la
+ * descarga se comía la vuelta, lo que se veía era el aviso de peaje saliendo
+ * con `sinTurno` alto y el latido diciendo `'parcial'`: el problema era VISIBLE
+ * pero no estaba arreglado, y quien pagaba la factura era el otro trabajo.
+ *
+ * Y este barrido tiene todo para comérsela: hasta 200 flotas, cada una con
+ * llamadas de RED a un PAC (verificar y descargar paquetes de miles de CFDI)
+ * más la ingesta fila por fila. Nada de eso es acotable a ojo — depende del
+ * proveedor, no de nosotros.
+ *
+ * El corte es LIMPIO por diseño del ciclo: el estado vive en
+ * `sat_descarga_solicitud`, no en memoria, y cada paquete ingerido se anota en
+ * cuanto se ingiere (0236). Una flota que no se miró hoy se mira en la pasada
+ * de dentro de seis horas sin haber perdido nada.
+ */
+export async function correrDescargaSat(
+  ahora: Date = new Date(),
+  opts: { venceEn?: number } = {},
+): Promise<ResumenCorrida> {
   const estado = estadoDescargaSat();
   const prov = resolverDescargaSat();
   if (prov === null) {
     // NO se simula nada y NO se devuelve un verde de mentira: se dice qué
     // falta, con las palabras que la pantalla también usa.
-    return { corrio: false, motivo: estado.motivo ?? 'La descarga masiva no está configurada.', flotas: 0, resumenes: [] };
+    return { corrio: false, motivo: estado.motivo ?? 'La descarga masiva no está configurada.', flotas: 0, resumenes: [], sinTurno: 0 };
   }
 
   const { data: configs, error } = await acotada(supabaseAdmin()
@@ -642,14 +743,35 @@ export async function correrDescargaSat(ahora: Date = new Date()): Promise<Resum
 
   const hoy = hoyMx(ahora);
   const resumenes: ResumenFlota[] = [];
-  for (const c of configs ?? []) {
+  const lista = configs ?? [];
+  let flotasSinTurno = 0;
+  for (let i = 0; i < lista.length; i++) {
+    const c = lista[i];
+    // ── EL RELOJ, ANTES DE ABRIR OTRA FLOTA (c7-1) ─────────────────────────
+    // La frontera entre flotas es el punto de corte más barato y más honesto
+    // que tiene este barrido: cada flota es independiente y su ciclo es
+    // reanudable por diseño. Cortar aquí no interrumpe ninguna conversación con
+    // el PAC ni deja una solicitud a medio verificar — simplemente no se
+    // empieza.
+    //
+    // Se cuentan las que se quedaron sin mirar, con nombre en el log y con
+    // número en el resumen: «se acabó el tiempo» sin el número es media verdad,
+    // y el latido necesita el número para decir `'parcial'` con fundamento.
+    if (opts.venceEn !== undefined && Date.now() >= opts.venceEn) {
+      flotasSinTurno = lista.length - i;
+      logger.warn('sat.barrido.corte_por_reloj', {
+        flotasSinTurno, atendidas: resumenes.length,
+        pendientes: lista.slice(i).map((x) => x.tenant_id as string).slice(0, 20),
+      });
+      break;
+    }
     const cfg: ConfigFlota = {
       tenantId: c.tenant_id as string,
       rfc: c.rfc as string,
       ultimaHasta: (c.ultima_descarga_hasta as string) || null,
     };
     try {
-      resumenes.push(await correrFlota(cfg, prov, hoy, ahora));
+      resumenes.push(await correrFlota(cfg, prov, hoy, ahora, opts.venceEn));
     } catch (e) {
       // Una flota que revienta no puede tumbar a las demás: se registra su
       // fallo como suyo y el barrido sigue.
@@ -659,5 +781,10 @@ export async function correrDescargaSat(ahora: Date = new Date()): Promise<Resum
       logger.error('sat.flota_fallo', { tenantId: cfg.tenantId, err: e instanceof Error ? e.message : String(e) });
     }
   }
-  return { corrio: true, flotas: resumenes.length, resumenes };
+  // Las flotas que no se abrieron MÁS lo que quedó pendiente dentro de las que
+  // sí. Se suman en un solo número porque para el latido significan lo mismo
+  // —«esta pasada dejó trabajo del SAT sin hacer»—, y el detalle por flota
+  // sigue estando en `resumenes[].sinTurno` para quien lo necesite.
+  const sinTurno = flotasSinTurno + resumenes.reduce((n, x) => n + x.sinTurno, 0);
+  return { corrio: true, flotas: resumenes.length, resumenes, sinTurno };
 }

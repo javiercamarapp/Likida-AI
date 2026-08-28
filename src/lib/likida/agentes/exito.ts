@@ -64,6 +64,54 @@ export interface ResultadoExito {
   motivo?: string;
   /** Gasto de modelo MEDIDO. $0 en los cinco deterministas. */
   costoUsd: number;
+  /** EL RELOJ DE LA VUELTA se agotó a media faena y quedó trabajo sin mirar.
+   *  No es un fallo y tampoco es «no había nada que hacer»: es la tercera cosa,
+   *  y sin ella el runner pintaría la vuelta completa. El runner la sube a
+   *  `saltadosPorReloj` (regla de la #152), que es lo que hace que el latido
+   *  diga `'parcial'` en vez de `'ok'`. */
+  sinTurno?: boolean;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RELOJ DE LA VUELTA — Y POR QUÉ NO SE LLAMA `venceEn` EN ESTE ARCHIVO
+// (auditoría ciclo 7, c7-1).
+//
+// CUIDADO: en este módulo `venceEn` YA SIGNIFICA OTRA COSA, y confundirlas
+// sería un error caro. `TicketVigilado.venceEn` es el SLA DEL TICKET —la
+// columna `ticket_soporte.vence_en`, un ISO de calendario escrito al abrir el
+// ticket, que `semaforoTicket` resta contra ahora para pintar el semáforo
+// (0051)—. Es un plazo DEL CLIENTE, medido en horas o días, y no tiene nada
+// que ver con si esta invocación de Vercel todavía cabe.
+//
+// Lo que este archivo NO tenía es el otro reloj: el PRESUPUESTO DE TIEMPO DE
+// LA INVOCACIÓN, un epoch en milisegundos que vale para la vuelta entera del
+// runner y que se apaga a los ~270 s. Para que nadie los mezcle —ni al leer ni
+// al escribir la próxima rama— aquí se llama `venceEnVuelta`, con `Vuelta` de
+// «la vuelta del runner». Un `venceEn: number` suelto al lado de un
+// `venceEn: string` que significa el SLA de un cliente es una trampa puesta
+// para el siguiente que toque el archivo.
+//
+// Los dos incidentes que justifican meterlo: el 25-ago-2026 («Sin latido:
+// runner hace 286 min») y el 28-ago-2026 00:03 UTC —32 corridas, todas en
+// `ok`, y aun así ni un latido escrito—. En los dos, un motor que iteraba por
+// dentro entró UNA vez por la puerta del reloj del despacho y ya no volvió a
+// mirarlo: se comió lo que quedaba del presupuesto y Vercel mató la función
+// antes de que la ruta pudiera latir.
+//
+// Se redefine aquí en vez de importar `relojAgotado` de `runner.ts` por lo
+// mismo que lo hicieron `direccion.ts` y `leads.ts` en la #158: el runner carga
+// este módulo por import dinámico justo para no arrastrarlo en cada vuelta, y
+// un import de vuelta cerraría el ciclo. Dos líneas no valen esa dependencia.
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Se EXPORTA porque `faq.ts` —el sexto agente de éxito, que vive en su propio
+// archivo por el peso del corpus— necesita exactamente la misma pregunta, y ya
+// importa de aquí `encolarPiezaExito`, `piezaExistente` y `cuentaComoRespuesta`.
+// Una segunda copia allá sería la tercera definición de dos líneas idénticas, y
+// lo que se busca es justo lo contrario: que buscar `relojAgotado` en el fuente
+// encuentre a TODOS los que preguntan la hora — y, por omisión, a los que no.
+export function relojAgotado(venceEnVuelta: number | undefined): boolean {
+  return venceEnVuelta !== undefined && Date.now() >= venceEnVuelta;
 }
 
 // ── Topes declarados ───────────────────────────────────────────────────────
@@ -391,7 +439,7 @@ export function armarParteOnboarding(
   return { cuerpo: lineas.join('\n'), atoros, muertas };
 }
 
-async function correrOnboarding(disparo: DisparoCorrida, hoy: string): Promise<ResultadoExito> {
+async function correrOnboarding(disparo: DisparoCorrida, hoy: string, venceEnVuelta?: number): Promise<ResultadoExito> {
   const inicio = new Date();
   const agente = 'onboarding_cliente';
   const titulo = `Onboarding — ${hoy}`;
@@ -422,6 +470,37 @@ async function correrOnboarding(disparo: DisparoCorrida, hoy: string): Promise<R
 
     const enOnboarding: FlotaEnOnboarding[] = [];
     for (const f of flotas) {
+      // ── EL RELOJ, ANTES DE LA CONSULTA DE CADA FLOTA (c7-1) ───────────────
+      // Este `for` hace UNA ida a la base POR FLOTA (`contarDeFlota`), así que
+      // con el tope de 500 flotas son 500 consultas en serie dentro de una
+      // función que Vercel mata a los 300 s. Es exactamente la forma del
+      // incidente: el candado 0 del runner preguntó la hora UNA vez, antes de
+      // despachar este agente, y aquí adentro ya nadie la volvió a preguntar.
+      //
+      // POR QUÉ EL CORTE ABANDONA EL PARTE EN VEZ DE PUBLICARLO A MEDIAS —
+      // ésta es la parte importante y es la regla del #160 aplicada aquí. El
+      // parte es idempotente POR TÍTULO (`Onboarding — 2026-08-27`, arbitrado
+      // por el índice único de la 0218): encolar uno armado con 3 de 500 flotas
+      // SELLA EL DÍA. La pasada de dentro de cuatro horas encontraría
+      // «ya_existia» y no fabricaría nunca el parte completo — o sea que un
+      // corte por reloj enterraría el parte del día entero, igual que una
+      // reserva tomada y no usada enterraba el aviso de peaje del mes. Y sería
+      // peor que no cortar: el parte diría «Flotas en seguimiento: 3» sin
+      // mentir en ninguna línea y aun así sería falso de cabo a rabo.
+      //
+      // Así que el punto seguro de corte es AQUÍ, ANTES de gastar la consulta y
+      // ANTES de sellar nada: se tira lo armado —que no cuesta nada, es
+      // memoria— y se dice `sinTurno`. Lo que no se hizo se hace completo en la
+      // próxima pasada, que es lo único que produce un parte honesto.
+      if (relojAgotado(venceEnVuelta)) {
+        const sinMirar = flotas.length - enOnboarding.length;
+        logger.warn('exito.onboarding.corte_por_reloj', { sinMirar, miradas: enOnboarding.length });
+        await anotar(agente, inicio, 'ok', disparo, { parte: 'sin_turno', sin_mirar: sinMirar, miradas: enOnboarding.length });
+        return {
+          resultado: 'corrio', piezas: 0, costoUsd: 0, sinTurno: true,
+          motivo: `el reloj de la vuelta se agotó con ${numero(sinMirar)} flota(s) sin mirar — el parte de hoy NO se fabricó a medias (sellaría el día con una lista incompleta); le toca completo en la próxima pasada`,
+        };
+      }
       // El conteo de viajes SÍ es duro: es la casilla que define si el
       // arranque ocurrió, y un 0 inventado diría que la flota nunca trabajó.
       const viajes = await contarDeFlota('viaje', 'created_at', f.id, null, null, 'exito.onboarding.viajes');
@@ -635,12 +714,13 @@ export function tocaReporteMensual(hoy: string): boolean {
   return Number(hoy.slice(8, 10)) >= 3;
 }
 
-async function correrExitoCliente(disparo: DisparoCorrida, hoy: string): Promise<ResultadoExito> {
+async function correrExitoCliente(disparo: DisparoCorrida, hoy: string, venceEnVuelta?: number): Promise<ResultadoExito> {
   const inicio = new Date();
   const agente = 'exito_cliente';
   try {
     const { flotas, truncado } = await leerFlotas();
     let piezas = 0;
+    let sinTurno = false;
     const motivos: string[] = [];
 
     // ── (a) El silencio, diario ────────────────────────────────────────────
@@ -651,6 +731,24 @@ async function correrExitoCliente(disparo: DisparoCorrida, hoy: string): Promise
       const corte = hace(DIAS_SILENCIO, hoy);
       const actividad: ActividadFlota[] = [];
       for (const f of flotas) {
+        // EL RELOJ, ANTES DE LAS CUATRO CONSULTAS DE ESTA FLOTA (c7-1). Este
+        // bucle es el MÁS CARO del archivo: son CUATRO `contarDeFlota` por
+        // flota —viajes, gastos, conversaciones e histórico—, o sea hasta
+        // 2,000 consultas en serie con el tope de 500 flotas.
+        //
+        // Se abandona el parte en vez de encolarlo a medias por lo mismo que
+        // en onboarding: el título `Silencio — <día>` sella el día, y un parte
+        // de silencio armado con media lista es peor que ninguno — la gracia
+        // del agente es decir QUIÉN está callado, y una flota que no se miró
+        // se lee igual que una flota que sí habló. Decir «no alcancé» es
+        // honesto; publicar la lista corta sería inventar que las demás están
+        // bien. Lo armado se tira (es memoria) y se dice `sinTurno`.
+        if (relojAgotado(venceEnVuelta)) {
+          sinTurno = true;
+          logger.warn('exito.silencio.corte_por_reloj', { sinMirar: flotas.length - actividad.length, miradas: actividad.length });
+          motivos.push(`el reloj de la vuelta se agotó con ${numero(flotas.length - actividad.length)} flota(s) sin mirar — el parte de silencio NO se fabricó a medias; le toca completo en la próxima pasada`);
+          break;
+        }
         actividad.push({
           flota: f,
           viajesVentana: await contarDeFlota('viaje', 'created_at', f.id, corte, null, 'exito.silencio.viajes'),
@@ -660,7 +758,11 @@ async function correrExitoCliente(disparo: DisparoCorrida, hoy: string): Promise
         });
       }
       const calladas = actividad.filter(enSilencio);
-      if (calladas.length === 0) {
+      // El `break` de arriba ya dejó dicho el motivo; lo que NO puede pasar es
+      // que la lista corta llegue a `encolarPiezaExito` y selle el día.
+      if (sinTurno) {
+        // nada que encolar: el parte de hoy se fabrica completo o no se fabrica.
+      } else if (calladas.length === 0) {
         // Un parte diario que dice «nadie está callado» enseña a no leer el
         // parte. El dato queda en la corrida, no en la bandeja.
         motivos.push(flotas.length === 0
@@ -677,11 +779,38 @@ async function correrExitoCliente(disparo: DisparoCorrida, hoy: string): Promise
     }
 
     // ── (b) El reporte de valor, mensual y por flota ───────────────────────
-    if (!tocaReporteMensual(hoy)) {
+    if (sinTurno) {
+      // Si ya no hubo reloj para (a), tampoco lo hay para (b): entrar aquí
+      // sería empezar una faena nueva con el presupuesto agotado, y lo que se
+      // gasta de más se lo quita a la ruta para escribir el latido.
+      motivos.push('el reloj de la vuelta ya estaba agotado — el reporte de valor ni se intentó');
+    } else if (!tocaReporteMensual(hoy)) {
       motivos.push('antes del día 3 el mes todavía recibe filas — el reporte de valor no corre');
     } else {
       const mes = mesAnterior(hoy);
-      for (const f of flotas) {
+      let flotasSinMirar = 0;
+      for (let i = 0; i < flotas.length; i++) {
+        const f = flotas[i];
+        // ── EL RELOJ, ANTES DE PREGUNTAR POR EL SELLO (c7-1 + criterio #160) ─
+        // AQUÍ el corte SÍ es a mitad de lista y NO pasa nada, y la diferencia
+        // con los partes de arriba es la que importa: este bucle fabrica UNA
+        // PIEZA POR FLOTA, cada una con su propio título (`Valor — mes — id`).
+        // Cortar deja las ya encoladas encoladas —cada una completa y correcta—
+        // y a las que faltan sin sellar, así que la próxima pasada las fabrica
+        // sin tropezar con nada. No hay un «parte del día» que se pueda enterrar.
+        //
+        // Se pregunta ANTES de `piezaExistente` —la sonda del sello— y no entre
+        // ella y `encolarPiezaExito`: ése es el hueco que el fork del #160
+        // señaló en el aviso de peaje, donde cortar entre reservar y actuar
+        // enterraba el aviso del mes. Aquí el equivalente sería gastar la
+        // lectura del valor del mes para tirarla.
+        if (relojAgotado(venceEnVuelta)) {
+          sinTurno = true;
+          flotasSinMirar = flotas.length - i;
+          logger.warn('exito.valor.corte_por_reloj', { sinMirar: flotasSinMirar, piezas });
+          motivos.push(`el reloj de la vuelta cortó el reporte de valor con ${numero(flotasSinMirar)} flota(s) sin mirar — las que ya se encolaron quedan; el resto le toca en la próxima pasada`);
+          break;
+        }
         const titulo = `Valor — ${mes} — ${f.id.slice(0, 8)}`;
         if (await piezaExistente(agente, titulo)) continue;
         const v = await leerValorDelMes(f.id, mes);
@@ -698,8 +827,15 @@ async function correrExitoCliente(disparo: DisparoCorrida, hoy: string): Promise
       }
     }
 
-    await anotar(agente, inicio, 'ok', disparo, { piezas, flotas: flotas.length, motivos });
-    return { resultado: 'corrio', piezas, motivo: piezas === 0 ? motivos.join(' · ') || undefined : undefined, costoUsd: 0 };
+    await anotar(agente, inicio, 'ok', disparo, { piezas, flotas: flotas.length, motivos, sin_turno: sinTurno });
+    return {
+      resultado: 'corrio', piezas, costoUsd: 0,
+      ...(sinTurno ? { sinTurno: true } : {}),
+      // Con corte por reloj el motivo se dice AUNQUE se hayan fabricado piezas:
+      // «encolé 3» a secas escondería que otras 40 flotas no se miraron, que es
+      // justo el silencio que este arreglo existe para romper.
+      motivo: (piezas === 0 || sinTurno) ? (motivos.join(' · ') || undefined) : undefined,
+    };
   } catch (e) {
     await anotar(agente, inicio, 'fallo', disparo, { dia: hoy },
       `No se pudo armar el parte de éxito del cliente: ${e instanceof Error ? e.message : String(e)}`.slice(0, 500));
@@ -787,7 +923,7 @@ export function armarParteRetencion(usos: UsoSemanal[], lunes: string, truncado:
   return { cuerpo: lineas.join('\n'), gatillos };
 }
 
-async function correrRetencion(disparo: DisparoCorrida, hoy: string): Promise<ResultadoExito> {
+async function correrRetencion(disparo: DisparoCorrida, hoy: string, venceEnVuelta?: number): Promise<ResultadoExito> {
   const inicio = new Date();
   const agente = 'retencion';
   const lunes = lunesDeSemana(hoy);
@@ -803,6 +939,25 @@ async function correrRetencion(disparo: DisparoCorrida, hoy: string): Promise<Re
     const corte14 = hace(14, hoy);
     const usos: UsoSemanal[] = [];
     for (const f of flotas) {
+      // EL RELOJ, ANTES DE LAS TRES CONSULTAS DE ESTA FLOTA (c7-1). Tres idas
+      // a la base por flota (semana, semana previa y fallos), en serie.
+      //
+      // Y aquí abandonar el parte importa MÁS que en los diarios, porque éste
+      // es SEMANAL: el título `Retención — semana del <lunes>` sella los siete
+      // días. Un parte armado con media lista no lo corrige la pasada de las
+      // cuatro horas siguientes ni la de mañana — se queda así hasta el lunes
+      // que viene, con los gatillos de riesgo de las flotas que no se miraron
+      // apagados durante una semana entera. Un cliente a punto de irse es
+      // exactamente lo que este agente existe para ver a tiempo.
+      if (relojAgotado(venceEnVuelta)) {
+        const sinMirar = flotas.length - usos.length;
+        logger.warn('exito.retencion.corte_por_reloj', { sinMirar, miradas: usos.length, semana: lunes });
+        await anotar(agente, inicio, 'ok', disparo, { parte: 'sin_turno', sin_mirar: sinMirar, miradas: usos.length, semana: lunes });
+        return {
+          resultado: 'corrio', piezas: 0, costoUsd: 0, sinTurno: true,
+          motivo: `el reloj de la vuelta se agotó con ${numero(sinMirar)} flota(s) sin mirar — el parte SEMANAL no se fabricó a medias (sellaría la semana y apagaría los gatillos de las flotas no miradas hasta el lunes que viene); le toca completo en la próxima pasada`,
+        };
+      }
       usos.push({
         flota: f,
         estaSemana: await contarDeFlota('viaje', 'created_at', f.id, corte7, null, 'exito.retencion.semana'),
@@ -1005,7 +1160,7 @@ export function armarParteCobranzaSaas(
   return lineas.join('\n');
 }
 
-async function correrCobranzaSaas(disparo: DisparoCorrida, hoy: string): Promise<ResultadoExito> {
+async function correrCobranzaSaas(disparo: DisparoCorrida, hoy: string, venceEnVuelta?: number): Promise<ResultadoExito> {
   const inicio = new Date();
   const agente = 'cobranza_saas';
   const titulo = `Cobranza SaaS — ${hoy}`;
@@ -1014,7 +1169,28 @@ async function correrCobranzaSaas(disparo: DisparoCorrida, hoy: string): Promise
     const toques = toquesDeHoy(facturas, hoy);
 
     let propuestas = 0;
-    for (const t of toques) {
+    let sinTurno = false;
+    let toquesSinMirar = 0;
+    for (let i = 0; i < toques.length; i++) {
+      const t = toques[i];
+      // ── EL RELOJ, ANTES DE PREGUNTAR POR EL SELLO (c7-1 + criterio #160) ───
+      // Dos idas a la base por toque (la sonda del título y el encolado). Se
+      // pregunta ANTES de `piezaExistente` y NUNCA entre la sonda y
+      // `encolarPiezaExito`: cortar en ese hueco gastaría la lectura para
+      // tirarla, y es el mismo hueco que en el aviso de peaje dejaba el sello
+      // puesto sobre una acción que no ocurrió.
+      //
+      // Cortar aquí es seguro porque cada toque es su propia pieza, con título
+      // propio (`tituloToque`) arbitrado por el índice único: las ya encoladas
+      // quedan, las que faltan no quedaron sembradas de nada y salen íntegras
+      // en la próxima pasada. Lo que NO se puede hacer es sellar el parte del
+      // día con las cuentas a medias — de eso se encarga el `if` de abajo.
+      if (relojAgotado(venceEnVuelta)) {
+        sinTurno = true;
+        toquesSinMirar = toques.length - i;
+        logger.warn('exito.cobranza_saas.corte_por_reloj', { sinMirar: toquesSinMirar, propuestas });
+        break;
+      }
       const tituloToqueHoy = tituloToque(t);
       if (await piezaExistente(agente, tituloToqueHoy)) continue;
       const res = await encolarPiezaExito(agente, 'recordatorio_cobranza', tituloToqueHoy,
@@ -1025,8 +1201,17 @@ async function correrCobranzaSaas(disparo: DisparoCorrida, hoy: string): Promise
       if (res === 'encolada') propuestas += 1;
     }
 
+    // EL PARTE DEL DÍA NO SE SELLA CON LAS CUENTAS A MEDIAS. `armarParteCobranzaSaas`
+    // escribe «de N toques de hoy se prepararon M propuestas», y con el bucle
+    // cortado esa M es una fracción que el texto presentaría como el total. Peor:
+    // el título `Cobranza SaaS — <día>` es idempotente, así que ese parte falso
+    // sellaría el día y la pasada de dentro de cuatro horas —la que SÍ va a
+    // terminar los toques— encontraría «ya_existia» y no lo corregiría nunca.
+    // Las propuestas ya encoladas no se pierden (cada una tiene su propio
+    // título); lo único que se pospone es el resumen, que es justo lo que puede
+    // esperar cuatro horas.
     let parte: 'encolada' | 'ya_existia' | 'ya_estaba' = 'ya_estaba';
-    if (!(await piezaExistente(agente, titulo))) {
+    if (!sinTurno && !(await piezaExistente(agente, titulo))) {
       parte = await encolarPiezaExito(agente, 'parte_cobranza_saas', titulo,
         armarParteCobranzaSaas(facturas, toques, propuestas, hoy), {
           por_cobrar: facturas.length, toques: toques.length, propuestas,
@@ -1035,12 +1220,18 @@ async function correrCobranzaSaas(disparo: DisparoCorrida, hoy: string): Promise
     }
 
     const piezas = propuestas + (parte === 'encolada' ? 1 : 0);
-    await anotar(agente, inicio, 'ok', disparo, { por_cobrar: facturas.length, toques: toques.length, propuestas, parte });
+    await anotar(agente, inicio, 'ok', disparo, {
+      por_cobrar: facturas.length, toques: toques.length, propuestas, parte,
+      ...(sinTurno ? { sin_turno: toquesSinMirar } : {}),
+    });
     return {
       resultado: 'corrio', piezas, costoUsd: 0,
-      motivo: piezas === 0
-        ? (facturas.length === 0 ? '0 mensualidades por cobrar y el parte de hoy ya está' : 'todo lo de hoy ya estaba en la bandeja')
-        : undefined,
+      ...(sinTurno ? { sinTurno: true } : {}),
+      motivo: sinTurno
+        ? `el reloj de la vuelta cortó la cobranza con ${numero(toquesSinMirar)} toque(s) sin mirar — las propuestas ya encoladas quedan; el parte del día NO se selló con cuentas a medias y sale completo en la próxima pasada`
+        : (piezas === 0
+          ? (facturas.length === 0 ? '0 mensualidades por cobrar y el parte de hoy ya está' : 'todo lo de hoy ya estaba en la bandeja')
+          : undefined),
     };
   } catch (e) {
     await anotar(agente, inicio, 'fallo', disparo, { dia: hoy },
@@ -1141,8 +1332,16 @@ export function armarParteSoporte(tickets: TicketVigilado[], ahoraIso: string, h
   return { cuerpo: lineas.join('\n'), vencidos, sinRespuesta };
 }
 
-/** Los tickets vivos con el conteo de su hilo. LANZA ante error de lectura. */
-export async function leerTicketsVivos(): Promise<{ tickets: TicketVigilado[]; truncado: boolean }> {
+/** Los tickets vivos con el conteo de su hilo. LANZA ante error de lectura.
+ *
+ *  `venceEnVuelta` es EL RELOJ DE LA INVOCACIÓN (epoch ms) — no confundir con
+ *  `TicketVigilado.venceEn`, que es el SLA del ticket y es un ISO de calendario.
+ *  Ver la nota grande de `relojAgotado` arriba: en este archivo conviven los dos
+ *  plazos y por eso el de la vuelta lleva apellido.
+ *
+ *  `sinTurno` dice que el reloj cortó la lectura y la lista devuelta está
+ *  INCOMPLETA — el llamador NO puede tratarla como el censo de tickets vivos. */
+export async function leerTicketsVivos(venceEnVuelta?: number): Promise<{ tickets: TicketVigilado[]; truncado: boolean; sinTurno: boolean }> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('ticket_soporte')
     // `abierto_por` es el SOLICITANTE: sin él no se puede decir si el hilo
@@ -1156,7 +1355,22 @@ export async function leerTicketsVivos(): Promise<{ tickets: TicketVigilado[]; t
   const truncado = filas.length > TOPE_TICKETS;
 
   const tickets: TicketVigilado[] = [];
-  for (const f of filas.slice(0, TOPE_TICKETS)) {
+  const aMirar = filas.slice(0, TOPE_TICKETS);
+  for (const f of aMirar) {
+    // EL RELOJ, ANTES DE LEER EL HILO DE ESTE TICKET (c7-1). Una consulta por
+    // ticket —el hilo completo, hasta 500 mensajes— por hasta 200 tickets: 200
+    // idas a la base en serie que nadie estaba cronometrando.
+    //
+    // Aquí no se corta y se sigue: se corta y se DEVUELVE la lista marcada como
+    // incompleta, porque lo que el llamador hace con ella no admite medias
+    // tintas — arma un censo («N tickets vivos, M vencidos») y escala al
+    // operador. Un censo corto presentado como completo diría que hay 3 tickets
+    // vencidos cuando hay 12. Quien decide qué hacer con la duda es
+    // `correrSoporte`, no esta lectura.
+    if (relojAgotado(venceEnVuelta)) {
+      logger.warn('exito.soporte.corte_por_reloj', { sinMirar: aMirar.length - tickets.length, miradas: tickets.length });
+      return { tickets, truncado, sinTurno: true };
+    }
     const id = String(f.id);
     // Ya no es un `count` de cabecera: hace falta MIRAR cada mensaje para
     // saber si es interno y de quién es. Se acota igual y el hilo de un
@@ -1185,15 +1399,40 @@ export async function leerTicketsVivos(): Promise<{ tickets: TicketVigilado[]; t
       respuestas,
     });
   }
-  return { tickets, truncado };
+  return { tickets, truncado, sinTurno: false };
 }
 
-async function correrSoporte(disparo: DisparoCorrida, hoy: string, ahora: Date): Promise<ResultadoExito> {
+async function correrSoporte(disparo: DisparoCorrida, hoy: string, ahora: Date, venceEnVuelta?: number): Promise<ResultadoExito> {
   const inicio = new Date();
   const agente = 'soporte';
   const titulo = `Soporte — ${hoy}`;
   try {
-    const { tickets, truncado } = await leerTicketsVivos();
+    const { tickets, truncado, sinTurno } = await leerTicketsVivos(venceEnVuelta);
+
+    // ── EL CENSO INCOMPLETO NO ESCALA NI SE ENCOLA ─────────────────────────
+    // Se sale ANTES de `armarParteSoporte`, y las dos razones son de las que
+    // hacen daño de verdad:
+    //
+    //   1. LA ESCALACIÓN. `alertarOperador` lleva un piso de reserva en Redis
+    //      para no repetir el mismo aviso; disparar «3 tickets vencidos» sobre
+    //      una lista truncada consumiría ese piso y podría CALLAR la alerta
+    //      correcta —«12 vencidos»— cuando la próxima pasada sí termine de
+    //      leer. Una alerta a la baja es peor que ninguna: deja al operador
+    //      tranquilo con un dato falso.
+    //   2. EL PARTE. El título `Soporte — <día>` es idempotente y sellaría el
+    //      día con un censo corto que el texto presenta como el total.
+    //
+    // Se pospone a la próxima pasada, que es en cuatro horas: el SLA de los
+    // tickets se mide en horas o días, así que esperar una pasada no pierde
+    // nada, y afirmar un censo que no se terminó de leer sí.
+    if (sinTurno) {
+      await anotar(agente, inicio, 'ok', disparo, { parte: 'sin_turno', leidos: tickets.length });
+      return {
+        resultado: 'corrio', piezas: 0, costoUsd: 0, sinTurno: true,
+        motivo: `el reloj de la vuelta cortó la lectura de tickets (${numero(tickets.length)} leído(s)) — ni se escaló ni se encoló sobre un censo incompleto: una alerta a la baja tranquiliza con un dato falso. Sale completo en la próxima pasada`,
+      };
+    }
+
     const { cuerpo, vencidos, sinRespuesta } = armarParteSoporte(tickets, ahora.toISOString(), hoy, truncado);
 
     // El SLA vencido va al operador YA. Antes de encolar: si la pieza no
@@ -1245,17 +1484,23 @@ export async function correrAgenteExito(
   disparo: DisparoCorrida = 'cron',
   hoy: string = hoyMx(),
   ahora: Date = new Date(),
+  /** EL RELOJ DE LA VUELTA del runner (epoch ms), no el SLA de ningún ticket
+   *  —ver la nota de `relojAgotado`—. Opcional: sin él los seis se comportan
+   *  igual que siempre, que es lo que quieren el copiloto y las pruebas que
+   *  llaman a un agente suelto. Lo pasa el cron, que es el único que corre
+   *  contra un `maxDuration`. */
+  venceEnVuelta?: number,
 ): Promise<ResultadoExito> {
   logger.info('exito.corrida', { agente: id, disparo });
   switch (id) {
-    case 'onboarding_cliente': return correrOnboarding(disparo, hoy);
-    case 'exito_cliente': return correrExitoCliente(disparo, hoy);
-    case 'retencion': return correrRetencion(disparo, hoy);
-    case 'cobranza_saas': return correrCobranzaSaas(disparo, hoy);
-    case 'soporte': return correrSoporte(disparo, hoy, ahora);
+    case 'onboarding_cliente': return correrOnboarding(disparo, hoy, venceEnVuelta);
+    case 'exito_cliente': return correrExitoCliente(disparo, hoy, venceEnVuelta);
+    case 'retencion': return correrRetencion(disparo, hoy, venceEnVuelta);
+    case 'cobranza_saas': return correrCobranzaSaas(disparo, hoy, venceEnVuelta);
+    case 'soporte': return correrSoporte(disparo, hoy, ahora, venceEnVuelta);
     case 'atencion_faq': {
       const { correrAtencionFaq } = await import('./faq');
-      return correrAtencionFaq(disparo, hoy);
+      return correrAtencionFaq(disparo, hoy, venceEnVuelta);
     }
   }
 }

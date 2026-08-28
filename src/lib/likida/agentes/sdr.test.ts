@@ -127,3 +127,59 @@ describe('c5-14 — el formato se verifica sobre el TEXTO FINAL, asunto incluido
     expect(encolar).toHaveBeenCalledWith(expect.objectContaining({ tipo: 'correo_seguimiento' }));
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RELOJ TAMBIÉN EN LA BÚSQUEDA (auditoría ciclo 7, c7-1).
+//
+// El `for` de `correrSdr` ya preguntaba la hora al FABRICAR (#152), pero la
+// BÚSQUEDA que lo alimenta no la preguntaba nunca — y cuesta: la sobre-lectura
+// es ×5 (25 filas para 5 candidatos) y cada fila son DOS idas a la base (el
+// historial de contactos y la revisión de rebote/queja). Con la cola llena de
+// prospectos que ya contestaron o ya rebotaron, esas 50 consultas se gastan
+// enteras ANTES de que el reloj del lote llegue a preguntar por primera vez.
+// Es el mismo hueco que la #158 cerró en `candidatoFicha` de `leads.ts`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('el reloj de la vuelta corta también la BÚSQUEDA del SDR (c7-1)', () => {
+  const RELOJ_VENCIDO = () => Date.now() - 1;
+
+  it('la búsqueda con el reloj vencido no gasta ni una consulta de historial', async () => {
+    respuestas.set('prospecto', [{ data: [PROSPECTO, { ...PROSPECTO, id: 'pr-2' }], error: null }]);
+    // Si el bucle corriera, se comería estas dos respuestas.
+    respuestas.set('prospecto_contacto', [{ data: [{ direccion: 'salida', ocurrio_en: hace(4) }], error: null }]);
+
+    const r = await candidatosDeSeguimiento(5, RELOJ_VENCIDO());
+
+    expect(r).toEqual([]);
+    // CORTA de verdad: la consulta por prospecto NO se gastó.
+    expect(respuestas.get('prospecto_contacto')).toHaveLength(1);
+  });
+
+  it('un corte en la BÚSQUEDA no puede ser mudo: la corrida lo reporta como sinTurno, no como «no había a quién»', async () => {
+    // El `beforeEach` de este archivo solo limpia `respuestas`; el contador del
+    // modelo se arrastra de las pruebas de arriba y aquí se afirma sobre él.
+    generar.mockClear();
+    respuestas.set('prospecto', [{ data: [PROSPECTO], error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: [{ direccion: 'salida', ocurrio_en: hace(4) }], error: null }]);
+
+    const r = await correrSdr('cron', 5, RELOJ_VENCIDO());
+
+    // La búsqueda devolvió CERO candidatos porque el reloj la cortó, no porque
+    // no hubiera a quién. Sin el piso de 1, `sinTurno` sería 0 y el resultado
+    // —`piezas: 0, sinTurno: 0`— sería indistinguible del estado sano: el
+    // runner no metería al SDR en `saltadosPorReloj` y el latido diría 'ok'.
+    // Ése es exactamente el 28-ago-2026: 32 corridas en 'ok' y ni un latido.
+    expect(r.candidatos).toBe(0);
+    expect(r.piezas).toBe(0);
+    expect(r.sinTurno).toBeGreaterThanOrEqual(1);
+    expect(generar).not.toHaveBeenCalled();
+  });
+
+  it('sin reloj la búsqueda corre entera — el parámetro es opcional a propósito', async () => {
+    respuestas.set('prospecto', [{ data: [PROSPECTO], error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: [{ direccion: 'salida', ocurrio_en: hace(4) }], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    const r = await candidatosDeSeguimiento(5);
+    expect(r).toHaveLength(1);
+  });
+});
