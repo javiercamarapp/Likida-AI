@@ -16,7 +16,36 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { readFileSync } from 'node:fs';
-import { sinComentarios, fuentesDeProduccion } from './codigo';
+import { fuentesDeProduccion } from './codigo';
+
+/**
+ * El fuente sin comentarios y CON LAS MISMAS LÍNEAS que el original.
+ *
+ * `sinComentarios` de `codigo.ts` no sirve aquí y hay que decir por qué, porque
+ * la diferencia es invisible hasta que muerde: colapsa cada bloque `/* … *\/`
+ * en un espacio y BORRA las líneas que empiezan con `//`. Para preguntar «¿este
+ * símbolo aparece en el código?» da igual — no hay líneas que citar. Aquí no:
+ * este módulo reporta `archivo:línea` y busca la marca de exención en las
+ * líneas de ARRIBA del `.limit(`, y las dos cosas necesitan que la línea N de
+ * la vista limpia sea la línea N del archivo.
+ *
+ * Medido el 28-ago-2026 con la primera versión, que sí usaba `sinComentarios`:
+ * 39 de los `.limit(` de cuatro archivos reportaban una línea que ni siquiera
+ * contenía un `.limit(` —`export interface Puntaje {`, `truncado,`, `}`—,
+ * porque el JSDoc de arriba se había comido los renglones. Con esos números, la
+ * marca `// orden-no-importa:` se habría buscado en el sitio equivocado: una
+ * declaración legítima se ignora y una ajena se toma por buena.
+ *
+ * Aquí un bloque se sustituye por espacios (conservando sus saltos de línea) y
+ * una línea de `//` se vacía, nunca se quita.
+ */
+export function sinComentariosMismasLineas(fuente: string): string {
+  return fuente
+    .replace(/\/\*[\s\S]*?\*\//g, (bloque) => bloque.replace(/[^\n]/g, ' '))
+    .split('\n')
+    .map((l) => (l.trim().startsWith('//') ? '' : l))
+    .join('\n');
+}
 
 /** Un `.limit(` encontrado en el fuente, con lo que se sabe de su cadena. */
 export interface SitioLimite {
@@ -106,10 +135,10 @@ export function cadenaAntes(fuente: string, i: number): string {
 export function sitiosDe(archivo: string, crudo: string): SitioLimite[] {
   // Los comentarios se quitan para BUSCAR (media docena de comentarios del repo
   // citan `.limit(5000)` para explicar por qué ya no está)…
-  const limpio = sinComentarios(crudo);
+  const limpio = sinComentariosMismasLineas(crudo);
   // …pero la marca de exención se busca en el fuente CRUDO, porque es un
-  // comentario. Las dos vistas tienen el mismo número de líneas: `sinComentarios`
-  // reemplaza y filtra por línea, nunca reordena.
+  // comentario. Las dos vistas tienen EXACTAMENTE las mismas líneas — ver el
+  // porqué (y el bug medido) en `sinComentariosMismasLineas`.
   const lineasCrudas = crudo.split('\n');
   const salida: SitioLimite[] = [];
   const re = /\.limit\s*\(/g;

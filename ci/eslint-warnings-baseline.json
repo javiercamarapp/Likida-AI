@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "totalWarnings": 159,
+  "totalWarnings": 160,
   "byFileRule": {
     "src/app/admin/mi-perfil/avatar_validado.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/app/admin/panel_dueno_href.test.ts::security/detect-non-literal-fs-filename": 1,
@@ -60,6 +60,7 @@
     "src/lib/likida/intake/cfdi.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/likida/intake/desglose_peaje.ts::security/detect-unsafe-regex": 2,
     "src/lib/likida/intake/sanitizar.ts::security/detect-unsafe-regex": 1,
+    "src/lib/likida/limite_con_orden.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/likida/liquidacion/acreditable.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/likida/marca.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/likida/normas/fundamento.ts::security/detect-unsafe-regex": 1,
