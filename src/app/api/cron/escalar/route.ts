@@ -249,6 +249,35 @@ export async function GET(req: Request) {
     huboFallo = true;
   }
 
+  // ── EL CUARTO BARRIDO: LAS REGLAS DE LA FLOTA (A19, mig. 0229) ──────────
+  // Las vigilancias que el dueño o el contador declararon en lenguaje natural
+  // y CONFIRMARON. Va aquí y no en un cron propio por la misma razón que los
+  // relojes: es un reloj más sobre datos que Likida ya tiene, la cadencia
+  // horaria le sobra (nada de esto se mide en minutos), y separarlo sería
+  // ceremonia — otra URL, otro secreto, otro latido que vigilar.
+  //
+  // NO tiene palanca propia: no es un agente del catálogo de la compañía, es
+  // una feature del producto que la flota compró. No llama a ningún modelo
+  // (el traductor corre UNA vez, al crear la regla, desde el panel), así que
+  // no hay techo en dólares que candar aquí. La global lo apaga con todo.
+  //
+  // Su try/catch propio, como los otros tres: una regla rota de una flota no
+  // puede dejar ciegos a los relojes legales de las demás.
+  try {
+    const { vigilarReglas } = await import('@/lib/likida/reglas/vigilante');
+    const reglas = await vigilarReglas(new Date());
+    logger.info('cron.reglas.ok', { ...reglas });
+    resultado.reglas = reglas;
+    if (reglas.fallos > 0) huboFallo = true;
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    const codigo = codigoDeError(e);
+    logger.error('cron.reglas.falló', { error, codigo });
+    await alertarOperador('cron.reglas', { error, codigo });
+    resultado.reglas = { error };
+    huboFallo = true;
+  }
+
   // Los fallos van en la RESPUESTA, no solo en el log. "Esa flota no tiene
   // teléfono de jefe registrado" es un problema de configuración que se
   // arregla en un minuto — si solo vive en el log, nadie lo ve hasta que

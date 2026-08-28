@@ -41,7 +41,11 @@ export type EntidadBitacora =
   | 'agente_definicion'
   | 'cola_aprobacion'
   | 'interruptor'
-  | 'runner';
+  | 'runner'
+  // A19 (0229): las vigilancias que la flota declara en lenguaje natural.
+  // Quién confirmó una regla que manda WhatsApps —y quién la pausó— es
+  // exactamente la clase de acto que esta tabla existe para recordar.
+  | 'regla_vigilancia';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una

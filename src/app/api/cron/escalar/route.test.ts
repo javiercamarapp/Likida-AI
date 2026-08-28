@@ -27,6 +27,14 @@ vi.mock('@/lib/likida/relojes_legales', () => ({
 vi.mock('@/lib/likida/agentes/cobranza', () => ({
   ejecutarCobranzaGlobal: (...a: unknown[]) => ejecutarCobranzaGlobal(...a),
 }));
+// A19 (0229): el cuarto barrido — las reglas que la flota declaró. Se dobla en
+// cero por lo mismo que los relojes: aquí se mide el reparto del reloj y los
+// interruptores de los DOS motores, no el vigilante (que tiene su propia
+// suite, reglas/vigilante.test.ts).
+const vigilarReglas = vi.fn(async () => ({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0 }));
+vi.mock('@/lib/likida/reglas/vigilante', () => ({
+  vigilarReglas: (...a: unknown[]) => vigilarReglas(...(a as [])),
+}));
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
 
@@ -306,4 +314,56 @@ describe('c5-CRON — el reintento único ante timeout, solo donde es idempotent
     expect(res.status).toBe(200);
     expect(ejecutarCobranzaGlobal).toHaveBeenCalledTimes(2);
   }, 15_000);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A19 (0229) — EL CUARTO BARRIDO: LAS REGLAS DE LA FLOTA.
+//
+// El vigilante entró a este cron y no a uno propio. Lo que estas pruebas
+// fijan es lo mismo que ya se le exige a los otros tres: que corra, que su
+// fallo pinte la corrida en 500 (un barrido caído no puede salir verde) y
+// que NO le quite el turno a nadie — una regla rota no deja sin escalar los
+// viajes de nadie.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el vigilante de reglas (A19) corre aquí, y falla como los demás', () => {
+  beforeEach(() => {
+    escalarViajesSinAceptar.mockReset().mockResolvedValue({ escalados: 0 });
+    ejecutarCobranzaGlobal.mockReset().mockResolvedValue({ tenants: 0, contactados: 0, fallos: [] });
+    alertarOperador.mockClear();
+    logger.error.mockClear();
+    estaApagado.mockReset().mockResolvedValue(false);
+    vigilarReglas.mockReset().mockResolvedValue({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0 });
+  });
+
+  it('se despacha en cada corrida y su resultado viaja en el cuerpo', async () => {
+    vigilarReglas.mockResolvedValue({ reglas: 3, disparadas: 1, avisos: 2, fallos: 0 });
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(vigilarReglas).toHaveBeenCalledTimes(1);
+    expect((await res.json()).reglas).toEqual({ reglas: 3, disparadas: 1, avisos: 2, fallos: 0 });
+  });
+
+  it('una regla que falló pinta la corrida en 500 — no se sale en verde con un barrido a medias', async () => {
+    vigilarReglas.mockResolvedValue({ reglas: 4, disparadas: 0, avisos: 0, fallos: 1 });
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(500);
+  });
+
+  it('si el barrido entero revienta: 500, el error en el cuerpo, y los otros motores CORRIERON igual', async () => {
+    vigilarReglas.mockRejectedValue(new Error('reglasActivas: relation does not exist'));
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(500);
+    const cuerpo = await res.json();
+    expect(String((cuerpo.reglas as { error?: string }).error)).toContain('relation does not exist');
+    expect(escalarViajesSinAceptar).toHaveBeenCalledTimes(1);
+    expect(ejecutarCobranzaGlobal).toHaveBeenCalledTimes(1);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.reglas', expect.objectContaining({ codigo: expect.stringMatching(/./) }));
+  });
+
+  it('con el interruptor global apagado NO corre: no tiene palanca propia porque no es un agente', async () => {
+    estaApagado.mockImplementation(async (n: string) => n === 'global');
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(vigilarReglas).not.toHaveBeenCalled();
+  });
 });
