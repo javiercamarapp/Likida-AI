@@ -58,6 +58,11 @@ vi.mock('@/lib/likida/relojes_legales', () => ({
 vi.mock('@/lib/likida/agentes/cobranza', () => ({
   ejecutarCobranzaGlobal: (...a: unknown[]) => ejecutarCobranzaGlobal(...a),
 }));
+// A19 (0229): el cuarto barrido, doblado en cero por lo mismo que los relojes
+// — aquí se prueba la cadena del interruptor, no el vigilante.
+vi.mock('@/lib/likida/reglas/vigilante', () => ({
+  vigilarReglas: async () => ({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0 }),
+}));
 const alertarOperador = vi.fn(async () => {});
 vi.mock('@/lib/observability/alerta', () => ({
   alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [])),

@@ -9,6 +9,7 @@ import {
   RadioTower,
   Calculator,
   Stamp,
+  ScanEye,
 } from 'lucide-react';
 
 /**
@@ -92,6 +93,11 @@ export const DINERO_FISCAL: Item[] = [
   // jefe de tráfico podía timbrar y el contador ni siquiera llegaba. Aquí es
   // donde le toca vivir: es papel fiscal con el flete adentro.
   { href: '/dashboard/timbrado', nombre: 'Timbrado (Carta Porte)', Icono: Stamp },
+  // A19 (27-ago-2026): las vigilancias que el dueño o el contador declaran
+  // escribiéndolas en español. Va en DINERO porque ahí es donde se declaran
+  // los topes de gasto y la cartera vencida; el canal de cada aviso lo decide
+  // la plantilla, no el menú.
+  { href: '/dashboard/reglas', nombre: 'Mis reglas', Icono: ScanEye },
 ];
 
 export const SISTEMA: Item[] = [

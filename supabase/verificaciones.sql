@@ -10379,3 +10379,171 @@ begin
     reserva_entra, segunda_reserva_rebota, reserva_sobre_vigente_rebota,
     vigente_incompleto_rebota, reserva_con_uuid_entra, origen_basura_rebota, palancas;
 end $$;
+
+-- ── 182. Las reglas en lenguaje natural: la firma humana, el catálogo cerrado y el sello por ciclo (mig. 0229) ──
+-- El bloque 181 es del portal de pago (rama paralela); esta ola toma el 182.
+--
+-- Lo que SOLO la base puede demostrar de A19, y que es donde vive la promesa
+-- entera de la feature:
+--
+--  (a) Una regla NO puede salir de 'pendiente' sin quién la confirmó y
+--      cuándo. La confirmación humana no es un `if` de una server action —es
+--      un CHECK—, así que un POST directo tampoco la puede rodear. Si este
+--      valor sale `f`, el producto está mandando WhatsApps por vigilancias
+--      que nadie leyó.
+--  (b) Con firma sí entra: el candado condiciona, no prohíbe.
+--  (c) El CATÁLOGO ES CERRADO. Una plantilla inventada rebota — es la mitad
+--      que impide guardar una vigilancia que el lector no sabe correr.
+--  (d) `params` tiene que ser un OBJETO: un arreglo o un escalar sería una
+--      regla que `validarParams` no puede leer.
+--  (e) La misma vigilancia con los mismos parámetros no se declara dos veces
+--      mientras esté viva (dos reglas idénticas = dos WhatsApps por el mismo
+--      hecho), y el orden de las llaves del jsonb NO la disfraza. Una
+--      PAUSADA sí deja volver a declararla.
+--  (f) EL SELLO ANTI-SPAM (patrón 0202): el mismo (regla, objeto, ciclo) no
+--      entra dos veces, y un CICLO NUEVO —otra fecha de vencimiento, otro
+--      conteo— sí. Es la diferencia entre avisar una vez y avisar cada hora.
+--  (g) La FK COMPUESTA: un sello de la flota B no se puede colgar de una
+--      regla de la flota A.
+--  (h) El dominio del objeto vigilado.
+--  (i) El doble candado (RLS deny-all + solo service_role) en las dos tablas.
+do $$
+declare
+  ta uuid; tb uuid; ua uuid;
+  regla_a uuid; regla_b uuid; regla_pausada uuid;
+  activa_sin_firma_rebota boolean; activa_con_firma_entra boolean;
+  plantilla_inventada_rebota boolean; params_arreglo_rebota boolean;
+  duplicada_rebota boolean; llaves_al_reves_rebota boolean; sobre_pausada_entra boolean;
+  sello_repetido_rebota boolean; ciclo_nuevo_entra boolean;
+  sello_cruzado_rebota boolean; objeto_inventado_rebota boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0229 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0229 B') returning id into tb;
+  insert into app_user (id, tenant_id, email, rol)
+    values (gen_random_uuid(), ta, 'zzz-verif-0229@likida.test', 'flota_admin') returning id into ua;
+
+  insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+    values (ta, 'gasto_de_concepto_mayor_a', '{"concepto":"caseta","monto":3000}'::jsonb,
+            'avísame si un gasto de caseta pasa de $3,000',
+            'Voy a avisarte cuando entre un comprobante de casetas por más de $3,000.00.')
+    returning id into regla_a;
+
+  -- (a) Sin firma no vigila. Es EL candado del diseño.
+  begin
+    update regla_vigilancia set estado = 'activa' where id = regla_a;
+    activa_sin_firma_rebota := false;
+  exception when check_violation then
+    activa_sin_firma_rebota := true;
+  end;
+
+  -- (b) Con firma sí.
+  begin
+    update regla_vigilancia
+      set estado = 'activa', confirmada_por = ua, confirmada_en = now()
+      where id = regla_a;
+    activa_con_firma_entra := true;
+  exception when others then
+    activa_con_firma_entra := false;
+  end;
+
+  -- (c) El catálogo es cerrado.
+  begin
+    insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+      values (ta, 'avisame_de_todo', '{}'::jsonb, 'x', 'y');
+    plantilla_inventada_rebota := false;
+  exception when check_violation then
+    plantilla_inventada_rebota := true;
+  end;
+
+  -- (d) `params` es un objeto o no es nada.
+  begin
+    insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+      values (ta, 'estadia_mayor_a', '[4]'::jsonb, 'x', 'y');
+    params_arreglo_rebota := false;
+  exception when check_violation then
+    params_arreglo_rebota := true;
+  end;
+
+  -- (e) La misma vigilancia, viva, no se declara dos veces…
+  begin
+    insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+      values (ta, 'gasto_de_concepto_mayor_a', '{"concepto":"caseta","monto":3000}'::jsonb, 'otra vez', 'otra vez');
+    duplicada_rebota := false;
+  exception when unique_violation then
+    duplicada_rebota := true;
+  end;
+  -- …ni disfrazada con las llaves en otro orden (jsonb las normaliza).
+  begin
+    insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+      values (ta, 'gasto_de_concepto_mayor_a', '{"monto":3000,"concepto":"caseta"}'::jsonb, 'al reves', 'al reves');
+    llaves_al_reves_rebota := false;
+  exception when unique_violation then
+    llaves_al_reves_rebota := true;
+  end;
+  -- Una PAUSADA no ocupa el lugar: se puede volver a declarar.
+  insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase, estado, confirmada_por, confirmada_en)
+    values (ta, 'estadia_mayor_a', '{"horas":4}'::jsonb, 'estadias de 4h', 'estadias de 4h', 'pausada', ua, now())
+    returning id into regla_pausada;
+  begin
+    insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+      values (ta, 'estadia_mayor_a', '{"horas":4}'::jsonb, 'otra vez estadias', 'otra vez estadias');
+    sobre_pausada_entra := true;
+  exception when unique_violation then
+    sobre_pausada_entra := false;
+  end;
+
+  -- (f) El sello por ciclo.
+  insert into regla_disparo (tenant_id, regla_id, objeto, objeto_id, clave, evidencia)
+    values (ta, regla_a, 'gasto', '00000000-0000-4000-8000-000000000229', '', '$3,500.00 de casetas');
+  begin
+    insert into regla_disparo (tenant_id, regla_id, objeto, objeto_id, clave, evidencia)
+      values (ta, regla_a, 'gasto', '00000000-0000-4000-8000-000000000229', '', 'el mismo gasto otra vez');
+    sello_repetido_rebota := false;
+  exception when unique_violation then
+    sello_repetido_rebota := true;
+  end;
+  begin
+    insert into regla_disparo (tenant_id, regla_id, objeto, objeto_id, clave, evidencia)
+      values (ta, regla_a, 'gasto', '00000000-0000-4000-8000-000000000229', '2027-01-31', 'ciclo nuevo del mismo objeto');
+    ciclo_nuevo_entra := true;
+  exception when unique_violation then
+    ciclo_nuevo_entra := false;
+  end;
+
+  -- (g) La FK compuesta: el sello de B no se cuelga de la regla de A.
+  insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+    values (tb, 'gasto_sin_cfdi_mayor_a', '{"monto":2000}'::jsonb, 'sin factura', 'sin factura')
+    returning id into regla_b;
+  begin
+    insert into regla_disparo (tenant_id, regla_id, objeto, objeto_id, clave, evidencia)
+      values (tb, regla_a, 'gasto', '00000000-0000-4000-8000-00000000022a', '', 'gasto de otra flota');
+    sello_cruzado_rebota := false;
+  exception when foreign_key_violation then
+    sello_cruzado_rebota := true;
+  end;
+
+  -- (h) El dominio de lo vigilado.
+  begin
+    insert into regla_disparo (tenant_id, regla_id, objeto, objeto_id, clave, evidencia)
+      values (ta, regla_a, 'lo_que_sea', '00000000-0000-4000-8000-00000000022b', '', 'objeto inventado');
+    objeto_inventado_rebota := false;
+  exception when check_violation then
+    objeto_inventado_rebota := true;
+  end;
+
+  -- (i) El doble candado, en las DOS tablas.
+  cerrado := not has_table_privilege('anon', 'public.regla_vigilancia', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.regla_vigilancia', 'SELECT')
+    and has_table_privilege('service_role', 'public.regla_vigilancia', 'SELECT')
+    and not has_table_privilege('anon', 'public.regla_disparo', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.regla_disparo', 'SELECT')
+    and has_table_privilege('service_role', 'public.regla_disparo', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.regla_vigilancia'::regclass)
+    and (select relrowsecurity from pg_class where oid = 'public.regla_disparo'::regclass);
+
+  raise exception 'REGLAS_0229  activa_sin_firma_rebota=%  activa_con_firma_entra=%  plantilla_inventada_rebota=%  params_arreglo_rebota=%  duplicada_rebota=%  llaves_al_reves_rebota=%  sobre_pausada_entra=%  sello_repetido_rebota=%  ciclo_nuevo_entra=%  sello_cruzado_rebota=%  objeto_inventado_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t)',
+    activa_sin_firma_rebota, activa_con_firma_entra, plantilla_inventada_rebota,
+    params_arreglo_rebota, duplicada_rebota, llaves_al_reves_rebota, sobre_pausada_entra,
+    sello_repetido_rebota, ciclo_nuevo_entra, sello_cruzado_rebota, objeto_inventado_rebota, cerrado;
+end $$;

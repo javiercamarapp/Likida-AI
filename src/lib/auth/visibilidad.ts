@@ -169,6 +169,14 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // definición misma de lo que el encargado no ve. Espejo de la RLS
   // `ve_finanzas()` que la 0051 le puso a `cotizacion`.
   '/dashboard/cotizaciones': 'dinero',
+  // MIS REGLAS (A19, 0229): las vigilancias que la flota declara en lenguaje
+  // natural. Es `dinero` porque quien las declara tiene que poder declarar las
+  // de dinero —topes de gasto, facturas sin cobrar, comprobantes sin CFDI— y
+  // la ficha de cada regla enseña sus montos. Que algunas manden su aviso al
+  // jefe de tráfico (las de operación: papeles, estadías, incidencias) no
+  // cambia quién las DECLARA: el canal del aviso lo decide la plantilla
+  // (`canal` en reglas/catalogo.ts), no esta llave.
+  '/dashboard/reglas': 'dinero',
   // Preguntar a la IA — reconstruida el 12-ago-2026 (la primera de las 17).
   // Es `dinero` porque responde montos comprobados/IVA/peaje (§12: las
   // cifras se piden DESPUÉS de este gateo).
