@@ -24,6 +24,8 @@
 //  - Sin guiones largos (—) en el cuerpo: regla de los textos de marketing.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import type { TemaNormativo } from '../normas/consulta';
+
 export type BloqueArticulo =
   | { t: 'p'; texto: string }
   | { t: 'h2'; texto: string }
@@ -36,9 +38,61 @@ export interface Articulo {
   resumen: string;
   /** ISO yyyy-mm-dd — fecha de publicación. */
   fecha: string;
+  /**
+   * El TEMA del corpus (`normas/consulta.ts`) que esta pieza cubre. Es un
+   * campo obligatorio y no una etiqueta suelta: el agente `contenido_fiscal`
+   * (0230) elige qué escribir restando los temas ya cubiertos del catálogo de
+   * temas citables, y sin esta liga tendría que adivinar la cobertura leyendo
+   * la prosa. `import type` a propósito — el tipo se borra al compilar, así
+   * que la página pública del blog no arrastra el índice de normas.
+   */
+  tema: TemaNormativo;
   /** Las fichas del corpus que fundamentan la pieza (se pintan al pie). */
   fundamento: string[];
   bloques: BloqueArticulo[];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LAS REGLAS EDITORIALES, COMO FUNCIÓN Y NO SOLO COMO PRUEBA.
+//
+// `articulos.test.ts` ya las afirma sobre los artículos PUBLICADOS: es la
+// puerta del merge. Pero desde la 0230 hay un agente que REDACTA borradores
+// con un modelo, y ese texto tiene que pasar por la misma vara ANTES de
+// entrar a la bandeja — si no, la única red sería el ojo de Javier leyendo la
+// pieza, que es exactamente lo que estas reglas existen para no depender de.
+//
+// Vive AQUÍ y no en el agente porque la regla es del BLOG, no del agente: el
+// día que otra pieza escriba para /blog, hereda la vara sin copiarla.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Las violaciones editoriales de un texto, cada una redactada para que un
+ * humano entienda qué se rompió. Vacío = pasó. PURA.
+ */
+export function revisarReglasEditoriales(texto: string): string[] {
+  const faltas: string[] = [];
+  const t = texto.toLowerCase();
+  if (/clientes?\s+reales/.test(t)) {
+    faltas.push('dice "clientes reales" — ninguna empresa ha firmado; la frase de la casa es "en pláticas con transportistas como Grupo GAL y Transportes Innovativos"');
+  }
+  // La marca prohíbe el "hasta un X%" (guia-de-marca §4): promete un techo
+  // que nadie midió y que el lector va a cruzar contra su propio PDF.
+  if (/hasta un \d/.test(t)) {
+    faltas.push('trae un "hasta un X%" — la marca lo prohíbe: es un techo sin fuente');
+  }
+  if (texto.includes('—')) {
+    faltas.push('trae guion largo (—) — los textos de marketing de la casa no los usan');
+  }
+  if (/te recuperamos|garantizamos/.test(t)) {
+    faltas.push('promete recuperar o garantizar — quien acredita es el contador; Likida entrega el dato y la bitácora');
+  }
+  // Si nombra a las dos flotas con las que hay conversaciones, tiene que ser
+  // con la frase honesta y completa. Nombrarlas a secas las convierte en
+  // clientes por implicación.
+  if ((t.includes('grupo gal') || t.includes('innovativos')) && !t.includes('en pláticas')) {
+    faltas.push('nombra a Grupo GAL o a Transportes Innovativos sin la frase "en pláticas" — sin ella se leen como clientes');
+  }
+  return faltas;
 }
 
 export const ARTICULOS: Articulo[] = [
@@ -48,6 +102,7 @@ export const ARTICULOS: Articulo[] = [
     resumen:
       'La LIF 2026 permite acreditar el 50% del peaje pagado en la Red Nacional de Autopistas de Cuota. El requisito que tumba el estímulo no es la caseta: es la bitácora conciliada.',
     fecha: '2026-08-27',
+    tema: 'peajes_y_casetas',
     fundamento: ['LIF 2026, art. 20 apartado A (estímulo de peaje)', 'RMF 2026, regla 9.1.8 (requisitos y bitácora)', 'Red Nacional de Autopistas de Cuota (término fiscal, no coloquial)'],
     bloques: [
       {
@@ -94,6 +149,7 @@ export const ARTICULOS: Articulo[] = [
     resumen:
       'El estímulo IEPS de diésel es cuota semanal del DOF por litros. La cuota cambió de $7.36 a $2.09 en cinco meses: cualquier cifra en pesos sin fecha de cuota está inflada o vencida.',
     fecha: '2026-08-27',
+    tema: 'diesel_y_combustible',
     fundamento: ['LIF 2026, art. 20 apartado A (estímulo IEPS de diésel)', 'Criterio LIF-PI: la cuota aplicable es la DISMINUIDA semanal del DOF', 'LIF 20-A, cuarto párrafo (medios de pago admitidos)'],
     bloques: [
       {
@@ -134,6 +190,7 @@ export const ARTICULOS: Articulo[] = [
     resumen:
       'El complemento Carta Porte depende de si el viaje pisa carretera federal y de quién transporta qué. La multa por equivocarse es real; la respuesta correcta empieza por un árbol de decisión, no por una corazonada.',
     fecha: '2026-08-27',
+    tema: 'carta_porte',
     fundamento: ['RMF 2026, reglas 2.7.7.2.1 y 2.7.7.2.8 (árbol de obligación y excepción local)', 'RMF 2026, regla 2.7.7.1.1 (responsabilidad por los datos que cada parte aporta)', 'Complemento Carta Porte 3.1 (estructura del SAT)'],
     bloques: [
       {

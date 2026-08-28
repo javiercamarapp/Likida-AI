@@ -10696,3 +10696,159 @@ begin
     params_arreglo_rebota, duplicada_rebota, llaves_al_reves_rebota, sobre_pausada_entra,
     sello_repetido_rebota, ciclo_nuevo_entra, sello_cruzado_rebota, objeto_inventado_rebota, cerrado;
 end $$;
+
+-- ── 183. Crecimiento: los 10 vivos con reloj y techo, una pieza por periodo, y las 40 palancas del dominio (mig. 0230) ──
+-- El bloque 182 es de las reglas en lenguaje natural (rama paralela); esta ola
+-- toma el 183.
+--
+-- Lo que SOLO la base puede demostrar de la 0230:
+--
+--  (a) LOS DIEZ PASAN LOS CANDADOS 2 Y 3 DEL RUNNER. `estado='vivo'` +
+--      `runner_habilitado` + `disparador='cron'` + techo declarado > 0 no es
+--      cosmética: la consulta del runner filtra por los tres primeros y el
+--      candado 3 salta a quien no tenga techo. Si este valor no sale 10, hay
+--      agentes que el PR dice que encendió y que el cron nunca despacha.
+--  (b) EL MODELO SE DECLARA CON LA VERDAD DEL MOTOR. Solo `contenido_fiscal`
+--      trae `modelo_rol`; los otros nueve son deterministas y su NULL dice
+--      «no usa modelo de texto» (convención 0125), no «se nos olvidó».
+--  (c) LAS 40 PALANCAS. Las 10 nuevas entran, y —la trampa que la 0227
+--      corrigió y que se repite en cada ola— las 30 ANTERIORES siguen en el
+--      dominio: si esta migración hubiera enumerado solo las suyas, apagar a
+--      `talento` o a `redactor` rebotaría con check_violation el día del
+--      incidente, que es el peor día para descubrirlo.
+--  (d) Una palanca inventada rebota: el dominio es cerrado.
+--  (e) UNA PIEZA POR PERIODO. El mismo (agente, título) no entra dos veces
+--      para un agente de crecimiento — es el árbitro de la carrera entre dos
+--      pasadas del runner, y por eso la idempotencia es un constraint y no un
+--      `if` que dos procesos concurrentes se saltan.
+--  (f) EL ÍNDICE ES PARCIAL. El Redactor SÍ puede repetir título: dos
+--      prospectos pueden compartir el asunto de un correo legítimamente, y un
+--      índice global rompería la campaña.
+--  (g) `aliado_objetivo` sembrado SIN CONTACTO Y SIN FECHA: los tres del
+--      blueprint existen y ninguno trae contacto ni acercamiento inventado.
+--  (h) Un aliado no puede AVANZAR de estado sin decir cuándo se le tocó (un
+--      estado que avanzó sin fecha no es auditable), y sin avanzar sí puede
+--      quedarse sin fecha.
+--  (i) El dominio cerrado de tipo, y el doble candado (RLS deny-all + grants
+--      solo a service_role) de la tabla nueva.
+do $$
+declare
+  vivos_con_reloj_y_techo int;
+  con_modelo int; sin_modelo int;
+  palancas_nuevas int; palancas_previas int;
+  palanca_inventada_rebota boolean;
+  pieza_repetida_rebota boolean; redactor_repite boolean;
+  aliados_sembrados int; aliados_con_contacto_o_fecha int;
+  avance_sin_fecha_rebota boolean; avance_con_fecha_entra boolean;
+  tipo_inventado_rebota boolean;
+  cerrado boolean;
+begin
+  -- (a) y (b) — el catálogo, tal como el runner lo consulta.
+  select count(*) into vivos_con_reloj_y_techo from agente_definicion
+    where id in ('contenido_fiscal','lead_magnet','seo_distribucion','guiones',
+                 'noticias_mercado','promos_diarias','visuales','video_demo',
+                 'video_marketing','alianzas')
+      and estado = 'vivo' and runner_habilitado and disparador = 'cron'
+      and presupuesto_dia_usd is not null and presupuesto_dia_usd > 0;
+
+  select count(*) into con_modelo from agente_definicion
+    where departamento = 'crecimiento' and modelo_rol is not null;
+  select count(*) into sin_modelo from agente_definicion
+    where departamento = 'crecimiento' and modelo_rol is null;
+
+  -- (c) Las 10 nuevas…
+  palancas_nuevas := 0;
+  begin
+    insert into interruptor (id, apagado) values
+      ('agente:contenido_fiscal', false), ('agente:lead_magnet', false),
+      ('agente:seo_distribucion', false), ('agente:guiones', false),
+      ('agente:noticias_mercado', false), ('agente:promos_diarias', false),
+      ('agente:visuales', false), ('agente:video_demo', false),
+      ('agente:video_marketing', false), ('agente:alianzas', false);
+    palancas_nuevas := 10;
+  exception when check_violation then
+    palancas_nuevas := -1;
+  end;
+  -- …y una muestra de las de CADA ola anterior, que es donde vive la trampa.
+  palancas_previas := 0;
+  begin
+    insert into interruptor (id, apagado) values
+      ('global', false), ('agente:redactor', false),
+      ('agente:tesoreria', false), ('agente:orquestador', false),
+      ('agente:enviador', false), ('agente:atencion_faq', false),
+      ('agente:talento', false);
+    palancas_previas := 7;
+  exception when check_violation then
+    palancas_previas := -1;
+  end;
+
+  -- (d) El dominio es cerrado.
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:inventado_0230', true, 'basura');
+    palanca_inventada_rebota := false;
+  exception when check_violation then
+    palanca_inventada_rebota := true;
+  end;
+
+  -- (e) Una pieza por periodo.
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('promo_diaria', 'normal', 'promos_diarias', 'Promo del dia — 2026-08-27', 'cuerpo');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('promo_diaria', 'normal', 'promos_diarias', 'Promo del dia — 2026-08-27', 'otra corrida');
+    pieza_repetida_rebota := false;
+  exception when unique_violation then
+    pieza_repetida_rebota := true;
+  end;
+
+  -- (f) El índice es PARCIAL: el Redactor sí repite título.
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('correo_frio', 'normal', 'redactor', 'Tu liquidacion de viajes', 'a');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('correo_frio', 'normal', 'redactor', 'Tu liquidacion de viajes', 'b');
+    redactor_repite := true;
+  exception when unique_violation then
+    redactor_repite := false;
+  end;
+
+  -- (g) La siembra: existen y NO traen contacto ni fecha inventados.
+  select count(*) into aliados_sembrados from aliado_objetivo
+    where id in ('canacar', 'anpact', 'tyt');
+  select count(*) into aliados_con_contacto_o_fecha from aliado_objetivo
+    where id in ('canacar', 'anpact', 'tyt')
+      and (contacto_nota is not null or ultimo_toque_en is not null or estado <> 'sin_contacto');
+
+  -- (h) Avanzar de estado exige decir cuándo.
+  begin
+    update aliado_objetivo set estado = 'contactado' where id = 'canacar';
+    avance_sin_fecha_rebota := false;
+  exception when check_violation then
+    avance_sin_fecha_rebota := true;
+  end;
+  begin
+    update aliado_objetivo set estado = 'contactado', ultimo_toque_en = current_date where id = 'canacar';
+    avance_con_fecha_entra := true;
+  exception when others then
+    avance_con_fecha_entra := false;
+  end;
+
+  -- (i) El dominio del tipo…
+  begin
+    insert into aliado_objetivo (id, nombre, tipo) values ('x_0230', 'Lo que sea', 'influencer');
+    tipo_inventado_rebota := false;
+  exception when check_violation then
+    tipo_inventado_rebota := true;
+  end;
+  -- …y el doble candado.
+  cerrado := not has_table_privilege('anon', 'public.aliado_objetivo', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.aliado_objetivo', 'SELECT')
+    and has_table_privilege('service_role', 'public.aliado_objetivo', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.aliado_objetivo'::regclass);
+
+  raise exception 'CRECIMIENTO_0230  vivos_con_reloj_y_techo=%  con_modelo=%  sin_modelo=%  palancas_nuevas=%  palancas_previas=%  palanca_inventada_rebota=%  pieza_repetida_rebota=%  redactor_repite=%  aliados_sembrados=%  aliados_con_contacto_o_fecha=%  avance_sin_fecha_rebota=%  avance_con_fecha_entra=%  tipo_inventado_rebota=%  cerrado=%   (esperado 10 / 1 / 9 / 10 / 7 / t / t / t / 3 / 0 / t / t / t / t)',
+    vivos_con_reloj_y_techo, con_modelo, sin_modelo, palancas_nuevas, palancas_previas,
+    palanca_inventada_rebota, pieza_repetida_rebota, redactor_repite,
+    aliados_sembrados, aliados_con_contacto_o_fecha,
+    avance_sin_fecha_rebota, avance_con_fecha_entra, tipo_inventado_rebota, cerrado;
+end $$;

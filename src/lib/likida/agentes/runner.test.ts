@@ -51,7 +51,9 @@ vi.mock('../interruptores', () => ({
     // Los dos de abajo solo los usan las pruebas del reloj (25-ago-2026):
     // el corte necesita TRES agentes deterministas seguidos para que haya un
     // «antes del tercero» que verificar.
-    'agente:exito_cliente', 'agente:soporte'],
+    'agente:exito_cliente', 'agente:soporte',
+    // Crecimiento (0230): el que gasta modelo y dos deterministas.
+    'agente:contenido_fiscal', 'agente:lead_magnet', 'agente:promos_diarias'],
   estaApagado: async (n: string) => {
     if (interruptorFalla && n !== 'global') throw new Error('base caída');
     return apagados.has(n);
@@ -82,6 +84,17 @@ vi.mock('./backoffice', async (importOriginal) => ({
 const correrExito = vi.fn(async (..._a: unknown[]) => ({ resultado: 'corrio' as const, piezas: 1, costoUsd: 0 }));
 vi.mock('./exito', () => ({ correrAgenteExito: (...a: unknown[]) => correrExito(...a) }));
 
+// Crecimiento (0230): mismo trato que el back office — import dinámico en el
+// runner y el predicado REAL (no mockeado), que es contra el que se compara la
+// lista literal del despacho. Mockear el motor evita arrastrar la calculadora
+// y el índice de normas a esta suite.
+const correrCrecimiento = vi.fn(async (..._a: unknown[]) => ({ resultado: 'corrio' as const, piezas: 1, costoUsd: 0 }));
+const { AGENTES_CRECIMIENTO, esAgenteCrecimiento } = await import('./crecimiento');
+vi.mock('./crecimiento', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./crecimiento')>()),
+  correrAgenteCrecimiento: (...a: unknown[]) => correrCrecimiento(...a),
+}));
+
 const { correrRunner, ordenarPorCosto, llamaAlModelo, MARGEN_RELOJ_MS, PLAZO_RUNNER_MS } = await import('./runner');
 
 const REDACTOR = { id: 'redactor', presupuesto_dia_usd: 1.0 };
@@ -100,6 +113,8 @@ beforeEach(() => {
   correrBackOffice.mockResolvedValue({ piezas: 1 });
   correrExito.mockClear();
   correrExito.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
+  correrCrecimiento.mockClear();
+  correrCrecimiento.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
 });
 
 describe('los cuatro candados', () => {
@@ -460,5 +475,91 @@ describe('el orden de despacho — lo barato primero, lo caro al final', () => {
     expect(correrExito.mock.calls.map((c) => c[0])).toEqual(['onboarding_cliente']);
     expect(r.saltadosPorReloj).toEqual(['atencion_faq']);
     vi.restoreAllMocks();
+  });
+});
+
+describe('el despacho de crecimiento (0230)', () => {
+  // La misma costura que la del back office: los ids viven DOS veces —literal
+  // en el runner, para no cargar la calculadora ni el índice de normas en cada
+  // vuelta, y en `AGENTES_CRECIMIENTO`—. Si divergen, un agente vivo se queda
+  // sin rama y el runner lo reporta como «sin motor despachable».
+  it('la lista literal del runner y la del motor son la misma', () => {
+    const fuente = readFileSync('src/lib/likida/agentes/runner.ts', 'utf8');
+    const linea = /const CRECIMIENTO: readonly string\[\] = \[([^\]]*)\]/.exec(fuente);
+    expect(linea, 'la lista literal del runner debe seguir existiendo').not.toBeNull();
+    const ids = (linea as RegExpExecArray)[1]
+      .split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean);
+    expect(ids).toEqual([...AGENTES_CRECIMIENTO]);
+    for (const id of ids) expect(esAgenteCrecimiento(id)).toBe(true);
+  });
+
+  it('un determinista se despacha a su motor y su resultado sale TAL CUAL', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'lead_magnet', presupuesto_dia_usd: 0.1 }], error: null }]);
+    correrCrecimiento.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrCrecimiento).toHaveBeenCalledWith('lead_magnet', 'cron');
+    expect(r.agentes).toEqual([{ agente: 'lead_magnet', resultado: 'corrio', motivo: undefined, piezas: 1, costoUsd: 0 }]);
+  });
+
+  it('un determinista NO consulta el gasto del día: no gasta modelo y no hay techo que medir', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'promos_diarias', presupuesto_dia_usd: 0.1 }], error: null }]);
+    // Si el runner pidiera el gasto, esta cola contestaría con un fallo y el
+    // agente saltaría fail-closed. Que corra prueba que ni la pidió.
+    respuestas.set('agente_corrida', [{ data: null, error: { message: 'nadie debería preguntar' } }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'promos_diarias', resultado: 'corrio' });
+  });
+
+  it('contenido_fiscal SÍ mide el gasto: techo alcanzado, no se despacha, y el motivo trae las dos cifras', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'contenido_fiscal', presupuesto_dia_usd: 1 }], error: null }]);
+    respuestas.set('agente_corrida', [{ data: [{ costo_usd: 1.2 }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrCrecimiento).not.toHaveBeenCalled();
+    expect(r.agentes[0].motivo).toContain('techo diario alcanzado (1.20 de 1 USD)');
+  });
+
+  it('contenido_fiscal con el gasto ILEGIBLE: fail closed y dicho', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'contenido_fiscal', presupuesto_dia_usd: 1 }], error: null }]);
+    respuestas.set('agente_corrida', [{ data: null, error: { message: 'base caída' } }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrCrecimiento).not.toHaveBeenCalled();
+    expect(r.agentes[0].motivo).toMatch(/fail closed/);
+  });
+
+  it('un motor que truena no tumba la vuelta: se dice y los demás siguen', async () => {
+    respuestas.set('agente_definicion', [{ data: [
+      { id: 'lead_magnet', presupuesto_dia_usd: 0.1 },
+      { id: 'promos_diarias', presupuesto_dia_usd: 0.1 },
+    ], error: null }]);
+    correrCrecimiento.mockRejectedValueOnce(new Error('sitio_evento ilegible'));
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'lead_magnet', resultado: 'saltado' });
+    expect(r.agentes[0].motivo).toContain('sitio_evento ilegible');
+    expect(r.agentes[1]).toMatchObject({ agente: 'promos_diarias', resultado: 'corrio' });
+  });
+
+  it('contenido_fiscal es CARO: se despacha al final, detrás de los deterministas', () => {
+    expect(llamaAlModelo('contenido_fiscal')).toBe(true);
+    for (const id of AGENTES_CRECIMIENTO.filter((x) => x !== 'contenido_fiscal')) {
+      expect(llamaAlModelo(id), id).toBe(false);
+    }
+    const orden = ordenarPorCosto([
+      { id: 'contenido_fiscal' }, { id: 'lead_magnet' }, { id: 'alianzas' },
+    ]).map((a) => a.id);
+    expect(orden).toEqual(['lead_magnet', 'alianzas', 'contenido_fiscal']);
+  });
+
+  it('sin kill switch declarado no corre, aunque tenga motor', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'visuales', presupuesto_dia_usd: 0.1 }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrCrecimiento).not.toHaveBeenCalled();
+    expect(r.agentes[0].motivo).toMatch(/kill switch/);
+  });
+
+  it('sin techo declarado no corre: el candado 3 no distingue departamentos', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'lead_magnet', presupuesto_dia_usd: null }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrCrecimiento).not.toHaveBeenCalled();
+    expect(r.agentes[0].motivo).toMatch(/sin presupuesto_dia_usd declarado/);
   });
 });

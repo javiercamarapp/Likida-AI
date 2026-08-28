@@ -41,7 +41,15 @@ export type AgenteConCorridas = 'liquidacion' | 'facturas' | 'cobranza' | 'condu
   // produce sí llevan tenant cuando son de una flota concreta — esa es la
   // trazabilidad que la bandeja enseña.
   | 'onboarding_cliente' | 'exito_cliente' | 'retencion'
-  | 'cobranza_saas' | 'soporte' | 'atencion_faq';
+  | 'cobranza_saas' | 'soporte' | 'atencion_faq'
+  // Crecimiento (0230): los diez que fabrican material de marca. Mismo
+  // contrato de tenant que los de arriba — corren para LIKIDA (tenant NULL):
+  // un borrador de artículo, un guion o un encargo de video no son de ninguna
+  // flota. La única de las diez que gasta modelo es `contenido_fiscal`; las
+  // otras nueve anotan costo 0 MEDIDO, que no es lo mismo que NULL.
+  | 'contenido_fiscal' | 'lead_magnet' | 'seo_distribucion'
+  | 'guiones' | 'noticias_mercado' | 'promos_diarias'
+  | 'visuales' | 'video_demo' | 'video_marketing' | 'alianzas';
 export type EstadoCorrida = 'ok' | 'parcial' | 'fallo';
 /** `correo` (0108): el agente de Proveedores no corre por reloj — corre
  *  cuando llega un correo al buzón. Registrarlo como 'cron' pintaría
