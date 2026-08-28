@@ -19,7 +19,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
-  leerManifiesto, subirFotos, firmarRuta, confirmarVerdadTerreno,
+  leerManifiesto, subirFotos, firmarRuta, firmarRutas, confirmarVerdadTerreno,
   BUCKET_QA_FOTOS, type ArchivoNuevo,
 } from '@/lib/admin/qa-storage';
 import { validarVerdadTerreno } from '@/lib/admin/qa-tipos';
@@ -40,10 +40,11 @@ export async function GET() {
   const db = supabaseAdmin();
   const manifiesto = await leerManifiesto(db);
   if (!manifiesto.ok) return NextResponse.json({ error: manifiesto.error }, { status: 502 });
-  const fotos = await Promise.all(manifiesto.datos.map(async (f) => ({
-    ...f,
-    url: await firmarRuta(db, BUCKET_QA_FOTOS, f.path),
-  })));
+  // EN LOTE, no una firma por foto: ver el incidente del 28-ago-2026 en la
+  // cabecera de `firmarRutas` — ~90 firmas sueltas saturaban el pool de
+  // Storage y tumbaban descargas ajenas.
+  const urls = await firmarRutas(db, BUCKET_QA_FOTOS, manifiesto.datos.map((f) => f.path));
+  const fotos = manifiesto.datos.map((f) => ({ ...f, url: urls.get(f.path) ?? null }));
   return NextResponse.json({ fotos });
 }
 
@@ -77,10 +78,8 @@ export async function POST(req: Request) {
   const r = await subirFotos(db, archivos);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: 502 });
 
-  const fotos = await Promise.all(r.datos.fotos.map(async (f) => ({
-    ...f,
-    url: await firmarRuta(db, BUCKET_QA_FOTOS, f.path),
-  })));
+  const urls = await firmarRutas(db, BUCKET_QA_FOTOS, r.datos.fotos.map((f) => f.path));
+  const fotos = r.datos.fotos.map((f) => ({ ...f, url: urls.get(f.path) ?? null }));
   return NextResponse.json({ resultados: r.datos.resultados, fotos });
 }
 

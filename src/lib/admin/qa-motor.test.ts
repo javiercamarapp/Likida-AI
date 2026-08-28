@@ -49,6 +49,13 @@ let tablas: Record<string, Fila[]>;
 let enviados: Array<{ tipo: string; waMessageId: string; from: string }>;
 let costoPorFotoUsd: number;
 let seq: number;
+/** Cuántas veces el motor PIDIÓ un cliente (supabaseAdmin). La afirmación del
+ *  incidente 28-ago-2026: UN cliente por pasada, jamás uno por foto. */
+let clientesPedidos: number;
+/** path → cuántas descargas de ese path deben rebotar con la saturación del
+ *  28-ago («Too many connections issued to the database»). Infinity = nunca
+ *  cede. Es el doble de Storage simulando el pool lleno. */
+let saturaPorPath: Map<string, number>;
 
 /** Las restricciones que la 0185 y la 0240 declaran, respetadas por el doble. */
 const UNICO: Record<string, string[]> = {
@@ -210,10 +217,17 @@ function dbFalsa(): SupabaseClient {
   };
 
   const bucketFalso = () => ({
-    download: async () => ({
-      data: { arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer },
-      error: null,
-    }),
+    download: async (path: string) => {
+      const pendientes = saturaPorPath.get(path) ?? 0;
+      if (pendientes > 0) {
+        saturaPorPath.set(path, pendientes - 1);
+        return { data: null as never, error: { message: 'Too many connections issued to the database' } };
+      }
+      return {
+        data: { arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer },
+        error: null,
+      };
+    },
     list: async () => ({ data: [], error: null }),
     remove: async () => ({ data: [], error: null }),
     upload: async () => ({ error: null }),
@@ -231,7 +245,23 @@ function dbFalsa(): SupabaseClient {
 }
 
 // ── Los mocks del entorno del motor ─────────────────────────────────────────
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => dbFalsa() }));
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => { clientesPedidos += 1; return dbFalsa(); },
+}));
+
+// El reintento REAL (backoff, conteo, predicado) pero sin dormir de verdad:
+// pagar 1.6 s de espera exponencial por cada saturación simulada le costaría
+// segundos de pared a una suite de ~2 900 pruebas.
+vi.mock('@/lib/supabase/reintento', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/supabase/reintento')>();
+  return {
+    ...real,
+    conReintentoDeSaturacion: <T,>(
+      fn: () => Promise<T>, esTransitorio: (r: T) => boolean,
+      opts?: import('@/lib/supabase/reintento').OpcionesReintento,
+    ) => real.conReintentoDeSaturacion(fn, esTransitorio, { ...opts, dormir: async () => {} }),
+  };
+});
 
 vi.mock('@/lib/likida/processor', () => ({
   processInbound: async (msg: { type: string; waMessageId: string; from: string }) => {
@@ -269,7 +299,10 @@ vi.mock('./qa-oraculos', () => ({
   }]),
 }));
 
-import { crearCorrida, ejecutarPasada, mezclarEventos } from './qa-motor';
+import {
+  crearCorrida, ejecutarPasada, mezclarEventos,
+  patronesDeFallo, fraseFallosMismaFirma, MIN_FALLOS_MISMA_FIRMA,
+} from './qa-motor';
 import { guardarCorrida, leerCorrida, leerFotosDeCorrida } from './qa-storage';
 import { reservaPorFotoMs, TECHO_PASADA_MS, type ParametrosCorrida } from './qa-tipos';
 import { TOPE_CORRIDA_USD } from '../../../scripts/qa-agentes/config.qa';
@@ -318,6 +351,8 @@ beforeEach(() => {
   enviados = [];
   seq = 0;
   costoPorFotoUsd = 0.0005;
+  clientesPedidos = 0;
+  saturaPorPath = new Map();
 });
 
 afterEach(() => {
@@ -597,5 +632,117 @@ describe('la memoria de la corrida', () => {
     expect(tenantsTras1).toBe(1);
     // Y el chofer sigue siendo el mismo — todas las fotos entran por un viaje.
     expect(new Set(enviados.map((e) => e.from)).size).toBe(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL INCIDENTE DEL 28-AGO-2026 (corrida 46ad99ca), REPRODUCIDO EN CHICO.
+//
+// 90 fotos reales, 10 'bad' — las 10 con EXACTAMENTE el mismo error: «Too
+// many connections issued to the database» (el pool de Storage API saturado
+// por las ráfagas de firmas del panel), repartidas por toda la corrida. Esta
+// es la prueba que lo habría cazado, con sus tres afirmaciones:
+//
+//   1. EL SISTEMA NO CREA N CLIENTES: un `supabaseAdmin()` por pasada — jamás
+//      uno por foto (era la hipótesis clásica, y quedó refutada: el cliente
+//      es singleton y el motor lo pide UNA vez).
+//   2. LA SATURACIÓN TRANSITORIA NO CUESTA UNA FOTO: se reintenta con espera
+//      exponencial y el reintento queda DECLARADO en el detalle.
+//   3. LA QUE NO CEDE queda 'bad' con su motivo — y N fallos con la MISMA
+//      firma se levantan como UNA señal en el motivo de la corrida (el
+//      criterio del PR #183), no como N fotos malas sueltas.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('saturación de Storage — el doble simula el pool lleno', () => {
+  test('un cliente por PASADA, jamás uno por foto (hipótesis 1 del incidente, refutada y fijada)', async () => {
+    const { corrida } = await nacer(5);
+    clientesPedidos = 0;
+    let r = await ejecutarPasada(corrida.id, Date.now() + 600_000);
+    let pasadas = 1;
+    while (!r.terminada && pasadas < 10) { r = await ejecutarPasada(corrida.id, Date.now() + 600_000); pasadas += 1; }
+    expect(r.terminada).toBe(true);
+    // 5 fotos + cierre + oráculos + limpieza y aun así: un cliente POR PASADA.
+    expect(clientesPedidos).toBe(pasadas);
+  });
+
+  test('la saturación que CEDE al reintento no cuesta la foto — y el reintento queda dicho', async () => {
+    const { corrida, ids } = await nacer(3);
+    // La foto 2 rebota UNA vez y luego sale (el blip real: el poll del panel
+    // pasó y el pool se vació).
+    saturaPorPath.set('banco/hash-1.jpg', 1);
+    let r = await ejecutarPasada(corrida.id, Date.now() + 600_000);
+    while (!r.terminada) r = await ejecutarPasada(corrida.id, Date.now() + 600_000);
+
+    const filas = await leerFotosDeCorrida(dbFalsa(), corrida.id);
+    expect(filas.ok).toBe(true);
+    if (!filas.ok) return;
+    const porFoto = new Map(filas.datos.map((f) => [f.fotoId, f]));
+    expect(porFoto.get(ids[1])?.estado).toBe('ok');                      // no costó la foto
+    expect(porFoto.get(ids[1])?.detalle).toMatch(/se reintentó 1 vez\(es\) por saturación de Storage/); // declarado
+    expect(porFoto.get(ids[0])?.detalle ?? null).toBeNull();             // las sanas no cargan notas ajenas
+    expect(fotosEnviadas()).toHaveLength(3);                             // las 3 entraron al camino real
+  });
+
+  test('N fallos con la MISMA firma = UNA señal en el motivo, no N fotos malas sueltas', async () => {
+    const { corrida, ids } = await nacer(6);
+    // Las fotos 2 y 5 nunca ceden: la saturación persistente del incidente.
+    saturaPorPath.set('banco/hash-1.jpg', Infinity);
+    saturaPorPath.set('banco/hash-4.jpg', Infinity);
+    let r = await ejecutarPasada(corrida.id, Date.now() + 600_000);
+    while (!r.terminada) r = await ejecutarPasada(corrida.id, Date.now() + 600_000);
+    expect(r.terminada).toBe(true);
+
+    const filas = await leerFotosDeCorrida(dbFalsa(), corrida.id);
+    expect(filas.ok).toBe(true);
+    if (!filas.ok) return;
+    const porFoto = new Map(filas.datos.map((f) => [f.fotoId, f]));
+    // Cada foto quedó 'bad' con su motivo — eso NO cambió (y no debe cambiar).
+    expect(porFoto.get(ids[1])?.estado).toBe('bad');
+    expect(porFoto.get(ids[4])?.estado).toBe('bad');
+    expect(porFoto.get(ids[1])?.detalle).toMatch(/Too many connections issued to the database/);
+    // Y el error DECLARA que hubo reintentos antes de rendirse.
+    expect(porFoto.get(ids[1])?.detalle).toMatch(/tras 3 intentos con espera exponencial/);
+
+    // La señal AGRUPADA: el motivo de la corrida junta los 2 fallos idénticos
+    // en UNA mano levantada, con el conteo y la firma.
+    const leida = await leerCorrida(dbFalsa(), corrida.id);
+    expect(leida.ok).toBe(true);
+    if (!leida.ok || !leida.datos) return;
+    expect(leida.datos.motivo).toMatch(/2 fallos con la MISMA firma/);
+    expect(leida.datos.motivo).toMatch(/too many connections issued to the database/i);
+    expect(leida.datos.motivo).toMatch(/patrón sistémico/);
+    // Las 4 sanas sí se midieron: la saturación de 2 no detuvo a las demás.
+    expect(leida.datos.avance!.ok).toBe(4);
+    expect(leida.datos.avance!.bad).toBe(2);
+  });
+});
+
+describe('patronesDeFallo — la firma agrupa, el umbral calla los baches sueltos', () => {
+  const bad = (detalle: string) => ({ estado: 'bad', detalle });
+
+  test('dos uuids distintos, la MISMA firma: el patrón los junta', () => {
+    const pats = patronesDeFallo([
+      bad('no se pudo descargar la foto 25c11dbb-c725-4ec3-bdaf-6fdf9dd04890: Too many connections issued to the database'),
+      bad('no se pudo descargar la foto 91be6462-ba04-407d-a567-364e8be896f9: Too many connections issued to the database'),
+      { estado: 'ok', detalle: null },
+    ]);
+    expect(pats).toHaveLength(1);
+    expect(pats[0].veces).toBe(2);
+    // La firma conserva el texto y normaliza lo variable (el uuid → <uuid>).
+    expect(pats[0].firma).toBe('no se pudo descargar la foto <uuid>: Too many connections issued to the database');
+  });
+
+  test('un fallo único NO es patrón (umbral = 2, el mismo del PR #183)', () => {
+    expect(MIN_FALLOS_MISMA_FIRMA).toBe(2);
+    expect(patronesDeFallo([bad('un error suelto')])).toHaveLength(0);
+    expect(fraseFallosMismaFirma([])).toBeNull();
+    // Y un 'bad' sin detalle no puede agruparse — no se inventa una firma.
+    expect(patronesDeFallo([{ estado: 'bad', detalle: null }, { estado: 'bad' }])).toHaveLength(0);
+  });
+
+  test('la frase nombra el conteo, la firma y que es UN problema, no N', () => {
+    const frase = fraseFallosMismaFirma([{ firma: 'x saturada', veces: 10, ejemplo: 'x' }]);
+    expect(frase).toContain('10 fallos con la MISMA firma');
+    expect(frase).toContain('«x saturada»');
+    expect(frase).toContain('patrón sistémico');
   });
 });

@@ -34,6 +34,11 @@ import {
   exigirTenantZZZ, exigirPrefijoQA, PREFIJO_QA, TOPE_CORRIDA_USD,
 } from '../../../scripts/qa-agentes/config.qa';
 import { relojAgotado } from '@/lib/likida/agentes/runner';
+// La MISMA noción de firma que los agentes de ingeniería (PR #183): uuids,
+// números y fechas fuera, para que 10 fallos del mismo bug sean UN patrón y no
+// 10 fotos malas sueltas. Se importa en vez de reescribirse — dos copias del
+// mismo normalizador divergen en silencio.
+import { firmaDeError } from '@/lib/likida/agentes/ingenieria_producto';
 import { correrOraculos } from './qa-oraculos';
 import { escenarioPorId } from './qa-escenarios';
 import {
@@ -373,6 +378,51 @@ async function limpiarTenant(db: SupabaseClient, corrida: CorridaQA): Promise<st
   }
 }
 
+// ── N FALLOS CON LA MISMA FIRMA = UNA SEÑAL, NO N FOTOS MALAS ──────────────
+//
+// El incidente del 28-ago-2026 (corrida 46ad99ca): 10 de 90 fotos 'bad', las
+// 10 con EXACTAMENTE el mismo error («Too many connections issued to the
+// database»), y el panel las enseñaba como diez fotos malas sueltas. Diez
+// fallos idénticos no son diez fotos con mala suerte: son UN problema
+// sistémico (ahí, la saturación del pool de Storage por las firmas del
+// panel), y la corrida debe levantarlo como una sola mano — el mismo criterio
+// que el PR #183 instaló en los agentes de ingeniería.
+
+export interface PatronFalloCorrida { firma: string; veces: number; ejemplo: string }
+
+/** Dos, el mismo umbral que `MIN_REPETICIONES_PATRON` de los agentes: un
+ *  fallo único puede ser un bache; dos con la misma forma ya son patrón. */
+export const MIN_FALLOS_MISMA_FIRMA = 2;
+
+/** Agrupa por firma los ítems 'bad' de una corrida (fotos del carril completo
+ *  o pasos del rápido — cualquier cosa con estado y detalle). Puro. */
+export function patronesDeFallo(
+  items: ReadonlyArray<{ estado: string; detalle?: string | null }>,
+): PatronFalloCorrida[] {
+  const acc = new Map<string, { veces: number; ejemplo: string }>();
+  for (const it of items) {
+    if (it.estado !== 'bad') continue;
+    const firma = firmaDeError(it.detalle ?? null);
+    if (firma === null) continue;
+    const a = acc.get(firma) ?? { veces: 0, ejemplo: it.detalle ?? '' };
+    a.veces += 1;
+    acc.set(firma, a);
+  }
+  return [...acc.entries()]
+    .filter(([, a]) => a.veces >= MIN_FALLOS_MISMA_FIRMA)
+    .map(([firma, a]) => ({ firma, veces: a.veces, ejemplo: a.ejemplo }))
+    .sort((x, y) => y.veces - x.veces);
+}
+
+/** La frase que se le pega al motivo de la corrida. `null` si no hay patrón —
+ *  no se grita sin evidencia (regla del #183: sin patrón verificado no hay
+ *  hallazgo). */
+export function fraseFallosMismaFirma(patrones: readonly PatronFalloCorrida[]): string | null {
+  if (patrones.length === 0) return null;
+  const partes = patrones.map((p) => `${p.veces} fallos con la MISMA firma: «${p.firma}»`);
+  return `⚠ ${partes.join(' · ')} — patrón sistémico, no ${patrones.reduce((s, p) => s + p.veces, 0)} fotos malas sueltas; búscale UNA causa.`;
+}
+
 // ── LA CORRIDA ──────────────────────────────────────────────────────────────
 
 /** Ejecuta el carril rápido de punta a punta, escribiendo cada paso en
@@ -486,7 +536,7 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
         return false;
       }
       try {
-        const dataUrl = await dataUrlDeFoto(db, foto);
+        const { dataUrl, reintentos } = await dataUrlDeFoto(db, foto);
         await processInbound({
           from: desde,
           type: 'image',
@@ -494,7 +544,11 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
           mediaDataUrlQA: dataUrl,
           waMessageId: `${prefijo}f${msg}`,
         });
-        await cerrarPaso(p, 'ok');
+        // El reintento por saturación se DECLARA aunque haya salido bien: es
+        // la evidencia de que Storage anduvo apretado (incidente 28-ago-2026).
+        await cerrarPaso(p, 'ok', reintentos > 0
+          ? `la descarga se reintentó ${reintentos} vez(es) por saturación de Storage antes de salir`
+          : undefined);
       } catch (e) {
         await cerrarPaso(p, 'bad', e instanceof Error ? e.message : String(e));
       }
@@ -603,6 +657,18 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
     } else {
       corrida.limpieza = await limpiarTenant(db, corrida);
       await cerrarPaso(pL, corrida.limpieza.startsWith('✅') ? 'ok' : 'warn', corrida.limpieza);
+    }
+
+    // N fallos con la MISMA firma se levantan como UNA señal (ver la cabecera
+    // de `patronesDeFallo`): aquí los ítems son los pasos del carril rápido.
+    const patrones = patronesDeFallo(corrida.pasos);
+    const frase = fraseFallosMismaFirma(patrones);
+    if (frase) {
+      corrida.motivo = corrida.motivo ? `${corrida.motivo} · ${frase}` : frase;
+      logger.warn('qa.corrida.fallos_misma_firma', {
+        corrida: corrida.id, carril: 'rapido',
+        patrones: patrones.map((p) => ({ firma: p.firma, veces: p.veces })),
+      });
     }
 
     corrida.fin = new Date().toISOString();
@@ -930,7 +996,12 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
         let estadoFoto: 'ok' | 'bad' = 'ok';
         let detalle: string | null = null;
         try {
-          const dataUrl = await dataUrlDeFoto(db, foto);
+          const { dataUrl, reintentos } = await dataUrlDeFoto(db, foto);
+          if (reintentos > 0) {
+            // Declarado aunque la foto salga 'ok': si Storage anduvo saturado,
+            // la corrida lo dice foto por foto (incidente 28-ago-2026).
+            detalle = `la descarga se reintentó ${reintentos} vez(es) por saturación de Storage antes de salir`;
+          }
           await processInbound({
             from: memoria.telefono,
             type: 'image',
@@ -942,7 +1013,9 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
           });
         } catch (e) {
           estadoFoto = 'bad';
-          detalle = e instanceof Error ? e.message : String(e);
+          // Se CONSERVA la nota del reintento si la hubo: que la descarga
+          // costó reintentos y AUN ASÍ algo falló es parte de la verdad.
+          detalle = `${detalle ? `${detalle} · ` : ''}${e instanceof Error ? e.message : String(e)}`;
         }
         duraciones.push(Date.now() - t0Foto);
 
@@ -1037,14 +1110,17 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
           let detalle: string | null = null;
           let estado: PasoQA['estado'] = 'ok';
           try {
-            const dataUrl = await dataUrlDeFoto(db, foto);
+            const { dataUrl, reintentos } = await dataUrlDeFoto(db, foto);
+            if (reintentos > 0) {
+              detalle = `la descarga se reintentó ${reintentos} vez(es) por saturación de Storage antes de salir`;
+            }
             await processInbound({
               from: desde, type: 'image',
               mediaId: `${prefijo}media-r1`, mediaDataUrlQA: dataUrl, waMessageId: `${prefijo}r1`,
             });
           } catch (e) {
             estado = 'bad';
-            detalle = e instanceof Error ? e.message : String(e);
+            detalle = `${detalle ? `${detalle} · ` : ''}${e instanceof Error ? e.message : String(e)}`;
           }
           let costo: number | null = null;
           try {
@@ -1149,6 +1225,26 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
     }
 
     const avFinal = await avanceAhora();
+
+    // ── N FALLOS CON LA MISMA FIRMA = UNA SEÑAL (incidente 28-ago-2026) ──
+    // La corrida 46ad99ca terminó 'parcial' con 10 fotos 'bad' que eran EL
+    // MISMO error diez veces («Too many connections issued to the database»)
+    // y nada lo decía como conjunto. Aquí se agrupan por firma (la del PR
+    // #183) y se escriben en el motivo como UN patrón, con su log — así el
+    // que mire la corrida busca UNA causa en vez de reabrir diez fotos.
+    const filasFinal = await leerFotosDeCorrida(db, corridaId);
+    if (filasFinal.ok) {
+      const patrones = patronesDeFallo(filasFinal.datos);
+      const frase = fraseFallosMismaFirma(patrones);
+      if (frase) {
+        corrida.motivo = corrida.motivo ? `${corrida.motivo} · ${frase}` : frase;
+        logger.warn('qa.corrida.fallos_misma_firma', {
+          corrida: corridaId, carril: 'completo',
+          patrones: patrones.map((p) => ({ firma: p.firma, veces: p.veces })),
+        });
+      }
+    }
+
     await guardar();
     return cerrarPasada(
       corrida.motivo ?? `corrida terminada en ${corrida.pasadas} pasada(s): ${avFinal?.ok ?? '?'} de ${avFinal?.total ?? corrida.parametros.fotoIds.length} fotos procesadas`,

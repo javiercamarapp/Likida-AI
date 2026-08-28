@@ -138,7 +138,10 @@ export async function POST(req: Request) {
 
     let dataUrl: string;
     try {
-      dataUrl = await dataUrlDeFoto(db, foto);
+      // El reintento por saturación viene declarado en el resultado; aquí la
+      // medición del OCR es lo que importa y un reintento no la cambia — el
+      // log de qa-storage ya lo dejó contado.
+      ({ dataUrl } = await dataUrlDeFoto(db, foto));
     } catch (e) {
       resultados.push({
         fotoId, etiqueta: foto.etiqueta, estado: 'fallo',

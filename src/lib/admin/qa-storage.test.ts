@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   hashBytes, duplicadaPorHash, extensionDe, mismoDiaMx, asegurarBuckets,
-  leerManifiesto, subirFotos, dataUrlDeFoto, firmarRuta,
+  leerManifiesto, subirFotos, dataUrlDeFoto, firmarRuta, firmarRutas,
   guardarCorrida, leerCorrida, listarCorridas, gastoHoyUsd,
   confirmarVerdadTerreno, guardarLectura, leerUltimasLecturas, gastoLecturasHoyUsd,
   _olvidarBuckets, BUCKET_QA_FOTOS,
@@ -40,6 +40,8 @@ let errorInsertFoto: ErrPg;              // error que devuelve el insert de qa_f
 let errorTabla: ErrPg;                   // error que devuelve CUALQUIER lectura
 let errorUpdateFoto: ErrPg;              // error que devuelve el update de qa_foto
 let seq: number;
+let fallosDescarga: number;              // N descargas rebotan con la saturación del 28-ago
+let lotesFirmados: string[][];           // cada createSignedUrls que el doble atendió
 
 /** Las restricciones que la 0185 declara y este doble tiene que respetar. */
 const UNICO: Record<string, string[]> = {
@@ -185,6 +187,12 @@ function dbFalsa(): SupabaseClient {
       },
       remove: async (paths: string[]) => { paths.forEach((p) => objetos.delete(`${bucket}/${p}`)); return { error: null }; },
       download: async (path: string) => {
+        // La saturación del incidente 28-ago-2026: los primeros N intentos
+        // rebotan con el mensaje LITERAL que storage-api devolvió.
+        if (fallosDescarga > 0) {
+          fallosDescarga -= 1;
+          return { data: null as never, error: { message: 'Too many connections issued to the database' } };
+        }
         const o = objetos.get(`${bucket}/${path}`);
         if (!o) return { data: null as never, error: { message: 'Object not found' } };
         return {
@@ -200,6 +208,17 @@ function dbFalsa(): SupabaseClient {
           ? { data: { signedUrl: `https://firmada.example/${bucket}/${path}` }, error: null }
           : { data: null, error: { message: 'Object not found' } }
       ),
+      // El endpoint de LOTE de storage-js: N rutas, UN request. Se registra
+      // cada llamada para poder afirmar cuántos requests costó una firma.
+      createSignedUrls: async (paths: string[], _s: number) => {
+        lotesFirmados.push([...paths]);
+        return {
+          data: paths.map((p) => (objetos.has(`${bucket}/${p}`)
+            ? { path: p, signedUrl: `https://firmada.example/${bucket}/${p}`, signedURL: `/${p}`, error: null }
+            : { path: p, signedUrl: null, signedURL: null, error: 'Object not found' })),
+          error: null,
+        };
+      },
     }),
   };
   return { from, storage } as unknown as SupabaseClient;
@@ -227,6 +246,7 @@ beforeEach(() => {
   objetos = new Map(); buckets = new Set();
   fallaTabla = null; alInsertarFoto = null; errorInsertFoto = null; errorTabla = null; seq = 0;
   errorUpdateFoto = null;
+  fallosDescarga = 0; lotesFirmados = [];
   _olvidarBuckets();
 });
 
@@ -348,8 +368,56 @@ describe('el banco de fotos', () => {
     await subirFotos(db, [{ nombre: 't.jpg', mime: 'image/jpeg', bytes: Buffer.from('pixeles') }]);
     const m = await leerManifiesto(db);
     if (!m.ok) throw new Error('banco ilegible');
-    const url = await dataUrlDeFoto(db, m.datos[0]);
-    expect(url).toBe(`data:image/jpeg;base64,${Buffer.from('pixeles').toString('base64')}`);
+    const { dataUrl, reintentos } = await dataUrlDeFoto(db, m.datos[0]);
+    expect(dataUrl).toBe(`data:image/jpeg;base64,${Buffer.from('pixeles').toString('base64')}`);
+    expect(reintentos).toBe(0);   // salió a la primera, y se DICE
+  });
+
+  // ── EL INCIDENTE DEL 28-AGO-2026, EN CHICO ────────────────────────────────
+  // 10 de 90 fotos quedaron 'bad' con «Too many connections issued to the
+  // database»: la saturación transitoria del pool de Storage. Estas pruebas
+  // fijan el segundo cinturón: esa firma —y SOLO esa— se reintenta con espera
+  // exponencial, y el reintento queda declarado, nunca mudo.
+  it('dataUrlDeFoto reintenta la saturación con espera exponencial y lo DECLARA', async () => {
+    const db = dbFalsa();
+    await subirFotos(db, [{ nombre: 't.jpg', mime: 'image/jpeg', bytes: Buffer.from('pixeles') }]);
+    const m = await leerManifiesto(db);
+    if (!m.ok) throw new Error('banco ilegible');
+    // Las 2 primeras descargas rebotan con la firma medida del incidente.
+    fallosDescarga = 2;
+    const esperas: number[] = [];
+    const { dataUrl, reintentos } = await dataUrlDeFoto(db, m.datos[0], {
+      dormir: async (ms) => { esperas.push(ms); },
+    });
+    expect(dataUrl).toBe(`data:image/jpeg;base64,${Buffer.from('pixeles').toString('base64')}`);
+    expect(reintentos).toBe(2);              // contado
+    expect(esperas).toEqual([400, 1200]);    // exponencial (400 × 3ⁿ), no martilleo
+  });
+
+  it('dataUrlDeFoto: agotados los reintentos, el error DICE cuántos intentos costó', async () => {
+    const db = dbFalsa();
+    await subirFotos(db, [{ nombre: 't.jpg', mime: 'image/jpeg', bytes: Buffer.from('x') }]);
+    const m = await leerManifiesto(db);
+    if (!m.ok) throw new Error('banco ilegible');
+    fallosDescarga = 99;   // la saturación no cede
+    await expect(dataUrlDeFoto(db, m.datos[0], { dormir: async () => {} }))
+      .rejects.toThrow(/tras 3 intentos con espera exponencial.*Too many connections/);
+  });
+
+  it('dataUrlDeFoto NO reintenta un 404 — fallaría igual y esconderia el error real', async () => {
+    const db = dbFalsa();
+    let descargas = 0;
+    const original = (db as unknown as { storage: { from: (b: string) => { download: (p: string) => Promise<unknown> } } }).storage.from;
+    (db as unknown as { storage: { from: unknown } }).storage.from = (b: string) => {
+      const bucket = original(b);
+      return {
+        ...bucket,
+        download: async (p: string) => { descargas += 1; return bucket.download(p); },
+      };
+    };
+    await expect(dataUrlDeFoto(db, foto({ path: 'banco/no-existe.jpg' }), { dormir: async () => {} }))
+      .rejects.toThrow(/Object not found/);
+    expect(descargas).toBe(1);   // un solo intento: el objeto no va a aparecer
   });
 
   it('firmarRuta: url firmada si existe, null si no — el panel degrada sin reventar', async () => {
@@ -359,6 +427,39 @@ describe('el banco de fotos', () => {
     if (!m.ok) throw new Error('ilegible');
     expect(await firmarRuta(db, BUCKET_QA_FOTOS, m.datos[0].path)).toContain('https://firmada.example/');
     expect(await firmarRuta(db, BUCKET_QA_FOTOS, 'banco/no-existe.jpg')).toBeNull();
+  });
+
+  it('firmarRutas firma N rutas en UN solo request — la causa raíz del 28-ago (90 firmas por poll) no puede volver', async () => {
+    const db = dbFalsa();
+    await subirFotos(db, [
+      { nombre: 'a.jpg', mime: 'image/jpeg', bytes: Buffer.from('a') },
+      { nombre: 'b.jpg', mime: 'image/jpeg', bytes: Buffer.from('b') },
+      { nombre: 'c.jpg', mime: 'image/jpeg', bytes: Buffer.from('c') },
+    ]);
+    const m = await leerManifiesto(db);
+    if (!m.ok) throw new Error('ilegible');
+    const rutas = m.datos.map((f) => f.path);
+    const urls = await firmarRutas(db, BUCKET_QA_FOTOS, [...rutas, 'banco/no-existe.jpg']);
+    // UN request para las 4 rutas, no 4 requests:
+    expect(lotesFirmados).toHaveLength(1);
+    expect(lotesFirmados[0]).toHaveLength(4);
+    for (const r of rutas) expect(urls.get(r)).toContain('https://firmada.example/');
+    // El contrato por ruta es el de firmarRuta: la que no existe degrada a null.
+    expect(urls.get('banco/no-existe.jpg')).toBeNull();
+  });
+
+  it('firmarRutas con lista vacía no viaja a Storage, y con duplicados firma una sola vez', async () => {
+    const db = dbFalsa();
+    expect((await firmarRutas(db, BUCKET_QA_FOTOS, [])).size).toBe(0);
+    expect(lotesFirmados).toHaveLength(0);
+    await subirFotos(db, [{ nombre: 'a.jpg', mime: 'image/jpeg', bytes: Buffer.from('a') }]);
+    const m = await leerManifiesto(db);
+    if (!m.ok) throw new Error('ilegible');
+    const p = m.datos[0].path;
+    const urls = await firmarRutas(db, BUCKET_QA_FOTOS, [p, p, p]);
+    expect(lotesFirmados).toHaveLength(1);
+    expect(lotesFirmados[0]).toEqual([p]);
+    expect(urls.get(p)).toContain('https://firmada.example/');
   });
 });
 

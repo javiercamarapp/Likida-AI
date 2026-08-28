@@ -57,7 +57,7 @@ const guardarLectura = vi.fn(async (_db: unknown, l: { fotoId: string }) => (
 
 vi.mock('@/lib/admin/qa-storage', () => ({
   leerManifiesto: async () => ({ ok: true as const, datos: banco }),
-  dataUrlDeFoto: async () => 'data:image/jpeg;base64,AAAA',
+  dataUrlDeFoto: async () => ({ dataUrl: 'data:image/jpeg;base64,AAAA', reintentos: 0 }),
   guardarLectura: (...a: unknown[]) => guardarLectura(...(a as [unknown, { fotoId: string }])),
   gastoHoyUsd: async () => gastoCorridas,
   gastoLecturasHoyUsd: async () => gastoLecturas,

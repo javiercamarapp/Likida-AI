@@ -32,6 +32,8 @@
 import { hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { conReintentoDeSaturacion, esSaturacionStorage, type OpcionesReintento } from '@/lib/supabase/reintento';
+import { logger } from '@/lib/logger';
 import {
   resumirAvance, PASADA_MUERTA_MS, validarVerdadTerreno,
   type CorridaQA, type FotoBanco, type PasoQA, type EstadoCorrida, type EscenarioId,
@@ -366,22 +368,96 @@ export async function subirFotos(
   return { ok: true, datos: { resultados, fotos: yaVistas } };
 }
 
+export interface DescargaFoto {
+  dataUrl: string;
+  /** Cuántas veces hubo que REPETIR la descarga por saturación de Storage.
+   *  0 = a la primera. El motor lo escribe en el detalle de la foto: un
+   *  reintento que nadie ve es una saturación que nadie arregla. */
+  reintentos: number;
+}
+
 /** Los bytes de una foto del banco como data-URL — SIEMPRE resuelto del lado
  *  del servidor a partir del id (nunca se confía en un data-URL del cliente:
- *  00-PANEL-DE-QA.md §3, "el resolver de la foto"). */
-export async function dataUrlDeFoto(db: SupabaseClient, foto: FotoBanco): Promise<string> {
-  const { data, error } = await db.storage.from(BUCKET_QA_FOTOS).download(foto.path);
-  if (error) throw new Error(`no se pudo descargar la foto ${foto.id}: ${error.message}`);
+ *  00-PANEL-DE-QA.md §3, "el resolver de la foto").
+ *
+ *  CON REINTENTO DECLARADO (incidente 28-ago-2026, corrida 46ad99ca): 10 de 90
+ *  fotos quedaron 'bad' con «Too many connections issued to the database» —
+ *  el pool de Storage API saturado por las ráfagas de firmas del panel (ver
+ *  `firmarRutas` y la cabecera de supabase/reintento.ts). La causa raíz se
+ *  arregló firmando en lote; este reintento es el segundo cinturón: un blip
+ *  transitorio de saturación no debe costar una foto 'bad'. SOLO reintenta esa
+ *  firma —un 404 falla igual a la segunda—, espera exponencial, y lo declara
+ *  en el resultado y en el log. */
+export async function dataUrlDeFoto(
+  db: SupabaseClient, foto: FotoBanco, reintento: OpcionesReintento = {},
+): Promise<DescargaFoto> {
+  const { resultado, reintentos } = await conReintentoDeSaturacion(
+    () => db.storage.from(BUCKET_QA_FOTOS).download(foto.path),
+    (r) => r.error !== null && esSaturacionStorage(r.error.message),
+    {
+      ...reintento,
+      alReintentar: (intento, esperaMs) => {
+        logger.warn('qa.foto.descarga_reintentada', { foto: foto.id, intento, esperaMs, motivo: 'saturación de Storage' });
+        reintento.alReintentar?.(intento, esperaMs);
+      },
+    },
+  );
+  const { data, error } = resultado;
+  if (error) {
+    const intentos = reintentos > 0 ? ` (tras ${reintentos + 1} intentos con espera exponencial)` : '';
+    throw new Error(`no se pudo descargar la foto ${foto.id}${intentos}: ${error.message}`);
+  }
   const buf = Buffer.from(await data.arrayBuffer());
-  return `data:${foto.mime};base64,${buf.toString('base64')}`;
+  return { dataUrl: `data:${foto.mime};base64,${buf.toString('base64')}`, reintentos };
 }
 
 /** URL firmada de 60 s — el mismo plazo que usa producción para el PDF
- *  (processor.ts, createSignedUrl(path, 60)). */
+ *  (processor.ts, createSignedUrl(path, 60)). Para UNA ruta suelta; una lista
+ *  se firma con `firmarRutas`, que cuesta UN request y no N. */
 export async function firmarRuta(db: SupabaseClient, bucket: string, path: string): Promise<string | null> {
   const { data, error } = await db.storage.from(bucket).createSignedUrl(path, 60);
   if (error || !data?.signedUrl) return null;
   return data.signedUrl;
+}
+
+/**
+ * Firma N rutas del mismo bucket en UN solo request (`createSignedUrls`).
+ *
+ * POR QUÉ EXISTE — el incidente del 28-ago-2026 (corrida 46ad99ca): el panel
+ * firmaba las ~90 fotos de la corrida UNA POR UNA en cada poll de ~2.5 s del
+ * ledger (/api/admin/qa/<id>/estado). Como 90 firmas tardan más que el
+ * intervalo, los polls se traslapaban, y storage_logs registró ráfagas de ~90
+ * POST /object/sign en ~4 s. Cada /object/sign le cuesta a Storage API una
+ * conexión de su pool contra Postgres; el pool se llenó a ratos y las
+ * descargas del carril —seriales e inocentes— rebotaron 10 veces con «Too
+ * many connections issued to the database», cada una tras ~2.4 s de espera de
+ * pool. Firmar en lote convierte esas ~90 conexiones por poll en UNA.
+ *
+ * El contrato por ruta es el MISMO que `firmarRuta`: url firmada, o `null` si
+ * el objeto no existe o no se pudo firmar (el panel degrada a "sin preview",
+ * no revienta). Si el lote ENTERO falla se dice en el log y todas quedan
+ * `null` — fallar cerrado y decirlo, nunca inventar una URL.
+ */
+export async function firmarRutas(
+  db: SupabaseClient, bucket: string, paths: readonly string[],
+): Promise<Map<string, string | null>> {
+  const urls = new Map<string, string | null>();
+  const unicos = [...new Set(paths)];
+  if (unicos.length === 0) return urls;
+  for (const p of unicos) urls.set(p, null);
+  try {
+    const { data, error } = await db.storage.from(bucket).createSignedUrls(unicos, 60);
+    if (error) {
+      logger.warn('qa.firmas.lote_fallo', { bucket, rutas: unicos.length, err: error.message });
+      return urls;
+    }
+    for (const fila of data ?? []) {
+      if (fila.path && fila.signedUrl && !fila.error) urls.set(fila.path, fila.signedUrl);
+    }
+  } catch (e) {
+    logger.warn('qa.firmas.lote_fallo', { bucket, rutas: unicos.length, err: e instanceof Error ? e.message : String(e) });
+  }
+  return urls;
 }
 
 // ── El oráculo humano: escribir la verdad-de-terreno ────────────────────────

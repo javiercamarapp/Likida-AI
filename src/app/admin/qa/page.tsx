@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
-  leerManifiesto, listarCorridas, gastoHoyUsd, firmarRuta, leerUltimasLecturas, BUCKET_QA_FOTOS,
+  leerManifiesto, listarCorridas, gastoHoyUsd, firmarRutas, leerUltimasLecturas, BUCKET_QA_FOTOS,
 } from '@/lib/admin/qa-storage';
 import { TOPE_DIA_USD } from '@/lib/admin/qa-tipos';
 import { TOPE_CORRIDA_USD } from '../../../../scripts/qa-agentes/config.qa';
@@ -27,10 +27,11 @@ export default async function QaPage() {
   let bancoError: string | null = null;
   const manifiesto = await leerManifiesto(db).catch((e) => ({ ok: false as const, error: String(e) }));
   if (manifiesto.ok) {
-    fotos = await Promise.all(manifiesto.datos.map(async (f) => ({
-      ...f,
-      url: await firmarRuta(db, BUCKET_QA_FOTOS, f.path).catch(() => null),
-    })));
+    // EN LOTE: el banco son ~90 fotos, y firmarlas una por una en cada
+    // pintada era parte de la ráfaga que saturó el pool de Storage el
+    // 28-ago-2026 (ver `firmarRutas`). Un request, no noventa.
+    const urls = await firmarRutas(db, BUCKET_QA_FOTOS, manifiesto.datos.map((f) => f.path));
+    fotos = manifiesto.datos.map((f) => ({ ...f, url: urls.get(f.path) ?? null }));
   } else {
     bancoError = manifiesto.error;
   }
