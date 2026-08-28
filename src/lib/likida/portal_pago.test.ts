@@ -1,0 +1,326 @@
+import { describe, it, expect } from 'vitest';
+import {
+  generarTokenPortal, hashDeToken, prefijoDeToken, diasDeVigencia, expiracionDesde,
+  estadoLiga, validarPropuesta, normalizarReferencia, esCarnada, esMetodoPortal,
+  identificaFactura, textoDelRep, METODOS_PORTAL,
+  PREFIJO_TOKEN, DIAS_VIGENCIA_DEFAULT, TEXTO_LIGA_NO_VALIDA,
+  type PropuestaCruda, type ContextoFactura,
+} from './portal_pago';
+import { DatoInvalido } from './errores';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LO QUE DECIDE EL PORTAL, SIN BASE DE DATOS.
+//
+// Se prueba la parte que decide DINERO y ACCESO: qué token vale, qué pago se
+// admite contra el saldo real, y qué se le dice a quien llega con un enlace
+// muerto. Las escrituras no se prueban contra un mock de Supabase — eso
+// demostraría que el mock funciona (mismo criterio que
+// `facturacion_escritura.test.ts`). Lo que la base garantiza —el índice único
+// de la propuesta, el CHECK del hash, la FK compuesta— lo demuestra el bloque
+// 181 de `verificaciones.sql`, contra Postgres real.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('generarTokenPortal — el token en claro no se puede reconstruir', () => {
+  it('el hash es SHA-256 en hex, 64 caracteres', () => {
+    // El CHECK `portal_pago_liga_hash_forma` (0228) exige exactamente esa
+    // forma: si alguien escribiera el token en claro, el insert falla en vez
+    // de guardarlo.
+    expect(generarTokenPortal().hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('el prefijo NO alcanza para reconstruir el token', () => {
+    const t = generarTokenPortal();
+    expect(t.enClaro.startsWith(t.prefijo)).toBe(true);
+    expect(t.enClaro.length).toBeGreaterThan(t.prefijo.length + 30);
+  });
+
+  it('lleva prefijo reconocible, para cacharlo en un log o un pegado', () => {
+    expect(generarTokenPortal().enClaro.startsWith(PREFIJO_TOKEN)).toBe(true);
+  });
+
+  it('100 tokens seguidos, 100 distintos', () => {
+    const set = new Set(Array.from({ length: 100 }, () => generarTokenPortal().enClaro));
+    expect(set.size).toBe(100);
+  });
+
+  it('el hash del token coincide con el que se guardaría', () => {
+    const t = generarTokenPortal();
+    expect(hashDeToken(t.enClaro)).toBe(t.hash);
+  });
+
+  it('el cuerpo es base64url: nada que tenga que escaparse en una URL', () => {
+    const t = generarTokenPortal();
+    expect(t.enClaro.slice(PREFIJO_TOKEN.length)).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(encodeURIComponent(t.enClaro)).toBe(t.enClaro);
+  });
+});
+
+describe('prefijoDeToken — sin la forma correcta ni se consulta la base', () => {
+  it('basura, vacío y un token ajeno devuelven null', () => {
+    expect(prefijoDeToken('hola')).toBeNull();
+    expect(prefijoDeToken('')).toBeNull();
+    expect(prefijoDeToken('lk_live_abcdefgh')).toBeNull();
+  });
+
+  it('el prefijo correcto pero truncado tampoco pasa', () => {
+    expect(prefijoDeToken(`${PREFIJO_TOKEN}ab`)).toBeNull();
+  });
+
+  it('un cuerpo con caracteres que no son base64url se rechaza', () => {
+    // `/`, `+` y `%` no salen del generador: dejarlos pasar sería mandar a la
+    // base lo que un atacante quiera escribir.
+    expect(prefijoDeToken(`${PREFIJO_TOKEN}abcd/efg`)).toBeNull();
+    expect(prefijoDeToken(`${PREFIJO_TOKEN}abcd%2fef`)).toBeNull();
+    expect(prefijoDeToken(`${PREFIJO_TOKEN}abcd efg`)).toBeNull();
+  });
+
+  it('un token real da su prefijo, y aguanta espacios alrededor', () => {
+    const t = generarTokenPortal();
+    expect(prefijoDeToken(t.enClaro)).toBe(t.prefijo);
+    expect(prefijoDeToken(`  ${t.enClaro}  `)).toBe(t.prefijo);
+  });
+});
+
+describe('diasDeVigencia — nunca "para siempre", nunca "muerto al nacer"', () => {
+  it('sin configurar, 90 días', () => {
+    expect(diasDeVigencia(undefined)).toBe(DIAS_VIGENCIA_DEFAULT);
+    expect(DIAS_VIGENCIA_DEFAULT).toBe(90);
+  });
+
+  it('un valor sano se respeta', () => {
+    expect(diasDeVigencia('30')).toBe(30);
+    expect(diasDeVigencia('365')).toBe(365);
+    expect(diasDeVigencia('1')).toBe(1);
+  });
+
+  it('cero, negativo y absurdo caen al default en vez de aplicarse', () => {
+    // `0` dejaría cada enlace muerto al nacer; `999999` es "para siempre"
+    // escrito de otra forma, que es lo que la caducidad existe para impedir.
+    expect(diasDeVigencia('0')).toBe(DIAS_VIGENCIA_DEFAULT);
+    expect(diasDeVigencia('-5')).toBe(DIAS_VIGENCIA_DEFAULT);
+    expect(diasDeVigencia('999999')).toBe(DIAS_VIGENCIA_DEFAULT);
+    expect(diasDeVigencia('366')).toBe(DIAS_VIGENCIA_DEFAULT);
+  });
+
+  it('lo ilegible cae al default, no lanza', () => {
+    expect(diasDeVigencia('noventa')).toBe(DIAS_VIGENCIA_DEFAULT);
+    expect(diasDeVigencia('')).toBe(DIAS_VIGENCIA_DEFAULT);
+    expect(diasDeVigencia('30.5')).toBe(DIAS_VIGENCIA_DEFAULT);
+  });
+});
+
+describe('expiracionDesde — la caducidad es una fecha, no una promesa', () => {
+  it('90 días después del instante que se le da', () => {
+    const ahora = new Date('2026-08-27T12:00:00.000Z');
+    expect(expiracionDesde(ahora, 90)).toBe('2026-11-25T12:00:00.000Z');
+  });
+});
+
+describe('estadoLiga — y por qué el orden importa', () => {
+  const futuro = new Date('2026-12-31T00:00:00Z').toISOString();
+  const pasado = new Date('2026-01-01T00:00:00Z').toISOString();
+  const ahora = new Date('2026-08-27T00:00:00Z');
+
+  it('vigente cuando no está revocada y no ha caducado', () => {
+    expect(estadoLiga({ expira_en: futuro, revocada_en: null }, ahora)).toBe('vigente');
+  });
+
+  it('expirada cuando la fecha ya pasó', () => {
+    expect(estadoLiga({ expira_en: pasado, revocada_en: null }, ahora)).toBe('expirada');
+  });
+
+  it('revocada GANA sobre expirada: eso es lo que un humano decidió', () => {
+    expect(estadoLiga({ expira_en: pasado, revocada_en: pasado }, ahora)).toBe('revocada');
+    expect(estadoLiga({ expira_en: futuro, revocada_en: pasado }, ahora)).toBe('revocada');
+  });
+
+  it('una fecha ilegible se trata como CADUCADA — falla cerrado', () => {
+    // El modo de falla contrario abriría una factura por un dato corrupto.
+    expect(estadoLiga({ expira_en: 'no-es-fecha', revocada_en: null }, ahora)).toBe('expirada');
+  });
+
+  it('el instante exacto de la caducidad ya NO vale', () => {
+    expect(estadoLiga({ expira_en: ahora.toISOString(), revocada_en: null }, ahora)).toBe('expirada');
+  });
+});
+
+describe('TEXTO_LIGA_NO_VALIDA — un solo texto para las cuatro razones', () => {
+  it('no nombra ninguna de las cuatro causas por separado', () => {
+    // "Este enlace expiró" le confirma a quien prueba tokens que acertó uno.
+    expect(TEXTO_LIGA_NO_VALIDA).not.toMatch(/revocad|no existe|inválid/i);
+  });
+});
+
+// ── EL FORMULARIO ──────────────────────────────────────────────────────────
+
+const BASE: PropuestaCruda = {
+  fecha: '2026-08-20',
+  monto: '1160',
+  referencia: 'REF-8891',
+  metodo: 'transferencia',
+};
+const CTX: ContextoFactura = { fechaFactura: '2026-08-14', saldo: 1160, hoy: '2026-08-27' };
+
+describe('validarPropuesta — falla cerrado cuando no sabe el saldo', () => {
+  it('con saldo null NO se acepta nada, y se dice por qué', () => {
+    // Sin saldo tampoco se puede decir en pantalla cuánto debe: el cliente
+    // estaría tecleando a ciegas contra una cifra que nadie verificó.
+    expect(() => validarPropuesta(BASE, { ...CTX, saldo: null })).toThrow(DatoInvalido);
+    expect(() => validarPropuesta(BASE, { ...CTX, saldo: null })).toThrow(/saldo/i);
+  });
+
+  it('un saldo de CERO no es lo mismo que un saldo desconocido', () => {
+    // Con saldo 0 sí se sabe: se rechaza por exceder, no por ignorancia.
+    expect(() => validarPropuesta(BASE, { ...CTX, saldo: 0 })).toThrow(/saldo pendiente/i);
+  });
+});
+
+describe('validarPropuesta — la fecha', () => {
+  it('acepta la de hoy y la de la factura', () => {
+    expect(validarPropuesta({ ...BASE, fecha: '2026-08-27' }, CTX).fecha).toBe('2026-08-27');
+    expect(validarPropuesta({ ...BASE, fecha: '2026-08-14' }, CTX).fecha).toBe('2026-08-14');
+  });
+
+  it('rechaza el futuro', () => {
+    expect(() => validarPropuesta({ ...BASE, fecha: '2026-08-28' }, CTX)).toThrow(/posterior a hoy/i);
+  });
+
+  it('rechaza pagar ANTES de que existiera la factura', () => {
+    expect(() => validarPropuesta({ ...BASE, fecha: '2026-08-13' }, CTX)).toThrow(/anterior a la de la factura/i);
+  });
+
+  it('rechaza una fecha que no existe y una ilegible', () => {
+    expect(() => validarPropuesta({ ...BASE, fecha: '2026-02-30' }, CTX)).toThrow(DatoInvalido);
+    expect(() => validarPropuesta({ ...BASE, fecha: '20/08/2026' }, CTX)).toThrow(DatoInvalido);
+    expect(() => validarPropuesta({ ...BASE, fecha: '' }, CTX)).toThrow(DatoInvalido);
+  });
+});
+
+describe('validarPropuesta — el monto', () => {
+  it('acepta lo que se pega desde un estado de cuenta', () => {
+    expect(validarPropuesta({ ...BASE, monto: '$1,160.00' }, CTX).monto).toBe(1160);
+    expect(validarPropuesta({ ...BASE, monto: ' 1160 ' }, CTX).monto).toBe(1160);
+  });
+
+  it('redondea a centavos, sin cola binaria', () => {
+    expect(validarPropuesta({ ...BASE, monto: '0.1' }, CTX).monto).toBe(0.1);
+    expect(validarPropuesta({ ...BASE, monto: '100.005' }, CTX).monto).toBe(100.01);
+  });
+
+  it('cero y negativo se rechazan', () => {
+    expect(() => validarPropuesta({ ...BASE, monto: '0' }, CTX)).toThrow(DatoInvalido);
+    expect(() => validarPropuesta({ ...BASE, monto: '-100' }, CTX)).toThrow(DatoInvalido);
+  });
+
+  it('vacío e ilegible se rechazan con instrucción', () => {
+    expect(() => validarPropuesta({ ...BASE, monto: '' }, CTX)).toThrow(/Escribe el monto/i);
+    expect(() => validarPropuesta({ ...BASE, monto: 'mil pesos' }, CTX)).toThrow(/12345.67/);
+  });
+
+  it('por encima del saldo se rechaza, y manda a hablar con la flota', () => {
+    // El portal es de UNA factura: un depósito que cubre varias no se puede
+    // repartir desde aquí, y fingir que sí dejaría un dicho imposible de cuadrar.
+    expect(() => validarPropuesta({ ...BASE, monto: '1200' }, CTX)).toThrow(/saldo pendiente/i);
+  });
+
+  it('el centavo de tolerancia es el mismo que usa la base', () => {
+    // `factura_total_cuadra` (0049) y `factura_saldo` dan por saldada una
+    // factura con un centavo de holgura: aquí se respeta la misma.
+    expect(validarPropuesta({ ...BASE, monto: '1160.01' }, CTX).monto).toBe(1160.01);
+    expect(() => validarPropuesta({ ...BASE, monto: '1160.02' }, CTX)).toThrow(DatoInvalido);
+  });
+
+  it('un pago PARCIAL entra sin problema: es la norma, no la excepción', () => {
+    expect(validarPropuesta({ ...BASE, monto: '500' }, CTX).monto).toBe(500);
+  });
+});
+
+describe('validarPropuesta — la referencia y el método', () => {
+  it('la referencia es obligatoria y se explica para qué sirve', () => {
+    expect(() => validarPropuesta({ ...BASE, referencia: '' }, CTX)).toThrow(/referencia bancaria/i);
+    expect(() => validarPropuesta({ ...BASE, referencia: 'ab' }, CTX)).toThrow(DatoInvalido);
+  });
+
+  it('se recorta, para que cuadre con el CHECK de la 0228', () => {
+    expect(validarPropuesta({ ...BASE, referencia: '  REF-8891  ' }, CTX).referencia).toBe('REF-8891');
+  });
+
+  it('más de 80 caracteres se rechaza en vez de truncarse en silencio', () => {
+    expect(() => validarPropuesta({ ...BASE, referencia: 'x'.repeat(81) }, CTX)).toThrow(/80/);
+    expect(validarPropuesta({ ...BASE, referencia: 'x'.repeat(80) }, CTX).referencia).toHaveLength(80);
+  });
+
+  it('el método es una lista cerrada: nada de texto libre de un tercero', () => {
+    expect(() => validarPropuesta({ ...BASE, metodo: 'bitcoin' }, CTX)).toThrow(/Elige cómo pagaste/i);
+    expect(() => validarPropuesta({ ...BASE, metodo: '' }, CTX)).toThrow(DatoInvalido);
+    for (const m of METODOS_PORTAL) {
+      expect(validarPropuesta({ ...BASE, metodo: m.id }, CTX).metodo).toBe(m.id);
+    }
+  });
+
+  it('esMetodoPortal reconoce la lista y nada más', () => {
+    expect(esMetodoPortal('cheque')).toBe(true);
+    expect(esMetodoPortal('paypal')).toBe(false);
+  });
+});
+
+describe('normalizarReferencia — espeja el índice único de la 0228', () => {
+  it('mayúsculas y orillas: el mismo movimiento bancario', () => {
+    // El índice es `upper(btrim(referencia))`. Esta función es la explicación,
+    // no el candado — pero si divergiera, el mensaje de "ya lo registraste"
+    // diría una cosa y la base haría otra.
+    expect(normalizarReferencia(' ref-8891 ')).toBe('REF-8891');
+    expect(normalizarReferencia('REF-8891')).toBe(normalizarReferencia('ref-8891'));
+  });
+});
+
+describe('esCarnada — el honeypot descarta en silencio', () => {
+  it('vacío, espacios y ausente NO son carnada', () => {
+    expect(esCarnada('')).toBe(false);
+    expect(esCarnada('   ')).toBe(false);
+    expect(esCarnada(undefined)).toBe(false);
+    expect(esCarnada(null)).toBe(false);
+    expect(esCarnada(123)).toBe(false);
+  });
+
+  it('cualquier texto es carnada', () => {
+    expect(esCarnada('https://spam.example')).toBe(true);
+  });
+});
+
+describe('identificaFactura — «sin folio» es la verdad, no un guion', () => {
+  it('serie y folio juntos cuando hay serie', () => {
+    expect(identificaFactura({ serie: 'A', folio: '123', cfdiUuid: null })).toBe('A-123');
+  });
+
+  it('folio solo cuando no hay serie', () => {
+    expect(identificaFactura({ serie: null, folio: '123', cfdiUuid: null })).toBe('123');
+  });
+
+  it('el UUID es el respaldo cuando no hay folio', () => {
+    expect(identificaFactura({ serie: null, folio: null, cfdiUuid: 'abc-123' })).toBe('abc-123');
+  });
+
+  it('sin nada, lo dice con palabras', () => {
+    // Un guion en una pantalla de cobranza se lee como un dato que no cargó.
+    expect(identificaFactura({ serie: null, folio: null, cfdiUuid: null })).toBe('sin folio');
+  });
+});
+
+describe('textoDelRep — tres estados, y ninguno se disfraza del otro', () => {
+  it('sin REP dice que aparecerá cuando lo haya', () => {
+    expect(textoDelRep(null)).toMatch(/aparecerá aquí/i);
+  });
+
+  it('con XML ofrece la descarga', () => {
+    expect(textoDelRep({ cfdi_uuid: 'abc', xml: '<x/>' })).toMatch(/descargar/i);
+  });
+
+  it('sin XML da el UUID citable y NO ofrece descarga', () => {
+    // Un botón que no baja nada es peor que no ofrecerlo.
+    const t = textoDelRep({ cfdi_uuid: 'abc-999', xml: null });
+    expect(t).toContain('abc-999');
+    expect(t).not.toMatch(/descarg/i);
+    expect(t).toMatch(/pídeselo/i);
+  });
+});

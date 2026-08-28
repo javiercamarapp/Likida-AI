@@ -10380,6 +10380,155 @@ begin
     vigente_incompleto_rebota, reserva_con_uuid_entra, origen_basura_rebota, palancas;
 end $$;
 
+-- ── 181. El portal de pago: una liga viva por factura, el token que no se puede guardar en claro, y la propuesta que no salda nada (mig. 0228) ──
+-- Lo que solo la base demuestra: (a) UNA liga viva por factura — el doble clic
+-- en "generar enlace" lo resuelve el índice parcial, gana exactamente una;
+-- (b) revocar LIBERA: tras revocar, la liga nueva entra; (c) el token EN CLARO
+-- no cabe en la columna — el CHECK de 64 hex es la red que impide guardarlo
+-- por accidente; (d) idempotencia de la propuesta: la misma referencia con
+-- otras mayúsculas es el mismo movimiento bancario y rebota; (e) la FK
+-- compuesta: la flota B no cuelga su liga de la factura de la flota A; (f) el
+-- estado de la propuesta es coherente — 'conciliada' sin el pago real rebota,
+-- que es el candado de "la conciliación propone, el humano confirma"; (g) el
+-- REP emitido no admite el mismo folio fiscal dos veces ni un UUID en
+-- mayúsculas; (h) LA PROPUESTA NO MUEVE `factura_saldo`: es la afirmación
+-- central de la migración y se comprueba contra la vista, no contra el código;
+-- (i) el doble candado en las cuatro tablas nuevas.
+do $$
+declare
+  ta uuid; tb uuid; ca uuid; cb uuid; fa uuid; fb uuid;
+  liga_a uuid; liga_b uuid; pago_a uuid;
+  segunda_liga_rebota boolean := false;
+  revocada_libera boolean := false;
+  token_en_claro_rebota boolean := false;
+  propuesta_repetida_rebota boolean := false;
+  liga_cruzada_rebota boolean := false;
+  conciliada_sin_pago_rebota boolean := false;
+  rep_uuid_repetido_rebota boolean := false;
+  rep_mayusculas_rebota boolean := false;
+  saldo_antes numeric; saldo_despues numeric; saldo_intacto boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0228 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0228 B') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ cli 0228 A') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (tb, 'ZZZ cli 0228 B') returning id into cb;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, ca, 1000, 160, 1160, 'emitida') returning id into fa;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (tb, cb, 500, 80, 580, 'emitida') returning id into fb;
+
+  -- (a) Una liga viva por factura. La segunda rebota contra el índice parcial.
+  insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+    values (ta, fa, repeat('a', 64), 'pgo_aaaa', now() + interval '90 days')
+    returning id into liga_a;
+  begin
+    insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+      values (ta, fa, repeat('b', 64), 'pgo_bbbb', now() + interval '90 days');
+    segunda_liga_rebota := false;
+  exception when unique_violation then
+    segunda_liga_rebota := true;
+  end;
+
+  -- (b) Revocar LIBERA: el índice es parcial sobre las vivas.
+  update portal_pago_liga set revocada_en = now() where id = liga_a;
+  begin
+    insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+      values (ta, fa, repeat('c', 64), 'pgo_cccc', now() + interval '90 days')
+      returning id into liga_a;
+    revocada_libera := true;
+  exception when others then
+    revocada_libera := false;
+  end;
+
+  -- (c) El token EN CLARO no cabe: 64 hex o nada. Si alguien escribiera el
+  -- token en vez de su sha256, el insert falla en vez de conservarlo.
+  begin
+    insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+      values (tb, fb, 'pgo_EstoEsElTokenEnClaro', 'pgo_Esto', now() + interval '90 days');
+    token_en_claro_rebota := false;
+  exception when check_violation then
+    token_en_claro_rebota := true;
+  end;
+
+  -- (e) La liga de la flota A sobre la factura de la flota B: la FK compuesta
+  -- lo rebota, no un filtro de aplicación.
+  -- Se ataca `fb` y no `fa` A PROPÓSITO: `fa` ya tiene liga viva, y entonces el
+  -- rebote vendría del índice único —la garantía del inciso (a)— y este inciso
+  -- estaría midiendo dos veces lo mismo en vez de la FK. `fb` está libre: el
+  -- (c) rebotó antes de insertar.
+  begin
+    insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+      values (ta, fb, repeat('d', 64), 'pgo_dddd', now() + interval '90 days');
+    liga_cruzada_rebota := false;
+  exception when foreign_key_violation then
+    liga_cruzada_rebota := true;
+  end;
+
+  -- (h) LA PROPUESTA NO MUEVE EL SALDO. Se mide la vista antes y después.
+  select saldo into saldo_antes from factura_saldo where factura_id = fa;
+  insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+    values (ta, liga_a, fa, current_date, 1160, 'REF-8891');
+  select saldo into saldo_despues from factura_saldo where factura_id = fa;
+  saldo_intacto := saldo_antes = 1160 and saldo_despues = 1160;
+
+  -- (d) La misma referencia con otras mayúsculas es el mismo movimiento.
+  begin
+    insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+      values (ta, liga_a, fa, current_date, 1160, 'ref-8891');
+    propuesta_repetida_rebota := false;
+  exception when unique_violation then
+    propuesta_repetida_rebota := true;
+  end;
+
+  -- (f) 'conciliada' EXIGE el pago real. Sin él, la propuesta no puede
+  -- declararse conciliada: es el candado de que solo un abono de verdad cierra
+  -- el circuito.
+  begin
+    update portal_pago_propuesta set estado = 'conciliada', resuelta_en = now()
+      where liga_id = liga_a;
+    conciliada_sin_pago_rebota := false;
+  exception when check_violation then
+    conciliada_sin_pago_rebota := true;
+  end;
+
+  -- (g) El REP emitido: un folio fiscal, una vez, y siempre en minúsculas.
+  insert into pago_recibido (tenant_id, factura_id, monto) values (ta, fa, 1160) returning id into pago_a;
+  insert into rep_emitido (tenant_id, factura_id, pago_id, cfdi_uuid, fecha_pago, imp_pagado)
+    values (ta, fa, pago_a, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001', current_date, 1160);
+  begin
+    insert into rep_emitido (tenant_id, factura_id, pago_id, cfdi_uuid, fecha_pago, imp_pagado)
+      values (ta, fa, pago_a, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001', current_date, 1160);
+    rep_uuid_repetido_rebota := false;
+  exception when unique_violation then
+    rep_uuid_repetido_rebota := true;
+  end;
+  begin
+    insert into rep_emitido (tenant_id, factura_id, pago_id, cfdi_uuid, fecha_pago, imp_pagado)
+      values (ta, fa, pago_a, 'AAAAAAAA-BBBB-4CCC-8DDD-000000000002', current_date, 1160);
+    rep_mayusculas_rebota := false;
+  exception when check_violation then
+    rep_mayusculas_rebota := true;
+  end;
+
+  -- (i) El doble candado en las cuatro tablas nuevas.
+  cerrado := not has_table_privilege('anon', 'public.portal_pago_liga', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.portal_pago_liga', 'SELECT')
+    and has_table_privilege('service_role', 'public.portal_pago_liga', 'SELECT')
+    and not has_table_privilege('anon', 'public.portal_pago_propuesta', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.portal_pago_propuesta', 'SELECT')
+    and has_table_privilege('service_role', 'public.portal_pago_propuesta', 'INSERT')
+    and not has_table_privilege('anon', 'public.rep_emitido', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.rep_emitido', 'SELECT')
+    and not has_table_privilege('anon', 'public.portal_pago_acceso', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.portal_pago_acceso', 'SELECT');
+
+  raise exception 'PORTAL_PAGO_0228  segunda_liga_rebota=%  revocada_libera=%  token_en_claro_rebota=%  liga_cruzada_rebota=%  saldo_intacto=%  propuesta_repetida_rebota=%  conciliada_sin_pago_rebota=%  rep_uuid_repetido_rebota=%  rep_mayusculas_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t)',
+    segunda_liga_rebota, revocada_libera, token_en_claro_rebota, liga_cruzada_rebota,
+    coalesce(saldo_intacto, false), propuesta_repetida_rebota, conciliada_sin_pago_rebota,
+    rep_uuid_repetido_rebota, rep_mayusculas_rebota, cerrado;
+end $$;
+
 -- ── 182. Las reglas en lenguaje natural: la firma humana, el catálogo cerrado y el sello por ciclo (mig. 0229) ──
 -- El bloque 181 es del portal de pago (rama paralela); esta ola toma el 182.
 --

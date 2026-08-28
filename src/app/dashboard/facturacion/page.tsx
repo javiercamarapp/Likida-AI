@@ -13,6 +13,7 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { mxn } from '@/lib/formato';
 import { VistaFacturacion, type CapturaFacturacion } from './vista';
 import { BloqueEstadias } from './estadias';
+import { BloquePortalPago } from './portal';
 import type { ResultadoForma } from './forma';
 
 export const dynamic = 'force-dynamic';
@@ -194,6 +195,10 @@ export default async function PaginaFacturacion({
       {/* Estadías y detención (0207): sección independiente — sus lecturas y
           su fallo no tocan la cartera ni el auditor. */}
       <BloqueEstadias sp={sp} />
+      {/* Portal de pago del cliente (0228): mismo criterio de independencia.
+          Lo que llega por el enlace público NO está en la cartera de arriba —
+          entra aquí como propuesta y solo la conciliación la mueve. */}
+      <BloquePortalPago sp={sp} />
     </>
   );
 }
