@@ -13190,3 +13190,78 @@ begin
     check_tabla_rebota, etiqueta_buena_entra, contadores_rebotan,
     lecturas_tras_borrar, rls_activo, cerrado;
 end $$;
+
+-- ── 198. Los litros del consolidado: dominio y el índice de la 3.3.1.7 (mig. 0242) ──
+-- (El ordinal 174 que la consigna reservaba YA ESTABA TOMADO desde la máquina
+--  de prospección, mig. 0217. El máximo vivo era el 197; este es el siguiente.
+--  El conteo de `do $$` es 173 porque seis ordinales quedaron reservados sin
+--  bloque — ver el 171 y los 165, 167-169.)
+--
+-- Lo que solo la base demuestra de la 0242:
+--   (a) un litro NEGATIVO no entra. El motor tiene su propio `litros > 0`
+--       antes de acumular, pero eso protege el cálculo de hoy, no la columna:
+--       cualquier reporte futuro que sume `cfdi_consolidado_linea.litros`
+--       heredaría el negativo, y un negativo entre las líneas del mes RESTA
+--       litros realmente cargados del estímulo de la LIF 2026 art. 20 ap. A;
+--   (b) `null` SÍ entra y significa "esta línea no midió volumen" (una caseta
+--       trae Cantidad=1 y eso es UN CRUCE). `null` ≠ 0, y el CHECK no lo
+--       confunde con un dato faltante que haya que rellenar;
+--   (c) el cero entra: una línea de $0 con 0.000 L es rara pero no imposible
+--       (una corrección del emisor), y rebotarla obligaría al intake a
+--       inventar `null` donde el documento sí midió;
+--   (d) el índice parcial del camino B de `evidenciaMonedero` EXISTE y su
+--       predicado es el del WHERE de `lineasEccParaCuadre` — un índice con
+--       otro predicado no lo usaría el planner y la consulta seguiría
+--       escaneando la cola entera de casetas del tenant en cada cuadre.
+do $$
+declare
+  ta uuid; xid uuid;
+  negativo_rebota boolean; nulo_entra boolean; cero_entra boolean;
+  indice_existe boolean; predicado_correcto boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0242') returning id into ta;
+  insert into cfdi_xml (tenant_id, cfdi_uuid, xml, tiene_multiples_conceptos, total_conceptos)
+    values (ta, 'zzz-verif-0242-uuid', '<x/>', true, 3)
+    returning id into xid;
+
+  -- (a) El litro negativo.
+  begin
+    insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, litros)
+      values (ta, xid, 1, 'ecc12', 1200.00, -450.000);
+    negativo_rebota := false;
+  exception when check_violation then
+    negativo_rebota := true;
+  end;
+
+  -- (b) NULL: "no se midió volumen" sigue siendo un valor legítimo.
+  begin
+    insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, litros)
+      values (ta, xid, 2, 'concepto_base', 118.00, null);
+    nulo_entra := true;
+  exception when others then
+    nulo_entra := false;
+  end;
+
+  -- (c) El cero medido no se confunde con el negativo.
+  begin
+    insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, litros)
+      values (ta, xid, 3, 'ecc12', 0.00, 0.000);
+    cero_entra := true;
+  exception when others then
+    cero_entra := false;
+  end;
+
+  -- (d) El índice del camino B, con SU predicado.
+  select count(*) = 1 into indice_existe
+    from pg_class
+    where relname = 'cfdi_consolidado_linea_ecc_por_fecha_idx' and relkind = 'i';
+  select pg_get_indexdef(c.oid) like '%WHERE%ecc12%estacion_rfc IS NOT NULL%'
+    into predicado_correcto
+    from pg_class c
+    where c.relname = 'cfdi_consolidado_linea_ecc_por_fecha_idx';
+
+  delete from tenant where id = ta;
+
+  raise exception 'CONSOLIDADO_LITROS_0242  negativo_rebota=%  nulo_entra=%  cero_entra=%  indice_existe=%  predicado_correcto=%   (esperado t / t / t / t / t)',
+    negativo_rebota, nulo_entra, cero_entra, indice_existe, predicado_correcto;
+end $$;

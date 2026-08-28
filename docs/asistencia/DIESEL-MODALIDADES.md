@@ -50,6 +50,11 @@ mucho mayor y **más margen de efectivo del que cree**: argumento de venta que h
    pagó AL EMISOR, no cómo se pagó en la bomba. Si es crédito será `99` y `engine.ts:1185` **tira los
    litros de todo el mes**. Es la modalidad más limpia fiscalmente y la que más riesgo tiene de dar
    cero. **Verificar contra un ECC real ANTES de tocar código.**
+   **28-ago-2026 — sigue abierta, y el diagnóstico de arriba estaba invertido:** el camino de
+   consolidado (`ligarLineaAGasto`) **nunca copia `forma_pago`** del encabezado del CFDI al gasto,
+   así que el `99` del ECC no apaga nada hoy; lo que sí apaga los litros es que el OCR del ticket
+   de monedero deje `forma_pago` en NULL. Análisis completo, recomendación y qué falta para
+   decidirlo: `docs/asistencia/ECC-FORMAPAGO-99.md`. **No se tocó el motor.**
 3. **6.3 — Doble conteo.** El dedup compara `(uuid, orden)` o `concepto|folio|monto`. El ticket no
    trae UUID y su folio es el de la estación; la línea ECC trae el UUID del monedero. **Las llaves no
    se ven como copias** → la carga entra dos veces, se infla el viaje y se le cobra al chofer una
@@ -71,7 +76,9 @@ mucho mayor y **más margen de efectivo del que cree**: argumento de venta que h
    (mig. 0076) **no tiene columna de litros**. Afecta a toda flota con monedero — las medianas y
    grandes, donde el estímulo vale más. Hoy obtienen conciliación y **cero litros acreditables**.
    Es una columna y un mapeo: **el mejor esfuerzo/dinero de toda la lista**.
-2. **RMF 3.3.1.7 no se aplica en ningún lado** (sólo se menciona en el ROADMAP) → §6.3.
+2. ~~**RMF 3.3.1.7 no se aplica en ningún lado** (sólo se menciona en el ROADMAP)~~ → §6.3.
+   **CERRADO el 23-ago-2026**: `evidencia_monedero.ts` → `engine.ts` (diferencia `ticket_monedero`)
+   y `sat_descarga/cruce.ts`. Sigue abierta la vigilancia de la ficha 7/ISR (hueco 3).
 3. **Sin padrón de emisores ni vigilancia de la ficha 7/ISR.** La autorización se renueva con aviso
    **entre agosto y octubre** — estamos dentro de la ventana. Si el emisor cae, el cliente se queda
    sin comprobante deducible de combustible y nadie le avisa.

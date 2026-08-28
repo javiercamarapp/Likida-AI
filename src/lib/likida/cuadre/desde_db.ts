@@ -167,7 +167,16 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
 }
 
 /** Líneas ECC del tenant en la ventana de los gastos (±1 día). Best-effort
- *  caller: un fallo no tumba el cuadre, solo apaga el camino B. */
+ *  caller: un fallo no tumba el cuadre, solo apaga el camino B.
+ *
+ *  FASE 2 · el filtro es el MISMO que `evidenciaMonedero` ya aplica en
+ *  memoria, movido al WHERE: camino B exige `estacionRfc` y `fecha`, y solo
+ *  `ecc12` los trae (`concepto_base` no da ninguno de los dos — ver
+ *  `cfdi_xml.ts`). Traerse las líneas de un consolidado de TAG para que el
+ *  matcher las descarte una por una era leer la cola entera de casetas de la
+ *  flota EN CADA CUADRE, en el camino caliente de WhatsApp, para no usar ni
+ *  una. Mismo resultado, menos filas; el índice parcial de la 0242 es
+ *  exactamente este predicado. */
 async function lineasEccParaCuadre(tenantId: string, gastos: Gasto[]): Promise<LineaEccRef[]> {
   const fechas = gastos.map((g) => g.fecha?.slice(0, 10)).filter((f): f is string => !!f);
   if (fechas.length === 0) return [];
@@ -181,6 +190,8 @@ async function lineasEccParaCuadre(tenantId: string, gastos: Gasto[]): Promise<L
     supabaseAdmin().from('cfdi_consolidado_linea')
       .select('fecha, monto, estacion_rfc')
       .eq('tenant_id', tenantId)
+      .eq('fuente', 'ecc12')
+      .not('estacion_rfc', 'is', null)
       .gte('fecha', shift(ordenadas[0], -1))
       .lte('fecha', shift(ordenadas[ordenadas.length - 1], 1)),
     'desde_db.lineas_ecc',
