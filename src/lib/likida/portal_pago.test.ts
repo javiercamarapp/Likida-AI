@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   generarTokenPortal, hashDeToken, prefijoDeToken, diasDeVigencia, expiracionDesde,
   estadoLiga, validarPropuesta, normalizarReferencia, esCarnada, esMetodoPortal,
-  identificaFactura, textoDelRep, METODOS_PORTAL,
+  identificaFactura, textoDelRep, montoTecleado, METODOS_PORTAL,
   PREFIJO_TOKEN, DIAS_VIGENCIA_DEFAULT, TEXTO_LIGA_NO_VALIDA,
   type PropuestaCruda, type ContextoFactura,
 } from './portal_pago';
+import { TOLERANCIA_ABONO_MXN } from '@/lib/formato';
 import { DatoInvalido } from './errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -200,11 +201,12 @@ describe('validarPropuesta — el monto', () => {
   it('acepta lo que se pega desde un estado de cuenta', () => {
     expect(validarPropuesta({ ...BASE, monto: '$1,160.00' }, CTX).monto).toBe(1160);
     expect(validarPropuesta({ ...BASE, monto: ' 1160 ' }, CTX).monto).toBe(1160);
+    expect(validarPropuesta({ ...BASE, monto: '1,160' }, CTX).monto).toBe(1160);
   });
 
-  it('redondea a centavos, sin cola binaria', () => {
+  it('redondea a centavos con `round2`, no a mano', () => {
     expect(validarPropuesta({ ...BASE, monto: '0.1' }, CTX).monto).toBe(0.1);
-    expect(validarPropuesta({ ...BASE, monto: '100.005' }, CTX).monto).toBe(100.01);
+    expect(validarPropuesta({ ...BASE, monto: '0.05' }, CTX).monto).toBe(0.05);
   });
 
   it('cero y negativo se rechazan', () => {
@@ -214,7 +216,38 @@ describe('validarPropuesta — el monto', () => {
 
   it('vacío e ilegible se rechazan con instrucción', () => {
     expect(() => validarPropuesta({ ...BASE, monto: '' }, CTX)).toThrow(/Escribe el monto/i);
-    expect(() => validarPropuesta({ ...BASE, monto: 'mil pesos' }, CTX)).toThrow(/12345.67/);
+    expect(() => validarPropuesta({ ...BASE, monto: 'mil pesos' }, CTX)).toThrow(/1234.50/);
+  });
+
+  // ── `c7-14`: LA CIFRA AMBIGUA SE PREGUNTA, NO SE ADIVINA ────────────────
+  it('«1.234,50» se RECHAZA en vez de registrarse como $1.23', () => {
+    // El hallazgo, textual: la regex barría las comas, quedaba "1.23450", y
+    // `Number` leía el punto de millares como decimal. Un depósito de
+    // $1,234.50 entraba a la bandeja del contralor como $1.23 sin una sola
+    // advertencia, y el cliente salía creyendo que había registrado su pago.
+    expect(() => validarPropuesta({ ...BASE, monto: '1.234,50' }, CTX)).toThrow(DatoInvalido);
+    expect(() => validarPropuesta({ ...BASE, monto: '1.234,50' }, CTX)).toThrow(/1234.50/);
+  });
+
+  it('«1.234» —punto de millares sin decimales— tampoco pasa', () => {
+    expect(() => validarPropuesta({ ...BASE, monto: '1.234' }, CTX)).toThrow(DatoInvalido);
+  });
+
+  it('la notación que nadie teclea en pesos no se interpreta', () => {
+    // `Number('1e4')` es 10000 y `Number('0x10')` es 16. Ninguna de las dos
+    // sale del teclado de una persona mirando su banca.
+    expect(() => validarPropuesta({ ...BASE, monto: '1e4' }, CTX)).toThrow(DatoInvalido);
+    expect(() => validarPropuesta({ ...BASE, monto: '0x10' }, CTX)).toThrow(DatoInvalido);
+    expect(() => validarPropuesta({ ...BASE, monto: 'Infinity' }, CTX)).toThrow(DatoInvalido);
+  });
+
+  it('una coma de millares mal puesta se rechaza en vez de "corregirse"', () => {
+    expect(() => validarPropuesta({ ...BASE, monto: '1,16' }, CTX)).toThrow(DatoInvalido);
+    expect(() => validarPropuesta({ ...BASE, monto: '11,60.00' }, CTX)).toThrow(DatoInvalido);
+  });
+
+  it('más de dos decimales se rechaza: los centavos son dos dígitos', () => {
+    expect(() => validarPropuesta({ ...BASE, monto: '100.005' }, CTX)).toThrow(DatoInvalido);
   });
 
   it('por encima del saldo se rechaza, y manda a hablar con la flota', () => {
@@ -223,15 +256,36 @@ describe('validarPropuesta — el monto', () => {
     expect(() => validarPropuesta({ ...BASE, monto: '1200' }, CTX)).toThrow(/saldo pendiente/i);
   });
 
-  it('el centavo de tolerancia es el mismo que usa la base', () => {
-    // `factura_total_cuadra` (0049) y `factura_saldo` dan por saldada una
-    // factura con un centavo de holgura: aquí se respeta la misma.
-    expect(validarPropuesta({ ...BASE, monto: '1160.01' }, CTX).monto).toBe(1160.01);
-    expect(() => validarPropuesta({ ...BASE, monto: '1160.02' }, CTX)).toThrow(DatoInvalido);
+  // ── `c7-6`: LA TOLERANCIA ES LA DE LA BASE, MEDIO CENTAVO ───────────────
+  it('la tolerancia del portal es EXACTAMENTE la de `registrar_pago_tx`', () => {
+    // Antes esto aceptaba `saldo + 0.01` y la RPC rechaza a partir de
+    // `saldo + 0.005`: con saldo $1,160.00, un tecleo de $1,160.01 entraba a la
+    // bandeja y luego era IMPOSIBLE de conciliar (CU011 motivo=sobrepago), para
+    // siempre, con el dinero ya depositado. La constante ahora se importa de un
+    // solo sitio y esta prueba fija el valor.
+    expect(TOLERANCIA_ABONO_MXN).toBe(0.005);
+    expect(() => validarPropuesta({ ...BASE, monto: '1160.01' }, CTX)).toThrow(/saldo pendiente/i);
+    expect(validarPropuesta({ ...BASE, monto: '1160.00' }, CTX).monto).toBe(1160);
   });
 
   it('un pago PARCIAL entra sin problema: es la norma, no la excepción', () => {
     expect(validarPropuesta({ ...BASE, monto: '500' }, CTX).monto).toBe(500);
+  });
+});
+
+describe('montoTecleado — el mismo lector para el portal y para el REP', () => {
+  it('el mensaje del campo vacío nombra QUÉ falta', () => {
+    // `registrarRepEmitido` lo usa con su propia etiqueta: un contralor que
+    // deja vacío el importe del complemento no puede leer «escribe el monto
+    // que pagaste», que es el texto del cliente.
+    expect(() => montoTecleado('', 'el importe pagado del complemento'))
+      .toThrow(/importe pagado del complemento/);
+  });
+
+  it('acepta las dos ortografías buenas y ninguna más', () => {
+    expect(montoTecleado('11,600.00')).toBe(11600);
+    expect(montoTecleado('$ 11600.5')).toBe(11600.5);
+    expect(() => montoTecleado('11.600,00')).toThrow(DatoInvalido);
   });
 });
 
@@ -307,20 +361,53 @@ describe('identificaFactura — «sin folio» es la verdad, no un guion', () => 
   });
 });
 
-describe('textoDelRep — tres estados, y ninguno se disfraza del otro', () => {
+describe('textoDelRep — cuatro estados, y ninguno se disfraza del otro', () => {
   it('sin REP dice que aparecerá cuando lo haya', () => {
-    expect(textoDelRep(null)).toMatch(/aparecerá aquí/i);
+    expect(textoDelRep([])).toMatch(/aparecerá aquí/i);
   });
 
   it('con XML ofrece la descarga', () => {
-    expect(textoDelRep({ cfdi_uuid: 'abc', xml: '<x/>' })).toMatch(/descargar/i);
+    expect(textoDelRep([{ cfdi_uuid: 'abc', tieneXml: true }])).toMatch(/descargar/i);
   });
 
   it('sin XML da el UUID citable y NO ofrece descarga', () => {
     // Un botón que no baja nada es peor que no ofrecerlo.
-    const t = textoDelRep({ cfdi_uuid: 'abc-999', xml: null });
+    const t = textoDelRep([{ cfdi_uuid: 'abc-999', tieneXml: false }]);
     expect(t).toContain('abc-999');
     expect(t).not.toMatch(/descarg/i);
     expect(t).toMatch(/pídeselo/i);
+  });
+
+  // ── `c7-16`: CON PARCIALIDADES SON VARIOS, Y SE DICEN EN PLURAL ─────────
+  it('con tres complementos NO dice «tu complemento» en singular', () => {
+    // La página afirmaba «Tu complemento de pago ya está listo» sobre una
+    // factura con tres, y solo entregaba el más reciente: los otros dos —los
+    // que el contador del cliente necesita para acreditar el IVA de esos
+    // meses— no tenían ni ruta ni mención.
+    const t = textoDelRep([
+      { cfdi_uuid: 'a', tieneXml: true },
+      { cfdi_uuid: 'b', tieneXml: true },
+      { cfdi_uuid: 'c', tieneXml: true },
+    ]);
+    expect(t).toContain('3 complementos');
+    expect(t).toMatch(/cada uno/i);
+  });
+
+  it('con varios y solo algunos con archivo, lo dice sin prometer de más', () => {
+    const t = textoDelRep([
+      { cfdi_uuid: 'a', tieneXml: true },
+      { cfdi_uuid: 'b', tieneXml: false },
+    ]);
+    expect(t).toContain('2 complementos');
+    expect(t).toMatch(/De 1 hay XML/);
+  });
+
+  it('con varios y ninguno con archivo, no ofrece ninguna descarga', () => {
+    const t = textoDelRep([
+      { cfdi_uuid: 'a', tieneXml: false },
+      { cfdi_uuid: 'b', tieneXml: false },
+    ]);
+    expect(t).toMatch(/pídeselos/i);
+    expect(t).not.toMatch(/puedes descargar/i);
   });
 });

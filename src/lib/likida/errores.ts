@@ -20,6 +20,32 @@ export class DatoInvalido extends Error {
 }
 
 /**
+ * El abono de ESA propuesta del portal de pago ya estaba registrado.
+ *
+ * No es un error de captura ni una falla: es la restricción de la 0237
+ * (`pago_recibido_propuesta_unica`) haciendo su trabajo cuando dos sesiones
+ * concilian la misma propuesta a la vez. `registrarPago` la lanza al ver el
+ * 23505 y `conciliarPropuesta` la usa para colgarse del abono que YA existe en
+ * vez de crear un segundo — que es el dinero duplicado de `c7-5`.
+ *
+ * VIVE AQUÍ y no en `facturacion_escritura.ts` por la misma razón que
+ * `DatoInvalido` vive aquí y no en `administracion.ts`: quien necesita
+ * reconocer esta clase (hoy `portal_pago_escritura.ts`, mañana cualquier otro)
+ * no tiene por qué arrastrar el módulo entero de facturación —con `intake/cfdi`
+ * y su cadena de `sharp`/`zxing-wasm`— para hacer un `instanceof`. Una clase de
+ * cuatro líneas no debería costar eso.
+ *
+ * NO se enseña verbatim: `mensajeParaPantalla` la trata como cualquier otra
+ * excepción, porque quien la vea en pantalla no tiene nada que corregir.
+ */
+export class AbonoYaRegistrado extends Error {
+  constructor(public readonly propuestaId: string) {
+    super(`El abono de la propuesta ${propuestaId} ya estaba registrado.`);
+    this.name = 'AbonoYaRegistrado';
+  }
+}
+
+/**
  * Traduce una excepción al texto que ve quien llenó el formulario.
  *
  * `DatoInvalido` se enseña VERBATIM: su mensaje se escribió para esto y es lo

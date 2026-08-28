@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { DatoInvalido } from './errores';
-import { hoyMx, mxn } from '@/lib/formato';
+import { hoyMx, mxn, round2, TOLERANCIA_ABONO_MXN } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL PORTAL DE PAGO — LA PARTE QUE NO TOCA LA BASE.
@@ -207,13 +207,85 @@ const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const REFERENCIA_MIN = 3;
 const REFERENCIA_MAX = 80;
 
-/** Un monto tecleado por una persona: `1,234.50`, `$1234.5`, `1 234,50` no. */
-function montoTecleado(crudo: string): number {
-  const limpio = crudo.replace(/[$\s,]/g, '');
-  if (limpio === '') throw new DatoInvalido('Escribe el monto que pagaste.');
-  const n = Number(limpio);
-  if (!Number.isFinite(n)) throw new DatoInvalido('Ese monto no se entiende. Escríbelo como 12345.67');
-  return Math.round(n * 100) / 100;
+/** Dígitos y nada más. Sin cuantificadores anidados a propósito: una expresión
+ *  con dos niveles de repetición sobre texto que llega de una página pública es
+ *  una puerta de ReDoS, y el reglón de este portal es que lo público no puede
+ *  costar tiempo ilimitado. Por eso las ortografías de abajo se comprueban
+ *  partiendo la cadena, no con una expresión que las describa entera. */
+const SOLO_DIGITOS = /^[0-9]+$/;
+
+/**
+ * ¿La parte entera está bien escrita?
+ *
+ * Las DOS formas buenas: `1234` (sin separadores) y `1,234` (coma de millares
+ * en grupos de exactamente tres). Cualquier otra cosa —`1,16`, `11,60`,
+ * `1.234`— es ambigua, y lo ambiguo se rechaza.
+ */
+function enteroSano(entero: string): boolean {
+  const grupos = entero.split(',');
+  if (!grupos.every((g) => SOLO_DIGITOS.test(g))) return false;
+  if (grupos.length === 1) return true;
+  if (grupos[0].length < 1 || grupos[0].length > 3) return false;
+  return grupos.slice(1).every((g) => g.length === 3);
+}
+
+/**
+ * El instructivo que se le da a quien tecleó algo que no se entiende. Se dice
+ * CÓMO escribirlo en vez de solo "está mal": el cliente está mirando el
+ * comprobante de su banco y lo único que quiere es copiar una cifra.
+ */
+const COMO_ESCRIBIR_EL_MONTO =
+  'Escríbelo con punto para los centavos y sin puntos de millares, así: 1234.50';
+
+/**
+ * Un monto tecleado por una persona, o un error que dice cómo escribirlo.
+ *
+ * AUDITORÍA 7, `c7-14` — antes esto barría `$`, espacios y COMAS y le dejaba a
+ * `Number` adivinar el resto. Un cliente que pega «1.234,50» desde su banca
+ * —punto de millares, coma decimal— acababa registrando **$1.23** por un
+ * depósito de **$1,234.50**, sin una sola advertencia: la coma se borraba,
+ * quedaba `"1.23450"`, y `Number` leía un punto decimal donde había un
+ * separador de millares. Verificado también: `"1.234"` daba 1.23, `"1e4"` daba
+ * 10000 y `"0x10"` daba 16 — `Number` acepta notación científica y hexadecimal,
+ * que nadie teclea en una caja de pesos.
+ *
+ * La corrección no es adivinar mejor: es NO ADIVINAR. Se aceptan exactamente
+ * dos ortografías (`1234.50` y `1,234.50`) y todo lo demás se rechaza diciendo
+ * cómo escribirlo. Una cifra ambigua sobre dinero de un tercero se pregunta,
+ * no se interpreta — y la que más caro sale es justo la que "casi" funciona.
+ *
+ * `c7-33` va en la misma línea: el redondeo era `Math.round(n * 100) / 100`,
+ * reimplementado a mano, que es el caso que `round2()` documenta como ALTO
+ * REINCIDENTE (`Math.round(1.005 * 100) / 100` da 1, no 1.01). Ahora se usa el
+ * redondeo de la casa. Con el filtro de arriba ya no entran tres decimales,
+ * pero el redondeo correcto no depende de que el filtro nunca cambie.
+ */
+export function montoTecleado(crudo: string, queEs = 'el monto que pagaste'): number {
+  const limpio = crudo.replace(/[$\s]/g, '');
+  if (limpio === '') throw new DatoInvalido(`Escribe ${queEs}.`);
+
+  const partes = limpio.split('.');
+  const centavos = partes.length === 2 ? partes[1] : '';
+  const malEscrito =
+    // Dos puntos decimales no son un monto; son un monto y una duda.
+    partes.length > 2
+    || !enteroSano(partes[0])
+    // Los centavos son DOS dígitos. Un tercero suele ser el separador de
+    // millares de otra ortografía («1.234» son mil doscientos treinta y cuatro
+    // pesos para media América Latina, y 1.23 para `Number`).
+    || (partes.length === 2 && (centavos.length > 2 || !SOLO_DIGITOS.test(centavos)));
+  if (malEscrito) {
+    throw new DatoInvalido(`Ese monto no se entiende. ${COMO_ESCRIBIR_EL_MONTO}`);
+  }
+
+  const n = Number(limpio.replace(/,/g, ''));
+  // Cinturón y tirantes: las dos expresiones de arriba ya excluyen todo lo que
+  // `Number` podría leer como NaN o Infinity, y aun así no se devuelve una
+  // cifra de dinero sin comprobar que es finita.
+  if (!Number.isFinite(n)) {
+    throw new DatoInvalido(`Ese monto no se entiende. ${COMO_ESCRIBIR_EL_MONTO}`);
+  }
+  return round2(n);
 }
 
 /**
@@ -249,9 +321,17 @@ export function validarPropuesta(c: PropuestaCruda, ctx: ContextoFactura): Propu
 
   const monto = montoTecleado(c.monto);
   if (monto <= 0) throw new DatoInvalido('El monto tiene que ser mayor que cero.');
-  // El centavo de tolerancia es el mismo que usa `factura_total_cuadra` (0049)
-  // y el que la vista `factura_saldo` da por saldada una factura.
-  if (monto > ctx.saldo + 0.01) {
+  // LA MISMA TOLERANCIA QUE LA BASE, importada de un solo sitio.
+  //
+  // AUDITORÍA 7, `c7-6`: aquí decía `+ 0.01` y `registrar_pago_tx` dice
+  // `+ 0.005`. El comentario que lo justificaba citaba `factura_total_cuadra`
+  // (0049), que es la holgura de `total = subtotal + iva` — otra pregunta. Con
+  // un saldo de $1,160.00 y un tecleo de $1,160.01, el portal aceptaba y la RPC
+  // rechazaba: propuesta INCONCILIABLE para siempre, con el dinero ya
+  // depositado y el cliente viendo «por confirmar» sin fecha. Que el portal sea
+  // MÁS estricto que la base no puede pasar tampoco, y por eso no se copia el
+  // número: se importa.
+  if (monto > ctx.saldo + TOLERANCIA_ABONO_MXN) {
     throw new DatoInvalido(
       `El saldo pendiente de esta factura es ${mxn(ctx.saldo)}. Si pagaste de más, o si ese depósito cubre varias facturas, escríbele directamente a quien te la emitió: aquí solo se puede registrar el pago de ESTA factura.`,
     );
@@ -278,9 +358,10 @@ export function validarPropuesta(c: PropuestaCruda, ctx: ContextoFactura): Propu
 /**
  * Cómo se normaliza una referencia para comparar dos registros.
  *
- * Espeja EXACTAMENTE el índice `portal_pago_propuesta_unica` de la 0228
- * (`upper(btrim(referencia))`). Se escribe aquí para que el mensaje de "ya lo
- * registraste" pueda armarse sin ir a la base, pero la garantía la da el
+ * Espeja EXACTAMENTE el índice `portal_pago_propuesta_unica_pendiente` (0237,
+ * que corrigió el de la 0228: `upper(btrim(referencia))`, ahora anclado a la
+ * FACTURA y solo sobre las PENDIENTES). Se escribe aquí para que el mensaje de
+ * "ya lo registraste" pueda armarse sin ir a la base, pero la garantía la da el
  * índice: esta función es la explicación, no el candado.
  */
 export function normalizarReferencia(r: string): string {
@@ -317,16 +398,35 @@ export function identificaFactura(
 /**
  * El texto de la caja del REP, según lo que de verdad hay.
  *
- * Tres estados y ninguno se disfraza del otro: sin REP todavía (el contralor
- * aún no lo registra), REP con XML (hay archivo que bajar) y REP sin XML (solo
- * existe el folio fiscal). El tercero es el que se presta a mentir: un botón
+ * Cuatro estados y ninguno se disfraza del otro: sin REP todavía (el contralor
+ * aún no lo registra), UN REP con XML (hay archivo que bajar), UN REP sin XML
+ * (solo existe el folio fiscal) y VARIOS, que es lo normal en una factura
+ * pagada en parcialidades. El tercero es el que se presta a mentir: un botón
  * de descarga que no baja nada es peor que no ofrecerlo.
+ *
+ * AUDITORÍA 7, `c7-16` — antes esto recibía UN rep y decía «Tu complemento de
+ * pago ya está listo» en singular sobre una factura que podía tener tres. Los
+ * complementos 1 y 2 —los que el contador del cliente necesita para acreditar
+ * el IVA de esos meses— no tenían ninguna ruta que los entregara, y la página
+ * ni siquiera decía que existían.
  */
-export function textoDelRep(rep: { cfdi_uuid: string; xml: string | null } | null): string {
-  if (!rep) {
+export function textoDelRep(reps: Array<{ cfdi_uuid: string; tieneXml: boolean }>): string {
+  if (reps.length === 0) {
     return 'Cuando tu pago quede conciliado y su complemento (REP) esté timbrado, aparecerá aquí.';
   }
-  if (rep.xml) {
+  if (reps.length > 1) {
+    const conXml = reps.filter((r) => r.tieneXml).length;
+    const cuantos = `Esta factura tiene ${reps.length} complementos de pago: uno por cada pago que se le aplicó.`;
+    if (conXml === reps.length) {
+      return `${cuantos} Abajo está cada uno con su folio fiscal, y puedes descargar su XML por separado.`;
+    }
+    if (conXml === 0) {
+      return `${cuantos} Abajo está cada uno con su folio fiscal citable. Los archivos XML no están cargados en Likida: pídeselos a quien te emitió la factura citando esos folios.`;
+    }
+    return `${cuantos} Abajo está cada uno con su folio fiscal. De ${conXml} hay XML para descargar aquí; el resto tienes que pedírselo a quien te emitió la factura, citando su folio.`;
+  }
+  const rep = reps[0];
+  if (rep.tieneXml) {
     return 'Tu complemento de pago ya está listo. Puedes descargar el XML desde esta misma página.';
   }
   return `Tu complemento de pago ya está timbrado. Su folio fiscal (UUID) es ${rep.cfdi_uuid}. El archivo XML no está cargado en Likida: pídeselo a quien te emitió la factura citando ese folio.`;

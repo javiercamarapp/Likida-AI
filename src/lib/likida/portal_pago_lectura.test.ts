@@ -25,7 +25,9 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 import { hashDeToken, generarTokenPortal } from './portal_pago';
-import { resolverLiga, vistaDelPortal, anotarAcceso, sellarUltimoAcceso } from './portal_pago_lectura';
+import {
+  resolverLiga, vistaDelPortal, anotarAcceso, sellarUltimoAcceso, xmlDelRep, panelDelPortal,
+} from './portal_pago_lectura';
 
 type Resultado = { data: unknown; error: { message: string; code?: string } | null };
 
@@ -135,7 +137,8 @@ function escenario(over: Partial<Record<string, Resultado[]>> = {}) {
     factura_emitida: [OK(FACTURA)],
     tenant: [OK({ nombre: 'Transportes del Bajío', razon_social: 'TRANSPORTES DEL BAJIO SA DE CV' })],
     portal_pago_propuesta: [OK([])],
-    rep_emitido: [OK([])],
+    // Dos lecturas: los complementos, y CUÁLES de ellos traen XML.
+    rep_emitido: [OK([]), OK([])],
     factura_saldo: [OK({ saldo: 11600, pagado: 0 })],
     cliente: [OK({ nombre: 'Cemex', razon_social: 'CEMENTOS DEL NORTE SA' })],
     ...over,
@@ -207,25 +210,63 @@ describe('vistaDelPortal — el saldo `null` no es cero', () => {
   });
 
   it('el REP viaja SIN su XML: solo si lo tiene', async () => {
-    // El documento fiscal no se carga en cada render.
+    // El documento fiscal no se carga en cada render. La segunda lectura de
+    // `rep_emitido` es la que dice CUÁLES tienen archivo, sin traer un byte.
     escenario({
-      rep_emitido: [OK([{ cfdi_uuid: 'aaa', fecha_pago: '2026-08-20', imp_pagado: 11600, xml: '<x/>' }])],
+      rep_emitido: [
+        OK([{ cfdi_uuid: 'aaa', fecha_pago: '2026-08-20', imp_pagado: 11600 }]),
+        OK([{ cfdi_uuid: 'aaa' }]),
+      ],
     });
     const r = await vistaDelPortal(LIGA);
     if (r.ok) {
-      expect(r.vista.rep).toEqual({
-        cfdiUuid: 'aaa', fechaPago: '2026-08-20', impPagado: 11600, tieneXml: true,
-      });
-      expect(JSON.stringify(r.vista.rep)).not.toContain('<x/>');
+      expect(r.vista.reps).toEqual([
+        { cfdiUuid: 'aaa', fechaPago: '2026-08-20', impPagado: 11600, tieneXml: true },
+      ]);
+      expect(JSON.stringify(r.vista.reps)).not.toContain('xml');
     }
   });
 
   it('un REP sin XML lo declara, en vez de ofrecer una descarga vacía', async () => {
     escenario({
-      rep_emitido: [OK([{ cfdi_uuid: 'aaa', fecha_pago: '2026-08-20', imp_pagado: 11600, xml: null }])],
+      rep_emitido: [
+        OK([{ cfdi_uuid: 'aaa', fecha_pago: '2026-08-20', imp_pagado: 11600 }]),
+        OK([]),
+      ],
     });
     const r = await vistaDelPortal(LIGA);
-    if (r.ok) expect(r.vista.rep?.tieneXml).toBe(false);
+    if (r.ok) expect(r.vista.reps[0].tieneXml).toBe(false);
+  });
+
+  // ── `c7-16`: LOS TRES COMPLEMENTOS DE UNA FACTURA EN PARCIALIDADES ──────
+  it('con parcialidades llegan TODOS los complementos, no el último', async () => {
+    escenario({
+      rep_emitido: [
+        OK([
+          { cfdi_uuid: 'c3', fecha_pago: '2026-08-20', imp_pagado: 4000 },
+          { cfdi_uuid: 'c2', fecha_pago: '2026-07-20', imp_pagado: 4000 },
+          { cfdi_uuid: 'c1', fecha_pago: '2026-06-20', imp_pagado: 3600 },
+        ]),
+        OK([{ cfdi_uuid: 'c1' }, { cfdi_uuid: 'c3' }]),
+      ],
+    });
+    const r = await vistaDelPortal(LIGA);
+    if (!r.ok) throw new Error('la vista tenía que salir');
+    expect(r.vista.reps.map((x) => x.cfdiUuid)).toEqual(['c3', 'c2', 'c1']);
+    // Y cada uno con SU verdad sobre el archivo, no la del más reciente.
+    expect(r.vista.reps.map((x) => x.tieneXml)).toEqual([true, false, true]);
+  });
+
+  it('si falla la lectura de CUÁLES tienen XML, ninguno se anuncia descargable', async () => {
+    // Fallar cerrado: un botón que no baja nada es peor que no ofrecerlo.
+    escenario({
+      rep_emitido: [
+        OK([{ cfdi_uuid: 'aaa', fecha_pago: '2026-08-20', imp_pagado: 11600 }]),
+        FALLA(),
+      ],
+    });
+    const r = await vistaDelPortal(LIGA);
+    if (r.ok) expect(r.vista.reps[0].tieneXml).toBe(false);
   });
 
   it('las propuestas del cliente llegan con su estado', async () => {
@@ -239,6 +280,148 @@ describe('vistaDelPortal — el saldo `null` no es cero', () => {
       expect(r.vista.propuestas).toHaveLength(1);
       expect(r.vista.propuestas[0].estado).toBe('pendiente');
     }
+  });
+});
+
+// ── `c7-7` · UNA FACTURA CANCELADA NO PIDE DINERO ─────────────────────────
+
+describe('vistaDelPortal — el CFDI cancelado deja de cobrar', () => {
+  it('una factura CANCELADA es `no_cobrable`, no una página con saldo', async () => {
+    // El escenario real: la liga se emitió sobre una factura `emitida`, el
+    // cliente pidió refacturación y el contralor la canceló. `cancelarFactura`
+    // no tocaba la liga, así que `estadoLiga` la seguía viendo VIGENTE y el
+    // cliente veía «Saldo pendiente $11,600.00» con el formulario activo — la
+    // vista `factura_saldo` calcula total − pagos sin mirar el estatus.
+    escenario({ factura_emitida: [OK({ ...FACTURA, estatus: 'cancelada' })] });
+    expect(await vistaDelPortal(LIGA)).toEqual({ ok: false, motivo: 'no_cobrable', estatus: 'cancelada' });
+  });
+
+  it('NI SIQUIERA se lee el saldo de una cancelada', async () => {
+    // La puerta va antes que la lectura del saldo a propósito: sobre un CFDI
+    // cancelado no hay cifra que enseñar, y una que se lee acaba pintándose.
+    escenario({
+      factura_emitida: [OK({ ...FACTURA, estatus: 'cancelada' })],
+      factura_saldo: [OK({ saldo: 11600, pagado: 0 })],
+    });
+    const r = await vistaDelPortal(LIGA);
+    expect(JSON.stringify(r)).not.toContain('11600');
+  });
+
+  it('un borrador tampoco cobra, y el desenlace lo distingue', async () => {
+    escenario({ factura_emitida: [OK({ ...FACTURA, estatus: 'borrador' })] });
+    expect(await vistaDelPortal(LIGA)).toEqual({ ok: false, motivo: 'no_cobrable', estatus: 'borrador' });
+  });
+
+  it('un estatus DESCONOCIDO cae al lado seguro: no cobra', async () => {
+    // Fail-closed por lista blanca: si mañana `factura_emitida` estrena un
+    // estatus, entra por omisión al lado que no le pide dinero a nadie.
+    escenario({ factura_emitida: [OK({ ...FACTURA, estatus: 'en_disputa' })] });
+    expect(await vistaDelPortal(LIGA)).toEqual({ ok: false, motivo: 'no_cobrable', estatus: 'en_disputa' });
+  });
+
+  it('emitida y pagada SÍ arman la vista', async () => {
+    escenario();
+    expect((await vistaDelPortal(LIGA)).ok).toBe(true);
+    escenario({ factura_emitida: [OK({ ...FACTURA, estatus: 'pagada' })] });
+    expect((await vistaDelPortal(LIGA)).ok).toBe(true);
+  });
+});
+
+// ── `c7-24` · «NO PUDE PREGUNTAR» NO ES «NO HAY» ──────────────────────────
+
+describe('xmlDelRep — el error de la base no se disfraza de «todavía no hay»', () => {
+  const UUID = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001';
+
+  it('un error de lectura es `no_disponible`, no `sin_xml`', async () => {
+    // La ruta contestaba 404 «Todavía no hay un XML de complemento para esta
+    // factura» ante un hipo de Supabase: una afirmación de hecho FALSA que
+    // manda al cliente a molestar a la flota por un archivo que sí está.
+    conTablas({ rep_emitido: [FALLA()] });
+    expect(await xmlDelRep(LIGA, UUID)).toEqual({ ok: false, motivo: 'no_disponible' });
+  });
+
+  it('sin fila con ese folio, `sin_xml` — que es un hecho comprobado', async () => {
+    conTablas({ rep_emitido: [OK([])] });
+    expect(await xmlDelRep(LIGA, UUID)).toEqual({ ok: false, motivo: 'sin_xml' });
+  });
+
+  it('un folio sin forma de UUID ni consulta la base', async () => {
+    conTablas({});
+    expect(await xmlDelRep(LIGA, 'no-es-uuid')).toEqual({ ok: false, motivo: 'sin_xml' });
+    expect(sbMock).not.toHaveBeenCalled();
+  });
+
+  it('con XML lo entrega, con su folio', async () => {
+    conTablas({ rep_emitido: [OK([{ cfdi_uuid: UUID, xml: '<x/>' }])] });
+    expect(await xmlDelRep(LIGA, UUID.toUpperCase())).toEqual({ ok: true, uuid: UUID, xml: '<x/>' });
+  });
+});
+
+// ── `c7-23` · LA BANDEJA NO INVENTA «sin folio · Cliente» ─────────────────
+
+describe('panelDelPortal — una propuesta huérfana se DICE, no se rotula', () => {
+  const PROPUESTA = {
+    id: 'p-1', factura_id: 'f-vieja', fecha: '2026-08-20', monto: 5000,
+    referencia: 'SPEI-8891', metodo: 'transferencia', registrada_en: '2026-08-20T10:00:00Z',
+  };
+
+  it('la factura que la primera lectura no alcanzó se resuelve POR ID, sin filtro de estatus', async () => {
+    // La primera consulta trae las 300 más recientes y solo emitida/pagada
+    // —es la lista de candidatas a generar enlace—, así que una factura
+    // CANCELADA después de registrar la propuesta no aparece ahí. Antes el
+    // renglón se pintaba «sin folio · Cliente»; ahora se busca por id.
+    conTablas({
+      portal_pago_propuesta: [OK([PROPUESTA])],
+      portal_pago_liga: [OK([])],
+      factura_emitida: [
+        OK([]),
+        OK([{ id: 'f-vieja', serie: 'A', folio: '1042', cfdi_uuid: null, cliente_id: 'c-1', estatus: 'cancelada' }]),
+      ],
+      factura_saldo: [OK([])],
+      cliente: [OK([{ id: 'c-1', nombre: 'Cemex', razon_social: 'CEMENTOS DEL NORTE SA' }])],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.pendientes[0].factura).toBe('A-1042');
+    expect(panel.pendientes[0].cliente).toBe('CEMENTOS DEL NORTE SA');
+    expect(panel.pendientes[0].identificada).toBe(true);
+    // Y el estatus viaja: conciliar contra una cancelada rebota en la RPC, y
+    // el contralor tiene que verlo ANTES de apretar.
+    expect(panel.pendientes[0].estatus).toBe('cancelada');
+  });
+
+  it('si NI ASÍ aparece, el renglón dice que no se pudo identificar', async () => {
+    // «sin folio» es la VERDAD de una factura sin folio ni UUID. Usarlo aquí lo
+    // convertía en «no la pude resolver», y «Cliente» aparecía donde hay una
+    // razón social real: el contralor decidía sobre dinero mirando una fila que
+    // no identificaba nada.
+    conTablas({
+      portal_pago_propuesta: [OK([PROPUESTA])],
+      portal_pago_liga: [OK([])],
+      factura_emitida: [OK([]), OK([])],
+      factura_saldo: [OK([])],
+      cliente: [OK([])],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.pendientes[0].factura).toBe('no se pudo identificar');
+    expect(panel.pendientes[0].cliente).toBe('no se pudo identificar');
+    expect(panel.pendientes[0].identificada).toBe(false);
+    expect(panel.pendientes[0].estatus).toBeNull();
+    // Y el monto y la referencia siguen ahí: lo que no se sabe se dice, lo que
+    // sí se sabe no se esconde.
+    expect(panel.pendientes[0].monto).toBe(5000);
+    expect(panel.pendientes[0].referencia).toBe('SPEI-8891');
+  });
+
+  it('si la segunda lectura falla, la bandeja sigue —diciendo lo que no supo—', async () => {
+    conTablas({
+      portal_pago_propuesta: [OK([PROPUESTA])],
+      portal_pago_liga: [OK([])],
+      factura_emitida: [OK([]), FALLA()],
+      factura_saldo: [OK([])],
+      cliente: [OK([])],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.pendientes[0].identificada).toBe(false);
   });
 });
 

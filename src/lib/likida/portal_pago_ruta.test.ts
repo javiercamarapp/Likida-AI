@@ -58,7 +58,7 @@ const VISTA = {
       serie: 'A', folio: '1042', cfdiUuid: null, fecha: '2026-08-14', venceEn: null,
       estatus: 'emitida', total: 11600, moneda: 'MXN', saldo: 11600, pagado: 0,
     },
-    propuestas: [], rep: null,
+    propuestas: [], reps: [],
   },
 };
 
@@ -152,6 +152,26 @@ describe('el token muerto y el que no se pudo comprobar', () => {
     const r = await POST(peticion(CUERPO_OK));
     expect(r.status).toBe(404);
     expect((await r.json()).error).toBe(TEXTO_LIGA_NO_VALIDA);
+  });
+
+  // ── `c7-7` · NI POR POST SE REGISTRA UN PAGO A UN CFDI CANCELADO ────────
+  it('una factura CANCELADA contesta 409 y NO registra nada', async () => {
+    // La página ya no enseña el formulario, pero esta ruta es pública: no puede
+    // depender de que nadie la llame a mano con el token que el cliente tiene.
+    vistaDelPortal.mockResolvedValue({ ok: false, motivo: 'no_cobrable', estatus: 'cancelada' });
+    const r = await POST(peticion(CUERPO_OK));
+    expect(r.status).toBe(409);
+    expect((await r.json()).error).toMatch(/cancelada/i);
+    expect(registrarPropuesta).not.toHaveBeenCalled();
+    expect(avisar).not.toHaveBeenCalled();
+  });
+
+  it('un borrador también se niega, con su propio texto', async () => {
+    vistaDelPortal.mockResolvedValue({ ok: false, motivo: 'no_cobrable', estatus: 'borrador' });
+    const r = await POST(peticion(CUERPO_OK));
+    expect(r.status).toBe(409);
+    expect((await r.json()).error).toMatch(/todavía no está emitida/i);
+    expect(registrarPropuesta).not.toHaveBeenCalled();
   });
 });
 

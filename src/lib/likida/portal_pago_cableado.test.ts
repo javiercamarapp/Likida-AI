@@ -18,7 +18,10 @@ import { correoDePropuesta } from './portal_pago_aviso';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const RUTA_PUBLICA = 'src/app/api/pago/registrar/route.ts';
-const RUTA_XML = 'src/app/pago/[token]/complemento/route.ts';
+// El folio del complemento es un SEGMENTO de la ruta y no un query param
+// (`c7-16`): con parcialidades hay varios REP y cada uno necesita su descarga,
+// pero el portal sigue sin aceptar parámetros sueltos.
+const RUTA_XML = 'src/app/pago/[token]/complemento/[uuid]/route.ts';
 const PAGINA = 'src/app/pago/[token]/page.tsx';
 const LECTURA = 'src/lib/likida/portal_pago_lectura.ts';
 const ESCRITURA = 'src/lib/likida/portal_pago_escritura.ts';
@@ -110,10 +113,26 @@ describe('el alcance del portal es una factura, y no hay parámetro que lo cambi
     expect(src).not.toContain('searchParams');
   });
 
-  it('la ruta del XML tampoco: solo el token', () => {
+  it('la ruta del XML recibe el token y el folio, y NINGÚN parámetro suelto', () => {
+    // El folio elige CUÁL complemento de esta factura se baja; no amplía el
+    // alcance, porque `xmlDelRep` sigue filtrando por el `factura_id` y el
+    // `tenant_id` de la liga resuelta. Un folio de otra flota no encuentra
+    // fila. Lo que esta prueba cierra sigue siendo la entrada: sin
+    // `searchParams` no hay parámetro que un visitante pueda inventar.
     const src = sinComentarios(leer(RUTA_XML));
-    expect(src).toContain('params: Promise<{ token: string }>');
+    expect(src).toContain('params: Promise<{ token: string; uuid: string }>');
     expect(src).not.toContain('searchParams');
+  });
+
+  it('la lectura del XML sigue anclada a la factura de la liga, no al folio', () => {
+    // La afirmación de arriba se sostiene sobre esto: el folio es un filtro
+    // MÁS, nunca el único.
+    const src = sinComentarios(leer(LECTURA));
+    const i = src.indexOf('export async function xmlDelRep');
+    expect(i).toBeGreaterThan(-1);
+    const cuerpo = src.slice(i, i + 1200);
+    expect(cuerpo).toContain("eq('factura_id', liga.facturaId)");
+    expect(cuerpo).toContain("eq('tenant_id', liga.tenantId)");
   });
 
   it('la página va noindex y sin Referer hacia fuera', () => {

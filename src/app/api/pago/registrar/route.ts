@@ -102,6 +102,20 @@ export async function POST(req: Request) {
         { status: 503 },
       );
     }
+    if (vista.motivo === 'no_cobrable') {
+      // `c7-7`: una factura CANCELADA no recibe pagos, ni siquiera por POST
+      // directo. La página ya no enseña el formulario, pero esta ruta es
+      // pública y no puede depender de que nadie la llame a mano. 409: el
+      // envío se entiende perfectamente, lo que ya no existe es la deuda.
+      return NextResponse.json(
+        {
+          error: vista.estatus === 'cancelada'
+            ? 'Esa factura fue cancelada, así que aquí ya no se puede registrar un pago. Si ya la pagaste, escríbele directamente a quien te la emitió.'
+            : 'Esa factura todavía no está emitida, así que aquí no se puede registrar un pago.',
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: TEXTO_LIGA_NO_VALIDA }, { status: 404 });
   }
   const v = vista.vista;
@@ -128,9 +142,15 @@ export async function POST(req: Request) {
   if (r.repetida) {
     // No es un error y no se cuenta como hecho nuevo: ni bitácora de acceso ni
     // aviso. Es el segundo clic, o el cliente comprobando que sí quedó.
+    // El texto puede afirmar esto porque el índice de la 0237 es PARCIAL sobre
+    // las pendientes (`c7-18`): un 23505 significa que hay una propuesta igual
+    // ESPERANDO en la bandeja del contralor. Con el índice anterior también
+    // chocaba contra una ya DESCARTADA, y entonces esta frase era falsa: le
+    // decía «no hace falta hacer nada más» a un cliente cuyo registro no iba a
+    // volver a la bandeja de nadie.
     return NextResponse.json({
       ok: true,
-      mensaje: 'Ese pago ya estaba registrado con la misma fecha, monto y referencia. No hace falta hacer nada más.',
+      mensaje: 'Ese pago ya estaba registrado con la misma fecha, monto y referencia, y sigue por confirmar. No hace falta hacer nada más.',
     });
   }
 

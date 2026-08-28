@@ -39,7 +39,12 @@ import {
   conciliarPropuesta, descartarPropuesta, registrarRepEmitido, sellarRepEntregado,
 } from './portal_pago_escritura';
 import { registrarPropuesta } from './portal_pago_propuesta';
-import { DatoInvalido } from './errores';
+// `AbonoYaRegistrado` se importa del módulo REAL de errores y no del mock de
+// `facturacion_escritura`: la clase vive en `errores.ts` justo para que quien
+// necesita reconocerla no tenga que arrastrar la cadena de facturación. Si
+// alguien la moviera de vuelta, este import se rompería y esa prueba —la de la
+// idempotencia del abono— dejaría de compilar antes de dejar de proteger.
+import { DatoInvalido, AbonoYaRegistrado } from './errores';
 
 type Resultado = { data: unknown; error: { message: string; code?: string } | null };
 
@@ -109,7 +114,9 @@ describe('crearLigaPago — sobre qué factura SÍ y sobre cuál no', () => {
   it('una emitida devuelve la URL con el token EN CLARO, una sola vez', async () => {
     conTablas({
       factura_emitida: [OK({ id: FACTURA, estatus: 'emitida' })],
-      portal_pago_liga: [OK({ id: 'liga-1' })],
+      // La primera lectura de la tabla es la limpieza de caducadas; la segunda,
+      // el insert.
+      portal_pago_liga: [OK([]), OK({ id: 'liga-1' })],
     });
     const l = await crearLigaPago(T, FACTURA);
     expect(l.url).toMatch(/\/pago\/pgo_[A-Za-z0-9_-]+$/);
@@ -122,7 +129,7 @@ describe('crearLigaPago — sobre qué factura SÍ y sobre cuál no', () => {
     // vivos que ya nadie sabe que existen.
     conTablas({
       factura_emitida: [OK({ id: FACTURA, estatus: 'emitida' })],
-      portal_pago_liga: [CHOQUE()],
+      portal_pago_liga: [OK([]), CHOQUE()],
     });
     await expect(crearLigaPago(T, FACTURA)).rejects.toThrow(/ya tiene un enlace vigente/i);
   });
@@ -130,9 +137,37 @@ describe('crearLigaPago — sobre qué factura SÍ y sobre cuál no', () => {
   it('un error que NO es choque no se disfraza de dato inválido', async () => {
     conTablas({
       factura_emitida: [OK({ id: FACTURA, estatus: 'emitida' })],
-      portal_pago_liga: [FALLA('conexión perdida')],
+      portal_pago_liga: [OK([]), FALLA('conexión perdida')],
     });
     await expect(crearLigaPago(T, FACTURA)).rejects.not.toBeInstanceOf(DatoInvalido);
+  });
+
+  // ── `c7-26` · LA LIGA CADUCADA NO ES UNA LIGA VIGENTE ───────────────────
+  it('la liga CADUCADA se revoca sola y deja sitio, en vez de mentir', async () => {
+    // El índice `portal_pago_liga_viva_unica` no mira `expira_en`, así que una
+    // liga muerta el 30-jul seguía ocupando el lugar en agosto y el contralor
+    // recibía «Esa factura ya tiene un enlace vigente» sobre un cadáver que el
+    // propio código clasifica como `expirada`.
+    conTablas({
+      factura_emitida: [OK({ id: FACTURA, estatus: 'emitida' })],
+      portal_pago_liga: [OK([{ id: 'liga-vieja' }]), OK({ id: 'liga-2' })],
+    });
+    const l = await crearLigaPago(T, FACTURA);
+    expect(l.prefijo.startsWith('pgo_')).toBe(true);
+    expect(anotarBitacora).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accion: 'portal_pago.liga_caducada_revocada', entidadId: 'liga-vieja',
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('si la limpieza de caducadas falla, NO se sigue con un mensaje que puede mentir', async () => {
+    conTablas({
+      factura_emitida: [OK({ id: FACTURA, estatus: 'emitida' })],
+      portal_pago_liga: [FALLA('sin red')],
+    });
+    await expect(crearLigaPago(T, FACTURA)).rejects.toThrow(/enlaces caducados/i);
   });
 });
 
@@ -228,8 +263,19 @@ describe('conciliarPropuesta — el abono primero, el sello después', () => {
     const r = await conciliarPropuesta(T, PROPUESTA);
     expect(registrarPago).toHaveBeenCalledWith(T, expect.objectContaining({
       facturaId: FACTURA, monto: 1160, referencia: 'REF-1',
-    }), undefined);
+    }), undefined, PROPUESTA);
     expect(r).toEqual({ pagoId: PAGO, monto: 1160 });
+  });
+
+  it('LA PROPUESTA VIAJA COMO LLAVE DE IDEMPOTENCIA, siempre', async () => {
+    // `c7-5`: sin este cuarto argumento, `pago_recibido.propuesta_id` queda
+    // NULL, el índice único parcial de la 0237 no indexa la fila y la carrera
+    // vuelve tal cual. El `if (estado !== 'pendiente')` de arriba NO es el
+    // candado —es el mensaje amable—, así que esta es la línea que hay que
+    // vigilar.
+    conTablas({ portal_pago_propuesta: [OK(FILA), OK([{ id: PROPUESTA }])] });
+    await conciliarPropuesta(T, PROPUESTA);
+    expect((registrarPago.mock.calls[0] as unknown[])[3]).toBe(PROPUESTA);
   });
 
   it('si `registrarPago` rechaza el sobrepago, NADA se sella', async () => {
@@ -238,14 +284,66 @@ describe('conciliarPropuesta — el abono primero, el sello después', () => {
     await expect(conciliarPropuesta(T, PROPUESTA)).rejects.toThrow(/rebasa/);
   });
 
-  it('si otra sesión llegó primero, se DICE que quedó un abono huérfano — con su id', async () => {
-    // No se borra en silencio: el contralor tiene que poder ir a cancelarlo.
-    conTablas({ portal_pago_propuesta: [OK(FILA), OK([])] });
-    await expect(conciliarPropuesta(T, PROPUESTA)).rejects.toThrow(new RegExp(PAGO));
+  // ── `c7-5` · CONCILIAR DOS VECES ES CONCILIAR UNA VEZ ───────────────────
+  it('si el abono de esta propuesta YA EXISTÍA, se cuelga de él y NO crea otro', async () => {
+    // Es lo que pasa cuando dos pestañas concilian a la vez: la base rechaza el
+    // segundo insert por el índice único, `registrarPago` lo cuenta como
+    // `AbonoYaRegistrado`, y esta función termina el trabajo con el abono que
+    // ya está. Antes se creaba un SEGUNDO abono real y se dejaba dicho en la
+    // bitácora que había quedado huérfano — dinero duplicado en la cartera de
+    // un cliente, para que alguien lo cancelara a mano.
+    registrarPago.mockRejectedValue(new AbonoYaRegistrado(PROPUESTA));
+    conTablas({
+      portal_pago_propuesta: [OK(FILA), OK([{ id: PROPUESTA }])],
+      pago_recibido: [OK([{ id: PAGO }])],
+    });
+    const r = await conciliarPropuesta(T, PROPUESTA);
+    expect(r).toEqual({ pagoId: PAGO, monto: 1160 });
     expect(anotarBitacora).toHaveBeenCalledWith(
-      expect.objectContaining({ accion: 'portal_pago.conciliacion_duplicada' }),
+      expect.objectContaining({
+        accion: 'portal_pago.propuesta_conciliada',
+        detalle: expect.objectContaining({ abonoYaExistia: true }),
+      }),
       expect.anything(),
     );
+  });
+
+  it('si la otra sesión ya selló con ESE MISMO abono, no hay nada que reportar', async () => {
+    // Idempotencia completa: mismo resultado, un solo abono, sin excepción en
+    // la cara del contralor por haber apretado dos veces.
+    registrarPago.mockRejectedValue(new AbonoYaRegistrado(PROPUESTA));
+    conTablas({
+      portal_pago_propuesta: [OK(FILA), OK([]), OK({ estado: 'conciliada', pago_id: PAGO })],
+      pago_recibido: [OK([{ id: PAGO }])],
+    });
+    const r = await conciliarPropuesta(T, PROPUESTA);
+    expect(r).toEqual({ pagoId: PAGO, monto: 1160 });
+    expect(anotarBitacora).toHaveBeenCalledWith(
+      expect.objectContaining({ accion: 'portal_pago.conciliacion_repetida' }),
+      expect.anything(),
+    );
+  });
+
+  it('si la propuesta cambió de estado antes del sello, se dice con su id — sin borrar nada', async () => {
+    // El caso que queda vivo: alguien la DESCARTÓ entre el abono y el sello.
+    // El abono existe y es real; se deja dicho para que un humano decida.
+    conTablas({
+      portal_pago_propuesta: [OK(FILA), OK([]), OK({ estado: 'descartada', pago_id: null })],
+    });
+    await expect(conciliarPropuesta(T, PROPUESTA)).rejects.toThrow(new RegExp(PAGO));
+    expect(anotarBitacora).toHaveBeenCalledWith(
+      expect.objectContaining({ accion: 'portal_pago.conciliacion_sin_sello' }),
+      expect.anything(),
+    );
+  });
+
+  it('si la base dice "duplicado" y el abono no aparece, NO se inventa un id', async () => {
+    registrarPago.mockRejectedValue(new AbonoYaRegistrado(PROPUESTA));
+    conTablas({
+      portal_pago_propuesta: [OK(FILA)],
+      pago_recibido: [OK([])],
+    });
+    await expect(conciliarPropuesta(T, PROPUESTA)).rejects.toThrow(/no encuentro el original/i);
   });
 });
 
@@ -284,9 +382,11 @@ describe('registrarRepEmitido — Likida no timbra, solo registra', () => {
     cfdiUuid: 'AAAAAAAA-BBBB-4CCC-8DDD-000000000001',
     fechaPago: '2026-08-20', impPagado: '11,600.00', formaPago: '03', xml: '',
   };
+  /** El abono que ampara: de ESTA factura y por ESTE importe. */
+  const ABONO = OK({ id: PAGO, factura_id: FACTURA, monto: 11600 });
 
   it('el UUID se normaliza a minúsculas, como exige el CHECK de la 0228', async () => {
-    conTablas({ rep_emitido: [OK({ id: 'rep-1' })] });
+    conTablas({ pago_recibido: [ABONO], rep_emitido: [OK({ id: 'rep-1' })] });
     await registrarRepEmitido(T, BASE);
     expect(anotarBitacora).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -308,7 +408,7 @@ describe('registrarRepEmitido — Likida no timbra, solo registra', () => {
   });
 
   it('la forma de pago del SAT son dos dígitos, o nada', async () => {
-    conTablas({ rep_emitido: [OK({ id: 'rep-1' })] });
+    conTablas({ pago_recibido: [ABONO], rep_emitido: [OK({ id: 'rep-1' })] });
     await expect(registrarRepEmitido(T, { ...BASE, formaPago: 'transferencia' })).rejects.toThrow(/dos dígitos/i);
     await expect(registrarRepEmitido(T, { ...BASE, formaPago: '' })).resolves.toBe('rep-1');
   });
@@ -319,12 +419,56 @@ describe('registrarRepEmitido — Likida no timbra, solo registra', () => {
   });
 
   it('el mismo folio fiscal dos veces se traduce a instrucción', async () => {
-    conTablas({ rep_emitido: [CHOQUE()] });
+    conTablas({ pago_recibido: [ABONO], rep_emitido: [CHOQUE()] });
     await expect(registrarRepEmitido(T, BASE)).rejects.toThrow(/ya está registrado/i);
   });
 
-  it('un XML enorme se rechaza con salida: registrarlo sin archivo', async () => {
+  // ── `c7-25` · EL COMPLEMENTO AMPARA EL ABONO DE SU FACTURA ──────────────
+  it('un abono de OTRA factura se rechaza, y se dice cuál es el problema', async () => {
+    // El formulario manda `facturaId` y `pagoId` como dos cadenas sueltas: un
+    // contralor con dos facturas del mismo cliente en pestañas pega el id
+    // equivocado y el portal del cliente enseña un importe que fue a otro papel.
+    conTablas({ pago_recibido: [OK({ id: PAGO, factura_id: 'otra-factura', monto: 11600 })] });
+    await expect(registrarRepEmitido(T, BASE)).rejects.toThrow(/es de OTRA factura/i);
+  });
+
+  it('un importe que no cuadra con el abono se rechaza con las dos cifras', async () => {
+    conTablas({ pago_recibido: [OK({ id: PAGO, factura_id: FACTURA, monto: 5000 })] });
+    await expect(registrarRepEmitido(T, BASE)).rejects.toThrow(/\$11,600\.00/);
+    await expect(registrarRepEmitido(T, BASE)).rejects.toThrow(/\$5,000\.00/);
+  });
+
+  it('UN CENTAVO de diferencia ya no cuadra: es lo que rebota el PAC', async () => {
+    // La holgura es la misma media-centavo de la casa (`TOLERANCIA_ABONO_MXN`),
+    // no «más o menos»: un complemento que declara un peso distinto al abono
+    // que ampara es justo lo que el SAT no acepta.
+    conTablas({ pago_recibido: [OK({ id: PAGO, factura_id: FACTURA, monto: 11600.01 })] });
+    await expect(registrarRepEmitido(T, BASE)).rejects.toThrow(/no cuadra/i);
+  });
+
+  it('la cola binaria de un `numeric` no se cuenta como descuadre', async () => {
+    conTablas({
+      pago_recibido: [OK({ id: PAGO, factura_id: FACTURA, monto: 11600.000000001 })],
+      rep_emitido: [OK({ id: 'rep-1' })],
+    });
+    await expect(registrarRepEmitido(T, BASE)).resolves.toBe('rep-1');
+  });
+
+  it('un abono que no existe en la flota se dice con instrucción', async () => {
+    conTablas({ pago_recibido: [OK(null)] });
+    await expect(registrarRepEmitido(T, BASE)).rejects.toThrow(/no existe en tu flota/i);
+  });
+
+  // ── `c7-14` · EL IMPORTE PEGADO DEL ACUSE NO SE ADIVINA ─────────────────
+  it('«1.234,50» pegado del acuse del PAC se RECHAZA, no se guarda como $1.23', async () => {
     conTablas({});
+    await expect(registrarRepEmitido(T, { ...BASE, impPagado: '1.234,50' })).rejects.toThrow(DatoInvalido);
+    // Y ni siquiera se llegó a leer el abono: el monto se valida antes.
+    expect(sbMock).not.toHaveBeenCalled();
+  });
+
+  it('un XML enorme se rechaza con salida: registrarlo sin archivo', async () => {
+    conTablas({ pago_recibido: [ABONO] });
     await expect(registrarRepEmitido(T, { ...BASE, xml: 'x'.repeat(500_001) })).rejects.toThrow(/sin archivo/i);
   });
 
@@ -337,13 +481,34 @@ describe('registrarRepEmitido — Likida no timbra, solo registra', () => {
 });
 
 describe('sellarRepEntregado — el sello no puede negar el documento', () => {
+  const UUID = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001';
+
   it('traga el error de la base', async () => {
     conTablas({ rep_emitido: [FALLA('sin red')] });
-    await expect(sellarRepEntregado(T, FACTURA)).resolves.toBeUndefined();
+    await expect(sellarRepEntregado(T, FACTURA, [UUID])).resolves.toBeUndefined();
   });
 
   it('traga hasta una excepción del cliente', async () => {
     sbMock.mockImplementation(() => { throw new Error('boom'); });
-    await expect(sellarRepEntregado(T, FACTURA)).resolves.toBeUndefined();
+    await expect(sellarRepEntregado(T, FACTURA, [UUID])).resolves.toBeUndefined();
+  });
+
+  // ── `c7-16` · UNA CONSTANCIA DE ENTREGA FALSA ES PEOR QUE NINGUNA ───────
+  it('sin folios que sellar NO TOCA la tabla', async () => {
+    // Antes esto sellaba TODOS los REP de la factura sin mirar cuál se había
+    // enseñado; con tres parcialidades, abrir el enlace dejaba «entregado»
+    // escrito sobre dos documentos que nadie vio y que ninguna ruta podía
+    // entregar. La 0228 dice que esa columna es «la constancia de entrega, no
+    // una intención de entregar».
+    conTablas({ rep_emitido: [OK(null)] });
+    await sellarRepEntregado(T, FACTURA, []);
+    expect(sbMock).not.toHaveBeenCalled();
+  });
+
+  it('con folios, sella y no lanza', async () => {
+    conTablas({ rep_emitido: [OK(null)] });
+    await expect(sellarRepEntregado(T, FACTURA, [UUID.toUpperCase(), ' ', UUID]))
+      .resolves.toBeUndefined();
+    expect(sbMock).toHaveBeenCalled();
   });
 });
