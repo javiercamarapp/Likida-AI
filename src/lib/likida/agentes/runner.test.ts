@@ -53,7 +53,9 @@ vi.mock('../interruptores', () => ({
     // «antes del tercero» que verificar.
     'agente:exito_cliente', 'agente:soporte',
     // Crecimiento (0230): el que gasta modelo y dos deterministas.
-    'agente:contenido_fiscal', 'agente:lead_magnet', 'agente:promos_diarias'],
+    'agente:contenido_fiscal', 'agente:lead_magnet', 'agente:promos_diarias',
+    // Ingeniería (0234): dos de los ocho, que es lo que la rama necesita.
+    'agente:migraciones', 'agente:seguridad'],
   estaApagado: async (n: string) => {
     if (interruptorFalla && n !== 'global') throw new Error('base caída');
     return apagados.has(n);
@@ -95,7 +97,18 @@ vi.mock('./crecimiento', async (importOriginal) => ({
   correrAgenteCrecimiento: (...a: unknown[]) => correrCrecimiento(...a),
 }));
 
-const { correrRunner, ordenarPorCosto, llamaAlModelo, MARGEN_RELOJ_MS, PLAZO_RUNNER_MS } = await import('./runner');
+// Ingeniería (0234): mismo trato que crecimiento — import dinámico en el
+// runner y el predicado REAL (no mockeado), que es contra el que se compara la
+// lista literal del despacho. Mockear el motor evita arrastrar los lectores del
+// catálogo de PostgreSQL y del despliegue a esta suite.
+const correrIngenieria = vi.fn(async (..._a: unknown[]) => ({ resultado: 'corrio' as const, piezas: 1, costoUsd: 0 }));
+const { AGENTES_INGENIERIA, esAgenteIngenieria } = await import('./ingenieria');
+vi.mock('./ingenieria', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./ingenieria')>()),
+  correrAgenteIngenieria: (...a: unknown[]) => correrIngenieria(...a),
+}));
+
+const { correrRunner, ordenarPorCosto, llamaAlModelo, AGENTES_DESPACHABLES, MARGEN_RELOJ_MS, PLAZO_RUNNER_MS } = await import('./runner');
 
 const REDACTOR = { id: 'redactor', presupuesto_dia_usd: 1.0 };
 const TENANT = 'tenant-runner-test';
@@ -115,6 +128,8 @@ beforeEach(() => {
   correrExito.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
   correrCrecimiento.mockClear();
   correrCrecimiento.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
+  correrIngenieria.mockClear();
+  correrIngenieria.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
 });
 
 describe('los cuatro candados', () => {
@@ -561,5 +576,92 @@ describe('el despacho de crecimiento (0230)', () => {
     const r = await correrRunner(undefined, TENANT);
     expect(correrCrecimiento).not.toHaveBeenCalled();
     expect(r.agentes[0].motivo).toMatch(/sin presupuesto_dia_usd declarado/);
+  });
+});
+
+
+describe('el despacho de ingeniería (0234)', () => {
+  // La misma costura que la del back office y crecimiento: los ids viven DOS
+  // veces —literal en el runner, para no cargar los lectores del catálogo de
+  // PostgreSQL en cada vuelta, y en `AGENTES_INGENIERIA`—. Si divergen, un
+  // agente vivo se queda sin rama y el runner lo reporta como «sin motor».
+  it('la lista literal del runner y la del motor son la misma', () => {
+    const fuente = readFileSync('src/lib/likida/agentes/runner.ts', 'utf8');
+    const linea = /const INGENIERIA: readonly string\[\] = \[([^\]]*)\]/.exec(fuente);
+    expect(linea, 'la lista literal del runner debe seguir existiendo').not.toBeNull();
+    const ids = (linea as RegExpExecArray)[1]
+      .split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean);
+    expect(ids).toEqual([...AGENTES_INGENIERIA]);
+    for (const id of ids) expect(esAgenteIngenieria(id)).toBe(true);
+  });
+
+  it('se despacha a su motor y su resultado sale TAL CUAL', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'migraciones', presupuesto_dia_usd: 0.1 }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrIngenieria).toHaveBeenCalledWith('migraciones', 'cron');
+    expect(r.agentes).toEqual([{ agente: 'migraciones', resultado: 'corrio', motivo: undefined, piezas: 1, costoUsd: 0 }]);
+  });
+
+  it('NINGUNO consulta el gasto del día: los ocho son deterministas y no hay techo que medir', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'seguridad', presupuesto_dia_usd: 0.1 }], error: null }]);
+    // Si el runner pidiera el gasto, esta cola contestaría con un fallo y el
+    // agente saltaría fail-closed. Que corra prueba que ni la pidió.
+    respuestas.set('agente_corrida', [{ data: null, error: { message: 'nadie debería preguntar' } }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'seguridad', resultado: 'corrio' });
+  });
+
+  it('ninguno de los ocho es CARO: van con los baratos, delante de los que gastan modelo', () => {
+    for (const id of AGENTES_INGENIERIA) expect(llamaAlModelo(id), id).toBe(false);
+  });
+
+  it('un motor que truena no tumba la vuelta: se dice y los demás siguen', async () => {
+    respuestas.set('agente_definicion', [{ data: [
+      { id: 'migraciones', presupuesto_dia_usd: 0.1 },
+      { id: 'seguridad', presupuesto_dia_usd: 0.1 },
+    ], error: null }]);
+    correrIngenieria.mockRejectedValueOnce(new Error('postura_seguridad() no contestó'));
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'migraciones', resultado: 'saltado' });
+    expect(r.agentes[0].motivo).toContain('postura_seguridad');
+    expect(r.agentes[1]).toMatchObject({ agente: 'seguridad', resultado: 'corrio' });
+  });
+
+  it('sin kill switch declarado no corre, aunque tenga motor', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'releases', presupuesto_dia_usd: 0.1 }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrIngenieria).not.toHaveBeenCalled();
+    expect(r.agentes[0].motivo).toMatch(/kill switch/);
+  });
+});
+
+describe('AGENTES_DESPACHABLES — lo que el auditor de código lee del artefacto', () => {
+  // NO es decoración: `auditor_codigo` (0234) la lee por import dinámico para
+  // comparar el bundle DESPLEGADO contra lo que la base declara vivo. Si esta
+  // lista mintiera, el agente acusaría (o absolvería) en falso.
+  it('trae los ocho de ingeniería y los diez de crecimiento, sin repetidos', () => {
+    for (const id of AGENTES_INGENIERIA) expect(AGENTES_DESPACHABLES, id).toContain(id);
+    for (const id of AGENTES_CRECIMIENTO) expect(AGENTES_DESPACHABLES, id).toContain(id);
+    for (const id of AGENTES_BACK_OFFICE) expect(AGENTES_DESPACHABLES, id).toContain(id);
+    expect(new Set(AGENTES_DESPACHABLES).size).toBe(AGENTES_DESPACHABLES.length);
+  });
+
+  it('todo id de la lista tiene rama de verdad: ninguno cae en «sin motor despachable»', async () => {
+    // Se despacha la lista COMPLETA en una sola vuelta contra un catálogo que
+    // los declara todos vivos. La prueba no es que corran (los motores están
+    // mockeados o fallan por falta de datos) sino que NINGUNO caiga en la rama
+    // del final, que es exactamente lo que el auditor mide.
+    respuestas.set('agente_definicion', [{ data: AGENTES_DESPACHABLES.map((id) => ({ id, presupuesto_dia_usd: 1 })), error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    const sinMotor = r.agentes.filter((a) => (a.motivo ?? '').includes('sin motor despachable')).map((a) => a.agente);
+    expect(sinMotor).toEqual([]);
+  });
+
+  it('un id que NO está en la lista sí cae en «sin motor despachable» — la señal que el auditor busca', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'fantasma_0234', presupuesto_dia_usd: 1 }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(AGENTES_DESPACHABLES).not.toContain('fantasma_0234');
+    // Sin palanca ni siquiera llega a la rama del final: el candado 1 va antes.
+    expect(r.agentes[0].motivo).toMatch(/kill switch/);
   });
 });

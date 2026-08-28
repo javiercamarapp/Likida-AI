@@ -34,7 +34,7 @@ import { estaApagado, INTERRUPTORES, type NombreInterruptor } from '../interrupt
 import { hoyMx } from '@/lib/formato';
 import { LlmBudgetExceededError, createLlmBudget, type LlmBudget } from '@/lib/llm/budget';
 import { redactarCorreoFrio } from './redactor';
-import { correrAgenteFinanciero, esAgenteFinanciero } from './finanzas';
+import { AGENTES_FINANCIEROS, correrAgenteFinanciero, esAgenteFinanciero } from './finanzas';
 import { candidatosSinDossier, investigarProspecto } from './investigador';
 import { correrSdr } from './sdr';
 import { correrEnviador } from './enviador';
@@ -53,6 +53,12 @@ export function topePendientesBandeja(): number {
   const v = Number(process.env.LIKIDA_RUNNER_TOPE_PENDIENTES);
   return Number.isFinite(v) && v > 0 ? Math.floor(v) : 20;
 }
+
+/** Los cuatro reporteros de dirección (0216). Se sube a constante —antes era
+ *  un literal dentro de su propia rama— porque `AGENTES_DESPACHABLES` la
+ *  necesita: una lista paralela para el auditor podría divergir del despacho
+ *  real, que es justo lo que ese agente existe para cazar. */
+const DIRECCION: readonly string[] = ['kpi_whatsapp', 'desempeno_startup', 'orquestador', 'orquestador_semanal'];
 
 /** Los cuatro del back office restante (0219). La lista se escribe AQUÍ como
  *  literal —y no importando `AGENTES_BACK_OFFICE`— por la misma razón que la
@@ -83,6 +89,42 @@ const CRECIMIENTO: readonly string[] = [
   'contenido_fiscal', 'lead_magnet', 'seo_distribucion',
   'guiones', 'noticias_mercado', 'promos_diarias',
   'visuales', 'video_demo', 'video_marketing', 'alianzas',
+];
+
+/** Los ocho de ingeniería (0234). Literal aquí por lo mismo que las listas de
+ *  arriba: el motor entra por import dinámico dentro de su rama, y un import
+ *  estático para leer ocho cadenas arrastraría los dos módulos —con sus
+ *  lectores del catálogo de PostgreSQL— a cada vuelta del runner.
+ *  `runner.test.ts` compara esta lista contra la del motor: si divergen, falla. */
+const INGENIERIA: readonly string[] = [
+  'migraciones', 'seguridad', 'rendimiento', 'pruebas',
+  'auditor_codigo', 'releases', 'producto', 'datos_instrumentacion',
+];
+
+/**
+ * TODOS los ids que ESTE BUNDLE sabe despachar — la unión de las ramas de
+ * `correrRunner`, en el mismo orden en que el `for` las prueba.
+ *
+ * NO ES DECORACIÓN: la lee el agente `auditor_codigo` (0234) por import
+ * dinámico para comparar el ARTEFACTO DESPLEGADO contra lo que la base declara
+ * vivo. Un agente que la base tiene en 'vivo' + runner_habilitado + 'cron' y
+ * que no está aquí se salta en cada vuelta con «sin motor despachable»: vivo en
+ * el catálogo, muerto en la práctica. Ese es el «mergeado ≠ desplegado» que ya
+ * mordió a este proyecto, y desde una función serverless es LO ÚNICO que se
+ * puede auditar del código con honestidad.
+ *
+ * Se arma de las mismas constantes que usa el despacho —no de una lista
+ * paralela— justo para que no puedan divergir.
+ */
+export const AGENTES_DESPACHABLES: readonly string[] = [
+  'redactor',
+  ...AGENTES_FINANCIEROS,
+  ...DIRECCION,
+  ...BACK_OFFICE_RESTANTE,
+  ...AGENTES_EXITO_CLIENTE,
+  ...CRECIMIENTO,
+  ...INGENIERIA,
+  'enriquecedor', 'sdr', 'enviador',
 ];
 
 export interface AgenteDelRunner {
@@ -361,7 +403,7 @@ export async function correrRunner(
     // Import dinámico a propósito: el módulo arrastra los lectores de /admin
     // (negocio, escalaciones, salud) y solo se paga cuando de verdad se
     // despacha un agente de dirección — no en cada carga del runner.
-    if (['kpi_whatsapp', 'desempeno_startup', 'orquestador', 'orquestador_semanal'].includes(a.id)) {
+    if (DIRECCION.includes(a.id)) {
       try {
         const { correrAgenteDireccion } = await import('../direccion/reportes');
         const r = await correrAgenteDireccion(a.id as 'kpi_whatsapp' | 'desempeno_startup' | 'orquestador' | 'orquestador_semanal');
@@ -475,6 +517,36 @@ export async function correrRunner(
         agentes.push({ agente: a.id, resultado: r.resultado, motivo: r.motivo, piezas: r.piezas, costoUsd: r.costoUsd });
       } catch (e) {
         agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del motor de crecimiento' });
+      }
+      continue;
+    }
+
+    // ── INGENIERÍA (0234): los ocho que cuidan la máquina por dentro ──────
+    // Los ocho son DETERMINISTAS y no llaman a ningún modelo (gasto de modelo
+    // $0 MEDIDO, no NULL): el techo declarado es el candado formal, y el día
+    // que alguno redacte con modelo el freno ya está puesto sin acordarse.
+    // Import dinámico por la misma razón que dirección, éxito y crecimiento:
+    // los dos módulos arrastran los lectores del catálogo de PostgreSQL y del
+    // despliegue; no se pagan en cada vuelta.
+    //
+    // Ninguno toca un canal de salida: los ocho encolan un parte semanal y ya.
+    // El backpressure de cada uno vive DENTRO de su motor (un parte por
+    // periodo, arbitrado por el índice único de la 0234), así que no hace
+    // falta el conteo de bandeja que sí lleva el Redactor.
+    if (INGENIERIA.includes(a.id)) {
+      try {
+        const { correrAgenteIngenieria, esAgenteIngenieria } = await import('./ingenieria');
+        // El estrechamiento de verdad lo hace el predicado del motor, no la
+        // lista literal de arriba: si alguna vez divergen, aquí se ve (mismo
+        // criterio que el back office y crecimiento).
+        if (!esAgenteIngenieria(a.id)) {
+          agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'la lista del runner y la del motor de ingeniería divergen — no se despacha a ciegas' });
+          continue;
+        }
+        const r = await correrAgenteIngenieria(a.id, 'cron');
+        agentes.push({ agente: a.id, resultado: r.resultado, motivo: r.motivo, piezas: r.piezas, costoUsd: r.costoUsd });
+      } catch (e) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del motor de ingeniería' });
       }
       continue;
     }

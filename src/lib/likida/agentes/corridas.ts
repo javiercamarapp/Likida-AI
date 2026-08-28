@@ -49,7 +49,14 @@ export type AgenteConCorridas = 'liquidacion' | 'facturas' | 'cobranza' | 'condu
   // otras nueve anotan costo 0 MEDIDO, que no es lo mismo que NULL.
   | 'contenido_fiscal' | 'lead_magnet' | 'seo_distribucion'
   | 'guiones' | 'noticias_mercado' | 'promos_diarias'
-  | 'visuales' | 'video_demo' | 'video_marketing' | 'alianzas';
+  | 'visuales' | 'video_demo' | 'video_marketing' | 'alianzas'
+  // Ingeniería (0234): los ocho que cuidan la máquina por dentro. Mismo
+  // contrato de tenant que los de arriba — corren para LIKIDA (tenant NULL):
+  // el estado del esquema, el SHA desplegado y la conducta de las corridas no
+  // son de ninguna flota. Los ocho son DETERMINISTAS y no llaman a ningún
+  // modelo, así que anotan costo 0 MEDIDO — que no es lo mismo que NULL.
+  | 'migraciones' | 'seguridad' | 'rendimiento' | 'pruebas'
+  | 'auditor_codigo' | 'releases' | 'producto' | 'datos_instrumentacion';
 export type EstadoCorrida = 'ok' | 'parcial' | 'fallo';
 /** `correo` (0108): el agente de Proveedores no corre por reloj — corre
  *  cuando llega un correo al buzón. Registrarlo como 'cron' pintaría
