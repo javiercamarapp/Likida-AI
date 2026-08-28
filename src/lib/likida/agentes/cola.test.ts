@@ -12,13 +12,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 //    se grita en el log.
 // ═══════════════════════════════════════════════════════════════════════════
 
-type Registro = { tabla: string; op: string; payload: Record<string, unknown> | null; eq: Array<[string, unknown]>; is: Array<[string, unknown]> };
+type Registro = { tabla: string; op: string; payload: Record<string, unknown> | null; eq: Array<[string, unknown]>; is: Array<[string, unknown]>; inn: Array<[string, unknown]> };
 const llamadas: Registro[] = [];
 const respuestas = new Map<string, Array<{ data: unknown; error: { code?: string; message: string } | null }>>();
 const logs = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
 function builder(tabla: string) {
-  const r: Registro = { tabla, op: 'select', payload: null, eq: [], is: [] };
+  const r: Registro = { tabla, op: 'select', payload: null, eq: [], is: [], inn: [] };
   const responder = () => {
     const cola = respuestas.get(tabla);
     return cola && cola.length > 0 ? cola.shift()! : { data: [], error: null };
@@ -28,12 +28,14 @@ function builder(tabla: string) {
     insert: (p: Record<string, unknown>) => { r.op = 'insert'; r.payload = p; llamadas.push(r); return b; },
     update: (p: Record<string, unknown>) => { r.op = 'update'; r.payload = p; llamadas.push(r); return b; },
     delete: () => { r.op = 'delete'; llamadas.push(r); return b; },
-    select: () => b,
+    // Una LECTURA también se registra: `rebotesRecientes` no escribe nada, y
+    // sin esto no habría forma de comprobar contra qué filtra.
+    select: () => { if (r.op === 'select' && !llamadas.includes(r)) llamadas.push(r); return b; },
     eq: (c: string, v: unknown) => { r.eq.push([c, v]); return b; },
     neq: () => b,
     not: () => b,
     is: (c: string, v: unknown) => { r.is.push([c, v]); return b; },
-    in: () => b,
+    in: (c: string, v: unknown) => { r.inn.push([c, v]); return b; },
     gte: () => b,
     lte: () => b,
     order: () => b,
@@ -61,7 +63,10 @@ let resultadoEnvio: { ok: true; id: string } | { ok: false; motivo: 'rechazado' 
 const enviarCorreo = vi.fn<(...a: unknown[]) => Promise<typeof resultadoEnvio>>(async () => resultadoEnvio);
 vi.mock('@/lib/correo/enviar', () => ({ enviarCorreo: (...a: unknown[]) => enviarCorreo(...a) }));
 
-const { encolarPieza, aprobarPieza, rechazarPieza, marcarEnviada, enviarPiezaPorCorreo } = await import('./cola');
+const {
+  encolarPieza, aprobarPieza, rechazarPieza, marcarEnviada, enviarPiezaPorCorreo,
+  rebotesRecientes, correosSuprimidos,
+} = await import('./cola');
 const { DatoInvalido } = await import('../errores');
 
 const de = (tabla: string, op: string) => llamadas.filter((l) => l.tabla === tabla && l.op === op);
@@ -480,5 +485,49 @@ describe('c5-14 — el formato de campaña se verifica también EN LA PUERTA', (
     expect(() => verificarFormatoCampana('nuestros clientes reales')).toThrow(/clientes reales/);
     expect(() => verificarFormatoCampana('texto — con raya')).toThrow(/guion largo/);
     expect(() => verificarFormatoCampana('en pláticas con transportistas')).not.toThrow();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS REBOTES, LEÍBLES (agosto-2026). El webhook de Resend (0124) escribía
+// `entrega_estado` y llenaba `correo_suprimido` (0217) desde hacía meses, y
+// no había un solo lector: el operador no podía enterarse de que un dominio
+// estaba rebotando. Lo que se fija aquí es lo que la pantalla necesita para
+// no mentir: que se filtre por los DOS estados malos, que rebote y queja no
+// se fundan, y que un error de lectura LANCE en vez de devolver [].
+// ═══════════════════════════════════════════════════════════════════════════
+describe('rebotesRecientes y correosSuprimidos — lo que Resend ya sabía', () => {
+  it('filtra por rebotado Y queja, y las distingue en el resultado', async () => {
+    respuestas.set('cola_aprobacion', [{
+      data: [
+        { id: 'p-1', tipo: 'correo_frio', prioridad: 'normal', agente: 'sdr', titulo: 't', cuerpo: 'c', estado: 'aprobado', creado_en: '2026-08-20T00:00:00Z', entrega_estado: 'rebotado', entrega_evento_en: '2026-08-21T00:00:00Z' },
+        { id: 'p-2', tipo: 'correo_frio', prioridad: 'normal', agente: 'sdr', titulo: 't', cuerpo: 'c', estado: 'aprobado', creado_en: '2026-08-19T00:00:00Z', entrega_estado: 'queja', entrega_evento_en: '2026-08-20T00:00:00Z' },
+      ],
+      error: null,
+    }]);
+    const r = await rebotesRecientes(15);
+    expect(r.map((p) => p.entregaEstado)).toEqual(['rebotado', 'queja']);
+
+    const lectura = llamadas.find((l) => l.tabla === 'cola_aprobacion' && l.op === 'select')!;
+    expect(lectura.inn).toEqual([['entrega_estado', ['rebotado', 'queja']]]);
+  });
+
+  it('un error de lectura LANZA: una lista vacía diría «no hay rebotes»', async () => {
+    respuestas.set('cola_aprobacion', [{ data: null, error: { message: 'fetch failed' } }]);
+    await expect(rebotesRecientes()).rejects.toThrow(/rebotesRecientes: fetch failed/);
+  });
+
+  it('la lista de bajas trae el MOTIVO — sin él, «ya no le escribimos» no se puede auditar', async () => {
+    respuestas.set('correo_suprimido', [{
+      data: [{ correo: 'quien@flota.mx', motivo: 'queja de spam (webhook Resend)', creado_en: '2026-08-21T00:00:00Z' }],
+      error: null,
+    }]);
+    const r = await correosSuprimidos();
+    expect(r).toEqual([{ correo: 'quien@flota.mx', motivo: 'queja de spam (webhook Resend)', creadoEn: '2026-08-21T00:00:00Z' }]);
+  });
+
+  it('la lista de bajas también LANZA ante error de lectura', async () => {
+    respuestas.set('correo_suprimido', [{ data: null, error: { message: 'timeout' } }]);
+    await expect(correosSuprimidos()).rejects.toThrow(/correosSuprimidos: timeout/);
   });
 });

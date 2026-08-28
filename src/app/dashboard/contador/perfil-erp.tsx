@@ -1,7 +1,11 @@
 import { revalidatePath } from 'next/cache';
-import { FileSpreadsheet } from 'lucide-react';
+import { FileSpreadsheet, Download } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { puedeExportar } from '@/lib/auth/permisos';
+import { hoyMx } from '@/lib/formato';
+import { ahoraMs } from '@/lib/saludo';
+import { sufijoTenant } from '../sufijo';
 import {
   guardarPerfilExportacionErp,
   perfilExportacionDeclarado,
@@ -48,6 +52,42 @@ function EstadoPerfil({ etiqueta, perfil, leyoOk }: { etiqueta: string; perfil: 
   );
 }
 
+/**
+ * EL BOTÓN DE DESCARGA DE LA PÓLIZA — el que faltaba (agosto-2026).
+ *
+ * `/api/export/poliza` existía, con sus guardas (área `dinero` +
+ * `puedeExportar`) y sus 409 escritos, y NINGUNA pantalla lo enlazaba: la
+ * única forma de bajar la póliza era teclear la URL a mano. Se pone aquí y no
+ * en el encabezado por una razón concreta: éste es el único punto de la
+ * pantalla donde YA se sabe si el endpoint va a responder 409 —lo dice
+ * `perfilExportacionDeclarado`—, así que el botón solo aparece cuando de
+ * verdad va a bajar un archivo.
+ *
+ * SOLO CONTPAQi. `formato=sap_b1` no devuelve una descarga: devuelve un JSON
+ * con los dos archivos DTW adentro (`oJournalEntries.txt` y
+ * `JournalEntries_Lines.txt`), y un `<a download>` bajaría ese JSON. Poner un
+ * botón que entrega algo que SAP no importa sería peor que no ponerlo, así
+ * que se dice en su lugar.
+ *
+ * El rango es el MES EN CURSO, el mismo truco que el export de liquidaciones
+ * del encabezado (`desde=AAAA-MM-01`), y cabe de sobra en el tope de 92 días
+ * que impone la ruta.
+ */
+function BotonPoliza({ sufijo, hoy }: { sufijo: string; hoy: string }) {
+  // El sufijo del superadmin (`?tenant=`, `?vista=`, `?rol=`) tiene que
+  // viajar o el CSV saldría de la flota equivocada. Tercer dialecto del
+  // repo: `${sufijo}${sufijo ? '&' : '?'}`, igual que el botón de arriba.
+  const href = `/api/export/poliza${sufijo}${sufijo ? '&' : '?'}formato=contpaqi&desde=${hoy.slice(0, 8)}01&hasta=${hoy}`;
+  return (
+    <a href={href} download
+      className="hairline inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+      style={{ background: 'var(--surface)' }}>
+      <Download width={13} height={13} strokeWidth={1.75} />
+      Descargar póliza del mes (CSV CONTPAQi)
+    </a>
+  );
+}
+
 export async function PerfilErp({
   searchParams,
   tenantExiste,
@@ -57,7 +97,7 @@ export async function PerfilErp({
 }) {
   if (!tenantExiste) return null;
 
-  const { tenantId } = await resolverTenantEfectivo('/dashboard/contador', searchParams);
+  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/contador', searchParams);
 
   // El mismo patrón `leyoOk` que `estimulo-peaje.tsx` (FRONTEND-19C2-5): un
   // error de lectura NO es "sin plantilla", y confundirlos invita a
@@ -141,6 +181,21 @@ export async function PerfilErp({
             <EstadoPerfil etiqueta="CONTPAQi" perfil={contpaqi} leyoOk={leyoOk} />
             <EstadoPerfil etiqueta="SAP Business One" perfil={sapB1} leyoOk={leyoOk} />
           </div>
+
+          {/* El botón solo con plantilla CONTPAQi confirmada Y con permiso de
+              exportar: sin lo primero la ruta contesta 409, y sin lo segundo
+              403. Ofrecerlo igual mandaría al contador a un error en vez de a
+              un archivo. La puerta REAL sigue estando en la ruta. */}
+          {leyoOk && contpaqi !== null && puedeExportar(rol) && (
+            <div className="mt-2.5">
+              <BotonPoliza sufijo={sufijoTenant(searchParams)} hoy={hoyMx(new Date(ahoraMs()))} />
+              <p className="text-xs mt-1" style={{ color: 'var(--faint)' }}>
+                El asiento del mes en curso, con el layout que confirmaste. SAP Business One no
+                baja como archivo —su plantilla DTW son dos .txt que la ruta entrega en JSON—;
+                se pide desde la integración, no desde aquí.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

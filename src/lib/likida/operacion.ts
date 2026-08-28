@@ -21,6 +21,7 @@ import { acotada } from './presupuesto';
 import { conteo, traerTodo } from './pg';
 import { DatoInvalido } from './errores';
 import { esNumero, esNumeroONulo, esObjeto, esTextoONulo, formaInesperada } from './comercial';
+import { CONECTORES_GPS } from './conectores/gps';
 
 /** Los tres estatus que `viaje` de verdad admite (`viaje_estatus_dominio`,
  *  0025). Un cuarto valor no se traduce ni se esconde: se cuenta aparte. */
@@ -141,6 +142,14 @@ export interface UnidadRow {
   polizaVence: string | null;
   permisoSictVence: string | null;
   verificacionVence: string | null;
+  /** El amarre con el GPS (0176). Los dos `null` = esta unidad no tiene
+   *  dispositivo ligado, y el poller cuenta sus lecturas como huérfanas. */
+  gpsProveedor: string | null;
+  gpsDeviceId: string | null;
+  /** Última vez que el poller trajo una posición de ESTA unidad. `null` =
+   *  nunca — es lo que separa «ligada» de «entrando de verdad», y por eso se
+   *  enseña aparte del device id. */
+  gpsVistoEn: string | null;
   ordenesAbiertas: number;
   activo: boolean;
 }
@@ -152,7 +161,7 @@ export async function getUnidades(tenantId: string, hoy = new Date()): Promise<U
   const [unidades, ordenes] = await Promise.all([
     traerTodo<Record<string, unknown>>(
       (d, h) => acotada(admin.from('unidad')
-        .select('id, numero_economico, placas, marca, modelo, anio, estado, km_actual, poliza_vence, permiso_sict_vence, verificacion_vence, activo', conteo(d))
+        .select('id, numero_economico, placas, marca, modelo, anio, estado, km_actual, poliza_vence, permiso_sict_vence, verificacion_vence, gps_proveedor, gps_device_id, gps_visto_en, activo', conteo(d))
         .eq('tenant_id', tenantId).order('numero_economico').range(d, h), 'getUnidades.unidad'),
       'getUnidades.unidad',
     ),
@@ -207,6 +216,9 @@ export async function getUnidades(tenantId: string, hoy = new Date()): Promise<U
       polizaVence: (u.poliza_vence as string) || null,
       permisoSictVence: (u.permiso_sict_vence as string) || null,
       verificacionVence: (u.verificacion_vence as string) || null,
+      gpsProveedor: (u.gps_proveedor as string) || null,
+      gpsDeviceId: (u.gps_device_id as string) || null,
+      gpsVistoEn: (u.gps_visto_en as string) || null,
       ordenesAbiertas: abiertasPorUnidad.get(u.id as string) ?? 0,
       activo: Boolean(u.activo),
     };
@@ -787,6 +799,16 @@ export interface NuevaUnidad {
   polizaVence?: string | null;
   permisoSictVence?: string | null;
   verificacionVence?: string | null;
+  // ── EL AMARRE CON EL GPS (columnas de la 0176) ──────────────────────────
+  // Sin estos dos, el poller de posiciones trae lecturas y las cuenta TODAS
+  // como huérfanas: `sincronizar_gps.ts` casa cada lectura buscando la unidad
+  // por `(tenant_id, gps_proveedor, gps_device_id)`. Las columnas existían
+  // desde la 0176 y no tenían un solo escritor en `src/` — el eslabón que
+  // faltaba para que el GPS llegara a la pantalla.
+  /** Con cuál conector del catálogo se ligó (`samsara`, `wialon`…). */
+  gpsProveedor?: string | null;
+  /** El id del dispositivo EN EL SISTEMA DEL PROVEEDOR. */
+  gpsDeviceId?: string | null;
 }
 
 /** Lo que llega del formulario de unidades: puros strings. `''` = sin dato. */
@@ -799,6 +821,8 @@ export interface UnidadCruda {
   polizaVence: string;
   permisoSictVence: string;
   verificacionVence: string;
+  gpsProveedor: string;
+  gpsDeviceId: string;
 }
 
 /** `''` → `null`; largo un texto opcional. Mismo criterio que clientes.ts. */
@@ -828,6 +852,46 @@ function fechaOpcional(crudo: string, campo: string): string | null {
 /** El primer año de una unidad de carga que siga rodando; espeja
  *  `ANIO_MIN_UNIDAD` de la API para que las dos puertas admitan lo mismo. */
 const ANIO_MIN = 1950;
+
+/** Los ids válidos de proveedor, DERIVADOS del catálogo. Escribir la lista a
+ *  mano aquí la desincronizaría del día que entre el sexto proveedor, y una
+ *  unidad ligada a un proveedor inexistente no la lee ningún poller. */
+const IDS_GPS_VALIDOS: readonly string[] = CONECTORES_GPS.map((c) => c.id);
+
+/** El tope del id de dispositivo. Es el MISMO que aplica `posicionValida` en
+ *  `sincronizar_gps.ts`: aceptar aquí uno más largo del que el poller admite
+ *  produciría una unidad que jamás casa con su lectura. */
+const TOPE_DEVICE_ID = 200;
+
+/**
+ * El amarre unidad↔dispositivo, validado como una sola cosa.
+ *
+ * Los dos campos van JUNTOS o no van, y esa es la regla que evita el estado
+ * inútil: `sincronizar_gps.ts` filtra por `gps_proveedor` Y por
+ * `gps_device_id`, así que una unidad con solo uno de los dos nunca casa con
+ * ninguna lectura — se vería configurada y no traería nada. El índice parcial
+ * `uq_unidad_gps` (0176) refuerza lo mismo del lado de la base.
+ */
+function validarAmarreGps(c: UnidadCruda): { gpsProveedor: string | null; gpsDeviceId: string | null } {
+  const proveedor = c.gpsProveedor.trim();
+  const device = c.gpsDeviceId.trim();
+
+  if (proveedor === '' && device === '') return { gpsProveedor: null, gpsDeviceId: null };
+
+  if (proveedor === '') {
+    throw new DatoInvalido('Pusiste el número de dispositivo pero no el proveedor de GPS. Sin el proveedor la lectura no se puede casar con esta unidad — elige uno o deja los dos vacíos.');
+  }
+  if (!IDS_GPS_VALIDOS.includes(proveedor)) {
+    throw new DatoInvalido(`«${proveedor}» no es un proveedor de rastreo del catálogo. Los que hay: ${IDS_GPS_VALIDOS.join(', ')}.`);
+  }
+  if (device === '') {
+    throw new DatoInvalido('Falta el número de dispositivo que te da tu proveedor de GPS. Sin él las posiciones llegan y no se sabe de qué unidad son.');
+  }
+  if (device.length > TOPE_DEVICE_ID) {
+    throw new DatoInvalido(`El número de dispositivo no puede pasar de ${TOPE_DEVICE_ID} caracteres.`);
+  }
+  return { gpsProveedor: proveedor, gpsDeviceId: device };
+}
 
 /**
  * Del formulario al motor. PURA: se prueba sin pantalla ni base.
@@ -865,6 +929,7 @@ export function validarUnidad(c: UnidadCruda, hoy = new Date()): UnidadValida {
     polizaVence: fechaOpcional(c.polizaVence, 'La fecha de la póliza'),
     permisoSictVence: fechaOpcional(c.permisoSictVence, 'La fecha del permiso SICT'),
     verificacionVence: fechaOpcional(c.verificacionVence, 'La fecha de la verificación'),
+    ...validarAmarreGps(c),
   };
 }
 
@@ -878,6 +943,8 @@ export interface UnidadValida {
   polizaVence: string | null;
   permisoSictVence: string | null;
   verificacionVence: string | null;
+  gpsProveedor: string | null;
+  gpsDeviceId: string | null;
 }
 
 /** `NuevaUnidad` (tipada, como llega del panel o de `POST /v1/unidades`) a la
@@ -893,6 +960,8 @@ function aCruda(u: NuevaUnidad): UnidadCruda {
     polizaVence: u.polizaVence ?? '',
     permisoSictVence: u.permisoSictVence ?? '',
     verificacionVence: u.verificacionVence ?? '',
+    gpsProveedor: u.gpsProveedor ?? '',
+    gpsDeviceId: u.gpsDeviceId ?? '',
   };
 }
 
@@ -916,6 +985,8 @@ export async function crearUnidad(tenantId: string, u: NuevaUnidad): Promise<str
     poliza_vence: v.polizaVence,
     permiso_sict_vence: v.permisoSictVence,
     verificacion_vence: v.verificacionVence,
+    gps_proveedor: v.gpsProveedor,
+    gps_device_id: v.gpsDeviceId,
   }).select('id').single(), 'crearUnidad');
   if (error) throw new Error(`crearUnidad: ${error.message}`);
   const id = (data as { id?: unknown } | null)?.id;
@@ -940,6 +1011,8 @@ export async function editarUnidad(tenantId: string, unidadId: string, u: NuevaU
     poliza_vence: v.polizaVence,
     permiso_sict_vence: v.permisoSictVence,
     verificacion_vence: v.verificacionVence,
+    gps_proveedor: v.gpsProveedor,
+    gps_device_id: v.gpsDeviceId,
   }).eq('id', unidadId).eq('tenant_id', tenantId).select('id'), 'editarUnidad');
 
   if (error) {
@@ -947,6 +1020,13 @@ export async function editarUnidad(tenantId: string, unidadId: string, u: NuevaU
     // choque esperable, y es de captura: se dice en palabras de quien capturó.
     if (error.message.includes('unidad_economico_unico')) {
       throw new DatoInvalido(`Ya tienes una unidad con el número económico "${v.numeroEconomico}". Si es otra, distínguela en el número.`);
+    }
+    // El segundo choque esperable desde la 0176: `uq_unidad_gps` es parcial
+    // sobre (tenant_id, gps_proveedor, gps_device_id). Un dispositivo = una
+    // unidad por flota; sin traducirlo, quien captura vería el nombre del
+    // índice y no sabría que el número ya está en otro camión.
+    if (error.message.includes('uq_unidad_gps')) {
+      throw new DatoInvalido(`El dispositivo "${v.gpsDeviceId}" ya está ligado a otra unidad de tu flota con ese mismo proveedor. Un dispositivo solo puede pertenecer a un camión: quítaselo al otro primero.`);
     }
     throw new Error(`editarUnidad: ${error.message}`);
   }

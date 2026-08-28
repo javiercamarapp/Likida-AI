@@ -2,7 +2,7 @@
 
 import { useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Vault, TriangleAlert } from 'lucide-react';
+import { Vault, TriangleAlert, PlugZap, CircleCheck } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CAPTURA DE CREDENCIALES (C2, auditoría 4) — la mitad CLIENTE.
@@ -34,8 +34,11 @@ export interface ConectorCaptura {
   campos: CampoCaptura[];
 }
 
-/** Un grupo del select: ERP / Peajes. Los GPS no vienen — tienen su propio
- *  almacén (`rastreo_credencial`) y su propio flujo. */
+/** Un grupo del select: una `CategoriaConector` con los conectores que piden
+ *  credenciales. Desde el arreglo de agosto-2026 los GPS SÍ vienen: se
+ *  capturan aquí, en `conector_credencial`, que es la tabla que lee el poller
+ *  de posiciones. Antes se excluían apuntando a `rastreo_credencial`, una
+ *  tabla que ningún escritor de `src/` llenaba nunca. */
 export interface GrupoCaptura {
   categoria: string;
   conectores: ConectorCaptura[];
@@ -148,6 +151,58 @@ export function FormaCredenciales({ grupos, guardar }: {
         {conector && <BotonGuardar />}
       </form>
     </div>
+  );
+}
+
+/**
+ * PROBAR LA CONEXIÓN — el botón que faltaba para que `probar()` deje de ser
+ * código muerto.
+ *
+ * Lo que aprieta esta forma NO es un ping: la server action lee la credencial
+ * del cofre, llama al sistema del cliente con ella y sella lo que contestó en
+ * `probada_en`/`ultimo_error`. Por eso el resultado se enseña TAL CUAL lo
+ * devolvió el adaptador —incluido el mensaje del proveedor— en vez de un
+ * «listo» genérico: un 403 de Samsara y un 500 de Samsara mandan a hacer
+ * cosas distintas, y fundirlos en «falló» manda a regenerar un token que
+ * estaba bien.
+ *
+ * La respuesta se pinta aquí y ADEMÁS queda sellada en la fila: al recargar,
+ * el renglón de arriba ya dice «probada el …» o enseña el error. Enseñarla
+ * solo aquí la perdería en el siguiente refresh.
+ */
+export function FormaProbar({ conectorId, probar }: {
+  conectorId: string;
+  probar: AccionCredencial;
+}) {
+  const [estado, despachar] = useActionState(probar, null);
+  return (
+    <div className="space-y-2">
+      <form action={despachar}>
+        <input type="hidden" name="conector" value={conectorId} />
+        <BotonProbar />
+      </form>
+      {estado && !estado.ok && <AvisoError error={estado.error} />}
+      {estado?.ok && (
+        <p className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
+          style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
+          <CircleCheck width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+          {estado.mensaje}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function BotonProbar() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending}
+      className="h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85 disabled:opacity-50">
+      <PlugZap width={13} height={13} strokeWidth={1.75} />
+      {/* «Probando…» y no «Conectando…»: probar no deja nada conectado, y la
+          espera puede ser de hasta 15 s (TIMEOUT_PRUEBA_MS). */}
+      {pending ? 'Probando contra el proveedor…' : 'Probar conexión'}
+    </button>
   );
 }
 

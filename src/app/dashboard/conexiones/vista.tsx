@@ -15,13 +15,17 @@ const ESTADO: Record<Conector['estado'], { rotulo: string; fg: string; bg: strin
  * en palabras de persona; las decisiones de negocio (el candado del
  * timbrado) se declaran como decisiones, no como fallas.
  */
-export function VistaConexiones({ conectores, credenciales }: {
+export function VistaConexiones({ conectores, credenciales, integraciones }: {
   conectores: Conector[];
   /** La sección "Credenciales de tus sistemas", ya armada en el servidor
    *  (`SeccionCredenciales` + acciones). Entra como ReactNode y no como
    *  datos: esta vista no debe importar el motor, que trae `supabaseAdmin`
    *  (mismo patrón que `notificaciones` en el Agente de Proveedores). */
   credenciales?: React.ReactNode;
+  /** La sección "Con qué sistemas conecta Likida", que era la pantalla gemela
+   *  `/dashboard/integraciones` hasta la fusión de agosto-2026. Mismo criterio
+   *  de ReactNode que la de credenciales. */
+  integraciones?: React.ReactNode;
 }) {
   return (
     <main className="h-full">
@@ -65,13 +69,12 @@ export function VistaConexiones({ conectores, credenciales }: {
             );
           })}
 
-          {credenciales}
+          {/* El orden es el del trabajo: primero QUÉ está medido, luego CON
+              QUÉ sabe conectar Likida, y al final DÓNDE se capturan los
+              accesos — que es lo que se hace después de leer las otras dos. */}
+          {integraciones}
 
-          <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>
-            ¿Falta un conector que tu operación necesita (correo de intake, tu proveedor de GPS,
-            tu ERP)? Es exactamente lo que se conecta contigo en el arranque — escríbenos desde
-            el Centro de ayuda.
-          </p>
+          {credenciales}
         </div>
       </div>
     </main>

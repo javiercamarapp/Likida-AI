@@ -228,6 +228,65 @@ async function emailDeActor(actorId: string): Promise<string> {
   return email;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS REBOTES, A LA VISTA (agosto-2026).
+//
+// El webhook de Resend (`/api/correo/eventos`, 0124) lleva meses guardando
+// `entrega_estado` = rebotado/queja y metiendo la dirección en
+// `correo_suprimido` (0217). Ni un solo `.tsx` los renderizaba: el operador
+// no tenía cómo enterarse de que un dominio entero estaba rebotando ni de a
+// quién dejamos de escribirle. Un rebote invisible se paga en reputación del
+// dominio, que es lo que decide si los correos SIGUIENTES llegan.
+//
+// Se leen aquí y no en la pantalla porque `correo_suprimido` es deny-all con
+// `grant` solo a `service_role`: no hay camino desde el cliente.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Las piezas que el proveedor reportó como REBOTADAS o QUEJA, la última
+ * primero. LANZA ante error de lectura: una lista vacía por base caída diría
+ * «no hay rebotes», que es exactamente la conclusión tranquilizadora que hace
+ * que nadie mire.
+ */
+export async function rebotesRecientes(limite = 15): Promise<PiezaEnCola[]> {
+  const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
+    .select(COLUMNAS)
+    .in('entrega_estado', ['rebotado', 'queja'])
+    .order('entrega_evento_en', { ascending: false })
+    .limit(limite), 'rebotesRecientes');
+  if (error) throw new Error(`rebotesRecientes: ${error.message}`);
+  return ((data ?? []) as Array<Record<string, unknown>>).map(desdeFila);
+}
+
+/** Una dirección a la que ya no se le escribe, con el por qué. */
+export interface CorreoSuprimido {
+  correo: string;
+  /** rebote / queja de spam / baja pedida / manual. Lo escribe quien suprime. */
+  motivo: string;
+  creadoEn: string;
+}
+
+/**
+ * La lista de bajas, para MIRARLA (`filtrarSuprimidos` la usa para decidir).
+ *
+ * Suprimir es para siempre y quitar una fila es decisión manual —lo dice el
+ * comentario de la 0217—, así que esta vista es de solo lectura a propósito:
+ * un botón de «reactivar» aquí convertiría una queja de spam en un click.
+ */
+export async function correosSuprimidos(limite = 25): Promise<CorreoSuprimido[]> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('correo_suprimido')
+    .select('correo, motivo, creado_en')
+    .order('creado_en', { ascending: false })
+    .limit(limite), 'correosSuprimidos');
+  if (error) throw new Error(`correosSuprimidos: ${error.message}`);
+  return ((data ?? []) as Array<Record<string, unknown>>).map((f) => ({
+    correo: String(f.correo),
+    motivo: String(f.motivo),
+    creadoEn: String(f.creado_en),
+  }));
+}
+
 /** Las últimas resueltas — el contexto de "qué ha estado saliendo". */
 export async function ultimasResueltas(limite = 10): Promise<PiezaEnCola[]> {
   const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')

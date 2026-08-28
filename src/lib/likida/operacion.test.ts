@@ -523,6 +523,7 @@ describe('escrituras', () => {
 const CRUDO_VACIO = {
   numeroEconomico: '', placas: '', marca: '', modelo: '', anio: '',
   polizaVence: '', permisoSictVence: '', verificacionVence: '',
+  gpsProveedor: '', gpsDeviceId: '',
 };
 const HOY = new Date('2026-08-14T12:00:00Z');
 
@@ -532,6 +533,7 @@ describe('validarUnidad — la regla pura del formulario', () => {
     expect(v).toEqual({
       numeroEconomico: '47', placas: null, marca: null, modelo: null, anio: null,
       polizaVence: null, permisoSictVence: null, verificacionVence: null,
+      gpsProveedor: null, gpsDeviceId: null,
     });
   });
 
@@ -575,8 +577,33 @@ describe('crearUnidad y editarUnidad — el escritor del panel', () => {
       tenant_id: 't-1', numero_economico: '47', placas: 'ABC-123-A', marca: 'Kenworth',
       modelo: 'T680', anio: 2019,
       poliza_vence: '2026-12-01', permiso_sict_vence: null, verificacion_vence: '2027-01-15',
+      // Sin amarre de GPS capturado, las dos columnas de la 0176 salen `null`
+      // —no cadena vacía—: el poller filtra por `gps_proveedor`, y un '' sería
+      // un proveedor que no existe.
+      gps_proveedor: null, gps_device_id: null,
     });
     expect(id).toBe('unidad-nuevo');
+  });
+
+  it('crearUnidad escribe el amarre de GPS cuando viene completo', async () => {
+    await crearUnidad('t-1', { ...UNIDAD, gpsProveedor: 'samsara', gpsDeviceId: '281474976710656' });
+    const w = escrituras.find((e) => e.tabla === 'unidad')!;
+    expect(w.valores).toMatchObject({ gps_proveedor: 'samsara', gps_device_id: '281474976710656' });
+  });
+
+  it('un dispositivo SIN proveedor no llega al insert — el poller nunca lo casaría', async () => {
+    await expect(crearUnidad('t-1', { ...UNIDAD, gpsDeviceId: '123' })).rejects.toThrow(/no el proveedor de GPS/);
+    expect(escrituras.find((e) => e.tabla === 'unidad')).toBeUndefined();
+  });
+
+  it('un proveedor SIN dispositivo tampoco: las posiciones llegarían huérfanas', async () => {
+    await expect(crearUnidad('t-1', { ...UNIDAD, gpsProveedor: 'samsara' })).rejects.toThrow(/número de dispositivo/);
+    expect(escrituras.find((e) => e.tabla === 'unidad')).toBeUndefined();
+  });
+
+  it('un proveedor fuera del catálogo se rechaza con la lista de los que sí hay', async () => {
+    await expect(crearUnidad('t-1', { ...UNIDAD, gpsProveedor: 'inventado', gpsDeviceId: '1' }))
+      .rejects.toThrow(/no es un proveedor de rastreo del catálogo/);
   });
 
   it('crearUnidad YA VALIDA: un número económico vacío no llega al insert', async () => {
