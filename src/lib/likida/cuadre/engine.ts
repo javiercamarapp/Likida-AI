@@ -147,8 +147,9 @@ export const FORMA_PAGO_SIN_PAGAR = '99';
  *   `causasDe` en `fiscal.ts` y que `getAcumuladoCombustible` en `repo.ts`.
  * - **`'99'` devuelve `false`.** No es un medio distinto: es que NO se pagó
  *   (RMF 2.7.1.29 fr. II). Ese caso lo juzga la regla de pago efectivo, no
- *   esta — y hoy no lo juzga nadie para efectos de ISR: queda anotado como
- *   hallazgo abierto en `docs/auditoria-18/fiscal-c3.md`, no se resuelve aquí.
+ *   esta, y el tratamiento de ISR para ese caso sigue pendiente de resolver
+ *   en el motor — ver el seguimiento interno de auditorías, no se resuelve
+ *   en esta función.
  */
 export function medioNoAdmitidoCombustible(formaPago: string | null | undefined): boolean {
   if (!formaPago) return false;

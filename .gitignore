@@ -63,3 +63,4 @@ zzz-*.mjs
 
 # Cache del CLI de Supabase (project-ref, versiones) — local, no del repo.
 supabase/.temp/
+.DS_Store
