@@ -76,6 +76,14 @@ export const INTERRUPTORES = [
   // este autónomo habla con el buzón tributario y ESCRIBE comprobantes, así
   // que apagarlo no puede exigir apagar la facturación entera.
   'agente:descarga_sat',
+  // INGENIERÍA (0234) — los ocho que cuidan la máquina por dentro. Ninguno
+  // escribe fuera de la bandeja, y aun así llevan palanca: son los únicos que
+  // recorren el CATÁLOGO ENTERO de PostgreSQL en cada pasada (tablas,
+  // policies, funciones, tamaños, pg_stat_statements). El día que una de esas
+  // consultas pese de más, apagar al que la lanza tiene que ser un click.
+  'agente:migraciones', 'agente:seguridad', 'agente:rendimiento',
+  'agente:pruebas', 'agente:auditor_codigo', 'agente:releases',
+  'agente:producto', 'agente:datos_instrumentacion',
 ] as const;
 
 export type NombreInterruptor = (typeof INTERRUPTORES)[number];

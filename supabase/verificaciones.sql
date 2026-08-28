@@ -11383,3 +11383,183 @@ begin
     intentos_negativos_rebotan, duplicado_rebota, otra_flota_entra,
     cascade_limpia, llave_compuesta, cerrado;
 end $$;
+
+-- ── 189. Ingeniería: los 8 vivos con reloj y techo, las 49 palancas, el registro del despliegue y las cuatro lecturas del catálogo (mig. 0234) ──
+-- Los bloques 183-188 los tomaron las ramas paralelas de esta ola (183
+-- crecimiento, 186 el vínculo de portales, 187 la descarga masiva del SAT,
+-- 188 el re-login de portales); esta toma el 189.
+--
+-- Lo que SOLO la base puede demostrar de la 0234:
+--
+--  (a) LOS OCHO PASAN LOS CANDADOS 2 Y 3 DEL RUNNER. `estado='vivo'` +
+--      `runner_habilitado` + `disparador='cron'` + techo declarado > 0 no es
+--      cosmética: la consulta del runner filtra por los tres primeros y el
+--      candado 3 salta a quien no tenga techo. Si esto no sale 8, hay agentes
+--      que el PR dice que encendió y que el cron nunca despacha. `releases`
+--      es el caso a vigilar: venía con disparador 'manual' desde la 0125.
+--  (b) EL MODELO SE DECLARA CON LA VERDAD DEL MOTOR. Los OCHO son
+--      deterministas y su `modelo_rol` es NULL (convención 0125 = no usa
+--      modelo de texto). La 0125 les había puesto 'codigo'/'analisis'
+--      pensando en agentes que leerían fuentes; el motor construido no llama
+--      a ningún modelo, y dejar el rol haría que /admin/consumo esperara un
+--      costo que nunca llega.
+--  (c) LAS 49 PALANCAS. Las 8 nuevas entran, y —la trampa que la 0227
+--      corrigió y que se repite en cada ola— las 41 ANTERIORES siguen en el
+--      dominio: si esta migración hubiera enumerado solo las suyas, apagar a
+--      `alianzas` o a `redactor` rebotaría con check_violation el día del
+--      incidente, que es el peor día para descubrirlo.
+--  (d) Una palanca inventada rebota: el dominio es cerrado.
+--  (e) UN PARTE POR PERIODO para los ocho, y el índice sigue siendo PARCIAL
+--      (el Redactor sí puede repetir título: dos prospectos comparten asunto).
+--  (f) `despliegue_visto` no admite un SHA que no lo sea, ni un reloj al
+--      revés, ni cero vistas — y lleva el doble candado (RLS + solo
+--      service_role).
+--  (g) LAS CUATRO LECTURAS ESTÁN CERRADAS: revocadas de anon y authenticated,
+--      concedidas solo a service_role, y las dos SECURITY DEFINER traen
+--      `search_path` fijo (sin él, una DEFINER resuelve nombres con el
+--      search_path de quien la llama).
+--  (h) `migraciones_aplicadas()` DEGRADA DICIENDO. En esta base de CI no
+--      existe `supabase_migrations`, así que tiene que contestar
+--      disponible=false CON MOTIVO — jamás una lista vacía que el agente
+--      leería como «no hay migraciones aplicadas».
+--  (i) `contrato_de_esquema()` encuentra el CHECK del interruptor y ve el
+--      índice único nuevo: es lo que el auditor de código compara contra la
+--      constante INTERRUPTORES del bundle.
+do $$
+declare
+  vivos_con_reloj_y_techo int;
+  con_modelo int; sin_modelo int;
+  palancas_nuevas int; palancas_previas int;
+  palanca_inventada_rebota boolean;
+  parte_repetido_rebota boolean; redactor_repite boolean;
+  sha_falso_rebota boolean; reloj_al_reves_rebota boolean; cero_vistas_rebota boolean;
+  despliegue_cerrado boolean;
+  funciones_cerradas int; definer_con_search_path int;
+  migraciones_degrada boolean;
+  check_visto boolean; indice_visto boolean;
+begin
+  -- (a) y (b) — el catálogo, tal como el runner lo consulta.
+  select count(*) into vivos_con_reloj_y_techo from agente_definicion
+    where id in ('migraciones','seguridad','rendimiento','pruebas',
+                 'auditor_codigo','releases','producto','datos_instrumentacion')
+      and estado = 'vivo' and runner_habilitado and disparador = 'cron'
+      and presupuesto_dia_usd is not null and presupuesto_dia_usd > 0;
+
+  select count(*) into con_modelo from agente_definicion
+    where departamento = 'ingenieria' and modelo_rol is not null;
+  select count(*) into sin_modelo from agente_definicion
+    where departamento = 'ingenieria' and modelo_rol is null;
+
+  -- (c) Las 8 nuevas…
+  palancas_nuevas := 0;
+  begin
+    insert into interruptor (id, apagado) values
+      ('agente:migraciones', false), ('agente:seguridad', false),
+      ('agente:rendimiento', false), ('agente:pruebas', false),
+      ('agente:auditor_codigo', false), ('agente:releases', false),
+      ('agente:producto', false), ('agente:datos_instrumentacion', false);
+    palancas_nuevas := 8;
+  exception when check_violation then
+    palancas_nuevas := -1;
+  end;
+  -- …y una muestra de las de CADA ola anterior, que es donde vive la trampa.
+  palancas_previas := 0;
+  begin
+    insert into interruptor (id, apagado) values
+      ('global', false), ('agente:redactor', false),
+      ('agente:tesoreria', false), ('agente:orquestador', false),
+      ('agente:enviador', false), ('agente:atencion_faq', false),
+      ('agente:talento', false), ('agente:alianzas', false),
+      ('agente:descarga_sat', false);
+    palancas_previas := 9;
+  exception when check_violation then
+    palancas_previas := -1;
+  end;
+
+  -- (d) El dominio es cerrado.
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:inventado_0234', true, 'basura');
+    palanca_inventada_rebota := false;
+  exception when check_violation then
+    palanca_inventada_rebota := true;
+  end;
+
+  -- (e) Un parte por periodo.
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('parte_seguridad', 'normal', 'seguridad', 'Seguridad — semana del 2026-08-24', 'cuerpo');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('parte_seguridad', 'normal', 'seguridad', 'Seguridad — semana del 2026-08-24', 'otra corrida');
+    parte_repetido_rebota := false;
+  exception when unique_violation then
+    parte_repetido_rebota := true;
+  end;
+
+  -- (e bis) El índice es PARCIAL: el Redactor sí repite título.
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('correo_frio', 'normal', 'redactor', 'Tu liquidacion 0234', 'a');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('correo_frio', 'normal', 'redactor', 'Tu liquidacion 0234', 'b');
+    redactor_repite := true;
+  exception when unique_violation then
+    redactor_repite := false;
+  end;
+
+  -- (f) El registro del despliegue.
+  begin
+    insert into despliegue_visto (sha, entorno) values ('no-es-un-sha', 'production');
+    sha_falso_rebota := false;
+  exception when check_violation then
+    sha_falso_rebota := true;
+  end;
+  begin
+    insert into despliegue_visto (sha, entorno, primera_vista, ultima_vista)
+      values ('abc1234', 'production', now(), now() - interval '1 day');
+    reloj_al_reves_rebota := false;
+  exception when check_violation then
+    reloj_al_reves_rebota := true;
+  end;
+  begin
+    insert into despliegue_visto (sha, entorno, vistas) values ('def5678', 'production', 0);
+    cero_vistas_rebota := false;
+  exception when check_violation then
+    cero_vistas_rebota := true;
+  end;
+  despliegue_cerrado := not has_table_privilege('anon', 'public.despliegue_visto', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.despliegue_visto', 'SELECT')
+    and has_table_privilege('service_role', 'public.despliegue_visto', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.despliegue_visto'::regclass);
+
+  -- (g) Las cuatro lecturas, cerradas.
+  select count(*) into funciones_cerradas
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname in ('migraciones_aplicadas', 'postura_seguridad', 'perfil_almacenamiento', 'contrato_de_esquema')
+     and not has_function_privilege('anon', p.oid, 'EXECUTE')
+     and not has_function_privilege('authenticated', p.oid, 'EXECUTE')
+     and has_function_privilege('service_role', p.oid, 'EXECUTE');
+
+  select count(*) into definer_con_search_path
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname in ('migraciones_aplicadas', 'postura_seguridad', 'perfil_almacenamiento', 'contrato_de_esquema')
+     and p.prosecdef
+     and exists (select 1 from unnest(coalesce(p.proconfig, array[]::text[])) o where o like 'search_path=%');
+
+  -- (h) Degrada DICIENDO, no con una lista vacía.
+  migraciones_degrada := (
+    to_regclass('supabase_migrations.schema_migrations') is not null
+    or ((public.migraciones_aplicadas()->>'disponible')::boolean = false
+        and length(coalesce(public.migraciones_aplicadas()->>'motivo', '')) > 20));
+
+  -- (i) El contrato ve el CHECK y el índice nuevo.
+  check_visto := position('agente:datos_instrumentacion' in coalesce(public.contrato_de_esquema()->>'interruptor_check', '')) > 0;
+  indice_visto := public.contrato_de_esquema()->'indices_unicos_parciales_cola' ? 'cola_parte_ingenieria_por_periodo';
+
+  raise exception 'INGENIERIA_0234  vivos_con_reloj_y_techo=%  con_modelo=%  sin_modelo=%  palancas_nuevas=%  palancas_previas=%  palanca_inventada_rebota=%  parte_repetido_rebota=%  redactor_repite=%  sha_falso_rebota=%  reloj_al_reves_rebota=%  cero_vistas_rebota=%  despliegue_cerrado=%  funciones_cerradas=%  definer_con_search_path=%  migraciones_degrada=%  check_visto=%  indice_visto=%   (esperado 8 / 0 / 8 / 8 / 9 / t / t / t / t / t / t / t / 4 / 2 / t / t / t)',
+    vivos_con_reloj_y_techo, con_modelo, sin_modelo, palancas_nuevas, palancas_previas,
+    palanca_inventada_rebota, parte_repetido_rebota, redactor_repite,
+    sha_falso_rebota, reloj_al_reves_rebota, cero_vistas_rebota, despliegue_cerrado,
+    funciones_cerradas, definer_con_search_path, migraciones_degrada, check_visto, indice_visto;
+end $$;
