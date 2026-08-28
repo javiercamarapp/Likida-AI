@@ -105,6 +105,32 @@ describe('el barrido no está ciego', () => {
     expect(SITIOS.filter(cumple).length).toBeGreaterThan(5);
   });
 
+  it('la LÍNEA que reporta es la del `.limit(`, en TODOS los archivos', () => {
+    // ═══════════════════════════════════════════════════════════════════════
+    // ESTO ESTUVO MAL Y SE MIDIÓ. La primera versión del extractor usaba
+    // `sinComentarios` de `codigo.ts`, que colapsa cada bloque `/* … */` en un
+    // espacio y BORRA las líneas de `//`. Para «¿aparece este símbolo?» da
+    // igual; aquí no: 39 de los `.limit(` de cuatro archivos reportaban una
+    // línea que ni siquiera contenía un `.limit(` (`export interface Puntaje {`,
+    // `truncado,`, `}`), porque el JSDoc de arriba se había comido renglones.
+    //
+    // No es cosmético. La marca `// orden-no-importa:` se busca en las 6 líneas
+    // de ARRIBA del sitio: con la línea corrida, una declaración legítima se
+    // ignora y la de otro sitio se toma por buena. Esta prueba es la que no
+    // deja que vuelva.
+    // ═══════════════════════════════════════════════════════════════════════
+    const desalineados: string[] = [];
+    for (const s of SITIOS) {
+      const linea = readFileSync(s.archivo, 'utf8').split('\n')[s.linea - 1] ?? '';
+      if (!linea.includes('.limit(')) desalineados.push(`${s.archivo}:${s.linea} → «${linea.trim().slice(0, 60)}»`);
+    }
+    expect(
+      desalineados.slice(0, 15),
+      `${desalineados.length} sitio(s) reportan una línea que no tiene un \`.limit(\`. ` +
+      'El extractor volvió a perder el alineado con el fuente: ver `sinComentariosMismasLineas`.',
+    ).toEqual([]);
+  });
+
   it('el caso que motivó la red sigue señalado con el dedo', () => {
     // `leerAvanzados()` en `agentes/leads.ts`: `.limit(5000)` sin `.order()`, y
     // de ahí sale el «perfil que convierte». Si alguien lo arregla, esta prueba
