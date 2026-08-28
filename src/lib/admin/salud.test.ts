@@ -78,6 +78,10 @@ describe('CADENCIA_MS espeja vercel.json', () => {
       '* * * * *': 60_000, '*/5 * * * *': 300_000, '*/15 * * * *': 900_000,
       '0 * * * *': 3_600_000, '7 * * * *': 3_600_000, '30 * * * *': 3_600_000,
       '0 */4 * * *': 4 * 3_600_000, '15 4 * * *': 86_400_000,
+      // 0231: el minuto 25 está desfasado a propósito de la estampida de los
+      // minutos 0/5/7/15 — un cron más en el minuto 0 se lleva la cuota de la
+      // plataforma y el pool de conexiones a la misma hora que los otros.
+      '25 */6 * * *': 6 * 3_600_000,
     };
     for (const c of cfg.crons) {
       const id = c.path.replace('/api/cron/', '') as keyof typeof CADENCIA_MS;

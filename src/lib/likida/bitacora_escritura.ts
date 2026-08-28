@@ -51,7 +51,13 @@ export type EntidadBitacora =
   // haber pagado — los tres son actos que hay que poder reconstruir.
   | 'portal_pago_liga'
   | 'portal_pago_propuesta'
-  | 'rep_emitido';
+  | 'rep_emitido'
+  // 0231: la descarga masiva del SAT. Quién declaró CUÁL RFC se descarga y
+  // quién pidió QUÉ periodo son los dos actos que hay que poder reconstruir:
+  // el primero decide de qué contribuyente se lee el buzón, y el segundo
+  // consume el tope diario que ese RFC tiene ante el SAT.
+  | 'sat_descarga_config'
+  | 'sat_descarga_solicitud';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una

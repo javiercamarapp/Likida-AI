@@ -165,6 +165,11 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // el botón viven de este lado. `/dashboard/timbrado/<uuid>` es dinámica y
   // gatea a mano contra esta misma llave, como `/dashboard/<uuid>`.
   '/dashboard/timbrado': 'dinero',
+  // DESCARGA DEL SAT (0231): se declara el RFC de un contribuyente y cada
+  // solicitud consume el tope diario que ese RFC tiene ante el SAT. Es
+  // `dinero` por lo mismo que Timbrado: papel fiscal con dinero adentro, y la
+  // pantalla enseña qué gasto quedó facturado.
+  '/dashboard/descarga-sat': 'dinero',
   // El cotizador (0225, A8): costos, márgenes y precio sugerido — la
   // definición misma de lo que el encargado no ve. Espejo de la RLS
   // `ve_finanzas()` que la 0051 le puso a `cotizacion`.
