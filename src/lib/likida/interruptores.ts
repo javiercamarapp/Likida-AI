@@ -62,6 +62,16 @@ export const INTERRUPTORES = [
   // puede apagar no corre, punto.
   'agente:onboarding_cliente', 'agente:exito_cliente', 'agente:retencion',
   'agente:cobranza_saas', 'agente:soporte', 'agente:atencion_faq',
+  // CRECIMIENTO (0230) — los diez que fabrican material de marca. NINGUNO
+  // publica: los diez dejan la pieza en la bandeja y publicar es el tap de
+  // Javier. Aun así llevan palanca por el candado 1 del runner, y por una
+  // razón propia: son los únicos agentes cuyo producto lleva la marca hacia
+  // AFUERA. Si una pieza sale mal, apagar al que la fabrica tiene que ser un
+  // click, no un deploy.
+  'agente:contenido_fiscal', 'agente:lead_magnet', 'agente:seo_distribucion',
+  'agente:guiones', 'agente:noticias_mercado', 'agente:promos_diarias',
+  'agente:visuales', 'agente:video_demo', 'agente:video_marketing',
+  'agente:alianzas',
 ] as const;
 
 export type NombreInterruptor = (typeof INTERRUPTORES)[number];

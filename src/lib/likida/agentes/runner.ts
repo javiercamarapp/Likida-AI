@@ -74,6 +74,17 @@ const AGENTES_EXITO_CLIENTE: readonly string[] = [
 type AgenteDeExito = 'onboarding_cliente' | 'exito_cliente' | 'retencion'
   | 'cobranza_saas' | 'soporte' | 'atencion_faq';
 
+/** Los diez de crecimiento (0230). Literal aquí por lo mismo que las listas de
+ *  arriba: el motor entra por import dinámico dentro de su rama, y un import
+ *  estático para leer diez cadenas arrastraría el módulo —con la calculadora y
+ *  el índice de normas— a cada vuelta del runner. `runner.test.ts` compara
+ *  esta lista contra la del motor: si divergen, falla. */
+const CRECIMIENTO: readonly string[] = [
+  'contenido_fiscal', 'lead_magnet', 'seo_distribucion',
+  'guiones', 'noticias_mercado', 'promos_diarias',
+  'visuales', 'video_demo', 'video_marketing', 'alianzas',
+];
+
 export interface AgenteDelRunner {
   agente: string;
   resultado: 'corrio' | 'saltado';
@@ -129,7 +140,11 @@ export const PLAZO_RUNNER_MS = 300_000 - MARGEN_RELOJ_MS;
  *  encabezaban la vuelta comiéndose el reloj de los otros treinta. */
 export function llamaAlModelo(agente: string): boolean {
   return agente === 'redactor' || agente === 'enriquecedor'
-    || agente === 'sdr' || agente === 'atencion_faq';
+    || agente === 'sdr' || agente === 'atencion_faq'
+    // El único de los diez de crecimiento (0230) que gasta modelo: redacta el
+    // borrador del siguiente artículo del blog. Los otros nueve son
+    // deterministas y salen en milisegundos, así que van con los baratos.
+    || agente === 'contenido_fiscal';
 }
 
 /** El orden de despacho: baratos primero, caros al final, y DENTRO de cada
@@ -418,6 +433,48 @@ export async function correrRunner(
         agentes.push({ agente: a.id, resultado: r.resultado, motivo: r.motivo, piezas: r.piezas, costoUsd: r.costoUsd });
       } catch (e) {
         agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del motor de éxito del cliente' });
+      }
+      continue;
+    }
+
+    // ── CRECIMIENTO (0230): los diez que fabrican material de marca ───────
+    // Nueve son deterministas (gasto de modelo $0, el techo declarado es el
+    // candado formal); `contenido_fiscal` SÍ redacta con LLM, así que se le
+    // aplica el mismo candado de gasto MEDIDO que al FAQ y a la prospección.
+    // Import dinámico por la misma razón que dirección y éxito: el módulo
+    // arrastra el motor de la calculadora, el índice de normas y —en la rama
+    // del contenido— el cliente del modelo; no se paga en cada vuelta.
+    //
+    // Ninguno de los diez toca un canal de salida: los diez encolan y ya. El
+    // backpressure de cada uno vive DENTRO de su motor (una pieza por periodo,
+    // arbitrada por el índice único de la 0230), así que no hace falta el
+    // conteo de bandeja que sí lleva el Redactor.
+    if (CRECIMIENTO.includes(a.id)) {
+      if (a.id === 'contenido_fiscal') {
+        try {
+          const gastado = await gastoDelDiaUsd(a.id);
+          if (gastado >= a.presupuesto_dia_usd) {
+            agentes.push({ agente: a.id, resultado: 'saltado', motivo: `techo diario alcanzado (${gastado.toFixed(2)} de ${a.presupuesto_dia_usd} USD)` });
+            continue;
+          }
+        } catch (e) {
+          agentes.push({ agente: a.id, resultado: 'saltado', motivo: `no se pudo leer el gasto del día — fail closed (${e instanceof Error ? e.message.slice(0, 120) : 'error'})` });
+          continue;
+        }
+      }
+      try {
+        const { correrAgenteCrecimiento, esAgenteCrecimiento } = await import('./crecimiento');
+        // El estrechamiento de verdad lo hace el predicado del motor, no la
+        // lista literal de arriba: si alguna vez divergen, aquí se ve (mismo
+        // criterio que el back office).
+        if (!esAgenteCrecimiento(a.id)) {
+          agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'la lista del runner y la del motor de crecimiento divergen — no se despacha a ciegas' });
+          continue;
+        }
+        const r = await correrAgenteCrecimiento(a.id, 'cron');
+        agentes.push({ agente: a.id, resultado: r.resultado, motivo: r.motivo, piezas: r.piezas, costoUsd: r.costoUsd });
+      } catch (e) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del motor de crecimiento' });
       }
       continue;
     }
