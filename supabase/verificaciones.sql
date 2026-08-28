@@ -11146,11 +11146,21 @@ begin
   end;
 
   -- (f) Un solo trámite vivo por rango; uno cerrado sí se vuelve a pedir.
+  -- 27-AGO-2026: el candado cambió de forma. La 0231 lo hacía con el índice
+  -- único parcial `uq_sat_solicitud_viva`, que sólo bloqueaba el PAR EXACTO de
+  -- fechas (c7-22: dos rangos distintos sobre los mismos días entraban los
+  -- dos); la 0236 lo sustituyó por la restricción de exclusión
+  -- `sat_solicitud_viva_sin_traslape`, que cubre el traslape de verdad. Lo que
+  -- este bloque afirma —el mismo rango no se pide dos veces mientras vive, y
+  -- uno cerrado sí— NO cambió; cambió el SQLSTATE con que la base lo dice
+  -- (23P01 en vez de 23505). Se aceptan los dos para que el bloque siga
+  -- probando la GARANTÍA y no el mecanismo. El traslape propiamente dicho lo
+  -- prueba el bloque 191.
   begin
     insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado)
       values (ta, 'recibidos', current_date - 30, current_date, 'solicitada');
     rango_vivo_repetido_rebota := false;
-  exception when unique_violation then
+  exception when unique_violation or exclusion_violation then
     rango_vivo_repetido_rebota := true;
   end;
   update sat_descarga_solicitud set estado = 'descargada' where id = sol_a;
@@ -11158,7 +11168,7 @@ begin
     insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado)
       values (ta, 'recibidos', current_date - 30, current_date, 'solicitada');
     rango_cerrado_reentra := true;
-  exception when unique_violation then
+  exception when unique_violation or exclusion_violation then
     rango_cerrado_reentra := false;
   end;
 
@@ -11562,4 +11572,188 @@ begin
     palanca_inventada_rebota, parte_repetido_rebota, redactor_repite,
     sha_falso_rebota, reloj_al_reves_rebota, cero_vistas_rebota, despliegue_cerrado,
     funciones_cerradas, definer_con_search_path, migraciones_degrada, check_visto, indice_visto;
+end $$;
+
+-- ── 191. La descarga del SAT, corregida: borrar SÍ se puede, el traslape rebota y las cifras no se truncan (mig. 0236) ──
+-- El 189 lo tomó la ola de ingeniería (0234) y el 190 el de dirección+leads
+-- (0235), paralelas a ésta; aquí se toma el 191. Los números se confirmaron al
+-- rebasar contra master, que es el momento en que un número se puede afirmar.
+--
+-- Este bloque prueba lo que la auditoría adversarial del ciclo 7 encontró en la
+-- 0231 y que el bloque 187 NO podía ver, porque 187 verifica la feature tal
+-- como se creyó escrita: nunca BORRA nada, y un arreglo de FK que no se prueba
+-- borrando algo no está probado.
+--
+--  (a) c7-3 · BORRAR UN GASTO CON UN CFDI CASADO COLGANDO. La 0231 dejó
+--      `on delete set null` SIN lista de columnas sobre una FK compuesta
+--      `(gasto_id, tenant_id)` — y `tenant_id` es NOT NULL. Postgres intentaba
+--      anular también el tenant y el DELETE del gasto (o del viaje que lo
+--      cascadea, o de la flota entera) reventaba con un error de NOT NULL que
+--      no dice ni una palabra del origen real. Aquí se BORRA de verdad.
+--  (b) …Y EL COMPROBANTE SOBREVIVE, DEGRADADO Y DICIENDO POR QUÉ. No se
+--      cascadea: `sat_cfdi_descargado` es EL SELLO DE DEDUP de toda la
+--      feature, y borrarlo dejaría entrar el mismo folio fiscal otra vez. Pero
+--      tampoco puede seguir diciendo 'casado' sin gasto: eso rompería
+--      `casado_coherente`, que es el candado que impide afirmar un cruce que
+--      no existe. Queda 'disponible' con el motivo escrito.
+--  (c) LO MISMO AL BORRAR LA SOLICITUD, Y AL BORRAR LA FLOTA ENTERA
+--      (`delete from tenant`, que es el camino real de borrado de una flota en
+--      `src/lib/admin/qa-motor.ts`).
+--  (d) EL BARRIDO DEL CATÁLOGO, para que no vuelva a pasar sin que nadie lo
+--      note: NINGUNA FK compuesta de la base puede tener `on delete set null`
+--      sin lista de columnas cuando alguna de sus columnas referenciantes es
+--      NOT NULL. `confdelsetcols` (Postgres 15+) es exactamente esa lista;
+--      vacía significa "anula todas". Esperado: lista vacía. Una migración
+--      futura que copie el patrón aparece aquí con nombre y CI se pone rojo —
+--      que es lo que le faltó al bloque 112, que sólo mira FKs SIMPLES sin
+--      hermana compuesta y nunca miró `confdeltype`.
+--  (e) c7-2 · LA MEMORIA DEL AVANCE. `paquetes_bajados` existe y sólo admite
+--      un ARREGLO: sin ella, una solicitud de más de 3 paquetes re-descargaba
+--      los mismos 3 cada 6 h contra el buzón fiscal real, para siempre.
+--  (f) c7-22 · EL TRASLAPE, NO SÓLO EL PAR EXACTO. Dos rangos DISTINTOS sobre
+--      los mismos días eran dos trámites vivos y dos peticiones al SAT contra
+--      el mismo periodo. Un rango pegado pero sin traslape sí entra (si no,
+--      el calendario no podría avanzar), y un rango ya CERRADO se puede volver
+--      a pedir: un reintento deliberado sigue siendo legítimo.
+--  (g) c7-27 · LOS CONTEOS, CONTADOS EN LA BASE. La pantalla traía 20,000
+--      filas y contaba en JS: con más comprobantes que eso, las cuatro cifras
+--      salían falsas sin que nada lo dijera. Y la función está cerrada a
+--      anon/authenticated como todo lo demás de la feature.
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; va uuid; ga uuid; sol uuid; sol2 uuid;
+  set_null_compuestas text;
+  borrar_gasto_ok boolean; cfdi_sobrevive boolean; cfdi_degradado boolean; motivo_escrito boolean;
+  borrar_solicitud_ok boolean; cfdi_sin_solicitud boolean; borrar_flota_ok boolean;
+  paquetes_objeto_rebota boolean; paquetes_arreglo_entra boolean;
+  traslape_rebota boolean; pegado_entra boolean; cerrado_reentra boolean;
+  conteos_exactos boolean; conteos_cerrados boolean;
+begin
+  -- ── (d) El barrido, ANTES de tocar datos: es catálogo, no filas ──────────
+  select coalesce(string_agg(
+           con.conrelid::regclass::text || '.' || con.conname, ', ' order by con.conname), '—')
+    into set_null_compuestas
+    from pg_constraint con
+    join pg_class c on c.oid = con.conrelid
+    join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public'
+     and con.contype = 'f'
+     and con.confdeltype = 'n'                              -- ON DELETE SET NULL
+     and array_length(con.conkey, 1) > 1                    -- compuesta
+     and coalesce(array_length(con.confdelsetcols, 1), 0) = 0  -- sin lista: anula TODAS
+     and exists (
+       select 1 from pg_attribute a
+        where a.attrelid = con.conrelid
+          and a.attnum = any (con.conkey)
+          and a.attnotnull and not a.attisdropped);
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0236 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0236 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono)
+    values (ta, 'ZZZ 0236', '+520000000236') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio) values (ta, oa, 'ZZZ-0236') returning id into va;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha)
+    values (ta, va, 'caseta', 300, current_date) returning id into ga;
+  insert into sat_descarga_config (tenant_id, rfc) values (ta, 'EKU9003173C9');
+  insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado, request_id)
+    values (ta, 'recibidos', date '2026-08-01', date '2026-08-31', 'en_proceso', 'req-0236-a')
+    returning id into sol;
+
+  -- Un comprobante CASADO con ese gasto: el escenario del hallazgo.
+  insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, solicitud_id, gasto_id, estatus, total, fecha)
+    values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000236', sol, ga, 'casado', 300, current_date);
+  -- Dos más, para que los conteos de (g) tengan algo que contar.
+  insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, solicitud_id, estatus, total)
+    values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000237', sol, 'ambiguo', 100),
+           (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000238', sol, 'disponible', 200);
+
+  -- ── (g) Los conteos, antes de empezar a borrar ───────────────────────────
+  select descargados = 3 and casados = 1 and ambiguos = 1 and disponibles = 1 and ignorados = 0
+    into conteos_exactos
+    from public.sat_descarga_conteos(ta);
+  conteos_cerrados :=
+        not has_function_privilege('anon', 'public.sat_descarga_conteos(uuid)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.sat_descarga_conteos(uuid)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.sat_descarga_conteos(uuid)', 'EXECUTE');
+
+  -- ── (e) c7-2: la memoria del avance ──────────────────────────────────────
+  begin
+    update sat_descarga_solicitud set paquetes_bajados = '{"p1": true}'::jsonb where id = sol;
+    paquetes_objeto_rebota := false;
+  exception when check_violation then
+    paquetes_objeto_rebota := true;
+  end;
+  begin
+    update sat_descarga_solicitud set paquetes_bajados = '["p1","p2"]'::jsonb where id = sol;
+    paquetes_arreglo_entra := true;
+  exception when others then
+    paquetes_arreglo_entra := false;
+  end;
+
+  -- ── (f) c7-22: el traslape ───────────────────────────────────────────────
+  -- Rango DISTINTO (un día menos) que cubre los mismos días: el índice único
+  -- viejo lo dejaba pasar porque el PAR de fechas no era el mismo.
+  begin
+    insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado)
+      values (ta, 'recibidos', date '2026-08-01', date '2026-08-30', 'solicitada');
+    traslape_rebota := false;
+  exception when exclusion_violation then
+    traslape_rebota := true;
+  end;
+  -- Pegado pero SIN traslape: el calendario tiene que poder avanzar.
+  begin
+    insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado)
+      values (ta, 'recibidos', date '2026-09-01', date '2026-09-30', 'solicitada')
+      returning id into sol2;
+    pegado_entra := true;
+  exception when others then
+    pegado_entra := false;
+  end;
+  -- Y un rango CERRADO se puede volver a pedir.
+  update sat_descarga_solicitud set estado = 'descargada' where id = sol2;
+  begin
+    insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado)
+      values (ta, 'recibidos', date '2026-09-10', date '2026-09-20', 'solicitada');
+    cerrado_reentra := true;
+  exception when others then
+    cerrado_reentra := false;
+  end;
+
+  -- ── (a)(b) c7-3: BORRAR EL GASTO. Lo que hasta la 0236 reventaba ─────────
+  begin
+    delete from gasto where id = ga;
+    borrar_gasto_ok := true;
+  exception when others then
+    borrar_gasto_ok := false;
+  end;
+  select count(*) = 1 into cfdi_sobrevive
+    from sat_cfdi_descargado where cfdi_uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000236';
+  select estatus = 'disponible' and gasto_id is null and tenant_id = ta
+    into cfdi_degradado
+    from sat_cfdi_descargado where cfdi_uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000236';
+  select candidatos ->> 'motivo' like '%se borró%' into motivo_escrito
+    from sat_cfdi_descargado where cfdi_uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000236';
+
+  -- ── (c) Borrar la solicitud, y después la flota entera ───────────────────
+  begin
+    delete from sat_descarga_solicitud where id = sol;
+    borrar_solicitud_ok := true;
+  exception when others then
+    borrar_solicitud_ok := false;
+  end;
+  select solicitud_id is null and tenant_id = ta into cfdi_sin_solicitud
+    from sat_cfdi_descargado where cfdi_uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000236';
+
+  begin
+    delete from tenant where id = ta;
+    borrar_flota_ok := true;
+  exception when others then
+    borrar_flota_ok := false;
+  end;
+
+  raise exception 'DESCARGA_SAT_0236  set-null-compuestas-sin-columna=%  borrar_gasto_ok=%  cfdi_sobrevive=%  cfdi_degradado=%  motivo_escrito=%  borrar_solicitud_ok=%  cfdi_sin_solicitud=%  borrar_flota_ok=%  paquetes_objeto_rebota=%  paquetes_arreglo_entra=%  traslape_rebota=%  pegado_entra=%  cerrado_reentra=%  conteos_exactos=%  conteos_cerrados=%   (esperado — / t / t / t / t / t / t / t / t / t / t / t / t / t / t)',
+    set_null_compuestas, borrar_gasto_ok, cfdi_sobrevive, cfdi_degradado, motivo_escrito,
+    borrar_solicitud_ok, cfdi_sin_solicitud, borrar_flota_ok,
+    paquetes_objeto_rebota, paquetes_arreglo_entra,
+    traslape_rebota, pegado_entra, cerrado_reentra, conteos_exactos, conteos_cerrados;
 end $$;

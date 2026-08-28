@@ -167,9 +167,25 @@ export async function pedirRangoManual(
     .select('id')
     .single(), 'sat_descarga.reservar_manual');
   if (errIns || fila === null) {
+    // EL REBOTE DEL CANDADO NO ES EL ÚNICO ERROR POSIBLE, y contestarle al
+    // contralor «ya hay una en curso» cuando lo que pasó fue que la base no
+    // respondió es afirmar un hecho que nadie comprobó. 23505 es el índice
+    // único; 23P01, la restricción de exclusión que la 0236 puso para cubrir
+    // el TRASLAPE (dos rangos distintos sobre los mismos días). Cualquier
+    // otro código se dice tal cual.
+    const codigo = errIns !== null && typeof errIns === 'object' && 'code' in errIns
+      ? (errIns as { code?: unknown }).code : undefined;
+    if (codigo === '23505' || codigo === '23P01') {
+      return {
+        ok: false,
+        mensaje: 'Ese rango ya tiene una solicitud en curso ante el SAT —o se traslapa con una que sí la tiene—. Espera a que termine (puede tardar hasta 6 días) antes de volver a pedirlo: reintentarlo consume el tope diario del RFC.',
+      };
+    }
+    const detalle = errIns?.message ?? 'la base no devolvió la fila reservada';
+    logger.error('sat_descarga.reserva_manual_fallo', { tenantId, codigo, err: detalle });
     return {
       ok: false,
-      mensaje: 'Ese rango ya tiene una solicitud en curso ante el SAT. Espera a que termine (puede tardar hasta 6 días) antes de volver a pedirlo — reintentarlo consume el tope diario del RFC.',
+      mensaje: `No se pudo registrar la solicitud, así que NO se pidió nada al SAT: ${detalle}`,
     };
   }
 
