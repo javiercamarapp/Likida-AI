@@ -19,11 +19,12 @@
 // copiloto: esa tabla exige tenant y el Redactor es gasto de LIKIDA.
 // ═══════════════════════════════════════════════════════════════════════════
 import { randomUUID } from 'crypto';
+import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { DatoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
-import { generateResponse } from '@/lib/llm/openrouter';
+import { generateStructured, StructuredError } from '@/lib/llm/openrouter';
 import { createLlmBudget, type LlmBudget } from '@/lib/llm/budget';
 import { encolarPieza, verificarFormatoCampana } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
@@ -60,20 +61,47 @@ LAS TRES PROHIBICIONES (romper cualquiera invalida el correo entero):
 3. NINGUNA CIFRA fuera de esta lista:
 ${CIFRAS_CANONICAS}
 
-FORMATO DE SALIDA (exacto, markdown):
-## Variante A — por el costo
-**Asunto:** ...
-[cuerpo]
+FORMATO DE SALIDA: JSON que cumpla el schema, y NADA más. Los campos:
+- variante_a: { asunto, cuerpo } — la del costo. OBLIGATORIA: sin ella no hay pieza.
+- variante_b: { asunto, cuerpo } — la del dinero fiscal, o null si no aplica.
+- variante_c: el cuerpo de la confirmación de demo, o null si el dossier no trae un sí previo.
+- datos_usados: cada hecho concreto del dossier que aparece en los correos, o "ninguno específico de esta empresa" — un correo genérico honesto es mejor que uno personalizado con datos inventados.
 
-## Variante B — por el dinero fiscal
-**Asunto:** ...
-[cuerpo]
+Los cuerpos van en texto plano con saltos de línea reales: sin markdown, sin encabezados, sin viñetas.`;
 
-## Variante C — confirmación de demo
-**Asunto:** ...
-[cuerpo o la línea de "No aplica"]
+// ═══════════════════════════════════════════════════════════════════════════
+// EL CONTRATO DE SALIDA, EN SCHEMA (primera pasada real del runner, 18:03).
+//
+// Hasta aquí el Redactor pedía markdown (`## Variante A` + `**Asunto:**`) y lo
+// desarmaba con regex. Las TRES corridas de la primera pasada real murieron
+// con «El Redactor devolvió una salida sin variante A legible»: el rol
+// `back_office` corre con un modelo de RAZONAMIENTO, que gasta cientos de
+// tokens invisibles antes de la primera letra visible y se quedaba sin los 900
+// de tope — el `content` llegaba vacío o cortado a media variante. Contra eso
+// un regex no tiene nada que hacer, y además confundía el diagnóstico:
+// "ilegible" cuando lo que pasaba era truncamiento.
+//
+// `generateStructured` sí lo distingue: ve `finish_reason: 'length'` ANTES de
+// parsear, reintenta con el doble de tope, valida contra el schema y trae el
+// texto CRUDO del modelo en el error para poder diagnosticar. Es el mismo
+// camino que ya usa el investigador con este mismo rol.
+// ═══════════════════════════════════════════════════════════════════════════
+const ESQUEMA_VARIANTES = z.object({
+  variante_a: z.object({
+    asunto: z.string().describe('Asunto de máximo 6 palabras, sin signos de admiración'),
+    cuerpo: z.string().describe('El correo completo listo para salir, máximo 5 líneas, texto plano'),
+  }).describe('La variante por el costo — la de default. Obligatoria: sin ella no hay pieza.'),
+  variante_b: z.object({
+    asunto: z.string(),
+    cuerpo: z.string(),
+  }).nullable().describe('La variante por el dinero fiscal, o null'),
+  variante_c: z.string().nullable()
+    .describe('Cuerpo de la confirmación de demo SOLO si el dossier trae un sí previo; si no, null'),
+  datos_usados: z.string().nullable()
+    .describe('Los hechos del dossier que aparecen en los correos, o "ninguno específico de esta empresa"'),
+});
 
-**Datos usados:** [cada hecho concreto del dossier que aparece en los correos, o "ninguno específico de esta empresa" — un correo genérico honesto es mejor que uno personalizado con datos inventados]`;
+export type SalidaRedactor = z.infer<typeof ESQUEMA_VARIANTES>;
 
 export interface PiezaRedactada {
   piezaId: string;
@@ -163,26 +191,45 @@ export function sustituirMarcador(texto: string, nombre: string | null): string 
     .split(MARCADOR_NOMBRE).join('');
 }
 
-/** Parsea la salida markdown del modelo. LANZA si la variante A no se puede
- *  extraer — una pieza malformada no entra a la cola. Exportada para su
- *  prueba: el parser es la frontera entre el modelo y la cola. */
-export function parsearVariantes(md: string): { a: Variante; b: Variante | null; c: string | null; datosUsados: string | null } {
-  const bloques = md.split(/^## /m).map((b) => b.trim()).filter(Boolean);
-  const leer = (prefijo: string): Variante | null => {
-    const b = bloques.find((x) => x.toLowerCase().startsWith(prefijo));
-    if (!b) return null;
-    const asunto = b.match(/\*\*Asunto:\*\*\s*(.+)/i)?.[1]?.trim();
-    if (!asunto) return null;
-    const cuerpo = b.split(/\*\*Asunto:\*\*.*\n/i)[1]?.split(/\*\*Datos usados:\*\*/i)[0]?.trim();
-    if (!cuerpo) return null;
+/** Lo que el modelo devolvió, TAL CUAL, para meterlo en el error. Sin esto el
+ *  diagnóstico de la primera pasada real fue imposible: la corrida solo decía
+ *  "sin variante A legible" y nadie podía ver qué había contestado el modelo.
+ *  `null`/vacío se dice con palabras, que también es información. */
+export function textoDelModelo(raw: string | undefined | null): string {
+  const t = (raw ?? '').trim();
+  return t === '' ? '(vacío — el modelo no devolvió texto)' : t;
+}
+
+/** Valida la salida del schema y la deja lista para la cola. LANZA si la
+ *  variante A no llega utilizable — una pieza malformada no entra a la cola, y
+ *  el error lleva el texto EXACTO del modelo para poder diagnosticarlo.
+ *  Exportada para su prueba: esta función es la frontera entre el modelo y la
+ *  cola. */
+export function variantesDeSalida(
+  d: SalidaRedactor,
+  raw: string,
+): { a: Variante; b: Variante | null; c: string | null; datosUsados: string | null } {
+  const limpiar = (v: { asunto: string; cuerpo: string } | null): Variante | null => {
+    const asunto = v?.asunto?.trim();
+    const cuerpo = v?.cuerpo?.trim();
+    // El schema garantiza los TIPOS, no que el modelo haya escrito algo: una
+    // cadena vacía cumple `z.string()` y encolaría un correo en blanco.
+    if (!asunto || !cuerpo) return null;
     return { asunto: asunto.slice(0, 120), cuerpo };
   };
-  const a = leer('variante a');
-  if (!a) throw new DatoInvalido('El Redactor devolvió una salida sin variante A legible — no se encoló nada. Reintenta.');
-  const b = leer('variante b');
-  const bloqueC = bloques.find((x) => x.toLowerCase().startsWith('variante c')) ?? null;
-  const datosUsados = md.match(/\*\*Datos usados:\*\*\s*([\s\S]+)$/i)?.[1]?.trim().slice(0, 1_000) ?? null;
-  return { a, b, c: bloqueC ? bloqueC.replace(/^variante c[^\n]*\n?/i, '').trim().slice(0, 2_000) : null, datosUsados };
+  const a = limpiar(d.variante_a);
+  if (!a) {
+    throw new DatoInvalido(
+      'El Redactor devolvió una salida sin variante A legible — no se encoló nada. Reintenta. '
+      + `Lo que contestó el modelo: ${textoDelModelo(raw)}`,
+    );
+  }
+  return {
+    a,
+    b: limpiar(d.variante_b),
+    c: d.variante_c?.trim().slice(0, 2_000) || null,
+    datosUsados: d.datos_usados?.trim().slice(0, 1_000) || null,
+  };
 }
 
 /**
@@ -295,39 +342,55 @@ export async function redactarCorreoFrio(
     '(No hay más hechos verificados. Lo que no esté aquí, NO existe.)',
   ].join('\n');
 
-  // 5) El modelo — una sola completion, sin tools.
-  let texto: string;
+  // 5) El modelo — una sola llamada, con SCHEMA (ver la nota de arriba), sin
+  //    tools.
+  let salida: SalidaRedactor;
+  let crudo = '';
   let costoUsd = 0;
   try {
-    const r = await generateResponse({
+    const r = await generateStructured({
       // El rol BARATO del back office (16-ago-2026) — por aquí pasan datos
       // de PROSPECTOS, nunca RFC/CFDI de un cliente (la frontera y el
       // proveedor viven en models.ts).
       role: 'back_office',
       system: SYSTEM,
+      schema: ESQUEMA_VARIANTES,
+      schemaName: 'variantes_correo_frio',
       messages: [{ role: 'user', content: `DOSSIER:\n${dossier}\n\nVENDEDOR (remitente): ${vendedorNombre}` }],
-      maxTokens: 900,
+      // Tres variantes + los datos usados, y el rol corre con un modelo de
+      // razonamiento cuyos tokens invisibles salen de este mismo tope: con 900
+      // no alcanzaba ni para abrir la llave del JSON. `generateStructured`
+      // reintenta solo al doble si aun así se corta.
+      maxTokens: 1_800,
       temperature: 0.5,
       budget,
     });
-    texto = r.text;
+    salida = r.data;
+    crudo = r.raw;
     costoUsd = r.cost;
-    // TOOL-CALLING-19C2-1 (barrido MEDIO/BAJO): `r.cost` sin `usage` real del
-    // proveedor es la RESERVA conservadora, no lo medido — mismo criterio
-    // que `noMedido` en `intake/ocr.ts`. Sin la marca, esta fila de costo se
-    // veía igual de confiable que una medida de verdad.
     logger.info('redactor.costo', {
-      costoUsd: r.cost, tokensIn: r.tokensIn, tokensOut: r.tokensOut,
-      modelo: r.noMedido ? `${r.model}:no_medido` : r.model,
+      costoUsd: r.cost, tokensIn: r.tokensIn, tokensOut: r.tokensOut, modelo: r.model,
     });
-    if (r.noMedido) logger.warn('redactor.costo_no_medido', { prospecto: prospectoId });
   } catch (e) {
+    // El texto CRUDO del modelo viaja en el StructuredError — es lo único que
+    // permite saber por qué no se pudo leer una salida, y era exactamente lo
+    // que faltó para diagnosticar los tres fallos de la primera pasada.
+    const rawDelError = e instanceof StructuredError ? textoDelModelo(e.raw) : null;
+    // La llamada se cobra aunque falle (`usage` viaja en el error): tirar ese
+    // costo dejaría al techo diario ciego justo en el modo que más gasta.
+    const gastado = e instanceof StructuredError ? e.usage?.cost ?? 0 : 0;
     await registrarCorrida(null, 'redactor', {
-      inicio, fin: new Date(), estado: 'fallo', disparo,
+      inicio, fin: new Date(), estado: 'fallo', disparo, costoUsd: gastado,
       resumen: { prospecto: prospectoId },
-      error: 'El modelo no respondió.',
+      error: (rawDelError
+        ? `El modelo no devolvió una salida legible. Lo que contestó: ${rawDelError}`
+        : 'El modelo no respondió.').slice(0, 1_000),
     });
-    logger.error('redactor.modelo_fallo', { prospecto: prospectoId, err: e instanceof Error ? e.message : String(e) });
+    logger.error('redactor.modelo_fallo', {
+      prospecto: prospectoId,
+      err: e instanceof Error ? e.message : String(e),
+      ...(rawDelError ? { crudo: rawDelError } : {}),
+    });
     throw new DatoInvalido('El Redactor no pudo escribir en este momento — inténtalo de nuevo.');
   }
 
@@ -336,7 +399,7 @@ export async function redactarCorreoFrio(
   // aquí hacia ningún correo.
   let pieza: PiezaRedactada;
   try {
-    const v = parsearVariantes(texto);
+    const v = variantesDeSalida(salida, crudo);
     const con = (s: string) => sustituirMarcador(s, primerNombre);
     // El asunto de la campaña se IMPONE (no se le confía al modelo), y el
     // cuerpo pasa por el verificador estructural: "clientes reales" o un
