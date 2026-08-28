@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { armarDesglose, type CostosDeclarados, type EntradaCotizacion } from './motor';
+import { armarDesglose, gananciaReal, type CostosDeclarados, type EntradaCotizacion } from './motor';
 import { viajesDeMismaRuta } from './lector';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -156,5 +156,50 @@ describe('viajesDeMismaRuta — la ruta se compara normalizada', () => {
 
   it('otra ruta u origen nulo quedan fuera', () => {
     expect(viajesDeMismaRuta(viajes, 'León', 'Monterrey').map((v) => v.id)).toEqual(['c']);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA GANANCIA. La pantalla se titula «La ganancia real del viaje antes de
+// aceptarlo» y no pintaba ninguna: enseñaba costo y precio y dejaba la resta
+// al ojo. Estas pruebas fijan las tres cosas que la resta NO puede hacer:
+// inventar un 0 cuando falta un dato, esconder una pérdida, y dividir entre
+// cero al sacar el margen.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('gananciaReal', () => {
+  it('precio menos costo, con el margen sobre el PRECIO', () => {
+    // 25,000 − 20,000 = 5,000, que es el 20% de 25,000.
+    expect(gananciaReal(25_000, 20_000)).toEqual({ pesos: 5_000, margenPct: 20 });
+  });
+
+  it('una PÉRDIDA se afirma en negativo, no se esconde', () => {
+    // El viaje que pierde es justo el que esta pantalla existe para cazar
+    // ANTES de aceptarlo. Un Math.max(0, …) aquí sería el peor bug posible.
+    expect(gananciaReal(18_000, 20_000)).toEqual({ pesos: -2_000, margenPct: -11.11 });
+  });
+
+  it('sin precio o sin costo es null, JAMÁS 0', () => {
+    // "$0.00" se leería como «sale a mano»; lo que pasa es que no se sabe.
+    expect(gananciaReal(null, 20_000)).toBeNull();
+    expect(gananciaReal(25_000, null)).toBeNull();
+    expect(gananciaReal(null, null)).toBeNull();
+  });
+
+  it('un no-finito no se convierte en cifra', () => {
+    expect(gananciaReal(Number.NaN, 20_000)).toBeNull();
+    expect(gananciaReal(25_000, Number.POSITIVE_INFINITY)).toBeNull();
+  });
+
+  it('precio 0: hay ganancia (negativa) pero NO hay margen que afirmar', () => {
+    // Sin la guarda, `pesos / 0` da -Infinity y se pintaría como porcentaje.
+    expect(gananciaReal(0, 20_000)).toEqual({ pesos: -20_000, margenPct: null });
+  });
+
+  it('un CERO real se conserva: el viaje que sale exactamente a mano', () => {
+    expect(gananciaReal(20_000, 20_000)).toEqual({ pesos: 0, margenPct: 0 });
+  });
+
+  it('redondea a dos decimales, como el resto del dinero de la casa', () => {
+    expect(gananciaReal(1_000.005, 0.001)?.pesos).toBe(1_000);
   });
 });
