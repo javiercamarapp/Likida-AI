@@ -1039,6 +1039,85 @@ export function cortesDePlazo(hoy: string): CortesPlazo {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// D.22 (frente de escala) — EL AGREGADO POR EMISOR NO SE QUEDA EN TEXTO LIBRE.
+//
+// SQL agrupa las celdas sin CFDI por lo que la visión LEYÓ (`ocr_extra->>
+// 'emisor'`, con el upper/trim de la 0192). Eso deja "PEMEX", "PEMEX SA DE CV"
+// y "PEMEX  SA DE CV" como TRES celdas: la cifra que ve el contador queda
+// partida sin que nadie lo note. La 0192 ya lo dijo: unificar variantes de
+// fondo exige el matching del catálogo, no una normalización de texto.
+//
+// Aquí se hace ese matching — en TS, que es donde vive `identificarComercio`
+// y el catálogo (`comercios.ts`; NO se toca: otro frente lo está ampliando).
+// Dos celdas sin CFDI se funden cuando TODAS sus demás dimensiones coinciden
+// y su emisor resuelve a la MISMA identidad canónica:
+//   · el COMERCIO del catálogo (por dominio del host → RFC → texto, la misma
+//     prioridad de `identificarComercio`), o
+//   · el RFC leído y validado, cuando el catálogo no lo conoce.
+//
+// `null` es `null`: una celda cuyo emisor no resuelve a nada (sin comercio y
+// sin RFC) NO se agrupa con nadie — se queda tal como SQL la entregó, jamás
+// en un cubo "otros" que mienta una identidad que no existe.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** La identidad canónica del emisor de una celda sin CFDI, o `null`. */
+function identidadDeEmisor(c: CeldaCruda): string | null {
+  if (c.tieneCfdi) return null;
+  const comercio = identificarComercio({
+    urlFacturacion: c.host ?? undefined,
+    rfcEmisor: c.rfcEmisor ?? undefined,
+    textoTicket: c.emisor ?? undefined,
+  });
+  if (comercio) return `comercio:${comercio.clave}`;
+  if (c.rfcEmisor) return `rfc:${c.rfcEmisor.trim().toUpperCase()}`;
+  return null;
+}
+
+/**
+ * Funde las celdas sin CFDI que son EL MISMO emisor con distinta ortografía.
+ * Se conservan los datos crudos (rfc/host/emisor) de la PRIMERA celda del
+ * grupo: resuelven a la misma identidad por construcción, y `plazoVencido`
+ * se calcula después sobre esa resolución — el mismo comercio, el mismo plazo.
+ */
+function consolidarCeldasPorEmisor(celdas: CeldaCruda[]): CeldaCruda[] {
+  const salida: CeldaCruda[] = [];
+  const grupos = new Map<string, CeldaCruda>();
+  for (const c of celdas) {
+    const identidad = identidadDeEmisor(c);
+    if (identidad === null) {
+      salida.push(c);   // sin identidad no hay con quién agrupar — tal cual
+      continue;
+    }
+    // Las DEMÁS dimensiones tienen que coincidir: fundir a través de bandas o
+    // conceptos cambiaría causas fiscales, no solo ortografía.
+    const llave = JSON.stringify([
+      identidad, c.concepto, c.claveProdServ, c.formaPago, c.efos, c.efosRevisar,
+      c.estadoSat, c.sinFecha, c.ivaEstado, c.sobreTopeEfectivo, c.banda, c.totalTimbradoDia,
+    ]);
+    const previa = grupos.get(llave);
+    if (!previa) {
+      const copia = { ...c };
+      grupos.set(llave, copia);
+      salida.push(copia);
+      continue;
+    }
+    previa.n += c.n;
+    previa.monto += c.monto;
+    previa.iva += c.iva;
+    previa.ieps += c.ieps;
+    previa.iepsNulos += c.iepsNulos;
+    previa.subTotal += c.subTotal;
+    previa.subTotalNulos += c.subTotalNulos;
+    if (c.muestraId < previa.muestraId) previa.muestraId = c.muestraId;
+    if (previa.muestraCfdi === null) previa.muestraCfdi = c.muestraCfdi;
+    if (c.fechaMax !== null && (previa.fechaMax === null || c.fechaMax > previa.fechaMax)) {
+      previa.fechaMax = c.fechaMax;
+    }
+  }
+  return salida;
+}
+
 /**
  * ¿El portal ya cerró su plazo para esta celda sin CFDI? El MISMO camino que
  * `armar` (facturacion/pendientes.ts): identificar el comercio por la liga,
@@ -1126,7 +1205,11 @@ export async function getGastosFiscales(
   if (!Array.isArray(data)) {
     throw new Error(`getGastosFiscales: gastos_fiscales_agregados_tenant devolvió ${typeof data} en vez de un arreglo (¿migración 0151 sin aplicar?)`);
   }
-  return data.map((x, i) => aGastoFiscal(leerCelda(x, i), cortes));
+  // D.22: las celdas sin CFDI del MISMO emisor con distinta ortografía se
+  // funden por identidad canónica (comercio del catálogo o RFC) ANTES de que
+  // el contador las vea partidas. Ver `consolidarCeldasPorEmisor`.
+  return consolidarCeldasPorEmisor(data.map((x, i) => leerCelda(x, i)))
+    .map((c) => aGastoFiscal(c, cortes));
 }
 
 export interface GastosFiscalesSeries {

@@ -2,9 +2,44 @@ import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 
+// ═══════════════════════════════════════════════════════════════════════════
+// D.23 (frente de escala) — EL PRESUPUESTO TIENE DIMENSIÓN DE PROPÓSITO.
+//
+// Antes todo el gasto de modelo de un tenant salía de la misma bolsa diaria:
+// el OCR barato de un lote grande podía vaciar el techo antes de que el
+// chofer mandara su ticket, y el camino interactivo —el que tiene a una
+// persona esperando— se quedaba sin servicio por un proceso de fondo.
+//
+// Tres propósitos (dominio cerrado, el mismo CHECK de la 0244):
+//   · 'interactivo' — hay una persona esperando AHORA: el turno de WhatsApp
+//     del chofer (agente, OCR de SU ticket, su audio), los chats del
+//     dashboard y las subidas manuales.
+//   · 'ocr_lote'    — extracción de comprobantes en fondo (piloto de visión).
+//   · 'fondo'       — agentes de back office (runner, analista, redactor).
+//
+// La RESERVA: 'ocr_lote' y 'fondo' solo gastan hasta (tope_tenant − reserva);
+// 'interactivo' puede usar el techo completo. Cuando el fondo toca su parte,
+// la RPC devuelve 'tope_proposito' y aquí se FALLA CERRADO con nombre —
+// jamás un número inventado ni un 0 silencioso. El propósito es un parámetro
+// OBLIGATORIO de `createLlmBudget`: un llamador nuevo tiene que decidir en
+// qué carril corre, no heredar uno en silencio.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type PropositoIa = 'interactivo' | 'ocr_lote' | 'fondo';
+
+const MENSAJE_POR_SCOPE = {
+  run: (pedido: string, limite: string) =>
+    `presupuesto de IA agotado para esta corrida: se requieren ${pedido} USD y el límite es ${limite} USD`,
+  tenant: (pedido: string, limite: string) =>
+    `presupuesto de IA del día agotado para esta flota: se requieren ${pedido} USD y el techo diario es ${limite} USD`,
+  proposito: (pedido: string, limite: string) =>
+    `presupuesto de IA de fondo agotado por hoy (se requieren ${pedido} USD y la parte de fondo es ${limite} USD): ` +
+    'la reserva restante es del camino interactivo — el chofer no se queda sin servicio por un lote de fondo. El trabajo de fondo reintenta en su siguiente corrida.',
+} as const;
+
 export class LlmBudgetExceededError extends Error {
-  constructor(public scope: 'run' | 'tenant', public requestedUsd: number, public limitUsd: number) {
-    super(`presupuesto de IA agotado para ${scope}: se requieren $${requestedUsd.toFixed(6)} USD y el límite es $${limitUsd.toFixed(6)} USD`);
+  constructor(public scope: 'run' | 'tenant' | 'proposito', public requestedUsd: number, public limitUsd: number) {
+    super(MENSAJE_POR_SCOPE[scope](`$${requestedUsd.toFixed(6)}`, `$${limitUsd.toFixed(6)}`));
     this.name = 'LlmBudgetExceededError';
   }
 }
@@ -12,8 +47,12 @@ export class LlmBudgetExceededError extends Error {
 export interface LlmBudget {
   tenantId: string;
   runId: string;
+  /** En qué carril corre este gasto — decide qué techo lo frena. */
+  proposito: PropositoIa;
   maxRunUsd: number;
   maxTenantDailyUsd: number;
+  /** Parte del techo diario que SOLO el camino interactivo puede tocar. */
+  reservaInteractivoUsd: number;
   reservadoRunUsd: number;
 }
 
@@ -62,23 +101,56 @@ export function requireLlmBudgetTenant(tenantId: string | null | undefined): str
   return value;
 }
 
+const PROPOSITOS: readonly PropositoIa[] = ['interactivo', 'ocr_lote', 'fondo'];
+
+/**
+ * Qué fracción del techo diario queda reservada para el camino interactivo.
+ * 0.4 por defecto: con el techo default de $5.00/día, $2.00 que ningún lote
+ * de fondo puede tocar. Ajustable sin desplegar; se acota a [0, 1].
+ */
+function fraccionReservaInteractivo(): number {
+  const parsed = Number(process.env.LIKIDA_LLM_RESERVA_INTERACTIVO_PCT);
+  if (!Number.isFinite(parsed)) return 0.4;
+  return Math.min(1, Math.max(0, parsed));
+}
+
+/** Los topes vigentes por defecto — para que el panel /admin/consumo enseñe el techo real, no uno recordado. */
+export function topesPresupuestoIa(): { topeTenantDiaUsd: number; reservaInteractivoUsd: number; fraccionReserva: number } {
+  const topeTenantDiaUsd = positiveEnv(process.env.LIKIDA_LLM_TENANT_DAILY_BUDGET_USD, 5.00);
+  const fraccionReserva = fraccionReservaInteractivo();
+  return {
+    topeTenantDiaUsd,
+    reservaInteractivoUsd: Number((topeTenantDiaUsd * fraccionReserva).toFixed(6)),
+    fraccionReserva,
+  };
+}
+
 export function createLlmBudget(
   tenantId: string | null | undefined,
   runId: string,
+  proposito: PropositoIa,
   limits: LlmBudgetLimits = {},
 ): LlmBudget {
   const resolvedTenantId = requireLlmBudgetTenant(tenantId);
+  // Fail-closed: un propósito fuera del dominio no se corrige a una cubeta —
+  // se rechaza antes de gastar un centavo.
+  if (!PROPOSITOS.includes(proposito)) {
+    throw new Error(`presupuesto_llm: propósito desconocido: ${String(proposito)}`);
+  }
+  const maxTenantDailyUsd = limits.maxTenantDailyUsd && limits.maxTenantDailyUsd > 0
+    ? limits.maxTenantDailyUsd
+    : positiveEnv(process.env.LIKIDA_LLM_TENANT_DAILY_BUDGET_USD, 5.00);
   return {
     tenantId: resolvedTenantId,
     runId,
+    proposito,
     // Seis rondas de Sonnet con 4k de salida caben en este techo; el límite
     // sigue siendo duro y puede bajarse sin desplegar.
     maxRunUsd: limits.maxRunUsd && limits.maxRunUsd > 0
       ? limits.maxRunUsd
       : positiveEnv(process.env.LIKIDA_LLM_RUN_BUDGET_USD, 0.50),
-    maxTenantDailyUsd: limits.maxTenantDailyUsd && limits.maxTenantDailyUsd > 0
-      ? limits.maxTenantDailyUsd
-      : positiveEnv(process.env.LIKIDA_LLM_TENANT_DAILY_BUDGET_USD, 5.00),
+    maxTenantDailyUsd,
+    reservaInteractivoUsd: Number((maxTenantDailyUsd * fraccionReservaInteractivo()).toFixed(6)),
     reservadoRunUsd: 0,
   };
 }
@@ -111,9 +183,21 @@ export async function reserveLlmBudget(budget: LlmBudget, amountUsd: number): Pr
     p_reserva_usd: Number(amountUsd.toFixed(6)),
     p_tope_run_usd: Number(budget.maxRunUsd.toFixed(6)),
     p_tope_tenant_usd: Number(budget.maxTenantDailyUsd.toFixed(6)),
+    // D.23 (0244): con los 8 argumentos nombrados, PostgREST resuelve el
+    // overload nuevo — el que conoce el propósito y la reserva interactiva.
+    p_proposito: budget.proposito,
+    p_reserva_interactivo_usd: Number(budget.reservaInteractivoUsd.toFixed(6)),
   }), 'reservarPresupuestoLlm');
   if (error) throw new Error(`reservar_presupuesto_llm: ${error.message}`);
-  if (data !== true) throw new LlmBudgetExceededError('tenant', amountUsd, budget.maxTenantDailyUsd);
+  // La RPC dice CUÁL techo frenó — y aquí se le pone el monto de ese techo,
+  // no uno genérico. Cualquier respuesta fuera del contrato LANZA: tratarla
+  // como éxito sería gastar sin reserva.
+  if (data === 'tope_tenant') throw new LlmBudgetExceededError('tenant', amountUsd, budget.maxTenantDailyUsd);
+  if (data === 'tope_proposito') {
+    throw new LlmBudgetExceededError('proposito', amountUsd, Math.max(0, budget.maxTenantDailyUsd - budget.reservaInteractivoUsd));
+  }
+  if (data === 'tope_run') throw new LlmBudgetExceededError('run', amountUsd, budget.maxRunUsd);
+  if (data !== 'ok') throw new Error(`reservar_presupuesto_llm: respuesta inesperada (${JSON.stringify(data)}) — ¿migración 0244 sin aplicar?`);
   budget.reservadoRunUsd += amountUsd;
   return { id, amountUsd, persisted: true };
 }

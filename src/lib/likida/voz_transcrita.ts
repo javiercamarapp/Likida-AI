@@ -107,7 +107,7 @@ export async function transcribirNotaDeVoz(args: {
       schema: TranscripcionSchema,
       schemaName: 'transcripcion',
       signal: args.senal,
-      budget: createLlmBudget(args.tenantId, randomUUID()),
+      budget: createLlmBudget(args.tenantId, randomUUID(), 'interactivo'),
       // Una nota de voz de WhatsApp dura segundos, no minutos: el tope corto
       // acota el costo del peor caso sin recortar ninguna nota real.
       maxTokens: 1000,

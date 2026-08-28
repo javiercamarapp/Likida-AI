@@ -168,3 +168,63 @@ export async function getConsumoPorAgente(ahoraMs: number): Promise<ConsumoPorAg
 
   return { agentes, insights };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// D.23 (frente de escala) — EL PRESUPUESTO POR PROPÓSITO, VISIBLE.
+//
+// El techo diario dejó de ser una sola bolsa (mig. 0244): 'interactivo' (el
+// chofer y los chats), 'ocr_lote' (visión en fondo) y 'fondo' (back office),
+// con una reserva que solo el camino interactivo puede tocar. Esta lectura
+// alimenta /admin/consumo: cuánto lleva HOY cada (flota, propósito) y dónde
+// está el techo — sin esta puerta, la reserva sería una regla que nadie ve.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import { topesPresupuestoIa, type PropositoIa } from '@/lib/llm/budget';
+
+export interface GastoProposito {
+  tenantId: string;
+  tenantNombre: string;
+  proposito: PropositoIa;
+  /** Costo real ya liquidado hoy. */
+  liquidadoUsd: number;
+  /** Reservas vivas (no vencidas) que aún no liquidan — dinero comprometido. */
+  reservadoVivoUsd: number;
+  n: number;
+}
+
+export interface PresupuestoPorProposito {
+  filas: GastoProposito[];
+  /** El techo diario por flota y la reserva del camino interactivo, los VIGENTES. */
+  topeTenantDiaUsd: number;
+  reservaInteractivoUsd: number;
+  fraccionReserva: number;
+}
+
+/** LANZA si la base no responde o la 0244 no está aplicada — un panel de
+ *  presupuesto en ceros por error afirmaría "hoy nadie gastó". */
+export async function getPresupuestoPorProposito(): Promise<PresupuestoPorProposito> {
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('presupuesto_ia_por_proposito', {}),
+    'consumo.presupuestoProposito',
+  );
+  if (error) throw new Error(`getPresupuestoPorProposito: ${error.message}`);
+  if (!Array.isArray(data)) {
+    throw new Error('getPresupuestoPorProposito: presupuesto_ia_por_proposito devolvió otra forma (¿migración 0244 sin aplicar?).');
+  }
+  const filas: GastoProposito[] = (data as Array<Record<string, unknown>>).map((f, i) => {
+    const proposito = f.proposito;
+    if (proposito !== 'interactivo' && proposito !== 'ocr_lote' && proposito !== 'fondo') {
+      throw new Error(`getPresupuestoPorProposito: la fila ${i} trae un propósito fuera del dominio (${String(proposito)}).`);
+    }
+    return {
+      tenantId: String(f.tenantId ?? ''),
+      tenantNombre: String(f.tenantNombre ?? ''),
+      proposito,
+      liquidadoUsd: Number(f.liquidadoUsd ?? 0),
+      reservadoVivoUsd: Number(f.reservadoVivoUsd ?? 0),
+      n: Number(f.n ?? 0),
+    };
+  });
+  const topes = topesPresupuestoIa();
+  return { filas, ...topes };
+}

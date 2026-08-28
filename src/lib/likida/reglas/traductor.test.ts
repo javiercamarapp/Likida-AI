@@ -89,7 +89,7 @@ describe('cuando la frase SÍ calza', () => {
   it('cobra la traducción al TENANT, con presupuesto declarado', async () => {
     generateStructured.mockResolvedValue(respuesta({ plantilla: 'gasto_sin_cfdi_mayor_a', monto: 2000 }));
     await interpretar('avísame de gastos sin factura arriba de 2000', DUEÑO);
-    expect(createLlmBudget).toHaveBeenCalledWith(DUEÑO.tenantId, expect.any(String), {});
+    expect(createLlmBudget).toHaveBeenCalledWith(DUEÑO.tenantId, expect.any(String), 'interactivo', {});
     expect(generateStructured).toHaveBeenCalledWith(expect.objectContaining({
       role: 'extraccion', temperature: 0, budget: expect.objectContaining({ tenantId: DUEÑO.tenantId }),
     }));

@@ -19,7 +19,7 @@ describe('generateResponse — reserva central cuando usage falta', () => {
     create.mockReset();
     rpc.mockReset();
     loggerError.mockReset();
-    rpc.mockResolvedValue({ data: true, error: null });
+    rpc.mockImplementation(async (fn: string) => ({ data: fn === 'reservar_presupuesto_llm' ? 'ok' : true, error: null }));
   });
 
   it('con usage ausente conserva la reserva y reporta el costo contabilizado', async () => {
@@ -27,7 +27,7 @@ describe('generateResponse — reserva central cuando usage falta', () => {
       choices: [{ message: { content: 'ok' } }],
       model: 'modelo-sin-usage',
     });
-    const budget = createLlmBudget('tenant-usage', '00000000-0000-4000-8000-000000000009');
+    const budget = createLlmBudget('tenant-usage', '00000000-0000-4000-8000-000000000009', 'fondo');
     const r = await generateResponse({
       role: 'back_office',
       system: 'sistema',
@@ -43,7 +43,7 @@ describe('generateResponse — reserva central cuando usage falta', () => {
 
   it('BACKEND-19C2-1: si el proveedor truena, NO liquida al monto reservado — deja la fila para que la 0193 la excluya sola', async () => {
     create.mockRejectedValueOnce(new Error('el modelo rechazó la petición (dato de negocio, no red)'));
-    const budget = createLlmBudget('tenant-error', '00000000-0000-4000-8000-00000000000a');
+    const budget = createLlmBudget('tenant-error', '00000000-0000-4000-8000-00000000000a', 'fondo');
 
     await expect(generateResponse({
       role: 'back_office',

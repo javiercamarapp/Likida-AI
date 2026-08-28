@@ -57,7 +57,7 @@ describe('runtime del agente', () => {
       model: 'm',
     });
     reserve.mockResolvedValueOnce({ id: 'reservation-1', amountUsd: 0.25 });
-    const budget = { tenantId: 'tenant-1', runId: 'run-1', maxRunUsd: 1, maxTenantDailyUsd: 5, reservadoRunUsd: 0 };
+    const budget = { tenantId: 'tenant-1', runId: 'run-1', proposito: 'interactivo' as const, maxRunUsd: 1, maxTenantDailyUsd: 5, reservaInteractivoUsd: 2, reservadoRunUsd: 0 };
     await generateWithTools({
       role: 'chat', system: 's', messages: [{ role: 'user', content: 'x' }],
       tools: [], toolExecutor: async () => ({ success: true, result: {}, durationMs: 1 }),
@@ -77,7 +77,7 @@ describe('runtime del agente', () => {
     reserve.mockImplementationOnce(async () => { signalAlReservar = currentToolSignal(); return { id: 'r-1', amountUsd: 0.1 }; });
     settle.mockImplementationOnce(async () => { signalAlLiquidar = currentToolSignal(); });
     const controller = new AbortController();
-    const budget = { tenantId: 't', runId: 'r', maxRunUsd: 1, maxTenantDailyUsd: 5, reservadoRunUsd: 0 };
+    const budget = { tenantId: 't', runId: 'r', proposito: 'interactivo' as const, maxRunUsd: 1, maxTenantDailyUsd: 5, reservaInteractivoUsd: 2, reservadoRunUsd: 0 };
     await generateWithTools({
       role: 'chat', system: 's', messages: [{ role: 'user', content: 'x' }],
       tools: [], toolExecutor: async () => ({ success: true, result: {}, durationMs: 1 }),

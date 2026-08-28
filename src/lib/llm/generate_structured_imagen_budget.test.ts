@@ -35,7 +35,7 @@ describe('generateStructured — el data-URL de una foto no se cobra por byte', 
   beforeEach(() => {
     create.mockReset();
     rpc.mockReset();
-    rpc.mockResolvedValue({ data: true, error: null });
+    rpc.mockImplementation(async (fn: string) => ({ data: fn === 'reservar_presupuesto_llm' ? 'ok' : true, error: null }));
     create.mockResolvedValue({
       choices: [{ message: { content: '{"monto":123}' } }],
       model: 'google/gemini-3.1-flash-lite',
@@ -48,7 +48,7 @@ describe('generateStructured — el data-URL de una foto no se cobra por byte', 
   const fotoDe3MB = `data:image/jpeg;base64,${'A'.repeat(3_000_000)}`;
 
   it('una foto de 3 MB llega al proveedor en vez de morir en la reserva', async () => {
-    const budget = createLlmBudget('tenant-foto', '00000000-0000-4000-8000-00000000c201');
+    const budget = createLlmBudget('tenant-foto', '00000000-0000-4000-8000-00000000c201', 'interactivo');
 
     const r = await generateStructured({
       role: 'ocr',
@@ -67,7 +67,7 @@ describe('generateStructured — el data-URL de una foto no se cobra por byte', 
   });
 
   it('la reserva de esa foto cabe holgadamente en el techo por corrida', async () => {
-    const budget = createLlmBudget('tenant-foto', '00000000-0000-4000-8000-00000000c202');
+    const budget = createLlmBudget('tenant-foto', '00000000-0000-4000-8000-00000000c202', 'interactivo');
 
     await generateStructured({
       role: 'ocr',
@@ -88,7 +88,7 @@ describe('generateStructured — el data-URL de una foto no se cobra por byte', 
   });
 
   it('el texto largo sigue sobre-reservándose: la cota conservadora no se tocó', async () => {
-    const budget = createLlmBudget('tenant-texto', '00000000-0000-4000-8000-00000000c203');
+    const budget = createLlmBudget('tenant-texto', '00000000-0000-4000-8000-00000000c203', 'interactivo');
 
     await generateStructured({
       role: 'ocr',
@@ -113,7 +113,7 @@ describe('generateStructured — el data-URL de una foto no se cobra por byte', 
     create.mockReset();
     loggerError.mockReset();
     create.mockRejectedValueOnce(new Error('el modelo rechazó la petición (dato de negocio, no red)'));
-    const budget = createLlmBudget('tenant-error-ocr', '00000000-0000-4000-8000-00000000c204');
+    const budget = createLlmBudget('tenant-error-ocr', '00000000-0000-4000-8000-00000000c204', 'interactivo');
 
     await expect(generateStructured({
       role: 'ocr',

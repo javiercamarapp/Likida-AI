@@ -606,7 +606,7 @@ export async function correrRunner(
 
       try {
         const budget = budgetTenantId
-          ? createLlmBudget(budgetTenantId, randomUUID(), { maxTenantDailyUsd: a.presupuesto_dia_usd })
+          ? createLlmBudget(budgetTenantId, randomUUID(), 'fondo', { maxTenantDailyUsd: a.presupuesto_dia_usd })
           : null;
         const { sinTurno, ...cifras } = await loteRedactor(budget, venceEn);
         agentes.push({

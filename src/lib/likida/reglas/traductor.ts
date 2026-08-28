@@ -168,7 +168,7 @@ export async function interpretar(texto: string, opciones: OpcionesTraduccion): 
 
   let budget;
   try {
-    budget = createLlmBudget(opciones.tenantId, randomUUID(),
+    budget = createLlmBudget(opciones.tenantId, randomUUID(), 'interactivo',
       opciones.maxTenantDailyUsd ? { maxTenantDailyUsd: opciones.maxTenantDailyUsd } : {});
   } catch (e) {
     // Sin tenant de presupuesto no se llama al proveedor. Fail-closed: el

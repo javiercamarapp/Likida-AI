@@ -324,7 +324,7 @@ export async function ejecutarAnalista(opts: {
   onPaso?: (ev: { fase: 'inicio' | 'fin'; tool: string }) => void;
 }): Promise<RespuestaAnalista> {
   const runId = randomUUID();
-  const budget = createLlmBudget(opts.tenantId, runId);
+  const budget = createLlmBudget(opts.tenantId, runId, 'fondo');
   const ctx: ToolContext = { tenantId: opts.tenantId, conversationId: runId, runId };
   const ROL_LEGIBLE: Record<string, string> = {
     flota_admin: 'dueño/administrador de la flota',

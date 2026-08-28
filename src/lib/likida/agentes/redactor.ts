@@ -149,7 +149,7 @@ function presupuestoDelRedactor(contexto: RedactorExecutionContext | undefined):
     }
     return contexto.budget;
   }
-  return createLlmBudget(contexto?.tenantId, contexto?.runId ?? randomUUID(), {
+  return createLlmBudget(contexto?.tenantId, contexto?.runId ?? randomUUID(), 'fondo', {
     maxTenantDailyUsd: contexto?.maxTenantDailyUsd,
   });
 }

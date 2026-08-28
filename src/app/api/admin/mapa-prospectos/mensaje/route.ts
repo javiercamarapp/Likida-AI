@@ -101,7 +101,7 @@ export async function POST(req: Request) {
       maxTokens: 900,
       temperature: 0.7,
       signal: AbortSignal.timeout(30_000),
-      budget: createLlmBudget(sesion.tenantId, randomUUID()),
+      budget: createLlmBudget(sesion.tenantId, randomUUID(), 'interactivo'),
     });
     const ahora = new Date().toISOString();
     // El nombre vuelve aquí, sin haber salido; y cada toque cierra con la

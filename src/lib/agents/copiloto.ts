@@ -185,7 +185,7 @@ export async function ejecutarCopiloto(opts: {
   // sin dueño. El caller deriva este valor de la sesión o lo inyecta
   // explícitamente; falta de tenant = rechazo, nunca env global ni tenant de
   // relleno.
-  const budget = createLlmBudget(opts.budgetTenantId, runId);
+  const budget = createLlmBudget(opts.budgetTenantId, runId, 'interactivo');
   // `tenantId` del contexto de tools queda VACÍO a propósito: ninguna tool
   // del copiloto lo lee (todas son cross-tenant vía lib/admin). Si alguna
   // futura lo leyera, un id vacío truena ruidoso en vez de leer una flota

@@ -209,7 +209,7 @@ export async function ingresarFacturaDesdeFoto(
   // ARQ-19C2-2: sin `signal`/`budget`, la visión caía al default del SDK
   // (10 min) y no gastaba contra el tope diario del tenant — mismo patrón
   // que `api/dashboard/ingesta/route.ts:80`.
-  const r = await extraerComprobante(imagenes, AbortSignal.timeout(45_000), createLlmBudget(tenantId, randomUUID()));
+  const r = await extraerComprobante(imagenes, AbortSignal.timeout(45_000), createLlmBudget(tenantId, randomUUID(), 'interactivo'));
   const puerta = validarFotoParaIngreso(r.gasto, r.legible);
   if (!puerta.ok) return puerta;
 

@@ -45,8 +45,8 @@ describe('idempotencia durable de mutaciones', () => {
     });
     const r = await executeTool('durable_mutation', {}, { tenantId: 't', viajeId: 'v', runId: 'r' });
     expect(r.success).toBe(true);
-    expect(claim).toHaveBeenCalledWith('t', 'durable_mutation:t:v:-', 'durable_mutation');
-    expect(complete).toHaveBeenCalledWith('t', 'durable_mutation:t:v:-', 'token-1', { saved: true });
+    expect(claim).toHaveBeenCalledWith('t', 'durable_mutation:t:v:-:r', 'durable_mutation');
+    expect(complete).toHaveBeenCalledWith('t', 'durable_mutation:t:v:-:r', 'token-1', { saved: true });
   });
 
   it('falla cerrado sin runId y no entra al handler', async () => {
@@ -100,7 +100,7 @@ describe('idempotencia durable de mutaciones', () => {
     });
     const r = await executeTool('durable_fail', {}, { tenantId: 't', viajeId: 'v', runId: 'r' });
     expect(r.success).toBe(false);
-    expect(fail).toHaveBeenCalledWith('t', 'durable_fail:t:v:-', 'token-fail', 'fallo controlado');
+    expect(fail).toHaveBeenCalledWith('t', 'durable_fail:t:v:-:r', 'token-fail', 'fallo controlado');
   });
 
   it('el handler recibe la señal enlazada y observa la cancelación del turno', async () => {
@@ -148,7 +148,7 @@ describe('idempotencia durable de mutaciones', () => {
     const r = await executeTool('mutacion_lenta_no_cooperante', {}, { tenantId: 't', viajeId: 'v', runId: 'r' });
     expect(r.success).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(complete).toHaveBeenCalledWith('t', 'mutacion_lenta_no_cooperante:t:v:-', 'token-late', { committed: true });
+    expect(complete).toHaveBeenCalledWith('t', 'mutacion_lenta_no_cooperante:t:v:-:r', 'token-late', { committed: true });
     expect(fail).not.toHaveBeenCalled();
   });
 

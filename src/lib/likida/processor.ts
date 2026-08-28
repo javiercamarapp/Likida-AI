@@ -1369,7 +1369,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // la segunda.
           const imgHash = await hashImagen(dataUrl);
           const ruta = await subirComprobante(op.tenantId, 'sin-viaje', imgHash, dataUrl);
-          const ex = await extraerComprobante(dataUrl, reloj.senal(25_000), createLlmBudget(op.tenantId, randomUUID()));
+          const ex = await extraerComprobante(dataUrl, reloj.senal(25_000), createLlmBudget(op.tenantId, randomUUID(), 'interactivo'));
           await registrarCosto({ tenantId: op.tenantId, viajeId: null, fase: 'ocr', modelo: ex.costo.modelo, tokensIn: ex.costo.tokensIn, tokensOut: ex.costo.tokensOut, costoUsd: ex.costo.costoUsd });
           // ── FALLO NUESTRO: AQUÍ TAMPOCO SE PIERDE EL COMPROBANTE ────────────
           //
@@ -1729,7 +1729,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // (~$0.015/ticket de dos fotos) no justificaba ese riesgo a 5 días del
         // demo — decisión explícita de Javier, 1-ago-2026. Cada foto vuelve a
         // pagar su propia visión, como antes de la auditoría 8.
-        const extraccion = await extraerComprobante(dataUrl, reloj.senal(25_000), createLlmBudget(op.tenantId, randomUUID()));
+        const extraccion = await extraerComprobante(dataUrl, reloj.senal(25_000), createLlmBudget(op.tenantId, randomUUID(), 'interactivo'));
         const { gasto, costo } = extraccion;
         await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
 

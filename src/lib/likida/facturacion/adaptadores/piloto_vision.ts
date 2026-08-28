@@ -446,7 +446,7 @@ async function decidir(
     images: captura?.startsWith('data:') ? [captura] : captura ? [await comoDataUri(captura)] : undefined,
     maxTokens: 700,
     temperature: 0,
-    budget: op.tenantId ? createLlmBudget(op.tenantId, randomUUID()) : undefined,
+    budget: op.tenantId ? createLlmBudget(op.tenantId, randomUUID(), 'ocr_lote') : undefined,
   });
   return data;
 }
