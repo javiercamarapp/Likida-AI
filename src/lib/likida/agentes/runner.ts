@@ -139,10 +139,60 @@ export interface AgenteDelRunner {
 export interface ResultadoRunner {
   apagadoGlobal: boolean;
   agentes: AgenteDelRunner[];
-  /** Los que NO alcanzaron turno porque el reloj de la corrida se agotó. La
-   *  lista, no el conteo: el operador necesita saber CUÁLES se quedaron sin
-   *  correr, no cuántos. Vacía en una vuelta que cupo entera. */
+  /** Los agentes a los que EL RELOJ LES QUITÓ TRABAJO. La lista, no el conteo:
+   *  el operador necesita saber CUÁLES se quedaron sin correr, no cuántos.
+   *  Vacía en una vuelta que cupo entera.
+   *
+   *  Desde el 28-ago-2026 (c7-1) la lista incluye DOS clases, porque las dos
+   *  significan lo mismo para el operador —«a este le falta trabajo, le toca en
+   *  la próxima pasada»— y las dos tienen que hacer que el latido diga
+   *  `'parcial'`:
+   *    · los que no alcanzaron TURNO (el candado 0 cortó antes de despacharlos);
+   *    · los que SÍ arrancaron y su lote se cortó A LA MITAD por el reloj.
+   *  Antes solo existía la primera, así que un Redactor cortado a la mitad
+   *  —que es el caso real, porque `ordenarPorCosto` lo despacha AL FINAL— dejaba
+   *  la lista vacía y el latido decía `'ok'`: el runner reportaba una pasada
+   *  limpia mientras agonizaba. El motivo de cada uno distingue las dos clases. */
   saltadosPorReloj: string[];
+  /** `true` cuando la vuelta no terminó por su cuenta y el RELOJ DURO de la
+   *  ruta la cortó por fuera (ver `conRelojDuro`). Es la única señal fiable
+   *  cuando el corte ocurre tan temprano que no hay ni un agente que nombrar
+   *  —p. ej. colgado en la propia lectura de `agente_definicion`—: sin ella,
+   *  `saltadosPorReloj` saldría vacía y el latido volvería a mentir `'ok'`. */
+  cortadaPorRelojDuro?: boolean;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PARTE EN VIVO DE LA VUELTA (c7-1, 28-ago-2026).
+//
+// `correrRunner` devuelve su resultado AL FINAL. Eso basta cuando la vuelta
+// termina; no basta cuando la matan a la mitad, que es justo el caso que este
+// archivo existe para evitar. Por eso la vuelta ya no solo DEVUELVE lo que
+// pasó: lo va ESCRIBIENDO en un objeto compartido conforme pasa, para que quien
+// la acota por fuera pueda decir la verdad de lo que alcanzó a ocurrir aunque
+// el motor en vuelo nunca devuelva nada.
+//
+// Sin esto, el `Promise.race` de la ruta solo podría reportar «se acabó el
+// tiempo» sin saber a quién le tocaba ni quién se quedó a medias — o sea, un
+// latido que late pero no dice nada. Decir «no sé» donde sí se sabe es
+// exactamente lo que este producto no hace.
+// ═══════════════════════════════════════════════════════════════════════════
+export interface AvanceRunner {
+  apagadoGlobal: boolean;
+  /** Los MISMOS arreglos que `correrRunner` devuelve — se comparten por
+   *  referencia, no se copian: un espejo que hay que acordarse de actualizar se
+   *  desincroniza el día que alguien agrega una rama de despacho y se olvida. */
+  agentes: AgenteDelRunner[];
+  saltadosPorReloj: string[];
+  /** Los ids que TODAVÍA no se despachan, en orden de despacho. */
+  pendientes: string[];
+  /** El id del agente que se está despachando AHORA MISMO, o `null` si la
+   *  vuelta no está dentro de ningún motor. */
+  enVuelo: string | null;
+}
+
+export function nuevoAvanceRunner(): AvanceRunner {
+  return { apagadoGlobal: false, agentes: [], saltadosPorReloj: [], pendientes: [], enVuelo: null };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -164,15 +214,66 @@ export interface ResultadoRunner {
 // infinitamente mejor que una pasada completa que muere muda.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Lo que se le deja a la ruta para responder y ESCRIBIR EL LATIDO después
- *  del corte. 20 s: el latido es un upsert (tope de `acotada`, 8 s) más el
- *  `leerLatido` de la racha y el correo del tercer corte seguido. */
-export const MARGEN_RELOJ_MS = 20_000;
+/**
+ * LA COLA DEL LATIDO, PASO POR PASO, con su tope REAL.
+ *
+ * Misma técnica que `PASOS_CIERRE` en `presupuesto.ts`, y por la misma razón:
+ * un margen justificado en prosa no se puede verificar, y este ya se quedó
+ * corto una vez. El comentario viejo decía «20 s: el latido es un upsert (tope
+ * de `acotada`, 8 s) más el `leerLatido` de la racha y el correo del tercer
+ * corte seguido» — cuatro pasos EN SERIE descritos con un solo número, y la
+ * suma real de esos cuatro es 25.2 s, no 20 (auditoría ciclo 7, c7-31).
+ *
+ * Los topes no son estimaciones: `TOPE_CONSULTA_MS` son 8 000 más 1 500 de
+ * gracia (`presupuesto.ts`), la reserva del piso de alerta es un viaje a Redis
+ * y `TIMEOUT_CORREO_MS` son 5 000 (`correo/enviar.ts`).
+ *
+ * El orden de la tabla ES el orden de la ruta, y ese orden cambió: el latido se
+ * escribe ANTES del correo al operador. Era al revés, así que en el peor caso
+ * —el tercer corte seguido, el único momento en que entra el correo— el latido
+ * quedaba ÚLTIMO de la fila: lo primero que se perdía era precisamente lo que
+ * el margen existe para proteger. Ahora, aunque el margen se quedara corto de
+ * nuevo, lo que se sacrifica es el correo (que además ya quedó en Sentry por
+ * `logger.error`) y no el latido.
+ *
+ * `runner.test.ts` compara esta suma contra `MARGEN_RELOJ_MS`: meter un paso más
+ * a la cola del latido sin ampliar el margen deja de ser un descuido silencioso
+ * y pasa a ser una prueba en rojo.
+ */
+export const PASOS_LATIDO: ReadonlyArray<{ paso: string; donde: string; ms: number }> = [
+  { paso: 'leerLatido de la racha (8 000 + 1 500 de gracia)', donde: 'salud.ts:100', ms: 9_500 },
+  { paso: 'registrarLatido — el upsert que NO se puede perder', donde: 'salud.ts:86', ms: 9_500 },
+  { paso: 'reservarPiso en Redis (SET NX) del correo al operador', donde: 'alerta.ts:133', ms: 1_200 },
+  { paso: 'enviarCorreo al operador (TIMEOUT_CORREO_MS)', donde: 'correo/enviar.ts:42', ms: 5_000 },
+];
+
+/** Suma de la tabla de arriba: 25.2 s. */
+export const COSTO_LATIDO_MS = PASOS_LATIDO.reduce((s, p) => s + p.ms, 0);
+
+/** Lo que se le deja a la ruta para responder y ESCRIBIR EL LATIDO después del
+ *  corte.
+ *
+ *  30 s contra los 25.2 s de `COSTO_LATIDO_MS`: 4.8 s de holgura, la misma
+ *  proporción que `MARGEN_CIERRE_MS` se da en `presupuesto.ts`. Eran 20 s, o
+ *  sea 5.2 s de DEUDA — el margen no cubría su propia cola.
+ *
+ *  Lo que cuesta: la vuelta pierde 10 s de sus 280. Es barato al lado de lo
+ *  que compra, porque el latido de los 30 s no protege una pasada: protege la
+ *  capacidad de enterarse de que las pasadas se están muriendo. */
+export const MARGEN_RELOJ_MS = 30_000;
 
 /** El reloj por default cuando el llamador no impone uno: el `maxDuration`
  *  de 300 s del cron menos el margen. El cron pasa el suyo explícito —esta
  *  constante es la red para el copiloto y las pruebas. */
 export const PLAZO_RUNNER_MS = 300_000 - MARGEN_RELOJ_MS;
+
+/** ¿Ya no cabe nada más en esta vuelta? Una función y no un `Date.now() >=
+ *  venceEn` suelto: es la MISMA pregunta en el despacho y dentro de cada motor
+ *  que itera, y tenerla escrita una sola vez es lo que hace que buscarla en el
+ *  fuente encuentre a todos los que la hacen — y a los que no. */
+export function relojAgotado(venceEn: number): boolean {
+  return Date.now() >= venceEn;
+}
 
 /** Los agentes que GASTAN MODELO. Se despachan AL FINAL a propósito: si el
  *  reloj corta, lo que se sacrifica es lo caro y lo lento, no los partes
@@ -217,22 +318,78 @@ export async function gastoDelDiaUsd(agente: string): Promise<number> {
  *  (los más viejos primero — los del SLA), cortando por la reserva/run central.
  *  Las guardas por prospecto (cadencia 48h, pieza pendiente, estado) viven
  *  DENTRO de redactarCorreoFrio — aquí solo se seleccionan candidatos. */
-async function loteRedactor(budget: LlmBudget | null): Promise<{ piezas: number; saltados: number; costoUsd: number }> {
+async function loteRedactor(
+  budget: LlmBudget | null,
+  /** EL RELOJ DE LA VUELTA, adentro del motor (c7-1). Ver la nota del `for`. */
+  venceEn: number,
+): Promise<{ piezas: number; saltados: number; costoUsd: number; sinTurno: number }> {
   const tope = topePiezasPorCorrida();
-  // Overfetch ×4: varios candidatos rebotan en las guardas del redactor
-  // (pieza pendiente, cadencia) y eso NO es fallo — es la guarda operando.
+  // ── EL OVERFETCH: era ×4 (20 candidatos para 5 piezas), ahora ×2 (10) ──────
+  //
+  // La razón original del overfetch SIGUE SIENDO VÁLIDA y por eso no se quita:
+  // varios candidatos rebotan en las guardas del redactor (pieza pendiente,
+  // cadencia de 48 h) y eso NO es fallo, es la guarda operando; sin colchón el
+  // lote entregaría dos piezas donde caben cinco. Y esos rebotes son BARATOS:
+  // `redactarCorreoFrio` verifica estado, cadencia e historial ANTES de tocar
+  // el modelo (redactor.ts:251-294), así que un rebote de guarda son tres
+  // consultas, no una llamada al LLM.
+  //
+  // Lo que cambió es el otro lado de la cuenta. Un candidato que pasa las
+  // guardas y REVIENTA EN EL MODELO también cae en el `catch` de abajo, cuenta
+  // como `saltados += 1` y el lote sigue — y ese sí ya costó la llamada. En la
+  // pasada del 28-ago-2026 los tres fallos fueron exactamente de esa clase
+  // («el Redactor devolvió una salida sin variante A legible»), medidos en
+  // 26.95 s, 20.96 s y 24.21 s. Con 32,996 prospectos en `nuevo` la consulta
+  // SIEMPRE trae su límite completo, así que el peor caso del ×4 no era teórico:
+  // 20 llamadas × 25 s = 500 s dentro de un `maxDuration` de 300.
+  //
+  // Con ×2 el peor caso baja a 10 intentos y el colchón sigue siendo del doble
+  // de lo que se quiere producir — suficiente para los rebotes de guarda, que
+  // son la razón por la que el colchón existe. Lo que no se produzca en esta
+  // pasada no se pierde: la cola tiene 32,996 filas y el cron vuelve en 4 horas.
+  //
+  // Y el número ya no es el freno: el freno es el reloj del `for`. El límite
+  // ahora solo dimensiona la pila de candidatos; el que decide cuándo parar es
+  // el tiempo, que es lo que de verdad se acaba.
   const { data, error } = await acotada(supabaseAdmin()
     .from('prospecto')
     .select('id, vendedor:vendedor_id(nombre)')
     .is('duplicado_de', null)
     .eq('estado', 'nuevo')
     .order('created_at', { ascending: true })
-    .limit(tope * 4), 'runner.candidatos');
+    .limit(tope * 2), 'runner.candidatos');
   if (error) throw new Error(`loteRedactor.candidatos: ${error.message}`);
   const candidatos = (data ?? []) as Array<{ id: string; vendedor: { nombre?: string } | null }>;
 
-  let piezas = 0, saltados = 0, costoUsd = 0;
-  for (const c of candidatos) {
+  let piezas = 0, saltados = 0, costoUsd = 0, sinTurno = 0;
+  for (let i = 0; i < candidatos.length; i++) {
+    const c = candidatos[i];
+    // ── EL RELOJ, ADENTRO DEL MOTOR (auditoría ciclo 7, c7-1) ───────────────
+    // El candado 0 del despacho pregunta esto ANTES de cada agente, pero el
+    // reloj no entraba a ningún motor: este `for` no lo recibía ni lo miraba, y
+    // sus únicas salidas eran cinco ÉXITOS o el techo de dinero. Los fallos no
+    // contaban (`saltados += 1` y seguir), y el techo de dinero tampoco frenaba
+    // —cada corrida costó ~$0.0002 USD contra un presupuesto diario de $1.00—.
+    // Peor: `ordenarPorCosto` despacha al Redactor AL FINAL a propósito por
+    // caro, así que el único motor sin freno propio era justo el que heredaba
+    // todo el presupuesto de tiempo restante.
+    //
+    // Resultado en producción: Vercel mató la función DENTRO de este bucle. No
+    // corrió ni el `try` ni el `catch` de la ruta, así que no se escribió
+    // latido — el silencio del 25-ago-2026 («Sin latido: runner hace 286 min»)
+    // y el del 28-ago-2026 00:03 UTC.
+    //
+    // Se pregunta ANTES de cada candidato y no después: lo que se protege es el
+    // tiempo de la ruta para latir, y una llamada al modelo puede costar hasta
+    // ~120 s (TIMEOUT_LLM_MS de 30 s × los cuatro intentos que encadena
+    // `generateStructured`). Los que no alcanzaron turno se CUENTAN y suben al
+    // resultado del agente: un lote cortado que lo dice es infinitamente mejor
+    // que uno que reporta `resultado: 'corrio', piezas: 0` mientras agoniza.
+    if (relojAgotado(venceEn)) {
+      sinTurno = candidatos.length - i;
+      logger.warn('runner.redactor.corte_por_reloj', { sinTurno, piezas, saltados });
+      break;
+    }
     if (piezas >= tope) break;
     if (budget && budget.reservadoRunUsd >= budget.maxRunUsd) break;
     try {
@@ -256,7 +413,14 @@ async function loteRedactor(budget: LlmBudget | null): Promise<{ piezas: number;
       logger.info('runner.redactor.saltado', { prospecto: c.id, motivo: e instanceof Error ? e.message.slice(0, 160) : String(e) });
     }
   }
-  return { piezas, saltados, costoUsd };
+  return { piezas, saltados, costoUsd, sinTurno };
+}
+
+/** El motivo que lleva un agente cuyo LOTE se cortó a la mitad por el reloj.
+ *  Se escribe una vez y se usa en las dos ramas (Redactor y enriquecedor) para
+ *  que el operador lea la misma frase venga de donde venga. */
+function motivoLoteCortado(sinTurno: number): string {
+  return `el reloj de la vuelta cortó el lote con ${sinTurno} candidato(s) sin turno — lo que se fabricó queda; el resto le toca en la próxima pasada`;
 }
 
 /**
@@ -276,11 +440,23 @@ export async function correrRunner(
   budgetTenantId?: string | null,
   /** El presupuesto de TIEMPO de esta vuelta. `venceEn` es el instante
    *  (epoch ms) a partir del cual ya no se despacha a nadie más — el cron le
-   *  pasa su `maxDuration` menos `MARGEN_RELOJ_MS`. */
-  opts: { venceEn?: number } = {},
+   *  pasa su `maxDuration` menos `MARGEN_RELOJ_MS`.
+   *
+   *  `avance` es el parte EN VIVO (ver `AvanceRunner`): quien acota esta vuelta
+   *  por fuera lo pasa para poder decir la verdad de lo que alcanzó a pasar si
+   *  la corta. Sin él la vuelta se comporta igual — el objeto se crea local. */
+  opts: { venceEn?: number; avance?: AvanceRunner } = {},
 ): Promise<ResultadoRunner> {
+  // Los arreglos del resultado SON los del parte en vivo: compartidos por
+  // referencia, para que cada `push` de las veinte ramas de despacho de abajo
+  // se vea desde fuera sin que ninguna tenga que acordarse de espejarlo.
+  const avance = opts.avance ?? nuevoAvanceRunner();
+  const agentes: AgenteDelRunner[] = avance.agentes;
+  const saltadosPorReloj: string[] = avance.saltadosPorReloj;
+
   if (await estaApagado('global')) {
-    return { apagadoGlobal: true, agentes: [], saltadosPorReloj: [] };
+    avance.apagadoGlobal = true;
+    return { apagadoGlobal: true, agentes, saltadosPorReloj };
   }
 
   const { data, error } = await acotada(supabaseAdmin()
@@ -295,15 +471,22 @@ export async function correrRunner(
     .filter((a) => !soloAgente || a.id === soloAgente));
 
   const venceEn = opts.venceEn ?? Date.now() + PLAZO_RUNNER_MS;
-  const agentes: AgenteDelRunner[] = [];
-  const saltadosPorReloj: string[] = [];
+  avance.pendientes = habilitados.map((a) => a.id);
   for (let i = 0; i < habilitados.length; i++) {
     const a = habilitados[i];
+    // El parte en vivo, antes de tocar nada: quién está en vuelo y quiénes
+    // quedan. Se pone AQUÍ y no dentro de cada rama porque las ramas terminan
+    // en `continue` por veinte caminos distintos, y una bitácora que hay que
+    // acordarse de escribir en veinte lugares es una bitácora que miente.
+    avance.enVuelo = a.id;
+    avance.pendientes = habilitados.slice(i + 1).map((x) => x.id);
     // Candado 0 — EL RELOJ. Se pregunta ANTES de despachar, no después: la
     // gracia es que el corte deje a la ruta tiempo de escribir el latido. Los
     // que faltan se dicen uno por uno —con nombre— en vez de desaparecer con
     // la invocación, que es exactamente lo que pasó el 25-ago.
-    if (Date.now() >= venceEn) {
+    if (relojAgotado(venceEn)) {
+      avance.enVuelo = null;
+      avance.pendientes = [];
       for (const pendiente of habilitados.slice(i)) {
         saltadosPorReloj.push(pendiente.id);
         agentes.push({
@@ -377,8 +560,17 @@ export async function correrRunner(
         const budget = budgetTenantId
           ? createLlmBudget(budgetTenantId, randomUUID(), { maxTenantDailyUsd: a.presupuesto_dia_usd })
           : null;
-        const r = await loteRedactor(budget);
-        agentes.push({ agente: a.id, resultado: 'corrio', ...r });
+        const { sinTurno, ...cifras } = await loteRedactor(budget, venceEn);
+        agentes.push({
+          agente: a.id, resultado: 'corrio', ...cifras,
+          ...(sinTurno > 0 ? { motivo: motivoLoteCortado(sinTurno) } : {}),
+        });
+        // Un lote cortado a la mitad ES trabajo que el reloj le quitó a este
+        // agente, y tiene que hacer que el latido diga `'parcial'` igual que un
+        // agente que no alcanzó turno. Antes no subía a ninguna lista, y como
+        // el Redactor se despacha AL FINAL, cortarlo dejaba `saltadosPorReloj`
+        // vacía y el latido decía `'ok'` sobre una pasada agonizante (c7-1).
+        if (sinTurno > 0) saltadosPorReloj.push(a.id);
       } catch (e) {
         agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del lote' });
       }
@@ -574,8 +766,19 @@ export async function correrRunner(
       try {
         if (a.id === 'enriquecedor') {
           const ids = await candidatosSinDossier(topePiezasPorCorrida());
-          let piezas = 0, saltados = 0, costoUsd = 0;
-          for (const id of ids) {
+          let piezas = 0, saltados = 0, costoUsd = 0, sinTurno = 0;
+          for (let j = 0; j < ids.length; j++) {
+            // El mismo reloj del lote del Redactor, por la misma razón (c7-1):
+            // `investigarProspecto` gasta modelo y este `for` no lo miraba. Es
+            // el segundo motor que itera dentro de este archivo; los dos
+            // preguntan lo mismo con la misma función, y el `Promise.race` de
+            // la ruta cubre a cualquier tercero que se agregue sin preguntar.
+            if (relojAgotado(venceEn)) {
+              sinTurno = ids.length - j;
+              logger.warn('runner.enriquecedor.corte_por_reloj', { sinTurno, piezas, saltados });
+              break;
+            }
+            const id = ids[j];
             try {
               const r = await investigarProspecto(id, 'cron');
               piezas += 1;
@@ -585,13 +788,25 @@ export async function correrRunner(
               logger.info('runner.investigador.saltado', { prospecto: id, motivo: e instanceof Error ? e.message.slice(0, 160) : String(e) });
             }
           }
-          agentes.push({ agente: a.id, resultado: 'corrio', piezas, saltados, costoUsd });
+          agentes.push({
+            agente: a.id, resultado: 'corrio', piezas, saltados, costoUsd,
+            ...(sinTurno > 0 ? { motivo: motivoLoteCortado(sinTurno) } : {}),
+          });
+          if (sinTurno > 0) saltadosPorReloj.push(a.id);
         } else if (a.id === 'sdr') {
-          const r = await correrSdr('cron', topePiezasPorCorrida());
-          agentes.push({ agente: a.id, resultado: 'corrio', piezas: r.piezas, saltados: r.saltados, costoUsd: r.costoUsd });
+          const r = await correrSdr('cron', topePiezasPorCorrida(), venceEn);
+          agentes.push({
+            agente: a.id, resultado: 'corrio', piezas: r.piezas, saltados: r.saltados, costoUsd: r.costoUsd,
+            ...(r.sinTurno > 0 ? { motivo: motivoLoteCortado(r.sinTurno) } : {}),
+          });
+          if (r.sinTurno > 0) saltadosPorReloj.push(a.id);
         } else {
-          const r = await correrEnviador('cron', topePiezasPorCorrida() * 2);
-          agentes.push({ agente: a.id, resultado: 'corrio', piezas: r.piezasEnviadas, saltados: r.saltadas, costoUsd: 0 });
+          const r = await correrEnviador('cron', topePiezasPorCorrida() * 2, venceEn);
+          agentes.push({
+            agente: a.id, resultado: 'corrio', piezas: r.piezasEnviadas, saltados: r.saltadas, costoUsd: 0,
+            ...(r.sinTurno > 0 ? { motivo: motivoLoteCortado(r.sinTurno) } : {}),
+          });
+          if (r.sinTurno > 0) saltadosPorReloj.push(a.id);
         }
       } catch (e) {
         agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del lote' });
@@ -603,5 +818,111 @@ export async function correrRunner(
     agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'sin motor despachable en el runner todavía — habilitarlo aquí exige su rama de despacho' });
   }
 
+  avance.enVuelo = null;
+  avance.pendientes = [];
   return { apagadoGlobal: false, agentes, saltadosPorReloj };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL TECHO ESTRUCTURAL DE LA VUELTA (auditoría ciclo 7, c7-1).
+//
+// EL PROBLEMA QUE ESTO RESUELVE, Y POR QUÉ EL RELOJ DE ARRIBA NO BASTABA.
+// El candado 0 y los relojes de cada motor son COOPERATIVOS: funcionan porque
+// alguien se acordó de preguntar. El 25-ago-2026 se acordaron en el despacho y
+// no en `loteRedactor`; el resultado fue una función muerta a los 300 s DENTRO
+// del bucle, sin `try` ni `catch` de la ruta y por lo tanto SIN LATIDO — la
+// alerta «Sin latido: runner hace 286 min» y, tres días después, el mismo
+// silencio del 28-ago-2026 00:03 UTC. Arreglar los motores que hoy existen no
+// impide que el motor número once, escrito el mes que viene por alguien que no
+// leyó este archivo, vuelva a hacerlo exactamente igual.
+//
+// Así que el techo deja de ser una disciplina y pasa a ser una RESTRICCIÓN: la
+// ruta no espera a la vuelta, espera a la CARRERA entre la vuelta y el reloj. Un
+// motor que ignore su `venceEn`, que se cuelgue en un `fetch` sin tope o que
+// simplemente no exista todavía ya no puede quitarle a la ruta su margen para
+// latir, porque la ruta deja de esperarlo pase lo que pase. `route.test.ts`
+// verifica que la ruta siga envuelta en esto leyendo su fuente: quitarla es una
+// prueba en rojo, no un descuido silencioso.
+//
+// Lo que esto NO hace, dicho para que nadie lo suponga: no CANCELA la vuelta.
+// La promesa perdedora sigue corriendo hasta que Vercel apaga la invocación —
+// no hay forma de matar un `await` a la mitad en JS. Lo que sí hace es que la
+// invocación termine por la puerta de la ruta (respondiendo y latiendo) en vez
+// de por el hachazo del `maxDuration`. Un agente que quedó a medias no pierde
+// trabajo: sus escrituras son idempotentes o no ocurrieron.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** El testigo del corte. Un `Symbol` y no `null`/`undefined` para que una
+ *  vuelta que legítimamente resolviera a nulo no se confunda con un corte. */
+const CORTE_DURO = Symbol('runner.corte_duro');
+
+export async function conRelojDuro<T>(
+  trabajo: PromiseLike<T>,
+  /** El MISMO instante que se le pasó a la vuelta como `venceEn`. Que sea el
+   *  mismo es lo que hace que el corte duro sea la RED y no el freno normal:
+   *  con todos los motores portándose bien, la vuelta termina antes y este
+   *  temporizador nunca gana. */
+  venceEn: number,
+  /** Qué devolver cuando el reloj gana. Se pasa como función y no como valor
+   *  porque el parte de lo que alcanzó a pasar solo se puede leer DESPUÉS. */
+  alVencer: () => T,
+): Promise<T> {
+  let temporizador: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const r = await Promise.race<T | typeof CORTE_DURO>([
+      trabajo,
+      new Promise<typeof CORTE_DURO>((resolver) => {
+        // `Math.max(0, …)`: un `venceEn` ya pasado corta de inmediato en vez de
+        // programar un temporizador negativo (que en Node dispara al instante,
+        // sí, pero depender de eso sería depender de un detalle).
+        temporizador = setTimeout(() => resolver(CORTE_DURO), Math.max(0, venceEn - Date.now()));
+      }),
+    ]);
+    return r === CORTE_DURO ? alVencer() : r;
+  } finally {
+    clearTimeout(temporizador);
+  }
+}
+
+/** El parte de una vuelta que el reloj duro cortó por fuera: convierte lo que
+ *  el `AvanceRunner` alcanzó a registrar en un `ResultadoRunner` honesto.
+ *
+ *  Nombra a los dos grupos que el corte deja: el que estaba EN VUELO (el motor
+ *  dentro del cual murió la invocación — el Redactor, en los dos incidentes) y
+ *  los que ni siquiera llegaron a su turno. Los dos suben a `saltadosPorReloj`,
+ *  así que el latido dice `'parcial'` y la racha de cortes cuenta. */
+export function cerrarPorRelojDuro(avance: AvanceRunner): ResultadoRunner {
+  // Dedupe: `enVuelo` puede haber quedado apuntando a un agente que ya se
+  // reportó (se despachó y se saltó por otro candado, y el corte cayó entre esa
+  // iteración y la siguiente). Nombrarlo dos veces sería inventar un agente.
+  const yaDichos = new Set(avance.agentes.map((x) => x.agente));
+  if (avance.enVuelo && !yaDichos.has(avance.enVuelo)) {
+    avance.agentes.push({
+      agente: avance.enVuelo,
+      resultado: 'saltado',
+      motivo: 'CORTADO EN VUELO — el reloj duro de la vuelta venció mientras este motor corría; lo que alcanzó a fabricar queda, el resto le toca en la próxima pasada',
+    });
+    avance.saltadosPorReloj.push(avance.enVuelo);
+    yaDichos.add(avance.enVuelo);
+  }
+  for (const id of avance.pendientes) {
+    if (yaDichos.has(id)) continue;
+    avance.agentes.push({
+      agente: id,
+      resultado: 'saltado',
+      motivo: 'saltado por reloj — la vuelta se cortó antes de llegarle; le toca en la próxima pasada',
+    });
+    avance.saltadosPorReloj.push(id);
+  }
+  logger.error('runner.corte_duro', {
+    enVuelo: avance.enVuelo,
+    saltadosPorReloj: avance.saltadosPorReloj,
+    corridos: avance.agentes.filter((x) => x.resultado === 'corrio').length,
+  });
+  return {
+    apagadoGlobal: avance.apagadoGlobal,
+    agentes: avance.agentes,
+    saltadosPorReloj: avance.saltadosPorReloj,
+    cortadaPorRelojDuro: true,
+  };
 }

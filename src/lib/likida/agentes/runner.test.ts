@@ -108,7 +108,12 @@ vi.mock('./ingenieria', async (importOriginal) => ({
   correrAgenteIngenieria: (...a: unknown[]) => correrIngenieria(...a),
 }));
 
-const { correrRunner, ordenarPorCosto, llamaAlModelo, AGENTES_DESPACHABLES, MARGEN_RELOJ_MS, PLAZO_RUNNER_MS } = await import('./runner');
+const {
+  correrRunner, ordenarPorCosto, llamaAlModelo, AGENTES_DESPACHABLES,
+  MARGEN_RELOJ_MS, PLAZO_RUNNER_MS,
+  PASOS_LATIDO, COSTO_LATIDO_MS, conRelojDuro, nuevoAvanceRunner, cerrarPorRelojDuro,
+} = await import('./runner');
+type ResultadoRunner = import('./runner').ResultadoRunner;
 
 const REDACTOR = { id: 'redactor', presupuesto_dia_usd: 1.0 };
 const TENANT = 'tenant-runner-test';
@@ -439,10 +444,187 @@ describe('el reloj de la vuelta', () => {
   });
 
   it('sin `venceEn` del llamador, el default deja margen para el latido', () => {
-    // 300 s de `maxDuration` del cron menos los 20 s que la ruta necesita para
-    // leer la racha, alertar y escribir el latido.
-    expect(MARGEN_RELOJ_MS).toBe(20_000);
-    expect(PLAZO_RUNNER_MS).toBe(280_000);
+    // 300 s de `maxDuration` del cron menos los 30 s que la ruta necesita para
+    // leer la racha, escribir el latido y alertar (c7-31).
+    expect(MARGEN_RELOJ_MS).toBe(30_000);
+    expect(PLAZO_RUNNER_MS).toBe(270_000);
+  });
+
+  // ── c7-31: EL MARGEN TIENE QUE CUBRIR SU PROPIA COLA ─────────────────────
+  // Mismo mecanismo que `MARGEN_CIERRE_MS` vs `COSTO_CIERRE_MS` en
+  // `presupuesto.ts`. Eran 20 s contra 25.2 s de cola real: 5.2 s de DEUDA, y
+  // el latido —lo último de la fila— era lo primero que se perdía. Meter un
+  // paso más a esa cola sin ampliar el margen ahora es una prueba en rojo.
+  it('el margen cubre la cola del latido con holgura, no la debe', () => {
+    expect(COSTO_LATIDO_MS).toBe(25_200);
+    expect(MARGEN_RELOJ_MS).toBeGreaterThan(COSTO_LATIDO_MS);
+    // Y la tabla enumera los CUATRO pasos en serie, no un número inventado.
+    expect(PASOS_LATIDO).toHaveLength(4);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RELOJ ADENTRO DE LOS MOTORES (auditoría ciclo 7, c7-1).
+//
+// El reloj de #141 se preguntaba ENTRE agentes y nunca DENTRO de uno. Con 32,996
+// prospectos en `nuevo`, `loteRedactor` traía siempre sus 20 candidatos y los
+// recorría a ~25 s medidos cada uno: 500 s dentro de un `maxDuration` de 300.
+// Vercel mataba la función DENTRO del bucle y la ruta no alcanzaba a latir —
+// los silencios del 25-ago-2026 y del 28-ago-2026.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el reloj adentro del lote', () => {
+  function relojFalso(inicio: number) {
+    let ahora = inicio;
+    vi.spyOn(Date, 'now').mockImplementation(() => ahora);
+    return { avanzar: (ms: number) => { ahora += ms; }, leer: () => ahora };
+  }
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  function conRedactorHabilitado(candidatos: number) {
+    respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
+    respuestas.set('prospecto', [{
+      data: Array.from({ length: candidatos }, (_, i) => ({ id: `pr-${i}`, vendedor: null })), error: null,
+    }]);
+  }
+
+  it('un candidato que se pasa del presupuesto CORTA el lote — no se despacha el siguiente', async () => {
+    const reloj = relojFalso(1_000_000);
+    // Cada llamada al modelo cuesta 25 s, como las tres medidas el 28-ago.
+    redactar.mockImplementation(async () => {
+      reloj.avanzar(25_000);
+      return { piezaId: 'p', asunto: 'x', aviso: null, costoUsd: 0.001 };
+    });
+    conRedactorHabilitado(10);
+
+    // 60 s de vuelta: caben dos candidatos, no diez.
+    const r = await correrRunner(undefined, TENANT, { venceEn: reloj.leer() + 60_000 });
+
+    expect(redactar).toHaveBeenCalledTimes(3);   // el tercero arranca en el s 50
+    expect(r.agentes[0]).toMatchObject({ agente: 'redactor', resultado: 'corrio', piezas: 3 });
+    // Y LO DICE: los que no alcanzaron turno están contados en el motivo.
+    expect(r.agentes[0].motivo).toMatch(/cortó el lote con 7 candidato\(s\) sin turno/);
+  });
+
+  it('el lote cortado sube a `saltadosPorReloj` — si no, el latido diría `ok` sobre una pasada agonizante', async () => {
+    const reloj = relojFalso(1_000_000);
+    redactar.mockImplementation(async () => {
+      reloj.avanzar(25_000);
+      return { piezaId: 'p', asunto: 'x', aviso: null, costoUsd: 0.001 };
+    });
+    conRedactorHabilitado(10);
+    const r = await correrRunner(undefined, TENANT, { venceEn: reloj.leer() + 30_000 });
+    // El Redactor es el ÚNICO agente de la vuelta: con el bug, `saltadosPorReloj`
+    // salía vacía y la ruta escribía `'ok'`.
+    expect(r.saltadosPorReloj).toEqual(['redactor']);
+  });
+
+  it('un FALLO del modelo también consume reloj: el lote corta aunque no fabrique nada', async () => {
+    const reloj = relojFalso(1_000_000);
+    // El modo de falla real del 28-ago: la salida del modelo no se pudo leer.
+    // Con el bug esto era `saltados += 1` y seguir, veinte veces, 500 s.
+    redactar.mockImplementation(async () => {
+      reloj.avanzar(25_000);
+      throw new Error('El Redactor devolvió una salida sin variante A legible — no se encoló nada. Reintenta.');
+    });
+    conRedactorHabilitado(10);
+    const r = await correrRunner(undefined, TENANT, { venceEn: reloj.leer() + 60_000 });
+    expect(redactar).toHaveBeenCalledTimes(3);
+    expect(r.agentes[0]).toMatchObject({ resultado: 'corrio', piezas: 0, saltados: 3 });
+    expect(r.saltadosPorReloj).toEqual(['redactor']);
+  });
+
+  it('una vuelta que cabe entera NO reporta corte y el lote no lleva motivo', async () => {
+    conRedactorHabilitado(6);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.saltadosPorReloj).toEqual([]);
+    expect(r.agentes[0].motivo).toBeUndefined();
+    expect(r.agentes[0]).toMatchObject({ resultado: 'corrio', piezas: 5 });
+  });
+
+  // ── LA SOBRE-LECTURA ×4 ──────────────────────────────────────────────────
+  it('el overfetch es ×2, no ×4: 10 candidatos para 5 piezas', () => {
+    const fuente = readFileSync('src/lib/likida/agentes/runner.ts', 'utf8');
+    expect(fuente).toMatch(/\.limit\(tope \* 2\), 'runner\.candidatos'/);
+    expect(fuente).not.toMatch(/\.limit\(tope \* 4\)/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL TECHO ESTRUCTURAL — `conRelojDuro` (c7-1). Los relojes de arriba son
+// COOPERATIVOS: funcionan porque alguien se acordó de preguntar. Esto funciona
+// aunque nadie se acuerde, que es lo que hace falta para que el motor número
+// once no pueda repetir el 25 y el 28 de agosto.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el reloj DURO de la vuelta', () => {
+  it('con la vuelta colgada, devuelve el parte de lo que alcanzó a pasar', async () => {
+    const avance = nuevoAvanceRunner();
+    avance.agentes.push({ agente: 'kpi_whatsapp', resultado: 'corrio', piezas: 1 });
+    avance.enVuelo = 'redactor';
+    avance.pendientes = ['enriquecedor', 'sdr'];
+
+    const r = await conRelojDuro(
+      new Promise<ResultadoRunner>(() => {}),   // el motor jamás vuelve
+      Date.now() + 20,
+      () => cerrarPorRelojDuro(avance),
+    );
+
+    expect(r.cortadaPorRelojDuro).toBe(true);
+    expect(r.saltadosPorReloj).toEqual(['redactor', 'enriquecedor', 'sdr']);
+    expect(r.agentes.find((a) => a.agente === 'redactor')?.motivo).toMatch(/CORTADO EN VUELO/);
+    expect(r.agentes.find((a) => a.agente === 'kpi_whatsapp')?.resultado).toBe('corrio');
+  });
+
+  it('con la vuelta puntual, el reloj duro NO se mete: devuelve el resultado tal cual', async () => {
+    const propio: ResultadoRunner = { apagadoGlobal: false, agentes: [{ agente: 'talento', resultado: 'corrio' }], saltadosPorReloj: [] };
+    const r = await conRelojDuro(
+      Promise.resolve(propio),
+      Date.now() + 60_000,
+      () => { throw new Error('no debió cortar'); },
+    );
+    expect(r).toBe(propio);
+    expect(r.cortadaPorRelojDuro).toBeUndefined();
+  });
+
+  it('un `venceEn` ya vencido corta de inmediato en vez de esperar', async () => {
+    const avance = nuevoAvanceRunner();
+    avance.pendientes = ['redactor'];
+    const r = await conRelojDuro(new Promise<ResultadoRunner>(() => {}), Date.now() - 5_000, () => cerrarPorRelojDuro(avance));
+    expect(r.saltadosPorReloj).toEqual(['redactor']);
+  });
+
+  it('no nombra dos veces al mismo agente: `enVuelo` que ya se reportó no se duplica', () => {
+    const avance = nuevoAvanceRunner();
+    avance.agentes.push({ agente: 'redactor', resultado: 'saltado', motivo: 'apagado desde Observabilidad/⌘K' });
+    avance.enVuelo = 'redactor';          // el corte cayó entre dos iteraciones
+    avance.pendientes = ['sdr'];
+    const r = cerrarPorRelojDuro(avance);
+    expect(r.agentes.filter((a) => a.agente === 'redactor')).toHaveLength(1);
+    expect(r.saltadosPorReloj).toEqual(['sdr']);
+  });
+
+  it('la vuelta llena el parte en vivo conforme despacha — sin él el corte sería mudo', async () => {
+    const avance = nuevoAvanceRunner();
+    respuestas.set('agente_definicion', [{ data: [
+      { id: 'onboarding_cliente', presupuesto_dia_usd: 0.1 },
+      { id: 'exito_cliente', presupuesto_dia_usd: 0.1 },
+    ], error: null }]);
+    // El primer motor mira el parte JUSTO cuando está en vuelo: es el instante
+    // exacto en el que el reloj duro leería, si cortara ahí.
+    const visto: Array<{ enVuelo: string | null; pendientes: string[] }> = [];
+    correrExito.mockImplementation(async () => {
+      visto.push({ enVuelo: avance.enVuelo, pendientes: [...avance.pendientes] });
+      return { resultado: 'corrio' as const, piezas: 1, costoUsd: 0 };
+    });
+
+    await correrRunner(undefined, TENANT, { avance });
+
+    expect(visto[0]).toEqual({ enVuelo: 'onboarding_cliente', pendientes: ['exito_cliente'] });
+    expect(visto[1]).toEqual({ enVuelo: 'exito_cliente', pendientes: [] });
+    // Terminada la vuelta, no queda nadie en vuelo: un corte tardío no
+    // acusaría de «cortado en vuelo» a un agente que sí terminó.
+    expect(avance.enVuelo).toBeNull();
+    expect(avance.agentes).toHaveLength(2);
   });
 });
 
