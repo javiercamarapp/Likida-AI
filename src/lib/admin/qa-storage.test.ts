@@ -197,7 +197,9 @@ const corrida = (p: Partial<CorridaQA>): CorridaQA => ({
   estado: 'ok', motivo: null, tenantId: null, tenantNombre: 'ZZZ QA',
   creadaEn: new Date().toISOString(), inicio: null, fin: null,
   latidoEn: new Date().toISOString(), pasos: [], costoUsdTotal: 0,
-  veredicto: null, turnos: [], pdfs: [], limpieza: null, ...p,
+  veredicto: null, turnos: [], pdfs: [], limpieza: null,
+  fase: 'terminada', corte: null, pasadas: 0, pasadaEnVuelo: null, memoria: null,
+  avance: null, ...p,
 });
 
 beforeEach(() => {

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { leerManifiesto, listarCorridas, gastoHoyUsd, firmarRuta, BUCKET_QA_FOTOS } from '@/lib/admin/qa-storage';
 import { TOPE_DIA_USD } from '@/lib/admin/qa-tipos';
+import { TOPE_CORRIDA_USD } from '../../../../scripts/qa-agentes/config.qa';
 import { PantallaQa } from './pantalla';
 import type { FotoConUrl } from './lanzar-form';
 
@@ -43,6 +44,7 @@ export default async function QaPage() {
       gastoHoy={gasto.ok ? gasto.datos : null}
       gastoError={gasto.ok ? null : gasto.error}
       topeDiaUsd={TOPE_DIA_USD}
+      topeCorridaUsd={TOPE_CORRIDA_USD}
     />
   );
 }

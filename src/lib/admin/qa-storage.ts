@@ -32,7 +32,12 @@
 import { hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { CorridaQA, FotoBanco, PasoQA, EstadoCorrida, EscenarioId } from './qa-tipos';
+import {
+  resumirAvance, PASADA_MUERTA_MS,
+  type CorridaQA, type FotoBanco, type PasoQA, type EstadoCorrida, type EscenarioId,
+  type FotoDeCorrida, type EstadoFotoCorrida, type MemoriaCorrida, type Carril,
+  type FaseCorrida, type CorteCorrida,
+} from './qa-tipos';
 
 export const BUCKET_QA_FOTOS = 'qa-fotos';
 export const BUCKET_QA_EVIDENCIA = 'qa-evidencia';
@@ -115,6 +120,35 @@ interface FilaCorrida {
   creada_en: string; inicio: string | null; fin: string | null; latido_en: string;
   costo_usd_total: number | string; veredicto: unknown; turnos: unknown;
   pdfs: string[] | null; limpieza: string | null;
+  // Carril completo (mig. 0240). Se leen con `??` porque una base que todavía
+  // no tiene la 0240 aplicada devuelve la fila sin estas llaves, y el panel
+  // tiene que seguir pintando el historial viejo en vez de reventar.
+  fase?: string | null; corte?: string | null; pasadas?: number | string | null;
+  pasada_en_vuelo?: string | null; memoria?: unknown;
+}
+
+interface FilaFotoCorrida {
+  corrida_id: string; foto_id: string; n: number; estado: string; pasada: number;
+  detalle: string | null; costo_usd: number | string | null;
+  inicio: string; fin: string | null;
+}
+
+function fotoDeCorridaDeFila(f: FilaFotoCorrida): FotoDeCorrida {
+  // `costo_usd` NULL = NO SE MIDIÓ. `Number(null)` es 0 y `Number(undefined)`
+  // es NaN: las dos conversiones automáticas convertirían "no se sabe" en una
+  // afirmación. Se comprueba a mano, a propósito.
+  const crudo = f.costo_usd;
+  const costoUsd = crudo === null || crudo === undefined ? null : Number(crudo);
+  return {
+    fotoId: f.foto_id,
+    n: Number(f.n),
+    estado: f.estado as EstadoFotoCorrida,
+    pasada: Number(f.pasada),
+    detalle: f.detalle,
+    costoUsd: costoUsd !== null && Number.isFinite(costoUsd) ? costoUsd : null,
+    inicio: f.inicio,
+    fin: f.fin,
+  };
 }
 
 interface FilaPaso {
@@ -133,12 +167,15 @@ function pasoDeFila(p: FilaPaso): PasoQA {
   };
 }
 
-function corridaDeFilas(c: FilaCorrida, pasos: FilaPaso[]): CorridaQA {
+function corridaDeFilas(c: FilaCorrida, pasos: FilaPaso[], fotos: FilaFotoCorrida[] = []): CorridaQA {
+  const carril = (c.carril ?? 'rapido') as Carril;
+  const parametros = c.parametros as CorridaQA['parametros'];
+  const mias = fotos.filter((f) => f.corrida_id === c.id).sort((a, b) => Number(a.n) - Number(b.n));
   return {
     id: c.id,
     escenario: c.escenario as EscenarioId,
-    carril: c.carril as CorridaQA['carril'],
-    parametros: c.parametros as CorridaQA['parametros'],
+    carril,
+    parametros,
     estado: c.estado as EstadoCorrida,
     motivo: c.motivo,
     tenantId: c.tenant_id,
@@ -153,6 +190,18 @@ function corridaDeFilas(c: FilaCorrida, pasos: FilaPaso[]): CorridaQA {
     turnos: (Array.isArray(c.turnos) ? c.turnos : []) as CorridaQA['turnos'],
     pdfs: c.pdfs ?? [],
     limpieza: c.limpieza,
+    fase: (c.fase ?? 'siembra') as FaseCorrida,
+    corte: (c.corte ?? null) as CorteCorrida | null,
+    pasadas: Number(c.pasadas ?? 0),
+    pasadaEnVuelo: c.pasada_en_vuelo ?? null,
+    memoria: (c.memoria ?? null) as MemoriaCorrida | null,
+    // `null` en el carril rápido A PROPÓSITO: ahí no se escriben filas de
+    // `qa_corrida_foto`, así que un avance de 0/N sobre una corrida rápida que
+    // sí procesó sus diez fotos sería una cifra inventada. La pantalla enseña
+    // el bloque de avance sólo cuando hay avance que enseñar.
+    avance: carril === 'completo'
+      ? resumirAvance(parametros?.fotoIds ?? [], mias.map(fotoDeCorridaDeFila))
+      : null,
   };
 }
 
@@ -339,6 +388,14 @@ export async function guardarCorrida(db: SupabaseClient, corrida: CorridaQA): Pr
     turnos: corrida.turnos,
     pdfs: corrida.pdfs,
     limpieza: corrida.limpieza,
+    fase: corrida.fase,
+    corte: corrida.corte,
+    pasadas: corrida.pasadas,
+    // `pasada_en_vuelo` NO se escribe aquí: su dueño es el UPDATE condicional
+    // de `tomarPasada`/`soltarPasada`, que es lo que arbitra la carrera. Si
+    // este upsert la pisara, dos pasadas simultáneas podrían quedarse las dos
+    // con la llave — o sea, exactamente el candado convertido en adorno.
+    memoria: corrida.memoria,
   };
   const { error } = await db.from('qa_corrida').upsert(fila, { onConflict: 'id' });
   if (error) throw new Error(`no se pudo guardar la corrida ${corrida.id}: ${error.message}`);
@@ -360,14 +417,26 @@ export async function guardarCorrida(db: SupabaseClient, corrida: CorridaQA): Pr
 }
 
 const COLS_CORRIDA =
-  'id, escenario, carril, parametros, estado, motivo, tenant_id, tenant_nombre, creada_en, inicio, fin, latido_en, costo_usd_total, veredicto, turnos, pdfs, limpieza';
+  'id, escenario, carril, parametros, estado, motivo, tenant_id, tenant_nombre, creada_en, inicio, fin, latido_en, costo_usd_total, veredicto, turnos, pdfs, limpieza, fase, corte, pasadas, pasada_en_vuelo, memoria';
 const COLS_PASO = 'corrida_id, n, nombre, estado, costo_usd, detalle, inicio, fin';
+const COLS_FOTO_CORRIDA = 'corrida_id, foto_id, n, estado, pasada, detalle, costo_usd, inicio, fin';
 
 async function pasosDe(db: SupabaseClient, ids: string[]): Promise<Resultado<FilaPaso[]>> {
   if (ids.length === 0) return { ok: true, datos: [] };
   const { data, error } = await db.from('qa_corrida_paso').select(COLS_PASO).in('corrida_id', ids);
   if (error) return { ok: false, error: tabla(error, 'no se pudieron leer los pasos') };
   return { ok: true, datos: (data ?? []) as FilaPaso[] };
+}
+
+/** Las filas de avance (`qa_corrida_foto`) de las corridas dadas. Un fallo se
+ *  DICE, nunca se lee como "esta corrida no ha procesado nada": esa confusión
+ *  es la que haría que la pantalla enseñara 0 de 91 sobre una corrida que va
+ *  en la 47. */
+async function fotosDe(db: SupabaseClient, ids: string[]): Promise<Resultado<FilaFotoCorrida[]>> {
+  if (ids.length === 0) return { ok: true, datos: [] };
+  const { data, error } = await db.from('qa_corrida_foto').select(COLS_FOTO_CORRIDA).in('corrida_id', ids);
+  if (error) return { ok: false, error: tabla(error, 'no se pudo leer el avance foto por foto') };
+  return { ok: true, datos: (data ?? []) as FilaFotoCorrida[] };
 }
 
 export async function leerCorrida(db: SupabaseClient, id: string): Promise<Resultado<CorridaQA | null>> {
@@ -380,7 +449,9 @@ export async function leerCorrida(db: SupabaseClient, id: string): Promise<Resul
     if (filas.length === 0) return { ok: true, datos: null };
     const pasos = await pasosDe(db, [id]);
     if (!pasos.ok) return pasos;
-    return { ok: true, datos: corridaDeFilas(filas[0], pasos.datos) };
+    const fotos = filas[0].carril === 'completo' ? await fotosDe(db, [id]) : { ok: true as const, datos: [] };
+    if (!fotos.ok) return fotos;
+    return { ok: true, datos: corridaDeFilas(filas[0], pasos.datos, fotos.datos) };
   } catch (e) {
     return { ok: false, error: `no se pudo leer la corrida: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -396,7 +467,11 @@ export async function listarCorridas(db: SupabaseClient, limite = 60): Promise<R
     const filas = (data ?? []) as FilaCorrida[];
     const pasos = await pasosDe(db, filas.map((c) => c.id));
     if (!pasos.ok) return pasos;
-    return { ok: true, datos: filas.map((c) => corridaDeFilas(c, pasos.datos)) };
+    // Sólo las del carril completo: pedir el avance de 60 corridas rápidas
+    // sería traer filas que no existen para pintar un bloque que no se pinta.
+    const fotos = await fotosDe(db, filas.filter((c) => c.carril === 'completo').map((c) => c.id));
+    if (!fotos.ok) return fotos;
+    return { ok: true, datos: filas.map((c) => corridaDeFilas(c, pasos.datos, fotos.datos)) };
   } catch (e) {
     return { ok: false, error: `no se pudo listar corridas: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -433,5 +508,163 @@ export async function gastoHoyUsd(db: SupabaseClient): Promise<Resultado<number>
     return { ok: true, datos: Math.round(total * 10_000) / 10_000 };
   } catch (e) {
     return { ok: false, error: `no se pudo leer el gasto del día: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL CARRIL COMPLETO — la llave de la pasada y el avance foto por foto
+// (mig. 0240).
+//
+// Todo lo de aquí abajo existe para que una corrida de 91 fotos pueda avanzar
+// en varias invocaciones sin repetir trabajo y sin gastar dos veces. Las dos
+// garantías que lo sostienen son de la BASE, no de este archivo:
+//
+//   · `tomarPasada` es un UPDATE condicional. Dos invocaciones simultáneas
+//     piden la llave; Postgres serializa los UPDATE y sólo uno ve una fila
+//     devuelta. El otro lee cero filas y se va SIN gastar un peso. Un
+//     `if (corrida.pasadaEnVuelo === null)` leído antes sería una carrera.
+//   · `tomarFoto` es un INSERT contra la PK (corrida_id, foto_id). El segundo
+//     intento rebota con 23505 y esta capa lo traduce a "esa foto ya tiene
+//     dueño" — que es la verdad, no un error.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Resultado de pedir la llave de la corrida para correr una pasada. */
+export type TomaDePasada =
+  | { ok: true; tomada: true; pasada: number }
+  /** No se pudo tomar y se DICE por qué: otra pasada la tiene, o la corrida ya
+   *  terminó. Nunca un `false` mudo. */
+  | { ok: true; tomada: false; motivo: string }
+  | { ok: false; error: string };
+
+/**
+ * Toma la corrida para una pasada nueva. Devuelve el número de pasada (1-based)
+ * que le tocó.
+ *
+ * Se reclama una pasada ajena SÓLO cuando lleva `PASADA_MUERTA_MS` sin dar
+ * señales (`latido_en`), o sea el `maxDuration` completo de la ruta: antes de
+ * eso la otra pasada todavía puede estar viva y quitarle la llave sería
+ * ponerse a mandar las mismas fotos en paralelo. Aun reclamando de más, la PK
+ * de `qa_corrida_foto` impide que eso cueste dinero — pero el candado barato
+ * va primero.
+ */
+export async function tomarPasada(
+  db: SupabaseClient, corridaId: string, pasadaId: string, ahora: Date = new Date(),
+): Promise<TomaDePasada> {
+  try {
+    const limite = new Date(ahora.getTime() - PASADA_MUERTA_MS).toISOString();
+    const { data, error } = await db.from('qa_corrida')
+      .update({ pasada_en_vuelo: pasadaId, latido_en: ahora.toISOString() })
+      .eq('id', corridaId)
+      .in('estado', ['pendiente', 'corriendo'])
+      .or(`pasada_en_vuelo.is.null,latido_en.lt.${limite}`)
+      .select('pasadas, estado');
+    if (error) return { ok: false, error: tabla(error, 'no se pudo tomar la pasada') };
+    const filas = (data ?? []) as Array<{ pasadas: number | string | null }>;
+    if (filas.length === 0) {
+      // Cero filas tiene DOS causas y no se pueden distinguir desde aquí sin
+      // una segunda lectura; se dicen las dos en vez de elegir una al azar.
+      return {
+        ok: true, tomada: false,
+        motivo: 'la corrida no está libre: o ya terminó, o otra pasada la tiene tomada y todavía da señales',
+      };
+    }
+    return { ok: true, tomada: true, pasada: Number(filas[0].pasadas ?? 0) + 1 };
+  } catch (e) {
+    return { ok: false, error: `no se pudo tomar la pasada: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+/** EL LATIDO DE UNA PASADA VIVA no tiene función propia a propósito: lo da
+ *  `guardarCorrida`, que refresca `latido_en` en cada apertura y cierre de
+ *  paso — o sea, al menos dos veces por foto. Un latido aparte sería un
+ *  segundo escritor del mismo campo que podría quedarse atrás del real.
+ *
+ *  Suelta la llave — SÓLO si sigue siendo nuestra. El `eq('pasada_en_vuelo')`
+ *  evita que una pasada que ya fue dada por muerta le quite la llave a la que
+ *  la relevó (el fencing de siempre: quien llega tarde no manda). */
+export async function soltarPasada(db: SupabaseClient, corridaId: string, pasadaId: string): Promise<void> {
+  const { error } = await db.from('qa_corrida')
+    .update({ pasada_en_vuelo: null, latido_en: new Date().toISOString() })
+    .eq('id', corridaId).eq('pasada_en_vuelo', pasadaId);
+  if (error) throw new Error(`no se pudo soltar la pasada ${pasadaId}: ${error.message}`);
+}
+
+export type TomaDeFoto =
+  | { ok: true; tomada: true }
+  /** Ya tiene dueño (23505). No es un error: es la PK haciendo su trabajo. */
+  | { ok: true; tomada: false }
+  | { ok: false; error: string };
+
+/** Toma UNA foto para esta pasada, dejando la marca 'corriendo' ANTES de
+ *  mandarla. El orden importa: si se marcara después, una invocación que
+ *  muriera a media foto no dejaría rastro y la siguiente pasada la mandaría de
+ *  nuevo — el mismo ticket, pagado dos veces. */
+export async function tomarFoto(
+  db: SupabaseClient, corridaId: string, fotoId: string, n: number, pasada: number,
+): Promise<TomaDeFoto> {
+  try {
+    const { error } = await db.from('qa_corrida_foto').insert({
+      corrida_id: corridaId, foto_id: fotoId, n, pasada,
+      estado: 'corriendo', inicio: new Date().toISOString(),
+      // `costo_usd` se deja fuera: la columna es NULL-able y NULL significa
+      // "no medido". Escribir 0 aquí diría que la foto ya costó cero.
+    });
+    if (!error) return { ok: true, tomada: true };
+    if (esDuplicado(error)) return { ok: true, tomada: false };
+    return { ok: false, error: tabla(error, `no se pudo tomar la foto ${fotoId}`) };
+  } catch (e) {
+    return { ok: false, error: `no se pudo tomar la foto ${fotoId}: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+/** Cierra la fila de una foto con lo que de verdad pasó. `costoUsd` puede ser
+ *  `null` y entonces se guarda NULL: no se pudo medir ≠ costó cero. */
+export async function cerrarFoto(
+  db: SupabaseClient, corridaId: string, fotoId: string,
+  estado: Exclude<EstadoFotoCorrida, 'corriendo'>, costoUsd: number | null, detalle?: string | null,
+): Promise<void> {
+  const { error } = await db.from('qa_corrida_foto')
+    .update({ estado, costo_usd: costoUsd, detalle: detalle ?? null, fin: new Date().toISOString() })
+    .eq('corrida_id', corridaId).eq('foto_id', fotoId);
+  if (error) throw new Error(`no se pudo cerrar la foto ${fotoId}: ${error.message}`);
+}
+
+/** El avance de UNA corrida, en orden. */
+export async function leerFotosDeCorrida(db: SupabaseClient, corridaId: string): Promise<Resultado<FotoDeCorrida[]>> {
+  const r = await fotosDe(db, [corridaId]);
+  if (!r.ok) return r;
+  return {
+    ok: true,
+    datos: r.datos.sort((a, b) => Number(a.n) - Number(b.n)).map(fotoDeCorridaDeFila),
+  };
+}
+
+/**
+ * Las fotos que una pasada ANTERIOR dejó en vuelo pasan a 'interrumpida'.
+ *
+ * Ni acierto ni fallo: no se sabe si el `processInbound` llegó a correr, y
+ * afirmar cualquiera de las dos cosas sería inventar. Tampoco se reintentan —
+ * eso costaría otra llamada al modelo por una foto que puede estar ya
+ * procesada, y el dedup de producción (`uq_gasto_img_hash`) la rebotaría
+ * gastando de todos modos. Se dice, se cuenta aparte, y Javier decide.
+ *
+ * Devuelve cuántas encontró.
+ */
+export async function marcarInterrumpidas(
+  db: SupabaseClient, corridaId: string, pasadaActual: number,
+): Promise<Resultado<number>> {
+  try {
+    const { data, error } = await db.from('qa_corrida_foto')
+      .update({
+        estado: 'interrumpida',
+        detalle: `una pasada anterior murió con esta foto en vuelo — no se sabe si llegó a procesarse. No se reintenta (costaría otra llamada al modelo por algo que puede estar hecho) y NO se cuenta ni como acierto ni como fallo.`,
+        fin: new Date().toISOString(),
+      })
+      .eq('corrida_id', corridaId).eq('estado', 'corriendo').lt('pasada', pasadaActual)
+      .select('foto_id');
+    if (error) return { ok: false, error: tabla(error, 'no se pudieron marcar las fotos interrumpidas') };
+    return { ok: true, datos: (data ?? []).length };
+  } catch (e) {
+    return { ok: false, error: `no se pudieron marcar las fotos interrumpidas: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
