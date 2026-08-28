@@ -3,7 +3,6 @@ import { registrarAdaptador, portalesAutomatizados, type AdaptadorPortal, type M
 import { COMERCIOS, type Comercio } from '../comercios';
 import { registrarCapufe, revisarReceptor, type DatosReceptorCapufe, type OpcionesCapufe } from './capufe';
 import { crearPilotoVision } from './piloto_vision';
-import type { ValoresCredencial } from '../../conectores/tipos';
 import type { FabricaDePagina } from './playwright_base';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -98,12 +97,20 @@ export interface OpcionesRegistro {
   /** Ajustes por portal, para cuando uno resulte distinto en campo. */
   capufe?: Omit<Partial<OpcionesCapufe>, 'abrirPagina' | 'receptor'>;
   /**
-   * Las cuentas de portal que ESTA flota compartió, descifradas
-   * (`credencialesDePortales`). Solo las mira el piloto de visión: un portal
-   * con cuenta y sin credencial aquí no se registra, y el ticket va con el
-   * encargado como siempre.
+   * LOS PORTALES CUYA SESIÓN YA ESTÁ VIVA en el navegador de este lote.
+   *
+   * Sustituye a lo que había hasta el 27-ago-2026 (`cuentas`: las credenciales
+   * DESCIFRADAS que el piloto tecleaba en el formulario de login). Ya no se
+   * descifra ninguna contraseña para facturar: lo que abre la puerta es la
+   * sesión que una persona inició, restaurada en el contexto de Playwright
+   * (`SesionNavegador.abrir({ storageState })`).
+   *
+   * Un portal con cuenta y SIN sesión aquí no se registra: el ticket va con el
+   * encargado como siempre, y la pantalla dice «sin vincular» con su botón de
+   * «Vincular ahora». Es el mismo comportamiento de antes para el ticket, con
+   * la diferencia de que ahora se puede arreglar sin darnos una contraseña.
    */
-  cuentas?: ReadonlyMap<string, ValoresCredencial>;
+  sesiones?: ReadonlySet<string>;
 }
 
 export interface ResultadoRegistro {
@@ -242,17 +249,34 @@ export function registrarPortales(op: OpcionesRegistro): ResultadoRegistro {
         ESTADO.set(marca(tenantId, comercio.clave), 'centinela');
         continue;
       }
-      const credencial = op.cuentas?.get(comercio.clave) ?? null;
-      if (comercio.requiereCuenta && !credencial) {
-        // NO es un problema: es el estado normal de un portal cuya cuenta no
-        // se ha compartido. `enrutar` lo manda con el encargado, que es el
+      const conSesion = op.sesiones?.has(comercio.clave) === true;
+      if (comercio.requiereCuenta && !conSesion) {
+        // NO es un problema: es el estado normal de un portal que nadie ha
+        // vinculado todavía. `enrutar` lo manda con el encargado, que es el
         // camino que siempre funcionó. Ni adaptador ni centinela.
-        ESTADO.delete(marca(tenantId, comercio.clave));
+        //
+        // Hasta el 27-ago-2026 la condición era «no hay credencial en el
+        // cofre», y con credencial el piloto entraba TECLEANDO la contraseña.
+        // Ese camino se retiró entero: ahora lo que habilita el portal es la
+        // SESIÓN que abrió una persona, no un secreto que Likida guarde y
+        // escriba. Una flota con credencial guardada y sin sesión cae aquí, y
+        // la pantalla le ofrece «Vincular ahora» — no se degrada en silencio a
+        // teclear la contraseña.
+        //
+        // SE MARCA COMO CENTINELA, NO SE BORRA LA MARCA. Aquí había un
+        // `ESTADO.delete`, y era correcto solo en un proceso frío: en una
+        // función CALIENTE, `olvidarPortales` del lote anterior ya dejó un
+        // adaptador centinela puesto para este comercio, así que borrar la
+        // marca hacía que `portalesVivos()` lo contara como OPERABLE — o sea,
+        // la pantalla de Conexiones afirmando "N portales operables" incluyendo
+        // uno que no factura nada.
+        ESTADO.set(marca(tenantId, comercio.clave), 'centinela');
         continue;
       }
       registrarAdaptador(tenantId, crearPilotoVision({
         tenantId,
         comercio,
+        arrancoConSesion: conSesion,
         // Campo por campo, no spread: el tenantId no viaja dentro del receptor.
         receptor: {
           rfc: op.flota.rfc,
@@ -263,7 +287,6 @@ export function registrarPortales(op: OpcionesRegistro): ResultadoRegistro {
           correo: op.flota.correo,
         },
         abrirPagina: op.abrirPagina,
-        credencial,
       }));
       ESTADO.set(marca(tenantId, comercio.clave), 'vivo');
       registrados.push(comercio.clave);

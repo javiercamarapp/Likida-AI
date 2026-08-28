@@ -7,7 +7,7 @@ import { logger } from '@/lib/logger';
 import type { AdaptadorPortal, ModoAgente, ResultadoAgente } from '../agente';
 import type { CampoListo } from '../pendientes';
 import type { Comercio } from '../comercios';
-import type { ValoresCredencial } from '../../conectores/tipos';
+import { clasificarFallo, pantallaDeLogin } from '../vinculo_senales';
 import type { FabricaDePagina, InventarioPagina, PaginaConInventario, PaginaPortal } from './playwright_base';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -41,12 +41,29 @@ import type { FabricaDePagina, InventarioPagina, PaginaConInventario, PaginaPort
 //
 // 2. CAPTCHA = PERSONA. Si el inventario trae señales de captcha, se devuelve
 //    `requiereCaptcha: true` y el ticket sale por el camino de siempre (fuera
-//    de la cola, aviso al encargado). No se rodea, no se reintenta.
+//    de la cola, aviso al encargado). No se rodea, no se reintenta. El porqué,
+//    entero, en el bloque CAPTCHA de más abajo.
 //
-// 3. LA CONTRASEÑA NO VIAJA AL MODELO. Cuando hay cuenta compartida, el
-//    modelo recibe los marcadores «USUARIO» y «CONTRASEÑA» y decide DÓNDE
-//    van; el valor real lo sustituye este código, localmente, al ejecutar.
-//    Al modelo, al log y a `capturado` solo les llega el marcador.
+// 3. EL PILOTO NO TECLEA CONTRASEÑAS. NI EL MODELO NI ESTE CÓDIGO.
+//
+//    Hasta el 27-ago-2026 esta regla decía otra cosa: el modelo recibía los
+//    marcadores «USUARIO» y «CONTRASEÑA» y este archivo los SUSTITUÍA por la
+//    credencial real sacada del cofre antes de escribirla en el formulario.
+//    El secreto no viajaba al modelo —eso era cierto— pero sí se descifraba
+//    en cada corrida, se tecleaba en un portal ajeno y vivía en memoria de la
+//    función mientras durara el lote. Eso rompe la regla dura de la casa
+//    («Likida nunca maneja contraseñas en claro») y se retiró.
+//
+//    En su lugar, el MODO ASISTIDO: cuando la pantalla pide entrar, la
+//    corrida se detiene con `requiereVinculacion` y el contralor hace el
+//    login él mismo UNA vez. De ahí sale el `storageState` que
+//    `sesion_portal.ts` guarda cifrado, y las corridas siguientes entran
+//    solas con esa sesión. La persona abre la puerta; el robot hace lo
+//    repetitivo.
+//
+//    LA GUARDA ES DE CÓDIGO, NO DE PROMPT: escribir en un campo
+//    `type="password"` está prohibido aquí abajo pase lo que pase, aunque el
+//    modelo lo pida y aunque el valor venga en claro en la acción.
 //
 // 4. UN SELECTOR SALE DEL INVENTARIO, no de la imaginación. El modelo ve la
 //    captura Y la lista real de campos/botones con sus id/name; una acción
@@ -55,13 +72,33 @@ import type { FabricaDePagina, InventarioPagina, PaginaConInventario, PaginaPort
 //    antes de ejecutarla.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CAPTCHA — EL LÍMITE, ESCRITO DONDE SE APLICA.
+//
+// LIKIDA NO RESUELVE NI BURLA CAPTCHAS. Ni con un servicio de terceros, ni
+// con visión, ni "probando a ver". Dos razones, y las dos son del cliente:
+//
+//   1. LOS TÉRMINOS DEL PORTAL. Un reCAPTCHA es una declaración explícita de
+//      que ese acceso es para personas. Rodearlo es operar contra los
+//      términos del servicio de un tercero —con la cuenta del cliente—.
+//   2. QUIÉN PAGA EL RIESGO. La cuenta que el portal suspende no es la de
+//      Likida: es la del cliente, y con ella se le cae la facturación de todo
+//      el mes. Un ahorro de treinta segundos no vale eso.
+//
+// LO QUE SÍ SE HACE: la corrida se detiene con `requiereCaptcha` (que es
+// `requiere_humano` visto desde el enrutador), el ticket sale de la cola
+// automática y el contralor recibe la pantalla con TODO prellenado —portal,
+// campos leídos, monto, folio— para resolverlo en segundos. La corrida
+// siguiente continúa por donde iba.
+//
+// Y por eso mismo el captcha del LOGIN dejó de doler: se paga una vez por
+// vinculación (la persona entra, la sesión se guarda cifrada) en vez de una
+// vez por ticket.
+// ═══════════════════════════════════════════════════════════════════════════
+
 /** Techo de pasos por sesión. Un formulario típico son 6-10 acciones; llegar
  *  aquí es estar dando vueltas, y cada vuelta cuesta una llamada de visión. */
 export const PASOS_MAXIMOS = 14;
-
-/** Los marcadores que el modelo usa en lugar de la credencial real. */
-export const MARCA_USUARIO = '«USUARIO»';
-export const MARCA_CONTRASENA = '«CONTRASEÑA»';
 
 /** Lo que el portal exige saber del receptor. Mismos campos que todo adaptador. */
 export interface ReceptorPiloto {
@@ -97,8 +134,21 @@ export interface OpcionesPiloto {
   comercio: Comercio;
   receptor: ReceptorPiloto;
   abrirPagina: FabricaDePagina;
-  /** La cuenta compartida del portal, descifrada, o `null` si no la hay. */
-  credencial: ValoresCredencial | null;
+  /**
+   * ¿El navegador de este lote arrancó con la sesión guardada de este portal?
+   *
+   * Es lo único que separa «se te venció la sesión» de «nunca has vinculado
+   * este portal»: los dos se ven igual desde la pantalla de login, y mandan al
+   * contralor a leer cosas distintas. Ver `clasificarFallo` en
+   * `vinculo_portal.ts`.
+   */
+  arrancoConSesion?: boolean;
+  /**
+   * OPCIONAL: qué existe SOLO estando dentro de este portal (el nombre de la
+   * cuenta, «Cerrar sesión»). Sin esto, la caducidad se detecta por campo de
+   * contraseña y por la dirección, que es lo que cubre a los portales de hoy.
+   */
+  senaDeAdentro?: string;
 }
 
 /**
@@ -142,13 +192,37 @@ async function volar(op: OpcionesPiloto, campos: CampoListo[], modo: ModoAgente)
     for (let paso = 1; paso <= PASOS_MAXIMOS; paso++) {
       const inv = await pagina.inventario();
 
+      // Regla 3: ¿esta pantalla es la de entrar? Se mira ANTES que nada más
+      // —incluso antes del captcha— porque cuando las dos cosas coinciden (el
+      // login de Megasur trae reCAPTCHA) lo ACCIONABLE es la vinculación: el
+      // contralor entra una vez, resuelve él ese captcha y la sesión queda
+      // guardada. Decir solo "hay captcha" lo mandaría a resolver un muro por
+      // ticket en vez de una vez por portal.
+      const login = pantallaDeLogin(inv, op.senaDeAdentro);
+      if (login) {
+        const fallo = clasificarFallo({ loginVisto: login, arrancoConSesion: op.arrancoConSesion === true });
+        captura = await capturaSegura(pagina);
+        logger.info('piloto.pide_vinculacion', {
+          comercio: op.comercio.clave, clase: fallo?.clase, evidencia: login, paso,
+        });
+        return {
+          modo: modoReal, ok: false, capturado, captura,
+          requiereVinculacion: true,
+          ...(fallo?.clase === 'sesion_caducada' ? { sesionCaducada: true } : {}),
+          // El captcha del login SÍ se declara además: es la razón por la que
+          // esto no lo puede hacer la máquina, y el aviso lo dice tal cual.
+          ...(inv.captcha.length > 0 ? { requiereCaptcha: true } : {}),
+          error: `${op.comercio.nombre} pide iniciar sesión (${login}). ${fallo?.queHacer ?? ''}`.trim(),
+        };
+      }
+
       // Regla 2: el captcha se declara y se sale. También si lo declara el
       // modelo y el DOM no lo enseña (un checkbox de reCAPTCHA en iframe).
       if (inv.captcha.length > 0) {
         captura = await capturaSegura(pagina);
         return {
           modo: modoReal, ok: false, capturado, captura, requiereCaptcha: true,
-          error: `El portal enseña un CAPTCHA (${inv.captcha[0]}), así que lo factura una persona.`,
+          error: `El portal enseña un CAPTCHA (${inv.captcha[0]}), así que lo factura una persona. Likida no resuelve ni burla CAPTCHAs: es el acceso del cliente el que se suspende si alguien lo intenta.`,
         };
       }
 
@@ -183,9 +257,20 @@ async function volar(op: OpcionesPiloto, campos: CampoListo[], modo: ModoAgente)
           terminado = accion;
           break;
         }
+        // La guarda dura de la regla 3: el modelo quiso teclear en un campo de
+        // contraseña. No es "no pude", es "no se hace" — y sale con el mismo
+        // estado declarado que la pantalla de login, porque el arreglo es el
+        // mismo: que entre una persona.
+        if (problema === CONTRASENA_NO) {
+          return {
+            modo: modoReal, ok: false, capturado, captura,
+            requiereVinculacion: true,
+            error: `${op.comercio.nombre} pide una contraseña y Likida no teclea contraseñas. El login lo hace una persona UNA vez desde el panel («Vincular ahora») y la sesión queda guardada cifrada para las corridas siguientes.`,
+          };
+        }
         return { modo: modoReal, ok: false, capturado, captura, error: problema };
       }
-      historial.push(`${paso}. ${accion.tipo} ${accion.selector ?? ''} ${enmascarar(accion.valor ?? '')}`.trim());
+      historial.push(`${paso}. ${accion.tipo} ${accion.selector ?? ''} ${accion.valor ?? ''}`.trim());
     }
 
     if (!terminado && historial.length >= PASOS_MAXIMOS) {
@@ -265,21 +350,34 @@ async function ejecutar(
 
   if (a.valor === null || a.valor === '') return `La acción ${a.tipo} en ${a.selector} vino sin valor.`;
 
-  // Regla 3: los marcadores se sustituyen AQUÍ, y lo que queda en `capturado`
-  // y en el historial es el marcador, jamás el secreto.
-  const { real, registro } = resolverValor(a.valor, op.credencial);
-  if (real === null) {
-    return `La acción usa ${a.valor} pero esta flota no tiene cuenta compartida de ${op.comercio.nombre}. El piloto no inventa credenciales.`;
+  // REGLA 3, LA GUARDA DURA. Un campo `type="password"` no se escribe NUNCA,
+  // venga el valor de donde venga. Se mira el INVENTARIO —lo que la página de
+  // verdad declaró— y no el texto del selector ni la palabra del modelo: un
+  // portal puede llamarle `#txt3` a su campo de contraseña, y el `type` es lo
+  // único que no miente.
+  if (esCampoDeContrasena(a.selector, inv)) {
+    logger.warn('piloto.contrasena_rechazada', { comercio: op.comercio.clave, selector: a.selector, modo });
+    return CONTRASENA_NO;
   }
 
   if (a.tipo === 'seleccionar') {
-    if (typeof pagina.seleccionar === 'function') await pagina.seleccionar(a.selector, real);
-    else await pagina.escribir(a.selector, real);
+    if (typeof pagina.seleccionar === 'function') await pagina.seleccionar(a.selector, a.valor);
+    else await pagina.escribir(a.selector, a.valor);
   } else {
-    await pagina.escribir(a.selector, real);
+    await pagina.escribir(a.selector, a.valor);
   }
-  capturado[a.selector] = registro;
+  capturado[a.selector] = a.valor;
   return null;
+}
+
+/** El código que `volar` reconoce para el rechazo de la regla 3. */
+const CONTRASENA_NO = 'contrasena_no_se_teclea';
+
+/** ¿El selector apunta a un campo que la PÁGINA declaró como contraseña? */
+function esCampoDeContrasena(selector: string, inv: InventarioPagina): boolean {
+  return inv.campos.some(
+    (c) => c.type === 'password' && ((c.id && selector.includes(c.id)) || (c.name && selector.includes(c.name))),
+  );
 }
 
 /** ¿El selector usa un id/name que la página de verdad tiene? */
@@ -289,27 +387,6 @@ function selectorDelInventario(selector: string, inv: InventarioPagina): boolean
     ...inv.botones.flatMap((b) => [b.id, b.name]),
   ].filter(Boolean);
   return señas.some((s) => selector.includes(s));
-}
-
-/** Sustituye los marcadores por la credencial real, localmente. */
-function resolverValor(
-  valor: string,
-  credencial: ValoresCredencial | null,
-): { real: string | null; registro: string } {
-  if (valor.includes(MARCA_USUARIO)) {
-    const u = credencial?.usuario?.trim();
-    return { real: u ? valor.replaceAll(MARCA_USUARIO, u) : null, registro: valor };
-  }
-  if (valor.includes(MARCA_CONTRASENA)) {
-    const c = credencial?.contrasena?.trim();
-    return { real: c ? valor.replaceAll(MARCA_CONTRASENA, c) : null, registro: MARCA_CONTRASENA };
-  }
-  return { real: valor, registro: valor };
-}
-
-/** Lo que se anota en el historial del modelo: jamás un secreto. */
-function enmascarar(valor: string): string {
-  return valor.includes(MARCA_CONTRASENA) ? MARCA_CONTRASENA : valor;
 }
 
 /** Una llamada de visión: pantalla + inventario → la siguiente acción. */
@@ -333,7 +410,7 @@ async function decidir(
     '1. NUNCA aprietes un botón que emita/genere/timbre la factura. Cuando el formulario esté completo y solo falte ese botón, marca el clic con esBotonQueEmite=true (el sistema se detiene ahí y una persona revisa la pantalla). Si no queda nada más que hacer, tipo=terminado.',
     '2. Si ves un CAPTCHA (reCAPTCHA, hCaptcha, Turnstile, una imagen con letras), hayCaptcha=true. No intentes resolverlo.',
     '3. El selector lo armas SOLO con los id/name que trae el inventario: `#id` o `[name="…"]`. Si lo que necesitas no está en el inventario, tipo=no_puedo con el motivo.',
-    `4. Si el portal pide iniciar sesión y abajo dice que hay cuenta compartida, usa los marcadores literales ${MARCA_USUARIO} y ${MARCA_CONTRASENA} como valor — el sistema los sustituye por la credencial real. Jamás inventes un usuario o contraseña.`,
+    '4. NUNCA escribas un usuario ni una contraseña, ni inventados ni de ningún lado: el inicio de sesión de este portal lo hace una persona, no tú. Si la pantalla pide entrar, tipo=no_puedo con motivo "pide iniciar sesión". El sistema rechaza cualquier escritura en un campo de contraseña aunque la pidas.',
     '5. Llena únicamente con los datos de abajo. Un dato que no tengas NO se inventa: tipo=no_puedo y el motivo dice qué falta.',
     '6. No te registres, no des de alta cuentas nuevas, no cambies datos de la cuenta: solo facturar el ticket.',
     '',
@@ -348,9 +425,9 @@ async function decidir(
     'DATOS DEL TICKET (lo que el portal pide de la compra):',
     datosTicket || '· (este portal no pide campos del ticket)',
     '',
-    op.credencial
-      ? `HAY CUENTA COMPARTIDA de este portal: usa ${MARCA_USUARIO} y ${MARCA_CONTRASENA} donde el portal pida entrar.`
-      : 'NO hay cuenta compartida: si el portal exige iniciar sesión para facturar, tipo=no_puedo con motivo "pide cuenta".',
+    op.arrancoConSesion
+      ? 'ESTE NAVEGADOR YA TRAE LA SESIÓN que una persona inició en este portal: deberías estar DENTRO. Si aun así ves la pantalla de entrar, tipo=no_puedo con motivo "la sesión caducó".'
+      : 'ESTE NAVEGADOR NO TIENE SESIÓN en este portal. Si para facturar hay que entrar, tipo=no_puedo con motivo "pide iniciar sesión".',
   ].join('\n');
 
   const usuario = [

@@ -6,8 +6,9 @@ import { armar } from '@/lib/likida/facturacion/pendientes';
 import { getFiscalDeFlota } from '@/lib/likida/facturacion/flota_fiscal';
 import { avisarPorFacturar } from '@/lib/likida/facturacion/avisar';
 import { telefonoJefeDe } from '@/lib/likida/contactos';
-import { conPortales, PORTALES_CONOCIDOS, portalesOperables, pilotoHabilitado } from '@/lib/likida/facturacion/adaptadores/registro';
-import { credencialesDePortales } from '@/lib/likida/facturacion/cuentas';
+import { conPortales, PORTALES_CONOCIDOS, portalesOperables } from '@/lib/likida/facturacion/adaptadores/registro';
+import { invalidarVinculo, refrescarSesiones, sesionesVigentes } from '@/lib/likida/facturacion/vinculo_portal';
+import { comercio as fichaComercio } from '@/lib/likida/facturacion/comercios';
 import { conNavegador } from '@/lib/likida/facturacion/adaptadores/pagina_playwright';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
@@ -657,6 +658,18 @@ export async function procesarLoteEnCola(
         resultados.push({ tenantId, comercio, ...p });
       }
       for (const b of r.bloqueados) anotarBloqueo(tenantId, b.gastoId, b.motivo);
+
+      // EL VÍNCULO. Si el portal nos sacó, la sesión guardada se apaga AQUÍ y
+      // no en la corrida siguiente: dejarla viva es garantizar que la próxima
+      // se estrelle con la misma cookie muerta y vuelva a gastar el navegador.
+      // `invalidarVinculo` ya sabe que `portal_cambio` NO toca la sesión.
+      if (r.vinculo) {
+        await invalidarVinculo({
+          tenantId, comercio, clase: r.vinculo.clase, motivo: r.vinculo.motivo,
+          ahora: new Date().toISOString(),
+        });
+      }
+      return r;
     };
 
     // ── 1. Lo que no necesita navegador. Se despacha primero: si Chromium no
@@ -723,16 +736,40 @@ export async function procesarLoteEnCola(
       // segunda no, lo de la segunda sigue siendo un fallo de arranque. Con una
       // bandera compartida ese caso se reportaría como 500 y los tickets de la
       // segunda quedarían marcados como intentados sin haberlo sido.
-      // Las cuentas de portal compartidas, para el piloto de visión. Solo se
-      // leen con la palanca puesta: sin piloto nadie las consume, y el
-      // descifrado de credenciales no se pasea por gusto.
-      const cuentas = pilotoHabilitado() ? await credencialesDePortales(tenantId) : undefined;
+      //
+      // LAS SESIONES YA INICIADAS de los portales de esta flota. Se leen ANTES
+      // de arrancar Chromium porque el `storageState` se le pasa al CONTEXTO al
+      // crearlo: después ya no hay dónde meterlo.
+      //
+      // Hasta el 27-ago-2026 aquí se leían las CREDENCIALES descifradas
+      // (`credencialesDePortales`) para que el piloto tecleara la contraseña en
+      // el formulario de login. Ese camino se retiró entero (ver la regla 3 de
+      // `piloto_vision.ts`): lo que abre la puerta es la sesión que inició una
+      // persona, y ninguna contraseña se descifra para facturar.
+      // NO va detrás de `pilotoHabilitado()`, a diferencia de lo que iba antes:
+      // una sesión guardada sirve para CUALQUIER adaptador —escrito o piloto—,
+      // y atarla a la palanca del piloto haría que un portal vinculado dejara
+      // de entrar solo el día que se escriba su adaptador. Es UNA consulta por
+      // flota, y una flota sin nada vinculado devuelve un mapa vacío.
+      const vigentes = await sesionesVigentes(tenantId, Date.now());
+      const conSesion = new Set(vigentes.porComercio.keys());
+
+      // Lo que el pre-cheque de EDAD descartó se apaga y se dice, sin abrir
+      // navegador: es gratis, y sin esto la pantalla seguiría diciendo
+      // «vinculado» sobre una sesión que este código ya no piensa usar.
+      for (const comercio of vigentes.vencidasPorEdad) {
+        await invalidarVinculo({
+          tenantId, comercio, clase: 'sesion_caducada',
+          motivo: 'la sesión guardada pasó de su edad máxima antes de intentarla; hay que volver a entrar una vez.',
+          ahora: new Date().toISOString(),
+        });
+      }
 
       let arranco = false;
       try {
-        await conNavegador(async (abrirPagina) => {
+        await conNavegador(async (abrirPagina, navegador) => {
           arranco = true;
-          await conPortales({ flota, abrirPagina, cuentas }, async (registro) => {
+          await conPortales({ flota, abrirPagina, sesiones: conSesion }, async (registro) => {
             flotas.push({
               tenantId,
               tickets: tickets.length,
@@ -756,6 +793,8 @@ export async function procesarLoteEnCola(
             // que no alcanza a intentarse NO se marca, y se recoge entero en
             // la corrida siguiente.
             let primerPortal = true;
+            /** Los que entraron con sesión Y siguieron dentro: clave → URL. */
+            const siguenDentro = new Map<string, string>();
             for (const [comercio, delPortal] of porPortal) {
               if (!primerPortal && Date.now() - inicioLote >= PRESUPUESTO_LOTE_MS - MARGEN_LOTE_MS) {
                 sinTiempo += delPortal.length;
@@ -763,10 +802,35 @@ export async function procesarLoteEnCola(
                 break;
               }
               primerPortal = false;
-              await correrLote(tenantId, comercio, delPortal);
+              const r = await correrLote(tenantId, comercio, delPortal);
+              // Solo se refresca lo que ENTRÓ con sesión y NO la perdió. Un
+              // portal sin sesión no tiene nada que guardar, y uno que acaba de
+              // caducar ya se apagó en `correrLote` — volver a guardarlo aquí
+              // resucitaría la cookie muerta que se acaba de invalidar.
+              const ficha = fichaComercio(comercio);
+              if (conSesion.has(comercio) && !r.vinculo && ficha) {
+                siguenDentro.set(comercio, ficha.portal);
+              }
+            }
+
+            // LAS COOKIES ROTADAS. Estos portales usan TTL deslizante: la
+            // sesión que sale del lote vale más que la que entró, y sin volver
+            // a guardarla el pre-cheque de edad la tiraría a los 30 min aunque
+            // el portal la siguiera aceptando — o sea, re-vincular para
+            // siempre. Va DENTRO de `conNavegador`: cerrar el contexto es lo
+            // que borra el perfil, y después ya no hay cookies que exportar.
+            const refrescados = await refrescarSesiones({
+              tenantId, navegador, portales: siguenDentro, ahora: new Date().toISOString(),
+            });
+            if (refrescados.length > 0) {
+              logger.info('cron.facturar.sesiones_refrescadas', { tenant: tenantId, portales: refrescados.join(',') });
             }
           });
         }, {
+          // La sesión que una persona inició, restaurada en el contexto. Es lo
+          // que convierte "un captcha por ticket" en "un toque humano cuando la
+          // sesión caduca" (ver el encabezado de `sesion_portal.ts`).
+          ...(vigentes.storageState ? { storageState: vigentes.storageState } : {}),
           // En la Mac se escriben los JPEG y `captura()` devuelve la RUTA, que
           // es lo que hace falta para MIRAR qué se habría enviado. En Vercel no
           // se pone: `/tmp` no sobrevive a la invocación, así que ahí la captura

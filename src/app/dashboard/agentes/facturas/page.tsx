@@ -7,6 +7,9 @@ import { mandatoFiscalAceptado, modoEfectivo } from '@/lib/likida/facturacion/mo
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { PORTALES_CONOCIDOS } from '@/lib/likida/facturacion/adaptadores/registro';
+import { COMERCIOS } from '@/lib/likida/facturacion/comercios';
+import { vinculosDePortales } from '@/lib/likida/facturacion/vinculo_portal';
+import type { FilaPortal } from './portales-vinculo';
 import { VistaAgenteFacturas } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
@@ -38,12 +41,37 @@ export default async function PaginaAgenteFacturas({
 
   // Sin catch: base caída = página caída, no una lista vacía que afirma
   // "todo facturado" estando ciega. El contador degrada solo (null = se dice).
-  const [tickets, conCfdi, corridas] = await Promise.all([
+  const [tickets, conCfdi, corridas, vinculos] = await Promise.all([
     getPorFacturar(tenantId),
     contarConCfdi(tenantId),
     // La ficha de corridas (B3): null = no se pudo leer, y la ficha lo dice.
     ultimasCorridas(tenantId, 'facturas').catch(() => null),
+    // El estado del vínculo por portal. `null` = no se pudo leer, y la sección
+    // lo dice tal cual: pintar «sin vincular» sobre una lectura caída mandaría
+    // al contralor a re-vincular portales que están bien.
+    vinculosDePortales(tenantId),
   ]);
+
+  // Los portales que ESTA pantalla enseña: los del catálogo que piden cuenta,
+  // más cualquiera que ya tenga un vínculo anotado (un portal sin cuenta puede
+  // haber vinculado sesión de todos modos). Se deriva del catálogo y del
+  // estado — nunca de una lista escrita a mano, que es la que se desincroniza.
+  const conVinculo = new Set(vinculos?.keys() ?? []);
+  const portales: FilaPortal[] = COMERCIOS
+    .filter((c) => c.requiereCuenta || conVinculo.has(c.clave))
+    .map((c) => {
+      const v = vinculos?.get(c.clave);
+      return {
+        clave: c.clave,
+        nombre: c.nombre,
+        portal: c.portal,
+        // Sin fila = sin vincular. Es lo que dice la 0232 y lo que significa.
+        estado: v?.estado ?? 'sin_vincular',
+        vinculadaEn: v?.vinculadaEn ?? null,
+        caducadaEn: v?.caducadaEn ?? null,
+        motivo: v?.motivo ?? null,
+      };
+    });
 
   const emite = modoEfectivo(
     process.env.FACTURACION_MODO === 'emitir' ? 'emitir' : 'ensayo',
@@ -100,6 +128,8 @@ export default async function PaginaAgenteFacturas({
     <VistaAgenteFacturas
       tickets={tickets}
       portalesConAdaptador={PORTALES_CONOCIDOS}
+      portales={portales}
+      vinculosLeidos={vinculos !== null}
       extra={{ conCfdi, emite }}
       marcarFacturada={marcarFacturada}
       notificaciones={

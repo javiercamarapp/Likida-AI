@@ -24,10 +24,10 @@ vi.mock('../presupuesto', () => ({ acotada: (p: unknown) => p }));
 process.env.LIKIDA_COFRE_LLAVE = 'llave-de-prueba-de-al-menos-32-caracteres!!';
 
 const {
-  guardarSesionPortal, cargarSesionPortal, sesionFresca, idSesion,
+  guardarSesionPortal, cargarSesionPortal, sesionFresca, idSesion, sesionesDePortales,
   MAX_EDAD_SESION_MS_DEFECTO,
 } = await import('./sesion_portal');
-const { descifrar } = await import('../conectores/cofre');
+const { descifrar, cifrar } = await import('../conectores/cofre');
 
 const TENANT = '11111111-1111-1111-1111-111111111111';
 const PORTAL = 'portal_facturacion:g500';
@@ -129,5 +129,51 @@ describe('sesionFresca — pre-cheque por edad, no veredicto', () => {
     const dosHoras = 2 * 60 * 60 * 1000;
     const ochoHoras = 8 * 60 * 60 * 1000;
     expect(sesionFresca(base, ahora + dosHoras, ochoHoras)).toBe(true);
+  });
+});
+
+describe('sesionesDePortales — todas las sesiones de una flota, en UNA consulta', () => {
+  /** El `like(...)` con el que se piden solo las filas `#sesion`. */
+  function lote(resultado: unknown) {
+    const q = {
+      select: () => q,
+      eq: () => q,
+      like: () => Promise.resolve(resultado),
+    };
+    return () => q;
+  }
+
+  it('devuelve la sesión por conector, sin el sufijo, y descifrada', async () => {
+    from.mockImplementation(lote({
+      data: [{
+        conector_id: `${PORTAL}#sesion`,
+        valores_cifrados: cifrar({ storageState: STORAGE, capturadaEn: '2026-08-21T10:00:00.000Z' } as never),
+      }],
+      error: null,
+    }));
+
+    const m = await sesionesDePortales(TENANT);
+    expect([...m!.keys()]).toEqual([PORTAL]);
+    expect(m!.get(PORTAL)!.storageState).toBe(STORAGE);
+  });
+
+  it('LA BASE CAÍDA DEVUELVE null, no un mapa vacío', async () => {
+    // Un mapa vacío significaría «ninguna sesión guardada» y el llamador
+    // invalidaría vínculos perfectamente vivos por un timeout.
+    from.mockImplementation(lote({ data: null, error: { message: 'timeout' } }));
+    expect(await sesionesDePortales(TENANT)).toBeNull();
+    expect(logger.warn).toHaveBeenCalledWith('sesion_portal.lote_sin_leer', expect.anything());
+  });
+
+  it('una fila corrupta se salta y las demás sesiones no pagan por ella', async () => {
+    from.mockImplementation(lote({
+      data: [
+        { conector_id: 'portal_facturacion:rota#sesion', valores_cifrados: 'esto-no-descifra' },
+        { conector_id: `${PORTAL}#sesion`, valores_cifrados: cifrar({ storageState: STORAGE, capturadaEn: '2026-08-21T10:00:00.000Z' } as never) },
+      ],
+      error: null,
+    }));
+    const m = await sesionesDePortales(TENANT);
+    expect([...m!.keys()]).toEqual([PORTAL]);
   });
 });

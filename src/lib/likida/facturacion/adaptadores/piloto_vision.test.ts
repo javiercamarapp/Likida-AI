@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { crearPilotoVision, MARCA_CONTRASENA, PASOS_MAXIMOS } from './piloto_vision';
+import { crearPilotoVision, PASOS_MAXIMOS } from './piloto_vision';
 import type { InventarioPagina } from './playwright_base';
 import type { Comercio } from '../comercios';
 
@@ -34,12 +34,12 @@ const RECEPTOR = {
 
 const CAMPOS = [{ clave: 'webId' as const, etiqueta: 'Web ID', valor: '650', requerido: true }];
 
+/** La pantalla de facturar YA ESTANDO DENTRO: sin campo de contraseña. */
 const INVENTARIO: InventarioPagina = {
   url: 'https://facturacion.enerser.com.mx/',
   titulo: 'Facturación',
   campos: [
     { tag: 'input', type: 'text', id: 'webid', name: 'webid', placeholder: '', etiqueta: 'Web ID', visible: true, opciones: [] },
-    { tag: 'input', type: 'password', id: 'pass', name: 'pass', placeholder: '', etiqueta: 'Contraseña', visible: true, opciones: [] },
   ],
   botones: [
     { tag: 'button', id: 'buscar', name: '', texto: 'Buscar ticket', visible: true },
@@ -47,6 +47,15 @@ const INVENTARIO: InventarioPagina = {
   ],
   captcha: [],
   texto: 'Facturación electrónica',
+};
+
+/** La pantalla de ENTRAR. Es lo que ve el piloto cuando no hay sesión viva. */
+const INVENTARIO_LOGIN: InventarioPagina = {
+  ...INVENTARIO,
+  campos: [
+    ...INVENTARIO.campos,
+    { tag: 'input', type: 'password', id: 'pass', name: 'pass', placeholder: '', etiqueta: 'Contraseña', visible: true, opciones: [] },
+  ],
 };
 
 /** Una página doble que ANOTA. `hechos` es lo que el piloto de verdad ejecutó. */
@@ -72,11 +81,11 @@ const accion = (a: Partial<Record<string, unknown>>) => ({
   },
 });
 
-function piloto(pagina: ReturnType<typeof paginaFalsa>, credencial: Record<string, string> | null = null) {
+function piloto(pagina: ReturnType<typeof paginaFalsa>, arrancoConSesion = false) {
   return crearPilotoVision({
     comercio: COMERCIO, receptor: RECEPTOR,
     abrirPagina: async () => pagina as never,
-    credencial,
+    arrancoConSesion,
   });
 }
 
@@ -135,27 +144,48 @@ describe('piloto de visión', () => {
     expect(decidirMock).not.toHaveBeenCalled();
   });
 
-  it('REGLA 3: la contraseña real llega a la página pero JAMÁS a capturado ni al historial', async () => {
-    const p = paginaFalsa();
-    decidirMock
-      .mockResolvedValueOnce(accion({ tipo: 'escribir', selector: '#pass', valor: MARCA_CONTRASENA }))
-      .mockResolvedValueOnce(accion({ tipo: 'terminado' }));
-    const r = await piloto(p, { usuario: 'flota@x.mx', contrasena: 's3creta' }).facturar(CAMPOS, 'ensayo');
-    expect(p.hechos).toContain('escribir #pass=s3creta');
-    expect(r.capturado['#pass']).toBe(MARCA_CONTRASENA);
-    expect(JSON.stringify(r.capturado)).not.toContain('s3creta');
-    // Y lo que el modelo recibe en el paso 2 (historial) tampoco lleva el secreto.
-    const segundaLlamada = JSON.stringify(decidirMock.mock.calls[1]);
-    expect(segundaLlamada).not.toContain('s3creta');
+  // ── REGLA 3 (27-ago-2026): el piloto NO teclea contraseñas ──────────────
+  // Antes de esta fecha había dos pruebas aquí que fijaban lo contrario: que
+  // la contraseña REAL del cofre llegaba a la página (enmascarada en el log).
+  // Se retiraron con el camino que verificaban. Lo que se fija ahora es que
+  // ese camino ya no existe y que en su lugar sale un estado declarado.
+
+  it('REGLA 3: la pantalla de entrar detiene la corrida con «requiere vinculación», sin gastar visión', async () => {
+    const p = paginaFalsa(INVENTARIO_LOGIN);
+    const r = await piloto(p).facturar(CAMPOS, 'ensayo');
+    expect(r.ok).toBe(false);
+    expect(r.requiereVinculacion).toBe(true);
+    expect(r.sesionCaducada, 'nunca hubo sesión: no es que se venciera').toBeUndefined();
+    expect(r.error).toMatch(/iniciar sesión/i);
+    expect(p.hechos.some((h) => h.startsWith('escribir'))).toBe(false);
+    expect(decidirMock, 'el login se ve en el inventario: no cuesta una llamada de visión').not.toHaveBeenCalled();
   });
 
-  it('sin cuenta compartida, el marcador de contraseña NO se inventa: se dice', async () => {
-    const p = paginaFalsa();
-    decidirMock.mockResolvedValueOnce(accion({ tipo: 'escribir', selector: '#pass', valor: MARCA_CONTRASENA }));
-    const r = await piloto(p, null).facturar(CAMPOS, 'ensayo');
-    expect(r.ok).toBe(false);
-    expect(r.error).toMatch(/no tiene cuenta compartida/);
-    expect(p.hechos.some((h) => h.startsWith('escribir'))).toBe(false);
+  it('…y si el lote ENTRÓ con sesión guardada, eso es «sesión caducada», que es otro mensaje', async () => {
+    const p = paginaFalsa(INVENTARIO_LOGIN);
+    const r = await piloto(p, true).facturar(CAMPOS, 'ensayo');
+    expect(r.requiereVinculacion).toBe(true);
+    expect(r.sesionCaducada).toBe(true);
+    expect(r.error).toMatch(/sesión guardada de este portal ya no sirve/i);
+  });
+
+  it('la guarda dura: aunque el modelo pida escribir en un campo type=password, no se escribe', async () => {
+    // El inventario NO enseña login (el campo de contraseña está oculto), así
+    // que el pre-cheque no dispara y la acción llega hasta `ejecutar`. Es el
+    // caso que el prompt no puede cubrir y el código sí.
+    const conPassOculto: InventarioPagina = {
+      ...INVENTARIO,
+      campos: [
+        ...INVENTARIO.campos,
+        { tag: 'input', type: 'password', id: 'pass', name: 'pass', placeholder: '', etiqueta: '', visible: false, opciones: [] },
+      ],
+    };
+    const p = paginaFalsa(conPassOculto);
+    decidirMock.mockResolvedValueOnce(accion({ tipo: 'escribir', selector: '#pass', valor: 's3creta' }));
+    const r = await piloto(p).facturar(CAMPOS, 'ensayo');
+    expect(p.hechos.some((h) => h.startsWith('escribir')), 'ni una contraseña llega a la página').toBe(false);
+    expect(r.requiereVinculacion).toBe(true);
+    expect(JSON.stringify(r)).not.toContain('s3creta');
   });
 
   it('REGLA 4: un selector que no está en el inventario no se ejecuta', async () => {

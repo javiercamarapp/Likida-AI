@@ -953,3 +953,83 @@ describe('facturarLoteAlVuelo · la misma carrera del claim, pero por lote', () 
     ]);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL VÍNCULO, SALIENDO DEL LOTE: qué se le dice al cron y a quién manda a
+// actuar cada mensaje.
+//
+// Las tres clases tienen DUEÑOS distintos y por eso no pueden compartir texto:
+// «vincula» va al contralor, «cambió el portal» va a Likida, y el captcha del
+// login no puede tapar al primero — decir solo «hay captcha» mandaría a la
+// persona a resolver un muro POR TICKET en vez de vincular UNA vez.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('facturarLoteAlVuelo · el vínculo con el portal', () => {
+  const correr = () => facturarLoteAlVuelo({
+    tenantId: 't-1', comercio: 'enerser', gastoIds: ['g-1'], modo: 'ensayo', hoy: HOY, ahora: AHORA,
+  });
+
+  beforeEach(() => {
+    lectura = { data: [g()], error: null };
+    idsReclamados = ['g-1'];
+  });
+
+  it('«se venció la sesión» sale como dato estructurado, no dentro del texto del error', async () => {
+    facturarLoteConAgente.mockResolvedValueOnce({
+      modo: 'ensayo', ok: false, capturado: {}, porGasto: [{ gastoId: 'g-1', incluido: false }],
+      requiereVinculacion: true, sesionCaducada: true, error: 'el portal enseña un campo de contraseña',
+    });
+    const r = await correr();
+    expect(r.vinculo).toEqual({ clase: 'sesion_caducada', motivo: 'el portal enseña un campo de contraseña' });
+    expect(r.porGasto[0]).toMatchObject({ motivo: 'bloqueado' });
+    expect(r.porGasto[0].bloqueado).toMatch(/SE VENCIÓ LA SESIÓN/);
+  });
+
+  it('sin sesión previa es «requiere vinculación», y el mensaje no habla de vencimiento', async () => {
+    facturarLoteConAgente.mockResolvedValueOnce({
+      modo: 'ensayo', ok: false, capturado: {}, porGasto: [{ gastoId: 'g-1', incluido: false }],
+      requiereVinculacion: true,
+    });
+    const r = await correr();
+    expect(r.vinculo?.clase).toBe('requiere_vinculacion');
+    expect(r.porGasto[0].bloqueado).toMatch(/todavía no está vinculado/);
+    expect(r.porGasto[0].bloqueado).not.toMatch(/SE VENCIÓ/);
+  });
+
+  it('el CAPTCHA del login NO tapa la vinculación: se nombra, pero lo accionable es vincular', async () => {
+    facturarLoteConAgente.mockResolvedValueOnce({
+      modo: 'ensayo', ok: false, capturado: {}, porGasto: [{ gastoId: 'g-1', incluido: false }],
+      requiereVinculacion: true, requiereCaptcha: true,
+    });
+    const r = await correr();
+    expect(r.porGasto[0].bloqueado).toMatch(/Vincular ahora/);
+    expect(r.porGasto[0].bloqueado).toMatch(/CAPTCHA/);
+    expect(r.porGasto[0].bloqueado, 'Likida no rodea captchas, y se dice').toMatch(/no lo rodea/);
+  });
+
+  it('«el portal cambió» no manda a nadie a re-vincular: es NUESTRO arreglo', async () => {
+    facturarLoteConAgente.mockResolvedValueOnce({
+      modo: 'ensayo', ok: false, capturado: {}, porGasto: [{ gastoId: 'g-1', incluido: false }],
+      portalCambio: true, error: 'falta #rfc',
+    });
+    const r = await correr();
+    expect(r.vinculo).toEqual({ clase: 'portal_cambio', motivo: 'falta #rfc' });
+    expect(r.porGasto[0].bloqueado).toMatch(/lo tenemos que corregir nosotros/);
+    expect(r.porGasto[0].bloqueado).not.toMatch(/Vincular ahora/);
+  });
+
+  it('la emisión sin confirmar gana a todo lo demás: es la única que puede haber dejado un CFDI vivo', async () => {
+    facturarLoteConAgente.mockResolvedValueOnce({
+      modo: 'emitir', ok: false, capturado: {}, porGasto: [{ gastoId: 'g-1', incluido: false }],
+      emisionSinConfirmar: true, requiereVinculacion: true,
+    });
+    const r = await correr();
+    expect(r.porGasto[0].bloqueado).toMatch(/NO SE PUDO CONFIRMAR EL FOLIO/);
+  });
+
+  it('un lote sano no reporta vínculo: no hay nada que anotar ni que apagar', async () => {
+    facturarLoteConAgente.mockResolvedValueOnce({
+      modo: 'ensayo', ok: true, capturado: {}, porGasto: [{ gastoId: 'g-1', incluido: true }],
+    });
+    expect((await correr()).vinculo).toBeUndefined();
+  });
+});

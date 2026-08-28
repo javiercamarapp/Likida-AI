@@ -287,3 +287,41 @@ describe('el piloto de visión: FACTURACION_PILOTO=si', () => {
     expect(operables.length).toBeGreaterThan(PORTALES_CONOCIDOS.length);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LO QUE HABILITA UN PORTAL CON CUENTA YA NO ES UNA CONTRASEÑA (27-ago-2026).
+//
+// Hasta esta fecha, `registrarPortales` recibía las credenciales DESCIFRADAS
+// (`cuentas`) y se las pasaba al piloto para que las TECLEARA en el formulario
+// de login. Ahora recibe `sesiones`: las claves de los portales cuya sesión ya
+// está viva en el contexto del navegador. Lo que se fija aquí es que el camino
+// viejo no volvió por la puerta de atrás y que el nuevo no se degrada solo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('los portales con cuenta se habilitan por SESIÓN, no por contraseña', () => {
+  beforeEach(() => vi.stubEnv('FACTURACION_PILOTO', 'si'));
+  afterEach(() => vi.unstubAllEnvs());
+
+  /** Un comercio pilotable que EXIGE cuenta (`comercios.ts`). */
+  const CON_CUENTA = 'oxxo_gas';
+
+  it('sin sesión NO queda operable: su ticket va con el encargado, como siempre', () => {
+    const r = registrarPortales({ flota: FLOTA_A, abrirPagina });
+    expect(r.registrados).not.toContain(CON_CUENTA);
+    expect(portalesVivos('tenant-a')).not.toContain(CON_CUENTA);
+    // Y NO es un «problema»: es el estado normal de un portal sin vincular.
+    expect(r.problemas.join(' ')).not.toContain(CON_CUENTA);
+  });
+
+  it('con la sesión viva SÍ queda operable, y sin que nadie nos dé una contraseña', () => {
+    const r = registrarPortales({ flota: FLOTA_A, abrirPagina, sesiones: new Set([CON_CUENTA]) });
+    expect(r.registrados).toContain(CON_CUENTA);
+    expect(portalesVivos('tenant-a')).toContain(CON_CUENTA);
+    expect(adaptadorDe('tenant-a', CON_CUENTA)).not.toBeNull();
+  });
+
+  it('un portal SIN cuenta queda operable igual, con sesión o sin ella', () => {
+    // 'enerser' no pide cuenta (`requiereCuenta: false`): permite continuar sin
+    // registro, así que la sesión no cambia nada para él.
+    expect(registrarPortales({ flota: FLOTA_A, abrirPagina }).registrados).toContain('enerser');
+  });
+});
