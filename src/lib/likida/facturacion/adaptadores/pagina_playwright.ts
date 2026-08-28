@@ -965,6 +965,52 @@ export interface OpcionesNavegador {
   viewport?: { width: number; height: number };
   /** Inyectable para poder probar el arranque sin arrancar nada. */
   lanzar?: (op: Parameters<typeof chromium.launch>[0]) => Promise<Browser>;
+  /**
+   * LA SESIÓN YA INICIADA con la que arranca el contexto: el `storageState` de
+   * Playwright (cookies + almacenamiento por origen) como JSON EN STRING, tal
+   * como lo guarda `sesion_portal.ts` cifrado en el cofre.
+   *
+   * Es el hueco que dejaba muerta a esa pieza entera: `sesion_portal.ts` sabía
+   * guardar y leer la sesión desde el 21-ago-2026, con pruebas, y nadie se la
+   * pasaba nunca al navegador — así que cada corrida volvía a la pantalla de
+   * login y el captcha se pagaba por ticket en vez de por vinculación.
+   *
+   * ── LA TRAMPA DEL TIPO (por eso entra como STRING y se parsea aquí) ──────
+   *
+   * `newContext({ storageState })` de Playwright admite `string` U OBJETO, y el
+   * string NO es el JSON: es una RUTA A UN ARCHIVO. Pasarle el JSON tal cual
+   * hace que Playwright intente abrir un archivo con nombre de 4 KB y reviente
+   * con un ENAMETOOLONG que no menciona cookies por ningún lado. Se parsea
+   * SIEMPRE aquí, en un solo sitio, y quien llame no puede equivocarse.
+   *
+   * Un JSON ilegible NO tumba el lote: se avisa y se arranca con contexto
+   * limpio — el peor caso es pedir un login que ya existía, y el llamador ve
+   * "sin vincular" en vez de un lote muerto.
+   */
+  storageState?: string;
+}
+
+/**
+ * El `storageState` en string a la forma que Playwright espera, o `null` si no
+ * se puede leer. NO lanza: ver la nota de `OpcionesNavegador.storageState`.
+ *
+ * Se exige la FORMA (`cookies` y `origins` como arreglos) y no solo que parsee:
+ * un `"null"` o un `{}` parsean sin problema y dejarían un contexto que se cree
+ * "vinculado" sin una sola cookie.
+ */
+export type EstadoDeSesion = Exclude<
+  NonNullable<Parameters<Browser['newContext']>[0]>['storageState'],
+  string | undefined
+>;
+
+export function leerStorageState(crudo: string): EstadoDeSesion | null {
+  try {
+    const v = JSON.parse(crudo) as { cookies?: unknown; origins?: unknown };
+    if (!v || !Array.isArray(v.cookies) || !Array.isArray(v.origins)) return null;
+    return v as EstadoDeSesion;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -984,6 +1030,8 @@ export class SesionNavegador {
     private readonly navegador: Browser,
     private readonly contexto: BrowserContext,
     private readonly op: OpcionesNavegador,
+    /** ¿Este contexto arrancó con una sesión guardada, o desde cero? */
+    readonly arrancoConSesion: boolean = false,
   ) {}
 
   static async abrir(op: OpcionesNavegador = {}): Promise<SesionNavegador> {
@@ -1029,6 +1077,16 @@ export class SesionNavegador {
       );
     }
 
+    // La sesión guardada, si la hay y si se puede leer. Se resuelve ANTES de
+    // crear el contexto para que "el JSON no sirve" sea un aviso y no una
+    // excepción a media creación.
+    const estado = op.storageState ? leerStorageState(op.storageState) : null;
+    if (op.storageState && !estado) {
+      logger.warn('portal.sesion_guardada_ilegible', {
+        detalle: 'el storageState guardado no parsea o no trae cookies/origins; se arranca con contexto limpio',
+      });
+    }
+
     try {
       const contexto = await navegador.newContext({
         // Alto de sobra: la tabla de "CÓDIGOS AGREGADOS" crece con cada caseta y
@@ -1040,8 +1098,14 @@ export class SesionNavegador {
         // Un portal de facturación no necesita nada de esto y cada permiso es
         // una razón más para que el navegador pida algo y se quede esperando.
         permissions: [],
+        // Las cookies del login que ya hizo una persona. Sin esto, el resto de
+        // `sesion_portal.ts` no sirve de nada.
+        ...(estado ? { storageState: estado } : {}),
       });
-      return new SesionNavegador(navegador, contexto, op);
+      if (estado) {
+        logger.info('portal.sesion_restaurada', { cookies: estado.cookies.length, origenes: estado.origins.length });
+      }
+      return new SesionNavegador(navegador, contexto, op, Boolean(estado));
     } catch (e) {
       // Si el contexto no se pudo crear, el navegador YA está arrancado: sin este
       // cierre queda un Chromium huérfano por cada intento fallido.
@@ -1075,6 +1139,29 @@ export class SesionNavegador {
       page.once('close', () => this.vivas.delete(pagina));
       return pagina;
     };
+  }
+
+  /**
+   * LA SESIÓN, PARA GUARDARLA: el `storageState` del contexto ahora mismo, como
+   * JSON en string —la forma exacta que `guardarSesionPortal` cifra—.
+   *
+   * Hay que llamarla ANTES de `cerrar()`: cerrar el contexto es lo que borra el
+   * perfil de Playwright, y después de eso no hay cookies que exportar.
+   *
+   * Devuelve `null` en vez de lanzar cuando el contexto ya no contesta. La
+   * sesión actualizada es una MEJORA (cookies rotadas, TTL deslizante que el
+   * portal renovó), no el resultado del lote: perderla cuesta un login de más
+   * dentro de un rato; tumbar por ella un lote que ya facturó cuesta el lote.
+   */
+  async estadoDeSesion(): Promise<string | null> {
+    if (this.cerrada) return null;
+    try {
+      const estado = await acotar(() => this.contexto.storageState(), TOPE_CERRAR_MS, 'exportar la sesión');
+      return JSON.stringify(estado);
+    } catch (e) {
+      logger.warn('portal.sesion_no_exportada', { error: texto(e) });
+      return null;
+    }
   }
 
   /** ¿Sigue vivo el proceso de Chromium? */

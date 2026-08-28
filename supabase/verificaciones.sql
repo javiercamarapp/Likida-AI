@@ -10852,3 +10852,142 @@ begin
     aliados_sembrados, aliados_con_contacto_o_fecha,
     avance_sin_fecha_rebota, avance_con_fecha_entra, tipo_inventado_rebota, cerrado;
 end $$;
+
+-- ── 186. El vínculo con cada portal: tres estados con fecha, sin una cookie en claro (mig. 0232) ──
+-- Los bloques 183-185 los toman ramas paralelas de esta misma ola; esta toma
+-- el 186. El último en master antes de escribir esto era el 182 (mig. 0229).
+--
+-- Lo que SOLO la base puede demostrar del estado de vinculación de portales:
+--
+--  (a) EL DOMINIO. 'vinculado', 'sin_vincular' y 'caducada' y nada más. Un
+--      estado inventado que entrara sería una píldora que el panel no sabe
+--      pintar, y `aVinculo()` la descartaría con grito — pero descartarla en
+--      lectura no sirve si la base la dejó escribir.
+--  (b) UN ESTADO SIN SU FECHA REBOTA. 'vinculado' sin `vinculada_en` no le
+--      dice a nadie desde cuándo, y 'caducada' sin `caducada_en` no distingue
+--      lo de hace diez minutos de lo del mes pasado. Los dos CHECK están.
+--  (c) Y CON SU FECHA ENTRA: el candado condiciona, no prohíbe.
+--  (d) NINGUNA COOKIE EN CLARO. `motivo` es una frase para una persona; un
+--      valor que empiece por `{` o `[` sería un storageState o un volcado, y
+--      esta columna la lee el panel SIN descifrar nada. Es la mitad de base
+--      de la regla dura de la casa: la sesión vive cifrada en el cofre y aquí
+--      solo hay palabras.
+--  (e) UNA FILA POR (FLOTA, PORTAL). El escritor hace UPSERT con esa llave —
+--      la idempotencia de dos corridas que ven lo mismo depende de que la
+--      base no admita dos filas del mismo portal para la misma flota.
+--  (f) Y LA MISMA CLAVE DE COMERCIO SÍ ENTRA PARA OTRA FLOTA: el candado es
+--      por tenant, no global. Sin esto, la primera flota que vinculara La Gas
+--      dejaría a todas las demás fuera.
+--  (g) EL BORRADO DE LA FLOTA SE LLEVA SUS VÍNCULOS (cascade). Un estado
+--      huérfano es un renglón que nadie puede leer ni borrar.
+--  (h) La llave `(id, tenant_id)` de la casa (0028/0145) existe, que es lo
+--      que hace posible colgar una FK compuesta de aquí.
+--  (i) El doble candado: RLS deny-all + solo service_role.
+do $$
+declare
+  ta uuid; tb uuid;
+  estado_inventado_rebota boolean; vinculado_sin_fecha_rebota boolean;
+  caducada_sin_fecha_rebota boolean; vinculado_con_fecha_entra boolean;
+  motivo_json_rebota boolean; motivo_frase_entra boolean;
+  duplicado_rebota boolean; otra_flota_entra boolean;
+  cascade_limpia boolean; llave_compuesta boolean; cerrado boolean;
+  quedan integer;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0232 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0232 B') returning id into tb;
+
+  -- (a) El dominio de los tres estados.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado)
+      values (ta, 'la_gas', 'medio_vinculado');
+    estado_inventado_rebota := false;
+  exception when check_violation then
+    estado_inventado_rebota := true;
+  end;
+
+  -- (b) Un estado sin su fecha no se puede pintar.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado)
+      values (ta, 'la_gas', 'vinculado');
+    vinculado_sin_fecha_rebota := false;
+  exception when check_violation then
+    vinculado_sin_fecha_rebota := true;
+  end;
+
+  begin
+    insert into portal_estado (tenant_id, comercio, estado)
+      values (ta, 'g500', 'caducada');
+    caducada_sin_fecha_rebota := false;
+  exception when check_violation then
+    caducada_sin_fecha_rebota := true;
+  end;
+
+  -- (c) Con su fecha sí entra.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado, vinculada_en)
+      values (ta, 'la_gas', 'vinculado', now());
+    vinculado_con_fecha_entra := true;
+  exception when others then
+    vinculado_con_fecha_entra := false;
+  end;
+
+  -- (d) Ninguna cookie en claro: un JSON en `motivo` rebota, una frase entra.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado, caducada_en, motivo)
+      values (ta, 'g500', 'caducada', now(), '{"cookies":[{"name":"ASP.NET_SessionId"}]}');
+    motivo_json_rebota := false;
+  exception when check_violation then
+    motivo_json_rebota := true;
+  end;
+
+  begin
+    insert into portal_estado (tenant_id, comercio, estado, caducada_en, motivo)
+      values (ta, 'g500', 'caducada', now(),
+              'el portal enseña un campo de contraseña (#pass), o sea la pantalla de entrar');
+    motivo_frase_entra := true;
+  exception when others then
+    motivo_frase_entra := false;
+  end;
+
+  -- (e) Una fila por (flota, portal): es de lo que depende el UPSERT.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado)
+      values (ta, 'la_gas', 'sin_vincular');
+    duplicado_rebota := false;
+  exception when unique_violation then
+    duplicado_rebota := true;
+  end;
+
+  -- (f) Pero la misma clave para OTRA flota sí entra: el candado es por tenant.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado, vinculada_en)
+      values (tb, 'la_gas', 'vinculado', now());
+    otra_flota_entra := true;
+  exception when others then
+    otra_flota_entra := false;
+  end;
+
+  -- (g) Borrar la flota se lleva sus vínculos.
+  delete from tenant where id = tb;
+  select count(*) into quedan from portal_estado where tenant_id = tb;
+  cascade_limpia := (quedan = 0);
+
+  -- (h) La llave que hace posibles las FK compuestas de la casa.
+  llave_compuesta := exists (
+    select 1 from pg_constraint
+    where conname = 'portal_estado_id_tenant_key'
+      and conrelid = 'public.portal_estado'::regclass
+      and contype = 'u'
+  );
+
+  -- (i) El doble candado.
+  cerrado := not has_table_privilege('anon', 'public.portal_estado', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.portal_estado', 'SELECT')
+    and has_table_privilege('service_role', 'public.portal_estado', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.portal_estado'::regclass);
+
+  raise exception 'PORTAL_ESTADO_0232  estado_inventado_rebota=%  vinculado_sin_fecha_rebota=%  caducada_sin_fecha_rebota=%  vinculado_con_fecha_entra=%  motivo_json_rebota=%  motivo_frase_entra=%  duplicado_rebota=%  otra_flota_entra=%  cascade_limpia=%  llave_compuesta=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t / t)',
+    estado_inventado_rebota, vinculado_sin_fecha_rebota, caducada_sin_fecha_rebota,
+    vinculado_con_fecha_entra, motivo_json_rebota, motivo_frase_entra,
+    duplicado_rebota, otra_flota_entra, cascade_limpia, llave_compuesta, cerrado;
+end $$;

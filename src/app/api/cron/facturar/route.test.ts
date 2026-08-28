@@ -138,7 +138,10 @@ const navegadoresAbiertos: number[] = [];
  * el peor caso medido en `docs/auditoria-10/rendimiento.md`.
  */
 const duracionSesionesMs: number[] = [];
-const conNavegador = vi.fn(async (fn: (abrir: unknown) => Promise<unknown>) => {
+const conNavegador = vi.fn(async (
+  fn: (abrir: unknown, sesion: unknown) => Promise<unknown>,
+  _op?: { storageState?: string; pagina?: unknown },
+) => {
   // `conNavegador` arranca Chromium ANTES de correr el cuerpo. Si lanza aquí, el
   // cuerpo no se ejecuta — que es justo lo que la ruta usa para distinguir "no
   // hay navegador" de "el lote falló".
@@ -146,9 +149,30 @@ const conNavegador = vi.fn(async (fn: (abrir: unknown) => Promise<unknown>) => {
   const dura = duracionSesionesMs.shift();
   if (dura) vi.setSystemTime(Date.now() + dura);
   navegadoresAbiertos.push(Date.now());
-  return fn(async () => ({}));
+  // El segundo argumento es la `SesionNavegador`: la ruta le pide el
+  // `storageState` al terminar para volver a guardarlo (cookies rotadas).
+  return fn(async () => ({}), { estadoDeSesion: async () => null });
 });
 vi.mock('@/lib/likida/facturacion/adaptadores/pagina_playwright', () => ({ conNavegador }));
+
+/**
+ * EL VÍNCULO CON LOS PORTALES. Se mockea entero porque toca el cofre y la
+ * tabla `portal_estado`, y estas pruebas miden el CRON —qué se abre, qué se
+ * marca, qué se corta por reloj—, no el cifrado.
+ *
+ * El default es "esta flota no tiene ninguna sesión guardada", que es el
+ * estado en el que corren todas las pruebas de este archivo: ninguna de ellas
+ * vincula nada, y el comportamiento que fijan es el de siempre.
+ */
+let vigentes = { porComercio: new Map<string, unknown>(), storageState: null as string | null, vencidasPorEdad: [] as string[] };
+const sesionesVigentes = vi.fn(async () => vigentes);
+const refrescarSesiones = vi.fn(async (_a: { portales: ReadonlyMap<string, string> }) => [] as string[]);
+const invalidarVinculo = vi.fn(async (_a: { comercio: string; clase: string }) => {});
+vi.mock('@/lib/likida/facturacion/vinculo_portal', () => ({
+  sesionesVigentes: (...a: unknown[]) => sesionesVigentes(...(a as [])),
+  refrescarSesiones: (...a: unknown[]) => refrescarSesiones(...(a as [Parameters<typeof refrescarSesiones>[0]])),
+  invalidarVinculo: (...a: unknown[]) => invalidarVinculo(...(a as [Parameters<typeof invalidarVinculo>[0]])),
+}));
 
 const conPortales = vi.fn(async (_op: unknown, fn: (r: unknown) => Promise<unknown>) =>
   fn({ registrados: ['capufe'], problemas: [] }));
@@ -233,6 +257,10 @@ beforeEach(() => {
   getFiscalDeFlota.mockClear();
   conNavegador.mockClear();
   conPortales.mockClear();
+  vigentes = { porComercio: new Map(), storageState: null, vencidasPorEdad: [] };
+  sesionesVigentes.mockClear();
+  refrescarSesiones.mockClear();
+  invalidarVinculo.mockClear();
   avisarCorridasPorFlota.mockClear();
   registrarCorrida.mockClear();
   ultimasCorridas.mockReset();
@@ -985,5 +1013,92 @@ describe('cuando la base no contesta', () => {
 
     expect(logger.error).toHaveBeenCalledWith('cron.facturar.falló', expect.objectContaining({ codigo: expect.any(String) }));
     expect(alertarOperador).toHaveBeenCalledWith('cron.facturar', expect.objectContaining({ codigo: expect.any(String) }));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA SESIÓN PERSISTENTE, CONECTADA (27-ago-2026).
+//
+// `sesion_portal.ts` sabía guardar y leer la sesión cifrada desde el
+// 21-ago-2026 y nadie la usaba: `SesionNavegador.abrir()` creaba el contexto
+// SIN `storageState`. Este bloque es el cable, mirado desde el cron:
+//
+//   1. lo guardado entra al navegador ANTES de abrirlo;
+//   2. al terminar bien se vuelve a guardar (cookies rotadas);
+//   3. si el portal nos sacó, la sesión se APAGA en la misma corrida — no en
+//      la siguiente, que volvería a estrellarse con la misma cookie muerta;
+//   4. lo que el pre-cheque de EDAD descartó se apaga sin abrir navegador.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la sesión persistente de portales', () => {
+  const ESTADO = JSON.stringify({ cookies: [{ name: 's', value: '1', domain: 'capufe.gob.mx', path: '/' }], origins: [] });
+
+  it('lo guardado se le pasa al navegador, y los portales con sesión se declaran al registro', async () => {
+    vigentes = {
+      porComercio: new Map([['capufe', { storageState: ESTADO, capturadaEn: '2026-08-27T17:59:00.000Z' }]]),
+      storageState: ESTADO,
+      vencidasPorEdad: [],
+    };
+
+    await pedir();
+
+    // (1) El contexto arranca CON la sesión: es el hueco que dejaba muerta la
+    // pieza entera.
+    const opNavegador = conNavegador.mock.calls[0][1]!;
+    expect(opNavegador.storageState).toBe(ESTADO);
+    // Y el registro sabe cuáles entraron con sesión, que es lo que separa
+    // «caducó» de «nunca se vinculó» en el reporte.
+    const opRegistro = conPortales.mock.calls[0][0] as { sesiones?: ReadonlySet<string> };
+    expect([...(opRegistro.sesiones ?? [])]).toEqual(['capufe']);
+  });
+
+  it('sin nada guardado, el navegador arranca limpio — como siempre', async () => {
+    await pedir();
+    expect(conNavegador.mock.calls[0][1]!).not.toHaveProperty('storageState');
+    expect([...((conPortales.mock.calls[0][0] as { sesiones?: ReadonlySet<string> }).sesiones ?? [])]).toEqual([]);
+  });
+
+  it('el lote que terminó BIEN refresca su sesión: las cookies rotadas valen más que las que entraron', async () => {
+    vigentes = {
+      porComercio: new Map([['capufe', { storageState: ESTADO, capturadaEn: '2026-08-27T17:59:00.000Z' }]]),
+      storageState: ESTADO, vencidasPorEdad: [],
+    };
+
+    await pedir();
+
+    expect(refrescarSesiones).toHaveBeenCalledTimes(1);
+    const arg = refrescarSesiones.mock.calls[0][0];
+    expect([...arg.portales.keys()]).toEqual(['capufe']);
+    // La URL sale del catálogo: es de donde se recorta la bolsa de cookies.
+    expect(arg.portales.get('capufe')).toMatch(/^https?:\/\//);
+  });
+
+  it('si el portal nos SACÓ, la sesión se apaga en ESTA corrida y no se refresca', async () => {
+    vigentes = {
+      porComercio: new Map([['capufe', { storageState: ESTADO, capturadaEn: '2026-08-27T17:59:00.000Z' }]]),
+      storageState: ESTADO, vencidasPorEdad: [],
+    };
+    facturarLoteAlVuelo.mockImplementationOnce(async (a: { gastoIds: string[] }) => ({
+      porGasto: a.gastoIds.map((gastoId) => ({ gastoId, intentado: true, facturado: false, motivo: 'bloqueado' })),
+      facturados: 0, bloqueados: [],
+      vinculo: { clase: 'sesion_caducada' as const, motivo: 'el portal enseña un campo de contraseña' },
+    }));
+
+    await pedir();
+
+    expect(invalidarVinculo).toHaveBeenCalledWith(expect.objectContaining({
+      comercio: 'capufe', clase: 'sesion_caducada',
+    }));
+    // Y NO se vuelve a guardar: refrescarla aquí resucitaría la cookie muerta
+    // que se acaba de invalidar.
+    const arg = refrescarSesiones.mock.calls[0][0];
+    expect(arg.portales.size).toBe(0);
+  });
+
+  it('lo que el pre-cheque de EDAD descartó se apaga sin gastar un navegador', async () => {
+    vigentes = { porComercio: new Map(), storageState: null, vencidasPorEdad: ['capufe'] };
+    await pedir();
+    expect(invalidarVinculo).toHaveBeenCalledWith(expect.objectContaining({
+      comercio: 'capufe', clase: 'sesion_caducada',
+    }));
   });
 });
