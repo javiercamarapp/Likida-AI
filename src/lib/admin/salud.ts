@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -54,6 +54,12 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // recoge el paquete el mismo día que queda listo, con margen de sobra antes
   // de que caduque, sin quemar cuota preguntando "¿ya?" cada minuto.
   'descarga-sat': 6 * 3_600_000,
+  // El derivador del registro de jornada (0241). Cada hora, en el minuto 30
+  // —desfasado de la estampida de los minutos 0/5/7/15/25— porque lo que
+  // deriva son hitos y posiciones que ya ocurrieron: el grano fino no compra
+  // nada y sí cuesta consultas. Barre tres días hacia atrás, así que una
+  // corrida perdida se recupera sola.
+  jornada: 3_600_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */

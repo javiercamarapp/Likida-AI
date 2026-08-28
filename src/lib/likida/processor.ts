@@ -31,6 +31,11 @@ import {
 } from '@/lib/likida/intake/rafaga';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/likida/privacidad';
 import { interpretarHito, sellarHito, mensajeHito } from '@/lib/likida/hitos_viaje';
+import {
+  interpretarMarcaJornada, interpretarConformidadJornada,
+  atenderMarcaJornada, atenderConformidadJornada, resumenParaOperador,
+} from '@/lib/likida/jornada/wa';
+import { asientosDeJornada } from '@/lib/likida/jornada/repo';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { atenderDespachoOficina } from '@/lib/likida/despacho_wa';
 import { interpretarTalacha, atenderTalachaChofer, atenderAutorizacionTalacha } from '@/lib/likida/talacha_wa';
@@ -785,6 +790,92 @@ export interface OpcionesInbound {
  */
 const COSTO_MINIMO_TURNO_MS = 15_000;
 
+/**
+ * ── EL REGISTRO DE JORNADA POR WHATSAPP (LFT 132 fr. XXXIV, mig. 0241) ─────
+ *
+ * Vive fuera de `processInbound` porque se cablea DOS VECES, y la razón es la
+ * misma por la que la asistencia también está en dos sitios: la jornada de un
+ * operador existe tenga o no un viaje abierto. Un chofer que llega al patio a
+ * las seis y no tiene viaje asignado hasta las nueve trabajó esas tres horas, y
+ * hasta hoy el sistema le contestaba «no tienes un viaje abierto para
+ * liquidar».
+ *
+ * Devuelve `null` si el mensaje no era suyo —y entonces sigue su camino, como
+ * todos los reconocedores de esta fila— o la lista de mensajes que hay que
+ * mandarle, en orden.
+ *
+ * EL ORDEN DENTRO DE LA FILA. Va ANTES de los hitos y del freno de cierre:
+ * `pidioCerrar` empata con `/termin[éeoó]/` y se comería «termino mi jornada»
+ * como intento de cerrar el viaje. Y va DESPUÉS de la emergencia y de los
+ * botones, que son respuesta a preguntas nuestras. Las frases de este módulo
+ * exigen la palabra «jornada», «descanso» o «comer», así que no se cruzan con
+ * ninguna lista de los demás — pero el orden documenta la intención igual.
+ */
+async function atenderJornadaSiAplica(args: {
+  tenantId: string;
+  operadorId: string;
+  texto: string | undefined;
+  momento: Date;
+  waMessageId: string | null;
+  viajeId: string | null;
+}): Promise<string[] | null> {
+  if (typeof args.texto !== 'string' || !args.texto.trim()) return null;
+
+  // La conformidad va primero: sus frases contienen «jornada» y ninguna es una
+  // marca, pero preguntar en este orden hace explícito que confirmar no es
+  // fichar.
+  if (interpretarConformidadJornada(args.texto)) {
+    const r = await atenderConformidadJornada({
+      tenantId: args.tenantId,
+      operadorId: args.operadorId,
+      momento: args.momento,
+      waMessageId: args.waMessageId,
+    });
+    logger.info('jornada.conformidad', { operador: args.operadorId, resultado: r.resultado });
+    return [r.respuesta];
+  }
+
+  const tipo = interpretarMarcaJornada(args.texto);
+  if (!tipo) return null;
+
+  const r = await atenderMarcaJornada({
+    tenantId: args.tenantId,
+    operadorId: args.operadorId,
+    tipo,
+    // La hora del MENSAJE, no la del procesamiento (DAT-38, igual que los
+    // hitos): el acuse dice «iniciaste a las 06:12» y esa hora tiene que ser
+    // la que el operador vivió, no la que este servidor tenía cuando le tocó
+    // turno. En un registro laboral la diferencia no es cosmética.
+    momento: args.momento,
+    texto: args.texto,
+    waMessageId: args.waMessageId,
+    viajeId: args.viajeId,
+  });
+  logger.info('jornada.marca', {
+    operador: args.operadorId, tipo, resultado: r.resultado, dia: r.dia,
+  });
+
+  const mensajes = [r.respuesta];
+
+  // Al cerrar la jornada se le enseña EXACTAMENTE lo que quedó escrito y se le
+  // pide su conformidad. Es la pieza que persigue la «prueba plena» del tercer
+  // párrafo del art. 132 fr. XXXIV: para acordar un registro hay que verlo.
+  //
+  // Si el resumen no se puede leer NO se manda un resumen a medias: se le dice
+  // que lo vea con la oficina. Un resumen incompleto presentado como completo
+  // es justo lo que después se firma sin leer.
+  if (tipo === 'fin_jornada' && r.resultado === 'asentado' && r.jornadaId && r.dia) {
+    const asientos = await asientosDeJornada(args.tenantId, r.jornadaId);
+    mensajes.push(
+      asientos === null
+        ? 'No pude armarte el resumen del día ahorita. Tu registro quedó guardado; revísalo con la oficina.'
+        : resumenParaOperador(r.dia, asientos),
+    );
+  }
+
+  return mensajes;
+}
+
 export async function processInbound(msg: InboundMessage, opts: OpcionesInbound = {}): Promise<ResultadoInbound> {
   // ── RELOJ COMPARTIDO, desde la primera línea ─────────────────────────────
   // Las etapas de abajo pedían su tope fijo sin saber que comparten UNA
@@ -1394,6 +1485,27 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           return;
         }
       }
+      // ── ¿MARCA DE JORNADA SIN VIAJE? (LFT 132-XXXIV, mig. 0241) ────────
+      // El caso NATURAL, no el raro: el operador llega al patio a las seis y
+      // le asignan viaje a las nueve. Esas tres horas son jornada, y hasta hoy
+      // el sistema le contestaba «no tienes un viaje abierto para liquidar».
+      // Va después del ámbar (una emergencia le gana a fichar) y antes del
+      // fallback.
+      if (msg.type === 'text') {
+        const jornada = await atenderJornadaSiAplica({
+          tenantId: op.tenantId,
+          operadorId: op.operadorId,
+          texto: msg.text,
+          momento: msg.timestampMs ? new Date(msg.timestampMs) : new Date(),
+          waMessageId: msg.waMessageId ?? null,
+          viajeId: null,
+        });
+        if (jornada) {
+          for (const t of jornada) await sendText(msg.from, t);
+          return;
+        }
+      }
+
       await sendText(msg.from, 'No tienes un viaje abierto para liquidar ahorita. Cuando tu flota te asigne uno, aquí lo cerramos. 👍');
       return;
     }
@@ -2622,6 +2734,32 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       logger.info('consulta.estado', { viaje: viajeId });
       await say(respEstado);
       return;
+    }
+
+    // ── ¿MARCA DE JORNADA? (LFT 132 fr. XXXIV, mig. 0241) ───────────────────
+    //
+    // ANTES de los hitos y del freno de cierre, por la misma razón por la que
+    // los hitos van antes que el freno: `pidioCerrar` empata con
+    // `/termin[éeoó]/` y se comería «termino mi jornada» como intento de cerrar
+    // el viaje — anotando un cierre que el operador no pidió y perdiendo la
+    // hora de salida que sí declaró.
+    //
+    // Las frases de este módulo exigen «jornada», «descanso» o «comer», y
+    // ninguna lista de los reconocedores de arriba las menciona, así que el
+    // solape es cero por construcción; el orden documenta la intención.
+    {
+      const jornada = await atenderJornadaSiAplica({
+        tenantId: op.tenantId,
+        operadorId: op.operadorId,
+        texto: msg.text,
+        momento: msg.timestampMs ? new Date(msg.timestampMs) : new Date(),
+        waMessageId: msg.waMessageId ?? null,
+        viajeId,
+      });
+      if (jornada) {
+        for (const t of jornada) await say(t);
+        return;
+      }
     }
 
     // ── ¿HITO DEL VIAJE? "ya llegué" / "descargando" / "de regreso" (0090) ──

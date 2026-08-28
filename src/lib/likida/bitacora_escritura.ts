@@ -62,7 +62,14 @@ export type EntidadBitacora =
   // reconecte sola (0233). Es un CONSENTIMIENTO: quién lo dio, cuándo, quién
   // lo revocó, y cada vez que la máquina lo ejerció. Sin esto, «reconecté
   // sola el 9 de agosto» sería una frase sin respaldo.
-  | 'portal_relogin';
+  | 'portal_relogin'
+  // 0241: el registro de jornada de la LFT 132 fr. XXXIV. Corregir una hora de
+  // un trabajador, o cerrar su día, son actos con consecuencia jurídica: el
+  // 805 de la propia LFT hace que la ausencia o el desaseo de este documento se
+  // vuelva una presunción en contra del patrón. La anotación vive además EN LA
+  // FILA (`anulado_por_email`, `cerrado_por_email`); esto es la copia
+  // cross-tenant que /admin puede reconstruir sin tocar el expediente.
+  | 'jornada_dia';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una

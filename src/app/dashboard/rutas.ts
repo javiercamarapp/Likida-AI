@@ -12,6 +12,7 @@ import {
   Stamp,
   ScanEye,
   CloudDownload,
+  CalendarClock,
 } from 'lucide-react';
 
 /**
@@ -56,6 +57,10 @@ export const OPERACION: Item[] = [
   // aquí se consulta y se cruza.
   { href: '/dashboard/viajes', nombre: 'Viajes', Icono: Truck },
   { href: '/dashboard/operadores', nombre: 'Operadores', Icono: Users },
+  // El registro que la LFT 132 fr. XXXIV obliga a llevar desde el decreto del
+  // 01-may-2026 (mig. 0241). Se llama «Jornada» y no «Cumplimiento laboral» a
+  // propósito: Likida registra y avisa, no certifica que la flota cumpla.
+  { href: '/dashboard/jornada', nombre: 'Jornada', Icono: CalendarClock },
   // El activo que produce el dinero, con sus vigencias de ley (14-ago-2026).
   { href: '/dashboard/unidades', nombre: 'Unidades', Icono: Container },
   // F3: los viajes vivos sobre México — trayecto ilustrativo, sin GPS, y la

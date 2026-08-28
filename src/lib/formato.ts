@@ -54,7 +54,7 @@ export function hoyMx(fecha: Date = new Date()): string {
  * UTC−6 sin ramas). Vive aquí, junto a `TZ_MX`, porque un `-06:00` tecleado
  * en cada consulta es la misma clase de copia que ya divergió con `mxn()`.
  */
-const OFFSET_MX = '-06:00';
+export const OFFSET_MX = '-06:00';
 
 /**
  * El PRIMER instante de un día de México, en ISO con offset:
