@@ -74,6 +74,55 @@ export function pantallaDeLogin(inv: InventarioPagina, senaDeAdentro?: string): 
   return null;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LA GUARDA DE `type="password"` — UNA, y con UNA sola puerta.
+//
+// El #146 la escribió dentro de `piloto_vision.ts`: escribir en un campo que
+// la PÁGINA declaró como contraseña estaba prohibido, punto. Se sube aquí sin
+// cambiarle el criterio, por dos razones:
+//
+//   1. Ahora hay DOS caminos que escriben en un formulario de portal —el
+//      piloto y el re-login automático (`relogin.ts`)— y una guarda copiada
+//      en dos sitios es una guarda que alguien relaja en uno solo.
+//   2. Este módulo no importa ni Supabase ni el modelo, así que la guarda se
+//      prueba sola: es lo que permite tener una prueba que diga «el piloto no
+//      puede pasarla ni pidiéndolo».
+//
+// LA ÚNICA PUERTA es `permitirCampoPassword: true`, y la pasa EXACTAMENTE un
+// llamador: `reconectarPortal`, después de haber comprobado el consentimiento
+// de la flota y el candado de intentos. No es un booleano de conveniencia: es
+// la marca de que ese camino ya pagó las comprobaciones que el resto no puede
+// pagar. Cualquier otro llamador omite el parámetro y la guarda sigue dura.
+//
+// Se mira el INVENTARIO —lo que la página de verdad declaró— y no el texto del
+// selector ni la palabra del modelo: un portal puede llamarle `#txt3` a su
+// campo de contraseña, y el `type` es lo único que no miente.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** ¿El selector apunta a un campo que la PÁGINA declaró como contraseña? */
+export function esCampoDeContrasena(selector: string, inv: InventarioPagina): boolean {
+  return inv.campos.some(
+    (c) => c.type === 'password' && ((c.id && selector.includes(c.id)) || (c.name && selector.includes(c.name))),
+  );
+}
+
+/**
+ * ¿Se puede escribir en este selector? `true` salvo que sea un campo de
+ * contraseña y quien pregunta no traiga la autorización explícita.
+ *
+ * FALLA CERRADO por construcción: el default de `permitirCampoPassword` es
+ * `false`, así que un llamador nuevo que no sepa de esto queda del lado duro
+ * sin tener que acordarse de nada.
+ */
+export function escrituraPermitida(
+  selector: string,
+  inv: InventarioPagina,
+  opciones?: { permitirCampoPassword?: boolean },
+): boolean {
+  if (!esCampoDeContrasena(selector, inv)) return true;
+  return opciones?.permitirCampoPassword === true;
+}
+
 /** Las tres clases de fallo, cada una con un dueño distinto. */
 export type ClaseDeFallo = 'sesion_caducada' | 'requiere_vinculacion' | 'portal_cambio';
 

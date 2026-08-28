@@ -1,6 +1,7 @@
 import { CircleCheck, CircleDashed, TriangleAlert, ExternalLink, ShieldAlert } from 'lucide-react';
 import { fechaCorta } from '@/lib/formato';
 import type { EstadoVinculo } from '@/lib/likida/facturacion/vinculo_portal';
+import { ControlesRelogin, type AccionRelogin, type EstadoRelogin } from './relogin-controles';
 
 // ════════════════════════════════════════════════════════════════════════════
 // EL ESTADO DEL VÍNCULO, POR PORTAL — la pantalla que faltaba.
@@ -42,12 +43,20 @@ export interface FilaPortal {
   caducadaEn: string | null;
   /** Qué se vio, en palabras. Nunca una cookie. */
   motivo: string | null;
+  /**
+   * El permiso de re-login automático de ESTE portal (0233). `null` = no se
+   * pudo leer, y los controles lo dicen — misma regla que `vinculos`.
+   */
+  relogin: EstadoRelogin | null;
 }
 
-export function SeccionPortales({ filas, vinculos }: {
+export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelogin }: {
   filas: FilaPortal[];
   /** `false` = la lectura del estado falló. NO es «ninguno vinculado». */
   vinculos: boolean;
+  /** Server actions del permiso. Re-verifican sesión, rol y flota ADENTRO. */
+  autorizarRelogin: AccionRelogin;
+  revocarRelogin: AccionRelogin;
 }) {
   const caducados = filas.filter((f) => f.estado === 'caducada');
 
@@ -85,31 +94,42 @@ export function SeccionPortales({ filas, vinculos }: {
             {filas.map((f) => {
               const p = PILDORA[f.estado];
               return (
-                <li key={f.clave} className="flex items-start justify-between gap-3 py-1.5 border-b last:border-0"
+                <li key={f.clave} className="py-1.5 border-b last:border-0"
                   style={{ borderColor: 'var(--line2)' }}>
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-medium truncate">{f.nombre}</div>
-                    <div className="text-[11px]" style={{ color: 'var(--faint)' }}>
-                      {leyenda(f)}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-medium truncate">{f.nombre}</div>
+                      <div className="text-[11px]" style={{ color: 'var(--faint)' }}>
+                        {leyenda(f)}
+                      </div>
+                      {f.motivo && f.estado !== 'vinculado' && (
+                        <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>{f.motivo}</div>
+                      )}
                     </div>
-                    {f.motivo && f.estado !== 'vinculado' && (
-                      <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>{f.motivo}</div>
-                    )}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px]"
+                        style={{ color: p.fg, background: p.bg }}>
+                        <p.Icono width={11} height={11} strokeWidth={2} />
+                        {p.rotulo}
+                      </span>
+                      {f.estado !== 'vinculado' && (
+                        <a href={f.portal} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11.5px] underline"
+                          style={{ color: 'var(--muted)' }}>
+                          Vincular ahora <ExternalLink width={10} height={10} strokeWidth={2} />
+                        </a>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px]"
-                      style={{ color: p.fg, background: p.bg }}>
-                      <p.Icono width={11} height={11} strokeWidth={2} />
-                      {p.rotulo}
-                    </span>
-                    {f.estado !== 'vinculado' && (
-                      <a href={f.portal} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11.5px] underline"
-                        style={{ color: 'var(--muted)' }}>
-                        Vincular ahora <ExternalLink width={10} height={10} strokeWidth={2} />
-                      </a>
-                    )}
-                  </div>
+                  {/* La casilla del re-login va DEBAJO de cada portal y no en
+                      un ajuste global: el permiso es por portal, porque una
+                      flota puede querer que Likida reconecte sola en la
+                      gasolinera de todos los días y no en el portal donde
+                      guarda su facturación del año. */}
+                  <ControlesRelogin
+                    clave={f.clave} nombre={f.nombre} estado={f.relogin}
+                    autorizar={autorizarRelogin} revocar={revocarRelogin}
+                  />
                 </li>
               );
             })}

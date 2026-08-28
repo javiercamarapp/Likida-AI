@@ -7,6 +7,7 @@ import { Dona } from '@/app/admin/charts';
 import { BarraPagina } from '../../resumen-visual';
 import { ColaJefe, type FilaJefe, type AccionMarcarFacturada } from './cola-jefe';
 import { SeccionPortales, type FilaPortal } from './portales-vinculo';
+import type { AccionRelogin } from './relogin-controles';
 
 /** Topes de las listas — declarados en pantalla cuando recortan, nunca en
  *  silencio (los encabezados suman la lista COMPLETA). */
@@ -32,7 +33,7 @@ export interface ExtraAgenteFacturas {
  * Nada se pinta que no salga de un ticket real; el modo de emisión se
  * declara (en ensayo no se promete emisión).
  */
-export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificaciones, portalesConAdaptador, portales, vinculosLeidos }: {
+export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificaciones, portalesConAdaptador, portales, vinculosLeidos, autorizarRelogin, revocarRelogin }: {
   tickets: TicketPorFacturar[];
   extra: ExtraAgenteFacturas;
   /**
@@ -43,6 +44,13 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
   portales: FilaPortal[];
   /** `false` = no se pudo leer el estado. NO es «ninguno vinculado». */
   vinculosLeidos: boolean;
+  /**
+   * Las server actions del permiso de re-login (0233). Igual que
+   * `marcarFacturada`: viven en el servidor y re-verifican sesión, rol y
+   * flota adentro — esta vista solo las pasa hacia abajo.
+   */
+  autorizarRelogin: AccionRelogin;
+  revocarRelogin: AccionRelogin;
   /** Server action de la puerta: escribe el CFDI capturado y re-verifica
    *  sesión/rol/tenant ADENTRO — la vista solo la pasa a la cola. */
   marcarFacturada: AccionMarcarFacturada;
@@ -191,7 +199,8 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
           </div>
 
           {/* ── El VÍNCULO por portal: lo que decide si esta cola crece sola ── */}
-          <SeccionPortales filas={portales} vinculos={vinculosLeidos} />
+          <SeccionPortales filas={portales} vinculos={vinculosLeidos}
+            autorizarRelogin={autorizarRelogin} revocarRelogin={revocarRelogin} />
 
           <div className="grid lg:grid-cols-3 gap-4">
             {/* ── Monitoreo: lo que NO tienes que hacer ── */}
