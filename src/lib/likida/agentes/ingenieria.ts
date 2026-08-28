@@ -99,22 +99,55 @@ export interface ResultadoIngenieria {
 // el PR de nadie: rompe MASTER después del merge, que es peor.
 //
 // Lo que sí es honesto y estable: la lista CURADA de migraciones cuyos objetos
-// este código lee de verdad. Si una de estas no está aplicada, el bundle
-// desplegado está hablándole a un esquema que no existe — y eso sí es un
-// hallazgo, no un detalle de bookkeeping. `ingenieria.test.ts` verifica que
-// cada nombre de esta lista exista como archivo en `supabase/migrations`
+// este código lee de verdad. Si lo que una de estas crea no está en la base,
+// el bundle desplegado está hablándole a un esquema que no existe — y eso sí
+// es un hallazgo, no un detalle de bookkeeping. `ingenieria.test.ts` verifica
+// que cada `nombre` de esta lista exista como archivo en `supabase/migrations`
 // (esa dirección nunca se rompe sola: agregar migraciones en otra rama no la
 // invalida).
+//
+// ── EL INCIDENTE DE LOS 5 CORREOS (noche del 28-ago-2026) ─────────────────
+//
+// La primera versión de este contrato era una lista de NOMBRES y el detector
+// comparaba rótulo contra rótulo (`nombres.has(m)`). Esa misma noche,
+// `releases` y `migraciones` mandaron dos correos «Urgente» acusando que
+// 0102/0116/0117/0123/0155 «no constan aplicadas» — y las tablas de las cinco
+// EXISTÍAN todas en producción, con 60 agentes vivos leyéndolas. La causa: el
+// registro de la base no guarda los nombres canónicos. La 0155 se aplicó
+// PARTIDA en cuatro piezas (`0155_purgas_parte1`, `0155_purgas_parte2`,
+// `0155_resumen_costo_ia_latido_bucket`, `0155_purgas_permisos`), la 0150 en
+// tres, y las cuatro primeras entraron SIN prefijo (`agente_corrida`,
+// `agente_definicion`, `cola_aprobacion`, `runner_y_campanas`). Todo medido
+// contra `supabase_migrations.schema_migrations` de producción.
+//
+// La lección quedó escrita como estructura: el registro es un RÓTULO y el
+// esquema es el HECHO. Cada exigida declara ahora las TABLAS que crea y que
+// este bundle lee, y ningún detector afirma «falta la migración X» sin haber
+// comprobado que lo que X crea NO está en el catálogo. Una migración aplicada
+// en piezas, o registrada con otro nombre, sigue estando aplicada.
 // ═══════════════════════════════════════════════════════════════════════════
-export const MIGRACIONES_EXIGIDAS: readonly string[] = [
-  '0102_agente_corrida',            // agente_corrida — la bitácora que casi todos leen.
-  '0110_interruptores',             // interruptor + su CHECK de dominio.
-  '0116_agente_definicion',         // el catálogo de agentes.
-  '0117_cola_aprobacion',           // la bandeja: salida única de los ocho.
-  '0123_runner_y_campanas',         // runner_habilitado + presupuesto por agente.
-  '0155_purgas_y_bucket_comprobantes', // cron_latido, que `pruebas` lee.
-  '0223_plataforma_marketing',      // sitio_evento, que datos_instrumentacion lee.
-  '0234_agentes_ingenieria',        // esta ola: despliegue_visto + las 4 funciones.
+
+export interface MigracionExigida {
+  /** El basename canónico del archivo en `supabase/migrations`. */
+  nombre: string;
+  /** El prefijo numérico del archivo: cualquier registro `0155_*` cuenta como
+   *  la 0155 aunque venga partida en piezas con nombres distintos. */
+  prefijo: number;
+  /** Las tablas que esa migración crea Y que este bundle lee. Son el HECHO
+   *  contra el que se verifica antes de acusar: si están en el catálogo, la
+   *  migración está aplicada, diga lo que diga el rótulo del registro. */
+  tablas: readonly string[];
+}
+
+export const MIGRACIONES_EXIGIDAS: readonly MigracionExigida[] = [
+  { nombre: '0102_agente_corrida', prefijo: 102, tablas: ['agente_corrida'] },        // la bitácora que casi todos leen.
+  { nombre: '0110_interruptores', prefijo: 110, tablas: ['interruptor'] },            // el kill switch + su CHECK de dominio.
+  { nombre: '0116_agente_definicion', prefijo: 116, tablas: ['agente_definicion'] },  // el catálogo de agentes.
+  { nombre: '0117_cola_aprobacion', prefijo: 117, tablas: ['cola_aprobacion'] },      // la bandeja: salida única de los ocho.
+  { nombre: '0123_runner_y_campanas', prefijo: 123, tablas: ['campana'] },            // runner_habilitado + presupuesto por agente.
+  { nombre: '0155_purgas_y_bucket_comprobantes', prefijo: 155, tablas: ['cron_latido'] }, // cron_latido, que `pruebas` lee.
+  { nombre: '0223_plataforma_marketing', prefijo: 223, tablas: ['sitio_evento'] },    // sitio_evento, que datos_instrumentacion lee.
+  { nombre: '0234_agentes_ingenieria', prefijo: 234, tablas: ['despliegue_visto'] },  // esta ola: despliegue_visto + las 4 funciones.
 ];
 
 /** Los agentes que el RUNNER DE ESTE BUNDLE sabe despachar. Es un espejo de
@@ -279,6 +312,16 @@ export const leerMigracionesAplicadas = () => rpc<RespuestaMigraciones>('migraci
 export const leerPostura = () => rpc<Postura>('postura_seguridad');
 export const leerPerfil = (top = 20) => rpc<Perfil>('perfil_almacenamiento', { p_top: top });
 export const leerContrato = () => rpc<ContratoEsquema>('contrato_de_esquema');
+
+/** Los NOMBRES de todas las tablas de public, vía `postura_seguridad()`. Es la
+ *  lectura del HECHO que el incidente de los 5 correos (28-ago-2026) exigió:
+ *  antes de acusar «falta la migración X», `migraciones` y `releases` comprueban
+ *  aquí que lo que X crea de verdad no esté. LANZA si el catálogo no contesta —
+ *  y entonces el detector NO acusa: fail-closed y dicho. */
+export async function leerTablasCatalogo(): Promise<string[]> {
+  const p = await leerPostura();
+  return p.tablas.map((t) => t.tabla);
+}
 
 // ── El catálogo vivo, que casi todos los ocho necesitan ────────────────────
 
@@ -466,21 +509,133 @@ export function nombresRepetidos(filas: MigracionAplicada[]): string[] {
   return [...cuenta.entries()].filter(([, n]) => n > 1).map(([n]) => n).sort();
 }
 
-/** Prefijos numéricos usados por DOS archivos distintos: dos ramas eligieron
- *  el mismo número, que con seis forks en paralelo es el choque más probable. */
+/**
+ * Prefijos numéricos usados por DOS archivos distintos SIN ser una migración
+ * aplicada en piezas: dos ramas eligieron el mismo número.
+ *
+ * LA DISTINCIÓN ES LA LECCIÓN DEL 28-ago-2026: la primera versión reportaba
+ * TODO prefijo compartido como choque ROJO, y esa noche acusó a la 0150 —que
+ * la casa aplicó a propósito en tres piezas (`0150_agregados_analytics_cuerpo`,
+ * `..._cuerpo2`, `..._permisos`)— como si fuera una anomalía. Una migración
+ * partida en piezas se aplica en UNA tanda: sus registros quedan CONTIGUOS en
+ * el orden real de aplicación. Un choque de ramas de verdad queda intercalado
+ * con otros números. Aquí solo se reportan los intercalados; las piezas
+ * contiguas son la práctica normal de la casa y no son hallazgo.
+ */
 export function prefijosChocados(filas: MigracionAplicada[]): string[] {
-  const porPrefijo = new Map<number, Set<string>>();
+  // Ascendente por orden real de aplicación (el `version` es el sello UTC),
+  // solo las filas con prefijo: la posición de cada una decide la contigüidad.
+  const asc = [...filas]
+    .sort((a, b) => (a.version < b.version ? -1 : a.version > b.version ? 1 : 0))
+    .map((f) => ({ nombre: f.nombre, prefijo: prefijoDe(f.nombre) }))
+    .filter((f): f is { nombre: string; prefijo: number } => f.prefijo !== null);
+  const porPrefijo = new Map<number, { nombres: Set<string>; posiciones: number[] }>();
+  asc.forEach((f, i) => {
+    const g = porPrefijo.get(f.prefijo) ?? { nombres: new Set<string>(), posiciones: [] };
+    g.nombres.add(f.nombre);
+    g.posiciones.push(i);
+    porPrefijo.set(f.prefijo, g);
+  });
+  return [...porPrefijo.entries()]
+    .filter(([, g]) => g.nombres.size > 1
+      // Contiguo = las posiciones ocupan un tramo seguido del orden de
+      // aplicación: es la migración partida en piezas, no el choque.
+      && g.posiciones[g.posiciones.length - 1] - g.posiciones[0] !== g.posiciones.length - 1)
+    .map(([p, g]) => `${String(p).padStart(4, '0')}: ${[...g.nombres].sort().join(' + ')}`)
+    .sort();
+}
+
+// ── La verificación POR HECHO de las migraciones exigidas ──────────────────
+//
+// El corazón del arreglo del incidente de los 5 correos: el rótulo del
+// registro se consulta primero (barato), pero la ACUSACIÓN solo sale del
+// hecho — «la tabla que esa migración crea no está en el catálogo». Un
+// hallazgo que no se refuta a sí mismo contra el esquema no sale de aquí.
+
+export interface VeredictoExigida {
+  exigida: MigracionExigida;
+  /** Cómo da cuenta el REGISTRO de esta migración: por su nombre canónico,
+   *  por piezas con su prefijo, o de ninguna forma. */
+  registro: 'nombre' | 'prefijo' | 'ausente';
+  /** Los nombres registrados que la cubren cuando fue por prefijo. */
+  piezas: string[];
+  /** El HECHO: sus tablas están, faltan, o el catálogo no se pudo leer. */
+  hecho: 'objetos_presentes' | 'objetos_ausentes' | 'sin_catalogo';
+  tablasAusentes: string[];
+}
+
+/** Cruza el registro (rótulos) con el catálogo (hechos). PURA. `tablasCatalogo`
+ *  en `null` significa «no se pudo leer el catálogo», nunca «no hay tablas». */
+export function verificarExigidas(
+  filas: MigracionAplicada[],
+  tablasCatalogo: readonly string[] | null,
+): VeredictoExigida[] {
+  const nombres = new Set(filas.map((f) => f.nombre));
+  const porPrefijo = new Map<number, string[]>();
   for (const f of filas) {
     const p = prefijoDe(f.nombre);
     if (p === null) continue;
-    const s = porPrefijo.get(p) ?? new Set<string>();
-    s.add(f.nombre);
-    porPrefijo.set(p, s);
+    porPrefijo.set(p, [...(porPrefijo.get(p) ?? []), f.nombre]);
   }
-  return [...porPrefijo.entries()]
-    .filter(([, s]) => s.size > 1)
-    .map(([p, s]) => `${String(p).padStart(4, '0')}: ${[...s].sort().join(' + ')}`)
-    .sort();
+  const tablas = tablasCatalogo === null ? null : new Set(tablasCatalogo);
+  return MIGRACIONES_EXIGIDAS.map((m) => {
+    const piezas = porPrefijo.get(m.prefijo) ?? [];
+    const registro = nombres.has(m.nombre) ? 'nombre' as const
+      : piezas.length > 0 ? 'prefijo' as const
+        : 'ausente' as const;
+    const tablasAusentes = tablas === null ? [] : m.tablas.filter((t) => !tablas.has(t));
+    const hecho = tablas === null ? 'sin_catalogo' as const
+      : tablasAusentes.length > 0 ? 'objetos_ausentes' as const
+        : 'objetos_presentes' as const;
+    return { exigida: m, registro, piezas: [...piezas].sort(), hecho, tablasAusentes };
+  });
+}
+
+/**
+ * Los hallazgos que salen de esos veredictos. Compartida por `migraciones`
+ * (G1) y `releases` (D2) para que los dos acusen con el MISMO criterio:
+ *
+ *   · ROJO solo cuando el HECHO falta: la tabla que la migración crea no está
+ *     en el catálogo. Eso sí va a romper al bundle en la primera corrida.
+ *   · rótulo ausente + hecho presente = NOTA de bookkeeping: aplicada bajo
+ *     otro nombre (el caso real de `agente_corrida` y compañía). No escala.
+ *   · rótulo ausente + catálogo ciego = ÁMBAR: no se pudo verificar el hecho
+ *     y NO se acusa sobre el rótulo solo — se verifica en la Mac.
+ *   · aplicada en piezas con el hecho presente = silencio: es lo normal.
+ */
+export function hallazgosDeExigidas(veredictos: VeredictoExigida[], codigo: string): Hallazgo[] {
+  const hallazgos: Hallazgo[] = [];
+
+  const rotas = veredictos.filter((v) => v.hecho === 'objetos_ausentes');
+  if (rotas.length > 0) {
+    hallazgos.push({
+      semaforo: 'ROJO', codigo, objeto: muestra(rotas.map((v) => v.exigida.nombre)),
+      detalle: `${numero(rotas.length)} migración(es) que este despliegue EXIGE no están aplicadas: lo que crean NO está en el catálogo.`,
+      evidencia: rotas.map((v) => `${v.exigida.nombre}: falta ${v.tablasAusentes.join(' + ')} en public (registro: ${v.registro === 'ausente' ? 'sin rótulo que la cubra' : `consta como ${v.registro === 'nombre' ? v.exigida.nombre : v.piezas.join(' + ')} y aun así el objeto no está`})`).join(' | ')
+        + '. VERIFICADO CONTRA EL ESQUEMA, no contra el rótulo del registro: el bundle va a hablarle a objetos que no existen. Aplicarlas es el siguiente paso; no lo hace este agente.',
+    });
+  }
+
+  const sinVerificar = veredictos.filter((v) => v.hecho === 'sin_catalogo' && v.registro === 'ausente');
+  if (sinVerificar.length > 0) {
+    hallazgos.push({
+      semaforo: 'AMBAR', codigo, objeto: muestra(sinVerificar.map((v) => v.exigida.nombre)),
+      detalle: `${numero(sinVerificar.length)} migración(es) exigidas sin rótulo en el registro Y sin catálogo contra el que verificar el hecho.`,
+      evidencia: 'ni el nombre ni su prefijo constan en schema_migrations, y postura_seguridad() no contestó para comprobar si sus tablas existen. NO se acusa una falta sobre el rótulo solo (la lección del 28-ago-2026: el registro guarda nombres partidos y renombrados); se verifica en la Mac con `ls supabase/migrations` contra la base.',
+    });
+  }
+
+  const soloRotulo = veredictos.filter((v) => v.hecho === 'objetos_presentes' && v.registro === 'ausente');
+  if (soloRotulo.length > 0) {
+    hallazgos.push({
+      semaforo: 'NOTA', codigo, objeto: muestra(soloRotulo.map((v) => v.exigida.nombre)),
+      detalle: `${numero(soloRotulo.length)} migración(es) exigidas SIN rótulo que las cubra en el registro — y APLICADAS: todo lo que crean está en el catálogo.`,
+      evidencia: soloRotulo.map((v) => `${v.exigida.nombre}: ${v.exigida.tablas.join(' + ')} existe(n) en public`).join(' | ')
+        + '. Es bookkeeping, no incidente: se aplicó bajo otro nombre o el registro quedó incompleto (el caso real: agente_corrida, agente_definicion, cola_aprobacion y runner_y_campanas entraron sin prefijo). No escala.',
+    });
+  }
+
+  return hallazgos;
 }
 
 /** Los huecos de numeración en el rango aplicado. AMBIGUO A PROPÓSITO y el
@@ -502,28 +657,27 @@ export function huecosDeNumeracion(filas: MigracionAplicada[]): number[] {
   return huecos;
 }
 
-/** El detector completo, PURO sobre lo ya leído. */
+/** El detector completo, PURO sobre lo ya leído. `tablas` es la lista de
+ *  tablas de public (el HECHO); `null` en su valor = no se pudo leer, y
+ *  entonces G1 no acusa sobre rótulos (incidente del 28-ago-2026). */
 export function evaluarMigraciones(
   aplicadas: Lectura<RespuestaMigraciones>,
   contrato: Lectura<ContratoEsquema>,
   catalogo: Lectura<FichaAgente[]>,
+  tablas: Lectura<readonly string[]>,
 ): Hallazgo[] {
   const hallazgos: Hallazgo[] = [];
 
   if (aplicadas.valor && aplicadas.valor.disponible) {
     const filas = aplicadas.valor.filas;
-    const nombres = new Set(filas.map((f) => f.nombre));
 
     // G1 — el bundle exige un esquema que la base no tiene. Es el hallazgo más
-    // caro de todos: el código desplegado va a fallar contra objetos ausentes.
-    const faltantes = MIGRACIONES_EXIGIDAS.filter((m) => !nombres.has(m));
-    if (faltantes.length > 0) {
-      hallazgos.push({
-        semaforo: 'ROJO', codigo: 'G1', objeto: muestra(faltantes),
-        detalle: `${numero(faltantes.length)} migración(es) que este despliegue EXIGE no constan aplicadas.`,
-        evidencia: `el bundle lee objetos de ${faltantes.join(', ')} y ninguna aparece en schema_migrations (${numero(filas.length)} registradas). Aplicarlas es el siguiente paso; no lo hace este agente.`,
-      });
-    }
+    // caro de todos, y por lo mismo el que más caro cuesta gritar en falso: la
+    // noche del 28-ago-2026 esta comparación era por NOMBRE y acusó cinco
+    // migraciones «faltantes» cuyas tablas existían todas (el registro las
+    // tenía partidas en piezas o sin prefijo). Ahora el ROJO solo sale del
+    // HECHO: la tabla que la migración crea no está en el catálogo.
+    hallazgos.push(...hallazgosDeExigidas(verificarExigidas(filas, tablas.valor), 'G1'));
 
     // G2 — el incidente 0218/0219 y 0231/0232, en su forma general.
     const inversiones = inversionesDeOrden(filas);
@@ -546,11 +700,15 @@ export function evaluarMigraciones(
         evidencia: 'dos filas de schema_migrations con el mismo nombre y distinto version. Es inocuo solo si la migración era idempotente de punta a punta; si tenía un `insert` sin `on conflict` o un `alter ... add constraint`, no lo fue.',
       });
     }
+    // ÁMBAR y no ROJO (28-ago-2026): un prefijo compartido es un RÓTULO, no un
+    // daño verificado — el daño real (el orden invertido) lo mide G2. Y las
+    // piezas contiguas de una migración partida (0150, 0155) ya ni aparecen
+    // aquí: `prefijosChocados` solo devuelve los prefijos INTERCALADOS.
     if (chocados.length > 0) {
       hallazgos.push({
-        semaforo: 'ROJO', codigo: 'G4', objeto: muestra(chocados, 4),
-        detalle: `${numero(chocados.length)} número(s) de migración usados por DOS archivos distintos.`,
-        evidencia: 'dos ramas eligieron el mismo número. El orden entre ellas deja de estar definido por el nombre y pasa a depender de quién aplicó primero — exactamente el desorden que G2 mide.',
+        semaforo: 'AMBAR', codigo: 'G4', objeto: muestra(chocados, 4),
+        detalle: `${numero(chocados.length)} número(s) de migración usados por DOS archivos distintos, intercalados con otras migraciones.`,
+        evidencia: 'dos ramas eligieron el mismo número. El orden entre ellas deja de estar definido por el nombre y pasa a depender de quién aplicó primero — exactamente el desorden que G2 mide. (Una migración aplicada en piezas contiguas NO aparece aquí: es la práctica normal de la casa.)',
       });
     }
 
@@ -659,8 +817,9 @@ export function armarParteMigraciones(
   lineas.push(...pintarHallazgos(hallazgos, 'Nada disparó umbral: el contrato del bundle está aplicado, el orden de aplicación respeta la numeración, no hay números chocados, todo agente vivo tiene palanca y ninguna tabla con tenant_id corre sin RLS.'));
   lineas.push('');
   lineas.push('LO QUE ESTE PARTE NO MIRA: el CONTENIDO de una migración. Desde Vercel no hay repo — solo los NOMBRES y los sellos de tiempo que la base registró, más lo que el catálogo de PostgreSQL dice del esquema resultante. Si un .sql hace algo distinto de lo que su nombre promete, eso lo caza la revisión del PR y la batería local, no este agente.');
+  lineas.push('CÓMO ACUSA UNA FALTANTE (desde el 28-ago-2026): nunca por el rótulo del registro — el registro guarda migraciones partidas en piezas y renombradas. Una exigida solo se declara faltante cuando la TABLA que crea no está en el catálogo, y la evidencia cita esa tabla.');
   lineas.push(PIE_ALCANCE);
-  lineas.push('Fuentes: migraciones_aplicadas() · contrato_de_esquema() · agente_definicion (0234).');
+  lineas.push('Fuentes: migraciones_aplicadas() · contrato_de_esquema() · agente_definicion · postura_seguridad() (la existencia real de las tablas exigidas) (0234).');
   return lineas.join('\n');
 }
 
@@ -674,13 +833,16 @@ async function correrMigraciones(disparo: DisparoCorrida, hoy: string): Promise<
       await anotar(agente, inicio, 'ok', disparo, { parte: 'ya_existia', titulo });
       return { resultado: 'saltado', piezas: 0, costoUsd: 0, motivo: 'el parte de esta semana ya está en la bandeja' };
     }
-    const [aplicadas, contrato, catalogo] = await Promise.all([
+    const [aplicadas, contrato, catalogo, tablas] = await Promise.all([
       porValor('migraciones aplicadas (schema_migrations)', leerMigracionesAplicadas),
       porValor('contrato de esquema', leerContrato),
       porValor('catálogo de agentes', leerCatalogo),
+      // El HECHO contra el que se verifica cada exigida antes de acusar
+      // (incidente 28-ago-2026): ciega esta lectura, G1 no acusa por rótulo.
+      porValor('tablas del catálogo (postura_seguridad)', leerTablasCatalogo),
     ]);
-    const hallazgos = evaluarMigraciones(aplicadas, contrato, catalogo);
-    const ciegas = lineaFuentesCiegas([aplicadas, contrato, catalogo]);
+    const hallazgos = evaluarMigraciones(aplicadas, contrato, catalogo, tablas);
+    const ciegas = lineaFuentesCiegas([aplicadas, contrato, catalogo, tablas]);
     const cuerpo = armarParteMigraciones(hallazgos, lunes, aplicadas, ciegas);
     await alertarRojos(agente, hallazgos);
     const res = await encolarParte(agente, 'parte_migraciones', titulo, cuerpo, {
@@ -688,7 +850,7 @@ async function correrMigraciones(disparo: DisparoCorrida, hoy: string): Promise<
       aplicadas_disponible: aplicadas.valor?.disponible ?? null,
       aplicadas_total: aplicadas.valor?.filas.length ?? null,
       hallazgos: hallazgos.map((h) => ({ semaforo: h.semaforo, codigo: h.codigo, objeto: h.objeto })),
-      consultas: ['migraciones_aplicadas()', 'contrato_de_esquema()', 'agente_definicion'],
+      consultas: ['migraciones_aplicadas()', 'contrato_de_esquema()', 'agente_definicion', 'postura_seguridad() (tablas)'],
     });
     await anotar(agente, inicio, 'ok', disparo,
       { parte: res, hallazgos: hallazgos.length, rojos: hallazgos.filter((h) => h.semaforo === 'ROJO').length },
@@ -1139,27 +1301,39 @@ export function ramaDesplegada(): string | null {
  * y INSERT solo si el UPDATE no encontró fila. Dos corridas simultáneas: la
  * segunda choca con la PK y se trata como «ya estaba», no como fallo.
  */
-export async function registrarDespliegue(sha: string): Promise<Despliegue | null> {
-  const ahora = new Date().toISOString();
-  const { data: act, error: errAct } = await acotada(supabaseAdmin()
+/** SOLO LEE la fila de un SHA en `despliegue_visto` (`null` = nunca visto).
+ *  La usa `registrarDespliegue` y también el agente `pruebas`, que necesita
+ *  saber DESDE CUÁNDO corre el código vigente para no contar como alerta los
+ *  fallos del código anterior (incidente 28-ago-2026) — y que por contrato de
+ *  la tabla (0234) no escribe en ella: el único escritor es `releases`. */
+export async function leerDespliegueVisto(sha: string): Promise<Despliegue | null> {
+  const { data, error } = await acotada(supabaseAdmin()
     .from('despliegue_visto')
     .select('sha, entorno, rama, primera_vista, ultima_vista, vistas')
     .eq('sha', sha)
     .limit(1), 'ingenieria.despliegue_leer');
-  if (errAct) throw new Error(`registrarDespliegue.leer: ${errAct.message}`);
-  const previa = ((act ?? []) as Array<Record<string, unknown>>)[0];
+  if (error) throw new Error(`leerDespliegueVisto: ${error.message}`);
+  const fila = ((data ?? []) as Array<Record<string, unknown>>)[0];
+  if (!fila) return null;
+  return {
+    sha, entorno: String(fila.entorno), rama: (fila.rama as string | null) ?? null,
+    primeraVista: String(fila.primera_vista), ultimaVista: String(fila.ultima_vista),
+    vistas: Number(fila.vistas ?? 0),
+  };
+}
+
+export async function registrarDespliegue(sha: string): Promise<Despliegue | null> {
+  const ahora = new Date().toISOString();
+  const previa = await leerDespliegueVisto(sha);
 
   if (previa) {
-    const vistas = Number(previa.vistas ?? 0) + 1;
+    const vistas = previa.vistas + 1;
     const { error } = await acotada(supabaseAdmin()
       .from('despliegue_visto')
       .update({ ultima_vista: ahora, vistas })
       .eq('sha', sha), 'ingenieria.despliegue_tocar');
     if (error) throw new Error(`registrarDespliegue.tocar: ${error.message}`);
-    return {
-      sha, entorno: String(previa.entorno), rama: (previa.rama as string | null) ?? null,
-      primeraVista: String(previa.primera_vista), ultimaVista: ahora, vistas,
-    };
+    return { ...previa, ultimaVista: ahora, vistas };
   }
 
   const fila = {
@@ -1200,6 +1374,7 @@ export async function leerDespliegues(limite = 6): Promise<Despliegue[]> {
 export function evaluarReleases(
   actual: Despliegue | null,
   aplicadas: Lectura<RespuestaMigraciones>,
+  tablas: Lectura<readonly string[]>,
 ): Hallazgo[] {
   const hallazgos: Hallazgo[] = [];
 
@@ -1221,17 +1396,13 @@ export function evaluarReleases(
   }
 
   const filas = aplicadas.valor.filas;
-  const nombres = new Set(filas.map((f) => f.nombre));
 
-  // D2 — el código exige objetos que la base no tiene. Es la mitad cara.
-  const faltantes = MIGRACIONES_EXIGIDAS.filter((m) => !nombres.has(m));
-  if (faltantes.length > 0) {
-    hallazgos.push({
-      semaforo: 'ROJO', codigo: 'D2', objeto: muestra(faltantes),
-      detalle: 'el código DESPLEGADO exige migraciones que la base NO tiene aplicadas.',
-      evidencia: `${faltantes.join(', ')}. Esta es la mitad cara de «mergeado ≠ desplegado»: el bundle va a hablarle a objetos que no existen y a fallar en la primera corrida que los toque.`,
-    });
-  }
+  // D2 — el código exige objetos que la base no tiene. Es la mitad cara — y
+  // fue el correo en falso del 28-ago-2026: comparado por NOMBRE, acusó
+  // migraciones «faltantes» que estaban aplicadas en piezas o bajo otro
+  // rótulo. Ahora usa el MISMO criterio verificado que G1: el ROJO solo sale
+  // cuando la tabla que la migración crea no está en el catálogo.
+  hallazgos.push(...hallazgosDeExigidas(verificarExigidas(filas, tablas.valor), 'D2'));
 
   // D3 — la otra mitad: el esquema se movió DESPUÉS de que este SHA empezó a
   // correr, así que el código que está en producción se construyó antes.
@@ -1282,7 +1453,8 @@ export function armarParteReleases(
   lineas.push('');
   lineas.push('LO QUE ESTE PARTE NO SABE: si un PR está mergeado, si el build pasó, si hay un despliegue en curso o si alguien hizo rollback. Nada de eso llega a la función; lo que sí llega es el SHA que está ejecutando ESTE código, y contra ese se mide todo lo de arriba.');
   lineas.push(PIE_ALCANCE);
-  lineas.push('Fuentes: VERCEL_GIT_COMMIT_SHA / VERCEL_ENV / VERCEL_GIT_COMMIT_REF del propio proceso · despliegue_visto (0234) · migraciones_aplicadas().');
+  lineas.push('CÓMO ACUSA UNA FALTANTE (desde el 28-ago-2026): nunca por el rótulo del registro — solo cuando la tabla que la migración crea NO está en el catálogo, verificado con postura_seguridad().');
+  lineas.push('Fuentes: VERCEL_GIT_COMMIT_SHA / VERCEL_ENV / VERCEL_GIT_COMMIT_REF del propio proceso · despliegue_visto (0234) · migraciones_aplicadas() · postura_seguridad() (tablas).');
   return lineas.join('\n');
 }
 
@@ -1311,12 +1483,15 @@ async function correrReleases(disparo: DisparoCorrida, hoy: string): Promise<Res
       };
     }
 
-    const [aplicadas, historial] = await Promise.all([
+    const [aplicadas, historial, tablas] = await Promise.all([
       porValor('migraciones aplicadas (schema_migrations)', leerMigracionesAplicadas),
       porValor('historial de despliegues', () => leerDespliegues(6)),
+      // El HECHO para D2 (incidente 28-ago-2026): sin esta lectura no se acusa
+      // una migración faltante por su rótulo.
+      porValor('tablas del catálogo (postura_seguridad)', leerTablasCatalogo),
     ]);
-    const hallazgos = evaluarReleases(actual.valor ?? null, aplicadas);
-    const ciegas = lineaFuentesCiegas([actual, aplicadas, historial]);
+    const hallazgos = evaluarReleases(actual.valor ?? null, aplicadas, tablas);
+    const ciegas = lineaFuentesCiegas([actual, aplicadas, historial, tablas]);
     const cuerpo = armarParteReleases(hallazgos, actual.valor ?? null, historial.valor ?? [], aplicadas, lunes, ciegas);
     await alertarRojos(agente, hallazgos);
     const res = await encolarParte(agente, 'parte_releases', titulo, cuerpo, {
@@ -1325,7 +1500,7 @@ async function correrReleases(disparo: DisparoCorrida, hoy: string): Promise<Res
       entorno: entornoDesplegado(),
       primera_vista: actual.valor?.primeraVista ?? null,
       hallazgos: hallazgos.map((h) => ({ semaforo: h.semaforo, codigo: h.codigo, objeto: h.objeto })),
-      consultas: ['despliegue_visto', 'migraciones_aplicadas()'],
+      consultas: ['despliegue_visto', 'migraciones_aplicadas()', 'postura_seguridad() (tablas)'],
     });
     await anotar(agente, inicio, 'ok', disparo,
       { parte: res, sha: sha ?? null, hallazgos: hallazgos.length },
