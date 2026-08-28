@@ -77,3 +77,39 @@ describe('trazaDeCorrida: el costo de la ventana se suma en SQL', () => {
     expect(await trazaDeCorrida('nadie')).toBeNull();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL GASTO MEDIDO DE LA CORRIDA (`agente_corrida.costo_usd`, 0123).
+//
+// La columna llevaba desde la 0123 escribiéndose y NINGUNA pantalla la leía:
+// `COLUMNAS` la omitía del select, así que la traza sustituía el gasto medido
+// por una correlación temporal contra `llm_costo`. Al añadirla, lo único que
+// hay que blindar es la distinción que el resto del repo ya defiende
+// (`backoffice.ts:17`): NULL es «no se midió», nunca $0.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('costoUsd: NULL es «no se midió», jamás cero', () => {
+  beforeEach(() => { corridas.clear(); rpcs.clear(); llamadasRpc.length = 0; tablasLeidas.length = 0; });
+
+  it('un costo medido llega como número', async () => {
+    corridas.set('c1', { ...CORRIDA, costo_usd: 0.0342 });
+    rpcs.set('resumen_costo_ia_tenant', { data: { totales: { n: 1, costoUsd: 1, tokensIn: 1, tokensOut: 1 } }, error: null });
+    expect((await trazaDeCorrida('c1'))?.corrida.costoUsd).toBe(0.0342);
+  });
+
+  it('un CERO medido se conserva como cero — es una medición, no un hueco', async () => {
+    corridas.set('c1', { ...CORRIDA, costo_usd: 0 });
+    rpcs.set('resumen_costo_ia_tenant', { data: { totales: { n: 1, costoUsd: 1, tokensIn: 1, tokensOut: 1 } }, error: null });
+    expect((await trazaDeCorrida('c1'))?.corrida.costoUsd).toBe(0);
+  });
+
+  it('NULL y la columna ausente son null, NUNCA 0', async () => {
+    // `Number(null)` es 0: sin el `== null` de por medio, una corrida que no
+    // midió su gasto se pintaría "US$0.0000" y se leería como un agente que
+    // trabaja gratis. Es el bug que esta prueba existe para impedir.
+    corridas.set('c1', { ...CORRIDA, costo_usd: null });
+    corridas.set('c2', { ...CORRIDA, id: 'c2' });
+    rpcs.set('resumen_costo_ia_tenant', { data: { totales: { n: 1, costoUsd: 1, tokensIn: 1, tokensOut: 1 } }, error: null });
+    expect((await trazaDeCorrida('c1'))?.corrida.costoUsd).toBeNull();
+    expect((await trazaDeCorrida('c2'))?.corrida.costoUsd).toBeNull();
+  });
+});

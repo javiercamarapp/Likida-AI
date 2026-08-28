@@ -1,8 +1,9 @@
+import { Fragment } from 'react';
 import Link from 'next/link';
 import { ListTree, ArrowLeft } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { corridasRecientes, type CorridaCruzada } from '@/lib/admin/corridas-cruzadas';
-import { fechaHoraMx } from '@/lib/formato';
+import { fechaHoraMx, usd4 } from '@/lib/formato';
 import { StatusPill, EstadoError, EstadoVacio, type Estado } from '../ui/kit';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { etiquetaInterruptor } from '../observabilidad/etiquetas';
@@ -74,13 +75,15 @@ export default async function IndiceCorridas() {
                   <th className="px-4 py-2.5">Inicio</th>
                   <th className="px-4 py-2.5">Duración</th>
                   <th className="px-4 py-2.5">Tareas</th>
+                  <th className="px-4 py-2.5">Gasto</th>
                 </tr>
               </thead>
               <tbody>
                 {corridas.map((c) => {
                   const pill = PILL[c.estado] ?? { estado: 'neutral' as Estado, etiqueta: c.estado };
                   return (
-                    <tr key={c.id} className="border-t" style={{ borderColor: 'var(--line-2)' }}>
+                    <Fragment key={c.id}>
+                    <tr className="border-t" style={{ borderColor: 'var(--line-2)' }}>
                       <td className="px-4 py-2.5">
                         <Link href={`/admin/corridas/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--ink)' }}>
                           {etiquetaInterruptor(c.agente)}
@@ -94,7 +97,29 @@ export default async function IndiceCorridas() {
                         {/* ambos o ninguno — la regla de la casa para tareas */}
                         {c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas} de ${c.tareasTotal}` : '—'}
                       </td>
+                      <td className="px-4 py-2.5 tabular-nums" style={{ color: 'var(--ink-2)' }}>
+                        {/* `usd4` y no `usd`: una corrida cuesta céntimos de
+                            céntimo, y `usd` los redondearía a US$0.00 — que se
+                            lee «no gastó». NULL se pinta '—' con su porqué en
+                            el title: no se midió, no es que saliera gratis. */}
+                        {c.costoUsd === null
+                          ? <span style={{ color: 'var(--faint)' }} title="Esta corrida no midió su gasto (costo_usd NULL). No significa que no gastara.">—</span>
+                          : usd4(c.costoUsd)}
+                      </td>
                     </tr>
+                    {/* EL ERROR, EN LA LISTA. Estaba solo dentro de la traza, una
+                        por una: con 50 corridas y tres fallos, encontrar el
+                        motivo eran tres clics a ciegas. `agente_corrida.error`
+                        ya guarda el motivo REDACTADO para una persona (0102:42),
+                        no un stack, así que se puede pintar tal cual. */}
+                    {c.error !== null && c.error !== '' && (
+                      <tr>
+                        <td colSpan={7} className="px-4 pb-2.5 text-xs" style={{ color: 'var(--color-bad)' }}>
+                          <span className="line-clamp-2" title={c.error}>{c.error}</span>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>

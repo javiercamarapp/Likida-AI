@@ -10,8 +10,11 @@ import { fechaHoraMx } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { EstadoVacio, StatusPill, type Estado } from '../ui/kit';
 import { FormaConAviso, Campo, type ResultadoAccion } from '../ui/forma';
+import { PalancaAgente } from './palanca';
 
 export type AccionAlta = (previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
+/** Apagar/encender la palanca de un agente, desde su propia fila. */
+export type AccionPalanca = (previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
 
 export const dynamic = 'force-dynamic';
 
@@ -69,7 +72,7 @@ const PILL_CORRIDA: Record<string, Estado> = { ok: 'ok', parcial: 'warn', fallo:
 /** El contenido REAL del panel, exportado aparte (patrón inicio-contenido):
  *  la puerta vive en page.tsx y el preview headless monta ESTO — el
  *  componente real, nunca una copia. La server action llega por props. */
-export async function PanelAgentesContenido({ accionAlta }: { accionAlta: AccionAlta }) {
+export async function PanelAgentesContenido({ accionAlta, accionPalanca }: { accionAlta: AccionAlta; accionPalanca: AccionPalanca }) {
 
   const [agentes, interruptores, exito, consumo] = await Promise.all([
     listarAgentes(),
@@ -129,10 +132,8 @@ export async function PanelAgentesContenido({ accionAlta }: { accionAlta: Accion
             <span style={{ color: interruptores === null ? 'var(--bad)' : 'var(--faint)' }}>
               {interruptores === null ? 'No se pudo leer' : 'Sin palanca propia'}
             </span>
-          ) : interruptor.apagado ? (
-            <StatusPill estado="bad">APAGADO</StatusPill>
           ) : (
-            <StatusPill estado="ok">Encendido</StatusPill>
+            <PalancaAgente id={`agente:${a.id}`} apagado={interruptor.apagado} accion={accionPalanca} />
           )}
         </td>
         <td className="px-4 py-2.5 text-[12px]">
@@ -242,7 +243,8 @@ export async function PanelAgentesContenido({ accionAlta }: { accionAlta: Accion
           <EstadoVacio>
             El runner de nivel 2 (ejecutar agentes declarativos dentro del producto, con sandbox de tools
             y presupuesto medido) es fase posterior a propósito — copiloto-del-fundador.md §4 dice por qué.
-            Encender/pausar un agente vivo sigue en Observabilidad y el ⌘K.
+            La palanca de cada agente vivo ya se mueve desde su propia fila, aquí arriba; Observabilidad
+            y el ⌘K siguen teniendo las 58 juntas, incluida la global.
           </EstadoVacio>
         </div>
       </div>
