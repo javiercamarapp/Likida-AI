@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // RES-7: un cron muerto era invisible. La puerta loguea el 401 con código
@@ -16,7 +16,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({ from: () => ({ upsert: (...a: unknown[]) => upsert(...(a as [])) }) }),
 }));
 
-const { puertaCron, registrarLatido, juzgarLatido, CADENCIA_MS, TOLERANCIA_LATIDO_MS } = await import('./salud');
+const { puertaCron, registrarLatido, juzgarLatido, motivoDeSalto, CRONS, CADENCIA_MS, TOLERANCIA_LATIDO_MS } = await import('./salud');
 
 beforeEach(() => { vi.clearAllMocks(); process.env.CRON_SECRET = 's3cr3t'; });
 
@@ -92,5 +92,62 @@ describe('CADENCIA_MS espeja vercel.json', () => {
       expect(CADENCIA_MS[id], `${id} falta en CADENCIA_MS`).toBe(esperada[c.schedule]);
     }
     expect(TOLERANCIA_LATIDO_MS).toBe(20 * 60_000);
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // EL GUARDIA QUE FALTABA. La prueba de arriba cruza CRONS contra
+  // vercel.json, así que un cron nuevo sin cadencia se cazaba. Nadie cruzaba
+  // CRONS contra el CHECK de `cron_latido`, y por ahí se coló el drift que
+  // arregla la 0242: `asistencia` y `descarga-sat` llevaban semanas
+  // llamando a `registrarLatido` con un id que la base rechazaba, y como el
+  // latido es best-effort (traga el error con un warn), los dos crons corrían
+  // y el panel los daba por muertos.
+  //
+  // Se lee el ÚLTIMO `add constraint cron_latido_id_dominio` de todo
+  // `supabase/migrations/` —no un archivo fijo— porque el dominio se ha
+  // reescrito tres veces (0155 → 0176 → 0180 → 0242) y la prueba tiene que
+  // seguir midiendo el vigente, no el que estaba cuando se escribió.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('el CHECK de cron_latido admite exactamente los CRONS que el código declara', () => {
+    const dir = 'supabase/migrations';
+    const archivos = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
+
+    let dominio: string[] | null = null;
+    let deQuien = '';
+    for (const archivo of archivos) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- recorre las migraciones del propio repo en tiempo de prueba; la ruta sale de readdirSync sobre una constante, no de ninguna entrada de usuario.
+      const sql = readFileSync(`${dir}/${archivo}`, 'utf8');
+      // Sin comentarios: la 0242 CITA el dominio viejo en su encabezado para
+      // explicar el bug, y sin este filtro la prueba leería esa cita como si
+      // fuera el CHECK vigente.
+      const vivo = sql.replace(/^\s*--.*$/gm, '');
+      const re = /add\s+constraint\s+cron_latido_id_dominio\s+check\s*\(\s*id\s+in\s*\(([^)]*)\)/gis;
+      for (const m of vivo.matchAll(re)) {
+        dominio = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
+        deQuien = archivo;
+      }
+    }
+
+    expect(dominio, 'ninguna migración declara cron_latido_id_dominio').not.toBeNull();
+    // Ordenados: al dominio le da igual el orden, y comparar listas ordenadas
+    // hace que el mensaje de fallo diga QUÉ id sobra o falta.
+    expect([...(dominio ?? [])].sort(), `el CHECK vigente lo pone ${deQuien}`)
+      .toEqual([...CRONS].sort());
+  });
+});
+
+describe('motivoDeSalto', () => {
+  it('traduce la palanca que apagó el cron', () => {
+    expect(motivoDeSalto({ interruptor: 'global' })).toBe('apagado por la palanca «global»');
+  });
+  it('un salto sin palanca no inventa un motivo', () => {
+    // `null` es «no fue un salto declarado», y la vista lo pinta distinto de
+    // un salto explicado. Un string de relleno aquí haría que un cron caído
+    // se leyera como un cron apagado a propósito.
+    expect(motivoDeSalto({})).toBeNull();
+    expect(motivoDeSalto({ interruptor: '' })).toBeNull();
+    expect(motivoDeSalto({ interruptor: '   ' })).toBeNull();
+    expect(motivoDeSalto({ interruptor: 7 })).toBeNull();
+    expect(motivoDeSalto({ otra: 'cosa' })).toBeNull();
   });
 });

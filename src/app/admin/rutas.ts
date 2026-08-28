@@ -4,7 +4,7 @@ import {
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
   Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge, Handshake, Inbox,
-  Bot, Bug, ListChecks, Sparkles, Hand, Globe2,
+  Bot, Bug, ListChecks, Sparkles, Hand, Globe2, AlarmClock,
 } from 'lucide-react';
 
 /**
@@ -84,6 +84,7 @@ export const CONTROL: Item[] = [
 
 export const SISTEMA: Item[] = [
   { href: '/admin/observabilidad', nombre: 'Observabilidad', Icono: Activity },
+  { href: '/admin/crons', nombre: 'Relojes', Icono: AlarmClock },
   { href: '/admin/calidad-evals', nombre: 'Calidad & Evals', Icono: ClipboardCheck },
   { href: '/admin/dev', nombre: 'Dev', Icono: Code2 },
   { href: '/admin/salud-sistema', nombre: 'Salud del sistema', Icono: HeartPulse },

@@ -10,6 +10,7 @@ import { envHealth, faltantes, type EnvGroup } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { redisConfigurado } from '@/lib/ratelimit';
+import { CRONS } from '@/lib/admin/salud';
 
 export const dynamic = 'force-dynamic';
 
@@ -140,18 +141,25 @@ function renglonCofre(): Renglon {
     };
 }
 
-/** Sin `CRON_SECRET`, los tres crons (escalar, facturar, purgar) devuelven 500
- *  A PROPÓSITO — un 200 dejaría el cron verde en Vercel sin haber hecho nada. */
+/** Sin `CRON_SECRET`, TODOS los crons devuelven 500 A PROPÓSITO (`puertaCron`)
+ *  — un 200 dejaría el cron verde en Vercel sin haber hecho nada.
+ *
+ *  El texto decía «los tres crons (escalar, facturar, purgar)» y nombraba a
+ *  tres de los nueve: se escribió cuando eran tres y nadie lo revisó al alta
+ *  de los otros seis. Un rótulo que nombra tres cuando son nueve hace creer
+ *  que las otras seis rutas siguen corriendo sin secreto, que es exactamente
+ *  al revés. Ahora la cuenta sale de `CRONS`, la misma constante que
+ *  `salud.test.ts` cruza contra vercel.json: no se puede volver a desfasar. */
 function renglonCronSecret(): Renglon {
   const titulo = 'Crons — CRON_SECRET';
   return process.env.CRON_SECRET
     ? {
       titulo, estado: 'ok', etiqueta: 'Configurado',
-      detalle: 'Escalar, facturar y purgar lo exigen como Bearer; Vercel Cron lo manda en cada disparo.',
+      detalle: `Los ${CRONS.length} crons lo exigen como Bearer; Vercel Cron lo manda en cada disparo.`,
     }
     : {
       titulo, estado: 'bad', etiqueta: 'Sin CRON_SECRET — los crons no corren',
-      detalle: 'Los tres crons devuelven 500 sin él (a propósito: un 200 dejaría el cron verde sin hacer nada). Escalación, facturación y purga están paradas.',
+      detalle: `Los ${CRONS.length} crons devuelven 500 sin él (a propósito: un 200 dejaría el cron verde sin hacer nada). Ninguno está corriendo.`,
     };
 }
 

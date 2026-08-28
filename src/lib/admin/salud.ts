@@ -131,6 +131,65 @@ export function juzgarLatido(cron: CronId, ultimoLatido: string | null, ultimoEs
   };
 }
 
+/**
+ * Por qué un cron se saltó su corrida, en palabras, o `null` si no fue un
+ * salto declarado. Puro para poder probarlo sin base.
+ *
+ * Los crons que se apagan por palanca anotan el motivo DENTRO de `detalle`
+ * (`{ interruptor: 'global' }` en `gps/route.ts:58`, `facturar/route.ts:431`),
+ * no en una columna. Sin esta lectura, un cron apagado a propósito y un cron
+ * caído se ven idénticos en el panel — y son la diferencia entre «lo apagué
+ * yo el martes» y «lleva tres días muerto».
+ */
+export function motivoDeSalto(detalle: Record<string, unknown>): string | null {
+  const palanca = detalle.interruptor;
+  if (typeof palanca === 'string' && palanca.trim() !== '') {
+    return `apagado por la palanca «${palanca}»`;
+  }
+  return null;
+}
+
+export interface LatidoDetallado extends SaludCron {
+  /** ISO del último latido, o `null` si nunca latió. */
+  ultimoLatido: string | null;
+  /** Cada cuánto DEBERÍA correr, según vercel.json. */
+  cadenciaMs: number;
+  /** El jsonb tal cual lo dejó el cron. `{}` si nunca latió. */
+  detalle: Record<string, unknown>;
+  /** `motivoDeSalto(detalle)` ya resuelto, para que la vista no razone. */
+  motivoSalto: string | null;
+}
+
+/**
+ * Como `estadoLatidos`, pero trae también `detalle` y la cadencia esperada:
+ * es lo que necesita una PANTALLA para explicar un rojo, frente a lo que
+ * necesita `/api/health` para contestar un booleano. LANZA ante error — una
+ * pantalla de salud que no puede leer la salud tiene que caerse, no pintar
+ * nueve renglones grises que se leen como «todo tranquilo».
+ */
+export async function detalleLatidos(ahoraMs: number = Date.now()): Promise<Record<CronId, LatidoDetallado>> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('cron_latido')
+    .select('id, ultimo_latido, estado, detalle'), 'detalleLatidos');
+  if (error) throw new Error(`detalleLatidos: ${error.message}`);
+  const porId = new Map((data ?? []).map((f) => [String(f.id), f]));
+  const salida = {} as Record<CronId, LatidoDetallado>;
+  for (const c of CRONS) {
+    const f = porId.get(c);
+    const ultimoLatido = f ? String(f.ultimo_latido) : null;
+    const ultimoEstado = f ? (f.estado as EstadoLatido) : null;
+    const detalle = (f?.detalle as Record<string, unknown> | null) ?? {};
+    salida[c] = {
+      ...juzgarLatido(c, ultimoLatido, ultimoEstado, ahoraMs),
+      ultimoLatido,
+      cadenciaMs: CADENCIA_MS[c],
+      detalle,
+      motivoSalto: motivoDeSalto(detalle),
+    };
+  }
+  return salida;
+}
+
 /** El estado de TODOS los crons en una sola lectura. LANZA ante error. */
 export async function estadoLatidos(ahoraMs: number = Date.now()): Promise<Record<CronId, SaludCron>> {
   const { data, error } = await acotada(supabaseAdmin()
