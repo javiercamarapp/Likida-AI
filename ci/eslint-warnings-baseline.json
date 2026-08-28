@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "totalWarnings": 157,
+  "totalWarnings": 159,
   "byFileRule": {
     "src/app/admin/mi-perfil/avatar_validado.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/app/admin/panel_dueno_href.test.ts::security/detect-non-literal-fs-filename": 1,
@@ -26,7 +26,6 @@
     "src/app/login/no_autoregistro.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/admin/evals.io.test.ts::@typescript-eslint/no-unused-vars": 1,
     "src/lib/admin/qa-panel.test.ts::security/detect-non-literal-fs-filename": 4,
-    "src/lib/admin/qa-storage.test.ts::@typescript-eslint/no-unused-vars": 1,
     "src/lib/agents/analista.ts::security/detect-unsafe-regex": 1,
     "src/lib/agents/copiloto-tools.test.ts::@typescript-eslint/no-unused-vars": 1,
     "src/lib/agents/copiloto-tools.test.ts::security/detect-non-literal-fs-filename": 1,
@@ -34,6 +33,7 @@
     "src/lib/auth/reenvio_enlace.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/dominio_propio.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/env.test.ts::security/detect-non-literal-fs-filename": 1,
+    "src/lib/env_no_fallback_privilegios.test.ts::security/detect-non-literal-fs-filename": 2,
     "src/lib/formato.test.ts::security/detect-non-literal-fs-filename": 4,
     "src/lib/likida/acotada_guardiana.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/likida/agentes/estrategia.ts::security/detect-unsafe-regex": 1,
@@ -81,6 +81,7 @@
     "src/lib/meta/telefono_en_logs.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/observability/runbook.test.ts::security/detect-non-literal-fs-filename": 4,
     "src/lib/pruebas/codigo.ts::security/detect-non-literal-fs-filename": 1,
+    "src/lib/pruebas/consultas.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/supabase/cookies.test.ts::security/detect-non-literal-fs-filename": 4,
     "src/lib/worker/llaves.test.ts::@typescript-eslint/no-unused-vars": 1
   }
