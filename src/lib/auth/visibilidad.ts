@@ -177,6 +177,15 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // `dinero` por lo mismo que Timbrado: papel fiscal con dinero adentro, y la
   // pantalla enseña qué gasto quedó facturado.
   '/dashboard/descarga-sat': 'dinero',
+  // LA BANDEJA DE CONCILIACIÓN (0243). Ruta propia y no una sección de la de
+  // arriba porque es OTRO trabajo: aquélla se declara una vez (el RFC, el
+  // modo, la e.firma), ésta se abre a diario y se pagina. Y `dinero` por el
+  // mismo motivo, subido de tono: aquí no solo se enseña qué gasto quedó
+  // facturado — se DECIDE. Ligar un CFDI a un gasto es afirmar una deducción,
+  // y el guarda de área es el molde de `export/poliza` tras el hallazgo
+  // SEG-19-1: el jefe de tráfico no ve las cifras de dinero de la flota, así
+  // que menos todavía las mueve.
+  '/dashboard/descarga-sat/bandeja': 'dinero',
   // El cotizador (0225, A8): costos, márgenes y precio sugerido — la
   // definición misma de lo que el encargado no ve. Espejo de la RLS
   // `ve_finanzas()` que la 0051 le puso a `cotizacion`.

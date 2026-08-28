@@ -13265,3 +13265,217 @@ begin
   raise exception 'CONSOLIDADO_LITROS_0242  negativo_rebota=%  nulo_entra=%  cero_entra=%  indice_existe=%  predicado_correcto=%   (esperado t / t / t / t / t)',
     negativo_rebota, nulo_entra, cero_entra, indice_existe, predicado_correcto;
 end $$;
+
+-- ── 199. La bandeja de conciliación del SAT: la firma no se pierde, el expediente no se edita, y deshacer no borra (mig. 0243) ──
+-- El bloque 191 tomó la 0236 y el 197 la 0241. El 198 lo tomó la 0242
+-- (litros del consolidado) mientras esta rama trabajaba, así que al rebasar
+-- este bloque se renumeró de 198 a 199 — el siguiente libre.
+--
+-- LO QUE SOLO LA BASE PUEDE DEMOSTRAR, y que hasta la 0243 estaba abierto:
+--
+--  (a) LA FIRMA A MEDIAS NO EXISTE. `resuelto_en` sin `resuelto_por_email`
+--      —o al revés— es un expediente que dice «lo resolvió alguien el
+--      martes». El CHECK lo rebota en los dos sentidos.
+--  (b) LA FIRMA SOBREVIVE AL BORRADO DE LA CUENTA. `resuelto_por` es uuid con
+--      `on delete set null` por ARCO: al borrar al contralor, el uuid se anula
+--      y el CORREO CONGELADO se queda. Sin él, el cruce quedaría firmado por
+--      nadie (misma razón que `cola_aprobacion.resuelto_por_email`, 0120, y
+--      `jornada_dia.cerrado_por_email`, 0241).
+--  (c) EL CHECK DE LA 0231 SIGUE APRETADO. Un 'casado' sin gasto rebota, y un
+--      gasto pegado a un estatus que no es 'casado' también. Resolver un
+--      ambiguo —estatus y gasto en el MISMO update— lo deja contento.
+--  (d) LA FLOTA A NO CASA CON UN GASTO DE LA FLOTA B. La FK compuesta
+--      `(gasto_id, tenant_id)` lo rebota, y el aislamiento no depende de que
+--      el TypeScript se acuerde de filtrar.
+--  (e) EL EXPEDIENTE ES APPEND-ONLY POR PRIVILEGIO, NO POR COMENTARIO.
+--      Supabase concede `update`/`delete` por DEFAULT PRIVILEGES a
+--      `service_role` al crear cualquier tabla nueva: sin el REVOKE explícito
+--      de la 0243, «append-only» habría sido una promesa de comentario. Se
+--      mide con `has_table_privilege`, que es el único que no se puede
+--      contradecir.
+--  (f) UN ACTO QUE QUITA UNA AFIRMACIÓN EXIGE MOTIVO, y todo acto de una
+--      PERSONA exige firma. El único acto sin firma es el de la base
+--      ('degradado'), y por eso se llama distinto.
+--  (g) BORRAR EL GASTO SIGUE SIENDO POSIBLE — y ahora, además, limpia la
+--      firma vieja y escribe su propio renglón. Ésta es la parte que más fácil
+--      se rompe: la 0243 añadió un CHECK de firma Y un insert dentro del
+--      trigger que la acción referencial dispara. Si cualquiera de los dos
+--      estuviera mal, borrar un viaje con gastos casados volvería a reventar —
+--      que es el bug c7-3 que la 0236 cerró, resucitado por su sucesora.
+--      (Se probó con `on delete set null (gasto_id)` sobre el expediente y
+--      REVENTABA: el CHECK `ligado_con_gasto` chocaba con la acción
+--      referencial. Por eso `sat_cfdi_resolucion.gasto_id` NO tiene FK.)
+--  (h) EL EXPEDIENTE NOMBRA UN GASTO QUE YA NO EXISTE. Es el punto entero de
+--      no ponerle FK: «alguien afirmó este cruce» es un hecho que sobrevive a
+--      que el gasto se borre.
+--  (i) BORRAR LA FLOTA ENTERA SIGUE FUNCIONANDO, y se lleva el expediente por
+--      cascade — aunque `service_role` no tenga DELETE sobre esa tabla: las
+--      acciones referenciales corren por dentro.
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; va uuid; vb uuid; ga uuid; gb uuid;
+  usr uuid; cf uuid;
+  firma_a_medias_rebota boolean; firma_sobrevive_borrado boolean;
+  casado_sin_gasto_rebota boolean; gasto_sin_casado_rebota boolean;
+  ambiguo_resuelto_entra boolean; otra_flota_rebota boolean;
+  expediente_cerrado boolean; ignorar_sin_motivo_rebota boolean;
+  revertir_sin_motivo_rebota boolean; acto_humano_sin_firma_rebota boolean;
+  ligado_sin_gasto_rebota boolean; acto_inventado_rebota boolean;
+  borrar_gasto_ok boolean; degradado_limpia_firma boolean;
+  degradado_anotado boolean; expediente_nombra_gasto_muerto boolean;
+  ligado_sobrevive boolean; indice_bandeja_existe boolean;
+  borrar_flota_ok boolean; expediente_barrido boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0243 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0243 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono)
+    values (ta, 'ZZZ 0243 A', '+520000000243') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono)
+    values (tb, 'ZZZ 0243 B', '+520000000244') returning id into ob;
+  insert into viaje (tenant_id, operador_id, folio) values (ta, oa, 'ZZZ-0243-A') returning id into va;
+  insert into viaje (tenant_id, operador_id, folio) values (tb, ob, 'ZZZ-0243-B') returning id into vb;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha)
+    values (ta, va, 'caseta', 300, current_date) returning id into ga;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha)
+    values (tb, vb, 'caseta', 300, current_date) returning id into gb;
+  insert into app_user (id, tenant_id, email)
+    values (gen_random_uuid(), ta, 'zzz-0243@likida.test') returning id into usr;
+
+  -- El comprobante que el motor dejó AMBIGUO: dos gastos empataron y no ligó
+  -- ninguno. Es la fila que existe para que un humano decida.
+  insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus, total, fecha, candidatos)
+    values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000243', 'ambiguo', 300, current_date,
+            '{"candidatos":[{"gastoId":"x","monto":300},{"gastoId":"y","monto":300}]}')
+    returning id into cf;
+
+  -- ── (c) EL CHECK DE LA 0231, en sus dos sentidos ─────────────────────────
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus)
+      values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000244', 'casado');
+    casado_sin_gasto_rebota := false;
+  exception when check_violation then casado_sin_gasto_rebota := true; end;
+
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus, gasto_id)
+      values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000245', 'disponible', ga);
+    gasto_sin_casado_rebota := false;
+  exception when check_violation then gasto_sin_casado_rebota := true; end;
+
+  -- ── (d) LIGAR UN GASTO DE OTRA FLOTA ─────────────────────────────────────
+  begin
+    update sat_cfdi_descargado
+       set estatus = 'casado', gasto_id = gb,
+           resuelto_por = usr, resuelto_por_email = 'zzz-0243@likida.test', resuelto_en = now()
+     where id = cf;
+    otra_flota_rebota := false;
+  exception when foreign_key_violation then otra_flota_rebota := true; end;
+
+  -- ── (c) RESOLVER EL AMBIGUO: estatus y gasto EN EL MISMO UPDATE ─────────
+  begin
+    update sat_cfdi_descargado
+       set estatus = 'casado', gasto_id = ga,
+           resuelto_por = usr, resuelto_por_email = 'zzz-0243@likida.test', resuelto_en = now()
+     where id = cf;
+    ambiguo_resuelto_entra := true;
+  exception when others then ambiguo_resuelto_entra := false; end;
+
+  insert into sat_cfdi_resolucion
+    (tenant_id, cfdi_id, acto, gasto_id, estatus_antes, estatus_despues, actor_id, actor_email)
+    values (ta, cf, 'ligado', ga, 'ambiguo', 'casado', usr, 'zzz-0243@likida.test');
+
+  -- ── (a) LA FIRMA A MEDIAS ────────────────────────────────────────────────
+  begin
+    update sat_cfdi_descargado set resuelto_por_email = null where id = cf;
+    firma_a_medias_rebota := false;
+  exception when check_violation then firma_a_medias_rebota := true; end;
+
+  -- ── (f) LOS CANDADOS DEL EXPEDIENTE ──────────────────────────────────────
+  begin
+    insert into sat_cfdi_resolucion (tenant_id, cfdi_id, acto, estatus_antes, estatus_despues, actor_email)
+      values (ta, cf, 'ignorado', 'disponible', 'ignorado', 'zzz-0243@likida.test');
+    ignorar_sin_motivo_rebota := false;
+  exception when check_violation then ignorar_sin_motivo_rebota := true; end;
+
+  begin
+    insert into sat_cfdi_resolucion (tenant_id, cfdi_id, acto, gasto_id, estatus_antes, estatus_despues, actor_email)
+      values (ta, cf, 'revertido', ga, 'casado', 'disponible', 'zzz-0243@likida.test');
+    revertir_sin_motivo_rebota := false;
+  exception when check_violation then revertir_sin_motivo_rebota := true; end;
+
+  begin
+    insert into sat_cfdi_resolucion (tenant_id, cfdi_id, acto, gasto_id, estatus_antes, estatus_despues, motivo)
+      values (ta, cf, 'revertido', ga, 'casado', 'disponible', 'sin firmar');
+    acto_humano_sin_firma_rebota := false;
+  exception when check_violation then acto_humano_sin_firma_rebota := true; end;
+
+  begin
+    insert into sat_cfdi_resolucion (tenant_id, cfdi_id, acto, estatus_antes, estatus_despues, actor_email)
+      values (ta, cf, 'ligado', 'ambiguo', 'casado', 'zzz-0243@likida.test');
+    ligado_sin_gasto_rebota := false;
+  exception when check_violation then ligado_sin_gasto_rebota := true; end;
+
+  begin
+    insert into sat_cfdi_resolucion (tenant_id, cfdi_id, acto, estatus_antes, estatus_despues, motivo, actor_email)
+      values (ta, cf, 'perdonado', 'casado', 'disponible', 'x', 'zzz-0243@likida.test');
+    acto_inventado_rebota := false;
+  exception when check_violation then acto_inventado_rebota := true; end;
+
+  -- ── (e) APPEND-ONLY POR PRIVILEGIO ───────────────────────────────────────
+  expediente_cerrado :=
+        not has_table_privilege('anon', 'public.sat_cfdi_resolucion', 'SELECT')
+    and not has_table_privilege('anon', 'public.sat_cfdi_resolucion', 'INSERT')
+    and not has_table_privilege('authenticated', 'public.sat_cfdi_resolucion', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.sat_cfdi_resolucion', 'INSERT')
+    and has_table_privilege('service_role', 'public.sat_cfdi_resolucion', 'SELECT')
+    and has_table_privilege('service_role', 'public.sat_cfdi_resolucion', 'INSERT')
+    and not has_table_privilege('service_role', 'public.sat_cfdi_resolucion', 'UPDATE')
+    and not has_table_privilege('service_role', 'public.sat_cfdi_resolucion', 'DELETE');
+
+  -- El índice que hace que la lista se pueda paginar sin barrer la tabla.
+  select count(*) = 1 into indice_bandeja_existe
+    from pg_indexes where schemaname = 'public' and indexname = 'sat_cfdi_descargado_bandeja_idx';
+
+  -- ── (b) LA FIRMA SOBREVIVE AL BORRADO DE LA CUENTA (ARCO) ────────────────
+  delete from app_user where id = usr;
+  select resuelto_por is null and resuelto_por_email = 'zzz-0243@likida.test'
+    into firma_sobrevive_borrado
+    from sat_cfdi_descargado where id = cf;
+
+  -- ── (g)(h) BORRAR EL GASTO ───────────────────────────────────────────────
+  begin
+    delete from gasto where id = ga;
+    borrar_gasto_ok := true;
+  exception when others then borrar_gasto_ok := false; end;
+
+  select estatus = 'disponible' and gasto_id is null
+     and resuelto_por_email is null and resuelto_en is null
+    into degradado_limpia_firma
+    from sat_cfdi_descargado where id = cf;
+
+  select count(*) = 1 into degradado_anotado
+    from sat_cfdi_resolucion
+   where cfdi_id = cf and acto = 'degradado' and actor_email is null
+     and estatus_despues = 'disponible' and motivo like '%zzz-0243@likida.test%';
+
+  -- El expediente NOMBRA el gasto que ya no existe: ése es el punto de que la
+  -- columna no tenga llave foránea.
+  select count(*) = 1 into expediente_nombra_gasto_muerto
+    from sat_cfdi_resolucion where cfdi_id = cf and acto = 'degradado' and gasto_id = ga;
+  select count(*) = 1 into ligado_sobrevive
+    from sat_cfdi_resolucion where cfdi_id = cf and acto = 'ligado' and gasto_id = ga;
+
+  -- ── (i) BORRAR LA FLOTA ENTERA ───────────────────────────────────────────
+  begin
+    delete from tenant where id = ta;
+    borrar_flota_ok := true;
+  exception when others then borrar_flota_ok := false; end;
+  select count(*) = 0 into expediente_barrido from sat_cfdi_resolucion where tenant_id = ta;
+
+  raise exception 'BANDEJA_SAT_0243  casado_sin_gasto_rebota=%  gasto_sin_casado_rebota=%  otra_flota_rebota=%  ambiguo_resuelto_entra=%  firma_a_medias_rebota=%  ignorar_sin_motivo_rebota=%  revertir_sin_motivo_rebota=%  acto_humano_sin_firma_rebota=%  ligado_sin_gasto_rebota=%  acto_inventado_rebota=%  expediente_cerrado=%  indice_bandeja_existe=%  firma_sobrevive_borrado=%  borrar_gasto_ok=%  degradado_limpia_firma=%  degradado_anotado=%  expediente_nombra_gasto_muerto=%  ligado_sobrevive=%  borrar_flota_ok=%  expediente_barrido=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t)',
+    casado_sin_gasto_rebota, gasto_sin_casado_rebota, otra_flota_rebota, ambiguo_resuelto_entra,
+    firma_a_medias_rebota, ignorar_sin_motivo_rebota, revertir_sin_motivo_rebota,
+    acto_humano_sin_firma_rebota, ligado_sin_gasto_rebota, acto_inventado_rebota,
+    expediente_cerrado, indice_bandeja_existe, firma_sobrevive_borrado,
+    borrar_gasto_ok, degradado_limpia_firma, degradado_anotado,
+    expediente_nombra_gasto_muerto, ligado_sobrevive, borrar_flota_ok, expediente_barrido;
+end $$;
