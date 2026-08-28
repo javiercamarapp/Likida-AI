@@ -55,7 +55,13 @@ vi.mock('../interruptores', () => ({
     // Crecimiento (0230): el que gasta modelo y dos deterministas.
     'agente:contenido_fiscal', 'agente:lead_magnet', 'agente:promos_diarias',
     // Ingeniería (0234): dos de los ocho, que es lo que la rama necesita.
-    'agente:migraciones', 'agente:seguridad'],
+    'agente:migraciones', 'agente:seguridad',
+    // Los nueve de la 0235. `agente:cazador` se deja FUERA a propósito: es el
+    // que las pruebas usan para verificar que un agente con motor pero sin
+    // palanca declarada tampoco corre (candado 1).
+    'agente:automejora', 'agente:especialistas_incidente', 'agente:fundraising',
+    'agente:scorer', 'agente:dossier', 'agente:vigia',
+    'agente:demo_prep', 'agente:propuestas'],
   estaApagado: async (n: string) => {
     if (interruptorFalla && n !== 'global') throw new Error('base caída');
     return apagados.has(n);
@@ -108,6 +114,24 @@ vi.mock('./ingenieria', async (importOriginal) => ({
   correrAgenteIngenieria: (...a: unknown[]) => correrIngenieria(...a),
 }));
 
+// Los nueve de la 0235, por el mismo camino que el back office y crecimiento:
+// import dinámico en el runner, predicado REAL (no mockeado) contra el que se
+// compara la lista literal del despacho, y motor mockeado para que esta suite
+// no arrastre los lectores de salud, de la cola ni del CRM.
+const correrDireccionBandeja = vi.fn(async (..._a: unknown[]) => ({ resultado: 'corrio' as const, piezas: 1, costoUsd: 0 } as { resultado: 'corrio' | 'saltado'; piezas: number; costoUsd: number; motivo?: string; sinTurno?: boolean }));
+const { AGENTES_DIRECCION_BANDEJA, esAgenteDireccionBandeja } = await import('./direccion');
+vi.mock('./direccion', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./direccion')>()),
+  correrAgenteDireccionBandeja: (...a: unknown[]) => correrDireccionBandeja(...a),
+}));
+
+const correrLeads = vi.fn(async (..._a: unknown[]) => ({ resultado: 'corrio' as const, piezas: 1, costoUsd: 0 } as { resultado: 'corrio' | 'saltado'; piezas: number; costoUsd: number; motivo?: string; sinTurno?: boolean }));
+const { AGENTES_LEADS, esAgenteLeads } = await import('./leads');
+vi.mock('./leads', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./leads')>()),
+  correrAgenteLeads: (...a: unknown[]) => correrLeads(...a),
+}));
+
 const {
   correrRunner, ordenarPorCosto, llamaAlModelo, AGENTES_DESPACHABLES,
   MARGEN_RELOJ_MS, PLAZO_RUNNER_MS,
@@ -135,6 +159,10 @@ beforeEach(() => {
   correrCrecimiento.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
   correrIngenieria.mockClear();
   correrIngenieria.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
+  correrDireccionBandeja.mockClear();
+  correrDireccionBandeja.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
+  correrLeads.mockClear();
+  correrLeads.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
 });
 
 describe('los cuatro candados', () => {
@@ -761,7 +789,6 @@ describe('el despacho de crecimiento (0230)', () => {
   });
 });
 
-
 describe('el despacho de ingeniería (0234)', () => {
   // La misma costura que la del back office y crecimiento: los ids viven DOS
   // veces —literal en el runner, para no cargar los lectores del catálogo de
@@ -845,5 +872,161 @@ describe('AGENTES_DESPACHABLES — lo que el auditor de código lee del artefact
     expect(AGENTES_DESPACHABLES).not.toContain('fantasma_0234');
     // Sin palanca ni siquiera llega a la rama del final: el candado 1 va antes.
     expect(r.agentes[0].motivo).toMatch(/kill switch/);
+  });
+});
+
+
+describe('el despacho de dirección-bandeja (0235)', () => {
+  // La misma costura que la del back office y la de crecimiento: los ids viven
+  // DOS veces —literal en el runner, para no cargar el juez de latidos en cada
+  // vuelta, y en `AGENTES_DIRECCION_BANDEJA`—. Si divergen, un agente vivo se
+  // queda sin rama y el runner lo reporta como «sin motor despachable».
+  it('la lista literal del runner y la del motor son la misma', () => {
+    const fuente = readFileSync('src/lib/likida/agentes/runner.ts', 'utf8');
+    const linea = /const DIRECCION_BANDEJA: readonly string\[\] = \[([^\]]*)\]/.exec(fuente);
+    expect(linea, 'la lista literal del runner debe seguir existiendo').not.toBeNull();
+    const ids = (linea as RegExpExecArray)[1]
+      .split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean);
+    expect(ids).toEqual([...AGENTES_DIRECCION_BANDEJA]);
+    for (const id of ids) expect(esAgenteDireccionBandeja(id)).toBe(true);
+  });
+
+  it('NO se lleva a los cuatro de la 0216: aquéllos siguen yendo por su motor de correo', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'kpi_whatsapp', presupuesto_dia_usd: 0.1 }], error: null }]);
+    await correrRunner(undefined, TENANT);
+    expect(correrDireccion).toHaveBeenCalledWith('kpi_whatsapp');
+    expect(correrDireccionBandeja).not.toHaveBeenCalled();
+  });
+
+  it('un agente de la ola se despacha a su motor y su resultado sale TAL CUAL', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'automejora', presupuesto_dia_usd: 0.1 }], error: null }]);
+    correrDireccionBandeja.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrDireccionBandeja).toHaveBeenCalledWith('automejora', 'cron', undefined, expect.any(Number));
+    expect(r.agentes).toEqual([{ agente: 'automejora', resultado: 'corrio', motivo: undefined, piezas: 1, costoUsd: 0 }]);
+  });
+
+  it('NO consulta el gasto del día: los tres son deterministas y no hay techo que medir', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'fundraising', presupuesto_dia_usd: 0.1 }], error: null }]);
+    // Si el runner pidiera el gasto, esta cola contestaría con un fallo y el
+    // agente saltaría fail-closed. Que corra prueba que ni la pidió.
+    respuestas.set('agente_corrida', [{ data: null, error: { message: 'nadie debería preguntar' } }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'fundraising', resultado: 'corrio' });
+  });
+
+  it('un motor que truena no tumba la vuelta: se dice y los demás siguen', async () => {
+    respuestas.set('agente_definicion', [{ data: [
+      { id: 'automejora', presupuesto_dia_usd: 0.1 },
+      { id: 'fundraising', presupuesto_dia_usd: 0.1 },
+    ], error: null }]);
+    correrDireccionBandeja.mockRejectedValueOnce(new Error('agente_corrida ilegible'));
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'automejora', resultado: 'saltado' });
+    expect(r.agentes[0].motivo).toContain('agente_corrida ilegible');
+    expect(r.agentes[1]).toMatchObject({ agente: 'fundraising', resultado: 'corrio' });
+  });
+
+  it('el de incidentes que se queda sin reloj sube a saltadosPorReloj', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'especialistas_incidente', presupuesto_dia_usd: 0.1 }], error: null }]);
+    correrDireccionBandeja.mockResolvedValue({ resultado: 'corrio', piezas: 0, costoUsd: 0, sinTurno: true, motivo: 'quedaron incidentes sin revisar' });
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.saltadosPorReloj).toContain('especialistas_incidente');
+  });
+
+  it('los tres son BARATOS: se despachan antes que los que gastan modelo', () => {
+    for (const id of AGENTES_DIRECCION_BANDEJA) expect(llamaAlModelo(id), id).toBe(false);
+    const orden = ordenarPorCosto([{ id: 'contenido_fiscal' }, { id: 'automejora' }]).map((a) => a.id);
+    expect(orden).toEqual(['automejora', 'contenido_fiscal']);
+  });
+});
+
+describe('el despacho de leads (0235)', () => {
+  it('la lista literal del runner y la del motor son la misma', () => {
+    const fuente = readFileSync('src/lib/likida/agentes/runner.ts', 'utf8');
+    const linea = /const LEADS: readonly string\[\] = \[([^\]]*)\]/.exec(fuente);
+    expect(linea, 'la lista literal del runner debe seguir existiendo').not.toBeNull();
+    const ids = (linea as RegExpExecArray)[1]
+      .split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean);
+    expect(ids).toEqual([...AGENTES_LEADS]);
+    for (const id of ids) expect(esAgenteLeads(id)).toBe(true);
+  });
+
+  it('un agente de leads se despacha a su motor y su resultado sale TAL CUAL', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'vigia', presupuesto_dia_usd: 0.1 }], error: null }]);
+    correrLeads.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrLeads).toHaveBeenCalledWith('vigia', 'cron', undefined, expect.any(Number));
+    expect(r.agentes).toEqual([{ agente: 'vigia', resultado: 'corrio', motivo: undefined, piezas: 1, costoUsd: 0 }]);
+  });
+
+  it('«corrió y no fabricó» llega TAL CUAL a la vuelta: no es un salto', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'demo_prep', presupuesto_dia_usd: 0.1 }], error: null }]);
+    correrLeads.mockResolvedValue({ resultado: 'corrio', piezas: 0, costoUsd: 0, motivo: 'no hay demo que preparar' });
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ resultado: 'corrio', piezas: 0, motivo: 'no hay demo que preparar' });
+  });
+
+  it('sin kill switch declarado no corre, aunque tenga motor', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'cazador', presupuesto_dia_usd: 0.1 }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrLeads).not.toHaveBeenCalled();
+    expect(r.agentes[0].motivo).toMatch(/kill switch/);
+  });
+
+  it('sin techo declarado no corre: el candado 3 no distingue departamentos', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'scorer', presupuesto_dia_usd: null }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrLeads).not.toHaveBeenCalled();
+    expect(r.agentes[0].motivo).toMatch(/sin presupuesto_dia_usd declarado/);
+  });
+
+  it('apagado desde la pantalla no corre, aunque el catálogo lo tenga vivo', async () => {
+    apagados = new Set(['agente:propuestas']);
+    respuestas.set('agente_definicion', [{ data: [{ id: 'propuestas', presupuesto_dia_usd: 0.1 }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrLeads).not.toHaveBeenCalled();
+    expect(r.agentes[0].motivo).toMatch(/apagado desde/);
+  });
+
+  it('un motor que truena no tumba la vuelta', async () => {
+    respuestas.set('agente_definicion', [{ data: [
+      { id: 'scorer', presupuesto_dia_usd: 0.1 },
+      { id: 'vigia', presupuesto_dia_usd: 0.1 },
+    ], error: null }]);
+    correrLeads.mockRejectedValueOnce(new Error('prospecto ilegible'));
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'scorer', resultado: 'saltado' });
+    expect(r.agentes[0].motivo).toContain('prospecto ilegible');
+    expect(r.agentes[1]).toMatchObject({ agente: 'vigia', resultado: 'corrio' });
+  });
+
+  it('los seis son BARATOS: ninguno llama al modelo', () => {
+    for (const id of AGENTES_LEADS) expect(llamaAlModelo(id), id).toBe(false);
+  });
+
+  // La regla que la #152 estableció: un motor que ITERA recibe el reloj, y si
+  // se queda a medias eso sube a `saltadosPorReloj`. Si no subiera, la ruta
+  // escribiría un latido 'ok' sobre una vuelta que dejó empresas sin mirar.
+  it('el motor recibe el vencimiento de la vuelta, no uno propio', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'dossier', presupuesto_dia_usd: 0.1 }], error: null }]);
+    const vence = Date.now() + 60_000;
+    await correrRunner(undefined, TENANT, { venceEn: vence });
+    expect(correrLeads).toHaveBeenCalledWith('dossier', 'cron', undefined, vence);
+  });
+
+  it('«no alcancé a mirarlos todos» sube a saltadosPorReloj, y no se pinta como vuelta completa', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'dossier', presupuesto_dia_usd: 0.1 }], error: null }]);
+    correrLeads.mockResolvedValue({ resultado: 'corrio', piezas: 0, costoUsd: 0, sinTurno: true, motivo: 'el reloj de la vuelta se agotó buscando candidato' });
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'dossier', resultado: 'corrio', piezas: 0 });
+    expect(r.saltadosPorReloj).toContain('dossier');
+  });
+
+  it('una vuelta que SÍ alcanzó no ensucia saltadosPorReloj', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'dossier', presupuesto_dia_usd: 0.1 }], error: null }]);
+    correrLeads.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.saltadosPorReloj).toEqual([]);
   });
 });

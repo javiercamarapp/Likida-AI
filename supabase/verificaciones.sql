@@ -11578,6 +11578,196 @@ begin
     funciones_cerradas, definer_con_search_path, migraciones_degrada, check_visto, indice_visto;
 end $$;
 
+-- ── 190. Los nueve que cierran la compañía agente: 60/60 vivos, 58 palancas y una pieza por clave (mig. 0235) ──
+-- Los bloques 188 y 189 los tomaron el re-login de portales (0233) y los ocho
+-- de ingeniería (0234), las dos olas paralelas a ésta; aquí se toma el 190.
+--
+-- Lo que SOLO la base puede demostrar de la 0235:
+--
+--  (a) LOS NUEVE PASAN LOS CANDADOS 2 Y 3 DEL RUNNER. `estado='vivo'` +
+--      `runner_habilitado` + `disparador='cron'` + techo declarado > 0 no es
+--      cosmética: la consulta del runner filtra por los tres primeros y el
+--      candado 3 salta a quien no tenga techo. Si este valor no sale 9, hay
+--      agentes que el PR dice que encendió y que el cron nunca despacha.
+--  (b) EL MODELO SE DECLARA CON LA VERDAD DEL MOTOR. Los nueve motores
+--      construidos son deterministas, así que su `modelo_rol` tiene que ser
+--      NULL (convención 0125). Los nueve traían uno del BLUEPRINT y si alguno
+--      sobrevivió, el catálogo estaría contando un LLM que nadie llama.
+--  (c) DIRECCIÓN Y LEADS QUEDAN COMPLETOS: cero filas de esos dos
+--      departamentos fuera de 'vivo'. Es el hito que esta ola cierra, y es una
+--      afirmación que solo la base puede sostener. (Ingeniería sigue en
+--      'disenado' — la enciende otra ola, y por eso este conteo se acota a los
+--      dos departamentos de esta migración en vez de mirar el catálogo entero;
+--      con la 0234 ya dentro, ingeniería también quedó viva y el catálogo llega
+--      a 60/60, pero afirmarlo aquí ataría este bloque al de la otra ola.)
+--  (d) LAS 58 PALANCAS. Las 9 nuevas entran, y —la trampa que la 0227 corrigió
+--      y que se repite en cada ola— las 49 ANTERIORES siguen en el dominio: si
+--      esta migración hubiera enumerado solo las suyas, apagar a `talento`, a
+--      `redactor`, a `descarga_sat` o a `seguridad` rebotaría con
+--      check_violation el día del incidente, que es el peor día para
+--      descubrirlo. Las 8 de ingeniería se absorbieron EN EL REBASE: la 0234
+--      entró después de escribir esta migración y antes de mergearla, así que
+--      el conteo tuvo que rehacerse contra el dominio vigente.
+--  (e) Una palanca inventada rebota: el dominio es cerrado.
+--  (f) UNA PIEZA POR CLAVE, en los DOS índices nuevos (dirección y leads). El
+--      título es determinista por semana, por mes, por empresa o por
+--      expediente, y estos índices son el árbitro de la carrera entre dos
+--      pasadas del runner: la idempotencia es un constraint, no un `if` que
+--      dos procesos concurrentes se saltan.
+--  (g) LOS ÍNDICES SON PARCIALES. El Redactor SÍ puede repetir título: dos
+--      prospectos pueden compartir el asunto de un correo legítimamente, y un
+--      índice global rompería la campaña.
+--  (h) EL INVARIANTE DEL QUE VIVE `especialistas_incidente`: `hay_lesionados`
+--      admite NULL y NO tiene default. La 0198 lo dice con todas sus letras —
+--      NULL significa NO PREGUNTADO— y el agente cuelga de eso su decisión más
+--      delicada: sobre un NULL no propone avisarle a ninguna familia. Si algún
+--      día alguien le pusiera `default false`, el silencio del chofer se
+--      convertiría en un parte médico y este agente empezaría a callar.
+--  (i) EL INVARIANTE DEL QUE VIVE `propuestas`: `plan.precio_mensual` admite
+--      NULL. Si dejara de admitirlo, el «este borrador va sin precio» dejaría
+--      de tener sentido — y peor, alguien habría tenido que inventar un número
+--      para poder migrar.
+--  (j) EL INVARIANTE DEL QUE VIVE `dossier`: un contacto `inferido` no puede
+--      declararse de confianza `alta`. Es lo que le permite a la ficha rotular
+--      «NO VERIFICADO» sin tener que confiar en el criterio de quien capturó.
+do $$
+declare
+  ta uuid; oa uuid; pa uuid;
+  vivos_con_reloj_y_techo int;
+  con_modelo int; departamentos_incompletos int;
+  palancas_nuevas int; palancas_previas int;
+  palanca_inventada_rebota boolean;
+  pieza_direccion_repetida_rebota boolean; pieza_leads_repetida_rebota boolean;
+  redactor_repite boolean;
+  lesionados_nulo boolean;
+  plan_sin_precio_entra boolean;
+  inferido_alta_rebota boolean; inferido_baja_entra boolean;
+begin
+  -- (a) y (b) — el catálogo, tal como el runner lo consulta.
+  select count(*) into vivos_con_reloj_y_techo from agente_definicion
+    where id in ('automejora','especialistas_incidente','fundraising',
+                 'scorer','dossier','vigia','demo_prep','propuestas','cazador')
+      and estado = 'vivo' and runner_habilitado and disparador = 'cron'
+      and presupuesto_dia_usd is not null and presupuesto_dia_usd > 0;
+
+  select count(*) into con_modelo from agente_definicion
+    where id in ('automejora','especialistas_incidente','fundraising',
+                 'scorer','dossier','vigia','demo_prep','propuestas','cazador')
+      and modelo_rol is not null;
+
+  -- (c) Los dos departamentos de esta ola, completos.
+  select count(*) into departamentos_incompletos from agente_definicion
+    where departamento in ('direccion', 'leads') and estado <> 'vivo';
+
+  -- (d) Las 9 nuevas…
+  palancas_nuevas := 0;
+  begin
+    insert into interruptor (id, apagado) values
+      ('agente:automejora', false), ('agente:especialistas_incidente', false),
+      ('agente:fundraising', false), ('agente:scorer', false),
+      ('agente:dossier', false), ('agente:vigia', false),
+      ('agente:demo_prep', false), ('agente:propuestas', false),
+      ('agente:cazador', false);
+    palancas_nuevas := 9;
+  exception when check_violation then
+    palancas_nuevas := -1;
+  end;
+  -- …y una muestra de las de CADA ola anterior, que es donde vive la trampa.
+  palancas_previas := 0;
+  begin
+    insert into interruptor (id, apagado) values
+      ('global', false), ('agente:redactor', false),
+      ('agente:tesoreria', false), ('agente:orquestador', false),
+      ('agente:enviador', false), ('agente:atencion_faq', false),
+      ('agente:talento', false), ('agente:alianzas', false),
+      ('agente:descarga_sat', false), ('agente:seguridad', false);
+    palancas_previas := 10;
+  exception when check_violation then
+    palancas_previas := -1;
+  end;
+
+  -- (e) El dominio es cerrado.
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:inventado_0235', true, 'basura');
+    palanca_inventada_rebota := false;
+  exception when check_violation then
+    palanca_inventada_rebota := true;
+  end;
+
+  -- (f) Una pieza por clave, en los dos índices.
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('parte_automejora', 'normal', 'automejora', 'Automejora - semana del 2026-08-17', 'cuerpo');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('parte_automejora', 'normal', 'automejora', 'Automejora - semana del 2026-08-17', 'otra corrida');
+    pieza_direccion_repetida_rebota := false;
+  exception when unique_violation then
+    pieza_direccion_repetida_rebota := true;
+  end;
+
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('vigilancia_leads', 'normal', 'vigia', 'Vigia de leads - 2026-08-27', 'cuerpo');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('vigilancia_leads', 'normal', 'vigia', 'Vigia de leads - 2026-08-27', 'otra corrida');
+    pieza_leads_repetida_rebota := false;
+  exception when unique_violation then
+    pieza_leads_repetida_rebota := true;
+  end;
+
+  -- (g) Los índices son PARCIALES: el Redactor sí repite título.
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('correo_frio', 'normal', 'redactor', 'Tu cuadre de viajes', 'a');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('correo_frio', 'normal', 'redactor', 'Tu cuadre de viajes', 'b');
+    redactor_repite := true;
+  exception when unique_violation then
+    redactor_repite := false;
+  end;
+
+  -- (h) `hay_lesionados` sin preguntar sigue siendo NULL, no false.
+  insert into tenant (nombre) values ('ZZZ VERIF 0235') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono)
+    values (ta, 'ZZZ 0235', '+520000000235') returning id into oa;
+  insert into incidencia (tenant_id, operador_id, tipo, prioridad, estado)
+    values (ta, oa, 'siniestro', 'critica', 'abierta');
+  select hay_lesionados is null into lesionados_nulo from incidencia
+    where tenant_id = ta;
+
+  -- (i) Un plan sin precio declarado sigue cabiendo.
+  begin
+    insert into plan (clave, nombre, precio_mensual, orden)
+      values ('zzz_0235', 'ZZZ sin precio', null, 99);
+    plan_sin_precio_entra := true;
+  exception when others then
+    plan_sin_precio_entra := false;
+  end;
+
+  -- (j) Un contacto INFERIDO no puede declararse de confianza alta.
+  insert into prospecto (empresa) values ('ZZZ VERIF 0235 SA') returning id into pa;
+  begin
+    insert into prospecto_persona (prospecto_id, nombre, origen, confianza)
+      values (pa, 'ZZZ Persona', 'inferido', 'alta');
+    inferido_alta_rebota := false;
+  exception when check_violation then
+    inferido_alta_rebota := true;
+  end;
+  begin
+    insert into prospecto_persona (prospecto_id, nombre, origen, confianza)
+      values (pa, 'ZZZ Persona', 'inferido', 'baja');
+    inferido_baja_entra := true;
+  exception when others then
+    inferido_baja_entra := false;
+  end;
+
+  raise exception 'AGENTES_0235  vivos_con_reloj_y_techo=%  con_modelo=%  departamentos_incompletos=%  palancas_nuevas=%  palancas_previas=%  palanca_inventada_rebota=%  pieza_direccion_repetida_rebota=%  pieza_leads_repetida_rebota=%  redactor_repite=%  lesionados_nulo=%  plan_sin_precio_entra=%  inferido_alta_rebota=%  inferido_baja_entra=%   (esperado 9 / 0 / 0 / 9 / 10 / t / t / t / t / t / t / t / t)',
+    vivos_con_reloj_y_techo, con_modelo, departamentos_incompletos,
+    palancas_nuevas, palancas_previas, palanca_inventada_rebota,
+    pieza_direccion_repetida_rebota, pieza_leads_repetida_rebota, redactor_repite,
+    lesionados_nulo, plan_sin_precio_entra, inferido_alta_rebota, inferido_baja_entra;
+end $$;
+
 -- ── 191. La descarga del SAT, corregida: borrar SÍ se puede, el traslape rebota y las cifras no se truncan (mig. 0236) ──
 -- El 189 lo tomó la ola de ingeniería (0234) y el 190 el de dirección+leads
 -- (0235), paralelas a ésta; aquí se toma el 191. Los números se confirmaron al
