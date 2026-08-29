@@ -196,9 +196,31 @@ export async function GET(req: Request) {
       await alertarOperador('cron.purgar.producto_evento', { error });
     }
 
-    logger.info('cron.purgar.ok', { ...data, vueltas, storage, productoEvento });
+    // ── MCP OAUTH: tokens revocados/expirados, códigos muertos, clientes DCR
+    // que nunca completaron un login (auditoría final 2026-08-29, hallazgo 3).
+    // RPC HERMANA por la misma razón que producto_evento arriba: esta
+    // migración (0265) sale de master sin apilarse sobre otra que redefina
+    // `mantenimiento_de_datos`. Su fallo tampoco tumba la corrida —las purgas
+    // de arriba ya corrieron—, pero sí se grita y se alerta.
+    let mcpOauth: Record<string, unknown> | null = null;
+    try {
+      const mo = await supabaseAdmin().rpc('mantener_mcp_oauth');
+      if (mo.error) {
+        const codigo = codigoDeError(mo.error);
+        logger.error('cron.purgar.mcp_oauth_falló', { error: mo.error.message, codigo });
+        await alertarOperador('cron.purgar.mcp_oauth', { error: mo.error.message, codigo });
+      } else {
+        mcpOauth = (mo.data ?? {}) as Record<string, unknown>;
+      }
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      logger.error('cron.purgar.mcp_oauth_excepcion', { error });
+      await alertarOperador('cron.purgar.mcp_oauth', { error });
+    }
+
+    logger.info('cron.purgar.ok', { ...data, vueltas, storage, productoEvento, mcpOauth });
     await registrarLatido('purgar', parcial ? 'parcial' : 'ok', { vueltas });
-    return NextResponse.json({ corrio: true, ...data, vueltas, storage, productoEvento });
+    return NextResponse.json({ corrio: true, ...data, vueltas, storage, productoEvento, mcpOauth });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     // Mismo criterio que el `if (error)` de arriba, para el camino que lanza.
