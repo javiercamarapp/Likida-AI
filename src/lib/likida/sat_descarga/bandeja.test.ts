@@ -204,6 +204,88 @@ describe('leerBandeja — los candidatos, con su estado de HOY', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// D-1 (auditoría E.28) — `hidratarHistorial` sin `.limit()` dejaba que
+// PostgREST recortara en silencio a `max_rows` (1,000, config.toml) sin
+// encender ninguna bandera. Comparado con su vecina `hidratarCandidatos`
+// (que sí se acota, por construcción de `.in()`), esto prueba que ahora
+// lleva su PROPIO tope explícito, con desempate, `count: 'exact'` en la
+// misma consulta, y que la página declara `historialTruncado` cuando el
+// total exacto rebasa lo que de verdad se adjuntó a las filas.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('leerBandeja — el expediente lleva su propio tope (D-1)', () => {
+  it('el `.limit()` del expediente va SIEMPRE con `.order()` con desempate por id', async () => {
+    respuestas.sat_cfdi_descargado = { data: [fila()], error: null, count: 1 };
+    respuestas.sat_cfdi_resolucion = { data: [], error: null, count: 0 };
+    await leerBandeja(TENANT, 'ambiguo', 1);
+    const o = ops('sat_cfdi_resolucion');
+    const iLimit = o.findIndex((x) => x.op === 'limit');
+    const ordenes = o.filter((x) => x.op === 'order');
+    expect(iLimit).toBeGreaterThan(-1);
+    expect(ordenes.map((x) => x.args[0])).toEqual(['creado_en', 'id']);
+  });
+
+  it('el conteo del expediente es EXACTO y viaja en la misma consulta', async () => {
+    respuestas.sat_cfdi_descargado = { data: [fila()], error: null, count: 1 };
+    respuestas.sat_cfdi_resolucion = { data: [], error: null, count: 0 };
+    await leerBandeja(TENANT, 'ambiguo', 1);
+    const select = ops('sat_cfdi_resolucion').find((x) => x.op === 'select');
+    expect(select!.args[1]).toEqual({ count: 'exact' });
+  });
+
+  it('cuando el total exacto excede lo adjuntado a las filas, se declara truncado', async () => {
+    respuestas.sat_cfdi_descargado = { data: [fila()], error: null, count: 1 };
+    // La base dice que hay 3 actos en total para este comprobante, pero la
+    // consulta (recortada por el `.limit()`) solo trajo 1 — el mismo patrón
+    // que PostgREST produciría al chocar contra su propio `max_rows`.
+    respuestas.sat_cfdi_resolucion = {
+      data: [{
+        cfdi_id: 'cfdi-1', acto: 'ligado', gasto_id: 'g-1',
+        estatus_antes: 'disponible', estatus_despues: 'casado',
+        motivo: null, actor_email: 'a@flota.test', creado_en: '2026-08-20T10:00:00Z',
+      }],
+      error: null, count: 3,
+    };
+    const p = await leerBandeja(TENANT, 'casado', 1);
+    expect(p.historialTotal).toBe(3);
+    expect(p.historialTruncado).toBe(true);
+    // Las filas SIGUEN teniendo lo que sí llegó: truncado no es vacío.
+    expect(p.filas[0].historial).toHaveLength(1);
+  });
+
+  it('cuando el total exacto coincide con lo adjuntado, NO se declara truncado', async () => {
+    respuestas.sat_cfdi_descargado = { data: [fila()], error: null, count: 1 };
+    respuestas.sat_cfdi_resolucion = {
+      data: [{
+        cfdi_id: 'cfdi-1', acto: 'ligado', gasto_id: 'g-1',
+        estatus_antes: 'disponible', estatus_despues: 'casado',
+        motivo: null, actor_email: 'a@flota.test', creado_en: '2026-08-20T10:00:00Z',
+      }],
+      error: null, count: 1,
+    };
+    const p = await leerBandeja(TENANT, 'casado', 1);
+    expect(p.historialTotal).toBe(1);
+    expect(p.historialTruncado).toBe(false);
+  });
+
+  it('un `count` que la base no dio es `historialTotal: null`, y nunca se declara truncado a ciegas', async () => {
+    respuestas.sat_cfdi_descargado = { data: [fila()], error: null, count: 1 };
+    respuestas.sat_cfdi_resolucion = { data: [], error: null, count: null };
+    const p = await leerBandeja(TENANT, 'ambiguo', 1);
+    expect(p.historialTotal).toBeNull();
+    expect(p.historialTruncado).toBe(false);
+  });
+
+  it('si el expediente no se pudo leer, la página queda `incompleta` — sin fingir cero actos', async () => {
+    respuestas.sat_cfdi_descargado = { data: [fila()], error: null, count: 1 };
+    respuestas.sat_cfdi_resolucion = { data: null, error: { message: 'timeout' }, count: null };
+    const p = await leerBandeja(TENANT, 'ambiguo', 1);
+    expect(p.incompleta).toBe(true);
+    expect(p.historialTotal).toBeNull();
+    expect(p.filas[0].historial).toEqual([]);
+  });
+});
+
 describe('candidatosAnotados / motivoAnotado — se lee a la defensiva', () => {
   it('lee la forma que escribe el ciclo', () => {
     expect(candidatosAnotados({ candidatos: [{ gastoId: 'g-1', monto: 10, fecha: '2026-01-01', concepto: 'diesel' }] }))

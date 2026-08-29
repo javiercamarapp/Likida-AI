@@ -14275,3 +14275,97 @@ begin
   raise exception 'EXAMEN_CONTADOR_0254  col_existe=%  duplicado_rebota=%  nulls_conviven=%   (esperado t / t / t)',
     col_existe, duplicado_rebota, nulls_conviven;
 end $$;
+
+-- ── 211. Ligar un CFDI a un gasto es ATÓMICO: un fallo a medio camino no deja la cuña sin salida (mig. 0263, auditoría E.28 C-1) ──
+-- (Nació 210 en su rama; renumerado a 211 al fusionar con el 210 de la 0262
+-- de LEG-C2, que reclamó el mismo número desde otra rama — mismo patrón que
+-- ya le pasó al 201 y al 207 esta noche.)
+--
+-- `ligarComprobante` hacía DOS escrituras sueltas desde TypeScript —primero
+-- el gasto, después el comprobante—, con el expediente escrito después de
+-- las dos como mejor esfuerzo. Los fallos EN BANDA se compensaban soltando
+-- el gasto por su folio, pero una MUERTE DEL PROCESO entre las dos
+-- escrituras no pasaba por ningún `catch`: el gasto quedaba afirmando estar
+-- facturado (`cfdi_uuid` + `xml_verificado=true`) con el CFDI todavía
+-- 'disponible' del otro lado, y esa cuña NO TENÍA SALIDA desde la interfaz
+-- (re-ligar el mismo gasto rebotaba con `gasto_ya_tiene_cfdi`, ligar a otro
+-- violaba `uq_gasto_cfdi_uuid` de la 0065, revertir decía
+-- `nada_que_revertir`).
+--
+-- `sat_cfdi_ligar_tx` mueve las dos escrituras Y el expediente a una sola
+-- función de Postgres. Aquí se prueba con un fallo INYECTADO —un CHECK
+-- temporal que solo dispara para la fila de la prueba (`total = 999999`,
+-- para no estorbar el camino bueno de arriba), y que revienta justo en la
+-- SEGUNDA escritura, después de que la primera (el gasto) ya corrió dentro
+-- de la misma llamada— que Postgres deshace también la escritura del gasto:
+-- no queda «a medias» que reparar a mano. Se prueba además el camino bueno
+-- (las dos escrituras, el expediente y el valor de retorno juntos), el
+-- ancla optimista (`p_estatus_esperado`, que decide la carrera igual que el
+-- `.eq('estatus', …)` que reemplaza) y que solo `service_role` ejecuta el
+-- RPC.
+do $$
+declare
+  v_t uuid; v_o uuid; v_v uuid; v_g uuid; v_a uuid; v_cfdi uuid;
+  res jsonb;
+  exito_gasto boolean; exito_cfdi boolean; exito_expediente boolean; retorno_ok boolean;
+  carrera_rebota boolean := false;
+  falla_sqlstate text := '';
+  gasto_intacto boolean; cfdi_intacto boolean; expediente_vacio boolean;
+  anon_ok boolean; auth_ok boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF LIGAR TX') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P', '520000009210') returning id into v_o;
+  insert into app_user (id, email, rol, tenant_id) values (gen_random_uuid(), '__verif_210__@likida.ai', 'contador', v_t) returning id into v_a;
+  insert into viaje (tenant_id, operador_id) values (v_t, v_o) returning id into v_v;
+
+  -- ── (a) EL CAMINO BUENO: las dos escrituras, el expediente y el retorno ──
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v, 'diesel', 300) returning id into v_g;
+  insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus, total)
+    values (v_t, lower(gen_random_uuid()::text), 'disponible', 300) returning id into v_cfdi;
+
+  res := public.sat_cfdi_ligar_tx(v_t, v_cfdi, v_g, 'disponible', '{}'::jsonb, v_a, 'contralor@verif.test');
+  retorno_ok := (res ->> 'gasto_id') = v_g::text;
+
+  select (cfdi_uuid is not null and xml_verificado is true and cfdi_orden = 1) into exito_gasto
+    from gasto where id = v_g;
+  select (estatus = 'casado' and gasto_id = v_g) into exito_cfdi
+    from sat_cfdi_descargado where id = v_cfdi;
+  select count(*) = 1 into exito_expediente
+    from sat_cfdi_resolucion where cfdi_id = v_cfdi and acto = 'ligado' and gasto_id = v_g;
+
+  -- ── (b) EL ANCLA OPTIMISTA: contra el estatus que YA NO es, rebota CU014 ─
+  begin
+    perform public.sat_cfdi_ligar_tx(v_t, v_cfdi, v_g, 'disponible', '{}'::jsonb, v_a, 'contralor@verif.test');
+  exception when others then carrera_rebota := (sqlstate = 'CU014');
+  end;
+
+  -- ── (c) EL FALLO A MEDIO CAMINO: un CHECK que solo dispara para ESTA fila ─
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v, 'caseta', 200) returning id into v_g;
+  insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus, total)
+    values (v_t, lower(gen_random_uuid()::text), 'disponible', 999999) returning id into v_cfdi;
+
+  execute 'alter table public.sat_cfdi_descargado add constraint __verif_210_falla_a_medias
+             check (not (total = 999999 and estatus = ''casado''))';
+
+  begin
+    perform public.sat_cfdi_ligar_tx(v_t, v_cfdi, v_g, 'disponible', '{}'::jsonb, v_a, 'contralor@verif.test');
+  exception when others then falla_sqlstate := sqlstate;
+  end;
+
+  -- Si la transacción NO hubiera revertido el UPDATE del gasto —que corrió
+  -- PRIMERO, dentro de la misma llamada, antes de que el CHECK reventara en
+  -- la segunda escritura— aquí quedaría con el folio pegado y CERO renglones
+  -- de expediente que lo expliquen: exactamente la cuña que encontró el
+  -- auditor.
+  select (cfdi_uuid is null and xml_verificado is null) into gasto_intacto from gasto where id = v_g;
+  select (estatus = 'disponible' and gasto_id is null) into cfdi_intacto from sat_cfdi_descargado where id = v_cfdi;
+  select count(*) = 0 into expediente_vacio from sat_cfdi_resolucion where cfdi_id = v_cfdi;
+
+  select has_function_privilege('anon', 'public.sat_cfdi_ligar_tx(uuid,uuid,uuid,text,jsonb,uuid,text)', 'EXECUTE') into anon_ok;
+  select has_function_privilege('authenticated', 'public.sat_cfdi_ligar_tx(uuid,uuid,uuid,text,jsonb,uuid,text)', 'EXECUTE') into auth_ok;
+
+  raise exception E'LIGAR_TX_0263  gasto_ok=%  cfdi_ok=%  expediente_ok=%  retorno_ok=%  carrera_rebota=%  falla_sqlstate=%  gasto_intacto=%  cfdi_intacto=%  expediente_vacio=%  anon=%  auth=%   (esperado t/t/t/t/t/23514/t/t/t/f/f)',
+    coalesce(exito_gasto,false), coalesce(exito_cfdi,false), coalesce(exito_expediente,false), coalesce(retorno_ok,false),
+    carrera_rebota, falla_sqlstate, coalesce(gasto_intacto,false), coalesce(cfdi_intacto,false),
+    coalesce(expediente_vacio,false), anon_ok, auth_ok;
+end $$;

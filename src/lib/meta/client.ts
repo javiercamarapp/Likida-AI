@@ -5,7 +5,7 @@
 
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
-import { encolarSalidaWhatsApp } from '@/lib/likida/wa_outbox';
+import { encolarSalidaWhatsApp, RETRASO_AMBIGUO_SEGUNDOS } from '@/lib/likida/wa_outbox';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const DOWNLOAD_TIMEOUT_MS = 15_000;
@@ -177,7 +177,10 @@ export async function enviarTexto(to: string, body: string): Promise<EnvioWhatsA
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     logger.error('wa.sendText.red', { para: destinatarioEnmascarado(to), error });
-    await encolarSalidaWhatsApp(payload, error);
+    // AUDITORÍA E.28 (H1): la respuesta NUNCA LLEGÓ — Meta pudo haber
+    // aceptado el mensaje igual. Se encola con el retraso AMBIGUO, no con
+    // reintento inmediato: ver `RETRASO_AMBIGUO_SEGUNDOS`.
+    await encolarSalidaWhatsApp(payload, error, RETRASO_AMBIGUO_SEGUNDOS);
     // Un timeout o un socket caído NO es un veredicto sobre el destinatario:
     // se marca como reintentable con el status que lo dice.
     return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}`, status: 503 };
@@ -334,7 +337,9 @@ export async function sendButtons(to: string, cuerpo: string, botones: BotonAcus
       para: destinatarioEnmascarado(to), status: 0, codigo: 'network',
       body: e instanceof Error ? e.message.slice(0, 400) : String(e).slice(0, 400),
     });
-    if (payload) await encolarSalidaWhatsApp(payload, e instanceof Error ? e.message : String(e));
+    // AUDITORÍA E.28 (H1): mismo caso que `sendText` — la respuesta nunca
+    // llegó, así que Meta pudo haber aceptado el mensaje igual.
+    if (payload) await encolarSalidaWhatsApp(payload, e instanceof Error ? e.message : String(e), RETRASO_AMBIGUO_SEGUNDOS);
     return null;
   }
 }
@@ -385,7 +390,9 @@ export async function sendTemplate(
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     logger.error('wa.sendTemplate.red', { plantilla, para: destinatarioEnmascarado(to), error });
-    await encolarSalidaWhatsApp(payload, error);
+    // AUDITORÍA E.28 (H1): mismo caso que `sendText` — la respuesta nunca
+    // llegó, así que Meta pudo haber aceptado el mensaje igual.
+    await encolarSalidaWhatsApp(payload, error, RETRASO_AMBIGUO_SEGUNDOS);
     return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}` };
   }
 
@@ -474,7 +481,9 @@ export async function sendDocument(
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     logger.error('wa.sendDocument.red', { filename, para: destinatarioEnmascarado(to), error });
-    await encolarSalidaWhatsApp(payload, error);
+    // AUDITORÍA E.28 (H1): mismo caso que `sendText` — la respuesta nunca
+    // llegó, así que Meta pudo haber aceptado el mensaje igual.
+    await encolarSalidaWhatsApp(payload, error, RETRASO_AMBIGUO_SEGUNDOS);
     return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}` };
   }
 

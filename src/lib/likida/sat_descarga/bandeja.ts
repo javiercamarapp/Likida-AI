@@ -60,6 +60,18 @@ export const PAGINA_MAX = 200;
  *  `candidatos` corrupto no arme una petición inmanejable. */
 const MAX_CANDIDATOS_VIVOS = 300;
 
+/**
+ * Cuántos renglones de expediente (`sat_cfdi_resolucion`) se traen de una
+ * vez para TODA la página (D-1, auditoría E.28).
+ *
+ * DELIBERADAMENTE menor al `max_rows` de PostgREST (1,000, `config.toml`):
+ * así el tope que se alcanza es SIEMPRE el nuestro —explícito, con su propia
+ * bandera— y nunca el recorte silencioso del proveedor. 25 comprobantes por
+ * página con un expediente típico de un puñado de actos cabe de sobra en 500;
+ * si algún día no cabe, `PaginaBandeja.historialTruncado` lo dice.
+ */
+const MAX_ACTOS_HISTORIAL = 500;
+
 /** Un gasto que el motor ofreció como candidato de un cruce ambiguo. */
 export interface CandidatoVista {
   gastoId: string;
@@ -132,6 +144,19 @@ export interface PaginaBandeja {
   /** `true` si alguna lectura secundaria (candidatos vivos, expediente) falló:
    *  las filas están, pero lo que cuelga de ellas puede faltar. */
   incompleta: boolean;
+  /** Total EXACTO de renglones de expediente (`sat_cfdi_resolucion`) para los
+   *  comprobantes de ESTA página, medido con `count: 'exact'` en la misma
+   *  consulta que trae `hidratarHistorial` (D-1, auditoría E.28). `null` = no
+   *  se pudo medir — no es «sin historial». Compárese con la suma de
+   *  `filas[].historial.length`, que es lo que de verdad se trajo. */
+  historialTotal: number | null;
+  /** `true` cuando el expediente combinado de esta página rebasa el tope que
+   *  se trae de una vez (`MAX_ACTOS_HISTORIAL`): hay actos que no se están
+   *  enseñando en ninguna fila. Antes de la 0243+D-1 esto lo recortaba
+   *  PostgREST en silencio a 1,000 (`max_rows`, config.toml) sin encender
+   *  ninguna bandera; ahora el tope es explícito y menor, y esto se declara
+   *  en vez de fingir que se trajo todo. */
+  historialTruncado: boolean;
   /** El mensaje de la falla cuando la consulta PRINCIPAL no respondió. `null`
    *  no es «no hay comprobantes»: `filas` vacío con `error` puesto es «no se
    *  pudo preguntar», y eso jamás se pinta como bandeja limpia. */
@@ -204,7 +229,8 @@ export async function leerBandeja(
   const desde = (pag - 1) * POR_PAGINA;
   const vacia: PaginaBandeja = {
     filas: [], estatus, pagina: pag, porPagina: POR_PAGINA, total: null,
-    paginaMax: PAGINA_MAX, truncada: false, incompleta: false, error: null,
+    paginaMax: PAGINA_MAX, truncada: false, incompleta: false,
+    historialTotal: null, historialTruncado: false, error: null,
   };
 
   let crudas: Array<Record<string, unknown>> = [];
@@ -257,19 +283,26 @@ export async function leerBandeja(
   }));
 
   let incompleta = false;
+  let historialTotal: number | null = null;
+  let historialTruncado = false;
   if (filas.length > 0) {
     // Las dos lecturas que COLGABAN de las filas van en paralelo y cada una
     // cae por su lado: que el expediente no se pueda leer no puede esconder
     // los candidatos, ni al revés.
-    const [okVivos, okHistorial] = await Promise.all([
+    const [okVivos, historial] = await Promise.all([
       hidratarCandidatos(tenantId, filas),
       hidratarHistorial(tenantId, filas),
     ]);
-    incompleta = !okVivos || !okHistorial;
+    incompleta = !okVivos || !historial.ok;
+    historialTotal = historial.total;
+    // Lo que de verdad se trajo, sumado de las filas — nunca de un `.length`
+    // sobre la respuesta cruda, que el `.limit()` ya recortó.
+    const historialMostrado = filas.reduce((acc, f) => acc + f.historial.length, 0);
+    historialTruncado = historialTotal !== null && historialTotal > historialMostrado;
   }
 
   const truncada = total !== null && total > PAGINA_MAX * POR_PAGINA;
-  return { ...vacia, filas, total, truncada, incompleta };
+  return { ...vacia, filas, total, truncada, incompleta, historialTotal, historialTruncado };
 }
 
 /**
@@ -324,17 +357,34 @@ async function hidratarCandidatos(tenantId: string, filas: FilaBandeja[]): Promi
   }
 }
 
-/** El expediente de los comprobantes de esta página (0243). */
-async function hidratarHistorial(tenantId: string, filas: FilaBandeja[]): Promise<boolean> {
+/**
+ * El expediente de los comprobantes de esta página (0243).
+ *
+ * ACOTADA EXPLÍCITAMENTE (D-1, auditoría E.28) — igual que su vecina
+ * `hidratarCandidatos` acota por `MAX_CANDIDATOS_VIVOS`, esta acota por
+ * `MAX_ACTOS_HISTORIAL`. Antes no llevaba `.limit()`: PostgREST recortaba en
+ * silencio a `max_rows` (1,000, `supabase/config.toml`) sin encender ninguna
+ * bandera de truncamiento — si el expediente combinado de los 25
+ * comprobantes de una página superaba eso, algunas filas se pintaban
+ * incompletas sin que nadie lo notara. El `count: 'exact'` viaja en la MISMA
+ * consulta (mismo patrón que `leerBandeja`, arriba) para que el llamador
+ * sepa la M verdadera y pueda decir «mostrando N de M» en vez de fingir que
+ * trajo todo. El `.order()` ya llevaba desempate por `id` — eso no cambia.
+ */
+async function hidratarHistorial(
+  tenantId: string,
+  filas: FilaBandeja[],
+): Promise<{ ok: boolean; total: number | null }> {
   const ids = filas.map((f) => f.id);
   try {
-    const { data, error } = await acotada(supabaseAdmin()
+    const { data, error, count } = await acotada(supabaseAdmin()
       .from('sat_cfdi_resolucion')
-      .select('cfdi_id, acto, gasto_id, estatus_antes, estatus_despues, motivo, actor_email, creado_en')
+      .select('cfdi_id, acto, gasto_id, estatus_antes, estatus_despues, motivo, actor_email, creado_en', { count: 'exact' })
       .eq('tenant_id', tenantId)
       .in('cfdi_id', ids)
       .order('creado_en', { ascending: false })
-      .order('id', { ascending: false }), 'sat_descarga.bandeja_historial');
+      .order('id', { ascending: false })
+      .limit(MAX_ACTOS_HISTORIAL), 'sat_descarga.bandeja_historial');
     if (error) throw new Error(error.message);
     const porCfdi = new Map<string, ActoResolucion[]>();
     for (const r of (data ?? []) as Array<Record<string, unknown>>) {
@@ -351,12 +401,14 @@ async function hidratarHistorial(tenantId: string, filas: FilaBandeja[]): Promis
       porCfdi.set(r.cfdi_id as string, lista);
     }
     for (const f of filas) f.historial = porCfdi.get(f.id) ?? [];
-    return true;
+    // `count` en null NO es cero: es «la base no lo dijo» (mismo criterio
+    // que el `total` de `leerBandeja`).
+    return { ok: true, total: typeof count === 'number' ? count : null };
   } catch (e) {
     logger.warn('sat_descarga.bandeja_historial_no_leido', {
       tenantId, err: e instanceof Error ? e.message : String(e),
     });
-    return false;
+    return { ok: false, total: null };
   }
 }
 

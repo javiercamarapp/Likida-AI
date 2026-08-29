@@ -338,6 +338,17 @@ export async function PanelBandeja({
                     resto sube.
                   </p>
                 )}
+
+                {/* D-1 (auditoría E.28): el expediente de esta página se cortó
+                    en su propio tope, no en el silencioso de PostgREST — y se
+                    dice, en vez de pintar cada renglón como si trajera todo. */}
+                {bandeja.historialTruncado && (
+                  <p className="text-[12px] mt-2 mb-0" style={{ color: 'var(--warn)' }}>
+                    El expediente de estos comprobantes trae {numero(bandeja.historialTotal ?? 0)} actos en
+                    total y aquí se muestran los más recientes: algunos renglones más viejos no caben en
+                    esta vista. Abre el expediente de cada comprobante para lo que sí se enseña.
+                  </p>
+                )}
               </>
             )}
           </section>
@@ -383,7 +394,8 @@ export async function VistaBandejaSat({ searchParams, tenantExiste = true }: {
       { config: null, solicitudes: [], conteos: null, incompleta: false } as VistaDescargaSat,
       {
         filas: [], estatus, pagina, porPagina: POR_PAGINA, total: null,
-        paginaMax: PAGINA_MAX, truncada: false, incompleta: false, error: null,
+        paginaMax: PAGINA_MAX, truncada: false, incompleta: false,
+        historialTotal: null, historialTruncado: false, error: null,
       } as PaginaBandeja,
     ];
 
