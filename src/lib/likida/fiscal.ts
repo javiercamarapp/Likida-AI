@@ -338,7 +338,9 @@ export interface Causa {
   detalle: string;
 }
 
-const TITULOS: Record<CausaPerdida, Omit<Causa, 'causa'>> = {
+/** Exportado para el guardia de exhaustividad de `ORDEN` (AUD20 FISC-C2): es
+ *  `Record<CausaPerdida, …>`, así que sus llaves son el union completo. */
+export const TITULOS: Record<CausaPerdida, Omit<Causa, 'causa'>> = {
   // AUD3 FI-A2, ALTO: esto era `gravedad: 'perdida'` y el KPI lo sumaba a
   // "monto perdido". La ficha `normas/politica-portales-plazos.yaml`
   // (jerarquía 6) dice lo contrario: el plazo del portal "tiene CERO fuerza
@@ -472,8 +474,15 @@ export function causasDe(g: GastoFiscal, o: OpcionesFiscales): Causa[] {
 // ticket sin CFDI con el portal cerrado cuesta una gestión ante el emisor,
 // no el dinero — así que una pérdida dura (efectivo sobre el tope) le gana
 // la dominancia.
-const ORDEN: CausaPerdida[] = [
-  'efos', 'cfdi_cancelado', 'efectivo_sobre_tope',
+// AUDITORÍA 20, FISC-C2 (CRÍTICO): faltaba `efectivo_no_elegible`, el cuarto y
+// último miembro con `gravedad: 'perdida'`. Al no estar en la lista, un diésel
+// en efectivo de una flota que YA declaró NO calificar a la RFA 2.9 quedaba
+// dominado por `sin_cfdi` (`recuperable`) y se imprimía en el KPI verde
+// "Recuperable pidiendo factura". Va con las pérdidas duras, junto a
+// `efectivo_sobre_tope`: son el mismo hecho —efectivo que la LISR 27-III no
+// admite— con y sin la facilidad del 15%.
+export const ORDEN: CausaPerdida[] = [
+  'efos', 'cfdi_cancelado', 'efectivo_sobre_tope', 'efectivo_no_elegible',
   'efos_indeterminado', 'plazo_vencido', 'combustible_efectivo', 'sin_cfdi',
 ];
 
