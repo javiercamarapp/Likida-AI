@@ -10,6 +10,7 @@ import {
   ROTULO_VEREDICTO, LEYENDA_VEREDICTOS, type RiesgoDia, type PoliticaFlota,
 } from '@/lib/likida/jornada/riesgo';
 import { LEYENDA_NOM_087, LEYENDA_NO_ES_BITACORA_83 } from '@/lib/likida/jornada/topes';
+import type { SemanaEvaluada } from '@/lib/likida/jornada/semanas';
 import { BarraPagina } from '../resumen-visual';
 import { FormasJornada, FormaPolitica, type AccionJornada } from './formas';
 
@@ -59,10 +60,14 @@ function hora(iso: string): string {
 }
 
 export function VistaJornada({
-  filas, motivoIlegible, truncada, politica, desde, hasta, sufijo, operador, abrir, puedeCorregir,
+  filas, semanas, motivoIlegible, truncada, politica, desde, hasta, sufijo, operador, abrir, puedeCorregir,
   anularMarca, capturarMarca, cerrarElDia, declararPolitica,
 }: {
   filas: FilaJornada[] | null;
+  /** El eje semanal (tableros al día, 28-ago-2026): solo semanas ENTERAS de
+   *  la ventana. `null` = no se evaluó (lectura caída o truncada) — que no es
+   *  lo mismo que «cero semanas completas» ([]). */
+  semanas: SemanaEvaluada[] | null;
   motivoIlegible: string | null;
   truncada: boolean;
   politica: PoliticaFlota | null;
@@ -207,6 +212,16 @@ export function VistaJornada({
             )}
           </section>
 
+          {/* ── EL EJE SEMANAL (tableros al día, 28-ago-2026) ──────────────
+              El tope del decreto es SEMANAL: un contralor podía tener catorce
+              días verdes uno por uno y una semana de 63 h — y esta pantalla
+              nunca lo decía, porque `evaluarRiesgoSemana` no tenía un solo
+              llamador. Solo semanas ENTERAS (lunes a domingo dentro de la
+              ventana): media semana evaluada diría «va bien» con el recorte. */}
+          {motivoIlegible === null && (
+            <SeccionSemanas semanas={semanas} truncada={truncada} />
+          )}
+
           {/* El detalle y las correcciones del día abierto. Un solo día a la
               vez: pintar un formulario por cada renglón mete cientos de forms
               en una pantalla donde se corrige uno (la lección de FE-12 en
@@ -255,7 +270,21 @@ function Renglon({ f, sufijo, desde, hasta }: { f: FilaJornada; sufijo: string; 
       <Td>
         {horas === null
           ? <span style={{ color: 'var(--muted)' }}>{hueco ?? 'no se puede calcular'}</span>
-          : `${horas} h`}
+          : (
+            <>
+              {horas} h
+              {/* Las extraordinarias del art. 61 se calculaban y se tiraban
+                  (tableros al día, 28-ago-2026): el dato que decide un pago
+                  al triple no llegaba a la pantalla. Solo se pinta MEDIDO
+                  (> 0): null es «no se pudo medir» y 0 es «sin tiempo extra»,
+                  y ninguna de las dos amerita un renglón que confunda. */}
+              {f.riesgo.horasExtraordinarias !== null && f.riesgo.horasExtraordinarias > 0 && (
+                <span className="block text-[11px]" style={{ color: 'var(--warn)' }}>
+                  {f.riesgo.horasExtraordinarias} h extraordinarias (art. 61)
+                </span>
+              )}
+            </>
+          )}
       </Td>
       <Td>
         <span className="inline-block px-2 py-0.5 rounded-md text-[11.5px] font-medium"
@@ -268,6 +297,118 @@ function Renglon({ f, sufijo, desde, hasta }: { f: FilaJornada; sufijo: string; 
         <div style={{ color: 'var(--muted)' }} className="text-[11.5px]">
           {f.conformeOperadorEn ? 'Con conformidad del operador' : 'Sin conformidad del operador'}
         </div>
+      </Td>
+    </tr>
+  );
+}
+
+/**
+ * El eje semanal, semana entera por operador. Exportada para probar el render
+ * sin montar la vista completa.
+ *
+ * Las tres verdades que esta sección no negocia:
+ *   · `semanas === null` ≠ «no hay semanas completas»: es «no se evaluó»
+ *     (lectura truncada), y se dice con esas palabras.
+ *   · Una semana con días sin expediente NO se concluye — y el renglón dice
+ *     CUÁLES días faltan y que no son cero horas.
+ *   · Las señales se pintan con su fundamento citable, tal como las escribió
+ *     `evaluarRiesgoSemana` — aquí no se redacta ley.
+ */
+export function SeccionSemanas({ semanas, truncada }: { semanas: SemanaEvaluada[] | null; truncada: boolean }) {
+  return (
+    <section className="card p-4 space-y-3">
+      <h2 className="font-display text-[15px] font-semibold">
+        La semana completa, contra el tope del año
+      </h2>
+      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        El decreto del 1 de mayo de 2026 escalona la jornada SEMANAL por año (48 h ordinarias en
+        2026). Catorce días verdes uno por uno pueden esconder una semana rebasada — por eso aquí
+        se evalúa la semana entera, de lunes a domingo, solo cuando cabe completa en el rango de
+        arriba.
+      </p>
+      {semanas === null ? (
+        <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+          {truncada
+            ? 'No se evaluó ninguna semana: la lectura vino recortada, y una semana evaluada sobre el recorte diría «va bien» con los días que faltan. Pide un rango más corto.'
+            : 'No se evaluó ninguna semana: el registro no se pudo leer.'}
+        </p>
+      ) : semanas.length === 0 ? (
+        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          El rango visible no contiene ninguna semana completa (de lunes a domingo) con registro.
+          Amplía el rango de fechas para ver el veredicto semanal.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12.5px]">
+            <thead>
+              <tr style={{ color: 'var(--muted)' }} className="text-left">
+                <Th>Operador</Th>
+                <Th>Semana</Th>
+                <Th>Horas</Th>
+                <Th>Lectura</Th>
+                <Th>Qué se ve</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {semanas.map((s) => <RenglonSemana key={`${s.operadorId}-${s.desde}`} s={s} />)}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RenglonSemana({ s }: { s: SemanaEvaluada }) {
+  const tono = TONO[s.riesgo.veredicto] ?? TONO.dato_insuficiente;
+  const faltan = s.riesgo.diasSinDato.length;
+  return (
+    <tr className="hairline-t align-top">
+      <Td>{s.operadorNombre}</Td>
+      <Td>{s.desde} → {s.hasta}</Td>
+      <Td>
+        {s.riesgo.horasMedidas === null ? (
+          <span style={{ color: 'var(--muted)' }}>
+            {/* El guion NO quiere decir cero: se escribe la razón. */}
+            no se concluye — {faltan === 1 ? 'falta 1 día' : `faltan ${numero(faltan)} días`} sin
+            registro, y eso no son cero horas
+          </span>
+        ) : (
+          <>
+            {s.riesgo.horasMedidas} h
+            {s.riesgo.topeOrdinariaHoras !== null && (
+              <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>
+                tope ordinario del año: {s.riesgo.topeOrdinariaHoras} h
+              </span>
+            )}
+          </>
+        )}
+      </Td>
+      <Td>
+        <span className="inline-block px-2 py-0.5 rounded-md text-[11.5px] font-medium"
+          style={{ background: tono.fondo, color: tono.texto }}>
+          {ROTULO_VEREDICTO[s.riesgo.veredicto]}
+        </span>
+      </Td>
+      <Td>
+        {s.riesgo.senales.length === 0 ? (
+          <span style={{ color: 'var(--muted)' }}>
+            {s.riesgo.horasMedidas === null
+              ? `sin datos completos no se afirma nada — días sin registro: ${s.riesgo.diasSinDato.join(', ')}`
+              : 'nada rebasado de lo que este motor evalúa'}
+          </span>
+        ) : (
+          <ul className="space-y-1.5">
+            {s.riesgo.senales.map((x, i) => (
+              <li key={i}>
+                <div>{x.dice}</div>
+                {x.fundamento && (
+                  <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{x.fundamento}</div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </Td>
     </tr>
   );

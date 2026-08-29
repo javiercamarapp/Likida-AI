@@ -13,6 +13,7 @@ import {
 import { correoDelUsuario } from '@/lib/likida/jornada/firma';
 import { componerJornada, type TipoAsiento } from '@/lib/likida/jornada/modelo';
 import { evaluarRiesgoDia, type PoliticaFlota } from '@/lib/likida/jornada/riesgo';
+import { evaluarSemanas, type SemanaEvaluada } from '@/lib/likida/jornada/semanas';
 import { sufijoTenant } from '../sufijo';
 import { VistaJornada, type FilaJornada } from './vista';
 
@@ -166,6 +167,23 @@ export default async function PaginaJornada({
       };
     });
   }
+
+  // ── EL EJE SEMANAL (tableros al día, 28-ago-2026) ────────────────────────
+  // `evaluarRiesgoSemana`, el tope del Transitorio Segundo, el art. 69 y
+  // `horas_min_entre_jornadas` estaban escritos, probados y SIN UN SOLO
+  // llamador — esta pantalla resumía por día y nunca decía si la semana
+  // rebasó las 48 h. `semanas.ts` es el pegamento puro.
+  //
+  // SOBRE UNA LECTURA TRUNCADA NO SE CONCLUYE NADA SEMANAL: los días que no
+  // cupieron podrían ser justo los que rebasan, y una semana evaluada sobre el
+  // recorte diría «va bien» con los datos que faltan. `null` aquí = no se
+  // evaluó, y la vista lo dice con esas palabras.
+  const semanas: SemanaEvaluada[] | null = filas !== null && !truncada
+    ? evaluarSemanas(
+      filas.map((f) => ({ operadorId: f.operadorId, operadorNombre: f.operadorNombre, dia: f.dia, jornada: f.jornada })),
+      politica, desde, hasta,
+    )
+    : null;
 
   async function anularMarca(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
@@ -327,6 +345,7 @@ export default async function PaginaJornada({
   return (
     <VistaJornada
       filas={filas}
+      semanas={semanas}
       motivoIlegible={motivoIlegible}
       truncada={truncada}
       politica={politica}
