@@ -33,6 +33,15 @@
 // que el segundo no encuentra fila y vuelve «alguien lo resolvió antes»
 // —jamás un éxito silencioso que pisa al primero—. Mismo patrón que
 // `resolverLineaAMano` (0076) y `aprobarPieza` (0120).
+//
+// LIGAR ES ATÓMICO DE PUNTA A PUNTA (0262, auditoría E.28 C-1): las dos
+// escrituras —gasto y comprobante— y el renglón del expediente corren dentro
+// de `sat_cfdi_ligar_tx`, una sola función de Postgres. Antes eran tres
+// viajes sueltos desde aquí, y una muerte del proceso entre el primero y el
+// segundo dejaba una cuña sin salida (el gasto decía facturado, el CFDI
+// seguía disponible, y ni re-ligar ni revertir la deshacían). IGNORAR y
+// REVERTIR siguen siendo una sola escritura cada uno —no tienen ese
+// problema— y no lo necesitan.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -74,6 +83,14 @@ export interface ResultadoResolucion {
 /** El código de `gasto_no_tras_liquidar` (0036/0037): el viaje ya se liquidó
  *  y pegarle un comprobante ahora cambiaría una liquidación EMITIDA. */
 const SQLSTATE_YA_LIQUIDADO = 'CU001';
+
+/** `sat_cfdi_ligar_tx` (0262): el comprobante ya no coincide con el estatus
+ *  anclado — alguien más lo resolvió mientras el contralor decidía. */
+const SQLSTATE_CFDI_NO_COINCIDE = 'CU014';
+
+/** `sat_cfdi_ligar_tx` (0262): el gasto ya no está disponible para el cruce
+ *  — perdió la carrera contra otro cruce que le pegó folio primero. */
+const SQLSTATE_GASTO_NO_DISPONIBLE = 'CU015';
 
 function codigoDe(error: unknown): string | undefined {
   return error !== null && typeof error === 'object' && 'code' in error
@@ -230,17 +247,38 @@ export async function ligarComprobante(
     return { ok: false, motivo: 'gasto_ya_tiene_cfdi', mensaje: 'Ese gasto ya tiene comprobante: le llegó por otro camino. Likida no pisa un CFDI que ya estaba.' };
   }
 
-  // ── El cruce, en dos escrituras y en este orden ──────────────────────────
-  // Primero el GASTO (con la guardia optimista que decide la carrera), después
-  // el comprobante. Al revés, un comprobante podría quedar diciendo «casé» con
-  // un gasto que otro se llevó.
-  const { data: ligado, error: errLigar } = await acotada(supabaseAdmin()
-    .from('gasto')
-    .update({ cfdi_uuid: cfdi.cfdiUuid, cfdi_orden: 1, xml_verificado: true })
-    .eq('tenant_id', tenantId)
-    .eq('id', gastoId)
-    .is('cfdi_uuid', null)
-    .select('id'), 'sat_descarga.ligar_a_mano');
+  const candidatosConEleccion = {
+    ...(cfdi.candidatos !== null && typeof cfdi.candidatos === 'object' && !Array.isArray(cfdi.candidatos)
+      ? (cfdi.candidatos as Record<string, unknown>) : {}),
+    elegido: gastoId,
+    elegido_por: email,
+    elegido_en: new Date().toISOString(),
+  };
+
+  // ── El cruce, ATÓMICO ─────────────────────────────────────────────────────
+  // Auditoría E.28, C-1: esto eran DOS escrituras sueltas desde aquí —primero
+  // el gasto, después el comprobante— con el expediente escrito DESPUÉS de
+  // las dos, mejor esfuerzo. Los fallos EN BANDA se compensaban soltando el
+  // gasto por su folio, pero una muerte del proceso ENTRE las dos escrituras
+  // no pasaba por ningún `catch`: dejaba el gasto afirmando estar facturado
+  // (`cfdi_uuid` + `xml_verificado=true`) con el CFDI todavía 'disponible', y
+  // esa cuña no tenía salida desde la interfaz (re-ligar rebotaba con
+  // `gasto_ya_tiene_cfdi`, ligar a otro violaba `uq_gasto_cfdi_uuid` de la
+  // 0065, revertir decía `nada_que_revertir`).
+  //
+  // `sat_cfdi_ligar_tx` (0262) hace las dos escrituras Y el expediente en UNA
+  // función de Postgres: si algo falla a medio camino, la base entera
+  // revierte — no queda «a medias» que reparar a mano.
+  const { error: errLigar } = await acotada(supabaseAdmin().rpc('sat_cfdi_ligar_tx', {
+    p_tenant: tenantId,
+    p_cfdi: cfdiId,
+    p_gasto: gastoId,
+    p_estatus_esperado: cfdi.estatus,
+    p_candidatos: candidatosConEleccion,
+    p_actor_id: actor.id,
+    p_actor_email: email,
+  }), 'sat_descarga.ligar_a_mano_tx');
+
   if (errLigar) {
     // `gasto_no_tras_liquidar` (0036/0037) bloquea tocar el CFDI de un gasto
     // cuyo viaje YA se liquidó. No es un fallo del sistema: es el candado que
@@ -252,73 +290,22 @@ export async function ligarComprobante(
         mensaje: 'Ese gasto pertenece a un viaje que YA se liquidó: pegarle un comprobante ahora cambiaría una liquidación emitida, y la base no lo permite. El comprobante se queda en la bandeja.',
       };
     }
-    logger.error('sat_descarga.ligar_a_mano_fallo', { tenantId, cfdi: cfdiId, err: errLigar.message });
+    // El comprobante ya no coincidía con el estatus anclado: alguien más lo
+    // resolvió mientras se decidía. Como TODO ocurrió dentro de una sola
+    // transacción, no se pisó nada — ni el gasto ni el comprobante se
+    // tocaron.
+    if (codigoDe(errLigar) === SQLSTATE_CFDI_NO_COINCIDE) {
+      return { ok: false, motivo: 'ya_resuelto', mensaje: 'Alguien resolvió ese comprobante mientras decidías. No se pisó nada — recarga la bandeja.' };
+    }
+    // El gasto perdió la carrera contra otro cruce que le pegó folio
+    // primero. Mismo caso: nada se tocó.
+    if (codigoDe(errLigar) === SQLSTATE_GASTO_NO_DISPONIBLE) {
+      return { ok: false, motivo: 'gasto_ya_tiene_cfdi', mensaje: 'Alguien le pegó un comprobante a ese gasto mientras decidías. No se pisó nada — recarga la bandeja.' };
+    }
+    logger.error('sat_descarga.ligar_a_mano_tx_fallo', { tenantId, cfdi: cfdiId, err: errLigar.message });
     return { ok: false, motivo: 'error_bd', mensaje: `No se pudo ligar el gasto, así que no se cambió nada: ${errLigar.message}` };
   }
-  if ((ligado ?? []).length !== 1) {
-    return { ok: false, motivo: 'gasto_ya_tiene_cfdi', mensaje: 'Alguien le pegó un comprobante a ese gasto mientras decidías. No se pisó nada — recarga la bandeja.' };
-  }
 
-  const candidatosConEleccion = {
-    ...(cfdi.candidatos !== null && typeof cfdi.candidatos === 'object' && !Array.isArray(cfdi.candidatos)
-      ? (cfdi.candidatos as Record<string, unknown>) : {}),
-    elegido: gastoId,
-    elegido_por: email,
-    elegido_en: new Date().toISOString(),
-  };
-
-  const { data: marcado, error: errMarcar } = await acotada(supabaseAdmin()
-    .from('sat_cfdi_descargado')
-    .update({
-      estatus: 'casado',
-      gasto_id: gastoId,
-      candidatos: candidatosConEleccion,
-      resuelto_por: actor.id,
-      resuelto_por_email: email,
-      resuelto_en: new Date().toISOString(),
-    })
-    .eq('tenant_id', tenantId)
-    .eq('id', cfdiId)
-    // ANCLADO AL ESTATUS QUE SE LEYÓ: si otro contralor lo resolvió mientras
-    // tanto, cero filas y se deshace lo del gasto.
-    .eq('estatus', cfdi.estatus)
-    .select('id'), 'sat_descarga.marcar_casado_a_mano');
-
-  if (errMarcar || (marcado ?? []).length !== 1) {
-    // El gasto YA quedó ligado y el comprobante no. Aquí SÍ se puede deshacer
-    // sin adivinar —a diferencia de `resolverLineaAMano`, que documentó no
-    // poder— porque se sabe exactamente qué folio se acaba de escribir: el
-    // `.eq('cfdi_uuid', …)` garantiza que solo se suelta lo que este mismo
-    // acto puso, nunca un comprobante ajeno.
-    const { error: errSoltar } = await acotada(supabaseAdmin()
-      .from('gasto')
-      .update({ cfdi_uuid: null, xml_verificado: null })
-      .eq('tenant_id', tenantId)
-      .eq('id', gastoId)
-      .eq('cfdi_uuid', cfdi.cfdiUuid), 'sat_descarga.deshacer_ligado_parcial');
-    if (errSoltar) {
-      // Quedó inconsistente y NO se esconde: el gasto tiene folio y el
-      // comprobante no dice que casó. Se grita para que se repare a mano.
-      logger.error('sat_descarga.ligado_parcial_sin_deshacer', {
-        tenantId, cfdi: cfdiId, gasto: gastoId, err: errSoltar.message,
-      });
-      return {
-        ok: false, motivo: 'error_bd',
-        mensaje: `El gasto quedó con el folio pegado pero el comprobante no se pudo marcar, y tampoco se pudo deshacer: ${errSoltar.message}. Revísalo antes de volver a intentarlo.`,
-      };
-    }
-    if (errMarcar) {
-      logger.error('sat_descarga.marcar_casado_fallo', { tenantId, cfdi: cfdiId, err: errMarcar.message });
-      return { ok: false, motivo: 'error_bd', mensaje: `No se pudo marcar el comprobante, así que se deshizo el cruce y no cambió nada: ${errMarcar.message}` };
-    }
-    return { ok: false, motivo: 'ya_resuelto', mensaje: 'Alguien resolvió ese comprobante mientras decidías. No se pisó nada — recarga la bandeja.' };
-  }
-
-  await anotarActo({
-    tenantId, cfdiId, acto: 'ligado', gastoId,
-    estatusAntes: cfdi.estatus, estatusDespues: 'casado',
-    motivo: null, actorId: actor.id, actorEmail: email,
-  });
   await anotarBitacora({
     tenantId, actor: { id: actor.id, email },
     accion: 'sat_descarga.cfdi_ligado',

@@ -27,12 +27,59 @@ export interface SalidaOutbox {
  */
 export const WA_OUTBOX_LEASE_SECONDS = 450; // 1.5 × maxDuration (300) de wa-outbox/route.ts
 
-/** Guarda una salida que Meta no aceptó por un error transitorio. Nunca lanza:
- * el caller ya devolvió su resultado normal; fallar al respaldo solo se grita. */
-export async function encolarSalidaWhatsApp(payload: Record<string, unknown>, motivo: string): Promise<void> {
+/**
+ * AUDITORÍA E.28 (H1, MEDIO): cuánto espera el PRIMER reintento de una salida
+ * que se encoló porque la respuesta de Meta NUNCA LLEGÓ (timeout o socket
+ * caído en `client.ts`) — no porque Meta la haya rechazado.
+ *
+ * LA DIFERENCIA QUE IMPORTA: un `!res.ok` (429, 5xx, lo que sea) es Meta
+ * CONTESTANDO que no aceptó el mensaje — ahí no hay ambigüedad, y esas
+ * salidas se encolan con `proximo_intento_en = now()` como siempre. Pero
+ * cuando el `catch` de la red dispara, la petición pudo haber llegado a Meta
+ * y ser aceptada IGUAL — el timeout es de ESTE lado, y WhatsApp Cloud API no
+ * ofrece un idempotency-key para mensajes con el que se pueda preguntar
+ * después "¿de verdad me quedaste debiendo éste?". Sin ese candado, encolar
+ * con reintento INMEDIATO significa que el cron de outbox (corre cada minuto,
+ * `vercel.json`) puede reenviar el ORIGINAL que Meta sí entregó, apenas
+ * segundos después de que el operador ya lo recibió.
+ *
+ * NO SE PUEDE ELIMINAR EL REENVÍO: la alternativa —no reintentar nunca ante
+ * un timeout— perdería mensajes reales con más frecuencia de la que evita
+ * duplicados, y esta casa ya decidió (0180) que un envío que no se sabe si
+ * salió se reintenta, no se abandona. Lo que SÍ se puede mitigar es LA
+ * VENTANA: sin este retraso, el primer reintento podía ocurrir en el mismo
+ * minuto que el timeout original — la peor combinación posible, porque es
+ * exactamente cuando es MÁS probable que la respuesta de Meta esté a punto de
+ * llegar tarde. Cinco minutos no prueban nada por sí solos, pero alejan el
+ * reintento de la ventana donde la carrera es más aguda, sin demorar de forma
+ * perceptible un mensaje que de verdad no salió — ningún camino de este
+ * archivo es una alerta de segundos (POD, cierre, cobranza).
+ */
+export const RETRASO_AMBIGUO_SEGUNDOS = 5 * 60;
+
+/**
+ * Guarda una salida que Meta no aceptó (o de la que nunca se supo) por un
+ * error transitorio. Nunca lanza: el caller ya devolvió su resultado normal;
+ * fallar al respaldo solo se grita.
+ *
+ * `retrasoSegundos` es CERO para un rechazo explícito de Meta (`!res.ok`,
+ * llamador de `client.ts`) y `RETRASO_AMBIGUO_SEGUNDOS` para un timeout o un
+ * socket caído — ver el comentario de esa constante. El default (0) preserva
+ * el comportamiento de siempre para quien no lo pase.
+ */
+export async function encolarSalidaWhatsApp(
+  payload: Record<string, unknown>,
+  motivo: string,
+  retrasoSegundos = 0,
+): Promise<void> {
   try {
+    const retraso = Number.isFinite(retrasoSegundos) ? Math.max(0, retrasoSegundos) : 0;
     const { error } = await acotada(supabaseAdmin().from('wa_outbox').insert({
       payload, ultimo_error: motivo.slice(0, 500),
+      // Con retraso 0 se omite la llave: el default de la columna (`now()`)
+      // es exactamente lo mismo, y así el insert de siempre no cambia de
+      // forma para quien ya lo prueba.
+      ...(retraso > 0 ? { proximo_intento_en: new Date(Date.now() + retraso * 1000).toISOString() } : {}),
     }), 'wa.outbox.encolar');
     if (error) logger.error('wa.outbox_no_encolado', { err: error.message });
   } catch (e) {

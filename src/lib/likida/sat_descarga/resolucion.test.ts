@@ -11,19 +11,35 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //  · EL CHECK NO SE AFLOJA. Todo update mueve `estatus` y `gasto_id` en la
 //    MISMA escritura, así que la fila jamás pasa por el estado que
 //    `sat_cfdi_descargado_casado_coherente` prohíbe.
-//  · NO SE PISA UN CFDI QUE YA ESTABA. La guardia optimista `.is('cfdi_uuid',
-//    null)` decide la carrera, no un `if`.
+//  · LIGAR ES ATÓMICO (0262): el gasto, el comprobante y el expediente los
+//    escribe `sat_cfdi_ligar_tx` en UNA transacción de Postgres — no tres
+//    viajes sueltos desde aquí. La guardia optimista contra un CFDI que ya
+//    estaba, y contra un gasto que ya tiene folio, vive DENTRO del RPC
+//    (`for update`); lo que este archivo prueba es el cableado (qué RPC, con
+//    qué argumentos) y la traducción de cada SQLSTATE. La atomicidad de
+//    verdad la prueba el bloque 210 de `verificaciones.sql`.
 //  · DESHACER NO ES BORRAR: escribe un renglón en `sat_cfdi_resolucion`.
 //  · UN AMBIGUO SOLO SE RESUELVE CON UN CANDIDATO OFRECIDO.
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface Llamada { tabla: string; ops: Array<{ op: string; args: unknown[] }> }
+interface LlamadaRpc { nombre: string; args: unknown }
 
 const llamadas: Llamada[] = [];
 /** Cola de respuestas por tabla; si se agota, se repite la última. */
 let respuestas: Record<string, Array<{ data: unknown; error: unknown }>> = {};
 const bitacoras: unknown[] = [];
 let correo: string | null = 'contralor@flota.test';
+
+// Desde la 0262 (auditoría E.28, C-1), `ligarComprobante` ya no hace las dos
+// escrituras sueltas: llama a `sat_cfdi_ligar_tx`, un RPC que hace el cruce
+// completo (gasto + comprobante + expediente) en una transacción de
+// Postgres. Lo que se prueba AQUÍ es el CABLEADO —qué RPC, con qué
+// argumentos, y cómo se traduce cada SQLSTATE—; la atomicidad de verdad
+// (que un fallo a medio camino revierte TODO) la comprueba el bloque 210 de
+// `supabase/verificaciones.sql` contra Postgres real, no un mock.
+const llamadasRpc: LlamadaRpc[] = [];
+let respuestasRpc: Array<{ data: unknown; error: unknown }> = [];
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/likida/presupuesto', () => ({ acotada: <T,>(q: T) => q }));
@@ -49,6 +65,12 @@ vi.mock('@/lib/supabase/admin', () => ({
       b.then = (ok: (v: unknown) => unknown) => Promise.resolve(siguiente()).then(ok);
       return b;
     },
+    rpc: (nombre: string, args: unknown) => {
+      llamadasRpc.push({ nombre, args });
+      const cola = respuestasRpc;
+      const r = cola.length === 0 ? { data: null, error: null } : cola.length === 1 ? cola[0] : cola.shift()!;
+      return Promise.resolve(r);
+    },
   }),
 }));
 
@@ -71,6 +93,7 @@ function inserts(tabla: string) { return ops(tabla).filter((x) => x.op === 'inse
 
 beforeEach(() => {
   llamadas.length = 0; bitacoras.length = 0; respuestas = {};
+  llamadasRpc.length = 0; respuestasRpc = [];
   correo = 'contralor@flota.test';
 });
 
@@ -93,67 +116,58 @@ describe('la firma es obligatoria', () => {
   });
 });
 
+// Desde la 0262 (auditoría E.28, C-1) las dos escrituras del cruce —gasto y
+// comprobante— y el renglón del expediente ya no las hace TypeScript: las
+// hace `sat_cfdi_ligar_tx`, un RPC que las corre en UNA transacción de
+// Postgres. Antes eran tres viajes sueltos desde aquí, y una muerte del
+// proceso entre el primero y el segundo dejaba una cuña sin salida (el gasto
+// decía facturado, el CFDI seguía disponible). Lo que se prueba en ESTE
+// archivo es el CABLEADO: qué RPC, con qué argumentos, y cómo se traduce
+// cada SQLSTATE a las palabras del contralor. La atomicidad de verdad —que
+// un fallo a medio camino revierte TODO, incluida la escritura del gasto que
+// ya había corrido— la comprueba el bloque 210 de `verificaciones.sql`
+// contra Postgres real, con un fallo inyectado a propósito.
 describe('ligar — el acto que afirma la deducción', () => {
-  it('escribe estatus, gasto y firma EN EL MISMO update', async () => {
-    respuestas.sat_cfdi_descargado = [cfdi(), { data: [{ id: 'cfdi-1' }], error: null }];
-    respuestas.gasto = [
-      { data: { id: 'g-1', cfdi_uuid: null, monto: '300.00' }, error: null },
-      { data: [{ id: 'g-1' }], error: null },
-    ];
+  it('llama al RPC con el gasto, el estatus anclado y la elección firmada', async () => {
+    respuestas.sat_cfdi_descargado = [cfdi()];
+    respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: null, monto: '300.00' }, error: null }];
+    respuestasRpc = [{ data: { gasto_id: 'g-1', cfdi_uuid: UUID }, error: null }];
     const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
     expect(r.ok).toBe(true);
 
-    const u = updates('sat_cfdi_descargado')[0];
-    // El CHECK `casado_coherente` no se puede violar ni un instante: los dos
-    // campos viajan juntos.
-    expect(u.estatus).toBe('casado');
-    expect(u.gasto_id).toBe('g-1');
-    expect(u.resuelto_por).toBe(ACTOR.id);
-    expect(u.resuelto_por_email).toBe('contralor@flota.test');
-    expect(typeof u.resuelto_en).toBe('string');
+    expect(llamadasRpc).toHaveLength(1);
+    expect(llamadasRpc[0].nombre).toBe('sat_cfdi_ligar_tx');
+    const args = llamadasRpc[0].args as Record<string, unknown>;
+    expect(args.p_tenant).toBe(TENANT);
+    expect(args.p_cfdi).toBe('cfdi-1');
+    expect(args.p_gasto).toBe('g-1');
+    // EL ANCLA OPTIMISTA viaja al RPC: es lo que reemplaza el
+    // `.eq('estatus', anterior)` que decidía la carrera en TypeScript.
+    expect(args.p_estatus_esperado).toBe('disponible');
+    expect(args.p_actor_id).toBe(ACTOR.id);
+    expect(args.p_actor_email).toBe('contralor@flota.test');
   });
 
-  it('el update va anclado al estatus que se leyó — la carrera la decide la base', async () => {
-    respuestas.sat_cfdi_descargado = [cfdi({ estatus: 'disponible' }), { data: [{ id: 'cfdi-1' }], error: null }];
-    respuestas.gasto = [
-      { data: { id: 'g-1', cfdi_uuid: null }, error: null },
-      { data: [{ id: 'g-1' }], error: null },
-    ];
-    await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
-    expect(ops('sat_cfdi_descargado')).toContainEqual({ op: 'eq', args: ['estatus', 'disponible'] });
-  });
-
-  it('el gasto se liga con la guardia optimista, no con un `if`', async () => {
-    respuestas.sat_cfdi_descargado = [cfdi(), { data: [{ id: 'cfdi-1' }], error: null }];
-    respuestas.gasto = [
-      { data: { id: 'g-1', cfdi_uuid: null }, error: null },
-      { data: [{ id: 'g-1' }], error: null },
-    ];
-    await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
-    expect(ops('gasto')).toContainEqual({ op: 'is', args: ['cfdi_uuid', null] });
-  });
-
-  it('un gasto que YA tiene comprobante se rechaza con esas palabras', async () => {
+  it('un gasto que YA tiene comprobante se rechaza con esas palabras, y no llama al RPC', async () => {
     respuestas.sat_cfdi_descargado = [cfdi()];
     respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: 'otro-folio' }, error: null }];
     const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
     expect(r.ok).toBe(false);
     expect(r.motivo).toBe('gasto_ya_tiene_cfdi');
-    // No se pisó: no hubo ni un update sobre el gasto.
-    expect(updates('gasto')).toEqual([]);
+    // No se pisó: el gasto ya traía folio y ni siquiera se llamó al RPC.
+    expect(llamadasRpc).toEqual([]);
   });
 
-  it('perder la carrera del gasto no se cuenta como éxito', async () => {
+  it('perder la carrera del gasto (CU015) no se cuenta como éxito', async () => {
     respuestas.sat_cfdi_descargado = [cfdi()];
-    respuestas.gasto = [
-      { data: { id: 'g-1', cfdi_uuid: null }, error: null },
-      // cero filas afectadas: alguien más le pegó su XML en el intermedio.
-      { data: [], error: null },
-    ];
+    respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: null }, error: null }];
+    // Alguien más le pegó su XML al gasto ENTRE la lectura de arriba y la
+    // llamada al RPC: la traba `for update … and cfdi_uuid is null` de
+    // `sat_cfdi_ligar_tx` lo detecta y responde CU015.
+    respuestasRpc = [{ data: null, error: { code: 'CU015', message: 'gasto no disponible' } }];
     const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
     expect(r.ok).toBe(false);
     expect(r.motivo).toBe('gasto_ya_tiene_cfdi');
-    expect(updates('sat_cfdi_descargado')).toEqual([]);
   });
 
   it('un ambiguo SOLO se resuelve con un candidato que el motor ofreció', async () => {
@@ -164,75 +178,78 @@ describe('ligar — el acto que afirma la deducción', () => {
     const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-fuera-de-lista', ACTOR);
     expect(r.ok).toBe(false);
     expect(r.motivo).toBe('candidato_no_ofrecido');
-    expect(updates('gasto')).toEqual([]);
+    expect(llamadasRpc).toEqual([]);
   });
 
-  it('un ambiguo con un candidato ofrecido sí pasa, y conserva la lista', async () => {
+  it('un ambiguo con un candidato ofrecido sí pasa, y el RPC recibe la lista conservada', async () => {
     respuestas.sat_cfdi_descargado = [
       cfdi({ estatus: 'ambiguo', candidatos: { candidatos: [{ gastoId: 'g-a' }, { gastoId: 'g-b' }] } }),
-      { data: [{ id: 'cfdi-1' }], error: null },
     ];
-    respuestas.gasto = [
-      { data: { id: 'g-a', cfdi_uuid: null }, error: null },
-      { data: [{ id: 'g-a' }], error: null },
-    ];
+    respuestas.gasto = [{ data: { id: 'g-a', cfdi_uuid: null }, error: null }];
+    respuestasRpc = [{ data: { gasto_id: 'g-a' }, error: null }];
     const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-a', ACTOR);
     expect(r.ok).toBe(true);
-    const u = updates('sat_cfdi_descargado')[0];
-    const cands = u.candidatos as Record<string, unknown>;
+    const args = llamadasRpc[0].args as Record<string, unknown>;
+    const cands = args.p_candidatos as Record<string, unknown>;
     // LOS CANDIDATOS NO SE BORRAN: es lo que permite que deshacer devuelva el
     // comprobante a la cola de la que salió, y no a otra.
     expect(cands.candidatos).toHaveLength(2);
     expect(cands.elegido).toBe('g-a');
     expect(cands.elegido_por).toBe('contralor@flota.test');
+    expect(args.p_estatus_esperado).toBe('ambiguo');
   });
 
   it('un viaje YA liquidado se dice con esas palabras, no como fallo genérico', async () => {
     respuestas.sat_cfdi_descargado = [cfdi()];
-    respuestas.gasto = [
-      { data: { id: 'g-1', cfdi_uuid: null }, error: null },
-      { data: null, error: { code: 'CU001', message: 'el viaje ya tiene liquidación emitida' } },
-    ];
+    respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: null }, error: null }];
+    respuestasRpc = [{ data: null, error: { code: 'CU001', message: 'el viaje ya tiene liquidación emitida' } }];
     const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
     expect(r.motivo).toBe('gasto_de_viaje_liquidado');
     expect(r.mensaje).toContain('liquidación emitida');
   });
 
-  it('si el comprobante no se pudo marcar, el gasto se SUELTA por su folio', async () => {
-    respuestas.sat_cfdi_descargado = [cfdi(), { data: null, error: { message: 'boom' } }];
-    respuestas.gasto = [
-      { data: { id: 'g-1', cfdi_uuid: null }, error: null },
-      { data: [{ id: 'g-1' }], error: null },   // se ligó
-      { data: [{ id: 'g-1' }], error: null },   // …y se deshizo
-    ];
+  it('alguien más resolvió el comprobante mientras se decidía (CU014): no se pisa nada', async () => {
+    respuestas.sat_cfdi_descargado = [cfdi()];
+    respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: null }, error: null }];
+    respuestasRpc = [{ data: null, error: { code: 'CU014', message: 'no coincide' } }];
     const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
     expect(r.ok).toBe(false);
-    // El deshacer va anclado al folio que ESTE acto escribió: nunca suelta un
-    // comprobante ajeno.
-    expect(ops('gasto')).toContainEqual({ op: 'eq', args: ['cfdi_uuid', UUID] });
-    expect(updates('gasto').at(-1)).toMatchObject({ cfdi_uuid: null });
+    expect(r.motivo).toBe('ya_resuelto');
+  });
+
+  it('un fallo de la base que no es ninguna de las reglas conocidas se dice como error_bd, sin inventar un motivo', async () => {
+    respuestas.sat_cfdi_descargado = [cfdi()];
+    respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: null }, error: null }];
+    respuestasRpc = [{ data: null, error: { message: 'la base no respondió' } }];
+    const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toBe('error_bd');
+    expect(r.mensaje).toContain('la base no respondió');
+    // Nada se escribió sobre las tablas directamente: la única escritura del
+    // cruce es el RPC, y el RPC fue el que falló.
+    expect(updates('gasto')).toEqual([]);
+    expect(updates('sat_cfdi_descargado')).toEqual([]);
   });
 
   it('un comprobante ya casado no se re-liga encima: primero se deshace', async () => {
     respuestas.sat_cfdi_descargado = [cfdi({ estatus: 'casado', gasto_id: 'g-viejo' })];
     const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-nuevo', ACTOR);
     expect(r.motivo).toBe('ya_resuelto');
-    expect(updates('gasto')).toEqual([]);
+    expect(llamadasRpc).toEqual([]);
   });
 
-  it('deja renglón en el expediente y en la bitácora', async () => {
-    respuestas.sat_cfdi_descargado = [cfdi(), { data: [{ id: 'cfdi-1' }], error: null }];
-    respuestas.gasto = [
-      { data: { id: 'g-1', cfdi_uuid: null }, error: null },
-      { data: [{ id: 'g-1' }], error: null },
-    ];
+  it('al tener éxito, deja rastro en la bitácora — el expediente lo escribe la base, dentro del mismo RPC (bloque 210)', async () => {
+    respuestas.sat_cfdi_descargado = [cfdi()];
+    respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: null }, error: null }];
+    respuestasRpc = [{ data: { gasto_id: 'g-1', cfdi_uuid: UUID }, error: null }];
     await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
-    expect(inserts('sat_cfdi_resolucion')[0]).toMatchObject({
-      tenant_id: TENANT, cfdi_id: 'cfdi-1', acto: 'ligado', gasto_id: 'g-1',
-      estatus_antes: 'disponible', estatus_despues: 'casado',
-      actor_email: 'contralor@flota.test',
-    });
     expect(bitacoras).toHaveLength(1);
+    expect(bitacoras[0]).toMatchObject({
+      tenantId: TENANT, accion: 'sat_descarga.cfdi_ligado', entidadId: 'cfdi-1',
+    });
+    // Ya no hay un insert suelto a `sat_cfdi_resolucion` desde TypeScript:
+    // el expediente lo escribe `sat_cfdi_ligar_tx` dentro de su transacción.
+    expect(inserts('sat_cfdi_resolucion')).toEqual([]);
   });
 });
 
@@ -367,16 +384,17 @@ describe('estatusAlRevertir', () => {
 });
 
 describe('el tenant de la sesión se impone en cada consulta', () => {
-  it('leer, ligar y marcar van todos anclados al tenant', async () => {
-    respuestas.sat_cfdi_descargado = [cfdi(), { data: [{ id: 'cfdi-1' }], error: null }];
-    respuestas.gasto = [
-      { data: { id: 'g-1', cfdi_uuid: null }, error: null },
-      { data: [{ id: 'g-1' }], error: null },
-    ];
+  it('las lecturas previas y el RPC van todos anclados al tenant', async () => {
+    respuestas.sat_cfdi_descargado = [cfdi()];
+    respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: null }, error: null }];
+    respuestasRpc = [{ data: { gasto_id: 'g-1' }, error: null }];
     await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
     for (const tabla of ['sat_cfdi_descargado', 'gasto']) {
       expect(ops(tabla)).toContainEqual({ op: 'eq', args: ['tenant_id', TENANT] });
     }
-    expect(inserts('sat_cfdi_resolucion')[0].tenant_id).toBe(TENANT);
+    // El RPC ancla el tenant DENTRO de la transacción (`p_tenant` en cada
+    // `where` de `sat_cfdi_ligar_tx`), no aquí — pero aquí se prueba que
+    // TypeScript se lo manda.
+    expect((llamadasRpc[0].args as Record<string, unknown>).p_tenant).toBe(TENANT);
   });
 });

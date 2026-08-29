@@ -14,7 +14,10 @@ vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 const loggerError = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/logger', () => ({ logger: { error: loggerError } }));
 
-const { finalizarSalidaWhatsApp, encolarSalidaWhatsApp, reclamarSalidasWhatsApp, WA_OUTBOX_LEASE_SECONDS } = await import('./wa_outbox');
+const {
+  finalizarSalidaWhatsApp, encolarSalidaWhatsApp, reclamarSalidasWhatsApp,
+  WA_OUTBOX_LEASE_SECONDS, RETRASO_AMBIGUO_SEGUNDOS,
+} = await import('./wa_outbox');
 
 const salida = { id: 'x', payload: {}, intentos: 8, leaseToken: 't' };
 
@@ -42,6 +45,55 @@ describe('encolarSalidaWhatsApp nunca lanza (BEST-EFFORT a propósito)', () => {
     insert.mockRejectedValue(new Error('red caída'));
     await expect(encolarSalidaWhatsApp({}, 'motivo')).resolves.toBeUndefined();
     expect(loggerError).toHaveBeenCalledWith('wa.outbox_no_encolado', { err: 'red caída' });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA E.28 (H1, MEDIO) — un timeout donde Meta SÍ entregó podía
+// triplicar un aviso: el catch de la red en `client.ts` encolaba el reintento
+// con `proximo_intento_en = now()` (el default de la columna), y el cron de
+// outbox corre cada minuto — el reintento del mensaje que Meta SÍ había
+// aceptado podía salir casi de inmediato. Sin retraso explícito, un timeout
+// y un rechazo EXPLÍCITO de Meta (`!res.ok`, donde no hay ambigüedad) se
+// encolaban EXACTAMENTE IGUAL, y son riesgos distintos.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('encolarSalidaWhatsApp — el retraso ambiguo (H1)', () => {
+  beforeEach(() => { insert.mockReset(); loggerError.mockReset(); insert.mockResolvedValue({ error: null }); });
+
+  it('sin retraso (el default, para un rechazo EXPLÍCITO de Meta) no manda `proximo_intento_en`: el default de la columna basta', async () => {
+    await encolarSalidaWhatsApp({ a: 1 }, 'HTTP 429: rate limit');
+    expect(insert).toHaveBeenCalledWith({ payload: { a: 1 }, ultimo_error: 'HTTP 429: rate limit' });
+  });
+
+  it('con `RETRASO_AMBIGUO_SEGUNDOS` (un timeout — no se sabe si Meta entregó), `proximo_intento_en` viaja en el futuro', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-25T12:00:00.000Z'));
+    try {
+      await encolarSalidaWhatsApp({ a: 1 }, 'timeout de red', RETRASO_AMBIGUO_SEGUNDOS);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(insert).toHaveBeenCalledWith({
+      payload: { a: 1 }, ultimo_error: 'timeout de red',
+      proximo_intento_en: new Date('2026-08-25T12:05:00.000Z').toISOString(),
+    });
+  });
+
+  it('el retraso ambiguo es de VARIOS MINUTOS, no segundos — el cron de outbox corre cada minuto (vercel.json)', () => {
+    // Con un retraso menor al intervalo del cron, el primer reintento podría
+    // seguir cayendo en el mismo minuto que el timeout original: exactamente
+    // la ventana que este arreglo busca alejar.
+    expect(RETRASO_AMBIGUO_SEGUNDOS).toBeGreaterThanOrEqual(5 * 60);
+  });
+
+  it('un retraso negativo o no-numérico nunca manda la salida al pasado', async () => {
+    await encolarSalidaWhatsApp({}, 'x', -30);
+    expect(insert).toHaveBeenCalledWith({ payload: {}, ultimo_error: 'x' });
+
+    insert.mockReset();
+    insert.mockResolvedValue({ error: null });
+    await encolarSalidaWhatsApp({}, 'x', NaN);
+    expect(insert).toHaveBeenCalledWith({ payload: {}, ultimo_error: 'x' });
   });
 });
 
