@@ -51,6 +51,40 @@ export interface FilaSeguridad {
   detalle: Record<string, unknown> | null; creadoEn: string;
 }
 
+export interface ResumenSeguridad {
+  /** Total histórico EXACTO — es la M de «mostrando N de M» del panel. */
+  total: number;
+  /** Conteos de los últimos 30 días, por severidad. Medidos en la base
+   *  (count exacto con head), jamás contando una rebanada traída al server. */
+  d30: { alta: number; media: number; info: number };
+}
+
+/** Los conteos del panel de Trust & Safety. LANZA en error — un panel de
+ *  seguridad que no puede leer su tabla tiene que decirlo, no pintar ceros
+ *  (tableros al día, 28-ago-2026: cero medido y «no se pudo medir» son
+ *  afirmaciones opuestas). */
+export async function resumenEventosSeguridad(ahora: Date = new Date()): Promise<ResumenSeguridad> {
+  const { supabaseAdmin } = await import('@/lib/supabase/admin');
+  const desde30 = new Date(ahora.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const exigir = (r: { count: number | null; error: { message: string } | null }, cual: string): number => {
+    if (r.error || typeof r.count !== 'number') {
+      throw new Error(`resumenEventosSeguridad(${cual}): ${r.error?.message ?? 'sin count'}`);
+    }
+    return r.count;
+  };
+  const base = () => supabaseAdmin().from('evento_seguridad').select('id', { count: 'exact', head: true });
+  const [rTotal, rAlta, rMedia, rInfo] = await Promise.all([
+    base(),
+    base().eq('severidad', 'alta').gte('creado_en', desde30),
+    base().eq('severidad', 'media').gte('creado_en', desde30),
+    base().eq('severidad', 'info').gte('creado_en', desde30),
+  ]);
+  return {
+    total: exigir(rTotal, 'total'),
+    d30: { alta: exigir(rAlta, 'alta'), media: exigir(rMedia, 'media'), info: exigir(rInfo, 'info') },
+  };
+}
+
 /** Los últimos eventos, para el panel. LANZA en error (el panel enseña su
  *  estado de fallo — cero eventos ≠ no se pudo leer). */
 export async function getEventosSeguridad(limite = 50): Promise<FilaSeguridad[]> {
