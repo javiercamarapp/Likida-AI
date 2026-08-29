@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 // AUDITORÍA 19 (OP-19c2-3): `finalizar_wa_outbox` (mig. 0189) pasó de devolver
 // `boolean` a `table(ok boolean, muerta boolean)` para que la app sepa cuándo
@@ -12,7 +14,7 @@ vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 const loggerError = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/logger', () => ({ logger: { error: loggerError } }));
 
-const { finalizarSalidaWhatsApp, encolarSalidaWhatsApp, reclamarSalidasWhatsApp } = await import('./wa_outbox');
+const { finalizarSalidaWhatsApp, encolarSalidaWhatsApp, reclamarSalidasWhatsApp, WA_OUTBOX_LEASE_SECONDS } = await import('./wa_outbox');
 
 const salida = { id: 'x', payload: {}, intentos: 8, leaseToken: 't' };
 
@@ -53,13 +55,13 @@ describe('reclamarSalidasWhatsApp mapea el contrato snake_case → camelCase de 
     });
     const salidas = await reclamarSalidasWhatsApp();
     expect(salidas).toEqual([{ id: 'a1', payload: { x: 1 }, intentos: 3, leaseToken: 'tok-1' }]);
-    expect(rpc).toHaveBeenCalledWith('reclamar_wa_outbox', { p_limite: 25, p_lease_seconds: 120 });
+    expect(rpc).toHaveBeenCalledWith('reclamar_wa_outbox', { p_limite: 25, p_lease_seconds: WA_OUTBOX_LEASE_SECONDS });
   });
 
   it('respeta el límite pasado y no el default cuando se especifica', async () => {
     rpc.mockResolvedValue({ data: [], error: null });
     await reclamarSalidasWhatsApp(5);
-    expect(rpc).toHaveBeenCalledWith('reclamar_wa_outbox', { p_limite: 5, p_lease_seconds: 120 });
+    expect(rpc).toHaveBeenCalledWith('reclamar_wa_outbox', { p_limite: 5, p_lease_seconds: WA_OUTBOX_LEASE_SECONDS });
   });
 
   it('sin filas reclamadas, devuelve arreglo vacío (no null/undefined)', async () => {
@@ -70,6 +72,43 @@ describe('reclamarSalidasWhatsApp mapea el contrato snake_case → camelCase de 
   it('si la RPC falla, lanza — a diferencia de encolar, aquí SÍ debe fallar ruidoso: el kill switch decide si reclama, no este archivo', async () => {
     rpc.mockResolvedValue({ data: null, error: { message: 'timeout' } });
     await expect(reclamarSalidasWhatsApp()).rejects.toThrow('reclamarSalidasWhatsApp: timeout');
+  });
+});
+
+// AUDITORÍA 20 (R-1, CRÍTICO): el lease reclamaba con 120s mientras la
+// corrida real (route.ts) mide 155.5s y puede correr hasta 300s de
+// `maxDuration` — el lease vencía a media corrida y el cron de al lado
+// (corre cada minuto) reenviaba el mismo PDF hasta 8 veces a un teléfono
+// real. Esta prueba lee el `maxDuration` REAL del archivo — no una copia —
+// así que si alguien lo vuelve a subir sin tocar el lease, o baja el lease
+// sin querer, esta prueba se pone roja.
+describe('WA_OUTBOX_LEASE_SECONDS sobrevive al maxDuration real del cron (invariante R-1)', () => {
+  const RUTA_ROUTE = join(__dirname, '..', '..', 'app', 'api', 'cron', 'wa-outbox', 'route.ts');
+
+  function leerMaxDurationDeclarado(): number {
+    const fuente = readFileSync(RUTA_ROUTE, 'utf8');
+    const m = fuente.match(/export const maxDuration = (\d+);/);
+    if (!m) throw new Error('no se pudo leer maxDuration de wa-outbox/route.ts — el regex de esta prueba quedó desalineado con el archivo');
+    return Number(m[1]);
+  }
+
+  it('el maxDuration declarado en route.ts sigue siendo 300 (si cambió, hay que revisar el margen de abajo)', () => {
+    expect(leerMaxDurationDeclarado()).toBe(300);
+  });
+
+  it('el lease es mayor al TECHO real de la corrida (maxDuration), no solo al promedio de 155.5s medido', () => {
+    const maxDuration = leerMaxDurationDeclarado();
+    expect(WA_OUTBOX_LEASE_SECONDS).toBeGreaterThan(maxDuration);
+  });
+
+  it('el lease guarda al menos 1.5× de margen sobre el techo — mismo margen que WA_LEASE_SECONDS en wa_pendientes.ts', () => {
+    const maxDuration = leerMaxDurationDeclarado();
+    expect(WA_OUTBOX_LEASE_SECONDS).toBeGreaterThanOrEqual(Math.ceil(maxDuration * 1.5));
+  });
+
+  it('regresión directa: 120s (el valor viejo, ya roto contra 155.5s medidos) ya no basta', () => {
+    expect(WA_OUTBOX_LEASE_SECONDS).toBeGreaterThan(120);
+    expect(WA_OUTBOX_LEASE_SECONDS).toBeGreaterThan(155.5);
   });
 });
 

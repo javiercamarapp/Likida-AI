@@ -11,6 +11,12 @@ export const dynamic = 'force-dynamic';
 // RENDIMIENTO-19C2-6: medido en 155.5s reales contra los 60s declarados —
 // mismo ajuste de margen que `gps/route.ts` (ver esa nota para el porqué de
 // 300 y no una redistribución de fondo).
+//
+// AUDITORÍA 20 (R-1): este es el TECHO real de la corrida — el lease del
+// outbox (`WA_OUTBOX_LEASE_SECONDS`, wa_outbox.ts) tiene que sobrevivirlo con
+// margen, no solo cubrir el promedio medido. Si vuelves a subir este número,
+// sube también ese lease — `wa_outbox.test.ts` lo verifica leyendo este
+// archivo y se pone rojo si se desalinean.
 export const maxDuration = 300;
 
 const GRAPH = 'https://graph.facebook.com/v21.0';

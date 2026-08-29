@@ -3,7 +3,7 @@
 -- SKIP LOCKED. La carrera real de dos sesiones se ejercita en el test TS.
 
 begin;
-select plan(33);
+select plan(40);
 
 select ok(
   (select prosrc ilike '%for update skip locked%'
@@ -125,6 +125,60 @@ select is(
   (select count(*)::int from public.reclamar_wa_pendiente('zzz-order-a2', 0, 'worker-b', 180)),
   1,
   'A2 se habilita solamente después de completar A1'
+);
+
+-- AUDITORÍA 20, BE-C1 (CRÍTICO): el desempate de una ráfaga no era
+-- cronológico. `guardarEventosPendientes` inserta TODA la ráfaga de un POST
+-- del webhook en UN SOLO INSERT multi-fila usando el DEFAULT de
+-- `recibido_en` — exactamente lo que se reproduce abajo. Los wamids se
+-- eligen A PROPÓSITO en orden alfabético INVERSO al de llegada real (la
+-- primera foto es "...-c-...", la última, "listo", es "...-a-..."): si el
+-- desempate cayera en `id` (el bug de `now()`, que empata las tres filas),
+-- "listo" ganaría el orden por ser alfabéticamente el primero.
+insert into public.wa_evento_pendiente (id, evento) values
+  ('zzz-rafaga-c-foto1', '{"from":"5219990009999","type":"image"}'::jsonb),
+  ('zzz-rafaga-b-foto2', '{"from":"5219990009999","type":"image"}'::jsonb),
+  ('zzz-rafaga-a-listo', '{"from":"5219990009999","type":"text"}'::jsonb);
+
+select ok(
+  (select count(distinct recibido_en) from public.wa_evento_pendiente
+    where id in ('zzz-rafaga-c-foto1', 'zzz-rafaga-b-foto2', 'zzz-rafaga-a-listo')) = 3,
+  'clock_timestamp() avanza fila por fila DENTRO del mismo INSERT: la ráfaga no empata en recibido_en (con now(), el bug, las tres comparten el mismo valor y esto da 1, no 3)'
+);
+select is(
+  (select id from public.wa_evento_pendiente
+    where id in ('zzz-rafaga-c-foto1', 'zzz-rafaga-b-foto2', 'zzz-rafaga-a-listo')
+    order by recibido_en, id limit 1),
+  'zzz-rafaga-c-foto1',
+  'el desempate ordena por LLEGADA real (foto1 primero), no por el alfabeto del wamid — con now() "zzz-rafaga-a-listo" ganaría por ser alfabéticamente el menor'
+);
+select is(
+  (select count(*)::int from public.reclamar_wa_pendiente('zzz-rafaga-a-listo', 0, 'worker-rafaga', 180)),
+  0,
+  '"listo" NO se puede reclamar mientras sus dos fotos siguen sin procesar — con el bug de now() esto reclama 1, porque "a-listo" ordena antes que "b-foto2"/"c-foto1" por wamid'
+);
+select is(
+  (select count(*)::int from public.reclamar_wa_pendiente('zzz-rafaga-c-foto1', 0, 'worker-rafaga', 180)),
+  1,
+  'la primera foto de la ráfaga (la más vieja según clock_timestamp) sí se puede reclamar'
+);
+select is(
+  (select count(*)::int from public.reclamar_wa_pendiente('zzz-rafaga-b-foto2', 0, 'worker-rafaga', 180)),
+  0,
+  'la segunda foto sigue bloqueada: la primera aún no tiene procesado_en, aunque ya la tenga arrendada este mismo worker'
+);
+select ok(
+  public.completar_wa_pendiente(
+    'zzz-rafaga-c-foto1',
+    (select claim_token from public.wa_evento_pendiente where id = 'zzz-rafaga-c-foto1'),
+    'worker-rafaga'
+  ),
+  'se completa la primera foto de la ráfaga'
+);
+select is(
+  (select count(*)::int from public.reclamar_wa_pendiente('zzz-rafaga-a-listo', 1, 'worker-rafaga', 180)),
+  0,
+  '"listo" sigue bloqueado: la SEGUNDA foto (b-foto2) todavía no se completó — el orden cronológico se respeta evento por evento, no solo contra la primera'
 );
 
 select is(
