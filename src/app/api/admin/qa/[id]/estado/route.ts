@@ -12,7 +12,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { leerCorrida, leerManifiesto, firmarRutas, BUCKET_QA_FOTOS } from '@/lib/admin/qa-storage';
+import { leerCorrida, leerManifiesto, leerLecturasDeCorrida, firmarRutas, BUCKET_QA_FOTOS } from '@/lib/admin/qa-storage';
+import { resumenDeLecturas } from '@/lib/admin/qa-medicion';
+import type { ResumenPrecisionCorrida } from '@/lib/admin/qa-verdad';
 import { sesionSuperadmin } from '../../puerta';
 
 export const runtime = 'nodejs';
@@ -64,5 +66,19 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     url: urlsPdf.get(path) ?? null,
   }));
 
-  return NextResponse.json({ corrida, fotos, pdfs, ahora: new Date().toISOString() });
+  // LA PRECISIÓN MEDIDA de esta corrida (qa_foto_lectura, migs. 0239/0246).
+  // Cero lecturas = la medición aún no corre (el motor la escribe en la fase
+  // de oráculos) y se manda null; un fallo de LECTURA se dice aparte — la
+  // pantalla no puede pintar "sin medir" sobre una medición que no se pudo
+  // mirar.
+  let medicion: ResumenPrecisionCorrida | null = null;
+  let medicionError: string | null = null;
+  const lecturas = await leerLecturasDeCorrida(db, id);
+  if (!lecturas.ok) {
+    medicionError = lecturas.error;
+  } else if (lecturas.datos.length > 0) {
+    medicion = resumenDeLecturas(lecturas.datos, manifiesto.ok ? manifiesto.datos : []);
+  }
+
+  return NextResponse.json({ corrida, fotos, pdfs, medicion, medicionError, ahora: new Date().toISOString() });
 }

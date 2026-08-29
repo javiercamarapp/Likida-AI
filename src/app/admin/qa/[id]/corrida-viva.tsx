@@ -22,7 +22,10 @@ import { fechaHoraMx, usd4 } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../../dashboard/resumen-visual';
 import { StatusPill, type Estado } from '../../ui/kit';
 import { PILL_CORRIDA } from '../pantalla';
+import { escenarioPorId } from '@/lib/admin/qa-escenarios';
 import type { CorridaQA, EstadoPaso } from '@/lib/admin/qa-tipos';
+import type { ResumenPrecisionCorrida } from '@/lib/admin/qa-verdad';
+import { MedicionCorrida } from './medicion-corrida';
 
 export interface FotoFirmada { id: string; etiqueta: string; url: string | null }
 export interface PdfFirmado { path: string; url: string | null }
@@ -49,14 +52,18 @@ function json(v: unknown): string {
   return typeof v === 'string' ? v : JSON.stringify(v, null, 1);
 }
 
-export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
+export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, medicionInicial = null, medicionErrorInicial = null }: {
   corridaInicial: CorridaQA;
   fotosIniciales: FotoFirmada[];
   pdfsIniciales: PdfFirmado[];
+  medicionInicial?: ResumenPrecisionCorrida | null;
+  medicionErrorInicial?: string | null;
 }) {
   const [corrida, setCorrida] = useState(corridaInicial);
   const [fotos, setFotos] = useState(fotosIniciales);
   const [pdfs, setPdfs] = useState(pdfsIniciales);
+  const [medicion, setMedicion] = useState<ResumenPrecisionCorrida | null>(medicionInicial);
+  const [medicionError, setMedicionError] = useState<string | null>(medicionErrorInicial);
   const [errorLectura, setErrorLectura] = useState<string | null>(null);
   // FE-20: `useState(() => Date.now())` se evalúa en el SERVIDOR al pintar el
   // HTML y otra vez en el NAVEGADOR al hidratar, con dos relojes distintos —
@@ -90,7 +97,10 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
       setAhora(Date.now());
       try {
         const res = await fetch(`/api/admin/qa/${corrida.id}/estado`, { cache: 'no-store' });
-        const cuerpo = await res.json().catch(() => null) as { corrida?: CorridaQA; fotos?: FotoFirmada[]; pdfs?: PdfFirmado[]; error?: string } | null;
+        const cuerpo = await res.json().catch(() => null) as {
+          corrida?: CorridaQA; fotos?: FotoFirmada[]; pdfs?: PdfFirmado[];
+          medicion?: ResumenPrecisionCorrida | null; medicionError?: string | null; error?: string;
+        } | null;
         if (!res.ok || !cuerpo?.corrida) {
           setErrorLectura(cuerpo?.error ?? `no se pudo leer el estado (HTTP ${res.status})`);
           return;
@@ -99,6 +109,10 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
         setCorrida(cuerpo.corrida);
         if (cuerpo.fotos) setFotos(cuerpo.fotos);
         if (cuerpo.pdfs) setPdfs(cuerpo.pdfs);
+        // Una medición ya pintada NO se borra por un poll que venga sin ella:
+        // sería cambiar una medición por la ausencia de una.
+        if (cuerpo.medicion) setMedicion(cuerpo.medicion);
+        setMedicionError(cuerpo.medicionError ?? null);
       } catch (e) {
         setErrorLectura(e instanceof Error ? e.message : String(e));
       }
@@ -175,7 +189,7 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
         <BarraPagina
           icono={<Bug {...ICONO} style={{ color: 'var(--muted)' }} />}
-          titulo={`Corrida de QA — ${corrida.escenario === 'demo_guion' ? 'guion del demo' : 'feliz'} — ${corrida.id.slice(0, 8)}`}
+          titulo={`Corrida de QA — ${escenarioPorId(corrida.escenario)?.nombre ?? corrida.escenario} — ${corrida.id.slice(0, 8)}`}
           derecha={
             <Link href="/admin/qa" className="text-xs inline-flex items-center gap-1" style={{ color: 'var(--muted)' }}>
               <ArrowLeft width={12} height={12} strokeWidth={1.75} /> Panel de QA
@@ -383,6 +397,9 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
               </div>
             )}
           </div>
+
+          {/* ── La precisión del OCR, medida ──────────────────────────────── */}
+          <MedicionCorrida medicion={medicion} error={medicionError} fotos={fotos} viva={viva} />
 
           {/* ── Evidencia clicable ────────────────────────────────────────── */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">

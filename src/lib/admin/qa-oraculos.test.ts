@@ -33,6 +33,15 @@ vi.mock('../../../scripts/qa-agentes/oraculos/dedup_comprobante.oraculo', () => 
     return veredicto('dedup_comprobante (#3)');
   },
 }));
+vi.mock('../../../scripts/qa-agentes/oraculos/huerfano_post_cierre.oraculo', () => ({
+  oraculoHuerfanoPostCierre: async (
+    _t: string, viaje: string,
+    opts: { liqSembrada: { totalComprobado: number }; montoTicket: number },
+  ) => {
+    llamadas.push(`#4(${viaje}|$${opts.montoTicket}|liq=${opts.liqSembrada.totalComprobado})`);
+    return veredicto('huerfano_post_cierre (#4)');
+  },
+}));
 
 import { correrOraculos, INVARIANTES } from './qa-oraculos';
 
@@ -71,6 +80,25 @@ describe('qué oráculos corre una corrida', () => {
     await correrOraculos({ ...BASE, dedup: { imgHash: 'h', viajeIntentoId: 'viaje-2' } });
     expect(llamadas.some((l) => l.startsWith('#3(viaje-2'))).toBe(true);
     expect(llamadas.some((l) => l.startsWith('#3(viaje-1'))).toBe(false);
+  });
+
+  test('sin ticket tardío #4 NO corre — un "ok" sobre un ataque que no ocurrió sería inventado', async () => {
+    await correrOraculos(BASE);
+    expect(llamadas.some((l) => l.startsWith('#4'))).toBe(false);
+  });
+
+  test('con el ticket tardío SÍ corre #4, con la liquidación de ANTES y el monto etiquetado', async () => {
+    // El monto viene de la verdad-de-terreno de la foto (qa_foto.ocr_esperado)
+    // — el dato que antes no existía y tenía a #4 importado y mudo.
+    const filas = await correrOraculos({
+      ...BASE,
+      huerfano: {
+        liqSembrada: { totalComprobado: 8_400, totalAnticipo: 10_600, diferencia: 2_200 },
+        montoTicket: 512.5,
+      },
+    });
+    expect(llamadas).toEqual(['#1', '#5', '#4(viaje-1|$512.5|liq=8400)', '#8']);
+    expect(filas.map((f) => f.oraculo)).toContain('huerfano_post_cierre (#4)');
   });
 
   test('toda fila del veredicto trae su invariante y su severidad — nada sale como "—"', async () => {

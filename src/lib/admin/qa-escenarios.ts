@@ -40,8 +40,12 @@ export const POLITICA_DEMO: PoliticaGasto[] = [
 
 /** Un paso del guion: lo que el chofer sintético hace, en orden. */
 export type PasoGuion =
-  /** Todas las fotos elegidas del banco, una por mensaje, en orden. */
-  | { tipo: 'fotos' }
+  /** Todas las fotos elegidas del banco, una por mensaje, en orden.
+   *  `menosUltima` RESERVA la última foto elegida para un acto posterior
+   *  (el ticket tardío de `foto_tras_cierre`): mandarla aquí la dejaría con
+   *  gasto en el tenant y el reenvío post-cierre rebotaría en
+   *  `uq_gasto_img_hash` — probaría el dedup, no el invariante #4. */
+  | { tipo: 'fotos'; menosUltima?: boolean }
   /** LA MISMA foto otra vez, byte a byte. `comoOtroChofer` la manda desde un
    *  segundo operador del mismo tenant — que es el caso que importa: el
    *  pre-check del processor mira UN viaje, así que solo cruzando de viaje se
@@ -49,7 +53,31 @@ export type PasoGuion =
    *  rechace. */
   | { tipo: 'foto_repetida'; indice: number; comoOtroChofer: boolean }
   /** «listo, ya subí todo», con UNA insistencia si el agente pidió confirmar. */
-  | { tipo: 'cierre' };
+  | { tipo: 'cierre' }
+  /** La ÚLTIMA foto elegida, mandada DESPUÉS del cierre — el ataque del
+   *  invariante #4: el viaje ya está liquidado, el ticket llega tarde, y lo
+   *  que se juzga es que la liquidación NO cambie y el comprobante quede
+   *  VISIBLE en huérfanos con su monto. El monto lo aporta la
+   *  verdad-de-terreno de esa foto (`qa_foto.ocr_esperado.monto`): sin monto
+   *  etiquetado el ataque no se puede juzgar y el motor lo dice ANTES de
+   *  gastar en mandarla. */
+  | { tipo: 'foto_tras_cierre' };
+
+/** Los ids que el acto `fotos` de verdad manda: todos, o todos menos la
+ *  última cuando el guion la reserva para el ticket tardío. Pura — el motor
+ *  del carril completo y el del rápido tienen que contar la misma historia. */
+export function idsParaActoFotos(acto: { menosUltima?: boolean }, fotoIds: readonly string[]): string[] {
+  return acto.menosUltima ? fotoIds.slice(0, Math.max(0, fotoIds.length - 1)) : [...fotoIds];
+}
+
+/** El id reservado para `foto_tras_cierre` (la última foto elegida), o null
+ *  si el guion no lo usa. El carril completo lo necesita para no quedarse
+ *  esperando eternamente una foto que POR GUION no se manda en la fase de
+ *  fotos. */
+export function idFotoTrasCierre(guion: readonly PasoGuion[], fotoIds: readonly string[]): string | null {
+  if (!guion.some((a) => a.tipo === 'foto_tras_cierre')) return null;
+  return fotoIds.length > 0 ? fotoIds[fotoIds.length - 1] : null;
+}
 
 export interface EscenarioQaDef {
   id: EscenarioId;
@@ -128,6 +156,30 @@ export const ESCENARIOS_QA: EscenarioQaDef[] = [
     segundoChofer: true,
     minFotos: 1,
     invariantes: ['#1', '#3', '#5', '#8'],
+  },
+  {
+    id: 'ticket_tarde',
+    nombre: 'El ticket que llegó tarde',
+    descripcion:
+      'Se mandan todas las fotos MENOS la última, el chofer cierra («listo, ya subí todo»), y la última ' +
+      'foto llega DESPUÉS de la liquidación. Responde el invariante #4: ¿la liquidación queda intacta y el ' +
+      'ticket tardío aparece en huérfanos con su monto — o se pierde en silencio? La última foto elegida ' +
+      'NECESITA monto en su verdad-de-terreno: es la vara con la que se busca el huérfano.',
+    anticipoDefault: null,   // mismo criterio que "feliz": el monto lo pone Javier
+    rfcEmpresaDefault: 'GMX0902279I1',
+    rutaDefault: { origen: 'Silao', destino: 'Nuevo Laredo' },
+    politicaDefault: POLITICA_DEMO,
+    guion: [
+      { tipo: 'fotos', menosUltima: true },
+      { tipo: 'cierre' },
+      { tipo: 'foto_tras_cierre' },
+    ],
+    segundoChofer: false,
+    // Al menos dos: una que cuadre el viaje y la que llega tarde. Con una
+    // sola, el acto de fotos no mandaría nada y el cierre liquidaría un viaje
+    // vacío — un ataque que no ataca nada.
+    minFotos: 2,
+    invariantes: ['#1', '#4', '#5', '#8'],
   },
 ];
 

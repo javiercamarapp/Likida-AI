@@ -5,6 +5,7 @@ import {
   leerManifiesto, subirFotos, dataUrlDeFoto, firmarRuta, firmarRutas,
   guardarCorrida, leerCorrida, listarCorridas, gastoHoyUsd,
   confirmarVerdadTerreno, guardarLectura, leerUltimasLecturas, gastoLecturasHoyUsd,
+  guardarLecturaDeCorrida, leerLecturasDeCorrida,
   _olvidarBuckets, BUCKET_QA_FOTOS,
 } from './qa-storage';
 import type { CorridaQA, FotoBanco, VerdadTerreno } from './qa-tipos';
@@ -72,6 +73,13 @@ function insertarFila(tabla: string, f: Fila): ErrPg {
   const llave = llaveDe(tabla, fila);
   if (tablas[tabla].some((r) => llaveDe(tabla, r) === llave)) {
     return { code: '23505', message: `duplicate key value violates unique constraint on ${tabla}` };
+  }
+  // El índice único PARCIAL de la 0246: una corrida no mide la misma foto dos
+  // veces; las lecturas sueltas (corrida_id null) se apilan libres. El doble
+  // lo respeta porque es exactamente la garantía que se está probando.
+  if (tabla === 'qa_foto_lectura' && fila.corrida_id != null
+    && tablas[tabla].some((r) => r.corrida_id === fila.corrida_id && r.foto_id === fila.foto_id)) {
+    return { code: '23505', message: 'duplicate key value violates unique constraint "qa_foto_lectura_una_por_corrida"' };
   }
   tablas[tabla].push(fila);
   return null;
@@ -762,6 +770,78 @@ describe('qa_foto_lectura — la historia de la medición', () => {
     fallaTabla = 'qa_foto_lectura';
     const caida = await leerUltimasLecturas(dbFalsa());
     expect(caida.ok).toBe(false);
+  });
+
+  it('guardarLecturaDeCorrida escribe con su corrida y la SEGUNDA rebota como "ya medida" — con la fila original, no con un error', async () => {
+    sembrarFoto();
+    const db = dbFalsa();
+    const medicion = medir(VERDAD, LEIDO);
+    const primera = await guardarLecturaDeCorrida(db, 'corrida-1', {
+      fotoId: 'foto-1', modelo: 'm1', ocrLeido: LEIDO, medicion, costoUsd: 0.001, motivo: null,
+    });
+    expect(primera.ok).toBe(true);
+    if (primera.ok) {
+      expect(primera.yaMedida).toBe(false);
+      expect(primera.datos.corridaId).toBe('corrida-1');
+    }
+    // El "if previo" no existe: el segundo intento va directo al insert y es
+    // el índice de la 0246 el que rebota (23505) — aquí se lee como la verdad
+    // que es: esa foto ya está medida en esta corrida.
+    const segunda = await guardarLecturaDeCorrida(db, 'corrida-1', {
+      fotoId: 'foto-1', modelo: 'm2-que-no-debe-pisar', ocrLeido: LEIDO, medicion, costoUsd: 0.009, motivo: null,
+    });
+    expect(segunda.ok).toBe(true);
+    if (segunda.ok) {
+      expect(segunda.yaMedida).toBe(true);
+      expect(segunda.datos.modelo).toBe('m1');   // la fila ORIGINAL, intacta
+    }
+    expect(tablas.qa_foto_lectura).toHaveLength(1);
+  });
+
+  it('la misma foto en OTRA corrida sí entra, y las lecturas sueltas siguen apilándose', async () => {
+    sembrarFoto();
+    const db = dbFalsa();
+    const medicion = medir(VERDAD, LEIDO);
+    const base = { fotoId: 'foto-1', modelo: 'm', ocrLeido: LEIDO, medicion, costoUsd: 0, motivo: null };
+    await guardarLecturaDeCorrida(db, 'corrida-1', base);
+    const otra = await guardarLecturaDeCorrida(db, 'corrida-2', base);
+    expect(otra.ok && !otra.yaMedida).toBe(true);
+    // Comparar dos corridas es justo lo que hace útil la medición: la nueva
+    // NO borra a la anterior.
+    expect(tablas.qa_foto_lectura).toHaveLength(2);
+    // Y el carril suelto del banco (sin corrida) se apila libre — es historial.
+    await guardarLectura(db, base);
+    await guardarLectura(db, base);
+    expect(tablas.qa_foto_lectura).toHaveLength(4);
+  });
+
+  it('leerLecturasDeCorrida trae SOLO las de esa corrida, y una base caída se dice', async () => {
+    sembrarFoto();
+    const db = dbFalsa();
+    const medicion = medir(VERDAD, LEIDO);
+    const base = { fotoId: 'foto-1', modelo: 'm', ocrLeido: LEIDO, medicion, costoUsd: 0, motivo: null };
+    await guardarLecturaDeCorrida(db, 'corrida-1', base);
+    await guardarLecturaDeCorrida(db, 'corrida-2', base);
+    await guardarLectura(db, base);   // suelta, sin corrida
+    const r = await leerLecturasDeCorrida(dbFalsa(), 'corrida-1');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.datos).toHaveLength(1);
+      expect(r.datos[0].corridaId).toBe('corrida-1');
+    }
+    fallaTabla = 'qa_foto_lectura';
+    const caida = await leerLecturasDeCorrida(dbFalsa(), 'corrida-1');
+    expect(caida.ok).toBe(false);
+  });
+
+  it('la columna corrida_id ausente manda a la 0246, no a la 0239', async () => {
+    errorTabla = { code: '42703', message: 'column qa_foto_lectura.corrida_id does not exist' };
+    const r = await leerLecturasDeCorrida(dbFalsa(), 'corrida-1');
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toMatch(/0246/);
+      expect(r.error).not.toMatch(/0239/);
+    }
   });
 
   it('el gasto de lecturas suma SOLO el día de México y falla por valor', async () => {

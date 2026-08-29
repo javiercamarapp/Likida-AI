@@ -2,7 +2,8 @@ import { describe, test, expect } from 'vitest';
 import {
   normalizarTextoVerdad, normalizarDominio, normalizarFechaVerdad, montosIguales,
   compararCampo, medir, medicionSinLeer, agregar, ocrVacio, ocrLeidoDeGasto,
-  type OcrLeido,
+  medirSinGasto, esAlucinacion, contarAlucinaciones, agregarPorCampo, resumenPrecision, variantesEmisorEsperado,
+  type OcrLeido, type MedicionFotoResumen,
 } from './qa-verdad';
 import { CLAVES_VERDAD, type ClaveVerdad, type VerdadTerreno } from './qa-tipos';
 
@@ -273,4 +274,162 @@ test('toda ClaveVerdad tiene una rama de comparación que no revienta', () => {
     expect(() => compararCampo(clave, VERDAD, ocrVacio())).not.toThrow();
     expect(compararCampo(clave, VERDAD, ocrVacio()).clave).toBe(clave);
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA MEDICIÓN DE PUNTA A PUNTA (Fase de precisión, mig. 0246): qué se cuenta
+// cuando la corrida NO persistió nada para una foto, cómo se agrupan los
+// números por campo, y cómo se identifican las alucinaciones desde la
+// medición GUARDADA (sin la etiqueta a la mano).
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('medirSinGasto — la foto procesada que no dejó gasto', () => {
+  test('la suma SIEMPRE es 7 — el CHECK de la 0239 no es negociable', () => {
+    for (const clase of ['ticket', 'voucher_bancario', 'cfdi_impreso', 'no_comprobante'] as const) {
+      const m = medirSinGasto(verdad({ clase }));
+      expect(m.camposOk + m.camposMal + m.camposNoMedidos).toBe(7);
+    }
+  });
+
+  test('un negativo (no_comprobante, todo noAplica) RECHAZADO = 7 ok — nada inventado entró', () => {
+    const m = medirSinGasto(verdad({
+      clase: 'no_comprobante',
+      emisor: null, rfcEmisor: null, folio: null, monto: null,
+      fecha: null, sucursal: null, dominioFacturacion: null,
+      noAplica: [...CLAVES_VERDAD],
+    }));
+    expect(m.camposOk).toBe(7);
+    expect(m.camposMal).toBe(0);
+    expect(m.camposNoMedidos).toBe(0);
+  });
+
+  test('un ticket de verdad rechazado = sus campos impresos cuentan MAL (estricto, y dicho)', () => {
+    const m = medirSinGasto(VERDAD);   // ticket con las 7 impresas
+    expect(m.camposMal).toBe(7);
+    expect(m.campos.every((c) => c.veredicto !== 'mal' || /punta a punta/.test(c.motivo ?? ''))).toBe(true);
+  });
+
+  test('un voucher rechazado POR DISEÑO: campos con valor → no_medido (ni premio ni castigo), noAplica → ok', () => {
+    const m = medirSinGasto(verdad({
+      clase: 'voucher_bancario',
+      folio: null, dominioFacturacion: null,
+      noAplica: ['folio', 'dominioFacturacion'],
+    }));
+    // 5 con valor → no_medido; 2 noAplica → ok (nada inventado).
+    expect(m.camposNoMedidos).toBe(5);
+    expect(m.camposOk).toBe(2);
+    expect(m.camposMal).toBe(0);
+    expect(m.campos.find((c) => c.clave === 'monto')?.motivo).toMatch(/solo_pago/);
+  });
+
+  test('lo ilegible sale del denominador también aquí', () => {
+    const m = medirSinGasto(verdad({ fecha: null, ilegibles: ['fecha'] }));
+    expect(m.campos.find((c) => c.clave === 'fecha')?.veredicto).toBe('no_medido');
+    expect(m.camposMal).toBe(6);
+  });
+});
+
+describe('esAlucinacion y contarAlucinaciones — desde la medición guardada', () => {
+  test('alucinación = esperado null con veredicto mal; un ilegible jamás califica', () => {
+    const negativo = verdad({
+      clase: 'no_comprobante',
+      emisor: null, rfcEmisor: null, folio: null, monto: null,
+      fecha: null, sucursal: null, dominioFacturacion: null,
+      noAplica: [...CLAVES_VERDAD],
+    });
+    const alucinada = medir(negativo, leido({}));           // "leyó" las 7
+    const rechazada = medir(negativo, ocrVacio());          // no leyó nada
+    expect(alucinada.campos.filter(esAlucinacion)).toHaveLength(7);
+    expect(rechazada.campos.filter(esAlucinacion)).toHaveLength(0);
+
+    const conIlegible = medir(verdad({ fecha: null, ilegibles: ['fecha'] }), leido({}));
+    // La fecha ilegible sale no_medido: no puede contarse alucinación.
+    expect(conIlegible.campos.filter(esAlucinacion)).toHaveLength(0);
+  });
+
+  test('contarAlucinaciones suma sobre varias mediciones', () => {
+    const negativo = verdad({
+      clase: 'no_comprobante',
+      emisor: null, rfcEmisor: null, folio: null, monto: null,
+      fecha: null, sucursal: null, dominioFacturacion: null,
+      noAplica: [...CLAVES_VERDAD],
+    });
+    const a = medir(negativo, leido({ monto: null, fecha: null }));  // 5 alucinadas
+    const b = medir(negativo, ocrVacio());                           // 0
+    expect(contarAlucinaciones([a, b])).toBe(5);
+  });
+});
+
+describe('agregarPorCampo — el campo que peor se lee vale más que el global', () => {
+  test('agrupa por clave y deja null (no 0%) al campo sin ni una medición', () => {
+    const soloFolioMal = medir(VERDAD, leido({ folio: '999999' }));
+    const sinNada = medicionSinLeer('fallo técnico');
+    const filas = agregarPorCampo([soloFolioMal, sinNada]);
+    const folio = filas.find((f) => f.clave === 'folio');
+    expect(folio).toMatchObject({ ok: 0, mal: 1, noMedidos: 1, medidos: 1, exactitud: 0 });
+    const monto = filas.find((f) => f.clave === 'monto');
+    expect(monto).toMatchObject({ ok: 1, mal: 0, noMedidos: 1, exactitud: 1 });
+    // TODAS las claves están presentes aunque nadie las haya medido.
+    expect(filas.map((f) => f.clave)).toEqual([...CLAVES_VERDAD]);
+    const nadaMedido = agregarPorCampo([sinNada]);
+    for (const f of nadaMedido) expect(f.exactitud).toBeNull();
+  });
+});
+
+describe('resumenPrecision — los negativos van APARTE y el no-medido lleva su razón', () => {
+  const negativoVerdad = verdad({
+    clase: 'no_comprobante',
+    emisor: null, rfcEmisor: null, folio: null, monto: null,
+    fecha: null, sucursal: null, dominioFacturacion: null,
+    noAplica: [...CLAVES_VERDAD],
+  });
+  const fotoResumen = (p: Partial<MedicionFotoResumen>): MedicionFotoResumen => ({
+    fotoId: 'f1', etiqueta: 'foto.jpg', clase: 'ticket',
+    medicion: medir(VERDAD, LEIDO_PERFECTO), modelo: 'm', motivo: null, costoUsd: 0, ...p,
+  });
+
+  test('separa los negativos con su conteo de alucinaciones, sin diluirlos en el global', () => {
+    const r = resumenPrecision([
+      fotoResumen({ fotoId: 'a' }),
+      fotoResumen({ fotoId: 'neg-ok', clase: 'no_comprobante', medicion: medir(negativoVerdad, ocrVacio()) }),
+      fotoResumen({ fotoId: 'neg-mal', clase: 'no_comprobante', medicion: medir(negativoVerdad, leido({})) }),
+    ]);
+    expect(r.negativos).toEqual({ fotos: 2, conAlucinacion: 1, camposAlucinados: 7 });
+    expect(r.alucinaciones).toBe(7);
+    expect(r.global.ok).toBe(7 + 7);   // la perfecta + el negativo rechazado
+    expect(r.global.mal).toBe(7);      // el negativo alucinado
+  });
+
+  test('los no-medidos se agrupan por su razón — nada sale del denominador sin decir por qué', () => {
+    const r = resumenPrecision([
+      fotoResumen({ medicion: medicionSinLeer('el proveedor devolvió 5xx') }),
+      fotoResumen({ fotoId: 'f2', medicion: medicionSinLeer('el proveedor devolvió 5xx') }),
+    ]);
+    expect(r.global.exactitud).toBeNull();   // sin campos medidos NO hay porcentaje
+    expect(r.noMedidosPorMotivo).toEqual([{ motivo: 'el proveedor devolvió 5xx', campos: 14 }]);
+  });
+});
+
+describe('el emisor con su nombre comercial entre paréntesis (caso medido, corrida 46ad99ca)', () => {
+  test('la razón social exacta acierta aunque la etiqueta anote el alias', () => {
+    const v = verdad({ emisor: 'NUEVA WAL MART DE MEXICO S DE RL DE CV (WALMART)' });
+    expect(compararCampo('emisor', v, leido({ emisor: 'NUEVA WAL MART DE MEXICO S DE RL DE CV' })).veredicto).toBe('ok');
+    // Y la etiqueta completa también, claro.
+    expect(compararCampo('emisor', v, leido({ emisor: 'Nueva Wal Mart de Mexico S de RL de CV (Walmart)' })).veredicto).toBe('ok');
+  });
+
+  test('el alias SOLO no acierta: "WALMART" a secas no demuestra la razón social', () => {
+    const v = verdad({ emisor: 'NUEVA WAL MART DE MEXICO S DE RL DE CV (WALMART)' });
+    expect(compararCampo('emisor', v, leido({ emisor: 'WALMART' })).veredicto).toBe('mal');
+  });
+
+  test('una razón social incompleta sigue siendo mal — la variante no relaja lo demás', () => {
+    const v = verdad({ emisor: 'NUEVA WAL MART DE MEXICO S DE RL DE CV (WALMART)' });
+    expect(compararCampo('emisor', v, leido({ emisor: 'WAL MART DE MEXICO S DE RL DE CV' })).veredicto).toBe('mal');
+  });
+
+  test('variantesEmisorEsperado: sin paréntesis no duplica variantes', () => {
+    expect(variantesEmisorEsperado('OXXO GAS')).toEqual(['OXXOGAS']);
+    expect(variantesEmisorEsperado('A.D.F.S.A. (ARCO 8039)')).toEqual(['ADFSAARCO8039', 'ADFSA']);
+  });
 });

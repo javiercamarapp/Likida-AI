@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation';
 import { Bug } from 'lucide-react';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { leerCorrida, leerManifiesto, firmarRutas, BUCKET_QA_FOTOS } from '@/lib/admin/qa-storage';
+import { leerCorrida, leerManifiesto, leerLecturasDeCorrida, firmarRutas, BUCKET_QA_FOTOS } from '@/lib/admin/qa-storage';
+import { resumenDeLecturas } from '@/lib/admin/qa-medicion';
+import type { ResumenPrecisionCorrida } from '@/lib/admin/qa-verdad';
 import { BarraPagina } from '../../../dashboard/resumen-visual';
 import { EstadoError } from '../../ui/kit';
 import { CorridaViva, type FotoFirmada, type PdfFirmado } from './corrida-viva';
@@ -68,5 +70,25 @@ export default async function CorridaQaPage({ params }: { params: Promise<{ id: 
     url: urlsPdf.get(path) ?? null,
   }));
 
-  return <CorridaViva corridaInicial={corrida} fotosIniciales={fotos} pdfsIniciales={pdfs} />;
+  // LA PRECISIÓN MEDIDA (qa_foto_lectura) de la primera pintada. Importa
+  // sobre todo en una corrida TERMINADA, donde el polling ya no corre y esta
+  // lectura es la única. Cero lecturas = todavía sin medir (null); un fallo
+  // de lectura se dice aparte, jamás como "sin medir".
+  let medicionInicial: ResumenPrecisionCorrida | null = null;
+  let medicionErrorInicial: string | null = null;
+  const lecturas = await leerLecturasDeCorrida(db, id);
+  if (!lecturas.ok) medicionErrorInicial = lecturas.error;
+  else if (lecturas.datos.length > 0) {
+    medicionInicial = resumenDeLecturas(lecturas.datos, manifiesto.ok ? manifiesto.datos : []);
+  }
+
+  return (
+    <CorridaViva
+      corridaInicial={corrida}
+      fotosIniciales={fotos}
+      pdfsIniciales={pdfs}
+      medicionInicial={medicionInicial}
+      medicionErrorInicial={medicionErrorInicial}
+    />
+  );
 }
