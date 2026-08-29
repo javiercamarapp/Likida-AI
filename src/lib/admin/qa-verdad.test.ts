@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest';
 import {
-  normalizarTextoVerdad, normalizarDominio, normalizarFechaVerdad, montosIguales,
+  normalizarTextoVerdad, normalizarDominio, normalizarFechaVerdad, normalizarRfcVerdad, montosIguales,
   compararCampo, medir, medicionSinLeer, agregar, ocrVacio, ocrLeidoDeGasto,
   medirSinGasto, esAlucinacion, contarAlucinaciones, agregarPorCampo, resumenPrecision, variantesEmisorEsperado,
   type OcrLeido, type MedicionFotoResumen,
@@ -99,6 +99,44 @@ describe('fecha y monto', () => {
     expect(montosIguales(1234.5, 1234.05)).toBe(false);   // dígito transpuesto: error
     expect(montosIguales(1234.5, null)).toBe(false);
     expect(montosIguales(null, null)).toBe(true);
+  });
+});
+
+describe('comparador de RFC — la Ñ y el & cuentan (auditoría tandas 21-24, hallazgo 2)', () => {
+  // El comparador genérico descomponía la Ñ (NFD) y eliminaba el & con
+  // [^A-Z0-9]: dos RFC de contribuyentes DISTINTOS daban `ok` — el fallo que
+  // la cabecera del módulo llama el más caro, con el porcentaje inflado justo
+  // en los casos difíciles. Reproducido con el código real antes del arreglo.
+  test('una Ñ leída como N es OTRO contribuyente → mal', () => {
+    const c = compararCampo('rfcEmisor', verdad({ rfcEmisor: 'AÑB123456XY0' }), leido({ rfcEmisor: 'ANB123456XY0' }));
+    expect(c.veredicto).toBe('mal');
+    expect(c.motivo).toMatch(/carácter por carácter/);
+  });
+
+  test('un & omitido es OTRO contribuyente → mal', () => {
+    const c = compararCampo('rfcEmisor', verdad({ rfcEmisor: 'J&B840101XX1' }), leido({ rfcEmisor: 'JB840101XX1' }));
+    expect(c.veredicto).toBe('mal');
+  });
+
+  test('la Ñ y el & bien leídos son acierto — no se castigan por raros', () => {
+    expect(compararCampo('rfcEmisor', verdad({ rfcEmisor: 'AÑB123456XY0' }), leido({ rfcEmisor: 'AÑB123456XY0' })).veredicto).toBe('ok');
+    expect(compararCampo('rfcEmisor', verdad({ rfcEmisor: 'J&B840101XX1' }), leido({ rfcEmisor: 'J&B840101XX1' })).veredicto).toBe('ok');
+  });
+
+  test('espacios, guiones y minúsculas NO son error de lectura → ok', () => {
+    const c = compararCampo('rfcEmisor', verdad({ rfcEmisor: 'XAX-010101-AB1' }), leido({ rfcEmisor: ' xax 010101 ab1 ' }));
+    expect(c.veredicto).toBe('ok');
+  });
+
+  test('la MISMA Ñ en NFC y en NFD es la misma letra → ok', () => {
+    // 'Ñ' compuesta (U+00D1) vs 'N' + tilde combinante (U+004E U+0303).
+    const c = compararCampo('rfcEmisor', verdad({ rfcEmisor: 'A\u00D1B123456XY0' }), leido({ rfcEmisor: 'AN\u0303B123456XY0' }));
+    expect(c.veredicto).toBe('ok');
+  });
+
+  test('normalizarRfcVerdad: vacío y nulo salen null — jamás cadena vacía', () => {
+    expect(normalizarRfcVerdad(null)).toBeNull();
+    expect(normalizarRfcVerdad('  - ')).toBeNull();
   });
 });
 
