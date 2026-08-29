@@ -64,3 +64,7 @@ zzz-*.mjs
 # Cache del CLI de Supabase (project-ref, versiones) — local, no del repo.
 supabase/.temp/
 .DS_Store
+
+# Mediciones locales de extracción (scripts/qa/medir-extraccion.ts): traen RFC
+# y datos de tickets reales — JAMÁS entran al repo público.
+.mediciones-extraccion/
