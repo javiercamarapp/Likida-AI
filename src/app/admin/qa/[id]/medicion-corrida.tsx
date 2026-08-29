@@ -71,13 +71,22 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
       {medicion !== null && (
         <div className="mt-2 space-y-3">
           {/* ── Los números de arriba ─────────────────────────────────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
             <CifraM
               etiqueta="Exactitud global"
               valor={medicion.global.exactitud === null ? 'sin medir' : porcentaje(medicion.global.exactitud * 100)}
               nota={medicion.global.exactitud === null
                 ? 'ni un campo medido: no hay porcentaje que decir'
                 : `✅ ${numero(medicion.global.ok)} · ❌ ${numero(medicion.global.mal)} sobre ${numero(medicion.global.medidos)} campos con vara`}
+            />
+            {/* LA PONDERACIÓN DECLARADA, con los dos números a la vista: no
+                fallan igual de caro (un folio mal es un timbrado fallido; una
+                sucursal a medias, una etiqueta), y promediarlos escondería a
+                los dos. La vara por campo es la MISMA de siempre. */}
+            <CifraM
+              etiqueta="Fiscales · Descriptivos"
+              valor={`${medicion.fiscales.exactitud === null ? 's/m' : porcentaje(medicion.fiscales.exactitud * 100)} · ${medicion.descriptivos.exactitud === null ? 's/m' : porcentaje(medicion.descriptivos.exactitud * 100)}`}
+              nota={`fiscales = rfc, folio, monto, fecha (${numero(medicion.fiscales.medidos)} medidos) — lo que factura · descriptivos = emisor, sucursal, dominio (${numero(medicion.descriptivos.medidos)}) — lo que ubica`}
             />
             <CifraM
               etiqueta="El campo que peor se lee"

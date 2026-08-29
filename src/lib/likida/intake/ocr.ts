@@ -16,7 +16,8 @@ import { generateStructured, StructuredError, TruncatedError, resumenCausa } fro
 import type { LlmBudget } from '@/lib/llm/budget';
 import { alertarOperador, contadorDeFallos } from '@/lib/observability/alerta';
 import { decodeCodigosFromImage, bufferFromDataUrl, esRfcValido, esUuidValido, rfcChecksumOk } from './cfdi';
-import { normalizarFecha } from './fecha';
+import { normalizarFecha, corregirVolteoDiaMes } from './fecha';
+import { hoyMx } from '@/lib/formato';
 import { sanitizarFolio, sanitizarTexto, sanitizarProducto } from './sanitizar';
 import { consultarCFDI } from './sat';
 import type { Gasto, ConceptoGasto, EstadoSat } from '@/types/likida';
@@ -98,6 +99,18 @@ const ExtraccionSchema = z.object({
   folio: z.string().nullable(),           // CRUDO, tal cual (conserva ceros a la izquierda)
   web_id: z.string().nullable(),          // string (numérico o alfanumérico)
   estacion: z.string().nullable(),        // nombre/# de estación
+  // La SUCURSAL impresa, para CUALQUIER comercio — no solo gasolineras.
+  //
+  // Medido sobre las 90 fotos reales del banco de QA (corrida 46ad99ca,
+  // 28-ago-2026): 62 de 67 tickets con sucursal impresa salieron con el campo
+  // vacío, porque el esquema solo pedía `estacion` y el modelo obedece al
+  // esquema. Un Walmart imprime "MERIDA NORTE", un Boston's "ALTABRISA", una
+  // farmacia su plaza — y nada de eso se pedía. Es un campo de forma simple
+  // (string nullable, mismo molde que `estacion`): el 24-ago la lección fue
+  // que lo que tumba al proveedor son arrays con maxItems, no strings planos —
+  // aun así, probado contra el proveedor real ANTES de mergear (regla de esa
+  // misma nota).
+  sucursal: z.string().nullable(),
   rfc_emisor: z.string().nullable(),
   // Razón social del emisor. Es la señal de RESPALDO para reconocer el comercio
   // cuando el RFC no se lee: el catálogo de facturación reconoce por dominio,
@@ -151,18 +164,19 @@ REGLAS DURAS:
 - monto: el TOTAL del comprobante, solo el número.
 
 MAPEO DE ETIQUETAS (mapea el CONCEPTO, no la etiqueta literal; varían por estación):
-- folio ← "FOLIO" / "NOTA" / "NUM VENTA" / "NUM. VENTA".
+- folio ← "FOLIO" / "NOTA" / "NUM VENTA" / "NUM. VENTA". Es LA LLAVE con la que se factura en el portal: cópialo CARÁCTER POR CARÁCTER, completo y con sus ceros a la izquierda ("000123" es "000123", nunca "123") — un solo dígito distinto es el ticket de otra persona. Verifica el largo contra lo impreso antes de responder. Si el ticket identifica la venta con VARIOS números juntos (el pie de Walmart/Sam's/Bodega Aurrera: "TDA#… OP#… TE#… TR#…"; un folio con clave adjunta: "283665 - K050042"), el folio son TODOS, en el orden impreso y con sus etiquetas — devolver solo uno deja a la oficina sin poder timbrar. NO sustituyas el folio impreso por los dígitos del código de barras ni por el número de operación de la terminal. En una serie larga de ceros, CUÉNTALOS uno a uno antes de responder ("OP#00000506" trae CINCO ceros; escribir cuatro es el ticket de otro).
 - producto ← SOLO en comprobantes de gasolinera: el GRADO del combustible tal como se imprime en el renglón del despacho ("DIESEL", "MAGNA", "PREMIUM", "REGULAR", "GSUPER", "SUPREMA", "PLUS"). Es el grado, NO el nombre de la estación ni la razón social: si el encabezado dice "SERVICIO DIESEL DEL SURESTE" pero se despachó Magna, producto es "MAGNA". El estímulo de IEPS es SOLO de diésel (LIF 2026 art. 20-A fr. IV), así que copiar aquí un nombre comercial que contenga "diesel" hace que el documento del contralor etiquete "Diésel" un litraje de gasolina. En cualquier comprobante que no sea de combustible, o si el grado no se lee, null.
 - cfdi_uuid ← el FOLIO FISCAL de un CFDI: 36 caracteres con guiones, en bloques de 8-4-4-4-12. Va etiquetado "Folio Fiscal", "Folio fiscal (UUID)", "UUID" o "IdDocumento", normalmente en el recuadro del sello digital. Cópialo COMPLETO y solo si lo lees entero: si dudas de un solo carácter, null — un UUID mal leído se consulta contra el SAT y vuelve como comprobante inexistente. Un ticket de gasolinera o de tienda NO trae folio fiscal: ese número es el folio de venta y va en "folio", no aquí.
 - fecha ← LEE EL AÑO CON CUIDADO. Muchas gasolineras imprimen la fecha con ESPACIOS y sin separadores ("FECHATRANS:2026 07 27 21:45:26"), y ese formato se confunde con facilidad: sobre tickets reales se leyó "2020" y "2024" en un ticket que decía 2026. El año son los CUATRO primeros dígitos de ese bloque. Si no puedes leer el año con seguridad, devuelve null en vez de adivinar: una fecha de otro ejercicio manda el gasto a revisión.
 - web_id ← "WEB ID" / "WebID" (trátalo como string; puede ser numérico "65038155" o alfanumérico "006A").
-- estacion ← "ESTACION" / "EST" / "EST.".
+- estacion ← "ESTACION" / "EST" / "EST." (solo gasolineras).
+- sucursal ← el nombre o número de la SUCURSAL/TIENDA impreso, en CUALQUIER comercio: "SUC." / "SUCURSAL" / "TIENDA" / "TDA" / el nombre de la plaza o ubicación que el ticket imprime bajo el encabezado ("MERIDA NORTE", "ALTABRISA", "POLANCO", "SUC 8743"). Cópialo LITERAL, con su número de tienda si lo trae ("0611 MCDONALDS MONTEJO" completo, no solo el nombre) y SIN agregar la palabra de la etiqueta: si el papel dice "Unidad: MERIDA NORTE", la sucursal es "MERIDA NORTE", no "UNIDAD MERIDA NORTE"; y sin anteponer la marca si no está impresa pegada al nombre. NO es la razón social ni la calle del domicilio fiscal: es cómo el comercio llama a ESTA tienda. En una gasolinera puede coincidir con "estacion" — ponlo en los dos. Si el ticket no lo imprime, null.
 - litros ← "LITROS" / "CANTIDAD" / "CANT-LTS" / "CANT/LTS" / "U.M." (la cantidad en litros).
 - forma_pago ← "FORMA DE PAGO" / "TIPO OPER" / "TIPO DE OPERACION" → 'efectivo' o 'tarjeta'.
 - precio_unitario ← "PRECIO" (por litro).
 - rfc_emisor ← el RFC de QUIEN EXPIDE el ticket. Casi nunca viene etiquetado "RFC": suele ir pegado a la razón social del encabezado y CON GUIONES o entre paréntesis ("Cadena Comercial Ejemplo, S.A. de C.V. (AAA-860523-1N4)", "RFC: AAA8605231N4"). Cópialo tal cual lo veas —los guiones se quitan después—; si hay varios RFC impresos, el del EMISOR es el del encabezado, no el del cliente.
-- emisor ← la RAZÓN SOCIAL completa del encabezado, tal cual ("Cadena Comercial Ejemplo, S.A. de C.V."). Es el nombre legal, no el de la sucursal ni el eslogan.
-- url_facturacion ← la dirección web impresa para FACTURAR el ticket ("INSTRUCCIONES PARA FACTURAR: Ingrese a www.ejemplo.com.mx", "Factura en: portal.ejemplo.mx", "DATOS PARA REIMPRESION DE FACTURA: www.ejemplo.com.mx"). Cópiala TAL CUAL, sin agregarle protocolo ni completarla. Si el ticket no trae ninguna, null. NO pongas aquí la web de publicidad ni el correo.
+- emisor ← la RAZÓN SOCIAL completa del encabezado, tal cual ("Cadena Comercial Ejemplo, S.A. de C.V."). Es el nombre legal, no el de la sucursal ni el eslogan. Copia SOLO lo impreso: no completes el nombre con lo que sepas de la marca (si el papel dice "COSTCO DE MEXICO", no agregues "WHOLESALE").
+- url_facturacion ← la dirección web impresa para FACTURAR el ticket ("INSTRUCCIONES PARA FACTURAR: Ingrese a www.ejemplo.com.mx", "Factura en: portal.ejemplo.mx", "DATOS PARA REIMPRESION DE FACTURA: www.ejemplo.com.mx"). Cópiala TAL CUAL, sin agregarle protocolo ni completarla. Si el ticket no trae ninguna, null. NO pongas aquí la web de publicidad ni el correo, NI la encuesta de opinión ("miopinion", "tuopinion", "opina y gana"), NI un enlace de WhatsApp (wa.me) — si lo único impreso para facturar es un WhatsApp o una encuesta, url_facturacion es null.
 
 QUÉ CLASE DE PAPEL ES (campo "documento") — decide si el gasto entra o no:
 - "voucher_pago" ← el comprobante de la TERMINAL BANCARIA, no del comercio. Se reconoce porque trae "VENTA"/"APROBADA", "Aut.:", "Oper.:", "ARQC", "AID", "Autorizado sin firma", el nombre de la terminal (Getnet, Clip, Netpay, Bancomer, First Data) y los últimos 4 de la tarjeta — y porque NO trae RFC del comercio, ni litros, ni desglose de IVA. Es el papel que sale JUNTO al ticket de la gasolinera, por la misma compra.
@@ -176,6 +190,7 @@ FECHAS (crítico — un error de fecha manda el gasto a otro ejercicio):
 - fecha_impresa ← COPIA LITERAL de lo que dice el papel, sin interpretar ni reordenar: si el ticket dice "01/08/26", devuelve "01/08/26"; si dice "a 01 de JULIO de 2026", devuelve eso. NO la conviertas a ISO: para eso está el campo "fecha". Sirve para enseñarle al operador qué se leyó y que él vea el error; una copia ya normalizada no le dice nada. Si no alcanzas a leerla, null.
 - La ÚNICA excepción confirmada es COSTCO, cuyo pie imprime MES/DÍA/AÑO (verificado en un ticket real: el pie decía "7/01/26" y el encabezado, con letra, "a 01 de JULIO de 2026"). No supongas que otras cadenas de origen estadounidense hacen lo mismo — Walmart de México imprime DÍA/MES, y darlo por hecho ya costó leer un ticket del 1 de agosto como del 8 de enero.
 - Si el papel trae DOS fechas y no coinciden, gana la que esté con letra; si ninguna lo está, gana la que sea imposible en el otro formato (un componente mayor que 12).
+- COMPRUEBA TU PROPIA SALIDA antes de responder: si el papel dice "2/8/2026" o "08/02/26", "fecha" es el 2 de AGOSTO → "2026-08-02", jamás "2026-02-08". Sobre los 90 tickets reales del banco de QA, el error MÁS repetido del extractor fue exactamente ése: voltear día y mes en fechas donde ambos componentes son ≤ 12. Relee tu "fecha" contra "fecha_impresa": el PRIMER número del papel es el día.
 - El AÑO se copia de lo impreso. Si está tapado, borroso o cortado, devuelve null en "fecha": una fecha inventada se lee como un gasto de otro ejercicio.
 
 IMPUESTOS (crítico):
@@ -247,9 +262,45 @@ function normalizarUrl(v: string | null | undefined): string | undefined {
   const t = v.trim().replace(/[),.;:]+$/, '');
   if (!t || /\s/.test(t) || t.includes('@') || !t.includes('.')) return undefined;
   if (t.length > 200) return undefined;
+  if (esEnlaceWhatsApp(t)) return undefined;
   if (/^https?:\/\//i.test(t)) return t;
   if (!/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(t)) return undefined;
   return `https://${t}`;
+}
+
+/**
+ * Un enlace de WhatsApp NO es un portal de facturación, venga de donde venga.
+ *
+ * El caso medido (banco de QA, 28-ago-2026): varios tickets traen un QR
+ * `wa.me/…` para "facturar por WhatsApp", y como lo del QR GANA sobre lo
+ * leído por visión, ese enlace pisaba al portal web impreso en el mismo
+ * papel. `urlFacturacion` alimenta `identificarComercio` (el dominio es su
+ * señal más fuerte) y la automatización de portales — un `wa.me` rompe las
+ * dos: no identifica al comercio y no hay página que abrir. Se descarta en
+ * la ÚNICA puerta, para el QR y para la visión por igual; si el papel además
+ * imprime un portal web, la visión lo aporta.
+ */
+function esEnlaceWhatsApp(v: string): boolean {
+  return /(^|\/\/)(www\.)?(wa\.me|api\.whatsapp\.com|chat\.whatsapp\.com)([/?]|$)/i.test(v.trim());
+}
+
+/**
+ * ¿La fecha leída es IMPOSIBLE por futura? Un comprobante de gasto ampara
+ * dinero YA gastado: una fecha posterior a hoy es siempre una mala lectura
+ * (el caso medido en el banco: día/mes volteados que caen adelante del reloj).
+ *
+ * Rechazar NO es adivinar: la fecha se descarta a "no leída" —el flujo de
+ * `pedir_fecha` ya sabe pedírsela al operador— y JAMÁS se voltea sola, porque
+ * voltear "02/08" a "08/02" sin mirar el papel sería inventar. Se da un día
+ * de gracia por el huso: el ticket de las 23:50 en Tijuana contra un reloj de
+ * servidor ya en "mañana" no es una mala lectura. Pura, con prueba.
+ */
+export function fechaImposiblePorFutura(fechaIso: string | undefined, hoyIso: string): boolean {
+  if (!fechaIso) return false;
+  const fecha = Date.parse(`${fechaIso}T00:00:00Z`);
+  const hoy = Date.parse(`${hoyIso}T00:00:00Z`);
+  if (!Number.isFinite(fecha) || !Number.isFinite(hoy)) return false;
+  return fecha - hoy > 24 * 3600 * 1000;   // más de 1 día adelante = imposible
 }
 
 export interface ExtraerResultado {
@@ -448,7 +499,11 @@ export async function extraerComprobante(
   // portales el folio y el total viajan codificados DENTRO de esa liga.
   const portal = codigos.find((c) => c.urlFacturacion);
   if (portal) {
-    urlFacturacion = portal.urlFacturacion;
+    // El QR también pasa por la puerta de WhatsApp: un `wa.me` del código
+    // pisaba al portal web impreso en el mismo papel (ver esEnlaceWhatsApp).
+    if (portal.urlFacturacion && !esEnlaceWhatsApp(portal.urlFacturacion)) {
+      urlFacturacion = portal.urlFacturacion;
+    }
     if (montoCodigo === undefined && portal.totalPortal != null) montoCodigo = portal.totalPortal;
   }
   if (montoCodigo != null) monto = montoCodigo;
@@ -502,11 +557,30 @@ export async function extraerComprobante(
   const folioRaw = sanitizarFolio(data.folio);
   const folioNorm = folioRaw ? folioRaw.replace(/^0+(?=\d)/, '') : undefined;
 
+  // EL VOLTEO DÍA/MES, CORREGIDO POR LA REGLA ESCRITA (no adivinado): cuando
+  // el modelo contradice su propia transcripción literal del papel leyendo
+  // MES/DÍA una fecha numérica ambigua, se aplica DÍA/MES — la regla del
+  // prompt, determinista. COSTCO queda fuera: es el único emisor confirmado
+  // que imprime MES/DÍA (misma excepción que el prompt documenta).
+  const esCostco = /costco/i.test(data.emisor ?? '');
+  const fechaSinVolteo = esCostco
+    ? normalizarFecha(data.fecha)
+    : corregirVolteoDiaMes(normalizarFecha(data.fecha), data.fecha_impresa);
+  const fechaCorregida = fechaSinVolteo !== normalizarFecha(data.fecha) || undefined;
+
+  // LA FECHA IMPOSIBLE SE RECHAZA, NO SE ADIVINA. Un gasto es dinero ya
+  // gastado: una fecha futura es siempre mala lectura (el patrón medido en el
+  // banco de QA: día/mes volteados). La fecha se descarta a "no leída" — el
+  // flujo de pedir_fecha se la pregunta al operador — y lo leído queda en
+  // `fechaRaw`/`fechaImplausible` para que la oficina vea QUÉ se leyó mal.
+  const fechaNormalizada = fechaSinVolteo;
+  const fechaFutura = fechaImposiblePorFutura(fechaNormalizada, hoyMx());
+
   const gasto: Gasto = {
     id: randomUUID(),
     concepto: data.concepto as ConceptoGasto,
     monto,
-    fecha: normalizarFecha(data.fecha),
+    fecha: fechaFutura ? undefined : fechaNormalizada,
     folio: folioRaw,
     folioNorm,
     rfcEmisor: rfc,
@@ -538,6 +612,16 @@ export async function extraerComprobante(
       precioUnitario: data.precio_unitario ?? undefined,
       webId: sanitizarFolio(data.web_id),
       estacion: sanitizarTexto(data.estacion),
+      // La sucursal de CUALQUIER comercio (las gasolineras la duplican en
+      // `estacion`). Dato descriptivo: ubica el gasto, no lo factura.
+      sucursal: sanitizarTexto(data.sucursal),
+      // La fecha leída era IMPOSIBLE (futura) y se descartó: el gasto sale
+      // sin fecha —pedir_fecha la pregunta— y esta marca dice por qué.
+      fechaImplausible: fechaFutura || undefined,
+      // El modelo volteó día/mes contra su propia transcripción y se
+      // corrigió por la regla DÍA/MES del prompt. La marca deja el rastro:
+      // `fechaRaw` conserva lo que el modelo contestó.
+      fechaCorregidaDiaMes: fechaCorregida,
       // Razón social: tercera señal para reconocer el comercio, detrás del
       // dominio y del RFC. Pasa por `sanitizarTexto` como todo lo que viene de
       // visión: es texto de una foto que puede traer cualquier cosa.

@@ -41,6 +41,7 @@ function pct(v: number | null): string {
 function imprimirResumen(r: ResumenPrecisionCorrida): void {
   console.log('\n── LA PRECISIÓN, MEDIDA ─────────────────────────────────────');
   console.log(`Global: ${pct(r.global.exactitud)}  (✅ ${r.global.ok} · ❌ ${r.global.mal} sobre ${r.global.medidos} campos con vara; ${r.global.noMedidos} fuera del denominador)`);
+  console.log(`Fiscales (rfc, folio, monto, fecha): ${pct(r.fiscales.exactitud)}  ·  Descriptivos (emisor, sucursal, dominio): ${pct(r.descriptivos.exactitud)}`);
   console.log('\nPor campo (el peor vale más que el global):');
   for (const c of r.porCampo) {
     console.log(`  ${NOMBRE_CLAVE_VERDAD[c.clave].padEnd(24)} ${pct(c.exactitud).padStart(9)}  ✅ ${String(c.ok).padStart(3)} · ❌ ${String(c.mal).padStart(3)} · sin medir ${String(c.noMedidos).padStart(3)}`);
