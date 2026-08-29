@@ -282,12 +282,15 @@ describe('lo verificado se distingue de la hipótesis', () => {
   //     trajo el reconocimiento de campo. Hasta ese día este catálogo no tenía
   //     NI UNO de este grado: los plazos "verificados" salían de un ticket de
   //     papel o del HTML de un campo, nunca de que el portal dijera su plazo con
-  //     sus propias palabras. Ahora hay nueve, cada uno con su cita literal en la
+  //     sus propias palabras. Ahora hay diez, cada uno con su cita literal en la
   //     ficha:
   //       enerser · sevafusa · arco_chihuahua («mes en curso o últimas 72 h»)
   //       tag_pase · circuito_exterior (30 días) · redviacorta (año fiscal)
   //       grupo_centra (3 DÍAS — el más corto del catálogo)
   //       ado y primera_plus (mes de compra + cola; obligaron a ampliar `Plazo`)
+  //       los_taquitos_pm (24 HRS, recon 29-ago-2026 al resolver su portal
+  //       pendiente — mismo plazo que conekta360, pero leído en la página del
+  //       portal y no en un ticket)
   //
   //     Y CONTRADICEN EL DEFAULT EN LAS DOS DIRECCIONES, igual que la tanda de
   //     tickets: Grupo Centra da 3 días donde suponíamos un mes, y Circuito
@@ -302,6 +305,8 @@ describe('lo verificado se distingue de la hipótesis', () => {
     // Leídos en la página del portal, recon del 28-ago-2026.
     'enerser', 'sevafusa', 'arco_chihuahua', 'tag_pase',
     'circuito_exterior', 'redviacorta', 'grupo_centra', 'ado', 'primera_plus',
+    // Leído en la página del portal al resolver su `portalPendiente`, 29-ago-2026.
+    'los_taquitos_pm',
   ];
   const FACTURADOS = ['la_gas', 'megasur'];
   /** Los que se verificaron mirando la foto de un ticket real, no el portal. */
@@ -350,10 +355,12 @@ describe('lo verificado se distingue de la hipótesis', () => {
 
   // Dos de los cuatro se miden en HORAS, y ése es el caso por el que
   // `caducidad.ts` admite `{ horas }`: redondear 24 h a "un día" da por vigente
-  // un ticket que ya venció.
-  it('hay plazos en HORAS, y salieron de un comprobante en la mano', () => {
+  // un ticket que ya venció. `los_taquitos_pm` se sumó el 29-ago-2026 al
+  // resolver su `portalPendiente`: mismas 24 horas que conekta360, pero leídas
+  // en la página del portal en vez de en un ticket de papel.
+  it('hay plazos en HORAS, y salieron de un comprobante o del portal en la mano', () => {
     const enHoras = COMERCIOS.filter((c) => typeof c.plazo === 'object' && 'horas' in c.plazo);
-    expect(enHoras.map((c) => c.clave).sort()).toEqual(['bptgroup', 'conekta360']);
+    expect(enHoras.map((c) => c.clave).sort()).toEqual(['bptgroup', 'conekta360', 'los_taquitos_pm']);
     for (const c of enHoras) expect(c.plazoVerificado, c.clave).toBe(true);
   });
 
@@ -417,36 +424,62 @@ describe('el portal sin verificar se declara con portalPendiente', () => {
   //
   // ── HAY DOS CAUSAS DISTINTAS, Y CONVIENE NO MEZCLARLAS ────────────────────
   //
-  // 1. EL TICKET NO IMPRIME LIGA. Los tres del banco de 91 fotos. No hay
-  //    dominio que reconocer porque el papel no lo trae, así que estos NO
-  //    pueden tener `reconocer.dominios`: un dominio aquí sería la URL
-  //    inventada entrando por la puerta de atrás.
+  // 1. EL TICKET NO IMPRIME LIGA. No hay dominio que reconocer porque el papel
+  //    no lo trae, así que estos NO pueden tener `reconocer.dominios`: un
+  //    dominio aquí sería la URL inventada entrando por la puerta de atrás.
   //
-  // 2. LA LIGA EXISTE PERO NO LLEVA A UN PORTAL (recon del 28-ago-2026). Los
-  //    tres que trajo el reconocimiento de campo. Aquí el dominio SÍ está
-  //    impreso y SÍ sirve para reconocer al emisor —es lo único verificado de
-  //    ellos— pero no hay URL honesta que guardar en `portal`:
-  //      · `facturacion_estacion` — el apex es una página de aparcamiento de
-  //        GoDaddy. La plataforma existe, pero solo por subdominio de comercio,
-  //        así que la entrada correcta es un PATRÓN, no una URL.
-  //      · `mobil` — no es un portal: es un directorio de nueve operadores, y
-  //        además responde 403 de Akamai.
-  //      · `pemex_franquicia` — `cargogas.com` sirve un 403 con `noindex`, y su
-  //        contenido real es otro directorio por estación.
+  //    Del banco de 91 fotos entraron TRES así: `walmart` salió de esta lista
+  //    el 29-ago-2026 —se investigó y se MIDIÓ con Chrome headless su portal
+  //    centralizado real, que no viene impreso en ningún ticket pero SÍ se
+  //    verificó navegándolo— y quedan dos, `amg_hospitality` y
+  //    `vaquero_montejo`, donde la búsqueda del 29-ago-2026 NO encontró nada
+  //    lo bastante confiable para escribir (ver la nota de cada uno: un correo
+  //    real mandado por AMG, y un sitio de nombre parecido pero RFC sin
+  //    confirmar para Vaquero Montejo).
   //
-  //    Guardar la URL vieja en cualquiera de los tres mandaba al robot —o a una
-  //    persona— a una página de venta de dominios o a un 403. Vaciarla y marcar
-  //    el pendiente dice la verdad y conserva la capacidad de NOMBRAR al emisor.
-  // 3. LA LIGA ESTÁ IMPRESA PERO NADIE HA ABIERTO SU FORMULARIO (corrida de
+  // 2. LA LIGA EXISTE PERO NO LLEVA A UN PORTAL (recon del 28-ago-2026, y
+  //    revisitado el 29-ago-2026). Aquí el dominio SÍ está impreso y SÍ sirve
+  //    para reconocer al emisor —es lo único verificado de ellos— pero no hay
+  //    URL honesta que guardar en `portal`:
+  //      · `facturacion_estacion` — el apex sigue siendo una página de
+  //        aparcamiento de GoDaddy (revisitado 29-ago-2026, sin cambio). La
+  //        plataforma existe, pero solo por subdominio de comercio, así que la
+  //        entrada correcta es un PATRÓN, no una URL.
+  //      · `mobil` — sigue sin ser un portal: hoy es un buscador de estaciones
+  //        por mapa que redirige a un operador distinto según dónde se cargó
+  //        (revisitado 29-ago-2026 con Chrome headless: ya no da 403 de Akamai,
+  //        pero el flujo real —"busca tu estación en el mapa, da clic en
+  //        Obtener factura"— sigue sin resolverse a una URL única).
+  //      · `pemex_franquicia` — el sitio se REDISEÑÓ (29-ago-2026): el 403 de
+  //        SiteGround ya no aplica, pero las dos rutas de facturar que ofrece
+  //        hoy (`cargogas.dyndns.ws:8080` y el nuevo
+  //        `factura.cargogas.warelan.com`) siguen siendo HTTP puro, medido con
+  //        Chrome headless — mismo motivo de fondo, evidencia fresca.
+  //
+  //    Guardar cualquiera de esas URLs mandaba al robot —o a una persona— a una
+  //    página de venta de dominios, a un directorio sin resolver o a un
+  //    formulario sin TLS. Vaciarla y marcar el pendiente dice la verdad y
+  //    conserva la capacidad de NOMBRAR al emisor.
+  // 3. LA LIGA ESTÁ IMPRESA PERO NADIE HABÍA ABIERTO SU FORMULARIO (corrida de
   //    producción del 28-ago-2026, 90 fotos). Los detectó el OCR leyendo el
   //    dominio del propio ticket, así que el dominio SÍ está verificado — lo que
-  //    falta es visitar la página. Es el estado más temprano de una ficha: se
+  //    faltaba era visitar la página. Es el estado más temprano de una ficha: se
   //    sabe a quién nombrar y no a dónde mandarlo.
-  const SIN_LIGA_EN_EL_TICKET = ['amg_hospitality', 'vaquero_montejo', 'walmart'];
+  //
+  //    `los_taquitos_pm` salió de esta lista el 29-ago-2026: el dominio del
+  //    catálogo (`lostaquitosdelpm.com`) resultó ser un typo que NUNCA iba a
+  //    reconocer un ticket real —NXDOMAIN, cero historial en la Wayback
+  //    Machine—, y el correcto (`lostaquitosdepm.com`) sí se abrió y se midió
+  //    con Chrome headless. Queda `gasolineria_mallorca`: su dominio impreso
+  //    (`facturascas.com`) también da NXDOMAIN, y el candidato más parecido que
+  //    arrojó la búsqueda (`facturasgas.com`) es una plataforma multi-comercio
+  //    sin nada que confirme que esta razón social factura ahí — se anotó como
+  //    hipótesis, no se escribió como dato.
+  const SIN_LIGA_EN_EL_TICKET = ['amg_hospitality', 'vaquero_montejo'];
   const LIGA_QUE_NO_ES_PORTAL = ['facturacion_estacion', 'mobil', 'pemex_franquicia'];
-  const LIGA_IMPRESA_SIN_VISITAR = ['gasolineria_mallorca', 'los_taquitos_pm'];
+  const LIGA_IMPRESA_SIN_VISITAR = ['gasolineria_mallorca'];
 
-  it('son exactamente estos ocho, y ninguno finge tener campos leídos', () => {
+  it('son exactamente estos seis, y ninguno finge tener campos leídos', () => {
     const pendientes = COMERCIOS.filter((c) => c.portalPendiente).map((c) => c.clave).sort();
     expect(pendientes).toEqual(
       [...SIN_LIGA_EN_EL_TICKET, ...LIGA_QUE_NO_ES_PORTAL, ...LIGA_IMPRESA_SIN_VISITAR].sort(),
