@@ -8,6 +8,7 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { ControlCampanas, type AccionCampana } from './campanas';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { listarProspectos, ESTADOS_PROSPECTO, conteosVacios } from '@/lib/likida/vendedores';
+import { getEmbudoActivacion, getCohortesUso } from '@/lib/admin/instrumentacion';
 import { usd } from '@/lib/utils';
 import { numero, fechaCorta } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
@@ -37,7 +38,7 @@ export default async function CrecimientoPage() {
   // base sumados en el reloj de la página— sin que ninguna dependiera de la
   // anterior. Salen juntas; cada una conserva su propio catch, o sea su
   // propia leyenda honesta.
-  const [r, prospectos, adquisicion, campanas] = await Promise.all([
+  const [r, prospectos, adquisicion, campanas, embudoActivacion, cohortes] = await Promise.all([
     getResumenNegocio(),
     // El embudo de ADQUISICIÓN sí es real desde la 0105: los prospectos del
     // censo por estado del kanban. Cae por su lado a null y se DICE — un
@@ -48,6 +49,13 @@ export default async function CrecimientoPage() {
     getAdquisicion(ahoraMs()).catch(() => null),
     // El control de campañas (0123, §4) — leer y pausar; jamás crear ni subir.
     listarCampanas().catch(() => null),
+    // La mitad de PRODUCTO del funnel (0251): altas → activadas → de pago,
+    // contada en la base sobre tenant/liquidacion/suscripcion. null = no se
+    // pudo leer, y se dice.
+    getEmbudoActivacion().catch(() => null),
+    // Retención por cohortes sobre producto_evento (0251). La regla vive en
+    // el lib: mes sin medición = null, jamás un 0% inventado.
+    getCohortesUso().catch(() => null),
   ]);
   const integracionAds = estadoIntegracionAds();
 
@@ -85,14 +93,13 @@ export default async function CrecimientoPage() {
   // base en 0 tenants (5-ago-2026) seguían afirmando que había una.
   const esSoloDemo = r.tenants === 1 && r.flotas[0]?.id === tenantDemo();
 
+  // El embudo activados → de pago y la retención por cohortes SALIERON de
+  // esta lista el 28-ago-2026 (0251): ya se miden abajo. Lo que queda tiene
+  // cada uno su razón, no un genérico «falta instrumentación».
   const sinInstrumentacion = [
-    'DAU / WAU / MAU',
-    'NPS',
-    // El embudo de LEADS ya existe arriba (0105); lo que sigue sin existir
-    // es la mitad de producto: activados → de pago.
-    'Embudo activados → de pago (la mitad de producto del funnel)',
-    'Retención por cohortes',
-    'Adopción por feature',
+    'DAU / WAU / MAU — producto_evento registra a propósito solo la FLOTA, nunca al usuario (minimización); contar usuarios activos exigiría una dimensión que hoy se decidió no recolectar',
+    'NPS — necesita encuestas que no existen',
+    'Adopción por feature — producto_evento mide qué pantalla se ABRE; qué se completa necesita acciones de grano fino que aún no se emiten',
   ];
 
   return (
@@ -246,6 +253,109 @@ export default async function CrecimientoPage() {
             </>
           )}
 
+          {/* ── El embudo de ACTIVACIÓN — la mitad de producto (0251) ──────
+              Contado en la base (embudo_activacion()): altas → con al menos
+              una liquidación → con suscripción de pago activa. Con null se
+              dice «no se pudo leer»; con ceros se dicen los ceros — son
+              conteos reales, no encuadre. */}
+          {embudoActivacion === null ? (
+            <div className="card p-4">
+              <TituloSeccion>Embudo de activación</TituloSeccion>
+              <p className="text-sm mt-2" style={{ color: 'var(--bad)' }}>
+                No se pudo leer el embudo de activación — esto NO significa que haya cero flotas.
+              </p>
+            </div>
+          ) : (
+            <div className="card p-4">
+              <div className="flex items-center gap-2">
+                <Filter width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+                <TituloSeccion>Embudo de activación — de alta a de pago</TituloSeccion>
+              </div>
+              <div className="mt-3">
+                <HBars
+                  datos={[
+                    { etiqueta: 'Flotas dadas de alta', valor: embudoActivacion.altas },
+                    { etiqueta: 'Activadas (≥1 liquidación)', valor: embudoActivacion.activadas },
+                    { etiqueta: 'De pago (suscripción activa)', valor: embudoActivacion.dePago },
+                  ]}
+                  formato="entero"
+                />
+              </div>
+              <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+                Contado en la base sobre tenant / liquidacion / suscripcion — las altas incluyen el tenant demo.
+                {embudoActivacion.dePago === 0 && ' El cero de «de pago» es un conteo real: ninguna suscripción está en estado activo todavía.'}
+              </p>
+            </div>
+          )}
+
+          {/* ── Retención por COHORTES — producto_evento (0251) ────────────
+              La regla de honestidad vive en construirCohortes(): un mes
+              anterior al primer evento registrado es «no medido» (null),
+              jamás un 0% — la tabla nació con la 0251 y pintarle churn a los
+              meses pre-medición sería inventar. */}
+          {cohortes === null ? (
+            <div className="card p-4">
+              <TituloSeccion>Retención por cohortes</TituloSeccion>
+              <p className="text-sm mt-2" style={{ color: 'var(--bad)' }}>
+                No se pudieron leer las cohortes — esto NO significa que no haya uso.
+              </p>
+            </div>
+          ) : (
+            <div className="card p-4">
+              <TituloSeccion>Retención por cohortes — uso del panel por mes de alta</TituloSeccion>
+              {cohortes.filas.length === 0 ? (
+                <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>
+                  Sin flotas dadas de alta: no hay cohorte que armar.
+                </p>
+              ) : (
+                <div className="overflow-x-auto mt-2">
+                  <table className="w-full text-[12.5px]">
+                    <thead>
+                      <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
+                        <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Cohorte (mes de alta)</th>
+                        <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Flotas</th>
+                        <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Flotas con uso, mes a mes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cohortes.filas.map((f) => (
+                        <tr key={f.cohorte} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
+                          <td className="py-2 cifra-mono">{f.cohorte}</td>
+                          <td className="py-2 text-right tabular">{numero(f.flotas)}</td>
+                          <td className="py-2">
+                            <div className="flex flex-wrap gap-1.5">
+                              {f.celdas.map((c) => (
+                                <span
+                                  key={c.mes}
+                                  className="inline-block rounded px-1.5 py-0.5 text-[11px] tabular"
+                                  style={{
+                                    background: 'var(--g2)',
+                                    color: c.activas === null ? 'var(--faint)' : undefined,
+                                  }}
+                                  title={c.mes}
+                                >
+                                  {c.mes.slice(5)}{' · '}
+                                  {c.activas === null ? 'no medido' : `${numero(c.activas)}/${numero(f.flotas)}`}
+                                  {c.enCurso && c.activas !== null ? ' (en curso)' : ''}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="text-xs mt-2 m-0" style={{ color: 'var(--muted)' }}>
+                {cohortes.desdeMedicion === null
+                  ? 'producto_evento (0251) todavía no registra un solo evento: cada celda dice «no medido», que no es un 0% — la matriz se llena sola conforme el panel se use.'
+                  : `La medición empezó en ${cohortes.desdeMedicion}; los meses anteriores se pintan «no medido», nunca 0. El mes en curso está incompleto por definición.`}
+                {' '}Con pocas flotas la cohorte describe, no concluye — necesita más de 1 cliente real para decir algo general.
+              </p>
+            </div>
+          )}
+
           {/* ChartCard (design system v2, ui/kit.tsx) — mismo AreaChartSimple
               de siempre (charts.tsx sigue vigente para esta forma de dato:
               una sola serie continua en el tiempo); `tamano="L"` porque es
@@ -287,7 +397,8 @@ export default async function CrecimientoPage() {
               ))}
             </ul>
             <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-              Necesitan instrumentación de producto que no existe hoy, y más de 1 cliente para decir algo real.
+              Cada renglón dice su propia razón — desde la 0251 ya NO es un genérico «falta instrumentación»:
+              el embudo de activación y las cohortes se miden arriba.
             </p>
           </div>
         </div>

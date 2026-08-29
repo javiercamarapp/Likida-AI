@@ -4,6 +4,7 @@ import { getSessionTenant } from '@/lib/auth/session';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { topeDiaUsd, gastoChatHoyUsd } from '@/app/api/dashboard/chat/tope';
 import DashboardChrome from './chrome';
+import { PulsoProducto } from './pulso-producto';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +48,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <DashboardChrome nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa}>
+      {/* El pulso de producto (0251): un POST de fuego-y-olvido por cambio de
+          ruta. El servidor decide tenant (sesión) y pantalla (catálogo
+          cerrado); el superadmin en preview se descarta allá. */}
+      <PulsoProducto />
       {children}
     </DashboardChrome>
   );

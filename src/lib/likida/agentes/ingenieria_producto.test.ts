@@ -570,16 +570,30 @@ describe('el catálogo de preguntas del negocio', () => {
     expect(q1?.detalle).toContain('4,321');
   });
 
-  it('el parte nombra el hueco grande y aclara que no instrumenta nada', () => {
-    const cuerpo = armarParteInstrumentacion([], { valor: { paginas: ['blog'], eventos: ['pageview'], filas: 12 }, error: null }, LUNES, null);
-    expect(cuerpo).toContain('no existe analítica de producto DENTRO de la app');
+  const SITIO_OK = { valor: { paginas: ['blog'], eventos: ['pageview'], filas: 12 }, error: null };
+  const PRODUCTO_OK = { valor: { pantallas: ['resumen', 'viajes'], filas: 40 }, error: null };
+
+  it('el parte dice el estado ACTUALIZADO del hueco (0251) y aclara que no instrumenta nada', () => {
+    const cuerpo = armarParteInstrumentacion([], SITIO_OK, LUNES, null, PRODUCTO_OK);
+    // La línea vieja («no existe analítica de producto DENTRO de la app»)
+    // hoy sería mentira: la 0251 la creó. Lo que se afirma es lo medido.
+    expect(cuerpo).not.toContain('no existe analítica de producto DENTRO de la app');
+    expect(cuerpo).toContain('producto_evento cubre HOY');
+    expect(cuerpo).toContain('viajes');
     expect(cuerpo).toContain('no instrumenta nada');
     expect(cuerpo).toContain('minimización LFPDPPP');
   });
 
-  it('sin poder leer sitio_evento no se afirma qué cubre', () => {
-    const cuerpo = armarParteInstrumentacion([], { valor: null, error: 'sitio_evento' }, LUNES, null);
+  it('producto_evento existente pero SIN uso se dice como cable suelto posible, no como flota inactiva', () => {
+    const cuerpo = armarParteInstrumentacion([], SITIO_OK, LUNES, null, { valor: { pantallas: [], filas: 0 }, error: null });
+    expect(cuerpo).toContain('NO registró uso');
+    expect(cuerpo).toContain('cable suelto');
+  });
+
+  it('sin poder leer sitio_evento o producto_evento no se afirma qué cubren', () => {
+    const cuerpo = armarParteInstrumentacion([], { valor: null, error: 'sitio_evento' }, LUNES, null, { valor: null, error: 'producto_evento' });
     expect(cuerpo).toContain('NO SE PUDO LEER. No se afirma qué cubre');
+    expect(cuerpo).toContain('«no se pudo leer» y «cero uso» son cosas distintas');
   });
 });
 
@@ -587,6 +601,7 @@ describe('la corrida de instrumentación', () => {
   it('fabrica el parte y deja el estado de cada fuente en fuentes', async () => {
     respuestas.set('cola_aprobacion', [{ data: [], error: null, count: 0 }]);
     respuestas.set('sitio_evento', [{ data: [{ pagina: 'blog', evento: 'pageview' }], error: null }]);
+    respuestas.set('producto_evento', [{ data: [{ pantalla: 'viajes' }], error: null }]);
     rpcs.set('perfil_almacenamiento', [{ data: {
       tablas: [{ tabla: 'sitio_evento', bytes: 8192, filas_estimadas: 10, seq_scan: 1, seq_tup_read: 1, idx_scan: 1, indices: 1 }],
       consultas: { disponible: false, motivo: 'no está', filas: [] },
