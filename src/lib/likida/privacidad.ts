@@ -18,6 +18,35 @@ import { appUrl } from '@/lib/env';
 // en normas/lfpdppp-15-16.yaml.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Lo MEDIDO sobre el rastreo GPS de la flota, para que el aviso declare el
+ * tratamiento que ESA flota tiene y no el de todas (refinamiento del C.15,
+ * 28-ago-2026). Tres caminos reales escriben geolocalización y solo UNO
+ * depende de esta señal:
+ *
+ *   1. El poller del proveedor (sincronizar_gps.ts, cron /api/cron/gps cada
+ *      5 min) — SOLO corre con credencial activa en `conector_credencial`.
+ *   2. El pin que el chofer manda por el chat (processor.ts →
+ *      registrarUbicacionChofer) — NO depende de ningún conector.
+ *   3. El pin de asistencia (asistencia_wa.ts → anclarUbicacionIncidencia) —
+ *      tampoco.
+ *
+ * Por eso la señal solo gobierna el RENGLÓN DEL PROVEEDOR: los pines se
+ * declaran SIEMPRE, porque el aviso viaja por el mismo chat desde el que
+ * cualquier chofer puede mandar uno — la capacidad existe en cuanto existe la
+ * conversación, y el aviso informa de lo que puede pasar, no de lo que ya pasó.
+ *
+ * El criterio de la señal también es de CAPACIDAD, no de hecho: credencial
+ * activa = el cron va a intentar traer posiciones, y el consentimiento tiene
+ * que ser PREVIO a la primera. Esperar a que haya filas en `posicion` sería
+ * avisar después de tratar.
+ *
+ * `no_medible` = la consulta no contestó, que NO es «sin conector»: se declara
+ * el caso amplio (falla cerrado — un aviso que declara de más un rato es
+ * inexacto; uno que calla un tratamiento que ocurre es el bug original C.15).
+ */
+export type SenalGps = 'conectado' | 'sin_conector' | 'no_medible';
+
 /** Los datos de la FLOTA. Sin ellos no hay aviso: el responsable es ella. */
 export interface DatosResponsable {
   /** Razón social tal cual está en el RFC. */
@@ -26,6 +55,13 @@ export interface DatosResponsable {
   domicilio: string;
   /** Dónde vive el aviso integral. Art. 16 fr. II obliga a señalarlo. */
   urlAvisoIntegral: string;
+  /**
+   * Señal MEDIDA en `conector_credencial` (ver `SenalGps`). Opcional a
+   * propósito y con ausencia = `no_medible`: quien no midió recibe el caso
+   * amplio, nunca el silencio. `getDatosResponsable` la mide siempre; un
+   * llamador que arme este objeto a mano sin medir declara de más, no de menos.
+   */
+  gps?: SenalGps;
 }
 
 /**
@@ -194,6 +230,32 @@ export function avisoSimplificado(r: DatosResponsable): string | null {
 
   const estado = revisarAvisoIntegral(r.urlAvisoIntegral);
   const url = r.urlAvisoIntegral?.trim();
+  // Ausente = no medido = caso amplio (ver `SenalGps`). Nunca un default que
+  // calle un tratamiento.
+  const gps = r.gps ?? 'no_medible';
+
+  // El renglón de la ubicación, POR FLOTA (refinamiento del C.15, 28-ago-2026).
+  // Solo varía la mitad del PROVEEDOR: el pin del chat se declara en los tres
+  // casos, porque este mismo mensaje viaja por el canal desde el que el chofer
+  // puede mandarlo — el tratamiento es posible en cuanto existe la conversación.
+  //
+  //   · `conectado`    → se afirma: la credencial activa existe y el cron va a
+  //                      traer posiciones (o ya las trae).
+  //   · `no_medible`   → el texto CONDICIONAL de siempre ("si tu empresa
+  //                      tiene GPS…"), que es literalmente cierto en ambos
+  //                      casos. Byte-idéntico al que salió a producción el
+  //                      22-ago, a propósito: así una falla transitoria de la
+  //                      medición no cambia `versionAviso` ni dispara un
+  //                      reenvío a media flota.
+  //   · `sin_conector` → se dice que por ese medio no entra nada, y que si la
+  //                      empresa conecta uno el aviso nuevo llega solo (la
+  //                      versión cambia → reenvío del art. 15 fr. VI).
+  const sobreUbicacion =
+    gps === 'conectado'
+      ? `Sobre tu ubicación: tu empresa tiene GPS en sus camiones, así que se recibe la *posición de la unidad* que manejas para medir los tiempos del viaje y enseñárselos a la empresa; si compartes tu ubicación por el chat, también se guarda y la ve tu jefe. Se borra a los 90 días. Tu teléfono no se rastrea.`
+      : gps === 'sin_conector'
+        ? `Sobre tu ubicación: tu empresa no tiene conectado un GPS con Likida, así que por ese medio no se recibe ninguna posición; si algún día conecta uno, este aviso cambia y el nuevo te llega por aquí. Lo que sí: si compartes tu ubicación por el chat, se guarda y la ve tu jefe. Se borra a los 90 días. Tu teléfono no se rastrea.`
+        : `Sobre tu ubicación: si tu empresa tiene GPS en sus camiones, se recibe la *posición de la unidad* que manejas para medir los tiempos del viaje y enseñárselos a la empresa; si compartes tu ubicación por el chat, también se guarda y la ve tu jefe. Se borra a los 90 días. Tu teléfono no se rastrea.`;
 
   return [
     `🔒 *Aviso de privacidad*`,
@@ -240,7 +302,9 @@ export function avisoSimplificado(r: DatosResponsable): string | null {
     // borran a los 90 días (purgar_posicion, mig. 0155).
     `También: anotar la hora de tus avisos del viaje para medir sus tiempos —como la espera en la descarga— y enseñárselos a la empresa.`,
     ``,
-    `Sobre tu ubicación: si tu empresa tiene GPS en sus camiones, se recibe la *posición de la unidad* que manejas para medir los tiempos del viaje y enseñárselos a la empresa; si compartes tu ubicación por el chat, también se guarda y la ve tu jefe. Se borra a los 90 días. Tu teléfono no se rastrea.`,
+    // AUDITORÍA 19 → refinamiento 28-ago-2026: el renglón ya no es el mismo
+    // para toda flota — se arma arriba, MEDIDO contra `conector_credencial`.
+    sobreUbicacion,
     ``,
     // Art. 26 fr. II — el derecho de oposición al tratamiento automatizado. Es
     // el elemento 11 del checklist de docs/conocimiento/11-datos-personales.md
@@ -506,6 +570,10 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
   const razonSocial = r.razonSocial.trim();
   const domicilio = r.domicilio.trim();
   const contacto = r.contactoPrivacidad?.trim();
+  // Mismo criterio que en `avisoSimplificado`: ausente = no medido = caso
+  // amplio. El párrafo del proveedor y su finalidad varían por flota; el pin
+  // del chat se declara SIEMPRE (ver `SenalGps`).
+  const gps = r.gps ?? 'no_medible';
 
   return [
     {
@@ -545,7 +613,19 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         // lo rastreado es el camión (el dispositivo lo instala la empresa,
         // no vive en el teléfono del chofer) y la retención es de 90 días
         // (purgar_posicion, mig. 0155).
-        `La **posición GPS de la unidad que traes asignada**, cuando tu empresa tiene contratado un rastreo satelital para sus camiones: la posición del camión se recibe cada pocos minutos, también mientras tú lo manejas. Y la **ubicación que tú decidas compartir** por el chat, que se guarda y se le muestra a tu empresa. **Tu teléfono no se rastrea:** el dispositivo de rastreo es del camión, y de tu teléfono solo sale lo que tú mandes. Las posiciones se conservan **90 días** y después se borran solas.`,
+        //
+        // REFINAMIENTO 28-ago-2026 (por flota): la mitad del PROVEEDOR se
+        // declara según lo MEDIDO en `conector_credencial` — declarar un
+        // rastreo satelital a una flota que no tiene ninguno conectado es tan
+        // inexacto como callarlo. El pin del chat se declara en los tres
+        // casos: no depende de conector alguno (ver `SenalGps`). El texto de
+        // `no_medible` queda byte-idéntico al desplegado el 22-ago, para que
+        // una falla de la medición no dispare reenvíos.
+        gps === 'conectado'
+          ? `La **posición GPS de la unidad que traes asignada**: tu empresa tiene contratado un rastreo satelital para sus camiones, y la posición del camión se recibe cada pocos minutos, también mientras tú lo manejas. Y la **ubicación que tú decidas compartir** por el chat, que se guarda y se le muestra a tu empresa. **Tu teléfono no se rastrea:** el dispositivo de rastreo es del camión, y de tu teléfono solo sale lo que tú mandes. Las posiciones se conservan **90 días** y después se borran solas.`
+          : gps === 'sin_conector'
+            ? `La **ubicación que tú decidas compartir** por el chat, que se guarda y se le muestra a tu empresa. Tu empresa **no tiene conectado un rastreo satelital** con Likida, así que por ese medio no se recibe ninguna posición; si algún día lo conecta, este aviso cambia y el nuevo te llega por WhatsApp. **Tu teléfono no se rastrea:** de él solo sale lo que tú decidas mandar. Las ubicaciones que compartas se conservan **90 días** y después se borran solas.`
+            : `La **posición GPS de la unidad que traes asignada**, cuando tu empresa tiene contratado un rastreo satelital para sus camiones: la posición del camión se recibe cada pocos minutos, también mientras tú lo manejas. Y la **ubicación que tú decidas compartir** por el chat, que se guarda y se le muestra a tu empresa. **Tu teléfono no se rastrea:** el dispositivo de rastreo es del camión, y de tu teléfono solo sale lo que tú mandes. Las posiciones se conservan **90 días** y después se borran solas.`,
         // AUDITORÍA EXTERNA 16-AGO-2026 (P2): la versión anterior decía "no
         // se usa para nada", y el flujo real es más matizado — la foto viaja
         // COMPLETA al motor de lectura (no se puede enmascarar una imagen
@@ -587,7 +667,15 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         // rastreo del camión lo contrata la empresa; lo que la oposición
         // detiene es el uso de esas posiciones ligado a tu persona, no el
         // dispositivo del camión.
-        `· Usar las posiciones GPS de la unidad para el seguimiento del viaje y para medir sus tiempos —por ejemplo, cuánto estuvo detenida la unidad en un sitio de carga o descarga— y mostrárselo a la empresa. Puedes oponerte a que esas posiciones se usen ligadas a tu persona; el rastreo del camión es un contrato de tu empresa con su proveedor y no se apaga desde aquí, y decírtelo así es más honesto que prometer lo contrario.`,
+        //
+        // REFINAMIENTO 28-ago-2026 (por flota): sin conector, la única fuente
+        // de posiciones es el pin que el chofer decide mandar — la finalidad
+        // se enuncia sobre ESA fuente, y la cláusula del contrato con el
+        // proveedor (que no existe) se cae. Con conector (o sin poder medir,
+        // que se trata como el caso amplio), el texto de siempre.
+        gps === 'sin_conector'
+          ? `· Usar la ubicación que tú compartas por el chat para el seguimiento del viaje y para medir sus tiempos —por ejemplo, cuánto estuvo detenida la unidad en un sitio de carga o descarga— y mostrárselo a la empresa. Puedes oponerte a que esas ubicaciones se usen ligadas a tu persona.`
+          : `· Usar las posiciones GPS de la unidad para el seguimiento del viaje y para medir sus tiempos —por ejemplo, cuánto estuvo detenida la unidad en un sitio de carga o descarga— y mostrárselo a la empresa. Puedes oponerte a que esas posiciones se usen ligadas a tu persona; el rastreo del camión es un contrato de tu empresa con su proveedor y no se apaga desde aquí, y decírtelo así es más honesto que prometer lo contrario.`,
         `· Medir cómo funciona el servicio para mejorarlo (estadísticas de uso, sin identificarte en los reportes).`,
         `Cualquier finalidad que no esté escrita aquí requiere que te vuelvan a pedir permiso. La ley vigente ya no permite ampararse en usos "compatibles o análogos".`,
       ],

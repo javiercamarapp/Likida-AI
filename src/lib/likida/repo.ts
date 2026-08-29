@@ -4,7 +4,8 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { round2 } from '@/lib/formato';
-import type { DatosIntegral } from './privacidad';
+import type { DatosIntegral, SenalGps } from './privacidad';
+import { CONECTORES_GPS } from './conectores/gps';
 import { acotada } from './presupuesto';
 import { traerTodo, conteo } from './pg';
 import type { Gasto, Liquidacion, Viaje, Operador } from '@/types/likida';
@@ -1013,14 +1014,59 @@ export async function saveLiquidacion(
 // persona encargada y solo pone el mecanismo: sin él, la flota no puede cumplir
 // aunque quiera. Detalle verificado en normas/lfpdppp-15-16.yaml.
 
+/** Los ids del catálogo que son de rastreo — derivado, nunca escrito a mano
+ *  (mismo criterio que `IDS_GPS` en conexiones.ts, que sirve a otra pantalla
+ *  con otra semántica de fallo y por eso no se importa de ahí). */
+const IDS_GPS_AVISO: readonly string[] = CONECTORES_GPS.map((c) => c.id);
+
+/**
+ * Lo MEDIDO para el renglón del proveedor de GPS en el aviso (ver `SenalGps`
+ * en privacidad.ts). Se mide donde se escribe la credencial y donde lee el
+ * poller: `conector_credencial` con `activo = true` — CAPACIDAD, no hecho,
+ * porque el consentimiento tiene que ser previo a la primera posición y con
+ * credencial activa el cron va a intentar traerlas en los próximos 5 minutos.
+ *
+ * FALLA CERRADO: cualquier camino de error —el `error` de PostgREST, la
+ * excepción de red, un `count` que no venga— devuelve `no_medible`, que el
+ * aviso trata como el caso AMPLIO (declara el proveedor en condicional).
+ * `null` jamás se convierte en 0: afirmar «sin conector» con la base caída
+ * sería callarle un tratamiento a una flota que sí lo tiene.
+ */
+export async function senalGpsFlota(tenantId: string): Promise<SenalGps> {
+  try {
+    const { count, error } = await acotada(supabaseAdmin()
+      .from('conector_credencial')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .eq('activo', true)
+      .in('conector_id', IDS_GPS_AVISO), 'aviso.senal_gps');
+    if (error) {
+      logger.error('aviso.senal_gps_no_medible', { tenantId, err: error.message });
+      return 'no_medible';
+    }
+    if (count == null) return 'no_medible';
+    return count > 0 ? 'conectado' : 'sin_conector';
+  } catch (e) {
+    logger.error('aviso.senal_gps_no_medible', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return 'no_medible';
+  }
+}
+
 /**
  * Datos de responsable de la flota, para armar el aviso. `null` en cualquiera
  * significa que el tenant no está configurado — y ahí NO se envía nada, porque
  * un aviso sin responsable no dice a quién reclamarle, que es para lo que sirve.
+ *
+ * Trae también la señal de GPS (28-ago-2026): el aviso es POR FLOTA y declara
+ * el rastreo del proveedor solo a la flota que lo tiene conectado. Se mide
+ * aquí —y no en cada llamador— para que el texto y su `versionAviso` salgan
+ * IGUALES en todos los caminos (processor, QA, página del integral): dos
+ * llamadores midiendo distinto producirían dos versiones y un reenvío falso.
  */
 export async function getDatosResponsable(
   tenantId: string,
 ): Promise<DatosIntegral | null> {
+  const gpsPromise = senalGpsFlota(tenantId);
   const { data, error } = await acotada(supabaseAdmin()
     .from('tenant')
     // `contacto_privacidad` (0034) es el art. 29 y solo lo usa el aviso
@@ -1038,6 +1084,8 @@ export async function getDatosResponsable(
     domicilio: (data.domicilio_fiscal as string) ?? '',
     urlAvisoIntegral: (data.url_aviso_privacidad as string) ?? '',
     contactoPrivacidad: (data.contacto_privacidad as string | null) ?? null,
+    // Nunca lanza: sus fallos ya son `no_medible` (caso amplio) adentro.
+    gps: await gpsPromise,
   };
   // La URL del integral NO se exige aquí. Devolver `null` por su ausencia hacía
   // que el operador no recibiera NADA: el aviso simplificado sí se puede armar
