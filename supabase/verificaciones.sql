@@ -5783,12 +5783,23 @@ end $$;
 -- UPDATE (`contacto_nombre is not null`) nunca lo tocaba. `sin_nombre`
 -- simula justo eso.
 --
+-- 0258 (hallazgo 5 de la auditoría de tandas 21-24): `conservar_hasta` ahora
+-- congela el EXPEDIENTE COMPLETO, no solo la fila de la persona — en un ARCO
+-- en disputa los mensajes/atribución del prospecto pueden ser la evidencia
+-- del tratamiento reclamado, y en «escríbanme en enero» anular el correo de
+-- la fila era exactamente al revés de lo pactado. Por eso la persona frenada
+-- ya no se siembra en el MISMO prospecto frío (antes se esperaba purgar a su
+-- vecina y limpiar la fila; hoy eso sería partir un expediente congelado):
+-- vive en su PROPIO prospecto frío `frenado`, y se comprueba que su fila
+-- conserva TODO — persona, contacto y datos.
+--
 -- Esperado:
---   RETENCION_0148_0191  purgadas=1  quedan=3  frio_limpio=t  sin_nombre_limpio=t  empresa_viva=t  reciente_con_datos=t  llave=t  anon=f
+--   RETENCION_0148_0191  purgadas=1  quedan=3  frio_limpio=t  sin_nombre_limpio=t  empresa_viva=t  reciente_con_datos=t  frenado_con_datos=t  llave=t  anon=f
 do $$
 declare
-  frio uuid; sin_nombre uuid; reciente uuid; trato uuid; res jsonb; purgadas bigint; quedan bigint;
+  frio uuid; sin_nombre uuid; reciente uuid; trato uuid; frenado uuid; res jsonb; purgadas bigint; quedan bigint;
   frio_limpio boolean; sin_nombre_limpio boolean; empresa_viva boolean; reciente_con_datos boolean;
+  frenado_con_datos boolean;
   tiene_llave boolean; anon_ok boolean;
 begin
   insert into public.prospecto (empresa, estado, contacto_nombre, telefono, correo, notas, lead_clave, created_at)
@@ -5799,16 +5810,22 @@ begin
     values ('__verif_0148_reciente__', 'contactado', 'Lic. Prueba Reciente', '5219990000003', 'reciente@verif.test', now() - interval '400 days') returning id into reciente;
   insert into public.prospecto (empresa, estado, contacto_nombre, created_at)
     values ('__verif_0148_trato__', 'negociacion', 'Prueba Trato', now() - interval '400 days') returning id into trato;
-  -- El reciente tuvo un toque hace 10 días; los otros dos fríos, ninguno.
+  -- Frío de 400 días con freno vigente: el expediente entero debe sobrevivir.
+  insert into public.prospecto (empresa, estado, contacto_nombre, telefono, correo, mensaje_wa,
+                                mensajes_generados_en, mensajes_modelo, created_at)
+    values ('__verif_0148_frenado__', 'contactado', 'Prueba Frenada', '5219990000004', 'frenado@verif.test',
+            'Hola Prueba, seguimos en enero como quedamos.',
+            now() - interval '400 days', 'modelo-de-prueba', now() - interval '400 days') returning id into frenado;
+  -- El reciente tuvo un toque hace 10 días; los demás fríos, ninguno.
   insert into public.prospecto_contacto (prospecto_id, canal, direccion, resumen, ocurrio_en)
     values (reciente, 'correo', 'salida', '__verif_0148__', now() - interval '10 days');
   insert into public.prospecto_persona (prospecto_id, nombre, origen, created_at) values
     (frio,     '__V148 frío sin freno__',  'directorio', now() - interval '400 days'),
-    (frio,     '__V148 frío con freno__',  'directorio', now() - interval '400 days'),
+    (frenado,  '__V148 frío con freno__',  'directorio', now() - interval '400 days'),
     (reciente, '__V148 reciente__',        'directorio', now() - interval '400 days'),
     (trato,    '__V148 en trato__',        'directorio', now() - interval '400 days');
   update public.prospecto_persona set conservar_hasta = now() + interval '30 days'
-   where prospecto_id = frio and nombre = '__V148 frío con freno__';
+   where prospecto_id = frenado and nombre = '__V148 frío con freno__';
 
   res := public.mantenimiento_de_datos(30);
   purgadas := (res->>'prospectoPersonasPurgadas')::bigint;
@@ -5819,10 +5836,12 @@ begin
   select (empresa = '__verif_0148_frio__') into empresa_viva from public.prospecto where id = frio;
   select (contacto_nombre is not null and telefono is not null and correo is not null)
     into reciente_con_datos from public.prospecto where id = reciente;
+  select (contacto_nombre is not null and telefono is not null and correo is not null and mensaje_wa is not null)
+    into frenado_con_datos from public.prospecto where id = frenado;
   tiene_llave := res ? 'prospectoPersonasPurgadas';
   select has_function_privilege('anon', 'public.purgar_prospecto_persona(integer, timestamptz)', 'EXECUTE') into anon_ok;
-  raise exception E'RETENCION_0148_0191  purgadas=%  quedan=%  frio_limpio=%  sin_nombre_limpio=%  empresa_viva=%  reciente_con_datos=%  llave=%  anon=%   (esperado 1/3/t/t/t/t/t/f)',
-    purgadas, quedan, frio_limpio, sin_nombre_limpio, empresa_viva, reciente_con_datos, tiene_llave, anon_ok;
+  raise exception E'RETENCION_0148_0191  purgadas=%  quedan=%  frio_limpio=%  sin_nombre_limpio=%  empresa_viva=%  reciente_con_datos=%  frenado_con_datos=%  llave=%  anon=%   (esperado 1/3/t/t/t/t/t/t/f)',
+    purgadas, quedan, frio_limpio, sin_nombre_limpio, empresa_viva, reciente_con_datos, frenado_con_datos, tiene_llave, anon_ok;
 end $$;
 
 -- ── 121. El claim huérfano se retoma; el completado no (mig. 0149) ──────────
@@ -13871,4 +13890,138 @@ begin
 
   raise exception 'PALANCAS_0250  n_catalogo=%  faltantes=%  invento_rebota=%   (esperado 60 / ninguno / t)',
     n_catalogo, faltantes, invento_rebota;
+end $$;
+
+-- ── 205. La purga alcanza las tablas satélite de `prospecto` y no toca las del vivo (mig. 0258) ──
+--
+-- La 0245 auditó columna por columna la tabla `prospecto` y no miró las
+-- satélite: `prospecto_correo` (1,414 filas de 852 prospectos fríos medidas
+-- en producción, correo+nombre+puesto), las piezas de `cola_aprobacion` (el
+-- borrador completo con el nombre de pila adentro), `prospecto_dossier`
+-- (teléfonos y hallazgos con correos en `datos`) y `prospecto_toque` (prosa
+-- libre en `resumen`). La 0258 las alcanza; aquí se comprueba con corrida
+-- real que el frío pierde exactamente eso, que el prospecto VIVO conserva
+-- todo, y que `mantenimiento_de_datos` reporta las cuatro llaves nuevas.
+-- Todo revierte con el RAISE final. Esperado:
+--   SATELITES_PURGA_0258  correos_frio_fuera=t  pieza_fria_fuera=t  dossier_frio_anonimo=t  empresa_dossier_viva=t  toque_frio_sin_prosa=t  vivo_intacto=t  llaves_nuevas=4
+do $$
+declare
+  frio uuid; vivo uuid; res jsonb;
+  correos_frio_fuera boolean; pieza_fria_fuera boolean; dossier_frio_anonimo boolean;
+  empresa_dossier_viva boolean; toque_frio_sin_prosa boolean; vivo_intacto boolean;
+  llaves_nuevas int;
+begin
+  insert into public.prospecto (empresa, estado, correo, created_at)
+    values ('__verif_0258_frio__', 'contactado', 'frio@verif0258.test', now() - interval '400 days')
+    returning id into frio;
+  insert into public.prospecto (empresa, estado, correo, created_at)
+    values ('__verif_0258_vivo__', 'contactado', 'vivo@verif0258.test', now() - interval '400 days')
+    returning id into vivo;
+  -- El vivo tuvo un toque hace 10 días; el frío, ninguno.
+  insert into public.prospecto_contacto (prospecto_id, canal, direccion, resumen, ocurrio_en)
+    values (vivo, 'correo', 'salida', '__verif_0258__', now() - interval '10 days');
+
+  insert into public.prospecto_correo (prospecto_id, correo, contacto_nombre, puesto, fuente) values
+    (frio, 'ramon.perez@verif0258.test', 'Ramón Pérez', 'Gerente de Tráfico', 'https://verif0258.test/equipo'),
+    (frio, 'contacto@verif0258.test', null, null, 'https://verif0258.test'),
+    (vivo, 'ana.lopez@verif0258.test', 'Ana López', 'Directora', 'https://verif0258.test/equipo');
+  insert into public.cola_aprobacion (tipo, agente, prospecto_id, titulo, cuerpo) values
+    ('correo_frio', 'enviador', frio, 'Correo a Ramón', 'Hola Ramón, ¿le vienen bien 15 minutos el jueves?'),
+    ('correo_frio', 'enviador', vivo, 'Correo a Ana', 'Hola Ana, le escribo de Likida…');
+  insert into public.prospecto_dossier (prospecto_id, historia, telefonos, datos) values
+    (frio, 'Fundada en 1990, 40 unidades.', '["5215590000001"]'::jsonb,
+     '[{"dato": "correo de tráfico: ramon.perez@verif0258.test", "fuente": "https://verif0258.test"}]'::jsonb),
+    (vivo, 'Fundada en 2001.', '["5215590000002"]'::jsonb, '[]'::jsonb);
+  insert into public.prospecto_toque (prospecto_id, canal, resumen, actor) values
+    (frio, 'nota', 'Hablé con Ramón, pide llamar en marzo.', 'javier'),
+    (vivo, 'nota', 'Ana pidió propuesta.', 'javier');
+
+  res := public.mantenimiento_de_datos(30);
+
+  select count(*) = 0 into correos_frio_fuera from public.prospecto_correo where prospecto_id = frio;
+  select count(*) = 0 into pieza_fria_fuera from public.cola_aprobacion where prospecto_id = frio;
+  select (telefonos is null and datos is null) into dossier_frio_anonimo
+    from public.prospecto_dossier where prospecto_id = frio;
+  select (historia = 'Fundada en 1990, 40 unidades.') into empresa_dossier_viva
+    from public.prospecto_dossier where prospecto_id = frio;
+  select (resumen is null) into toque_frio_sin_prosa from public.prospecto_toque where prospecto_id = frio;
+  select ((select count(*) from public.prospecto_correo where prospecto_id = vivo) = 1
+      and (select count(*) from public.cola_aprobacion where prospecto_id = vivo) = 1
+      and (select telefonos is not null from public.prospecto_dossier where prospecto_id = vivo)
+      and (select resumen is not null from public.prospecto_toque where prospecto_id = vivo)
+      and (select correo is not null from public.prospecto where id = vivo))
+    into vivo_intacto;
+  llaves_nuevas := (case when res ? 'prospectoCorreosPurgados' then 1 else 0 end)
+                 + (case when res ? 'prospectoPiezasPurgadas' then 1 else 0 end)
+                 + (case when res ? 'prospectoDossiersAnonimizados' then 1 else 0 end)
+                 + (case when res ? 'prospectoToquesAnonimizados' then 1 else 0 end);
+
+  raise exception E'SATELITES_PURGA_0258  correos_frio_fuera=%  pieza_fria_fuera=%  dossier_frio_anonimo=%  empresa_dossier_viva=%  toque_frio_sin_prosa=%  vivo_intacto=%  llaves_nuevas=%   (esperado t/t/t/t/t/t/4)',
+    correos_frio_fuera, pieza_fria_fuera, dossier_frio_anonimo, empresa_dossier_viva, toque_frio_sin_prosa, vivo_intacto, llaves_nuevas;
+end $$;
+
+-- ── 206. Ninguna tabla colgada de `prospecto` se escapa de la purga sin decisión escrita (estructural, mig. 0258) ──
+--
+-- La lección de tres pasadas (0148 miró una columna, 0191 miró cinco, 0245
+-- miró una tabla): el error no fue nunca la tabla que se arregló, sino la
+-- que nadie enumeró. Este bloque cierra la CLASE: barre `pg_constraint`
+-- buscando toda FK que apunte a `prospecto` (menos el self-FK
+-- `duplicado_de`) y exige que cada tabla satélite esté DECIDIDA — o su
+-- nombre aparece en el fuente de `purgar_prospecto_persona` /
+-- `purgar_comercial_evento` (la purga la conoce), o está en la lista de
+-- exentas de abajo CON su razón escrita. Una tabla satélite nueva sin
+-- decisión pone este bloque en rojo el mismo día que su migración.
+--
+-- LAS EXENTAS Y SUS RAZONES (mantener en sincronía con la 0258):
+--   · prospecto_contacto — índice de la relación SIN datos de persona POR
+--     DISEÑO (0118: «SIN el cuerpo completo ni datos personales de más»;
+--     medido en producción: 0 resúmenes con '@') y es el INSUMO del filtro
+--     de frialdad: purgarlo destruiría el instrumento que decide qué purgar.
+--   · comercial_evento — ya la anonimiza `purgar_comercial_evento` (0245)
+--     por EDAD del evento, con o sin prospecto_id (el payload de Cal.com
+--     llega también huérfano); un segundo camino por frialdad solo taparía
+--     al primero. Además su nombre SÍ se exige en el fuente de esa función.
+--
+-- Esperado:
+--   SATELITES_ESTRUCTURAL_0258  sin_decidir=ninguna  exentas=2  ledger_cubierto=t
+do $$
+declare
+  exentas text[] := array['prospecto_contacto', 'comercial_evento'];
+  src_purga text; src_ledger text;
+  t text; sin_decidir text[] := '{}'; faltantes text; ledger_cubierto boolean;
+begin
+  select p.prosrc into src_purga
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'purgar_prospecto_persona';
+  select p.prosrc into src_ledger
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'purgar_comercial_evento';
+
+  for t in
+    select cl.relname
+      from pg_constraint c
+      join pg_class cl on cl.oid = c.conrelid
+     where c.contype = 'f'
+       and c.confrelid = 'public.prospecto'::regclass
+       and c.conrelid <> c.confrelid
+     group by cl.relname
+     order by cl.relname
+  loop
+    if t = any(exentas) then
+      continue;
+    end if;
+    if position(t in coalesce(src_purga, '')) = 0
+       and position(t in coalesce(src_ledger, '')) = 0 then
+      sin_decidir := sin_decidir || t;
+    end if;
+  end loop;
+
+  faltantes := coalesce(array_to_string(sin_decidir, ','), '');
+  if faltantes = '' then faltantes := 'ninguna'; end if;
+  -- La exención de comercial_evento descansa en que la función del ledger
+  -- exista Y la nombre; si alguien la vacía, la exención deja de valer.
+  ledger_cubierto := position('comercial_evento' in coalesce(src_ledger, '')) > 0;
+
+  raise exception E'SATELITES_ESTRUCTURAL_0258  sin_decidir=%  exentas=%  ledger_cubierto=%   (esperado ninguna / 2 / t)',
+    faltantes, cardinality(exentas), ledger_cubierto;
 end $$;
