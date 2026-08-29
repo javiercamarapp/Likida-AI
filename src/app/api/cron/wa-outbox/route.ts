@@ -49,6 +49,9 @@ export async function GET(req: Request) {
   // obedecer la misma palanca es una palanca que no se puede razonar.
   const global = await leerInterruptor('global');
   if (global === 'ilegible') {
+    // El latido ANTES del 500 (tableros al día, 28-ago-2026): sin él este
+    // camino era mudo y el tablero decía «No late» sin la causa.
+    await registrarLatido('wa-outbox', 'fallo', { codigo: 'interruptor_ilegible' });
     return NextResponse.json({
       corrio: false,
       error: 'No se pudo leer el interruptor global: el outbox no se drena sin saber si está apagado.',
@@ -58,6 +61,9 @@ export async function GET(req: Request) {
   }
   if (global === 'apagado') {
     logger.warn('cron.wa_outbox.saltado', { interruptor: 'global' });
+    // Sin este latido, el apagado deliberado se pintaba como cron muerto y
+    // /api/health alertaba al operador por su propia decisión.
+    await registrarLatido('wa-outbox', 'saltado', { interruptor: 'global' });
     return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }
 

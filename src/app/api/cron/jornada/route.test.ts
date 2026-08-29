@@ -100,7 +100,11 @@ describe('cron jornada — palanca, reloj y contrato de fallo', () => {
       corrio: false, codigo: 'interruptor_ilegible', interruptor: 'global',
     });
     expect(derivarJornadas).not.toHaveBeenCalled();
-    expect(registrarLatido).not.toHaveBeenCalled();
+    // El latido `fallo` con su código (tableros al día, 28-ago-2026): este
+    // camino era MUDO y /admin/crons decía «No late» sin la causa. NO lleva
+    // llave `interruptor` en el detalle: esa la lee `motivoDeSalto()` como
+    // «apagado a propósito», que es la historia contraria.
+    expect(registrarLatido).toHaveBeenCalledWith('jornada', 'fallo', { codigo: 'interruptor_ilegible' });
   });
 
   it('APAGADO: latido `saltado` y ni una marca asentada', async () => {

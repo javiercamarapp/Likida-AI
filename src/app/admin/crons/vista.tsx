@@ -127,6 +127,15 @@ function Renglon({ cron, l }: { cron: CronId; l: LatidoDetallado }) {
               {l.motivoSalto}
             </span>
           )
+          // El código del fallo, si el cron lo dejó (tableros al día,
+          // 28-ago-2026): `interruptor_ilegible` y «base caída» son problemas
+          // distintos, y hasta hoy el porqué solo vivía en los logs de Vercel.
+          : l.ultimoEstado === 'fallo' && typeof l.detalle.codigo === 'string'
+          ? (
+            <span style={{ color: 'var(--muted)' }}>
+              falló con código <code>{l.detalle.codigo}</code>
+            </span>
+          )
           : l.estado === 'sin_latido'
             ? <span style={{ color: 'var(--muted)' }}>no ha escrito su pulso ni una vez</span>
             : l.estado === 'vencido'
@@ -141,9 +150,28 @@ function Renglon({ cron, l }: { cron: CronId; l: LatidoDetallado }) {
   );
 }
 
+/**
+ * El resumen del card superior, puro para poder probarlo. Dos ejes, los
+ * MISMOS que /api/health (tableros al día, 28-ago-2026): antes este card solo
+ * miraba la cadencia (`estado !== 'ok'`) y un cron que latía puntual
+ * reportando `fallo` cada minuto salía en «los 10 relojes latieron» — el
+ * panel del operador era más laxo que el endpoint público, que es exactamente
+ * al revés de lo que promete esta pantalla.
+ */
+export function resumenRelojes(lista: Array<{ cron: CronId; l: LatidoDetallado }>): {
+  sinLatir: CronId[]; conFallo: CronId[]; parciales: CronId[];
+} {
+  return {
+    sinLatir: lista.filter((x) => x.l.estado !== 'ok').map((x) => x.cron),
+    conFallo: lista.filter((x) => x.l.estado === 'ok' && x.l.ultimoEstado === 'fallo').map((x) => x.cron),
+    parciales: lista.filter((x) => x.l.estado === 'ok' && x.l.ultimoEstado === 'parcial').map((x) => x.cron),
+  };
+}
+
 export function VistaCrons({ latidos }: { latidos: Record<CronId, LatidoDetallado> | null }) {
   const lista = latidos === null ? [] : CRONS.map((c) => ({ cron: c, l: latidos[c] }));
-  const malos = lista.filter((x) => x.l.estado !== 'ok');
+  const { sinLatir, conFallo, parciales } = resumenRelojes(lista);
+  const malos = [...sinLatir, ...conFallo];
 
   return (
     <main className="p-5 space-y-5">
@@ -162,14 +190,30 @@ export function VistaCrons({ latidos }: { latidos: Record<CronId, LatidoDetallad
                 que "de 9" no se queda viejo al alta del décimo. */}
             {malos.length === 0 ? (
               <p className="text-sm">
-                Los <strong>{CRONS.length}</strong> relojes latieron dentro de su cadencia.
+                Los <strong>{CRONS.length}</strong> relojes latieron dentro de su cadencia
+                y ninguno reportó fallo en su última corrida.
+                {parciales.length > 0 && (
+                  <span style={{ color: 'var(--muted)' }}>
+                    {' '}({parciales.join(', ')} {parciales.length === 1 ? 'reportó' : 'reportaron'} corrida parcial — el detalle está abajo.)
+                  </span>
+                )}
               </p>
             ) : (
               <p className="text-sm inline-flex items-start gap-2">
                 <TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--color-bad)', flexShrink: 0 }} />
                 <span>
-                  <strong>{malos.length}</strong> de {CRONS.length} relojes no están latiendo como deberían:{' '}
-                  {malos.map((x) => x.cron).join(', ')}.
+                  {sinLatir.length > 0 && (
+                    <>
+                      <strong>{sinLatir.length}</strong> de {CRONS.length} relojes no están latiendo como deberían:{' '}
+                      {sinLatir.join(', ')}.{' '}
+                    </>
+                  )}
+                  {conFallo.length > 0 && (
+                    <>
+                      {conFallo.length === 1 ? 'Un reloj late' : `${conFallo.length} relojes laten`} a tiempo
+                      pero su última corrida reportó <strong>fallo</strong>: {conFallo.join(', ')}.
+                    </>
+                  )}
                 </span>
               </p>
             )}

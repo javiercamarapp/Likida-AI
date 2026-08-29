@@ -39,6 +39,9 @@ export async function GET(req: Request) {
 
   const global = await leerInterruptor('global');
   if (global === 'ilegible') {
+    // El latido ANTES del 500 (tableros al día, 28-ago-2026): sin él este
+    // camino era mudo y el tablero decía «No late» sin la causa.
+    await registrarLatido('asistencia', 'fallo', { codigo: 'interruptor_ilegible' });
     return NextResponse.json({
       corrio: false,
       error: 'No se pudo leer el interruptor global: el escalamiento no corre sin saber si está apagado.',

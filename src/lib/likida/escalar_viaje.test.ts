@@ -228,12 +228,23 @@ describe('viajesSinAceptar', () => {
   });
 
   it('sin `ahora` usa el reloj, pero sigue restando 5 h', async () => {
-    const antes = Date.now();
-    await viajesSinAceptar();
-    const [[, limite]] = args('lte') as Array<[string, string]>;
-    const delta = antes - Date.parse(limite);
-    expect(delta).toBeGreaterThanOrEqual(5 * 3_600_000);
-    expect(delta).toBeLessThan(5 * 3_600_000 + 5_000);
+    // RELOJ CONGELADO (flake real del CI, 28-ago-2026): antes se medía contra
+    // el reloj de pared — `antes = Date.now()` y luego el `new Date()` interno
+    // de `viajesSinAceptar` un instante DESPUÉS. Si el milisegundo avanzaba
+    // entre las dos capturas, la resta salía 17,999,999 y la prueba caía por
+    // 1 ms. La ironía: la prueba se llama «sin `ahora` usa el reloj» y probaba
+    // justo el camino que no controlaba. Con el reloj del sistema congelado el
+    // propósito SE CONSERVA — se ejercita el default (sin `ahora`), que toma
+    // el reloj del sistema — y la resta es EXACTA, sin margen puesto a ojo.
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-08-28T12:00:00.000Z'));
+      await viajesSinAceptar();
+      const [[, limite]] = args('lte') as Array<[string, string]>;
+      expect(Date.now() - Date.parse(limite)).toBe(5 * 3_600_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('UN ERROR NO ES UNA LISTA VACÍA: lanza en vez de decir que no hay viajes', async () => {
