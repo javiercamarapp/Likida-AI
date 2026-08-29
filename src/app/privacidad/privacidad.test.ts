@@ -81,3 +81,17 @@ describe('AUDITORÍA 18 (M8) · el correo de acceso está dicho', () => {
     expect(P).toMatch(/enlace de acceso de un solo uso/);
   });
 });
+
+describe('AUDITORÍA 21 (legal C1) · el piloto de facturación está dicho', () => {
+  // El piloto de visión manda al modelo los datos fiscales del receptor y una
+  // captura del portal del comercio en cada paso. La correspondencia exacta
+  // prompt↔aviso la vigila piloto_vision_aviso.test.ts (junto al piloto);
+  // aquí se fija lo mínimo: que esta página no vuelva a callarlo.
+  it('la cláusula de encargados (art. 35) nombra los datos fiscales y la captura del portal', () => {
+    expect(P).toMatch(/capturas de pantalla del portal de facturación del comercio/);
+    expect(P).toMatch(/RFC, razón social, código postal, régimen fiscal, uso CFDI y el correo de recepción/);
+  });
+  it('y la fr. II ya no dice solo "validar": los datos fiscales también facturan tickets', () => {
+    expect(P).toMatch(/facturar tus tickets en los portales de los comercios/);
+  });
+});
