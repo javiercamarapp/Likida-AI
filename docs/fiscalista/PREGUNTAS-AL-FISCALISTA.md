@@ -43,7 +43,29 @@ y nadie sabe cuál creer.
 **DINERO · la más cara de todas.**
 
 El estímulo de la LIF 2026 art. 20 se calcula sobre una cuota por litro. Hay dos
-lecturas del texto y **entre ellas hay un factor de 3.5×**.
+lecturas del texto, y entre ellas hay un factor que **no es constante: va de
+2.85× a 4.15×** según la semana.
+
+**Medido el 28-ago-2026 sobre las cuatro semanas capturadas en
+`normas/datos/cuota-ieps-diesel.yaml`, para un tanque de 500 L:**
+
+| semana (DOF) | cuota disminuida | (A) cuota ÍNTEGRA | (B) cuota DISMINUIDA | factor | diferencia |
+|---|---|---|---|---|---|
+| 25-31 jul 2026 | 2.0925 $/L | $3,681.70 | $1,046.25 | 3.52× | **$2,635.45** |
+| 1-7 ago 2026 | 1.7747 $/L | $3,681.70 | $887.35 | **4.15×** | **$2,794.35** |
+| 8-14 ago 2026 | 2.5801 $/L | $3,681.70 | $1,290.05 | **2.85×** | **$2,391.65** |
+| 15-21 ago 2026 | 2.2760 $/L | $3,681.70 | $1,138.00 | 3.24× | **$2,543.70** |
+
+**Por qué el factor se mueve, y por qué importa para la pregunta:** la cuota
+íntegra es FIJA (7.3634 $/L, LIEPS 2o-I-D-1-c vía Acuerdo 179/2025) y la
+disminuida la fija la SHCP CADA VIERNES. O sea, la lectura (A) da siempre el
+mismo número por litro y la (B) cambia semana con semana. Decir «3.5×» sugiere
+una proporción estable que no existe: lo que hay es un piso fijo contra un valor
+móvil, y el hueco entre los dos se ensancha justo cuando la SHCP recorta más.
+
+En pesos, sobre 500 L, la exposición por tanque va de **$2,391.65 a $2,794.35**.
+Una flota de 40 unidades cargando dos veces por semana mueve eso ~80 veces por
+semana.
 
 - La conclusión actual (cuota **disminuida**) se sostiene en el texto de la LIF
   («con los ajustes que, en su caso, correspondan… vigente en el momento de la
@@ -53,7 +75,7 @@ lecturas del texto y **entre ellas hay un factor de 3.5×**.
   palabras.** Las afirmaciones categóricas que circulan vienen de blogs de
   despachos, no de fuente primaria.
 - Si el criterio fuera el contrario, Likida estaría **subestimando el estímulo
-  hasta 3.5 veces**.
+  entre 2.85 y 4.15 veces**, según la semana de la carga.
 
 **Qué bloquea hoy:** publicar **cualquier** cifra de estímulo de diésel en pesos.
 Por eso el producto entrega **litros** y el contador multiplica a mano —
@@ -65,7 +87,15 @@ es justo el trabajo manual que Likida existe para quitar.
 `src/lib/likida/cuadre/cuota_diesel.ts:20` (el módulo está construido y
 deliberadamente sin cablear, esperando esta firma).
 
-**Cómo se cierra:** un fiscalista con cédula, una llamada.
+**Cómo se cierra:** un fiscalista con cédula, una llamada. Lo que hace falta por
+escrito es UNA frase: si el estímulo del LIF 2026 art. 20 ap. A fr. IV se calcula
+sobre la cuota íntegra del LIEPS o sobre la cuota disminuida que la SHCP publica
+cada viernes, con la cita concreta. Todo lo demás ya está medido y capturado.
+
+**Procedencia de las cifras de arriba:** salen del YAML del repo, que se coteja
+dígito por dígito contra cada acuerdo del DOF (edición vespertina, con codNota) y
+cuya aritmética `reducción + disminuida = 7.3634` verifica `cuota_diesel.test.ts`
+en cada CI — las cuatro semanas cierran exacto. No son estimaciones.
 
 ---
 
