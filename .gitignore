@@ -68,3 +68,9 @@ supabase/.temp/
 # Mediciones locales de extracción (scripts/qa/medir-extraccion.ts): traen RFC
 # y datos de tickets reales — JAMÁS entran al repo público.
 .mediciones-extraccion/
+
+# Pruebas de navegador contra la app propia (pruebas-navegador/): cookies de
+# sesión guardadas, reporte HTML y trazas/screenshots de corridas locales.
+pruebas-navegador/.estado/
+pruebas-navegador/.reporte/
+pruebas-navegador/.artefactos/
