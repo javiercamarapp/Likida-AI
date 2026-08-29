@@ -208,6 +208,37 @@ describe('el mapa de rutas no se queda atrás del sidebar', () => {
       expect(todas.some((i) => i.href === '/dashboard/llaves-api')).toBe(true);
     });
   });
+
+  // ── Sesiones MCP (H3, 29-ago-2026) ───────────────────────────────────────
+  //
+  // Un token MCP (0260) es la misma clase de cosa que una llave `lk_live_`:
+  // lee los datos de la flota desde fuera del panel, sin sesión. Cortar el de
+  // OTRA persona es del dueño, y por eso la ruta es `administracion` — pero
+  // cortar los PROPIOS tiene que poder hacerlo también el contador y el
+  // encargado, y eso vive en /dashboard/mi-perfil (RUTAS_TODO_ROL). Estas dos
+  // pruebas fijan justamente ese reparto: sin la segunda, un contador que
+  // conectó Claude no tendría ninguna pantalla donde cortarlo.
+  describe('/dashboard/sesiones-mcp', () => {
+    it('es administración: solo el dueño y el superadmin cortan los de otro', () => {
+      expect(areaDeRuta('/dashboard/sesiones-mcp')).toBe('administracion');
+      expect(puedeVerRuta('flota_admin', '/dashboard/sesiones-mcp')).toBe(true);
+      expect(puedeVerRuta('superadmin', '/dashboard/sesiones-mcp')).toBe(true);
+      expect(puedeVerRuta('contador', '/dashboard/sesiones-mcp')).toBe(false);
+      expect(puedeVerRuta('encargado', '/dashboard/sesiones-mcp')).toBe(false);
+    });
+
+    it('pero TODO rol conocido llega a Mi perfil, donde corta los suyos', () => {
+      for (const rol of ['flota_admin', 'encargado', 'contador', 'superadmin']) {
+        expect(puedeVerRuta(rol, '/dashboard/mi-perfil')).toBe(true);
+      }
+      // Y un rol desconocido no: fail closed, también para esto.
+      expect(puedeVerRuta('lo_que_sea', '/dashboard/mi-perfil')).toBe(false);
+    });
+
+    it('está en el sidebar, junto a Llaves de API', () => {
+      expect(todas.some((i) => i.href === '/dashboard/sesiones-mcp')).toBe(true);
+    });
+  });
 });
 
 describe('"Ver como" solo puede QUITAR visibilidad', () => {

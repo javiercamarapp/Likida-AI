@@ -5,9 +5,13 @@ import { estadoMfa } from '@/lib/auth/mfa';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import {
+  listarMisClientesMcp, revocarSesionesMcp, type ClienteMcpConectado,
+} from '@/lib/mcp/sesiones';
 import AvatarUploader from '../../admin/mi-perfil/avatar-uploader';
 import { BarraPagina } from '../resumen-visual';
 import { sufijoTenant } from '../sufijo';
+import { TablaClientesMcp } from '../sesiones-mcp/vista';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,6 +79,24 @@ export default async function MiPerfilFlota({
   const { data: fila } = await supabaseAdmin()
     .from('app_user').select('email').eq('id', s.userId).maybeSingle();
 
+  // ── MIS CLIENTES MCP (H3, auditoría de dashboards 29-ago-2026) ──────────
+  // La 0260 dejó que cualquiera del panel autorizara Claude o ChatGPT a leer
+  // los datos de su flota desde /mcp/autorizar, y la 0265 escribió la función
+  // que corta esos accesos… sin un solo llamador ni una pantalla. Este es el
+  // lado de "los MÍOS": todo rol conocido llega a esta página, incluidos el
+  // contador y el encargado, que no ven `administracion` y por tanto no
+  // podrían cortarlos desde /dashboard/sesiones-mcp (los de OTROS, del dueño).
+  //
+  // `null` = la consulta FALLÓ, y se dice. Pintar "no tienes nada conectado"
+  // sobre una base caída es exactamente la mentira que haría que nadie
+  // cortara nada.
+  let mcp: ClienteMcpConectado[] | null;
+  try {
+    mcp = await listarMisClientesMcp(s.tenantId, s.userId);
+  } catch {
+    mcp = null;
+  }
+
   // ── MFA (fase 7): el estado del factor y, si está inscribiendo, el QR. ──
   // El enroll corre EN EL RENDER cuando ?mfa=inscribir (no en la action: el
   // QR/SVG no cabe en un redirect). Antes se barren los factores a medias —
@@ -132,6 +154,29 @@ export default async function MiPerfilFlota({
     redirect(volverAMiPerfil(sufijo, 'ok=avatar'));
   }
 
+  /**
+   * Corta TODOS mis clientes MCP de un tiro (`revocar_mcp_oauth_usuario`,
+   * 0265). No recibe un id: el usuario y el tenant salen de la sesión
+   * RE-RESUELTA aquí adentro, así que un POST directo a esta acción con el
+   * uuid de otra persona no tiene por dónde entrar — es la misma regla que
+   * ya gobierna `actualizarNombre` y `subirAvatar` en esta página, y el modo
+   * de falla #1 (IDOR) es justo el que aparecería en una revocación.
+   *
+   * `formData` no se usa, pero la firma la exige el `action` de un <form>.
+   */
+  async function cortarMisSesionesMcp() {
+    'use server';
+    const { userId, tenantId } = await requireSessionTenant('/dashboard/mi-perfil');
+    try {
+      await revocarSesionesMcp(tenantId, userId, userId);
+    } catch {
+      // El detalle no aporta nada accionable aquí: o no había nada vivo (y la
+      // lista recargada ya lo dice) o la base falló. Un solo aviso honesto.
+      redirect(volverAMiPerfil(sufijo, 'error=mcp'));
+    }
+    redirect(volverAMiPerfil(sufijo, 'ok=mcp'));
+  }
+
   async function verificarMfa(formData: FormData) {
     'use server';
     await requireSessionTenant('/dashboard/mi-perfil');
@@ -170,6 +215,7 @@ export default async function MiPerfilFlota({
     nombre: 'Nombre guardado.',
     mfa: 'Segundo factor verificado — tu sesión queda al nivel alto un rato.',
     mfa_fuera: 'Segundo factor eliminado.',
+    mcp: 'Listo: tus clientes MCP dejaron de leer los datos de la flota.',
   };
   const ERROR: Record<string, string> = {
     avatar: 'No se pudo subir la foto — intenta con otra imagen.',
@@ -179,6 +225,7 @@ export default async function MiPerfilFlota({
     peso: 'La imagen pasa de 2 MB — usa una más ligera.',
     mfa: 'No se pudo completar la operación del segundo factor — intenta de nuevo.',
     mfa_codigo: 'El código no es válido — revisa tu app de autenticación y vuelve a intentar.',
+    mcp: 'No se pudieron cortar los accesos MCP — recarga la pantalla y vuelve a intentar.',
   };
 
   return (
@@ -280,6 +327,43 @@ export default async function MiPerfilFlota({
                     className="inline-block text-[12.5px] px-3.5 py-2 rounded-lg font-medium hairline transition-colors hover:bg-[var(--canvas)]">
                     Activar segundo factor
                   </a>
+                </div>
+              )}
+            </div>
+
+            {/* ── SEGURIDAD: mis clientes MCP (H3, 29-ago-2026) ────────────
+                Lo que Claude o ChatGPT pueden leer de la flota EN MI NOMBRE.
+                Vive junto al segundo factor y no en otra pantalla porque es
+                la misma pregunta: ¿qué puede entrar a mi cuenta hoy? ── */}
+            <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--line)' }}>
+              <h2 className="text-[13px] font-semibold mb-1">Seguridad — clientes MCP conectados</h2>
+              {mcp === null ? (
+                <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
+                  No pude leer tus conexiones MCP. No se enseña una lista a medias:
+                  «no tienes nada conectado» sobre una consulta caída es justo la
+                  mentira que haría que no cortaras nada. Recarga la pantalla.
+                </p>
+              ) : mcp.length === 0 ? (
+                <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                  No tienes ningún cliente MCP conectado: nada fuera de este panel está
+                  leyendo los datos de la flota en tu nombre.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                    Estos clientes <strong>leen</strong> —nunca cambian— lo que ves tú en el
+                    panel, sin navegador y sin volver a iniciar sesión. El nombre lo declaró
+                    quien registró el cliente, no Likida.
+                  </p>
+                  <TablaClientesMcp clientes={mcp} />
+                  <form action={cortarMisSesionesMcp}>
+                    <button type="submit" className="text-[11.5px]" style={{ color: 'var(--bad)' }}>
+                      {/* Lo que la función de la 0265 hace, dicho tal cual: corta
+                          TODOS, no uno. Un rótulo más fino prometería una
+                          precisión que la revocación por usuario no tiene. */}
+                      Cortar {mcp.length === 1 ? 'este acceso' : `los ${mcp.length} accesos`} (no hay deshacer)
+                    </button>
+                  </form>
                 </div>
               )}
             </div>

@@ -14,6 +14,7 @@ import {
   CloudDownload,
   CalendarClock,
   Scale3d,
+  PlugZap,
 } from 'lucide-react';
 
 /**
@@ -134,6 +135,12 @@ export const SISTEMA: Item[] = [
   // /v1. El openapi prometía "se emite desde el panel" sin que el panel
   // existiera — `tenant_api_key` no tenía un solo INSERT en src/.
   { href: '/dashboard/llaves-api', nombre: 'Llaves de API', Icono: KeyRound },
+  // H3 (auditoría de dashboards, 29-ago-2026): los accesos que Claude o
+  // ChatGPT tienen a los datos de la flota por MCP (0260). Va JUNTO a Llaves
+  // de API a propósito — son la misma pregunta ("¿quién lee mis datos desde
+  // fuera del panel?") sobre dos credenciales distintas, y quien viene a
+  // revocar una tiene que tropezarse con la otra.
+  { href: '/dashboard/sesiones-mcp', nombre: 'Sesiones MCP', Icono: PlugZap },
   // Las tres huérfanas del sidebar (16-ago-2026): existían en AREA_POR_RUTA
   // pero no aquí — el dueño no llegaba a ellas navegando, solo tecleando la
   // URL. `puedeVerRuta` sigue decidiendo quién las ve (usuarios/políticas
