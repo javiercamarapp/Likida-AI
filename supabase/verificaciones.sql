@@ -8229,6 +8229,46 @@ begin
     oposicion_revision, retencion_fiscal;
 end $$;
 
+-- ── 210. La cancelación ARCO también anonimiza el RFC y la licencia del operador (mig. 0262) ──
+--
+-- LEG-C2 (auditoría E.28): `ejecutar_arco_cancelacion` anonimizaba nombre y
+-- teléfono pero dejaba intactos `operador.rfc` (0080) y `licencia`/
+-- `licencia_tipo`/`licencia_vence` (0053) — un descuido de alcance en el
+-- UPDATE de 0178, no una decisión: esas columnas son ANTERIORES a 0178 y
+-- nunca se auditó el esquema completo de `operador` al escribirlo. 0262
+-- añade las cuatro al mismo UPDATE. Este bloque prueba justo eso: un
+-- operador con RFC y licencia capturados, tras la cancelación, sale con las
+-- cuatro columnas en NULL — sin tocar la evidencia fiscal ya emitida
+-- (gasto/CFDI), que sigue viva por el mismo bloque de arriba.
+--
+-- Esperado: ARCO_0262  ok=t  rfc_fuera=t  licencia_fuera=t  tipo_fuera=t  vence_fuera=t  seudonimo=t
+do $$
+declare
+  ta uuid; oa uuid; sa uuid;
+  r jsonb;
+  ok boolean;
+  rfc_fuera boolean; licencia_fuera boolean; tipo_fuera boolean; vence_fuera boolean; seudonimo_ok boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ ARCO 0262') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono, rfc, licencia, licencia_tipo, licencia_vence)
+    values (ta, 'Juan Perez', '+520000017303', 'XAXX010101000', 'B12345678', 'B', current_date + 365)
+    returning id into oa;
+
+  insert into solicitud_arco (tenant_id, operador_id, tipo, canal, vence_en)
+    values (ta, oa, 'cancelacion', 'whatsapp', current_date + 15) returning id into sa;
+
+  r := public.ejecutar_arco_cancelacion(ta, sa);
+  ok := (r->>'ok')::boolean;
+
+  select rfc is null, licencia is null, licencia_tipo is null, licencia_vence is null,
+         nombre like 'Operador %'
+    into rfc_fuera, licencia_fuera, tipo_fuera, vence_fuera, seudonimo_ok
+    from operador where id = oa;
+
+  raise exception E'ARCO_0262  ok=%  rfc_fuera=%  licencia_fuera=%  tipo_fuera=%  vence_fuera=%  seudonimo=%   (esperado t / t / t / t / t / t)',
+    ok, rfc_fuera, licencia_fuera, tipo_fuera, vence_fuera, seudonimo_ok;
+end $$;
+
 -- ── 145. Un centavo de redondeo no es una diferencia del operador (mig. 0174) ──
 --
 -- `stats_operador_tenant` (0150) declara en su propio comentario que «centavos
