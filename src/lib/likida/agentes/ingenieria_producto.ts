@@ -901,15 +901,15 @@ export const PREGUNTAS: readonly PreguntaDeNegocio[] = [
     id: 'Q3',
     pregunta: '¿Qué pantalla del producto usa de verdad un operador, y cuál nadie abre?',
     fuente: 'producto_evento',
-    eventoPropuesto: 'una tabla `producto_evento` (tenant_id, pantalla, accion, created_at) — el hermano interno de sitio_evento, con RLS por tenant.',
-    donde: 'en las rutas de la app autenticada. HOY NO EXISTE NINGUNA: es el hueco más grande del tablero.',
+    eventoPropuesto: 'ninguno nuevo desde la 0251: el pulso del panel ya emite pageview por pantalla. Si la pregunta pide más grano (qué se COMPLETA, no solo qué se abre), se amplía el dominio de `accion` en la base y en el escritor, juntos — nunca se infiere de lo que no se emitió.',
+    donde: 'ya se emite: PulsoProducto (layout de /dashboard) → /api/dashboard/evento, con la misma minimización que sitio_evento (solo la flota y la pantalla del catálogo; sin usuario, sin IP).',
   },
   {
     id: 'Q4',
     pregunta: '¿Las flotas que entraron el mismo mes se comportan igual? (cohortes de retención)',
     fuente: 'producto_evento',
-    eventoPropuesto: 'la misma tabla de Q3: sin un evento de uso fechado por tenant no hay cohorte que calcular.',
-    donde: 'derivable en cuanto Q3 exista; hoy solo se puede cohortear por viajes, que mide operación y no uso.',
+    eventoPropuesto: 'ninguno nuevo: se deriva de producto_evento (0251) contra tenant.created_at — la RPC uso_producto_mensual() ya agrupa en la base.',
+    donde: 'la matriz vive en /admin/crecimiento, con la regla de que un mes anterior al primer evento es «no medido», jamás 0. Sigue siendo cierto que cohortear por viajes mediría operación y no uso.',
   },
   {
     id: 'Q5',
@@ -961,6 +961,27 @@ export async function leerCoberturaSitio(desdeIso: string): Promise<CoberturaSit
     filas: filas.length,
     paginas: [...new Set(filas.map((f) => f.pagina))].sort(),
     eventos: [...new Set(filas.map((f) => f.evento))].sort(),
+  };
+}
+
+export interface CoberturaProducto { pantallas: string[]; filas: number }
+
+/** Qué cubre HOY producto_evento (0251), medido y no supuesto. LANZA si no se
+ *  lee — que la tabla no exista todavía en la base TAMBIÉN es un lanzamiento,
+ *  y el parte lo dice como «no se pudo leer», no como «cero uso». */
+export async function leerCoberturaProducto(desdeIso: string): Promise<CoberturaProducto> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('producto_evento')
+    .select('pantalla')
+    .gte('created_at', desdeIso)
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(5000), 'ingenieria.cobertura_producto');
+  if (error) throw new Error(`leerCoberturaProducto: ${error.message}`);
+  const filas = (data ?? []) as Array<{ pantalla: string }>;
+  return {
+    filas: filas.length,
+    pantallas: [...new Set(filas.map((f) => f.pantalla))].sort(),
   };
 }
 
@@ -1026,8 +1047,10 @@ export function evaluarInstrumentacion(
 
 export function armarParteInstrumentacion(
   hallazgos: Hallazgo[], cobertura: Lectura<CoberturaSitio>, lunes: string, ciegas: string | null,
+  coberturaProducto: Lectura<CoberturaProducto>,
 ): string {
   const c = cobertura.valor;
+  const cp = coberturaProducto.valor;
   const lineas = [
     `DATOS E INSTRUMENTACIÓN — semana del ${lunes}`,
     '',
@@ -1035,16 +1058,23 @@ export function armarParteInstrumentacion(
     c
       ? `Lo que sitio_evento cubre HOY (últimos 28 días, ${numero(c.filas)} fila(s)): páginas ${muestra(c.paginas, 8)} · eventos ${muestra(c.eventos, 6)}. Solo el sitio PÚBLICO, y sin un solo dato del visitante (ni IP, ni UA, ni cookies — minimización LFPDPPP).`
       : 'Cobertura de sitio_evento: NO SE PUDO LEER. No se afirma qué cubre.',
+    // La analítica DENTRO de la app (0251): la línea que hasta el 28-ago-2026
+    // decía «no existe» hoy se MIDE — y si no se puede leer, se dice eso.
+    !cp
+      ? 'Cobertura de producto_evento: NO SE PUDO LEER. No se afirma qué cubre — «no se pudo leer» y «cero uso» son cosas distintas.'
+      : cp.filas === 0
+        ? 'producto_evento (0251) existe y NO registró uso en los últimos 28 días. Su único escritor es el pulso del panel: si el panel se está usando y esto sigue en cero, el pulso no está llegando — eso es un cable suelto, no una flota inactiva.'
+        : `Lo que producto_evento cubre HOY (últimos 28 días, ${numero(cp.filas)} fila(s)): pantallas ${muestra(cp.pantallas, 8)}. Solo la FLOTA y la PANTALLA — sin usuario, sin IP (misma minimización que sitio_evento).`,
     '',
   ];
   if (ciegas) { lineas.push(ciegas, ''); }
   lineas.push(...pintarHallazgos(hallazgos, 'Todas las preguntas del catálogo tienen fuente con datos. (Si esto sale así, el catálogo se quedó corto: la siguiente tarea es ampliarlo, no celebrarlo.)'));
   lineas.push('');
-  lineas.push('EL HUECO MÁS GRANDE, DICHO SIN ADORNO: no existe analítica de producto DENTRO de la app. sitio_evento (0223) cubre el blog y la calculadora del sitio público; de lo que hace un operador adentro —qué pantalla abre, qué acción completa, dónde se atora— no queda un solo registro. Sin eso no hay cohortes, no hay activación medida y no hay forma de saber qué parte del producto sobra.');
+  lineas.push('EL HUECO GRANDE, ACTUALIZADO (0251, 28-ago-2026): la analítica de producto dentro de la app ya tiene tabla y pulso — producto_evento registra pageview por pantalla, por flota. Lo que SIGUE sin existir, dicho con su razón: acciones de grano fino (qué se completa, no solo qué se abre) — el dominio de `accion` se amplía cuando alguien las necesite — y cualquier dimensión de USUARIO, cuya ausencia es a propósito (minimización): la pregunta que la necesite (DAU por usuario) debe declararla en vez de suponerla recolectada.');
   lineas.push('CÓMO SE CLASIFICA UN HUECO (desde el 28-ago-2026): una fuente que NUNCA ha existido es BACKLOG de instrumentación (ámbar) — el parte lo dice completo, pero no despierta a nadie. El rojo queda reservado para la REGRESIÓN: una fuente que el censo del parte anterior vio existir y que desapareció. Eso sí es «algo se rompió».');
   lineas.push('LO QUE ESTE AGENTE NO HACE: no instrumenta nada, no crea tablas y no emite eventos. Propone la spec mínima —qué evento, dónde, con qué campos— y la deja en la bandeja. Cada evento nuevo es dato personal potencial: el diseño de la tabla pasa por la misma minimización que sitio_evento y por RLS por tenant.');
   lineas.push(PIE_ALCANCE);
-  lineas.push('Fuentes: perfil_almacenamiento() (existencia y volumen estimado de cada fuente) · sitio_evento (cobertura real) · el catálogo de preguntas declarado en el código.');
+  lineas.push('Fuentes: perfil_almacenamiento() (existencia y volumen estimado de cada fuente) · sitio_evento (cobertura real del sitio público) · producto_evento (cobertura real del panel, 0251) · el catálogo de preguntas declarado en el código.');
   return lineas.join('\n');
 }
 
@@ -1059,8 +1089,11 @@ async function correrInstrumentacion(disparo: DisparoCorrida, hoy: string): Prom
       return { resultado: 'saltado', piezas: 0, costoUsd: 0, motivo: 'el parte de esta semana ya está en la bandeja' };
     }
     const perfil = await leerPerfil(1);
-    const [cobertura, previo] = await Promise.all([
+    const [cobertura, coberturaProducto, previo] = await Promise.all([
       porValor('cobertura de sitio_evento', () => leerCoberturaSitio(inicioDia(masDias(lunes, -28)))),
+      // La analítica DENTRO de la app (0251) — el hueco que este agente
+      // declaró cada noche hasta que se construyó. Ahora se mide.
+      porValor('cobertura de producto_evento', () => leerCoberturaProducto(inicioDia(masDias(lunes, -28)))),
       // El censo del parte anterior: es lo que separa «hueco conocido» (ámbar,
       // backlog) de «la fuente existía y desapareció» (rojo, incidente). Sin
       // él, todo hueco se trata como conocido — el lado que no grita en falso.
@@ -1073,13 +1106,15 @@ async function correrInstrumentacion(disparo: DisparoCorrida, hoy: string): Prom
       : null;
     const fuentes = estadoDeFuentes(perfil, PREGUNTAS);
     const hallazgos = evaluarInstrumentacion(fuentes, PREGUNTAS, previas);
-    const cuerpo = armarParteInstrumentacion(hallazgos, cobertura, lunes, lineaFuentesCiegas([cobertura, previo]));
+    const cuerpo = armarParteInstrumentacion(
+      hallazgos, cobertura, lunes, lineaFuentesCiegas([cobertura, coberturaProducto, previo]), coberturaProducto,
+    );
     await alertarRojos(agente, hallazgos);
     const res = await encolarParte(agente, 'parte_instrumentacion', titulo, cuerpo, {
       semana: lunes,
       fuentes: [...fuentes.values()],
       hallazgos: hallazgos.map((h) => ({ semaforo: h.semaforo, codigo: h.codigo, objeto: h.objeto })),
-      consultas: ['perfil_almacenamiento()', 'sitio_evento'],
+      consultas: ['perfil_almacenamiento()', 'sitio_evento', 'producto_evento'],
     });
     await anotar(agente, inicio, 'ok', disparo,
       // `sin_fuente` cuenta HUECOS (fuente inexistente), no rojos: desde el

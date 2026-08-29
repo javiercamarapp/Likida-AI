@@ -148,6 +148,7 @@ export const MIGRACIONES_EXIGIDAS: readonly MigracionExigida[] = [
   { nombre: '0155_purgas_y_bucket_comprobantes', prefijo: 155, tablas: ['cron_latido'] }, // cron_latido, que `pruebas` lee.
   { nombre: '0223_plataforma_marketing', prefijo: 223, tablas: ['sitio_evento'] },    // sitio_evento, que datos_instrumentacion lee.
   { nombre: '0234_agentes_ingenieria', prefijo: 234, tablas: ['despliegue_visto'] },  // esta ola: despliegue_visto + las 4 funciones.
+  { nombre: '0251_producto_evento', prefijo: 251, tablas: ['producto_evento'] },      // producto_evento, que datos_instrumentacion lee (Q3/Q4).
 ];
 
 /** Los agentes que el RUNNER DE ESTE BUNDLE sabe despachar. Es un espejo de
