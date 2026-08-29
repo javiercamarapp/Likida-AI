@@ -1134,11 +1134,52 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // Fail-closed en la verdad: no entender es respuesta, adivinar no. La nota
     // ininteligible, el presupuesto agotado y el fallo nuestro terminan todos
     // en un "¿me lo escribes?" — jamás en silencio.
+    //
+    // ── AUDITORÍA E.28, LEG-C1 (CRÍTICO legal, LFPDPPP art. 8/16-II) ─────────
+    // La nota de voz es dato personal (la voz, y lo que dice) y transcribirla
+    // es tratarla: `transcribirNotaDeVoz` la manda a OpenRouter. Hasta hoy eso
+    // ocurría AQUÍ, unas 130 líneas ANTES de la compuerta del aviso
+    // (`ponerAvisoADisposicion`, más abajo) — el dato ya había salido hacia un
+    // proveedor externo sin que el aviso estuviera puesto. La foto y el XML sí
+    // pasaban por la compuerta antes de tratarse (aviso_bloqueo.test.ts,
+    // auditoría 8); la nota de voz era la única puerta que la saltaba, porque
+    // ARCO/ROJO/talacha necesitan el TEXTO para reconocerse y ese texto no
+    // existe hasta transcribir.
+    //
+    // La compuerta se evalúa AQUÍ, antes de la transcripción, y no se mueve
+    // otra vez a su posición original para este mensaje (`avisoConfirmadoAudio`
+    // se lo dice al segundo chequeo, más abajo, para no invocar la MISMA
+    // compuerta dos veces por turno). Esto sí cambia el comportamiento de
+    // ROJO/ARCO ejercidos POR VOZ cuando la flota aún no configuró su aviso
+    // (`sin_datos`): antes disparaban igual, porque la nota ya se había
+    // transcrito; ahora se bloquean como cualquier otro tratamiento, porque no
+    // hay forma de saber que la nota dice "chocamos" sin mandarla al modelo
+    // primero. ROJO y ARCO por TEXTO o por CAPTION DE FOTO siguen sin gate —esos
+    // no tratan ningún dato personal para reconocerse, es coincidencia de texto
+    // local— así que una emergencia escrita sigue atendida siempre. La garantía
+    // que no se negocia es la otra: ningún dato personal sale hacia un modelo
+    // antes de que el aviso esté confirmado.
+    let avisoConfirmadoAudio = false;
     if (msg.type === 'audio') {
       if (!msg.mediaId) {
         await sendText(msg.from, RESPUESTA_NO_ENTENDI);
         return;
       }
+      const avisoAudio = await ponerAvisoADisposicion(op.tenantId, op.operadorId, msg.from);
+      if (avisoAudio !== 'puesto') {
+        logger.error('privacidad.tratamiento_bloqueado', {
+          tenant: op.tenantId, operador: op.operadorId, motivo: avisoAudio, canal: 'audio',
+        });
+        try {
+          await sendText(msg.from, avisoAudio === 'sin_datos'
+            ? 'No puedo escuchar tu nota de voz todavía: tu empresa aún no ha terminado de configurar su aviso de privacidad. Avísale a tu flota. 🙏'
+            : 'Se me trabó tantito antes de poder escuchar tu nota de voz 😕. No es cosa tuya ni de tu empresa. Reenvíamela en un minuto, por favor. 🙏');
+        } catch { /* best-effort */ }
+        if (avisoAudio !== 'sin_datos') await soltarClaim();
+        return;
+      }
+      avisoConfirmadoAudio = true;
+
       const t = await transcribirNotaDeVoz({
         tenantId: op.tenantId,
         mediaId: msg.mediaId,
@@ -1271,7 +1312,15 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     //
     // El obligado es el RESPONSABLE, o sea la flota. Likida solo pone el
     // mecanismo: sin él la flota no puede cumplir aunque quiera.
-    const avisoPuesto = await ponerAvisoADisposicion(op.tenantId, op.operadorId, msg.from);
+    //
+    // AUDITORÍA E.28, LEG-C1: si el mensaje llegó como nota de voz, la MISMA
+    // compuerta ya se evaluó arriba —antes de transcribir, no después— y
+    // `avisoConfirmadoAudio` lo registra. No se vuelve a invocar
+    // `ponerAvisoADisposicion` una segunda vez para el mismo turno: es la
+    // misma compuerta, no una copia.
+    const avisoPuesto = avisoConfirmadoAudio
+      ? 'puesto' as const
+      : await ponerAvisoADisposicion(op.tenantId, op.operadorId, msg.from);
     if (avisoPuesto !== 'puesto') {
       // SIN AVISO NO HAY TRATAMIENTO. Lo que se le dice depende de POR QUÉ no
       // se pudo: «tu empresa no ha configurado su aviso» solo cuando es
