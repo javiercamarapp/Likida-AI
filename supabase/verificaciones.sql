@@ -14653,3 +14653,192 @@ begin
     hook_creado, hook_vacio_rebota, ruta_vacia_rebota, ref_creado, ref_nombre_vacio_rebota, ref_foto_vacia_rebota,
     tipo_inventado_rebota, hook_cerrado, referencia_cerrado, bucket_hooks_privado, bucket_referencias_privado;
 end $$;
+
+-- ── 215. `agente_insumo` es deny-all: ningún `authenticated` —dueño de la fila o no— la lee ni la escribe (mig. 0267) ──
+--
+-- La bandeja de contexto universal (Fase D, plan-de-cierre.md): RLS activa,
+-- CERO policies, y REVOKE ALL de `public, anon, authenticated` — mismo
+-- patrón que `agente_definicion` (0116) y `mcp_oauth_*` (0260). No es solo
+-- RLS: la tabla ni siquiera tiene el GRANT (mismo caso que el bloque 153,
+-- QA_PANEL_0185), así que el intento rebota en el PRIVILEGIO antes de que
+-- RLS entre a evaluar — el candado más fuerte que existe, y por eso el
+-- `esperado` de las lecturas es `-1` ("denegado por privilegio"), no `0`
+-- ("RLS me deja a ciegas").
+--
+-- Se impersonan DOS sesiones (mismo mecanismo del bloque 27): un app_user de
+-- la flota DUEÑA de un insumo con `tenant_id` (el caso reservado para el día
+-- que un agente de producto reciba un insumo de una flota concreta — hoy
+-- casi todo insumo nace con `tenant_id` NULL, ver la cabecera de la 0267) y
+-- un app_user de OTRA flota. Las DOS quedan ciegas exactamente igual: el
+-- candado no depende de a quién pertenezca la fila, que es la demostración
+-- de aislamiento que esta migración pide — ni siquiera el dueño legítimo
+-- entra por el camino de sesión de navegador; el único camino es el
+-- `service_role` del servidor, filtrando `tenant_id` a mano (capa 2).
+do $$
+declare
+  v_agente text := 'control_costos';
+  t_propio uuid := gen_random_uuid();
+  t_ajeno uuid := gen_random_uuid();
+  u_propio uuid := gen_random_uuid();
+  u_ajeno uuid := gen_random_uuid();
+  n_propio int;
+  n_ajeno int;
+  n_sin_rls int;
+  escribe_propio boolean;
+  escribe_ajeno boolean;
+begin
+  insert into public.tenant (id, nombre) values (t_propio, '__verif_0267_propio__');
+  insert into public.tenant (id, nombre) values (t_ajeno, '__verif_0267_ajeno__');
+  insert into public.app_user (id, email, rol, tenant_id) values (u_propio, '__verif_0267_u1__@likida.ai', 'flota_admin', t_propio);
+  insert into public.app_user (id, email, rol, tenant_id) values (u_ajeno, '__verif_0267_u2__@likida.ai', 'flota_admin', t_ajeno);
+
+  -- Un insumo de PLATAFORMA (tenant_id null, el caso normal de hoy) y uno
+  -- hipotético atado a t_propio — las dos formas a la vez.
+  insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+    values (v_agente, null, 'texto', '__verif plataforma__', 'idea de plataforma', u_propio);
+  insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+    values (v_agente, t_propio, 'texto', '__verif de flota__', 'idea de la flota propia', u_propio);
+
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims', json_build_object('sub', u_propio)::text, true);
+    select count(*) into n_propio from public.agente_insumo where agente = v_agente;
+    reset role;
+  exception when insufficient_privilege then
+    reset role;
+    n_propio := -1;
+  end;
+
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims', json_build_object('sub', u_propio)::text, true);
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+      values (v_agente, t_propio, 'texto', 'x', 'x', u_propio);
+    escribe_propio := true;
+    reset role;
+  exception when insufficient_privilege then
+    reset role;
+    escribe_propio := false;
+  end;
+
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims', json_build_object('sub', u_ajeno)::text, true);
+    select count(*) into n_ajeno from public.agente_insumo where agente = v_agente;
+    reset role;
+  exception when insufficient_privilege then
+    reset role;
+    n_ajeno := -1;
+  end;
+
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims', json_build_object('sub', u_ajeno)::text, true);
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+      values (v_agente, t_ajeno, 'texto', 'x', 'x', u_ajeno);
+    escribe_ajeno := true;
+    reset role;
+  exception when insufficient_privilege then
+    reset role;
+    escribe_ajeno := false;
+  end;
+
+  -- Sin cambiar de rol: esta sesión corre con el superusuario de CI, que
+  -- bypassa RLS igual que `service_role` en producción (documentado por
+  -- Supabase, ver cabecera de andamio_ci.sql) — confirma que las DOS filas
+  -- (plataforma y de flota) siguen ahí y son el servidor, no RLS, quien
+  -- tiene que separarlas por tenant.
+  select count(*) into n_sin_rls from public.agente_insumo where agente = v_agente;
+
+  raise exception 'AGENTE_INSUMO_DENY_ALL_0267  ve_propio=%  escribe_propio=%  ve_ajeno=%  escribe_ajeno=%  ve_sin_rls=%   (esperado -1 / false / -1 / false / >=2)',
+    n_propio, escribe_propio, n_ajeno, escribe_ajeno, n_sin_rls;
+end $$;
+
+-- ── 216. Los CHECK de `agente_insumo` rechazan basura: tipo fuera de dominio, contenido en el campo equivocado, y un resumen sin fecha de proceso (mig. 0267) ──
+--
+-- Tres garantías que solo la base puede demostrar con certeza (un mock de
+-- supabase-js jamás ejercita un CHECK real): (1) el dominio de `tipo` es
+-- CERRADO — cualquier palabra que no sea de las cinco del plan rebota; (2) el
+-- contenido vive en EXACTAMENTE el campo de su tipo — un documento sin ruta,
+-- o un documento CON texto además de ruta, o un texto/link sin contenido, o
+-- CON una ruta que no le corresponde, todos rebotan; (3) un `resumen_uso` no
+-- puede existir sin `procesado_en` — la regla de "nunca afirmar un uso que
+-- nadie midió" (CLAUDE.md), aplicada al agente en vez de a una cifra.
+do $$
+declare
+  v_agente text := 'control_costos';
+  u uuid := gen_random_uuid();
+  rebota_tipo boolean := false;
+  rebota_doc_sin_ruta boolean := false;
+  rebota_doc_con_texto boolean := false;
+  rebota_texto_sin_contenido boolean := false;
+  rebota_texto_con_ruta boolean := false;
+  rebota_resumen_sin_proceso boolean := false;
+  acepta_documento boolean := false;
+  acepta_texto boolean := false;
+  acepta_resumen_con_proceso boolean := false;
+begin
+  -- `subido_por` exige un app_user real (FK) — de PLATAFORMA (tenant_id
+  -- null): el superadmin también sube insumos, sin necesitar una flota.
+  insert into public.app_user (id, email, rol, tenant_id) values (u, '__verif_0267_check__@likida.ai', 'superadmin', null);
+
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+      values (v_agente, null, 'video_de_gatos', '__verif__', 'x', u);
+  exception when check_violation then rebota_tipo := true;
+  end;
+
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, storage_path, subido_por)
+      values (v_agente, null, 'documento', '__verif__', null, u);
+  exception when check_violation then rebota_doc_sin_ruta := true;
+  end;
+
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, storage_path, contenido_texto, subido_por)
+      values (v_agente, null, 'documento', '__verif__', 'x/y.pdf', 'texto de más', u);
+  exception when check_violation then rebota_doc_con_texto := true;
+  end;
+
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+      values (v_agente, null, 'texto', '__verif__', null, u);
+  exception when check_violation then rebota_texto_sin_contenido := true;
+  end;
+
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, storage_path, contenido_texto, subido_por)
+      values (v_agente, null, 'texto', '__verif__', 'x/y.pdf', 'idea', u);
+  exception when check_violation then rebota_texto_con_ruta := true;
+  end;
+
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por, resumen_uso)
+      values (v_agente, null, 'texto', '__verif__', 'idea', u, 'ya lo usé sin haberlo procesado');
+  exception when check_violation then rebota_resumen_sin_proceso := true;
+  end;
+
+  -- Las formas buenas SÍ entran — un CHECK demasiado estricto sería tan
+  -- falso como uno demasiado laxo.
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, storage_path, subido_por)
+      values (v_agente, null, 'documento', '__verif ok doc__', 'control_costos/ok.pdf', u);
+    acepta_documento := true;
+  exception when others then acepta_documento := false;
+  end;
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+      values (v_agente, null, 'texto', '__verif ok texto__', 'idea de verdad', u);
+    acepta_texto := true;
+  exception when others then acepta_texto := false;
+  end;
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por, procesado_en, resumen_uso)
+      values (v_agente, null, 'texto', '__verif ok procesado__', 'idea ya usada', u, now(), 'Incluida en el parte de Costos.');
+    acepta_resumen_con_proceso := true;
+  exception when others then acepta_resumen_con_proceso := false;
+  end;
+
+  raise exception 'AGENTE_INSUMO_CHECKS_0267  tipo=%  doc_sin_ruta=%  doc_con_texto=%  texto_sin_contenido=%  texto_con_ruta=%  resumen_sin_proceso=%  ok_doc=%  ok_texto=%  ok_procesado=%   (esperado t / t / t / t / t / t / t / t / t)',
+    rebota_tipo, rebota_doc_sin_ruta, rebota_doc_con_texto, rebota_texto_sin_contenido, rebota_texto_con_ruta, rebota_resumen_sin_proceso, acepta_documento, acepta_texto, acepta_resumen_con_proceso;
+end $$;

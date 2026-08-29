@@ -44,6 +44,7 @@ import { getPlanes } from '@/lib/saas/suscripcion';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { encolarPieza } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
+import { insumosPendientes, marcarInsumosProcesados, type InsumoAgente } from './insumos';
 import { logger } from '@/lib/logger';
 
 export const AGENTES_FINANCIEROS = ['analista_metricas', 'control_costos', 'tesoreria', 'cierre_mensual'] as const;
@@ -263,6 +264,26 @@ export function evaluarUmbralesCostos(
   return hallazgos;
 }
 
+/**
+ * La sección "lo que Javier dejó en la bandeja" (Fase D, la bandeja de
+ * contexto universal, 0267) — PURA, para poder probarla sin base. Vacía
+ * cuando no hay insumos pendientes: un parte no debe cargar una sección
+ * fantasma. Un `link`/`texto` enseña su contenido recortado (200
+ * caracteres — el parte es para leerse, no para transcribir un documento
+ * entero); un `documento`/`imagen`/`video` solo el título, porque su
+ * contenido vive en Storage y este parte es texto plano.
+ */
+export function formatearSeccionInsumos(insumos: Pick<InsumoAgente, 'tipo' | 'titulo' | 'contenidoTexto'>[]): string[] {
+  if (insumos.length === 0) return [];
+  const lineas = ['INSUMOS QUE JAVIER DEJÓ EN LA BANDEJA:'];
+  for (const i of insumos) {
+    const extra = i.contenidoTexto ? `: ${i.contenidoTexto.slice(0, 200)}${i.contenidoTexto.length > 200 ? '…' : ''}` : '';
+    lineas.push(`  · [${i.tipo}] ${i.titulo}${extra}`);
+  }
+  lineas.push('');
+  return lineas;
+}
+
 /** El parte de una pantalla (formato del blueprint). Si nada disparó umbral,
  *  el parte es corto a propósito: media página para decir «todo bien» enseña
  *  a no leerlo. */
@@ -271,6 +292,7 @@ export function armarParteCostos(
   porFaseModelo: CostoPorFaseModelo[],
   hallazgos: HallazgoCosto[],
   hoy: string,
+  insumos: Pick<InsumoAgente, 'tipo' | 'titulo' | 'contenidoTexto'>[] = [],
 ): string {
   const costo7d = round2(r.porDia.reduce((s, d) => s + d.costoUsd, 0));
   const tendencia = r.tendenciaCosto === null
@@ -300,7 +322,8 @@ export function armarParteCostos(
   const disparados = hallazgos.filter((h) => h.semaforo !== 'NOTA');
   for (const h of hallazgos) lineas.push(`[${h.semaforo}]  ${h.umbral} — ${h.detalle}`);
   if (disparados.length === 0) lineas.push('Nada disparó umbral.');
-  lineas.push('', 'Fuentes: getResumenNegocio()/getCostoPorFaseModelo() (RPC resumen_costo_ia, mig. 0062) · umbrales del blueprint agente-control-de-costos.md.');
+  lineas.push('', ...formatearSeccionInsumos(insumos));
+  lineas.push('Fuentes: getResumenNegocio()/getCostoPorFaseModelo() (RPC resumen_costo_ia, mig. 0062) · umbrales del blueprint agente-control-de-costos.md.');
   return lineas.join('\n');
 }
 
@@ -323,8 +346,12 @@ async function correrControlCostos(disparo: DisparoCorrida, hoy: string): Promis
     // leer. Siete días delatan el override caído Y el cambio a mitad de
     // camino sin arrastrar la historia entera.
     const desde7d = new Date(Date.parse(`${hoy}T12:00:00Z`) - 7 * 86_400_000).toISOString();
-    const [r, porFaseModelo, cfg] = await Promise.all([
-      getResumenNegocio(hoy), getCostoPorFaseModelo(desde7d), leerConfigFinanzas(),
+    // La bandeja de contexto universal (Fase D, 0267): lo que Javier dejó
+    // pendiente para ESTE agente entra en el mismo Promise.all que el resto
+    // de las lecturas — si insumosPendientes truena, la corrida entera falla
+    // (fail-closed, mismo contrato que el resto de este archivo).
+    const [r, porFaseModelo, cfg, insumos] = await Promise.all([
+      getResumenNegocio(hoy), getCostoPorFaseModelo(desde7d), leerConfigFinanzas(), insumosPendientes(agente),
     ]);
     const hallazgos = evaluarUmbralesCostos(r, porFaseModelo, cfg, modelFor, hoy);
 
@@ -339,15 +366,26 @@ async function correrControlCostos(disparo: DisparoCorrida, hoy: string): Promis
       });
     }
 
-    const cuerpo = armarParteCostos(r, porFaseModelo, hallazgos, hoy);
+    const cuerpo = armarParteCostos(r, porFaseModelo, hallazgos, hoy, insumos);
     const res = await encolarParte(agente, 'parte_costos', titulo, cuerpo, {
       hallazgos: hallazgos.map((h) => ({ semaforo: h.semaforo, umbral: h.umbral })),
-      consultas: ['getResumenNegocio', 'getCostoPorFaseModelo', 'finanzas_config'],
+      consultas: ['getResumenNegocio', 'getCostoPorFaseModelo', 'finanzas_config', 'agente_insumo (pendientes)'],
     });
+    // El insumo solo se marca procesado si el parte de verdad quedó en la
+    // bandeja CON él adentro — si otra corrida ganó el periodo (res ===
+    // 'ya_existia'), este insumo sigue pendiente para la siguiente vez que
+    // de verdad se arme un parte nuevo.
+    let insumosMarcados = 0;
+    if (res === 'encolada' && insumos.length > 0) {
+      insumosMarcados = await marcarInsumosProcesados(
+        insumos.map((i) => i.id),
+        `Incluido en el parte de Costos — ${hoy}.`,
+      );
+    }
     await registrarCorrida(null, agente, {
       inicio, fin: new Date(), estado: 'ok', disparo, costoUsd: 0,
       tareasHechas: 1, tareasTotal: 1,
-      resumen: { parte: res, rojos: rojos.length, ambar: hallazgos.filter((h) => h.semaforo === 'AMBAR').length },
+      resumen: { parte: res, rojos: rojos.length, ambar: hallazgos.filter((h) => h.semaforo === 'AMBAR').length, insumosMarcados },
     });
     return { piezas: res === 'encolada' ? 1 : 0, motivo: res === 'ya_existia' ? 'otra corrida ganó el periodo' : undefined };
   } catch (e) {
