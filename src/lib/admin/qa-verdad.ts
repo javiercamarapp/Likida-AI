@@ -97,6 +97,34 @@ export function normalizarTextoVerdad(v: string | null | undefined): string | nu
 }
 
 /**
+ * RFC comparable. Se trata APARTE del texto genérico porque la normalización
+ * genérica DESTRUYE dos caracteres que en un RFC del SAT son válidos y
+ * significativos (auditoría adversarial tandas 21-24, hallazgo 2):
+ *
+ *   · la `Ñ` — NFD la descompone en N + tilde y el filtro tira la tilde:
+ *     "AÑB123456XY0" y "ANB123456XY0" quedaban iguales y son DOS
+ *     contribuyentes distintos.
+ *   · el `&` — `[^A-Z0-9]` lo elimina: "J&B840101XX1" y "JB840101XX1"
+ *     quedaban iguales. El SAT usa `&` en razones sociales reales.
+ *
+ * El propio archivo llama a esto el fallo más caro (decisión 2 de la
+ * cabecera): un RFC mal dado por bueno manda a facturar contra un
+ * contribuyente que no existe — y el porcentaje del campo salía inflado
+ * JUSTO en los casos difíciles.
+ *
+ * Lo único que se quita: espacios y guiones ("XAX-010101-AB1" impreso con
+ * separadores es el mismo RFC) y minúsculas → mayúsculas. `NFC` recompone la
+ * Ñ que llegue descompuesta (NFD) para que la MISMA letra en dos
+ * codificaciones no cuente como error. Nada más: ni acentos (un RFC no los
+ * lleva; si el OCR leyó uno, ES un error de lectura) ni puntuación restante.
+ */
+export function normalizarRfcVerdad(v: string | null | undefined): string | null {
+  if (v === null || v === undefined) return null;
+  const t = v.normalize('NFC').toUpperCase().replace(/[\s-]+/g, '');
+  return t === '' ? null : t;
+}
+
+/**
  * Dominio comparable. Se trata aparte del texto porque un dominio tiene partes
  * que NO son contenido: el esquema y el `www.` son decoración, y el camino
  * (`/facturacion`) cambia de un ticket a otro del mismo comercio.
@@ -226,6 +254,20 @@ export function compararCampo(clave: ClaveVerdad, verdad: VerdadTerreno, leido: 
       clave, esperado, leido: crudoLeido,
       veredicto: iguales ? 'ok' : 'mal',
       motivo: iguales ? null : 'no coincide con lo etiquetado (comparado sin acentos, mayúsculas ni puntuación, con o sin el nombre comercial entre paréntesis)',
+    };
+  }
+
+  if (clave === 'rfcEmisor') {
+    // Comparador DEDICADO: preserva Ñ y & (caracteres válidos del RFC que la
+    // normalización genérica destruía dando `ok` a contribuyentes distintos);
+    // quita solo espacios y guiones. Ver `normalizarRfcVerdad`.
+    const a = normalizarRfcVerdad(String(esperado ?? ''));
+    const b = normalizarRfcVerdad(String(crudoLeido));
+    const iguales = a !== null && a === b;
+    return {
+      clave, esperado, leido: crudoLeido,
+      veredicto: iguales ? 'ok' : 'mal',
+      motivo: iguales ? null : 'el RFC leído no coincide (comparado carácter por carácter: la Ñ y el & cuentan; solo se ignoran espacios, guiones y minúsculas)',
     };
   }
 
