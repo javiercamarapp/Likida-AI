@@ -994,13 +994,19 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // tenant se busca por teléfono SIN el filtro de activo, o por cuenta de
     // oficina; sin ninguna de las dos, se le dice la verdad en vez de callar.
     //
-    // CORRECCIÓN 29-ago-2026 (auditoría 20): este comentario decía que
-    // `activo = false` era "la única forma de inactivar DEL PANEL", y esa
-    // frase describía un camino que no existe — ninguna pantalla ni endpoint
-    // de `src/` escribe `operador.activo = false` (H2 de esa auditoría: la
-    // baja de un chofer todavía termina en SQL a mano). Esta rama no depende
-    // de CÓMO se apagó la bandera: responde a cualquiera que escriba
-    // PRIVACIDAD, esté activo o no, esté dado de alta o no.
+    // ESTE COMENTARIO SE CORRIGIÓ DOS VECES EL MISMO DÍA, y las dos veces por
+    // lo mismo: describía el estado de OTRA pantalla en vez de lo que hace
+    // esta rama. Primero decía que `activo = false` era "la única forma de
+    // inactivar DEL PANEL" cuando ese camino no existía (auditoría 20, H2);
+    // se corrigió a "ninguna pantalla lo escribe" y esa frase duró una hora —
+    // el PR #260 cerró el ciclo esa misma tarde y hoy `/dashboard/operadores`
+    // SÍ da de baja (`actualizarOperador`, con `operador.baja` en bitácora).
+    //
+    // La lección se queda escrita porque es la que evita la tercera vuelta:
+    // esta rama NO DEPENDE de cómo se apagó la bandera, ni de si existe una
+    // pantalla que la apague. Responde a cualquiera que escriba PRIVACIDAD —
+    // activo o no, dado de alta o no—, y por eso su comentario no tiene por
+    // qué nombrar el inventario de escritores de `operador.activo`.
     if (msg.type === 'text' && msg.text && pideAtencionPrivacidad(msg.text)) {
       const tenantId =
         (await buscarTenantPorTelefono(msg.from).catch(() => null))
