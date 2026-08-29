@@ -223,3 +223,64 @@ describe('un guion sin medir NO le quita el ticket al encargado', () => {
     expect(salida.error).toContain('NO se ha medido');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LAS PLATAFORMAS: LA AFIRMACIÓN DE QUE UN ADAPTADOR VALE POR VARIOS.
+//
+// El recon del 28-ago-2026 encontró que varios comercios corren el MISMO
+// software con los MISMOS `id`. De ahí sale la promesa que abarata este frente:
+// «automatizar N portales no cuesta N adaptadores». Una promesa así, escrita
+// solo en un comentario, es la que se rompe callada el día que alguien toca una
+// de las dos copias — así que aquí se mide.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('un adaptador de plataforma cubre N comercios', () => {
+  it('ControlGAS® y facturacionestacion producen la MISMA tabla, solo cambia el host', () => {
+    // Se construyen dos instancias de cada fábrica con hosts distintos y se
+    // comparan los selectores. Si alguien "arregla" una plataforma escribiendo
+    // el selector a mano en un comercio, esto lo caza.
+    const facturagas = guionDe('facturagas');
+    const sevafusa = guionDe('sevafusa');
+    expect(facturagas, 'facturagas debe estar escrito').not.toBeNull();
+    expect(sevafusa, 'sevafusa debe estar escrito').not.toBeNull();
+
+    // Cada uno apunta a SU host, que es lo único que la fábrica parametriza.
+    expect(facturagas!.portal).toContain('facturagas.net');
+    expect(sevafusa!.portal).toContain('sevafusa.facturacionestacion.com');
+
+    // Y los `id` de la plataforma son de la PLATAFORMA: los de sevafusa son los
+    // que el recon leyó y sirven para cualquier subdominio que la use.
+    expect(JSON.stringify(sevafusa!.campos)).toContain('#txtReferencia');
+    expect(JSON.stringify(facturagas!.campos)).toContain('#despacho');
+  });
+
+  it('los selectores leídos del DOM se distinguen de los adivinados', () => {
+    // `lecturaDeCampo` NO autoriza emitir —solo `verificado` lo hace— pero sí
+    // cambia qué significa que el pre-vuelo falle: con lectura, "el portal
+    // cambió"; sin ella, "adivinamos mal". Que la distinción exista en el
+    // dato, y no solo en la cabeza de quien lo escribió, es el punto.
+    const conLectura = GUIONES.filter((g) => g.lecturaDeCampo);
+    const sinLectura = GUIONES.filter((g) => !g.lecturaDeCampo);
+
+    // Los diez del recon la tienen; los cuatro del PR #163 no, porque sus
+    // selectores se derivaron de la etiqueta del catálogo.
+    expect(conLectura.length).toBe(10);
+    expect(sinLectura.map((g) => g.comercio).sort())
+      .toEqual(['autozone', 'controlnet', 'enerser', 'office_depot']);
+
+    for (const g of conLectura) {
+      expect(g.lecturaDeCampo!.fecha, g.comercio).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(g.lecturaDeCampo!.acta, g.comercio).toMatch(/RECON-PORTALES-(17|20)\.md/);
+    }
+  });
+
+  it('NINGUNO se declara verificado: leer el DOM no es haber ensayado', () => {
+    // La línea que no se cruza. El recon copió selectores de páginas reales,
+    // pero NO envió un solo formulario: en casi todos los portales no llegó a
+    // ver la pantalla del receptor ni el botón que emite. Ascender eso a
+    // `verificado` sería exactamente el fraude que la política 1 impide, y
+    // habilitaría apretar el botón que crea un CFDI irreversible.
+    for (const g of GUIONES) {
+      expect(g.verificado, `${g.comercio}: nadie ha corrido el arnés de pre-vuelo`).toBeNull();
+    }
+  });
+});
