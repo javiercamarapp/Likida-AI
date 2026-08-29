@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { estadoLatidos, type CronId } from '@/lib/admin/salud';
-import { alertarOperador } from '@/lib/observability/alerta';
+import { detalleLatidos, esHuecoDeConfiguracion, type CronId } from '@/lib/admin/salud';
+import { alertarOperador, alertarHuecoConfiguracion } from '@/lib/observability/alerta';
 import { logger } from '@/lib/logger';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 
@@ -29,6 +29,14 @@ export const dynamic = 'force-dynamic';
 //    quedan únicamente en logs/alerta privados, no en el endpoint público.
 //    `sin_latido` mantiene el health degradado hasta que el cron haya probado
 //    que está vivo.
+//  · un latido no sano (`fallo`/`parcial`/`saltado`) SIEMPRE degrada el
+//    status público a 503 — eso no cambia. Lo que sí se distingue (auditoría
+//    prod 29-ago-2026) es A QUIÉN se lo dice y con qué urgencia: un hueco de
+//    configuración que el propio cron ya declaró en prosa (`descarga-sat` sin
+//    LIKIDA_SAT_PROVEEDOR, por ejemplo — `esHuecoDeConfiguracion`) manda a lo
+//    sumo un correo por semana por `alertarHuecoConfiguracion`, no uno por
+//    hora para siempre por cada ping de un monitor externo. Una regresión de
+//    verdad sigue mandando el correo "Urgente" de `alertarOperador` sin cambios.
 //  · NO mide la ausencia de corridas de cron: con la base en cero flotas,
 //    "no hubo corridas con trabajo" es lo normal y alarmaría siempre. Ese
 //    monitor llega cuando `agente_corrida` tenga tráfico real que fechar.
@@ -67,7 +75,7 @@ export async function GET(req: NextRequest) {
   // nombres de cron ni datos de negocio. Una lectura caída degrada el pulso.
   let cronCheck: 'ok' | 'degraded' | 'unknown' = 'unknown';
   try {
-    const latidos = await estadoLatidos();
+    const latidos = await detalleLatidos();
     const vencidos = (Object.keys(latidos) as CronId[]).filter((c) => latidos[c].estado === 'vencido');
     const sinLatido = (Object.keys(latidos) as CronId[]).filter((c) => latidos[c].estado === 'sin_latido');
     const noSanos = (Object.keys(latidos) as CronId[]).filter((c) =>
@@ -83,14 +91,35 @@ export async function GET(req: NextRequest) {
       // Fresco no significa sano: un cron que acaba de reportar `fallo`,
       // `parcial` o `saltado` debe tumbar el health aunque su reloj esté al día.
       cronCheck = 'degraded';
-      logger.error('health.cron_estado_no_ok', {
-        crons: noSanos,
-        estados: noSanos.map((c) => latidos[c].ultimoEstado),
-      });
-      await alertarOperador('cron.estado_no_ok', {
-        error: `Cron con resultado no sano: ${noSanos.map((c) => `${c} (${latidos[c].ultimoEstado})`).join(', ')}`,
-        codigo: 'cron_estado_no_ok',
-      });
+      // Un hueco de configuración YA declarado (el propio cron dice qué falta
+      // y quién lo destraba) no es lo mismo que una regresión real — separarlo
+      // ANTES de decidir a quién avisar y con qué urgencia (auditoría prod
+      // 29-ago-2026: `descarga-sat` sin LIKIDA_SAT_PROVEEDOR mandaba el mismo
+      // correo "Urgente" en cada ping de un monitor externo, para siempre).
+      const configAusente = noSanos.filter((c) => esHuecoDeConfiguracion(latidos[c].detalle.motivo));
+      const regresiones = noSanos.filter((c) => !configAusente.includes(c));
+      if (configAusente.length > 0) {
+        logger.warn('health.cron_config_ausente', {
+          crons: configAusente,
+          motivos: configAusente.map((c) => latidos[c].detalle.motivo),
+        });
+        for (const c of configAusente) {
+          await alertarHuecoConfiguracion(`cron.config_ausente:${c}`, String(latidos[c].detalle.motivo), {
+            cron: c,
+            estado: latidos[c].ultimoEstado,
+          });
+        }
+      }
+      if (regresiones.length > 0) {
+        logger.error('health.cron_estado_no_ok', {
+          crons: regresiones,
+          estados: regresiones.map((c) => latidos[c].ultimoEstado),
+        });
+        await alertarOperador('cron.estado_no_ok', {
+          error: `Cron con resultado no sano: ${regresiones.map((c) => `${c} (${latidos[c].ultimoEstado})`).join(', ')}`,
+          codigo: 'cron_estado_no_ok',
+        });
+      }
     } else if (sinLatido.length === 0) {
       cronCheck = 'ok';
     }

@@ -63,7 +63,7 @@ const TIMEOUT_REDIS_MS = 1200;
  * `null` = Redis no pudo decirlo (sin credenciales, red, timeout) — el
  * llamador cae al Map local.
  */
-async function reservarPisoRedis(evento: string, ahora: number): Promise<boolean | null> {
+async function reservarPisoRedis(evento: string, ahora: number, pisoMs: number): Promise<boolean | null> {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return null;
@@ -71,7 +71,7 @@ async function reservarPisoRedis(evento: string, ahora: number): Promise<boolean
     const r = await fetch(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(['SET', `${PREFIJO_PISO}${evento}`, String(ahora), 'PX', PISO_ALERTA_MS, 'NX']),
+      body: JSON.stringify(['SET', `${PREFIJO_PISO}${evento}`, String(ahora), 'PX', pisoMs, 'NX']),
       signal: AbortSignal.timeout(TIMEOUT_REDIS_MS),
     });
     const json = (await r.json()) as { result?: unknown; error?: string };
@@ -86,9 +86,12 @@ async function reservarPisoRedis(evento: string, ahora: number): Promise<boolean
   }
 }
 
-/** El piso de una hora: Redis si contesta, el Map de la instancia si no. */
-async function reservarPiso(evento: string, ahora: number): Promise<boolean> {
-  const redis = await reservarPisoRedis(evento, ahora);
+/** El piso entre dos correos del MISMO evento: `PISO_ALERTA_MS` por omisión
+ *  (una hora), o el que pase el llamador — ver `alertarHuecoConfiguracion`,
+ *  que usa uno mucho más largo. Redis si contesta, el Map de la instancia si
+ *  no. */
+async function reservarPiso(evento: string, ahora: number, pisoMs: number = PISO_ALERTA_MS): Promise<boolean> {
+  const redis = await reservarPisoRedis(evento, ahora, pisoMs);
   if (redis !== null) {
     // El Map se mantiene al día igual: si Redis se cae a media hora, el
     // respaldo no arranca de cero en esta instancia.
@@ -96,7 +99,7 @@ async function reservarPiso(evento: string, ahora: number): Promise<boolean> {
     return redis;
   }
   const anterior = ultimaAlerta.get(evento);
-  if (anterior !== undefined && ahora - anterior < PISO_ALERTA_MS) return false;
+  if (anterior !== undefined && ahora - anterior < pisoMs) return false;
   ultimaAlerta.set(evento, ahora);
   return true;
 }
@@ -158,6 +161,94 @@ export async function alertarOperador(evento: string, detalle: Record<string, un
     if (!r.ok) logger.warn('alerta.no_salio', { evento, motivo: r.motivo });
   } catch (e) {
     // Cinturón sobre los tirantes: nada de este canal puede propagar al cron.
+    logger.warn('alerta.fallo', { evento, error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+// ── EL HUECO DE CONFIGURACIÓN NO ES UNA REGRESIÓN (auditoría prod 29-ago-2026) ──
+//
+// `descarga-sat` sin `LIKIDA_SAT_PROVEEDOR` reporta 'parcial' con un motivo
+// que se explica solo: "falta LIKIDA_SAT_PROVEEDOR... lo destraba Javier". Es
+// honesto y correcto. El problema era `/api/health`: cada vez que un monitor
+// externo pegaba al endpoint (cada 1-5 min) y el cron seguía sin ese hueco
+// resuelto, disparaba `alertarOperador('cron.estado_no_ok', ...)` — con el
+// piso de una hora de ESE evento, eso es un correo "Urgente" por hora, para
+// siempre, mientras Javier no contrate el PAC. Ocho en doce horas,
+// indistinguibles del cron que sí se rompió.
+//
+// La diferencia real: una regresión es información nueva cada vez (algo que
+// funcionaba dejó de hacerlo, y HOY sigue roto). Un hueco de configuración ya
+// declarado es la MISMA información repetida — el propio proceso no sabe
+// nada que no supiera hace una hora. Alertar sobre la primera es urgente;
+// alertar sobre la segunda cada hora es enseñar a Javier a ignorar el correo,
+// que es exactamente el vicio que esta misma auditoría corrigió esa noche en
+// otro sitio (agentes de ingeniería escalando huecos conocidos).
+
+/** El piso para un hueco de configuración YA declarado por el propio proceso:
+ *  una semana, no una hora. Es tiempo de sobra para que Javier lo vea sin que
+ *  el canal se aprenda a ignorar. */
+export const PISO_ALERTA_CONFIG_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Huella corta y estable de un texto: la LLAVE del piso incluye esta huella
+ *  del `motivo`, así que si el motivo CAMBIA (Javier resolvió una cosa y
+ *  apareció otra) es información nueva y sí avisa, aunque el piso de la
+ *  semana anterior siga vigente para el motivo viejo. No es criptográfica —
+ *  es un identificador de deduplicación, no un secreto. */
+function huella(texto: string): string {
+  let h = 0;
+  for (let i = 0; i < texto.length; i++) h = (Math.imul(31, h) + texto.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+/**
+ * Como `alertarOperador`, pero para un HUECO DE CONFIGURACIÓN que el propio
+ * proceso YA declaró en prosa (`esHuecoDeConfiguracion` en `admin/salud.ts`
+ * decide cuándo aplica): falta una variable de entorno, un contrato, una
+ * credencial. No es una regresión —nada se rompió, algo nunca se terminó de
+ * contratar o configurar— así que no merece el tono "urgente" ni el piso de
+ * una hora de un cron que sí estaba sano y dejó de estarlo.
+ *
+ * El piso vive bajo su PROPIA llave (`evento` + huella del `motivo`) y dura
+ * `PISO_ALERTA_CONFIG_MS`. Mientras la razón no cambie, sale UN correo por
+ * semana en vez de uno por hora para siempre.
+ */
+export async function alertarHuecoConfiguracion(evento: string, motivo: string, detalle: Record<string, unknown> = {}): Promise<void> {
+  try {
+    const para = process.env.ALERTA_EMAIL;
+    if (!para) {
+      if (!avisadoSinConfigurar) {
+        logger.info('alerta.sin_configurar', { evento });
+        avisadoSinConfigurar = true;
+      }
+      return;
+    }
+
+    const ahora = Date.now();
+    const llave = `${evento}:${huella(motivo)}`;
+    if (!(await reservarPiso(llave, ahora, PISO_ALERTA_CONFIG_MS))) return;
+
+    const datos: Array<[string, string]> = [
+      ['Evento', evento],
+      ['Cuándo', fechaHoraMx(new Date(ahora).toISOString())],
+      ['Motivo', redactarTexto(motivo).slice(0, 300)],
+      ...Object.entries(detalle).map(([k, v]) => [k, redactarTexto(String(v)).slice(0, 300)] as [string, string]),
+    ];
+
+    const r = await enviarCorreo(para, {
+      asunto: `[Likida] Pendiente de configurar: ${evento}`,
+      avance: 'Nada se rompió: sigue pendiente un hueco de configuración ya conocido.',
+      titulo: `Pendiente de configurar: ${evento}`,
+      parrafos: [
+        'Esto NO es una falla: el propio proceso ya sabe exactamente qué le falta y lo dice abajo, en el campo "Motivo". Mientras tanto no hace nada a propósito — nunca simula ni adivina.',
+        'De este mismo pendiente no va a llegar otro correo en varios días aunque siga sin resolverse; si lo que falta CAMBIA, este correo vuelve a salir porque eso sí es información nueva.',
+      ],
+      datos,
+      boton: { texto: 'Ver salud del sistema', href: `${APP}/admin/salud-sistema` },
+      tono: 'atencion',
+      porQueLoRecibes: 'Recibes esto porque ALERTA_EMAIL apunta a esta dirección: es el canal del operador del sistema, no de una flota.',
+    });
+    if (!r.ok) logger.warn('alerta.no_salio', { evento, motivo: r.motivo });
+  } catch (e) {
     logger.warn('alerta.fallo', { evento, error: e instanceof Error ? e.message : String(e) });
   }
 }
