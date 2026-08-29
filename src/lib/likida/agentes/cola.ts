@@ -21,6 +21,7 @@ import { traerTodo, conteo } from '../pg';
 import { DatoInvalido } from '../errores';
 import { logger } from '@/lib/logger';
 import { enviarCorreo } from '@/lib/correo/enviar';
+import { pieAvisoProspectos } from '@/lib/likida/privacidad';
 import { hoyMx } from '@/lib/formato';
 
 /** El tope de correos FRÍOS aprobados por día (Fase 2: "20–40, máximo" —
@@ -76,7 +77,13 @@ export async function filtrarSuprimidos(correos: string[]): Promise<string[]> {
  * Exportada para su prueba.
  */
 export function porQueLoRecibes(fuente: string | null, vacante: string | null): string {
-  const baja = 'Si prefieres no recibir estos correos, responde con la palabra BAJA y no volveremos a escribirte.';
+  // AUDITORÍA 19 (legal, reincidente #10): el primer toque por correo salía
+  // SIN la liga del aviso de prospectos — `pieAvisoProspectos` tenía un solo
+  // llamador (el mensaje de WhatsApp del Cerebro) y el art. 16 fr. II obliga
+  // a señalar el sitio del aviso integral en CADA obtención por medio
+  // electrónico, no en uno de los canales. La liga va en el mismo pie que la
+  // BAJA: es la primera vez que esta persona sabe que Likida tiene sus datos.
+  const baja = `Si prefieres no recibir estos correos, responde con la palabra BAJA y no volveremos a escribirte. ${pieAvisoProspectos()}`;
   if (vacante?.trim()) {
     return `Recibes este correo porque tu empresa publicó una vacante relacionada con liquidación de viajes. ${baja}`;
   }

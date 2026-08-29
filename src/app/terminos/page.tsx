@@ -46,6 +46,13 @@ const SECCIONES: SeccionLegal[] = [
   {
     titulo: '1. Aceptación de los términos',
     parrafos: [
+      // AUDITORÍA 19-c2 (A1): PRESTADOR.razonSocial/.domicilio se cableaban
+      // desde el env y no se pintaban en ninguna sección — un contrato sin la
+      // razón social de quien se obliga no obliga a nadie. Va aquí; si falta,
+      // se dice qué falta.
+      PRESTADOR.razonSocial && PRESTADOR.domicilio
+        ? `Estos términos los pacta la empresa con **${PRESTADOR.razonSocial}**, con domicilio en ${PRESTADOR.domicilio} — la entidad que aquí se nombra "Likida".`
+        : `🔴 **La razón social inscrita y el domicilio de la entidad que presta el servicio aún no están capturados.** Un contrato sin la identidad de quien se obliga está incompleto, y se dice aquí en vez de dejarse en blanco.`,
       `Al crear una cuenta, entrar al panel o mandar un comprobante por WhatsApp a un número de Likida, la empresa **acepta estos términos**. Si quien acepta lo hace a nombre de una persona moral, declara que tiene facultades para obligarla.`,
       `Si no está de acuerdo con alguna parte, la salida es no usar el servicio. No hay aceptación parcial: el servicio se presta completo o no se presta.`,
     ],
@@ -173,7 +180,9 @@ const SECCIONES: SeccionLegal[] = [
     parrafos: [
       `Los operadores mandan datos personales por WhatsApp. Frente a ellos, la **responsable es la empresa**; Likida es **encargado** y los trata siguiendo sus instrucciones.`,
       `Eso significa dos obligaciones concretas de la empresa: **publicar su propio aviso de privacidad** a sus operadores (Likida lo aloja en \`/aviso/<flota>\` y lo entrega por el chat cuando el operador escribe PRIVACIDAD), y **designar a quien atienda los derechos ARCO**.`,
-      `El encargo se documenta por escrito, como pide la ley. 🔴 **El contrato de encargado del tratamiento está pendiente de firma.**`,
+      LEGAL_CONFIG.dpaVersion
+        ? `El encargo se documenta por escrito, como pide la ley, en el contrato de encargado del tratamiento (versión ${LEGAL_CONFIG.dpaVersion}) que forma parte del paquete contractual.`
+        : `El encargo se documenta por escrito, como pide la ley. 🔴 **El contrato de encargado del tratamiento está pendiente de firma.**`,
     ],
   },
   {
@@ -187,7 +196,11 @@ const SECCIONES: SeccionLegal[] = [
     titulo: '19. Ley aplicable y competencia',
     parrafos: [
       `Estos términos se rigen por las **leyes de los Estados Unidos Mexicanos**.`,
-      `🔴 **Plaza y tribunales competentes: pendientes de definir.** Hasta que se fije, las partes se someten a la jurisdicción que corresponda conforme a la ley, renunciando a cualquier otra por razón de domicilio presente o futuro.`,
+      // AUDITORÍA 19-c2 (A1): la jurisdicción ya viaja en LEGAL_JURISDICTION y
+      // el cuerpo seguía diciendo "pendiente" aunque estuviera capturada.
+      PRESTADOR.jurisdiccion
+        ? `Para cualquier controversia, las partes se someten a los tribunales competentes de **${PRESTADOR.jurisdiccion}**, renunciando a cualquier otro fuero por razón de domicilio presente o futuro.`
+        : `🔴 **Plaza y tribunales competentes: pendientes de definir.** Hasta que se fije, las partes se someten a la jurisdicción que corresponda conforme a la ley, renunciando a cualquier otra por razón de domicilio presente o futuro.`,
     ],
   },
   {
@@ -213,10 +226,18 @@ export default function Terminos() {
       etiqueta="Términos de servicio"
       bajada="Condiciones de uso del servicio de liquidación de viáticos"
       secciones={SECCIONES}
-      aviso={!estado.listo ? (
+      aviso={estado.faltantesEntidad.length > 0 ? (
+        // AUDITORÍA 19-c2 (A6): el rótulo era una nota interna de despliegue
+        // («PRODUCCIÓN BLOQUEADA… no debe presentarse como paquete
+        // enterprise») publicada al lector del contrato, y se encendía
+        // también por las versiones de anexos (SLA/DPA), que no son parte de
+        // la identidad. Ahora habla al lector, nombra lo que falta, y solo
+        // dispara por identidad — los anexos se gestionan en el paquete
+        // enterprise, no en este documento.
         <FaltaDato>
-          <strong>PRODUCCIÓN BLOQUEADA:</strong> faltan datos de identidad o anexos contractuales.
-          No debe usarse como contrato enterprise hasta completar identidad, contacto y versiones contractuales.
+          A estos términos les faltan datos de identidad de la entidad que presta el servicio
+          (razón social, domicilio o jurisdicción). Las secciones afectadas lo señalan en su
+          texto en vez de dejarlo en blanco.
         </FaltaDato>
       ) : undefined}
       pie={

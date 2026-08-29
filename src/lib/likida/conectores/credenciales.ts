@@ -384,9 +384,21 @@ export async function probarCredencial(
 }
 
 /**
- * Desactiva la credencial de un conector: `activo = false`, NO se borra —
- * el cifrado se queda para poder auditar qué acceso existió y hasta cuándo
- * (mismo criterio que revocar una llave de API).
+ * Desactiva la credencial de un conector: `activo = false` Y el secreto se
+ * DESTRUYE.
+ *
+ * AUDITORÍA 19 (legal, reincidente #17): antes solo apagaba `activo` y el
+ * JSON cifrado se quedaba "para auditar qué acceso existió". La auditoría no
+ * necesita el SECRETO: la fila (conector, fechas, actor en la bitácora) y las
+ * `pistas` (últimos 4) ya dicen qué acceso existió y hasta cuándo. Conservar
+ * la contraseña cifrada de un cliente después de que la revocó es retención
+ * sin finalidad (LFPDPPP art. 11) y una promesa rota de /seguridad
+ * («Desactivarlas desde el panel corta el acceso») — cortado a medias si el
+ * día que la llave del cofre se filtre, lo revocado se vuelve a abrir. El
+ * valor se pisa con un marcador (`revocada:<fecha>`, que el CHECK
+ * `conector_credencial_no_en_claro` acepta y `descifrar` jamás abrirá);
+ * reactivar siempre fue capturar de nuevo (`guardarCredencial` pisa el
+ * cifrado), así que nada pierde un camino que existiera.
  *
  * El UPDATE va anclado a `tenant_id` Y comprueba las filas devueltas: con el
  * conector de otra flota —o uno ya desactivado— toca cero filas, y Postgres
@@ -399,7 +411,7 @@ export async function desactivarCredencial(
   actor?: { id?: string; email?: string },
 ): Promise<void> {
   const { data, error } = await acotada(supabaseAdmin().from('conector_credencial')
-    .update({ activo: false })
+    .update({ activo: false, valores_cifrados: `revocada:${new Date().toISOString()}` })
     .eq('tenant_id', tenantId)
     .eq('conector_id', conectorId)
     .eq('activo', true)

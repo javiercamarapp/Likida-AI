@@ -62,10 +62,13 @@ export default async function AvisoIntegral({ params }: { params: Promise<{ tena
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant)) notFound();
 
   const datos = await getDatosResponsable(tenant);
-  // `null` también cuando la flota existe pero le falta razón social o
-  // domicilio: un aviso sin responsable no dice a quién reclamarle, que es
-  // justamente para lo que sirve. Mejor 404 que un documento a medias que
-  // aparente cumplimiento.
+  // `null` también cuando la flota existe pero le falta la RAZÓN SOCIAL: un
+  // aviso sin responsable no dice a quién reclamarle, que es justamente para
+  // lo que sirve. El domicilio ya NO tumba la página (auditoría 19, legal
+  // C3 / C.16): con responsable nombrado, la sección de la fr. I se pinta
+  // como pendiente —igual que el contacto del art. 29— porque un aviso que
+  // dice qué le falta cumple más que un 404 mudo que deja al operador sin
+  // documento por un dato que le toca capturar a su empresa.
   if (!datos) notFound();
 
   const secciones = avisoIntegral(datos);

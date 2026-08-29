@@ -78,8 +78,12 @@ describe('avisoSimplificado', () => {
 
   it('cabe en un mensaje de WhatsApp', () => {
     // El límite de Meta para texto es 4096. Un aviso que se parte en varios
-    // mensajes se lee a medias y la constancia queda coja.
-    expect(avisoSimplificado(flota)!.length).toBeLessThan(1400);
+    // mensajes se lee a medias y la constancia queda coja. El tope era 1400;
+    // subió a 1900 el 28-ago-2026 porque la fr. II ganó el dato que faltaba
+    // enumerar (el GPS — auditoría 19, legal C1): un aviso más corto que
+    // calla un tratamiento no es más legible, es más falso. Sigue cabiendo
+    // entero en UN mensaje con margen de 2×.
+    expect(avisoSimplificado(flota)!.length).toBeLessThan(1900);
   });
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -101,14 +105,23 @@ describe('avisoSimplificado', () => {
     expect(a).toMatch(/espera en la descarga/i);
   });
 
-  it('no deja creer que hay GPS: la hora es la del mensaje, no telemetría', () => {
-    // hitos_viaje.ts lo estableció ("el producto nunca la presenta como
-    // telemetría"). "Avisos de posición con hora" se presta a leerse como
-    // rastreo, y un aviso que lo insinúe enuncia un tratamiento que no ocurre —
-    // el error simétrico al que esta auditoría vino a cerrar.
+  it('declara el GPS por su nombre: la posición de la unidad y el pin del chat, con su retención', () => {
+    // AUDITORÍA 19, CRÍTICO (legal C1 / C.15). Esta prueba afirmaba lo
+    // contrario ("no hay GPS") mientras el cron de /api/cron/gps y el pin de
+    // WhatsApp escribían `posicion` desde la 0050. El aviso ahora declara el
+    // tratamiento que ocurre, con sus dos límites verdaderos: lo rastreado es
+    // el camión (no el teléfono) y las posiciones se borran a los 90 días
+    // (purgar_posicion, mig. 0155). Si alguien vuelve a escribir "no hay GPS"
+    // en el aviso, esta prueba truena — y debe tronar, porque el sistema sí
+    // lo graba.
     const a = avisoSimplificado(flota)!;
-    expect(a).toMatch(/no hay gps/i);
-    expect(a).toMatch(/lo que tú escribes/i);
+    expect(a).toMatch(/posición\s+de\s+la\s+unidad/i);
+    expect(a).toMatch(/gps/i);
+    expect(a).not.toMatch(/no hay gps/i);
+    // El límite verdadero: el teléfono no se rastrea; el camión sí.
+    expect(a).toMatch(/tu teléfono no se rastrea/i);
+    // La retención prometida es la que purgar_posicion ejecuta (90 días).
+    expect(a).toMatch(/90 días/i);
   });
 });
 

@@ -13567,3 +13567,81 @@ begin
   raise exception 'ANTIJOIN_Y_PROPOSITO_0244  folio_uuid_descartado=%  folio_normal_reportado=%  sin_position=%  fondo_ok=%  fondo_rebota=%  interactivo_entra=%  proposito_malo_rebota=%  anon=%  auth=%  svc=%   (esperado t / t / t / ok / tope_proposito / ok / t / t / t / t)',
     folio_uuid_descartado, folio_normal_reportado, sin_position, fondo_ok, fondo_rebota, interactivo_entra, proposito_malo_rebota, anon_ciego, auth_ciego, svc_puede;
 end $$;
+
+-- ── 201. La purga de prospectos borra TODO lo que el aviso promete, y el ledger comercial pierde lo personal pero no el hecho (mig. 0245) ──
+--
+-- (Renumerado dos veces al fusionar: nació 199 —la bandeja SAT tomó ese—,
+-- pasó a 200, y el anti-join de la 0244 tomó el 200. La numeración es de
+-- lectura, no de ejecución.)
+--
+-- /aviso/prospectos promete «tu nombre, puesto, correo y teléfono se eliminan
+-- automáticamente… lo único que queda es el registro de la empresa». Tras la
+-- 0191 la fila del prospecto frío CONSERVABA los mensajes redactados (llevan
+-- el nombre de pila ADENTRO, repuesto tras la completion) y la `atribucion`
+-- del lead (fbclid/gclid identifican a quien llenó /getdemo); y un prospecto
+-- 'lost' (el 'perdido' del CRM de la 0181) nunca entraba a la purga porque la
+-- condición de estado se quedó con la lista vieja. La 0245 cierra las tres.
+--
+-- El ledger comercial (comercial_evento, 0181) guardaba el payload ENTERO de
+-- Cal.com —nombre, correo, respuestas del formulario— sin ningún plazo. La
+-- 0245 lo anonimiza a los 365 días: payload fuera, el hecho (fuente, tipo,
+-- fecha) se queda — borrar el renglón mataría la idempotencia del webhook y
+-- el valor del ledger, y el dato personal no vive ahí.
+--
+-- Todo revierte con el RAISE final. Esperado:
+--   PURGA_0245  lost_persona_fuera=t  lost_limpio=t  empresa_viva=t  ledger_viejo_vacio=t  ledger_reciente_intacto=t  llave_nueva=t  llave_120=t  anon=f
+do $$
+declare
+  lost uuid; ev_viejo uuid; ev_reciente uuid; res jsonb;
+  lost_persona_fuera boolean; lost_limpio boolean; empresa_viva boolean;
+  ledger_viejo_vacio boolean; ledger_reciente_intacto boolean;
+  llave_nueva boolean; llave_120 boolean; anon_ok boolean;
+begin
+  -- El prospecto 'lost' de hace 400 días, con TODO lo que la purga promete
+  -- quitar: persona, contacto de cabecera, notas, clave, mensajes redactados
+  -- (con el nombre adentro, como los deja reponerDecisor) y atribución.
+  insert into public.prospecto (
+      empresa, estado, contacto_nombre, telefono, correo, notas, lead_clave,
+      mensaje_wa, mensaje_correo_asunto, mensaje_correo,
+      mensajes_generados_en, mensajes_modelo, atribucion, created_at)
+    values (
+      '__verif_0243_lost__', 'lost', 'Ing. Prueba Lost', '5219990002431', 'lost@verif.test', 'hablar con lost@verif.test',
+      'lost@verif.test',
+      'Hola Prueba, ¿le vienen bien 15 minutos el jueves?', 'Asunto de prueba', 'Hola Prueba, le escribo de…',
+      now() - interval '400 days', 'modelo-de-prueba',
+      '{"fbclid": "verif-0243"}'::jsonb, now() - interval '400 days')
+    returning id into lost;
+  insert into public.prospecto_persona (prospecto_id, nombre, correo, origen, created_at)
+    values (lost, '__V243 lost__', 'lost.persona@verif.test', 'directorio', now() - interval '400 days');
+
+  -- El ledger: un evento de hace 400 días con payload personal, y uno de hace
+  -- 10 días que tiene que quedarse intacto.
+  insert into public.comercial_evento (clave_idempotencia, fuente, tipo, payload, ocurrido_en)
+    values ('__verif_0243_viejo__', 'calcom', 'appointment',
+            '{"attendee": {"name": "Prueba Persona", "email": "persona@verif.test"}}'::jsonb,
+            now() - interval '400 days')
+    returning id into ev_viejo;
+  insert into public.comercial_evento (clave_idempotencia, fuente, tipo, payload, ocurrido_en)
+    values ('__verif_0243_reciente__', 'calcom', 'appointment',
+            '{"attendee": {"name": "Otra Persona"}}'::jsonb, now() - interval '10 days')
+    returning id into ev_reciente;
+
+  res := public.mantenimiento_de_datos(30);
+
+  select count(*) = 0 into lost_persona_fuera from public.prospecto_persona where prospecto_id = lost;
+  select (contacto_nombre is null and telefono is null and correo is null and notas is null
+          and lead_clave is null and mensaje_wa is null and mensaje_correo is null
+          and mensaje_correo_asunto is null and mensajes_generados_en is null
+          and mensajes_modelo is null and atribucion is null)
+    into lost_limpio from public.prospecto where id = lost;
+  select (empresa = '__verif_0243_lost__' and estado = 'lost') into empresa_viva
+    from public.prospecto where id = lost;
+  select (payload = '{}'::jsonb) into ledger_viejo_vacio from public.comercial_evento where id = ev_viejo;
+  select (payload ? 'attendee') into ledger_reciente_intacto from public.comercial_evento where id = ev_reciente;
+  llave_nueva := res ? 'comercialEventosAnonimizados';
+  llave_120 := res ? 'prospectoPersonasPurgadas';
+  select has_function_privilege('anon', 'public.purgar_comercial_evento(integer, timestamptz)', 'EXECUTE') into anon_ok;
+
+  raise exception E'PURGA_0245  lost_persona_fuera=%  lost_limpio=%  empresa_viva=%  ledger_viejo_vacio=%  ledger_reciente_intacto=%  llave_nueva=%  llave_120=%  anon=%   (esperado t/t/t/t/t/t/t/f)',
+    lost_persona_fuera, lost_limpio, empresa_viva, ledger_viejo_vacio, ledger_reciente_intacto, llave_nueva, llave_120, anon_ok;
+end $$;

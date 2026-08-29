@@ -44,6 +44,22 @@ export interface DatosFiscalesFlota {
   codigoPostal: string | null;
   usoCfdi: string | null;
   /**
+   * Domicilio fiscal completo (calle, número, colonia, CP, ciudad).
+   *
+   * AUDITORÍA 19, CRÍTICO (legal C3 / C.16): esta columna existe desde la
+   * 0018 y NINGUNA pantalla de producción la escribía — solo el seed de demo
+   * y dos arneses de QA. Sin ella `getDatosResponsable` devolvía null y
+   * `/aviso/<flota>` respondía 404 para toda flota real: el aviso de
+   * privacidad que no se puede leer es, legalmente, un aviso que no existe
+   * (LFPDPPP art. 15 fr. I exige identidad Y domicilio del responsable).
+   *
+   * NO entra en `estanCompletos` a propósito: los cinco de arriba los exige
+   * el SAT para timbrar; este lo exige la LFPDPPP para el aviso. Faltando,
+   * se factura igual — lo que no se puede es tratar datos de operadores, y
+   * eso lo frena `ponerAvisoADisposicion` con su propio mensaje.
+   */
+  domicilioFiscal: string | null;
+  /**
    * A dónde se le manda el CFDI (0163, DAT-33).
    *
    * NO ENTRA EN `estanCompletos` A PROPÓSITO: los cinco datos de arriba los
@@ -64,7 +80,7 @@ export function estanCompletos(d: DatosFiscalesFlota | null): boolean {
 export async function getDatosFiscales(tenantId: string): Promise<DatosFiscalesFlota | null> {
   const { data, error } = await supabaseAdmin()
     .from('tenant')
-    .select('rfc, razon_social, regimen_fiscal, codigo_postal_fiscal, uso_cfdi, email_facturacion')
+    .select('rfc, razon_social, regimen_fiscal, codigo_postal_fiscal, uso_cfdi, email_facturacion, domicilio_fiscal')
     .eq('id', tenantId)
     .maybeSingle();
 
@@ -77,6 +93,7 @@ export async function getDatosFiscales(tenantId: string): Promise<DatosFiscalesF
     codigoPostal: (data.codigo_postal_fiscal as string) || null,
     usoCfdi: (data.uso_cfdi as string) || null,
     email: (data.email_facturacion as string) || null,
+    domicilioFiscal: (data.domicilio_fiscal as string) || null,
   };
 }
 
@@ -96,9 +113,12 @@ export interface DatosFiscalesCapturados {
   rfc: string; razonSocial: string; regimenFiscal: string; codigoPostal: string; usoCfdi: string;
   /** Opcional: a dónde llega el CFDI. Ver `DatosFiscalesFlota.email`. */
   email?: string;
+  /** Opcional para facturar, obligatorio para el aviso de privacidad.
+   *  Ver `DatosFiscalesFlota.domicilioFiscal`. */
+  domicilioFiscal?: string;
 }
 
-/** Las cinco columnas de `tenant`, ya normalizadas y listas para escribir. */
+/** Las columnas de `tenant`, ya normalizadas y listas para escribir. */
 export interface FilaFiscalTenant {
   rfc: string;
   razon_social: string;
@@ -106,6 +126,7 @@ export interface FilaFiscalTenant {
   codigo_postal_fiscal: string;
   uso_cfdi: string;
   email_facturacion: string | null;
+  domicilio_fiscal: string | null;
 }
 
 /**
@@ -169,6 +190,17 @@ export function validarDatosFiscales(d: DatosFiscalesCapturados): FilaFiscalTena
     throw new DatoInvalido(`El correo "${d.email}" no tiene forma de correo. Ahí es donde te va a llegar tu CFDI.`);
   }
 
+  // AUDITORÍA 19 (legal C3 / C.16): el domicilio del aviso de privacidad. Se
+  // valida solo la forma mínima —que quepa una dirección de verdad, no una
+  // palabra suelta— porque el SAT no lo compara y nosotros no sabemos mejor
+  // que la constancia. Vacío = null explícito ("no capturado"), nunca ''.
+  const domicilio = (d.domicilioFiscal ?? '').trim();
+  if (domicilio && domicilio.length < 10) {
+    throw new DatoInvalido(
+      'El domicilio fiscal se ve incompleto. Escríbelo entero —calle, número, colonia, código postal y ciudad—: es el que va a aparecer en el aviso de privacidad de tus operadores, y un aviso con medio domicilio no dice dónde reclamarte.',
+    );
+  }
+
   return {
     rfc,
     razon_social: razonSocial,
@@ -176,6 +208,7 @@ export function validarDatosFiscales(d: DatosFiscalesCapturados): FilaFiscalTena
     codigo_postal_fiscal: cp,
     uso_cfdi: d.usoCfdi,
     email_facturacion: email || null,
+    domicilio_fiscal: domicilio || null,
   };
 }
 

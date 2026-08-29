@@ -46,12 +46,22 @@ describe('la política de Likida', () => {
     expect(P).toMatch(/art\. 30/);
   });
 
-  it('no inventa la razón social: si falta, lo dice', () => {
+  it('no inventa la razón social: si está, se PINTA; si falta, lo dice al titular', () => {
     // Mismo criterio que el aviso integral con el contacto del art. 29. Una
     // razón social inventada en una política de privacidad es peor que una que
     // falta, porque la que falta se nota.
-    expect(P).toMatch(/LEGAL_CONFIG\.razonSocial/);
-    expect(P).toMatch(/PRODUCCIÓN BLOQUEADA/);
+    //
+    // AUDITORÍA 19-c2 (A1/A6): antes bastaba con que el env llegara a
+    // LEGAL_CONFIG — el dato no se pintaba en ninguna sección y el banner era
+    // una nota interna de despliegue («PRODUCCIÓN BLOQUEADA») publicada al
+    // titular. Ahora la fr. I interpola la identidad en el primer párrafo, la
+    // rama sin dato lo dice con palabras dirigidas al lector, y el banner
+    // dispara solo por identidad (faltantesEntidad), no por el SLA.
+    expect(P).toMatch(/RESPONSABLE\.razonSocial && RESPONSABLE\.domicilio/);
+    expect(P).toMatch(/con domicilio en \$\{RESPONSABLE\.domicilio\}/);
+    expect(P).toMatch(/aún no están capturados/);
+    expect(P).toMatch(/faltantesEntidad/);
+    expect(P).not.toMatch(/PRODUCCIÓN BLOQUEADA/);
   });
 
   it('el silencio no cuenta como aceptar una transferencia futura', () => {

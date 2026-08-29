@@ -28,6 +28,7 @@ import { generateStructured, StructuredError } from '@/lib/llm/openrouter';
 import { createLlmBudget, type LlmBudget } from '@/lib/llm/budget';
 import { encolarPieza, verificarFormatoCampana } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
+import { notasSinPersona } from '@/lib/likida/prospectos/seudonimo';
 import { logger } from '@/lib/logger';
 
 // Las ÚNICAS cifras que el correo puede decir (prompts/redactor.md §3,
@@ -332,12 +333,22 @@ export async function redactarCorreoFrio(
     logger.info('redactor.dossier_ilegible', { prospecto: prospectoId, err: e instanceof Error ? e.message : String(e) });
   }
 
+  // AUDITORÍA 19, CRÍTICO (legal C2 / C.18): las notas pasaban CRUDAS al
+  // modelo — `prospecto.notas.slice(0, 500)` con lo que un vendedor hubiera
+  // escrito adentro: nombres, correos, teléfonos, y desde /api/lead hasta el
+  // teléfono de un tercero que un formulario público inyectó a `notas`. El
+  // nombre ya se había cerrado con el marcador (ronda previa); las notas se
+  // escapaban por la misma puerta. Ahora pasan por `notasSinPersona` — LA
+  // PUERTA ÚNICA de lib/likida/prospectos/seudonimo.ts, la misma que usa el
+  // Cerebro — con ESTE marcador, para que si el modelo copia un tramo de la
+  // nota, `sustituirMarcador` lo resuelva de vuelta igual que el saludo.
+  const notasLimpias = notasSinPersona(prospecto.notas, prospecto.contacto_nombre, MARCADOR_NOMBRE);
   const dossier = [
     `Empresa: ${prospecto.empresa}`,
     primerNombre ? 'Contacto: {{NOMBRE}}' : 'Contacto: no capturado',
     prospecto.ciudad ? `Ciudad: ${prospecto.ciudad}` : 'Ciudad: no capturada',
     `Etapa del pipeline: ${prospecto.estado}`,
-    prospecto.notas ? `Notas del vendedor: ${prospecto.notas.slice(0, 500)}` : 'Notas: ninguna',
+    notasLimpias ? `Notas del vendedor: ${notasLimpias.slice(0, 500)}` : 'Notas: ninguna',
     ...lineasInvestigadas,
     '(No hay más hechos verificados. Lo que no esté aquí, NO existe.)',
   ].join('\n');
