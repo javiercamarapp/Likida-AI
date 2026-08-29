@@ -19,10 +19,16 @@ vi.mock('@/lib/observability/alerta', () => ({
 
 /** Lo que contesta la RPC `mantenimiento_de_datos`. */
 let rpcRespuesta: { data: unknown; error: { message: string; code?: string } | null };
-const rpc = vi.fn(async () => rpcRespuesta);
+/** Lo que contesta la RPC hermana `mantener_producto_evento` (0259). */
+let rpcProductoRespuesta: { data: unknown; error: { message: string; code?: string } | null };
+const rpc = vi.fn(async (nombre?: unknown) =>
+  nombre === 'mantener_producto_evento' ? rpcProductoRespuesta : rpcRespuesta);
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({ rpc: (...a: unknown[]) => rpc(...(a as [])) }),
 }));
+/** Solo las llamadas a la RPC de borrado principal — el ciclo de vueltas se
+ *  cuenta sobre ELLA; la hermana de producto_evento corre una vez al final. */
+const llamadasMantenimiento = () => rpc.mock.calls.filter((c) => c[0] === 'mantenimiento_de_datos').length;
 
 // El kill switch (0110). Default: sin fila = encendido (false).
 const estaApagado = vi.fn(async (nombre: string) => nombre === '__ninguno_apagado__');
@@ -44,6 +50,7 @@ const peticion = (auth?: string) => new Request('http://likida.test/api/cron/pur
 
 beforeEach(() => {
   rpcRespuesta = { data: { waPurgados: 3, llmCostoPurgado: false }, error: null };
+  rpcProductoRespuesta = { data: { mesesConsolidados: 0, detalleBorrado: 0, parcial: false }, error: null };
   rpc.mockClear();
   alertarOperador.mockClear();
   estaApagado.mockReset().mockResolvedValue(false);
@@ -82,7 +89,23 @@ describe('la corrida', () => {
     // que añadir un dato nuevo al informe no rompa esta prueba por su forma.
     expect(cuerpo).toMatchObject({ corrio: true, waPurgados: 3, llmCostoPurgado: false, vueltas: 1 });
     expect(cuerpo).toHaveProperty('storage');
+    // 0259: el mantenimiento de producto_evento corre en la misma vuelta y su
+    // detalle viaja en el cuerpo — una tabla sin techo no se mantiene a
+    // ciegas.
+    expect(cuerpo).toMatchObject({ productoEvento: { mesesConsolidados: 0, detalleBorrado: 0, parcial: false } });
     expect(rpc).toHaveBeenCalledWith('mantenimiento_de_datos', { p_dias_wa: 30 });
+    expect(rpc).toHaveBeenCalledWith('mantener_producto_evento');
+  });
+
+  it('si la RPC de producto_evento falla, la corrida NO se cae — pero se alerta y el cuerpo dice null, no un 0 inventado', async () => {
+    rpcProductoRespuesta = { data: null, error: { message: 'no existe', code: '42883' } };
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    const cuerpo = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(cuerpo.corrio).toBe(true);
+    expect(cuerpo.productoEvento).toBeNull();
+    expect(alertarOperador).toHaveBeenCalledWith('cron.purgar.producto_evento', expect.objectContaining({ error: 'no existe' }));
   });
 
   // ESC-16: la purga borra en tandas y devuelve `parcial` cuando no alcanzó.
@@ -95,14 +118,14 @@ describe('la corrida', () => {
 
     expect(res.status).toBe(200);
     // Tres vueltas es el techo duro: lo que no cupo lo levanta mañana.
-    expect(rpc).toHaveBeenCalledTimes(3);
+    expect(llamadasMantenimiento()).toBe(3);
     expect(cuerpo).toMatchObject({ corrio: true, parcial: true, vueltas: 3 });
   });
 
   it('una corrida completa NO repite: `parcial` false corta en la primera vuelta', async () => {
     rpcRespuesta = { data: { waPurgados: 12, parcial: false }, error: null };
     await GET(peticion('Bearer secreto-de-prueba'));
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(llamadasMantenimiento()).toBe(1);
   });
 
   it('un error POR VALOR de la RPC es 500 con alerta — no una purga verde que "no encontró nada"', async () => {
@@ -140,6 +163,6 @@ describe('el kill switch (0110)', () => {
   it('sin fila (el default) la purga corre — solo se consulta la palanca global', async () => {
     await GET(peticion('Bearer secreto-de-prueba'));
     expect(estaApagado.mock.calls.map((c) => c[0])).toEqual(['global']);
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(llamadasMantenimiento()).toBe(1);
   });
 });

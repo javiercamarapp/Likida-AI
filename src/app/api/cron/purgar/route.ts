@@ -170,9 +170,35 @@ export async function GET(req: Request) {
       logger.error('cron.purgar.storage_excepcion', { err: e instanceof Error ? e.message : String(e) });
     }
 
-    logger.info('cron.purgar.ok', { ...data, vueltas, storage });
+    // ── PRODUCTO_EVENTO: consolidar el mes cerrado y purgar el detalle ─────
+    // (0259, auditoría tandas 21-24 hallazgo 3). RPC HERMANA y no una llave
+    // más de `mantenimiento_de_datos` a propósito: el PR del 0258 redefine
+    // esa función desde master y dos redefiniciones independientes se borran
+    // las llaves entre sí (regla de la casa: cada PR sale de master, el
+    // squash pierde el apilado sin señal). Misma corrida, mismo horario,
+    // fallo visible propio. Su fallo NO tumba la corrida —las purgas de
+    // arriba ya corrieron— pero se grita y se alerta: una tabla que vuelve a
+    // crecer sin techo en silencio es exactamente el hallazgo que esto
+    // cierra. `null` en el cuerpo = no se pudo, dicho; jamás un 0 inventado.
+    let productoEvento: Record<string, unknown> | null = null;
+    try {
+      const pe = await supabaseAdmin().rpc('mantener_producto_evento');
+      if (pe.error) {
+        const codigo = codigoDeError(pe.error);
+        logger.error('cron.purgar.producto_evento_falló', { error: pe.error.message, codigo });
+        await alertarOperador('cron.purgar.producto_evento', { error: pe.error.message, codigo });
+      } else {
+        productoEvento = (pe.data ?? {}) as Record<string, unknown>;
+      }
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      logger.error('cron.purgar.producto_evento_excepcion', { error });
+      await alertarOperador('cron.purgar.producto_evento', { error });
+    }
+
+    logger.info('cron.purgar.ok', { ...data, vueltas, storage, productoEvento });
     await registrarLatido('purgar', parcial ? 'parcial' : 'ok', { vueltas });
-    return NextResponse.json({ corrio: true, ...data, vueltas, storage });
+    return NextResponse.json({ corrio: true, ...data, vueltas, storage, productoEvento });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     // Mismo criterio que el `if (error)` de arriba, para el camino que lanza.

@@ -14025,3 +14025,82 @@ begin
   raise exception E'SATELITES_ESTRUCTURAL_0258  sin_decidir=%  exentas=%  ledger_cubierto=%   (esperado ninguna / 2 / t)',
     faltantes, cardinality(exentas), ledger_cubierto;
 end $$;
+
+-- ── 207. producto_evento se consolida al cerrar el mes, purga su detalle y el lector no ve encoger nada (mig. 0259) ──
+--
+-- (Nació 205 en su rama y se renumeró a 207 al fusionar con la 0258, que
+-- tomó el 205 y el 206 — la numeración es de lectura, no de ejecución,
+-- como ya pasó dos veces con el 201.)
+--
+-- La 0251 dejó `uso_producto_mensual()` agrupando la tabla ENTERA sin rango
+-- (cada visita a /admin/crecimiento, force-dynamic, un escaneo completo) y
+-- `producto_evento` sin purga: millones de filas al año con 200 flotas. La
+-- 0259 aplica el patrón de llm_costo (0072/0155): consolidado mensual +
+-- purga del detalle, consolidar ANTES de purgar y en la misma función.
+--
+-- Lo que se fija con corrida real:
+--   · el mes cerrado queda en el consolidado con su conteo exacto;
+--   · el detalle viejo muere y el del mes en curso vive;
+--   · el lector devuelve los DOS meses con las cifras correctas (cerrado
+--     desde el consolidado, en curso desde el detalle) — mismo nombre, misma
+--     firma que la 0251;
+--   · repetir el mantenimiento tras la purga NO encoge el mes consolidado
+--     (`do nothing`: el snapshot del cierre es inmutable — un `do update`
+--     re-agregaría desde un detalle ya parcial);
+--   · el piso de 62 días rebota (PU001): purgar antes de consolidar sería
+--     borrar sin snapshot;
+--   · `anon` no ejecuta el mantenimiento.
+-- Todo revierte con el RAISE final. Esperado:
+--   PRODUCTO_MENSUAL_0259  consolidado=t  detalle_viejo_fuera=t  detalle_vivo=t  lector_dos_meses=t  no_encoge=t  piso_rebota=t  anon=f
+do $$
+declare
+  t uuid; res jsonb; res2 jsonb;
+  -- Día 10 de hace CUATRO meses (local MX): siempre a más de 92 días de hoy
+  -- (mínimo ~107) y nunca pegado a una frontera de mes — la siembra no puede
+  -- volverse intermitente por la hora a la que corra el CI.
+  mes_viejo date := (date_trunc('month', now() at time zone 'America/Mexico_City') - interval '4 months')::date;
+  viejo_ts timestamptz := ((date_trunc('month', now() at time zone 'America/Mexico_City')
+                            - interval '4 months' + interval '10 days') at time zone 'America/Mexico_City');
+  mes_actual date := date_trunc('month', now() at time zone 'America/Mexico_City')::date;
+  consolidado boolean; detalle_viejo_fuera boolean; detalle_vivo boolean;
+  lector_dos_meses boolean; no_encoge boolean; piso_rebota boolean := false; anon_ok boolean;
+begin
+  insert into public.tenant (nombre) values ('__verif_0259__') returning id into t;
+  insert into public.producto_evento (tenant_id, pantalla, accion, created_at) values
+    (t, 'resumen', 'pageview', viejo_ts),
+    (t, 'viajes',  'pageview', viejo_ts + interval '1 hour'),
+    (t, 'resumen', 'pageview', viejo_ts + interval '2 hours'),
+    (t, 'resumen', 'pageview', now()),
+    (t, 'viajes',  'pageview', now());
+
+  res := public.mantener_producto_evento(92, now());
+
+  select (eventos = 3) into consolidado
+    from public.producto_evento_mensual where tenant_id = t and mes = mes_viejo;
+  select count(*) = 2 into detalle_viejo_fuera
+    from public.producto_evento where tenant_id = t;
+  select count(*) = 2 into detalle_vivo
+    from public.producto_evento where tenant_id = t and created_at >= now() - interval '1 day';
+  select count(*) = 2
+     and count(*) filter (where u.mes = mes_viejo and u.eventos = 3) = 1
+     and count(*) filter (where u.mes = mes_actual and u.eventos = 2) = 1
+    into lector_dos_meses
+    from public.uso_producto_mensual() u where u.tenant_id = t;
+
+  -- Repetir tras la purga: el consolidado NO se reescribe desde el detalle
+  -- (ya parcial: las filas del mes viejo murieron).
+  res2 := public.mantener_producto_evento(92, now());
+  select (eventos = 3) into no_encoge
+    from public.producto_evento_mensual where tenant_id = t and mes = mes_viejo;
+
+  begin
+    perform public.mantener_producto_evento(30, now());
+  exception when sqlstate 'PU001' then piso_rebota := true;
+  end;
+
+  select has_function_privilege('anon', 'public.mantener_producto_evento(integer, timestamptz, timestamptz)', 'EXECUTE') into anon_ok;
+
+  raise exception E'PRODUCTO_MENSUAL_0259  consolidado=%  detalle_viejo_fuera=%  detalle_vivo=%  lector_dos_meses=%  no_encoge=%  piso_rebota=%  anon=%   (esperado t/t/t/t/t/t/f)',
+    coalesce(consolidado, false), detalle_viejo_fuera, detalle_vivo,
+    coalesce(lector_dos_meses, false), coalesce(no_encoge, false), piso_rebota, anon_ok;
+end $$;
