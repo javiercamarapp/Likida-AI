@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   calcularEstimacion, cuotaVencida, CUOTA_DOF, PRECIO_DIESEL_REFERENCIA,
 } from './calculadora';
+import {
+  parsearCuotasDiesel, validarCuotasDiesel, cuotaDieselVigente,
+} from '../cuadre/cuota_diesel';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // El motor de la calculadora contra los SEIS candados de honestidad del
@@ -126,5 +130,41 @@ describe('calcularEstimacion — las advertencias que venden (candados 3 y 6)', 
     const todo = JSON.stringify(r).toLowerCase();
     expect(todo).not.toContain('hasta un');
     expect(todo).not.toContain('te recuperamos');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 20, FISC-C1 (CRÍTICO). `CUOTA_DOF` es la ÚNICA superficie pública
+// que imprime pesos de estímulo de IEPS de diésel, y su cifra estaba tecleada
+// a mano sin ningún vínculo con `normas/datos/cuota-ieps-diesel.yaml` —el
+// archivo que la rutina del DOF escribe y que el repo cotejó dígito por dígito
+// contra sus acuerdos—. Resultado: la cuota del 25-31 de JULIO ($2.0925)
+// sellada `registradaEl: '2026-08-27'`. El sello de agosto impedía que la
+// guarda de frescura de 14 días disparara, así que la página publicaba pesos
+// calculados con una cuota de hace más de un mes.
+//
+// Las pruebas de arriba no podían verlo: `HOY_VIVA = CUOTA_DOF.registradaEl`
+// compara la constante contra sí misma. Este bloque la compara contra la
+// FUENTE, usando el mismo lector fail-closed que el repo ya tenía escrito para
+// esto (`cuadre/cuota_diesel.ts`) y que nadie llamaba.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('CUOTA_DOF contra la tabla verificada del DOF', () => {
+  const tabla = parsearCuotasDiesel(readFileSync('normas/datos/cuota-ieps-diesel.yaml', 'utf8'));
+
+  it('la tabla de normas/ está bien formada', () => {
+    expect(validarCuotasDiesel(tabla)).toEqual([]);
+    expect(tabla.semanas.length).toBeGreaterThan(0);
+  });
+
+  it('la cuota publicada es la que de verdad estaba vigente en la fecha que la sella', () => {
+    const semana = cuotaDieselVigente(tabla, CUOTA_DOF.registradaEl);
+    expect(semana).not.toBeNull();
+    expect(semana!.cuotaDisminuidaPorLitro).toBe(CUOTA_DOF.pesosPorLitro);
+  });
+
+  it('no se publica una cuota más vieja que la última que el repo verificó', () => {
+    const ultima = [...tabla.semanas].sort((a, b) => a.desde.localeCompare(b.desde)).at(-1)!;
+    expect(CUOTA_DOF.registradaEl >= ultima.desde).toBe(true);
   });
 });

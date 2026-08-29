@@ -31,13 +31,23 @@
  * `cuotaVencida()`: pasado el plazo, la calculadora deja de estimar pesos de
  * IEPS y entrega solo litros (el dato que no cambia).
  *
- * Fuente del valor: la decisión D2 del roadmap documentada en
- * `cuadre/engine.ts` (la cuota vigente citada ahí, $2.0925/L, ago-2026).
- * Quien actualice este valor actualiza TAMBIÉN `registradaEl`.
+ * AUDITORÍA 20, FISC-C1 (CRÍTICO). Este par estuvo mal apareado: $2.0925 es la
+ * cuota del 25-31 de JULIO y venía sellada `registradaEl: '2026-08-27'`. El
+ * sello de agosto impedía que `cuotaVencida()` disparara, así que la única
+ * superficie pública que imprime pesos de IEPS publicaba una cifra de más de
+ * un mes atrás como si fuera la vigente.
+ *
+ * FUENTE ÚNICA: `normas/datos/cuota-ieps-diesel.yaml`, la tabla que la rutina
+ * del DOF escribe y que el repo cotejó dígito por dígito contra sus acuerdos.
+ * El valor de abajo es la última semana verificada ahí (2026-08-15 a 08-21).
+ * Quien lo actualice actualiza TAMBIÉN `registradaEl`, y
+ * `calculadora.test.ts` lo cruza contra esa tabla con el lector fail-closed de
+ * `cuadre/cuota_diesel.ts`: si el par deja de corresponder a una semana real,
+ * falla en CI en vez de publicarse.
  */
 export const CUOTA_DOF = {
-  pesosPorLitro: 2.0925,
-  registradaEl: '2026-08-27',
+  pesosPorLitro: 2.2760,
+  registradaEl: '2026-08-15',
   fuenteUrl: 'https://www.dof.gob.mx/#gsc.tab=0',
 } as const;
 
