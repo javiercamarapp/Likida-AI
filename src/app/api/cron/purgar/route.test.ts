@@ -21,8 +21,13 @@ vi.mock('@/lib/observability/alerta', () => ({
 let rpcRespuesta: { data: unknown; error: { message: string; code?: string } | null };
 /** Lo que contesta la RPC hermana `mantener_producto_evento` (0259). */
 let rpcProductoRespuesta: { data: unknown; error: { message: string; code?: string } | null };
-const rpc = vi.fn(async (nombre?: unknown) =>
-  nombre === 'mantener_producto_evento' ? rpcProductoRespuesta : rpcRespuesta);
+/** Lo que contesta la RPC hermana `mantener_mcp_oauth` (0265). */
+let rpcMcpOauthRespuesta: { data: unknown; error: { message: string; code?: string } | null };
+const rpc = vi.fn(async (nombre?: unknown) => {
+  if (nombre === 'mantener_producto_evento') return rpcProductoRespuesta;
+  if (nombre === 'mantener_mcp_oauth') return rpcMcpOauthRespuesta;
+  return rpcRespuesta;
+});
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({ rpc: (...a: unknown[]) => rpc(...(a as [])) }),
 }));
@@ -51,6 +56,7 @@ const peticion = (auth?: string) => new Request('http://likida.test/api/cron/pur
 beforeEach(() => {
   rpcRespuesta = { data: { waPurgados: 3, llmCostoPurgado: false }, error: null };
   rpcProductoRespuesta = { data: { mesesConsolidados: 0, detalleBorrado: 0, parcial: false }, error: null };
+  rpcMcpOauthRespuesta = { data: { tokensBorrados: 0, codigosBorrados: 0, clientesBorrados: 0, parcial: false }, error: null };
   rpc.mockClear();
   alertarOperador.mockClear();
   estaApagado.mockReset().mockResolvedValue(false);
@@ -93,8 +99,23 @@ describe('la corrida', () => {
     // detalle viaja en el cuerpo — una tabla sin techo no se mantiene a
     // ciegas.
     expect(cuerpo).toMatchObject({ productoEvento: { mesesConsolidados: 0, detalleBorrado: 0, parcial: false } });
+    // 0265: el mantenimiento de MCP OAuth (tokens/códigos/clientes DCR) corre
+    // en la misma vuelta, misma razón que producto_evento.
+    expect(cuerpo).toMatchObject({ mcpOauth: { tokensBorrados: 0, codigosBorrados: 0, clientesBorrados: 0, parcial: false } });
     expect(rpc).toHaveBeenCalledWith('mantenimiento_de_datos', { p_dias_wa: 30 });
     expect(rpc).toHaveBeenCalledWith('mantener_producto_evento');
+    expect(rpc).toHaveBeenCalledWith('mantener_mcp_oauth');
+  });
+
+  it('si la RPC de mcp_oauth falla, la corrida NO se cae — pero se alerta y el cuerpo dice null, no un 0 inventado', async () => {
+    rpcMcpOauthRespuesta = { data: null, error: { message: 'no existe', code: '42883' } };
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    const cuerpo = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(cuerpo.corrio).toBe(true);
+    expect(cuerpo.mcpOauth).toBeNull();
+    expect(alertarOperador).toHaveBeenCalledWith('cron.purgar.mcp_oauth', expect.objectContaining({ error: 'no existe' }));
   });
 
   it('si la RPC de producto_evento falla, la corrida NO se cae — pero se alerta y el cuerpo dice null, no un 0 inventado', async () => {

@@ -14369,3 +14369,187 @@ begin
     carrera_rebota, falla_sqlstate, coalesce(gasto_intacto,false), coalesce(cfdi_intacto,false),
     coalesce(expediente_vacio,false), anon_ok, auth_ok;
 end $$;
+
+-- ── 212. La identidad congelada de un token MCP deja de ser válida el instante en que app_user cambia (mig. 0265, HALLAZGO 1) ──
+--
+-- Esto es lo que un test de TypeScript con Supabase mockeado NO puede
+-- demostrar: que la GARANTÍA vive en la base, contra una fila REAL de
+-- `app_user` que cambia entre el momento en que el token nació y el momento
+-- en que se intenta refrescar. `refrescarTokens` llama exactamente esta RPC
+-- antes de rotar (oauth.ts) — aquí se prueba la RPC misma, con Postgres de
+-- verdad, no con un mock que solo probaría que el mock contesta lo que se le
+-- programó.
+--
+--  (a) Recién consentido: usuario vigente en su tenant y su rol → true.
+--  (b) El ADMIN LE CAMBIA EL ROL (el escenario exacto del hallazgo: "un
+--      contador... el admin le cambia el rol... sin borrar la fila de
+--      app_user") → la MISMA pregunta con el rol viejo ahora contesta false.
+--  (c) Lo mueven a OTRO tenant (incluida la variante que el hallazgo llama
+--      "lo desvincula") → false con el tenant viejo.
+--  (d) Restaurado a su tenant y rol originales → vuelve a true: no es un
+--      candado de una sola vez, es el estado ACTUAL en cada llamada.
+--  (e) La fila de `app_user` ya no existe → false (y, aparte, el FK cascade
+--      de mcp_oauth_token.user_id ya habría borrado el token solo; esta rama
+--      cubre el caso en que la RPC se llama con un user_id que nunca fue, o
+--      cuya fila se borró por otro camino).
+--
+--  (f) `revocar_mcp_oauth_usuario`: tumba TODOS los tokens activos de un
+--      usuario en su tenant de un tiro, deja intacto el de OTRO usuario de
+--      la misma flota, y una segunda llamada no vuelve a tocar lo ya
+--      revocado (idempotente por el propio `where revocado_en is null`).
+do $$
+declare
+  t uuid := gen_random_uuid();
+  t_otro uuid := gen_random_uuid();
+  u uuid := gen_random_uuid();
+  u_otro uuid := gen_random_uuid();
+  cli uuid;
+  tok_a uuid; tok_r uuid; tok_otro uuid;
+  vigente_inicial boolean;
+  vigente_tras_rol boolean;
+  vigente_tras_tenant boolean;
+  vigente_restaurado boolean;
+  vigente_usuario_borrado boolean;
+  revocados_primera bigint;
+  revocados_segunda bigint;
+  otro_token_intacto boolean;
+  ambos_revocados boolean;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0265_a__');
+  insert into public.tenant (id, nombre) values (t_otro, '__verif_0265_b__');
+  insert into public.app_user (id, email, rol, tenant_id) values (u, '__verif_0265_u__@likida.ai', 'contador', t);
+  insert into public.app_user (id, email, rol, tenant_id) values (u_otro, '__verif_0265_v__@likida.ai', 'contador', t);
+  insert into public.mcp_oauth_cliente (nombre, redirect_uris)
+    values ('__verif_0265__', '["https://claude.ai/api/mcp/auth_callback"]'::jsonb)
+    returning id into cli;
+
+  -- (a) recién consentido: la identidad congelada (tenant=t, rol=contador)
+  -- es exactamente la actual.
+  select public.mcp_oauth_usuario_vigente(u, t, 'contador') into vigente_inicial;
+
+  -- (b) EL ESCENARIO DEL HALLAZGO: el admin cambia el rol sin borrar la fila.
+  update public.app_user set rol = 'encargado' where id = u;
+  select public.mcp_oauth_usuario_vigente(u, t, 'contador') into vigente_tras_rol;
+
+  -- (c) lo mueven a otro tenant (con el rol ya restaurado, para aislar la variable).
+  update public.app_user set rol = 'contador', tenant_id = t_otro where id = u;
+  select public.mcp_oauth_usuario_vigente(u, t, 'contador') into vigente_tras_tenant;
+
+  -- (d) restaurado del todo: no es un candado de un solo uso.
+  update public.app_user set tenant_id = t where id = u;
+  select public.mcp_oauth_usuario_vigente(u, t, 'contador') into vigente_restaurado;
+
+  -- (e) la fila ya no existe.
+  select public.mcp_oauth_usuario_vigente(gen_random_uuid(), t, 'contador') into vigente_usuario_borrado;
+
+  -- (f) revocar_mcp_oauth_usuario: dos tokens activos de `u` en `t`, uno de
+  -- `u_otro` en el mismo tenant.
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('1', 64), 'acceso', cli, u, t, 'contador', gen_random_uuid(), now() + interval '8 hours')
+    returning id into tok_a;
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('2', 64), 'refresco', cli, u, t, 'contador', gen_random_uuid(), now() + interval '60 days')
+    returning id into tok_r;
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('3', 64), 'acceso', cli, u_otro, t, 'contador', gen_random_uuid(), now() + interval '8 hours')
+    returning id into tok_otro;
+
+  select public.revocar_mcp_oauth_usuario(t, u) into revocados_primera;
+  select (revocado_en is null) into otro_token_intacto from public.mcp_oauth_token where id = tok_otro;
+  select bool_and(revocado_en is not null) into ambos_revocados
+    from public.mcp_oauth_token where id in (tok_a, tok_r);
+  -- Segunda llamada: ya no hay nada activo que tocar (idempotente).
+  select public.revocar_mcp_oauth_usuario(t, u) into revocados_segunda;
+
+  raise exception 'MCP_OAUTH_VIGENCIA_0265  inicial=%  tras_rol=%  tras_tenant=%  restaurado=%  usuario_borrado=%  revocados_1=%  revocados_2=%  otro_intacto=%  ambos_revocados=%   (esperado t / f / f / t / f / 2 / 0 / t / t)',
+    vigente_inicial, vigente_tras_rol, vigente_tras_tenant, vigente_restaurado, vigente_usuario_borrado,
+    revocados_primera, revocados_segunda, otro_token_intacto, ambos_revocados;
+end $$;
+
+-- ── 213. `mantener_mcp_oauth` purga tokens revocados/expirados, códigos muertos y clientes DCR que nunca completaron un login — y nada más (mig. 0265, HALLAZGO 3) ──
+--
+-- Mismo criterio que el bloque 208 (`mantener_producto_evento`, 0259): lo
+-- que solo Postgres puede demostrar es que el DELETE se detiene exactamente
+-- donde debe. Un cliente DCR SÍ usado (con un token, aunque ya expirado) NO
+-- se borra por su antigüedad — perdería la trazabilidad de qué cliente
+-- consintió qué, que es justo el dato que la 0260 nació para guardar.
+do $$
+declare
+  t uuid := gen_random_uuid();
+  u uuid := gen_random_uuid();
+  cli_vivo uuid; cli_muerto uuid; cli_joven uuid;
+  tok_vivo uuid; tok_revocado_viejo uuid; tok_revocado_reciente uuid; tok_expirado_viejo uuid;
+  cod_viejo uuid; cod_reciente uuid;
+  piso_rebota boolean := false;
+  r jsonb;
+  vivo_token_sigue boolean;
+  revocado_viejo_se_fue boolean;
+  revocado_reciente_sigue boolean;
+  expirado_viejo_se_fue boolean;
+  cliente_vivo_sigue boolean;
+  cliente_muerto_se_fue boolean;
+  cliente_joven_sigue boolean;
+  codigo_viejo_se_fue boolean;
+  codigo_reciente_sigue boolean;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0265_purga__');
+  insert into public.app_user (id, email, rol, tenant_id) values (u, '__verif_0265_purga__@likida.ai', 'contador', t);
+
+  -- El piso (PU001): 29 días rebota, sin tocar nada.
+  begin
+    perform public.mantener_mcp_oauth(29);
+  exception when others then piso_rebota := (sqlstate = 'PU001');
+  end;
+
+  -- Un cliente que SÍ produjo un token (aunque el token ya haya muerto):
+  -- nunca se borra por antigüedad — tiene historia que contar.
+  insert into public.mcp_oauth_cliente (id, nombre, redirect_uris, creado_en)
+    values (gen_random_uuid(), '__cliente_vivo__', '["https://claude.ai/api/mcp/auth_callback"]'::jsonb, now() - interval '200 days')
+    returning id into cli_vivo;
+  -- Un cliente que JAMÁS produjo un token, viejo: el escenario del hallazgo
+  -- (DCR abierto, un escáner que se registra y se va).
+  insert into public.mcp_oauth_cliente (id, nombre, redirect_uris, creado_en)
+    values (gen_random_uuid(), '__cliente_muerto__', '["https://claude.ai/api/mcp/auth_callback"]'::jsonb, now() - interval '200 days')
+    returning id into cli_muerto;
+  -- Un cliente sin token pero RECIÉN registrado: todavía puede estar a
+  -- mitad del primer login — no se toca.
+  insert into public.mcp_oauth_cliente (id, nombre, redirect_uris, creado_en)
+    values (gen_random_uuid(), '__cliente_joven__', '["https://claude.ai/api/mcp/auth_callback"]'::jsonb, now())
+    returning id into cli_joven;
+
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en, revocado_en)
+    values (repeat('4', 64), 'acceso', cli_vivo, u, t, 'contador', gen_random_uuid(), now() + interval '8 hours', null)
+    returning id into tok_vivo;
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en, revocado_en)
+    values (repeat('5', 64), 'refresco', cli_vivo, u, t, 'contador', gen_random_uuid(), now() + interval '60 days', now() - interval '100 days')
+    returning id into tok_revocado_viejo;
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en, revocado_en)
+    values (repeat('6', 64), 'refresco', cli_vivo, u, t, 'contador', gen_random_uuid(), now() + interval '60 days', now() - interval '1 day')
+    returning id into tok_revocado_reciente;
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en, revocado_en)
+    values (repeat('7', 64), 'acceso', cli_vivo, u, t, 'contador', gen_random_uuid(), now() - interval '100 days', null)
+    returning id into tok_expirado_viejo;
+
+  insert into public.mcp_oauth_codigo (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en, usado_en, creado_en)
+    values (repeat('a', 64), cli_vivo, u, t, 'contador', 'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() - interval '10 days', now() - interval '10 days', now() - interval '10 days')
+    returning id into cod_viejo;
+  insert into public.mcp_oauth_codigo (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en, usado_en, creado_en)
+    values (repeat('b', 64), cli_vivo, u, t, 'contador', 'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '3 min', null, now())
+    returning id into cod_reciente;
+
+  r := public.mantener_mcp_oauth(30);
+
+  select exists(select 1 from public.mcp_oauth_token where id = tok_vivo) into vivo_token_sigue;
+  select not exists(select 1 from public.mcp_oauth_token where id = tok_revocado_viejo) into revocado_viejo_se_fue;
+  select exists(select 1 from public.mcp_oauth_token where id = tok_revocado_reciente) into revocado_reciente_sigue;
+  select not exists(select 1 from public.mcp_oauth_token where id = tok_expirado_viejo) into expirado_viejo_se_fue;
+  select exists(select 1 from public.mcp_oauth_cliente where id = cli_vivo) into cliente_vivo_sigue;
+  select not exists(select 1 from public.mcp_oauth_cliente where id = cli_muerto) into cliente_muerto_se_fue;
+  select exists(select 1 from public.mcp_oauth_cliente where id = cli_joven) into cliente_joven_sigue;
+  select not exists(select 1 from public.mcp_oauth_codigo where id = cod_viejo) into codigo_viejo_se_fue;
+  select exists(select 1 from public.mcp_oauth_codigo where id = cod_reciente) into codigo_reciente_sigue;
+
+  raise exception 'MANTENER_MCP_OAUTH_0265  piso_rebota=%  vivo=%  rev_viejo_fue=%  rev_reciente=%  exp_viejo_fue=%  cli_vivo=%  cli_muerto_fue=%  cli_joven=%  cod_viejo_fue=%  cod_reciente=%  borrados=%   (esperado t/t/t/t/t/t/t/t/t/t/{3 tokens,1 codigo,1 cliente})',
+    piso_rebota, vivo_token_sigue, revocado_viejo_se_fue, revocado_reciente_sigue, expirado_viejo_se_fue,
+    cliente_vivo_sigue, cliente_muerto_se_fue, cliente_joven_sigue, codigo_viejo_se_fue, codigo_reciente_sigue, r;
+end $$;

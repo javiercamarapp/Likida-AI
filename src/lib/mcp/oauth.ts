@@ -222,6 +222,18 @@ export async function emitirCodigo(c: Consentimiento): Promise<ResultadoCodigo> 
     logger.error('mcp.oauth.codigo_emision', { err: error.message });
     return { ok: false, error: 'no_disponible', detalle: 'No se pudo emitir la autorización. Intenta de nuevo.' };
   }
+
+  // Sello de último uso del CLIENTE (no del token): best-effort, igual que
+  // el de `validarAcceso`. Es lo que la 0260 prometió ("para poder podarlas")
+  // y nadie escribía — `mantener_mcp_oauth` (0265) purga por "nunca produjo
+  // un token", que no depende de esta columna, pero dejarla en null para
+  // siempre en un cliente SÍ usado sería una promesa de la 0260 incumplida.
+  void supabaseAdmin()
+    .from('mcp_oauth_cliente')
+    .update({ ultimo_uso_en: new Date().toISOString() })
+    .eq('id', c.clientId)
+    .then(({ error: e }) => { if (e) logger.warn('mcp.oauth.cliente_sello', { err: e.message }); });
+
   return { ok: true, codigo };
 }
 
@@ -389,6 +401,28 @@ export async function refrescarTokens(refresco: string, clientId: string): Promi
     return { ok: false, error: 'no_valido', detalle: REFRESCO_INVALIDO };
   }
   if (Date.parse(String(data.expira_en)) <= Date.now()) {
+    return { ok: false, error: 'no_valido', detalle: REFRESCO_INVALIDO };
+  }
+
+  // AUDITORÍA FINAL 2026-08-29, HALLAZGO 1: la identidad congelada en el
+  // token (tenant_id, rol) puede llevar meses sin ser cierta — un usuario
+  // dado de baja o con el rol cambiado en `app_user` no borra su fila (el FK
+  // cascade sí la borraría, pero nada en el producto hace la baja hoy). Sin
+  // esto, cada rotación renovaba el refresco otros 60 días para siempre.
+  // Se revalida contra la base ANTES de rotar, y un desajuste se trata
+  // EXACTAMENTE como el reuso de un refresco: se tumba la familia entera y
+  // se contesta el mismo `invalid_grant` (mcp_oauth_usuario_vigente, 0265).
+  const vigente = await supabaseAdmin().rpc('mcp_oauth_usuario_vigente', {
+    p_user_id: data.user_id,
+    p_tenant_id: data.tenant_id,
+    p_rol: data.rol,
+  });
+  if (vigente.error) {
+    logger.error('mcp.oauth.revalidacion', { err: vigente.error.message });
+    return { ok: false, error: 'no_disponible', detalle: 'No se pudo verificar el usuario. Intenta de nuevo.' };
+  }
+  if (vigente.data !== true) {
+    await revocarFamilia(String(data.familia), 'usuario_no_vigente');
     return { ok: false, error: 'no_valido', detalle: REFRESCO_INVALIDO };
   }
 

@@ -48,15 +48,25 @@ function cadena(resultado: Resultado): unknown {
   return proxy;
 }
 
-/** Respuestas por tabla, consumidas en orden; la última se repite. */
-function conTablas(porTabla: Record<string, Resultado[]>) {
+/** Respuestas por tabla, consumidas en orden; la última se repite. Y, por
+ *  RPC (`porRpc`), para `mcp_oauth_usuario_vigente` — la revalidación del
+ *  hallazgo 1 no pasa por `.from()`. */
+function conTablas(porTabla: Record<string, Resultado[]>, porRpc: Record<string, Resultado[]> = {}) {
   const usados: Record<string, number> = {};
+  const usadosRpc: Record<string, number> = {};
   sbMock.mockReturnValue({
     from(tabla: string) {
       const r = porTabla[tabla];
       if (!r) return cadena(OK([]));
       const i = usados[tabla] ?? 0;
       usados[tabla] = i + 1;
+      return cadena(r[Math.min(i, r.length - 1)]);
+    },
+    rpc(fn: string) {
+      const r = porRpc[fn];
+      if (!r) return cadena(OK(true));
+      const i = usadosRpc[fn] ?? 0;
+      usadosRpc[fn] = i + 1;
       return cadena(r[Math.min(i, r.length - 1)]);
     },
   });
@@ -228,6 +238,56 @@ describe('refrescarTokens', () => {
     conTablas({ mcp_oauth_token: [OK(filaRefresco({ tipo: 'acceso' }))] });
     const r = await refrescarTokens(REFRESCO, 'cli-1');
     expect(r.ok).toBe(false);
+  });
+
+  // AUDITORÍA FINAL 2026-08-29, HALLAZGO 1: la identidad congelada se
+  // revalida contra app_user (mcp_oauth_usuario_vigente) ANTES de rotar.
+  describe('revalidación de identidad (hallazgo 1)', () => {
+    it('usuario dado de baja o con el rol/tenant cambiado: tumba la familia y niega, igual que el reuso', async () => {
+      const updates: string[] = [];
+      sbMock.mockReturnValue({
+        from(tabla: string) {
+          if (tabla === 'mcp_oauth_token') {
+            updates.push('token');
+            return cadena(OK(filaRefresco()));
+          }
+          return cadena(OK([]));
+        },
+        rpc(fn: string) {
+          if (fn === 'mcp_oauth_usuario_vigente') {
+            updates.push('vigente');
+            return cadena(OK(false));
+          }
+          return cadena(OK(true));
+        },
+      });
+      const r = await refrescarTokens(REFRESCO, 'cli-1');
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toBe('no_valido');
+      // Se llamó la revalidación, y el SIGUIENTE `.from('mcp_oauth_token')`
+      // (tras negarse) fue el UPDATE de `revocarFamilia` — la misma rama que
+      // el reuso de un refresco ya rotado.
+      expect(updates).toEqual(['token', 'vigente', 'token']);
+    });
+
+    it('usuario vigente (mismo tenant y rol): rota normal', async () => {
+      conTablas(
+        { mcp_oauth_token: [OK(filaRefresco()), OK([{ id: 'tok-r' }]), OK(null)] },
+        { mcp_oauth_usuario_vigente: [OK(true)] },
+      );
+      const r = await refrescarTokens(REFRESCO, 'cli-1');
+      expect(r.ok).toBe(true);
+    });
+
+    it('la base que no contesta la revalidación es no_disponible, no no_valido', async () => {
+      conTablas(
+        { mcp_oauth_token: [OK(filaRefresco())] },
+        { mcp_oauth_usuario_vigente: [FALLA()] },
+      );
+      const r = await refrescarTokens(REFRESCO, 'cli-1');
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toBe('no_disponible');
+    });
   });
 });
 
