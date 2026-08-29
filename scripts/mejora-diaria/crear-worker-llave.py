@@ -6,7 +6,7 @@
 # (Usa el service role local por última vez: para eso existe esta ceremonia.)
 import hashlib, json, pathlib, secrets, urllib.request
 
-REPO = pathlib.Path.home() / "javiercamarapp" / "likida"
+REPO = pathlib.Path(__file__).resolve().parents[2]
 ENV = REPO / ".env.local"
 
 def leer(clave):

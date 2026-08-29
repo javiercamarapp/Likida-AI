@@ -29,7 +29,7 @@ en la cola para no repetir nota.
 
 ## 3 · La entrega
 
-`~/javiercamarapp/likida-marketing-cola/publicar/<fecha>-noticias-<slug>/`:
+`~/likida-marketing-cola/publicar/<fecha>-noticias-<slug>/`:
 las tarjetas numeradas, `post.md` con copy por canal (LinkedIn: profesional
 con la fuente citada · Instagram: directo · TikTok: texto corto para
 descripción), hashtags, y `fuentes.md` con los links. Nada se publica solo.

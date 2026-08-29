@@ -5,7 +5,7 @@ LinkedIn público, el conmutador — y el primer mensaje que Javier mandaría.
 
 ## El lote del día
 
-Lee las credenciales de `~/javiercamarapp/likida/.env.local`
+Lee las credenciales de `~/likida/.env.local`
 (NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY) y trae 10 prospectos
 por curl al REST de Supabase: `prospecto` con `contacto_nombre=is.null`,
 ordenados así — primero los que YA tienen teléfono o correo (etapa DENUE),
@@ -34,7 +34,7 @@ nota lo dice ("sin decisor público") — así mañana no se repite el intento.
 ## El mensaje hiperpersonalizado (la mitad que vale)
 
 Para los 5 mejores del lote, escribe el primer toque en
-`~/javiercamarapp/likida-marketing-cola/prospeccion/<fecha>-<slug>.md`:
+`~/likida-marketing-cola/prospeccion/<fecha>-<slug>.md`:
 tres variantes (WhatsApp ≤6 líneas · correo ≤120 palabras · LinkedIn DM ≤400
 caracteres), cada una anclada en SU evidencia — la vacante que publicaron con
 sus palabras, su ruta, su flota. Voz honesto-fiscal, sin humo. Likida no

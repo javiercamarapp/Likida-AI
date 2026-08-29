@@ -3,7 +3,7 @@ MARCA.md §6 (el proceso de Javier). Corres cada lunes en la mañana.
 
 ## 1 · El banco de hooks (procesa lo nuevo de Javier)
 
-Revisa `~/javiercamarapp/likida-marketing-cola/referencias/`:
+Revisa `~/likida-marketing-cola/referencias/`:
 
 - Videos nuevos (.mp4/.mov/.webm) que no estén ya en `banco-de-hooks.md`:
   extrae el audio con ffmpeg y transcríbelo EN LOCAL con whisper.cpp (modelo

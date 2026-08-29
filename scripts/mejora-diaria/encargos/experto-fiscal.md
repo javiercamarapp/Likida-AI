@@ -40,7 +40,7 @@ verificación, jerarquía (ley > reglamento > RMF), version_anterior.
    (formato del auditor) para el pipeline de mejora diaria. Tu commit toca
    SOLO `normas/`. PR siempre — lo fiscal se revisa.
 
-Reporte a `~/javiercamarapp/likida/.mejora-diaria/reportes/fiscal-<fecha>.md`:
+Reporte a `~/likida/.mejora-diaria/reportes/fiscal-<fecha>.md`:
 fichas verificadas/actualizadas/creadas, drifts con archivo:línea, y qué
 área sigue. Termina con UNA línea:
 VEREDICTO: área <n> — <f> fichas verificadas, <a> actualizadas, <d> drifts código-vs-ley hallados

@@ -4,7 +4,7 @@ rutinas leyendo UNA página — y que ninguna rutina muera en silencio.
 
 ## 1 · El censo de la semana (todo es local, no inventes nada)
 
-- `~/javiercamarapp/likida/.mejora-diaria/logs/`: por CADA rutina declarada
+- `~/likida/.mejora-diaria/logs/`: por CADA rutina declarada
   en `scripts/mejora-diaria/ESQUELETO-AUTONOMIA.md`, ¿corrió cuando le
   tocaba? Una rutina SIN entradas de log en su ventana = **CAÍDA EN
   SILENCIO** — va al principio del reporte, en rojo. Ese es tu hallazgo más
@@ -13,7 +13,7 @@ rutinas leyendo UNA página — y que ninguna rutina muera en silencio.
   descartados, sin veredicto.
 - `gh pr list` (likida.ai): PRs `mejora/*` abiertos ESPERANDO a Javier, con
   días de edad; los de dependabot añejos.
-- `~/javiercamarapp/likida-marketing-cola/`: piezas en `publicar/` sin
+- `~/likida-marketing-cola/`: piezas en `publicar/` sin
   publicar (edad), sequences en `propuesta` esperando su autorización,
   guiones sin producir.
 - Reportes de la semana en `.mejora-diaria/reportes/` (auditoría, fiscal):
@@ -25,7 +25,7 @@ rutinas leyendo UNA página — y que ninguna rutina muera en silencio.
 
 ## 2 · El reporte
 
-`~/javiercamarapp/likida/.mejora-diaria/reportes/enjambre-<fecha>.md`, UNA
+`~/likida/.mejora-diaria/reportes/enjambre-<fecha>.md`, UNA
 página: primero lo ROTO (rutinas caídas, fallos repetidos), luego lo que
 ESPERA SU ACCIÓN (PRs, sequences, piezas — con conteos), luego lo producido
 (cifras de la semana), y al final una recomendación concreta (máx 3 líneas).

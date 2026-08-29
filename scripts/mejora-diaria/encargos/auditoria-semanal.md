@@ -35,7 +35,7 @@ Corre `date +%V`, toma el número de semana módulo 8 y audita SOLO ese rubro:
    limpio y `npx vitest run` COMPLETO en verde. Commit por hallazgo
    (conventional, español, SIN "[deploy]" en el asunto, con el pie
    Co-Authored-By de la casa). NO hagas push.
-4. REPORTA a `~/javiercamarapp/likida/.mejora-diaria/reportes/semana-<fecha>-rubro-<n>.md`:
+4. REPORTA a `~/likida/.mejora-diaria/reportes/semana-<fecha>-rubro-<n>.md`:
    calificación del rubro (0-10 con criterio escrito), cada hallazgo con
    archivo:línea + escenario, cada ataque con su resultado (rompió / resistió),
    y lo que quedó SIN arreglar para decisión de Javier. Sin ambigüedad: "está
