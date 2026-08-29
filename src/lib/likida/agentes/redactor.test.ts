@@ -321,6 +321,43 @@ describe('redactarCorreoFrio — el modelo NUNCA ve el nombre real del contacto'
     const llamada = generateStructured.mock.calls[0][0] as { messages: Array<{ content: string }> };
     expect(llamada.messages[0].content).toContain('Contacto: no capturado');
   });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 19, CRÍTICO (legal C2 / C.18), sexta pasada: el nombre se
+  // cerró con el marcador y las NOTAS siguieron saliendo crudas por la misma
+  // puerta — con el correo, el teléfono y el nombre que un vendedor (o el
+  // formulario público de /api/lead, vía la mezcla que anota lo rechazado)
+  // hubiera dejado en `prospecto.notas`. Estas pruebas fijan la puerta única:
+  // lo que llega al modelo pasó por `notasSinPersona`.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('las notas del vendedor llegan al modelo SIN correo, SIN teléfono y SIN el nombre del contacto', async () => {
+    respuestas.set('prospecto', [{
+      data: {
+        ...PROSPECTO,
+        contacto_nombre: 'Ing. Ramón Treviño',
+        notas: 'Hablar con Ramón Treviño al 8112345678 o a ramon.trevino@perla.mx; urge antes del cierre.',
+      },
+      error: null,
+    }]);
+    respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    generateStructured.mockResolvedValueOnce(respuestaModelo(SALIDA_CON_MARCADOR));
+
+    await redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO);
+
+    const llamada = generateStructured.mock.calls[0][0] as { messages: Array<{ content: string }> };
+    const dossierEnviado = llamada.messages[0].content;
+    // Lo que la nota decía de la persona, fuera:
+    expect(dossierEnviado).not.toContain('8112345678');
+    expect(dossierEnviado).not.toContain('ramon.trevino@perla.mx');
+    expect(dossierEnviado).not.toMatch(/Ramón|Trevi/);
+    // Lo que la nota decía del NEGOCIO, intacto — la puerta reduce, no borra:
+    expect(dossierEnviado).toContain('urge antes del cierre');
+    // Y el nombre dentro de la nota quedó como EL MISMO marcador del saludo,
+    // para que `sustituirMarcador` lo resuelva de vuelta si el modelo lo copia.
+    expect(dossierEnviado).toContain('Notas del vendedor:');
+    expect(dossierEnviado).toContain('{{NOMBRE}}');
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

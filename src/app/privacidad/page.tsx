@@ -48,7 +48,14 @@ const SECCIONES: SeccionLegal[] = [
     titulo: 'Quién es responsable, y de qué datos exactamente',
     fundamento: 'LFPDPPP art. 15 fr. I · art. 14',
     parrafos: [
-      `**Likida** es responsable de los datos personales de quien **contrata y usa el servicio**: la persona que administra la flota, el contralor, quien entra al panel.`,
+      // AUDITORÍA 19-c2 (A1): `RESPONSABLE.razonSocial` y `.domicilio` se
+      // cableaban desde el env y NO SE PINTABAN en ninguna sección — la
+      // página cumplía la fr. I solo en el código fuente. La identidad va
+      // aquí, en el primer párrafo; si falta, se DICE qué falta (misma regla
+      // del repo: no se rellena, se señala).
+      RESPONSABLE.razonSocial && RESPONSABLE.domicilio
+        ? `**${RESPONSABLE.razonSocial}**, con domicilio en ${RESPONSABLE.domicilio}, es la responsable de los datos personales de quien **contrata y usa el servicio**: la persona que administra la flota, el contralor, quien entra al panel. Aquí "Likida" nombra a esa entidad.`
+        : `**Likida** es responsable de los datos personales de quien **contrata y usa el servicio**: la persona que administra la flota, el contralor, quien entra al panel. 🔴 **La razón social inscrita y el domicilio de la entidad operadora aún no están capturados** — la fr. I del art. 15 los exige y se señalan aquí en vez de quedar en blanco o inventarse.`,
       `**Los datos de los operadores son otra cosa.** Cuando un chofer manda sus comprobantes por WhatsApp, la responsable de esos datos es **su empresa**, no Likida: Likida los trata por cuenta de ella y siguiendo sus instrucciones, como persona encargada (art. 2 fr. XII). El aviso que le corresponde a cada operador lo publica su propia flota, y Likida lo aloja por encargo.`,
       `Si eres operador y llegaste aquí buscando tus datos, el aviso que te toca es el de tu empresa: escribe **PRIVACIDAD** por el mismo chat y te llega la liga.`,
       // AUDITORÍA 18 (C2): el tercer grupo de titulares. Likida también es
@@ -66,6 +73,14 @@ const SECCIONES: SeccionLegal[] = [
       // AUDITORÍA 18 (M8): el enlace de acceso es un dato que se trata —y que
       // sale por el proveedor de correo—; la fr. II obliga a enumerarlo.
       `El **enlace de acceso de un solo uso** que te llega por correo cada vez que entras: se genera para tu dirección, caduca en minutos y se invalida al usarlo.`,
+      // AUDITORÍA 19 (reincidente #22): la cookie del reenvío de enlace no
+      // estaba en ningún aviso. Es un dato (tu correo, en tu navegador) y la
+      // fr. II obliga a enumerarlo — reenvio_enlace.ts la describe entera.
+      `Dos **cookies técnicas de acceso**: una guarda por una hora el correo con el que pediste tu enlace —solo para reenviarte uno nuevo si el tuyo caduca, la lee únicamente el servidor— y otra impide reenvíos repetidos durante cinco minutos. No hay cookies de publicidad ni de rastreo.`,
+      // AUDITORÍA 19 (reincidente #18): el contenido de los mensajes del
+      // dueño/contralor por WhatsApp se trata (el analista de oficina los
+      // contesta) y no estaba enumerado.
+      `El **contenido de tus mensajes** cuando le escribes al número de WhatsApp del servicio — las preguntas que haces y lo que el asistente te contesta.`,
       `**Registros técnicos de uso**: cuándo entras al panel, qué liquidaciones consultas y los errores que produce el sistema mientras lo usas.`,
       `**No se tratan datos sensibles**, ni se piden datos bancarios o de tarjeta.`,
     ],
@@ -84,7 +99,11 @@ const SECCIONES: SeccionLegal[] = [
     fundamento: 'LFPDPPP art. 35 · art. 2 fr. XX',
     parrafos: [
       `**No se venden, y no se comparten con nadie para que los use por su cuenta.**`,
-      `Pasan por proveedores que trabajan por instrucción de Likida y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia**—: alojamiento de aplicación y base de datos, mensajería de WhatsApp, **envío de correo** —tanto los avisos del panel como **el correo con el que entras**: por ese proveedor pasa tu dirección y el enlace de un solo uso que abre tu sesión—, monitoreo de errores, y los modelos de lenguaje que leen los comprobantes, a los que en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
+      // AUDITORÍA 19 (reincidente #18): decía solo "los modelos de lenguaje
+      // que leen los comprobantes" — y el texto de los mensajes del panel/
+      // WhatsApp de oficina también viaja al mismo proveedor para poder
+      // contestarte. El art. 35 exige describir el flujo real.
+      `Pasan por proveedores que trabajan por instrucción de Likida y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia**—: alojamiento de aplicación y base de datos, mensajería de WhatsApp, **envío de correo** —tanto los avisos del panel como **el correo con el que entras**: por ese proveedor pasa tu dirección y el enlace de un solo uso que abre tu sesión—, monitoreo de errores, y los modelos de lenguaje: les llegan **los comprobantes para leerlos** y **el texto de tus mensajes y consultas** para poder contestarte. A esos modelos en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
       `El detalle de esos subencargados está en la documentación del producto y se actualiza cuando cambia.`,
       `**Si algún día quisiéramos transferir tus datos para algo distinto, te lo pediríamos antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
     ],
@@ -146,10 +165,16 @@ export default function Privacidad() {
       etiqueta="Política de privacidad"
       bajada="Ley Federal de Protección de Datos Personales en Posesión de los Particulares"
       secciones={SECCIONES}
-      aviso={!estado.listo ? (
+      aviso={estado.faltantesEntidad.length > 0 ? (
+        // AUDITORÍA 19-c2 (A6): el rótulo era una instrucción interna al
+        // equipo de ventas publicada en el documento legal del titular, y
+        // disparaba también por versiones de anexos (SLA) que nada tienen que
+        // ver con el art. 15. Ahora le habla al titular, nombra el dato
+        // ausente, y solo dispara por la identidad del responsable.
         <FaltaDato>
-          <strong>PRODUCCIÓN BLOQUEADA:</strong> faltan datos legales o anexos contractuales.
-          No debe presentarse como paquete enterprise hasta completar identidad, contacto y versiones contractuales.
+          A esta política le faltan datos de identidad del responsable (razón social o
+          domicilio de la entidad que opera Likida). La primera sección lo señala en su texto
+          en vez de dejarlo en blanco.
         </FaltaDato>
       ) : undefined}
       pie={

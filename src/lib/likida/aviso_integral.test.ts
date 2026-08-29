@@ -175,13 +175,26 @@ describe('lo que este producto sí hace, dicho sin adornos', () => {
     expect(t).toMatch(/espera en la descarga/i);
   });
 
-  it('dice que no hay GPS: la hora es la del mensaje del chofer, no telemetría', () => {
-    // hitos_viaje.ts: "el sello guarda la hora en que el mensaje llegó, no la
-    // del evento físico... el producto nunca la presenta como telemetría". El
-    // aviso tampoco puede: insinuar rastreo enunciaría un tratamiento que no
-    // ocurre.
-    expect(todo()).toMatch(/No hay GPS ni rastreo/i);
-    expect(todo()).toMatch(/lo que tú escribes/i);
+  it('declara el GPS de la unidad como dato (fr. II) y su uso como finalidad oponible (fr. III)', () => {
+    // AUDITORÍA 19, CRÍTICO (legal C1 / C.15). Esta prueba afirmaba "No hay
+    // GPS ni rastreo" mientras sincronizar_gps.ts (cron cada 5 min) y el pin
+    // de WhatsApp escribían `posicion` desde la 0050 — el aviso negaba un
+    // tratamiento que corre en producción. Ahora fija lo contrario: que el
+    // dato esté enumerado, que la finalidad esté enunciada entre las NO
+    // necesarias (la liquidación cierra sin posiciones — 0207), y que la
+    // retención dicha sea la que purgar_posicion ejecuta (90 días).
+    expect(todo()).toMatch(/posición GPS de la unidad/i);
+    expect(todo()).not.toMatch(/No hay GPS/i);
+    // El límite verdadero, dicho: el rastreado es el camión, no el teléfono.
+    expect(todo()).toMatch(/tu teléfono no se rastrea/i);
+    expect(todo()).toMatch(/90 días/i);
+    // La finalidad del GPS vive entre las NO necesarias, con oposición.
+    const frIII = avisoIntegral(FLOTA).find((s) => s.fundamento.includes('15 fr. III'))!;
+    const t = frIII.parrafos.join('\n');
+    const rotulo = t.indexOf('NO son necesarias');
+    const gps = t.indexOf('posiciones GPS');
+    expect(rotulo).toBeGreaterThan(-1);
+    expect(gps).toBeGreaterThan(rotulo);
   });
 });
 

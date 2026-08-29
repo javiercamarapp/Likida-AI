@@ -171,7 +171,11 @@ export default async function FlotasPage() {
   const onboardingDe = (tenantId: string): OnboardingFlota | null =>
     onboarding === null
       ? null
-      : onboarding.get(tenantId) ?? { credenciales: { total: 0, probadas: 0 }, avisosConfigurados: 0 };
+      : onboarding.get(tenantId) ?? {
+          credenciales: { total: 0, probadas: 0 },
+          avisosConfigurados: 0,
+          avisoPrivacidad: { razonSocial: false, domicilio: false },
+        };
 
   return (
     <main className="h-full">
@@ -355,6 +359,24 @@ export default async function FlotasPage() {
                           ? `${numero(f.viajes)} ${f.viajes === 1 ? 'viaje registrado' : 'viajes registrados'}`
                           : 'Ni un viaje registrado todavía'}
                         href={`/dashboard/viajes?tenant=${f.id}`} accion="ver viajes"
+                      />
+                      {/* 6. El aviso de privacidad de la flota (auditoría 19,
+                          legal C3 / C.16). Sin razón social el aviso NO existe
+                          (404) y el tratamiento de datos de choferes queda
+                          frenado en el primer mensaje; sin domicilio existe
+                          pero sale con la fr. I pendiente. */}
+                      <Casilla
+                        estado={ob === null
+                          ? 'sin_medir'
+                          : ob.avisoPrivacidad.razonSocial && ob.avisoPrivacidad.domicilio ? 'ok' : 'pendiente'}
+                        texto={ob === null
+                          ? 'Aviso de privacidad: no se pudo leer (≠ que falte)'
+                          : !ob.avisoPrivacidad.razonSocial
+                            ? 'Aviso de privacidad SIN responsable: falta la razón social — sus choferes no pueden mandar comprobantes'
+                            : !ob.avisoPrivacidad.domicilio
+                              ? 'Aviso de privacidad incompleto: falta el domicilio fiscal (la fr. I sale marcada pendiente)'
+                              : 'Aviso de privacidad completo: razón social y domicilio capturados'}
+                        href={`/dashboard/suscripcion?tenant=${f.id}`} accion="capturar"
                       />
                     </div>
                   );

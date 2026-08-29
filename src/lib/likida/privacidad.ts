@@ -209,7 +209,7 @@ export function avisoSimplificado(r: DatosResponsable): string | null {
     // `viaje.llegada_en/descarga_en/regreso_en` y ningún aviso los enunciaba.
     // Se nombran con las palabras que el chofer de verdad manda, porque eso es
     // lo que tiene que reconocer.
-    `Qué se trata: tu nombre y teléfono, las fotos de comprobantes de gasto que envíes por aquí (diésel, casetas, alimentación, hospedaje) con sus montos y fechas, y los avisos del viaje que tú mandes ("ya llegué", "estoy descargando", "voy de regreso") con la hora de tu mensaje.`,
+    `Qué se trata: tu nombre y teléfono, las fotos de comprobantes de gasto que envíes por aquí (diésel, casetas, alimentación, hospedaje) con sus montos y fechas, los avisos del viaje que tú mandes ("ya llegué", "estoy descargando", "voy de regreso") con la hora de tu mensaje, y la posición GPS de la unidad que traes asignada.`,
     ``,
     // Fr. III — finalidades, DISTINGUIENDO. La fracción vigente no se conforma
     // con enumerarlas: pide separar las que requieren consentimiento. Y el
@@ -224,12 +224,23 @@ export function avisoSimplificado(r: DatosResponsable): string | null {
     ``,
     // AUDITORÍA 3, ALTO (LEG-A1) — la finalidad de los hitos, enunciada. La
     // liquidación cierra igual sin ellos (es seguimiento, no requisito), así
-    // que va como finalidad ADICIONAL, no escondida en "liquidar". Y se dice
-    // la verdad sobre el alcance: la hora es la del mensaje, no telemetría —
-    // hitos_viaje.ts ya lo estableció ("el producto nunca la presenta como
-    // telemetría"), y un aviso que insinúe rastreo enunciaría un tratamiento
-    // que no ocurre.
-    `También: anotar la hora de tus avisos del viaje para medir sus tiempos —como la espera en la descarga— y enseñárselos a la empresa. No hay GPS: solo se anota lo que tú escribes y a qué hora lo mandaste.`,
+    // que va como finalidad ADICIONAL, no escondida en "liquidar".
+    //
+    // AUDITORÍA 19, CRÍTICO (legal C1 / C.15): esta línea decía "No hay GPS:
+    // solo se anota lo que tú escribes" — y el producto lleva desde la 0050
+    // grabando posiciones. Tres caminos reales las escriben en `posicion`:
+    // el poller de rastreo (sincronizar_gps.ts, cron /api/cron/gps cada 5
+    // min, vercel.json:30), el pin que el chofer manda por WhatsApp
+    // (processor.ts → registrarUbicacionChofer) y el pin de asistencia
+    // (asistencia_wa.ts). La geolocalización de la unidad mientras el chofer
+    // la maneja ES un dato personal suyo (LFPDPPP art. 3 fr. IX: persona
+    // identificada o identificable), y un aviso que lo niega es peor que uno
+    // que calla. Se declara con su límite verdadero: el rastreado es el
+    // camión de la empresa, no el teléfono del chofer, y las posiciones se
+    // borran a los 90 días (purgar_posicion, mig. 0155).
+    `También: anotar la hora de tus avisos del viaje para medir sus tiempos —como la espera en la descarga— y enseñárselos a la empresa.`,
+    ``,
+    `Sobre tu ubicación: si tu empresa tiene GPS en sus camiones, se recibe la *posición de la unidad* que manejas para medir los tiempos del viaje y enseñárselos a la empresa; si compartes tu ubicación por el chat, también se guarda y la ve tu jefe. Se borra a los 90 días. Tu teléfono no se rastrea.`,
     ``,
     // Art. 26 fr. II — el derecho de oposición al tratamiento automatizado. Es
     // el elemento 11 del checklist de docs/conocimiento/11-datos-personales.md
@@ -500,8 +511,15 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
     {
       titulo: 'Quién es responsable de tus datos',
       fundamento: 'LFPDPPP art. 15 fr. I',
+      // AUDITORÍA 19 (legal C3 / C.16): sin domicilio capturado, la sección
+      // lo DICE y se marca pendiente — mismo criterio que el contacto del
+      // art. 29 más abajo. Antes la ruta entera respondía 404, que es dejar
+      // al titular sin nada por faltar un dato de la flota.
+      pendiente: !domicilio,
       parrafos: [
-        `**${razonSocial}**, con domicilio en ${domicilio}, es la responsable de tus datos personales. A ella le reclamas y ante ella ejerces tus derechos.`,
+        domicilio
+          ? `**${razonSocial}**, con domicilio en ${domicilio}, es la responsable de tus datos personales. A ella le reclamas y ante ella ejerces tus derechos.`
+          : `**${razonSocial}** es la responsable de tus datos personales. A ella le reclamas y ante ella ejerces tus derechos. **La empresa aún no ha capturado su domicilio fiscal** — se dice aquí en vez de dejarlo en blanco o inventar uno; mientras tanto, el camino que sí funciona es escribir **PRIVACIDAD** por el mismo chat de WhatsApp.`,
         // AUDITORÍA 18 (B6): decía "fr. XX", que es la definición de TRANSFERENCIA.
         // "Persona encargada" es la fr. XII (normas/lfpdppp-2-XII-XX.yaml); la
         // XX se cita bien más abajo, en la sección del art. 35, donde sí toca.
@@ -516,8 +534,18 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         `Las **fotos de comprobantes** que envías por WhatsApp —diésel, casetas, alimentación, hospedaje, refacciones— y lo que viene escrito en ellas: montos, fechas, folios, RFC del establecimiento y datos fiscales del comprobante.`,
         `El **contenido de tus mensajes** en esa conversación, y los **viajes y liquidaciones** en los que participas.`,
         // AUDITORÍA 3, ALTO (LEG-A1): los hitos 0090 como categoría de dato,
-        // con su límite dicho — la hora es la del mensaje, no telemetría.
-        `Los **avisos del viaje** que decides mandar por el mismo chat —"ya llegué", "estoy descargando", "voy de regreso"— con la hora en que llega tu mensaje. **No hay GPS ni rastreo del teléfono:** se anota únicamente lo que tú escribes y cuándo lo mandaste.`,
+        // con su límite dicho — la hora es la del mensaje.
+        `Los **avisos del viaje** que decides mandar por el mismo chat —"ya llegué", "estoy descargando", "voy de regreso"— con la hora en que llega tu mensaje.`,
+        // AUDITORÍA 19, CRÍTICO (legal C1 / C.15): este párrafo decía "**No
+        // hay GPS ni rastreo del teléfono**" mientras el cron de
+        // /api/cron/gps (cada 5 minutos) y el pin de WhatsApp escriben
+        // `posicion` desde la 0050. La geolocalización de la unidad con un
+        // chofer identificado al volante es dato personal del chofer, y la
+        // fr. II obliga a enumerarla. Se declara con sus dos límites reales:
+        // lo rastreado es el camión (el dispositivo lo instala la empresa,
+        // no vive en el teléfono del chofer) y la retención es de 90 días
+        // (purgar_posicion, mig. 0155).
+        `La **posición GPS de la unidad que traes asignada**, cuando tu empresa tiene contratado un rastreo satelital para sus camiones: la posición del camión se recibe cada pocos minutos, también mientras tú lo manejas. Y la **ubicación que tú decidas compartir** por el chat, que se guarda y se le muestra a tu empresa. **Tu teléfono no se rastrea:** el dispositivo de rastreo es del camión, y de tu teléfono solo sale lo que tú mandes. Las posiciones se conservan **90 días** y después se borran solas.`,
         // AUDITORÍA EXTERNA 16-AGO-2026 (P2): la versión anterior decía "no
         // se usa para nada", y el flujo real es más matizado — la foto viaja
         // COMPLETA al motor de lectura (no se puede enmascarar una imagen
@@ -525,7 +553,15 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         // que lo sensible se guarde o participe del cuadre. El aviso ahora
         // describe exactamente eso; un aviso que promete más de lo que el
         // código hace es un hallazgo de due diligence, no una protección.
-        `**No se piden ni se conservan datos sensibles.** Ni salud, ni origen racial o étnico, ni creencias, ni afiliación sindical, ni preferencias sexuales, ni datos biométricos. Cada foto se procesa completa por el motor de lectura para extraer los campos del comprobante; si en ella aparece por accidente algo sensible (un ticket de farmacia, por ejemplo), un filtro lo detecta y lo excluye: **no se guarda, no participa en tu liquidación**, y puedes pedir que la foto se borre.`,
+        // AUDITORÍA 19 (legal, reincidente #7): decía a secas "puedes pedir
+        // que la foto se borre", y la 0178 decidió lo contrario para la foto
+        // que YA es comprobante de un gasto: es evidencia fiscal y se
+        // conserva (CFF art. 30) — el ejecutor ARCO la desliga del titular,
+        // no la borra. Lo que SÍ se borra solo es la imagen que no respalda
+        // ningún gasto (cola de huérfanos, mig. 0165). El aviso ahora dice
+        // esa frontera con todas sus letras, porque prometer un borrado que
+        // la base rechaza es una promesa con evidencia escrita de romperse.
+        `**No se piden ni se conservan datos sensibles.** Ni salud, ni origen racial o étnico, ni creencias, ni afiliación sindical, ni preferencias sexuales, ni datos biométricos. Cada foto se procesa completa por el motor de lectura para extraer los campos del comprobante; si en ella aparece por accidente algo sensible (un ticket de farmacia, por ejemplo), un filtro lo detecta y lo excluye: **no se guarda como dato, no participa en tu liquidación**, y la imagen que no respalda ningún gasto se elimina sola del almacenamiento. **Lo que no se puede borrar ni pidiéndolo:** la foto que ya es comprobante de un gasto — esa se conserva por obligación fiscal (CFF art. 30). Lo que sí puedes pedir es que se **desligue de tu persona**, y eso es lo que la cancelación ejecuta.`,
       ],
     },
     {
@@ -543,6 +579,15 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         // ellos: es seguimiento pedido por la empresa, y el titular conserva
         // la oposición sin que eso afecte su liquidación.
         `· Anotar la hora de tus avisos del viaje ("ya llegué", "estoy descargando", "voy de regreso") para medir los tiempos de la operación —por ejemplo, cuánto dura la espera en la descarga— y mostrárselos a la empresa.`,
+        // AUDITORÍA 19 (legal C1 / C.15): la finalidad del GPS, enunciada
+        // donde la ley la pide y con su oposición dicha entera. Va entre las
+        // NO necesarias porque la liquidación cierra igual sin posiciones
+        // (0207: sin posiciones en el radio no hay fila, es un motivo
+        // declarado, no un cero). Y se dice el límite de la oposición: el
+        // rastreo del camión lo contrata la empresa; lo que la oposición
+        // detiene es el uso de esas posiciones ligado a tu persona, no el
+        // dispositivo del camión.
+        `· Usar las posiciones GPS de la unidad para el seguimiento del viaje y para medir sus tiempos —por ejemplo, cuánto estuvo detenida la unidad en un sitio de carga o descarga— y mostrárselo a la empresa. Puedes oponerte a que esas posiciones se usen ligadas a tu persona; el rastreo del camión es un contrato de tu empresa con su proveedor y no se apaga desde aquí, y decírtelo así es más honesto que prometer lo contrario.`,
         `· Medir cómo funciona el servicio para mejorarlo (estadísticas de uso, sin identificarte en los reportes).`,
         `Cualquier finalidad que no esté escrita aquí requiere que te vuelvan a pedir permiso. La ley vigente ya no permite ampararse en usos "compatibles o análogos".`,
       ],
@@ -735,7 +780,13 @@ export function avisoProspectos(d: DatosAvisoProspectos): SeccionAviso[] {
       pendiente: !d.razonSocial || !d.domicilio,
       parrafos: [
         `**${razonSocial}** (Likida), con domicilio en ${domicilio}, es la responsable de tus datos personales.`,
-        `Este aviso es para ti si **trabajas en una empresa de transporte o con flota propia** y Likida te contactó —o piensa hacerlo— para ofrecerle su servicio a tu empresa. No eres cliente de Likida ni nos diste tus datos: por eso te decimos aquí de dónde salieron y qué hacemos con ellos.`,
+        // AUDITORÍA 19 (legal, reincidente #14): decía "ni nos diste tus
+        // datos" a TODO lector — y el lead de /getdemo (api/lead) sí los dio,
+        // con su nombre, correo y teléfono en el formulario. Un aviso que le
+        // niega al titular su propio acto no describe el tratamiento real
+        // (art. 15 fr. II exige decir de dónde salieron). Se dicen los dos
+        // orígenes, porque los dos existen.
+        `Este aviso es para ti si **trabajas en una empresa de transporte o con flota propia** y Likida te contactó —o piensa hacerlo— para ofrecerle su servicio a tu empresa. Hay dos formas de que tengamos tus datos, y este aviso cubre las dos: **los buscamos nosotros** en fuentes públicas sin que lo supieras, o **tú los dejaste** al usar la calculadora o pedir una demostración en likida.ai. En ambos casos aquí dice qué tenemos y qué hacemos con ello.`,
         `Si ya usas Likida como cliente, tu aviso es la **política de privacidad**; si eres operador de una flota, el aviso que te toca lo publica tu empresa.`,
       ],
     },
@@ -745,6 +796,11 @@ export function avisoProspectos(d: DatosAvisoProspectos): SeccionAviso[] {
       parrafos: [
         `Tu **nombre**, tu **puesto**, tu **correo y teléfono de trabajo** y, si lo tienes público, tu **perfil profesional**; junto con el nombre, el giro y la plaza de tu empresa y la vacante que publicó.`,
         `Salieron de **fuentes de acceso público**: el directorio de empresas del INEGI (DENUE), bolsas de trabajo donde tu empresa publicó una vacante, el sitio web de tu empresa y directorios o perfiles profesionales públicos. Algunos correos **no se leyeron en ninguna parte: se dedujeron** del patrón de correos de la empresa, y así quedan marcados —como no verificados— hasta que alguien los confirma.`,
+        // AUDITORÍA 19 (legal, reincidente #14): el fbclid del lead no estaba
+        // enumerado en ningún aviso. Es un identificador de la persona que
+        // llenó el formulario y la fr. II obliga a decirlo. Se purga junto
+        // con lo demás (mig. 0243).
+        `Si tú dejaste tus datos en likida.ai, además se guarda **de qué anuncio o búsqueda llegaste** (los identificadores de campaña que tu navegador trae en la liga, como el fbclid de Facebook o el gclid de Google). Sirven para saber qué canal funcionó; se borran con el resto de tus datos.`,
         `**No se tratan datos sensibles** ni datos de tu vida privada: solo los de tu papel en la empresa.`,
       ],
     },

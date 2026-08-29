@@ -12,6 +12,18 @@
 //
 // Lo mismo para lo que se cuela en `notas`: correos y teléfonos de personas,
 // y el propio nombre del contacto si el censo lo repitió ahí.
+//
+// ── POR QUÉ VIVE EN lib/ Y NO JUNTO A LA RUTA (auditoría 19, C2 / C.18) ────
+//
+// Nació pegado a /api/admin/mapa-prospectos/mensaje, y por eso el SEGUNDO
+// camino que manda datos de prospecto a un modelo —el Redactor de correos
+// fríos (agentes/redactor.ts)— no lo encontró: cerró el nombre con su propio
+// marcador y dejó `prospecto.notas` saliendo crudo hacia OpenRouter durante
+// seis pasadas de auditoría. La lección no es "arreglar el redactor": es que
+// una protección pegada a UN llamador se queda en ese llamador. Ahora es LA
+// PUERTA ÚNICA: todo prompt que se arme con datos de un prospecto pasa las
+// notas por `notasSinPersona`, y seudonimo_puerta_unica.test.ts vigila que
+// ningún archivo que llame al modelo interpole `notas` sin importar de aquí.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const MARCADOR_DECISOR = '{{DECISOR}}';
@@ -39,8 +51,18 @@ function escaparRegex(s: string): string {
  * apellido suelto de ≥3 letras, palabra entera). No es un anonimizador perfecto —una nota puede
  * nombrar a otra persona que no conocemos— y por eso se DICE en el aviso de
  * prospectos qué sale; esto reduce el dato al mínimo que el redactor necesita.
+ *
+ * `marcador` es el token con el que ESE prompt nombra al decisor: el Cerebro
+ * usa `{{DECISOR}}` y el Redactor de correos `{{NOMBRE}}`. Se parametriza
+ * para que la sustitución de vuelta (reponer el nombre tras la completion)
+ * encuentre el mismo token que su propio system prompt enseña — un marcador
+ * ajeno dentro de las notas confundiría al modelo y sobreviviría a la vuelta.
  */
-export function notasSinPersona(notas: string | null, contactoNombre: string | null): string | null {
+export function notasSinPersona(
+  notas: string | null,
+  contactoNombre: string | null,
+  marcador: string = MARCADOR_DECISOR,
+): string | null {
   if (!notas) return null;
   let t = notas.replace(CORREO, '[correo omitido]').replace(TELEFONO, '[teléfono omitido]');
   if (contactoNombre) {
@@ -49,7 +71,7 @@ export function notasSinPersona(notas: string | null, contactoNombre: string | n
     // suelto de 3+ letras: "Treviño" a secas también identifica.
     for (const n of [tokens.join(' '), ...tokens]) {
       if (n.length < 3) continue;
-      t = t.replace(new RegExp(`(?<![\\p{L}])${escaparRegex(n)}(?![\\p{L}])`, 'giu'), MARCADOR_DECISOR);
+      t = t.replace(new RegExp(`(?<![\\p{L}])${escaparRegex(n)}(?![\\p{L}])`, 'giu'), marcador);
     }
   }
   return t;

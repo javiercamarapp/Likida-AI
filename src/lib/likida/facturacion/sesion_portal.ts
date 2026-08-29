@@ -230,9 +230,16 @@ export async function invalidarSesionPortal(
   portalConectorId: string,
 ): Promise<void> {
   try {
+    // La cookie cifrada se DESTRUYE junto con el apagado (auditoría 19,
+    // reincidente #17 — mismo criterio que `desactivarCredencial`): una
+    // sesión invalidada que conserva su cookie es acceso revocado a medias.
     const { error } = await acotada(supabaseAdmin()
       .from('conector_credencial')
-      .update({ activo: false, ultimo_error: 'sesión caducada o rechazada por el portal' })
+      .update({
+        activo: false,
+        valores_cifrados: `revocada:${new Date().toISOString()}`,
+        ultimo_error: 'sesión caducada o rechazada por el portal',
+      })
       .eq('tenant_id', tenantId)
       .eq('conector_id', idSesion(portalConectorId)), 'invalidarSesionPortal');
     if (error) throw new Error(error.message);

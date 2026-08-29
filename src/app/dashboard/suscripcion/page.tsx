@@ -195,6 +195,11 @@ export default async function SuscripcionPage({
         // pantalla, en vez de bloquear la contratación por un dato que se puede
         // capturar después.
         email: String(fd.get('emailFacturacion') ?? ''),
+        // El domicilio del aviso de privacidad (auditoría 19, legal C3 /
+        // C.16): sin él, /aviso/<flota> no puede decir dónde reclamarle al
+        // responsable y el tratamiento de datos de los operadores se queda
+        // frenado en el primer mensaje.
+        domicilioFiscal: String(fd.get('domicilioFiscal') ?? ''),
       });
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'guardar los datos fiscales') };
@@ -387,6 +392,14 @@ export default async function SuscripcionPage({
               <Campo nombre="emailFacturacion" etiqueta="Correo para tu factura"
                 valorInicial={fiscales?.email ?? ''} placeholder="contabilidad@miflota.com"
                 ayuda="Ahí te llega el CFDI de cada mensualidad. Si lo dejas vacío, se timbra igual pero no te llega a nadie." />
+              {/* AUDITORÍA 19, CRÍTICO (legal C3 / C.16): la columna existía
+                  desde la 0018 y ninguna pantalla la llenaba, así que el aviso
+                  de privacidad de TODA flota real respondía 404. Este es el
+                  lugar: los mismos datos de la constancia, capturados juntos. */}
+              <Campo nombre="domicilioFiscal" etiqueta="Domicilio fiscal"
+                valorInicial={fiscales?.domicilioFiscal ?? ''}
+                placeholder="Calle 60 #123, Col. Centro, 97000 Mérida, Yuc."
+                ayuda="Completo, como en tu constancia. Es el que aparece en el aviso de privacidad de tus operadores; sin él, tus choferes no pueden mandar comprobantes — la ley obliga a decirles quién es responsable de sus datos y dónde." />
             </FormaConAviso>
           )}
         </section>

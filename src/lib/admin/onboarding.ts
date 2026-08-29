@@ -23,6 +23,12 @@ export interface OnboardingFlota {
   /** Filas en `agente_notificacion_config` (0097). 0 NO es "roto": sin fila
    *  corren los defaults del código — la casilla lo dice así. */
   avisosConfigurados: number;
+  /** ¿El aviso de privacidad de la flota se puede armar completo? (auditoría
+   *  19, legal C3 / C.16). Sin razón social el aviso NI EXISTE (404 y el
+   *  tratamiento de datos de choferes queda frenado en el primer mensaje);
+   *  sin domicilio existe pero sale con la fr. I pendiente. Se capturan en
+   *  /dashboard/suscripcion. */
+  avisoPrivacidad: { razonSocial: boolean; domicilio: boolean };
 }
 
 /**
@@ -33,7 +39,7 @@ export interface OnboardingFlota {
  */
 export async function getOnboardingFlotas(): Promise<Map<string, OnboardingFlota>> {
   const admin = supabaseAdmin();
-  const [credenciales, avisos] = await Promise.all([
+  const [credenciales, avisos, tenants] = await Promise.all([
     traerTodo<{ tenant_id: string; probada_en: string | null }>(
       (d, h) => admin
         .from('conector_credencial')
@@ -51,13 +57,27 @@ export async function getOnboardingFlotas(): Promise<Map<string, OnboardingFlota
         .order('tenant_id').order('agente').range(d, h),
       'getOnboardingFlotas/agente_notificacion_config',
     ),
+    // Los dos datos que sostienen /aviso/<flota> (auditoría 19, legal C3 /
+    // C.16). Se leen de `tenant` directo — es la misma verdad que consulta
+    // `getDatosResponsable`, sin duplicar el criterio en otra tabla.
+    traerTodo<{ id: string; razon_social: string | null; domicilio_fiscal: string | null }>(
+      (d, h) => admin
+        .from('tenant')
+        .select('id, razon_social, domicilio_fiscal', conteo(d))
+        .order('id').range(d, h),
+      'getOnboardingFlotas/tenant',
+    ),
   ]);
 
   const mapa = new Map<string, OnboardingFlota>();
   const de = (tenantId: string): OnboardingFlota => {
     let v = mapa.get(tenantId);
     if (!v) {
-      v = { credenciales: { total: 0, probadas: 0 }, avisosConfigurados: 0 };
+      v = {
+        credenciales: { total: 0, probadas: 0 },
+        avisosConfigurados: 0,
+        avisoPrivacidad: { razonSocial: false, domicilio: false },
+      };
       mapa.set(tenantId, v);
     }
     return v;
@@ -68,5 +88,12 @@ export async function getOnboardingFlotas(): Promise<Map<string, OnboardingFlota
     if (c.probada_en !== null) v.credenciales.probadas += 1;
   }
   for (const a of avisos) de(a.tenant_id).avisosConfigurados += 1;
+  for (const t of tenants) {
+    const v = de(t.id);
+    v.avisoPrivacidad = {
+      razonSocial: Boolean(t.razon_social?.trim()),
+      domicilio: Boolean(t.domicilio_fiscal?.trim()),
+    };
+  }
   return mapa;
 }

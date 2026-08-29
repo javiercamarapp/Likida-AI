@@ -4,7 +4,7 @@ import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { revalidatePath } from 'next/cache';
-import { listarSolicitudesArco, resolverSolicitudArco } from '@/lib/likida/repo';
+import { listarSolicitudesArco, resolverSolicitudArco, ejecutarCancelacionArco } from '@/lib/likida/repo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { fechaMx, hoyMx } from '@/lib/formato';
@@ -60,6 +60,35 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
         : { ok: `Solicitud resuelta. La respuesta NO se pudo enviar por WhatsApp${r.error ? ` (${r.error})` : ''} — entrégala al titular por otro canal.` };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'resolver la solicitud') };
+    }
+  }
+
+  // AUDITORÍA 19 (legal, reincidente #5): `ejecutar_arco_cancelacion` (0178)
+  // existía sin un solo llamador — una cancelación se "resolvía" escribiendo
+  // prosa sin que la base cambiara. Este botón la ejecuta DE VERDAD:
+  // anonimiza nombre y teléfono del titular, borra sus conversaciones, y la
+  // RPC misma deja la solicitud resuelta con la evidencia de qué tocó. El
+  // humano firma (aprieta el botón); el sistema ejecuta — en ese orden.
+  async function accionEjecutarCancelacion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await requireSessionTenant(RUTA);
+    const sp = await searchParams;
+    let tenantEfectivo = s.tenantId;
+    if (s.rol === 'superadmin' && sp?.tenant) {
+      const { resolverTenantPedido } = await import('@/lib/auth/tenant-api');
+      tenantEfectivo = await resolverTenantPedido(supabaseAdmin(), tenantEfectivo, sp.tenant);
+    }
+    const solicitudId = String(fd.get('solicitudId') ?? '');
+    if (!solicitudId) return { error: 'Falta la solicitud.' };
+    try {
+      const r = await ejecutarCancelacionArco(tenantEfectivo, solicitudId);
+      revalidatePath(RUTA);
+      if (!r.ok) return { error: `No se ejecutó la cancelación: ${r.motivo}` };
+      return r.avisada
+        ? { ok: 'Cancelación ejecutada: el titular quedó anonimizado en la base y se le confirmó por WhatsApp. La documentación fiscal se conserva por el CFF art. 30, desligada de su persona.' }
+        : { ok: `Cancelación ejecutada: el titular quedó anonimizado en la base. La confirmación NO salió por WhatsApp${r.errorAviso ? ` (${r.errorAviso})` : ''} — entrégasela por otro canal.` };
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'ejecutar la cancelación') };
     }
   }
 
@@ -144,6 +173,19 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
                       <td className="px-3 py-3">
                         {s.estado === 'resuelta' || s.estado === 'improcedente' ? (
                           <span className="text-xs" style={{ color: 'var(--muted)' }}>{s.resolucion ?? '—'}</span>
+                        ) : s.tipo === 'cancelacion' ? (
+                          <div className="flex flex-col gap-2">
+                            {/* La cancelación NO se resuelve con prosa: se
+                                EJECUTA (anonimiza al titular). El botón dice
+                                lo que hace antes de que alguien lo apriete. */}
+                            <FormaConAviso accion={accionEjecutarCancelacion} boton="Ejecutar cancelación" columnas="auto">
+                              <input type="hidden" name="solicitudId" value={s.id} />
+                            </FormaConAviso>
+                            <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                              Anonimiza nombre y teléfono del titular y borra sus conversaciones. Los comprobantes
+                              fiscales se conservan por ley (CFF art. 30), desligados de su persona. No se puede deshacer.
+                            </span>
+                          </div>
                         ) : (
                           <FormaConAviso accion={accionResponder} boton="Responder" columnas="260px auto">
                             <input type="hidden" name="solicitudId" value={s.id} />

@@ -506,7 +506,11 @@ async function correrOnboarding(disparo: DisparoCorrida, hoy: string, venceEnVue
       const viajes = await contarDeFlota('viaje', 'created_at', f.id, null, null, 'exito.onboarding.viajes');
       const obf: OnboardingFlota | null = ob === null
         ? null
-        : ob.get(f.id) ?? { credenciales: { total: 0, probadas: 0 }, avisosConfigurados: 0 };
+        : ob.get(f.id) ?? {
+            credenciales: { total: 0, probadas: 0 },
+            avisosConfigurados: 0,
+            avisoPrivacidad: { razonSocial: false, domicilio: false },
+          };
       enOnboarding.push({
         flota: f,
         dias: Math.max(0, diasEntreIso(f.creadaEn, `${hoy}T12:00:00Z`)),

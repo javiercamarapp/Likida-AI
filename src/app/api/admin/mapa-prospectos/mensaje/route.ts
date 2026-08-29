@@ -20,7 +20,11 @@ import { generateStructured } from '@/lib/llm/openrouter';
 import { createLlmBudget } from '@/lib/llm/budget';
 import { giroDe, NOMBRE_GIRO } from '@/lib/admin/prospectos-mapa';
 import { pieAvisoProspectos } from '@/lib/likida/privacidad';
-import { lineaDecisor, notasSinPersona, reponerDecisor, MARCADOR_DECISOR } from './seudonimo';
+// La PUERTA ÚNICA de datos de persona hacia el modelo (auditoría 19, legal
+// C2 / C.18): vive en lib/likida/prospectos para que TODO camino que arme un
+// prompt con datos de un prospecto pase por la misma puerta — este y el
+// Redactor de correos fríos. seudonimo_puerta_unica.test.ts lo vigila.
+import { lineaDecisor, notasSinPersona, reponerDecisor, MARCADOR_DECISOR } from '@/lib/likida/prospectos/seudonimo';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { sesionSuperadmin } from '../puerta';

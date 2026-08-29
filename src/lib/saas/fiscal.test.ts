@@ -39,13 +39,14 @@ describe('estanCompletos — se puede facturar o no, no hay a medias', () => {
       rfc: RFC_OK, razonSocial: 'X SA', regimenFiscal: '601', codigoPostal: '97000', usoCfdi: 'G03',
       // El correo NO entra en `estanCompletos`: sin él se timbra igual, solo
       // que el papel no le llega a nadie (DAT-33). Aquí va nulo a propósito.
-      email: null,
+      // El domicilio tampoco: es del aviso de privacidad, no del CFDI (C.16).
+      email: null, domicilioFiscal: null,
     })).toBe(true);
   });
 
   it('falta uno y NO se puede facturar', () => {
     expect(estanCompletos({
-      rfc: RFC_OK, razonSocial: 'X SA', regimenFiscal: '601', codigoPostal: null, usoCfdi: 'G03', email: null,
+      rfc: RFC_OK, razonSocial: 'X SA', regimenFiscal: '601', codigoPostal: null, usoCfdi: 'G03', email: null, domicilioFiscal: null,
     })).toBe(false);
     expect(estanCompletos(null)).toBe(false);
   });
@@ -125,5 +126,30 @@ describe('validarDatosFiscales — el RFC genérico no es el de un cliente', () 
     expect(validarDatosFiscales({ ...BASE }).email_facturacion).toBeNull();
     expect(validarDatosFiscales({ ...BASE, email: ' pagos@flota.mx ' }).email_facturacion).toBe('pagos@flota.mx');
     expect(() => validarDatosFiscales({ ...BASE, email: 'pagos@flota' })).toThrow(/correo/i);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 19, CRÍTICO (legal C3 / C.16) — EL DOMICILIO DEL AVISO POR FIN SE
+// PUEDE CAPTURAR. `tenant.domicilio_fiscal` existía desde la 0018 y ningún
+// formulario de producción la escribía: /aviso/<flota> respondía 404 para toda
+// flota real. Estas pruebas fijan el contrato del campo nuevo: opcional para
+// facturar (el SAT no lo pide en el CFDI), validado si viene, y NUNCA '' — el
+// vacío es null explícito, que es como el aviso sabe decir "pendiente".
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('validarDatosFiscales — el domicilio del aviso de privacidad', () => {
+  it('vacío o ausente → null explícito (no capturado), sin bloquear la factura', () => {
+    expect(validarDatosFiscales({ ...BASE }).domicilio_fiscal).toBeNull();
+    expect(validarDatosFiscales({ ...BASE, domicilioFiscal: '   ' }).domicilio_fiscal).toBeNull();
+  });
+
+  it('capturado, se guarda recortado tal cual — el SAT no lo compara y la constancia sabe mejor', () => {
+    expect(validarDatosFiscales({ ...BASE, domicilioFiscal: ' Calle 60 #123, Col. Centro, 97000 Mérida, Yuc. ' }).domicilio_fiscal)
+      .toBe('Calle 60 #123, Col. Centro, 97000 Mérida, Yuc.');
+  });
+
+  it('medio domicilio rebota con palabras de pantalla: un aviso con media dirección no dice dónde reclamar', () => {
+    expect(() => validarDatosFiscales({ ...BASE, domicilioFiscal: 'Centro' })).toThrow(/incompleto/i);
   });
 });

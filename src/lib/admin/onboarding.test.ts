@@ -61,9 +61,24 @@ describe('getOnboardingFlotas', () => {
       ],
       error: null,
     });
+    // El aviso de privacidad (auditoría 19, C3 / C.16): t1 completo, t2 con
+    // razón social pero sin domicilio — la casilla del admin distingue.
+    respuestas.set('tenant', {
+      data: [
+        { id: 't1', razon_social: 'FLOTA UNO SA', domicilio_fiscal: 'Calle 1, Mérida' },
+        { id: 't2', razon_social: 'FLOTA DOS SA', domicilio_fiscal: null },
+      ],
+      error: null,
+    });
     const r = await getOnboardingFlotas();
-    expect(r.get('t1')).toEqual({ credenciales: { total: 2, probadas: 1 }, avisosConfigurados: 2 });
-    expect(r.get('t2')).toEqual({ credenciales: { total: 1, probadas: 0 }, avisosConfigurados: 0 });
+    expect(r.get('t1')).toEqual({
+      credenciales: { total: 2, probadas: 1 }, avisosConfigurados: 2,
+      avisoPrivacidad: { razonSocial: true, domicilio: true },
+    });
+    expect(r.get('t2')).toEqual({
+      credenciales: { total: 1, probadas: 0 }, avisosConfigurados: 0,
+      avisoPrivacidad: { razonSocial: true, domicilio: false },
+    });
     // Una flota sin filas NO aparece — el llamador la lee como ceros
     // CONTADOS porque la lectura sí se completó.
     expect(r.has('t3')).toBe(false);

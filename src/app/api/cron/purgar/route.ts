@@ -121,6 +121,23 @@ export async function GET(req: Request) {
       data = (r.data ?? {}) as Record<string, unknown>;
       parcial = data.parcial === true;
       if (parcial) logger.warn('cron.purgar.parcial', { vuelta: vueltas, transcurridoMs: Date.now() - inicio });
+      // AUDITORÍA 19 (legal, reincidente #13): `mantenimiento_de_datos`
+      // acumula en `fallos` cada purga que lanzó (0165) y NADIE leía la
+      // llave — una purga rota (la de retención que un aviso promete) salía
+      // en el log como corrida verde con un array adentro que ningún humano
+      // abría. Un fallo de purga es un plazo legal que dejó de correr: se
+      // grita como error y se avisa al operador, pero NO se corta la vuelta
+      // — las demás purgas sí corrieron y volver a intentarlo aquí no
+      // arregla la que lanzó.
+      const fallosPurga = Array.isArray(data.fallos) ? (data.fallos as unknown[]) : [];
+      if (fallosPurga.length > 0) {
+        logger.error('cron.purgar.purgas_con_fallos', { fallos: fallosPurga, vuelta: vueltas });
+        await alertarOperador('cron.purgar.purgas_con_fallos', { fallos: fallosPurga.map(String).join(' · ').slice(0, 500) });
+        // Una purga que LANZA no es "quedó trabajo pendiente": reintentarla
+        // en la misma corrida daría el mismo error. Se sale del ciclo — el
+        // `parcial` por fallos ya quedó dicho arriba y en el latido.
+        break;
+      }
     } while (parcial && vueltas < MAX_VUELTAS && Date.now() - inicio + PLAZO_VUELTA_MS < (maxDuration - 5) * 1000);
 
     // ── EL BORRADO DE STORAGE (23-ago-2026) ────────────────────────────────
