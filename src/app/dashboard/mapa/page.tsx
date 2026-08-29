@@ -87,7 +87,7 @@ async function contarVivos(tenantId: string): Promise<number | null> {
 
 /**
  * El GPS de la flota, si lo hay — `getEstadoRastreo` (0162) + las últimas
- * posiciones por unidad (0267).
+ * posiciones por unidad (0269).
  *
  * FALLA CERRADO SIN TUMBAR EL MAPA: si la lectura del rastreo truena, los
  * viajes vivos se siguen dibujando y el bloque de GPS enseña su error. Lo que

@@ -1,6 +1,27 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- 0267 · `ultimas_posiciones_tenant()` — la ÚLTIMA posición de cada unidad,
+-- 0269 · `ultimas_posiciones_tenant()` — la ÚLTIMA posición de cada unidad,
 -- resuelta en la base. Auditoría 20, hallazgo 5 (MEDIO): el GPS es invisible.
+--
+-- ── POR QUÉ ESTE ARCHIVO LLEVA TRES NÚMEROS ────────────────────────────────
+--
+-- Nació 0266, se renumeró a 0267 al mergear el estudio de marketing (#262), y
+-- llega a 0269 porque `0267_agente_insumo.sql` (#259) mergeó DESPUÉS que esta
+-- migración con el mismo 0267 — durante unas horas master tuvo dos archivos
+-- `0267_*`. El 0268 quedó apartado por el ciclo de tickets de soporte (#263),
+-- todavía abierto cuando esto se escribió, así que el hueco es a propósito:
+-- se salta un número antes que arriesgar la colisión de nuevo.
+--
+-- La numeración no es cosmética: `migraciones_verificadas.test.ts` indexa por
+-- los cuatro primeros caracteres del nombre, así que dos archivos con el mismo
+-- prefijo comparten decisión — mientras el 0267 estuvo duplicado, la exención
+-- escrita para ESTA migración estaba dando por comprobada también a la otra.
+-- No se rompió nada (agente_insumo sí tiene sus bloques 215 y 216 en
+-- `verificaciones.sql`), pero el mecanismo que obliga a decidir por migración
+-- estaba contando dos como una, en silencio, que es justo lo que ese test
+-- existe para impedir.
+--
+-- Antes de reservar un número: `ls supabase/migrations/` contra el master del
+-- momento y revisar los PR abiertos, no el número que traiga la rama.
 --
 -- ── LO MEDIDO ───────────────────────────────────────────────────────────────
 --
