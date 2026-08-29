@@ -69,7 +69,10 @@ const SECCIONES: SeccionLegal[] = [
     fundamento: 'LFPDPPP art. 15 fr. II',
     parrafos: [
       `Tu **nombre**, tu **correo** y tu **teléfono**.`,
-      `Los **datos fiscales de tu empresa** que captures para que el sistema pueda validar facturas a su nombre: RFC, razón social, domicilio fiscal, régimen.`,
+      // AUDITORÍA 21 (legal, CRÍTICO): estos datos no solo se VALIDAN — el
+      // piloto de facturación los USA para llenar los portales de los
+      // comercios. Decir solo "validar" describía la mitad del tratamiento.
+      `Los **datos fiscales de tu empresa** que captures para que el sistema pueda validar facturas a su nombre y facturar tus tickets en los portales de los comercios: RFC, razón social, domicilio fiscal, régimen, uso CFDI y el correo donde recibes los CFDI.`,
       // AUDITORÍA 18 (M8): el enlace de acceso es un dato que se trata —y que
       // sale por el proveedor de correo—; la fr. II obliga a enumerarlo.
       `El **enlace de acceso de un solo uso** que te llega por correo cada vez que entras: se genera para tu dirección, caduca en minutos y se invalida al usarlo.`,
@@ -103,7 +106,16 @@ const SECCIONES: SeccionLegal[] = [
       // que leen los comprobantes" — y el texto de los mensajes del panel/
       // WhatsApp de oficina también viaja al mismo proveedor para poder
       // contestarte. El art. 35 exige describir el flujo real.
-      `Pasan por proveedores que trabajan por instrucción de Likida y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia**—: alojamiento de aplicación y base de datos, mensajería de WhatsApp, **envío de correo** —tanto los avisos del panel como **el correo con el que entras**: por ese proveedor pasa tu dirección y el enlace de un solo uso que abre tu sesión—, monitoreo de errores, y los modelos de lenguaje: les llegan **los comprobantes para leerlos** y **el texto de tus mensajes y consultas** para poder contestarte. A esos modelos en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
+      // AUDITORÍA 21 (legal, CRÍTICO): el piloto de facturación
+      // (`lib/likida/facturacion/adaptadores/piloto_vision.ts`) manda al
+      // modelo, en cada paso, los seis datos fiscales del receptor Y una
+      // captura de pantalla del portal del comercio — y esta lista era
+      // taxativa y no lo decía. La cláusula describe el flujo real (art. 35):
+      // el modelo necesita esos datos porque es quien decide qué se escribe
+      // en cada campo del formulario; la captura es la pantalla que navega.
+      // El detalle del porqué —y de lo que el piloto NUNCA hace: emitir,
+      // teclear contraseñas, rodear captchas— vive en ese archivo.
+      `Pasan por proveedores que trabajan por instrucción de Likida y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia**—: alojamiento de aplicación y base de datos, mensajería de WhatsApp, **envío de correo** —tanto los avisos del panel como **el correo con el que entras**: por ese proveedor pasa tu dirección y el enlace de un solo uso que abre tu sesión—, monitoreo de errores, y los modelos de lenguaje: les llegan **los comprobantes para leerlos**, **el texto de tus mensajes y consultas** para poder contestarte, y —si tu flota factura tickets en los portales de los comercios— **los datos fiscales de tu empresa (RFC, razón social, código postal, régimen fiscal, uso CFDI y el correo de recepción) junto con capturas de pantalla del portal de facturación del comercio**, porque es un modelo el que llena ese formulario campo por campo y necesita ver la pantalla y saber qué escribir; ese modelo nunca aprieta el botón que emite la factura ni recibe contraseñas. A esos modelos en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
       `El detalle de esos subencargados está en la documentación del producto y se actualiza cuando cambia.`,
       `**Si algún día quisiéramos transferir tus datos para algo distinto, te lo pediríamos antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
     ],
