@@ -101,6 +101,20 @@ y el teléfono y **sustituye** el UUID por una huella. Y se inicializa con
 cabeceras —que el pipeline del logger no ha visto y por tanto no ha podido
 redactar—. Sin `SENTRY_DSN` no se carga el paquete siquiera.
 
+> **Actualizado (OP3-1, auditoría E.28).** Hasta esta ronda, el saneador
+> (`sanitizarEventoSentry`) borraba el campo `extra` de TODO evento sin
+> condición — así que la afirmación de arriba era cierta de la forma más
+> trivial posible: no había ningún `extra` que auditar. Ahora `extra` viaja,
+> pero pasa por una lista blanca de LLAVES antes: solo identificadores
+> técnicos y operativos —`tenant`/`tenantId`, `viaje`/`viajeId`,
+> `operador`/`operadorId`, `gasto`/`gastoId`, `agente`/`agenteId`,
+> `runId`/`corrida`, `ruta`/`endpoint`, `tipo`, `metodo`, `digest`,
+> `codigo`/`code`/`status`— entran, y el VALOR de cada uno se vuelve a pasar
+> por el mismo `redactarTexto` del logger antes de salir. Ninguna llave de
+> texto libre (`err`, `error`, `message`, `motivo`, o cualquier nombre nuevo
+> que no esté en la lista) llega a Sentry, sin importar qué traiga adentro.
+> Ver `LLAVES_EXTRA_SEGURAS` en `src/lib/observability/sentry.ts`.
+
 **Borrar y huellar no son lo mismo, y ante un auditor conviene decirlo así**
 (`src/lib/logger.ts:11-47` lo razona entero):
 
