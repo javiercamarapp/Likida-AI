@@ -235,6 +235,15 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // quien decide sobre una grúa a las 3 a.m. es el jefe de tráfico o el dueño.
   '/dashboard/asistencia': 'operacion',
   '/dashboard/llaves-api': 'administracion',
+  // Sesiones MCP (H3, auditoría de dashboards 29-ago-2026): los accesos que
+  // Claude/ChatGPT tienen a los datos de la flota vía OAuth (0260). MISMO
+  // criterio que las llaves de API, porque es la MISMA clase de cosa: una
+  // credencial que lee desde fuera del panel, sin sesión. Aquí se ven y se
+  // cortan los de OTRA persona, y eso es del dueño. Las PROPIAS las corta
+  // cada quien —contador y encargado incluidos— desde /dashboard/mi-perfil,
+  // que es RUTAS_TODO_ROL: por eso son dos rutas y no una con excepciones
+  // (este mapa asigna UN área por ruta a propósito).
+  '/dashboard/sesiones-mcp': 'administracion',
   '/dashboard/usuarios': 'administracion',
   '/dashboard/politicas': 'administracion',
   '/dashboard/configuracion': 'administracion',

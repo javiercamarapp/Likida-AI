@@ -83,7 +83,12 @@ export type EntidadBitacora =
   // tablas que tocan (`cola_aprobacion`, `bus_*`) tampoco tienen una — son de
   // Javier, no de una flota. `entidadId` es el id de la pieza, el nombre de
   // la rutina, o 'general' para un "estatus" sin argumento.
-  | 'comando_admin_wa';
+  | 'comando_admin_wa'
+  // 0260/0265: los accesos MCP (Claude, ChatGPT) de un usuario a los datos de
+  // su flota. Cortarlos es un acto sobre una credencial —de la misma clase que
+  // revocar una `tenant_api_key`— y quién lo cortó no tiene columna en
+  // `mcp_oauth_token`: esta anotación es su única memoria.
+  | 'mcp_oauth_token';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una
