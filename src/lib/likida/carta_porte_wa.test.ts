@@ -47,6 +47,11 @@ vi.mock('@/lib/meta/client', () => ({
 vi.mock('./repo', () => ({ getPerfilCrudo: async () => ({}) }));
 const registrarCorrida = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('./agentes/corridas', () => ({ registrarCorrida: (...a: unknown[]) => registrarCorrida(...a) }));
+// La palanca (0250): encendida por default en toda la suite — sin este mock,
+// `estaApagado` cae al supabase de mentiras (que solo sabe de `viaje`), truena
+// y el fail-closed apaga el agente para TODAS las pruebas.
+const palancaApagada = vi.fn(async (..._a: unknown[]) => false);
+vi.mock('./interruptores', () => ({ estaApagado: (...a: unknown[]) => palancaApagada(...a) }));
 
 const getBorradorViaje = vi.fn();
 const declararCcp = vi.fn(async (..._a: unknown[]) => {});
@@ -83,6 +88,8 @@ beforeEach(() => {
   filasPorId = [];
   getBorradorViaje.mockResolvedValue(viajeCcp());
   telefonoJefe.mockResolvedValue('5215550000001');
+  palancaApagada.mockReset();
+  palancaApagada.mockResolvedValue(false);
 });
 
 describe('atenderCcpOficina — qué es nuestro y qué pasa de largo', () => {
@@ -256,5 +263,30 @@ describe('evaluarYAvisarCcpDespacho — el disparo al crear el viaje (H1)', () =
     sendButtons.mockResolvedValue(null as never);
     await evaluarYAvisarCcpDespacho('t-1', VIAJE_ID);
     expect(registrarCorrida).toHaveBeenCalledWith('t-1', 'carta_porte', expect.objectContaining({ estado: 'parcial' }));
+  });
+});
+
+describe('la palanca agente:carta_porte (0250) — el agente vivo que no se podía apagar', () => {
+  it('apagada, el disparo deja su rastro en bitácora pero NO le escribe a nadie', async () => {
+    palancaApagada.mockResolvedValue(true);
+    await evaluarYAvisarCcpDespacho('t-1', VIAJE_ID);
+    // El contrato del docstring sigue: rastro SIEMPRE, aunque el aviso no salga.
+    expect(bitacora).toHaveBeenCalledTimes(1);
+    expect(sendText).not.toHaveBeenCalled();
+    expect(sendButtons).not.toHaveBeenCalled();
+  });
+
+  it('apagada, al humano se le contesta la VERDAD (no silencio) y no se escribe nada', async () => {
+    palancaApagada.mockResolvedValue(true);
+    const r = await atenderCcpOficina(JEFE, `ccp_no:${VIAJE_ID}`);
+    expect(r).toContain('apagado');
+    expect(r).toContain('NO quedó registrada');
+    expect(declararCcp).not.toHaveBeenCalled();
+  });
+
+  it('un texto que no es de este agente NO gasta lectura de palanca', async () => {
+    palancaApagada.mockResolvedValue(true);
+    expect(await atenderCcpOficina(JEFE, 'buenos días')).toBeNull();
+    expect(palancaApagada).not.toHaveBeenCalled();
   });
 });

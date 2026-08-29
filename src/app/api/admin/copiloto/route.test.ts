@@ -16,6 +16,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let sesion: { userId: string; tenantId: string | null; rol: string } | null = null;
 vi.mock('@/lib/auth/session', () => ({ getSessionTenant: async () => sesion }));
+// La palanca del copiloto (0250): encendida por default en toda la suite —
+// sin este mock, `estaApagado` truena contra el supabase de mentiras y el
+// fail-closed contesta 503 a todas las pruebas.
+const palancaCopilotoApagada = vi.fn(async () => false);
+vi.mock('@/lib/likida/interruptores', () => ({ estaApagado: () => palancaCopilotoApagada() }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 // El step-up (fase 7): por default pasa (usuario sin factor); cada prueba
 // que lo necesite lo aprieta.
@@ -98,6 +103,8 @@ beforeEach(() => {
   stepUp.mockImplementation(async () => ({ ok: true }));
   rateLimit.mockReset();
   rateLimit.mockImplementation(async () => true);
+  palancaCopilotoApagada.mockReset();
+  palancaCopilotoApagada.mockResolvedValue(false);
 });
 
 describe('la puerta', () => {
@@ -113,6 +120,19 @@ describe('la puerta', () => {
     const r = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));
     expect(r.status).toBe(403);
     expect(ejecutarCopiloto).not.toHaveBeenCalled();
+  });
+
+  it('la palanca agente:copiloto apagada: 503 con la puerta dicha, sin modelo NI acciones', async () => {
+    // 0250: la interfaz de mando también se calla con un click. El 503 corta
+    // los DOS caminos (chat y acción con intent) antes de gastar nada.
+    palancaCopilotoApagada.mockResolvedValue(true);
+    const chat = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));
+    expect(chat.status).toBe(503);
+    expect(((await chat.json()) as { error: string }).error).toContain('apagado');
+    const accion = await POST(pedir({ intentId: 'x', accion: { id: 'apagar_agente', objetivo: 'agente:cobranza' } }));
+    expect(accion.status).toBe(503);
+    expect(ejecutarCopiloto).not.toHaveBeenCalled();
+    expect(ejecutarAccionCopiloto).not.toHaveBeenCalled();
   });
 });
 

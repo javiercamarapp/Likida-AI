@@ -92,6 +92,9 @@ export const ETIQUETA_INTERRUPTOR: Record<string, string> = {
   'agente:demo_prep': 'Preparación de demo',
   'agente:propuestas': 'Propuestas',
   'agente:cazador': 'Cazador del censo',
+  // Las 2 del 0250 — los agentes vivos que corrían sin poderse apagar.
+  'agente:carta_porte': 'Agente de Carta Porte',
+  'agente:copiloto': 'Copiloto del fundador',
 };
 
 export function etiquetaInterruptor(id: string): string {

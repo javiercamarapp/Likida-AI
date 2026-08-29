@@ -39,6 +39,7 @@ import { DatoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
 import { sesionSuperadmin } from './puerta';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
+import { estaApagado } from '@/lib/likida/interruptores';
 import { supabaseServer } from '@/lib/supabase/server';
 import { exigirAal2SiHayFactor, MSG_STEP_UP, MSG_MFA_NO_VERIFICABLE } from '@/lib/auth/mfa';
 import { CATALOGO_ACCIONES } from '@/lib/agents/copiloto-acciones';
@@ -101,6 +102,17 @@ function conPlazo<T>(p: Promise<T>, ms: number, etiqueta: string): Promise<T> {
 export async function POST(req: Request) {
   const { error: puerta, sesion } = await sesionSuperadmin();
   if (!sesion) return puerta;
+
+  // La palanca del copiloto (0250, tableros al día): gasto de modelo por
+  // llamada + ejecución de acciones administrativas = la interfaz de mando
+  // también tiene que poderse callar con un click, no con un deploy. Se
+  // enciende desde Observabilidad o el ⌘K — esa puerta no pasa por aquí.
+  // Fail-closed heredado de `estaApagado`: palanca ilegible = apagado.
+  if (await estaApagado('agente:copiloto')) {
+    return NextResponse.json({
+      error: 'El copiloto está apagado (palanca agente:copiloto). Se enciende desde Observabilidad o el ⌘K.',
+    }, { status: 503 });
+  }
 
   let cuerpo: Record<string, unknown>;
   try { cuerpo = await req.json() as Record<string, unknown>; } catch {
