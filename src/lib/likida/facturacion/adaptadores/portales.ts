@@ -815,6 +815,275 @@ export const LIBRAMIENTOS_META: GuionPortal = {
   xml: { boton: [botonQueDice('XML'), 'a[href$=".xml"]'] },
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// TERCERA TANDA (29-ago-2026): LOS 7 DE LOS 26 `camposPendientes` QUE SÍ SE
+// PUDIERON LEER DE PUNTA A PUNTA (o casi).
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// El reconocimiento del 28-ago-2026 (arriba) visitó los 37 comercios
+// ORIGINALES del catálogo. Después de eso, la ingesta del banco de tickets
+// reales sumó decenas más, y 26 de ellos quedaron con `camposPendientes: true`
+// sin que nadie hubiera abierto su portal todavía. Este recon visitó esos 26
+// —mismo candado de red que arriba: GET/HEAD solamente, cero formularios
+// enviados— y solo 7 dieron suficiente DOM real para escribir una tabla sin
+// inventar nada. El detalle línea por línea de los 7 y de los 18 que
+// quedaron pendientes (credenciales que no se tienen, CAPTCHA, URLs muertas,
+// SPA que no montan campos sin enviar algo antes, un caso nuevo de TLS
+// ausente) está en
+// `pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt`.
+//
+// Igual que la tanda anterior: NINGUNO se marca `verificado`. Se leyeron
+// formularios en blanco, no se ensayó ni se emitió un solo CFDI.
+export const MCDONALDS: GuionPortal = {
+  comercio: 'mcdonalds',
+  portal: 'https://www.facturacionmcdonalds.com.mx/',
+  verificado: null,
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  campos: {
+    sucursal: { selector: ['#number_store'], formato: 'solo_digitos' },
+    numeroTicket: { selector: ['#num_ticket'] },
+    caja: { selector: ['#num_caja'] },
+    fecha: { selector: ['#fecha_ticket'], formato: 'fecha_dmy' },
+    monto: { selector: ['#total_ticket'], formato: 'monto' },
+  },
+  receptor: {
+    rfc: { selector: ['#tax_id_receiver'], formato: 'mayusculas' },
+    nombre: { selector: ['#name_receiver'] },
+    codigoPostal: { selector: ['#cp_client'] },
+    // Llega con una sola opción ("Régimen Fiscal"); se puebla por AJAX, como
+    // los `<select>` de CAPUFE. No se ejercitó ese AJAX (recon de solo GET).
+    regimenFiscal: { selector: ['#regime_id'], como: 'seleccionar' },
+    correo: { selector: ['#email_receiver'] },
+  },
+  // ⚠️ `#politico` (Complemento para partidos políticos, el mismo tipo de
+  // trampa que `#cb1` de CAPUFE) y `#condiciones` NUNCA entran a `campos` ni
+  // a `receptor`: el motor declarativo solo escribe lo que está en esas dos
+  // tablas y no tiene ningún camino para marcar un checkbox por su cuenta.
+  botonEmitir: ['#facturar', botonQueDice('Realizar facturación')],
+  uuid: '.uuid, [class*="folio-fiscal" i], [data-uuid]',
+  error: '.alert-danger, .invalid-feedback, .error-message',
+};
+
+/**
+ * Los Bisquets Bisquets Obregón — tres campos, sin cuenta.
+ *
+ * `#Contrasenia` es `type="password"` en el HTML pero NO es la contraseña de
+ * una cuenta: es una CLAVE impresa en el ticket, junto a Sucursal y Folio. El
+ * `botonEmitir` NO se confirmó — el único botón visible («Facturar») se
+ * asume que revela el paso fiscal (`buscar`), no que emite, porque no hay
+ * cuenta ni receptor en esta pantalla y un CFDI necesita RFC. Van candidatos
+ * genéricos hasta que alguien corra el pre-vuelo y lo confirme.
+ */
+export const LBBO: GuionPortal = {
+  comercio: 'lbbo',
+  portal: 'https://autofacturacionlbbo.edimex.com.mx/edi2/AutofacturacionPublico',
+  verificado: null,
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  campos: {
+    sucursal: { selector: ['#NotaVentaEmpresa'] },
+    folio: { selector: ['#NotaVentaFolio'] },
+    codigo: { selector: ['#Contrasenia'] },
+  },
+  // No se vio el paso fiscal: van candidatos genéricos, no lectura del DOM.
+  receptor: {
+    rfc: { selector: [porEtiqueta('RFC'), 'input[name*="rfc" i]'], formato: 'mayusculas' },
+    correo: { selector: [porEtiqueta('Correo'), 'input[type="email"]'] },
+  },
+  buscar: {
+    boton: [botonQueDice('Facturar')],
+    que: 'el botón de facturar (revela el paso fiscal)',
+    esperar: '.resultado, [class*="fiscal" i], input[name*="rfc" i]',
+    sinResultados: '.alert-danger, [class*="error" i]',
+  },
+  botonEmitir: [botonQueDice('Generar Factura'), botonQueDice('Emitir')],
+  uuid: '.uuid, [class*="folio-fiscal" i], [data-uuid]',
+  error: '.alert-danger, [class*="error" i]',
+};
+
+/**
+ * Tim Hortons México — cuatro campos, portal en OTRO dominio (`timsboh.com`)
+ * del que imprime el ticket. Ni `<form>` envolvente ni receptor visibles: el
+ * receptor va como candidato genérico, no como lectura.
+ */
+export const TIM_HORTONS: GuionPortal = {
+  comercio: 'tim_hortons',
+  portal: 'https://timsboh.com/autofacturacion/busqueda',
+  verificado: null,
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  campos: {
+    sucursal: { selector: ['#sucursal'] },
+    numeroTicket: { selector: ['#ticket'] },
+    fecha: { selector: ['input[name="fecha"]'], formato: 'fecha_dmy' },
+    monto: { selector: ['#Total'], formato: 'monto' },
+  },
+  receptor: {
+    rfc: { selector: [porEtiqueta('RFC'), 'input[name*="rfc" i]'], formato: 'mayusculas' },
+    correo: { selector: [porEtiqueta('Correo'), 'input[type="email"]'] },
+  },
+  buscar: {
+    boton: [botonQueDice('Buscar')],
+    que: 'el botón de buscar el ticket',
+    esperar: '.resultado, table tbody tr, [class*="resultado" i]',
+    sinResultados: '.alert-warning, .sin-resultados, .no-results',
+  },
+  botonEmitir: [botonQueDice('Facturar'), botonQueDice('Generar')],
+  uuid: '.uuid, [class*="folio-fiscal" i], [data-uuid]',
+  error: '.alert-danger, [class*="error" i]',
+};
+
+/**
+ * The Home Depot México — dos campos y NADA MÁS antes de «Continuar»:
+ * RFC y No. de Ticket. `portal` corregido: la raíz del catálogo era el
+ * sitio general de venta, no el de facturación.
+ *
+ * ⚠️ Cloudflare Turnstile está SIEMPRE presente en esta pantalla (no solo
+ * tras un error), así que `mirarCaptcha` lo va a encontrar en la primera
+ * visita y este guion va a `requiereCaptcha` siempre. Es correcto: el
+ * portal defiere a una persona en cada intento.
+ */
+export const HOME_DEPOT: GuionPortal = {
+  comercio: 'home_depot',
+  portal: 'https://facturacion.homedepot.com.mx/',
+  verificado: null,
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  captcha: ['.turnstile-container', 'iframe[src*="challenges.cloudflare.com"]'],
+  campos: {
+    numeroTicket: { selector: ['#ticket'] },
+  },
+  receptor: {
+    rfc: { selector: ['#rfc'] },
+  },
+  buscar: {
+    boton: [botonQueDice('Continuar')],
+    que: 'el botón de continuar',
+    esperar: '.resultado, [class*="resultado" i]',
+    sinResultados: '.alert-danger, [class*="error" i]',
+  },
+  botonEmitir: [botonQueDice('Facturar'), botonQueDice('Generar')],
+  uuid: '.uuid, [class*="folio-fiscal" i], [data-uuid]',
+  error: '.alert-danger, [class*="error" i]',
+};
+
+/**
+ * Lo de Mored (Fomento Gasolinero, Mérida) — el formulario más completo de
+ * esta tanda, con domicilio fiscal entero. `portal` corregido: la raíz
+ * redirige al sitio corporativo del grupo (`lodemo.com.mx`), sin nada de
+ * facturación; la liga real es `fact.lodemored.net`.
+ *
+ * ⚠️ CAPTCHA propio SIEMPRE visible en el formulario (`#txtRecaptcha`,
+ * "Digite código Captcha"), no reCAPTCHA de Google. Este guion va a
+ * `requiereCaptcha` en cada intento — correcto, es lo que el portal exige.
+ *
+ * ⚠️ El portal pide domicilio COMPLETO (Calle, Colonia, Estado, Municipio,
+ * País, Número Exterior) que `ReceptorDeGuion` no modela — solo
+ * rfc/nombre/codigoPostal/regimenFiscal/usoCfdi/correo. Esos campos quedan
+ * sin declarar; el pre-vuelo los va a reportar como huecos hasta que el
+ * receptor de Likida crezca esas columnas.
+ */
+export const LODEMORED: GuionPortal = {
+  comercio: 'lodemored',
+  portal: 'https://fact.lodemored.net/',
+  verificado: null,
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  captcha: ['#txtRecaptcha', '#lnkBtnCaptcha'],
+  campos: {
+    numeroTicket: { selector: ['#txtTicket'] },
+    fecha: { selector: ['#txtFechaIni'], formato: 'fecha_dmy' },
+    // `#txtImporte` es el campo POR TICKET; `#txtTotal` es la suma de la
+    // lista completa y NO debe usarse aquí — escribirle el monto de un solo
+    // ticket dejaría el total de la factura mal.
+    monto: { selector: ['#txtImporte'], formato: 'monto' },
+  },
+  receptor: {
+    rfc: { selector: ['#txtRFC'], formato: 'mayusculas' },
+    nombre: { selector: ['#txtRazonSocial'] },
+    correo: { selector: ['#txtEmailFac'] },
+    codigoPostal: { selector: ['#txtCP'] },
+    regimenFiscal: { selector: ['#ddlRegimenFiscal'], como: 'seleccionar' },
+    usoCfdi: { selector: ['#ddlUsoCFDI'], como: 'seleccionar' },
+  },
+  buscar: {
+    // "Agregar" mete el ticket a una lista; "GENERAR FACTURA" emite con
+    // todos los agregados. Confundirlos facturaría con la lista vacía.
+    boton: ['#lnkBtnTicket', botonQueDice('Agregar')],
+    que: 'el botón de agregar el ticket a la lista',
+    esperar: 'table tbody tr, [class*="lista" i]',
+    sinResultados: '.alert-danger, [class*="error" i]',
+  },
+  botonEmitir: ['#lnkBtnFacturar', botonQueDice('GENERAR FACTURA')],
+  uuid: '.uuid, [class*="folio-fiscal" i], [data-uuid]',
+  error: '.alert-danger, [class*="error" i]',
+};
+
+/**
+ * Parrot — la plataforma que mete el folio EN LA URL. La raíz también
+ * acepta teclearlo a mano en un solo campo. No se encontró el botón de
+ * envío tras escribir un código de prueba (el candado de red bloquea
+ * cualquier validación por XHR, y no había botón de texto claro) — puede
+ * que valide con Enter; `botonEmitir` va con candidatos sin confirmar.
+ * `receptor` tampoco se vio: candidatos genéricos.
+ */
+export const PARROT: GuionPortal = {
+  comercio: 'parrot',
+  portal: 'https://facturacion.parrot.rest/',
+  verificado: null,
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  campos: {
+    codigo: { selector: ['#input-code'] },
+  },
+  receptor: {
+    rfc: { selector: [porEtiqueta('RFC'), 'input[name*="rfc" i]'], formato: 'mayusculas' },
+    correo: { selector: [porEtiqueta('Correo'), 'input[type="email"]'] },
+  },
+  botonEmitir: [botonQueDice('Facturar'), botonQueDice('Generar'), 'button[type="submit"]'],
+  uuid: '.uuid, [class*="folio-fiscal" i], [data-uuid]',
+  error: '.alert-danger, [class*="error" i]',
+};
+
+/**
+ * El Globo (Tradición en Pastelerías) — ASP.NET WebForms, plataforma
+ * «Masteredi» de terceros. Los `id` de los campos son POSICIONALES
+ * (`ctl00_Main_repCampos_ctlNN_...`, generados por un `Repeater` del
+ * servidor), así que la ETIQUETA visible (`TICKET-#`, `SUCURSAL`…) va
+ * PRIMERO como candidato y el `id` leído queda de red.
+ *
+ * ⚠️ EL LÍMITE MÁS GRANDE DE ESTE GUION: `mfwCreaCFDI.aspx` (donde viven
+ * estos campos) NO carga su formulario si se abre directo — se comprobó con
+ * una visita aislada, que solo devolvió el esqueleto de ASP.NET. El flujo
+ * real es abrir el ÍNDICE (`portal`, aquí abajo) y hacer clic en «Crear
+ * Factura» SIN escribir nada antes. Este motor no tiene un paso de "navegar
+ * sin datos": el pre-vuelo de este guion va a fallar SIEMPRE con
+ * "selectores idos" hasta que el motor aprenda ese paso, o hasta que
+ * alguien lo haga a mano. Es inofensivo — `verificado: null` nunca deja
+ * emitir, y el fallo es un diagnóstico claro, no un CFDI mal hecho — y se
+ * deja escrito porque los CAMPOS sí están leídos de verdad (mismo límite ya
+ * aceptado en `CIRCLE_K`, arriba).
+ *
+ * FORMA_DE_PAGO (otro `<select>` de este mismo paso) no tiene equivalente en
+ * `DatoReceptor`: queda sin declarar, y el portal se queda con lo que tenga
+ * preseleccionado por default. El paso "Dos" (nombre/correo/domicilio del
+ * receptor) no se vio — no hay forma de leerlo sin enviar el paso "Uno".
+ */
+export const EL_GLOBO: GuionPortal = {
+  comercio: 'el_globo',
+  portal: 'https://www.masfacturaweb.com.mx:73/ElGlobo/',
+  verificado: null,
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  campos: {
+    numeroTicket: { selector: [porEtiqueta('TICKET-#'), '#ctl00_Main_repCampos_ctl03_txtVariable'] },
+    sucursal: { selector: [porEtiqueta('SUCURSAL'), '#ctl00_Main_repCampos_ctl05_txtVariable'] },
+    monto: { selector: [porEtiqueta('TOTAL'), '#ctl00_Main_repCampos_ctl07_txtVariable'], formato: 'monto' },
+    fecha: { selector: [porEtiqueta('FECHA'), '#ctl00_Main_repCampos_ctl09_txtCalendar'], formato: 'fecha_dmy' },
+  },
+  receptor: {
+    rfc: { selector: [porEtiqueta('RFC_CLIENTE'), '#ctl00_Main_repCampos_ctl01_txtVariable'], formato: 'mayusculas' },
+    usoCfdi: { selector: ['#ctl00_Main_repCampos_ctl11_ddLista'], como: 'seleccionar' },
+  },
+  botonEmitir: [botonQueDice('Generar'), botonQueDice('Facturar'), botonQueDice('Confirmar')],
+  uuid: '.uuid, [class*="folio-fiscal" i], [data-uuid]',
+  error: '.alert-danger, .validation-summary-errors, [class*="error" i]',
+};
+
 /**
  * TODOS LOS GUIONES ESCRITOS. De aquí se deriva la tabla de `registro.ts`.
  *
@@ -834,6 +1103,9 @@ export const GUIONES: readonly GuionPortal[] = [
   // escrita como fábrica (FACTURAGAS y SEVAFUSA).
   FACTURAGAS, SEVAFUSA, GOGAS, OXXO, RED_ESTATAL_AUTOPISTAS,
   SUPERCARRETERAS, ARCO_CHIHUAHUA, CIRCLE_K, REDVIACORTA, LIBRAMIENTOS_META,
+  // Los siete del recon de 29-ago-2026, sobre los 26 comercios que trajo el
+  // banco de tickets con `camposPendientes: true`.
+  MCDONALDS, LBBO, TIM_HORTONS, HOME_DEPOT, LODEMORED, PARROT, EL_GLOBO,
 ];
 
 /** Un guion por su clave de comercio, o `null`. No lanza: quien pregunta decide. */
