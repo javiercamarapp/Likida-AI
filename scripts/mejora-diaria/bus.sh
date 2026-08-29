@@ -22,8 +22,9 @@
 # ═══════════════════════════════════════════════════════════════════════════
 set -uo pipefail
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-REPO="$HOME/javiercamarapp/likida"
-COLA="$HOME/javiercamarapp/likida-marketing-cola"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+COLA="$(dirname "$REPO")/likida-marketing-cola"
+export REPO COLA
 
 leer() { grep "^$1=" "$REPO/.env.local" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/[[:space:]]*#.*//' | tr -d '"' | tr -d "'" | xargs; }
 export WORKER_KEY="$(leer LIKIDA_WORKER_KEY)"
@@ -113,7 +114,7 @@ pieza)
   python3 - "$RUTINA" "$CARPETA" <<'PY' 2>/dev/null || true
 import base64, json, os, sys, urllib.request, urllib.parse, mimetypes, pathlib
 rutina, carpeta = sys.argv[1], pathlib.Path(sys.argv[2])
-COLA = pathlib.Path.home() / "javiercamarapp" / "likida-marketing-cola"
+COLA = pathlib.Path(os.environ["COLA"])
 MODO = os.environ.get("BUS_MODO", "legacy")
 if not carpeta.is_dir(): sys.exit(0)
 try: rel = str(carpeta.relative_to(COLA))
@@ -184,7 +185,7 @@ PY
 sembrar-catalogo)
   python3 - <<'PY'
 import json, os, plistlib, pathlib, urllib.request, datetime
-BASE = pathlib.Path.home() / "javiercamarapp" / "likida" / "scripts" / "mejora-diaria"
+BASE = pathlib.Path(os.environ["REPO"]) / "scripts" / "mejora-diaria"
 MODO = os.environ.get("BUS_MODO", "legacy")
 DIAS = {0: "dom", 1: "lun", 2: "mar", 3: "mié", 4: "jue", 5: "vie", 6: "sáb", 7: "dom"}
 
@@ -238,7 +239,7 @@ ordenes)
   python3 - <<'PY'
 import json, os, subprocess, pathlib, urllib.request, datetime
 MODO = os.environ.get("BUS_MODO", "legacy")
-REPO = pathlib.Path.home() / "javiercamarapp" / "likida"
+REPO = pathlib.Path(os.environ["REPO"])
 APAGADO = REPO / ".mejora-diaria" / "APAGADO"
 NOTAS = REPO / ".mejora-diaria" / "notas-javier.md"
 

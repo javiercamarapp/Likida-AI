@@ -21,7 +21,7 @@ públicos", que también es información.
 
 ## La entrega
 
-`~/javiercamarapp/likida/.mejora-diaria/reportes/competencia-<fecha>.md`:
+`~/likida/.mejora-diaria/reportes/competencia-<fecha>.md`:
 qué se movió, qué significa para Likida (2-3 líneas por rival, no ensayo), y
 UNA implicación accionable si la hay (p. ej. "Uvicuo publicó precio X —
 nuestra calculadora debería contrastarlo"). Mantén también el acumulado

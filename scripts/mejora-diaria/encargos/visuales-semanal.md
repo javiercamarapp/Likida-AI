@@ -27,7 +27,7 @@ APROBACIÓN — nada, absolutamente nada, se publica solo.
 
 ## La entrega (cola de aprobación, no publicación)
 
-Guarda TODO en `~/javiercamarapp/likida-marketing-cola/<fecha>/`:
+Guarda TODO en `~/likida-marketing-cola/<fecha>/`:
 la imagen final, el copy del post en `copy.md` (con 2 variantes), y
 `pieza.md` con: tema, modelo usado, créditos gastados, prompt, y qué
 verificaste. Registra el renglón en la bitácora de visuales del paquete si

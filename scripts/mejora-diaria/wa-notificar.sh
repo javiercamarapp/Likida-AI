@@ -18,7 +18,7 @@
 #   WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID  (las del producto)
 #   LIKIDA_WA_JAVIER  → su número personal en E.164, ej. 5218112345678
 set -uo pipefail
-REPO="$HOME/javiercamarapp/likida"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 GRAPH="https://graph.facebook.com/v21.0"   # la misma versión que src/lib/meta/client.ts
 
 leer() { grep "^$1=" "$REPO/.env.local" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/[[:space:]]*#.*//' | tr -d '"' | tr -d "'" | xargs; }

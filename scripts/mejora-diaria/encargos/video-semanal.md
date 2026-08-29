@@ -5,7 +5,7 @@ POR SEQUENCE (frontmatter `estado: aprobada`) y ahí anima el render diario.
 
 ## 0 · El insumo
 
-El guion más reciente de `~/javiercamarapp/likida-marketing-cola/guiones/`
+El guion más reciente de `~/likida-marketing-cola/guiones/`
 que NO tenga carpeta de producción en `likida-marketing-cola/video-*/`. No
 esperes aprobación del guion — la cadena corre; si Javier lo editó, usa su
 versión. Sin guion nuevo: termina y dilo (el lunes sale uno).

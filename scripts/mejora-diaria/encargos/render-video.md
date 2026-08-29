@@ -4,7 +4,7 @@ script ya confirmó que existen sequences aprobadas sin clip).
 
 ## 1 · Animar lo autorizado (etapa 5)
 
-En `~/javiercamarapp/likida-marketing-cola/video-*/sequences/`: cada `.md`
+En `~/likida-marketing-cola/video-*/sequences/`: cada `.md`
 con `estado: aprobada` y sin su clip correspondiente en `clips/`:
 
 - Renderiza ESA escena con el motor de video vigente de MARCA.md §5 en

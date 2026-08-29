@@ -28,7 +28,7 @@ clientes/testimonios/logos de flotas (Likida no tiene clientes), nada de
 
 ## 3 · La entrega
 
-`~/javiercamarapp/likida-marketing-cola/publicar/<fecha>-promo-<slug>/`: la(s)
+`~/likida-marketing-cola/publicar/<fecha>-promo-<slug>/`: la(s)
 imagen(es), `post.md` con copy por canal (LinkedIn / Instagram / TikTok) en
 la voz honesto-fiscal de §1 — beneficio concreto, cero superlativo vacío — y
 hashtags del gremio. Nada se publica solo: el tap es de Javier.
