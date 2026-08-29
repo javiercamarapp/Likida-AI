@@ -6,8 +6,9 @@ import { CRONS } from '@/lib/admin/salud';
 // y que el cuerpo no filtre un solo dato de negocio.
 
 let dbFalla = false;
-/** Las filas de `cron_latido` (RES-7). */
-let latidos: Array<{ id: string; ultimo_latido: string; estado: string }> = [];
+/** Las filas de `cron_latido` (RES-7), con `detalle` opcional (auditoría prod
+ *  29-ago-2026: distinguir un hueco de configuración de una regresión real). */
+let latidos: Array<{ id: string; ultimo_latido: string; estado: string; detalle?: Record<string, unknown> }> = [];
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => ({
@@ -18,8 +19,12 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-const alertarOperador = vi.fn(async () => {});
-vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [])) }));
+const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
+const alertarHuecoConfiguracion = vi.fn(async (..._a: unknown[]) => {});
+vi.mock('@/lib/observability/alerta', () => ({
+  alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [])),
+  alertarHuecoConfiguracion: (...a: unknown[]) => alertarHuecoConfiguracion(...(a as [])),
+}));
 
 // OPERABILIDAD-19C2-3: permitido por default en todas las pruebas de este
 // archivo — el rate limit tiene su propio caso dedicado abajo.
@@ -103,6 +108,82 @@ describe('/api/health', () => {
     expect(c).toMatchObject({ ok: false, status: 'degraded', checks: { db: 'ok', crons: 'degraded' } });
     expect(JSON.stringify(c)).not.toContain('runner');
     expect(alertarOperador).toHaveBeenCalledWith('cron.estado_no_ok', expect.objectContaining({ codigo: 'cron_estado_no_ok' }));
+  });
+
+  // AUDITORÍA PROD 29-ago-2026: ocho correos "Urgente" en doce horas por
+  // `descarga-sat` sin LIKIDA_SAT_PROVEEDOR — un hueco de configuración que el
+  // propio cron ya declaró con toda precisión, indistinguible de una
+  // regresión real porque `alertarOperador('cron.estado_no_ok', ...)` se
+  // disparaba en CADA ping de un monitor externo. Fija el comportamiento
+  // nuevo: el health sigue diciendo la verdad (503/degraded), pero el hueco
+  // declarado ya NO manda el correo urgente repetido.
+  it('hueco de configuración declarado: degrada el health pero NO manda el correo urgente repetido', async () => {
+    dbFalla = false;
+    alertarOperador.mockClear();
+    alertarHuecoConfiguracion.mockClear();
+    const ahora = new Date().toISOString();
+    latidos = [
+      {
+        id: 'descarga-sat',
+        ultimo_latido: ahora,
+        estado: 'parcial',
+        detalle: {
+          motivo: 'La descarga masiva no está configurada: falta LIKIDA_SAT_PROVEEDOR en el servidor. Lo destraba Javier (contrato con el PAC y variables de entorno).',
+        },
+      },
+    ];
+
+    const r = await GET(peticion());
+    const c = await r.json();
+
+    // El monitor externo sigue viendo la verdad: el cron no está sano.
+    expect(r.status).toBe(503);
+    expect(c).toMatchObject({ ok: false, status: 'degraded', checks: { db: 'ok', crons: 'degraded' } });
+    // Pero el canal urgente no se dispara por un hueco ya conocido...
+    expect(alertarOperador).not.toHaveBeenCalled();
+    // ...se avisa por el canal de "pendiente de configurar", con el motivo tal cual.
+    expect(alertarHuecoConfiguracion).toHaveBeenCalledWith(
+      'cron.config_ausente:descarga-sat',
+      expect.stringMatching(/LIKIDA_SAT_PROVEEDOR/),
+      expect.objectContaining({ cron: 'descarga-sat' }),
+    );
+  });
+
+  it('un hueco declarado y una regresión real a la vez: cada quien su canal', async () => {
+    dbFalla = false;
+    alertarOperador.mockClear();
+    alertarHuecoConfiguracion.mockClear();
+    const ahora = new Date().toISOString();
+    latidos = [
+      {
+        id: 'descarga-sat',
+        ultimo_latido: ahora,
+        estado: 'parcial',
+        detalle: { motivo: 'La descarga masiva no está configurada: falta LIKIDA_SAT_PROVEEDOR en el servidor.' },
+      },
+      // `runner` sí se rompió de verdad: nada en su motivo habla de configurar.
+      { id: 'runner', ultimo_latido: ahora, estado: 'fallo', detalle: { codigo: 'timeout_proveedor' } },
+    ];
+
+    const r = await GET(peticion());
+    const c = await r.json();
+
+    expect(r.status).toBe(503);
+    expect(c).toMatchObject({ ok: false, status: 'degraded', checks: { db: 'ok', crons: 'degraded' } });
+    // La regresión real SIGUE alertando por el canal urgente de siempre.
+    expect(alertarOperador).toHaveBeenCalledWith('cron.estado_no_ok', expect.objectContaining({
+      error: expect.stringContaining('runner'),
+    }));
+    expect(alertarOperador).toHaveBeenCalledTimes(1);
+    // El nombre del cron que sí se rompió no se cuela en el aviso del hueco.
+    const detalleUrgente = alertarOperador.mock.calls[0]?.[1] as { error?: string } | undefined;
+    expect(detalleUrgente?.error).not.toContain('descarga-sat');
+    // El hueco declarado sigue yendo por su propio canal, no por el urgente.
+    expect(alertarHuecoConfiguracion).toHaveBeenCalledWith(
+      'cron.config_ausente:descarga-sat',
+      expect.stringMatching(/LIKIDA_SAT_PROVEEDOR/),
+      expect.anything(),
+    );
   });
 
   it('con la base caída: 503 y fail — lo que un monitor entiende sin leer el cuerpo', async () => {

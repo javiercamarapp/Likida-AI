@@ -16,7 +16,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({ from: () => ({ upsert: (...a: unknown[]) => upsert(...(a as [])) }) }),
 }));
 
-const { puertaCron, registrarLatido, juzgarLatido, motivoDeSalto, CRONS, CADENCIA_MS, TOLERANCIA_LATIDO_MS } = await import('./salud');
+const { puertaCron, registrarLatido, juzgarLatido, motivoDeSalto, esHuecoDeConfiguracion, CRONS, CADENCIA_MS, TOLERANCIA_LATIDO_MS } = await import('./salud');
 
 beforeEach(() => { vi.clearAllMocks(); process.env.CRON_SECRET = 's3cr3t'; });
 
@@ -166,5 +166,35 @@ describe('motivoDeSalto', () => {
     // La palanca gana si vienen las dos: apagar a mano es la señal más fuerte.
     expect(motivoDeSalto({ interruptor: 'global', motivo: 'otra cosa' }))
       .toBe('apagado por la palanca «global»');
+  });
+});
+
+// Auditoría prod 29-ago-2026: `descarga-sat` sin LIKIDA_SAT_PROVEEDOR mandó
+// ocho correos "Urgente" en doce horas porque `/api/health` no distinguía un
+// hueco de configuración YA DECLARADO de una regresión real. Esta función es
+// la bisagra de esa distinción — lee la MISMA convención de prosa que ya usa
+// todo el repo ("no está configurado" / "no configurado"), no una lista de
+// crons a mano.
+describe('esHuecoDeConfiguracion', () => {
+  it('reconoce el motivo real de descarga-sat en producción (falta LIKIDA_SAT_PROVEEDOR)', () => {
+    expect(esHuecoDeConfiguracion(
+      'La descarga masiva no está configurada: falta LIKIDA_SAT_PROVEEDOR en el servidor. Lo destraba Javier (contrato con el PAC y variables de entorno).',
+    )).toBe(true);
+  });
+  it('reconoce la variante "no configurado" sin el "está" (otros canales del repo)', () => {
+    expect(esHuecoDeConfiguracion('El canal de correo no está configurado (RESEND_API_KEY/RESEND_EMAIL_DOMAIN).')).toBe(true);
+    expect(esHuecoDeConfiguracion('canal de WhatsApp no configurado')).toBe(true);
+    expect(esHuecoDeConfiguracion('El cofre no está configurado (falta LIKIDA_COFRE_LLAVE).')).toBe(true);
+  });
+  it('una regresión real NO trae la convención de "no configurado" y no se confunde con un hueco', () => {
+    expect(esHuecoDeConfiguracion('timeout al llamar al proveedor de SW')).toBe(false);
+    expect(esHuecoDeConfiguracion('el proveedor devolvió 500')).toBe(false);
+    expect(esHuecoDeConfiguracion('interruptor_ilegible')).toBe(false);
+  });
+  it('sin motivo, o con un tipo que no es texto, no es un hueco declarado', () => {
+    expect(esHuecoDeConfiguracion(null)).toBe(false);
+    expect(esHuecoDeConfiguracion(undefined)).toBe(false);
+    expect(esHuecoDeConfiguracion(42)).toBe(false);
+    expect(esHuecoDeConfiguracion('')).toBe(false);
   });
 });

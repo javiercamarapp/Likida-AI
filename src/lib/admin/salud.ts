@@ -162,6 +162,29 @@ export function motivoDeSalto(detalle: Record<string, unknown>): string | null {
   return null;
 }
 
+/**
+ * ¿El `motivo` que el propio cron dejó en su latido describe un HUECO DE
+ * CONFIGURACIÓN ya declarado (falta una variable de entorno, un contrato, una
+ * credencial) en vez de una regresión real (algo que funcionaba y se rompió)?
+ *
+ * Lee la MISMA convención de prosa que ya usa el repo entero para decir "esto
+ * no está listo": `sat_descarga/index.ts` ("La descarga masiva no está
+ * configurada: falta LIKIDA_SAT_PROVEEDOR..."), el cofre de credenciales
+ * ("El cofre no está configurado..."), los canales de correo/WhatsApp
+ * ("...no está configurado en este entorno"). No es una lista de crons a
+ * mano — es leer la frase — así que un cron nuevo que declare su propio hueco
+ * con esta misma convención queda cubierto sin tocar este archivo.
+ *
+ * AUDITORÍA PROD 29-AGO-2026: sin esta distinción, `/api/health` trataba
+ * `descarga-sat` sin `LIKIDA_SAT_PROVEEDOR` exactamente igual que una
+ * regresión — un correo "Urgente" cada vez que un monitor externo pegaba al
+ * endpoint (ocho en doce horas), indistinguible del cron que sí se rompió.
+ * Ver `alertarHuecoConfiguracion` en `observability/alerta.ts`.
+ */
+export function esHuecoDeConfiguracion(motivo: unknown): motivo is string {
+  return typeof motivo === 'string' && /no\s+est[aá]\s+configurad[oa]|no\s+configurad[oa]/i.test(motivo);
+}
+
 export interface LatidoDetallado extends SaludCron {
   /** ISO del último latido, o `null` si nunca latió. */
   ultimoLatido: string | null;
