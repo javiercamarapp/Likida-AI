@@ -44,6 +44,10 @@ export interface TicketCruzado {
    *  mezclaría los pendientes de clientes distintos como si fueran uno. */
   tenantId: string;
   tenantNombre: string;
+  /** Quién de Likida lo tomó (0268). `null` = SIN TOMAR — que no es lo mismo
+   *  que "en proceso": la cola lo dice con esas palabras. */
+  asignadoA: string | null;
+  asignadoNombre: string | null;
 }
 
 /**
@@ -75,7 +79,8 @@ export async function getTicketsCruzados(
 ): Promise<TicketCruzado[]> {
   let consulta = supabaseAdmin()
     .from('ticket_soporte')
-    .select('id, asunto, categoria, prioridad, estado, abierto_en, resuelto_en, vence_en, tenant_id, tenant:tenant_id(nombre)');
+    .select('id, asunto, categoria, prioridad, estado, abierto_en, resuelto_en, vence_en, tenant_id, '
+      + 'asignado_a, tenant:tenant_id(nombre), asignado:asignado_a(nombre)');
   if (opciones.tenantId) consulta = consulta.eq('tenant_id', opciones.tenantId);
 
   const { data, error } = await consulta
@@ -88,7 +93,11 @@ export async function getTicketsCruzados(
   if (error) throw new Error(`getTicketsCruzados: ${error.message}`);
 
   return (data ?? []).map((f): TicketCruzado => {
-    const t = f as Record<string, unknown>;
+    // Por `unknown`: con DOS embeds (`tenant:tenant_id` y `asignado:asignado_a`
+    // — dos FKs distintas a app_user desde la misma tabla) el tipo que
+    // supabase-js infiere es una unión con `GenericStringError`. Se lee campo
+    // por campo abajo, como ya se hacía.
+    const t = f as unknown as Record<string, unknown>;
     const vence = (t.vence_en as string | null) ?? null;
     return {
       id: t.id as string,
@@ -106,8 +115,52 @@ export async function getTicketsCruzados(
       // El join sin nombre se pinta '—' — visible, no inventado (mismo
       // criterio que `mapearCorrida` en negocio.ts).
       tenantNombre: ((t.tenant as { nombre?: string } | null)?.nombre) ?? '—',
+      asignadoA: (t.asignado_a as string | null) ?? null,
+      asignadoNombre: ((t.asignado as { nombre?: string | null } | null)?.nombre) ?? null,
     };
   });
+}
+
+/**
+ * DE QUÉ FLOTA ES ESTE TICKET — la única función de todo el ciclo de soporte
+ * que cruza tenants, y por eso vive aquí y no en `lib/likida/soporte.ts`.
+ *
+ * El superadmin de /admin/soporte atiende una cola de TODAS las flotas: para
+ * responder o cerrar un ticket necesita saber a cuál pertenece. En vez de
+ * darle a `lib/likida/soporte.ts` un modo "sin filtro de tenant" —que sería
+ * un `.eq('tenant_id')` opcional, o sea un aislamiento que depende de que
+ * nadie olvide pasar el parámetro—, el permiso de cruzar se aísla en ESTA
+ * consulta, que solo LEE el tenant al que el ticket ya pertenece. Todo lo que
+ * escribe entra después por la puerta tenant-scoped, con este id en la mano.
+ *
+ * `null` = ese id no es un ticket. LANZA si la lectura falla: "no se pudo
+ * mirar" no puede confundirse con "no existe" cuando lo que sigue es cerrar
+ * el ticket de alguien.
+ */
+export async function resolverTicketCruzado(
+  ticketId: string,
+): Promise<{ id: string; tenantId: string; tenantNombre: string } | null> {
+  const id = ticketId.trim();
+  if (!id) return null;
+  const { data, error } = await supabaseAdmin()
+    .from('ticket_soporte')
+    .select('id, tenant_id, tenant:tenant_id(nombre)')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw new Error(`resolverTicketCruzado: ${error.message}`);
+  if (!data) return null;
+  // Doble casteo a propósito: con un embed (`tenant:tenant_id(nombre)`) el
+  // tipo que supabase-js infiere para `.maybeSingle()` es una unión con
+  // `GenericStringError`, que no solapa con un Record. Se pasa por `unknown` y
+  // se lee campo por campo abajo, como el resto del archivo.
+  const t = data as unknown as Record<string, unknown>;
+  return {
+    id: String(t.id),
+    tenantId: String(t.tenant_id),
+    // El join sin nombre se pinta '—' — visible, no inventado (mismo criterio
+    // que `getTicketsCruzados` arriba).
+    tenantNombre: ((t.tenant as { nombre?: string } | null)?.nombre) ?? '—',
+  };
 }
 
 export interface ConteosTickets {
