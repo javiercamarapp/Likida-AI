@@ -88,6 +88,11 @@ function builder(tabla: string) {
     },
     eq: () => b, is: () => b, gte: () => b, lt: () => b,
     in: () => b, limit: () => b, maybeSingle: () => b, order: () => b,
+    // `update` — solo lo usa `marcarInsumosProcesados` (insumos.ts) al
+    // marcar un insumo consumido. No dispara el guardia de columnas
+    // fantasma (eso es cosa de `select`); la respuesta sale de la MISMA
+    // cola por tabla, en el orden en que la corrida las llama.
+    update: () => b,
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve()
         .then(() => (error42703 ? { data: null, count: null, error: error42703 } : responderDe(tabla)))
@@ -391,6 +396,63 @@ describe('las corridas — fail closed, idempotencia y el ROJO que no espera', (
     expect(r.motivo).toContain('otra corrida ganó el periodo');
     expect(registrarCorrida).toHaveBeenCalledWith(null, 'control_costos',
       expect.objectContaining({ estado: 'ok' }));
+  });
+
+  it('DEMOSTRACIÓN: un insumo subido a la bandeja (Fase D, 0267) SÍ llega al agente en su siguiente corrida y queda marcado', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('finanzas_config', [{ data: null, error: null }]);
+    // Lo que Javier "subió" en /admin/agentes/control_costos/insumos: una
+    // idea en texto libre, pendiente (procesado_en: null). Dos respuestas
+    // en cola para `agente_insumo` — la del SELECT de `insumosPendientes`
+    // y la del UPDATE de `marcarInsumosProcesados`, en el orden real en que
+    // `correrControlCostos` las dispara.
+    respuestas.set('agente_insumo', [
+      {
+        data: [{
+          id: 'insumo-1', agente: 'control_costos', tenant_id: null, tipo: 'texto',
+          titulo: 'Ojo con la renovación del plan de Vercel', storage_path: null,
+          contenido_texto: 'Sube de $20 a $150/mes en octubre, revisar si compensa el uso real.',
+          subido_por: 'u1', subido_en: '2026-08-26T10:00:00Z', procesado_en: null, resumen_uso: null,
+        }],
+        error: null,
+      },
+      { data: [{ id: 'insumo-1' }], error: null },
+    ]);
+
+    const r = await correrAgenteFinanciero('control_costos', 'cron', '2026-08-27');
+
+    expect(r.piezas).toBe(1);
+    // El insumo SÍ llegó al cuerpo del parte que se encoló — no se quedó
+    // en la tabla sin que el agente lo leyera.
+    expect(encolarPieza).toHaveBeenCalledWith(expect.objectContaining({
+      tipo: 'parte_costos', agente: 'control_costos',
+      cuerpo: expect.stringContaining('Ojo con la renovación del plan de Vercel'),
+    }));
+    const cuerpo = (encolarPieza.mock.calls[0][0] as { cuerpo: string }).cuerpo;
+    expect(cuerpo).toContain('INSUMOS QUE JAVIER DEJÓ EN LA BANDEJA');
+    expect(cuerpo).toContain('Sube de $20 a $150/mes en octubre');
+    // Y quedó marcado procesado — "qué usó, qué aprendió de eso".
+    expect(registrarCorrida).toHaveBeenCalledWith(null, 'control_costos',
+      expect.objectContaining({ estado: 'ok', resumen: expect.objectContaining({ insumosMarcados: 1 }) }));
+  });
+
+  it('un insumo NO se marca procesado si el periodo ya lo ganó otra corrida (queda pendiente para la próxima vez de verdad)', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('finanzas_config', [{ data: null, error: null }]);
+    respuestas.set('agente_insumo', [
+      { data: [{ id: 'insumo-2', agente: 'control_costos', tenant_id: null, tipo: 'texto', titulo: 't', storage_path: null, contenido_texto: 'c', subido_por: 'u', subido_en: '2026-08-26T00:00:00Z', procesado_en: null, resumen_uso: null }], error: null },
+    ]);
+    encolarPieza.mockRejectedValueOnce(new Error(
+      'encolarPieza: duplicate key value violates unique constraint "cola_parte_por_periodo"'));
+    const r = await correrAgenteFinanciero('control_costos', 'cron', '2026-08-27');
+    expect(r.piezas).toBe(0);
+    // Solo UNA respuesta se puso en cola para `agente_insumo` (el SELECT):
+    // si el código llamara al UPDATE de todos modos, la cola vacía le daría
+    // el default `{ data: [], count: 0, error: null }` — 0 marcados es
+    // exactamente lo que se afirma abajo, así que la prueba real es que
+    // NADA se marcó procesado cuando el periodo ya lo ganó otra corrida.
+    expect(registrarCorrida).toHaveBeenCalledWith(null, 'control_costos',
+      expect.objectContaining({ resumen: expect.objectContaining({ insumosMarcados: 0 }) }));
   });
 
   it('el cierre no corre antes del día 3 — sin corrida y sin pieza, con el motivo dicho', async () => {

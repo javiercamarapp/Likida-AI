@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 import { execSync } from 'node:child_process';
-import { mxn, usd, usd4, mxnCompacto, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio, porcentaje, hoyMx, inicioDiaMx, finDiaMx } from './formato';
+import { mxn, usd, usd4, mxnCompacto, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio, porcentaje, hoyMx, inicioDiaMx, finDiaMx, pesoArchivo } from './formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 7 · MEDIO REINCIDENTE POR TERCERA RONDA — y el número CRECÍA:
@@ -428,5 +428,30 @@ describe('porcentaje — puntos porcentuales, no fracción', () => {
 
   it('un negativo se escribe como negativo', () => {
     expect(porcentaje(-12.34, 2)).toBe('-12.34%');
+  });
+});
+
+describe('pesoArchivo — bytes, KB o MB, nunca "0 KB" para lo que nadie midió', () => {
+  it('bytes debajo de 1 KB se escriben tal cual', () => {
+    expect(pesoArchivo(0)).toBe('0 B');
+    expect(pesoArchivo(512)).toBe('512 B');
+  });
+
+  it('entre 1 KB y 1 MB, redondeado a KB', () => {
+    expect(pesoArchivo(2048)).toBe('2 KB');
+    expect(pesoArchivo(348_160)).toBe('340 KB');
+  });
+
+  it('1 MB o más, con un decimal si es menor a 10 MB', () => {
+    expect(pesoArchivo(8 * 1024 * 1024)).toBe('8.0 MB');
+    expect(pesoArchivo(2_411_724)).toBe('2.3 MB');
+    expect(pesoArchivo(50 * 1024 * 1024)).toBe('50 MB');
+  });
+
+  it('null/undefined/negativo/NaN son "—", NUNCA "0 KB" — un tamaño desconocido no es un archivo vacío', () => {
+    expect(pesoArchivo(null)).toBe('—');
+    expect(pesoArchivo(undefined)).toBe('—');
+    expect(pesoArchivo(-5)).toBe('—');
+    expect(pesoArchivo(NaN)).toBe('—');
   });
 });

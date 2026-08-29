@@ -1,9 +1,11 @@
-import { Bot, Plus } from 'lucide-react';
+import Link from 'next/link';
+import { Bot, Plus, Inbox } from 'lucide-react';
 import {
   listarAgentes,
   DEPARTAMENTOS, DISPARADORES, ESTADOS_AGENTE, type AgenteDefinido,
 } from '@/lib/likida/agentes/definiciones';
 import { listarInterruptores } from '@/lib/likida/interruptores';
+import { contarPendientesPorAgente } from '@/lib/likida/agentes/insumos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { usd } from '@/lib/utils';
 import { fechaHoraMx } from '@/lib/formato';
@@ -74,11 +76,12 @@ const PILL_CORRIDA: Record<string, Estado> = { ok: 'ok', parcial: 'warn', fallo:
  *  componente real, nunca una copia. La server action llega por props. */
 export async function PanelAgentesContenido({ accionAlta, accionPalanca }: { accionAlta: AccionAlta; accionPalanca: AccionPalanca }) {
 
-  const [agentes, interruptores, exito, consumo] = await Promise.all([
+  const [agentes, interruptores, exito, consumo, insumosPendientes] = await Promise.all([
     listarAgentes(),
     safe(() => listarInterruptores()),
     safe(() => exitoTreintaDias()),
     safe(() => getConsumoPorAgente(ahoraMs())),
+    safe(() => contarPendientesPorAgente()),
   ]);
   const costoDe = new Map<string, number>(
     (consumo?.agentes ?? []).map((a) => [a.agente, a.gastado30dUsd]),
@@ -163,6 +166,17 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca }: { acc
             ? <span style={{ color: 'var(--faint)' }}>Sin tope declarado</span>
             : `${usd(a.presupuestoDiaUsd)}/día`}
         </td>
+        <td className="px-4 py-2.5 text-[12.5px]">
+          <Link href={`/admin/agentes/${a.id}/insumos`}
+            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 hairline hover:opacity-70 transition-opacity">
+            <Inbox width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+            {insumosPendientes === null
+              ? <span style={{ color: 'var(--bad)' }}>No se pudo leer</span>
+              : (insumosPendientes.get(a.id) ?? 0) > 0
+                ? <span className="font-medium">{insumosPendientes.get(a.id)} pendiente{(insumosPendientes.get(a.id) ?? 0) === 1 ? '' : 's'}</span>
+                : <span style={{ color: 'var(--faint)' }}>Bandeja</span>}
+          </Link>
+        </td>
       </tr>
     );
   }
@@ -202,6 +216,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca }: { acc
                       <th className="px-4 py-2 font-medium text-right">Éxito 30d</th>
                       <th className="px-4 py-2 font-medium text-right">Costo 30d</th>
                       <th className="px-4 py-2 font-medium text-right">Presupuesto</th>
+                      <th className="px-4 py-2 font-medium">Insumos</th>
                     </tr>
                   </thead>
                   <tbody>{agentes.map(filaAgente)}</tbody>

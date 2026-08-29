@@ -388,3 +388,19 @@ export function fechaHoraSat(iso: string): string | null {
   // `h23` explícito por la misma razón que fechaHoraMx: "24:00" no existe.
   return `${partes.year}-${partes.month}-${partes.day}T${partes.hour}:${partes.minute}:${partes.second}`;
 }
+
+/**
+ * Tamaño de archivo legible («340 KB», «2.3 MB») — para la bandeja de
+ * insumos (0267) y cualquier otra pantalla que enseñe un archivo subido.
+ * Vive aquí por el mismo guardia que el resto del archivo: un tamaño no se
+ * formatea dos veces distinto en dos pantallas. `null`/negativo/NaN ⇒ '—',
+ * nunca "0 KB" — un tamaño desconocido no es un archivo vacío.
+ */
+export function pesoArchivo(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
+}
