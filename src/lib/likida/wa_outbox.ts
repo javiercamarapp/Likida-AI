@@ -9,6 +9,24 @@ export interface SalidaOutbox {
   leaseToken: string;
 }
 
+/**
+ * AUDITORÍA 20 (R-1, CRÍTICO): este lease vivía en 120s mientras
+ * `wa-outbox/route.ts` mide 155.5s reales y puede correr hasta los 300s de
+ * su `maxDuration` — el TECHO que Vercel permite, no el promedio de hoy. Con
+ * lease < techo, el cron que corre cada minuto (`vercel.json`) reclamaba las
+ * mismas filas mientras la corrida anterior seguía viva y las reenviaba a un
+ * teléfono real, hasta 8 veces (tope de reintentos, 0180).
+ *
+ * El lease tiene que sobrevivir al PEOR CASO POSIBLE (el `maxDuration` de la
+ * ruta), no a la medición de hoy — el promedio ya creció una vez (60s→155.5s)
+ * y puede volver a crecer. Mismo margen (1.5×) que ya usa `WA_LEASE_SECONDS`
+ * en `wa_pendientes.ts` frente a su propio `maxDuration` (180 vs 120).
+ * `wa_outbox.test.ts` fija este invariante contra el `maxDuration` real leído
+ * de `route.ts` — si alguien baja este número, o vuelve a subir el de la
+ * ruta sin ajustar este, la prueba se pone roja.
+ */
+export const WA_OUTBOX_LEASE_SECONDS = 450; // 1.5 × maxDuration (300) de wa-outbox/route.ts
+
 /** Guarda una salida que Meta no aceptó por un error transitorio. Nunca lanza:
  * el caller ya devolvió su resultado normal; fallar al respaldo solo se grita. */
 export async function encolarSalidaWhatsApp(payload: Record<string, unknown>, motivo: string): Promise<void> {
@@ -24,7 +42,7 @@ export async function encolarSalidaWhatsApp(payload: Record<string, unknown>, mo
 
 export async function reclamarSalidasWhatsApp(limite = 25): Promise<SalidaOutbox[]> {
   const { data, error } = await acotada(supabaseAdmin().rpc('reclamar_wa_outbox', {
-    p_limite: limite, p_lease_seconds: 120,
+    p_limite: limite, p_lease_seconds: WA_OUTBOX_LEASE_SECONDS,
   }), 'wa.outbox.reclamar');
   if (error) throw new Error(`reclamarSalidasWhatsApp: ${error.message}`);
   return ((data ?? []) as Array<{ id: string; payload: Record<string, unknown>; intentos: number; lease_token: string }>).map((f) => ({
