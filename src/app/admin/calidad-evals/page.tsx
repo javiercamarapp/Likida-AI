@@ -16,11 +16,13 @@ export const dynamic = 'force-dynamic';
  * evaluación ni tabla de feedback») hasta que dejó de ser verdad por partes:
  *
  *   · EVALOPS (0134) examina al analista y acusa el drift de prompt.
+ *   · EVALOPS fase 2 (E.26, 0254) examina al CONTADOR con las 32 preguntas
+ *     doradas de 22-evaluacion.md — trampas, inventos y falsa cautela.
  *   · agente_corrida (0102) registra el veredicto de CADA corrida de agente.
  *   · El banco de QA (0239/0246) mide la precisión del OCR campo por campo
  *     contra verdad de terreno etiquetada a mano.
  *
- * Tres fuentes medidas, tres pantallas distintas. Aquí se JUNTAN — nada se
+ * Cuatro fuentes medidas. Aquí se JUNTAN — nada se
  * mide nuevo, cada tarjeta enlaza a su pantalla de detalle, y lo que sigue
  * sin fuente (feedback 👍/👎, CSAT, drift de calidad en producción) se sigue
  * diciendo abajo con su razón, no con una gráfica vacía.
@@ -42,8 +44,12 @@ function estadoDeVeredicto(v: string | null): { estado: Estado; texto: string } 
 
 export default async function CalidadEvalsPage() {
   const desdeIso = new Date(ahoraMs() - DIAS_VENTANA * 24 * 3600 * 1000).toISOString();
-  const [evals, corridas, ocr] = await Promise.all([
+  const [evals, evalsContador, corridas, ocr] = await Promise.all([
     getEstadoEvals('analista').catch(() => null),
+    // E.26 (fase 2): el examen fiscal de 32 preguntas doradas. Se lee aparte
+    // y cae aparte — que el analista no se quede sin tarjeta porque el
+    // corpus del contador no cargó, ni al revés.
+    getEstadoEvals('contador').catch(() => null),
     getCalidadCorridas(desdeIso).catch(() => null),
     getCalidadOcr().catch(() => null),
   ]);
@@ -60,7 +66,8 @@ export default async function CalidadEvalsPage() {
           <div className="card p-4">
             <h1 className="text-base font-semibold tracking-tight">La calidad que ya se mide, junta</h1>
             <p className="text-sm mt-1.5 leading-relaxed" style={{ color: 'var(--muted)' }}>
-              Tres fuentes reales: el examen del analista (EVALOPS), el veredicto de cada corrida de agente,
+              Cuatro fuentes reales: el examen del analista (EVALOPS), el examen fiscal del contador
+              (las 32 preguntas doradas de 22-evaluacion.md), el veredicto de cada corrida de agente,
               y la precisión del OCR contra verdad de terreno etiquetada a mano. Nada aquí se mide nuevo —
               cada tarjeta enlaza a su detalle. Lo que sigue sin fuente está abajo, con su razón.
             </p>
@@ -109,6 +116,59 @@ export default async function CalidadEvalsPage() {
                 <p className="text-xs mt-2 m-0" style={{ color: 'var(--faint)' }}>
                   El detalle y el juez humano viven en <Link href="/admin/evals" className="underline">Evals</Link>.
                   El examen se corre a mano (gasta llamadas reales): <code>npx tsx scripts/evals/correr-analista.ts</code>.
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* ── 1b · El examen fiscal del contador (E.26, 0254) ───────────── */}
+          <div className="card p-4">
+            <div className="flex items-center gap-2">
+              <FlaskConical width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+              <TituloSeccion>El examen del contador — 32 preguntas doradas</TituloSeccion>
+            </div>
+            {evalsContador === null ? (
+              <p className="text-sm mt-2 m-0" style={{ color: 'var(--bad)' }}>
+                No se pudo leer el estado del examen — esto NO significa que el examen esté bien ni mal.
+              </p>
+            ) : (
+              <>
+                {evalsContador.driftDePrompt && (
+                  <div className="mt-2 rounded-lg px-3 py-2" style={{ background: 'var(--warnbg)' }}>
+                    <p className="text-[13px] font-medium m-0" style={{ color: 'var(--warn)' }}>
+                      {evalsContador.ultima === null
+                        ? 'El examen NUNCA se ha corrido: el prompt vivo no está examinado.'
+                        : 'El prompt vivo NO es el examinado (el hash cubre reglas + corpus de normas/) — re-examina antes de desplegar cambios del agente o de las fichas.'}
+                    </p>
+                  </div>
+                )}
+                <div className="mt-2.5 text-sm flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                  {evalsContador.ultima === null ? (
+                    <span style={{ color: 'var(--muted)' }}>Sin corridas registradas.</span>
+                  ) : (
+                    <>
+                      <span className="flex items-center gap-1.5">
+                        Última corrida:{' '}
+                        <StatusPill estado={estadoDeVeredicto(evalsContador.ultima.veredicto).estado}>
+                          {estadoDeVeredicto(evalsContador.ultima.veredicto).texto}
+                        </StatusPill>
+                      </span>
+                      <span style={{ color: 'var(--muted)' }}>{fechaHoraMx(evalsContador.ultima.iniciadaEn)}</span>
+                      {evalsContador.ultima.casos !== null && (
+                        <span style={{ color: 'var(--muted)' }}>{numero(evalsContador.ultima.casos)} caso(s)</span>
+                      )}
+                    </>
+                  )}
+                  <span style={{ color: 'var(--muted)' }}>{numero(evalsContador.casosActivos)} caso(s) activos en el banco</span>
+                </div>
+                {/* La calificación desglosada, tal cual la dejó el runner —
+                    buena o mala, aquí no se maquilla. */}
+                {evalsContador.ultima?.notas && (
+                  <p className="text-xs mt-2 m-0" style={{ color: 'var(--muted)' }}>{evalsContador.ultima.notas}</p>
+                )}
+                <p className="text-xs mt-2 m-0" style={{ color: 'var(--faint)' }}>
+                  El detalle y el juez humano viven en <Link href="/admin/evals" className="underline">Evals</Link>.
+                  El examen se corre a mano (gasta llamadas reales): <code>npx tsx scripts/evals/correr-contador.ts</code>.
                 </p>
               </>
             )}

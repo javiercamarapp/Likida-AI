@@ -14195,3 +14195,43 @@ begin
     coalesce(consolidado, false), detalle_viejo_fuera, detalle_vivo,
     coalesce(lector_dos_meses, false), coalesce(no_encoge, false), piso_rebota, anon_ok;
 end $$;
+
+-- ── 209. La llave de idempotencia del examen del contador (mig. 0254) ──
+-- El banco dorado se sincroniza por upsert sobre (agente, clave): la columna
+-- existe, el índice único rechaza el duplicado con clave, y los casos del
+-- analista (clave null) siguen conviviendo — NULLS DISTINCT, no un candado
+-- accidental sobre lo sembrado en 0134.
+do $$
+declare
+  col_existe boolean;
+  duplicado_rebota boolean;
+  nulls_conviven boolean;
+begin
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'eval_caso' and column_name = 'clave'
+  ) into col_existe;
+
+  -- (a) dos casos del contador con la MISMA clave: el segundo rebota.
+  insert into public.eval_caso (agente, pregunta, espera, tipo, clave)
+    values ('contador_v205', 'p1', 'e1', 'factica', 'Q1');
+  begin
+    insert into public.eval_caso (agente, pregunta, espera, tipo, clave)
+      values ('contador_v205', 'p2', 'e2', 'factica', 'Q1');
+    duplicado_rebota := false;
+  exception when unique_violation then
+    duplicado_rebota := true;
+  end;
+
+  -- (b) dos casos SIN clave del mismo agente conviven (los del analista, 0134).
+  begin
+    insert into public.eval_caso (agente, pregunta, espera, tipo)
+      values ('contador_v205', 'p3', 'e3', 'factica'), ('contador_v205', 'p4', 'e4', 'factica');
+    nulls_conviven := true;
+  exception when unique_violation then
+    nulls_conviven := false;
+  end;
+
+  raise exception 'EXAMEN_CONTADOR_0254  col_existe=%  duplicado_rebota=%  nulls_conviven=%   (esperado t / t / t)',
+    col_existe, duplicado_rebota, nulls_conviven;
+end $$;
