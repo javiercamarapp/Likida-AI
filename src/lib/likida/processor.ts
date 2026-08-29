@@ -83,6 +83,7 @@ import {
 } from './acuse_ticket';
 import { estadoDelViaje, responderConsulta } from './consulta_chofer';
 import { resolverCuentaOficina, telefonoJefeDe, type CuentaOficina } from './contactos';
+import { atenderComandoAdmin } from './admin_comandos_wa';
 import { atenderConfirmacion, aceptarPorActividad } from './confirmar_viaje';
 import { enviarBriefingInicio } from './briefing_inicio_wa';
 import { transcribirNotaDeVoz, RESPUESTA_NO_ENTENDI, RESPUESTA_SIN_PRESUPUESTO } from './voz_transcrita';
@@ -607,6 +608,25 @@ async function atenderTextoOficina(
     }
   } catch (e) {
     logger.error('oficina.coordinacion_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+  }
+
+  // ── COMANDOS DE ADMINISTRACIÓN DE PLATAFORMA (admin_comandos_wa.ts) ──────
+  // "aprobar <id>", "correr <rutina>", "estatus[.rutina]" — la consola de
+  // Javier (/admin/aprobaciones, /admin/tu-turno) operada por WhatsApp. Va
+  // ANTES del corte de `!cuenta.tenantId`: el superadmin no tiene flota y es
+  // justo el único rol que estos comandos aceptan — cortar aquí antes de
+  // probarlos los dejaría sin dueño posible. Un flota_admin que los escribe
+  // SÍ entra a la función (su teléfono es de oficina) y recibe la negación
+  // explícita de rol, no un silencio ni un "no te entendí".
+  try {
+    const rAdmin = await atenderComandoAdmin(cuenta, from, texto);
+    if (rAdmin !== null) {
+      logger.info('oficina.comando_admin', { user: cuenta.userId, rol: cuenta.rol });
+      await sendText(from, rAdmin);
+      return true;
+    }
+  } catch (e) {
+    logger.error('oficina.comando_admin_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
   }
 
   // Sin flota no hay nada que despachar ni sobre qué informar. Es el caso del
