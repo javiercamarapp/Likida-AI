@@ -4,7 +4,9 @@ import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { revalidatePath } from 'next/cache';
-import { listarSolicitudesArco, resolverSolicitudArco, ejecutarCancelacionArco } from '@/lib/likida/repo';
+import {
+  listarSolicitudesArco, resolverSolicitudArco, ejecutarCancelacionArco, ejecutarOposicionArco,
+} from '@/lib/likida/repo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { fechaMx, hoyMx } from '@/lib/formato';
@@ -89,6 +91,39 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
         : { ok: `Cancelación ejecutada: el titular quedó anonimizado en la base. La confirmación NO salió por WhatsApp${r.errorAviso ? ` (${r.errorAviso})` : ''} — entrégasela por otro canal.` };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'ejecutar la cancelación') };
+    }
+  }
+
+  // AUDITORÍA 20 (legal, reincidente #5 OTRA VEZ): `ejecutar_arco_oposicion`
+  // es la gemela de la de arriba —misma migración 0178, mismo grant— y
+  // también nació sin llamador. Una oposición se cerraba escribiendo "listo"
+  // y no quedaba evidencia estructurada de nada.
+  //
+  // NO CIERRA LA SOLICITUD, y por eso este botón convive con el de Responder
+  // en vez de sustituirlo: la RPC deja la solicitud `en_proceso` con
+  // `oposicion_automatizada_vigente` y declara que requiere revisión humana.
+  // Primero se registra la constancia, después la persona contesta al titular.
+  async function accionRegistrarOposicion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await requireSessionTenant(RUTA);
+    const sp = await searchParams;
+    let tenantEfectivo = s.tenantId;
+    if (s.rol === 'superadmin' && sp?.tenant) {
+      const { resolverTenantPedido } = await import('@/lib/auth/tenant-api');
+      tenantEfectivo = await resolverTenantPedido(supabaseAdmin(), tenantEfectivo, sp.tenant);
+    }
+    const solicitudId = String(fd.get('solicitudId') ?? '');
+    if (!solicitudId) return { error: 'Falta la solicitud.' };
+    try {
+      const r = await ejecutarOposicionArco(tenantEfectivo, solicitudId);
+      revalidatePath(RUTA);
+      if (!r.ok) return { error: `No se registró la oposición: ${r.motivo}` };
+      return {
+        ok: 'Oposición registrada en el expediente: queda en proceso, con la constancia de que la '
+          + 'oposición del titular está vigente. Falta que revises el caso y le contestes con el botón de Responder.',
+      };
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'registrar la oposición') };
     }
   }
 
@@ -187,10 +222,29 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
                             </span>
                           </div>
                         ) : (
-                          <FormaConAviso accion={accionResponder} boton="Responder" columnas="260px auto">
-                            <input type="hidden" name="solicitudId" value={s.id} />
-                            <input name="resolucion" placeholder="Qué se resolvió y cómo se entrega al titular" style={{ width: 260 }} />
-                          </FormaConAviso>
+                          <div className="flex flex-col gap-2">
+                            {/* La oposición SÍ tiene un acto que dejar
+                                asentado antes de la prosa: la constancia de
+                                que está vigente. Se ofrece arriba de
+                                Responder porque ése es el orden — primero la
+                                evidencia, después la contestación. */}
+                            {s.tipo === 'oposicion' && (
+                              <>
+                                <FormaConAviso accion={accionRegistrarOposicion} boton="Registrar la oposición" columnas="auto">
+                                  <input type="hidden" name="solicitudId" value={s.id} />
+                                </FormaConAviso>
+                                <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                                  Deja constancia en el expediente de que la oposición del titular está vigente
+                                  (queda «en proceso»). No cancela ni borra ningún dato y no cierra la solicitud:
+                                  eso lo haces tú al responder.
+                                </span>
+                              </>
+                            )}
+                            <FormaConAviso accion={accionResponder} boton="Responder" columnas="260px auto">
+                              <input type="hidden" name="solicitudId" value={s.id} />
+                              <input name="resolucion" placeholder="Qué se resolvió y cómo se entrega al titular" style={{ width: 260 }} />
+                            </FormaConAviso>
+                          </div>
                         )}
                       </td>
                     </tr>

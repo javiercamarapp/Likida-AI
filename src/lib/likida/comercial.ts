@@ -547,6 +547,77 @@ async function traerEstadoRastreoSql(
   return { unidadesConPosicion: r.unidadesConPosicion, ultimaPosicion: r.ultimaPosicion };
 }
 
+/** La última posición conocida de UNA unidad activa de la flota. */
+export interface UltimaPosicion {
+  unidadId: string;
+  /** Como la flota llama a la unidad en la radio y en el papel ("C2-08"). */
+  numeroEconomico: string;
+  placas: string | null;
+  /** `unidad.estado` (disponible|en_ruta|taller|baja) — el rótulo lo pone la
+   *  pantalla; aquí viaja crudo. */
+  estadoUnidad: string;
+  lat: number;
+  lng: number;
+  /** km/h que reportó el proveedor. `null` cuando no lo manda (el pin de
+   *  WhatsApp nunca lo trae) — y `null` NO es cero: cero es "parado". */
+  velocidadKmh: number | null;
+  /** El instante que reporta el GPS (`medida_en`), no el de la inserción. */
+  medidaEn: string;
+  /** `whatsapp` (pin del chofer) o el nombre del proveedor del conector. */
+  proveedor: string;
+}
+
+/**
+ * La ÚLTIMA posición de cada unidad activa — `ultimas_posiciones_tenant`
+ * (mig. 0267).
+ *
+ * AUDITORÍA 20, hallazgo 5 (MEDIO): `posicion` tenía dos escritores reales
+ * (el pin del chofer por WhatsApp en `processor.ts` y el poller del conector
+ * GPS en `conectores/sincronizar_gps.ts`) y NINGUNA pantalla enseñaba una
+ * sola posición; `/dashboard/mapa` seguía declarando que la tabla estaba
+ * vacía. Ésta es la lectura que faltaba.
+ *
+ * FALLA CERRADO, igual que `traerEstadoRastreoSql`: un arreglo vacío se pinta
+ * como "todavía no llega ninguna posición", y esa frase no se puede decir
+ * porque no se pudo preguntar. El error sale por valor y la forma se
+ * comprueba fila por fila.
+ */
+export async function getUltimasPosiciones(tenantId: string): Promise<UltimaPosicion[]> {
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('ultimas_posiciones_tenant', { p_tenant: tenantId }),
+    'getUltimasPosiciones',
+  );
+  if (error) throw new Error(`getUltimasPosiciones: ${error.message}`);
+  if (!Array.isArray(data)) {
+    throw new Error(
+      'getUltimasPosiciones: ultimas_posiciones_tenant devolvió otra forma (¿migración 0267 sin aplicar?): '
+      + 'se esperaba un arreglo de filas',
+    );
+  }
+  return data.map((f: unknown) => {
+    const r = f as Record<string, unknown>;
+    // Lat/lng son LO ÚNICO no negociable: sin las dos no hay dónde pintar el
+    // pin, y un 0,0 por defecto pondría el camión en el Golfo de Guinea.
+    if (!esObjeto(r) || !esNumero(r.lat) || !esNumero(r.lng) || typeof r.medida_en !== 'string') {
+      throw new Error(
+        'getUltimasPosiciones: ultimas_posiciones_tenant devolvió una fila sin lat/lng/medida_en '
+        + `(¿migración 0267 sin aplicar?): ${JSON.stringify(r).slice(0, 120)}`,
+      );
+    }
+    return {
+      unidadId: String(r.unidad_id),
+      numeroEconomico: String(r.numero_economico ?? ''),
+      placas: esTextoONulo(r.placas) ? r.placas : null,
+      estadoUnidad: String(r.estado ?? ''),
+      lat: r.lat,
+      lng: r.lng,
+      velocidadKmh: esNumero(r.velocidad) ? r.velocidad : null,
+      medidaEn: r.medida_en,
+      proveedor: String(r.proveedor ?? ''),
+    };
+  });
+}
+
 // ── Abrir un ticket — LA PUERTA de la señal de PMF #3 ──────────────────────
 //
 // Auditoría externa 16-ago-2026 (P2): la señal "el cliente se queja por su

@@ -149,6 +149,13 @@ export const SISTEMA: Item[] = [
   { href: '/dashboard/onboarding', nombre: 'Perfil de la flota', Icono: ClipboardList },
   { href: '/dashboard/politicas', nombre: 'Políticas de gasto', Icono: Scale },
   { href: '/dashboard/arco', nombre: 'Solicitudes ARCO', Icono: ShieldCheck },
+  // AUDITORÍA 20 (H6, 29-ago-2026): los hilos bot↔chofer de ESTA flota. Se
+  // leían solo desde /admin —el proveedor veía la conversación de cualquier
+  // flota y el dueño no veía la de su propio chofer—. Va en SISTEMA y no en
+  // AUTOMATIZACIONES porque no es un agente que se configure: es el registro
+  // de lo que se dijo, del mismo talante que ARCO y Usuarios. `administracion`
+  // en visibilidad.ts: solo el dueño (ver el comentario de esa línea).
+  { href: '/dashboard/conversaciones', nombre: 'Conversaciones de WhatsApp', Icono: MessagesSquare },
 ];
 
 /** El bloque INFERIOR fijo (Soporte / Configuración),

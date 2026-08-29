@@ -51,9 +51,26 @@ describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () =>
     '/dashboard/rentabilidad',
     '/dashboard/usuarios', '/dashboard/configuracion', '/dashboard/politicas',
     '/dashboard/onboarding',
+    // Los hilos de WhatsApp de la flota (auditoría 20, H6). Es la pantalla
+    // más fácil de clasificar mal: el interlocutor es el chofer, así que
+    // "operación" suena bien — y en esa conversación el bot le dicta al
+    // chofer montos comprobados y diferencias de liquidación. `dinero_por_
+    // area.test.ts` no la atraparía: no hay un `mxn(` en la página, las
+    // cifras vienen en los DATOS. Por eso la puerta va aquí.
+    '/dashboard/conversaciones',
   ];
   it.each(PROHIBIDAS)('%s le está negada al encargado', (href) => {
     expect(puedeVerRuta('encargado', href)).toBe(false);
+  });
+
+  it('las conversaciones de WhatsApp son del DUEÑO: ni el encargado ni el contador', () => {
+    // El contador tampoco: no tiene por qué leer la conversación personal de
+    // un trabajador para cerrar una contabilidad.
+    expect(puedeVerRuta('flota_admin', '/dashboard/conversaciones')).toBe(true);
+    expect(puedeVerRuta('superadmin', '/dashboard/conversaciones')).toBe(true);
+    expect(puedeVerRuta('encargado', '/dashboard/conversaciones')).toBe(false);
+    expect(puedeVerRuta('contador', '/dashboard/conversaciones')).toBe(false);
+    expect(puedeVerRuta('operador', '/dashboard/conversaciones')).toBe(false);
   });
 
   // El Registro de F2 (14-ago-2026) le devolvió al encargado sus pantallas

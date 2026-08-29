@@ -524,6 +524,95 @@ export async function guardarAjustesOperativos(
   }, actor);
 }
 
+// ── Las OTRAS razones sociales de la flota (auditoría 20, hallazgo 7) ──────
+//
+// `config.empresa.rfcsAdicionales` se CONSUMÍA (el motor de cuadre acepta un
+// CFDI cuyo receptor sea cualquiera de esos RFC — `engine.ts:365` vía
+// `desde_db.ts:146`) y se MOSTRABA (`/dashboard/configuracion:131`, "También
+// se aceptan: …"), pero NADA en `src/` lo escribía: la única forma de
+// declararlo era un UPDATE a mano sobre `tenant.config`.
+//
+// El escenario es corriente en autotransporte: la flota factura con dos
+// razones sociales (la de los camiones y la del arrendamiento, o la vieja y
+// la nueva tras una reestructura). Los CFDI timbrados al segundo RFC salían
+// "a revisar" en cada liquidación y no había pantalla donde decirlo.
+
+/** Cuántas razones sociales adicionales se admiten. No es una limitación
+ *  técnica: es que a partir de ahí lo que hay no es "una flota con dos
+ *  razones sociales" sino un grupo, y eso son varios tenants. */
+export const MAX_RFCS_ADICIONALES = 10;
+
+/**
+ * De lo tecleado (uno por línea o separados por coma) al arreglo que se
+ * guarda: mayúsculas, sin repetidos y sin el RFC principal.
+ *
+ * PURA y exportada para poder probarla: cada rechazo de aquí es un CFDI que
+ * el motor va a dejar de aceptar (o a aceptar de más), así que el RFC pasa
+ * por el MISMO doble filtro que en el alta de flota y en el de clientes —
+ * forma (`esRfcValido`) y dígito verificador (`rfcChecksumOk`)—. Un RFC con
+ * un dígito mal no rebota en ningún lado: simplemente no empata nunca con el
+ * receptor de un CFDI, y el contador se queda buscando por qué su segunda
+ * razón social sigue "a revisar".
+ *
+ * Vacío es una respuesta válida: significa "esta flota factura con un solo
+ * RFC", y guardarlo BORRA los que hubiera. Por eso la pantalla lo dice antes
+ * de que alguien vacíe el campo sin querer.
+ */
+export function parsearRfcsAdicionales(crudo: string, rfcPrincipal: string): string[] {
+  const principal = rfcPrincipal.trim().toUpperCase();
+  const salida: string[] = [];
+
+  for (const trozo of crudo.split(/[\n,;]/)) {
+    const rfc = trozo.trim().toUpperCase();
+    if (rfc === '') continue;
+    if (!esRfcValido(rfc)) {
+      throw new DatoInvalido(`"${rfc}" no tiene forma de RFC (12 o 13 caracteres, como AAA010101AAA).`);
+    }
+    if (!rfcChecksumOk(rfc)) {
+      throw new DatoInvalido(`El RFC "${rfc}" no pasa el dígito verificador — revísalo contra la Constancia de Situación Fiscal.`);
+    }
+    if (rfc === principal) {
+      // Silenciarlo lo dejaría duplicado en la lista de aceptados, que no
+      // rompe nada pero le enseña al contador un RFC de más y le hace dudar.
+      throw new DatoInvalido(`"${rfc}" ya es el RFC principal de la flota; aquí van SOLO las otras razones sociales.`);
+    }
+    if (salida.includes(rfc)) {
+      throw new DatoInvalido(`"${rfc}" está repetido.`);
+    }
+    salida.push(rfc);
+  }
+
+  if (salida.length > MAX_RFCS_ADICIONALES) {
+    throw new DatoInvalido(`Son ${salida.length} RFC y el máximo aquí es ${MAX_RFCS_ADICIONALES}. Con más de eso ya no es una flota con varias razones sociales: háblanos y lo montamos bien.`);
+  }
+  return salida;
+}
+
+/**
+ * Guarda las razones sociales adicionales de la flota en `tenant.config`.
+ *
+ * La mezcla va por `tenant_config_merge` como todo lo demás (DAT-20): un
+ * lee-modifica-escribe se llevaría por delante `empresa.rfc` —la identidad
+ * fiscal contra la que se valida CADA CFDI— si dos pantallas guardan a la vez.
+ * Y el CHECK `tenant_config_valida` (0085) ya comprueba del lado de la base
+ * que `rfcsAdicionales` sea un array de textos.
+ */
+export async function guardarRfcsAdicionales(
+  tenantId: string,
+  rfcs: string[],
+  actor?: { id?: string; email?: string },
+): Promise<void> {
+  const { error } = await mezclarConfig(tenantId, {
+    empresa: { rfcsAdicionales: rfcs },
+  }, 'guardarRfcsAdicionales');
+  if (error) throw error;
+
+  // Los RFC VAN en la bitácora: "cambió las razones sociales aceptadas" no
+  // contesta la pregunta que se le va a hacer a esta línea seis meses después
+  // ("¿desde cuándo aceptamos CFDI a nombre de la otra empresa?").
+  await anotar(tenantId, 'empresa.rfcs_adicionales.editados', 'tenant', tenantId, { rfcs }, actor);
+}
+
 /** La política vigente de la flota, ya fusionada con la base. */
 export async function politicaVigente(tenantId: string): Promise<PoliticaGasto[]> {
   return (await getConfig(tenantId)).politica;

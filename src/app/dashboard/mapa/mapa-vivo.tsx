@@ -20,6 +20,34 @@ export interface ViajeEnMapa {
   kmRecta: number;
 }
 
+/**
+ * Una POSICIÓN MEDIDA de una unidad, ya proyectada al viewBox (auditoría 20).
+ *
+ * No es un `ViajeEnMapa` ni se dibuja como uno: aquélla es una línea entre dos
+ * ciudades de catálogo (ilustrativa) y ésta es una coordenada que un GPS
+ * reportó a una hora. Mezclarlas en el mismo tipo sería el primer paso para
+ * mezclarlas en el mismo rótulo.
+ */
+export interface PinUnidad {
+  unidadId: string;
+  /** Número económico, o placas si no hay. Es como la flota la nombra. */
+  etiqueta: string;
+  placas: string | null;
+  /** `unidad.estado` crudo (disponible|en_ruta|taller|baja). */
+  estadoUnidad: string;
+  x: number; y: number;
+  /** Las coordenadas CRUDAS, además de la proyección: la tabla las enseña
+   *  para que la posición se pueda verificar fuera de Likida (pegarlas en
+   *  cualquier mapa). Un pin que solo existe como pixel no es verificable. */
+  lat: number; lng: number;
+  /** ISO de `medida_en` — la hora del GPS, no la de la inserción. */
+  medidaEn: string;
+  /** Minutos de antigüedad, calculados EN EL SERVIDOR (ver page.tsx). */
+  minutos: number;
+  velocidadKmh: number | null;
+  proveedor: string;
+}
+
 /** El arco origen→destino: cuadrática con control perpendicular, siempre
  *  abombada hacia el norte — el lenguaje de los mapas de rutas. */
 function arcoDe(v: ViajeEnMapa): string | null {
@@ -39,14 +67,26 @@ function arcoDe(v: ViajeEnMapa): string | null {
  * píxeles, en mapa), los viajes en curso como arcos, y UN camión animado
  * sobre el viaje activo. Hover o clic en una card lo cambia.
  *
- * HONESTIDAD DEL DIBUJO: el arco es trayecto ilustrativo en línea curva
- * entre ciudades — la leyenda lo dice junto al mapa. El punto que se mueve
- * es decorativo (ilustra "va en camino"), no una posición: por eso no lleva
- * marcas de tiempo ni porcentaje de avance.
+ * HONESTIDAD DEL DIBUJO — y son DOS cosas distintas sobre el mismo lienzo:
+ *
+ *   · el ARCO es trayecto ilustrativo en línea curva entre ciudades, y el
+ *     punto que se mueve encima es decorativo (ilustra "va en camino"), no
+ *     una posición: por eso no lleva marcas de tiempo ni % de avance;
+ *   · el PIN CUADRADO es una posición MEDIDA (auditoría 20): coordenada real
+ *     que reportó el GPS de la unidad o el chofer por WhatsApp, con su hora
+ *     en la tabla de abajo. Se dibuja con otra forma y otro color a propósito
+ *     — si se pareciera al arco, el dato y el dibujo se leerían igual.
  *
  * `prefers-reduced-motion` apaga todas las animaciones vía CSS.
  */
-export function MapaVivo({ viajes }: { viajes: ViajeEnMapa[] }) {
+export function MapaVivo({ viajes, pines = [], minutosFrescos = 360 }: {
+  viajes: ViajeEnMapa[];
+  /** Posiciones medidas por unidad. Vacío = la flota no tiene GPS todavía. */
+  pines?: PinUnidad[];
+  /** Pasado esto, el pin se dibuja apagado: sigue siendo la última posición
+   *  conocida, no dónde está el camión ahora. */
+  minutosFrescos?: number;
+}) {
   const [fijo, setFijo] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const activoId = hover ?? fijo ?? viajes[0]?.id ?? null;
@@ -116,9 +156,33 @@ export function MapaVivo({ viajes }: { viajes: ViajeEnMapa[] }) {
                 </g>
               );
             })()}
+
+            {/* Los PINES medidos, encima de todo: cuadrado girado 45° (no un
+                círculo, que es el vocabulario de los extremos del arco) y en
+                --ok si reportó hace poco, --faint si lleva horas callado. */}
+            {pines.map((p) => {
+              const fresco = p.minutos <= minutosFrescos;
+              return (
+                <g key={p.unidadId}>
+                  <rect x={p.x - 3.2} y={p.y - 3.2} width={6.4} height={6.4}
+                    transform={`rotate(45 ${p.x} ${p.y})`}
+                    fill={fresco ? 'var(--ok)' : 'var(--faint)'}
+                    stroke="var(--surface)" strokeWidth={1.2}>
+                    <title>
+                      {`${p.etiqueta} — ${fresco ? 'posición reciente' : 'última posición conocida'} (${p.proveedor})`}
+                    </title>
+                  </rect>
+                  <text x={p.x} y={p.y + 11} textAnchor="middle" fontSize={9} fontWeight={600}
+                    fill="var(--ink)" stroke="var(--surface)" strokeWidth={2.4} paintOrder="stroke"
+                    opacity={fresco ? 1 : 0.6}>
+                    {p.etiqueta}
+                  </text>
+                </g>
+              );
+            })}
           </svg>
 
-          {viajes.length === 0 && (
+          {viajes.length === 0 && pines.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center">
               <p className="hairline rounded-xl px-4 py-2.5 text-[13px] text-center max-w-[36ch]"
                 style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
@@ -127,9 +191,15 @@ export function MapaVivo({ viajes }: { viajes: ViajeEnMapa[] }) {
             </div>
           )}
 
+          {/* AUDITORÍA 20 (H5): esta leyenda decía «Likida no rastrea GPS» y
+              dejó de ser verdad — `posicion` tiene escritores y los pines de
+              arriba salen de ahí. Lo ilustrativo sigue siendo el ARCO, y eso
+              es lo que la leyenda tiene que decir ahora. */}
           <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
-            Trayecto ilustrativo entre origen y destino — Likida no rastrea GPS; los viajes,
-            sus días y sus ciudades sí son reales.
+            El ARCO es el trayecto ilustrativo entre origen y destino, no la ruta que hizo el
+            camión. {pines.length > 0
+              ? `Los ${numero(pines.length)} ${pines.length === 1 ? 'rombo es una posición MEDIDA' : 'rombos son posiciones MEDIDAS'} — con su hora y su origen en la lista de abajo.`
+              : 'Cuando una unidad reporte posición (conector GPS o pin del chofer por WhatsApp) aparece aquí como un rombo.'}
           </p>
         </div>
 
