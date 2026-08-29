@@ -14026,11 +14026,102 @@ begin
     faltantes, cardinality(exentas), ledger_cubierto;
 end $$;
 
--- ── 207. producto_evento se consolida al cerrar el mes, purga su detalle y el lector no ve encoger nada (mig. 0259) ──
+-- ── 207. Los secretos OAuth del MCP no se pueden guardar en claro, y un código solo se canjea una vez (mig. 0260) ──
 --
--- (Nació 205 en su rama y se renumeró a 207 al fusionar con la 0258, que
--- tomó el 205 y el 206 — la numeración es de lectura, no de ejecución,
--- como ya pasó dos veces con el 201.)
+-- Lo que SOLO la base puede demostrar de la 0260 — el código de la app ya
+-- promete hashear y marcar usado con condición; aquí se prueba que la BASE
+-- lo exige aunque el código de la app se equivoque:
+--
+--  (a) EL CHECK DE 64 HEX RECHAZA UN SECRETO EN CLARO. Un token real empieza
+--      con `lk_mcp_at_` y no tiene la forma de un SHA-256: si alguien
+--      intentara guardarlo entero (el bug clásico de "ya luego lo hasheo"),
+--      el insert truena en vez de dejar la credencial legible en la tabla.
+--      Se prueba en las DOS tablas con hash (código y token).
+--
+--  (b) EL DOMINIO DE `tipo` ES CERRADO. Un token que no sea acceso/refresco
+--      no existe: `eterno` rebota con check_violation.
+--
+--  (c) EL CANDADO DEL CANJE ÚNICO VIVE EN LA BASE. El canje marca `usado_en`
+--      con `update … where usado_en is null`: el primer update toca UNA
+--      fila y el segundo (el código robado que se canjea otra vez, o la
+--      carrera de dos canjes simultáneos) toca CERO. Si una migración
+--      futura le quitara la columna o un trigger la rellenara solo, esta
+--      cuenta cambiaría.
+--
+-- El DO revierte con su excepción final: no queda ni cliente, ni código, ni
+-- fila alguna.
+do $$
+declare
+  t uuid := gen_random_uuid();
+  u uuid := gen_random_uuid();
+  cli uuid;
+  cod uuid;
+  claro_rebota_codigo boolean := false;
+  claro_rebota_token boolean := false;
+  tipo_rebota boolean := false;
+  primer_canje int;
+  segundo_canje int;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0260__');
+  insert into public.app_user (id, email, rol, tenant_id)
+    values (u, '__verif_0260__@likida.ai', 'contador', t);
+  insert into public.mcp_oauth_cliente (nombre, redirect_uris)
+    values ('__verif_0260__', '["https://claude.ai/api/mcp/auth_callback"]'::jsonb)
+    returning id into cli;
+
+  -- (a) el secreto en claro no entra: ni como código…
+  begin
+    insert into public.mcp_oauth_codigo
+      (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en)
+    values
+      ('lk_mcp_ac_secreto-en-claro-que-alguien-olvido-hashear', cli, u, t, 'contador',
+       'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '5 min');
+  exception when check_violation then
+    claro_rebota_codigo := true;
+  end;
+  -- …ni como token.
+  begin
+    insert into public.mcp_oauth_token
+      (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values
+      ('lk_mcp_at_secreto-en-claro-que-alguien-olvido-hashear', 'acceso', cli, u, t, 'contador',
+       gen_random_uuid(), now() + interval '8 hours');
+  exception when check_violation then
+    claro_rebota_token := true;
+  end;
+
+  -- (b) el dominio de tipo es cerrado.
+  begin
+    insert into public.mcp_oauth_token
+      (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values
+      (repeat('a', 64), 'eterno', cli, u, t, 'contador', gen_random_uuid(), now() + interval '8 hours');
+  exception when check_violation then
+    tipo_rebota := true;
+  end;
+
+  -- (c) el canje único: un código bien hasheado, dos intentos de marcarlo.
+  insert into public.mcp_oauth_codigo
+    (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en)
+  values
+    (repeat('b', 64), cli, u, t, 'contador',
+     'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '5 min')
+  returning id into cod;
+
+  update public.mcp_oauth_codigo set usado_en = now() where id = cod and usado_en is null;
+  get diagnostics primer_canje = row_count;
+  update public.mcp_oauth_codigo set usado_en = now() where id = cod and usado_en is null;
+  get diagnostics segundo_canje = row_count;
+
+  raise exception 'MCP_OAUTH_0260  claro_rebota_codigo=%  claro_rebota_token=%  tipo_rebota=%  primer_canje=%  segundo_canje=%   (esperado t / t / t / 1 / 0)',
+    claro_rebota_codigo, claro_rebota_token, tipo_rebota, primer_canje, segundo_canje;
+end $$;
+
+-- ── 208. producto_evento se consolida al cerrar el mes, purga su detalle y el lector no ve encoger nada (mig. 0259) ──
+--
+-- (Nació 205 en su rama y se renumeró a 207 al fusionar con la 0258, que tomó
+-- el 205 y el 206; y otra vez a 208 al fusionar con el 207 del MCP — la
+-- numeración es de lectura, no de ejecución, como ya pasó dos veces con el 201.)
 --
 -- La 0251 dejó `uso_producto_mensual()` agrupando la tabla ENTERA sin rango
 -- (cada visita a /admin/crecimiento, force-dynamic, un escaneo completo) y
