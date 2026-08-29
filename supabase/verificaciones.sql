@@ -13725,3 +13725,68 @@ begin
   raise exception 'QA_LECTURA_CORRIDA_0246  segunda_rebota=%  misma_foto_otra_corrida=%  sueltas=%  tras_borrar_corrida=%  con_corrida_nula=%   (esperado t / 2 / 2 / 4 / 3)',
     segunda_rebota, misma_foto_otra_corrida, sueltas, tras_borrar_corrida, con_corrida_nula;
 end $$;
+
+-- ── 203. El vigilante de portales entra al catálogo de crons, y los diez de antes siguen (mig. 0248) ──
+--
+-- Lo que SOLO la base puede demostrar de la 0248, y por qué vale un bloque:
+--
+--  (a) `portales-vivos` ES UN LATIDO LEGÍTIMO. Si no lo fuera, el cron correría
+--      perfecto y cada `registrarLatido` rebotaría contra el CHECK — y como el
+--      latido es best-effort (traga el error con un `warn`), nadie se enteraría.
+--      `/api/health` tampoco podría llamarlo muerto, porque nunca tendría un
+--      latido suyo que juzgar. Es EXACTAMENTE lo que les pasó a `asistencia` y
+--      a `descarga-sat` durante semanas hasta que la 0241 lo cazó, y repetirlo
+--      aquí tendría una ironía especial: el cron silenciado sería justo el que
+--      existe para que nada se pudra en silencio.
+--
+--  (b) LOS DIEZ DE LA 0241 SIGUEN ENTRANDO. Ésta es la mitad que de verdad se
+--      escapa. El CHECK se reescribe ENTERO cada vez que se toca (se hace
+--      `drop` y `add`), así que olvidar un id no da error: lo borra del
+--      catálogo. Una migración que solo comprobara «el nuevo entra» pasaría en
+--      verde habiendo dejado mudos a los diez anteriores. Por eso se prueban
+--      los once, uno por uno.
+--
+--  (c) UN ID INVENTADO SIGUE REBOTANDO. Si el CHECK se hubiera quedado sin
+--      restricción —un `drop` sin su `add`, por ejemplo— (a) y (b) pasarían en
+--      verde igual, porque todo entraría. Esta es la que distingue «la lista es
+--      correcta» de «no hay lista».
+do $$
+declare
+  vigilante_late boolean;
+  faltantes text;
+  cron_inventado_rebota boolean;
+  ids text[] := array[
+    'wa-pendientes','wa-outbox','escalar','facturar','purgar',
+    'runner','gps','asistencia','descarga-sat','jornada','portales-vivos'
+  ];
+  k text;
+  no_entraron text[] := '{}';
+begin
+  -- (a) el nuevo.
+  insert into cron_latido (id) values ('portales-vivos')
+    on conflict (id) do update set ultimo_latido = now();
+  vigilante_late := exists (select 1 from cron_latido where id = 'portales-vivos');
+
+  -- (b) los once, uno por uno: el CHECK se reescribe entero y un olvido no grita.
+  foreach k in array ids loop
+    begin
+      insert into cron_latido (id) values (k)
+        on conflict (id) do update set ultimo_latido = now();
+    exception when check_violation then
+      no_entraron := no_entraron || k;
+    end;
+  end loop;
+  faltantes := coalesce(array_to_string(no_entraron, ','), '');
+  if faltantes = '' then faltantes := 'ninguno'; end if;
+
+  -- (c) y la lista sigue siendo una lista.
+  begin
+    insert into cron_latido (id) values ('cron-que-nadie-escribio');
+    cron_inventado_rebota := false;
+  exception when check_violation then
+    cron_inventado_rebota := true;
+  end;
+
+  raise exception 'CRONS_0248  vigilante_late=%  faltantes=%  cron_inventado_rebota=%   (esperado t / ninguno / t)',
+    vigilante_late, faltantes, cron_inventado_rebota;
+end $$;
