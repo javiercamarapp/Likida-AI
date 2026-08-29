@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ChevronRight, Download, MessageCircle, RotateCcw, Truck, UserCog } from 'lucide-react';
 import type { LiquidacionDetalle } from '@/lib/likida/analytics';
+import type { ResumenLaboral } from '@/lib/likida/laboral/pagadero';
 import { filasDeducibilidad } from '@/lib/likida/liquidacion/deducibilidad';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { mxn, litros, fechaMx, fechaCorta } from '@/lib/formato';
@@ -282,6 +283,16 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, wa, 
                     </p>
                   </div>
                 )}
+
+                {/* ── DEDUCIBLE ≠ PAGADERO (tableros al día, 28-ago-2026) ──
+                    El mismo resumen que el PDF imprime desde el 1-ago, con las
+                    MISMAS funciones (analytics lo calcula junto a las cubetas).
+                    Hasta hoy el contralor decidía el neto EN ESTA PANTALLA
+                    viendo solo la deducibilidad — y la advertencia de que «no
+                    deducible» NO autoriza descontárselo al operador (LFT
+                    110/111/263) solo aparecía en el PDF ya generado. La
+                    decisión se toma aquí; la advertencia va aquí. */}
+                {d.laboral && <SeccionLaboral laboral={d.laboral} />}
               </section>
 
               {/* ── Diferencias en lenguaje humano ── */}
@@ -424,6 +435,29 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, wa, 
   );
 }
 
+
+/** DEDUCIBLE ≠ PAGADERO en pantalla — exportada para probarla sin montar el
+ *  detalle entero. El texto es EL MISMO que imprime el PDF (`resumenLaboral`):
+ *  dos redacciones de la misma obligación laboral serían dos opiniones
+ *  legales, y este producto emite una. */
+export function SeccionLaboral({ laboral }: { laboral: ResumenLaboral }) {
+  return (
+    <div className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--line2)' }}>
+      <Rotulo>Lo que se le reembolsa al operador</Rotulo>
+      <div className="flex items-start justify-between gap-4 mt-1.5">
+        <p className="text-[12.5px] min-w-0">{laboral.texto}</p>
+        {laboral.montoPagadero > 0 && (
+          <span className="cifra-mono text-[13px] font-medium whitespace-nowrap">{mxn(laboral.montoPagadero)}</span>
+        )}
+      </div>
+      <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
+        Deducible y pagadero son veredictos distintos: que un gasto no sea deducible (ISR) no
+        autoriza descontárselo al operador (LFT 110 y 111; hospedaje y alimentación por demora
+        ajena, LFT 263-I). Es el mismo texto que imprime el PDF.
+      </p>
+    </div>
+  );
+}
 
 function Celda({ children, vacio }: { children: React.ReactNode; vacio: boolean }) {
   return (

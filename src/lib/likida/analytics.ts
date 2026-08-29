@@ -7,6 +7,8 @@
 import type { Anomalia } from './duplicados';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { cuadrarDesdeDB } from './cuadre/desde_db';
+import { cubetaDe, copiasDeComprobante } from './cuadre/engine';
+import { resumenLaboral, type ResumenLaboral } from './laboral/pagadero';
 // La agregación de `llm_costo` de una flota vive en el módulo que ESCRIBE esa
 // tabla (`costos.ts`), y se importa en vez de reescribirse: `getResumenCosto` y
 // `getValorAhorro` necesitan la misma consulta con distinto recorte, y dos
@@ -1324,6 +1326,14 @@ export interface LiquidacionDetalle {
   comprobantesCuadran: boolean;
   /** Las tres cubetas del motor, o `null` si no se pudieron reconstruir. */
   deducibilidad: { totalDeducible: number; totalNoDeducible: number; totalPorConfirmar: number } | null;
+  /** DEDUCIBLE ≠ PAGADERO (LFT 110/111/263) — el mismo resumen que el PDF
+   *  imprime desde el 1-ago, calculado con las MISMAS funciones (tableros al
+   *  día, 28-ago-2026: el contralor decidía el neto en esta pantalla viendo
+   *  solo la deducibilidad; la advertencia laboral solo aparecía en el PDF ya
+   *  generado). `null` = el motor no pudo reconstruir (misma señal que
+   *  `deducibilidad: null`) O no hay nada que advertir — se distinguen porque
+   *  en el segundo caso `deducibilidad` sí viene. */
+  laboral: ResumenLaboral | null;
   /** Ruta del PDF del contralor en storage (`liquidacion.pdf_url`), o `null`.
    *  No es una URL pública: se firma en `/api/export/pdf/[id]`. */
   pdfPath: string | null;
@@ -1335,7 +1345,7 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
   const res = await acotada(
     admin
     .from('liquidacion')
-    .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, litros_diesel_acreditables, iva_acreditable, peaje_acreditable, created_at, pdf_url, viaje:viaje_id(folio, origen, destino, fecha_inicio, created_at, avisado_en, aceptado_en, llegada_en, descarga_en, regreso_en, operador_id, operador:operador_id(nombre, telefono), unidad:unidad_id(numero_economico, placas), cliente:cliente_id(nombre))')
+    .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, litros_diesel_acreditables, iva_acreditable, peaje_acreditable, created_at, pdf_url, viaje:viaje_id(folio, origen, destino, fecha_inicio, created_at, avisado_en, aceptado_en, llegada_en, descarga_en, regreso_en, demora_no_imputable, operador_id, operador:operador_id(nombre, telefono), unidad:unidad_id(numero_economico, placas), cliente:cliente_id(nombre))')
     .eq('id', id)
     .eq('tenant_id', tenantId)
     .maybeSingle(),
@@ -1350,6 +1360,10 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
   const totalComprobado = Number(data.total_comprobado ?? 0);
   const reconstruida = await reconstruir(
     tenantId, data.viaje_id as string, totalComprobado, data.diferencias,
+    // La declaración del viaje (0020, nullable): null = no declarado, que
+    // `resumenLaboral` trata igual que false — la obligación del 263-I solo
+    // nace de la declaración explícita, jamás de un default.
+    (data.viaje as { demora_no_imputable?: boolean | null } | null)?.demora_no_imputable ?? undefined,
   );
   // Solo se consulta `gasto` cuando el motor no pudo reconstruir: en el camino
   // normal las filas salen de la reconstrucción, que ya trae los gastos.
@@ -1398,6 +1412,7 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
     comprobantesExcluidos: reconstruida?.excluidos ?? 0,
     comprobantesCuadran: reconstruida !== null,
     deducibilidad: reconstruida?.deducibilidad ?? null,
+    laboral: reconstruida?.laboral ?? null,
     pdfPath: (data.pdf_url as string) || null,
   };
 }
@@ -1525,6 +1540,7 @@ async function reconstruir(
   viajeId: string,
   totalPersistido: number,
   diferenciasPersistidas: unknown,
+  demoraNoImputable?: boolean,
 ) {
   try {
     const liq = await cuadrarDesdeDB(tenantId, viajeId);
@@ -1565,7 +1581,25 @@ async function reconstruir(
     // avisar es peor que no enseñar el desglose.
     if (derivoLaConfig(diferenciasPersistidas, liq.diferencias)) return null;
     const { filas, duplicados } = filasImprimibles(liq);
+    // ── DEDUCIBLE ≠ PAGADERO, con las MISMAS funciones que el PDF ──────────
+    // (tableros al día, 28-ago-2026). Copiado del contrato de pdf.ts:425, no
+    // reconstruido con criterio propio: la clasificación la decide el motor
+    // (`cubetaDe`), las copias las decide `copiasDeComprobante` (el bug de los
+    // $19,978 del primer PDF real), y la conclusión legal es de `pagadero.ts`.
+    // Dos textos distintos para la misma obligación laboral serían dos
+    // opiniones legales, y este producto emite UNA.
+    const cubetas = new Map(liq.gastos.map((g) => [g.id, cubetaDe(g, liq.diferencias.filter((d) => d.gastoId === g.id))]));
+    const idsEnCubeta = (c: string) => new Set([...cubetas].filter(([, v]) => v === c).map(([id]) => id));
+    const laboral = resumenLaboral({
+      gastos: liq.gastos,
+      idsNoDeducibles: idsEnCubeta('no_deducible'),
+      idsPorConfirmar: idsEnCubeta('por_confirmar'),
+      sobrePolitica: new Set(liq.diferencias.filter((d) => d.tipo === 'sobre_politica').map((d) => d.gastoId!).filter(Boolean)),
+      idsDuplicados: new Set(copiasDeComprobante(liq.gastos).keys()),
+      demoraNoImputable,
+    });
     return {
+      laboral,
       deducibilidad: {
         totalDeducible: liq.totalDeducible,
         totalNoDeducible: liq.totalNoDeducible,
