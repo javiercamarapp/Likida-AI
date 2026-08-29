@@ -5,10 +5,11 @@ import { acotada } from '@/lib/likida/presupuesto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { resolverCiudad, type Ciudad } from '@/lib/likida/geo/ciudades';
+import { getEstadoRastreo, getUltimasPosiciones } from '@/lib/likida/comercial';
 import { ahoraMs } from '@/lib/saludo';
 import { proyectar } from './mexico-geo';
-import { VistaMapa, type SinUbicar } from './vista';
-import type { ViajeEnMapa } from './mapa-vivo';
+import { VistaMapa, type SinUbicar, type Rastreo } from './vista';
+import type { ViajeEnMapa, PinUnidad } from './mapa-vivo';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,13 +86,70 @@ async function contarVivos(tenantId: string): Promise<number | null> {
 }
 
 /**
- * El mapa de la operación (F3 del plan): los viajes VIVOS sobre México.
+ * El GPS de la flota, si lo hay — `getEstadoRastreo` (0162) + las últimas
+ * posiciones por unidad (0267).
  *
- * LA VERDAD DE LOS DATOS: `posicion` y `geocerca` están vacías — no hay GPS.
- * Lo que se dibuja es el trayecto ILUSTRATIVO origen→destino geocodificado
- * contra la tabla estática de ciudades, y así se rotula. Nunca "posición
- * actual", nunca ETA. Una ciudad no reconocida NO desaparece el viaje: se
- * lista aparte con sus palabras.
+ * FALLA CERRADO SIN TUMBAR EL MAPA: si la lectura del rastreo truena, los
+ * viajes vivos se siguen dibujando y el bloque de GPS enseña su error. Lo que
+ * NO puede pasar es que un fallo de lectura se pinte como "todavía no llega
+ * ninguna posición": esa frase afirma algo sobre el GPS de la flota y aquí no
+ * se pudo ni preguntar.
+ */
+async function rastreoDe(tenantId: string, ahora: number): Promise<Rastreo> {
+  try {
+    const [estado, posiciones] = await Promise.all([
+      getEstadoRastreo(tenantId), getUltimasPosiciones(tenantId),
+    ]);
+    return {
+      error: null,
+      unidadesConPosicion: estado.unidadesConPosicion,
+      ultimaPosicion: estado.ultimaPosicion,
+      proveedores: estado.proveedores,
+      pines: posiciones.map((p): PinUnidad => {
+        const { x, y } = proyectar(p.lat, p.lng);
+        return {
+          unidadId: p.unidadId,
+          etiqueta: p.numeroEconomico || p.placas || 'Unidad sin número',
+          placas: p.placas,
+          estadoUnidad: p.estadoUnidad,
+          x: +x.toFixed(1), y: +y.toFixed(1),
+          lat: p.lat, lng: p.lng,
+          medidaEn: p.medidaEn,
+          // Los minutos se calculan AQUÍ, en el servidor: un `Date.now()` en
+          // el cliente daría una antigüedad distinta a la que el servidor
+          // rotuló y el número bailaría en cada rerender.
+          minutos: Math.max(0, Math.round((ahora - Date.parse(p.medidaEn)) / 60_000)),
+          velocidadKmh: p.velocidadKmh,
+          proveedor: p.proveedor,
+        };
+      }),
+    };
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    logger.warn('mapa.rastreo', { tenantId, err });
+    return { error: err, unidadesConPosicion: null, ultimaPosicion: null, proveedores: [], pines: [] };
+  }
+}
+
+/**
+ * El mapa de la operación (F3 del plan): los viajes VIVOS sobre México y, desde
+ * la auditoría 20, las ÚLTIMAS POSICIONES REALES de las unidades.
+ *
+ * LA VERDAD DE LOS DATOS, Y CAMBIÓ: hasta el 29-ago-2026 esta página declaraba
+ * que «`posicion` y `geocerca` están vacías — no hay GPS». Era cierto cuando se
+ * escribió y dejó de serlo sin que nadie moviera el rótulo: `posicion` tiene
+ * dos escritores reales —el pin que el chofer manda por WhatsApp
+ * (`processor.ts`) y el poller del conector GPS (`conectores/sincronizar_gps.ts`
+ * vía `/api/cron/gps`)— y `getEstadoRastreo` (0162) llevaba semanas sin un solo
+ * llamador. Hoy se pintan las dos cosas, SEPARADAS y rotuladas como lo que son:
+ *
+ *   · el PIN — posición medida, con su hora y quién la reportó. Es un dato.
+ *   · el ARCO — trayecto ILUSTRATIVO origen→destino geocodificado contra la
+ *     tabla estática de ciudades. Nunca "posición actual", nunca ETA.
+ *
+ * `geocerca` SÍ sigue sin escritor (solo lectores), así que aquí no se dibuja
+ * ninguna. Una ciudad no reconocida NO desaparece el viaje: se lista aparte con
+ * sus palabras.
  *
  * Área `operacion` (el jefe de tráfico es quien vigila rutas) y por eso
  * CERO pesos: las cards llevan días en ruta y fotos, no gasto.
@@ -105,9 +163,11 @@ export default async function PaginaMapa({
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/mapa', sp);
   if (!puedeVerRuta(rol, '/dashboard/mapa')) redirect('/dashboard');
 
-  const [vivos, totalVivos] = await Promise.all([viajesVivos(tenantId), contarVivos(tenantId)]);
-
   const ahora = ahoraMs();
+  const [vivos, totalVivos, rastreo] = await Promise.all([
+    viajesVivos(tenantId), contarVivos(tenantId), rastreoDe(tenantId, ahora),
+  ]);
+
   const ubicados: ViajeEnMapa[] = [];
   const sinUbicar: SinUbicar[] = [];
 
@@ -143,5 +203,8 @@ export default async function PaginaMapa({
   // Lo más atorado primero — mismo criterio que la cola de cobranza.
   ubicados.sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1));
 
-  return <VistaMapa ubicados={ubicados} sinUbicar={sinUbicar} totalVivos={totalVivos} tope={TOPE_MAPA} />;
+  return (
+    <VistaMapa ubicados={ubicados} sinUbicar={sinUbicar} totalVivos={totalVivos} tope={TOPE_MAPA}
+      rastreo={rastreo} />
+  );
 }

@@ -1456,6 +1456,48 @@ export async function resolverSolicitudArco(
  * (imágenes de gasto/CFDI) se retiene por CFF art. 30 y queda desligada del
  * titular — la resolución escrita lo enuncia.
  */
+/**
+ * REGISTRA una solicitud de OPOSICIÓN: deja constancia estructurada de que la
+ * oposición del titular está vigente y de que el caso pasa a revisión humana.
+ *
+ * AUDITORÍA 20, hallazgo 8 (BAJO — patrón reincidente #5): `ejecutar_arco_
+ * oposicion` existe desde la 0178, con grant a `service_role`, y NADA la
+ * llamaba. Una oposición se "resolvía" escribiendo prosa en `resolucion`; en
+ * una revisión de privacidad no quedaba rastro verificable de qué se hizo.
+ * Es exactamente el hueco que la auditoría 19 cerró para la CANCELACIÓN, en
+ * la otra función de la misma migración.
+ *
+ * LO QUE ESTA RPC HACE Y LO QUE NO, porque el rótulo del botón depende de
+ * ello: NO cancela datos, NO anonimiza y NO cierra la solicitud. Deja la
+ * solicitud en `en_proceso` con `evidencia.oposicion_automatizada_vigente` y
+ * dice, en la misma evidencia, que requiere revisión humana. La
+ * materialización de la oposición sobre el operador
+ * (`operador.oposicion_automatizada`, 0100) ya ocurrió por el canal de
+ * WhatsApp (`processor.ts`) cuando el titular la pidió; esto es la constancia
+ * del lado de la responsable.
+ *
+ * Por eso NO se avisa al titular desde aquí: no hay nada consumado que
+ * confirmarle todavía. El aviso sale cuando la flota resuelve de verdad, por
+ * `resolverSolicitudArco`, que sí lo manda.
+ */
+export async function ejecutarOposicionArco(
+  tenantId: string, solicitudId: string,
+): Promise<{ ok: boolean; motivo?: string }> {
+  const { data, error } = await acotada(supabaseAdmin().rpc('ejecutar_arco_oposicion', {
+    p_tenant: tenantId,
+    p_solicitud: solicitudId,
+  }), 'ejecutarOposicionArco');
+  if (error) throw new Error(`ejecutarOposicionArco: ${error.message}`);
+
+  const r = (data ?? {}) as { ok?: boolean; motivo?: string };
+  if (r.ok !== true) {
+    // La RPC se niega con motivo (no es una oposición, es de otra flota, no
+    // existe): se propaga tal cual — es la explicación que ve la pantalla.
+    return { ok: false, motivo: r.motivo ?? 'la base no explicó el rechazo' };
+  }
+  return { ok: true };
+}
+
 export async function ejecutarCancelacionArco(
   tenantId: string, solicitudId: string,
 ): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string }> {

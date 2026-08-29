@@ -988,12 +988,19 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
   try {
     // ── EL MEDIO ARCO RESPONDE SIEMPRE, incluso a quien YA no es operador ──
     // AUDITORÍA 12, MEDIO (legal): el chequeo vivía dentro de `if (op)`, así
-    // que un operador DADO DE BAJA (activo=false — la única forma de inactivar
-    // del panel) escribía PRIVACIDAD y recibía "no te tengo registrado". La
-    // población más probable de ejercer cancelación/oposición es exactamente
-    // la que el canal rechazaba. El tenant se busca por teléfono SIN el filtro
-    // de activo, o por cuenta de oficina; sin ninguna de las dos, se le dice la
-    // verdad en vez de callar.
+    // que un operador con `activo = false` escribía PRIVACIDAD y recibía "no
+    // te tengo registrado". La población más probable de ejercer
+    // cancelación/oposición es exactamente la que el canal rechazaba. El
+    // tenant se busca por teléfono SIN el filtro de activo, o por cuenta de
+    // oficina; sin ninguna de las dos, se le dice la verdad en vez de callar.
+    //
+    // CORRECCIÓN 29-ago-2026 (auditoría 20): este comentario decía que
+    // `activo = false` era "la única forma de inactivar DEL PANEL", y esa
+    // frase describía un camino que no existe — ninguna pantalla ni endpoint
+    // de `src/` escribe `operador.activo = false` (H2 de esa auditoría: la
+    // baja de un chofer todavía termina en SQL a mano). Esta rama no depende
+    // de CÓMO se apagó la bandera: responde a cualquiera que escriba
+    // PRIVACIDAD, esté activo o no, esté dado de alta o no.
     if (msg.type === 'text' && msg.text && pideAtencionPrivacidad(msg.text)) {
       const tenantId =
         (await buscarTenantPorTelefono(msg.from).catch(() => null))

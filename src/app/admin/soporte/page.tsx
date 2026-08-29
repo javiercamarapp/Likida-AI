@@ -54,11 +54,19 @@ function slaDe(t: TicketCruzado): { texto: string; vencido: boolean } {
  * (`lib/admin/soporte.ts` — el permiso de cruzar vive en lib/admin, como
  * negocio.ts).
  *
- * El matiz honesto: el ESCRITOR de tickets no existe todavía — ninguna
- * pantalla ni endpoint inserta en `ticket_soporte` (verificado por grep,
- * 14-ago-2026): el panel del cliente la LEE pero no tiene botón de "abrir
- * ticket". Así que "0 tickets" es la verdad de hoy, y el estado vacío la
- * explica sin prometer fechas.
+ * EL MATIZ CAMBIÓ, Y ESTE COMENTARIO SE QUEDÓ ATRÁS HASTA EL 29-AGO-2026.
+ * Decía que "el ESCRITOR de tickets no existe todavía — ninguna pantalla ni
+ * endpoint inserta en `ticket_soporte`". Era cierto el 14-ago y dejó de serlo
+ * el mismo mes: `/dashboard/soporte` SÍ abre tickets (`abrirTicket`,
+ * comercial.ts, con su reloj de SLA en `vence_en`). Así que un "0 tickets"
+ * aquí ya no significa "nadie puede abrir uno" — significa que nadie ha
+ * abierto uno, que es otra cosa y el estado vacío tiene que decir ésa.
+ *
+ * Lo que SÍ sigue faltando de este lado (auditoría 20, H1 — no es de esta
+ * corrección de comentario): esta cola no tiene un solo server action. No hay
+ * responder, ni tomar, ni resolver, ni cerrar; `ticket_mensaje` (0051) no
+ * tiene un solo escritor en `src/`. Un ticket entra y no puede salir de
+ * `abierto`.
  */
 export default async function SoportePage() {
   const ahora = ahoraMs();
