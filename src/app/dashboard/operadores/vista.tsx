@@ -234,6 +234,7 @@ function RenglonOperador({ f, hoy, puedeEditar, guardarOperador, editando, hrefE
                   licenciaTipo: f.licenciaTipo ?? '',
                   licenciaVence: f.licenciaVence ?? '',
                   rfc: f.rfc ?? '',
+                  activo: f.activo,
                 }}
               />
               <Link href={hrefEditar} className="inline-block mt-2 text-[12px] underline hover:opacity-70 transition-opacity"

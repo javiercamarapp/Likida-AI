@@ -157,18 +157,23 @@ export async function guardarDeclaracionEstimuloPeaje(
 export async function getOperador(operadorId: string, tenantId: string): Promise<Operador | null> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('operador')
-    .select('id, nombre, telefono, rfc, oposicion_automatizada, terminal:terminal_id(nombre)')
+    .select('id, nombre, telefono, rfc, activo, oposicion_automatizada, terminal:terminal_id(nombre)')
     .eq('id', operadorId)
     .eq('tenant_id', tenantId)
     .maybeSingle(), 'getOperador');
   if (error) throw new Error(`operador: ${error.message}`);
   if (!data) return null;
   const terminal = data.terminal as { nombre?: string } | null;
+  const activo = (data as { activo?: unknown }).activo;
   return {
     id: data.id as string,
     nombre: data.nombre as string,
     telefono: data.telefono as string,
     rfc: (data.rfc as string | null) ?? undefined,
+    // `undefined` cuando la columna no vino (lectores viejos, dobles de
+    // prueba): "no se preguntó" ≠ "dado de baja", y quien decide sobre la baja
+    // tiene que poder distinguirlas.
+    activo: typeof activo === 'boolean' ? activo : undefined,
     oposicionAutomatizada: (data.oposicion_automatizada as string | null) ?? null,
     terminal: terminal?.nombre,
   };
@@ -329,6 +334,14 @@ export async function listOperadores(
 export async function reasignarOperador(tenantId: string, viajeId: string, operadorId: string): Promise<void> {
   const propio = await getOperador(operadorId, tenantId);
   if (!propio) throw new Error('reasignarOperador: el operador no pertenece a esta flota');
+  // AUDITORÍA 20 (H2): y tiene que SEGUIR trabajando aquí. El combo de
+  // /dashboard/despacho ya no lo ofrece (`buscarCatalogo` filtra `activo`),
+  // pero eso es la UI: un POST directo —o la pestaña que alguien dejó abierta
+  // antes de la baja— le pasaba el viaje a un chofer al que el bot de WhatsApp
+  // ya no le contesta, y ese viaje se quedaba sin quien lo reporte.
+  if (propio.activo === false) {
+    throw new Error('reasignarOperador: el operador está dado de baja en esta flota');
+  }
 
   const { error } = await acotada(supabaseAdmin()
     .from('viaje')

@@ -283,18 +283,49 @@ export async function crearOperador(
     .from('operador')
     .select('id, tenant_id, nombre, activo')
     .in('telefono', variantesTelefono(telefono))
-    .limit(2);
+    .limit(20);
 
   // Fallar cerrado: sin poder comprobar el duplicado NO se da de alta. Seguir
   // sería justo el caso que esta comprobación existe para impedir.
   if (errBusca) throw new Error(`crearOperador: no se pudo comprobar el teléfono — ${errBusca.message}`);
 
-  if (choque && choque.length > 0) {
-    const c = choque[0] as { tenant_id: string; nombre: string };
+  // ── SOLO LOS ACTIVOS BLOQUEAN (auditoría 20, H2) ──────────────────────────
+  //
+  // Esta comprobación miraba TODAS las filas con ese teléfono, activas o no —
+  // más estricta que el índice que dice defender. `uq_operador_telefono_activo`
+  // (0024) es `where activo`, y su propio comentario declara la intención: "un
+  // operador dado de baja en la flota A puede reaparecer en la flota B — eso es
+  // una rotación normal y sigue permitido". Mirar también a los inactivos
+  // convertía la baja de un chofer en una condena para su número: ninguna flota
+  // podía volver a contratarlo y la única salida era SQL a mano.
+  //
+  // NO SE RELAJA NADA: `resolveOperador` (conv.ts) busca `.eq('activo', true)`,
+  // así que la ambigüedad que esta puerta existe para impedir —dos filas
+  // ACTIVAS del mismo número, y el gasto anotado en la flota que salga
+  // primero— sigue exactamente igual de cerrada. Deja de bloquear justo el
+  // caso en el que no hay ninguna ambigüedad que resolver.
+  //
+  // `limit(20)` y no 2: con el filtro de activo hecho aquí, dos filas de baja
+  // podían llenar el cupo y esconder a la activa que sí choca.
+  const filas = (choque ?? []) as Array<{ tenant_id: string; nombre: string; activo: boolean }>;
+  const yaActivo = filas.find((c) => c.activo);
+  if (yaActivo) {
     throw new DatoInvalido(
-      c.tenant_id === tenantId
-        ? `Ese teléfono ya está registrado en esta flota, a nombre de ${c.nombre}.`
+      yaActivo.tenant_id === tenantId
+        ? `Ese teléfono ya está registrado en esta flota, a nombre de ${yaActivo.nombre}.`
         : `Ese teléfono ya está registrado en OTRA flota. Dos operadores con el mismo número harían que sus comprobantes se anoten en la flota equivocada.`,
+    );
+  }
+
+  // El OTRO índice de la 0024, `uq_operador_tenant_telefono_norm`, es POR
+  // TENANT y sobre TODAS las filas: la misma flota no puede tener dos fichas
+  // del mismo número ni aunque una esté de baja (partiría su historial en
+  // dos). Se dice ANTES de intentar el insert, y se dice QUÉ HACER: al chofer
+  // que vuelve se le reactiva su ficha, no se le abre una nueva.
+  const propioDeBaja = filas.find((c) => c.tenant_id === tenantId);
+  if (propioDeBaja) {
+    throw new DatoInvalido(
+      `Ese teléfono es de ${propioDeBaja.nombre}, que está dado de baja en tu flota. Si volvió a trabajar contigo, vuelve a marcarlo como activo en Operadores en vez de darlo de alta otra vez — así conserva su historial de viajes.`,
     );
   }
 
@@ -335,6 +366,28 @@ export interface CambiosOperador {
   licenciaVence?: string | null;
   /** RFC del trabajador (migración 0080, RLISR 57). */
   rfc?: string | null;
+  /**
+   * LA BAJA DEL CHOFER (auditoría 20, H2). `false` = renunció o lo corrieron.
+   *
+   * No es un campo cosmético, es el interruptor del que cuelga TODO el efecto
+   * en cascada, y por eso vive aquí y no en una función aparte:
+   *  · `resolveOperador` (conv.ts) busca `.eq('activo', true)` — el bot de
+   *    WhatsApp deja de contestarle como operador de la flota en el turno
+   *    siguiente. El medio arco de privacidad SÍ le sigue respondiendo
+   *    (processor.ts, auditoría 12): quien se fue es justo quien ejerce
+   *    cancelación, y ese camino busca el tenant sin el filtro de activo.
+   *  · `buscarCatalogo` (repo.ts) filtra `.eq('activo', true)` — desaparece de
+   *    los combos de despacho, y `crearViaje`/`reasignarOperador` lo rechazan
+   *    también del lado del servidor (un POST directo no lo revive).
+   *  · `uq_operador_telefono_activo` (0024) es parcial `where activo`, así que
+   *    su teléfono queda LIBRE para que otra flota lo contrate — que es
+   *    exactamente para lo que ese índice se diseñó parcial.
+   *
+   * Nunca se BORRA la fila: el historial de viajes, gastos y liquidaciones de
+   * ese chofer es documentación fiscal y laboral que la flota tiene que poder
+   * enseñar años después.
+   */
+  activo?: boolean;
 }
 
 /**
@@ -413,11 +466,49 @@ export async function actualizarOperador(
     }
   }
 
+  if (cambios.activo !== undefined) {
+    fila.activo = cambios.activo;
+  }
+
   if (Object.keys(fila).length === 0) {
     throw new DatoInvalido('No hay ningún cambio que guardar.');
   }
 
   const admin = supabaseAdmin();
+
+  // ── QUÉ ERA ANTES, para que la bitácora diga la verdad ────────────────────
+  // La forma manda `activo` en CADA guardado (es un checkbox, no un parche),
+  // así que sin leer el valor anterior toda corrección de licencia quedaría
+  // anotada como "reactivado". Se lee SOLO cuando la baja está en juego: es la
+  // única acción de esta pantalla que un abogado laboral puede querer fechar.
+  //
+  // "NO PUDE PREGUNTAR" NO ES "ERA DISTINTO" (revisión de Fable, 29-ago-2026).
+  // El `error` del destructure se descartaba, así que un bache transitorio de
+  // Supabase dejaba `previo = null` y de ahí el código concluía "cambió el
+  // alta" — un guardado rutinario de licencia se anotaba como
+  // `operador.reactivado`. Nunca escondía una baja real, pero ensuciaba con
+  // reactivaciones inventadas justo el registro que existe para reconstruir
+  // quién movió el alta de quién. Ante la duda se cae al nombre que no afirma
+  // nada (`operador.editado`) y se deja dicho POR QUÉ en el detalle: el UPDATE
+  // sigue adelante, porque la baja que el usuario pidió sí tiene que ocurrir.
+  let activoAntes: boolean | null = null;
+  let previaLeida = true;
+  if (cambios.activo !== undefined) {
+    const { data: previo, error: errPrevio } = await admin
+      .from('operador')
+      .select('activo')
+      .eq('id', operadorId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    if (errPrevio) {
+      previaLeida = false;
+      logger.warn('operador.alta_previa_ilegible', { tenantId, operadorId, err: errPrevio.message });
+    } else {
+      const v = (previo as { activo?: unknown } | null)?.activo;
+      activoAntes = typeof v === 'boolean' ? v : null;
+    }
+  }
+
   const { data, error } = await admin
     .from('operador')
     .update(fila)
@@ -430,7 +521,23 @@ export async function actualizarOperador(
     throw new DatoInvalido('No se encontró ese operador en tu flota. Puede que alguien lo haya borrado — recarga la pantalla.');
   }
 
-  await anotar(tenantId, 'operador.editado', 'operador', operadorId, fila, actor);
+  // La baja y la reactivación se anotan CON SU PROPIO NOMBRE, no escondidas
+  // dentro de un `operador.editado` cuyo detalle nadie lee: son las dos únicas
+  // acciones de esta pantalla que cortan (o devuelven) el acceso de una
+  // persona al canal de WhatsApp de la flota. `quién` y `cuándo` los pone
+  // `anotarBitacora` con el actor y el `creado_en` de la tabla.
+  const cambioDeAlta = previaLeida && cambios.activo !== undefined && activoAntes !== cambios.activo;
+  const accion = !cambioDeAlta
+    ? 'operador.editado'
+    : cambios.activo ? 'operador.reactivado' : 'operador.baja';
+
+  // Cuando la lectura previa falló, el detalle lo dice: el `activo` que se
+  // escribió sigue ahí (la fila entera va en `detalle`), y quien lea la
+  // bitácora sabe que el NOMBRE de la acción se quedó corto por una consulta
+  // caída, no porque el alta no se hubiera movido.
+  const detalle = previaLeida ? fila : { ...fila, alta_previa_ilegible: true };
+
+  await anotar(tenantId, accion, 'operador', operadorId, detalle, actor);
 }
 
 // ── 3. Editar la política de gastos ────────────────────────────────────────

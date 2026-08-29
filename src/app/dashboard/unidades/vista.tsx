@@ -11,6 +11,7 @@ import { BarraPagina } from '../resumen-visual';
 // librería de UI, y un plegable propio sería su segunda copia.
 import { Plegable } from '../clientes/forma';
 import { FormaUnidad, type AccionForma, type ProveedorGps } from './forma';
+import { AccionesEstadoUnidad, ReactivarUnidad, type AccionEstado } from './estado';
 
 const PILL: Record<EstadoVigencia, { fg: string; bg: string; Icono: typeof ShieldCheck }> = {
   vencido: { fg: 'var(--bad)', bg: 'var(--badbg)', Icono: ShieldAlert },
@@ -19,7 +20,10 @@ const PILL: Record<EstadoVigencia, { fg: string; bg: string; Icono: typeof Shiel
   sin_dato: { fg: 'var(--muted)', bg: 'var(--canvas)', Icono: CircleDashed },
 };
 
-/** Los estados que `unidad.estado` admite, en palabras de persona. */
+/** Los estados que `unidad.estado` admite, en palabras de persona. La fuente
+ *  es `ESTADOS_UNIDAD` de `operacion.ts` (el mismo dominio que el servidor
+ *  valida); aquí solo se re-declara el tipo para no arrastrar ese módulo —con
+ *  su `supabaseAdmin`— al bundle del navegador. */
 const ESTADO_UNIDAD: Record<string, string> = {
   disponible: 'Disponible',
   en_ruta: 'En ruta',
@@ -79,11 +83,14 @@ const INICIAL_VACIO: UnidadCruda = {
  * de edición existe SOLO para la fila que `?editar=<id>` nombra. Las demás
  * llevan un link — que es lo que un `<details>` cerrado siempre debió ser.
  */
-export function VistaUnidades({ unidades, puedeEditar, guardar, sp, sufijo, camposOcultos, proveedoresGps }: {
+export function VistaUnidades({ unidades, puedeEditar, guardar, cambiarEstado, sp, sufijo, camposOcultos, proveedoresGps }: {
   unidades: readonly UnidadRow[];
   /** Si se PINTA la captura. La puerta real vive dentro del server action. */
   puedeEditar: boolean;
   guardar: AccionForma;
+  /** Mover el estado operativo: taller, baja, o de vuelta a disponible
+   *  (auditoría 20, H4). Misma puerta que `guardar`. */
+  cambiarEstado: AccionEstado;
   /** El catálogo de rastreo, ya recortado a `{id, nombre}` en el servidor. */
   proveedoresGps: ProveedorGps[];
   /** `?q=`/`?p=`/`?editar=` ya leídos por la página. */
@@ -93,6 +100,13 @@ export function VistaUnidades({ unidades, puedeEditar, guardar, sp, sufijo, camp
   camposOcultos: Array<[string, string]>;
 }) {
   const activas = unidades.filter((u) => u.activo);
+  // AUDITORÍA 20 (H4): las bajas ya no se pierden. Esta vista SIEMPRE filtró
+  // `activo`, así que hasta hoy una unidad inactiva desaparecía de la pantalla
+  // sin dejar rastro — y como nada la podía inactivar, el hueco nunca se notó.
+  // Ahora que la baja existe, tiene que existir también el camino de vuelta:
+  // un camión que se vendió y no se vendió, o una baja tecleada por error, no
+  // pueden requerir SQL para deshacerse.
+  const dadasDeBaja = unidades.filter((u) => !u.activo);
   const conteo = contarVigencias(activas);
   const aviso = avisoVigencias(conteo);
 
@@ -154,7 +168,10 @@ export function VistaUnidades({ unidades, puedeEditar, guardar, sp, sufijo, camp
             </section>
           )}
 
-          {activas.length === 0 ? (
+          {/* `unidades` y no `activas`: con todo el parque dado de baja,
+              "todavía no hay unidades dadas de alta" sería falso — y mandaría
+              a capturar de nuevo camiones que ya están en la base, abajo. */}
+          {unidades.length === 0 ? (
             <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
               Todavía no hay unidades dadas de alta. Cuando registres tus tractocamiones con su póliza,
               permiso SICT y verificación, aquí se ve cuál está por vencer antes de que te pare un inspector.
@@ -267,6 +284,15 @@ export function VistaUnidades({ unidades, puedeEditar, guardar, sp, sufijo, camp
                             </Link>
                           )
                         )}
+
+                        {/* El estado operativo NO vive en la forma de edición:
+                            es una acción de un clic sobre un hecho del mundo
+                            ("se fue al taller", "la vendimos"), no un campo que
+                            se captura junto a las placas. Va siempre visible,
+                            no solo en la fila que `?editar=` abrió. */}
+                        {puedeEditar && (
+                          <AccionesEstadoUnidad accion={cambiarEstado} unidadId={u.id} estado={u.estado} />
+                        )}
                       </div>
                     </div>
                   </section>
@@ -279,6 +305,42 @@ export function VistaUnidades({ unidades, puedeEditar, guardar, sp, sufijo, camp
                 si está en regla, y decir que sí sería inventarlo.
               </p>
             </>
+          )}
+
+          {/* ── LAS QUE YA NO ESTÁN EN EL PARQUE ────────────────────────────
+              Aparte y al final: no cuentan en los cuatro contadores de arriba
+              (una póliza vencida de un camión vendido no es un pendiente) ni
+              se ofrecen en Despacho. Pero SE VEN — un activo dado de baja que
+              desaparece de la pantalla se lee como borrado, y no lo está: su
+              historial de viajes y de taller sigue completo. */}
+          {dadasDeBaja.length > 0 && (
+            <section className="card p-4">
+              <h2 className="font-display text-[14px] font-semibold mb-1">
+                Dadas de baja ({dadasDeBaja.length})
+              </h2>
+              <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+                Fuera del parque: no se ofrecen para viajes nuevos y no cuentan en los papeles de arriba.
+                Su historial se conserva.
+              </p>
+              <ul className="space-y-2">
+                {dadasDeBaja.map((u) => (
+                  <li key={u.id} className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="min-w-0">
+                      <span className="text-[13px] font-medium">{u.numeroEconomico}</span>
+                      {u.placas && (
+                        <span className="text-[12px] ml-2 cifra-mono" style={{ color: 'var(--muted)' }}>{u.placas}</span>
+                      )}
+                      {(u.marca || u.modelo || u.anio) && (
+                        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+                          {[u.marca, u.modelo, u.anio].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                    {puedeEditar && <ReactivarUnidad accion={cambiarEstado} unidadId={u.id} />}
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
         </div>
       </div>

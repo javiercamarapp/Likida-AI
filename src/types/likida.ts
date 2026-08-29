@@ -201,4 +201,9 @@ export interface Operador {
    *  mig. 0100). `null`/ausente = no ejercida. Con fecha, sus liquidaciones
    *  salen a revisión humana. */
   oposicionAutomatizada?: string | null;
+  /** ¿Sigue trabajando en la flota? (auditoría 20, H2). `false` = dado de
+   *  baja: no recibe viajes nuevos ni le contesta el bot de WhatsApp como
+   *  operador. Opcional porque no todo lector lo pide, y `undefined` quiere
+   *  decir "no se preguntó" — que NO es lo mismo que dado de baja. */
+  activo?: boolean;
 }

@@ -538,6 +538,39 @@ async function unidadPropia(tenantId: string, unidadId: string): Promise<boolean
 }
 
 /**
+ * ¿Esa unidad SIGUE en el parque? (auditoría 20, H4).
+ *
+ * Se lee la bandera y NO se filtra con un `.eq('activo', true)` en el WHERE a
+ * propósito: "no es de tu flota" y "está dada de baja" son dos errores
+ * distintos, y el segundo tiene una salida (reactivarla en Unidades) que el
+ * primero no. Colapsarlos en "no pertenece a esta flota" mandaría al
+ * despachador a buscar un problema de permisos que no existe.
+ *
+ * Los combos de `/dashboard/despacho` ya no la ofrecen (`buscarCatalogo`
+ * filtra `activo`), pero eso es la UI: un POST directo al server action con el
+ * UUID de un camión vendido lo volvería a poner a rodar en el papel.
+ */
+async function unidadDeBaja(tenantId: string, unidadId: string): Promise<boolean> {
+  const filas = await traerTodo<{ activo: unknown }>(
+    (d, h) => acotada(supabaseAdmin().from('unidad').select('id, activo', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', unidadId).order('id').range(d, h), 'unidadDeBaja'),
+    'unidadDeBaja',
+  );
+  return filas.some((u) => u.activo === false);
+}
+
+/** El gemelo de `unidadDeBaja` para el chofer: un operador dado de baja no
+ *  recibe viajes nuevos ni por POST directo. Ver `CambiosOperador.activo`. */
+async function operadorDeBaja(tenantId: string, operadorId: string): Promise<boolean> {
+  const filas = await traerTodo<{ activo: unknown }>(
+    (d, h) => acotada(supabaseAdmin().from('operador').select('id, activo', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', operadorId).order('id').range(d, h), 'operadorDeBaja'),
+    'operadorDeBaja',
+  );
+  return filas.some((o) => o.activo === false);
+}
+
+/**
  * Comprueba que un cliente sea del tenant, ANTES de escribirlo en `viaje`.
  *
  * Mismo candado que `operadorId` y `unidadId`, por la misma razón exacta: el
@@ -597,11 +630,24 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
       'crearViaje.operadorPropio',
     );
     if (propio.length === 0) throw new Error('crearViaje: el operador no pertenece a esta flota');
+    // AUDITORÍA 20 (H2): y tiene que SEGUIR trabajando aquí. Un chofer dado de
+    // baja ya no aparece en el combo (`buscarCatalogo` filtra `activo`), pero
+    // eso es la UI: sin este candado, un POST directo —o una pestaña vieja
+    // abierta antes de la baja— le asigna un viaje a alguien que el bot de
+    // WhatsApp ya no reconoce, y ese viaje nace sin quien lo pueda reportar.
+    if (await operadorDeBaja(tenantId, v.operadorId)) {
+      throw new DatoInvalido('Ese operador está dado de baja en tu flota. Vuelve a marcarlo como activo en Operadores, o asigna el viaje a otro chofer.');
+    }
   }
 
   // Mismo candado, para `unidadId` (auditoría 10, MEDIO) — ver `unidadPropia`.
   if (v.unidadId && !(await unidadPropia(tenantId, v.unidadId))) {
     throw new Error('crearViaje: la unidad no pertenece a esta flota');
+  }
+  // Y su gemelo de la auditoría 20 (H4): un camión vendido o siniestrado no
+  // sale a un viaje NUEVO. Ver `unidadDeBaja`.
+  if (v.unidadId && (await unidadDeBaja(tenantId, v.unidadId))) {
+    throw new DatoInvalido('Esa unidad está dada de baja. Si volvió al parque, vuelve a ponerla disponible en Unidades antes de asignarla.');
   }
 
   // Y el tercero, para el cliente que paga el flete (14-ago-2026).
@@ -766,6 +812,12 @@ export async function asignarUnidad(tenantId: string, viajeId: string, unidadId:
   if (unidadId && !(await unidadPropia(tenantId, unidadId))) {
     throw new Error('asignarUnidad: la unidad no pertenece a esta flota');
   }
+  // AUDITORÍA 20 (H4): tampoco se le asigna un viaje a un camión dado de baja.
+  // Desasignar (`unidadId === null`) SÍ se permite siempre — es justo lo que
+  // hay que poder hacer con el viaje del camión que se acaba de chocar.
+  if (unidadId && (await unidadDeBaja(tenantId, unidadId))) {
+    throw new DatoInvalido('Esa unidad está dada de baja. Si volvió al parque, vuelve a ponerla disponible en Unidades antes de asignarla.');
+  }
 
   // El `.select('id')` no es adorno: con el id de un viaje de OTRA flota este
   // UPDATE toca cero filas y Postgres no lo considera un error. Sin mirar lo
@@ -780,11 +832,82 @@ export async function asignarUnidad(tenantId: string, viajeId: string, unidadId:
   }
 }
 
-export async function cambiarEstadoUnidad(tenantId: string, unidadId: string, estado: string): Promise<void> {
-  const { error } = await acotada(supabaseAdmin().from('unidad')
-    .update({ estado })
-    .eq('id', unidadId).eq('tenant_id', tenantId), 'cambiarEstadoUnidad');
+/**
+ * Los cuatro valores que `unidad_estado_dominio` (0047) admite, en palabras de
+ * persona. Vive aquí y no en la vista porque el SERVIDOR es quien tiene que
+ * rechazar un quinto valor: la pantalla manda botones, pero una server action
+ * es un endpoint POST y `estado` llega como texto libre. Sin este cerco, un
+ * valor fuera del dominio lo rechazaría Postgres con el nombre del constraint
+ * en la cara del usuario — y `ESTADO_UNIDAD` de la vista lo pintaría crudo.
+ */
+export const ESTADOS_UNIDAD: Record<string, string> = {
+  disponible: 'Disponible',
+  en_ruta: 'En ruta',
+  taller: 'En taller',
+  baja: 'Dada de baja',
+};
+
+/** Los estados desde los que la unidad SIGUE siendo parte del parque. Un
+ *  camión vendido o siniestrado (`baja`) no lo es: deja de contar y deja de
+ *  ofrecerse. `en_ruta` no se ofrece como botón —lo mueve el viaje, no una
+ *  persona—, pero sí es un origen válido del que salir. */
+const ESTADO_ES_BAJA = (estado: string) => estado === 'baja';
+
+/**
+ * Mueve el estado operativo de una unidad — la puerta que faltaba (auditoría
+ * 20, H4): la función existía desde la 0047 SIN UN SOLO LLAMADOR, así que
+ * `taller` y `baja` eran inalcanzables desde cualquier pantalla y la etiqueta
+ * "Dada de baja" que `unidades/vista.tsx` ya pintaba esperaba un disparador
+ * que nunca existió. Un camión vendido o chocado quedaba "disponible" para
+ * siempre: el despacho lo seguía ofreciendo y las alertas de vigencias lo
+ * seguían contando.
+ *
+ * ── `estado` Y `activo` SE MUEVEN JUNTOS, a propósito ──────────────────────
+ * `unidad.activo` es lo que filtran `buscarCatalogo` (los combos de despacho)
+ * y `contarCatalogo`; `unidad.estado` es lo que la pantalla pinta. Dejarlos
+ * desacoplados produce las dos mentiras simétricas: una unidad "dada de baja"
+ * que el despacho sigue ofreciendo, o una "disponible" que no aparece en
+ * ningún combo. La baja apaga `activo`; volver a cualquier otro estado lo
+ * enciende. Nunca se BORRA la fila: sus viajes, sus órdenes de taller y sus
+ * vigencias son el historial del activo.
+ *
+ * ANCLADO A `tenant_id` EN EL WHERE Y COMPROBADO CON `.select('id')` después,
+ * igual que `editarUnidad`: con el id de una unidad de OTRA flota el UPDATE
+ * toca cero filas y Postgres no lo llama error — la pantalla diría "dada de
+ * baja" sobre un camión que sigue rodando.
+ */
+export async function cambiarEstadoUnidad(
+  tenantId: string,
+  unidadId: string,
+  estado: string,
+  actor?: { id?: string; email?: string },
+): Promise<void> {
+  if (!UUID_RE.test(unidadId)) throw new DatoInvalido('No se reconoce esa unidad. Vuelve a abrir la pantalla.');
+  if (!Object.hasOwn(ESTADOS_UNIDAD, estado)) {
+    throw new DatoInvalido(`"${estado}" no es un estado de unidad. Los válidos son: ${Object.keys(ESTADOS_UNIDAD).join(', ')}.`);
+  }
+
+  const { data, error } = await acotada(supabaseAdmin().from('unidad')
+    .update({ estado, activo: !ESTADO_ES_BAJA(estado) })
+    .eq('id', unidadId).eq('tenant_id', tenantId).select('id'), 'cambiarEstadoUnidad');
   if (error) throw new Error(`cambiarEstadoUnidad: ${error.message}`);
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new DatoInvalido('No se encontró esa unidad en tu flota. Puede que alguien la haya borrado — recarga la pantalla.');
+  }
+
+  // La bitácora es parte del acto, no un adorno: "quién dio de baja este
+  // camión y cuándo" es la pregunta del seguro, del contador que lo deduce y
+  // del socio que pregunta dónde quedó. `anotarBitacora` NUNCA lanza — una
+  // falla al anotar no deshace una baja que ya ocurrió, se loguea.
+  const { anotarBitacora } = await import('./bitacora_escritura');
+  await anotarBitacora({
+    tenantId,
+    actor: actor ?? {},
+    accion: ESTADO_ES_BAJA(estado) ? 'unidad.baja' : 'unidad.estado',
+    entidad: 'unidad',
+    entidadId: unidadId,
+    detalle: { estado, activo: !ESTADO_ES_BAJA(estado) },
+  });
 }
 
 export interface NuevaUnidad {

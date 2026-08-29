@@ -102,6 +102,11 @@ export default async function PaginaOperadores({
       // `administracion.test.ts`. Los CINCO campos van siempre, aunque no
       // hayan cambiado: es un reemplazo de fila, no un parche, y así lo prueba
       // el test "actualiza los campos editables".
+      // Un checkbox NO viaja en el FormData cuando está desmarcado: su
+      // ausencia ES el "false". Leerlo con `=== 'on'` (mismo criterio que
+      // `/dashboard/clientes`) es lo que convierte el hueco en la baja.
+      const activo = fd.get('activo') === 'on';
+
       await actualizarOperador(s.tenantId, operadorId, {
         nombre: String(fd.get('nombre') ?? ''),
         numeroEmpleado: String(fd.get('numeroEmpleado') ?? ''),
@@ -109,10 +114,19 @@ export default async function PaginaOperadores({
         licenciaTipo: String(fd.get('licenciaTipo') ?? ''),
         licenciaVence: String(fd.get('licenciaVence') ?? ''),
         rfc: String(fd.get('rfc') ?? ''),
+        activo,
       }, { id: s.userId });
 
       revalidatePath(RUTA);
-      return { ok: true, mensaje: 'Datos del operador actualizados.' };
+      // El mensaje DICE lo que pasó. "Datos actualizados" sobre una baja
+      // esconde justo el efecto que hay que confirmar: que el chofer dejó de
+      // recibir mensajes del bot y de aparecer en despacho.
+      return {
+        ok: true,
+        mensaje: activo
+          ? 'Datos del operador actualizados.'
+          : 'Operador dado de baja. Ya no recibe mensajes del bot ni aparece en Despacho; su historial queda completo.',
+      };
     } catch (e) {
       // `DatoInvalido` sale VERBATIM (dice qué corregir); cualquier otra cosa
       // se loguea y sale como falla del sistema.
