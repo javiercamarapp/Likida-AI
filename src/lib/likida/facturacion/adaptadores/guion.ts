@@ -157,6 +157,34 @@ export interface GuionPortal {
   /** `null` = NO se ha medido contra el portal real. Entonces NO emite. */
   verificado: VerificacionDeGuion | null;
   /**
+   * LOS SELECTORES SE COPIARON DEL DOM DEL PORTAL, EN UNA VISITA REAL.
+   *
+   * ⚠️ ESTO NO AUTORIZA EMITIR. Solo `verificado` lo hace, y sigue exigiendo el
+   * arnés de pre-vuelo. La distinción es fina y vale la pena tenerla escrita:
+   *
+   *   · `lecturaDeCampo` dice DE DÓNDE SALIÓ CADA SELECTOR — alguien abrió la
+   *     página y copió el `id` que estaba ahí. Es lo contrario de derivar un
+   *     candidato de la etiqueta («el campo del folio probablemente se llame
+   *     #folio»), que es como se escribieron los primeros cuatro guiones.
+   *   · `verificado` dice que EL GUION COMPLETO se ejercitó contra el portal:
+   *     que los selectores resuelven TODOS a la vez, en el orden en que el
+   *     motor los usa, incluido el paso fiscal y el botón de emitir.
+   *
+   * Un selector leído puede seguir fallando en el guion: el recon del
+   * 28-ago-2026 no envió ningún formulario, así que en la mayoría de los
+   * portales no llegó a ver la pantalla del receptor ni el botón que emite. Lo
+   * que esta marca aporta es que el pre-vuelo va a CONFIRMAR en vez de
+   * DESCUBRIR — y que si un selector no resuelve, la conclusión no es "nos
+   * equivocamos al adivinar" sino "el portal cambió desde esta fecha", que se
+   * arregla en otro sitio.
+   */
+  lecturaDeCampo?: {
+    /** AAAA-MM-DD de la visita que copió los selectores. */
+    fecha: string;
+    /** El acta donde está el volcado del DOM, para poder cotejarlo. */
+    acta: string;
+  };
+  /**
    * Este portal exige que una persona haya iniciado sesión.
    *
    * Cuando es `true` y la pantalla resulta ser la de entrar, el resultado sale
@@ -269,7 +297,13 @@ export function revisarDatosDeGuion(g: GuionPortal, r: Partial<ReceptorDeGuion>)
 
 /** El motivo con el que un guion sin medir se niega a emitir. */
 export function motivoSinVerificar(g: GuionPortal): string {
-  return `El mapeo de "${g.comercio}" NO se ha medido contra ${g.portal}: sus selectores son una hipótesis, no un hecho. Emitir con una hipótesis crea un CFDI real ante el SAT que puede salir con el dato de otro campo, y eso no se deshace. Se puede ENSAYAR (llena, captura y no aprieta); para emitir hay que correr antes el arnés de pre-vuelo y anotar aquí lo que resolvió.`;
+  // El origen de los selectores cambia lo que hay que HACER a continuación, así
+  // que se dice: con lectura de campo, el pre-vuelo va a confirmar y es una
+  // visita de dos segundos; sin ella, va a descubrir y puede no resolver nada.
+  const origen = g.lecturaDeCampo
+    ? ` Sus selectores SÍ se copiaron del DOM real el ${g.lecturaDeCampo.fecha} (${g.lecturaDeCampo.acta}), así que el pre-vuelo debería confirmarlos a la primera; si alguno no resuelve, el portal cambió desde esa fecha.`
+    : ' Sus selectores son una hipótesis derivada de la etiqueta del campo, no una lectura del portal.';
+  return `El mapeo de "${g.comercio}" NO se ha medido de punta a punta contra ${g.portal}.${origen} Emitir sin ese ensayo crea un CFDI real ante el SAT que puede salir con el dato de otro campo, y eso no se deshace. Se puede ENSAYAR (llena, captura y no aprieta); para emitir hay que correr antes el arnés de pre-vuelo y anotar en \`verificado\` lo que resolvió.`;
 }
 
 /**
