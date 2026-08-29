@@ -11,6 +11,7 @@ import { getPerfilCrudo } from './repo';
 import { transporteDedicadoDeclarado } from './perfil/preguntas';
 import { registrarCorrida } from './agentes/corridas';
 import { getBorradorViaje, declararCcp, validarDeclaracion, type ViajeCcp } from './carta_porte_datos';
+import { estaApagado } from './interruptores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CARTA PORTE POR WHATSAPP (Fase B del blueprint 20-Agente-Carta-Porte) — el
@@ -128,6 +129,17 @@ export async function evaluarYAvisarCcpDespacho(tenantId: string, viajeId: strin
     { evento: 'carta_porte.bitacora_no_escribio' },
   );
 
+  // La palanca del agente (0250, tableros al día): hasta hoy este era un
+  // agente vivo escribiendo a un canal real SIN poderse apagar — solo
+  // tumbando `global` o con deploy. Apagado = no le escribe a nadie; la
+  // evaluación YA quedó en bitácora arriba (el rastro se deja siempre) y el
+  // semáforo del panel sigue diciendo la verdad. Fail-closed heredado de
+  // `estaApagado`: palanca ilegible = apagado.
+  if (await estaApagado('agente:carta_porte')) {
+    logger.warn('ccp.aviso_saltado', { tenant: tenantId, viaje: viajeId, interruptor: 'agente:carta_porte' });
+    return;
+  }
+
   let telefono: string | null = null;
   try {
     telefono = await telefonoJefeDe(tenantId);
@@ -242,6 +254,14 @@ export async function atenderCcpOficina(cuenta: CuentaCcp, texto: string): Promi
   const boton = leerBotonCcp(texto);
   const radio = boton ? null : leerComandoRadio(texto);
   if (!boton && !radio) return null;
+
+  // La palanca (0250) también corta la conversación — pero al humano se le
+  // contesta la VERDAD, no el silencio: su botón/radio NO quedó registrado y
+  // el panel sigue abierto. Va después de `leerBotonCcp`/`leerComandoRadio` a
+  // propósito: un mensaje cualquiera no es de este agente y no gasta lectura.
+  if (await estaApagado('agente:carta_porte')) {
+    return 'El agente de Carta Porte está apagado ahora mismo, así que esta respuesta NO quedó registrada. Puedes declarar la ruta desde el panel (Carta Porte), o volver a intentar cuando se encienda.';
+  }
 
   if (!cuenta.tenantId) {
     // Superadmin sin flota: no hay viajes suyos que declarar.

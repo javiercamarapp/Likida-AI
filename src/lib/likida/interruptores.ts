@@ -95,6 +95,16 @@ export const INTERRUPTORES = [
   'agente:automejora', 'agente:especialistas_incidente', 'agente:fundraising',
   'agente:scorer', 'agente:dossier', 'agente:vigia',
   'agente:demo_prep', 'agente:propuestas', 'agente:cazador',
+  // LAS DOS QUE FALTABAN CON CALL SITE REAL (0250, tableros al día). El
+  // inventario del 28-ago midió 4 agentes vivos sin palanca; solo estos dos
+  // tienen motor en src/ que la pregunte (la lección de la Fase 1: palanca
+  // sin call site es decoración). Carta Porte le escribe al jefe por WhatsApp
+  // al despachar (carta_porte_wa.ts la pregunta en las DOS entradas); el
+  // copiloto gasta modelo y ejecuta acciones de admin (/api/admin/copiloto la
+  // pregunta antes de tocar el modelo). `experto_fiscal` (rutinas locales,
+  // fuera del deploy) y `guardia_alertas` (reglas dentro del copiloto) NO
+  // llevan palanca, con esa razón.
+  'agente:carta_porte', 'agente:copiloto',
 ] as const;
 
 export type NombreInterruptor = (typeof INTERRUPTORES)[number];
