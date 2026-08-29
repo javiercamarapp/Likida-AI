@@ -84,8 +84,21 @@ export const CATALOGO_ACCIONES: readonly AccionCatalogo[] = [
   },
   {
     id: 'correr_runner', gateo: 'confirma', implementada: true,
-    efecto: 'Dispara UNA vuelta del runner nivel 2 sin esperar su cron: despacha los agentes autónomos habilitados con sus cuatro candados (kill switch, opt-in, techo de dinero del día, backpressure de la bandeja). Gasta modelo del rol barato y fabrica borradores hacia Aprobaciones — jamás envía nada.',
-    revertir: 'Lo fabricado espera en la bandeja: se rechaza pieza por pieza. La corrida que corrió, corrió.',
+    // AUDITORÍA E.28, H4 — esta tarjeta decía "jamás envía nada", y era falso:
+    // `enviador` está en `AGENTES_DESPACHABLES` (runner.ts) y, a diferencia de
+    // TODO el resto de la lista, no fabrica un borrador para que un humano lo
+    // revise — se auto-aprueba (`RESOLUTOR_AUTOMATICO`, enviador.ts) y manda
+    // el correo por Resend él solo. La ventana de veto es opcional y su
+    // default es 0 = inmediato (`LIKIDA_ENVIADOR_VENTANA_MIN`, orden del
+    // 27-ago-2026). Javier firma esta acción leyendo esta descripción: tiene
+    // que decir la verdad de lo que puede pasar, no lo que sería más cómodo
+    // de aprobar. Es la misma clase de bug que M30 (auditoría 18) ya corrigió
+    // una vez — una compuerta de agente que describe mal su propio efecto —,
+    // así que además de arreglar el texto hay una prueba de acoplamiento en
+    // `copiloto-acciones.test.ts` que falla si `enviador` sale de la lista de
+    // despachables sin que alguien revise esta tarjeta.
+    efecto: 'Dispara UNA vuelta del runner nivel 2 sin esperar su cron: despacha los agentes autónomos habilitados con sus cuatro candados (kill switch, opt-in, techo de dinero del día, backpressure de la bandeja). Gasta modelo del rol barato. CASI TODOS solo fabrican borradores hacia Aprobaciones — pero el agente "enviador" es la excepción: SÍ manda correo frío por su cuenta, auto-aprobando la pieza sin esperar revisión humana (ventana de veto opcional, 0 minutos = inmediato por default).',
+    revertir: 'Lo que solo fabricó borrador espera en la bandeja: se rechaza pieza por pieza. Lo que "enviador" ya mandó NO se deshace — el correo salió. La corrida que corrió, corrió.',
   },
 ] as const;
 
