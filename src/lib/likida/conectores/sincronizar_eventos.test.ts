@@ -248,4 +248,54 @@ describe('sincronizarEventosTodas', () => {
     estado.errorCredenciales = 'base caída';
     await expect(sincronizarEventosTodas(samsaraCon([]))).rejects.toThrow('eventos.credenciales');
   });
+
+  // ── EL RELOJ DURO (auditoría 21) ──────────────────────────────────────────
+  // Esta fase corre EN SERIE después de las posiciones, que solas ya toman
+  // ~180 s de un techo de 300: es la fase que Vercel mataba a la mitad, con el
+  // barrido de graves (choque/volcadura) sin correr, sin latido y sin alerta.
+  // El corte va ANTES de despachar cada flota (patrón `vigilarPortales`/#152);
+  // lo que quede lo absorben la ventana traslapada de 30 min y el rebarrido
+  // por `procesado_en` NULL, que existen exactamente para esto — pero ahora la
+  // corrida termina LIMPIA y lo pendiente se dice, en vez de morir muda.
+  it('con el presupuesto vencido no despacha NI UNA flota: ni red, ni disparos — todas sin turno, dichas', async () => {
+    estado.credenciales = [
+      { tenant_id: 't-1', conector_id: 'samsara', valores_cifrados: CRED },
+      { tenant_id: 't-OTRO', conector_id: 'samsara', valores_cifrados: CRED },
+    ];
+    const http = vi.fn(samsaraCon([CHOQUE]));
+    const rs = await sincronizarEventosTodas(http, { venceEn: 100, ahora: () => 100 });
+
+    expect(rs).toHaveLength(2);
+    expect(rs.every((r) => r.sinTurno === true)).toBe(true);
+    expect(rs.every((r) => r.error === undefined)).toBe(true);
+    expect(http).not.toHaveBeenCalled();
+    expect(disparar).not.toHaveBeenCalled();
+    expect(estado.guardados.size).toBe(0);
+  });
+
+  it('el reloj vence a MEDIA corrida: la flota en vuelo termina (su choque SÍ dispara) y las demás quedan sin turno', async () => {
+    estado.credenciales = [
+      { tenant_id: 't-1', conector_id: 'samsara', valores_cifrados: CRED },
+      { tenant_id: 't-OTRO', conector_id: 'samsara', valores_cifrados: CRED },
+      { tenant_id: 't-3', conector_id: 'samsara', valores_cifrados: CRED },
+    ];
+    let reloj = 0;
+    const http = vi.fn(async () => {
+      reloj = 1_000; // la primera llamada de red consume el presupuesto entero
+      return { estado: 200, cuerpo: JSON.stringify({ data: [CHOQUE], pagination: { hasNextPage: false } }) };
+    });
+    const rs = await sincronizarEventosTodas(http, { venceEn: 500, ahora: () => reloj });
+
+    // La unidad atómica se respeta: la flota en vuelo termina su fase completa,
+    // incluido el disparo de asistencia de su choque.
+    expect(rs[0].sinTurno).toBeUndefined();
+    expect(rs[0].guardados).toBe(1);
+    expect(rs[0].disparos).toBe(1);
+    // Las siguientes no arrancan, y salen nombradas SIN error: su turno es de
+    // la corrida que viene, no un fallo.
+    expect(rs[1].sinTurno).toBe(true);
+    expect(rs[2].sinTurno).toBe(true);
+    expect(rs[1].error).toBeUndefined();
+    expect(http).toHaveBeenCalledTimes(1);
+  });
 });

@@ -20,6 +20,22 @@ export const dynamic = 'force-dynamic';
 // el fix de fondo cuando haga falta escalar más allá de esto.
 export const maxDuration = 300;
 
+// ── EL RELOJ DURO (auditoría 21, CRÍTICO de rendimiento) ────────────────────
+// Este era el ÚNICO cron de los diez sin reloj: las dos fases (posiciones y
+// eventos) corren EN SERIE y cada una escala por flota con la misma paginación
+// (10 páginas × 15 s de red + consultas acotadas a 9.5 s), así que el peor
+// caso sumado rebasa los 300 s en cuanto N crece — y las posiciones SOLAS ya
+// se midieron en ~180 s. Un kill de Vercel a media fase de eventos dejaba el
+// barrido de graves (choque/volcadura) sin correr, SIN latido y sin alerta:
+// exactamente el silencio que mató al runner el 25 y el 28-ago-2026.
+//
+// El arreglo es el mismo que ya usan sus nueve hermanos (PR #152 / ESC-3,
+// molde de `descarga-sat`: UN venceEn compartido entre las dos fases en
+// serie): cada fase deja de despachar flotas NUEVAS al vencer, la flota en
+// vuelo termina (unidad atómica), las sin turno se DICEN en el cuerpo y el
+// latido sale `parcial`. El margen deja aire para latir y responder.
+const MARGEN_RELOJ_MS = 20_000;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON QUE HACE VERDAD «el GPS de tu flota».
 //
@@ -62,22 +78,29 @@ export async function GET(req: Request) {
     return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }
 
+  // El reloj de ESTA invocación, uno solo para las dos fases (molde de
+  // `descarga-sat`). Se cuenta desde aquí y no desde dentro del motor:
+  // `maxDuration` corre desde que Vercel invoca.
+  const venceEn = Date.now() + maxDuration * 1000 - MARGEN_RELOJ_MS;
+
   try {
-    const resultados = await sincronizarGpsTodas();
+    const resultados = await sincronizarGpsTodas(httpReal, { venceEn });
 
     // Los EVENTOS DE SEGURIDAD de las cámaras del cliente van en la MISMA
     // corrida — mismo proveedor, misma credencial, misma cadencia; un cron
     // aparte duplicaría las 8,640 invocaciones/mes por nada (la lección de
     // COSTO-VERCEL-50K). Un evento grave (crash/volcadura) abre el expediente
     // de asistencia y avisa al jefe ANTES de que el chofer pueda escribir.
-    const eventos = await sincronizarEventosTodas(httpReal);
+    const eventos = await sincronizarEventosTodas(httpReal, { venceEn });
 
     const conError = resultados.filter((r) => r.error);
     const guardadas = resultados.reduce((s, r) => s + r.guardadas, 0);
     const huerfanas = resultados.reduce((s, r) => s + r.huerfanas, 0);
+    const sinTurno = resultados.filter((r) => r.sinTurno).length;
     const eventosConError = eventos.filter((r) => r.error && !r.sinPermiso);
     const eventosGuardados = eventos.reduce((s, r) => s + r.guardados, 0);
     const disparos = eventos.reduce((s, r) => s + r.disparos, 0);
+    const eventosSinTurno = eventos.filter((r) => r.sinTurno).length;
 
     // Las huérfanas no son un error de la corrida, pero tampoco son ruido: son
     // camiones que el proveedor reporta y que ninguna unidad reclama. Van en el
@@ -91,10 +114,15 @@ export async function GET(req: Request) {
       guardadas,
       huerfanas,
       conError: conError.length,
+      // El corte por reloj viaja en el CUERPO, no solo en el log (regla del
+      // PR #152): una corrida que dejó flotas sin sincronizar y contesta 200
+      // limpio es un cron verde que miente.
+      sinTurnoPorReloj: sinTurno,
       eventos: {
         flotas: eventos.length,
         guardados: eventosGuardados,
         disparosAsistencia: disparos,
+        sinTurnoPorReloj: eventosSinTurno,
         sinPermiso: eventos.filter((r) => r.sinPermiso).map((r) => ({ tenantId: r.tenantId, proveedor: r.proveedor })),
         conError: eventosConError.length,
         errores: eventosConError.map((r) => ({ tenantId: r.tenantId, proveedor: r.proveedor, error: r.error })),
@@ -103,9 +131,17 @@ export async function GET(req: Request) {
       errores: conError.map((r) => ({ tenantId: r.tenantId, proveedor: r.proveedor, error: r.error })),
     };
 
-    if (conError.length > 0 || eventosConError.length > 0) {
+    // `parcial` también cuando el reloj cortó: ni «ok» (quedó trabajo sin
+    // hacer, incluido el barrido de graves de las flotas sin turno) ni «fallo»
+    // (nada se rompió; la corrida siguiente, en 5 min, retoma lo pendiente).
+    const cortadaPorReloj = sinTurno > 0 || eventosSinTurno > 0;
+    if (conError.length > 0 || eventosConError.length > 0 || cortadaPorReloj) {
       logger.warn('cron.gps.parcial', cuerpo);
-      await registrarLatido('gps', 'parcial', { flotas: resultados.length, conError: conError.length + eventosConError.length });
+      await registrarLatido('gps', 'parcial', {
+        flotas: resultados.length,
+        conError: conError.length + eventosConError.length,
+        sinTurnoPorReloj: sinTurno + eventosSinTurno,
+      });
     } else {
       logger.info('cron.gps.ok', cuerpo);
       await registrarLatido('gps', 'ok', { flotas: resultados.length, guardadas, disparos });

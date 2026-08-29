@@ -100,6 +100,7 @@ vi.mock('./cofre', () => ({
 import { sincronizarGpsDeFlota, sincronizarGpsTodas } from './sincronizar_gps';
 import { LECTORES_POSICION } from './posiciones';
 import type { Http } from './tipos';
+import { logger } from '@/lib/logger';
 
 const CRED = JSON.stringify({ token: 'tok' });
 
@@ -247,5 +248,67 @@ describe('la corrida de todas las flotas', () => {
   it('si NO se puede leer el universo de credenciales, falla el cron: [] sería un verde falso', async () => {
     errorCredenciales = { message: 'db down' };
     await expect(sincronizarGpsTodas(httpQue(200, cuerpoSamsara([])))).rejects.toThrow('gps.credenciales');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RELOJ DURO (auditoría 21, CRÍTICO de rendimiento): este era el ÚNICO cron
+// de los diez sin reloj, con su propia medición (posiciones solas ~180 s de un
+// techo de 300) avisando que el kill de Vercel a media corrida era cuestión de
+// que N creciera. El patrón es el de `vigilarPortales`/PR #152: el corte va
+// ANTES de despachar cada flota — la flota en vuelo termina (unidad atómica),
+// las que no alcanzaron salen con `sinTurno` y se DICEN, no desaparecen.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el reloj duro corta ANTES de despachar, nunca a media flota', () => {
+  it('con el presupuesto YA vencido no despacha NI UNA flota: todas sin turno, dichas', async () => {
+    credenciales = [
+      { tenant_id: 't-1', conector_id: 'samsara', valores_cifrados: CRED },
+      { tenant_id: 't-2', conector_id: 'samsara', valores_cifrados: CRED },
+    ];
+    const http = vi.fn(httpQue(200, cuerpoSamsara([{ id: '1234', lat: 20.9, lng: -89.5, t: '2026-08-23T18:00:00Z' }])));
+    const r = await sincronizarGpsTodas(http, { venceEn: 100, ahora: () => 100 });
+
+    expect(r).toHaveLength(2);
+    expect(r.every((x) => x.sinTurno === true)).toBe(true);
+    expect(r.every((x) => x.error === undefined)).toBe(true);
+    // NADA salió a la red ni se escribió: lo que no alcanzó queda intacto.
+    expect(http).not.toHaveBeenCalled();
+    expect(escrituras).toHaveLength(0);
+    // Y se dice: el corte deja huella de que quedó trabajo pendiente.
+    expect(logger.warn).toHaveBeenCalledWith('gps.corte_por_reloj', { sinTurno: 2, flotas: 2 });
+  });
+
+  it('el reloj vence a MEDIA corrida: la flota en vuelo TERMINA y las siguientes quedan sin turno', async () => {
+    credenciales = [
+      { tenant_id: 't-1', conector_id: 'samsara', valores_cifrados: CRED },
+      { tenant_id: 't-2', conector_id: 'samsara', valores_cifrados: CRED },
+      { tenant_id: 't-3', conector_id: 'samsara', valores_cifrados: CRED },
+    ];
+    // La PRIMERA llamada de red consume todo el presupuesto — el escenario del
+    // hallazgo: 10 páginas × 15 s por flota contra un techo compartido.
+    let reloj = 0;
+    const http = vi.fn(async () => {
+      reloj = 1_000;
+      return { estado: 200, cuerpo: cuerpoSamsara([{ id: '1234', lat: 20.9, lng: -89.5, t: '2026-08-23T18:00:00Z' }]) };
+    });
+    const r = await sincronizarGpsTodas(http, { venceEn: 500, ahora: () => reloj });
+
+    // La flota que YA estaba en vuelo no se corta a medias: termina completa.
+    expect(r[0].sinTurno).toBeUndefined();
+    expect(r[0].guardadas).toBe(1);
+    expect(escrituras).toHaveLength(1);
+    // Las que no habían arrancado NO arrancan — y salen nombradas, sin error.
+    expect(r[1].sinTurno).toBe(true);
+    expect(r[2].sinTurno).toBe(true);
+    expect(r[1].error).toBeUndefined();
+    expect(http).toHaveBeenCalledTimes(1);
+  });
+
+  it('sin `venceEn` no cambia NADA: el reloj es opcional y los llamadores viejos siguen enteros', async () => {
+    credenciales = [{ tenant_id: 't-1', conector_id: 'samsara', valores_cifrados: CRED }];
+    const http = httpQue(200, cuerpoSamsara([{ id: '1234', lat: 20.9, lng: -89.5, t: '2026-08-23T18:00:00Z' }]));
+    const r = await sincronizarGpsTodas(http);
+    expect(r[0].sinTurno).toBeUndefined();
+    expect(r[0].guardadas).toBe(1);
   });
 });
