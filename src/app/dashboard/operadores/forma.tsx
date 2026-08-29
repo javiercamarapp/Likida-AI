@@ -19,6 +19,8 @@ export interface OperadorCrudo {
   /** ISO `AAAA-MM-DD`, o `''` = no capturada. */
   licenciaVence: string;
   rfc: string;
+  /** ¿Sigue trabajando en la flota? (auditoría 20, H2). */
+  activo: boolean;
 }
 
 const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
@@ -148,6 +150,24 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo }: {
           </p>
         </div>
       </div>
+
+      {/* ── LA BAJA DEL CHOFER (auditoría 20, H2) ─────────────────────────────
+          Mismo checkbox que `/dashboard/clientes` usa para "Cliente activo" —
+          es el patrón que este panel ya resolvió, y una segunda invención
+          (un botón rojo, un modal) enseñaría dos gestos para la misma idea.
+
+          Se explica QUÉ pasa al desmarcarlo porque las tres consecuencias son
+          invisibles desde aquí: el bot deja de contestarle, desaparece de los
+          combos de despacho, y su teléfono queda libre para otra flota. */}
+      <label className="flex items-center gap-2 text-[12.5px] cursor-pointer">
+        <input type="checkbox" name="activo" defaultChecked={inicial.activo} />
+        Operador activo
+      </label>
+      <p className="text-[11px] -mt-1.5" style={{ color: 'var(--faint)' }}>
+        Desmárcalo cuando el chofer deje de trabajar contigo: el bot de WhatsApp deja de atenderlo como
+        operador de tu flota, sale de los buscadores de Despacho y su teléfono queda libre para darlo de
+        alta en otra flota. Su historial de viajes y liquidaciones se conserva completo — no se borra nada.
+      </p>
 
       <Aviso estado={estado} />
       <Boton />
