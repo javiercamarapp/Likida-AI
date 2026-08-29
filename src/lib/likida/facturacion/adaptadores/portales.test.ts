@@ -261,15 +261,19 @@ describe('un adaptador de plataforma cubre N comercios', () => {
     const conLectura = GUIONES.filter((g) => g.lecturaDeCampo);
     const sinLectura = GUIONES.filter((g) => !g.lecturaDeCampo);
 
-    // Los diez del recon la tienen; los cuatro del PR #163 no, porque sus
-    // selectores se derivaron de la etiqueta del catálogo.
-    expect(conLectura.length).toBe(10);
+    // Los diez del recon del 28-ago-2026 la tienen, los siete del 29-ago
+    // también (mismo candado de solo-lectura); los cuatro del PR #163 no,
+    // porque sus selectores se derivaron de la etiqueta del catálogo.
+    expect(conLectura.length).toBe(17);
     expect(sinLectura.map((g) => g.comercio).sort())
       .toEqual(['autozone', 'controlnet', 'enerser', 'office_depot']);
 
     for (const g of conLectura) {
       expect(g.lecturaDeCampo!.fecha, g.comercio).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(g.lecturaDeCampo!.acta, g.comercio).toMatch(/RECON-PORTALES-(17|20)\.md/);
+      // Los diez de la primera ronda apuntan a los .md que vivían fuera del
+      // repo público; los siete de la segunda apuntan al acta que SÍ vive
+      // aquí, en `pruebas-manuales/ensayo/`.
+      expect(g.lecturaDeCampo!.acta, g.comercio).toMatch(/RECON-PORTALES-(17|20)\.md|pruebas-manuales\/ensayo\//);
     }
   });
 
