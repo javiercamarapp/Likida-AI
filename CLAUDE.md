@@ -56,15 +56,19 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
     ya existe. **Y desde el 29-ago-2026 también** `posicion` (dos escritores:
     el pin del chofer por WhatsApp en `processor.ts` y el poller del conector
     GPS en `conectores/sincronizar_gps.ts` vía `/api/cron/gps`), `cotizacion`
-    (el cotizador de la 0225, `cotizador/lector.ts`) y `mantenimiento` (el
-    taller de la 0209, `mantenimiento.ts`) — las tres se listaban abajo como
-    huérfanas y hacía semanas que no lo eran.
+    (el cotizador de la 0225, `cotizador/lector.ts`), `mantenimiento` (el
+    taller de la 0209, `mantenimiento.ts`) y **`ticket_mensaje`** (el ciclo de
+    soporte de la 0268, `likida/soporte.ts` — responder, tomar, cerrar y
+    reabrir, con las dos pantallas cableadas: /admin/soporte y
+    /dashboard/soporte). Las cuatro se listaban abajo como huérfanas y hacía
+    semanas que no lo eran. El caso de `ticket_mensaje` es el que más costaba:
+    tenía dos LECTORES y cero escritores, y por eso la alarma «sin respuesta»
+    del agente de Éxito era insatisfacible por construcción.
   - Siguen SIN escritor: `geocerca` (solo lectores: estadías, briefing,
     facturación), `terminal` (huérfana desde 0001: la referencian
-    operador/viaje y solo la lee un join en repo.ts), `ticket_mensaje` (el
-    hilo del ticket nunca se implementó: `/dashboard/soporte` sí abre tickets,
-    pero nadie puede contestarlos), `portal_credencial`, `invitacion`, y las
-    muertas de facto `campania`/`envio_mensaje` (las sustituyó `campana`, 0123).
+    operador/viaje y solo la lee un join en repo.ts), `portal_credencial`,
+    `invitacion`, y las muertas de facto `campania`/`envio_mensaje` (las
+    sustituyó `campana`, 0123).
   - La base entera está en cero (0 viajes, 14-ago-2026) porque **no hay
     clientes todavía**, no porque falte código. Ver `project_likida_sin_clientes`.
 

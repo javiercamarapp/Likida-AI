@@ -70,6 +70,12 @@ export type EntidadBitacora =
   // lo revocó, y cada vez que la máquina lo ejerció. Sin esto, «reconecté
   // sola el 9 de agosto» sería una frase sin respaldo.
   | 'portal_relogin'
+  // 0268: el ciclo del ticket de soporte. Quién lo TOMÓ y quién lo CERRÓ son
+  // los dos actos que la fila sola no reconstruye: `asignado_a` guarda al dueño
+  // ACTUAL (se sobrescribe al reasignar) y `estado` guarda el último, no la
+  // secuencia. El hilo (`ticket_mensaje`, con su `autor_id`) ya es el registro
+  // de qué se dijo; esto es el de qué se decidió.
+  | 'ticket_soporte'
   // 0241: el registro de jornada de la LFT 132 fr. XXXIV. Corregir una hora de
   // un trabajador, o cerrar su día, son actos con consecuencia jurídica: el
   // 805 de la propia LFT hace que la ausencia o el desaseo de este documento se

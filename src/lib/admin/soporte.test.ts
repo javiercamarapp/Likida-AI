@@ -40,6 +40,9 @@ function crearBuilder(tabla: string) {
   b.lt = (c: string, v: unknown) => { l.lt.push([c, v]); return b; };
   b.order = (c: string, o?: unknown) => { l.order.push([c, o]); return b; };
   b.limit = (n: number) => { l.limite = n; return Promise.resolve(resp()); };
+  // `resolverTicketCruzado` (0268) termina en `.maybeSingle()`, no en
+  // `.limit()`. Lee su propia entrada del mapa para no pisarse con la cola.
+  b.maybeSingle = () => Promise.resolve(respuestas.get(`${tabla}#single`) ?? { data: null, error: null });
   return b;
 }
 
@@ -71,7 +74,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { getTicketsCruzados, contarTickets, TOPE_TICKETS } = await import('./soporte');
+const { getTicketsCruzados, contarTickets, resolverTicketCruzado, TOPE_TICKETS } = await import('./soporte');
 
 // El reloj se INYECTA (mismo criterio que `getTickets(tenantId, ahoraMs)` en
 // comercial.ts): una prueba de SLA no puede depender de la hora a la que corra.
@@ -113,6 +116,21 @@ describe('getTicketsCruzados', () => {
     expect(r[2].tenantId).toBe('t2');
   });
 
+  // 0268: SIN TOMAR no es lo mismo que "en proceso", y la cola lo dice con
+  // esas palabras. Un ticket sin dueño tiene `asignadoA` null — no un nombre
+  // de relleno.
+  it('trae quién tomó el ticket, y null cuando nadie lo ha tomado', async () => {
+    respuestas.set('ticket_soporte', {
+      data: [
+        { ...TICKETS[0], asignado_a: 'u-javier', asignado: { nombre: 'Javier' } },
+        { ...TICKETS[2], asignado_a: null, asignado: null },
+      ],
+      error: null,
+    });
+    const r = await getTicketsCruzados(AHORA);
+    expect(r.map((t) => [t.asignadoA, t.asignadoNombre])).toEqual([['u-javier', 'Javier'], [null, null]]);
+  });
+
   // LA PRUEBA DE FE-11: el orden y el tope viven en la BASE. Ordenar después
   // de recortar enseñaría los 200 tickets equivocados.
   it('pide el orden y el tope a la base — nunca trae la tabla y recorta en memoria', async () => {
@@ -152,6 +170,48 @@ describe('getTicketsCruzados', () => {
   it('un fallo de Supabase LANZA — una base caída no se lee como "nadie necesita nada"', async () => {
     respuestas.set('ticket_soporte', { data: null, error: { message: 'fetch failed' } });
     await expect(getTicketsCruzados(AHORA)).rejects.toThrow('fetch failed');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// `resolverTicketCruzado` (0268) — LA ÚNICA LECTURA DE TODO EL CICLO DE
+// SOPORTE QUE CRUZA FLOTAS, y por eso vive en este archivo (el barrio con ese
+// permiso, declarado en su encabezado y en el ALLOWLIST de
+// `consultas_admin_filtran_tenant.test.ts`).
+//
+// Lo que devuelve es el tenant al que el ticket YA pertenece. Todo lo que
+// ESCRIBE entra después por la puerta tenant-scoped de `lib/likida/soporte.ts`
+// con ese id en la mano — así el aislamiento es una propiedad de cada
+// consulta y no de quién la llama.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('resolverTicketCruzado', () => {
+  beforeEach(() => { respuestas.clear(); llamadas.length = 0; });
+
+  it('devuelve la flota del ticket, buscando SOLO por id (ese es el permiso que tiene)', async () => {
+    respuestas.set('ticket_soporte#single', {
+      data: { id: 'tk1', tenant_id: 't1', tenant: { nombre: 'Flota Demo SA de CV' } },
+      error: null,
+    });
+    expect(await resolverTicketCruzado('tk1')).toEqual({ id: 'tk1', tenantId: 't1', tenantNombre: 'Flota Demo SA de CV' });
+    expect(llamadas.find((x) => x.tabla === 'ticket_soporte')!.eq).toEqual([['id', 'tk1']]);
+  });
+
+  it('un id que no es un ticket devuelve null, sin llegar a la base con basura', async () => {
+    expect(await resolverTicketCruzado('   ')).toBeNull();
+    expect(llamadas).toHaveLength(0);
+    expect(await resolverTicketCruzado('tk-inexistente')).toBeNull();
+  });
+
+  it('el join sin nombre de flota se pinta "—", no se inventa', async () => {
+    respuestas.set('ticket_soporte#single', { data: { id: 'tk1', tenant_id: 't1', tenant: null }, error: null });
+    expect((await resolverTicketCruzado('tk1'))!.tenantNombre).toBe('—');
+  });
+
+  // "No se pudo mirar" no puede confundirse con "no existe" cuando lo que
+  // sigue es responder o cerrar el ticket de alguien.
+  it('un fallo de lectura LANZA — nunca se lee como "ese ticket no existe"', async () => {
+    respuestas.set('ticket_soporte#single', { data: null, error: { message: 'fetch failed' } });
+    await expect(resolverTicketCruzado('tk1')).rejects.toThrow('fetch failed');
   });
 });
 
