@@ -19,6 +19,17 @@
 //    inicializar NUNCA puede tumbar el flujo del operador — la observabilidad no
 //    vale una liquidación.
 //
+// OP3-1 (auditoría E.28): `extra` NO se borra entero. `redactarTexto` solo
+// redacta lo que tiene FORMA de RFC/teléfono/UUID/tarjeta — un valor como
+// `nombreCliente: 'Juan Pérez'` no matchea ningún patrón y saldría intacto si
+// solo se confiara en redactar valores por su forma. La defensa es de DOS
+// capas, como la hace cualquier plataforma de observabilidad a nivel
+// enterprise: (1) lista blanca de LLAVES — solo identificadores técnicos
+// conocidos entran a `extra`, cualquier llave nueva se descarta por default,
+// nunca al revés; (2) el VALOR de cada llave permitida pasa TAMBIÉN por
+// `redactarTexto`, por si una llave de apariencia inocua (`tenantId`) trajera
+// por error un valor que no lo es. Ver `LLAVES_EXTRA_SEGURAS`.
+//
 // PRIVACIDAD: al cablearlo, Sentry pasa a ser subencargado en el sentido de la
 // LFPDPPP. Está anotado en docs/conocimiento/52-anexo-subencargados.md.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -54,12 +65,86 @@ export function tasaTrazas(): number {
   return Number.isFinite(valor) ? Math.min(1, Math.max(0, valor)) : 0.05;
 }
 
-/** Elimina query, headers, cookies, body, usuario y extras de eventos automáticos. */
+/**
+ * Llaves permitidas en `extra`. Confirmado contra el código real (no
+ * inventado): `reportar()` reenvía el `meta` YA redactado de cualquier
+ * `logger.warn`/`logger.error` (tenant/tenantId lee `discriminadores`,
+ * ver logger.ts:242-245 y reportar.test.ts), y `reportarExcepcion` arma su
+ * `contexto` en `instrumentation.ts:onRequestError` con `ruta`/`tipo`/
+ * `metodo`, más `digest` propio. Toda llave de aquí es un identificador
+ * TÉCNICO u OPERATIVO — nunca un dato personal por sí mismo — y aun así su
+ * valor se vuelve a pasar por `redactarTexto` antes de salir (ver abajo):
+ * no se confía en el nombre de la llave solo.
+ *
+ *   · tenant/tenantId, viaje/viajeId, operador/operadorId, gasto/gastoId,
+ *     agente/agenteId — ids primarios de las entidades del camino del
+ *     dinero; en el camino real ya llegan huellados (`id:…`, `huellaId`) si
+ *     son UUID, nunca el UUID crudo.
+ *   · runId/corrida — identificador de una corrida de agente.
+ *   · ruta/endpoint, tipo, metodo — la petición que falló (path técnico,
+ *     tipo de ruta de Next, verbo HTTP), nunca su query ni su body.
+ *   · digest — el hash que Next enseña en pantalla al contralor. Son diez
+ *     dígitos (la forma de un celular mexicano sin lada): `redactarTexto` lo
+ *     volvería `[TEL]`, así que tiene su propio carve-out en
+ *     `LLAVES_SIN_REDACTAR_VALOR`, igual que `CLAVES_NO_PII` en logger.ts.
+ *   · codigo/code/status — el discriminador de causa (`codigoDeError`, un
+ *     status HTTP o un código de proveedor), no texto libre.
+ *
+ * Deliberadamente FUERA: `err`/`error`/`message`/`motivo` y cualquier otra
+ * llave de texto libre. Esas llaves existen para prosa escrita por un
+ * humano o interpolada de una excepción, que es precisamente donde un dato
+ * personal se cuela sin tener forma de RFC/teléfono/UUID.
+ */
+export const LLAVES_EXTRA_SEGURAS = new Set([
+  'tenant', 'tenantId',
+  'viaje', 'viajeId',
+  'operador', 'operadorId',
+  'gasto', 'gastoId',
+  'agente', 'agenteId',
+  'runId', 'corrida',
+  'ruta', 'endpoint',
+  'tipo', 'metodo',
+  'digest',
+  'codigo', 'code', 'status',
+]);
+
+// Mismo carve-out que `CLAVES_NO_PII` en logger.ts, y por el mismo motivo: el
+// `digest` de Next son diez dígitos, EXACTAMENTE la forma de un celular
+// mexicano sin lada, y `redactarTexto` lo volvería `[TEL]` — destruyendo el
+// único puente entre lo que el contralor ve en pantalla y esta línea. Lo pone
+// Next, nunca el código de negocio, así que no hay dato personal que redactar.
+const LLAVES_SIN_REDACTAR_VALOR = new Set(['digest']);
+
+/** Solo primitivos pasan; un objeto/arreglo anidado no se puede garantizar limpio y se descarta entero. */
+function valorExtraSeguro(clave: string, v: unknown): string | number | boolean | undefined {
+  if (typeof v === 'string') return LLAVES_SIN_REDACTAR_VALOR.has(clave) ? v : redactarTexto(v);
+  if (typeof v === 'number' || typeof v === 'boolean') return v;
+  return undefined;
+}
+
+/**
+ * Filtra `extra` a la lista blanca de llaves seguras, redactando cada valor
+ * de nuevo. `undefined` = nada que conservar (ni el objeto vacío: una llave
+ * `extra` presente pero vacía no aporta nada y solo sería ruido en el evento).
+ */
+function extraSeguro(extra: unknown): Record<string, string | number | boolean> | undefined {
+  if (!extra || typeof extra !== 'object') return undefined;
+  const salida: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(extra as Record<string, unknown>)) {
+    if (!LLAVES_EXTRA_SEGURAS.has(k)) continue;
+    const seguro = valorExtraSeguro(k, v);
+    if (seguro !== undefined) salida[k] = seguro;
+  }
+  return Object.keys(salida).length > 0 ? salida : undefined;
+}
+
+/** Elimina query, headers, cookies, body y usuario; filtra `extra` a una lista blanca redactada. */
 export function sanitizarEventoSentry(evento: unknown): unknown {
   if (!evento || typeof evento !== 'object') return evento;
   const salida = { ...(evento as Record<string, unknown>) };
   delete salida.user;
-  delete salida.extra;
+  const extra = extraSeguro(salida.extra);
+  if (extra) salida.extra = extra; else delete salida.extra;
   // BACKEND-19C2-3 (revisión): un evento de TRANSACCIÓN lleva la query en dos
   // sitios que un evento de error no tiene y que este saneador no tocaba:
   // `spans[].data` y `contexts.trace.data`. La instrumentación de fetch del
