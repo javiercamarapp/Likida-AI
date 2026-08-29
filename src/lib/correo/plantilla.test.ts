@@ -160,6 +160,28 @@ describe('el pie dice por qué llegó', () => {
   });
 });
 
+describe('la liga de baja (bajaHref, 0266) — enlace real, no solo texto', () => {
+  it('sin bajaHref no aparece — un transaccional no se da de baja', () => {
+    expect(armarHtml(BASE)).not.toContain('Darme de baja');
+  });
+
+  it('con bajaHref, pinta un <a href> real hacia la liga (escapada, como cualquier href)', () => {
+    const html = armarHtml({ ...BASE, bajaHref: 'https://app.likida.ai/api/correo/baja?e=a%40b.mx&t=xyz' });
+    expect(html).toContain('Darme de baja');
+    expect(html).toContain('href="https://app.likida.ai/api/correo/baja?e=a%40b.mx&amp;t=xyz"');
+  });
+
+  it('un bajaHref que no es http(s) cae a la app, como cualquier otro botón (hrefSeguro)', () => {
+    const html = armarHtml({ ...BASE, bajaHref: 'javascript:alert(1)' });
+    expect(html).not.toContain('javascript:');
+  });
+
+  it('también viaja en la parte de texto plano', () => {
+    const txt = aTextoPlano({ ...BASE, bajaHref: 'https://app.likida.ai/api/correo/baja?e=a%40b.mx&t=xyz' });
+    expect(txt).toContain('https://app.likida.ai/api/correo/baja?e=a%40b.mx&t=xyz');
+  });
+});
+
 describe('el tono es un micro-rótulo, no una banda de color', () => {
   it('urgente pone la palabra, y el correo NO se llena de rojo', () => {
     // La versión anterior ponía un filo rojo de 3px y un botón rojo: el correo

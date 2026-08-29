@@ -21,6 +21,7 @@ import { traerTodo, conteo } from '../pg';
 import { DatoInvalido } from '../errores';
 import { logger } from '@/lib/logger';
 import { enviarCorreo } from '@/lib/correo/enviar';
+import { urlBaja } from '@/lib/correo/baja';
 import { pieAvisoProspectos } from '@/lib/likida/privacidad';
 import { hoyMx } from '@/lib/formato';
 
@@ -478,6 +479,24 @@ export async function enviarPiezaPorCorreo(
     }
   }
 
+  // ── LA LIGA DE BAJA DE UN CLIC, OBLIGATORIA EN CAMPAÑA (envío autónomo
+  // acotado, 29-ago-2026) ──────────────────────────────────────────────────
+  // "Responde BAJA" (respuesta_campana.ts) ya cumplía LFPDPPP; esto agrega lo
+  // que un remitente masivo necesita además: un enlace de un clic (art. 16
+  // fr. II + `List-Unsubscribe` que Gmail/Yahoo exigen desde 2024). NO es
+  // cortesía — es la puerta, y por eso FALLA CERRADO igual que la lista de
+  // bajas de abajo: sin `LIKIDA_BAJA_SECRET` configurado no hay liga que
+  // firmar, y sin liga la campaña NO SALE. Un correo transaccional (fuera de
+  // `esCampana`) no la necesita — nadie se "da de baja" de un aviso de acceso.
+  let bajaHref: string | null = null;
+  if (esCampana) {
+    bajaHref = urlBaja(destinatario);
+    if (!bajaHref) {
+      await revertir('Falta LIKIDA_BAJA_SECRET — sin liga de baja funcional, la campaña no sale.');
+      throw new DatoInvalido('No se puede mandar campaña sin una liga de baja funcional (falta configurar LIKIDA_BAJA_SECRET) — el cumplimiento no es opcional. Configúrala y reintenta.');
+    }
+  }
+
   // ── LA LISTA DE BAJAS, EN LA PUERTA Y FAIL-CLOSED (c5-1) ─────────────────
   // Cubre el camino humano Y el automático: si la lista no se puede leer, no
   // se manda; si el principal está suprimido, la pieza no sale y SE DICE.
@@ -567,7 +586,13 @@ export async function enviarPiezaPorCorreo(
     titulo: String(fila.titulo),
     parrafos: cuerpo.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).slice(0, 12),
     porQueLoRecibes: porQueLoRecibes(prospecto?.fuente ?? null, prospecto?.vacante ?? null),
-  }, { idempotencyKey: `pieza-${id}` });
+    // La liga es del destinatario PRINCIPAL — un solo correo con varios
+    // destinatarios (principal + copias) solo puede llevar UN enlace, y
+    // suprimir al principal ya suprime la razón del envío. Una copia que
+    // quiera su propia baja sigue cubierta por "responde BAJA": esa vía lee
+    // el remitente REAL de la respuesta, sea quien sea.
+    ...(bajaHref ? { bajaHref } : {}),
+  }, { idempotencyKey: `pieza-${id}`, ...(bajaHref ? { listaBajaUrl: bajaHref } : {}) });
   if (!r.ok) {
     // ── LA AMBIGÜEDAD DE RED (c5-3) ────────────────────────────────────────
     // 'red' incluye el timeout: el POST pudo haber sido ACEPTADO con la

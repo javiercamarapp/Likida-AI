@@ -142,6 +142,15 @@ export interface Correo {
   tono?: TonoCorreo;
   /** Por qué le llegó este correo. Va al pie. */
   porQueLoRecibes: string;
+  /**
+   * La liga de baja de UN CLIC (`baja.ts`), cuando el correo la lleva. Solo
+   * la usa la campaña de prospección (`cola.ts`): un correo transaccional no
+   * necesita darse de baja de la cuenta que ya tiene. Se pinta como enlace
+   * real en el pie, aparte del texto de `porQueLoRecibes` — esa promesa
+   * ("responde BAJA") sigue viva, esta es la vía de un clic que exigen los
+   * filtros de remitente masivo (Gmail/Yahoo) y el art. 16 fr. II LFPDPPP.
+   */
+  bajaHref?: string;
 }
 
 /**
@@ -181,6 +190,7 @@ export function aTextoPlano(c: Correo): string {
   if (c.boton) lineas.push('', `${c.boton.texto}: ${c.boton.href}`);
   if (c.nota) lineas.push('', c.nota);
   lineas.push('', '—', c.porQueLoRecibes, `Likida · ${base()}`);
+  if (c.bajaHref) lineas.push('', `Darte de baja: ${c.bajaHref}`);
   return lineas.join('\n');
 }
 
@@ -259,6 +269,16 @@ ${c.datos.map(([k, v]) => `        <tr>
       </table>`
     : '';
 
+  // LA LIGA DE BAJA DE UN CLIC — un `<a>` real, no una instrucción de texto:
+  // es lo que separa "responde BAJA" (válido pero no lo que el filtro de un
+  // remitente masivo ni un destinatario apurado esperan) de un enlace que
+  // funciona con un clic. `hrefSeguro` la protege igual que a un botón.
+  const baja = c.bajaHref
+    ? `<p style="margin:6px 0 0 0;font-family:${SANS};font-size:11px;line-height:18px;color:${C.faint};">
+          <a href="${hrefSeguro(c.bajaHref)}" style="color:${C.faint};text-decoration:underline;text-decoration-color:${C.linea};">Darme de baja de estos correos</a>
+        </p>`
+    : '';
+
   const parrafos = c.parrafos
     .map((p) => `<p style="margin:0 0 16px 0;font-family:${SANS};font-size:15px;line-height:24px;color:#52525b;">${esc(p)}</p>`)
     .join('\n      ');
@@ -319,6 +339,7 @@ ${c.datos.map(([k, v]) => `        <tr>
         <p style="margin:0;font-family:${SANS};font-size:11px;line-height:18px;color:${C.faint};">
           <a href="${base()}" style="color:${C.faint};text-decoration:underline;text-decoration-color:${C.linea};">${esc(base().replace(/^https?:\/\//, ''))}</a>
         </p>
+        ${baja}
       </td></tr>
 
     </table>
