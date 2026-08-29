@@ -279,6 +279,25 @@ const PROVIDER_OPTS = {
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════
+// EL RAZONAMIENTO DEL CONTADOR — apagado, no medido (E.26).
+//
+// Hallazgo del primer examen real (28-ago-2026): con el corpus completo en
+// el prompt (~74k tokens) y sin desactivar el razonamiento oculto de Sonnet
+// 5, `max_tokens: 900` se lo comió ENTERO en "reasoning" —
+// `finish_reason: 'length'`, `content: null` — y la corrida calificó 15/23
+// fácticas como «abstención» cuando el modelo nunca llegó a escribir una
+// respuesta. Es el vicio que la regla 6 del encargo prohíbe: una falla de
+// infraestructura silenciada y leída como comportamiento del examinado.
+//
+// Al contrario del OCR (arriba), aquí no hace falta medir contra un conjunto
+// dorado antes de apagarlo: el FORMATO del prompt (RESPUESTA/FUNDAMENTO/
+// CERTEZA) YA es el andamiaje de razonamiento, expuesto y auditable — el
+// razonamiento oculto no le agrega nada que el examen pueda calificar, y si
+// algún día se quisiera medir si ayuda, se hace con el mismo método: conjunto
+// dorado antes y después, nunca "se ve mejor".
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
 // EL RAZONAMIENTO DEL OCR — la palanca de costo más grande, y la más peligrosa.
 //
 // MEDIDO el 4-ago-2026 sobre las 57 llamadas de OCR en producción: la salida
@@ -310,6 +329,9 @@ const PROVIDER_OPTS = {
 //   (sin variable)              → como hoy, sin tocar nada
 // ═══════════════════════════════════════════════════════════════════════════
 function opcionesDeRazonamiento(role: ModelRole): Record<string, unknown> {
+  // El contador (E.26) también apaga el razonamiento oculto — ver la nota
+  // «EL RAZONAMIENTO DEL CONTADOR» arriba de este archivo para el porqué.
+  if (role === 'contador') return { reasoning: { enabled: false } };
   if (role !== 'ocr') return {};
   const v = (process.env.LLM_RAZONAMIENTO_OCR ?? '').trim().toLowerCase();
   if (v === 'off' || v === 'none' || v === '0') return { reasoning: { enabled: false } };
@@ -332,11 +354,23 @@ export async function generateResponse(opts: {
 
   const once = async (m: string) => {
     opts.signal?.throwIfAborted();
+    // CACHÉ DE PROMPT — la misma palanca (y el mismo razonamiento medido) que
+    // en `generateWithTools`: si el modelo es de Anthropic, el SYSTEM se marca
+    // con el breakpoint y las llamadas siguientes con el mismo prefijo pagan
+    // la lectura al 10%. Importa aquí porque el CONTADOR (E.26) manda el
+    // corpus normativo completo (~45k tokens) idéntico en cada una de sus 32
+    // preguntas — sin la marca, el examen re-paga el corpus entero 32 veces.
+    // Un modelo que no entiende `cache_control` la ignora — no rompe.
+    const sistema = /anthropic\//.test(m)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? ({ role: 'system', content: [{ type: 'text', text: opts.system, cache_control: { type: 'ephemeral' } }] } as any)
+      : { role: 'system' as const, content: opts.system };
     const body = {
       model: m,
-      messages: [{ role: 'system', content: opts.system }, ...opts.messages],
+      messages: [sistema, ...opts.messages],
       max_tokens: opts.maxTokens ?? 500,
       temperature: opts.temperature ?? 0.4,
+      ...opcionesDeRazonamiento(opts.role),
       ...PROVIDER_OPTS,
     } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
     const reservation = opts.budget

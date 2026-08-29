@@ -36,7 +36,7 @@
 
 import { envPuesta } from '../env';
 
-export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto' | 'transcripcion';
+export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto' | 'transcripcion' | 'contador';
 
 const DEFAULTS: Record<ModelRole, string> = {
   // OCR de comprobantes (visión + JSON en una sola llamada).
@@ -147,10 +147,21 @@ const DEFAULTS: Record<ModelRole, string> = {
   // (Anthropic no recibe audio); ahí la llamada falla y el chofer recibe el
   // "¿me lo escribes?" honesto — fallar hacia pedir texto, no hacia inventar.
   transcripcion: 'google/gemini-3.5-flash-lite', // $0.3/$2.5
+  // EL CONTADOR (E.26, fase 2 de EVALOPS): el experto fiscal que responde a
+  // un contralor con el corpus de fichas de normas/ en el prompt. Sonnet 5 y
+  // no un modelo barato por la misma razón que el cuadre: calidad de frontera
+  // DONDE un error cuesta dinero — aquí cada respuesta es una opinión fiscal
+  // con consecuencias económicas. El corpus (~45k tokens) viaja idéntico en
+  // cada pregunta, así que la caché de prompt de Anthropic (misma palanca del
+  // cuadre) deja la corrida de 32 preguntas en el orden de lo presupuestado
+  // en 22-evaluacion.md, no en el de una corrida sin caché.
+  contador: 'anthropic/claude-sonnet-5',        // $2/$10 (lectura de caché al 10%)
 
   // ── QUÉ ROL CORRE HOY Y CUÁL NO (verificado el 23-ago-2026) ──────────────
   // Tienen llamador en producción: ocr, cuadre, chat, analisis, marketing,
-  // back_office, piloto.
+  // back_office, piloto. `contador` tiene llamador pero NO tráfico de
+  // producción: es el examinado del examen dorado (scripts/evals/
+  // correr-contador.ts, E.26) — se paga solo cuando el examen se corre a mano.
   //
   // RESERVADOS — declarados a propósito, todavía sin nadie que los pida:
   //   · cuadre_fallback  la escalación por baja confianza / monto alto está
@@ -182,6 +193,7 @@ const ENV_KEY: Record<ModelRole, string> = {
   qa: 'LIKIDA_MODEL_QA',
   piloto: 'LIKIDA_MODEL_PILOTO',
   transcripcion: 'LIKIDA_MODEL_TRANSCRIPCION',
+  contador: 'LIKIDA_MODEL_CONTADOR',
 };
 
 /** Devuelve el slug del modelo para un rol, respetando override por env.
@@ -210,4 +222,5 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
   qa: { temperature: 0.3 },                   // adversarial, no caótico
   piloto: { temperature: 0 },                 // un formulario fiscal no se improvisa
   transcripcion: { temperature: 0 },          // se escribe lo que se oye, no se redacta
+  contador: { temperature: 0 },               // una opinión fiscal no se improvisa
 };
