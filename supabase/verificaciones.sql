@@ -13645,3 +13645,83 @@ begin
   raise exception E'PURGA_0245  lost_persona_fuera=%  lost_limpio=%  empresa_viva=%  ledger_viejo_vacio=%  ledger_reciente_intacto=%  llave_nueva=%  llave_120=%  anon=%   (esperado t/t/t/t/t/t/t/f)',
     lost_persona_fuera, lost_limpio, empresa_viva, ledger_viejo_vacio, ledger_reciente_intacto, llave_nueva, llave_120, anon_ok;
 end $$;
+
+-- ── 202. La lectura del OCR conoce su corrida, y una corrida no mide dos veces (mig. 0246) ──
+-- (Renumerado tres veces al fusionar: nació 199 —lo tomó la bandeja SAT
+--  (0243)—, pasó a 200 —lo tomó el anti-join del frente D (0244)— y a 201
+--  —lo tomó la purga del frente C legal (0245)—. La numeración es de
+--  lectura, no de ejecución.)
+-- ═══════════════════════════════════════════════════════════════════════════
+-- CORRECTIVA 0246 — `qa_foto_lectura.corrida_id` + el índice único PARCIAL
+-- `qa_foto_lectura_una_por_corrida`.
+--
+-- El agujero medido que la migración cierra: la corrida del 28-ago-2026
+-- procesó las 90 fotos reales ($0.29 de modelo, qa_corrida_foto = 90) y
+-- `qa_foto_lectura` quedó en CERO — nadie comparaba lo leído contra la
+-- verdad-de-terreno. El medidor nuevo (qa-medicion.ts) escribe una fila por
+-- foto, y su idempotencia NO es un `if` en TypeScript: es este índice. Lo que
+-- solo la base puede demostrar, se demuestra aquí:
+--
+--  (a) LA MISMA FOTO EN LA MISMA CORRIDA REBOTA (23505). Repetir la medición
+--      (una pasada muerta a medias, el script corrido dos veces) no puede
+--      duplicar filas: una fila doble entra al porcentaje dos veces y el
+--      número que se cita queda inventado.
+--  (b) LA MISMA FOTO EN OTRA CORRIDA SÍ ENTRA: comparar dos corridas (prompt
+--      A vs prompt B) es exactamente lo que hace útil la medición — una
+--      corrida nueva jamás borra ni bloquea a la anterior.
+--  (c) LAS LECTURAS SUELTAS (corrida_id NULL) SE APILAN LIBRES: el botón del
+--      banco escribe historial, y el índice es parcial justo para no
+--      convertir ese historial en un rebote.
+--  (d) BORRAR LA CORRIDA NO BORRA LA MEDICIÓN (`on delete set null`): la
+--      lectura es historial del modelo contra la foto; la corrida es su
+--      contexto, no su dueña. La fila queda viva y huérfana de corrida.
+do $$
+declare
+  fid uuid; cid uuid;
+  segunda_rebota boolean;
+  misma_foto_otra_corrida integer;
+  sueltas integer;
+  tras_borrar_corrida integer;
+  con_corrida_nula integer;
+begin
+  insert into qa_foto (hash, path, mime, etiqueta, bytes)
+    values ('zzz-verif-0246-hash', 'banco/zzz-verif-0246.jpg', 'image/jpeg', 'ZZZ VERIF 0246', 100)
+    returning id into fid;
+  insert into qa_corrida (escenario, parametros, estado, tenant_nombre)
+    values ('demo_guion', '{}'::jsonb, 'ok', 'ZZZ VERIF 0246')
+    returning id into cid;
+
+  -- (a) la primera entra; la segunda de la MISMA corrida rebota.
+  insert into qa_foto_lectura (foto_id, corrida_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos)
+    values (fid, cid, 'zzz-verif', '{}'::jsonb, '{}'::jsonb, 7, 0, 0);
+  begin
+    insert into qa_foto_lectura (foto_id, corrida_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos)
+      values (fid, cid, 'zzz-verif-2', '{}'::jsonb, '{}'::jsonb, 0, 7, 0);
+    segunda_rebota := false;
+  exception when unique_violation then
+    segunda_rebota := true;
+  end;
+
+  -- (b) la misma foto medida por OTRA corrida entra sin tocar la anterior.
+  insert into qa_corrida (escenario, parametros, estado, tenant_nombre)
+    values ('demo_guion', '{}'::jsonb, 'ok', 'ZZZ VERIF 0246 B')
+    returning id into cid;
+  insert into qa_foto_lectura (foto_id, corrida_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos)
+    values (fid, cid, 'zzz-verif', '{}'::jsonb, '{}'::jsonb, 6, 1, 0);
+  select count(*) into misma_foto_otra_corrida from qa_foto_lectura where foto_id = fid and corrida_id is not null;
+
+  -- (c) las sueltas (sin corrida) se apilan: dos inserts idénticos, dos filas.
+  insert into qa_foto_lectura (foto_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos)
+    values (fid, 'zzz-suelta', '{}'::jsonb, '{}'::jsonb, 7, 0, 0);
+  insert into qa_foto_lectura (foto_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos)
+    values (fid, 'zzz-suelta', '{}'::jsonb, '{}'::jsonb, 7, 0, 0);
+  select count(*) into sueltas from qa_foto_lectura where foto_id = fid and corrida_id is null;
+
+  -- (d) borrar la SEGUNDA corrida: su lectura sobrevive, huérfana de corrida.
+  delete from qa_corrida where id = cid;
+  select count(*) into tras_borrar_corrida from qa_foto_lectura where foto_id = fid;
+  select count(*) into con_corrida_nula from qa_foto_lectura where foto_id = fid and corrida_id is null;
+
+  raise exception 'QA_LECTURA_CORRIDA_0246  segunda_rebota=%  misma_foto_otra_corrida=%  sueltas=%  tras_borrar_corrida=%  con_corrida_nula=%   (esperado t / 2 / 2 / 4 / 3)',
+    segunda_rebota, misma_foto_otra_corrida, sueltas, tras_borrar_corrida, con_corrida_nula;
+end $$;

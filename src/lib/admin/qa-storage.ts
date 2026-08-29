@@ -532,6 +532,9 @@ export async function confirmarVerdadTerreno(
 export interface LecturaFoto {
   id: string;
   fotoId: string;
+  /** La corrida del panel que produjo la medición, o `null` si salió del
+   *  botón suelto del banco (mig. 0246). */
+  corridaId: string | null;
   corridaEn: string;
   modelo: string;
   ocrLeido: OcrLeido;
@@ -548,6 +551,9 @@ interface FilaLectura {
   ocr_leido: unknown; medicion: unknown;
   campos_ok: number; campos_mal: number; campos_no_medidos: number;
   costo_usd: number | string; motivo: string | null;
+  /** Opcional: una base sin la 0246 devuelve la fila sin esta llave, y las
+   *  lecturas sueltas la traen NULL. `?? null` en la traducción. */
+  corrida_id?: string | null;
 }
 
 const COLS_LECTURA =
@@ -557,6 +563,7 @@ function lecturaDeFila(l: FilaLectura): LecturaFoto {
   return {
     id: l.id,
     fotoId: l.foto_id,
+    corridaId: l.corrida_id ?? null,
     corridaEn: l.corrida_en,
     modelo: l.modelo,
     ocrLeido: (l.ocr_leido ?? {}) as OcrLeido,
@@ -606,14 +613,104 @@ export async function guardarLectura(db: SupabaseClient, l: LecturaNueva): Promi
 
 /** Igual que `tabla`, pero apuntando a la migración que de verdad falta. Decir
  *  "aplica la 0185" cuando lo que falta es la 0239 manda a arreglar lo que ya
- *  está bien. */
+ *  está bien — y decir "aplica la 0239" cuando la que falta es la COLUMNA
+ *  `corrida_id` (0246) hace exactamente lo mismo con la otra. */
 function tablaLectura(error: { code?: string; message?: string } | null, prefijo: string): string {
   const msg = error?.message ?? 'error sin mensaje';
+  const faltaColumna = error?.code === '42703' || /corrida_id/i.test(msg);
+  if (faltaColumna && /does not exist|schema cache|corrida_id/i.test(msg)) {
+    return `${prefijo}: falta aplicar la migración 0246 (qa_foto_lectura.corrida_id). Sin ella la medición de una corrida no se puede guardar ni leer — el detalle: ${msg}`;
+  }
   const falta = error?.code === '42P01' || error?.code === 'PGRST205'
     || /does not exist|schema cache/i.test(msg);
   return falta
     ? `${prefijo}: falta aplicar la migración 0239 (qa_foto_lectura). Sin ella el OCR se puede correr pero su medición no se guarda — el detalle: ${msg}`
     : `${prefijo}: ${msg}`;
+}
+
+// ── La medición de UNA corrida (mig. 0246) ─────────────────────────────────
+
+/** Solo las funciones de corrida lo piden: una base sin la 0246 seguiría
+ *  sirviendo el carril suelto del banco con `COLS_LECTURA` intacta. */
+const COLS_LECTURA_CORRIDA = `${COLS_LECTURA}, corrida_id`;
+
+export type LecturaCorridaGuardada =
+  | { ok: true; datos: LecturaFoto; yaMedida: false }
+  /** El índice único parcial rebotó (23505): esta corrida YA midió esta foto.
+   *  No es un error — es la idempotencia haciendo su trabajo — y se devuelve
+   *  la fila que ya estaba, para que quien re-mide agregue sobre lo real. */
+  | { ok: true; datos: LecturaFoto; yaMedida: true }
+  | { ok: false; error: string };
+
+/**
+ * Escribe la lectura de UNA foto DENTRO de una corrida. La idempotencia es el
+ * índice `qa_foto_lectura_una_por_corrida` (0246), jamás un `if` previo: si
+ * dos mediciones de la misma corrida se solapan (una pasada dada por muerta
+ * que seguía viva, el script de respaldo corrido dos veces), la segunda
+ * rebota con 23505 y aquí se lee como "ya medida" — con la fila existente,
+ * no con un error.
+ */
+export async function guardarLecturaDeCorrida(
+  db: SupabaseClient, corridaId: string, l: LecturaNueva,
+): Promise<LecturaCorridaGuardada> {
+  try {
+    const { data, error } = await db.from('qa_foto_lectura').insert({
+      foto_id: l.fotoId,
+      corrida_id: corridaId,
+      modelo: l.modelo,
+      ocr_leido: l.ocrLeido,
+      medicion: l.medicion,
+      campos_ok: l.medicion.camposOk,
+      campos_mal: l.medicion.camposMal,
+      campos_no_medidos: l.medicion.camposNoMedidos,
+      costo_usd: l.costoUsd,
+      motivo: l.motivo,
+      // `.order('id')`: el desempate total que pide la red del `.limit()` sin
+      // orden (limite_con_orden.test.ts). Aquí decide poco —el select devuelve
+      // solo la fila recién insertada— pero el desempate explícito es gratis y
+      // no obliga al lector a razonar por qué este sitio sería la excepción.
+    }).select(COLS_LECTURA_CORRIDA).order('id').limit(1);
+
+    if (error) {
+      if (esDuplicado(error)) {
+        // `.order('id')` por la red del `.limit()`: el índice único parcial de
+        // la 0246 ya deja a lo sumo UNA fila por (corrida_id, foto_id), así
+        // que el orden no decide nada — pero el desempate explícito es gratis.
+        const previa = await db.from('qa_foto_lectura').select(COLS_LECTURA_CORRIDA)
+          .eq('corrida_id', corridaId).eq('foto_id', l.fotoId).order('id').limit(1);
+        const filas = (previa.data ?? []) as FilaLectura[];
+        if (!previa.error && filas.length > 0) {
+          return { ok: true, datos: lecturaDeFila(filas[0]), yaMedida: true };
+        }
+        // Rebotó como duplicada pero la fila no se pudo releer: se dice, no se
+        // inventa una lectura para cuadrar el conteo.
+        return { ok: false, error: `la foto ${l.fotoId} ya estaba medida en la corrida ${corridaId} pero la fila no se pudo releer${previa.error ? `: ${previa.error.message}` : ''}` };
+      }
+      return { ok: false, error: tablaLectura(error, `no se pudo guardar la lectura de la foto ${l.fotoId} (corrida ${corridaId})`) };
+    }
+    const filas = (data ?? []) as FilaLectura[];
+    if (filas.length === 0) return { ok: false, error: `la lectura de la foto ${l.fotoId} (corrida ${corridaId}) no devolvió fila` };
+    return { ok: true, datos: lecturaDeFila(filas[0]), yaMedida: false };
+  } catch (e) {
+    return { ok: false, error: `no se pudo guardar la lectura de la foto ${l.fotoId} (corrida ${corridaId}): ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+/** Todas las lecturas de UNA corrida (una por foto — lo garantiza el índice
+ *  de la 0246). Un fallo se DICE: jamás se lee como "esta corrida no midió
+ *  nada", que pintaría un panel vacío sobre una medición que sí existe. */
+export async function leerLecturasDeCorrida(db: SupabaseClient, corridaId: string): Promise<Resultado<LecturaFoto[]>> {
+  try {
+    // Desempate por `id`: el medidor escribe las 90 en el mismo tramo de
+    // segundos y `corrida_en` empata — sin desempate total, dos lecturas de la
+    // misma corrida podrían pintarse en orden distinto entre dos vistas.
+    const { data, error } = await db.from('qa_foto_lectura').select(COLS_LECTURA_CORRIDA)
+      .eq('corrida_id', corridaId).order('corrida_en', { ascending: true }).order('id');
+    if (error) return { ok: false, error: tablaLectura(error, `no se pudieron leer las lecturas de la corrida ${corridaId}`) };
+    return { ok: true, datos: ((data ?? []) as FilaLectura[]).map(lecturaDeFila) };
+  } catch (e) {
+    return { ok: false, error: `no se pudieron leer las lecturas de la corrida ${corridaId}: ${e instanceof Error ? e.message : String(e)}` };
+  }
 }
 
 /**

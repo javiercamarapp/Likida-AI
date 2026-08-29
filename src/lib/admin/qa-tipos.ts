@@ -23,7 +23,7 @@ import { COMERCIOS } from '@/lib/likida/facturacion/comercios';
 export type EstadoCorrida = 'pendiente' | 'corriendo' | 'ok' | 'parcial' | 'fallo' | 'abortada';
 export type EstadoPaso = 'pendiente' | 'corriendo' | 'ok' | 'warn' | 'bad';
 export type Retencion = 'borrar_al_terminar' | 'conservar';
-export type EscenarioId = 'feliz' | 'demo_guion' | 'foto_duplicada';
+export type EscenarioId = 'feliz' | 'demo_guion' | 'foto_duplicada' | 'ticket_tarde';
 
 /** Los dos carriles (0185 ya los admitía en la columna; la Fase C los estrena).
  *  `rapido` = una sola invocación, hasta MAX_FOTOS_CARRIL_RAPIDO fotos.
@@ -44,7 +44,7 @@ export type EstadoFotoCorrida = 'corriendo' | 'ok' | 'bad' | 'interrumpida';
  *  el validador del servidor y el formulario tienen que estar de acuerdo, y
  *  qa-escenarios.ts importa este tipo — no al revés. El catálogo del diseño
  *  tiene 11; los que faltan no se ofrecen, y el rechazo lo DICE. */
-export const ESCENARIOS_VALIDOS: readonly EscenarioId[] = ['feliz', 'demo_guion', 'foto_duplicada'];
+export const ESCENARIOS_VALIDOS: readonly EscenarioId[] = ['feliz', 'demo_guion', 'foto_duplicada', 'ticket_tarde'];
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA VERDAD-DE-TERRENO (el oráculo humano de la Fase B, pieza 2)
@@ -216,6 +216,16 @@ export interface MemoriaCorrida {
   /** El ataque de dedup, montado en una pasada y juzgado en otra. Ausente = el
    *  guion no repitió ninguna foto, y entonces #3 NO se corre. */
   dedup?: { imgHash: string; viajeIntentoId: string };
+  /** El ataque del ticket TARDÍO (escenario ticket_tarde), montado tras el
+   *  cierre y juzgado por el oráculo #4 en la fase de oráculos — que puede
+   *  ser OTRA pasada. `liqSembrada` son los totales que la liquidación tenía
+   *  ANTES de mandar el ticket; `montoTicket` es el monto de la
+   *  verdad-de-terreno de esa foto, la vara con la que #4 busca el huérfano.
+   *  Ausente = el guion no mandó ticket tarde, y entonces #4 NO se corre. */
+  huerfano?: {
+    liqSembrada: { totalComprobado: number; totalAnticipo: number; diferencia: number };
+    montoTicket: number;
+  };
   /** Los MENSAJES distintos que la bitácora emitió a lo largo de TODAS las
    *  pasadas. Es exactamente lo que `oraculoBitacoraRegistro` mira (`msg`), así
    *  que guardar el conjunto no pierde nada de lo que ese oráculo juzga. */

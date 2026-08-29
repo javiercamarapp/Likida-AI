@@ -39,8 +39,11 @@ import { relojAgotado } from '@/lib/likida/agentes/runner';
 // 10 fotos malas sueltas. Se importa en vez de reescribirse — dos copias del
 // mismo normalizador divergen en silencio.
 import { firmaDeError } from '@/lib/likida/agentes/ingenieria_producto';
+import { porcentaje } from '@/lib/formato';
 import { correrOraculos } from './qa-oraculos';
-import { escenarioPorId } from './qa-escenarios';
+import { escenarioPorId, idsParaActoFotos, idFotoTrasCierre, type PasoGuion } from './qa-escenarios';
+import { medirCorrida } from './qa-medicion';
+import { agregar } from './qa-verdad';
 import {
   dataUrlDeFoto, guardarCorrida, leerManifiesto, leerCorrida, gastoHoyUsd,
   tomarPasada, soltarPasada, tomarFoto, cerrarFoto, leerFotosDeCorrida,
@@ -51,6 +54,7 @@ import {
   motivoTopeDinero, motivoCorteReloj, MAX_EVENTOS_MEMORIA, TOPE_DIA_USD,
   type CorridaQA, type EscenarioId, type ParametrosCorrida, type PasoQA, type TurnoConversacion,
   type Carril, type CorteCorrida, type MemoriaCorrida, type AvanceFotos, type FotoBanco,
+  type EstadoFotoCorrida,
 } from './qa-tipos';
 
 // El tope DIARIO vive en qa-tipos.ts (client-safe, el botón lo enseña); el
@@ -134,6 +138,25 @@ function capturarBitacora(): { eventos: EventoCapturado[]; restaurar: () => void
       logger.error = originales.error;
     },
   };
+}
+
+// ── El renglón del paso de medición del OCR ─────────────────────────────────
+
+/** Traduce el resultado de `medirCorrida` al renglón que la pantalla enseña.
+ *  El número se dice con su denominador y sus fuera-de-denominador; un fallo
+ *  se dice entero — jamás un paso "ok" sobre una medición que no se escribió. */
+function detalleMedicion(r: Awaited<ReturnType<typeof medirCorrida>>): { estado: PasoQA['estado']; detalle: string } {
+  if (!r.ok) {
+    return { estado: 'bad', detalle: `la medición no se pudo hacer: ${r.error} — el gasto de la corrida quedó sin comparar contra la verdad-de-terreno` };
+  }
+  const res = agregar(r.datos.lecturas.map((l) => l.medicion));
+  const exact = res.exactitud === null
+    ? 'sin campos medidos — no hay porcentaje que decir'
+    : `exactitud ${porcentaje(res.exactitud * 100)} sobre ${res.medidos} campos (✅ ${res.ok} · ❌ ${res.mal} · fuera del denominador ${res.noMedidos})`;
+  const base = `${r.datos.medidas} lecturas nuevas, ${r.datos.yaMedidas} ya medidas · ${exact}`;
+  return r.datos.fallos.length === 0
+    ? { estado: 'ok', detalle: base }
+    : { estado: 'warn', detalle: `${base} · ${r.datos.fallos.length} SIN escribir: ${r.datos.fallos.join('; ')}` };
 }
 
 // ── Siembra (mismo patrón que el orquestador del ejército) ──────────────────
@@ -479,6 +502,12 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
   let telefono2: string | null = null;
   /** Se llena si el guion repitió una foto: es lo que habilita el oráculo #3. */
   let dedup: { imgHash: string; viajeIntentoId: string } | undefined;
+  /** Se llena si el guion mandó el ticket TARDÍO: habilita el oráculo #4. */
+  let huerfano: MemoriaCorrida['huerfano'];
+  /** Lo que ESTE motor vio de cada foto. El carril rápido no escribe
+   *  `qa_corrida_foto`, así que la medición del OCR recibe esta evidencia en
+   *  vez de leerla de la base. */
+  const evidenciaFotos = new Map<string, { estado: EstadoFotoCorrida; detalle: string | null; costoUsd: number | null }>();
   const TEXTO_CIERRE = 'listo, ya subí todo';
   try {
     // 1 — siembra
@@ -549,8 +578,14 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
         await cerrarPaso(p, 'ok', reintentos > 0
           ? `la descarga se reintentó ${reintentos} vez(es) por saturación de Storage antes de salir`
           : undefined);
+        // El costo del paso YA está medido por cerrarPaso; 0 aquí significa
+        // "no se pudo leer del ledger", así que se guarda null — jamás un 0
+        // que afirme "gratis".
+        evidenciaFotos.set(fotoId, { estado: 'ok', detalle: null, costoUsd: p.costoUsd > 0 ? p.costoUsd : null });
       } catch (e) {
-        await cerrarPaso(p, 'bad', e instanceof Error ? e.message : String(e));
+        const detalle = e instanceof Error ? e.message : String(e);
+        await cerrarPaso(p, 'bad', detalle);
+        evidenciaFotos.set(fotoId, { estado: 'bad', detalle, costoUsd: p.costoUsd > 0 ? p.costoUsd : null });
       }
       return true;
     };
@@ -558,10 +593,12 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
     const fotoIds = corrida.parametros.fotoIds;
     for (const acto of guion) {
       if (acto.tipo === 'fotos') {
+        // `menosUltima` reserva la última foto para el ticket tardío del #4.
+        const idsActo = idsParaActoFotos(acto, fotoIds);
         let f = 0;
-        for (const fotoId of fotoIds) {
+        for (const fotoId of idsActo) {
           f += 1;
-          if (!(await mandarFoto(fotoId, `foto ${f}/${fotoIds.length}`, telefono))) return corrida;
+          if (!(await mandarFoto(fotoId, `foto ${f}/${idsActo.length}`, telefono))) return corrida;
           if (excedeTope()) {
             await abortar(`TOPE DE CORRIDA excedido: $${corrida.costoUsdTotal.toFixed(4)} > $${TOPE_CORRIDA_USD} (config.qa.ts del ejército)`);
             return corrida;
@@ -597,6 +634,45 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
         continue;
       }
 
+      if (acto.tipo === 'foto_tras_cierre') {
+        // EL ATAQUE DEL INVARIANTE #4: el viaje ya está liquidado y la última
+        // foto llega tarde. Antes de gastar un centavo se comprueba que el
+        // ataque se pueda JUZGAR: hace falta el monto etiquetado de esa foto
+        // (la vara con la que #4 busca el huérfano) y los totales de la
+        // liquidación de ANTES — mandar el ticket sin ellos sería pagar por
+        // un veredicto imposible.
+        const fotoId = idFotoTrasCierre(guion, fotoIds);
+        const foto = fotoId ? porId.get(fotoId) : undefined;
+        const monto = foto?.ocrEsperado?.monto ?? null;
+        if (!fotoId || !foto || monto === null) {
+          await abortar(!fotoId || !foto
+            ? 'el escenario manda un ticket TRAS el cierre y la corrida no trae esa foto — elige al menos 2 fotos'
+            : `la última foto elegida («${foto.etiqueta}») no tiene monto en su verdad-de-terreno: sin monto el oráculo #4 no puede buscar el huérfano, y mandarla sería gastar en un ataque que no se puede juzgar. Elige de última una foto con monto etiquetado.`);
+          return corrida;
+        }
+        const liq = await db.from('liquidacion')
+          .select('total_comprobado, total_anticipo, diferencia')
+          .eq('tenant_id', corrida.tenantId!).eq('viaje_id', viajeId).maybeSingle();
+        if (liq.error || !liq.data) {
+          await abortar(`el cierre no dejó liquidación legible (${liq.error?.message ?? 'sin fila'}): el ataque post-cierre no tiene contra qué juzgarse`);
+          return corrida;
+        }
+        huerfano = {
+          liqSembrada: {
+            totalComprobado: Number(liq.data.total_comprobado),
+            totalAnticipo: Number(liq.data.total_anticipo),
+            diferencia: Number(liq.data.diferencia),
+          },
+          montoTicket: monto,
+        };
+        if (!(await mandarFoto(fotoId, 'ticket TARDÍO — tras el cierre (ataque del invariante #4)', telefono))) return corrida;
+        if (excedeTope()) {
+          await abortar(`TOPE DE CORRIDA excedido: $${corrida.costoUsdTotal.toFixed(4)} > $${TOPE_CORRIDA_USD}`);
+          return corrida;
+        }
+        continue;
+      }
+
       // acto.tipo === 'cierre'
       const pC = await paso(`cierre — el chofer escribe «${TEXTO_CIERRE}»`);
       if (sinTiempo()) {
@@ -620,8 +696,18 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
       }
     }
 
+    // N+1 — LA MEDICIÓN DEL OCR contra la verdad-de-terreno. Va ANTES de los
+    // oráculos y de la limpieza: la evidencia son los `gasto` del tenant
+    // sintético y la limpieza los borra en cascada. Escribe una fila por foto
+    // en `qa_foto_lectura` (migs. 0239/0246) — el gasto de modelo de la
+    // corrida COMPRÓ lecturas, y sin este paso la medición no existe (pasó el
+    // 28-ago-2026: 90 fotos procesadas, $0.29 medidos, cero filas escritas).
+    const pM = await paso(`medición del OCR contra la verdad-de-terreno — ${fotoIds.length} foto(s)`);
+    const dm = detalleMedicion(await medirCorrida(db, corrida, evidenciaFotos));
+    await cerrarPaso(pM, dm.estado, dm.detalle);
+
     // N+2 — evidencia + oráculos (funciones puras del ejército, importadas)
-    const rotuloOraculos = ['#1 cuadre_balancea', '#5 cifras_con_fuente', dedup ? '#3 dedup_comprobante' : null, '#8 bitacora_registro']
+    const rotuloOraculos = ['#1 cuadre_balancea', '#5 cifras_con_fuente', dedup ? '#3 dedup_comprobante' : null, huerfano ? '#4 huerfano_post_cierre' : null, '#8 bitacora_registro']
       .filter(Boolean).join(' · ');
     const pO = await paso(`oráculos — ${rotuloOraculos}`);
     corrida.turnos = await turnosDelTenant(db, corrida.tenantId!);
@@ -637,6 +723,7 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
         eventosBitacora: bit.eventos,
         eventosEsperados: ['agent.run'],
         dedup,
+        huerfano,
       });
       const final = estadoFinalDe(corrida.veredicto);
       await cerrarPaso(pO, final === 'ok' ? 'ok' : final === 'parcial' ? 'warn' : 'bad');
@@ -929,6 +1016,13 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
     const memoria = corrida.memoria as MemoriaCorrida;
     const prefijo = prefijoMensajes(corrida.id);
     const fotoIds = corrida.parametros.fotoIds;
+    // El guion se resuelve UNA vez y lo usan dos fases: la de fotos necesita
+    // saber si la última está RESERVADA para el ticket tardío (#4), o se
+    // quedaría esperando eternamente una foto que por guion no le toca.
+    const guion = escenarioPorId(corrida.escenario)?.guion ?? [{ tipo: 'fotos' as const }, { tipo: 'cierre' as const }];
+    const actoFotos = guion.find((a): a is Extract<PasoGuion, { tipo: 'fotos' }> => a.tipo === 'fotos');
+    const idsFotos = actoFotos ? idsParaActoFotos(actoFotos, fotoIds) : [...fotoIds];
+    const reservadaTarde = idFotoTrasCierre(guion, fotoIds);
 
     // ── FASE 2: LAS FOTOS, UNA POR UNA, CON EL RELOJ EN LA MANO ──────────
     if (corrida.fase === 'fotos') {
@@ -960,8 +1054,8 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
         .map((f) => Date.parse(f.fin as string) - Date.parse(f.inicio))
         .filter((d) => Number.isFinite(d) && d > 0);
 
-      for (let i = 0; i < fotoIds.length; i++) {
-        const fotoId = fotoIds[i];
+      for (let i = 0; i < idsFotos.length; i++) {
+        const fotoId = idsFotos[i];
         // CINTURÓN 1 (ahorra red, NO es la garantía): lo que ya tiene dueño no
         // se vuelve a pedir.
         if (conDueno.has(fotoId)) continue;
@@ -1054,11 +1148,15 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
         await guardar();
         return cerrarPasada(corrida.motivo, null);
       }
-      if (av.sinTurno > 0 || av.enVuelo > 0) {
+      // La foto RESERVADA para el ticket tardío no se espera aquí: por guion
+      // se manda DESPUÉS del cierre, y esperarla dejaría la corrida pausada
+      // para siempre por una foto que esta fase jamás va a mandar.
+      const pendientes = av.sinTurnoIds.filter((id) => id !== reservadaTarde);
+      if (pendientes.length > 0 || av.enVuelo > 0) {
         // Quedaron fotos que otra pasada tiene tomadas: no se sigue al cierre
         // con el viaje a medio llenar, porque el cuadre juzgaría un viaje
         // incompleto y ese veredicto sería mentira.
-        corrida.motivo = `pasada ${pasada}: van ${av.ok} de ${av.total}; ${av.sinTurno} sin turno y ${av.enVuelo} tomadas por otra pasada. El cierre espera a que estén todas.`;
+        corrida.motivo = `pasada ${pasada}: van ${av.ok} de ${av.total}; ${pendientes.length} sin turno y ${av.enVuelo} tomadas por otra pasada. El cierre espera a que estén todas.`;
         await guardar();
         return cerrarPasada(corrida.motivo, av);
       }
@@ -1067,8 +1165,7 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
       await guardar();
     }
 
-    // ── FASE 3: EL RESTO DEL GUION (foto repetida, cierre) ────────────────
-    const guion = escenarioPorId(corrida.escenario)?.guion ?? [{ tipo: 'fotos' as const }, { tipo: 'cierre' as const }];
+    // ── FASE 3: EL RESTO DEL GUION (foto repetida, cierre, ticket tardío) ──
     const TEXTO_CIERRE = 'listo, ya subí todo';
     if (corrida.fase === 'cierre') {
       if (relojAgotado(venceEn - reservaPorFotoMs([]))) {
@@ -1137,6 +1234,98 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
           continue;
         }
 
+        if (acto.tipo === 'foto_tras_cierre') {
+          // EL ATAQUE DEL INVARIANTE #4 en el carril completo. Mismo criterio
+          // que el rápido — no se gasta en un ataque que no se pueda juzgar —
+          // más lo que las pasadas exigen: la vara (`liqSembrada` +
+          // `montoTicket`) va a la MEMORIA ANTES de mandar el ticket, porque
+          // si la pasada muere entre el envío y el juicio, la siguiente tiene
+          // que juzgar con los totales de ANTES del ataque (releerlos después
+          // mediría contra una liquidación que el bug, si existiera, ya habría
+          // alterado); y el envío mismo es idempotente por la PK de
+          // `qa_corrida_foto` — dos pasadas solapadas no pagan dos veces.
+          const fotoId = reservadaTarde;
+          const manifiestoTarde = await leerManifiesto(db);
+          const foto = manifiestoTarde.ok && fotoId ? manifiestoTarde.datos.find((f) => f.id === fotoId) : undefined;
+          const monto = foto?.ocrEsperado?.monto ?? null;
+          if (!fotoId || !foto || monto === null) {
+            const p = await paso(`ticket tardío — ataque del invariante #4 (pasada ${pasada})`);
+            const motivo = !fotoId || !foto
+              ? 'el escenario manda un ticket TRAS el cierre y la corrida no trae esa foto — elige al menos 2 fotos'
+              : `la última foto elegida («${foto.etiqueta}») no tiene monto en su verdad-de-terreno: sin monto el oráculo #4 no puede buscar el huérfano, y mandarla sería gastar en un ataque que no se puede juzgar. Elige de última una foto con monto etiquetado.`;
+            await cerrarPaso(p, 'bad', null, motivo);
+            corrida.estado = 'fallo';
+            corrida.motivo = motivo;
+            corrida.fase = 'terminada';
+            corrida.fin = new Date().toISOString();
+            await guardar();
+            return cerrarPasada(corrida.motivo, corrida.avance);
+          }
+          if (!memoria.huerfano) {
+            const liq = await db.from('liquidacion')
+              .select('total_comprobado, total_anticipo, diferencia')
+              .eq('tenant_id', memoria.tenantId).eq('viaje_id', memoria.viajeId).maybeSingle();
+            if (liq.error || !liq.data) {
+              const p = await paso(`ticket tardío — ataque del invariante #4 (pasada ${pasada})`);
+              const motivo = `el cierre no dejó liquidación legible (${liq.error?.message ?? 'sin fila'}): el ataque post-cierre no tiene contra qué juzgarse`;
+              await cerrarPaso(p, 'bad', null, motivo);
+              corrida.estado = 'fallo';
+              corrida.motivo = motivo;
+              corrida.fase = 'terminada';
+              corrida.fin = new Date().toISOString();
+              await guardar();
+              return cerrarPasada(corrida.motivo, corrida.avance);
+            }
+            memoria.huerfano = {
+              liqSembrada: {
+                totalComprobado: Number(liq.data.total_comprobado),
+                totalAnticipo: Number(liq.data.total_anticipo),
+                diferencia: Number(liq.data.diferencia),
+              },
+              montoTicket: monto,
+            };
+            await guardar();
+          }
+          const tomaTarde = await tomarFoto(db, corridaId, fotoId, fotoIds.length, pasada);
+          if (!tomaTarde.ok) {
+            corrida.motivo = `pasada ${pasada} no pudo registrar la toma del ticket tardío (${tomaTarde.error}) — sin ese registro no se manda, porque no habría cómo saber que ya se mandó.`;
+            await guardar();
+            return cerrarPasada(corrida.motivo, corrida.avance);
+          }
+          if (tomaTarde.tomada) {
+            const p = await paso(`ticket TARDÍO — ${foto.etiqueta} tras el cierre (ataque del invariante #4, pasada ${pasada})`);
+            let estadoTarde: 'ok' | 'bad' = 'ok';
+            let detalleTarde: string | null = null;
+            try {
+              const { dataUrl, reintentos } = await dataUrlDeFoto(db, foto);
+              if (reintentos > 0) {
+                detalleTarde = `la descarga se reintentó ${reintentos} vez(es) por saturación de Storage antes de salir`;
+              }
+              await processInbound({
+                from: memoria.telefono, type: 'image',
+                mediaId: `${prefijo}media-tarde`, mediaDataUrlQA: dataUrl, waMessageId: `${prefijo}tarde`,
+              });
+            } catch (e) {
+              estadoTarde = 'bad';
+              detalleTarde = `${detalleTarde ? `${detalleTarde} · ` : ''}${e instanceof Error ? e.message : String(e)}`;
+            }
+            let costoTarde: number | null = null;
+            try {
+              const antes = corrida.costoUsdTotal;
+              corrida.costoUsdTotal = await costoTotalUsd(db, memoria.tenantId);
+              costoTarde = Math.round((corrida.costoUsdTotal - antes) * 1_000_000) / 1_000_000;
+            } catch (e) {
+              detalleTarde = `${detalleTarde ? `${detalleTarde} · ` : ''}costo no leído: ${e instanceof Error ? e.message : e}`;
+            }
+            await cerrarFoto(db, corridaId, fotoId, estadoTarde, costoTarde, detalleTarde);
+            await cerrarPaso(p, estadoTarde, costoTarde, detalleTarde);
+            if (corrida.costoUsdTotal > TOPE_CORRIDA_USD) {
+              return await abortarPorDinero('corrida', corrida.costoUsdTotal, TOPE_CORRIDA_USD);
+            }
+          }
+          continue;
+        }
+
         // acto.tipo === 'cierre'
         const pC = await paso(`cierre — el chofer escribe «${TEXTO_CIERRE}» (pasada ${pasada})`);
         let detalleC: string | null = null;
@@ -1168,9 +1357,20 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
       await guardar();
     }
 
-    // ── FASE 4: LOS ORÁCULOS ─────────────────────────────────────────────
+    // ── FASE 4: LA MEDICIÓN DEL OCR + LOS ORÁCULOS ───────────────────────
     if (corrida.fase === 'oraculos') {
-      const rotulo = ['#1 cuadre_balancea', '#5 cifras_con_fuente', memoria.dedup ? '#3 dedup_comprobante' : null, '#8 bitacora_registro']
+      // La medición va ANTES de los oráculos y de la limpieza: la evidencia
+      // son los `gasto` del tenant sintético y la limpieza los borra en
+      // cascada. Escribe una fila por foto en `qa_foto_lectura` (0239/0246);
+      // repetirla (una pasada muerta a medias) no duplica nada — el índice
+      // único parcial de la 0246 rebota y aquí se cuenta como "ya medida".
+      // Sin este paso la medición NO existe: pasó el 28-ago-2026 — 90 fotos
+      // procesadas, $0.29 de modelo medidos, cero lecturas escritas.
+      const pM = await paso(`medición del OCR contra la verdad-de-terreno — ${fotoIds.length} fotos (pasada ${pasada})`);
+      const dm = detalleMedicion(await medirCorrida(db, corrida));
+      await cerrarPaso(pM, dm.estado, 0, dm.detalle);
+
+      const rotulo = ['#1 cuadre_balancea', '#5 cifras_con_fuente', memoria.dedup ? '#3 dedup_comprobante' : null, memoria.huerfano ? '#4 huerfano_post_cierre' : null, '#8 bitacora_registro']
         .filter(Boolean).join(' · ');
       const pO = await paso(`oráculos — ${rotulo} (pasada ${pasada})`);
       corrida.turnos = await turnosDelTenant(db, memoria.tenantId);
@@ -1193,6 +1393,7 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
           eventosBitacora: eventos.map((msg) => ({ msg })),
           eventosEsperados: ['agent.run'],
           dedup: memoria.dedup,
+          huerfano: memoria.huerfano,
         });
         const final = estadoFinalDe(corrida.veredicto);
         await cerrarPaso(pO, final === 'ok' ? 'ok' : final === 'parcial' ? 'warn' : 'bad', 0);

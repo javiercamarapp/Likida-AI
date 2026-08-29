@@ -25,7 +25,7 @@
 //     "acierte" contra un ticket cuyo monto no se lee.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { CLAVES_VERDAD, type ClaveVerdad, type VerdadTerreno } from './qa-tipos';
+import { CLAVES_VERDAD, type ClaseComprobante, type ClaveVerdad, type VerdadTerreno } from './qa-tipos';
 
 export type VeredictoCampo = 'ok' | 'mal' | 'no_medido';
 
@@ -117,6 +117,28 @@ export function normalizarDominio(v: string | null | undefined): string | null {
   return t === '' ? null : t;
 }
 
+/**
+ * Variantes comparables del EMISOR esperado.
+ *
+ * El caso MEDIDO que la obliga (primera medición real, corrida 46ad99ca,
+ * 28-ago-2026): la etiqueta del banco anota el nombre comercial entre
+ * paréntesis — "NUEVA WAL MART DE MEXICO S DE RL DE CV (WALMART)" — y el OCR
+ * leyó la razón social EXACTA. Comparar contra la etiqueta completa contaba
+ * como error ~20 lecturas perfectas de 42 "fallos" de emisor: una medición
+ * falseada en la otra dirección, igual de inservible que una inflada.
+ *
+ * Se acepta la etiqueta completa o la etiqueta SIN sus paréntesis. Lo que NO
+ * se acepta es el alias solo: un OCR que devuelve "WALMART" a secas no
+ * demostró haber leído la razón social, y la razón social es lo que casa con
+ * el RFC y con el portal de facturación.
+ */
+export function variantesEmisorEsperado(esperado: string): string[] {
+  const completa = normalizarTextoVerdad(esperado);
+  const sinParentesis = normalizarTextoVerdad(esperado.replace(/\([^)]*\)/g, ' '));
+  const variantes = [completa, sinParentesis].filter((v): v is string => v !== null);
+  return [...new Set(variantes)];
+}
+
 /** Fecha comparable en `yyyy-mm-dd`. NO adivina formatos raros: la
  *  verdad-de-terreno ya viene validada en ISO, y del lado del OCR es
  *  `normalizarFecha` (intake/fecha.ts) quien ya normalizó. Aquí solo se recorta
@@ -192,6 +214,21 @@ export function compararCampo(clave: ClaveVerdad, verdad: VerdadTerreno, leido: 
     };
   }
 
+  if (clave === 'emisor') {
+    // El emisor acepta la etiqueta con o sin su anotación entre paréntesis
+    // (el nombre comercial) — ver `variantesEmisorEsperado` para el caso
+    // medido que lo obliga. El leído NO recibe el mismo trato: el alias solo
+    // no demuestra la razón social.
+    const variantes = variantesEmisorEsperado(String(esperado ?? ''));
+    const b = normalizarTextoVerdad(String(crudoLeido));
+    const iguales = b !== null && variantes.includes(b);
+    return {
+      clave, esperado, leido: crudoLeido,
+      veredicto: iguales ? 'ok' : 'mal',
+      motivo: iguales ? null : 'no coincide con lo etiquetado (comparado sin acentos, mayúsculas ni puntuación, con o sin el nombre comercial entre paréntesis)',
+    };
+  }
+
   const normalizar = clave === 'dominioFacturacion' ? normalizarDominio : normalizarTextoVerdad;
   const a = normalizar(esperado as string | null);
   const b = normalizar(String(crudoLeido));
@@ -231,6 +268,110 @@ export function medicionSinLeer(motivo: string): Medicion {
   return { campos, camposOk: 0, camposMal: 0, camposNoMedidos: campos.length };
 }
 
+/**
+ * La medición de una foto que la corrida procesó y el pipeline NO persistió
+ * como gasto (ni como huérfano) — la "lectura de punta a punta" de esa foto
+ * fue: nada entró al sistema.
+ *
+ * Aquí el denominador se decide por la CLASE del papel, porque "no persistió"
+ * significa cosas opuestas según qué papel era:
+ *
+ *  · `no_comprobante` — RECHAZAR era el veredicto correcto. Nada entró, nada
+ *    se inventó: cada campo en `noAplica` cuenta `ok`. Este es el caso que
+ *    más vale del banco: un OCR que ve una credencial de elector y NO fabrica
+ *    un gasto es exactamente lo que se quiere medir.
+ *
+ *  · `voucher_bancario` — producción lo reconoce y lo rechaza POR DISEÑO
+ *    (`solo_pago`, intake/ocr.ts): su ticket fiscal ya representa el mismo
+ *    gasto. Los valores que el modelo haya leído no se persisten, así que los
+ *    campos CON valor esperado no tienen contra qué medirse → `no_medido`,
+ *    dicho. Contarlos `mal` castigaría el comportamiento diseñado; contarlos
+ *    `ok` premiaría una lectura que nadie verificó. Los `noAplica` sí cuentan
+ *    `ok`: nada inventado entró al sistema.
+ *
+ *  · `ticket` / `cfdi_impreso` — el papel es un comprobante de verdad y de
+ *    punta a punta no quedó NADA leído: cada campo con valor esperado es
+ *    `mal`. Es la opción estricta a propósito (regla de la casa: en la duda,
+ *    estricto y dicho): quizá el modelo leyó bien y el pipeline lo tiró por
+ *    `ilegible`, pero el resultado medible es que el gasto no existe — y eso
+ *    es un fallo del carril completo de lectura, que es lo que se mide.
+ *
+ * Los `ilegibles` salen del denominador siempre, como en `medir`.
+ */
+export function medirSinGasto(verdad: VerdadTerreno): Medicion {
+  const rechazoPorDiseno = verdad.clase === 'voucher_bancario';
+  const campos: MedicionCampo[] = CLAVES_VERDAD.map((clave) => {
+    if (verdad.ilegibles.includes(clave)) {
+      return {
+        clave, esperado: null, leido: null, veredicto: 'no_medido' as const,
+        motivo: 'la persona no pudo leerlo en la foto: no hay valor esperado contra el que medir',
+      };
+    }
+    if (verdad.noAplica.includes(clave)) {
+      // Nada persistido = nada inventado. Para el papel que no imprime el
+      // campo, el silencio del pipeline es el acierto.
+      return { clave, esperado: null, leido: null, veredicto: 'ok' as const, motivo: null };
+    }
+    if (rechazoPorDiseno) {
+      return {
+        clave, esperado: verdad[clave], leido: null, veredicto: 'no_medido' as const,
+        motivo: 'el pipeline reconoce el voucher y lo rechaza por diseño (solo_pago): lo que el modelo leyó no se persiste y no hay contra qué medirlo',
+      };
+    }
+    return {
+      clave, esperado: verdad[clave], leido: null, veredicto: 'mal' as const,
+      motivo: 'el comprobante SÍ imprime este campo y de punta a punta no quedó ningún gasto: la foto se rechazó o la lectura se perdió',
+    };
+  });
+  return {
+    campos,
+    camposOk: campos.filter((c) => c.veredicto === 'ok').length,
+    camposMal: campos.filter((c) => c.veredicto === 'mal').length,
+    camposNoMedidos: campos.filter((c) => c.veredicto === 'no_medido').length,
+  };
+}
+
+/** ¿Este campo es una ALUCINACIÓN? — el papel no lo imprime (`esperado` null
+ *  con veredicto, o sea estaba en `noAplica`) y aun así salió `mal`: el OCR
+ *  devolvió un valor donde no había nada que leer. Se identifica desde la
+ *  medición GUARDADA (sin necesitar la etiqueta), porque los `ilegibles`
+ *  jamás salen `mal` — salen `no_medido`. */
+export function esAlucinacion(c: MedicionCampo): boolean {
+  return c.esperado === null && c.veredicto === 'mal';
+}
+
+/** Cuántos campos alucinados hay en un conjunto de mediciones. */
+export function contarAlucinaciones(mediciones: Array<Pick<Medicion, 'campos'>>): number {
+  return mediciones.reduce((s, m) => s + m.campos.filter(esAlucinacion).length, 0);
+}
+
+export interface AgregadoPorCampo extends Agregado {
+  clave: ClaveVerdad;
+}
+
+/**
+ * El desglose POR CAMPO: cuál se lee peor. Este número vale más que el
+ * global — "94% global" esconde un folio que falla una de cada tres veces, y
+ * el folio es lo que el portal de facturación exige. Mismo contrato que
+ * `agregar`: `exactitud` null cuando ese campo no tiene ni una medición, que
+ * la pantalla dice "sin medir" y JAMÁS pinta como 0%.
+ */
+export function agregarPorCampo(mediciones: Array<Pick<Medicion, 'campos'>>): AgregadoPorCampo[] {
+  return CLAVES_VERDAD.map((clave) => {
+    let ok = 0, mal = 0, noMedidos = 0;
+    for (const m of mediciones) {
+      for (const c of m.campos) {
+        if (c.clave !== clave) continue;
+        if (c.veredicto === 'ok') ok += 1;
+        else if (c.veredicto === 'mal') mal += 1;
+        else noMedidos += 1;
+      }
+    }
+    const medidos = ok + mal;
+    return { clave, ok, mal, noMedidos, medidos, exactitud: medidos === 0 ? null : ok / medidos };
+  });
+}
+
 export interface Agregado {
   ok: number;
   mal: number;
@@ -259,6 +400,73 @@ export function agregar(mediciones: Array<Pick<Medicion, 'camposOk' | 'camposMal
  *  escribe cuando el OCR falló técnicamente. */
 export function ocrVacio(): OcrLeido {
   return { ...VACIO };
+}
+
+// ── El resumen de precisión de UNA corrida (lo que la pantalla pinta) ───────
+
+/** La medición de una foto de la corrida, con lo que la pantalla necesita
+ *  para llegar del número a la foto concreta que lo bajó. */
+export interface MedicionFotoResumen {
+  fotoId: string;
+  etiqueta: string;
+  /** null = la foto no tiene verdad-de-terreno (o salió del banco). */
+  clase: ClaseComprobante | null;
+  medicion: Medicion;
+  modelo: string;
+  motivo: string | null;
+  costoUsd: number;
+}
+
+export interface ResumenPrecisionCorrida {
+  global: Agregado;
+  /** El desglose por campo — cuál se lee peor vale más que el global. */
+  porCampo: AgregadoPorCampo[];
+  /** Los CASOS NEGATIVOS del banco (clase `no_comprobante`), aparte y con
+   *  nombre propio: lo único que pueden medir es si el OCR INVENTA un gasto
+   *  donde no hay comprobante, y diluir eso entre 90 fotos lo esconde. */
+  negativos: {
+    fotos: number;
+    /** Cuántos negativos dejaron al menos un campo alucinado. 0 = el
+     *  pipeline los RECHAZÓ todos, que es el veredicto correcto. */
+    conAlucinacion: number;
+    camposAlucinados: number;
+  };
+  /** Alucinaciones en TODA la corrida (campo que el papel no imprime y el
+   *  OCR "leyó" — `esperado` null con veredicto `mal`). */
+  alucinaciones: number;
+  /** Los campos que salieron del denominador, agrupados por su razón — un
+   *  "no medido" sin razón es un número que no se puede defender. */
+  noMedidosPorMotivo: Array<{ motivo: string; campos: number }>;
+  fotos: MedicionFotoResumen[];
+}
+
+/** Arma el resumen entero a partir de las mediciones de la corrida. Pura —
+ *  el servidor lo calcula, la pantalla solo lo pinta. */
+export function resumenPrecision(fotos: MedicionFotoResumen[]): ResumenPrecisionCorrida {
+  const mediciones = fotos.map((f) => f.medicion);
+  const negativos = fotos.filter((f) => f.clase === 'no_comprobante');
+  const porMotivo = new Map<string, number>();
+  for (const m of mediciones) {
+    for (const c of m.campos) {
+      if (c.veredicto !== 'no_medido') continue;
+      const motivo = c.motivo ?? 'sin motivo registrado';
+      porMotivo.set(motivo, (porMotivo.get(motivo) ?? 0) + 1);
+    }
+  }
+  return {
+    global: agregar(mediciones),
+    porCampo: agregarPorCampo(mediciones),
+    negativos: {
+      fotos: negativos.length,
+      conAlucinacion: negativos.filter((f) => f.medicion.campos.some(esAlucinacion)).length,
+      camposAlucinados: contarAlucinaciones(negativos.map((f) => f.medicion)),
+    },
+    alucinaciones: contarAlucinaciones(mediciones),
+    noMedidosPorMotivo: [...porMotivo.entries()]
+      .map(([motivo, campos]) => ({ motivo, campos }))
+      .sort((a, b) => b.campos - a.campos),
+    fotos,
+  };
 }
 
 // ── El puente con el `Gasto` de producción ─────────────────────────────────
