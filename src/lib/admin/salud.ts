@@ -154,6 +154,11 @@ export function motivoDeSalto(detalle: Record<string, unknown>): string | null {
   if (typeof palanca === 'string' && palanca.trim() !== '') {
     return `apagado por la palanca «${palanca}»`;
   }
+  // Un salto puede tener motivo PROPIO en prosa, no solo palanca: `facturar`
+  // sin un adaptador de portal escrito anota `{ motivo: '...' }` (tableros al
+  // día, 28-ago-2026). El cron escribe la frase; aquí solo se lee.
+  const motivo = detalle.motivo;
+  if (typeof motivo === 'string' && motivo.trim() !== '') return motivo;
   return null;
 }
 
@@ -192,7 +197,10 @@ export async function detalleLatidos(ahoraMs: number = Date.now()): Promise<Reco
       ultimoLatido,
       cadenciaMs: CADENCIA_MS[c],
       detalle,
-      motivoSalto: motivoDeSalto(detalle),
+      // SOLO cuando el propio cron dijo 'saltado': el detalle de un 'fallo'
+      // puede traer llaves parecidas (p.ej. qué palanca resultó ilegible) y
+      // leerlas como «apagado a propósito» sería contar la historia al revés.
+      motivoSalto: ultimoEstado === 'saltado' ? motivoDeSalto(detalle) : null,
     };
   }
   return salida;

@@ -134,9 +134,17 @@ export async function GET(req: Request) {
   // `codigo`, para que Vercel pinte el cron rojo: cinco crons saltándose
   // corridas sobre una base con hipo se veían como cinco crons verdes.
   const global = await leerInterruptorConReintento('global');
-  if (global === 'ilegible') return NextResponse.json(ilegible('global'), { status: 500 });
+  if (global === 'ilegible') {
+    // El latido ANTES del 500 (tableros al día, 28-ago-2026): sin él este
+    // camino era mudo y /admin/crons decía «No late» sin la causa.
+    await registrarLatido('escalar', 'fallo', { codigo: 'interruptor_ilegible' });
+    return NextResponse.json(ilegible('global'), { status: 500 });
+  }
   if (global === 'apagado') {
     logger.warn('cron.escalar.saltado', { interruptor: 'global' });
+    // Sin este latido, el apagado deliberado se pintaba como cron muerto y
+    // /api/health alertaba al operador por su propia decisión.
+    await registrarLatido('escalar', 'saltado', { interruptor: 'global' });
     return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }
 

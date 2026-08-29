@@ -415,6 +415,11 @@ export async function GET(req: Request) {
   for (const nombre of ['global', 'agente:facturas'] as const) {
     const lectura = await leerInterruptor(nombre);
     if (lectura === 'ilegible') {
+      // El latido ANTES del 500 (tableros al día, 28-ago-2026): sin él este
+      // camino era mudo y el tablero decía «No late» sin la causa. El nombre
+      // de la palanca ilegible va en `cual`, NUNCA en `interruptor`: esa llave
+      // del detalle es la que `motivoDeSalto()` lee como «apagado a propósito».
+      await registrarLatido('facturar', 'fallo', { codigo: 'interruptor_ilegible', cual: nombre });
       return NextResponse.json({
         corrio: false,
         error: `No se pudo leer el interruptor ${nombre}: no se factura sin saber si está apagado.`,
@@ -437,6 +442,13 @@ export async function GET(req: Request) {
   // de que la facturación automática está corriendo.
   if (PORTALES_CONOCIDOS.length === 0) {
     logger.warn('cron.facturar.sin_adaptadores', {});
+    // El latido con su motivo (tableros al día, 28-ago-2026): sin él, este
+    // camino corría a diario sin dejar rastro y /admin/crons daba por MUERTO
+    // a un cron que en realidad no tiene nada que hacer. `motivo` es la llave
+    // que `motivoDeSalto()` traduce a la columna «Por qué».
+    await registrarLatido('facturar', 'saltado', {
+      motivo: 'no hay ningún adaptador de portal escrito — no hay nada que facturar solo',
+    });
     return NextResponse.json({
       corrio: false,
       motivo: 'No hay ningún adaptador de portal escrito, así que no se puede facturar nada solo todavía.',
@@ -444,10 +456,13 @@ export async function GET(req: Request) {
     });
   }
 
-  // La corrida llegó a trabajar: eso es el latido (RES-7). Va aquí y no en
-  // cada `return` de abajo porque lo que mide es "este cron sigue vivo", no
-  // cuántos tickets salieron — eso ya lo cuenta la bitácora de corridas.
-  await registrarLatido('facturar', 'ok', {});
+  // El latido ya NO se escribe aquí (tableros al día, 28-ago-2026). Antes iba
+  // un `registrarLatido('facturar','ok',{})` en este punto —«llegó a trabajar,
+  // eso es el latido»— y el efecto era un OK mentiroso: un timeout de Vercel a
+  // los 300 s o un 500 sin `throw` dejaban escrito «ok, hace 30 segundos» de
+  // una corrida que no terminó. Ahora el latido va en cada salida terminal
+  // (encolado, lote procesado, 503 de Chromium, catch) — como en los otros
+  // nueve crons, el pulso afirma que la corrida TERMINÓ, y cómo.
 
     // RES-13 (auditoría prod): era `toISOString().slice(0, 10)` — el día UTC. De
   // las 18:00 a medianoche hora de México el cron ya vivía en "mañana": el
@@ -577,6 +592,12 @@ export async function GET(req: Request) {
       if (sinEncolar.length > 0) {
         await alertarOperador('cron.facturar', { error: `QStash no aceptó ${sinEncolar.length} de ${flotas.length} lotes`, codigo: 'encolado_parcial' });
       }
+      // El latido del camino encolado: la corrida del CRON terminó (encolar
+      // era su trabajo); el resultado del lote lo latirá el callback de QStash
+      // al procesar, por `procesarLoteEnCola`. Parcial si QStash rechazó lotes.
+      await registrarLatido('facturar', sinEncolar.length > 0 ? 'parcial' : 'ok', {
+        encolado: true, flotas: encolados.length, tickets, sinEncolar: sinEncolar.length,
+      });
       return NextResponse.json({
         corrio: true,
         encolado: true,
@@ -1025,9 +1046,15 @@ export async function procesarLoteEnCola(
 
     if (falloDeArranque) {
       logger.error('cron.facturar.sin_navegador', { error: falloDeArranque, sinIntentar });
+      await registrarLatido('facturar', 'fallo', {
+        codigo: 'chromium_sin_arrancar', intentados: resultados.length, facturados, sinIntentar,
+      });
       return NextResponse.json({
         corrio: false,
         modo,
+        // (El latido 'fallo' de este camino se registró justo arriba: un 503
+        // devuelto sin `throw` no pasa por el catch, y sin latido propio este
+        // camino dejaba en pie el último estado que hubiera escrito otro.)
         motivo:
           'No se pudo arrancar Chromium, así que los tickets de portal NO se intentaron y quedan sin marcar para la próxima corrida. ' +
           'El campo `error` trae los TRES caminos que se probaron para conseguir el binario, en orden: la ruta explícita ' +
@@ -1068,6 +1095,13 @@ export async function procesarLoteEnCola(
     const motivos: Record<string, number> = {};
     for (const r of resultados) if (r.motivo) motivos[r.motivo] = (motivos[r.motivo] ?? 0) + 1;
     logger.info('cron.facturar.ok', { modo, intentados: resultados.length, facturados, quedaron, sinTiempo, flotas: flotas.length, motivos });
+
+    // El latido del cierre REAL (tableros al día, 28-ago-2026): la corrida
+    // terminó y así le fue. `parcial` si el reloj cortó flotas — mismo
+    // criterio que asistencia/runner con sus cortes.
+    await registrarLatido('facturar', sinTiempo > 0 ? 'parcial' : 'ok', {
+      modo, intentados: resultados.length, facturados, sinTiempo, quedaron,
+    });
 
     return NextResponse.json({
       corrio: true,

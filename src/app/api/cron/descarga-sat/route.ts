@@ -49,6 +49,11 @@ export async function GET(req: Request) {
   for (const nombre of ['global', 'agente:descarga_sat'] as NombreInterruptor[]) {
     const v = await leerInterruptor(nombre);
     if (v === 'ilegible') {
+      // El latido ANTES del 500 (tableros al día, 28-ago-2026): sin él este
+      // camino era mudo y el tablero decía «No late» sin la causa. El nombre
+      // de la palanca ilegible va en `cual`, NUNCA en `interruptor`: esa llave
+      // del detalle es la que `motivoDeSalto()` lee como «apagado a propósito».
+      await registrarLatido('descarga-sat', 'fallo', { codigo: 'interruptor_ilegible', cual: nombre });
       return NextResponse.json({
         corrio: false,
         error: `No se pudo leer el interruptor ${nombre}: la descarga no corre sin saber si está apagada.`,

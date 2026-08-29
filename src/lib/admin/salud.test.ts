@@ -155,4 +155,16 @@ describe('motivoDeSalto', () => {
     expect(motivoDeSalto({ interruptor: 7 })).toBeNull();
     expect(motivoDeSalto({ otra: 'cosa' })).toBeNull();
   });
+  it('lee el motivo en prosa que dejó el cron (facturar sin adaptadores)', () => {
+    // Tableros al día (28-ago-2026): un salto puede tener motivo propio sin
+    // palanca — `facturar` con cero adaptadores de portal escribe la frase y
+    // aquí solo se lee, nunca se inventa.
+    expect(motivoDeSalto({ motivo: 'no hay ningún adaptador de portal escrito' }))
+      .toBe('no hay ningún adaptador de portal escrito');
+    expect(motivoDeSalto({ motivo: '   ' })).toBeNull();
+    expect(motivoDeSalto({ motivo: 42 })).toBeNull();
+    // La palanca gana si vienen las dos: apagar a mano es la señal más fuerte.
+    expect(motivoDeSalto({ interruptor: 'global', motivo: 'otra cosa' }))
+      .toBe('apagado por la palanca «global»');
+  });
 });
