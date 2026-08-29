@@ -77,6 +77,12 @@ export async function GET(req: Request) {
   // base que no se pudo leer (mismo criterio que `purgar`, auditoría 18 A17).
   const global = await leerInterruptor('global');
   if (global === 'ilegible') {
+    // El latido ANTES del 500 (auditoría tandas 21-24, hallazgo 4): este era
+    // el ÚNICO cron con dos caminos de salida mudos — el PR del patrón
+    // «latido en todo camino» (#206) y este cron (#202) entraron en tandas
+    // consecutivas y nadie los cruzó. Sin él, el tablero decía «No late» sin
+    // la causa. Espejo de `purgar`.
+    await registrarLatido('portales-vivos', 'fallo', { codigo: 'interruptor_ilegible' });
     return NextResponse.json({
       corrio: false,
       error: 'No se pudo leer el interruptor global: no se sale a la red sin saber si está apagado.',
@@ -86,6 +92,11 @@ export async function GET(req: Request) {
   }
   if (global === 'apagado') {
     logger.warn('cron.portales_vivos.saltado', { interruptor: 'global' });
+    // Sin este latido, dos lunes con el global apagado envejecían el latido
+    // más de 7 días y /api/health declaraba MUERTO al cron sin poder
+    // distinguirlo de «saltado a propósito» — que es exactamente la ceguera
+    // que el estado `saltado` existe para evitar.
+    await registrarLatido('portales-vivos', 'saltado', { interruptor: 'global' });
     return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }
 
