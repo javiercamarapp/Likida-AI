@@ -123,7 +123,7 @@ const FILA = {
 };
 
 describe('getUltimasPosiciones — la posición medida, sin traerse `posicion`', () => {
-  it('llama a la RPC de la 0267 con su tenant y NO pagina la tabla', async () => {
+  it('llama a la RPC de la 0269 con su tenant y NO pagina la tabla', async () => {
     respPosiciones = { data: [FILA], error: null };
     const r = await getUltimasPosiciones('t-1');
     expect(llamadas).toContainEqual({ tipo: 'rpc', nombre: 'ultimas_posiciones_tenant', args: { p_tenant: 't-1' } });
@@ -153,9 +153,9 @@ describe('getUltimasPosiciones — la posición medida, sin traerse `posicion`',
     await expect(getUltimasPosiciones('t-1')).rejects.toThrow(/getUltimasPosiciones: fetch failed/);
   });
 
-  it('la 0267 sin aplicar (otra forma) LANZA con la migración en el mensaje', async () => {
+  it('la 0269 sin aplicar (otra forma) LANZA con la migración en el mensaje', async () => {
     respPosiciones = { data: { filas: [] }, error: null };
-    await expect(getUltimasPosiciones('t-1')).rejects.toThrow(/0267 sin aplicar/);
+    await expect(getUltimasPosiciones('t-1')).rejects.toThrow(/0269 sin aplicar/);
   });
 
   it('una fila sin lat/lng LANZA: un 0,0 por defecto pondría el camión en el Golfo de Guinea', async () => {

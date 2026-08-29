@@ -569,7 +569,7 @@ export interface UltimaPosicion {
 
 /**
  * La ÚLTIMA posición de cada unidad activa — `ultimas_posiciones_tenant`
- * (mig. 0267).
+ * (mig. 0269).
  *
  * AUDITORÍA 20, hallazgo 5 (MEDIO): `posicion` tenía dos escritores reales
  * (el pin del chofer por WhatsApp en `processor.ts` y el poller del conector
@@ -590,7 +590,7 @@ export async function getUltimasPosiciones(tenantId: string): Promise<UltimaPosi
   if (error) throw new Error(`getUltimasPosiciones: ${error.message}`);
   if (!Array.isArray(data)) {
     throw new Error(
-      'getUltimasPosiciones: ultimas_posiciones_tenant devolvió otra forma (¿migración 0267 sin aplicar?): '
+      'getUltimasPosiciones: ultimas_posiciones_tenant devolvió otra forma (¿migración 0269 sin aplicar?): '
       + 'se esperaba un arreglo de filas',
     );
   }
@@ -601,7 +601,7 @@ export async function getUltimasPosiciones(tenantId: string): Promise<UltimaPosi
     if (!esObjeto(r) || !esNumero(r.lat) || !esNumero(r.lng) || typeof r.medida_en !== 'string') {
       throw new Error(
         'getUltimasPosiciones: ultimas_posiciones_tenant devolvió una fila sin lat/lng/medida_en '
-        + `(¿migración 0267 sin aplicar?): ${JSON.stringify(r).slice(0, 120)}`,
+        + `(¿migración 0269 sin aplicar?): ${JSON.stringify(r).slice(0, 120)}`,
       );
     }
     return {
