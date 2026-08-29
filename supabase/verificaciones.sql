@@ -14553,3 +14553,103 @@ begin
     piso_rebota, vivo_token_sigue, revocado_viejo_se_fue, revocado_reciente_sigue, expirado_viejo_se_fue,
     cliente_vivo_sigue, cliente_muerto_se_fue, cliente_joven_sigue, codigo_viejo_se_fue, codigo_reciente_sigue, r;
 end $$;
+
+-- ── 214. El estudio de marketing: banco de hooks y personajes/lugares, deny-all con su dominio cerrado (mig. 0266) ──
+--
+-- Lo que solo la base puede demostrar: las dos tablas nuevas (marketing_hook,
+-- marketing_referencia) quedan CERRADAS a anon/authenticated y abiertas solo
+-- a service_role (mismo doble candado que aliado_objetivo, bloque 185), sus
+-- CHECK de "no vacío" rebotan una fila vacía en vez de guardar un hook o una
+-- referencia sin contenido, el dominio de `tipo` es cerrado (personaje/lugar,
+-- nada más), y los dos buckets nuevos (marketing_hooks_video,
+-- marketing_referencias) nacen PRIVADOS — un video o una foto de referencia
+-- interna servida en un bucket público sería indexable por cualquiera que
+-- adivine la ruta (mismo criterio que `comprobantes`, 0039).
+do $$
+declare
+  hook_id uuid;
+  hook_creado boolean;
+  hook_vacio_rebota boolean;
+  ruta_vacia_rebota boolean;
+  ref_id uuid;
+  ref_creado boolean;
+  ref_nombre_vacio_rebota boolean;
+  ref_foto_vacia_rebota boolean;
+  tipo_inventado_rebota boolean;
+  hook_cerrado boolean;
+  referencia_cerrado boolean;
+  bucket_hooks_privado boolean;
+  bucket_referencias_privado boolean;
+begin
+  -- El hook normal entra.
+  insert into public.marketing_hook (video_ruta, hook_texto)
+    values ('verif/0266/video.mp4', 'la pregunta llega igual en todas las flotas')
+    returning id into hook_id;
+  hook_creado := hook_id is not null;
+
+  -- Un hook sin texto (solo espacios) rebota.
+  begin
+    insert into public.marketing_hook (video_ruta, hook_texto) values ('verif/0266/otro.mp4', '   ');
+    hook_vacio_rebota := false;
+  exception when check_violation then
+    hook_vacio_rebota := true;
+  end;
+
+  -- Una ruta vacía también rebota.
+  begin
+    insert into public.marketing_hook (video_ruta, hook_texto) values ('   ', 'algo');
+    ruta_vacia_rebota := false;
+  exception when check_violation then
+    ruta_vacia_rebota := true;
+  end;
+
+  -- La referencia normal entra.
+  insert into public.marketing_referencia (tipo, nombre, foto_ruta)
+    values ('personaje', 'Chofer Ramon', 'verif/0266/ramon.jpg')
+    returning id into ref_id;
+  ref_creado := ref_id is not null;
+
+  -- Un nombre vacío rebota.
+  begin
+    insert into public.marketing_referencia (tipo, nombre, foto_ruta) values ('lugar', '   ', 'verif/0266/x.jpg');
+    ref_nombre_vacio_rebota := false;
+  exception when check_violation then
+    ref_nombre_vacio_rebota := true;
+  end;
+
+  -- Una foto vacía rebota.
+  begin
+    insert into public.marketing_referencia (tipo, nombre, foto_ruta) values ('lugar', 'Patio norte', '   ');
+    ref_foto_vacia_rebota := false;
+  exception when check_violation then
+    ref_foto_vacia_rebota := true;
+  end;
+
+  -- El dominio de tipo es cerrado: ni un tercer valor entra.
+  begin
+    insert into public.marketing_referencia (tipo, nombre, foto_ruta) values ('vehiculo', 'x', 'verif/0266/y.jpg');
+    tipo_inventado_rebota := false;
+  exception when check_violation then
+    tipo_inventado_rebota := true;
+  end;
+
+  -- El doble candado de las dos tablas.
+  hook_cerrado := not has_table_privilege('anon', 'public.marketing_hook', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.marketing_hook', 'SELECT')
+    and has_table_privilege('service_role', 'public.marketing_hook', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.marketing_hook'::regclass);
+  referencia_cerrado := not has_table_privilege('anon', 'public.marketing_referencia', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.marketing_referencia', 'SELECT')
+    and has_table_privilege('service_role', 'public.marketing_referencia', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.marketing_referencia'::regclass);
+
+  -- Los dos buckets nacen privados.
+  select public = false into bucket_hooks_privado
+    from storage.buckets where id = 'marketing_hooks_video';
+  select public = false into bucket_referencias_privado
+    from storage.buckets where id = 'marketing_referencias';
+
+  raise exception 'ESTUDIO_MARKETING_0266  hook_creado=%  hook_vacio_rebota=%  ruta_vacia_rebota=%  ref_creado=%  ref_nombre_vacio_rebota=%  ref_foto_vacia_rebota=%  tipo_inventado_rebota=%  hook_cerrado=%  referencia_cerrado=%  bucket_hooks_privado=%  bucket_referencias_privado=%   (esperado t / t / t / t / t / t / t / t / t / t / t)',
+    hook_creado, hook_vacio_rebota, ruta_vacia_rebota, ref_creado, ref_nombre_vacio_rebota, ref_foto_vacia_rebota,
+    tipo_inventado_rebota, hook_cerrado, referencia_cerrado, bucket_hooks_privado, bucket_referencias_privado;
+end $$;
