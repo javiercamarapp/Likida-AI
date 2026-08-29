@@ -234,7 +234,22 @@ export const LECTURA_RFA_29_PRORRATEO =
   'del ejercicio — confírmela con su contador.';
 
 export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible', 'gasto_otro_ejercicio'];
-export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'consumo_bar', 'ticket_monedero', 'renglones_ajenos'];
+// AUDITORÍA 21, CRÍTICO (fiscal): `cfdi_efos_indeterminado` entra a
+// POR_CONFIRMAR (y a SIN_ACREDITAMIENTO, abajo) por el mismo camino que
+// `cfdi_pendiente`. Desde que la auditoría 9 quitó —con razón— el mapeo
+// `'100' → efos: true` (ConsultaCFDIService no distingue el listado presunto
+// del definitivo del CFF 69-B), NADA produce `efos: true`, así que la rama
+// `cfdi_efos` de NO_DEDUCIBLE_ISR quedó inalcanzable y el ÚNICO rastro de un
+// emisor ya publicado en DEFINITIVA era esta diferencia... que solo movía el
+// badge a "revisar". El CFDI caía en la cubeta `deducible` y acreditaba su IVA
+// completo, en verde y citando LIVA 5 — sobre operaciones que `cff-69-B.yaml`
+// (verificado_fuente_primaria, 4º párrafo) declara sin "efecto fiscal alguno".
+// No va a NO_DEDUCIBLE_ISR porque el servicio tampoco distingue al PRESUNTO
+// (1er párrafo: solo "se presumirá", con derecho a desvirtuar) — declararlo
+// fraude sería el falso positivo que `intake/sat.ts` documenta como peor que
+// el falso negativo. Tercer estado: ni deducible ni no-deducible, a cotejar el
+// listado del DOF a mano.
+export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'cfdi_efos_indeterminado', 'consumo_bar', 'ticket_monedero', 'renglones_ajenos'];
 
 /**
  * LA ÚNICA definición de en qué cubeta cae un gasto. Vive aquí, exportada, para
@@ -760,7 +775,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     } else if (g.efos === true) {
       diferencias.push({ tipo: 'cfdi_efos', concepto: g.concepto, monto: 0, nota: `El emisor del CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} está en lista negra del SAT (EFOS) — no deducible.`, gastoId: g.id });
     } else if (g.efosRevisar) {
-      diferencias.push({ tipo: 'cfdi_efos_indeterminado', concepto: g.concepto, monto: 0, nota: `La validación EFOS del CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} no fue concluyente — conviene revisarlo a mano.`, gastoId: g.id });
+      diferencias.push({ tipo: 'cfdi_efos_indeterminado', concepto: g.concepto, monto: 0, nota: `La validación EFOS del CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} no fue concluyente — el gasto queda POR CONFIRMAR (ni deducible ni acreditable) hasta cotejar el listado del art. 69-B a mano.`, gastoId: g.id });
     } else if (g.estadoSat === 'pendiente' && g.cfdiUuid) {
       diferencias.push({ tipo: 'cfdi_pendiente', concepto: g.concepto, monto: 0, nota: `No se pudo validar el CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} con el SAT — se revisa después.`, gastoId: g.id });
     }
@@ -1243,7 +1258,13 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // acreditaba su IVA completo, su peaje y sus litros — contra la LIVA 5-I
   // que este mismo bloque cita ("en la proporción en que las erogaciones
   // sean deducibles": la proporción es cero).
-  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'rfc_receptor_no_verificable', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'combustible_efectivo_dentro15', 'efectivo_sobre_15', 'efectivo_no_elegible', 'efectivo_sobre_tope', 'monto_invalido', 'cfdi_pendiente', 'consumo_bar', 'moneda_extranjera', 'gasto_otro_ejercicio'];
+  // `cfdi_efos_indeterminado` (AUDITORÍA 21): mismo tercer estado que
+  // `cfdi_pendiente` — con la validación EFOS no concluyente, el emisor puede
+  // estar en el listado DEFINITIVO del 69-B ("no producen ni produjeron efecto
+  // fiscal alguno", 4º párrafo, ficha verificada) y acreditar su IVA sería
+  // afirmar en verde lo que la ley niega de plano. Ver el comentario largo en
+  // POR_CONFIRMAR.
+  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'rfc_receptor_no_verificable', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'combustible_efectivo_dentro15', 'efectivo_sobre_15', 'efectivo_no_elegible', 'efectivo_sobre_tope', 'monto_invalido', 'cfdi_pendiente', 'consumo_bar', 'moneda_extranjera', 'gasto_otro_ejercicio'];
   // AUDITORÍA 12, ALTO (fiscal, reincidente de la 11): `cfdi_pendiente` entra
   // aquí y en POR_CONFIRMAR — con el SAT caído o en timeout, "no se pudo
   // verificar" es el MISMO tercer estado que el motor ya aplica a EFOS, al RFC
