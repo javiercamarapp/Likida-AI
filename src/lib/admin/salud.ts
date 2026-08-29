@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -60,6 +60,14 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // nada y sí cuesta consultas. Barre tres días hacia atrás, así que una
   // corrida perdida se recupera sola.
   jornada: 3_600_000,
+  // El vigilante de portales de facturación (0248). SEMANAL, y la cadencia es
+  // una decisión, no una comodidad: lo que vigila se mueve en semanas o meses
+  // —un dominio que expira, un portal que se muda—, así que golpear treinta
+  // sitios de terceros cada hora no adelantaría ningún hallazgo y sí nos
+  // pondría en sus registros como tráfico automatizado insistente. Tres de
+  // esos sitios ya bloquean robots; el vigilante no puede ser el que provoque
+  // el problema que vino a detectar.
+  'portales-vivos': 7 * 86_400_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */

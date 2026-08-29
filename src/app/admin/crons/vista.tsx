@@ -41,6 +41,7 @@ const RUTA: Record<CronId, string> = {
   asistencia: '/api/cron/asistencia',
   'descarga-sat': '/api/cron/descarga-sat',
   jornada: '/api/cron/jornada',
+  'portales-vivos': '/api/cron/portales-vivos',
 };
 
 /** Qué hace cada reloj, en una línea, para que el rojo se pueda priorizar. */
@@ -55,6 +56,7 @@ const OFICIO: Record<CronId, string> = {
   asistencia: 'vigila las emergencias sin reconocer',
   'descarga-sat': 'recoge del SAT los CFDI que el comercio ya timbró',
   jornada: 'asienta el registro de jornada del día (LFT 132-XXXIV)',
+  'portales-vivos': 'comprueba que los portales de facturación sigan en pie',
 };
 
 /**

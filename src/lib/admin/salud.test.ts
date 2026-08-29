@@ -82,6 +82,11 @@ describe('CADENCIA_MS espeja vercel.json', () => {
       // minutos 0/5/7/15 — un cron más en el minuto 0 se lleva la cuota de la
       // plataforma y el pool de conexiones a la misma hora que los otros.
       '25 */6 * * *': 6 * 3_600_000,
+      // 0248: el vigilante de portales, SEMANAL — lunes 06:40 UTC. El minuto 40
+      // y el lunes temprano están elegidos igual que el 25 de arriba: fuera de
+      // la estampida, y el lunes para que si un portal murió el fin de semana
+      // se sepa antes de la primera tanda de facturación de la semana.
+      '40 6 * * 1': 7 * 86_400_000,
     };
     for (const c of cfg.crons) {
       const id = c.path.replace('/api/cron/', '') as keyof typeof CADENCIA_MS;
