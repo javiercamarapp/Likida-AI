@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL ENVIADOR (0217) — los contratos del envío automático:
@@ -62,12 +62,43 @@ const PIEZA = {
   prospecto: { empresa: 'Transportes X', correo: 'c@x.mx' },
 };
 
+const ENCENDIDO_ANTES = process.env.LIKIDA_ENVIADOR_ENCENDIDO;
+afterAll(() => {
+  if (ENCENDIDO_ANTES === undefined) delete process.env.LIKIDA_ENVIADOR_ENCENDIDO;
+  else process.env.LIKIDA_ENVIADOR_ENCENDIDO = ENCENDIDO_ANTES;
+});
+
 beforeEach(() => {
   respuestas.clear();
   apagado = false;
   canal = true;
   enviarPiezaPorCorreo.mockClear();
   registrarCorrida.mockClear();
+  // El interruptor MAESTRO (envío autónomo acotado, 29-ago-2026): arranca
+  // apagado por default, así que el grueso de este archivo —que prueba OTRA
+  // cosa— lo enciende aquí; el describe dedicado más abajo lo apaga a
+  // propósito para probar el default real.
+  process.env.LIKIDA_ENVIADOR_ENCENDIDO = 'true';
+});
+
+describe('el interruptor MAESTRO — apagado por default (envío autónomo acotado)', () => {
+  it('ausente: no manda nada, sin siquiera consultar el kill switch de incidente', async () => {
+    delete process.env.LIKIDA_ENVIADOR_ENCENDIDO;
+    await expect(correrEnviador()).rejects.toThrow(/APAGADO/);
+    expect(enviarPiezaPorCorreo).not.toHaveBeenCalled();
+  });
+
+  it('cualquier valor que no sea exactamente "true" cuenta como apagado', async () => {
+    process.env.LIKIDA_ENVIADOR_ENCENDIDO = 'si';
+    await expect(correrEnviador()).rejects.toThrow(/APAGADO/);
+    process.env.LIKIDA_ENVIADOR_ENCENDIDO = '1';
+    await expect(correrEnviador()).rejects.toThrow(/APAGADO/);
+  });
+
+  it('con "true", pasa este candado y llega al kill switch de incidente (que sigue apagándolo si toca)', async () => {
+    apagado = true;
+    await expect(correrEnviador()).rejects.toThrow(/enviador está apagado/);
+  });
 });
 
 describe('correrEnviador', () => {

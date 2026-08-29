@@ -68,6 +68,7 @@ const {
   rebotesRecientes, correosSuprimidos,
 } = await import('./cola');
 const { DatoInvalido } = await import('../errores');
+const { verificarBaja } = await import('@/lib/correo/baja');
 
 const de = (tabla: string, op: string) => llamadas.filter((l) => l.tabla === tabla && l.op === op);
 
@@ -78,6 +79,11 @@ beforeEach(() => {
   logs.error.mockClear();
   enviarCorreo.mockClear();
   resultadoEnvio = { ok: true, id: 're_123' };
+  // La liga de baja de un clic (0266) es OBLIGATORIA para toda campaña — el
+  // grueso de las pruebas de este archivo no es sobre ESE candado, así que
+  // aquí queda configurado por default; el describe dedicado más abajo lo
+  // desconfigura a propósito para probar el fail-closed.
+  process.env.LIKIDA_BAJA_SECRET = 'clave-de-prueba-cola';
 });
 
 describe('encolarPieza', () => {
@@ -529,5 +535,58 @@ describe('rebotesRecientes y correosSuprimidos — lo que Resend ya sabía', () 
   it('la lista de bajas también LANZA ante error de lectura', async () => {
     respuestas.set('correo_suprimido', [{ data: null, error: { message: 'timeout' } }]);
     await expect(correosSuprimidos()).rejects.toThrow(/correosSuprimidos: timeout/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA LIGA DE BAJA DE UN CLIC (envío autónomo acotado, 0266) — obligatoria en
+// campaña, ausente en el resto: el cumplimiento no es un adorno que se pueda
+// dejar para después.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la liga de baja — obligatoria en campaña, fail-closed sin secreto', () => {
+  const FILA_CAMPANA = {
+    id: 'p-1', tipo: 'correo_frio', titulo: 'Correo día 0', cuerpo: 'Hola.', cuerpo_final: null,
+    agente: 'redactor', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'contacto@x.mx' },
+  };
+  const FILA_NO_CAMPANA = {
+    id: 'p-2', tipo: 'parte_costos', titulo: 'Costos', cuerpo: 'Parte.', cuerpo_final: null,
+    agente: 'control_costos', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'contacto@x.mx' },
+  };
+
+  it('sin LIKIDA_BAJA_SECRET configurado, la campaña NO sale — el claim se revierte y se dice por qué', async () => {
+    delete process.env.LIKIDA_BAJA_SECRET;
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_CAMPANA], error: null },   // el claim
+      { data: null, error: null },             // la reversión
+    ]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/LIKIDA_BAJA_SECRET/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+    const reversion = de('cola_aprobacion', 'update')[1];
+    expect(reversion.payload).toMatchObject({ enviado_en: null });
+  });
+
+  it('con el secreto puesto, el correo de campaña lleva `bajaHref` verificable y las cabeceras List-Unsubscribe', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_CAMPANA], error: null },
+      { data: null, error: null },
+    ]);
+    await enviarPiezaPorCorreo('p-1', 'u-1');
+    const [, correo, opciones] = enviarCorreo.mock.calls[0] as unknown as [string[], { bajaHref?: string }, { listaBajaUrl?: string }];
+    expect(correo.bajaHref).toBeDefined();
+    expect(opciones.listaBajaUrl).toBe(correo.bajaHref);
+    const url = new URL(correo.bajaHref!);
+    expect(verificarBaja(url.searchParams.get('e')!, url.searchParams.get('t')!)).toBe(true);
+  });
+
+  it('una pieza que NO es de campaña no necesita el secreto ni lleva liga', async () => {
+    delete process.env.LIKIDA_BAJA_SECRET;
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_NO_CAMPANA], error: null },
+      { data: null, error: null },
+    ]);
+    const r = await enviarPiezaPorCorreo('p-2', 'u-1');
+    expect(r.ok).toBe(true);
+    const [, correo] = enviarCorreo.mock.calls[0] as unknown as [string[], { bajaHref?: string }];
+    expect(correo.bajaHref).toBeUndefined();
   });
 });

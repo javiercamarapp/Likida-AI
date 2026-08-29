@@ -20,6 +20,20 @@
 //     el investigador MENOS los suprimidos — y la lista de bajas se lee
 //     FAIL-CLOSED: si no se puede leer, no sale nada.
 //   · Kill switch propio (`agente:enviador`) y techo de gasto en el runner.
+//   · APAGADO POR DEFAULT (envío autónomo acotado, 29-ago-2026): ver
+//     `enviadorEncendido()` abajo — el "sin fila = encendido" del kill switch
+//     de `agente:enviador` sigue intacto (es el candado de INCIDENTE, y
+//     sembrarle una fila desde una migración le rompería el supuesto de
+//     tabla vacía a media docena de bloques de verificaciones.sql que ya
+//     prueban ese CHECK), pero el envío AUTÓNOMO real de correo — sin
+//     aprobación humana por mensaje — es un cambio de comportamiento que no
+//     puede empezar solo porque una migración se aplicó y RESEND_API_KEY ya
+//     estaba puesta por otra razón. `LIKIDA_ENVIADOR_ENCENDIDO` es el
+//     interruptor MAESTRO, en código, sin tabla que sembrar: por default
+//     (ausente o cualquier valor que no sea 'true') el enviador NO manda
+//     nada, y lo dice. Javier lo prende a propósito en Vercel cuando decida
+//     que el envío autónomo puede empezar; el kill switch de incidente
+//     sigue funcionando exactamente igual encima de esto.
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
@@ -45,6 +59,24 @@ export const RESOLUTOR_AUTOMATICO = 'enviador@automatico';
 export function ventanaRevisionMin(): number {
   const v = Number(process.env.LIKIDA_ENVIADOR_VENTANA_MIN);
   return Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+}
+
+/**
+ * El interruptor MAESTRO del envío autónomo (envío autónomo acotado,
+ * 29-ago-2026) — DEFAULT APAGADO. Ausente, vacío o cualquier valor que no
+ * sea exactamente `'true'` cuenta como apagado: un `LIKIDA_ENVIADOR_ENCENDIDO=si`
+ * mal tecleado no debe encender nada por accidente.
+ *
+ * Distinto del kill switch `agente:enviador` (interruptores.ts): aquél es la
+ * palanca de INCIDENTE ("algo salió mal, apágalo YA"), con su propio default
+ * seguro (sin fila = encendido) porque así deben arrancar los agentes que
+ * solo dejan piezas en una bandeja. Este es el interruptor de LANZAMIENTO:
+ * el envío de correo sin aprobación humana por mensaje es un cambio de
+ * comportamiento real, y no puede empezar como efecto secundario de aplicar
+ * una migración o de que RESEND_API_KEY ya estuviera puesta.
+ */
+export function enviadorEncendido(): boolean {
+  return process.env.LIKIDA_ENVIADOR_ENCENDIDO === 'true';
 }
 
 export interface ResultadoEnviador {
@@ -78,6 +110,12 @@ export async function correrEnviador(
   venceEn?: number,
 ): Promise<ResultadoEnviador> {
   const inicio = new Date();
+  // EL INTERRUPTOR MAESTRO, primero y sin I/O (fail-fast barato): el envío
+  // autónomo arranca apagado hasta que alguien lo prenda a propósito en
+  // Vercel — nunca por default de un deploy o de una migración.
+  if (!enviadorEncendido()) {
+    throw new DatoInvalido('El envío autónomo de campaña arranca APAGADO por decisión explícita — enciéndelo con LIKIDA_ENVIADOR_ENCENDIDO=true cuando decidas que puede empezar.');
+  }
   if (await estaApagado('agente:enviador')) {
     throw new DatoInvalido('El enviador está apagado — se enciende desde /admin/observabilidad o ⌘K.');
   }

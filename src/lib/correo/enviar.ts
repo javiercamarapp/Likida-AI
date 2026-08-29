@@ -87,6 +87,16 @@ export interface OpcionesEnvio {
    * del operador no la necesitan.
    */
   idempotencyKey?: string;
+  /**
+   * La URL de `baja.ts`, cuando el correo es de campaña. Viaja como
+   * CABECERA DEL MENSAJE (no del POST a Resend) — `List-Unsubscribe` +
+   * `List-Unsubscribe-Post: List-Unsubscribe=One-Click` es lo que Gmail y
+   * Yahoo exigen desde 2024 de un remitente masivo para no puntuar como
+   * spam, y es lo que enciende el botón nativo "Cancelar suscripción" que
+   * NUNCA abre el correo (RFC 8058) — la liga visible en el pie
+   * (`plantilla.ts`) es para quien no tiene ese botón.
+   */
+  listaBajaUrl?: string;
 }
 
 /** Un destinatario que no parece correo no se manda: la API lo rechazaría
@@ -146,6 +156,15 @@ export async function enviarCorreo(
           content_id: LOGO_CID,
           content_disposition: 'inline',
         }],
+        // CABECERAS DEL MENSAJE — distintas de las del POST arriba (esas son
+        // HTTP hacia Resend; estas viajan DENTRO del correo hacia el cliente
+        // del destinatario). Solo van si el llamador trae la liga de baja.
+        ...(op.listaBajaUrl ? {
+          headers: {
+            'List-Unsubscribe': `<${op.listaBajaUrl}>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          },
+        } : {}),
       }),
       signal: AbortSignal.timeout(TIMEOUT_CORREO_MS),
     });
