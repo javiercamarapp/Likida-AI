@@ -40,6 +40,10 @@ export interface ResultadoSync {
   guardadas: number;
   /** Lecturas cuyo dispositivo no lo reclama ninguna unidad. Se reportan. */
   huerfanas: number;
+  /** La corrida se quedó sin presupuesto de tiempo ANTES de tocar esta flota.
+   *  No es un error de la flota: le toca en la corrida siguiente (cada 5 min),
+   *  y el cron lo reporta como `parcial` — un verde aquí mentiría. */
+  sinTurno?: boolean;
   error?: string;
 }
 
@@ -170,8 +174,23 @@ export async function sincronizarGpsDeFlota(
   return base;
 }
 
-/** Sincroniza TODAS las flotas con credencial de GPS activa. */
-export async function sincronizarGpsTodas(http: Http = httpReal): Promise<ResultadoSync[]> {
+/**
+ * Sincroniza TODAS las flotas con credencial de GPS activa.
+ *
+ * ── EL RELOJ (patrón del PR #152 / `vigilarPortales`) ─────────────────────
+ * `venceEn` es el `Date.now()` a partir del cual la corrida deja de tomar
+ * flotas NUEVAS. El corte va ANTES de despachar una flota, nunca a medias: la
+ * flota en vuelo termina (es la unidad atómica) y las que no alcanzaron turno
+ * salen con `sinTurno: true` — se DICEN, no desaparecen. Antes de esto el cron
+ * de GPS era el único de los diez sin reloj duro, con la medición propia
+ * (174-188 s reales contra 300 de techo, y las posiciones SOLAS ~180 s) ya
+ * avisando que un kill de Vercel a media corrida era cosa de que N creciera.
+ */
+export async function sincronizarGpsTodas(
+  http: Http = httpReal,
+  opts: { venceEn?: number; ahora?: () => number } = {},
+): Promise<ResultadoSync[]> {
+  const ahora = opts.ahora ?? Date.now;
   const { data, error } = await acotada(
     supabaseAdmin().from('conector_credencial')
       .select('tenant_id, conector_id, valores_cifrados')
@@ -188,10 +207,19 @@ export async function sincronizarGpsTodas(http: Http = httpReal): Promise<Result
   }
 
   const credenciales = data ?? [];
-  const resultados = await conPool(credenciales, ANCHO_FANOUT_FLOTAS, async (c) =>
-    sincronizarGpsDeFlota(String(c.tenant_id), String(c.conector_id), String(c.valores_cifrados), http),
-  );
-  return resultados.map((r, i) => {
+  const resultados = await conPool(credenciales, ANCHO_FANOUT_FLOTAS, async (c) => {
+    // El reloj se mira ANTES de despachar cada flota, no una vez al principio:
+    // el patrón de `conRelojDuro`/`vigilarPortales`. Lo que no alcanzó queda
+    // intacto para la corrida siguiente.
+    if (opts.venceEn !== undefined && ahora() >= opts.venceEn) {
+      return {
+        tenantId: String(c.tenant_id), proveedor: String(c.conector_id),
+        leidas: 0, guardadas: 0, huerfanas: 0, sinTurno: true,
+      } satisfies ResultadoSync;
+    }
+    return sincronizarGpsDeFlota(String(c.tenant_id), String(c.conector_id), String(c.valores_cifrados), http);
+  });
+  const salida = resultados.map((r, i) => {
     if ('ok' in r) return r.ok;
     const c = credenciales[i];
     return {
@@ -200,4 +228,11 @@ export async function sincronizarGpsTodas(http: Http = httpReal): Promise<Result
       error: r.error instanceof Error ? r.error.message : String(r.error),
     };
   });
+  const sinTurno = salida.filter((r) => r.sinTurno).length;
+  if (sinTurno > 0) {
+    // WARN, no info: la corrida NO barrió su universo. El cron lo pinta
+    // `parcial` — quedó trabajo declarado para la siguiente pasada.
+    logger.warn('gps.corte_por_reloj', { sinTurno, flotas: salida.length });
+  }
+  return salida;
 }

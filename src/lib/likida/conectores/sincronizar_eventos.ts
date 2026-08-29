@@ -57,6 +57,11 @@ export interface ResultadoSyncEventos {
   disparos: number;
   /** El token sirve pero no trae el scope de eventos: el panel debe decirlo. */
   sinPermiso?: boolean;
+  /** La corrida se quedó sin presupuesto de tiempo ANTES de tocar esta flota.
+   *  Sus eventos —incluido el barrido de graves pendientes— quedan para la
+   *  corrida siguiente: la ventana traslapada de 30 min y el rebarrido por
+   *  `procesado_en` NULL están diseñados exactamente para absorber esto. */
+  sinTurno?: boolean;
   error?: string;
 }
 
@@ -220,9 +225,24 @@ export async function sincronizarEventosDeFlota(
   return base;
 }
 
-/** Sincroniza los eventos de TODAS las flotas con credencial activa. Se llama
- *  desde el cron de GPS, después de las posiciones. */
-export async function sincronizarEventosTodas(http: Http): Promise<ResultadoSyncEventos[]> {
+/**
+ * Sincroniza los eventos de TODAS las flotas con credencial activa. Se llama
+ * desde el cron de GPS, después de las posiciones.
+ *
+ * ── EL RELOJ (patrón del PR #152 / `vigilarPortales`) ─────────────────────
+ * El `venceEn` es EL MISMO que el de las posiciones (molde de `descarga-sat`:
+ * un reloj compartido entre las dos fases en serie, para que ninguna se coma
+ * a ciegas el presupuesto de la otra). El corte va ANTES de despachar cada
+ * flota, nunca a media flota; una flota sin turno sale con `sinTurno: true` y
+ * el cron late `parcial`. Es lo que faltaba del arreglo c2-1: la recuperación
+ * idempotente ya existía (rebarrido de graves), pero el kill de Vercel a media
+ * corrida seguía siendo posible y MUDO — sin latido y sin barrido de graves.
+ */
+export async function sincronizarEventosTodas(
+  http: Http,
+  opts: { venceEn?: number; ahora?: () => number } = {},
+): Promise<ResultadoSyncEventos[]> {
+  const ahora = opts.ahora ?? Date.now;
   const { data, error } = await acotada(
     supabaseAdmin().from('conector_credencial')
       .select('tenant_id, conector_id, valores_cifrados')
@@ -237,10 +257,18 @@ export async function sincronizarEventosTodas(http: Http): Promise<ResultadoSync
   }
 
   const credenciales = data ?? [];
-  const resultados = await conPool(credenciales, ANCHO_FANOUT_FLOTAS, async (c) =>
-    sincronizarEventosDeFlota(String(c.tenant_id), String(c.conector_id), String(c.valores_cifrados), http),
-  );
-  return resultados.map((r, i) => {
+  const resultados = await conPool(credenciales, ANCHO_FANOUT_FLOTAS, async (c) => {
+    // El reloj se mira ANTES de despachar cada flota, no una vez al principio:
+    // el patrón de `conRelojDuro`/`vigilarPortales`.
+    if (opts.venceEn !== undefined && ahora() >= opts.venceEn) {
+      return {
+        tenantId: String(c.tenant_id), proveedor: String(c.conector_id),
+        leidos: 0, guardados: 0, huerfanos: 0, disparos: 0, sinTurno: true,
+      } satisfies ResultadoSyncEventos;
+    }
+    return sincronizarEventosDeFlota(String(c.tenant_id), String(c.conector_id), String(c.valores_cifrados), http);
+  });
+  const salida = resultados.map((r, i) => {
     if ('ok' in r) return r.ok;
     const c = credenciales[i];
     return {
@@ -249,4 +277,11 @@ export async function sincronizarEventosTodas(http: Http): Promise<ResultadoSync
       error: r.error instanceof Error ? r.error.message : String(r.error),
     };
   });
+  const sinTurno = salida.filter((r) => r.sinTurno).length;
+  if (sinTurno > 0) {
+    // WARN con nombre propio: aquí lo que se queda sin correr es el barrido de
+    // graves (choque/volcadura). La corrida siguiente lo rebarre — pero se dice.
+    logger.warn('eventos.corte_por_reloj', { sinTurno, flotas: salida.length });
+  }
+  return salida;
 }
