@@ -44,6 +44,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { exigirAal2SiHayFactor, MSG_STEP_UP, MSG_MFA_NO_VERIFICABLE } from '@/lib/auth/mfa';
 import { CATALOGO_ACCIONES } from '@/lib/agents/copiloto-acciones';
 import { PartialExecutionError } from '@/lib/llm/openrouter';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -100,6 +101,19 @@ function conPlazo<T>(p: Promise<T>, ms: number, etiqueta: string): Promise<T> {
 }
 
 export async function POST(req: Request) {
+  // ── DE DÓNDE VIENE, ANTES DE QUIÉN ES (auditoría 21 — BAJO-MEDIO: el
+  // chequeo ya existía en /api/admin/palette y no se generalizó al resto de
+  // escrituras cookie-autenticadas). Esta es la más sensible de todas: ejecuta
+  // acciones administrativas (algunas 'doble' + MFA) y gasta dinero de modelo
+  // por turno. Va ANTES de la sesión, a propósito: a una petición de otro
+  // sitio no se le contesta si el usuario es superadmin o no.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('copiloto.origen_ajeno', {
+      origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site'),
+    });
+    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+  }
+
   const { error: puerta, sesion } = await sesionSuperadmin();
   if (!sesion) return puerta;
 

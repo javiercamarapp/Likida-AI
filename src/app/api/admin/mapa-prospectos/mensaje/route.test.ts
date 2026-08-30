@@ -56,9 +56,9 @@ vi.mock('../puerta', () => ({
 
 const { POST } = await import('./route');
 
-function postear() {
+function postear(cabeceras?: Record<string, string>) {
   return POST(new Request('https://app.likida.ai/api/admin/mapa-prospectos/mensaje', {
-    method: 'POST', body: JSON.stringify({ id: PROSPECTO.id }),
+    method: 'POST', headers: cabeceras, body: JSON.stringify({ id: PROSPECTO.id }),
   }));
 }
 
@@ -67,6 +67,15 @@ beforeEach(() => {
   escrituras.length = 0;
   estadoSesion.tenantId = '22222222-2222-2222-2222-222222222222';
   process.env.NEXT_PUBLIC_APP_URL = 'https://app.likida.ai';
+});
+
+describe('la puerta de origen (auditoría 21, BAJO-MEDIO)', () => {
+  it('desde otro sitio: 403 y el modelo ni se toca', async () => {
+    const r = await postear({ 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' });
+    expect(r.status).toBe(403);
+    expect(llamadas).toHaveLength(0);
+    expect(escrituras).toHaveLength(0);
+  });
 });
 
 describe('POST /api/admin/mapa-prospectos/mensaje — la persona no sale', () => {

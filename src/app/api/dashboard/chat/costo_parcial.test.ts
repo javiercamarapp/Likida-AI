@@ -46,11 +46,11 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const { POST } = await import('./route');
 const { PartialExecutionError } = await import('@/lib/llm/openrouter');
 
-function peticion() {
+function peticion(cabeceras: Record<string, string> = {}) {
   const req = new Request('http://likida.test/api/dashboard/chat', {
     method: 'POST',
     body: JSON.stringify({ mensajes: [{ rol: 'usuario', texto: '¿cuánto llevo de diésel?' }] }),
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...cabeceras },
   }) as unknown as Record<string, unknown>;
   // NextRequest.nextUrl — lo único que la ruta le pide es searchParams.
   req.nextUrl = new URL('http://likida.test/api/dashboard/chat');
@@ -62,6 +62,14 @@ async function drenar(res: Response) {
   if (!lector) return;
   while (!(await lector.read()).done) { /* drenar el stream para que start() termine */ }
 }
+
+describe('la puerta de origen (auditoría 21, BAJO-MEDIO)', () => {
+  it('desde otro sitio: 403 y el analista ni se toca', async () => {
+    const res = await POST(peticion({ 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' }));
+    expect((res as Response).status).toBe(403);
+    expect(ejecutarAnalista).not.toHaveBeenCalled();
+  });
+});
 
 describe('POST /api/dashboard/chat — el turno fallido TAMBIÉN se cobra (TC-A1)', () => {
   beforeEach(() => { registrarCosto.mockClear(); ejecutarAnalista.mockReset(); });

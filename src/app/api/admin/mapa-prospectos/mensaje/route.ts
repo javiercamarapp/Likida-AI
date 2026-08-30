@@ -28,6 +28,7 @@ import { lineaDecisor, notasSinPersona, reponerDecisor, MARCADOR_DECISOR } from 
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { sesionSuperadmin } from '../puerta';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -50,6 +51,14 @@ Reglas DURAS (violarlas invalida el mensaje):
 - Nada de emojis en el correo; en WhatsApp máximo uno.`;
 
 export async function POST(req: Request) {
+  // Auditoría 21, BAJO-MEDIO: el chequeo CSRF explícito (SEG-9) solo cubría
+  // /api/admin/palette y /v1/*. Escribe la ficha del prospecto y gasta
+  // dinero de modelo — autenticada solo por cookie de sesión.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('cerebro.mensaje_origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
+    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+  }
+
   const { error, sesion } = await sesionSuperadmin();
   if (error) return error;
   if (!sesion.tenantId) {

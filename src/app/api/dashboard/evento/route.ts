@@ -19,11 +19,19 @@ import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { pantallaDesdeRuta } from '@/app/dashboard/pantalla-evento';
 import { logger } from '@/lib/logger';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   if (bodyExcede(req, 1_000)) return new Response(null, { status: 204 });
+  // Auditoría 21, BAJO-MEDIO: el chequeo CSRF explícito (SEG-9) solo cubría
+  // /api/admin/palette y /v1/*. Esta ruta ya "jamás contesta un problema al
+  // panel" (204 siempre) — el rechazo por origen ajeno sigue esa misma regla.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('producto.pageview_origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
+    return new Response(null, { status: 204 });
+  }
 
   const s = await getSessionTenant();
   if (!s || !s.tenantId || s.rol === 'superadmin') return new Response(null, { status: 204 });

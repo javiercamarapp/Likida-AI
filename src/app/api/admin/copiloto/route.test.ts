@@ -136,6 +136,37 @@ describe('la puerta', () => {
   });
 });
 
+describe('la puerta de origen (auditoría 21, BAJO-MEDIO — mismo patrón que /api/admin/palette)', () => {
+  it('desde otro sitio: 403 y NI el chat NI una acción con intent se tocan', async () => {
+    const cabeceras = { 'Content-Type': 'application/json', 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' };
+    const chat = await POST(new Request('https://app.likida.ai/api/admin/copiloto', {
+      method: 'POST', headers: cabeceras, body: JSON.stringify({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }),
+    }));
+    expect(chat.status).toBe(403);
+    expect(ejecutarCopiloto).not.toHaveBeenCalled();
+
+    const accion = await POST(new Request('https://app.likida.ai/api/admin/copiloto', {
+      method: 'POST', headers: cabeceras, body: JSON.stringify({ intentId: 'x', accion: { id: 'apagar_agente', objetivo: 'agente:cobranza' } }),
+    }));
+    expect(accion.status).toBe(403);
+    expect(ejecutarAccionCopiloto).not.toHaveBeenCalled();
+  });
+
+  it('se contesta 403 sin mirar siquiera si el usuario es superadmin', async () => {
+    const cruzada = () => POST(new Request('https://app.likida.ai/api/admin/copiloto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'sec-fetch-site': 'cross-site' },
+      body: JSON.stringify({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }),
+    }));
+    sesion = null;
+    const sinSesion = await cruzada();
+    sesion = { userId: 'u-javier', tenantId: 'tenant-plataforma', rol: 'superadmin' };
+    const conSesion = await cruzada();
+    expect(sinSesion.status).toBe(conSesion.status);
+    expect(conSesion.status).toBe(403);
+  });
+});
+
 describe('la acción con intent (AdminActionIntent)', () => {
   const ACCION = { id: 'apagar_agente', objetivo: 'agente:cobranza', motivo: 'manda de más' };
 

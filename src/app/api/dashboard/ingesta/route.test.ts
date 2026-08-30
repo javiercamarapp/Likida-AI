@@ -38,9 +38,9 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const { POST } = await import('./route');
 
 const IMG = 'data:image/png;base64,AAAA';
-function postear(cuerpo: unknown = { imagen: IMG }) {
+function postear(cuerpo: unknown = { imagen: IMG }, cabeceras: Record<string, string> = {}) {
   return POST(new Request('https://app.likida.ai/api/dashboard/ingesta', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo),
+    method: 'POST', headers: { 'content-type': 'application/json', ...cabeceras }, body: JSON.stringify(cuerpo),
   }) as never);
 }
 
@@ -48,6 +48,14 @@ beforeEach(() => {
   sesion = { userId: 'u-1', tenantId: 't-1', rol: 'contador', nombre: 'C' };
   permitido = true; gastado = 0;
   extraer.mockClear(); registrarCosto.mockClear(); rateLimit.mockClear();
+});
+
+describe('la puerta de origen (auditoría 21, BAJO-MEDIO)', () => {
+  it('desde otro sitio: 403 y el modelo ni se toca', async () => {
+    const r = await postear({ imagen: IMG }, { 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' });
+    expect(r.status).toBe(403);
+    expect(extraer).not.toHaveBeenCalled();
+  });
 });
 
 describe('la puerta', () => {
