@@ -186,6 +186,41 @@ describe('/api/health', () => {
     );
   });
 
+  // AUDITORÍA 21 (29-ago-2026): antes de `configAusente`, esta redacción — una
+  // de las otras tres ramas reales de `estadoDescargaSat()` — no matcheaba el
+  // regex viejo ("no está configurado"/"no configurado") y caía como
+  // regresión real, disparando el correo "Urgente" cada hora para una
+  // variable que ya está parcialmente puesta.
+  it('hueco de configuración con una redacción que el regex viejo NO reconocía: la señal estructurada lo salva', async () => {
+    dbFalla = false;
+    alertarOperador.mockClear();
+    alertarHuecoConfiguracion.mockClear();
+    const ahora = new Date().toISOString();
+    latidos = [
+      {
+        id: 'descarga-sat',
+        ultimo_latido: ahora,
+        estado: 'parcial',
+        detalle: {
+          motivo: 'El camino directo al SAT está declarado pero NO construido: cambia LIKIDA_SAT_PROVEEDOR a «sw».',
+          configAusente: true,
+        },
+      },
+    ];
+
+    const r = await GET(peticion());
+    const c = await r.json();
+
+    expect(r.status).toBe(503);
+    expect(c).toMatchObject({ ok: false, status: 'degraded', checks: { db: 'ok', crons: 'degraded' } });
+    expect(alertarOperador).not.toHaveBeenCalled();
+    expect(alertarHuecoConfiguracion).toHaveBeenCalledWith(
+      'cron.config_ausente:descarga-sat',
+      expect.stringMatching(/NO construido/),
+      expect.objectContaining({ cron: 'descarga-sat' }),
+    );
+  });
+
   it('con la base caída: 503 y fail — lo que un monitor entiende sin leer el cuerpo', async () => {
     dbFalla = true;
     const r = await GET(peticion());

@@ -163,26 +163,59 @@ export function motivoDeSalto(detalle: Record<string, unknown>): string | null {
 }
 
 /**
- * ¿El `motivo` que el propio cron dejó en su latido describe un HUECO DE
- * CONFIGURACIÓN ya declarado (falta una variable de entorno, un contrato, una
- * credencial) en vez de una regresión real (algo que funcionaba y se rompió)?
+ * ¿El latido de un cron describe un HUECO DE CONFIGURACIÓN ya declarado
+ * (falta una variable de entorno, un contrato, una credencial) en vez de una
+ * regresión real (algo que funcionaba y se rompió)?
  *
- * Lee la MISMA convención de prosa que ya usa el repo entero para decir "esto
- * no está listo": `sat_descarga/index.ts` ("La descarga masiva no está
- * configurada: falta LIKIDA_SAT_PROVEEDOR..."), el cofre de credenciales
- * ("El cofre no está configurado..."), los canales de correo/WhatsApp
- * ("...no está configurado en este entorno"). No es una lista de crons a
- * mano — es leer la frase — así que un cron nuevo que declare su propio hueco
- * con esta misma convención queda cubierto sin tocar este archivo.
+ * DOS SEÑALES, en orden de preferencia:
  *
- * AUDITORÍA PROD 29-AGO-2026: sin esta distinción, `/api/health` trataba
- * `descarga-sat` sin `LIKIDA_SAT_PROVEEDOR` exactamente igual que una
- * regresión — un correo "Urgente" cada vez que un monitor externo pegaba al
- * endpoint (ocho en doce horas), indistinguible del cron que sí se rompió.
- * Ver `alertarHuecoConfiguracion` en `observability/alerta.ts`.
+ * 1. ESTRUCTURADA: `detalle.configAusente` (booleano). El cron ya resolvió la
+ *    pregunta internamente — p. ej. `estadoDescargaSat().configurado` en
+ *    `sat_descarga/index.ts`, que viaja hasta aquí vía `configAusente` en
+ *    `cron/descarga-sat/route.ts` — así que aquí solo se lee el veredicto, no
+ *    se reinterpreta texto libre. Es la señal que decide cuando está
+ *    presente, sea cual sea la redacción de `motivo`.
+ * 2. DE PROSA (respaldo, para crons que no traen `configAusente`): la MISMA
+ *    convención que ya usa el repo entero para decir "esto no está listo":
+ *    el cofre de credenciales ("El cofre no está configurado..."), los
+ *    canales de correo/WhatsApp ("...no está configurado en este entorno").
+ *    No es una lista de crons a mano — es leer la frase — así que un cron
+ *    nuevo que declare su propio hueco con esta misma convención queda
+ *    cubierto sin tocar este archivo. Pero es, por construcción, un regex
+ *    contra texto libre: SIEMPRE que un cron pueda calcular el booleano,
+ *    debe mandarlo (señal 1) en vez de confiar en que su prosa futura siga
+ *    matcheando este patrón.
+ *
+ * AUDITORÍA PROD 29-AGO-2026 (ronda 18): sin la señal estructurada,
+ * `/api/health` trataba `descarga-sat` sin `LIKIDA_SAT_PROVEEDOR` igual que
+ * una regresión — un correo "Urgente" cada vez que un monitor externo pegaba
+ * al endpoint (ocho en doce horas), indistinguible del cron que sí se rompió.
+ *
+ * AUDITORÍA 21 (29-ago-2026, ronda siguiente): ese arreglo dejó el regex de
+ * respaldo cubriendo solo UNA de las cuatro ramas de `estadoDescargaSat()`
+ * (proveedor ausente) — las otras tres (declarado y no construido,
+ * desconocido, credenciales incompletas) redactan su motivo distinto y no
+ * matcheaban. `configAusente` cierra el hueco de raíz para `descarga-sat`
+ * (no depende de la redacción); el regex de abajo también se amplió para
+ * cubrir las tres frases reales, como red de seguridad para latidos viejos
+ * (escritos antes de este cambio) o crons que todavía no manden la señal
+ * estructurada. Ver `alertarHuecoConfiguracion` en `observability/alerta.ts`.
  */
-export function esHuecoDeConfiguracion(motivo: unknown): motivo is string {
-  return typeof motivo === 'string' && /no\s+est[aá]\s+configurad[oa]|no\s+configurad[oa]/i.test(motivo);
+const RE_HUECO_CONFIGURACION =
+  /no\s+est[aá]\s+configurad[oa]|no\s+configurad[oa]|no\s+construid[oa]|no\s+es\s+un[a]?\s+\S+\s+conocid[oa]|\bfalta\s+LIKIDA_[A-Z_]+\b/i;
+
+function esHuecoPorProsa(motivo: unknown): boolean {
+  return typeof motivo === 'string' && RE_HUECO_CONFIGURACION.test(motivo);
+}
+
+export function esHuecoDeConfiguracion(valor: unknown): boolean {
+  if (typeof valor === 'string') return esHuecoPorProsa(valor);
+  if (valor !== null && typeof valor === 'object') {
+    const detalle = valor as Record<string, unknown>;
+    if (typeof detalle.configAusente === 'boolean') return detalle.configAusente;
+    return esHuecoPorProsa(detalle.motivo);
+  }
+  return false;
 }
 
 export interface LatidoDetallado extends SaludCron {
