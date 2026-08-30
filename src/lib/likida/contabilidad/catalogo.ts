@@ -39,6 +39,7 @@ const CONCEPTOS: readonly ConceptoGasto[] = [
  */
 export const CUENTAS_BALANCE = {
   iva_acreditable: 'ivaAcreditable',
+  iva_no_acreditable: 'ivaNoAcreditable',
   anticipo_operador: 'anticipoOperador',
   por_cobrar_operador: 'porCobrarOperador',
   por_pagar_operador: 'porPagarOperador',
@@ -47,6 +48,8 @@ export const CUENTAS_BALANCE = {
 /** Cómo se le explica cada llave reservada a quien la captura. */
 export const AYUDA_BALANCE: Record<keyof typeof CUENTAS_BALANCE, string> = {
   iva_acreditable: 'IVA acreditable de los comprobantes del viaje.',
+  iva_no_acreditable:
+    'IVA/IEPS que el motor de cuadre NO acreditó (RFC ajeno, EFOS, efectivo, o IEPS de diésel, que nunca se acredita). Sigue siendo dinero del anticipo.',
   anticipo_operador: 'El anticipo entregado al operador; el asiento lo cancela.',
   por_cobrar_operador: 'Lo que el operador debe devolver (comprobó de menos).',
   por_pagar_operador: 'Lo que se le debe al operador (puso de su bolsa).',
@@ -79,7 +82,7 @@ export async function catalogoDeclarado(tenantId: string): Promise<LecturaCatalo
   const declarado = crudo as Record<string, unknown>;
   const catalogo = armarCatalogo(declarado);
   const vacio = Object.keys(catalogo.gastos).length === 0 &&
-    !catalogo.ivaAcreditable && !catalogo.anticipoOperador &&
+    !catalogo.ivaAcreditable && !catalogo.ivaNoAcreditable && !catalogo.anticipoOperador &&
     !catalogo.porCobrarOperador && !catalogo.porPagarOperador;
   return vacio ? { ok: false, motivo: 'sin_declarar' } : { ok: true, catalogo };
 }
