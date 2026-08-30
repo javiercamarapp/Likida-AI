@@ -688,6 +688,19 @@ export async function correrFlota(
 export interface ResumenCorrida {
   corrio: boolean;
   motivo?: string;
+  /** El `configurado` de `estadoDescargaSat()`, tal cual — AUDITORÍA PROD
+   *  29-AGO-2026 (ronda 21): antes de este campo, la única señal de "esto es
+   *  un hueco de configuración, no una regresión" que viajaba hasta el latido
+   *  era la PROSA de `motivo`, y `esHuecoDeConfiguracion` (`admin/salud.ts`)
+   *  solo reconocía la redacción de UNA de las cuatro ramas de
+   *  `estadoDescargaSat()` (proveedor ausente). Las otras tres — proveedor
+   *  declarado y no construido, proveedor desconocido, credenciales
+   *  incompletas — se leían como regresión real. Este booleano es el mismo
+   *  que la función YA calculaba internamente; ahora viaja hasta
+   *  `registrarLatido` (`cron/descarga-sat/route.ts`) para que la
+   *  clasificación en `/api/health` se decida sobre un campo estructurado, no
+   *  sobre si alguien redactó el motivo con las palabras correctas. */
+  configurado: boolean;
   flotas: number;
   resumenes: ResumenFlota[];
   /** Unidades de trabajo que el RELOJ DE LA VUELTA dejó sin mirar en TODO el
@@ -731,7 +744,10 @@ export async function correrDescargaSat(
   if (prov === null) {
     // NO se simula nada y NO se devuelve un verde de mentira: se dice qué
     // falta, con las palabras que la pantalla también usa.
-    return { corrio: false, motivo: estado.motivo ?? 'La descarga masiva no está configurada.', flotas: 0, resumenes: [], sinTurno: 0 };
+    return {
+      corrio: false, motivo: estado.motivo ?? 'La descarga masiva no está configurada.',
+      configurado: estado.configurado, flotas: 0, resumenes: [], sinTurno: 0,
+    };
   }
 
   const { data: configs, error } = await acotada(supabaseAdmin()
@@ -786,5 +802,5 @@ export async function correrDescargaSat(
   // —«esta pasada dejó trabajo del SAT sin hacer»—, y el detalle por flota
   // sigue estando en `resumenes[].sinTurno` para quien lo necesite.
   const sinTurno = flotasSinTurno + resumenes.reduce((n, x) => n + x.sinTurno, 0);
-  return { corrio: true, flotas: resumenes.length, resumenes, sinTurno };
+  return { corrio: true, configurado: true, flotas: resumenes.length, resumenes, sinTurno };
 }
