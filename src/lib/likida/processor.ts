@@ -74,7 +74,7 @@ import {
   iniciarRenovacionMessageClaim,
 } from '@/lib/likida/conv';
 import { registrarCosto, registrarCostoWhatsApp, faseDeModelo, vincularCostosALiquidacion } from '@/lib/likida/costos';
-import { sendText, sendButtons, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText } from '@/lib/meta/client';
+import { sendText, sendButtons, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText, ImagenDemasiadoPesadaError } from '@/lib/meta/client';
 import {
   decidirAcuse, mensajeConfirmar, mensajeAcuse, mensajeRefoto, esPeticionDeFoto,
   mensajeCorregir, mensajeConfirmado, leerBoton, mensajeDemasiadasDudas,
@@ -811,6 +811,17 @@ export interface OpcionesInbound {
 const COSTO_MINIMO_TURNO_MS = 15_000;
 
 /**
+ * AUDITORÍA 21, MEDIO: lo que recibe el chofer cuando su foto excede
+ * `MAX_IMAGEN_WHATSAPP_BYTES` (`ImagenDemasiadoPesadaError`, `meta/client.ts`).
+ * A propósito NO es el mismo texto que "no pude descargar tu foto": ahí
+ * reenviar la misma foto puede funcionar (fue un problema de red o del token);
+ * aquí reenviar la MISMA foto sin comprimir falla otra vez por el mismo
+ * motivo, así que hay que decírselo con esas palabras.
+ */
+const MENSAJE_FOTO_PESADA =
+  'Tu foto es muy pesada para que la pueda leer 📦. Intenta mandarla de nuevo o comprimida, por favor. 🙏';
+
+/**
  * ── EL REGISTRO DE JORNADA POR WHATSAPP (LFT 132 fr. XXXIV, mig. 0241) ─────
  *
  * Vive fuera de `processInbound` porque se cablea DOS VECES, y la razón es la
@@ -1440,7 +1451,13 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         try {
           // El `??` es el gancho de QA (ver InboundMessage.mediaDataUrlQA):
           // producción siempre trae el campo undefined y descarga de Meta.
-          const dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
+          let dataUrl: string | null;
+          try {
+            dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
+          } catch (e) {
+            if (e instanceof ImagenDemasiadoPesadaError) { await sendText(msg.from, MENSAJE_FOTO_PESADA); return; }
+            throw e;
+          }
           if (!dataUrl) { await sendText(msg.from, 'No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
           // DAT-01: el hash se calcula UNA vez y se conserva. Antes se usaba
           // para nombrar el archivo del bucket y se tiraba, así que la fila de
@@ -1656,7 +1673,13 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       if (esCaptionPod(msg.text)) {
         try {
           // Gancho de QA (ver InboundMessage.mediaDataUrlQA) — undefined en producción.
-          const dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
+          let dataUrl: string | null;
+          try {
+            dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
+          } catch (e) {
+            if (e instanceof ImagenDemasiadoPesadaError) { await say(MENSAJE_FOTO_PESADA); return; }
+            throw e;
+          }
           if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
           // El constraint pod_subido_tiene_archivo manda: sin archivo guardado
           // no hay "subido" que registrar. Fallar cerrado y decirlo.
@@ -1747,7 +1770,13 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // `intake/rafaga.ts`.
       try {
         // Gancho de QA (ver InboundMessage.mediaDataUrlQA) — undefined en producción.
-        const dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
+        let dataUrl: string | null;
+        try {
+          dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
+        } catch (e) {
+          if (e instanceof ImagenDemasiadoPesadaError) { await say(MENSAJE_FOTO_PESADA); return; }
+          throw e;
+        }
         if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
 
         // ── EL HASH SE CALCULA SIEMPRE (DAT-01, CRÍTICO) ────────────────────

@@ -17,6 +17,49 @@ const DOWNLOAD_TIMEOUT_MS = 15_000;
 // lo entrega.
 const SEND_TIMEOUT_MS = 10_000;
 
+/**
+ * AUDITORÍA 21, MEDIO: tope de tamaño para una IMAGEN entrante de WhatsApp
+ * antes de que `downloadMediaAsDataUrl` la deje pasar al OCR.
+ *
+ * Hasta hoy no existía ningún tope aquí: el binario que Meta entregara, del
+ * tamaño que fuera, se convertía completo a base64 y entraba al cuerpo JSON
+ * de la llamada a OpenRouter. Es la misma clase de hallazgo que ya se cerró
+ * del lado del panel (RES-20, 22-ago-2026, ver `dashboard/ingesta/limites.ts`
+ * y su `MAX_DATAURL`), sin cerrar todavía del lado de WhatsApp — el canal por
+ * el que entra el 100% de los comprobantes.
+ *
+ * El número NO es el mismo que `MAX_DATAURL` (4 MB) a propósito: aquél acota
+ * el CUERPO HTTP que el navegador del contralor sube a una función serverless
+ * de Vercel, que corta en 4.5 MB antes de que nuestro código corra — una
+ * restricción de transporte que no existe aquí, porque esta descarga la hace
+ * el propio servidor contra el CDN de Meta, sin pasar por el body de ninguna
+ * función nuestra. El límite que sí aplica aquí es el que la WhatsApp Cloud
+ * API declara para mensajes de tipo imagen: **5 MB** en bytes crudos (no de
+ * base64). Se deja 1 MB de margen sobre ese tope oficial —6 MB— para no
+ * rechazar una foto legítima por un `file_size` ligeramente optimista que
+ * reporte Meta; cualquier imagen por encima de ese margen no es algo que la
+ * WhatsApp Cloud API debería producir para un mensaje de tipo "imagen", así
+ * que se trata como anómala y se rechaza ANTES del OCR, con un mensaje claro
+ * al chofer en vez de dejarla correr con un costo y un tiempo sin medir
+ * (ver hallazgo MEDIO, auditoría 21, rendimiento).
+ */
+export const MAX_IMAGEN_WHATSAPP_BYTES = 6 * 1024 * 1024; // 6 MB, bytes crudos
+
+/**
+ * Se lanza desde `downloadMediaAsDataUrl` cuando la IMAGEN descargada excede
+ * `MAX_IMAGEN_WHATSAPP_BYTES`. Deliberadamente NO la traga el `catch` genérico
+ * de esa función (que convierte cualquier otra falla en `null`): el llamador
+ * necesita distinguir "no se pudo descargar" (pídele que reenvíe, puede
+ * funcionar) de "la foto pesa demasiado" (reenviar la MISMA foto sin
+ * comprimir no arregla nada — hay que decírselo con esas palabras).
+ */
+export class ImagenDemasiadoPesadaError extends Error {
+  constructor(public readonly bytes: number, public readonly limiteBytes: number) {
+    super(`imagen de ${bytes} bytes excede el tope de ${limiteBytes} bytes`);
+    this.name = 'ImagenDemasiadoPesadaError';
+  }
+}
+
 function token(): string {
   const t = process.env.WHATSAPP_ACCESS_TOKEN;
   if (!t) throw new Error('WHATSAPP_ACCESS_TOKEN no configurado');
@@ -547,7 +590,16 @@ export async function downloadMediaAsText(mediaId: string): Promise<string | nul
   }
 }
 
-/** Descarga un media entrante de Meta y lo devuelve como data-URL para el OCR. */
+/** Descarga un media entrante de Meta y lo devuelve como data-URL para el OCR.
+ *
+ * Lanza `ImagenDemasiadoPesadaError` (ver arriba) cuando lo descargado es una
+ * IMAGEN y excede `MAX_IMAGEN_WHATSAPP_BYTES` — el llamador debe atraparla por
+ * separado del `null` genérico. El chequeo corre dos veces a propósito:
+ * primero contra `file_size` (si Meta lo reporta, evita bajar el binario
+ * completo de una imagen que ya sabemos que sobra) y otra vez contra el
+ * tamaño real del buffer ya descargado (por si `file_size` viniera ausente o
+ * equivocado) — ninguna de las dos es opcional, son la misma guardia en dos
+ * puntos distintos del camino. */
 export async function downloadMediaAsDataUrl(mediaId: string): Promise<string | null> {
   try {
     const meta = await fetch(`${GRAPH}/${mediaId}`, {
@@ -555,15 +607,27 @@ export async function downloadMediaAsDataUrl(mediaId: string): Promise<string | 
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
     if (!meta.ok) { await avisarFalloMedia('metadatos', mediaId, meta); return null; }
-    const { url, mime_type } = (await meta.json()) as { url: string; mime_type: string };
+    const { url, mime_type, file_size } = (await meta.json()) as {
+      url: string; mime_type: string; file_size?: number;
+    };
+    const esImagen = (mime_type || '').startsWith('image/');
+    if (esImagen && typeof file_size === 'number' && file_size > MAX_IMAGEN_WHATSAPP_BYTES) {
+      logger.warn('wa.imagen_demasiado_pesada', { mediaId, bytes: file_size, etapa: 'metadatos' });
+      throw new ImagenDemasiadoPesadaError(file_size, MAX_IMAGEN_WHATSAPP_BYTES);
+    }
     const bin = await fetch(url, {
       headers: { Authorization: `Bearer ${token()}` },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
     if (!bin.ok) { await avisarFalloMedia('contenido', mediaId, bin); return null; }
     const buf = Buffer.from(await bin.arrayBuffer());
+    if (esImagen && buf.length > MAX_IMAGEN_WHATSAPP_BYTES) {
+      logger.warn('wa.imagen_demasiado_pesada', { mediaId, bytes: buf.length, etapa: 'binario' });
+      throw new ImagenDemasiadoPesadaError(buf.length, MAX_IMAGEN_WHATSAPP_BYTES);
+    }
     return `data:${mime_type || 'image/jpeg'};base64,${buf.toString('base64')}`;
   } catch (e) {
+    if (e instanceof ImagenDemasiadoPesadaError) throw e;
     logger.warn('wa.downloadMedia', { err: e instanceof Error ? e.message : String(e) });
     return null;
   }
