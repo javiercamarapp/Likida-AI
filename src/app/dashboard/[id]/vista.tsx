@@ -138,9 +138,17 @@ export function Diferencia({ nota, monto }: { nota: string; monto: number }) {
 // ── Comprobantes ─────────────────────────────────────────────────────────
 
 /** c_FormaPago del SAT — solo las claves que un comprobante de viaje trae
- *  en la práctica. Una clave desconocida se pinta cruda, no se adivina. */
+ *  en la práctica. Una clave desconocida se pinta cruda, no se adivina.
+ *
+ *  AUDITORÍA 21 (frontend, MEDIO 2): faltaban '05' y '06' pese a que el motor
+ *  los trata como medios VÁLIDOS (`MEDIOS_LISR_27_III` y
+ *  `MEDIOS_ELECTRONICOS_PEAJE` en cuadre/engine.ts) y '05' es el pago típico
+ *  del diésel de flota (RMF 3.3.1.7) — el contralor veía "05" crudo justo en
+ *  la columna que sustenta la deducibilidad. `etiqueta_forma_pago.test.ts`
+ *  vigila que toda clave que el motor admite tenga rótulo aquí. */
 const FORMA_PAGO: Record<string, string> = {
   '01': 'Efectivo', '02': 'Cheque', '03': 'Transferencia', '04': 'Tarjeta de crédito',
+  '05': 'Monedero electrónico', '06': 'Dinero electrónico',
   '28': 'Tarjeta de débito', '29': 'Tarjeta de servicios', '99': 'Por definir',
 };
 

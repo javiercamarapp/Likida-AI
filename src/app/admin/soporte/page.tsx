@@ -18,22 +18,15 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaMx, fechaHoraMx, numero } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { StatCard, StatusPill, EstadoVacio, EstadoError, type Estado } from '../ui/kit';
+import { StatCard, StatusPill, EstadoVacio, EstadoError } from '../ui/kit';
 import { FormaConAviso, CampoTexto, Casilla, Selector, type ResultadoAccion } from '../ui/forma';
 import { HiloSoporte } from '../ui/hilo-soporte';
+// El rótulo del estado del ticket vivía aquí, privado, y /dashboard/soporte
+// imprimía `t.estado` crudo (auditoría 21, MEDIO 1). Ahora las dos pantallas
+// importan el MISMO mapa — el patrón de `dashboard/estatus.ts`.
+import { pillTicket } from '../../dashboard/soporte/estatus';
 
 export const dynamic = 'force-dynamic';
-
-/** `ticket_soporte.estado` (dominio de la 0051) como pill. Un valor fuera del
- *  dominio se pinta crudo en neutro — visible, no roto (mismo criterio que
- *  `PILL_ESTATUS` en resumen-visual). */
-const PILL_TICKET: Record<string, { estado: Estado; etiqueta: string }> = {
-  abierto: { estado: 'warn', etiqueta: 'Abierto' },
-  en_proceso: { estado: 'warn', etiqueta: 'En proceso' },
-  esperando: { estado: 'neutral', etiqueta: 'Esperando' },
-  resuelto: { estado: 'ok', etiqueta: 'Resuelto' },
-  cerrado: { estado: 'ok', etiqueta: 'Cerrado' },
-};
 
 /** "hace 3 h" / "hace 2 d" — la edad del ticket contra el reloj del SERVIDOR
  *  (`ahoraMs()`), el mismo contra el que se resta el SLA: dos relojes en la
@@ -273,8 +266,8 @@ export default async function SoportePage({
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <StatusPill estado={(PILL_TICKET[detalle.estado] ?? { estado: 'neutral' as Estado }).estado}>
-                            {(PILL_TICKET[detalle.estado] ?? { etiqueta: detalle.estado }).etiqueta}
+                          <StatusPill estado={pillTicket(detalle.estado).estado}>
+                            {pillTicket(detalle.estado).etiqueta}
                           </StatusPill>
                           <span className="text-xs flex items-center gap-1" style={{ color: 'var(--muted)' }}>
                             <UserCheck width={13} height={13} strokeWidth={1.75} />
@@ -372,7 +365,7 @@ export default async function SoportePage({
                       </thead>
                       <tbody>
                         {tickets.map((t) => {
-                          const pill = PILL_TICKET[t.estado] ?? { estado: 'neutral' as Estado, etiqueta: t.estado };
+                          const pill = pillTicket(t.estado);
                           const sla = slaDe(t);
                           return (
                             <tr key={t.id} className="border-t" style={{ borderColor: 'var(--line2)' }}>
