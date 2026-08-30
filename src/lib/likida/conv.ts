@@ -198,6 +198,50 @@ export async function getOpenViaje(tenantId: string, operadorId: string): Promis
   return data.id as string;
 }
 
+/** Lo que se sabe de la última liquidación reciente de un operador. */
+export interface LiquidacionReciente { viajeId: string; liquidacionId: string }
+
+/** Ventana en la que un cierre cuenta como "reciente" para el reintento. */
+const VENTANA_LIQUIDACION_RECIENTE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * La liquidación MÁS RECIENTE del operador (últimas 24h), o `null`.
+ *
+ * AUDITORÍA 21, CRÍTICO (C1): cuando el ciclo del agente muere DESPUÉS de que
+ * `guardar_liquidacion` ya persistió el cierre, el chofer recibe "se me trabó"
+ * y obedece reenviando. Su reintento cae en la rama sin viaje abierto —el
+ * viaje ya es `liquidado`— y el fallback le afirmaba "No tienes un viaje
+ * abierto", que él lee como "tu cierre no existió". Esta consulta es lo que
+ * permite decirle la verdad completa: tu viaje YA quedó liquidado.
+ *
+ * FAIL-OPEN Y NUNCA LANZA, igual que `viajeAbiertoDesdeMs` y al revés que
+ * `getOpenViaje`: `null` significa "no se supo", y con eso el llamador cae al
+ * mensaje genérico — que sigue siendo verdad (`getOpenViaje` ya estableció,
+ * sin error, que no hay viaje abierto). Un blip de red aquí no puede tirar el
+ * turno entero ni inventar un cierre.
+ */
+export async function liquidacionRecienteDe(tenantId: string, operadorId: string): Promise<LiquidacionReciente | null> {
+  const desde = new Date(Date.now() - VENTANA_LIQUIDACION_RECIENTE_MS).toISOString();
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('liquidacion')
+    // Anclado a `viaje_id` (regla de embeds del repo): `liquidacion` no trae
+    // operador, se filtra por el del viaje embebido.
+    .select('id, viaje_id, viaje:viaje_id!inner(operador_id)')
+    .eq('tenant_id', tenantId)
+    .eq('viaje.operador_id', operadorId)
+    .gte('created_at', desde)
+    .order('created_at', { ascending: false })
+    .order('id')
+    .limit(1)
+    .maybeSingle(), 'liquidacionRecienteDe');
+  if (error) {
+    logger.warn('liquidacion_reciente.fallo', { tenant: tenantId, operador: operadorId, err: error.message });
+    return null;
+  }
+  if (!data) return null;
+  return { viajeId: data.viaje_id as string, liquidacionId: data.id as string };
+}
+
 /**
  * DESDE CUÁNDO está abierto este viaje (epoch en ms), o `null` si no se supo.
  *
