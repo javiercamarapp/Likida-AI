@@ -50,7 +50,7 @@ import { violaIndice, llegoTarde } from '@/lib/likida/pg_errores';
 import { mxn, fechaMx } from '@/lib/formato';
 import { guardiaFundamento, normasDeToolCalls } from '@/lib/likida/normas/fundamento';
 import { guardiaEstado } from '@/lib/likida/cuadre/estado_afirmado';
-import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS, acotada, type Presupuesto } from '@/lib/likida/presupuesto';
+import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS, MARGEN_CIERRE_MS, acotada, type Presupuesto } from '@/lib/likida/presupuesto';
 import { conceptoDesdeClave } from '@/lib/likida/intake/concepto';
 import { getConfig } from '@/lib/likida/config';
 import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/likida/intake/emparejar';
@@ -65,7 +65,7 @@ import {
   registrarSolicitudArco,
 } from '@/lib/likida/repo';
 import {
-  resolveOperador, getOpenViaje, viajeAbiertoDesdeMs, getTenantContext, type ResolvedOperador,
+  resolveOperador, getOpenViaje, viajeAbiertoDesdeMs, liquidacionRecienteDe, getTenantContext, type ResolvedOperador,
   loadConversation, saveConversation, claimMessage,
   acquireViajeLock, intentarLockViaje, TTL_LOCK_CIERRE_MS,
   releaseViajeLock, releaseMessageClaim, completarMessageClaim,
@@ -1588,6 +1588,26 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         }
       }
 
+      // ── ¿ES EL REINTENTO DE UN CIERRE QUE SÍ OCURRIÓ? (auditoría 21, C1) ──
+      // El chofer al que un fallo posterior a `guardar_liquidacion` le dijo
+      // "se me trabó, ¿me reenvías tu último mensaje?" obedece y cae AQUÍ,
+      // porque su viaje ya es `liquidado`. "No tienes un viaje abierto" es
+      // verdad a medias y él la lee como "tu cierre no existió". Si hay una
+      // liquidación reciente suya, se le confirma el cierre — la verdad
+      // completa. `liquidacionRecienteDe` es fail-open (null si no se supo):
+      // el mensaje genérico de abajo sigue siendo cierto en ese caso.
+      try {
+        const reciente = await liquidacionRecienteDe(op.tenantId, op.operadorId);
+        if (reciente) {
+          logger.info('sin_viaje.cierre_confirmado', { tenant: op.tenantId, operador: op.operadorId, viaje: reciente.viajeId, liq: reciente.liquidacionId });
+          await sendText(msg.from, 'Tu último viaje ya quedó liquidado ✅ — no tienes ninguno abierto ahorita. Si no te llegó tu PDF, pídeselo a tu contralor: él ya lo tiene en el panel. 👍');
+          return;
+        }
+      } catch (e) {
+        // Nunca debería lanzar (es fail-open), pero un aviso accesorio no
+        // puede tirar la respuesta del turno.
+        logger.warn('sin_viaje.liquidacion_reciente', { err: e instanceof Error ? e.message : String(e) });
+      }
       await sendText(msg.from, 'No tienes un viaje abierto para liquidar ahorita. Cuando tu flota te asigne uno, aquí lo cerramos. 👍');
       return;
     }
@@ -3339,9 +3359,15 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // partialToolCalls. Sin recuperación: liquidacion persistida en DB pero el
       // operador recibe "se trabó" y NUNCA su PDF → huérfano. Se recupera tratando
       // el cierre como válido, vinculando costos y armando el resumen REAL del motor.
-      // FLAG (HARD RULE 3): default off = comportamiento actual EXACTO (mensaje de
-      // error, sin cierre). Se recomienda ON para el demo (ver REPORTE_NOCHE).
-      const recuperar = process.env.LIKIDA_RECUPERAR_CIERRE_PARCIAL === '1';
+      // AUDITORÍA 21, CRÍTICO (C1): esto era opt-in (`=== '1'`) con default
+      // APAGADO, así que el comportamiento de fábrica era exactamente el peor
+      // caso que el comentario de arriba describe: liquidación persistida,
+      // chofer con "se me trabó", y su reintento chocando con "no tienes viaje
+      // abierto". La recuperación decide por EVIDENCIA —`partialToolCalls` trae
+      // `guardar_liquidacion` exitoso o no la trae—, no por configuración de
+      // infraestructura. Default ENCENDIDO; `=0` queda como apagador de
+      // emergencia (`.env.example` ya recomendaba prenderlo desde AUDIT_V3).
+      const recuperar = process.env.LIKIDA_RECUPERAR_CIERRE_PARCIAL !== '0';
       const parcial = e instanceof PartialExecutionError ? e.partialToolCalls : null;
 
       // LO QUE SE GASTÓ ANTES DE CAERSE TAMBIÉN SE PAGÓ. Esta rama nunca llamaba
@@ -3431,6 +3457,32 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           }
         }
       }
+    }
+
+    // ── EL RELOJ SE VUELVE A MIRAR DESPUÉS DEL AGENTE (auditoría 21, C2) ─────
+    //
+    // Hasta aquí la última consulta al reloj era el `timeoutMs` del agente: la
+    // cola de cierre entera corría a ciegas contra los techos reales de sus
+    // pasos (10s por envío de WhatsApp, 9.5s por consulta). Si el agente
+    // devoró el presupuesto y Meta/Supabase están lentos, Vercel mata el
+    // proceso a media cola: sin excepción, sin catch, sin log — con la
+    // liquidación YA persistida.
+    //
+    // `margenDuro()` es lo que queda hasta `maxDuration`, sin descontar nada.
+    // Si ya no alcanza el margen real del cierre, se deja rastro RUIDOSO (la
+    // muerte del proceso no deja ninguno; esto sí) y los pasos ACCESORIOS se
+    // omiten con su propio log — el aviso al jefe y el de barrera vencida —
+    // para gastar lo que queda en los irrenunciables: la respuesta y el PDF
+    // del chofer. Recortar también esos sería fabricar a propósito el mismo
+    // silencio que se viene a evitar; se intentan igual, cada uno acotado por
+    // su propio techo.
+    const margenRealMs = reloj.margenDuro();
+    const cierreConMargen = margenRealMs >= MARGEN_CIERRE_MS;
+    if (!cierreConMargen) {
+      logger.error('cierre.sin_margen', {
+        tenant: op.tenantId, viaje: viajeId, cerro: closed,
+        gastadoMs: reloj.gastado(), margenRealMs, requeridoMs: MARGEN_CIERRE_MS,
+      });
     }
 
     // GUARDIA DETERMINÍSTICA (código, no prompt): el LLM NUNCA reporta cifras que
@@ -3553,7 +3605,12 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // clase de mentira que `guardiaEstado` existe para tapar, solo que este
     // texto no pasa por ninguna guardia. Se bifurca la frase ENTERA por
     // `closed`, no solo el consejo (que ya se bifurcaba desde la ronda 8).
-    if (!intakeOk) {
+    if (!intakeOk && !cierreConMargen) {
+      // Sin margen, este aviso accesorio no puede costarle al chofer su PDF:
+      // se omite con rastro (auditoría 21, C2). El dato de fondo —cuántos
+      // comprobantes entraron— sigue visible para el contralor en el panel.
+      logger.warn('cierre.aviso_barrera_omitido_sin_margen', { tenant: op.tenantId, viaje: viajeId, margenRealMs });
+    } else if (!intakeOk) {
       try {
         const n = (await getGastos(viajeId, op.tenantId)).length;
         const aviso = closed
@@ -3687,7 +3744,17 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // reproduce. El try/catch es lo que impide que este await cueste el
       // cierre; son dos lecturas y un envío, no un presupuesto — y están
       // contados en `PASOS_CIERRE` (A24).
-      try {
+      if (!cierreConMargen) {
+        // AUDITORÍA 21, C2: el aviso al jefe son hasta 5 viajes de red más
+        // (dos consultas, una firma y dos envíos). Sin margen, correrlos
+        // arriesga que Vercel mate el proceso ANTES de `saveConversation` y
+        // del release del lock. Se omite con rastro; el contralor tiene la
+        // liquidación y su PDF en el panel, y este log es la señal para
+        // avisarle por otra vía.
+        // `warn` y no `error`: el error RUIDOSO de este estado ya quedó arriba
+        // (`cierre.sin_margen`); esto es el detalle de QUÉ se recortó.
+        logger.warn('cierre.jefe_omitido_sin_margen', { tenant: op.tenantId, viaje: viajeId, margenRealMs });
+      } else try {
         let urlPdfJefe: string | null = null;
         if (pdfContralorGenerado) {
           const firma = await acotada(supabaseAdmin().storage.from('liquidaciones').createSignedUrl(`${op.tenantId}/${viajeId}.pdf`, 60), 'createSignedUrl.contralor');
