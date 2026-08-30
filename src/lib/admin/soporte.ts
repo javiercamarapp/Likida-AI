@@ -18,15 +18,23 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { round2 } from '@/lib/formato';
+import { ESTADOS_TICKET, ESTADOS_TERMINALES } from '@/lib/likida/soporte';
 
 /** Cuántos tickets se LISTAN de una vez. Es un tope de pantalla, no un total:
  *  los conteos salen de `contarTickets` y la cola dice "N de M". */
 export const TOPE_TICKETS = 200;
 
-/** Los dos estados TERMINALES del dominio de `ticket_soporte.estado` (0051).
- *  Vive aquí —junto a la lectura— y no en cada pantalla, para que "abierto"
- *  no se calcule distinto en /admin/soporte y en la bandeja de escalaciones. */
-export const ESTADOS_TICKET_CERRADO: ReadonlySet<string> = new Set(['resuelto', 'cerrado']);
+/** Los estados TERMINALES del dominio de `ticket_soporte.estado` (0051),
+ *  DERIVADOS de `ESTADOS_TICKET` (la fuente, `likida/soporte.ts`) filtrados
+ *  por `ESTADOS_TERMINALES` (la misma fuente) — antes era una lista
+ *  independiente escrita a mano aquí, que un estado terminal nuevo (p. ej.
+ *  `cancelado`) no habría movido: el conteo de "cerrados" de /admin se habría
+ *  quedado congelado en los dos de siempre. Vive aquí —junto a la lectura— y
+ *  no en cada pantalla, para que "abierto" no se calcule distinto en
+ *  /admin/soporte y en la bandeja de escalaciones. */
+export const ESTADOS_TICKET_CERRADO: ReadonlySet<string> = new Set(
+  ESTADOS_TICKET.filter((e) => ESTADOS_TERMINALES.has(e)),
+);
 
 export interface TicketCruzado {
   id: string;
