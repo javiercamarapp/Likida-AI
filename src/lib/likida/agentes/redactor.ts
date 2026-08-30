@@ -436,14 +436,28 @@ export async function redactarCorreoFrio(
     });
     pieza = { piezaId, asunto: asuntoA, aviso, costoUsd };
   } catch (e) {
-    // El modelo YA gastó: el costo se registra aunque la pieza no entrara —
-    // tirarlo dejaría al techo diario ciego al modo de falla que más gasta.
+    // AUDITORÍA 21 (agéntico, MEDIO): la lectura previa de `pendientes`
+    // (arriba, paso 3) basta contra un humano pero no contra dos disparadores
+    // en carrera (el botón del tablero y el cron nivel 2, ambos llaman a
+    // `redactarCorreoFrio` para el mismo prospecto). El árbitro real es el
+    // índice único parcial `cola_correo_frio_por_prospecto` (0270): la
+    // invocación que pierde la carrera rebota aquí con 23505, y se traduce al
+    // MISMO mensaje de pantalla que ya daba el freno de lectura — el mismo
+    // patrón que `encolarPiezaExito` usa contra `cola_parte_exito_por_periodo`
+    // (exito.ts). El costo del modelo YA se gastó de todos modos: se registra
+    // aunque la pieza no entrara — tirarlo dejaría al techo diario ciego al
+    // modo de falla que más gasta.
+    const msg = e instanceof Error ? e.message : String(e);
+    const esCarreraDuplicada = msg.includes('cola_correo_frio_por_prospecto') || msg.includes('duplicate key');
+    const error = esCarreraDuplicada
+      ? new DatoInvalido('Este prospecto ya tiene una pieza esperando aprobación — resuélvela antes de redactar otra.')
+      : e;
     await registrarCorrida(null, 'redactor', {
       inicio, fin: new Date(), estado: 'fallo', disparo, costoUsd,
       resumen: { prospecto: prospectoId },
-      error: e instanceof DatoInvalido ? e.message : 'No se pudo encolar la pieza.',
+      error: error instanceof DatoInvalido ? error.message : 'No se pudo encolar la pieza.',
     });
-    throw e;
+    throw error;
   }
 
   await registrarCorrida(null, 'redactor', {

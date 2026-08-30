@@ -14973,3 +14973,98 @@ begin
     n_publico_propio, n_interna_propia, n_hilo_ajeno, b_no_escribe, a_no_fabrica_interna,
     a_no_suplanta, a_firma_propia, asignado_ok;
 end $$;
+
+-- ── 218. `cola_correo_frio_por_prospecto`: dos invocaciones que compiten por el mismo prospecto no fabrican dos piezas `correo_frio` pendientes (mig. 0270) ──
+--
+-- (auditoría 21, agéntico, MEDIO.)
+--
+-- El hallazgo: `redactarCorreoFrio` frenaba la duplicada con una LECTURA
+-- previa ("¿hay una pieza pendiente de este prospecto?"), que basta contra un
+-- humano pero no contra el botón del tablero y el cron nivel 2 compitiendo por
+-- el mismo prospecto — las dos pasan la lectura ANTES de que ninguna inserte,
+-- las dos ven cero, las dos intentan encolar. Este bloque simula esa carrera
+-- con dos INSERT consecutivos dentro de la misma transacción (la forma en que
+-- esta batería reproduce una condición de carrera real — mismo patrón que el
+-- bloque 172, `parte_costos`/0215, y el 64, `cobranza_contacto`/0089): si el
+-- índice es el árbitro, el SEGUNDO insert debe rebotar con 23505 sin importar
+-- que la lectura de ambas invocaciones haya dado "cero pendientes".
+--
+-- (a) primera pieza entra; (b) la segunda, MISMO prospecto y MISMO tipo,
+-- rebota — exactamente la carrera del hallazgo; (c) tras esas dos, sigue
+-- habiendo UNA sola pendiente de ese prospecto (el índice no dejó pasar la
+-- segunda ni a medias); (d) resuelto (rechazado) el sobreviviente, el
+-- prospecto queda libre y una TERCERA pieza SÍ entra — la parcialidad a
+-- `estado = 'pendiente'` funciona en el sentido "se resuelve, se libera"; (e)
+-- una pieza `respuesta_ads` (el SDR) del MISMO prospecto convive con un
+-- `correo_frio` pendiente — el índice es parcial también a `tipo`, a
+-- propósito (0270, misma exclusión que 0215/0218 hacen con el Redactor); (f)
+-- dos prospectos DISTINTOS con el MISMO título de campaña no chocan entre
+-- sí — el árbitro es por prospecto, no por título (a diferencia de 0215/0218,
+-- cuyos títulos SÍ son deterministas por periodo).
+do $$
+declare
+  v_p1 uuid; v_p2 uuid;
+  segunda_rebota boolean := false;
+  n_pendientes_tras_carrera int;
+  tercera_entra boolean := false;
+  ads_convive boolean := false;
+  otro_prospecto_entra boolean := false;
+begin
+  insert into prospecto (empresa, fuente) values ('ZZZ VERIF 0270 — uno', 'censo') returning id into v_p1;
+  insert into prospecto (empresa, fuente) values ('ZZZ VERIF 0270 — dos', 'censo') returning id into v_p2;
+
+  -- (a) La primera invocación gana la carrera.
+  insert into cola_aprobacion (tipo, agente, prospecto_id, titulo, cuerpo)
+    values ('correo_frio', 'redactor', v_p1, 'Asunto de campaña 0270', 'pieza de la 1a invocación');
+
+  -- (b) La segunda invocación, la que la LECTURA previa no pudo frenar
+  -- (leyó cero pendientes antes de que la primera terminara de insertar):
+  -- el índice único parcial es quien de verdad arbitra.
+  begin
+    insert into cola_aprobacion (tipo, agente, prospecto_id, titulo, cuerpo)
+      values ('correo_frio', 'redactor', v_p1, 'Asunto de campaña 0270', 'pieza de la 2a invocación (perdedora)');
+  exception when unique_violation then
+    segunda_rebota := true;
+  end;
+
+  -- (c) Sigue habiendo UNA sola pendiente de v_p1.
+  select count(*) into n_pendientes_tras_carrera
+    from cola_aprobacion where prospecto_id = v_p1 and tipo = 'correo_frio' and estado = 'pendiente';
+
+  -- (d) Se resuelve (rechaza) la sobreviviente: el prospecto queda libre.
+  update cola_aprobacion
+    set estado = 'rechazado', motivo_rechazo = 'prueba 0270', resuelto_en = now(), resuelto_por_email = 'verif@likida.ai'
+    where prospecto_id = v_p1 and tipo = 'correo_frio' and estado = 'pendiente';
+  begin
+    insert into cola_aprobacion (tipo, agente, prospecto_id, titulo, cuerpo)
+      values ('correo_frio', 'redactor', v_p1, 'Asunto de campaña 0270', 'pieza de la 3a invocación (tras liberar)');
+    tercera_entra := true;
+  exception when unique_violation then
+    tercera_entra := false;
+  end;
+
+  -- (e) `respuesta_ads` del mismo prospecto convive con el `correo_frio`
+  -- pendiente que acaba de entrar arriba (la 3a invocación sigue pendiente).
+  begin
+    insert into cola_aprobacion (tipo, agente, prospecto_id, titulo, cuerpo)
+      values ('respuesta_ads', 'redactor', v_p1, 'Respondió el ads de Facebook', 'pieza del SDR');
+    ads_convive := true;
+  exception when unique_violation then
+    ads_convive := false;
+  end;
+
+  -- (f) Otro prospecto, MISMO título de campaña: el árbitro es por
+  -- prospecto, no por título — no debe chocar con nada de lo de arriba.
+  begin
+    insert into cola_aprobacion (tipo, agente, prospecto_id, titulo, cuerpo)
+      values ('correo_frio', 'redactor', v_p2, 'Asunto de campaña 0270', 'pieza de otro prospecto, mismo asunto');
+    otro_prospecto_entra := true;
+  exception when unique_violation then
+    otro_prospecto_entra := false;
+  end;
+
+  delete from cola_aprobacion where prospecto_id in (v_p1, v_p2);
+  delete from prospecto where id in (v_p1, v_p2);
+  raise exception E'CORREO_FRIO_UNICO_0270  segunda-rebota=%  pendientes-tras-carrera=%  tercera-entra=%  ads-convive=%  otro-prospecto-entra=%   (esperado t / 1 / t / t / t)',
+    segunda_rebota, n_pendientes_tras_carrera, tercera_entra, ads_convive, otro_prospecto_entra;
+end $$;
