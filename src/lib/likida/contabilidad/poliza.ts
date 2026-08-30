@@ -29,6 +29,16 @@ export interface CatalogoContable {
   gastos: Partial<Record<ConceptoGasto, string>>;
   /** IVA acreditable (el que el motor ya calculó y que el ERP separa). */
   ivaAcreditable?: string;
+  /**
+   * Impuesto trasladado que el motor de cuadre NO acreditó — IVA excluido por
+   * regla fiscal (RFC ajeno, EFOS, combustible en efectivo, CFDI cancelado…) Y,
+   * SIEMPRE, el IEPS trasladado de diésel: `engine.ts` deja `iepsAcreditable`
+   * fijo en 0 porque la cuota LIF 20-A no es una cifra que este motor calcule,
+   * así que TODO el IEPS de cada CFDI cae aquí, aunque el CFDI esté impecable.
+   * Sigue siendo dinero que salió del anticipo; sin esta cuenta, la póliza
+   * descuadra por exactamente ese monto (AUDITORÍA 21 ALTO, reincidente c19).
+   */
+  ivaNoAcreditable?: string;
   /** El anticipo entregado al operador: se cancela contra los comprobantes. */
   anticipoOperador?: string;
   /** Lo que el operador debe devolver (comprobó de menos). */
@@ -114,6 +124,42 @@ export function polizaDeLiquidacion(
         concepto: `IVA acreditable — viaje ${liq.folioViaje}`,
         referencia: ref,
       });
+  }
+
+  // ── AUDITORÍA 21 (ALTO), reincidente de la 19 ────────────────────────────
+  // `liq.diferencia` viene de `anticipo − comprobado`, y `comprobado`
+  // (`totalComprobado` en engine.ts) suma `g.monto`: el TOTAL del CFDI, CON
+  // impuesto. Los cargos de arriba solo llevan la BASE (`sub_total`, sin
+  // impuesto) y el IVA que sí se acreditó. Si el motor decidió NO acreditar
+  // algo de IVA (o hay IEPS, que este motor nunca acredita), ese impuesto
+  // sigue siendo dinero que salió del anticipo y no tiene renglón — la
+  // póliza descuadraba por exactamente ese monto. Se deriva `comprobado` de
+  // los mismos datos que ya trae la liquidación (nunca se pide un campo
+  // nuevo a la RPC: `anticipo − diferencia` es la misma identidad que usa
+  // el motor) y el residuo contra base+IVA-acreditable es ese impuesto.
+  const subtotalDeclarado = REDONDEO(liq.porConcepto.reduce((s, g) => s + g.subtotal, 0));
+  const comprobado = REDONDEO(liq.anticipo - liq.diferencia);
+  const impuestoNoAcreditado = REDONDEO(comprobado - subtotalDeclarado - liq.ivaAcreditable);
+  if (impuestoNoAcreditado > 0.01) {
+    if (!catalogo.ivaNoAcreditable) falta.push('cuenta de IVA/IEPS no acreditable');
+    else
+      movimientos.push({
+        cuenta: catalogo.ivaNoAcreditable,
+        cargo: impuestoNoAcreditado,
+        abono: 0,
+        concepto: `IVA/IEPS no acreditable — viaje ${liq.folioViaje}`,
+        referencia: ref,
+      });
+  } else if (impuestoNoAcreditado < -0.01) {
+    // No tiene sentido contable: el comprobado (con impuesto) saldría MENOR
+    // que la base más el IVA que sí se acreditó — un dato de origen roto, no
+    // un ajuste que se pueda inventar. Se bloquea para revisión, como manda
+    // la regla del módulo.
+    falta.push(
+      `la póliza no cuadra: el comprobado (${comprobado.toFixed(2)}) es menor que la base más el IVA ` +
+        `acreditable (${(subtotalDeclarado + liq.ivaAcreditable).toFixed(2)}) por ${Math.abs(impuestoNoAcreditado).toFixed(2)}. ` +
+        'No se inventa un ajuste: revisar la liquidación a mano antes de exportar.',
+    );
   }
 
   if (liq.anticipo > 0) {
