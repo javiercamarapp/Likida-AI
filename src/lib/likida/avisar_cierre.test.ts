@@ -133,10 +133,25 @@ describe('avisarCierreAlJefe · lo básico', () => {
     expect(r.enviado).toBe(true);
   });
 
-  it('si WhatsApp rechaza el TEXTO, no se intenta el PDF y se dice por qué', async () => {
+  // AUDITORÍA 21 (agéntico, ALTO): antes el fallo del texto hacía `return`
+  // ANTES del bloque del PDF, y el jefe se quedaba sin texto Y sin el
+  // documento que ya estaba firmado — contradiciendo el encabezado del
+  // archivo ("el PDF siempre, el texto solo si hay que decidir"). Estas dos
+  // pruebas fijan el contrato correcto: son escrituras independientes.
+  it('EL HALLAZGO (aud. 21): WhatsApp rechaza el TEXTO → el PDF se manda de todos modos', async () => {
     liq = { data: { total_comprobado: 900, total_anticipo: 1000, diferencia: 100, diferencias: [] }, error: null };
     sendText.mockResolvedValue(null);
     const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
+    // El fallo del texto se sigue reportando, para que el llamador loguee...
+    expect(r).toEqual({ enviado: false, motivo: 'WhatsApp no aceptó el mensaje al jefe.' });
+    // ...pero el documento que YA estaba listo se intentó igual.
+    expect(sendDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('texto rechazado y sin urlPdf: solo se reporta el fallo del texto, sin intentar documento', async () => {
+    liq = { data: { total_comprobado: 900, total_anticipo: 1000, diferencia: 100, diferencias: [] }, error: null };
+    sendText.mockResolvedValue(null);
+    const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1' });
     expect(r).toEqual({ enviado: false, motivo: 'WhatsApp no aceptó el mensaje al jefe.' });
     expect(sendDocument).not.toHaveBeenCalled();
   });

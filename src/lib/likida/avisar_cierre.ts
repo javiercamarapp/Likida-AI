@@ -142,9 +142,17 @@ export async function avisarCierreAlJefe(args: {
 
   const { texto, requiereDecision } = armarAvisoJefe(resumen);
 
+  // AUDITORÍA 21 (agéntico, ALTO): el texto y el PDF son DOS escrituras
+  // independientes. Antes, un `return` temprano cuando `sendText` fallaba
+  // (rate limit, blip de red) se llevaba también el `sendDocument` que viene
+  // abajo — justo en el caso `requiereDecision: true`, cuando el contralor
+  // más necesita el documento que YA estaba firmado y listo. El fallo del
+  // texto se sigue reportando (`enviado: false`), pero ya no corta el PDF:
+  // la garantía del encabezado es "el PDF siempre".
+  let motivoTexto: string | null = null;
   if (requiereDecision) {
     const id = await sendText(tel, texto);
-    if (!id) return { enviado: false, motivo: 'WhatsApp no aceptó el mensaje al jefe.' };
+    if (!id) motivoTexto = 'WhatsApp no aceptó el mensaje al jefe.';
   }
 
   if (args.urlPdf) {
@@ -168,6 +176,11 @@ export async function avisarCierreAlJefe(args: {
       logger.warn('cierre.pdf_al_jefe_falló', { viaje: args.viajeId, err: e instanceof Error ? e.message : String(e) });
     }
   }
+
+  // El fallo del texto se reporta DESPUÉS de intentar el PDF: el llamador
+  // sigue viendo `enviado: false` (y loguea `cierre.jefe_no_avisado`), pero
+  // el documento ya se intentó mandar de todos modos.
+  if (motivoTexto) return { enviado: false, motivo: motivoTexto };
 
   logger.info('cierre.avisado_al_jefe', { viaje: args.viajeId, requiereDecision });
   return { enviado: true };

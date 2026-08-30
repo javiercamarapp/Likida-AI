@@ -186,6 +186,27 @@ describe('redactarCorreoFrio', () => {
     expect(generateStructured).not.toHaveBeenCalled();
   });
 
+  // AUDITORÍA 21 (agéntico, MEDIO): la lectura previa (arriba) basta contra
+  // UN disparador, no contra dos en carrera — el botón del tablero y el cron
+  // nivel 2 pueden pasar la lectura de `pendientes` a la vez, ambas ven cero,
+  // y las dos intentan `encolarPieza`. El índice único parcial de la 0270
+  // (`cola_correo_frio_por_prospecto`) es el árbitro real: la perdedora
+  // rebota con 23505 y debe verse en pantalla EXACTAMENTE como el freno de
+  // lectura de arriba — no como un error crudo de Postgres.
+  it('carrera ganada por otra invocación: 23505 del índice 0270 se traduce al MISMO mensaje del freno', async () => {
+    respuestas.set('prospecto', [{ data: PROSPECTO, error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: [], error: null }]); // la lectura no vio nada pendiente
+    encolarPieza.mockRejectedValueOnce(
+      new Error('encolarPieza: duplicate key value violates unique constraint "cola_correo_frio_por_prospecto"'),
+    );
+    await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/esperando aprobación/);
+    expect(registrarCorrida).toHaveBeenCalledWith(null, 'redactor', expect.objectContaining({
+      estado: 'fallo',
+      error: expect.stringMatching(/esperando aprobación/),
+    }));
+  });
+
   it('a un cerrado/perdido no se le redacta correo frío', async () => {
     respuestas.set('prospecto', [{ data: { ...PROSPECTO, estado: 'perdido' }, error: null }]);
     await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/perdido/);
