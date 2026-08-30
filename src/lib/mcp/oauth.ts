@@ -471,9 +471,22 @@ export async function validarAcceso(token: string): Promise<ResultadoAcceso> {
   if (!token.startsWith(PREFIJO_ACCESO)) {
     return { ok: false, error: 'no_valido', detalle: ACCESO_INVALIDO };
   }
+  // AUDITORÍA 21 (modelo de datos), ALTO: `app_user:user_id(tenant_id, rol)`
+  // revalida la identidad congelada del token EN LA MISMA CONSULTA, anclada a
+  // la columna (regla de embeds del repo, `embeds_con_alias.test.ts` — sin
+  // ancla, la FK compuesta que la 0271 le agregó a esta misma relación vuelve
+  // ambiguo el embed a secas). Es DELIBERADAMENTE más ligera que la RPC
+  // `mcp_oauth_usuario_vigente()` (0265, que solo corre en `refrescarTokens`
+  // al rotar): no es un viaje extra a la base, es una columna más en la
+  // consulta que este camino caliente YA hacía por cada llamada de
+  // herramienta MCP. La FK compuesta de la 0271 ya impide que la fila NAZCA
+  // desalineada; esto cierra la ventana que la FK no puede cerrar — un
+  // `app_user` que cambia de tenant/rol DESPUÉS de emitido el token, sin que
+  // nadie llame `revocar_mcp_oauth_usuario` — para que deje de servir en el
+  // acto, no solo en el siguiente refresco.
   const { data, error } = await supabaseAdmin()
     .from('mcp_oauth_token')
-    .select('id, tipo, user_id, user_email, tenant_id, rol, expira_en, revocado_en')
+    .select('id, tipo, user_id, user_email, tenant_id, rol, expira_en, revocado_en, app_user:user_id(tenant_id, rol)')
     .eq('token_hash', hashDeLlave(token))
     .maybeSingle();
   if (error) {
@@ -483,6 +496,23 @@ export async function validarAcceso(token: string): Promise<ResultadoAcceso> {
   if (!data || data.tipo !== 'acceso') return { ok: false, error: 'no_valido', detalle: ACCESO_INVALIDO };
   if (data.revocado_en !== null) return { ok: false, error: 'no_valido', detalle: ACCESO_INVALIDO };
   if (Date.parse(String(data.expira_en)) <= Date.now()) {
+    return { ok: false, error: 'no_valido', detalle: ACCESO_INVALIDO };
+  }
+  // supabase-js sin tipos generados infiere el embed como arreglo por
+  // default; en runtime, PostgREST devuelve un objeto (o null) porque la FK
+  // es de mcp_oauth_token HACIA app_user (muchos-a-uno) — de ahí el paso por
+  // `unknown` que el propio compilador pide.
+  const identidadActual = data.app_user as unknown as { tenant_id: string; rol: string } | null;
+  if (
+    !identidadActual ||
+    identidadActual.tenant_id !== data.tenant_id ||
+    identidadActual.rol !== data.rol
+  ) {
+    // La fila del token ya no describe a `app_user` tal como es HOY: el
+    // usuario se movió de flota, le cambiaron el rol, o (con la FK compuesta
+    // de la 0271 ya en pie) esta rama ya casi no debería alcanzarse — y si se
+    // alcanza, es la señal de que algo la sorteó.
+    logger.warn('mcp.oauth.identidad_desalineada', { tokenId: String(data.id) });
     return { ok: false, error: 'no_valido', detalle: ACCESO_INVALIDO };
   }
 
