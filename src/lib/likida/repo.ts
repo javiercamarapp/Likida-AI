@@ -758,8 +758,23 @@ export async function updateGastoCfdiXml(
   const litrosDelXml = x.claveUnidad === 'LTR' && x.cantidad != null && x.cantidad > 0;
   const monedaDelXml = !!x.moneda || x.tipoCambio != null;
   if (litrosDelXml || monedaDelXml) {
-    const { data: actual } = await acotada(supabaseAdmin().from('gasto')
+    const { data: actual, error: errorLectura } = await acotada(supabaseAdmin().from('gasto')
       .select('ocr_extra').eq('id', gastoId).eq('tenant_id', tenantId).maybeSingle(), 'updateGastoCfdiXml.leerOcrExtra');
+    // FAIL-CLOSED (auditoría 21, backend, ALTO REINCIDENTE desde la 18-c4).
+    // `acotada` entrega el tope agotado POR VALOR —`{ data: null, error }`,
+    // nunca lanza—, igual que cualquier error de Postgres. Sin esta
+    // comprobación, un timeout en esta lectura se leía como "el gasto no
+    // tenía ocr_extra": el merge arrancaba de `{}` y el update de abajo
+    // REEMPLAZABA el jsonb entero, borrando `moneda`, `tipoCambio`,
+    // `montoDiscrepante`, `estacion`… — y el motor de cuadre acreditaba IVA
+    // de un gasto en USD como si fuera en pesos, sin una línea en el log.
+    // Mejor no actualizar que perder datos: se lanza y el ocr_extra viejo
+    // queda intacto, con `code` preservado igual que en el update de abajo.
+    if (errorLectura) {
+      const e = new Error(`updateGastoCfdiXml.leerOcrExtra: ${errorLectura.message}`) as Error & { code?: string };
+      if (errorLectura.code) e.code = errorLectura.code;
+      throw e;
+    }
     const ocrExtra = { ...((actual?.ocr_extra as Record<string, unknown> | null) ?? {}) };
     if (litrosDelXml) ocrExtra.litros = x.cantidad;
     // El XML manda sobre lo que leyó la visión: el emisor declaró la moneda en
