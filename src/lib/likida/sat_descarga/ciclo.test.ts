@@ -71,6 +71,10 @@ describe('correrDescargaSat sin configuración', () => {
   it('NO simula nada y devuelve el motivo en cristiano', async () => {
     const r = await correrDescargaSat(new Date('2026-08-27T12:00:00Z'));
     expect(r.corrio).toBe(false);
+    // AUDITORÍA 21 (29-ago-2026): la señal estructurada que viaja hasta el
+    // latido para que `esHuecoDeConfiguracion` no dependa de la prosa de
+    // `motivo`.
+    expect(r.configurado).toBe(false);
     expect(r.flotas).toBe(0);
     expect(r.resumenes).toEqual([]);
     expect(r.motivo).toMatch(/no está configurada/i);

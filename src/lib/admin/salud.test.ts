@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -17,6 +17,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 
 const { puertaCron, registrarLatido, juzgarLatido, motivoDeSalto, esHuecoDeConfiguracion, CRONS, CADENCIA_MS, TOLERANCIA_LATIDO_MS } = await import('./salud');
+const { estadoDescargaSat } = await import('@/lib/likida/sat_descarga');
 
 beforeEach(() => { vi.clearAllMocks(); process.env.CRON_SECRET = 's3cr3t'; });
 
@@ -196,5 +197,94 @@ describe('esHuecoDeConfiguracion', () => {
     expect(esHuecoDeConfiguracion(undefined)).toBe(false);
     expect(esHuecoDeConfiguracion(42)).toBe(false);
     expect(esHuecoDeConfiguracion('')).toBe(false);
+  });
+
+  // AUDITORÍA 21 (29-ago-2026): el regex de arriba solo reconocía UNA de las
+  // cuatro ramas de `estadoDescargaSat()` (verificado contra el código real,
+  // no hipotético). La señal ESTRUCTURADA `configAusente` es la que de verdad
+  // cierra el hueco: gana sobre `motivo` sea cual sea su redacción.
+  it('la señal estructurada `configAusente` decide, no la prosa de `motivo`', () => {
+    // Un motivo que NO trae la convención de texto, pero SÍ trae la señal
+    // estructurada en true: es un hueco de configuración de todos modos.
+    expect(esHuecoDeConfiguracion({ configAusente: true, motivo: 'cualquier redacción futura' })).toBe(true);
+    // Al revés: `configAusente: false` gana aunque el texto libre "suene" a
+    // hueco de configuración — la señal estructurada nunca la contradice el
+    // regex.
+    expect(esHuecoDeConfiguracion({ configAusente: false, motivo: 'esto no está configurado, pero ya se resolvió' })).toBe(false);
+  });
+
+  it('sin `configAusente`, cae al regex de prosa sobre `detalle.motivo` (crons que no mandan la señal estructurada)', () => {
+    expect(esHuecoDeConfiguracion({ motivo: 'El cofre no está configurado (falta LIKIDA_COFRE_LLAVE).' })).toBe(true);
+    expect(esHuecoDeConfiguracion({ motivo: 'timeout al llamar al proveedor de SW' })).toBe(false);
+    expect(esHuecoDeConfiguracion({})).toBe(false);
+  });
+
+  // Las CUATRO variantes reales de `estadoDescargaSat()`
+  // (`sat_descarga/index.ts:64-91`), probadas contra el flujo real: el mismo
+  // objeto que `cron/descarga-sat/route.ts` manda a `registrarLatido`
+  // (`{ motivo, configAusente: !configurado }`). Antes de este arreglo, solo
+  // la primera de las cuatro clasificaba como hueco — las otras tres caían en
+  // "regresión real" y disparaban el correo "Urgente" cada hora para siempre.
+  describe('las cuatro variantes de motivo de estadoDescargaSat(), vía el latido real', () => {
+    const detalleDelLatido = () => {
+      const estado = estadoDescargaSat();
+      return { motivo: estado.motivo, configAusente: !estado.configurado };
+    };
+
+    afterEach(() => { vi.unstubAllEnvs(); });
+
+    it('1) LIKIDA_SAT_PROVEEDOR ausente', () => {
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', '');
+      const detalle = detalleDelLatido();
+      expect(detalle.motivo).toMatch(/no está configurada/i);
+      expect(esHuecoDeConfiguracion(detalle)).toBe(true);
+    });
+
+    it('2) LIKIDA_SAT_PROVEEDOR=sat_directo (declarado, no construido)', () => {
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'sat_directo');
+      const detalle = detalleDelLatido();
+      expect(detalle.motivo).toMatch(/no construido/i);
+      expect(esHuecoDeConfiguracion(detalle)).toBe(true);
+    });
+
+    it('3) LIKIDA_SAT_PROVEEDOR con un valor desconocido (typo, p. ej. mayúscula)', () => {
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'SW');
+      const detalle = detalleDelLatido();
+      expect(detalle.motivo).toMatch(/no es un proveedor conocido/i);
+      expect(esHuecoDeConfiguracion(detalle)).toBe(true);
+    });
+
+    it('4) proveedor válido pero credenciales incompletas (falta LIKIDA_SAT_URL)', () => {
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'sw');
+      vi.stubEnv('LIKIDA_SAT_URL', '');
+      vi.stubEnv('LIKIDA_SAT_USUARIO', '');
+      vi.stubEnv('LIKIDA_SAT_PASSWORD', '');
+      vi.stubEnv('LIKIDA_PAC_USUARIO', '');
+      vi.stubEnv('LIKIDA_PAC_PASSWORD', '');
+      const detalle = detalleDelLatido();
+      expect(detalle.motivo).toMatch(/^Falta LIKIDA_SAT_URL/);
+      expect(esHuecoDeConfiguracion(detalle)).toBe(true);
+    });
+
+    // Y el regex de respaldo (para latidos viejos sin `configAusente`, o
+    // crons que aún no manden la señal) también reconoce las tres variantes
+    // que antes se le escapaban.
+    it('el regex de respaldo también reconoce las tres variantes que antes se le escapaban', () => {
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'sat_directo');
+      expect(esHuecoDeConfiguracion(estadoDescargaSat().motivo)).toBe(true);
+      vi.unstubAllEnvs();
+
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'SW');
+      expect(esHuecoDeConfiguracion(estadoDescargaSat().motivo)).toBe(true);
+      vi.unstubAllEnvs();
+
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'sw');
+      vi.stubEnv('LIKIDA_SAT_URL', '');
+      vi.stubEnv('LIKIDA_SAT_USUARIO', '');
+      vi.stubEnv('LIKIDA_SAT_PASSWORD', '');
+      vi.stubEnv('LIKIDA_PAC_USUARIO', '');
+      vi.stubEnv('LIKIDA_PAC_PASSWORD', '');
+      expect(esHuecoDeConfiguracion(estadoDescargaSat().motivo)).toBe(true);
+    });
   });
 });

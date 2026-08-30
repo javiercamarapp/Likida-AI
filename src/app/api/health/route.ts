@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
       // ANTES de decidir a quién avisar y con qué urgencia (auditoría prod
       // 29-ago-2026: `descarga-sat` sin LIKIDA_SAT_PROVEEDOR mandaba el mismo
       // correo "Urgente" en cada ping de un monitor externo, para siempre).
-      const configAusente = noSanos.filter((c) => esHuecoDeConfiguracion(latidos[c].detalle.motivo));
+      const configAusente = noSanos.filter((c) => esHuecoDeConfiguracion(latidos[c].detalle));
       const regresiones = noSanos.filter((c) => !configAusente.includes(c));
       if (configAusente.length > 0) {
         logger.warn('health.cron_config_ausente', {

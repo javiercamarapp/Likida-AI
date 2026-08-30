@@ -35,6 +35,7 @@ vi.mock('@/lib/admin/salud', () => ({
 const correrDescargaSat = vi.fn(async () => ({
   corrio: true,
   motivo: undefined as string | undefined,
+  configurado: true,
   flotas: 1,
   resumenes: [{
     tenantId: 't1', verificadas: 1, descargadas: 1, solicitadas: 1,
@@ -126,12 +127,13 @@ describe('cron descarga-sat — la corrida', () => {
     const cuerpo = await res.json();
     expect(cuerpo).toMatchObject({ corrio: true, flotas: 1, cfdis: 12, casados: 9, errores: 0 });
     expect(cuerpo.peaje).toMatchObject({ avisadas: 1 });
-    expect(registrarLatido).toHaveBeenCalledWith('descarga-sat', 'ok', expect.anything());
+    expect(registrarLatido).toHaveBeenCalledWith('descarga-sat', 'ok',
+      expect.objectContaining({ configAusente: false }));
   });
 
   it('con errores de una flota el latido es PARCIAL — un verde con errores adentro es mentira', async () => {
     correrDescargaSat.mockResolvedValueOnce({
-      corrio: true, motivo: undefined, flotas: 1,
+      corrio: true, motivo: undefined, configurado: true, flotas: 1,
       resumenes: [{
         tenantId: 't1', verificadas: 1, descargadas: 0, solicitadas: 0,
         cfdisNuevos: 0, cfdisRepetidos: 0, casados: 0, ambiguos: 0, disponibles: 0,
@@ -147,12 +149,16 @@ describe('cron descarga-sat — la corrida', () => {
 
   it('NO CONFIGURADO también es parcial: el circuito no está haciendo su trabajo', async () => {
     correrDescargaSat.mockResolvedValueOnce({
-      corrio: false, motivo: 'La descarga masiva no está configurada…', flotas: 0, resumenes: [], sinTurno: 0,
+      corrio: false, motivo: 'La descarga masiva no está configurada…', configurado: false, flotas: 0, resumenes: [], sinTurno: 0,
     });
     const res = await GET(new Request(URL_CRON, CON_SECRETO));
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ corrio: false });
-    expect(registrarLatido).toHaveBeenCalledWith('descarga-sat', 'parcial', expect.anything());
+    // AUDITORÍA 21: la señal estructurada que le permite a `/api/health`
+    // clasificar esto como hueco de configuración, no como regresión, sin
+    // depender de cómo esté redactado `motivo`.
+    expect(registrarLatido).toHaveBeenCalledWith('descarga-sat', 'parcial',
+      expect.objectContaining({ configAusente: true }));
   });
 
   // ── EL RELOJ ENTRA TAMBIÉN A LA DESCARGA (c7-1; deuda del fork del #160) ──
@@ -175,7 +181,7 @@ describe('cron descarga-sat — la corrida', () => {
 
   it('un barrido del SAT cortado por reloj hace el latido PARCIAL — son CFDI que no entraron', async () => {
     correrDescargaSat.mockResolvedValueOnce({
-      corrio: true, motivo: undefined, flotas: 1,
+      corrio: true, motivo: undefined, configurado: true, flotas: 1,
       resumenes: [{
         tenantId: 't1', verificadas: 1, descargadas: 0, solicitadas: 0,
         cfdisNuevos: 0, cfdisRepetidos: 0, casados: 0, ambiguos: 0, disponibles: 0,
@@ -196,7 +202,7 @@ describe('cron descarga-sat — la corrida', () => {
     // Es la distinción entera: el derecho a facturar caseta se vence aunque
     // la flota no tenga e.firma ni contrato de PAC.
     correrDescargaSat.mockResolvedValueOnce({
-      corrio: false, motivo: 'no configurada', flotas: 0, resumenes: [], sinTurno: 0,
+      corrio: false, motivo: 'no configurada', configurado: false, flotas: 0, resumenes: [], sinTurno: 0,
     });
     await GET(new Request(URL_CRON, CON_SECRETO));
     expect(avisarCierrePeaje).toHaveBeenCalledTimes(1);
