@@ -15068,3 +15068,114 @@ begin
   raise exception E'CORREO_FRIO_UNICO_0270  segunda-rebota=%  pendientes-tras-carrera=%  tercera-entra=%  ads-convive=%  otro-prospecto-entra=%   (esperado t / 1 / t / t / t)',
     segunda_rebota, n_pendientes_tras_carrera, tercera_entra, ads_convive, otro_prospecto_entra;
 end $$;
+
+-- ── 219. Un token/código MCP con (user_id, tenant_id, rol) cruzados nunca se escribe, y un rol fuera de dominio tampoco (mig. 0271) ──
+--
+-- El hallazgo: `mcp_oauth_codigo`/`mcp_oauth_token` llevaban `user_id` y
+-- `tenant_id` con FK SIMPLES e INDEPENDIENTES a `app_user(id)` y `tenant(id)`
+-- — nada ataba el par, así que un INSERT con el usuario de la flota A y el
+-- `tenant_id` de la flota B pasaba las dos FK. La 0271 cierra esto con la
+-- misma técnica de 0028/0145 (FK compuesta contra una `unique (id, tenant_id,
+-- rol)` en `app_user`) y le agrega a `rol` el dominio cerrado que le faltaba
+-- desde la 0260 — más ESTRECHO que `app_user_rol_dominio` a propósito: solo
+-- los tres roles que `/mcp/autorizar` de verdad deja consentir.
+--
+-- Lo que este bloque demuestra, con las DOS tablas y un solo tenant real de
+-- por medio:
+--
+--  (a) El trío REAL (usuario, SU tenant, SU rol) → el INSERT pasa.
+--  (b) EL ESCENARIO LITERAL DEL HALLAZGO: mismo usuario, `tenant_id` de OTRA
+--      flota → `foreign_key_violation`, en las dos tablas.
+--  (c) Mismo usuario y tenant, un rol que el usuario NO TIENE HOY
+--      (`flota_admin` en vez de su `contador` real) → también
+--      `foreign_key_violation`, aunque ese rol sí sea válido en general —
+--      esto es lo que la FK compuesta cierra y un CHECK de dominio, solo,
+--      jamás habría podido cerrar.
+--  (d) Un rol que NUNCA es de `app_user` (`auditor`) → `check_violation` del
+--      dominio de la 0271, ANTES de que la FK ni se evalúe.
+do $$
+declare
+  ta uuid := gen_random_uuid();
+  tb uuid := gen_random_uuid();
+  u uuid := gen_random_uuid();
+  cli uuid;
+  real_codigo boolean := false; real_token boolean := false;
+  tenant_cruzado_codigo boolean := false; tenant_cruzado_token boolean := false;
+  rol_no_vigente_codigo boolean := false; rol_no_vigente_token boolean := false;
+  rol_fuera_dominio_codigo boolean := false; rol_fuera_dominio_token boolean := false;
+begin
+  insert into public.tenant (id, nombre) values (ta, '__verif_0271_a__');
+  insert into public.tenant (id, nombre) values (tb, '__verif_0271_b__');
+  insert into public.app_user (id, email, rol, tenant_id) values (u, '__verif_0271__@likida.ai', 'contador', ta);
+  insert into public.mcp_oauth_cliente (nombre, redirect_uris)
+    values ('__verif_0271__', '["https://claude.ai/api/mcp/auth_callback"]'::jsonb)
+    returning id into cli;
+
+  -- (a) el trío real: pasa en las dos tablas.
+  begin
+    insert into public.mcp_oauth_codigo
+      (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en)
+    values (repeat('1', 64), cli, u, ta, 'contador',
+      'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '5 min');
+    real_codigo := true;
+  exception when foreign_key_violation then real_codigo := false;
+  end;
+  begin
+    insert into public.mcp_oauth_token
+      (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('1', 64), 'acceso', cli, u, ta, 'contador', gen_random_uuid(), now() + interval '8 hours');
+    real_token := true;
+  exception when foreign_key_violation then real_token := false;
+  end;
+
+  -- (b) el escenario literal del hallazgo: usuario de A, tenant_id de B.
+  begin
+    insert into public.mcp_oauth_codigo
+      (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en)
+    values (repeat('2', 64), cli, u, tb, 'contador',
+      'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '5 min');
+  exception when foreign_key_violation then tenant_cruzado_codigo := true;
+  end;
+  begin
+    insert into public.mcp_oauth_token
+      (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('2', 64), 'acceso', cli, u, tb, 'contador', gen_random_uuid(), now() + interval '8 hours');
+  exception when foreign_key_violation then tenant_cruzado_token := true;
+  end;
+
+  -- (c) tenant correcto, pero un rol que el usuario no tiene HOY (es
+  -- 'contador', no 'flota_admin' — ambos válidos en general, solo uno cierto).
+  begin
+    insert into public.mcp_oauth_codigo
+      (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en)
+    values (repeat('3', 64), cli, u, ta, 'flota_admin',
+      'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '5 min');
+  exception when foreign_key_violation then rol_no_vigente_codigo := true;
+  end;
+  begin
+    insert into public.mcp_oauth_token
+      (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('3', 64), 'acceso', cli, u, ta, 'flota_admin', gen_random_uuid(), now() + interval '8 hours');
+  exception when foreign_key_violation then rol_no_vigente_token := true;
+  end;
+
+  -- (d) un rol que ni siquiera es de app_user: el CHECK de dominio de la
+  -- 0271 lo rechaza antes de tocar la FK.
+  begin
+    insert into public.mcp_oauth_codigo
+      (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en)
+    values (repeat('4', 64), cli, u, ta, 'auditor',
+      'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '5 min');
+  exception when check_violation then rol_fuera_dominio_codigo := true;
+  end;
+  begin
+    insert into public.mcp_oauth_token
+      (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('4', 64), 'acceso', cli, u, ta, 'auditor', gen_random_uuid(), now() + interval '8 hours');
+  exception when check_violation then rol_fuera_dominio_token := true;
+  end;
+
+  raise exception E'MCP_OAUTH_IDENTIDAD_ATADA_0271  real-codigo=%  real-token=%  tenant-cruzado-codigo=%  tenant-cruzado-token=%  rol-no-vigente-codigo=%  rol-no-vigente-token=%  rol-fuera-dominio-codigo=%  rol-fuera-dominio-token=%   (esperado t / t / t / t / t / t / t / t)',
+    real_codigo, real_token, tenant_cruzado_codigo, tenant_cruzado_token,
+    rol_no_vigente_codigo, rol_no_vigente_token, rol_fuera_dominio_codigo, rol_fuera_dominio_token;
+end $$;

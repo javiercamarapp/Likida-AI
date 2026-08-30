@@ -14,6 +14,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //     de red no puede hacer que Claude tire un token bueno;
 //   · las redirect_uris: https exacto, loopback con puerto libre, y nada de
 //     esquemas custom ni credenciales incrustadas.
+//   · AUDITORÍA 21 (modelo de datos), ALTO: `validarAcceso` revalida contra
+//     el `app_user` embebido en la MISMA fila — un token cuya identidad
+//     congelada ya no cuadra con `app_user` (tenant o rol distinto, o la fila
+//     ni siquiera vino) se niega, aunque no esté ni expirado ni revocado.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const sbMock = vi.fn();
@@ -296,6 +300,10 @@ describe('validarAcceso', () => {
   const filaAcceso = (extra: Record<string, unknown> = {}) => ({
     id: 'tok-a', tipo: 'acceso', user_id: 'u-1', user_email: 'ana@flota.mx',
     tenant_id: 't-1', rol: 'contador', expira_en: FUTURO, revocado_en: null,
+    // El embed anclado a user_id (oauth.ts): por default, la identidad de
+    // app_user coincide exactamente con la congelada en el token — los tests
+    // de desalineación de abajo la desajustan a propósito.
+    app_user: { tenant_id: 't-1', rol: 'contador' },
     ...extra,
   });
 
@@ -335,6 +343,39 @@ describe('validarAcceso', () => {
     const r = await validarAcceso(ACCESO);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe('no_disponible');
+  });
+
+  // AUDITORÍA 21 (modelo de datos), HALLAZGO ALTO: el escenario exacto del
+  // hallazgo — user_id de un contador de la flota A, tenant_id de la flota
+  // B — reproducido tal como llegaría si la FK compuesta de la 0271 alguna
+  // vez se sorteara (a mano contra la base, o por un bug futuro). Antes de
+  // este cambio, `validarAcceso` solo miraba la fila del token y esto pasaba.
+  it('tenant_id cruzado con el de app_user (identidad desalineada) → no_valido, aunque el token no esté ni expirado ni revocado', async () => {
+    conTablas({
+      mcp_oauth_token: [OK(filaAcceso({ tenant_id: 't-B', app_user: { tenant_id: 't-A', rol: 'contador' } }))],
+    });
+    const r = await validarAcceso(ACCESO);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toBe('no_valido');
+      expect(r.detalle).toBe('Token inválido o expirado.');
+    }
+  });
+
+  it('rol cruzado con el de app_user (a alguien le cambiaron el rol después de emitido) → no_valido', async () => {
+    conTablas({
+      mcp_oauth_token: [OK(filaAcceso({ rol: 'contador', app_user: { tenant_id: 't-1', rol: 'flota_admin' } }))],
+    });
+    const r = await validarAcceso(ACCESO);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe('no_valido');
+  });
+
+  it('app_user ya no existe (embed vacío) → no_valido, no un crash', async () => {
+    conTablas({ mcp_oauth_token: [OK(filaAcceso({ app_user: null }))] });
+    const r = await validarAcceso(ACCESO);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe('no_valido');
   });
 });
 
