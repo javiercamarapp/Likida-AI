@@ -13,6 +13,10 @@ import { FormaConAviso, Campo, CampoTexto, type ResultadoAccion } from '../../ad
 import { HiloSoporte } from '../../admin/ui/hilo-soporte';
 import { ahoraMs } from '@/lib/saludo';
 import { EstadoVacio, KpiTile, StatusPill } from '../../admin/ui/kit';
+// El rótulo del estado del ticket es COMPARTIDO con /admin/soporte (auditoría
+// 21, MEDIO 1): imprimir `t.estado` crudo aquí enseñaba "en_proceso" con guion
+// bajo al flota_admin mientras el admin sí lo traducía con su mapa privado.
+import { pillTicket } from './estatus';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
 
 export const dynamic = 'force-dynamic';
@@ -232,7 +236,9 @@ export default async function SoportePage({
                   </tr>
                 </thead>
                 <tbody>
-                  {tickets.map((t) => (
+                  {tickets.map((t) => {
+                    const pill = pillTicket(t.estado);
+                    return (
                     <tr key={t.id} style={{ borderTop: '1px solid var(--line)' }}>
                       <td className="px-5 py-3 font-medium">
                         <Link href={enlaceHilo(t.id)} style={{ color: 'var(--marca)' }}>{t.asunto}</Link>
@@ -240,9 +246,7 @@ export default async function SoportePage({
                       <td className="px-5 py-3" style={{ color: 'var(--muted)' }}>{t.categoria}</td>
                       <td className="px-5 py-3">{t.prioridad}</td>
                       <td className="px-5 py-3">
-                        <StatusPill estado={t.estado === 'resuelto' || t.estado === 'cerrado' ? 'ok' : 'warn'}>
-                          {t.estado}
-                        </StatusPill>
+                        <StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill>
                       </td>
                       <td className="px-5 py-3 text-xs" style={{ color: 'var(--muted)' }}>{fechaMx(t.abiertoEn)}</td>
                       <td className="px-5 py-3 text-right text-xs tabular"
@@ -254,7 +258,8 @@ export default async function SoportePage({
                             : `${Math.round(t.horasRestantes)} h`}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
