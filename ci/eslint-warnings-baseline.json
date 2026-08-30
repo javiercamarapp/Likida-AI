@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "totalWarnings": 162,
+  "totalWarnings": 166,
   "byFileRule": {
     "src/app/admin/mi-perfil/avatar_validado.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/app/admin/panel_dueno_href.test.ts::security/detect-non-literal-fs-filename": 1,
@@ -40,6 +40,7 @@
     "src/lib/likida/asignar_wa.ts::security/detect-unsafe-regex": 1,
     "src/lib/likida/bitacora_escritura.test.ts::security/detect-non-literal-fs-filename": 2,
     "src/lib/likida/carta_porte_datos.ts::security/detect-unsafe-regex": 1,
+    "src/lib/likida/conceptos_gasto_espejos.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/likida/crear_viaje_wa.ts::security/detect-unsafe-regex": 3,
     "src/lib/likida/cuadre/cifras.ts::security/detect-unsafe-regex": 4,
     "src/lib/likida/cuadre/copias_un_origen.test.ts::security/detect-non-literal-fs-filename": 2,
@@ -55,6 +56,7 @@
     "src/lib/likida/facturacion/adaptadores/piloto_vision.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/likida/facturacion_escritura.ts::security/detect-unsafe-regex": 1,
     "src/lib/likida/fiscal_agregado.test.ts::security/detect-unsafe-regex": 1,
+    "src/lib/likida/frontera_datos_guardiana.test.ts::security/detect-non-literal-fs-filename": 3,
     "src/lib/likida/intake/cfdi.ts::security/detect-unsafe-regex": 1,
     "src/lib/likida/intake/cfdi.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/likida/intake/desglose_peaje.ts::security/detect-unsafe-regex": 2,

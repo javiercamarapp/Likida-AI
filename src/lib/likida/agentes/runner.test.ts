@@ -40,7 +40,13 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({
   },
 }) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
+// importOriginal (y no un reemplazo total): importar `AGENTES_EXITO` real
+// (`./exito`, guardia MEDIO 1 de la auditoría 21) arrastra `../contactos` →
+// `conv.ts`, que necesita `PRESUPUESTO_WEBHOOK_MS` real de este módulo.
+vi.mock('@/lib/likida/presupuesto', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/likida/presupuesto')>()),
+  acotada: (q: unknown) => q,
+}));
 
 let apagados = new Set<string>();
 let interruptorFalla = false;
@@ -72,9 +78,15 @@ const redactar = vi.fn(async (..._a: unknown[]) => ({ piezaId: 'p', asunto: 'x',
 vi.mock('./redactor', () => ({ redactarCorreoFrio: (...a: unknown[]) => redactar(...a) }));
 
 // El motor de dirección (0216) se despacha por import dinámico; el mock
-// aplica igual y evita arrastrar los lectores reales de /admin.
+// aplica igual y evita arrastrar los lectores reales de /admin. La constante
+// NO se mockea — es la lista real del motor contra la que se compara la
+// literal del runner (mismo trato que el back office restante).
 const correrDireccion = vi.fn(async (_a: unknown) => ({ resultado: 'corrio' as const, piezas: 1, costoUsd: 0 }));
-vi.mock('../direccion/reportes', () => ({ correrAgenteDireccion: (...a: unknown[]) => correrDireccion(...(a as [unknown])) }));
+const { AGENTES_DIRECCION } = await import('../direccion/reportes');
+vi.mock('../direccion/reportes', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../direccion/reportes')>()),
+  correrAgenteDireccion: (...a: unknown[]) => correrDireccion(...(a as [unknown])),
+}));
 
 // El back office restante (0219) entra por el mismo camino: import dinámico
 // dentro de su rama. El predicado NO se mockea — es la lista real del motor
@@ -88,9 +100,15 @@ vi.mock('./backoffice', async (importOriginal) => ({
 
 // Éxito del cliente (0218): mismo trato que dirección — import dinámico en el
 // runner, mock aquí, y así la vuelta no arrastra los lectores de /admin ni el
-// corpus de normas.
+// corpus de normas. El predicado y la constante NO se mockean — son la lista
+// real del motor contra la que se compara la literal del runner (mismo trato
+// que el back office restante y crecimiento).
 const correrExito = vi.fn(async (..._a: unknown[]): Promise<{ resultado: 'corrio' | 'saltado'; piezas: number; costoUsd: number; motivo?: string; sinTurno?: boolean }> => ({ resultado: 'corrio', piezas: 1, costoUsd: 0 }));
-vi.mock('./exito', () => ({ correrAgenteExito: (...a: unknown[]) => correrExito(...a) }));
+const { AGENTES_EXITO, esAgenteExito } = await import('./exito');
+vi.mock('./exito', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./exito')>()),
+  correrAgenteExito: (...a: unknown[]) => correrExito(...a),
+}));
 
 // Crecimiento (0230): mismo trato que el back office — import dinámico en el
 // runner y el predicado REAL (no mockeado), que es contra el que se compara la
@@ -285,6 +303,19 @@ describe('M30 — correrRunner(soloAgente) acota la vuelta a UN agente', () => {
 });
 
 describe('el despacho de dirección (0216)', () => {
+  // Los ids viven DOS veces —literal en el runner (para no cargar los
+  // lectores de /admin y el correo en cada vuelta) y en `AGENTES_DIRECCION`
+  // (`reportes.ts`)—. Si divergen, un reportero vivo se queda sin rama de
+  // despacho y el runner lo reporta como «sin motor». Misma costura que la
+  // del back office, crecimiento, ingeniería, dirección-bandeja y leads.
+  it('la lista literal del runner y la del motor son la misma', () => {
+    const fuente = readFileSync('src/lib/likida/agentes/runner.ts', 'utf8');
+    const linea = /const DIRECCION: readonly string\[\] = \[([^\]]*)\]/.exec(fuente);
+    expect(linea, 'la lista literal del runner debe seguir existiendo').not.toBeNull();
+    const ids = (linea as RegExpExecArray)[1].split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean);
+    expect(ids).toEqual([...AGENTES_DIRECCION]);
+  });
+
   it('un agente de dirección habilitado se despacha a su motor, con su resultado tal cual', async () => {
     respuestas.set('agente_definicion', [{ data: [{ id: 'kpi_whatsapp', presupuesto_dia_usd: 0.1 }], error: null }]);
     const r = await correrRunner(undefined, TENANT);
@@ -308,6 +339,20 @@ describe('el despacho de dirección (0216)', () => {
 });
 
 describe('el despacho de éxito del cliente (0218)', () => {
+  // Los ids viven DOS veces —literal en el runner (para no cargar los
+  // lectores de /admin ni el corpus de normas en cada vuelta) y en
+  // `AGENTES_EXITO` (`exito.ts`)—. Si divergen, un agente vivo se queda sin
+  // rama de despacho y el runner lo reporta como «sin motor». Misma costura
+  // que la del back office, crecimiento, ingeniería, dirección-bandeja y leads.
+  it('la lista literal del runner y la del motor son la misma', () => {
+    const fuente = readFileSync('src/lib/likida/agentes/runner.ts', 'utf8');
+    const linea = /const AGENTES_EXITO_CLIENTE: readonly string\[\] = \[([^\]]*)\]/.exec(fuente);
+    expect(linea, 'la lista literal del runner debe seguir existiendo').not.toBeNull();
+    const ids = (linea as RegExpExecArray)[1].split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean);
+    expect(ids).toEqual([...AGENTES_EXITO]);
+    for (const id of ids) expect(esAgenteExito(id)).toBe(true);
+  });
+
   it('un determinista se despacha a su motor y su resultado sale tal cual', async () => {
     respuestas.set('agente_definicion', [{ data: [{ id: 'onboarding_cliente', presupuesto_dia_usd: 0.1 }], error: null }]);
     const r = await correrRunner(undefined, TENANT);
