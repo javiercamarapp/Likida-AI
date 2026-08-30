@@ -20,6 +20,7 @@ import { validarLanzar } from '@/lib/admin/qa-tipos';
 import { crearCorrida, ejecutarCorridaRapida, TOPE_DIA_USD } from '@/lib/admin/qa-motor';
 import { gastoHoyUsd, guardarCorrida, leerManifiesto } from '@/lib/admin/qa-storage';
 import { sesionSuperadmin } from '../puerta';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,14 @@ export const maxDuration = 120;
 const MAX_BODY = 64 * 1024;
 
 export async function POST(req: Request) {
+  // Auditoría 21, BAJO-MEDIO: el chequeo CSRF explícito (SEG-9) solo cubría
+  // /api/admin/palette y /v1/*. Lanza una corrida que gasta dinero real,
+  // autenticada solo por cookie de sesión.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('qa_lanzar.origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
+    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+  }
+
   const { error, sesion } = await sesionSuperadmin();
   if (error) return error;
 

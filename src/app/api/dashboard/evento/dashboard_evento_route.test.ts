@@ -27,12 +27,20 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 const { POST } = await import('./route');
 
-const pedir = (cuerpo: unknown) =>
-  new Request('https://x/api/dashboard/evento', { method: 'POST', body: JSON.stringify(cuerpo) });
+const pedir = (cuerpo: unknown, cabeceras?: Record<string, string>) =>
+  new Request('https://x/api/dashboard/evento', { method: 'POST', headers: cabeceras, body: JSON.stringify(cuerpo) });
 
 const FLOTA = { userId: 'u-1', tenantId: 't-1', rol: 'flota_admin' };
 
 beforeEach(() => { limiteOk = true; eventos.length = 0; sesion = { ...FLOTA }; });
+
+describe('la puerta de origen (auditoría 21, BAJO-MEDIO)', () => {
+  it('desde otro sitio: 204 (esta ruta jamás contesta un problema) pero sin escribir', async () => {
+    const r = await POST(pedir({ ruta: '/dashboard/viajes' }, { 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' }));
+    expect(r.status).toBe(204);
+    expect(eventos).toHaveLength(0);
+  });
+});
 
 describe('POST /api/dashboard/evento', () => {
   it('pageview de una pantalla del catálogo → 204 y fila SIN ningún dato del usuario', async () => {

@@ -19,3 +19,15 @@
  * mano (partir el archivo), en vez de con una pantalla de la plataforma.
  */
 export const MAX_BASE64 = 4_000_000;
+
+/**
+ * Peticiones por minuto por USUARIO al lector (auditoría 21, MEDIO).
+ *
+ * Mismo valor que `SONDAS_POR_MINUTO` de la sonda de ingesta: son endpoints
+ * hermanos con el mismo llamador (un contralor adjuntando cosas al chat) y
+ * un humano no pasa de un puñado por minuto. La ruta calcó la autorización
+ * de ingesta pero no su límite de tasa — y aquí cada petición puede armar un
+ * xlsx ENTERO en memoria (`XLSX.read` descomprime el ZIP sin tope de
+ * expansión): el tamaño del cuerpo está acotado, la frecuencia no lo estaba.
+ */
+export const LECTURAS_POR_MINUTO = 10;

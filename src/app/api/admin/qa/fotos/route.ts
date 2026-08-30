@@ -24,6 +24,8 @@ import {
 } from '@/lib/admin/qa-storage';
 import { validarVerdadTerreno } from '@/lib/admin/qa-tipos';
 import { sesionSuperadmin } from '../puerta';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
+import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -49,6 +51,14 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  // Auditoría 21, BAJO-MEDIO: el chequeo CSRF explícito (SEG-9) solo cubría
+  // /api/admin/palette y /v1/*. Sube archivos al banco, autenticada solo por
+  // cookie de sesión.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('qa_fotos.origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
+    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+  }
+
   const { error } = await sesionSuperadmin();
   if (error) return error;
 
@@ -95,6 +105,13 @@ const MAX_BODY_PATCH = 16 * 1024;
  * para que un "esperado" tenga un responsable.
  */
 export async function PATCH(req: Request) {
+  // Auditoría 21, BAJO-MEDIO: mismo chequeo CSRF que POST — firma la
+  // verdad-de-terreno, autenticada solo por cookie de sesión.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('qa_fotos.origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
+    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+  }
+
   const { error, sesion } = await sesionSuperadmin();
   if (error) return error;
 

@@ -32,9 +32,9 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 
 const { POST } = await import('./route');
 
-function postear(cuerpo: unknown = { mensajes: [{ rol: 'usuario', texto: 'hola' }] }) {
+function postear(cuerpo: unknown = { mensajes: [{ rol: 'usuario', texto: 'hola' }] }, cabeceras: Record<string, string> = {}) {
   const req = new Request('http://likida.test/api/dashboard/onboarding-chat', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo),
+    method: 'POST', headers: { 'content-type': 'application/json', ...cabeceras }, body: JSON.stringify(cuerpo),
   }) as unknown as Record<string, unknown>;
   // NextRequest.nextUrl — lo único que la ruta le pide es searchParams.
   req.nextUrl = new URL('http://likida.test/api/dashboard/onboarding-chat');
@@ -45,6 +45,14 @@ beforeEach(() => {
   sesion = { userId: 'u-1', tenantId: 't-1', rol: 'dueno', nombre: 'D' };
   permitido = true;
   rateLimit.mockClear(); responderEntrevista.mockClear(); getPerfilCrudo.mockClear();
+});
+
+describe('la puerta de origen (auditoría 21, BAJO-MEDIO)', () => {
+  it('desde otro sitio: 403 y el agente ni se toca', async () => {
+    const r = await postear(undefined, { 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' });
+    expect(r.status).toBe(403);
+    expect(responderEntrevista).not.toHaveBeenCalled();
+  });
 });
 
 describe('la puerta', () => {

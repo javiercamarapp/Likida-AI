@@ -1,0 +1,64 @@
+import { describe, it, expect } from 'vitest';
+import { readdirSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CADA RUTA NUEVA DE /api PASA POR UNA REVISIÓN CONSCIENTE (auditoría 21).
+//
+// El matcher de `proxy.ts` EXCLUYE todo `/api` a propósito (decisión de
+// diseño documentada en su cabecera: webhook, demo, export manejan lo suyo y
+// no deben pasar por el gate ni cargar cabeceras de página). Eso significa
+// que cada `route.ts` bajo `src/app/api/` es su PROPIA y ÚNICA puerta:
+// sesión + rol + tenant los resuelve el archivo mismo, sin red de respaldo
+// del lado del proxy — a diferencia de /dashboard y /admin, que tienen la
+// puerta de proxy.ts MÁS la de la página.
+//
+// Hoy (auditoría 21) las 64 rutas fueron revisadas y todas tienen su puerta
+// bien construida. El riesgo no es ninguna de ellas: es la ruta 65 — un
+// endpoint futuro al que se le olvide una de las tres comprobaciones no
+// tiene ningún gate anterior que lo atrape; se sirve.
+//
+// Esta prueba NO agrega esa segunda capa (revertir la exclusión del proxy
+// sobre 64 rutas es otro trabajo, con otro riesgo). Es el MECANISMO DE
+// CONTENCIÓN: inventaría el disco —no una lista que alguien mantenga— y
+// compara contra la constante de abajo. Crecer la superficie sin tocar este
+// archivo pone la suite en rojo; tocar este archivo es el momento de la
+// revisión. El mismo trato que ya reciben los previews (sin_previews.test.ts).
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * El número de archivos `route.ts` bajo `src/app/api/` que YA fueron
+ * revisados (auditoría 21, 29-ago-2026: sesión + rol + tenant confirmados
+ * en las 64, con las excepciones públicas documentadas en cada archivo).
+ *
+ * Si vas a subir este número: primero confirma que la ruta nueva trae su
+ * propia puerta COMPLETA — sesión (o firma de webhook / llave de API / secreto
+ * de cron), rol y tenant — ANTES de procesar nada. El proxy no la va a salvar.
+ */
+const RUTAS_API_REVISADAS = 64;
+
+function rutasApi(): string[] {
+  const raiz = join(process.cwd(), 'src', 'app', 'api');
+  return readdirSync(raiz, { recursive: true, withFileTypes: true })
+    .filter((e) => e.isFile() && e.name === 'route.ts')
+    .map((e) => relative(raiz, join(e.parentPath, e.name)).split(sep).join('/'))
+    .sort();
+}
+
+describe('la superficie /api no crece en silencio', () => {
+  it(`hay exactamente ${RUTAS_API_REVISADAS} route.ts bajo src/app/api`, () => {
+    const rutas = rutasApi();
+
+    const mensaje = rutas.length > RUTAS_API_REVISADAS
+      ? 'Una ruta nueva de /api apareció sin que nadie confirme que tiene su propia ' +
+        'sesión+rol+tenant — revísala y sube esta constante (RUTAS_API_REVISADAS en ' +
+        'este archivo). Recuerda: proxy.ts excluye /api entero, así que la puerta que ' +
+        'esa ruta escriba adentro es la ÚNICA que tiene.\n\nInventario actual ' +
+        `(${rutas.length}):\n  ` + rutas.join('\n  ')
+      : 'Desaparecieron rutas de /api (¿se borró o movió un endpoint?). Si fue a ' +
+        'propósito, baja RUTAS_API_REVISADAS en este archivo para que el inventario ' +
+        `siga siendo verdad.\n\nInventario actual (${rutas.length}):\n  ` + rutas.join('\n  ');
+
+    expect(rutas.length, mensaje).toBe(RUTAS_API_REVISADAS);
+  });
+});

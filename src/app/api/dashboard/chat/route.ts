@@ -23,11 +23,20 @@ import { logger } from '@/lib/logger';
 import { validarMensajes, validarConversacionId } from './validacion';
 import { topeDiaUsd, gastoChatHoyUsd } from './tope';
 import { tenantEfectivoChat } from './tenant';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  // Auditoría 21, BAJO-MEDIO: el chequeo CSRF explícito (SEG-9) solo cubría
+  // /api/admin/palette y /v1/*. Esta ruta escribe (guarda el intercambio) y
+  // gasta dinero de modelo, autenticada solo por la cookie de sesión.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('chat.origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
+    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+  }
+
   const sesion = await getSessionTenant();
   if (!sesion) return NextResponse.json({ error: 'sin sesion' }, { status: 401 });
   if (!puedeVerArea(sesion.rol, 'dinero')) {

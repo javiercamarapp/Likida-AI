@@ -31,12 +31,21 @@ import { registrarCosto } from '@/lib/likida/costos';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { gastoSondaHoyUsd, topeSondaDiaUsd, SONDAS_POR_MINUTO } from './tope';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 
 export async function POST(req: NextRequest) {
+  // Auditoría 21, BAJO-MEDIO: el chequeo CSRF explícito (SEG-9) solo cubría
+  // /api/admin/palette y /v1/*. Autenticada solo por cookie y gasta dinero
+  // de modelo por llamada (visión).
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('ingesta.origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
+    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+  }
+
   const sesion = await getSessionTenant();
   if (!sesion) return NextResponse.json({ error: 'sin sesion' }, { status: 401 });
   if (!puedeVerArea(sesion.rol, 'dinero')) {
