@@ -133,6 +133,13 @@ export async function GET(req: Request) {
     await registrarLatido('descarga-sat', sano ? 'ok' : 'parcial', {
       flotas: descarga.flotas, cfdis, casados, errores,
       motivo: descarga.motivo ?? null,
+      // AUDITORÍA PROD 29-AGO-2026 (ronda 21): señal ESTRUCTURADA de hueco de
+      // configuración, no la prosa de `motivo`. `esHuecoDeConfiguracion`
+      // (`admin/salud.ts`) la prefiere sobre el regex de texto libre, así que
+      // las cuatro ramas de `estadoDescargaSat()` (proveedor ausente,
+      // declarado y no construido, desconocido, o credenciales incompletas)
+      // se clasifican igual sin depender de cómo esté redactado `motivo`.
+      configAusente: !descarga.configurado,
       descargaSinTurno: descarga.sinTurno,
       peajeAvisadas: peaje?.avisadas ?? null,
       peajeSinTurno: peaje?.sinTurno ?? null,
