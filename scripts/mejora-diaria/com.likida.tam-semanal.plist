@@ -3,11 +3,23 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.likida.tam-semanal</string>
+  <!-- AUDITORÍA 21 (29-ago-2026, MEDIO): esta ruta apunta a otro proyecto
+       externo ($HOME/javiercamarapp/censo-liquidacion) que el barrido del
+       commit 22960571 (mismo día) NO tocó a propósito -- no pudo verificar
+       si esa ruta existe en esta Mac. Confirmado con `test -d`: NO existe
+       ($HOME/javiercamarapp tampoco existe). `instalar.sh` solo sustituye
+       __REPO__ con sed; nunca toca esta ruta. El guard `[ -d ... ] || exit 0`
+       hace que la rutina falle en silencio-mudo (sale limpio, sin escribir
+       "No such file or directory" en tam-semanal.log) en vez de un error
+       críptico cada domingo -- no arregla la ruta (no vive en este repo,
+       no se puede verificar desde aquí), pero deja de ensuciar el log con
+       un fallo que nadie lee. Si el día de mañana esa carpeta SÍ existe,
+       el guard no estorba: simplemente deja pasar el bash de abajo. -->
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
     <string>-c</string>
-    <string>[ ! -f __REPO__/.mejora-diaria/APAGADO ] &amp;&amp; bash $HOME/javiercamarapp/censo-liquidacion/expandir-tam.sh</string>
+    <string>[ ! -f __REPO__/.mejora-diaria/APAGADO ] &amp;&amp; { [ -d "$HOME/javiercamarapp/censo-liquidacion" ] || exit 0; bash "$HOME/javiercamarapp/censo-liquidacion/expandir-tam.sh"; }</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict><key>Weekday</key><integer>0</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
