@@ -14,13 +14,50 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null };
 const respuestas = new Map<string, Resp[]>();
-const escrituras: Array<{ tabla: string; op: 'insert' | 'update'; fila: Record<string, unknown>; filtros: Array<[string, unknown]> }> = [];
+const escrituras: Array<{
+  tabla: string; op: 'insert' | 'update'; fila: Record<string, unknown>;
+  filtros: Array<[string, unknown]>; filtrosIn: Array<[string, unknown[]]>;
+}> = [];
+
+// ── ANCLAS DE VERDAD, NO SOLO REGISTRADAS ───────────────────────────────────
+//
+// Auditoría 21: el mock de arriba solo GUARDABA los filtros en `filtros` para
+// que una prueba pudiera afirmar sobre ellos a mano — pero la respuesta que
+// `responder()` entregaba salía de `respuestas.get(tabla)` por NOMBRE DE TABLA
+// únicamente, sin cruzarla contra esos filtros. Borrar un `.eq('tenant_id',…)`
+// de producción dejaba la suite entera en verde porque ninguna prueba sin esa
+// aserción explícita podía notarlo.
+//
+// `filasSimuladas` es la fila que "de verdad" existe en la base para esa
+// tabla en la prueba. Cuando una prueba la registra con `establecerFila`, un
+// UPDATE que no calce sus anclas (`.eq()`/`.in()` acumulados) contra esa fila
+// devuelve 0 filas — SIN IMPORTAR qué respuesta haya en la cola —, tal como
+// pasaría contra Postgres real con un WHERE que no aplica. Así, borrar un
+// ancla en producción cambia qué filtros SE ACUMULAN (uno menos) y por lo
+// tanto si el chequeo de abajo detecta o no el desajuste, sin que la prueba
+// tenga que afirmar sobre `filtros` a mano.
+const filasSimuladas = new Map<string, Record<string, unknown>>();
+function establecerFila(tabla: string, fila: Record<string, unknown>) { filasSimuladas.set(tabla, fila); }
+function anclasCalzan(
+  fila: Record<string, unknown>,
+  filtros: Array<[string, unknown]>,
+  filtrosIn: Array<[string, unknown[]]>,
+): boolean {
+  return filtros.every(([c, v]) => fila[c] === v) && filtrosIn.every(([c, vs]) => vs.includes(fila[c]));
+}
 
 function builder(tabla: string) {
   const filtros: Array<[string, unknown]> = [];
+  const filtrosIn: Array<[string, unknown[]]> = [];
   let pendiente: { op: 'insert' | 'update'; fila: Record<string, unknown> } | null = null;
   const responder = () => {
-    if (pendiente) escrituras.push({ tabla, ...pendiente, filtros });
+    if (pendiente) {
+      escrituras.push({ tabla, ...pendiente, filtros, filtrosIn });
+      if (pendiente.op === 'update') {
+        const fila = filasSimuladas.get(tabla);
+        if (fila && !anclasCalzan(fila, filtros, filtrosIn)) return { data: [], error: null };
+      }
+    }
     const cola = respuestas.get(tabla);
     return cola && cola.length > 0 ? cola.shift()! : { data: null, error: null };
   };
@@ -33,7 +70,9 @@ function builder(tabla: string) {
     // revocada.
     is: (c: string, v: unknown) => { filtros.push([c, v]); return b; },
     lte: (c: string, v: unknown) => { filtros.push([c, v]); return b; },
-    in: () => b,
+    // Antes `in: () => b` no registraba nada: ningún UPDATE con `.in()` podía
+    // tener ancla verificable, ni a mano ni por el chequeo de arriba.
+    in: (c: string, v: unknown[]) => { filtrosIn.push([c, v]); return b; },
     maybeSingle: () => b,
     single: () => b,
     insert: (fila: Record<string, unknown>) => { pendiente = { op: 'insert', fila }; return b; },
@@ -57,7 +96,7 @@ const FACTURA = 'ad662d33-6934-459c-a128-bdf0393f0f44';
 const pago = (monto: number) => ({ facturaId: FACTURA, fecha: '2026-08-20', monto, metodo: 'transferencia', referencia: null });
 const escribioEn = (tabla: string) => escrituras.filter((e) => e.tabla === tabla);
 
-beforeEach(() => { respuestas.clear(); escrituras.length = 0; rpc.mockReset(); });
+beforeEach(() => { respuestas.clear(); escrituras.length = 0; rpc.mockReset(); filasSimuladas.clear(); });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 18 · DAT-05 — el veredicto se mudó a la base, y por eso este
@@ -246,6 +285,20 @@ describe('cancelarFactura — cuenta los pagos ANTES de cancelar', () => {
     await expect(cancelarFactura(T, 'x')).rejects.toThrow(DatoInvalido);
     expect(escrituras).toEqual([]);
   });
+
+  // ── Auditoría 21 · ALTO — `.in('estatus', ['borrador','emitida'])` ─────────
+  // Antes el mock ni siquiera registraba `.in()`, así que ninguna prueba podía
+  // detectar que este ancla desapareciera. La fila simulada ya está
+  // `cancelada` (un estatus FUERA del `.in()`): con el ancla intacta el UPDATE
+  // no calza y toca 0 filas; si alguien borra el `.in()` en producción, el
+  // filtro deja de acumularse, el chequeo deja de tener nada que descartar, y
+  // el mock (equivocadamente) reporta éxito — la prueba se pone roja.
+  it('una factura YA CANCELADA no se vuelve a cancelar (ancla `.in(estatus,…)`)', async () => {
+    respuestas.set('pago_recibido', [{ data: null, error: null, count: 0 }]);
+    establecerFila('factura_emitida', { id: FACTURA, tenant_id: T, estatus: 'cancelada' });
+    respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);
+    await expect(cancelarFactura(T, FACTURA)).rejects.toThrow(/no se pudo cancelar/);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -339,5 +392,32 @@ describe('marcarEmitida — la serie sólo se toca si de verdad viene', () => {
     expect(err).toBeInstanceOf(DatoInvalido);
     expect(err.message).toContain('ese mismo ejercicio');
     expect(err.message).not.toMatch(/ejercicio \d{4}/);
+  });
+});
+
+// ── Auditoría 21 · ALTO — las dos anclas del UPDATE de `marcarEmitida` ──────
+//
+// `.eq('tenant_id', tenantId)` y `.eq('estatus', 'borrador')` no tenían
+// ninguna prueba que dependiera de que existieran: las de arriba solo miran
+// qué campos trae `fila`. Aquí se registra la fila REAL simulada — de otra
+// flota, o ya no en borrador — para que el mock mismo (vía `anclasCalzan`)
+// decida si el UPDATE debería tocar 0 filas, en vez de que la cola de
+// respuestas lo diga a mano. Si el ancla correspondiente desaparece de
+// producción, el filtro deja de acumularse, deja de haber nada que no calce,
+// y `marcarEmitida` se lee como éxito sobre una factura ajena o ya sellada:
+// exactamente la mutación que describe la auditoría.
+describe('marcarEmitida — las anclas del UPDATE (tenant_id + estatus) protegen de verdad', () => {
+  it('una factura con el mismo id pero de OTRA flota no se sella (ancla tenant_id)', async () => {
+    establecerFila('factura_emitida', { id: FACTURA, tenant_id: 'otro-tenant', estatus: 'borrador' });
+    respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);
+    await expect(marcarEmitida(T, FACTURA, { folio: '1', cfdiUuid: FACTURA }))
+      .rejects.toThrow(/no está en borrador en tu flota/);
+  });
+
+  it('una factura que YA NO está en borrador no se vuelve a sellar (ancla estatus)', async () => {
+    establecerFila('factura_emitida', { id: FACTURA, tenant_id: T, estatus: 'cancelada' });
+    respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);
+    await expect(marcarEmitida(T, FACTURA, { folio: '1', cfdiUuid: FACTURA }))
+      .rejects.toThrow(/no está en borrador en tu flota/);
   });
 });

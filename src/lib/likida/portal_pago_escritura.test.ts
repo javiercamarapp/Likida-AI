@@ -48,14 +48,39 @@ import { DatoInvalido, AbonoYaRegistrado } from './errores';
 
 type Resultado = { data: unknown; error: { message: string; code?: string } | null };
 
-function cadena(resultado: Resultado): unknown {
-  const p = Promise.resolve(resultado);
+// ── Auditoría 21 · ALTO — el `.eq('estado', 'pendiente')` del UPDATE de
+// sellado (`conciliarPropuesta`/`descartarPropuesta`) NO TENÍA ANCLA en este
+// mock: el Proxy de abajo devolvía la MISMA respuesta fija sin mirar nunca los
+// argumentos de `.eq()`, así que borrar ese `.eq()` en producción no podía
+// ponerse rojo aquí. `filasConGuarda` es la fila «real» simulada para una
+// tabla; cuando una prueba la registra con `establecerFilaConGuarda`, un
+// UPDATE cuyos `.eq()` acumulados no calcen contra esa fila devuelve 0 filas
+// —tal como Postgres— SIN IMPORTAR la respuesta fija en la cola. Las tablas
+// sin guarda siguen exactamente como antes: respuesta fija por índice de
+// llamada, cero cambio de comportamiento para el resto de las pruebas.
+const filasConGuarda = new Map<string, Record<string, unknown>>();
+function establecerFilaConGuarda(tabla: string, fila: Record<string, unknown>) {
+  filasConGuarda.set(tabla, fila);
+}
+
+function cadena(tabla: string, resultado: Resultado): unknown {
+  const filtros: Array<[string, unknown]> = [];
+  let esUpdate = false;
+  const p = Promise.resolve().then(() => {
+    const guarda = filasConGuarda.get(tabla);
+    if (esUpdate && guarda && !filtros.every(([c, v]) => guarda[c] === v)) {
+      return { data: [], error: null } as Resultado;
+    }
+    return resultado;
+  });
   const proxy: unknown = new Proxy({}, {
     get(_t, prop) {
       if (typeof prop === 'symbol') return undefined;
       if (prop === 'then') return p.then.bind(p);
       if (prop === 'catch') return p.catch.bind(p);
       if (prop === 'finally') return p.finally.bind(p);
+      if (prop === 'eq') return (c: string, v: unknown) => { filtros.push([c, v]); return proxy; };
+      if (prop === 'update') return (..._a: unknown[]) => { esUpdate = true; return proxy; };
       return () => proxy;
     },
   });
@@ -71,10 +96,10 @@ function conTablas(porTabla: Record<string, Resultado[]>) {
   sbMock.mockReturnValue({
     from(tabla: string) {
       const r = porTabla[tabla];
-      if (!r) return cadena(OK(null));
+      if (!r) return cadena(tabla, OK(null));
       const i = usados[tabla] ?? 0;
       usados[tabla] = i + 1;
-      return cadena(r[Math.min(i, r.length - 1)]);
+      return cadena(tabla, r[Math.min(i, r.length - 1)]);
     },
   });
 }
@@ -85,7 +110,7 @@ const PROPUESTA = '33333333-3333-4333-8333-333333333333';
 const PAGO = '44444444-4444-4444-8444-444444444444';
 const LIGA = { ligaId: 'liga-1', tenantId: T, facturaId: FACTURA };
 
-beforeEach(() => { vi.clearAllMocks(); registrarPago.mockResolvedValue(PAGO); });
+beforeEach(() => { vi.clearAllMocks(); registrarPago.mockResolvedValue(PAGO); filasConGuarda.clear(); });
 
 describe('crearLigaPago — sobre qué factura SÍ y sobre cuál no', () => {
   it('un id que no es UUID ni consulta la base', async () => {
@@ -345,6 +370,22 @@ describe('conciliarPropuesta — el abono primero, el sello después', () => {
     });
     await expect(conciliarPropuesta(T, PROPUESTA)).rejects.toThrow(/no encuentro el original/i);
   });
+
+  // ── Auditoría 21 · ALTO — el sello `.eq('estado', 'pendiente')` ─────────
+  // Es justo el ancla que el comentario del código (líneas 264-267) dice que
+  // evita la carrera: «otra sesión ya selló, o alguien descartó la propuesta
+  // entre medias». Aquí la fila simulada YA está `descartada` cuando llega el
+  // UPDATE de sellado: con el ancla intacta ese UPDATE no calza y toca 0
+  // filas (entra al camino de "cambió de estado"); si el `.eq('estado',…)`
+  // desaparece de producción, el mock deja de tener nada que descartar y
+  // reporta éxito sobre una propuesta que otra sesión ya resolvió.
+  it('si la propuesta cambió de estado ANTES del sello, no la resella (ancla `.eq(estado,pendiente)`)', async () => {
+    conTablas({
+      portal_pago_propuesta: [OK(FILA), OK([{ id: PROPUESTA }]), OK({ estado: 'descartada', pago_id: null })],
+    });
+    establecerFilaConGuarda('portal_pago_propuesta', { id: PROPUESTA, tenant_id: T, estado: 'descartada' });
+    await expect(conciliarPropuesta(T, PROPUESTA)).rejects.toThrow(/cambió de estado/i);
+  });
 });
 
 describe('descartarPropuesta — «sin motivo» no es una respuesta', () => {
@@ -372,6 +413,18 @@ describe('descartarPropuesta — «sin motivo» no es una respuesta', () => {
 
   it('si ya estaba resuelta, lo dice', async () => {
     conTablas({ portal_pago_propuesta: [OK([])] });
+    await expect(descartarPropuesta(T, PROPUESTA, 'un motivo suficiente')).rejects.toThrow(DatoInvalido);
+  });
+
+  // ── Auditoría 21 · ALTO — mismo ancla `.eq('estado', 'pendiente')`,
+  // gemela de `conciliarPropuesta` (línea 368 del archivo de producción).
+  // La fila simulada ya está `conciliada`: con el ancla intacta el UPDATE de
+  // descarte no calza contra ella y toca 0 filas. Sin el ancla, el mock solo
+  // vería `id`/`tenant_id` (que sí calzan) y reportaría éxito sobre una
+  // propuesta que ya se resolvió por el otro lado.
+  it('una propuesta que YA NO está pendiente no se descarta de nuevo (ancla estado)', async () => {
+    conTablas({ portal_pago_propuesta: [OK([{ id: PROPUESTA }])] });
+    establecerFilaConGuarda('portal_pago_propuesta', { id: PROPUESTA, tenant_id: T, estado: 'conciliada' });
     await expect(descartarPropuesta(T, PROPUESTA, 'un motivo suficiente')).rejects.toThrow(DatoInvalido);
   });
 });
