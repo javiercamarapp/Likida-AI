@@ -125,8 +125,47 @@ const Accion = z.object({
 });
 type AccionPiloto = z.infer<typeof Accion>;
 
-/** Texto de botón que huele a emisión. Veto propio, aparte del juicio del modelo. */
-const HUELE_A_EMITIR = /emitir|generar|timbrar|facturar|crear\s*(mi\s*)?(cfdi|factura)/i;
+/**
+ * Texto de botón que huele a emisión. Veto propio, aparte del juicio del modelo.
+ *
+ * ── AUDITORÍA 22, TC-A2 (ALTO) ─────────────────────────────────────────────
+ * Eran cuatro verbos: `emitir|generar|timbrar|facturar`. El vocabulario real de
+ * los portales de autofacturación mexicanos es mucho más ancho, y el botón que
+ * de verdad timbra suele decir cualquier cosa MENOS «emitir»: «Continuar»,
+ * «Aceptar», «Confirmar», «Enviar», «Finalizar», «Obtener factura», «Descargar
+ * CFDI». Un veto que no los reconoce deja pasar el clic que emite un
+ * comprobante fiscal irreversible a nombre de la flota.
+ *
+ * DOS COSAS QUE ESTE VETO NO ES:
+ *
+ *  1. NO es la defensa principal. Lo es `a.esBotonQueEmite`, el juicio del
+ *     modelo que mira la página completa. Esto es el segundo par de ojos.
+ *  2. NO puede ser completo, y fingir que lo es sería el error. Una lista
+ *     negra sobre lenguaje natural siempre va un portal atrás. Por eso el
+ *     criterio al ampliarla es el del repo para lo fiscal: ante la duda, se
+ *     detiene. Un falso positivo cuesta una corrida abortada que un humano
+ *     reanuda; un falso negativo cuesta un CFDI timbrado que nadie pidió y que
+ *     solo se cancela con acuse del receptor.
+ *
+ * Se compara sobre texto SIN ACENTOS: «Generación» y «Emisión» no casaban con
+ * `generar|emitir`, y son literalmente los rótulos más comunes.
+ */
+const HUELE_A_EMITIR = new RegExp([
+  // Los cuatro originales, con sus derivados.
+  'emiti|emision|generar|generacion|genera\\b|timbrar|timbrado|facturar|facturacion',
+  // Lo que el botón final REALMENTE dice en los portales.
+  'continuar|aceptar|confirmar|enviar|finalizar|concluir|procesar|solicitar',
+  // Y las formas que nombran el entregable.
+  'obtener\\s*(mi\\s*)?(cfdi|factura)',
+  'descargar\\s*(mi\\s*)?(cfdi|factura)',
+  'crear\\s*(mi\\s*)?(cfdi|factura)',
+  'generar\\s*(mi\\s*)?(cfdi|factura)',
+].join('|'), 'i');
+
+/** Sin acentos y en minúsculas: «Emisión» tiene que casar con `emision`. */
+function paraVeto(s: string | null | undefined): string {
+  return (s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
 
 export interface OpcionesPiloto {
   /** Tenant de la corrida; sin él se mantiene el piloto en modo no persistido. */
@@ -340,7 +379,13 @@ async function ejecutar(
     // Regla 1, con las dos guardas. La del texto mira el inventario: qué botón
     // casa con ese selector y qué dice encima.
     const boton = inv.botones.find((b) => (b.id && a.selector!.includes(b.id)) || (b.name && a.selector!.includes(b.name)));
-    if (a.esBotonQueEmite || HUELE_A_EMITIR.test(boton?.texto ?? '') || HUELE_A_EMITIR.test(a.selector)) {
+    // TC-A2: se miran TODOS los rótulos que el botón puede llevar, no solo
+    // `texto`. Un `<input type=submit value="Continuar">` no tiene texto, y un
+    // botón con icono lleva su rótulo en `aria-label`.
+    // `texto` ya trae el primer rótulo no vacío del botón (textContent, value,
+    // aria-label o title): el inventario se arregló para eso en la misma ronda.
+    const rotulos = [boton?.texto, boton?.id, boton?.name, a.selector];
+    if (a.esBotonQueEmite || rotulos.some((r) => HUELE_A_EMITIR.test(paraVeto(r)))) {
       logger.info('piloto.detenido_antes_de_emitir', { comercio: op.comercio.clave, selector: a.selector, boton: boton?.texto, modo });
       return 'detenido_antes_de_emitir';
     }

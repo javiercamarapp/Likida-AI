@@ -40,6 +40,9 @@ export const ROTULO_DIFERENCIA: Record<TipoDiferencia, string> = {
   // sí: con forma de pago '06' decir «en efectivo» era falso en pantalla.
   combustible_efectivo: 'Combustible sin medio de pago admitido',
   efectivo_sobre_tope: 'Efectivo sobre el tope',
+  // Mismo criterio que `combustible_efectivo`: el rótulo NO dice «efectivo»,
+  // porque con forma '06' o '12' sería falso en pantalla (auditoría 22, FIS-C3).
+  medio_pago_no_admitido: 'Medio de pago fuera de la LISR 27-III',
   ieps_no_desglosado: 'IEPS sin desglosar',
   viatico_excede_fiscal: 'Viático sobre el tope fiscal',
   fecha_sospechosa: 'Fecha sospechosa',

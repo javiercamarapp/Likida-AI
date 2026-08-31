@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const gastoHoyUsd = 0;
+vi.mock('@/app/api/dashboard/chat/tope', () => ({
+  gastoChatHoyUsd: async () => gastoHoyUsd,
+  topeDiaUsd: () => 5,
+}));
+vi.mock('@/lib/likida/costos', () => ({
+  registrarCosto: async () => {},
+  faseDeModelo: () => 'chat',
+}));
+
 // ═══════════════════════════════════════════════════════════════════════════
 // El CABLEADO de F4 en el dispatcher — lo que las unidades no pueden probar:
 //

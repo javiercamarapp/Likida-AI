@@ -43,6 +43,7 @@ export const NORMA_POR_DIFERENCIA: Partial<Record<TipoDiferencia, string[]>> = {
   efectivo_sobre_15: ['lisr-27-fr-III', 'rfa-2026-2.9'],
   efectivo_no_elegible: ['lisr-27-fr-III'],
   efectivo_sobre_tope: ['lisr-27-fr-III'],
+  medio_pago_no_admitido: ['lisr-27-fr-III'],
   viatico_excede_fiscal: ['lisr-28-fr-V'],
   alimentacion_sin_soporte: ['lisr-28-fr-V'],
   alimentacion_transporte_sin_tarjeta_credito: ['lisr-28-fr-V'],

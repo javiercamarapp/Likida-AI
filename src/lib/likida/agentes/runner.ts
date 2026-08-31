@@ -370,7 +370,7 @@ async function loteRedactor(
   budget: LlmBudget | null,
   /** EL RELOJ DE LA VUELTA, adentro del motor (c7-1). Ver la nota del `for`. */
   venceEn: number,
-): Promise<{ piezas: number; saltados: number; costoUsd: number; sinTurno: number }> {
+): Promise<{ piezas: number; saltados: number; costoUsd: number | null; sinTurno: number }> {
   const tope = topePiezasPorCorrida();
   // ── EL OVERFETCH: era ×4 (20 candidatos para 5 piezas), ahora ×2 (10) ──────
   //
@@ -409,7 +409,10 @@ async function loteRedactor(
   if (error) throw new Error(`loteRedactor.candidatos: ${error.message}`);
   const candidatos = (data ?? []) as Array<{ id: string; vendedor: { nombre?: string } | null }>;
 
-  let piezas = 0, saltados = 0, costoUsd = 0, sinTurno = 0;
+  // ARQ-2: `null` es PEGAJOSO. Sumar un desconocido con `+=` lo convertía en
+  // cero y el agregado salía con cara de medido.
+  let piezas = 0, saltados = 0, sinTurno = 0;
+  let costoUsd: number | null = 0;
   for (let i = 0; i < candidatos.length; i++) {
     const c = candidatos[i];
     // ── EL RELOJ, ADENTRO DEL MOTOR (auditoría ciclo 7, c7-1) ───────────────
@@ -449,7 +452,7 @@ async function loteRedactor(
         budget,
       } : { plataforma: true });
       piezas += 1;
-      costoUsd += r.costoUsd;
+      costoUsd = (costoUsd === null || r.costoUsd === null) ? null : costoUsd + r.costoUsd;
     } catch (e) {
       // La RPC central ya hizo la decisión atómica. No se trata como un
       // prospecto inválido ni se sigue fabricando: el techo es de la corrida.

@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
 import { acotada } from '../presupuesto';
+import { traerTodo } from '../pg';
 import { violaIndice, UNIQUE_VIOLATION } from '../pg_errores';
 import type { Asiento, Procedencia, TipoAsiento } from './modelo';
 import type { PoliticaFlota } from './riesgo';
@@ -321,13 +322,32 @@ export async function leerJornadas(
   if (filas.length === 0) return { dias: [], truncada: false };
 
   const ids = filas.map((f) => String(f.id));
-  const asientos = await acotada(
-    admin.from('jornada_asiento').select(`jornada_id, ${CAMPOS_ASIENTO}`)
-      .eq('tenant_id', tenantId).in('jornada_id', ids)
-      .order('momento', { ascending: true }),
-    'jornada.leer.asientos',
-  );
-  if (asientos.error) throw new JornadaIlegible(asientos.error.message);
+  // ── AUDITORÍA 22, REN-C2 (CRÍTICO) ────────────────────────────────────────
+  // Esto era un `.in()` desnudo sobre hasta 900 expedientes. PostgREST recorta
+  // a 1,000 filas EN SILENCIO —sin error, sin bandera— y cada expediente lleva
+  // varias marcas: con ~4 por día, 900 expedientes son ~3,600 filas y se
+  // perdían dos tercios. Lo que se pierde aquí no es una cifra de tablero: son
+  // MARCAS DEL REGISTRO DE JORNADA, el documento del art. 132 fr. XXXIV de la
+  // LFT. Un registro laboral al que le faltan horas, sin decir que le faltan,
+  // es peor que no tenerlo.
+  //
+  // `traerTodo` pagina con `count` y LANZA `LecturaIncompleta` si no puede
+  // demostrar que leyó todo — que es justo lo que este módulo necesita, porque
+  // ya falla cerrado con `JornadaIlegible`.
+  let asientosFilas: Array<Record<string, unknown>>;
+  try {
+    asientosFilas = await traerTodo<Record<string, unknown>>(
+      (desde, hasta) => admin.from('jornada_asiento')
+        .select(`jornada_id, ${CAMPOS_ASIENTO}`, { count: 'exact' })
+        .eq('tenant_id', tenantId).in('jornada_id', ids)
+        .order('momento', { ascending: true })
+        .range(desde, hasta),
+      'jornada.leer.asientos',
+    );
+  } catch (e) {
+    throw new JornadaIlegible(e instanceof Error ? e.message : String(e));
+  }
+  const asientos = { data: asientosFilas, error: null as { message: string } | null };
 
   const porJornada = new Map<string, Asiento[]>();
   for (const a of (asientos.data ?? []) as unknown as Array<FilaAsientoDb & { jornada_id: string }>) {

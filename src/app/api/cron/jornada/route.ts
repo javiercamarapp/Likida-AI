@@ -90,13 +90,22 @@ export async function GET(req: Request) {
     // rebasa el tope devuelve siempre los mismos viajes viejos y los recientes
     // no se derivan nunca—. Un `ok` aquí sería un cron verde sobre un registro
     // laboral que se está quedando vacío.
-    const parcial = r.cortadosPorReloj > 0 || r.listaTruncada;
+    // AUDITORÍA 22, LEG-C1: un operador sin aviso previo NO es un fallo del
+    // cron —el motor hizo lo correcto al negarse—, pero SÍ deja su registro de
+    // jornada vacío, y eso el latido tiene que decirlo o el hueco es invisible.
+    // `parcial`, que es exactamente lo que significa: la ventana no se derivó
+    // entera y la razón está escrita.
+    const parcial = r.cortadosPorReloj > 0 || r.listaTruncada || r.sinAvisoPrevio > 0;
     const huboFallo = r.fallos.length > 0;
     await registrarLatido('jornada', huboFallo ? 'fallo' : parcial ? 'parcial' : 'ok', {
       cortadosPorReloj: r.cortadosPorReloj,
       listaTruncada: r.listaTruncada,
       asentados: r.asentados,
       diasSinGps: r.diasSinGps,
+      sinAvisoPrevio: r.sinAvisoPrevio,
+      motivo: r.sinAvisoPrevio > 0
+        ? `${r.sinAvisoPrevio} par(es) (operador, día) sin derivar: el operador nunca recibió el aviso de privacidad (LFPDPPP art. 16). La flota tiene que ponérselo a disposición antes de que su jornada se derive.`
+        : undefined,
     });
 
     if (huboFallo) {

@@ -127,6 +127,7 @@ export const RUTA_DE_DIFERENCIA: Record<TipoDiferencia, RutaDeAviso> = {
   complemento_hidrocarburos: 'decision',
   ieps_no_desglosado: 'decision',      // sin IEPS desglosado se pierde el estímulo: se pide refacturación
   efectivo_sobre_tope: 'decision',
+  medio_pago_no_admitido: 'decision', // lo confirma el contador: ni deducible ni perdido
   rfc_receptor: 'decision',            // timbrado a otro RFC: se pide refacturación
   rfc_receptor_no_verificable: 'decision', // el RFC de la propia flota no sirve; eso lo arregla el jefe
   alimentacion_transporte_sin_tarjeta_credito: 'decision',

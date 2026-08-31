@@ -44,6 +44,27 @@ describe('FISCAL-19C2-6: renglones ajenos al viaje ya no se imprimen 100% deduci
     expect(r.estatus).toBe('revisar');
   });
 
+  // ── AUDITORÍA 22, ARQ-1 / FIS (ALTO) ──────────────────────────────────────
+  // El arreglo de FISCAL-19C2-6 metió `renglones_ajenos` en `POR_CONFIRMAR` y
+  // en `REVISAR`, pero NO en `SIN_ACREDITAMIENTO`. Las pruebas de arriba miran
+  // la cubeta de ISR y el estatus; ninguna miraba el IVA. Resultado: el mismo
+  // CFDI salía con `totalDeducible 0` / `totalPorConfirmar 1000` y aun así
+  // `ivaAcreditable 137.93`, en verde.
+  //
+  // LIVA art. 5 fr. I —el artículo que este mismo bloque cita— acredita "en la
+  // proporción en la que dichas erogaciones sean deducibles para los fines del
+  // impuesto sobre la renta". Un gasto en `por_confirmar` tiene deducible CERO
+  // mientras no se confirme, así que la proporción es cero. Es el mismo
+  // razonamiento que `engine.ts` ya escribió para `gasto_otro_ejercicio`.
+  it('un gasto en por-confirmar no acredita su IVA (LIVA 5-I: la proporción deducible es cero)', () => {
+    const r = cuadra(canastaMixta);
+    expect(cubetaDe(canastaMixta, r.diferencias.filter((x) => x.gastoId === 'g1'))).toBe('por_confirmar');
+    expect(r.totalDeducible).toBe(0);
+    expect(r.totalPorConfirmar).toBe(1000);
+    // Lo que rompía: 137.93 acreditados sobre una erogación con deducible 0.
+    expect(r.ivaAcreditable).toBe(0);
+  });
+
   it('un renglón ajeno de menos del 15% no dispara nada (ruido, no señal)', () => {
     const g: Gasto = {
       ...canastaMixta,

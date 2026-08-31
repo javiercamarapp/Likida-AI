@@ -41,7 +41,7 @@ import {
 } from './cuadre/tope_alimentacion';
 // La constante vive en el motor a propósito: el panel y el motor tienen que
 // juzgar «no pagado» con el MISMO valor, o vuelven las dos cifras (FISC-C3-2).
-import { FORMA_PAGO_SIN_PAGAR, medioNoAdmitidoCombustible } from './cuadre/engine';
+import { FORMA_PAGO_SIN_PAGAR, MEDIOS_LISR_27_III, medioNoAdmitidoCombustible } from './cuadre/engine';
 import { getConfig, type LikidaConfig } from './config';
 
 // ── La fila de `gasto` leída con ojos de contador ──────────────────────────
@@ -151,6 +151,28 @@ function pesoDe(g: GastoFiscal): number {
  */
 function sobreTopeEfectivo(g: GastoFiscal, o: OpcionesFiscales): boolean {
   return g.celda ? g.celda.sobreTopeEfectivo : g.monto > o.efectivoTopeMxn;
+}
+
+/**
+ * AUDITORÍA 22, FIS-C3 (CRÍTICO) — el hermano de `sobreTopeEfectivo` que
+ * faltaba. La lista del primer párrafo de la LISR 27-III es CERRADA; el panel
+ * medía la frontera como «¿es '01'?», así que `'06' Dinero electrónico`,
+ * `'08' Vales`, `'12' Dación en pago`, `'17' Compensación`, `'23' Novación` y
+ * `'99 Por definir'` pasaban como deducibles con su IVA.
+ *
+ * DEBE espejar exactamente `engine.ts` (misma lista, mismo tope, mismas dos
+ * exclusiones): el motor y el panel del contador que discrepan sobre el mismo
+ * CFDI son dos cálculos, y esa es la falla que el producto no puede permitirse.
+ *
+ * - `'01'` NO entra: tiene su propia causa (`efectivo_sobre_tope`, perdida).
+ * - Sin `formaPago` NO entra: desconocido no es «medio distinto».
+ * - Combustible NO entra: lo gobierna la RFA 2.9 con su propia matriz.
+ */
+function medioFueraDeLista27III(g: GastoFiscal, o: OpcionesFiscales): boolean {
+  if (!g.formaPago || g.formaPago === '01') return false;
+  if (esCombustible(g, o)) return false;
+  if (!sobreTopeEfectivo(g, o)) return false;
+  return !(MEDIOS_LISR_27_III as readonly string[]).includes(g.formaPago);
 }
 
 // ── Periodo ────────────────────────────────────────────────────────────────
@@ -313,6 +335,8 @@ export type CausaPerdida =
   | 'efos_indeterminado'
   /** Efectivo sobre el tope, gasto NO combustible (LISR 27-III). */
   | 'efectivo_sobre_tope'
+  /** Sobre el tope con una forma de pago FUERA de la lista cerrada de LISR 27-III. */
+  | 'medio_pago_no_admitido'
   /** Combustible en efectivo: cuenta contra el 15% (RFA 2026 regla 2.9). */
   | 'combustible_efectivo'
   /** La flota no califica a la facilidad del 15% (RFA 2.9) — no deducible. */
@@ -378,6 +402,12 @@ export const TITULOS: Record<CausaPerdida, Omit<Causa, 'causa'>> = {
     titulo: 'Pagado en efectivo sobre el tope',
     norma: 'LISR 27-III',
     detalle: 'Gasto no-combustible pagado en efectivo por encima del tope: no es deducible aunque tenga CFDI.',
+  },
+  medio_pago_no_admitido: {
+    gravedad: 'en_riesgo',
+    titulo: 'Forma de pago fuera de la lista de la LISR 27-III',
+    norma: 'LISR 27-III',
+    detalle: 'Sobre el tope, la fracción admite una lista cerrada: transferencia, cheque nominativo, tarjeta de crédito/débito/servicios o monedero autorizado. Esta forma de pago no está en ella. No se afirma perdido —hay criterio en disputa para dación en pago, compensación y novación—: lo confirma tu contador.',
   },
   combustible_efectivo: {
     gravedad: 'en_riesgo',
@@ -457,6 +487,8 @@ export function causasDe(g: GastoFiscal, o: OpcionesFiscales): Causa[] {
     // que ya calculó el motor sobre recalcular el monto aquí.
   } else if (g.formaPago === '01' && sobreTopeEfectivo(g, o)) {
     push('efectivo_sobre_tope');
+  } else if (medioFueraDeLista27III(g, o)) {
+    push('medio_pago_no_admitido');
   }
 
   return out;
@@ -483,7 +515,7 @@ export function causasDe(g: GastoFiscal, o: OpcionesFiscales): Causa[] {
 // admite— con y sin la facilidad del 15%.
 export const ORDEN: CausaPerdida[] = [
   'efos', 'cfdi_cancelado', 'efectivo_sobre_tope', 'efectivo_no_elegible',
-  'efos_indeterminado', 'plazo_vencido', 'combustible_efectivo', 'sin_cfdi',
+  'efos_indeterminado', 'plazo_vencido', 'combustible_efectivo', 'medio_pago_no_admitido', 'sin_cfdi',
 ];
 
 export function causaDominante(g: GastoFiscal, o: OpcionesFiscales): Causa | null {
@@ -650,10 +682,27 @@ function ivaSostenible(g: GastoFiscal, o: OpcionesFiscales): boolean {
   if (g.estadoSat === 'pendiente' || g.estadoSat === 'no_encontrado') return false;
   if (g.efos === true) return false;
   if (g.formaPago === '01' && !esCombustible(g, o) && sobreTopeEfectivo(g, o)) return false;
-  // AUDITORÍA 14, ALTO: el combustible en EFECTIVO no acredita IVA — la
-  // facilidad del 15% (RFA 2.9) solo salva la deducción de ISR, y el motor ya
-  // lo niega (SIN_ACREDITAMIENTO). El panel afirmaba IVA sobre esos CFDIs.
-  if (medioNoAdmitidoCombustible(g.formaPago) && esCombustible(g, o)) return false;
+  // AUDITORÍA 22, FIS-C3: mismo hecho con otra forma de pago. Mientras el
+  // contador no confirme, la proporción deducible es cero y LIVA 5-I no acredita.
+  if (medioFueraDeLista27III(g, o)) return false;
+  // Combustible con un medio que la LISR 27-III no admite.
+  //
+  // AUDITORÍA 14, ALTO puso esta puerta cerrada del todo, razonando que «la
+  // facilidad del 15% solo salva la deducción de ISR». AUDITORÍA 22, FIS-C2
+  // (CRÍTICO) la corrige leyendo las dos fichas: `rfa-2026-2.9.yaml` →
+  // `limite_importante` dice «NO habilita el acreditamiento del IEPS» —dice
+  // IEPS, no dice IVA—, y `liva-5.yaml` art. 5 fr. I ata el acreditamiento a
+  // que la erogación sea DEDUCIBLE PARA ISR, que es justo lo que la facilidad
+  // conserva. Negar el IVA aquí le costaba a una flota con $5,000,000 de
+  // combustible al año unos $103,000 anuales que la ley le concede.
+  //
+  // La frontera queda en la elegibilidad, igual que en el motor:
+  //   · `elegible15 === true`  → hay deducción, luego hay IVA que sostener.
+  //   · `false` o sin declarar → no hay deducción (el motor emite
+  //     `efectivo_no_elegible` o `combustible_efectivo`), luego no hay IVA.
+  // Esta función es un booleano y no reparte proporciones; el motor sí lo hace
+  // con `proporcionDeducible`, y él es quien imprime la cifra del PDF.
+  if (medioNoAdmitidoCombustible(g.formaPago) && esCombustible(g, o) && o.elegible15 !== true) return false;
   // AUDITORÍA 18-c3, FISC-C3-2 (CRÍTICO): LIVA 5-III exige que el impuesto esté
   // "efectivamente pagado en el mes". `'99' Por definir` = la contraprestación
   // NO se ha pagado (RMF 2.7.1.29 fr. II), que es el caso normal de un CFDI PPD

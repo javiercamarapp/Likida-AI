@@ -142,6 +142,21 @@ export interface CfdiXmlData {
   tipoCambio?: number;
   iepsTraslado: number;     // Σ Traslado[Impuesto=003] Importe → IEPS acreditable
   ivaTraslado: number;      // Σ Traslado[Impuesto=002] Importe → IVA acreditable
+  /**
+   * Σ Retencion[Impuesto=002] Importe — IVA RETENIDO (AUDITORÍA 22, FIS-A1).
+   *
+   * El nodo `Retenciones` no se leía: solo se parseaban los `Traslado`. Las
+   * columnas `gasto.iva_retenido` / `isr_retenido` existen desde la migración
+   * 0063 y nadie las escribía, así que un flete subcontratado a un permisionario
+   * persona física —el caso normal en carga federal— llegaba a la póliza sin su
+   * retención, y el residuo que ese módulo deriva por resta salía NEGATIVO:
+   * el export contestaba «dato de origen roto» y tiraba el periodo entero.
+   *
+   * Una retención NO es un gasto: es una cuenta POR PAGAR al SAT.
+   */
+  ivaRetenido: number;
+  /** Σ Retencion[Impuesto=001] Importe — ISR retenido. Mismo criterio. */
+  isrRetenido: number;
   uuid?: string;
   conceptos: CfdiConceptoXml[];
   // Concepto REPRESENTATIVO (el de combustible si existe, si no el primero):
@@ -334,6 +349,20 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       else if (imp === '002') ivaTraslado += importe;
     }
 
+    // FIS-A1: las RETENCIONES, que no se leían. 001=ISR, 002=IVA. Mismo nodo
+    // `Impuestos` del comprobante, misma forma que los traslados.
+    const retenciones = toArr(
+      (impuestos.Retenciones as Record<string, unknown> | undefined)?.Retencion as Record<string, string>[] | undefined,
+    );
+    let ivaRetenido = 0;
+    let isrRetenido = 0;
+    for (const r of retenciones) {
+      const imp = r['@_Impuesto'];
+      const importe = num(r['@_Importe']) ?? 0;
+      if (imp === '002') ivaRetenido += importe;
+      else if (imp === '001') isrRetenido += importe;
+    }
+
     return {
       version: (comp['@_Version'] as string) || undefined,
       tipoComprobante: (comp['@_TipoDeComprobante'] as string) || undefined,
@@ -352,6 +381,8 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       moneda: monedaIso(comp['@_Moneda'] as string | undefined),
       tipoCambio: num(comp['@_TipoCambio']),
       iepsTraslado,
+      ivaRetenido,
+      isrRetenido,
       ivaTraslado,
       uuid: uuidRaw ? uuidRaw.toLowerCase() : undefined,
       conceptos,

@@ -87,8 +87,8 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
       revalidatePath(RUTA);
       if (!r.ok) return { error: `No se ejecutó la cancelación: ${r.motivo}` };
       return r.avisada
-        ? { ok: 'Cancelación ejecutada: el titular quedó anonimizado en la base y se le confirmó por WhatsApp. La documentación fiscal se conserva por el CFF art. 30, desligada de su persona.' }
-        : { ok: `Cancelación ejecutada: el titular quedó anonimizado en la base. La confirmación NO salió por WhatsApp${r.errorAviso ? ` (${r.errorAviso})` : ''} — entrégasela por otro canal.` };
+        ? { ok: 'Cancelación ejecutada: el titular quedó anonimizado en la base —incluido el texto libre que escribió por el chat— y se le confirmó por WhatsApp. La documentación fiscal se conserva por el CFF art. 30, desligada de su persona.' }
+        : { ok: `Cancelación ejecutada: el titular quedó anonimizado en la base, incluido el texto libre que escribió por el chat. La confirmación NO salió por WhatsApp${r.errorAviso ? ` (${r.errorAviso})` : ''} — entrégasela por otro canal.` };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'ejecutar la cancelación') };
     }

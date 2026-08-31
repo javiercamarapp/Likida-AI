@@ -158,6 +158,16 @@ export async function GET(req: Request) {
           const ultima = filas[filas.length - 1];
           res = await pagina({ creadoEn: String(ultima.created_at), id: String(ultima.id) });
         }
+        // ── AUDITORÍA 22, BE-3 (ALTO) ────────────────────────────────────
+        // Agotar las 100 páginas caía aquí y cerraba el CSV en limpio: a
+        // partir de 100,000 filas el archivo salía CORTO con cara de
+        // completo. El `throw` de arriba solo cubre «la base dejó de
+        // entregar»; este cubre «se acabaron las vueltas», que es el mismo
+        // resultado para quien recibe el archivo. Mismo criterio que
+        // `traerTodo` en pg.ts: completa Y DEMOSTRADA, o se dice.
+        if (esperadas !== null && leidas < esperadas) {
+          throw new LecturaIncompleta('export.liquidaciones', leidas, esperadas);
+        }
         controlador.close();
       } catch (e) {
         // Un fallo A MEDIO ARCHIVO no puede cambiar el 200 ya enviado; lo que

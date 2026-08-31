@@ -1,5 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const gastoHoyUsd = 0;
+const costosRegistrados: unknown[] = [];
+vi.mock('@/app/api/dashboard/chat/tope', () => ({
+  gastoChatHoyUsd: async () => gastoHoyUsd,
+  topeDiaUsd: () => 5,
+}));
+vi.mock('@/lib/likida/costos', () => ({
+  registrarCosto: async (c: unknown) => { costosRegistrados.push(c); },
+  faseDeModelo: () => 'chat',
+}));
+
 // ═══════════════════════════════════════════════════════════════════════════
 // La rama de OFICINA del dispatcher (processor.ts ~402-470) no tenía NINGUNA
 // prueba — lo anotó el mapa del 14-ago. Aquí se fija el contrato nuevo de F4:

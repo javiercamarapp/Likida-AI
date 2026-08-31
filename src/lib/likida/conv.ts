@@ -327,7 +327,23 @@ export async function loadConversation(tenantId: string, telefono: string, viaje
     .from('wa_conversacion')
     .select('id, estado, viaje_id')
     .eq('tenant_id', tenantId)
-    .eq('telefono', telefono)
+    // ── AUDITORÍA 22, DATOS-1 (ALTO) ──────────────────────────────────────
+    // Era `.eq('telefono', telefono)`: igualdad EXACTA sobre el texto crudo,
+    // mientras `resolveOperador` —dos funciones más arriba, en este mismo
+    // archivo— resuelve al chofer por cualquiera de las seis `variantesTelefono`
+    // precisamente porque el comentario de la línea 64 documenta que «el mismo
+    // teléfono llega como 529993700779 o como 5219993700779 según por dónde
+    // entre».
+    //
+    // Con la igualdad exacta, el MISMO chofer entrando por otro camino no
+    // encontraba fila y caía al INSERT de abajo: estrenaba conversación, y su
+    // `estado` —el viaje en curso, la barrera de ráfaga, la constancia del
+    // aviso de privacidad— quedaba partido entre dos filas, ninguna con la
+    // historia completa. Es el mismo defecto que la 0024 cerró para `operador`
+    // y que `wa_conversacion` nunca recibió (índice único en la 0274).
+    .in('telefono', variantesTelefono(telefono))
+    .order('updated_at', { ascending: false }).order('id', { ascending: false })
+    .limit(1)
     .maybeSingle(), 'loadConversation');
   // AUDITORÍA 8, ALTO: era la única vecina de `getOpenViaje`/`resolveOperador`
   // que descartaba `error`. Un blip de Supabase se leía como "no existe la
