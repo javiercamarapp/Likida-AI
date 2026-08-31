@@ -34,11 +34,18 @@ vi.mock('@/lib/supabase/admin', () => ({
               error: anticipos.error,
               count: anticipos.error ? null : todas.length,
             });
-            return {
+            // AUDITORÍA 23, REN-1: `order` entró a la cadena real (`traerTodo`
+            // pagina por posición y exige un orden único, `pg.ts:131-135`), así
+            // que el arnés tiene que aceptarlo. Aquí solo encadena; el arnés que
+            // sí distingue «con orden» de «sin orden» —y que por eso puede
+            // fallar por ese bug— es `oficina_wa_orden.test.ts`.
+            const constructor = () => ({
+              order: () => constructor(),
               range: (desde: number, hasta: number) => Promise.resolve(respuesta(desde, hasta)),
               // Sin `range`: el servidor recorta a `max-rows` y no lo dice.
               then: (r: (v: unknown) => unknown) => Promise.resolve(respuesta(0, TOPE_PG - 1)).then(r),
-            };
+            });
+            return constructor();
           },
         }),
       }),

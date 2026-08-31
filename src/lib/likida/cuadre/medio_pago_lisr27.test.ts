@@ -45,8 +45,27 @@ const cuadra = (formaPago: string) =>
 
 describe('FIS-C3: el tope de $2,000 se mide contra la lista cerrada, no contra «¿es 01?»', () => {
   // Lo que rompía: las tres salían deducibles al 100% con su IVA y sin una sola
-  // diferencia. `'99 Por definir'` entra por el mismo hueco.
-  it.each(['06', '08', '12', '17', '23', '99'])(
+  // diferencia.
+  //
+  // ── AUDITORÍA 23, FIS-1: `'99'` SALIÓ DE ESTA LISTA ──────────────────────
+  // Esta prueba lo incluía —«entra por el mismo hueco»— y no era cierto: `'99
+  // Por definir'` no es un medio de pago, es la AUSENCIA de uno (RMF 2.7.1.29
+  // fr. II). El propio `engine.ts` lo dice dos veces (`:127-128` y `:148-152`:
+  // «'99' devuelve false. No es un medio distinto: es que NO se pagó. Ese caso
+  // lo juzga la regla de pago efectivo, no esta»), y `medioNoAdmitidoCombustible`
+  // lo respeta desde la auditoría 18.
+  //
+  // Meterlo aquí sacaba del deducible toda compra a crédito de más de $2,000
+  // —la forma normal de comprar a crédito en México— y mataba la FASE 7
+  // (mig. 0199), que ingiere el complemento de pago justamente para recuperar
+  // ese IVA. Esta prueba pasaba en verde afirmando el bug.
+  //
+  // Ahora se juzga la forma EFECTIVA. El caso `'99'` en sus cuatro variantes
+  // (sin REP, con REP que dice '03', con REP que dice '06', con REP sin
+  // FormaDePagoP legible) vive en `medio_pago_99_credito.test.ts`, e incluye el
+  // que sostiene lo que ESTA prueba quería proteger: un '99' cuyo REP dice
+  // «06 Dinero electrónico» SÍ levanta la diferencia.
+  it.each(['06', '08', '12', '17', '23'])(
     'FormaPago %s sobre el tope: ni deducible en verde ni IVA acreditado',
     (forma) => {
       const r = cuadra(forma);

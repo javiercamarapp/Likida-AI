@@ -1,0 +1,69 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- AUDITORÍA 23 · SEG-1 / LEG-C1 (CRÍTICO) — LA 0273 REVIRTIÓ EL ARREGLO DE LA
+-- 0264, Y CI NO PUEDE VERLO.
+--
+-- `ejecutar_arco_cancelacion` llama `digest()` sin calificar (0273:70 y :124).
+-- `digest()` la aporta `pgcrypto`, y en Supabase GESTIONADO pgcrypto vive en el
+-- esquema `extensions`. Sin `extensions` en el `search_path` de la función, la
+-- llamada truena SIEMPRE, antes de tocar una sola tabla:
+--
+--     ERROR: 42883: function digest(text, unknown) does not exist
+--
+-- La 0264 (28-ago) encontró exactamente eso —verificándolo EN VIVO contra
+-- producción, no en CI— y lo cerró extendiendo el search_path de la función a
+-- `public, extensions, pg_catalog`.
+--
+-- Dos días después, la 0273 volvió a hacer `create or replace` de la misma
+-- función para cerrar LEG-A4 (el texto libre que la anonimización no alcanzaba)
+-- y declaró en su propia cabecera: «ESTA MIGRACIÓN PARTE DEL CUERPO DE LA 0262,
+-- VERBATIM». La 0262 es la versión ANTERIOR a la 0264. Al copiar el cuerpo
+-- bueno se copió también la cabecera mala, y `extensions` desapareció (0273:41).
+--
+-- Efecto hoy en producción: el contralor abre /dashboard/arco, aprieta
+-- «Ejecutar cancelación» sobre la solicitud de un operador, y recibe un error
+-- crudo de Postgres. NADA se anonimiza —nombre, teléfono, RFC, licencia y el
+-- texto libre de `incidencia.descripcion` siguen tal cual— mientras corre el
+-- plazo de 20 días hábiles del art. 31 de la LFPDPPP. El titular no puede
+-- ejercer su derecho de cancelación y la flota no puede cumplir aunque quiera.
+--
+-- ── POR QUÉ `alter function ... set` Y NO OTRO `create or replace` ─────────
+-- Porque el defecto está en la CABECERA, no en el cuerpo, y volver a copiar un
+-- cuerpo de 100 líneas para cambiar una línea de configuración es precisamente
+-- la maniobra que produjo este bug — dos veces ya (el primer intento de la 0273
+-- reescribió la función a mano y perdió el rechazo de `oposicion` y el «ya
+-- estaba cerrada»; la batería lo cazó). `alter function ... set search_path`
+-- toca la cabecera y deja el cuerpo de la 0273 intacto, byte por byte. Es el
+-- mismo mecanismo que usó la 0247 y por la misma razón.
+--
+-- ── POR QUÉ EXTENDER EL search_path Y NO CALIFICAR LA LLAMADA ─────────────
+-- Se descartó `extensions.digest(...)`, y la 0264 dejó escrita la medición: en
+-- el Postgres LOCAL de CI la extensión NO está en ese esquema (vive en `public`,
+-- porque `andamio_ci.sql` deja que la 0001 la instale ahí). Calificar habría
+-- arreglado producción rompiendo CI. Extender el search_path resuelve en los
+-- dos entornos, cada uno por el esquema donde de hecho tiene la extensión.
+--
+-- ── LA PRUEBA QUE SÍ LO ATRAPA ────────────────────────────────────────────
+-- El bloque 210 de `verificaciones.sql` llama esta función de verdad y espera
+-- `ok=t`, y pasó en VERDE los dos días que el defecto estuvo puesto: corre
+-- sobre el Postgres local, donde `digest()` sin calificar resuelve por `public`.
+-- El bloque E de `capa1_auditoria_estatica.sql` tampoco lo ve: comprueba que
+-- exista *algún* `search_path=`, nunca su contenido.
+--
+-- Por eso la red nueva es estática y vive en TS:
+-- `src/lib/likida/arco_search_path.test.ts` lee la ÚLTIMA definición vigente de
+-- la función en `supabase/migrations/` y exige `extensions` en su search_path
+-- mientras el cuerpo llame a `digest()` sin calificar. No se ancla a la 0273:
+-- se ancla a «la última», que es la que gana en producción. La próxima
+-- migración que redefina la función partiendo de un cuerpo viejo cae ahí igual.
+--
+-- Pendiente, fuera de esta migración (ya anotado por la 0264 y sigue sin
+-- hacerse): alinear `andamio_ci.sql` para instalar pgcrypto en `extensions`
+-- como Supabase gestionado, y que esta familia entera —mismatch de layout de
+-- esquemas entre local y gestionado— se atrape en CI la próxima vez.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+alter function public.ejecutar_arco_cancelacion(uuid, uuid)
+  set search_path = public, extensions, pg_catalog;
+
+comment on function public.ejecutar_arco_cancelacion(uuid, uuid) is
+  'Ejecuta una solicitud ARCO de CANCELACIÓN (no oposición): anonimiza nombre, teléfono, RFC y licencia (licencia_tipo, licencia_vence) del operador, borra su conversación de WhatsApp y sus envíos, anonimiza su app_user, y retira el texto libre que escribió el titular (incidencia.descripcion e incidencia_evento.detalle->>''texto'', marcando incidencia.texto_anonimizado_en — 0273). NO toca la documentación fiscal ya emitida (gasto.imagen_url, cfdi_uuid, ccp_timbre.xml): esos artefactos son inmutables, tienen su propia retención de 5 años (CFF art. 30) y quedan DESLIGADOS del titular en vez de borrados — ver 0178. search_path EXTENDIDO a `extensions` (0264, RESTAURADO por la 0275 tras que la 0273 lo revirtiera al partir del cuerpo de la 0262): pgcrypto vive en ese esquema en Supabase gestionado, fuera del search_path original de esta función (`public, pg_catalog`), y una llamada sin calificar a digest() truena SIEMPRE. La regresión es invisible en CI (pgcrypto está en `public` localmente); la red que sí la atrapa es src/lib/likida/arco_search_path.test.ts. SECURITY INVOKER.';
