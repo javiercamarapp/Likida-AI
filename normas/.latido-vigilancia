@@ -1,39 +1,53 @@
 fecha_corrida: 2026-08-30 (domingo)
-ultimo_dia_barrido: 2026-08-16 (sin cambio — septima corrida consecutiva sin poder barrer)
-rango_intentado: 2026-08-17..2026-08-29 (13 dias, quedaron sin cubrir; incluye 4 domingos: 23, 30-ago no cuenta pues es hoy... ver detalle)
-notas_revisadas: 0 — bloqueo de red antes de la primera llamada
-notas_por_edicion: {matutina: no_alcanzado, vespertina: no_alcanzado, extraordinaria: no_alcanzado}
-fichas_disparadas: 0
-etag_sat: sin_recheck — hoy es domingo, no lunes; ademas el host esta bloqueado igual
-etag_sat_check: no_intentado_bloqueo_previo
-deriva_ley_check: no_aplica_no_es_dia_1_trimestre
-estado: "INFRA egress bloqueado — septima corrida consecutiva de esta sesion en la nube con el mismo bloqueo (16-ago fue OK via sesion local; 20, 21, 22, 23 y 29-ago fallaron en la nube; hoy 30-ago falla identico)"
-detalle: >
-  curl directo a sidofqa.segob.gob.mx:443 -> proxy responde 403 a nivel
-  CONNECT (curl exit 56, "CONNECT tunnel failed, response 403"), identico
-  a las corridas del 20/21/22/23/29-ago. $HTTPS_PROXY/__agentproxy/status
-  confirma que la sesion esta bien configurada (enabled:true) y que el
-  403 fue registrado como recentRelayFailures contra
-  sidofqa.segob.gob.mx:443 justo antes de este intento — el bloqueo no es
-  un error de red intermitente, es politica del entorno. Esta corrida
-  repitio ademas la prueba independiente por WebFetch (corre del lado de
-  Anthropic, no via el proxy local) contra la misma URL: devolvio
-  EGRESS_BLOCKED explicito otra vez. Dos caminos distintos, mismo veto.
+ultimo_dia_barrido: 2026-08-30 (hoy — 0 notas, DOF no publica domingo)
+rango_barrido: 2026-08-17..2026-08-30 (14 dias, 3 ediciones/dia; cierra el backlog
+  acumulado desde el 16-ago, incluidos los 4 dias no habiles 22,23,29,30-ago)
+notas_revisadas: 931 (suma de NotasMatutinas+Vespertinas+Extraordinarias de los 10
+  dias habiles del rango; 0 en los 4 dias no habiles, confirmado por diarios/porFecha
+  con 404 NOT_FOUND — no es fallo de infra, es ausencia real de edicion)
+notas_por_edicion: {matutina: la_mayoria, vespertina: 2 relevantes (21-ago, 28-ago),
+  extraordinaria: 0}
+fichas_disparadas: 1 — cuota_ieps_diesel (dato semanal, no una ficha con
+  estado_verificacion; ver normas/datos/cuota-ieps-diesel.yaml)
+etag_sat: no_recheck — hoy no es lunes (el proximo chequeo cae 31-ago-2026)
+deriva_ley_check: no_aplica — no es dia 1 de trimestre
+estado: "OK — egress disponible en esta sesion local (a diferencia de las 6 corridas
+  en la nube 16 al 29-ago que reportaron EGRESS_BLOCKED); backlog de 14 dias cerrado
+  de un solo barrido"
+hallazgo: >
+  2 acuerdos semanales de cuota IEPS diesel encontrados y capturados:
+  Acuerdo 128/2026 (DOF 21-ago vespertina, codNota 5796917, vigencia
+  22-28 ago: 82.59% / reduccion 6.0813 / disminuida 1.2821) y Acuerdo
+  131/2026 (DOF 28-ago vespertina, codNota 5797457, vigencia 29ago-4sep:
+  81.50% / reduccion 6.0012 / disminuida 1.3622). Aritmetica verificada:
+  ambas semanas suman 7.3634 exacto. Ambas escritas en
+  normas/datos/cuota-ieps-diesel.yaml. El cambio EXIGIO tocar codigo:
+  CUOTA_DOF en src/lib/likida/marketing/calculadora.ts citaba la semana
+  15-21 ago y calculadora.test.ts lo hubiera fallado en CI (mismo guardia
+  de la auditoria 20, FISC-C1) — actualizado a la semana 29ago-4sep,
+  31 pruebas en verde, tsc limpio.
+falsos_positivos_revisados: >
+  9 notas mas dispararon el diccionario y se leyeron completas para
+  descartarlas: 7 licitaciones de CAPUFE (coincidencia de "ingresos" en
+  el nombre del organismo, no Ley de Ingresos), 1 acuerdo del Organo de
+  Administracion Judicial sobre datos personales (regla interna del
+  Poder Judicial, no toca LFPDPPP), 1 NOM de sangre humana (coincidencia
+  de "uma" dentro de "humana"). Ademas un acuerdo de estimulo
+  diesel/gasolina para sectores PESQUERO Y AGROPECUARIO (19-ago,
+  matutina) que es un programa distinto al que consume la ficha
+  lif-2026-20-A (ese es para autotransporte general) — no aplica.
 sin_verificar_esta_corrida: >
-  Todo el rango 17-ago..29-ago-2026 (13 dias) sin barrer. El ETag del
-  minisitio SAT sigue sin poder chequearse (ya pasaron CUATRO lunes sin
-  intentarlo con exito: 17-ago, 24-ago, y ahora ya viene el 31-ago
-  tampoco se podra si el bloqueo sigue) y las fichas de normas/ siguen
-  sin tocarse desde el 16-ago (hace 14 dias).
+  El ETag del minisitio SAT sigue sin chequear desde hace semanas (la
+  ultima vez documentada con exito fue antes del bloqueo de egress en la
+  nube); el proximo lunes 31-ago-2026 es la ventana. Las 31 fichas de
+  normas/*.yaml no se releyeron contra fuente primaria en esta corrida
+  (esta rutina solo barre el DOF y marca contradicho si algo choca; no
+  encontro contradicciones directas a ninguna ficha con estado_verificacion
+  en el rango 17-30 ago).
 accion_requerida: >
-  MISMA accion pendiente desde el 16-ago, AUN NO TOMADA tras SIETE
-  corridas consecutivas en la nube documentando el mismo bloqueo (20, 21,
-  22, 23, 29 y hoy 30-ago; mas la corrida OK del 16-ago que si tuvo
-  egress porque corrio local): (1) mover la cadencia diaria de esta
-  routine a un entorno con egress real — ejecucion local (launchd/cron en
-  una maquina con salida a internet), no esta sesion en la nube — o (2)
-  pedir a un admin que agregue sidofqa.segob.gob.mx, www.sat.gob.mx y
-  diputados.gob.mx a la allowlist de egress de este entorno. Mientras
-  ninguna de las dos pase, CADA corrida programada en la nube va a fallar
-  identico y el backlog de dias sin barrer sigue creciendo (van 14 dias
-  sin cubrir: 17-ago al 30-ago).
+  Ninguna urgente. Nota operativa: la corrida de HOY uso esta sesion local
+  (con egress real) para cerrar el backlog que 6 corridas en la nube no
+  pudieron tocar — si las corridas programadas siguen cayendo en el
+  entorno de nube sin salida a internet, el patron se va a repetir. Vale
+  la pena, cuando alguien lo revise, decidir si la cadencia diaria de esta
+  rutina se ancla a un entorno con egress garantizado.
