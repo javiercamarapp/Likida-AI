@@ -278,6 +278,23 @@ export const NORMAS: readonly Norma[] = [
     ]
   },
   {
+    "archivo": "lisr-72-73.yaml",
+    "id": "lisr-72-73",
+    "tipo": "ley",
+    "instrumento": "Ley del Impuesto sobre la Renta",
+    "articulo_o_regla": "72 y 73",
+    "titulo": "Título II, Capítulo VII — Del Régimen de Coordinados",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LISR.pdf",
+    "verificado_el": "2026-08-30",
+    "jerarquia": 1,
+    "citasEnCodigo": [
+      "LISR 72-73",
+      "LISR 72–73",
+      "LISR 72"
+    ]
+  },
+  {
     "archivo": "liva-5.yaml",
     "id": "liva-art-5",
     "tipo": "ley",
@@ -371,6 +388,21 @@ export const NORMAS: readonly Norma[] = [
     ]
   },
   {
+    "archivo": "rfa-2026-2.1.yaml",
+    "id": "rfa-2026-2.1",
+    "tipo": "rfa",
+    "instrumento": "Resolución de Facilidades Administrativas para 2026",
+    "articulo_o_regla": "2.1",
+    "titulo": "Retención del ISR a operadores, macheteros y maniobristas (7.5%, sobre el SBC)",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rfa/rfa/RFA2026_17022026.pdf",
+    "verificado_el": "2026-08-30",
+    "jerarquia": 3,
+    "citasEnCodigo": [
+      "RFA 2026 regla 2.1"
+    ]
+  },
+  {
     "archivo": "rfa-2026-2.2.yaml",
     "id": "rfa-2026-2.2",
     "tipo": "rfa",
@@ -383,6 +415,36 @@ export const NORMAS: readonly Norma[] = [
     "jerarquia": 3,
     "citasEnCodigo": [
       "RFA 2026 regla 2.2"
+    ]
+  },
+  {
+    "archivo": "rfa-2026-2.3.yaml",
+    "id": "rfa-2026-2.3",
+    "tipo": "rfa",
+    "instrumento": "Resolución de Facilidades Administrativas para 2026",
+    "articulo_o_regla": "2.3",
+    "titulo": "Responsabilidad solidaria acotada del coordinado cuando el integrante tributa individual",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rfa/rfa/RFA2026_17022026.pdf",
+    "verificado_el": "2026-08-30",
+    "jerarquia": 3,
+    "citasEnCodigo": [
+      "RFA 2026 regla 2.3"
+    ]
+  },
+  {
+    "archivo": "rfa-2026-2.5.yaml",
+    "id": "rfa-2026-2.5",
+    "tipo": "rfa",
+    "instrumento": "Resolución de Facilidades Administrativas para 2026",
+    "articulo_o_regla": "2.5",
+    "titulo": "Concepto de coordinado (la definición administrativa que completa a LISR 72)",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rfa/rfa/RFA2026_17022026.pdf",
+    "verificado_el": "2026-08-30",
+    "jerarquia": 3,
+    "citasEnCodigo": [
+      "RFA 2026 regla 2.5"
     ]
   },
   {

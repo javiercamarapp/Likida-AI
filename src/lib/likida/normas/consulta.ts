@@ -64,6 +64,7 @@ export const TEMAS: Record<TemaNormativo, readonly string[]> = {
   iva_acreditable: ['liva-art-5', 'lif-2026-art-20-A'],
   nomina_imss_y_descuentos: [
     'lss-27', 'criterios-imss-sbc', 'lft-110-111-263', 'rlisr-57',
+    'rfa-2026-2.1',
   ],
   privacidad_de_datos: [
     'lfpdppp-2025-art-15-16', 'lfpdppp-2025-art-2-fr-XII-XX',
@@ -73,6 +74,7 @@ export const TEMAS: Record<TemaNormativo, readonly string[]> = {
   regimen_de_autotransporte: [
     'rfa-2026-2.2', 'tesis-autotransporte', 'red-nacional-autopistas',
     'rmf-2026-9.1.7', 'nom-087-sct-2-2017', 'reglamento-transito-83',
+    'lisr-72-73', 'rfa-2026-2.3', 'rfa-2026-2.5',
   ],
   // El tema del registro de jornada (mig. 0241). Las tres fichas conviven a
   // propósito y NO dicen lo mismo: la LFT manda registrar la jornada y pone los

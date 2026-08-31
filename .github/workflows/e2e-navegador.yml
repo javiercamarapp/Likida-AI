@@ -137,6 +137,9 @@ jobs:
           # Nadie llama a un modelo en esta suite; si un camino probado lo
           # intentara, el placeholder lo vuelve un fallo ruidoso, no un gasto.
           OPENROUTER_API_KEY: e2e-placeholder
+          # Mismo motivo que ci.yml (31-ago-2026): el paso de TypeScript de
+          # `next build` empezó a tronar por heap en el runner estándar.
+          NODE_OPTIONS: --max-old-space-size=6144
 
       - name: Chromium para Playwright
         run: npx playwright install --with-deps chromium
