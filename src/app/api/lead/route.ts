@@ -37,7 +37,7 @@ const ORIGENES = new Set(['https://likida.ai', 'https://www.likida.ai']);
 const MAX_BODY = 8 * 1024;
 
 /**
- * Los dos dominios cerrados, espejo de los `check` de la 0137.
+ * Los tres dominios cerrados, espejo de los `check` de la 0137 y la 0275.
  *
  * Se validan aquí ADEMÁS de en la base por una razón concreta: si llega un
  * valor fuera del dominio, la base rebotaría el INSERT ENTERO y se perdería el
@@ -45,6 +45,7 @@ const MAX_BODY = 8 * 1024;
  * cae solo y el prospecto se guarda igual — que es lo que importa.
  */
 const UNIDADES = new Set(['5-30', '31-100', '101-250', '250+']);
+const EMPLEADOS = new Set(['1-3', '4-10', '11-30', '30+']);
 const URGENCIAS = new Set(['inmediata', 'trimestre', 'explorando']);
 
 /** Lo único que se guarda de la URL. Lo que no está aquí se descarta. */
@@ -196,6 +197,7 @@ export async function POST(req: Request) {
     correo: texto(body.correo, 160),
     telefono: texto(body.whatsapp, 40),
     unidades: deDominio(body.unidades, UNIDADES),
+    empleados: deDominio(body.empleados, EMPLEADOS),
     urgencia: deDominio(body.urgencia, URGENCIAS),
     atribucion: atr,
     updated_at: new Date().toISOString(),
@@ -271,7 +273,7 @@ function esViolacionUnica(err: unknown): boolean {
 // AUDITORÍA PROD (22-ago-2026) · SEG-2. Este endpoint no tiene sesión: basta
 // con acertarle al correo de un prospecto —o a su nombre de empresa— para
 // reescribirle `empresa`, `contacto_nombre`, `telefono`, `unidades`,
-// `urgencia` y `atribucion`. El daño no es "spam en el CRM": el teléfono es
+// `empleados`, `urgencia` y `atribucion`. El daño no es "spam en el CRM": el teléfono es
 // AL QUE LLAMA EL VENDEDOR y la atribución es la que decide cuánto se cree
 // que rinde cada canal. Cambiar el teléfono de un prospecto en negociación es
 // desviar la llamada.
@@ -290,22 +292,22 @@ function esViolacionUnica(err: unknown): boolean {
 
 
 
-/** Las columnas que la 0137 agrega y que pueden no existir todavía. */
-const DE_LA_0137 = new Set(['unidades', 'urgencia', 'atribucion']);
+/** Las columnas que la 0137 y la 0275 agregan y que pueden no existir todavía. */
+const DE_LA_0137 = new Set(['unidades', 'urgencia', 'atribucion', 'empleados']);
 
 /**
- * LA RED DE SEGURIDAD DE LA 0137.
+ * LA RED DE SEGURIDAD DE LA 0137 (generalizada a la 0275).
  *
  * Si este endpoint se despliega ANTES de que la migración corra, Postgres
  * rebota por columna desconocida y —con el catch de arriba— el lead se
  * perdería EN SILENCIO, que es exactamente lo que esta ruta existe para
  * impedir. Se reintenta sin la columna que faltó y lo que traía se anota en
- * `notas`, que siempre existió. Se repite porque faltan tres a la vez y
- * Postgres solo nombra UNA por intento.
+ * `notas`, que siempre existió. Se repite porque pueden faltar varias a la vez
+ * y Postgres solo nombra UNA por intento.
  *
- * Solo se sacrifican columnas de la 0137: si lo que falta fuera `empresa`, eso
- * no es "todavía no migra", es que la tabla no es la que se cree, y ahí sí hay
- * que gritar en vez de guardar una fila coja.
+ * Solo se sacrifican columnas de la 0137/0275: si lo que falta fuera `empresa`,
+ * eso no es "todavía no migra", es que la tabla no es la que se cree, y ahí sí
+ * hay que gritar en vez de guardar una fila coja.
  */
 async function escribir(
   db: ReturnType<typeof supabaseAdmin>,
