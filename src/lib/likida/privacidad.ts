@@ -641,7 +641,29 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         // ningún gasto (cola de huérfanos, mig. 0165). El aviso ahora dice
         // esa frontera con todas sus letras, porque prometer un borrado que
         // la base rechaza es una promesa con evidencia escrita de romperse.
-        `**No se piden ni se conservan datos sensibles.** Ni salud, ni origen racial o étnico, ni creencias, ni afiliación sindical, ni preferencias sexuales, ni datos biométricos. Cada foto se procesa completa por el motor de lectura para extraer los campos del comprobante; si en ella aparece por accidente algo sensible (un ticket de farmacia, por ejemplo), un filtro lo detecta y lo excluye: **no se guarda como dato, no participa en tu liquidación**, y la imagen que no respalda ningún gasto se elimina sola del almacenamiento. **Lo que no se puede borrar ni pidiéndolo:** la foto que ya es comprobante de un gasto — esa se conserva por obligación fiscal (CFF art. 30). Lo que sí puedes pedir es que se **desligue de tu persona**, y eso es lo que la cancelación ejecuta.`,
+        // AUDITORÍA 22, LEG-A1 (ALTO): la nota de voz viaja ÍNTEGRA al
+        // proveedor que la transcribe (`voz_transcrita.ts`) y no estaba
+        // enumerada ni como dato ni como salida. La voz es dato personal por
+        // sí misma (art. 3 fr. V): identifica a quien habla.
+        `Las **notas de voz** que mandas por el chat. Se transcriben a texto para poder atenderlas, y tanto el audio como su transcripción quedan en la conversación.`,
+        // AUDITORÍA 22, LEG-A2 (ALTO): el RFC y el número de licencia del
+        // operador salen hacia el PAC dentro del Carta Porte
+        // (`carta_porte_xml.ts:183-185`) y no estaban en ninguna de las dos
+        // listas del aviso. La fr. II obliga a enumerarlos.
+        `Tu **RFC** y el **número de tu licencia de conducir**, cuando tu empresa emite un complemento Carta Porte del viaje que traes: el SAT los exige dentro de ese comprobante.`,
+        // ── AUDITORÍA 22, LEG-C2 (CRÍTICO) ─────────────────────────────────
+        // Este párrafo juraba «No se piden ni se conservan datos sensibles. Ni
+        // salud…». El circuito de asistencia guarda `incidencia.hay_lesionados`
+        // —columna propia, migración 0198, ligada a `operador_id`— y el texto
+        // crudo con el que el chofer describe el accidente
+        // (`asistencia_wa.ts:524`). La salud es dato sensible (art. 3 fr. VI) y
+        // el art. 59 fr. IV agrava la sanción hasta el doble.
+        //
+        // Una negativa ABSOLUTA que el código contradice es peor que el
+        // silencio: es una afirmación falsa firmada, con evidencia en la base.
+        // Se declara lo que sí ocurre, con su finalidad y su límite, y se
+        // conserva la promesa que sí es cierta para las demás categorías.
+        `**Un dato de salud, y solo uno:** si avisas por el chat de un accidente o una emergencia, se guarda **si hay personas lesionadas** y el texto con el que lo describes, para poder escalarlo a tu empresa y atenderlo. No se usa para tu liquidación ni para evaluarte. **Fuera de ese caso no se piden ni se conservan datos sensibles:** ni origen racial o étnico, ni creencias, ni afiliación sindical, ni preferencias sexuales, ni datos biométricos. Cada foto se procesa completa por el motor de lectura para extraer los campos del comprobante; si en ella aparece por accidente algo sensible (un ticket de farmacia, por ejemplo), un filtro lo detecta y lo excluye: **no se guarda como dato, no participa en tu liquidación**, y la imagen que no respalda ningún gasto se elimina sola del almacenamiento. **Lo que no se puede borrar ni pidiéndolo:** la foto que ya es comprobante de un gasto — esa se conserva por obligación fiscal (CFF art. 30). Lo que sí puedes pedir es que se **desligue de tu persona**, y eso es lo que la cancelación ejecuta.`,
       ],
     },
     {
@@ -676,6 +698,13 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         gps === 'sin_conector'
           ? `· Usar la ubicación que tú compartas por el chat para el seguimiento del viaje y para medir sus tiempos —por ejemplo, cuánto estuvo detenida la unidad en un sitio de carga o descarga— y mostrárselo a la empresa. Puedes oponerte a que esas ubicaciones se usen ligadas a tu persona.`
           : `· Usar las posiciones GPS de la unidad para el seguimiento del viaje y para medir sus tiempos —por ejemplo, cuánto estuvo detenida la unidad en un sitio de carga o descarga— y mostrárselo a la empresa. Puedes oponerte a que esas posiciones se usen ligadas a tu persona; el rastreo del camión es un contrato de tu empresa con su proveedor y no se apaga desde aquí, y decírtelo así es más honesto que prometer lo contrario.`,
+        // AUDITORÍA 22, LEG-A3 (ALTO): `jornada/derivar.ts` DERIVA tu registro
+        // de jornada laboral a partir de las posiciones GPS. Eso no es
+        // "seguimiento del viaje": es una finalidad distinta, con un destino
+        // distinto (LFT 132 fr. XXXIV), y el propio aviso declara dos párrafos
+        // más abajo que toda finalidad no escrita exige pedir permiso otra vez.
+        // Va entre las NO necesarias: la liquidación cierra igual sin ella.
+        `· Derivar tu **registro de jornada** —a qué hora empezaste a manejar, cuánto condujiste, cuánto descansaste— a partir de esas mismas posiciones, para que tu empresa cumpla su obligación de llevarlo (Ley Federal del Trabajo art. 132 fr. XXXIV). Puedes oponerte a que se derive ligado a tu persona.`,
         `· Medir cómo funciona el servicio para mejorarlo (estadísticas de uso, sin identificarte en los reportes).`,
         `Cualquier finalidad que no esté escrita aquí requiere que te vuelvan a pedir permiso. La ley vigente ya no permite ampararse en usos "compatibles o análogos".`,
       ],
@@ -735,6 +764,12 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
       parrafos: [
         `**Tus datos no se venden, ni se comparten con nadie para que los use por su cuenta.**`,
         `Sí pasan por proveedores que trabajan por instrucción de la empresa y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia** (art. 2 fr. XX)—: el proveedor de mensajería de WhatsApp, el de alojamiento de la base de datos, y los modelos de lenguaje: les llegan **las fotos de tus comprobantes** para leerlas y **el texto de tus mensajes** —la conversación completa— para poder contestarte. A esos modelos en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
+        // AUDITORÍA 22, LEG-A1: la nota de voz sale ENTERA al mismo proveedor
+        // para transcribirse, y no se decía. AUDITORÍA 22, LEG-A2: el PAC no
+        // estaba en ninguna lista, y el Carta Porte lleva RFC y licencia del
+        // operador.
+        `También les llegan **tus notas de voz**, completas, para transcribirlas a texto.`,
+        `Y cuando tu empresa emite un complemento **Carta Porte**, el comprobante viaja al **proveedor autorizado de certificación (PAC)** que lo timbra ante el SAT, y dentro de él van **tu RFC y el número de tu licencia**: el SAT los exige en ese documento.`,
         `Transferencias que sí lo son y no necesitan tu consentimiento: a la autoridad fiscal cuando la ley lo exige, y al contador de la empresa para cumplir sus obligaciones.`,
         `**Si algún día se quisiera transferir tus datos para algo distinto, se te pedirá permiso antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
       ],

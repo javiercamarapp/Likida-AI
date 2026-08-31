@@ -106,6 +106,11 @@ export const LLAVES_EXTRA_SEGURAS = new Set([
   'tipo', 'metodo',
   'digest',
   'codigo', 'code', 'status',
+  // AUDITORÍA 22, OP-A2: el folio fiscal identifica un DOCUMENTO, no a una
+  // persona, y cuando el `update {uuid_fiscal}` falla es la ÚNICA llave para
+  // reconstruir un comprobante que ya existe ante el SAT. `extraSeguro` la
+  // descartaba entera y el evento llegaba sin con qué buscar.
+  'uuid', 'uuidFiscal', 'uuidCfdi', 'folioFiscal',
 ]);
 
 // Mismo carve-out que `CLAVES_NO_PII` en logger.ts, y por el mismo motivo: el

@@ -888,7 +888,18 @@ export class PaginaPlaywright implements PaginaPortal {
             tag: el.tagName.toLowerCase(),
             id: el.getAttribute('id') ?? '',
             name: el.getAttribute('name') ?? '',
-            texto: (el.textContent ?? (el as HTMLInputElement).value ?? '').trim().slice(0, 60),
+            // AUDITORÍA 22, TC-A2: era `el.textContent ?? value ?? ''`, y en un
+            // `<input type=submit>` `textContent` es la CADENA VACÍA, no null:
+            // el `??` nunca caía al `value`, así que el botón que dice
+            // «Continuar» llegaba al veto de emisión con rótulo vacío. Se toma
+            // el primer rótulo NO VACÍO, e incluye `aria-label`/`title`, que es
+            // donde vive el rótulo de un botón con icono.
+            texto: [
+              el.textContent,
+              (el as HTMLInputElement).value,
+              el.getAttribute('aria-label'),
+              el.getAttribute('title'),
+            ].map((s) => (s ?? '').trim()).find((s) => s.length > 0)?.slice(0, 60) ?? '',
             visible: visible(el),
           })),
           captcha: [...document.querySelectorAll('iframe, div, script')]

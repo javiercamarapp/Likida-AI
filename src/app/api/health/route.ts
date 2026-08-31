@@ -73,7 +73,18 @@ export async function GET(req: NextRequest) {
 
   // Solo el agregado, sin detalle: el health es público y esto no filtra
   // nombres de cron ni datos de negocio. Una lectura caída degrada el pulso.
-  let cronCheck: 'ok' | 'degraded' | 'unknown' = 'unknown';
+  // ── AUDITORÍA 22, OP-C1 (CRÍTICO): TRES ESTADOS, NO DOS ──────────────────
+  // `config_ausente` es NUEVO y es el hallazgo entero. Este endpoint ya
+  // distinguía por dentro un hueco de configuración DECLARADO (el cron dice qué
+  // le falta y quién lo destraba) de una regresión real, y luego colapsaba los
+  // dos en `degraded`. El watchdog de producción exige `estado=ok`, así que
+  // `descarga-sat` sin LIKIDA_SAT_PROVEEDOR lo dejaba rojo PARA SIEMPRE: 30
+  // corridas seguidas en failure, y una muerte real de cron se veía idéntica al
+  // ruido conocido. Un detector que no puede cambiar de color no detecta.
+  //
+  // Se publica el tercer estado para que el watchdog pueda tratarlos distinto:
+  // un hueco declarado se anota y no tumba el job; una regresión sí.
+  let cronCheck: 'ok' | 'degraded' | 'config_ausente' | 'unknown' = 'unknown';
   try {
     const latidos = await detalleLatidos();
     const vencidos = (Object.keys(latidos) as CronId[]).filter((c) => latidos[c].estado === 'vencido');
@@ -98,6 +109,9 @@ export async function GET(req: NextRequest) {
       // correo "Urgente" en cada ping de un monitor externo, para siempre).
       const configAusente = noSanos.filter((c) => esHuecoDeConfiguracion(latidos[c].detalle));
       const regresiones = noSanos.filter((c) => !configAusente.includes(c));
+      // OP-C1: si TODO lo no-sano es hueco declarado, el estado es
+      // `config_ausente` — visible, pero distinguible de una regresión.
+      cronCheck = regresiones.length > 0 ? 'degraded' : 'config_ausente';
       if (configAusente.length > 0) {
         logger.warn('health.cron_config_ausente', {
           crons: configAusente,
@@ -128,7 +142,15 @@ export async function GET(req: NextRequest) {
     logger.warn('health.latidos_ilegibles', { err: e instanceof Error ? e.message : String(e) });
   }
 
-  const status: 'ok' | 'degraded' | 'fail' = db !== 'ok' ? 'fail' : cronCheck !== 'ok' ? 'degraded' : 'ok';
+  // OP-C1: `config_ausente` NO tumba el status global. No es benevolencia: es
+  // que un hueco declarado ya tiene su propio canal (alertarHuecoConfiguracion)
+  // y dejarlo aquí en rojo permanente destruye la única señal que distingue un
+  // cron muerto de uno sin configurar. El estado sigue publicado en
+  // `checks.crons` para quien quiera exigirlo.
+  const status: 'ok' | 'degraded' | 'fail' =
+    db !== 'ok' ? 'fail'
+      : cronCheck === 'degraded' || cronCheck === 'unknown' ? 'degraded'
+        : 'ok';
   // Métrica de baja cardinalidad para logs/drains. El detalle de qué cron fue
   // vencido queda en el log privado y no se publica en este endpoint.
   logger.info('metric.health', { status, db, cron: cronCheck, ms: Date.now() - iniciado });

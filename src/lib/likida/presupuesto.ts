@@ -150,6 +150,30 @@ export const TECHO_CIERRE_MS = PASOS_CIERRE.reduce((s, p) => s + p.techoMs, 0);
  */
 export const MARGEN_CIERRE_MS = PASOS_CIERRE.reduce((s, p) => s + (p.critico ? p.techoMs : p.ms), 0);
 
+/**
+ * Lo IRRENUNCIABLE del cierre: solo los pasos críticos, a su techo duro.
+ *
+ * ── AUDITORÍA 22, AGEN-A1 (ALTO) ──────────────────────────────────────────
+ * `MARGEN_CIERRE_MS` es la RESERVA: `restante()` ya lo descuenta antes de
+ * dárselo al agente. Volver a exigirlo DESPUÉS del agente es contarlo dos
+ * veces, y el resultado no es un borde raro sino una identidad:
+ *
+ *     margenDuro() = restante() + MARGEN_CIERRE_MS
+ *
+ * El agente pide `min(40_000, restante())`. Siempre que ese `min` lo gana
+ * `restante()` —o sea, siempre que el turno llegó con menos de 41 s
+ * utilizables— y el agente consume su tope, `restante()` aterriza en 0 y
+ * `margenDuro()` en `MARGEN_CIERRE_MS − ε`. El chequeo daba FALSO
+ * determinísticamente, y con él se suprimía el único aviso de que la
+ * liquidación salió corta: la alarma se apagaba justo en el caso que existe
+ * para vigilar.
+ *
+ * Lo que el chequeo tiene que responder no es «¿me queda la reserva entera?»
+ * sino «¿alcanzo a hacer lo que no puedo dejar de hacer?»: mandar la
+ * respuesta, firmar el PDF y entregarlo. Eso es esto.
+ */
+export const MARGEN_CIERRE_CRITICO_MS = PASOS_CIERRE.reduce((s, p) => s + (p.critico ? p.techoMs : 0), 0);
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TODA CONSULTA DE ESTE ARCHIVO TIENE TECHO.
 //

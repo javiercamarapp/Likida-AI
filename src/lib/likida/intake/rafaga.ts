@@ -82,6 +82,10 @@ interface Bandeja {
   confirmaciones: number;
   /** Acuses de las fotos que entraron bien, pendientes de decidir si se mandan. */
   acuses: string[];
+  /** A quién contestarle si la ráfaga se cierra POR CORTE (auditoría 22,
+   *  AGEN-A2). Se guarda al anotar la foto para no pagar una consulta justo
+   *  cuando el corte ocurre por falta de presupuesto. */
+  telefono: string | null;
 }
 
 /**
@@ -110,7 +114,7 @@ function abrir(viajeId: string): Bandeja {
       const vieja = bandejas.keys().next();
       if (!vieja.done) bandejas.delete(vieja.value);
     }
-    b = { vistas: 0, incidencias: [], confirmaciones: 0, acuses: [] };
+    b = { vistas: 0, incidencias: [], confirmaciones: 0, acuses: [], telefono: null };
     bandejas.set(viajeId, b);
   }
   return b;
@@ -128,9 +132,33 @@ function abrir(viajeId: string): Bandeja {
  * fotos» a quien mandó tres. Una cifra inventada, que es la regla que no se
  * rompe en este repo.
  */
-export function anotarFoto(viajeId: string, empiezaRafaga = false): void {
+export function anotarFoto(viajeId: string, empiezaRafaga = false, telefono?: string): void {
   if (empiezaRafaga) bandejas.delete(viajeId);
-  abrir(viajeId).vistas += 1;
+  const b = abrir(viajeId);
+  b.vistas += 1;
+  // AUDITORÍA 22, AGEN-A2: el teléfono se guarda AQUÍ para que un cierre por
+  // corte pueda hablarle al chofer sin pagar una consulta — y el corte ocurre
+  // justamente cuando ya no queda presupuesto para consultas.
+  if (telefono) b.telefono = telefono;
+}
+
+/**
+ * Las ráfagas que quedaron ABIERTAS en este proceso, con a quién contestarles.
+ *
+ * ── AUDITORÍA 22, AGEN-A2 (ALTO) ──────────────────────────────────────────
+ * La libreta solo se cierra en la foto que no tiene otra detrás en su cadena.
+ * Pero la cadena se corta con `break` cuando `processInbound` devuelve
+ * `'sin_tiempo'`, y ese corte es el caso NORMAL del fajo grande: 22 fotos a
+ * 8-15 s cada una no caben en una invocación.
+ *
+ * Resultado: la libreta con `vistas: 6` y tres incidencias nunca se cerraba, y
+ * el proceso moría con ella. El chofer mandó seis fotos, tres salieron
+ * ilegibles, y no recibió nada — ni el resumen ni el aviso de que tres no se
+ * leyeron. El cron levanta el resto en OTRA invocación, con libreta nueva, así
+ * que nadie va a decirlo después: se perdió con el proceso.
+ */
+export function bandejasAbiertas(): Array<{ viajeId: string; telefono: string | null }> {
+  return [...bandejas.entries()].map(([viajeId, b]) => ({ viajeId, telefono: b.telefono ?? null }));
 }
 
 /**

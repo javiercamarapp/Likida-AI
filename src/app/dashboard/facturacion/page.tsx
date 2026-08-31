@@ -73,24 +73,34 @@ export default async function PaginaFacturacion({
     auditoria = null;
   }
 
-  // El catálogo de clientes para el formulario. `catch → []` es honesto aquí:
-  // sin catálogo el form dice "no tienes clientes dados de alta", que manda a
-  // la pantalla correcta en vez de fingir una lista vacía de otra cosa.
-  let clientes: Array<{ id: string; nombre: string; diasCredito: number | null }> = [];
+  // El catálogo de clientes para el formulario. `null` = NO SE PUDO LEER; `[]`
+  // = se leyó y de verdad no hay ninguno (AUDITORÍA 22, FE-1).
+  //
+  // Antes esto caía a `[]` en cualquier falla, y el comentario de aquí lo
+  // llamaba "honesto". No lo era: supabase-js NO lanza, devuelve
+  // `{ data: null, error }`, así que un 500 de PostgREST o una policy nueva
+  // hacían que el formulario le dijera «no tienes clientes dados de alta» a una
+  // flota con 40 clientes activos — que además los ve listados en
+  // /dashboard/clientes. El mismo archivo ya distinguía las dos cosas para
+  // `datos` y `auditoria` ("el catch NO finge que no hay facturas"); esta era
+  // la única lectura de la pantalla que las mezclaba.
+  let clientes: Array<{ id: string; nombre: string; diasCredito: number | null }> | null = null;
   try {
     const { data, error } = await supabaseAdmin().from('cliente')
       .select('id, nombre, dias_credito')
       .eq('tenant_id', tenantId).eq('activo', true)
       .order('nombre');
-    if (!error && data) {
-      clientes = data.map((c) => ({
+    if (error) {
+      clientes = null;
+    } else {
+      clientes = (data ?? []).map((c) => ({
         id: String((c as { id: unknown }).id),
         nombre: String((c as { nombre: unknown }).nombre),
         diasCredito: (c as { dias_credito: number | null }).dias_credito,
       }));
     }
   } catch {
-    clientes = [];
+    clientes = null;
   }
 
   // ── Las cuatro escrituras. Las puertas van escritas en CADA action a

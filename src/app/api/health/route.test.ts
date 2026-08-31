@@ -117,7 +117,19 @@ describe('/api/health', () => {
   // disparaba en CADA ping de un monitor externo. Fija el comportamiento
   // nuevo: el health sigue diciendo la verdad (503/degraded), pero el hueco
   // declarado ya NO manda el correo urgente repetido.
-  it('hueco de configuración declarado: degrada el health pero NO manda el correo urgente repetido', async () => {
+  // ── AUDITORÍA 22, OP-C1 (CRÍTICO): ESTA PRUEBA CAMBIÓ DE VEREDICTO ───────
+  // Antes fijaba `status:'degraded'` + 503 para un hueco de configuración
+  // DECLARADO. Esa decisión, tomada de buena fe, tuvo una consecuencia que solo
+  // se ve en producción: el watchdog (`salud-produccion.yml`) exige
+  // `estado=ok`, así que `descarga-sat` sin LIKIDA_SAT_PROVEEDOR lo dejó rojo
+  // 30 corridas seguidas — y una muerte REAL de cron se veía idéntica al ruido
+  // conocido. El único detector automático de cron muerto no podía cambiar de
+  // color, y de paso arrastraba el cotejo del sha desplegado, que nunca corría.
+  //
+  // El hueco no se oculta: se publica como `checks.crons='config_ausente'`, un
+  // tercer estado propio, y conserva su canal de aviso. Lo que deja de hacer es
+  // tumbar el pulso, porque una alarma que no puede apagarse no es una alarma.
+  it('hueco de configuración declarado: se DISTINGUE, no tumba el pulso, y conserva su canal', async () => {
     dbFalla = false;
     alertarOperador.mockClear();
     alertarHuecoConfiguracion.mockClear();
@@ -136,9 +148,10 @@ describe('/api/health', () => {
     const r = await GET(peticion());
     const c = await r.json();
 
-    // El monitor externo sigue viendo la verdad: el cron no está sano.
-    expect(r.status).toBe(503);
-    expect(c).toMatchObject({ ok: false, status: 'degraded', checks: { db: 'ok', crons: 'degraded' } });
+    // El monitor externo sigue viendo la verdad —el cron no está sano— pero
+    // ahora puede distinguirla de una regresión: es un estado propio.
+    expect(r.status).toBe(200);
+    expect(c).toMatchObject({ ok: true, status: 'ok', checks: { db: 'ok', crons: 'config_ausente' } });
     // Pero el canal urgente no se dispara por un hueco ya conocido...
     expect(alertarOperador).not.toHaveBeenCalled();
     // ...se avisa por el canal de "pendiente de configurar", con el motivo tal cual.
@@ -211,8 +224,11 @@ describe('/api/health', () => {
     const r = await GET(peticion());
     const c = await r.json();
 
-    expect(r.status).toBe(503);
-    expect(c).toMatchObject({ ok: false, status: 'degraded', checks: { db: 'ok', crons: 'degraded' } });
+    // Mismo cambio de veredicto que arriba (auditoría 22, OP-C1): lo que se
+    // afirma aquí es que la señal ESTRUCTURADA lo clasifica como hueco, y eso
+    // sigue siendo cierto — ahora con su estado propio en vez de `degraded`.
+    expect(r.status).toBe(200);
+    expect(c).toMatchObject({ ok: true, status: 'ok', checks: { db: 'ok', crons: 'config_ausente' } });
     expect(alertarOperador).not.toHaveBeenCalled();
     expect(alertarHuecoConfiguracion).toHaveBeenCalledWith(
       'cron.config_ausente:descarga-sat',
@@ -250,5 +266,55 @@ describe('/api/health — no expone configuración interna', () => {
     vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'tok');
     const c = await (await GET(peticion())).json();
     expect(JSON.stringify(c)).not.toMatch(/upstash|sentry|token|wa-pendientes/i);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 22 · OP-C1 (CRÍTICO) — el detector tiene que poder cambiar de color.
+//
+// Lo que rompía, medido con la API de GitHub: 30 corridas consecutivas de
+// `salud-produccion.yml` en `failure`, incluida la programada del día. La causa
+// era un hueco de configuración declarado que degradaba el health para siempre.
+// Con el watchdog clavado en rojo, un cron REALMENTE muerto no cambiaba nada en
+// pantalla — que es la definición de no tener detector.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('OP-C1: hueco de configuración y cron muerto ya no se ven igual', () => {
+  const conLatidos = async (ls: unknown[]) => {
+    dbFalla = false;
+    latidos = ls as typeof latidos;
+    const r = await GET(peticion());
+    return { http: r.status, cuerpo: await r.json() };
+  };
+  const ahora = () => new Date().toISOString();
+  const HUECO = {
+    id: 'descarga-sat', ultimo_latido: ahora(), estado: 'parcial',
+    detalle: { motivo: 'falta LIKIDA_SAT_PROVEEDOR en el servidor' },
+  };
+
+  it('solo huecos declarados ⇒ el pulso pasa, marcado como config_ausente', async () => {
+    const { http, cuerpo } = await conLatidos([HUECO]);
+    expect(http).toBe(200);
+    expect(cuerpo.checks.crons).toBe('config_ausente');
+  });
+
+  it('un cron VENCIDO sí tumba el pulso, aunque haya un hueco declarado al lado', async () => {
+    // Éste es el escenario que el watchdog clavado en rojo no podía distinguir.
+    const viejo = new Date(Date.now() - 48 * 3_600_000).toISOString();
+    const { http, cuerpo } = await conLatidos([
+      HUECO,
+      { id: 'gps', ultimo_latido: viejo, estado: 'ok', detalle: {} },
+    ]);
+    expect(http).toBe(503);
+    expect(cuerpo.status).toBe('degraded');
+    expect(cuerpo.checks.crons).toBe('degraded');
+  });
+
+  it('una REGRESIÓN real junto a un hueco declarado también tumba el pulso', async () => {
+    const { http, cuerpo } = await conLatidos([
+      HUECO,
+      { id: 'gps', ultimo_latido: ahora(), estado: 'fallo', detalle: { motivo: 'timeout del proveedor' } },
+    ]);
+    expect(http).toBe(503);
+    expect(cuerpo.checks.crons).toBe('degraded');
   });
 });

@@ -28,6 +28,12 @@ vi.mock('@/lib/supabase/admin', () => ({
       // (tenant + teléfono) que para la de uno (`getTenantContext`).
       const nodo: Record<string, unknown> = {};
       nodo.eq = () => nodo;
+      // AUDITORÍA 22, DATOS-1: `loadConversation` busca por las seis
+      // `variantesTelefono` (`.in`) y desempata (`.order`/`.limit`), no por
+      // igualdad exacta. El nodo tiene que aceptar esa cadena.
+      nodo.in = () => nodo;
+      nodo.order = () => nodo;
+      nodo.limit = () => nodo;
       nodo.maybeSingle = maybeSingle;
       return {
         select: () => nodo,

@@ -85,7 +85,12 @@ export function Plegable({ resumen, children }: { resumen: string; children: Rea
  */
 export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
   accion: AccionForma;
-  clientes: ReadonlyArray<{ id: string; nombre: string; diasCredito: number | null }>;
+  /**
+   * `null` = la lectura del catálogo FALLÓ. No es lo mismo que `[]`, que es
+   * «se leyó y de verdad no hay ninguno» (AUDITORÍA 22, FE-1). Confundirlos le
+   * dice a una flota con 40 clientes que no tiene ninguno.
+   */
+  clientes: ReadonlyArray<{ id: string; nombre: string; diasCredito: number | null }> | null;
   viajesSinFacturar: ReadonlyArray<RenglonSinFacturar>;
   /** `YYYY-MM-DD` calculado en el servidor (hora de México), para que el
    *  default no dependa del reloj del navegador. */
@@ -98,7 +103,13 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
           <label htmlFor="ff-cliente" className={ETIQUETA}>Cliente</label>
-          {clientes.length === 0 ? (
+          {clientes === null ? (
+            <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+              Tu catálogo de clientes no se pudo leer en este momento — la lista existe, el
+              sistema no la alcanzó. Vuelve a cargar la pantalla en unos minutos; no registres
+              la factura a ciegas.
+            </p>
+          ) : clientes.length === 0 ? (
             <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
               No tienes clientes dados de alta. Una factura siempre es A ALGUIEN: dalos de alta
               primero en la pantalla de Clientes.

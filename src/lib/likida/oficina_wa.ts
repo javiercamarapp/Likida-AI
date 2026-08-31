@@ -1,6 +1,9 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
+import { traerTodo } from './pg';
+import { registrarCosto, faseDeModelo } from './costos';
+import { gastoChatHoyUsd, topeDiaUsd } from '@/app/api/dashboard/chat/tope';
 import { strip_accents } from './cuadre/util';
 import { getTableroOperacion } from './operacion';
 import { generarInformePDF, type Informe, type KpiInforme } from './informes/pdf';
@@ -74,19 +77,37 @@ export async function mandarInformePdf(cuenta: CuentaInforme, telefono: string):
     // La MISMA consulta que el informe de texto (informes_wa): suma de
     // anticipos de viajes sin cerrar. Fallar cerrado: si no se puede leer,
     // la sección lo dice — nunca un cero con cara de medición.
-    const { data, error } = await admin.from('viaje')
-      .select('anticipo').eq('tenant_id', cuenta.tenantId).in('estatus', ['abierto', 'en_cuadre']);
-    if (error) {
-      secciones.push({ titulo: 'Dinero', parrafos: ['Los anticipos no se pudieron leer en este momento — la cifra existe, el sistema no la alcanzó. Vuelve a pedir el informe en unos minutos.'] });
-    } else {
-      const suma = (data ?? []).reduce((acc, v) => acc + (typeof v.anticipo === 'number' ? v.anticipo : 0), 0);
+    //
+    // AUDITORÍA 22, REN-1 (CRÍTICO): esto manejaba `error` y ahí se detenía,
+    // que es la mitad del problema. PostgREST recorta a 1,000 filas EN
+    // SILENCIO —sin error y sin bandera—, así que una flota con 1,500 viajes
+    // sin cerrar recibía la suma de 1,000 impresa como «Anticipos en la
+    // calle», y «Viajes sin liquidar» decía 1,000. Una cifra incompleta con
+    // cara de completa es el mismo pecado que el cero con cara de medición, y
+    // esta va en un PDF firmado que el dueño reenvía a su contador.
+    //
+    // `traerTodo` pagina con `count` y LANZA `LecturaIncompleta` si no puede
+    // demostrar que leyó todo — que es justo lo que este `catch` necesita para
+    // decirlo en vez de imprimirlo corto.
+    try {
+      const filas = await traerTodo<{ anticipo: number | null }>(
+        (desde, hasta) => admin.from('viaje')
+          .select('anticipo', { count: 'exact' })
+          .eq('tenant_id', cuenta.tenantId).in('estatus', ['abierto', 'en_cuadre'])
+          .range(desde, hasta),
+        'oficina.anticipos_en_calle',
+      );
+      const suma = filas.reduce((acc, v) => acc + (typeof v.anticipo === 'number' ? v.anticipo : 0), 0);
       secciones.push({
         titulo: 'Dinero',
         filas: [
           ['Anticipos en la calle', mxn(suma)],
-          ['Viajes sin liquidar', numero((data ?? []).length)],
+          ['Viajes sin liquidar', numero(filas.length)],
         ],
       });
+    } catch (e) {
+      logger.error('oficina.anticipos_no_leidos', { tenantId: cuenta.tenantId, err: String(e) });
+      secciones.push({ titulo: 'Dinero', parrafos: ['Los anticipos no se pudieron leer completos en este momento — la cifra existe, el sistema no la alcanzó. Vuelve a pedir el informe en unos minutos.'] });
     }
   }
   secciones.push({
@@ -157,6 +178,27 @@ export function bloquesATextoWa(bloques: Bloque[]): string {
 export async function atenderPreguntaLibre(cuenta: CuentaInforme, texto: string): Promise<string | null> {
   if (!rolConAnalista(cuenta.rol)) return null;
   const { data } = await supabaseAdmin().from('tenant').select('nombre').eq('id', cuenta.tenantId).maybeSingle();
+  // ── AUDITORÍA 22, REN-A1 (ALTO): EL MISMO ANALISTA, SIN FRENO NI CUENTA ──
+  // Esto corre el analista COMPLETO —hasta nueve completions con tools— y no
+  // registraba un centavo en `llm_costo` ni pasaba por el tope diario. El chat
+  // del panel, que ejecuta EXACTAMENTE el mismo agente, hace las dos cosas
+  // (api/dashboard/chat/route.ts). O sea: el mismo gasto, por otro canal, era
+  // invisible para el panel de costo y para el freno — y el canal de WhatsApp
+  // es justamente el que el producto empuja como principal.
+  //
+  // El tope se lee igual y falla CERRADO, con el mismo criterio: si no se pudo
+  // verificar el presupuesto, no se gasta más.
+  let gastadoHoy: number;
+  try {
+    gastadoHoy = await gastoChatHoyUsd(cuenta.tenantId);
+  } catch (e) {
+    logger.error('oficina.tope_dia.error', { tenantId: cuenta.tenantId, err: e instanceof Error ? e.message : String(e) });
+    return 'No pude verificar el presupuesto de IA del día, así que mejor no sigo por ahí. Vuelve a preguntarme en un rato.';
+  }
+  if (gastadoHoy >= topeDiaUsd()) {
+    return 'El análisis con IA de hoy llegó a su tope diario (existe para cuidar tu costo). Mañana se renueva solo; mientras, pídeme el informe o el estatus, que no gastan.';
+  }
+
   try {
     const r = await ejecutarAnalista({
       tenantId: cuenta.tenantId,
@@ -165,6 +207,20 @@ export async function atenderPreguntaLibre(cuenta: CuentaInforme, texto: string)
       mensajes: [{ rol: 'usuario', texto: texto.slice(0, 1500) }],
       timeoutMs: 35_000,
     });
+    // POR MODELO real, mismo criterio que el chat del panel y que processor.ts:
+    // una sola etiqueta miente cuando hubo fallback entre proveedores.
+    for (const [modelo, c] of Object.entries(r.costoPorModelo ?? {})) {
+      try {
+        await registrarCosto({
+          tenantId: cuenta.tenantId, viajeId: null, fase: faseDeModelo(modelo, 'chat'), modelo,
+          tokensIn: c.tokensIn, tokensOut: c.tokensOut, costoUsd: c.cost,
+        });
+      } catch (e2) {
+        // El costo no registrado NO se traga la respuesta del jefe, pero sí se
+        // dice: un gasto invisible es exactamente lo que este arreglo cierra.
+        logger.error('oficina.costo_sin_registrar', { tenantId: cuenta.tenantId, err: e2 instanceof Error ? e2.message : String(e2) });
+      }
+    }
     const salida = bloquesATextoWa(r.bloques);
     return salida || 'No alcancé a armar esa respuesta. ¿Me la repites de otra forma?';
   } catch (e) {

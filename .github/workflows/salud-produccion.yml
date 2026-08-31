@@ -31,18 +31,38 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: /api/health está healthy (cron stale degrada y falla)
+      # ── AUDITORÍA 22, OP-C1 (CRÍTICO) ──────────────────────────────────
+      # Este paso exigía `estado=ok` a secas. `descarga-sat` sin
+      # LIKIDA_SAT_PROVEEDOR es un hueco de configuración DECLARADO —el cron
+      # dice qué le falta y quién lo destraba— y degradaba el health, así que
+      # el watchdog llevaba 30 corridas seguidas en rojo. Una muerte real de
+      # cron se veía EXACTAMENTE igual que el ruido conocido: el único
+      # detector automático de cron muerto no podía cambiar de color.
+      #
+      # Ahora se leen los dos campos. `checks.crons=config_ausente` se ANOTA y
+      # deja pasar; un `degraded` de verdad (regresión o cron vencido) falla.
+      - name: /api/health está healthy (un cron vencido falla; un hueco de config se anota)
         run: |
           set -u
           cuerpo=$(curl -sS --max-time 20 -w '\n%{http_code}' https://app.likida.ai/api/health) || { echo "::error::/api/health no contestó"; exit 1; }
           status=$(echo "$cuerpo" | tail -n1)
           json=$(echo "$cuerpo" | sed '$d')
-          estado=$(printf '%s' "$json" | node -e "let s=''; process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(String(JSON.parse(s).status||''))}catch{process.stdout.write('invalid')}})")
-          echo "http=$status estado=$estado"
-          [ "$status" = "200" ] && [ "$estado" = "ok" ] || { echo "::error::/api/health no está healthy (http=$status estado=$estado); un cron stale se reporta como degraded."; exit 1; }
+          leer() { printf '%s' "$json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);process.stdout.write(String(j$1??''))}catch{process.stdout.write('invalid')}})"; }
+          estado=$(leer '.status')
+          crons=$(leer '.checks?.crons')
+          echo "http=$status estado=$estado crons=$crons"
+          if [ "$crons" = "config_ausente" ]; then
+            echo "::warning::Hay un cron sin configurar (checks.crons=config_ausente). NO tumba el pulso a propósito: dejarlo rojo permanente esconde un cron muerto de verdad. Destrábalo en las variables de entorno."
+          fi
+          [ "$status" = "200" ] && [ "$estado" = "ok" ] || { echo "::error::/api/health no está healthy (http=$status estado=$estado crons=$crons); un cron vencido o con regresión se reporta como degraded."; exit 1; }
 
+      # AUDITORÍA 22, OP-A1 (ALTO): `if: always()`. Este paso es la ÚNICA
+      # defensa contra el modo de falla silencioso del deploy que documenta
+      # CLAUDE.md —olvidar la bandera y quedarse con la versión anterior sin
+      # aviso—, y nunca corría: el paso de arriba abortaba el job antes. Un
+      # pulso rojo no puede llevarse por delante el cotejo del sha.
       - name: El sha desplegado es el que se pusheó (solo push con [deploy] en el asunto)
-        if: github.event_name == 'push'
+        if: always() && github.event_name == 'push'
         env:
           ASUNTO: ${{ github.event.head_commit.message }}
           SHA: ${{ github.sha }}

@@ -327,6 +327,20 @@ async function cerrarLiquidacion(ctx: ToolContext, inicioCorrida: Date) {
     // reimprimir con la fotografía vieja archivaría el PDF que causó el
     // hallazgo. Se vuelve a fotografiar Y se vuelve a imprimir, o no se cierra.
     const generarPdfs = async (cuadre: Omit<Liquidacion, 'id' | 'creadaEn'>) => {
+      // ── AUDITORÍA 22, BE-2 (ALTO): LAS RUTAS SE REINICIAN ────────────────
+      // El comentario de arriba dice la intención: «reimprimir con la
+      // fotografía vieja archivaría el PDF que causó el hallazgo». Pero
+      // `pdfPath` y `pdfOperadorPath` viven FUERA y no se reiniciaban, así que
+      // si la SEGUNDA impresión falla —el `catch` de abajo la registra y sigue—
+      // las rutas de la PRIMERA sobreviven, `saveLiquidacion` archiva el PDF
+      // del cuadre VIEJO y `sendDocument` se lo manda al chofer, todo
+      // reportando éxito. O sea: exactamente lo que este bloque existe para
+      // impedir, en el camino de excepción que lo motivó (CU003, 0158).
+      //
+      // `undefined` es la verdad cuando no hay papel nuevo: `saveLiquidacion`
+      // y la corrida ya saben leerlo como «el cierre vale, falta el papel».
+      pdfPath = undefined;
+      pdfOperadorPath = undefined;
       try {
         // DAT-41: el id del papel es el que la fila va a tener (trigger de la
         // 0159), no uno inventado que nadie podría buscar después.

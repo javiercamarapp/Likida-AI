@@ -16,8 +16,23 @@ const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 // `loadConversation` filtra por (tenant_id, telefono) —dos `.eq()`— y el
 // LEE-MODIFICA-ESCRIBE de `saveConversation` (auditoría 2, ronda 2) filtra
 // solo por `id` —uno—. Las dos formas terminan en el mismo `maybeSingle`.
-function nodoEncadenable(): { eq: () => ReturnType<typeof nodoEncadenable>; maybeSingle: typeof maybeSingle } {
-  const nodo = { eq: () => nodoEncadenable(), maybeSingle };
+// AUDITORÍA 22, DATOS-1: `loadConversation` ya no busca por igualdad exacta
+// sino por las seis `variantesTelefono` (`.in`), con desempate — el mismo
+// chofer llegaba como 52… o 521… y estrenaba conversación.
+function nodoEncadenable(): {
+  eq: () => ReturnType<typeof nodoEncadenable>;
+  in: () => ReturnType<typeof nodoEncadenable>;
+  order: () => ReturnType<typeof nodoEncadenable>;
+  limit: () => ReturnType<typeof nodoEncadenable>;
+  maybeSingle: typeof maybeSingle;
+} {
+  const nodo = {
+    eq: () => nodoEncadenable(),
+    in: () => nodoEncadenable(),
+    order: () => nodoEncadenable(),
+    limit: () => nodoEncadenable(),
+    maybeSingle,
+  };
   return nodo;
 }
 

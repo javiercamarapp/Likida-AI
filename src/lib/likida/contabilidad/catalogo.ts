@@ -40,6 +40,9 @@ const CONCEPTOS: readonly ConceptoGasto[] = [
 export const CUENTAS_BALANCE = {
   iva_acreditable: 'ivaAcreditable',
   iva_no_acreditable: 'ivaNoAcreditable',
+  gasto_no_deducible: 'gastoNoDeducible',
+  gasto_por_confirmar: 'gastoPorConfirmar',
+  retenciones_por_pagar: 'retencionesPorPagar',
   anticipo_operador: 'anticipoOperador',
   por_cobrar_operador: 'porCobrarOperador',
   por_pagar_operador: 'porPagarOperador',
@@ -50,6 +53,12 @@ export const AYUDA_BALANCE: Record<keyof typeof CUENTAS_BALANCE, string> = {
   iva_acreditable: 'IVA acreditable de los comprobantes del viaje.',
   iva_no_acreditable:
     'IVA/IEPS que el motor de cuadre NO acreditó (RFC ajeno, EFOS, efectivo, o IEPS de diésel, que nunca se acredita). Sigue siendo dinero del anticipo.',
+  gasto_no_deducible:
+    'Gastos que el motor declaró NO deducibles (EFOS, CFDI cancelado, efectivo sobre el tope). Salieron del anticipo, así que van en el asiento — pero no en la cuenta de gasto deducible: el PDF los imprime como no deducibles y el archivo del ERP tiene que decir lo mismo.',
+  gasto_por_confirmar:
+    'El tercer estado: ni deducible ni perdido, lo confirma tu contador (combustible en efectivo dentro del 15%, EFOS no concluyente, ticket sin timbrar). Va aparte de los no deducibles: juntarlos diría que ya se perdió algo que todavía se puede recuperar.',
+  retenciones_por_pagar:
+    'IVA/ISR que le retienes al proveedor (típico en fletes subcontratados a un permisionario persona física). No es un gasto: es una cuenta POR PAGAR al SAT, y va como abono. Sin ella el export se negaba diciendo «dato de origen roto».',
   anticipo_operador: 'El anticipo entregado al operador; el asiento lo cancela.',
   por_cobrar_operador: 'Lo que el operador debe devolver (comprobó de menos).',
   por_pagar_operador: 'Lo que se le debe al operador (puso de su bolsa).',

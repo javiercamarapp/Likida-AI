@@ -75,7 +75,7 @@ const linea = (indice: number, monto: number, fecha?: string): CfdiLineaXml => (
 
 const xmlConsolidado = (lineas: CfdiLineaXml[]): CfdiXmlData => ({
   uuid: 'UUID-CONSOLIDADO-1',
-  iepsTraslado: 0, ivaTraslado: 0, conceptos: [],
+  iepsTraslado: 0, ivaTraslado: 0, ivaRetenido: 0, isrRetenido: 0, conceptos: [],
   complementoHidrocarburos: false, esquemaAlterno: false,
   lineas,
 });

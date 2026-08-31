@@ -30,7 +30,8 @@ import { polizaDeLiquidacion, type LiquidacionParaPoliza } from '@/lib/likida/co
 import { catalogoDeclarado, CUENTAS_BALANCE } from '@/lib/likida/contabilidad/catalogo';
 import { archivoContpaqi, archivoSapB1 } from '@/lib/likida/contabilidad/formatos';
 import { perfilExportacionDeclarado } from '@/lib/likida/contabilidad/perfiles';
-import type { ConceptoGasto } from '@/types/likida';
+import { cubetaDe } from '@/lib/likida/cuadre/engine';
+import type { ConceptoGasto, Diferencia, Gasto } from '@/types/likida';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -47,6 +48,54 @@ interface FilaPoliza {
   ivaAcreditable: number;
   porConcepto: Array<{ concepto: ConceptoGasto; subtotal: number | null; baseConocida?: boolean }>;
   baseDesconocida: number;
+  /** FIS-C1: un renglón por comprobante, para clasificarlo con `cubetaDe`. */
+  gastos?: Array<{ id: string; concepto: ConceptoGasto; subtotal: number | null; descuento?: number | null; tieneCfdi: boolean }>;
+  /** FIS-A1: Σ IVA/ISR retenido al proveedor. Va como ABONO en el asiento. */
+  retenciones?: number;
+  /** Las diferencias que la liquidación ya guarda (`gastoId` + `tipo`). */
+  diferencias?: Diferencia[];
+}
+
+/**
+ * AUDITORÍA 22, FIS-C1 (CRÍTICO) — reparte la base de cada concepto en las TRES
+ * cubetas del motor.
+ *
+ * La clasificación NO se reimplementa aquí ni en SQL: se llama a `cubetaDe`,
+ * la misma función que el PDF y el panel usan. Si mañana un tipo nuevo entra a
+ * `NO_DEDUCIBLE_ISR`, este reparto se entera solo — que es justo lo que no
+ * pasaría con las listas copiadas en la RPC.
+ *
+ * Sin `gastos` (una liquidación vieja, o la RPC anterior a la 0272) se conserva
+ * el comportamiento previo: todo a la cubeta deducible. Es lo que había, y
+ * degradar en silencio a «todo no deducible» sería peor.
+ */
+function repartirPorCubeta(f: FilaPoliza): LiquidacionParaPoliza['porConcepto'] {
+  const base = (f.porConcepto ?? []).map((c) => ({
+    concepto: c.concepto, subtotal: Number(c.subtotal),
+    subtotalNoDeducible: 0, subtotalPorConfirmar: 0,
+  }));
+  if (!f.gastos?.length) return base;
+
+  const porConcepto = new Map(base.map((b) => [b.concepto, { ...b, subtotal: 0 }]));
+  const difs = f.diferencias ?? [];
+  for (const g of f.gastos) {
+    // FIS-A1: la base va NETA de `@Descuento`. El Total del CFDI ya lo está,
+    // así que el asiento tiene que estarlo o el residuo sale negativo y el
+    // export contesta «dato de origen roto» tirando el periodo entero.
+    const monto = Number(g.subtotal ?? 0) - Number(g.descuento ?? 0);
+    if (!Number.isFinite(monto) || monto === 0) continue;
+    const fila = porConcepto.get(g.concepto);
+    if (!fila) continue;
+    // `cubetaDe` solo mira el UUID del CFDI y las diferencias del gasto.
+    const cubeta = cubetaDe(
+      { id: g.id, concepto: g.concepto, monto, cfdiUuid: g.tieneCfdi ? 'si' : undefined } as Gasto,
+      difs.filter((d) => d.gastoId === g.id),
+    );
+    if (cubeta === 'no_deducible') fila.subtotalNoDeducible += monto;
+    else if (cubeta === 'por_confirmar') fila.subtotalPorConfirmar += monto;
+    else fila.subtotal += monto;
+  }
+  return [...porConcepto.values()];
 }
 
 const DIAS_MAXIMO = 92;
@@ -192,8 +241,9 @@ export async function GET(req: Request) {
       operador: f.operador,
       fecha: f.fecha,
       anticipo: Number(f.anticipo),
-      porConcepto: (f.porConcepto ?? []).map((c) => ({ concepto: c.concepto, subtotal: Number(c.subtotal) })),
+      porConcepto: repartirPorCubeta(f),
       ivaAcreditable: Number(f.ivaAcreditable),
+      retenciones: Number(f.retenciones ?? 0),
       diferencia: Number(f.diferencia),
     };
     const r = polizaDeLiquidacion(liq, catalogo);

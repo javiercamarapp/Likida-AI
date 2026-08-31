@@ -318,7 +318,9 @@ export async function correrAtencionFaq(
 ): Promise<ResultadoExito> {
   const inicio = new Date();
   const agente = 'atencion_faq';
-  let costoUsd = 0;
+  // AUDITORÍA 22, ARQ-2 (ALTO): `number | null`, como en contenido.ts.
+  // `null` = no medido, que NO es lo mismo que cero.
+  let costoUsd: number | null = 0;
   let piezas = 0;
   let escalados = 0;
   let saltados = 0;
@@ -418,8 +420,23 @@ export async function correrAtencionFaq(
             messages: [{ role: 'user', content: contexto }],
             maxTokens: 600, temperature: 0.3,
           });
-          costoUsd += r.cost;
-          if (r.noMedido) logger.warn('faq.costo_no_medido', { ticket: t.id });
+          // ── AUDITORÍA 22, ARQ-2 (ALTO) ─────────────────────────────────
+          // «Un costo no medido no es cero» estaba implementado en UNO de los
+          // tres agentes que gastan modelo. Aquí se logueaba `noMedido` y
+          // acto seguido se sumaba `r.cost`, que en modo plataforma llega en
+          // 0: `gastoDelDiaUsd` sumaba ceros, nunca llegaba a $1.00 y el
+          // techo diario del runner NUNCA cortaba mientras el agente seguía
+          // gastando de verdad. El log sin la consecuencia es decoración.
+          //
+          // Es PEGAJOSO a propósito, igual que en contenido.ts: una sola
+          // llamada sin medir vuelve incierta la corrida entera, porque
+          // sumarle las medidas produciría una cifra que parece completa.
+          if (r.noMedido) {
+            costoUsd = null;
+            logger.warn('faq.costo_no_medido', { ticket: t.id });
+          } else if (costoUsd !== null) {
+            costoUsd = costoUsd + r.cost;
+          }
           const g = guardarBorrador(r.text, fichas, contexto);
           redactado = g.texto;
           motivoSinModelo = g.motivo;

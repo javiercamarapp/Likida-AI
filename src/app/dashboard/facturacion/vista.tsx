@@ -22,7 +22,9 @@ import {
  *  propósito: sin esto la vista sigue siendo pura-props y se puede mirar con
  *  fixtures sin sesión, igual que siempre. */
 export interface CapturaFacturacion {
-  clientes: ReadonlyArray<{ id: string; nombre: string; diasCredito: number | null }>;
+  /** `null` = la lectura del catálogo falló, distinto de `[]` = no hay ninguno
+   *  (AUDITORÍA 22, FE-1). Mismo criterio que `auditoria` más abajo. */
+  clientes: ReadonlyArray<{ id: string; nombre: string; diasCredito: number | null }> | null;
   /** `YYYY-MM-DD` en hora de México, para los defaults de fecha. */
   hoy: string;
   factura: AccionForma;

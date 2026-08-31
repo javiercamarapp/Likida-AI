@@ -104,6 +104,22 @@ async function reservarPiso(evento: string, ahora: number, pisoMs: number = PISO
   return true;
 }
 
+/**
+ * OP-A3: qué hace distinto a un incidente de otro dentro del mismo evento.
+ *
+ * Se toman las llaves de identidad y el código de error, no el mensaje entero:
+ * un timeout que cambia de milisegundos entre reintentos es el MISMO incidente
+ * y tiene que seguir dedupeándose. Ordenadas para que el orden del objeto no
+ * fabrique huellas distintas.
+ */
+function huellaDeDetalle(detalle: Record<string, unknown>): string {
+  const SALIENTES = ['codigo', 'code', 'viajeId', 'viaje', 'gastoId', 'operadorId', 'tenantId', 'cron', 'uuid'];
+  const partes = SALIENTES
+    .filter((k) => detalle[k] !== undefined && detalle[k] !== null)
+    .map((k) => `${k}=${String(detalle[k]).slice(0, 64)}`);
+  return partes.length > 0 ? partes.sort().join('&') : '_';
+}
+
 /** Para decir "sin configurar" UNA vez por instancia, no en cada corrida. */
 let avisadoSinConfigurar = false;
 
@@ -117,6 +133,28 @@ const APP = appUrl();
  * Resend (un tercero), así que va anonimizado por el mismo camino que los logs
  * — no por una lista aparte que alguien tenga que acordarse de mantener.
  */
+/**
+ * AUDITORÍA 22, OP-A2 (ALTO) — las llaves que NO se redactan en la alerta.
+ *
+ * `redactarTexto` convierte todo UUID en una huella FNV irreversible. Bien
+ * pensado para datos de persona; catastrófico para un FOLIO FISCAL.
+ *
+ * El escenario: el PAC timbra el CFDI, devuelve el uuid, y el `update
+ * {uuid_fiscal}` falla. En ese punto el comprobante existe SOLO ante el SAT —
+ * no se escribió en `ccp_timbre` ni en ninguna otra tabla. El correo decía «el
+ * PAC timbró el uuid id:33ab7e19c0d1», la consola lo mismo, y Sentry perdía la
+ * llave entera. Resultado: un comprobante fiscal vivo que Likida no puede
+ * nombrar, y el único camino de vuelta que el comentario proponía —«computa
+ * `huellaId(fila.id)` y compara»— exige tener la fila, que es justo lo que no
+ * se escribió.
+ *
+ * Un UUID de CFDI identifica un DOCUMENTO, no a una persona. En una alerta
+ * interna de operación es el dato sin el cual no hay reconstrucción posible.
+ */
+const LLAVES_SIN_REDACTAR = new Set([
+  'uuid', 'uuidFiscal', 'uuidCfdi', 'folioFiscal',
+]);
+
 export async function alertarOperador(evento: string, detalle: Record<string, unknown>): Promise<void> {
   try {
     const para = process.env.ALERTA_EMAIL;
@@ -133,14 +171,33 @@ export async function alertarOperador(evento: string, detalle: Record<string, un
     // reintenta dentro de la hora (enviar.ts ya decidió no reintentar), y dos
     // corridas casi simultáneas —en la misma instancia o en dos— no mandan dos
     // correos: la reserva en Redis es atómica (SET NX).
-    if (!(await reservarPiso(evento, ahora))) return;
+    // ── AUDITORÍA 22, OP-A3 (ALTO): EL PISO ERA POR NOMBRE DE EVENTO ───────
+    // `carta_porte_timbre.ts` manda cinco alertas distintas bajo el mismo
+    // `evento`, así que el SEGUNDO incidente de la hora se descartaba en
+    // silencio: dos viajes que fallan al timbrar en la misma hora producían UN
+    // correo, y el contralor solo sabía de uno. En el camino del dinero eso no
+    // es ruido ahorrado: es un incidente perdido.
+    //
+    // El piso ahora incluye una huella del detalle SALIENTE (el código de error
+    // y las llaves de identidad), así que dos incidentes distintos son dos
+    // alarmas y el mismo incidente repitiéndose sigue siendo una.
+    // Sin nada saliente que distinguir, la llave se queda como estaba: no hay
+    // dos incidentes que separar y cambiar el formato por gusto rompería la
+    // continuidad del piso ya reservado en Redis entre despliegues.
+    const huella = huellaDeDetalle(detalle);
+    if (!(await reservarPiso(huella === '_' ? evento : `${evento}|${huella}`, ahora))) return;
 
     const datos: Array<[string, string]> = [
       ['Evento', evento],
       ['Cuándo', fechaHoraMx(new Date(ahora).toISOString())],
       // Recortado a 300: un stack completo va en Sentry, no en el cuerpo de
       // un correo que se lee en el teléfono.
-      ...Object.entries(detalle).map(([k, v]) => [k, redactarTexto(String(v)).slice(0, 300)] as [string, string]),
+      ...Object.entries(detalle).map(([k, v]) => [
+        k,
+        // OP-A2: un folio fiscal se entrega tal cual — es la única llave para
+        // reconstruir un comprobante que ya existe ante el SAT.
+        (LLAVES_SIN_REDACTAR.has(k) ? String(v) : redactarTexto(String(v))).slice(0, 300),
+      ] as [string, string]),
     ];
 
     const r = await enviarCorreo(para, {

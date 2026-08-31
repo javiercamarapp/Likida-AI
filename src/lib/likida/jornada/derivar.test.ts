@@ -46,10 +46,22 @@ let errorViajes: { message: string } | null = null;
 /** `${unidadId}|${dia}` → los `medida_en` de ese día, en orden ascendente. */
 let posiciones = new Map<string, string[]>();
 let errorGps: { message: string } | null = null;
+// ── AUDITORÍA 22, LEG-C1 ───────────────────────────────────────────────────
+// Qué operadores YA recibieron el aviso de privacidad. El motor se niega a
+// derivar el expediente laboral de quien no está aquí: tratar antes de avisar
+// es lo que el art. 16 prohíbe. Por default todos lo tienen, para que las demás
+// pruebas de esta suite sigan midiendo lo suyo.
+let conAviso: Set<string> | null = null;   // null = todos
+let errorAviso: { message: string } | null = null;
 
-interface Estado { tabla: string; ascendente: boolean; unidad: string; dia: string }
+interface Estado { tabla: string; ascendente: boolean; unidad: string; dia: string; operador: string }
 
 function resolver(e: Estado): { data: unknown; error: { message: string } | null } {
+  if (e.tabla === 'operador') {
+    if (errorAviso) return { data: null, error: errorAviso };
+    const ok = conAviso === null || conAviso.has(e.operador);
+    return { data: { aviso_privacidad_en: ok ? '2026-08-01T00:00:00.000Z' : null }, error: null };
+  }
   if (e.tabla === 'viaje') {
     return errorViajes ? { data: null, error: errorViajes } : { data: viajes, error: null };
   }
@@ -62,12 +74,16 @@ function resolver(e: Estado): { data: unknown; error: { message: string } | null
 }
 
 function builder(tabla: string) {
-  const e: Estado = { tabla, ascendente: true, unidad: '', dia: '' };
+  const e: Estado = { tabla, ascendente: true, unidad: '', dia: '', operador: '' };
   const b: Record<string, unknown> = {};
   const igual = () => b;
   Object.assign(b, {
     select: igual, not: igual, lte: igual, limit: igual, is: igual, in: igual, maybeSingle: igual,
-    eq: (col: string, v: unknown) => { if (col === 'unidad_id') e.unidad = String(v); return b; },
+    eq: (col: string, v: unknown) => {
+      if (col === 'unidad_id') e.unidad = String(v);
+      if (col === 'id' && tabla === 'operador') e.operador = String(v);
+      return b;
+    },
     // El `gte` de posiciones lleva `inicioDiaMx(dia)`: de ahí sale el día.
     gte: (_col: string, v: unknown) => { e.dia = String(v).slice(0, 10); return b; },
     order: (_col: string, o?: { ascending?: boolean }) => { e.ascendente = o?.ascending !== false; return b; },
@@ -113,6 +129,8 @@ beforeEach(() => {
   errorViajes = null;
   posiciones = new Map();
   errorGps = null;
+  conAviso = null;
+  errorAviso = null;
   resultadoAsiento = 'asentado';
 });
 
@@ -281,5 +299,56 @@ describe('derivarJornadas — el día sin GPS', () => {
     expect(r.asentados).toBe(2);   // hito + primera posición, sin fin
     const tipos = asentarMarca.mock.calls.map((c) => (c[0] as { tipo: string }).tipo);
     expect(tipos).not.toContain('fin_jornada');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 22 · LEG-C1 (CRÍTICO) — no se trata antes de avisar.
+//
+// `ponerAvisoADisposicion` cuelga del camino del MENSAJE ENTRANTE. Un chofer
+// que recibe sus viajes por radio puede no escribir nunca: su
+// `operador.aviso_privacidad_en` se queda en NULL mientras este cron le
+// construye un expediente laboral —horas, banderas del art. 61 y del 68— que él
+// nunca supo que existía. El art. 16 de la LFPDPPP obliga a poner el aviso a
+// disposición ANTES del tratamiento, y el propio `privacidad.ts` ya escribe ese
+// principio: «esperar a que haya filas sería avisar después de tratar».
+// ═══════════════════════════════════════════════════════════════════════════
+describe('LEG-C1: sin aviso previo no se deriva expediente laboral', () => {
+  it('el operador que nunca recibió el aviso no obtiene expediente ni marcas', async () => {
+    viajes = [viaje(1, 'op-sin-aviso', 'u-1')];
+    posiciones.set(`u-1|${DIA}`, [`${DIA}T14:00:00.000Z`, `${DIA}T23:00:00.000Z`]);
+    conAviso = new Set();   // nadie tiene aviso
+
+    const r = await derivarJornadas({ ahora: AHORA });
+
+    expect(r.sinAvisoPrevio).toBe(1);
+    expect(r.asentados).toBe(0);
+    // Ni siquiera se abre el expediente: crearlo ya es tratamiento.
+    expect(asegurarDiaJornada).not.toHaveBeenCalled();
+    expect(asentarMarca).not.toHaveBeenCalled();
+  });
+
+  it('el que sí lo recibió se deriva normal, en la misma corrida', async () => {
+    viajes = [viaje(1, 'op-con', 'u-1'), viaje(2, 'op-sin', 'u-2')];
+    conAviso = new Set(['op-con']);
+
+    const r = await derivarJornadas({ ahora: AHORA });
+
+    expect(r.sinAvisoPrevio).toBe(1);
+    expect(asegurarDiaJornada).toHaveBeenCalledTimes(1);
+    expect(asegurarDiaJornada).toHaveBeenCalledWith(T, 'op-con', DIA);
+  });
+
+  // Fallar cerrado en los dos bordes: un error de red no puede volverse permiso
+  // para construirle a alguien un expediente laboral sin haberle avisado.
+  it('si la lectura del aviso falla, NO se deriva', async () => {
+    viajes = [viaje(1, 'op-1', 'u-1')];
+    errorAviso = { message: 'PostgREST 500' };
+
+    const r = await derivarJornadas({ ahora: AHORA });
+
+    expect(r.sinAvisoPrevio).toBe(1);
+    expect(asegurarDiaJornada).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith('jornada.aviso_previo_ilegible', expect.anything());
   });
 });

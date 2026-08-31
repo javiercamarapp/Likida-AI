@@ -21,7 +21,11 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: () => ({
       select: () => ({
-        eq: () => ({ eq: () => ({ maybeSingle }) }),
+        // DATOS-1: `.eq(tenant).in(variantes).order().order().limit().maybeSingle()`
+        eq: () => ({
+          eq: () => ({ maybeSingle }),
+          in: () => { const n = { order: () => n, limit: () => n, maybeSingle }; return n; },
+        }),
       }),
       insert: () => ({ select: () => ({ single: insertSingle }) }),
     }),

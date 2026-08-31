@@ -193,6 +193,20 @@ describe('los formatos que la landing nombra', () => {
     expect(txt.trim().split('\n')).toHaveLength(1 + poliza.movimientos.length * 2);
   });
 
+  // ── AUDITORÍA 22, PRU-A1 (ALTO): ESTA PRUEBA ERA TAUTOLÓGICA ─────────────
+  // La de arriba pasa `numeroInicial: 20` y NUNCA lo cotejaba: solo contaba
+  // encabezados y renglones. Si `filasContpaqi` usara un número constante para
+  // todas las pólizas —o sea, si `numeroInicial + i` perdiera el `+ i`—, las
+  // dos aserciones seguirían pasando y el archivo del ERP fundiría el periodo
+  // ENTERO en un solo asiento: dos liquidaciones distintas, un solo número de
+  // póliza, y el contador cuadrando a ciegas. Se afirma el número.
+  it('CONTPAQi: cada póliza lleva su PROPIO número, correlativo desde numeroInicial', () => {
+    const txt = archivoContpaqi([poliza, poliza], { tipo: 'Dr', numeroInicial: 20 });
+    const filas = txt.trim().split('\n').slice(1);
+    const numeros = [...new Set(filas.map((f) => f.split(',')[1]))];
+    expect(numeros).toEqual(['20', '21']);
+  });
+
   it('SAP B1: dos archivos ligados por JdtNum, con DOBLE encabezado técnico', () => {
     const { cabecera, lineas } = aSapB1(poliza, 7);
     const filasCab = cabecera.trim().split('\n');
@@ -223,5 +237,17 @@ describe('los formatos que la landing nombra', () => {
     const { cabecera, lineas } = archivoSapB1([poliza, poliza], SAP_B1_BASE);
     expect(cabecera.trim().split('\n')).toHaveLength(4);
     expect(lineas.trim().split('\n')).toHaveLength(2 + poliza.movimientos.length * 2);
+  });
+
+  // PRU-A1, el gemelo del de CONTPAQi: `JdtNum` es la llave que une cabecera
+  // con líneas y separa un asiento de otro. Contando filas, dos pólizas con el
+  // MISMO JdtNum pasaban — y en SAP eso es un solo asiento con el doble de
+  // renglones, no dos asientos.
+  it('SAP B1: dos pólizas son dos asientos, con JdtNum distinto en cabecera y líneas', () => {
+    const { cabecera, lineas } = archivoSapB1([poliza, poliza], SAP_B1_BASE);
+    const jdtCab = [...new Set(cabecera.trim().split('\n').slice(2).map((f) => f.split('\t')[0]))];
+    const jdtLin = [...new Set(lineas.trim().split('\n').slice(2).map((f) => f.split('\t')[0]))];
+    expect(jdtCab).toHaveLength(2);
+    expect(jdtLin).toEqual(jdtCab);
   });
 });

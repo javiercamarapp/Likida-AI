@@ -28,6 +28,7 @@ import {
 import { decidirFoto } from '@/lib/likida/intake/decidir';
 import {
   anotarFoto, anotarIncidencia, anotarAcuse, pedirTurnoDeConfirmacion, cerrarRafaga, lineaIncidencias,
+  bandejasAbiertas,
 } from '@/lib/likida/intake/rafaga';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/likida/privacidad';
 import { interpretarHito, sellarHito, mensajeHito } from '@/lib/likida/hitos_viaje';
@@ -50,7 +51,7 @@ import { violaIndice, llegoTarde } from '@/lib/likida/pg_errores';
 import { mxn, fechaMx } from '@/lib/formato';
 import { guardiaFundamento, normasDeToolCalls } from '@/lib/likida/normas/fundamento';
 import { guardiaEstado } from '@/lib/likida/cuadre/estado_afirmado';
-import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS, MARGEN_CIERRE_MS, acotada, type Presupuesto } from '@/lib/likida/presupuesto';
+import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS, MARGEN_CIERRE_CRITICO_MS, acotada, type Presupuesto } from '@/lib/likida/presupuesto';
 import { conceptoDesdeClave } from '@/lib/likida/intake/concepto';
 import { getConfig } from '@/lib/likida/config';
 import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/likida/intake/emparejar';
@@ -62,6 +63,7 @@ import {
   guardarHuerfano, getHuerfanos, resolverHuerfanos, marcarHuerfanosOfrecidos, getViaje,
   enriquecerGastoConCodigo, guardarCodigoPendiente, getCodigosPendientes, reclamarCodigoPendiente,
   getDatosResponsable, reclamarEnvioAviso, confirmarEnvioAviso, liberarEnvioAviso,
+  getLiquidacionDeViaje,
   registrarSolicitudArco,
 } from '@/lib/likida/repo';
 import {
@@ -907,6 +909,29 @@ async function atenderJornadaSiAplica(args: {
   return mensajes;
 }
 
+/**
+ * Cierra las ráfagas que quedaron abiertas y le dice a cada chofer lo suyo.
+ *
+ * AUDITORÍA 22, AGEN-A2. Solo habla si hay algo que decir: una libreta sin
+ * incidencias y sin acuses no genera un mensaje — el módulo de ráfaga existe
+ * precisamente para no mandar siete.
+ */
+async function cerrarRafagasPorCorte(): Promise<void> {
+  for (const { viajeId, telefono } of bandejasAbiertas()) {
+    const b = cerrarRafaga(viajeId);
+    if (!telefono || b.vistas === 0) continue;
+    const linea = lineaIncidencias(b.vistas, b.incidencias);
+    if (!linea && b.acuses.length === 0) continue;
+    const texto = linea
+      ?? `Van ${b.vistas} comprobante${b.vistas === 1 ? '' : 's'} anotado${b.vistas === 1 ? '' : 's'}. Sigo con el resto en un momento.`;
+    try {
+      await sendText(telefono, texto);
+    } catch (e) {
+      logger.error('rafaga.cierre_por_corte_no_enviado', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+}
+
 export async function processInbound(msg: InboundMessage, opts: OpcionesInbound = {}): Promise<ResultadoInbound> {
   // ── RELOJ COMPARTIDO, desde la primera línea ─────────────────────────────
   // Las etapas de abajo pedían su tope fijo sin saber que comparten UNA
@@ -923,6 +948,17 @@ export async function processInbound(msg: InboundMessage, opts: OpcionesInbound 
   const reloj = crearPresupuesto(PRESUPUESTO_WEBHOOK_MS, Date.now, opts.inicioInvocacionMs ?? Date.now());
   if (!reloj.alcanza(COSTO_MINIMO_TURNO_MS)) {
     logger.warn('wa.sin_tiempo', { id: msg.waMessageId, gastadoMs: reloj.gastado(), restanteMs: reloj.restante() });
+    // ── AUDITORÍA 22, AGEN-A2 (ALTO): LA LIBRETA NO SE VA MUDA ─────────────
+    // Este `return` corta la cadena (el `break` del webhook y del drenado), y
+    // es el caso NORMAL del fajo grande: 22 fotos a 8-15 s no caben en una
+    // invocación. La libreta solo se cerraba en la foto sin otra detrás, así
+    // que se quedaba abierta con lo ya visto —«de tus 6 fotos, 3 no se
+    // leyeron»— y moría con el proceso. El cron levanta el resto en OTRA
+    // invocación, con libreta nueva: nadie iba a decirlo después.
+    //
+    // Se cierra lo que haya y se dice. Cuesta un envío; el silencio costaba
+    // que el chofer no supiera que tres de sus fotos no se leyeron.
+    await cerrarRafagasPorCorte();
     return 'sin_tiempo';
   }
 
@@ -1756,7 +1792,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // esa primera foto SÍ se tratara como "siguiente", perdiendo el reset
       // que le tocaba: ver la nota de `OpcionesInbound` arriba.)
       const siguienteDeLaMismaCadena = opts.hayFotoAntesEnCadena === true;
-      anotarFoto(viajeId, incrementado === 1 && !siguienteDeLaMismaCadena);
+      anotarFoto(viajeId, incrementado === 1 && !siguienteDeLaMismaCadena, msg.from);
       // AQUÍ VIVÍA `llegoSola = incrementado === 1`, y era falso justo cuando
       // más importaba. `1` no significa «llegó sola»: significa «es la primera
       // en vuelo», y toda ráfaga tiene una primera. El incremento es atómico,
@@ -3415,8 +3451,39 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           logger.error('agent.costo_parcial_no_registrado', { viaje: viajeId, err: err2 instanceof Error ? err2.message : String(err2) });
         }
       }
-      const cierreParcial =
-        recuperar && parcial?.find((t) => t.toolName === 'guardar_liquidacion' && !t.error);
+      // ── AUDITORÍA 22, AGEN-C1 (CRÍTICO): LA BASE ES LA AUTORIDAD ─────────
+      // Esto miraba `!t.error` sobre el resultado de la tool. Pero
+      // `guardar_liquidacion` NO lee `ctx.signal` (`grep -c signal tools.ts`
+      // = 0), así que cuando el reloj del agente vence a mitad de las dos
+      // subidas a Storage, `raceAbort` devuelve `{success:false,
+      // error:'Timeout'}` y el handler SIGUE VIVO: segundos después
+      // `guardar_liquidacion_tx` commitea, el viaje queda `liquidado`, los PDF
+      // quedan en el bucket y los triggers 0036/0037 lo vuelven irreversible.
+      //
+      // Resultado: el cierre EXISTE y el chofer recibía lo contrario — «se
+      // trabó, vuelve a intentar» sobre un viaje ya cerrado que no se puede
+      // volver a cerrar. La base dice una cosa y el humano cree otra, que es
+      // exactamente el estado que las anclas de este rubro puntúan más bajo.
+      //
+      // Preguntarle a la base cuesta una consulta y solo ocurre en el camino
+      // de excepción. Si la lectura truena, `getLiquidacionDeViaje` LANZA: un
+      // error de red no puede leerse como «no se cerró».
+      let cierreParcial: ToolCallRecord | undefined =
+        recuperar ? parcial?.find((t) => t.toolName === 'guardar_liquidacion' && !t.error) : undefined;
+      if (recuperar && !cierreParcial && parcial?.some((t) => t.toolName === 'guardar_liquidacion')) {
+        try {
+          const liq = await getLiquidacionDeViaje(op.tenantId, viajeId);
+          if (liq) {
+            logger.warn('agent.cierre_commiteado_tras_abortar', { viaje: viajeId, liquidacion: liq.id });
+            cierreParcial = {
+              toolName: 'guardar_liquidacion',
+              result: { liquidacion_id: liq.id, pdf_url: liq.pdfUrl },
+            } as ToolCallRecord;
+          }
+        } catch (errLiq) {
+          logger.error('agent.cierre_no_verificable', { viaje: viajeId, err: errLiq instanceof Error ? errLiq.message : String(errLiq) });
+        }
+      }
       if (cierreParcial) {
         agentTools = parcial!;
         closed = true;
@@ -3505,12 +3572,20 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // del chofer. Recortar también esos sería fabricar a propósito el mismo
     // silencio que se viene a evitar; se intentan igual, cada uno acotado por
     // su propio techo.
+    // AGEN-A1: se compara contra lo IRRENUNCIABLE, no contra la reserva
+    // entera. `restante()` ya descontó `MARGEN_CIERRE_MS` antes de dárselo al
+    // agente; exigirlo otra vez aquí es contarlo dos veces, y por la identidad
+    // `margenDuro() = restante() + MARGEN_CIERRE_MS` el chequeo daba falso
+    // DETERMINÍSTICAMENTE cada vez que el agente consumía su tope recortado —
+    // apagando el único aviso de que la liquidación salió corta justo en el
+    // caso que existe para vigilar. Ver el comentario de
+    // `MARGEN_CIERRE_CRITICO_MS`.
     const margenRealMs = reloj.margenDuro();
-    const cierreConMargen = margenRealMs >= MARGEN_CIERRE_MS;
+    const cierreConMargen = margenRealMs >= MARGEN_CIERRE_CRITICO_MS;
     if (!cierreConMargen) {
       logger.error('cierre.sin_margen', {
         tenant: op.tenantId, viaje: viajeId, cerro: closed,
-        gastadoMs: reloj.gastado(), margenRealMs, requeridoMs: MARGEN_CIERRE_MS,
+        gastadoMs: reloj.gastado(), margenRealMs, requeridoMs: MARGEN_CIERRE_CRITICO_MS,
       });
     }
 

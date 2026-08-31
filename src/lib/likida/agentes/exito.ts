@@ -62,8 +62,14 @@ export interface ResultadoExito {
   piezas: number;
   /** Por qué no se fabricó, cuando piezas = 0 y no es un fallo. */
   motivo?: string;
-  /** Gasto de modelo MEDIDO. $0 en los cinco deterministas. */
-  costoUsd: number;
+  /**
+   * Gasto de modelo MEDIDO. $0 en los cinco deterministas.
+   *
+   * `null` = NO MEDIDO (auditoría 22, ARQ-2), que no es lo mismo que cero: el
+   * proveedor omitió `usage` y anotar un 0 dejaba ciego al techo diario.
+   * Es pegajoso — una llamada sin medir vuelve incierta la corrida entera.
+   */
+  costoUsd: number | null;
   /** EL RELOJ DE LA VUELTA se agotó a media faena y quedó trabajo sin mirar.
    *  No es un fallo y tampoco es «no había nada que hacer»: es la tercera cosa,
    *  y sin ella el runner pintaría la vuelta completa. El runner la sube a
