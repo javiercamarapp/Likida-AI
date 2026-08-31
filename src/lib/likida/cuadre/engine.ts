@@ -457,6 +457,22 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     const h = input.hidrocarburos;
     const esCombustible = g.concepto === 'diesel' || (!!h && h.claves.includes(g.claveProdServ ?? ''));
 
+    // AUDITORÍA 23, FIS-1 (CRÍTICO). La forma de pago que se puede JUZGAR, que
+    // no siempre es la del comprobante: `'99 Por definir'` no es un medio de
+    // pago sino la ausencia de uno (RMF 2.7.1.29 fr. II, y `:127-128`). Con su
+    // complemento de pago ingerido (FASE 7, mig. 0199), el medio real es el
+    // `FormaDePagoP` del REP; sin él, todavía no hay nada que juzgar.
+    // `undefined` = «no opino», que es el mismo criterio con el que esta
+    // función trata una `formaPago` ausente: desconocido no es «medio
+    // distinto», y suponerlo inflaría el no-deducible contra la flota.
+    //
+    // Es la misma idea que `formaPagoEfectiva` (`:1397`) ya aplica al IVA, al
+    // peaje electrónico y al IEPS del diésel; se calcula aquí porque aquella
+    // vive en otro recorrido, 800 líneas más abajo.
+    const formaPagoJuzgable = g.formaPago === FORMA_PAGO_SIN_PAGAR
+      ? (g.pagadoEn ? g.pagadoForma : undefined)
+      : g.formaPago;
+
     // FASE 2 · RMF 3.3.1.7 — ticket de monedero no es factura de estación.
     // Solo con evidencia (padrón o línea ECC día/estación/monto). Sin
     // evidencia no se afirma: un diésel de PEMEX en efectivo sigue siendo
@@ -591,12 +607,38 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       //
       // Sin `formaPago` NO entra: desconocido no es «medio distinto», el mismo
       // criterio que sostiene `medioNoAdmitidoCombustible`.
-      g.formaPago !== undefined && g.formaPago !== '01' && !esCombustible &&
-      g.monto > topeEfectivo && !(MEDIOS_LISR_27_III as readonly string[]).includes(g.formaPago)
+      //
+      // ── AUDITORÍA 23, FIS-1 (CRÍTICO): SE JUZGA LA FORMA EFECTIVA ────────
+      // La primera versión de esta rama juzgaba `g.formaPago` crudo, y con eso
+      // metió `'99 Por definir'` en el mismo saco que `'06' Dinero
+      // electrónico`. No es lo mismo, y este archivo lo tiene escrito dos
+      // veces: `:127-128` («'99' = la contraprestación no se ha pagado, RMF
+      // 2.7.1.29 fr. II») y `:148-152` («'99' devuelve false. No es un medio
+      // distinto: es que NO se pagó. Ese caso lo juzga la regla de pago
+      // efectivo, no esta»). `medioNoAdmitidoCombustible:156` respeta esa
+      // frontera; esta rama no la había replicado.
+      //
+      // Costaba: `MetodoPago 'PPD'` / `FormaPago '99'` es la forma NORMAL de
+      // una compra a crédito en México. Todo comprobante a crédito de más de
+      // $2,000 salía del deducible, perdía su IVA, bajaba la liquidación a
+      // `revisar` y se imprimía «se pagó con la forma «99»» — falso dos veces:
+      // no se pagó, y cuando el REP existe dice que se pagó por transferencia,
+      // que SÍ está en la lista. Y mataba la FASE 7 (mig. 0199) entera, que
+      // ingiere el complemento de pago justamente para recuperar ese IVA.
+      //
+      // No basta con excluir el '99': eso dejaría pasar un CFDI a crédito cuyo
+      // REP dice haberse pagado con '06', que es el hueco que esta rama vino a
+      // cerrar. Se juzga la forma EFECTIVA — la misma idea que
+      // `formaPagoEfectiva` (`:1397`) ya aplica al IVA, al peaje electrónico y
+      // al IEPS del diésel. Sin REP no se opina; con REP se juzga
+      // `pagadoForma`; con REP sin `FormaDePagoP` legible tampoco se opina,
+      // porque desconocido no es «medio distinto» (mismo criterio de `:1394`).
+      formaPagoJuzgable !== undefined && formaPagoJuzgable !== '01' && !esCombustible &&
+      g.monto > topeEfectivo && !(MEDIOS_LISR_27_III as readonly string[]).includes(formaPagoJuzgable)
     ) {
       diferencias.push({
         tipo: 'medio_pago_no_admitido', concepto: g.concepto, monto: 0,
-        nota: `${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} se pagó con la forma «${g.formaPago}», que no está en la lista de la LISR 27-III (transferencia, cheque nominativo, tarjeta de crédito/débito/servicios o monedero autorizado) y excede el tope de ${mxn(topeEfectivo)}. No se afirma deducible ni perdido: lo confirma tu contador. Mientras tanto no acredita IVA.`,
+        nota: `${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} se pagó con la forma «${formaPagoJuzgable}», que no está en la lista de la LISR 27-III (transferencia, cheque nominativo, tarjeta de crédito/débito/servicios o monedero autorizado) y excede el tope de ${mxn(topeEfectivo)}. No se afirma deducible ni perdido: lo confirma tu contador. Mientras tanto no acredita IVA.`,
         gastoId: g.id,
       });
     }

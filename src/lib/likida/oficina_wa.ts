@@ -89,11 +89,33 @@ export async function mandarInformePdf(cuenta: CuentaInforme, telefono: string):
     // `traerTodo` pagina con `count` y LANZA `LecturaIncompleta` si no puede
     // demostrar que leyó todo — que es justo lo que este `catch` necesita para
     // decirlo en vez de imprimirlo corto.
+    //
+    // ── AUDITORÍA 23, REN-1 (CRÍTICO): EL `.order('id')` NO ES DECORACIÓN ──
+    // El arreglo de la 22 metió `traerTodo` y se le olvidó el orden. `traerTodo`
+    // pagina por POSICIÓN, y su contrato lo pide en mayúsculas (`pg.ts:131-135`:
+    // «LA CONSULTA TIENE QUE VENIR ORDENADA POR ALGO ÚNICO … dos páginas pueden
+    // repetir una fila y saltarse otra. Todos los llamadores desempatan con
+    // `id`»).
+    //
+    // Sin `ORDER BY`, Postgres entrega el orden físico del heap, y ese orden
+    // cambia entre página y página en cuanto un `UPDATE` reescribe una tupla al
+    // final — en una flota viva pasa todo el tiempo: llega un comprobante, el
+    // anticipo se recalcula, la fila se mueve.
+    //
+    // Y es INDETECTABLE para la red que ya existe: cuando una fila se mueve, una
+    // página repite una y se salta otra, así que el total leído sigue cuadrando
+    // con `count` y `LecturaIncompleta` nunca se lanza. Medido con 1,500 viajes:
+    // se imprimía $112,475,000.00 donde la verdad son $112,575,000.00, con
+    // «Viajes sin liquidar: 1,500» correcto al lado. Es peor que el bug que
+    // sustituyó — aquél imprimía una cifra corta, detectable contra el panel;
+    // éste imprime el conteo bien y el dinero mal, en el PDF firmado que el
+    // dueño reenvía a su contador.
     try {
       const filas = await traerTodo<{ anticipo: number | null }>(
         (desde, hasta) => admin.from('viaje')
           .select('anticipo', { count: 'exact' })
           .eq('tenant_id', cuenta.tenantId).in('estatus', ['abierto', 'en_cuadre'])
+          .order('id')
           .range(desde, hasta),
         'oficina.anticipos_en_calle',
       );
