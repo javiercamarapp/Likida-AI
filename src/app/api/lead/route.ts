@@ -37,7 +37,7 @@ const ORIGENES = new Set(['https://likida.ai', 'https://www.likida.ai']);
 const MAX_BODY = 8 * 1024;
 
 /**
- * Los tres dominios cerrados, espejo de los `check` de la 0137 y la 0275.
+ * Los tres dominios cerrados, espejo de los `check` de la 0137 y la 0276.
  *
  * Se validan aquí ADEMÁS de en la base por una razón concreta: si llega un
  * valor fuera del dominio, la base rebotaría el INSERT ENTERO y se perdería el
@@ -292,11 +292,11 @@ function esViolacionUnica(err: unknown): boolean {
 
 
 
-/** Las columnas que la 0137 y la 0275 agregan y que pueden no existir todavía. */
+/** Las columnas que la 0137 y la 0276 agregan y que pueden no existir todavía. */
 const DE_LA_0137 = new Set(['unidades', 'urgencia', 'atribucion', 'empleados']);
 
 /**
- * LA RED DE SEGURIDAD DE LA 0137 (generalizada a la 0275).
+ * LA RED DE SEGURIDAD DE LA 0137 (generalizada a la 0276).
  *
  * Si este endpoint se despliega ANTES de que la migración corra, Postgres
  * rebota por columna desconocida y —con el catch de arriba— el lead se
@@ -305,7 +305,7 @@ const DE_LA_0137 = new Set(['unidades', 'urgencia', 'atribucion', 'empleados']);
  * `notas`, que siempre existió. Se repite porque pueden faltar varias a la vez
  * y Postgres solo nombra UNA por intento.
  *
- * Solo se sacrifican columnas de la 0137/0275: si lo que falta fuera `empresa`,
+ * Solo se sacrifican columnas de la 0137/0276: si lo que falta fuera `empresa`,
  * eso no es "todavía no migra", es que la tabla no es la que se cree, y ahí sí
  * hay que gritar en vez de guardar una fila coja.
  */

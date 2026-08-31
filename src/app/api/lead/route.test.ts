@@ -212,7 +212,7 @@ describe('deduplicar sin destruir', () => {
   });
 });
 
-describe('la red de seguridad de la 0137 (y la 0275)', () => {
+describe('la red de seguridad de la 0137 (y la 0276)', () => {
   it('con las CUATRO columnas ausentes, el lead se salva y lo perdido va a notas', async () => {
     respuestas.push(
       { data: [], error: null },
