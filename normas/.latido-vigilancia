@@ -1,53 +1,37 @@
-fecha_corrida: 2026-08-30 (domingo)
-ultimo_dia_barrido: 2026-08-30 (hoy — 0 notas, DOF no publica domingo)
-rango_barrido: 2026-08-17..2026-08-30 (14 dias, 3 ediciones/dia; cierra el backlog
-  acumulado desde el 16-ago, incluidos los 4 dias no habiles 22,23,29,30-ago)
-notas_revisadas: 931 (suma de NotasMatutinas+Vespertinas+Extraordinarias de los 10
-  dias habiles del rango; 0 en los 4 dias no habiles, confirmado por diarios/porFecha
-  con 404 NOT_FOUND — no es fallo de infra, es ausencia real de edicion)
-notas_por_edicion: {matutina: la_mayoria, vespertina: 2 relevantes (21-ago, 28-ago),
-  extraordinaria: 0}
-fichas_disparadas: 1 — cuota_ieps_diesel (dato semanal, no una ficha con
-  estado_verificacion; ver normas/datos/cuota-ieps-diesel.yaml)
-etag_sat: no_recheck — hoy no es lunes (el proximo chequeo cae 31-ago-2026)
+fecha_corrida: 2026-08-31 (lunes)
+ultimo_dia_barrido: 2026-08-30 (sin cambio — el rango debido hoy, dia-siguiente-al-
+  ultimo-barrido 31-ago hasta ayer 30-ago, esta vacio: el barrido del 30-ago ya
+  cerro ese dia; no hay dias nuevos de DOF que barrer todavia)
+rango_barrido: ninguno (rango vacio por fecha, no por fallo — ver nota anterior)
+notas_revisadas: 0 (no aplica; no habia rango pendiente)
+notas_por_edicion: no_aplica
+fichas_disparadas: 0
+etag_sat: BLOQUEADO — hoy es LUNES (la ventana semanal exigida por la rutina) pero
+  el egress de esta sesion de nube rechazo la conexion a www.sat.gob.mx con
+  EGRESS_BLOCKED (confirmado con WebFetch) y por separado con 403 CONNECT del
+  proxy de salida (confirmado con curl a sidofqa.segob.gob.mx). NO hay un ETag
+  guardado de ninguna corrida anterior contra el cual comparar — revisando el
+  historial completo de este archivo (git log -p), CADA chequeo de lunes desde
+  que existe la rutina reporto no_recheck o bloqueo. El chequeo semanal del
+  minisitio SAT nunca se ha completado ni una sola vez.
 deriva_ley_check: no_aplica — no es dia 1 de trimestre
-estado: "OK — egress disponible en esta sesion local (a diferencia de las 6 corridas
-  en la nube 16 al 29-ago que reportaron EGRESS_BLOCKED); backlog de 14 dias cerrado
-  de un solo barrido"
-hallazgo: >
-  2 acuerdos semanales de cuota IEPS diesel encontrados y capturados:
-  Acuerdo 128/2026 (DOF 21-ago vespertina, codNota 5796917, vigencia
-  22-28 ago: 82.59% / reduccion 6.0813 / disminuida 1.2821) y Acuerdo
-  131/2026 (DOF 28-ago vespertina, codNota 5797457, vigencia 29ago-4sep:
-  81.50% / reduccion 6.0012 / disminuida 1.3622). Aritmetica verificada:
-  ambas semanas suman 7.3634 exacto. Ambas escritas en
-  normas/datos/cuota-ieps-diesel.yaml. El cambio EXIGIO tocar codigo:
-  CUOTA_DOF en src/lib/likida/marketing/calculadora.ts citaba la semana
-  15-21 ago y calculadora.test.ts lo hubiera fallado en CI (mismo guardia
-  de la auditoria 20, FISC-C1) — actualizado a la semana 29ago-4sep,
-  31 pruebas en verde, tsc limpio.
-falsos_positivos_revisados: >
-  9 notas mas dispararon el diccionario y se leyeron completas para
-  descartarlas: 7 licitaciones de CAPUFE (coincidencia de "ingresos" en
-  el nombre del organismo, no Ley de Ingresos), 1 acuerdo del Organo de
-  Administracion Judicial sobre datos personales (regla interna del
-  Poder Judicial, no toca LFPDPPP), 1 NOM de sangre humana (coincidencia
-  de "uma" dentro de "humana"). Ademas un acuerdo de estimulo
-  diesel/gasolina para sectores PESQUERO Y AGROPECUARIO (19-ago,
-  matutina) que es un programa distinto al que consume la ficha
-  lif-2026-20-A (ese es para autotransporte general) — no aplica.
+estado: "INFRA egress bloqueado — esta sesion de nube no tiene salida a
+  sidofqa.segob.gob.mx ni a www.sat.gob.mx (403 CONNECT / EGRESS_BLOCKED,
+  confirmado con curl y con WebFetch). El barrido diario del DOF no tenia rango
+  pendiente asi que no se perdio contenido nuevo, pero el chequeo semanal del
+  ETag del SAT — la unica defensa contra la ventana ciega de 4.5 meses de
+  modificaciones anticipadas — SIGUE sin correr nunca, van ya varias semanas."
 sin_verificar_esta_corrida: >
-  El ETag del minisitio SAT sigue sin chequear desde hace semanas (la
-  ultima vez documentada con exito fue antes del bloqueo de egress en la
-  nube); el proximo lunes 31-ago-2026 es la ventana. Las 31 fichas de
-  normas/*.yaml no se releyeron contra fuente primaria en esta corrida
-  (esta rutina solo barre el DOF y marca contradicho si algo choca; no
-  encontro contradicciones directas a ninguna ficha con estado_verificacion
-  en el rango 17-30 ago).
+  ETag del minisitio SAT (bloqueado, ver arriba). Las 31 fichas de normas/*.yaml
+  no se releyeron contra fuente primaria (no hubo rango de DOF nuevo que
+  barrer). Deriva de ley: no aplica hoy.
 accion_requerida: >
-  Ninguna urgente. Nota operativa: la corrida de HOY uso esta sesion local
-  (con egress real) para cerrar el backlog que 6 corridas en la nube no
-  pudieron tocar — si las corridas programadas siguen cayendo en el
-  entorno de nube sin salida a internet, el patron se va a repetir. Vale
-  la pena, cuando alguien lo revise, decidir si la cadencia diaria de esta
-  rutina se ancla a un entorno con egress garantizado.
+  Repetido de la corrida anterior, ahora mas urgente: el chequeo semanal del
+  ETag del SAT nunca se ha completado con exito en el historial de esta
+  rutina. Si esta rutina sigue programada para caer en el entorno de nube sin
+  egress a dominios .gob.mx, esa vigilancia especifica (la que cierra la
+  ventana ciega de 4.5 meses de modificaciones anticipadas) es 100% inefectiva
+  por diseño, no por mala suerte. Hace falta anclar la corrida de los LUNES
+  a un entorno con egress garantizado a sat.gob.mx y sidofqa.segob.gob.mx, o
+  pedir que el administrador agregue esos dominios a la política de salida de
+  las sesiones de nube.
