@@ -68,3 +68,13 @@ semanas:
     reduccion_shcp_por_litro: 5.0874
     cuota_disminuida_por_litro: 2.2760
     fuente: { dof: 2026-08-14, edicion: vespertina, codNota: 5796377 }
+  - vigencia: 2026-08-22 a 2026-08-28
+    porcentaje_estimulo: 82.59
+    reduccion_shcp_por_litro: 6.0813
+    cuota_disminuida_por_litro: 1.2821
+    fuente: { dof: 2026-08-21, edicion: vespertina, codNota: 5796917 }
+  - vigencia: 2026-08-29 a 2026-09-04
+    porcentaje_estimulo: 81.50
+    reduccion_shcp_por_litro: 6.0012
+    cuota_disminuida_por_litro: 1.3622
+    fuente: { dof: 2026-08-28, edicion: vespertina, codNota: 5797457 }

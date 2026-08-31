@@ -39,15 +39,15 @@
  *
  * FUENTE ÚNICA: `normas/datos/cuota-ieps-diesel.yaml`, la tabla que la rutina
  * del DOF escribe y que el repo cotejó dígito por dígito contra sus acuerdos.
- * El valor de abajo es la última semana verificada ahí (2026-08-15 a 08-21).
+ * El valor de abajo es la última semana verificada ahí (2026-08-29 a 09-04).
  * Quien lo actualice actualiza TAMBIÉN `registradaEl`, y
  * `calculadora.test.ts` lo cruza contra esa tabla con el lector fail-closed de
  * `cuadre/cuota_diesel.ts`: si el par deja de corresponder a una semana real,
  * falla en CI en vez de publicarse.
  */
 export const CUOTA_DOF = {
-  pesosPorLitro: 2.2760,
-  registradaEl: '2026-08-15',
+  pesosPorLitro: 1.3622,
+  registradaEl: '2026-08-29',
   fuenteUrl: 'https://www.dof.gob.mx/#gsc.tab=0',
 } as const;
 
