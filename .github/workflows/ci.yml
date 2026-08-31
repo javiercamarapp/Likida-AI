@@ -136,6 +136,12 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
           SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+          # 31-ago-2026: el paso de TypeScript de `next build` empezó a tronar
+          # con "JavaScript heap out of memory" en el runner estándar (7 GB)
+          # tras crecer el repo (auditoría 22, +3,777 líneas). El heap de V8
+          # por defecto no usa toda la RAM disponible; se lo damos explícito
+          # dejando margen para el resto del proceso (Next + Webpack + OS).
+          NODE_OPTIONS: --max-old-space-size=6144
 
       # Smoke de navegador sin secretos ni proveedores: arranca el build que
       # acaba de pasar, visita solo rutas públicas y falla ante página vacía,
