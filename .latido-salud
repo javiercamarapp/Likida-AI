@@ -1,72 +1,93 @@
-fecha: 2026-08-24
+fecha: 2026-08-31
 
 ## Bloque 1 — Tests intermitentes
-5/5 corridas verdes, idénticas: 501 archivos, 6434 passed | 1 skipped (6435 total) cada vez.
+5/5 corridas válidas, idénticas: 708 archivos, 9995 passed | 1 skipped (9996) cada vez.
 Sin intermitencia, sin roto. Sano.
 
+Nota de metodología: la primera corrida de la sesión fue descartada y repetida — falló
+con `Cannot find package 'zod'` por un `npm update` propio corriendo en paralelo sobre
+`node_modules` (contaminación del entorno, no un flake real del código). Se repitió esa
+corrida después de que el entorno quedó estable; las 5 que cuentan aquí no tuvieron
+ninguna modificación concurrente.
+
+`node_modules` no estaba instalado al arrancar la sesión (entorno efímero) — se corrió
+`npm install` antes de la primera corrida.
+
 ## Bloque 2 — Dependencias
-`npm audit --json`: 0 vulnerabilidades (0 críticas/altas/medias/bajas). `npm outdated --json`: 13 paquetes.
+`npm audit --json`: 0 vulnerabilidades (0 críticas/altas/medias/bajas). `npm outdated
+--json`: 13 paquetes — el mismo universo que la semana pasada, con trabajo ya en curso
+sobre casi todos:
 
-- MECÁNICO (7): PR #53, rama claude/salud-2026-08-24.
-  @supabase/ssr 0.12.4→0.12.5, @supabase/supabase-js 2.101.0(rango)→2.112.4,
-  fast-xml-parser 5.10.1→5.11.0, lucide-react 1.31.0→1.34.0, next 16.2.4(rango)→16.3.2,
-  @types/react-dom 19.2.4→19.2.5, eslint-config-next 16.3.1→16.3.2.
-  Verificado en la rama: tsc limpio, eslint limpio (0 errores), vitest 6434/1/6435 verde,
-  npm run build verde.
-  NOTA: #53 se solapa con dos PRs de Dependabot ya abiertos (#50 grupo "produccion", #51
-  eslint-config-next) — no se tocaron ni cerraron, es decisión del dueño del repo cuál se
-  mergea.
+- MECÁNICO (2): PR #297, rama claude/salud-2026-08-31 (borrador).
+  sharp 0.35.3→0.35.4, zod 4.4.3→4.5.4 — ambos ya dentro del rango declarado en
+  package.json (^0.35.3, ^4.0.0); solo el lockfile quedaba atrás. tsc limpio, eslint
+  limpio (0 errores, 165 warnings preexistentes), vitest 9995/1/9996 verde.
+  Los otros 6 paquetes que subirían de versión con un bump mecánico normal
+  (@sentry/nextjs, eslint-config-next, fast-xml-parser, lucide-react, next, zxing-wasm)
+  YA tienen PR abierto y no se duplicaron: PR #293 (Dependabot, grupo produccion —
+  bloqueado, probablemente por conflicto con #290 sobre zxing-wasm) y PR #294
+  (Dependabot, grupo desarrollo, limpio).
 
-- NECESITA LECTURA (3):
-  - issue #54 — zxing-wasm 3.1.2→3.1.3 (patch, pero rompe la suite): decodeQrFromImage
-    deja de leer el QR en fotos grandes con orientación EXIF
-    (src/lib/likida/intake/codigos.test.ts). Camino real: lectura de QR en comprobantes
-    por WhatsApp. Se avisó también en el PR #50 de Dependabot, que incluye este mismo
-    bump en su grupo — no debe mergearse tal cual.
-  - issue #55 — openai 6.49.0→7.5.0 (mayor). Usado directo en el loop de agentes
-    (src/lib/agents/run.ts, analista.ts, copiloto.ts), tool-executor, openrouter.ts,
-    computer_use.ts (portales de autofactura). Riesgo de romper tool-calling en runtime
-    sin que lo detecte tsc.
-  - issue #56 — tailwind-merge 2.6.1→3.6.0 (mayor). cn() en src/lib/utils.ts sin config
-    extendida, reexportado a todo /admin y /dashboard vía ui/kit. v3 cambió la resolución
-    por defecto de clases en conflicto — riesgo de regresión visual silenciosa (no hay
-    pruebas de snapshot visual en el repo).
+- NECESITA LECTURA (2, ninguno nuevo): issue #55 (openai, mayor) e issue #56
+  (tailwind-merge, mayor) siguen abiertos con los mismos números que la semana pasada
+  (openai ahora 6.49.0→7.8.0 vs 7.5.0 hace una semana; tailwind-merge sin cambio,
+  2.6.1→3.6.0). openai ya tiene PR #291 abierto (cierra #55, sin mergear). No se abrió
+  issue nuevo para ninguno de los dos — ya están rastreados.
 
-- RUIDO (3, descartado con razón, sin issue):
-  typescript 5.9.3→7.0.2, eslint 9.39.5→10.9.0, @types/node 22.20.1→26.2.0 — los tres son
-  herramientas de desarrollo (no corren en producción), sin CVE asociado. Cualquier
+- RUIDO (3, descartado con razón, sin issue — mismo descarte que la semana pasada):
+  typescript 5.9.3→7.0.2, eslint 9.39.5→10.9.1, @types/node 22.20.1→26.4.0 — los tres
+  son herramientas de desarrollo (no corren en producción), sin CVE asociado. Cualquier
   incompatibilidad se detecta de inmediato en las puertas de calidad obligatorias
-  (`npx tsc --noEmit`, `npx eslint src/`) antes de que llegue a nadie — no hay camino
-  silencioso. No urgente; no genera issue.
+  (`npx tsc --noEmit`, `npx eslint src/`) antes de que llegue a nadie.
 
 ## Bloque 3 — Deriva de documentación
-Revisados: CLAUDE.md, README.md, DESIGN.md, MARCA.md, AUDITORIA-PROD-REGLAS.md (los únicos
-.md en la raíz — DOCUMENTO_MAESTRO/ROADMAP/DEPLOY/GUIA_BUILD/ESTADO_FINAL/DECISIONES_PENDIENTES
-no existen en este repo).
+Revisados los 4 .md de la raíz: CLAUDE.md, DESIGN.md, MARCA.md, README.md
+(DOCUMENTO_MAESTRO/ROADMAP/DEPLOY/GUIA_BUILD/ESTADO_FINAL/DECISIONES_PENDIENTES no
+existen en este repo; AUDITORIA-PROD-REGLAS.md, que sí existía hace una semana, ya no
+está — no se investigó por qué, no forma parte del alcance de este bloque).
 
-1 hallazgo verificable:
-- CLAUDE.md:75 — dice "~2,880 pruebas (la cifra crece; no la cites de memoria)". Hoy son
-  6,434 passed + 1 skipped = 6,435 — más del doble. El hedge ("no la cites de memoria")
-  ya avisa que crece, pero la brecha es grande como para seguir sirviendo de referencia.
-  No se abrió PR para esto — el super prompt no lo pide para Bloque 3, se reporta aquí y
-  en el resumen de la sesión.
+1 hallazgo verificable nuevo:
+- README.md:145 — dice "~225 versioned, tested database migrations". Hoy hay 255
+  archivos en `supabase/migrations/` (el más alto es `0274_...`). La brecha creció
+  ~13% desde que se escribió esa cifra.
 
-Verificado y SIN drift: reglas de negocio de CLAUDE.md (ocr_raw muerta, toLocaleString
-solo en formato.ts, requireSessionTenant/sufijo.ts, vercel.json ignoreCommand con
-[deploy] en la primera línea, facturacion_escritura.ts con insert real a factura_emitida
-—la línea exacta corrió de :279 a :368 por ediciones normales, el hecho que cita sigue
-siendo cierto—); referencias de archivo en DESIGN.md y MARCA.md (kit.tsx, charts.tsx,
-graficas.tsx, resumen-visual.tsx, marco.ts, sidebar-nav.tsx, rutas.ts, barra-acciones.tsx,
-visibilidad.ts, globals.css, logo.tsx — todos existen); "0 errores" de tsc y eslint
-(confirmado: tsc 0 errores, eslint 0 errores/157 warnings preexistentes);
-`npm run build` limpio (exit 0 — el issue #12 de la semana pasada, build roto en master,
-ya no reproduce).
+1 hallazgo ya conocido, sin resolver, y que sigue creciendo:
+- CLAUDE.md:85 — dice "~2,880 pruebas (la cifra crece; no la cites de memoria)". Se
+  reportó la semana pasada cuando ya eran 6,435; hoy son 9,996 — más del triple del
+  número escrito. El hedge sigue vigente pero la cifra ancla ya no orienta a nadie.
+
+Verificado y SIN drift: los paths de módulos que lista README.md (intake, cuadre,
+fiscal.ts, liquidacion, facturacion, agentes, src/lib/agents, saas, observability — los
+9 existen); docs/conocimiento/ (00-RESUMEN-EJECUTIVO.md, 30-dolores-flota.md,
+34-proceso-liquidacion.md, CONFIGURAR-META.md, fase1/, fiscal/, legal/ — los 7 existen);
+.env.example existe y trae CRON_SECRET; vercel.json sigue con el ignoreCommand
+`[deploy]` en el asunto; los comandos de "Running locally" (npm install, npm run dev,
+npx tsc --noEmit -p ., npx eslint src/, npx vitest run, npm run build) están todos en
+package.json; los paths que citan DESIGN.md/MARCA.md (kit.tsx, charts.tsx, graficas.tsx,
+resumen-visual.tsx, marco.ts, sidebar-nav.tsx, rutas.ts, barra-acciones.tsx,
+visibilidad.ts, globals.css, logo.tsx, layout.tsx) — todos existen; `lib/formato.ts` de
+MARCA.md es `src/app/dashboard/formato.ts`, que reexporta desde `src/lib/formato.ts` a
+propósito (documentado en su propio encabezado) — no es una segunda implementación, no
+es drift. Los .md de MARCA.md sin resolver (agente-guiones.md, banco-de-hooks.md,
+post.md, agente-visuales.md, bitacora-visuales.md) no son de este repo — son artefactos
+de una cola de trabajo de marketing externa (`likida-marketing-cola/...`), no código;
+descartados, no es hallazgo.
+
+No se investigó: "60 agentes vivos en producción" y "37 portales, 5 automatizados de
+punta a punta" de README.md. El catálogo de agentes vive en una tabla de base de datos
+(`agente_definicion`, no en código estático) — no verificable sin acceso a producción,
+que este entorno no tiene (ver Bloque 4). El de portales sí tiene soporte en código
+(`portales_vivos.ts:6` confirma "37 portales" del reconocimiento del 28-ago-2026) pero
+no se verificó el conteo de "5 automatizados" con la misma profundidad — se dejó fuera
+por presupuesto de tiempo, no se reporta como hallazgo ni como sano.
 
 ## Bloque 4 — Costo por liquidación
 Saltado. Sin credenciales ni datos de producción en este entorno (sin .env.local, sin
-variables de Supabase/OpenRouter/OpenAI en el ambiente). No se estimó nada.
+variables de Supabase/OpenRouter/OpenAI/WhatsApp/CRON_SECRET en el ambiente). No se
+estimó nada.
 
 ## Estado: OK
-Los cuatro bloques corrieron. Bloque 4 se saltó por falta de datos, como indica su propia
-regla. 1 PR abierto (#53), 3 issues abiertos (#54, #55, #56), 1 comentario de aviso en un
-PR de Dependabot (#50).
+Los cuatro bloques corrieron. Bloque 4 se saltó por falta de datos, como indica su
+propia regla. 1 PR nuevo (#297, borrador). No se abrieron issues nuevos — los dos
+NECESITA LECTURA de esta semana ya estaban rastreados por #55/#56 de la semana pasada,
+sin cambios que ameriten reabrir la conversación.
