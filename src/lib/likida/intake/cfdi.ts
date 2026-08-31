@@ -245,13 +245,27 @@ export async function decodeCodigosFromImage(image: Buffer): Promise<CodigoLeido
     // nativa cuesta segundos y no encuentra nada que no encuentre la de 1600 px
     // (medido el 27-jul-2026 con tickets de campo). El presupuesto del request
     // —60 s para TODA la liquidación— vale más que esa cola.
+    //
+    // zxing-wasm 3.1.3 (bump de zxing-cpp, ago-2026) afinó el umbral del
+    // finder-pattern: en un ticket con QR + Code93 (Office Depot), a 1600 px
+    // ahora solo lee el Code93 — el QR aparece hasta la pasada de 1000 px. Un
+    // `return` en el primer resultado NO VACÍO cortaba ahí y se quedaba solo
+    // con el código de barras, sin la liga de facturación. Se acumulan los
+    // códigos de las dos pasadas (dedupe por formato+texto) y solo se corta
+    // temprano cuando ya apareció el dato que de verdad importa —CFDI o liga—,
+    // no con cualquier código.
+    const vistos = new Map<string, CodigoLeido>();
     for (const ancho of [1600, 1000]) {
       const buf = await sharp(image).rotate().resize({ width: ancho, withoutEnlargement: true }).jpeg().toBuffer();
       const leidos = await readBarcodes(new Blob([new Uint8Array(buf)]), { tryHarder: true });
-      const codigos = leidos.filter((r) => r.text).map((r) => ({ ...clasificarQr(r.text), formato: r.format }));
-      if (codigos.length) return codigos;
+      for (const r of leidos) {
+        if (!r.text) continue;
+        const clave = `${r.format}:${r.text}`;
+        if (!vistos.has(clave)) vistos.set(clave, { ...clasificarQr(r.text), formato: r.format });
+      }
+      if ([...vistos.values()].some((c) => c.cfdi || c.urlFacturacion)) break;
     }
-    return [];
+    return [...vistos.values()];
   } catch {
     return [];
   }
