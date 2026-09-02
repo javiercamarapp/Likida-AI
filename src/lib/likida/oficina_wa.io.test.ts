@@ -228,3 +228,62 @@ describe('REN-A1: la pregunta libre por WhatsApp cuenta y se frena', () => {
     gastoHoyUsd = 0;
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · REN-A2 / REN-A3 (ALTO, reincidentes) — el analista por
+// WhatsApp corría con 35 s FIJOS sin mirar el reloj de la invocación (139.5 s
+// de peor caso contra `maxDuration = 120`: Vercel mataba el proceso y el jefe
+// no recibía nada), y el turno que tronaba por timeout tiraba lo que YA había
+// pagado (`gastoChatHoyUsd` leía cero en cada reintento).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('REN-A2: la pregunta libre corre DENTRO del reloj de la invocación', () => {
+  it('con 70 s ya gastados (la compuerta de una ráfaga) NO arranca el analista y contesta «dame un minuto»', async () => {
+    const { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS } = await import('./presupuesto');
+    const { RESPUESTA_OFICINA_SIN_TIEMPO } = await import('./oficina_wa');
+    const ahora = Date.now();
+    const reloj = crearPresupuesto(PRESUPUESTO_WEBHOOK_MS, () => ahora, ahora - 70_000);
+    analista.mockClear();
+    const r = await atenderPreguntaLibre(DUENO, '¿cuánto llevo de diésel?', { reloj });
+    expect(analista).not.toHaveBeenCalled();
+    expect(r).toBe(RESPUESTA_OFICINA_SIN_TIEMPO);
+  });
+
+  it('con reloj de sobra, el techo del analista se recorta a lo que queda menos la holgura (nunca los 35 s a ciegas)', async () => {
+    const { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS } = await import('./presupuesto');
+    const ahora = Date.now();
+    // 120 s − 30 s gastados − margen de cierre ≈ 50 s utilizables → 30 s para el analista.
+    const reloj = crearPresupuesto(PRESUPUESTO_WEBHOOK_MS, () => ahora, ahora - 30_000);
+    analista.mockClear();
+    await atenderPreguntaLibre(DUENO, '¿cuánto llevo de diésel?', { reloj });
+    const opts = analista.mock.calls[0][0] as { timeoutMs: number };
+    expect(opts.timeoutMs).toBeLessThanOrEqual(35_000);
+    expect(opts.timeoutMs).toBeLessThanOrEqual(reloj.restante() - 20_000);
+    expect(opts.timeoutMs).toBeGreaterThanOrEqual(8_000);
+  });
+
+  it('sin reloj (llamadores viejos) conserva los 35 s', async () => {
+    analista.mockClear();
+    await atenderPreguntaLibre(DUENO, '¿cómo vamos?');
+    expect((analista.mock.calls[0][0] as { timeoutMs: number }).timeoutMs).toBe(35_000);
+  });
+});
+
+describe('REN-A3: el turno del jefe que truena por timeout registra lo que YA pagó', () => {
+  it('PartialExecutionError con tokens ⇒ una fila de costo como modelo «parcial», y la respuesta sigue siendo null', async () => {
+    const { PartialExecutionError } = await import('@/lib/llm/openrouter');
+    costosRegistrados.length = 0;
+    gastoHoyUsd = 0;
+    analista.mockRejectedValueOnce(new PartialExecutionError('timeout del analista', new Error('timeout'), [], 4200, 610, 0.019));
+    const r = await atenderPreguntaLibre(DUENO, '¿cuánto llevo gastado?');
+    expect(r).toBeNull();
+    expect(costosRegistrados).toHaveLength(1);
+    expect(costosRegistrados[0]).toMatchObject({ tenantId: 't-1', modelo: 'parcial', fase: 'chat', tokensIn: 4200, tokensOut: 610, costoUsd: 0.019 });
+  });
+
+  it('un error cualquiera (sin consumo que reportar) no inventa una fila de costo', async () => {
+    costosRegistrados.length = 0;
+    analista.mockRejectedValueOnce(new Error('modelo caído'));
+    await atenderPreguntaLibre(DUENO, '¿cómo vamos?');
+    expect(costosRegistrados).toHaveLength(0);
+  });
+});

@@ -5,6 +5,9 @@ import { usd } from '@/lib/utils';
 import { StatCard, StatusPill, type Estado } from '../../ui/kit';
 import { BarraPagina, TituloSeccion } from '../../../dashboard/resumen-visual';
 import type { FichaCliente } from '@/lib/admin/ficha-cliente';
+import type { InterruptorPipelineTenant } from '@/lib/admin/negocio';
+import type { AccionDeForma } from '../../ui/forma';
+import { SeccionInterruptores } from '../../observabilidad/interruptores-ui';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA FICHA 360 — el contenido, exportado (patrón page+contenido para poder
@@ -24,7 +27,18 @@ function NoSePudo({ que }: { que: string }) {
   return <p className="text-[12.5px] m-0" style={{ color: 'var(--muted)' }}>No se pudo leer {que} ahora mismo — reintenta.</p>;
 }
 
-export function Ficha360({ f }: { f: FichaCliente }) {
+export function Ficha360({ f, interruptoresPipeline, accionInterruptorPipeline }: {
+  f: FichaCliente;
+  /**
+   * ADM-6 (auditoría 24): las palancas del pipeline del chofer de ESTA
+   * flota (`interruptor_tenant`, mig. 0297) — `undefined` (props opcionales,
+   * mismo criterio que el resto de la ficha) para no romper un preview que
+   * siga montando `<Ficha360 f={...} />` sin las props nuevas. `null` =
+   * no se pudo leer.
+   */
+  interruptoresPipeline?: InterruptorPipelineTenant[] | null;
+  accionInterruptorPipeline?: AccionDeForma;
+}) {
   const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
   return (
     <main className="h-full">
@@ -181,6 +195,35 @@ export function Ficha360({ f }: { f: FichaCliente }) {
               </div>
             </div>
           </div>
+
+          {/* ── ADM-6 (auditoría 24): interruptores del pipeline del chofer,
+              POR FLOTA — a diferencia de las 58 palancas de Observabilidad
+              (agentes de back office + 'global', que apagarían TODAS las
+              flotas a la vez), estas tres cortan solo whatsapp/ocr/cuadre
+              de ESTA flota. Mismo componente que Observabilidad
+              (SeccionInterruptores): la firma solo necesita
+              id/apagado/motivo/cambiadoPorNombre/cambiadoEn. */}
+          {interruptoresPipeline !== undefined && accionInterruptorPipeline && (
+            <div className="card p-3.5">
+              <TituloSeccion>Pipeline del chofer — palancas de esta flota</TituloSeccion>
+              <div className="mt-2">
+                {interruptoresPipeline === null ? (
+                  <NoSePudo que="los interruptores del pipeline" />
+                ) : (
+                  <SeccionInterruptores
+                    interruptores={interruptoresPipeline.map((i) => ({
+                      id: `pipeline:${i.pipeline}`,
+                      apagado: i.apagado,
+                      motivo: i.motivo,
+                      cambiadoPorNombre: i.cambiadoPorNombre,
+                      cambiadoEn: i.cambiadoEn,
+                    }))}
+                    accion={accionInterruptorPipeline}
+                  />
+                )}
+              </div>
+            </div>
+          )}
 
           {/* ── El pulso: últimas corridas de agentes de ESTA flota ──────── */}
           <div className="card p-3.5">

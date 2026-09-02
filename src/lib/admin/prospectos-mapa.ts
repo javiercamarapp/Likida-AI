@@ -19,6 +19,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, exigir, traerTodo, traerPorIds, PAGINA, LecturaIncompleta, type RespuestaPg } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import {
   type DatosMapa, type DetalleProspecto, type FilaCompacta, type Giro,
   type ProspectoMapa, type Tamano, type TextosProspecto,
@@ -696,4 +697,45 @@ export async function getDetalleProspecto(id: string): Promise<DetalleProspecto 
       linkedin: x.linkedin, origen: x.origen, confianza: x.confianza, evidencia: x.evidencia,
     })),
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADM-8 (auditoría 24, MEDIO) — el rastro de una exportación.
+//
+// Un clic en "Exportar CSV (N)" de `cerebro.tsx` descarga la cartera
+// filtrada COMPLETA (hasta 33k filas, con teléfono y correo de decisores) y
+// no dejaba NINGUNA huella: ni el listado GET ni el fetch de textos llaman
+// `anotarBitacora`. Con una sola sesión de superadmin comprometida, la fuga
+// es masiva y sin evidencia para LFPDPPP.
+//
+// Vía `anotarBitacora` (lib/likida/bitacora_escritura.ts) — el ÚNICO
+// escritor de `bitacora_auditoria` (auditoría 18, A1: "un solo escritor",
+// `bitacora_escritura.test.ts` lo hace cumplir por grep sobre todo `src/`).
+// `'prospecto'` se agregó al dominio de `EntidadBitacora` ahí mismo, "Ampliar
+// AQUÍ, no en el llamador" — su propio comentario. `detalle` lleva SOLO el
+// conteo y los filtros elegidos (giro, estado, texto de búsqueda) — nunca una
+// fila de prospecto: la bitácora no puede volverse ella misma una segunda
+// copia de los datos que audita. `entidadId` es `'csv'`: no hay una fila de
+// prospecto singular que nombrar — es la cartera filtrada completa.
+//
+// BEST-EFFORT, nunca lanza: `anotarBitacora` ya no lanza por diseño (una
+// bitácora que tumbara la descarga sería peor que una descarga sin rastro).
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function registrarExportacionProspectos(
+  actorId: string | null,
+  n: number,
+  filtros: Record<string, unknown>,
+): Promise<void> {
+  await anotarBitacora(
+    {
+      tenantId: null,
+      actor: actorId ? { id: actorId } : 'sistema',
+      accion: 'prospectos.exportados',
+      entidad: 'prospecto',
+      entidadId: 'csv',
+      detalle: { n, filtros },
+    },
+    { evento: 'prospectos.exportacion_no_bitacorada' },
+  );
 }

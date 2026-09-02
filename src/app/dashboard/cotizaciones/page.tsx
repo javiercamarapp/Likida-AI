@@ -5,13 +5,14 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { mxn, porcentaje, fechaHoraMx } from '@/lib/formato';
+import { mxn, porcentaje, fechaHoraMx, fechaMx, numero } from '@/lib/formato';
 import { gananciaReal } from '@/lib/likida/cotizador/motor';
 import {
   getPanelCotizador, guardarConfigCotizador, crearCotizacion, marcarEnviada, marcarPerdida,
   convertirEnViaje, type PanelCotizador, type CotizacionRow,
 } from '@/lib/likida/cotizador/lector';
-import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
+import { FormaConAviso, Campo, Selector, type ResultadoAccion, type AccionDeForma } from '../../admin/ui/forma';
+import { FilaAccionesCotizacion } from './acciones';
 
 export const dynamic = 'force-dynamic';
 
@@ -100,43 +101,51 @@ export default async function PaginaCotizaciones({
     return { ok: 'Cotización creada con su desglose citable. Revísala abajo.' };
   }
 
-  async function accionEnviada(fd: FormData): Promise<void> {
+  // FE-13b: las tres eran `(fd) => Promise<void>` — sin `useActionState` no
+  // hay estado `pending` (doble clic manda dos veces) y el `catch` se tragaba
+  // el error en el log; el humano solo veía la fila SIN cambiar tras el
+  // `revalidatePath` y no sabía si su clic hizo algo. Ahora todas devuelven
+  // `ResultadoAccion`, como el resto de las forms del panel.
+  async function accionEnviada(_prev: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const s = await resolverTenantEfectivo(RUTA, sp);
-    if (!puedeVerRuta(s.rol, RUTA)) return;
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede editar cotizaciones.' };
     try {
       await marcarEnviada(s.tenantId, String(fd.get('id') ?? ''));
     } catch (e) {
-      logger.warn('cotizador.enviada_fallo', { err: e instanceof Error ? e.message : String(e) });
+      return { error: mensajeParaPantalla(e, 'marcar la cotización como enviada') };
     }
     revalidatePath(RUTA);
+    return { ok: 'Marcada como enviada.' };
   }
 
-  async function accionPerdida(fd: FormData): Promise<void> {
+  async function accionPerdida(_prev: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const s = await resolverTenantEfectivo(RUTA, sp);
-    if (!puedeVerRuta(s.rol, RUTA)) return;
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede editar cotizaciones.' };
+    const como = String(fd.get('como')) === 'vencida' ? 'vencida' : 'perdida';
     try {
-      const como = String(fd.get('como')) === 'vencida' ? 'vencida' : 'perdida';
       await marcarPerdida(s.tenantId, String(fd.get('id') ?? ''), como, s.userId ?? null);
     } catch (e) {
-      logger.warn('cotizador.perdida_fallo', { err: e instanceof Error ? e.message : String(e) });
+      return { error: mensajeParaPantalla(e, como === 'vencida' ? 'marcar como vencida' : 'marcar como perdida') };
     }
     revalidatePath(RUTA);
+    return { ok: como === 'vencida' ? 'Marcada como vencida.' : 'Marcada como perdida.' };
   }
 
-  async function accionConvertir(fd: FormData): Promise<void> {
+  async function accionConvertir(_prev: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const s = await resolverTenantEfectivo(RUTA, sp);
-    if (!puedeVerRuta(s.rol, RUTA)) return;
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede crear viajes desde aquí.' };
     try {
       await convertirEnViaje(s.tenantId, String(fd.get('id') ?? ''), s.userId ?? null);
     } catch (e) {
-      // El motivo honesto (sin precio, ya decidida…) queda en el log; la
-      // fila de abajo pinta el estado real tras el revalidate.
-      logger.warn('cotizador.convertir_fallo', { err: e instanceof Error ? e.message : String(e) });
+      // El motivo honesto (sin precio, ya decidida…) ahora también llega a
+      // pantalla, no solo al log.
+      return { error: mensajeParaPantalla(e, 'crear el viaje desde esta cotización') };
     }
     revalidatePath(RUTA);
+    return { ok: 'Viaje creado desde esta cotización.' };
   }
 
   const c = panel?.config;
@@ -226,9 +235,9 @@ function Fila({
   q, enviada, perdida, convertir,
 }: {
   q: CotizacionRow;
-  enviada: (fd: FormData) => Promise<void>;
-  perdida: (fd: FormData) => Promise<void>;
-  convertir: (fd: FormData) => Promise<void>;
+  enviada: AccionDeForma;
+  perdida: AccionDeForma;
+  convertir: AccionDeForma;
 }) {
   const viva = q.estado === 'borrador' || q.estado === 'enviada';
   // EL NÚMERO QUE EL TÍTULO DE ESTA PANTALLA PROMETE. `null` = todavía no se
@@ -242,7 +251,7 @@ function Fila({
           <span className="font-medium">{q.origen} → {q.destino}</span>
           {q.folio && <span className="ml-2 text-neutral-500">({q.folio})</span>}
           <span className="ml-2 text-neutral-500">{q.clienteNombre ?? 'sin cliente'}</span>
-          {q.km !== null && <span className="ml-2 text-neutral-500">{q.km} km</span>}
+          {q.km !== null && <span className="ml-2 text-neutral-500">{numero(q.km)} km</span>}
         </div>
         <div className="text-sm">
           <span className="mr-3">costo: {q.costoEstimado !== null ? mxn(q.costoEstimado) : 'incompleto'}</span>
@@ -302,37 +311,14 @@ function Fila({
 
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
         <span>creada {fechaHoraMx(q.creadaEn)}</span>
-        {q.vigenteHasta && <span>· vigente hasta {q.vigenteHasta}</span>}
+        {q.vigenteHasta && <span>· vigente hasta {fechaMx(q.vigenteHasta)}</span>}
         {q.viajeId && <span>· viaje creado</span>}
         {viva && (
-          <span className="ml-auto flex gap-2">
-            {q.estado === 'borrador' && (
-              <form action={enviada}>
-                <input type="hidden" name="id" value={q.id} />
-                <button className="rounded border px-2 py-1 hover:bg-neutral-50 dark:hover:bg-neutral-800" type="submit">Marcar enviada</button>
-              </form>
-            )}
-            <form action={convertir}>
-              <input type="hidden" name="id" value={q.id} />
-              <button
-                className="rounded border border-emerald-600 px-2 py-1 text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:hover:bg-emerald-950"
-                type="submit"
-                disabled={q.precio === null}
-                title={q.precio === null ? 'Sin precio no hay viaje que crear' : 'Crea el viaje con esta ruta, cliente y precio'}
-              >
-                Crear viaje
-              </button>
-            </form>
-            <form action={perdida}>
-              <input type="hidden" name="id" value={q.id} />
-              <input type="hidden" name="como" value="perdida" />
-              <button className="rounded border px-2 py-1 hover:bg-neutral-50 dark:hover:bg-neutral-800" type="submit">Perdida</button>
-            </form>
-            <form action={perdida}>
-              <input type="hidden" name="id" value={q.id} />
-              <input type="hidden" name="como" value="vencida" />
-              <button className="rounded border px-2 py-1 hover:bg-neutral-50 dark:hover:bg-neutral-800" type="submit">Vencida</button>
-            </form>
+          <span className="ml-auto">
+            <FilaAccionesCotizacion
+              id={q.id} puedeEnviar={q.estado === 'borrador'} precio={q.precio}
+              enviada={enviada} convertir={convertir} perdida={perdida}
+            />
           </span>
         )}
       </div>

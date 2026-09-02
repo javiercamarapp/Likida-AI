@@ -83,6 +83,18 @@ export async function listarInsumosDeAgente(agenteId: string, limite = 50): Prom
   return (data ?? []).map(desdeFila);
 }
 
+/** El total REAL de insumos de un agente — AUDITORÍA 24, ADM-9: el panel
+ *  pintaba `insumos.length` (topado a `limite`, default 50) como si fuera el
+ *  total. `count: 'exact', head: true` no trae filas, solo el conteo. */
+export async function contarInsumosDeAgente(agenteId: string): Promise<number> {
+  const { count, error } = await acotada(supabaseAdmin()
+    .from('agente_insumo')
+    .select('id', { count: 'exact', head: true })
+    .eq('agente', agenteId), 'insumos.contar');
+  if (error) throw new Error(`contarInsumosDeAgente(${agenteId}): ${error.message}`);
+  return count ?? 0;
+}
+
 /**
  * Los insumos PENDIENTES de un agente — lo que su siguiente corrida debe
  * leer. Plataforma (`tenant_id is null`): es el filtro que la capa 2 del

@@ -3,7 +3,7 @@ import { FileSpreadsheet, Download } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeExportar } from '@/lib/auth/permisos';
-import { hoyMx } from '@/lib/formato';
+import { hoyMx, fechaMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { sufijoTenant } from '../sufijo';
 import {
@@ -46,7 +46,7 @@ function EstadoPerfil({ etiqueta, perfil, leyoOk }: { etiqueta: string; perfil: 
       {!leyoOk
         ? 'no pude leer si ya hay plantilla confirmada — recarga antes de confirmar de nuevo.'
         : perfil
-          ? `plantilla confirmada el ${perfil.confirmadoEn.slice(0, 10)}. El export ya usa este layout; volver a enviar la reemplaza.`
+          ? `plantilla confirmada el ${fechaMx(perfil.confirmadoEn)}. El export ya usa este layout; volver a enviar la reemplaza.`
           : 'sin plantilla confirmada — el export de póliza en este formato responde 409 hasta confirmarla.'}
     </p>
   );

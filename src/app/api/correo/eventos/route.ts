@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { suprimirCorreo } from '@/lib/likida/agentes/enviador';
 import { logger } from '@/lib/logger';
+import { cuerpoAcotado } from '../_cuerpo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,9 @@ export const dynamic = 'force-dynamic';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const TOLERANCIA_S = 300;
+
+/** Un evento de entrega de Resend son cientos de bytes; 64 KB ya es holgado. */
+const MAX_CUERPO_BYTES = 64 * 1024;
 
 const ESTADO_POR_EVENTO: Record<string, 'entregado' | 'rebotado' | 'queja'> = {
   'email.delivered': 'entregado',
@@ -55,8 +59,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'RESEND_WEBHOOK_SECRET no está configurado.' }, { status: 500 });
   }
 
-  const cuerpo = await req.text();
-  if (cuerpo.length > 64 * 1024) return new NextResponse('Payload too large', { status: 413 });
+  // AUDITORÍA 24, BE-21: era `await req.text()` y el tope se medía DESPUÉS.
+  // Un POST `chunked` de 200 MB sin cabeceras svix —o sea, sin haber
+  // demostrado nada— entraba entero a memoria antes del 413. `cuerpoAcotado`
+  // corta MIENTRAS lee, como ya hacía correo/entrante.
+  const cuerpo = await cuerpoAcotado(req, MAX_CUERPO_BYTES);
+  if (cuerpo === null) {
+    logger.warn('correo.eventos.cuerpo_excede', { maxBytes: MAX_CUERPO_BYTES });
+    return new NextResponse('Payload too large', { status: 413 });
+  }
   if (!firmaValida(cuerpo, req.headers.get('svix-id'), req.headers.get('svix-timestamp'), req.headers.get('svix-signature'), secreto)) {
     return new NextResponse('Invalid signature', { status: 401 });
   }

@@ -15,12 +15,14 @@ export const dynamic = 'force-dynamic';
 const REPO_URL = 'https://github.com/javiercamarapp/likida.ai';
 
 /**
- * Dev — `requireSuperadmin()` ya lo hizo el layout, esta página no trae
- * datos porque no hay ninguno real que traer: no existe integración con la
- * API de GitHub ni con la de Vercel para jalar en vivo el calendario de
- * contribuciones, deploys, feature flags o PRs. Lo único real y barato que
- * SÍ se puede ofrecer es el link directo al repositorio (mismo patrón que
- * "Salud del sistema" en Inicio: se enlaza, no se reconstruye).
+ * Dev — `requireSuperadmin()` ya lo hizo el layout.
+ *
+ * ADM-12 (auditoría 24, menor): este comentario decía "no existe
+ * integración con la API de GitHub" — falso desde que `lib/admin/github.ts`
+ * llegó: el mapa de actividad (pushes por día), los autores y los SLOs de
+ * abajo SÍ jalan en vivo con `GITHUB_TOKEN`. Lo que de verdad NO existe es
+ * Vercel (deploys, feature flags) — no hay integración con esa API, y por
+ * eso el link directo al repositorio sigue siendo el único atajo para eso.
  */
 export default async function DevPage() {
   // El selector de vistas necesita saber si HAY flotas (con cero, sus ligas

@@ -51,3 +51,45 @@ export function leerPeriodo(q: URLSearchParams):
     etiqueta: `${desde}..${hasta}`,
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// QUÉ REVISIONES ENTRAN AL ARCHIVO (auditoría 24, bloqueante 6 — mig. 0299).
+//
+// Desde la 0299 una liquidación tiene dos estados: el del MOTOR (`estatus`) y
+// el de la PERSONA (`revision`). Este CSV es con lo que tesorería arma la
+// dispersión al chofer (`producto-completitud.md` §19), así que una
+// liquidación RECHAZADA —cuyas cifras el motor va a recalcular en cuanto
+// llegue el comprobante bueno— no puede entrar por omisión: se pagaría sobre
+// un total que ya se sabe equivocado.
+//
+// Por omisión entra todo MENOS lo rechazado. Se puede pedir explícito otra
+// cosa; lo que NO se puede es que el archivo salga sin decir cuál fue el
+// corte, así que el filtro viaja en el nombre del archivo y en un encabezado.
+// Las columnas del CSV no cambian (el ERP del contador ya las lee).
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const FILTROS_REVISION = ['sin_rechazadas', 'firmadas', 'pendiente', 'aprobada', 'ajustada', 'rechazada', 'todas'] as const;
+export type FiltroRevisionExport = (typeof FILTROS_REVISION)[number];
+export const FILTRO_REVISION_DEFECTO: FiltroRevisionExport = 'sin_rechazadas';
+
+export function leerFiltroRevision(q: URLSearchParams):
+  | { ok: true; filtro: FiltroRevisionExport }
+  | { ok: false; motivo: string } {
+  const crudo = q.get('revision');
+  if (crudo === null || crudo === '') return { ok: true, filtro: FILTRO_REVISION_DEFECTO };
+  if (!(FILTROS_REVISION as readonly string[]).includes(crudo)) {
+    return { ok: false, motivo: `\`revision\` solo acepta: ${FILTROS_REVISION.join(', ')}.` };
+  }
+  return { ok: true, filtro: crudo as FiltroRevisionExport };
+}
+
+/** Cómo se le explica el corte a quien abra el archivo. */
+export const LEYENDA_REVISION: Record<FiltroRevisionExport, string> = {
+  sin_rechazadas: 'todas menos las rechazadas',
+  firmadas: 'solo las aprobadas o ajustadas',
+  pendiente: 'solo las que esperan firma',
+  aprobada: 'solo las aprobadas',
+  ajustada: 'solo las ajustadas',
+  rechazada: 'solo las rechazadas',
+  todas: 'todas, firmadas o no',
+};

@@ -64,6 +64,8 @@ import { logger } from '@/lib/logger';
 import { conteo, traerTodo } from '@/lib/likida/pg';
 import { acotada } from '@/lib/likida/presupuesto';
 import { round2, TZ_MX, hoyMx } from '@/lib/formato';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
+import { DatoInvalido } from '@/lib/likida/errores';
 // Solo TIPOS: `import type` se borra al compilar, así que esto no arrastra el
 // módulo de corridas (que carga supabaseAdmin/logger al importarse) — aquí
 // nada más se quiere el dominio del CHECK de la 0102 escrito una vez.
@@ -369,10 +371,17 @@ export async function getResumenNegocio(
   // cientos de miles): cubre el error por valor y el recorte a `max_rows`, y
   // LANZA si no completa. `llm_costo` (0062) y `viaje`/`gasto` (0153) no se
   // traen: se cuentan en la base. Ver la cabecera.
+  //
+  // AUDITORÍA 24, ADM-3 (ALTO): `not.ilike('nombre', 'ZZZ %')` — una corrida
+  // de QA abortada CONSERVA su tenant sintético a propósito (es evidencia
+  // para inspección, ver qa-motor.ts), y sin este filtro entraba aquí como
+  // una flota real hasta que alguien la limpiara a mano. El prefijo 'ZZZ '
+  // es la misma llave que usa el guard de borrado del ejército de QA
+  // (`scripts/qa-agentes/config.qa.ts`) — no una convención nueva.
   const [tenantsData, costoIa, negocio] = await Promise.all([
     traerTodo<{ id: string; nombre: string; plan: string; config: unknown }>(
       (d, h) => acotada(
-        admin.from('tenant').select('id, nombre, plan, config', conteo(d)).order('id').range(d, h),
+        admin.from('tenant').select('id, nombre, plan, config', conteo(d)).not('nombre', 'ilike', 'ZZZ %').order('id').range(d, h),
         'getResumenNegocio/tenant',
       ),
       'getResumenNegocio/tenant',
@@ -527,16 +536,99 @@ export async function getConversacionesActivas(): Promise<ConversacionActiva[]> 
     .order('updated_at', { ascending: false })
     .limit(TOPE_CONVERSACIONES), 'getConversacionesActivas');
   if (error) throw new Error(`getConversacionesActivas: ${error.message}`);
-  return (data ?? []).map((c) => {
-    const estado = (c.estado as { turns?: TurnoConversacion[] }) ?? {};
-    return {
-      telefono: c.telefono as string,
-      tenantId: (c.tenant_id as string | null) ?? null,
-      tenantNombre: ((c.tenant as { nombre?: string } | null)?.nombre) ?? '—',
-      turns: Array.isArray(estado.turns) ? estado.turns : [],
-      actualizadaEn: c.updated_at as string,
-    };
-  });
+  return (data ?? []).map(mapFilaConversacion);
+}
+
+/** La misma fila cruda de `wa_conversacion` (+ join a `tenant`) a
+ *  `ConversacionActiva`, compartida por `getConversacionesActivas`,
+ *  `buscarConversaciones` y `getConversacion` — antes duplicada en la
+ *  primera y a punto de triplicarse con ADM-1. */
+function mapFilaConversacion(c: Record<string, unknown>): ConversacionActiva {
+  const estado = (c.estado as { turns?: TurnoConversacion[] }) ?? {};
+  return {
+    telefono: c.telefono as string,
+    tenantId: (c.tenant_id as string | null) ?? null,
+    tenantNombre: ((c.tenant as { nombre?: string } | null)?.nombre) ?? '—',
+    turns: Array.isArray(estado.turns) ? estado.turns : [],
+    actualizadaEn: c.updated_at as string,
+  };
+}
+
+/** Filas por página de `buscarConversaciones` — mismo criterio que
+ *  `paginar-registro.ts` del dashboard (25 se lee sin scroll infinito). */
+export const CONVERSACIONES_POR_PAGINA = 25;
+
+export interface PaginaConversaciones {
+  filas: ConversacionActiva[];
+  pagina: number;
+  paginas: number;
+  /** Cuántas conversaciones pasan el filtro actual — `count exact`, nunca
+   *  `filas.length`. */
+  total: number;
+}
+
+/**
+ * ADM-1: `getConversacionesActivas` es un TOPE de 20 sin filtro — con
+ * cientos de choferes activos las 20 filas rotan en minutos y no hay forma
+ * de abrir la conversación de un teléfono concreto sin ir a la base. Esta
+ * función SÍ filtra (`?q=` por teléfono, `?tenant=`) y SÍ pagina con
+ * `count exact` real, nunca `filas.length` como total.
+ *
+ * `q` se normaliza a solo dígitos ANTES de armar el `ilike` — el mismo
+ * criterio que `bitacora.ts` (sanear antes de que `%`/`_` entren como
+ * comodines de LIKE) y el mismo que espera un teléfono mexicano en
+ * `wa_conversacion.telefono` (dígitos, sin `+`/espacios).
+ */
+export async function buscarConversaciones(params: {
+  q?: string;
+  tenantId?: string | null;
+  pagina?: number;
+}): Promise<PaginaConversaciones> {
+  const porPagina = CONVERSACIONES_POR_PAGINA;
+  const paginaPedida = Math.trunc(params.pagina ?? 1);
+  const pagina = Number.isFinite(paginaPedida) && paginaPedida >= 1 ? paginaPedida : 1;
+  const q = (params.q ?? '').replace(/[^\d]/g, '').slice(0, 20);
+
+  let consulta = supabaseAdmin()
+    .from('wa_conversacion')
+    .select('telefono, tenant_id, estado, updated_at, tenant:tenant_id(nombre)', { count: 'exact' })
+    .order('updated_at', { ascending: false })
+    .order('telefono'); // desempata `updated_at` repetido entre páginas
+  if (q) consulta = consulta.ilike('telefono', `%${q}%`);
+  if (params.tenantId) consulta = consulta.eq('tenant_id', params.tenantId);
+
+  const desde = (pagina - 1) * porPagina;
+  const { data, error, count } = await acotada(
+    consulta.range(desde, desde + porPagina - 1), 'buscarConversaciones',
+  );
+  if (error) throw new Error(`buscarConversaciones: ${error.message}`);
+  const total = count ?? 0;
+  const paginas = Math.max(1, Math.ceil(total / porPagina));
+  return {
+    filas: ((data ?? []) as Array<Record<string, unknown>>).map(mapFilaConversacion),
+    pagina: Math.min(pagina, paginas),
+    paginas,
+    total,
+  };
+}
+
+/**
+ * Una sola conversación por (tenant, teléfono) — la llave real de
+ * `wa_conversacion` (ver el comentario de `ConversacionActiva.tenantId`).
+ * `null` = no existe esa conversación (no un error: el link vino de un id
+ * viejo o manipulado, y la página de detalle lo trata como 404, no como
+ * "la base falló").
+ */
+export async function getConversacion(tenantId: string, telefono: string): Promise<ConversacionActiva | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('wa_conversacion')
+    .select('telefono, tenant_id, estado, updated_at, tenant:tenant_id(nombre)')
+    .eq('tenant_id', tenantId)
+    .eq('telefono', telefono)
+    .maybeSingle(), 'getConversacion');
+  if (error) throw new Error(`getConversacion: ${error.message}`);
+  if (!data) return null;
+  return mapFilaConversacion(data as Record<string, unknown>);
 }
 
 /**
@@ -913,4 +1005,170 @@ export async function contarLiquidacionesEnRevisar(): Promise<number> {
     throw new Error('contarLiquidacionesEnRevisar: PostgREST no devolvió el conteo — no se afirma un 0 que nadie midió.');
   }
   return count;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL MRR (ADM-5, auditoría 24) — antes una constante `0` en `consola.tsx` y
+// `ejecutivo/page.tsx`, aunque `saas/suscripcion.ts` (0052) ya trae
+// `suscripcion.estado` y `plan.precio_mensual` reales. El día 1 del piloto
+// (Innovativos con una suscripción activa) la consola habría seguido
+// diciendo "$0 MRR" — una cifra que el código nunca calculó, justo lo que la
+// regla #1 del producto prohíbe.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ResumenMrr {
+  /**
+   * Suma de `plan.precio_mensual` de las suscripciones en estado 'activa'.
+   * `null` = NO SE PUDO MEDIR — o falló la lectura, o alguna suscripción
+   * activa cuelga de un plan sin precio configurado (`precio_mensual` NULL,
+   * ver `plan.ts` — "un precio de ejemplo termina en una propuesta
+   * comercial"). Nunca se resta esa suscripción en silencio: un MRR
+   * incompleto sin decirlo es peor que decir "sin medir".
+   */
+  totalMxn: number | null;
+  /** Cuántas suscripciones activas hay — se pinta aunque `totalMxn` sea
+   *  `null`, para distinguir "cero clientes" de "clientes sin precio". */
+  suscripcionesActivas: number;
+}
+
+/** El MRR de TODA la plataforma, cruzando tenants (mismo permiso que el resto
+ *  de este archivo). `traerTodo` + `count` real: mismo contrato que `tenant`
+ *  arriba, para que 800 flotas no se recorten en silencio. */
+export async function getMrr(): Promise<ResumenMrr> {
+  const admin = supabaseAdmin();
+  const filas = await traerTodo<{ id: string; plan: { precio_mensual: number | null } | Array<{ precio_mensual: number | null }> | null }>(
+    (d, h) => acotada(
+      admin.from('suscripcion').select('id, plan:plan_clave(precio_mensual)', conteo(d))
+        .eq('estado', 'activa').order('id').range(d, h),
+      'getMrr',
+    ),
+    'getMrr',
+  );
+  let total = 0;
+  let medible = true;
+  for (const f of filas) {
+    const planRel = f.plan;
+    const p = Array.isArray(planRel) ? planRel[0] : planRel;
+    if (!p || p.precio_mensual === null) { medible = false; continue; }
+    total += Number(p.precio_mensual);
+  }
+  return { totalMxn: medible ? round2(total) : null, suscripcionesActivas: filas.length };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INTERRUPTORES DEL PIPELINE DEL CHOFER, POR FLOTA (ADM-6, auditoría 24;
+// tabla `interruptor_tenant`, mig. 0297).
+//
+// `lib/likida/interruptores.ts` (0110) es GLOBAL por agente — las 58
+// palancas + `global` son de agentes de back office, y apagar 'global'
+// apagaría TODAS las flotas de golpe. El pipeline que un chofer ejercita por
+// WhatsApp (recepción, OCR, cuadre) corre por WEBHOOK, una flota a la vez, y
+// hasta esta migración no tenía NINGUNA palanca propia.
+//
+// MISMO CONTRATO que el interruptor global: SIN FILA = ENCENDIDO, apagar
+// exige motivo, LANZA si la escritura falla ("apagué" que no apagó es el
+// peor resultado posible). Vive aquí (lib/admin) y no en lib/likida porque
+// hoy solo lo toca /admin/flotas/[id] — si algún día el webhook necesita
+// LEERLO (ver la nota de la migración: falta que `processor.ts` lo
+// consulte), esa lectura puede mudarse a lib/likida sin tocar la tabla.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type PipelineChofer = 'whatsapp' | 'ocr' | 'cuadre';
+export const PIPELINES_CHOFER: readonly PipelineChofer[] = ['whatsapp', 'ocr', 'cuadre'];
+
+export interface InterruptorPipelineTenant {
+  pipeline: PipelineChofer;
+  apagado: boolean;
+  motivo: string | null;
+  cambiadoPorNombre: string | null;
+  cambiadoEn: string | null;
+}
+
+function esPipelineValido(p: string): p is PipelineChofer {
+  return (PIPELINES_CHOFER as readonly string[]).includes(p);
+}
+
+/** Los tres pipelines de UNA flota, con los que no tienen fila en su estado
+ *  default (encendidos) — mismo patrón que `listarInterruptores` (0110).
+ *  LANZA ante un error de lectura: es de panel, y "todo encendido" sobre
+ *  una base caída afirmaría que nada está apagado sin haber podido mirar. */
+export async function getInterruptoresPipelineDeTenant(tenantId: string): Promise<InterruptorPipelineTenant[]> {
+  const admin = supabaseAdmin();
+  const { data, error } = await acotada(admin
+    .from('interruptor_tenant')
+    .select('pipeline, apagado, motivo, cambiado_por, cambiado_en')
+    .eq('tenant_id', tenantId), 'getInterruptoresPipelineDeTenant');
+  if (error) throw new Error(`getInterruptoresPipelineDeTenant: ${error.message}`);
+
+  const filas = new Map<string, Record<string, unknown>>();
+  for (const f of (data ?? []) as Array<Record<string, unknown>>) filas.set(String(f.pipeline), f);
+
+  const actorIds = [...new Set(
+    [...filas.values()].map((f) => f.cambiado_por as string | null).filter((v): v is string => v !== null),
+  )];
+  const nombresPorId = new Map<string, string>();
+  if (actorIds.length > 0) {
+    const { data: actores } = await acotada(
+      admin.from('app_user').select('id, nombre, email').in('id', actorIds),
+      'getInterruptoresPipelineDeTenant/actores',
+    );
+    for (const a of (actores ?? []) as Array<{ id: string; nombre: string | null; email: string }>) {
+      nombresPorId.set(a.id, a.nombre ?? a.email);
+    }
+  }
+
+  return PIPELINES_CHOFER.map((pipeline) => {
+    const f = filas.get(pipeline);
+    if (!f) return { pipeline, apagado: false, motivo: null, cambiadoPorNombre: null, cambiadoEn: null };
+    const cambiadoPor = f.cambiado_por as string | null;
+    return {
+      pipeline,
+      apagado: Boolean(f.apagado),
+      motivo: (f.motivo as string | null) ?? null,
+      cambiadoPorNombre: cambiadoPor ? (nombresPorId.get(cambiadoPor) ?? 'cuenta borrada') : null,
+      cambiadoEn: (f.cambiado_en as string | null) ?? null,
+    };
+  });
+}
+
+/** Apaga UN pipeline de UNA flota. Motivo obligatorio (mismo CHECK que la
+ *  0297 en base). LANZA si la escritura falla. */
+export async function apagarPipelineDeTenant(tenantId: string, pipeline: string, motivo: string, userId: string): Promise<void> {
+  if (!esPipelineValido(pipeline)) {
+    throw new DatoInvalido(`"${pipeline}" no es un pipeline del catálogo (whatsapp/ocr/cuadre).`);
+  }
+  const m = motivo.trim();
+  if (!m) {
+    throw new DatoInvalido('Apagar exige un motivo: sin nota, en tres semanas nadie sabe si ya se puede encender.');
+  }
+  const { error } = await acotada(supabaseAdmin()
+    .from('interruptor_tenant')
+    .upsert(
+      { tenant_id: tenantId, pipeline, apagado: true, motivo: m, cambiado_por: userId, cambiado_en: new Date().toISOString() },
+      { onConflict: 'tenant_id,pipeline' },
+    ), 'apagarPipelineDeTenant');
+  if (error) throw new Error(`apagarPipelineDeTenant(${tenantId}, ${pipeline}): ${error.message}`);
+  await anotarBitacora(
+    { tenantId, actor: { id: userId }, accion: 'interruptor.pipeline_apagado', entidad: 'interruptor', entidadId: `${tenantId}:${pipeline}`, detalle: { pipeline, motivo: m } },
+    { evento: 'admin.interruptor_pipeline_no_bitacorado', contexto: { tenantId, pipeline } },
+  );
+}
+
+/** Enciende UN pipeline de UNA flota (vuelve al default). LANZA si la
+ *  escritura falla. */
+export async function encenderPipelineDeTenant(tenantId: string, pipeline: string, userId: string): Promise<void> {
+  if (!esPipelineValido(pipeline)) {
+    throw new DatoInvalido(`"${pipeline}" no es un pipeline del catálogo (whatsapp/ocr/cuadre).`);
+  }
+  const { error } = await acotada(supabaseAdmin()
+    .from('interruptor_tenant')
+    .upsert(
+      { tenant_id: tenantId, pipeline, apagado: false, motivo: null, cambiado_por: userId, cambiado_en: new Date().toISOString() },
+      { onConflict: 'tenant_id,pipeline' },
+    ), 'encenderPipelineDeTenant');
+  if (error) throw new Error(`encenderPipelineDeTenant(${tenantId}, ${pipeline}): ${error.message}`);
+  await anotarBitacora(
+    { tenantId, actor: { id: userId }, accion: 'interruptor.pipeline_encendido', entidad: 'interruptor', entidadId: `${tenantId}:${pipeline}`, detalle: { pipeline } },
+    { evento: 'admin.interruptor_pipeline_no_bitacorado', contexto: { tenantId, pipeline } },
+  );
 }

@@ -73,20 +73,23 @@ export default async function PaginaAgentePeajes({
   const desgloseSel = desglosesProveedor?.find((d) => d.desgloseId === sp.desglose)
     ?? desglosesProveedor?.[0]
     ?? null;
-  const detalleSel = desgloseSel
-    ? await safe(() => detalleDesglose(tenantId, desgloseSel.desgloseId))
-    : null;
-  // La evidencia GPS del desglose seleccionado (post-plan-maestro #1). Se
-  // computa al leer — no escribe nada — y `safe()` la degrada a "no se pudo
-  // leer" igual que el detalle: un resumen a medias diría "sin evidencia" de
-  // cruces que sí la tienen.
-  const evidenciaSel = desgloseSel
-    ? await safe(async () => {
-        const e = await evidenciaGpsDeDesglose(tenantId, desgloseSel.desgloseId);
-        // El Map → objeto plano: la vista solo anota las líneas visibles.
-        return { resumen: e.resumen, porLinea: Object.fromEntries(e.porLinea) };
-      })
-    : null;
+  // FE-33: las dos lecturas de abajo solo dependen de `desgloseSel` — nada
+  // de la segunda depende del resultado de la primera —, así que van en
+  // paralelo en vez de en serie.
+  const [detalleSel, evidenciaSel] = desgloseSel
+    ? await Promise.all([
+        safe(() => detalleDesglose(tenantId, desgloseSel.desgloseId)),
+        // La evidencia GPS del desglose seleccionado (post-plan-maestro #1).
+        // Se computa al leer — no escribe nada — y `safe()` la degrada a "no
+        // se pudo leer" igual que el detalle: un resumen a medias diría "sin
+        // evidencia" de cruces que sí la tienen.
+        safe(async () => {
+          const e = await evidenciaGpsDeDesglose(tenantId, desgloseSel.desgloseId);
+          // El Map → objeto plano: la vista solo anota las líneas visibles.
+          return { resumen: e.resumen, porLinea: Object.fromEntries(e.porLinea) };
+        }),
+      ])
+    : [null, null];
 
   async function subirDesglose(
     _prev: { error?: string; resumen?: { totalLineas: number; conciliadas: number; porConciliar: number } } | null,

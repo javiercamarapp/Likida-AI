@@ -150,6 +150,21 @@ export interface Diferencia {
 
 export type EstatusLiquidacion = 'cuadrada' | 'con_diferencias' | 'revisar';
 
+/**
+ * LO QUE FIRMÓ UNA PERSONA — no es lo mismo que `EstatusLiquidacion` (mig.
+ * 0299, auditoría 24 · BLOQ-6).
+ *
+ * `estatus` es el veredicto del MOTOR («cuadró», «hay diferencias», «revísala»);
+ * `revision` es el de la PERSONA. Una liquidación puede estar `cuadrada` y
+ * seguir `pendiente` de firma, o estar `con_diferencias` y ya `aprobada`
+ * porque el contralor las dio por buenas. Quien contabilice por `estatus`
+ * asienta cierres que nadie firmó.
+ *
+ * `pendiente` es el estado de nacimiento (salvo que cuadre sola, que nace
+ * `aprobada` con `revisadaPor` vacío = la firmó el motor).
+ */
+export type RevisionLiquidacion = 'pendiente' | 'aprobada' | 'ajustada' | 'rechazada';
+
 /** Resultado del cuadre — lo que consume el PDF y el export a ERP. */
 export interface Liquidacion {
   id: string;
@@ -177,6 +192,15 @@ export interface Liquidacion {
   ivaAcreditable: number;  // Σ IVA de CFDI deducibles (LIVA art. 5)
   peajeAcreditable: number; // Σ SubTotal de casetas × factor (0.5) → estímulo de peaje (LIF 2026 Art. 20-A)
   creadaEn: string;        // ISO
+  // ── La firma humana (0299). Aditivo: lo que ya leía esta forma sigue igual ──
+  /** Ver `RevisionLiquidacion`. Ausente = fila leída antes de la 0299. */
+  revision?: RevisionLiquidacion;
+  /** Correo de quien firmó. `null` con `revision` ≠ pendiente = la firmó el
+   *  motor (cuadró sola), que NO es lo mismo que «la firmó alguien». */
+  revisadaPor?: string | null;
+  revisadaEn?: string | null;
+  /** El motivo escrito al ajustar o rechazar (la base lo exige en esos dos). */
+  motivo?: string | null;
 }
 
 export interface Viaje {

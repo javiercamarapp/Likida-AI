@@ -34,6 +34,7 @@ import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';
 import { useCountUp } from '../ui/use-count-up';
 import { hrefWa, hrefCorreo, esperandoTextos } from './mensajes';
 import { arrancarLatido, visibilidadDelNavegador } from './latido';
+import { accionRegistrarExportacion } from './acciones-exportar';
 
 const Calles = dynamic(() => import('./calles'), { ssr: false });
 
@@ -477,6 +478,24 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     const lista = ordenados;
     setExportando(true);
     try {
+      // ADM-8 (auditoría 24): la exportación no dejaba NINGÚN rastro — un
+      // clic descargaba hasta 33k filas con teléfono/correo de decisores
+      // sin una sola entrada en bitácora. Se registra ANTES de armar el
+      // archivo (si el navegador se cierra a medio streaming, el intento ya
+      // quedó firmado) con el conteo y los filtros elegidos — nunca los
+      // datos de los prospectos. Best-effort: un fallo aquí NO detiene la
+      // descarga (misma regla que el resto de la bitácora).
+      accionRegistrarExportacion(lista.length, {
+        giros: filtros.giros ? [...filtros.giros] : null,
+        etapas: filtros.etapas ? [...filtros.etapas] : null,
+        fuentes: filtros.fuentes ? [...filtros.fuentes] : null,
+        tamanos: filtros.tamanos ? [...filtros.tamanos] : null,
+        minUrgencia: filtros.minUrgencia, soloTel: filtros.soloTel, soloDecisor: filtros.soloDecisor,
+        orden: filtros.orden, minCompletitud: filtros.minCompletitud,
+        minSimilitud: filtros.minSimilitud, minNecesidad: filtros.minNecesidad,
+        sinToqueDias: filtros.sinToqueDias, soloMensajeIA: filtros.soloMensajeIA, soloVacante: filtros.soloVacante,
+        radioKm: filtros.radioKm,
+      }).catch(() => { /* la bitácora es best-effort: no bloquea la descarga */ });
       // La columna `notas` ya no viene en el listado: se pide para las filas
       // que se van a exportar (en tandas) ANTES de armar el archivo. El CSV
       // sale igual de completo que antes; lo que cambió es cuándo se paga.

@@ -428,9 +428,10 @@ export async function refrescarTokens(refresco: string, clientId: string): Promi
 
   // Rotar = revocar ESTE refresco con condición en la base (mismo patrón de
   // carrera que el canje del código) y emitir el par nuevo.
+  const selloRotacion = new Date().toISOString();
   const marcado = await supabaseAdmin()
     .from('mcp_oauth_token')
-    .update({ revocado_en: new Date().toISOString() })
+    .update({ revocado_en: selloRotacion })
     .eq('id', data.id)
     .is('revocado_en', null)
     .select('id');
@@ -443,7 +444,7 @@ export async function refrescarTokens(refresco: string, clientId: string): Promi
     return { ok: false, error: 'no_valido', detalle: REFRESCO_INVALIDO };
   }
 
-  return emitirPar({
+  const par = await emitirPar({
     cliente_id: String(data.cliente_id),
     user_id: String(data.user_id),
     user_email: (data.user_email as string) ?? null,
@@ -451,6 +452,33 @@ export async function refrescarTokens(refresco: string, clientId: string): Promi
     rol: String(data.rol),
     familia: String(data.familia),
   });
+
+  // AUDITORÍA 24, BE-18: el refresco viejo quedaba revocado aunque el par
+  // nuevo NO llegara a existir. El cliente recibía `no_disponible` (503),
+  // reintentaba con el ÚNICO refresco que tiene —el viejo—, y arriba lo leía
+  // como reuso: `revocarFamilia('refresco_reusado')` e `invalid_grant`. Un
+  // parpadeo de la base le costaba al contralor reautorizar el MCP desde el
+  // panel, justo lo contrario de lo que promete `token/route.ts`.
+  //
+  // El insert de `emitirPar` es UNA sola sentencia de dos renglones: si falló,
+  // no hay par nuevo y devolver el refresco viejo a la vida no deja dos
+  // refrescos vivos. Se devuelve SOLO si sigue siendo el que revocamos aquí
+  // (`revocado_en` = el sello que pusimos): si otra rotación ganó la carrera
+  // en medio, no se toca nada.
+  if (!par.ok) {
+    const vuelta = await supabaseAdmin()
+      .from('mcp_oauth_token')
+      .update({ revocado_en: null })
+      .eq('id', data.id)
+      .eq('revocado_en', selloRotacion)
+      .select('id');
+    if (vuelta.error) {
+      logger.error('mcp.oauth.rotacion_sin_deshacer', { err: vuelta.error.message });
+    } else if (!vuelta.data || vuelta.data.length === 0) {
+      logger.warn('mcp.oauth.rotacion_sin_deshacer', { motivo: 'la fila ya no traía nuestro sello' });
+    }
+  }
+  return par;
 }
 
 // ── Validar un acceso (el camino caliente de /api/mcp) ─────────────────────

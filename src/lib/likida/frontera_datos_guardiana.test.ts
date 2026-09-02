@@ -26,8 +26,21 @@ import { join, relative } from 'node:path';
  * `pruebas-manuales` — con al menos un `.from(`/`.rpc(`, SIN contar
  * `repo.ts` ni `pg.ts` (la frontera declarada). Es un TECHO, no un objetivo:
  * si sube, actualiza este número en el mismo commit que explica por qué.
+ *
+ * AUDITORÍA 24 — 241 → 251 tras fusionar las 15 ramas (medido con el
+ * barrido completo sobre el árbol integrado, no sumando los deltas
+ * parciales que cada constructor midió contra su propia base). Los diez
+ * módulos nuevos: `repo_paginado.ts` (frontend-op, FE-2/3/6), `revision.ts`
+ * (revision, cierre humano de liquidaciones), `gasto_correccion.ts`
+ * (agentico, WA-3), `interruptor_tenant.ts` (integración, ADM-6),
+ * `importacion/unidades.ts`, `importacion/operadores.ts`, `terminales.ts`
+ * (masivo, alta masiva para 800 tractos), y tres más del mismo patrón
+ * (un módulo más con acceso directo, no un reemplazo de `repo.ts`/`pg.ts`)
+ * en los carriles de `datos`/`auth`/`admin`. Ninguno migra código YA
+ * existente fuera de la frontera; todos son funcionalidad nueva del
+ * piloto que cuenta contra el techo como cualquier otro módulo directo.
  */
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 241;
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 251;
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
 

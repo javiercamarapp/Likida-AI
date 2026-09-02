@@ -1,14 +1,29 @@
-import { ClipboardList, Inbox, Truck, Users } from 'lucide-react';
+import Link from 'next/link';
+import { ClipboardList, Inbox, Truck, Users, Search } from 'lucide-react';
 import type { TableroOperacion, ViajeSinAsignar, CargaOperador } from '@/lib/likida/operacion';
-import type { ViajeRow } from '@/lib/likida/analytics';
+import type { Pagina, ViajeEnCursoRow } from '@/lib/likida/repo_paginado';
 import { numero, fechaCorta } from '@/lib/formato';
 import { BarraPagina } from '../resumen-visual';
 import { FormaViaje, type AccionCrearViaje } from '../forma-viaje';
 import type { BuscarCatalogo } from '../combo-catalogo';
 import { AsignarFila, AsignarUnidadFila, BotonReenviar, AltaOperador, type AccionDespacho } from './acciones';
 
-/** Tope de las listas — declarado en pantalla cuando recorta. */
+/** Tope de "Por asignar" — declarado en pantalla cuando recorta. "En curso"
+ *  ya no usa esta constante: FE-2 le dio su propia paginación con `count`
+ *  real (`activos`, abajo). */
 const MAX_FILAS = 12;
+
+const BTN_PAGINA = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]';
+
+/** El link a otra página de "En curso", conservando folio buscado y sufijo
+ *  de previsualización — mismo patrón que `rentabilidad/vista.tsx`. */
+function hrefPaginaActivos(sufijo: string, folioPedido: string, pagina: number): string {
+  const params = new URLSearchParams(sufijo ? sufijo.slice(1) : '');
+  if (pagina > 1) params.set('p', String(pagina)); else params.delete('p');
+  if (folioPedido) params.set('q', folioPedido); else params.delete('q');
+  const qs = params.toString();
+  return `/dashboard/despacho${qs ? `?${qs}` : ''}`;
+}
 
 /**
  * El render del Despacho (13-ago-2026) — la página donde se ACTÚA: crear
@@ -22,12 +37,16 @@ const MAX_FILAS = 12;
  * columna — el estándar de siempre del despacho.
  */
 export function VistaDespacho({
-  tablero, sinAsignar, activos, buscarCatalogo, totalOperadores, totalClientes, totalUnidades,
+  tablero, sinAsignar, activos, sufijo, folioPedido, buscarCatalogo, totalOperadores, totalClientes, totalUnidades,
   carga, crear, asignarYAvisar, asignarUnidadViaje, reenviarAviso, altaOperador,
 }: {
   tablero: TableroOperacion | null;
   sinAsignar: ViajeSinAsignar[];
-  activos: ViajeRow[];
+  /** FE-2: consulta propia, ordenada por urgencia y con `count` real —
+   *  reemplaza el recorte a 12 de "los últimos 100 viajes creados". */
+  activos: Pagina<ViajeEnCursoRow>;
+  sufijo: string;
+  folioPedido: string;
   /** FE-2: los catálogos ya NO viajan como listas — viaja el buscador. */
   buscarCatalogo: BuscarCatalogo;
   /** Cuántos operadores/clientes/unidades ACTIVOS hay (count exact, head).
@@ -124,13 +143,38 @@ export function VistaDespacho({
           <div className="grid lg:grid-cols-3 gap-4">
             {/* ── Lo vivo, con el estado del aviso ── */}
             <section className="card p-4 lg:col-span-2 flex flex-col">
-              <h2 className="font-display text-[15px] font-semibold">En curso</h2>
-              <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-                Abiertos y en cuadre, con el estado del aviso al chofer
-              </p>
-              {activos.length === 0 ? (
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h2 className="font-display text-[15px] font-semibold">En curso</h2>
+                  <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+                    Primero lo que nadie ha aceptado, y entre eso lo avisado hace más tiempo
+                  </p>
+                </div>
+                {/* FE-2: buscador por folio — antes no había forma de llegar a
+                    un viaje en curso que no estuviera entre los 12 más
+                    urgentes de la primera página. GET plano, con el sufijo de
+                    previsualización como hidden (mismo patrón que
+                    `viajes/vista.tsx`) para no perderlo al buscar. */}
+                <form method="get" action="/dashboard/despacho" className="flex items-center gap-1.5" role="search">
+                  {[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]
+                    .map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
+                  <div className="relative">
+                    <Search width={13} height={13} strokeWidth={2} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--faint)' }} />
+                    <input
+                      type="search" name="q" defaultValue={folioPedido} placeholder="Folio…" aria-label="Buscar viaje en curso por folio"
+                      className="text-[12.5px] rounded-lg pl-6 pr-2.5 py-1.5 w-32 hairline"
+                      style={{ background: 'var(--surface)' }}
+                    />
+                  </div>
+                </form>
+              </div>
+              {activos.error !== null ? (
+                <Leyenda icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />}>
+                  No se pudo leer &quot;En curso&quot; ahora mismo — vuelve a intentar en un momento.
+                </Leyenda>
+              ) : activos.filas.length === 0 ? (
                 <Leyenda icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  Ningún viaje en curso ahora mismo.
+                  {folioPedido ? `Ningún viaje en curso con folio "${folioPedido}".` : 'Ningún viaje en curso ahora mismo.'}
                 </Leyenda>
               ) : (
                 <div className="overflow-x-auto">
@@ -147,7 +191,7 @@ export function VistaDespacho({
                       </tr>
                     </thead>
                     <tbody>
-                      {activos.slice(0, MAX_FILAS).map((v) => (
+                      {activos.filas.map((v) => (
                         <tr key={v.id} className="border-t" style={{ borderColor: 'var(--line2)' }}>
                           <td className="py-2 font-medium">{v.folio}</td>
                           <td className="py-2 truncate max-w-[180px]" style={{ color: 'var(--muted)' }}>
@@ -181,23 +225,31 @@ export function VistaDespacho({
                       ))}
                     </tbody>
                   </table>
-                  {/* FE-5: decía "hay {activos.length - 12} más en curso",
-                      calculado sobre las 100 filas que la página traía — a 50k
-                      viajes/mes, ~90 minutos de operación, así que el número
-                      se topaba en 88 pasara lo que pasara. `tablero.viajesActivos`
-                      es el conteo REAL (RPC `tablero_operacion_tenant`); sin él
-                      no se inventa una diferencia, solo se dice que hay más. */}
-                  {(tablero !== null || activos.length > MAX_FILAS) && (
-                    tablero !== null && tablero.viajesActivos > MAX_FILAS ? (
-                      <p className="text-[12px] mt-3" style={{ color: 'var(--faint)' }}>
-                        Se muestran {MAX_FILAS} de {numero(tablero.viajesActivos)} viajes en curso — el resto está en el registro.
-                      </p>
-                    ) : activos.length > MAX_FILAS ? (
-                      <p className="text-[12px] mt-3" style={{ color: 'var(--faint)' }}>
-                        Se muestran {MAX_FILAS} — hay más en curso de los que caben aquí.
-                      </p>
-                    ) : null
-                  )}
+                  {/* FE-2: `activos.total` es el conteo REAL de la consulta
+                      (`count: 'exact'`), no `filas.length` sobre un recorte
+                      fijo — y hay paginación de verdad para llegar al resto. */}
+                  <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
+                    <p className="text-[12px]" style={{ color: 'var(--faint)' }}>
+                      {activos.total !== null
+                        ? `${numero((activos.pagina - 1) * activos.porPagina + 1)}–${numero((activos.pagina - 1) * activos.porPagina + activos.filas.length)} de ${numero(activos.total)} en curso`
+                        : `Página ${numero(activos.pagina)} — no se pudo contar el total.`}
+                    </p>
+                    {(activos.pagina > 1 || activos.filas.length === activos.porPagina) && (
+                      <div className="flex gap-1.5">
+                        {activos.pagina > 1 && (
+                          <Link href={hrefPaginaActivos(sufijo, folioPedido, activos.pagina - 1)} className={BTN_PAGINA} style={{ background: 'var(--surface)' }}>
+                            ← Anterior
+                          </Link>
+                        )}
+                        {activos.filas.length === activos.porPagina
+                          && (activos.total === null || activos.pagina * activos.porPagina < activos.total) && (
+                          <Link href={hrefPaginaActivos(sufijo, folioPedido, activos.pagina + 1)} className={BTN_PAGINA} style={{ background: 'var(--surface)' }}>
+                            Siguiente →
+                          </Link>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </section>
@@ -253,7 +305,7 @@ export function VistaDespacho({
  *  (0058): sin avisar → avisado (con el conteo) → aceptó / escalado.
  *  Exportada desde F2: el registro de Viajes pinta el MISMO estado — dos
  *  copias de este mapa se separan en el primer estatus nuevo. */
-export function PillAviso({ v }: { v: Pick<ViajeRow, 'aceptadoEn' | 'escaladoEn' | 'avisadoEn' | 'avisosEnviados'> }) {
+export function PillAviso({ v }: { v: Pick<ViajeEnCursoRow, 'aceptadoEn' | 'escaladoEn' | 'avisadoEn' | 'avisosEnviados'> }) {
   const pill = (texto: string, fg: string, bg: string) => (
     <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: fg, background: bg }}>{texto}</span>
   );

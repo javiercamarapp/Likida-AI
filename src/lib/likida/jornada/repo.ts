@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
 import { acotada } from '../presupuesto';
-import { traerTodo } from '../pg';
+import { traerTodo, conteo } from '../pg';
 import { violaIndice, UNIQUE_VIOLATION } from '../pg_errores';
 import type { Asiento, Procedencia, TipoAsiento } from './modelo';
 import type { PoliticaFlota } from './riesgo';
@@ -340,7 +340,15 @@ export async function leerJornadas(
       (desde, hasta) => admin.from('jornada_asiento')
         .select(`jornada_id, ${CAMPOS_ASIENTO}`, { count: 'exact' })
         .eq('tenant_id', tenantId).in('jornada_id', ids)
+        // REN-9 (auditoría 24): `.order('momento')` solo no es un orden
+        // ÚNICO — dos marcas con el mismo `momento` (dos sellos en el mismo
+        // milisegundo, no imposible en un flujo de WhatsApp) podían caer en
+        // páginas distintas de `.range()` en cualquier orden, duplicándose o
+        // saltándose entre vueltas. El desempate por `id` (contrato de
+        // `pg.ts`: `traerTodo` necesita un orden determinista) lo vuelve
+        // reproducible.
         .order('momento', { ascending: true })
+        .order('id', { ascending: true })
         .range(desde, hasta),
       'jornada.leer.asientos',
     );
@@ -391,6 +399,23 @@ export async function nombresDeOperadores(
     mapa.set(String(o.id), { nombre: String(o.nombre), numeroEmpleado: o.numero_empleado });
   }
   return mapa;
+}
+
+/**
+ * FE-19 (auditoría 24): el catálogo completo de operadores de la flota, para
+ * el `<select>` del filtro de Jornada — antes el filtro `?operador=` existía
+ * en el servidor pero no había de dónde elegirlo en la UI. `traerTodo` con
+ * orden único (`nombre`, desempate por `id`): con cientos de choferes, un
+ * `.limit()` desnudo recortaría en silencio.
+ */
+export async function catalogoDeOperadores(tenantId: string): Promise<Array<{ id: string; nombre: string }>> {
+  const admin = supabaseAdmin();
+  const filas = await traerTodo<{ id: string; nombre: string }>(
+    (desde, hasta) => acotada(admin.from('operador').select('id, nombre', conteo(desde))
+      .eq('tenant_id', tenantId).order('nombre').order('id').range(desde, hasta), 'jornada.catalogo_operadores'),
+    'jornada.catalogo_operadores',
+  );
+  return filas.map((o) => ({ id: String(o.id), nombre: String(o.nombre) }));
 }
 
 /**

@@ -1,5 +1,6 @@
 import { PaginaLegal, FaltaDato, type SeccionLegal } from '../../legal/marco';
 import { avisoProspectos } from '@/lib/likida/privacidad';
+import { LEGAL_CONFIG } from '@/lib/legal/config';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL AVISO DE PRIVACIDAD PARA PROSPECTOS — Likida como RESPONSABLE.
@@ -10,6 +11,19 @@ import { avisoProspectos } from '@/lib/likida/privacidad';
 //
 // Segmento ESTÁTICO junto al dinámico `[tenant]`: Next resuelve el estático
 // primero, así que `/aviso/prospectos` nunca cae al aviso de una flota.
+//
+// AUDITORÍA 24 (LEG-4, ALTO): esta página traía su PROPIA copia de
+// `RESPONSABLE` fija en `null, null` — nunca leía `LEGAL_CONFIG`, la fuente
+// única que `/privacidad` y `/terminos` sí usan. Resultado medido en
+// producción: esta liga (el pie de 6,524 correos fríos y 8,598 prospectos con
+// mensaje generado) mostraba «🔴 razón social pendiente 🔴» mientras
+// `/privacidad`, con el mismo dato ya capturado en el entorno, mostraba la
+// razón social real. Y el contacto aquí era un buzón distinto
+// (`likida.ai@gmail.com`) al de `/privacidad` (`LEGAL_CONFIG.contacto`): dos
+// buzones para el mismo responsable. Ahora lee `LEGAL_CONFIG` — una sola
+// fuente, un solo buzón — y si de verdad faltara el dato en el entorno, el
+// texto lo dice como «aviso en actualización» (ver `avisoProspectos`) en vez
+// de imprimir un marcador rojo hardcodeado en un documento público.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const metadata = {
@@ -18,11 +32,9 @@ export const metadata = {
 };
 
 const RESPONSABLE = {
-  // 🔴 PENDIENTE: los mismos dos datos que faltan en /privacidad. Hasta que
-  // estén, la página lo DICE en vez de inventarlos.
-  razonSocial: null as string | null,
-  domicilio: null as string | null,
-  contacto: 'likida.ai@gmail.com',
+  razonSocial: LEGAL_CONFIG.razonSocial,
+  domicilio: LEGAL_CONFIG.domicilio,
+  contacto: LEGAL_CONFIG.contacto,
 };
 
 export default function AvisoProspectos() {
@@ -35,11 +47,15 @@ export default function AvisoProspectos() {
     <PaginaLegal
       etiqueta="Aviso de privacidad · contactos comerciales"
       bajada="Ley Federal de Protección de Datos Personales en Posesión de los Particulares"
+      // LEG-12: fecha del último cambio SUSTANTIVO del texto de este aviso
+      // (LEG-4, auditoría 24), no la fecha en que alguien lo abre.
+      vigenteDesde="2026-09-01"
       secciones={secciones}
       aviso={faltan ? (
         <FaltaDato>
-          Falta capturar la razón social y el domicilio fiscal de la empresa que opera Likida.
-          Aparece señalado en vez de quedar en blanco.
+          A este aviso le faltan datos de identidad del responsable (razón social o domicilio
+          de la entidad que opera Likida). La primera sección lo señala en su texto en vez de
+          dejarlo en blanco o inventarlo.
         </FaltaDato>
       ) : undefined}
       pie={

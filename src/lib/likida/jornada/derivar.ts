@@ -3,6 +3,9 @@ import { logger } from '@/lib/logger';
 import { inicioDiaMx, finDiaMx } from '@/lib/formato';
 import { acotada } from '../presupuesto';
 import { asegurarDiaJornada, asentarMarca, diaMxDe } from './repo';
+// AUDITORÍA 24, LEG-1: la compuerta vive en privacidad.ts y la comparten
+// jornada, poller de GPS y poller de cámara.
+import { tieneAvisoPrevio } from '../privacidad';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL DERIVADOR — convertir lo que Likida YA sabe en marcas con origen.
@@ -189,27 +192,6 @@ async function listaDeTrabajo(
  */
 const avisoPorOperador = new Map<string, boolean>();
 
-async function tieneAvisoPrevio(tenantId: string, operadorId: string): Promise<boolean> {
-  const llave = `${tenantId}|${operadorId}`;
-  const cache = avisoPorOperador.get(llave);
-  if (cache !== undefined) return cache;
-
-  const { data, error } = await acotada(
-    supabaseAdmin().from('operador')
-      .select('aviso_privacidad_en')
-      .eq('tenant_id', tenantId).eq('id', operadorId)
-      .maybeSingle(),
-    'jornada.aviso_previo',
-  );
-  if (error) {
-    logger.error('jornada.aviso_previo_ilegible', { tenantId, operadorId, err: error.message });
-    return false;
-  }
-  const ok = (data as { aviso_privacidad_en: string | null } | null)?.aviso_privacidad_en != null;
-  avisoPorOperador.set(llave, ok);
-  return ok;
-}
-
 /** La primera y la última posición de una unidad en un día de México. */
 async function extremosGps(
   tenantId: string,
@@ -306,7 +288,7 @@ export async function derivarJornadas(args: {
     //
     // Va ANTES de `asegurarDiaJornada` a propósito: crear el expediente ya es
     // tratamiento, aunque no lleve marcas.
-    if (!(await tieneAvisoPrevio(t.tenantId, t.operadorId))) {
+    if (!(await tieneAvisoPrevio(t.tenantId, t.operadorId, avisoPorOperador))) {
       r.sinAvisoPrevio++;
       continue;
     }

@@ -78,7 +78,19 @@ export async function POST(req: Request) {
       if (estado !== 'won') cambios.cerrado_en = null;
       const { error } = await supabaseAdmin().from('prospecto').update(cambios)
         .eq('id', prospecto.id);
-      if (error) throw new Error(`prospecto: ${error.message}`);
+      // AUDITORÍA 24, BE-17: el libro se sellaba ANTES de aplicar. Si el
+      // `UPDATE` fallaba, contestábamos 500, Cal.com reintentaba y la clave ya
+      // escrita lo devolvía como `repetido` con 200: el evento quedaba
+      // registrado y NUNCA aplicado. Un BOOKING_CANCELLED así deja al
+      // prospecto en `appointment` para siempre y el vendedor le habla el día
+      // de una cita que ya no existe. Se suelta la reclamación antes de
+      // relanzar, para que el reintento sí entre. No se reordena (aplicar y
+      // sellar después re-aplicaría un CREATED reentregado DESPUÉS de un
+      // CANCELLED, resucitando el estado viejo): se compensa.
+      if (error) {
+        await soltarReclamacion(clave, tipo, externo);
+        throw new Error(`prospecto: ${error.message}`);
+      }
     }
     return NextResponse.json({ ok: true, prospectoId: prospecto?.id ?? null });
   } catch (error) {
@@ -93,4 +105,22 @@ async function encontrarProspecto(email: string | null): Promise<{ id: string } 
     .eq('correo', email.toLowerCase()).is('duplicado_de', null).order('updated_at', { ascending: false }).limit(1).maybeSingle();
   if (error) throw new Error(`prospecto lookup: ${error.message}`);
   return data as { id: string } | null;
+}
+
+/**
+ * Borra el renglón del libro que acabamos de escribir (AUDITORÍA 24, BE-17).
+ *
+ * Se llama SOLO cuando la escritura del libro fue nuestra (`'nuevo'`) y lo que
+ * venía después falló: sin esto, la clave escrita convierte el reintento de
+ * Cal.com en un `repetido` que contesta 200 sin haber aplicado nada.
+ *
+ * Si el borrado también falla no hay nada más que hacer desde aquí —el 500
+ * sale igual—, pero se nombra: es la única señal de que ese evento se quedó
+ * sellado sin aplicar y hay que correr `reconciliarReservasCalcom`.
+ */
+async function soltarReclamacion(clave: string, tipo: string, externo: string): Promise<void> {
+  const { error } = await supabaseAdmin().from('comercial_evento').delete().eq('clave_idempotencia', clave);
+  if (error) {
+    logger.error('calcom.webhook.reclamacion_atorada', { tipo, externo, clave, err: error.message });
+  }
 }

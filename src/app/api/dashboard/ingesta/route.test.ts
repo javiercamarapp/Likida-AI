@@ -14,6 +14,19 @@ let sesion: { userId: string; tenantId: string | null; rol: string; nombre: stri
 vi.mock('@/lib/auth/session', () => ({ getSessionTenant: async () => sesion }));
 vi.mock('@/lib/auth/visibilidad', () => ({ puedeVerArea: (rol: string) => rol !== 'operador' }));
 
+// H14 (auditoría 24): `tenantEfectivoChat` (chat/tenant.ts, ajeno a este
+// agente) es la MISMA regla que ya usan /chat y /conversaciones* — un
+// superadmin puede pedir OTRO tenant con `?tenant=`; cualquier otro rol
+// siempre recibe el suyo propio. Se mockea con la MISMA semántica (no la
+// implementación real, que llama a Supabase) para poder probar las dos
+// ramas sin base de datos.
+const tenantEfectivoChat = vi.fn(async (s: { tenantId: string | null; rol: string }, pedido: string | null) => {
+  if (pedido && s.rol === 'superadmin') return { tenantId: pedido, nombreFlota: 'flota pedida' };
+  if (!s.tenantId) return null;
+  return { tenantId: s.tenantId, nombreFlota: 'tu flota' };
+});
+vi.mock('../chat/tenant', () => ({ tenantEfectivoChat: (...a: unknown[]) => tenantEfectivoChat(...(a as [never, never])) }));
+
 const extraer = vi.fn(async () => ({
   legible: true, gasto: { concepto: 'diesel', monto: 1500 },
   costo: { modelo: 'vision-x', tokensIn: 900, tokensOut: 80, costoUsd: 0.0123 },
@@ -38,8 +51,8 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const { POST } = await import('./route');
 
 const IMG = 'data:image/png;base64,AAAA';
-function postear(cuerpo: unknown = { imagen: IMG }, cabeceras: Record<string, string> = {}) {
-  return POST(new Request('https://app.likida.ai/api/dashboard/ingesta', {
+function postear(cuerpo: unknown = { imagen: IMG }, cabeceras: Record<string, string> = {}, qs = '') {
+  return POST(new Request(`https://app.likida.ai/api/dashboard/ingesta${qs}`, {
     method: 'POST', headers: { 'content-type': 'application/json', ...cabeceras }, body: JSON.stringify(cuerpo),
   }) as never);
 }
@@ -47,7 +60,7 @@ function postear(cuerpo: unknown = { imagen: IMG }, cabeceras: Record<string, st
 beforeEach(() => {
   sesion = { userId: 'u-1', tenantId: 't-1', rol: 'contador', nombre: 'C' };
   permitido = true; gastado = 0;
-  extraer.mockClear(); registrarCosto.mockClear(); rateLimit.mockClear();
+  extraer.mockClear(); registrarCosto.mockClear(); rateLimit.mockClear(); tenantEfectivoChat.mockClear();
 });
 
 describe('la puerta de origen (auditoría 21, BAJO-MEDIO)', () => {
@@ -71,6 +84,39 @@ describe('la puerta', () => {
     permitido = false;
     expect((await postear()).status).toBe(429);
     expect(rateLimit).toHaveBeenCalledWith('ingesta:u-1', 10, 60_000);
+    expect(extraer).not.toHaveBeenCalled();
+  });
+});
+
+describe('H14 (auditoría 24) — el ?tenant= de la previsualización de superadmin', () => {
+  it('sin ?tenant=: resuelve el tenant de la SESIÓN, como antes', async () => {
+    const r = await postear();
+    expect(r.status).toBe(200);
+    expect(tenantEfectivoChat).toHaveBeenCalledWith(sesion, null);
+    expect(registrarCosto).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't-1' }));
+  });
+
+  it('superadmin con ?tenant=t-otra: el OCR corre contra la flota PREVISUALIZADA, no la propia', async () => {
+    sesion = { userId: 'u-super', tenantId: null, rol: 'superadmin', nombre: 'S' };
+    const r = await postear({ imagen: IMG }, {}, '?tenant=t-otra');
+    expect(r.status).toBe(200);
+    expect(tenantEfectivoChat).toHaveBeenCalledWith(sesion, 't-otra');
+    expect(registrarCosto).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't-otra' }));
+  });
+
+  it('un rol que NO es superadmin no puede forzar otro tenant con ?tenant= — la regla la aplica tenantEfectivoChat, aquí solo se confirma que se le pasa el crudo', async () => {
+    // `contador` no es superadmin: el mock (misma regla que la real)
+    // ignora el `?tenant=` pedido y devuelve el propio.
+    const r = await postear({ imagen: IMG }, {}, '?tenant=t-ajena');
+    expect(r.status).toBe(200);
+    expect(tenantEfectivoChat).toHaveBeenCalledWith(sesion, 't-ajena');
+    expect(registrarCosto).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't-1' }));
+  });
+
+  it('sin tenant efectivo (superadmin sin flota Y sin ?tenant= resuelto): 403, sin tocar el modelo', async () => {
+    tenantEfectivoChat.mockResolvedValueOnce(null);
+    const r = await postear();
+    expect(r.status).toBe(403);
     expect(extraer).not.toHaveBeenCalled();
   });
 });

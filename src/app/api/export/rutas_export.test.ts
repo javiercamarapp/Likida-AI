@@ -37,6 +37,11 @@ function builderLiquidacion() {
   Object.assign(b, {
     select: (_cols: string, opt?: { count?: string }) => { c.conteo = opt?.count === 'exact'; return b; },
     eq: (col: string, v: unknown) => { filtros.push([col, v]); return b; },
+    // BLOQ-6 (0299): la ruta acota por `revision` — por omisión deja fuera las
+    // rechazadas (`neq`), y con `?revision=firmadas` usa `in`. La "base" de
+    // esta prueba tiene que conocer los dos verbos o la cadena se rompe.
+    neq: (col: string, v: unknown) => { filtros.push([`${col}<>`, v]); return b; },
+    in: (col: string, v: unknown) => { filtros.push([`${col} in`, v]); return b; },
     gte: (col: string, v: unknown) => { filtros.push([`${col}>=`, v]); return b; },
     lt: (col: string, v: unknown) => { filtros.push([`${col}<`, v]); return b; },
     or: (f: string) => { c.or = f; return b; },
@@ -107,6 +112,7 @@ vi.mock('@/lib/likida/intake/desglose_peaje', () => ({
   bitacoraACsv: () => 'csv-bitacora',
 }));
 
+const { LecturaIncompleta } = await import('@/lib/likida/pg');
 const pdf = await import('./pdf/[id]/route');
 const liq = await import('./liquidaciones/route');
 const prov = await import('./facturas-proveedor/route');
@@ -385,5 +391,17 @@ describe('export/bitacora-peaje — el desglose se busca acotado al tenant', () 
 
   it('sin ?desglose= es 400', async () => {
     expect((await GET_BIT('')).status).toBe(400);
+  });
+
+  // AUDITORÍA 24, BE-24: una lectura que no puede demostrar que trajo todos
+  // los cruces salía como «Intenta de nuevo en un momento» — mandaba al
+  // contralor a reintentar un error determinista creyendo que fue mala suerte.
+  it('BE-24: `LecturaIncompleta` se nombra, no se disfraza de bache pasajero', async () => {
+    bitacoraRmf918.mockRejectedValueOnce(new LecturaIncompleta('peaje.cruces', 1_000, 1_400));
+    const r = await GET_BIT('d-9');
+    const texto = await r.text();
+    expect(r.status).toBe(500);
+    expect(texto).not.toContain('Intenta de nuevo');
+    expect(texto).toContain('más cruces de los que');
   });
 });

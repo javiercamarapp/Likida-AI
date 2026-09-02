@@ -44,6 +44,7 @@ import {
   type ResultadoFotoOcr,
 } from '@/lib/admin/qa-verdad';
 import { sesionSuperadmin } from '../../puerta';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -66,6 +67,15 @@ const PRESUPUESTO_MS = 105_000;
 const MAX_BODY = 8 * 1024;
 
 export async function POST(req: Request) {
+  // AUDITORÍA 24, BE-26: sus hermanos (`qa/lanzar`, `qa/fotos` POST y PATCH)
+  // ya lo hacían; estos dos no. Autenticados solo por cookie de sesión, un
+  // sitio ajeno con el superadmin logueado podía dispararlos desde un form.
+  // Mitigado por `sameSite: lax`, pero el candado se pone donde falta.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('qa_fotos_ocr.origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
+    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+  }
+
   const { error: puerta, sesion } = await sesionSuperadmin();
   if (puerta) return puerta;
 

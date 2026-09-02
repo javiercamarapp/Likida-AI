@@ -188,7 +188,7 @@ export function VistaAgenteProveedores({
                           {f.ocrConfianza !== null && (
                             <span className="inline-flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--warn)' }}>
                               <TriangleAlert width={10} height={10} strokeWidth={2} />
-                              leída de foto (OCR {f.ocrConfianza.toFixed(2)}) — revisa contra el papel
+                              leída de foto (OCR {numero(f.ocrConfianza)}) — revisa contra el papel
                             </span>
                           )}
                         </td>

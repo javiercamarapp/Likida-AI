@@ -34,6 +34,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
+import { traerTodo, conteo } from '../pg';
 import { hoyMx, round2, mxn, numero, litros, pctCambio, fechaMx } from '@/lib/formato';
 import { telefonosJefe } from '../contactos';
 import { getOnboardingFlotas, type OnboardingFlota } from '@/lib/admin/onboarding';
@@ -126,10 +127,6 @@ export function relojAgotado(venceEnVuelta: number | undefined): boolean {
  *  unidades); si algún día se rebasa, el parte lo DICE en vez de callar las
  *  que no cupieron — una lista truncada en silencio es una lista falsa. */
 export const TOPE_FLOTAS = 500;
-/** Filas de `liquidacion` que el reporte de valor de UN mes de UNA flota
- *  suma en JS. 2,000 liquidaciones en un mes son ~4× el tope del plan Flota
- *  (500 viajes/mes); al rebasarse, el reporte se declara INCOMPLETO. */
-export const TOPE_LIQUIDACIONES_MES = 2_000;
 /** Tickets que una corrida de soporte revisa. */
 export const TOPE_TICKETS = 200;
 /** Mensajes que se miran por ticket para decidir si hay respuesta (c6-5).
@@ -252,12 +249,23 @@ export interface Flota {
   politicaPropia: boolean;
 }
 
+/** AGB-10 (auditoría 24, 1-sep-2026): los tenants de QA se siembran con el
+ *  prefijo `ZZZ QA ` a propósito (para ordenar al final en listas por
+ *  nombre) — pero ningún agente los excluía. Medido en producción: de 24
+ *  `tenant`, 2 son "ZZZ QA …" y el parte de onboarding decía "Flotas en
+ *  seguimiento: 3" contándolas como reales. Vive aquí (no una columna
+ *  `es_qa`, que exigiría migración) porque es el mismo criterio que ya
+ *  siembra los datos de prueba: el nombre lo dice. */
+const PREFIJO_TENANT_QA = 'ZZZ QA %';
+
 /** Las flotas del sistema. LANZA ante un error de lectura. `truncado` avisa
- *  de que hay más de las que caben — el parte lo dice, no lo esconde. */
+ *  de que hay más de las que caben — el parte lo dice, no lo esconde.
+ *  AGB-10: excluye los tenants "ZZZ QA …" — no son flotas reales. */
 export async function leerFlotas(): Promise<{ flotas: Flota[]; truncado: boolean }> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('tenant')
     .select('id, nombre, created_at, config')
+    .not('nombre', 'ilike', PREFIJO_TENANT_QA)
     .order('created_at', { ascending: true })
     .limit(TOPE_FLOTAS + 1), 'exito.flotas');
   if (error) throw new Error(`leerFlotas: ${error.message}`);
@@ -653,36 +661,42 @@ export function armarReporteValor(flota: Flota, v: ValorDelMes): string {
   }
   if (v.incompleto) {
     lineas.push('');
-    lineas.push(`[INCOMPLETO]  El mes rebasó las ${numero(TOPE_LIQUIDACIONES_MES)} liquidaciones que esta lectura suma: los TOTALES de arriba no se afirman. El conteo sí es exacto (va en base); las sumas no.`);
+    lineas.push('[INCOMPLETO]  La lectura no pudo demostrar que trajo TODAS las liquidaciones del mes: los TOTALES de arriba no se afirman.');
   }
   lineas.push('');
   lineas.push('LO QUE ESTE REPORTE NO DICE: cuánto dinero se recuperó de verdad (Likida observa la diferencia, no cobra por ella), ni horas ahorradas sin declarar el supuesto. Ninguna cifra de aquí es una estimación.');
   return lineas.join('\n');
 }
 
-/** Suma el mes de UNA flota. Las sumas se hacen en JS sobre una ventana
- *  ACOTADA: si el mes rebasa el tope, el reporte se declara INCOMPLETO en vez
- *  de afirmar un total que le faltan filas. */
+/** Suma el mes de UNA flota. AGB-8 (auditoría 24): antes esta lectura topaba
+ *  a 2,000 filas y declaraba el mes INCOMPLETO al pasarlo — a 15,000
+ *  viajes/mes eso corta el reporte de valor en el 13% del mes real. Ahora
+ *  pagina de verdad con `traerTodo` (pg.ts): 100 páginas de 1,000 = 100,000
+ *  filas/mes, un techo que ni Innovativos a escala completa alcanza, y LANZA
+ *  si de plano no puede demostrar que trajo todo — en vez de devolver una
+ *  suma parcial con cara de completa. El tope numérico desaparece: ya no hay
+ *  un número que declarar rebasado. */
 export async function leerValorDelMes(tenantId: string, mes: string): Promise<ValorDelMes> {
   const desde = new Date(`${mes}-01T00:00:00-06:00`).toISOString();
   const finMes = new Date(`${mes}-01T00:00:00Z`);
   finMes.setUTCMonth(finMes.getUTCMonth() + 1);
   const hasta = new Date(`${finMes.toISOString().slice(0, 7)}-01T00:00:00-06:00`).toISOString();
 
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('liquidacion')
-    .select('estatus, total_comprobado, diferencia, iva_acreditable, peaje_acreditable, litros_diesel_acreditables')
-    .eq('tenant_id', tenantId)
-    .gte('created_at', desde)
-    .lt('created_at', hasta)
-    .limit(TOPE_LIQUIDACIONES_MES + 1), 'exito.valor.liquidaciones');
-  if (error) throw new Error(`leerValorDelMes: ${error.message}`);
-  const filas = (data ?? []) as Array<Record<string, unknown>>;
-  const incompleto = filas.length > TOPE_LIQUIDACIONES_MES;
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('liquidacion')
+      .select('estatus, total_comprobado, diferencia, iva_acreditable, peaje_acreditable, litros_diesel_acreditables', conteo(d))
+      .eq('tenant_id', tenantId)
+      .gte('created_at', desde)
+      .lt('created_at', hasta)
+      .order('id')
+      .range(d, h), 'exito.valor.liquidaciones'),
+    'exito.valor.liquidaciones',
+  );
 
   const porEstatus = new Map<string, number>();
   let totalComprobado = 0, diferencia = 0, iva = 0, peaje = 0, dieselL = 0;
-  for (const f of filas.slice(0, TOPE_LIQUIDACIONES_MES)) {
+  for (const f of filas) {
     const est = String(f.estatus);
     porEstatus.set(est, (porEstatus.get(est) ?? 0) + 1);
     totalComprobado += Number(f.total_comprobado ?? 0);
@@ -691,18 +705,25 @@ export async function leerValorDelMes(tenantId: string, mes: string): Promise<Va
     peaje += Number(f.peaje_acreditable ?? 0);
     dieselL += Number(f.litros_diesel_acreditables ?? 0);
   }
+  // El CONTEO ya es exacto: `traerTodo` demostró que `filas` son TODAS las
+  // del mes (count o página vacía) — no hace falta una consulta aparte
+  // (antes divergía de las sumas: el conteo se leía SIN tope y las sumas SÍ
+  // lo tenían, dos consultas que podían no acordar por una fila insertada
+  // entre las dos).
+  const liquidaciones = filas.length;
 
-  // El CONTEO va en base aunque las sumas se trunquen: «cuántos viajes
-  // liquidamos» es la cifra que el cliente cruza contra su papel, y esa no
-  // puede depender de un tope de lectura.
-  const liquidaciones = await contarDeFlota('liquidacion', 'created_at', tenantId, desde, hasta, 'exito.valor.conteo');
-  const gastosDelMes = await contarDeFlota('gasto', 'created_at', tenantId, desde, hasta, 'exito.valor.gastos');
-  const { count: conCfdi, error: errCfdi } = await acotada(supabaseAdmin()
-    .from('gasto').select('id', { count: 'exact', head: true })
-    .eq('tenant_id', tenantId).eq('cfdi_valido', true)
-    .gte('created_at', desde).lt('created_at', hasta), 'exito.valor.cfdi_valido');
-  if (errCfdi) throw new Error(`leerValorDelMes(cfdi): ${errCfdi.message}`);
-  if (typeof conCfdi !== 'number') throw new Error('leerValorDelMes(cfdi): PostgREST no devolvió el conteo.');
+  // Las dos lecturas de `gasto` son independientes entre sí — en paralelo,
+  // mismo criterio AGB-8 que el silencio y la retención.
+  const [gastosDelMes, cfdi] = await Promise.all([
+    contarDeFlota('gasto', 'created_at', tenantId, desde, hasta, 'exito.valor.gastos'),
+    acotada(supabaseAdmin()
+      .from('gasto').select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId).eq('cfdi_valido', true)
+      .gte('created_at', desde).lt('created_at', hasta), 'exito.valor.cfdi_valido'),
+  ]);
+  if (cfdi.error) throw new Error(`leerValorDelMes(cfdi): ${cfdi.error.message}`);
+  if (typeof cfdi.count !== 'number') throw new Error('leerValorDelMes(cfdi): PostgREST no devolvió el conteo.');
+  const conCfdi = cfdi.count;
 
   return {
     mes, liquidaciones,
@@ -714,7 +735,10 @@ export async function leerValorDelMes(tenantId: string, mes: string): Promise<Va
     litrosDiesel: round2(dieselL),
     gastosConCfdiValido: conCfdi,
     gastosDelMes,
-    incompleto,
+    // AGB-8: `traerTodo` ya lanzó si no pudo demostrar que trajo TODO — de
+    // haber llegado aquí, la lectura es completa. `false` no es un default
+    // optimista: es la prueba de la línea de arriba.
+    incompleto: false,
   };
 }
 
@@ -759,13 +783,22 @@ async function correrExitoCliente(disparo: DisparoCorrida, hoy: string, venceEnV
           motivos.push(`el reloj de la vuelta se agotó con ${numero(flotas.length - actividad.length)} flota(s) sin mirar — el parte de silencio NO se fabricó a medias; le toca completo en la próxima pasada`);
           break;
         }
-        actividad.push({
-          flota: f,
-          viajesVentana: await contarDeFlota('viaje', 'created_at', f.id, corte, null, 'exito.silencio.viajes'),
-          gastosVentana: await contarDeFlota('gasto', 'created_at', f.id, corte, null, 'exito.silencio.gastos'),
-          conversacionesVentana: await contarDeFlota('wa_conversacion', 'updated_at', f.id, corte, null, 'exito.silencio.wa'),
-          viajesHistoricos: await contarDeFlota('viaje', 'created_at', f.id, null, null, 'exito.silencio.historico'),
-        });
+        // AGB-8 (auditoría 24): las CUATRO consultas de esta flota son
+        // independientes entre sí (viajes/gastos/conversaciones/histórico no
+        // se necesitan una a otra) — `await` en serie las sumaba: 4 × el
+        // tiempo de red por flota. Medido en producción: `TimeoutError` en
+        // `exito.silencio.gastos` con solo 119 filas en `gasto` — no era el
+        // volumen de esa tabla, era la cola de 4 viajes redondos seguidos
+        // dentro del `acotada` de 8 s de la ÚLTIMA consulta. `Promise.all`
+        // las manda las cuatro a la vez: el costo de la flota pasa a ser el
+        // de la consulta MÁS LENTA, no la SUMA de las cuatro.
+        const [viajesVentana, gastosVentana, conversacionesVentana, viajesHistoricos] = await Promise.all([
+          contarDeFlota('viaje', 'created_at', f.id, corte, null, 'exito.silencio.viajes'),
+          contarDeFlota('gasto', 'created_at', f.id, corte, null, 'exito.silencio.gastos'),
+          contarDeFlota('wa_conversacion', 'updated_at', f.id, corte, null, 'exito.silencio.wa'),
+          contarDeFlota('viaje', 'created_at', f.id, null, null, 'exito.silencio.historico'),
+        ]);
+        actividad.push({ flota: f, viajesVentana, gastosVentana, conversacionesVentana, viajesHistoricos });
       }
       const calladas = actividad.filter(enSilencio);
       // El `break` de arriba ya dejó dicho el motivo; lo que NO puede pasar es
@@ -968,10 +1001,16 @@ async function correrRetencion(disparo: DisparoCorrida, hoy: string, venceEnVuel
           motivo: `el reloj de la vuelta se agotó con ${numero(sinMirar)} flota(s) sin mirar — el parte SEMANAL no se fabricó a medias (sellaría la semana y apagaría los gatillos de las flotas no miradas hasta el lunes que viene); le toca completo en la próxima pasada`,
         };
       }
+      // AGB-8: las dos ventanas de la misma flota no dependen una de otra —
+      // en paralelo, no en serie (mismo criterio que el silencio diario).
+      const [estaSemana, semanaPrevia] = await Promise.all([
+        contarDeFlota('viaje', 'created_at', f.id, corte7, null, 'exito.retencion.semana'),
+        contarDeFlota('viaje', 'created_at', f.id, corte14, corte7, 'exito.retencion.previa'),
+      ]);
       usos.push({
         flota: f,
-        estaSemana: await contarDeFlota('viaje', 'created_at', f.id, corte7, null, 'exito.retencion.semana'),
-        semanaPrevia: await contarDeFlota('viaje', 'created_at', f.id, corte14, corte7, 'exito.retencion.previa'),
+        estaSemana,
+        semanaPrevia,
         fallos7d: await contarFallosDeFlota(f.id, corte7),
       });
     }

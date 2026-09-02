@@ -3,7 +3,7 @@
 import { useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Link2, Trash2 } from 'lucide-react';
-import { numero } from '@/lib/formato';
+import { ComboViaje, type BuscarViaje } from './combo-viaje';
 
 export type AccionHuerfano = (
   prev: { error?: string } | null,
@@ -22,12 +22,15 @@ export interface ViajeVivo { id: string; rotulo: string }
  * adjuntar — metería una línea de $0.00 en la liquidación. El mismo guardia
  * vive en el server action y en el flujo de WhatsApp; aquí solo se dice.
  */
-export function FilaAcciones({ huerfanoId, viajesVivos, sinMonto, cargados, adjuntar, descartar }: {
+export function FilaAcciones({ huerfanoId, hayViajesVivos, sinMonto, buscarViaje, adjuntar, descartar }: {
   huerfanoId: string;
-  viajesVivos: ViajeVivo[];
+  /** FE-3: ya no se manda la lista completa de viajes vivos (recortada a los
+   *  100 más recientes) — solo si la flota TIENE alguno, para decidir si
+   *  ofrecer el buscador o el mensaje "sin viajes abiertos". El buscador
+   *  (`ComboViaje`) le pregunta al servidor por folio u operador. */
+  hayViajesVivos: boolean;
   sinMonto: boolean;
-  /** Cuántos viajes recientes cargó la page — el alcance real del selector. */
-  cargados: number;
+  buscarViaje: BuscarViaje;
   adjuntar: AccionHuerfano;
   descartar: AccionHuerfano;
 }) {
@@ -56,14 +59,11 @@ export function FilaAcciones({ huerfanoId, viajesVivos, sinMonto, cargados, adju
             <span className="text-[12px] text-right" style={{ color: 'var(--faint)' }}>
               Sin monto legible no se puede adjuntar (metería $0.00) — pídele al chofer que reenvíe la foto
             </span>
-          ) : viajesVivos.length > 0 ? (
+          ) : hayViajesVivos ? (
             <>
-              <select name="viajeId" required aria-label="Viaje al que va" defaultValue=""
+              <ComboViaje name="viajeId" buscar={buscarViaje} requerido aria-label="Viaje al que va"
                 className="flex-1 min-w-0 max-w-[180px] text-[12px] px-2 py-1.5 rounded-lg hairline"
-                style={{ background: 'var(--surface)' }}>
-                <option value="" disabled>Elegir viaje…</option>
-                {viajesVivos.map((v) => <option key={v.id} value={v.id}>{v.rotulo}</option>)}
-              </select>
+                estilo={{ background: 'var(--surface)' }} />
               <BotonAdjuntar />
             </>
           ) : (
@@ -81,9 +81,11 @@ export function FilaAcciones({ huerfanoId, viajesVivos, sinMonto, cargados, adju
           </button>
         </form>
       )}
-      {!confirmando && !sinMonto && viajesVivos.length > 0 && (
+      {/* FE-3: ya no hay ventana que confesar — el buscador pregunta a la
+          flota entera de viajes vivos, no a un recorte cargado de una vez. */}
+      {!confirmando && !sinMonto && hayViajesVivos && (
         <p className="text-[11px] mt-1 text-right" style={{ color: 'var(--faint)' }}>
-          El selector ofrece los viajes vivos entre los {numero(cargados)} más recientes.
+          Escribe el folio o el nombre del operador — se busca en todos los viajes vivos.
         </p>
       )}
       {estadoAdj?.error && <p className="text-[11px] mt-1 text-right" style={{ color: 'var(--bad)' }}>{estadoAdj.error}</p>}

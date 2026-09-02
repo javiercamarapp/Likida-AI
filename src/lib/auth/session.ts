@@ -67,7 +67,7 @@ export async function getSessionTenant(): Promise<SessionTenant | null> {
       const sb = await supabaseServer();
       const { data: { user } } = await sb.auth.getUser();
       if (!user) return null;
-      const { data, error } = await sb.from('app_user').select('tenant_id, rol, nombre, operador_id, avatar_url').eq('id', user.id).maybeSingle();
+      const { data, error } = await sb.from('app_user').select('tenant_id, rol, nombre, operador_id, avatar_url, activo').eq('id', user.id).maybeSingle();
       // Sin este log, un bache de Supabase o una regresión de RLS es
       // INDISTINGUIBLE de "este correo nunca se dio de alta": las dos acaban con
       // `tenantId: null`, y `requireSessionTenant` manda al contralor a
@@ -87,6 +87,18 @@ export async function getSessionTenant(): Promise<SessionTenant | null> {
           await new Promise((r) => setTimeout(r, 250));
           continue;
         }
+      }
+      // ── LA BAJA (SEG-1, 0294). `activo = false` es una cuenta que la flota
+      // dio de baja desde el panel: para esta capa es EXACTAMENTE «no hay
+      // sesión». No se devuelve `SIN_ROL` (eso la mandaría a /sin-acceso con
+      // un texto que le pide su alta — la tuvo y se la quitaron): se devuelve
+      // `null` y la puerta la manda a /login, donde el ban de Auth que puso
+      // `desactivarUsuario` impide pedir otro enlace. Solo un `false`
+      // EXPLÍCITO desactiva: una fila sin la columna (base sin la 0294) sigue
+      // entrando — la columna nueva no puede dejar fuera a toda la base.
+      if (data && data.activo === false) {
+        logger.warn('session.usuario_desactivado', { userId: user.id });
+        return null;
       }
       return {
         userId: user.id,

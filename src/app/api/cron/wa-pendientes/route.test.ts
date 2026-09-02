@@ -53,8 +53,9 @@ vi.mock('@upstash/qstash', () => ({
   Client: class { publishJSON = (...a: unknown[]) => publishJSON(...(a as [])); },
 }));
 // El latido (RES-7) vive en su propio archivo de pruebas.
+const registrarLatido = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => {}));
 vi.mock('@/lib/admin/salud', () => ({
-  registrarLatido: vi.fn(async () => {}),
+  registrarLatido: (...a: unknown[]) => registrarLatido(...a),
   puertaCron: async (_c: string, req: Request) =>
     req.headers.get('authorization') === 'Bearer secreto-de-prueba'
       ? null
@@ -159,6 +160,20 @@ describe('el drenado', () => {
     // El claim reclamó con intentos+1; se devuelve ANCLADO a ese valor.
     expect(devolverIntentoPendiente).toHaveBeenCalledWith('wamid.pos', 2);
     expect(await r.json()).toMatchObject({ procesados: 0, fallidos: 0, pospuestos: 1 });
+  });
+
+  // AUDITORÍA 24, BE-14: la vuelta entera pospuesta latía `ok` y la bandeja
+  // crecía minuto a minuto con /api/health en verde.
+  it('BE-14: si TODO se pospuso por falta de presupuesto, el latido es `parcial`, no `ok`', async () => {
+    registrarLatido.mockClear();
+    pendientesPorDrenar.mockResolvedValue([
+      { id: 'wamid.a', intentos: 1, remitente: '521999' },
+      { id: 'wamid.b', intentos: 1, remitente: '521998' },
+    ]);
+    processInbound.mockResolvedValue('sin_tiempo' as never);
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    expect(registrarLatido).toHaveBeenCalledWith('wa-pendientes', 'parcial', expect.objectContaining({ procesados: 0, fallidos: 0, pospuestos: 2 }));
   });
 
   // ESC-1: cada chofer es una cadena en serie; choferes distintos, en paralelo.

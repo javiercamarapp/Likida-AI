@@ -105,11 +105,23 @@ export function FormaPieza({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
   );
 }
 
+/** AGB-4 (auditoría 24, 1-sep-2026): réplica de `TIPOS_ENVIABLES` de cola.ts
+ *  — solo COSMÉTICA (esconder el botón), no el candado real. El candado que
+ *  de verdad importa es el de servidor: `aprobadasSinEnviar` ya excluye estos
+ *  tipos de la lista, y `enviarPiezaPorCorreo` los rechaza aunque de algún
+ *  modo llegaran aquí (página vieja sin recargar). No se importa la constante
+ *  real porque `cola.ts` es un módulo de servidor (supabaseAdmin) y este
+ *  archivo es 'use client'. Mantener en sincronía con cola.ts si cambia. */
+const TIPOS_ENVIABLES_UI = new Set(['correo_frio', 'correo_seguimiento']);
+
 /** El paso de ENVÍO de una aprobada (0120): un click aparte con claim
  *  anti-doble-click en el servidor. Dice a quién sale y con qué versión;
- *  sin correo del prospecto, lo dice en vez de ofrecer un botón muerto. */
+ *  sin correo del prospecto, lo dice en vez de ofrecer un botón muerto. Un
+ *  tipo INTERNO (ficha/brief/propuesta — AGB-4) tampoco ofrece botón: esas
+ *  piezas son un expediente sobre el prospecto, no algo que se le manda. */
 export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: AccionPieza }) {
   const [estado, enviar, pendiente] = useActionState<ResultadoPieza, FormData>(accion, null);
+  const enviable = TIPOS_ENVIABLES_UI.has(pieza.tipo);
 
   if (estado?.ok) {
     return (
@@ -132,7 +144,9 @@ export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
       {estado?.error && <span className="text-[12px] basis-full" style={{ color: 'var(--bad)' }}>{estado.error}</span>}
       <form action={enviar} className="ml-auto shrink-0">
         <input type="hidden" name="pieza" value={pieza.id} />
-        {pieza.prospectoCorreo ? (
+        {!enviable ? (
+          <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>pieza interna — no se manda al prospecto</span>
+        ) : pieza.prospectoCorreo ? (
           <button type="submit" disabled={pendiente}
             className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3.5 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
             style={{ background: 'var(--ink)', color: 'var(--surface)' }}>

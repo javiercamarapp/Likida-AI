@@ -79,7 +79,8 @@ export async function despacharHerramienta(
   if (!h) {
     return { ok: false, tipo: 'desconocida', mensaje: `No existe la herramienta «${nombre}».` };
   }
-  if (!alcanza(h.area)) {
+  // Cualquiera de las áreas declaradas alcanza (TC-N4); sin lista, solo `area`.
+  if (!(h.areasQueAlcanzan ?? [h.area]).some((a) => alcanza(a))) {
     return {
       ok: false,
       tipo: 'sin_permiso',

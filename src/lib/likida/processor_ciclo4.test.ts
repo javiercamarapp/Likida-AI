@@ -103,6 +103,10 @@ vi.mock('@/lib/likida/costos', () => ({
 vi.mock('@/lib/meta/client', () => ({
   MAX_CUERPO_BOTONES: 1024,
   sendText: (...a: unknown[]) => sendText(...a),
+  // AGEN-5: el aviso al jefe sale por `avisarOficina` (texto → plantilla).
+  enviarTexto: vi.fn(async () => ({ ok: true, id: 'wamid.JEFE' })),
+  sendTemplate: vi.fn(async () => ({ ok: true, id: 'wamid.PLANTILLA' })),
+  motivoDeFalloWhatsApp: (e: string) => e,
   sendButtons: vi.fn(async () => 'wamid.BTN'),
   sendDocument: vi.fn(async () => 'wamid.DOC'),
   downloadMediaAsDataUrl: vi.fn(async () => 'data:image/jpeg;base64,QUJDREVGRw=='),

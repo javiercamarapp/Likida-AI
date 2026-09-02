@@ -133,7 +133,11 @@ describe('la contabilidad del cierre', () => {
   it('cada envío de avisar_cierre.ts tiene su renglón en la tabla', () => {
     const fuente = readFileSync('src/lib/likida/avisar_cierre.ts', 'utf8')
       .split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n');
-    const envios = (fuente.match(/\b(sendText|sendDocument)\(/g) ?? []).length;
+    // AUDITORÍA 24 · AGEN-5/WA-4: el texto al jefe ya no sale por `sendText`
+    // crudo sino por `avisarOficina`, que además cae a plantilla ante el
+    // 131047 de Meta. Se cuenta igual — es el mismo envío y el mismo costo de
+    // pared— para que el control siga contando dos.
+    const envios = (fuente.match(/\b(sendText|sendDocument|avisarOficina)\(/g) ?? []).length;
     expect(envios, 'control: avisar_cierre.ts manda al menos texto y PDF').toBeGreaterThanOrEqual(2);
     const renglones = PASOS_CIERRE.filter((p) => p.donde.includes('avisar_cierre.ts') && /send(Text|Document)/.test(p.paso));
     expect(renglones.length, 'envíos en avisar_cierre.ts sin renglón en PASOS_CIERRE').toBeGreaterThanOrEqual(envios);

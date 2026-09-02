@@ -217,6 +217,20 @@ export async function getEstadoBus(): Promise<EstadoBus> {
 
 // ── Mutaciones (siempre tras requireSuperadmin — lo garantiza la página) ────
 
+/**
+ * ADM-12 (auditoría 24, menor): `tu-turno/page.tsx` mandaba `s.userId` (un
+ * uuid) donde `crearOrden`/`resolverPieza` esperan `actorEmail` — el
+ * `creado_por`/`resuelto_por` de `bus_orden`/`bus_pieza` (lo que Javier lee
+ * en la Mac para saber QUIÉN tocó qué) quedaba con un uuid en vez de un
+ * correo. `SessionTenant` no trae el correo — se resuelve aquí, la MISMA
+ * consulta que ya hace `mi-perfil/page.tsx`. `null` = no se pudo leer (se
+ * dice, no se inventa un correo).
+ */
+export async function emailDeActor(userId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin().from('app_user').select('email').eq('id', userId).maybeSingle();
+  return (data?.email as string | undefined) ?? null;
+}
+
 export async function crearOrden(
   tipo: TipoOrdenUi,
   rutina: string | null,

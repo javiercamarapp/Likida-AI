@@ -55,6 +55,7 @@ const ESQUEMA_REAL: Record<string, Set<string>> = {
 function columnasPedidas(expr: string): string[] {
   return expr
     .replace(/\([^)]*\)/g, '')          // embebidos: plan(nombre)
+    .replace(/!(inner|left)\b/g, '')    // AGB-10: el hint de join, tenant_id!inner
     .split(',')
     .map((c) => c.split(':').pop()!.trim())
     .filter((c) => c && c !== '*');
@@ -66,6 +67,8 @@ function columnasPedidas(expr: string): string[] {
 const respuestas = new Map<string, Array<Record<string, unknown>>>();
 /** Cada `.select()` que corrió, para las pruebas estructurales. */
 const selects: Array<{ tabla: string; columnas: string }> = [];
+/** AGB-10: cada `.not(...)` que corrió — para afirmar el filtro de tenants QA. */
+const llamadasNot: Array<{ tabla: string; args: unknown[] }> = [];
 function responderDe(tabla: string) {
   const cola = respuestas.get(tabla);
   return cola && cola.length > 0 ? cola.shift()! : { data: [], count: 0, error: null };
@@ -87,6 +90,7 @@ function builder(tabla: string) {
       return b;
     },
     eq: () => b, is: () => b, gte: () => b, lt: () => b,
+    not: (...args: unknown[]) => { llamadasNot.push({ tabla, args }); return b; },
     in: () => b, limit: () => b, maybeSingle: () => b, order: () => b,
     // `update` — solo lo usa `marcarInsumosProcesados` (insumos.ts) al
     // marcar un insumo consumido. No dispara el guardia de columnas
@@ -149,6 +153,7 @@ const {
 beforeEach(() => {
   respuestas.clear();
   selects.length = 0;
+  llamadasNot.length = 0;
   vi.clearAllMocks();
   getResumenNegocio.mockResolvedValue(RESUMEN_VACIO);
   getCostoPorFaseModelo.mockResolvedValue([]);
@@ -562,7 +567,9 @@ describe('el analista de métricas consulta las columnas REALES de suscripcion',
     const r = await correrAgenteFinanciero('analista_metricas', 'cron', '2026-08-27');
     expect(r.piezas).toBe(1);
     const s = selects.find((x) => x.tabla === 'suscripcion');
-    expect(s?.columnas).toBe('plan_clave');
+    // AGB-10: ahora también trae el tenant embebido — para poder excluir los
+    // "ZZZ QA …" del MRR (`!inner` porque el filtro va sobre esa tabla).
+    expect(s?.columnas).toBe('plan_clave, tenant:tenant_id!inner(nombre)');
   });
 
   it('el MRR se calcula cruzando plan_clave con el precio del plan (2 × $9,500; 1 sin precio ⇒ SIN CIFRA)', async () => {
@@ -571,6 +578,13 @@ describe('el analista de métricas consulta las columnas REALES de suscripcion',
     const pieza = encolarPieza.mock.calls[0][0] as { cuerpo: string };
     expect(pieza.cuerpo).toContain('MRR: SIN CIFRA COMPLETA');
     expect(pieza.cuerpo).toContain('3 activas pero 1 sin precio configurado');
+  });
+
+  it('AGB-10: la consulta de suscripciones activas excluye los tenants "ZZZ QA …"', async () => {
+    CON_ACTIVAS();
+    await correrAgenteFinanciero('analista_metricas', 'cron', '2026-08-27');
+    const filtro = llamadasNot.find((l) => l.tabla === 'suscripcion');
+    expect(filtro?.args).toEqual(['tenant.nombre', 'ilike', 'ZZZ QA %']);
   });
 
   it('LA REGRESIÓN: pedir una columna fantasma devuelve el 42703 real y la corrida queda en FALLO, sin parte', async () => {

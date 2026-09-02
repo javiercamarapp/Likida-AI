@@ -78,7 +78,12 @@ export default async function PaginaViajes({
       anticipo: verDinero ? v.anticipo : null,
       comprobado: verDinero && liq ? liq.comprobado : null,
       diferencia: verDinero && liq ? liq.diferencia : null,
-      liqId: liq?.id ?? null,
+      // FE-26: sin gatear, el encargado (área `operacion`, sin dinero) veía
+      // "Ver →" en cada viaje liquidado y el link lo mandaba a `/dashboard/
+      // [id]`, que lo rebota al Resumen (`puedeVerArea(rol,'dinero')`) — el
+      // único "detalle de viaje" que el producto ofrece hoy es la
+      // liquidación, y para él es un callejón sin salida.
+      liqId: verDinero && liq ? liq.id : null,
       liqEstatus: liq?.estatus ?? null,
     };
   });

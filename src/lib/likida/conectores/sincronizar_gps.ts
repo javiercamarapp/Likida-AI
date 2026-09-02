@@ -26,9 +26,31 @@ import { descifrar } from './cofre';
 import { lectorDe, LECTORES_POSICION } from './posiciones';
 import type { Http } from './tipos';
 import { conPool } from '../lotes';
+import { unidadesSinAvisoPrevio } from '../privacidad';
 
-/** Cuántas lecturas se escriben por corrida y flota. */
-const TOPE_POR_FLOTA = 500;
+// ── AUDITORÍA 24, REN-2 (ALTO): EL TOPE MUDO ─────────────────────────────
+// Era `TOPE_POR_FLOTA = 500` con `.slice()` en silencio: con las 800 unidades
+// de Innovativos, las MISMAS 300 quedaban fuera en las 288 corridas del día,
+// sin posición, sin `gps_visto_en`, y el cron latía «ok» con `leidas = 500`.
+// El conciliador de peajes las marcaba «sin evidencia GPS» — una afirmación
+// falsa sobre el comprobante de otro. Ahora el techo es de seguridad (una
+// ráfaga absurda del proveedor), no de dimensionamiento, y si se cruza SE
+// DICE: `recortadas` en el resultado, `error` en el log y `parcial` en el cron.
+const TOPE_LECTURAS_POR_FLOTA = 5000;
+/** Filas por `upsert`: el cuerpo viaja en POST, pero cada tanda es UNA
+ *  transacción contra un índice único; 500 mantiene cortas las esperas. */
+const FILAS_POR_UPSERT = 500;
+const ANCHO_UPSERT = 2;
+/** UUIDs/ids por `.in()`: viajan en la URL. 200 son ~7.5 KB, debajo del techo
+ *  típico de un proxy (misma cifra que `IDS_POR_TANDA` en pg.ts — REN-7:
+ *  500 ids eran 19 KB y un 414 dejaba `gps_visto_en` nulo sin que nadie lo
+ *  leyera). */
+const IDS_POR_CONSULTA = 200;
+/** Una lectura fechada más de una hora después de recibida es un reloj mal
+ *  puesto, no una posición (CHECK `posicion_medida_en_no_futura`, 0287). Se
+ *  descarta AQUÍ para que una unidad con reloj malo no tumbe la tanda de la
+ *  flota entera contra ese CHECK. */
+const TOLERANCIA_FUTURO_MS = 60 * 60 * 1000;
 /** Evita que una instalación con muchas flotas abra una ráfaga ilimitada de
  * conexiones contra proveedores y PostgREST. */
 const ANCHO_FANOUT_FLOTAS = 4;
@@ -40,6 +62,20 @@ export interface ResultadoSync {
   guardadas: number;
   /** Lecturas cuyo dispositivo no lo reclama ninguna unidad. Se reportan. */
   huerfanas: number;
+  /** Lecturas válidas que quedaron fuera por `TOPE_LECTURAS_POR_FLOTA`. Si es
+   *  > 0 el cron NO puede latir «ok» (REN-2). */
+  recortadas?: number;
+  /** Lecturas que no cruzaron a Postgres: coordenadas fuera de dominio, fecha
+   *  ilegible o fechada en el futuro (reloj del GPS). Se dicen. */
+  descartadas?: number;
+  /**
+   * AUDITORÍA 24, LEG-1 (CRÍTICO). Unidades cuyo operador ACTUAL (viaje vivo)
+   * no ha recibido el aviso de privacidad: sus posiciones NO se guardan. El
+   * art. 16 LFPDPPP exige el aviso ANTES del tratamiento, y rastrear 288
+   * veces al día a quien nunca lo recibió es el tratamiento principal del
+   * piloto. Se cuenta para que el cron lo pinte y la flota pueda cerrarlo.
+   */
+  sinAvisoPrevio?: number;
   /** La corrida se quedó sin presupuesto de tiempo ANTES de tocar esta flota.
    *  No es un error de la flota: le toca en la corrida siguiente (cada 5 min),
    *  y el cron lo reporta como `parcial` — un verde aquí mentiría. */
@@ -47,17 +83,26 @@ export interface ResultadoSync {
   error?: string;
 }
 
+type Lectura = { deviceId: string; lat: number; lng: number; medidaEn: string; velocidad: number | null; rumbo: number | null };
+
 /** La frontera entre un proveedor ajeno y nuestra tabla es estricta: un id
  * vacío, una fecha inválida o números fuera de dominio no llegan a Postgres.
  * El lector valida su JSON, pero esta segunda barrera protege adaptadores
  * futuros y evita escribir NaN/fechas locales ambiguas. */
-function posicionValida(p: { deviceId: string; lat: number; lng: number; medidaEn: string; velocidad: number | null; rumbo: number | null }): boolean {
+function posicionValida(p: Lectura, ahoraMs: number): boolean {
   const fecha = Date.parse(p.medidaEn);
   return p.deviceId.trim().length > 0 && p.deviceId.length <= 200 &&
     Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.lat >= -90 && p.lat <= 90 && p.lng >= -180 && p.lng <= 180 &&
     !(p.lat === 0 && p.lng === 0) && Number.isFinite(fecha) &&
+    fecha <= ahoraMs + TOLERANCIA_FUTURO_MS &&
     (p.velocidad === null || (Number.isFinite(p.velocidad) && p.velocidad >= 0 && p.velocidad <= 300)) &&
     (p.rumbo === null || (Number.isFinite(p.rumbo) && p.rumbo >= 0 && p.rumbo < 360));
+}
+
+function enTandas<T>(items: readonly T[], tamano: number): T[][] {
+  const salida: T[][] = [];
+  for (let i = 0; i < items.length; i += tamano) salida.push(items.slice(i, i + tamano));
+  return salida;
 }
 
 /** El `Http` real. Se inyecta para poder probar sin red. */
@@ -83,6 +128,7 @@ export async function sincronizarGpsDeFlota(
   conectorId: string,
   valoresCifrados: string,
   http: Http = httpReal,
+  ahora: () => number = Date.now,
 ): Promise<ResultadoSync> {
   const base: ResultadoSync = { tenantId, proveedor: conectorId, leidas: 0, guardadas: 0, huerfanas: 0 };
 
@@ -100,7 +146,19 @@ export async function sincronizarGpsDeFlota(
 
   const r = await lector(valores, http);
   if (!r.ok) return { ...base, error: r.motivo };
-  const posiciones = r.posiciones.filter(posicionValida).slice(0, TOPE_POR_FLOTA);
+  const ahoraMs = ahora();
+  const validas = r.posiciones.filter((p) => posicionValida(p, ahoraMs));
+  if (validas.length < r.posiciones.length) {
+    base.descartadas = r.posiciones.length - validas.length;
+    logger.warn('gps.lecturas_descartadas', { tenantId, proveedor: conectorId, descartadas: base.descartadas });
+  }
+  const posiciones = validas.slice(0, TOPE_LECTURAS_POR_FLOTA);
+  if (validas.length > posiciones.length) {
+    // ERROR, no warn: hay camiones que este cron no va a ver nunca mientras
+    // el proveedor devuelva más de esto. El cron lo pinta `parcial`.
+    base.recortadas = validas.length - posiciones.length;
+    logger.error('gps.recorte', { tenantId, proveedor: conectorId, leidas: validas.length, tope: TOPE_LECTURAS_POR_FLOTA, recortadas: base.recortadas });
+  }
   base.leidas = posiciones.length;
   if (posiciones.length === 0) return base;
 
@@ -109,22 +167,23 @@ export async function sincronizarGpsDeFlota(
   // que sin él una lectura podría asentarse en la unidad de otra flota que
   // usara el mismo número de dispositivo con otro proveedor.
   const ids = [...new Set(posiciones.map((p) => p.deviceId))];
-  const { data: unidades, error: errU } = await acotada(
-    supabaseAdmin().from('unidad')
-      .select('id, gps_device_id')
-      .eq('tenant_id', tenantId)
-      .eq('gps_proveedor', conectorId)
-      .in('gps_device_id', ids),
-    'gps.unidades',
-  );
-  if (errU) return { ...base, error: `no se pudieron leer las unidades: ${errU.message}` };
-
   const porDevice = new Map<string, string>();
-  for (const u of unidades ?? []) {
-    if (u.gps_device_id) porDevice.set(String(u.gps_device_id), String(u.id));
+  for (const tanda of enTandas(ids, IDS_POR_CONSULTA)) {
+    const { data: unidades, error: errU } = await acotada(
+      supabaseAdmin().from('unidad')
+        .select('id, gps_device_id')
+        .eq('tenant_id', tenantId)
+        .eq('gps_proveedor', conectorId)
+        .in('gps_device_id', tanda),
+      'gps.unidades',
+    );
+    if (errU) return { ...base, error: `no se pudieron leer las unidades: ${errU.message}` };
+    for (const u of unidades ?? []) {
+      if (u.gps_device_id) porDevice.set(String(u.gps_device_id), String(u.id));
+    }
   }
 
-  const filas: Array<Record<string, unknown>> = [];
+  let filas: Array<{ tenant_id: string; unidad_id: string; lat: number; lng: number; velocidad: number | null; rumbo: number | null; medida_en: string; proveedor: string }> = [];
   const unidadesVistas = new Set<string>();
   for (const p of posiciones) {
     const unidadId = porDevice.get(p.deviceId);
@@ -142,28 +201,63 @@ export async function sincronizarGpsDeFlota(
     });
   }
 
+  // ── LEG-1: NO SE TRATA ANTES DE AVISAR ──────────────────────────────────
+  // Va ANTES del upsert a propósito: guardar la posición ya es tratamiento.
+  // Si la base no contesta, no se guarda NADA de esta flota (fallar cerrado):
+  // «no sé si avisé» no es permiso para rastrear.
+  if (unidadesVistas.size > 0) {
+    const compuerta = await unidadesSinAvisoPrevio(tenantId, [...unidadesVistas]);
+    if (compuerta.error) {
+      return { ...base, error: `no se guardó ninguna posición: ${compuerta.error}` };
+    }
+    if (compuerta.sinAviso.size > 0) {
+      base.sinAvisoPrevio = compuerta.sinAviso.size;
+      filas = filas.filter((f) => !compuerta.sinAviso.has(f.unidad_id));
+      for (const u of compuerta.sinAviso) unidadesVistas.delete(u);
+      logger.warn('gps.sin_aviso_previo', { tenantId, proveedor: conectorId, unidades: compuerta.sinAviso.size });
+    }
+  }
+
   if (filas.length > 0) {
     // `ignoreDuplicates`: la misma última posición entre corridas no es un
-    // error, es lo normal cuando el camión está parado.
-    const { error: errIns } = await acotada(
-      supabaseAdmin().from('posicion')
-        .upsert(filas, { onConflict: 'tenant_id,unidad_id,medida_en', ignoreDuplicates: true }),
-      'gps.guardar_posiciones',
-    );
-    if (errIns) return { ...base, error: `no se pudieron guardar las posiciones: ${errIns.message}` };
-    base.guardadas = filas.length;
+    // error, es lo normal cuando el camión está parado. En tandas de
+    // FILAS_POR_UPSERT con ancho 2: 800 unidades son dos viajes, no uno de
+    // 800 filas ni 800 de una.
+    const tandas = enTandas(filas, FILAS_POR_UPSERT);
+    const resultados = await conPool(tandas, ANCHO_UPSERT, async (tanda) => {
+      const { error: errIns } = await acotada(
+        supabaseAdmin().from('posicion')
+          .upsert(tanda, { onConflict: 'tenant_id,unidad_id,medida_en', ignoreDuplicates: true }),
+        'gps.guardar_posiciones',
+      );
+      if (errIns) throw new Error(errIns.message);
+      return tanda.length;
+    });
+    const fallo = resultados.find((x) => 'error' in x);
+    for (const x of resultados) if ('ok' in x) base.guardadas += x.ok;
+    if (fallo && 'error' in fallo) {
+      const msg = fallo.error instanceof Error ? fallo.error.message : String(fallo.error);
+      return { ...base, error: `no se pudieron guardar las posiciones: ${msg}` };
+    }
 
     // `gps_visto_en` es lo que distingue «credencial guardada» de «fuente que
     // de verdad está entrando». Sin esta marca, el panel no puede decir la
-    // diferencia y la landing tampoco.
-    const ahora = new Date().toISOString();
-    await acotada(
-      supabaseAdmin().from('unidad')
-        .update({ gps_visto_en: ahora })
-        .eq('tenant_id', tenantId)
-        .in('id', [...unidadesVistas]),
-      'gps.sellar_visto',
-    );
+    // diferencia y la landing tampoco. REN-7: en tandas de 200 ids (la lista
+    // viaja en la URL) y MIRANDO el error — antes se tiraba, y un 414 del
+    // borde dejaba la flota entera en «la fuente todavía no entra».
+    const sello = new Date(ahoraMs).toISOString();
+    for (const tanda of enTandas([...unidadesVistas], IDS_POR_CONSULTA)) {
+      const { error: errSello } = await acotada(
+        supabaseAdmin().from('unidad')
+          .update({ gps_visto_en: sello })
+          .eq('tenant_id', tenantId)
+          .in('id', tanda),
+        'gps.sellar_visto',
+      );
+      if (errSello) {
+        return { ...base, error: `las posiciones se guardaron pero no se pudo sellar gps_visto_en: ${errSello.message}` };
+      }
+    }
   }
 
   if (base.huerfanas > 0) {

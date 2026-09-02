@@ -66,6 +66,7 @@ export function LineasPorConciliar({
             <input type="hidden" name="lineaId" value={l.id} />
             <select
               name="eleccion"
+              aria-label="Con qué gasto ligar esta línea"
               defaultValue={l.candidatos.length > 0 ? l.candidatos[0].gastoId : NINGUNO_VALOR}
               className="text-sm rounded-lg px-2.5 py-1.5 max-w-xs"
               style={CONTROL}

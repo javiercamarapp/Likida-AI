@@ -54,6 +54,63 @@ function esAreaDeLlave(v: string): v is Area {
   return AREAS_DE_LLAVE.some((a) => a.valor === v);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CADUCIDAD (SEG-8, auditoría 24 · columna `expira_en` de la 0294).
+//
+// Una llave de área `administracion` filtrada en el repo del TMS del cliente
+// servía PARA SIEMPRE, hasta que a alguien se le ocurriera revocarla a mano.
+// Ahora la emisión pide una vigencia, con un año por default; «sin caducidad»
+// sigue existiendo —hay integraciones que nadie va a rotar— pero como una
+// decisión que se elige, no como el único camino.
+//
+// El día de la caducidad no se calcula en la base: se manda un instante ISO
+// desde aquí para que la fila diga exactamente lo que la pantalla prometió.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface OpcionVigencia {
+  /** Días, o `'nunca'`. Viaja tal cual en el `<select>`. */
+  valor: string;
+  rotulo: string;
+}
+
+export const VIGENCIAS_DE_LLAVE: readonly OpcionVigencia[] = [
+  { valor: '90', rotulo: '90 días' },
+  { valor: '365', rotulo: '1 año' },
+  { valor: '730', rotulo: '2 años' },
+  { valor: 'nunca', rotulo: 'Sin caducidad' },
+];
+
+/** El default de la forma: un año. Ni tan corto que rompa la integración de un
+ *  cliente cada trimestre, ni «para siempre». */
+export const VIGENCIA_DEFAULT = '365';
+
+/** Tope duro: 10 años. Más que eso es «nunca» con otro nombre, y el `<select>`
+ *  no lo ofrece — esto ataja un POST directo. */
+const MAX_DIAS_VIGENCIA = 3650;
+
+/**
+ * De lo que llega del formulario al instante ISO que va a la fila.
+ *
+ * `undefined`/vacío se trata como el DEFAULT, no como «nunca»: quien no elige
+ * no está pidiendo una llave eterna. Solo el valor explícito `'nunca'` deja
+ * `expira_en` en null.
+ */
+export function expiraEnDesdeVigencia(vigencia: string | undefined, ahoraMs = Date.now()): string | null {
+  const v = (vigencia ?? '').trim() || VIGENCIA_DEFAULT;
+  if (v === 'nunca') return null;
+  const dias = Number(v);
+  if (!Number.isInteger(dias) || dias < 1 || dias > MAX_DIAS_VIGENCIA) {
+    throw new DatoInvalido('Elige una vigencia de la lista: 90 días, 1 año, 2 años o sin caducidad.');
+  }
+  return new Date(ahoraMs + dias * 86_400_000).toISOString();
+}
+
+/** ¿Ya no vale por vencida? Mismo criterio que `resolverLlave`, para que la
+ *  pantalla y el camino caliente no puedan discrepar. */
+export function llaveVencida(expiraEn: string | null, ahoraMs = Date.now()): boolean {
+  return expiraEn !== null && Date.parse(expiraEn) <= ahoraMs;
+}
+
 /**
  * Deja constancia en la bitácora. Best-effort A PROPÓSITO, igual que en
  * `clientes.ts` y `administracion.ts`: si la bitácora falla, la llave YA se
@@ -80,6 +137,8 @@ export interface LlaveEmitida {
    *  lado: perderla es revocarla y emitir otra. */
   enClaro: string;
   prefijo: string;
+  /** Cuándo deja de valer, o `null` si se emitió sin caducidad (SEG-8). */
+  expiraEn: string | null;
 }
 
 /**
@@ -92,7 +151,7 @@ export interface LlaveEmitida {
  */
 export async function crearLlaveApi(
   tenantId: string,
-  datos: { nombre: string; area: string },
+  datos: { nombre: string; area: string; vigencia?: string },
   creadaPor?: string,
 ): Promise<LlaveEmitida> {
   const nombre = datos.nombre.trim();
@@ -109,6 +168,10 @@ export async function crearLlaveApi(
     throw new DatoInvalido('Esa área no existe: elige operación, dinero o administración.');
   }
 
+  // Antes de generar nada: una vigencia inválida no debe dejar una llave a
+  // medias ni gastar entropía.
+  const expiraEn = expiraEnDesdeVigencia(datos.vigencia);
+
   const llave = generarLlave();
   const { data, error } = await acotada(supabaseAdmin().from('tenant_api_key').insert({
     tenant_id: tenantId,
@@ -118,6 +181,7 @@ export async function crearLlaveApi(
     hash: llave.hash,
     area: datos.area,
     creada_por: creadaPor ?? null,
+    expira_en: expiraEn,
   }).select('id').single(), 'crearLlaveApi');
 
   if (error) throw new Error(`crearLlaveApi: ${error.message}`);
@@ -126,10 +190,10 @@ export async function crearLlaveApi(
 
   await anotar(tenantId, 'llave_api.creada', String(id), {
     // El prefijo es la pista pública; ni el hash ni la llave van a la bitácora.
-    nombre, area: datos.area, prefijo: llave.prefijo,
+    nombre, area: datos.area, prefijo: llave.prefijo, expira_en: expiraEn,
   }, creadaPor);
 
-  return { id: String(id), enClaro: llave.enClaro, prefijo: llave.prefijo };
+  return { id: String(id), enClaro: llave.enClaro, prefijo: llave.prefijo, expiraEn };
 }
 
 /**
@@ -175,6 +239,8 @@ export interface LlaveListada {
   /** `null` = nunca se ha usado. La pantalla lo dice así, no con un guion. */
   ultimoUsoEn: string | null;
   revocadaEn: string | null;
+  /** `null` = no caduca (SEG-8). La pantalla lo dice así, no con un guion. */
+  expiraEn: string | null;
 }
 
 /**
@@ -188,7 +254,7 @@ export interface LlaveListada {
  */
 export async function listarLlavesApi(tenantId: string): Promise<LlaveListada[]> {
   const { data, error } = await acotada(supabaseAdmin().from('tenant_api_key')
-    .select('id, nombre, prefijo, area, creada_en, ultimo_uso_en, revocada_en')
+    .select('id, nombre, prefijo, area, creada_en, ultimo_uso_en, revocada_en, expira_en')
     .eq('tenant_id', tenantId)
     .order('creada_en', { ascending: false }), 'listarLlavesApi');
 
@@ -202,5 +268,6 @@ export async function listarLlavesApi(tenantId: string): Promise<LlaveListada[]>
     creadaEn: String(f.creada_en),
     ultimoUsoEn: f.ultimo_uso_en == null ? null : String(f.ultimo_uso_en),
     revocadaEn: f.revocada_en == null ? null : String(f.revocada_en),
+    expiraEn: f.expira_en == null ? null : String(f.expira_en),
   }));
 }

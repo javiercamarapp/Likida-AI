@@ -83,19 +83,28 @@ vi.mock('./cola', async () => {
     verificarFormatoCampana: (texto: string) => {
       if (/clientes?\s+reales/i.test(texto)) throw new DI('El correo dice "clientes reales" — Pieza descartada.');
       if (texto.includes('—')) throw new DI('El correo trae guion largo (—) — Pieza descartada.');
+      // AGB-2: réplica del candado de tracción — TRACCION_PUBLICABLE vacía.
+      for (const nombre of ['Grupo GAL', 'Transportes Innovativos', 'Innovativos']) {
+        if (texto.includes(nombre)) throw new DI(`El correo nombra a "${nombre}" como tracción — no autorizado. Pieza descartada.`);
+      }
     },
   };
 });
 const registrarCorrida = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock('./corridas', () => ({ registrarCorrida: (...a: unknown[]) => registrarCorrida(...a) }));
 
-const { redactarCorreoFrio, variantesDeSalida, primerNombreDelContacto, sustituirMarcador } = await import('./redactor');
+const { redactarCorreoFrio, variantesDeSalida, primerNombreDelContacto, sustituirMarcador, pasaCompuertaIcp } = await import('./redactor');
 const CONTEXTO = { tenantId: 'tenant-redactor-a', runId: '00000000-0000-4000-8000-000000000001' };
 const { DatoInvalido } = await import('../errores');
 
 const PROSPECTO = {
   id: 'pr-1', empresa: 'Transportes X', contacto_nombre: null, correo: 'c@x.mx',
   ciudad: 'Apodaca', estado: 'nuevo', fuente: 'censo', notas: null,
+  // AGB-6: SCIAN 484 = "Autotransporte de carga" (INEGI) — pasa la compuerta
+  // de ICP de por sí, para que el resto de este archivo (que prueba OTRA
+  // cosa) no tenga que preocuparse por ella. La compuerta en sí tiene sus
+  // propias pruebas más abajo con perfiles que NO la pasan.
+  scian: '484110', similitud_icp_pct: null,
 };
 
 beforeEach(() => {
@@ -213,6 +222,34 @@ describe('redactarCorreoFrio', () => {
     expect(generateStructured).not.toHaveBeenCalled();
   });
 
+  it('AGB-6: un prospecto del censo sin SCIAN de autotransporte, fuente vetada ni similitud ICP se rechaza ANTES del modelo', async () => {
+    respuestas.set('prospecto', [{ data: { ...PROSPECTO, scian: null, fuente: 'censo', similitud_icp_pct: null }, error: null }]);
+    await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/compuerta de ICP/);
+    expect(generateStructured).not.toHaveBeenCalled();
+    expect(encolarPieza).not.toHaveBeenCalled();
+  });
+
+  it('AGB-6: un SCIAN fuera de 48-49 (p. ej. restaurantes) tampoco pasa', async () => {
+    respuestas.set('prospecto', [{ data: { ...PROSPECTO, scian: '722511', fuente: 'censo', similitud_icp_pct: null }, error: null }]);
+    await expect(redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO)).rejects.toThrow(/compuerta de ICP/);
+  });
+
+  it('AGB-6: una similitud ICP alta (scorer) basta aunque el SCIAN no conste', async () => {
+    respuestas.set('prospecto', [{ data: { ...PROSPECTO, scian: null, fuente: 'censo', similitud_icp_pct: 75 }, error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    const r = await redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO);
+    expect(r.piezaId).toBe('pieza-1');
+  });
+
+  it('AGB-6: una fuente ya vetada a mano (p. ej. "manual") basta aunque falte el SCIAN', async () => {
+    respuestas.set('prospecto', [{ data: { ...PROSPECTO, scian: null, fuente: 'manual', similitud_icp_pct: null }, error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    const r = await redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO);
+    expect(r.piezaId).toBe('pieza-1');
+  });
+
   it('el camino feliz: encola la variante A como cuerpo, B/C en fuentes, agente redactor — y corrida ok', async () => {
     respuestas.set('prospecto', [{ data: PROSPECTO, error: null }]);
     respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
@@ -262,6 +299,29 @@ describe('redactarCorreoFrio', () => {
 // después, dentro de Likida» (privacidad.ts:757). El código mandaba el
 // nombre COMPLETO tal cual al modelo — el mecanismo del aviso nunca existió.
 // ═══════════════════════════════════════════════════════════════════════════
+describe('pasaCompuertaIcp — AGB-6, PURA', () => {
+  it('SCIAN 48 o 49 pasa', () => {
+    expect(pasaCompuertaIcp({ scian: '484110', fuente: 'censo', similitudIcpPct: null })).toBe(true);
+    expect(pasaCompuertaIcp({ scian: '493', fuente: 'censo', similitudIcpPct: null })).toBe(true);
+  });
+  it('sin señal alguna, NO pasa (fail closed)', () => {
+    expect(pasaCompuertaIcp({ scian: null, fuente: 'censo', similitudIcpPct: null })).toBe(false);
+    expect(pasaCompuertaIcp({ scian: '', fuente: 'censo', similitudIcpPct: null })).toBe(false);
+  });
+  it('un SCIAN de otro giro no pasa aunque no esté vacío', () => {
+    expect(pasaCompuertaIcp({ scian: '722511', fuente: 'censo', similitudIcpPct: null })).toBe(false);
+  });
+  it('una fuente vetada pasa aunque el SCIAN falte', () => {
+    for (const fuente of ['canacar', 'aaag', 'manual', 'landing']) {
+      expect(pasaCompuertaIcp({ scian: null, fuente, similitudIcpPct: null })).toBe(true);
+    }
+  });
+  it('similitud_icp_pct ≥ 60 pasa; por debajo, no', () => {
+    expect(pasaCompuertaIcp({ scian: null, fuente: 'censo', similitudIcpPct: 60 })).toBe(true);
+    expect(pasaCompuertaIcp({ scian: null, fuente: 'censo', similitudIcpPct: 59 })).toBe(false);
+  });
+});
+
 describe('primerNombreDelContacto — el ÚNICO dato que se sustituye de vuelta', () => {
   it('toma solo la primera palabra — "de pila", no el nombre completo', () => {
     expect(primerNombreDelContacto('Juan Pérez López')).toBe('Juan');
@@ -397,9 +457,15 @@ describe('verificarFormatoCampana — los guardarraíles son código, no prompt'
     expect(() => verificarFormatoCampana('Liquidamos viajes — sin liquidador.')).toThrow(/guion largo/);
   });
 
-  it('deja pasar la frase permitida ("en pláticas con transportistas como...")', async () => {
+  it('deja pasar la frase permitida sin nombrar a nadie ("en pláticas con transportistas del centro y norte del país")', async () => {
     const { verificarFormatoCampana } = await import('./redactor');
-    expect(() => verificarFormatoCampana('Estamos en pláticas con transportistas como Grupo GAL y Transportes Innovativos.')).not.toThrow();
+    expect(() => verificarFormatoCampana('Estamos en pláticas con transportistas del centro y norte del país.')).not.toThrow();
+  });
+
+  it('AGB-2: rechaza nombrar al prospecto del piloto o a Grupo GAL como tracción, aunque la plática sea real', async () => {
+    const { verificarFormatoCampana } = await import('./redactor');
+    expect(() => verificarFormatoCampana('Estamos en pláticas con transportistas como Grupo GAL y Transportes Innovativos.')).toThrow(/tracción/);
+    expect(() => verificarFormatoCampana('Ya trabajamos con Transportes Innovativos.')).toThrow(DatoInvalido);
   });
 
   it('un correo del modelo que viole el formato NO entra a la cola y la corrida queda en fallo', async () => {
@@ -446,6 +512,12 @@ describe('el Redactor pide SCHEMA, no markdown (los 3 fallos de la primera pasad
     // El prompt ya no puede pedir markdown: sería un contrato contra el otro.
     expect(llamada.system).not.toContain('## Variante A');
     expect(llamada.system).toContain('JSON');
+  });
+
+  it('AGB-2: el SYSTEM no nombra a ningún prospecto ("Innovativos", "Grupo GAL")', () => {
+    const fuente = readFileSync('src/lib/likida/agentes/redactor.ts', 'utf8');
+    expect(fuente).not.toContain('Innovativos');
+    expect(fuente).not.toContain('Grupo GAL');
   });
 
   it('el archivo ya no parsea markdown con regex — esa frontera se fue al schema (estructural)', () => {

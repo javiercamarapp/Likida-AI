@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // AUDITORÍA 18 · A20 — las dos reglas que impiden cobrar contra nada vivían
 // en dos `if` que ninguna prueba tocaba. `evaluarAbono` (pura) SÍ estaba
 // probada; lo que no estaba probado era el CABLEADO: ¿registrarPago consulta
-// el veredicto? ¿cancelarFactura cuenta los pagos antes de cancelar? Borrando
+// el veredicto? ¿cancelarFactura rechaza con pagos encima? Borrando
 // las dos guardas la suite quedaba verde y una factura de $11,600 con $10,000
 // pagados aceptaba un abono de $2,000.
 //
@@ -215,23 +215,41 @@ describe('registrarPago — la decisión la toma la base; aquí se traduce', () 
   });
 });
 
-describe('cancelarFactura — cuenta los pagos ANTES de cancelar', () => {
-  it('con un pago encima NO cancela: el dinero ya contado se aclara primero', async () => {
-    respuestas.set('pago_recibido', [{ data: null, error: null, count: 1 }]);
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · BE-3 — el conteo de pagos y la cancelación se mudaron a la
+// base (`cancelar_factura_tx`, 0284), y por eso este bloque cambió de forma.
+//
+// Antes se comprobaba que `cancelarFactura` contara los pagos ANTES del
+// UPDATE. Eso ya no se puede probar aquí —ni tiene sentido—: entre el conteo
+// y el UPDATE cabía un abono, y la única forma de que no quepa es que los dos
+// ocurran con la factura tomada `for update`, que es lo que hace el RPC y lo
+// que el bloque 232 de verificaciones.sql ejecuta contra Postgres.
+//
+// Lo que SÍ es de este lado: que el rechazo de la base llegue con las palabras
+// del contralor, que una CAÍDA no se lea como rechazo de negocio, que ninguna
+// escritura suelta (ni conteo, ni UPDATE de factura_emitida) haya sobrevivido
+// a la mudanza, y que la liga de pago se revoque DESPUÉS y solo si se canceló.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cancelarFactura — la decisión la toma la base; aquí se traduce (BE-3)', () => {
+  it('un abono que entró en la ventana NO deja un CFDI cancelado con dinero encima: CU016 con_pagos → DatoInvalido, sin tocar la factura ni la liga', async () => {
+    // El escenario de BE-3: el contador concilió $10,000 mientras el contralor
+    // pulsaba Cancelar. El RPC lo ve con la fila trabada y rebota.
+    rpc.mockResolvedValue({ data: null, error: { code: 'CU016', message: 'motivo=con_pagos pagos=1' } });
     await expect(cancelarFactura(T, FACTURA)).rejects.toThrow(/pagos registrados/);
     expect(escribioEn('factura_emitida')).toEqual([]);
+    expect(escribioEn('portal_pago_liga')).toEqual([]);
     expect(escribioEn('bitacora_auditoria')).toEqual([]);
   });
 
-  it('sin pagos cancela, acotado a tenant, y anota la bitácora', async () => {
-    respuestas.set('pago_recibido', [{ data: null, error: null, count: 0 }]);
-    respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);
+  it('sin pagos cancela por UN solo RPC con tenant y factura, y anota la bitácora', async () => {
+    rpc.mockResolvedValue({ data: { factura_id: FACTURA, estatus_previo: 'emitida' }, error: null });
     respuestas.set('portal_pago_liga', [{ data: [], error: null }]);
     await cancelarFactura(T, FACTURA, { id: 'u-1' });
-    const upd = escribioEn('factura_emitida');
-    expect(upd).toHaveLength(1);
-    expect(upd[0].fila).toEqual({ estatus: 'cancelada' });
-    expect(upd[0].filtros).toEqual(expect.arrayContaining([['tenant_id', T], ['id', FACTURA]]));
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('cancelar_factura_tx', { p_tenant: T, p_factura: FACTURA });
+    // Ninguna escritura suelta sobrevivió a la mudanza: ni conteo ni UPDATE.
+    expect(escribioEn('factura_emitida')).toEqual([]);
+    expect(escribioEn('pago_recibido')).toEqual([]);
     expect(escribioEn('bitacora_auditoria')[0].fila).toMatchObject({ accion: 'factura.cancelada' });
   });
 
@@ -240,8 +258,7 @@ describe('cancelarFactura — cuenta los pagos ANTES de cancelar', () => {
     // Sin esto, el cliente abría el mismo link y veía «Saldo pendiente
     // $34,800.00» con el formulario activo sobre una factura que ante el SAT ya
     // no existe — `factura_saldo` calcula total − pagos sin mirar el estatus.
-    respuestas.set('pago_recibido', [{ data: null, error: null, count: 0 }]);
-    respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);
+    rpc.mockResolvedValue({ data: { factura_id: FACTURA, estatus_previo: 'emitida' }, error: null });
     respuestas.set('portal_pago_liga', [{ data: [{ id: 'liga-1' }], error: null }]);
     await cancelarFactura(T, FACTURA, { id: 'u-1' });
 
@@ -251,53 +268,46 @@ describe('cancelarFactura — cuenta los pagos ANTES de cancelar', () => {
     expect(rev[0].filtros).toEqual(expect.arrayContaining([
       ['tenant_id', T], ['factura_id', FACTURA], ['revocada_en', null],
     ]));
-    // El orden importa: la factura se cancela ANTES de matar el enlace. Al
-    // revés, un update fallido dejaría muerta la liga de una factura viva.
-    expect(escrituras.findIndex((e) => e.tabla === 'factura_emitida'))
-      .toBeLessThan(escrituras.findIndex((e) => e.tabla === 'portal_pago_liga'));
+    // El orden importa: la factura se cancela (el RPC) ANTES de matar el
+    // enlace. Al revés, un RPC fallido dejaría muerta la liga de una factura viva.
     expect(escribioEn('bitacora_auditoria').map((e) => e.fila.accion))
       .toContain('portal_pago.liga_revocada');
   });
 
   it('si la revocación falla, se LANZA: no se deja un enlace suelto en silencio', async () => {
-    respuestas.set('pago_recibido', [{ data: null, error: null, count: 0 }]);
-    respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);
+    rpc.mockResolvedValue({ data: { factura_id: FACTURA, estatus_previo: 'emitida' }, error: null });
     respuestas.set('portal_pago_liga', [{ data: null, error: { message: 'sin red' } }]);
     await expect(cancelarFactura(T, FACTURA)).rejects.toThrow(/SÍ quedó cancelada/);
     // Y la cancelación queda anotada: pasó de verdad.
     expect(escribioEn('bitacora_auditoria')[0].fila).toMatchObject({ accion: 'factura.cancelada' });
   });
 
-  it('si el conteo de pagos falla, NO se cancela a ciegas', async () => {
-    respuestas.set('pago_recibido', [{ data: null, error: { message: 'caída' }, count: null }]);
-    await expect(cancelarFactura(T, FACTURA)).rejects.toThrow(/no se pudieron contar/);
-    expect(escribioEn('factura_emitida')).toEqual([]);
+  it('la base caída NO se lee como rechazo de negocio: Error, no DatoInvalido, y la liga no se toca', async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: 'sin respuesta en 8000 ms (tope de consulta)' } });
+    const err = await cancelarFactura(T, FACTURA).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(DatoInvalido);
+    expect(escribioEn('portal_pago_liga')).toEqual([]);
+    expect(escribioEn('bitacora_auditoria')).toEqual([]);
   });
 
-  it('ya cancelada / de otra flota: el update toca 0 filas y se dice', async () => {
-    respuestas.set('pago_recibido', [{ data: null, error: null, count: 0 }]);
-    respuestas.set('factura_emitida', [{ data: [], error: null }]);
+  it('ya cancelada o pagada (CU016 motivo=estatus): se dice, sin tocar la liga', async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: 'CU016', message: 'motivo=estatus estatus=cancelada' } });
     await expect(cancelarFactura(T, FACTURA)).rejects.toThrow(/no se pudo cancelar/);
+    expect(escribioEn('portal_pago_liga')).toEqual([]);
     expect(escribioEn('bitacora_auditoria')).toEqual([]);
+  });
+
+  it('una factura de OTRA flota (CU010) se rechaza sin escribir', async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: 'CU010', message: 'factura fuera de la flota' } });
+    await expect(cancelarFactura(T, FACTURA)).rejects.toThrow(/no está en tu flota/);
+    expect(escrituras).toEqual([]);
   });
 
   it('un id que no es uuid se rechaza antes de tocar la base', async () => {
     await expect(cancelarFactura(T, 'x')).rejects.toThrow(DatoInvalido);
+    expect(rpc).not.toHaveBeenCalled();
     expect(escrituras).toEqual([]);
-  });
-
-  // ── Auditoría 21 · ALTO — `.in('estatus', ['borrador','emitida'])` ─────────
-  // Antes el mock ni siquiera registraba `.in()`, así que ninguna prueba podía
-  // detectar que este ancla desapareciera. La fila simulada ya está
-  // `cancelada` (un estatus FUERA del `.in()`): con el ancla intacta el UPDATE
-  // no calza y toca 0 filas; si alguien borra el `.in()` en producción, el
-  // filtro deja de acumularse, el chequeo deja de tener nada que descartar, y
-  // el mock (equivocadamente) reporta éxito — la prueba se pone roja.
-  it('una factura YA CANCELADA no se vuelve a cancelar (ancla `.in(estatus,…)`)', async () => {
-    respuestas.set('pago_recibido', [{ data: null, error: null, count: 0 }]);
-    establecerFila('factura_emitida', { id: FACTURA, tenant_id: T, estatus: 'cancelada' });
-    respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);
-    await expect(cancelarFactura(T, FACTURA)).rejects.toThrow(/no se pudo cancelar/);
   });
 });
 

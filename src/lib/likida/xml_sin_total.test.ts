@@ -71,9 +71,13 @@ vi.mock('@/lib/likida/costos', () => ({
   registrarCosto: vi.fn(), registrarCostoWhatsApp: vi.fn(),
   faseDeModelo: vi.fn(() => 'cuadre'), vincularCostosALiquidacion: vi.fn(),
 }));
+const downloadMediaAsText = vi.fn(async () => '<cfdi:Comprobante/>');
+// AUDITORÍA 24 · WA-8: los metadatos se consultan ANTES de bajar el binario.
+const metadatosMedia = vi.fn(async () => ({ mimeType: 'text/xml', fileSize: 2048 } as { mimeType: string; fileSize: number | null } | null));
 vi.mock('@/lib/meta/client', async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  downloadMediaAsText: vi.fn(async () => '<cfdi:Comprobante/>'),
+  downloadMediaAsText: (...a: unknown[]) => downloadMediaAsText(...(a as [])),
+  metadatosMedia: (...a: unknown[]) => metadatosMedia(...(a as [])),
 }));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
@@ -195,5 +199,53 @@ describe('DAT-19 · la moneda del XML viaja hasta el gasto', () => {
     const g = addGasto.mock.calls[0][2] as { ocrExtra?: Record<string, unknown> };
     expect(g.ocrExtra?.moneda).toBe('MXN');
     expect(g.ocrExtra?.tipoCambio).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · WA-8 (MEDIO) — el documento se bajaba ENTERO (WhatsApp
+// permite 100 MB) para descubrir después que no era un XML, y se contestaba
+// siempre lo mismo. Ahora se pregunta QUÉ es y CUÁNTO pesa antes de tocar el
+// binario, y se contesta por lo que de verdad mandó.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('WA-8 · qué es y cuánto pesa, ANTES de bajarlo', () => {
+  beforeEach(() => {
+    downloadMediaAsText.mockClear();
+    metadatosMedia.mockReset();
+    metadatosMedia.mockResolvedValue({ mimeType: 'text/xml', fileSize: 2048 });
+    parseCfdiXml.mockReturnValue(cfdi(450));
+  });
+
+  it('EL FALLO: el HEIC mandado «como archivo» NO se descarga, y se le dice qué botón usar', async () => {
+    metadatosMedia.mockResolvedValue({ mimeType: 'image/heic', fileSize: 3_000_000 });
+    await processInbound(xmlMsg);
+    expect(downloadMediaAsText, 'ni un byte del binario').not.toHaveBeenCalled();
+    expect(salientes.join(' ')).toMatch(/cámara|galería/i);
+    expect(salientes.join(' '), 'no mandó ningún PDF').not.toMatch(/PDF/);
+  });
+
+  it('el PDF de 40 MB del CFDI de casetas tampoco se lee a memoria', async () => {
+    metadatosMedia.mockResolvedValue({ mimeType: 'application/pdf', fileSize: 40_000_000 });
+    await processInbound(xmlMsg);
+    expect(downloadMediaAsText).not.toHaveBeenCalled();
+    expect(salientes.join(' ')).toMatch(/XML/);
+  });
+
+  it('un archivo enorme con mime plausible se para por TAMAÑO', async () => {
+    metadatosMedia.mockResolvedValue({ mimeType: 'application/octet-stream', fileSize: 60_000_000 });
+    await processInbound(xmlMsg);
+    expect(downloadMediaAsText).not.toHaveBeenCalled();
+    expect(salientes.join(' ')).toMatch(/pesa demasiado/i);
+  });
+
+  it('el XML de siempre pasa igual: un CFDI ronda los kilobytes', async () => {
+    await processInbound(xmlMsg);
+    expect(downloadMediaAsText).toHaveBeenCalled();
+  });
+
+  it('si no se pudieron leer los metadatos, se intenta igual (fail-open: rebotar un XML bueno es peor)', async () => {
+    metadatosMedia.mockResolvedValue(null);
+    await processInbound(xmlMsg);
+    expect(downloadMediaAsText).toHaveBeenCalled();
   });
 });

@@ -92,30 +92,33 @@ export default async function PaginaBorradorCcp({
             Carta Porte, con los datos que da tu cliente.
           </p>
         ) : (
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                <th className="py-1 pr-3 font-medium">Descripción</th>
-                <th className="py-1 pr-3 font-medium">Clave SAT</th>
-                <th className="py-1 pr-3 font-medium">Cantidad</th>
-                <th className="py-1 pr-3 font-medium">Unidad</th>
-                <th className="py-1 pr-3 font-medium">Peso (kg)</th>
-                <th className="py-1 font-medium">Peligroso</th>
-              </tr>
-            </thead>
-            <tbody>
-              {v.mercancias.map((m) => (
-                <tr key={m.id} className="align-top">
-                  <td className="py-1 pr-3">{m.descripcion}</td>
-                  <td className="py-1 pr-3 cifra-mono">{m.bienesTransp ?? hueco('sin clave')}</td>
-                  <td className="py-1 pr-3 cifra-mono">{numero(m.cantidad)}</td>
-                  <td className="py-1 pr-3 cifra-mono">{m.claveUnidad ?? hueco('sin unidad')}</td>
-                  <td className="py-1 pr-3 cifra-mono">{m.pesoKg !== null ? numero(m.pesoKg) : hueco('sin peso')}</td>
-                  <td className="py-1">{m.materialPeligroso === true ? 'Sí' : m.materialPeligroso === false ? 'No' : hueco('sin declarar')}</td>
+          // FE-34: sin overflow-x-auto, seis columnas desbordan en 390 px.
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="text-left" style={{ color: 'var(--faint)' }}>
+                  <th className="py-1 pr-3 font-medium">Descripción</th>
+                  <th className="py-1 pr-3 font-medium">Clave SAT</th>
+                  <th className="py-1 pr-3 font-medium">Cantidad</th>
+                  <th className="py-1 pr-3 font-medium">Unidad</th>
+                  <th className="py-1 pr-3 font-medium">Peso (kg)</th>
+                  <th className="py-1 font-medium">Peligroso</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {v.mercancias.map((m) => (
+                  <tr key={m.id} className="align-top">
+                    <td className="py-1 pr-3">{m.descripcion}</td>
+                    <td className="py-1 pr-3 cifra-mono">{m.bienesTransp ?? hueco('sin clave')}</td>
+                    <td className="py-1 pr-3 cifra-mono">{numero(m.cantidad)}</td>
+                    <td className="py-1 pr-3 cifra-mono">{m.claveUnidad ?? hueco('sin unidad')}</td>
+                    <td className="py-1 pr-3 cifra-mono">{m.pesoKg !== null ? numero(m.pesoKg) : hueco('sin peso')}</td>
+                    <td className="py-1">{m.materialPeligroso === true ? 'Sí' : m.materialPeligroso === false ? 'No' : hueco('sin declarar')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 

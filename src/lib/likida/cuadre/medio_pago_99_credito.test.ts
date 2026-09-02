@@ -130,3 +130,95 @@ describe('FIS-1: una compra a crédito (FormaPago 99) no es «un medio que la LI
     expect(r.diferencias.some((x) => x.tipo === 'medio_pago_no_admitido')).toBe(false);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · FIS-5 (ALTO) — FIS-1 cableó `formaPagoJuzgable` a UNA de las
+// tres ramas que juzgan el medio. Las otras dos (el tope de $2,000 y el cubo
+// del 15% de combustible) seguían preguntando por `g.formaPago`, que en un
+// CFDI PPD es siempre `'99'`: un REP con `FormaDePagoP = '01'` —la prueba
+// documental de que se pagó en EFECTIVO— abría el IVA y no cerraba la
+// deducción. Hospedaje de $58,000 a crédito pagado en caja salía «Deducible
+// para ISR $58,000» con «IVA acreditable $8,000».
+// Ficha: `normas/lisr-27-III.yaml` (1er y 2º párrafo).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('FIS-5: el tope de $2,000 y la regla de combustible juzgan la forma del REP, no el «99»', () => {
+  it('hospedaje $58,000 «99» + REP «01» (efectivo) > tope: efectivo_sobre_tope, deducible 0, IVA 0', () => {
+    const r = cuadra({ pagadoEn: '2026-05-03', pagadoForma: '01' });
+    const d = r.diferencias.find((x) => x.tipo === 'efectivo_sobre_tope');
+    expect(d, 'el REP dice EFECTIVO por encima de $2,000 y la rama del tope no lo vio').toBeDefined();
+    // El rótulo tiene que ser verdad: dice que lo dijo el REP.
+    expect(d!.nota).toContain('complemento de pago');
+    expect(r.totalDeducible).toBe(0);
+    expect(r.totalNoDeducible).toBe(58_000);
+    expect(r.ivaAcreditable).toBe(0);
+  });
+
+  it('control: el mismo hospedaje con «01» directo da exactamente lo mismo', () => {
+    const directo = cuadra({ formaPago: '01' });
+    const viaRep = cuadra({ pagadoEn: '2026-05-03', pagadoForma: '01' });
+    expect(viaRep.totalDeducible).toBe(directo.totalDeducible);
+    expect(viaRep.totalNoDeducible).toBe(directo.totalNoDeducible);
+    expect(viaRep.ivaAcreditable).toBe(directo.ivaAcreditable);
+  });
+
+  it('diésel $58,000 «99» + REP «01», flota NO elegible al 15%: efectivo_no_elegible', () => {
+    const diesel = gasto({ concepto: 'diesel', pagadoEn: '2026-05-03', pagadoForma: '01', claveProdServ: '15101505' });
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 58_000, politica: [{ concepto: 'diesel', topeMonto: 100_000 }],
+      estimulos: EST, gastos: [diesel], facilidad15: false,
+    });
+    const d = r.diferencias.find((x) => x.tipo === 'efectivo_no_elegible');
+    expect(d, 'el REP dice EFECTIVO y la flota no califica a la RFA 2.9: no deducible').toBeDefined();
+    expect(d!.nota).toContain('EFECTIVO');
+    expect(d!.nota).toContain('complemento de pago');
+    expect(r.totalDeducible).toBe(0);
+    expect(r.ivaAcreditable).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · FIS-6 (ALTO) — un CFDI a crédito que NADIE ha pagado (`'99'`
+// sin REP) salía «Deducible para ISR» al 100% y la liquidación «Cuadrada».
+// El motor lo tenía confesado desde la auditoría 18 («el tratamiento de ISR
+// para ese caso sigue pendiente de resolver»). Para los regímenes a los que se
+// vende la facilidad (`normas/lisr-72-73.yaml`: coordinados y PF con actividad
+// empresarial → flujo de efectivo) la deducción nace al pagar; y para
+// combustible el 2º párrafo de `lisr-27-III.yaml` condiciona la deducción al
+// MEDIO cualquiera que sea el monto — con `'99'` el medio no existe aún.
+// Ausencia de evidencia = ámbar, no verde: `por_confirmar` y a revisión.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('FIS-6: «99» sin complemento de pago no es deducible todavía, ni «Cuadrada»', () => {
+  it('hospedaje $58,000 «99» sin REP: por_confirmar, deducible 0, estatus revisar', () => {
+    const r = cuadra({});
+    expect(cubetaDe(gasto({}), r.diferencias.filter((x) => x.gastoId === 'g1'))).toBe('por_confirmar');
+    expect(r.totalDeducible).toBe(0);
+    expect(r.totalPorConfirmar).toBe(58_000);
+    expect(r.totalNoDeducible).toBe(0);
+    expect(r.estatus).toBe('revisar');
+  });
+
+  it('diésel «99» sin REP, flota NO elegible: tampoco se cuela como deducible', () => {
+    const diesel = gasto({ concepto: 'diesel', claveProdServ: '15101505' });
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 58_000, politica: [{ concepto: 'diesel', topeMonto: 100_000 }],
+      estimulos: EST, gastos: [diesel], facilidad15: false,
+    });
+    expect(r.totalDeducible).toBe(0);
+    expect(r.totalPorConfirmar).toBe(58_000);
+    expect(r.estatus).toBe('revisar');
+  });
+
+  it('el mismo gasto con REP «03» sube solo a deducible: el REP abre, nunca se infiere', () => {
+    const r = cuadra({ pagadoEn: '2026-05-03', pagadoForma: '03' });
+    expect(cubetaDe(gasto({ pagadoEn: '2026-05-03', pagadoForma: '03' }), r.diferencias.filter((x) => x.gastoId === 'g1'))).toBe('deducible');
+    expect(r.totalDeducible).toBe(58_000);
+    expect(r.totalPorConfirmar).toBe(0);
+  });
+
+  it('la ausencia de forma de pago sigue siendo «desconocido», no «impago»', () => {
+    // Distinto de FIS-6: sin `formaPago` no hay dato; con `'99'` sí lo hay
+    // («no se ha pagado»). Un desconocido no infla el por-confirmar.
+    const r = cuadra({ formaPago: undefined });
+    expect(r.totalDeducible).toBe(58_000);
+  });
+});

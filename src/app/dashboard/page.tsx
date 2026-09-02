@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { sufijoTenant } from './sufijo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { InicioContenido } from './inicio-contenido';
 import { InicioOperacion } from './inicio-operacion';
@@ -36,8 +37,7 @@ export default async function DashboardInicio({
   // El MISMO contrato de sufijo que el sidebar (sidebar-nav.tsx): los links
   // que esta página emite (tabla de viajes → detalle de liquidación) cargan
   // el ?tenant=/?vista= del superadmin; para roles reales queda vacío.
-  const base = sp.tenant ? `?tenant=${sp.tenant}` : sp.vista ? `?vista=${sp.vista}` : '';
-  const sufijo = sp.rol ? `${base}${base ? '&' : '?'}rol=${sp.rol}` : base;
+  const sufijo = sufijoTenant(sp);
 
   // El dueño declara el perfil ANTES de ver cifras. Sin el umbral de peaje el
   // motor es fail-closed: el estímulo queda en $0 hasta declarar (FISCAL

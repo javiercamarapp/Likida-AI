@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { decodeQrFromImage, decodeCfdiFromImage, clasificarQr } from './cfdi';
+import { clasificarQr } from './cfdi';
+import { decodeQrFromImage, decodeCfdiFromImage } from './cfdi_imagen';
 
 // El fixture es un QR de verificación del SAT generado con CoreImage (macOS).
 // Sirve de CONTROL: si esta prueba falla, el camino de lectura de QR está roto

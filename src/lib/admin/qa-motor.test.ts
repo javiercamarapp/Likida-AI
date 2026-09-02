@@ -108,8 +108,14 @@ function dbFalsa(): SupabaseClient {
     let cabeza = false;
     let devolver = false;
     let tope: number | null = null;
-    let orden: { col: string; asc: boolean } | null = null;
+    // AUDITORÍA 24 (BE-27): los `order` se ACUMULAN. `leerManifiesto` pagina y
+    // desempata con `id`; guardar solo el último haría que el doble ordenara
+    // por una columna que no es la que manda.
+    const orden: Array<{ col: string; asc: boolean }> = [];
+    let rango: [number, number] | null = null;
     let uno: 'single' | 'maybe' | null = null;
+    /** El recorte REAL de PostgREST: nunca más de `max_rows` por respuesta. */
+    const MAX_ROWS = 1_000;
 
     const b: Record<string, unknown> = {};
     const yo = () => b as never;
@@ -147,8 +153,11 @@ function dbFalsa(): SupabaseClient {
       }));
       return yo();
     };
-    b.order = (col: string, o?: { ascending?: boolean }) => { orden = { col, asc: o?.ascending !== false }; return yo(); };
+    b.order = (col: string, o?: { ascending?: boolean }) => { orden.push({ col, asc: o?.ascending !== false }); return yo(); };
     b.limit = (n: number) => { tope = n; return yo(); };
+    // BE-27: `leerManifiesto` pagina con `range`. Sin esto el doble ni existe
+    // ese método y la lectura del banco revienta antes de empezar.
+    b.range = (d: number, h: number) => { rango = [d, h]; return yo(); };
     b.single = () => { uno = 'single'; return yo(); };
     b.maybeSingle = () => { uno = 'maybe'; return yo(); };
     b.insert = (f: Fila | Fila[]) => { modo = 'insert'; payload = Array.isArray(f) ? f : [f]; return yo(); };
@@ -192,12 +201,22 @@ function dbFalsa(): SupabaseClient {
         tablas[tabla] = (tablas[tabla] ?? []).filter((f) => !fuera.has(f));
       } else {
         let filas = filtradas();
-        if (orden) {
-          const o = orden;
-          filas = [...filas].sort((a, z) => (String(a[o.col]) < String(z[o.col]) ? -1 : 1) * (o.asc ? 1 : -1));
+        if (orden.length > 0) {
+          filas = [...filas].sort((a, z) => {
+            for (const o of orden) {
+              if (String(a[o.col]) === String(z[o.col])) continue;
+              return (String(a[o.col]) < String(z[o.col]) ? -1 : 1) * (o.asc ? 1 : -1);
+            }
+            return 0;
+          });
         }
         if (tope !== null) filas = filas.slice(0, tope);
+        // El `count` es el TOTAL que casa con los filtros — lo que PostgREST
+        // devuelve con `count: 'exact'`—, no el tamaño de la página.
         count = filas.length;
+        filas = rango
+          ? filas.slice(rango[0], Math.min(rango[1] + 1, rango[0] + MAX_ROWS))
+          : filas.slice(0, MAX_ROWS);
         data = cabeza ? null : filas;
       }
 
@@ -302,6 +321,7 @@ vi.mock('./qa-oraculos', () => ({
 import {
   crearCorrida, ejecutarPasada, mezclarEventos,
   patronesDeFallo, fraseFallosMismaFirma, MIN_FALLOS_MISMA_FIRMA,
+  instalarInterceptorSalidaMeta,
 } from './qa-motor';
 import { guardarCorrida, leerCorrida, leerFotosDeCorrida } from './qa-storage';
 import { reservaPorFotoMs, TECHO_PASADA_MS, type ParametrosCorrida } from './qa-tipos';
@@ -744,5 +764,59 @@ describe('patronesDeFallo — la firma agrupa, el umbral calla los baches suelto
     expect(frase).toContain('10 fallos con la MISMA firma');
     expect(frase).toContain('«x saturada»');
     expect(frase).toContain('patrón sistémico');
+  });
+});
+
+// ── ADM-3 (auditoría 24): el interceptor de salida a Meta ──────────────────
+describe('instalarInterceptorSalidaMeta — ningún envío de QA llega a graph.facebook.com', () => {
+  test('un POST a graph.facebook.com NUNCA sale por la red: se responde sintético y queda en wa_outbox como dead/QA', async () => {
+    const original = vi.fn(async () => new Response('no debería llamarse', { status: 200 }));
+    const globalConFetch = globalThis as { fetch: typeof fetch };
+    globalConFetch.fetch = original as unknown as typeof fetch;
+
+    const restaurar = instalarInterceptorSalidaMeta('corrida-abc123');
+    try {
+      const res = await fetch('https://graph.facebook.com/v21.0/1234567890/messages', {
+        method: 'POST',
+        body: JSON.stringify({ messaging_product: 'whatsapp', to: '5215559900001', type: 'text', text: { body: 'hola' } }),
+      });
+      expect(original).not.toHaveBeenCalled();
+      expect(res.status).toBe(200);
+      const cuerpo = await res.json();
+      expect(cuerpo.messages[0].id).toMatch(/^qa_/);
+
+      expect(tablas.wa_outbox).toHaveLength(1);
+      const fila = tablas.wa_outbox[0];
+      expect(fila.estado).toBe('dead');
+      expect(String(fila.ultimo_error)).toContain('QA: corrida corrida-abc123');
+      expect((fila.payload as { to: string }).to).toBe('5215559900001');
+    } finally {
+      restaurar();
+    }
+  });
+
+  test('una petición GET, o a otro host, SÍ pasa por el fetch original — el interceptor no es un apagador general', async () => {
+    const original = vi.fn(async () => new Response('ok', { status: 200 }));
+    const globalConFetch = globalThis as { fetch: typeof fetch };
+    globalConFetch.fetch = original as unknown as typeof fetch;
+
+    const restaurar = instalarInterceptorSalidaMeta('corrida-xyz');
+    try {
+      await fetch('https://otraapi.example/algo', { method: 'POST' });
+      await fetch('https://graph.facebook.com/v21.0/media/1', { method: 'GET' });
+      expect(original).toHaveBeenCalledTimes(2);
+      expect(tablas.wa_outbox ?? []).toHaveLength(0);
+    } finally {
+      restaurar();
+    }
+  });
+
+  test('restaurar() devuelve el fetch original tal cual', () => {
+    const original = vi.fn(async () => new Response('ok'));
+    const globalConFetch = globalThis as { fetch: typeof fetch };
+    globalConFetch.fetch = original as unknown as typeof fetch;
+    const restaurar = instalarInterceptorSalidaMeta('corrida-r');
+    restaurar();
+    expect(globalConFetch.fetch).toBe(original);
   });
 });

@@ -125,24 +125,16 @@ export async function guardarPerfilPatch(
   patch: Record<string, unknown>,
   actualizadoPor: string | null,
 ): Promise<void> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('tenant')
-    .select('perfil')
-    .eq('id', tenantId)
-    .maybeSingle(), 'guardarPerfilPatch.leer');
+  // AUDITORÍA 24, H20/H21/H22: leer+mezclar+escribir en dos statements
+  // dejaba una carrera de "lost update" (dos respuestas de la entrevista de
+  // onboarding casi juntas se pisaban). `tenant_perfil_merge` (mig. 0296)
+  // hace la lectura y la escritura en el MISMO statement.
+  const { error } = await acotada(supabaseAdmin().rpc('tenant_perfil_merge', {
+    p_tenant_id: tenantId,
+    p_patch: patch,
+    p_actualizado_por: actualizadoPor,
+  }), 'guardarPerfilPatch');
   if (error) throw new Error(`perfil: ${error.message}`);
-  if (!data) throw new Error('perfil: tenant no encontrado');
-  const actual = (data.perfil && typeof data.perfil === 'object' && !Array.isArray(data.perfil))
-    ? data.perfil as Record<string, unknown>
-    : {};
-  const { error: errW } = await acotada(supabaseAdmin()
-    .from('tenant')
-    .update({
-      perfil: { ...actual, ...patch },
-      perfil_actualizado_por: actualizadoPor,
-    })
-    .eq('id', tenantId), 'guardarPerfilPatch.escribir');
-  if (errW) throw new Error(`perfil: ${errW.message}`);
 }
 
 export async function guardarDeclaracionEstimuloPeaje(
@@ -542,12 +534,24 @@ export async function guardarHuerfano(
  * cerrar el viaje que sí tiene. Se pierde el ofrecimiento, no el comprobante —
  * las filas siguen ahí para el mensaje siguiente.
  */
-export async function getHuerfanos(tenantId: string, operadorId: string): Promise<Huerfano[]> {
-  const { data, error } = await acotada(supabaseAdmin()
+export async function getHuerfanos(
+  tenantId: string, operadorId: string,
+  opciones: {
+    /** AUDITORÍA 24 · WA-7 (MEDIO): los huérfanos SIN monto (fallo de OCR,
+     *  voucher) nunca se ofrecen, pero ocupaban el tope de 50 por antigüedad
+     *  y a partir del 50º el chofer dejaba de ver los que SÍ tienen monto.
+     *  Con esto el filtro va en la base, ANTES del `limit`. */
+    soloConMonto?: boolean;
+  } = {},
+): Promise<Huerfano[]> {
+  let q = supabaseAdmin()
     .from('comprobante_huerfano')
     .select('id, gasto, motivo, creado_en, ruta_imagen, ofrecido_en')
     .eq('tenant_id', tenantId).eq('operador_id', operadorId)
-    .is('resuelto_en', null)
+    .is('resuelto_en', null);
+  // `->` (jsonb) y no `->>` (texto): PostgREST compara el número como número.
+  if (opciones.soloConMonto) q = q.gt('gasto->monto', 0);
+  const { data, error } = await acotada(q
     .order('creado_en', { ascending: true })
     .limit(50), 'getHuerfanos');
   if (error || !data) return [];
@@ -580,15 +584,24 @@ export async function marcarHuerfanosOfrecidos(tenantId: string, ids: string[]):
  * medias, lo que queda es una fila todavía pendiente —que se vuelve a ofrecer—
  * y no un comprobante marcado como puesto que no está en ningún lado.
  */
+/**
+ * Devuelve si quedó sellado (AUDITORÍA 24 · BE-12): antes tragaba el error
+ * con un log sin ids, y el llamador seguía como si los huérfanos ya no
+ * existieran — en el siguiente viaje se le volvían a ofrecer al chofer.
+ */
 export async function resolverHuerfanos(
   tenantId: string, ids: string[],
   resolucion: 'adjuntado' | 'descartado', viajeId: string | null,
-): Promise<void> {
-  if (!ids.length) return;
+): Promise<boolean> {
+  if (!ids.length) return true;
   const { error } = await acotada(supabaseAdmin().from('comprobante_huerfano').update({
     resuelto_en: new Date().toISOString(), resolucion, viaje_id: viajeId,
   }).in('id', ids).eq('tenant_id', tenantId), 'resolverHuerfanos');
-  if (error) logger.error('huerfano.resolver_error', { err: error.message });
+  if (error) {
+    logger.error('huerfano.resolver_error', { tenant: tenantId, ids, resolucion, viaje: viajeId, err: error.message });
+    return false;
+  }
+  return true;
 }
 
 /** Una fila de la bandeja de la OFICINA (F2 del plan): lo que el humano

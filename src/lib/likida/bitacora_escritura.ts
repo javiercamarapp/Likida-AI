@@ -100,7 +100,14 @@ export type EntidadBitacora =
   // chocado o siniestrado— que cambian lo que el despacho puede ofrecer y el
   // denominador de todo lo que se mide por unidad. Quién lo decidió y cuándo
   // es exactamente lo que hay que poder reconstruir meses después.
-  | 'unidad';
+  | 'unidad'
+  // ADM-8 (auditoría 24): una exportación CSV del Cerebro de ventas
+  // (mapa-prospectos/cerebro.tsx) descarga hasta 33k prospectos con
+  // teléfono/correo de decisores y no dejaba ningún rastro. `entidadId`
+  // es 'csv' (no hay una fila de prospecto singular que nombrar — es la
+  // cartera filtrada completa); `detalle` lleva el conteo y los filtros
+  // elegidos, nunca datos de un prospecto.
+  | 'prospecto';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una

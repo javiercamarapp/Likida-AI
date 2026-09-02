@@ -12,13 +12,14 @@ import { runAgent } from '@/lib/agents/run';
 import { guardiaCifras } from '@/lib/likida/cuadre/guardia';
 import { cuadrarDesdeDB, ventanaDesdeDB } from '@/lib/likida/cuadre/desde_db';
 import { fechaDudosa } from '@/lib/likida/cuadre/fecha_dudosa';
+import { pipelineTenantApagado } from '@/lib/likida/interruptor_tenant';
 import { etiquetaConcepto, copiasDeComprobante } from '@/lib/likida/cuadre/engine';
 import { mensajePideFechaOtraVez } from '@/lib/likida/intake/pedir_fecha';
 import { resumenCuadre } from '@/lib/likida/cuadre/resumen';
-import { PartialExecutionError, isTransientError, type ToolCallRecord } from '@/lib/llm/openrouter';
+import { PartialExecutionError, isTransientError, esErrorDePresupuesto, type ToolCallRecord } from '@/lib/llm/openrouter';
 import type { Gasto } from '@/types/likida';
 import { extraerComprobante } from '@/lib/likida/intake/ocr';
-import { createLlmBudget, LlmBudgetExceededError } from '@/lib/llm/budget';
+import { createLlmBudget } from '@/lib/llm/budget';
 import { hashImagen } from '@/lib/likida/intake/hash';
 import { subirComprobante } from '@/lib/likida/intake/almacen';
 import {
@@ -26,6 +27,7 @@ import {
   mensajeAdjuntados, esAfirmacion, esNegacion,
 } from '@/lib/likida/intake/huerfanos';
 import { decidirFoto } from '@/lib/likida/intake/decidir';
+import { marcarMontoDisputado } from '@/lib/likida/gasto_correccion';
 import {
   anotarFoto, anotarIncidencia, anotarAcuse, pedirTurnoDeConfirmacion, cerrarRafaga, lineaIncidencias,
   bandejasAbiertas,
@@ -45,7 +47,7 @@ import { interpretarAsistencia, atenderAsistenciaChofer, atenderReconocimientoAs
 import { atenderCoordinacionOficina, atenderMensajeProveedor, atenderMedioProveedorSinTexto } from '@/lib/likida/asistencia_coordinacion';
 import { esCaptionPod, guardarPodDelChofer, mensajePod } from '@/lib/likida/pod_wa';
 import { atenderInformeOficina } from '@/lib/likida/informes_wa';
-import { pideInformePdf, mandarInformePdf, atenderPreguntaLibre } from '@/lib/likida/oficina_wa';
+import { pideInformePdf, mandarInformePdf, atenderPreguntaLibre, RESPUESTA_OFICINA_SIN_TIEMPO } from '@/lib/likida/oficina_wa';
 import { atenderAsignacionOficina } from '@/lib/likida/asignar_wa';
 import { violaIndice, llegoTarde } from '@/lib/likida/pg_errores';
 import { mxn, fechaMx } from '@/lib/formato';
@@ -68,15 +70,17 @@ import {
 } from '@/lib/likida/repo';
 import {
   resolveOperador, getOpenViaje, viajeAbiertoDesdeMs, liquidacionRecienteDe, getTenantContext, type ResolvedOperador,
+  sellarEntregaLiquidacion, type LiquidacionReciente,
   loadConversation, saveConversation, claimMessage,
-  acquireViajeLock, intentarLockViaje, TTL_LOCK_CIERRE_MS,
+  acquireViajeLock, intentarLockViaje, TTL_LOCK_CIERRE_MS, nuevoTokenDeLock,
   releaseViajeLock, releaseMessageClaim, completarMessageClaim,
-  intakeDelta, esperarIntake, ConsultaFallida, OperadorAmbiguo, type ConvTurn,
+  intakeDelta, esperarIntake, fotoAnteriorSinProcesar, ConsultaFallida, OperadorAmbiguo, type ConvTurn,
   buscarTenantPorTelefono,
   iniciarRenovacionMessageClaim,
 } from '@/lib/likida/conv';
 import { registrarCosto, registrarCostoWhatsApp, faseDeModelo, vincularCostosALiquidacion } from '@/lib/likida/costos';
-import { sendText, sendButtons, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText, ImagenDemasiadoPesadaError } from '@/lib/meta/client';
+import { sendText, sendButtons, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText, metadatosMedia, MAX_XML_BYTES, ImagenDemasiadoPesadaError } from '@/lib/meta/client';
+import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
 import {
   decidirAcuse, mensajeConfirmar, mensajeAcuse, mensajeRefoto, esPeticionDeFoto,
   mensajeCorregir, mensajeConfirmado, leerBoton, mensajeDemasiadasDudas,
@@ -102,6 +106,14 @@ export interface InboundMessage {
    *  y la nota de talacha de un comprobante cualquiera). */
   text?: string;
   mediaId?: string;           // para image/document
+  /**
+   * Qué era en realidad un mensaje `other` (`sticker`, `video`, `contacts`,
+   * `unsupported`, `list_reply`…). AUDITORÍA 24 · WA-9: sin esto, el chofer
+   * que manda un video de la llanta ponchada recibe una lista de formatos que
+   * no dice ni una palabra de lo que él mandó. Las reacciones no llegan
+   * hasta aquí: el webhook las descarta.
+   */
+  subtipo?: string;
   /** El pin de WhatsApp (type 'location') — ambas o ninguna (webhook). */
   lat?: number;
   lng?: number;
@@ -136,9 +148,11 @@ export interface InboundMessage {
  * La ubicación del chofer (F-Ruta): guarda en `posicion` si el viaje trae
  * unidad y avisa al jefe con el link del mapa. BEST-EFFORT en cada pata por
  * separado: que falle el INSERT no debe callar el aviso al jefe, y viceversa.
- * Nunca lanza — el llamador confirma al chofer pase lo que pase.
+ * Nunca lanza — el llamador confirma al chofer pase lo que pase. Devuelve si
+ * el JEFE recibió el aviso: la frase «ya se la pasé a tu jefe» solo se dice
+ * cuando es verdad (AGEN-5 / WA-4).
  */
-async function registrarUbicacionChofer(op: ResolvedOperador, viajeId: string, lat: number, lng: number): Promise<void> {
+async function registrarUbicacionChofer(op: ResolvedOperador, viajeId: string, lat: number, lng: number): Promise<boolean> {
   const admin = supabaseAdmin();
   try {
     const { data: viaje, error } = await admin.from('viaje')
@@ -159,13 +173,32 @@ async function registrarUbicacionChofer(op: ResolvedOperador, viajeId: string, l
   } catch (e) {
     logger.error('ubicacion.insert', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
   }
+  return avisarUbicacionAlJefe(op, `https://maps.google.com/?q=${lat},${lng}`, 'compartió su ubicación en ruta', { viaje: viajeId });
+}
+
+/**
+ * El link del mapa al jefe, por texto y —fuera de la ventana de 24 h— por
+ * plantilla (`avisarOficina`, AGEN-5 / WA-4). El jefe de una flota grande
+ * RECIBE y no escribe: `sendText` le rebotaba con 131047 en silencio y al
+ * chofer varado a las 02:00 se le afirmaba «ya se la pasé». Nunca lanza;
+ * `false` = el jefe NO lo recibió, y el llamador lo dice así.
+ */
+async function avisarUbicacionAlJefe(op: ResolvedOperador, mapa: string, motivo: string, contexto: Record<string, unknown>): Promise<boolean> {
   try {
     const jefe = await telefonoJefeDe(op.tenantId);
-    if (jefe) {
-      await sendText(jefe, `📍 ${op.nombre} compartió su ubicación en ruta.\nhttps://maps.google.com/?q=${lat},${lng}`);
+    if (!jefe) {
+      logger.warn('ubicacion.sin_jefe', { tenant: op.tenantId, ...contexto });
+      return false;
     }
+    const r = await avisarOficina(jefe, `📍 ${op.nombre} ${motivo}.\n${mapa}`, {
+      parametros: parametrosAvisoOficina(op.nombre, motivo, mapa),
+      contexto: { tenant: op.tenantId, ...contexto },
+    });
+    if (!r.ok) logger.error('ubicacion.aviso_jefe', { tenant: op.tenantId, ...contexto, motivo: r.motivo, codigo: r.codigo });
+    return r.ok;
   } catch (e) {
-    logger.error('ubicacion.aviso_jefe', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+    logger.error('ubicacion.aviso_jefe', { ...contexto, err: e instanceof Error ? e.message : String(e) });
+    return false;
   }
 }
 
@@ -530,8 +563,8 @@ async function atenderTextoOficina(
   cuenta: CuentaOficina,
   from: string,
   texto: string,
-  opciones: { incluirPreguntaLibre: boolean; incluirDespacho: boolean },
-): Promise<boolean> {
+  opciones: { incluirPreguntaLibre: boolean; incluirDespacho: boolean; reloj?: Presupuesto },
+): Promise<boolean | 'reintentar'> {
   // La ASISTENCIA va antes que todo (0198, punto D del plano): el botón
   // `asi_ok:<uuid>` del 🚨 responde a una pregunta nuestra, y un ROJO escrito
   // por el dueño ("chocamos") no puede caer al analista como si fuera una
@@ -726,7 +759,16 @@ async function atenderTextoOficina(
   if (opciones.incluirPreguntaLibre) {
     const rLibre = await atenderPreguntaLibre(
       { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId, nombre: cuenta.nombre }, texto,
+      { reloj: opciones.reloj },
     );
+    // REN-A2: no cupo en lo que queda de la invocación. Se le dice y se pide
+    // al llamador que suelte el claim: la bandeja durable lo trae de vuelta
+    // en otra invocación, con reloj entero. Hasta aquí ningún reconocedor
+    // escribió nada, así que reprocesar el texto es seguro.
+    if (rLibre === RESPUESTA_OFICINA_SIN_TIEMPO) {
+      await sendText(from, rLibre);
+      return 'reintentar';
+    }
     if (rLibre) {
       logger.info('oficina.pregunta_libre', { user: cuenta.userId, rol: cuenta.rol });
       await sendText(from, rLibre);
@@ -910,14 +952,255 @@ async function atenderJornadaSiAplica(args: {
 }
 
 /**
- * Cierra las ráfagas que quedaron abiertas y le dice a cada chofer lo suyo.
+ * Lo que se le contesta a un mensaje que no sabemos leer (AUDITORÍA 24 · WA-9).
+ *
+ * La lista de formatos era la misma para todo, y por eso no servía para nada:
+ * el chofer que manda un video de la llanta ponchada leía «solo proceso texto,
+ * fotos de comprobantes, el XML del CFDI y tu ubicación» sin una palabra sobre
+ * el video. Se nombra lo que mandó y se le dice qué hacer con ESO.
+ *
+ * Las reacciones (👍) no llegan aquí: el webhook las descarta antes del inbox.
+ *
+ * PURA: es texto y se prueba como texto.
+ */
+export function mensajeTipoNoSoportado(subtipo?: string): string {
+  const cola = 'Mándame la foto de tu ticket o el XML. 📸';
+  switch (subtipo) {
+    case 'sticker':
+      return `Ese sticker no me dice nada 🙂. Si necesitas algo, escríbemelo. ${cola}`;
+    case 'video':
+      return `Los videos no los leo 🎥 — una *foto* sí. Si es un ticket, tómale foto; si es un problema del camión, cuéntamelo por escrito. ${cola}`;
+    case 'contacts':
+      return `Los contactos compartidos no los uso 📇. Si necesitas que tu jefe se entere de algo, dímelo por escrito y yo le aviso. ${cola}`;
+    default:
+      return `Por ahora solo proceso texto, fotos de comprobantes, el XML del CFDI y tu ubicación 📍. ${cola}`;
+  }
+}
+
+/**
+ * Un `document` que NO es el XML del CFDI (AUDITORÍA 24 · WA-8).
+ *
+ * WhatsApp deja mandar cualquier cosa por el botón de «Documento», y el
+ * mensaje era uno solo: «necesito el XML del CFDI, no el PDF». El chofer con
+ * iPhone que usa «Documento» para no perder calidad manda su ticket como
+ * `image/heic` y lee que mandó un PDF —que no mandó—, así que no tiene forma
+ * de saber qué hacer. Se le dice lo que pasó y el siguiente paso, por tipo.
+ *
+ * PURA: es texto y se prueba como texto.
+ */
+export function mensajeDocumentoNoEsXml(mime?: string | null): string {
+  const m = (mime ?? '').toLowerCase();
+  if (m.startsWith('image/')) {
+    return 'Esa foto me llegó como *archivo* 📎 y así no la puedo leer. Mándamela otra vez con el botón de la *cámara o la galería* (como foto) y la proceso. 📸';
+  }
+  if (m === 'application/pdf') {
+    return 'El *PDF* del comprobante no lo leo 📄. Mándame el *XML* del CFDI (el archivo .xml que viene junto con el PDF) o una *foto* del ticket. 🧾';
+  }
+  if (m.startsWith('video/') || m.startsWith('audio/')) {
+    return 'Eso no lo puedo leer 🤔. Si es un comprobante, mándame la *foto* del ticket o el *XML* del CFDI. 🧾';
+  }
+  return 'Recibí un documento, pero necesito el *XML* del CFDI (el archivo .xml que te manda la gasolinera por correo), no el PDF. ¿Me lo reenvías? 📎';
+}
+
+/**
+ * ¿Puede este `mime` ser el XML del CFDI? Se responde en NEGATIVO a propósito:
+ * un XML reenviado por correo llega igual como `text/xml`, `application/xml`
+ * o `application/octet-stream` según el cliente, y bloquear por lista blanca
+ * rebotaría comprobantes buenos. Solo se descarta lo que con certeza no lo es.
+ */
+export function puedeSerXml(mime?: string | null): boolean {
+  const m = (mime ?? '').toLowerCase();
+  if (!m) return true;   // Meta no lo dijo: se intenta, como siempre.
+  return !(m.startsWith('image/') || m.startsWith('video/') || m.startsWith('audio/') || m === 'application/pdf');
+}
+
+/** El error de fondo, sin el envoltorio del ciclo de tools (ver arriba). */
+function causaDeFondo(e: unknown): unknown {
+  return e instanceof PartialExecutionError ? e.cause : e;
+}
+
+/** Colofón que todo cuadre DEGRADADO lleva: dice sin rodeos que el viaje sigue
+ *  abierto (AUDITORÍA 24, AGEN-10, reincidente desde la 22). El texto se
+ *  añade DESPUÉS de las guardias, porque `guardiaCifras` sustituye el `reply`
+ *  entero por `resumenCuadre` y se lo comería. */
+const COLOFON_NO_CERRE = 'Todavía *NO* cerré tu liquidación: tu viaje sigue abierto. En un momento vuelve a escribirme *listo* y la cierro.';
+const COLOFON_SIN_PRESUPUESTO = 'Hoy tu flota ya agotó su cupo de IA, así que todavía *NO* cerré tu liquidación: tu viaje sigue abierto y tus comprobantes quedan guardados. Mañana escríbeme *listo* otra vez, o pídele a tu contralor que suba el tope hoy.';
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · AGEN-4 (ALTO) — TODA muerte posterior al commit del cierre
+// aterriza en la rama «sin viaje abierto» del siguiente «listo». Antes esa
+// rama decía «pídeselo a tu contralor» sin mandar el PDF que existe ni avisar
+// al jefe. Ahora lee los dos sellos de la 0279 y ENTREGA lo que falte: el PDF
+// del operador si nunca salió, el aviso a la oficina si nunca salió. Lo
+// sellado no se repite. Best-effort en cada pata, nunca lanza.
+// ═══════════════════════════════════════════════════════════════════════════
+type EntregaPendiente = {
+  pdf: 'mandado' | 'ya_entregado' | 'sin_pdf' | 'fallo';
+  jefe: 'avisado' | 'ya_avisado' | 'fallo';
+};
+
+async function entregarCierrePendiente(op: ResolvedOperador, telefono: string, liq: LiquidacionReciente): Promise<EntregaPendiente> {
+  const admin = supabaseAdmin();
+  const ctx = { tenant: op.tenantId, viaje: liq.viajeId, liq: liq.liquidacionId, reentrega: true };
+
+  let pdf: EntregaPendiente['pdf'];
+  if (!liq.pdfUrl) {
+    pdf = 'sin_pdf';
+  } else if (liq.entregadaOperadorEn) {
+    pdf = 'ya_entregado';
+  } else {
+    try {
+      // El ejemplar del OPERADOR (`tools.ts`), igual que el camino feliz.
+      const firma = await acotada(admin.storage.from('liquidaciones').createSignedUrl(`${op.tenantId}/${liq.viajeId}-operador.pdf`, TTL_FIRMA_PDF_SEGUNDOS), 'createSignedUrl.reentrega');
+      if (firma.error || !firma.data?.signedUrl) throw new Error(firma.error?.message ?? 'storage no devolvió URL firmada');
+      const r = await sendDocument(telefono, firma.data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
+      if (!r.ok) {
+        logger.error('pdf.no_entregado', { ...ctx, codigo: r.codigo, error: r.error });
+        pdf = 'fallo';
+      } else {
+        await registrarCostoWhatsApp(op.tenantId, liq.viajeId);
+        await sellarEntregaLiquidacion(op.tenantId, liq.liquidacionId, 'entregada_operador_en');
+        pdf = 'mandado';
+      }
+    } catch (e) {
+      logger.error('pdf.no_entregado', { ...ctx, err: e instanceof Error ? e.message : String(e), codigo: codigoDeError(e) });
+      pdf = 'fallo';
+    }
+  }
+
+  let jefe: EntregaPendiente['jefe'];
+  if (liq.avisadaOficinaEn) {
+    jefe = 'ya_avisado';
+  } else {
+    try {
+      let urlPdfJefe: string | null = null;
+      if (liq.pdfUrl) {
+        const firma = await acotada(admin.storage.from('liquidaciones').createSignedUrl(`${op.tenantId}/${liq.viajeId}.pdf`, TTL_FIRMA_PDF_SEGUNDOS), 'createSignedUrl.contralor');
+        if (firma.error || !firma.data?.signedUrl) logger.warn('cierre.pdf_jefe_sin_url', { ...ctx, err: firma.error?.message ?? 'storage no devolvió URL firmada' });
+        else urlPdfJefe = firma.data.signedUrl;
+      }
+      const rj = await avisarCierreAlJefe({ tenantId: op.tenantId, viajeId: liq.viajeId, urlPdf: urlPdfJefe, telefonoOperador: telefono });
+      if (rj.enviado) {
+        await sellarEntregaLiquidacion(op.tenantId, liq.liquidacionId, 'avisada_oficina_en');
+        jefe = 'avisado';
+      } else {
+        logger.warn('cierre.jefe_no_avisado', { ...ctx, motivo: rj.motivo });
+        jefe = 'fallo';
+      }
+    } catch (e) {
+      logger.error('cierre.aviso_jefe_falló', { ...ctx, err: e instanceof Error ? e.message : String(e) });
+      jefe = 'fallo';
+    }
+  }
+  return { pdf, jefe };
+}
+
+/** Lo que se le dice al chofer según lo que de verdad pasó con su PDF. Ninguna
+ *  frase afirma una entrega que Meta no aceptó. */
+function mensajeCierreConfirmado(e: EntregaPendiente): string {
+  const cabeza = 'Tu último viaje ya quedó liquidado ✅ — no tienes ninguno abierto ahorita.';
+  switch (e.pdf) {
+    case 'mandado': return `${cabeza} Te acabo de mandar tu PDF 📄`;
+    case 'ya_entregado': return `${cabeza} Tu PDF ya te lo había mandado; si no lo ves, pídeselo a tu contralor: él ya lo tiene en el panel. 👍`;
+    case 'sin_pdf': return `${cabeza} El PDF de esa liquidación no se generó; avísale a tu contralor para que la revise en el panel.`;
+    case 'fallo': return `${cabeza} El PDF no se te pudo entregar por el chat; pídeselo a tu contralor: él ya lo tiene en el panel. 🙏`;
+  }
+}
+
+/** TTL de las URLs firmadas de los PDF (segundos). Ver AGEN-9: el outbox
+ *  reintenta a ≥ 5 min, así que una firma de 60 s nacía muerta. */
+/**
+ * Cuánto vive la URL firmada del PDF que se le manda al chat.
+ *
+ * ── POR QUÉ YA NO SON 60 s (AUDITORÍA 24 · AGEN-9, MEDIO) ─────────────────
+ *
+ * Las rondas 5-13 lo bajaron a 60 s con un razonamiento correcto —Meta baja
+ * el `link` en segundos y el objeto es privado— y con una regla explícita:
+ * subirlo solo cuando `pdf.no_entregado` traiga un error de STORAGE, no de
+ * Meta. Esa evidencia llegó por otro lado: `sendDocument` ENCOLA el payload
+ * entero —`link` incluido— cuando el POST a Meta se cae por red, y el outbox
+ * lo reintenta a los 5 minutos (`RETRASO_AMBIGUO_SEGUNDOS = 300`) y después
+ * con backoff `15·2^n` hasta ocho veces. O sea: cada PDF que se cayó por red
+ * nacía muerto —a los 300 s la firma lleva 240 s vencida—, Meta contestaba
+ * «medio no descargable» (no reintentable), y a la octava el mensaje moría
+ * con su alerta de `salida_muerta`. Ocho intentos garantizados de fallar y
+ * una alerta operativa por cada PDF que tocó una red mala.
+ *
+ * 15 minutos cubren el reintento de los 5 y los tres siguientes del backoff.
+ * No cubren los ocho, y no se estira más por eso: lo correcto de verdad es
+ * que el outbox vuelva a firmar al enviar (anotado en CIERRE.md, toca el cron
+ * de `wa-outbox`), y este número es lo que hace que el caso normal —una red
+ * mala de diez segundos— entregue el PDF en vez de gastar una hora de cola.
+ */
+const TTL_FIRMA_PDF_SEGUNDOS = 900;
+
+/**
+ * LA BASE ES LA AUTORIDAD sobre si un viaje cerró.
+ *
+ * AUDITORÍA 24, AGEN-1 (CRÍTICO, 3ª ronda) + AGEN-A1/BE-1 (ALTO, 2ª ronda).
+ * `guardar_liquidacion_tx` puede COMMITEAR y aun así la tool reportar fallo:
+ * `acotada` se rinde a los 8 s y el RPC termina del lado del servidor; o el
+ * reloj del agente vence con la tool en vuelo. En los dos casos el viaje
+ * queda `liquidado`, los PDF en el bucket, y el `ToolCallRecord` dice
+ * `error`. Por eso, tras CUALQUIER resultado no-OK de `guardar_liquidacion`,
+ * se relee la liquidación y se narra lo que la base dice — en el camino feliz
+ * y en el de excepción, con UN SOLO registro sintético.
+ *
+ * El registro sintético habla el VOCABULARIO DE LA TOOL (`pdf_generado`,
+ * `pdf_contralor_generado`), que es lo que leen los consumidores de abajo
+ * (`agentTools.find(...).result.pdf_generado`, `guardia.ts`). El anterior
+ * traía `pdf_url` —vocabulario de la tabla— y nadie lo leía: al chofer se le
+ * negaba un PDF que sí existía. Los dos ejemplares se suben ANTES del RPC
+ * (`tools.ts`), así que `pdf_url != null` implica que existen ambos.
+ *
+ * Tres respuestas, nunca dos: si la lectura truena, `no_verificable` — un
+ * error de red no puede leerse como «no se cerró».
+ */
+async function confirmarCierreEnBase(tenantId: string, viajeId: string): Promise<
+  | { estado: 'cerrado'; liqId: string; registro: ToolCallRecord }
+  | { estado: 'abierto' }
+  | { estado: 'no_verificable'; err: string }
+> {
+  try {
+    const liq = await getLiquidacionDeViaje(tenantId, viajeId);
+    if (!liq) return { estado: 'abierto' };
+    const hayPdf = liq.pdfUrl != null;
+    return {
+      estado: 'cerrado',
+      liqId: liq.id,
+      registro: {
+        toolName: 'guardar_liquidacion',
+        args: {},
+        result: { liquidacion_id: liq.id, pdf_generado: hayPdf, pdf_contralor_generado: hayPdf },
+        durationMs: 0,
+      } as ToolCallRecord,
+    };
+  } catch (e) {
+    return { estado: 'no_verificable', err: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * Cierra la ráfaga del chofer que se quedó sin reloj y le dice lo suyo.
  *
  * AUDITORÍA 22, AGEN-A2. Solo habla si hay algo que decir: una libreta sin
  * incidencias y sin acuses no genera un mensaje — el módulo de ráfaga existe
  * precisamente para no mandar siete.
+ *
+ * AUDITORÍA 24, AGEN-A2/BE-2 (ALTO, 2ª ronda): cerraba y BORRABA las libretas
+ * de TODOS los choferes del proceso. Con pool de 5 cadenas y reloj compartido,
+ * `sin_tiempo` es el final NORMAL de cada vuelta del cron: la cadena que se
+ * quedaba sin reloj le mandaba al chofer A «de tus 4 fotos, 2 no las leí»
+ * mientras su 4ª foto seguía en vuelo, y el cierre real le mandaba después
+ * «de tus 2 fotos…» sobre una libreta recreada en cero. Dos cifras, ninguna
+ * verdadera. Ahora recibe el teléfono del mensaje que se quedó sin presupuesto
+ * y cierra SOLO esa libreta; las de los demás siguen vivas para su propio
+ * cierre.
  */
-async function cerrarRafagasPorCorte(): Promise<void> {
-  for (const { viajeId, telefono } of bandejasAbiertas()) {
+async function cerrarRafagasPorCorte(telefono: string): Promise<void> {
+  for (const { viajeId, telefono: tel } of bandejasAbiertas()) {
+    if (tel !== telefono) continue;
     const b = cerrarRafaga(viajeId);
     if (!telefono || b.vistas === 0) continue;
     const linea = lineaIncidencias(b.vistas, b.incidencias);
@@ -958,7 +1241,7 @@ export async function processInbound(msg: InboundMessage, opts: OpcionesInbound 
     //
     // Se cierra lo que haya y se dice. Cuesta un envío; el silencio costaba
     // que el chofer no supiera que tres de sus fotos no se leyeron.
-    await cerrarRafagasPorCorte();
+    await cerrarRafagasPorCorte(msg.from);
     return 'sin_tiempo';
   }
 
@@ -1024,6 +1307,8 @@ export async function processInbound(msg: InboundMessage, opts: OpcionesInbound 
  *  claim y el reloj. Nunca lanza (el `catch` general vive aquí). */
 async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClaim: () => Promise<void>, opts: OpcionesInbound): Promise<void> {
   let lockedViaje: string | null = null;
+  /** BE-11: la firma del lease que TOMÓ este turno; solo con ella se suelta. */
+  let tokenViaje: string | undefined;
   // Contexto para el `catch` general. Vive FUERA del `try` a propósito: sin esto
   // el log de un fallo salía como `{ id, de, err }` — sin tenant, sin viaje y sin
   // saber si la liquidación había cerrado—, así que era imposible reconstruir
@@ -1140,9 +1425,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // necesita (un dueño que maneja es su propio operador). Aquí entra con
         // el analista ENCENDIDO: este número no es de nadie más, así que una
         // pregunta suelta es suya y no se le disputa a ningún acuse de ruta.
-        if (msg.type === 'text' && msg.text
-            && await atenderTextoOficina(cuenta, msg.from, msg.text, { incluirPreguntaLibre: true, incluirDespacho: true })) {
-          return;
+        if (msg.type === 'text' && msg.text) {
+          const rOficina = await atenderTextoOficina(cuenta, msg.from, msg.text, { incluirPreguntaLibre: true, incluirDespacho: true, reloj });
+          if (rOficina === 'reintentar') { await soltarClaim(); return; }
+          if (rOficina) return;
         }
         const quien = cuenta.nombre ? `${cuenta.nombre}` : 'Qué tal';
         // Se le dice lo que SÍ puede hacer hoy por aquí y se le manda al panel
@@ -1199,6 +1485,20 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       }
 
       await sendText(msg.from, 'Hola, no te tengo registrado como operador. Pídele a tu flota que te dé de alta en Likida. 🚛');
+      return;
+    }
+    // ── AUDITORÍA 24, ADM-6: EL INTERRUPTOR POR FLOTA (mig. 0297) ───────────
+    //
+    // `interruptor` (0110) es global — apagarlo corta a las 800 unidades de
+    // Innovativos junto con las demás flotas del piloto. Esta palanca es por
+    // (tenant, pipeline): Javier puede frenar SOLO el pipeline de whatsapp de
+    // una flota con un incidente, sin tocar a las otras. Se pregunta aquí
+    // —ya hay tenant, todavía no arrancó OCR ni cuadre— y se avisa (a
+    // diferencia del kill switch global, este SÍ contesta: solo un tenant
+    // se ve afectado, no todo el canal de WhatsApp).
+    if (await pipelineTenantApagado(op.tenantId, 'whatsapp')) {
+      logger.warn('wa.pipeline_tenant_apagado', { tenant: op.tenantId, operador: op.operadorId });
+      await sendText(msg.from, 'Tu flota puso en pausa la recepción automática por WhatsApp ahorita. Guarda tu foto o mensaje y reenvíamelo más tarde, o contacta a tu oficina.');
       return;
     }
     // ── CAPA E1: LA NOTA DE VOZ DEL CHOFER SE VUELVE TEXTO, AQUÍ Y SOLO AQUÍ ─
@@ -1377,8 +1677,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // «ya llegué» y «listo», que son con los que se cierra un viaje. Sin
           // viaje abierto no hay nada de ruta que decir y la pregunta es del
           // dueño. Lo que ningún reconocedor reclame sigue su camino intacto.
-          && await atenderTextoOficina(cuentaPropia, msg.from, msg.text, { incluirPreguntaLibre: !viajeId, incluirDespacho: !viajeId })) {
-        return;
+      ) {
+        const rOficina = await atenderTextoOficina(cuentaPropia, msg.from, msg.text, { incluirPreguntaLibre: !viajeId, incluirDespacho: !viajeId, reloj });
+        if (rOficina === 'reintentar') { await soltarClaim(); return; }
+        if (rOficina) return;
       }
     }
 
@@ -1555,9 +1857,37 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             }
             return;
           }
+          // ── AUDITORÍA 24 · WA-2 (ALTO): EL VOUCHER SIN VIAJE NO ES UN GASTO ──
+          // Con viaje, `decidirFoto` ya sabe que el voucher de la terminal (o el
+          // acercamiento al código) se PEGA al ticket y no se da de alta. Esta
+          // rama reutilizaba el `gasto` crudo de la extracción: el voucher
+          // entraba a la sala de espera CON monto, se ofrecía junto al ticket
+          // («Tengo 2 comprobantes tuyos, $5,780») y un «sí» cobraba la misma
+          // carga dos veces. Se guarda para la oficina —la foto es evidencia—
+          // pero con `monto: 0`, marcado como lo que es, y por eso nunca se
+          // ofrece (solo se ofrece lo que tiene monto).
+          if (!ex.legible && (ex.motivo === 'solo_codigo' || ex.motivo === 'solo_pago')) {
+            const esVoucher = ex.motivo === 'solo_pago';
+            const guardado = await guardarHuerfano(op.tenantId, op.operadorId, {
+              gasto: {
+                ...ex.gasto, monto: 0, imgHash, ...(ruta ? { imagenUrl: ruta } : {}),
+                ocrExtra: { ...(ex.gasto.ocrExtra ?? {}), documento: esVoucher ? 'voucher_pago' : 'acercamiento_codigo', montoDelPapel: ex.gasto.monto },
+              },
+              motivo: 'sin_viaje', rutaImagen: ruta,
+            });
+            logger.info('huerfano.voucher_sin_viaje', { tenant: op.tenantId, operador: op.operadorId, motivo: ex.motivo, montoDelPapel: ex.gasto.monto, ok: guardado });
+            if (!guardado) {
+              await sendText(msg.from, 'No pude guardar ese comprobante ⚙️. Guarda el papel y vuelve a mandarlo en un rato, por favor.');
+              return;
+            }
+            await sendText(msg.from, esVoucher
+              ? 'Ese es el voucher de la terminal 💳, no el ticket. Lo guardé para tu oficina, pero lo que cuenta en tu liquidación es el ticket de la gasolinera: mándamelo cuando tengas viaje abierto. 🧾'
+              : 'Ese es el acercamiento al código 🔍, no el ticket completo. Lo guardé para tu oficina, pero lo que cuenta es el ticket entero: mándamelo cuando tengas viaje abierto. 🧾');
+            return;
+          }
           // Ilegible: se le pide otra ANTES de guardar algo que no se puede usar.
           // Aquí sí es la foto (borrosa, cortada, oscura) y reenviarla SIRVE.
-          if (!ex.legible && ex.motivo !== 'solo_codigo' && ex.motivo !== 'solo_pago') {
+          if (!ex.legible) {
             await sendText(msg.from, 'Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?');
             return;
           }
@@ -1589,13 +1919,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       if (msg.type === 'location' && typeof msg.lat === 'number' && typeof msg.lng === 'number') {
         const anclada = await anclarUbicacionIncidencia(op.tenantId, op.operadorId, msg.lat, msg.lng);
         if (anclada) {
-          try {
-            const jefe = await telefonoJefeDe(op.tenantId);
-            if (jefe) await sendText(jefe, `📍 ${op.nombre} compartió su ubicación (emergencia en curso).\nhttps://maps.google.com/?q=${msg.lat},${msg.lng}`);
-          } catch (e) {
-            logger.error('ubicacion.aviso_jefe', { operador: op.operadorId, err: e instanceof Error ? e.message : String(e) });
-          }
-          await sendText(msg.from, '📍 Recibida tu ubicación — quedó en tu reporte de emergencia y ya se la pasé a tu jefe.');
+          const avisado = await avisarUbicacionAlJefe(op, `https://maps.google.com/?q=${msg.lat},${msg.lng}`, 'compartió su ubicación (emergencia en curso)', { operador: op.operadorId });
+          await sendText(msg.from, avisado
+            ? '📍 Recibida tu ubicación — quedó en tu reporte de emergencia y ya se la pasé a tu jefe.'
+            : '📍 Recibida tu ubicación — quedó en tu reporte de emergencia, pero NO pude pasársela a tu jefe por WhatsApp. Si es urgente, márcale directo.');
           return;
         }
         // Sin expediente vivo, el pin sin viaje sigue al mensaje de abajo.
@@ -1653,7 +1980,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         const reciente = await liquidacionRecienteDe(op.tenantId, op.operadorId);
         if (reciente) {
           logger.info('sin_viaje.cierre_confirmado', { tenant: op.tenantId, operador: op.operadorId, viaje: reciente.viajeId, liq: reciente.liquidacionId });
-          await sendText(msg.from, 'Tu último viaje ya quedó liquidado ✅ — no tienes ninguno abierto ahorita. Si no te llegó tu PDF, pídeselo a tu contralor: él ya lo tiene en el panel. 👍');
+          // AGEN-4: se ENTREGA lo que ese cierre dejó pendiente (PDF al
+          // chofer, aviso al jefe) y se narra lo que de verdad pasó.
+          const entrega = await entregarCierrePendiente(op, msg.from, reciente);
+          logger.info('sin_viaje.cierre_entregado', { tenant: op.tenantId, viaje: reciente.viajeId, liq: reciente.liquidacionId, ...entrega });
+          await sendText(msg.from, mensajeCierreConfirmado(entrega));
           return;
         }
       } catch (e) {
@@ -1848,6 +2179,15 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // ruido. Lo que cambia el caso es que el gasto que empata tenga la
           // fecha en duda, porque entonces esa foto NO puede aportar nada:
           // es la misma que ya se leyó mal.
+          //
+          // AUDITORÍA 24 · AGEN-11 (BAJO): dentro de una ráfaga, callar rompe
+          // la cuenta. `anotarFoto` ya la contó en «de tus 5 fotos», el gasto
+          // no se duplicó, y el resumen decía «llevo 4 comprobantes» sin
+          // explicar la resta: el chofer la reenvía y vuelve el silencio. Se
+          // anota en la libreta (no se manda nada por sí sola: para una foto
+          // suelta el silencio SIGUE siendo lo correcto) y el resumen de la
+          // ráfaga dice «*1* venía repetida (ya la tenía)».
+          let avisadaPorFecha = false;
           try {
             const [previo, v] = await Promise.all([
               gastoPorHash(viajeId, imgHash, op.tenantId),
@@ -1855,11 +2195,14 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             ]);
             if (previo && v && fechaDudosa(previo.fecha, v)) {
               await say(`Esa es la *misma foto* que ya me habías mandado 🔁, así que la fecha sigue igual. Necesito una foto *nueva* de ese ticket de ${mxn(previo.monto)} —tomada otra vez, no reenviada— enfocando la parte donde viene la fecha. 📸`);
+              avisadaPorFecha = true;
             }
+            if (!avisadaPorFecha) anotarIncidencia(viajeId, { tipo: 'repetida', monto: previo?.monto ?? null });
           } catch (e) {
             // Best-effort: el dedup ya hizo su trabajo. Fallar aquí no puede
             // costar un gasto, solo un aviso.
             logger.warn('foto.dedup_aviso_falló', { err: e instanceof Error ? e.message : String(e) });
+            if (!avisadaPorFecha) anotarIncidencia(viajeId, { tipo: 'repetida' });
           }
           return; // ya la teníamos: no re-OCR, no duplicar gasto
         }
@@ -2009,7 +2352,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           anotarIncidencia(viajeId, {
             tipo: 'fallo_tecnico',
             mensajeSolo: guardado
-              ? 'Se me trabó a mí al leer ese comprobante ⚙️ — no es tu foto. Ya lo guardé, así que *no se pierde*. ¿Me lo reenvías en un momento? Si no alcanza a entrar en este viaje, te lo ofrezco en el siguiente. 📸'
+              // AGEN-12 (BAJO): NO se promete «te lo ofrezco en el siguiente» —
+              // un huérfano sin monto nunca se ofrece; lo que lo recupera es
+              // el reenvío, y eso es lo que se pide.
+              ? 'Se me trabó a mí al leer ese comprobante ⚙️ — no es tu foto. Guardé la imagen para tu oficina, así que el papel *no se pierde*, pero no alcancé a leer el monto: reenvíamela en un momento para poder contarla. 📸'
               : 'Se me trabó a mí al leer ese comprobante ⚙️ y tampoco lo pude guardar. Conserva el ticket y reenvíamelo en un rato, por favor. 🙏',
           });
           return;
@@ -2630,10 +2976,26 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         return;
       }
       try {
+        // ── AUDITORÍA 24 · WA-8 (MEDIO): QUÉ ES Y CUÁNTO PESA, ANTES ────────
+        // WhatsApp acepta documentos de 100 MB y esto los bajaba ENTEROS a
+        // memoria para después descubrir que no eran un XML. Una llamada a
+        // los metadatos lo decide barato, y de paso permite contestar por lo
+        // que de verdad mandó: el HEIC del iPhone leía «no el PDF».
+        const metaDoc = await metadatosMedia(msg.mediaId);
+        if (metaDoc && !puedeSerXml(metaDoc.mimeType)) {
+          logger.info('xml.no_es_xml', { viaje: viajeId, mime: metaDoc.mimeType, bytes: metaDoc.fileSize });
+          await say(mensajeDocumentoNoEsXml(metaDoc.mimeType));
+          return;
+        }
+        if (metaDoc?.fileSize != null && metaDoc.fileSize > MAX_XML_BYTES) {
+          logger.warn('xml.demasiado_pesado', { viaje: viajeId, bytes: metaDoc.fileSize });
+          await say('Ese archivo pesa demasiado para ser el XML de un comprobante 📎. Mándame el *.xml* que te manda la gasolinera, o una *foto* del ticket. 🧾');
+          return;
+        }
         const xmlText = await downloadMediaAsText(msg.mediaId);
         const xml = xmlText ? parseCfdiXml(xmlText) : null;
         if (!xml || !xml.uuid) {
-          await say('Recibí un documento, pero necesito el *XML* del CFDI (el archivo .xml que te manda la gasolinera por correo), no el PDF. ¿Me lo reenvías? 📎');
+          await say(mensajeDocumentoNoEsXml(metaDoc?.mimeType));
           return;
         }
 
@@ -2688,7 +3050,12 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // emparejamiento contra la carrera. Si sigue ocupado tras esperar, se le
         // pide al operador que reenvíe en vez de proceder sin exclusividad —
         // proceder es exactamente la carrera que esto existe para cerrar.
-        const xmlLock = await acquireViajeLock(viajeId, { maxWaitMs: reloj.acotar(12_000) });
+        // BE-11: el lease se FIRMA, y el TTL es el mismo que el del cierre
+        // (por omisión). Con 60 s contra 120 s, este lease vencía a media
+        // escritura, el «listo» entraba encima, y el `finally` de aquí le
+        // borraba el lock al cierre.
+        const xmlToken = nuevoTokenDeLock();
+        const xmlLock = await acquireViajeLock(viajeId, { maxWaitMs: reloj.acotar(12_000), token: xmlToken });
         if (!xmlLock) {
           logger.warn('xml.lock_ocupado', { viaje: viajeId, tenant: op.tenantId });
           await sendText(msg.from, 'Estoy terminando de procesar otro XML de tu viaje 🙏. Reenvía este en un momento.');
@@ -2706,7 +3073,16 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             // dos veces, con su IVA y su IEPS encima. Un unique(cfdi_uuid) no lo
             // arregla: el del ticket es NULL y NULL no colisiona.
             const porTicket = emparejarXmlConTicket({ total: xml.total, fecha: xml.fecha }, gastos);
-            if (porTicket) { match = porTicket; eraTicket = true; }
+            if (porTicket) {
+              match = porTicket; eraTicket = true;
+              // AUDITORÍA 24 · WA-5: cuando el empate fue APROXIMADO (el OCR
+              // leyó $2,890.00 sobre un CFDI de $2,890.50), el XML corrige el
+              // monto —`updateGastoCfdiXml` escribe su `total`, que viene de
+              // un comprobante timbrado—. Queda dicho en el log: es la única
+              // señal de que una cifra del chofer se movió sin que él lo pidiera.
+              const brecha = xml.total != null ? Math.abs(porTicket.monto - xml.total) : 0;
+              if (brecha > 0.01) logger.info('xml.monto_corregido_por_cfdi', { viaje: viajeId, gasto: porTicket.id, leido: porTicket.monto, cfdi: xml.total });
+            }
           }
           let gastoId: string;
           if (match) {
@@ -2811,7 +3187,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // 1.8: conservar el XML crudo (CFF 30). Best-effort.
           await saveCfdiXmlRaw(op.tenantId, xml.uuid, gastoId, xmlText!);
         } finally {
-          await releaseViajeLock(viajeId);
+          await releaseViajeLock(viajeId, xmlToken);
         }
       } finally {
         await intakeDelta(viajeId, -1); // libera el contador pase lo que pase
@@ -2827,20 +3203,23 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // best-effort menos la confirmación: perder el INSERT es malo, dejarlo sin
     // respuesta creyendo que nadie la vio es peor.
     if (msg.type === 'location' && typeof msg.lat === 'number' && typeof msg.lng === 'number') {
-      await registrarUbicacionChofer(op, viajeId, msg.lat, msg.lng);
+      const avisadoJefe = await registrarUbicacionChofer(op, viajeId, msg.lat, msg.lng);
       // c4-6: el pin que el propio bot pide ("mándame tu ubicación") ahora SÍ
       // llega a donde la cascada y el mensaje al proveedor lo van a usar — el
       // expediente de asistencia vivo del chofer, si lo hay. Best-effort.
       const anclada = await anclarUbicacionIncidencia(op.tenantId, op.operadorId, msg.lat, msg.lng);
-      await say(anclada
-        ? '📍 Recibida tu ubicación — quedó en tu viaje Y en tu reporte de emergencia, y ya se la pasé a tu jefe.'
-        : '📍 Recibida tu ubicación — queda registrada en tu viaje y ya se la pasé a tu jefe.');
+      // AGEN-5 / WA-4: «ya se la pasé a tu jefe» solo cuando Meta la aceptó
+      // (texto o plantilla). Si no, se dice y se le da la salida.
+      const donde = anclada ? 'quedó en tu viaje Y en tu reporte de emergencia' : 'queda registrada en tu viaje';
+      await say(avisadoJefe
+        ? `📍 Recibida tu ubicación — ${donde}, y ya se la pasé a tu jefe.`
+        : `📍 Recibida tu ubicación — ${donde}, pero NO pude pasársela a tu jefe por WhatsApp. Si es urgente, márcale directo.`);
       return;
     }
 
     // ── TEXTO: corre el agente UNA vez → respuesta consolidada ───────────────
     if (!(msg.type === 'text' && msg.text)) {
-      await say('Por ahora solo proceso texto, fotos de comprobantes, el XML del CFDI y tu ubicación 📍. Mándame la foto de tu ticket o el XML. 📸');
+      await say(mensajeTipoNoSoportado(msg.subtipo));
       return;
     }
 
@@ -2860,10 +3239,17 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // NO se toca el gasto. El chofer dijo que el monto está mal, pero no dijo
         // cuál es el bueno: corregirlo a un número inventado sería peor que
         // dejarlo mal leído, y ponerlo en cero le quitaría un gasto que sí hizo.
-        // Se le pide la cifra y la corrección entra por el camino normal del
-        // agente, que ya sabe corregir un comprobante.
+        //
+        // AUDITORÍA 24 · WA-3 (ALTO): lo que faltaba era el RASTRO. Esto era un
+        // `logger.warn` que muere con la invocación y un mensaje que lo mandaba
+        // con su oficina — la cual no tenía forma de enterarse de que él había
+        // dicho nada. Ahora la fila queda marcada, y el texto solo lo afirma si
+        // la marca de verdad se escribió.
         logger.warn('acuse.rechazado', { viaje: viajeId, gasto: boton.gastoId });
-        await say(mensajeCorregir());
+        const marcado = await marcarMontoDisputado({
+          tenantId: op.tenantId, gastoId: boton.gastoId, quien: op.operadorId,
+        });
+        await say(mensajeCorregir(marcado));
       }
       return;
     }
@@ -3088,7 +3474,9 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // ofrecimiento le enseñaría al operador "• Otro · $0.00", que no le dice
     // nada. Se conservan (la foto y la fila son la evidencia de que existió) y
     // se recuperan reenviando la foto, que es lo que su propio mensaje le pide.
-    const enEspera = (await getHuerfanos(op.tenantId, op.operadorId))
+    // WA-7: el filtro de monto va en la base (antes del tope de 50); el
+    // `.filter` de aquí se queda como cinturón para el `gasto` mal formado.
+    const enEspera = (await getHuerfanos(op.tenantId, op.operadorId, { soloConMonto: true }))
       .filter((h) => h.gasto.monto > 0);
     if (enEspera.length) {
       const ofrecidos = enEspera.filter((h) => h.ofrecidoEn);
@@ -3109,11 +3497,18 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           } catch (e) {
             // Un duplicado benigno también cuenta como resuelto: el comprobante
             // YA está en el viaje, que es lo que el operador pidió.
-            if (violaIndice(e, 'uq_gasto_img_hash') || violaIndice(e, 'uq_gasto_cfdi_uuid')) { puestos.push(h.id); continue; }
-            logger.error('huerfano.adjuntar_error', { err: e instanceof Error ? e.message : String(e) });
+            // AUDITORÍA 24 · BE-12: `gasto_pkey` también. El huérfano guarda el
+            // `gasto` con su id ya fijado (`ocr.ts` lo asigna al extraer); si un
+            // «sí» anterior insertó y `resolverHuerfanos` falló, el segundo «sí»
+            // choca contra la llave primaria (el índice de menor OID se evalúa
+            // primero), no contra `uq_gasto_img_hash` — y sin esto el
+            // comprobante se reofrecía para siempre con un error sin fila.
+            if (violaIndice(e, 'uq_gasto_img_hash') || violaIndice(e, 'uq_gasto_cfdi_uuid') || violaIndice(e, 'gasto_pkey')) { puestos.push(h.id); continue; }
+            logger.error('huerfano.adjuntar_error', { huerfanoId: h.id, gastoId: h.gasto.id, viaje: viajeId, tenant: op.tenantId, err: e instanceof Error ? e.message : String(e) });
           }
         }
-        await resolverHuerfanos(op.tenantId, puestos, 'adjuntado', viajeId);
+        const resueltos = await resolverHuerfanos(op.tenantId, puestos, 'adjuntado', viajeId);
+        if (!resueltos) logger.error('huerfano.sin_sellar', { viaje: viajeId, tenant: op.tenantId, huerfanos: puestos, nota: 'los gastos SÍ quedaron en el viaje; el siguiente «sí» los reconoce por gasto_pkey' });
         const ok = ofrecidos.filter((h) => puestos.includes(h.id));
         logger.info('huerfano.adjuntados', { viaje: viajeId, cuantos: ok.length, de: ofrecidos.length });
         // EL NETO, con el MISMO `copiasDeComprobante` que usan el motor y el PDF.
@@ -3209,6 +3604,25 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     const intakeOk = await esperarIntake(viajeId, reloj.acotar(20_000));
     if (!intakeOk) logger.warn('intake.barrera_timeout', { viaje: viajeId, restanteMs: reloj.restante() });
 
+    // ── AUDITORÍA 24 · AGEN-6 (MEDIO): EL «LISTO» ADELANTADO ────────────────
+    //
+    // La barrera de arriba solo ve las fotos que YA hicieron `+1`. Meta no
+    // garantiza el orden entre POSTs: la foto que el chofer mandó ANTES puede
+    // aterrizar en el inbox DESPUÉS de este «listo», y entonces el contador
+    // está en cero porque nadie lo tocó — se cierra sin el último ticket, y la
+    // liquidación es irreversible (0036/0037). La 0280 pone el orden de la
+    // cola por la hora del MENSAJE; esto cubre al turno que ya está corriendo.
+    //
+    // Se pregunta aquí y no antes a propósito: después de la barrera la foto
+    // ya tuvo su ventana para llegar a la tabla. Y solo para un «listo» con
+    // hora de Meta — sin ella no se adivina, igual que la guardia de arriba.
+    if (msg.timestampMs && pareceCierre(msg.text) && await fotoAnteriorSinProcesar(msg.from, msg.timestampMs)) {
+      logger.warn('cierre.foto_anterior_pendiente', { viaje: viajeId, tenant: op.tenantId, mensajeMs: msg.timestampMs });
+      await say('Todavía me falta leer una foto que mandaste *antes* de este *listo* 📸. Dame un momento y cierro tu liquidación con ella adentro — no la vuelvas a mandar.');
+      await soltarClaim();
+      return;
+    }
+
     // Mutex para serializar cierres concurrentes (dos "listo" a la vez).
     //
     // Si NO se consigue, se ABANDONA el turno. Antes solo se dejaba un warn y se
@@ -3251,11 +3665,13 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // se libera el claim para que el mensaje no quede atascado. No resuelve
     // "el segundo mensaje se contesta", pero sí "el operador sabe que no se
     // perdió, y puede volver a mandarlo".
+    const tokenCierre = nuevoTokenDeLock();
     const lock = await intentarLockViaje(viajeId, {
-      ttlMs: TTL_LOCK_CIERRE_MS, maxWaitMs: reloj.acotar(12_000),
+      ttlMs: TTL_LOCK_CIERRE_MS, maxWaitMs: reloj.acotar(12_000), token: tokenCierre,
     });
     if (lock === 'obtenido') {
       lockedViaje = viajeId;
+      tokenViaje = tokenCierre;
     } else {
       // Los dos motivos se cuentan por separado: 'ocupado' es el sistema
       // funcionando (otro turno en vuelo) y 'indeterminado' es la base sin
@@ -3342,6 +3758,9 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     let reply = '';
     let closed = false;
     let agentTools: ToolCallRecord[] = [];
+    // Texto que se PEGA al final del `reply` después de las guardias (AGEN-10):
+    // «no cerré» explícito en los degradados. Ver `COLOFON_NO_CERRE`.
+    let colofon = '';
 
     // ── ¿ALCANZA PARA EL AGENTE? ─────────────────────────────────────────────
     // El agente es lo caro y lo último: si la barrera y el mutex se comieron el
@@ -3356,10 +3775,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       logger.error('agente.sin_presupuesto', { viaje: viajeId, gastadoMs: reloj.gastado(), restanteMs: reloj.restante() });
       try {
         const liq = await cuadrarDesdeDB(op.tenantId, viajeId);
-        await say(resumenCuadre(liq, false, 'operador'));
+        // AGEN-10: el degradado dice sin rodeos que el viaje sigue abierto.
+        await say(`${resumenCuadre(liq, false, 'operador')}\n\n${COLOFON_NO_CERRE}`);
       } catch (e) {
         logger.error('agente.sin_presupuesto_fallback', { err: e instanceof Error ? e.message : String(e) });
-        await say('Ya tengo tus comprobantes 👍. Dame un momento y te paso el cuadre.');
+        await say(`Ya tengo tus comprobantes 👍. ${COLOFON_NO_CERRE}`);
       }
       return;
     }
@@ -3392,6 +3812,37 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         : 'Perdón, no alcancé a procesar eso. ¿Me lo repites?');
       agentTools = res.toolCalls;
       closed = res.toolCalls.some((t) => t.toolName === 'guardar_liquidacion' && !t.error);
+      // ── AUDITORÍA 24, AGEN-1 (CRÍTICO, 3ª ronda): LA BASE ES LA AUTORIDAD
+      // TAMBIÉN EN EL CAMINO FELIZ. La tool puede reportar `error` con el
+      // RPC ya commiteado (`acotada` a 8 s; el servidor termina a los 8.4).
+      // El modelo lee `{error}` y escribe «no pude cerrar»; el viaje está
+      // `liquidado`; `guardiaEstado(cerro:false)` lo refuerza; y el segundo
+      // «listo» del chofer choca con «ya quedó liquidado, pídele el PDF a tu
+      // contralor». Hasta aquí la relectura vivía SOLO en el `catch`.
+      if (!closed && res.toolCalls.some((t) => t.toolName === 'guardar_liquidacion')) {
+        const enBase = await confirmarCierreEnBase(op.tenantId, viajeId);
+        if (enBase.estado === 'cerrado') {
+          // `error`, no `warn`: un cierre que la tool narró como fallo es un
+          // estado que hay que mirar (Sentry), aunque aquí se repare.
+          logger.error('agent.cierre_commiteado_tras_fallo_tool', { tenant: op.tenantId, viaje: viajeId, liquidacion: enBase.liqId });
+          closed = true;
+          agentTools = [...res.toolCalls.filter((t) => t.toolName !== 'guardar_liquidacion'), enBase.registro];
+          try {
+            reply = resumenCuadre(await cuadrarDesdeDB(op.tenantId, viajeId), true, 'operador');
+          } catch {
+            reply = 'Ya cerré tu liquidación ✅. Te mando el PDF.';
+          }
+        } else if (enBase.estado === 'no_verificable') {
+          // Fail-closed y DICHO: no se afirma ni «cerré» ni «no cerré».
+          logger.error('agent.cierre_no_verificable', { tenant: op.tenantId, viaje: viajeId, err: enBase.err });
+          // Redactado para que `guardiaEstado` no lo lea como afirmación de
+          // cierre: no dice ni «quedó cerrada» ni «no cerré».
+          reply = 'No pude confirmar cómo va tu liquidación. En un minuto escríbeme *listo* otra vez y te lo digo. 🙏';
+        } else {
+          logger.warn('agent.cierre_fallido_viaje_sigue_abierto', { tenant: op.tenantId, viaje: viajeId });
+          colofon = 'Tu viaje sigue abierto (todavía *NO* cerré tu liquidación).';
+        }
+      }
       ctxCerro = closed;
       // AUDITORÍA 10, MEDIO REINCIDENTE: si el ciclo cruzó de proveedor a medio
       // camino (primario en 3 rondas + fallback en la 4ª), `res.model` es solo
@@ -3471,21 +3922,22 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       let cierreParcial: ToolCallRecord | undefined =
         recuperar ? parcial?.find((t) => t.toolName === 'guardar_liquidacion' && !t.error) : undefined;
       if (recuperar && !cierreParcial && parcial?.some((t) => t.toolName === 'guardar_liquidacion')) {
-        try {
-          const liq = await getLiquidacionDeViaje(op.tenantId, viajeId);
-          if (liq) {
-            logger.warn('agent.cierre_commiteado_tras_abortar', { viaje: viajeId, liquidacion: liq.id });
-            cierreParcial = {
-              toolName: 'guardar_liquidacion',
-              result: { liquidacion_id: liq.id, pdf_url: liq.pdfUrl },
-            } as ToolCallRecord;
-          }
-        } catch (errLiq) {
-          logger.error('agent.cierre_no_verificable', { viaje: viajeId, err: errLiq instanceof Error ? errLiq.message : String(errLiq) });
+        // AGEN-A1/BE-1: el MISMO registro sintético que el camino feliz, con
+        // el vocabulario de la tool (`pdf_generado`), que es lo que leen los
+        // consumidores de abajo. El anterior traía `pdf_url` y nadie lo leía.
+        const enBase = await confirmarCierreEnBase(op.tenantId, viajeId);
+        if (enBase.estado === 'cerrado') {
+          logger.warn('agent.cierre_commiteado_tras_abortar', { viaje: viajeId, liquidacion: enBase.liqId });
+          cierreParcial = enBase.registro;
+        } else if (enBase.estado === 'no_verificable') {
+          logger.error('agent.cierre_no_verificable', { viaje: viajeId, err: enBase.err });
         }
       }
       if (cierreParcial) {
-        agentTools = parcial!;
+        // Sin el registro con `error:'Timeout'`: la guardia y el bloque del
+        // PDF buscan `guardar_liquidacion && !t.error`, y con los dos en la
+        // lista el `find` podía caer en el fallido según el orden.
+        agentTools = [...parcial!.filter((t) => t.toolName !== 'guardar_liquidacion'), cierreParcial];
         closed = true;
         // AUDITORÍA 7, ALTO REINCIDENTE de ronda 6: `ctxCerro` es el Único campo
         // que el log del catch general trae para distinguir "no pasó nada" de
@@ -3520,10 +3972,17 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // No es lo mismo agotar el presupuesto (el motor SÍ puede cuadrar
         // solo, con las cifras reales de la base) que un error de código (ahí
         // sí hay que decir "se me trabó" y no inventar que se resolvió).
-        const agotoPresupuesto = e instanceof LlmBudgetExceededError;
-        const transitorio = isTransientError(e) || agotoPresupuesto;
+        //
+        // AUDITORÍA 24, TC-N1 (CRÍTICO): ese `instanceof` se hacía sobre el
+        // ENVOLTORIO (`PartialExecutionError`), así que en producción daba
+        // `false` siempre y esta rama seguía muerta. Se decide sobre la causa
+        // de fondo, atravesando envoltorios (`esErrorDePresupuesto`).
+        const agotoPresupuesto = esErrorDePresupuesto(e);
+        const transitorio = isTransientError(causaDeFondo(e)) || agotoPresupuesto;
         logger.error('agent.fail', { tenant: op.tenantId, viaje: viajeId, operador: op.operadorId, transitorio, agotoPresupuesto, err: e instanceof Error ? e.message : String(e) });
-        reply = 'Perdón, se me trabó el sistema tantito. ¿Me reenvías tu último mensaje?';
+        reply = agotoPresupuesto
+          ? COLOFON_SIN_PRESUPUESTO
+          : 'Perdón, se me trabó el sistema tantito. ¿Me reenvías tu último mensaje?';
 
         // ── EL MOTOR NO NECESITA AL LLM PARA CUADRAR (RES-15) ─────────────
         //
@@ -3546,7 +4005,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         if (transitorio) {
           try {
             reply = resumenCuadre(await cuadrarDesdeDB(op.tenantId, viajeId), false, 'operador');
-            logger.warn('agent.degradado_a_cuadre', { tenant: op.tenantId, viaje: viajeId });
+            // AGEN-10: el cuadre degradado dice que NO cerró; con el tope de
+            // IA, además, por qué y qué hacer (TC-N1). Se pega tras las guardias.
+            colofon = agotoPresupuesto ? COLOFON_SIN_PRESUPUESTO : COLOFON_NO_CERRE;
+            logger.warn('agent.degradado_a_cuadre', { tenant: op.tenantId, viaje: viajeId, agotoPresupuesto });
           } catch (eDeg) {
             // Si NI ESO se puede, se queda el mensaje de arriba: es la verdad.
             logger.error('agent.degradado_fallo', { viaje: viajeId, err: eDeg instanceof Error ? eDeg.message : String(eDeg) });
@@ -3677,6 +4139,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         reply = est.reply;
       }
     }
+    // El colofón «no cerré» va DESPUÉS de las guardias (AGEN-10): la de cifras
+    // sustituye el texto entero y lo perdía. Solo se pone si de verdad no
+    // cerró — un cierre recuperado por la base lo deja sin efecto.
+    if (colofon && !closed && !reply.includes(colofon)) reply = `${reply}\n\n${colofon}`;
 
     const entregado = await say(reply);
 
@@ -3746,9 +4212,9 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // que ya usa `pdf.no_entregado` dos líneas abajo para el caso gemelo
       // del operador.
       const pdfContralorGenerado = Boolean((guardado?.result as { pdf_contralor_generado?: boolean } | undefined)?.pdf_contralor_generado);
+      const liqIdCerrada = (guardado?.result as { liquidacion_id?: string } | undefined)?.liquidacion_id;
       if (!pdfContralorGenerado) {
-        const liqId = (guardado?.result as { liquidacion_id?: string } | undefined)?.liquidacion_id;
-        logger.error('pdf.contralor_no_generado', { tenant: op.tenantId, viaje: viajeId, liqId });
+        logger.error('pdf.contralor_no_generado', { tenant: op.tenantId, viaje: viajeId, liqId: liqIdCerrada });
       }
       try {
         if (!pdfGenerado) throw new Error('la tool reportó pdf_generado=false');
@@ -3770,16 +4236,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // "TTL de 7 días" heredado desde la ronda 11): se reconsideró subir
         // este número, porque `sendDocument` acepta el mensaje y Meta descarga
         // el `link` DESPUÉS, por su cuenta (`meta/client.ts`) — asíncrono, no
-        // simultáneo al POST. Aun así se deja en 60s: la ruta YA registra
-        // `pdf.no_entregado` con el código de error de Meta cuando el envío
-        // falla (auditoría 12, ALTO), y ninguna entrada de ese log documenta
-        // jamás un 403/404 de Storage — solo token vencido o documento
-        // rechazado por Meta. Subir el TTL sin esa evidencia sería inventar un
-        // riesgo para resolverlo, y reabriría en sentido contrario lo que las
-        // rondas 5-9 ya cerraron con evidencia. Si `pdf.no_entregado` empieza a
-        // traer un error de Storage (no de Meta), ESA es la señal para subirlo
-        // — no antes.
-        const { data, error } = await acotada(supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, 60), 'createSignedUrl');
+        // simultáneo al POST. Se dejó en 60s a la espera de evidencia de un
+        // fallo de Storage; la evidencia llegó en la 24 (AGEN-9) por el
+        // camino del OUTBOX, que reintenta el MISMO `link` a los 5 minutos.
+        // El porqué del número vive con la constante.
+        const { data, error } = await acotada(supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, TTL_FIRMA_PDF_SEGUNDOS), 'createSignedUrl');
         if (error || !data?.signedUrl) throw new Error(error?.message ?? 'storage no devolvió URL firmada');
         // AUDITORÍA 12, ALTO (backend, reincidente de ronda 10): `sendDocument`
         // NO lanza — devuelve { ok: false, error } cuando Meta rechaza el
@@ -3800,6 +4261,9 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           await sendText(msg.from, 'Tu liquidación ya quedó cerrada ✅, pero el PDF no se te entregó por un problema del chat. Pídeselo a tu contralor: él ya lo tiene en el panel. 🙏').catch(() => {});
         } else {
           await registrarCostoWhatsApp(op.tenantId, viajeId);
+          // AGEN-4: sello de entrega — el reintento de un «listo» no vuelve a
+          // mandar este PDF.
+          await sellarEntregaLiquidacion(op.tenantId, liqIdCerrada, 'entregada_operador_en');
         }
 
       } catch (e) {
@@ -3861,7 +4325,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       } else try {
         let urlPdfJefe: string | null = null;
         if (pdfContralorGenerado) {
-          const firma = await acotada(supabaseAdmin().storage.from('liquidaciones').createSignedUrl(`${op.tenantId}/${viajeId}.pdf`, 60), 'createSignedUrl.contralor');
+          const firma = await acotada(supabaseAdmin().storage.from('liquidaciones').createSignedUrl(`${op.tenantId}/${viajeId}.pdf`, TTL_FIRMA_PDF_SEGUNDOS), 'createSignedUrl.contralor');
           if (firma.error || !firma.data?.signedUrl) {
             logger.warn('cierre.pdf_jefe_sin_url', { viaje: viajeId, err: firma.error?.message ?? 'storage no devolvió URL firmada' });
           } else {
@@ -3870,6 +4334,8 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         }
         const rj = await avisarCierreAlJefe({ tenantId: op.tenantId, viajeId, urlPdf: urlPdfJefe, telefonoOperador: msg.from });
         if (!rj.enviado) logger.warn('cierre.jefe_no_avisado', { viaje: viajeId, motivo: rj.motivo });
+        // AGEN-4: sello — el reintento de un «listo» no vuelve a avisar.
+        else await sellarEntregaLiquidacion(op.tenantId, liqIdCerrada, 'avisada_oficina_en');
       } catch (e) {
         logger.error('cierre.aviso_jefe_falló', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
       }
@@ -3932,6 +4398,6 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         : 'Perdón, se me trabó tantito. ¿Me reenvías tu último mensaje? 🙏';
     try { await sendText(msg.from, aviso); } catch { /* best-effort */ }
   } finally {
-    if (lockedViaje) await releaseViajeLock(lockedViaje);
+    if (lockedViaje) await releaseViajeLock(lockedViaje, tokenViaje);
   }
 }

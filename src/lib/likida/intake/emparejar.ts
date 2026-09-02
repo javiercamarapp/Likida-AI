@@ -18,6 +18,14 @@ import type { Gasto } from '@/types/likida';
 const TOLERANCIA = 0.01;
 
 /**
+ * Lo que se tolera EN PROPORCIÓN cuando el centavo no alcanza (AUDITORÍA 24 ·
+ * WA-5): la diferencia entre un total leído por el OCR y el del CFDI de esa
+ * misma carga. Solo la usa `emparejarXmlConTicket`, y solo con la fecha del
+ * XML y un candidato único.
+ */
+const TOLERANCIA_RELATIVA = 0.02;
+
+/**
  * Devuelve el gasto al que pertenece un acercamiento, o `null` si no hay una
  * respuesta única.
  */
@@ -122,13 +130,48 @@ export function emparejarXmlConTicket(
   if (!(xml.total != null && xml.total > 0)) return null; // sin monto no se adivina
   // Solo tickets SIN timbrar: los que ya tienen UUID son facturas y se emparejan
   // por UUID antes de llegar aquí.
-  const candidatos = gastos.filter((g) => !g.cfdiUuid && Math.abs(g.monto - xml.total!) <= TOLERANCIA);
+  const sinTimbrar = gastos.filter((g) => !g.cfdiUuid);
+  const candidatos = sinTimbrar.filter((g) => Math.abs(g.monto - xml.total!) <= TOLERANCIA);
   if (candidatos.length === 1) return candidatos[0];
-  if (candidatos.length === 0) return null;
-  // Varios del mismo monto: la fecha desempata (dos cargas iguales en días
-  // distintos es plausible en un viaje largo).
-  if (!xml.fecha) return null;
-  const dia = xml.fecha.slice(0, 10);
-  const mismoDia = candidatos.filter((g) => g.fecha?.slice(0, 10) === dia);
-  return mismoDia.length === 1 ? mismoDia[0] : null;
+  const dia = xml.fecha ? xml.fecha.slice(0, 10) : null;
+  if (candidatos.length > 1) {
+    // Varios del mismo monto: la fecha desempata (dos cargas iguales en días
+    // distintos es plausible en un viaje largo).
+    if (!dia) return null;
+    const mismoDia = candidatos.filter((g) => g.fecha?.slice(0, 10) === dia);
+    return mismoDia.length === 1 ? mismoDia[0] : null;
+  }
+
+  // ── AUDITORÍA 24 · WA-5 (MEDIO): EL CENTAVO NO ALCANZA ───────────────────
+  //
+  // Ninguno cuadra AL CENTAVO. Con el acuse sin botón a partir de 0.9 de
+  // confianza (`acuse_ticket.ts`), un ticket de $2,890.50 leído como
+  // $2,890.00 es un caso corriente y no lo cuestiona nadie: el XML de esa
+  // misma carga entraba como gasto NUEVO `xml_verificado` y el motor no los
+  // unía —llaves disjuntas: el ticket tiene folio y no UUID, el XML al revés—.
+  // Los litros y el IVA se cuentan una vez (bien), pero el reembolso al chofer
+  // sale DOBLE. Es el caso «gasolinera que manda el XML por correo», que el
+  // piloto va a tener con sus monederos.
+  //
+  // Segunda pasada con tolerancia RELATIVA y dos candados que la hacen segura:
+  //
+  //   • el mismo DÍA, obligatorio. Sin fecha del XML no se intenta: adivinar
+  //     por monto parecido a lo largo de un viaje de cinco días es justo lo
+  //     que el resto de este archivo se niega a hacer.
+  //   • candidato ÚNICO, la regla dura de siempre. Dos tickets dentro del 2 %
+  //     del mismo total y del mismo día no se desempatan: se deja el XML como
+  //     gasto aparte, que es visible y corregible, en vez de pegarle el CFDI
+  //     al ticket equivocado, que no lo nota nadie.
+  //
+  // El 2 % es lo que separa una lectura mal redondeada de otra carga: sobre
+  // $2,890 son $58, y dos cargas de diésel del mismo día que difieren en menos
+  // de eso no existen en la práctica (el mínimo de una pipa es mucho mayor).
+  // Cuando pega, el XML manda: `updateGastoCfdiXml` escribe su `total` y su
+  // `fecha`, que vienen de un comprobante timbrado y no del OCR.
+  if (!dia) return null;
+  const parecidos = sinTimbrar.filter((g) =>
+    g.fecha?.slice(0, 10) === dia &&
+    g.monto > 0 &&
+    Math.abs(g.monto - xml.total!) / xml.total! <= TOLERANCIA_RELATIVA);
+  return parecidos.length === 1 ? parecidos[0] : null;
 }

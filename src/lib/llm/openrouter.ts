@@ -14,6 +14,10 @@ import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { modelFor, type ModelRole } from './models';
 import { reserveLlmBudget, settleLlmBudget, type LlmBudget, type LlmBudgetReservation } from './budget';
+// AUDITORÍA 24, TC-N1: el processor decide el degradado a cuadre con este
+// helper —que atraviesa el `cause` de `PartialExecutionError`— y no con un
+// `instanceof` sobre el envoltorio, que era `false` en producción.
+export { esErrorDePresupuesto } from './budget';
 import { runWithToolSignal } from './runtime-signal';
 
 let _client: OpenAI | null = null;
@@ -196,7 +200,11 @@ const PRICES: Record<string, [number, number]> = {
   'google/gemini-2.5-flash-lite': [0.1, 0.4],
   'google/gemini-2.5-flash': [0.3, 2.5],
   'google/gemini-3-flash-preview': [0.5, 3],
-  'anthropic/claude-sonnet-5': [2, 10],       // intro VIGENTE hasta 31-ago-2026; revertir a [3,15] después
+  // $2/$10 es el precio ESTÁNDAR de Sonnet 5: el aumento a $3/$15 anunciado
+  // para el 1-sep-2026 fue cancelado (verificado el 23-ago; ver models.ts).
+  // Aquí decía "revertir a [3,15] después del 31-ago" — dos verdades sobre el
+  // mismo precio, y la de aquí subía 50 % la reserva del cuadre (TC-N6).
+  'anthropic/claude-sonnet-5': [2, 10],
   'anthropic/claude-opus-5': [5, 25],
   'anthropic/claude-haiku-4.5': [1, 5],
   'openai/gpt-5.6-terra': [1, 6],
@@ -492,7 +500,7 @@ export class TruncatedError extends StructuredError {
  * repo usa cobran del orden de cientos de tokens por imagen, así que 4,000
  * sigue sobre-reservando sin volver a hacerlo por byte.
  */
-const TOKENS_POR_IMAGEN = 4_000;
+export const TOKENS_POR_IMAGEN = 4_000;
 
 export function cotaEntradaEnTokens(messages: unknown): number {
   let imagenes = 0;
@@ -994,11 +1002,20 @@ export async function generateWithTools(opts: {
       }
       return response;
     } catch (err) {
-      // Ante un error de red se conserva la reserva completa: el proveedor pudo
-      // haber cobrado aunque la respuesta no llegara a la aplicación.
+      // AUDITORÍA 24, TC-6 (reincidente de la 22/23): aquí se LIQUIDABA la
+      // reserva COMPLETA ante cualquier error —un 503, un timeout, un
+      // `fetch failed` que nunca llegó al proveedor— mientras sus dos
+      // hermanas (`generateResponse`, `generateStructured`, BACKEND-19C2-1)
+      // dejan la fila en 'reservado' para que la 0193 (`expira_en`) la
+      // excluya sola del tope diario si de verdad nunca hubo uso. A $0.056
+      // por reserva de cuadre, 20 minutos de 503 con 40 turnos eran $2.24 de
+      // cargo fantasma que adelantaban el `tope_tenant` de TC-N1. Mismo
+      // trato que las hermanas: se deja la fila reservada y se dice.
       if (reservation) {
-        try { await runWithToolSignal(opts.signal, () => settleLlmBudget(opts.budget!, reservation, reservation.amountUsd)); }
-        catch (e) { logger.error('llm.presupuesto_no_liquidado', { runId: opts.budget?.runId, err: e instanceof Error ? e.message : String(e) }); }
+        logger.error('llm.reserva_sin_liquidar_por_error', {
+          fn: 'generateWithTools', runId: opts.budget?.runId, reservaId: reservation.id,
+          err: err instanceof Error ? err.message : String(err),
+        });
       }
       throw err;
     }

@@ -58,25 +58,25 @@ import { logger } from '@/lib/logger';
 //  2. CON CREDENCIALES, PERO EL INTENTO FALLA (timeout, red caída, Upstash
 //     devuelve 5xx). Aquí SÍ hay una decisión que tomar, y se pensó así:
 //
-//     · DEFAULT — se degrada esa petición al Map local (fail-open ACOTADO,
-//       no fail-open a secas: el Map sigue imponiendo un tope por instancia,
-//       nunca deja pasar todo sin medida). Es la elección correcta para
-//       CASI todos los llamadores: un blip de Redis no puede dejar a un
-//       contralor fuera de su propio login, ni negarle un export a alguien
-//       con sesión válida. Y para el webhook de WhatsApp es la que evita
-//       perder comprobantes: un chofer real, ya autenticado por el HMAC de
-//       Meta, no se queda sin liquidación por una avería de un proveedor
-//       ajeno a WhatsApp.
-//     · CONFIGURABLE A FAIL-CLOSED — `RATELIMIT_REDIS_FALLA_CERRADO=true`
-//       hace que esa misma avería NIEGUE la petición en vez de degradarla.
-//       Para quien prefiera bloquear tráfico de más a arriesgar abuso de
-//       más mientras Redis está mal. Nótese que en el webhook de WhatsApp
-//       "negar" NO es "tirar": un `false` de `rateLimit` ahí se APLAZA (429,
-//       Meta reintenta) — ver la nota de `route.ts`. Fail-closed ahí cuesta
-//       latencia, no comprobantes, MIENTRAS la avería sea transitoria; si
-//       Redis quedara caído más tiempo del que Meta reintenta, el aplazo se
-//       vuelve pérdida igual que documenta `route.ts` — ese límite no lo
-//       cierra ninguna decisión de este módulo.
+//     · DEFAULT (cambió en la auditoría 24, SEG-4): esa misma avería NIEGA
+//       la petición — fail-CLOSED. Antes el default degradaba al Map local y
+//       el interruptor `RATELIMIT_REDIS_FALLA_CERRADO=true` había que
+//       acordarse de ponerlo: en producción nadie lo puso, y con Upstash
+//       caído dos minutos el techo de `/api/mcp/oauth/token`, `/api/lead`,
+//       el reenvío de magic link y `/api/demo` se volvía N × instancias
+//       frías — spam de correos, filas en `prospecto`, tokens del demo. Un
+//       límite que se apaga solo cuando su backend falla no es un límite.
+//       Nótese que en el webhook de WhatsApp "negar" NO es "tirar": un
+//       `false` de `rateLimit` ahí se APLAZA (429, Meta reintenta) — ver la
+//       nota de `route.ts`. Fail-closed ahí cuesta latencia, no
+//       comprobantes, MIENTRAS la avería sea transitoria.
+//     · CONFIGURABLE A FAIL-OPEN ACOTADO — `RATELIMIT_REDIS_FALLA_CERRADO=false`
+//       (global) o `rateLimit(key, n, ms, { fallaCerrado: false })` (por
+//       llamada) degrada esa petición al Map local: sigue habiendo un tope
+//       por instancia, nunca cero. Es la elección razonable para un llamador
+//       con sesión válida —un contralor no debería quedarse fuera de su
+//       propio login por un blip de un proveedor ajeno— y ese llamador lo
+//       decide a la vista, no un default que nadie recuerda.
 //     · Lo que NUNCA pasa: que un fallo de Redis tire una excepción hacia el
 //       llamador. `intentarRedis` atrapa todo y devuelve `null` — la petición
 //       del operador jamás se rompe por telemetría de otro proveedor.
@@ -201,15 +201,21 @@ async function intentarRedis(key: string, limit: number, windowMs: number): Prom
     });
     const json = (await r.json()) as { result?: number; error?: string };
     if (!r.ok || typeof json.result !== 'number') {
-      logger.error('ratelimit.redis_fallo', { key, status: r.status, err: json.error });
+      logger.error('ratelimit.redis_fallo', { llave: categoria(key), status: r.status, err: json.error });
       return null;
     }
     return json.result <= limit;
   } catch (e) {
     // Timeout (AbortError) o red caída: mismo tratamiento, es "no se pudo saber".
-    logger.error('ratelimit.redis_fallo', { key, err: e instanceof Error ? e.message : String(e) });
+    logger.error('ratelimit.redis_fallo', { llave: categoria(key), err: e instanceof Error ? e.message : String(e) });
     return null;
   }
+}
+
+/** SEG-4 (auditoría 24, reincidente de la 22): la llave entera lleva IP o id
+ *  de usuario; al log solo va su CATEGORÍA (`login`, `health`, `demo`…). */
+function categoria(key: string): string {
+  return key.split(':')[0] || 'sin-categoria';
 }
 
 let avisadoBackend = false;
@@ -237,11 +243,33 @@ function avisarBackend(): void {
   if (redisConfigurado()) {
     logger.info('startup.ratelimit_backend', { backend: 'redis' });
   } else {
-    logger.error('startup.ratelimit_backend', {
-      backend: 'memoria',
-      err: 'UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN ausentes: el límite vive en la memoria de CADA instancia — en Vercel, N intentos se vuelven N × instancias abiertas en paralelo. No hay límite global.',
-    });
+    const err = 'UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN ausentes: el límite vive en la memoria de CADA instancia — en Vercel, N intentos se vuelven N × instancias abiertas en paralelo. No hay límite global.';
+    logger.error('startup.ratelimit_backend', { backend: 'memoria', err });
+    // SEG-4 (auditoría 24): en PRODUCCIÓN esto no es un log que nadie lee —
+    // es la única defensa de cuatro endpoints públicos apagada. Sale por el
+    // canal del operador (piso de una hora, nunca lanza). Import dinámico
+    // para no cargar el árbol del correo en cada instancia que solo limita.
+    if (process.env.VERCEL_ENV === 'production') {
+      void import('@/lib/observability/alerta')
+        .then((m) => m.alertarOperador('ratelimit.sin_redis', { error: err, codigo: 'ratelimit_sin_redis' }))
+        .catch(() => { /* el aviso es de mejor esfuerzo; el log de arriba ya quedó */ });
+    }
   }
+}
+
+export interface OpcionesRateLimit {
+  /**
+   * Qué hacer si Redis está configurado y el intento FALLA a media petición
+   * (timeout, red, 5xx). `true` niega; `false` degrada al Map local. Sin
+   * indicar, manda `RATELIMIT_REDIS_FALLA_CERRADO`, cuyo default es CERRADO
+   * (SEG-4, auditoría 24).
+   */
+  fallaCerrado?: boolean;
+}
+
+/** El default de la avería de Redis: cerrado, salvo que la env diga «false». */
+export function fallaCerradoPorDefault(): boolean {
+  return process.env.RATELIMIT_REDIS_FALLA_CERRADO !== 'false';
 }
 
 /**
@@ -252,14 +280,18 @@ function avisarBackend(): void {
  * intento contra Redis falla, cae al Map local — ver la cabecera del archivo
  * para la justificación completa de esa degradación.
  */
-export async function rateLimit(key: string, limit: number, windowMs: number): Promise<boolean> {
+export async function rateLimit(key: string, limit: number, windowMs: number, opciones: OpcionesRateLimit = {}): Promise<boolean> {
   avisarBackend();
 
   if (redisConfigurado()) {
     const resultado = await intentarRedis(key, limit, windowMs);
     if (resultado !== null) return resultado;
 
-    if (process.env.RATELIMIT_REDIS_FALLA_CERRADO === 'true') return false;
+    const cerrado = opciones.fallaCerrado ?? fallaCerradoPorDefault();
+    if (cerrado) {
+      logger.warn('ratelimit.redis_falla_cerrado', { llave: categoria(key) });
+      return false;
+    }
     return limiteLocal(key, limit, windowMs);
   }
 

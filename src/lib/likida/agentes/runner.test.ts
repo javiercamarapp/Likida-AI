@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { DatoInvalido } from '../errores';
+
+const alertarOperador = vi.fn(async (..._a: unknown[]) => undefined);
+vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL RUNNER NIVEL 2 (0123) — los cuatro candados, todos fail-closed:
@@ -154,6 +158,7 @@ const {
   correrRunner, ordenarPorCosto, llamaAlModelo, AGENTES_DESPACHABLES,
   MARGEN_RELOJ_MS, PLAZO_RUNNER_MS,
   PASOS_LATIDO, COSTO_LATIDO_MS, conRelojDuro, nuevoAvanceRunner, cerrarPorRelojDuro,
+  motivoBandejaGlobalSinAtender, topeBandejaGlobal, diasVencimientoPieza,
 } = await import('./runner');
 type ResultadoRunner = import('./runner').ResultadoRunner;
 
@@ -166,6 +171,7 @@ beforeEach(() => {
   apagados = new Set();
   interruptorFalla = false;
   redactar.mockClear();
+  alertarOperador.mockClear();
   redactar.mockResolvedValue({ piezaId: 'p', asunto: 'x', aviso: null, costoUsd: 0.001 });
   correrDireccion.mockClear();
   correrDireccion.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
@@ -282,6 +288,46 @@ describe('el lote', () => {
     expect(r.agentes[0].motivo).toBeUndefined();
     expect(r.agentes[0].piezas).toBe(5);
     expect(redactar.mock.calls.every((call) => (call[3] as { tenantId?: string }).tenantId === TENANT)).toBe(true);
+  });
+
+  // AGB-11 (auditoría 24, 1-sep-2026) — 21 de 48 corridas del redactor
+  // fallaron con el MISMO error contra el modelo, y el runner las pagaba
+  // todas sin cortar: 100 s de reloj por 0 piezas.
+  it('AGB-11: tres fallos del modelo SEGUIDOS cortan el lote, con el motivo dicho, y alertan al operador', async () => {
+    respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
+    respuestas.set('prospecto', [{
+      data: Array.from({ length: 8 }, (_, i) => ({ id: `pr-${i}`, vendedor: null })), error: null,
+    }]);
+    redactar.mockRejectedValue(new DatoInvalido('El Redactor no pudo escribir en este momento — inténtalo de nuevo.'));
+    const r = await correrRunner(undefined, TENANT);
+    expect(redactar).toHaveBeenCalledTimes(3);
+    expect(r.agentes[0]).toMatchObject({ resultado: 'corrio', piezas: 0, saltados: 3 });
+    expect(r.agentes[0].motivo).toMatch(/3 fallos del modelo SEGUIDOS/);
+    expect(alertarOperador).toHaveBeenCalledWith('redactor.fallos_seguidos', expect.objectContaining({ codigo: 'redactor_fallos_modelo_seguidos' }));
+  });
+
+  it('AGB-11: un rebote de GUARDA (no del modelo) intercalado no cuenta para la racha — no corta el lote', async () => {
+    respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
+    respuestas.set('prospecto', [{
+      data: Array.from({ length: 8 }, (_, i) => ({ id: `pr-${i}`, vendedor: null })), error: null,
+    }]);
+    let llamada = 0;
+    redactar.mockImplementation(async () => {
+      llamada += 1;
+      // modelo, modelo, GUARDA (rompe la racha), modelo, modelo, GUARDA,
+      // modelo, modelo — nunca hay TRES fallos de modelo seguidos.
+      if (llamada === 3 || llamada === 6) throw new DatoInvalido('A este prospecto se le escribió hace menos de 48 horas — la cadencia lo protege.');
+      throw new DatoInvalido('El Redactor no pudo escribir en este momento — inténtalo de nuevo.');
+    });
+    const r = await correrRunner(undefined, TENANT);
+    // Nadie produjo pieza (piezas nunca llega al tope), así que sin el corte
+    // de AGB-11 el lote recorre los 8 candidatos enteros.
+    expect(redactar).toHaveBeenCalledTimes(8);
+    expect(alertarOperador).not.toHaveBeenCalled();
+    expect(r.agentes[0].motivo).toBeUndefined();
+    expect(r.agentes[0]).toMatchObject({ piezas: 0, saltados: 8 });
   });
 });
 
@@ -405,7 +451,14 @@ describe('el despacho de éxito del cliente (0218)', () => {
 
   it('atencion_faq SÍ pasa por el techo de gasto MEDIDO: es el único que gasta modelo', async () => {
     respuestas.set('agente_definicion', [{ data: [{ id: 'atencion_faq', presupuesto_dia_usd: 1 }], error: null }]);
-    respuestas.set('agente_corrida', [{ data: [{ costo_usd: 0.02 }], error: null }]);
+    // AUDITORÍA 24, ARQ-2 (integración): el runner ahora consulta
+    // `corridasSinCostoMedidoHoy` (count) ANTES de `gastoDelDiaUsd` (data) —
+    // dos llamadas a `agente_corrida`, en ese orden. `count: 0` = nada sin
+    // medir hoy, para que el techo compare contra el gasto real.
+    respuestas.set('agente_corrida', [
+      { count: 0, error: null },
+      { data: [{ costo_usd: 0.02 }], error: null },
+    ]);
     const r = await correrRunner(undefined, TENANT);
     // `atencion_faq` es el que MÁS necesita el reloj de los seis: gasta modelo
     // por ticket y `ordenarPorCosto` lo despacha al final de la vuelta.
@@ -415,7 +468,10 @@ describe('el despacho de éxito del cliente (0218)', () => {
 
   it('con el techo de atencion_faq agotado, ni se le pregunta al modelo', async () => {
     respuestas.set('agente_definicion', [{ data: [{ id: 'atencion_faq', presupuesto_dia_usd: 1 }], error: null }]);
-    respuestas.set('agente_corrida', [{ data: [{ costo_usd: 5 }], error: null }]);
+    respuestas.set('agente_corrida', [
+      { count: 0, error: null },
+      { data: [{ costo_usd: 5 }], error: null },
+    ]);
     const r = await correrRunner(undefined, TENANT);
     expect(correrExito).not.toHaveBeenCalled();
     expect(r.agentes[0].motivo).toMatch(/techo diario alcanzado/);
@@ -767,7 +823,13 @@ describe('el orden de despacho — lo barato primero, lo caro al final', () => {
       { id: 'atencion_faq', presupuesto_dia_usd: 1 },
       { id: 'onboarding_cliente', presupuesto_dia_usd: 0.1 },
     ], error: null }]);
-    respuestas.set('agente_corrida', [{ data: [], error: null }]);
+    // Solo `atencion_faq` gasta modelo y consulta `agente_corrida`
+    // (`onboarding_cliente` es determinista, no la toca): dos llamadas —
+    // `corridasSinCostoMedidoHoy` (count) y `gastoDelDiaUsd` (data) —.
+    respuestas.set('agente_corrida', [
+      { count: 0, error: null },
+      { data: [], error: null },
+    ]);
     const r = await correrRunner(undefined, TENANT);
     expect(correrExito.mock.calls.map((c) => c[0])).toEqual(['onboarding_cliente', 'atencion_faq']);
     expect(r.agentes.map((a) => a.agente)).toEqual(['onboarding_cliente', 'atencion_faq']);
@@ -933,6 +995,40 @@ describe('el despacho de crecimiento (0230)', () => {
     const r = await correrRunner(undefined, TENANT);
     expect(correrCrecimiento).not.toHaveBeenCalled();
     expect(r.agentes[0].motivo).toMatch(/sin presupuesto_dia_usd declarado/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AGENTES TEATRO (auditoría 24, 1-sep-2026, migración 0301) — nueve agentes
+// del catálogo prometen un motor que el código no tiene todavía. Siguen
+// `vivo` + `runner_habilitado` en la base, pero `experimental = true` los
+// saca del despacho automático — candado 2, entre el kill switch y el techo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('candado 2 — experimental (agentes teatro, 0301)', () => {
+  it('experimental=true salta el agente ANTES de tocar su motor, con el motivo dicho', async () => {
+    // `promos_diarias` sí tiene kill switch declarado en este arnés — para
+    // aislar el candado 2 del candado 1, que ya tiene su propia prueba.
+    respuestas.set('agente_definicion', [{ data: [{ id: 'promos_diarias', presupuesto_dia_usd: 0.1, experimental: true }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrCrecimiento).not.toHaveBeenCalled();
+    expect(r.agentes[0]).toMatchObject({ agente: 'promos_diarias', resultado: 'saltado' });
+    expect(r.agentes[0].motivo).toMatch(/experimental/);
+  });
+
+  it('experimental=false (o ausente) NO lo afecta — corre como cualquier agente real', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'promos_diarias', presupuesto_dia_usd: 0.1, experimental: false }], error: null }]);
+    respuestas.set('agente_corrida', [{ data: null, error: { message: 'nadie debería preguntar' } }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'promos_diarias', resultado: 'corrio' });
+  });
+
+  it('el candado 1 (kill switch) sigue mandando ANTES que el 2: sin interruptor, ni siquiera se mira si es experimental', async () => {
+    // `cazador` (LEADS, también experimental) no tiene interruptor declarado
+    // en este arnés a propósito — el motivo tiene que seguir siendo el del
+    // candado 1, no el del 2, aunque el agente sea de los nueve.
+    respuestas.set('agente_definicion', [{ data: [{ id: 'cazador', presupuesto_dia_usd: 0.1, experimental: true }], error: null }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0].motivo).toMatch(/kill switch/);
   });
 });
 
@@ -1175,5 +1271,93 @@ describe('el despacho de leads (0235)', () => {
     correrLeads.mockResolvedValue({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
     const r = await correrRunner(undefined, TENANT);
     expect(r.saltadosPorReloj).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AGB-5 (auditoría 24, 1-sep-2026) — CONTRAPRESIÓN GLOBAL: antes solo el
+// Redactor miraba su propia bandeja; los demás 44 agentes que encolan un
+// parte fabricaban sin mirar si alguien las leía (107 pendientes medidas,
+// cero resoluciones humanas en 15 días).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('motivoBandejaGlobalSinAtender — PURA', () => {
+  it('sin nada pendiente, no hay motivo', () => {
+    expect(motivoBandejaGlobalSinAtender(0, null)).toBeNull();
+  });
+
+  it('llegar al tope (la consulta trajo topeBandejaGlobal() filas) sí es motivo', () => {
+    expect(motivoBandejaGlobalSinAtender(topeBandejaGlobal(), '2026-09-01T00:00:00Z')).toMatch(/bandeja sin atender/);
+  });
+
+  it('por debajo del tope pero con la más vieja pasada de plazo, también es motivo', () => {
+    const ahora = new Date('2026-09-01T00:00:00Z').getTime();
+    const viejaVencida = new Date(ahora - (diasVencimientoPieza() + 1) * 86_400_000).toISOString();
+    expect(motivoBandejaGlobalSinAtender(1, viejaVencida, ahora)).toMatch(/vencida/);
+  });
+
+  it('por debajo del tope y la más vieja dentro del plazo: sin motivo', () => {
+    const ahora = new Date('2026-09-01T00:00:00Z').getTime();
+    const nueva = new Date(ahora - 60_000).toISOString();
+    expect(motivoBandejaGlobalSinAtender(1, nueva, ahora)).toBeNull();
+  });
+});
+
+describe('el candado 5 (AGB-5) en correrRunner', () => {
+  it('con la bandeja al tope (o por arriba), un agente que encola un parte (back office) se SALTA con el motivo "bandeja sin atender"', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'talento', presupuesto_dia_usd: 0.1 }], error: null }]);
+    respuestas.set('cola_aprobacion', [{
+      data: Array.from({ length: topeBandejaGlobal() }, (_, i) => ({ creado_en: `2026-08-${10 + i}T00:00:00Z` })),
+      error: null,
+    }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'talento', resultado: 'saltado' });
+    expect(r.agentes[0].motivo).toMatch(/bandeja sin atender/);
+  });
+
+  it('con la bandeja al tope, un agente de LEADS también se salta — el candado es ancho, no solo del Redactor', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'vigia', presupuesto_dia_usd: 0.1 }], error: null }]);
+    respuestas.set('cola_aprobacion', [{
+      data: Array.from({ length: topeBandejaGlobal() }, (_, i) => ({ creado_en: `2026-08-${10 + i}T00:00:00Z` })),
+      error: null,
+    }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'vigia', resultado: 'saltado' });
+    expect(correrLeads).not.toHaveBeenCalled();
+  });
+
+  it('los CUATRO de dirección (correo directo a Javier) NO pasan por este candado — mandan correo, no encolan', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'kpi_whatsapp', presupuesto_dia_usd: 0.1 }], error: null }]);
+    respuestas.set('cola_aprobacion', [{
+      data: Array.from({ length: topeBandejaGlobal() }, (_, i) => ({ creado_en: `2026-08-${10 + i}T00:00:00Z` })),
+      error: null,
+    }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(correrDireccion).toHaveBeenCalledWith('kpi_whatsapp');
+    expect(r.agentes[0]).toMatchObject({ agente: 'kpi_whatsapp', resultado: 'corrio' });
+  });
+
+  it('sin poder leer la bandeja, fail closed: se salta igual que si estuviera llena', async () => {
+    respuestas.set('agente_definicion', [{ data: [{ id: 'vigilante_calidad', presupuesto_dia_usd: 0.1 }], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: null, error: { message: 'db down' } }]);
+    const r = await correrRunner(undefined, TENANT);
+    expect(r.agentes[0]).toMatchObject({ agente: 'vigilante_calidad', resultado: 'saltado' });
+    expect(r.agentes[0].motivo).toMatch(/no se pudo leer la bandeja global/);
+  });
+
+  it('se lee UNA sola vez por vuelta — dos agentes no exentos comparten la misma lectura', async () => {
+    // `talento` y `vigilante_calidad`, los dos del back office restante, en
+    // la MISMA vuelta: si el candado leyera la bandeja una vez por agente, la
+    // cola de `cola_aprobacion` (una sola respuesta) se agotaría en el
+    // primero y el segundo caería al default vacío ("bandeja sana"),
+    // contradiciendo al primero. Memoizado, los dos ven la MISMA bandeja llena.
+    respuestas.set('agente_definicion', [
+      { data: [{ id: 'talento', presupuesto_dia_usd: 0.1 }, { id: 'vigilante_calidad', presupuesto_dia_usd: 0.1 }], error: null },
+    ]);
+    respuestas.set('cola_aprobacion', [{
+      data: Array.from({ length: topeBandejaGlobal() }, (_, i) => ({ creado_en: `2026-08-${10 + i}T00:00:00Z` })),
+      error: null,
+    }]);
+    const r = await correrRunner();
+    expect(r.agentes.every((a) => a.resultado === 'saltado')).toBe(true);
   });
 });

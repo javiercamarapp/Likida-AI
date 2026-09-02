@@ -35,7 +35,7 @@ REGLAS:
 - Referencia honesta al correo anterior ("le escribí hace unos días sobre la liquidación de viajes") sin reprochar el silencio.
 - Termina con UNA pregunta de agenda concreta ("¿le vienen bien 15 minutos esta semana?").
 - Si el dossier trae un Contacto, usa EXACTAMENTE el token {{NOMBRE}} donde iría su nombre de pila; si dice "no capturado", saluda sin nombre.
-- PROHIBIDO: cifras nuevas, promesas nuevas, datos que no estén en el dossier, la palabra "recordatorio", los guiones largos (—), y decir "clientes reales" (si mencionas tracción, la frase permitida es "en pláticas con transportistas como Grupo GAL y Transportes Innovativos").
+- PROHIBIDO: cifras nuevas, promesas nuevas, datos que no estén en el dossier, la palabra "recordatorio", los guiones largos (—), decir "clientes reales", y nombrar a NINGÚN prospecto o cliente por su nombre (AGB-2: si mencionas tracción, la única frase permitida es "en pláticas con transportistas del centro y norte del país").
 - Español mexicano directo, sin emojis.
 
 FORMATO DE SALIDA (exacto):
@@ -46,7 +46,12 @@ export interface ResultadoSdr {
   candidatos: number;
   piezas: number;
   saltados: number;
-  costoUsd: number;
+  /** AGB-9 (auditoría 24): `null` = al menos una llamada al modelo no trajo
+   *  `usage` medible — el costo es DESCONOCIDO, no cero. Antes `0` se
+   *  guardaba como NULL en la base por `costoUsd || undefined` sin que este
+   *  tipo lo admitiera, y el runner sumaba ceros contra un techo que nunca
+   *  se enteraba de que había gasto real sin medir (28 de 28 corridas). */
+  costoUsd: number | null;
   /** Los candidatos que el RELOJ de la vuelta dejó sin turno (c7-1). 0 cuando
    *  el lote cupo entero o cuando el llamador no impuso reloj. */
   sinTurno: number;
@@ -129,8 +134,11 @@ export async function candidatosDeSeguimiento(limite: number, venceEn?: number):
   return elegidos;
 }
 
-/** Fabrica el seguimiento de UN candidato y lo encola. */
-async function fabricarSeguimiento(c: CandidatoSdr): Promise<number> {
+/** Fabrica el seguimiento de UN candidato y lo encola. AGB-9: devuelve
+ *  también si el costo vino MEDIDO — `noMedido` (c7-11) significa que el
+ *  proveedor omitió `usage` y `cost` es la RESERVA (una cota), no lo gastado
+ *  de verdad; guardarlo como cifra dejaría ciego al techo diario. */
+async function fabricarSeguimiento(c: CandidatoSdr): Promise<{ costoUsd: number; noMedido: boolean }> {
   // Pieza pendiente del prospecto = no se fabrica encima (misma guarda que
   // el Redactor: la bandeja no se desborda con duplicados).
   const { data: pend, error: errPend } = await supabaseAdmin()
@@ -168,7 +176,7 @@ async function fabricarSeguimiento(c: CandidatoSdr): Promise<number> {
     cuerpo: cuerpoFinal,
     fuentes: { seguimiento: c.numeroSeguimiento, de: CADENCIA_SDR_DIAS.length },
   });
-  return r.cost;
+  return { costoUsd: r.cost, noMedido: Boolean(r.noMedido) };
 }
 
 /** UNA corrida del SDR (la llama el runner). */
@@ -196,7 +204,11 @@ export async function correrSdr(
   // piso de 1 deja constancia de que la vuelta se quedó a medias aunque no haya
   // un candidato concreto que nombrar.
   const busquedaCortada = venceEn !== undefined && Date.now() >= venceEn;
-  let piezas = 0, saltados = 0, costoUsd = 0, sinTurno = busquedaCortada ? Math.max(1, candidatos.length) : 0;
+  // AGB-9: `null` es PEGAJOSO (ARQ-2) — una sola llamada sin medir vuelve
+  // incierta la corrida entera; sumarle un número con `+=` la convertiría en
+  // cero, que es justo el bug que dejaba 28 de 28 corridas con costo NULL sin
+  // que el runner se enterara de que había gasto real sin medir.
+  let piezas = 0, saltados = 0, costoUsd: number | null = 0, sinTurno = busquedaCortada ? Math.max(1, candidatos.length) : 0;
   for (let i = 0; i < candidatos.length; i++) {
     // ── EL RELOJ, ADENTRO DEL MOTOR (auditoría ciclo 7, c7-1) ───────────────
     // El SDR gasta modelo (`llamaAlModelo` lo tiene en la lista de caros) y
@@ -213,8 +225,14 @@ export async function correrSdr(
     }
     const c = candidatos[i];
     try {
-      costoUsd += await fabricarSeguimiento(c);
+      const r = await fabricarSeguimiento(c);
       piezas += 1;
+      if (r.noMedido) {
+        costoUsd = null;
+        logger.warn('sdr.costo_no_medido', { prospecto: c.id });
+      } else if (costoUsd !== null) {
+        costoUsd = costoUsd + r.costoUsd;
+      }
     } catch (e) {
       saltados += 1;
       logger.info('sdr.saltado', { prospecto: c.id, motivo: e instanceof Error ? e.message.slice(0, 160) : String(e) });
@@ -224,7 +242,7 @@ export async function correrSdr(
     inicio, fin: new Date(), estado: 'ok', disparo,
     tareasHechas: piezas, tareasTotal: candidatos.length,
     resumen: { candidatos: candidatos.length, piezas, saltados, sinTurno },
-    costoUsd: costoUsd || undefined,
+    costoUsd,
   });
   return { candidatos: candidatos.length, piezas, saltados, costoUsd, sinTurno };
 }

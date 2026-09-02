@@ -50,7 +50,7 @@ ESCRIBE 3 VARIANTES:
 REGLAS DE ESCRITURA:
 - Máximo 5 líneas por correo. Asunto de máximo 6 palabras, sin signos de admiración. (El asunto de la variante A se sustituye después por el asunto fijo de la campaña — escríbelo igual: el de las variantes B/C sí sale.)
 - PROHIBIDO el guion largo (—) en cualquier parte del correo.
-- Si mencionas tracción, la ÚNICA frase permitida es "en pláticas con transportistas como Grupo GAL y Transportes Innovativos". PROHIBIDO decir "clientes reales" o llamar cliente a cualquier empresa: ninguna ha firmado.
+- Si mencionas tracción, la ÚNICA frase permitida es "en pláticas con transportistas del centro y norte del país". PROHIBIDO nombrar a NINGÚN prospecto o cliente por su nombre, aunque exista una plática real (AGB-2: el nombre de un prospecto es un dato de terceros, no un argumento de venta). PROHIBIDO decir "clientes reales" o llamar cliente a cualquier empresa: ninguna ha firmado.
 - Termina SIEMPRE con una pregunta de agenda concreta: "¿le vienen bien 15 minutos el jueves?" — no "¿le interesaría platicar?".
 - Remitente: el vendedor humano indicado, una persona. Nunca "el equipo de Likida".
 - Español mexicano directo. Prohibido "revolucionario", "innovador", "inteligente", "de vanguardia", "solución integral". Sin emojis, sin negritas de venta, sin postdata de urgencia falsa.
@@ -168,6 +168,31 @@ export const ASUNTO_CAMPANA = 'Automatizar la liquidación de viajes, antes de c
 // llamadores y pruebas que lo importaban de aquí.
 export { verificarFormatoCampana };
 
+/** AGB-6 (auditoría 24, 1-sep-2026): fuentes ya vetadas a mano — no son el
+ *  censo abierto (DENUE/Computrabajo, sin giro) que dejó pasar vacantes como
+ *  "Gerente General de Restaurante" (Premium Restaurant Brands) o "Analista
+ *  de finanzas" (Coca-Cola FEMSA) hacia el redactor. */
+const FUENTES_ICP_VETADAS = ['canacar', 'aaag', 'manual', 'landing'] as const;
+/** El piso de `similitud_icp_pct` (columna derivada, 0140/0143) para que la
+ *  compuerta confíe en el scorer en vez de en el SCIAN o la fuente. */
+const UMBRAL_SIMILITUD_ICP = 60;
+
+/** AGB-6: la COMPUERTA DE ICP — sin ella, `estado = 'nuevo'` era el único
+ *  filtro entre el censo (vacantes de Computrabajo, sin giro capturado en
+ *  32,900 de 32,986 prospectos) y el redactor. Un prospecto pasa si CUALQUIERA
+ *  de tres señales dice "es transportista": su SCIAN es del sector 48-49
+ *  (Transportes, correos y almacenamiento, INEGI), su fuente ya fue vetada a
+ *  mano (no es censo abierto), o el propio scorer (`similitud_icp_pct`,
+ *  0140/0143) ya mide suficiente parecido con el ICP. PURA, para poder
+ *  probarla sin base — y FAIL CLOSED: sin ninguna de las tres, no pasa. */
+export function pasaCompuertaIcp(p: { scian: string | null; fuente: string; similitudIcpPct: number | null }): boolean {
+  const scian = p.scian?.trim() ?? '';
+  if (scian.startsWith('48') || scian.startsWith('49')) return true;
+  if ((FUENTES_ICP_VETADAS as readonly string[]).includes(p.fuente)) return true;
+  if (typeof p.similitudIcpPct === 'number' && p.similitudIcpPct >= UMBRAL_SIMILITUD_ICP) return true;
+  return false;
+}
+
 /** El nombre de pila del contacto — lo único que se sustituye de vuelta, y
  *  SOLO fuera del modelo (ver la nota de AUDITORÍA 19 legal C2 en el
  *  dossier). `null` si no hay contacto capturado: sin nombre no hay nada
@@ -261,14 +286,21 @@ export async function redactarCorreoFrio(
   // 2) El prospecto REAL — el dossier es su fila, nada más (prohibición #2).
   const { data: p, error } = await acotada(supabaseAdmin()
     .from('prospecto')
-    .select('id, empresa, contacto_nombre, correo, ciudad, estado, fuente, notas')
+    .select('id, empresa, contacto_nombre, correo, ciudad, estado, fuente, notas, scian, similitud_icp_pct')
     .is('duplicado_de', null)
     .eq('id', prospectoId).maybeSingle(), 'redactor.prospecto');
   if (error) throw new Error(`redactarCorreoFrio: ${error.message}`);
   if (!p) throw new DatoInvalido('Ese prospecto no existe — recarga el tablero.');
-  const prospecto = p as { id: string; empresa: string; contacto_nombre: string | null; correo: string | null; ciudad: string | null; estado: string; fuente: string; notas: string | null };
+  const prospecto = p as { id: string; empresa: string; contacto_nombre: string | null; correo: string | null; ciudad: string | null; estado: string; fuente: string; notas: string | null; scian: string | null; similitud_icp_pct: number | null };
   if (prospecto.estado === 'cerrado' || prospecto.estado === 'perdido') {
     throw new DatoInvalido(`Este prospecto está ${prospecto.estado} — a un ${prospecto.estado} no se le redacta correo frío.`);
+  }
+  // AGB-6: compuerta de ICP ANTES de gastar modelo — fail closed, como la
+  // cadencia de abajo. Sin giro de autotransporte, fuente vetada o score
+  // suficiente, este prospecto no es a quien se le escribe "liquidación de
+  // viajes" (el caso real: vacantes de Computrabajo sin relación con carga).
+  if (!pasaCompuertaIcp({ scian: prospecto.scian, fuente: prospecto.fuente, similitudIcpPct: prospecto.similitud_icp_pct })) {
+    throw new DatoInvalido('Este prospecto no pasa la compuerta de ICP (sin SCIAN de autotransporte, sin fuente vetada y sin similitud ICP suficiente) — no se le redacta correo frío.');
   }
 
   // 3) La regla del censo finito: contactado hace <48h NO se vuelve a tocar

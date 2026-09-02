@@ -17,6 +17,7 @@ import { SOLO_CONTRALOR, type Destinatario } from '../cuadre/resumen';
 
 import { leyendaPdf } from '../cuadre/leyendas';
 import { LOGO_PNG_BASE64 } from '@/lib/marca/logo';
+import { DatoInvalido } from '../errores';
 import type { Liquidacion, Viaje, Operador } from '@/types/likida';
 
 // Paleta (Apple) en 0–1 para pdf-lib
@@ -83,6 +84,15 @@ export async function generarLiquidacionPDF(
    */
   destinatario: Destinatario = 'contralor',
 ): Promise<Uint8Array> {
+  // AUDITORÍA 24 (revision → fiscal): un rechazo (0299) devuelve el viaje a
+  // `en_cuadre` y admite gastos nuevos — el PDF emitido antes deja de
+  // cuadrar con la base en cuanto llegue el comprobante bueno.
+  if (liq.revision === 'rechazada') {
+    throw new DatoInvalido('Esta liquidación se rechazó y el viaje volvió a cuadre: no hay PDF que emitir todavía.');
+  }
+  const selloRevision = liq.revision === 'pendiente' || liq.revision == null
+    ? 'PENDIENTE DE REVISIÓN — todavía no la firma una persona'
+    : `Revisada por ${liq.revisadaPor ?? 'el sistema (cuadró sola)'}${liq.revisadaEn ? ` el ${fechaMx(liq.revisadaEn)}` : ''}`;
   const doc = await PDFDocument.create();
   doc.setTitle(`Liquidación ${viaje.folio ?? liq.id.slice(0, 8)}`);
   doc.setProducer('Likida');
@@ -521,6 +531,9 @@ export async function generarLiquidacionPDF(
     text(linea, M, ly, 6, font, MUTED);
     ly -= 7.5;
   }
+  // AUDITORÍA 24 (BLOQ-6): el sello de revisión humana — quién firmó esta
+  // liquidación o si sigue pendiente de que alguien lo haga.
+  text(selloRevision, M, ly - 3, 6, font, MUTED);
 
   return doc.save();
 }

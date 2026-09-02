@@ -9,12 +9,31 @@ import { describe, it, expect, vi } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => ({}) }) }));
+
+// AGB-3: builder real por tabla, con una cola de respuestas por tabla — el
+// mismo patrón que enviador.test.ts — para poder ejercer `candidatosSinDossier`
+// (antes el mock trivial `from: () => ({})` bastaba porque nada la probaba).
+const respuestas = new Map<string, Array<{ data: unknown; error: { message: string } | null }>>();
+function builder(tabla: string) {
+  const responder = () => {
+    const cola = respuestas.get(tabla);
+    return cola && cola.length > 0 ? cola.shift()! : { data: [], error: null };
+  };
+  const b: Record<string, unknown> = {};
+  Object.assign(b, {
+    select: () => b, eq: () => b, is: () => b, in: () => b, or: () => b,
+    order: () => b, limit: () => b, insert: () => b, upsert: () => b,
+    then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
+      Promise.resolve().then(responder).then(res, rej),
+  });
+  return b;
+}
+vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => builder(t) }) }));
 vi.mock('../interruptores', () => ({ estaApagado: async () => false }));
 vi.mock('@/lib/llm/openrouter', () => ({ generateStructured: vi.fn() }));
 vi.mock('./corridas', () => ({ registrarCorrida: vi.fn() }));
 
-const { textoVisible, enlacesInstitucionales, correosVerificados, cosecharCorreosDeNotas } = await import('./investigador');
+const { textoVisible, enlacesInstitucionales, correosVerificados, cosecharCorreosDeNotas, candidatosSinDossier } = await import('./investigador');
 
 describe('correosVerificados — la compuerta literal contra el contacto inventado', () => {
   const paginas = [{ url: 'https://x.mx/contacto', texto: 'Escríbenos a VENTAS@x.mx o llama al 8112345678' }];
@@ -140,5 +159,53 @@ describe('c5-11 — la frontera SSRF: IPs privadas jamás se visitan', () => {
   it('172.15 y 172.32 NO son privadas (el /12 es exacto)', () => {
     expect(esIpPrivada('172.15.0.1')).toBe(false);
     expect(esIpPrivada('172.32.0.1')).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AGB-3 (auditoría 24, 1-sep-2026) — `candidatosSinDossier` con una ventana
+// FIJA devolvía `[]` para siempre en cuanto los N más viejos ya tenían
+// dossier (medido en producción: 25/25). El cursor tiene que AVANZAR a la
+// siguiente página dentro de la misma llamada, no repetir la misma ventana.
+// ═══════════════════════════════════════════════════════════════════════════
+function filaProspecto(n: number) {
+  // created_at estrictamente creciente — el orden que el cursor recorre.
+  return { id: `pr-${String(n).padStart(4, '0')}`, created_at: `2026-08-${String(1 + Math.floor(n / 1000)).padStart(2, '0')}T00:${String(n % 60).padStart(2, '0')}:00.000Z` };
+}
+
+describe('candidatosSinDossier — el cursor avanza más allá de una página agotada', () => {
+  it('con la primera página de 100 TODA con dossier, sigue a la segunda página y encuentra ahí a los candidatos', async () => {
+    const pagina1 = Array.from({ length: 100 }, (_, i) => filaProspecto(i));
+    const pagina2 = [filaProspecto(100), filaProspecto(101), filaProspecto(102)]; // página parcial: fin de la tabla
+    respuestas.set('prospecto', [
+      { data: pagina1, error: null },
+      { data: pagina2, error: null },
+    ]);
+    respuestas.set('prospecto_dossier', [
+      { data: pagina1.map((f) => ({ prospecto_id: f.id })), error: null }, // los 100 de la página 1: TODOS con dossier
+      { data: [{ prospecto_id: pagina2[0].id }], error: null },            // de la página 2, solo el primero tiene dossier
+    ]);
+    const r = await candidatosSinDossier(5);
+    expect(r).toEqual([pagina2[1].id, pagina2[2].id]);
+  });
+
+  it('sin más filas (página vacía), el cursor se detiene y devuelve lo que ya juntó — sin colgarse', async () => {
+    respuestas.set('prospecto', [{ data: [], error: null }]);
+    respuestas.set('prospecto_dossier', []);
+    const r = await candidatosSinDossier(5);
+    expect(r).toEqual([]);
+  });
+
+  it('una página parcial (menor al tamaño de página) para el cursor sin pedir una vuelta de más', async () => {
+    const pagina = [filaProspecto(0), filaProspecto(1)];
+    respuestas.set('prospecto', [{ data: pagina, error: null }]);
+    respuestas.set('prospecto_dossier', [{ data: [], error: null }]);
+    const r = await candidatosSinDossier(5);
+    expect(r).toEqual([pagina[0].id, pagina[1].id]);
+    // Solo UNA respuesta de 'prospecto' quedaba en cola — si el cursor hubiera
+    // pedido otra vuelta habría consumido el `{data: [], error: null}` default
+    // del builder, indistinguible aquí; lo que sí es observable es que el
+    // resultado no incluye nada de una vuelta fantasma.
+    expect(respuestas.get('prospecto')).toHaveLength(0);
   });
 });

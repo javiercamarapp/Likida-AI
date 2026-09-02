@@ -11,6 +11,10 @@ import { leerJornadas, leerPolitica, nombresDeOperadores } from '@/lib/likida/jo
 import { armarReporte, reporteACsv, type DiaDelReporte } from '@/lib/likida/jornada/reporte';
 
 export const runtime = 'nodejs';
+// BE-19 (auditoría 24): sin esto el tope lo pone el default de la plataforma
+// (15 s en Node sin Fluid Compute) y un export de 92 días sobre 45,000
+// liquidaciones muere en 504 mudo. Literal a propósito: Next lo lee en build.
+export const maxDuration = 120;
 
 /**
  * EL REPORTE DE JORNADA QUE LA FLOTA ENSEÑA EN UNA INSPECCIÓN.

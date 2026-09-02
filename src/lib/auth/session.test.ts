@@ -38,7 +38,7 @@ describe('getSessionTenant', () => {
     maybeSingle.mockResolvedValue({ data: { tenant_id: 't-1', rol: 'flota_admin', nombre: 'Ana' } });
     const r = await getSessionTenant();
     expect(from).toHaveBeenCalledWith('app_user');
-    expect(select).toHaveBeenCalledWith('tenant_id, rol, nombre, operador_id, avatar_url');
+    expect(select).toHaveBeenCalledWith('tenant_id, rol, nombre, operador_id, avatar_url, activo');
     expect(eq).toHaveBeenCalledWith('id', 'u-1');
     expect(r).toEqual({ userId: 'u-1', tenantId: 't-1', rol: 'flota_admin', nombre: 'Ana', operadorId: null, avatarUrl: null });
   });
@@ -116,6 +116,20 @@ describe('getSessionTenant', () => {
     expect(r).toEqual({ userId: 'u-6', tenantId: null, rol: 'superadmin', nombre: 'Javier', operadorId: null, avatarUrl: 'https://x/avatares/u-6/foto.jpg' });
   });
 
+  // ── SEG-1 (auditoría 24, 0294): la baja cierra la puerta de app ────────
+  it('una cuenta dada de baja (activo=false) es NO-sesión: null, y queda en el log', async () => {
+    getUser.mockResolvedValue({ data: { user: { id: 'u-baja' } } });
+    maybeSingle.mockResolvedValue({ data: { tenant_id: 't-1', rol: 'contador', nombre: 'Ex', activo: false } });
+    expect(await getSessionTenant()).toBeNull();
+    expect(logger.warn).toHaveBeenCalledWith('session.usuario_desactivado', { userId: 'u-baja' });
+  });
+
+  it('activo=true (o la columna ausente) entra igual que antes — solo el false explícito da de baja', async () => {
+    getUser.mockResolvedValue({ data: { user: { id: 'u-ok' } } });
+    maybeSingle.mockResolvedValue({ data: { tenant_id: 't-1', rol: 'contador', nombre: 'Luz', activo: true } });
+    expect(await getSessionTenant()).toMatchObject({ userId: 'u-ok', rol: 'contador' });
+  });
+
   it('si Supabase truena las DOS veces, regresa null en vez de lanzar', async () => {
     getUser.mockRejectedValue(new Error('fetch failed'));
     expect(await getSessionTenant()).toBeNull();
@@ -157,6 +171,14 @@ describe('una cuenta de auth.users sin fila en app_user no entra por ninguna pue
   it('las rutas de API (export, asistente): 403, y no la flota demo', async () => {
     const r = await resolverTenantApi('https://likida.ai/api/export/liquidaciones');
     expect(r).toMatchObject({ ok: false, status: 403 });
+  });
+
+  it('SEG-1: una cuenta dada de baja tampoco entra por ninguna puerta — a /login, no a /sin-acceso', async () => {
+    maybeSingle.mockResolvedValue({ data: { tenant_id: 't-1', rol: 'flota_admin', nombre: 'Ex', activo: false } });
+    await expect(requireSessionTenant('/dashboard')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(`/login?next=${encodeURIComponent('/dashboard')}`);
+    const r = await resolverTenantApi('https://likida.ai/api/export/liquidaciones');
+    expect(r).toMatchObject({ ok: false, status: 401 });
   });
 
   it('CONTROL — la misma cadena con fila SÍ abre, así que el candado no es un muro', async () => {

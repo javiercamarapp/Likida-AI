@@ -97,6 +97,22 @@ export const ETIQUETA_INTERRUPTOR: Record<string, string> = {
   'agente:copiloto': 'Copiloto del fundador',
 };
 
+/**
+ * Pipeline del chofer, POR FLOTA (0297, ADM-6 auditoría 24) — tabla
+ * `interruptor_tenant`, un dominio DISTINTO de `interruptor`/`INTERRUPTORES`
+ * (estos ids solo se usan en /admin/flotas/[id], nunca en el catálogo
+ * global de arriba). Mapa APARTE, no dentro de `ETIQUETA_INTERRUPTOR`:
+ * `etiquetas.test.ts` exige que esa constante sea EXACTAMENTE el dominio de
+ * `INTERRUPTORES` (ni de más ni de menos) — meterlos ahí habría hecho que
+ * la prueba viera tres "rótulos huérfanos" de una palanca que nunca existió
+ * en ese catálogo.
+ */
+const ETIQUETA_PIPELINE: Record<string, string> = {
+  'pipeline:whatsapp': 'Recepción de WhatsApp (router)',
+  'pipeline:ocr': 'OCR de la foto del ticket',
+  'pipeline:cuadre': 'Cuadre de la liquidación',
+};
+
 export function etiquetaInterruptor(id: string): string {
-  return ETIQUETA_INTERRUPTOR[id] ?? id;
+  return ETIQUETA_INTERRUPTOR[id] ?? ETIQUETA_PIPELINE[id] ?? id;
 }

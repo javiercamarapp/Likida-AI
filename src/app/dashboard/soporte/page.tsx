@@ -74,6 +74,12 @@ export default async function SoportePage({
   ].filter(Boolean).join('&');
   const enlaceHilo = (id: string) =>
     `/dashboard/soporte?ticket=${encodeURIComponent(id)}${sufijo ? `&${sufijo}` : ''}`;
+  // H25 (auditoría 24): "← Volver a mis tickets" volvía a `/dashboard/soporte`
+  // A SECAS — la misma trampa que `sufijo.ts` documenta: un superadmin
+  // previsualizando una flota (`?tenant=X&vista=demo`) que abriera un hilo y
+  // volviera perdía la previsualización a media revisión, igual que el link
+  // al hilo de arriba ya cuida.
+  const enlaceVolver = `/dashboard/soporte${sufijo ? `?${sufijo}` : ''}`;
 
   // ── Abrir un ticket — la puerta de la señal de PMF #3 (auditoría externa
   // 16-ago-2026: la señal estaba instrumentada y nada podía producirla).
@@ -341,7 +347,7 @@ export default async function SoportePage({
             </>
           )}
 
-          <Link href="/dashboard/soporte" className="text-xs inline-block" style={{ color: 'var(--marca)' }}>
+          <Link href={enlaceVolver} className="text-xs inline-block" style={{ color: 'var(--marca)' }}>
             ← Volver a mis tickets
           </Link>
         </div>

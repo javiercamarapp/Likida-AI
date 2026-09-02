@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
-import { traerTodo, conteo } from './pg';
+import { traerTodo, traerPorIds, conteo } from './pg';
 import { sendText } from '@/lib/meta/client';
 import { telefonoJefeDe, telefonoParaDineroDe } from './contactos';
 import { anotarEventoIncidencia } from './asistencia_wa';
@@ -130,9 +130,20 @@ const TIPOS_CON_RELOJ = ['siniestro', 'robo', 'bloqueo'] as const;
 const VENTANA_MS = 72 * 3_600_000;
 
 export interface ResultadoRelojes {
+  /** Incidencias con reloj en la ventana, ya descontadas las selladas. */
   revisadas: number;
   avisadas: number;
   fallos: number;
+  /** BE-7: las que no alcanzaron turno porque el reloj del cron venció. Se
+   *  recogen enteras en la corrida siguiente (no se sellan). */
+  cortadasPorReloj: number;
+}
+
+/** El reloj que los barridos reciben del cron (BE-7, auditoría 24). Sin él
+ *  corren hasta acabar — como en la Mac o en una prueba. */
+export interface OpcionesBarrido {
+  /** Instante (ms) a partir del cual NO se arranca otro envío. */
+  venceEn?: number;
 }
 
 interface IncidenciaConReloj {
@@ -152,26 +163,65 @@ interface IncidenciaConReloj {
  * Best-effort POR INCIDENCIA y declarado: un aviso que no salió se loguea y
  * se reintenta a la siguiente corrida (el sello solo se pone tras mandar).
  */
-export async function avisarRelojesLegales(ahora: Date = new Date()): Promise<ResultadoRelojes> {
+export async function avisarRelojesLegales(ahora: Date = new Date(), opts: OpcionesBarrido = {}): Promise<ResultadoRelojes> {
   const desde = new Date(ahora.getTime() - VENTANA_MS).toISOString();
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('incidencia')
-    .select('id, tenant_id, tipo, viaje_id')
-    .in('tipo', [...TIPOS_CON_RELOJ])
-    .neq('estado', 'resuelta')
-    .gte('abierta_en', desde)
-    .limit(100), 'relojes.incidencias');
-  if (error) throw new Error(`avisarRelojesLegales: ${error.message}`);
+  const admin = supabaseAdmin();
+  // AUDITORÍA 24, BE-31: esto era `limit(100)` sin `order` y sin descontar
+  // las ya selladas — 130 incidencias en 72 h devolvían 100 arbitrarias, las
+  // selladas gastaban ranura y las 30 restantes salían de la ventana sin
+  // aviso, con `revisadas = 100` y latido `ok`. Ahora se leen TODAS las de la
+  // ventana (`traerTodo`, orden único por `abierta_en, id`) y los sellos se
+  // descuentan de un golpe, en tandas, antes de repartir turnos.
+  const data = await traerTodo<{ id: unknown; tenant_id: unknown; tipo: unknown; viaje_id: unknown }>(
+    (d, h) => acotada(admin
+      .from('incidencia')
+      .select('id, tenant_id, tipo, viaje_id', conteo(d))
+      .in('tipo', [...TIPOS_CON_RELOJ])
+      .neq('estado', 'resuelta')
+      .gte('abierta_en', desde)
+      .order('abierta_en', { ascending: true }).order('id', { ascending: true })
+      .range(d, h), 'relojes.incidencias'),
+    'relojes.incidencias',
+  );
 
-  const filas: IncidenciaConReloj[] = (data ?? []).map((f) => ({
+  const todas: IncidenciaConReloj[] = data.map((f) => ({
     id: f.id as string,
     tenantId: f.tenant_id as string,
     tipo: f.tipo as string,
     viajeId: (f.viaje_id as string) || null,
   }));
 
-  const r: ResultadoRelojes = { revisadas: filas.length, avisadas: 0, fallos: 0 };
-  for (const inc of filas) {
+  // El anti-join con los sellos: una lectura por tanda, no una por incidencia.
+  // El sello vive en la bitácora de la incidencia — el mismo expediente que
+  // lee el panel, no un estado paralelo.
+  //
+  // El barrido es CROSS-TENANT a propósito (un cron sobre todas las flotas),
+  // igual que la lectura de `incidencia` de arriba: no hay un `tenant_id`
+  // único que filtrar. Lo que sí se hace —y por eso `tenant_id` viaja en el
+  // select— es casar el sello con el PAR (flota, incidencia): un sello solo
+  // descuenta a la incidencia de SU flota, nunca a una homónima de otra.
+  const sellos = todas.length === 0 ? [] : await traerPorIds<{ incidencia_id: unknown; tenant_id: unknown }>(
+    todas.map((i) => i.id),
+    (tanda) => acotada(admin
+      .from('incidencia_evento')
+      .select('incidencia_id, tenant_id')
+      .eq('tipo', EVENTO_RELOJ)
+      .in('incidencia_id', tanda), 'relojes.sellos'),
+    'relojes.sellos',
+  );
+  const selladas = new Set(sellos.map((s) => `${String(s.tenant_id)}:${String(s.incidencia_id)}`));
+  const filas = todas.filter((i) => !selladas.has(`${i.tenantId}:${i.id}`));
+
+  const r: ResultadoRelojes = { revisadas: filas.length, avisadas: 0, fallos: 0, cortadasPorReloj: 0 };
+  for (const [n, inc] of filas.entries()) {
+    // BE-7: el reloj se mira ANTES de cada incidencia, no después. Un aviso
+    // que arranca sin presupuesto muere a media escritura: WhatsApp fuera y
+    // sello sin poner, o sea el reenvío de la hora siguiente.
+    if (opts.venceEn !== undefined && Date.now() >= opts.venceEn) {
+      r.cortadasPorReloj = filas.length - n;
+      logger.warn('relojes.cortado_por_reloj', { pendientes: r.cortadasPorReloj });
+      break;
+    }
     try {
       const hecho = await avisarRelojesDeIncidencia(inc);
       if (hecho) r.avisadas++;
@@ -185,20 +235,8 @@ export async function avisarRelojesLegales(ahora: Date = new Date()): Promise<Re
 
 /** `true` si ESTA corrida mandó el aviso (la anterior ya sellada devuelve false). */
 async function avisarRelojesDeIncidencia(inc: IncidenciaConReloj): Promise<boolean> {
-  const admin = supabaseAdmin();
-
-  // ¿Ya se avisó? El sello vive en la bitácora de la incidencia — el mismo
-  // expediente que lee el panel, no un estado paralelo.
-  const { data: previo, error: errPrevio } = await acotada(admin
-    .from('incidencia_evento')
-    .select('id')
-    .eq('tenant_id', inc.tenantId)
-    .eq('incidencia_id', inc.id)
-    .eq('tipo', EVENTO_RELOJ)
-    .limit(1), 'relojes.sello');
-  if (errPrevio) throw new Error(`relojes.sello: ${errPrevio.message}`);
-  if ((previo ?? []).length > 0) return false;
-
+  // El sello ya se descontó en `avisarRelojesLegales` (una lectura por tanda,
+  // BE-31): aquí solo llegan incidencias sin aviso.
   const folio = inc.viajeId ? await folioDelViaje(inc.tenantId, inc.viajeId) : null;
 
   // Qué relojes aplican a ESTA incidencia. Cada uno con su canal correcto:
@@ -355,6 +393,9 @@ export interface ResultadoVencimientos {
   candidatos: number;
   avisados: number;
   fallos: number;
+  /** BE-7: vencimientos (no flotas) que quedaron sin aviso porque el reloj
+   *  del cron venció. Sin sello: la corrida siguiente los recoge. */
+  cortadosPorReloj: number;
 }
 
 /**
@@ -368,7 +409,7 @@ export interface ResultadoVencimientos {
  * permiso SICT importa doble: reincidir dos veces en 2 años en ciertas
  * faltas faculta a la SICT a REVOCAR el permiso.
  */
-export async function avisarVencimientos(ahora: Date = new Date()): Promise<ResultadoVencimientos> {
+export async function avisarVencimientos(ahora: Date = new Date(), opts: OpcionesBarrido = {}): Promise<ResultadoVencimientos> {
   const hoy = hoyMx(ahora);
   const admin = supabaseAdmin();
 
@@ -386,32 +427,39 @@ export async function avisarVencimientos(ahora: Date = new Date()): Promise<Resu
   const piso = new Date(Date.parse(`${hoy}T12:00:00Z`) - 366 * 86_400_000)
     .toISOString().slice(0, 10);
 
+  // AUDITORÍA 24, BE-10 (ALTO): las tres lecturas llevaban `limit(500)` — y la
+  // de unidades ni `order`. El filtro matchea si CUALQUIERA de los tres
+  // documentos cae en 13 meses, o sea la mayor parte de una flota activa: con
+  // 800 tractocamiones volvían 500 en orden de plan, ECO-114 con la póliza a
+  // 7 días quedaba en la posición 620 y nunca entraba a `candidatos`; el
+  // latido salía `ok` y el sello decía «no había aviso pendiente». Ahora las
+  // tres se leen COMPLETAS con `traerTodo` (orden único por `id`; lanza si la
+  // lectura sale corta), que es la única forma de que «Likida avisa» sea
+  // verdad a la escala del piloto.
   const [unidades, operadores, polizas] = await Promise.all([
-    acotada(admin.from('unidad')
-      .select('id, tenant_id, numero_economico, poliza_vence, permiso_sict_vence, verificacion_vence')
+    traerTodo<Record<string, unknown>>((d, h) => acotada(admin.from('unidad')
+      .select('id, tenant_id, numero_economico, poliza_vence, permiso_sict_vence, verificacion_vence', conteo(d))
       .eq('activo', true)
       .or([
         `and(poliza_vence.gte.${piso},poliza_vence.lte.${horizonte})`,
         `and(permiso_sict_vence.gte.${piso},permiso_sict_vence.lte.${horizonte})`,
         `and(verificacion_vence.gte.${piso},verificacion_vence.lte.${horizonte})`,
       ].join(','))
-      .limit(500), 'vencimientos.unidades'),
-    acotada(admin.from('operador')
-      .select('id, tenant_id, nombre, licencia_vence')
+      .order('id', { ascending: true })
+      .range(d, h), 'vencimientos.unidades'), 'vencimientos.unidades'),
+    traerTodo<Record<string, unknown>>((d, h) => acotada(admin.from('operador')
+      .select('id, tenant_id, nombre, licencia_vence', conteo(d))
       .gte('licencia_vence', piso)
       .lte('licencia_vence', horizonte)
-      .order('licencia_vence', { ascending: true })
-      .limit(500), 'vencimientos.operadores'),
-    acotada(admin.from('flota_poliza')
-      .select('id, tenant_id, aseguradora, vigencia_hasta')
+      .order('id', { ascending: true })
+      .range(d, h), 'vencimientos.operadores'), 'vencimientos.operadores'),
+    traerTodo<Record<string, unknown>>((d, h) => acotada(admin.from('flota_poliza')
+      .select('id, tenant_id, aseguradora, vigencia_hasta', conteo(d))
       .gte('vigencia_hasta', piso)
       .lte('vigencia_hasta', horizonte)
-      .order('vigencia_hasta', { ascending: true })
-      .limit(500), 'vencimientos.polizas'),
+      .order('id', { ascending: true })
+      .range(d, h), 'vencimientos.polizas'), 'vencimientos.polizas'),
   ]);
-  for (const r of [unidades, operadores, polizas]) {
-    if (r.error) throw new Error(`avisarVencimientos: ${r.error.message}`);
-  }
 
   const candidatos: VencimientoPorAvisar[] = [];
   const empuja = (tenantId: string, objeto: VencimientoPorAvisar['objeto'], objetoId: string,
@@ -425,20 +473,20 @@ export async function avisarVencimientos(ahora: Date = new Date()): Promise<Resu
       rotulo: `${ROTULO_DOC[documento]} de ${quien}`,
     });
   };
-  for (const u of unidades.data ?? []) {
+  for (const u of unidades) {
     const quien = (u.numero_economico as string) || 'unidad';
     empuja(u.tenant_id as string, 'unidad', u.id as string, 'poliza', quien, u.poliza_vence);
     empuja(u.tenant_id as string, 'unidad', u.id as string, 'permiso_sict', quien, u.permiso_sict_vence);
     empuja(u.tenant_id as string, 'unidad', u.id as string, 'verificacion', quien, u.verificacion_vence);
   }
-  for (const o of operadores.data ?? []) {
+  for (const o of operadores) {
     empuja(o.tenant_id as string, 'operador', o.id as string, 'licencia', (o.nombre as string) || 'operador', o.licencia_vence);
   }
-  for (const p of polizas.data ?? []) {
+  for (const p of polizas) {
     empuja(p.tenant_id as string, 'flota_poliza', p.id as string, 'poliza_flota', (p.aseguradora as string) || 'la flota', p.vigencia_hasta);
   }
 
-  const r: ResultadoVencimientos = { candidatos: candidatos.length, avisados: 0, fallos: 0 };
+  const r: ResultadoVencimientos = { candidatos: candidatos.length, avisados: 0, fallos: 0, cortadosPorReloj: 0 };
   if (candidatos.length === 0) return r;
 
   // ¿Cuáles ya se avisaron? Una consulta por corrida, no una por candidato.
@@ -474,7 +522,18 @@ export async function avisarVencimientos(ahora: Date = new Date()): Promise<Resu
     (porTenant.get(c.tenantId) ?? porTenant.set(c.tenantId, []).get(c.tenantId)!).push(c);
   }
 
-  for (const [tenantId, items] of porTenant) {
+  const flotas = [...porTenant.entries()];
+  for (const [n, [tenantId, items]] of flotas.entries()) {
+    // BE-7 (auditoría 24): el reloj se mira ANTES de cada flota. Este barrido
+    // sella DESPUÉS de mandar (patrón 0202): si Vercel mata la lambda entre
+    // el WhatsApp y el sello, la corrida siguiente REENVÍA «la póliza de
+    // ECO-114 vence en 7 días» a la misma flota, cada hora. Lo que no alcanza
+    // turno no se manda ni se sella, y se dice.
+    if (opts.venceEn !== undefined && Date.now() >= opts.venceEn) {
+      r.cortadosPorReloj = flotas.slice(n).reduce((s, [, i]) => s + i.length, 0);
+      logger.warn('vencimientos.cortado_por_reloj', { flotasPendientes: flotas.length - n, vencimientos: r.cortadosPorReloj });
+      break;
+    }
     try {
       const tel = await telefonoJefeDe(tenantId);
       if (!tel) {

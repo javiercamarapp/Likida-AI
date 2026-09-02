@@ -33,6 +33,10 @@ import { fechaMx } from '@/lib/formato';
 
 export const dynamic = 'force-dynamic';
 
+/** LEG-12: la fecha del último cambio sustantivo de `avisoIntegral()`, no la
+ *  fecha en que alguien abre la página. Actualizar junto con el texto. */
+const VIGENTE_DESDE = '2026-09-01';
+
 export const metadata = {
   title: 'Aviso de privacidad',
   // El integral es público por obligación legal, pero no es contenido que deba
@@ -95,7 +99,14 @@ export default async function AvisoIntegral({ params }: { params: Promise<{ tena
           {datos.razonSocial}
         </h1>
         <p className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>
-          Vigente al {fechaMx(new Date().toISOString())} · Ley Federal de Protección de
+          {/* AUDITORÍA 24 (LEG-12, BAJO, reincidente): esto imprimía
+              `fechaMx(new Date())` — "Vigente al" cambiaba cada día que
+              alguien abriera la página, sin decir nunca cuándo cambió el
+              TEXTO de `avisoIntegral()`. `VIGENTE_DESDE` es la fecha del
+              último cambio sustantivo de ese texto (LEG-3/LEG-8, auditoría
+              24: cámara/telemetría y contacto de emergencia), no la fecha
+              del render. */}
+          Vigente desde el {fechaMx(VIGENTE_DESDE)} · Ley Federal de Protección de
           Datos Personales en Posesión de los Particulares
         </p>
       </header>

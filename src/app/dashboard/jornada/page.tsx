@@ -5,8 +5,9 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { hoyMx, OFFSET_MX } from '@/lib/formato';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
+import { logger } from '@/lib/logger';
 import {
-  leerJornadas, leerPolitica, nombresDeOperadores,
+  leerJornadas, leerPolitica, nombresDeOperadores, catalogoDeOperadores,
   anularAsiento, cerrarDia, asentarMarca, guardarPolitica,
   JornadaIlegible,
 } from '@/lib/likida/jornada/repo';
@@ -342,6 +343,20 @@ export default async function PaginaJornada({
     return { ok: true, mensaje: 'Umbrales de la flota guardados, con tu nombre y la fecha.' };
   }
 
+  // FE-19: el filtro `?operador=` ya existía en el servidor (`leerJornadas`,
+  // arriba) pero la pantalla no tenía de dónde elegirlo — con cientos de
+  // choferes, la ventana por omisión (14 días) nace truncada casi siempre
+  // (`300 operadores × 14 días = 4,200 > 900`, el tope de `leerJornadas`), y
+  // sin selector la única salida era teclear el id en la URL a mano. Lectura
+  // propia y aparte (`traerTodo`, orden único): que falle no puede tumbar el
+  // resto de la pantalla, solo apaga el selector.
+  let operadores: Array<{ id: string; nombre: string }> | null = null;
+  try {
+    operadores = await catalogoDeOperadores(tenantId);
+  } catch (e) {
+    logger.warn('jornada.operadores_no_leidos', { tenantId, err: e instanceof Error ? e.message : String(e) });
+  }
+
   return (
     <VistaJornada
       filas={filas}
@@ -353,6 +368,7 @@ export default async function PaginaJornada({
       hasta={hasta}
       sufijo={sufijo}
       operador={sp.operador ?? null}
+      operadores={operadores}
       abrir={sp.abrir ?? null}
       puedeCorregir={puedeAdministrar(rol)}
       anularMarca={anularMarca}

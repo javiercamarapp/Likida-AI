@@ -11,6 +11,10 @@ const respuestas = new Map<string, Resp>();
 /** Los `range(desde, hasta)` que pidió cada tabla — para comprobar que se
  *  pagina UNA vez cuando el `count` ya dijo que no falta nada. */
 const rangos = new Map<string, Array<[number, number]>>();
+// ADM-6: los `.upsert(...)` que cada tabla recibió — para las pruebas de
+// `apagarPipelineDeTenant`/`encenderPipelineDeTenant`, que escriben en vez
+// de leer.
+const escrituras = new Map<string, Array<Record<string, unknown>>>();
 
 // El mock pagina COMO POSTGREST: `range` rebana, y `count` solo viene si la
 // consulta lo pidió con `.select(cols, { count: 'exact' })`. Un mock que
@@ -30,15 +34,70 @@ function crearBuilder(tabla: string) {
   let esHead = false;
   let tope: number | null = null;
   const filtros: Array<[string, unknown]> = [];
+  // ADM-1 (buscarConversaciones/getConversacion): `.ilike`/`.maybeSingle` no
+  // existían en el mock — la búsqueda por teléfono y el detalle por
+  // (tenant, teléfono) los necesitan de verdad, como PostgREST.
+  let filtroIlike: [string, RegExp] | null = null;
+  // ADM-3: `.not(col, 'ilike', patron)` — getResumenNegocio excluye los
+  // tenants sintéticos 'ZZZ %' que una corrida de QA abortada conserva.
+  const filtrosNot: Array<[string, RegExp]> = [];
+  // ADM-6: `.in(col, vals)` — la resolución del nombre de quién movió la
+  // palanca (`getInterruptoresPipelineDeTenant`) lo necesita de verdad.
+  const filtrosIn: Array<[string, unknown[]]> = [];
+  // ADM-6: `.upsert(payload)` — `apagarPipelineDeTenant`/
+  // `encenderPipelineDeTenant` escriben en vez de leer; `esEscritura` desvía
+  // `.then()` a registrar en `escrituras` en vez de correr el camino de
+  // lectura (que ningún test de escritura toca).
+  let esEscritura = false;
+  let payloadEscritura: Array<Record<string, unknown>> = [];
   const filtradas = (): Array<Record<string, unknown>> => {
     let todas = (raw().data ?? []) as Array<Record<string, unknown>>;
     for (const [col, val] of filtros) todas = todas.filter((f) => f[col] === val);
+    if (filtroIlike) {
+      const [col, re] = filtroIlike;
+      todas = todas.filter((f) => re.test(String(f[col] ?? '')));
+    }
+    for (const [col, re] of filtrosNot) todas = todas.filter((f) => !re.test(String(f[col] ?? '')));
+    for (const [col, vals] of filtrosIn) todas = todas.filter((f) => vals.includes(f[col]));
     return todas;
   };
   const b: Record<string, unknown> = {};
   b.order = () => b; // el orden lo simula el fixture: se declara ya ordenado
   b.eq = (col: string, val: unknown) => { filtros.push([col, val]); return b; };
+  b.in = (col: string, vals: unknown[]) => { filtrosIn.push([col, vals]); return b; };
   b.limit = (n: number) => { tope = n; return b; };
+  b.upsert = (payload: Record<string, unknown> | Array<Record<string, unknown>>) => {
+    esEscritura = true;
+    payloadEscritura = Array.isArray(payload) ? payload : [payload];
+    return b;
+  };
+  // `anotarBitacora` (lib/likida/bitacora_escritura.ts, importado tal cual
+  // por `apagarPipelineDeTenant`/`encenderPipelineDeTenant`) hace un INSERT
+  // liso a `bitacora_auditoria` — mismo camino de escritura que `.upsert`.
+  b.insert = (payload: Record<string, unknown> | Array<Record<string, unknown>>) => {
+    esEscritura = true;
+    payloadEscritura = Array.isArray(payload) ? payload : [payload];
+    return b;
+  };
+  // `%texto%` → regex que exige contener "texto" (mismo comodín que LIKE).
+  b.ilike = (col: string, patron: string) => {
+    const cuerpo = patron.split('%').map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*');
+    filtroIlike = [col, new RegExp(`^${cuerpo}$`, 'i')];
+    return b;
+  };
+  b.not = (col: string, op: string, patron: string) => {
+    if (op === 'ilike') {
+      const cuerpo = patron.split('%').map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*');
+      filtrosNot.push([col, new RegExp(`^${cuerpo}$`, 'i')]);
+    }
+    return b;
+  };
+  b.maybeSingle = () => {
+    const r = raw();
+    if (r.error) return Promise.resolve({ data: null, error: r.error });
+    const todas = filtradas();
+    return Promise.resolve({ data: todas[0] ?? null, error: null });
+  };
   b.select = (_cols?: unknown, opts?: { count?: string; head?: boolean }) => {
     if (opts?.count === 'exact') pidioConteo = true;
     if (opts?.head) esHead = true;
@@ -58,6 +117,16 @@ function crearBuilder(tabla: string) {
   };
   b.then = (ok: (v: Resp) => unknown, fail?: (e: unknown) => unknown) => {
     const r = raw();
+    if (esEscritura) {
+      // El fixture puede sembrar un error para simular la escritura caída
+      // (`respuestas.set(tabla, { data: null, error: {...} })`); sin error
+      // sembrado, la escritura "tuvo éxito" — solo queda registrada.
+      if (!r.error) {
+        if (!escrituras.has(tabla)) escrituras.set(tabla, []);
+        escrituras.get(tabla)!.push(...payloadEscritura);
+      }
+      return Promise.resolve({ data: null, error: r.error ?? null }).then(ok, fail);
+    }
     if (r.error) return Promise.resolve(r).then(ok, fail);
     const todas = filtradas();
     const count = 'count' in r ? (r.count ?? null) : pidioConteo ? todas.length : null;
@@ -135,9 +204,11 @@ vi.mock('@/lib/supabase/admin', () => ({
 const {
   getResumenNegocio, getCostoPorFaseModelo, getConversacionesActivas,
   contarConversacionesActivas, TOPE_CONVERSACIONES,
+  buscarConversaciones, getConversacion, CONVERSACIONES_POR_PAGINA,
   getConteosPlataforma, getCorridasRecientes, getUltimaCorridaPorAgente, AGENTES_BITACORA,
   getCorridasFallidas, getLiquidacionesEnRevisar, contarLiquidacionesEnRevisar, LIMITE_LIQUIDACIONES_REVISAR,
-  costoIaMesActual, costoIaDeTenant, SEGUNDOS_CACHE_CONSOLA,
+  costoIaMesActual, costoIaDeTenant, SEGUNDOS_CACHE_CONSOLA, getMrr,
+  getInterruptoresPipelineDeTenant, apagarPipelineDeTenant, encenderPipelineDeTenant,
 } = await import('./negocio');
 
 describe('getResumenNegocio', () => {
@@ -230,6 +301,20 @@ describe('getResumenNegocio', () => {
       facturasTotal: 0,
       tendenciaCosto: null, tendenciaTokens: null,
     });
+  });
+
+  it('ADM-3: un tenant "ZZZ QA …" conservado por una corrida abortada no cuenta como flota real', async () => {
+    respuestas.set('tenant', {
+      data: [
+        { id: 't1', nombre: 'Flota Real SA de CV', plan: 'pro' },
+        { id: 'zzz1', nombre: 'ZZZ QA a1b2c3d4', plan: 'demo' },
+      ],
+      error: null,
+    });
+    respuestas.set('viaje', { data: [{ id: 'v1', tenant_id: 't1' }], error: null });
+    const r = await getResumenNegocio('2026-08-02');
+    expect(r.tenants).toBe(1);
+    expect(r.flotas.map((f) => f.nombre)).toEqual(['Flota Real SA de CV']);
   });
 
   it('con dos semanas de historia, la tendencia es el % real de cambio', async () => {
@@ -529,6 +614,79 @@ describe('getConversacionesActivas', () => {
   });
 });
 
+// ADM-1: `getConversacionesActivas` es un TOPE de 20 sin filtro. Con
+// cientos de choferes activos, Javier necesita poder ENCONTRAR la
+// conversación de un teléfono concreto — de ahí `buscarConversaciones`
+// (filtro + `count exact`, nunca `filas.length`) y `getConversacion`
+// (detalle por tenant+teléfono, para la URL propia).
+describe('buscarConversaciones', () => {
+  beforeEach(() => { respuestas.clear(); rangos.clear(); });
+
+  function fila(telefono: string, tenantId = 't-1') {
+    return { telefono, tenant_id: tenantId, updated_at: '2026-08-02T20:00:00Z', estado: { turns: [] }, tenant: { nombre: 'Flota Demo' } };
+  }
+
+  it('filtra por teléfono (dígitos) y el total viene de count exact, no de filas.length', async () => {
+    respuestas.set('wa_conversacion', {
+      data: [fila('529991110001'), fila('529991110002'), fila('529992220003')],
+      error: null,
+    });
+    const r = await buscarConversaciones({ q: '9991', pagina: 1 });
+    expect(r.total).toBe(2); // count exact sobre las filtradas, no 3 (todas)
+    expect(r.filas.map((f) => f.telefono)).toEqual(['529991110001', '529991110002']);
+    expect(r.paginas).toBe(1);
+  });
+
+  it('normaliza el texto de búsqueda a solo dígitos antes de armar el ilike', async () => {
+    respuestas.set('wa_conversacion', { data: [fila('529991110001')], error: null });
+    const r = await buscarConversaciones({ q: '+52 999 111 0001', pagina: 1 });
+    expect(r.total).toBe(1);
+  });
+
+  it('pagina de verdad: con más filas que CONVERSACIONES_POR_PAGINA, la página 2 trae el resto', async () => {
+    const muchas = Array.from({ length: CONVERSACIONES_POR_PAGINA + 3 }, (_, i) => fila(`52999111${String(i).padStart(4, '0')}`));
+    respuestas.set('wa_conversacion', { data: muchas, error: null });
+    const p1 = await buscarConversaciones({ pagina: 1 });
+    const p2 = await buscarConversaciones({ pagina: 2 });
+    expect(p1.total).toBe(CONVERSACIONES_POR_PAGINA + 3);
+    expect(p1.filas.length).toBe(CONVERSACIONES_POR_PAGINA);
+    expect(p2.filas.length).toBe(3);
+    expect(p1.paginas).toBe(2);
+  });
+
+  it('un fallo de Supabase lanza, no devuelve página vacía', async () => {
+    respuestas.set('wa_conversacion', { data: null, error: { message: 'caída' } });
+    await expect(buscarConversaciones({ q: '999' })).rejects.toThrow('caída');
+  });
+});
+
+describe('getConversacion', () => {
+  beforeEach(() => { respuestas.clear(); rangos.clear(); });
+
+  it('trae la conversación por (tenant, teléfono)', async () => {
+    respuestas.set('wa_conversacion', {
+      data: [{
+        telefono: '529991110001', tenant_id: 't-1', updated_at: '2026-08-02T20:00:00Z',
+        estado: { turns: [{ role: 'user', content: 'hola' }] }, tenant: { nombre: 'Flota Demo' },
+      }],
+      error: null,
+    });
+    const r = await getConversacion('t-1', '529991110001');
+    expect(r?.telefono).toBe('529991110001');
+    expect(r?.turns).toEqual([{ role: 'user', content: 'hola' }]);
+  });
+
+  it('null cuando no existe esa conversación (no un error)', async () => {
+    respuestas.set('wa_conversacion', { data: [], error: null });
+    expect(await getConversacion('t-1', '529990000000')).toBeNull();
+  });
+
+  it('un fallo de Supabase lanza', async () => {
+    respuestas.set('wa_conversacion', { data: null, error: { message: 'caída' } });
+    await expect(getConversacion('t-1', '529990000000')).rejects.toThrow('caída');
+  });
+});
+
 // Los conteos de plataforma del Inicio: operadores, liquidaciones y
 // conversaciones se cuentan con `head: true` (la base cuenta, no viajan
 // filas); `app_user` sí se trae —solo `rol`— porque además del total se
@@ -816,5 +974,123 @@ describe('costoIaDeTenant — la ficha 360', () => {
     expect(r).toEqual({ historicoUsd: 0.12, d30Usd: 0.12 });
     const otro = await costoIaDeTenant('t-sin-uso');
     expect(otro).toEqual({ historicoUsd: 0, d30Usd: 0 });
+  });
+});
+
+// ADM-5 (auditoría 24): MRR real — antes una constante `0` en la consola.
+describe('getMrr', () => {
+  beforeEach(() => { respuestas.clear(); rangos.clear(); });
+
+  it('suma precio_mensual de las suscripciones activas', async () => {
+    respuestas.set('suscripcion', {
+      data: [
+        { id: 's1', estado: 'activa', plan: { precio_mensual: 1500 } },
+        { id: 's2', estado: 'activa', plan: { precio_mensual: 2500.5 } },
+      ],
+      error: null,
+    });
+    const r = await getMrr();
+    expect(r).toEqual({ totalMxn: 4000.5, suscripcionesActivas: 2 });
+  });
+
+  it('sin suscripciones activas: $0 REAL (la lectura corrió, no hay nada que sumar)', async () => {
+    respuestas.set('suscripcion', { data: [], error: null });
+    const r = await getMrr();
+    expect(r).toEqual({ totalMxn: 0, suscripcionesActivas: 0 });
+  });
+
+  it('una suscripción activa sin precio configurado: totalMxn null — nunca se descuenta en silencio', async () => {
+    respuestas.set('suscripcion', {
+      data: [
+        { id: 's1', estado: 'activa', plan: { precio_mensual: 1500 } },
+        { id: 's2', estado: 'activa', plan: { precio_mensual: null } },
+      ],
+      error: null,
+    });
+    const r = await getMrr();
+    expect(r.totalMxn).toBeNull();
+    // El conteo de suscripciones SÍ se sabe, aunque el total no se pueda sumar.
+    expect(r.suscripcionesActivas).toBe(2);
+  });
+
+  it('con la base caída LANZA — nunca un $0 fabricado', async () => {
+    respuestas.set('suscripcion', { data: null, error: { message: 'db down' } });
+    await expect(getMrr()).rejects.toThrow();
+  });
+});
+
+// ADM-6 (auditoría 24): interruptores del pipeline del chofer, POR FLOTA
+// (tabla `interruptor_tenant`, mig. 0297) — mismo contrato que el
+// interruptor global (0110): sin fila = encendido, apagar exige motivo,
+// lanza si la escritura falla.
+describe('getInterruptoresPipelineDeTenant', () => {
+  beforeEach(() => { respuestas.clear(); rangos.clear(); escrituras.clear(); });
+
+  it('sin filas: los tres pipelines salen ENCENDIDOS por default', async () => {
+    respuestas.set('interruptor_tenant', { data: [], error: null });
+    const r = await getInterruptoresPipelineDeTenant('t1');
+    expect(r).toEqual([
+      { pipeline: 'whatsapp', apagado: false, motivo: null, cambiadoPorNombre: null, cambiadoEn: null },
+      { pipeline: 'ocr', apagado: false, motivo: null, cambiadoPorNombre: null, cambiadoEn: null },
+      { pipeline: 'cuadre', apagado: false, motivo: null, cambiadoPorNombre: null, cambiadoEn: null },
+    ]);
+  });
+
+  it('con una fila apagada, resuelve el nombre de quién movió la palanca', async () => {
+    respuestas.set('interruptor_tenant', {
+      data: [
+        { tenant_id: 't1', pipeline: 'ocr', apagado: true, motivo: 'gasto disparado', cambiado_por: 'u1', cambiado_en: '2026-08-30T10:00:00Z' },
+      ],
+      error: null,
+    });
+    respuestas.set('app_user', { data: [{ id: 'u1', nombre: 'Javier', email: 'javier@likida.mx' }], error: null });
+    const r = await getInterruptoresPipelineDeTenant('t1');
+    const ocr = r.find((p) => p.pipeline === 'ocr');
+    expect(ocr).toEqual({
+      pipeline: 'ocr', apagado: true, motivo: 'gasto disparado',
+      cambiadoPorNombre: 'Javier', cambiadoEn: '2026-08-30T10:00:00Z',
+    });
+    // Los otros dos siguen en su default.
+    expect(r.find((p) => p.pipeline === 'whatsapp')?.apagado).toBe(false);
+  });
+
+  it('con la base caída LANZA — "todo encendido" no se puede afirmar sin haber podido mirar', async () => {
+    respuestas.set('interruptor_tenant', { data: null, error: { message: 'db down' } });
+    await expect(getInterruptoresPipelineDeTenant('t1')).rejects.toThrow();
+  });
+});
+
+describe('apagarPipelineDeTenant / encenderPipelineDeTenant', () => {
+  beforeEach(() => { respuestas.clear(); rangos.clear(); escrituras.clear(); });
+
+  it('apagar escribe apagado=true con el motivo, tenant y pipeline correctos', async () => {
+    await apagarPipelineDeTenant('t1', 'ocr', 'gasto disparado', 'u1');
+    const filas = escrituras.get('interruptor_tenant') ?? [];
+    expect(filas).toHaveLength(1);
+    expect(filas[0]).toMatchObject({
+      tenant_id: 't1', pipeline: 'ocr', apagado: true, motivo: 'gasto disparado', cambiado_por: 'u1',
+    });
+  });
+
+  it('apagar sin motivo (o solo espacios) rechaza SIN escribir', async () => {
+    await expect(apagarPipelineDeTenant('t1', 'ocr', '   ', 'u1')).rejects.toThrow(/motivo/);
+    expect(escrituras.get('interruptor_tenant') ?? []).toHaveLength(0);
+  });
+
+  it('un pipeline fuera del catálogo (whatsapp/ocr/cuadre) rechaza SIN escribir', async () => {
+    await expect(apagarPipelineDeTenant('t1', 'facturacion', 'motivo', 'u1')).rejects.toThrow(/catálogo/);
+    expect(escrituras.get('interruptor_tenant') ?? []).toHaveLength(0);
+  });
+
+  it('encender escribe apagado=false con motivo null', async () => {
+    await encenderPipelineDeTenant('t1', 'cuadre', 'u1');
+    const filas = escrituras.get('interruptor_tenant') ?? [];
+    expect(filas).toHaveLength(1);
+    expect(filas[0]).toMatchObject({ tenant_id: 't1', pipeline: 'cuadre', apagado: false, motivo: null, cambiado_por: 'u1' });
+  });
+
+  it('con la escritura caída LANZA — "apagué" que no apagó es el peor resultado', async () => {
+    respuestas.set('interruptor_tenant', { data: null, error: { message: 'db down' } });
+    await expect(apagarPipelineDeTenant('t1', 'ocr', 'motivo', 'u1')).rejects.toThrow();
   });
 });

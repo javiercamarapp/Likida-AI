@@ -65,7 +65,7 @@ vi.mock('@/lib/correo/enviar', () => ({ enviarCorreo: (...a: unknown[]) => envia
 
 const {
   encolarPieza, aprobarPieza, rechazarPieza, marcarEnviada, enviarPiezaPorCorreo,
-  rebotesRecientes, correosSuprimidos,
+  rebotesRecientes, correosSuprimidos, aprobadasSinEnviar, TIPOS_ENVIABLES,
 } = await import('./cola');
 const { DatoInvalido } = await import('../errores');
 const { verificarBaja } = await import('@/lib/correo/baja');
@@ -181,7 +181,7 @@ describe('marcarEnviada — el eslabón con el historial de contactos (0118)', (
 
 describe('enviarPiezaPorCorreo — el envío REAL (0120, P1 de la auditoría externa)', () => {
   const FILA = {
-    id: 'p-1', titulo: 'Correo día 0', cuerpo: 'Hola,\n\nvi su vacante.', cuerpo_final: null,
+    id: 'p-1', tipo: 'correo_frio', titulo: 'Correo día 0', cuerpo: 'Hola,\n\nvi su vacante.', cuerpo_final: null,
     agente: 'ventas', prospecto_id: 'pr-9', prospecto: { empresa: 'Transportes X', correo: 'contacto@x.mx' },
   };
 
@@ -246,7 +246,7 @@ describe('enviarPiezaPorCorreo — el envío REAL (0120, P1 de la auditoría ext
 
 describe('la guardia de cadencia, ATÓMICA (0124) — una transacción decide, no un SELECT', () => {
   const FILA_G = {
-    id: 'p-1', titulo: 'Correo día 2', cuerpo: 'Seguimiento.', cuerpo_final: null,
+    id: 'p-1', tipo: 'correo_seguimiento', titulo: 'Correo día 2', cuerpo: 'Seguimiento.', cuerpo_final: null,
     agente: 'ventas', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'c@x.mx' },
   };
 
@@ -300,7 +300,7 @@ describe('la guardia de cadencia, ATÓMICA (0124) — una transacción decide, n
 
 describe('el tope diario de correo frío (Fase 2: 20-40/día, configurable)', () => {
   const FILA_T = {
-    id: 'p-1', titulo: 'Correo frío', cuerpo: 'Hola.', cuerpo_final: null,
+    id: 'p-1', tipo: 'correo_frio', titulo: 'Correo frío', cuerpo: 'Hola.', cuerpo_final: null,
     agente: 'redactor', prioridad: 'normal', prospecto_id: null, prospecto: { empresa: 'X', correo: 'c@x.mx' },
   };
   const envAntes = process.env.LIKIDA_TOPE_CORREO_FRIO_DIA;
@@ -475,7 +475,7 @@ describe('c5-14 — el formato de campaña se verifica también EN LA PUERTA', (
     expect(enviarCorreo).not.toHaveBeenCalled();
   });
 
-  it('una pieza que NO es de campaña no pasa por el verificador (los partes financieros llevan guiones)', async () => {
+  it('AGB-4: una pieza que NO es de campaña (p. ej. un parte interno) se RECHAZA de plano — no hay verificador de formato que la salve, porque no debe salir del todo', async () => {
     respuestas.set('cola_aprobacion', [
       { data: [{
         id: 'p-1', tipo: 'parte_costos', titulo: 'Costos — 2026-08-27', cuerpo: 'Parte — con guiones.', cuerpo_final: null,
@@ -483,14 +483,19 @@ describe('c5-14 — el formato de campaña se verifica también EN LA PUERTA', (
       }], error: null },
       { data: null, error: null },
     ]);
-    const r = await enviarPiezaPorCorreo('p-1', 'u-1');
-    expect(r.ok).toBe(true);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/parte interno/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
   });
 
   it('verificarFormatoCampana vive en la cola y caza los dos guardarraíles', () => {
     expect(() => verificarFormatoCampana('nuestros clientes reales')).toThrow(/clientes reales/);
     expect(() => verificarFormatoCampana('texto — con raya')).toThrow(/guion largo/);
     expect(() => verificarFormatoCampana('en pláticas con transportistas')).not.toThrow();
+  });
+
+  it('AGB-2: un cuerpo con "Transportes Innovativos" o "Grupo GAL" lanza DatoInvalido — TRACCION_PUBLICABLE vacía por default', () => {
+    expect(() => verificarFormatoCampana('Ya estamos en pláticas con Transportes Innovativos.')).toThrow(/tracción/);
+    expect(() => verificarFormatoCampana('Trabajamos con Grupo GAL desde hace meses.')).toThrow(/tracción/);
   });
 });
 
@@ -578,15 +583,28 @@ describe('la liga de baja — obligatoria en campaña, fail-closed sin secreto',
     expect(verificarBaja(url.searchParams.get('e')!, url.searchParams.get('t')!)).toBe(true);
   });
 
-  it('una pieza que NO es de campaña no necesita el secreto ni lleva liga', async () => {
+  it('AGB-4: una pieza que NO es de campaña se rechaza por el candado de TIPO, ANTES de llegar a la liga de baja — hoy TIPOS_ENVIABLES = TIPOS_CAMPANA, así que "no campaña" y "no enviable" son lo mismo', async () => {
     delete process.env.LIKIDA_BAJA_SECRET;
     respuestas.set('cola_aprobacion', [
       { data: [FILA_NO_CAMPANA], error: null },
       { data: null, error: null },
     ]);
-    const r = await enviarPiezaPorCorreo('p-2', 'u-1');
-    expect(r.ok).toBe(true);
-    const [, correo] = enviarCorreo.mock.calls[0] as unknown as [string[], { bajaHref?: string }];
-    expect(correo.bajaHref).toBeUndefined();
+    await expect(enviarPiezaPorCorreo('p-2', 'u-1')).rejects.toThrow(/parte interno/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+});
+
+describe('AGB-4 — aprobadasSinEnviar solo lista lo ENVIABLE', () => {
+  it('la consulta filtra por TIPOS_ENVIABLES — un `ficha_prospecto` aprobado no aparece en "Aprobadas por enviar"', async () => {
+    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    await aprobadasSinEnviar();
+    const select = de('cola_aprobacion', 'select')[0];
+    expect(select.inn).toContainEqual(['tipo', [...TIPOS_ENVIABLES]]);
+  });
+
+  it('TIPOS_ENVIABLES no incluye los tipos internos que ya salieron hacia el prospecto en producción', () => {
+    for (const interno of ['ficha_prospecto', 'brief_demo', 'propuesta_comercial']) {
+      expect(TIPOS_ENVIABLES).not.toContain(interno);
+    }
   });
 });

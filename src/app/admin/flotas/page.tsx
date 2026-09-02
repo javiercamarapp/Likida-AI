@@ -484,8 +484,15 @@ export default async function FlotasPage() {
             </p>
           </section>
 
+          {/* ADM-5 (auditoría 24): decía que uso vs. límite, salud
+              (activa/en riesgo/morosa) y el audit log de impersonación
+              "siguen en el roadmap" — ya existen: los dos primeros en la
+              ficha de cada flota (`ficha.tsx`, `lib/saas/suscripcion.ts`), el
+              audit log en `impersonacion_dia`/`bitacora_auditoria`
+              (`tenant-efectivo.ts`). Lo único que de verdad falta es el MRR
+              DESGLOSADO por cliente (hoy `getMrr()` solo trae el total). */}
           <EstadoVacio>
-            &quot;Ver dashboard&quot; ya existe (arriba) — entra al panel real de esa flota con tu propia sesión de superadmin, sin credenciales nuevas. Uso vs. límite, salud (activa/en riesgo/morosa), MRR por cliente y un audit log de qué flota viste y cuándo siguen en el roadmap.
+            &quot;Ver dashboard&quot; ya existe (arriba) — entra al panel real de esa flota con tu propia sesión de superadmin, sin credenciales nuevas. Uso vs. límite y salud (activa/en riesgo/morosa) ya están en la ficha de cada flota; el audit log de qué flota viste y cuándo ya se escribe (impersonación). Lo que falta: MRR desglosado por cliente — hoy solo hay el total de la plataforma.
             <br /><br />
             Retención por cohortes, distribución por plan — necesita más de 1 tenant para decir algo real.
           </EstadoVacio>

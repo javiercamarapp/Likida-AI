@@ -31,6 +31,9 @@ const extraerComprobante = vi.fn();
 const getGastos = vi.fn(async () => [] as unknown[]);
 const addGasto = vi.fn(async () => {});
 const ventanaDesdeDB = vi.fn();
+/** AUDITORÍA 24 · AGEN-11: la foto repetida dentro de la ráfaga. */
+const gastoExistePorHash = vi.fn(async () => false);
+const gastoPorHash = vi.fn(async () => null as unknown);
 
 /** El contador de intake REAL: atómico, compartido por las fotos del viaje. */
 let contador = 0;
@@ -57,7 +60,8 @@ vi.mock('@/lib/likida/repo', () => ({
   ubicarGastoPorHash: vi.fn(async () => null),
   getHuerfanos: vi.fn(async () => []), resolverHuerfanos: vi.fn(), marcarHuerfanosOfrecidos: vi.fn(),
   updateGastoCfdiXml: vi.fn(), saveCfdiXmlRaw: vi.fn(),
-  gastoExistePorHash: vi.fn(async () => false), gastoPorHash: vi.fn(async () => null),
+  gastoExistePorHash: (...a: unknown[]) => gastoExistePorHash(...(a as [])),
+  gastoPorHash: (...a: unknown[]) => gastoPorHash(...(a as [])),
   corregirFechaGasto: vi.fn(), enriquecerGastoConCodigo: vi.fn(),
   guardarCodigoPendiente: vi.fn(), getCodigosPendientes: vi.fn(async () => []),
   reclamarCodigoPendiente: vi.fn(), getViaje: vi.fn(async () => null),
@@ -174,6 +178,8 @@ beforeEach(() => {
   extraerComprobante.mockReset(); getGastos.mockReset(); addGasto.mockReset();
   guardarHuerfano.mockClear(); subirComprobante.mockClear();
   ventanaDesdeDB.mockReset(); ventanaDesdeDB.mockResolvedValue(undefined);
+  gastoExistePorHash.mockReset(); gastoExistePorHash.mockResolvedValue(false);
+  gastoPorHash.mockReset(); gastoPorHash.mockResolvedValue(null);
   getGastos.mockResolvedValue([]);
   process.env.WHATSAPP_ACCESS_TOKEN = 'tok';
   process.env.WHATSAPP_PHONE_NUMBER_ID = '123';
@@ -189,7 +195,7 @@ describe('22 fotos que fallan NO son 22 mensajes', () => {
     // se midió el 20-ago (ver el describe de abajo).
     expect(salientes.length, `el chofer recibió ${salientes.length} mensajes: ${JSON.stringify(salientes)}`).toBe(1);
     const todo = salientes.join('\n');
-    expect(todo).toContain('De tus 22 fotos');
+    expect(todo, 'AGEN-8: no se afirma un total que solo vale dentro de esta invocación').toContain('De las fotos que me mandaste,');
     expect(todo).toMatch(/\*22\*/);
     expect(todo).toMatch(/de mi lado/i);
   });
@@ -236,7 +242,7 @@ describe('22 fotos que fallan NO son 22 mensajes', () => {
   // El chofer mandó seis y recibió esto, en este orden:
   //
   //   1. «Se me trabó a mí al leer ese comprobante ⚙️ — no es tu foto…»
-  //   2. «Ya revisé tus fotos… De tus 6 fotos, *6* se me trabaron de mi lado…»
+  //   2. «Ya revisé tus fotos… De las fotos que me mandaste, *6* se me trabaron…»
   //
   // El mismo trabón, dos veces, y la segunda con un número que parecía
   // desmentir a la primera. La causa: `llegoSola` se calculaba como «el
@@ -247,7 +253,7 @@ describe('22 fotos que fallan NO son 22 mensajes', () => {
     await rafaga(6);
 
     expect(salientes, 'un fajo es UN mensaje, no uno suelto más el resumen').toHaveLength(1);
-    expect(salientes[0]).toContain('De tus 6 fotos');
+    expect(salientes[0]).toContain('De las fotos que me mandaste,');
     // El texto individual es correcto para una foto sola; suelto DELANTE del
     // resumen es la repetición que se midió.
     expect(salientes[0]).not.toMatch(/al leer ese comprobante/i);
@@ -335,7 +341,7 @@ describe('AUDITORÍA 19 — la misma ráfaga, pero procesada EN SERIE (route.ts 
 
     expect(salientes.length, `el chofer recibió ${salientes.length} mensajes: ${JSON.stringify(salientes)}`).toBe(1);
     const todo = salientes.join('\n');
-    expect(todo).toContain('De tus 22 fotos');
+    expect(todo, 'AGEN-8: no se afirma un total que solo vale dentro de esta invocación').toContain('De las fotos que me mandaste,');
     expect(todo).toMatch(/\*22\*/);
   });
 
@@ -436,6 +442,19 @@ describe('un fallo técnico de OCR ya no pierde el comprobante', () => {
     expect(dicho).toMatch(/no se pierde/i);
   });
 
+  it('AUDITORÍA 24 · AGEN-12: NO le promete que se lo ofreceremos en el siguiente viaje', async () => {
+    // Un huérfano de `fallo_ocr` nace con `monto: 0` y la oferta solo saca los
+    // que tienen monto: «te lo ofrezco en el siguiente» era una promesa que el
+    // código no podía cumplir. Lo que de verdad lo recupera es el reenvío, y
+    // eso es lo único que ahora se le pide.
+    extraerComprobante.mockResolvedValue(FALLO_TECNICO);
+    await processInbound({ from: '5219993700779', type: 'image', mediaId: 'm1', waMessageId: 'wa1' });
+
+    const dicho = salientes.join('\n');
+    expect(dicho).not.toMatch(/ofrezco en el siguiente|en el siguiente viaje/i);
+    expect(dicho, 'lo que sí depende de él').toMatch(/reenv/i);
+  });
+
   it('si tampoco se puede guardar, se le dice la verdad', async () => {
     extraerComprobante.mockResolvedValue(FALLO_TECNICO);
     guardarHuerfano.mockResolvedValueOnce(false);
@@ -473,5 +492,53 @@ describe('MAX_CONFIRMACIONES_SEGUIDAS: el tope estaba escrito y sin cablear', ()
 
     expect(botones).toHaveLength(4);
     expect(salientes.join('\n')).not.toMatch(/no pude leer con seguridad/i);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · AGEN-11 (BAJO) — la foto repetida dentro de la ráfaga era
+// muda: `anotarFoto` ya la había contado en «de tus N fotos», el dedup por
+// hash hacía `return` sin anotar nada, y el resumen decía «llevo N-1
+// comprobantes» sin explicar la resta. El chofer la reenviaba y volvía el
+// mismo silencio.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('AGEN-11 · la foto repetida se cuenta y se dice', () => {
+  it('en una ráfaga, el resumen la nombra en vez de callarla', async () => {
+    extraerComprobante.mockResolvedValue(bueno(1000));
+    // La 3ª de 5 es la misma que ya estaba en el viaje.
+    let i = 0;
+    gastoExistePorHash.mockImplementation(async () => (i += 1) === 3);
+    gastoPorHash.mockResolvedValue({ id: 'g3', monto: 1000, fecha: '2026-08-02' });
+    getGastos.mockResolvedValue([{ id: 'a', concepto: 'diesel', monto: 1000 }]);
+
+    await rafagaSerial(5);
+
+    const todo = salientes.join('\n');
+    expect(todo).toContain('De las fotos que me mandaste,');
+    expect(todo, 'la resta entre «5 fotos» y los comprobantes tiene que estar explicada').toMatch(/repetida/i);
+    expect(todo, 'no se le pide nada: no hay nada que hacer con ella').not.toMatch(/buena luz/i);
+  });
+
+  it('una foto repetida que llegó SOLA sigue en silencio (un doble toque no es una noticia)', async () => {
+    extraerComprobante.mockResolvedValue(bueno(1000));
+    gastoExistePorHash.mockResolvedValue(true);
+    gastoPorHash.mockResolvedValue({ id: 'g1', monto: 1000, fecha: '2026-08-02' });
+
+    await processInbound({ from: '5219993700779', type: 'image', mediaId: 'm1', waMessageId: 'wa1' });
+
+    expect(salientes, `recibió: ${JSON.stringify(salientes)}`).toEqual([]);
+  });
+
+  it('si además trae fecha dudosa, gana el aviso entero de la fecha y NO se cuenta dos veces', async () => {
+    extraerComprobante.mockResolvedValue(bueno(1000));
+    gastoExistePorHash.mockResolvedValue(true);
+    gastoPorHash.mockResolvedValue({ id: 'g1', monto: 45, fecha: '2019-03-02' });
+    ventanaDesdeDB.mockResolvedValue({ inicio: '2026-08-01', fin: '2026-08-05', hoy: '2026-08-04' });
+
+    await processInbound({ from: '5219993700779', type: 'image', mediaId: 'm1', waMessageId: 'wa1' });
+
+    const todo = salientes.join('\n');
+    expect(todo).toMatch(/misma foto/i);
+    expect(todo).not.toMatch(/repetida \(ya la tenía\)/i);
   });
 });

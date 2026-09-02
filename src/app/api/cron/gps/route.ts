@@ -101,6 +101,10 @@ export async function GET(req: Request) {
     const eventosGuardados = eventos.reduce((s, r) => s + r.guardados, 0);
     const disparos = eventos.reduce((s, r) => s + r.disparos, 0);
     const eventosSinTurno = eventos.filter((r) => r.sinTurno).length;
+    // AUDITORÍA 24, REN-2 y LEG-1: lo que la corrida NO guardó, con nombre.
+    const recortadas = resultados.reduce((s, r) => s + (r.recortadas ?? 0), 0);
+    const sinAvisoPrevio = resultados.reduce((s, r) => s + (r.sinAvisoPrevio ?? 0), 0);
+    const eventosSinAvisoPrevio = eventos.reduce((s, r) => s + (r.sinAvisoPrevio ?? 0), 0);
 
     // Las huérfanas no son un error de la corrida, pero tampoco son ruido: son
     // camiones que el proveedor reporta y que ninguna unidad reclama. Van en el
@@ -118,11 +122,21 @@ export async function GET(req: Request) {
       // PR #152): una corrida que dejó flotas sin sincronizar y contesta 200
       // limpio es un cron verde que miente.
       sinTurnoPorReloj: sinTurno,
+      // REN-2: lecturas válidas que el techo dejó fuera. > 0 = hay camiones
+      // que este cron no ve; nunca «ok».
+      recortadas,
+      // LEG-1: unidades con viaje vivo cuyo operador no ha recibido el aviso
+      // de privacidad. Sus posiciones NO se guardaron (art. 16 LFPDPPP).
+      sinAvisoPrevio,
+      motivoSinAviso: sinAvisoPrevio > 0 || eventosSinAvisoPrevio > 0
+        ? `${Math.max(sinAvisoPrevio, eventosSinAvisoPrevio)} unidad(es) sin rastrear: su operador nunca recibió el aviso de privacidad (LFPDPPP art. 16). La flota tiene que ponérselo a disposición antes de que su GPS o su cámara se sincronicen.`
+        : undefined,
       eventos: {
         flotas: eventos.length,
         guardados: eventosGuardados,
         disparosAsistencia: disparos,
         sinTurnoPorReloj: eventosSinTurno,
+        sinAvisoPrevio: eventosSinAvisoPrevio,
         sinPermiso: eventos.filter((r) => r.sinPermiso).map((r) => ({ tenantId: r.tenantId, proveedor: r.proveedor })),
         conError: eventosConError.length,
         errores: eventosConError.map((r) => ({ tenantId: r.tenantId, proveedor: r.proveedor, error: r.error })),
@@ -135,12 +149,17 @@ export async function GET(req: Request) {
     // hacer, incluido el barrido de graves de las flotas sin turno) ni «fallo»
     // (nada se rompió; la corrida siguiente, en 5 min, retoma lo pendiente).
     const cortadaPorReloj = sinTurno > 0 || eventosSinTurno > 0;
-    if (conError.length > 0 || eventosConError.length > 0 || cortadaPorReloj) {
+    // `parcial` también con recorte o con unidades sin aviso: en los dos casos
+    // hay camiones que esta corrida NO sincronizó, y un «ok» lo taparía.
+    const incompleta = recortadas > 0 || sinAvisoPrevio > 0 || eventosSinAvisoPrevio > 0;
+    if (conError.length > 0 || eventosConError.length > 0 || cortadaPorReloj || incompleta) {
       logger.warn('cron.gps.parcial', cuerpo);
       await registrarLatido('gps', 'parcial', {
         flotas: resultados.length,
         conError: conError.length + eventosConError.length,
         sinTurnoPorReloj: sinTurno + eventosSinTurno,
+        recortadas,
+        sinAvisoPrevio: sinAvisoPrevio + eventosSinAvisoPrevio,
       });
     } else {
       logger.info('cron.gps.ok', cuerpo);

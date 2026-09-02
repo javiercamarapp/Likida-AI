@@ -10,6 +10,7 @@ import { ahoraMs } from '@/lib/saludo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { traerTodo, conteo } from '@/lib/likida/pg';
 import { getSolicitudesArcoPendientes } from '@/lib/admin/escalaciones';
+import { agregarDiasHabiles } from '@/lib/admin/dias-habiles';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 
 export const dynamic = 'force-dynamic';
@@ -43,7 +44,14 @@ export default async function CompliancePage() {
     if (resolucion.length < 5) return { error: 'Escribe la resolución (a quién se respondió y qué).' };
     // El tenant: la solicitud se resuelve bajo la flota responsable. Se busca
     // el tenant de la solicitud para no depender del orden del listado.
-    const { data: sol } = await supabaseAdmin().from('solicitud_arco').select('tenant_id').eq('id', solicitudId).maybeSingle();
+    //
+    // ADM-10 (auditoría 24, MEDIO): el `error` de esta lectura se descartaba
+    // — una base caída y una solicitud inexistente se pintaban con el MISMO
+    // mensaje ("La solicitud no existe."), que es "fallar cerrado" pero
+    // mintiendo sobre el porqué: quien lo lee busca la solicitud a mano y no
+    // la encuentra porque la lectura ni siquiera corrió.
+    const { data: sol, error: errSol } = await supabaseAdmin().from('solicitud_arco').select('tenant_id').eq('id', solicitudId).maybeSingle();
+    if (errSol) return { error: `No se pudo leer la solicitud — ${errSol.message}. Intenta de nuevo.` };
     if (!sol?.tenant_id) return { error: 'La solicitud no existe.' };
     try {
       await resolverSolicitudArco(sol.tenant_id as string, solicitudId, resolucion);
@@ -190,7 +198,7 @@ async function datosDeCompliance(): Promise<{ solicitudes: SolicitudArcoPanel[];
   // DAT-08 (auditoría prod): el corte era el día UTC. De 18:00 a 24:00 hora de
   // México el "dentro de 5 días" era en realidad dentro de 6, y el plazo del
   // art. 31 de la LFPDPPP se cuenta en días de México.
-  const corte = hoyMx(new Date(ahoraMs() + 5 * 864e5));
+  const corte = agregarDiasHabiles(hoyMx(new Date(ahoraMs())), 5);
   const vence = pendientes.filter((p) => p.venceEn <= corte).length;
   return { solicitudes: mapeadas as SolicitudArcoPanel[], pendientesVencen: vence };
 }

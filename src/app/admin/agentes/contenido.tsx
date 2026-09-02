@@ -36,18 +36,30 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 }
 
 /** Éxito de 30 días POR agente: ok / total de agente_corrida. LANZA en
- *  error — el llamador pinta "no se pudo leer" en su celda. */
+ *  error — el llamador pinta "no se pudo leer" en su celda.
+ *
+ * AUDITORÍA 24, ADM-9: era `.select(...).limit(5000)` sin `order` — el
+ * mismo hueco que `consumo.ts` ya cerró (FE-8): PostgREST recorta a
+ * `max_rows` en silencio y sin orden esas filas son un muestreo arbitrario.
+ * `consumo_agentes()` (mig. 0162) agrupa en la base y devuelve un arreglo
+ * del tamaño del catálogo de agentes, no del historial. */
 async function exitoTreintaDias(): Promise<Map<string, { ok: number; total: number }>> {
   const desde = new Date(ahoraMs() - 30 * 86_400_000).toISOString();
-  const { data, error } = await supabaseAdmin()
-    .from('agente_corrida').select('agente, estado').gte('inicio', desde).limit(5000);
+  const { data, error } = await supabaseAdmin().rpc('consumo_agentes', {
+    p_desde: desde,
+    p_inicio_hoy: new Date(ahoraMs()).toISOString(),
+  });
   if (error) throw new Error(`exitoTreintaDias: ${error.message}`);
+  if (!Array.isArray(data)) {
+    throw new Error('exitoTreintaDias: consumo_agentes devolvió otra forma (¿migración 0162 sin aplicar?).');
+  }
   const acc = new Map<string, { ok: number; total: number }>();
-  for (const f of data ?? []) {
-    const a = acc.get(f.agente) ?? { ok: 0, total: 0 };
-    a.total += 1;
-    if (f.estado === 'ok') a.ok += 1;
-    acc.set(f.agente, a);
+  for (const f of data as Array<Record<string, unknown>>) {
+    const agente = typeof f.agente === 'string' ? f.agente : '';
+    if (!agente) continue;
+    const total = Number(f.n ?? 0);
+    const fallos = Number(f.fallos ?? 0);
+    acc.set(agente, { ok: total - fallos, total });
   }
   return acc;
 }

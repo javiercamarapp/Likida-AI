@@ -117,3 +117,24 @@ describe('descifrarErrorProvision — los errores duros salen verbatim, el resto
     expect(descifrarErrorProvision(null)).toBeNull();
   });
 });
+
+// ── SEG-7 (auditoría 24): el alta del dueño no es un oráculo de correos ──
+describe('esCorreoYaRegistrado / mensajeAltaNeutro', () => {
+  it('reconoce las tres formas del duplicado y nada más', async () => {
+    const { esCorreoYaRegistrado } = await import('./invitar');
+    expect(esCorreoYaRegistrado(new Error('A user with this email address has already been registered'))).toBe(true);
+    expect(esCorreoYaRegistrado(new Error('email_exists'))).toBe(true);
+    expect(esCorreoYaRegistrado(new Error('duplicate key value violates unique constraint "app_user_email_key"'))).toBe(true);
+    expect(esCorreoYaRegistrado(new Error('fetch failed'))).toBe(false);
+    expect(esCorreoYaRegistrado('no es Error')).toBe(false);
+  });
+
+  it('el mensaje neutro no afirma ni niega que el correo ya tuviera cuenta', async () => {
+    const { mensajeAltaNeutro } = await import('./invitar');
+    const m = mensajeAltaNeutro('x@flota.mx');
+    expect(m).toContain('x@flota.mx');
+    expect(m).toMatch(/Si .* no tenía cuenta/);
+    expect(m).toMatch(/Si ya la tenía/);
+    expect(m).not.toMatch(/ya tiene una cuenta registrada/);
+  });
+});

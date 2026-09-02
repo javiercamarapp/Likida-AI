@@ -419,10 +419,15 @@ interface SuscripcionActiva { plan_clave: string }
  *  que el hallazgo c5-9 en reportes.ts). La prueba estructural de abajo lee el
  *  esquema REAL de la migración y compara: una columna inventada ya no pasa. */
 async function leerSuscripcionesActivas(): Promise<SuscripcionActiva[]> {
+  // AGB-10 (auditoría 24): los tenants "ZZZ QA …" (sembrados a propósito
+  // para pruebas) no deben contar hacia el MRR ni las suscripciones activas
+  // del parte semanal — mismo criterio que `exito.ts leerFlotas`. `!inner`
+  // porque el filtro va sobre la tabla embebida (regla de embeds del repo).
   const { data, error } = await acotada(supabaseAdmin()
     .from('suscripcion')
-    .select('plan_clave')
+    .select('plan_clave, tenant:tenant_id!inner(nombre)')
     .eq('estado', 'activa')
+    .not('tenant.nombre', 'ilike', 'ZZZ QA %')
     .limit(1000), 'finanzas.suscripciones');
   if (error) throw new Error(`leerSuscripcionesActivas: ${error.message}`);
   return (data ?? []) as SuscripcionActiva[];

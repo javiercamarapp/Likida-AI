@@ -10,7 +10,9 @@ import {
 import { resolverLineaAMano, type ResolucionLineaManual } from '@/lib/likida/intake/consolidado';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn } from '@/lib/utils';
-import { numero } from '@/lib/formato';
+import { numero, hoyMx } from '@/lib/formato';
+import { ventanaLitrosElegibles } from '@/lib/likida/fiscal';
+import { ahoraMs } from '@/lib/saludo';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -52,13 +54,21 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  * POST alcanzable por su cuenta — el gateo de la página (arriba) no la
  * protege.
  */
-async function tenantYUsuarioDelAction(sufijo: string, tenantPedido?: string) {
-  const s = await requireSessionTenant('/dashboard/combustible-casetas');
+async function tenantYUsuarioDelAction(
+  sufijo: string,
+  sp: { vista?: string; tenant?: string },
+) {
+  // FE-32: sin `sp` aquí, un superadmin en `?vista=demo`/`?tenant=` resolvía
+  // esta acción contra SU tenant elegido en /admin/elegir-flota (o el
+  // selector), distinto del que `resolverTenantEfectivo` usó para LEER la
+  // página — la acción fallaba cerrado con "Esa línea ya no existe" en vez
+  // de resolver la línea que el superadmin de verdad está viendo.
+  const s = await requireSessionTenant('/dashboard/combustible-casetas', sp);
   if (!puedeVerRuta(s.rol, '/dashboard/combustible-casetas')) {
     redirect(`/dashboard/combustible-casetas${sufijo}`);
   }
-  if (s.rol === 'superadmin' && tenantPedido) {
-    const t = await resolverTenantPedido(supabaseAdmin(), s.tenantId, tenantPedido);
+  if (s.rol === 'superadmin' && sp.tenant) {
+    const t = await resolverTenantPedido(supabaseAdmin(), s.tenantId, sp.tenant);
     return { tenantId: t, userId: s.userId };
   }
   return { tenantId: s.tenantId, userId: s.userId };
@@ -125,9 +135,17 @@ export default async function CombustibleCasetasPage({
   const { tenantId } = await resolverTenantEfectivo('/dashboard/combustible-casetas', sp);
   const sufijo = sufijoTenant(sp);
 
+  // FE-8: LA MISMA función que el contador (`inicio-contador.tsx`) y el chat
+  // (`chat/page.tsx`) — antes cada pantalla medía "litros elegibles para el
+  // estímulo, LIF 20-A" con su propio cálculo de ventana, la misma cita legal
+  // con dos o tres cifras distintas. CLAUDE.md: una cifra fiscal que se lee
+  // distinto en dos pantallas se lee como dos cálculos.
+  const hoy = hoyMx(new Date(ahoraMs()));
+  const vl = ventanaLitrosElegibles(hoy);
+
   const [porConcepto, acred, anomalias, docs, conciliacion, lineasPendientes] = await Promise.all([
     safe<GastoPorConcepto[]>(() => getGastoPorConcepto(tenantId)),
-    safe<Acreditables>(() => getAcreditables(tenantId)),
+    safe<Acreditables>(() => getAcreditables(tenantId, vl.dias)),
     safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
     safe<DocumentoRow[]>(() => getDocumentos(tenantId, VENTANA_DOCUMENTOS)),
     safeConciliacion(tenantId),
@@ -136,7 +154,7 @@ export default async function CombustibleCasetasPage({
 
   async function accionResolverLinea(formData: FormData) {
     'use server';
-    const { tenantId: t, userId } = await tenantYUsuarioDelAction(sufijo, sp?.tenant);
+    const { tenantId: t, userId } = await tenantYUsuarioDelAction(sufijo, sp);
     const lineaId = String(formData.get('lineaId') ?? '');
     const eleccion = String(formData.get('eleccion') ?? '');
     if (!lineaId || !eleccion) redirect(`/dashboard/combustible-casetas${sufijo}`);
@@ -188,14 +206,25 @@ export default async function CombustibleCasetasPage({
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
               <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+                // FE-9: `getGastoPorConcepto` no tiene ventana (histórico
+                // completo) — junto al tile vecino, que sí declara la suya
+                // ("últimos 100 comprobantes"), esto se leía como "del mes".
+                // A 15k viajes/mes este acumulado crece sin fin, y ES la
+                // pantalla que el contador abre para el cierre.
                 etiqueta="Gastado en combustible" valor={diesel?.total ?? 0} formato="mxn"
-                nota={diesel ? `${numero(diesel.n)} cargas registradas` : 'Sin cargas registradas todavía'} />
+                nota={diesel ? `histórico · ${numero(diesel.n)} cargas registradas` : 'Sin cargas registradas todavía'} />
               <KpiTile icono={<RouteIcon width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Gastado en casetas" valor={caseta?.total ?? 0} formato="mxn"
-                nota={caseta ? `${numero(caseta.n)} casetas registradas` : 'Sin casetas registradas todavía'} />
+                nota={caseta ? `histórico · ${numero(caseta.n)} casetas registradas` : 'Sin casetas registradas todavía'} />
               <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                etiqueta="Litros elegibles para el estímulo" valor={acred?.litrosDiesel ?? 0} formato="litros"
-                nota="LIF 2026, Art. 20-A" />
+                // A23-ALTO: era `acred?.litrosDiesel ?? 0` — una lectura caída
+                // se pintaba como "0 litros elegibles", una cifra fiscal FALSA
+                // (no es que no haya nada acreditable: es que no se pudo leer).
+                // FE-8: el rótulo ahora dice la ventana del ejercicio en curso,
+                // la misma que usa el contador.
+                etiqueta={vl.rotulo} valor={acred ? acred.litrosDiesel : null} formato="litros"
+                vacio={acred === null ? 'No se pudo leer lo acreditable' : undefined}
+                nota={vl.nota} />
               <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 // AUDITORÍA 1, ALTO: sin comprobantes, `pctSinCfdi` es null — se
                 // PRESERVA para que el encabezado diga "—" y no un "0%" que se

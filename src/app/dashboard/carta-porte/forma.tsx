@@ -239,16 +239,23 @@ export function FormaMercancia({ accion, viajeId }: { accion: AccionForma; viaje
   );
 }
 
+function BotonQuitar() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending} className="text-[11px] underline decoration-dotted hover:opacity-75 disabled:opacity-50"
+      style={{ color: 'var(--bad)' }}>
+      {pending ? 'quitando…' : 'quitar'}
+    </button>
+  );
+}
+
 /** El tache de un renglón: forma mínima, misma acción firmada del servidor. */
 export function BotonBorrarMercancia({ accion, mercanciaId }: { accion: AccionForma; mercanciaId: string }) {
   const [estado, despachar] = useActionState(accion, null);
   return (
     <form action={despachar} className="inline-flex items-center gap-2">
       <input type="hidden" name="mercanciaId" value={mercanciaId} />
-      <button type="submit" className="text-[11px] underline decoration-dotted hover:opacity-75"
-        style={{ color: 'var(--bad)' }}>
-        quitar
-      </button>
+      <BotonQuitar />
       {estado && !estado.ok && <span className="text-[11px]" style={{ color: 'var(--bad)' }}>{estado.error}</span>}
     </form>
   );

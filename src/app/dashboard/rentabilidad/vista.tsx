@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import type { Rentabilidad, Cobranza } from '@/lib/likida/comercial';
 import { StatCard, EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
-import { mxn, fechaCorta, numero } from '@/lib/formato';
+import { mxn, fechaCorta, numero, porcentaje } from '@/lib/formato';
 import { BarraPagina } from '../resumen-visual';
 
 const BTN_PAGINA = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]';
@@ -90,7 +90,7 @@ export function VistaRentabilidad({
                   </div>
                   <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                     {rentabilidad.margenPct !== null
-                      ? `Margen: ${rentabilidad.margenPct}% — medido solo sobre los ${numero(rentabilidad.viajesConIngreso)} viajes con ingreso capturado.`
+                      ? `Margen: ${porcentaje(rentabilidad.margenPct)} — medido solo sobre los ${numero(rentabilidad.viajesConIngreso)} viajes con ingreso capturado.`
                       : 'Sin ingreso capturado, el margen no se calcula.'}
                     {rentabilidad.viajesSinIngreso > 0
                       && ` ${numero(rentabilidad.viajesSinIngreso)} viajes sin ingreso quedan fuera de esta medición.`}

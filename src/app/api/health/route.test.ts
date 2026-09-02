@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { readdirSync } from 'node:fs';
 import { CRONS } from '@/lib/admin/salud';
 
 // El pulso para el monitor externo (D4): la única promesa es que el status
@@ -8,7 +9,21 @@ import { CRONS } from '@/lib/admin/salud';
 let dbFalla = false;
 /** Las filas de `cron_latido` (RES-7), con `detalle` opcional (auditoría prod
  *  29-ago-2026: distinguir un hueco de configuración de una regresión real). */
-let latidos: Array<{ id: string; ultimo_latido: string; estado: string; detalle?: Record<string, unknown> }> = [];
+type Fila = { id: string; ultimo_latido: string; estado: string; detalle?: Record<string, unknown> };
+let latidos: Fila[] = [];
+/** AUDITORÍA 24, OP-P4: la base solo con UNA fila ya no es «sana con un
+ *  hueco»: los otros diez crons nunca latieron. Los fixtures que quieren
+ *  medir SOLO el hueco parten de todos frescos y sustituyen el que les toca. */
+const frescos = (...cambios: Fila[]): Fila[] => {
+  const ahora = new Date().toISOString();
+  const base: Fila[] = [...CRONS].map((id) => ({ id, ultimo_latido: ahora, estado: 'ok' }));
+  return base.map((f) => cambios.find((c) => c.id === f.id) ?? f);
+};
+/** OP-P1: lo que `migraciones_aplicadas()` (0234) contesta. Por default la
+ *  base va A LA PAR del código: el prefijo más alto del repo. */
+const CODIGO = readdirSync('supabase/migrations').map((f) => f.slice(0, 4)).filter((p) => /^\d{4}$/.test(p)).sort().at(-1)!;
+let rpcMigraciones: () => { data: unknown; error: { message: string } | null } =
+  () => ({ data: { disponible: true, motivo: null, filas: [{ version: '2026', nombre: `${CODIGO}_x` }] }, error: null });
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => ({
@@ -16,6 +31,7 @@ vi.mock('@/lib/supabase/admin', () => ({
         ? { data: latidos, error: null }
         : (dbFalla ? { count: null, error: { message: 'caída' } } : { count: 0, error: null }),
     }),
+    rpc: async (fn: string) => (fn === 'migraciones_aplicadas' ? rpcMigraciones() : { data: null, error: { message: `rpc desconocida ${fn}` } }),
   }),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -40,15 +56,20 @@ const peticion = () => new Request('https://app.likida.ai/api/health') as never;
 describe('/api/health', () => {
   it('sin latidos todavía: degraded y el cuerpo solo trae pulso (nada de negocio)', async () => {
     dbFalla = false;
+    alertarOperador.mockClear();
     const r = await GET(peticion());
     expect(r.status).toBe(503);
     const c = await r.json();
     expect(c.ok).toBe(false);
-    expect(Object.keys(c).sort()).toEqual(['checks', 'hora', 'ok', 'status', 'version']);
+    expect(Object.keys(c).sort()).toEqual(['checks', 'hora', 'migracion', 'ok', 'status', 'version']);
     expect(c.status).toBe('degraded');
-    expect(c.checks.crons).toBe('unknown');
+    // AUDITORÍA 24, OP-P4: once crons que nunca latieron no son «unknown»:
+    // son crons muertos, y el operador se entera por su canal.
+    expect(c.checks.crons).toBe('degraded');
     expect(r.headers.get('cache-control')).toBe('no-store');
-    expect(alertarOperador).not.toHaveBeenCalled();
+    expect(alertarOperador).toHaveBeenCalledWith('cron.sin_latido', expect.objectContaining({
+      codigo: 'cron_sin_latido', error: expect.stringContaining('nunca latió'),
+    }));
     // Ni tablas, ni tenants, ni correos: el health es público a propósito.
     expect(JSON.stringify(c)).not.toMatch(/tenant_id|@|supabase/i);
   });
@@ -134,16 +155,14 @@ describe('/api/health', () => {
     alertarOperador.mockClear();
     alertarHuecoConfiguracion.mockClear();
     const ahora = new Date().toISOString();
-    latidos = [
-      {
-        id: 'descarga-sat',
-        ultimo_latido: ahora,
-        estado: 'parcial',
-        detalle: {
-          motivo: 'La descarga masiva no está configurada: falta LIKIDA_SAT_PROVEEDOR en el servidor. Lo destraba Javier (contrato con el PAC y variables de entorno).',
-        },
+    latidos = frescos({
+      id: 'descarga-sat',
+      ultimo_latido: ahora,
+      estado: 'parcial',
+      detalle: {
+        motivo: 'La descarga masiva no está configurada: falta LIKIDA_SAT_PROVEEDOR en el servidor. Lo destraba Javier (contrato con el PAC y variables de entorno).',
       },
-    ];
+    });
 
     const r = await GET(peticion());
     const c = await r.json();
@@ -167,7 +186,7 @@ describe('/api/health', () => {
     alertarOperador.mockClear();
     alertarHuecoConfiguracion.mockClear();
     const ahora = new Date().toISOString();
-    latidos = [
+    latidos = frescos(
       {
         id: 'descarga-sat',
         ultimo_latido: ahora,
@@ -176,7 +195,7 @@ describe('/api/health', () => {
       },
       // `runner` sí se rompió de verdad: nada en su motivo habla de configurar.
       { id: 'runner', ultimo_latido: ahora, estado: 'fallo', detalle: { codigo: 'timeout_proveedor' } },
-    ];
+    );
 
     const r = await GET(peticion());
     const c = await r.json();
@@ -209,17 +228,15 @@ describe('/api/health', () => {
     alertarOperador.mockClear();
     alertarHuecoConfiguracion.mockClear();
     const ahora = new Date().toISOString();
-    latidos = [
-      {
-        id: 'descarga-sat',
-        ultimo_latido: ahora,
-        estado: 'parcial',
-        detalle: {
-          motivo: 'El camino directo al SAT está declarado pero NO construido: cambia LIKIDA_SAT_PROVEEDOR a «sw».',
-          configAusente: true,
-        },
+    latidos = frescos({
+      id: 'descarga-sat',
+      ultimo_latido: ahora,
+      estado: 'parcial',
+      detalle: {
+        motivo: 'El camino directo al SAT está declarado pero NO construido: cambia LIKIDA_SAT_PROVEEDOR a «sw».',
+        configAusente: true,
       },
-    ];
+    });
 
     const r = await GET(peticion());
     const c = await r.json();
@@ -281,7 +298,7 @@ describe('/api/health — no expone configuración interna', () => {
 describe('OP-C1: hueco de configuración y cron muerto ya no se ven igual', () => {
   const conLatidos = async (ls: unknown[]) => {
     dbFalla = false;
-    latidos = ls as typeof latidos;
+    latidos = frescos(...(ls as Fila[]));
     const r = await GET(peticion());
     return { http: r.status, cuerpo: await r.json() };
   };
@@ -316,5 +333,102 @@ describe('OP-C1: hueco de configuración y cron muerto ya no se ven igual', () =
     ]);
     expect(http).toBe(503);
     expect(cuerpo.checks.crons).toBe('degraded');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · OP-P4 / OP-C2 / PRU-3 (ALTO) — el health de `master` volvía
+// verde con crons que NUNCA latieron.
+//
+// `sinLatido` se consultaba en la tercera rama, después de `noSanos`. Con la
+// tabla `cron_latido` vacía salvo `descarga-sat` en `parcial` por un hueco de
+// configuración declarado, el endpoint contestaba `config_ausente` → 200 `ok`
+// con diez crons que jamás habían corrido. El escenario del piloto es una base
+// restaurada: `wa-outbox` no manda, `facturar` no factura, y el watchdog pasa.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('OP-P4: un cron que nunca latió es degraded aunque haya un hueco declarado', () => {
+  beforeEach(() => { dbFalla = false; alertarOperador.mockClear(); alertarHuecoConfiguracion.mockClear(); });
+
+  it('una sola fila (descarga-sat sin proveedor) con los otros diez sin latir: 503, no 200', async () => {
+    latidos = [{
+      id: 'descarga-sat', ultimo_latido: new Date().toISOString(), estado: 'parcial',
+      detalle: { motivo: 'falta LIKIDA_SAT_PROVEEDOR en el servidor', configAusente: true },
+    }];
+    const r = await GET(peticion());
+    const c = await r.json();
+    expect(r.status).toBe(503);
+    expect(c).toMatchObject({ ok: false, status: 'degraded', checks: { crons: 'degraded' } });
+    // El canal urgente nombra a los muertos; el hueco sigue por el suyo.
+    expect(alertarOperador).toHaveBeenCalledWith('cron.sin_latido', expect.objectContaining({
+      error: expect.stringMatching(/wa-outbox \(nunca latió\)/),
+    }));
+    expect(alertarHuecoConfiguracion).toHaveBeenCalledWith('cron.config_ausente:descarga-sat', expect.any(String), expect.anything());
+    // Y el nombre del cron no se cuela al cuerpo público.
+    expect(JSON.stringify(c)).not.toContain('wa-outbox');
+  });
+
+  it('el mismo hueco con los diez restantes frescos: config_ausente y 200 (lo que OP-C1 prometió sigue vivo)', async () => {
+    latidos = frescos({
+      id: 'descarga-sat', ultimo_latido: new Date().toISOString(), estado: 'parcial',
+      detalle: { motivo: 'falta LIKIDA_SAT_PROVEEDOR en el servidor', configAusente: true },
+    });
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect((await r.json()).checks.crons).toBe('config_ausente');
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · OP-P1 (BLOQUEANTE) — la base en 0271 y el código en 0276, y
+// nada lo decía. El health publica `migracion: { base, codigo, atras }` y se
+// degrada cuando la base va atrás o cuando no se pudo leer.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('OP-P1: el health coteja la migración de la base contra la del código', () => {
+  beforeEach(() => { dbFalla = false; latidos = frescos(); });
+  afterEach(() => {
+    rpcMigraciones = () => ({ data: { disponible: true, motivo: null, filas: [{ version: '2026', nombre: `${CODIGO}_x` }] }, error: null });
+  });
+
+  it('a la par: atras=0, sin motivo, y el pulso sigue en 200', async () => {
+    const r = await GET(peticion());
+    const c = await r.json();
+    expect(r.status).toBe(200);
+    expect(c.migracion).toEqual({ base: CODIGO, codigo: CODIGO, atras: 0 });
+  });
+
+  it('la base va atrás: degraded, con cuántas faltan y qué aplicar', async () => {
+    rpcMigraciones = () => ({
+      data: { disponible: true, motivo: null, filas: [
+        { version: '20260830', nombre: '0271_mcp_oauth_rol' },
+        { version: '20260829', nombre: '0270_cola_correo' },
+        // Las cuatro primeras entraron sin prefijo: no cuentan.
+        { version: '20260701', nombre: 'agente_corrida' },
+      ] },
+      error: null,
+    });
+    const r = await GET(peticion());
+    const c = await r.json();
+    expect(r.status).toBe(503);
+    expect(c.status).toBe('degraded');
+    expect(c.checks.crons).toBe('ok');
+    expect(c.migracion).toMatchObject({ base: '0271', codigo: CODIGO, atras: Number(CODIGO) - 271 });
+    expect(c.migracion.motivo).toMatch(/aplica 0272\.\./);
+  });
+
+  it('no se pudo leer la base: base null, se dice por qué, y NO es verde', async () => {
+    rpcMigraciones = () => ({ data: null, error: { message: 'function migraciones_aplicadas() does not exist' } });
+    const r = await GET(peticion());
+    const c = await r.json();
+    expect(r.status).toBe(503);
+    expect(c.migracion).toMatchObject({ base: null, codigo: CODIGO, atras: null });
+    expect(c.migracion.motivo).toMatch(/no contestó/);
+  });
+
+  it('la RPC contesta «no disponible» (CI local sin schema_migrations): mismo trato honesto', async () => {
+    rpcMigraciones = () => ({ data: { disponible: false, motivo: 'supabase_migrations.schema_migrations no existe en esta base', filas: [] }, error: null });
+    const c = await (await GET(peticion())).json();
+    expect(c.status).toBe('degraded');
+    expect(c.migracion).toMatchObject({ base: null, atras: null, motivo: expect.stringContaining('schema_migrations no existe') });
   });
 });

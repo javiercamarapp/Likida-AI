@@ -5,13 +5,14 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { estadoDescargaSat } from '@/lib/likida/sat_descarga';
-import { leerDescargaSat, type VistaDescargaSat } from '@/lib/likida/sat_descarga/lectura';
+import { leerDescargaSat, TOPE_SOLICITUDES, type VistaDescargaSat } from '@/lib/likida/sat_descarga/lectura';
 import {
   guardarConfigDescarga, verificarCredencial, pedirRangoManual,
 } from '@/lib/likida/sat_descarga/escritura';
 import { VENTANA_MAX_DIAS } from '@/lib/likida/sat_descarga/ciclo';
 import { DIAS_AVISO_DEFECTO } from '@/lib/likida/sat_descarga/peaje_cierre';
 import { fechaMx, hoyMx } from '@/lib/formato';
+import { sufijoTenant } from '../sufijo';
 import { BarraPagina, TituloSeccion } from '../resumen-visual';
 import { StatCard, EstadoVacio } from '../../admin/ui/kit';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
@@ -271,7 +272,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
                 ['casado', 'los que ya cuadraron'],
                 ['ignorado', 'los archivados'],
               ] as const).map(([e, texto]) => (
-                <Link key={e} href={`/dashboard/descarga-sat/bandeja?estatus=${e}`}
+                <Link key={e} href={`/dashboard/descarga-sat/bandeja?estatus=${e}${sufijoTenant(searchParams) ? `&${sufijoTenant(searchParams).slice(1)}` : ''}`}
                   className="inline-flex items-center gap-1.5 font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
                   <Scale3d width={13} height={13} strokeWidth={1.75} /> {texto}
                 </Link>
@@ -324,7 +325,15 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
           {/* ── 5. LAS SOLICITUDES ────────────────────────────────────── */}
           {datos.solicitudes.length > 0 && (
             <section className="card p-3">
-              <TituloSeccion>Tus solicitudes</TituloSeccion>
+              {/* FE-34: antes callaba la ventana — "Tus solicitudes" es
+                  siempre "las 12 más recientes" (`TOPE_SOLICITUDES`), nunca
+                  el historial completo. */}
+              <TituloSeccion>
+                Tus solicitudes
+                {datos.solicitudes.length >= TOPE_SOLICITUDES && (
+                  <span className="font-normal" style={{ color: 'var(--faint)' }}> — las {TOPE_SOLICITUDES} más recientes</span>
+                )}
+              </TituloSeccion>
               <div className="mt-2 overflow-x-auto">
                 <table className="w-full text-[12.5px]">
                   <thead>

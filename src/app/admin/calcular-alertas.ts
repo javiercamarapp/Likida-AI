@@ -1,6 +1,7 @@
 import type { ResumenNegocio, ConversacionActiva } from '@/lib/admin/negocio';
 import type { ConteosEscalaciones } from '@/lib/admin/escalaciones';
 import { NOMBRE_FUENTE } from '@/lib/admin/escalaciones';
+import { tenantDemo } from '@/lib/auth/tenant-demo';
 
 export interface Alerta {
   tipo: 'ok' | 'atencion';
@@ -126,7 +127,13 @@ export function calcularAlertas(
       href: '/admin/conversaciones',
     });
   }
-  if (r.tenants <= 1) {
+  // AUDITORÍA 24, ADM-5: `r.tenants <= 1` disparaba esta alerta con el
+  // PRIMER cliente real dado de alta (Innovativos, sin el demo) — 1 tenant,
+  // pero NO el demo. El criterio verificable (mismo que `esSoloDemo` en
+  // consola.tsx) es que el ÚNICO tenant que hay sea, de verdad, el tenant
+  // demo — no que haya como máximo uno.
+  const esSoloDemo = r.tenants === 1 && r.flotas[0]?.id === tenantDemo();
+  if (esSoloDemo) {
     alertas.push({
       tipo: 'atencion',
       texto: 'Likida sigue con solo el tenant demo — sin clientes reales dados de alta.',

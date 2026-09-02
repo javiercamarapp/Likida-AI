@@ -199,7 +199,44 @@ export async function getOpenViaje(tenantId: string, operadorId: string): Promis
 }
 
 /** Lo que se sabe de la última liquidación reciente de un operador. */
-export interface LiquidacionReciente { viajeId: string; liquidacionId: string }
+export interface LiquidacionReciente {
+  viajeId: string;
+  liquidacionId: string;
+  /** Ruta del PDF del contralor en Storage (`${tenant}/${viaje}.pdf`), o null
+   *  si el cierre no generó papel. */
+  pdfUrl: string | null;
+  /** Sellos de entrega (0279, AGEN-4): null = falta hacerlo. */
+  entregadaOperadorEn: string | null;
+  avisadaOficinaEn: string | null;
+}
+
+/** Los dos sellos de entrega de `liquidacion` (0279). */
+export type SelloEntrega = 'entregada_operador_en' | 'avisada_oficina_en';
+
+/**
+ * Marca que la entrega ocurrió (AGEN-4). Escribe SOLO si el sello está en
+ * null: es idempotente y una segunda entrega no reescribe la hora de la
+ * primera. Best-effort y nunca lanza: la liquidación ya está cerrada y el PDF
+ * ya salió; perder el sello cuesta a lo sumo un reenvío, no un cierre.
+ */
+export async function sellarEntregaLiquidacion(tenantId: string, liquidacionId: string | null | undefined, sello: SelloEntrega): Promise<boolean> {
+  if (!liquidacionId) return false;
+  try {
+    const { error } = await acotada(supabaseAdmin()
+      .from('liquidacion')
+      .update({ [sello]: new Date().toISOString() })
+      .eq('tenant_id', tenantId).eq('id', liquidacionId)
+      .is(sello, null), 'sellarEntregaLiquidacion');
+    if (error) {
+      logger.warn('liquidacion.sello_entrega', { tenant: tenantId, liq: liquidacionId, sello, err: error.message });
+      return false;
+    }
+    return true;
+  } catch (e) {
+    logger.warn('liquidacion.sello_entrega', { tenant: tenantId, liq: liquidacionId, sello, err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+}
 
 /** Ventana en la que un cierre cuenta como "reciente" para el reintento. */
 const VENTANA_LIQUIDACION_RECIENTE_MS = 24 * 60 * 60 * 1000;
@@ -226,7 +263,9 @@ export async function liquidacionRecienteDe(tenantId: string, operadorId: string
     .from('liquidacion')
     // Anclado a `viaje_id` (regla de embeds del repo): `liquidacion` no trae
     // operador, se filtra por el del viaje embebido.
-    .select('id, viaje_id, viaje:viaje_id!inner(operador_id)')
+    // Con `pdf_url` y los dos sellos (0279, AGEN-4): el reintento del «listo»
+    // entrega lo que falte en vez de afirmar «pídeselo a tu contralor».
+    .select('id, viaje_id, pdf_url, entregada_operador_en, avisada_oficina_en, viaje:viaje_id!inner(operador_id)')
     .eq('tenant_id', tenantId)
     .eq('viaje.operador_id', operadorId)
     .gte('created_at', desde)
@@ -239,7 +278,14 @@ export async function liquidacionRecienteDe(tenantId: string, operadorId: string
     return null;
   }
   if (!data) return null;
-  return { viajeId: data.viaje_id as string, liquidacionId: data.id as string };
+  const f = data as { id: unknown; viaje_id: unknown; pdf_url?: unknown; entregada_operador_en?: unknown; avisada_oficina_en?: unknown };
+  const texto = (v: unknown) => (v == null ? null : String(v));
+  return {
+    viajeId: String(f.viaje_id), liquidacionId: String(f.id),
+    pdfUrl: texto(f.pdf_url),
+    entregadaOperadorEn: texto(f.entregada_operador_en),
+    avisadaOficinaEn: texto(f.avisada_oficina_en),
+  };
 }
 
 /**
@@ -321,6 +367,10 @@ const MAX_TURNS = 12;
  * cerré", no lo tapa nada — es munición para la afirmación de estado falsa. Y
  * encima se pagan tokens de un viaje ajeno en cada turno.
  */
+/** Los índices únicos de `wa_conversacion` contra los que choca el insert que
+ *  pierde la carrera: el crudo de la 0005 y el normalizado de la 0274. */
+export const ES_CARRERA_DE_CONVERSACION: readonly string[] = ['wa_conversacion_tenant_tel_uidx', 'uq_wa_conversacion_tenant_telefono_norm'];
+
 export async function loadConversation(tenantId: string, telefono: string, viajeId: string | null): Promise<Conversacion> {
   const admin = supabaseAdmin();
   const { data, error } = await acotada(admin
@@ -376,15 +426,29 @@ export async function loadConversation(tenantId: string, telefono: string, viaje
   if (!errInsert && creada) return desdeFila(creada, viajeId, telefono);
   // Cualquier otro fallo —red, permisos, un choque contra OTRO índice— no es
   // esta carrera y tragárselo escondería un bug distinto.
-  if (errInsert && !violaIndice(errInsert, 'wa_conversacion_tenant_tel_uidx')) {
+  //
+  // AUDITORÍA 24 · BE-4 (MEDIO, reincidente): desde la 0274 el índice que
+  // gana la carrera es `uq_wa_conversacion_tenant_telefono_norm` (teléfono
+  // NORMALIZADO); el viejo `wa_conversacion_tenant_tel_uidx` puede seguir
+  // existiendo en bases que no lo soltaron. Un choque contra cualquiera de los
+  // dos ES esta carrera — reconocer solo el viejo convertía la carrera normal
+  // de dos invocaciones con distinta forma del número en «No pude consultar
+  // tus datos» sobre una conversación sana.
+  if (errInsert && !ES_CARRERA_DE_CONVERSACION.some((idx) => violaIndice(errInsert, idx))) {
     throw new ConsultaFallida(`loadConversation.insert: ${errInsert.message}`);
   }
 
+  // La relectura busca como la lectura de arriba: por las seis variantes, no
+  // por el texto exacto (BE-4). La fila que ganó pudo nacer con la OTRA forma
+  // del número, y con `.eq` no aparecía aunque el índice acababa de decir
+  // que existe.
   const { data: ganadora, error: errRelectura } = await acotada(admin
     .from('wa_conversacion')
     .select('id, estado, viaje_id')
     .eq('tenant_id', tenantId)
-    .eq('telefono', telefono)
+    .in('telefono', variantesTelefono(telefono))
+    .order('updated_at', { ascending: false }).order('id', { ascending: false })
+    .limit(1)
     .maybeSingle(), 'loadConversation.relectura');
   if (errRelectura) throw new ConsultaFallida(`loadConversation.relectura: ${errRelectura.message}`);
   // Chocó con el índice y aun así no está: la fila no se puede nombrar, y
@@ -710,8 +774,21 @@ export const TTL_LOCK_CIERRE_MS = PRESUPUESTO_WEBHOOK_MS;
  * "¿lo tengo o no?" (`administracion.ts`, el brazo del XML). Quien necesite
  * distinguir OCUPADO de NO SE SUPO usa `intentarLockViaje`.
  */
-export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number; maxWaitMs?: number }): Promise<boolean> {
+export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number; maxWaitMs?: number; token?: string }): Promise<boolean> {
   return (await intentarLockViaje(viajeId, opts)) === 'obtenido';
+}
+
+/**
+ * El token con el que se firma un lease del viaje (AUDITORÍA 24 · BE-11).
+ *
+ * `unlock_viaje` borraba el lease de QUIEN FUERA. Escenario medido: el XML
+ * toma el lock con TTL 60 s, tarda más bajo carga, el «listo» toma el lease ya
+ * vencido y empieza a cuadrar, y el `finally` del XML borra el lock del
+ * cierre — dejando entrar un segundo «listo» completo. Quien toma el lock lo
+ * firma, y solo con esa firma se suelta.
+ */
+export function nuevoTokenDeLock(): string {
+  return randomUUID();
 }
 
 /**
@@ -738,8 +815,12 @@ export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number;
  * mensaje de "vuelve a intentar" y un reintento de la bandeja durable; fallar
  * abierto cuesta una liquidación cerrada dos veces.
  */
-export async function intentarLockViaje(viajeId: string, opts?: { ttlMs?: number; maxWaitMs?: number }): Promise<ResultadoLockViaje> {
-  const ttlMs = opts?.ttlMs ?? 60_000;
+export async function intentarLockViaje(viajeId: string, opts?: { ttlMs?: number; maxWaitMs?: number; token?: string }): Promise<ResultadoLockViaje> {
+  // BE-11: el TTL por omisión sube al del cierre. Los dos usuarios de este
+  // mutex son el XML y el «listo», y tenerlos con TTLs distintos (60 s contra
+  // 120 s) era la mitad del hallazgo: el corto vencía a media escritura y el
+  // largo entraba encima.
+  const ttlMs = opts?.ttlMs ?? TTL_LOCK_CIERRE_MS;
   const maxWaitMs = opts?.maxWaitMs ?? 12_000;
   const admin = supabaseAdmin();
   const start = Date.now();
@@ -751,7 +832,9 @@ export async function intentarLockViaje(viajeId: string, opts?: { ttlMs?: number
     // que el `maxWaitMs` de abajo nunca se revisa y la función muere al
     // `maxDuration` sin tomar el lock ni cuadrar. Con `acotada` cada intento
     // corta en el tope de consulta y el bucle sí puede revisar su `maxWaitMs`.
-    const { data, error } = await acotada(admin.rpc('try_lock_viaje', { p_viaje: viajeId, p_ttl_ms: ttlMs }), 'acquireViajeLock');
+    const args: Record<string, unknown> = { p_viaje: viajeId, p_ttl_ms: ttlMs };
+    if (opts?.token) args.p_token = opts.token;
+    const { data, error } = await acotada(admin.rpc('try_lock_viaje', args), 'acquireViajeLock');
     if (!error && data === true) return 'obtenido';
     if (error) {
       ultimoError = error;
@@ -765,6 +848,27 @@ export async function intentarLockViaje(viajeId: string, opts?: { ttlMs?: number
       // doble cierre — y el arranque ya falla ruidoso por esto
       // (ver instrumentation.ts).
       if (rpcAusente(error)) {
+        // AUDITORÍA 24 · BE-11: `p_token` es de la 0280. Durante la ventana de
+        // despliegue (código nuevo, migración sin aplicar) PostgREST no
+        // encuentra la firma de TRES argumentos — y eso NO es «no hay mutex»:
+        // el de dos argumentos sigue ahí. Se reintenta sin token antes de
+        // concluir nada, porque la conclusión de aquí es ABRIR el mutex.
+        if (opts?.token) {
+          const viejo = await acotada(admin.rpc('try_lock_viaje', { p_viaje: viajeId, p_ttl_ms: ttlMs }), 'acquireViajeLock.sinToken');
+          if (!viejo.error && viejo.data === true) {
+            logger.warn('viaje.lock_sin_token', { nota: 'la 0280 no está aplicada; el lease queda sin dueño' });
+            return 'obtenido';
+          }
+          if (!viejo.error) { ultimoError = null; }
+          else { ultimoError = viejo.error; }
+          if (!viejo.error) {
+            // Existía y está OCUPADO: el bucle sigue como siempre.
+            if (Date.now() - start >= maxWaitMs) return 'ocupado';
+            await sleep(delay);
+            delay = Math.min(delay * 2, 1500);
+            continue;
+          }
+        }
         logger.error('viaje.lock_rpc_ausente', { code: error.code, msg: error.message });
         return 'obtenido';
       }
@@ -790,6 +894,61 @@ export async function intentarLockViaje(viajeId: string, opts?: { ttlMs?: number
     await sleep(delay);
     delay = Math.min(delay * 2, 1500);
   }
+}
+
+/**
+ * ¿Quedó una FOTO de este chofer, más vieja que este mensaje, sin procesar?
+ *
+ * AUDITORÍA 24 · AGEN-6 (MEDIO). El orden del inbox lo daba `recibido_en`, que
+ * es la hora en que el POST llegó a NUESTRO servidor. Meta entrega los
+ * mensajes de una ráfaga en POSTs distintos y no garantiza el orden entre
+ * ellos: la foto que el chofer mandó a las 10:40:00.2 puede aterrizar a las
+ * 10:40:03 (un reintento de Meta de por medio) y el «listo» que escribió a las
+ * 10:40:01.1 a las 10:40:01.4. La 0280 arregla el ORDEN de la cola; lo que no
+ * puede arreglar es el turno que ya está corriendo: cuando el webhook del
+ * «listo» lo procesa, la foto todavía no existe en la tabla, `esperarIntake`
+ * ve el contador en cero porque nadie hizo `+1`, y la liquidación cierra sin
+ * el último ticket — irreversible por la 0036/0037.
+ *
+ * Esto se pregunta DESPUÉS de la barrera de ráfaga, que es cuando la foto ya
+ * tuvo tiempo de llegar a la tabla: si está ahí, el «listo» se aplaza y el
+ * cron lo vuelve a tomar, ahora sí después de ella.
+ *
+ * FAIL-OPEN (`false` si no se supo): aplazar el cierre de un chofer cada vez
+ * que la base tosa es peor que el caso que esto cubre, y el aplazamiento no es
+ * gratis — se le pide que espere.
+ */
+export async function fotoAnteriorSinProcesar(telefono: string, mensajeMs: number): Promise<boolean> {
+  if (!telefono || !Number.isFinite(mensajeMs) || mensajeMs <= 0) return false;
+  try {
+    return await consultarFotoAnterior(telefono, mensajeMs);
+  } catch (e) {
+    // FAIL-OPEN también ante excepción, por lo mismo: lo caro es dejar a todos
+    // los choferes sin poder cerrar.
+    logger.warn('inbox.foto_anterior_ilegible', { err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+}
+
+async function consultarFotoAnterior(telefono: string, mensajeMs: number): Promise<boolean> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('wa_evento_pendiente')
+    .select('id')
+    .is('procesado_en', null)
+    .lt('intentos', 5)
+    .in('evento->>from', variantesTelefono(telefono))
+    .eq('evento->>type', 'image')
+    // `->` (jsonb) y no `->>`: con texto, «999…» compararía como cadena.
+    .lt('evento->timestampMs', mensajeMs)
+    // orden-no-importa: esto pregunta si EXISTE alguna, no cuál. Con `limit(1)`
+    // el resultado es «hay» o «no hay», y las dos respuestas son las mismas sin
+    // importar qué fila devuelva la base.
+    .limit(1), 'fotoAnteriorSinProcesar');
+  if (error) {
+    logger.warn('inbox.foto_anterior_ilegible', { err: error.message });
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
 }
 
 /**
@@ -938,10 +1097,19 @@ export async function esperarIntake(
   }
 }
 
-/** Libera el mutex del viaje (best-effort; si falla, expira por TTL). */
-export async function releaseViajeLock(viajeId: string): Promise<void> {
+/**
+ * Libera el mutex del viaje (best-effort; si falla, expira por TTL).
+ *
+ * AUDITORÍA 24 · BE-11: con `token`, la base solo borra el lease SI ES EL
+ * SUYO. Sin token se conserva el contrato viejo —soltar el lease sin firma—,
+ * que es lo único que puede soltar los leases que ya estén vivos cuando la
+ * 0280 se aplique.
+ */
+export async function releaseViajeLock(viajeId: string, token?: string): Promise<void> {
   try {
-    await acotada(supabaseAdmin().rpc('unlock_viaje', { p_viaje: viajeId }), 'releaseViajeLock');
+    const args: Record<string, unknown> = { p_viaje: viajeId };
+    if (token) args.p_token = token;
+    await acotada(supabaseAdmin().rpc('unlock_viaje', args), 'releaseViajeLock');
   } catch (e) {
     logger.warn('viaje.unlock', { err: e instanceof Error ? e.message : String(e) });
   }

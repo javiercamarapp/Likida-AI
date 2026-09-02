@@ -250,7 +250,8 @@ export function FilaComprobante({
 
         {/* El motivo, cuando la operación quita una afirmación. */}
         {motivando !== null && (
-          <input name="motivo" autoFocus
+          <input name="motivo" autoFocus required
+            aria-label={motivando === 'ignorar' ? 'Por qué se archiva' : 'Por qué se deshace'}
             placeholder={motivando === 'ignorar'
               ? 'Por qué se archiva (obligatorio) — «no es de esta flota», «duplicado del folio X»…'
               : 'Por qué se deshace (obligatorio) — «era del ticket de la otra unidad»…'}

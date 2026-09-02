@@ -25,8 +25,38 @@ import { TEMAS_NORMATIVOS, normasPorTema } from '@/lib/likida/normas/consulta';
 import { resolverPeriodo, getGastosFiscales, resumirPerdidas, opcionesDe } from '@/lib/likida/fiscal';
 import { ahoraMs } from '@/lib/saludo';
 import { hoyMx } from '@/lib/formato';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '@/lib/likida/presupuesto';
+import { logger } from '@/lib/logger';
 
 const SIN_PARAMS = { type: 'object', properties: {}, additionalProperties: false } as const;
+
+/**
+ * AUDITORÍA 24, TC-N3 (MEDIO): `viajes_flota` y `liquidaciones_flota` publicaban
+ * `total: vs.length` — el LÍMITE de la consulta (100 y 50), no el total de la
+ * flota. Con 15,000 viajes el analista decía «llevan 100 viajes» y la guardia
+ * lo respaldaba porque la tool lo devolvió. El total sale de un `count` real;
+ * si el conteo falla, `null` con nota — nunca un número que no se midió.
+ */
+async function contarDeLaFlota(tabla: 'viaje' | 'liquidacion', tenantId: string): Promise<number | null> {
+  try {
+    const { count, error } = await acotada(
+      supabaseAdmin().from(tabla).select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+      `chat-tools.contar_${tabla}`,
+    );
+    if (error) throw new Error(error.message);
+    if (typeof count !== 'number') throw new Error('PostgREST no devolvió el conteo');
+    return count;
+  } catch (e) {
+    logger.warn('chat_tools.conteo_fallo', { tabla, tenantId, err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
+/** `total` real o `null` con su nota: la regla del repo, nunca inventar una cifra. */
+function conTotal(total: number | null): { total: number | null; nota?: string } {
+  return total === null ? { total: null, nota: 'no se pudo contar el total de la flota; `mostrando` es lo que sí se leyó' } : { total };
+}
 
 /** Único parámetro que existe en este set: la ventana, como enum cerrado. */
 const PARAM_MODO = {
@@ -129,14 +159,14 @@ registerTool('viajes_flota', {
     type: 'function',
     function: {
       name: 'viajes_flota',
-      description: 'Los viajes más recientes de la flota (máx. 25): folio, origen→destino, estatus (abierto|en_cuadre|liquidado), anticipo MXN, operador y fecha de inicio.',
+      description: 'Los viajes más recientes de la flota (máx. 25): folio, origen→destino, estatus (abierto|en_cuadre|liquidado), anticipo MXN, operador y fecha de inicio. `total` es el conteo REAL de viajes de la flota (null si no se pudo contar); `mostrando`, cuántos van en la lista.',
       parameters: SIN_PARAMS,
     },
   },
   handler: async (_a, ctx) => {
-    const vs = await getViajes(ctx.tenantId);
+    const [vs, total] = await Promise.all([getViajes(ctx.tenantId), contarDeLaFlota('viaje', ctx.tenantId)]);
     return {
-      total: vs.length, mostrando: Math.min(vs.length, 25), moneda: 'MXN',
+      ...conTotal(total), mostrando: Math.min(vs.length, 25), moneda: 'MXN',
       viajes: vs.slice(0, 25).map((v) => ({
         folio: v.folio, origen: v.origen, destino: v.destino, estatus: v.estatus,
         anticipo: v.anticipo, operador: v.operadorNombre, inicio: v.fechaInicio,
@@ -150,14 +180,14 @@ registerTool('liquidaciones_flota', {
     type: 'function',
     function: {
       name: 'liquidaciones_flota',
-      description: 'Las liquidaciones más recientes (máx. 20): folio del viaje, monto comprobado MXN, diferencia MXN y estatus (cuadrada|con_diferencias|revisar).',
+      description: 'Las liquidaciones más recientes (máx. 20): folio del viaje, monto comprobado MXN, diferencia MXN y estatus (cuadrada|con_diferencias|revisar). `total` es el conteo REAL de liquidaciones de la flota (null si no se pudo contar); `mostrando`, cuántas van en la lista.',
       parameters: SIN_PARAMS,
     },
   },
   handler: async (_a, ctx) => {
-    const ls = await getLiquidaciones(ctx.tenantId);
+    const [ls, total] = await Promise.all([getLiquidaciones(ctx.tenantId), contarDeLaFlota('liquidacion', ctx.tenantId)]);
     return {
-      total: ls.length, mostrando: Math.min(ls.length, 20), moneda: 'MXN',
+      ...conTotal(total), mostrando: Math.min(ls.length, 20), moneda: 'MXN',
       liquidaciones: ls.slice(0, 20).map((l) => ({
         folio: l.folio, comprobado: l.comprobado, diferencia: l.diferencia, estatus: l.estatus, creadaEn: l.creadoEn,
       })),

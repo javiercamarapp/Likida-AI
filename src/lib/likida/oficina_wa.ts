@@ -1,8 +1,9 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
-import { acotada } from './presupuesto';
+import { acotada, type Presupuesto } from './presupuesto';
 import { traerTodo } from './pg';
 import { registrarCosto, faseDeModelo } from './costos';
+import { PartialExecutionError } from '@/lib/llm/openrouter';
 import { gastoChatHoyUsd, topeDiaUsd } from '@/app/api/dashboard/chat/tope';
 import { strip_accents } from './cuadre/util';
 import { getTableroOperacion } from './operacion';
@@ -63,9 +64,13 @@ export function pideInformePdf(texto: string): boolean {
  */
 export async function mandarInformePdf(cuenta: CuentaInforme, telefono: string): Promise<string> {
   const admin = supabaseAdmin();
+  // AUDITORÍA 24 · REN-A1: las lecturas de este camino van con el tope de 8 s
+  // (`acotada`) como todo lo demás que corre dentro del webhook; sin él, el
+  // backstop de 25 s de `supabaseAdmin()` por lectura sumaba al filo de los
+  // 120 s de `maxDuration` tras la compuerta de una ráfaga.
   const [tablero, rTenant] = await Promise.all([
     getTableroOperacion(cuenta.tenantId),
-    admin.from('tenant').select('nombre').eq('id', cuenta.tenantId).maybeSingle(),
+    acotada(admin.from('tenant').select('nombre').eq('id', cuenta.tenantId).maybeSingle(), 'informe.tenant'),
   ]);
   const kpis: KpiInforme[] = [
     { etiqueta: 'Viajes activos', valor: numero(tablero.viajesActivos) },
@@ -112,11 +117,11 @@ export async function mandarInformePdf(cuenta: CuentaInforme, telefono: string):
     // dueño reenvía a su contador.
     try {
       const filas = await traerTodo<{ anticipo: number | null }>(
-        (desde, hasta) => admin.from('viaje')
+        (desde, hasta) => acotada(admin.from('viaje')
           .select('anticipo', { count: 'exact' })
           .eq('tenant_id', cuenta.tenantId).in('estatus', ['abierto', 'en_cuadre'])
           .order('id')
-          .range(desde, hasta),
+          .range(desde, hasta), 'oficina.anticipos_en_calle'),
         'oficina.anticipos_en_calle',
       );
       const suma = filas.reduce((acc, v) => acc + (typeof v.anticipo === 'number' ? v.anticipo : 0), 0);
@@ -197,9 +202,26 @@ export function bloquesATextoWa(bloques: Bloque[]): string {
  * ¿cómo van?", el panel) en vez de dejar un callejón sin salida. El fallo
  * queda en el log; degradar a la guía es mejor que un error pelón.
  */
-export async function atenderPreguntaLibre(cuenta: CuentaInforme, texto: string): Promise<string | null> {
+export async function atenderPreguntaLibre(
+  cuenta: CuentaInforme,
+  texto: string,
+  opciones: { reloj?: Presupuesto } = {},
+): Promise<string | null> {
   if (!rolConAnalista(cuenta.rol)) return null;
-  const { data } = await supabaseAdmin().from('tenant').select('nombre').eq('id', cuenta.tenantId).maybeSingle();
+  // ── AUDITORÍA 24 · REN-A2 (ALTO, reincidente): DENTRO DEL RELOJ ──────────
+  // Este analista corría con 35 s FIJOS sin mirar cuánto quedaba de la
+  // invocación: tras la compuerta de una ráfaga (66 s en hora pico) el peor
+  // caso sumaba 139.5 s contra `maxDuration = 120` — Vercel mataba el proceso
+  // y el jefe no recibía nada, sin un solo log. Si no cabe, se le dice que en
+  // un minuto y la bandeja durable lo reintenta en otra invocación; si cabe,
+  // el techo del analista se recorta a lo que de verdad queda.
+  const reloj = opciones.reloj;
+  if (reloj && !reloj.alcanza(COSTO_ANALISTA_MS)) {
+    logger.warn('oficina.analista_sin_tiempo', { tenantId: cuenta.tenantId, restanteMs: reloj.restante() });
+    return RESPUESTA_OFICINA_SIN_TIEMPO;
+  }
+  const timeoutMs = reloj ? Math.max(TIMEOUT_ANALISTA_MINIMO_MS, Math.min(TIMEOUT_ANALISTA_MS, reloj.restante() - HOLGURA_TRAS_ANALISTA_MS)) : TIMEOUT_ANALISTA_MS;
+  const { data } = await acotada(supabaseAdmin().from('tenant').select('nombre').eq('id', cuenta.tenantId).maybeSingle(), 'oficina.tenant');
   // ── AUDITORÍA 22, REN-A1 (ALTO): EL MISMO ANALISTA, SIN FRENO NI CUENTA ──
   // Esto corre el analista COMPLETO —hasta nueve completions con tools— y no
   // registraba un centavo en `llm_costo` ni pasaba por el tope diario. El chat
@@ -227,7 +249,7 @@ export async function atenderPreguntaLibre(cuenta: CuentaInforme, texto: string)
       nombreFlota: data?.nombre ?? 'tu flota',
       usuario: { nombre: cuenta.nombre, rol: cuenta.rol },
       mensajes: [{ rol: 'usuario', texto: texto.slice(0, 1500) }],
-      timeoutMs: 35_000,
+      timeoutMs,
     });
     // POR MODELO real, mismo criterio que el chat del panel y que processor.ts:
     // una sola etiqueta miente cuando hubo fallback entre proveedores.
@@ -246,7 +268,35 @@ export async function atenderPreguntaLibre(cuenta: CuentaInforme, texto: string)
     const salida = bloquesATextoWa(r.bloques);
     return salida || 'No alcancé a armar esa respuesta. ¿Me la repites de otra forma?';
   } catch (e) {
+    // ── AUDITORÍA 24 · REN-A3 (ALTO, reincidente): EL TURNO QUE TRUENA YA PAGÓ ──
+    // Un timeout (más frecuente aquí que en el panel: 35 s contra 40) llega
+    // como `PartialExecutionError` con hasta nueve completions pagadas y esto
+    // lo tiraba: `gastoChatHoyUsd` leía cero en cada reintento del jefe y el
+    // tope diario quedaba ciego justo al modo de falla que más gasta. Mismo
+    // criterio que `api/dashboard/chat/route.ts`: se registra como 'parcial'.
+    if (e instanceof PartialExecutionError && (e.tokensIn > 0 || e.tokensOut > 0)) {
+      try {
+        await registrarCosto({
+          tenantId: cuenta.tenantId, viajeId: null, fase: 'chat', modelo: 'parcial',
+          tokensIn: e.tokensIn, tokensOut: e.tokensOut, costoUsd: e.cost,
+        });
+      } catch (e2) {
+        logger.error('oficina.costo_parcial_sin_registrar', { tenantId: cuenta.tenantId, err: e2 instanceof Error ? e2.message : String(e2) });
+      }
+    }
     logger.error('oficina.analista', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
     return null;
   }
 }
+
+/** Techo del analista por WhatsApp (más corto que los 40 s del panel). */
+export const TIMEOUT_ANALISTA_MS = 35_000;
+/** Por debajo de esto no vale la pena arrancar nueve completions con tools. */
+const TIMEOUT_ANALISTA_MINIMO_MS = 8_000;
+/** Lo que tiene que quedar DESPUÉS del analista: convertir, mandar, sellar. */
+const HOLGURA_TRAS_ANALISTA_MS = 20_000;
+/** Lo que se le pide al reloj para arrancar el analista: techo mínimo + holgura. */
+export const COSTO_ANALISTA_MS = TIMEOUT_ANALISTA_MINIMO_MS + HOLGURA_TRAS_ANALISTA_MS;
+/** Lo que se le contesta al jefe cuando no cabe (REN-A2); el llamador suelta
+ *  el claim para que la bandeja lo reintente con reloj nuevo. */
+export const RESPUESTA_OFICINA_SIN_TIEMPO = 'Dame un minuto y te contesto — ahorita voy con varias fotos de tus choferes. ⏳';

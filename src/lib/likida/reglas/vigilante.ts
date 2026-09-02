@@ -110,10 +110,19 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<number> {
  * LANZA solo si no se pudo leer la lista de reglas — quedarse ciego no se
  * puede reportar como calma. Un fallo POR REGLA se cuenta y se sigue.
  */
-export async function vigilarReglas(ahora: Date = new Date()): Promise<ResultadoVigilancia> {
+export async function vigilarReglas(
+  ahora: Date = new Date(),
+  /** AUDITORÍA 24, BE-7: el mismo `venceEn` (epoch ms) que `cron/escalar`
+   *  ya pasa a sus otros barridos — antes solo lo cubría el techo duro de
+   *  la ruta entera, así que un barrido lento de reglas podía dejar sin
+   *  correr a la cobranza/relojes legales que van después en la misma
+   *  invocación. */
+  opts: { venceEn?: number } = {},
+): Promise<ResultadoVigilancia> {
   const reglas = await reglasActivas();
   const r: ResultadoVigilancia = { reglas: reglas.length, disparadas: 0, avisos: 0, fallos: 0 };
   for (const regla of reglas) {
+    if (opts.venceEn && Date.now() >= opts.venceEn) break;
     try {
       const avisos = await correrRegla(regla, ahora);
       if (avisos > 0) {

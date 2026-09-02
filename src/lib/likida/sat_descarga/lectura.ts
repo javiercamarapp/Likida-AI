@@ -13,6 +13,10 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { logger } from '@/lib/logger';
 
+/** FE-34: exportado para que la pantalla pueda declarar la ventana ("las 12
+ *  más recientes") en vez de callarla — antes era un `12` inline sin rótulo. */
+export const TOPE_SOLICITUDES = 12;
+
 export interface ConfigFlotaVista {
   rfc: string;
   proveedor: string;
@@ -102,7 +106,7 @@ export async function leerDescargaSat(tenantId: string): Promise<VistaDescargaSa
       .select('id, request_id, tipo, desde, hasta, estado, cfdis_nuevos, proveedor_mensaje, solicitada_en')
       .eq('tenant_id', tenantId)
       .order('solicitada_en', { ascending: false })
-      .limit(12), 'sat_descarga.leer_solicitudes');
+      .limit(TOPE_SOLICITUDES), 'sat_descarga.leer_solicitudes');
     if (error) throw new Error(error.message);
     solicitudes = (data ?? []).map((s) => ({
       id: s.id as string,

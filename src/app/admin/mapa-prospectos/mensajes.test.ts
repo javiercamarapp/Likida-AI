@@ -63,4 +63,17 @@ describe('los href — el texto del agente experto manda', () => {
     expect(hrefWa({ ...base, telefono: '529991234567' })).toContain('wa.me/529991234567');
     expect(hrefWa(base)).toContain('wa.me/529991234567');
   });
+
+  // ADM-15 (auditoría 24, MEDIO): DENUE entrega teléfonos con espacios y el
+  // `+` de país — `replace(/^52/, '')` no los tocaba y el link salía roto
+  // (`wa.me/52+52 55 1234 5678`). Se normaliza a solo dígitos primero.
+  it('un teléfono con formato DENUE (+52, espacios) normaliza a solo dígitos', () => {
+    expect(hrefWa({ ...base, telefono: '+52 55 1234 5678' })).toContain('wa.me/525512345678');
+  });
+  it('un teléfono con guiones y paréntesis también normaliza', () => {
+    expect(hrefWa({ ...base, telefono: '(55) 1234-5678' })).toContain('wa.me/525512345678');
+  });
+  it('un teléfono que ya trae 52 pero con espacios no lo duplica', () => {
+    expect(hrefWa({ ...base, telefono: '52 999 123 4567' })).toContain('wa.me/529991234567');
+  });
 });

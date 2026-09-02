@@ -53,8 +53,8 @@ vi.mock('@/lib/supabase/admin', () => ({
 /** El procesador compartido: se captura QUÉ lote le llega. */
 const procesarLoteEnCola = vi.fn(async (lote: Array<{ id: string }>) =>
   new Response(JSON.stringify({ corrio: true, facturados: lote.map((g) => g.id) }), { status: 200 }));
-vi.mock('../route', async (o) => ({
-  ...(await o<typeof import('../route')>()),
+vi.mock('../lote', async (o) => ({
+  ...(await o<typeof import('../lote')>()),
   procesarLoteEnCola: (...a: unknown[]) => procesarLoteEnCola(...(a as [never])),
 }));
 

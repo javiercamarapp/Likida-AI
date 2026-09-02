@@ -25,16 +25,31 @@ import {
 import { validarVerdadTerreno } from '@/lib/admin/qa-tipos';
 import { sesionSuperadmin } from '../puerta';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
+import { bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
-/** Tope del LOTE (no por archivo): 40 fotos de ~3 MB caben; más que esto se
- *  sube en dos tandas — el error lo dice, no revienta a medias. */
-const MAX_LOTE_BYTES = 120 * 1024 * 1024;
+/**
+ * Tope del LOTE (no por archivo).
+ *
+ * AUDITORÍA 24, BE-25: decía 120 MB —«40 fotos de ~3 MB caben»— sobre un
+ * runtime que corta el cuerpo en 4.5 MB ANTES de que esta ruta exista. O sea:
+ * el rótulo prometía 40 fotos y la plataforma mataba el lote en la segunda,
+ * con SU 413 y sin una línea de log nuestra. `dashboard/archivo/limites.ts`
+ * documenta ese techo desde ESC-14 y ahí se bajó a 4 MB por lo mismo.
+ *
+ * Se dice la verdad: 4 MB de lote, que es una foto de tres megas o unas cuantas
+ * de teléfono. Subir el banco entero de una sentada exige subida directa a
+ * Storage (URL firmada desde el navegador, sin pasar por la función) y eso es
+ * otra pieza — hasta que exista, el número de aquí es el que la plataforma
+ * respeta.
+ */
+const MAX_LOTE_BYTES = 4 * 1024 * 1024;
 const MAX_ARCHIVOS_POR_LOTE = 200;
+const MENSAJE_LOTE = 'El lote pasa de 4 MB, que es lo que la plataforma deja entrar en una petición. Súbelo en tandas más chicas.';
 
 export async function GET() {
   const { error } = await sesionSuperadmin();
@@ -62,6 +77,12 @@ export async function POST(req: Request) {
   const { error } = await sesionSuperadmin();
   if (error) return error;
 
+  // BE-25: si el emisor declara el tamaño, se rechaza ANTES de materializar
+  // nada — nuestro texto, no la pantalla de la plataforma.
+  if (bodyExcede(req, MAX_LOTE_BYTES)) {
+    return NextResponse.json({ error: MENSAJE_LOTE }, { status: 413 });
+  }
+
   let form: FormData;
   try {
     form = await req.formData();
@@ -78,7 +99,7 @@ export async function POST(req: Request) {
     const bytes = Buffer.from(await valor.arrayBuffer());
     totalBytes += bytes.length;
     if (totalBytes > MAX_LOTE_BYTES) {
-      return NextResponse.json({ error: 'el lote pasa de 120 MB — súbelo en dos tandas' }, { status: 413 });
+      return NextResponse.json({ error: MENSAJE_LOTE }, { status: 413 });
     }
     archivos.push({ nombre: valor.name || 'sin-nombre', mime: valor.type, bytes });
   }

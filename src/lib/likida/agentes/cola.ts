@@ -38,18 +38,58 @@ export function topeCorreoFrioDia(): number {
  *  estructural también al ENVIAR (c5-14: la edición humana no lo esquiva). */
 export const TIPOS_CAMPANA = ['correo_frio', 'correo_seguimiento'] as const;
 
-/** El verificador ESTRUCTURAL del formato de campaña — los dos guardarraíles
+/** AGB-4 (auditoría 24, 1-sep-2026): los ÚNICOS tipos de pieza que se pueden
+ *  mandar a un TERCERO por `enviarPiezaPorCorreo` — hoy, los mismos que
+ *  `TIPOS_CAMPANA`, pero declarados aparte a propósito: son cosas distintas
+ *  que hoy coinciden (campaña ⊂ enviable), no la misma lista con dos nombres.
+ *  Un `ficha_prospecto`/`brief_demo`/`propuesta_comercial` (leads.ts) lleva
+ *  `prospecto_id` para que el HUMANO sepa de quién habla — no para que la
+ *  máquina se lo pueda mandar A ÉL. `cola_aprobacion` mezclaba "piezas para
+ *  un tercero" con "partes para leer" y la cola de salida se definía solo por
+ *  `estado = aprobado ∧ enviado_en null`, sin mirar el tipo: el expediente
+ *  interno del prospecto (nombres, correos "INFERIDO — NO VERIFICADO",
+ *  teléfonos) quedaba a un clic de salir hacia el propio prospecto. */
+export const TIPOS_ENVIABLES: readonly string[] = TIPOS_CAMPANA;
+
+/** AGB-2 (auditoría 24, 1-sep-2026): nombres de prospectos/clientes que SÍ se
+ *  autorizó nombrar como tracción en correo de campaña — VACÍA por default.
+ *  Sin una entrada aquí, a propósito, ningún nombre de tercero sale en un
+ *  correo automático. El SYSTEM del redactor y del SDR permitían literalmente
+ *  "Grupo GAL y Transportes Innovativos" — el nombre del PROSPECTO DEL PILOTO
+ *  saliendo hacia Coca-Cola FEMSA, Pepsi, Nadro, KFC sin su consentimiento.
+ *  Poblar esta lista es una decisión explícita de Javier (acuerdo de
+ *  referencia real), nunca un efecto secundario de que el modelo "decida
+ *  mencionar tracción". */
+export const TRACCION_PUBLICABLE: readonly string[] = [];
+
+/** Los nombres que YA se cazaron saliendo sin autorización (AGB-2) — se
+ *  bloquean SIEMPRE salvo que aparezcan, a propósito, en `TRACCION_PUBLICABLE`. */
+const NOMBRES_TRACCION_CAZADOS = ['Grupo GAL', 'Transportes Innovativos', 'Innovativos'] as const;
+
+function nombreTraccionNoAutorizado(texto: string): string | null {
+  for (const nombre of NOMBRES_TRACCION_CAZADOS) {
+    if (texto.includes(nombre) && !TRACCION_PUBLICABLE.includes(nombre)) return nombre;
+  }
+  return null;
+}
+
+/** El verificador ESTRUCTURAL del formato de campaña — los guardarraíles
  *  cazados en vivo: jamás "clientes reales" (ninguna empresa ha firmado; la
- *  frase permitida es "en pláticas con...") y sin guiones largos. Es código,
- *  no prompt. Vive AQUÍ (y no en redactor.ts, que lo re-exporta) porque la
- *  puerta de salida también lo aplica (c5-14): una edición humana o una
- *  variante guardada que lo viole tampoco sale. */
+ *  frase permitida es "en pláticas con..."), sin guiones largos, y jamás un
+ *  nombre de tercero no autorizado como tracción (AGB-2, `TRACCION_PUBLICABLE`).
+ *  Es código, no prompt. Vive AQUÍ (y no en redactor.ts, que lo re-exporta)
+ *  porque la puerta de salida también lo aplica (c5-14): una edición humana o
+ *  una variante guardada que lo viole tampoco sale. */
 export function verificarFormatoCampana(texto: string): void {
   if (/clientes?\s+reales/i.test(texto)) {
     throw new DatoInvalido('El correo dice "clientes reales" — ninguna empresa ha firmado; la frase permitida es "en pláticas con transportistas como...". Pieza descartada.');
   }
   if (texto.includes('—')) {
     throw new DatoInvalido('El correo trae guion largo (—) — el formato de campaña los prohíbe. Pieza descartada.');
+  }
+  const nombreNoAutorizado = nombreTraccionNoAutorizado(texto);
+  if (nombreNoAutorizado) {
+    throw new DatoInvalido(`El correo nombra a "${nombreNoAutorizado}" como tracción — nombre de tercero no autorizado (TRACCION_PUBLICABLE vacía por default). Pieza descartada.`);
   }
 }
 
@@ -212,12 +252,19 @@ export async function bandejaPendiente(prioridad: PrioridadPieza): Promise<Pieza
   return filas.map(desdeFila);
 }
 
-/** Las aprobadas que AÚN no se envían — la cola de salida real. */
+/** Las aprobadas que AÚN no se envían — la cola de salida real.
+ *
+ *  AGB-4: acotada a `TIPOS_ENVIABLES`. Una `ficha_prospecto` aprobada NO
+ *  tiene un paso de "envío" pendiente — aprobarla es el final del camino,
+ *  como cualquier parte interno — así que no pertenece a esta lista aunque
+ *  técnicamente sea `aprobado ∧ enviado_en null`; sale por `ultimasResueltas`
+ *  como todo lo demás. */
 export async function aprobadasSinEnviar(limite = 20): Promise<PiezaEnCola[]> {
   const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
     .select(COLUMNAS)
     .eq('estado', 'aprobado')
     .is('enviado_en', null)
+    .in('tipo', [...TIPOS_ENVIABLES])
     .order('resuelto_en', { ascending: true })
     .limit(limite), 'aprobadasSinEnviar');
   if (error) throw new Error(`aprobadasSinEnviar: ${error.message}`);
@@ -457,6 +504,18 @@ export async function enviarPiezaPorCorreo(
     // la inconsistencia visible que el panel pinta. Se grita.
     if (errRevertir) logger.error('cola.envio_sin_revertir', { pieza: id, motivo, err: errRevertir.message });
   };
+
+  // ── AGB-4: EL CANDADO DE TIPO, EN LA PUERTA ─────────────────────────────
+  // `aprobadasSinEnviar` ya excluye los tipos internos de la lista que ve el
+  // panel, pero esto es la puerta de VERDAD (cola.ts:427-444): un llamador
+  // viejo, un script, o una página sin recargar no puede convertir un
+  // `ficha_prospecto`/`brief_demo`/`propuesta_comercial` (con datos internos
+  // del prospecto, "INFERIDO — NO VERIFICADO") en un correo AL PROPIO
+  // prospecto solo porque alguien lo aprobó pensando "sí, buena ficha".
+  if (!(TIPOS_ENVIABLES as readonly string[]).includes(String(fila.tipo))) {
+    await revertir(`El tipo "${String(fila.tipo)}" no es enviable a terceros — es una pieza interna.`);
+    throw new DatoInvalido(`Esta pieza es de tipo "${String(fila.tipo)}" — un parte interno, no algo que se le mande al prospecto. No hay botón de envío para esto; si necesitas comunicarte con el prospecto, escríbele aparte.`);
+  }
 
   if (!destinatario) {
     await revertir('El prospecto no tiene correo capturado.');

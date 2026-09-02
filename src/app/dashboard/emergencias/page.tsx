@@ -1,10 +1,12 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { Siren, ShieldCheck, PhoneCall, HeartHandshake } from 'lucide-react';
+import { fechaMx } from '@/lib/formato';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
+import { traerTodo, conteo } from '@/lib/likida/pg';
 import {
   listarProveedoresEmergencia, crearProveedorEmergencia, borrarProveedorEmergencia,
   marcarProveedorVerificado, polizaVigenteDe, guardarPoliza,
@@ -56,10 +58,19 @@ export default async function PaginaEmergencias({
   let operadores: Array<{ id: string; nombre: string }> = [];
   let leyoOk = true;
   try {
-    const rOps = await acotada(supabaseAdmin()
-      .from('operador').select('id, nombre').eq('tenant_id', tenantId).order('nombre'), 'emergencias.operadores');
-    if (rOps.error) throw new Error(rOps.error.message);
-    operadores = (rOps.data ?? []).map((o) => ({ id: o.id as string, nombre: o.nombre as string }));
+    // FE-31: sin `.limit()` esta lectura se recortaba en silencio a 1,000
+    // (`max_rows`) — con cientos de operadores hoy no reproduce, pero con la
+    // flota completa del piloto sí. `traerTodo` pagina hasta demostrar que
+    // trajo todos, o lanza (lo atrapa el `catch` de abajo, que ya sabe
+    // convertir eso en «no se pudo leer» en vez de una lista vacía).
+    const opsRaw = await traerTodo<{ id: string; nombre: string }>(
+      (desde, hasta) => acotada(supabaseAdmin()
+        .from('operador').select('id, nombre', conteo(desde)).eq('tenant_id', tenantId)
+        .order('nombre').order('id')
+        .range(desde, hasta), 'emergencias.operadores'),
+      'emergencias.operadores',
+    );
+    operadores = opsRaw.map((o) => ({ id: o.id, nombre: o.nombre }));
     [proveedores, poliza, contactos] = await Promise.all([
       listarProveedoresEmergencia(tenantId),
       polizaVigenteDe(tenantId),
@@ -204,7 +215,7 @@ export default async function PaginaEmergencias({
                 <p className="text-sm font-medium">Póliza de la flota</p>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
                   {poliza
-                    ? `${poliza.aseguradora} · póliza ${poliza.numeroPoliza} · siniestros ${poliza.telefonoSiniestros}${poliza.vigenciaHasta ? ` · vigente hasta ${poliza.vigenciaHasta}` : ''}. Guardar de nuevo la reemplaza (la anterior queda en la historia).`
+                    ? `${poliza.aseguradora} · póliza ${poliza.numeroPoliza} · siniestros ${poliza.telefonoSiniestros}${poliza.vigenciaHasta ? ` · vigente hasta ${fechaMx(poliza.vigenciaHasta)}` : ''}. Guardar de nuevo la reemplaza (la anterior queda en la historia).`
                     : 'Sin póliza capturada. El 800 de siniestros es EL dato de un siniestro — sin él, el tercer nivel de escalamiento solo puede decir que falta.'}
                 </p>
               </div>
@@ -236,7 +247,7 @@ export default async function PaginaEmergencias({
                     <span className="font-medium">{p.nombre}</span>
                     <span style={{ color: 'var(--muted)' }}>{p.tipo} · {p.telefono}{p.radioKm ? ` · ~${p.radioKm} km` : ''}</span>
                     <span style={{ color: p.verificadoEn ? 'var(--ok)' : 'var(--warn)' }}>
-                      {p.verificadoEn ? `verificado ${p.verificadoEn.slice(0, 10)}` : 'sin confirmar'}
+                      {p.verificadoEn ? `verificado ${fechaMx(p.verificadoEn)}` : 'sin confirmar'}
                     </span>
                     <span className="ml-auto flex gap-1.5">
                       {!p.verificadoEn && (

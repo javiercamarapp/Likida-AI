@@ -523,8 +523,14 @@ describe('puedeConfigurarAvisos — la puerta de la escritura multi-tenant', () 
       .toBe('Tu rol no puede configurar los avisos de este agente.');
   });
 
-  it('el jefe de tráfico SÍ configura el de conductores, que es su área', () => {
-    expect(puedeConfigurarAvisos({ rol: 'encargado', tenantId: 'A' }, 'A', conductores)).toBeNull();
+  it('FE-27: el jefe de tráfico VE conductores (es su área) pero NO reconfigura a quién le llegan los avisos — eso es del dueño', () => {
+    // Antes de FE-27 (auditoría 24) esto pasaba con `puedeVerRuta` a secas:
+    // cualquier rol que viera la página del agente podía apagar los avisos
+    // del DUEÑO de la flota. Ver un agente y decidir quién recibe sus
+    // correos son dos cosas distintas — la segunda exige `puedeAdministrar`,
+    // la misma puerta que ya protegía `guardarEstrategiaAgente`.
+    expect(puedeConfigurarAvisos({ rol: 'encargado', tenantId: 'A' }, 'A', conductores))
+      .toBe('Solo el dueño de la flota decide quién recibe los avisos de este agente.');
   });
 
   it('el contador NO configura el de conductores', () => {

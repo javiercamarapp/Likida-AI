@@ -10,11 +10,14 @@
 // La diferencia con el ejército es UNA: aquí no hay vi.mock (no existe en el
 // runtime de Next), así que la foto entra por `InboundMessage.mediaDataUrlQA`
 // (el gancho aditivo documentado en processor.ts y en 00-PANEL-DE-QA.md §3).
-// Los envíos salientes NO se interceptan: van por el cliente Meta real y
-// rebotan en la allowed-list del número de PRUEBA (#131030 — el teléfono
-// sintético 5215559… es de un rango imposible y no está en la lista), o sea
-// que ningún humano recibe nada; la evidencia de qué contestó el sistema se
-// lee de `wa_conversacion.estado.turns`, que el pipeline persiste solo.
+// Los envíos salientes SÍ se interceptan (ADM-3, auditoría 24):
+// `instalarInterceptorSalidaMeta` desvía cualquier POST a `graph.facebook.com`
+// antes de que salga a la red — ya no depende de que el número esté en modo
+// PRUEBA de Meta (#131030), condición que desaparece en cuanto la WABA del
+// piloto pase a producción. Queda registrado en `wa_outbox` (`estado='dead'`,
+// `ultimo_error` con prefijo `QA:`) y nunca lo reclama el cron real; la
+// evidencia de qué contestó el sistema se sigue leyendo de
+// `wa_conversacion.estado.turns`, que el pipeline persiste solo.
 //
 // Guard reutilizado tal cual del ejército: `exigirTenantZZZ` /
 // `exigirPrefijoQA` (scripts/qa-agentes/config.qa.ts) ANTES de cualquier
@@ -138,6 +141,53 @@ function capturarBitacora(): { eventos: EventoCapturado[]; restaurar: () => void
       logger.error = originales.error;
     },
   };
+}
+
+// ── Interceptor de salida a Meta (ADM-3, auditoría 24) ──────────────────────
+//
+// Antes de esto, `processInbound` mandaba las respuestas de una corrida QA
+// por `fetch` real a `graph.facebook.com` — la ÚNICA barrera era que el
+// número de PRUEBA de Meta rechazara al destinatario sintético (#131030). En
+// cuanto la WABA del piloto pase a producción esa barrera desaparece y cada
+// corrida intenta mandar WhatsApp de verdad a números `5215559…`.
+//
+// Mismo patrón que `capturarBitacora`: instala, corre, `restaurar()` en el
+// `finally` de la corrida — jamás una copia del cliente Meta, solo una
+// desviación de `fetch` mientras el motor de QA está vivo. Cualquier POST a
+// `graph.facebook.com` se desvía ANTES de tocar la red: se registra en
+// `wa_outbox` con `estado='dead'` (valor ya permitido por el CHECK de la
+// 0180 — no hace falta migración para esto) y `ultimo_error` con el prefijo
+// `QA:`, así que nunca la reclama `reclamar_wa_outbox` (solo toma
+// `pending`/`sending`) y queda distinguible de un fallo real de Meta. Se
+// responde un 200 sintético con la forma que `client.ts` espera
+// (`messages:[{id}]`) para que el resto del pipeline —que sí lee el
+// wamid— no truene.
+const HOST_META_GRAPH = 'graph.facebook.com';
+
+export function instalarInterceptorSalidaMeta(corridaId: string): () => void {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if (!url.includes(HOST_META_GRAPH) || (init?.method ?? 'GET').toUpperCase() !== 'POST') {
+      return original(input, init);
+    }
+    let payload: Record<string, unknown> = {};
+    try { payload = init?.body ? JSON.parse(String(init.body)) : {}; } catch { /* cuerpo no-JSON: se registra vacío, no se aborta la corrida por esto */ }
+    try {
+      const { error } = await supabaseAdmin().from('wa_outbox').insert({
+        payload,
+        estado: 'dead',
+        ultimo_error: `QA: corrida ${corridaId} — interceptado, nunca se mandó a Meta`.slice(0, 500),
+      });
+      if (error) logger.error('qa.interceptor_no_registrado', { corridaId, err: error.message });
+    } catch (e) {
+      logger.error('qa.interceptor_no_registrado', { corridaId, err: e instanceof Error ? e.message : String(e) });
+    }
+    return new Response(JSON.stringify({ messages: [{ id: `qa_${randomUUID()}` }] }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    });
+  }) as typeof fetch;
+  return () => { globalThis.fetch = original; };
 }
 
 // ── El renglón del paso de medición del OCR ─────────────────────────────────
@@ -496,6 +546,7 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
   const sinTiempo = () => Date.now() - t0 > TECHO_CORRIDA_MS - MARGEN_MENSAJE_MS;
 
   const bit = capturarBitacora();
+  const restaurarFetch = instalarInterceptorSalidaMeta(corrida.id);
   let viajeId = '';
   let telefono = '';
   let viaje2Id: string | null = null;
@@ -775,6 +826,7 @@ export async function ejecutarCorridaRapida(corrida: CorridaQA): Promise<Corrida
     return corrida;
   } finally {
     bit.restaurar();
+    restaurarFetch();
   }
 }
 
@@ -901,6 +953,7 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
   corrida.pasadaEnVuelo = pasadaId;
 
   const bit = capturarBitacora();
+  const restaurarFetch = instalarInterceptorSalidaMeta(corridaId);
   let fotosProcesadas = 0;
   let corte: CorteCorrida | null = null;
 
@@ -1464,6 +1517,7 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
     return cerrarPasada(corrida.motivo, corrida.avance);
   } finally {
     bit.restaurar();
+    restaurarFetch();
     // La llave SIEMPRE se suelta, y sólo si sigue siendo nuestra. Si esto no
     // corre (Vercel mató la invocación), `PASADA_MUERTA_MS` la libera sola.
     await soltarPasada(db, corridaId, pasadaId).catch((err) => {

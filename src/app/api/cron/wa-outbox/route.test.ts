@@ -108,4 +108,19 @@ describe('cron wa-outbox — el kill switch global (BACK-19-1)', () => {
     expect(res.status).toBe(401);
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  // AUDITORÍA 24, BE-15: un hueco de configuración quemaba un intento de cada
+  // salida reclamada por minuto, hasta matarlas todas en ~1 h.
+  it('BE-15: sin token de Meta NO se reclama ninguna salida — 500, latido `fallo` y el outbox intacto', async () => {
+    delete process.env.WHATSAPP_ACCESS_TOKEN;
+
+    const res = await GET(new Request('https://likida.ai/api/cron/wa-outbox', CON_SECRETO));
+    const body = await res.json();
+
+    expect(reclamarSalidasWhatsApp).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(res.status).toBe(500);
+    expect(body).toMatchObject({ corrio: false, codigo: 'canal_no_configurado' });
+    expect(registrarLatido).toHaveBeenCalledWith('wa-outbox', 'fallo', { codigo: 'canal_no_configurado' });
+  });
 });

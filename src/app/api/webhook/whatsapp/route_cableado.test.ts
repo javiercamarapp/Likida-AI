@@ -45,7 +45,12 @@ vi.mock('@/lib/observability/sentry', () => ({ flushObservabilidad }));
 // cableado el 15-ago-2026). Sin este mock corre el real, que falla CERRADO
 // —una base ilegible cuenta como apagado— y estas pruebas verían cero
 // mensajes procesados por una razón que no es la que están midiendo.
-vi.mock('@/lib/likida/interruptores', () => ({ estaApagado: vi.fn(async () => false) }));
+// AUDITORÍA 24 · AGEN-7: la ruta lee `leerInterruptor` (distingue «apagado»
+// de «no pude leer la palanca»); `estaApagado` se conserva para el resto.
+vi.mock('@/lib/likida/interruptores', () => ({
+  estaApagado: vi.fn(async () => false),
+  leerInterruptor: vi.fn(async () => 'encendido' as const),
+}));
 
 // `after()` fuera de una petición de Next lanza ("called outside a request
 // scope"). Se recogen las tareas y se corren a mano: así se puede AFIRMAR qué
@@ -214,11 +219,43 @@ describe('el webhook entrega al procesador lo que Meta manda', () => {
 
   it('un tipo que no manejamos (sticker) llega como other, no se pierde', async () => {
     // Se procesa igual para poder contestarle al operador "mándamelo en foto".
+    // AUDITORÍA 24 · WA-9: viaja el `subtipo`, para que lo que se le conteste
+    // mencione lo que él mandó y no una lista de formatos.
     const c = payload('5219990000014', { id: 'wamid.S1', type: 'sticker' });
     await postear(c, firmar(c));
     expect(processInbound).toHaveBeenCalledWith({
-      from: '5219990000014', waMessageId: 'wamid.S1', type: 'other',
+      from: '5219990000014', waMessageId: 'wamid.S1', type: 'other', subtipo: 'sticker',
     });
+  });
+
+  // ── AUDITORÍA 24 · WA-9 (MEDIO) ─────────────────────────────────────────
+  it('un 👍 de reacción NO es un turno: se descarta antes del inbox', async () => {
+    // Reaccionar al «Anotado ✅» es lo que hace medio México en vez de
+    // contestar. Cada reacción entraba a `wa_evento_pendiente`, gastaba cupo
+    // de rate limit y recibía «Por ahora solo proceso texto, fotos…»: con 22
+    // acuses, 22 sermones y 22 mensajes salientes pagados.
+    const c = payload('5219990000021', {
+      id: 'wamid.R1', type: 'reaction', reaction: { message_id: 'wamid.ACUSE', emoji: '👍' },
+    });
+    const res = await postear(c, firmar(c));
+    expect(res.status).toBe(200);
+    expect(processInbound, 'no hay nada que contestarle a un pulgar').not.toHaveBeenCalled();
+  });
+
+  it('y una reacción entre dos mensajes de verdad no se lleva a los otros', async () => {
+    const c = JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: [{ id: '1', changes: [{ field: 'messages', value: {
+        messaging_product: 'whatsapp',
+        messages: [
+          { from: '5219990000022', id: 'wamid.T1', type: 'text', text: { body: 'listo' } },
+          { from: '5219990000022', id: 'wamid.R2', type: 'reaction', reaction: { message_id: 'x', emoji: '👍' } },
+        ],
+      } }] }],
+    });
+    await postear(c, firmar(c));
+    expect(processInbound).toHaveBeenCalledTimes(1);
+    expect(processInbound).toHaveBeenCalledWith(expect.objectContaining({ waMessageId: 'wamid.T1' }));
   });
 
   it('un JSON roto con firma válida devuelve 400, no revienta', async () => {

@@ -40,7 +40,10 @@ const loadConversation = vi.fn(async () => ({
   cierreSinComprobantes: true,
 }));
 const getOpenViaje = vi.fn<(tenantId: string, operadorId: string) => Promise<string | null>>(async () => 'v1');
-const liquidacionReciente = vi.fn<(tenantId: string, operadorId: string) => Promise<{ viajeId: string; liquidacionId: string } | null>>(async () => null);
+type Reciente = { viajeId: string; liquidacionId: string; pdfUrl: string | null; entregadaOperadorEn: string | null; avisadaOficinaEn: string | null };
+const liquidacionReciente = vi.fn<(tenantId: string, operadorId: string) => Promise<Reciente | null>>(async () => null);
+/** AGEN-4: los sellos de entrega que el processor escribe (0279). */
+const sellarEntregaLiquidacion = vi.fn(async (_t: string, _l: string | null | undefined, _s: string) => true);
 const claimMessage = vi.fn<(id: string) => Promise<'nuevo' | 'duplicado' | 'indeterminado'>>(async () => 'nuevo');
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
@@ -68,6 +71,7 @@ vi.mock('@/lib/likida/conv', async (original) => ({
   resolveOperador: vi.fn(async () => ({ tenantId: 't1', operadorId: 'o1' })),
   getOpenViaje: (t: string, o: string) => getOpenViaje(t, o),
   liquidacionRecienteDe: (t: string, o: string) => liquidacionReciente(t, o),
+  sellarEntregaLiquidacion: (...a: unknown[]) => sellarEntregaLiquidacion(...(a as [string, string, string])),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
   loadConversation: (...a: unknown[]) => loadConversation(...(a as [])),
   saveConversation: (...a: unknown[]) => saveConversation(...a),
@@ -94,7 +98,10 @@ vi.mock('@/lib/likida/repo', () => ({
   saveLiquidacion: vi.fn(async () => 'L1'),
   getAcumuladoCombustible: vi.fn(async () => { throw new Error('sin base en pruebas'); }),
   getPerfilCrudo: vi.fn(async () => ({})),
+  getLiquidacionDeViaje: (...a: unknown[]) => getLiquidacionDeViaje(...(a as [string, string])),
 }));
+/** AUDITORÍA 24, AGEN-1/AGEN-A1: la lectura de la BASE que decide si cerró. */
+const getLiquidacionDeViaje = vi.fn<(t: string, v: string) => Promise<{ id: string; pdfUrl: string | null } | undefined>>(async () => undefined);
 const vincularCostosALiquidacion = vi.fn();
 vi.mock('@/lib/likida/costos', () => ({
   registrarCosto: vi.fn(), registrarCostoWhatsApp: vi.fn(),
@@ -158,8 +165,10 @@ beforeEach(() => {
   loadConversation.mockReset();
   loadConversation.mockResolvedValue({ id: 'c1', turns: [], cierreSinComprobantes: true });
   vincularCostosALiquidacion.mockReset();
+  getLiquidacionDeViaje.mockReset(); getLiquidacionDeViaje.mockResolvedValue(undefined);
   cuadrarDesdeDB.mockReset(); cuadrarDesdeDB.mockResolvedValue({ totalComprobado: 1234 });
   avisarCierreAlJefe.mockClear();
+  sellarEntregaLiquidacion.mockClear();
   vi.stubGlobal('fetch', fetchSpy);
   fetchSpy.mockClear();
   process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
@@ -220,16 +229,171 @@ describe('C1 — el cierre que SÍ ocurrió se recupera DE FÁBRICA, sin flag', 
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · AGEN-1 (CRÍTICO, 3ª ronda) — la base es la autoridad TAMBIÉN
+// en el camino feliz. `guardar_liquidacion_tx` commitea; `acotada` se rindió a
+// los 8 s; la tool reporta `error`; el ciclo sigue normal (SIN excepción) y el
+// modelo escribe «No pude cerrar». El viaje está `liquidado`.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('AGEN-1 — un guardar_liquidacion que reporta fallo sin tumbar el ciclo se coteja con la base', () => {
+  const resultadoConToolFallida = () => ({
+    finalText: 'No pude cerrar tu liquidación, ¿me reenvías *listo*?',
+    toolCalls: [{ toolName: 'guardar_liquidacion', args: {}, error: 'saveLiquidacion: sin respuesta en 8000 ms (tope de consulta)', durationMs: 9500 }],
+    model: 'm', tokensIn: 1, tokensOut: 1, costUsd: 0, costoPorModelo: {},
+  });
+
+  it('si la base dice `liquidado`, el chofer recibe el cierre con cifras del motor, su PDF, y el jefe se entera', async () => {
+    runAgent.mockResolvedValue(resultadoConToolFallida());
+    getLiquidacionDeViaje.mockResolvedValue({ id: 'L1', pdfUrl: 't1/v1.pdf' });
+    await processInbound(listo);
+
+    expect(getLiquidacionDeViaje).toHaveBeenCalledWith('t1', 'v1');
+    const dichos = textos().join(' | ');
+    expect(dichos, 'narró «no cerré» sobre un viaje liquidado').not.toContain('No pude cerrar');
+    expect(dichos).toContain('CUADRE REAL (cerrado=true)');
+    expect(documentos(), 'el PDF existe y no se mandó').toHaveLength(1);
+    expect(avisarCierreAlJefe).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't1', viajeId: 'v1' }));
+    expect(logger.error).toHaveBeenCalledWith('agent.cierre_commiteado_tras_fallo_tool', expect.objectContaining({ viaje: 'v1', liquidacion: 'L1' }));
+    expect(logger.error).not.toHaveBeenCalledWith('pdf.contralor_no_generado', expect.anything());
+    // La conversación se desancla del viaje cerrado (igual que en el camino feliz).
+    expect(saveConversation).toHaveBeenCalledWith('c1', expect.anything(), null, expect.anything());
+  });
+
+  it('si la base dice que NO hay liquidación, se le dice que el viaje sigue abierto y no se inventa un cierre', async () => {
+    runAgent.mockResolvedValue(resultadoConToolFallida());
+    getLiquidacionDeViaje.mockResolvedValue(undefined);
+    await processInbound(listo);
+    const dichos = textos().join(' | ');
+    expect(dichos).toMatch(/sigue abierto/);
+    expect(dichos).not.toContain('cerrado=true');
+    expect(documentos()).toHaveLength(0);
+    expect(avisarCierreAlJefe).not.toHaveBeenCalled();
+  });
+
+  it('si la base no contesta, NI «cerré» NI «no cerré»: se pide reintentar y se registra', async () => {
+    runAgent.mockResolvedValue(resultadoConToolFallida());
+    getLiquidacionDeViaje.mockRejectedValue(new Error('getLiquidacionDeViaje: sin respuesta'));
+    await processInbound(listo);
+    const dichos = textos().join(' | ');
+    expect(dichos).toMatch(/No pude confirmar/);
+    expect(dichos).not.toContain('cerrado=true');
+    expect(dichos).not.toContain('No pude cerrar');
+    expect(logger.error).toHaveBeenCalledWith('agent.cierre_no_verificable', expect.objectContaining({ viaje: 'v1' }));
+  });
+
+  it('control: con la tool exitosa no se consulta la base (el snapshot de la tool manda)', async () => {
+    runAgent.mockResolvedValue({
+      finalText: 'Listo', model: 'm', tokensIn: 1, tokensOut: 1, costUsd: 0, costoPorModelo: {},
+      toolCalls: [{ toolName: 'guardar_liquidacion', args: {}, result: { liquidacion_id: 'L1', pdf_generado: true, pdf_contralor_generado: true }, durationMs: 5 }],
+    });
+    await processInbound(listo);
+    expect(getLiquidacionDeViaje).not.toHaveBeenCalled();
+    expect(documentos()).toHaveLength(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · AGEN-A1 / BE-1 (ALTO, 2ª ronda) — la recuperación por base
+// del `catch` fabricaba un registro con `pdf_url` (vocabulario de la tabla) que
+// nadie leía, y conservaba el registro con `error:'Timeout'`: al chofer se le
+// negaba un PDF que sí existía y se logueaban dos errores falsos.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('AGEN-A1 — el cierre que abortó con la tool en vuelo y commiteó entrega el PDF que existe', () => {
+  const abortoConToolEnVuelo = () => new PartialExecutionError(
+    'timeout del agente', new Error('timeout del agente'),
+    [{ toolName: 'guardar_liquidacion', args: {}, result: null, error: 'Timeout', durationMs: 40_000 }],
+    10, 10, 0,
+  );
+
+  it('manda el PDF, avisa al jefe, y NO registra `pdf.contralor_no_generado`', async () => {
+    runAgent.mockRejectedValue(abortoConToolEnVuelo());
+    getLiquidacionDeViaje.mockResolvedValue({ id: 'L-77', pdfUrl: 't-1/v-9.pdf' });
+    await processInbound(listo);
+
+    const dichos = textos().join(' | ');
+    expect(dichos).toContain('CUADRE REAL (cerrado=true)');
+    expect(dichos, 'negó el PDF').not.toMatch(/no pude generarte el PDF/);
+    expect(documentos()).toHaveLength(1);
+    expect(avisarCierreAlJefe).toHaveBeenCalledWith(expect.objectContaining({ viajeId: 'v1', urlPdf: 'https://x/liq.pdf' }));
+    expect(logger.error).not.toHaveBeenCalledWith('pdf.contralor_no_generado', expect.anything());
+    expect(logger.error).not.toHaveBeenCalledWith('pdf.no_entregado', expect.anything());
+    expect(vincularCostosALiquidacion).toHaveBeenCalledWith('t1', 'v1', 'L-77');
+  });
+
+  it('si la liquidación existe pero sin `pdf_url`, se dice que el PDF falta (no se firma un objeto inexistente)', async () => {
+    runAgent.mockRejectedValue(abortoConToolEnVuelo());
+    getLiquidacionDeViaje.mockResolvedValue({ id: 'L-78', pdfUrl: null });
+    await processInbound(listo);
+    expect(documentos()).toHaveLength(0);
+    expect(textos().join(' | ')).toMatch(/no pude generarte el PDF/);
+  });
+});
+
 describe('C1 — el reintento sin viaje abierto no niega un cierre reciente', () => {
   beforeEach(() => { getOpenViaje.mockResolvedValue(null); });
 
   it('con una liquidación reciente del operador, se le CONFIRMA el cierre', async () => {
-    liquidacionReciente.mockResolvedValue({ viajeId: 'v1', liquidacionId: 'L1' });
+    liquidacionReciente.mockResolvedValue({ viajeId: 'v1', liquidacionId: 'L1', pdfUrl: null, entregadaOperadorEn: null, avisadaOficinaEn: null });
     await processInbound(listo);
     const dichos = textos().join(' | ');
     expect(dichos, 'negó un cierre que sí existe').not.toMatch(/No tienes un viaje abierto para liquidar/i);
     expect(dichos).toMatch(/liquidad/i);
     expect(dichos).toMatch(/contralor|panel/i);
+  });
+
+  // ── AUDITORÍA 24 · AGEN-4 (ALTO) ──────────────────────────────────────────
+  // Toda muerte posterior al commit (kill de Vercel antes de `say`, del PDF o
+  // del aviso al jefe) aterriza aquí. Antes: «pídeselo a tu contralor» sin
+  // mandar el PDF que existe y sin avisar al jefe — nunca.
+  const cerradaSinEntregar = (): Reciente => ({ viajeId: 'v1', liquidacionId: 'L1', pdfUrl: 't1/v1.pdf', entregadaOperadorEn: null, avisadaOficinaEn: null });
+
+  it('AGEN-4: con PDF en la base y sin sellos, ENTREGA el PDF, avisa al jefe con el ejemplar del contralor y sella los dos', async () => {
+    liquidacionReciente.mockResolvedValue(cerradaSinEntregar());
+    await processInbound(listo);
+    // El PDF del operador salió por WhatsApp, firmado en storage.
+    expect(documentos()).toHaveLength(1);
+    expect(createSignedUrl).toHaveBeenCalledWith('t1/v1-operador.pdf', expect.any(Number));
+    // El jefe se entera, con el ejemplar completo.
+    expect(avisarCierreAlJefe).toHaveBeenCalledTimes(1);
+    expect(avisarCierreAlJefe).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't1', viajeId: 'v1', urlPdf: 'https://x/liq.pdf', telefonoOperador: listo.from }));
+    // Y quedó sellado, para que el siguiente «listo» no lo repita.
+    const sellos = sellarEntregaLiquidacion.mock.calls.map((c) => c[2]);
+    expect(sellos).toEqual(expect.arrayContaining(['entregada_operador_en', 'avisada_oficina_en']));
+    // El texto dice lo que pasó de verdad: el PDF va, no «pídeselo».
+    const dichos = textos().join(' | ');
+    expect(dichos).toMatch(/liquidado/i);
+    expect(dichos).toMatch(/PDF/);
+    expect(dichos).not.toMatch(/pídeselo a tu contralor/i);
+  });
+
+  it('AGEN-4: con los dos sellos puestos NO repite nada: ni documento ni aviso al jefe, y lo dice', async () => {
+    liquidacionReciente.mockResolvedValue({ ...cerradaSinEntregar(), entregadaOperadorEn: '2026-09-01T10:41:20Z', avisadaOficinaEn: '2026-09-01T10:41:25Z' });
+    await processInbound(listo);
+    expect(documentos()).toHaveLength(0);
+    expect(avisarCierreAlJefe).not.toHaveBeenCalled();
+    expect(sellarEntregaLiquidacion).not.toHaveBeenCalled();
+    expect(textos().join(' | ')).toMatch(/ya te lo había mandado/i);
+  });
+
+  it('AGEN-4: sin `pdf_url` no se firma un objeto inexistente; el jefe se avisa igual (sin PDF) y al chofer se le dice que el PDF no se generó', async () => {
+    liquidacionReciente.mockResolvedValue({ ...cerradaSinEntregar(), pdfUrl: null });
+    await processInbound(listo);
+    expect(documentos()).toHaveLength(0);
+    expect(createSignedUrl).not.toHaveBeenCalled();
+    expect(avisarCierreAlJefe).toHaveBeenCalledWith(expect.objectContaining({ urlPdf: null }));
+    expect(sellarEntregaLiquidacion.mock.calls.map((c) => c[2])).toEqual(['avisada_oficina_en']);
+    expect(textos().join(' | ')).toMatch(/no se generó/i);
+  });
+
+  it('AGEN-4: si Meta rechaza el PDF, NO se sella la entrega y al chofer no se le afirma que ya lo tiene', async () => {
+    liquidacionReciente.mockResolvedValue(cerradaSinEntregar());
+    fetchSpy.mockImplementationOnce(async (url: string, init?: RequestInit) => {
+      salientes.push({ url: String(url), body: JSON.parse(String(init?.body ?? '{}')) });
+      return new Response(JSON.stringify({ error: { code: 131053, message: 'Media upload error' } }), { status: 400, headers: { 'content-type': 'application/json' } });
+    });
+    await processInbound(listo);
+    expect(sellarEntregaLiquidacion.mock.calls.map((c) => c[2])).not.toContain('entregada_operador_en');
+    expect(textos().join(' | ')).toMatch(/no se te pudo entregar/i);
   });
 
   it('sin liquidación reciente, el mensaje de siempre (regresión)', async () => {

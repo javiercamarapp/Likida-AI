@@ -129,3 +129,59 @@ describe('generateStructured — el data-URL de una foto no se cobra por byte', 
     expect(loggerError).toHaveBeenCalledWith('llm.reserva_sin_liquidar_por_error', expect.objectContaining({ reservaId: expect.any(String) }));
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24, PRU-5 (MEDIO) — mutación M7: quitar `imagenes * TOKENS_POR_IMAGEN`
+// de `cotaEntradaEnTokens` dejaba la suite en verde. La prueba de arriba mide
+// un MÍNIMO de texto, no la diferencia con/sin imagen; ésta la ancla.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('PRU-5 · una imagen pesa TOKENS_POR_IMAGEN en la reserva', () => {
+  const fotoDe3MB = `data:image/jpeg;base64,${'A'.repeat(3_000_000)}`;
+  beforeEach(() => {
+    rpc.mockReset();
+    rpc.mockImplementation(async (fn: string) => ({ data: fn === 'reservar_presupuesto_llm' ? 'ok' : true, error: null }));
+    create.mockReset();
+    create.mockResolvedValue({
+      choices: [{ message: { content: '{"monto":123}' } }],
+      model: 'google/gemini-3.1-flash-lite',
+      usage: { prompt_tokens: 1200, completion_tokens: 40 },
+    });
+  });
+  it('cotaEntradaEnTokens: con imagen = sin imagen + TOKENS_POR_IMAGEN (por imagen, no por byte)', async () => {
+    const { cotaEntradaEnTokens, TOKENS_POR_IMAGEN } = await import('./openrouter');
+    const texto = [{ role: 'user', content: [{ type: 'text', text: 'este ticket' }] }];
+    const conImagen = [{ role: 'user', content: [{ type: 'text', text: 'este ticket' }, { type: 'image_url', image_url: { url: fotoDe3MB } }] }];
+    const conDos = [{ role: 'user', content: [{ type: 'text', text: 'este ticket' }, { type: 'image_url', image_url: { url: fotoDe3MB } }, { type: 'image_url', image_url: { url: fotoDe3MB } }] }];
+    const base = cotaEntradaEnTokens(texto);
+    // La parte `image_url` con el data-URL vaciado pesa unos caracteres; lo
+    // que importa es que el término de imagen sea EXACTAMENTE TOKENS_POR_IMAGEN
+    // y no dependa de los 3 MB.
+    const envoltorio = JSON.stringify([{ type: 'image_url', image_url: { url: '' } }]).length - 2;
+    expect(cotaEntradaEnTokens(conImagen) - base).toBe(TOKENS_POR_IMAGEN + envoltorio + 1);
+    expect(cotaEntradaEnTokens(conDos) - cotaEntradaEnTokens(conImagen)).toBe(TOKENS_POR_IMAGEN + envoltorio + 1);
+    expect(TOKENS_POR_IMAGEN).toBeGreaterThan(0);
+  });
+
+  it('la RESERVA de generateStructured sube en calcCost(modelo, TOKENS_POR_IMAGEN) al adjuntar una foto', async () => {
+    const { calcCost, TOKENS_POR_IMAGEN } = await import('./openrouter');
+    const { modelFor } = await import('./models');
+    const reservaDe = async (images?: string[]) => {
+      rpc.mockClear();
+      await generateStructured({
+        role: 'ocr', system: 'extrae', messages: [{ role: 'user', content: 'este ticket' }], images,
+        schema: z.object({ monto: z.number() }), schemaName: 'comprobante',
+        budget: createLlmBudget('tenant-foto', '00000000-0000-4000-8000-00000000c205', 'interactivo'),
+      });
+      const reserva = rpc.mock.calls.find((c) => c[0] === 'reservar_presupuesto_llm')?.[1] as { p_reserva_usd: number } | undefined;
+      expect(reserva).toBeDefined();
+      return reserva!.p_reserva_usd;
+    };
+    const sinImagen = await reservaDe(undefined);
+    const conImagen = await reservaDe([fotoDe3MB]);
+    const esperado = calcCost(modelFor('ocr'), TOKENS_POR_IMAGEN, 0);
+    expect(esperado).toBeGreaterThan(0);
+    // Tolerancia: el envoltorio JSON de la parte `image_url` son ~50 caracteres
+    // (≈ $0.00001); el término de la imagen es 4,000 tokens (≈ $0.001).
+    expect(conImagen - sinImagen).toBeCloseTo(esperado, 4);
+  });
+});

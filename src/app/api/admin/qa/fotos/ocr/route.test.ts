@@ -131,6 +131,32 @@ describe('la puerta', () => {
   });
 });
 
+// AUDITORÍA 24, BE-26: sus hermanos (`qa/lanzar`, `qa/fotos` POST/PATCH) ya
+// comprobaban el origen; esta no. Autenticada solo por cookie de sesión, un
+// sitio ajeno con el superadmin logueado podía disparar el gasto de visión.
+describe('BE-26 — la puerta de origen', () => {
+  it('REPRO: desde otro sitio es 403 y no se gasta un centavo', async () => {
+    const r = await POST(new Request('http://x/api/admin/qa/fotos/ocr', {
+      method: 'POST',
+      headers: { 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' },
+      body: JSON.stringify({ fotoIds: [ID_A] }),
+    }));
+    expect(r.status).toBe(403);
+    expect(extraerComprobante).not.toHaveBeenCalled();
+  });
+
+  it('desde el panel (same-origin) pasa', async () => {
+    respuestasOcr = [lecturaBuena];
+    const r = await POST(new Request('http://x/api/admin/qa/fotos/ocr', {
+      method: 'POST',
+      headers: { 'sec-fetch-site': 'same-origin' },
+      body: JSON.stringify({ fotoIds: [ID_A] }),
+    }));
+    expect(r.status).toBe(200);
+    expect(extraerComprobante).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('el body', () => {
   it('JSON roto: 400', async () => {
     const r = await POST(new Request('http://x', { method: 'POST', body: '{no' }));

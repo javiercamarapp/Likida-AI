@@ -6,6 +6,8 @@ import { crearIncidencia } from './operacion';
 import { telefonoJefeDe } from './contactos';
 import type { RolOficina } from './contactos';
 import { sendText, sendButtons, MAX_CUERPO_BOTONES } from '@/lib/meta/client';
+import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
+import { appUrl } from '@/lib/env';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { recomendacionCascada } from './asistencia_proveedor';
 import { hoyMx } from '@/lib/formato';
@@ -681,7 +683,14 @@ async function atenderConExpedienteAbierto(
     if (telefono) {
       const etiquetas = await etiquetasAviso(args.tenantId, args.viajeId, args.operadorId);
       const texto = `${lesionadosNuevos ? '⛑️ Ahora menciona LESIONADOS.\n' : ''}${etiquetas.chofer} sigue reportando sobre su emergencia:\n«${args.texto.replace(/\s+/g, ' ').trim().slice(0, 220)}»`;
-      reenviado = Boolean(await sendText(telefono, texto));
+      // AGEN-5 / WA-4: por texto y, fuera de la ventana de 24 h, por
+      // plantilla. `reenviado` decide lo que se le dice al chofer.
+      const r = await avisarOficina(telefono, texto, {
+        parametros: parametrosAvisoOficina(etiquetas.chofer, `${lesionadosNuevos ? 'LESIONADOS · ' : ''}sigue reportando su emergencia`, `${appUrl()}/dashboard/emergencias`),
+        contexto: { tenant: args.tenantId, incidencia: abierta.id, evento: 'asistencia.adicional' },
+      });
+      reenviado = r.ok;
+      if (!r.ok) logger.warn('asistencia.adicional_no_reenviado', { incidencia: abierta.id, motivo: r.motivo, codigo: r.codigo });
     }
   } catch (e) {
     logger.warn('asistencia.adicional_no_reenviado', { incidencia: abierta.id, err: e instanceof Error ? e.message : String(e) });

@@ -219,8 +219,19 @@ vi.mock('@/lib/likida/contactos', () => ({
   telefonoJefeDe: (...a: unknown[]) => telefonoJefeDe(...(a as [])),
 }));
 
+/** AUDITORÍA 24 (BE-6): el latido y su lectura, observables. Todo lo demás
+ *  de `salud` (la puerta) se queda real. */
+const registrarLatido = vi.fn(async (..._a: unknown[]) => {});
+const leerLatido = vi.fn(async (..._a: unknown[]): Promise<{ ultimoLatido: string; estado: string; detalle: Record<string, unknown> } | null> => null);
+vi.mock('@/lib/admin/salud', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/admin/salud')>()),
+  registrarLatido: (...a: unknown[]) => registrarLatido(...a),
+  leerLatido: (...a: unknown[]) => leerLatido(...a),
+}));
+
 const { GET } = await import('./route');
 const { FalloDePlataforma } = await import('@/lib/likida/agentes/notificaciones');
+const { appUrl } = await import('@/lib/env');
 
 /** Una fila de la cola. Por default, un ticket de CAPUFE. */
 const CAPUFE = { urlFacturacion: 'https://facturacioncapufe.com.mx/Capufe/', codigo: 'X' };
@@ -245,6 +256,11 @@ beforeEach(() => {
   cola = { data: [fila()], error: null };
   backlog = null;
   delete process.env.UPSTASH_QSTASH_TOKEN;
+  delete process.env.QSTASH_CURRENT_SIGNING_KEY;
+  delete process.env.QSTASH_NEXT_SIGNING_KEY;
+  registrarLatido.mockClear();
+  leerLatido.mockReset();
+  leerLatido.mockResolvedValue(null);
   publishJSON.mockClear();
   publishJSON.mockImplementation(async () => ({ messageId: `msg-${publishJSON.mock.calls.length}` }));
   consulta.length = 0;
@@ -732,7 +748,13 @@ describe('el presupuesto de tiempo del lote', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('el despacho por flota con QStash (ESC-5)', () => {
-  beforeEach(() => { process.env.UPSTASH_QSTASH_TOKEN = 'tok'; });
+  beforeEach(() => {
+    // BE-6 (a): las TRES variables, como exige el callback. Con una sola el
+    // cron ya no encola (ver el describe de la auditoría 24).
+    process.env.UPSTASH_QSTASH_TOKEN = 'tok';
+    process.env.QSTASH_CURRENT_SIGNING_KEY = 'cur';
+    process.env.QSTASH_NEXT_SIGNING_KEY = 'nxt';
+  });
 
   it('encola UN mensaje POR FLOTA — no un solo lote con las flotas mezcladas', async () => {
     // Un mensaje = un navegador = una sesión por portal, en su propia
@@ -793,7 +815,8 @@ describe('el despacho por flota con QStash (ESC-5)', () => {
   it('el mismo cuarto de hora no encola dos veces la misma flota (Vercel Cron es at-least-once)', async () => {
     await pedir();
     const dedup = publishJSON.mock.calls[0][0].deduplicationId as string;
-    expect(dedup).toMatch(/^facturar-t-1-\d+$/);
+    // REN-5: la ranura es por (flota, portal).
+    expect(dedup).toMatch(/^facturar-t-1-capufe-\d+$/);
     // Un segundo disparo del MISMO cuarto de hora reusa la ranura.
     publishJSON.mockClear();
     await pedir();
@@ -821,7 +844,7 @@ describe('el despacho por flota con QStash (ESC-5)', () => {
     const cuerpo = await (await pedir()).json();
 
     expect(cuerpo.flotas).toBe(1);
-    expect(cuerpo.sinEncolar).toEqual([{ tenantId: 't-2', tickets: 1, error: 'rechazado' }]);
+    expect(cuerpo.sinEncolar).toEqual([{ tenantId: 't-2', portal: 'capufe', tickets: 1, error: 'rechazado' }]);
     expect(alertarOperador).toHaveBeenCalledWith('cron.facturar', expect.objectContaining({ codigo: 'encolado_parcial' }));
   });
 
@@ -842,6 +865,71 @@ describe('el despacho por flota con QStash (ESC-5)', () => {
     expect(logger.error).toHaveBeenCalledWith('cron.facturar.encolado_fallo', expect.objectContaining({
       err: expect.stringContaining('sin respuesta'),
     }));
+  });
+
+  // ── AUDITORÍA 24 ────────────────────────────────────────────────────────
+
+  it('BE-6 (a): con SOLO el token —una signing key ausente o rotada— NO se encola: se factura síncrono y se grita', async () => {
+    delete process.env.QSTASH_CURRENT_SIGNING_KEY;
+    // Antes: 25 lotes publicados, latido `ok`, y cada callback contestaba 503.
+    const cuerpo = await (await pedir()).json();
+    expect(publishJSON).not.toHaveBeenCalled();
+    expect(cuerpo.encolado).toBeUndefined();
+    expect(facturarLoteAlVuelo).toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith('cron.facturar.qstash_a_medias', { token: true, current: false, next: true });
+    expect(alertarOperador).toHaveBeenCalledWith('cron.facturar', expect.objectContaining({ codigo: 'qstash_config_incompleta' }));
+  });
+
+  it('BE-6 (c): si el último latido sigue siendo «encolé» de la corrida anterior, nadie procesó — se factura síncrono, latido `parcial` con la causa y alerta', async () => {
+    leerLatido.mockResolvedValue({
+      ultimoLatido: new Date(Date.now() - 15 * 60_000).toISOString(), estado: 'ok',
+      detalle: { encolado: true, sesiones: 3, tickets: 40 },
+    });
+    const cuerpo = await (await pedir()).json();
+    expect(publishJSON).not.toHaveBeenCalled();
+    expect(facturarLoteAlVuelo).toHaveBeenCalled();
+    expect(cuerpo.parcialPor).toBe('cola_sin_procesar');
+    expect(alertarOperador).toHaveBeenCalledWith('cron.facturar', expect.objectContaining({ codigo: 'cola_sin_procesar' }));
+    expect(registrarLatido).toHaveBeenCalledWith('facturar', 'parcial', expect.objectContaining({ parcialPor: 'cola_sin_procesar' }));
+  });
+
+  it('BE-6 (c): el latido de encolar dice `encolado: true` — es lo que la corrida siguiente cruza', async () => {
+    await pedir();
+    expect(registrarLatido).toHaveBeenCalledWith('facturar', 'ok', expect.objectContaining({ encolado: true, sesiones: 1, tickets: 1 }));
+  });
+
+  it('BE-6 (c): con el último latido escrito por el callback (sin `encolado`), se encola normal', async () => {
+    leerLatido.mockResolvedValue({ ultimoLatido: new Date().toISOString(), estado: 'ok', detalle: { modo: 'ensayo', intentados: 20, facturados: 0 } });
+    await pedir();
+    expect(publishJSON).toHaveBeenCalledTimes(1);
+  });
+
+  it('REN-5: una flota con tickets de TRES portales encola TRES mensajes, no uno', async () => {
+    // Un mensaje = un navegador. Con uno por flota, los tres portales iban
+    // en serie dentro de un solo navegador de 150 s: 2-5 tickets por corrida.
+    const GOGAS = { urlFacturacion: 'https://facturasgas.com/facturacion/autofactura.php' };
+    cola = { data: [
+      fila({ id: 'c-1' }), fila({ id: 'c-2' }),
+      fila({ id: 'g-1', ocr_extra: GOGAS }), fila({ id: 'g-2', ocr_extra: GOGAS }),
+      fila({ id: 'x-1', ocr_extra: {} }),
+    ], error: null };
+    const cuerpo = await (await pedir()).json();
+    expect(publishJSON).toHaveBeenCalledTimes(3);
+    const lotes = publishJSON.mock.calls.map(([m]) => (m.body as { lote: Array<{ id: string }> }).lote.map((g) => g.id));
+    expect(lotes).toEqual([['c-1', 'c-2'], ['g-1', 'g-2'], ['x-1']]);
+    expect(cuerpo).toMatchObject({ flotas: 1, sesiones: 3, tickets: 5 });
+    expect(cuerpo.mensajes.map((m: { portal: string }) => m.portal)).toEqual(['capufe', 'gogas', 'sin_portal']);
+  });
+
+  it('REN-5: el backlog por encima de dos días de demanda se AVISA, no solo se mide', async () => {
+    backlog = { count: 1_001, error: null };
+    await pedir();
+    expect(alertarOperador).toHaveBeenCalledWith('cron.facturar', expect.objectContaining({ codigo: 'backlog_facturacion' }));
+  });
+
+  it('BE-32: la URL del callback sale de appUrl(), no de la cabecera Host', async () => {
+    await pedir();
+    expect(String(publishJSON.mock.calls[0][0].url)).toBe(`${appUrl()}/api/cron/facturar/cola`);
   });
 
   it('el cron corre cada 15 minutos: el techo de 192 tickets/día era el hallazgo', async () => {
@@ -1149,5 +1237,50 @@ describe('la sesión persistente de portales', () => {
     expect(invalidarVinculo).toHaveBeenCalledWith(expect.objectContaining({
       comercio: 'capufe', clase: 'requiere_vinculacion',
     }));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24, BE-9 (ALTO): el navegador abre, el portal revienta a media
+// escritura, `if (arranco) throw e` salía del bucle SIN `corridas.set`, y
+// como todo el cierre itera `corridas`/`bloqueadosPorFlota`, la flota
+// desaparecía de correo, bitácora y aviso de cola — con sus tickets ya
+// marcados «emisión en curso» y fuera de la cola automática para siempre.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('BE-9 — la flota cuyo portal reventó a media escritura NO desaparece del cierre', () => {
+  it('la corrida de esa flota se anota como fallida, sus tickets sin reportar quedan como «emisión interrumpida» y el error nombra flota y tickets', async () => {
+    cola = { data: [fila({ id: 'g-1' }), fila({ id: 'g-2' })], error: null };
+    conPortales.mockRejectedValueOnce(new Error('page.click: Target closed'));
+
+    const res = await pedir();
+    expect(res.status).toBe(500);
+    const cuerpo = await res.json();
+    expect(cuerpo).toMatchObject({ tenant: 't-1', gastos: ['g-1', 'g-2'] });
+
+    // El cierre por flota la nombra, y no como fallo de plataforma: el navegador SÍ abrió.
+    expect(avisarCorridasPorFlota).toHaveBeenCalledTimes(1);
+    const [, corridas] = avisarCorridasPorFlota.mock.calls[0] as unknown as [string, Map<string, unknown>];
+    expect(corridas.get('t-1')).toBeInstanceOf(Error);
+    expect(corridas.get('t-1')).not.toBeInstanceOf(FalloDePlataforma);
+    expect(registrarCorrida).toHaveBeenCalledWith('t-1', 'facturas', expect.objectContaining({ estado: 'fallo' }));
+    // Los tickets cuya suerte no se sabe van al aviso de cola atorada.
+    expect(avisar).toHaveBeenCalledWith('t-1', 'facturas', 'cola_atorada', { hayProblema: true, magnitud: 2 }, expect.any(Function));
+    expect(cuerpo.error).toContain('Target closed');
+    expect(logger.error).toHaveBeenCalledWith('cron.facturar.falló', expect.objectContaining({ tenant: 't-1', gastos: ['g-1', 'g-2'] }));
+    expect(registrarLatido).toHaveBeenCalledWith('facturar', 'fallo', expect.objectContaining({ tenant: 't-1' }));
+  });
+
+  it('los tickets que SÍ se alcanzaron a reportar antes del reventón no se duplican como bloqueados', async () => {
+    cola = { data: [fila({ id: 'g-1' }), fila({ id: 'g-2' })], error: null };
+    // El lote reportó g-1 (g-2 no alcanzó a reportarse) y el navegador
+    // revienta después, al refrescar la sesión — todavía dentro de `conNavegador`.
+    facturarLoteAlVuelo.mockResolvedValueOnce({ porGasto: [{ gastoId: 'g-1', intentado: true, facturado: false }], facturados: 0, bloqueados: [] });
+    refrescarSesiones.mockRejectedValueOnce(new Error('Target closed'));
+
+    const res = await pedir();
+    expect(res.status).toBe(500);
+    // Solo g-2: la suerte de g-1 ya está en el parte.
+    expect(avisar).toHaveBeenCalledWith('t-1', 'facturas', 'cola_atorada', { hayProblema: true, magnitud: 1 }, expect.any(Function));
+    expect(registrarCorrida).toHaveBeenCalledWith('t-1', 'facturas', expect.objectContaining({ estado: 'fallo', resumen: expect.objectContaining({ intentados: 1 }) }));
   });
 });

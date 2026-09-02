@@ -78,7 +78,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 const {
   getBandejaEscalaciones, getSolicitudesArcoPendientes, getTalachasPendientes,
-  getFacturasProveedorPendientes,
+  getFacturasProveedorPendientes, conteoDeFuente, totalEscalaciones,
 } = await import('./escalaciones');
 
 // `ahora`: 15-ago-2026 mediodía UTC — todos los relojes de la bandeja se
@@ -253,6 +253,33 @@ describe('getBandejaEscalaciones', () => {
       arco: 0, corridasFallo: 0, talachas: 0, facturasProveedor: 0,
       ticketsAbiertos: 0, ticketsVencidos: 0, liquidacionesRevisar: 0,
     });
+  });
+
+  // ADM-4 (auditoría 24): `conteoDeFuente`/`totalEscalaciones` — el real,
+  // no `items.length` de una lista topada (corridas/tickets/liquidaciones).
+  it('conteoDeFuente mapea cada fuente a SU conteo real (tickets = abiertos, no vencidos)', async () => {
+    sembrarTodo();
+    const b = await getBandejaEscalaciones(AHORA);
+    expect(conteoDeFuente('arco', b.conteos)).toBe(1);
+    expect(conteoDeFuente('corridas', b.conteos)).toBe(1);
+    expect(conteoDeFuente('talachas', b.conteos)).toBe(1);
+    expect(conteoDeFuente('facturas_proveedor', b.conteos)).toBe(1);
+    expect(conteoDeFuente('tickets', b.conteos)).toBe(1);
+    expect(conteoDeFuente('liquidaciones', b.conteos)).toBe(1);
+  });
+
+  it('totalEscalaciones suma las seis fuentes sin duplicar tickets (abiertos y vencidos son el mismo universo)', async () => {
+    sembrarTodo();
+    const b = await getBandejaEscalaciones(AHORA);
+    expect(totalEscalaciones(b)).toBe(6);
+  });
+
+  it('totalEscalaciones no fabrica: una fuente caída aporta 0 al total, no lanza', async () => {
+    sembrarTodo();
+    respuestas.set('ticket_soporte', { data: null, error: { message: 'fetch failed' } });
+    const b = await getBandejaEscalaciones(AHORA);
+    expect(conteoDeFuente('tickets', b.conteos)).toBeNull();
+    expect(totalEscalaciones(b)).toBe(5); // las otras cinco, 1 cada una
   });
 });
 

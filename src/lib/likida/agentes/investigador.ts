@@ -458,23 +458,64 @@ export async function investigarProspecto(
   return { prospectoId, paginasLeidas: paginas.length, correosNuevos, costoUsd, aviso };
 }
 
-/** El lote del runner: prospectos vivos SIN dossier, los más viejos primero. */
+/** AGB-3 (auditoría 24): el tamaño de cada página del cursor — antes era una
+ *  ventana FIJA (`limite * 5`) que, una vez que sus filas quedaban TODAS con
+ *  dossier, devolvía `[]` PARA SIEMPRE (medido: 25/25 de la ventana con
+ *  dossier → cero corridas desde el 1-sep). El cursor avanza en vez de
+ *  repetir siempre la misma ventana de los más viejos. */
+const PAGINA_CANDIDATOS = 100;
+/** El presupuesto de filas que esta función puede leer en una sola llamada,
+ *  paginando — un tope explícito, no un `while(true)`: con 32,986
+ *  prospectos en `nuevo` un cursor sin freno podría escanear la tabla
+ *  entera antes de rendirse. */
+const TOPE_FILAS_ESCANEADAS = 2_000;
+
+/** El lote del runner: prospectos vivos SIN dossier, los más viejos primero.
+ *  CURSOR QUE AVANZA (AGB-3): pagina por `(created_at, id)` en vez de mirar
+ *  siempre la misma ventana de los N más viejos — si una página entera ya
+ *  tiene dossier, sigue a la siguiente en la MISMA llamada, hasta juntar
+ *  `limite` candidatos o agotar `TOPE_FILAS_ESCANEADAS`. */
 export async function candidatosSinDossier(limite: number): Promise<string[]> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('prospecto')
-    .select('id')
-    .is('duplicado_de', null)
-    .in('estado', ['nuevo', 'contactado'])
-    .order('created_at', { ascending: true })
-    .limit(limite * 5), 'investigador.candidatos');
-  if (error) throw new Error(`candidatosSinDossier: ${error.message}`);
-  const ids = ((data ?? []) as Array<{ id: string }>).map((f) => f.id);
-  if (ids.length === 0) return [];
-  const { data: hechos, error: errHechos } = await acotada(supabaseAdmin()
-    .from('prospecto_dossier')
-    .select('prospecto_id')
-    .in('prospecto_id', ids), 'investigador.hechos');
-  if (errHechos) throw new Error(`candidatosSinDossier: ${errHechos.message}`);
-  const ya = new Set(((hechos ?? []) as Array<{ prospecto_id: string }>).map((f) => f.prospecto_id));
-  return ids.filter((id) => !ya.has(id)).slice(0, limite);
+  const encontrados: string[] = [];
+  let cursor: { createdAt: string; id: string } | null = null;
+  let escaneadas = 0;
+  while (encontrados.length < limite && escaneadas < TOPE_FILAS_ESCANEADAS) {
+    let q = supabaseAdmin()
+      .from('prospecto')
+      .select('id, created_at')
+      .is('duplicado_de', null)
+      .in('estado', ['nuevo', 'contactado'])
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(PAGINA_CANDIDATOS);
+    // Keyset (regla del repo, `pg.ts`): estrictamente DESPUÉS del último
+    // visto, para que la siguiente vuelta del `while` avance de verdad.
+    if (cursor) {
+      q = q.or(`created_at.gt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.gt.${cursor.id})`);
+    }
+    const { data, error } = await acotada(q, 'investigador.candidatos');
+    if (error) throw new Error(`candidatosSinDossier: ${error.message}`);
+    const pagina = (data ?? []) as Array<{ id: string; created_at: string }>;
+    if (pagina.length === 0) break; // el cursor alcanzó el final de la tabla
+    escaneadas += pagina.length;
+
+    const ids = pagina.map((f) => f.id);
+    const { data: hechos, error: errHechos } = await acotada(supabaseAdmin()
+      .from('prospecto_dossier')
+      .select('prospecto_id')
+      .in('prospecto_id', ids), 'investigador.hechos');
+    if (errHechos) throw new Error(`candidatosSinDossier: ${errHechos.message}`);
+    const ya = new Set(((hechos ?? []) as Array<{ prospecto_id: string }>).map((f) => f.prospecto_id));
+    for (const f of pagina) {
+      if (!ya.has(f.id)) {
+        encontrados.push(f.id);
+        if (encontrados.length >= limite) break;
+      }
+    }
+
+    const ultima = pagina[pagina.length - 1];
+    cursor = { createdAt: ultima.created_at, id: ultima.id };
+    if (pagina.length < PAGINA_CANDIDATOS) break; // página parcial: no hay más filas
+  }
+  return encontrados;
 }

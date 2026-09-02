@@ -25,7 +25,36 @@
 import { redirect } from 'next/navigation';
 import { tenantDemo } from './tenant-demo';
 import { leerSeleccionFlota } from './admin-context';
+import { mfaSuperadminObligatorio, veredictoMfaSuperadmin } from './mfa';
+import { logger } from '@/lib/logger';
 import { getSessionTenant, type SessionTenant } from './session';
+
+/**
+ * DÓNDE SE INSCRIBE EL SEGUNDO FACTOR. Es la única pantalla EXENTA de la
+ * exigencia de SEG-3: gatearla también sería un círculo perfecto — «para
+ * inscribir tu factor, inscribe tu factor».
+ */
+const RUTA_MFA = '/dashboard/mi-perfil';
+
+/**
+ * MFA OBLIGATORIO PARA SUPERADMIN (auditoría 24, SEG-3). Apagado por default:
+ * solo `LIKIDA_SUPERADMIN_MFA=obligatorio` lo enciende (ver `mfa.ts` y
+ * DEPLOY.md). Con la palanca apagada esta función no hace ni una llamada.
+ *
+ * Rebota a Mi perfil con el veredicto en el query string para que la pantalla
+ * diga QUÉ falta —inscribirlo, verificarlo, o que no se pudo preguntar— en vez
+ * de dejar a alguien girando sin saber qué hacer. `no_verificable` también
+ * rebota: fallar cerrado, igual que las acciones 'doble'.
+ */
+async function exigirMfaSuperadmin(destino: string): Promise<void> {
+  if (!mfaSuperadminObligatorio()) return;
+  if (destino.startsWith(RUTA_MFA)) return;
+  const { supabaseServer } = await import('@/lib/supabase/server');
+  const veredicto = await veredictoMfaSuperadmin(await supabaseServer());
+  if (veredicto === 'ok') return;
+  logger.warn('mfa.superadmin_exigido', { veredicto, destino });
+  redirect(`${RUTA_MFA}?exige=${veredicto}`);
+}
 
 
 export async function requireSessionTenant(
@@ -42,15 +71,31 @@ export async function requireSessionTenant(
 ): Promise<SessionTenant & { tenantId: string }> {
   const s = await getSessionTenant();
   if (!s) redirect(`/login?next=${encodeURIComponent(destino)}`);
+  if (s.rol === 'superadmin') await exigirMfaSuperadmin(destino);
   if (!s.tenantId) {
     if (s.rol === 'superadmin') {
       // "Ver como" (previsualización auditada): la base sigue siendo la demo
       // — `resolverTenantEfectivo` resuelve `?tenant=` encima y firma.
-      if (sp?.tenant || sp?.vista === 'demo' || sp?.rol) return { ...s, tenantId: tenantDemo() };
+      if (sp?.tenant || sp?.vista === 'demo') return { ...s, tenantId: tenantDemo() };
       // Selección EXPLÍCITA de /admin/elegir-flota (cookie httpOnly firmada,
       // admin-context.ts). Puede ser una flota real o la demo — pero elegida.
       const seleccion = await leerSeleccionFlota();
       if (seleccion) return { ...s, tenantId: seleccion };
+      // ADM-11 (auditoría 24): `?rol=` SOLO —sin `?tenant=` ni `?vista=`— es
+      // "ver el panel con los ojos de otro rol", no "cambiar de flota". Antes
+      // se resolvía arriba junto a los otros dos y devolvía la demo AUNQUE
+      // hubiera flota elegida: un link con solo `?rol=contador` te sacaba de
+      // Innovativos a la demo sin cinta que lo dijera. Ahora la cookie manda,
+      // y `?rol=` sin cookie sigue cayendo a la demo — que es de dónde
+      // vienen esos links (`/admin/selector-vista.tsx`).
+      if (sp?.rol) return { ...s, tenantId: tenantDemo() };
+      // La pantalla donde se inscribe el factor no puede exigir haber elegido
+      // flota: con SEG-3 encendido, el rebote a /admin/elegir-flota y el
+      // rebote a Mi perfil se perseguirían el uno al otro. Solo con la
+      // palanca puesta, y solo para esa ruta.
+      if (mfaSuperadminObligatorio() && destino.startsWith(RUTA_MFA)) {
+        return { ...s, tenantId: tenantDemo() };
+      }
       // SIN selección NO hay tenant implícito: al selector, con el destino
       // para volver. Este redirect es el que mató el fallback a demo.
       redirect(`/admin/elegir-flota?next=${encodeURIComponent(destino)}`);
@@ -75,6 +120,9 @@ export async function requireSuperadmin(): Promise<SessionTenant> {
   const s = await getSessionTenant();
   if (!s) redirect(`/login?next=${encodeURIComponent('/admin')}`);
   if (s.rol !== 'superadmin') redirect('/dashboard');
+  // SEG-3: la consola de negocio es justo lo que un phishing con enlace
+  // mágico buscaría. Apagado por default (ver `exigirMfaSuperadmin`).
+  await exigirMfaSuperadmin('/admin');
   return s;
 }
 

@@ -54,6 +54,8 @@ vi.mock('@/lib/likida/costos', () => ({
 vi.mock('@/lib/meta/client', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   downloadMediaAsText: (...a: unknown[]) => downloadMediaAsText(...a),
+  // AUDITORÍA 24 · WA-8: los metadatos se consultan ANTES de bajar el binario.
+  metadatosMedia: vi.fn(async () => ({ mimeType: 'text/xml', fileSize: 2048 })),
 }));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({

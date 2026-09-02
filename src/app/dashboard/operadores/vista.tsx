@@ -2,9 +2,10 @@ import Link from 'next/link';
 import { Users, Phone, PhoneOff, IdCard } from 'lucide-react';
 import { numero, fechaCorta } from '@/lib/formato';
 import { clasificarVigencia, DIAS_AVISO } from '@/lib/likida/vigencias';
+import type { ConteosOperadores } from '@/lib/likida/administracion';
 import { EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../resumen-visual';
-import { paginarRegistro, urlRegistro, type ParamsRegistro } from '../paginar-registro';
+import { urlRegistro, type PaginaRegistroUI } from '../paginar-registro';
 import { FiltroRegistro } from '../registro-filtro';
 import { FormaOperador, type AccionForma } from './forma';
 
@@ -53,12 +54,20 @@ function diasParaVencer(vence: string, hoy: string): number {
  * `?p=` acotan lo que se pinta y la forma existe solo para `?editar=<id>`.
  */
 export function VistaOperadores({
-  filas, hoy, puedeEditar, guardarOperador, ilegible = false, sp, sufijo, camposOcultos,
+  filas, pag, conteos, totalConocido, hoy, puedeEditar, guardarOperador, ilegible = false, sufijo, camposOcultos,
 }: {
+  /** Las filas de ESTA página. Ya vienen cortadas por la base. */
   filas: FilaOperador[];
+  /** La página, con el `total` y el `filtrados` que CONTÓ la base (auditoría
+   *  24). No se recuentan aquí: el largo de una página no es un total. */
+  pag: PaginaRegistroUI<FilaOperador>;
+  /** Los KPIs sobre la FLOTA ENTERA. `null` = no se pudieron contar, y
+   *  entonces se pinta «—»: un 0 se leería como una medición. */
+  conteos: ConteosOperadores | null;
+  /** ¿Se sabe cuántos hay en el padrón entero? Cuando no —`conteos` cayó y
+   *  además hay búsqueda— el pie no puede decir «de N» sin inventarlo. */
+  totalConocido: boolean;
   hoy: string;
-  /** `?q=`/`?p=`/`?editar=` ya leídos por la página. */
-  sp: ParamsRegistro;
   /** `?tenant=`/`?vista=`/`?rol=` del superadmin. */
   sufijo: string;
   camposOcultos: Array<[string, string]>;
@@ -72,21 +81,11 @@ export function VistaOperadores({
   puedeEditar: boolean;
   guardarOperador: AccionForma;
 }) {
-  const activos = filas.filter((f) => f.activo);
-  // FE-12: qué se pinta. La búsqueda cubre nombre, teléfono y número de
-  // empleado — las tres formas en que alguien busca a un chofer.
-  const pag = paginarRegistro(
-    filas,
-    (f) => [f.nombre, f.telefono, f.numeroEmpleado].filter(Boolean).join(' '),
-    sp,
-    (f) => f.operadorId,
-  );
-  const sinTelefono = activos.filter((f) => !f.telefono).length;
-  const conVencida = activos.filter((f) => f.licenciaVence !== null && diasParaVencer(f.licenciaVence, hoy) < 0).length;
-  const porVencer = activos.filter((f) => {
-    if (f.licenciaVence === null) return false;
-    return clasificarVigencia(diasParaVencer(f.licenciaVence, hoy), 'Licencia').estado === 'por_vencer';
-  }).length;
+  // Los KPIs son de la FLOTA ENTERA y los cuenta la base. Contarlos aquí sobre
+  // `filas` diría que no hay licencias vencidas porque cayeron en la página 12.
+  // `null` NO se convierte en 0: `—` dice «no lo sé», un 0 dice «no hay».
+  const kpi = (v: number | undefined) => (v === undefined ? '—' : numero(v));
+  const hayFiltro = pag.q !== '';
 
   return (
     <main className="h-full">
@@ -98,22 +97,33 @@ export function VistaOperadores({
         <div className="px-5 py-5 flex-1 space-y-4">
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi titulo="Activos" valor={numero(activos.length)} nota={`${numero(filas.length)} en total`} />
-            <Kpi titulo="Sin teléfono" valor={numero(sinTelefono)} nota="los agentes no pueden escribirles"
-              tono={sinTelefono > 0 ? 'warn' : undefined} />
-            <Kpi titulo="Licencias vencidas" valor={numero(conVencida)} tono={conVencida > 0 ? 'bad' : undefined} />
-            <Kpi titulo={`Vencen en ${DIAS_AVISO} días`} valor={numero(porVencer)} tono={porVencer > 0 ? 'warn' : undefined} />
+            <Kpi titulo="Activos" valor={kpi(conteos?.activos)}
+              nota={conteos ? `${numero(conteos.total)} en total` : 'no se pudo contar la flota'} />
+            <Kpi titulo="Sin teléfono" valor={kpi(conteos?.sinTelefono)} nota="los agentes no pueden escribirles"
+              tono={conteos && conteos.sinTelefono > 0 ? 'warn' : undefined} />
+            <Kpi titulo="Licencias vencidas" valor={kpi(conteos?.licenciasVencidas)}
+              tono={conteos && conteos.licenciasVencidas > 0 ? 'bad' : undefined} />
+            <Kpi titulo={`Vencen en ${DIAS_AVISO} días`} valor={kpi(conteos?.licenciasPorVencer)}
+              tono={conteos && conteos.licenciasPorVencer > 0 ? 'warn' : undefined} />
           </div>
 
           <section className="card p-4">
             <h2 className="font-display text-[15px] font-semibold mb-3">El registro</h2>
-            {!ilegible && filas.length > 0 && (
+            {!ilegible && (pag.filtrados > 0 || hayFiltro) && (
               <FiltroRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag}
                 sustantivo="operadores" camposOcultos={camposOcultos} />
             )}
+            {!ilegible && hayFiltro && !totalConocido && (
+              // No se pudo contar el padrón entero, así que el «de N» del pie
+              // sería un número inventado. Se dice, en vez de dejarlo pasar.
+              <p className="text-[11.5px] mb-3" style={{ color: 'var(--faint)' }}>
+                No pude contar el padrón completo en este momento: el total de al lado es el de los que
+                coinciden con la búsqueda, no el de la flota.
+              </p>
+            )}
             {ilegible ? (
               <EstadoError mensaje="No pude leer el registro de operadores. No se enseña media lista: media lista se ve igual que la lista entera, solo que más corta." />
-            ) : filas.length === 0 ? (
+            ) : pag.filtrados === 0 && !hayFiltro ? (
               <EstadoVacio icono={<Users width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                 Aún no hay operadores dados de alta — el alta rápida vive en Despacho.
               </EstadoVacio>
@@ -131,7 +141,7 @@ export function VistaOperadores({
                     </tr>
                   </thead>
                   <tbody>
-                    {pag.filas.map((f) => (
+                    {filas.map((f) => (
                       <RenglonOperador key={f.operadorId} f={f} hoy={hoy}
                         puedeEditar={puedeEditar} guardarOperador={guardarOperador}
                         editando={pag.editando === f.operadorId}
@@ -142,7 +152,7 @@ export function VistaOperadores({
                     ))}
                   </tbody>
                 </table>
-                {pag.filas.length === 0 && (
+                {filas.length === 0 && (
                   <p className="text-[12.5px] pt-2" style={{ color: 'var(--muted)' }}>
                     Ningún operador coincide con «{pag.q}».
                   </p>
@@ -229,6 +239,7 @@ function RenglonOperador({ f, hoy, puedeEditar, guardarOperador, editando, hrefE
                 // alguien lo borra sin querer del campo.
                 inicial={{
                   nombre: f.nombre,
+                  telefono: f.telefono ?? '',
                   numeroEmpleado: f.numeroEmpleado ?? '',
                   licencia: f.licencia ?? '',
                   licenciaTipo: f.licenciaTipo ?? '',

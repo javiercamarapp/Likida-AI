@@ -153,6 +153,43 @@ export default async function ConsumoPage() {
             )}
           </div>
 
+          {/* ── ADM-6 (auditoría 24) · Por FLOTA — cuánto cuesta cada cliente ──
+              Antes no existía ninguna tabla de "cuánto cuesta Innovativos":
+              `costoIaDeTenant`/`flotas[].costoIaUsd` existían en negocio.ts
+              sin una sola pantalla que los pintara. `r.flotas` ya trae el
+              costo de IA de la MISMA ventana que las tarjetas de arriba (7
+              días por default) — cero lecturas nuevas, solo pintar lo que
+              `getResumenNegocio` ya calcula. */}
+          <div className="card p-4">
+            <TituloSeccion>Por flota — costo de IA de la ventana (7 días)</TituloSeccion>
+            {!r || r.flotas.length === 0 ? (
+              <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>
+                {r ? 'Sin flotas dadas de alta todavía.' : 'No se pudo leer el costo por flota.'}
+              </p>
+            ) : (
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-[12.5px]">
+                  <thead>
+                    <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
+                      <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Flota</th>
+                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Viajes</th>
+                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Costo de IA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...r.flotas].sort((a, b) => b.costoIaUsd - a.costoIaUsd).map((f) => (
+                      <tr key={f.id} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
+                        <td className="py-2">{f.nombre}</td>
+                        <td className="py-2 text-right tabular">{numero(f.viajes)}</td>
+                        <td className="py-2 text-right tabular">{usd(f.costoIaUsd)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* ── D.23 · Por PROPÓSITO — la reserva del camino interactivo ──── */}
           <div className="card p-4">
             <TituloSeccion>Presupuesto de IA por propósito — hoy, con su techo</TituloSeccion>
