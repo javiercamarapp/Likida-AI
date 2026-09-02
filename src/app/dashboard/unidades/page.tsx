@@ -4,11 +4,22 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { getUnidades, validarUnidad, crearUnidad, editarUnidad } from '@/lib/likida/operacion';
+import { validarUnidad, crearUnidad, editarUnidad, cambiarEstadoUnidad, ESTADOS_UNIDAD } from '@/lib/likida/operacion';
+import {
+  getUnidadesRegistro, getUnidadesConteos, UNIDADES_POR_PAGINA,
+  type FilaRegistroUnidad,
+} from '@/lib/likida/administracion';
+import { DIAS_AVISO } from '@/lib/likida/vigencias';
+import { hoyMx } from '@/lib/formato';
+import { ahoraMs } from '@/lib/saludo';
+import { sanearQ, type PaginaRegistroUI } from '../paginar-registro';
+import { CONECTORES_GPS } from '@/lib/likida/conectores/gps';
 import { sufijoTenant } from '../sufijo';
 import { camposDeSufijo } from '../paginar-campos';
 import { VistaUnidades } from './vista';
+import { BloqueTaller } from './taller';
 import type { ResultadoForma } from './forma';
+import type { ResultadoEstado } from './estado';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,7 +63,52 @@ export default async function PaginaUnidades({
   // sacaría de la flota que estaba viendo.
   const camposOcultos = camposDeSufijo(sp);
 
-  const unidades = await getUnidades(tenantId);
+  // ── LA PÁGINA LA CORTA LA BASE, NO LA PANTALLA (auditoría 24, ADM-2) ────
+  //
+  // Antes: `getUnidades(tenantId)` traía el parque COMPLETO —`traerTodo`, que
+  // es lo correcto para DEMOSTRAR un conteo, pero no para pintar 25
+  // renglones— y `paginarRegistro` lo ordenaba y rebanaba en memoria. Con 800
+  // tractos, el catálogo entero viajaba a la pantalla en cada render.
+  //
+  // Ahora `unidades_registro_tenant` (0298) corta la página sobre un orden
+  // TOTAL —lo que vence antes primero, sin papeles al final, desempate por
+  // económico e id— y devuelve el `total` real en la misma respuesta.
+  const hoy = hoyMx(new Date(ahoraMs()));
+  const q = sanearQ(sp.q);
+  const pCruda = Number(sp.p);
+  const paginaPedida = Number.isInteger(pCruda) && pCruda >= 1 ? pCruda : 1;
+
+  const registro = await getUnidadesRegistro(tenantId, hoy, {
+    q, pagina: paginaPedida, porPagina: UNIDADES_POR_PAGINA, activo: true,
+  });
+
+  // Las bajas van en su propia sección y en su propia lectura, ACOTADA: un
+  // parque con cientos de bajas no puede arrastrarlas todas a la pantalla solo
+  // para llenar un plegable. Se pide una página y se dice cuántas hay.
+  const bajas = await getUnidadesRegistro(tenantId, hoy, {
+    q: '', pagina: 1, porPagina: UNIDADES_POR_PAGINA, activo: false,
+  });
+
+  // El semáforo cuenta la FLOTA ENTERA, no la página: calculado sobre 25 de
+  // 800 diría que no hay nada vencido porque los vencidos cayeron en la página
+  // 3. `null` = no se pudo contar, y entonces se pinta «—», no un 0.
+  const conteos = await getUnidadesConteos(tenantId, hoy, DIAS_AVISO);
+
+  const pag: PaginaRegistroUI<FilaRegistroUnidad> = {
+    filas: registro.filas,
+    pagina: registro.pagina,
+    paginas: registro.paginas,
+    // `total` es el parque ACTIVO entero (lo que el pie compara contra los que
+    // coinciden); `filtrados`, los que casan con la búsqueda. Los dos los
+    // cuenta la base.
+    total: conteos?.activas ?? registro.total,
+    filtrados: registro.total,
+    q,
+    editando: (() => {
+      const e = (sp.editar ?? '').trim().slice(0, 64);
+      return e && registro.filas.some((u) => u.id === e) ? e : null;
+    })(),
+  };
 
   async function guardarUnidad(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
@@ -76,6 +132,11 @@ export default async function PaginaUnidades({
         polizaVence: String(fd.get('polizaVence') ?? ''),
         permisoSictVence: String(fd.get('permisoSictVence') ?? ''),
         verificacionVence: String(fd.get('verificacionVence') ?? ''),
+        // El amarre con el GPS (0176). `validarAmarreGps` comprueba que el
+        // proveedor esté en el catálogo y que los dos campos vayan juntos:
+        // uno solo de los dos produce una unidad que el poller nunca casa.
+        gpsProveedor: String(fd.get('gpsProveedor') ?? ''),
+        gpsDeviceId: String(fd.get('gpsDeviceId') ?? ''),
       });
 
       if (id) await editarUnidad(s.tenantId, id, valores);
@@ -99,20 +160,80 @@ export default async function PaginaUnidades({
       if (e instanceof Error && e.message.includes('unidad_economico_unico')) {
         return { ok: false, error: `Ya tienes una unidad con el número económico "${eco}". Búscala en la lista en vez de darla de alta otra vez.` };
       }
+      // El otro índice que un alta puede chocar desde la 0176: `uq_unidad_gps`
+      // (un dispositivo = un camión por flota). `crearUnidad` tampoco lo
+      // traduce, por el mismo motivo que el anterior.
+      if (e instanceof Error && e.message.includes('uq_unidad_gps')) {
+        return { ok: false, error: 'Ese número de dispositivo de GPS ya está ligado a otra unidad de tu flota con el mismo proveedor. Un dispositivo solo puede pertenecer a un camión.' };
+      }
       return { ok: false, error: mensajeParaPantalla(e, id ? 'guardar la unidad' : 'dar de alta la unidad') };
     }
   }
 
+  /**
+   * ── EL ESTADO OPERATIVO DE LA UNIDAD (auditoría 20, H4) ──────────────────
+   *
+   * LAS MISMAS DOS PUERTAS que el alta y la edición, y por la misma razón: dar
+   * de baja un camión es un acto sobre un activo de la empresa, no una nota
+   * operativa. Se re-comprueban aquí adentro porque un server action es un
+   * endpoint POST alcanzable sin haber pasado por el render — el `rol` de
+   * arriba es el del momento en que se pintó la pantalla.
+   *
+   * El `tenantId` va por SESIÓN RE-RESUELTA, nunca del formulario: lo único
+   * que el navegador decide es QUÉ unidad y A QUÉ estado, y las dos cosas las
+   * vuelve a revisar `cambiarEstadoUnidad` (dominio del estado + `.eq(
+   * 'tenant_id')` + filas afectadas). Con el UUID de una unidad de OTRA flota
+   * el UPDATE toca cero filas y sale como error, no como "dada de baja".
+   */
+  async function cambiarEstado(_previo: ResultadoEstado, fd: FormData): Promise<ResultadoEstado> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver las unidades.' };
+    if (!puedeAdministrar(s.rol)) {
+      return { ok: false, error: 'Solo el dueño de la flota cambia el estado de una unidad.' };
+    }
+
+    const unidadId = String(fd.get('unidadId') ?? '').trim();
+    const estado = String(fd.get('estado') ?? '').trim();
+    try {
+      // El actor viaja para que la bitácora pueda contestar "quién dio de baja
+      // este camión y cuándo" — la pregunta del seguro y la del contador que
+      // lo deduce.
+      await cambiarEstadoUnidad(s.tenantId, unidadId, estado, { id: s.userId });
+      revalidatePath(RUTA);
+      return {
+        ok: true,
+        mensaje: estado === 'baja'
+          ? 'Unidad dada de baja. Deja de ofrecerse para viajes nuevos y sale del conteo de papeles; su historial queda completo.'
+          : `Unidad en «${ESTADOS_UNIDAD[estado] ?? estado}».`,
+      };
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'cambiar el estado de la unidad') };
+    }
+  }
+
   return (
-    <VistaUnidades
-      unidades={unidades}
-      sp={sp}
-      sufijo={sufijo}
-      camposOcultos={camposOcultos}
-      // El gateo de la UI solo decide si la forma SE PINTA; la puerta real se
-      // re-comprueba adentro del action (alcanzable por POST directo).
-      puedeEditar={puedeAdministrar(rol)}
-      guardar={guardarUnidad}
-    />
+    <>
+      <VistaUnidades
+        pag={pag}
+        bajas={bajas.filas}
+        totalBajas={bajas.total}
+        conteos={conteos}
+        totalActivasConocido={conteos !== null}
+        sufijo={sufijo}
+        camposOcultos={camposOcultos}
+        cambiarEstado={cambiarEstado}
+        // El gateo de la UI solo decide si la forma SE PINTA; la puerta real se
+        // re-comprueba adentro del action (alcanzable por POST directo).
+        puedeEditar={puedeAdministrar(rol)}
+        guardar={guardarUnidad}
+        // Al cliente viaja SOLO id+nombre: el catálogo trae los `probar()` y
+        // las fuentes de cada fabricante, y nada de eso va al navegador.
+        proveedoresGps={CONECTORES_GPS.map((c) => ({ id: c.id, nombre: c.nombre }))}
+      />
+      {/* Fase 9 (0209): el taller — órdenes de mantenimiento y rutinas
+          preventivas de las mismas unidades de arriba. */}
+      <BloqueTaller sp={sp} />
+    </>
   );
 }

@@ -5,8 +5,10 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { fechaMx } from '@/lib/formato';
 import {
-  crearLlaveApi, revocarLlaveApi, listarLlavesApi, AREAS_DE_LLAVE, type LlaveListada,
+  crearLlaveApi, revocarLlaveApi, listarLlavesApi, AREAS_DE_LLAVE, VIGENCIAS_DE_LLAVE,
+  VIGENCIA_DEFAULT, type LlaveListada,
 } from '@/lib/auth/llave-api-escritura';
 import { EstadoError } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../resumen-visual';
@@ -65,12 +67,17 @@ export default async function PaginaLlavesApi({
       const llave = await crearLlaveApi(s.tenantId, {
         nombre: String(fd.get('nombre') ?? ''),
         area: String(fd.get('area') ?? ''),
+        // SEG-8: si el POST no la trae, `crearLlaveApi` aplica el default de
+        // un año — no «sin caducidad».
+        vigencia: String(fd.get('vigencia') ?? ''),
       }, s.userId);
 
       revalidatePath(RUTA);
       return {
         ok: true,
-        mensaje: 'Llave emitida.',
+        mensaje: llave.expiraEn
+          ? `Llave emitida. Deja de valer el ${fechaMx(llave.expiraEn)}: apunta la fecha para renovarla antes.`
+          : 'Llave emitida SIN caducidad: va a valer hasta que alguien la revoque a mano.',
         // El ÚNICO viaje del secreto: del motor a esta respuesta y a la
         // pantalla. No se guarda en ningún lado — ver `SecretoUnaVez`.
         secreto: { enClaro: llave.enClaro, prefijo: llave.prefijo },
@@ -122,7 +129,8 @@ export default async function PaginaLlavesApi({
                   Emitir una llave
                 </h2>
                 <div className="card p-4">
-                  <FormaEmision accion={emitirLlave} areas={AREAS_DE_LLAVE} />
+                  <FormaEmision accion={emitirLlave} areas={AREAS_DE_LLAVE}
+                    vigencias={VIGENCIAS_DE_LLAVE} vigenciaDefault={VIGENCIA_DEFAULT} />
                 </div>
               </section>
             </>

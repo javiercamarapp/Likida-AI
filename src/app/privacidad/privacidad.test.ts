@@ -46,12 +46,22 @@ describe('la política de Likida', () => {
     expect(P).toMatch(/art\. 30/);
   });
 
-  it('no inventa la razón social: si falta, lo dice', () => {
+  it('no inventa la razón social: si está, se PINTA; si falta, lo dice al titular', () => {
     // Mismo criterio que el aviso integral con el contacto del art. 29. Una
     // razón social inventada en una política de privacidad es peor que una que
     // falta, porque la que falta se nota.
-    expect(P).toMatch(/LEGAL_CONFIG\.razonSocial/);
-    expect(P).toMatch(/PRODUCCIÓN BLOQUEADA/);
+    //
+    // AUDITORÍA 19-c2 (A1/A6): antes bastaba con que el env llegara a
+    // LEGAL_CONFIG — el dato no se pintaba en ninguna sección y el banner era
+    // una nota interna de despliegue («PRODUCCIÓN BLOQUEADA») publicada al
+    // titular. Ahora la fr. I interpola la identidad en el primer párrafo, la
+    // rama sin dato lo dice con palabras dirigidas al lector, y el banner
+    // dispara solo por identidad (faltantesEntidad), no por el SLA.
+    expect(P).toMatch(/RESPONSABLE\.razonSocial && RESPONSABLE\.domicilio/);
+    expect(P).toMatch(/con domicilio en \$\{RESPONSABLE\.domicilio\}/);
+    expect(P).toMatch(/aún no están capturados/);
+    expect(P).toMatch(/faltantesEntidad/);
+    expect(P).not.toMatch(/PRODUCCIÓN BLOQUEADA/);
   });
 
   it('el silencio no cuenta como aceptar una transferencia futura', () => {
@@ -69,5 +79,19 @@ describe('AUDITORÍA 18 (M8) · el correo de acceso está dicho', () => {
   });
   it('y el enlace de acceso aparece entre los datos tratados (art. 15 fr. II)', () => {
     expect(P).toMatch(/enlace de acceso de un solo uso/);
+  });
+});
+
+describe('AUDITORÍA 21 (legal C1) · el piloto de facturación está dicho', () => {
+  // El piloto de visión manda al modelo los datos fiscales del receptor y una
+  // captura del portal del comercio en cada paso. La correspondencia exacta
+  // prompt↔aviso la vigila piloto_vision_aviso.test.ts (junto al piloto);
+  // aquí se fija lo mínimo: que esta página no vuelva a callarlo.
+  it('la cláusula de encargados (art. 35) nombra los datos fiscales y la captura del portal', () => {
+    expect(P).toMatch(/capturas de pantalla del portal de facturación del comercio/);
+    expect(P).toMatch(/RFC, razón social, código postal, régimen fiscal, uso CFDI y el correo de recepción/);
+  });
+  it('y la fr. II ya no dice solo "validar": los datos fiscales también facturan tickets', () => {
+    expect(P).toMatch(/facturar tus tickets en los portales de los comercios/);
   });
 });

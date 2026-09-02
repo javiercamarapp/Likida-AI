@@ -40,6 +40,52 @@ export function interpretarPerfilExportacion(sistema: unknown, plantilla: unknow
   return null;
 }
 
+/**
+ * EL ESCRITOR QUE FALTABA (plan maestro 26-ago, sección B). La tabla
+ * `erp_export_perfil` (0178) existía con lector y ruta cableados, pero sin un
+ * solo camino de inserción en todo el repo: el export a SAP B1/CONTPAQi
+ * respondía 409 "pide a tu contador que confirme una plantilla" y esa
+ * confirmación no tenía dónde hacerse. Para cualquier cliente — incluido uno
+ * con SAP Business One — el archivo estaba permanentemente bloqueado.
+ *
+ * Se valida con EL MISMO `interpretarPerfilExportacion` que usa el lector,
+ * ANTES de escribir: una fila que el lector rechazaría no debe poder entrar,
+ * porque produciría el mismo 409 con una fila de por medio — peor que sin
+ * fila, porque parecería confirmada.
+ *
+ * `confirmadoEn` lo pone el servidor (ahora), no el cliente: la fecha ES el
+ * acto de confirmación del contador, no un dato que se captura.
+ */
+export async function guardarPerfilExportacionErp(
+  tenantId: string,
+  sistema: unknown,
+  plantilla: unknown,
+  confirmadoPor: string | null,
+): Promise<PerfilExportacionErp> {
+  const confirmadoEn = new Date().toISOString();
+  const perfil = interpretarPerfilExportacion(sistema, plantilla, confirmadoEn);
+  if (!perfil) {
+    throw new Error(
+      'La plantilla no tiene la forma que el export exige (CONTPAQi: tipo, número inicial, separador y encabezado de 9 columnas; SAP B1: las cuatro filas de la plantilla DTW con columnas parejas). No se guarda una plantilla que el export rechazaría.',
+    );
+  }
+  const { error } = await acotada(
+    supabaseAdmin().from('erp_export_perfil').upsert({
+      tenant_id: tenantId,
+      sistema: perfil.sistema,
+      plantilla: perfil.sistema === 'contpaqi'
+        ? { tipo: perfil.opciones.tipo, numeroInicial: perfil.opciones.numero, separador: perfil.opciones.separador, encabezado: perfil.opciones.encabezado }
+        : perfil.plantilla,
+      confirmado_en: confirmadoEn,
+      confirmado_por: confirmadoPor,
+      actualizado_en: confirmadoEn,
+    }, { onConflict: 'tenant_id,sistema' }),
+    'contabilidad.perfil_erp.guardar',
+  );
+  if (error) throw new Error(`guardarPerfilExportacionErp: ${error.message}`);
+  return perfil;
+}
+
 /** Lee solo una plantilla ya confirmada; no interpreta una credencial como listo. */
 export async function perfilExportacionDeclarado(tenantId: string, sistema: 'contpaqi' | 'sap_b1'): Promise<PerfilExportacionErp | null> {
   const { data, error } = await acotada(

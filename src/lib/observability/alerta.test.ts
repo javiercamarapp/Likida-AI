@@ -228,3 +228,94 @@ describe('alertarOperador — el piso vive en Redis, compartido entre instancias
     expect(enviarCorreo).toHaveBeenCalledTimes(1);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA PROD (29-ago-2026) — `alertarHuecoConfiguracion`: el canal para un
+// hueco de configuración YA DECLARADO por el propio proceso (no una
+// regresión). Fija el defecto que costó ocho correos "Urgente" en doce horas:
+// `descarga-sat` sin LIKIDA_SAT_PROVEEDOR mandaba `alertarOperador(...)` en
+// cada ping de `/api/health`, con el piso de una hora de siempre.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('alertarHuecoConfiguracion — el piso es de días, no de una hora', () => {
+  it('manda la primera; la segunda del MISMO motivo, minutos después, NO', async () => {
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    const { alertarHuecoConfiguracion } = await cargar();
+    const motivo = 'La descarga masiva no está configurada: falta LIKIDA_SAT_PROVEEDOR en el servidor.';
+
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', motivo, { cron: 'descarga-sat' });
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', motivo, { cron: 'descarga-sat' });
+
+    expect(enviarCorreo).toHaveBeenCalledTimes(1);
+    const correo = enviarCorreo.mock.calls[0][1] as Correo & { tono?: string };
+    expect(correo.asunto).toBe('[Likida] Pendiente de configurar: cron.config_ausente:descarga-sat');
+    expect(correo.tono).toBe('atencion');
+  });
+
+  it('pasado el piso de `alertarOperador` (una hora) el hueco SIGUE sin repetirse: el piso es más largo', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-29T09:00:00Z'));
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    const { alertarHuecoConfiguracion, PISO_ALERTA_MS } = await cargar();
+    const motivo = 'La descarga masiva no está configurada: falta LIKIDA_SAT_PROVEEDOR en el servidor.';
+
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', motivo, {});
+    // Ocho correos en doce horas es justo el ritmo que este piso corta: una
+    // hora después (el piso viejo de `alertarOperador`) sigue sin repetirse.
+    vi.setSystemTime(new Date(Date.now() + PISO_ALERTA_MS + 1));
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', motivo, {});
+
+    expect(enviarCorreo).toHaveBeenCalledTimes(1);
+  });
+
+  it('pasado su propio piso (una semana) sí vuelve a avisar', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-29T09:00:00Z'));
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    const { alertarHuecoConfiguracion, PISO_ALERTA_CONFIG_MS } = await cargar();
+    const motivo = 'La descarga masiva no está configurada: falta LIKIDA_SAT_PROVEEDOR en el servidor.';
+
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', motivo, {});
+    vi.setSystemTime(new Date(Date.now() + PISO_ALERTA_CONFIG_MS + 1));
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', motivo, {});
+
+    expect(enviarCorreo).toHaveBeenCalledTimes(2);
+  });
+
+  it('si el motivo CAMBIA, es información nueva y avisa aunque el piso del motivo viejo siga vivo', async () => {
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    const { alertarHuecoConfiguracion } = await cargar();
+
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', 'falta LIKIDA_SAT_PROVEEDOR', {});
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', 'falta LIKIDA_SAT_URL', {});
+
+    expect(enviarCorreo).toHaveBeenCalledTimes(2);
+  });
+
+  it('no comparte piso con `alertarOperador`: un hueco declarado no bloquea ni hereda el canal urgente', async () => {
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    const { alertarOperador, alertarHuecoConfiguracion } = await cargar();
+
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', 'falta LIKIDA_SAT_PROVEEDOR', {});
+    await alertarOperador('cron.estado_no_ok', { error: 'runner (fallo)' });
+
+    expect(enviarCorreo).toHaveBeenCalledTimes(2);
+    const asuntos = enviarCorreo.mock.calls.map((c) => (c[1] as Correo).asunto);
+    expect(asuntos).toContain('[Likida] Falló cron.estado_no_ok');
+    expect(asuntos).toContain('[Likida] Pendiente de configurar: cron.config_ausente:descarga-sat');
+  });
+
+  it('sin ALERTA_EMAIL no manda nada y no lanza', async () => {
+    vi.stubEnv('ALERTA_EMAIL', '');
+    const { alertarHuecoConfiguracion } = await cargar();
+    await expect(alertarHuecoConfiguracion('cron.config_ausente:x', 'no está configurado', {})).resolves.toBeUndefined();
+    expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+
+  it('el motivo viaja redactado, igual que el detalle', async () => {
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    const { alertarHuecoConfiguracion } = await cargar();
+    await alertarHuecoConfiguracion('cron.config_ausente:x', 'no configurado, avisar al 9993700779', {});
+    const correo = enviarCorreo.mock.calls[0][1] as Correo;
+    expect(JSON.stringify(correo.datos)).not.toContain('9993700779');
+  });
+});

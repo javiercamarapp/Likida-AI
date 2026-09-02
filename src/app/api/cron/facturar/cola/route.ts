@@ -4,14 +4,16 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
 import { estaApagado } from '@/lib/likida/interruptores';
-import { procesarLoteEnCola, type FilaCola } from '../route';
+import { registrarLatido } from '@/lib/admin/salud';
+import { procesarLoteEnCola, type FilaCola } from '../lote';
 
 export const runtime = 'nodejs';
 // AUDITORÍA 18 (M2, B12): decía 600 "porque QStash permite 10 min de timeout".
 // QStash es el CLIENTE: espera más, no deja correr más. El plan del equipo
 // está verificado como pro, tope 300s (`presupuesto.ts`, `webhook/whatsapp/
 // route.ts`), y el corte real del lote es `PRESUPUESTO_LOTE_MS - MARGEN_LOTE_MS`
-// de `../route.ts`, derivado de SU maxDuration = 300 — o sea 150s de trabajo
+// de `../lote.ts`, derivado de `TOPE_DURACION_S` = 300 (el mismo que declara
+// `../route.ts` en su `maxDuration`) — o sea 150s de trabajo
 // útil. Con 600 aquí, el número escrito no era el que la ruta respetaba ni el
 // que la plataforma concede, y quien subiera MARGEN_LOTE_MS "porque tengo
 // 600s" dimensionaría contra un presupuesto que no existe. Lo que esta cola
@@ -33,6 +35,11 @@ export async function POST(req: NextRequest) {
   const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY;
   if (!token || !currentKey || !nextKey) {
     logger.error('qstash.cola.sin_config', { token: !!token, current: !!currentKey, next: !!nextKey });
+    // AUDITORÍA 24, BE-6 (b): este 503 era MUDO. El cron latía `ok` por
+    // encolar, QStash reintentaba dos veces contra esta puerta y tiraba el
+    // lote; /api/health seguía en verde con cero CFDI. El latido `fallo`
+    // aquí es lo que pinta el tablero de rojo en la primera corrida.
+    await registrarLatido('facturar', 'fallo', { codigo: 'qstash_config_ausente', token: !!token, current: !!currentKey, next: !!nextKey });
     return NextResponse.json({ error: 'QStash no configurado' }, { status: 503 });
   }
 
@@ -48,10 +55,14 @@ export async function POST(req: NextRequest) {
     });
     if (!valido) {
       logger.warn('qstash.cola.firma_invalida', {});
+      // BE-6 (b): una signing key rotada en QStash y no en Vercel se ve
+      // EXACTAMENTE así — cada lote rebota 401 y nadie factura. También late.
+      await registrarLatido('facturar', 'fallo', { codigo: 'qstash_firma_invalida' });
       return NextResponse.json({ error: 'Firma inválida' }, { status: 401 });
     }
   } catch (e) {
     logger.warn('qstash.cola.verificacion_error', { err: e instanceof Error ? e.message : String(e) });
+    await registrarLatido('facturar', 'fallo', { codigo: 'qstash_firma_invalida' });
     return NextResponse.json({ error: 'No se pudo verificar la firma' }, { status: 401 });
   }
 

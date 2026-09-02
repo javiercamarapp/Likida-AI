@@ -8,6 +8,10 @@ import { fuentesDeProduccion, sinComentarios } from '@/lib/pruebas/codigo';
 // La FK compuesta anti-cross-tenant (patrón 0028/0073, validada en la 0075)
 // dejó DOS relaciones entre 5 pares de tablas: viaje↔operador, gasto→viaje,
 // liquidacion→viaje, codigo_pendiente→viaje y comprobante_huerfano→operador.
+// La 0271 (auditoría 21, modelo de datos) sumó un sexto par con la misma
+// forma: mcp_oauth_codigo/mcp_oauth_token → app_user, con la FK simple de
+// `user_id` YA existente de la 0260 y la compuesta nueva `(user_id,
+// tenant_id, rol)` — así que `app_user` entra a la lista de abajo.
 // Desde entonces, un embed de PostgREST escrito a secas — `operador(nombre)` —
 // es ambiguo y el servidor lo rechaza con "more than one relationship" EN
 // RUNTIME, contra el esquema vivo. Ni `tsc`, ni el build, ni un mock de
@@ -41,6 +45,9 @@ const TABLAS_DOBLE_FK = [
   'liquidacion',
   'codigo_pendiente',
   'comprobante_huerfano',
+  // mcp_oauth_codigo/mcp_oauth_token → app_user (0260 + FK compuesta de la
+  // 0271, auditoría 21 modelo de datos).
+  'app_user',
 ];
 
 /**

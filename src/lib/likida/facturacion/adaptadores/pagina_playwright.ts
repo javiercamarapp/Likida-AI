@@ -129,6 +129,18 @@ export const TOPE_LANZAR_MS = Number(process.env.LIKIDA_TOPE_LANZAR_MS) || 30_00
  */
 export const TOPE_CERRAR_MS = Number(process.env.LIKIDA_TOPE_CERRAR_MS) || 5_000;
 
+/**
+ * BAJAR EL XML del CFDI ya emitido.
+ *
+ * Más largo que una acción normal (8 s) y por una razón concreta: el portal no
+ * tiene el archivo hecho cuando se aprieta el botón — lo pide al PAC, lo arma y
+ * lo entrega. Y quedarse corto AQUÍ es distinto de quedarse corto en cualquier
+ * otro paso: para cuando esto corre el CFDI YA EXISTE y el UUID ya se
+ * confirmó, así que un tope agotado no cuesta un timbrado de más, cuesta que
+ * alguien tenga que entrar al portal a bajar un archivo que ya está ahí.
+ */
+export const TOPE_DESCARGA_MS = Number(process.env.LIKIDA_TOPE_DESCARGA_MS) || 30_000;
+
 /** Margen sobre el tope antes de que dispare la red de seguridad. Igual que en `presupuesto.ts`. */
 const GRACIA_TOPE_MS = 1_500;
 
@@ -687,6 +699,20 @@ export class PaginaPlaywright implements PaginaPortal {
   }
 
   /**
+   * Cuántos elementos casan con el selector. Es la guarda que el piloto de
+   * visión consulta ANTES de escribir o hacer clic (auditoría 24, TC-2):
+   * `uno()` ante ambigüedad solo avisa y toma el PRIMERO, que para un
+   * formulario duplicado (pestañas, un modal) es justo el botón que timbra.
+   * Los adaptadores de guion siguen con `uno()` —sus selectores se midieron
+   * contra el portal— y el piloto, que arma el suyo con un modelo, no adivina.
+   *
+   * LANZA si no se puede contar: un conteo que no se pudo hacer no es un 1.
+   */
+  async contar(selector: string): Promise<number> {
+    return acotar(() => this.page.locator(selector).count(), this.topes.lectura, `contar \`${selector}\``);
+  }
+
+  /**
    * `null` cuando el selector no está. NUNCA lanza — lo dice el contrato, y de
    * él depende que la ausencia del cuadro de error no se lea como un fallo.
    *
@@ -753,6 +779,57 @@ export class PaginaPlaywright implements PaginaPortal {
       b64 = buf.toString('base64');
     }
     return `data:image/jpeg;base64,${b64}`;
+  }
+
+  /**
+   * APRIETA Y SE QUEDA CON EL ARCHIVO QUE EL PORTAL ENTREGUE.
+   *
+   * Es el paso que hace verdad la regla de la casa: EL CFDI SE BAJA, NO SE
+   * FABRICA. Lo único que este método sabe hacer es esperar el evento
+   * `download` de Playwright y guardar lo que venga. No compone XML, no
+   * rellena huecos, no reconstruye un comprobante con lo que se capturó — un
+   * CFDI fabricado es un delito fiscal DEL CLIENTE.
+   *
+   * ── POR QUÉ SE ARMA EL ESPERADOR ANTES DEL CLIC ──────────────────────
+   *
+   * `waitForEvent('download')` engancha el oyente cuando se llama, y en un
+   * portal rápido la descarga puede dispararse ANTES de que el `await` del
+   * clic vuelva. Enganchando después se perdería el evento y el diagnóstico
+   * sería «el portal no entregó el XML» sobre un archivo que sí llegó. Por eso
+   * las dos promesas se crean juntas y se esperan juntas.
+   *
+   * ── DÓNDE CAE EL ARCHIVO ────────────────────────────────────────────
+   *
+   * En `directorioCapturas` si está puesto —para poder MIRARLO en la Mac— y si
+   * no, en la ruta temporal que Playwright eligió. En Vercel eso es `/tmp` y no
+   * sobrevive a la invocación: quien quiera conservarlo tiene que subirlo
+   * dentro de la misma corrida. Se dice aquí porque una ruta que se evapora es
+   * peor que ninguna si nadie lo sabe.
+   */
+  async descargar(selector: string, topeMs = TOPE_DESCARGA_MS): Promise<string> {
+    const loc = await this.uno(selector, 'descargar');
+    return acotar(async () => {
+      const esperando = this.page.waitForEvent('download', { timeout: topeMs });
+      await loc.click({ timeout: this.topes.accion });
+      const bajada = await esperando;
+
+      // `suggestedFilename()` viene del portal: se usa SOLO para la extensión y
+      // se le antepone un nombre nuestro. Un nombre de archivo elegido por un
+      // sitio ajeno no se escribe tal cual en disco — es por donde entra un
+      // `../` o un nombre de 300 caracteres.
+      const sugerido = bajada.suggestedFilename();
+      const ext = /\.([A-Za-z0-9]{1,5})$/.exec(sugerido)?.[1]?.toLowerCase() ?? 'xml';
+      const nombre = `cfdi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+      if (this.op.directorioCapturas) {
+        const ruta = join(this.op.directorioCapturas, nombre);
+        await bajada.saveAs(ruta);
+        return ruta;
+      }
+      const ruta = await bajada.path();
+      if (!ruta) throw new Error('la descarga no dejó archivo en disco');
+      return ruta;
+    }, topeMs, `descargar con \`${selector}\``);
   }
 
   /**
@@ -825,7 +902,18 @@ export class PaginaPlaywright implements PaginaPortal {
             tag: el.tagName.toLowerCase(),
             id: el.getAttribute('id') ?? '',
             name: el.getAttribute('name') ?? '',
-            texto: (el.textContent ?? (el as HTMLInputElement).value ?? '').trim().slice(0, 60),
+            // AUDITORÍA 22, TC-A2: era `el.textContent ?? value ?? ''`, y en un
+            // `<input type=submit>` `textContent` es la CADENA VACÍA, no null:
+            // el `??` nunca caía al `value`, así que el botón que dice
+            // «Continuar» llegaba al veto de emisión con rótulo vacío. Se toma
+            // el primer rótulo NO VACÍO, e incluye `aria-label`/`title`, que es
+            // donde vive el rótulo de un botón con icono.
+            texto: [
+              el.textContent,
+              (el as HTMLInputElement).value,
+              el.getAttribute('aria-label'),
+              el.getAttribute('title'),
+            ].map((s) => (s ?? '').trim()).find((s) => s.length > 0)?.slice(0, 60) ?? '',
             visible: visible(el),
           })),
           captcha: [...document.querySelectorAll('iframe, div, script')]
@@ -965,6 +1053,52 @@ export interface OpcionesNavegador {
   viewport?: { width: number; height: number };
   /** Inyectable para poder probar el arranque sin arrancar nada. */
   lanzar?: (op: Parameters<typeof chromium.launch>[0]) => Promise<Browser>;
+  /**
+   * LA SESIÓN YA INICIADA con la que arranca el contexto: el `storageState` de
+   * Playwright (cookies + almacenamiento por origen) como JSON EN STRING, tal
+   * como lo guarda `sesion_portal.ts` cifrado en el cofre.
+   *
+   * Es el hueco que dejaba muerta a esa pieza entera: `sesion_portal.ts` sabía
+   * guardar y leer la sesión desde el 21-ago-2026, con pruebas, y nadie se la
+   * pasaba nunca al navegador — así que cada corrida volvía a la pantalla de
+   * login y el captcha se pagaba por ticket en vez de por vinculación.
+   *
+   * ── LA TRAMPA DEL TIPO (por eso entra como STRING y se parsea aquí) ──────
+   *
+   * `newContext({ storageState })` de Playwright admite `string` U OBJETO, y el
+   * string NO es el JSON: es una RUTA A UN ARCHIVO. Pasarle el JSON tal cual
+   * hace que Playwright intente abrir un archivo con nombre de 4 KB y reviente
+   * con un ENAMETOOLONG que no menciona cookies por ningún lado. Se parsea
+   * SIEMPRE aquí, en un solo sitio, y quien llame no puede equivocarse.
+   *
+   * Un JSON ilegible NO tumba el lote: se avisa y se arranca con contexto
+   * limpio — el peor caso es pedir un login que ya existía, y el llamador ve
+   * "sin vincular" en vez de un lote muerto.
+   */
+  storageState?: string;
+}
+
+/**
+ * El `storageState` en string a la forma que Playwright espera, o `null` si no
+ * se puede leer. NO lanza: ver la nota de `OpcionesNavegador.storageState`.
+ *
+ * Se exige la FORMA (`cookies` y `origins` como arreglos) y no solo que parsee:
+ * un `"null"` o un `{}` parsean sin problema y dejarían un contexto que se cree
+ * "vinculado" sin una sola cookie.
+ */
+export type EstadoDeSesion = Exclude<
+  NonNullable<Parameters<Browser['newContext']>[0]>['storageState'],
+  string | undefined
+>;
+
+export function leerStorageState(crudo: string): EstadoDeSesion | null {
+  try {
+    const v = JSON.parse(crudo) as { cookies?: unknown; origins?: unknown };
+    if (!v || !Array.isArray(v.cookies) || !Array.isArray(v.origins)) return null;
+    return v as EstadoDeSesion;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -984,6 +1118,8 @@ export class SesionNavegador {
     private readonly navegador: Browser,
     private readonly contexto: BrowserContext,
     private readonly op: OpcionesNavegador,
+    /** ¿Este contexto arrancó con una sesión guardada, o desde cero? */
+    readonly arrancoConSesion: boolean = false,
   ) {}
 
   static async abrir(op: OpcionesNavegador = {}): Promise<SesionNavegador> {
@@ -1029,6 +1165,16 @@ export class SesionNavegador {
       );
     }
 
+    // La sesión guardada, si la hay y si se puede leer. Se resuelve ANTES de
+    // crear el contexto para que "el JSON no sirve" sea un aviso y no una
+    // excepción a media creación.
+    const estado = op.storageState ? leerStorageState(op.storageState) : null;
+    if (op.storageState && !estado) {
+      logger.warn('portal.sesion_guardada_ilegible', {
+        detalle: 'el storageState guardado no parsea o no trae cookies/origins; se arranca con contexto limpio',
+      });
+    }
+
     try {
       const contexto = await navegador.newContext({
         // Alto de sobra: la tabla de "CÓDIGOS AGREGADOS" crece con cada caseta y
@@ -1040,8 +1186,21 @@ export class SesionNavegador {
         // Un portal de facturación no necesita nada de esto y cada permiso es
         // una razón más para que el navegador pida algo y se quede esperando.
         permissions: [],
+        // EL XML DEL CFDI SE BAJA, NO SE FABRICA — y sin esto no se puede
+        // bajar: con `acceptDownloads: false` Chromium CANCELA la descarga y el
+        // evento `download` nunca llega, así que `PaginaPlaywright.descargar()`
+        // agotaría su tope y reportaría «el portal no entregó el XML» sobre un
+        // portal que sí lo entregó. Es el default de Playwright, pero se pone
+        // explícito porque de él depende un paso de la facturación.
+        acceptDownloads: true,
+        // Las cookies del login que ya hizo una persona. Sin esto, el resto de
+        // `sesion_portal.ts` no sirve de nada.
+        ...(estado ? { storageState: estado } : {}),
       });
-      return new SesionNavegador(navegador, contexto, op);
+      if (estado) {
+        logger.info('portal.sesion_restaurada', { cookies: estado.cookies.length, origenes: estado.origins.length });
+      }
+      return new SesionNavegador(navegador, contexto, op, Boolean(estado));
     } catch (e) {
       // Si el contexto no se pudo crear, el navegador YA está arrancado: sin este
       // cierre queda un Chromium huérfano por cada intento fallido.
@@ -1075,6 +1234,29 @@ export class SesionNavegador {
       page.once('close', () => this.vivas.delete(pagina));
       return pagina;
     };
+  }
+
+  /**
+   * LA SESIÓN, PARA GUARDARLA: el `storageState` del contexto ahora mismo, como
+   * JSON en string —la forma exacta que `guardarSesionPortal` cifra—.
+   *
+   * Hay que llamarla ANTES de `cerrar()`: cerrar el contexto es lo que borra el
+   * perfil de Playwright, y después de eso no hay cookies que exportar.
+   *
+   * Devuelve `null` en vez de lanzar cuando el contexto ya no contesta. La
+   * sesión actualizada es una MEJORA (cookies rotadas, TTL deslizante que el
+   * portal renovó), no el resultado del lote: perderla cuesta un login de más
+   * dentro de un rato; tumbar por ella un lote que ya facturó cuesta el lote.
+   */
+  async estadoDeSesion(): Promise<string | null> {
+    if (this.cerrada) return null;
+    try {
+      const estado = await acotar(() => this.contexto.storageState(), TOPE_CERRAR_MS, 'exportar la sesión');
+      return JSON.stringify(estado);
+    } catch (e) {
+      logger.warn('portal.sesion_no_exportada', { error: texto(e) });
+      return null;
+    }
   }
 
   /** ¿Sigue vivo el proceso de Chromium? */

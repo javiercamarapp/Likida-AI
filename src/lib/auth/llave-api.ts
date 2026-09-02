@@ -139,7 +139,7 @@ export async function resolverLlave(enClaro: string): Promise<ResultadoLlave> {
 
   const { data, error } = await supabaseAdmin()
     .from('tenant_api_key')
-    .select('id, tenant_id, area, hash')
+    .select('id, tenant_id, area, hash, expira_en')
     .eq('prefijo', prefijo)
     .is('revocada_en', null)
     .limit(20);
@@ -152,13 +152,28 @@ export async function resolverLlave(enClaro: string): Promise<ResultadoLlave> {
   const esperado = hashDeLlave(enClaro);
   // Se recorren TODAS las candidatas del prefijo aunque la primera cuadre: salir
   // temprano volvería medible cuántas comparten prefijo.
-  let hallada: { id: string; tenant_id: string; area: string } | null = null;
+  let hallada: { id: string; tenant_id: string; area: string; expira_en: string | null } | null = null;
   for (const fila of data ?? []) {
     if (mismoHash(String(fila.hash), esperado)) {
-      hallada = { id: String(fila.id), tenant_id: String(fila.tenant_id), area: String(fila.area) };
+      hallada = {
+        id: String(fila.id), tenant_id: String(fila.tenant_id), area: String(fila.area),
+        expira_en: fila.expira_en == null ? null : String(fila.expira_en),
+      };
     }
   }
   if (!hallada) return { ok: false, status: 401, motivo: 'Llave inválida.' };
+
+  // SEG-8 (auditoría 24, 0294): una llave VENCIDA vale lo mismo que una
+  // revocada — el mismo 401 y el mismo texto, porque distinguirlos le diría a
+  // quien prueba llaves cuál acertó a medias. Se comprueba DESPUÉS de la
+  // comparación en tiempo constante, no en el WHERE, para no meter una rama
+  // más antes del `timingSafeEqual`. `expira_en` null = no caduca, que es la
+  // decisión explícita de quien la emitió (y lo que traen todas las llaves
+  // emitidas antes de la 0294).
+  if (hallada.expira_en !== null && Date.parse(hallada.expira_en) <= Date.now()) {
+    logger.warn('llave_api.vencida', { llave: hallada.id, expiro: hallada.expira_en });
+    return { ok: false, status: 401, motivo: 'Llave inválida.' };
+  }
 
   // Sello de último uso: best-effort a propósito. Sirve para contestar "¿esta
   // llave todavía se usa?" antes de revocarla y para notar una que se filtró,

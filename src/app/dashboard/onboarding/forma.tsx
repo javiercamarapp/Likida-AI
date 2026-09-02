@@ -52,8 +52,9 @@ export function FormaOnboarding({
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium">Fiscal — lo que ningún comprobante revela</h2>
         <p className="text-xs" style={{ color: 'var(--muted)' }}>
-          Estas dos son las únicas obligatorias. Sin ellas el motor aplica el 50% de peaje
-          a cualquier flota. El resto se puede dejar en blanco y completarlo después.
+          Estas dos son las únicas obligatorias. Sin ellas el estímulo de peaje queda en
+          $0 hasta que las contestes — el motor nunca lo acredita sin esta declaración.
+          El resto se puede dejar en blanco y completarlo después.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Selector nombre="ingresos" etiqueta="Ingresos anuales del último ejercicio" requerido
@@ -66,8 +67,16 @@ export function FormaOnboarding({
             ayuda="LIF 2026 art. 20-A. $300 millones exactos ya no califican." />
           <Selector nombre="parte" etiqueta="¿Es parte relacionada de otra empresa? (LISR art. 179)" requerido
             valorInicial={inicial.parte} opciones={SI_NO} />
-          <Selector nombre="dedicacion" etiqueta="¿Dedicación exclusiva a transporte de carga / pasaje / turismo?"
-            opciones={SI_NO} ayuda="Válvula del 15% de combustible en efectivo (RFA 2.9) y del estímulo de peaje." />
+          {/* AUDITORÍA 19 (fiscal F3): la RFA 2026 regla 2.9 exige carga
+              FEDERAL específicamente — no cualquier carga (local/municipal
+              no califica). Este formulario decía solo "carga", mientras la
+              entrevista conversacional (perfil/entrevista.ts) ya decía
+              "carga federal" — dos onboardings, dos preguntas distintas
+              para la misma facilidad. Una flota de carga local podía
+              contestar "sí" de buena fe y quedar declarada elegible al 15%
+              sin serlo. */}
+          <Selector nombre="dedicacion" etiqueta="¿Dedicación exclusiva a transporte de carga federal / pasaje / turismo?"
+            opciones={SI_NO} ayuda="RFA 2026 regla 2.9: exige carga FEDERAL específicamente — la carga local/municipal no califica. Válvula del 15% de combustible en efectivo y del estímulo de peaje." />
           <Selector nombre="regimen" etiqueta="¿Régimen fiscal elegible para la facilidad del 15%?"
             opciones={SI_NO} ayuda="RESICO y el régimen general de PM quedan fuera. Si no estás seguro, déjalo en blanco." />
           <Selector nombre="dedicado" etiqueta="¿Hacen transporte dedicado?"

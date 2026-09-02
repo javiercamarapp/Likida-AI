@@ -6,11 +6,15 @@ import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { puedeExportar } from '@/lib/auth/permisos';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
-import { conteo, exigir, PAGINA, MAX_PAGINAS, LecturaIncompleta } from '@/lib/likida/pg';
+import { exigir, PAGINA, MAX_PAGINAS, LecturaIncompleta } from '@/lib/likida/pg';
 import { acotada } from '@/lib/likida/presupuesto';
-import { leerPeriodo } from './periodo';
+import { leerPeriodo, leerFiltroRevision, LEYENDA_REVISION, FILTRO_REVISION_DEFECTO } from './periodo';
 
 export const runtime = 'nodejs';
+// BE-19 (auditoría 24): sin esto el tope lo pone el default de la plataforma
+// (15 s en Node sin Fluid Compute) y un export de 92 días sobre 45,000
+// liquidaciones muere en 504 mudo. Literal a propósito: Next lo lee en build.
+export const maxDuration = 120;
 
 // Export de liquidaciones a CSV (ERP/Excel). Gate por la sesión real del
 // contralor (Supabase Auth) — ya no por el passcode compartido. El
@@ -77,27 +81,67 @@ export async function GET(req: Request) {
   // 1,000 filas. Las columnas y el formato son EXACTAMENTE los de antes (el
   // ERP del contador ya los lee): `toCsv` de `lib/likida/export` sigue
   // escribiendo cada página, y solo la primera lleva el encabezado.
-  const periodo = leerPeriodo(new URL(req.url).searchParams);
+  const params = new URL(req.url).searchParams;
+  const periodo = leerPeriodo(params);
   if (!periodo.ok) return new NextResponse(periodo.motivo, { status: 400 });
   const { desde, hastaExclusivo, etiqueta } = periodo;
 
-  const pagina = (d: number) => acotada(
-    supabaseAdmin().from('liquidacion')
-      .select('created_at, total_comprobado, total_anticipo, diferencia, estatus, diferencias, viaje:viaje_id(folio, operador:operador_id(nombre))', conteo(d))
+  // ── BLOQ-6 (0299): EL ARCHIVO RESPETA LA FIRMA HUMANA ───────────────────
+  // Ver la nota larga en `periodo.ts`. Por omisión NO salen las rechazadas:
+  // tesorería dispersa con este CSV y el total de una rechazada está a punto
+  // de cambiar. El corte va en el nombre del archivo y en un encabezado —
+  // un export que oculta filas sin decirlo es un dato corto con cara de
+  // completo, que es justo lo que este archivo persigue.
+  const rev = leerFiltroRevision(params);
+  if (!rev.ok) return new NextResponse(rev.motivo, { status: 400 });
+
+  // ── KEYSET, NO `range` POR POSICIÓN (auditoría 21, MEDIO REINCIDENTE 18-c4) ─
+  //
+  // Antes cada página era `range(d, d+999)` sobre `created_at desc` — posición
+  // sobre un orden que CAMBIA entre página y página: una liquidación nueva
+  // escrita a media descarga (un chofer cierra su viaje por WhatsApp) entra en
+  // la posición 0 y desplaza todo un lugar, así que la última fila de la
+  // página anterior salía DOS VECES en el CSV y otra no salía nunca — con
+  // `leidas` llegando exacto a `esperadas`, o sea sin que el corte lo notara.
+  //
+  // Ahora el cursor es la FILA, no la posición: `(created_at, id) < (última)`,
+  // el mismo patrón que `/v1/viajes` y el Registro de Viajes (y el índice de
+  // la 0157 es exactamente ese ORDER BY). Una fila nueva entra arriba del
+  // cursor y no mueve a nadie: el archivo trae el corte congelado al momento
+  // de la primera página, cada fila una sola vez.
+  const pagina = (despues: { creadoEn: string; id: string } | null) => {
+    let q = supabaseAdmin().from('liquidacion')
+      // `id` y `created_at` son el cursor; `toLiquidacionRows` ignora `id`,
+      // así que el CSV sigue siendo byte por byte el de siempre.
+      // El `count` solo en la primera página, como el `conteo()` de pg.ts:
+      // pedirlo en cada vuelta haría contar de más.
+      .select('id, created_at, total_comprobado, total_anticipo, diferencia, estatus, diferencias, viaje:viaje_id(folio, operador:operador_id(nombre))', despues ? {} : { count: 'exact' })
       .eq('tenant_id', tenantId)
       .gte('created_at', desde)
-      .lt('created_at', hastaExclusivo)
-      .order('created_at', { ascending: false }).order('id', { ascending: false })
-      .range(d, d + PAGINA - 1),
-    'export.liquidaciones',
-  );
+      .lt('created_at', hastaExclusivo);
+    if (rev.filtro === 'sin_rechazadas') q = q.neq('revision', 'rechazada');
+    else if (rev.filtro === 'firmadas') q = q.in('revision', ['aprobada', 'ajustada']);
+    else if (rev.filtro !== 'todas') q = q.eq('revision', rev.filtro);
+    // `(created_at, id) < (c, i)` en el dialecto de PostgREST: o es más vieja,
+    // o es del mismo instante y su id va después en el orden. Sin la segunda
+    // rama, dos liquidaciones del mismo microsegundo se pierden o se repiten —
+    // la advertencia de `pg.ts`.
+    if (despues) {
+      q = q.or(`created_at.lt.${despues.creadoEn},and(created_at.eq.${despues.creadoEn},id.lt.${despues.id})`);
+    }
+    return acotada(
+      q.order('created_at', { ascending: false }).order('id', { ascending: false })
+        .range(0, PAGINA - 1),
+      'export.liquidaciones',
+    );
+  };
 
   // La PRIMERA página se lee antes de contestar: así un error de base sigue
   // siendo un 500 con texto, no un archivo a medias con 200. Trae el `count`
   // exacto, que es lo que permite saber cuándo se acabó sin un viaje extra.
   let primera: Awaited<ReturnType<typeof pagina>>;
   try {
-    primera = await pagina(0);
+    primera = await pagina(null);
     exigir(primera, 'export.liquidaciones');
   } catch (e) {
     logger.error('export.liquidaciones', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
@@ -112,7 +156,9 @@ export async function GET(req: Request) {
         let leidas = 0;
         let res = primera;
         for (let n = 0; n < MAX_PAGINAS; n++) {
-          const filas = (exigir(res, 'export.liquidaciones') ?? []) as Parameters<typeof toLiquidacionRows>[0];
+          const filas = (exigir(res, 'export.liquidaciones') ?? []) as Array<
+            Parameters<typeof toLiquidacionRows>[0][number] & { id: string }
+          >;
           const csv = toCsv(toLiquidacionRows(filas));
           // Solo la primera página lleva encabezado; de las demás se quita la
           // primera línea. Pegadas, dan byte por byte lo que daba `toCsv` de
@@ -126,7 +172,18 @@ export async function GET(req: Request) {
             // un archivo corto con cara de completo es justo lo que no sale.
             throw new LecturaIncompleta('export.liquidaciones', leidas, esperadas);
           }
-          res = await pagina(leidas);
+          const ultima = filas[filas.length - 1];
+          res = await pagina({ creadoEn: String(ultima.created_at), id: String(ultima.id) });
+        }
+        // ── AUDITORÍA 22, BE-3 (ALTO) ────────────────────────────────────
+        // Agotar las 100 páginas caía aquí y cerraba el CSV en limpio: a
+        // partir de 100,000 filas el archivo salía CORTO con cara de
+        // completo. El `throw` de arriba solo cubre «la base dejó de
+        // entregar»; este cubre «se acabaron las vueltas», que es el mismo
+        // resultado para quien recibe el archivo. Mismo criterio que
+        // `traerTodo` en pg.ts: completa Y DEMOSTRADA, o se dice.
+        if (esperadas !== null && leidas < esperadas) {
+          throw new LecturaIncompleta('export.liquidaciones', leidas, esperadas);
         }
         controlador.close();
       } catch (e) {
@@ -142,7 +199,13 @@ export async function GET(req: Request) {
   return new NextResponse(stream, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="liquidaciones_likida.csv"`,
+      // El nombre por omisión NO cambia: el contador ya tiene su carpeta y su
+      // macro apuntando a `liquidaciones_likida.csv`. Un corte PEDIDO sí se
+      // marca en el nombre, porque entonces conviven dos archivos distintos en
+      // la misma carpeta de Descargas.
+      'Content-Disposition': `attachment; filename="liquidaciones_likida${rev.filtro === FILTRO_REVISION_DEFECTO ? '' : `_${rev.filtro}`}.csv"`,
+      // El corte, SIEMPRE, legible por quien reciba el archivo sin ver la URL.
+      'X-Likida-Revision': `${rev.filtro} (${LEYENDA_REVISION[rev.filtro]})`,
       'Cache-Control': 'no-store',
     },
   });

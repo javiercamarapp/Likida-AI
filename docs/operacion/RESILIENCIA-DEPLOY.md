@@ -18,10 +18,15 @@ restore drill con cronómetro, el estado contractual es **no demostrado**.
 
 ## Backup programable de Storage
 
-El workflow `.github/workflows/backup-storage.yml` corre diariamente a las
-03:17 UTC y también permite `workflow_dispatch`. Usa el environment de GitHub
-`production-backup`, no sube comprobantes como artifacts de GitHub y sincroniza
-solo hacia el destino remoto configurado. El `aws s3 sync` no usa `--delete`.
+El workflow `.github/workflows/backup-storage.yml` está pensado para correr
+diariamente a las 03:17 UTC, pero **el `schedule` está apagado a propósito**
+(OPERABILIDAD-19C2-2) hasta que se complete la configuración de abajo: sin
+ella fallaba cada noche sobre el único buzón de alertas. Por ahora solo se
+dispara con `workflow_dispatch`; reactivar el `schedule` es el último paso
+de la lista de "Primera configuración externa pendiente". Usa el environment
+de GitHub `production-backup`, no sube comprobantes como artifacts de GitHub
+y sincroniza solo hacia el destino remoto configurado. El `aws s3 sync` no
+usa `--delete`.
 
 El script canónico es:
 
@@ -76,6 +81,9 @@ Antes de llamar “verde” al backup programado, un administrador debe:
 4. Probar el workflow manualmente.
 5. Comprobar que `MANIFIESTO.json` y `MANIFIESTO.sha256` existan en el remoto.
 6. Registrar el tamaño, cantidad de objetos, hora y duración.
+7. Reactivar el `schedule` en `backup-storage.yml` (se apagó a propósito en
+   OPERABILIDAD-19C2-2 para no fallar cada noche mientras esto seguía
+   pendiente).
 
 Si falta una credencial, el workflow falla cerrado. No se debe poner una llave
 real en `.env`, logs, artifacts o comentarios de PR.

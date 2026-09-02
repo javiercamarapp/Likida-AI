@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { numero, fechaHoraMx } from '@/lib/formato';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { puedeAdministrar } from '@/lib/auth/permisos';
 import { correoConfigurado, enviarCorreo } from '@/lib/correo/enviar';
 import { avisoCorridaFallida } from '@/lib/correo/avisos';
 import type { Correo } from '@/lib/correo/plantilla';
@@ -51,7 +52,8 @@ import type { Correo } from '@/lib/correo/plantilla';
 // ── EL CATÁLOGO: qué agentes hay y qué le puede pasar a cada uno ───────────
 
 export type AgenteId =
-  | 'liquidacion' | 'facturas' | 'cobranza' | 'conductores' | 'peajes' | 'proveedores';
+  | 'liquidacion' | 'facturas' | 'cobranza' | 'conductores' | 'peajes' | 'proveedores'
+  | 'carta_porte';
 
 export type EventoId = 'corrida_fallida' | 'cola_atorada' | 'escalado';
 
@@ -110,6 +112,13 @@ export const AGENTES_NOTIFICABLES: readonly AgenteNotificable[] = [
   {
     id: 'proveedores', nombre: 'Agente de Proveedores', ruta: '/dashboard/agentes/proveedores',
     eventos: ['corrida_fallida', 'cola_atorada'],
+  },
+  {
+    // Fases B-C del blueprint (25-ago-2026). Solo `corrida_fallida`: su cola
+    // («falta declarar») se mide en el render, no en un cron — listarle
+    // `cola_atorada` sin emisor sería el bug original de la pestaña.
+    id: 'carta_porte', nombre: 'Agente de Carta Porte', ruta: '/dashboard/agentes/carta-porte',
+    eventos: ['corrida_fallida'],
   },
 ];
 
@@ -248,6 +257,16 @@ export function rolesQuePueden(agente: AgenteNotificable): RolAvisable[] {
  * `superadmin` sí opera sobre otra flota A PROPÓSITO: /admin es su consola y
  * cruza tenants por diseño (la única excepción del repo). Cualquier otro rol
  * que traiga un tenant distinto al suyo es un POST fabricado.
+ *
+ * FE-27 (auditoría 24): exigía solo `puedeVerRuta`, la misma puerta que abre
+ * la PANTALLA — pero VER un agente y decidir A QUIÉN le llegan sus correos son
+ * dos cosas distintas. Con eso, cualquier rol que viera la página podía
+ * apagar los avisos del DUEÑO: el contador en liquidación/facturas/cobranza/
+ * peajes/proveedores, el encargado en conductores/carta-porte. La estrategia
+ * del mismo agente (`guardarEstrategiaAgente`) ya exige `puedeAdministrar`
+ * (`agentes/conductores/page.tsx`, `agentes/liquidacion/page.tsx`) — quién
+ * recibe el correo es la misma clase de decisión que quién opera el agente,
+ * y ahora exige lo mismo.
  */
 export function puedeConfigurarAvisos(
   sesion: { rol: string; tenantId: string | null },
@@ -258,6 +277,9 @@ export function puedeConfigurarAvisos(
     return 'Tu rol no puede configurar los avisos de este agente.';
   }
   if (sesion.rol === 'superadmin') return null;
+  if (!puedeAdministrar(sesion.rol)) {
+    return 'Solo el dueño de la flota decide quién recibe los avisos de este agente.';
+  }
   if (sesion.tenantId !== tenantIdObjetivo) return 'Este agente no es de tu flota.';
   return null;
 }
@@ -675,10 +697,16 @@ export async function guardarConfigNotificaciones(
  * correos, la segunda no se arregla capturando nada.
  */
 export async function usuariosAvisables(tenantId: string): Promise<UsuarioAvisable[]> {
+  // FE-34: `.limit(200)` sin `.order()` no traía "los primeros 200" —
+  // traía 200 cualesquiera, y ninguna pantalla decía que había un tope.
+  // `.order('id')` lo vuelve determinista; el reparto real de avisos sigue
+  // filtrando por rol después (`repartoDe`), así que el orden no cambia a
+  // quién le llega qué.
   const { data, error } = await supabaseAdmin()
     .from('app_user')
     .select('id, nombre, email, rol')
     .eq('tenant_id', tenantId)
+    .order('id')
     .limit(200);
   if (error) throw new Error(`usuariosAvisables: ${error.message}`);
   return (data ?? []).map((u) => ({

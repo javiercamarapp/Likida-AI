@@ -29,7 +29,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { traerTodo, conteo } from './pg';
+import { exigir } from './pg';
 import { acotada } from './presupuesto';
 import { round2, hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
 import { identificarComercio } from './facturacion/identificar';
@@ -41,7 +41,7 @@ import {
 } from './cuadre/tope_alimentacion';
 // La constante vive en el motor a propósito: el panel y el motor tienen que
 // juzgar «no pagado» con el MISMO valor, o vuelven las dos cifras (FISC-C3-2).
-import { FORMA_PAGO_SIN_PAGAR, medioNoAdmitidoCombustible } from './cuadre/engine';
+import { FORMA_PAGO_SIN_PAGAR, MEDIOS_LISR_27_III, medioNoAdmitidoCombustible } from './cuadre/engine';
 import { getConfig, type LikidaConfig } from './config';
 
 // ── La fila de `gasto` leída con ojos de contador ──────────────────────────
@@ -73,6 +73,15 @@ export interface GastoFiscal {
   efosRevisar: boolean | null;
   /** c_FormaPago del SAT. '01' es efectivo. */
   formaPago: string | null;
+  /**
+   * AUDITORÍA 24, FIS-7: ¿un complemento de pago liquidó este CFDI POR
+   * COMPLETO? (`gasto.pagado_en is not null`, mig. 0199; dimensión del
+   * agregado desde la 0282). `null`/ausente = no se sabe, y se trata como NO
+   * pagado — el lado conservador, el mismo que el panel tenía antes.
+   */
+  pagado?: boolean | null;
+  /** `FormaDePagoP` del REP: el medio con el que DE VERDAD se pagó un '99'. */
+  pagadoForma?: string | null;
   subTotal: number | null;
   ivaTraslado: number | null;
   iepsTraslado: number | null;
@@ -145,12 +154,50 @@ function pesoDe(g: GastoFiscal): number {
 }
 
 /**
+ * La forma de pago que se puede JUZGAR — la misma idea que `formaPagoJuzgable`
+ * en cuadre/engine.ts (FIS-1/FIS-5): `'99 Por definir'` no es un medio, es la
+ * ausencia de uno (RMF 2.7.1.29 fr. II). Con el REP ingerido, el medio real es
+ * su `FormaDePagoP`; sin él, `null` = «no opino» — desconocido no es «medio
+ * distinto» ni «efectivo».
+ *
+ * AUDITORÍA 24, FIS-7 (MEDIO): este módulo era ciego al complemento de pago
+ * y el mismo UUID daba $0 en «IVA acreditable documentado» y $8,000 en el PDF.
+ */
+export function formaPagoEfectiva(g: Pick<GastoFiscal, 'formaPago' | 'pagado' | 'pagadoForma'>): string | null {
+  if (g.formaPago !== FORMA_PAGO_SIN_PAGAR) return g.formaPago;
+  return g.pagado ? (g.pagadoForma ?? null) : null;
+}
+
+/**
  * LISR 27-III, el único juicio POR MONTO de la ley: sobre un comprobante se
  * compara aquí; sobre una celda se lee la partición que SQL hizo con el MISMO
  * tope (ver `CeldaFiscal.sobreTopeEfectivo`).
  */
 function sobreTopeEfectivo(g: GastoFiscal, o: OpcionesFiscales): boolean {
   return g.celda ? g.celda.sobreTopeEfectivo : g.monto > o.efectivoTopeMxn;
+}
+
+/**
+ * AUDITORÍA 22, FIS-C3 (CRÍTICO) — el hermano de `sobreTopeEfectivo` que
+ * faltaba. La lista del primer párrafo de la LISR 27-III es CERRADA; el panel
+ * medía la frontera como «¿es '01'?», así que `'06' Dinero electrónico`,
+ * `'08' Vales`, `'12' Dación en pago`, `'17' Compensación`, `'23' Novación` y
+ * `'99 Por definir'` pasaban como deducibles con su IVA.
+ *
+ * DEBE espejar exactamente `engine.ts` (misma lista, mismo tope, mismas dos
+ * exclusiones): el motor y el panel del contador que discrepan sobre el mismo
+ * CFDI son dos cálculos, y esa es la falla que el producto no puede permitirse.
+ *
+ * - `'01'` NO entra: tiene su propia causa (`efectivo_sobre_tope`, perdida).
+ * - Sin `formaPago` NO entra: desconocido no es «medio distinto».
+ * - Combustible NO entra: lo gobierna la RFA 2.9 con su propia matriz.
+ */
+function medioFueraDeLista27III(g: GastoFiscal, o: OpcionesFiscales): boolean {
+  const forma = formaPagoEfectiva(g);
+  if (!forma || forma === '01') return false;
+  if (esCombustible(g, o)) return false;
+  if (!sobreTopeEfectivo(g, o)) return false;
+  return !(MEDIOS_LISR_27_III as readonly string[]).includes(forma);
 }
 
 // ── Periodo ────────────────────────────────────────────────────────────────
@@ -223,6 +270,47 @@ export function resolverPeriodo(crudo: string | undefined, hoy: string): Periodo
     desde: primerDia(refAnio, refMes),
     hasta: ultimoDia(refAnio, refMes),
     etiqueta: `${MESES[refMes]} ${refAnio}`,
+  };
+}
+
+/**
+ * LA VENTANA DE «LITROS ELEGIBLES PARA EL ESTÍMULO» (LIF 2026, 20-A), EN UN
+ * SOLO SITIO — con su rótulo.
+ *
+ * AUDITORÍA 24, FE-8 (ALTO): la MISMA cifra fiscal se medía con dos ventanas
+ * distintas en dos pantallas. `contador/inicio-contador.tsx` la pedía con
+ * `diasEjercicio` (el ejercicio en curso) y lo rotulaba;
+ * `combustible-casetas/page.tsx` y `chat/page.tsx` la pedían SIN ventana
+ * —`corteVentana(undefined) = null`, o sea el histórico completo— y la
+ * rotulaban «Litros elegibles para el estímulo · LIF 2026, Art. 20-A», sin
+ * periodo. El contralor ve dos litrajes bajo la misma cita legal: «una cifra
+ * fiscal que se lee distinto en dos pantallas se lee como dos cálculos».
+ *
+ * El estímulo del 20-A se acredita CONTRA EL EJERCICIO, así que la ventana
+ * correcta es la del ejercicio en curso; el histórico completo suma litros de
+ * años ya declarados. Aquí va el cálculo Y el rótulo juntos, por la misma
+ * razón que en `resolverPeriodo`: cuando eran dos cosas separadas, una
+ * pantalla decía un periodo y consultaba otro.
+ *
+ * `dias` es lo que `getAcreditables(tenantId, dias)` espera (`corteVentana`
+ * cuenta el día de hoy dentro, de ahí el `+ 1`).
+ */
+export function ventanaLitrosElegibles(hoy: string): {
+  periodo: Periodo;
+  dias: number;
+  rotulo: string;
+  nota: string;
+} {
+  const periodo = resolverPeriodo('ejercicio', hoy);
+  const desde = periodo.desde ?? `${hoy.slice(0, 4)}-01-01`;
+  const dias = Math.floor((Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86_400_000) + 1;
+  return {
+    periodo,
+    dias,
+    rotulo: 'Litros elegibles para el estímulo',
+    // La ventana VA EN EL RÓTULO, no en un comentario del código: es la regla
+    // «toda ventana declarada en el rótulo».
+    nota: `LIF 2026, Art. 20-A — ${periodo.etiqueta.toLowerCase()}, del ${desde} a hoy`,
   };
 }
 
@@ -313,6 +401,8 @@ export type CausaPerdida =
   | 'efos_indeterminado'
   /** Efectivo sobre el tope, gasto NO combustible (LISR 27-III). */
   | 'efectivo_sobre_tope'
+  /** Sobre el tope con una forma de pago FUERA de la lista cerrada de LISR 27-III. */
+  | 'medio_pago_no_admitido'
   /** Combustible en efectivo: cuenta contra el 15% (RFA 2026 regla 2.9). */
   | 'combustible_efectivo'
   /** La flota no califica a la facilidad del 15% (RFA 2.9) — no deducible. */
@@ -338,7 +428,9 @@ export interface Causa {
   detalle: string;
 }
 
-const TITULOS: Record<CausaPerdida, Omit<Causa, 'causa'>> = {
+/** Exportado para el guardia de exhaustividad de `ORDEN` (AUD20 FISC-C2): es
+ *  `Record<CausaPerdida, …>`, así que sus llaves son el union completo. */
+export const TITULOS: Record<CausaPerdida, Omit<Causa, 'causa'>> = {
   // AUD3 FI-A2, ALTO: esto era `gravedad: 'perdida'` y el KPI lo sumaba a
   // "monto perdido". La ficha `normas/politica-portales-plazos.yaml`
   // (jerarquía 6) dice lo contrario: el plazo del portal "tiene CERO fuerza
@@ -376,6 +468,12 @@ const TITULOS: Record<CausaPerdida, Omit<Causa, 'causa'>> = {
     titulo: 'Pagado en efectivo sobre el tope',
     norma: 'LISR 27-III',
     detalle: 'Gasto no-combustible pagado en efectivo por encima del tope: no es deducible aunque tenga CFDI.',
+  },
+  medio_pago_no_admitido: {
+    gravedad: 'en_riesgo',
+    titulo: 'Forma de pago fuera de la lista de la LISR 27-III',
+    norma: 'LISR 27-III',
+    detalle: 'Sobre el tope, la fracción admite una lista cerrada: transferencia, cheque nominativo, tarjeta de crédito/débito/servicios o monedero autorizado. Esta forma de pago no está en ella. No se afirma perdido —hay criterio en disputa para dación en pago, compensación y novación—: lo confirma tu contador.',
   },
   combustible_efectivo: {
     gravedad: 'en_riesgo',
@@ -443,7 +541,7 @@ export function causasDe(g: GastoFiscal, o: OpcionesFiscales): Causa[] {
   // MISMO predicado que usa el motor, importado a propósito: si el panel se
   // escribe su copia, vuelven las dos cifras sobre el mismo comprobante.
   if (esCombustible(g, o)) {
-    if (medioNoAdmitidoCombustible(g.formaPago)) {
+    if (medioNoAdmitidoCombustible(formaPagoEfectiva(g))) {
       // AUDITORÍA 14-15, ALTO: mismo estándar que el motor — pero SIN DECLARAR
       // (elegible15 undefined) NO es "deducción perdida": el motor lo mantiene
       // "por confirmar" y el panel debe decir lo mismo (en_riesgo), no perdido.
@@ -453,8 +551,10 @@ export function causasDe(g: GastoFiscal, o: OpcionesFiscales): Causa[] {
     // El tope de efectivo NO aplica al combustible: su frontera es la lista de
     // la LISR 27-III, arriba. `sobreTopeEfectivo` (de master) prefiere la celda
     // que ya calculó el motor sobre recalcular el monto aquí.
-  } else if (g.formaPago === '01' && sobreTopeEfectivo(g, o)) {
+  } else if (formaPagoEfectiva(g) === '01' && sobreTopeEfectivo(g, o)) {
     push('efectivo_sobre_tope');
+  } else if (medioFueraDeLista27III(g, o)) {
+    push('medio_pago_no_admitido');
   }
 
   return out;
@@ -472,9 +572,16 @@ export function causasDe(g: GastoFiscal, o: OpcionesFiscales): Causa[] {
 // ticket sin CFDI con el portal cerrado cuesta una gestión ante el emisor,
 // no el dinero — así que una pérdida dura (efectivo sobre el tope) le gana
 // la dominancia.
-const ORDEN: CausaPerdida[] = [
-  'efos', 'cfdi_cancelado', 'efectivo_sobre_tope',
-  'efos_indeterminado', 'plazo_vencido', 'combustible_efectivo', 'sin_cfdi',
+// AUDITORÍA 20, FISC-C2 (CRÍTICO): faltaba `efectivo_no_elegible`, el cuarto y
+// último miembro con `gravedad: 'perdida'`. Al no estar en la lista, un diésel
+// en efectivo de una flota que YA declaró NO calificar a la RFA 2.9 quedaba
+// dominado por `sin_cfdi` (`recuperable`) y se imprimía en el KPI verde
+// "Recuperable pidiendo factura". Va con las pérdidas duras, junto a
+// `efectivo_sobre_tope`: son el mismo hecho —efectivo que la LISR 27-III no
+// admite— con y sin la facilidad del 15%.
+export const ORDEN: CausaPerdida[] = [
+  'efos', 'cfdi_cancelado', 'efectivo_sobre_tope', 'efectivo_no_elegible',
+  'efos_indeterminado', 'plazo_vencido', 'combustible_efectivo', 'medio_pago_no_admitido', 'sin_cfdi',
 ];
 
 export function causaDominante(g: GastoFiscal, o: OpcionesFiscales): Causa | null {
@@ -640,11 +747,28 @@ function ivaSostenible(g: GastoFiscal, o: OpcionesFiscales): boolean {
   if (g.estadoSat === 'cancelado') return false;
   if (g.estadoSat === 'pendiente' || g.estadoSat === 'no_encontrado') return false;
   if (g.efos === true) return false;
-  if (g.formaPago === '01' && !esCombustible(g, o) && sobreTopeEfectivo(g, o)) return false;
-  // AUDITORÍA 14, ALTO: el combustible en EFECTIVO no acredita IVA — la
-  // facilidad del 15% (RFA 2.9) solo salva la deducción de ISR, y el motor ya
-  // lo niega (SIN_ACREDITAMIENTO). El panel afirmaba IVA sobre esos CFDIs.
-  if (medioNoAdmitidoCombustible(g.formaPago) && esCombustible(g, o)) return false;
+  if (formaPagoEfectiva(g) === '01' && !esCombustible(g, o) && sobreTopeEfectivo(g, o)) return false;
+  // AUDITORÍA 22, FIS-C3: mismo hecho con otra forma de pago. Mientras el
+  // contador no confirme, la proporción deducible es cero y LIVA 5-I no acredita.
+  if (medioFueraDeLista27III(g, o)) return false;
+  // Combustible con un medio que la LISR 27-III no admite.
+  //
+  // AUDITORÍA 14, ALTO puso esta puerta cerrada del todo, razonando que «la
+  // facilidad del 15% solo salva la deducción de ISR». AUDITORÍA 22, FIS-C2
+  // (CRÍTICO) la corrige leyendo las dos fichas: `rfa-2026-2.9.yaml` →
+  // `limite_importante` dice «NO habilita el acreditamiento del IEPS» —dice
+  // IEPS, no dice IVA—, y `liva-5.yaml` art. 5 fr. I ata el acreditamiento a
+  // que la erogación sea DEDUCIBLE PARA ISR, que es justo lo que la facilidad
+  // conserva. Negar el IVA aquí le costaba a una flota con $5,000,000 de
+  // combustible al año unos $103,000 anuales que la ley le concede.
+  //
+  // La frontera queda en la elegibilidad, igual que en el motor:
+  //   · `elegible15 === true`  → hay deducción, luego hay IVA que sostener.
+  //   · `false` o sin declarar → no hay deducción (el motor emite
+  //     `efectivo_no_elegible` o `combustible_efectivo`), luego no hay IVA.
+  // Esta función es un booleano y no reparte proporciones; el motor sí lo hace
+  // con `proporcionDeducible`, y él es quien imprime la cifra del PDF.
+  if (medioNoAdmitidoCombustible(formaPagoEfectiva(g)) && esCombustible(g, o) && o.elegible15 !== true) return false;
   // AUDITORÍA 18-c3, FISC-C3-2 (CRÍTICO): LIVA 5-III exige que el impuesto esté
   // "efectivamente pagado en el mes". `'99' Por definir` = la contraprestación
   // NO se ha pagado (RMF 2.7.1.29 fr. II), que es el caso normal de un CFDI PPD
@@ -658,7 +782,10 @@ function ivaSostenible(g: GastoFiscal, o: OpcionesFiscales): boolean {
   // Ojo con el criterio del módulo: se niega SOLO cuando la columna dice '99'.
   // Un comprobante SIN `forma_pago` es desconocido, no impago (mismo estándar
   // que `causasDe` y que `getAcumuladoCombustible`).
-  if (g.formaPago === FORMA_PAGO_SIN_PAGAR) return false;
+  // AUDITORÍA 24, FIS-7: con el complemento de pago ingerido (`pagado`, mig.
+  // 0282 como dimensión del agregado) el '99' deja de cerrar la puerta — igual
+  // que `pagadoConRep` en el motor. Sin el sello, todo queda como antes.
+  if (g.formaPago === FORMA_PAGO_SIN_PAGAR && !g.pagado) return false;
   return true;
 }
 
@@ -732,7 +859,13 @@ export function resumirFiscal(gastos: GastoFiscal[], o: OpcionesFiscales): Resum
     // El IEPS del diésel exige pago electrónico y NO tiene la válvula del 15%
     // que la RFA 2.9 concede para ISR: la facilidad salva la deducción, no el
     // acreditamiento (LIF 2026 20-A, 4º párrafo).
-    if (esDieselConIeps(g, o) && g.iepsTraslado !== null && g.formaPago && g.formaPago !== '01') {
+    // AUDITORÍA 24, FIS-A2 (ALTO, reincidente 23): era `!== '01'`, que sumaba
+    // '06', '99' (no pagado) y cualquier medio fuera de la lista. LIF 20-A
+    // (`normas/lif-2026-20-A.yaml`) exige pago con los medios de la LISR
+    // 27-III: lista CERRADA y forma EFECTIVA (la del REP, si el CFDI era '99').
+    // Sigue siendo el IEPS TRASLADADO documentado, no el estímulo (cuota × litros).
+    const formaIeps = formaPagoEfectiva(g);
+    if (esDieselConIeps(g, o) && g.iepsTraslado !== null && formaIeps && (MEDIOS_LISR_27_III as readonly string[]).includes(formaIeps)) {
       iepsDieselDocumentado += g.iepsTraslado;
     }
     if (g.concepto === 'caseta') {
@@ -789,7 +922,11 @@ export function resumirCombustibleCasetas(gastos: GastoFiscal[]): ResumenCombust
     const sinCfdi = filas.filter((g) => !g.cfdiUuid);
     const conFormaPago = filas.filter((g) => g.formaPago);
     const baseConocida = conFormaPago.reduce((s, g) => s + g.monto, 0);
-    const electronico = conFormaPago.filter((g) => g.formaPago !== '01').reduce((s, g) => s + g.monto, 0);
+    // FIS-A2: «electrónico» = uno de los medios de la LISR 27-III, con la forma
+    // EFECTIVA; un '99' sin pagar no es electrónico todavía.
+    const electronico = conFormaPago
+      .filter((g) => { const f = formaPagoEfectiva(g); return !!f && (MEDIOS_LISR_27_III as readonly string[]).includes(f); })
+      .reduce((s, g) => s + g.monto, 0);
     const cuenta = (xs: GastoFiscal[]) => xs.reduce((s, g) => s + pesoDe(g), 0);
     return {
       concepto,
@@ -812,7 +949,7 @@ export function tope15DeGastos(gastos: GastoFiscal[], o: OpcionesFiscales): Resu
     if (!esCombustible(g, o)) continue;
     if (!(g.monto > 0)) continue;
     totalCombustible += g.monto;
-    if (medioNoAdmitidoCombustible(g.formaPago)) efectivo += g.monto;
+    if (medioNoAdmitidoCombustible(formaPagoEfectiva(g))) efectivo += g.monto;
   }
   return evaluarTope15({ efectivo, totalCombustible });
 }
@@ -924,6 +1061,8 @@ export function diagnosticoRetencion(gastos: GastoFiscal[]): DiagnosticoRetencio
 /** Forma EXACTA de una celda tal como la emite `gastos_fiscales_agregados_tenant`. */
 interface CeldaCruda {
   concepto: string; claveProdServ: string | null; formaPago: string | null;
+  /** FIS-7 (mig. 0282). `null` = la RPC no lo trae (base anterior): no pagado. */
+  pagado: boolean | null; pagadoForma: string | null;
   efos: boolean | null; efosRevisar: boolean | null; estadoSat: string | null;
   tieneCfdi: boolean; sinFecha: boolean; ivaEstado: CeldaFiscal['ivaEstado'];
   sobreTopeEfectivo: boolean;
@@ -971,6 +1110,7 @@ function leerCelda(x: unknown, i: number): CeldaCruda {
   if (!Number.isInteger(n) || n < 1) throw falla('n');
   return {
     concepto: strReq('concepto'), claveProdServ: str('claveProdServ'), formaPago: str('formaPago'),
+    pagado: bool('pagado'), pagadoForma: str('pagadoForma'),
     efos: bool('efos'), efosRevisar: bool('efosRevisar'), estadoSat: str('estadoSat'),
     tieneCfdi: boolReq('tieneCfdi'), sinFecha: boolReq('sinFecha'), ivaEstado,
     sobreTopeEfectivo: boolReq('sobreTopeEfectivo'),
@@ -1039,6 +1179,85 @@ export function cortesDePlazo(hoy: string): CortesPlazo {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// D.22 (frente de escala) — EL AGREGADO POR EMISOR NO SE QUEDA EN TEXTO LIBRE.
+//
+// SQL agrupa las celdas sin CFDI por lo que la visión LEYÓ (`ocr_extra->>
+// 'emisor'`, con el upper/trim de la 0192). Eso deja "PEMEX", "PEMEX SA DE CV"
+// y "PEMEX  SA DE CV" como TRES celdas: la cifra que ve el contador queda
+// partida sin que nadie lo note. La 0192 ya lo dijo: unificar variantes de
+// fondo exige el matching del catálogo, no una normalización de texto.
+//
+// Aquí se hace ese matching — en TS, que es donde vive `identificarComercio`
+// y el catálogo (`comercios.ts`; NO se toca: otro frente lo está ampliando).
+// Dos celdas sin CFDI se funden cuando TODAS sus demás dimensiones coinciden
+// y su emisor resuelve a la MISMA identidad canónica:
+//   · el COMERCIO del catálogo (por dominio del host → RFC → texto, la misma
+//     prioridad de `identificarComercio`), o
+//   · el RFC leído y validado, cuando el catálogo no lo conoce.
+//
+// `null` es `null`: una celda cuyo emisor no resuelve a nada (sin comercio y
+// sin RFC) NO se agrupa con nadie — se queda tal como SQL la entregó, jamás
+// en un cubo "otros" que mienta una identidad que no existe.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** La identidad canónica del emisor de una celda sin CFDI, o `null`. */
+function identidadDeEmisor(c: CeldaCruda): string | null {
+  if (c.tieneCfdi) return null;
+  const comercio = identificarComercio({
+    urlFacturacion: c.host ?? undefined,
+    rfcEmisor: c.rfcEmisor ?? undefined,
+    textoTicket: c.emisor ?? undefined,
+  });
+  if (comercio) return `comercio:${comercio.clave}`;
+  if (c.rfcEmisor) return `rfc:${c.rfcEmisor.trim().toUpperCase()}`;
+  return null;
+}
+
+/**
+ * Funde las celdas sin CFDI que son EL MISMO emisor con distinta ortografía.
+ * Se conservan los datos crudos (rfc/host/emisor) de la PRIMERA celda del
+ * grupo: resuelven a la misma identidad por construcción, y `plazoVencido`
+ * se calcula después sobre esa resolución — el mismo comercio, el mismo plazo.
+ */
+function consolidarCeldasPorEmisor(celdas: CeldaCruda[]): CeldaCruda[] {
+  const salida: CeldaCruda[] = [];
+  const grupos = new Map<string, CeldaCruda>();
+  for (const c of celdas) {
+    const identidad = identidadDeEmisor(c);
+    if (identidad === null) {
+      salida.push(c);   // sin identidad no hay con quién agrupar — tal cual
+      continue;
+    }
+    // Las DEMÁS dimensiones tienen que coincidir: fundir a través de bandas o
+    // conceptos cambiaría causas fiscales, no solo ortografía.
+    const llave = JSON.stringify([
+      identidad, c.concepto, c.claveProdServ, c.formaPago, c.pagado, c.pagadoForma, c.efos, c.efosRevisar,
+      c.estadoSat, c.sinFecha, c.ivaEstado, c.sobreTopeEfectivo, c.banda, c.totalTimbradoDia,
+    ]);
+    const previa = grupos.get(llave);
+    if (!previa) {
+      const copia = { ...c };
+      grupos.set(llave, copia);
+      salida.push(copia);
+      continue;
+    }
+    previa.n += c.n;
+    previa.monto += c.monto;
+    previa.iva += c.iva;
+    previa.ieps += c.ieps;
+    previa.iepsNulos += c.iepsNulos;
+    previa.subTotal += c.subTotal;
+    previa.subTotalNulos += c.subTotalNulos;
+    if (c.muestraId < previa.muestraId) previa.muestraId = c.muestraId;
+    if (previa.muestraCfdi === null) previa.muestraCfdi = c.muestraCfdi;
+    if (c.fechaMax !== null && (previa.fechaMax === null || c.fechaMax > previa.fechaMax)) {
+      previa.fechaMax = c.fechaMax;
+    }
+  }
+  return salida;
+}
+
 /**
  * ¿El portal ya cerró su plazo para esta celda sin CFDI? El MISMO camino que
  * `armar` (facturacion/pendientes.ts): identificar el comercio por la liga,
@@ -1071,6 +1290,8 @@ function aGastoFiscal(c: CeldaCruda, cortes: CortesPlazo): GastoFiscal {
     efos: c.efos,
     efosRevisar: c.efosRevisar,
     formaPago: c.formaPago,
+    pagado: c.pagado,
+    pagadoForma: c.pagadoForma,
     subTotal: c.subTotalNulos >= c.n ? null : c.subTotal,
     ivaTraslado: c.ivaEstado === 'nulo' ? null : c.iva,
     iepsTraslado: c.iepsNulos >= c.n ? null : c.ieps,
@@ -1126,7 +1347,11 @@ export async function getGastosFiscales(
   if (!Array.isArray(data)) {
     throw new Error(`getGastosFiscales: gastos_fiscales_agregados_tenant devolvió ${typeof data} en vez de un arreglo (¿migración 0151 sin aplicar?)`);
   }
-  return data.map((x, i) => aGastoFiscal(leerCelda(x, i), cortes));
+  // D.22: las celdas sin CFDI del MISMO emisor con distinta ortografía se
+  // funden por identidad canónica (comercio del catálogo o RFC) ANTES de que
+  // el contador las vea partidas. Ver `consolidarCeldasPorEmisor`.
+  return consolidarCeldasPorEmisor(data.map((x, i) => leerCelda(x, i)))
+    .map((c) => aGastoFiscal(c, cortes));
 }
 
 export interface GastosFiscalesSeries {
@@ -1243,6 +1468,25 @@ export interface LiquidacionFiscal {
   pdfUrl: string | null;
 }
 
+/** El cursor de la lista: la ÚLTIMA fila entregada, no una posición. */
+export interface CursorLiquidacionFiscal {
+  creadoEn: string;
+  id: string;
+}
+
+export interface PaginaLiquidacionesFiscales {
+  filas: LiquidacionFiscal[];
+  /** Con qué seguir, o `null` si esta fue la última página. */
+  siguiente: CursorLiquidacionFiscal | null;
+  /** Cuántas hay en el periodo ENTERO. Solo viene en la primera página (pedir
+   *  el count en cada vuelta haría contar de más); `null` en las siguientes. */
+  total: number | null;
+}
+
+/** Cuántas filas por página. Tope duro: nadie pide más aunque lo pase. */
+export const LIQUIDACIONES_FISCALES_POR_PAGINA = 200;
+const MAX_POR_PAGINA = 1_000;
+
 /**
  * Las liquidaciones cerradas del periodo, para amarrar lo contable con lo
  * operativo. SOLO LECTURA: este módulo no expone nada que escriba.
@@ -1250,51 +1494,90 @@ export interface LiquidacionFiscal {
  * Se filtra por `created_at` y no por `fecha` porque una liquidación no tiene
  * fecha de documento: la fecha que le importa al contador es cuándo se cerró.
  * El rótulo de la pantalla lo dice con esas palabras.
+ *
+ * ── AUDITORÍA 24, REN-6 · UNA PÁGINA, NO EL EJERCICIO ENTERO ───────────────
+ *
+ * Traía TODO con `traerTodo` y ordenaba en JS. El periodo por default es el
+ * EJERCICIO: a 12,000 liquidaciones/mes, el mes 8.3 del año llega a 100,000
+ * filas, que es el techo de `traerTodo` (100 páginas × 1,000) — y de ahí en
+ * adelante la pantalla del contador dejaba de servir con un `LecturaIncompleta`
+ * hasta que él acortara el periodo a mano. Antes de reventar, 100 viajes de red
+ * y 13 columnas × 100k filas en memoria de la función.
+ *
+ * Ahora entrega UNA página con cursor keyset `(created_at, id)` — el mismo
+ * patrón que `export/liquidaciones` y `/v1/viajes`, y el mismo índice de la
+ * 0157. El cursor es la FILA, no la posición: una liquidación nueva escrita a
+ * media lectura (un chofer cierra su viaje por WhatsApp) entra arriba del
+ * cursor y no repite ni se salta a nadie.
+ *
+ * El orden ya viene de la base (`created_at desc, id desc`), no de un `.sort()`
+ * en JS: ordenar una página no ordena el conjunto, y el `.sort()` de antes solo
+ * era correcto porque se había traído todo.
  */
 export async function getLiquidacionesFiscales(
   tenantId: string,
   periodo: Periodo,
-): Promise<LiquidacionFiscal[]> {
-  const filas = await traerTodo<Record<string, unknown>>(
-    (desde, hasta) => {
-      let q = supabaseAdmin()
-        .from('liquidacion')
-        .select('id, created_at, total_comprobado, total_anticipo, diferencia, estatus, diferencias, pdf_url, iva_acreditable, ieps_acreditable, peaje_acreditable, litros_diesel_acreditables, viaje:viaje_id(folio, operador:operador_id(nombre))', conteo(desde))
-        .eq('tenant_id', tenantId);
-      // DAT-08 (auditoría prod): el rango se armaba con `Z` —medianoche y
-      // último milisegundo de LONDRES—, así que el periodo real iba de las
-      // 18:00 del día anterior a las 17:59 del último día, en hora de México.
-      // Una liquidación cerrada el 31 de diciembre a las 19:00 se contaba en el
-      // ejercicio SIGUIENTE, y el rótulo seguía diciendo "del periodo".
-      if (periodo.desde) q = q.gte('created_at', inicioDiaMx(periodo.desde));
-      if (periodo.hasta) q = q.lte('created_at', finDiaMx(periodo.hasta));
-      return acotada(q.order('id').range(desde, hasta), 'getLiquidacionesFiscales');
-    },
+  opciones: { despues?: CursorLiquidacionFiscal | null; limite?: number } = {},
+): Promise<PaginaLiquidacionesFiscales> {
+  const despues = opciones.despues ?? null;
+  const limite = Math.max(1, Math.min(opciones.limite ?? LIQUIDACIONES_FISCALES_POR_PAGINA, MAX_POR_PAGINA));
+
+  let q = supabaseAdmin()
+    .from('liquidacion')
+    .select(
+      'id, created_at, total_comprobado, total_anticipo, diferencia, estatus, diferencias, pdf_url, iva_acreditable, ieps_acreditable, peaje_acreditable, litros_diesel_acreditables, viaje:viaje_id(folio, operador:operador_id(nombre))',
+      despues ? {} : { count: 'exact' },
+    )
+    .eq('tenant_id', tenantId);
+  // DAT-08 (auditoría prod): el rango se armaba con `Z` —medianoche y
+  // último milisegundo de LONDRES—, así que el periodo real iba de las
+  // 18:00 del día anterior a las 17:59 del último día, en hora de México.
+  // Una liquidación cerrada el 31 de diciembre a las 19:00 se contaba en el
+  // ejercicio SIGUIENTE, y el rótulo seguía diciendo "del periodo".
+  if (periodo.desde) q = q.gte('created_at', inicioDiaMx(periodo.desde));
+  if (periodo.hasta) q = q.lte('created_at', finDiaMx(periodo.hasta));
+  // `(created_at, id) < (c, i)` en el dialecto de PostgREST: o es más vieja, o
+  // es del mismo instante y su id va después. Sin la segunda rama, dos
+  // liquidaciones del mismo microsegundo se pierden o se repiten (pg.ts).
+  if (despues) {
+    q = q.or(`created_at.lt.${despues.creadoEn},and(created_at.eq.${despues.creadoEn},id.lt.${despues.id})`);
+  }
+
+  const res = await acotada(
+    q.order('created_at', { ascending: false }).order('id', { ascending: false }).range(0, limite - 1),
     'getLiquidacionesFiscales',
   );
+  const crudas = (exigir(res, 'getLiquidacionesFiscales') ?? []) as Array<Record<string, unknown>>;
 
-  return filas
-    .map((r) => {
-      const v = r.viaje as { folio?: string; operador?: { nombre?: string } | null } | null;
-      const difs = r.diferencias as unknown[] | null;
-      return {
-        id: r.id as string,
-        viajeFolio: v?.folio ?? null,
-        operadorNombre: v?.operador?.nombre ?? null,
-        fecha: r.created_at as string,
-        totalComprobado: Number(r.total_comprobado ?? 0),
-        totalAnticipo: Number(r.total_anticipo ?? 0),
-        diferencia: Number(r.diferencia ?? 0),
-        estatus: (r.estatus as string) ?? '',
-        observaciones: Array.isArray(difs) ? difs.length : 0,
-        ivaAcreditable: Number(r.iva_acreditable ?? 0),
-        iepsAcreditable: Number(r.ieps_acreditable ?? 0),
-        peajeAcreditable: Number(r.peaje_acreditable ?? 0),
-        litrosDieselAcreditables: Number(r.litros_diesel_acreditables ?? 0),
-        pdfUrl: (r.pdf_url as string) || null,
-      };
-    })
-    .sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+  const filas = crudas.map((r) => {
+    const v = r.viaje as { folio?: string; operador?: { nombre?: string } | null } | null;
+    const difs = r.diferencias as unknown[] | null;
+    return {
+      id: r.id as string,
+      viajeFolio: v?.folio ?? null,
+      operadorNombre: v?.operador?.nombre ?? null,
+      fecha: r.created_at as string,
+      totalComprobado: Number(r.total_comprobado ?? 0),
+      totalAnticipo: Number(r.total_anticipo ?? 0),
+      diferencia: Number(r.diferencia ?? 0),
+      estatus: (r.estatus as string) ?? '',
+      observaciones: Array.isArray(difs) ? difs.length : 0,
+      ivaAcreditable: Number(r.iva_acreditable ?? 0),
+      iepsAcreditable: Number(r.ieps_acreditable ?? 0),
+      peajeAcreditable: Number(r.peaje_acreditable ?? 0),
+      litrosDieselAcreditables: Number(r.litros_diesel_acreditables ?? 0),
+      pdfUrl: (r.pdf_url as string) || null,
+    };
+  });
+
+  // Una página CORTA prueba que no hay nada después. Una página llena no lo
+  // prueba: puede que la siguiente venga vacía, y por eso el cursor se
+  // entrega igual — quien pagina lo sabrá en el siguiente viaje, que es más
+  // barato que mentir con un "ya no hay".
+  const ultima = filas[filas.length - 1];
+  const siguiente = filas.length === limite && ultima ? { creadoEn: ultima.fecha, id: ultima.id } : null;
+
+  return { filas, siguiente, total: typeof res.count === 'number' ? res.count : null };
 }
 
 // ── Export ─────────────────────────────────────────────────────────────────

@@ -17,7 +17,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
+const encolarMock = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/likida/wa_outbox', async (importOriginal) => ({
+  // El RETRASO_AMBIGUO_SEGUNDOS real (no un doble): la prueba de H1 de abajo
+  // quiere ver el VALOR de verdad que `client.ts` importa, no uno inventado
+  // en el mock que podría desalinearse sin que nadie lo note.
+  ...(await importOriginal<typeof import('@/lib/likida/wa_outbox')>()),
+  encolarSalidaWhatsApp: encolarMock,
+}));
+
 const { enviarTexto, sendText, esReintentableMeta, CODIGOS_META_REINTENTABLES } = await import('./client');
+const { RETRASO_AMBIGUO_SEGUNDOS } = await import('@/lib/likida/wa_outbox');
 
 const fetchMock = vi.fn();
 beforeEach(() => {
@@ -78,5 +88,37 @@ describe('esReintentableMeta (RES-1)', () => {
     expect(esReintentableMeta(undefined, 429)).toBe(true);
     expect(esReintentableMeta(undefined, 502)).toBe(true);
     expect(esReintentableMeta(undefined, 400)).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA E.28 (H1, MEDIO) — un timeout donde Meta SÍ entregó podía
+// triplicar un aviso. El cableado que cierra el hueco: un fallo de RED (la
+// respuesta nunca llegó — ambiguo, Meta pudo haber aceptado el mensaje) tiene
+// que encolarse con el retraso deliberado; un rechazo EXPLÍCITO de Meta (la
+// respuesta SÍ llegó, y dijo que no) no tiene esa ambigüedad y se sigue
+// encolando para reintento inmediato, como siempre.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el catch de red encola con el retraso AMBIGUO — el `!res.ok` no (H1)', () => {
+  it('un timeout (la respuesta nunca llegó) encola con `RETRASO_AMBIGUO_SEGUNDOS`', async () => {
+    fetchMock.mockRejectedValue(new Error('The operation was aborted due to timeout'));
+    await enviarTexto('5219991112233', 'hola');
+    expect(encolarMock).toHaveBeenCalledTimes(1);
+    expect(encolarMock.mock.calls[0][2]).toBe(RETRASO_AMBIGUO_SEGUNDOS);
+  });
+
+  it('un 429 explícito de Meta (la respuesta SÍ llegó) encola SIN retraso — no hay ambigüedad que esperar', async () => {
+    fetchMock.mockResolvedValue(respuesta(429, { error: { code: 130429, message: 'rate limit' } }));
+    await enviarTexto('5219991112233', 'hola');
+    expect(encolarMock).toHaveBeenCalledTimes(1);
+    // El tercer argumento no viaja: `encolarSalidaWhatsApp` cae a su default
+    // (0, reintento inmediato) para un rechazo que no tiene nada que esperar.
+    expect(encolarMock.mock.calls[0][2]).toBeUndefined();
+  });
+
+  it('un rechazo NO reintentable (destinatario fuera de lista) ni siquiera encola', async () => {
+    fetchMock.mockResolvedValue(respuesta(400, { error: { code: 131030, message: 'no está en la lista' } }));
+    await enviarTexto('5219991112233', 'hola');
+    expect(encolarMock).not.toHaveBeenCalled();
   });
 });

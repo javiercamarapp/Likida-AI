@@ -1,6 +1,10 @@
+import Link from 'next/link';
 import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
+import { leerUltimasLecturas } from '@/lib/admin/qa-storage';
+import { agregar, agregarPorCampo, type Agregado, type AgregadoPorCampo } from '@/lib/admin/qa-verdad';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { usd, numero } from '@/lib/formato';
-import { ScanText, DollarSign, Repeat, ReceiptText } from 'lucide-react';
+import { ScanText, DollarSign, Repeat, ReceiptText, Crosshair } from 'lucide-react';
 import { BarChartSimple } from '../charts';
 import { IconoProveedor } from '../proveedor-icono';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -25,6 +29,28 @@ const ICONO_KPI = { width: 15, height: 15, strokeWidth: 1.75 } as const;
  */
 export default async function AgenteOcrPage() {
   const [r, porFaseModelo] = await Promise.all([getResumenNegocio(), getCostoPorFaseModelo()]);
+  // ── LA PRECISIÓN, EN LA PANTALLA CON EL NOMBRE CORRECTO (28-ago-2026) ────
+  // El medidor existe (0239/0246) y su casa es /admin/qa — pero quien busca
+  // «¿qué tan bien lee el OCR?» llega AQUÍ y solo veía dólares. El agregado se
+  // calcula con las MISMAS funciones que el panel de QA (`agregar` /
+  // `agregarPorCampo`), sobre la última lectura de cada foto del banco.
+  // Fuente propia y fallo propio: que esta lectura caiga no tumba los costos,
+  // y se dice — «no se pudo leer» no es «no hay medición».
+  const lecturas = await leerUltimasLecturas(supabaseAdmin()).catch((e) => ({ ok: false as const, error: String(e) }));
+  let precision: { global: Agregado; porCampo: AgregadoPorCampo[]; fotos: number } | null = null;
+  if (lecturas.ok) {
+    const mediciones = [...lecturas.datos.values()].map((l) => l.medicion);
+    precision = { global: agregar(mediciones), porCampo: agregarPorCampo(mediciones), fotos: mediciones.length };
+  }
+  // Los tres campos que peor se leen, solo entre los que SÍ tienen medición:
+  // `exactitud: null` es «sin medir», no 0%, y no compite en este ranking.
+  const peores = precision === null
+    ? []
+    : precision.porCampo
+      .filter((c): c is AgregadoPorCampo & { exactitud: number } => c.exactitud !== null)
+      .sort((a, b) => a.exactitud - b.exactitud)
+      .slice(0, 3);
+  const pct = (x: number) => `${Math.round(x * 100)}%`;
   const ocr = r.porFase.find((f) => f.fase === 'ocr');
   const modelosOcr = porFaseModelo.filter((m) => m.fase === 'ocr');
   // La tabla `llm_costo` sí trae `fase` y `modelo` juntos, pero cuando esa
@@ -54,6 +80,56 @@ export default async function AgenteOcrPage() {
             <StatCard icono={<ReceiptText {...ICONO_KPI} />}
               etiqueta="Facturas procesadas — histórico" valor={r.facturasTotal} formato="entero"
             />
+          </div>
+
+          {/* ── Qué tan bien lee — la puerta a la medición (0239/0246) ── */}
+          <div className="card p-4">
+            <TituloSeccion>Qué tan bien lee — medido contra el banco de verdad</TituloSeccion>
+            {precision === null ? (
+              <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+                No se pudo leer la medición de precisión — que no es lo mismo que «no hay medición».
+                La fuente vive en <Link href="/admin/qa" className="underline underline-offset-2">QA</Link>.
+              </p>
+            ) : precision.global.exactitud === null ? (
+              <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+                El OCR todavía no se ha medido contra el banco de verdad — sin campos medidos no hay
+                exactitud que reportar (esto NO es un 0%). La medición se corre desde{' '}
+                <Link href="/admin/qa" className="underline underline-offset-2">QA</Link>, contra las
+                fotos reales con verdad de terreno firmada.
+              </p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                <p className="text-sm inline-flex items-center gap-2">
+                  <Crosshair width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+                  <span>
+                    <strong>{pct(precision.global.exactitud)}</strong> de exactitud global —{' '}
+                    {numero(precision.global.medidos)} campos medidos sobre {numero(precision.fotos)} fotos
+                    (última lectura de cada una).
+                  </span>
+                </p>
+                {peores.length > 0 && (
+                  <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                    {/* El desglose por campo vale más que el global: un 94% general
+                        esconde el folio que falla una de cada tres — y el folio es lo
+                        que el portal de facturación exige. */}
+                    Lo que peor se lee:{' '}
+                    {peores.map((c, i) => (
+                      <span key={c.clave}>
+                        {i > 0 && ' · '}
+                        <span className="font-medium" style={{ color: c.exactitud < 0.7 ? 'var(--bad)' : 'var(--ink)' }}>
+                          {c.clave} {pct(c.exactitud)}
+                        </span>{' '}
+                        ({numero(c.medidos)} {c.medidos === 1 ? 'medición' : 'mediciones'})
+                      </span>
+                    ))}
+                  </p>
+                )}
+                <p className="text-xs" style={{ color: 'var(--faint)' }}>
+                  La medición por corrida, el detalle por foto y el botón para volver a medir viven en{' '}
+                  <Link href="/admin/qa" className="underline underline-offset-2">QA — banco de verdad</Link>.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="card overflow-hidden">

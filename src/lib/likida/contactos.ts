@@ -56,15 +56,30 @@ export class TelefonoAmbiguo extends Error {}
 export async function resolverCuentaOficina(telefono: string): Promise<CuentaOficina | null> {
   // AUDITORÍA 18, ALTO (A23): con techo — corre en el camino caliente del
   // webhook, y sin `acotada` un socket colgado gastaba los 300 s de undici.
+  // AUDITORÍA 24, CRÍTICO (AGEN-1): `activo` entra al select y a la consulta.
+  // La 0294 le enseñó a la base a dar de baja y `session.ts:99` lo respeta,
+  // pero WhatsApp no pasa por Auth ni por `session.ts` — pasa por aquí. El
+  // contador al que la flota le quitó el acceso el viernes seguía siendo
+  // atendido el lunes, comandos de administración incluidos
+  // (`admin_comandos_wa.ts:45` delega su autenticación en esta función).
+  //
+  // El filtro va en la BASE y otra vez en TS, y no es redundancia ociosa: el
+  // `.limit(2)` cuenta filas del servidor, así que sin el filtro de allá dos
+  // cuentas de baja podrían llenar el cupo y esconder a la viva. `activo` es
+  // NULL en una base sin la 0294, y en PostgREST `neq` descarta los NULL —
+  // por eso el `or(...is.null, ...eq.true)` explícito.
   const { data, error } = await acotada(supabaseAdmin()
     .from('app_user')
-    .select('id, tenant_id, rol, nombre, email, telefono')
+    .select('id, tenant_id, rol, nombre, email, telefono, activo')
     .in('telefono', variantesTelefono(telefono))
+    .or('activo.is.null,activo.eq.true')
     .limit(2), 'resolverCuentaOficina'); // dos, para poder DETECTAR la ambigüedad en vez de recortarla
 
   if (error) throw new Error(`cuenta de oficina por teléfono: ${error.message}`);
 
-  const filas = data ?? [];
+  // Solo el `false` EXPLÍCITO da de baja, exactamente como `session.ts:99`: una
+  // fila sin la columna sigue entrando. Una regla, dos capas — no dos reglas.
+  const filas = (data ?? []).filter((f) => (f as { activo?: boolean }).activo !== false);
   if (filas.length === 0) return null;
   if (filas.length > 1) {
     logger.error('cuenta.ambigua', {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   registrarPortales,
   olvidarPortales,
@@ -6,6 +6,8 @@ import {
   exigirTenantRegistrado,
   tenantRegistrado,
   portalesVivos,
+  portalesOperables,
+  pilotoHabilitado,
   PORTALES_CONOCIDOS,
   type FlotaFiscal,
 } from './registro';
@@ -81,9 +83,41 @@ describe('registrarPortales', () => {
 
     const r = registrarPortales({ flota: FLOTA_A, abrirPagina });
 
-    expect(r.registrados).toEqual(['capufe']);
-    expect(r.problemas).toEqual([]);
-    expect(portalesVivos('tenant-a')).toEqual(['capufe']);
+    // Se compara contra `portalesOperables()` y NO contra una lista escrita a
+    // mano ni contra `PORTALES_CONOCIDOS`, y las dos cosas importan:
+    //
+    //  · No una lista literal, porque la tabla ya no es una entrada — es
+    //    CAPUFE más los guiones declarativos de `portales.ts` —, y escribirla
+    //    a mano obligaría a tocar esta prueba cada vez que alguien agregue una
+    //    tabla de selectores, que es justo el trabajo que se volvió barato.
+    //  · No `PORTALES_CONOCIDOS`, porque ese es «qué sé hacer» e incluye los
+    //    guiones que todavía no se han medido contra su portal. Esos quedan
+    //    como CENTINELA a propósito (ver `bloqueado` en la TABLA): el ticket
+    //    sigue yendo con el encargado en vez de quedarse en una cola donde
+    //    nadie lo va a facturar. Por eso salen en `problemas` y no en
+    //    `registrados`.
+    expect(r.registrados).toEqual([...portalesOperables()]);
+    expect(portalesVivos('tenant-a')).toEqual([...portalesOperables()]);
+    // Los que no entran dicen POR QUÉ, uno por uno — y desde el recon del
+    // 28-ago-2026 hay DOS motivos distintos, que es el punto:
+    //
+    //   · «NO se ha medido» — no hemos corrido el pre-vuelo contra ese portal.
+    //     Se arregla con una visita de lectura de dos segundos.
+    //   · el portal no se puede automatizar y no por falta de código: no habla
+    //     TLS, no factura por ticket, o bloquea robots. Eso NO se arregla
+    //     corriendo el pre-vuelo, y mandar a alguien a correrlo sería mandarlo a
+    //     estrellarse contra un 403.
+    expect(r.problemas).toHaveLength(PORTALES_CONOCIDOS.length - portalesOperables().length);
+    for (const p of r.problemas) {
+      expect(p, `motivo poco claro: ${p}`).toMatch(/NO se ha medido|no ofrece HTTPS|no se factura ticket por ticket|bloquea navegadores automatizados/);
+    }
+
+    // AutoZone es el caso concreto: tiene guion escrito, así que antes salía con
+    // «corre el pre-vuelo». El recon midió 403 en tres intentos con tres
+    // configuraciones — correr el pre-vuelo ahí no mide nada, choca.
+    const deAutozone = r.problemas.find((p) => p.startsWith('autozone'));
+    expect(deAutozone, 'autozone debe declarar su bloqueo, no pedir un pre-vuelo').toContain('bloquea navegadores automatizados');
+    expect(deAutozone).not.toContain('NO se ha medido');
     expect(portalesAutomatizados('tenant-a')).toContain('capufe');
     expect(adaptadorDe('tenant-a', 'capufe')?.portal).toContain('facturacionrapida');
   });
@@ -194,12 +228,12 @@ describe('exigirTenantRegistrado', () => {
 describe('conPortales', () => {
   it('registra, corre y desregistra', async () => {
     const dentro = await conPortales({ flota: FLOTA_A, abrirPagina }, async (registro) => {
-      expect(registro.registrados).toEqual(['capufe']);
+      expect(registro.registrados).toEqual([...portalesOperables()]);
       expect(tenantRegistrado()).toBe('tenant-a');
       return portalesVivos('tenant-a');
     });
 
-    expect(dentro).toEqual(['capufe']);
+    expect(dentro).toEqual([...portalesOperables()]);
     expect(tenantRegistrado()).toBeNull();
     expect(portalesVivos('tenant-a')).toEqual([]);
   });
@@ -228,7 +262,7 @@ describe('conPortales', () => {
     await conPortales({ flota: FLOTA_A, abrirPagina }, async () => {});
 
     expect(portalesVivos('tenant-a')).toEqual([]);
-    expect(portalesVivos('tenant-b')).toEqual(['capufe']);
+    expect(portalesVivos('tenant-b')).toEqual([...portalesOperables()]);
   });
 
   it('después del lote, facturar falla CERRADO y dice qué falta', async () => {
@@ -249,5 +283,94 @@ describe('la lista de portales conocidos', () => {
     // Son dos preguntas distintas y se responden distinto: "qué sé hacer" contra
     // "qué puedo hacer ahora con la flota que está cargada".
     expect(portalesVivos('tenant-a')).toEqual([]);
+  });
+});
+
+// PRUEBAS (barrido MEDIO/BAJO): `FACTURACION_PILOTO=si` no tenía ni una
+// prueba — la palanca que decide si el cron intenta el piloto de visión
+// contra un portal SIN adaptador escrito (o lo manda con el encargado como
+// siempre) estaba completamente sin cubrir.
+describe('el piloto de visión: FACTURACION_PILOTO=si', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('apagado por default: portalesOperables() es exactamente PORTALES_CONOCIDOS', () => {
+    vi.stubEnv('FACTURACION_PILOTO', '');
+    expect(pilotoHabilitado()).toBe(false);
+    // Con el piloto apagado, `portalesOperables()` son los portales ESCRITOS
+    // que de verdad pueden emitir — que ya NO es lo mismo que
+    // `PORTALES_CONOCIDOS`. La rama de portales declarativos abrió esa brecha
+    // a propósito: un guion cuyos selectores nunca se midieron se CONOCE (está
+    // en la tabla, se puede ensayar, el panel lo cuenta) pero no OPERA, porque
+    // contarlo como operable le quitaría el ticket al encargado para no
+    // facturarlo nunca. Ver `bloqueado` en la TABLA de registro.ts.
+    expect(portalesOperables()).toEqual(['capufe']);
+    expect(PORTALES_CONOCIDOS.length).toBeGreaterThan(portalesOperables().length);
+  });
+
+  it('cualquier valor que no sea "si" exacto se trata como apagado', () => {
+    vi.stubEnv('FACTURACION_PILOTO', 'true');
+    expect(pilotoHabilitado()).toBe(false);
+    vi.stubEnv('FACTURACION_PILOTO', 'SI');
+    expect(pilotoHabilitado()).toBe(false);
+  });
+
+  it('encendido: suma los pilotables a los que ya tienen adaptador escrito', () => {
+    vi.stubEnv('FACTURACION_PILOTO', 'si');
+    expect(pilotoHabilitado()).toBe(true);
+    const operables = portalesOperables();
+
+    // ⚠️ YA NO SE PUEDE PEDIR QUE ESTÉN **TODOS** LOS CONOCIDOS. Con el piloto
+    // encendido, `operables` es "lo que la máquina va a intentar esta vuelta", y
+    // desde el recon del 28-ago-2026 hay portales que sabemos operar y que aun
+    // así NO se intentan nunca — AutoZone devuelve 403 a cualquier navegador
+    // automatizado. Que el piloto esté encendido no derriba un muro anti-bot.
+    const conocidosSinBloqueo = PORTALES_CONOCIDOS.filter((p) => p !== 'autozone');
+    expect(operables).toEqual(expect.arrayContaining([...conocidosSinBloqueo]));
+    expect(operables, 'el piloto no puede saltarse un bloqueo del catálogo').not.toContain('autozone');
+
+    // 'oxxo_gas' no tiene adaptador escrito (no está en PORTALES_CONOCIDOS) —
+    // si esto falla, alguien le escribió adaptador y debería salir de
+    // COMERCIOS_PILOTABLES o esta prueba debe apuntar a otro comercio.
+    expect(PORTALES_CONOCIDOS).not.toContain('oxxo_gas');
+    expect(operables).toContain('oxxo_gas');
+    expect(operables.length).toBeGreaterThan(PORTALES_CONOCIDOS.length);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LO QUE HABILITA UN PORTAL CON CUENTA YA NO ES UNA CONTRASEÑA (27-ago-2026).
+//
+// Hasta esta fecha, `registrarPortales` recibía las credenciales DESCIFRADAS
+// (`cuentas`) y se las pasaba al piloto para que las TECLEARA en el formulario
+// de login. Ahora recibe `sesiones`: las claves de los portales cuya sesión ya
+// está viva en el contexto del navegador. Lo que se fija aquí es que el camino
+// viejo no volvió por la puerta de atrás y que el nuevo no se degrada solo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('los portales con cuenta se habilitan por SESIÓN, no por contraseña', () => {
+  beforeEach(() => vi.stubEnv('FACTURACION_PILOTO', 'si'));
+  afterEach(() => vi.unstubAllEnvs());
+
+  /** Un comercio pilotable que EXIGE cuenta (`comercios.ts`). */
+  const CON_CUENTA = 'oxxo_gas';
+
+  it('sin sesión NO queda operable: su ticket va con el encargado, como siempre', () => {
+    const r = registrarPortales({ flota: FLOTA_A, abrirPagina });
+    expect(r.registrados).not.toContain(CON_CUENTA);
+    expect(portalesVivos('tenant-a')).not.toContain(CON_CUENTA);
+    // Y NO es un «problema»: es el estado normal de un portal sin vincular.
+    expect(r.problemas.join(' ')).not.toContain(CON_CUENTA);
+  });
+
+  it('con la sesión viva SÍ queda operable, y sin que nadie nos dé una contraseña', () => {
+    const r = registrarPortales({ flota: FLOTA_A, abrirPagina, sesiones: new Set([CON_CUENTA]) });
+    expect(r.registrados).toContain(CON_CUENTA);
+    expect(portalesVivos('tenant-a')).toContain(CON_CUENTA);
+    expect(adaptadorDe('tenant-a', CON_CUENTA)).not.toBeNull();
+  });
+
+  it('un portal SIN cuenta queda operable igual, con sesión o sin ella', () => {
+    // 'enerser' no pide cuenta (`requiereCuenta: false`): permite continuar sin
+    // registro, así que la sesión no cambia nada para él.
+    expect(registrarPortales({ flota: FLOTA_A, abrirPagina }).registrados).toContain('enerser');
   });
 });

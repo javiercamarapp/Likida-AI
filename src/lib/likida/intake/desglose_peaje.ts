@@ -43,6 +43,7 @@ import { toCsv } from '../export';
 import { leerArchivoUniversal, ArchivoNoSoportado } from './archivo';
 import { diasDeDiferencia, VENTANA_DIAS_FECHA, TOLERANCIA_MONTO_MXN } from './consolidado';
 import { registrarCorrida } from '../agentes/corridas';
+import { contextoEvidenciaGps, llaveUnidadDia } from '../peajes/evidencia_gps';
 
 /**
  * La tolerancia del segundo pase: rondeos de centavos entre lo que el
@@ -924,6 +925,7 @@ export const LEYENDAS_BITACORA_RMF_918: readonly string[] = [
   'Solo entran las líneas que cuadraron; las discrepancias y las líneas sin contraparte NO forman parte de esta bitácora.',
   'Este documento NO afirma que el estímulo del 50% de peaje (LIF 2026, art. 20, ap. A, fr. V) proceda. Corren por cuenta del contribuyente: el aviso de marzo con inventario vehicular por buzón tributario (fr. I), pagar con TAG o sistema electrónico y conservar los estados de cuenta (fr. III), la dedicación exclusiva al autotransporte, el uso de la Red Nacional de Autopistas de Cuota, ingresos anuales menores a 300 millones de pesos y no ser parte relacionada (LISR 179).',
   'La base del acreditamiento es el importe pagado SIN IVA con factor 0.5 (fr. IV). Esta bitácora lista el monto conciliado del desglose; NO calcula el estímulo — eso decídelo con tu contador.',
+  'La columna posiciones_gps_dia es evidencia OPERATIVA adicional (cuántas posiciones GPS registró la unidad del viaje el día del cruce), no un requisito de la regla. «sin datos» significa GPS sin conectar o dato faltante — no invalida el cruce conciliado.',
 ];
 
 export interface FilaBitacora {
@@ -934,6 +936,12 @@ export interface FilaBitacora {
   caseta: string;
   tag: string;
   montoConciliado: number;
+  /** Posiciones GPS de la unidad del viaje el día del cruce (evidencia
+   *  operativa, ver leyenda). Solo AFIRMA: n > 0. null = sin datos — GPS sin
+   *  conectar, cero posiciones ese día (indistinguible del anterior sin más
+   *  contexto), viaje sin unidad o fecha ilegible. Jamás un 0 que se leería
+   *  como "la unidad no se movió". */
+  posicionesGpsDia: number | null;
 }
 
 export interface BitacoraRmf918 {
@@ -952,12 +960,17 @@ export interface BitacoraRmf918 {
  */
 export function filasBitacora(
   lineasCuadra: ReadonlyArray<{ fecha: string | null; caseta: string | null; monto: number; tag: string | null; viajeId: string | null }>,
-  viajePorId: ReadonlyMap<string, { folio: string | null; origen: string | null; destino: string | null }>,
+  viajePorId: ReadonlyMap<string, { folio: string | null; origen: string | null; destino: string | null; unidadId?: string | null }>,
+  /** `llaveUnidadDia(unidad, fecha)` → conteo (contextoEvidenciaGps). Sin el
+   *  mapa, toda la columna sale `null` — "sin datos", no un cero. */
+  posicionesPorUnidadDia?: ReadonlyMap<string, number>,
 ): FilaBitacora[] {
   return lineasCuadra
     .filter((l) => l.viajeId !== null)
     .map((l) => {
       const v = viajePorId.get(l.viajeId as string);
+      const unidadId = v?.unidadId ?? null;
+      const n = unidadId && l.fecha ? posicionesPorUnidadDia?.get(llaveUnidadDia(unidadId, l.fecha)) ?? 0 : 0;
       return {
         viajeFolio: v?.folio ?? '',
         origen: v?.origen ?? '',
@@ -966,6 +979,7 @@ export function filasBitacora(
         caseta: l.caseta ?? '',
         tag: l.tag ?? '',
         montoConciliado: l.monto,
+        posicionesGpsDia: n > 0 ? n : null,
       };
     });
 }
@@ -1004,14 +1018,14 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
   }));
 
   const viajeIds = [...new Set(lineas.map((l) => l.viajeId).filter((v): v is string => !!v))];
-  const viajePorId = new Map<string, { folio: string | null; origen: string | null; destino: string | null }>();
+  const viajePorId = new Map<string, { folio: string | null; origen: string | null; destino: string | null; unidadId: string | null }>();
   if (viajeIds.length > 0) {
     // `traerPorIds`: un `.in()` con miles de viajes se recorta a 1,000 en
     // silencio y además viaja en la URL (ver pg.ts).
-    const data = await traerPorIds<{ id: unknown; folio: unknown; origen: unknown; destino: unknown }>(
+    const data = await traerPorIds<{ id: unknown; folio: unknown; origen: unknown; destino: unknown; unidad_id: unknown }>(
       viajeIds,
       (tanda) => acotada(supabaseAdmin()
-        .from('viaje').select('id, folio, origen, destino').eq('tenant_id', tenantId).in('id', tanda), 'bitacora.viajes'),
+        .from('viaje').select('id, folio, origen, destino, unidad_id').eq('tenant_id', tenantId).in('id', tanda), 'bitacora.viajes'),
       'bitacora.viajes',
     );
     for (const v of data) {
@@ -1019,16 +1033,23 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
         folio: (v.folio as string | null) ?? null,
         origen: (v.origen as string | null) ?? null,
         destino: (v.destino as string | null) ?? null,
+        unidadId: (v.unidad_id as string | null) ?? null,
       });
     }
   }
+
+  // La columna `posiciones_gps_dia` sale de la MISMA resolución que usa el
+  // panel (contextoEvidenciaGps): si el panel y la bitácora contaran distinto,
+  // el contralor vería dos verdades. El costo es una consulta viaje→unidad
+  // repetida — barato para un documento que se descarga a mano.
+  const { posicionesPorUnidadDia } = await contextoEvidenciaGps(tenantId, lineas);
 
   return {
     desgloseId,
     proveedor: (desglose.proveedor as string | null) ?? null,
     periodoDesde: (desglose.periodo_desde as string | null) ?? null,
     periodoHasta: (desglose.periodo_hasta as string | null) ?? null,
-    filas: filasBitacora(lineas, viajePorId),
+    filas: filasBitacora(lineas, viajePorId, posicionesPorUnidadDia),
     leyendas: LEYENDAS_BITACORA_RMF_918,
   };
 }
@@ -1054,6 +1075,9 @@ export function bitacoraACsv(b: BitacoraRmf918): string {
       caseta: f.caseta,
       tag: f.tag,
       monto_conciliado: f.montoConciliado,
+      // «sin datos», no 0: un cero se leería como "la unidad no se movió",
+      // que es más de lo que sabemos (ver leyenda).
+      posiciones_gps_dia: f.posicionesGpsDia ?? 'sin datos',
     })));
   return `${encabezado}\n${tabla}`;
 }

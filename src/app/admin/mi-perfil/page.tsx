@@ -48,7 +48,12 @@ export default async function MiPerfilPage({
     const { userId } = await requireSuperadmin();
     const nombre = String(formData.get('nombre') ?? '').trim();
     if (!nombre) redirect('/admin/mi-perfil?error=nombre');
-    await supabaseAdmin().from('app_user').update({ nombre }).eq('id', userId);
+    // ADM-14 (auditoría 24, MEDIO): el `error` de este update se
+    // descartaba — "Guardado" salía SIEMPRE, aunque la escritura fallara.
+    // Viola "fallar cerrado y decirlo": un guardado que no guardó es peor
+    // que uno que dice que falló.
+    const { error } = await supabaseAdmin().from('app_user').update({ nombre }).eq('id', userId);
+    if (error) redirect('/admin/mi-perfil?error=nombre_guardar');
     redirect('/admin/mi-perfil?ok=nombre');
   }
 
@@ -73,7 +78,13 @@ export default async function MiPerfilPage({
     // `?t=` para reventar el caché del navegador — la ruta pública es
     // siempre la misma (mismo userId, mismo nombre de archivo), así que
     // sin esto el navegador podría seguir mostrando la foto vieja.
-    await admin2.from('app_user').update({ avatar_url: `${pub.publicUrl}?t=${Date.now()}` }).eq('id', userId);
+    //
+    // ADM-14: este segundo `error` también se descartaba — el archivo ya
+    // subió a Storage, pero si ESTA escritura falla, `app_user.avatar_url`
+    // se queda apuntando a la foto VIEJA mientras la pantalla dice
+    // "Foto de perfil actualizada."
+    const { error: errAvatar } = await admin2.from('app_user').update({ avatar_url: `${pub.publicUrl}?t=${Date.now()}` }).eq('id', userId);
+    if (errAvatar) redirect('/admin/mi-perfil?error=avatar_guardar');
     redirect('/admin/mi-perfil?ok=avatar');
   }
 
@@ -96,7 +107,10 @@ export default async function MiPerfilPage({
             {sp.error && (
               <div className="flex items-center gap-2 text-sm px-3.5 py-2.5 rounded-lg mb-5" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
                 <AlertTriangle width={15} height={15} strokeWidth={1.75} />
-                {sp.error === 'avatar' ? 'No se pudo subir la foto — intenta con otra imagen.' : 'El nombre no puede quedar vacío.'}
+                {sp.error === 'avatar' ? 'No se pudo subir la foto — intenta con otra imagen.'
+                  : sp.error === 'avatar_guardar' ? 'La foto se subió, pero no se pudo guardar en tu perfil — intenta de nuevo.'
+                    : sp.error === 'nombre_guardar' ? 'No se pudo guardar el nombre — intenta de nuevo.'
+                      : 'El nombre no puede quedar vacío.'}
               </div>
             )}
 

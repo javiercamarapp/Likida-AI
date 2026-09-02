@@ -37,6 +37,15 @@ export interface CorridaCruzada {
   tareasTotal: number | null;
   resumen: Record<string, unknown> | null;
   error: string | null;
+  /**
+   * El gasto MEDIDO de esta corrida (`agente_corrida.costo_usd`, 0123).
+   *
+   * `null` = «esta corrida no midió su gasto», JAMÁS $0 — es la misma regla
+   * que `backoffice.ts:17` defiende en los partes, y aquí importa igual: un
+   * agente al que se le pinta $0.00 se lee como un agente gratis, y el
+   * siguiente que lo mire dejará de buscar dónde se va el dinero.
+   */
+  costoUsd: number | null;
   /** `null` sin fin: una corrida sin cerrar no tiene duración que afirmar. */
   duracionMs: number | null;
 }
@@ -57,11 +66,19 @@ function desdeFila(f: Record<string, unknown>): CorridaCruzada {
     tareasTotal: f.tareas_total == null ? null : Number(f.tareas_total),
     resumen: (f.resumen as Record<string, unknown> | null) ?? null,
     error: (f.error as string | null) ?? null,
+    // `== null` cubre null y undefined de una vez; Number(null) sería 0 y eso
+    // convertiría «no se midió» en «no gastó».
+    costoUsd: f.costo_usd == null ? null : Number(f.costo_usd),
     duracionMs: fin === null ? null : new Date(fin).getTime() - new Date(inicio).getTime(),
   };
 }
 
-const COLUMNAS = 'id, agente, tenant_id, inicio, fin, estado, disparo, tareas_hechas, tareas_total, resumen, error, tenant:tenant_id(nombre)';
+// `costo_usd` faltaba en este select desde que la 0123 lo añadió: la columna
+// se escribía y ninguna pantalla la leía, así que la traza sustituía el gasto
+// MEDIDO por una correlación temporal contra `llm_costo`. La correlación se
+// queda (mide la flota entera en la ventana, que es otra pregunta útil), pero
+// ya no es la única respuesta disponible.
+const COLUMNAS = 'id, agente, tenant_id, inicio, fin, estado, disparo, tareas_hechas, tareas_total, resumen, error, costo_usd, tenant:tenant_id(nombre)';
 
 /**
  * Las últimas `limite` corridas de TODOS los agentes y TODAS las flotas.
@@ -76,6 +93,64 @@ export async function corridasRecientes(limite = 15): Promise<CorridaCruzada[]> 
     .limit(limite), 'corridasRecientes');
   if (error) throw new Error(`corridasRecientes: ${error.message}`);
   return ((data ?? []) as Array<Record<string, unknown>>).map(desdeFila);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADM-10 (auditoría 24, MEDIO) — /admin/corridas pintaba las últimas 50 SIN
+// filtro ni paginación. Con 58 agentes despachando por cron/webhook, triage
+// de fallos ("¿qué le pasó a Cobranza hoy?") era desplazarse a ojo entre
+// filas de todo lo demás. `corridasFiltradas` es el mismo patrón que
+// `buscarConversaciones` (ADM-1): filtros opcionales + `count: 'exact'` real
+// (nunca `.length` de una página) + `range` para no traer la tabla entera.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const CORRIDAS_POR_PAGINA = 50;
+
+export interface PaginaCorridas {
+  corridas: CorridaCruzada[];
+  pagina: number;
+  paginas: number;
+  total: number;
+}
+
+/** El dominio real de `agente_corrida.estado` (CHECK de la 0102) — el mismo
+ *  que ya pinta `PILL` en la página. */
+export const ESTADOS_CORRIDA = ['ok', 'parcial', 'fallo'] as const;
+
+export async function corridasFiltradas(params: {
+  agente?: string;
+  estado?: string;
+  tenantId?: string;
+  pagina?: number;
+} = {}): Promise<PaginaCorridas> {
+  const porPagina = CORRIDAS_POR_PAGINA;
+  const paginaPedida = Math.trunc(params.pagina ?? 1);
+  const pagina = Number.isFinite(paginaPedida) && paginaPedida >= 1 ? paginaPedida : 1;
+
+  let consulta = supabaseAdmin()
+    .from('agente_corrida')
+    .select(COLUMNAS, { count: 'exact' })
+    .order('inicio', { ascending: false })
+    .order('id'); // desempata `inicio` repetido entre páginas
+  if (params.agente) consulta = consulta.eq('agente', params.agente);
+  if (params.estado && (ESTADOS_CORRIDA as readonly string[]).includes(params.estado)) {
+    consulta = consulta.eq('estado', params.estado);
+  }
+  if (params.tenantId) consulta = consulta.eq('tenant_id', params.tenantId);
+
+  const desde = (pagina - 1) * porPagina;
+  const { data, error, count } = await acotada(
+    consulta.range(desde, desde + porPagina - 1), 'corridasFiltradas',
+  );
+  if (error) throw new Error(`corridasFiltradas: ${error.message}`);
+  const total = count ?? 0;
+  const paginas = Math.max(1, Math.ceil(total / porPagina));
+  return {
+    corridas: ((data ?? []) as Array<Record<string, unknown>>).map(desdeFila),
+    pagina: Math.min(pagina, paginas),
+    paginas,
+    total,
+  };
 }
 
 export interface CostoVentana {

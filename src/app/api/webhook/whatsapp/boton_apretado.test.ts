@@ -34,7 +34,12 @@ vi.mock('@/lib/observability/sentry', () => ({ flushObservabilidad: vi.fn(async 
 // cableado el 15-ago-2026). Sin este mock corre el real, que falla CERRADO
 // —una base ilegible cuenta como apagado— y estas pruebas verían cero
 // mensajes procesados por una razón que no es la que están midiendo.
-vi.mock('@/lib/likida/interruptores', () => ({ estaApagado: vi.fn(async () => false) }));
+// AUDITORÍA 24 · AGEN-7: la ruta lee `leerInterruptor` (distingue «apagado»
+// de «no pude leer la palanca»); `estaApagado` se conserva para el resto.
+vi.mock('@/lib/likida/interruptores', () => ({
+  estaApagado: vi.fn(async () => false),
+  leerInterruptor: vi.fn(async () => 'encendido' as const),
+}));
 
 // `after()` fuera de una petición de Next lanza. Se recogen las tareas y se
 // corren a mano para poder AFIRMAR qué llegó al procesador.
@@ -183,7 +188,7 @@ describe('un interactivo que NO es button_reply no se traga como si lo fuera', (
       list_reply: { id: 'fila_3', title: 'Diésel', description: 'Carga de combustible' },
     }));
     expect(processInbound).toHaveBeenCalledWith({
-      from: '5219990001010', waMessageId: 'wamid.LST1', timestampMs: 1714510003000, type: 'other',
+      from: '5219990001010', waMessageId: 'wamid.LST1', timestampMs: 1714510003000, type: 'other', subtipo: 'interactive',
     });
   });
 
@@ -213,14 +218,14 @@ describe('un interactivo que NO es button_reply no se traga como si lo fuera', (
       button_reply: { id: 'cerrar_si', title: 'Sí' },
     }));
     expect(processInbound).toHaveBeenCalledWith({
-      from: '5219990001014', waMessageId: 'wamid.MIX', timestampMs: 1714510003000, type: 'other',
+      from: '5219990001014', waMessageId: 'wamid.MIX', timestampMs: 1714510003000, type: 'other', subtipo: 'interactive',
     });
   });
 
   it('un interactivo sin button_reply no revienta el parseo', async () => {
     await postear(payloadInteractivo('5219990001012', 'wamid.INT1', { type: 'button_reply' }));
     expect(processInbound).toHaveBeenCalledWith({
-      from: '5219990001012', waMessageId: 'wamid.INT1', timestampMs: 1714510003000, type: 'other',
+      from: '5219990001012', waMessageId: 'wamid.INT1', timestampMs: 1714510003000, type: 'other', subtipo: 'interactive',
     });
   });
 

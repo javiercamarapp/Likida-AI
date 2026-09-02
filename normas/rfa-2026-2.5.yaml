@@ -1,0 +1,70 @@
+id: rfa-2026-2.5
+tipo: rfa
+jerarquia: 3
+instrumento: "Resolución de Facilidades Administrativas para 2026"
+articulo_o_regla: "2.5"
+titulo: "Concepto de coordinado (la definición administrativa que completa a LISR 72)"
+citas_en_codigo: ["RFA 2026 regla 2.5"]
+texto_vigente: >
+  Para los efectos de lo establecido en los artículos 72 y 73 de la Ley del ISR, se considerará
+  como coordinado a toda persona moral dedicada exclusivamente al servicio de autotransporte
+  terrestre de carga federal, que agrupa y se integra con otras personas físicas y personas
+  morales similares y complementarias, constituidas con el propósito de proporcionar servicios
+  necesarios para la actividad común de autotransporte terrestre de carga federal. Estos
+  elementos integran una unidad económica con intereses comunes y participan de manera
+  conjunta y en proporciones no identificables con los propósitos siguientes:
+  ---
+  I. Coordinar y convenir los servicios que se presten de manera conjunta, incluyendo las
+  empresas que presten servicios o posean inmuebles dedicados a la actividad de autotransporte
+  terrestre de carga federal. En el caso de centrales o paraderos de autotransporte que no sean
+  integrantes de algún coordinado, podrán tributar en el Título II, Capítulo VII de la Ley del ISR,
+  siempre que estén conformadas por empresas dedicadas al autotransporte de carga federal y
+  presten sus servicios preponderantemente a empresas de autotransporte terrestre de carga
+  federal. Además, dichas centrales o paraderos no aplicarán las facilidades contenidas en las
+  reglas 2.1., 2.2. y 2.9. de la presente Resolución.
+  ---
+  II. Cumplir con las obligaciones fiscales por cuenta de cada uno de sus integrantes en forma
+  global.
+  ---
+  III. Contar con un manual de políticas para la aplicación de los gastos comunes y su prorrateo a
+  cada uno de sus integrantes, el cual deberán tener a disposición de las autoridades fiscales
+  cuando se lo soliciten.
+fecha_publicacion: 2026-02-17
+fecha_vigencia_desde: 2026-02-18
+fecha_vigencia_hasta: 2026-12-31
+fuente_url: "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rfa/rfa/RFA2026_17022026.pdf"
+fuente_tipo: sat_oficial
+estado_verificacion: verificado_fuente_primaria
+nota_verificacion: >
+  Leída el 30-ago-2026 en el PDF oficial del minisitio del SAT (mismo documento que
+  rfa-2026-2.1/2.2/2.3/2.9), bajo el subtítulo propio "Concepto de coordinado".
+por_que_importa: >
+  LISR 72 (ficha lisr-72-73) define "coordinado" en función de QUÉ ACTIVOS administra la
+  persona moral (activos fijos, o activos fijos y terrenos, del autotransporte). Esta regla de la RFA
+  AÑADE una capa distinta: coordinado es una UNIDAD ECONÓMICA de intereses comunes que
+  agrupa a integrantes "en proporciones NO IDENTIFICABLES" — un rasgo que ninguna ficha de
+  ley por sí sola capturaba y que puede pesar en una discusión sobre si una estructura societaria
+  concreta encaja o no en el régimen.
+la_excepcion_de_centrales_y_paraderos: >
+  La fracción I trae una regla con dientes propios: una central o paradero de autotransporte que
+  NO es integrante de ningún coordinado puede tributar en Título II Cap. VII (y aparecer con
+  régimen fiscal 624) si (a) la integran empresas de autotransporte de carga federal y (b) presta
+  sus servicios PREPONDERANTEMENTE a empresas de autotransporte de carga federal — pero
+  esa central o paradero NO PUEDE aplicar las facilidades de las reglas 2.1 (retención 7.5%), 2.2
+  (deducción ciega 8%) ni 2.9 (15% de diésel en efectivo). Es la única excepción documentada en
+  la RFA donde el régimen 624 NO abre automáticamente esas tres facilidades.
+impacto_en_producto: >
+  Si Likida llegara a dar de alta una flota que en realidad es una central o paradero (no un
+  coordinado de transportistas), la regla `REGIMENES_ELEGIBLES = ['624', '612']` de
+  `administracion.ts` (RFA 2.9) la aceptaría por su régimen fiscal SAT sin distinguir este caso —
+  el régimen 624 por sí solo no basta para saber si aplica o no la facilidad del 15%. Esto no es un
+  drift confirmado (Likida hoy vende a flotas y transportistas, no a centrales/paraderos), pero es
+  un hueco de precisión que vale la pena que el fiscalista confirme antes de que el producto entre
+  a ese segmento — ver reporte de esta auditoría.
+pendiente_en_producto: >
+  Sin escritor todavía: `regimenFiscal` no distingue "coordinado de transportistas" de "central o
+  paradero tributando en 624". Ficha creada para que el corpus del agente contador tenga de
+  dónde citar esta distinción si se le pregunta.
+verificado_por: "auditoría fiscal semanal, área 5 (regímenes del autotransporte), 30-ago-2026"
+verificado_el: 2026-08-30
+usado_en_codigo: []

@@ -4,7 +4,8 @@ import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../resumen-visual';
-import { FilaAcciones, type AccionHuerfano, type ViajeVivo } from './acciones';
+import { FilaAcciones, type AccionHuerfano } from './acciones';
+import type { BuscarViaje } from './combo-viaje';
 
 /** Por qué quedó suelto, en palabras de oficina. Un motivo nuevo cae al
  *  crudo en gris — visible, no roto. */
@@ -20,11 +21,12 @@ const MOTIVO: Record<MotivoHuerfano, string> = {
  * las dos salidas reales: adjuntar a un viaje VIVO o descartar. La foto no
  * se enseña (candado del 2-ago); el dato extraído sí.
  */
-export function VistaHuerfanos({ pendientes, viajesVivos, cargados, totalPendientes, acciones }: {
+export function VistaHuerfanos({ pendientes, hayViajesVivos, buscarViaje, totalPendientes, acciones }: {
   pendientes: HuerfanoDeFlota[];
-  viajesVivos: ViajeVivo[];
-  /** Cuántos viajes recientes cargó la page — el alcance real del selector. */
-  cargados: number;
+  /** FE-3: ya no se manda la lista completa de viajes vivos — el combo
+   *  pregunta al servidor (`buscarViaje`), como en Despacho (FE-2). */
+  hayViajesVivos: boolean;
+  buscarViaje: BuscarViaje;
   /** FE-13: cuántos comprobantes sueltos hay DE VERDAD (`count exact`), no
    *  cuántos cupieron en la página. `getHuerfanosDeFlota` trae 200 como tope,
    *  y enseñar "200" a secas se lee como el total de la bandeja. `null` = no
@@ -101,8 +103,8 @@ export function VistaHuerfanos({ pendientes, viajesVivos, cargados, totalPendien
                           {MOTIVO[h.motivo] ?? h.motivo}
                         </td>
                         <td className="py-2.5 pl-4">
-                          <FilaAcciones huerfanoId={h.id} viajesVivos={viajesVivos}
-                            sinMonto={h.monto <= 0} cargados={cargados}
+                          <FilaAcciones huerfanoId={h.id} hayViajesVivos={hayViajesVivos}
+                            sinMonto={h.monto <= 0} buscarViaje={buscarViaje}
                             adjuntar={acciones.adjuntar} descartar={acciones.descartar} />
                         </td>
                       </tr>

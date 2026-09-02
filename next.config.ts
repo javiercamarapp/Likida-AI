@@ -1,6 +1,51 @@
 import type { NextConfig } from 'next';
+import { readdirSync } from 'node:fs';
+
+/**
+ * La ÚLTIMA migración del repo (`0276` de `0276_prospecto_empleados.sql`),
+ * leída EN BUILD y publicada como `process.env.LIKIDA_MIGRACION_CODIGO`.
+ *
+ * AUDITORÍA 24, OP-P1 (BLOQUEANTE): producción corría con la base en 0271 y
+ * el código de master pidiendo la forma 0272 de `poliza_datos_tenant`, y nada
+ * lo decía. `/api/health` compara este número contra lo que la base registra
+ * aplicado (`migraciones_aplicadas()`, 0234) y se degrada si la base va atrás.
+ * Se lee aquí, en build, porque el bundle de la función EXCLUYE `supabase/**`
+ * (ver `outputFileTracingExcludes` abajo): en Vercel no hay carpeta que leer
+ * en runtime. `next.config.ts` corre en la Mac o en el runner con el repo
+ * entero, y `env` inlinea el valor en el bundle.
+ */
+function ultimaMigracionDelRepo(): string {
+  const prefijos = readdirSync('supabase/migrations')
+    .map((f) => /^(\d{4})_.*\.sql$/.exec(f)?.[1])
+    .filter((p): p is string => p !== undefined)
+    .sort();
+  if (prefijos.length === 0) throw new Error('supabase/migrations sin migraciones: el health no podría comparar código y base');
+  return prefijos[prefijos.length - 1];
+}
 
 const nextConfig: NextConfig = {
+  env: { LIKIDA_MIGRACION_CODIGO: ultimaMigracionDelRepo() },
+  // SEG-8 (auditoría 24): `x-powered-by: Next.js` no aporta nada al cliente y
+  // le dice al que escanea qué framework y, por versión, qué CVE probar.
+  poweredByHeader: false,
+  // ── FE-1 (auditoría 24, CRÍTICO): LAS SUBIDAS POR SERVER ACTION MORÍAN EN 1 MB ──
+  // Next capa el cuerpo de una server action a 1 MB por default. Las pantallas
+  // del panel anuncian topes de 2, 4 y 8 MB (`MAX_XML_BYTES`, `MAX_FOTO_BYTES`,
+  // `MAX_DESGLOSE_BYTES`, `MAX_IMPORT_BYTES` en `src/app/dashboard/**`) y los
+  // validan DENTRO de la action — que nunca corría: el runtime rebotaba antes
+  // con una excepción que el error boundary pintaba como «No se pudo cargar el
+  // panel». El consolidado mensual de TAG de 800 tractos, la foto de celular
+  // de una factura de proveedor y el CSV de 2,000 viajes del TMS —las tres
+  // puertas de entrada masiva— no funcionaban con archivos reales.
+  //
+  // 10 MB = el mayor `MAX_*_BYTES` (8 MB) + margen para la envoltura multipart
+  // (la doc de Next pide dejar holgura). La prueba
+  // `scripts/ci/next_config_subidas_aud24.test.ts` lee este archivo y los
+  // `MAX_*_BYTES` y falla si alguien sube un tope de pantalla por encima de
+  // este límite, o lo baja aquí por debajo de lo que las pantallas prometen.
+  experimental: {
+    serverActions: { bodySizeLimit: '10mb' },
+  },
   // `zxing-wasm` va aquí a propósito: el lector es WebAssembly y el `.wasm` se
   // lee de node_modules en tiempo de ejecución (ver cfdi.ts). Si el bundler se
   // lo lleva, el binario deja de estar donde `require.resolve` lo busca y el
@@ -224,7 +269,8 @@ const nextConfig: NextConfig = {
           // origen HTTPS real, así que restringirla a producción evita
           // publicar una cabecera que en `localhost` no hace nada, no una
           // que haga daño — pero se sigue el mismo patrón por consistencia.
-          ...(produccion ? [{ key: 'Strict-Transport-Security', value: 'max-age=31536000' }] : []),
+          // SEG-5 (auditoría 24): mismo valor que `HSTS` en `src/proxy.ts`.
+          ...(produccion ? [{ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' }] : []),
         ],
       },
     ];

@@ -87,9 +87,13 @@ export function SecretoUnaVez({ enClaro }: { enClaro: string }) {
  * El alta. Tras emitir, el resultado ENSEÑA el secreto una vez (arriba); el
  * renglón nuevo de la lista solo trae la pista.
  */
-export function FormaEmision({ accion, areas }: {
+export function FormaEmision({ accion, areas, vigencias, vigenciaDefault }: {
   accion: AccionForma;
   areas: ReadonlyArray<OpcionArea>;
+  /** SEG-8: cuánto vale la llave. Como PROP, igual que las áreas — este
+   *  componente no puede importar del módulo que arrastra `supabaseAdmin`. */
+  vigencias: ReadonlyArray<{ valor: string; rotulo: string }>;
+  vigenciaDefault: string;
 }) {
   const [estado, despachar] = useActionState(accion, null);
 
@@ -120,6 +124,22 @@ export function FormaEmision({ accion, areas }: {
             <p className={AYUDA} style={{ color: 'var(--faint)' }}>
               {areas.map((a) => `${a.rotulo}: ${a.detalle}`).join(' ')} Cada área
               alcanza también las de abajo — dale a cada sistema la más angosta que le sirva.
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="llave-vigencia" className={ETIQUETA}>Hasta cuándo vale</label>
+            <select id="llave-vigencia" name="vigencia" defaultValue={vigenciaDefault}
+              className={CAMPO} style={{ background: 'var(--surface)' }}>
+              {vigencias.map((v) => (
+                <option key={v.valor} value={v.valor}>{v.rotulo}</option>
+              ))}
+            </select>
+            <p className={AYUDA} style={{ color: 'var(--faint)' }}>
+              Pasada esa fecha la llave deja de servir sola, sin que nadie tenga que
+              acordarse de revocarla — que es lo que salva a una llave olvidada en el
+              repositorio de tu proveedor. «Sin caducidad» solo para lo que de verdad
+              nadie va a rotar.
             </p>
           </div>
         </div>

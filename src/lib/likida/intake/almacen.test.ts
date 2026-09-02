@@ -23,6 +23,20 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 
+// El reintento REAL (predicado, backoff, conteo) pero sin dormir de verdad:
+// el backoff exponencial real serían 1.6 s de pared por caso de saturación.
+vi.mock('@/lib/supabase/reintento', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/supabase/reintento')>();
+  return {
+    ...real,
+    conReintentoDeSaturacion: <T,>(
+      fn: () => Promise<T>, esTransitorio: (r: T) => boolean,
+      opts?: import('@/lib/supabase/reintento').OpcionesReintento,
+    ) => real.conReintentoDeSaturacion(fn, esTransitorio, { ...opts, dormir: async () => {} }),
+  };
+});
+
+const { logger } = await import('@/lib/logger');
 const { subirComprobante, ligaComprobante } = await import('./almacen');
 
 const JPG = 'data:image/jpeg;base64,AAAA';
@@ -58,6 +72,37 @@ describe('subirComprobante', () => {
   it('respeta el tipo real: un png no se guarda como .jpg', async () => {
     upload.mockResolvedValue({ error: null });
     expect(await subirComprobante('t1', 'v1', 'H', 'data:image/png;base64,AAAA')).toBe('t1/v1/H.png');
+  });
+
+  // ── LA SATURACIÓN DEL 28-AGO-2026, DEL LADO DEL CHOFER ────────────────────
+  // El pool de Storage saturado (por las firmas en ráfaga del panel de QA)
+  // rebotaba CUALQUIER petición con «Too many connections issued to the
+  // database» — y aquí ese rebote costaba el comprobante: el gasto entraba
+  // sin su imagen (art. 30 CFF) por un blip de 2 segundos. El reintento es
+  // SOLO para esa firma, y queda declarado.
+  it('la saturación que cede al reintento NO cuesta el comprobante — y se declara en el log', async () => {
+    upload
+      .mockResolvedValueOnce({ error: { message: 'Too many connections issued to the database' } })
+      .mockResolvedValueOnce({ error: null });
+    const r = await subirComprobante('t1', 'v1', 'HASH', JPG);
+    expect(r).toBe('t1/v1/HASH.jpg');          // el comprobante se guardó
+    expect(upload).toHaveBeenCalledTimes(2);   // exactamente un reintento
+    expect(logger.warn).toHaveBeenCalledWith('comprobante.subida_reintentada',
+      expect.objectContaining({ viaje: 'v1', intento: 1, motivo: 'saturación de Storage' }));
+  });
+
+  it('la saturación que NO cede: 3 intentos, undefined, y el fallo DICE cuántos costó', async () => {
+    upload.mockResolvedValue({ error: { message: 'Too many connections issued to the database' } });
+    await expect(subirComprobante('t1', 'v1', 'H', JPG)).resolves.toBeUndefined();
+    expect(upload).toHaveBeenCalledTimes(3);   // 1 + REINTENTOS_SATURACION_MAX
+    expect(logger.error).toHaveBeenCalledWith('comprobante.subida_falló',
+      expect.objectContaining({ err: expect.stringContaining('tras 3 intentos con espera exponencial') }));
+  });
+
+  it('un error que NO es saturación no se reintenta — fallaría igual y escondería la causa', async () => {
+    upload.mockResolvedValue({ error: { message: 'bucket not found' } });
+    await expect(subirComprobante('t1', 'v1', 'H', JPG)).resolves.toBeUndefined();
+    expect(upload).toHaveBeenCalledTimes(1);
   });
 });
 

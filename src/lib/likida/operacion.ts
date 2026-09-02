@@ -14,11 +14,14 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { notificarAsignacion } from './notificar';
+import { evaluarYAvisarCcpDespacho } from './carta_porte_wa';
+import { enviarBriefingInicio } from './briefing_inicio_wa';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { conteo, traerTodo } from './pg';
 import { DatoInvalido } from './errores';
 import { esNumero, esNumeroONulo, esObjeto, esTextoONulo, formaInesperada } from './comercial';
+import { CONECTORES_GPS } from './conectores/gps';
 
 /** Los tres estatus que `viaje` de verdad admite (`viaje_estatus_dominio`,
  *  0025). Un cuarto valor no se traduce ni se esconde: se cuenta aparte. */
@@ -139,6 +142,14 @@ export interface UnidadRow {
   polizaVence: string | null;
   permisoSictVence: string | null;
   verificacionVence: string | null;
+  /** El amarre con el GPS (0176). Los dos `null` = esta unidad no tiene
+   *  dispositivo ligado, y el poller cuenta sus lecturas como huérfanas. */
+  gpsProveedor: string | null;
+  gpsDeviceId: string | null;
+  /** Última vez que el poller trajo una posición de ESTA unidad. `null` =
+   *  nunca — es lo que separa «ligada» de «entrando de verdad», y por eso se
+   *  enseña aparte del device id. */
+  gpsVistoEn: string | null;
   ordenesAbiertas: number;
   activo: boolean;
 }
@@ -150,7 +161,7 @@ export async function getUnidades(tenantId: string, hoy = new Date()): Promise<U
   const [unidades, ordenes] = await Promise.all([
     traerTodo<Record<string, unknown>>(
       (d, h) => acotada(admin.from('unidad')
-        .select('id, numero_economico, placas, marca, modelo, anio, estado, km_actual, poliza_vence, permiso_sict_vence, verificacion_vence, activo', conteo(d))
+        .select('id, numero_economico, placas, marca, modelo, anio, estado, km_actual, poliza_vence, permiso_sict_vence, verificacion_vence, gps_proveedor, gps_device_id, gps_visto_en, activo', conteo(d))
         .eq('tenant_id', tenantId).order('numero_economico').range(d, h), 'getUnidades.unidad'),
       'getUnidades.unidad',
     ),
@@ -205,6 +216,9 @@ export async function getUnidades(tenantId: string, hoy = new Date()): Promise<U
       polizaVence: (u.poliza_vence as string) || null,
       permisoSictVence: (u.permiso_sict_vence as string) || null,
       verificacionVence: (u.verificacion_vence as string) || null,
+      gpsProveedor: (u.gps_proveedor as string) || null,
+      gpsDeviceId: (u.gps_device_id as string) || null,
+      gpsVistoEn: (u.gps_visto_en as string) || null,
       ordenesAbiertas: abiertasPorUnidad.get(u.id as string) ?? 0,
       activo: Boolean(u.activo),
     };
@@ -524,6 +538,39 @@ async function unidadPropia(tenantId: string, unidadId: string): Promise<boolean
 }
 
 /**
+ * ¿Esa unidad SIGUE en el parque? (auditoría 20, H4).
+ *
+ * Se lee la bandera y NO se filtra con un `.eq('activo', true)` en el WHERE a
+ * propósito: "no es de tu flota" y "está dada de baja" son dos errores
+ * distintos, y el segundo tiene una salida (reactivarla en Unidades) que el
+ * primero no. Colapsarlos en "no pertenece a esta flota" mandaría al
+ * despachador a buscar un problema de permisos que no existe.
+ *
+ * Los combos de `/dashboard/despacho` ya no la ofrecen (`buscarCatalogo`
+ * filtra `activo`), pero eso es la UI: un POST directo al server action con el
+ * UUID de un camión vendido lo volvería a poner a rodar en el papel.
+ */
+async function unidadDeBaja(tenantId: string, unidadId: string): Promise<boolean> {
+  const filas = await traerTodo<{ activo: unknown }>(
+    (d, h) => acotada(supabaseAdmin().from('unidad').select('id, activo', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', unidadId).order('id').range(d, h), 'unidadDeBaja'),
+    'unidadDeBaja',
+  );
+  return filas.some((u) => u.activo === false);
+}
+
+/** El gemelo de `unidadDeBaja` para el chofer: un operador dado de baja no
+ *  recibe viajes nuevos ni por POST directo. Ver `CambiosOperador.activo`. */
+async function operadorDeBaja(tenantId: string, operadorId: string): Promise<boolean> {
+  const filas = await traerTodo<{ activo: unknown }>(
+    (d, h) => acotada(supabaseAdmin().from('operador').select('id, activo', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', operadorId).order('id').range(d, h), 'operadorDeBaja'),
+    'operadorDeBaja',
+  );
+  return filas.some((o) => o.activo === false);
+}
+
+/**
  * Comprueba que un cliente sea del tenant, ANTES de escribirlo en `viaje`.
  *
  * Mismo candado que `operadorId` y `unidadId`, por la misma razón exacta: el
@@ -583,11 +630,24 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
       'crearViaje.operadorPropio',
     );
     if (propio.length === 0) throw new Error('crearViaje: el operador no pertenece a esta flota');
+    // AUDITORÍA 20 (H2): y tiene que SEGUIR trabajando aquí. Un chofer dado de
+    // baja ya no aparece en el combo (`buscarCatalogo` filtra `activo`), pero
+    // eso es la UI: sin este candado, un POST directo —o una pestaña vieja
+    // abierta antes de la baja— le asigna un viaje a alguien que el bot de
+    // WhatsApp ya no reconoce, y ese viaje nace sin quien lo pueda reportar.
+    if (await operadorDeBaja(tenantId, v.operadorId)) {
+      throw new DatoInvalido('Ese operador está dado de baja en tu flota. Vuelve a marcarlo como activo en Operadores, o asigna el viaje a otro chofer.');
+    }
   }
 
   // Mismo candado, para `unidadId` (auditoría 10, MEDIO) — ver `unidadPropia`.
   if (v.unidadId && !(await unidadPropia(tenantId, v.unidadId))) {
     throw new Error('crearViaje: la unidad no pertenece a esta flota');
+  }
+  // Y su gemelo de la auditoría 20 (H4): un camión vendido o siniestrado no
+  // sale a un viaje NUEVO. Ver `unidadDeBaja`.
+  if (v.unidadId && (await unidadDeBaja(tenantId, v.unidadId))) {
+    throw new DatoInvalido('Esa unidad está dada de baja. Si volvió al parque, vuelve a ponerla disponible en Unidades antes de asignarla.');
   }
 
   // Y el tercero, para el cliente que paga el flete (14-ago-2026).
@@ -629,6 +689,25 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
   // de despacho. El fallo se loguea y el aviso se puede reintentar desde el
   // panel.
   if (v.operadorId) await avisarAlChofer(tenantId, v.operadorId, id as string).catch(() => {});
+
+  // EL DISPARO DE CARTA PORTE (Fase B, hueco H1): en cuanto el viaje existe se
+  // corre el clasificador legal y el jefe recibe lo que falta declarar (o el
+  // veredicto con fundamento). Mismo best-effort que el aviso al chofer: el
+  // viaje YA está creado; un WhatsApp caído no lo deshace, y el semáforo del
+  // panel sigue diciendo la verdad. El fallo queda logueado adentro.
+  await evaluarYAvisarCcpDespacho(tenantId, id as string).catch((e) => {
+    logger.warn('ccp.disparo_fallo', { viaje: id, err: e instanceof Error ? e.message : String(e) });
+  });
+
+  // EL BRIEFING DE INICIO (0208): primer intento, mejor esfuerzo. Es texto
+  // libre — solo entra si la ventana de 24 h del chofer está abierta; si no,
+  // el sello queda en NULL y el reintento sale cuando el chofer confirme
+  // (processor). Un `fallo` aquí es lo esperado, no una emergencia.
+  if (v.operadorId) {
+    await enviarBriefingInicio(tenantId, id as string).catch((e) => {
+      logger.warn('briefing.disparo_fallo', { viaje: id, err: e instanceof Error ? e.message : String(e) });
+    });
+  }
 
   return id as string;
 }
@@ -733,6 +812,12 @@ export async function asignarUnidad(tenantId: string, viajeId: string, unidadId:
   if (unidadId && !(await unidadPropia(tenantId, unidadId))) {
     throw new Error('asignarUnidad: la unidad no pertenece a esta flota');
   }
+  // AUDITORÍA 20 (H4): tampoco se le asigna un viaje a un camión dado de baja.
+  // Desasignar (`unidadId === null`) SÍ se permite siempre — es justo lo que
+  // hay que poder hacer con el viaje del camión que se acaba de chocar.
+  if (unidadId && (await unidadDeBaja(tenantId, unidadId))) {
+    throw new DatoInvalido('Esa unidad está dada de baja. Si volvió al parque, vuelve a ponerla disponible en Unidades antes de asignarla.');
+  }
 
   // El `.select('id')` no es adorno: con el id de un viaje de OTRA flota este
   // UPDATE toca cero filas y Postgres no lo considera un error. Sin mirar lo
@@ -747,11 +832,82 @@ export async function asignarUnidad(tenantId: string, viajeId: string, unidadId:
   }
 }
 
-export async function cambiarEstadoUnidad(tenantId: string, unidadId: string, estado: string): Promise<void> {
-  const { error } = await acotada(supabaseAdmin().from('unidad')
-    .update({ estado })
-    .eq('id', unidadId).eq('tenant_id', tenantId), 'cambiarEstadoUnidad');
+/**
+ * Los cuatro valores que `unidad_estado_dominio` (0047) admite, en palabras de
+ * persona. Vive aquí y no en la vista porque el SERVIDOR es quien tiene que
+ * rechazar un quinto valor: la pantalla manda botones, pero una server action
+ * es un endpoint POST y `estado` llega como texto libre. Sin este cerco, un
+ * valor fuera del dominio lo rechazaría Postgres con el nombre del constraint
+ * en la cara del usuario — y `ESTADO_UNIDAD` de la vista lo pintaría crudo.
+ */
+export const ESTADOS_UNIDAD: Record<string, string> = {
+  disponible: 'Disponible',
+  en_ruta: 'En ruta',
+  taller: 'En taller',
+  baja: 'Dada de baja',
+};
+
+/** Los estados desde los que la unidad SIGUE siendo parte del parque. Un
+ *  camión vendido o siniestrado (`baja`) no lo es: deja de contar y deja de
+ *  ofrecerse. `en_ruta` no se ofrece como botón —lo mueve el viaje, no una
+ *  persona—, pero sí es un origen válido del que salir. */
+const ESTADO_ES_BAJA = (estado: string) => estado === 'baja';
+
+/**
+ * Mueve el estado operativo de una unidad — la puerta que faltaba (auditoría
+ * 20, H4): la función existía desde la 0047 SIN UN SOLO LLAMADOR, así que
+ * `taller` y `baja` eran inalcanzables desde cualquier pantalla y la etiqueta
+ * "Dada de baja" que `unidades/vista.tsx` ya pintaba esperaba un disparador
+ * que nunca existió. Un camión vendido o chocado quedaba "disponible" para
+ * siempre: el despacho lo seguía ofreciendo y las alertas de vigencias lo
+ * seguían contando.
+ *
+ * ── `estado` Y `activo` SE MUEVEN JUNTOS, a propósito ──────────────────────
+ * `unidad.activo` es lo que filtran `buscarCatalogo` (los combos de despacho)
+ * y `contarCatalogo`; `unidad.estado` es lo que la pantalla pinta. Dejarlos
+ * desacoplados produce las dos mentiras simétricas: una unidad "dada de baja"
+ * que el despacho sigue ofreciendo, o una "disponible" que no aparece en
+ * ningún combo. La baja apaga `activo`; volver a cualquier otro estado lo
+ * enciende. Nunca se BORRA la fila: sus viajes, sus órdenes de taller y sus
+ * vigencias son el historial del activo.
+ *
+ * ANCLADO A `tenant_id` EN EL WHERE Y COMPROBADO CON `.select('id')` después,
+ * igual que `editarUnidad`: con el id de una unidad de OTRA flota el UPDATE
+ * toca cero filas y Postgres no lo llama error — la pantalla diría "dada de
+ * baja" sobre un camión que sigue rodando.
+ */
+export async function cambiarEstadoUnidad(
+  tenantId: string,
+  unidadId: string,
+  estado: string,
+  actor?: { id?: string; email?: string },
+): Promise<void> {
+  if (!UUID_RE.test(unidadId)) throw new DatoInvalido('No se reconoce esa unidad. Vuelve a abrir la pantalla.');
+  if (!Object.hasOwn(ESTADOS_UNIDAD, estado)) {
+    throw new DatoInvalido(`"${estado}" no es un estado de unidad. Los válidos son: ${Object.keys(ESTADOS_UNIDAD).join(', ')}.`);
+  }
+
+  const { data, error } = await acotada(supabaseAdmin().from('unidad')
+    .update({ estado, activo: !ESTADO_ES_BAJA(estado) })
+    .eq('id', unidadId).eq('tenant_id', tenantId).select('id'), 'cambiarEstadoUnidad');
   if (error) throw new Error(`cambiarEstadoUnidad: ${error.message}`);
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new DatoInvalido('No se encontró esa unidad en tu flota. Puede que alguien la haya borrado — recarga la pantalla.');
+  }
+
+  // La bitácora es parte del acto, no un adorno: "quién dio de baja este
+  // camión y cuándo" es la pregunta del seguro, del contador que lo deduce y
+  // del socio que pregunta dónde quedó. `anotarBitacora` NUNCA lanza — una
+  // falla al anotar no deshace una baja que ya ocurrió, se loguea.
+  const { anotarBitacora } = await import('./bitacora_escritura');
+  await anotarBitacora({
+    tenantId,
+    actor: actor ?? {},
+    accion: ESTADO_ES_BAJA(estado) ? 'unidad.baja' : 'unidad.estado',
+    entidad: 'unidad',
+    entidadId: unidadId,
+    detalle: { estado, activo: !ESTADO_ES_BAJA(estado) },
+  });
 }
 
 export interface NuevaUnidad {
@@ -766,6 +922,16 @@ export interface NuevaUnidad {
   polizaVence?: string | null;
   permisoSictVence?: string | null;
   verificacionVence?: string | null;
+  // ── EL AMARRE CON EL GPS (columnas de la 0176) ──────────────────────────
+  // Sin estos dos, el poller de posiciones trae lecturas y las cuenta TODAS
+  // como huérfanas: `sincronizar_gps.ts` casa cada lectura buscando la unidad
+  // por `(tenant_id, gps_proveedor, gps_device_id)`. Las columnas existían
+  // desde la 0176 y no tenían un solo escritor en `src/` — el eslabón que
+  // faltaba para que el GPS llegara a la pantalla.
+  /** Con cuál conector del catálogo se ligó (`samsara`, `wialon`…). */
+  gpsProveedor?: string | null;
+  /** El id del dispositivo EN EL SISTEMA DEL PROVEEDOR. */
+  gpsDeviceId?: string | null;
 }
 
 /** Lo que llega del formulario de unidades: puros strings. `''` = sin dato. */
@@ -778,6 +944,8 @@ export interface UnidadCruda {
   polizaVence: string;
   permisoSictVence: string;
   verificacionVence: string;
+  gpsProveedor: string;
+  gpsDeviceId: string;
 }
 
 /** `''` → `null`; largo un texto opcional. Mismo criterio que clientes.ts. */
@@ -807,6 +975,46 @@ function fechaOpcional(crudo: string, campo: string): string | null {
 /** El primer año de una unidad de carga que siga rodando; espeja
  *  `ANIO_MIN_UNIDAD` de la API para que las dos puertas admitan lo mismo. */
 const ANIO_MIN = 1950;
+
+/** Los ids válidos de proveedor, DERIVADOS del catálogo. Escribir la lista a
+ *  mano aquí la desincronizaría del día que entre el sexto proveedor, y una
+ *  unidad ligada a un proveedor inexistente no la lee ningún poller. */
+const IDS_GPS_VALIDOS: readonly string[] = CONECTORES_GPS.map((c) => c.id);
+
+/** El tope del id de dispositivo. Es el MISMO que aplica `posicionValida` en
+ *  `sincronizar_gps.ts`: aceptar aquí uno más largo del que el poller admite
+ *  produciría una unidad que jamás casa con su lectura. */
+const TOPE_DEVICE_ID = 200;
+
+/**
+ * El amarre unidad↔dispositivo, validado como una sola cosa.
+ *
+ * Los dos campos van JUNTOS o no van, y esa es la regla que evita el estado
+ * inútil: `sincronizar_gps.ts` filtra por `gps_proveedor` Y por
+ * `gps_device_id`, así que una unidad con solo uno de los dos nunca casa con
+ * ninguna lectura — se vería configurada y no traería nada. El índice parcial
+ * `uq_unidad_gps` (0176) refuerza lo mismo del lado de la base.
+ */
+function validarAmarreGps(c: UnidadCruda): { gpsProveedor: string | null; gpsDeviceId: string | null } {
+  const proveedor = c.gpsProveedor.trim();
+  const device = c.gpsDeviceId.trim();
+
+  if (proveedor === '' && device === '') return { gpsProveedor: null, gpsDeviceId: null };
+
+  if (proveedor === '') {
+    throw new DatoInvalido('Pusiste el número de dispositivo pero no el proveedor de GPS. Sin el proveedor la lectura no se puede casar con esta unidad — elige uno o deja los dos vacíos.');
+  }
+  if (!IDS_GPS_VALIDOS.includes(proveedor)) {
+    throw new DatoInvalido(`«${proveedor}» no es un proveedor de rastreo del catálogo. Los que hay: ${IDS_GPS_VALIDOS.join(', ')}.`);
+  }
+  if (device === '') {
+    throw new DatoInvalido('Falta el número de dispositivo que te da tu proveedor de GPS. Sin él las posiciones llegan y no se sabe de qué unidad son.');
+  }
+  if (device.length > TOPE_DEVICE_ID) {
+    throw new DatoInvalido(`El número de dispositivo no puede pasar de ${TOPE_DEVICE_ID} caracteres.`);
+  }
+  return { gpsProveedor: proveedor, gpsDeviceId: device };
+}
 
 /**
  * Del formulario al motor. PURA: se prueba sin pantalla ni base.
@@ -844,6 +1052,7 @@ export function validarUnidad(c: UnidadCruda, hoy = new Date()): UnidadValida {
     polizaVence: fechaOpcional(c.polizaVence, 'La fecha de la póliza'),
     permisoSictVence: fechaOpcional(c.permisoSictVence, 'La fecha del permiso SICT'),
     verificacionVence: fechaOpcional(c.verificacionVence, 'La fecha de la verificación'),
+    ...validarAmarreGps(c),
   };
 }
 
@@ -857,6 +1066,8 @@ export interface UnidadValida {
   polizaVence: string | null;
   permisoSictVence: string | null;
   verificacionVence: string | null;
+  gpsProveedor: string | null;
+  gpsDeviceId: string | null;
 }
 
 /** `NuevaUnidad` (tipada, como llega del panel o de `POST /v1/unidades`) a la
@@ -872,6 +1083,8 @@ function aCruda(u: NuevaUnidad): UnidadCruda {
     polizaVence: u.polizaVence ?? '',
     permisoSictVence: u.permisoSictVence ?? '',
     verificacionVence: u.verificacionVence ?? '',
+    gpsProveedor: u.gpsProveedor ?? '',
+    gpsDeviceId: u.gpsDeviceId ?? '',
   };
 }
 
@@ -895,6 +1108,8 @@ export async function crearUnidad(tenantId: string, u: NuevaUnidad): Promise<str
     poliza_vence: v.polizaVence,
     permiso_sict_vence: v.permisoSictVence,
     verificacion_vence: v.verificacionVence,
+    gps_proveedor: v.gpsProveedor,
+    gps_device_id: v.gpsDeviceId,
   }).select('id').single(), 'crearUnidad');
   if (error) throw new Error(`crearUnidad: ${error.message}`);
   const id = (data as { id?: unknown } | null)?.id;
@@ -919,6 +1134,8 @@ export async function editarUnidad(tenantId: string, unidadId: string, u: NuevaU
     poliza_vence: v.polizaVence,
     permiso_sict_vence: v.permisoSictVence,
     verificacion_vence: v.verificacionVence,
+    gps_proveedor: v.gpsProveedor,
+    gps_device_id: v.gpsDeviceId,
   }).eq('id', unidadId).eq('tenant_id', tenantId).select('id'), 'editarUnidad');
 
   if (error) {
@@ -926,6 +1143,13 @@ export async function editarUnidad(tenantId: string, unidadId: string, u: NuevaU
     // choque esperable, y es de captura: se dice en palabras de quien capturó.
     if (error.message.includes('unidad_economico_unico')) {
       throw new DatoInvalido(`Ya tienes una unidad con el número económico "${v.numeroEconomico}". Si es otra, distínguela en el número.`);
+    }
+    // El segundo choque esperable desde la 0176: `uq_unidad_gps` es parcial
+    // sobre (tenant_id, gps_proveedor, gps_device_id). Un dispositivo = una
+    // unidad por flota; sin traducirlo, quien captura vería el nombre del
+    // índice y no sabría que el número ya está en otro camión.
+    if (error.message.includes('uq_unidad_gps')) {
+      throw new DatoInvalido(`El dispositivo "${v.gpsDeviceId}" ya está ligado a otra unidad de tu flota con ese mismo proveedor. Un dispositivo solo puede pertenecer a un camión: quítaselo al otro primero.`);
     }
     throw new Error(`editarUnidad: ${error.message}`);
   }
@@ -959,6 +1183,19 @@ export interface NuevaIncidencia {
    *  ('autorizada'/'rechazada') NUNCA se escribe al crear: la firma un humano
    *  después, con quién y cuándo (constraint `incidencia_decision_firmada`). */
   autorizacion?: 'pendiente' | null;
+
+  // ── El circuito de asistencia/siniestros (0198, Fase 4) ────────────────────
+  /** De quién es la emergencia — imprescindible cuando NO hay viaje abierto
+   *  (punto C del plano): sin esto dos choferes sin viaje compartirían "la
+   *  incidencia abierta" de la flota. */
+  operadorId?: string | null;
+  /** NULL = NO PREGUNTADO — jamás false por defecto (comentario de la 0198):
+   *  un false aquí es un parte médico que solo el chofer puede dar. */
+  hayLesionados?: boolean | null;
+  /** Coordenadas del incidente cuando la fuente las trae (el pin del chofer o
+   *  el evento de cámara del proveedor). Columnas de la 0198. */
+  lat?: number | null;
+  lng?: number | null;
 }
 
 /** Comprueba que un gasto sea del tenant, ANTES de enlazarlo a una incidencia.
@@ -989,6 +1226,10 @@ export async function crearIncidencia(tenantId: string, i: NuevaIncidencia): Pro
   if (i.gastoId && !(await gastoPropio(tenantId, i.gastoId))) {
     throw new Error('crearIncidencia: el gasto no pertenece a esta flota');
   }
+  // Y el cuarto, para la emergencia sin viaje (0198): mismo candado.
+  if (i.operadorId && !(await operadorPropio(tenantId, i.operadorId))) {
+    throw new Error('crearIncidencia: el operador no pertenece a esta flota');
+  }
   const { data, error } = await acotada(supabaseAdmin().from('incidencia').insert({
     tenant_id: tenantId,
     viaje_id: i.viajeId || null,
@@ -1004,6 +1245,10 @@ export async function crearIncidencia(tenantId: string, i: NuevaIncidencia): Pro
     evidencia_path: i.evidenciaPath ?? null,
     gasto_id: i.gastoId ?? null,
     autorizacion: i.autorizacion ?? null,
+    operador_id: i.operadorId ?? null,
+    hay_lesionados: i.hayLesionados ?? null,
+    lat: i.lat ?? null,
+    lng: i.lng ?? null,
   }).select('id').single(), 'crearIncidencia');
   if (error) throw new Error(`crearIncidencia: ${error.message}`);
   const id = (data as { id?: unknown } | null)?.id;

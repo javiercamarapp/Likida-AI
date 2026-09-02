@@ -1,0 +1,67 @@
+id: lss-27
+tipo: ley
+jerarquia: 1
+instrumento: "Ley del Seguro Social"
+articulo_o_regla: "27"
+titulo: "Salario base de cotización — y el hallazgo de que los VIÁTICOS no están entre las exclusiones"
+citas_en_codigo: ["LSS 27", "art. 27 LSS", "salario base de cotización"]
+texto_vigente: >
+  Artículo 27. El salario base de cotización se integra con los pagos hechos en
+  efectivo por cuota diaria, gratificaciones, percepciones, alimentación,
+  habitación, primas, comisiones, prestaciones en especie y cualquiera otra
+  cantidad o prestación que se entregue al trabajador por su trabajo. Se excluyen
+  como integrantes del salario base de cotización, dada su naturaleza, los
+  siguientes conceptos:
+  I. Los instrumentos de trabajo tales como herramientas, ropa y otros similares;
+  II. El ahorro, cuando se integre por un depósito de cantidad semanaria,
+  quincenal o mensual igual del trabajador y de la empresa [...];
+  III. Las aportaciones adicionales que el patrón convenga otorgar a favor de sus
+  trabajadores por concepto de cuotas del seguro de retiro, cesantía en edad
+  avanzada y vejez;
+  IV. Las cuotas que en términos de esta Ley le corresponde cubrir al patrón, las
+  aportaciones al INFONAVIT, y las participaciones en las utilidades de la empresa;
+  V. La alimentación y la habitación cuando se entreguen en forma onerosa [...];
+  VI. Las despensas en especie o en dinero [...] que no rebase el cuarenta por
+  ciento del salario mínimo [...];
+  VII. Los premios por asistencia y puntualidad [...];
+  VIII. Las cantidades aportadas para fines sociales [...], y
+  IX. El tiempo extraordinario dentro de los márgenes señalados en la Ley Federal
+  del Trabajo.
+  ---
+  "Para que los conceptos mencionados en este precepto se excluyan como
+  integrantes del salario base de cotización, deberán estar debidamente
+  registrados en la contabilidad del patrón."
+fecha_publicacion: 1995-12-21
+fecha_vigencia_desde: 2009-01-16
+fuente_url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSS.pdf"
+fuente_tipo: diputados_oficial
+estado_verificacion: verificado_fuente_primaria
+nota_verificacion: >
+  Transcrito el 20-ago-2026 del PDF oficial de la Cámara de Diputados, texto
+  vigente, última reforma DOF 15-01-2026.
+
+el_hallazgo_que_cambia_el_diseno:
+  que_se_creia: >
+    Que los viáticos estaban excluidos del salario base de cotización por una
+    fracción del artículo 27, como lo repite casi toda la literatura de despachos.
+  que_dice_la_ley: >
+    NO EXISTE tal fracción. La palabra "viático" aparece UNA sola vez en las 181
+    páginas de la Ley del Seguro Social, y es en el artículo 56 fracción VII
+    (gastos de traslado de un trabajador accidentado). El artículo 27 no la usa.
+  por_que_es_grave: >
+    Porque el artículo 9 de la misma Ley ordena: "Las disposiciones fiscales de
+    esta Ley que establecen cargas a los particulares Y LAS QUE SEÑALAN
+    EXCEPCIONES A LAS MISMAS... son de APLICACIÓN ESTRICTA. Se considera que
+    establecen cargas las normas que se refieran a sujeto, objeto, BASE DE
+    COTIZACIÓN y tasa." Una exclusión que no está escrita no se puede invocar por
+    analogía.
+  la_consecuencia_correcta: >
+    El anticipo que Likida despacha a un operador NO se salva por vía de
+    exclusión, porque no hay fracción que lo ampare. Sólo se salva si NO ENTRA al
+    primer párrafo, es decir, si se acredita que no es "cantidad o prestación que
+    se entregue al trabajador POR SU TRABAJO", sino un gasto del patrón erogado
+    por conducto del trabajador. Es una defensa de naturaleza, no de excepción, y
+    se gana o se pierde con la COMPROBACIÓN DEL DESTINO.
+
+verificado_el: 2026-08-20
+usado_en_codigo: []

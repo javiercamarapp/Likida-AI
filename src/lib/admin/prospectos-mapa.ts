@@ -19,6 +19,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, exigir, traerTodo, traerPorIds, PAGINA, LecturaIncompleta, type RespuestaPg } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import {
   type DatosMapa, type DetalleProspecto, type FilaCompacta, type Giro,
   type ProspectoMapa, type Tamano, type TextosProspecto,
@@ -361,7 +362,7 @@ interface FilaProspecto {
   num_unidades: number | null;
   similitud_icp_pct: number;
   necesidad_pct: number;
-  prospecto_persona: Array<{ confianza: 'alta' | 'media' | 'baja' }> | null;
+  prospecto_persona: Array<{ confianza: 'alta' | 'media' | 'baja'; origen: string }> | null;
 }
 
 /** Las columnas del LISTADO. `mensaje_wa`, `mensaje_correo_asunto` y
@@ -369,7 +370,7 @@ interface FilaProspecto {
  *  —la usan giroDe/tamanoDe/scoreUrgencia/completitudDe y el filtro de
  *  duplicados—, pero se queda en el servidor. */
 const COLUMNAS_LISTADO =
-  'id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, scian, urgencia, unidades, duplicado_de, mensajes_generados_en, updated_at, sitio_verificado, num_unidades, similitud_icp_pct, necesidad_pct, prospecto_toque(creado_en), prospecto_persona(confianza)';
+  'id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, scian, urgencia, unidades, duplicado_de, mensajes_generados_en, updated_at, sitio_verificado, num_unidades, similitud_icp_pct, necesidad_pct, prospecto_toque(creado_en), prospecto_persona(confianza, origen)';
 
 /** Cuántas páginas de 1,000 se piden A LA VEZ (mismo criterio que
  *  `TANDAS_EN_PARALELO` de `traerPorIds` en pg.ts: acotado para no abrir
@@ -463,7 +464,14 @@ function aProspecto(p: FilaProspecto): ProspectoMapa {
       scian: p.scian,
       numUnidades: p.num_unidades,
       unidadesDeclaradas: p.unidades,
-      personasVerificadas: (p.prospecto_persona ?? []).filter((x) => x.confianza !== 'baja').length,
+      personasVerificadas: (p.prospecto_persona ?? [])
+        // AUDITORÍA 19 (legal, reincidente #16): un correo `origen='inferido'`
+        // nace con confianza 'media' (la 0138 solo prohíbe 'alta'), así que
+        // `confianza !== 'baja'` contaba lo ADIVINADO como decisor verificado
+        // — y ese conteo suma puntos de cierre (scoreCierre) que deciden a
+        // quién se le llama primero. Verificado = leído en alguna parte:
+        // el inferido queda fuera por su origen, no por su confianza.
+        .filter((x) => x.origen !== 'inferido' && x.confianza !== 'baja').length,
     }),
     numUnidades: p.num_unidades,
     similitudIcpPct: p.similitud_icp_pct,
@@ -670,7 +678,14 @@ export async function getDetalleProspecto(id: string): Promise<DetalleProspecto 
       telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
       estado: p.estado, fuente: p.fuente, empresa: p.empresa, vacante: p.vacante, notas: p.notas,
       scian: p.scian, numUnidades: p.num_unidades, unidadesDeclaradas: p.unidades,
-      personasVerificadas: (p.prospecto_persona ?? []).filter((x) => x.confianza !== 'baja').length,
+      personasVerificadas: (p.prospecto_persona ?? [])
+        // AUDITORÍA 19 (legal, reincidente #16): un correo `origen='inferido'`
+        // nace con confianza 'media' (la 0138 solo prohíbe 'alta'), así que
+        // `confianza !== 'baja'` contaba lo ADIVINADO como decisor verificado
+        // — y ese conteo suma puntos de cierre (scoreCierre) que deciden a
+        // quién se le llama primero. Verificado = leído en alguna parte:
+        // el inferido queda fuera por su origen, no por su confianza.
+        .filter((x) => x.origen !== 'inferido' && x.confianza !== 'baja').length,
     }),
     sitio: p.sitio, sitioVerificado: p.sitio_verificado,
     numUnidades: p.num_unidades, historia: p.historia,
@@ -682,4 +697,45 @@ export async function getDetalleProspecto(id: string): Promise<DetalleProspecto 
       linkedin: x.linkedin, origen: x.origen, confianza: x.confianza, evidencia: x.evidencia,
     })),
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADM-8 (auditoría 24, MEDIO) — el rastro de una exportación.
+//
+// Un clic en "Exportar CSV (N)" de `cerebro.tsx` descarga la cartera
+// filtrada COMPLETA (hasta 33k filas, con teléfono y correo de decisores) y
+// no dejaba NINGUNA huella: ni el listado GET ni el fetch de textos llaman
+// `anotarBitacora`. Con una sola sesión de superadmin comprometida, la fuga
+// es masiva y sin evidencia para LFPDPPP.
+//
+// Vía `anotarBitacora` (lib/likida/bitacora_escritura.ts) — el ÚNICO
+// escritor de `bitacora_auditoria` (auditoría 18, A1: "un solo escritor",
+// `bitacora_escritura.test.ts` lo hace cumplir por grep sobre todo `src/`).
+// `'prospecto'` se agregó al dominio de `EntidadBitacora` ahí mismo, "Ampliar
+// AQUÍ, no en el llamador" — su propio comentario. `detalle` lleva SOLO el
+// conteo y los filtros elegidos (giro, estado, texto de búsqueda) — nunca una
+// fila de prospecto: la bitácora no puede volverse ella misma una segunda
+// copia de los datos que audita. `entidadId` es `'csv'`: no hay una fila de
+// prospecto singular que nombrar — es la cartera filtrada completa.
+//
+// BEST-EFFORT, nunca lanza: `anotarBitacora` ya no lanza por diseño (una
+// bitácora que tumbara la descarga sería peor que una descarga sin rastro).
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function registrarExportacionProspectos(
+  actorId: string | null,
+  n: number,
+  filtros: Record<string, unknown>,
+): Promise<void> {
+  await anotarBitacora(
+    {
+      tenantId: null,
+      actor: actorId ? { id: actorId } : 'sistema',
+      accion: 'prospectos.exportados',
+      entidad: 'prospecto',
+      entidadId: 'csv',
+      detalle: { n, filtros },
+    },
+    { evento: 'prospectos.exportacion_no_bitacorada' },
+  );
 }

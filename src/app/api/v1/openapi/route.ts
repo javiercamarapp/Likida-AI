@@ -37,6 +37,11 @@ import { NextResponse } from 'next/server';
 import { clientIp, rateLimit } from '@/lib/ratelimit';
 import { DIAS_AVISO } from '@/lib/likida/vigencias';
 import { CABECERA_IDEMPOTENCIA, LARGO_MIN_LLAVE, LARGO_MAX_LLAVE, ANIO_MIN_UNIDAD } from '../_escritura';
+// El tope de filas por POST en las altas por lote. Se importa del MISMO sitio
+// que lo aplica: un número copiado aquí a mano documentaría un límite que no
+// es el que valida, y eso enseña a mandar peticiones que rebotan.
+import { FILAS_POR_TANDA } from '@/lib/likida/importacion/archivo';
+import { MAX_BUSQUEDA_OPERADORES } from '@/lib/likida/administracion';
 import {
   LIMITE_DEFECTO,
   LIMITE_MAXIMO,
@@ -297,6 +302,212 @@ const UNIDAD_CREADA = {
   required: ['id', 'numeroEconomico'],
 } as const;
 
+// ── Las altas por lote (auditoría 24) ──────────────────────────────────────
+//
+// Una flota que estrena Likida llega con 800 tractos y cientos de choferes ya
+// capturados en su TMS. El alta de a uno los obliga a 800 POST, y un TMS al
+// que se le cae la red a media captura no tiene forma de saber por dónde iba.
+
+const ALTA_UNIDAD = {
+  type: 'object',
+  title: 'Una unidad',
+  properties: {
+    numeroEconomico: { type: 'string', maxLength: 40, description: 'Como le dice la flota a esa unidad (T-042). Único por flota: es su clave natural.' },
+    placas: { type: 'string', maxLength: 20, nullable: true },
+    marca: { type: 'string', maxLength: 60, nullable: true },
+    modelo: { type: 'string', maxLength: 60, nullable: true },
+    anio: {
+      type: 'integer',
+      minimum: ANIO_MIN_UNIDAD,
+      nullable: true,
+      description: `Entre ${ANIO_MIN_UNIDAD} y el año en curso + 2 (las unidades se compran con modelo adelantado). Acepta también su forma de texto ("2018"), porque un CSV exportado por un TMS manda todo como texto; "2018.5" no pasa.`,
+    },
+  },
+  required: ['numeroEconomico'],
+  additionalProperties: false,
+} as const;
+
+const FILA_UNIDAD_LOTE = {
+  type: 'object',
+  properties: {
+    numeroEconomico: { type: 'string', maxLength: 40, description: 'Clave natural de la unidad dentro de la flota. Repetirlo manda la fila a `duplicadas` sin tocar lo que ya está.' },
+    placas: { type: 'string', maxLength: 20, description: 'OBLIGATORIA en el lote (a diferencia del alta de una). Se guarda en MAYÚSCULAS y con los separadores normalizados: «abc 123 4» y «ABC-123-4» son la misma placa, y la segunda que llegue es un error de fila que nombra a la unidad que ya la tiene.' },
+    marca: { type: 'string', maxLength: 60, nullable: true },
+    modelo: { type: 'string', maxLength: 60, nullable: true },
+    anio: { type: 'string', nullable: true, description: `Entre ${ANIO_MIN_UNIDAD} y el año en curso + 2.` },
+    polizaVence: { type: 'string', format: 'date', nullable: true, description: 'ISO AAAA-MM-DD. Solo el lote captura vigencias: vienen de una exportación donde ya existen, no de un tecleo.' },
+    permisoSictVence: { type: 'string', format: 'date', nullable: true },
+    verificacionVence: { type: 'string', format: 'date', nullable: true },
+  },
+  required: ['placas'],
+  additionalProperties: false,
+} as const;
+
+const LOTE_UNIDADES = {
+  type: 'object',
+  title: 'Un lote de unidades',
+  properties: {
+    unidades: { type: 'array', minItems: 1, maxItems: FILAS_POR_TANDA, items: FILA_UNIDAD_LOTE },
+    terminalId: { type: 'string', format: 'uuid', nullable: true, description: 'El patio al que entra TODO el lote (una carga masiva suele ser el parque de un patio). Tiene que ser un patio de TU flota: uno ajeno es 400. Sin él las unidades nacen sin patio, que es la verdad y no un patio inventado.' },
+  },
+  required: ['unidades'],
+  additionalProperties: false,
+} as const;
+
+const FILA_OPERADOR_LOTE = {
+  type: 'object',
+  properties: {
+    nombre: { type: 'string', minLength: 3, maxLength: 120 },
+    telefono: { type: 'string', maxLength: 25, description: 'El WhatsApp del chofer. Se normaliza a E.164 de México (`52` + 10 dígitos): «55 1234 5678», «+52 55 1234 5678» y «5215512345678» son el mismo número. Es ÚNICO por flota y es LA IDENTIDAD del chofer frente al bot — un dedazo en un dígito no produce un registro incompleto, produce un chofer que nunca puede reportar un gasto.' },
+    numeroEmpleado: { type: 'string', maxLength: 40, nullable: true },
+    rfc: { type: 'string', maxLength: 13, nullable: true, description: 'Se acepta al dar de alta (viene de la nómina del TMS) pero NO se devuelve en el `GET`: es dato fiscal de una persona física y ningún integrador de tráfico lo necesita.' },
+    licencia: { type: 'string', maxLength: 40, nullable: true },
+    licenciaTipo: { type: 'string', maxLength: 10, nullable: true },
+    licenciaVence: { type: 'string', format: 'date', nullable: true, description: 'ISO AAAA-MM-DD.' },
+  },
+  required: ['nombre', 'telefono'],
+  additionalProperties: false,
+} as const;
+
+const LOTE_OPERADORES = {
+  type: 'object',
+  title: 'Un lote de operadores',
+  properties: {
+    operadores: { type: 'array', minItems: 1, maxItems: FILAS_POR_TANDA, items: FILA_OPERADOR_LOTE },
+    terminalId: { type: 'string', format: 'uuid', nullable: true, description: 'El patio al que entra TODO el lote. Tiene que ser un patio de TU flota: uno ajeno es 400.' },
+  },
+  required: ['operadores'],
+  additionalProperties: false,
+} as const;
+
+const FILAS_CON_MOTIVO = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      fila: { type: 'integer', minimum: 1, description: 'La posición en la lista que mandaste, empezando en 1. Es el índice que puedes señalar en tu propio arreglo.' },
+      motivo: { type: 'string', description: 'Qué corregir, en español y ya redactado para una persona.' },
+    },
+    required: ['fila', 'motivo'],
+  },
+} as const;
+
+function loteCreado(que: string, creadas: Record<string, unknown>, nombreCreadas: string, nombreDuplicadas: string, extra: Record<string, unknown> = {}) {
+  return {
+    description: `El lote de ${que} se procesó. Revisa los tres arreglos: NO todas las filas tuvieron que quedar creadas.`,
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          properties: {
+            dato: {
+              type: 'object',
+              properties: {
+                [nombreCreadas]: { type: 'array', items: creadas, description: 'Las filas que quedaron dadas de alta en ESTA llamada, con el id que les tocó.' },
+                [nombreDuplicadas]: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      fila: { type: 'integer', minimum: 1 },
+                      id: { type: 'string', format: 'uuid', nullable: true, description: '`null` cuando otra carga simultánea la creó entre la lectura y la escritura: es un duplicado, no un error.' },
+                      motivo: { type: 'string' },
+                    },
+                    required: ['fila', 'motivo'],
+                  },
+                  description: 'Las que YA ESTABAN en tu flota. No se tocó nada de lo que tenían: el alta masiva da de alta, corregir se hace en el panel.',
+                },
+                errores: { ...FILAS_CON_MOTIVO, description: 'Las que NO quedaron, con el porqué. Una fila mala no tira el lote.' },
+                ...extra,
+                recibidas: { type: 'integer', description: `Cuántas filas traía el cuerpo. \`${nombreCreadas} + ${nombreDuplicadas} + errores\` siempre suma esto: si no sumara, alguna fila se habría perdido en silencio.` },
+              },
+              required: [nombreCreadas, nombreDuplicadas, 'errores', 'recibidas'],
+            },
+            idempotente: { type: 'boolean', description: '`true` = este lote ya se había procesado con esta misma `Idempotency-Key` y se te devuelve la respuesta EXACTA de la primera vez.' },
+          },
+          required: ['dato', 'idempotente'],
+        },
+      },
+    },
+  };
+}
+
+const loteTodoInvalido = (que: string) => ({
+  description: `NINGUNA fila del lote es válida y NO se dio de alta ${que}. El detalle viene fila por fila en \`error.filas\`: un lote de ${FILAS_POR_TANDA} que rebota entero sin decir cuáles fallaron obliga a bisecar a mano. Corrige y reintenta con una \`${CABECERA_IDEMPOTENCIA}\` NUEVA.`,
+  content: {
+    'application/json': {
+      schema: {
+        type: 'object',
+        properties: {
+          error: {
+            type: 'object',
+            properties: {
+              codigo: { type: 'string', enum: ['parametro_invalido'] },
+              mensaje: { type: 'string' },
+              filas: FILAS_CON_MOTIVO,
+            },
+            required: ['codigo', 'mensaje', 'filas'],
+          },
+        },
+        required: ['error'],
+      },
+    },
+  },
+});
+
+/** Lo que se acusa de una unidad creada DENTRO de un lote: además del id, la
+ *  `fila` para poder casarla con el renglón que mandó el integrador. */
+const UNIDAD_CREADA_EN_LOTE = {
+  type: 'object',
+  properties: {
+    fila: { type: 'integer', minimum: 1 },
+    id: { type: 'string', format: 'uuid' },
+    numeroEconomico: { type: 'string' },
+    placas: { type: 'string', description: 'Ya normalizada (MAYÚSCULAS): es como quedó guardada, no como la mandaste.' },
+  },
+  required: ['fila', 'id', 'numeroEconomico', 'placas'],
+} as const;
+
+const OPERADOR_CREADO_EN_LOTE = {
+  type: 'object',
+  properties: {
+    fila: { type: 'integer', minimum: 1 },
+    id: { type: 'string', format: 'uuid' },
+    telefono: { type: 'string', description: 'Ya normalizado a `52` + 10 dígitos: es como quedó guardado, no como lo mandaste.' },
+  },
+  required: ['fila', 'id', 'telefono'],
+} as const;
+
+/** Un chofer como lo devuelve `GET /v1/operadores`. SIN RFC: ver la prosa de
+ *  la ruta. */
+const OPERADOR = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    nombre: { type: 'string' },
+    telefono: { type: 'string', nullable: true, description: '`52` + 10 dígitos. `null` = a este chofer NADIE le capturó teléfono, y entonces no puede usar el bot. No es `""` ni 0.' },
+    numeroEmpleado: { type: 'string', nullable: true },
+    activo: { type: 'boolean' },
+    viajes: { type: 'integer', description: 'Viajes que ya trae encima, para no dar de baja al que está en ruta.' },
+    terminalId: { type: 'string', format: 'uuid', nullable: true },
+    terminalNombre: { type: 'string', nullable: true },
+    licencia: {
+      type: 'object',
+      properties: {
+        numero: { type: 'string', nullable: true },
+        tipo: { type: 'string', nullable: true },
+        vence: { type: 'string', format: 'date', nullable: true },
+        estado: { type: 'string', enum: ['vencido', 'por_vencer', 'vigente', 'sin_dato'], description: '`sin_dato` NO es `vigente`: a ese chofer nadie le capturó la licencia.' },
+        diasAlVencimiento: { type: 'integer', nullable: true, description: 'NEGATIVO = ya venció. `null` = sin capturar, nunca 0.' },
+        rotulo: { type: 'string', description: 'La frase ya conjugada, la misma que ve el gerente en el panel.' },
+      },
+      required: ['numero', 'tipo', 'vence', 'estado', 'diasAlVencimiento', 'rotulo'],
+    },
+    avisoPrivacidadEn: { type: 'string', format: 'date-time', nullable: true, description: 'Cuándo se le entregó el aviso de privacidad. `null` = TODAVÍA NO.' },
+  },
+  required: ['id', 'nombre', 'telefono', 'activo', 'viajes', 'licencia', 'avisoPrivacidadEn'],
+} as const;
+
 const noEncontrado = {
   description: 'No hay nada con ese id EN TU FLOTA. "No existe" y "no es tuyo" contestan lo mismo a propósito: distinguirlos convertiría la ruta en un oráculo para enumerar los uuids de otras flotas.',
   content: { 'application/json': { schema: cuerpoError } },
@@ -390,7 +601,50 @@ function documento(servidor: string) {
       },
       schemas: {
         Error: cuerpoError,
+        // ── BLOQ-6 (mig. 0299): el CIERRE de un viaje, con su firma ────────
+        Liquidacion: {
+          type: 'object',
+          description:
+            'El cierre de un viaje. TIENE DOS ESTADOS Y NO UNO: `estatus` es el veredicto del MOTOR y `revision` el de la PERSONA. '
+            + 'Contabilizar por `estatus` asienta cierres que nadie firmó.',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            viajeId: { type: 'string', format: 'uuid' },
+            folio: anulable('string', 'Folio del viaje.'),
+            creadaEn: { type: 'string', description: 'ISO-8601.' },
+            estatus: { type: 'string', enum: ['cuadrada', 'con_diferencias', 'revisar'], description: 'Lo que concluyó el motor.' },
+            revision: { type: 'string', enum: ['pendiente', 'aprobada', 'ajustada', 'rechazada'], description: 'Lo que firmó una persona. `pendiente` = nadie la ha firmado: no la asientes.' },
+            revisadaPor: anulable('string', 'Correo de quien firmó. `null` con `revision` distinta de `pendiente` = la firmó el motor (cuadró sola), que NO es lo mismo que "la firmó alguien".'),
+            revisadaEn: anulable('string', 'ISO-8601 de la firma.'),
+            motivo: anulable('string', 'Lo que se escribió al ajustar o rechazar (la base lo exige en esos dos).'),
+            ajustes: {
+              type: 'array',
+              description: 'Montos que la persona corrigió al ajustar: el comprobante mal leído, de cuánto a cuánto.',
+              items: {
+                type: 'object',
+                properties: {
+                  gastoId: { type: 'string' }, concepto: { type: 'string' },
+                  montoAnterior: { type: 'number' }, montoNuevo: { type: 'number' },
+                },
+                required: ['gastoId', 'concepto', 'montoAnterior', 'montoNuevo'],
+              },
+            },
+            anticipo: { type: 'number' },
+            comprobado: { type: 'number' },
+            diferencia: { type: 'number', description: 'anticipo − comprobado. Positivo = el operador debe; negativo = se le repone.' },
+            ivaAcreditable: { type: 'number' },
+            iepsAcreditable: { type: 'number' },
+            litrosDieselAcreditables: { type: 'number' },
+            hallazgos: { type: 'integer', description: 'Cuántas observaciones levantó el motor. El detalle vive en el PDF.' },
+          },
+          required: ['id', 'viajeId', 'folio', 'creadaEn', 'estatus', 'revision', 'revisadaPor', 'revisadaEn', 'motivo', 'ajustes', 'anticipo', 'comprobado', 'diferencia', 'hallazgos'],
+        },
         Pagina: paginaSobre,
+        AltaUnidad: ALTA_UNIDAD,
+        LoteUnidades: LOTE_UNIDADES,
+        AltaOperador: FILA_OPERADOR_LOTE,
+        Operador: OPERADOR,
+        LoteOperadores: LOTE_OPERADORES,
         Documental: documental,
         FacturaDelViaje: factura,
         Cobro: cobro,
@@ -652,8 +906,13 @@ function documento(servidor: string) {
           description:
             'Requiere el área `administracion`. Es la ruta con la que se carga el parque desde un TMS o un CSV sin teclearlo a mano.\n\n'
             + 'EL TENANT NO SE MANDA: sale de la credencial, igual que en `POST /v1/viajes`.\n\n'
-            + 'NO SE CAPTURAN VIGENCIAS AQUÍ. La póliza, el permiso SICT y la verificación se cargan por su propia pantalla: son fechas cuya caducidad dispara alertas, y aceptarlas en el alta masiva es la forma más rápida de llenar la flota de vencimientos inventados por un CSV mal mapeado. Una unidad recién creada aparece en el panel como `sin_dato`, que es lo que de verdad se sabe de ella.\n\n'
-            + 'El `numeroEconomico` es único por flota: repetirlo devuelve 200 con la unidad que ya existía.',
+            + `DOS FORMAS DE CUERPO, Y NO CAPTURAN LO MISMO:\n\n`
+            + '· **Una unidad** — los campos en la raíz. NO captura vigencias: la póliza, el permiso SICT y la verificación se cargan por su propia pantalla. Una unidad creada así aparece en el panel como `sin_dato`, que es lo que de verdad se sabe de ella, y NO como `vigente`.\n\n'
+            + `· **Un lote** — \`{ "unidades": [ … ] }\`, hasta ${FILAS_POR_TANDA} filas. Es el camino del alta masiva (una flota que estrena Likida llega con cientos de tractos ya capturados). El lote SÍ escribe las tres vigencias, porque viene de una exportación del TMS donde esas fechas ya existen y no de un tecleo, y a cambio EXIGE \`placas\`: una unidad sin placa no se puede cruzar después con una multa, una caseta ni un GPS.\n\n`
+            + 'Las dos formas no se mezclan: mandar `unidades` y `numeroEconomico` en el mismo cuerpo es 400.\n\n'
+            + 'EN EL LOTE, UNA FILA MALA NO TIRA LAS DEMÁS. Cada fila inválida sale en `errores` con su número de fila (empezando en 1) y el qué corregir; las buenas se escriben. `creadas + duplicadas + errores` siempre suma `recibidas`: si no sumara, alguna fila se habría perdido en silencio. Si NINGUNA fila sirve, es 400 con el detalle en `error.filas` y no se escribe nada.\n\n'
+            + 'LO QUE YA ESTABA NO SE PISA. Una unidad cuyo `numeroEconomico` ya existe sale en `duplicadas` con su id y se queda como está. Es deliberado: si el TMS remanda el lote con la póliza vieja de su exportación, sobrescribir borraría un dato bueno con uno viejo. El alta masiva DA DE ALTA; corregir se hace en el panel.\n\n'
+            + 'El `numeroEconomico` es único por flota: repetirlo en la forma de una unidad devuelve 200 con la unidad que ya existía.',
           tags: ['unidades'],
           parameters: [cabeceraIdempotencia],
           requestBody: {
@@ -661,30 +920,37 @@ function documento(servidor: string) {
             content: {
               'application/json': {
                 schema: {
-                  type: 'object',
-                  properties: {
-                    numeroEconomico: { type: 'string', maxLength: 40, description: 'Como le dice la flota a esa unidad (T-042). Único por flota: es su clave natural.' },
-                    placas: { type: 'string', maxLength: 20, nullable: true },
-                    marca: { type: 'string', maxLength: 60, nullable: true },
-                    modelo: { type: 'string', maxLength: 60, nullable: true },
-                    anio: {
-                      type: 'integer',
-                      minimum: ANIO_MIN_UNIDAD,
-                      nullable: true,
-                      description: `Entre ${ANIO_MIN_UNIDAD} y el año en curso + 2 (las unidades se compran con modelo adelantado). Acepta también su forma de texto ("2018"), porque un CSV exportado por un TMS manda todo como texto; "2018.5" no pasa.`,
-                    },
-                  },
-                  required: ['numeroEconomico'],
-                  additionalProperties: false,
+                  oneOf: [
+                    { $ref: '#/components/schemas/AltaUnidad' },
+                    { $ref: '#/components/schemas/LoteUnidades' },
+                  ],
                 },
               },
             },
           },
           responses: {
-            '201': seCreo('La unidad', UNIDAD_CREADA),
+            // Las dos formas del cuerpo contestan con la suya. El 201 del lote
+            // NO significa «las N quedaron»: significa que el lote se procesó,
+            // y cuántas quedaron lo dicen los tres arreglos.
+            '201': {
+              description: 'Se procesó el alta. Con una unidad: quedó creada. Con un lote: revisa `creadas`, `duplicadas` y `errores` — no todas las filas tuvieron que quedar.',
+              content: {
+                'application/json': {
+                  schema: {
+                    oneOf: [
+                      seCreo('La unidad', UNIDAD_CREADA).content['application/json'].schema,
+                      loteCreado('unidades', UNIDAD_CREADA_EN_LOTE, 'creadas', 'duplicadas').content['application/json'].schema,
+                    ],
+                  },
+                },
+              },
+            },
             '200': yaExistia('Una unidad con ese número económico', UNIDAD_CREADA),
             '409': conflictoNatural('una unidad', 'número económico'),
             ...respuestasError,
+            // Va DESPUÉS del spread a propósito: pisa el 400 genérico con el
+            // que sí trae el detalle por fila del lote.
+            '400': loteTodoInvalido('ninguna unidad'),
           },
         },
         get: {
@@ -717,6 +983,84 @@ function documento(servidor: string) {
                       },
                     },
                     required: ['datos', 'pagina', 'resumen'],
+                  },
+                },
+              },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/operadores': {
+        post: {
+          operationId: 'crearOperadores',
+          'x-likida-area': 'administracion',
+          summary: 'Da de alta choferes, de uno o en lote.',
+          description:
+            'Requiere el área `administracion`. Un chofer nuevo es una persona con contrato y su alta dispara el aviso de privacidad; por eso escribir es `administracion` aunque LEER el padrón sea `operacion`.\n\n'
+            + 'EL TENANT NO SE MANDA: sale de la credencial, igual que en el resto de /v1.\n\n'
+            + `DOS FORMAS DE CUERPO, la misma por dentro: los campos en la raíz (un chofer) o \`{ "operadores": [ … ] }\` (hasta ${FILAS_POR_TANDA} filas). Un padrón de 800 son cuatro POST, cada uno con su \`${CABECERA_IDEMPOTENCIA}\`.\n\n`
+            + 'EL TELÉFONO ES LA IDENTIDAD. Se normaliza a E.164 de México y es único por flota. Tres desenlaces, y los tres se dicen: si el número ya es de un chofer de TU flota, la fila sale en `duplicados` con el id del que ya estaba; si es de un chofer ACTIVO de OTRA flota, la fila sale en `errores` y no se escribe —dos flotas no pueden compartir la identidad de un chofer sin cruzar el dinero de las dos—; si es de uno tuyo dado de baja, la fila sale en `errores` pidiendo que lo reactives en vez de crear un segundo registro de la misma persona.\n\n'
+            + 'UNA FILA MALA NO TIRA EL LOTE. Cada fila inválida sale en `errores` con su número de fila (empezando en 1) y el qué corregir. `creados + duplicados + errores` siempre suma `recibidas`. Si NINGUNA fila sirve, es 400 con el detalle en `error.filas` y no se escribe nada.\n\n'
+            + 'EL AVISO DE PRIVACIDAD SE ENCOLA, NO SE DA POR ENTREGADO. `avisoPendiente` dice a cuántos de los recién creados les falta recibirlo; se les entrega en su primer contacto con el bot. Un alta masiva NO es un consentimiento masivo, y esta API no finge que lo sea.',
+          tags: ['operadores'],
+          parameters: [cabeceraIdempotencia],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  oneOf: [
+                    { $ref: '#/components/schemas/AltaOperador' },
+                    { $ref: '#/components/schemas/LoteOperadores' },
+                  ],
+                },
+              },
+            },
+          },
+          responses: {
+            '201': loteCreado('operadores', OPERADOR_CREADO_EN_LOTE, 'creados', 'duplicados', {
+              avisoPendiente: { type: 'integer', description: 'Cuántos de los recién creados traen el aviso de privacidad POR ENTREGAR. Se les entrega en su primer mensaje al bot; aquí solo se dice cuántos son.' },
+            }),
+            ...respuestasError,
+            // Va DESPUÉS del spread a propósito: pisa el 400 genérico con el
+            // que sí trae el detalle por fila del lote.
+            '400': loteTodoInvalido('a ningún chofer'),
+          },
+        },
+        get: {
+          operationId: 'listarOperadores',
+          'x-likida-area': 'operacion',
+          summary: 'El padrón de choferes con la vigencia de su licencia.',
+          description: `Área \`operacion\`: el jefe de tráfico es exactamente quien debe enterarse de que a un chofer se le venció la licencia y hoy no puede salir.\n\n`
+            + `\`licencia.estado\` vale \`vencido\`, \`por_vencer\`, \`vigente\` o \`sin_dato\`, y **\`sin_dato\` NO ES \`vigente\`**: significa que a ese chofer NADIE le capturó la licencia, no que esté en regla. \`diasAlVencimiento\` es negativo cuando ya venció y \`null\` cuando no hay dato — nunca 0. \`diasAviso\` (${DIAS_AVISO}) es la anticipación con la que se pasa a \`por_vencer\`.\n\n`
+            + 'EL `total` DE `pagina` ES UN CONTEO REAL sobre todo el padrón, no el largo de esta página: la base pagina y cuenta en la misma consulta, así que a cientos de choferes el padrón entero no viaja.\n\n'
+            + 'EL RFC NO SE DEVUELVE, aunque se acepte al dar de alta: es dato fiscal de una persona física y ningún integrador de tráfico lo necesita para despachar un viaje. Lo que no se manda no se puede filtrar.\n\n'
+            + '`desplazamiento` tiene que ser múltiplo de `limite` en esta ruta (el padrón se pagina por páginas completas).',
+          tags: ['operadores'],
+          parameters: [
+            ...parametrosPagina,
+            {
+              name: 'q',
+              in: 'query',
+              required: false,
+              description: 'Busca por nombre, teléfono o número de empleado. Sin acentos y sin distinguir mayúsculas: «ramirez» encuentra a «Ramírez».',
+              schema: { type: 'string', maxLength: MAX_BUSQUEDA_OPERADORES },
+            },
+          ],
+          responses: {
+            '200': {
+              description: 'Página del padrón.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      datos: { type: 'array', items: { $ref: '#/components/schemas/Operador' } },
+                      pagina: paginaSobre,
+                      diasAviso: { type: 'integer', description: 'Con cuántos días de anticipación una licencia pasa a `por_vencer`. Viaja en la respuesta para que no lo fijes por tu cuenta en otro número.' },
+                    },
+                    required: ['datos', 'pagina', 'diasAviso'],
                   },
                 },
               },
@@ -758,6 +1102,54 @@ function documento(servidor: string) {
                       },
                     },
                     required: ['datos', 'pagina', 'resumen'],
+                  },
+                },
+              },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/liquidaciones': {
+        get: {
+          operationId: 'listarLiquidaciones',
+          'x-likida-area': 'dinero',
+          summary: 'El cierre de cada viaje, con la firma de quien lo revisó.',
+          description:
+            'Área `dinero`: anticipo, comprobado y diferencia por viaje.\n\n'
+            + 'POR OMISIÓN TRAE SOLO LO ASENTABLE (`?revision=firmadas`: aprobada o ajustada). Las que esperan firma y las rechazadas —cuyas cifras el motor va a '
+            + 'recalcular en cuanto llegue el comprobante bueno— se piden explícito con `?revision=pendiente` o `?revision=rechazada`; `?revision=todas` las trae todas. '
+            + 'El filtro aplicado viaja en `filtro.revision` de la respuesta, para que nadie confunda "no hay" con "no lo pedí".\n\n'
+            + 'Recorre el histórico con el cursor: `?despues=` + el `pagina.siguiente` de la respuesta anterior, hasta que `siguiente` sea `null`.',
+          tags: ['liquidaciones', 'dinero'],
+          parameters: [
+            ...parametrosPagina, ...parametrosCursor,
+            {
+              name: 'revision', in: 'query', required: false,
+              description: 'Qué revisiones traer. Un valor desconocido es 400 — no se cae al default en silencio.',
+              schema: { type: 'string', enum: ['firmadas', 'todas', 'pendiente', 'aprobada', 'ajustada', 'rechazada'], default: 'firmadas' },
+            },
+          ],
+          responses: {
+            '200': {
+              description: 'Página de liquidaciones más el filtro que se aplicó.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      datos: { type: 'array', items: { $ref: '#/components/schemas/Liquidacion' } },
+                      pagina: paginaSobre,
+                      filtro: {
+                        type: 'object',
+                        properties: {
+                          revision: { type: 'string' },
+                          significado: { type: 'string', description: 'El corte, en español: qué entró y qué no.' },
+                        },
+                        required: ['revision', 'significado'],
+                      },
+                    },
+                    required: ['datos', 'pagina', 'filtro'],
                   },
                 },
               },

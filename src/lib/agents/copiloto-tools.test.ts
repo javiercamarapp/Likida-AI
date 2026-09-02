@@ -94,7 +94,7 @@ vi.mock('@/lib/likida/agentes/cola', () => ({
 }));
 
 const { TOOLS_COPILOTO_LECTURA, PANTALLA_POR_TOOL } = await import('./copiloto-tools');
-const { executeTool } = await import('@/lib/llm/tool-executor');
+const { executeTool, toolSchemas } = await import('@/lib/llm/tool-executor');
 
 import { readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -155,5 +155,115 @@ describe('el contrato de las 14 tools del copiloto', () => {
     const r = await executeTool('ficha_cliente', { nombre: 'INEXISTENTE' }, { tenantId: 'likida' });
     const c = r.result as Record<string, unknown>;
     expect(JSON.stringify(c)).not.toMatch(/FLOTA DEMO/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INVARIANTE ESTRUCTURAL (auditoría 21, MEDIO) — el hueco de la ronda 18 se
+// cerró a medias.
+//
+// Las pruebas de arriba son de COMPORTAMIENTO: corren las 14 y verifican que
+// no lancen, que citen la pantalla correcta, que `traza_corrida` valide el
+// uuid, etc. Ninguna compara el JSON Schema publicado contra la regla
+// estructural que SÍ existe en `chat-tools.ts` ("ninguna toma un tenant por
+// parámetro: el tenant sale del contexto"). Sin esta prueba, una tool 15ª con
+// un parámetro que en efecto ELIJA un tenant —o `bitacora`/`ficha_cliente`
+// mutadas de "buscar por texto" a "seleccionar por id"— se cuela sin que
+// ninguna prueba lo note.
+//
+// Recorre `TOOLS_COPILOTO_LECTURA` —el registro real que exporta
+// copiloto-tools.ts, no una lista copiada a mano aquí— así que una tool 15ª
+// que se agregue a esa constante queda cubierta AUTOMÁTICAMENTE sin tocar
+// este archivo.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Los ÚNICOS parámetros de texto libre (string sin `enum`) que el diseño
+ * acepta HOY, documentados a propósito por el hallazgo de la auditoría 21:
+ *   - `bitacora.filtro`: busca por SUBCADENA de acción — nunca selecciona
+ *     una flota.
+ *   - `ficha_cliente.nombre`: busca por SUBCADENA de nombre, con
+ *     desambiguación si hay más de una coincidencia (prueba de arriba) —
+ *     nunca un id directo que salte la búsqueda.
+ *   - `traza_corrida.id`: es el uuid de una CORRIDA (no de un tenant) y se
+ *     valida con regex antes de tocar la base (prueba de arriba, "valida el
+ *     uuid ANTES de tocar la base").
+ *
+ * Cualquier OTRO string sin enum en cualquier tool —incluida una que se
+ * registre mañana— hace fallar la prueba de abajo: la excepción tiene que
+ * declararse aquí a propósito, con revisor, igual que hoy.
+ */
+const TEXTO_LIBRE_A_PROPOSITO: Record<string, string[]> = {
+  bitacora: ['filtro'],
+  ficha_cliente: ['nombre'],
+  traza_corrida: ['id'],
+};
+
+/** Ídem `funciones()` de chat-tools.test.ts: estrecha a `function` y de paso
+ *  AFIRMA que las 14 lo son — una tool `custom` no lleva JSON Schema y las
+ *  reglas de abajo pasarían de largo sin fallar. */
+function funcionesCopiloto() {
+  const todas = toolSchemas([...TOOLS_COPILOTO_LECTURA]);
+  const fns = todas.filter((s) => s.type === 'function');
+  expect(fns).toHaveLength(todas.length);
+  return fns;
+}
+
+describe('copiloto-tools.ts — invariante estructural (auditoría 21, MEDIO)', () => {
+  it('el registro completo (TOOLS_COPILOTO_LECTURA) sigue siendo function', () => {
+    expect(toolSchemas([...TOOLS_COPILOTO_LECTURA])).toHaveLength(TOOLS_COPILOTO_LECTURA.length);
+  });
+
+  it('ninguna acepta propiedades extra: additionalProperties permanece false', () => {
+    // Sin `additionalProperties: false` el modelo puede inventar un parámetro
+    // que algún handler futuro lea por accidente.
+    for (const s of funcionesCopiloto()) {
+      const p = s.function.parameters as { additionalProperties?: boolean } | undefined;
+      expect(p?.additionalProperties, s.function.name).toBe(false);
+    }
+  });
+
+  it('ninguna toma un tenant/flota/empresa por NOMBRE de parámetro', () => {
+    // El copiloto sí cruza cross-tenant a propósito (superadmin, /admin) —
+    // pero por REGISTRO de la tool, nunca porque el modelo lo haya elegido
+    // con un argumento. Un parámetro llamado `tenantId`/`flotaId`/`empresa`
+    // es justo la puerta que convertiría eso en un selector.
+    for (const s of funcionesCopiloto()) {
+      const params = s.function.parameters as { properties?: Record<string, unknown> } | undefined;
+      for (const clave of Object.keys(params?.properties ?? {})) {
+        expect(clave.toLowerCase(), s.function.name).not.toMatch(/tenant|flota|empresa/);
+      }
+    }
+  });
+
+  it('todo string SIN enum está en la lista de excepciones documentadas', () => {
+    // Es la prueba que atrapa a la tool 15ª: un parámetro de texto libre
+    // nuevo que nadie declaró aquí a propósito hace fallar esto, en vez de
+    // colarse en silencio como pasó con las 14 originales en la ronda 18.
+    for (const s of funcionesCopiloto()) {
+      const params = s.function.parameters as { properties?: Record<string, { type?: string; enum?: unknown[] }> } | undefined;
+      const permitidas = TEXTO_LIBRE_A_PROPOSITO[s.function.name] ?? [];
+      for (const [clave, def] of Object.entries(params?.properties ?? {})) {
+        if (def.type === 'string' && !def.enum) {
+          expect(permitidas, `${s.function.name}.${clave} es texto libre no declarado en TEXTO_LIBRE_A_PROPOSITO`).toContain(clave);
+        }
+      }
+    }
+  });
+
+  it('las excepciones declaradas de verdad existen en el schema de hoy', () => {
+    // Si `bitacora` deja de llamarse `filtro`, o `ficha_cliente` deja de
+    // llamarse `nombre`, esta prueba avisa — la lista de arriba no puede
+    // quedarse describiendo un schema que ya cambió.
+    for (const [tool, props] of Object.entries(TEXTO_LIBRE_A_PROPOSITO)) {
+      const [schema] = toolSchemas([tool]);
+      expect(schema, tool).toBeDefined();
+      const params = schema?.type === 'function'
+        ? (schema.function.parameters as { properties?: Record<string, unknown> } | undefined)
+        : undefined;
+      for (const p of props) {
+        expect(Object.keys(params?.properties ?? {}), tool).toContain(p);
+      }
+    }
   });
 });

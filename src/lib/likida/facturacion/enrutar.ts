@@ -82,6 +82,22 @@ export function enrutar(t: TicketPorFacturar, sabeOperarlo: boolean, cuentaCompa
     falta.push(t.urlTicket ? 'el portal no está en el registro todavía' : 'el ticket no trae liga de facturación');
     return { via: 'incompleto', falta };
   }
+
+  // SE SABE DE QUIÉN ES EL TICKET, PERO NO A DÓNDE MANDARLO.
+  //
+  // Va aquí arriba, antes que cualquier otra rama, porque todas las de abajo
+  // —`mensaje` y `automatico`— llevan `portal` en la respuesta, y el portal de
+  // un comercio con `portalPendiente` es la cadena vacía. Dejarlo pasar
+  // mandaría al encargado un WhatsApp con un renglón en blanco donde va la
+  // liga, o al robot a `pagina.abrir('')`. Fail-closed y DICHO, con el nombre
+  // del comercio: es más accionable que el "el portal no está en el registro
+  // todavía" de arriba, porque aquí sí se sabe a quién hay que ir a buscarle
+  // la página de facturación.
+  if (t.comercio.portalPendiente) {
+    falta.push(`${t.comercio.nombre}: su ticket no imprime liga y su portal de facturación todavía no se ha verificado`);
+    return { via: 'incompleto', falta };
+  }
+
   if (t.camposPendientes) {
     falta.push('no se han leído los campos que pide ese portal');
     return { via: 'incompleto', falta };
@@ -157,10 +173,17 @@ export function mensajeParaEncargado(t: TicketPorFacturar, ruta: Extract<Ruta, {
   const lineas: string[] = [];
   const c = t.caducidad;
 
+  // FISCAL-19C2-8 (barrido MEDIO/BAJO): "VENCE HOY" a secas se leía como el
+  // plazo LEGAL, cuando en la mayoría de los comercios (`plazoVerificado:
+  // false` es el default del catálogo, ver engine.ts) es el plazo IMPRESO
+  // en el ticket — legalmente se puede exigir la factura dentro del
+  // ejercicio. Mismo matiz que ya usa engine.ts, en versión corta para un
+  // mensaje de WhatsApp.
+  const notaPlazo = t.plazoVerificado ? '' : ' (plazo del comercio, no de la ley)';
   const urgencia = c.desconocido
     ? 'sin fecha legible'
     : c.urgente
-      ? (c.diasRestantes === 0 ? '⚠️ VENCE HOY' : `⚠️ vence en ${c.diasRestantes} día(s)`)
+      ? (c.diasRestantes === 0 ? `⚠️ VENCE HOY${notaPlazo}` : `⚠️ vence en ${c.diasRestantes} día(s)${notaPlazo}`)
       : `${c.diasRestantes} días para facturar`;
 
   lineas.push(`Falta la factura de un ${t.concepto} — ${urgencia}`);

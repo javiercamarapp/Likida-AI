@@ -64,15 +64,20 @@ describe('la ruta del PDF del operador es la MISMA donde se sube y donde se lee'
     // Si el chofer recibiera `{}/{}.pdf`, le llegarían por WhatsApp los
     // veredictos que `resumen.ts` le oculta — el hallazgo ALTO de la ronda 4
     // por otra puerta. Desde la auditoría 18 (M26) `processor.ts` SÍ firma el
-    // completo, pero en UNA sola línea, etiquetada para el contralor, y esa
-    // línea no es la que manda el documento al chofer.
+    // completo, y desde la 24 (AGEN-4, la re-entrega de un cierre que murió
+    // después del commit) lo firma en DOS sitios. Lo que importa no es cuántos
+    // sean: es que TODOS vayan etiquetados para el contralor y que NINGUNO sea
+    // la línea que manda el documento al chofer. Contar sitios ataba la prueba
+    // a la forma del archivo; esto ata la garantía.
     expect(rutasDePdf(PROCESSOR)).toContain('{}/{}-operador.pdf');
     const firmasDelCompleto = PROCESSOR.split('\n')
       .filter((l) => !l.trim().startsWith('//'))
       .filter((l) => /`\$\{[^}]*\}\/\$\{[^}]*\}\.pdf`/.test(l));
-    expect(firmasDelCompleto, 'el ejemplar completo se firma en un solo sitio').toHaveLength(1);
-    expect(firmasDelCompleto[0]).toContain("'createSignedUrl.contralor'");
-    expect(firmasDelCompleto[0]).not.toContain('sendDocument');
+    expect(firmasDelCompleto.length, 'el ejemplar completo tiene que firmarse en algún lado').toBeGreaterThanOrEqual(1);
+    for (const linea of firmasDelCompleto) {
+      expect(linea, 'una firma del completo sin etiqueta de contralor').toContain("'createSignedUrl.contralor'");
+      expect(linea, 'el completo NUNCA se manda en la misma línea que lo firma').not.toContain('sendDocument');
+    }
   });
 
   it('`tools.ts` sube los DOS ejemplares en rutas distintas', () => {

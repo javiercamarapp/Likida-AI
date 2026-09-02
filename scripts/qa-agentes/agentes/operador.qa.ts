@@ -16,6 +16,8 @@ import { vi } from 'vitest';
 import sharp from 'sharp';
 import { PREFIJO_QA } from '../config.qa';
 import type { TicketEscenario } from '../escenarios/operador.escenarios';
+import { bytesBasura, type FotoFuzz } from '../escenarios/fuzzing.escenarios';
+import { mulberry32 } from '../escenarios/rng';
 
 // ── Lo capturado por el Meta falso ──────────────────────────────────────────
 
@@ -182,4 +184,69 @@ export async function enviarTexto(telefono: string, texto: string, etiqueta: str
     text: texto,
     waMessageId: `${PREFIJO_QA}${etiqueta}-${++almacen.n}`,
   });
+}
+
+// ── Las fotos del fuzzer (Modo 4) ──────────────────────────────────────────
+//
+// Vive aquí y no en `escenarios/fuzzing.escenarios.ts` por la misma razón por
+// la que `generarTicketPng` vive aquí: el generador es PURO y síncrono, y
+// renderizar necesita `sharp` y es asíncrono. Mezclarlos obligaría a la suite
+// offline del generador a cargar sharp para probar una función que no lo usa.
+//
+// `seed` entra por parámetro para que el renderizado sea tan reproducible como
+// el escenario: la misma foto, byte a byte, en las 3 repeticiones — que es lo
+// que hace comparable un N/N.
+
+/** Un ticket creíble con el payload de inyección IMPRESO en 4 renglones. */
+async function ticketEnvenenadoPng(t: TicketEscenario, payload: string): Promise<string> {
+  const [y, m, d] = t.fecha.split('-');
+  // Mismos cortes que `pruebas-manuales/inyeccion.prueba.ts`: 4 × 62 caracteres.
+  const renglon = (i: number) => payload.slice(i * 62, (i + 1) * 62);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="620" height="880">
+    <rect width="620" height="880" fill="#ffffff"/>
+    <g font-family="monospace" font-size="21" fill="#111111">
+      <text x="40" y="60">GASOLINERA ZZZ QA SA DE CV</text>
+      <text x="40" y="130">FOLIO       ${t.folio}</text>
+      <text x="40" y="160">FECHA       ${d}/${m}/${y}  10:15</text>
+      <text x="40" y="200">PRODUCTO    DIESEL</text>
+      <text x="40" y="230">LITROS      ${t.litros.toFixed(3)}</text>
+      <text x="40" y="365" font-size="27">TOTAL         ${t.monto.toFixed(2)}</text>
+      <text x="40" y="400">FORMA DE PAGO  TARJETA</text>
+      <text x="40" y="450" font-size="17">${renglon(0)}</text>
+      <text x="40" y="475" font-size="17">${renglon(1)}</text>
+      <text x="40" y="500" font-size="17">${renglon(2)}</text>
+      <text x="40" y="525" font-size="17">${renglon(3)}</text>
+      <text x="40" y="620">GRACIAS POR SU COMPRA</text>
+    </g>
+  </svg>`;
+  const png = await sharp(Buffer.from(svg)).png().toBuffer();
+  return `data:image/png;base64,${png.toString('base64')}`;
+}
+
+/**
+ * El data-URL de una foto del fuzzer. `bytes_basura` NO pasa por sharp a
+ * propósito: si pasara, o fallaría o produciría una imagen válida, y en los dos
+ * casos dejaría de ser «esto no es una imagen».
+ */
+export async function generarFotoFuzzPng(foto: FotoFuzz, seed: number): Promise<string> {
+  const rng = mulberry32(seed);
+  switch (foto.clase) {
+    case 'bytes_basura':
+      return `data:${foto.mime};base64,${bytesBasura(rng, foto.bytes).toString('base64')}`;
+
+    case 'ruido_valido': {
+      // PNG válido de verdad: decodifica, tiene dimensiones, y no hay un solo
+      // carácter que leer. Es la foto que invita a alucinar un monto.
+      const rects = foto.bloques
+        .map((b) => `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="rgb(${b.gris},${b.gris},${b.gris})"/>`)
+        .join('');
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${foto.ancho}" height="${foto.alto}">`
+        + `<rect width="${foto.ancho}" height="${foto.alto}" fill="#ffffff"/>${rects}</svg>`;
+      const png = await sharp(Buffer.from(svg)).png().toBuffer();
+      return `data:image/png;base64,${png.toString('base64')}`;
+    }
+
+    case 'ticket_envenenado':
+      return ticketEnvenenadoPng(foto.ticket, foto.payload);
+  }
 }

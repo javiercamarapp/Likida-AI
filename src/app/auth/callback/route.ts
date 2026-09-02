@@ -13,7 +13,13 @@ import { reenviarEnlaceCaducado } from '@/lib/auth/reenvio_enlace';
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code');
   const next = req.nextUrl.searchParams.get('next');
-  const destinoExplicito = next && next.startsWith('/dashboard') ? next : null;
+  // La allowlist es de PREFIJOS DE RUTA PROPIOS, nunca URLs completas: es lo
+  // que cierra el open redirect. `/mcp/autorizar` entró con el servidor MCP
+  // — el consentimiento OAuth rebota aquí a mitad de flujo y sin este
+  // prefijo el usuario aterrizaba en su panel mientras Claude/ChatGPT se
+  // quedaba esperando la autorización que nunca volvió.
+  const destinoExplicito =
+    next && (next.startsWith('/dashboard') || next.startsWith('/mcp/autorizar')) ? next : null;
 
   // Con qué se vuelve a /login si esto no acaba en sesión. Empieza en el
   // motivo que Supabase pegó al redirect cuando rechazó el token ANTES de

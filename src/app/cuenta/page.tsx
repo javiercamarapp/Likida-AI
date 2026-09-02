@@ -1,12 +1,20 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { sufijoTenant } from '@/app/dashboard/sufijo';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Cuenta() {
-  const s = await requireSessionTenant('/cuenta');
+export default async function Cuenta({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tenant?: string; vista?: string; rol?: string }>;
+}) {
+  const sp = await searchParams;
+  const s = await requireSessionTenant('/cuenta', sp);
+  const sufijo = sufijoTenant(sp);
   const { data: tenant } = await supabaseAdmin()
     .from('tenant').select('nombre').eq('id', s.tenantId).maybeSingle();
 
@@ -31,7 +39,10 @@ export default async function Cuenta() {
             <dd>{s.nombre ?? s.userId}</dd>
           </div>
         </dl>
-        <form action={cerrarSesion} className="mt-6">
+        <Link href={`/dashboard${sufijo}`} className="mt-6 block text-sm underline" style={{ color: 'var(--muted)' }}>
+          ← Volver al panel
+        </Link>
+        <form action={cerrarSesion} className="mt-4">
           <button type="submit"
             className="w-full px-4 py-2.5 rounded-lg text-sm font-medium hairline"
             style={{ color: 'var(--ink)' }}>

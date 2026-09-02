@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { sufijoTenant } from '../../sufijo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import {
@@ -7,6 +8,7 @@ import {
   ejecutarCobranza, dentroDeVentana,
 } from '@/lib/likida/agentes/cobranza';
 import { logger } from '@/lib/logger';
+import { ahoraMs } from '@/lib/saludo';
 import { registrarCorrida, ultimasCorridas, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
 import { VistaAgenteCobranza } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
@@ -48,8 +50,7 @@ export default async function PaginaAgenteCobranza({
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/cobranza', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/cobranza')) redirect('/dashboard');
 
-  const base = sp.tenant ? `?tenant=${sp.tenant}` : sp.vista ? `?vista=${sp.vista}` : '';
-  const sufijo = sp.rol ? `${base}${base ? '&' : '?'}rol=${sp.rol}` : base;
+  const sufijo = sufijoTenant(sp);
 
   const [cola, config, bitacora, corridas] = await Promise.all([
     colaCobranza(tenantId),
@@ -103,8 +104,19 @@ export default async function PaginaAgenteCobranza({
 
     // `ignorarVentana`: el humano que aprieta ES la autorización de contactar
     // fuera de horario. Un agente pausado no corre ni a mano (lo dice el motor).
+    //
+    // FE-14: sin `venceEn` la corrida manual mandaba WhatsApp en serie a TODA
+    // la cola sin reloj de corte — con cientos de choferes en tier, la
+    // function podía cortarse a mitad (timeout de la plataforma) con
+    // `registrarCorrida` sin escribirse: la bitácora quedaba muda y el
+    // usuario veía un error genérico. `ejecutarCobranza` ya sabe cortarse
+    // sola cuando se le pasa `venceEn` (el cron global ya lo hace,
+    // `cobranza.ts:406`) y reportar cuántos quedaron fuera
+    // (`cortadosPorReloj`); solo faltaba pasárselo aquí.
     const inicio = new Date();
-    const resultado = await ejecutarCobranza(tenantId, new Date(), { ignorarVentana: true });
+    const resultado = await ejecutarCobranza(tenantId, new Date(), {
+      ignorarVentana: true, venceEn: ahoraMs() + 25_000,
+    });
     // La bitácora de corridas (B3). `registrarCorrida` nunca lanza.
     await registrarCorrida(tenantId, 'cobranza', {
       inicio,

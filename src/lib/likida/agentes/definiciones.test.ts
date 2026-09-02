@@ -8,6 +8,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const inserciones: Array<{ tabla: string; fila: Record<string, unknown> }> = [];
 let errorInsert: { code?: string; message: string } | null = null;
+/** Ids que `graduarAgente` encuentra al hacer `UPDATE ... WHERE id = ...`
+ *  (simula qué filas existen de verdad en el catálogo). */
+let idsExistentes: Set<string> = new Set();
+let errorUpdate: { message: string } | null = null;
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
@@ -18,12 +22,24 @@ vi.mock('@/lib/supabase/admin', () => ({
         return { error: null };
       },
       select: () => ({ order: () => ({ range: async () => ({ data: [], error: null }) }) }),
+      update: (cambios: Record<string, unknown>) => ({
+        eq: (_col: string, id: string) => ({
+          select: () => ({
+            maybeSingle: async () => {
+              if (errorUpdate) return { data: null, error: errorUpdate };
+              if (!idsExistentes.has(id)) return { data: null, error: null };
+              inserciones.push({ tabla, fila: { id, ...cambios } });
+              return { data: { id }, error: null };
+            },
+          }),
+        }),
+      }),
     }),
   }),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { validarDefinicion, darDeAltaAgente } = await import('./definiciones');
+const { validarDefinicion, darDeAltaAgente, graduarAgente } = await import('./definiciones');
 const { DatoInvalido } = await import('../errores');
 
 const CRUDA = {
@@ -31,7 +47,7 @@ const CRUDA = {
   descripcion: 'Barre el censo', disparador: 'manual', promptRef: '', presupuestoDiaUsd: '',
 };
 
-beforeEach(() => { inserciones.length = 0; errorInsert = null; });
+beforeEach(() => { inserciones.length = 0; errorInsert = null; idsExistentes = new Set(); errorUpdate = null; });
 
 describe('validarDefinicion', () => {
   it('un id con mayúsculas o espacios se normaliza o rebota con texto de pantalla', () => {
@@ -68,5 +84,22 @@ describe('darDeAltaAgente', () => {
   it('un id duplicado (23505) se dice con palabras, no con el error de Postgres', async () => {
     errorInsert = { code: '23505', message: 'duplicate key value violates unique constraint' };
     await expect(darDeAltaAgente(validarDefinicion(CRUDA), 'u-1')).rejects.toThrow(/ya existe un agente/i);
+  });
+});
+
+describe('graduarAgente', () => {
+  it('quita experimental del agente y lo anota en bitácora con el actor', async () => {
+    idsExistentes = new Set(['cazador']);
+    await graduarAgente('cazador', 'u-javier');
+    const upd = inserciones.find((i) => i.tabla === 'agente_definicion');
+    expect(upd?.fila).toMatchObject({ id: 'cazador', experimental: false });
+    const bit = inserciones.find((i) => i.tabla === 'bitacora_auditoria');
+    expect(bit?.fila).toMatchObject({ accion: 'agente.graduado', entidad_id: 'cazador', actor_id: 'u-javier' });
+  });
+
+  it('graduar un id que no existe en el catálogo rebota con texto de pantalla, no una fila fantasma', async () => {
+    idsExistentes = new Set();
+    await expect(graduarAgente('no_existe', 'u-1')).rejects.toThrow(DatoInvalido);
+    expect(inserciones.find((i) => i.tabla === 'bitacora_auditoria')).toBeUndefined();
   });
 });

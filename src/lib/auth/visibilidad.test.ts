@@ -51,9 +51,26 @@ describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () =>
     '/dashboard/rentabilidad',
     '/dashboard/usuarios', '/dashboard/configuracion', '/dashboard/politicas',
     '/dashboard/onboarding',
+    // Los hilos de WhatsApp de la flota (auditoría 20, H6). Es la pantalla
+    // más fácil de clasificar mal: el interlocutor es el chofer, así que
+    // "operación" suena bien — y en esa conversación el bot le dicta al
+    // chofer montos comprobados y diferencias de liquidación. `dinero_por_
+    // area.test.ts` no la atraparía: no hay un `mxn(` en la página, las
+    // cifras vienen en los DATOS. Por eso la puerta va aquí.
+    '/dashboard/conversaciones',
   ];
   it.each(PROHIBIDAS)('%s le está negada al encargado', (href) => {
     expect(puedeVerRuta('encargado', href)).toBe(false);
+  });
+
+  it('las conversaciones de WhatsApp son del DUEÑO: ni el encargado ni el contador', () => {
+    // El contador tampoco: no tiene por qué leer la conversación personal de
+    // un trabajador para cerrar una contabilidad.
+    expect(puedeVerRuta('flota_admin', '/dashboard/conversaciones')).toBe(true);
+    expect(puedeVerRuta('superadmin', '/dashboard/conversaciones')).toBe(true);
+    expect(puedeVerRuta('encargado', '/dashboard/conversaciones')).toBe(false);
+    expect(puedeVerRuta('contador', '/dashboard/conversaciones')).toBe(false);
+    expect(puedeVerRuta('operador', '/dashboard/conversaciones')).toBe(false);
   });
 
   // El Registro de F2 (14-ago-2026) le devolvió al encargado sus pantallas
@@ -84,14 +101,20 @@ describe('el contador — su panel volvió, y la operación le sigue cerrada', (
       '/dashboard/agentes/peajes',
       // Proveedores (F6): la bandeja de facturas del taller — dinero.
       '/dashboard/agentes/proveedores',
+      // Carta Porte (Fases B-C, 25-ago-2026): cero pesos y la declaración de
+      // ruta es del jefe de tráfico — operación, como su pantalla.
+      '/dashboard/agentes/carta-porte',
     ]);
     const DINERO = [
       '/dashboard/agentes/liquidacion', '/dashboard/agentes/facturas',
       '/dashboard/agentes/cobranza', '/dashboard/agentes/peajes', '/dashboard/agentes/proveedores',
     ];
+    const OPERACION_AGENTES = ['/dashboard/agentes/conductores', '/dashboard/agentes/carta-porte'];
     for (const href of DINERO) expect(puedeVerRuta('contador', href)).toBe(true);
-    expect(puedeVerRuta('contador', '/dashboard/agentes/conductores')).toBe(false);
-    expect(puedeVerRuta('encargado', '/dashboard/agentes/conductores')).toBe(true);
+    for (const href of OPERACION_AGENTES) {
+      expect(puedeVerRuta('contador', href), href).toBe(false);
+      expect(puedeVerRuta('encargado', href), href).toBe(true);
+    }
     for (const href of DINERO) expect(puedeVerRuta('encargado', href)).toBe(false);
   });
 
@@ -200,6 +223,37 @@ describe('el mapa de rutas no se queda atrás del sidebar', () => {
 
     it('está en el sidebar, no solo en el mapa de áreas', () => {
       expect(todas.some((i) => i.href === '/dashboard/llaves-api')).toBe(true);
+    });
+  });
+
+  // ── Sesiones MCP (H3, 29-ago-2026) ───────────────────────────────────────
+  //
+  // Un token MCP (0260) es la misma clase de cosa que una llave `lk_live_`:
+  // lee los datos de la flota desde fuera del panel, sin sesión. Cortar el de
+  // OTRA persona es del dueño, y por eso la ruta es `administracion` — pero
+  // cortar los PROPIOS tiene que poder hacerlo también el contador y el
+  // encargado, y eso vive en /dashboard/mi-perfil (RUTAS_TODO_ROL). Estas dos
+  // pruebas fijan justamente ese reparto: sin la segunda, un contador que
+  // conectó Claude no tendría ninguna pantalla donde cortarlo.
+  describe('/dashboard/sesiones-mcp', () => {
+    it('es administración: solo el dueño y el superadmin cortan los de otro', () => {
+      expect(areaDeRuta('/dashboard/sesiones-mcp')).toBe('administracion');
+      expect(puedeVerRuta('flota_admin', '/dashboard/sesiones-mcp')).toBe(true);
+      expect(puedeVerRuta('superadmin', '/dashboard/sesiones-mcp')).toBe(true);
+      expect(puedeVerRuta('contador', '/dashboard/sesiones-mcp')).toBe(false);
+      expect(puedeVerRuta('encargado', '/dashboard/sesiones-mcp')).toBe(false);
+    });
+
+    it('pero TODO rol conocido llega a Mi perfil, donde corta los suyos', () => {
+      for (const rol of ['flota_admin', 'encargado', 'contador', 'superadmin']) {
+        expect(puedeVerRuta(rol, '/dashboard/mi-perfil')).toBe(true);
+      }
+      // Y un rol desconocido no: fail closed, también para esto.
+      expect(puedeVerRuta('lo_que_sea', '/dashboard/mi-perfil')).toBe(false);
+    });
+
+    it('está en el sidebar, junto a Llaves de API', () => {
+      expect(todas.some((i) => i.href === '/dashboard/sesiones-mcp')).toBe(true);
     });
   });
 });
@@ -348,5 +402,25 @@ describe('las rutas de la cuenta/persona las ve TODO rol conocido (16-ago-2026)'
   it('la excepción no se derrama: el contador sigue sin ver despacho ni el encargado facturación', () => {
     expect(puedeVerRuta('contador', '/dashboard/despacho')).toBe(false);
     expect(puedeVerRuta('encargado', '/dashboard/facturacion')).toBe(false);
+  });
+});
+
+// ── El timbrado, en `dinero` (0227 — auditoría Fable c6-3) ─────────────────
+
+describe('/dashboard/timbrado vive en dinero, no en operación', () => {
+  it('el CONTADOR y el dueño la ven — es su papel fiscal', () => {
+    expect(puedeVerRuta('contador', '/dashboard/timbrado')).toBe(true);
+    expect(puedeVerRuta('flota_admin', '/dashboard/timbrado')).toBe(true);
+    expect(puedeVerRuta('superadmin', '/dashboard/timbrado')).toBe(true);
+  });
+
+  it('el ENCARGADO no: el CFDI lleva flete, IVA y retención adentro', () => {
+    expect(puedeVerRuta('encargado', '/dashboard/timbrado')).toBe(false);
+    expect(areaDeRuta('/dashboard/timbrado')).toBe('dinero');
+  });
+
+  it('el borrador de Carta Porte SIGUE siendo del jefe de tráfico: la ruta la declara quien la conoce', () => {
+    expect(puedeVerRuta('encargado', '/dashboard/carta-porte')).toBe(true);
+    expect(areaDeRuta('/dashboard/carta-porte')).toBe('operacion');
   });
 });

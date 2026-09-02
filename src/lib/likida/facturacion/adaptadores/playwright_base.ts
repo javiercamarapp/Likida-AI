@@ -2,6 +2,10 @@ import { logger } from '@/lib/logger';
 import type { AdaptadorPortal, ModoAgente, ResultadoAgente } from '../agente';
 import type { CampoListo } from '../pendientes';
 import type { ClaveCampo } from '../comercios';
+import {
+  capturaSegura, escribirCampo, esperarTexto, FalloDePortal, leerRechazo,
+  mensajeSelectoresIdos, preVuelo, textoDeError, type SelectorAVerificar,
+} from './pasos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA BASE DE LA QUE CUELGA CADA ADAPTADOR DE PORTAL.
@@ -203,10 +207,26 @@ export interface OpcionesAdaptador {
   ahora?: () => number;
 }
 
-/** Fallo con mensaje ya escrito para una persona. Se distingue del inesperado. */
-class FalloDePortal extends Error {}
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PROCEDIMIENTO SE MUDÓ A `pasos.ts`, Y ESTA CLASE LO LLAMA.
+//
+// Hasta esta rama, cada paso de operar un portal —el pre-vuelo, escribir un
+// campo, sondear el UUID, leer el cuadro de error, la captura que no puede
+// tumbar nada— era un método PRIVADO de esta clase. O sea reusable solo por
+// herencia y solo en ESTE orden. Un portal que necesitara un paso de más
+// (entrar con la sesión de una persona, apretar «Buscar» antes de que aparezca
+// el formulario fiscal, bajar el XML al final) tenía que sobrescribir
+// `facturar()` entero, que es lo que hizo CAPUFE con sus 1 282 líneas.
+//
+// Los pasos bajaron a `pasos.ts` como funciones sueltas sobre `PaginaPortal`,
+// con los MENSAJES LITERALES intactos —son el diagnóstico que alguien lee a
+// las tres de la mañana y ya están probados palabra por palabra—, y esta clase
+// se quedó con lo suyo: el ORDEN FIJO y la regla de los reintentos. El motor
+// declarativo (`guion.ts`) compone los mismos pasos en otro orden sin heredar
+// de aquí, que es justo lo que antes no se podía.
+// ═══════════════════════════════════════════════════════════════════════════
 
-const texto = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const texto = textoDeError;
 
 export abstract class AdaptadorPlaywrightBase implements AdaptadorPortal {
   /** Clave del comercio en el registro (`comercios.ts`). */
@@ -301,11 +321,11 @@ export abstract class AdaptadorPlaywrightBase implements AdaptadorPortal {
           logger.warn('agente.portal.campo_sin_selector', { comercio: this.comercio, clave: c.clave });
           continue;
         }
-        try {
-          await pagina.escribir(sel, c.valor);
-        } catch (e) {
-          throw new FalloDePortal(`No se pudo llenar "${c.etiqueta}" en ${this.portal}: el selector \`${sel}\` ya no está en la página (${texto(e)}). Hay que actualizar el mapeo de "${this.comercio}".`);
-        }
+        await escribirCampo(
+          pagina,
+          { selector: sel, valor: c.valor, que: c.etiqueta },
+          { portal: this.portal, comercio: this.comercio },
+        );
         // La llave es la CLAVE, no la etiqueta: dos campos pueden llamarse igual
         // en pantalla y uno pisaría al otro sin que nadie lo viera.
         capturado[c.clave] = c.valor;
@@ -393,23 +413,18 @@ export abstract class AdaptadorPlaywrightBase implements AdaptadorPortal {
    * existen todavía cuando el formulario está en blanco.
    */
   private async verificarSelectores(pagina: PaginaPortal, campos: CampoListo[], mapeo: MapeoPortal): Promise<void> {
-    const existe = pagina.existe;
-    // Sin pre-vuelo no se falla: se descubre al escribir, con el mismo mensaje.
-    if (!existe) return;
-
-    const revisar: Array<{ que: string; sel: string }> = [];
+    const revisar: SelectorAVerificar[] = [];
     for (const c of campos) {
       const sel = mapeo.campos[c.clave];
       if (sel && c.valor) revisar.push({ que: `el campo "${c.etiqueta}"`, sel });
     }
     revisar.push({ que: 'el botón de emitir', sel: mapeo.botonEmitir });
 
-    const faltan: string[] = [];
-    for (const r of revisar) {
-      if (!(await existe.call(pagina, r.sel))) faltan.push(`${r.que} → \`${r.sel}\``);
-    }
+    // Sin pre-vuelo (página sin `existe`) no se falla: se descubre al escribir,
+    // con el mismo mensaje. Lo decide `preVuelo` devolviendo `seVerifico:false`.
+    const { faltan } = await preVuelo(pagina, revisar);
     if (faltan.length > 0) {
-      throw new FalloDePortal(`${this.portal} ya no tiene estos selectores: ${faltan.join('; ')}. Hay que actualizar el mapeo de "${this.comercio}".`);
+      throw new FalloDePortal(mensajeSelectoresIdos(this.portal, this.comercio, faltan));
     }
   }
 
@@ -430,47 +445,25 @@ export abstract class AdaptadorPlaywrightBase implements AdaptadorPortal {
    * selector ausente). Devuelve además si el contenedor llegó a existir.
    */
   protected async esperarUuid(pagina: PaginaPortal, selector: string): Promise<{ uuid: string | null; aparecio: boolean }> {
-    const limite = this.ahora() + this.esperaUuidMs;
-    const vueltas = Math.max(1, Math.ceil(this.esperaUuidMs / this.intervaloMs));
-    let aparecio = false;
-
-    for (let i = 0; i < vueltas; i++) {
-      // `leerTexto` distingue `null` (el selector no resuelve) de `''` (existe y
-      // está vacío) — y esa diferencia es justo la que aquí no se puede aplanar.
-      const bruto = await pagina.leerTexto(selector);
-      if (bruto !== null) {
-        aparecio = true;
-        const v = bruto.trim();
-        if (v) return { uuid: v, aparecio: true };
-      }
-      if (i === vueltas - 1 || this.ahora() >= limite) break;
-      await this.dormir(this.intervaloMs);
+    const { valor, aparecio } = await esperarTexto(pagina, selector, {
+      topeMs: this.esperaUuidMs,
+      intervaloMs: this.intervaloMs,
+      dormir: this.dormir,
+      ahora: this.ahora,
+    });
+    if (valor === null) {
+      logger.warn('agente.portal.uuid_sin_confirmar', { comercio: this.comercio, aparecio, esperaMs: this.esperaUuidMs });
     }
-
-    logger.warn('agente.portal.uuid_sin_confirmar', { comercio: this.comercio, aparecio, esperaMs: this.esperaUuidMs });
-    return { uuid: null, aparecio };
+    return { uuid: valor, aparecio };
   }
 
   /** Lo que el portal dice de lo capturado. Vacío o ausente = no dijo nada. */
   private async leerRechazo(pagina: PaginaPortal, mapeo: MapeoPortal): Promise<string | null> {
-    if (!mapeo.error) return null;
-    try {
-      const t = await pagina.leerTexto(mapeo.error);
-      return t && t.trim() ? t.trim() : null;
-    } catch {
-      // Que no se pueda leer el cuadro de error NO es un rechazo. Tratarlo como
-      // tal convertiría cada portal sin cuadro de error en un fallo permanente.
-      return null;
-    }
+    return leerRechazo(pagina, mapeo.error);
   }
 
   /** Una captura que falla no puede tumbar un intento: es evidencia, no paso. */
   private async capturaSegura(pagina: PaginaPortal): Promise<string | undefined> {
-    try {
-      return await pagina.captura();
-    } catch (e) {
-      logger.warn('agente.portal.captura_fallo', { comercio: this.comercio, error: texto(e) });
-      return undefined;
-    }
+    return capturaSegura(pagina, this.comercio);
   }
 }

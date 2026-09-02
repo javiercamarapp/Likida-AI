@@ -13,12 +13,17 @@ export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<Resu
  *  para siempre. */
 export interface OperadorCrudo {
   nombre: string;
+  /** El WhatsApp con el que el bot lo reconoce. `''` = sin capturar, y
+   *  entonces ese chofer NO puede reportar un gasto (FE-4). */
+  telefono: string;
   numeroEmpleado: string;
   licencia: string;
   licenciaTipo: string;
   /** ISO `AAAA-MM-DD`, o `''` = no capturada. */
   licenciaVence: string;
   rfc: string;
+  /** ¿Sigue trabajando en la flota? (auditoría 20, H2). */
+  activo: boolean;
 }
 
 const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
@@ -107,6 +112,27 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo }: {
             className={CAMPO} style={{ background: 'var(--surface)' }} />
         </div>
 
+        {/* ── EL TELÉFONO DE WHATSAPP (auditoría 24, FE-4) ─────────────────
+            Faltaba, y era el hueco más caro de esta pantalla: el teléfono es
+            la IDENTIDAD del chofer frente al bot, y un dígito mal tecleado en
+            el alta lo dejaba sin poder reportar un solo gasto — sin forma de
+            corregirlo salvo dando de baja al chofer y creándolo de nuevo, que
+            parte su historial en dos.
+
+            Se avisa de las dos consecuencias porque ninguna se ve desde aquí:
+            el número viejo deja de funcionar en el acto, y el nuevo tiene que
+            estar libre en la flota (`comprobarTelefonoLibre`). */}
+        <div>
+          <label htmlFor={campo('telefono')} className={ETIQUETA}>WhatsApp del operador</label>
+          <input id={campo('telefono')} name="telefono" type="tel" required maxLength={25}
+            defaultValue={inicial.telefono} placeholder="55 1234 5678"
+            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+          <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
+            Es con lo que el bot lo reconoce. Si lo cambias, el número anterior deja de funcionar de
+            inmediato y el chofer tiene que escribir desde el nuevo.
+          </p>
+        </div>
+
         <div>
           <label htmlFor={campo('numeroEmpleado')} className={ETIQUETA}>Nº de empleado (opcional)</label>
           <input id={campo('numeroEmpleado')} name="numeroEmpleado" type="text" maxLength={40}
@@ -148,6 +174,24 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo }: {
           </p>
         </div>
       </div>
+
+      {/* ── LA BAJA DEL CHOFER (auditoría 20, H2) ─────────────────────────────
+          Mismo checkbox que `/dashboard/clientes` usa para "Cliente activo" —
+          es el patrón que este panel ya resolvió, y una segunda invención
+          (un botón rojo, un modal) enseñaría dos gestos para la misma idea.
+
+          Se explica QUÉ pasa al desmarcarlo porque las tres consecuencias son
+          invisibles desde aquí: el bot deja de contestarle, desaparece de los
+          combos de despacho, y su teléfono queda libre para otra flota. */}
+      <label className="flex items-center gap-2 text-[12.5px] cursor-pointer">
+        <input type="checkbox" name="activo" defaultChecked={inicial.activo} />
+        Operador activo
+      </label>
+      <p className="text-[11px] -mt-1.5" style={{ color: 'var(--faint)' }}>
+        Desmárcalo cuando el chofer deje de trabajar contigo: el bot de WhatsApp deja de atenderlo como
+        operador de tu flota, sale de los buscadores de Despacho y su teléfono queda libre para darlo de
+        alta en otra flota. Su historial de viajes y liquidaciones se conserva completo — no se borra nada.
+      </p>
 
       <Aviso estado={estado} />
       <Boton />

@@ -39,6 +39,10 @@ const CONCEPTOS: readonly ConceptoGasto[] = [
  */
 export const CUENTAS_BALANCE = {
   iva_acreditable: 'ivaAcreditable',
+  iva_no_acreditable: 'ivaNoAcreditable',
+  gasto_no_deducible: 'gastoNoDeducible',
+  gasto_por_confirmar: 'gastoPorConfirmar',
+  retenciones_por_pagar: 'retencionesPorPagar',
   anticipo_operador: 'anticipoOperador',
   por_cobrar_operador: 'porCobrarOperador',
   por_pagar_operador: 'porPagarOperador',
@@ -47,6 +51,14 @@ export const CUENTAS_BALANCE = {
 /** Cómo se le explica cada llave reservada a quien la captura. */
 export const AYUDA_BALANCE: Record<keyof typeof CUENTAS_BALANCE, string> = {
   iva_acreditable: 'IVA acreditable de los comprobantes del viaje.',
+  iva_no_acreditable:
+    'IVA/IEPS que el motor de cuadre NO acreditó (RFC ajeno, EFOS, efectivo, o IEPS de diésel, que nunca se acredita). Sigue siendo dinero del anticipo.',
+  gasto_no_deducible:
+    'Gastos que el motor declaró NO deducibles (EFOS, CFDI cancelado, efectivo sobre el tope). Salieron del anticipo, así que van en el asiento — pero no en la cuenta de gasto deducible: el PDF los imprime como no deducibles y el archivo del ERP tiene que decir lo mismo.',
+  gasto_por_confirmar:
+    'El tercer estado: ni deducible ni perdido, lo confirma tu contador (combustible en efectivo dentro del 15%, EFOS no concluyente, ticket sin timbrar). Va aparte de los no deducibles: juntarlos diría que ya se perdió algo que todavía se puede recuperar.',
+  retenciones_por_pagar:
+    'IVA/ISR que le retienes al proveedor (típico en fletes subcontratados a un permisionario persona física). No es un gasto: es una cuenta POR PAGAR al SAT, y va como abono. Sin ella el export se negaba diciendo «dato de origen roto».',
   anticipo_operador: 'El anticipo entregado al operador; el asiento lo cancela.',
   por_cobrar_operador: 'Lo que el operador debe devolver (comprobó de menos).',
   por_pagar_operador: 'Lo que se le debe al operador (puso de su bolsa).',
@@ -79,7 +91,7 @@ export async function catalogoDeclarado(tenantId: string): Promise<LecturaCatalo
   const declarado = crudo as Record<string, unknown>;
   const catalogo = armarCatalogo(declarado);
   const vacio = Object.keys(catalogo.gastos).length === 0 &&
-    !catalogo.ivaAcreditable && !catalogo.anticipoOperador &&
+    !catalogo.ivaAcreditable && !catalogo.ivaNoAcreditable && !catalogo.anticipoOperador &&
     !catalogo.porCobrarOperador && !catalogo.porPagarOperador;
   return vacio ? { ok: false, motivo: 'sin_declarar' } : { ok: true, catalogo };
 }
@@ -112,3 +124,48 @@ export function armarCatalogo(declarado: Record<string, unknown>): CatalogoConta
   return catalogo;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · ARQ-3 (ALTO, NUEVO) — el mismo catálogo tenía dos lectores
+// con dos verdades: este archivo lee el override CRUDO (a propósito, ver la
+// cabecera) y `/dashboard/configuracion` leía `getConfig()`, que FUSIONA
+// `DEMO_CONFIG`. Resultado: el textarea llegaba prellenado con `600-001`…
+// `600-099` —cuentas marcadas 🔴 demo— sin marca de que no eran de la flota, y
+// el primer «Guardar» de CUALQUIER ajuste operativo las escribía en
+// `tenant.config.catalogoCuentas` como DECLARADAS. A partir de ahí el export
+// de póliza las asienta en el ERP del cliente. «Una cuenta inventada no se
+// detecta al importar — se detecta en la auditoría del año siguiente».
+//
+// Éste es el lector que la pantalla necesitaba: el MISMO crudo, sin pasar por
+// `armarCatalogo`, para que una llave que el contador se dejó de nota (o una
+// cuenta de balance nueva) sobreviva el viaje de ida y vuelta por el textarea.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * `concepto=cuenta` tal como ESTA flota lo declaró, para prellenar la pantalla.
+ *
+ * `null` = no declaró NADA (o lo guardado no es un mapa de textos): el textarea
+ * va vacío y la pantalla lo dice. Nunca devuelve defaults — heredar cuentas de
+ * la demo es exactamente el defecto que esto cierra.
+ */
+export function cuentasDeclaradasDe(crudo: unknown): Record<string, string> | null {
+  if (!crudo || typeof crudo !== 'object' || Array.isArray(crudo)) return null;
+  const salida: Record<string, string> = {};
+  for (const [llave, valor] of Object.entries(crudo as Record<string, unknown>)) {
+    if (typeof valor !== 'string') continue;
+    const cuenta = valor.trim();
+    const c = llave.trim();
+    if (c === '' || cuenta === '') continue;
+    salida[c] = cuenta;
+  }
+  return Object.keys(salida).length === 0 ? null : salida;
+}
+
+/** Lo mismo, contra la base. Falla cerrado: una lectura caída NO es «vacío». */
+export async function cuentasDeclaradas(tenantId: string): Promise<Record<string, string> | null> {
+  const { data, error } = await acotada(
+    supabaseAdmin().from('tenant').select('config').eq('id', tenantId).maybeSingle(),
+    'contabilidad.catalogo',
+  );
+  if (error) throw new Error(`cuentasDeclaradas: ${error.message}`);
+  return cuentasDeclaradasDe((data?.config as { catalogoCuentas?: unknown } | null)?.catalogoCuentas);
+}

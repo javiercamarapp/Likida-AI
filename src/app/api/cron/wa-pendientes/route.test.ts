@@ -29,7 +29,7 @@ vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]
 const urgentesVencidas = vi.fn(async (..._a: unknown[]) => 0);
 vi.mock('@/lib/likida/agentes/cola', () => ({ urgentesVencidas: (...a: unknown[]) => urgentesVencidas(...a) }));
 
-const pendientesPorDrenar = vi.fn(async (): Promise<Array<{ id: string; intentos: number; remitente: string }>> => []);
+const pendientesPorDrenar = vi.fn(async (): Promise<Array<{ id: string; intentos: number; remitente: string; tipo?: string }>> => []);
 const reclamarPendiente = vi.fn(async (id: string, intentos: number): Promise<{ id: string; evento: object; intentos: number } | null> =>
   ({ id, evento: { from: '521999', type: 'text', waMessageId: id }, intentos: intentos + 1 }));
 const marcarPendienteProcesado = vi.fn(async () => {});
@@ -53,8 +53,9 @@ vi.mock('@upstash/qstash', () => ({
   Client: class { publishJSON = (...a: unknown[]) => publishJSON(...(a as [])); },
 }));
 // El latido (RES-7) vive en su propio archivo de pruebas.
+const registrarLatido = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => {}));
 vi.mock('@/lib/admin/salud', () => ({
-  registrarLatido: vi.fn(async () => {}),
+  registrarLatido: (...a: unknown[]) => registrarLatido(...a),
   puertaCron: async (_c: string, req: Request) =>
     req.headers.get('authorization') === 'Bearer secreto-de-prueba'
       ? null
@@ -161,6 +162,20 @@ describe('el drenado', () => {
     expect(await r.json()).toMatchObject({ procesados: 0, fallidos: 0, pospuestos: 1 });
   });
 
+  // AUDITORÍA 24, BE-14: la vuelta entera pospuesta latía `ok` y la bandeja
+  // crecía minuto a minuto con /api/health en verde.
+  it('BE-14: si TODO se pospuso por falta de presupuesto, el latido es `parcial`, no `ok`', async () => {
+    registrarLatido.mockClear();
+    pendientesPorDrenar.mockResolvedValue([
+      { id: 'wamid.a', intentos: 1, remitente: '521999' },
+      { id: 'wamid.b', intentos: 1, remitente: '521998' },
+    ]);
+    processInbound.mockResolvedValue('sin_tiempo' as never);
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    expect(registrarLatido).toHaveBeenCalledWith('wa-pendientes', 'parcial', expect.objectContaining({ procesados: 0, fallidos: 0, pospuestos: 2 }));
+  });
+
   // ESC-1: cada chofer es una cadena en serie; choferes distintos, en paralelo.
   it('paraleliza POR CHOFER y conserva el orden dentro de cada conversación', async () => {
     pendientesPorDrenar.mockResolvedValue([
@@ -221,6 +236,32 @@ describe('el drenado', () => {
     const opts = processInbound.mock.calls[0][1] as { inicioInvocacionMs: number };
     expect(opts.inicioInvocacionMs).toBeGreaterThanOrEqual(antes);
     expect(opts.inicioInvocacionMs).toBeLessThanOrEqual(Date.now());
+  });
+
+  // AGEN-19C2-1 (corrección tras auditoría Fable-5 post-merge PR #72): el
+  // drenado también arma `hayFotoAntesEnCadena`/`hayFotoDespuesEnCadena` a
+  // partir de `tipo` (mig. 0194) — sin esto, un fajo de fotos recuperado por
+  // el cron (en vez de procesado en vivo) seguía produciendo un acuse por
+  // foto en vez del resumen consolidado.
+  it('arma hayFotoAntesEnCadena/hayFotoDespuesEnCadena por chofer usando `tipo`, contando SOLO fotos', async () => {
+    pendientesPorDrenar.mockResolvedValue([
+      { id: 'f1', intentos: 0, remitente: '521999', tipo: 'image' },
+      { id: 'f2', intentos: 0, remitente: '521999', tipo: 'image' },
+      { id: 'listo', intentos: 0, remitente: '521999', tipo: 'text' },
+    ]);
+    reclamarPendiente.mockImplementation(async (id: string, intentos: number) =>
+      ({ id, evento: { from: '521999', type: 'text', waMessageId: id }, intentos: intentos + 1 }));
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+
+    const opts = processInbound.mock.calls.map((c) => c[1] as { hayFotoAntesEnCadena: boolean; hayFotoDespuesEnCadena: boolean });
+    expect(opts).toEqual([
+      { hayFotoAntesEnCadena: false, hayFotoDespuesEnCadena: true, inicioInvocacionMs: expect.any(Number) },
+      { hayFotoAntesEnCadena: true, hayFotoDespuesEnCadena: false, inicioInvocacionMs: expect.any(Number) },
+      // El "listo" (no-foto) no cambia la cuenta: ninguna foto queda DESPUÉS
+      // de él, y SÍ hay fotos antes.
+      { hayFotoAntesEnCadena: true, hayFotoDespuesEnCadena: false, inicioInvocacionMs: expect.any(Number) },
+    ]);
   });
 
   it('el claim perdido (otra corrida lo tomó) no procesa ni cuenta como fallo', async () => {

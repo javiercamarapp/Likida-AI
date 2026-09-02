@@ -58,13 +58,23 @@ function Aviso({ estado }: { estado: ResultadoForma }) {
  * CERO CAMPOS DE DINERO a propósito: esta página es del área `operacion` y
  * `dinero_por_area.test.ts` vigila que ahí no se pinte un peso.
  */
-export function FormaUnidad({ accion, id = '', inicial, idPrefijo }: {
+/** Un proveedor de rastreo, como llega del servidor: SOLO id y nombre. El
+ *  catálogo entero (`CONECTORES_GPS`) trae los `probar()` y las fuentes de
+ *  cada fabricante, y nada de eso tiene que hacer en el bundle del navegador
+ *  — misma decisión que `GrupoCaptura` en la pantalla de Conexiones. */
+export interface ProveedorGps { id: string; nombre: string }
+
+export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGps, gpsVistoEn = null }: {
   accion: AccionForma;
   id?: string;
   inicial: UnidadCruda;
   /** Prefijo para los `id` del DOM: esta forma se repite por unidad y dos
    *  `<label for="placas">` en la misma página apuntan al primero. */
   idPrefijo: string;
+  proveedoresGps: ProveedorGps[];
+  /** Cuándo entró la última posición de ESTA unidad, o `null` si nunca. Se
+   *  enseña junto al amarre porque es lo único que prueba que funciona. */
+  gpsVistoEn?: string | null;
 }) {
   const [estado, despachar] = useActionState(accion, null);
   const campo = (n: string) => `${idPrefijo}-${n}`;
@@ -144,6 +154,53 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo }: {
         </div>
         <p className={AYUDA} style={{ color: 'var(--faint)' }}>
           Con las fechas capturadas, Likida avisa cuál papel vence primero — antes de que lo haga un inspector.
+        </p>
+      </fieldset>
+
+      {/* ── EL AMARRE CON EL GPS (columnas de la 0176) ────────────────────
+          Es lo que faltaba para que el rastreo llegue al panel. El poller
+          (`sincronizar_gps.ts`) busca la unidad por (flota, proveedor,
+          dispositivo): sin estos dos campos, las posiciones que el proveedor
+          reporta se cuentan como HUÉRFANAS y se descartan. Van juntos o no van
+          — el motor lo exige y `validarAmarreGps` lo dice con esas palabras.
+          No es dinero, así que no choca con `dinero_por_area.test.ts`. */}
+      <fieldset className="pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
+        <legend className="etiqueta-mono text-[10px] uppercase mb-2.5" style={{ color: 'var(--faint)' }}>
+          Rastreo GPS · opcional
+        </legend>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label htmlFor={campo('gpsprov')} className={ETIQUETA}>Proveedor de rastreo</label>
+            <select id={campo('gpsprov')} name="gpsProveedor" defaultValue={inicial.gpsProveedor}
+              className={CAMPO} style={{ background: 'var(--surface)' }}>
+              <option value="">Sin GPS conectado</option>
+              {proveedoresGps.map((p) => (
+                <option key={p.id} value={p.id}>{p.nombre}</option>
+              ))}
+            </select>
+            <p className={AYUDA} style={{ color: 'var(--faint)' }}>
+              El mismo que capturaste en Conexiones. Si no está aquí, es que su credencial
+              todavía no se guardó.
+            </p>
+          </div>
+          <div>
+            <label htmlFor={campo('gpsdev')} className={ETIQUETA}>Número de dispositivo</label>
+            <input id={campo('gpsdev')} name="gpsDeviceId" type="text" maxLength={200}
+              defaultValue={inicial.gpsDeviceId} placeholder="El id que le da tu proveedor"
+              className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            <p className={AYUDA} style={{ color: 'var(--faint)' }}>
+              Es el id del vehículo EN EL SISTEMA DE TU PROVEEDOR, no las placas. Un dispositivo
+              solo puede estar en un camión.
+            </p>
+          </div>
+        </div>
+        <p className={AYUDA} style={{ color: gpsVistoEn ? 'var(--ok)' : 'var(--faint)' }}>
+          {gpsVistoEn
+            // Se dice cuándo, no «conectado»: la marca la pone el poller al
+            // asentar una lectura de verdad, y su fecha es el único dato que
+            // distingue «está entrando» de «entró alguna vez».
+            ? `El GPS está entrando: la última posición de esta unidad llegó el ${gpsVistoEn.slice(0, 10)}.`
+            : 'Todavía no ha llegado una sola posición de esta unidad. El cron de rastreo corre cada 5 minutos y solo trae lo de las unidades ligadas.'}
         </p>
       </fieldset>
 

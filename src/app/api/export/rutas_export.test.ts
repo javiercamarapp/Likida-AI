@@ -28,20 +28,47 @@ const MAX_ROWS = 1_000;
 const createSignedUrl = vi.fn(async () => ({ data: { signedUrl: 'https://storage/firmada' }, error: null }));
 const rpc = vi.fn(async () => ({ error: null }));
 function builderLiquidacion() {
+  // Estado POR CONSULTA (el cursor `.or`, el rango, si pidió count) — la
+  // "base" de esta prueba interpreta DE VERDAD el filtro keyset que manda la
+  // ruta, igual que `paginacion.test.ts` de /v1/viajes: si el cursor se arma
+  // mal, aquí se repiten o se pierden filas.
+  const c = { or: null as string | null, rango: null as [number, number] | null, conteo: false };
   const b: Record<string, unknown> = {};
   Object.assign(b, {
-    select: () => b,
-    eq: (c: string, v: unknown) => { filtros.push([c, v]); return b; },
-    gte: (c: string, v: unknown) => { filtros.push([`${c}>=`, v]); return b; },
-    lt: (c: string, v: unknown) => { filtros.push([`${c}<`, v]); return b; },
+    select: (_cols: string, opt?: { count?: string }) => { c.conteo = opt?.count === 'exact'; return b; },
+    eq: (col: string, v: unknown) => { filtros.push([col, v]); return b; },
+    // BLOQ-6 (0299): la ruta acota por `revision` — por omisión deja fuera las
+    // rechazadas (`neq`), y con `?revision=firmadas` usa `in`. La "base" de
+    // esta prueba tiene que conocer los dos verbos o la cadena se rompe.
+    neq: (col: string, v: unknown) => { filtros.push([`${col}<>`, v]); return b; },
+    in: (col: string, v: unknown) => { filtros.push([`${col} in`, v]); return b; },
+    gte: (col: string, v: unknown) => { filtros.push([`${col}>=`, v]); return b; },
+    lt: (col: string, v: unknown) => { filtros.push([`${col}<`, v]); return b; },
+    or: (f: string) => { c.or = f; return b; },
     order: () => b,
-    range: (d: number, h: number) => { rangos.push([d, h]); return b; },
+    range: (d: number, h: number) => { c.rango = [d, h]; rangos.push([d, h]); return b; },
     maybeSingle: async () => ({ data: filaPdf, error: null }),
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) => {
       if (errorLiquidacion) return Promise.resolve({ data: null, error: errorLiquidacion, count: null }).then(res, rej);
-      const [d, h] = rangos.at(-1) ?? [0, MAX_ROWS - 1];
-      const data = rangos.length > seCallaDesde ? [] : liquidaciones.slice(d, Math.min(h + 1, d + MAX_ROWS));
-      return Promise.resolve({ data, error: null, count: d === 0 ? liquidaciones.length : null }).then(res, rej);
+      paginasServidas += 1;
+      let filas = [...liquidaciones];
+      if (c.or) {
+        // El MISMO filtro que manda la ruta, interpretado de verdad:
+        // `created_at.lt.X,and(created_at.eq.X,id.lt.Y)`
+        const m = /^created_at\.lt\.(.+),and\(created_at\.eq\.(.+),id\.lt\.(.+)\)$/.exec(c.or);
+        if (!m) throw new Error(`filtro de cursor irreconocible: ${c.or}`);
+        const [, menor, igual, id] = m;
+        filas = filas.filter((v) =>
+          (v.created_at as string) < menor || ((v.created_at as string) === igual && (v.id as string) < id));
+      }
+      const [d, h] = c.rango ?? [0, MAX_ROWS - 1];
+      const data = paginasServidas > seCallaDesde ? [] : filas.slice(d, Math.min(h + 1, d + MAX_ROWS));
+      const count = c.conteo ? filas.length : null;
+      // LA ESCRITURA CONCURRENTE del hallazgo 21-b2: después de servir esta
+      // página, un chofer cierra su viaje y entra una liquidación NUEVA — la
+      // más reciente de la flota, arriba de todas en el orden descendente.
+      if (paginasServidas === insertarTrasPagina) liquidaciones.unshift(FILA_NUEVA);
+      return Promise.resolve({ data, error: null, count }).then(res, rej);
     },
   });
   return b;
@@ -50,6 +77,17 @@ let liquidaciones: Array<Record<string, unknown>> = [];
 let errorLiquidacion: { message: string } | null = null;
 /** A partir de esta página la base contesta vacío aunque el count diga más. */
 let seCallaDesde = Infinity;
+/** Cuántas consultas de página ha contestado la "base". */
+let paginasServidas = 0;
+/** Tras servir esta página entra la liquidación nueva (Infinity = nunca). */
+let insertarTrasPagina = Infinity;
+/** La liquidación que se escribe a media descarga: más nueva que todas. */
+const FILA_NUEVA = {
+  id: '00000000-0000-4000-8000-999999999999',
+  created_at: '2026-08-22T13:00:00+00:00',
+  total_comprobado: 999, total_anticipo: 999, diferencia: 0, estatus: 'cerrada',
+  diferencias: [], viaje: { folio: 'V-NUEVA', operador: { nombre: 'Recién' } },
+};
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: () => builderLiquidacion(),
@@ -74,6 +112,7 @@ vi.mock('@/lib/likida/intake/desglose_peaje', () => ({
   bitacoraACsv: () => 'csv-bitacora',
 }));
 
+const { LecturaIncompleta } = await import('@/lib/likida/pg');
 const pdf = await import('./pdf/[id]/route');
 const liq = await import('./liquidaciones/route');
 const prov = await import('./facturas-proveedor/route');
@@ -102,6 +141,8 @@ beforeEach(() => {
   liquidaciones = [];
   errorLiquidacion = null;
   seCallaDesde = Infinity;
+  paginasServidas = 0;
+  insertarTrasPagina = Infinity;
   createSignedUrl.mockClear(); rpc.mockClear();
   exportarAprobadas.mockClear(); bitacoraRmf918.mockClear();
 });
@@ -180,8 +221,18 @@ describe('export/pdf/[id] — el tenant es el de la SESIÓN, no el de la URL', (
 });
 
 describe('export/liquidaciones — CSV acotado al tenant', () => {
+  // `id` y `created_at` bajan ESTRICTAMENTE con `i` — el mismo orden
+  // (`created_at desc, id desc`) que pide la ruta — para que el filtro
+  // `.or()` del cursor, aplicado sobre este arreglo ya "ordenado", recorte
+  // exactamente el sufijo que serviría Postgres. Antes `created_at` ciclaba
+  // cada 28 días (montones de empates) y no había `id`: el cursor keyset no
+  // podía distinguir filas del mismo instante — se necesitaba esto para
+  // poder escribir la prueba de la escritura concurrente de abajo.
+  const BASE_MS = Date.parse('2026-08-22T12:00:00Z');
   const fila = (i: number) => ({
-    created_at: `2026-08-${String(1 + (i % 28)).padStart(2, '0')}T12:00:00Z`, total_comprobado: 100 + i, total_anticipo: 120, diferencia: 20 - i,
+    id: `id-${String(900_000 - i).padStart(6, '0')}`,
+    created_at: new Date(BASE_MS - i * 1_000).toISOString(),
+    total_comprobado: 100 + i, total_anticipo: 120, diferencia: 20 - i,
     estatus: 'cerrada', diferencias: i % 2 ? [{}] : [], viaje: { folio: `V-${i}`, operador: { nombre: 'Juan' } },
   });
 
@@ -231,7 +282,11 @@ describe('export/liquidaciones — CSV acotado al tenant', () => {
     const { toCsv, toLiquidacionRows } = await import('@/lib/likida/export');
     expect(texto).toBe(toCsv(toLiquidacionRows(liquidaciones as never)));
     expect(texto.split('\n').length).toBe(2_345 + 2); // encabezado + filas + salto final
-    expect(rangos).toEqual([[0, 999], [1000, 1999], [2000, 2999]]);
+    // KEYSET, no posición: cada página pide `range(0, 999)` — el cursor va en
+    // el `.or()`, no en el rango — así que las tres páginas piden el MISMO
+    // rango. La firma de que en verdad se avanzó es `filtros`/`rangos.length`,
+    // no un rango creciente como el de antes del arreglo.
+    expect(rangos).toEqual([[0, 999], [0, 999], [0, 999]]);
   });
 
   it('una página exacta (1,000) no paga un viaje extra: el count dice que ya está', async () => {
@@ -259,6 +314,51 @@ describe('export/liquidaciones — CSV acotado al tenant', () => {
     const r = await GET_LIQ();
     expect(r.status).toBe(200);
     await expect(r.text()).rejects.toThrow(/incompleta/);
+  });
+
+  // ── AUDITORÍA 21 · BACKEND · MEDIO (REINCIDENTE 18-c4) ────────────────────
+  //
+  // Antes cada página se pedía con `range(d, d+999)`: posición sobre un orden
+  // (`created_at desc`) que CAMBIA entre página y página. Un chofer que cierra
+  // su viaje por WhatsApp a media descarga escribe la liquidación MÁS NUEVA de
+  // la flota — entra en la posición 0 del orden descendente y desplaza a todas
+  // las demás un lugar. Con `count` ya congelado desde la primera página, la
+  // página 2 pedía `range(1000, 1999)`: ahora esa ventana trae la ÚLTIMA fila
+  // de la página 1 REPETIDA (se corrió una posición) y NUNCA trae la fila que
+  // antes vivía en la posición 1999 — y como `leidas` llega exacto a
+  // `esperadas`, el corte no lo nota: el CSV sale "completo" con una fila de
+  // más y otra de menos.
+  //
+  // El arreglo cambia el cursor de POSICIÓN a FILA: `(created_at, id) <
+  // (última vista)`. Una fila más nueva que el cursor nunca puede colarse
+  // antes de él, así que insertarla a mitad de la descarga no mueve a nadie.
+  it('REPRO 21-b2: una liquidación nueva escrita ENTRE páginas ya no duplica una fila ni pierde otra', async () => {
+    const N = 1_200; // > PAGINA: obliga a una segunda vuelta de página
+    liquidaciones = Array.from({ length: N }, (_, i) => fila(i));
+    insertarTrasPagina = 1; // el chofer cierra su viaje justo después de la 1ª página
+
+    const r = await GET_LIQ();
+    expect(r.status).toBe(200);
+    const texto = await r.text();
+    const cuerpo = texto.trim().split('\n').slice(1); // sin encabezado
+
+    // Ni una fila de más: el folio de la escritura concurrente (la más nueva,
+    // fuera del cursor de la primera página) no aparece — el corte quedó
+    // congelado al instante de la primera página, como documenta el código.
+    expect(texto).not.toContain('V-NUEVA');
+
+    // Ni una fila de menos, ni una repetida: las N originales, cada una UNA
+    // sola vez — el bug viejo dejaba N+1 líneas (una duplicada) con una de las
+    // N faltando.
+    const folios = cuerpo.map((linea) => linea.split(',')[0]);
+    expect(folios).toHaveLength(N);
+    expect(new Set(folios).size).toBe(N); // sin duplicados
+    const esperados = new Set(Array.from({ length: N }, (_, i) => `V-${i}`));
+    expect(new Set(folios)).toEqual(esperados); // sin faltantes
+
+    // Y sí se pidieron (al menos) dos páginas: la escritura concurrente pasó
+    // DE VERDAD entre una y otra, no antes de la primera.
+    expect(rangos.length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -291,5 +391,17 @@ describe('export/bitacora-peaje — el desglose se busca acotado al tenant', () 
 
   it('sin ?desglose= es 400', async () => {
     expect((await GET_BIT('')).status).toBe(400);
+  });
+
+  // AUDITORÍA 24, BE-24: una lectura que no puede demostrar que trajo todos
+  // los cruces salía como «Intenta de nuevo en un momento» — mandaba al
+  // contralor a reintentar un error determinista creyendo que fue mala suerte.
+  it('BE-24: `LecturaIncompleta` se nombra, no se disfraza de bache pasajero', async () => {
+    bitacoraRmf918.mockRejectedValueOnce(new LecturaIncompleta('peaje.cruces', 1_000, 1_400));
+    const r = await GET_BIT('d-9');
+    const texto = await r.text();
+    expect(r.status).toBe(500);
+    expect(texto).not.toContain('Intenta de nuevo');
+    expect(texto).toContain('más cruces de los que');
   });
 });

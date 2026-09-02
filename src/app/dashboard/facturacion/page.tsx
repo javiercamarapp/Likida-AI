@@ -4,6 +4,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getFacturacionClientes, type FacturacionClientes } from '@/lib/likida/facturacion_clientes';
+import { getAuditoriaCobranza, ventanaAuditor, type AuditoriaCobranza } from '@/lib/likida/auditor_cobranza';
 import { hoyMx } from '@/lib/formato';
 import {
   validarFactura, crearFactura, validarPago, registrarPago, marcarEmitida, cancelarFactura,
@@ -11,6 +12,8 @@ import {
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { mxn } from '@/lib/formato';
 import { VistaFacturacion, type CapturaFacturacion } from './vista';
+import { BloqueEstadias } from './estadias';
+import { BloquePortalPago } from './portal';
 import type { ResultadoForma } from './forma';
 
 export const dynamic = 'force-dynamic';
@@ -57,24 +60,47 @@ export default async function PaginaFacturacion({
     datos = null;
   }
 
-  // El catálogo de clientes para el formulario. `catch → []` es honesto aquí:
-  // sin catálogo el form dice "no tienes clientes dados de alta", que manda a
-  // la pantalla correcta en vez de fingir una lista vacía de otra cosa.
-  let clientes: Array<{ id: string; nombre: string; diasCredito: number | null }> = [];
+  // El auditor de cobranza: el cruce pactado/entregado/facturado/cobrado de
+  // los viajes iniciados en la ventana (§8.2). Su fallo NO tumba la cartera
+  // —son lecturas independientes— y `null` hace que la sección pinte el
+  // error dicho, no una auditoría vacía que se leería como "sin hallazgos".
+  let auditoria: AuditoriaCobranza | null;
+  try {
+    const hoy = hoyMx();
+    const { desde, hasta } = ventanaAuditor(hoy);
+    auditoria = await getAuditoriaCobranza(tenantId, { desde, hasta, hoy });
+  } catch {
+    auditoria = null;
+  }
+
+  // El catálogo de clientes para el formulario. `null` = NO SE PUDO LEER; `[]`
+  // = se leyó y de verdad no hay ninguno (AUDITORÍA 22, FE-1).
+  //
+  // Antes esto caía a `[]` en cualquier falla, y el comentario de aquí lo
+  // llamaba "honesto". No lo era: supabase-js NO lanza, devuelve
+  // `{ data: null, error }`, así que un 500 de PostgREST o una policy nueva
+  // hacían que el formulario le dijera «no tienes clientes dados de alta» a una
+  // flota con 40 clientes activos — que además los ve listados en
+  // /dashboard/clientes. El mismo archivo ya distinguía las dos cosas para
+  // `datos` y `auditoria` ("el catch NO finge que no hay facturas"); esta era
+  // la única lectura de la pantalla que las mezclaba.
+  let clientes: Array<{ id: string; nombre: string; diasCredito: number | null }> | null = null;
   try {
     const { data, error } = await supabaseAdmin().from('cliente')
       .select('id, nombre, dias_credito')
       .eq('tenant_id', tenantId).eq('activo', true)
       .order('nombre');
-    if (!error && data) {
-      clientes = data.map((c) => ({
+    if (error) {
+      clientes = null;
+    } else {
+      clientes = (data ?? []).map((c) => ({
         id: String((c as { id: unknown }).id),
         nombre: String((c as { nombre: unknown }).nombre),
         diasCredito: (c as { dias_credito: number | null }).dias_credito,
       }));
     }
   } catch {
-    clientes = [];
+    clientes = null;
   }
 
   // ── Las cuatro escrituras. Las puertas van escritas en CADA action a
@@ -173,5 +199,16 @@ export default async function PaginaFacturacion({
     cancelar,
   };
 
-  return <VistaFacturacion datos={datos} captura={captura} />;
+  return (
+    <>
+      <VistaFacturacion datos={datos} captura={captura} auditoria={auditoria} />
+      {/* Estadías y detención (0207): sección independiente — sus lecturas y
+          su fallo no tocan la cartera ni el auditor. */}
+      <BloqueEstadias sp={sp} />
+      {/* Portal de pago del cliente (0228): mismo criterio de independencia.
+          Lo que llega por el enlace público NO está en la cartera de arriba —
+          entra aquí como propuesta y solo la conciliación la mueve. */}
+      <BloquePortalPago sp={sp} />
+    </>
+  );
 }

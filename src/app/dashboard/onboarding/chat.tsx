@@ -307,9 +307,16 @@ export function ChatEntrevista({
       } else {
         d = await resp.json().catch(() => null);
       }
+      // FRONTEND-19C2-6: `d.error` son strings INTERNOS de la ruta ('sin
+      // sesion', 'sin acceso', 'mensajes inválidos', 'cuerpo inválido') — se
+      // imprimían tal cual en la burbuja de chat sin distinguir 401/403
+      // (sesión muerta, necesita recargar) de un 400 (algo del cliente,
+      // recuperable con reintentar). Nunca se muestra `d.error` crudo.
       const respuesta = resp.ok && d && typeof d.texto === 'string'
         ? d.texto
-        : (typeof d?.error === 'string' ? d.error : 'No pude guardar eso y prefiero no suponerlo. Inténtalo de nuevo o usa el formulario.');
+        : resp.status === 401 || resp.status === 403
+          ? 'Tu sesión expiró. Recarga la página para volver a entrar.'
+          : 'No pude guardar eso y prefiero no suponerlo. Inténtalo de nuevo o usa el formulario.';
       setHistorial((h) => [...h.slice(0, -1), {
         q: mostrado,
         r: { texto: respuesta, chips: Array.isArray(d?.chips) ? d.chips as OpcionChip[] : undefined },

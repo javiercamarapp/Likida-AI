@@ -14,6 +14,11 @@ import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { modelFor, type ModelRole } from './models';
 import { reserveLlmBudget, settleLlmBudget, type LlmBudget, type LlmBudgetReservation } from './budget';
+// AUDITORÍA 24, TC-N1: el processor decide el degradado a cuadre con este
+// helper —que atraviesa el `cause` de `PartialExecutionError`— y no con un
+// `instanceof` sobre el envoltorio, que era `false` en producción.
+export { esErrorDePresupuesto } from './budget';
+import { runWithToolSignal } from './runtime-signal';
 
 let _client: OpenAI | null = null;
 
@@ -195,7 +200,11 @@ const PRICES: Record<string, [number, number]> = {
   'google/gemini-2.5-flash-lite': [0.1, 0.4],
   'google/gemini-2.5-flash': [0.3, 2.5],
   'google/gemini-3-flash-preview': [0.5, 3],
-  'anthropic/claude-sonnet-5': [2, 10],       // intro VIGENTE hasta 31-ago-2026; revertir a [3,15] después
+  // $2/$10 es el precio ESTÁNDAR de Sonnet 5: el aumento a $3/$15 anunciado
+  // para el 1-sep-2026 fue cancelado (verificado el 23-ago; ver models.ts).
+  // Aquí decía "revertir a [3,15] después del 31-ago" — dos verdades sobre el
+  // mismo precio, y la de aquí subía 50 % la reserva del cuadre (TC-N6).
+  'anthropic/claude-sonnet-5': [2, 10],
   'anthropic/claude-opus-5': [5, 25],
   'anthropic/claude-haiku-4.5': [1, 5],
   'openai/gpt-5.6-terra': [1, 6],
@@ -278,6 +287,25 @@ const PROVIDER_OPTS = {
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════
+// EL RAZONAMIENTO DEL CONTADOR — apagado, no medido (E.26).
+//
+// Hallazgo del primer examen real (28-ago-2026): con el corpus completo en
+// el prompt (~74k tokens) y sin desactivar el razonamiento oculto de Sonnet
+// 5, `max_tokens: 900` se lo comió ENTERO en "reasoning" —
+// `finish_reason: 'length'`, `content: null` — y la corrida calificó 15/23
+// fácticas como «abstención» cuando el modelo nunca llegó a escribir una
+// respuesta. Es el vicio que la regla 6 del encargo prohíbe: una falla de
+// infraestructura silenciada y leída como comportamiento del examinado.
+//
+// Al contrario del OCR (arriba), aquí no hace falta medir contra un conjunto
+// dorado antes de apagarlo: el FORMATO del prompt (RESPUESTA/FUNDAMENTO/
+// CERTEZA) YA es el andamiaje de razonamiento, expuesto y auditable — el
+// razonamiento oculto no le agrega nada que el examen pueda calificar, y si
+// algún día se quisiera medir si ayuda, se hace con el mismo método: conjunto
+// dorado antes y después, nunca "se ve mejor".
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
 // EL RAZONAMIENTO DEL OCR — la palanca de costo más grande, y la más peligrosa.
 //
 // MEDIDO el 4-ago-2026 sobre las 57 llamadas de OCR en producción: la salida
@@ -309,6 +337,9 @@ const PROVIDER_OPTS = {
 //   (sin variable)              → como hoy, sin tocar nada
 // ═══════════════════════════════════════════════════════════════════════════
 function opcionesDeRazonamiento(role: ModelRole): Record<string, unknown> {
+  // El contador (E.26) también apaga el razonamiento oculto — ver la nota
+  // «EL RAZONAMIENTO DEL CONTADOR» arriba de este archivo para el porqué.
+  if (role === 'contador') return { reasoning: { enabled: false } };
   if (role !== 'ocr') return {};
   const v = (process.env.LLM_RAZONAMIENTO_OCR ?? '').trim().toLowerCase();
   if (v === 'off' || v === 'none' || v === '0') return { reasoning: { enabled: false } };
@@ -331,15 +362,27 @@ export async function generateResponse(opts: {
 
   const once = async (m: string) => {
     opts.signal?.throwIfAborted();
+    // CACHÉ DE PROMPT — la misma palanca (y el mismo razonamiento medido) que
+    // en `generateWithTools`: si el modelo es de Anthropic, el SYSTEM se marca
+    // con el breakpoint y las llamadas siguientes con el mismo prefijo pagan
+    // la lectura al 10%. Importa aquí porque el CONTADOR (E.26) manda el
+    // corpus normativo completo (~45k tokens) idéntico en cada una de sus 32
+    // preguntas — sin la marca, el examen re-paga el corpus entero 32 veces.
+    // Un modelo que no entiende `cache_control` la ignora — no rompe.
+    const sistema = /anthropic\//.test(m)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? ({ role: 'system', content: [{ type: 'text', text: opts.system, cache_control: { type: 'ephemeral' } }] } as any)
+      : { role: 'system' as const, content: opts.system };
     const body = {
       model: m,
-      messages: [{ role: 'system', content: opts.system }, ...opts.messages],
+      messages: [sistema, ...opts.messages],
       max_tokens: opts.maxTokens ?? 500,
       temperature: opts.temperature ?? 0.4,
+      ...opcionesDeRazonamiento(opts.role),
       ...PROVIDER_OPTS,
     } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
     const reservation = opts.budget
-      ? await reserveLlmBudget(opts.budget, calcCost(m, Math.max(1, JSON.stringify(body.messages).length), Number(body.max_tokens ?? 500)))
+      ? await reserveLlmBudget(opts.budget, calcCost(m, Math.max(1, cotaEntradaEnTokens(body.messages)), Number(body.max_tokens ?? 500)))
       : null;
     let settled = false;
     const settle = async (amount: number) => {
@@ -360,9 +403,24 @@ export async function generateResponse(opts: {
       // seguridad. El resultado público debe reflejar lo mismo; devolver 0
       // aquí haría que el Redactor/runner subestimara su gasto aunque la RPC
       // central ya hubiera retenido la reserva.
-      return { text: (res.choices[0]?.message?.content ?? '').trim(), model: res.model || m, tokensIn, tokensOut, cost: costoContabilizado };
+      //
+      // TOOL-CALLING-19C2-1 (barrido MEDIO/BAJO): `costoContabilizado` en
+      // ese caso es la RESERVA (una cota conservadora), no lo medido de
+      // verdad — mismo patrón que `noMedido` en `intake/ocr.ts`. Sin la
+      // marca, un consumidor (p.ej. `redactor.ts`) lo escribía en
+      // `llm_costo` como si fuera una cifra real.
+      return {
+        text: (res.choices[0]?.message?.content ?? '').trim(), model: res.model || m, tokensIn, tokensOut, cost: costoContabilizado,
+        ...(usageValido ? {} : { noMedido: true as const }),
+      };
     } catch (e) {
-      await settle(reservation?.amountUsd ?? 0);
+      // BACKEND-19C2-1: antes se liquidaba aquí al monto RESERVADO (el
+      // estimado, no lo que de verdad se gastó) — una racha de
+      // timeouts/red inestable podía agotar el tope diario del tenant sin
+      // que se hubiera consumido nada real. Ahora se deja la fila en
+      // 'reservado': la 0193 (expira_en) la excluye sola del tope diario
+      // tras el margen de gracia si de verdad nunca hubo uso.
+      if (reservation) logger.error('llm.reserva_sin_liquidar_por_error', { runId: opts.budget?.runId, reservaId: reservation.id, err: e instanceof Error ? e.message : String(e) });
       throw e;
     }
   };
@@ -422,6 +480,42 @@ export class TruncatedError extends StructuredError {
   }
 }
 
+/**
+ * Cota superior de tokens de entrada para RESERVAR antes de llamar al proveedor.
+ *
+ * Se sigue contando el texto a razón de UN token por carácter: es una cota
+ * conservadora deliberada (~4× de más) que evita que un retry o un fallback
+ * gasten sin autorización previa, y liquidar al costo real la corrige después.
+ *
+ * Lo que NO se puede contar así es una imagen. `generateStructured` mete el
+ * data-URL base64 completo dentro de `messages`, y un modelo de visión cobra
+ * una imagen a TARIFA FIJA de unos cientos de tokens, no por byte. Contarla por
+ * carácter hacía que una foto de 3 MB —la que `api/dashboard/ingesta/limites.ts`
+ * admite por escrito diciendo «una foto de celular normal cabe»— pidiera una
+ * reserva de $0.75 contra un techo de $0.50 y muriera ANTES de tocar al
+ * proveedor. El chofer mandaba su ticket y leía «fallo técnico»; el costo real
+ * de esa llamada, medido en las tarifas de arriba, es ~$0.0016.
+ *
+ * `TOKENS_POR_IMAGEN` es holgado a propósito: los modelos de visión que este
+ * repo usa cobran del orden de cientos de tokens por imagen, así que 4,000
+ * sigue sobre-reservando sin volver a hacerlo por byte.
+ */
+export const TOKENS_POR_IMAGEN = 4_000;
+
+export function cotaEntradaEnTokens(messages: unknown): number {
+  let imagenes = 0;
+  const sinDataUrl = JSON.stringify(messages, (clave, valor) => {
+    // Solo el `url` de una parte `image_url`; cualquier otro string se cuenta
+    // entero, que es lo que mantiene la cota conservadora para el texto.
+    if (clave === 'url' && typeof valor === 'string' && valor.startsWith('data:')) {
+      imagenes += 1;
+      return '';
+    }
+    return valor;
+  });
+  return (sinDataUrl?.length ?? 0) + imagenes * TOKENS_POR_IMAGEN;
+}
+
 export async function generateStructured<T>(opts: {
   role: ModelRole;
   system: string;
@@ -439,6 +533,16 @@ export async function generateStructured<T>(opts: {
   signal?: AbortSignal;
   /** Data-URLs de imágenes (OCR de comprobantes). Se adjuntan al último mensaje user. */
   images?: string[];
+  /**
+   * Audios en base64 (transcripción de notas de voz, Capa E1). Mismo viaje que
+   * `images`: se adjuntan al último mensaje user como partes `input_audio`.
+   * `format` es el de OpenRouter ('ogg', 'mp3', 'wav', 'mp4'…) — el tipo del
+   * SDK de OpenAI solo enumera wav/mp3, pero OpenRouter pasa el formato al
+   * proveedor tal cual (Gemini acepta el OGG/Opus de WhatsApp); por eso el
+   * cast de abajo. Un modelo sin oído devuelve 400 — no transitorio, no hay
+   * fallback: el llamador decide qué decirle al usuario.
+   */
+  audios?: { data: string; format: string }[];
   maxTokens?: number;
   temperature?: number;
   /** Reserva dura por corrida/tenant antes de cada intento, incluido fallback. */
@@ -465,11 +569,14 @@ export async function generateStructured<T>(opts: {
     { role: 'system', content: opts.system },
     ...opts.messages.map((m) => ({ role: m.role, content: m.content })),
   ];
-  if (opts.images?.length) {
+  if (opts.images?.length || opts.audios?.length) {
     const lastUserIdx = [...built].map((m) => m.role).lastIndexOf('user');
     const parts: OpenAI.Chat.ChatCompletionContentPart[] = [
       { type: 'text', text: typeof built[lastUserIdx]?.content === 'string' ? (built[lastUserIdx].content as string) : 'Extrae los datos de estas imágenes.' },
-      ...opts.images.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
+      ...(opts.images ?? []).map((url) => ({ type: 'image_url' as const, image_url: { url } })),
+      // El cast: el SDK de OpenAI enumera solo wav/mp3 en `format`, pero
+      // OpenRouter reenvía el formato al proveedor (Gemini sí recibe 'ogg').
+      ...(opts.audios ?? []).map((a) => ({ type: 'input_audio', input_audio: { data: a.data, format: a.format } }) as unknown as OpenAI.Chat.ChatCompletionContentPart),
     ];
     if (lastUserIdx >= 0) built[lastUserIdx] = { role: 'user', content: parts };
     else built.push({ role: 'user', content: parts });
@@ -512,7 +619,7 @@ export async function generateStructured<T>(opts: {
       ...PROVIDER_OPTS,
     };
     const reservation = opts.budget
-      ? await reserveLlmBudget(opts.budget, calcCost(m, Math.max(1, JSON.stringify(body.messages).length + JSON.stringify(jsonSchema).length), maxTokens))
+      ? await reserveLlmBudget(opts.budget, calcCost(m, Math.max(1, cotaEntradaEnTokens(body.messages) + JSON.stringify(jsonSchema).length), maxTokens))
       : null;
     let settled = false;
     const settle = async (amount: number) => {
@@ -525,7 +632,10 @@ export async function generateStructured<T>(opts: {
     try {
       res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
     } catch (e) {
-      await settle(reservation?.amountUsd ?? 0);
+      // BACKEND-19C2-1: ver el mismo fix en `generateResponse` — no liquidar
+      // al monto reservado en error/abort, dejar la fila 'reservado' para
+      // que la 0193 (expira_en) la excluya sola del tope diario.
+      if (reservation) logger.error('llm.reserva_sin_liquidar_por_error', { runId: opts.budget?.runId, reservaId: reservation.id, err: e instanceof Error ? e.message : String(e) });
       throw e;
     }
     const raw = res.choices[0]?.message?.content || '';
@@ -837,14 +947,34 @@ export async function generateWithTools(opts: {
     // Cota conservadora: cada carácter puede representar un token en entradas
     // JSON/URLs. Se sobre-reserva y luego se liquida al costo real; nunca se
     // deja que un retry o fallback gaste sin autorización previa.
-    const inputUpperBound = Math.max(1, JSON.stringify(body.messages ?? '').length + JSON.stringify(body.tools ?? '').length);
-    return reserveLlmBudget(opts.budget, calcCost(modelForRequest, inputUpperBound, maxTokens));
+    // `cotaEntradaEnTokens` (no el largo crudo del JSON) para que, si algún día
+    // este ciclo de tools carga una imagen (p.ej. un adaptador de facturación
+    // con captura de pantalla), la reserva no infle por el base64 de la
+    // data-URL de la misma forma en que lo hacía `generateStructured` antes
+    // del fix de AGEN-19C2-4/OCR.
+    const inputUpperBound = Math.max(1, cotaEntradaEnTokens(body.messages ?? '') + JSON.stringify(body.tools ?? '').length);
+    // RENDIMIENTO-19C2-1: dentro de `runWithToolSignal` para que un cliente
+    // de red profundo (Supabase) herede la señal — sin esto, esta RPC podía
+    // seguir corriendo después de que el reloj de la invocación ya se acabó.
+    return runWithToolSignal(opts.signal, () => reserveLlmBudget(opts.budget!, calcCost(modelForRequest, inputUpperBound, maxTokens)));
   };
 
   const completion = async (body: Record<string, unknown>, signalOpt: { signal: AbortSignal } | undefined) => {
     const reservation = await reservarCompletion(body, activeModel);
     try {
-      const create = client.chat.completions.create as unknown as (
+      // AUDITORÍA prod 25-ago-2026, CRÍTICO: extraer `create` sin `.bind()`
+      // pierde el `this` del método — el SDK de OpenAI guarda su cliente en
+      // `this._client` dentro de cada `APIResource` (`chat.completions` es
+      // uno) y lo usa para hacer la petición HTTP. Llamando a la función
+      // suelta, `this` es `undefined` en modo estricto y revienta con
+      // "Cannot read properties of undefined (reading '_client')" — DESPUÉS
+      // de reservar presupuesto y ANTES de tocar la red, así que cae en
+      // `agent.fail` como cualquier otro error no transitorio. Invisible a la
+      // suite: los mocks de prueba son funciones sueltas que no leen `this`,
+      // así que ninguna prueba con el cliente MOCKEADO puede reproducirlo —
+      // solo el SDK real lo revienta. Verificado en logs reales de producción
+      // el 25-ago mandando "Hola" por WhatsApp.
+      const create = client.chat.completions.create.bind(client.chat.completions) as unknown as (
         request: Record<string, unknown>,
         options?: { signal?: AbortSignal },
       ) => PromiseLike<OpenAI.Chat.ChatCompletion>;
@@ -862,18 +992,30 @@ export async function generateWithTools(opts: {
           const costo = usageCompleta
             ? costoReal(usage as { cost?: number }, activeModel, usage.prompt_tokens, usage.completion_tokens)
             : reservation.amountUsd;
-          await settleLlmBudget(opts.budget!, reservation, costo);
+          // RENDIMIENTO-19C2-1: mismo motivo que `reservarCompletion` — la
+          // RPC de liquidación hereda la señal en vez de poder seguir
+          // corriendo sola después de que el reloj de la invocación terminó.
+          await runWithToolSignal(opts.signal, () => settleLlmBudget(opts.budget!, reservation, costo));
         } catch (e) {
           logger.error('llm.presupuesto_no_liquidado', { runId: opts.budget?.runId, err: e instanceof Error ? e.message : String(e) });
         }
       }
       return response;
     } catch (err) {
-      // Ante un error de red se conserva la reserva completa: el proveedor pudo
-      // haber cobrado aunque la respuesta no llegara a la aplicación.
+      // AUDITORÍA 24, TC-6 (reincidente de la 22/23): aquí se LIQUIDABA la
+      // reserva COMPLETA ante cualquier error —un 503, un timeout, un
+      // `fetch failed` que nunca llegó al proveedor— mientras sus dos
+      // hermanas (`generateResponse`, `generateStructured`, BACKEND-19C2-1)
+      // dejan la fila en 'reservado' para que la 0193 (`expira_en`) la
+      // excluya sola del tope diario si de verdad nunca hubo uso. A $0.056
+      // por reserva de cuadre, 20 minutos de 503 con 40 turnos eran $2.24 de
+      // cargo fantasma que adelantaban el `tope_tenant` de TC-N1. Mismo
+      // trato que las hermanas: se deja la fila reservada y se dice.
       if (reservation) {
-        try { await settleLlmBudget(opts.budget!, reservation, reservation.amountUsd); }
-        catch (e) { logger.error('llm.presupuesto_no_liquidado', { runId: opts.budget?.runId, err: e instanceof Error ? e.message : String(e) }); }
+        logger.error('llm.reserva_sin_liquidar_por_error', {
+          fn: 'generateWithTools', runId: opts.budget?.runId, reservaId: reservation.id,
+          err: err instanceof Error ? err.message : String(err),
+        });
       }
       throw err;
     }
@@ -911,6 +1053,10 @@ export async function generateWithTools(opts: {
 
   try {
     for (let round = 0; round < maxRounds; round++) {
+      // RENDIMIENTO-19C2-1: si la señal ya se disparó mientras corría la
+      // ronda anterior (ejecución de tools, sobre todo), no arrancar una
+      // completion completa más — cortar aquí y no después de pagarla.
+      opts.signal?.throwIfAborted();
       const res = await complete(convo);
       const rIn = res.usage?.prompt_tokens ?? 0;
       const rOut = res.usage?.completion_tokens ?? 0;

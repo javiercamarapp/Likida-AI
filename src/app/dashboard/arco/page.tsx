@@ -3,8 +3,12 @@ import { EstadoVacio, KpiTile } from '../../admin/ui/kit';
 import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { puedeAdministrar } from '@/lib/auth/permisos';
 import { revalidatePath } from 'next/cache';
-import { listarSolicitudesArco, resolverSolicitudArco } from '@/lib/likida/repo';
+import {
+  listarSolicitudesArco, resolverSolicitudArco, ejecutarCancelacionArco, ejecutarOposicionArco,
+} from '@/lib/likida/repo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { fechaMx, hoyMx } from '@/lib/formato';
@@ -18,6 +22,21 @@ const ETIQUETA_TIPO: Record<string, string> = {
 
 type Params = { tenant?: string; vista?: string; rol?: string };
 const RUTA = '/dashboard/arco';
+
+/**
+ * AUDITORÍA 24 — las tres acciones de esta pantalla se gateaban con
+ * `requireSessionTenant` a secas: solo «hay sesión y tiene flota». La PÁGINA
+ * sí gatea (`resolverTenantEfectivo` corre `puedeVerRuta`), pero una server
+ * action es un endpoint POST que no hereda esa puerta, y un encargado —que ve
+ * el área `operacion`, y por tanto esta ruta— podía resolver una solicitud
+ * ARCO, anonimizar al titular en la base y borrar sus conversaciones con un
+ * POST a mano. Contestarle a un titular en nombre del responsable obligado
+ * (LFPDPPP art. 31) es CONTROL de la cuenta: `puedeAdministrar`.
+ */
+const NO_AUTORIZADO = 'Tu rol no puede responder solicitudes ARCO: es una respuesta legal que firma el dueño de la flota.';
+function puedeResponderArco(rol: string): boolean {
+  return puedeVerRuta(rol, RUTA) && puedeAdministrar(rol);
+}
 
 /**
  * Solicitudes ARCO de ESTA flota — la responsable obligada a contestar en 20
@@ -42,6 +61,7 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
     // AUDITORÍA 16, MEDIO: el superadmin que previsualiza una flota real
     // (?tenant=t-otra) no podía resolver — el action usaba el tenant de sesión.
     const s = await requireSessionTenant(RUTA);
+    if (!puedeResponderArco(s.rol)) return { error: NO_AUTORIZADO };
     const sp = await searchParams;
     let tenantEfectivo = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
@@ -60,6 +80,70 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
         : { ok: `Solicitud resuelta. La respuesta NO se pudo enviar por WhatsApp${r.error ? ` (${r.error})` : ''} — entrégala al titular por otro canal.` };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'resolver la solicitud') };
+    }
+  }
+
+  // AUDITORÍA 19 (legal, reincidente #5): `ejecutar_arco_cancelacion` (0178)
+  // existía sin un solo llamador — una cancelación se "resolvía" escribiendo
+  // prosa sin que la base cambiara. Este botón la ejecuta DE VERDAD:
+  // anonimiza nombre y teléfono del titular, borra sus conversaciones, y la
+  // RPC misma deja la solicitud resuelta con la evidencia de qué tocó. El
+  // humano firma (aprieta el botón); el sistema ejecuta — en ese orden.
+  async function accionEjecutarCancelacion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await requireSessionTenant(RUTA);
+    if (!puedeResponderArco(s.rol)) return { error: NO_AUTORIZADO };
+    const sp = await searchParams;
+    let tenantEfectivo = s.tenantId;
+    if (s.rol === 'superadmin' && sp?.tenant) {
+      const { resolverTenantPedido } = await import('@/lib/auth/tenant-api');
+      tenantEfectivo = await resolverTenantPedido(supabaseAdmin(), tenantEfectivo, sp.tenant);
+    }
+    const solicitudId = String(fd.get('solicitudId') ?? '');
+    if (!solicitudId) return { error: 'Falta la solicitud.' };
+    try {
+      const r = await ejecutarCancelacionArco(tenantEfectivo, solicitudId);
+      revalidatePath(RUTA);
+      if (!r.ok) return { error: `No se ejecutó la cancelación: ${r.motivo}` };
+      return r.avisada
+        ? { ok: 'Cancelación ejecutada: el titular quedó anonimizado en la base —incluido el texto libre que escribió por el chat— y se le confirmó por WhatsApp. La documentación fiscal se conserva por el CFF art. 30, desligada de su persona.' }
+        : { ok: `Cancelación ejecutada: el titular quedó anonimizado en la base, incluido el texto libre que escribió por el chat. La confirmación NO salió por WhatsApp${r.errorAviso ? ` (${r.errorAviso})` : ''} — entrégasela por otro canal.` };
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'ejecutar la cancelación') };
+    }
+  }
+
+  // AUDITORÍA 20 (legal, reincidente #5 OTRA VEZ): `ejecutar_arco_oposicion`
+  // es la gemela de la de arriba —misma migración 0178, mismo grant— y
+  // también nació sin llamador. Una oposición se cerraba escribiendo "listo"
+  // y no quedaba evidencia estructurada de nada.
+  //
+  // NO CIERRA LA SOLICITUD, y por eso este botón convive con el de Responder
+  // en vez de sustituirlo: la RPC deja la solicitud `en_proceso` con
+  // `oposicion_automatizada_vigente` y declara que requiere revisión humana.
+  // Primero se registra la constancia, después la persona contesta al titular.
+  async function accionRegistrarOposicion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await requireSessionTenant(RUTA);
+    if (!puedeResponderArco(s.rol)) return { error: NO_AUTORIZADO };
+    const sp = await searchParams;
+    let tenantEfectivo = s.tenantId;
+    if (s.rol === 'superadmin' && sp?.tenant) {
+      const { resolverTenantPedido } = await import('@/lib/auth/tenant-api');
+      tenantEfectivo = await resolverTenantPedido(supabaseAdmin(), tenantEfectivo, sp.tenant);
+    }
+    const solicitudId = String(fd.get('solicitudId') ?? '');
+    if (!solicitudId) return { error: 'Falta la solicitud.' };
+    try {
+      const r = await ejecutarOposicionArco(tenantEfectivo, solicitudId);
+      revalidatePath(RUTA);
+      if (!r.ok) return { error: `No se registró la oposición: ${r.motivo}` };
+      return {
+        ok: 'Oposición registrada en el expediente: queda en proceso, con la constancia de que la '
+          + 'oposición del titular está vigente. Falta que revises el caso y le contestes con el botón de Responder.',
+      };
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'registrar la oposición') };
     }
   }
 
@@ -92,10 +176,20 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
         </div>
       </header>
 
+      {/* H7 (auditoría 24): las tres cifras salían de `solicitudes`, que es
+          `[]` TANTO si de verdad no hay solicitudes COMO si la lectura de
+          arriba falló (`errorCarga`, catch → `solicitudes = []`). Antes de
+          este arreglo las tres KPI pintaban "0" en los dos casos: con la
+          base caída, "0 vencidas sin responder" es exactamente la mentira
+          que un responsable obligado por el art. 31 no se puede permitir —
+          puede haber solicitudes vencidas de verdad y la pantalla las
+          esconde bajo un cero con cara de medición. `null` es NO MEDIBLE
+          (KpiTile lo pinta "—", no "0"); la caja roja de `errorCarga` de
+          abajo ya explica por qué. */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiTile icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Por responder" valor={pendientes.length} />
-        <KpiTile icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} />} etiqueta={`Vencen pronto (≤ ${DIAS_VENCE_PRONTO} días)`} valor={vencenPronto.length} />
-        <KpiTile icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Vencidas sin responder" valor={vencidas.length} />
+        <KpiTile icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Por responder" valor={errorCarga ? null : pendientes.length} />
+        <KpiTile icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} />} etiqueta={`Vencen pronto (≤ ${DIAS_VENCE_PRONTO} días)`} valor={errorCarga ? null : vencenPronto.length} />
+        <KpiTile icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Vencidas sin responder" valor={errorCarga ? null : vencidas.length} />
       </div>
 
       <div className="glass-panel overflow-hidden">
@@ -144,11 +238,43 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
                       <td className="px-3 py-3">
                         {s.estado === 'resuelta' || s.estado === 'improcedente' ? (
                           <span className="text-xs" style={{ color: 'var(--muted)' }}>{s.resolucion ?? '—'}</span>
+                        ) : s.tipo === 'cancelacion' ? (
+                          <div className="flex flex-col gap-2">
+                            {/* La cancelación NO se resuelve con prosa: se
+                                EJECUTA (anonimiza al titular). El botón dice
+                                lo que hace antes de que alguien lo apriete. */}
+                            <FormaConAviso accion={accionEjecutarCancelacion} boton="Ejecutar cancelación" columnas="auto">
+                              <input type="hidden" name="solicitudId" value={s.id} />
+                            </FormaConAviso>
+                            <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                              Anonimiza nombre y teléfono del titular y borra sus conversaciones. Los comprobantes
+                              fiscales se conservan por ley (CFF art. 30), desligados de su persona. No se puede deshacer.
+                            </span>
+                          </div>
                         ) : (
-                          <FormaConAviso accion={accionResponder} boton="Responder" columnas="260px auto">
-                            <input type="hidden" name="solicitudId" value={s.id} />
-                            <input name="resolucion" placeholder="Qué se resolvió y cómo se entrega al titular" style={{ width: 260 }} />
-                          </FormaConAviso>
+                          <div className="flex flex-col gap-2">
+                            {/* La oposición SÍ tiene un acto que dejar
+                                asentado antes de la prosa: la constancia de
+                                que está vigente. Se ofrece arriba de
+                                Responder porque ése es el orden — primero la
+                                evidencia, después la contestación. */}
+                            {s.tipo === 'oposicion' && (
+                              <>
+                                <FormaConAviso accion={accionRegistrarOposicion} boton="Registrar la oposición" columnas="auto">
+                                  <input type="hidden" name="solicitudId" value={s.id} />
+                                </FormaConAviso>
+                                <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                                  Deja constancia en el expediente de que la oposición del titular está vigente
+                                  (queda «en proceso»). No cancela ni borra ningún dato y no cierra la solicitud:
+                                  eso lo haces tú al responder.
+                                </span>
+                              </>
+                            )}
+                            <FormaConAviso accion={accionResponder} boton="Responder" columnas="260px auto">
+                              <input type="hidden" name="solicitudId" value={s.id} />
+                              <input name="resolucion" placeholder="Qué se resolvió y cómo se entrega al titular" style={{ width: 260 }} />
+                            </FormaConAviso>
+                          </div>
                         )}
                       </td>
                     </tr>

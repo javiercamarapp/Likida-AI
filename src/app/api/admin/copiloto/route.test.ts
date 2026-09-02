@@ -16,6 +16,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let sesion: { userId: string; tenantId: string | null; rol: string } | null = null;
 vi.mock('@/lib/auth/session', () => ({ getSessionTenant: async () => sesion }));
+// La palanca del copiloto (0250): encendida por default en toda la suite —
+// sin este mock, `estaApagado` truena contra el supabase de mentiras y el
+// fail-closed contesta 503 a todas las pruebas.
+const palancaCopilotoApagada = vi.fn(async () => false);
+vi.mock('@/lib/likida/interruptores', () => ({ estaApagado: () => palancaCopilotoApagada() }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 // El step-up (fase 7): por default pasa (usuario sin factor); cada prueba
 // que lo necesite lo aprieta.
@@ -34,7 +39,12 @@ vi.mock('@/lib/agents/copiloto-acciones', () => ({
   // para el step-up. Se declara chico y fiel a los ids que estas pruebas usan.
   CATALOGO_ACCIONES: [
     { id: 'apagar_agente', gateo: 'confirma', implementada: true },
-    { id: 'correr_runner', gateo: 'confirma', implementada: true },
+    // ADM-13 (auditoría 24, MEDIO): `correr_runner` puede disparar al
+    // `enviador` (correo real por su cuenta, sin borrador que revisar) —
+    // exigía la MISMA confirmación de un solo POST que "apagar una
+    // palanca". Pasa a 'doble' (motivo + dos POSTs + step-up MFA), mismo
+    // nivel que las acciones con efecto legal/de dinero.
+    { id: 'correr_runner', gateo: 'doble', implementada: true },
     { id: 'encender_agente', gateo: 'doble', implementada: false },
   ],
 }));
@@ -98,6 +108,8 @@ beforeEach(() => {
   stepUp.mockImplementation(async () => ({ ok: true }));
   rateLimit.mockReset();
   rateLimit.mockImplementation(async () => true);
+  palancaCopilotoApagada.mockReset();
+  palancaCopilotoApagada.mockResolvedValue(false);
 });
 
 describe('la puerta', () => {
@@ -113,6 +125,50 @@ describe('la puerta', () => {
     const r = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));
     expect(r.status).toBe(403);
     expect(ejecutarCopiloto).not.toHaveBeenCalled();
+  });
+
+  it('la palanca agente:copiloto apagada: 503 con la puerta dicha, sin modelo NI acciones', async () => {
+    // 0250: la interfaz de mando también se calla con un click. El 503 corta
+    // los DOS caminos (chat y acción con intent) antes de gastar nada.
+    palancaCopilotoApagada.mockResolvedValue(true);
+    const chat = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));
+    expect(chat.status).toBe(503);
+    expect(((await chat.json()) as { error: string }).error).toContain('apagado');
+    const accion = await POST(pedir({ intentId: 'x', accion: { id: 'apagar_agente', objetivo: 'agente:cobranza' } }));
+    expect(accion.status).toBe(503);
+    expect(ejecutarCopiloto).not.toHaveBeenCalled();
+    expect(ejecutarAccionCopiloto).not.toHaveBeenCalled();
+  });
+});
+
+describe('la puerta de origen (auditoría 21, BAJO-MEDIO — mismo patrón que /api/admin/palette)', () => {
+  it('desde otro sitio: 403 y NI el chat NI una acción con intent se tocan', async () => {
+    const cabeceras = { 'Content-Type': 'application/json', 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' };
+    const chat = await POST(new Request('https://app.likida.ai/api/admin/copiloto', {
+      method: 'POST', headers: cabeceras, body: JSON.stringify({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }),
+    }));
+    expect(chat.status).toBe(403);
+    expect(ejecutarCopiloto).not.toHaveBeenCalled();
+
+    const accion = await POST(new Request('https://app.likida.ai/api/admin/copiloto', {
+      method: 'POST', headers: cabeceras, body: JSON.stringify({ intentId: 'x', accion: { id: 'apagar_agente', objetivo: 'agente:cobranza' } }),
+    }));
+    expect(accion.status).toBe(403);
+    expect(ejecutarAccionCopiloto).not.toHaveBeenCalled();
+  });
+
+  it('se contesta 403 sin mirar siquiera si el usuario es superadmin', async () => {
+    const cruzada = () => POST(new Request('https://app.likida.ai/api/admin/copiloto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'sec-fetch-site': 'cross-site' },
+      body: JSON.stringify({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }),
+    }));
+    sesion = null;
+    const sinSesion = await cruzada();
+    sesion = { userId: 'u-javier', tenantId: 'tenant-plataforma', rol: 'superadmin' };
+    const conSesion = await cruzada();
+    expect(sinSesion.status).toBe(conSesion.status);
+    expect(conSesion.status).toBe(403);
   });
 });
 
@@ -234,19 +290,59 @@ describe("gateo 'doble' — dos POSTs con el mismo intent, motivo obligatorio", 
     );
   });
 
-  it("las dos acciones vivas ('confirma') siguen ejecutando con UN solo intent", async () => {
-    // La declaración del catálogo real: apagar_agente y correr_runner son
-    // 'confirma' — el flujo de un POST les basta (el de arriba lo prueba
-    // para apagar_agente vía proponer(); aquí correr_runner).
-    const i = await crearIntent({ actorId: 'u-javier', accion: 'correr_runner', objetivo: 'runner', gateo: 'confirma' });
-    const r = await POST(pedir({ intentId: i.id, accion: { id: 'correr_runner', objetivo: 'runner', motivo: 'adelantar el cron' } }));
+  it("'apagar_agente' ('confirma') sigue ejecutando con UN solo intent", async () => {
+    // La declaración del catálogo real: apagar_agente es 'confirma' — el
+    // flujo de un POST le basta (el de arriba lo prueba vía proponer();
+    // ver el describe de ADM-13 más abajo para correr_runner, que ahora
+    // es 'doble').
+    const i = await crearIntent({ actorId: 'u-javier', accion: 'apagar_agente', objetivo: 'agente:cobranza', gateo: 'confirma' });
+    const r = await POST(pedir({ intentId: i.id, accion: { id: 'apagar_agente', objetivo: 'agente:cobranza', motivo: 'manda de más' } }));
     expect(r.status).toBe(200);
+    expect(ejecutarAccionCopiloto).toHaveBeenCalledTimes(1);
+    expect(ejecutarAccionCopiloto).toHaveBeenCalledWith(
+      'apagar_agente',
+      { id: 'agente:cobranza', motivo: 'manda de más' },
+      'u-javier',
+    );
+  });
+});
+
+// ADM-13 (auditoría 24, MEDIO) — `correr_runner` puede disparar al
+// `enviador` (correo real, sin borrador que revisar) y hasta esta ronda
+// exigía la misma confirmación de un clic que apagar una palanca. Ahora
+// exige lo mismo que `encender_agente`: motivo + DOS POSTs + step-up MFA.
+describe("ADM-13 — correr_runner ahora es 'doble': un solo POST NO ejecuta", () => {
+  it('un solo POST con motivo ARMA (no ejecuta); el segundo POST ejecuta', async () => {
+    const i = await crearIntent({ actorId: 'u-javier', accion: 'correr_runner', objetivo: 'runner', gateo: 'doble' });
+    const r1 = await POST(pedir({ intentId: i.id, accion: { id: 'correr_runner', objetivo: 'runner', motivo: 'adelantar el cron' } }));
+    expect(r1.status).toBe(200);
+    expect(await r1.json()).toMatchObject({ ok: true, armado: true });
+    expect(ejecutarAccionCopiloto).not.toHaveBeenCalled();
+
+    const r2 = await POST(pedir({ intentId: i.id, accion: { id: 'correr_runner', objetivo: 'runner', motivo: 'texto cambiado' } }));
+    expect(r2.status).toBe(200);
     expect(ejecutarAccionCopiloto).toHaveBeenCalledTimes(1);
     expect(ejecutarAccionCopiloto).toHaveBeenCalledWith(
       'correr_runner',
       { id: 'runner', motivo: 'adelantar el cron' },
       'u-javier',
     );
+  });
+
+  it('sin motivo NO arma: 400, el ejecutor ni se toca', async () => {
+    const i = await crearIntent({ actorId: 'u-javier', accion: 'correr_runner', objetivo: 'runner', gateo: 'doble' });
+    const r = await POST(pedir({ intentId: i.id, accion: { id: 'correr_runner', objetivo: 'runner', motivo: '  ' } }));
+    expect(r.status).toBe(400);
+    expect(ejecutarAccionCopiloto).not.toHaveBeenCalled();
+  });
+
+  it('con AAL1 (segundo factor inscrito, sin verificar) → 403, SIN gastar el intent', async () => {
+    stepUp.mockImplementation(async () => ({ ok: false, motivo: 'verificar' }));
+    const i = await crearIntent({ actorId: 'u-javier', accion: 'correr_runner', objetivo: 'runner', gateo: 'doble' });
+    const r = await POST(pedir({ intentId: i.id, accion: { id: 'correr_runner', objetivo: 'runner', motivo: 'x' } }));
+    expect(r.status).toBe(403);
+    expect(ejecutarAccionCopiloto).not.toHaveBeenCalled();
+    stepUp.mockImplementation(async () => ({ ok: true }));
   });
 });
 

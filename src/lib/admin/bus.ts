@@ -158,25 +158,30 @@ export async function getEstadoBus(): Promise<EstadoBus> {
       .order('creado_en', { ascending: false })
       .limit(50);
     if (r.error) throw r.error;
-    piezasPendientes = await Promise.all(
-      (r.data ?? []).map(async (p) => {
-        let mediaUrl: string | null = null;
-        if (p.media_path) {
-          const firma = await admin.storage.from('bus').createSignedUrl(p.media_path, HORA_FIRMA_S);
-          mediaUrl = firma.data?.signedUrl ?? null; // sin firma ⇒ tarjeta sin preview, no tarjeta rota
-        }
-        return {
-          id: p.id,
-          rutina: p.rutina,
-          carpeta: p.carpeta,
-          titulo: p.titulo,
-          tipo: p.tipo,
-          copyMd: p.copy_md,
-          mediaUrl,
-          creadoEn: p.creado_en,
-        };
-      }),
-    );
+    // Las firmas van EN LOTE (un solo request), no una por pieza: hasta 50
+    // `createSignedUrl` concurrentes por pintada es la misma forma que saturó
+    // el pool de Storage el 28-ago-2026 desde el panel de QA («Too many
+    // connections issued to the database» sobre descargas ajenas). Cada
+    // /object/sign le cuesta a Storage API una conexión contra Postgres.
+    const rutasMedia = (r.data ?? []).map((p) => p.media_path).filter((m): m is string => Boolean(m));
+    const firmas = new Map<string, string | null>();
+    if (rutasMedia.length > 0) {
+      const lote = await admin.storage.from('bus').createSignedUrls([...new Set(rutasMedia)], HORA_FIRMA_S);
+      for (const f of lote.data ?? []) {
+        if (f.path && f.signedUrl && !f.error) firmas.set(f.path, f.signedUrl);
+      }
+      // sin firma ⇒ tarjeta sin preview, no tarjeta rota (igual que antes)
+    }
+    piezasPendientes = (r.data ?? []).map((p) => ({
+      id: p.id,
+      rutina: p.rutina,
+      carpeta: p.carpeta,
+      titulo: p.titulo,
+      tipo: p.tipo,
+      copyMd: p.copy_md,
+      mediaUrl: p.media_path ? firmas.get(p.media_path) ?? null : null,
+      creadoEn: p.creado_en,
+    }));
   } catch (e) {
     errores.push('piezas: no se pudieron leer (bus_pieza)');
     logger.error('bus.leer_piezas', { err: e instanceof Error ? e.message : String(e) });
@@ -211,6 +216,20 @@ export async function getEstadoBus(): Promise<EstadoBus> {
 }
 
 // ── Mutaciones (siempre tras requireSuperadmin — lo garantiza la página) ────
+
+/**
+ * ADM-12 (auditoría 24, menor): `tu-turno/page.tsx` mandaba `s.userId` (un
+ * uuid) donde `crearOrden`/`resolverPieza` esperan `actorEmail` — el
+ * `creado_por`/`resuelto_por` de `bus_orden`/`bus_pieza` (lo que Javier lee
+ * en la Mac para saber QUIÉN tocó qué) quedaba con un uuid en vez de un
+ * correo. `SessionTenant` no trae el correo — se resuelve aquí, la MISMA
+ * consulta que ya hace `mi-perfil/page.tsx`. `null` = no se pudo leer (se
+ * dice, no se inventa un correo).
+ */
+export async function emailDeActor(userId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin().from('app_user').select('email').eq('id', userId).maybeSingle();
+  return (data?.email as string | undefined) ?? null;
+}
 
 export async function crearOrden(
   tipo: TipoOrdenUi,

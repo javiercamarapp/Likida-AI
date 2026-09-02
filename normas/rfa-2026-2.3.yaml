@@ -1,0 +1,51 @@
+id: rfa-2026-2.3
+tipo: rfa
+jerarquia: 3
+instrumento: "Resolución de Facilidades Administrativas para 2026"
+articulo_o_regla: "2.3"
+titulo: "Responsabilidad solidaria acotada del coordinado cuando el integrante tributa individual"
+citas_en_codigo: ["RFA 2026 regla 2.3"]
+texto_vigente: >
+  Los coordinados que opten por aplicar las facilidades establecidas en las reglas 2.1. y 2.2. de la
+  presente Resolución, en el caso de que sus integrantes opten por tributar de manera individual,
+  serán responsables solidarios únicamente por los ingresos, deducciones, impuestos y
+  retenciones que hayan consignado en la liquidación emitida al integrante de que se trate.
+  Dichos coordinados deberán proporcionar anualmente a la autoridad fiscal la información
+  detallada de los ingresos, deducciones, impuestos y retenciones que hayan consignado en la
+  citada liquidación correspondiente a cada uno de sus integrantes que hayan optado por tributar
+  de manera individual.
+fecha_publicacion: 2026-02-17
+fecha_vigencia_desde: 2026-02-18
+fecha_vigencia_hasta: 2026-12-31
+fuente_url: "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rfa/rfa/RFA2026_17022026.pdf"
+fuente_tipo: sat_oficial
+estado_verificacion: verificado_fuente_primaria
+nota_verificacion: >
+  Leída el 30-ago-2026 en el mismo PDF oficial del minisitio del SAT que rfa-2026-2.1 y
+  rfa-2026-2.2, inmediatamente después de la regla 2.2, bajo el subtítulo "Cuentas maestras" que
+  en realidad encabeza la regla 2.4 siguiente (2.3 no lleva subtítulo propio en el original).
+por_que_importa: >
+  Es la EXCEPCIÓN a la regla general de LISR 72 (ficha lisr-72-73), que hace al coordinado
+  "responsable del cumplimiento de las obligaciones fiscales a cargo de sus integrantes,
+  respecto de las operaciones realizadas a través del coordinado" SIN matizarlo. Esta regla de la
+  RFA acota esa responsabilidad — pero SOLO cuando (a) el coordinado aplica 2.1 o 2.2, y (b) el
+  integrante concreto optó por tributar individual (la opción del art. 72, fr. II, cuarto párrafo /
+  art. 73). Fuera de esas dos condiciones, sigue rigiendo la responsabilidad solidaria sin acotar de
+  LISR 72.
+condiciones_de_aplicacion:
+  - "El coordinado debe estar aplicando la regla 2.1 (retención 7.5%) o la 2.2 (deducción ciega 8%)"
+  - "El integrante concreto debe haber optado por tributar de manera individual (LISR 72-II párr. 4 / LISR 73)"
+  - "El coordinado debe declarar anualmente al SAT el detalle de ingresos, deducciones, impuestos y retenciones de cada integrante que tributa individual"
+advertencia: >
+  No acota la responsabilidad del coordinado por los integrantes que SÍ tributan de forma
+  conjunta (la mayoría): para ésos sigue aplicando LISR 72 sin matiz. Presentar esta regla como
+  "el coordinado nunca responde por sus integrantes" sería una lectura falsa — es una excepción
+  puntual, no la regla general.
+pendiente_en_producto: >
+  Igual que rfa-2026-2.1: Likida no modela hoy la relación coordinado-integrante ni la
+  responsabilidad solidaria (el producto liquida viajes, no declara ISR de terceros). Ficha creada
+  para que el agente contador no responda sobre responsabilidad solidaria de un coordinado
+  citando solo LISR 72 sin esta acotación, si la pregunta llegara a plantearse.
+verificado_por: "auditoría fiscal semanal, área 5 (regímenes del autotransporte), 30-ago-2026"
+verificado_el: 2026-08-30
+usado_en_codigo: []

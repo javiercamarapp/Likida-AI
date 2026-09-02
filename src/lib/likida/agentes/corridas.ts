@@ -20,7 +20,55 @@ import { acotada } from '../presupuesto';
  *  más `ventas` (0105): el asignador de prospectos, que corre para LIKIDA y
  *  no para una flota — sus corridas van con `tenant_id` null y solo las ve
  *  el superadmin (la policy `tenant_lee` no alcanza filas sin tenant). */
-export type AgenteConCorridas = 'liquidacion' | 'facturas' | 'cobranza' | 'conductores' | 'peajes' | 'proveedores' | 'ventas' | 'redactor';
+export type AgenteConCorridas = 'liquidacion' | 'facturas' | 'cobranza' | 'conductores' | 'peajes' | 'proveedores' | 'ventas' | 'redactor' | 'carta_porte'
+  // Los 4 financieros del back office (0215) — corren para LIKIDA (tenant
+  // null, como `ventas`/`redactor`): sus cifras son del negocio, no de una
+  // flota. En base la FK contra agente_definicion (0116) ya los admite.
+  | 'analista_metricas' | 'control_costos' | 'tesoreria' | 'cierre_mensual'
+  // Dirección (0216): mismo contrato — tenant null; este tipo es el espejo
+  // de los que ESCRIBEN corridas.
+  | 'kpi_whatsapp' | 'desempeno_startup' | 'orquestador' | 'orquestador_semanal'
+  // La máquina de prospección (0217) — también de LIKIDA (tenant null).
+  | 'enriquecedor' | 'sdr' | 'enviador'
+  // El back office restante (0219): auditan, documentan, vigilan los relojes
+  // legales de la EMPRESA y registran talento. Todas sus corridas son de
+  // Likida (tenant null), igual que las de los financieros.
+  | 'vigilante_calidad' | 'documentacion' | 'legal_compliance' | 'talento'
+  // Éxito del cliente (0218). Sus corridas van con `tenant_id` NULL como las
+  // de arriba: cada pasada barre TODAS las flotas de una vez (el parte de
+  // onboarding lista a las atoradas, el de retención a las que se enfrían),
+  // así que la corrida no es de ninguna flota en particular. Las PIEZAS que
+  // produce sí llevan tenant cuando son de una flota concreta — esa es la
+  // trazabilidad que la bandeja enseña.
+  | 'onboarding_cliente' | 'exito_cliente' | 'retencion'
+  | 'cobranza_saas' | 'soporte' | 'atencion_faq'
+  // Crecimiento (0230): los diez que fabrican material de marca. Mismo
+  // contrato de tenant que los de arriba — corren para LIKIDA (tenant NULL):
+  // un borrador de artículo, un guion o un encargo de video no son de ninguna
+  // flota. La única de las diez que gasta modelo es `contenido_fiscal`; las
+  // otras nueve anotan costo 0 MEDIDO, que no es lo mismo que NULL.
+  | 'contenido_fiscal' | 'lead_magnet' | 'seo_distribucion'
+  | 'guiones' | 'noticias_mercado' | 'promos_diarias'
+  | 'visuales' | 'video_demo' | 'video_marketing' | 'alianzas'
+  // Ingeniería (0234): los ocho que cuidan la máquina por dentro. Mismo
+  // contrato de tenant que los de arriba — corren para LIKIDA (tenant NULL):
+  // el estado del esquema, el SHA desplegado y la conducta de las corridas no
+  // son de ninguna flota. Los ocho son DETERMINISTAS y no llaman a ningún
+  // modelo, así que anotan costo 0 MEDIDO — que no es lo mismo que NULL.
+  | 'migraciones' | 'seguridad' | 'rendimiento' | 'pruebas'
+  | 'auditor_codigo' | 'releases' | 'producto' | 'datos_instrumentacion'
+  // Los tres de dirección que van a la BANDEJA (0235) — los otros cuatro de
+  // dirección (0216) mandan correo y ya estaban arriba. Tenant NULL: la
+  // automejora mira la telemetría de TODA la compañía agente y el fundraising
+  // cuenta la plataforma entera. `especialistas_incidente` es el caso
+  // interesante: su PIEZA sí lleva el tenant de la flota del incidente (esa es
+  // la trazabilidad que la bandeja enseña), pero su CORRIDA no — una pasada
+  // barre los expedientes de todas las flotas de una vez.
+  | 'automejora' | 'especialistas_incidente' | 'fundraising'
+  // Los seis de leads (0235). Tenant NULL por la razón más vieja del repo: el
+  // CRM es de LIKIDA y no de ninguna flota (0105), igual que `ventas` y
+  // `redactor`.
+  | 'scorer' | 'dossier' | 'vigia' | 'demo_prep' | 'propuestas' | 'cazador';
 export type EstadoCorrida = 'ok' | 'parcial' | 'fallo';
 /** `correo` (0108): el agente de Proveedores no corre por reloj — corre
  *  cuando llega un correo al buzón. Registrarlo como 'cron' pintaría

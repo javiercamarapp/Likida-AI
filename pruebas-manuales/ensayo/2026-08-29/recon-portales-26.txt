@@ -1,0 +1,274 @@
+══════════════════════════════════════════════════════════════════════════════
+RECON DE CAMPO — LOS 26 COMERCIOS CON `camposPendientes: true` (29-ago-2026)
+══════════════════════════════════════════════════════════════════════════════
+
+Cómo se hizo: Chromium real vía Playwright (playwright-core, headless), UNA
+visita por portal, con el candado de `guion-prevuelo.prueba.ts`: se intercepta
+TODA la red y se ABORTA cualquier método que no sea GET/HEAD, así que ningún
+formulario salió aunque algún clic disparara un submit. Sin credenciales
+reales, sin resolver CAPTCHA, sin crear cuentas. Screenshots de los 7
+COMPLETADOS en este mismo directorio (`<clave>.png`); las visitas a los 18
+pendientes no dejaron captura porque no valía la pena conservar la imagen de
+un directorio genérico, un 404 o un sitio caído.
+
+De los 26 con `camposPendientes: true`, tres quedan fuera de este recon porque
+el propio catálogo ya los trata aparte:
+  - iave, tag_pase, televia: `noAutomatizable: factura_mensual_por_cuenta`
+    (facturan mensual contra la cuenta del TAG, no por ticket). No tocados.
+Quedan 25. De esos, 7 se completaron de punta a punta (campos leídos del DOM
+real, guion escrito, `camposPendientes` retirado) y 18 quedaron pendientes,
+cada uno con su razón medida abajo. NINGUNO se marca `verificado`: se leyeron
+formularios en blanco, no se ensayó ni se emitió nada.
+
+════════════════════════════ COMPLETADOS (7) ═════════════════════════════════
+
+── MCDONALDS ───────────────────────────────────────────────────────────────
+URL: https://www.facturacionmcdonalds.com.mx/ (ya era la correcta)
+Formulario de una sola pantalla, sin login. `<form id="facturar_form">`:
+  #number_store   "Número de restaurante" (4 dígitos)
+  #num_ticket     "Número de ticket"
+  #num_caja       "Número Reg. o Caja"
+  #fecha_ticket   "Fecha" (datepicker sobre input de texto)
+  #total_ticket   "Importe total"
+  #tax_id_receiver   "RFC"
+  #name_receiver     "Nombre o razón social"
+  #cp_client         "Código Postal"
+  #regime_id (select, name="id_regime") "Régimen Fiscal" — llega con una sola
+    opción ("Régimen Fiscal"); se puebla por AJAX, probablemente tras el RFC.
+  #email_receiver    "Correo electrónico"
+  #politico (checkbox) — "Complemento para partidos políticos". NO declarado
+    en el guion a propósito: el motor solo escribe lo que está en `campos`/
+    `receptor` y nunca marca checkboxes sueltos, así que no hay camino de
+    código que lo prenda. Mismo espíritu que `#cb1` en CAPUFE.
+  #condiciones (checkbox) — términos y condiciones. Tampoco declarado: sin
+    soporte de checkboxes en el motor, el ensayo no lo puede probar; queda
+    anotado para cuando el motor aprenda a marcarlo.
+  button#facturar "Realizar facturación"
+Sin `buscar` separado: todo en un solo paso.
+
+── LBBO (Los Bisquets Bisquets Obregón) ───────────────────────────────────
+URL declarada: https://www.lbbo.com.mx/factura — redirige (302) a
+http://autofacturacionlbbo.edimex.com.mx/edi2/AutofacturacionPublico, EN
+CLARO. Se comprobó que el mismo host SÍ sirve HTTPS con certificado válido
+(`https://autofacturacionlbbo.edimex.com.mx/edi2/AutofacturacionPublico` →
+200), así que no es un caso de "sin TLS" como Megasur: es un enlace flojo
+que manda por HTTP pudiendo mandar por HTTPS. Se usa la URL segura directa.
+Campos (sin `<label for>`; el texto sale de los párrafos "Sucursal*",
+"Folio*", "Código*" junto a los inputs):
+  #NotaVentaEmpresa (text)      "Sucursal"
+  #NotaVentaFolio   (number)    "Folio"
+  #Contrasenia      (password)  "Código" — NO es una contraseña de cuenta:
+    es una clave impresa en el ticket. `requiereCuenta` sigue en `false`.
+Botón único visible: "Facturar" (sin `id`). No se pudo ver qué aparece
+después sin enviar el formulario (candado de red). Se asume que es el paso
+de BUSCAR (revela los datos fiscales) y no el de emitir; el guion lo declara
+así, con `botonEmitir` como candidato genérico sin confirmar.
+
+── TIM HORTONS MÉXICO ──────────────────────────────────────────────────────
+URL declarada: https://timhortonsmx.com/es/facturar → tiene un enlace
+"Factura aquí" hacia https://timsboh.com/autofacturacion/busqueda, que es el
+formulario real (se guarda esta URL, mismo patrón que ENERSER/LODEMORED).
+Cuatro inputs sin `<form>` envolvente (framework JS sin wrapper clásico):
+  #sucursal              "Sucursal"
+  #ticket                "Número de ticket"
+  input[name="fecha"]    "Fecha del ticket" (sin `id`)
+  #Total                 "Total"
+  Botón "Buscar" (sin `id`).
+No se vio el paso posterior (receptor/RFC): candado de red.
+
+── THE HOME DEPOT MÉXICO ───────────────────────────────────────────────────
+URL declarada: https://www.homedepot.com.mx/ (sitio general de la tienda) →
+la de facturación real es https://facturacion.homedepot.com.mx/, con enlace
+"Facturación electrónica" en el pie del sitio. Redirige internamente a un
+SPA (`:2053/FacturacionWeb/#/portalweb`).
+  #rfc      "RFC"
+  #ticket   "No. de Ticket"
+  Botones "Limpiar" / "Continuar".
+⚠️ Cloudflare Turnstile SIEMPRE presente (`challenges.cloudflare.com/turnstile`,
+`.turnstile-container`) — no solo tras un RFC inválido. El motor lo va a
+detectar en cuanto abra la página (`mirarCaptcha`) y va a reportar
+`requiereCaptcha` de inmediato: este portal defiere a una persona SIEMPRE, y
+eso es correcto, no un bug del guion.
+
+── LO DE MORED (Fomento Gasolinero, Mérida) ────────────────────────────────
+URL declarada: https://www.lodemored.com.mx/ → redirige a `lodemo.com.mx`,
+que es OTRO sitio (el corporativo del grupo, sin nada de facturación). La
+liga real, en el pie: https://fact.lodemored.net/.
+Formulario largo, con domicilio completo. Ids reales:
+  #txtRFC, #txtRazonSocial, #txtEmailFac, #txtCP,
+  #ddlRegimenFiscal (select, con catálogo completo de regímenes SAT),
+  #ddlUsoCFDI (select),
+  #txtTicket ("# Ticket"), #txtFechaIni ("Fecha compra", placeholder
+    DD/MM/YYYY), #txtImporte ("Importe"), #txtTotal ("Total", suma de la
+    lista — NO es el campo por ticket),
+  #txtRecaptcha ("Digite código Captcha") + #lnkBtnCaptcha — CAPTCHA propio
+    (no reCAPTCHA de Google), SIEMPRE visible en el formulario.
+  Botones: #lnkBtnTicket ("Agregar", mete el ticket a una lista) y
+    #lnkBtnFacturar ("GENERAR FACTURA").
+⚠️ El portal exige domicilio completo (Calle, Colonia, Estado, Municipio,
+País, Número Exterior) que el modelo de `ReceptorDeGuion` de Likida NO
+captura (solo rfc/nombre/codigoPostal/regimenFiscal/usoCfdi/correo). Esos
+campos quedan sin llenar; el pre-vuelo los va a reportar como huecos del
+formulario que el guion no cubre, y así debe ser hasta que el receptor de
+Likida crezca esos cinco campos de domicilio.
+
+── PARROT (plataforma de punto de venta) ──────────────────────────────────
+URL: https://facturacion.parrot.rest/ (correcta). UN solo campo visible:
+  #input-code (name="codeField") "Ingresa el código de facturación"
+No se encontró un botón de envío visible tras escribir un código de prueba
+(candado de red bloqueó cualquier XHR de validación, y no hay botón de texto
+claro — puede que valide con Enter o un ícono sin texto). `botonEmitir` va
+con candidatos genéricos sin confirmar. `receptor` (rfc/correo) tampoco se
+vio — van como candidatos genéricos, comentados como hipótesis.
+
+── EL GLOBO (Tradición en Pastelerías) ─────────────────────────────────────
+URL declarada: https://www.elglobo.com.mx/ (sitio de venta de pasteles, sin
+nada de facturación) → la liga real está en el pie: "Facturación" apunta a
+https://www.masfacturaweb.com.mx:73/ElGlobo/, un portal ASP.NET WebForms
+aparte ("Masteredi"). Desde ahí, "Crear Factura" navega a
+`mfwCreaCFDI.aspx`, que expone (ASP.NET, `Repeater` de campos, ids
+posicionales `ctl00_Main_repCampos_ctlNN_...`):
+  RFC_CLIENTE (ctl01)   → receptor.rfc
+  TICKET-#    (ctl03)   → campos.numeroTicket
+  SUCURSAL    (ctl05)   → campos.sucursal
+  TOTAL       (ctl07)   → campos.monto
+  FECHA       (ctl09, datepicker)  → campos.fecha
+  USO_CFDI    (ctl11, select: Gastos en general / Adquisición de mercancias /
+               Sin efectos fiscales)  → receptor.usoCfdi
+  FORMA_DE_PAGO (ctl13, select) — NO tiene equivalente en `DatoReceptor` de
+    Likida; queda SIN declarar y el portal se queda con lo que tenga
+    preseleccionado por default.
+  Botones: btnContinuarUno ("Continuar") y btnCancelarUno ("Cancelar").
+⚠️ SE CONFIRMÓ QUE `mfwCreaCFDI.aspx` NO CARGA SU FORMULARIO SI SE ABRE
+DIRECTO (sin pasar antes por el índice): sin la visita previa a
+`ElGlobo/index`, la página vuelve solo el esqueleto de ASP.NET
+(`__VIEWSTATE` y nada más — se comprobó con una visita aislada). O sea que
+el flujo real es: abrir el índice → clic en "Crear Factura" (sin escribir
+nada ahí) → aparece el formulario de arriba. El guion de este motor no tiene
+un paso de "navegar sin escribir": `portal` se deja apuntando al ÍNDICE
+(`.../ElGlobo/`), que es justo lo que un contralor humano necesita abrir
+también. CONSECUENCIA: el pre-vuelo de este guion va a fallar SIEMPRE con
+"selectores idos" hasta que alguien agregue al motor un paso de navegación
+sin datos (o hasta que se le enseñe al guion a hacer ese clic). Es el mismo
+tipo de límite documentado ya en `CIRCLE_K` (portales.ts): con
+`verificado: null` esto es inofensivo — nunca emite, solo falla con un
+diagnóstico claro — y se deja escrito porque los CAMPOS sí están leídos de
+verdad y el día que el motor sepa navegar sin escribir, este guion funciona
+sin tocarle una línea a la tabla.
+No se vio el paso "Dos" (nombre/correo/domicilio/régimen del receptor): se
+queda sin declarar, igual que en CIRCLE_K.
+
+═════════════════════════ PENDIENTES (18), CON RAZÓN ═════════════════════════
+
+REQUIEREN CUENTA Y NO HAY CREDENCIALES DE PRUEBA (4):
+  g500, shell, bp, circuito_exterior — `requiereCuenta: true` en el catálogo.
+  NO SE VISITÓ NINGUNO de los cuatro en este recon — cero peticiones HTTP a
+  sus dominios. No se intentó ninguna cuenta real ni de prueba, ni ningún
+  login: sin credenciales, no hay forma honesta de leer el formulario que
+  vive detrás del login, así que directamente no se abrió la página.
+
+CAPTCHA BLOQUEA LA PANTALLA DE ENTRADA (1):
+  hidrosina — https://facturacionelectronica.hidrosina.com.mx/facturaciontranseunte/
+  pide RFC + un captcha matemático propio ("4 + 8 =") MÁS reCAPTCHA de
+  Google en la misma pantalla, antes de mostrar cualquier campo de ticket.
+  No se resuelve — Likida no resuelve captchas — así que el formulario real
+  queda sin ver.
+
+URL DECLARADA MUERTA (2):
+  zetus — https://f.zetus.app/ responde 404.
+  la_parisina — https://www.laparisina.com.mx/ no resuelve DNS
+  (net::ERR_NAME_NOT_RESOLVED). Ninguna de las dos se pudo sustituir por una
+  URL nueva dentro del alcance de este recon (sin buscar activamente en la
+  web una liga de reemplazo, que queda fuera de "solo Playwright").
+
+URL DECLARADA NO ES UN PORTAL DE FACTURACIÓN (2):
+  mefacturo — https://mefacturo.mx/ redirige a `admin.softrestaurant.com`, el
+  SITIO DE MERCADEO del producto POS "Soft Restaurant Admin", no a un
+  formulario de facturación de ESTE restaurante. El botón "Facturar Ticket"
+  es un modal JS (`AbrirModalFacturacion()`) que necesita la instalación
+  específica del restaurante emisor, que no está impresa de forma genérica
+  en `comercios.ts` (la ficha es la PLATAFORMA, sin nombrar al restaurante
+  por privacidad — ver el comentario ya existente en la ficha).
+  paquetexpress — https://www.paquetexpress.com.mx/ es el sitio corporativo
+  de la paquetería. El único botón relacionado ("Invoicing") lleva a un área
+  con campos "User"/"Password" — un login, cosa que CONTRADICE
+  `requiereCuenta: false` del catálogo actual. Se deja anotado como hallazgo
+  para quien revise esa bandera; no se cambió aquí para no tocar más de lo
+  medido.
+
+SITIO NO CARGA / SERVICIO CAÍDO (2):
+  costco — https://www3.costco.com.mx/facturacion responde 200 con el
+  cuerpo literal "Lo sentimos, el servicio está temporalmente inactivo. Por
+  favor inténtalo más tarde." en dos intentos (con minutos de diferencia).
+  farmacias_guadalajara — tanto la raíz como `/facturacion` fallan con
+  `net::ERR_HTTP2_PROTOCOL_ERROR` en TRES intentos (con y sin `waitUntil`
+  distinto); la propia ficha del catálogo ya advertía que este dominio es el
+  sitio general, no un endpoint de facturación confirmado.
+
+FORMULARIO NO EXISTE EN EL DOM SIN ENVIAR ALGO ANTES (JS complejo) (4):
+  arco_sonora — https://www.buzonfacturas.com/GenerarCFDI/Index?avanzada=0
+  es una búsqueda por RFC; el HTML trae 14 `<input>` SIN `id` ni `name`, así
+  que no hay un selector que no sea inventado. ⚠️ CORRECCIÓN A LO QUE DECÍA
+  ESTA LÍNEA ANTES: en el segundo intento SÍ se escribió el RFC ficticio de
+  prueba `GMX0902279I1` (el mismo fixture inventado que usa `capufe.test.ts`,
+  no el dato de ningún cliente real) en `#RFC`, y DESPUÉS SÍ SE APRETÓ
+  "Buscar" — no se quedó sin apretar. El candado de red (GET/HEAD solamente,
+  registrado antes de navegar) debía abortar cualquier POST que ese botón
+  disparara, y la página quedó completamente en blanco después del clic, lo
+  que es consistente con eso — pero no se instrumentó un log de peticiones
+  bloqueadas/permitidas para ese clic específico (a diferencia de
+  `guion-prevuelo.prueba.ts`, que sí lo hace con su arreglo `bloqueadas`),
+  así que no hay prueba a nivel de red de qué método usa ese botón. Por eso
+  esta ficha no se toca de nuevo sin un pre-vuelo instrumentado que lo
+  confirme.
+  conekta360 — https://facturacion.conekta360.mx/ solo expone `#rfc` +
+  "Buscar". MISMA ACLARACIÓN: se escribió el mismo RFC ficticio en `#rfc` y
+  se apretó "Buscar" de verdad; mismo candado, mismo resultado en blanco,
+  misma falta de log de red para probarlo. El resto del flujo (selección de
+  tickets del RFC, monto, folio) vive detrás de esa búsqueda y no se pudo
+  ver.
+  primera_plus — https://www.facturaelectronicagfa.mx/#/emision/servicio es
+  una SPA (Angular) con CERO inputs en el DOM —ni ocultos— hasta elegir un
+  "servicio" de un combo que tampoco se pudo ejercitar sin enviar nada.
+  grupo_centra — https://facturacion.grupocentra.mx/Karmi_FacturacionWeb usa
+  un framework tipo WebDev/PowerBuilder (`clWDUtil.pfGetTraitement(...)`)
+  cuyos "botones" son disparadores de JavaScript, no enlaces; el DOM inicial
+  no trae NINGÚN campo (ni oculto) de los seis servicios que ofrece
+  ("Facturar GAS", "SP", "TH", "OC", "VIP", "AE").
+
+MULTI-SUCURSAL SIN FORMA DE ENRUTAR DESDE EL CATÁLOGO (1):
+  bptgroup — la raíz (https://facturacion.bptgroup.mx/) es un directorio que
+  reparte a OCHO portales reales, todos de la misma plataforma
+  "Efisense Intel" (Boston's Pizza × 4 ciudades, La Parroquia × 3, Sushi
+  Roll × 1). Se leyó el formulario completo de un sub-portal de muestra
+  (Boston's Mérida, `.../bostons/mid/`): tres campos —
+    #txt-rfc ("RFC"), #txt-cp ("C.P."), #txt-ref ("Referencia", 12 dígitos)
+  — y botón `#btn-step1` ("Continuar"). PERO: `comercios.ts` modela un
+  comercio con UN SOLO `portal`, y ese campo es también el que se le enseña
+  a un humano en el camino asistido. Cambiarlo a la URL de Mérida
+  mandaría a cualquier persona con un ticket de Campeche, CDMX, Querétaro,
+  La Parroquia o Sushi Roll al portal EQUIVOCADO — peor que dejar el
+  directorio actual, que sí deja elegir. No se escribió el guion por esto:
+  hace falta que el catálogo sepa distinguir sucursal/marca antes de que
+  esto se pueda automatizar sin arriesgar el camino manual.
+  Nota de seguridad aparte: el otro subdominio de esta franquicia,
+  FULLGAS, corre en texto plano — ver abajo.
+
+TLS AUSENTE EN EL BACKEND REAL (1) — NUEVO HALLAZGO, MISMO PATRÓN QUE MEGASUR:
+  fullgas — la liga impresa (https://www.fullgas.com.mx/) es el sitio
+  corporativo; el botón "FACTURA AQUÍ" lleva a `http://62.151.183.96:9062`
+  — una IP cruda, SIN HTTPS (`https://62.151.183.96:9062` responde
+  `ERR_SSL_PROTOCOL_ERROR`: no hay ni certificado que ofrecer). Esa página
+  es un LOGIN por RFC con reCAPTCHA y un enlace "Regístrate": la
+  contraseña de la cuenta viajaría en claro, exactamente el caso que
+  `noAutomatizable: 'sin_tls'` existe para declarar (ver Megasur). Se marcó
+  así en `comercios.ts`; `camposPendientes` se deja como estaba porque, con
+  o sin ese hallazgo, nunca se iba a poder leer el formulario de ticket sin
+  crear una cuenta sobre HTTP plano.
+
+FICHA NO LLEVA A UN FORMULARIO (1):
+  fantasias_miguel — https://fantasiasmiguel.com/pages/facturacion es una
+  página de contenido de Shopify, sin ningún `<input>` de facturación: solo
+  explica que hay que mandar un correo con los datos fiscales a
+  facturacion-online@fantasiasmiguel.com.mx. No hay portal que automatizar
+  hasta que el comercio publique uno.

@@ -145,6 +145,19 @@ export interface LecturaTicket {
    *  `esMontoImplausible`). No es un juicio sobre el chofer: es una cifra que
    *  nadie puede dar por buena sin verla. */
   montoImplausible?: boolean;
+  /** FISCAL-19C2-3 (barrido MEDIO/BAJO): la moneda que el OCR leyó del
+   *  comprobante (`ocrExtra.moneda`). `undefined`/`'MXN'` no cambia nada —
+   *  cualquier otro valor evita anunciar un monto extranjero como si fueran
+   *  pesos (el motor ya lo excluye del acreditamiento vía `moneda_extranjera`
+   *  en `engine.ts`, pero el acuse inmediato mostraba la cifra cruda). */
+  moneda?: string;
+}
+
+/** El monto del acuse, con el código de moneda al frente si NO es MXN —
+ *  nunca formatearlo como pesos cuando el comprobante dice otra cosa. */
+function montoDelAcuse(l: LecturaTicket): string {
+  const monto = mxn(l.montoMxn ?? 0);
+  return l.moneda && l.moneda !== 'MXN' ? `${l.moneda} ${monto.replace(/^\$/, '')}` : monto;
 }
 
 export interface Decision {
@@ -234,7 +247,7 @@ export function lineaDeSaldo(e: EstadoViaje | null): string {
 export function mensajeAcuse(l: LecturaTicket, estado: EstadoViaje | null): string {
   const partes = [
     l.concepto ?? 'Comprobante',
-    mxn(l.montoMxn ?? 0),
+    montoDelAcuse(l),
     l.fecha ? fechaMx(l.fecha) : null,
   ].filter(Boolean);
 
@@ -260,7 +273,7 @@ export function mensajeConfirmar(
 ): MensajeConBotones {
   const partes = [
     l.concepto ?? 'Comprobante',
-    mxn(l.montoMxn ?? 0),
+    montoDelAcuse(l),
     l.fecha ? fechaMx(l.fecha) : null,
   ].filter(Boolean);
 
@@ -339,11 +352,22 @@ export function esPeticionDeFoto(ultimoMensajeNuestro: string): boolean {
  * Cuando exista la corrección de verdad (marcar el gasto para revisión y que el
  * cuadre lo levante, sin inventar el monto) este texto cambia con ella.
  */
-export function mensajeCorregir(): string {
-  return 'Anotado: ese monto no está bien 👍.\n\n' +
+export function mensajeCorregir(marcado = false): string {
+  // AUDITORÍA 24 · WA-3: hasta hoy apretar el botón no dejaba RASTRO de
+  // ninguna clase —un `warn` que muere con la invocación— y aun así se le
+  // decía «enséñaselo a tu oficina», que no tenía cómo enterarse. Ahora el
+  // gasto queda marcado (`ocr_extra.montoDisputado`) y el texto lo dice…
+  // solo si de verdad se marcó: si la marca no se pudo escribir, se le pide
+  // lo único que entonces SÍ funciona.
+  const cabeza = marcado
+    ? 'Anotado: ese monto no está bien 👍. Lo marqué para que tu oficina lo revise.\n\n'
+    : 'Anotado: ese monto no está bien 👍.\n\n';
+  return cabeza +
     'Todavía no puedo cambiarlo desde aquí, y *no me mandes otra foto de ese mismo ticket* — ' +
     'entraría como un gasto aparte y se te contaría dos veces.\n\n' +
-    'Guarda el papel y enséñaselo a tu oficina para que lo revisen contra tu liquidación. 🙏';
+    (marcado
+      ? 'Guarda el papel: tu oficina lo va a comparar contra tu liquidación. 🙏'
+      : 'Guarda el papel y enséñaselo a tu oficina para que lo revisen contra tu liquidación. 🙏');
 }
 
 /** Lo que se contesta cuando aprieta "Sí, está bien". */

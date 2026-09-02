@@ -7,13 +7,20 @@
 # del `ignoreCommand` (push sin [deploy] en el asunto = producción se queda
 # atrás sin avisar)— no se comparaba contra nada.
 #
-# Dos disparadores, un solo job:
-#   · schedule cada 30 min: producción contesta 200 con ok:true, o rojo.
-#   · push a master: si el asunto del commit lleva [deploy], se espera hasta
-#     10 minutos a que `version` sea el sha pusheado. Si no llega, rojo — con
-#     el sha esperado y el que de verdad corre en el log.
+# Tres disparadores, un solo job:
+#   · schedule cada 30 min: producción contesta 200 con ok:true, o rojo; y
+#     corre el último commit con [deploy] de master (o uno posterior), o rojo
+#     (auditoría 24, OP-P3: el cotejo solo corría en el push).
+#   · push a master: si el asunto lleva [deploy], PRIMERO la compuerta de
+#     migraciones (auditoría 24, OP-P1: el mismo veredicto que el
+#     ignoreCommand de Vercel, pero en rojo y con el motivo), y luego se espera
+#     hasta 10 minutos a que `version` sea el sha pusheado.
+#   · workflow_dispatch: lo mismo que el schedule, a mano.
 # GitHub manda correo al dueño del repo cuando un workflow programado falla,
-# así que esto es una alerta sin infraestructura nueva y sin secretos.
+# y desde la auditoría 24 (PRU-3) el rojo además tiene dueño: se abre un issue
+# `salud-produccion` la primera vez que el pulso falla y se cierra solo cuando
+# vuelve a verde — 40 corridas rojas seguidas sin que nadie las atendiera
+# demostraron que un correo por corrida se aprende a ignorar.
 name: Salud de producción
 
 on:
@@ -25,31 +32,82 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   pulso:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: /api/health está healthy (cron stale degrada y falla)
+      # Historial completo: el cotejo por schedule busca el último commit con
+      # [deploy] y resuelve el sha corto que publica /api/health.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      # ── AUDITORÍA 22, OP-C1 (CRÍTICO) ──────────────────────────────────
+      # Este paso exigía `estado=ok` a secas. `descarga-sat` sin
+      # LIKIDA_SAT_PROVEEDOR es un hueco de configuración DECLARADO —el cron
+      # dice qué le falta y quién lo destraba— y degradaba el health, así que
+      # el watchdog llevaba 30 corridas seguidas en rojo. Una muerte real de
+      # cron se veía EXACTAMENTE igual que el ruido conocido: el único
+      # detector automático de cron muerto no podía cambiar de color.
+      #
+      # Ahora se leen los dos campos. `checks.crons=config_ausente` se ANOTA y
+      # deja pasar; un `degraded` de verdad (regresión o cron vencido) falla.
+      # Desde la auditoría 24 (OP-P1) también se imprime `migracion`: una base
+      # atrás del código ya viene como `degraded` con su motivo.
+      - name: /api/health está healthy (un cron vencido falla; un hueco de config se anota)
         run: |
           set -u
           cuerpo=$(curl -sS --max-time 20 -w '\n%{http_code}' https://app.likida.ai/api/health) || { echo "::error::/api/health no contestó"; exit 1; }
           status=$(echo "$cuerpo" | tail -n1)
           json=$(echo "$cuerpo" | sed '$d')
-          estado=$(printf '%s' "$json" | node -e "let s=''; process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(String(JSON.parse(s).status||''))}catch{process.stdout.write('invalid')}})")
-          echo "http=$status estado=$estado"
-          [ "$status" = "200" ] && [ "$estado" = "ok" ] || { echo "::error::/api/health no está healthy (http=$status estado=$estado); un cron stale se reporta como degraded."; exit 1; }
+          leer() { printf '%s' "$json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);process.stdout.write(String(j$1??''))}catch{process.stdout.write('invalid')}})"; }
+          estado=$(leer '.status')
+          crons=$(leer '.checks?.crons')
+          migracion=$(leer '.migracion?JSON.stringify(j.migracion):"sin campo"')
+          echo "http=$status estado=$estado crons=$crons migracion=$migracion"
+          if [ "$crons" = "config_ausente" ]; then
+            echo "::warning::Hay un cron sin configurar (checks.crons=config_ausente). NO tumba el pulso a propósito: dejarlo rojo permanente esconde un cron muerto de verdad. Destrábalo en las variables de entorno."
+          fi
+          [ "$status" = "200" ] && [ "$estado" = "ok" ] || { echo "::error::/api/health no está healthy (http=$status estado=$estado crons=$crons migracion=$migracion); un cron vencido, una regresión o una base atrás del código se reportan como degraded."; exit 1; }
 
+      # ── AUDITORÍA 24, OP-P1 (BLOQUEANTE): LA COMPUERTA, EN ROJO ────────
+      # El ignoreCommand de Vercel corre este MISMO script y, si la base va
+      # atrás de la última migración del repo, no construye — en silencio.
+      # Aquí sale con el motivo y el rango de migraciones que faltan.
+      - name: Compuerta de migraciones (solo push con [deploy] en el asunto)
+        if: always() && github.event_name == 'push'
+        env:
+          ASUNTO: ${{ github.event.head_commit.message }}
+        run: |
+          set -u
+          asunto=$(printf '%s' "$ASUNTO" | head -n1)
+          if ! printf '%s' "$asunto" | grep -qiE '\[deploy(:forzar)?\]'; then
+            echo "El asunto no lleva [deploy]: nada que cotejar."
+            exit 0
+          fi
+          node scripts/ci/compuerta-deploy.mjs --asunto "$asunto"
+
+      # AUDITORÍA 22, OP-A1 (ALTO): `if: always()`. Este paso es la ÚNICA
+      # defensa contra el modo de falla silencioso del deploy que documenta
+      # CLAUDE.md —olvidar la bandera y quedarse con la versión anterior sin
+      # aviso—, y nunca corría: el paso de arriba abortaba el job antes. Un
+      # pulso rojo no puede llevarse por delante el cotejo del sha.
       - name: El sha desplegado es el que se pusheó (solo push con [deploy] en el asunto)
-        if: github.event_name == 'push'
+        if: always() && github.event_name == 'push'
         env:
           ASUNTO: ${{ github.event.head_commit.message }}
           SHA: ${{ github.sha }}
         run: |
           set -u
           asunto=$(printf '%s' "$ASUNTO" | head -n1)
-          if ! printf '%s' "$asunto" | grep -qi '\[deploy\]'; then
+          if ! printf '%s' "$asunto" | grep -qiE '\[deploy(:forzar)?\]'; then
             echo "El asunto no lleva [deploy]: este push NO construye a propósito (vercel.json ignoreCommand). Nada que cotejar."
             exit 0
           fi
@@ -60,5 +118,54 @@ jobs:
             [ "$version" = "$esperado" ] && exit 0
             sleep 30
           done
-          echo "::error::Producción sigue en '${version:-?}' y el push con [deploy] fue $esperado — el build no llegó (mira el panel de Vercel o haz Redeploy)."
+          echo "::error::Producción sigue en '${version:-?}' y el push con [deploy] fue $esperado — el build no llegó (mira el panel de Vercel, la compuerta de migraciones de arriba, o haz Redeploy)."
           exit 1
+
+      # ── AUDITORÍA 24, OP-P3 (ALTO): EL COTEJO TAMBIÉN POR SCHEDULE ──────
+      # Producción puede quedarse 15 commits atrás sin que ningún push lo
+      # denuncie (el cotejo de arriba solo corre en el push). Cada 30 minutos:
+      # el `version` que corre tiene que ser el último commit de master con
+      # [deploy] en el asunto, o un descendiente suyo (un Redeploy posterior).
+      - name: Producción corre el último [deploy] de master (schedule / manual)
+        if: always() && github.event_name != 'push'
+        run: |
+          set -u
+          version=$(curl -sS --max-time 20 https://app.likida.ai/api/health | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+          ultimo=$(git log -i --grep='\[deploy' -1 --pretty=%H)
+          echo "desplegado=${version:-?} ultimo_[deploy]=$(printf '%s' "$ultimo" | cut -c1-7)"
+          if [ -z "$version" ] || [ "$version" = "local" ]; then echo "::error::/api/health no publicó una versión."; exit 1; fi
+          if [ -z "$ultimo" ]; then echo "master no tiene ningún commit con [deploy]: nada que cotejar."; exit 0; fi
+          desplegado=$(git rev-parse --verify --quiet "${version}^{commit}") || { echo "::error::El sha desplegado '$version' no está en master: producción corre algo que el repo no conoce."; exit 1; }
+          if git merge-base --is-ancestor "$ultimo" "$desplegado"; then
+            echo "Producción corre el último [deploy] ($(printf '%s' "$ultimo" | cut -c1-7)) o uno posterior."
+          else
+            echo "::error::Producción corre $version y el último commit con [deploy] en master es $(printf '%s' "$ultimo" | cut -c1-7): el build no llegó (compuerta de migraciones, o Vercel no construyó). Mira el panel o haz Redeploy."
+            exit 1
+          fi
+
+      # ── AUDITORÍA 24, PRU-3 (ALTO): EL ROJO TIENE DUEÑO ─────────────────
+      # Un issue por episodio: se abre la primera vez que el pulso falla y se
+      # cierra solo al recuperarse. Mientras siga rojo no se comenta (48
+      # comentarios al día es la misma enfermedad que un correo por corrida).
+      - name: Abrir el issue si el pulso pasó a rojo
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -u
+          abierto=$(gh issue list --label salud-produccion --state open --json number --jq '.[0].number // empty')
+          if [ -n "$abierto" ]; then echo "Ya hay un issue abierto (#$abierto); no se duplica."; exit 0; fi
+          gh label create salud-produccion --color B60205 --description 'El pulso de producción está en rojo' --force >/dev/null 2>&1 || true
+          gh issue create --title 'Salud de producción en rojo' --label salud-produccion --body "$(printf 'El workflow **Salud de producción** falló: %s\n\nQué mirar, en este orden: `docs/conocimiento/DEPLOY.md` § «Algo se rompió». El cuerpo de `/api/health` (status, checks.crons, migracion) está en el log de la corrida.\n\nEste issue se cierra solo cuando el pulso vuelva a verde.' "$RUN_URL")"
+
+      - name: Cerrar el issue al recuperarse
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -u
+          for n in $(gh issue list --label salud-produccion --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "El pulso volvió a verde: $RUN_URL"
+          done

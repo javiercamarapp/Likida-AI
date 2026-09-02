@@ -78,6 +78,25 @@ export interface OpcionesEnvio {
    * legibilidad para quien recibe, no un canal nuevo que verificar.
    */
   remitenteLocal?: string;
+  /**
+   * AUDITORÍA FABLE CICLO 5 (c5-3): la llave de idempotencia que Resend
+   * deduplica de su lado. Un timeout de red es AMBIGUO — el POST pudo haber
+   * sido aceptado con la respuesta perdida — y sin esta llave un reintento
+   * mandaba el MISMO correo frío dos veces al mismo contacto. Quien envía
+   * piezas de campaña la pasa (la llave es el id de la pieza); los avisos
+   * del operador no la necesitan.
+   */
+  idempotencyKey?: string;
+  /**
+   * La URL de `baja.ts`, cuando el correo es de campaña. Viaja como
+   * CABECERA DEL MENSAJE (no del POST a Resend) — `List-Unsubscribe` +
+   * `List-Unsubscribe-Post: List-Unsubscribe=One-Click` es lo que Gmail y
+   * Yahoo exigen desde 2024 de un remitente masivo para no puntuar como
+   * spam, y es lo que enciende el botón nativo "Cancelar suscripción" que
+   * NUNCA abre el correo (RFC 8058) — la liga visible en el pie
+   * (`plantilla.ts`) es para quien no tiene ese botón.
+   */
+  listaBajaUrl?: string;
 }
 
 /** Un destinatario que no parece correo no se manda: la API lo rechazaría
@@ -114,6 +133,10 @@ export async function enviarCorreo(
       headers: {
         Authorization: `Bearer ${llave}`,
         'Content-Type': 'application/json',
+        // La llave viaja solo si el llamador la dio (c5-3): Resend rechaza
+        // el duplicado de una llave ya usada, volviendo seguro el reintento
+        // tras un timeout ambiguo.
+        ...(op.idempotencyKey ? { 'Idempotency-Key': op.idempotencyKey } : {}),
       },
       body: JSON.stringify({
         from,
@@ -133,6 +156,15 @@ export async function enviarCorreo(
           content_id: LOGO_CID,
           content_disposition: 'inline',
         }],
+        // CABECERAS DEL MENSAJE — distintas de las del POST arriba (esas son
+        // HTTP hacia Resend; estas viajan DENTRO del correo hacia el cliente
+        // del destinatario). Solo van si el llamador trae la liga de baja.
+        ...(op.listaBajaUrl ? {
+          headers: {
+            'List-Unsubscribe': `<${op.listaBajaUrl}>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          },
+        } : {}),
       }),
       signal: AbortSignal.timeout(TIMEOUT_CORREO_MS),
     });

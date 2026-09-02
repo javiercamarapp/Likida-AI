@@ -36,7 +36,7 @@
 
 import { envPuesta } from '../env';
 
-export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto';
+export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto' | 'transcripcion' | 'contador';
 
 const DEFAULTS: Record<ModelRole, string> = {
   // OCR de comprobantes (visión + JSON en una sola llamada).
@@ -138,10 +138,30 @@ const DEFAULTS: Record<ModelRole, string> = {
   // piloto_vision.ts), pero un selector mal elegido quema una corrida entera.
   // Se paga por PASO (~8-14 por portal), solo cuando FACTURACION_PILOTO=si.
   piloto: 'anthropic/claude-sonnet-5',         // $2/$10
+  // TRANSCRIPCIÓN de notas de voz de WhatsApp (Capa E1 de asistencia). El
+  // mismo Gemini barato del chat y no un servicio de voz aparte: acepta el
+  // OGG/Opus que manda Meta, transcribe español mexicano coloquial, y viaja
+  // por la MISMA cuenta OpenRouter con el mismo presupuesto por tenant que el
+  // OCR — cero proveedores nuevos, cero API keys nuevas. OJO con el override:
+  // el fallback de red (openrouter.ts) puede caer a un modelo SIN oído
+  // (Anthropic no recibe audio); ahí la llamada falla y el chofer recibe el
+  // "¿me lo escribes?" honesto — fallar hacia pedir texto, no hacia inventar.
+  transcripcion: 'google/gemini-3.5-flash-lite', // $0.3/$2.5
+  // EL CONTADOR (E.26, fase 2 de EVALOPS): el experto fiscal que responde a
+  // un contralor con el corpus de fichas de normas/ en el prompt. Sonnet 5 y
+  // no un modelo barato por la misma razón que el cuadre: calidad de frontera
+  // DONDE un error cuesta dinero — aquí cada respuesta es una opinión fiscal
+  // con consecuencias económicas. El corpus (~45k tokens) viaja idéntico en
+  // cada pregunta, así que la caché de prompt de Anthropic (misma palanca del
+  // cuadre) deja la corrida de 32 preguntas en el orden de lo presupuestado
+  // en 22-evaluacion.md, no en el de una corrida sin caché.
+  contador: 'anthropic/claude-sonnet-5',        // $2/$10 (lectura de caché al 10%)
 
   // ── QUÉ ROL CORRE HOY Y CUÁL NO (verificado el 23-ago-2026) ──────────────
   // Tienen llamador en producción: ocr, cuadre, chat, analisis, marketing,
-  // back_office, piloto.
+  // back_office, piloto. `contador` tiene llamador pero NO tráfico de
+  // producción: es el examinado del examen dorado (scripts/evals/
+  // correr-contador.ts, E.26) — se paga solo cuando el examen se corre a mano.
   //
   // RESERVADOS — declarados a propósito, todavía sin nadie que los pida:
   //   · cuadre_fallback  la escalación por baja confianza / monto alto está
@@ -172,6 +192,8 @@ const ENV_KEY: Record<ModelRole, string> = {
   codigo_escritura: 'LIKIDA_MODEL_CODIGO_ESCRITURA',
   qa: 'LIKIDA_MODEL_QA',
   piloto: 'LIKIDA_MODEL_PILOTO',
+  transcripcion: 'LIKIDA_MODEL_TRANSCRIPCION',
+  contador: 'LIKIDA_MODEL_CONTADOR',
 };
 
 /** Devuelve el slug del modelo para un rol, respetando override por env.
@@ -199,4 +221,42 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
   codigo_escritura: { temperature: 0, reasoning: 'high' }, // el diff no se improvisa
   qa: { temperature: 0.3 },                   // adversarial, no caótico
   piloto: { temperature: 0 },                 // un formulario fiscal no se improvisa
+  transcripcion: { temperature: 0 },          // se escribe lo que se oye, no se redacta
+  contador: { temperature: 0 },               // una opinión fiscal no se improvisa
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COSTOS UNITARIOS PARA DIMENSIONAR TOPES (auditoría 24, TC-N1 / WA-1 / ARQ-2).
+//
+// Son las cifras que este mismo archivo y `docs/escala-15k.md` ya citan en
+// prosa; aquí viven como números para que un tope se DERIVE de ellas en vez
+// de copiarlas a mano. No son precios de proveedor (eso es `PRICES` en
+// openrouter.ts): son lo que una operación completa le cuesta al tenant.
+//
+//   · `comprobanteOcr`  medido el 4-ago-2026 contra 18 comprobantes reales con
+//                       `gemini-3.1-flash-lite` (arriba, rol `ocr`): $0.0015-0.0016.
+//   · `liquidacion`     la banda alta de la arquitectura (jul-2026, cabecera):
+//                       $0.03-0.05 por liquidación con Sonnet en el cuadre.
+//   · `fotosPorViaje`   el supuesto central de escala-15k.md (2-4 fotos/viaje).
+//   · `viajeCompleto`   cuadre + OCR de sus fotos: lo que cuesta liquidar UN
+//                       viaje de punta a punta. Con 500 viajes/día son ~$27,
+//                       que es justo la cifra con la que la auditoría 24 mostró
+//                       que el techo global de $5/día se agotaba a media mañana.
+//   · `corridaAgenteSinMedir`  lo que se le CARGA a una corrida de agente de
+//                       fondo cuyo proveedor omitió `usage` (ARQ-2/AGB-9): un
+//                       costo no medido no es cero, y el techo diario tiene que
+//                       contarla con algo. Es la banda alta de una liquidación
+//                       —la llamada más cara del repo— a propósito: sobreestimar
+//                       corta antes; subestimar deja gastar sin freno.
+// ═══════════════════════════════════════════════════════════════════════════
+const COMPROBANTE_OCR_USD = 0.0016;
+const LIQUIDACION_USD = 0.05;
+const FOTOS_POR_VIAJE = 3;
+
+export const COSTO_ESTIMADO_USD = {
+  comprobanteOcr: COMPROBANTE_OCR_USD,
+  liquidacion: LIQUIDACION_USD,
+  fotosPorViaje: FOTOS_POR_VIAJE,
+  viajeCompleto: Number((LIQUIDACION_USD + FOTOS_POR_VIAJE * COMPROBANTE_OCR_USD).toFixed(6)),
+  corridaAgenteSinMedir: LIQUIDACION_USD,
+} as const;

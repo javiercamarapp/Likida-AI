@@ -1,4 +1,7 @@
 import { appUrl } from '@/lib/env';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
+import { acotada } from './presupuesto';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AVISO DE PRIVACIDAD EN EL CANAL — modalidad simplificada.
@@ -18,6 +21,35 @@ import { appUrl } from '@/lib/env';
 // en normas/lfpdppp-15-16.yaml.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Lo MEDIDO sobre el rastreo GPS de la flota, para que el aviso declare el
+ * tratamiento que ESA flota tiene y no el de todas (refinamiento del C.15,
+ * 28-ago-2026). Tres caminos reales escriben geolocalización y solo UNO
+ * depende de esta señal:
+ *
+ *   1. El poller del proveedor (sincronizar_gps.ts, cron /api/cron/gps cada
+ *      5 min) — SOLO corre con credencial activa en `conector_credencial`.
+ *   2. El pin que el chofer manda por el chat (processor.ts →
+ *      registrarUbicacionChofer) — NO depende de ningún conector.
+ *   3. El pin de asistencia (asistencia_wa.ts → anclarUbicacionIncidencia) —
+ *      tampoco.
+ *
+ * Por eso la señal solo gobierna el RENGLÓN DEL PROVEEDOR: los pines se
+ * declaran SIEMPRE, porque el aviso viaja por el mismo chat desde el que
+ * cualquier chofer puede mandar uno — la capacidad existe en cuanto existe la
+ * conversación, y el aviso informa de lo que puede pasar, no de lo que ya pasó.
+ *
+ * El criterio de la señal también es de CAPACIDAD, no de hecho: credencial
+ * activa = el cron va a intentar traer posiciones, y el consentimiento tiene
+ * que ser PREVIO a la primera. Esperar a que haya filas en `posicion` sería
+ * avisar después de tratar.
+ *
+ * `no_medible` = la consulta no contestó, que NO es «sin conector»: se declara
+ * el caso amplio (falla cerrado — un aviso que declara de más un rato es
+ * inexacto; uno que calla un tratamiento que ocurre es el bug original C.15).
+ */
+export type SenalGps = 'conectado' | 'sin_conector' | 'no_medible';
+
 /** Los datos de la FLOTA. Sin ellos no hay aviso: el responsable es ella. */
 export interface DatosResponsable {
   /** Razón social tal cual está en el RFC. */
@@ -26,6 +58,13 @@ export interface DatosResponsable {
   domicilio: string;
   /** Dónde vive el aviso integral. Art. 16 fr. II obliga a señalarlo. */
   urlAvisoIntegral: string;
+  /**
+   * Señal MEDIDA en `conector_credencial` (ver `SenalGps`). Opcional a
+   * propósito y con ausencia = `no_medible`: quien no midió recibe el caso
+   * amplio, nunca el silencio. `getDatosResponsable` la mide siempre; un
+   * llamador que arme este objeto a mano sin medir declara de más, no de menos.
+   */
+  gps?: SenalGps;
 }
 
 /**
@@ -194,6 +233,32 @@ export function avisoSimplificado(r: DatosResponsable): string | null {
 
   const estado = revisarAvisoIntegral(r.urlAvisoIntegral);
   const url = r.urlAvisoIntegral?.trim();
+  // Ausente = no medido = caso amplio (ver `SenalGps`). Nunca un default que
+  // calle un tratamiento.
+  const gps = r.gps ?? 'no_medible';
+
+  // El renglón de la ubicación, POR FLOTA (refinamiento del C.15, 28-ago-2026).
+  // Solo varía la mitad del PROVEEDOR: el pin del chat se declara en los tres
+  // casos, porque este mismo mensaje viaja por el canal desde el que el chofer
+  // puede mandarlo — el tratamiento es posible en cuanto existe la conversación.
+  //
+  //   · `conectado`    → se afirma: la credencial activa existe y el cron va a
+  //                      traer posiciones (o ya las trae).
+  //   · `no_medible`   → el texto CONDICIONAL de siempre ("si tu empresa
+  //                      tiene GPS…"), que es literalmente cierto en ambos
+  //                      casos. Byte-idéntico al que salió a producción el
+  //                      22-ago, a propósito: así una falla transitoria de la
+  //                      medición no cambia `versionAviso` ni dispara un
+  //                      reenvío a media flota.
+  //   · `sin_conector` → se dice que por ese medio no entra nada, y que si la
+  //                      empresa conecta uno el aviso nuevo llega solo (la
+  //                      versión cambia → reenvío del art. 15 fr. VI).
+  const sobreUbicacion =
+    gps === 'conectado'
+      ? `Sobre tu ubicación: tu empresa tiene GPS en sus camiones, así que se recibe la *posición de la unidad* que manejas para medir los tiempos del viaje y enseñárselos a la empresa; si compartes tu ubicación por el chat, también se guarda y la ve tu jefe. Se borra a los 90 días. Tu teléfono no se rastrea.`
+      : gps === 'sin_conector'
+        ? `Sobre tu ubicación: tu empresa no tiene conectado un GPS con Likida, así que por ese medio no se recibe ninguna posición; si algún día conecta uno, este aviso cambia y el nuevo te llega por aquí. Lo que sí: si compartes tu ubicación por el chat, se guarda y la ve tu jefe. Se borra a los 90 días. Tu teléfono no se rastrea.`
+        : `Sobre tu ubicación: si tu empresa tiene GPS en sus camiones, se recibe la *posición de la unidad* que manejas para medir los tiempos del viaje y enseñárselos a la empresa; si compartes tu ubicación por el chat, también se guarda y la ve tu jefe. Se borra a los 90 días. Tu teléfono no se rastrea.`;
 
   return [
     `🔒 *Aviso de privacidad*`,
@@ -209,7 +274,7 @@ export function avisoSimplificado(r: DatosResponsable): string | null {
     // `viaje.llegada_en/descarga_en/regreso_en` y ningún aviso los enunciaba.
     // Se nombran con las palabras que el chofer de verdad manda, porque eso es
     // lo que tiene que reconocer.
-    `Qué se trata: tu nombre y teléfono, las fotos de comprobantes de gasto que envíes por aquí (diésel, casetas, alimentación, hospedaje) con sus montos y fechas, y los avisos del viaje que tú mandes ("ya llegué", "estoy descargando", "voy de regreso") con la hora de tu mensaje.`,
+    `Qué se trata: tu nombre y teléfono, las fotos de comprobantes de gasto que envíes por aquí (diésel, casetas, alimentación, hospedaje) con sus montos y fechas, los avisos del viaje que tú mandes ("ya llegué", "estoy descargando", "voy de regreso") con la hora de tu mensaje, y la posición GPS de la unidad que traes asignada.`,
     ``,
     // Fr. III — finalidades, DISTINGUIENDO. La fracción vigente no se conforma
     // con enumerarlas: pide separar las que requieren consentimiento. Y el
@@ -224,12 +289,25 @@ export function avisoSimplificado(r: DatosResponsable): string | null {
     ``,
     // AUDITORÍA 3, ALTO (LEG-A1) — la finalidad de los hitos, enunciada. La
     // liquidación cierra igual sin ellos (es seguimiento, no requisito), así
-    // que va como finalidad ADICIONAL, no escondida en "liquidar". Y se dice
-    // la verdad sobre el alcance: la hora es la del mensaje, no telemetría —
-    // hitos_viaje.ts ya lo estableció ("el producto nunca la presenta como
-    // telemetría"), y un aviso que insinúe rastreo enunciaría un tratamiento
-    // que no ocurre.
-    `También: anotar la hora de tus avisos del viaje para medir sus tiempos —como la espera en la descarga— y enseñárselos a la empresa. No hay GPS: solo se anota lo que tú escribes y a qué hora lo mandaste.`,
+    // que va como finalidad ADICIONAL, no escondida en "liquidar".
+    //
+    // AUDITORÍA 19, CRÍTICO (legal C1 / C.15): esta línea decía "No hay GPS:
+    // solo se anota lo que tú escribes" — y el producto lleva desde la 0050
+    // grabando posiciones. Tres caminos reales las escriben en `posicion`:
+    // el poller de rastreo (sincronizar_gps.ts, cron /api/cron/gps cada 5
+    // min, vercel.json:30), el pin que el chofer manda por WhatsApp
+    // (processor.ts → registrarUbicacionChofer) y el pin de asistencia
+    // (asistencia_wa.ts). La geolocalización de la unidad mientras el chofer
+    // la maneja ES un dato personal suyo (LFPDPPP art. 3 fr. IX: persona
+    // identificada o identificable), y un aviso que lo niega es peor que uno
+    // que calla. Se declara con su límite verdadero: el rastreado es el
+    // camión de la empresa, no el teléfono del chofer, y las posiciones se
+    // borran a los 90 días (purgar_posicion, mig. 0155).
+    `También: anotar la hora de tus avisos del viaje para medir sus tiempos —como la espera en la descarga— y enseñárselos a la empresa.`,
+    ``,
+    // AUDITORÍA 19 → refinamiento 28-ago-2026: el renglón ya no es el mismo
+    // para toda flota — se arma arriba, MEDIDO contra `conector_credencial`.
+    sobreUbicacion,
     ``,
     // Art. 26 fr. II — el derecho de oposición al tratamiento automatizado. Es
     // el elemento 11 del checklist de docs/conocimiento/11-datos-personales.md
@@ -495,13 +573,24 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
   const razonSocial = r.razonSocial.trim();
   const domicilio = r.domicilio.trim();
   const contacto = r.contactoPrivacidad?.trim();
+  // Mismo criterio que en `avisoSimplificado`: ausente = no medido = caso
+  // amplio. El párrafo del proveedor y su finalidad varían por flota; el pin
+  // del chat se declara SIEMPRE (ver `SenalGps`).
+  const gps = r.gps ?? 'no_medible';
 
   return [
     {
       titulo: 'Quién es responsable de tus datos',
       fundamento: 'LFPDPPP art. 15 fr. I',
+      // AUDITORÍA 19 (legal C3 / C.16): sin domicilio capturado, la sección
+      // lo DICE y se marca pendiente — mismo criterio que el contacto del
+      // art. 29 más abajo. Antes la ruta entera respondía 404, que es dejar
+      // al titular sin nada por faltar un dato de la flota.
+      pendiente: !domicilio,
       parrafos: [
-        `**${razonSocial}**, con domicilio en ${domicilio}, es la responsable de tus datos personales. A ella le reclamas y ante ella ejerces tus derechos.`,
+        domicilio
+          ? `**${razonSocial}**, con domicilio en ${domicilio}, es la responsable de tus datos personales. A ella le reclamas y ante ella ejerces tus derechos.`
+          : `**${razonSocial}** es la responsable de tus datos personales. A ella le reclamas y ante ella ejerces tus derechos. **La empresa aún no ha capturado su domicilio fiscal** — se dice aquí en vez de dejarlo en blanco o inventar uno; mientras tanto, el camino que sí funciona es escribir **PRIVACIDAD** por el mismo chat de WhatsApp.`,
         // AUDITORÍA 18 (B6): decía "fr. XX", que es la definición de TRANSFERENCIA.
         // "Persona encargada" es la fr. XII (normas/lfpdppp-2-XII-XX.yaml); la
         // XX se cita bien más abajo, en la sección del art. 35, donde sí toca.
@@ -516,8 +605,48 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         `Las **fotos de comprobantes** que envías por WhatsApp —diésel, casetas, alimentación, hospedaje, refacciones— y lo que viene escrito en ellas: montos, fechas, folios, RFC del establecimiento y datos fiscales del comprobante.`,
         `El **contenido de tus mensajes** en esa conversación, y los **viajes y liquidaciones** en los que participas.`,
         // AUDITORÍA 3, ALTO (LEG-A1): los hitos 0090 como categoría de dato,
-        // con su límite dicho — la hora es la del mensaje, no telemetría.
-        `Los **avisos del viaje** que decides mandar por el mismo chat —"ya llegué", "estoy descargando", "voy de regreso"— con la hora en que llega tu mensaje. **No hay GPS ni rastreo del teléfono:** se anota únicamente lo que tú escribes y cuándo lo mandaste.`,
+        // con su límite dicho — la hora es la del mensaje.
+        `Los **avisos del viaje** que decides mandar por el mismo chat —"ya llegué", "estoy descargando", "voy de regreso"— con la hora en que llega tu mensaje.`,
+        // AUDITORÍA 19, CRÍTICO (legal C1 / C.15): este párrafo decía "**No
+        // hay GPS ni rastreo del teléfono**" mientras el cron de
+        // /api/cron/gps (cada 5 minutos) y el pin de WhatsApp escriben
+        // `posicion` desde la 0050. La geolocalización de la unidad con un
+        // chofer identificado al volante es dato personal del chofer, y la
+        // fr. II obliga a enumerarla. Se declara con sus dos límites reales:
+        // lo rastreado es el camión (el dispositivo lo instala la empresa,
+        // no vive en el teléfono del chofer) y la retención es de 90 días
+        // (purgar_posicion, mig. 0155).
+        //
+        // REFINAMIENTO 28-ago-2026 (por flota): la mitad del PROVEEDOR se
+        // declara según lo MEDIDO en `conector_credencial` — declarar un
+        // rastreo satelital a una flota que no tiene ninguno conectado es tan
+        // inexacto como callarlo. El pin del chat se declara en los tres
+        // casos: no depende de conector alguno (ver `SenalGps`). El texto de
+        // `no_medible` queda byte-idéntico al desplegado el 22-ago, para que
+        // una falla de la medición no dispare reenvíos.
+        gps === 'conectado'
+          ? `La **posición GPS de la unidad que traes asignada**: tu empresa tiene contratado un rastreo satelital para sus camiones, y la posición del camión se recibe cada pocos minutos, también mientras tú lo manejas. Y la **ubicación que tú decidas compartir** por el chat, que se guarda y se le muestra a tu empresa. **Tu teléfono no se rastrea:** el dispositivo de rastreo es del camión, y de tu teléfono solo sale lo que tú mandes. Las posiciones se conservan **90 días** y después se borran solas.`
+          : gps === 'sin_conector'
+            ? `La **ubicación que tú decidas compartir** por el chat, que se guarda y se le muestra a tu empresa. Tu empresa **no tiene conectado un rastreo satelital** con Likida, así que por ese medio no se recibe ninguna posición; si algún día lo conecta, este aviso cambia y el nuevo te llega por WhatsApp. **Tu teléfono no se rastrea:** de él solo sale lo que tú decidas mandar. Las ubicaciones que compartas se conservan **90 días** y después se borran solas.`
+            : `La **posición GPS de la unidad que traes asignada**, cuando tu empresa tiene contratado un rastreo satelital para sus camiones: la posición del camión se recibe cada pocos minutos, también mientras tú lo manejas. Y la **ubicación que tú decidas compartir** por el chat, que se guarda y se le muestra a tu empresa. **Tu teléfono no se rastrea:** el dispositivo de rastreo es del camión, y de tu teléfono solo sale lo que tú mandes. Las posiciones se conservan **90 días** y después se borran solas.`,
+        // AUDITORÍA 24 (LEG-3, ALTO): ningún aviso enumeraba los eventos que
+        // la cámara/telemetría del camión reporta — `sincronizar_eventos.ts`
+        // los guarda TODOS (no solo los graves) desde la misma credencial y
+        // cadencia del GPS (`conector_credencial`; ver el comentario de
+        // cabecera de ese archivo: "Eventos y posiciones comparten
+        // proveedor, credencial y cadencia"). Se reutiliza la señal `gps`
+        // por eso — no es un tratamiento con su propio conector, es el mismo
+        // con otro tipo de dato. NO se promete un plazo de borrado fijo para
+        // estos eventos: hoy no existe una purga automática que lo ejecute, y
+        // este archivo ya tiene un hallazgo (LEG-6) por prometer un "90 días"
+        // que ningún código cumplía — no se repite el error aquí. Mismo
+        // criterio que la categoría de salud, dos párrafos abajo: se declara
+        // la finalidad y el límite reales, no una cifra que nadie ejecuta.
+        gps === 'conectado'
+          ? `La **conducta al volante que reporta la cámara o el sistema de telemetría de tu camión**, cuando tu empresa tiene ese servicio conectado con Likida: frenadas bruscas, uso del celular al manejar, distracción, colisión, impacto o volcadura, con la hora y la posición del camión en ese momento, y una liga al video en el sistema del proveedor cuando él la entrega. **Se usan para atender un accidente o incidente grave de tu unidad** —abrir el expediente de asistencia y avisar a tu empresa— y, mientras tanto, quedan disponibles para que tu empresa revise cómo conduces. Hoy no tienen una fecha de borrado automático.`
+          : gps === 'sin_conector'
+            ? `Tu empresa **no tiene conectado un sistema de cámara o telemetría** con Likida, así que por ese medio no se recibe ningún evento sobre cómo conduces; si algún día lo conecta, este aviso cambia y el nuevo te llega por WhatsApp.`
+            : `La **conducta al volante que reporta la cámara o el sistema de telemetría de tu camión**, cuando tu empresa tiene ese servicio conectado con Likida: frenadas bruscas, uso del celular al manejar, distracción, colisión, impacto o volcadura, con la hora y la posición del camión en ese momento, y una liga al video en el sistema del proveedor cuando él la entrega. **Se usan para atender un accidente o incidente grave de tu unidad** —abrir el expediente de asistencia y avisar a tu empresa— y, mientras tanto, quedan disponibles para que tu empresa revise cómo conduces. Hoy no tienen una fecha de borrado automático.`,
         // AUDITORÍA EXTERNA 16-AGO-2026 (P2): la versión anterior decía "no
         // se usa para nada", y el flujo real es más matizado — la foto viaja
         // COMPLETA al motor de lectura (no se puede enmascarar una imagen
@@ -525,13 +654,53 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         // que lo sensible se guarde o participe del cuadre. El aviso ahora
         // describe exactamente eso; un aviso que promete más de lo que el
         // código hace es un hallazgo de due diligence, no una protección.
-        `**No se piden ni se conservan datos sensibles.** Ni salud, ni origen racial o étnico, ni creencias, ni afiliación sindical, ni preferencias sexuales, ni datos biométricos. Cada foto se procesa completa por el motor de lectura para extraer los campos del comprobante; si en ella aparece por accidente algo sensible (un ticket de farmacia, por ejemplo), un filtro lo detecta y lo excluye: **no se guarda, no participa en tu liquidación**, y puedes pedir que la foto se borre.`,
+        // AUDITORÍA 19 (legal, reincidente #7): decía a secas "puedes pedir
+        // que la foto se borre", y la 0178 decidió lo contrario para la foto
+        // que YA es comprobante de un gasto: es evidencia fiscal y se
+        // conserva (CFF art. 30) — el ejecutor ARCO la desliga del titular,
+        // no la borra. Lo que SÍ se borra solo es la imagen que no respalda
+        // ningún gasto (cola de huérfanos, mig. 0165). El aviso ahora dice
+        // esa frontera con todas sus letras, porque prometer un borrado que
+        // la base rechaza es una promesa con evidencia escrita de romperse.
+        // AUDITORÍA 22, LEG-A1 (ALTO): la nota de voz viaja ÍNTEGRA al
+        // proveedor que la transcribe (`voz_transcrita.ts`) y no estaba
+        // enumerada ni como dato ni como salida. La voz es dato personal por
+        // sí misma (art. 3 fr. V): identifica a quien habla.
+        `Las **notas de voz** que mandas por el chat. Se transcriben a texto para poder atenderlas, y tanto el audio como su transcripción quedan en la conversación.`,
+        // AUDITORÍA 22, LEG-A2 (ALTO): el RFC y el número de licencia del
+        // operador salen hacia el PAC dentro del Carta Porte
+        // (`carta_porte_xml.ts:183-185`) y no estaban en ninguna de las dos
+        // listas del aviso. La fr. II obliga a enumerarlos.
+        `Tu **RFC** y el **número de tu licencia de conducir**, cuando tu empresa emite un complemento Carta Porte del viaje que traes: el SAT los exige dentro de ese comprobante.`,
+        // ── AUDITORÍA 22, LEG-C2 (CRÍTICO) ─────────────────────────────────
+        // Este párrafo juraba «No se piden ni se conservan datos sensibles. Ni
+        // salud…». El circuito de asistencia guarda `incidencia.hay_lesionados`
+        // —columna propia, migración 0198, ligada a `operador_id`— y el texto
+        // crudo con el que el chofer describe el accidente
+        // (`asistencia_wa.ts:524`). La salud es dato sensible (art. 3 fr. VI) y
+        // el art. 59 fr. IV agrava la sanción hasta el doble.
+        //
+        // Una negativa ABSOLUTA que el código contradice es peor que el
+        // silencio: es una afirmación falsa firmada, con evidencia en la base.
+        // Se declara lo que sí ocurre, con su finalidad y su límite, y se
+        // conserva la promesa que sí es cierta para las demás categorías.
+        `**Un dato de salud, y solo uno:** si avisas por el chat de un accidente o una emergencia, se guarda **si hay personas lesionadas** y el texto con el que lo describes, para poder escalarlo a tu empresa y atenderlo. No se usa para tu liquidación ni para evaluarte. **Fuera de ese caso no se piden ni se conservan datos sensibles:** ni origen racial o étnico, ni creencias, ni afiliación sindical, ni preferencias sexuales, ni datos biométricos. Cada foto se procesa completa por el motor de lectura para extraer los campos del comprobante; si en ella aparece por accidente algo sensible (un ticket de farmacia, por ejemplo), un filtro lo detecta y lo excluye: **no se guarda como dato, no participa en tu liquidación**, y la imagen que no respalda ningún gasto se elimina sola del almacenamiento. **Lo que no se puede borrar ni pidiéndolo:** la foto que ya es comprobante de un gasto — esa se conserva por obligación fiscal (CFF art. 30). Lo que sí puedes pedir es que se **desligue de tu persona**, y eso es lo que la cancelación ejecuta.`,
+        // AUDITORÍA 24 (LEG-8, MEDIO, reincidente ×3): `grep 'familiar|contacto
+        // de emergencia'` en los dos avisos daba 0 — el nombre 24, teléfono y
+        // parentesco del contacto de emergencia (`contacto_emergencia`, 0198)
+        // no estaban enumerados en ningún lado. No es tu dato: es el de un
+        // tercero que tu empresa captura sobre ti, y se declara aquí porque
+        // es la única sección donde el operador puede leer qué existe.
+        `**El contacto de emergencia que tu empresa capture sobre ti:** si tu empresa registra a alguien —nombre, teléfono y parentesco— para que se le avise en caso de que tengas un accidente, ese dato se guarda con esa sola finalidad. Se le avisa únicamente si tu empresa activa ese aviso para ese contacto, y Likida no le llama por su cuenta.`,
       ],
     },
     {
       titulo: 'Para qué se usan',
       fundamento: 'LFPDPPP art. 15 fr. III',
-      parrafos: [
+      // AUDITORÍA 24 (LEG-3): el filtro final quita el `null` de la
+      // finalidad de cámara cuando la flota no tiene una conectada — no hay
+      // nada que declarar en ese caso, y un párrafo vacío no es honesto.
+      parrafos: ([
         `**Finalidades necesarias — sin ellas no puede haber liquidación:**`,
         `· Liquidar tus viajes: cuadrar lo que gastaste contra el anticipo que recibiste y emitir el documento de liquidación.`,
         `· Comprobar los gastos ante el SAT y conservar los comprobantes fiscales el tiempo que la ley obliga (Código Fiscal de la Federación art. 30: al menos cinco años).`,
@@ -543,9 +712,43 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         // ellos: es seguimiento pedido por la empresa, y el titular conserva
         // la oposición sin que eso afecte su liquidación.
         `· Anotar la hora de tus avisos del viaje ("ya llegué", "estoy descargando", "voy de regreso") para medir los tiempos de la operación —por ejemplo, cuánto dura la espera en la descarga— y mostrárselos a la empresa.`,
+        // AUDITORÍA 19 (legal C1 / C.15): la finalidad del GPS, enunciada
+        // donde la ley la pide y con su oposición dicha entera. Va entre las
+        // NO necesarias porque la liquidación cierra igual sin posiciones
+        // (0207: sin posiciones en el radio no hay fila, es un motivo
+        // declarado, no un cero). Y se dice el límite de la oposición: el
+        // rastreo del camión lo contrata la empresa; lo que la oposición
+        // detiene es el uso de esas posiciones ligado a tu persona, no el
+        // dispositivo del camión.
+        //
+        // REFINAMIENTO 28-ago-2026 (por flota): sin conector, la única fuente
+        // de posiciones es el pin que el chofer decide mandar — la finalidad
+        // se enuncia sobre ESA fuente, y la cláusula del contrato con el
+        // proveedor (que no existe) se cae. Con conector (o sin poder medir,
+        // que se trata como el caso amplio), el texto de siempre.
+        gps === 'sin_conector'
+          ? `· Usar la ubicación que tú compartas por el chat para el seguimiento del viaje y para medir sus tiempos —por ejemplo, cuánto estuvo detenida la unidad en un sitio de carga o descarga— y mostrárselo a la empresa. Puedes oponerte a que esas ubicaciones se usen ligadas a tu persona.`
+          : `· Usar las posiciones GPS de la unidad para el seguimiento del viaje y para medir sus tiempos —por ejemplo, cuánto estuvo detenida la unidad en un sitio de carga o descarga— y mostrárselo a la empresa. Puedes oponerte a que esas posiciones se usen ligadas a tu persona; el rastreo del camión es un contrato de tu empresa con su proveedor y no se apaga desde aquí, y decírtelo así es más honesto que prometer lo contrario.`,
+        // AUDITORÍA 22, LEG-A3 (ALTO): `jornada/derivar.ts` DERIVA tu registro
+        // de jornada laboral a partir de las posiciones GPS. Eso no es
+        // "seguimiento del viaje": es una finalidad distinta, con un destino
+        // distinto (LFT 132 fr. XXXIV), y el propio aviso declara dos párrafos
+        // más abajo que toda finalidad no escrita exige pedir permiso otra vez.
+        // Va entre las NO necesarias: la liquidación cierra igual sin ella.
+        `· Derivar tu **registro de jornada** —a qué hora empezaste a manejar, cuánto condujiste, cuánto descansaste— a partir de esas mismas posiciones, para que tu empresa cumpla su obligación de llevarlo (Ley Federal del Trabajo art. 132 fr. XXXIV). Puedes oponerte a que se derive ligado a tu persona.`,
+        // AUDITORÍA 24 (LEG-3, ALTO): la finalidad de los eventos de cámara.
+        // "Atender un accidente" (abrir el expediente de asistencia) es la
+        // parte que no admite oposición —es la misma ayuda que se activa
+        // cuando ocurre—; revisar la conducta fuera de un accidente sí es
+        // oponible, igual que el resto de lo derivado de las posiciones.
+        gps === 'conectado'
+          ? `· **Atender un accidente o incidente grave de tu unidad** (choque, impacto, volcadura) que la cámara o telemetría reporte, abriendo el expediente de asistencia y avisando a tu empresa. Esta finalidad no admite oposición: es la misma ayuda que se activa cuando ocurre. Fuera de un accidente, tu empresa también puede usar esos eventos para revisar cómo conduces; puedes oponerte a que ese uso quede ligado a tu persona.`
+          : gps === 'sin_conector'
+            ? null
+            : `· Si tu empresa conecta un sistema de cámara o telemetría, **atender un accidente o incidente grave de tu unidad** (choque, impacto, volcadura) que reporte, abriendo el expediente de asistencia y avisando a tu empresa —esta finalidad no admite oposición—, y revisar cómo conduces fuera de un accidente, a lo que sí puedes oponerte.`,
         `· Medir cómo funciona el servicio para mejorarlo (estadísticas de uso, sin identificarte en los reportes).`,
         `Cualquier finalidad que no esté escrita aquí requiere que te vuelvan a pedir permiso. La ley vigente ya no permite ampararse en usos "compatibles o análogos".`,
-      ],
+      ] as Array<string | null>).filter((p): p is string => p !== null),
     },
     {
       titulo: 'Un programa revisa tus comprobantes, y puedes oponerte',
@@ -602,6 +805,12 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
       parrafos: [
         `**Tus datos no se venden, ni se comparten con nadie para que los use por su cuenta.**`,
         `Sí pasan por proveedores que trabajan por instrucción de la empresa y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia** (art. 2 fr. XX)—: el proveedor de mensajería de WhatsApp, el de alojamiento de la base de datos, y los modelos de lenguaje: les llegan **las fotos de tus comprobantes** para leerlas y **el texto de tus mensajes** —la conversación completa— para poder contestarte. A esos modelos en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
+        // AUDITORÍA 22, LEG-A1: la nota de voz sale ENTERA al mismo proveedor
+        // para transcribirse, y no se decía. AUDITORÍA 22, LEG-A2: el PAC no
+        // estaba en ninguna lista, y el Carta Porte lleva RFC y licencia del
+        // operador.
+        `También les llegan **tus notas de voz**, completas, para transcribirlas a texto.`,
+        `Y cuando tu empresa emite un complemento **Carta Porte**, el comprobante viaja al **proveedor autorizado de certificación (PAC)** que lo timbra ante el SAT, y dentro de él van **tu RFC y el número de tu licencia**: el SAT los exige en ese documento.`,
         `Transferencias que sí lo son y no necesitan tu consentimiento: a la autoridad fiscal cuando la ley lo exige, y al contador de la empresa para cumplir sus obligaciones.`,
         `**Si algún día se quisiera transferir tus datos para algo distinto, se te pedirá permiso antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
       ],
@@ -725,17 +934,32 @@ export interface DatosAvisoProspectos {
  * I a IV están en las cuatro primeras secciones.
  */
 export function avisoProspectos(d: DatosAvisoProspectos): SeccionAviso[] {
-  const razonSocial = d.razonSocial?.trim() || '🔴 razón social pendiente 🔴';
-  const domicilio = d.domicilio?.trim() || '🔴 domicilio pendiente 🔴';
+  const razonSocial = d.razonSocial?.trim() || null;
+  const domicilio = d.domicilio?.trim() || null;
   const meses = Math.round(DIAS_RETENCION_PROSPECTO_PERSONA / 30.4);
   return [
     {
       titulo: 'Quién es responsable, y por qué tienes este aviso',
       fundamento: 'LFPDPPP art. 15 fr. I · art. 14',
-      pendiente: !d.razonSocial || !d.domicilio,
+      pendiente: !razonSocial || !domicilio,
       parrafos: [
-        `**${razonSocial}** (Likida), con domicilio en ${domicilio}, es la responsable de tus datos personales.`,
-        `Este aviso es para ti si **trabajas en una empresa de transporte o con flota propia** y Likida te contactó —o piensa hacerlo— para ofrecerle su servicio a tu empresa. No eres cliente de Likida ni nos diste tus datos: por eso te decimos aquí de dónde salieron y qué hacemos con ellos.`,
+        // AUDITORÍA 24 (LEG-4, ALTO): esta sección sustituía el dato ausente
+        // por un marcador rojo (🔴 razón social pendiente 🔴) DENTRO de la
+        // misma frase donde iría el nombre real — un documento público, con
+        // 33,298 prospectos detrás, que se leía como roto en vez de "en
+        // actualización". Mismo criterio que `avisoIntegral`: si falta el
+        // dato, se dice en una frase aparte y completa, no se rellena el
+        // hueco con un emoji.
+        razonSocial && domicilio
+          ? `**${razonSocial}** (Likida), con domicilio en ${domicilio}, es la responsable de tus datos personales.`
+          : `**Likida** es la responsable de tus datos personales. Este aviso está en actualización: la razón social inscrita y el domicilio de la entidad operadora siguen pendientes de captura — la fr. I del art. 15 los exige y se señalan aquí en vez de quedar en blanco o inventarse.`,
+        // AUDITORÍA 19 (legal, reincidente #14): decía "ni nos diste tus
+        // datos" a TODO lector — y el lead de /getdemo (api/lead) sí los dio,
+        // con su nombre, correo y teléfono en el formulario. Un aviso que le
+        // niega al titular su propio acto no describe el tratamiento real
+        // (art. 15 fr. II exige decir de dónde salieron). Se dicen los dos
+        // orígenes, porque los dos existen.
+        `Este aviso es para ti si **trabajas en una empresa de transporte o con flota propia** y Likida te contactó —o piensa hacerlo— para ofrecerle su servicio a tu empresa. Hay dos formas de que tengamos tus datos, y este aviso cubre las dos: **los buscamos nosotros** en fuentes públicas sin que lo supieras, o **tú los dejaste** al usar la calculadora o pedir una demostración en likida.ai. En ambos casos aquí dice qué tenemos y qué hacemos con ello.`,
         `Si ya usas Likida como cliente, tu aviso es la **política de privacidad**; si eres operador de una flota, el aviso que te toca lo publica tu empresa.`,
       ],
     },
@@ -745,6 +969,11 @@ export function avisoProspectos(d: DatosAvisoProspectos): SeccionAviso[] {
       parrafos: [
         `Tu **nombre**, tu **puesto**, tu **correo y teléfono de trabajo** y, si lo tienes público, tu **perfil profesional**; junto con el nombre, el giro y la plaza de tu empresa y la vacante que publicó.`,
         `Salieron de **fuentes de acceso público**: el directorio de empresas del INEGI (DENUE), bolsas de trabajo donde tu empresa publicó una vacante, el sitio web de tu empresa y directorios o perfiles profesionales públicos. Algunos correos **no se leyeron en ninguna parte: se dedujeron** del patrón de correos de la empresa, y así quedan marcados —como no verificados— hasta que alguien los confirma.`,
+        // AUDITORÍA 19 (legal, reincidente #14): el fbclid del lead no estaba
+        // enumerado en ningún aviso. Es un identificador de la persona que
+        // llenó el formulario y la fr. II obliga a decirlo. Se purga junto
+        // con lo demás (mig. 0243).
+        `Si tú dejaste tus datos en likida.ai, además se guarda **de qué anuncio o búsqueda llegaste** (los identificadores de campaña que tu navegador trae en la liga, como el fbclid de Facebook o el gclid de Google). Sirven para saber qué canal funcionó; se borran con el resto de tus datos.`,
         `**No se tratan datos sensibles** ni datos de tu vida privada: solo los de tu papel en la empresa.`,
       ],
     },
@@ -791,4 +1020,114 @@ export function avisoProspectos(d: DatosAvisoProspectos): SeccionAviso[] {
       ],
     },
   ];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA COMPUERTA: NO SE TRATA ANTES DE AVISAR.
+//
+// AUDITORÍA 22 (LEG-C1) la puso en la jornada; AUDITORÍA 24 (LEG-1, CRÍTICO)
+// encontró que el TRATAMIENTO PRINCIPAL del piloto —800 tractos × 288
+// posiciones/día y los eventos de cámara— corría sin ella: el poller escribe
+// contra `unidad_id` y nunca tenía al operador a la mano. Se extrae aquí para
+// que jornada, GPS y cámara pasen por la MISMA pregunta con la MISMA
+// respuesta: «¿este titular ya recibió el aviso?». El principio está escrito
+// arriba (`SenalGps`): el consentimiento tiene que ser PREVIO a la primera.
+//
+// Fallar cerrado: si la base no contesta, la respuesta es «no» — construir
+// un expediente o guardar un pin a ciegas es exactamente lo que el art. 16
+// prohíbe, y el expuesto es el operador mientras la sancionable es la flota.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** `.in()` de PostgREST viaja en la URL: 200 UUID son ~7.5 KB, debajo del
+ *  techo típico de un proxy (misma cifra que `IDS_POR_TANDA` en pg.ts). */
+const IDS_POR_CONSULTA = 200;
+
+/**
+ * `true` si el operador ya tiene `aviso_privacidad_en`. El `cache` es por
+ * corrida (la lista de trabajo de la jornada trae el mismo operador muchas
+ * veces); quien no lo pasa consulta cada vez.
+ */
+export async function tieneAvisoPrevio(
+  tenantId: string,
+  operadorId: string,
+  cache?: Map<string, boolean>,
+): Promise<boolean> {
+  const llave = `${tenantId}|${operadorId}`;
+  const memo = cache?.get(llave);
+  if (memo !== undefined) return memo;
+
+  const { data, error } = await acotada(
+    supabaseAdmin().from('operador')
+      .select('aviso_privacidad_en')
+      .eq('tenant_id', tenantId).eq('id', operadorId)
+      .maybeSingle(),
+    'privacidad.aviso_previo',
+  );
+  if (error) {
+    logger.error('privacidad.aviso_previo_ilegible', { tenantId, operadorId, err: error.message });
+    return false;
+  }
+  const ok = (data as { aviso_privacidad_en: string | null } | null)?.aviso_privacidad_en != null;
+  cache?.set(llave, ok);
+  return ok;
+}
+
+/**
+ * Las unidades cuyo operador ACTUAL no ha recibido el aviso.
+ *
+ * «Actual» = el del viaje vivo (`abierto`/`en_cuadre`) que lleva esa unidad.
+ * Una unidad sin viaje vivo no está ligada a ninguna persona: su posición es
+ * la de un camión, no la de un titular, y se guarda. Una unidad con viaje
+ * vivo cuyo operador tiene `aviso_privacidad_en` NULL es tratamiento sin
+ * aviso, y NO se persiste nada suyo — ni posición ni evento de cámara.
+ *
+ * Devuelve `error` cuando la base no contestó: el llamador debe tratar la
+ * corrida entera como no autorizada (fallar cerrado), no como «sin aviso: 0».
+ */
+export async function unidadesSinAvisoPrevio(
+  tenantId: string,
+  unidadIds: readonly string[],
+): Promise<{ sinAviso: Set<string>; error?: string }> {
+  const sinAviso = new Set<string>();
+  if (unidadIds.length === 0) return { sinAviso };
+
+  const operadorPorUnidad = new Map<string, string>();
+  for (let i = 0; i < unidadIds.length; i += IDS_POR_CONSULTA) {
+    const tanda = unidadIds.slice(i, i + IDS_POR_CONSULTA);
+    const { data, error } = await acotada(
+      supabaseAdmin().from('viaje')
+        .select('unidad_id, operador_id')
+        .eq('tenant_id', tenantId)
+        .in('estatus', ['abierto', 'en_cuadre'])
+        .in('unidad_id', tanda),
+      'privacidad.viajes_vivos_por_unidad',
+    );
+    if (error) return { sinAviso, error: `no se pudo saber qué operador lleva cada unidad: ${error.message}` };
+    for (const v of (data ?? []) as Array<{ unidad_id: unknown; operador_id: unknown }>) {
+      if (v.unidad_id && v.operador_id) operadorPorUnidad.set(String(v.unidad_id), String(v.operador_id));
+    }
+  }
+  if (operadorPorUnidad.size === 0) return { sinAviso };
+
+  const operadores = [...new Set(operadorPorUnidad.values())];
+  const conAviso = new Set<string>();
+  for (let i = 0; i < operadores.length; i += IDS_POR_CONSULTA) {
+    const tanda = operadores.slice(i, i + IDS_POR_CONSULTA);
+    const { data, error } = await acotada(
+      supabaseAdmin().from('operador')
+        .select('id, aviso_privacidad_en')
+        .eq('tenant_id', tenantId)
+        .in('id', tanda),
+      'privacidad.aviso_previo_por_operador',
+    );
+    if (error) return { sinAviso, error: `no se pudo leer el aviso de privacidad de los operadores: ${error.message}` };
+    for (const o of (data ?? []) as Array<{ id: unknown; aviso_privacidad_en: unknown }>) {
+      if (o.aviso_privacidad_en != null) conAviso.add(String(o.id));
+    }
+  }
+
+  for (const [unidadId, operadorId] of operadorPorUnidad) {
+    if (!conAviso.has(operadorId)) sinAviso.add(unidadId);
+  }
+  return { sinAviso };
 }

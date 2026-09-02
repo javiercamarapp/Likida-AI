@@ -1,11 +1,11 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ESCENARIOS_QA, POLITICA_DEMO, escenarioPorId } from './qa-escenarios';
+import { ESCENARIOS_QA, POLITICA_DEMO, escenarioPorId, idsParaActoFotos, idFotoTrasCierre } from './qa-escenarios';
 
 describe('los escenarios del selector', () => {
   test('el selector ofrece los que TIENEN guion, y `escenarioPorId` no inventa', () => {
-    expect(ESCENARIOS_QA.map((e) => e.id).sort()).toEqual(['demo_guion', 'feliz', 'foto_duplicada']);
+    expect(ESCENARIOS_QA.map((e) => e.id).sort()).toEqual(['demo_guion', 'feliz', 'foto_duplicada', 'ticket_tarde']);
     expect(escenarioPorId('demo_guion')?.nombre).toMatch(/demo/i);
     expect(escenarioPorId('inexistente')).toBeNull();
   });
@@ -54,10 +54,16 @@ describe('la política del demo no deriva de su fuente (api/demo/route.ts)', () 
 });
 
 describe('el guion es el contrato — un invariante declarado tiene que estar atacado', () => {
-  test('todo escenario trae guion, y el guion siempre cierra', () => {
+  test('todo escenario trae guion, y el guion siempre cierra el viaje', () => {
     for (const e of ESCENARIOS_QA) {
       expect(e.guion.length, e.id).toBeGreaterThan(0);
-      expect(e.guion.at(-1)?.tipo, e.id).toBe('cierre');
+      // El cierre existe siempre; después de él solo puede venir el ticket
+      // TARDÍO — que es post-cierre por definición, no un cabo suelto.
+      const iCierre = e.guion.findIndex((p) => p.tipo === 'cierre');
+      expect(iCierre, e.id).toBeGreaterThanOrEqual(0);
+      for (const p of e.guion.slice(iCierre + 1)) {
+        expect(p.tipo, `${e.id}: tras el cierre solo cabe el ataque post-cierre`).toBe('foto_tras_cierre');
+      }
       expect(e.minFotos, e.id).toBeGreaterThan(0);
     }
   });
@@ -82,5 +88,43 @@ describe('el guion es el contrato — un invariante declarado tiene que estar at
         if (p.tipo === 'foto_repetida') expect(p.indice, e.id).toBeLessThan(e.minFotos);
       }
     }
+  });
+});
+
+describe('el ticket tardío (escenario ticket_tarde, invariante #4)', () => {
+  test('#4 SOLO lo declara quien manda un ticket tras el cierre — y viceversa', () => {
+    for (const e of ESCENARIOS_QA) {
+      const ataca = e.guion.some((p) => p.tipo === 'foto_tras_cierre');
+      expect(e.invariantes.includes('#4'), `${e.id}: declara #4 sin ticket tardío (o al revés)`).toBe(ataca);
+    }
+  });
+
+  test('quien reserva la última foto exige al menos 2: una que cuadre y la tardía', () => {
+    for (const e of ESCENARIOS_QA) {
+      const reserva = e.guion.some((p) => p.tipo === 'fotos' && p.menosUltima === true);
+      const ataca = e.guion.some((p) => p.tipo === 'foto_tras_cierre');
+      // El ataque post-cierre implica reservar (mandarla antes la dejaría con
+      // gasto y el reenvío rebotaría en el dedup, probando otra cosa).
+      expect(reserva, e.id).toBe(ataca);
+      if (ataca) expect(e.minFotos, e.id).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  test('idsParaActoFotos: con menosUltima la última se queda fuera; sin él van todas', () => {
+    const ids = ['a', 'b', 'c'];
+    expect(idsParaActoFotos({ menosUltima: true }, ids)).toEqual(['a', 'b']);
+    expect(idsParaActoFotos({}, ids)).toEqual(ids);
+    // Bordes: con una sola foto reservada no queda ninguna que mandar, y con
+    // cero no revienta — el motor es quien rechaza el caso con su motivo.
+    expect(idsParaActoFotos({ menosUltima: true }, ['solo'])).toEqual([]);
+    expect(idsParaActoFotos({ menosUltima: true }, [])).toEqual([]);
+  });
+
+  test('idFotoTrasCierre: la última elegida cuando el guion ataca; null cuando no', () => {
+    const tarde = escenarioPorId('ticket_tarde')!;
+    expect(idFotoTrasCierre(tarde.guion, ['a', 'b', 'c'])).toBe('c');
+    expect(idFotoTrasCierre(tarde.guion, [])).toBeNull();
+    const feliz = escenarioPorId('feliz')!;
+    expect(idFotoTrasCierre(feliz.guion, ['a', 'b'])).toBeNull();
   });
 });

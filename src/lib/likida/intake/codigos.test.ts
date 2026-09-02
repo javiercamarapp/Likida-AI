@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { decodeCodigosFromImage, decodeQrFromImage, clasificarQr } from './cfdi';
+import { clasificarQr } from './cfdi';
+import { decodeCodigosFromImage, decodeQrFromImage } from './cfdi_imagen';
 
 // FOTO REAL DE CAMPO (27-jul-2026): acercamiento al ticket de Office Depot que
 // Javier tomó a propósito para probar el protocolo de dos fotos. Trae DOS

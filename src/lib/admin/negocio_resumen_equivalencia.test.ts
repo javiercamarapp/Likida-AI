@@ -112,6 +112,10 @@ vi.mock('@/lib/supabase/admin', () => ({
       const b: Record<string, unknown> = {};
       b.select = () => b;
       b.order = () => b;
+      // ADM-3 (auditoría 24): getResumenNegocio ahora excluye tenants
+      // 'ZZZ %' con `.not('nombre', 'ilike', 'ZZZ %')`. El fixture de esta
+      // prueba no siembra ninguno, así que basta con no tronar la cadena.
+      b.not = () => b;
       b.range = (d: number, h: number) => Promise.resolve({ data: tablaTenant.slice(d, h + 1), error: null, count: tablaTenant.length });
       return b;
     },

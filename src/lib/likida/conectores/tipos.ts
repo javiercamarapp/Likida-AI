@@ -183,6 +183,11 @@ export type Capacidad =
   | 'leer_recorrido'
   /** El catálogo de unidades del proveedor, para casarlo con `unidad`. */
   | 'leer_unidades'
+  /** Los eventos que las cámaras/sensores del PROVEEDOR DEL CLIENTE detectan
+   *  (colisión, volcadura, frenado brusco). Solo lectura: Likida no construye
+   *  cámaras — lee las del cliente y monta el circuito de asistencia encima.
+   *  Un evento grave abre expediente; el resto se registra para coaching. */
+  | 'leer_eventos_seguridad'
   // ── ERP y sistemas de operación ──
   /** Los viajes que la flota ya capturó en su TMS, para no recapturarlos. */
   | 'leer_viajes'
@@ -221,6 +226,7 @@ export const CAPACIDADES: readonly Capacidad[] = [
   'leer_posiciones',
   'leer_recorrido',
   'leer_unidades',
+  'leer_eventos_seguridad',
   'leer_viajes',
   'leer_catalogo_cuentas',
   'leer_proveedores',
@@ -370,6 +376,28 @@ export function httpReal(): Http {
  * que lo exige. Sin ese campo, un adaptador que devolviera `ok: true` sin
  * llamar a nada se vería igual que uno que sí verificó.
  */
+/**
+ * QUÉ DICE UNA PRUEBA SOBRE LA CREDENCIAL DEL CLIENTE — que no es lo mismo que
+ * si la prueba salió bien.
+ *
+ * AUDITORÍA CICLO 7, c7-12 (alto). `ok: false` juntaba tres cosas con dueños
+ * distintos: «el proveedor rechazó tu credencial» (del cliente), «el proveedor
+ * está caído» y «no pudimos hablar con él» (nuestros). Como `probarCredencial`
+ * sellaba los tres igual, un 503 de Samsara o un `AbortSignal.timeout` por una
+ * VPN lenta BORRABAN `probada_en` —el único registro de que esa credencial se
+ * verificó alguna vez— y pintaban el badge en «la última prueba FALLÓ», en
+ * rojo, mandando al cliente a regenerar un token que estaba bien.
+ *
+ * `verificadoContra` no alcanzaba para separarlos: `veredictoHttp` lo llena
+ * también en el 5xx, cuyo propio texto dice «esto NO dice nada sobre la
+ * credencial». Hacía falta decirlo como dato, no como frase.
+ *
+ *   · `sirve`      — alguien de fuera la aceptó. Se sella.
+ *   · `no_sirve`   — alguien de fuera la rechazó. Se sella (es accionable).
+ *   · `no_se_sabe` — nadie dio un veredicto sobre ELLA. NO se sella nada.
+ */
+export type VeredictoCredencial = 'sirve' | 'no_sirve' | 'no_se_sabe';
+
 export interface ResultadoPrueba {
   ok: boolean;
   /** Para una persona: qué se hizo y qué contestó. Sin volcar la respuesta. */
@@ -378,6 +406,22 @@ export interface ResultadoPrueba {
   verificadoContra: string | null;
   /** Qué campos faltan, cuando ese fue el motivo. Vacío si no aplica. */
   falta?: readonly string[];
+  /** Qué se puede afirmar de la CREDENCIAL. Ausente se lee con `veredictoDe`,
+   *  que falla del lado seguro. */
+  sobreLaCredencial?: VeredictoCredencial;
+}
+
+/**
+ * El veredicto de un resultado, con el default que NO culpa al cliente.
+ *
+ * Un resultado sin marcar que además falló se lee `no_se_sabe`: preferimos no
+ * sellar un fallo real (el peor caso es que el badge tarde una prueba más en
+ * ponerse rojo) antes que sellar como «tu credencial falló» algo que fue
+ * nuestro. El costo de los dos errores no es simétrico.
+ */
+export function veredictoDe(r: Pick<ResultadoPrueba, 'ok' | 'sobreLaCredencial'>): VeredictoCredencial {
+  if (r.sobreLaCredencial) return r.sobreLaCredencial;
+  return r.ok ? 'sirve' : 'no_se_sabe';
 }
 
 /**
@@ -439,7 +483,8 @@ export function faltantes(c: Pick<Conector, 'credenciales'>, v: ValoresCredencia
  * proveedor no publica API"— por el camino de las excepciones inesperadas.
  */
 export function sinApiQueProbar(motivo: string): ResultadoPrueba {
-  return { ok: false, detalle: motivo, verificadoContra: null };
+  // Nadie de fuera contestó: esto no dice NADA de la credencial (c7-12).
+  return { ok: false, detalle: motivo, verificadoContra: null, sobreLaCredencial: 'no_se_sabe' };
 }
 
 /**
@@ -469,6 +514,8 @@ export async function probarConGuardas(
       ok: false,
       detalle: `Faltan datos para probar ${c.nombre}: ${falta.join(', ')}.`,
       verificadoContra: null,
+      // Ni siquiera se intentó: no hay veredicto que sellar (c7-12).
+      sobreLaCredencial: 'no_se_sabe',
       falta,
     };
   }
@@ -482,6 +529,9 @@ export async function probarConGuardas(
       ok: false,
       detalle: `No se pudo hablar con ${c.nombre}: ${e instanceof Error ? e.message : String(e)}. Un error de red NO significa que la credencial sea mala; significa que no se pudo comprobar.`,
       verificadoContra: null,
+      // El detalle ya lo decía con todas sus letras y el sello lo ignoraba
+      // (c7-12). Ahora es un dato: un error de red no es un veredicto.
+      sobreLaCredencial: 'no_se_sabe',
     };
   }
 }
@@ -500,13 +550,15 @@ export function veredictoHttp(
   nombre: string,
 ): ResultadoPrueba {
   if (r.estado >= 200 && r.estado < 300) {
-    return { ok: true, detalle: `${nombre} contestó ${r.estado} y reconoció la credencial.`, verificadoContra: endpoint };
+    return { ok: true, detalle: `${nombre} contestó ${r.estado} y reconoció la credencial.`, verificadoContra: endpoint, sobreLaCredencial: 'sirve' };
   }
   if (r.estado === 401 || r.estado === 403) {
-    return { ok: false, detalle: `${nombre} rechazó la credencial (${r.estado}). Hay que revisarla o generarla de nuevo.`, verificadoContra: endpoint };
+    return { ok: false, detalle: `${nombre} rechazó la credencial (${r.estado}). Hay que revisarla o generarla de nuevo.`, verificadoContra: endpoint, sobreLaCredencial: 'no_sirve' };
   }
   if (r.estado >= 500) {
-    return { ok: false, detalle: `${nombre} respondió ${r.estado}: su servicio está fallando. Esto NO dice nada sobre la credencial — hay que volver a probar más tarde.`, verificadoContra: endpoint };
+    // El 5xx es del PROVEEDOR, no del cliente — y este es el caso que c7-12
+    // sellaba en rojo sobre la credencial de una flota que no hizo nada mal.
+    return { ok: false, detalle: `${nombre} respondió ${r.estado}: su servicio está fallando. Esto NO dice nada sobre la credencial — hay que volver a probar más tarde.`, verificadoContra: endpoint, sobreLaCredencial: 'no_se_sabe' };
   }
-  return { ok: false, detalle: `${nombre} respondió ${r.estado}, que no es lo esperado. No se puede afirmar que la credencial sirva.`, verificadoContra: endpoint };
+  return { ok: false, detalle: `${nombre} respondió ${r.estado}, que no es lo esperado. No se puede afirmar que la credencial sirva.`, verificadoContra: endpoint, sobreLaCredencial: 'no_se_sabe' };
 }

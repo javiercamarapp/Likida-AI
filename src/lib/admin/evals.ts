@@ -2,6 +2,7 @@ import { TZ_MX } from '@/lib/formato';
 import { createHash } from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getSystemPrompt } from '@/lib/agents/prompts';
+import { hashPromptContador } from '@/lib/agents/contador';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EVALOPS (0134) — el estado del examen y la REGLA DE RE-EXAMEN visible.
@@ -12,11 +13,19 @@ import { getSystemPrompt } from '@/lib/agents/prompts';
 // corrida, y el panel acusa el drift con todas sus letras.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** Los agentes con examen dorado. El contador entró con E.26 (fase 2). */
+export type AgenteExaminado = 'analista' | 'contador';
+
 /** El hash del prompt EXACTO que corre hoy — con un ctx fijo, para que el
- *  hash mida el TEXTO del prompt y no los datos del tenant. */
-export function promptHashActual(agente: 'analista'): string {
-  const key = agente === 'analista' ? 'analista_flota' : agente;
-  const texto = getSystemPrompt(key, {
+ *  hash mida el TEXTO del prompt y no los datos del tenant.
+ *
+ *  Para el CONTADOR el prompt incluye su corpus normativo completo
+ *  (corpus_texto.ts, generado desde normas/): cambiar una FICHA también
+ *  cambia el hash — la regla de re-examen cubre prompt, modelo Y corpus,
+ *  como pide 22-evaluacion.md. */
+export function promptHashActual(agente: AgenteExaminado): string {
+  if (agente === 'contador') return hashPromptContador();
+  const texto = getSystemPrompt('analista_flota', {
     tenantId: '00000000-0000-0000-0000-000000000000',
     nombreFlota: 'HASH', agentName: 'HASH', timezone: TZ_MX,
   });
@@ -39,6 +48,8 @@ export interface EstadoEvals {
   ultima: {
     id: string; promptHash: string; veredicto: string | null;
     iniciadaEn: string; terminadaEn: string | null; casos: number | null; costoUsd: number | null;
+    /** La calificación desglosada que el runner dejó escrita (contador, E.26). */
+    notas: string | null;
   } | null;
   /** true = el prompt cambió desde el último examen — NO desplegar cambios
    *  del agente sin re-examinar (la regla de 22-evaluacion.md). */
@@ -46,10 +57,10 @@ export interface EstadoEvals {
   casosActivos: number;
 }
 
-export async function getEstadoEvals(agente: 'analista' = 'analista'): Promise<EstadoEvals> {
+export async function getEstadoEvals(agente: AgenteExaminado = 'analista'): Promise<EstadoEvals> {
   const admin = supabaseAdmin();
   const [rCorrida, rCasos] = await Promise.all([
-    admin.from('eval_corrida').select('id, prompt_hash, veredicto, iniciada_en, terminada_en, casos, costo_usd')
+    admin.from('eval_corrida').select('id, prompt_hash, veredicto, iniciada_en, terminada_en, casos, costo_usd, notas')
       .eq('agente', agente).order('iniciada_en', { ascending: false }).limit(1).maybeSingle(),
     admin.from('eval_caso').select('id', { count: 'exact', head: true }).eq('agente', agente).eq('activo', true),
   ]);
@@ -60,6 +71,7 @@ export async function getEstadoEvals(agente: 'analista' = 'analista'): Promise<E
     id: rCorrida.data.id, promptHash: rCorrida.data.prompt_hash, veredicto: rCorrida.data.veredicto,
     iniciadaEn: rCorrida.data.iniciada_en, terminadaEn: rCorrida.data.terminada_en,
     casos: rCorrida.data.casos, costoUsd: rCorrida.data.costo_usd,
+    notas: rCorrida.data.notas ?? null,
   } : null;
   return {
     agente, hashVivo, ultima,

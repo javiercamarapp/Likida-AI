@@ -124,10 +124,13 @@ export const NORMAS: Record<string, Norma> = {
     id: 'criterio-1-CFF-PI',
     instrumento: "Anexo 3 de la Resolución Miscelánea Fiscal para 2026 (criterios no vinculativos)",
     articulo: "1/CFF/PI",
-    titulo: ">",
+    titulo: "Entrega o puesta a disposición del CFDI. No se cumple con la obligación cuando el emisor únicamente remite a una página de Internet.",
     citas: ["1/CFF/PI", "CFF art. 89", "artículo 52 del Código Fiscal"],
     jerarquia: 5,
-    estado: "evidencia_corroborante",
+    // Subido de evidencia_corroborante el 26-ago-2026: texto completo
+    // transcrito y cotejado contra el Anexo 3 (DOF 9-ene-2026), rescatado de
+    // `rutina-fiscal-wip` (investigación del 20-ago-2026, nunca mergeada).
+    estado: "verificado_fuente_primaria",
     ficha: "normas/criterio-1-CFF-PI.yaml",
   },
   'criterio-1-LIF-PI': {
@@ -196,6 +199,54 @@ export const NORMAS: Record<string, Norma> = {
     estado: "verificado_fuente_primaria",
     ficha: "normas/lft-110-111-263.yaml",
   },
+  // El registro de jornada (mig. 0241). La fracción XXXIV del 132 es NUEVA —
+  // la adicionó el decreto del DOF del 01-05-2026, el mismo de la reducción de
+  // jornada— y por eso `exigibleDesde` sí trae fecha: la obligación es
+  // exigible, no latente. Los topes de los arts. 61 y 68 son los únicos números
+  // de horas que el producto puede citar, y el motor los cita SIEMPRE con su
+  // artículo.
+  'lft-132-XXXIV-jornada': {
+    id: 'lft-132-XXXIV-jornada',
+    instrumento: "Ley Federal del Trabajo",
+    articulo: "132 fr. XXXIV, 58 a 69, 784, 804, 805 y 994 fr. IV Bis",
+    titulo: "El registro electrónico de la jornada, los topes de horas, y qué pasa si el patrón no lo exhibe",
+    citas: ["LFT 132-XXXIV", "LFT 58", "LFT 60", "LFT 61", "LFT 63", "LFT 64", "LFT 68", "LFT 69", "LFT 784", "LFT 804", "LFT 805", "LFT 994-IV Bis"],
+    jerarquia: 1,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: "2026-05-01",
+    ficha: "normas/lft-132-XXXIV-jornada.yaml",
+  },
+  // Nivel 3: una NOM la emite una Secretaría, no el legislador. Está en el
+  // índice para que el producto pueda DECIR que no la evalúa —mide conducción,
+  // y Likida registra jornada— citando la norma que se está absteniendo de
+  // aplicar. Callarse sin nombrar lo que uno calla no es transparencia.
+  'nom-087-sct-2-2017': {
+    id: 'nom-087-sct-2-2017',
+    instrumento: "NOM-087-SCT-2-2017 (Norma Oficial Mexicana)",
+    articulo: "numerales 4.1 a 4.7, 8.2.1, 8.3.2 y 8.5",
+    titulo: "Tiempos de conducción y pausas del autotransporte federal — y por qué Likida no los evalúa",
+    citas: ["NOM-087-SCT-2-2017", "NOM-087 4.1", "NOM-087 4.6", "NOM-087 4.7", "NOM-087 8.5"],
+    jerarquia: 3,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: "2018-08-27",
+    ficha: "normas/nom-087-sct-2-2017.yaml",
+  },
+  // `exigibleDesde: null` A PROPÓSITO: la reforma del 25-05-2026 sí se verificó,
+  // pero el texto CONSOLIDADO del reglamento no se pudo leer (las URLs
+  // oficiales devolvieron error), así que no se puede afirmar que no haya
+  // reformas intermedias. La regla de la casa manda null cuando nadie lo
+  // confirmó — ver la ficha.
+  'reglamento-transito-83': {
+    id: 'reglamento-transito-83',
+    instrumento: "Reglamento de Tránsito en Carreteras y Puentes de Jurisdicción Federal",
+    articulo: "83",
+    titulo: "La bitácora de horas de servicio y sus diez campos obligatorios",
+    citas: ["Reglamento de Tránsito 83", "RTCPJF 83"],
+    jerarquia: 2,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: null,
+    ficha: "normas/reglamento-transito-83.yaml",
+  },
   'lif-2026-art-20-A': {
     id: 'lif-2026-art-20-A',
     instrumento: "Ley de Ingresos de la Federación para el Ejercicio Fiscal de 2026",
@@ -239,6 +290,17 @@ export const NORMAS: Record<string, Norma> = {
     estado: "evidencia_corroborante",
     ficha: "normas/lisr-28-XX.yaml",
   },
+  'lisr-72-73': {
+    id: 'lisr-72-73',
+    instrumento: "Ley del Impuesto sobre la Renta",
+    articulo: "72 y 73",
+    titulo: "Título II, Capítulo VII — Del Régimen de Coordinados",
+    citas: ["LISR 72-73", "LISR 72–73", "LISR 72"],
+    jerarquia: 1,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: null,
+    ficha: "normas/lisr-72-73.yaml",
+  },
   'liva-art-5': {
     id: 'liva-art-5',
     instrumento: "Ley del Impuesto al Valor Agregado",
@@ -259,6 +321,17 @@ export const NORMAS: Record<string, Norma> = {
     estado: "sin_verificar",
     ficha: "normas/politica-portales-plazos.yaml",
   },
+  'rfa-2026-2.1': {
+    id: 'rfa-2026-2.1',
+    instrumento: "Resolución de Facilidades Administrativas para 2026",
+    articulo: "2.1",
+    titulo: "Retención del ISR a operadores, macheteros y maniobristas (7.5%, sobre el SBC)",
+    citas: ["RFA 2026 regla 2.1"],
+    jerarquia: 3,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: "2026-02-18",
+    ficha: "normas/rfa-2026-2.1.yaml",
+  },
   'rfa-2026-2.2': {
     id: 'rfa-2026-2.2',
     instrumento: "Resolución de Facilidades Administrativas para 2026",
@@ -269,6 +342,28 @@ export const NORMAS: Record<string, Norma> = {
     estado: "verificado_fuente_primaria",
     exigibleDesde: "2026-02-18",
     ficha: "normas/rfa-2026-2.2.yaml",
+  },
+  'rfa-2026-2.3': {
+    id: 'rfa-2026-2.3',
+    instrumento: "Resolución de Facilidades Administrativas para 2026",
+    articulo: "2.3",
+    titulo: "Responsabilidad solidaria acotada del coordinado cuando el integrante tributa individual",
+    citas: ["RFA 2026 regla 2.3"],
+    jerarquia: 3,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: "2026-02-18",
+    ficha: "normas/rfa-2026-2.3.yaml",
+  },
+  'rfa-2026-2.5': {
+    id: 'rfa-2026-2.5',
+    instrumento: "Resolución de Facilidades Administrativas para 2026",
+    articulo: "2.5",
+    titulo: "Concepto de coordinado (la definición administrativa que completa a LISR 72)",
+    citas: ["RFA 2026 regla 2.5"],
+    jerarquia: 3,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: "2026-02-18",
+    ficha: "normas/rfa-2026-2.5.yaml",
   },
   'rfa-2026-2.9': {
     id: 'rfa-2026-2.9',
@@ -355,6 +450,66 @@ export const NORMAS: Record<string, Norma> = {
     estado: "evidencia_corroborante",
     exigibleDesde: '2026-01-01',
     ficha: "normas/rmf-2026-3.3.1.7.yaml",
+  },
+  // Rescatadas de `rutina-fiscal-wip` (rama huérfana del 21-ago, nunca
+  // mergeada): investigación legal verificada contra fuente primaria que
+  // nadie más había escrito. No cambian ningún veredicto del motor —
+  // `usado_en_codigo: []` en las cinco fichas— son evidencia para decisiones
+  // pendientes (anticipo de ruta vs. salario base de cotización, catálogo de
+  // la Red Nacional de Autopistas de Cuota) y corpus de referencia.
+  'lss-27': {
+    id: 'lss-27',
+    instrumento: "Ley del Seguro Social",
+    articulo: "27",
+    titulo: "Salario base de cotización — y el hallazgo de que los VIÁTICOS no están entre las exclusiones",
+    citas: ["LSS 27", "art. 27 LSS", "salario base de cotización"],
+    jerarquia: 1,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: '2009-01-16',
+    ficha: "normas/lss-27.yaml",
+  },
+  'red-nacional-autopistas': {
+    id: 'red-nacional-autopistas',
+    instrumento: "Ley de Ingresos de la Federación 2026 / Ley de Caminos, Puentes y Autotransporte Federal",
+    articulo: "LIF 2026 art. 20 ap. A fr. V; LCPAF art. 2o. fr. I",
+    titulo: "Qué es la Red Nacional de Autopistas de Cuota — y por qué NO se puede resolver con una lista blanca de casetas",
+    citas: ["Red Nacional de Autopistas de Cuota"],
+    jerarquia: 1,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: '2026-01-01',
+    ficha: "normas/red-nacional-autopistas.yaml",
+  },
+  'tesis-autotransporte': {
+    id: 'tesis-autotransporte',
+    instrumento: "Semanario Judicial de la Federación / Revista del Tribunal Federal de Justicia Administrativa",
+    articulo: "Tesis y precedentes aplicables al autotransporte de carga federal",
+    titulo: "Lo que los tribunales SÍ han resuelto — y los dos vacíos donde no hay criterio en ningún acervo publicado de México",
+    citas: ["2a./J. 54/2022", "VI-P-1aS-383", "VII-TASR-1NOI-18", "VII-CASR-NCIV-18", "1a./J. 49/2019"],
+    jerarquia: 5,
+    estado: "verificado_fuente_primaria",
+    ficha: "normas/tesis-autotransporte.yaml",
+  },
+  'rmf-2026-9.1.7': {
+    id: 'rmf-2026-9.1.7',
+    instrumento: "Resolución Miscelánea Fiscal para 2026",
+    articulo: "9.1.7",
+    titulo: "Carreteras o caminos para acreditamiento del estímulo — la regla cuya remisión apunta a un párrafo inexistente",
+    citas: ["RMF 9.1.7", "regla 9.1.7"],
+    jerarquia: 3,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: '2026-01-01',
+    ficha: "normas/rmf-2026-9.1.7.yaml",
+  },
+  'criterios-imss-sbc': {
+    id: 'criterios-imss-sbc',
+    instrumento: "Criterios Normativos en materia de Seguridad Social del H. Consejo Técnico del IMSS",
+    articulo: "01/2024/NV/SBC-LSS-27-I y 02/2024/NV/SBC-LSS-27-V",
+    titulo: "Los dos criterios del IMSS que deciden si un anticipo de ruta integra salario base de cotización — y el que alcanza a quien presta el servicio",
+    citas: ["criterio IMSS 01/2024", "criterio IMSS 02/2024"],
+    jerarquia: 5,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: '2024-07-11',
+    ficha: "normas/criterios-imss-sbc.yaml",
   },
 };
 

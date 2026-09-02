@@ -240,6 +240,63 @@ Para listarlas: `vercel env ls production`.
 
 ---
 
+## Auth
+
+### Encender el segundo factor obligatorio del superadmin (SEG-3)
+
+La cuenta de superadmin cruza **todas** las flotas: `is_superadmin()` abre la
+RLS entera, `?tenant=` abre el panel de cualquier cliente y `/api/export/*` sus
+liquidaciones. Su única puerta es un enlace mágico al correo, así que un
+phishing que consiga que pegues un código de seis dígitos entrega la base de
+todos los clientes. La palanca `LIKIDA_SUPERADMIN_MFA=obligatorio` cierra eso.
+
+**Está apagada por default a propósito: encenderla sin haber inscrito el factor
+te deja fuera de tu propia consola.** La secuencia, en este orden:
+
+1. **Habilita TOTP en el proyecto de producción**: Supabase → Authentication →
+   Multi-Factor → *TOTP: enabled*. (En local es `[auth.mfa.totp]
+   enroll_enabled = true` / `verify_enabled = true` en `supabase/config.toml`;
+   hoy están en `false`, que es por lo que este paso no se puede saltar.)
+2. **Inscribe tu factor** en `https://app.likida.ai/dashboard/mi-perfil` →
+   *Seguridad — segundo factor* → «Inscribir». Guarda el secreto en el gestor
+   de contraseñas, no solo en el teléfono.
+3. **Comprueba que verificas**: escribe el código de la app en esa misma
+   pantalla y espera el aviso «Segundo factor verificado».
+4. Solo entonces: `vercel env add LIKIDA_SUPERADMIN_MFA production` con el
+   valor exacto `obligatorio` (ningún otro valor la enciende — ni `true`, ni
+   `1`), y redespliega.
+
+**Qué cambia con la palanca puesta.** Al abrir `/admin` o cualquier página de
+`/dashboard`, una sesión de superadmin sin factor —o con factor pero en AAL1—
+rebota a `/dashboard/mi-perfil?exige=…`, con el aviso de qué falta. Esa
+pantalla es la **única exenta** (gatearla sería un círculo) y, mientras la
+palanca esté puesta, resuelve sin exigir flota elegida. Si Supabase Auth no
+contesta, también rebota: fallar cerrado.
+
+**Cómo apagarla si te quedas fuera.** `vercel env rm LIKIDA_SUPERADMIN_MFA
+production` y redesplegar. La cuenta no queda bloqueada en la base: la
+exigencia vive solo en el código (`src/lib/auth/guard.ts`).
+
+### Dar de baja a alguien de una flota (SEG-1)
+
+La flota lo hace sola desde `/dashboard/usuarios` → «Dar de baja». Son tres
+capas y conviene saber qué hace cada una cuando algo se ve raro:
+
+1. `app_user.activo = false` (mig. 0294) — las cuatro funciones de RLS filtran
+   por esa columna, así que la base cierra en la siguiente petición aunque el
+   JWT siga vigente, y `session.ts` devuelve `null`.
+2. **Ban en Supabase Auth** (`ban_duration`) — es lo que mata el *refresh* del
+   token: sin él la cookie de 400 días se sigue renovando cada hora. Si el ban
+   no entra, la pantalla lo **dice** («la revocación de su sesión no se pudo
+   confirmar») y queda `equipo.ban_fallo` en el log; se arregla reactivando y
+   volviendo a dar de baja.
+3. Bitácora (`usuario.desactivado`) con quién y a quién.
+
+Reactivar levanta el ban. La fila **no se borra nunca**: es el rastro de quién
+tuvo acceso y hasta cuándo.
+
+---
+
 ## Desplegar
 
 Con el proyecto ya vinculado:
@@ -281,11 +338,47 @@ el que dejó fuera el tenant del demo. El inventario de arriba es el que manda.
 
 ---
 
-## Publicar un cambio (cambió el 5-ago-2026)
+## Publicar un cambio (cambió el 5-ago-2026; compuerta desde el 1-sep-2026)
+
+### El orden es migraciones → verificar → `[deploy]`, y ya no depende de la memoria
+
+Auditoría 24, OP-P1: producción corrió con la base en la migración 0271
+mientras `master` pedía la forma 0272 de `poliza_datos_tenant`; publicar sin
+migrar rompía el export de póliza y no publicar dejaba 34 arreglos sin vivir.
+Ahora hay tres piezas que lo atan:
+
+1. **`/api/health` publica `migracion: {base, codigo, atras, motivo?}`** —
+   `base` es la última migración que la base registra aplicada
+   (`migraciones_aplicadas()`), `codigo` la última del código que corre
+   (`LIKIDA_MIGRACION_CODIGO`, inlineada en build por `next.config.ts`). Con
+   `atras > 0` o base ilegible el pulso es `degraded` (503) y `motivo` dice
+   qué aplicar.
+2. **La compuerta de Vercel.** `vercel.json` corre
+   `scripts/ci/compuerta-deploy.mjs` como `ignoreCommand`: lee el asunto del
+   commit, la última `supabase/migrations/NNNN_*.sql` del repo y
+   `migracion.base` del health de producción. Con `[deploy]` y base atrás
+   **no construye**. Health caído o base ilegible tampoco construyen (un cotejo
+   que no se hizo no es verde). La única excepción de arranque: si el health
+   desplegado todavía no publica `migracion` (versión anterior), construye esa
+   vez con aviso. `[deploy:forzar]` en el asunto salta la compuerta a la vista.
+3. **El mismo veredicto en rojo, en Actions.** `salud-produccion.yml` corre la
+   compuerta en cada push con `[deploy]` (el `ignoreCommand` es mudo; esto no),
+   y por `schedule` comprueba además que producción corra el último commit con
+   `[deploy]` de `master` (o uno posterior), abre un issue `salud-produccion`
+   cuando el pulso pasa a rojo y lo cierra al recuperarse.
+
+El procedimiento, entonces:
+
+```bash
+bash scripts/aplicar-migraciones-y-humos.sh   # 1. migraciones a producción
+curl -s https://app.likida.ai/api/health | grep -o '"migracion":{[^}]*}'   # 2. atras:0
+git commit -m 'fix(x): … [deploy]' && git push   # 3. ahora sí construye
+```
 
 **El push a `master` ya no despliega solo.** `vercel.json` trae un
 `ignoreCommand` que solo construye cuando **el asunto del commit** —la primera
-línea, no el cuerpo— lleva la bandera `[deploy]`.
+línea, no el cuerpo— lleva la bandera `[deploy]` (y, desde la auditoría 24,
+cuando la compuerta de arriba lo deja pasar).
 
 ```
 fix(cuadre): redondeo de casetas [deploy]     -> construye y publica
@@ -315,10 +408,14 @@ solo dato de negocio. El workflow `.github/workflows/salud-produccion.yml` lo
 consume de dos formas:
 
 - cada 30 minutos pega a `https://app.likida.ai/api/health` y falla (correo
-  de GitHub Actions al dueño del repo) si no responde 200 con `ok:true`;
-- tras cada push a `master` cuyo asunto lleve `[deploy]`, espera hasta 10
-  minutos a que `version` coincida con el sha pusheado y falla si no — que es
-  exactamente el modo de falla silencioso del `ignoreCommand`.
+  de GitHub Actions al dueño del repo, más un issue `salud-produccion` que se
+  abre en rojo y se cierra en verde) si no responde 200 con `ok:true`; y
+  comprueba que `version` sea el último commit con `[deploy]` de `master` o
+  uno posterior;
+- tras cada push a `master` cuyo asunto lleve `[deploy]`, corre la compuerta
+  de migraciones y luego espera hasta 10 minutos a que `version` coincida con
+  el sha pusheado y falla si no — que es exactamente el modo de falla
+  silencioso del `ignoreCommand`.
 
 ```bash
 curl -s https://app.likida.ai/api/health   # {"ok":true,"db":"ok","sentry":"configurado","version":"553bee7",...}

@@ -1,0 +1,128 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# SUPABASE LOCAL — el entorno efímero de las pruebas de navegador (E.27).
+#
+# Este archivo existe SOLO para `supabase start` en local y en CI
+# (`.github/workflows/e2e-navegador.yml`). No toca el proyecto gestionado:
+# ninguna credencial de producción vive aquí, y el guard de `sembrar-e2e.mjs`
+# rehúsa cualquier URL que no sea 127.0.0.1/localhost.
+#
+# POR QUÉ UN SUPABASE LOCAL Y NO EL POSTGRES PELÓN DE `ci-postgres.yml`:
+# la app de verdad habla con TRES servicios además de Postgres — GoTrue (el
+# login por magic link), PostgREST (cada consulta de supabase-js) y Storage
+# (el PDF de la liquidación). El andamio de `andamio_ci.sql` imita lo mínimo
+# para que las MIGRACIONES apliquen; para probar el LOGIN REAL hace falta el
+# GoTrue real. `supabase start` levanta exactamente esa pila, con Mailpit
+# capturando los correos del magic link (sección [local_smtp]) — así la
+# prueba de login recorre el flujo de producción entero menos el SMTP.
+#
+# QUÉ SE APAGA Y POR QUÉ: studio (UI humana, nadie la mira en CI), realtime
+# (la app no se suscribe a nada), edge_runtime (no hay edge functions) y
+# analytics (telemetría local). Cada contenedor apagado son segundos menos
+# de arranque y una imagen menos que bajar en el runner.
+#
+# FIDELIDAD: Postgres local es 17 (el CLI solo ofrece 15/17); `ci-postgres`
+# prueba las migraciones sobre 16.4. La diferencia es deliberada y declarada:
+# las migraciones ya corren limpias en los dos, y lo que esta pila prueba es
+# la APP contra la pila de Supabase, no la compatibilidad de versiones.
+# ═══════════════════════════════════════════════════════════════════════════
+
+project_id = "likida"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+# El mismo recorte silencioso de producción (PostgREST corta a 1,000 filas):
+# dejarlo idéntico es a propósito — `traerTodo()` existe por esto.
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.pooler]
+enabled = false
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+# El MISMO seed del demo (tenant 11111111-…, VJ-2026-0001 con sus dos gastos,
+# tres viajes liquidados): las pruebas de navegador afirman contra estas
+# cifras. Lo que el seed no puede sembrar (auth.users y el PDF del bucket)
+# lo pone `scripts/ci/e2e/sembrar-e2e.mjs` después de `db reset`.
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = false
+
+[studio]
+enabled = false
+
+# Mailpit: captura TODO el correo saliente del GoTrue local y lo expone en
+# http://127.0.0.1:54324 (API en /api/v1). Es la pieza que permite probar el
+# magic link de verdad: la prueba manda el formulario, pesca el correo aquí
+# y navega el enlace — sin saltarse la autenticación ni tocar SMTP real.
+[local_smtp]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+# Tiene que coincidir con NEXT_PUBLIC_APP_URL del servidor bajo prueba: el
+# magic link aterriza en {site_url}/auth/callback (ver login/page.tsx).
+#
+# `localhost`, NO `127.0.0.1` — verificado con trazas de Playwright (E.27):
+# arrancando `next start --hostname 127.0.0.1`, GoTrue redirige correcto a
+# `http://127.0.0.1:3000/auth/callback`, pero la respuesta de ESE mismo route
+# handler (`new URL(dest, req.url)`) devuelve un Location con host
+# `localhost` — Next no refleja el `--hostname` pedido en `req.url` ahí. La
+# sesión queda puesta en el origen equivocado y `/dashboard` rebota a
+# `/login` sin sesión. No es un bug de producción: Vercel nunca pasa por
+# `next start --hostname`, así que `req.url` ahí sí trae el host real. Con
+# TODO el arnés (server, aquí, PLAYWRIGHT_BASE_URL) en `localhost`, el
+# mismatch desaparece — se deja `127.0.0.1` en `additional_redirect_urls`
+# por si algún día alguien corre este mismo Supabase local contra un `next
+# dev`/`next start` sin `--hostname` (bind por default, sirve en los dos).
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/**", "http://127.0.0.1:3000/**"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+# `enable_signup` queda en true (el default de GoTrue): el candado real del
+# producto es `shouldCreateUser: false` en el signInWithOtp del login — y la
+# prueba del anti-oráculo depende de que ESE candado sea el que actúe, no una
+# configuración del servidor que producción no tiene.
+enable_signup = true
+enable_anonymous_sign_ins = false
+
+[auth.rate_limit]
+# El default local (2 correos/hora) mata la suite a la segunda prueba de
+# login. Producción tiene su propia cuota SMTP; aquí el límite que se prueba
+# es el de la APP (10/5min por IP en login/page.tsx), no el del GoTrue local.
+email_sent = 360
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+# Producción espaciaría correos al mismo destinatario; en la suite el mismo
+# buzón entra más de una vez en segundos.
+max_frequency = "1s"
+otp_expiry = 3600
+
+[auth.mfa.totp]
+enroll_enabled = false
+verify_enabled = false
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false

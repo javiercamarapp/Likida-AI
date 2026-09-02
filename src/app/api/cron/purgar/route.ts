@@ -80,6 +80,10 @@ export async function GET(req: Request) {
   // `leerInterruptor`).
   const global = await leerInterruptor('global');
   if (global === 'ilegible') {
+    // El latido ANTES del 500 (tableros al día, 28-ago-2026): sin él este
+    // camino era mudo y el tablero decía «No late» sin la causa. En un cron
+    // diario, además, el silencio tardaba un día entero en notarse.
+    await registrarLatido('purgar', 'fallo', { codigo: 'interruptor_ilegible' });
     return NextResponse.json({
       corrio: false,
       error: 'No se pudo leer el interruptor global: no se purga sin saber si está apagado.',
@@ -89,6 +93,9 @@ export async function GET(req: Request) {
   }
   if (global === 'apagado') {
     logger.warn('cron.purgar.saltado', { interruptor: 'global' });
+    // Sin este latido, el apagado deliberado se pintaba como cron muerto y
+    // /api/health alertaba al operador por su propia decisión.
+    await registrarLatido('purgar', 'saltado', { interruptor: 'global' });
     return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }
 
@@ -121,6 +128,23 @@ export async function GET(req: Request) {
       data = (r.data ?? {}) as Record<string, unknown>;
       parcial = data.parcial === true;
       if (parcial) logger.warn('cron.purgar.parcial', { vuelta: vueltas, transcurridoMs: Date.now() - inicio });
+      // AUDITORÍA 19 (legal, reincidente #13): `mantenimiento_de_datos`
+      // acumula en `fallos` cada purga que lanzó (0165) y NADIE leía la
+      // llave — una purga rota (la de retención que un aviso promete) salía
+      // en el log como corrida verde con un array adentro que ningún humano
+      // abría. Un fallo de purga es un plazo legal que dejó de correr: se
+      // grita como error y se avisa al operador, pero NO se corta la vuelta
+      // — las demás purgas sí corrieron y volver a intentarlo aquí no
+      // arregla la que lanzó.
+      const fallosPurga = Array.isArray(data.fallos) ? (data.fallos as unknown[]) : [];
+      if (fallosPurga.length > 0) {
+        logger.error('cron.purgar.purgas_con_fallos', { fallos: fallosPurga, vuelta: vueltas });
+        await alertarOperador('cron.purgar.purgas_con_fallos', { fallos: fallosPurga.map(String).join(' · ').slice(0, 500) });
+        // Una purga que LANZA no es "quedó trabajo pendiente": reintentarla
+        // en la misma corrida daría el mismo error. Se sale del ciclo — el
+        // `parcial` por fallos ya quedó dicho arriba y en el latido.
+        break;
+      }
     } while (parcial && vueltas < MAX_VUELTAS && Date.now() - inicio + PLAZO_VUELTA_MS < (maxDuration - 5) * 1000);
 
     // ── EL BORRADO DE STORAGE (23-ago-2026) ────────────────────────────────
@@ -146,9 +170,57 @@ export async function GET(req: Request) {
       logger.error('cron.purgar.storage_excepcion', { err: e instanceof Error ? e.message : String(e) });
     }
 
-    logger.info('cron.purgar.ok', { ...data, vueltas, storage });
+    // ── PRODUCTO_EVENTO: consolidar el mes cerrado y purgar el detalle ─────
+    // (0259, auditoría tandas 21-24 hallazgo 3). RPC HERMANA y no una llave
+    // más de `mantenimiento_de_datos` a propósito: el PR del 0258 redefine
+    // esa función desde master y dos redefiniciones independientes se borran
+    // las llaves entre sí (regla de la casa: cada PR sale de master, el
+    // squash pierde el apilado sin señal). Misma corrida, mismo horario,
+    // fallo visible propio. Su fallo NO tumba la corrida —las purgas de
+    // arriba ya corrieron— pero se grita y se alerta: una tabla que vuelve a
+    // crecer sin techo en silencio es exactamente el hallazgo que esto
+    // cierra. `null` en el cuerpo = no se pudo, dicho; jamás un 0 inventado.
+    let productoEvento: Record<string, unknown> | null = null;
+    try {
+      const pe = await supabaseAdmin().rpc('mantener_producto_evento');
+      if (pe.error) {
+        const codigo = codigoDeError(pe.error);
+        logger.error('cron.purgar.producto_evento_falló', { error: pe.error.message, codigo });
+        await alertarOperador('cron.purgar.producto_evento', { error: pe.error.message, codigo });
+      } else {
+        productoEvento = (pe.data ?? {}) as Record<string, unknown>;
+      }
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      logger.error('cron.purgar.producto_evento_excepcion', { error });
+      await alertarOperador('cron.purgar.producto_evento', { error });
+    }
+
+    // ── MCP OAUTH: tokens revocados/expirados, códigos muertos, clientes DCR
+    // que nunca completaron un login (auditoría final 2026-08-29, hallazgo 3).
+    // RPC HERMANA por la misma razón que producto_evento arriba: esta
+    // migración (0265) sale de master sin apilarse sobre otra que redefina
+    // `mantenimiento_de_datos`. Su fallo tampoco tumba la corrida —las purgas
+    // de arriba ya corrieron—, pero sí se grita y se alerta.
+    let mcpOauth: Record<string, unknown> | null = null;
+    try {
+      const mo = await supabaseAdmin().rpc('mantener_mcp_oauth');
+      if (mo.error) {
+        const codigo = codigoDeError(mo.error);
+        logger.error('cron.purgar.mcp_oauth_falló', { error: mo.error.message, codigo });
+        await alertarOperador('cron.purgar.mcp_oauth', { error: mo.error.message, codigo });
+      } else {
+        mcpOauth = (mo.data ?? {}) as Record<string, unknown>;
+      }
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      logger.error('cron.purgar.mcp_oauth_excepcion', { error });
+      await alertarOperador('cron.purgar.mcp_oauth', { error });
+    }
+
+    logger.info('cron.purgar.ok', { ...data, vueltas, storage, productoEvento, mcpOauth });
     await registrarLatido('purgar', parcial ? 'parcial' : 'ok', { vueltas });
-    return NextResponse.json({ corrio: true, ...data, vueltas, storage });
+    return NextResponse.json({ corrio: true, ...data, vueltas, storage, productoEvento, mcpOauth });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     // Mismo criterio que el `if (error)` de arriba, para el camino que lanza.

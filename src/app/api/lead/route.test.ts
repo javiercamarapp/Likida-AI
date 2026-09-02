@@ -6,8 +6,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //  · Un lead confirmado devuelve `accepted: true`; una base caída devuelve
 //    503 explícito para que la landing muestre reintento/fallback y no invente
 //    una conversión.
-//  · `unidades` y `urgencia` son dominios cerrados y se filtran AQUÍ: un valor
-//    fuera de dominio no puede tirar el insert entero y llevarse el prospecto.
+//  · `unidades`, `empleados` y `urgencia` son dominios cerrados y se filtran
+//    AQUÍ: un valor fuera de dominio no puede tirar el insert entero y
+//    llevarse el prospecto.
 //  · El canal se deduce de la atribución, y un click id manda sobre el utm_*
 //    porque lo pega la plataforma, no quien armó la URL.
 //  · Deduplicar solo AGREGA: jamás borra el teléfono del censo ni repinta el
@@ -63,7 +64,7 @@ function postear(cuerpo: unknown, origen: string | null = LANDING) {
 const LEAD = {
   empresa: 'Transportes GAL', nombre: 'Alejandro', apellido: 'Vargas',
   correo: 'a@gal.mx', whatsapp: '8112345678',
-  unidades: '101-250', urgencia: 'inmediata',
+  unidades: '101-250', empleados: '4-10', urgencia: 'inmediata',
 };
 
 /** Cola: primero la lectura de duplicados, luego la escritura. */
@@ -101,6 +102,7 @@ describe('el lead se guarda con lo que califica', () => {
       contacto_nombre: 'Alejandro Vargas',
       telefono: '8112345678',
       unidades: '101-250',
+      empleados: '4-10',
       urgencia: 'inmediata',
       fuente: 'landing',
       estado: 'nuevo',
@@ -113,6 +115,13 @@ describe('el lead se guarda con lo que califica', () => {
     nuevoLead();
     await postear({ ...LEAD, unidades: '5 a 30 unidades' });
     expect(llamadas[0].payload.unidades).toBeNull();
+  });
+
+  it('un empleados inventado se cae solo y NO tira el lead (mismo criterio que unidades)', async () => {
+    nuevoLead();
+    await postear({ ...LEAD, empleados: '1000+' });
+    expect(llamadas[0].payload.empleados).toBeNull();
+    expect(llamadas[0].payload.empresa).toBe('Transportes GAL');
   });
 
   it('una urgencia inventada se cae sola y NO tira el lead', async () => {
@@ -203,11 +212,12 @@ describe('deduplicar sin destruir', () => {
   });
 });
 
-describe('la red de seguridad de la 0137', () => {
-  it('con las TRES columnas ausentes, el lead se salva y lo perdido va a notas', async () => {
+describe('la red de seguridad de la 0137 (y la 0276)', () => {
+  it('con las CUATRO columnas ausentes, el lead se salva y lo perdido va a notas', async () => {
     respuestas.push(
       { data: [], error: null },
       { data: null, error: { message: 'column "unidades" of relation "prospecto" does not exist' } },
+      { data: null, error: { message: 'column "empleados" of relation "prospecto" does not exist' } },
       { data: null, error: { message: 'column "urgencia" of relation "prospecto" does not exist' } },
       { data: null, error: { message: 'column "atribucion" of relation "prospecto" does not exist' } },
       { data: null, error: null },
@@ -216,9 +226,11 @@ describe('la red de seguridad de la 0137', () => {
     expect(r.status).toBe(200);
     const ultima = llamadas[llamadas.length - 1].payload;
     expect(ultima).not.toHaveProperty('unidades');
+    expect(ultima).not.toHaveProperty('empleados');
     expect(ultima).not.toHaveProperty('urgencia');
     expect(ultima).not.toHaveProperty('atribucion');
     expect(String(ultima.notas)).toContain('101-250');
+    expect(String(ultima.notas)).toContain('4-10');
     expect(String(ultima.notas)).toContain('inmediata');
     // El canal NO se pierde: vive en `fuente`, que existe desde la 0105.
     expect(ultima.fuente).toBe('ads-meta');
@@ -303,12 +315,12 @@ describe('SEG-2 — el lead público solo rellena huecos', () => {
     expect(llamadas[0].payload).not.toHaveProperty('telefono');
   });
 
-  it('tampoco la empresa, el contacto, las unidades ni la urgencia', async () => {
-    respuestas.push({ data: [YA_TIENE], error: null }, { data: null, error: null });
-    await postear({ ...LEAD, empresa: 'Otra Cosa SA', nombre: 'Quien', apellido: 'Sea', unidades: '500+', urgencia: 'inmediata' });
+  it('tampoco la empresa, el contacto, las unidades, los empleados ni la urgencia', async () => {
+    respuestas.push({ data: [{ ...YA_TIENE, empleados: '11-30' }], error: null }, { data: null, error: null });
+    await postear({ ...LEAD, empresa: 'Otra Cosa SA', nombre: 'Quien', apellido: 'Sea', unidades: '500+', empleados: '30+', urgencia: 'inmediata' });
 
     const p = llamadas[0].payload;
-    for (const campo of ['empresa', 'contacto_nombre', 'unidades', 'urgencia']) {
+    for (const campo of ['empresa', 'contacto_nombre', 'unidades', 'empleados', 'urgencia']) {
       expect(p, `pisó ${campo}`).not.toHaveProperty(campo);
     }
   });

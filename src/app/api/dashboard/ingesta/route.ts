@@ -31,12 +31,22 @@ import { registrarCosto } from '@/lib/likida/costos';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { gastoSondaHoyUsd, topeSondaDiaUsd, SONDAS_POR_MINUTO } from './tope';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
+import { tenantEfectivoChat } from '../chat/tenant';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 
 export async function POST(req: NextRequest) {
+  // Auditoría 21, BAJO-MEDIO: el chequeo CSRF explícito (SEG-9) solo cubría
+  // /api/admin/palette y /v1/*. Autenticada solo por cookie y gasta dinero
+  // de modelo por llamada (visión).
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('ingesta.origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
+    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+  }
+
   const sesion = await getSessionTenant();
   if (!sesion) return NextResponse.json({ error: 'sin sesion' }, { status: 401 });
   if (!puedeVerArea(sesion.rol, 'dinero')) {
@@ -61,9 +71,17 @@ export async function POST(req: NextRequest) {
     }, { status: 413 });
   }
 
+  // H14 (auditoría 24): esta ruta leía SIEMPRE `sesion.tenantId` — a
+  // diferencia de sus hermanas /chat y /conversaciones*, que honran
+  // `?tenant=` para que un superadmin PREVISUALIZANDO una flota (mismo
+  // patrón que el resto del panel) pruebe "Leer comprobante" contra la
+  // flota que está viendo, no contra su propia sesión (sin tenant real).
+  // `tenantEfectivoChat` es la MISMA regla, no una copia: un superadmin sin
+  // flota cae al tenant demo, y solo un superadmin puede pedir otro tenant.
+  const efectivo = await tenantEfectivoChat(sesion, new URL(req.url).searchParams.get('tenant'));
+  if (!efectivo) return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
   // ── Tope diario ── se lee ANTES de gastar; fallar cerrado si no se pudo.
-  const tenantId = sesion.tenantId;
-  if (!tenantId) return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
+  const tenantId = efectivo.tenantId;
   let gastadoHoy: number;
   try {
     gastadoHoy = await gastoSondaHoyUsd(tenantId);
@@ -77,7 +95,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // 45s de tope: por debajo del maxDuration para alcanzar a responder.
-    const r = await extraerComprobante(imagen, AbortSignal.timeout(45_000), createLlmBudget(tenantId, randomUUID()));
+    const r = await extraerComprobante(imagen, AbortSignal.timeout(45_000), createLlmBudget(tenantId, randomUUID(), 'interactivo'));
     // La fila de costo: sin viaje (es una sonda) y con la fase del OCR — es
     // lo que el tope de arriba lee y lo que el tablero de costo de IA suma.
     await registrarCosto({

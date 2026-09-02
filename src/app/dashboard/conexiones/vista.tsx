@@ -1,4 +1,4 @@
-import { Plug, CircleCheck, CircleAlert, CircleDashed, FlaskConical } from 'lucide-react';
+import { Plug, CircleCheck, CircleAlert, CircleDashed, CircleHelp, FlaskConical } from 'lucide-react';
 import type { Conector } from '@/lib/likida/conexiones';
 import { BarraPagina } from '../resumen-visual';
 
@@ -6,6 +6,12 @@ const ESTADO: Record<Conector['estado'], { rotulo: string; fg: string; bg: strin
   listo: { rotulo: 'Listo', fg: 'var(--ok)', bg: 'var(--okbg)', Icono: CircleCheck },
   incompleto: { rotulo: 'Incompleto', fg: 'var(--warn)', bg: 'var(--warnbg)', Icono: CircleAlert },
   sin_configurar: { rotulo: 'Sin conectar', fg: 'var(--muted)', bg: 'var(--canvas)', Icono: CircleDashed },
+  // «No se pudo medir» tiene rótulo y tono PROPIOS (c7-28). Pintarlo con el
+  // gris de «Sin conectar» decía sobre la flota lo que solo se sabía de la
+  // consulta, y mandaba a recapturar credenciales que ya existían. Va en
+  // ámbar y con el icono de la pregunta, no con el del hueco: aquí no falta
+  // nada, falta la lectura.
+  no_medible: { rotulo: 'No se pudo medir', fg: 'var(--warn)', bg: 'var(--warnbg)', Icono: CircleHelp },
   ensayo: { rotulo: 'En ensayo', fg: 'var(--warn)', bg: 'var(--warnbg)', Icono: FlaskConical },
 };
 
@@ -15,13 +21,17 @@ const ESTADO: Record<Conector['estado'], { rotulo: string; fg: string; bg: strin
  * en palabras de persona; las decisiones de negocio (el candado del
  * timbrado) se declaran como decisiones, no como fallas.
  */
-export function VistaConexiones({ conectores, credenciales }: {
+export function VistaConexiones({ conectores, credenciales, integraciones }: {
   conectores: Conector[];
   /** La sección "Credenciales de tus sistemas", ya armada en el servidor
    *  (`SeccionCredenciales` + acciones). Entra como ReactNode y no como
    *  datos: esta vista no debe importar el motor, que trae `supabaseAdmin`
    *  (mismo patrón que `notificaciones` en el Agente de Proveedores). */
   credenciales?: React.ReactNode;
+  /** La sección "Con qué sistemas conecta Likida", que era la pantalla gemela
+   *  `/dashboard/integraciones` hasta la fusión de agosto-2026. Mismo criterio
+   *  de ReactNode que la de credenciales. */
+  integraciones?: React.ReactNode;
 }) {
   return (
     <main className="h-full">
@@ -65,13 +75,12 @@ export function VistaConexiones({ conectores, credenciales }: {
             );
           })}
 
-          {credenciales}
+          {/* El orden es el del trabajo: primero QUÉ está medido, luego CON
+              QUÉ sabe conectar Likida, y al final DÓNDE se capturan los
+              accesos — que es lo que se hace después de leer las otras dos. */}
+          {integraciones}
 
-          <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>
-            ¿Falta un conector que tu operación necesita (correo de intake, tu proveedor de GPS,
-            tu ERP)? Es exactamente lo que se conecta contigo en el arranque — escríbenos desde
-            el Centro de ayuda.
-          </p>
+          {credenciales}
         </div>
       </div>
     </main>

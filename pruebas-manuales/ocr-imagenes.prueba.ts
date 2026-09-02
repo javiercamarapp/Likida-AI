@@ -161,7 +161,8 @@ test('OCR sobre imágenes reales + cuadre del lote', async () => {
     // Se decodifica aparte SOLO para el informe: es lo único que distingue "el
     // lector no vio nada" de "vio un código que no era de CFDI". Sin esto, el
     // arnés decía "sin QR" sobre tickets cuyo QR se había leído perfectamente.
-    const { decodeCodigosFromImage, bufferFromDataUrl } = await import('@/lib/likida/intake/cfdi');
+    const { bufferFromDataUrl } = await import('@/lib/likida/intake/cfdi');
+    const { decodeCodigosFromImage } = await import('@/lib/likida/intake/cfdi_imagen');
     const codigos = await decodeCodigosFromImage(bufferFromDataUrl(url)).catch(() => []);
 
     const t0 = Date.now();

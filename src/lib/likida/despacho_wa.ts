@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
-import { ConsultaFallida } from './conv';
+import { ConsultaFallida, variantesTelefono } from './conv';
 import { esAfirmacion, esNegacion } from './intake/huerfanos';
 import {
   interpretarPeticionViaje, resumenParaConfirmar, resolverOperadorPorNombre,
@@ -97,7 +97,9 @@ async function cargarPendiente(tenantId: string, telefono: string, ahora: Date):
   const { data, error } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
     .select('estado')
-    .eq('tenant_id', tenantId).eq('telefono', telefono)
+    .eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono))
+    .order('updated_at', { ascending: false }).order('id', { ascending: false })
+    .limit(1)
     .maybeSingle(), 'despachoWa.cargarPendiente');
   if (error) {
     // Perder el estado cuesta re-preguntar; inventarlo costaría crear un
@@ -120,12 +122,18 @@ async function guardarPendiente(tenantId: string, telefono: string, p: Pendiente
   // (escribir solo la llave propia), y queda anotado para diagnóstico.
   const { data: filaActual, error: errLectura } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
-    .select('estado')
-    .eq('tenant_id', tenantId).eq('telefono', telefono)
+    .select('telefono, estado')
+    .eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono))
+    .order('updated_at', { ascending: false }).order('id', { ascending: false })
+    .limit(1)
     .maybeSingle(), 'despachoWa.guardarPendiente.leer');
   if (errLectura) {
     logger.warn('despacho_wa.pendiente_fusion_ilegible', { err: errLectura.message });
   }
+  // DAT-5: el teléfono CANÓNICO es el que la fila ya trae. Escribir con la
+  // forma que trajo este webhook estrenaría una segunda conversación para el
+  // mismo jefe (o chocaría contra el índice de la 0274).
+  const telefonoFila = (filaActual as { telefono?: string } | null)?.telefono ?? telefono;
   const previo = (filaActual?.estado as Record<string, unknown> | null) ?? {};
   const fusionado: Record<string, unknown> = { ...previo };
   if (p) fusionado.viajePendiente = p; else delete fusionado.viajePendiente;
@@ -139,7 +147,7 @@ async function guardarPendiente(tenantId: string, telefono: string, p: Pendiente
     .from('wa_conversacion')
     .upsert({
       tenant_id: tenantId,
-      telefono,
+      telefono: telefonoFila,
       estado: fusionado,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'tenant_id,telefono' }), 'despachoWa.guardarPendiente');
@@ -177,7 +185,9 @@ async function reclamarPendiente(tenantId: string, telefono: string): Promise<'r
   const { data: filaActual, error: errLectura } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
     .select('estado')
-    .eq('tenant_id', tenantId).eq('telefono', telefono)
+    .eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono))
+    .order('updated_at', { ascending: false }).order('id', { ascending: false })
+    .limit(1)
     .maybeSingle(), 'despachoWa.reclamarPendiente.leer');
   if (errLectura) {
     logger.error('despacho_wa.reclamo_lectura_fallo', { err: errLectura.message });
@@ -189,7 +199,7 @@ async function reclamarPendiente(tenantId: string, telefono: string): Promise<'r
   const { data, error } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
     .update({ estado: sinPendiente, updated_at: new Date().toISOString() })
-    .eq('tenant_id', tenantId).eq('telefono', telefono)
+    .eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono))
     .not('estado->viajePendiente', 'is', null)
     .select('telefono'), 'despachoWa.reclamarPendiente');
   if (error) {

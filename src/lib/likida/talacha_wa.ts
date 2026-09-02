@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { strip_accents } from './cuadre/util';
 import { crearIncidencia } from './operacion';
+import { abrirOrdenPorAveria } from './mantenimiento';
 import { telefonoJefeDe } from './contactos';
 import type { RolOficina } from './contactos';
 import { sendText, sendButtons } from '@/lib/meta/client';
@@ -406,8 +407,21 @@ async function firmarDecision(
     if (errLee) return 'No pude registrar tu decisión ahorita — inténtalo de nuevo en un momento.';
     if (!existente) return 'No encontré esa solicitud en tu flota.';
     const estado = existente.autorizacion as string | null;
-    return estado === 'autorizada' || estado === 'rechazada'
-      ? `Esa avería ya estaba ${estado} — no cambié nada.`
+    if (estado === 'autorizada') {
+      // AUDITORÍA FABLE CICLO 3 (c3-4): si el proceso murió entre la firma y
+      // la apertura de la orden (timeout del webhook, deploy), el reintento de
+      // Meta caía aquí y la orden se perdía sin aviso — pese a que
+      // `abrirOrdenPorAveria` es idempotente PRECISAMENTE para poderse
+      // rellamar (la unique de la 0209 hace del duplicado un `ya_existia`
+      // inocuo). El reintento también abre; la respuesta dice la verdad de lo
+      // que encontró.
+      const orden = await abrirOrdenPorAveria(cuenta.tenantId!, incidenciaId);
+      if (orden === 'abierta') return 'Esa avería ya estaba autorizada — no cambié la firma, pero la orden de taller faltaba y ya quedó abierta.';
+      if (orden === 'fallo') return 'Esa avería ya estaba autorizada — no cambié nada. Ojo: no pude confirmar su orden de taller — revísala en el panel de unidades.';
+      return 'Esa avería ya estaba autorizada — no cambié nada.';
+    }
+    return estado === 'rechazada'
+      ? 'Esa avería ya estaba rechazada — no cambié nada.'
       : 'Esa solicitud ya no está pendiente — revísala en el panel.';
   }
 
@@ -418,9 +432,17 @@ async function firmarDecision(
   const cifra = monto !== null ? ` · ${mxn(monto)}` : '';
   const quien = r.chofer ?? 'tu chofer';
   if (decision === 'autorizada') {
+    // Fase 9: la avería firmada abre su orden de taller. DESPUÉS de la firma
+    // — un tropiezo aquí no puede leerse como "no se autorizó" — y con la
+    // falla dicha: la orden que no se pudo abrir se pide en el panel, no se
+    // finge abierta ni se calla.
+    const orden = await abrirOrdenPorAveria(cuenta.tenantId!, incidenciaId);
+    const notaOrden = orden === 'fallo'
+      ? ' Ojo: NO pude abrir la orden de taller — ábrela en el panel de unidades.'
+      : '';
     return r.avisado
-      ? `Autorizada ✅${cifra} — ya le avisé a ${quien}. El gasto llegará a la liquidación con tu autorización firmada.`
-      : `Autorizada ✅${cifra} y quedó firmada, pero NO le pude avisar a ${quien} por WhatsApp — márcale tú.`;
+      ? `Autorizada ✅${cifra} — ya le avisé a ${quien}. El gasto llegará a la liquidación con tu autorización firmada.${notaOrden}`
+      : `Autorizada ✅${cifra} y quedó firmada, pero NO le pude avisar a ${quien} por WhatsApp — márcale tú.${notaOrden}`;
   }
   return r.avisado
     ? `Rechazada ❌${cifra} — ya le avisé a ${quien}.`

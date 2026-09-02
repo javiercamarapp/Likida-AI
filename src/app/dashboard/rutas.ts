@@ -1,10 +1,20 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
   BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel, Building2, Plug,
-  ChartNoAxesCombined, UserRound, BookOpen, Container, Blocks, Handshake, FileText, KeyRound,
+  // `Blocks` se fue con la entrada de «Integraciones», fusionada en Conexiones.
+  ChartNoAxesCombined, UserRound, BookOpen, Container, Handshake, FileText, KeyRound,
   ScrollText,
   UsersRound,
   ShieldCheck,
+  Siren,
+  RadioTower,
+  Calculator,
+  Stamp,
+  ScanEye,
+  CloudDownload,
+  CalendarClock,
+  Scale3d,
+  PlugZap,
 } from 'lucide-react';
 
 /**
@@ -38,6 +48,9 @@ export const AUTOMATIZACIONES: Item[] = [
   { href: '/dashboard/agentes/peajes', nombre: 'Conciliación de peajes', Icono: Scale },
   // F6: la factura del taller que hoy se captura a mano en el ERP.
   { href: '/dashboard/agentes/proveedores', nombre: 'Facturas de proveedores', Icono: Building2 },
+  // Fases B-C del blueprint de Carta Porte (25-ago-2026): al despachar,
+  // pregunta por WhatsApp lo que falta declarar y arma el borrador validado.
+  { href: '/dashboard/agentes/carta-porte', nombre: 'Carta Porte en automático', Icono: ScrollText },
 ];
 
 export const OPERACION: Item[] = [
@@ -46,6 +59,10 @@ export const OPERACION: Item[] = [
   // aquí se consulta y se cruza.
   { href: '/dashboard/viajes', nombre: 'Viajes', Icono: Truck },
   { href: '/dashboard/operadores', nombre: 'Operadores', Icono: Users },
+  // El registro que la LFT 132 fr. XXXIV obliga a llevar desde el decreto del
+  // 01-may-2026 (mig. 0241). Se llama «Jornada» y no «Cumplimiento laboral» a
+  // propósito: Likida registra y avisa, no certifica que la flota cumpla.
+  { href: '/dashboard/jornada', nombre: 'Jornada', Icono: CalendarClock },
   // El activo que produce el dinero, con sus vigencias de ley (14-ago-2026).
   { href: '/dashboard/unidades', nombre: 'Unidades', Icono: Container },
   // F3: los viajes vivos sobre México — trayecto ilustrativo, sin GPS, y la
@@ -56,6 +73,12 @@ export const OPERACION: Item[] = [
   // complemento y qué dato falta — partido 19 del cliente / 18 del
   // transportista, que es como la ley parte la responsabilidad.
   { href: '/dashboard/carta-porte', nombre: 'Carta Porte', Icono: ScrollText },
+  // Fase 5: el directorio que el escalamiento de emergencias consulta — la
+  // grúa, la póliza con su 800 de siniestros y los contactos del operador.
+  { href: '/dashboard/emergencias', nombre: 'Emergencias', Icono: Siren },
+  // Capa F del agente de ayuda en ruta: las incidencias vivas con su timeline
+  // y los botones de intervención — el humano siempre puede tomar el control.
+  { href: '/dashboard/asistencia', nombre: 'Mesa de control', Icono: RadioTower },
 ];
 
 export const DINERO_FISCAL: Item[] = [
@@ -70,22 +93,54 @@ export const DINERO_FISCAL: Item[] = [
   { href: '/dashboard/rentabilidad', nombre: 'Rentabilidad y cobranza', Icono: ChartNoAxesCombined },
   // El lado del ingreso: quién paga el flete y cuánto debe.
   { href: '/dashboard/clientes', nombre: 'Clientes y tarifas', Icono: Handshake },
+  // A8 (27-ago-2026): la ganancia real ANTES de aceptar el viaje — costos
+  // declarados + casetas MEDIDAS en los viajes liquidados de la ruta.
+  { href: '/dashboard/cotizaciones', nombre: 'Cotizador', Icono: Calculator },
   { href: '/dashboard/facturacion', nombre: 'Facturación a clientes', Icono: FileText },
+  // 0227 (auditoría Fable c6-3): el botón que EMITE el CFDI con complemento
+  // Carta Porte. Estaba dentro del borrador, que es `operacion` — así que el
+  // jefe de tráfico podía timbrar y el contador ni siquiera llegaba. Aquí es
+  // donde le toca vivir: es papel fiscal con el flete adentro.
+  { href: '/dashboard/timbrado', nombre: 'Timbrado (Carta Porte)', Icono: Stamp },
+  // A19 (27-ago-2026): las vigilancias que el dueño o el contador declaran
+  // escribiéndolas en español. Va en DINERO porque ahí es donde se declaran
+  // los topes de gasto y la cartera vencida; el canal de cada aviso lo decide
+  // la plantilla, no el menú.
+  { href: '/dashboard/reglas', nombre: 'Mis reglas', Icono: ScanEye },
+  // 0231: los CFDI que el comercio YA timbró al RFC de la flota, bajados del
+  // buzón del SAT y cruzados solos contra el ticket. Va en DINERO porque
+  // declara un RFC, consume el tope diario de ese contribuyente ante el SAT y
+  // deja gastos facturados.
+  { href: '/dashboard/descarga-sat', nombre: 'Descarga del SAT', Icono: CloudDownload },
+  // 0243: la bandeja donde el contralor DECIDE sobre lo que bajó y no cuadró
+  // solo. Entrada propia y no un enlace dentro de la de arriba porque son dos
+  // trabajos distintos: aquélla se declara una vez, ésta se abre a diario.
+  { href: '/dashboard/descarga-sat/bandeja', nombre: 'Conciliación del SAT', Icono: Scale3d },
 ];
 
 export const SISTEMA: Item[] = [
   // El corpus de `normas/` consultable: de dónde sale el fundamento de cada
   // cifra fiscal, con su estado de verificación a la vista.
   { href: '/dashboard/conocimiento', nombre: 'Conocimiento normativo', Icono: BookOpen },
-  // F7 (chasis de agentes): la salud MEDIDA de cada conector de la flota.
+  // F7 (chasis de agentes): la salud MEDIDA de cada conector de la flota, el
+  // catálogo de sistemas y la captura de accesos — las tres en una pantalla.
+  //
+  // «Integraciones» ERA una entrada aparte y se quitó del menú en agosto-2026:
+  // contestaba la misma pregunta que ésta con otra consulta y otro texto, y dos
+  // renglones del sidebar para un solo trabajo obligan a adivinar cuál abrir.
+  // La ruta sigue viva como redirect (los enlaces guardados no se rompen), pero
+  // no se ofrece dos veces.
   { href: '/dashboard/conexiones', nombre: 'Conexiones', Icono: Plug },
-  // La otra mitad del chasis: los SISTEMAS del cliente (ERP, GPS, TAG), separados
-  // de las CREDENCIALES que vive en Conexiones.
-  { href: '/dashboard/integraciones', nombre: 'Integraciones', Icono: Blocks },
   // A6 (auditoría 4, 14-ago-2026): la emisión y revocación de las llaves de
   // /v1. El openapi prometía "se emite desde el panel" sin que el panel
   // existiera — `tenant_api_key` no tenía un solo INSERT en src/.
   { href: '/dashboard/llaves-api', nombre: 'Llaves de API', Icono: KeyRound },
+  // H3 (auditoría de dashboards, 29-ago-2026): los accesos que Claude o
+  // ChatGPT tienen a los datos de la flota por MCP (0260). Va JUNTO a Llaves
+  // de API a propósito — son la misma pregunta ("¿quién lee mis datos desde
+  // fuera del panel?") sobre dos credenciales distintas, y quien viene a
+  // revocar una tiene que tropezarse con la otra.
+  { href: '/dashboard/sesiones-mcp', nombre: 'Sesiones MCP', Icono: PlugZap },
   // Las tres huérfanas del sidebar (16-ago-2026): existían en AREA_POR_RUTA
   // pero no aquí — el dueño no llegaba a ellas navegando, solo tecleando la
   // URL. `puedeVerRuta` sigue decidiendo quién las ve (usuarios/políticas
@@ -94,6 +149,13 @@ export const SISTEMA: Item[] = [
   { href: '/dashboard/onboarding', nombre: 'Perfil de la flota', Icono: ClipboardList },
   { href: '/dashboard/politicas', nombre: 'Políticas de gasto', Icono: Scale },
   { href: '/dashboard/arco', nombre: 'Solicitudes ARCO', Icono: ShieldCheck },
+  // AUDITORÍA 20 (H6, 29-ago-2026): los hilos bot↔chofer de ESTA flota. Se
+  // leían solo desde /admin —el proveedor veía la conversación de cualquier
+  // flota y el dueño no veía la de su propio chofer—. Va en SISTEMA y no en
+  // AUTOMATIZACIONES porque no es un agente que se configure: es el registro
+  // de lo que se dijo, del mismo talante que ARCO y Usuarios. `administracion`
+  // en visibilidad.ts: solo el dueño (ver el comentario de esa línea).
+  { href: '/dashboard/conversaciones', nombre: 'Conversaciones de WhatsApp', Icono: MessagesSquare },
 ];
 
 /** El bloque INFERIOR fijo (Soporte / Configuración),

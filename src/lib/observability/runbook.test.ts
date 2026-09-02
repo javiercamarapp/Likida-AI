@@ -22,8 +22,14 @@ const RAIZ = process.cwd();
 // Las pone la plataforma o el arnés de pruebas: no van en `.env.example`.
 const DE_LA_PLATAFORMA = new Set([
   'NODE_ENV', 'VERCEL_ENV', 'NEXT_RUNTIME',
-  // El sha del deploy, inyectado por Vercel en build (lo lee /api/health).
+  // El sha del deploy, inyectado por Vercel en build (lo leen /api/health y el
+  // agente `releases`, 0234).
   'VERCEL_GIT_COMMIT_SHA',
+  // La rama del deploy, del mismo lote que el sha y con la misma razón: la
+  // inyecta Vercel en build y nadie la pone a mano. La lee el agente
+  // `releases` (0234) para el parte de qué está corriendo; cuando NO llega, el
+  // parte escribe «NO CONSTA» en vez de rellenarla con «master».
+  'VERCEL_GIT_COMMIT_REF',
   'TICKET_PATH', 'TICKET_HOY', 'TICKET_ANTICIPO',
 ]);
 

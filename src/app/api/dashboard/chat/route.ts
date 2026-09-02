@@ -20,24 +20,50 @@ import { PartialExecutionError } from '@/lib/llm/openrouter';
 import { guardarIntercambio } from '@/lib/likida/chat/conversaciones';
 import { ejecutarAnalista } from '@/lib/agents/analista';
 import { logger } from '@/lib/logger';
+import { rateLimit } from '@/lib/ratelimit';
 import { validarMensajes, validarConversacionId } from './validacion';
 import { topeDiaUsd, gastoChatHoyUsd } from './tope';
 import { tenantEfectivoChat } from './tenant';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+// BE-20 (auditoría 24): era la única ruta cara del panel sin límite de tasa.
+// El tope diario se lee ANTES de la completion y el costo se registra
+// DESPUÉS, así que 40 POST en paralelo con `gastadoHoy = $0` pasaban los 40 y
+// gastaban ~$2 contra un tope de $1, con 40 streams de 60 s. Diez turnos por
+// minuto por usuario le sobran a una persona escribiendo (un turno tarda
+// 5-40 s en contestar) y acotan la ráfaga a lo que el tope diario sí alcanza
+// a ver. Mismo patrón que `onboarding-chat`, `ingesta` y `archivo`.
+const TURNOS_POR_MINUTO = 10;
+
 export async function POST(req: NextRequest) {
+  // Auditoría 21, BAJO-MEDIO: el chequeo CSRF explícito (SEG-9) solo cubría
+  // /api/admin/palette y /v1/*. Esta ruta escribe (guarda el intercambio) y
+  // gasta dinero de modelo, autenticada solo por la cookie de sesión.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('chat.origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
+    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+  }
+
   const sesion = await getSessionTenant();
   if (!sesion) return NextResponse.json({ error: 'sin sesion' }, { status: 401 });
   if (!puedeVerArea(sesion.rol, 'dinero')) {
     return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
   }
+  if (!(await rateLimit(`chat:${sesion.userId}`, TURNOS_POR_MINUTO, 60_000))) {
+    return NextResponse.json({ error: 'Demasiadas preguntas seguidas; espera un momento.' }, { status: 429 });
+  }
 
   // Tenant efectivo + nombre de flota: regla COMPARTIDA con /conversaciones
   // (tenant.ts) — dos copias de una regla de autorización se desincronizan.
   const efectivo = await tenantEfectivoChat(sesion, req.nextUrl.searchParams.get('tenant'));
-  if (!efectivo) return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
+  // AUDITORÍA 24 (auth): `null` con `?tenant=` presente es "no se pudo
+  // verificar la flota" (lectura caída), no "sin permiso" — 503, como
+  // `resolverTenantApi`. Sin `?tenant=` sigue siendo 403 real.
+  if (!efectivo) return NextResponse.json({ error: 'sin acceso' },
+    { status: req.nextUrl.searchParams.get('tenant') ? 503 : 403 });
   const { tenantId, nombreFlota } = efectivo;
 
   let cuerpo: unknown;

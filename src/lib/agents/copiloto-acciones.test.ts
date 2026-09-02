@@ -54,6 +54,51 @@ describe('el catálogo de acciones', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA E.28, H4 — LA TARJETA DE `correr_runner` YA NO PUEDE DECIR
+// "jamás envía nada".
+//
+// La tarjeta es lo que Javier lee para FIRMAR la ejecución (previsualización
+// del copiloto / ⌘K). Antes de este arreglo decía que `correr_runner`
+// "fabrica borradores hacia Aprobaciones — jamás envía nada", pero
+// `AGENTES_DESPACHABLES` (runner.ts) incluye `enviador`, que se auto-aprueba
+// y manda correo real por Resend sin que ningún humano lo revise primero
+// (`enviador.ts`, orden del 27-ago-2026). Es la MISMA clase de bug que M30
+// (auditoría 18) ya corrigió una vez: una compuerta de agente que describe
+// mal su propio efecto.
+//
+// Esta prueba fija DOS cosas para que no se puedan deshacer a medias:
+//  · el hecho de dominio que hace falsa la frase vieja — `enviador` SIGUE
+//    despachable por el runner (si algún día deja de estarlo, esta prueba lo
+//    dice, y ahí sí la tarjeta podría volver a simplificarse);
+//  · que la tarjeta ACTUAL ya no promete lo que no cumple, y sí nombra la
+//    excepción real.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('H4 — la tarjeta de correr_runner no miente sobre el envío autónomo', () => {
+  it('"enviador" sigue en AGENTES_DESPACHABLES del runner (el hecho que la tarjeta tiene que reflejar)', async () => {
+    // `@/lib/likida/agentes/runner` está mockeado arriba para el resto de este
+    // archivo; `importActual` trae el módulo real solo para esta afirmación.
+    const real = await vi.importActual<typeof import('@/lib/likida/agentes/runner')>('@/lib/likida/agentes/runner');
+    expect(real.AGENTES_DESPACHABLES).toContain('enviador');
+  });
+
+  it('la tarjeta de correr_runner ya no promete "jamás envía nada"', () => {
+    const tarjeta = accionDelCatalogo('correr_runner')!;
+    expect(tarjeta.efecto).not.toMatch(/jamás env[ií]a nada/i);
+    expect(tarjeta.efecto + ' ' + tarjeta.revertir).not.toMatch(/nunca env[ií]a/i);
+  });
+
+  it('la tarjeta nombra a "enviador" como la excepción que SÍ manda correo autónomo', () => {
+    const tarjeta = accionDelCatalogo('correr_runner')!;
+    expect(tarjeta.efecto).toContain('enviador');
+    expect(tarjeta.efecto).toMatch(/manda correo|env[ií]a correo/i);
+    expect(tarjeta.efecto).toMatch(/auto-aprob/i);
+    // Y deja claro que lo mandado no se puede deshacer — a diferencia de un
+    // borrador, que sí se rechaza desde la bandeja.
+    expect(tarjeta.revertir).toMatch(/no se deshace|NO se deshace/);
+  });
+});
+
 describe('ejecutarAccionCopiloto', () => {
   it('una acción fuera del catálogo se rechaza con texto para pantalla', async () => {
     await expect(ejecutarAccionCopiloto('borrar_todo', {}, 'u-1')).rejects.toThrow(DatoInvalido);
@@ -135,23 +180,29 @@ describe('correr_runner y su bitácora — el contrato que el comentario declara
 const { objetivoDelRunner } = await import('./copiloto-acciones');
 
 describe('M30 — correr_runner respeta el objetivo que Javier confirmó', () => {
+  // AUDITORÍA 24, AGB-7 (integración): `correrRunner` ahora recibe un tercer
+  // argumento con `venceEn` (la ruta del copiloto tiene maxDuration=60; sin
+  // reloj el runner podía correr más de lo que la invocación aguanta). El
+  // objetivo (primer argumento) sigue siendo lo que este bloque prueba —
+  // `expect.any(Number)` en el tercer argumento no ancla un instante exacto
+  // de `Date.now()`, ancla que SE MANDÓ un reloj.
   it('objetivo "redactor" → correrRunner("redactor"), y la bitácora lo anota', async () => {
     await ejecutarAccionCopiloto('correr_runner', { id: 'redactor', motivo: 'adelantar la demo' }, 'u-javier');
-    expect(correrRunner).toHaveBeenCalledWith('redactor');
+    expect(correrRunner).toHaveBeenCalledWith('redactor', undefined, { venceEn: expect.any(Number) });
     const detalle = insertBitacora.mock.calls[0][0].detalle as Record<string, unknown>;
     expect(detalle.objetivo).toBe('redactor');
   });
 
   it('"agente:redactor" (la forma del catálogo de interruptores) también acota', async () => {
     await ejecutarAccionCopiloto('correr_runner', { id: 'agente:redactor', motivo: 'x' }, 'u-1');
-    expect(correrRunner).toHaveBeenCalledWith('redactor');
+    expect(correrRunner).toHaveBeenCalledWith('redactor', undefined, { venceEn: expect.any(Number) });
   });
 
   it('"runner" / vacío = la vuelta completa (lo que describe `efecto`)', async () => {
     await ejecutarAccionCopiloto('correr_runner', { id: 'runner', motivo: 'x' }, 'u-1');
-    expect(correrRunner).toHaveBeenCalledWith(undefined);
+    expect(correrRunner).toHaveBeenCalledWith(undefined, undefined, { venceEn: expect.any(Number) });
     await ejecutarAccionCopiloto('correr_runner', { motivo: 'x' }, 'u-1');
-    expect(correrRunner).toHaveBeenLastCalledWith(undefined);
+    expect(correrRunner).toHaveBeenLastCalledWith(undefined, undefined, { venceEn: expect.any(Number) });
   });
 
   it('un agente que no está habilitado para el runner se DICE, no se finge una vuelta', async () => {

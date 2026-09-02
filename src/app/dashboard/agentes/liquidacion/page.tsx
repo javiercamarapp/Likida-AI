@@ -17,6 +17,8 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { revalidatePath } from 'next/cache';
 import { FormaEstrategiaLiquidacion, type ResultadoEstrategia } from '../estrategia-forma';
 import { Bloque, EsqTabla, vigilar } from '../../bloque';
+import { colaRevision, leerFiltrosCola, decodificarCursorCola, listarTerminales } from '@/lib/likida/revision';
+import { buscarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/likida/repo';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +52,14 @@ function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 export default async function PaginaAgenteLiquidacion({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
+  // Los siete de la cola (`rev`, `estado`, `operador`, `unidad`, `terminal`,
+  // `desde`, `hasta`, `cursor`) van en la URL a propósito: un filtro se
+  // comparte por chat y el botón de atrás funciona (ver `cola.tsx`).
+  searchParams: Promise<{
+    vista?: string; tenant?: string; rol?: string;
+    rev?: string; estado?: string; operador?: string; unidad?: string;
+    terminal?: string; desde?: string; hasta?: string; cursor?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
@@ -79,6 +88,36 @@ export default async function PaginaAgenteLiquidacion({
   // 7 agentes sin bitácora hasta la Fase 1 del blueprint (0115); su corrida
   // es el cierre por WhatsApp. null = no se pudo leer, y la ficha lo dice.
   const pCorridas = safe(() => ultimasCorridas(tenantId, 'liquidacion'));
+
+  // ── FE-5 · BLOQ-6: LA COLA ES SU PROPIA CONSULTA ────────────────────────
+  // Ya no un filtro en memoria sobre `getLiquidaciones` (50 más recientes ≈
+  // 2.4 h a 500 cierres/día). Va por llave, por antigüedad y con `count` real
+  // de la base; primaria, o sea SIN `safe`: una cola que no se pudo leer
+  // enseña su error, nunca «nada que firmar».
+  const filtros = leerFiltrosCola(sp);
+  const pCola = vigilar(colaRevision(tenantId, filtros, decodificarCursorCola(sp.cursor)));
+  // El selector de terminales sí degrada: sin él la cola sigue sirviendo.
+  const pTerminales = safe(() => listarTerminales(tenantId));
+
+  /** Buscador de catálogo para los combos de operador/unidad de los filtros.
+   *  Re-gatea con la sesión REAL: es alcanzable por POST directo y devuelve
+   *  nombres de UNA flota. Lanza ante rechazo — una lista vacía afirmaría
+   *  "ningún chofer se llama así". */
+  async function buscarFiltro(tipo: TipoCatalogo, q: string): Promise<OpcionCatalogo[]> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
+    if (tipo !== 'operador' && tipo !== 'unidad') throw new Error('Catálogo desconocido.');
+    return buscarCatalogo(s.tenantId, tipo, typeof q === 'string' ? q : '');
+  }
+
+  // Lo que hay que conservar en cada link y en el submit del filtro: el mismo
+  // contrato de sufijo del resto del panel.
+  const contexto: Array<[string, string]> = [
+    ...(sp.tenant ? [['tenant', sp.tenant] as [string, string]] : []),
+    ...(sp.vista ? [['vista', sp.vista] as [string, string]] : []),
+    ...(sp.rol ? [['rol', sp.rol] as [string, string]] : []),
+  ];
 
   // Derivadas: `.then` sobre promesas YA lanzadas — no añaden espera, solo
   // dicen qué hacer cuando lleguen, y agrupan lo que una MISMA tarjeta pinta.
@@ -126,6 +165,7 @@ export default async function PaginaAgenteLiquidacion({
     <VistaAgenteLiquidacion
       kpis={pKpis}
       liquidaciones={pLiqs}
+      cola={{ cola: pCola, filtros, terminales: pTerminales, buscar: buscarFiltro, contexto, sufijo }}
       extra={extra}
       sufijo={sufijo}
       notificaciones={

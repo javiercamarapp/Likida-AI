@@ -345,6 +345,23 @@ export function ventanaCobranzaDeclarada(perfilCrudo: unknown): { horaInicio: nu
   return decidir(leerPerfil(perfilCrudo).cobranzaVentana) ?? null;
 }
 
+/** ¿La flota DECLARÓ mover materiales peligrosos? `null` = no declarado —
+ *  que para los relojes matpel (Fase 6) significa NO disparar plazos de
+ *  SICT/ASEA que quizá no aplican: un reloj legal inventado entrena a
+ *  ignorar los reales. Solo una declaración (o detección) enciende el reloj.
+ *  También lo lee el clasificador de Carta Porte: hazmat declarado = materia
+ *  excluida = complemento SIEMPRE (2.7.7.2.1, cuarto párrafo). */
+export function hazmatDeclarado(perfilCrudo: unknown): boolean | null {
+  return decidir(leerPerfil(perfilCrudo).hazmat) ?? null;
+}
+
+/** RMF 2.7.7.1.3: en transporte DEDICADO se invierten los roles del
+ *  complemento (el cliente emite el traslado). El aviso ADVIERTE, sin
+ *  veredicto duro — la P40 del fiscalista sigue abierta. */
+export function transporteDedicadoDeclarado(perfilCrudo: unknown): boolean | null {
+  return decidir(leerPerfil(perfilCrudo).transporteDedicado) ?? null;
+}
+
 const ROLES_AVISO = ['encargado', 'flota_admin', 'contador'] as const;
 export type RolAviso = typeof ROLES_AVISO[number];
 

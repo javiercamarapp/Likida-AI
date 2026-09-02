@@ -85,6 +85,13 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // `dinero_por_area.test.ts` los escanea).
   '/dashboard/viajes': 'operacion',
   '/dashboard/operadores': 'operacion',
+  // El registro de jornada (LFT 132 fr. XXXIV, mig. 0241). Es `operacion` y no
+  // `dinero` por dos razones: no enseña un peso, y el usuario natural es el
+  // jefe de tráfico —él sabe a qué hora salió cada quien y es el único que
+  // puede corregirlo con conocimiento. Corregir, en cambio, exige
+  // `puedeAdministrar`: mover la hora registrada de un trabajador es un acto
+  // con consecuencia jurídica (LFT 805).
+  '/dashboard/jornada': 'operacion',
   // El Registro de Unidades (14-ago-2026): el activo que produce el dinero y
   // sus vigencias de ley. Es `operacion` porque el jefe de tráfico es
   // exactamente quien debe enterarse de que una unidad no puede salir, y la
@@ -96,10 +103,16 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // de ruta ("¿pisa federal?") es del jefe de tráfico — la regla 2.7.7.2.1
   // exige plena certeza de quien CONOCE la ruta, no del que ve el dinero.
   '/dashboard/carta-porte': 'operacion',
-  // El Agente de Conductores (F4) es el ÚNICO agente de operación: no toca
-  // un peso y su usuario diario es el jefe de tráfico. Sus hermanos
+  // El Agente de Conductores (F4) es agente de operación: no toca un peso y
+  // su usuario diario es el jefe de tráfico. Sus hermanos
   // (liquidación/facturas/cobranza) siguen en dinero.
   '/dashboard/agentes/conductores': 'operacion',
+  // El Agente de Carta Porte (Fases B-C, 25-ago-2026): mismo criterio que su
+  // pantalla /dashboard/carta-porte — cero pesos, y la declaración de ruta es
+  // del jefe de tráfico. La página del borrador
+  // (/dashboard/carta-porte/borrador/<uuid>) es dinámica y se gatea con la
+  // llave de su padre, como /dashboard/<uuid> gatea su área a mano.
+  '/dashboard/agentes/carta-porte': 'operacion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
   // Notificaciones (14-ago-2026) — el "alertas primero". Su VISIBILIDAD la
@@ -145,6 +158,46 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // que el jefe de tráfico no ve.
   '/dashboard/clientes': 'dinero',
   '/dashboard/facturacion': 'dinero',
+  // TIMBRADO (0227, auditoría Fable c6-3). El botón que emite el CFDI vivía
+  // dentro del borrador de Carta Porte, que es `operacion`: el ENCARGADO
+  // podía timbrar —un acto fiscal irreversible— y para poder hacerlo la
+  // pantalla le pintaba flete, IVA, retención y total. Los dos errores son el
+  // mismo error: el timbre no es operación, es dinero.
+  //
+  // Ruta propia y no una excepción dentro de `/dashboard/carta-porte`: el mapa
+  // de este archivo asigna UN área por ruta, y una pantalla que hubiera que
+  // gatear "para unos sí y para otros no" rompe esa regla justo donde más
+  // caro es. El borrador sigue siendo del jefe de tráfico (la declaración de
+  // ruta es suya, regla 2.7.7.2.1) y desde ahí solo hay un LINK — el dinero y
+  // el botón viven de este lado. `/dashboard/timbrado/<uuid>` es dinámica y
+  // gatea a mano contra esta misma llave, como `/dashboard/<uuid>`.
+  '/dashboard/timbrado': 'dinero',
+  // DESCARGA DEL SAT (0231): se declara el RFC de un contribuyente y cada
+  // solicitud consume el tope diario que ese RFC tiene ante el SAT. Es
+  // `dinero` por lo mismo que Timbrado: papel fiscal con dinero adentro, y la
+  // pantalla enseña qué gasto quedó facturado.
+  '/dashboard/descarga-sat': 'dinero',
+  // LA BANDEJA DE CONCILIACIÓN (0243). Ruta propia y no una sección de la de
+  // arriba porque es OTRO trabajo: aquélla se declara una vez (el RFC, el
+  // modo, la e.firma), ésta se abre a diario y se pagina. Y `dinero` por el
+  // mismo motivo, subido de tono: aquí no solo se enseña qué gasto quedó
+  // facturado — se DECIDE. Ligar un CFDI a un gasto es afirmar una deducción,
+  // y el guarda de área es el molde de `export/poliza` tras el hallazgo
+  // SEG-19-1: el jefe de tráfico no ve las cifras de dinero de la flota, así
+  // que menos todavía las mueve.
+  '/dashboard/descarga-sat/bandeja': 'dinero',
+  // El cotizador (0225, A8): costos, márgenes y precio sugerido — la
+  // definición misma de lo que el encargado no ve. Espejo de la RLS
+  // `ve_finanzas()` que la 0051 le puso a `cotizacion`.
+  '/dashboard/cotizaciones': 'dinero',
+  // MIS REGLAS (A19, 0229): las vigilancias que la flota declara en lenguaje
+  // natural. Es `dinero` porque quien las declara tiene que poder declarar las
+  // de dinero —topes de gasto, facturas sin cobrar, comprobantes sin CFDI— y
+  // la ficha de cada regla enseña sus montos. Que algunas manden su aviso al
+  // jefe de tráfico (las de operación: papeles, estadías, incidencias) no
+  // cambia quién las DECLARA: el canal del aviso lo decide la plantilla
+  // (`canal` en reglas/catalogo.ts), no esta llave.
+  '/dashboard/reglas': 'dinero',
   // Preguntar a la IA — reconstruida el 12-ago-2026 (la primera de las 17).
   // Es `dinero` porque responde montos comprobados/IVA/peaje (§12: las
   // cifras se piden DESPUÉS de este gateo).
@@ -163,15 +216,43 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // Administración de la cuenta — solo el dueño
   // Conexiones (F7): la configuración de conectores de la cuenta.
   '/dashboard/conexiones': 'administracion',
-  // Integraciones (chasis de agentes, 14-ago-2026): con qué sistemas del cliente
-  // conecta Likida y CÓMO conecta hoy con cada uno. Es `administracion` —
-  // decidir conectar el ERP o el GPS es del dueño, no del jefe de tráfico.
+  // Integraciones: fusionada en Conexiones (agosto-2026). La ruta sobrevive
+  // como REDIRECT —hay enlaces guardados y correos que apuntan aquí— y por eso
+  // sigue declarada: una ruta sin área es una ruta que `puedeVerRuta` no sabe
+  // gatear, y aunque el destino vuelva a comprobar, dejarla huérfana rompería
+  // la invariante de que toda ruta del panel tiene dueño.
   '/dashboard/integraciones': 'administracion',
   // Llaves de API (A6, 14-ago-2026): una llave es CONTROL, no dato — con
   // ella se lee desde fuera, sin sesión, todo lo que su área permita. Mismo
   // criterio que la RLS de la 0093 (`administra_flota()`): ni el contador ni
   // el encargado la ven, solo el dueño y el superadmin.
+  // Directorio de emergencia (Fase 5): grúas, póliza y contactos del
+  // operador. Es `operacion` — el jefe de tráfico es quien conoce a los
+  // proveedores de carretera y quien captura; el dueño también entra.
+  '/dashboard/emergencias': 'operacion',
+  // Mesa de control (Capa F): las incidencias de asistencia vivas y los
+  // botones de intervención. `operacion` por la misma razón que Emergencias —
+  // quien decide sobre una grúa a las 3 a.m. es el jefe de tráfico o el dueño.
+  '/dashboard/asistencia': 'operacion',
   '/dashboard/llaves-api': 'administracion',
+  // Sesiones MCP (H3, auditoría de dashboards 29-ago-2026): los accesos que
+  // Claude/ChatGPT tienen a los datos de la flota vía OAuth (0260). MISMO
+  // criterio que las llaves de API, porque es la MISMA clase de cosa: una
+  // credencial que lee desde fuera del panel, sin sesión. Aquí se ven y se
+  // cortan los de OTRA persona, y eso es del dueño. Las PROPIAS las corta
+  // cada quien —contador y encargado incluidos— desde /dashboard/mi-perfil,
+  // que es RUTAS_TODO_ROL: por eso son dos rutas y no una con excepciones
+  // (este mapa asigna UN área por ruta a propósito).
+  '/dashboard/sesiones-mcp': 'administracion',
+  // Los hilos de WhatsApp de la flota (auditoría 20, H6). Es `administracion`
+  // y NO `operacion`, aunque el interlocutor sea el chofer: en esa
+  // conversación el bot dicta montos comprobados y diferencias de
+  // liquidación, y el jefe de tráfico no ve el dinero de la flota. Un hilo de
+  // WhatsApp es dinero en prosa, y `dinero_por_area.test.ts` no lo atraparía
+  // porque no hay un `mxn(` en la página: las cifras vienen en los datos.
+  // Tampoco `dinero`: el contador no tiene por qué leer la conversación
+  // personal de un trabajador. Queda con el dueño, que es de quien es el dato.
+  '/dashboard/conversaciones': 'administracion',
   '/dashboard/usuarios': 'administracion',
   '/dashboard/politicas': 'administracion',
   '/dashboard/configuracion': 'administracion',

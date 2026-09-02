@@ -13,6 +13,7 @@ import { NextResponse } from 'next/server';
 import { getTextosProspectos } from '@/lib/admin/prospectos-mapa';
 import { logger } from '@/lib/logger';
 import { sesionSuperadmin } from '../puerta';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,6 +28,15 @@ const TOPE_IDS = 2_000;
 const ES_UUID = /^[0-9a-f-]{36}$/;
 
 export async function POST(req: Request) {
+  // Auditoría 21, BAJO-MEDIO: el chequeo CSRF explícito (SEG-9) solo cubría
+  // /api/admin/palette y /v1/*. Es POST y no GET por tamaño de payload, pero
+  // sigue siendo cookie-autenticada — misma puerta que el resto de la
+  // familia, aunque esta ruta en particular sea de solo lectura.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('mapa_prospectos.textos_origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
+    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+  }
+
   const { error } = await sesionSuperadmin();
   if (error) return error;
   const cuerpo = (await req.json().catch(() => null)) as { ids?: unknown } | null;

@@ -38,10 +38,11 @@ function entrada(sobre: Partial<EntradaDecision> = {}): EntradaDecision {
 // ── EL CATÁLOGO ────────────────────────────────────────────────────────────
 
 describe('el catálogo declara agentes reales, no una lista suelta', () => {
-  it('son los seis agentes y sus llaves no se repiten', () => {
-    expect(AGENTES_NOTIFICABLES).toHaveLength(6);
+  it('son los siete agentes y sus llaves no se repiten', () => {
+    // Siete desde las Fases B-C de Carta Porte (25-ago-2026).
+    expect(AGENTES_NOTIFICABLES).toHaveLength(7);
     const ids = AGENTES_NOTIFICABLES.map((a) => a.id);
-    expect(new Set(ids).size).toBe(6);
+    expect(new Set(ids).size).toBe(7);
   });
 
   it('la ruta de cada agente es una que el panel sabe gatear', () => {
@@ -522,8 +523,14 @@ describe('puedeConfigurarAvisos — la puerta de la escritura multi-tenant', () 
       .toBe('Tu rol no puede configurar los avisos de este agente.');
   });
 
-  it('el jefe de tráfico SÍ configura el de conductores, que es su área', () => {
-    expect(puedeConfigurarAvisos({ rol: 'encargado', tenantId: 'A' }, 'A', conductores)).toBeNull();
+  it('FE-27: el jefe de tráfico VE conductores (es su área) pero NO reconfigura a quién le llegan los avisos — eso es del dueño', () => {
+    // Antes de FE-27 (auditoría 24) esto pasaba con `puedeVerRuta` a secas:
+    // cualquier rol que viera la página del agente podía apagar los avisos
+    // del DUEÑO de la flota. Ver un agente y decidir quién recibe sus
+    // correos son dos cosas distintas — la segunda exige `puedeAdministrar`,
+    // la misma puerta que ya protegía `guardarEstrategiaAgente`.
+    expect(puedeConfigurarAvisos({ rol: 'encargado', tenantId: 'A' }, 'A', conductores))
+      .toBe('Solo el dueño de la flota decide quién recibe los avisos de este agente.');
   });
 
   it('el contador NO configura el de conductores', () => {

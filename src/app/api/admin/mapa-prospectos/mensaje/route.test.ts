@@ -10,6 +10,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const llamadas: Array<{ system: string; messages: Array<{ content: string }> }> = [];
 const escrituras: Array<Record<string, unknown>> = [];
 const estadoSesion = vi.hoisted(() => ({ tenantId: '22222222-2222-2222-2222-222222222222' as string | null }));
+/** BE-29: cuando está puesto, el `update` de la ficha falla. */
+let errorAlGuardar: { message: string } | null = null;
 
 const PROSPECTO = {
   id: '11111111-1111-1111-1111-111111111111',
@@ -28,7 +30,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: () => ({
       select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: PROSPECTO, error: null }) }) }),
-      update: (v: Record<string, unknown>) => { escrituras.push(v); return { eq: () => Promise.resolve({ error: null }) }; },
+      update: (v: Record<string, unknown>) => { escrituras.push(v); return { eq: () => Promise.resolve({ error: errorAlGuardar }) }; },
     }),
   }),
 }));
@@ -56,17 +58,27 @@ vi.mock('../puerta', () => ({
 
 const { POST } = await import('./route');
 
-function postear() {
+function postear(cabeceras?: Record<string, string>) {
   return POST(new Request('https://app.likida.ai/api/admin/mapa-prospectos/mensaje', {
-    method: 'POST', body: JSON.stringify({ id: PROSPECTO.id }),
+    method: 'POST', headers: cabeceras, body: JSON.stringify({ id: PROSPECTO.id }),
   }));
 }
 
 beforeEach(() => {
   llamadas.length = 0;
   escrituras.length = 0;
+  errorAlGuardar = null;
   estadoSesion.tenantId = '22222222-2222-2222-2222-222222222222';
   process.env.NEXT_PUBLIC_APP_URL = 'https://app.likida.ai';
+});
+
+describe('la puerta de origen (auditoría 21, BAJO-MEDIO)', () => {
+  it('desde otro sitio: 403 y el modelo ni se toca', async () => {
+    const r = await postear({ 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' });
+    expect(r.status).toBe(403);
+    expect(llamadas).toHaveLength(0);
+    expect(escrituras).toHaveLength(0);
+  });
 });
 
 describe('POST /api/admin/mapa-prospectos/mensaje — la persona no sale', () => {
@@ -109,5 +121,34 @@ describe('POST /api/admin/mapa-prospectos/mensaje — la persona no sale', () =>
     // Y lo guardado es lo mismo que se devuelve.
     expect(escrituras[0].mensaje_wa).toBe(j.mensajeWaIa);
     expect(escrituras[0].mensaje_correo).toBe(j.correoCuerpoIa);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24, BE-29 — el modelo y el `update` vivían en el MISMO try: un
+// bache al guardar contestaba 502 «El redactor no contestó». Dos mentiras: el
+// redactor sí contestó (y ya se pagó), y los tres textos —que estaban en
+// memoria— se tiraban. El vendedor apretaba otra vez y se pagaba de nuevo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('BE-29 — lo que ya se pagó se entrega, aunque no se pueda guardar', () => {
+  it('REPRO: el `update` falla y los textos VUELVEN igual, con el aviso de que no se guardaron', async () => {
+    errorAlGuardar = { message: 'could not connect' };
+
+    const r = await postear();
+    const j = await r.json() as { mensajeWaIa?: string; correoCuerpoIa?: string; guardado?: boolean; aviso?: string; error?: string };
+
+    expect(r.status).toBe(200);
+    expect(j.error).toBeUndefined();
+    expect(j.mensajeWaIa).toMatch(/^Hola Ramón, vi que buscan/);
+    expect(j.correoCuerpoIa).toMatch(/^Estimado Ramón:/);
+    // Y no se dice «guardado» cuando no se guardó.
+    expect(j.guardado).toBe(false);
+    expect(j.aviso).toContain('NO se pudieron guardar');
+  });
+
+  it('el camino bueno se rotula como guardado', async () => {
+    const j = await (await postear()).json() as { guardado?: boolean; aviso?: string };
+    expect(j.guardado).toBe(true);
+    expect(j.aviso).toBeUndefined();
   });
 });

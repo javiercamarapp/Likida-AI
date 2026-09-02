@@ -47,8 +47,21 @@ vi.mock('@/lib/likida/escalar_viaje', () => ({
   // ESC-3: el cron reparte su reloj entre los dos motores con esta constante.
   PLAZO_ESCALACION_MS: 40_000,
 }));
+// FASE 6: los relojes legales corren dentro de este cron. Aquí se doblan
+// en cero para que las pruebas del reparto del reloj y los interruptores
+// sigan midiendo SOLO a sus dos motores — los relojes tienen su propia
+// suite (relojes_legales.test.ts).
+vi.mock('@/lib/likida/relojes_legales', () => ({
+  avisarRelojesLegales: async () => ({ revisadas: 0, avisadas: 0, fallos: 0 }),
+  avisarVencimientos: async () => ({ candidatos: 0, avisados: 0, fallos: 0 }),
+}));
 vi.mock('@/lib/likida/agentes/cobranza', () => ({
   ejecutarCobranzaGlobal: (...a: unknown[]) => ejecutarCobranzaGlobal(...a),
+}));
+// A19 (0229): el cuarto barrido, doblado en cero por lo mismo que los relojes
+// — aquí se prueba la cadena del interruptor, no el vigilante.
+vi.mock('@/lib/likida/reglas/vigilante', () => ({
+  vigilarReglas: async () => ({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0 }),
 }));
 const alertarOperador = vi.fn(async () => {});
 vi.mock('@/lib/observability/alerta', () => ({

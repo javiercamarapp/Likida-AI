@@ -6,6 +6,7 @@ import { Save, TriangleAlert, CheckCircle2 } from 'lucide-react';
 import {
   validarAjustes, FORMATOS, type AjustesCrudos,
 } from '@/lib/likida/ajustes_operativos';
+import type { EstadoCatalogo } from './inicial';
 // El formato de cifras vive SOLO en formato.ts — hay una prueba que falla si
 // otro archivo formatea moneda mexicana por su cuenta. Una cifra que se lee
 // distinto en dos pantallas se lee como dos cálculos. (Este archivo hizo fallar
@@ -42,13 +43,18 @@ function Boton() {
  * El guardado RE-VALIDA en el servidor. Lo de aquí solo alimenta la vista
  * previa y los avisos tempranos — nunca es la autoridad.
  */
-export function FormaAjustes({ inicial, ejemploKm, guardar }: {
+export function FormaAjustes({ inicial, ejemploKm, guardar, catalogo }: {
   inicial: AjustesCrudos;
   /** Los km de un viaje REAL de la flota, para que la vista previa hable de
    *  su operación y no de un viaje inventado. null = todavía no hay viajes
    *  con km capturados, y entonces se dice, no se rellena con un número. */
   ejemploKm: number | null;
   guardar: AccionGuardar;
+  /** AUDITORÍA 24, ARQ-3: si la flota declaró su catálogo o no. El textarea ya
+   *  NO se prellena con las cuentas de la demo (`600-001`…), así que hay que
+   *  decir por qué está vacío — y avisar si no se pudo leer, porque entonces
+   *  guardar reemplazaría un catálogo que sí existe. */
+  catalogo: EstadoCatalogo;
 }) {
   const [estado, accion] = useActionState(guardar, null);
   const [v, setV] = useState<AjustesCrudos>(inicial);
@@ -168,14 +174,38 @@ export function FormaAjustes({ inicial, ejemploKm, guardar }: {
             Una por línea: <span className="cifra-mono">concepto=cuenta</span>. Puedes pegar el bloque
             entero desde tu Excel.
           </p>
-          {/* Sin estas cuatro, el export de póliza para CONTPAQi y SAP no puede
+          {/* AUDITORÍA 24, ARQ-3: antes esto llegaba prellenado con las cuentas
+              de la demo y se leía como el catálogo de la flota. Ahora solo se
+              enseña lo DECLARADO, y cuando no hay nada se dice — la misma
+              distinción «propia / heredada» que ya hace la pantalla de
+              políticas. */}
+          {catalogo === 'sin_declarar' && (
+            <p className="text-[11px] mt-2 px-3 py-2 rounded-lg"
+              style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
+              Todavía no declaraste tu catálogo. Estas cuentas son las de tu contador y nadie más las
+              conoce, así que Likida no las inventa: mientras esté vacío, el export de póliza no puede
+              escribir el archivo para tu ERP.
+            </p>
+          )}
+          {catalogo === 'ilegible' && (
+            <p className="text-[11px] mt-2 px-3 py-2 rounded-lg"
+              style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+              No se pudo leer tu catálogo de cuentas. Vacío aquí no quiere decir vacío allá: vuelve a
+              cargar la pantalla antes de guardar, o reemplazarías el catálogo que ya tienes.
+            </p>
+          )}
+          {/* Sin estas cinco, el export de póliza para CONTPAQi y SAP no puede
               cuadrar el asiento y devuelve 409 diciendo cuál falta. Se listan
               aquí, con el nombre EXACTO que hay que teclear, porque antes el
-              error mandaba a una pantalla que no existía. */}
+              error mandaba a una pantalla que no existía.
+              `iva_no_acreditable` se agregó en la AUDITORÍA 21 (ALTO): sin
+              ella, un viaje con IVA no acreditado (o con IEPS de diésel, que
+              este motor nunca acredita) descuadraba el periodo entero. */}
           <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
             Para exportar la póliza a tu ERP hacen falta, además de tus conceptos de gasto, estas
-            cuatro cuentas de balance:{' '}
+            cinco cuentas de balance:{' '}
             <span className="cifra-mono">iva_acreditable</span>,{' '}
+            <span className="cifra-mono">iva_no_acreditable</span>,{' '}
             <span className="cifra-mono">anticipo_operador</span>,{' '}
             <span className="cifra-mono">por_cobrar_operador</span> y{' '}
             <span className="cifra-mono">por_pagar_operador</span>.

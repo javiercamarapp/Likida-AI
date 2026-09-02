@@ -81,6 +81,21 @@ async function dentroDelLimite(llave: string): Promise<boolean> {
   return await rateLimit(`${llave}:${ip}`, 10, 5 * 60_000);
 }
 
+/**
+ * La allowlist de PREFIJOS DE RUTA PROPIOS a la que este login honra `next`
+ * — mismo criterio, y las mismas dos rutas, que `destinoExplicito` en
+ * `auth/callback/route.ts`. Antes de esto SOLO admitía `/dashboard`: quien
+ * llegaba a `/mcp/autorizar` sin sesión (el consentimiento OAuth del
+ * servidor MCP) rebotaba aquí con `next=/mcp/autorizar?...`, este gate lo
+ * recortaba a `/dashboard`, y `/auth/callback` — que SÍ sabe volver a
+ * `/mcp/autorizar` — nunca llegaba a intentarlo: el `next` que le tocaba ya
+ * había muerto tres pasos antes. Claude/ChatGPT se quedaban esperando el
+ * `code` que jamás llegaba (auditoría E.28, F-1).
+ */
+function destinoPermitido(n: string): boolean {
+  return n.startsWith('/dashboard') || n.startsWith('/mcp/autorizar');
+}
+
 // El anti-oráculo de la auditoría 10 vivía aquí y enumeraba el caso "la cuenta
 // no existe"; AUDITORÍA 18 (M24) invirtió la regla en `respuesta_otp.ts`: solo
 // un conjunto cerrado de fallos que NO dependen de la cuenta sale como error.
@@ -91,12 +106,12 @@ export default async function Login({
   searchParams: Promise<{ next?: string; enviado?: string; reenviado?: string; error?: string }>;
 }) {
   const sp = await searchParams;
-  const next = sp?.next && sp.next.startsWith('/dashboard') ? sp.next : '/dashboard';
+  const next = sp?.next && destinoPermitido(sp.next) ? sp.next : '/dashboard';
 
   async function entrarConGoogle(formData: FormData) {
     'use server';
     const rawNext = String(formData.get('next') ?? '/dashboard');
-    const dest = rawNext.startsWith('/dashboard') ? rawNext : '/dashboard';
+    const dest = destinoPermitido(rawNext) ? rawNext : '/dashboard';
     if (!(await dentroDelLimite('login:google'))) {
       redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
     }
@@ -112,7 +127,7 @@ export default async function Login({
   async function entrarConEmail(formData: FormData) {
     'use server';
     const rawNext = String(formData.get('next') ?? '/dashboard');
-    const dest = rawNext.startsWith('/dashboard') ? rawNext : '/dashboard';
+    const dest = destinoPermitido(rawNext) ? rawNext : '/dashboard';
     // Al exceder el límite se responde el error GENÉRICO, no "vas muy rápido":
     // la diferencia le diría a quien prueba correos cuándo dejó de contar.
     if (!(await dentroDelLimite('login:email'))) {

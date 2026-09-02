@@ -1,0 +1,77 @@
+id: rfa-2026-2.1
+tipo: rfa
+jerarquia: 3
+instrumento: "Resolución de Facilidades Administrativas para 2026"
+articulo_o_regla: "2.1"
+titulo: "Retención del ISR a operadores, macheteros y maniobristas (7.5%, sobre el SBC)"
+citas_en_codigo: ["RFA 2026 regla 2.1"]
+texto_vigente: >
+  Los contribuyentes personas físicas y morales, dedicados exclusivamente al autotransporte
+  terrestre de carga federal y que tributen en los términos del Título II, Capítulo VII o Título IV,
+  Capítulo II, Sección I de la Ley del ISR, podrán optar por enterar el 7.5 por ciento por concepto
+  de retenciones del ISR, correspondiente a los pagos efectivamente realizados a operadores,
+  macheteros y maniobristas, en lugar de aplicar las disposiciones correspondientes al pago de
+  salarios.
+  ---
+  Para calcular estas retenciones, se tomará como referencia el salario base de cotización
+  utilizado para el cálculo de las aportaciones de dichos trabajadores al IMSS, conforme a la
+  normatividad aplicable, en cuyo caso, deberán elaborar y entregar, a más tardar el 15 de
+  febrero de 2027, una relación individualizada de dicho personal en la que se indique las
+  cantidades que les son pagadas en el periodo de que se trate, en los términos en que se
+  elabora para efectos de las aportaciones que realicen al IMSS, así como del impuesto retenido,
+  de conformidad con la ficha de trámite 65/ISR "Aviso que presentan los contribuyentes
+  dedicados a la actividad de autotransporte terrestre de carga federal que ejercen la opción de
+  enterar el 7.5 por ciento por concepto de retenciones de ISR", contenida en el Anexo 2 de la
+  RMF, además de emitir el CFDI y su complemento por concepto de nómina correspondiente.
+  ---
+  Tratándose de pagos realizados a trabajadores distintos a los señalados en esta regla, se
+  aplicará lo establecido en la Ley del ISR.
+  ---
+  Esta regla será aplicable siempre que los contribuyentes a que se refiere el primer párrafo de la
+  misma no presten preponderantemente sus servicios a otra persona moral residente en el país
+  o en el extranjero, que se considere parte relacionada en los términos de la Ley del ISR.
+fecha_publicacion: 2026-02-17
+fecha_vigencia_desde: 2026-02-18
+fecha_vigencia_hasta: 2026-12-31
+fuente_url: "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rfa/rfa/RFA2026_17022026.pdf"
+fuente_tipo: sat_oficial
+estado_verificacion: verificado_fuente_primaria
+nota_verificacion: >
+  Descargado el 30-ago-2026 el PDF que el propio minisitio de Normatividad del SAT aloja de la
+  RFA 2026 (DOF 17-feb-2026), convertido con pdftotext y localizado el texto íntegro de la regla
+  bajo el encabezado "Título 2. Sector de Autotransporte Terrestre de Carga Federal — Retención
+  del ISR a operadores, macheteros y maniobristas". Es la regla INMEDIATA ANTERIOR a la 2.2
+  (gasto ciego del 8%, ya fichada) dentro del mismo Título 2. Buscada además cualquier
+  modificación posterior: la 1ª Resolución de Modificaciones a la RMF 2026 (DOF 09-jul-2026) solo
+  MENCIONA la sigla "RFA" en su glosario de abreviaturas (línea 39 de su texto) y no toca ninguna
+  regla del Título 2 de la propia RFA. No se localizó ninguna "Resolución de Modificaciones a la
+  RFA 2026" publicada al 30-ago-2026.
+cambio_de_numero: false
+condiciones_de_aplicacion:
+  - "Dedicados EXCLUSIVAMENTE al autotransporte terrestre de carga FEDERAL (no aplica a pasaje ni turístico — a diferencia de la RFA 2.2 y 2.9, esta regla es más angosta)"
+  - "Tributar en Título II Cap. VII (coordinados) o Título IV Cap. II Secc. I (PF con actividad empresarial) — mismas dos claves que abren 2.2 y 2.9: 624 y 612"
+  - "Es una OPCIÓN, no una obligación: sustituye el régimen de sueldos y salarios, no lo complementa"
+  - "Solo cubre pagos a OPERADORES, MACHETEROS y MANIOBRISTAS — pagos a otros trabajadores siguen la LISR general (Título IV Cap. I, sueldos y salarios)"
+  - "No prestar preponderantemente el servicio a una parte relacionada (misma condición que LISR 72, segundo párrafo)"
+lo_que_no_dice_la_regla: >
+  No es una exención ni una tasa reducida del ISR del trabajador: es una BASE distinta (el SBC del
+  IMSS en vez del sueldo real) sobre la que se retiene un 7.5% fijo, en sustitución del cálculo con
+  tarifa progresiva de sueldos y salarios. Requiere de todos modos emitir el CFDI de nómina y su
+  complemento, y entregar antes del 15-feb-2027 la relación individualizada del personal — no es
+  "sin papeleo" como sí lo es la 2.2.
+relacion_con_otras_reglas: >
+  RFA 2.3 (ficha rfa-2026-2.3) acota la responsabilidad solidaria del coordinado cuando aplica esta
+  regla y algún integrante opta por tributar individual: solo responde por lo que conste en la
+  liquidación de ESE integrante. RFA 2.5 (ficha rfa-2026-2.5) excluye de esta regla a las centrales o
+  paraderos de autotransporte que tributen en Título II Cap. VII sin ser integrantes de un
+  coordinado.
+pendiente_en_producto: >
+  Likida NO calcula ni retiene nómina de operadores hoy (el dominio del producto es la
+  liquidación de viajes contra comprobantes y anticipo, no la relación laboral) — por eso
+  `usado_en_codigo` está vacío y no hay drift que reportar todavía. Esta ficha existe porque el
+  corpus del agente contador (`normas/consulta.ts`, tema `nomina_imss_y_descuentos`) puede
+  recibir la pregunta "¿cómo se retiene el ISR a mis operadores?" y hoy respondería sin fundamento
+  fiscal — con esta ficha puede citar la regla 2.1 en vez de guardar silencio o improvisar.
+verificado_por: "auditoría fiscal semanal, área 5 (regímenes del autotransporte), 30-ago-2026"
+verificado_el: 2026-08-30
+usado_en_codigo: []

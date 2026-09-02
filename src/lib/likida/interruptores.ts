@@ -38,6 +38,73 @@ export const INTERRUPTORES = [
   'agente:liquidacion', 'agente:facturas', 'agente:cobranza',
   'agente:conductores', 'agente:peajes', 'agente:proveedores',
   'agente:ventas', 'agente:redactor',
+  // Los 4 financieros del back office (0215) — autónomos del runner: sin
+  // kill switch declarado el runner ni los despacha (candado 1).
+  'agente:analista_metricas', 'agente:control_costos',
+  'agente:tesoreria', 'agente:cierre_mensual',
+  // Los cuatro de dirección (0216) — mismo candado.
+  'agente:kpi_whatsapp', 'agente:desempeno_startup',
+  'agente:orquestador', 'agente:orquestador_semanal',
+  // La máquina de prospección (0217): el investigador (id histórico
+  // `enriquecedor`), el SDR de seguimientos y el enviador de campaña — el
+  // único de los tres que toca un canal real, y por eso el primero que se
+  // apaga si algo huele mal.
+  'agente:enriquecedor', 'agente:sdr', 'agente:enviador',
+  // El back office restante (0219): el vigilante que audita a los otros, el
+  // que caza el drift del catálogo, los relojes legales de Likida-empresa y
+  // el registro de talento. Mismo candado 1 — sin palanca no se despachan.
+  'agente:vigilante_calidad', 'agente:documentacion',
+  'agente:legal_compliance', 'agente:talento',
+  // Éxito del cliente (0218) — los seis que vigilan a la flota que YA firmó.
+  // Ninguno escribe al cliente: todos dejan el parte o el borrador en la
+  // bandeja. Aun así llevan palanca, porque el candado 1 del runner no
+  // distingue entre "manda correos" y "solo propone": un autónomo que no se
+  // puede apagar no corre, punto.
+  'agente:onboarding_cliente', 'agente:exito_cliente', 'agente:retencion',
+  'agente:cobranza_saas', 'agente:soporte', 'agente:atencion_faq',
+  // CRECIMIENTO (0230) — los diez que fabrican material de marca. NINGUNO
+  // publica: los diez dejan la pieza en la bandeja y publicar es el tap de
+  // Javier. Aun así llevan palanca por el candado 1 del runner, y por una
+  // razón propia: son los únicos agentes cuyo producto lleva la marca hacia
+  // AFUERA. Si una pieza sale mal, apagar al que la fabrica tiene que ser un
+  // click, no un deploy.
+  'agente:contenido_fiscal', 'agente:lead_magnet', 'agente:seo_distribucion',
+  'agente:guiones', 'agente:noticias_mercado', 'agente:promos_diarias',
+  'agente:visuales', 'agente:video_demo', 'agente:video_marketing',
+  'agente:alianzas',
+  // La descarga masiva del SAT (0231). Palanca propia y no solo la global:
+  // este autónomo habla con el buzón tributario y ESCRIBE comprobantes, así
+  // que apagarlo no puede exigir apagar la facturación entera.
+  'agente:descarga_sat',
+  // INGENIERÍA (0234) — los ocho que cuidan la máquina por dentro. Ninguno
+  // escribe fuera de la bandeja, y aun así llevan palanca: son los únicos que
+  // recorren el CATÁLOGO ENTERO de PostgreSQL en cada pasada (tablas,
+  // policies, funciones, tamaños, pg_stat_statements). El día que una de esas
+  // consultas pese de más, apagar al que la lanza tiene que ser un click.
+  'agente:migraciones', 'agente:seguridad', 'agente:rendimiento',
+  'agente:pruebas', 'agente:auditor_codigo', 'agente:releases',
+  'agente:producto', 'agente:datos_instrumentacion',
+  // LOS NUEVE QUE CIERRAN LA COMPAÑÍA AGENTE (0235). Tres de dirección y seis
+  // de leads: con ellos las 60 filas de `agente_definicion` quedan vivas y no
+  // queda una sola promesa sin motor. Ninguno de los nueve escribe a nadie —
+  // los nueve dejan su pieza en la bandeja—, y aun así llevan palanca por el
+  // candado 1 del runner y por una razón propia de cada mitad: los de leads
+  // preparan lo que después se le manda a una empresa real, y los de dirección
+  // producen el parte que Javier lee para decidir. Si uno empieza a fabricar
+  // ruido, apagarlo tiene que ser un click y no un deploy.
+  'agente:automejora', 'agente:especialistas_incidente', 'agente:fundraising',
+  'agente:scorer', 'agente:dossier', 'agente:vigia',
+  'agente:demo_prep', 'agente:propuestas', 'agente:cazador',
+  // LAS DOS QUE FALTABAN CON CALL SITE REAL (0250, tableros al día). El
+  // inventario del 28-ago midió 4 agentes vivos sin palanca; solo estos dos
+  // tienen motor en src/ que la pregunte (la lección de la Fase 1: palanca
+  // sin call site es decoración). Carta Porte le escribe al jefe por WhatsApp
+  // al despachar (carta_porte_wa.ts la pregunta en las DOS entradas); el
+  // copiloto gasta modelo y ejecuta acciones de admin (/api/admin/copiloto la
+  // pregunta antes de tocar el modelo). `experto_fiscal` (rutinas locales,
+  // fuera del deploy) y `guardia_alertas` (reglas dentro del copiloto) NO
+  // llevan palanca, con esa razón.
+  'agente:carta_porte', 'agente:copiloto',
 ] as const;
 
 export type NombreInterruptor = (typeof INTERRUPTORES)[number];
@@ -87,9 +154,37 @@ export type LecturaInterruptor = 'encendido' | 'apagado' | 'ilegible';
 const TTL_CACHE_INTERRUPTOR_MS = 5_000;
 const cache = new Map<NombreInterruptor, { valor: LecturaInterruptor; hasta: number }>();
 
-/** Tira la caché. La llaman `apagar`/`encender` y las pruebas. */
+// ── LA RACHA ANTES DEL CORREO (incidente 28-ago-2026) ──────────────────────
+//
+// Esa noche UN TimeoutError aislado leyendo `agente:facturas` mandó un correo
+// «Urgente» — y llegó junto a otros cuatro que resultaron falsos. El sistema
+// se portó bien (falló cerrado, el runner se saltó al agente y reintentó a la
+// vuelta siguiente), así que el correo pedía mirar algo que ya se había
+// resuelto solo. Un bache aislado no es un incidente; una RACHA sí: la base
+// caída, la llave vencida, el socket que nadie contesta.
+//
+// Desde entonces el correo espera la MISMA vara que el corte por reloj del
+// runner (`cortesSeguidos >= 3`, RES-6): tres lecturas ilegibles CONSECUTIVAS
+// —de cualquier interruptor: una pasada del runner lee decenas, y una base
+// caída las tumba en fila— y a partir de ahí grita en cada fallo, con el piso
+// de una hora de `alertarOperador` limitando los envíos reales. Lo que NO
+// cambia: cada lectura ilegible sigue gritando en el log con su código (Sentry
+// notifica por causa nueva) y sigue siendo fail-closed. El contador vive por
+// instancia (mejor esfuerzo, mismo trato que RES-3/RES-16): la alerta puede
+// subcontar entre instancias frías, jamás inventar. Es un `let` propio y no
+// el `contadorDeFallos` de alerta.ts a propósito: este módulo se carga en el
+// camino caliente del webhook y media docena de suites mockean
+// `@/lib/observability/alerta` con solo `alertarOperador` — una dependencia
+// nueva en el init del módulo las tumbaría a todas.
+export const LECTURAS_ILEGIBLES_PARA_ALERTA = 3;
+let lecturasIlegiblesSeguidas = 0;
+
+/** Tira la caché Y la racha de lecturas ilegibles. La llaman `apagar` y
+ *  `encender` —que acaban de ESCRIBIR con éxito en la misma base: si la
+ *  escritura entró, la base contesta y la racha ya no es racha— y las pruebas. */
 export function olvidarInterruptores(): void {
   cache.clear();
+  lecturasIlegiblesSeguidas = 0;
 }
 
 /**
@@ -121,6 +216,8 @@ export async function leerInterruptor(nombre: NombreInterruptor): Promise<Lectur
       return 'ilegible';
     }
     const lectura: LecturaInterruptor = data?.apagado === true ? 'apagado' : 'encendido';
+    // Una lectura fresca que contesta corta la racha: el bache terminó.
+    lecturasIlegiblesSeguidas = 0;
     cache.set(nombre, { valor: lectura, hasta: Date.now() + TTL_CACHE_INTERRUPTOR_MS });
     return lectura;
   } catch (e) {
@@ -131,11 +228,20 @@ export async function leerInterruptor(nombre: NombreInterruptor): Promise<Lectur
 
 /** Se GRITA: el salto por fail-closed no puede pasar desapercibido — un cron
  *  saltándose corridas por una base con hipo se parece demasiado a un cron
- *  sano sin trabajo. Log con código (Sentry notifica por causa nueva) Y correo
- *  al operador (`alertarOperador` nunca lanza y ya trae su piso de una hora). */
+ *  sano sin trabajo. SIEMPRE al log con código (Sentry notifica por causa
+ *  nueva). El CORREO, en cambio, espera la racha (28-ago-2026): un timeout
+ *  aislado se resuelve solo con el reintento del cron y no amerita despertar
+ *  a nadie; tres seguidos ya son la base caída o la llave vencida, y entonces
+ *  sí sale (`alertarOperador` nunca lanza y ya trae su piso de una hora). */
 async function gritarIlegible(nombre: NombreInterruptor, err: string, codigo: string): Promise<void> {
-  logger.error('interruptores.lectura_fallo', { interruptor: nombre, err, codigo });
-  await alertarOperador('interruptores.lectura_fallo', { interruptor: nombre, error: err, codigo });
+  lecturasIlegiblesSeguidas += 1;
+  const lecturasSeguidas = lecturasIlegiblesSeguidas;
+  logger.error('interruptores.lectura_fallo', { interruptor: nombre, err, codigo, lecturasSeguidas });
+  if (lecturasSeguidas >= LECTURAS_ILEGIBLES_PARA_ALERTA) {
+    await alertarOperador('interruptores.lectura_fallo', {
+      interruptor: nombre, error: err, codigo, lecturasSeguidas,
+    });
+  }
 }
 
 /**
@@ -204,8 +310,8 @@ export async function encender(nombre: string, userId: string): Promise<void> {
  * esta lista es de PANEL, y pintar "todo encendido" sobre una base caída
  * afirmaría que nada está apagado sin haber podido mirar.
  *
- * Sin paginar a propósito: la tabla tiene a lo sumo 8 filas (el CHECK del
- * dominio lo garantiza).
+ * Sin paginar a propósito: la tabla tiene a lo sumo las filas del catálogo
+ * (el CHECK del dominio lo garantiza).
  */
 export async function listarInterruptores(): Promise<EstadoInterruptor[]> {
   const { data, error } = await acotada(supabaseAdmin()

@@ -73,6 +73,10 @@ const CSP = [
   scriptSrc,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https://*.supabase.co",
+  // SEG-5 (auditoría 24): el video de marketing (`admin/marketing`) y cualquier
+  // nota de voz servida desde Storage necesitan `media-src`; sin la directiva
+  // caían a `default-src 'self'` y un origen de Storage se bloqueaba en silencio.
+  "media-src 'self' https://*.supabase.co",
   "font-src 'self' data:",
   "connect-src 'self'",
   "frame-src 'none'",
@@ -82,6 +86,9 @@ const CSP = [
   "form-action 'self'",
 ].join('; ');
 
+/** Un año, subdominios incluidos, apta para precarga. Exportada para la prueba y para `next.config.ts`. */
+export const HSTS = 'max-age=31536000; includeSubDomains; preload';
+
 function withSecurityHeaders(res: NextResponse): NextResponse {
   res.headers.set('X-Content-Type-Options', 'nosniff');
   res.headers.set('X-Frame-Options', 'DENY');
@@ -89,7 +96,11 @@ function withSecurityHeaders(res: NextResponse): NextResponse {
   res.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   res.headers.set('Content-Security-Policy', CSP);
   if (process.env.NODE_ENV === 'production') {
-    res.headers.set('Strict-Transport-Security', 'max-age=31536000');
+    // SEG-5 (auditoría 24): `includeSubDomains` cierra el primer `http://` a
+    // cualquier subdominio bajo el de la app; `preload` declara la intención
+    // de entrar a la lista de precarga de los navegadores (un año + subdominios
+    // son sus requisitos). Mismo valor en `next.config.ts` para `/api/*`.
+    res.headers.set('Strict-Transport-Security', HSTS);
   }
   return res;
 }

@@ -1,17 +1,22 @@
-import { Bot, Plus } from 'lucide-react';
+import Link from 'next/link';
+import { Bot, Plus, Inbox } from 'lucide-react';
 import {
   listarAgentes,
   DEPARTAMENTOS, DISPARADORES, ESTADOS_AGENTE, type AgenteDefinido,
 } from '@/lib/likida/agentes/definiciones';
 import { listarInterruptores } from '@/lib/likida/interruptores';
+import { contarPendientesPorAgente } from '@/lib/likida/agentes/insumos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { usd } from '@/lib/utils';
 import { fechaHoraMx } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { EstadoVacio, StatusPill, type Estado } from '../ui/kit';
 import { FormaConAviso, Campo, type ResultadoAccion } from '../ui/forma';
+import { PalancaAgente } from './palanca';
 
 export type AccionAlta = (previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
+/** Apagar/encender la palanca de un agente, desde su propia fila. */
+export type AccionPalanca = (previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
 
 export const dynamic = 'force-dynamic';
 
@@ -31,18 +36,30 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 }
 
 /** Éxito de 30 días POR agente: ok / total de agente_corrida. LANZA en
- *  error — el llamador pinta "no se pudo leer" en su celda. */
+ *  error — el llamador pinta "no se pudo leer" en su celda.
+ *
+ * AUDITORÍA 24, ADM-9: era `.select(...).limit(5000)` sin `order` — el
+ * mismo hueco que `consumo.ts` ya cerró (FE-8): PostgREST recorta a
+ * `max_rows` en silencio y sin orden esas filas son un muestreo arbitrario.
+ * `consumo_agentes()` (mig. 0162) agrupa en la base y devuelve un arreglo
+ * del tamaño del catálogo de agentes, no del historial. */
 async function exitoTreintaDias(): Promise<Map<string, { ok: number; total: number }>> {
   const desde = new Date(ahoraMs() - 30 * 86_400_000).toISOString();
-  const { data, error } = await supabaseAdmin()
-    .from('agente_corrida').select('agente, estado').gte('inicio', desde).limit(5000);
+  const { data, error } = await supabaseAdmin().rpc('consumo_agentes', {
+    p_desde: desde,
+    p_inicio_hoy: new Date(ahoraMs()).toISOString(),
+  });
   if (error) throw new Error(`exitoTreintaDias: ${error.message}`);
+  if (!Array.isArray(data)) {
+    throw new Error('exitoTreintaDias: consumo_agentes devolvió otra forma (¿migración 0162 sin aplicar?).');
+  }
   const acc = new Map<string, { ok: number; total: number }>();
-  for (const f of data ?? []) {
-    const a = acc.get(f.agente) ?? { ok: 0, total: 0 };
-    a.total += 1;
-    if (f.estado === 'ok') a.ok += 1;
-    acc.set(f.agente, a);
+  for (const f of data as Array<Record<string, unknown>>) {
+    const agente = typeof f.agente === 'string' ? f.agente : '';
+    if (!agente) continue;
+    const total = Number(f.n ?? 0);
+    const fallos = Number(f.fallos ?? 0);
+    acc.set(agente, { ok: total - fallos, total });
   }
   return acc;
 }
@@ -69,13 +86,14 @@ const PILL_CORRIDA: Record<string, Estado> = { ok: 'ok', parcial: 'warn', fallo:
 /** El contenido REAL del panel, exportado aparte (patrón inicio-contenido):
  *  la puerta vive en page.tsx y el preview headless monta ESTO — el
  *  componente real, nunca una copia. La server action llega por props. */
-export async function PanelAgentesContenido({ accionAlta }: { accionAlta: AccionAlta }) {
+export async function PanelAgentesContenido({ accionAlta, accionPalanca }: { accionAlta: AccionAlta; accionPalanca: AccionPalanca }) {
 
-  const [agentes, interruptores, exito, consumo] = await Promise.all([
+  const [agentes, interruptores, exito, consumo, insumosPendientes] = await Promise.all([
     listarAgentes(),
     safe(() => listarInterruptores()),
     safe(() => exitoTreintaDias()),
     safe(() => getConsumoPorAgente(ahoraMs())),
+    safe(() => contarPendientesPorAgente()),
   ]);
   const costoDe = new Map<string, number>(
     (consumo?.agentes ?? []).map((a) => [a.agente, a.gastado30dUsd]),
@@ -107,7 +125,16 @@ export async function PanelAgentesContenido({ accionAlta }: { accionAlta: Accion
         </td>
         <td className="px-4 py-2.5" style={{ color: 'var(--muted)' }}>{rotuloDepartamento.get(a.departamento) ?? a.departamento}</td>
         <td className="px-4 py-2.5">
-          <StatusPill estado={PILL_ESTADO[a.estado] ?? 'neutral'}>{rotuloEstado.get(a.estado) ?? a.estado}</StatusPill>
+          <span className="inline-flex items-center gap-1.5 flex-wrap">
+            <StatusPill estado={PILL_ESTADO[a.estado] ?? 'neutral'}>{rotuloEstado.get(a.estado) ?? a.estado}</StatusPill>
+            {a.experimental && (
+              <StatusPill estado="warn">
+                <span title="El catálogo lo declara vivo, pero el runner no lo despacha en automático hasta que se gradúe (agente_definicion.experimental) — AGB, auditoría 24.">
+                  Experimental
+                </span>
+              </StatusPill>
+            )}
+          </span>
         </td>
         <td className="px-4 py-2.5" style={{ color: 'var(--muted)' }}>{a.disparador}</td>
         <td className="px-4 py-2.5 text-[12.5px]">
@@ -129,10 +156,8 @@ export async function PanelAgentesContenido({ accionAlta }: { accionAlta: Accion
             <span style={{ color: interruptores === null ? 'var(--bad)' : 'var(--faint)' }}>
               {interruptores === null ? 'No se pudo leer' : 'Sin palanca propia'}
             </span>
-          ) : interruptor.apagado ? (
-            <StatusPill estado="bad">APAGADO</StatusPill>
           ) : (
-            <StatusPill estado="ok">Encendido</StatusPill>
+            <PalancaAgente id={`agente:${a.id}`} apagado={interruptor.apagado} accion={accionPalanca} />
           )}
         </td>
         <td className="px-4 py-2.5 text-[12px]">
@@ -161,6 +186,17 @@ export async function PanelAgentesContenido({ accionAlta }: { accionAlta: Accion
           {a.presupuestoDiaUsd === null
             ? <span style={{ color: 'var(--faint)' }}>Sin tope declarado</span>
             : `${usd(a.presupuestoDiaUsd)}/día`}
+        </td>
+        <td className="px-4 py-2.5 text-[12.5px]">
+          <Link href={`/admin/agentes/${a.id}/insumos`}
+            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 hairline hover:opacity-70 transition-opacity">
+            <Inbox width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+            {insumosPendientes === null
+              ? <span style={{ color: 'var(--bad)' }}>No se pudo leer</span>
+              : (insumosPendientes.get(a.id) ?? 0) > 0
+                ? <span className="font-medium">{insumosPendientes.get(a.id)} pendiente{(insumosPendientes.get(a.id) ?? 0) === 1 ? '' : 's'}</span>
+                : <span style={{ color: 'var(--faint)' }}>Bandeja</span>}
+          </Link>
         </td>
       </tr>
     );
@@ -201,6 +237,7 @@ export async function PanelAgentesContenido({ accionAlta }: { accionAlta: Accion
                       <th className="px-4 py-2 font-medium text-right">Éxito 30d</th>
                       <th className="px-4 py-2 font-medium text-right">Costo 30d</th>
                       <th className="px-4 py-2 font-medium text-right">Presupuesto</th>
+                      <th className="px-4 py-2 font-medium">Insumos</th>
                     </tr>
                   </thead>
                   <tbody>{agentes.map(filaAgente)}</tbody>
@@ -242,7 +279,8 @@ export async function PanelAgentesContenido({ accionAlta }: { accionAlta: Accion
           <EstadoVacio>
             El runner de nivel 2 (ejecutar agentes declarativos dentro del producto, con sandbox de tools
             y presupuesto medido) es fase posterior a propósito — copiloto-del-fundador.md §4 dice por qué.
-            Encender/pausar un agente vivo sigue en Observabilidad y el ⌘K.
+            La palanca de cada agente vivo ya se mueve desde su propia fila, aquí arriba; Observabilidad
+            y el ⌘K siguen teniendo las 58 juntas, incluida la global.
           </EstadoVacio>
         </div>
       </div>

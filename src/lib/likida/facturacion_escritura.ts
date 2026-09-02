@@ -41,8 +41,8 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora, type EntidadBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
-import { mxn } from '@/lib/formato';
-import { DatoInvalido } from './errores';
+import { mxn, TOLERANCIA_ABONO_MXN } from '@/lib/formato';
+import { DatoInvalido, AbonoYaRegistrado } from './errores';
 import { esUuidValido } from './intake/cfdi';
 import { acotada } from './presupuesto';
 
@@ -255,8 +255,11 @@ export function evaluarAbono(
   if (f.estatus === 'cancelada') return rechazar('cancelada');
   if (f.estatus === 'borrador') return rechazar('borrador');
   if (f.estatus === 'pagada') return rechazar('pagada');
-  if (monto > saldo + 0.005) return rechazar('sobrepago');
-  return { rechazo: null, saldo, quedaSaldada: monto >= saldo - 0.005 };
+  // La tolerancia se IMPORTA (`c7-6`): este 0.005 y el de `registrar_pago_tx`
+  // tienen que ser el mismo medio centavo, y el portal de pago tenía una
+  // tercera copia con otro valor. Ver `TOLERANCIA_ABONO_MXN` en `formato.ts`.
+  if (monto > saldo + TOLERANCIA_ABONO_MXN) return rechazar('sobrepago');
+  return { rechazo: null, saldo, quedaSaldada: monto >= saldo - TOLERANCIA_ABONO_MXN };
 }
 
 // ── Escrituras ─────────────────────────────────────────────────────────────
@@ -499,6 +502,10 @@ export async function marcarEmitida(
 // con sus palabras; cualquier otra cosa es un error y se grita.
 const FACTURA_FUERA_DE_FLOTA = 'CU010';
 const ABONO_RECHAZADO = 'CU011';
+/** El choque contra un índice único, que en este insert solo puede ser uno:
+ *  `pago_recibido_propuesta_unica` (0237). La clase que lo cuenta hacia arriba
+ *  vive en `errores.ts` — ver ahí el porqué. */
+const CHOQUE_UNICO = '23505';
 
 /** El motivo y el saldo que manda la base, convertidos en el mensaje de siempre. */
 function traducirErrorDelPago(error: { code?: string; message?: string }, monto: number): Error {
@@ -522,6 +529,25 @@ function traducirErrorDelPago(error: { code?: string; message?: string }, monto:
   return new Error(`registrarPago: ${error.message}`);
 }
 
+/** El rechazo de `cancelar_factura_tx` (0284), en las palabras del contralor.
+ *  `CU016` es el código del RPC de cancelación; `CU010`, factura ajena. */
+const CANCELACION_RECHAZADA = 'CU016';
+function traducirErrorDeCancelacion(error: { code?: string; message?: string }): Error {
+  if (error.code === FACTURA_FUERA_DE_FLOTA) {
+    return new DatoInvalido('Esa factura no está en tu flota. Recarga la pantalla.');
+  }
+  if (error.code === CANCELACION_RECHAZADA) {
+    const motivo = /motivo=([a-z_]+)/.exec(error.message ?? '')?.[1];
+    if (motivo === 'con_pagos') {
+      return new DatoInvalido('Esa factura tiene pagos registrados. Primero aclara ese dinero (con el cliente y con el SAT); cancelarla de un clic dejaría cobros contra nada.');
+    }
+    return new DatoInvalido('Esa factura no se pudo cancelar: puede que ya esté cancelada o pagada. Recarga la pantalla.');
+  }
+  // Base caída, RPC ausente, tope de `acotada`: un error de verdad, no un
+  // rechazo de negocio — no se le dice al contralor que su factura tiene la culpa.
+  return new Error(`cancelarFactura: ${error.message}`);
+}
+
 /**
  * Registra un abono contra una factura EMITIDA.
  *
@@ -530,12 +556,29 @@ function traducirErrorDelPago(error: { code?: string; message?: string }, monto:
  * Un pago que rebasa el saldo también: los pagos parciales son la norma, los
  * sobrepagos son casi siempre un dedazo, y el que no lo es se captura cuando
  * exista la nota de crédito que lo explique.
+ *
+ * DEVUELVE EL ID DEL PAGO. Antes devolvía `void` y el id se calculaba aquí
+ * dentro solo para la bitácora. Lo necesita quien concilia una propuesta del
+ * portal de pago (0228): esa fila tiene que quedar APUNTANDO al pago real, y
+ * sin el id la única alternativa era volver a consultar `pago_recibido`
+ * adivinando cuál de los abonos de la factura acababa de nacer — una carrera
+ * en el peor lugar posible. Los llamadores que no lo usan no cambian.
  */
 export async function registrarPago(
   tenantId: string,
   p: PagoValido,
   actor?: { id?: string; email?: string },
-): Promise<void> {
+  /**
+   * La propuesta del portal de pago que originó este abono, cuando lo hay.
+   *
+   * Es la LLAVE DE IDEMPOTENCIA: viaja hasta `pago_recibido.propuesta_id`
+   * DENTRO de la transacción del RPC, donde el índice único parcial de la 0237
+   * la vigila. Si otra sesión ya concilió esta propuesta, la base devuelve
+   * 23505 y aquí sale como `AbonoYaRegistrado` — nunca como un segundo abono.
+   * El pago tecleado a mano no la pasa y no compite con nada.
+   */
+  propuestaId?: string,
+): Promise<string> {
   // ── DAT-05 · EL SALDO SE LEE CON LA FACTURA TRABADA, NO ANTES ────────────
   //
   // Esto eran cuatro viajes a la base: leer la factura, sumar los pagos,
@@ -562,22 +605,69 @@ export async function registrarPago(
     p_monto: p.monto,
     p_metodo: p.metodo,
     p_referencia: p.referencia,
+    p_propuesta: propuestaId ?? null,
   }), 'registrarPago');
 
-  if (error) throw traducirErrorDelPago(error, p.monto);
+  if (error) {
+    // El 23505 solo puede venir de `pago_recibido_propuesta_unica` (0237): es
+    // el único índice único que este insert puede tocar. No se disfraza de
+    // error genérico ni se reintenta — quien llamó tiene que decidir, y para
+    // eso necesita saber que el abono ya está.
+    if (error.code === CHOQUE_UNICO && propuestaId) throw new AbonoYaRegistrado(propuestaId);
+    throw traducirErrorDelPago(error, p.monto);
+  }
 
   const pagoId = (data as { pago_id?: unknown } | null)?.pago_id;
   if (!pagoId) throw new Error('registrarPago: el RPC no devolvió el id del pago');
 
   await anotar(tenantId, 'pago.registrado', 'pago_recibido', String(pagoId), {
     facturaId: p.facturaId, fecha: p.fecha, monto: p.monto, metodo: p.metodo, referencia: p.referencia,
+    ...(propuestaId ? { propuestaId } : {}),
   }, actor);
+
+  return String(pagoId);
 }
 
 /**
  * Cancela una factura SIN pagos. Con pagos encima no se cancela desde aquí:
  * ese dinero ya contado tiene que aclararse primero (¿se devuelve? ¿se aplica
  * a otra factura?), y esa decisión no es de un botón.
+ *
+ * ── AUDITORÍA 24, BE-3: EL CONTEO Y LA CANCELACIÓN VAN EN LA MISMA TRANSACCIÓN
+ *
+ * Esto eran dos viajes: `count` de `pago_recibido` y después el UPDATE. Entre
+ * los dos cabía un abono —el contador conciliando $10,000 mientras el
+ * contralor pulsaba Cancelar—: `registrar_pago_tx` trababa la factura,
+ * insertaba y la dejaba `emitida` (no saldaba); el UPDATE de aquí la
+ * encontraba `emitida` y cancelaba. $10,000 contra un CFDI que ante el SAT ya
+ * no existe. Es el mismo select-luego-update que `registrarPago` abandonó por
+ * un RPC, y aquí se hace lo mismo: `cancelar_factura_tx` (0284) toma la
+ * factura `for update`, cuenta con la fila trabada y cancela; un abono
+ * concurrente espera y lo rechaza el trigger de la 0284 (la factura ya está
+ * cancelada), o entra antes y entonces el conteo lo ve. La REDACCIÓN sigue
+ * siendo de aquí: la base manda el motivo, este archivo escribe.
+ *
+ * ── Y APAGA SU ENLACE PÚBLICO DE PAGO (`c7-7`) ──────────────────────────
+ *
+ * Cancelar dejaba viva la liga de `/pago/<token>`: el cliente abría el mismo
+ * link y seguía viendo «Saldo pendiente $34,800.00» con el formulario activo,
+ * porque la vista `factura_saldo` calcula `total − pagos` sin mirar el estatus.
+ * Cobrarle a alguien por un CFDI cancelado es lo peor que este producto puede
+ * hacer.
+ *
+ * La revocación va DESPUÉS del cambio de estatus y no antes: si el RPC
+ * fallara, habríamos matado el enlace de una factura que sigue viva. Y si la
+ * revocación falla, se LANZA —no se traga—, porque el contralor tiene que
+ * enterarse de que le quedó un enlace suelto. Aun así, el enlace suelto ya no
+ * cobra: `vistaDelPortal` degrada a `no_cobrable` mirando el estatus real. Dos
+ * capas, y la de la lectura pública es la que no depende de que esta escritura
+ * haya salido bien.
+ *
+ * El UPDATE de las ligas se hace aquí con `supabaseAdmin` en vez de llamar a
+ * `revocarLigaPago`: ese verbo vive en `portal_pago_escritura.ts`, que a su vez
+ * importa `registrarPago` DE ESTE ARCHIVO. Importarlo de vuelta sería un ciclo
+ * entre dos módulos de dinero, y no vale un `import` circular ahorrarse seis
+ * líneas.
  */
 export async function cancelarFactura(
   tenantId: string,
@@ -586,21 +676,31 @@ export async function cancelarFactura(
 ): Promise<void> {
   if (!esUuidValido(facturaId)) throw new DatoInvalido('No se reconoce esa factura. Recarga la pantalla.');
 
-  const { count, error: errP } = await supabaseAdmin().from('pago_recibido')
-    .select('id', { count: 'exact', head: true })
-    .eq('factura_id', facturaId).eq('tenant_id', tenantId);
-  if (errP) throw new Error(`cancelarFactura: no se pudieron contar los pagos: ${errP.message}`);
-  if ((count ?? 0) > 0) {
-    throw new DatoInvalido('Esa factura tiene pagos registrados. Primero aclara ese dinero (con el cliente y con el SAT); cancelarla de un clic dejaría cobros contra nada.');
-  }
+  const { error } = await acotada(supabaseAdmin().rpc('cancelar_factura_tx', {
+    p_tenant: tenantId,
+    p_factura: facturaId,
+  }), 'cancelarFactura');
+  if (error) throw traducirErrorDeCancelacion(error);
 
-  const { data, error } = await acotada(supabaseAdmin().from('factura_emitida')
-    .update({ estatus: 'cancelada' })
-    .eq('id', facturaId).eq('tenant_id', tenantId).in('estatus', ['borrador', 'emitida'])
-    .select('id'), 'cancelarFactura');
-  if (error) throw new Error(`cancelarFactura: ${error.message}`);
-  if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Esa factura no se pudo cancelar: puede que ya esté cancelada o no sea de tu flota. Recarga la pantalla.');
+  const { data: ligas, error: errL } = await acotada(supabaseAdmin().from('portal_pago_liga')
+    .update({ revocada_en: new Date().toISOString(), revocada_por: actor?.id ?? null })
+    .eq('tenant_id', tenantId).eq('factura_id', facturaId)
+    .is('revocada_en', null)
+    .select('id'), 'cancelarFactura.revocarLigas');
+
+  await anotar(tenantId, 'factura.cancelada', 'factura_emitida', facturaId, {
+    ligasRevocadas: Array.isArray(ligas) ? ligas.length : null,
+  }, actor);
+
+  if (errL) {
+    throw new Error(
+      `La factura SÍ quedó cancelada, pero no se pudo revocar su enlace de pago: ${errL.message}. `
+      + 'El enlace ya no cobra —la página pública mira el estatus de la factura—, pero revísalo en la sección del portal de pago.',
+    );
   }
-  await anotar(tenantId, 'factura.cancelada', 'factura_emitida', facturaId, {}, actor);
+  for (const l of (ligas ?? []) as Array<{ id: unknown }>) {
+    await anotar(tenantId, 'portal_pago.liga_revocada', 'portal_pago_liga', String(l.id), {
+      facturaId, nota: 'Se revocó al cancelar la factura: un CFDI cancelado no cobra.',
+    }, actor);
+  }
 }

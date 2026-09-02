@@ -35,7 +35,8 @@ const confirmarEnvioAviso = vi.fn(async () => {});
 const getDatosResponsable = vi.fn();
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 
-vi.mock('@/lib/meta/client', () => ({ sendText, sendDocument: vi.fn(), verifySignature: vi.fn() }));
+vi.mock('@/lib/meta/client', () => ({
+  MAX_CUERPO_BOTONES: 1024, sendText, sendDocument: vi.fn(), verifySignature: vi.fn() }));
 vi.mock('@/lib/logger', () => ({ logger }));
 vi.mock('./repo', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),

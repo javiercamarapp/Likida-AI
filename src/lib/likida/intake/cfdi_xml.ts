@@ -13,9 +13,10 @@
 // ═══ AUDITORÍA 10, CRÍTICO FISCAL — LÍNEAS DE UN CONSOLIDADO ══════════════
 //
 // Diésel por monedero (Edenred, Efectivale…) y peaje por TAG (IAVE, PASE,
-// TeleVía) son ~54% del gasto real de una flota (INEGI EAT 2024) y llegan
-// como UN SOLO CFDI que ampara MUCHAS transacciones de MUCHOS días — no un
-// ticket por transacción. Hasta hoy este parser asumía 1 CFDI = 1 concepto
+// TeleVía) son, por estimación interna SIN FUENTE CONFIRMADA (no verificado
+// contra INEGI, SICT ni CANACAR — no citar la cifra hacia afuera), una
+// fracción grande del gasto real de una flota, y llegan como UN SOLO CFDI que
+// ampara MUCHAS transacciones de MUCHOS días — no un ticket por transacción. Hasta hoy este parser asumía 1 CFDI = 1 concepto
 // "representativo" (`claveProdServ`/`complementoHidrocarburos` de arriba), que
 // es correcto para un ticket suelto pero tira al piso la granularidad de un
 // consolidado.
@@ -102,6 +103,14 @@ export interface CfdiXmlData {
   tipoComprobante?: string; // I | E | P | N | T
   fecha?: string;           // ISO del atributo Fecha del Comprobante
   formaPago?: string;       // c_FormaPago (01=efectivo, 03=transferencia, 04/28=tarjeta…)
+  /**
+   * `@MetodoPago` (PUE = pago en una sola exhibición, PPD = pago en
+   * parcialidades o diferido). Fase 7: es el atributo que dice si este CFDI
+   * ESPERA un complemento de pago — un PPD con FormaPago 99 no acredita su
+   * IVA hasta que llegue el REP que lo liquida (LIVA 5-III). Este parser lo
+   * tiraba, así que nadie podía distinguir "a crédito" de "sin dato".
+   */
+  metodoPago?: string;
   subTotal?: number;        // @SubTotal (sin impuestos) — base BRUTA del estímulo de peaje
   /**
    * `@Descuento` del Comprobante. Es OPCIONAL en el CFDI 4.0 y este parser lo
@@ -133,6 +142,21 @@ export interface CfdiXmlData {
   tipoCambio?: number;
   iepsTraslado: number;     // Σ Traslado[Impuesto=003] Importe → IEPS acreditable
   ivaTraslado: number;      // Σ Traslado[Impuesto=002] Importe → IVA acreditable
+  /**
+   * Σ Retencion[Impuesto=002] Importe — IVA RETENIDO (AUDITORÍA 22, FIS-A1).
+   *
+   * El nodo `Retenciones` no se leía: solo se parseaban los `Traslado`. Las
+   * columnas `gasto.iva_retenido` / `isr_retenido` existen desde la migración
+   * 0063 y nadie las escribía, así que un flete subcontratado a un permisionario
+   * persona física —el caso normal en carga federal— llegaba a la póliza sin su
+   * retención, y el residuo que ese módulo deriva por resta salía NEGATIVO:
+   * el export contestaba «dato de origen roto» y tiraba el periodo entero.
+   *
+   * Una retención NO es un gasto: es una cuenta POR PAGAR al SAT.
+   */
+  ivaRetenido: number;
+  /** Σ Retencion[Impuesto=001] Importe — ISR retenido. Mismo criterio. */
+  isrRetenido: number;
   uuid?: string;
   conceptos: CfdiConceptoXml[];
   // Concepto REPRESENTATIVO (el de combustible si existe, si no el primero):
@@ -209,6 +233,17 @@ export function formaPagoSat(bruto: string | undefined | null): string | undefin
   const v = String(bruto ?? '').trim();
   if (!/^\d{1,2}$/.test(v)) return undefined;
   return v.padStart(2, '0');
+}
+
+/**
+ * `@MetodoPago` normalizado al catálogo c_MetodoPago (PUE/PPD) o descartado.
+ * Mismo criterio que `formaPagoSat`: perder un dato accesorio es mejor que
+ * perder el CFDI — cualquier valor fuera del catálogo va a `undefined`, que
+ * el CHECK de la 0199 acepta como NULL. La verdad queda en el XML crudo.
+ */
+export function metodoPagoSat(bruto: string | undefined | null): string | undefined {
+  const v = String(bruto ?? '').trim().toUpperCase();
+  return v === 'PUE' || v === 'PPD' ? v : undefined;
 }
 
 export function parseCfdiXml(xml: string): CfdiXmlData | null {
@@ -314,11 +349,26 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       else if (imp === '002') ivaTraslado += importe;
     }
 
+    // FIS-A1: las RETENCIONES, que no se leían. 001=ISR, 002=IVA. Mismo nodo
+    // `Impuestos` del comprobante, misma forma que los traslados.
+    const retenciones = toArr(
+      (impuestos.Retenciones as Record<string, unknown> | undefined)?.Retencion as Record<string, string>[] | undefined,
+    );
+    let ivaRetenido = 0;
+    let isrRetenido = 0;
+    for (const r of retenciones) {
+      const imp = r['@_Impuesto'];
+      const importe = num(r['@_Importe']) ?? 0;
+      if (imp === '002') ivaRetenido += importe;
+      else if (imp === '001') isrRetenido += importe;
+    }
+
     return {
       version: (comp['@_Version'] as string) || undefined,
       tipoComprobante: (comp['@_TipoDeComprobante'] as string) || undefined,
       fecha: (comp['@_Fecha'] as string) || undefined,
       formaPago: formaPagoSat(comp['@_FormaPago'] as string | undefined),
+      metodoPago: metodoPagoSat(comp['@_MetodoPago'] as string | undefined),
       subTotal: num(comp['@_SubTotal']),
       descuento: num(comp['@_Descuento']),
       rfcEmisor: (emisor['@_Rfc'] as string)?.toUpperCase() || undefined,
@@ -331,6 +381,8 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       moneda: monedaIso(comp['@_Moneda'] as string | undefined),
       tipoCambio: num(comp['@_TipoCambio']),
       iepsTraslado,
+      ivaRetenido,
+      isrRetenido,
       ivaTraslado,
       uuid: uuidRaw ? uuidRaw.toLowerCase() : undefined,
       conceptos,

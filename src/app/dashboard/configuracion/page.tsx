@@ -4,10 +4,17 @@ import { getConfig } from '@/lib/likida/config';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { guardarAjustesOperativos, mensajeParaPantalla } from '@/lib/likida/administracion';
-import { validarAjustes, formatearCuentas, type AjustesCrudos } from '@/lib/likida/ajustes_operativos';
+import { revalidatePath } from 'next/cache';
+import {
+  guardarAjustesOperativos, guardarRfcsAdicionales, parsearRfcsAdicionales,
+  MAX_RFCS_ADICIONALES, mensajeParaPantalla,
+} from '@/lib/likida/administracion';
+import { validarAjustes } from '@/lib/likida/ajustes_operativos';
+import { cuentasDeclaradas } from '@/lib/likida/contabilidad/catalogo';
 import { EstadoVacio } from '../../admin/ui/kit';
+import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 import { FormaAjustes, type ResultadoGuardar } from './forma';
+import { ajustesIniciales, type EstadoCatalogo } from './inicial';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +63,19 @@ export default async function ConfiguracionPage({
 
   const unidades = config ? Object.entries(config.unidades) : [];
 
+  // AUDITORÍA 24, ARQ-3: el catálogo se lee del OVERRIDE de la flota, no de
+  // `config` (que trae las cuentas demo fusionadas). Fallar cerrado: una
+  // lectura caída no es «no declaró nada», y por eso tiene su propio estado —
+  // si se enseñara vacío, el siguiente «Guardar» borraría el catálogo real.
+  let cuentas: Record<string, string> | null = null;
+  let estadoCatalogo: EstadoCatalogo;
+  try {
+    cuentas = await cuentasDeclaradas(tenantId);
+    estadoCatalogo = cuentas ? 'declarado' : 'sin_declarar';
+  } catch {
+    estadoCatalogo = 'ilegible';
+  }
+
   async function guardar(_previo: ResultadoGuardar, fd: FormData): Promise<ResultadoGuardar> {
     'use server';
     // Re-gateo ADENTRO: el rol de arriba es del render, no de esta llamada, y
@@ -84,18 +104,40 @@ export default async function ConfiguracionPage({
     }
   }
 
-  const inicial: AjustesCrudos = config ? {
-    rendimientoPorDefecto: String(config.tabulador.rendimientoPorDefecto),
-    factorCarga: String(config.tabulador.factorCarga),
-    precioDieselPorDefecto: String(config.tabulador.precioDieselPorDefecto),
-    // De fracción a porcentaje: el motor guarda 0.15, la persona lee 15.
-    umbralDesviacionPct: String(Math.round(config.tabulador.umbralDesviacion * 10000) / 100),
-    salida: config.salida,
-    cuentas: formatearCuentas(config.catalogoCuentas),
-  } : {
-    rendimientoPorDefecto: '', factorCarga: '', precioDieselPorDefecto: '',
-    umbralDesviacionPct: '', salida: 'csv', cuentas: '',
-  };
+  // AUDITORÍA 20, hallazgo 7 (MEDIO-BAJO): `rfcsAdicionales` se consumía en el
+  // motor y se mostraba en esta misma pantalla, pero NADA en `src/` lo
+  // escribía — la única forma de declarar la segunda razón social de la flota
+  // era un UPDATE a mano sobre `tenant.config`. Éste es el campo que faltaba.
+  const rfcPrincipal = config?.empresa.rfc ?? '';
+  async function guardarRfcs(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    // Re-gateo ADENTRO, igual que la acción de arriba: una server action es
+    // alcanzable sin pasar por la página, y esto toca la validación fiscal de
+    // TODOS los CFDI de gasto de la flota.
+    const s = await resolverTenantEfectivo('/dashboard/configuracion', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/configuracion')) {
+      return { error: 'Tu rol no puede cambiar la configuración de la flota.' };
+    }
+    try {
+      // El RFC principal se relee CONTRA EL TENANT EFECTIVO, no el del render:
+      // un superadmin que abrió con ?tenant= tiene enfrente otra flota, y
+      // compararlo contra el RFC de la del render dejaría pasar como
+      // "adicional" el RFC principal de la que se está editando.
+      const cfg = await getConfig(s.tenantId);
+      const rfcs = parsearRfcsAdicionales(String(fd.get('rfcsAdicionales') ?? ''), cfg.empresa.rfc);
+      await guardarRfcsAdicionales(s.tenantId, rfcs, { id: userId });
+      revalidatePath('/dashboard/configuracion');
+      return {
+        ok: rfcs.length === 0
+          ? 'Listo: esta flota factura con un solo RFC. Los CFDI a nombre de cualquier otro vuelven a salir a revisión.'
+          : `Listo: el motor ya acepta CFDI de gasto a nombre de ${rfcs.join(', ')}.`,
+      };
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'guardar los RFC adicionales') };
+    }
+  }
+
+  const inicial = ajustesIniciales(config, cuentas);
 
   return (
     <div className="flex flex-col gap-4">
@@ -135,13 +177,44 @@ export default async function ConfiguracionPage({
                 )}
               </div>
             </div>
+
+            {/* Las OTRAS razones sociales, EDITABLES desde el 29-ago-2026. El
+                RFC principal sigue sin formulario (cambiarlo apaga la
+                validación de receptor sobre todo el histórico); éstos se
+                SUMAN a él y por eso sí son del cliente. */}
+            <div className="card p-4 mt-3">
+              <h3 className="text-[13px] font-medium">Otras razones sociales que facturas</h3>
+              <p className="text-xs mt-1 mb-3" style={{ color: 'var(--muted)' }}>
+                Si tu operación factura con más de un RFC (dos empresas del mismo grupo, la razón social
+                vieja y la nueva), decláralos aquí y el motor aceptará como tuyos los CFDI de gasto
+                timbrados a cualquiera de ellos. Sin esto, salen «a revisar» uno por uno.
+                Máximo {MAX_RFCS_ADICIONALES}. Dejarlo vacío y guardar los borra: vuelves a facturar con un
+                solo RFC.
+              </p>
+              <FormaConAviso accion={guardarRfcs} boton="Guardar RFC adicionales" columnas="md:grid-cols-1">
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="rfcsAdicionales" className="text-xs" style={{ color: 'var(--muted)' }}>
+                    RFC adicionales — uno por línea o separados por coma
+                  </label>
+                  <textarea id="rfcsAdicionales" name="rfcsAdicionales" rows={3} spellCheck={false}
+                    defaultValue={(config.empresa.rfcsAdicionales ?? []).join('\n')}
+                    placeholder={`Distinto de ${rfcPrincipal}`}
+                    className="text-sm rounded-lg px-2.5 py-2 font-mono"
+                    style={{ background: 'var(--canvas)', border: '1px solid var(--line)', color: 'var(--ink)' }} />
+                  <span className="text-xs" style={{ color: 'var(--faint)' }}>
+                    Se comprueban forma y dígito verificador, igual que en el alta de la flota. El RFC
+                    principal ({rfcPrincipal}) no va aquí.
+                  </span>
+                </div>
+              </FormaConAviso>
+            </div>
           </section>
 
           <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
             <h2 className="text-xs font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--muted)' }}>
               Ajustes de tu operación
             </h2>
-            <FormaAjustes inicial={inicial} ejemploKm={ejemploKm} guardar={guardar} />
+            <FormaAjustes inicial={inicial} ejemploKm={ejemploKm} guardar={guardar} catalogo={estadoCatalogo} />
           </section>
 
           <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>

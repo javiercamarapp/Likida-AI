@@ -89,7 +89,7 @@ hallazgos_que_el_codigo_NO_implementa:
       afirmar el 8.5%/0% con la misma disciplina fail-closed que ya usa para
       combustible en efectivo (RFA 2.9): mejor no afirmarlo que afirmarlo mal.
 usado_en_codigo:
-  - "cuadre/engine.ts — SENAL_BAR / pareceBar y la diferencia consumo_bar (POR_CONFIRMAR, SIN_ACREDITAMIENTO, REVISAR): la lectura conservadora de 'en ningún caso los consumos en bares serán deducibles'"
+  - "cuadre/engine.ts — SENAL_BAR / pareceBar y la diferencia consumo_bar (POR_CONFIRMAR, SIN_IVA_ACREDITABLE, REVISAR): la lectura conservadora de 'en ningún caso los consumos en bares serán deducibles'"
   - "normas/por_diferencia.ts — consumo_bar cita esta ficha"
 pendiente_en_producto: >
   La regla se implementa solo en su lectura conservadora (ver H4): el motor

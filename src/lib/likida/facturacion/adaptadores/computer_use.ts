@@ -335,5 +335,9 @@ function herramienta(
 /** Un UUID de CFDI donde sea que aparezca. */
 export function extraerUuid(texto: string): string | null {
   const m = texto.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
-  return m ? m[0].toUpperCase() : null;
+  // ARQ-19C2-5: `repo.ts` normaliza todo UUID a MINÚSCULAS (`.toLowerCase()`,
+  // línea 36) antes de comparar/guardar. Este adaptador no está cableado a
+  // producción hoy, pero normalizar distinto aquí sembraba una trampa lista
+  // para cuando alguien lo conecte.
+  return m ? m[0].toLowerCase() : null;
 }

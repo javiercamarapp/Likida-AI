@@ -3,17 +3,19 @@ import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
-import { getConexiones } from '@/lib/likida/conexiones';
+import { getConexiones, contarCredencialesGps } from '@/lib/likida/conexiones';
+import { catalogoIntegraciones } from '@/lib/likida/integraciones';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { conectorPorId } from '@/lib/likida/conectores/registro';
 import { cofreConfigurado } from '@/lib/likida/conectores/cofre';
 import {
-  guardarCredencial, listarCredenciales, desactivarCredencial,
+  guardarCredencial, listarCredenciales, desactivarCredencial, probarCredencial,
 } from '@/lib/likida/conectores/credenciales';
 import type { ResultadoCredencial } from './credenciales-controles';
 import {
   SeccionCredenciales, catalogoParaCaptura, pistasConRotulo, type CredencialPantalla,
 } from './seccion-credenciales';
+import { SeccionIntegraciones } from './seccion-integraciones';
 import { VistaConexiones } from './vista';
 
 export const dynamic = 'force-dynamic';
@@ -43,6 +45,12 @@ export default async function PaginaConexiones({
   // Primario sin catch: una pantalla de salud que no puede leer la salud
   // debe caerse, no pintar verdes de adorno.
   const conectores = await getConexiones(tenantId);
+
+  // El catálogo de sistemas, que hasta agosto-2026 vivía en la pantalla gemela
+  // `/dashboard/integraciones`. Su único estado medido por flota es el rastreo,
+  // y ahora se mide contra la MISMA tabla que el renglón de arriba — antes cada
+  // pantalla hacía su propia consulta y podían contradecirse.
+  const credencialesRastreo = await contarCredencialesGps(tenantId);
 
   // Las credenciales son SECUNDARIAS de esta página: si su lectura falla, los
   // renglones de arriba siguen sirviendo y la sección dice "no se pudo leer"
@@ -87,6 +95,49 @@ export default async function PaginaConexiones({
     }
   }
 
+  /**
+   * PROBAR: la action que hacía falta para que `probar()` dejara de ser código
+   * muerto. Llama al sistema del cliente DE VERDAD con la credencial guardada
+   * y sella el veredicto en la fila.
+   *
+   * Es `puedeAdministrar` y no solo `puedeVerRuta` por dos razones: la prueba
+   * DESCIFRA un secreto de la flota, y ESCRIBE (`probada_en`/`ultimo_error`).
+   * Mismo criterio que guardar y desactivar, y la RLS `administra_flota` de la
+   * 0094 dice lo mismo.
+   *
+   * El detalle del adaptador se devuelve TAL CUAL: es lo que distingue «te
+   * rechazaron el token» de «su servidor está caído», que mandan a hacer cosas
+   * distintas. `mensajeParaPantalla` solo cubre lo que se ROMPE antes de llegar
+   * al proveedor (cofre sin llave, base caída).
+   */
+  async function probar(_previo: ResultadoCredencial, fd: FormData): Promise<ResultadoCredencial> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
+      return { ok: false, error: 'Solo el dueño de la flota prueba las conexiones.' };
+    }
+
+    const conectorId = typeof fd.get('conector') === 'string' ? (fd.get('conector') as string).trim().slice(0, 64) : '';
+    try {
+      const r = await probarCredencial(s.tenantId, conectorId, { id: s.userId });
+      // El sello ya quedó en la fila: se revalida para que el renglón de arriba
+      // enseñe «probada el …» (o el error) sin que nadie recargue a mano.
+      revalidatePath(RUTA);
+      if (!r.ok) return { ok: false, error: r.detalle };
+      return {
+        ok: true,
+        // Se dice CONTRA QUÉ se habló: sin el endpoint, «conectado» es una
+        // palabra sin evidencia. `verificadoContra` en null con `ok: true` no
+        // puede pasar — hay una prueba del registro que lo impide.
+        mensaje: r.verificadoContra
+          ? `${r.detalle} (verificado contra ${r.verificadoContra})`
+          : r.detalle,
+      };
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'probar la conexión') };
+    }
+  }
+
   async function desactivar(_previo: ResultadoCredencial, fd: FormData): Promise<ResultadoCredencial> {
     'use server';
     const s = await resolverTenantEfectivo(RUTA, sp);
@@ -107,13 +158,14 @@ export default async function PaginaConexiones({
   return (
     <VistaConexiones
       conectores={conectores}
+      integraciones={<SeccionIntegraciones integraciones={catalogoIntegraciones({ credencialesRastreo })} />}
       credenciales={(
         <SeccionCredenciales
           cofreListo={cofreConfigurado()}
           puedeAdministrarCofre={puedeAdministrar(rol)}
           guardadas={guardadas}
           grupos={catalogoParaCaptura()}
-          acciones={{ guardar, desactivar }}
+          acciones={{ guardar, desactivar, probar }}
         />
       )}
     />

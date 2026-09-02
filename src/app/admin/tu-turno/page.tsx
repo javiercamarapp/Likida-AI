@@ -2,7 +2,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import {
-  getEstadoBus, getPrsAbiertos, crearOrden, resolverPieza, esOrdenUi,
+  getEstadoBus, getPrsAbiertos, crearOrden, resolverPieza, esOrdenUi, emailDeActor,
 } from '@/lib/admin/bus';
 import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
 import { bandejaPendiente } from '@/lib/likida/agentes/cola';
@@ -56,7 +56,12 @@ export default async function PaginaTuTurno({
     const accion = String(fd.get('accion') ?? '');
     try {
       if (accion !== 'aprobada' && accion !== 'descartada') throw new Error('Acción desconocida.');
-      await resolverPieza(id, accion, s.userId);
+      // ADM-12: `resolverPieza` guarda un CORREO en `resuelto_por` (lo que
+      // Javier lee en la Mac), no un uuid — `s.userId` sin traducir dejaba
+      // ahí un uuid ilegible. Sin correo resuelto, se dice el uuid con su
+      // porqué en vez de fingir un correo que no se pudo leer.
+      const actor = (await emailDeActor(s.userId)) ?? `uuid:${s.userId} (correo no resuelto)`;
+      await resolverPieza(id, accion, actor);
       revalidatePath('/admin/tu-turno');
     } catch (e) {
       redirect(`/admin/tu-turno?error=${encodeURIComponent(mensajeParaPantalla(e, 'resolver la pieza'))}`);
@@ -74,7 +79,10 @@ export default async function PaginaTuTurno({
     const contenido = String(fd.get('contenido') ?? '').trim();
     try {
       if (!esOrdenUi(tipo)) throw new Error('Esa orden no existe.');
-      await crearOrden(tipo, rutina, s.userId, tipo === 'editar_encargo' ? { contenido } : {});
+      // ADM-12: mismo caso que accionPieza — `crearOrden` guarda un CORREO
+      // en `creado_por`, no un uuid.
+      const actor = (await emailDeActor(s.userId)) ?? `uuid:${s.userId} (correo no resuelto)`;
+      await crearOrden(tipo, rutina, actor, tipo === 'editar_encargo' ? { contenido } : {});
       revalidatePath('/admin/tu-turno');
     } catch (e) {
       redirect(`/admin/tu-turno?error=${encodeURIComponent(mensajeParaPantalla(e, 'encolar la orden'))}`);

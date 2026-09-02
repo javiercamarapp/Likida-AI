@@ -1,0 +1,132 @@
+id: nom-087-sct-2-2017
+tipo: regla_general
+jerarquia: 3
+instrumento: "NOM-087-SCT-2-2017 (Norma Oficial Mexicana)"
+articulo_o_regla: "numerales 4.1 a 4.7, 8.2.1, 8.3.2 y 8.5"
+titulo: "Tiempos de conducción y pausas del autotransporte federal — y por qué Likida no los evalúa"
+citas_en_codigo: ["NOM-087-SCT-2-2017", "NOM-087 4.1", "NOM-087 4.6", "NOM-087 4.7", "NOM-087 8.5"]
+texto_vigente: >
+  4.1 Todo conductor debe realizar una pausa de 30 minutos cuando:
+  a) Ha conducido hasta cinco horas continuas, o bien;
+  b) Esta pausa podrá distribuirse durante un lapso de cinco horas y media de
+  acuerdo a las condiciones de la ruta.
+
+  4.2. Los periodos de pausa, en ningún caso podrán ser acumulables.
+
+  4.3. Durante todo el tiempo de conducción, el conductor debe portar la
+  Bitácora de Horas de Servicio y exhibirla a la autoridad competente cuando
+  ésta le sea requerida; la cual debe ser de uso personal e intransferible. El
+  registro de los datos de la bitácora se realizará en formatos impresos o
+  electrónicos.
+
+  4.4. Los permisionarios pueden aprovechar los dispositivos tecnológicos
+  disponibles con el objeto de cumplir las disposiciones del presente
+  ordenamiento, tales como el tacógrafo u otras aplicaciones electrónicas.
+
+  4.5. El permisionario del autotransporte federal de pasaje y turismo y
+  transporte privado de pasajeros, está obligado a considerar un segundo
+  conductor cuando: a) El tiempo de trayecto de la ruta exceda las 9 horas.
+  [...]
+
+  4.6. En el autotransporte de carga, deben organizar las rutas considerando lo
+  siguiente: a) En rutas que impliquen una conducción máxima de 14 horas, el
+  conductor debe tener una pausa no menor a 8 horas continuas, sin menoscabo de
+  cumplir con las pausas mínimas establecidas en los numerales 4.1 y 4.2 de la
+  presente Norma.
+
+  4.7. El tiempo máximo de conducción en 24 horas nunca podrá exceder las 14
+  horas.
+
+  8.3.2 En la bitácora se revisarán: que cumpla con la portación de la misma y
+  con los contenidos que establecen el Reglamento de Tránsito en Carreteras y
+  Puentes de Jurisdicción Federal, se verificará que las horas máximas de
+  conducción en 24 horas no excedan las 14 horas; pausas cada 30 minutos por
+  cada 5 horas de conducción o su distribución en un lapso de 5 horas y media; y
+  las 8 horas de pausa obligatorias para cada 14 horas de conducción en 24
+  horas.
+
+  8.5. La bitácora de horas de servicio podrá llevarse de manera impresa o en
+  medios electrónicos, para ser exhibida ante la autoridad competente y deberán
+  ser conservadas al menos durante dos años.
+fecha_publicacion: 2018-06-28
+fecha_vigencia_desde: 2018-08-27
+estado_verificacion: verificado_fuente_primaria
+fuente_url: "https://dof.gob.mx/nota_detalle.php?codigo=5529381&fecha=28/06/2018"
+fuente_tipo: dof_oficial
+fuente: >
+  Texto leído en el DOF del 28-06-2018 (nota 5529381) y en su espejo
+  https://sidof.segob.gob.mx/notas/docFuente/5529381. Vigencia confirmada en el
+  catálogo oficial de la Secretaría de Economía,
+  https://platiica.economia.gob.mx/normalizacion/nom-087-sct-2-2017/ — estatus
+  «Vigente», publicación 28/06/2018, entrada en vigor 27/08/2018 (Transitorio
+  Primero: 60 días naturales después de la publicación).
+nota_verificacion: >
+  Creada el 27-ago-2026 junto con el registro de jornada (mig. 0241).
+
+  OJO CON EL HOST: `www.dof.gob.mx` falla por certificado TLS; el que responde
+  es `dof.gob.mx` sin www.
+
+  Esta ficha existe para documentar un LÍMITE DEL PRODUCTO, no para alimentar un
+  motor. Ver `impacto_en_producto`.
+contexto_verificado: >
+  Es de observancia obligatoria para el Servicio del Autotransporte Federal y
+  sus servicios auxiliares en todas sus modalidades que transitan en caminos y
+  puentes de jurisdicción federal, y para el transporte privado del art. 8 fr.
+  XI de la Ley de Caminos.
+
+  DOS CONFUSIONES QUE CUESTAN CARO, y las dos se verificaron leyendo el texto:
+
+  1. El numeral 4.5 —segundo conductor cuando el trayecto excede 9 horas— NO
+     APLICA A CARGA. Es exclusivo de pasaje, turismo y transporte privado de
+     PASAJEROS. Aplicárselo a una flota de carga sería inventarle una obligación.
+  2. La NOM mide TIEMPO DE CONDUCCIÓN; la LFT mide JORNADA, que el art. 58
+     define como el tiempo a disposición del patrón. No son la misma magnitud y
+     sus topes conviven mal: 14 h de conducción en 24 h (numeral 4.7) contra 12
+     h de jornada ordinaria + extraordinaria (LFT art. 68, último párrafo). Un
+     operador puede caber en la NOM y no caber en la LFT.
+sin_criterio:
+  - >
+    LA TENSIÓN ENTRE LAS 14 H DE LA NOM Y LAS 12 H DEL ART. 68 DE LA LFT ES UNA
+    LECTURA DE LOS DOS TEXTOS, NO UN CRITERIO DE AUTORIDAD. No se localizó
+    jurisprudencia ni criterio administrativo que la resuelva. El producto NO la
+    presenta como conclusión legal.
+  - >
+    NO SE VERIFICÓ el catálogo de sanciones por incumplir la NOM: su numeral 6.1
+    solo remite genéricamente («dará lugar a sanciones de acuerdo a las
+    disposiciones aplicables por la autoridad competente»). La única multa
+    numérica confirmada del tema vive en el art. 83 del Reglamento de Tránsito
+    (ver la ficha `reglamento-transito-83`).
+  - >
+    NO SE VERIFICÓ el numeral 4.2 de la NOM-012-SCT-2-2017, que la 087 cita como
+    fuente concurrente del contenido de la bitácora. Podría añadir campos.
+  - >
+    La vigilancia que el numeral 7.1 asigna a «la SCT y la Secretaría de
+    Gobernación a través de la Policía Federal» corresponde hoy a la SICT y a la
+    Guardia Nacional (ver la reforma del Reglamento de Tránsito, DOF
+    25-05-2026). El texto de la NOM no se ha actualizado.
+impacto_en_producto: >
+  ESTA FICHA EXISTE PARA QUE EL PRODUCTO SE CALLE, Y ESO ES SU VALOR.
+
+  Likida registra JORNADA: a qué hora empezó y terminó el operador, y qué
+  descansos hubo. NO registra CONDUCCIÓN EFECTIVA — no sabe cuántas de esas
+  horas fueron volante y cuántas fueron esperar andén, cargar, o dormir en la
+  litera. Los topes de la NOM (4.1, 4.6, 4.7) se miden sobre conducción, así que
+  el motor de riesgo NO los evalúa y lo DICE, con esta frase, en la pantalla y
+  en el reporte:
+
+    «Este registro mide jornada, no tiempo de conducción. Los tiempos de la
+     NOM-087-SCT-2-2017 se miden sobre conducción efectiva, que Likida no
+     registra: no se emite juicio sobre ellos.»
+
+  Estimarla a partir del GPS sería exactamente lo que la casa prohíbe: un
+  «cumple» falso es peor que un hueco declarado, y aquí el hueco tiene nombre.
+
+  Lo que sí aporta la ficha al producto: el numeral 8.5 fija DOS AÑOS de
+  conservación de la bitácora de horas de servicio, plazo distinto del que el
+  art. 804 de la LFT fija para el control de asistencia. El reporte exportable
+  los enseña como dos plazos, no como uno.
+verificado_por: "texto leído en el DOF (nota 5529381) y vigencia confirmada en el catálogo de la Secretaría de Economía"
+verificado_el: 2026-08-27
+usado_en_codigo:
+  - "jornada/topes.ts — LEYENDA_NOM_087: la frase exacta con la que el producto declara que NO evalúa los tiempos de conducción, y CONSERVACION_NOM_087_ANIOS (2)"
+  - "jornada/reporte.ts — la leyenda va pegada al CSV que la flota enseña en una inspección"

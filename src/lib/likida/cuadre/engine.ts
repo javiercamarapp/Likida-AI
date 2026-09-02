@@ -126,6 +126,47 @@ export type Cubeta = 'deducible' | 'no_deducible' | 'por_confirmar';
 export const MEDIOS_LISR_27_III = ['02', '03', '04', '05', '28', '29'] as const;
 /** '99 Por definir' = la contraprestación no se ha pagado (RMF 2.7.1.29 fr. II). */
 export const FORMA_PAGO_SIN_PAGAR = '99';
+/**
+ * El tope de la LISR 27-III, primer párrafo (`normas/lisr-27-III.yaml`):
+ * «los pagos cuyo monto exceda de $2,000.00 se efectúen mediante
+ * transferencia electrónica…». Es el default cuando la configuración del
+ * tenant no trae `estimulos.efectivoTopeMxn`.
+ *
+ * AUDITORÍA 24, PRU-2 (ALTO): vivía como `?? 2000` suelto en el cuerpo del
+ * motor y NINGUNA prueba lo pisaba — `?? 20000` pasaba 10,001 pruebas en
+ * verde. Con nombre y exportado, `tope_efectivo_default.test.ts` lo ancla a
+ * la ficha en la frontera exacta ($2,000.00 pasa, $2,000.01 no).
+ */
+export const TOPE_EFECTIVO_LISR_27_III = 2000;
+
+/**
+ * ¿Este comprobante está A CRÉDITO y NADIE lo ha pagado todavía? `'99 Por
+ * definir'` sin el sello del REP (`pagadoEn`, que solo escribe `intake/rep.ts`
+ * cuando un complemento de pago liquidó el CFDI por completo).
+ *
+ * AUDITORÍA 24, FIS-6 (ALTO). El motor resolvió el `'99'` para el IVA
+ * (auditoría 2: LIVA 5-III, «efectivamente pagado en el mes») y para el
+ * MEDIO (FIS-1: se juzga la forma del REP), y nunca para la cubeta de ISR:
+ * un hospedaje de $58,000 PPD sin REP salía «Deducible para ISR» en verde y
+ * la liquidación «Cuadrada». Es afirmar un requisito que todavía no se puede
+ * conocer: para los regímenes a los que se vende la facilidad (coordinados y
+ * PF con actividad empresarial, `normas/lisr-72-73.yaml` remite a la Sección
+ * I del Cap. II del Título IV — flujo de efectivo; el art. 105-I que fija
+ * «efectivamente erogadas» NO tiene ficha propia: se anota no verificable)
+ * la deducción nace al pagar; y para combustible el 2º párrafo del 27-III
+ * condiciona la deducción al MEDIO cualquiera que sea el monto, y con `'99'`
+ * el medio no existe aún. La regla de la casa para la AUSENCIA de evidencia
+ * es ámbar, no verde: `por_confirmar`, y la liquidación a revisión. Cuando
+ * el REP selle `pagadoEn`, el recuadre lo saca solo.
+ */
+export function pagoPendiente(g: Pick<Gasto, 'formaPago' | 'pagadoEn'>): boolean {
+  return g.formaPago === FORMA_PAGO_SIN_PAGAR && !g.pagadoEn;
+}
+
+/** La leyenda que lee el contralor sobre un comprobante a crédito sin pagar. */
+export const LEYENDA_PAGO_PENDIENTE =
+  'A crédito (forma de pago 99) y sin complemento de pago: pendiente de pago comprobado. ' +
+  'Se deduce cuando se pague y con el medio con que se pague (LISR 27-III; coordinados y personas físicas: al pago efectivo).';
 
 /**
  * ¿Este pago de COMBUSTIBLE se hizo con «un medio distinto» a los que la LISR
@@ -147,8 +188,9 @@ export const FORMA_PAGO_SIN_PAGAR = '99';
  *   `causasDe` en `fiscal.ts` y que `getAcumuladoCombustible` en `repo.ts`.
  * - **`'99'` devuelve `false`.** No es un medio distinto: es que NO se pagó
  *   (RMF 2.7.1.29 fr. II). Ese caso lo juzga la regla de pago efectivo, no
- *   esta — y hoy no lo juzga nadie para efectos de ISR: queda anotado como
- *   hallazgo abierto en `docs/auditoria-18/fiscal-c3.md`, no se resuelve aquí.
+ *   esta, y el tratamiento de ISR para ese caso sigue pendiente de resolver
+ *   en el motor — ver el seguimiento interno de auditorías, no se resuelve
+ *   en esta función.
  */
 export function medioNoAdmitidoCombustible(formaPago: string | null | undefined): boolean {
   if (!formaPago) return false;
@@ -160,10 +202,13 @@ export function medioNoAdmitidoCombustible(formaPago: string | null | undefined)
  * Cómo se nombra el medio de pago en la nota que lee el contralor. Un rótulo
  * tiene que ser verdad: con `'06'` la nota no puede decir «EFECTIVO».
  */
-function comoSePago(formaPago: string | null | undefined): string {
+function comoSePago(formaPago: string | null | undefined, pagadoEn?: string): string {
+  // FIS-5: cuando la forma viene del complemento de pago, el papel lo dice —
+  // el CFDI decía «99 Por definir» y fue el REP quien reveló el medio real.
+  const segunRep = pagadoEn ? ` según su complemento de pago del ${pagadoEn}` : '';
   return formaPago === '01'
-    ? 'pagado en EFECTIVO'
-    : `pagado con la forma de pago «${formaPago}», que no es de las que la LISR 27-III admite para combustible`;
+    ? `pagado en EFECTIVO${segunRep}`
+    : `pagado con la forma de pago «${formaPago}»${segunRep}, que no es de las que la LISR 27-III admite para combustible`;
 }
 /**
  * Medios que cuentan como "sistema electrónico de pago" para el estímulo de
@@ -232,8 +277,98 @@ export const LECTURA_RFA_29_PRORRATEO =
   'la lectura literal del "siempre que" de la regla 2.9 negaría la facilidad a TODO el combustible en efectivo ' +
   'del ejercicio — confírmela con su contador.';
 
-export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
-export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'consumo_bar', 'ticket_monedero'];
+export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible', 'gasto_otro_ejercicio'];
+// AUDITORÍA 21, CRÍTICO (fiscal): `cfdi_efos_indeterminado` entra a
+// POR_CONFIRMAR (y a SIN_IVA_ACREDITABLE, abajo) por el mismo camino que
+// `cfdi_pendiente`. Desde que la auditoría 9 quitó —con razón— el mapeo
+// `'100' → efos: true` (ConsultaCFDIService no distingue el listado presunto
+// del definitivo del CFF 69-B), NADA produce `efos: true`, así que la rama
+// `cfdi_efos` de NO_DEDUCIBLE_ISR quedó inalcanzable y el ÚNICO rastro de un
+// emisor ya publicado en DEFINITIVA era esta diferencia... que solo movía el
+// badge a "revisar". El CFDI caía en la cubeta `deducible` y acreditaba su IVA
+// completo, en verde y citando LIVA 5 — sobre operaciones que `cff-69-B.yaml`
+// (verificado_fuente_primaria, 4º párrafo) declara sin "efecto fiscal alguno".
+// No va a NO_DEDUCIBLE_ISR porque el servicio tampoco distingue al PRESUNTO
+// (1er párrafo: solo "se presumirá", con derecho a desvirtuar) — declararlo
+// fraude sería el falso positivo que `intake/sat.ts` documenta como peor que
+// el falso negativo. Tercer estado: ni deducible ni no-deducible, a cotejar el
+// listado del DOF a mano.
+export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'cfdi_efos_indeterminado', 'consumo_bar', 'ticket_monedero', 'renglones_ajenos', 'medio_pago_no_admitido'];
+
+// ── AUDITORÍA 22, FIS-C2 (CRÍTICO): DOS PREGUNTAS, DOS LISTAS ─────────────
+// Esto era UNA lista para dos preguntas distintas —«¿acredita IVA?» y
+// «¿acredita el estímulo de diésel/peaje?»— y los dos tipos de la RFA 2.9
+// entraron para cerrar la segunda y cerraron las dos.
+//
+// Lo que dicen las fichas, leídas:
+//   · `rfa-2026-2.9.yaml` → `limite_importante`: «Conserva la DEDUCCIÓN para
+//     ISR. NO habilita el acreditamiento del IEPS». Dice IEPS. NO dice IVA.
+//   · `liva-5.yaml` art. 5 fr. I: son indispensables «las erogaciones… que
+//     sean deducibles para los fines del impuesto sobre la renta», y las
+//     parcialmente deducibles acreditan «en la proporción».
+//
+// O sea: el mismo CFDI de diésel perdía sus $16,000 de IVA solo por el medio
+// de pago, bajo el rótulo «IVA acreditable (LIVA art. 5)» — el artículo que
+// lo contradice. Una flota con $5,000,000 de combustible al año y su 15% en
+// efectivo perdía ~$103,000 anuales que la ley le concede.
+//
+// AUDITORÍA 12, ALTO (fiscal, reincidente de la 11): `cfdi_pendiente` entra
+// aquí y en POR_CONFIRMAR — con el SAT caído o en timeout, "no se pudo
+// verificar" es el MISMO tercer estado que el motor ya aplica a EFOS, al RFC
+// y al complemento: nunca deducible, nunca acreditable.
+//
+// AUDITORÍA 24, ARQ-1: exportadas junto a sus hermanas de arriba, para que
+// `contencion_listas.test.ts` pueda exigir la consistencia entre las cinco.
+export const SIN_IVA_ACREDITABLE: TipoDiferencia[] = ['rfc_receptor', 'rfc_receptor_no_verificable', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'efectivo_no_elegible', 'efectivo_sobre_tope', 'monto_invalido', 'cfdi_pendiente', 'consumo_bar', 'moneda_extranjera', 'gasto_otro_ejercicio', 'renglones_ajenos', 'medio_pago_no_admitido'];
+// El estímulo (litros de diésel y peaje) SÍ lo niegan los dos tipos de la RFA
+// 2.9: eso es exactamente lo que su `limite_importante` dice. Esta lista es
+// la de arriba MÁS esos dos.
+export const SIN_ESTIMULO: TipoDiferencia[] = [...SIN_IVA_ACREDITABLE, 'combustible_efectivo_dentro15', 'efectivo_sobre_15'];
+
+/**
+ * Los tipos que bajan una liquidación a «Por revisar» por razón OPERATIVA —
+ * no por deducibilidad: una foto ilegible, un ticket sin timbrar, un exceso
+ * de viático que hay que confirmar, una fecha rara…
+ *
+ * `ieps_no_desglosado` NO va aquí a propósito: el gasto es deducible y lo único
+ * que se pierde es el acreditamiento del estímulo. Casi ningún CFDI de
+ * gasolinera desglosa el IEPS al consumidor final, así que tenerlo en REVISAR
+ * mandaba TODA liquidación con diésel a la bandeja y la vaciaba de significado.
+ * Se sigue avisando en `diferencias`; ya no bloquea.
+ *
+ * `permiso_cre_no_verificable` TAMPOCO va aquí, por la MISMA razón exacta —y
+ * costó un hallazgo verlo: AUDITORÍA 9, ALTO (frontend). Se dispara en TODO
+ * CFDI de diésel con XML verificado —el camino de MEJOR calidad de dato que
+ * existe hoy—, así que mandarlo a REVISAR volvía "Por revisar" (rojo,
+ * `--color-bad` en el panel) el estatus de CUALQUIER liquidación con un
+ * diésel bien facturado, incluido el viaje que `seed.sql` sembró como pieza
+ * central del demo. El requisito sigue avisado —ahora con tono `condicionado`
+ * en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
+ * no puede bajar un estatus que nunca podría volver a subir.
+ */
+export const REVISAR_OPERATIVO: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'monto_invalido', 'complemento_no_verificable', 'efectivo_sobre_15', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'iva_mes_del_pago', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'oposicion_titular'];
+
+/**
+ * Lo que baja una liquidación a «Por revisar». DERIVADA, no copiada.
+ *
+ * AUDITORÍA 24, ARQ-1 (ALTO, 6ª caída por el mismo hueco, 22→23→24): esta
+ * lista se escribía a mano, con 35 valores, y `rfc_receptor_no_verificable`
+ * —que está en POR_CONFIRMAR desde la auditoría 5— nunca entró. Resultado:
+ * un CFDI de $11,600 a nombre de un tercero, con el RFC de la flota sin
+ * capturar (`XAXX010101000` de la demo), daba `totalDeducible 0 ·
+ * totalPorConfirmar 11,600 · estatus 'cuadrada'`: la misma hoja decía
+ * «Cuadrada» en verde arriba y «Deducible para ISR: —» abajo, y el contralor
+ * que filtra por «Cuadrada» para cerrar su semana se llevaba liquidaciones
+ * con deducción cero.
+ *
+ * TypeScript verifica PERTENENCIA, nunca COBERTURA: nada ataba las listas.
+ * La regla que esta derivación fija es la única que tiene sentido: TODO motivo
+ * que saque un peso de la cubeta deducible (a `no_deducible` o a
+ * `por_confirmar`) merece que una persona mire la liquidación antes de
+ * cerrarla. Un tipo nuevo que entre a `NO_DEDUCIBLE_ISR` o a `POR_CONFIRMAR`
+ * entra aquí solo; `contencion_listas.test.ts` lo exige contra el fuente.
+ */
+export const REVISAR: TipoDiferencia[] = [...new Set<TipoDiferencia>([...NO_DEDUCIBLE_ISR, ...POR_CONFIRMAR, ...REVISAR_OPERATIVO])];
 
 /**
  * LA ÚNICA definición de en qué cubeta cae un gasto. Vive aquí, exportada, para
@@ -253,6 +388,9 @@ export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_rec
 export function cubetaDe(g: Gasto, suyas: Diferencia[]): Cubeta {
   if (suyas.some((d) => NO_DEDUCIBLE_ISR.includes(d.tipo))) return 'no_deducible';
   if (suyas.some((d) => POR_CONFIRMAR.includes(d.tipo))) return 'por_confirmar';
+  // A CRÉDITO Y SIN PAGAR NO ES DEDUCIBLE TODAVÍA (FIS-6, ver `pagoPendiente`).
+  // Tercer estado: ni se afirma ni se pierde — llega el REP y sube sola.
+  if (pagoPendiente(g)) return 'por_confirmar';
   // UN TICKET NO ES UNA FACTURA. LISR 27-III exige que la deducción esté
   // "amparada con un comprobante fiscal", y un ticket de gasolinera no lo es:
   // hay que timbrarlo. Contarlo como deducible le promete al contralor una
@@ -330,6 +468,48 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
     }
   }
   return originalDe;
+}
+
+/**
+ * Qué FRACCIÓN de cada gasto es deducible, reconstruida desde las diferencias
+ * que la liquidación ya guarda. Un gasto que no esté en el mapa es deducible
+ * al 100% (o cayó entero en otra cubeta, que `cubetaDe` decide aparte).
+ *
+ * AUDITORÍA 24, FIS-2 (CRÍTICO, reincidente 23): `proporcionDeducible` vivía
+ * solo DENTRO de `cuadrarViaje`; ni la RPC ni la liquidación guardada la
+ * exponían, y `repartirPorCubeta` (api/export/poliza) no tenía con qué partir:
+ * una comida de $2,000 con tope de $750 salía «$750 deducible» en el PDF y
+ * `5020-001 cargo 1,724.14` —la base entera— en la póliza.
+ *
+ * Las dos reglas que parten un gasto, y de dónde sale cada una:
+ *   · RFA 2.9 (`normas/rfa-2026-2.9.yaml`): `efectivo_sobre_15` guarda en
+ *     `esperado`/`monto` el excedente de ESTE comprobante → `1 − exc/monto`.
+ *   · LISR 28-V (`normas/lisr-28-V.yaml`): `viatico_excede_fiscal` guarda en
+ *     `esperado` el tope diario; la proporción del día entre TIMBRADOS la da
+ *     `diasSobreTope`, la misma función que el motor llama.
+ * `proporciones_deducibles.test.ts` exige que este mapa reproduzca al centavo
+ * los totales del motor: si `cuadrarViaje` cambia la regla, ese test cae.
+ */
+export function proporcionesDeducibles(
+  gastos: Gasto[],
+  diferencias: Pick<Diferencia, 'tipo' | 'gastoId' | 'esperado' | 'monto'>[],
+): Map<string, number> {
+  const p = new Map<string, number>();
+  for (const d of diferencias) {
+    if (d.tipo !== 'efectivo_sobre_15' || !d.gastoId) continue;
+    const g = gastos.find((x) => x.id === d.gastoId);
+    if (!g || !(g.monto > 0)) continue;
+    const excedente = d.esperado ?? d.monto;
+    p.set(g.id, Math.max(0, Math.min(1, (g.monto - excedente) / g.monto)));
+  }
+  const tope = diferencias.find((d) => d.tipo === 'viatico_excede_fiscal')?.esperado;
+  if (tope != null && tope > 0) {
+    for (const d of diasSobreTope(gastos, tope)) {
+      if (d.proporcionTimbrado == null) continue;
+      for (const x of d.delDia) if (x.cfdiUuid) p.set(x.id, d.proporcionTimbrado);
+    }
+  }
+  return p;
 }
 
 export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'creadaEn'> {
@@ -441,6 +621,22 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     const h = input.hidrocarburos;
     const esCombustible = g.concepto === 'diesel' || (!!h && h.claves.includes(g.claveProdServ ?? ''));
 
+    // AUDITORÍA 23, FIS-1 (CRÍTICO). La forma de pago que se puede JUZGAR, que
+    // no siempre es la del comprobante: `'99 Por definir'` no es un medio de
+    // pago sino la ausencia de uno (RMF 2.7.1.29 fr. II, y `:127-128`). Con su
+    // complemento de pago ingerido (FASE 7, mig. 0199), el medio real es el
+    // `FormaDePagoP` del REP; sin él, todavía no hay nada que juzgar.
+    // `undefined` = «no opino», que es el mismo criterio con el que esta
+    // función trata una `formaPago` ausente: desconocido no es «medio
+    // distinto», y suponerlo inflaría el no-deducible contra la flota.
+    //
+    // Es la misma idea que `formaPagoEfectiva` (`:1397`) ya aplica al IVA, al
+    // peaje electrónico y al IEPS del diésel; se calcula aquí porque aquella
+    // vive en otro recorrido, 800 líneas más abajo.
+    const formaPagoJuzgable = g.formaPago === FORMA_PAGO_SIN_PAGAR
+      ? (g.pagadoEn ? g.pagadoForma : undefined)
+      : g.formaPago;
+
     // FASE 2 · RMF 3.3.1.7 — ticket de monedero no es factura de estación.
     // Solo con evidencia (padrón o línea ECC día/estación/monto). Sin
     // evidencia no se afirma: un diésel de PEMEX en efectivo sigue siendo
@@ -473,11 +669,21 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     //   sin declarar              → por confirmar (no se afirma nada)
     //
     // En ningún caso acredita IEPS (la facilidad salva UN beneficio, no dos).
-    const topeEfectivo = input.estimulos?.efectivoTopeMxn ?? 2000;
-    if (medioNoAdmitidoCombustible(g.formaPago) && esCombustible) {
+    const topeEfectivo = input.estimulos?.efectivoTopeMxn ?? TOPE_EFECTIVO_LISR_27_III;
+    // ── AUDITORÍA 24, FIS-5 (ALTO): LAS TRES RAMAS JUZGAN LA MISMA FORMA ──
+    // FIS-1 construyó `formaPagoJuzgable` y lo cableó a UNA de las tres
+    // ramas que juzgan el medio. Ésta (el cubo del 15%) y la del tope de
+    // $2,000 seguían preguntando por `g.formaPago`, que en un CFDI PPD es
+    // siempre `'99'`: un REP con `FormaDePagoP = '01'` —la prueba documental
+    // de que se pagó en EFECTIVO— abría el IVA (`pagadoConRep`, abajo) y no
+    // cerraba la deducción. Hospedaje de $58,000 a crédito pagado en caja
+    // salía «Deducible para ISR $58,000» con «IVA acreditable $8,000», el caso
+    // exacto del 27-III presentado como cumplido.
+    if (medioNoAdmitidoCombustible(formaPagoJuzgable) && esCombustible) {
       const etiqueta = etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined);
-      // El rótulo tiene que ser verdad: «EFECTIVO» solo cuando lo fue.
-      const medio = comoSePago(g.formaPago);
+      // El rótulo tiene que ser verdad: «EFECTIVO» solo cuando lo fue — y si
+      // lo dijo el REP, se dice que lo dijo el REP.
+      const medio = comoSePago(formaPagoJuzgable, g.formaPago === FORMA_PAGO_SIN_PAGAR ? g.pagadoEn : undefined);
       const elegible = input.facilidad15;
       if (elegible === true) {
         // AUDITORÍA 15, ALTO: fail-closed REAL — si el contador del ejercicio no
@@ -522,14 +728,21 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
           const pct = total > 0 ? Math.round((acumulado / total) * 100) : 0;
           diferencias.push({
             tipo: 'combustible_efectivo_dentro15', concepto: g.concepto, monto: 0,
+            // FISCAL-19C2-4: `esperado` es lo que `derivoLaConfig` (analytics.ts)
+            // compara contra el `acumulado` recalculado del panel para detectar
+            // deriva — sin él, si `totalCombustibleEjercicio` cambia después de
+            // archivar esta liquidación, el TIPO sigue igual en ambos lados y la
+            // deriva pasa desapercibida.
             nota: `${etiqueta} ${medio} — deducible por la facilidad del 15% (RFA 2026 regla 2.9): el ejercicio lleva ${mxn(acumulado)} de ${mxn(total)} de combustible pagado con medios que la LISR 27-III no admite (${pct}% del total, tope 15%). No acredita IEPS.`,
             gastoId: g.id,
+            esperado: acumulado,
           });
         } else {
           diferencias.push({
             tipo: 'efectivo_sobre_15', concepto: g.concepto, monto: excedenteDeEste,
             nota: `${etiqueta} ${medio} — el ejercicio lleva ${mxn(acumulado)} de combustible pagado con medios que la LISR 27-III no admite, contra un tope de ${mxn(tope)} (15% de ${mxn(total)}); el excedente de ${mxn(excedenteDeEste)} de ESTE comprobante NO se deduce (RFA 2026 regla 2.9). No acredita IEPS. ${LECTURA_RFA_29_PRORRATEO}`,
             gastoId: g.id,
+            esperado: excedenteDeEste,
           });
         }
       } else if (elegible === false) {
@@ -545,9 +758,65 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
           gastoId: g.id,
         });
       }
-    } else if (g.formaPago === '01' && !esCombustible && g.monto > topeEfectivo) {
+    } else if (formaPagoJuzgable === '01' && !esCombustible && g.monto > topeEfectivo) {
       // Regla 6: gasto no-combustible en efectivo > tope → no deducible.
-      diferencias.push({ tipo: 'efectivo_sobre_tope', concepto: g.concepto, monto: 0, nota: `${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} en efectivo excede el tope de ${mxn(topeEfectivo)} (LISR 27-III) — no deducible.`, gastoId: g.id });
+      // FIS-5: `formaPagoJuzgable`, no `g.formaPago` — ver arriba.
+      const segunRep = g.formaPago === FORMA_PAGO_SIN_PAGAR && g.pagadoEn ? ` (según su complemento de pago del ${g.pagadoEn})` : '';
+      diferencias.push({ tipo: 'efectivo_sobre_tope', concepto: g.concepto, monto: 0, nota: `${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} en efectivo${segunRep} excede el tope de ${mxn(topeEfectivo)} (LISR 27-III) — no deducible.`, gastoId: g.id });
+    } else if (
+      // ── AUDITORÍA 22, FIS-C3 (CRÍTICO) ──────────────────────────────────
+      // La lista del primer párrafo de la fracción es CERRADA, igual que la del
+      // segundo. El motor ya la tenía escrita (`MEDIOS_LISR_27_III`) pero la
+      // usaba SOLO para combustible: para todo lo demás la frontera era «¿es
+      // '01'?», y `'06' Dinero electrónico`, `'08' Vales`, `'12' Dación en
+      // pago`, `'17' Compensación`, `'23' Novación` y `'99 Por definir` salían
+      // «Deducible para ISR» en verde, con su IVA acreditado y CERO diferencias.
+      // Es el mismo defecto que la 18 arregló para el diésel y que aquí se
+      // quedó sin generalizar.
+      //
+      // Va a POR_CONFIRMAR y no a NO_DEDUCIBLE_ISR a propósito: '06' y '08'
+      // claramente no están en la lista, pero '12', '17' y '23' EXTINGUEN la
+      // obligación y hay criterio en disputa sobre si les aplica el requisito
+      // de "pago". La ficha advierte contra citar la fracción sola para negar
+      // una deducción, así que se pone la cifra a la vista y la confirma una
+      // persona — sin acreditar IVA mientras tanto (LIVA 5-I).
+      //
+      // Sin `formaPago` NO entra: desconocido no es «medio distinto», el mismo
+      // criterio que sostiene `medioNoAdmitidoCombustible`.
+      //
+      // ── AUDITORÍA 23, FIS-1 (CRÍTICO): SE JUZGA LA FORMA EFECTIVA ────────
+      // La primera versión de esta rama juzgaba `g.formaPago` crudo, y con eso
+      // metió `'99 Por definir'` en el mismo saco que `'06' Dinero
+      // electrónico`. No es lo mismo, y este archivo lo tiene escrito dos
+      // veces: `:127-128` («'99' = la contraprestación no se ha pagado, RMF
+      // 2.7.1.29 fr. II») y `:148-152` («'99' devuelve false. No es un medio
+      // distinto: es que NO se pagó. Ese caso lo juzga la regla de pago
+      // efectivo, no esta»). `medioNoAdmitidoCombustible:156` respeta esa
+      // frontera; esta rama no la había replicado.
+      //
+      // Costaba: `MetodoPago 'PPD'` / `FormaPago '99'` es la forma NORMAL de
+      // una compra a crédito en México. Todo comprobante a crédito de más de
+      // $2,000 salía del deducible, perdía su IVA, bajaba la liquidación a
+      // `revisar` y se imprimía «se pagó con la forma «99»» — falso dos veces:
+      // no se pagó, y cuando el REP existe dice que se pagó por transferencia,
+      // que SÍ está en la lista. Y mataba la FASE 7 (mig. 0199) entera, que
+      // ingiere el complemento de pago justamente para recuperar ese IVA.
+      //
+      // No basta con excluir el '99': eso dejaría pasar un CFDI a crédito cuyo
+      // REP dice haberse pagado con '06', que es el hueco que esta rama vino a
+      // cerrar. Se juzga la forma EFECTIVA — la misma idea que
+      // `formaPagoEfectiva` (`:1397`) ya aplica al IVA, al peaje electrónico y
+      // al IEPS del diésel. Sin REP no se opina; con REP se juzga
+      // `pagadoForma`; con REP sin `FormaDePagoP` legible tampoco se opina,
+      // porque desconocido no es «medio distinto» (mismo criterio de `:1394`).
+      formaPagoJuzgable !== undefined && formaPagoJuzgable !== '01' && !esCombustible &&
+      g.monto > topeEfectivo && !(MEDIOS_LISR_27_III as readonly string[]).includes(formaPagoJuzgable)
+    ) {
+      diferencias.push({
+        tipo: 'medio_pago_no_admitido', concepto: g.concepto, monto: 0,
+        nota: `${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} se pagó con la forma «${formaPagoJuzgable}», que no está en la lista de la LISR 27-III (transferencia, cheque nominativo, tarjeta de crédito/débito/servicios o monedero autorizado) y excede el tope de ${mxn(topeEfectivo)}. No se afirma deducible ni perdido: lo confirma tu contador. Mientras tanto no acredita IVA.`,
+        gastoId: g.id,
+      });
     }
 
     // B5: el intake ya detectó que el total del CÓDIGO y el del OCR no coinciden
@@ -597,7 +866,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // NO se convierte aquí. El motor no inventa cifras, y aplicar un tipo de
     // cambio produciría un número que ni el contralor ni el SAT podrían
     // reproducir sin saber qué fecha se usó. Se declara y se manda a revisar; y
-    // sobre todo NO se acredita como pesos (ver SIN_ACREDITAMIENTO).
+    // sobre todo NO se acredita como pesos (ver SIN_IVA_ACREDITABLE).
     const monedaGasto = typeof extraOcr?.moneda === 'string' ? extraOcr.moneda : undefined;
     if (monedaGasto && monedaGasto !== 'MXN') {
       const tc = typeof extraOcr?.tipoCambio === 'number' ? extraOcr.tipoCambio : undefined;
@@ -659,7 +928,13 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       const motivo = fechaDudosa(f, { fechaMin: input.fechaMin, fechaMax: input.fechaMax, hoy: input.hoy });
       if (motivo === 'otro_ejercicio') {
         const ejercicioHoy = input.hoy ? Number(input.hoy.slice(0, 4)) : null;
-        diferencias.push({ tipo: 'fecha_sospechosa', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} está fechado en ${Number(f.slice(0, 4))} y estamos en ${ejercicioHoy}: un gasto de otro ejercicio no se deduce en este. Puede ser un error de lectura — verifica la fecha impresa.`, gastoId: g.id });
+        // FISCAL (rescatado de rutina-fiscal-wip, 26-ago-2026): iba con el
+        // mismo `tipo` que el gasto simplemente "fuera de rango" de abajo —
+        // ninguno de los dos buckets de deducibilidad lo excluía, así que
+        // `totalDeducible` lo sumaba de todas formas mientras la nota decía
+        // "no se deduce en este [ejercicio]". La frase y el dinero no
+        // coincidían. Tipo propio, en NO_DEDUCIBLE_ISR.
+        diferencias.push({ tipo: 'gasto_otro_ejercicio', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} está fechado en ${Number(f.slice(0, 4))} y estamos en ${ejercicioHoy}: un gasto de otro ejercicio no se deduce en este. Puede ser un error de lectura — verifica la fecha impresa.`, gastoId: g.id });
       } else if (motivo === 'fuera_de_rango') {
         diferencias.push({ tipo: 'fecha_sospechosa', concepto: g.concepto, monto: 0, nota: `La fecha del comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} (${f}) está fuera del rango esperado del viaje — verifícala (afecta periodo fiscal y plazo de facturación).`, gastoId: g.id });
       }
@@ -746,7 +1021,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     } else if (g.efos === true) {
       diferencias.push({ tipo: 'cfdi_efos', concepto: g.concepto, monto: 0, nota: `El emisor del CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} está en lista negra del SAT (EFOS) — no deducible.`, gastoId: g.id });
     } else if (g.efosRevisar) {
-      diferencias.push({ tipo: 'cfdi_efos_indeterminado', concepto: g.concepto, monto: 0, nota: `La validación EFOS del CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} no fue concluyente — conviene revisarlo a mano.`, gastoId: g.id });
+      diferencias.push({ tipo: 'cfdi_efos_indeterminado', concepto: g.concepto, monto: 0, nota: `La validación EFOS del CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} no fue concluyente — el gasto queda POR CONFIRMAR (ni deducible ni acreditable) hasta cotejar el listado del art. 69-B a mano.`, gastoId: g.id });
     } else if (g.estadoSat === 'pendiente' && g.cfdiUuid) {
       diferencias.push({ tipo: 'cfdi_pendiente', concepto: g.concepto, monto: 0, nota: `No se pudo validar el CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} con el SAT — se revisa después.`, gastoId: g.id });
     }
@@ -810,7 +1085,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
             // El hecho es verificable (el XML no trae el nodo); lo que NO es
             // verificable es que ya se exija. Se reusa `complemento_no_verificable`
             // porque es el tipo que significa "no se puede concluir": queda en
-            // REVISAR, fuera de NO_DEDUCIBLE_ISR y fuera de SIN_ACREDITAMIENTO,
+            // REVISAR, fuera de NO_DEDUCIBLE_ISR y fuera de SIN_IVA_ACREDITABLE,
             // que es exactamente el veredicto que el motor puede sostener.
             diferencias.push({ tipo: 'complemento_no_verificable', concepto: g.concepto, monto: 0, nota: `El CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} es de combustible y no trae el complemento de hidrocarburos de la regla 2.7.1.48 RMF. Pídele a la gasolinera la factura con el complemento. NO se declara no deducible: la fecha desde la que el SAT lo hace exigible no está confirmada — confírmalo con tu contador.`, gastoId: g.id });
           }
@@ -927,8 +1202,8 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // manda a la oficina a buscar algo que no existe.
       if (!liga && !comercio) continue;
       if (!g.fecha) continue; // sin fecha no se afirma nada
-      // Un comprobante de otro EJERCICIO ya lleva su `fecha_sospechosa`, que dice
-      // que no se deduce en este año. Añadirle el aviso de facturación produce
+      // Un comprobante de otro EJERCICIO ya lleva su `gasto_otro_ejercicio`,
+      // que dice que no se deduce en este año. Añadirle el aviso de facturación produce
       // dos frases que se contradicen sobre el mismo ticket: una dice que no se
       // deduce, y la otra ofrece "exigirlo dentro del ejercicio" — un remedio que
       // para un ticket de 2019 mirado en 2026 no existe. Salió sobre cinco
@@ -1003,7 +1278,8 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       //
       // Dudar de un dato y a la vez actuar sobre él es peor que no dudar: el
       // aviso lleva la autoridad de un cálculo y la fragilidad de una lectura.
-      const fechaEnDuda = diferencias.some((d) => d.tipo === 'fecha_sospechosa' && d.gastoId === g.id);
+      const fechaEnDuda = diferencias.some((d) =>
+        (d.tipo === 'fecha_sospechosa' || d.tipo === 'gasto_otro_ejercicio') && d.gastoId === g.id);
       const cuerpo = fechaEnDuda
         ? `no se puede calcular el plazo de facturación: su fecha no cuadra con el viaje y hay que verificarla primero en el papel`
         : c.vencido
@@ -1222,14 +1498,36 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // `cfdi_pendiente`: el importe de la columna NO son pesos, así que acreditar
   // su IVA sería acreditar una cifra que nadie convirtió. Es el tercer estado
   // de siempre —«no se pudo verificar»— y nunca se resuelve en verde solo.
-  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'rfc_receptor_no_verificable', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'combustible_efectivo_dentro15', 'efectivo_sobre_15', 'efectivo_no_elegible', 'efectivo_sobre_tope', 'monto_invalido', 'cfdi_pendiente', 'consumo_bar', 'moneda_extranjera'];
-  // AUDITORÍA 12, ALTO (fiscal, reincidente de la 11): `cfdi_pendiente` entra
-  // aquí y en POR_CONFIRMAR — con el SAT caído o en timeout, "no se pudo
-  // verificar" es el MISMO tercer estado que el motor ya aplica a EFOS, al RFC
-  // y al complemento: nunca deducible, nunca acreditable. Antes caía en
-  // deducible con IVA en verde, y una tarde con el ConsultaCFDIService lento
-  // producía liquidaciones enteras afirmadas en verde sin un solo UUID
-  // confirmado.
+  // `gasto_otro_ejercicio` entra desde la auditoría Fable ciclo 1 (90-A): el
+  // tipo nació en NO_DEDUCIBLE_ISR pero no aquí, así que un diésel del
+  // ejercicio pasado con CFDI válido salía con deducible $0 y aun así
+  // acreditaba su IVA completo, su peaje y sus litros — contra la LIVA 5-I
+  // que este mismo bloque cita ("en la proporción en que las erogaciones
+  // sean deducibles": la proporción es cero).
+  // `cfdi_efos_indeterminado` (AUDITORÍA 21): mismo tercer estado que
+  // `cfdi_pendiente` — con la validación EFOS no concluyente, el emisor puede
+  // estar en el listado DEFINITIVO del 69-B ("no producen ni produjeron efecto
+  // fiscal alguno", 4º párrafo, ficha verificada) y acreditar su IVA sería
+  // afirmar en verde lo que la ley niega de plano. Ver el comentario largo en
+  // POR_CONFIRMAR.
+  // `renglones_ajenos` entra desde la AUDITORÍA 22 (ARQ-1): el arreglo de
+  // FISCAL-19C2-6 lo metió en POR_CONFIRMAR y en REVISAR y se detuvo ahí, así
+  // que un CFDI de canasta mixta salía con `totalDeducible 0` /
+  // `totalPorConfirmar 1000` y ACREDITABA su IVA completo — la misma
+  // contradicción que este bloque ya había corregido dos veces (`cfdi_pendiente`
+  // en la 12, `gasto_otro_ejercicio` en el ciclo Fable 1). La proporción
+  // deducible de un gasto por confirmar es cero, y cero es lo que LIVA 5-I
+  // permite acreditar hasta que una persona lo confirme.
+  //
+  // `ticket_monedero` es el otro miembro de POR_CONFIRMAR que no está en esta
+  // lista, y NO se agrega: es una foto de bomba, nunca trae CFDI, y el
+  // `if (!g.xmlVerificado) continue` de abajo ya lo ataja estructuralmente.
+  // Meterlo aquí sugeriría que sin esta línea acreditaría, y no es cierto.
+  // Las dos listas de acreditamiento (`SIN_IVA_ACREDITABLE`, `SIN_ESTIMULO`)
+  // viven arriba, exportadas junto a las de las cubetas (ARQ-1). El
+  // `iepsAcreditable` de abajo es `const … = 0`, así que la pertenencia de los
+  // dos tipos de la RFA 2.9 a SIN_ESTIMULO no protege una cifra en pesos: lo
+  // que protege son los LITROS elegibles y el peaje.
   const peajeFactor = input.estimulos?.peajeFactor ?? 0.5;
   // `iepsAcreditable` se queda en 0 a propósito y por eso es const: el estímulo
   // del LIF 20-A no es una cifra que este motor pueda calcular (necesita la cuota
@@ -1240,7 +1538,14 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   let litrosDieselAcreditables = 0;
   for (const g of input.gastos) {
     if (duplicados.has(g.id)) continue;
-    if (diferencias.some((d) => d.gastoId === g.id && SIN_ACREDITAMIENTO.includes(d.tipo))) continue;
+    // FIS-C2: dos preguntas separadas sobre el MISMO gasto. Un diésel en
+    // efectivo dentro del 15% acredita su IVA (es deducible) y NO acredita el
+    // estímulo (la RFA 2.9 lo niega). Antes un solo `continue` respondía las
+    // dos con «no».
+    const misDif = diferencias.filter((d) => d.gastoId === g.id);
+    const sinIva = misDif.some((d) => SIN_IVA_ACREDITABLE.includes(d.tipo));
+    const sinEstimulo = misDif.some((d) => SIN_ESTIMULO.includes(d.tipo));
+    if (sinIva && sinEstimulo) continue;
     // El acreditamiento exige un CFDI VERIFICADO (XML): un ticket de gasolinera
     // sin factura NO es deducible ni acreditable hasta timbrarse. Además, así el
     // IVA/IEPS son SIEMPRE los importes LEÍDOS del XML (nunca recomputados con una
@@ -1269,14 +1574,41 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // IVA trasladado pero NO acreditable aún. Se excluye igual que ya se hace
     // con peaje/diésel en la lógica de forma de pago. Un '99' se acreditará el
     // mes en que se pague (con su complemento de pago), no éste.
-    if ((g.ivaTraslado ?? 0) > 0 && g.formaPago !== '99') ivaAcreditable += (g.ivaTraslado as number) * proporcion;
+    //
+    // FASE 7 (mig. 0199): ese complemento de pago YA SE INGIERE. `pagadoEn`
+    // solo lo escribe intake/rep.ts cuando un REP liquidó este CFDI POR
+    // COMPLETO (ImpSaldoInsoluto = 0) — jamás se infiere. Con el sello, el
+    // '99' deja de cerrar la puerta del IVA; sin él, todo queda EXACTAMENTE
+    // como antes (el REP solo abre). Y `pagadoForma` (FormaDePagoP del REP,
+    // el medio con el que DE VERDAD se pagó) sustituye al '99' en las
+    // puertas que juzgan el MEDIO: peaje electrónico e IEPS de diésel. Si el
+    // REP no trajo FormaDePagoP legible, esas puertas siguen cerradas —
+    // "pagado" no implica "pagado con un medio admitido".
+    const pagadoConRep = g.formaPago === FORMA_PAGO_SIN_PAGAR && !!g.pagadoEn;
+    const formaPagoEfectiva = pagadoConRep ? g.pagadoForma : g.formaPago;
+    if (!sinIva && (g.ivaTraslado ?? 0) > 0 && (g.formaPago !== '99' || pagadoConRep)) {
+      ivaAcreditable += (g.ivaTraslado as number) * proporcion;
+      // La verdad fiscal completa, no solo la cifra: LIVA 5-III lo acredita
+      // EN EL MES DEL PAGO. Si ese mes no es el del comprobante, el contralor
+      // tiene que asentarlo en el periodo correcto — esconderlo dejaría una
+      // declaración con el IVA en el mes equivocado, firmada por el sistema.
+      if (pagadoConRep && g.pagadoEn!.slice(0, 7) !== (g.fecha ?? '').slice(0, 7)) {
+        diferencias.push({
+          tipo: 'iva_mes_del_pago', concepto: g.concepto, monto: 0,
+          nota: `El CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} era a crédito (forma de pago 99) y su complemento de pago llegó: se pagó el ${g.pagadoEn}. Su IVA se acredita en ESE mes (LIVA 5-III), no en el del comprobante (${g.fecha ?? 'sin fecha'}) — asiéntalo en el periodo del pago.`,
+          gastoId: g.id,
+        });
+      }
+    }
     // Peaje (1.6): 50% del SubTotal (sin IVA) de casetas, SOLO con pago
     // electrónico. AUDITORÍA 2 (fiscal): sin forma de pago o con '99' (Por
     // definir = no pagado) no se afirma el estímulo — es el tercer estado, "no se
     // pudo verificar" nunca es "sí". Mismo criterio que diésel e IVA.
     // AUDITORÍA 18, A7: y "electrónico" es la lista cerrada de la RMF 9.1.8
     // fr. III (`MEDIOS_ELECTRONICOS_PEAJE`), no "todo lo que no sea efectivo".
-    const peajePagadoElectronicamente = !!g.formaPago && (MEDIOS_ELECTRONICOS_PEAJE as readonly string[]).includes(g.formaPago);
+    // FASE 7: la forma EFECTIVA — con un REP que liquidó el CFDI, el medio
+    // real es el FormaDePagoP del pago, no el '99' del comprobante.
+    const peajePagadoElectronicamente = !!formaPagoEfectiva && (MEDIOS_ELECTRONICOS_PEAJE as readonly string[]).includes(formaPagoEfectiva);
     // Dos condiciones distintas, ambas necesarias — se arreglaron el mismo día
     // por caminos separados y aquí conviven:
     //
@@ -1290,7 +1622,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     //      con descuento acreditaba sobre el SubTotal íntegro. Se acota a 0
     //      por si llega un CFDI mal formado: una base negativa no existe.
     const elegiblePeaje = input.elegiblePeaje === true;
-    if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0 && peajePagadoElectronicamente && elegiblePeaje) {
+    if (!sinEstimulo && g.concepto === 'caseta' && (g.subTotal ?? 0) > 0 && peajePagadoElectronicamente && elegiblePeaje) {
       const baseDelEstimulo = Math.max(0, (g.subTotal as number) - (g.descuento ?? 0));
       peajeAcreditable += baseDelEstimulo * peajeFactor;
     }
@@ -1298,7 +1630,9 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // gasolina. Se identifica por la clave de producto del SAT (15101505).
     const clavesDiesel = input.estimulos?.clavesDieselIeps ?? [];
     const esDieselIeps = clavesDiesel.includes(g.claveProdServ ?? '');
-    if (esDieselIeps) {
+    // `!sinEstimulo`: esto es lo que la RFA 2.9 SÍ niega al efectivo, con todas
+    // sus letras. Es la mitad que la lista única protegía de verdad (FIS-C2).
+    if (!sinEstimulo && esDieselIeps) {
       // EL ESTÍMULO NO ES EL IEPS TRASLADADO. `normas/lif-2026-20-A.yaml`
       // (verificado_fuente_primaria) dice literal: "cuota IEPS vigente al momento
       // de la compra × LITROS. No es el IEPS trasladado en el CFDI."
@@ -1322,7 +1656,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       const litros = Number((g.ocrExtra as Record<string, unknown> | undefined)?.litros ?? 0);
       // AUDITORÍA 2 (fiscal): lista CERRADA de la LIF 20-A-IV, no "cualquiera !=
       // 01". Antes admitía 06, 08, 30, 31 y 99 (no pagado), que la ley no cubre.
-      const pagoElectronico = !!g.formaPago && (MEDIOS_LISR_27_III as readonly string[]).includes(g.formaPago);
+      const pagoElectronico = !!formaPagoEfectiva && (MEDIOS_LISR_27_III as readonly string[]).includes(formaPagoEfectiva);
       if (pagoElectronico && Number.isFinite(litros) && litros > 0) {
         // AUDITORÍA 8, CRÍTICO: los litros salen del OCR y nada los cotejaba —
         // ni contra el XML (no siempre trae la cantidad desglosada), ni contra
@@ -1407,23 +1741,12 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     totalNoDeducible += round2(g.monto - deducibleDelGasto);
   }
 
-  // `ieps_no_desglosado` NO va aquí a propósito: el gasto es deducible y lo único
-  // que se pierde es el acreditamiento del estímulo. Casi ningún CFDI de
-  // gasolinera desglosa el IEPS al consumidor final, así que tenerlo en REVISAR
-  // mandaba TODA liquidación con diésel a la bandeja y la vaciaba de significado.
-  // Se sigue avisando en `diferencias`; ya no bloquea.
-  //
-  // `permiso_cre_no_verificable` TAMPOCO va aquí, por la MISMA razón exacta —y
-  // costó un hallazgo verlo: AUDITORÍA 9, ALTO (frontend). Se dispara en TODO
-  // CFDI de diésel con XML verificado —el camino de MEJOR calidad de dato que
-  // existe hoy—, así que mandarlo a REVISAR volvía "Por revisar" (rojo,
-  // `--color-bad` en el panel) el estatus de CUALQUIER liquidación con un
-  // diésel bien facturado, incluido el viaje que `seed.sql` sembró como pieza
-  // central del demo. El requisito sigue avisado —ahora con tono `condicionado`
-  // en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
-  // no puede bajar un estatus que nunca podría volver a subir.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'consumo_bar', 'ticket_monedero', 'oposicion_titular'];
-  const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
+  // `REVISAR` vive arriba, DERIVADA de las cubetas más lo operativo (ARQ-1).
+  // FIS-6: un comprobante a crédito sin pagar cae a `por_confirmar` por el
+  // gasto mismo, no por una diferencia — y por la regla de ARQ-1 (todo lo que
+  // saca dinero de la cubeta deducible se revisa) también baja el estatus.
+  const hayPagoPendiente = input.gastos.some((g) => !duplicados.has(g.id) && g.monto > 0 && pagoPendiente(g));
+  const hayRevisar = hayPagoPendiente || diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';
 

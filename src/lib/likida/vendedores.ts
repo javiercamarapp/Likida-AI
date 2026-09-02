@@ -398,7 +398,13 @@ export async function listarProspectos(filtro: FiltroProspectos = {}): Promise<P
     ciudad: (f.ciudad as string) ?? null,
     vacante: (f.vacante as string) ?? null,
     fuente: String(f.fuente ?? 'censo'),
-    // `prospecto_estado_dominio` (0105) garantiza el dominio.
+    // FRONTEND-19C2-4: este cast YA NO es cierto sin más. `prospecto_estado_dominio`
+    // (0105) garantizaba el dominio cuando `EstadoProspecto` tenía las mismas 6
+    // llaves que el CHECK — pero la 0181 amplió el CHECK con los 11 estados del
+    // embudo de Cal.com sin ampliar este tipo. La base puede devolver un valor
+    // que NO está en `EstadoProspecto`; quien consuma `estado` debe validar con
+    // `esEstadoProspecto` antes de indexar un `Record<EstadoProspecto, ...>`
+    // con él (ver `agruparConteos`) — no asumir el cast a ciegas.
     estado: f.estado as EstadoProspecto,
     vendedorId: (f.vendedor_id as string) ?? null,
     tenantId: (f.tenant_id as string) ?? null,
@@ -476,14 +482,54 @@ async function esVendedor(vendedorId: string): Promise<boolean> {
   return filas.length > 0;
 }
 
+/**
+ * ¿Ya existe esta empresa en el Cerebro? Por correo (la señal fuerte) o por
+ * nombre de empresa, sin importar mayúsculas. AUDITORÍA FABLE CICLO 5 (c5-7):
+ * sin este dedup, el mismo transportista que llenaba la calculadora dos veces
+ * — o que ya venía del censo — abría DOS hilos de campaña simultáneos al
+ * mismo correo: la cadencia de 48h y el máximo de 2 seguimientos son POR
+ * PROSPECTO, y protegen a la EMPRESA solo si la empresa es una fila.
+ * Fail closed: si la lectura falla, se lanza — crear a ciegas es crear el
+ * duplicado que este candado existe para impedir.
+ */
+async function prospectoExistente(correo: string | null, empresa: string): Promise<string | null> {
+  const admin = supabaseAdmin();
+  if (correo?.trim()) {
+    const { data, error } = await acotada(admin.from('prospecto').select('id')
+      .ilike('correo', correo.trim()).is('duplicado_de', null).limit(1), 'crearProspecto.dedupCorreo');
+    if (error) throw new Error(`crearProspecto.dedup: ${error.message}`);
+    const id = (data?.[0] as { id?: string } | undefined)?.id;
+    if (id) return id;
+  }
+  const nombre = empresa.trim();
+  if (nombre) {
+    const { data, error } = await acotada(admin.from('prospecto').select('id')
+      .ilike('empresa', nombre).is('duplicado_de', null).limit(1), 'crearProspecto.dedupEmpresa');
+    if (error) throw new Error(`crearProspecto.dedup: ${error.message}`);
+    const id = (data?.[0] as { id?: string } | undefined)?.id;
+    if (id) return id;
+  }
+  return null;
+}
+
 export async function crearProspecto(
   p: ProspectoValido,
-  /** El censo se importa con 'censo'; el alta del panel es 'manual'. */
-  fuente: 'manual' | 'censo' = 'manual',
+  /** El censo se importa con 'censo'; el alta del panel es 'manual';
+   *  'landing' es el visitante que levantó la mano en la calculadora pública
+   *  (blueprint del lead magnet: la unión se amplía AQUÍ antes de escribir la
+   *  primera fila — un valor fuera del dominio declarado rompe tableros sin
+   *  avisar; el comentario de la columna lo amplía la migración 0223). */
+  fuente: 'manual' | 'censo' | 'landing' = 'manual',
 ): Promise<string> {
   if (p.vendedorId !== null && !(await esVendedor(p.vendedorId))) {
     throw new DatoInvalido('Esa cuenta no es un vendedor. Vuelve a elegirlo de la lista.');
   }
+
+  // El DEDUP (c5-7): la fila nueva se guarda igual — los datos capturados
+  // valen — pero marcada `duplicado_de`, y TODA la maquinaria de campaña
+  // (redactor, investigador, SDR, candidatos del runner) filtra
+  // `duplicado_de is null`: el duplicado no abre un hilo de campaña nuevo.
+  const original = await prospectoExistente(p.correo, p.empresa);
 
   const { data, error } = await acotada(supabaseAdmin().from('prospecto').insert({
     empresa: p.empresa,
@@ -495,6 +541,7 @@ export async function crearProspecto(
     notas: p.notas,
     vendedor_id: p.vendedorId,
     fuente,
+    duplicado_de: original,
   }).select('id').single(), 'crearProspecto');
 
   if (error) throw new Error(`crearProspecto: ${error.message}`);

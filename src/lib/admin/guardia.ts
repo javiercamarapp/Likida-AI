@@ -18,7 +18,7 @@
 //    bandeja y se calla es peor que no tener guardia").
 //  · corridasFallo → S2 (una función dejó de operar; nada miente).
 //  · arco → S3, y S2 al acercarse el plazo legal (20 días hábiles, LFPDPPP
-//    art. 32 — vencerlo es incumplimiento, no molestia).
+//    art. 31 — vencerlo es incumplimiento, no molestia).
 //  · tickets → S3; vencidos de SLA → S2.
 //  · talachas / facturasProveedor / liquidacionesRevisar → S3 (esperan
 //    decisión humana; el sistema opera).
@@ -70,7 +70,7 @@ function clasificarItem(i: ItemEscalacion, ahoraMs: number): ItemClasificado {
   if (i.fuente === 'arco') {
     const porVencer = i.vence !== null && new Date(i.vence).getTime() - ahoraMs < 5 * DIA_MS;
     if (vencido || porVencer) {
-      return { ...base, severidad: 'S2', regla: vencido ? 'Solicitud ARCO con el plazo legal VENCIDO (LFPDPPP art. 32) — incumplimiento, no pendiente.' : 'Solicitud ARCO a menos de 5 días del plazo legal (LFPDPPP art. 32).' };
+      return { ...base, severidad: 'S2', regla: vencido ? 'Solicitud ARCO con el plazo legal VENCIDO (LFPDPPP art. 31) — incumplimiento, no pendiente.' : 'Solicitud ARCO a menos de 5 días del plazo legal (LFPDPPP art. 31).' };
     }
     return { ...base, severidad: 'S3', regla: 'Solicitud ARCO dentro de plazo — se atiende en el día, no despierta a nadie.' };
   }

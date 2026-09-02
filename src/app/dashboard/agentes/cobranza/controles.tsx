@@ -77,6 +77,15 @@ export function BotonEjecutar({ ejecutarAhora, enCola, activo }: {
               {r.fallos.length > 0 && <span style={{ color: 'var(--bad)' }}> · {r.fallos.length} fallos</span>}
             </p>
           )}
+          {/* FE-14: el reloj de corte (25 s) puede dejar folios sin tocar
+              en una cola grande — se dice, para que el humano sepa que hay
+              que volver a apretar "Ejecutar ahora" en vez de asumir que ya
+              se contactó a todos. */}
+          {r.cortadosPorReloj > 0 && (
+            <p style={{ color: 'var(--warn)' }}>
+              El reloj cortó la corrida — {r.cortadosPorReloj} sin tocar todavía. Vuelve a apretar &quot;Ejecutar ahora&quot; para seguir.
+            </p>
+          )}
           {r.fallos.map((f, i) => (
             <p key={i} style={{ color: 'var(--bad)' }}>{f}</p>
           ))}

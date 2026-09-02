@@ -11,6 +11,7 @@ type Builder = {
   limit: (...args: unknown[]) => Builder;
   insert: (fila: Record<string, unknown>) => Builder;
   update: (fila: Record<string, unknown>) => Builder;
+  delete: () => Builder;
   maybeSingle: () => Promise<Resultado>;
   then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise<unknown>;
 };
@@ -21,6 +22,8 @@ const db = vi.hoisted(() => ({
   eventError: false,
   updateError: false,
   eventKeys: new Set<string>(),
+  borradoError: false,
+  borrados: [] as string[],
   inserts: [] as Array<Record<string, unknown>>,
   updates: [] as Array<{ cambios: Record<string, unknown>; filtros: Filtro[] }>,
   filtros: [] as Filtro[],
@@ -30,6 +33,7 @@ function builder(table: string): Builder {
   const b = {} as Builder;
   let evento: Record<string, unknown> | null = null;
   let cambios: Record<string, unknown> | null = null;
+  let borrando = false;
   const filtros: Filtro[] = [];
   b.select = () => b;
   b.eq = (columna: string, valor: unknown) => { filtros.push({ columna, valor }); return b; };
@@ -44,6 +48,7 @@ function builder(table: string): Builder {
     return b;
   };
   b.update = (fila: Record<string, unknown>) => { cambios = fila; return b; };
+  b.delete = () => { borrando = true; return b; };
   b.maybeSingle = async () => {
     if (table === 'prospecto') {
       return db.lookupError
@@ -57,6 +62,13 @@ function builder(table: string): Builder {
     return { data: { id: 'evento-1' }, error: null };
   };
   b.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => {
+    if (table === 'comercial_evento' && borrando) {
+      const clave = String(filtros.find((f) => f.columna === 'clave_idempotencia')?.valor ?? '');
+      if (db.borradoError) return Promise.resolve({ data: null, error: { message: 'ledger delete failed' } }).then(resolve, reject);
+      db.eventKeys.delete(clave);
+      db.borrados.push(clave);
+      return Promise.resolve({ data: null, error: null }).then(resolve, reject);
+    }
     if (table === 'prospecto' && cambios) {
       db.updates.push({ cambios, filtros: [...filtros] });
       const response = db.updateError ? { data: null, error: { message: 'CRM update failed' } } : { data: null, error: null };
@@ -72,6 +84,7 @@ vi.mock('@/lib/ratelimit', () => ({ bodyExcede: vi.fn(() => false) }));
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), error: vi.fn() } }));
 
 const { POST } = await import('./route');
+const { logger } = await import('@/lib/logger');
 
 const SECRET = 'calcom-test-secret';
 
@@ -102,6 +115,8 @@ beforeEach(() => {
   db.eventKeys.clear();
   db.inserts.length = 0;
   db.updates.length = 0;
+  db.borradoError = false;
+  db.borrados.length = 0;
 });
 
 afterEach(() => { delete process.env.CALCOM_WEBHOOK_SECRET; });
@@ -153,5 +168,52 @@ describe('POST /api/webhook/calcom — puerta y durabilidad', () => {
     const r = await postear(EVENTO);
     expect(r.status).toBe(500);
     expect(db.inserts).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24, BE-17 — el libro se sellaba ANTES de aplicar el cambio al
+// prospecto. Un bache en el `UPDATE` dejaba el evento REGISTRADO y NUNCA
+// APLICADO: el 500 hacía reintentar a Cal.com, la clave ya escrita devolvía
+// `repetido` con 200, y un BOOKING_CANCELLED dejaba al prospecto en
+// `appointment` para siempre — el vendedor le habla el día de una cita que ya
+// no existe.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('BE-17 — un evento sellado pero no aplicado se puede reintentar', () => {
+  const CANCELADO = JSON.stringify({
+    triggerEvent: 'BOOKING_CANCELLED',
+    bookingId: 'booking-98765',
+    payload: { attendees: [{ email: 'lead@landing.mx' }] },
+  });
+
+  it('REPRO: el UPDATE falla una vez y el SEGUNDO envío sí aplica', async () => {
+    db.updateError = true;
+    expect((await postear(CANCELADO)).status).toBe(500);
+    // La reclamación se soltó: el reintento no puede salir como `repetido`.
+    expect(db.borrados).toEqual(['calcom:BOOKING_CANCELLED:booking-98765']);
+
+    db.updateError = false;
+    const r = await postear(CANCELADO);
+
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ ok: true, prospectoId: 'p-landing-1' });
+    expect(db.updates.at(-1)!.cambios).toMatchObject({ estado: 'cancelled' });
+  });
+
+  it('si NI SIQUIERA se puede soltar la reclamación, se nombra en el log', async () => {
+    db.updateError = true;
+    db.borradoError = true;
+    expect((await postear(CANCELADO)).status).toBe(500);
+    expect(logger.error).toHaveBeenCalledWith('calcom.webhook.reclamacion_atorada', expect.objectContaining({
+      clave: 'calcom:BOOKING_CANCELLED:booking-98765',
+    }));
+  });
+
+  it('un evento que SÍ aplicó no suelta nada: el repetido sigue siendo repetido', async () => {
+    expect((await postear(CANCELADO)).status).toBe(200);
+    expect(db.borrados).toHaveLength(0);
+    const r = await postear(CANCELADO);
+    expect(await r.json()).toMatchObject({ repetido: true });
+    expect(db.updates).toHaveLength(1);
   });
 });

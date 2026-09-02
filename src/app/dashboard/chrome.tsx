@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import Fondo from '../fondo';
 import { MARCO_FILA, MARCO_SIDEBAR, MARCO_COLUMNA, MARCO_SCROLL, CLASE_COLUMNA_CENTRO } from '../marco';
@@ -6,6 +5,7 @@ import SidebarNav, { SidebarAbajo } from './sidebar-nav';
 import { BotonSidebar } from '../boton-sidebar';
 import AvisoRol from './aviso-rol';
 import { Logo } from '../logo';
+import { EnlaceCuenta } from './enlace-cuenta';
 
 /**
  * El marco visual de /dashboard — fondo shader, sidebar glass con el logo,
@@ -76,20 +76,35 @@ export default function DashboardChrome({
 
           {/* El user card: tarjeta con hairline,
               avatar + nombre + rol, y salir como icono al lado — el botón
-              rojo de ancho completo gritaba más que cualquier contenido. */}
+              rojo de ancho completo gritaba más que cualquier contenido.
+              H10/H11 (auditoría 24): en modo ícono (72px — colapso manual
+              en escritorio o CUALQUIER pantalla bajo `lg`, es decir, todo
+              teléfono) no caben avatar y botón uno junto al otro, así que se
+              apilan en columna (`lg:flex-row` los pone en fila desde 1024px;
+              `.sb-user-card` en globals.css cubre el colapso manual, que se
+              queda en viewport `lg` pero en ancho de 72px). "Cerrar sesión"
+              ya NO lleva `hidden lg:block`: antes desaparecía entero en un
+              teléfono y no había ningún control de salir de la cuenta desde
+              el panel. */}
           <div className="px-2 pb-2 pt-2" style={{ borderTop: '1px solid var(--line)' }}>
-            <div className="hairline rounded-xl p-2 flex items-center justify-center lg:justify-start gap-2 sb-centrable" style={{ background: 'var(--surface)' }}>
+            <div className="hairline rounded-xl p-2 flex flex-col items-center lg:flex-row lg:justify-start gap-2 sb-centrable sb-user-card" style={{ background: 'var(--surface)' }}>
               <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[11px] font-semibold" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                 {(nombre ?? 'F')[0].toUpperCase()}
               </div>
               <div className="hidden lg:block min-w-0 flex-1 sb-texto">
-                <Link href="/cuenta" className="block text-[13px] font-medium hover:opacity-70 transition-opacity truncate leading-tight">
+                {/* H29 (auditoría 24): iba a `/cuenta` a secas — un superadmin
+                    previsualizando una flota (`?tenant=X&vista=demo`) que
+                    tocara su nombre perdía esos parámetros. Mismo contrato de
+                    sufijo que `sidebar-nav.tsx` (Client Component, lee
+                    `useSearchParams()` — `layout.tsx` no recibe `searchParams`,
+                    limitación de Next.js documentada ahí mismo). */}
+                <EnlaceCuenta rol={rol} className="block text-[13px] font-medium hover:opacity-70 transition-opacity truncate leading-tight">
                   {nombre ?? 'Mi cuenta'}
-                </Link>
+                </EnlaceCuenta>
                 <div className="text-[10px] truncate" style={{ color: 'var(--faint)' }}>{ROL_BADGE[rol] ?? rol.toUpperCase()}</div>
               </div>
               {cerrarSesion && (
-                <form action={cerrarSesion} className="hidden lg:block shrink-0 sb-texto">
+                <form action={cerrarSesion} className="shrink-0">
                   <button type="submit" title="Cerrar sesión" aria-label="Cerrar sesión"
                     className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--badbg)]"
                     style={{ color: 'var(--bad)' }}>

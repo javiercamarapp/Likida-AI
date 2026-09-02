@@ -1,13 +1,17 @@
 import Link from 'next/link';
-import { ChevronRight, Download, MessageCircle, RotateCcw, Truck, UserCog } from 'lucide-react';
+import { ChevronRight, Download, MessageCircle, RotateCcw, Truck } from 'lucide-react';
 import type { LiquidacionDetalle } from '@/lib/likida/analytics';
+import type { ResumenLaboral } from '@/lib/likida/laboral/pagadero';
 import { filasDeducibilidad } from '@/lib/likida/liquidacion/deducibilidad';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { mxn, litros, fechaMx, fechaCorta } from '@/lib/formato';
 import { StatusPill, type Estado } from '@/app/admin/ui/kit';
 import { FormaConAviso, type ResultadoAccion } from '@/app/admin/ui/forma';
 import { BarraPagina } from '../resumen-visual';
-import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
+import type { BuscarCatalogo } from '../combo-catalogo';
+import { PanelRevision, type GastoAjustable } from './revision-panel';
+import { FormaReasignar } from './reasignar-forma';
+import type { RevisionDetalle } from '@/lib/likida/revision';
 import {
   BTN_PRIMARIO, BTN_SECUNDARIO, ESTILO_PRIMARIO, ESTILO_SECUNDARIO,
   Kpi, Dato, Rotulo, LineaDeTiempo, Diferencia, PillRenglon, TH,
@@ -47,13 +51,24 @@ export interface PropsDetalle {
     /** El nombre del chofer ACTUAL — viene con el detalle, así que el control
      *  arranca lleno sin pedirle nada al catálogo. */
     actualNombre: string;
-    accion: (fd: FormData) => Promise<void>;
+    /** FE-11: devuelve el rechazo en vez de lanzarlo — un chofer dado de baja
+     *  no puede tumbar la pantalla entera por `error.tsx`. */
+    accion: (previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
   } | null;
   /** La acción de reabrir, solo si el rol administra. */
   reabrir: ((previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>) | null;
+  /** La firma humana (BLOQ-6, mig. 0299). `null` = no se pudo leer el estado
+   *  de la revisión; entonces NO se pinta el panel, porque unos botones sin
+   *  saber si la liquidación ya está firmada invitan a firmarla dos veces. */
+  revision: {
+    estado: RevisionDetalle;
+    gastos: GastoAjustable[];
+    /** `null` = el rol ve la firma pero no la pone. */
+    accion: ((previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>) | null;
+  } | null;
 }
 
-export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, wa, reasignar, reabrir }: PropsDetalle) {
+export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, wa, reasignar, reabrir, revision }: PropsDetalle) {
   // LA FOTO DEL TICKET SE GUARDA (CFF art. 30, conservación 5 años) PERO NO SE
   // ENSEÑA AQUÍ. El aviso de privacidad (privacidad.ts:498) le promete al
   // operador que un dato sensible que aparezca por accidente en su ticket "no
@@ -166,19 +181,8 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, wa, 
                   Solo dueño/encargado (permisos.ts: puedeAsignar) — un contador o un
                   superadmin de paso por el tenant demo no mueve viajes de chofer. */}
               {reasignar && (
-                <form action={reasignar.accion} className="flex items-start gap-2">
-                  <label htmlFor="operadorId" className="sr-only">Chofer</label>
-                  <ComboCatalogo tipo="operador" name="operadorId" campoId="operadorId"
-                    buscar={reasignar.buscar} aria-label="Chofer"
-                    etiquetaVacia="Escribe el nombre del chofer…"
-                    valorInicial={reasignar.actual} textoInicial={reasignar.actualNombre}
-                    total={reasignar.total}
-                    className="h-8 text-[12.5px] px-2.5 rounded-lg hairline min-w-0 max-w-[220px]"
-                    estilo={{ background: 'var(--surface)' }} />
-                  <button type="submit" className={BTN_SECUNDARIO} style={ESTILO_SECUNDARIO}>
-                    <UserCog width={13} height={13} strokeWidth={1.75} aria-hidden /> Reasignar chofer
-                  </button>
-                </form>
+                <FormaReasignar accion={reasignar.accion} buscar={reasignar.buscar}
+                  actual={reasignar.actual} actualNombre={reasignar.actualNombre} total={reasignar.total} />
               )}
             </div>
 
@@ -282,6 +286,16 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, wa, 
                     </p>
                   </div>
                 )}
+
+                {/* ── DEDUCIBLE ≠ PAGADERO (tableros al día, 28-ago-2026) ──
+                    El mismo resumen que el PDF imprime desde el 1-ago, con las
+                    MISMAS funciones (analytics lo calcula junto a las cubetas).
+                    Hasta hoy el contralor decidía el neto EN ESTA PANTALLA
+                    viendo solo la deducibilidad — y la advertencia de que «no
+                    deducible» NO autoriza descontárselo al operador (LFT
+                    110/111/263) solo aparecía en el PDF ya generado. La
+                    decisión se toma aquí; la advertencia va aquí. */}
+                {d.laboral && <SeccionLaboral laboral={d.laboral} />}
               </section>
 
               {/* ── Diferencias en lenguaje humano ── */}
@@ -395,6 +409,13 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, wa, 
             )}
           </section>
 
+          {/* La firma va ANTES de «reabrir»: es lo que se hace todos los
+              días; reabrir es lo excepcional y destructivo. */}
+          {revision && (
+            <PanelRevision estado={revision.estado} gastos={revision.gastos}
+              accion={revision.accion} folio={d.folio} />
+          )}
+
           {reabrir && (
             <section className="card p-4">
               <div className="flex items-center gap-2 mb-1">
@@ -424,6 +445,29 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, wa, 
   );
 }
 
+
+/** DEDUCIBLE ≠ PAGADERO en pantalla — exportada para probarla sin montar el
+ *  detalle entero. El texto es EL MISMO que imprime el PDF (`resumenLaboral`):
+ *  dos redacciones de la misma obligación laboral serían dos opiniones
+ *  legales, y este producto emite una. */
+export function SeccionLaboral({ laboral }: { laboral: ResumenLaboral }) {
+  return (
+    <div className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--line2)' }}>
+      <Rotulo>Lo que se le reembolsa al operador</Rotulo>
+      <div className="flex items-start justify-between gap-4 mt-1.5">
+        <p className="text-[12.5px] min-w-0">{laboral.texto}</p>
+        {laboral.montoPagadero > 0 && (
+          <span className="cifra-mono text-[13px] font-medium whitespace-nowrap">{mxn(laboral.montoPagadero)}</span>
+        )}
+      </div>
+      <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
+        Deducible y pagadero son veredictos distintos: que un gasto no sea deducible (ISR) no
+        autoriza descontárselo al operador (LFT 110 y 111; hospedaje y alimentación por demora
+        ajena, LFT 263-I). Es el mismo texto que imprime el PDF.
+      </p>
+    </div>
+  );
+}
 
 function Celda({ children, vacio }: { children: React.ReactNode; vacio: boolean }) {
   return (

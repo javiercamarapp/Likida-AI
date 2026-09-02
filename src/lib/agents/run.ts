@@ -62,7 +62,7 @@ export async function runAgent(opts: {
   const timer = setTimeout(() => controller.abort(new DOMException('Timeout', 'TimeoutError')), opts.timeoutMs ?? timeoutAgenteMs());
   const signal = combineAbortSignals(opts.signal, opts.ctx.signal, controller.signal)!;
   const runId = opts.ctx.runId ?? randomUUID();
-  const budget = createLlmBudget(opts.ctx.tenantId, runId);
+  const budget = createLlmBudget(opts.ctx.tenantId, runId, 'interactivo');
   const ctx: ToolContext = { ...opts.ctx, runId, signal };
 
   // ME-1: aplicar los parámetros por rol (temp 0 + reasoning donde importa), en

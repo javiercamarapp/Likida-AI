@@ -75,7 +75,7 @@ const linea = (indice: number, monto: number, fecha?: string): CfdiLineaXml => (
 
 const xmlConsolidado = (lineas: CfdiLineaXml[]): CfdiXmlData => ({
   uuid: 'UUID-CONSOLIDADO-1',
-  iepsTraslado: 0, ivaTraslado: 0, conceptos: [],
+  iepsTraslado: 0, ivaTraslado: 0, ivaRetenido: 0, isrRetenido: 0, conceptos: [],
   complementoHidrocarburos: false, esquemaAlterno: false,
   lineas,
 });
@@ -101,7 +101,7 @@ describe('guardarYConciliarConsolidado — la segunda escritura NO se traga', ()
     ]), '<xml/>');
     expect(r).toEqual({ cfdiXmlId: 'xml-1', totalLineas: 2, conciliadas: 1, porConciliar: 1 });
     expect(gastoUpdates).toHaveLength(1);
-    expect(gastoUpdates[0]).toEqual({ cfdi_uuid: 'UUID-CONSOLIDADO-1', cfdi_orden: 1 });
+    expect(gastoUpdates[0]).toEqual({ cfdi_uuid: 'UUID-CONSOLIDADO-1', cfdi_orden: 1, xml_verificado: true });
     expect(lineasUpsertPayload).toHaveLength(2);
   });
 
@@ -131,7 +131,7 @@ describe('guardarYConciliarConsolidado — la segunda escritura NO se traga', ()
     // La línea 1 se reconstruye desde el sello, sin re-ligar el gasto (ya
     // trae el sello — el único update es el de g2, la línea nueva).
     expect(gastoUpdates).toHaveLength(1);
-    expect(gastoUpdates[0]).toEqual({ cfdi_uuid: 'UUID-CONSOLIDADO-1', cfdi_orden: 2 });
+    expect(gastoUpdates[0]).toEqual({ cfdi_uuid: 'UUID-CONSOLIDADO-1', cfdi_orden: 2, xml_verificado: true });
     const fila1 = lineasUpsertPayload?.find((f) => f.indice === 1);
     expect(fila1?.estatus).toBe('conciliada');
     expect(fila1?.gasto_id).toBe('g1');

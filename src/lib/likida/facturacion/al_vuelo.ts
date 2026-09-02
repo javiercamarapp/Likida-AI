@@ -11,9 +11,12 @@ import {
   facturarLoteConAgente,
   adaptadorDe,
   pideCaptcha,
+  pideVinculacion,
+  cambioElPortal,
   type ResultadoPorGasto,
   type TicketDeLote,
 } from './agente';
+import type { ClaseDeFallo } from './vinculo_senales';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FACTURAR EN CUANTO LLEGA LA FOTO, NO AL CERRAR EL VIAJE.
@@ -351,6 +354,15 @@ export interface ResultadoLoteAutofactura {
   capturado?: Record<string, string>;
   error?: string;
   aviso?: string;
+  /**
+   * QUÉ LE PASÓ AL VÍNCULO CON EL PORTAL en esta sesión, si le pasó algo.
+   *
+   * Sale como dato estructurado y no dentro de `error` para que el cron pueda
+   * actuar sin leer texto: apagar la sesión guardada, anotar el estado que la
+   * pantalla enseña, y —en el caso `portal_cambio`— NO tocar ninguna de las
+   * dos cosas, porque ahí el arreglo es de Likida.
+   */
+  vinculo?: { clase: ClaseDeFallo; motivo: string };
 }
 
 export async function facturarLoteAlVuelo(args: {
@@ -470,6 +482,7 @@ export async function facturarLoteAlVuelo(args: {
   // portal, que es el único orden que nos consta (ver mig. 0065).
   const ordenPorUuid = new Map<string, number>();
   const bloqueoDelLote = motivoDeBloqueo(r);
+  const vinculoDelLote = vinculoDelResultado(r);
 
   for (const p of r.porGasto) {
     const propio = await guardarUno(admin, args, p, r.error, ordenPorUuid, bloqueoDelLote, modo === 'emitir');
@@ -492,7 +505,37 @@ export async function facturarLoteAlVuelo(args: {
     capturado: r.capturado,
     ...(r.error ? { error: r.error } : {}),
     ...(r.aviso ? { aviso: r.aviso } : {}),
+    ...(vinculoDelLote ? { vinculo: vinculoDelLote } : {}),
   };
+}
+
+/**
+ * Lo que el lote dice del VÍNCULO, en la forma que `vinculo_portal.ts` sabe
+ * ejecutar. `null` = al vínculo no le pasó nada que anotar.
+ *
+ * Las tres banderas del adaptador se traducen a UNA clase porque quien actúa
+ * necesita una decisión, no tres booleanos: apagar la sesión y anotar
+ * «caducada», anotar «sin vincular», o no tocar nada porque el roto es el
+ * mapeo.
+ */
+function vinculoDelResultado(r: {
+  requiereVinculacion?: boolean;
+  sesionCaducada?: boolean;
+  portalCambio?: boolean;
+  error?: string;
+}): { clase: ClaseDeFallo; motivo: string } | null {
+  if (r.requiereVinculacion) {
+    return {
+      clase: r.sesionCaducada ? 'sesion_caducada' : 'requiere_vinculacion',
+      motivo: r.error ?? (r.sesionCaducada
+        ? 'el portal rechazó la sesión guardada'
+        : 'el portal pide iniciar sesión y no hay sesión vinculada'),
+    };
+  }
+  if (r.portalCambio) {
+    return { clase: 'portal_cambio', motivo: r.error ?? 'el portal ya no se parece al mapeo del adaptador' };
+  }
+  return null;
 }
 
 /** Lo que le pasa a UN gasto después de que el portal contestó. */
@@ -698,12 +741,35 @@ async function bloquear(
  * no del texto del error: un mensaje se reescribe y el que lo reescriba no tiene
  * por qué saber que alguien lo estaba interpretando.
  */
-function motivoDeBloqueo(r: { requiereCaptcha?: boolean; emisionSinConfirmar?: boolean; error?: string }): string | null {
+function motivoDeBloqueo(r: {
+  requiereCaptcha?: boolean;
+  emisionSinConfirmar?: boolean;
+  requiereVinculacion?: boolean;
+  sesionCaducada?: boolean;
+  portalCambio?: boolean;
+  error?: string;
+}): string | null {
+  // La emisión sin confirmar va PRIMERO: es la única que puede haber dejado un
+  // CFDI vivo, y su mensaje es el que no se puede perder detrás de otro.
+  if (r.emisionSinConfirmar) {
+    return `SE APRETÓ EMITIR Y NO SE PUDO CONFIRMAR EL FOLIO: puede que el CFDI ya exista. Hay que mirarlo en el portal antes de volver a intentar — un segundo intento lo duplicaría${r.error ? ` — ${r.error}` : ''}`;
+  }
+  // La vinculación va antes que el captcha cuando vienen las dos: el login de
+  // varios portales trae reCAPTCHA, y decir solo "hay captcha" manda a la
+  // persona a resolver un muro POR TICKET. Lo accionable es vincular UNA vez.
+  if (pideVinculacion(r)) {
+    const que = r.sesionCaducada
+      ? 'SE VENCIÓ LA SESIÓN de este portal'
+      : 'este portal pide iniciar sesión y todavía no está vinculado';
+    const captcha = r.requiereCaptcha ? ' Su pantalla de entrar trae CAPTCHA, y eso lo resuelve la persona al vincular — Likida no lo rodea.' : '';
+    return `${que}: hay que entrar UNA vez desde «Vincular ahora» y las corridas siguientes lo hacen solas.${captcha}${r.error ? ` — ${r.error}` : ''}`;
+  }
   if (pideCaptcha(r)) {
     return `el portal pidió CAPTCHA, así que lo tiene que facturar una persona. Reintentarlo no lo va a cambiar${r.error ? ` — ${r.error}` : ''}`;
   }
-  if (r.emisionSinConfirmar) {
-    return `SE APRETÓ EMITIR Y NO SE PUDO CONFIRMAR EL FOLIO: puede que el CFDI ya exista. Hay que mirarlo en el portal antes de volver a intentar — un segundo intento lo duplicaría${r.error ? ` — ${r.error}` : ''}`;
+  // Y esta no manda a nadie del lado del cliente a hacer nada: es NUESTRA.
+  if (cambioElPortal(r)) {
+    return `EL PORTAL CAMBIÓ y el mapeo de Likida ya no le queda. NO es tu sesión —esa sigue viva— y volver a entrar no lo arregla: lo tenemos que corregir nosotros${r.error ? ` — ${r.error}` : ''}`;
   }
   return null;
 }

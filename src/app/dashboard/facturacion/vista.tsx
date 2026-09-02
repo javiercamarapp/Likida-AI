@@ -1,9 +1,10 @@
 import {
-  FileText, Banknote, Wallet, CalendarClock, HandCoins, TriangleAlert, Truck,
+  FileText, Banknote, Wallet, CalendarClock, HandCoins, TriangleAlert, Truck, ClipboardCheck,
 } from 'lucide-react';
 import type {
   FacturacionClientes, RenglonCartera, ClienteCartera, RenglonSinFacturar,
 } from '@/lib/likida/facturacion_clientes';
+import { CUBETAS_AUDITOR, type AuditoriaCobranza, type CubetaAuditor } from '@/lib/likida/auditor_cobranza';
 import { StatCard, EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
 // El formato de cifras vive SOLO en formato.ts — hay una prueba que falla si
 // otro archivo formatea moneda mexicana por su cuenta. Se usa `fechaMx` (CON
@@ -21,7 +22,9 @@ import {
  *  propósito: sin esto la vista sigue siendo pura-props y se puede mirar con
  *  fixtures sin sesión, igual que siempre. */
 export interface CapturaFacturacion {
-  clientes: ReadonlyArray<{ id: string; nombre: string; diasCredito: number | null }>;
+  /** `null` = la lectura del catálogo falló, distinto de `[]` = no hay ninguno
+   *  (AUDITORÍA 22, FE-1). Mismo criterio que `auditoria` más abajo. */
+  clientes: ReadonlyArray<{ id: string; nombre: string; diasCredito: number | null }> | null;
   /** `YYYY-MM-DD` en hora de México, para los defaults de fecha. */
   hoy: string;
   factura: AccionForma;
@@ -50,9 +53,12 @@ export interface CapturaFacturacion {
  *
  * Pura props a propósito, para poder mirarla con fixtures sin sesión.
  */
-export function VistaFacturacion({ datos, captura = null }: {
+export function VistaFacturacion({ datos, captura = null, auditoria = null }: {
   datos: FacturacionClientes | null;
   captura?: CapturaFacturacion | null;
+  /** El cruce pactado/entregado/facturado/cobrado (auditor_cobranza.ts).
+   *  `null` = su lectura falló; la sección pinta el error dicho, no un cero. */
+  auditoria?: AuditoriaCobranza | null;
 }) {
   return (
     <main className="h-full">
@@ -88,11 +94,16 @@ export function VistaFacturacion({ datos, captura = null }: {
                   </Plegable>
                 </div>
               )}
+              {/* Una flota sin facturas puede tener hallazgos IGUAL: el
+                  entregado-sin-facturar existe justamente antes de la primera
+                  factura. Si el auditor encontró algo, se enseña aquí también. */}
+              {auditoria !== null && auditoria.cola.length > 0 && <BloqueAuditor auditoria={auditoria} />}
             </>
           ) : (
             <>
               <BloqueCartera datos={datos} captura={captura} />
               <BloqueEnLaMesa datos={datos} />
+              <BloqueAuditor auditoria={auditoria} />
               <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
                 Todo lo de esta pantalla se fechó contra un solo día: <strong>{fechaMx(datos.hoy)}</strong>,
                 en hora de México. Es lo que impide que una factura salga marcada como vencida y con
@@ -575,5 +586,139 @@ function RenglonMesa({ v }: { v: RenglonSinFacturar }) {
           : mxn(v.ingreso)}
       </td>
     </tr>
+  );
+}
+
+// ── El auditor de cobranza — el cruce pactado / entregado / facturado / cobrado ──
+
+/** Cuántos hallazgos se listan. El TOTAL siempre se dice aparte: recortar la
+ *  lista está bien, recortar la cifra sin decirlo no. */
+const LIMITE_COLA_AUDITOR = 25;
+
+const ROTULO_CUBETA: Record<CubetaAuditor, { rotulo: string; ayuda: string }> = Object.fromEntries(
+  CUBETAS_AUDITOR.map((c) => [c.clave, { rotulo: c.rotulo, ayuda: c.ayuda }]),
+) as Record<CubetaAuditor, { rotulo: string; ayuda: string }>;
+
+function BloqueAuditor({ auditoria }: { auditoria: AuditoriaCobranza | null }) {
+  return (
+    <section className="space-y-3">
+      <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+        Auditor de cobranza — lo pactado contra lo entregado, lo facturado y lo cobrado
+      </h2>
+
+      {auditoria === null ? (
+        <EstadoError mensaje="No pude cruzar los viajes contra sus tarifas, PODs, facturas y pagos. No se enseña una auditoría a medias: un cruce incompleto diría que no hay discrepancias en viajes que sí las tienen." />
+      ) : auditoria.resumen.viajesAuditados === 0 ? (
+        <EstadoVacio icono={<ClipboardCheck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+          No hubo viajes iniciados entre el {fechaMx(auditoria.desde)} y el {fechaMx(auditoria.hasta)},
+          que es la ventana que este auditor revisa. En cuanto los haya, aquí sale el cruce de cada uno:
+          lo pactado con el cliente (tarifa o ingreso capturado), lo entregado (POD e hitos), lo
+          facturado y lo cobrado — con cada discrepancia dicha y cifrada.
+          {auditoria.viajesSinFecha > 0 && (
+            <> Ojo: {auditoria.viajesSinFecha === 1
+              ? 'hay 1 viaje sin fecha de inicio que queda'
+              : `hay ${numero(auditoria.viajesSinFecha)} viajes sin fecha de inicio que quedan`} fuera
+            de cualquier ventana.</>
+          )}
+        </EstadoVacio>
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <StatCard
+              icono={<Truck width={14} height={14} strokeWidth={1.75} />}
+              etiqueta="Dinero dormido" valor={auditoria.resumen.dineroDormido} formato="mxn"
+              nota={auditoria.resumen.dormidosSinMonto > 0
+                ? `Entregado y sin facturar. Es el piso: ${plural(auditoria.resumen.dormidosSinMonto, 'entrega más no tiene', 'entregas más no tienen')} monto resoluble`
+                : 'Viajes con entrega probada y ninguna factura viva'}
+            />
+            <StatCard
+              icono={<TriangleAlert width={14} height={14} strokeWidth={1.75} />}
+              etiqueta="Facturado de menos" valor={auditoria.resumen.brechaFacturadoDeMenos} formato="mxn"
+              nota="La brecha entre lo pactado y lo que suman las facturas"
+            />
+            <StatCard
+              icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
+              etiqueta="Margen real medido" valor={auditoria.resumen.margen.margen} formato="mxn"
+              nota={auditoria.resumen.margen.viajesMedidos > 0
+                ? `${auditoria.resumen.margen.margenPct === null ? '' : `${numero(auditoria.resumen.margen.margenPct)}% · `}pactado menos gastos liquidados, en ${plural(auditoria.resumen.margen.viajesMedidos, 'viaje medido', 'viajes medidos')}; ${numero(auditoria.resumen.margen.viajesSinDato)} sin las dos mitades`
+                : 'Ningún viaje de la ventana tiene pactado Y liquidación: no se mide'}
+            />
+          </div>
+
+          {auditoria.cola.length === 0 ? (
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+              Los {numero(auditoria.resumen.viajesAuditados)} viajes de la ventana salieron sin
+              discrepancias: lo facturado cuadra con lo pactado, lo entregado está facturado y no hay
+              cobros a medias ni PODs faltantes con factura viva.
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {CUBETAS_AUDITOR.filter((c) => auditoria.resumen.porCubeta[c.clave] > 0).map((c) => (
+                  <span key={c.clave} title={c.ayuda}
+                    className="text-[11px] px-2 py-0.5 rounded-full hairline"
+                    style={{ color: 'var(--muted)' }}>
+                    {c.rotulo} · {numero(auditoria.resumen.porCubeta[c.clave])}
+                  </span>
+                ))}
+              </div>
+
+              <div className="card overflow-x-auto">
+                <table className="w-full text-[12.5px]">
+                  <thead>
+                    <tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}>
+                      <th className="px-3 py-2 font-medium">Viaje</th>
+                      <th className="px-3 py-2 font-medium">Cliente</th>
+                      <th className="px-3 py-2 font-medium">Hallazgo</th>
+                      <th className="px-3 py-2 font-medium text-right">En juego</th>
+                      <th className="px-3 py-2 font-medium">La nota, citable</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditoria.cola.slice(0, LIMITE_COLA_AUDITOR).map((h) => (
+                      <tr key={`${h.viajeId}-${h.cubeta}`} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
+                        <td className="px-3 py-2">
+                          <span className="cifra-mono">{h.folio}</span>
+                          {h.ruta && <div className="text-[10.5px]" style={{ color: 'var(--faint)' }}>{h.ruta}</div>}
+                        </td>
+                        <td className="px-3 py-2">
+                          {h.cliente ?? <span style={{ color: 'var(--warn)' }}>sin asignar</span>}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">{ROTULO_CUBETA[h.cubeta].rotulo}</td>
+                        <td className="px-3 py-2 text-right tabular font-medium">
+                          {/* Sin monto resoluble no se inventa uno: la nota dice qué falta. */}
+                          {h.monto === null ? <span style={{ color: 'var(--faint)' }}>—</span> : mxn(h.monto)}
+                        </td>
+                        <td className="px-3 py-2 text-[11.5px]" style={{ color: 'var(--muted)' }}>{h.nota}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {auditoria.cola.length > LIMITE_COLA_AUDITOR && (
+                <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+                  Se listan los {numero(LIMITE_COLA_AUDITOR)} hallazgos con más dinero enfrente
+                  de {numero(auditoria.cola.length)}. Las tarjetas y los conteos de arriba son de todos.
+                </p>
+              )}
+            </>
+          )}
+
+          <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+            Ventana auditada: viajes iniciados del <strong>{fechaMx(auditoria.desde)}</strong> al{' '}
+            <strong>{fechaMx(auditoria.hasta)}</strong>, juzgados contra el {fechaMx(auditoria.hoy)}.
+            {auditoria.viajesSinFecha > 0 && (
+              <> {auditoria.viajesSinFecha === 1
+                ? '1 viaje sin fecha de inicio queda'
+                : `${numero(auditoria.viajesSinFecha)} viajes sin fecha de inicio quedan`} fuera de
+              cualquier ventana; captúrales la fecha y entran solos.</>
+            )}
+            {' '}Este auditor propone: la refacturación la firma el humano — no emite ni cancela CFDI,
+            ni toca la tarifa.
+          </p>
+        </>
+      )}
+    </section>
   );
 }

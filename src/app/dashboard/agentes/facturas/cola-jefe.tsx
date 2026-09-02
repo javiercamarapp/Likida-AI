@@ -50,7 +50,7 @@ export function ColaJefe({ filas, marcarFacturada, maxFilas, totalFilas }: {
 
   return (
     <>
-      <div className="space-y-1">
+      <div className="space-y-1 overflow-x-auto">
         {filas.map((f) => (
           <div key={f.gastoId} className="rounded-xl border" style={{ borderColor: abierta === f.gastoId ? 'var(--line)' : 'transparent', background: abierta === f.gastoId ? 'var(--canvas)' : undefined }}>
             <button type="button" onClick={() => setAbierta((v) => (v === f.gastoId ? null : f.gastoId))}

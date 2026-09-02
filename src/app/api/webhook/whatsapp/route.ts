@@ -1,19 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { randomUUID } from 'crypto';
-// `sendText` ya no se importa aquí: el único envío que salía de esta ruta era
-// el aviso de rate limit, y ese aviso desapareció con el 429 (los mensajes
-// vuelven solos). Esta ruta solo recibe; quien contesta es el processor.
-import { verifyWebhookChallenge, verifySignature } from '@/lib/meta/client';
+// Esta ruta solo recibe; quien contesta es el processor. La ÚNICA excepción
+// es el aviso de mantenimiento (AUDITORÍA 24 · AGEN-7): con la palanca abajo
+// el processor no llega a correr, así que si no habla esta ruta no habla
+// nadie — y el chofer se queda tres horas sin una sola línea.
+import { verifyWebhookChallenge, verifySignature, sendText } from '@/lib/meta/client';
 import { processInbound, type InboundMessage, type ResultadoInbound } from '@/lib/likida/processor';
 import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { flushObservabilidad, codigoDeError } from '@/lib/observability/sentry';
-import { estaApagado } from '@/lib/likida/interruptores';
+import { leerInterruptor } from '@/lib/likida/interruptores';
+import { avisadosDeApagado, VENTANA_AVISO_APAGADO_MS } from './avisos_apagado';
 import {
   guardarEventosPendientes, pendientesYaConocidos, reclamarPendiente,
-  marcarPendienteProcesado, anotarFalloPendiente,
+  marcarPendienteProcesado, anotarFalloPendiente, devolverIntentoPendiente,
   iniciarRenovacionLease,
 } from '@/lib/likida/wa_pendientes';
 
@@ -296,11 +298,33 @@ export async function POST(req: NextRequest) {
       // ocurrió ANTES del código de salida (el inbox general): con la
       // palanca abajo aquí no se procesa nada — las filas durables esperan
       // al cron `wa-pendientes`, que las drena cuando la palanca suba.
-      if (await estaApagado('global')) {
+      const palanca = await leerInterruptor('global');
+      if (palanca !== 'encendido') {
         logger.warn('wa.entrante_apagado', {
           mensajes: permitidos.length,
+          palanca,
           ids: permitidos.map((m) => m.waMessageId),
         });
+        // ── AUDITORÍA 24 · AGEN-7 (MEDIO): APAGADO NO PUEDE SER MUDO ──────
+        //
+        // El interruptor SÍ corta y SÍ conserva: todo queda en
+        // `wa_evento_pendiente` y el cron lo drena cuando la palanca sube.
+        // Lo que no hacía era hablar. Escenario medido: se apaga a las 11:00
+        // por un incidente; a las 11:20 un chofer manda cinco fotos y un
+        // «listo», recibe la palomita de WhatsApp y NADA durante tres horas.
+        // Para él el sistema no está apagado: está roto, y llama a la
+        // oficina — que tampoco sabe.
+        //
+        // Solo con 'apagado', nunca con 'ilegible': ése es el fail-closed de
+        // un blip de cinco segundos de la base, y anunciar mantenimiento por
+        // un parpadeo sería decir algo que no es.
+        //
+        // UNA VEZ POR NÚMERO, en memoria del módulo — el mismo trato que la
+        // libreta de la ráfaga, y por el mismo motivo: no se puede escribir
+        // en la base durante un incidente cuya causa puede ser la base. El
+        // peor caso es un aviso por instancia de lambda, nunca uno por
+        // mensaje, y jamás el silencio.
+        if (palanca === 'apagado') await avisarMantenimiento(permitidos);
         await flushObservabilidad();
         return;
       }
@@ -345,8 +369,21 @@ export async function POST(req: NextRequest) {
       }
 
       await conPool([...porChofer.values()], MAX_EN_PARALELO, async (cadena) => {
-        for (const f of cadena) {
+        // AUDITORÍA 19 (AGEN-19C2-1, corregido tras auditoría Fable-5): la
+        // cadena completa de este chofer ya se conoce de antemano — la señal
+        // que `processInbound` necesita para saber que hubo ráfaga sin
+        // depender de que dos fotos se solapen en el tiempo (ya no se
+        // solapan, por diseño, desde el 23-ago: "en serie dentro de cada
+        // chofer"). Se cuenta SOLO por FOTOS (`type === 'image'`), no por
+        // cualquier mensaje: una cadena `[foto, foto, "listo"]` antes hacía
+        // que la ÚLTIMA foto se creyera "no soy la última del lote" porque el
+        // "listo" venía después, y como el cierre de ráfaga solo vive en el
+        // camino de la foto, la libreta nunca se cerraba. Ver la nota en
+        // `processor.ts` (OpcionesInbound.hayFotoAntesEnCadena).
+        for (const [posicion, f] of cadena.entries()) {
           try {
+            const hayFotoAntesEnCadena = cadena.slice(0, posicion).some((x) => x.evento.type === 'image');
+            const hayFotoDespuesEnCadena = cadena.slice(posicion + 1).some((x) => x.evento.type === 'image');
             const claim = await reclamarPendiente(f.id, 0, leaseOwner);
             // Si otra invocación tiene el mensaje anterior, esta cadena se
             // detiene: avanzar al siguiente rompería el orden por chofer.
@@ -355,11 +392,27 @@ export async function POST(req: NextRequest) {
               ? iniciarRenovacionLease(claim.id, claim.leaseToken, claim.leaseOwner)
               : () => {};
             try {
-              const resultado = await processInbound(claim.evento, { inicioInvocacionMs: inicioInvocacion });
+              const resultado = await processInbound(claim.evento, {
+                inicioInvocacionMs: inicioInvocacion,
+                hayFotoAntesEnCadena,
+                hayFotoDespuesEnCadena,
+              });
               if (quedoPendiente(resultado)) {
                 logger.warn('wa.pendiente_pospuesto', { id: f.id, resultado });
-                if (claim.leaseToken && claim.leaseOwner) await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`, claim.leaseToken, claim.leaseOwner);
-                else await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`);
+                if (resultado === 'sin_tiempo') {
+                  // BACKEND-19C2-4 (barrido MEDIO/BAJO): quedarse sin
+                  // presupuesto NO es un intento fallido — el mensaje ni se
+                  // miró. Contarlo como fallo (`anotarFalloPendiente`)
+                  // convertía en carta muerta, a los 5 golpes de una ráfaga
+                  // cargada, una foto que nadie llegó a procesar. Mismo
+                  // criterio que ya usa el drenado del cron (ESC-1) — este
+                  // camino en vivo no lo aplicaba.
+                  if (claim.leaseToken && claim.leaseOwner) await devolverIntentoPendiente(f.id, claim.intentos, claim.leaseToken, claim.leaseOwner);
+                  else await devolverIntentoPendiente(f.id, claim.intentos);
+                } else {
+                  if (claim.leaseToken && claim.leaseOwner) await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`, claim.leaseToken, claim.leaseOwner);
+                  else await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`);
+                }
                 // Sin presupuesto para éste tampoco lo hay para el que sigue, y
                 // procesar el «listo» sin sus fotos es peor que posponerlo: se
                 // corta la cadena y el cron la retoma entera. Mismo criterio
@@ -504,6 +557,12 @@ interface WaWebhook {
           // en emergencia manda su posición y el sistema la registra y se la
           // pasa al jefe. Meta la manda como `type: 'location'`.
           location?: { latitude?: number; longitude?: number };
+          // La nota de voz del chofer (Capa E1). Meta manda `type: 'audio'`
+          // tanto para la nota grabada en el chat (`voice: true`) como para un
+          // audio reenviado — se tratan igual: ambos se transcriben. El mime
+          // no viaja en InboundMessage a propósito: la descarga de media (que
+          // el transcriptor reutiliza) lo trae en los metadatos de Meta.
+          audio?: { id: string };
           // El chofer apretó un botón. Meta manda `type: 'interactive'` y dentro
           // un `interactive.type` que dice CUÁL de los interactivos fue:
           // `button_reply` (botones de respuesta rápida) o `list_reply` (lista
@@ -522,6 +581,30 @@ interface WaWebhook {
 }
 
 /** Los acuses de entrega, que viven en `value.statuses` y no en `value.messages`. */
+/**
+ * Le dice UNA vez a cada número que estamos en mantenimiento y que lo suyo
+ * quedó guardado. Best-effort puro: si Meta no lo acepta, el mensaje del
+ * chofer sigue en el inbox igual — esto es información, no el dinero.
+ */
+async function avisarMantenimiento(mensajes: InboundMessage[]): Promise<void> {
+  const ahora = Date.now();
+  // Se limpia lo viejo aquí y no con un timer: este Map vive lo que viva la
+  // instancia, y sin la poda un apagado largo lo dejaría creciendo.
+  for (const [tel, cuando] of avisadosDeApagado) {
+    if (ahora - cuando > VENTANA_AVISO_APAGADO_MS) avisadosDeApagado.delete(tel);
+  }
+  const numeros = [...new Set(mensajes.map((m) => m.from).filter(Boolean))];
+  for (const numero of numeros) {
+    if (avisadosDeApagado.has(numero)) continue;
+    avisadosDeApagado.set(numero, ahora);
+    try {
+      await sendText(numero, 'Estamos en *mantenimiento* ahorita 🛠️. Lo que me mandes queda guardado y lo proceso en cuanto vuelva — no lo mandes otra vez. Si es una emergencia, márcale directo a tu oficina. 🙏');
+    } catch (e) {
+      logger.warn('wa.aviso_apagado_falló', { err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+}
+
 function extractStatuses(p: WaWebhook): WaEstado[] {
   const out: WaEstado[] = [];
   for (const entry of p.entry ?? []) {
@@ -560,6 +643,12 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
         // `|| undefined` para que un caption vacío no se distinga de ninguno.
         else if (m.type === 'image' && m.image) out.push({ ...base, type: 'image', mediaId: m.image.id, text: m.image.caption || undefined });
         else if (m.type === 'document' && m.document) out.push({ ...base, type: 'document', mediaId: m.document.id });
+        // La nota de voz llega con su mediaId y NADA más: la descarga y la
+        // transcripción son del processor (Capa E1), que es quien sabe si el
+        // remitente es un chofer y qué presupuesto la paga. Antes de esto el
+        // audio caía a 'other' y el chofer en apuros recibía "solo proceso
+        // texto y fotos" — el bug señalado por el blueprint 19.
+        else if (m.type === 'audio' && m.audio) out.push({ ...base, type: 'audio', mediaId: m.audio.id });
         // UBICACIÓN → lat/lng planos. Solo con AMBAS coordenadas numéricas:
         // un pin a medias no es una posición, es ruido.
         else if (m.type === 'location' && typeof m.location?.latitude === 'number' && typeof m.location?.longitude === 'number') {
@@ -584,9 +673,25 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
         else if (m.type === 'interactive' && m.interactive?.type === 'button_reply' && m.interactive.button_reply?.id) {
           out.push({ ...base, type: 'text', text: m.interactive.button_reply.id });
         }
+        // ── AUDITORÍA 24 · WA-9 (MEDIO): UN 👍 NO ES UN TURNO ──────────────
+        //
+        // Meta manda `type: 'reaction'` cuando el chofer reacciona a un
+        // mensaje nuestro — y reaccionar al «Anotado ✅» es lo que hace medio
+        // México en vez de contestar. Cada una entraba a `wa_evento_pendiente`,
+        // gastaba cupo de rate limit, corría un turno completo y recibía «Por
+        // ahora solo proceso texto, fotos…». Con 22 acuses son 22 sermones,
+        // 22 mensajes salientes pagados, y el chofer aprendiendo que el bot no
+        // entiende. No hay nada que contestarle a un pulgar: se descarta aquí,
+        // antes del inbox.
+        else if (m.type === 'reaction') {
+          logger.info('wa.reaccion_ignorada', { de: m.from });
+        }
         // Cualquier otro interactivo (`list_reply`, `nfm_reply`…) NO se traga
         // como si fuera un botón: su forma es distinta y hoy no se manda ninguno.
-        else out.push({ ...base, type: 'other' });
+        // El `subtipo` viaja para que el processor conteste lo que de verdad
+        // pasó («los videos no los leo; una foto sí») en vez de una lista de
+        // formatos que no menciona lo que él mandó (WA-9).
+        else out.push({ ...base, type: 'other', subtipo: m.type });
       }
     }
   }

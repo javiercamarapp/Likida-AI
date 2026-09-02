@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { cuadrarViaje, type PoliticaGasto } from '@/lib/likida/cuadre/engine';
 import { rateLimit, bodyExcede, clientIp } from '@/lib/ratelimit';
-import { envHealth } from '@/lib/env';
 import type { Gasto } from '@/types/likida';
 
-// Health del demo (config detectada, sin exponer valores).
+// SEG-8 / OP-P10 (auditoría 24): este GET público contestaba `envHealth()` —
+// `{llm, whatsapp, supabase}` — o sea, un mapa de qué integraciones están
+// configuradas para cualquiera que lo pidiera. El demo no lo necesita (el
+// POST no depende de ninguna) y /admin/salud-sistema ya lo enseña con sesión.
 export async function GET() {
-  return NextResponse.json({ ok: true, config: envHealth() });
+  return NextResponse.json({ ok: true });
 }
 
 export const runtime = 'nodejs';

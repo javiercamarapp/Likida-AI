@@ -17,13 +17,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // exactamente ese caso.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const { sendText, sendDocument, telefonoParaDineroDe } = vi.hoisted(() => ({
-  sendText: vi.fn(),
+const { enviarTexto, sendTemplate, sendDocument, telefonoParaDineroDe, alertarOperador } = vi.hoisted(() => ({
+  enviarTexto: vi.fn(),
+  sendTemplate: vi.fn(),
   sendDocument: vi.fn(),
   telefonoParaDineroDe: vi.fn(),
+  alertarOperador: vi.fn(async () => {}),
 }));
 
-vi.mock('@/lib/meta/client', () => ({ sendText, sendDocument }));
+// AUDITORÍA 24 · AGEN-5: el texto de decisión sale por `avisarOficina`
+// (texto → plantilla fuera de ventana), que a su vez usa `enviarTexto` y
+// `sendTemplate` del cliente. Se mockea el cliente, no el helper: lo que se
+// prueba aquí es el cableado real.
+vi.mock('@/lib/meta/client', () => ({
+  sendDocument, enviarTexto, sendTemplate,
+  motivoDeFalloWhatsApp: (error: string, codigo?: number) => `${error} (${codigo ?? 'sin código'})`,
+}));
+vi.mock('@/lib/observability/alerta', () => ({ alertarOperador }));
 vi.mock('./contactos', () => ({ telefonoParaDineroDe }));
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -63,8 +73,11 @@ beforeEach(() => {
   viaje = { data: { folio: 'F-1', operador: { nombre: 'Juan' } }, error: null };
   telefonoParaDineroDe.mockReset();
   telefonoParaDineroDe.mockResolvedValue(TEL);
-  sendText.mockReset();
-  sendText.mockResolvedValue('wamid.texto');
+  enviarTexto.mockReset();
+  enviarTexto.mockResolvedValue({ ok: true, id: 'wamid.texto' });
+  sendTemplate.mockReset();
+  sendTemplate.mockResolvedValue({ ok: true, id: 'wamid.plantilla' });
+  alertarOperador.mockClear();
   sendDocument.mockReset();
   sendDocument.mockResolvedValue({ ok: true, id: 'wamid.pdf' });
   for (const f of Object.values(logger)) f.mockReset();
@@ -110,7 +123,7 @@ describe('avisarCierreAlJefe · lo básico', () => {
     telefonoParaDineroDe.mockResolvedValue(null);
     const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
     expect(r).toEqual({ enviado: false, motivo: 'Esa flota no tiene un teléfono de oficina registrado.' });
-    expect(sendText).not.toHaveBeenCalled();
+    expect(enviarTexto).not.toHaveBeenCalled();
     expect(sendDocument).not.toHaveBeenCalled();
   });
 
@@ -128,17 +141,82 @@ describe('avisarCierreAlJefe · lo básico', () => {
   it('con diferencia real manda el TEXTO y el PDF, los dos', async () => {
     liq = { data: { total_comprobado: 900, total_anticipo: 1000, diferencia: 100, diferencias: [] }, error: null };
     const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
-    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(enviarTexto).toHaveBeenCalledTimes(1);
     expect(sendDocument).toHaveBeenCalledTimes(1);
-    expect(r.enviado).toBe(true);
+    expect(r).toEqual({ enviado: true, via: 'texto' });
   });
 
-  it('si WhatsApp rechaza el TEXTO, no se intenta el PDF y se dice por qué', async () => {
+  // AUDITORÍA 21 (agéntico, ALTO): antes el fallo del texto hacía `return`
+  // ANTES del bloque del PDF, y el jefe se quedaba sin texto Y sin el
+  // documento que ya estaba firmado — contradiciendo el encabezado del
+  // archivo ("el PDF siempre, el texto solo si hay que decidir"). Estas dos
+  // pruebas fijan el contrato correcto: son escrituras independientes.
+  it('EL HALLAZGO (aud. 21): WhatsApp rechaza el TEXTO → el PDF se manda de todos modos', async () => {
     liq = { data: { total_comprobado: 900, total_anticipo: 1000, diferencia: 100, diferencias: [] }, error: null };
-    sendText.mockResolvedValue(null);
+    // Un rechazo que NO es de ventana (número inválido): no hay plantilla que valga.
+    enviarTexto.mockResolvedValue({ ok: false, error: 'número inválido', codigo: 131030 });
     const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
-    expect(r).toEqual({ enviado: false, motivo: 'WhatsApp no aceptó el mensaje al jefe.' });
+    // El fallo del texto se sigue reportando, para que el llamador loguee...
+    expect(r).toEqual({ enviado: false, motivo: 'WhatsApp no aceptó el mensaje al jefe: número inválido (131030)', fueraDeVentana: false });
+    expect(sendTemplate).not.toHaveBeenCalled();
+    // ...pero el documento que YA estaba listo se intentó igual.
+    expect(sendDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('texto rechazado y sin urlPdf: solo se reporta el fallo del texto, sin intentar documento', async () => {
+    liq = { data: { total_comprobado: 900, total_anticipo: 1000, diferencia: 100, diferencias: [] }, error: null };
+    enviarTexto.mockResolvedValue({ ok: false, error: 'número inválido', codigo: 131030 });
+    const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1' });
+    expect(r).toMatchObject({ enviado: false, motivo: expect.stringContaining('WhatsApp no aceptó el mensaje al jefe') });
     expect(sendDocument).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · AGEN-5 / WA-4 (ALTO): el jefe de una flota de 800 tractos
+// RECIBE y no escribe — su ventana de 24 h está cerrada casi siempre. El
+// texto libre rebotaba con 131047 (no reintentable), no había plantilla y el
+// único rastro era `warn cierre.jefe_no_avisado`: «esta liquidación requiere
+// tu decisión» se apagaba en silencio justo en la flota grande.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('avisarCierreAlJefe · fuera de la ventana de 24 h (AGEN-5)', () => {
+  const conDecision = () => {
+    liq = { data: { total_comprobado: 900, total_anticipo: 1000, diferencia: 100, diferencias: [] }, error: null };
+  };
+
+  it('EL HALLAZGO: 131047 al texto → sale la PLANTILLA al mismo jefe, con chofer, folio y liga; enviado por «plantilla»', async () => {
+    conDecision();
+    enviarTexto.mockResolvedValue({ ok: false, error: 'Re-engagement message', codigo: 131047 });
+    const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
+    expect(r).toEqual({ enviado: true, via: 'plantilla' });
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
+    const [tel, nombre, opts] = sendTemplate.mock.calls[0] as [string, string, { parametros: string[] }];
+    expect(tel).toBe(TEL);
+    expect(nombre).toBe('aviso_operacion_v1');
+    expect(opts.parametros[0]).toBe('Juan');
+    expect(opts.parametros[1]).toContain('F-1');
+    expect(opts.parametros[1]).toContain('decisión');
+    expect(opts.parametros[2]).toMatch(/^https?:\/\/.+\/dashboard\/viajes$/);
+    // El PDF se intenta igual: son escrituras independientes.
+    expect(sendDocument).toHaveBeenCalledTimes(1);
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+
+  it('si la plantilla TAMPOCO sale (132001), el resultado lo dice (fueraDeVentana) y hay ALERTA operativa, no un warn', async () => {
+    conDecision();
+    enviarTexto.mockResolvedValue({ ok: false, error: 'Re-engagement message', codigo: 131047 });
+    sendTemplate.mockResolvedValue({ ok: false, error: 'Template name does not exist', codigo: 132001 });
+    const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
+    expect(r).toMatchObject({ enviado: false, fueraDeVentana: true });
+    expect(r.motivo).toContain('WhatsApp no aceptó el mensaje al jefe');
+    expect(alertarOperador).toHaveBeenCalledWith('cierre.jefe_sin_ventana', expect.objectContaining({ tenant: 't-1', viaje: 'v-1', folio: 'F-1', codigo: 132001 }));
+  });
+
+  it('sin decisión que tomar no hay texto ni plantilla: solo el PDF', async () => {
+    const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
+    expect(enviarTexto).not.toHaveBeenCalled();
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(r).toEqual({ enviado: true });
   });
 });
 

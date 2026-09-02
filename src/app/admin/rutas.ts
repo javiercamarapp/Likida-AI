@@ -4,7 +4,7 @@ import {
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
   Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge, Handshake, Inbox,
-  Bot, Bug, ListChecks, Sparkles, Hand, Globe2,
+  Bot, Bug, ListChecks, Sparkles, Hand, Globe2, AlarmClock, Clapperboard,
 } from 'lucide-react';
 
 /**
@@ -64,6 +64,12 @@ export const NEGOCIO: Item[] = [
   { href: '/admin/consumo', nombre: 'Consumo de IA', Icono: Cpu },
   { href: '/admin/cobranza', nombre: 'Cobranza', Icono: Receipt },
   { href: '/admin/crecimiento', nombre: 'Crecimiento', Icono: TrendingUp },
+  // El estudio de marketing (Fase D, 0266): banco de hooks, personajes y
+  // lugares, piezas del día — la capa visual de lo que crecimiento.ts YA
+  // fabrica hacia cola_aprobacion. Va junto a Crecimiento (mismo dominio,
+  // negocio hacia afuera) y no dentro de Comunicación: esa es sobre avisos
+  // INTERNOS a choferes/flotas, que sigue sin existir.
+  { href: '/admin/marketing', nombre: 'Estudio de marketing', Icono: Clapperboard },
   { href: '/admin/ejecutivo', nombre: 'Ejecutivo / Board', Icono: Presentation },
   { href: '/admin/usuarios/nuevo', nombre: 'Nuevo usuario', Icono: UserPlus },
 ];
@@ -84,6 +90,7 @@ export const CONTROL: Item[] = [
 
 export const SISTEMA: Item[] = [
   { href: '/admin/observabilidad', nombre: 'Observabilidad', Icono: Activity },
+  { href: '/admin/crons', nombre: 'Relojes', Icono: AlarmClock },
   { href: '/admin/calidad-evals', nombre: 'Calidad & Evals', Icono: ClipboardCheck },
   { href: '/admin/dev', nombre: 'Dev', Icono: Code2 },
   { href: '/admin/salud-sistema', nombre: 'Salud del sistema', Icono: HeartPulse },

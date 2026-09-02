@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { NORMAS, IDS_NORMA, esVinculante, type Jerarquia } from './indice';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -19,6 +20,29 @@ function campo(txt: string, n: string): string | undefined {
   const m = new RegExp(`^${n}:\\s*(.+)$`, 'm').exec(txt);
   const v = m?.[1]?.trim().replace(/^["']|["']$/g, '');
   return v && v !== 'null' ? v : undefined;
+}
+
+/**
+ * El `titulo` de la ficha: inline entre comillas (el caso común) o un escalar
+ * YAML plegado (`titulo: >`, líneas indentadas debajo). FISCAL (barrido
+ * MEDIO/BAJO): `criterio-1-CFF-PI.yaml` usa la forma plegada, y quien copió el
+ * título al índice pegó el literal ">" en vez de las líneas de abajo — el
+ * plegado las junta con un espacio, sin el salto de línea.
+ */
+function tituloDeFicha(txt: string): string | undefined {
+  const idx = txt.search(/^titulo:/m);
+  if (idx === -1) return undefined;
+  const resto = txt.slice(idx);
+  const primeraLinea = resto.split('\n')[0].replace(/^titulo:\s*/, '').trim();
+  if (!primeraLinea.startsWith('>') && !primeraLinea.startsWith('|')) {
+    return primeraLinea.replace(/^["']|["']$/g, '');
+  }
+  const partes: string[] = [];
+  for (const linea of resto.split('\n').slice(1)) {
+    if (!/^\s+\S/.test(linea)) break;
+    partes.push(linea.trim());
+  }
+  return partes.join(' ');
 }
 
 const archivos = readdirSync(DIR).filter((f) => f.endsWith('.yaml'));
@@ -74,6 +98,15 @@ describe('índice de normas vs fichas', () => {
       let lista: string[] = [];
       try { lista = JSON.parse(enFicha.replace(/'/g, '"')); } catch { /* mal formada → [] */ }
       expect(NORMAS[f.id!].citas, `citas distintas en ${f.archivo}`).toEqual(lista);
+    }
+  });
+
+  it('el título coincide con la ficha, incluida la forma plegada', () => {
+    // FISCAL (barrido MEDIO/BAJO): `criterio-1-CFF-PI` tenía `titulo: ">"` en
+    // el índice — el literal del plegado YAML, no el texto de abajo — porque
+    // nada cotejaba este campo.
+    for (const f of fichas) {
+      expect(NORMAS[f.id!].titulo, `título distinto en ${f.archivo}`).toBe(tituloDeFicha(f.txt));
     }
   });
 
@@ -165,6 +198,60 @@ describe('usado_en_codigo apunta a código que existe', () => {
         ).toBe(true);
       }
     }
+  });
+
+  // ── AUDITORÍA 24 · FIS-A1 (ALTO, reincidente 23) ────────────────────────
+  //
+  // La ruta existía, el símbolo no. `rfa-2026-2.9.yaml` citaba
+  // «cuadre/engine.ts — SIN_ACREDITAMIENTO: la facilidad salva la deducción de
+  // ISR, NO el IEPS ni el IVA» durante tres auditorías. `SIN_ACREDITAMIENTO`
+  // se había partido en dos (`SIN_IVA_ACREDITABLE` y `SIN_ESTIMULO`) porque la
+  // facilidad SÍ salva el IVA, y la ficha se quedó con la frase vieja. No es
+  // un comentario: `corpus_texto.ts` la mete VERBATIM en el prompt del agente
+  // contador («son tu ÚNICO material afirmable», agents/contador.ts), así que
+  // el contralor preguntaba en el chat y recibía «no» sobre el mismo caso que
+  // el PDF de su liquidación imprime en verde.
+  //
+  // Se cotejan solo los símbolos INEQUÍVOCOS —MAYÚSCULAS con guion bajo y
+  // `nombre()` con paréntesis—: la prosa de una ficha es española y un
+  // heurístico más ancho ("CFDI", "SAT") daría falsos positivos.
+  // Sin cuantificadores anidados (`security/detect-unsafe-regex`): MAYÚSCULAS
+  // con al menos un guion bajo, o un identificador seguido de `()`.
+  const SIMBOLOS = /\b[A-Z][A-Z0-9_]*_[A-Z0-9_]*\b|\b[A-Za-z_$][\w$]*(?=\(\))/g;
+
+  // Los COMENTARIOS no cuentan. Justo lo que pasó: `SIN_ACREDITAMIENTO` seguía
+  // nombrado en tres comentarios de engine.ts años después de partirse en dos,
+  // así que un `grep` crudo sobre el archivo habría dado verde igual.
+  const sinComentarios = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+  it('cada SÍMBOLO citado existe en el archivo que la ficha nombra', () => {
+    let cotejados = 0;
+    for (const f of fichas) {
+      for (const entrada of usadoEnCodigo(f.txt)) {
+        const ruta = rutaCitada(entrada);
+        if (!ruta) continue;
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- `ruta` sale de las fichas YAML del propio repo, en tiempo de prueba; no hay entrada de usuario en el camino.
+        const base = BASES.find((b) => existsSync(fileURLToPath(new URL(b + ruta, RAIZ))));
+        if (base === undefined) continue; // lo reporta el `it` de arriba
+        const archivo = fileURLToPath(new URL(base + ruta, RAIZ));
+        let fuente: string;
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- misma razón que arriba: fuente del propio repo, ruta de una ficha YAML versionada.
+        try { fuente = sinComentarios(readFileSync(archivo, 'utf8')); } catch { continue; } // carpeta
+        for (const simbolo of entrada.replace(ruta, '').match(SIMBOLOS) ?? []) {
+          cotejados++;
+          expect(
+            fuente.includes(simbolo),
+            `${f.archivo}: "${entrada}" cita el símbolo "${simbolo}" y ${ruta} no lo ` +
+            `contiene. Este texto viaja VERBATIM al prompt del agente contador ` +
+            `(corpus_texto.ts): un símbolo renombrado deja a la ficha afirmando la ` +
+            `regla vieja. Corrige la ficha y corre node scripts/generar-corpus-contador.mjs.`,
+          ).toBe(true);
+        }
+      }
+    }
+    // Que el heurístico no se quede mudo y haga pasar todo en silencio.
+    expect(cotejados).toBeGreaterThan(10);
   });
 
   it('el coteo no está ciego: el barrido extrae rutas de verdad', () => {

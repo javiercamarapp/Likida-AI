@@ -5,7 +5,7 @@ import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import {
   getHuerfanosDeFlota, traerHuerfanoPendiente, resolverHuerfanoDesdeOficina, addGasto,
 } from '@/lib/likida/repo';
-import { getViajes } from '@/lib/likida/analytics';
+import { buscarViajesVivos, type OpcionViaje } from '@/lib/likida/repo_paginado';
 import { acotada } from '@/lib/likida/presupuesto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { contarHuerfanosPendientes } from '@/lib/likida/repo';
@@ -84,20 +84,27 @@ export default async function PaginaHuerfanos({
   // Primarios sin catch: bandeja ciega = página caída, no "no hay sueltos".
   // El CONTEO va aparte y sí degrada (`null`): sirve para rotular "200 de N",
   // y no poder contar no puede tumbar la bandeja (FE-13).
-  const [pendientes, viajes, totalPendientes] = await Promise.all([
+  const [pendientes, hayViajesVivosRes, totalPendientes] = await Promise.all([
     getHuerfanosDeFlota(tenantId),
-    getViajes(tenantId),
+    // FE-3: ya NO se trae la lista completa de viajes vivos (antes
+    // `getViajes(tenantId)`, 100 más recientes) para armar el `<select>` —
+    // solo se pregunta SI hay alguno, con `count exact, head` (cero filas de
+    // vuelta). El combo de la fila (`buscarViajeAccion`, abajo) le pregunta
+    // al servidor por folio/operador cuando el humano escribe.
+    acotada(supabaseAdmin()
+      .from('viaje').select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId).in('estatus', ['abierto', 'en_cuadre']), 'huerfanos.hay_viajes_vivos'),
     contarHuerfanosPendientes(tenantId),
   ]);
-
-  // A dónde se puede adjuntar: solo viajes VIVOS. Un gasto a un viaje
-  // liquidado lo rebota el trigger de la 0037 — mejor no ofrecerlo.
-  const viajesVivos = viajes
-    .filter((v) => v.estatus === 'abierto' || v.estatus === 'en_cuadre')
-    .map((v) => ({
-      id: v.id,
-      rotulo: `${v.folio}${v.operadorNombre ? ` · ${v.operadorNombre}` : ''}`,
-    }));
+  // Un conteo caído no puede esconder el botón de adjuntar (sería fallar
+  // "cerrado" en el sentido incorrecto: negar una acción legítima por una
+  // lectura que ni siquiera es la de seguridad — esa vive en
+  // `viajeSigueVivo`, dentro de la action). Se asume que SÍ hay, y el
+  // combo dice por su cuenta si no encuentra nada al buscar.
+  const hayViajesVivos = hayViajesVivosRes.error ? true : (hayViajesVivosRes.count ?? 0) > 0;
+  if (hayViajesVivosRes.error) {
+    logger.warn('huerfanos.conteo_viajes_vivos', { tenantId, err: hayViajesVivosRes.error.message });
+  }
 
   async function adjuntar(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
@@ -163,11 +170,30 @@ export default async function PaginaHuerfanos({
     redirect(`/dashboard/huerfanos${sufijo}`);
   }
 
+  /**
+   * FE-3 · El buscador del combo "Adjuntar a…" — el `tenantId` va por
+   * CLOSURE (el cliente manda solo el texto), y repite el gateo completo:
+   * es alcanzable por POST directo, y aunque solo devuelva folios y nombres
+   * de operador, son datos de UNA flota. LANZA ante rechazo o fallo — una
+   * lista vacía es la afirmación "no hay ningún viaje así", y sería falsa.
+   */
+  async function buscarViajeAccion(q: string): Promise<OpcionViaje[]> {
+    'use server';
+    const negado = await exigirPermiso(tenantId);
+    if (negado) throw new Error(negado);
+    try {
+      return await buscarViajesVivos(tenantId, typeof q === 'string' ? q : '');
+    } catch (err) {
+      logger.error('huerfanos.buscar_viaje.fallo', { err: err instanceof Error ? err.message : String(err) });
+      throw new Error('No se pudo buscar en los viajes vivos.');
+    }
+  }
+
   return (
     <VistaHuerfanos
       pendientes={pendientes}
-      viajesVivos={viajesVivos}
-      cargados={viajes.length}
+      hayViajesVivos={hayViajesVivos}
+      buscarViaje={buscarViajeAccion}
       totalPendientes={totalPendientes}
       acciones={{ adjuntar, descartar }}
     />

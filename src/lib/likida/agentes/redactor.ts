@@ -19,14 +19,16 @@
 // copiloto: esa tabla exige tenant y el Redactor es gasto de LIKIDA.
 // ═══════════════════════════════════════════════════════════════════════════
 import { randomUUID } from 'crypto';
+import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { DatoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
-import { generateResponse } from '@/lib/llm/openrouter';
+import { generateStructured, StructuredError } from '@/lib/llm/openrouter';
 import { createLlmBudget, type LlmBudget } from '@/lib/llm/budget';
-import { encolarPieza } from './cola';
+import { encolarPieza, verificarFormatoCampana } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
+import { notasSinPersona } from '@/lib/likida/prospectos/seudonimo';
 import { logger } from '@/lib/logger';
 
 // Las ÚNICAS cifras que el correo puede decir (prompts/redactor.md §3,
@@ -46,10 +48,13 @@ ESCRIBE 3 VARIANTES:
 - Variante C — confirmación de demo (SOLO si el dossier trae un sí previo; si no, escribe exactamente: "No aplica: la variante C solo se usa después de un sí.")
 
 REGLAS DE ESCRITURA:
-- Máximo 5 líneas por correo. Asunto de máximo 6 palabras, sin signos de admiración.
+- Máximo 5 líneas por correo. Asunto de máximo 6 palabras, sin signos de admiración. (El asunto de la variante A se sustituye después por el asunto fijo de la campaña — escríbelo igual: el de las variantes B/C sí sale.)
+- PROHIBIDO el guion largo (—) en cualquier parte del correo.
+- Si mencionas tracción, la ÚNICA frase permitida es "en pláticas con transportistas del centro y norte del país". PROHIBIDO nombrar a NINGÚN prospecto o cliente por su nombre, aunque exista una plática real (AGB-2: el nombre de un prospecto es un dato de terceros, no un argumento de venta). PROHIBIDO decir "clientes reales" o llamar cliente a cualquier empresa: ninguna ha firmado.
 - Termina SIEMPRE con una pregunta de agenda concreta: "¿le vienen bien 15 minutos el jueves?" — no "¿le interesaría platicar?".
 - Remitente: el vendedor humano indicado, una persona. Nunca "el equipo de Likida".
 - Español mexicano directo. Prohibido "revolucionario", "innovador", "inteligente", "de vanguardia", "solución integral". Sin emojis, sin negritas de venta, sin postdata de urgencia falsa.
+- Si el dossier trae un Contacto, para dirigirte a él por su nombre escribe EXACTAMENTE el token \`{{NOMBRE}}\` (con las llaves dobles, tal cual) donde iría su nombre de pila — nunca inventes ni copies un nombre distinto. Ese token se reemplaza fuera de este modelo. Si el dossier dice "no capturado", no uses el token: saluda sin nombre ("Hola,").
 
 LAS TRES PROHIBICIONES (romper cualquiera invalida el correo entero):
 1. NO CITES LA VACANTE ni menciones que la viste. El dolor se alude por OFICIO: "liquidar viajes a mano", "el cierre administrativo del viaje", "la comprobación de gastos del operador".
@@ -57,20 +62,47 @@ LAS TRES PROHIBICIONES (romper cualquiera invalida el correo entero):
 3. NINGUNA CIFRA fuera de esta lista:
 ${CIFRAS_CANONICAS}
 
-FORMATO DE SALIDA (exacto, markdown):
-## Variante A — por el costo
-**Asunto:** ...
-[cuerpo]
+FORMATO DE SALIDA: JSON que cumpla el schema, y NADA más. Los campos:
+- variante_a: { asunto, cuerpo } — la del costo. OBLIGATORIA: sin ella no hay pieza.
+- variante_b: { asunto, cuerpo } — la del dinero fiscal, o null si no aplica.
+- variante_c: el cuerpo de la confirmación de demo, o null si el dossier no trae un sí previo.
+- datos_usados: cada hecho concreto del dossier que aparece en los correos, o "ninguno específico de esta empresa" — un correo genérico honesto es mejor que uno personalizado con datos inventados.
 
-## Variante B — por el dinero fiscal
-**Asunto:** ...
-[cuerpo]
+Los cuerpos van en texto plano con saltos de línea reales: sin markdown, sin encabezados, sin viñetas.`;
 
-## Variante C — confirmación de demo
-**Asunto:** ...
-[cuerpo o la línea de "No aplica"]
+// ═══════════════════════════════════════════════════════════════════════════
+// EL CONTRATO DE SALIDA, EN SCHEMA (primera pasada real del runner, 18:03).
+//
+// Hasta aquí el Redactor pedía markdown (`## Variante A` + `**Asunto:**`) y lo
+// desarmaba con regex. Las TRES corridas de la primera pasada real murieron
+// con «El Redactor devolvió una salida sin variante A legible»: el rol
+// `back_office` corre con un modelo de RAZONAMIENTO, que gasta cientos de
+// tokens invisibles antes de la primera letra visible y se quedaba sin los 900
+// de tope — el `content` llegaba vacío o cortado a media variante. Contra eso
+// un regex no tiene nada que hacer, y además confundía el diagnóstico:
+// "ilegible" cuando lo que pasaba era truncamiento.
+//
+// `generateStructured` sí lo distingue: ve `finish_reason: 'length'` ANTES de
+// parsear, reintenta con el doble de tope, valida contra el schema y trae el
+// texto CRUDO del modelo en el error para poder diagnosticar. Es el mismo
+// camino que ya usa el investigador con este mismo rol.
+// ═══════════════════════════════════════════════════════════════════════════
+const ESQUEMA_VARIANTES = z.object({
+  variante_a: z.object({
+    asunto: z.string().describe('Asunto de máximo 6 palabras, sin signos de admiración'),
+    cuerpo: z.string().describe('El correo completo listo para salir, máximo 5 líneas, texto plano'),
+  }).describe('La variante por el costo — la de default. Obligatoria: sin ella no hay pieza.'),
+  variante_b: z.object({
+    asunto: z.string(),
+    cuerpo: z.string(),
+  }).nullable().describe('La variante por el dinero fiscal, o null'),
+  variante_c: z.string().nullable()
+    .describe('Cuerpo de la confirmación de demo SOLO si el dossier trae un sí previo; si no, null'),
+  datos_usados: z.string().nullable()
+    .describe('Los hechos del dossier que aparecen en los correos, o "ninguno específico de esta empresa"'),
+});
 
-**Datos usados:** [cada hecho concreto del dossier que aparece en los correos, o "ninguno específico de esta empresa" — un correo genérico honesto es mejor que uno personalizado con datos inventados]`;
+export type SalidaRedactor = z.infer<typeof ESQUEMA_VARIANTES>;
 
 export interface PiezaRedactada {
   piezaId: string;
@@ -90,13 +122,27 @@ interface Variante { asunto: string; cuerpo: string }
  * varias piezas del mismo lote, sin reiniciar la contabilidad por prospecto.
  */
 export interface RedactorExecutionContext {
-  tenantId: string | null | undefined;
+  tenantId?: string | null | undefined;
   budget?: LlmBudget;
   runId?: string;
   maxTenantDailyUsd?: number;
+  /**
+   * AUDITORÍA FABLE CICLO 5 (c5-10): el gasto es de LIKIDA (tenant null) —
+   * el mismo contrato que investigador/SDR/enviador desde la 0217. El techo
+   * NO desaparece: lo vigila el runner comparando el gasto MEDIDO del día
+   * (agente_corrida.costo_usd, que cada corrida escribe) contra el
+   * `presupuesto_dia_usd` declarado del agente. Sin este modo, la corrida
+   * cron del runner no tenía ningún tenant que darle y el Redactor quedaba
+   * "saltado — fail closed" en TODA pasada: la cadena cron→redactor→
+   * enviador→SDR estaba muerta y la máquina solo trabajaba a mano.
+   */
+  plataforma?: boolean;
 }
 
-function presupuestoDelRedactor(contexto: RedactorExecutionContext | undefined): LlmBudget {
+function presupuestoDelRedactor(contexto: RedactorExecutionContext | undefined): LlmBudget | undefined {
+  // El modo plataforma no lleva ledger por-tenant: su techo es el gasto
+  // medido contra el presupuesto declarado, en el runner (c5-10).
+  if (contexto?.plataforma) return undefined;
   if (contexto?.budget) {
     if (contexto.tenantId !== undefined && contexto.tenantId !== null
       && contexto.tenantId !== contexto.budget.tenantId) {
@@ -104,31 +150,112 @@ function presupuestoDelRedactor(contexto: RedactorExecutionContext | undefined):
     }
     return contexto.budget;
   }
-  return createLlmBudget(contexto?.tenantId, contexto?.runId ?? randomUUID(), {
+  return createLlmBudget(contexto?.tenantId, contexto?.runId ?? randomUUID(), 'fondo', {
     maxTenantDailyUsd: contexto?.maxTenantDailyUsd,
   });
 }
 
-/** Parsea la salida markdown del modelo. LANZA si la variante A no se puede
- *  extraer — una pieza malformada no entra a la cola. Exportada para su
- *  prueba: el parser es la frontera entre el modelo y la cola. */
-export function parsearVariantes(md: string): { a: Variante; b: Variante | null; c: string | null; datosUsados: string | null } {
-  const bloques = md.split(/^## /m).map((b) => b.trim()).filter(Boolean);
-  const leer = (prefijo: string): Variante | null => {
-    const b = bloques.find((x) => x.toLowerCase().startsWith(prefijo));
-    if (!b) return null;
-    const asunto = b.match(/\*\*Asunto:\*\*\s*(.+)/i)?.[1]?.trim();
-    if (!asunto) return null;
-    const cuerpo = b.split(/\*\*Asunto:\*\*.*\n/i)[1]?.split(/\*\*Datos usados:\*\*/i)[0]?.trim();
-    if (!cuerpo) return null;
+const MARCADOR_NOMBRE = '{{NOMBRE}}';
+
+/** El asunto ÚNICO de la campaña de frío (plantilla asentada en la campaña
+ *  real y ratificada el 27-ago-2026). La variante A siempre sale con él —
+ *  se impone en CÓDIGO tras el parseo, no se le confía al modelo. */
+export const ASUNTO_CAMPANA = 'Automatizar la liquidación de viajes, antes de contratar para el puesto';
+
+// El verificador ESTRUCTURAL del formato de campaña vive ahora en cola.ts
+// (c5-14): la PUERTA de salida también lo aplica — una edición humana o una
+// pieza retomada que lo viole tampoco sale. Se re-exporta para los
+// llamadores y pruebas que lo importaban de aquí.
+export { verificarFormatoCampana };
+
+/** AGB-6 (auditoría 24, 1-sep-2026): fuentes ya vetadas a mano — no son el
+ *  censo abierto (DENUE/Computrabajo, sin giro) que dejó pasar vacantes como
+ *  "Gerente General de Restaurante" (Premium Restaurant Brands) o "Analista
+ *  de finanzas" (Coca-Cola FEMSA) hacia el redactor. */
+const FUENTES_ICP_VETADAS = ['canacar', 'aaag', 'manual', 'landing'] as const;
+/** El piso de `similitud_icp_pct` (columna derivada, 0140/0143) para que la
+ *  compuerta confíe en el scorer en vez de en el SCIAN o la fuente. */
+const UMBRAL_SIMILITUD_ICP = 60;
+
+/** AGB-6: la COMPUERTA DE ICP — sin ella, `estado = 'nuevo'` era el único
+ *  filtro entre el censo (vacantes de Computrabajo, sin giro capturado en
+ *  32,900 de 32,986 prospectos) y el redactor. Un prospecto pasa si CUALQUIERA
+ *  de tres señales dice "es transportista": su SCIAN es del sector 48-49
+ *  (Transportes, correos y almacenamiento, INEGI), su fuente ya fue vetada a
+ *  mano (no es censo abierto), o el propio scorer (`similitud_icp_pct`,
+ *  0140/0143) ya mide suficiente parecido con el ICP. PURA, para poder
+ *  probarla sin base — y FAIL CLOSED: sin ninguna de las tres, no pasa. */
+export function pasaCompuertaIcp(p: { scian: string | null; fuente: string; similitudIcpPct: number | null }): boolean {
+  const scian = p.scian?.trim() ?? '';
+  if (scian.startsWith('48') || scian.startsWith('49')) return true;
+  if ((FUENTES_ICP_VETADAS as readonly string[]).includes(p.fuente)) return true;
+  if (typeof p.similitudIcpPct === 'number' && p.similitudIcpPct >= UMBRAL_SIMILITUD_ICP) return true;
+  return false;
+}
+
+/** El nombre de pila del contacto — lo único que se sustituye de vuelta, y
+ *  SOLO fuera del modelo (ver la nota de AUDITORÍA 19 legal C2 en el
+ *  dossier). `null` si no hay contacto capturado: sin nombre no hay nada
+ *  que sustituir, y el SYSTEM le pide al modelo no usar el marcador en ese
+ *  caso. Exportada para su prueba. */
+export function primerNombreDelContacto(contactoNombre: string | null): string | null {
+  const primero = contactoNombre?.trim().split(/\s+/)[0];
+  return primero || null;
+}
+
+/**
+ * Reemplaza el marcador por el nombre de pila real DESPUÉS de la completion
+ * — el modelo nunca ve `nombre`. Si no hay nombre (el dossier decía "no
+ * capturado" y aun así el modelo usó el marcador, o lo usó mal), se limpia
+ * el saludo a secas en vez de dejar "Hola {{NOMBRE}}," visible en la pieza
+ * que un humano va a aprobar.
+ */
+export function sustituirMarcador(texto: string, nombre: string | null): string {
+  if (nombre) return texto.split(MARCADOR_NOMBRE).join(nombre);
+  return texto
+    .replace(new RegExp(`\\s*${MARCADOR_NOMBRE.replace(/[{}]/g, '\\$&')}\\s*,`, 'g'), ',')
+    .split(MARCADOR_NOMBRE).join('');
+}
+
+/** Lo que el modelo devolvió, TAL CUAL, para meterlo en el error. Sin esto el
+ *  diagnóstico de la primera pasada real fue imposible: la corrida solo decía
+ *  "sin variante A legible" y nadie podía ver qué había contestado el modelo.
+ *  `null`/vacío se dice con palabras, que también es información. */
+export function textoDelModelo(raw: string | undefined | null): string {
+  const t = (raw ?? '').trim();
+  return t === '' ? '(vacío — el modelo no devolvió texto)' : t;
+}
+
+/** Valida la salida del schema y la deja lista para la cola. LANZA si la
+ *  variante A no llega utilizable — una pieza malformada no entra a la cola, y
+ *  el error lleva el texto EXACTO del modelo para poder diagnosticarlo.
+ *  Exportada para su prueba: esta función es la frontera entre el modelo y la
+ *  cola. */
+export function variantesDeSalida(
+  d: SalidaRedactor,
+  raw: string,
+): { a: Variante; b: Variante | null; c: string | null; datosUsados: string | null } {
+  const limpiar = (v: { asunto: string; cuerpo: string } | null): Variante | null => {
+    const asunto = v?.asunto?.trim();
+    const cuerpo = v?.cuerpo?.trim();
+    // El schema garantiza los TIPOS, no que el modelo haya escrito algo: una
+    // cadena vacía cumple `z.string()` y encolaría un correo en blanco.
+    if (!asunto || !cuerpo) return null;
     return { asunto: asunto.slice(0, 120), cuerpo };
   };
-  const a = leer('variante a');
-  if (!a) throw new DatoInvalido('El Redactor devolvió una salida sin variante A legible — no se encoló nada. Reintenta.');
-  const b = leer('variante b');
-  const bloqueC = bloques.find((x) => x.toLowerCase().startsWith('variante c')) ?? null;
-  const datosUsados = md.match(/\*\*Datos usados:\*\*\s*([\s\S]+)$/i)?.[1]?.trim().slice(0, 1_000) ?? null;
-  return { a, b, c: bloqueC ? bloqueC.replace(/^variante c[^\n]*\n?/i, '').trim().slice(0, 2_000) : null, datosUsados };
+  const a = limpiar(d.variante_a);
+  if (!a) {
+    throw new DatoInvalido(
+      'El Redactor devolvió una salida sin variante A legible — no se encoló nada. Reintenta. '
+      + `Lo que contestó el modelo: ${textoDelModelo(raw)}`,
+    );
+  }
+  return {
+    a,
+    b: limpiar(d.variante_b),
+    c: d.variante_c?.trim().slice(0, 2_000) || null,
+    datosUsados: d.datos_usados?.trim().slice(0, 1_000) || null,
+  };
 }
 
 /**
@@ -159,14 +286,21 @@ export async function redactarCorreoFrio(
   // 2) El prospecto REAL — el dossier es su fila, nada más (prohibición #2).
   const { data: p, error } = await acotada(supabaseAdmin()
     .from('prospecto')
-    .select('id, empresa, contacto_nombre, correo, ciudad, estado, fuente, notas')
+    .select('id, empresa, contacto_nombre, correo, ciudad, estado, fuente, notas, scian, similitud_icp_pct')
     .is('duplicado_de', null)
     .eq('id', prospectoId).maybeSingle(), 'redactor.prospecto');
   if (error) throw new Error(`redactarCorreoFrio: ${error.message}`);
   if (!p) throw new DatoInvalido('Ese prospecto no existe — recarga el tablero.');
-  const prospecto = p as { id: string; empresa: string; contacto_nombre: string | null; correo: string | null; ciudad: string | null; estado: string; fuente: string; notas: string | null };
+  const prospecto = p as { id: string; empresa: string; contacto_nombre: string | null; correo: string | null; ciudad: string | null; estado: string; fuente: string; notas: string | null; scian: string | null; similitud_icp_pct: number | null };
   if (prospecto.estado === 'cerrado' || prospecto.estado === 'perdido') {
     throw new DatoInvalido(`Este prospecto está ${prospecto.estado} — a un ${prospecto.estado} no se le redacta correo frío.`);
+  }
+  // AGB-6: compuerta de ICP ANTES de gastar modelo — fail closed, como la
+  // cadencia de abajo. Sin giro de autotransporte, fuente vetada o score
+  // suficiente, este prospecto no es a quien se le escribe "liquidación de
+  // viajes" (el caso real: vacantes de Computrabajo sin relación con carga).
+  if (!pasaCompuertaIcp({ scian: prospecto.scian, fuente: prospecto.fuente, similitudIcpPct: prospecto.similitud_icp_pct })) {
+    throw new DatoInvalido('Este prospecto no pasa la compuerta de ICP (sin SCIAN de autotransporte, sin fuente vetada y sin similitud ICP suficiente) — no se le redacta correo frío.');
   }
 
   // 3) La regla del censo finito: contactado hace <48h NO se vuelve a tocar
@@ -192,70 +326,170 @@ export async function redactarCorreoFrio(
   }
 
   // 4) El dossier: SOLO los hechos de la fila, declarados como tales.
+  //
+  // AUDITORÍA 19 (legal C2, CRÍTICO): el aviso de privacidad del Cerebro de
+  // ventas promete «tu nombre no sale de Likida: la ficha que recibe el
+  // modelo de lenguaje lleva un marcador en lugar de tu nombre... tu nombre
+  // de pila se pone después, dentro de Likida» (privacidad.ts:757) — pero
+  // este archivo mandaba `prospecto.contacto_nombre` COMPLETO, tal cual, a
+  // un modelo externo (OpenRouter). El aviso describía un mecanismo que
+  // nunca se construyó. `primerNombreDelContacto` se queda LOCAL: el modelo
+  // solo ve el marcador `{{NOMBRE}}` (instrucción en SYSTEM); el nombre de
+  // pila real se sustituye DESPUÉS de la completion, en `sustituirMarcador`.
+  const primerNombre = primerNombreDelContacto(prospecto.contacto_nombre);
+
+  // LA INVESTIGACIÓN (0217): si el investigador ya dejó dossier, sus hechos
+  // — cada uno leído del sitio real de la empresa, con fuente — SON hechos
+  // verificados y entran al contexto permitido. Es la única ampliación de la
+  // prohibición #2: personalizar con lo investigado, jamás con lo imaginado.
+  // Lectura best-effort deliberada: sin dossier (o con la lectura caída) el
+  // correo sale genérico honesto, que siempre fue el piso del Redactor.
+  const lineasInvestigadas: string[] = [];
+  try {
+    const { data: d, error: errD } = await supabaseAdmin()
+      .from('prospecto_dossier')
+      .select('historia, empleados, flotilla, datos')
+      .eq('prospecto_id', prospectoId).maybeSingle();
+    if (errD) {
+      logger.info('redactor.dossier_ilegible', { prospecto: prospectoId, err: errD.message });
+    } else if (d) {
+      const dd = d as { historia: string | null; empleados: string | null; flotilla: string | null; datos: Array<{ dato?: string }> | null };
+      if (dd.historia) lineasInvestigadas.push(`Historia (de su sitio): ${dd.historia.slice(0, 300)}`);
+      if (dd.empleados) lineasInvestigadas.push(`Tamaño (de su sitio): ${dd.empleados.slice(0, 150)}`);
+      if (dd.flotilla) lineasInvestigadas.push(`Flota (de su sitio): ${dd.flotilla.slice(0, 150)}`);
+      for (const h of (dd.datos ?? []).slice(0, 4)) {
+        if (h?.dato) lineasInvestigadas.push(`Hallazgo (de su sitio): ${h.dato.slice(0, 200)}`);
+      }
+    }
+  } catch (e) {
+    logger.info('redactor.dossier_ilegible', { prospecto: prospectoId, err: e instanceof Error ? e.message : String(e) });
+  }
+
+  // AUDITORÍA 19, CRÍTICO (legal C2 / C.18): las notas pasaban CRUDAS al
+  // modelo — `prospecto.notas.slice(0, 500)` con lo que un vendedor hubiera
+  // escrito adentro: nombres, correos, teléfonos, y desde /api/lead hasta el
+  // teléfono de un tercero que un formulario público inyectó a `notas`. El
+  // nombre ya se había cerrado con el marcador (ronda previa); las notas se
+  // escapaban por la misma puerta. Ahora pasan por `notasSinPersona` — LA
+  // PUERTA ÚNICA de lib/likida/prospectos/seudonimo.ts, la misma que usa el
+  // Cerebro — con ESTE marcador, para que si el modelo copia un tramo de la
+  // nota, `sustituirMarcador` lo resuelva de vuelta igual que el saludo.
+  const notasLimpias = notasSinPersona(prospecto.notas, prospecto.contacto_nombre, MARCADOR_NOMBRE);
   const dossier = [
     `Empresa: ${prospecto.empresa}`,
-    prospecto.contacto_nombre ? `Contacto: ${prospecto.contacto_nombre}` : 'Contacto: no capturado',
+    primerNombre ? 'Contacto: {{NOMBRE}}' : 'Contacto: no capturado',
     prospecto.ciudad ? `Ciudad: ${prospecto.ciudad}` : 'Ciudad: no capturada',
     `Etapa del pipeline: ${prospecto.estado}`,
-    prospecto.notas ? `Notas del vendedor: ${prospecto.notas.slice(0, 500)}` : 'Notas: ninguna',
+    notasLimpias ? `Notas del vendedor: ${notasLimpias.slice(0, 500)}` : 'Notas: ninguna',
+    ...lineasInvestigadas,
     '(No hay más hechos verificados. Lo que no esté aquí, NO existe.)',
   ].join('\n');
 
-  // 5) El modelo — una sola completion, sin tools.
-  let texto: string;
+  // 5) El modelo — una sola llamada, con SCHEMA (ver la nota de arriba), sin
+  //    tools.
+  let salida: SalidaRedactor;
+  let crudo = '';
   let costoUsd = 0;
   try {
-    const r = await generateResponse({
+    const r = await generateStructured({
       // El rol BARATO del back office (16-ago-2026) — por aquí pasan datos
       // de PROSPECTOS, nunca RFC/CFDI de un cliente (la frontera y el
       // proveedor viven en models.ts).
       role: 'back_office',
       system: SYSTEM,
+      schema: ESQUEMA_VARIANTES,
+      schemaName: 'variantes_correo_frio',
       messages: [{ role: 'user', content: `DOSSIER:\n${dossier}\n\nVENDEDOR (remitente): ${vendedorNombre}` }],
-      maxTokens: 900,
+      // Tres variantes + los datos usados, y el rol corre con un modelo de
+      // razonamiento cuyos tokens invisibles salen de este mismo tope: con 900
+      // no alcanzaba ni para abrir la llave del JSON. `generateStructured`
+      // reintenta solo al doble si aun así se corta.
+      maxTokens: 1_800,
       temperature: 0.5,
       budget,
     });
-    texto = r.text;
+    salida = r.data;
+    crudo = r.raw;
     costoUsd = r.cost;
-    logger.info('redactor.costo', { costoUsd: r.cost, tokensIn: r.tokensIn, tokensOut: r.tokensOut, modelo: r.model });
-  } catch (e) {
-    await registrarCorrida(null, 'redactor', {
-      inicio, fin: new Date(), estado: 'fallo', disparo,
-      resumen: { prospecto: prospectoId },
-      error: 'El modelo no respondió.',
+    logger.info('redactor.costo', {
+      costoUsd: r.cost, tokensIn: r.tokensIn, tokensOut: r.tokensOut, modelo: r.model,
     });
-    logger.error('redactor.modelo_fallo', { prospecto: prospectoId, err: e instanceof Error ? e.message : String(e) });
+  } catch (e) {
+    // El texto CRUDO del modelo viaja en el StructuredError — es lo único que
+    // permite saber por qué no se pudo leer una salida, y era exactamente lo
+    // que faltó para diagnosticar los tres fallos de la primera pasada.
+    const rawDelError = e instanceof StructuredError ? textoDelModelo(e.raw) : null;
+    // La llamada se cobra aunque falle (`usage` viaja en el error): tirar ese
+    // costo dejaría al techo diario ciego justo en el modo que más gasta.
+    const gastado = e instanceof StructuredError ? e.usage?.cost ?? 0 : 0;
+    await registrarCorrida(null, 'redactor', {
+      inicio, fin: new Date(), estado: 'fallo', disparo, costoUsd: gastado,
+      resumen: { prospecto: prospectoId },
+      error: (rawDelError
+        ? `El modelo no devolvió una salida legible. Lo que contestó: ${rawDelError}`
+        : 'El modelo no respondió.').slice(0, 1_000),
+    });
+    logger.error('redactor.modelo_fallo', {
+      prospecto: prospectoId,
+      err: e instanceof Error ? e.message : String(e),
+      ...(rawDelError ? { crudo: rawDelError } : {}),
+    });
     throw new DatoInvalido('El Redactor no pudo escribir en este momento — inténtalo de nuevo.');
   }
 
-  // 6) Parsear y ENCOLAR. La pieza jamás sale de aquí hacia ningún correo.
+  // 6) Parsear, SUSTITUIR el marcador por el nombre de pila real (nunca visto
+  // por el modelo — AUDITORÍA 19 legal C2), y ENCOLAR. La pieza jamás sale de
+  // aquí hacia ningún correo.
   let pieza: PiezaRedactada;
   try {
-    const v = parsearVariantes(texto);
+    const v = variantesDeSalida(salida, crudo);
+    const con = (s: string) => sustituirMarcador(s, primerNombre);
+    // El asunto de la campaña se IMPONE (no se le confía al modelo), y el
+    // cuerpo pasa por el verificador estructural: "clientes reales" o un
+    // guion largo descartan la pieza entera — mejor cero correo que uno que
+    // rompa los guardarraíles cazados en vivo.
+    const asuntoA = ASUNTO_CAMPANA;
+    const cuerpoA = con(v.a.cuerpo);
+    verificarFormatoCampana(cuerpoA);
+    const varianteB = v.b ? { asunto: con(v.b.asunto), cuerpo: con(v.b.cuerpo) } : null;
+    const varianteC = v.c ? con(v.c) : null;
     const aviso = prospecto.correo?.trim()
       ? null
       : 'El prospecto no tiene correo capturado — conseguir el contacto ANTES de aprobar.';
     const piezaId = await encolarPieza({
       tipo: 'correo_frio', prioridad: 'normal', agente: 'redactor',
-      prospectoId, titulo: v.a.asunto,
-      cuerpo: v.a.cuerpo,
+      prospectoId, titulo: asuntoA,
+      cuerpo: cuerpoA,
       fuentes: {
-        variante_b: v.b, variante_c: v.c, datos_usados: v.datosUsados,
+        variante_b: varianteB, variante_c: varianteC, datos_usados: v.datosUsados,
         dossier: { empresa: prospecto.empresa, ciudad: prospecto.ciudad, etapa: prospecto.estado, fuente: prospecto.fuente },
         ...(aviso ? { aviso } : {}),
       },
     });
-    pieza = { piezaId, asunto: v.a.asunto, aviso, costoUsd };
+    pieza = { piezaId, asunto: asuntoA, aviso, costoUsd };
   } catch (e) {
-    // El modelo YA gastó: el costo se registra aunque la pieza no entrara —
-    // tirarlo dejaría al techo diario ciego al modo de falla que más gasta.
+    // AUDITORÍA 21 (agéntico, MEDIO): la lectura previa de `pendientes`
+    // (arriba, paso 3) basta contra un humano pero no contra dos disparadores
+    // en carrera (el botón del tablero y el cron nivel 2, ambos llaman a
+    // `redactarCorreoFrio` para el mismo prospecto). El árbitro real es el
+    // índice único parcial `cola_correo_frio_por_prospecto` (0270): la
+    // invocación que pierde la carrera rebota aquí con 23505, y se traduce al
+    // MISMO mensaje de pantalla que ya daba el freno de lectura — el mismo
+    // patrón que `encolarPiezaExito` usa contra `cola_parte_exito_por_periodo`
+    // (exito.ts). El costo del modelo YA se gastó de todos modos: se registra
+    // aunque la pieza no entrara — tirarlo dejaría al techo diario ciego al
+    // modo de falla que más gasta.
+    const msg = e instanceof Error ? e.message : String(e);
+    const esCarreraDuplicada = msg.includes('cola_correo_frio_por_prospecto') || msg.includes('duplicate key');
+    const error = esCarreraDuplicada
+      ? new DatoInvalido('Este prospecto ya tiene una pieza esperando aprobación — resuélvela antes de redactar otra.')
+      : e;
     await registrarCorrida(null, 'redactor', {
       inicio, fin: new Date(), estado: 'fallo', disparo, costoUsd,
       resumen: { prospecto: prospectoId },
-      error: e instanceof DatoInvalido ? e.message : 'No se pudo encolar la pieza.',
+      error: error instanceof DatoInvalido ? error.message : 'No se pudo encolar la pieza.',
     });
-    throw e;
+    throw error;
   }
 
   await registrarCorrida(null, 'redactor', {

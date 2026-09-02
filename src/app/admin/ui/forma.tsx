@@ -150,6 +150,86 @@ export function Campo({
   );
 }
 
+/**
+ * Como `Campo`, pero para lo que se escribe en varias líneas — la respuesta de
+ * un ticket, una nota interna.
+ *
+ * No es cosmético que no sea un `<input>`: en un input de una línea, un texto
+ * de 300 caracteres se vuelve una ventanita por la que no se puede releer lo
+ * que uno acaba de escribir, y lo que se manda sin releer es lo que después
+ * hay que corregir con un segundo mensaje.
+ */
+export function CampoTexto({
+  nombre,
+  etiqueta,
+  placeholder,
+  requerido,
+  filas = 4,
+  maxLargo,
+  ayuda,
+}: {
+  nombre: string;
+  etiqueta: string;
+  placeholder?: string;
+  requerido?: boolean;
+  filas?: number;
+  maxLargo?: number;
+  ayuda?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={nombre} className="text-xs" style={{ color: 'var(--muted)' }}>
+        {etiqueta}
+        {requerido && <span aria-hidden> *</span>}
+      </label>
+      <textarea
+        id={nombre}
+        name={nombre}
+        rows={filas}
+        required={requerido}
+        maxLength={maxLargo}
+        placeholder={placeholder}
+        className="text-sm rounded-lg px-2.5 py-2"
+        style={CONTROL}
+      />
+      {ayuda && (
+        <span className="text-xs" style={{ color: 'var(--faint)' }}>
+          {ayuda}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Una casilla con su etiqueta al lado. El `value="1"` es explícito porque un
+ * checkbox sin marcar NO viaja en el FormData: el server action lee la
+ * ausencia como `false`, que es el default seguro para "nota interna".
+ */
+export function Casilla({
+  nombre,
+  etiqueta,
+  ayuda,
+}: {
+  nombre: string;
+  etiqueta: string;
+  ayuda?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={nombre} className="flex items-center gap-2 text-xs" style={{ color: 'var(--muted)' }}>
+        <input id={nombre} name={nombre} type="checkbox" value="1" className="shrink-0" />
+        {etiqueta}
+      </label>
+      {ayuda && (
+        <span className="text-xs" style={{ color: 'var(--faint)' }}>
+          {ayuda}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function Selector({
   nombre,
   etiqueta,

@@ -111,7 +111,7 @@ export const CONECTORES_PORTALES_FACTURACION: readonly Conector[] = COMERCIOS
     probar: async (valores) => {
       const falta = faltantes({ credenciales }, valores);
       if (falta.length > 0) {
-        return { ok: false, detalle: `Faltan datos para guardar la cuenta: ${falta.join(', ')}.`, verificadoContra: null, falta };
+        return { ok: false, detalle: `Faltan datos para guardar la cuenta: ${falta.join(', ')}.`, verificadoContra: null, sobreLaCredencial: 'no_se_sabe', falta };
       }
       return sinApiQueProbar(
         `${c.nombre} no publica API: la cuenta se prueba entrando al portal con navegador, y eso lo hace el Agente de Facturas en su siguiente corrida, no un ping desde esta pantalla.`,

@@ -26,17 +26,25 @@ vi.mock('@/lib/likida/intake/archivo', async (orig) => {
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const { POST } = await import('./route');
-  const { MAX_BASE64 } = await import('./limites');
+  const { MAX_BASE64, LECTURAS_POR_MINUTO } = await import('./limites');
 
-function postear(cuerpo: unknown) {
+function postear(cuerpo: unknown, cabeceras: Record<string, string> = {}) {
   return POST(new Request('https://app.likida.ai/api/dashboard/archivo', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo),
+    method: 'POST', headers: { 'content-type': 'application/json', ...cabeceras }, body: JSON.stringify(cuerpo),
   }) as never);
 }
 
 beforeEach(() => {
   sesion = { userId: 'u-1', tenantId: 't-1', rol: 'contador', nombre: 'C' };
   leer.mockClear();
+});
+
+describe('la puerta de origen (auditoría 21, BAJO-MEDIO)', () => {
+  it('desde otro sitio: 403 y no se lee nada', async () => {
+    const r = await postear({ nombre: 'a.csv', contenido: 'x' }, { 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' });
+    expect(r.status).toBe(403);
+    expect(leer).not.toHaveBeenCalled();
+  });
 });
 
 describe('la puerta', () => {
@@ -50,6 +58,21 @@ describe('la puerta', () => {
     sesion = { userId: 'u-2', tenantId: 't-1', rol: 'operador', nombre: 'O' };
     expect((await postear({ nombre: 'a.csv', contenido: 'x' })).status).toBe(403);
     expect(leer).not.toHaveBeenCalled();
+  });
+});
+
+describe('el freno de FRECUENCIA (auditoría 21 — la ruta calcó la autorización de ingesta pero no su rateLimit)', () => {
+  // Sin mock del ratelimit a propósito: en pruebas no hay credenciales de
+  // Redis y el módulo cae a su Map local — la ráfaga de verdad se topa.
+  it(`la petición ${LECTURAS_POR_MINUTO + 1} dentro del minuto: 429 y el archivo NO se parsea`, async () => {
+    sesion = { userId: 'u-rafaga', tenantId: 't-1', rol: 'contador', nombre: 'C' };
+    for (let i = 0; i < LECTURAS_POR_MINUTO; i++) {
+      expect((await postear({ nombre: 'a.csv', contenido: 'data:text/csv;base64,QUJD' })).status).toBe(200);
+    }
+    const extra = await postear({ nombre: 'a.csv', contenido: 'data:text/csv;base64,QUJD' });
+    expect(extra.status).toBe(429);
+    expect((await extra.json()).error).toMatch(/demasiadas lecturas/i);
+    expect(leer).toHaveBeenCalledTimes(LECTURAS_POR_MINUTO); // la N+1 no llegó al lector
   });
 });
 

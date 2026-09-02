@@ -7,16 +7,81 @@ titulo: >
   Entrega o puesta a disposición del CFDI. No se cumple con la obligación cuando el
   emisor únicamente remite a una página de Internet.
 citas_en_codigo: ["1/CFF/PI", "CFF art. 89", "artículo 52 del Código Fiscal"]
-texto_vigente: null
+texto_vigente: >
+  1/CFF/PI Entrega o puesta a disposición del CFDI. No se cumple con la obligación
+  cuando el emisor únicamente remite a una página de Internet.
+
+  El artículo 29, primer párrafo del CFF establece la obligación para los
+  contribuyentes de expedir CFDI por los actos o actividades que realicen, por los
+  ingresos que se perciban o por las retenciones de contribuciones que efectúen, para
+  lo cual de conformidad con su fracción IV, antes de su expedición deberán remitirlos
+  al SAT o al PCCFDI con el objeto de que se certifique, es decir, se valide el
+  cumplimiento de los requisitos establecidos en el artículo 29-A del mismo Código, se
+  le asigne un folio y se le incorpore el sello digital del SAT.
+
+  El artículo 29, fracción V del citado ordenamiento prevé que una vez que al CFDI se
+  le haya incorporado el sello digital a que se refiere el párrafo anterior, los
+  contribuyentes deberán entregar o poner a disposición de sus clientes el archivo
+  electrónico del CFDI y, cuando les sea solicitada por los clientes, su
+  representación impresa, por lo que se considera que el cliente que solicita el
+  comprobante fiscal solo debe proporcionar su clave en el RFC, nombre o razón social,
+  código postal del domicilio fiscal y uso fiscal que le dará al comprobante fiscal,
+  sin necesidad de exhibir la Cédula de Identificación Fiscal o Constancia de
+  Situación Fiscal.
+
+  Por lo anterior, se considera que realizan una práctica fiscal indebida:
+
+  I. Los contribuyentes que no cumplan, en el mismo acto y lugar, con su obligación de
+  expedir el CFDI y tampoco con su remisión al SAT o al PCCFDI con el objeto de que se
+  certifique.
+
+  II. Los contribuyentes que no permitan, en el mismo acto y lugar que el cliente
+  proporcione sus datos para la generación del CFDI.
+
+  III. Los contribuyentes que, en sus establecimientos, sucursales o puntos de venta,
+  únicamente pongan a disposición del cliente un medio por el cual le invitan para que
+  este, por su cuenta, proporcione sus datos y, por ende, le trasladan la obligación
+  de generar el CFDI.
+
+  IV. Quien asesore, aconseje, preste servicios o participe en la realización o la
+  implementación de cualquiera de las prácticas anteriores.
+
+  Origen: Quinta Resolución de Modificaciones a la RMF para 2014. Primer antecedente:
+  publicada en el DOF el 16 de octubre de 2014, Anexo 3, publicado en el DOF el 17 de
+  octubre de 2014.
 fecha_publicacion: 2026-01-09
 fuente_url: "https://www.sat.gob.mx/"
+fuente_dof: "Anexo 3 de la RMF para 2026, DOF viernes 9 de enero de 2026 (publicado junto con los Anexos 7, 10, 11, 12, 13, 14, 16 y 29). Encabezado del Anexo: «Para los efectos del artículo 33, fracción I, inciso h) del CFF, en relación con la regla 1.4., fracción III»."
 fuente_tipo: dof_oficial
-estado_verificacion: evidencia_corroborante
+estado_verificacion: verificado_fuente_primaria
 nota_verificacion: >
   El título, el fundamento (CFF 33 fr. I inciso h) y la existencia de la fracción IV
   fueron verificados por el verificador adversarial de la ola 1. NO se transcribió el
   texto completo. PARA CERRAR: bajar el Anexo 3 del DOF del 09-01-2026 y pegar el
   texto de las fracciones II, III y IV.
+
+  CERRADO EL 20-AGO-2026. El texto de arriba se transcribió palabra por palabra del
+  Anexo 3 de la RMF 2026 publicado en el DOF el 9 de enero de 2026, apartado
+  "A. Vigentes / I. Criterios del CFF". Confirmado además:
+
+    · El TÍTULO de la ficha coincide LITERALMENTE con el del criterio publicado.
+    · El fundamento del Anexo es el art. 33, fr. I, inciso h) del CFF, en relación
+      con la regla 1.4., fr. III — como decía la ficha.
+    · Las cuatro fracciones existen y dicen lo que `por_que_nos_toca` afirma. La IV
+      es literal: "Quien asesore, aconseje, preste servicios o participe en la
+      realización o la implementación de cualquiera de las prácticas anteriores".
+    · VIGENCIA 2026: la Primera Modificación al Anexo 3 (DOF 17-jul-2026, derivada de
+      la 1a Resolución de Modificaciones a la RMF 2026 del 09-jul-2026) NO tocó el
+      1/CFF/PI: lo único que reformó en el Anexo 3 fue el 43/ISR/PI. El criterio
+      sigue vigente con el texto de arriba.
+
+  `estado_verificacion` NO se sube en esta pasada: se proyecta a
+  `src/lib/likida/normas/corpus.ts` y a `normas/indice.ts`, y esta auditoría tenía
+  prohibido tocar nada fuera de `normas/`. PARA CERRAR: subirlo a
+  `verificado_fuente_primaria`, poner `fuente_url` al DOF real (hoy es el marcador
+  genérico "https://www.sat.gob.mx/", que no lleva a ningún lado — el dato bueno está
+  en `fuente_dof`), correr `node scripts/generar-normas.mjs` y ajustar
+  `normas/indice.ts`.
 por_que_nos_toca: >
   La fracción IV alcanza a "Quien asesore, aconseje, PRESTE SERVICIOS o participe en
   la realización o la implementación de cualquiera de las prácticas anteriores".
@@ -28,11 +93,27 @@ por_que_nos_toca: >
 dato_verificado_adicional: >
   El Anexo 3 de la RMF 2026 contiene ~74 criterios (4 del CFF), no uno. Casi todos
   cierran con la misma cláusula de "quien preste servicios".
-  En 2026 se ELIMINÓ del 1/CFF/PI la fracción que castigaba condicionar el CFDI a la
-  exhibición de la constancia de situación fiscal: esa conducta pasó a ser infracción
-  tipificada.
+
+  CONFIRMADO EXACTO el 20-ago-2026: son 74 criterios /PI en el Anexo 3 del DOF
+  09-ene-2026, y los del CFF son exactamente cuatro (1/CFF/PI a 4/CFF/PI).
+lo_que_NO_se_pudo_verificar: >
+  La ficha afirma: "En 2026 se ELIMINÓ del 1/CFF/PI la fracción que castigaba
+  condicionar el CFDI a la exhibición de la constancia de situación fiscal: esa
+  conducta pasó a ser infracción tipificada."
+
+  NO SE PUDO COMPROBAR y se deja marcado como tal. El texto vigente de 2026 sí dice,
+  en el cuerpo del criterio, que el cliente "solo debe proporcionar su clave en el
+  RFC, nombre o razón social, código postal del domicilio fiscal y uso fiscal (…) sin
+  necesidad de exhibir la Cédula de Identificación Fiscal o Constancia de Situación
+  Fiscal" — o sea, la conducta sigue reprochada, pero desde el cuerpo y no desde una
+  fracción propia. Para saber si ANTES existía como fracción numerada hace falta el
+  Anexo 3 de la RMF 2025, que no está en el corpus con el que se hizo esta auditoría.
+  Tampoco se identificó cuál sería la "infracción tipificada" que la habría
+  sustituido. No repetir esta frase ante un cliente hasta cotejar el Anexo 3 de 2025.
 mitigacion: "Leyenda de descargo (arts. 52 y 89 CFF) — ver cuadre/leyendas.ts"
 verificado_por: "verificador adversarial ola1 (refutación 3)"
 verificado_el: 2026-07-27
+corregido_el: 2026-08-20  # texto_vigente transcrito del Anexo 3 (DOF 09-ene-2026): pasa de null a literal. Confirmados título, fundamento 33-I-h, las 4 fracciones y los 74 criterios. Vigencia 2026 comprobada contra la 1a Modificación al Anexo 3 (DOF 17-jul-2026): no lo tocó. La afirmación sobre la fracción eliminada en 2026 queda marcada como NO verificada
+usado_en_codigo_verificado_el: 2026-08-20  # cuadre/leyendas.ts existe y define LEYENDA_CORTA y leyendaPdf()
 usado_en_codigo:
   - "cuadre/leyendas.ts — LEYENDA_CORTA y leyendaPdf()"
