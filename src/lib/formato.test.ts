@@ -287,9 +287,9 @@ describe('NO puede volver a haber una copia a mano', () => {
 
   it('y `formato.ts` no importa NADA, para que el motor pueda usarlo', () => {
     // `engine.ts` es puro y sin I/O, y `pdf.ts` viaja en el bundle del webhook.
-    // Si el formato viviera en `utils.ts` —que importa clsx y tailwind-merge
-    // para `cn()`— los dos arrastrarían el sistema de clases de Tailwind. Hoy el
-    // tree-shaking lo salva; un archivo sin imports no depende de la suerte.
+    // Un archivo sin imports no depende de que nadie, algún día, le cuelgue una
+    // dependencia pesada por accidente — un archivo sin imports no depende de
+    // la suerte.
     const fuente = readFileSync('src/lib/formato.ts', 'utf8');
     expect(fuente).not.toMatch(/^\s*import\s/m);
   });
