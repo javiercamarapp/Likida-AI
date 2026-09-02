@@ -1,10 +1,21 @@
 # Aplicar en producción — orden, riesgos y qué se rompe si no
 
-> **AUDITORÍA 24, DAT-1 (ALTO).** Producción va en la **0271**. `master` ya
-> llama funciones que nacen en la **0272** y en adelante. Desplegar sin migrar
-> deja el export de póliza en 503 en cada intento; aplicar en desorden puede
-> **revertir un CRÍTICO ya cerrado**. Este archivo existe para que ninguna de
-> las dos cosas dependa de que alguien se acuerde.
+> **Actualización 2-sep-2026.** Las migraciones **0272→0301** ya están
+> aplicadas contra la base real de producción (proyecto Supabase "Likida"),
+> confirmadas en `supabase_migrations.schema_migrations` y contra el esquema
+> en vivo. `search_path` de `ejecutar_arco_cancelacion` verificado en
+> `public, extensions, pg_catalog`. `master` incluye el PR #303 (auditoría 24
+> integrada) más #306/#307/el fix de `fast-uri`, y ya se desplegó con
+> `[deploy]`. Esta sección se deja como referencia histórica de por qué el
+> orden de aplicación no es un detalle — sigue aplicando para la PRÓXIMA
+> tanda de migraciones.
+
+> **AUDITORÍA 24, DAT-1 (ALTO), contexto histórico.** Producción iba en la
+> **0271**. `master` ya llamaba funciones que nacían en la **0272** y en
+> adelante. Desplegar sin migrar dejaba el export de póliza en 503 en cada
+> intento; aplicar en desorden podía **revertir un CRÍTICO ya cerrado**. Este
+> archivo existe para que ninguna de las dos cosas dependa de que alguien se
+> acuerde — la próxima vez que haya migraciones pendientes, vuelve a aplicar.
 
 ## La regla corta
 
@@ -87,13 +98,16 @@ select proconfig from pg_proc where proname = 'ejecutar_arco_cancelacion';
 
 ## Lo que sigue pendiente (auditoría 24, no cerrado aquí)
 
-- **DAT-3 / DAT-4**: piso ≥ 0 en las cinco columnas de dinero de `gasto`, y
+- ~~**DAT-3 / DAT-4**: piso ≥ 0 en las cinco columnas de dinero de `gasto`, y
   `viaje_id`/`iva_retenido`/`isr_retenido`/`descuento` en el WHEN de
-  `trg_gasto_no_tras_liquidar_update`. **No están en esta tanda** y son las dos
-  que dejan divergir el papel firmado y la fila.
+  `trg_gasto_no_tras_liquidar_update`.~~ **Cerrado**: el piso llegó en la 0281
+  (`gasto_importes_no_negativos`) y el WHEN completo en la 0283, reconciliado
+  con la 0299 en la 0300 — las cuatro columnas que faltaban ya están.
 - **DAT-6**: `viaje.estatus='liquidado'` ⇔ existe `liquidacion`. Requiere
   reordenar `reabrir_viaje_tx` y reescribir 16 bloques de la batería que usan
-  `estatus='liquidado'` como atajo de fixture.
+  `estatus='liquidado'` como atajo de fixture. Sigue sin cerrar.
 - **DAT-1, tercera parte**: `/api/export/poliza` debería distinguir `PGRST202`
   («la 0272 no está aplicada») de un error de lectura, para que el 503 diga qué
-  hacer. Es de otro dueño (`src/app/api/export/poliza/route.ts`).
+  hacer. Es de otro dueño (`src/app/api/export/poliza/route.ts`). Sigue sin
+  cerrar — ya no aplica el escenario original (la 0272 SÍ está aplicada), pero
+  la distinción de errores en el 503 sigue siendo una mejora real pendiente.
