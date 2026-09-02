@@ -8827,6 +8827,21 @@ end $$;
 -- contar contra el tope del tenant, pero una vigente sigue contando igual
 -- que antes — el fix no perdona presupuesto real, solo el fantasma de una
 -- invocación muerta.
+-- ACTUALIZACIÓN (auditoría de graduación de agentes, 2-sep-2026, migración
+-- 0302): este bloque llamaba al overload de 6 argumentos de
+-- `reservar_presupuesto_llm` (booleano) — el que existía cuando se escribió
+-- este bloque, antes de que la 0244 lo sustituyera por el de 8 argumentos
+-- (texto: 'ok'/'tope_tenant'/'tope_proposito'/'tope_run'). La 0302 retiró
+-- ese overload de 6 por huérfano (0 callers reales en `src/`), y este bloque
+-- CI dejó de compilar — "ERROR INESPERADO... function ... does not exist"
+-- (block 154, no llegó ni a su RAISE de cierre). Se migró a la firma de 8
+-- args con `proposito='fondo'` y `reserva_interactivo_usd=0` — con la
+-- reserva de interactivo en cero, el sub-tope de 'fondo' coincide con el
+-- tope del tenant, así que el bloque sigue probando EXACTAMENTE lo mismo
+-- que antes (el tope diario completo, no el reparto por propósito de la
+-- 0244 — eso ya lo prueba el bloque 200/0244). El tipo de retorno cambió de
+-- boolean a text: `acepta_tras_expirada`/`acepta_tras_vigente` ahora
+-- comparan contra 'ok'/'tope_tenant', no contra t/f.
 do $$
 declare
   t uuid;
@@ -8839,8 +8854,8 @@ declare
   def_fn text;
   fn_usa_mx boolean;
   fn_usa_expira boolean;
-  acepta_tras_expirada boolean;
-  acepta_tras_vigente boolean;
+  acepta_tras_expirada text;
+  acepta_tras_vigente text;
 begin
   insert into public.tenant (nombre) values ('ZZZ VERIF 0193') returning id into t;
 
@@ -8852,26 +8867,26 @@ begin
 
   -- (b) La función desplegada de verdad usa esa fórmula (y la columna de
   -- expiración), no `date_trunc('day', now())` a secas.
-  def_fn := pg_get_functiondef('public.reservar_presupuesto_llm(uuid,uuid,uuid,numeric,numeric,numeric)'::regprocedure);
+  def_fn := pg_get_functiondef('public.reservar_presupuesto_llm(uuid,uuid,uuid,numeric,numeric,numeric,text,numeric)'::regprocedure);
   fn_usa_mx := def_fn ilike '%America/Mexico_City%';
   fn_usa_expira := def_fn ilike '%expira_en%';
 
   -- (c) Una reserva YA EXPIRADA no cuenta contra el tope del tenant.
   insert into public.llm_presupuesto_reserva (id, tenant_id, run_id, reservado_usd, estado, expira_en)
     values (r_expirada, t, gen_random_uuid(), 0.90, 'reservado', now() - interval '1 minute');
-  acepta_tras_expirada := public.reservar_presupuesto_llm(r_nueva_c, t, gen_random_uuid(), 0.50, 10.00, 1.00);
+  acepta_tras_expirada := public.reservar_presupuesto_llm(r_nueva_c, t, gen_random_uuid(), 0.50, 10.00, 1.00, 'fondo', 0);
   delete from public.llm_presupuesto_reserva where id in (r_expirada, r_nueva_c);
 
   -- (d) Pero una reserva VIGENTE (no vencida) SÍ sigue contando: 0.90 + 0.50
   -- > 1.00 de tope, así que esta debe RECHAZARSE.
   insert into public.llm_presupuesto_reserva (id, tenant_id, run_id, reservado_usd, estado, expira_en)
     values (r_vigente, t, gen_random_uuid(), 0.90, 'reservado', now() + interval '10 minutes');
-  acepta_tras_vigente := public.reservar_presupuesto_llm(r_nueva_d, t, gen_random_uuid(), 0.50, 10.00, 1.00);
+  acepta_tras_vigente := public.reservar_presupuesto_llm(r_nueva_d, t, gen_random_uuid(), 0.50, 10.00, 1.00, 'fondo', 0);
 
   delete from public.llm_presupuesto_reserva where tenant_id = t;
   delete from public.tenant where id = t;
 
-  raise exception 'PRESUPUESTO_LLM_0193  formula_dia_mx_ok=%  fn_usa_mx=%  fn_usa_expira=%  acepta_tras_expirada=%  acepta_tras_vigente=%   (esperado t / t / t / t / f)',
+  raise exception 'PRESUPUESTO_LLM_0193  formula_dia_mx_ok=%  fn_usa_mx=%  fn_usa_expira=%  acepta_tras_expirada=%  acepta_tras_vigente=%   (esperado t / t / t / ok / tope_tenant)',
     formula_ok, fn_usa_mx, fn_usa_expira, acepta_tras_expirada, acepta_tras_vigente;
 end $$;
 
@@ -15472,65 +15487,6 @@ begin
     convive_dos_pipelines_misma_flota, convive_mismo_pipeline_otra_flota, choca_mismo_par, cascade_al_borrar_tenant;
 end $$;
 
--- ── 248. Los nueve agentes TEATRO quedan `experimental`, el resto del catálogo no se toca (mig. 0301) ──
---
--- Lo que solo la base puede demostrar de la 0301:
---
---  (a) la columna `experimental` existe en `agente_definicion` (el ALTER
---      corrió).
---  (b) los NUEVE ids del hallazgo (cazador, seo_distribucion, guiones,
---      noticias_mercado, promos_diarias, visuales, video_demo,
---      video_marketing, pruebas) quedan `experimental = true` — uno por
---      uno, porque un UPDATE con un `where id in (...)` mal escrito deja
---      alguno fuera en silencio.
---  (c) un agente REAL del catálogo (`redactor`, que sí manda correo) NO
---      quedó marcado — la migración no pudo haber puesto `true` a TODOS
---      por accidente (p. ej. un UPDATE sin WHERE).
---  (d) el DEFAULT de la columna es `false`: un agente nuevo que se dé de
---      alta sin tocar esta columna nace NO experimental — la marca es
---      opt-in explícito para los nueve de este hallazgo, no el estado de
---      reposo de un agente cualquiera.
-do $$
-declare
-  col_existe boolean;
-  faltantes text;
-  ids text[] := array[
-    'cazador','seo_distribucion','guiones','noticias_mercado',
-    'promos_diarias','visuales','video_demo','video_marketing','pruebas'
-  ];
-  k text;
-  no_marcados text[] := '{}';
-  redactor_intacto boolean;
-  default_es_false boolean;
-begin
-  select exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'agente_definicion' and column_name = 'experimental'
-  ) into col_existe;
-
-  -- (b) los nueve, uno por uno.
-  foreach k in array ids loop
-    if not exists (select 1 from public.agente_definicion where id = k and experimental = true) then
-      no_marcados := no_marcados || k;
-    end if;
-  end loop;
-  faltantes := coalesce(array_to_string(no_marcados, ','), '');
-  if faltantes = '' then faltantes := 'ninguno'; end if;
-
-  -- (c) redactor (agente REAL, manda correo) sigue sin la marca.
-  select (experimental = false) into redactor_intacto
-    from public.agente_definicion where id = 'redactor';
-
-  -- (d) el default de la columna, sobre una fila nueva que no la toca.
-  insert into public.agente_definicion (id, nombre, departamento)
-    values ('__verif_0301_default__', 'Verificación 0301', 'ingenieria');
-  select (experimental = false) into default_es_false
-    from public.agente_definicion where id = '__verif_0301_default__';
-
-  raise exception E'AGENTES_EXPERIMENTALES_0301  col_existe=%  faltantes=%  redactor_intacto=%  default_es_false=%   (esperado t / ninguno / t / t)',
-    col_existe, faltantes, redactor_intacto, default_es_false;
-end $$;
-
 -- ── 249. Los nueve agentes TEATRO se gradúan tras la auditoría, sin tocar al resto del catálogo (mig. 0303) ──
 --
 -- Lo que solo la base puede demostrar de la 0303 (el espejo de la 248/0301):
@@ -15550,6 +15506,11 @@ end $$;
 --  (d) un agente REAL del catálogo (`redactor`) NO quedó tocado — la
 --      migración no pudo haber puesto `experimental = false` a TODOS por
 --      accidente, ni tocado su `descripcion`.
+--  (e) el DEFAULT de la columna `experimental` sigue siendo `false` — este
+--      bloque hereda ese sub-check del retirado 248/0301 (ver EXENTAS de
+--      `migraciones_verificadas.test.ts`, entrada 0301): esa migración
+--      solo declaró el default una vez, y la garantía de la base sobre eso
+--      no cambió con la 0303, así que se mueve aquí en vez de perderse.
 do $$
 declare
   ids text[] := array[
@@ -15569,6 +15530,7 @@ declare
   redactor_experimental boolean;
   redactor_descripcion_antes text;
   redactor_descripcion_despues text;
+  default_es_false boolean;
 begin
   select descripcion into redactor_descripcion_antes from public.agente_definicion where id = 'redactor';
 
@@ -15594,12 +15556,20 @@ begin
   select (experimental = false) into redactor_experimental from public.agente_definicion where id = 'redactor';
   select descripcion into redactor_descripcion_despues from public.agente_definicion where id = 'redactor';
 
-  raise exception E'AGENTES_GRADUADOS_0303  no_graduados=%  con_prompt_ref=%  con_frase_vieja=%  redactor_experimental_false=%  redactor_descripcion_intacta=%   (esperado ninguno / ninguno / ninguno / t / t)',
+  -- (e) el default de la columna, sobre una fila nueva que no la toca
+  -- (heredado del bloque 248/0301, retirado — ver arriba).
+  insert into public.agente_definicion (id, nombre, departamento)
+    values ('__verif_0303_default__', 'Verificación 0303', 'ingenieria');
+  select (experimental = false) into default_es_false
+    from public.agente_definicion where id = '__verif_0303_default__';
+
+  raise exception E'AGENTES_GRADUADOS_0303  no_graduados=%  con_prompt_ref=%  con_frase_vieja=%  redactor_experimental_false=%  redactor_descripcion_intacta=%  default_es_false=%   (esperado ninguno / ninguno / ninguno / t / t / t)',
     coalesce(array_to_string(no_graduados, ','), 'ninguno'),
     coalesce(array_to_string(con_prompt_ref, ','), 'ninguno'),
     coalesce(array_to_string(con_frase_vieja, ','), 'ninguno'),
     redactor_experimental,
-    (redactor_descripcion_antes is not distinct from redactor_descripcion_despues);
+    (redactor_descripcion_antes is not distinct from redactor_descripcion_despues),
+    default_es_false;
 end $$;
 
 -- ── 243. `tenant_perfil_merge` mezcla el perfil ATÓMICAMENTE — leer+escribir en el mismo UPDATE, no en dos viajes de Node (mig. 0296, auditoría 24, H20/H21/H22) ──
