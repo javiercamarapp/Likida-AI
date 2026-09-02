@@ -1,38 +1,41 @@
-fecha_corrida: 2026-08-23 (domingo)
-ultimo_dia_barrido: 2026-08-16 (sin cambio — esta corrida no pudo barrer nada)
-rango_intentado: 2026-08-17..2026-08-22 (6 dias, incluye el sabado 22; quedaron sin cubrir)
-notas_revisadas: 0 — bloqueo de red antes de la primera llamada
-notas_por_edicion: {matutina: no_alcanzado, vespertina: no_alcanzado, extraordinaria: no_alcanzado}
+fecha_corrida: 2026-09-02 (miércoles)
+ultimo_dia_barrido: 2026-08-30 (sin avance — el rango debido hoy, 31-ago a
+  01-sep, no se pudo barrer por bloqueo de egress; ver estado)
+rango_debido: 31-ago-2026 (lunes) a 01-sep-2026 (martes) — 2 días, no barridos
+notas_revisadas: 0
+notas_por_edicion: no_aplica — bloqueo de red impidió cualquier consulta
 fichas_disparadas: 0
-etag_sat: sin_recheck — hoy es domingo, no lunes; ademas el host esta bloqueado igual
-etag_sat_check: no_intentado_bloqueo_previo
-deriva_ley_check: no_aplica_no_es_dia_1_trimestre
-estado: "INFRA egress bloqueado — quinta corrida consecutiva de esta sesion en la nube con el mismo bloqueo (16-ago fue OK via sesion local; 20-ago, 21-ago, 22-ago y hoy 23-ago fallan en la nube)"
-detalle: >
-  curl directo a sidofqa.segob.gob.mx:443, www.sat.gob.mx:443 y
-  diputados.gob.mx:443 -> proxy responde 403 a nivel CONNECT en los tres
-  (curl exit 56, "CONNECT tunnel failed, response 403"), identico a las
-  corridas del 20/21/22-ago. Ademas, esta corrida probo un camino
-  independiente — WebFetch, que corre del lado de Anthropic, no via el
-  proxy local — contra sidofqa.segob.gob.mx: tambien devolvio
-  EGRESS_BLOCKED explicito. Eso descarta que sea un capricho del proxy
-  local de esta sesion: el dominio esta vetado a nivel de politica para
-  este entorno por dos caminos distintos. $HTTPS_PROXY/__agentproxy/status
-  confirma que la sesion esta bien configurada (enabled:true, sin
-  relayFailures previos) — el bloqueo es intencional, no un error de red.
+etag_sat: no_aplica_hoy (hoy es MIÉRCOLES, no lunes; el chequeo semanal no
+  corresponde a esta corrida)
+deriva_ley_check: no_aplica (no es día 1 de trimestre)
+estado: "INFRA egress bloqueado — confirmado por DOS vías independientes:
+  curl directo devolvió 'CONNECT tunnel failed, response 403' contra
+  sidofqa.segob.gob.mx (notas y diarios/porFecha), y el estado del proxy
+  (__agentproxy/status) registra 'connect_rejected: gateway answered 403 to
+  CONNECT (policy denial or upstream failure)' para ese host. La
+  herramienta WebFetch devolvió por separado EGRESS_BLOCKED para el mismo
+  dominio. Cero acceso a sidofqa.segob.gob.mx desde esta sesión de nube; no
+  se llegó a probar sat.gob.mx ni diputados.gob.mx porque hoy no tocaban
+  (no es lunes ni día 1 de trimestre), pero el latido anterior
+  (2026-08-31) ya había reportado el mismo bloqueo también contra
+  www.sat.gob.mx. Van al menos DOS corridas consecutivas (31-ago y 02-sep)
+  con el barrido diario del DOF completamente inoperante por política de
+  red del entorno, no por caída del SIDOF."
 sin_verificar_esta_corrida: >
-  Todo el rango 17..22-ago-2026 (6 dias, incluido el sabado) sin barrer.
-  Ademas quedan sin intentar: ETag del minisitio SAT (cadencia semanal, ya
-  pasaron DOS lunes — 17-ago y 24-ago aun no llega — sin poder chequearse)
-  y las 23 fichas sin tocar desde el 16-ago.
+  Las notas del DOF del 31-ago y 01-sep (2 días, 3 ediciones cada uno):
+  bloqueado por egress. Las 34 fichas de normas/*.yaml no se releyeron
+  contra fuente primaria porque no se pudo bajar ni una nota. ETag del SAT
+  y deriva de ley: no correspondían a esta corrida (no es lunes / no es
+  día 1 de trimestre), pero siguen sin verificarse desde que existe la
+  rutina.
 accion_requerida: >
-  MISMA accion pendiente desde el 16-ago, AUN NO TOMADA tras CINCO corridas
-  consecutivas en la nube documentando el mismo bloqueo (20, 21, 22 y hoy
-  23-ago; mas la corrida OK del 16-ago que si tuvo egress porque corrio
-  local): (1) mover la cadencia diaria de esta routine a un entorno con
-  egress real — ejecucion local (launchd/cron en una maquina con salida a
-  internet), no esta sesion en la nube — o (2) pedir a un admin que agregue
-  sidofqa.segob.gob.mx, www.sat.gob.mx y diputados.gob.mx a la allowlist de
-  egress de este entorno. Mientras ninguna de las dos pase, CADA corrida
-  programada en la nube va a fallar identico y el backlog de dias sin
-  barrer sigue creciendo (van 6 dias sin cubrir: 17,18,19,20,21,22-ago).
+  Repetido y ahora confirmado en dos corridas: esta sesión de nube no tiene
+  salida a sidofqa.segob.gob.mx (403 CONNECT del proxy de salida, y
+  EGRESS_BLOCKED de WebFetch). Sin acceso a ese dominio, NINGUNA parte de
+  esta rutina puede correr — ni el barrido diario, ni el chequeo semanal
+  del SAT, ni la deriva trimestral. Hace falta que un administrador agregue
+  sidofqa.segob.gob.mx (y www.sat.gob.mx, diputados.gob.mx cuando toque) a
+  la política de salida de las sesiones de nube programadas, o mover esta
+  rutina a un entorno con ese egress. Mientras tanto, las 34 fichas de
+  normas/ llevan acumulando días sin ninguna verificación real contra
+  fuente primaria.

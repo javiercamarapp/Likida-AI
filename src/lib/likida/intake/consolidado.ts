@@ -1,8 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // EL JOIN DEL CFDI CONSOLIDADO — auditoría 10, hallazgo CRÍTICO fiscal.
 //
-// Diésel por monedero y peaje por TAG son ~54% del gasto real de una flota
-// (INEGI EAT 2024) y NUNCA generan un ticket por transacción: llegan como UN
+// Diésel por monedero y peaje por TAG son, por estimación interna SIN FUENTE
+// CONFIRMADA (ver la nota en `intake/cfdi_xml.ts`), una fracción grande del
+// gasto real de una flota, y NUNCA generan un ticket por transacción: llegan como UN
 // CFDI que ampara muchos días de consumo. `cfdi_xml.ts` ya sabe extraer esas
 // líneas (`CfdiLineaXml[]`, ver ese archivo). Este módulo hace lo que falta:
 // decidir a qué `gasto` ya capturado pertenece cada línea, o admitir que no
@@ -37,6 +38,7 @@ import { acotada } from '../presupuesto';
 import { traerTodo, conteo } from '../pg';
 import { logger } from '@/lib/logger';
 import { enLotes } from '../lotes';
+import { strip_accents } from '../cuadre/util';
 import type { Gasto } from '@/types/likida';
 import type { CfdiLineaXml, CfdiXmlData } from './cfdi_xml';
 
@@ -89,18 +91,85 @@ export function rangoFechasLineas(lineas: CfdiLineaXml[]): { desde: string; hast
   };
 }
 
-// FASE 1 (docs/asistencia/PLAN-FASES.md): identifica diésel de una línea del
-// consolidado y su clave SAT. concepto_base trae `claveProdServ` nativo;
-// ecc12 NO (la ECC12 v1.2 no da ClaveProdServ por transacción) — solo
-// `tipoCombustible`, catálogo cerrado del SAT. Se traduce ÚNICAMENTE
-// "Diesel" a 15101505 (la clave que `config.ts:130` reconoce para el
-// estímulo LIF 2026 art. 20 ap. A): el estímulo es diésel, no "cualquier
-// combustible", así que Magna/Premium/Gas/Otros se quedan sin clave a
-// propósito, no por omisión.
+/**
+ * FASE 1 (docs/asistencia/PLAN-FASES.md): identifica diésel de una línea del
+ * consolidado y su clave SAT. concepto_base trae `claveProdServ` nativo;
+ * ecc12 NO (la ECC12 v1.2 no da ClaveProdServ por transacción) — solo
+ * `tipoCombustible`, catálogo cerrado del SAT. Se traduce ÚNICAMENTE
+ * diésel a 15101505 (la clave que `config.ts:130` reconoce para el
+ * estímulo LIF 2026 art. 20 ap. A): el estímulo es diésel, no "cualquier
+ * combustible", así que Magna/Premium/Gas/Otros se quedan sin clave a
+ * propósito, no por omisión.
+ *
+ * ═══ POR QUÉ SE NORMALIZA EL TEXTO Y HASTA DÓNDE ═════════════════════════
+ *
+ * Hasta hoy la comparación era `l.tipoCombustible === 'Diesel'`, EXACTA:
+ * mayúscula inicial, sin acento, sin espacios. El repo no tiene —ni ha
+ * tenido nunca— un solo CFDI con complemento ECC emitido de verdad (los tres
+ * fixtures del repo son strings sintéticos; ver `pruebas-manuales/
+ * consolidado-real.prueba.ts`, que dice literal "real en estructura"), así
+ * que nadie ha visto con qué exactitud tipográfica timbra un emisor real ese
+ * atributo. Un `"DIESEL"`, un `"Diésel"` o un `" Diesel "` —las tres formas
+ * en que un emisor puede escribir LA MISMA PALABRA— devolvían `undefined`, y
+ * entonces `datosDieselDeLinea` no propagaba nada: los litros del mes
+ * entero se guardaban en la línea y no llegaban NUNCA al gasto ni al motor.
+ * Cero litros acreditables por una mayúscula. Ese es el mismo hueco que la
+ * Fase 1 vino a cerrar, sobreviviendo dentro del arreglo.
+ *
+ * Se normaliza mayúsculas, acentos y espacios — es la MISMA palabra escrita
+ * distinto, no una clave distinta.
+ *
+ * LO QUE NO SE HACE, A PROPÓSITO: no se mapea ninguna clave numérica de
+ * catálogo (`"01"`, `"02"`…). El SAT publica `c_ClaveTipoCombustible` y este
+ * repo NO tiene ese catálogo verificado contra fuente (ni en `normas/`, ni
+ * en `normas/datos/`, ni en `docs/conocimiento/05-hidrocarburos.md`, que
+ * documenta el complemento pero no el catálogo de ese atributo). Adivinar
+ * que "02" es diésel acreditaría litros de gasolina — una cifra fiscal
+ * inventada, exactamente lo que la casa prohíbe. Cuando exista el catálogo
+ * con su fuente (mismo patrón que `normas/datos/cuota-ieps-diesel.yaml`),
+ * esta función es el único lugar donde hay que agregarlo.
+ */
 export function claveProdServDeLinea(l: Pick<CfdiLineaXml, 'claveProdServ' | 'tipoCombustible'>): string | undefined {
   if (l.claveProdServ?.startsWith('15101')) return l.claveProdServ;
-  if (l.tipoCombustible === 'Diesel') return '15101505';
+  if (esDieselTexto(l.tipoCombustible)) return '15101505';
   return undefined;
+}
+
+/** ¿Este `TipoCombustible` de una línea ECC12 dice "diésel"? Solo texto: la
+ *  misma palabra escrita con otra caja, con acento o con espacios de más
+ *  sigue siendo la misma palabra. Una clave numérica de catálogo NO entra
+ *  aquí — ver el bloque de arriba. */
+function esDieselTexto(tipo: string | undefined): boolean {
+  if (!tipo) return false;
+  return strip_accents(tipo).trim().toUpperCase() === 'DIESEL';
+}
+
+/**
+ * ¿La `Cantidad` de esta línea son LITROS de combustible?
+ *
+ * La columna se llama `litros` (mig. 0168) y hasta hoy se llenaba con
+ * `linea.cantidad` de CUALQUIER línea. En un consolidado de TAG —el otro uso
+ * de esta tabla, casetas por `concepto_base`— cada `cfdi:Concepto` trae
+ * `Cantidad="1"`: UN CRUCE, no un litro. La tabla quedaba diciendo que una
+ * caseta de $118 tuvo "1 litro", y el propio comentario de la columna 0168
+ * ("NULL = la linea no trae Cantidad, p.ej. una caseta") describía algo que
+ * no pasaba. Ningún cálculo de dinero lo leía todavía —`datosDieselDeLinea`
+ * y `resolverLineaAMano` exigen `clave_prod_serv`, que una caseta no tiene—,
+ * pero es una cifra falsa esperando a que alguien la sume en un reporte.
+ *
+ * Se guarda `litros` cuando:
+ *   · la línea es `ecc12` — el complemento se llama Estado de Cuenta de
+ *     COMBUSTIBLES y su `Cantidad` es volumen por definición del estándar
+ *     (sea diésel, magna o gas: son litros aunque no sean acreditables); o
+ *   · la línea es `concepto_base` CON clave de combustible (`15101…`).
+ *
+ * En cualquier otro caso queda `null`, que es la verdad: no se midió un
+ * volumen. `null` ≠ 0 y `null` ≠ "1 litro".
+ */
+export function litrosDeLinea(l: Pick<CfdiLineaXml, 'cantidad' | 'fuente' | 'claveProdServ' | 'tipoCombustible'>): number | null {
+  if (l.cantidad == null || !Number.isFinite(l.cantidad)) return null;
+  if (l.fuente === 'ecc12') return l.cantidad;
+  return l.claveProdServ?.startsWith('15101') ? l.cantidad : null;
 }
 
 export type EstatusLineaConsolidado = 'conciliada' | 'por_conciliar';
@@ -194,7 +263,22 @@ async function ligarLineaAGasto(
   // (caseta, gasolina, …) liga igual que siempre, sin tocar ocr_extra.
   diesel?: { litros: number; claveProdServ: string },
 ): Promise<boolean> {
-  const cambios: Record<string, unknown> = { cfdi_uuid: cfdiUuid, cfdi_orden: orden };
+  // AUDITORÍA 19 (fiscal, CRÍTICO F1): sin esto, un gasto ligado a un CFDI
+  // consolidado nunca marcaba `xml_verificado`, y `cuadre/engine.ts:1248`
+  // (`if (!g.xmlVerificado) continue;`) gatea TODO el bloque de acreditamiento
+  // — no solo el IVA, también el estímulo de peaje y los litros de diésel que
+  // la Fase 1 ya captura en `ocr_extra.litros`. El resultado: el litro se
+  // guardaba y nunca se usaba, y el IVA/estímulo de un monedero o TAG salían
+  // en $0 sin avisar — la MISMA garantía que ya vale para el CFDI 1:1
+  // (`repo.ts:updateGastoCfdiXml`, `processor.ts` al crear desde XML), porque
+  // el match monto+fecha contra la línea del CFDI (`conciliarLineas`, o un
+  // humano vía `resolverLineaAMano`) es la misma verificación que un CFDI
+  // suelto. NO se copian `iva_traslado`/`ieps_traslado` del documento: el
+  // estándar (ECC12/concepto_base) no los da POR LÍNEA, solo en el total del
+  // CFDI completo, y asignarle el total del documento a una sola transacción
+  // sería inventar un desglose que no existe — se deja `null`, que es lo que
+  // hace que el motor avise "IEPS no desglosado" en vez de acreditar de más.
+  const cambios: Record<string, unknown> = { cfdi_uuid: cfdiUuid, cfdi_orden: orden, xml_verificado: true };
   if (diesel) {
     // Lectura + fusión + escritura sobre `ocr_extra` — mismo patrón que
     // `updateGastoCfdiXml` en repo.ts (auditoría 12): el jsonb ya guarda
@@ -417,7 +501,9 @@ export async function guardarYConciliarConsolidado(
     // FASE 1: se guarda para que la resolución a mano y el barrido —que
     // vuelven a leer esta fila, nunca el XML— liguen con los mismos litros
     // sin recalcular nada (`claveProdServDeLinea` corrió una sola vez, aquí).
-    litros: r.linea.cantidad ?? null,
+    // `litrosDeLinea` (no `cantidad` a secas) porque la `Cantidad` de una
+    // caseta es un cruce, no un litro — ver el bloque de esa función.
+    litros: litrosDeLinea(r.linea),
     clave_prod_serv: claveProdServDeLinea(r.linea) ?? null,
   }));
   const { error: errLineas } = await acotada(supabaseAdmin()

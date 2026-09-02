@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // RES-7: un cron muerto era invisible. La puerta loguea el 401 con código
@@ -16,7 +16,8 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({ from: () => ({ upsert: (...a: unknown[]) => upsert(...(a as [])) }) }),
 }));
 
-const { puertaCron, registrarLatido, juzgarLatido, CADENCIA_MS, TOLERANCIA_LATIDO_MS } = await import('./salud');
+const { puertaCron, registrarLatido, juzgarLatido, motivoDeSalto, esHuecoDeConfiguracion, CRONS, CADENCIA_MS, TOLERANCIA_LATIDO_MS } = await import('./salud');
+const { estadoDescargaSat } = await import('@/lib/likida/sat_descarga');
 
 beforeEach(() => { vi.clearAllMocks(); process.env.CRON_SECRET = 's3cr3t'; });
 
@@ -76,8 +77,17 @@ describe('CADENCIA_MS espeja vercel.json', () => {
     const cfg = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: Array<{ path: string; schedule: string }> };
     const esperada: Record<string, number> = {
       '* * * * *': 60_000, '*/5 * * * *': 300_000, '*/15 * * * *': 900_000,
-      '0 * * * *': 3_600_000, '30 * * * *': 3_600_000,
+      '0 * * * *': 3_600_000, '7 * * * *': 3_600_000, '30 * * * *': 3_600_000,
       '0 */4 * * *': 4 * 3_600_000, '15 4 * * *': 86_400_000,
+      // 0231: el minuto 25 está desfasado a propósito de la estampida de los
+      // minutos 0/5/7/15 — un cron más en el minuto 0 se lleva la cuota de la
+      // plataforma y el pool de conexiones a la misma hora que los otros.
+      '25 */6 * * *': 6 * 3_600_000,
+      // 0248: el vigilante de portales, SEMANAL — lunes 06:40 UTC. El minuto 40
+      // y el lunes temprano están elegidos igual que el 25 de arriba: fuera de
+      // la estampida, y el lunes para que si un portal murió el fin de semana
+      // se sepa antes de la primera tanda de facturación de la semana.
+      '40 6 * * 1': 7 * 86_400_000,
     };
     for (const c of cfg.crons) {
       const id = c.path.replace('/api/cron/', '') as keyof typeof CADENCIA_MS;
@@ -88,5 +98,193 @@ describe('CADENCIA_MS espeja vercel.json', () => {
       expect(CADENCIA_MS[id], `${id} falta en CADENCIA_MS`).toBe(esperada[c.schedule]);
     }
     expect(TOLERANCIA_LATIDO_MS).toBe(20 * 60_000);
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // EL GUARDIA QUE FALTABA. La prueba de arriba cruza CRONS contra
+  // vercel.json, así que un cron nuevo sin cadencia se cazaba. Nadie cruzaba
+  // CRONS contra el CHECK de `cron_latido`, y por ahí se coló el drift que
+  // arregla la 0242: `asistencia` y `descarga-sat` llevaban semanas
+  // llamando a `registrarLatido` con un id que la base rechazaba, y como el
+  // latido es best-effort (traga el error con un warn), los dos crons corrían
+  // y el panel los daba por muertos.
+  //
+  // Se lee el ÚLTIMO `add constraint cron_latido_id_dominio` de todo
+  // `supabase/migrations/` —no un archivo fijo— porque el dominio se ha
+  // reescrito tres veces (0155 → 0176 → 0180 → 0242) y la prueba tiene que
+  // seguir midiendo el vigente, no el que estaba cuando se escribió.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('el CHECK de cron_latido admite exactamente los CRONS que el código declara', () => {
+    const dir = 'supabase/migrations';
+    const archivos = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
+
+    let dominio: string[] | null = null;
+    let deQuien = '';
+    for (const archivo of archivos) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- recorre las migraciones del propio repo en tiempo de prueba; la ruta sale de readdirSync sobre una constante, no de ninguna entrada de usuario.
+      const sql = readFileSync(`${dir}/${archivo}`, 'utf8');
+      // Sin comentarios: la 0242 CITA el dominio viejo en su encabezado para
+      // explicar el bug, y sin este filtro la prueba leería esa cita como si
+      // fuera el CHECK vigente.
+      const vivo = sql.replace(/^\s*--.*$/gm, '');
+      const re = /add\s+constraint\s+cron_latido_id_dominio\s+check\s*\(\s*id\s+in\s*\(([^)]*)\)/gis;
+      for (const m of vivo.matchAll(re)) {
+        dominio = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
+        deQuien = archivo;
+      }
+    }
+
+    expect(dominio, 'ninguna migración declara cron_latido_id_dominio').not.toBeNull();
+    // Ordenados: al dominio le da igual el orden, y comparar listas ordenadas
+    // hace que el mensaje de fallo diga QUÉ id sobra o falta.
+    expect([...(dominio ?? [])].sort(), `el CHECK vigente lo pone ${deQuien}`)
+      .toEqual([...CRONS].sort());
+  });
+});
+
+describe('motivoDeSalto', () => {
+  it('traduce la palanca que apagó el cron', () => {
+    expect(motivoDeSalto({ interruptor: 'global' })).toBe('apagado por la palanca «global»');
+  });
+  it('un salto sin palanca no inventa un motivo', () => {
+    // `null` es «no fue un salto declarado», y la vista lo pinta distinto de
+    // un salto explicado. Un string de relleno aquí haría que un cron caído
+    // se leyera como un cron apagado a propósito.
+    expect(motivoDeSalto({})).toBeNull();
+    expect(motivoDeSalto({ interruptor: '' })).toBeNull();
+    expect(motivoDeSalto({ interruptor: '   ' })).toBeNull();
+    expect(motivoDeSalto({ interruptor: 7 })).toBeNull();
+    expect(motivoDeSalto({ otra: 'cosa' })).toBeNull();
+  });
+  it('lee el motivo en prosa que dejó el cron (facturar sin adaptadores)', () => {
+    // Tableros al día (28-ago-2026): un salto puede tener motivo propio sin
+    // palanca — `facturar` con cero adaptadores de portal escribe la frase y
+    // aquí solo se lee, nunca se inventa.
+    expect(motivoDeSalto({ motivo: 'no hay ningún adaptador de portal escrito' }))
+      .toBe('no hay ningún adaptador de portal escrito');
+    expect(motivoDeSalto({ motivo: '   ' })).toBeNull();
+    expect(motivoDeSalto({ motivo: 42 })).toBeNull();
+    // La palanca gana si vienen las dos: apagar a mano es la señal más fuerte.
+    expect(motivoDeSalto({ interruptor: 'global', motivo: 'otra cosa' }))
+      .toBe('apagado por la palanca «global»');
+  });
+});
+
+// Auditoría prod 29-ago-2026: `descarga-sat` sin LIKIDA_SAT_PROVEEDOR mandó
+// ocho correos "Urgente" en doce horas porque `/api/health` no distinguía un
+// hueco de configuración YA DECLARADO de una regresión real. Esta función es
+// la bisagra de esa distinción — lee la MISMA convención de prosa que ya usa
+// todo el repo ("no está configurado" / "no configurado"), no una lista de
+// crons a mano.
+describe('esHuecoDeConfiguracion', () => {
+  it('reconoce el motivo real de descarga-sat en producción (falta LIKIDA_SAT_PROVEEDOR)', () => {
+    expect(esHuecoDeConfiguracion(
+      'La descarga masiva no está configurada: falta LIKIDA_SAT_PROVEEDOR en el servidor. Lo destraba Javier (contrato con el PAC y variables de entorno).',
+    )).toBe(true);
+  });
+  it('reconoce la variante "no configurado" sin el "está" (otros canales del repo)', () => {
+    expect(esHuecoDeConfiguracion('El canal de correo no está configurado (RESEND_API_KEY/RESEND_EMAIL_DOMAIN).')).toBe(true);
+    expect(esHuecoDeConfiguracion('canal de WhatsApp no configurado')).toBe(true);
+    expect(esHuecoDeConfiguracion('El cofre no está configurado (falta LIKIDA_COFRE_LLAVE).')).toBe(true);
+  });
+  it('una regresión real NO trae la convención de "no configurado" y no se confunde con un hueco', () => {
+    expect(esHuecoDeConfiguracion('timeout al llamar al proveedor de SW')).toBe(false);
+    expect(esHuecoDeConfiguracion('el proveedor devolvió 500')).toBe(false);
+    expect(esHuecoDeConfiguracion('interruptor_ilegible')).toBe(false);
+  });
+  it('sin motivo, o con un tipo que no es texto, no es un hueco declarado', () => {
+    expect(esHuecoDeConfiguracion(null)).toBe(false);
+    expect(esHuecoDeConfiguracion(undefined)).toBe(false);
+    expect(esHuecoDeConfiguracion(42)).toBe(false);
+    expect(esHuecoDeConfiguracion('')).toBe(false);
+  });
+
+  // AUDITORÍA 21 (29-ago-2026): el regex de arriba solo reconocía UNA de las
+  // cuatro ramas de `estadoDescargaSat()` (verificado contra el código real,
+  // no hipotético). La señal ESTRUCTURADA `configAusente` es la que de verdad
+  // cierra el hueco: gana sobre `motivo` sea cual sea su redacción.
+  it('la señal estructurada `configAusente` decide, no la prosa de `motivo`', () => {
+    // Un motivo que NO trae la convención de texto, pero SÍ trae la señal
+    // estructurada en true: es un hueco de configuración de todos modos.
+    expect(esHuecoDeConfiguracion({ configAusente: true, motivo: 'cualquier redacción futura' })).toBe(true);
+    // Al revés: `configAusente: false` gana aunque el texto libre "suene" a
+    // hueco de configuración — la señal estructurada nunca la contradice el
+    // regex.
+    expect(esHuecoDeConfiguracion({ configAusente: false, motivo: 'esto no está configurado, pero ya se resolvió' })).toBe(false);
+  });
+
+  it('sin `configAusente`, cae al regex de prosa sobre `detalle.motivo` (crons que no mandan la señal estructurada)', () => {
+    expect(esHuecoDeConfiguracion({ motivo: 'El cofre no está configurado (falta LIKIDA_COFRE_LLAVE).' })).toBe(true);
+    expect(esHuecoDeConfiguracion({ motivo: 'timeout al llamar al proveedor de SW' })).toBe(false);
+    expect(esHuecoDeConfiguracion({})).toBe(false);
+  });
+
+  // Las CUATRO variantes reales de `estadoDescargaSat()`
+  // (`sat_descarga/index.ts:64-91`), probadas contra el flujo real: el mismo
+  // objeto que `cron/descarga-sat/route.ts` manda a `registrarLatido`
+  // (`{ motivo, configAusente: !configurado }`). Antes de este arreglo, solo
+  // la primera de las cuatro clasificaba como hueco — las otras tres caían en
+  // "regresión real" y disparaban el correo "Urgente" cada hora para siempre.
+  describe('las cuatro variantes de motivo de estadoDescargaSat(), vía el latido real', () => {
+    const detalleDelLatido = () => {
+      const estado = estadoDescargaSat();
+      return { motivo: estado.motivo, configAusente: !estado.configurado };
+    };
+
+    afterEach(() => { vi.unstubAllEnvs(); });
+
+    it('1) LIKIDA_SAT_PROVEEDOR ausente', () => {
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', '');
+      const detalle = detalleDelLatido();
+      expect(detalle.motivo).toMatch(/no está configurada/i);
+      expect(esHuecoDeConfiguracion(detalle)).toBe(true);
+    });
+
+    it('2) LIKIDA_SAT_PROVEEDOR=sat_directo (declarado, no construido)', () => {
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'sat_directo');
+      const detalle = detalleDelLatido();
+      expect(detalle.motivo).toMatch(/no construido/i);
+      expect(esHuecoDeConfiguracion(detalle)).toBe(true);
+    });
+
+    it('3) LIKIDA_SAT_PROVEEDOR con un valor desconocido (typo, p. ej. mayúscula)', () => {
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'SW');
+      const detalle = detalleDelLatido();
+      expect(detalle.motivo).toMatch(/no es un proveedor conocido/i);
+      expect(esHuecoDeConfiguracion(detalle)).toBe(true);
+    });
+
+    it('4) proveedor válido pero credenciales incompletas (falta LIKIDA_SAT_URL)', () => {
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'sw');
+      vi.stubEnv('LIKIDA_SAT_URL', '');
+      vi.stubEnv('LIKIDA_SAT_USUARIO', '');
+      vi.stubEnv('LIKIDA_SAT_PASSWORD', '');
+      vi.stubEnv('LIKIDA_PAC_USUARIO', '');
+      vi.stubEnv('LIKIDA_PAC_PASSWORD', '');
+      const detalle = detalleDelLatido();
+      expect(detalle.motivo).toMatch(/^Falta LIKIDA_SAT_URL/);
+      expect(esHuecoDeConfiguracion(detalle)).toBe(true);
+    });
+
+    // Y el regex de respaldo (para latidos viejos sin `configAusente`, o
+    // crons que aún no manden la señal) también reconoce las tres variantes
+    // que antes se le escapaban.
+    it('el regex de respaldo también reconoce las tres variantes que antes se le escapaban', () => {
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'sat_directo');
+      expect(esHuecoDeConfiguracion(estadoDescargaSat().motivo)).toBe(true);
+      vi.unstubAllEnvs();
+
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'SW');
+      expect(esHuecoDeConfiguracion(estadoDescargaSat().motivo)).toBe(true);
+      vi.unstubAllEnvs();
+
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'sw');
+      vi.stubEnv('LIKIDA_SAT_URL', '');
+      vi.stubEnv('LIKIDA_SAT_USUARIO', '');
+      vi.stubEnv('LIKIDA_SAT_PASSWORD', '');
+      vi.stubEnv('LIKIDA_PAC_USUARIO', '');
+      vi.stubEnv('LIKIDA_PAC_PASSWORD', '');
+      expect(esHuecoDeConfiguracion(estadoDescargaSat().motivo)).toBe(true);
+    });
   });
 });

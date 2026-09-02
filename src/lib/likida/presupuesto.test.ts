@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import {
   crearPresupuesto, MARGEN_CIERRE_MS, PRESUPUESTO_WEBHOOK_MS,
   PASOS_CIERRE, COSTO_CIERRE_MS, TOPE_CONSULTA_MS,
+  TECHO_ENVIO_WHATSAPP_MS, TECHO_PASO_CONSULTA_MS, TECHO_CIERRE_MS,
 } from './presupuesto';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -66,12 +67,14 @@ describe('crearPresupuesto', () => {
   });
 
   it('acota el tope que pide una etapa a lo que de verdad queda', () => {
-    // La barrera pide 20s; si solo quedan 8, se le dan 8. Sin esto se pasa del
-    // presupuesto y se lleva por delante al agente.
+    // La barrera pide 20s; si solo quedan menos, se le dan los que hay. Sin
+    // esto se pasa del presupuesto y se lleva por delante al agente.
+    // (Los totales usan el presupuesto REAL del webhook desde la auditoría 21:
+    // con el margen derivado de techos, 60s de juguete ya no dejan resto.)
     let ahora = 0;
-    const p = crearPresupuesto(60_000, () => ahora);
-    ahora = 40_000;
-    const quedan = 60_000 - MARGEN_CIERRE_MS - 40_000;
+    const p = crearPresupuesto(120_000, () => ahora);
+    ahora = 70_000;
+    const quedan = 120_000 - MARGEN_CIERRE_MS - 70_000;
     expect(quedan, 'control: con este margen tiene que quedar algo').toBeGreaterThan(1_000);
     expect(p.acotar(20_000)).toBe(quedan);       // pide 20s, se le dan los que hay
     expect(p.acotar(quedan - 1_000)).toBe(quedan - 1_000);  // si pide menos, se respeta
@@ -79,10 +82,11 @@ describe('crearPresupuesto', () => {
 
   it('alcanza() responde si cabe una etapa que se sabe cara', () => {
     let ahora = 0;
-    const p = crearPresupuesto(60_000, () => ahora);
+    const p = crearPresupuesto(120_000, () => ahora);
     expect(p.alcanza(30_000)).toBe(true);
-    ahora = 40_000;
-    const quedan = 60_000 - MARGEN_CIERRE_MS - 40_000;
+    ahora = 60_000;
+    const quedan = 120_000 - MARGEN_CIERRE_MS - 60_000;
+    expect(quedan, 'control: queda menos que la etapa cara').toBeLessThan(30_000);
     expect(p.alcanza(30_000)).toBe(false);
     expect(p.alcanza(quedan)).toBe(true);
     expect(p.alcanza(quedan + 1)).toBe(false);
@@ -129,7 +133,11 @@ describe('la contabilidad del cierre', () => {
   it('cada envío de avisar_cierre.ts tiene su renglón en la tabla', () => {
     const fuente = readFileSync('src/lib/likida/avisar_cierre.ts', 'utf8')
       .split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n');
-    const envios = (fuente.match(/\b(sendText|sendDocument)\(/g) ?? []).length;
+    // AUDITORÍA 24 · AGEN-5/WA-4: el texto al jefe ya no sale por `sendText`
+    // crudo sino por `avisarOficina`, que además cae a plantilla ante el
+    // 131047 de Meta. Se cuenta igual — es el mismo envío y el mismo costo de
+    // pared— para que el control siga contando dos.
+    const envios = (fuente.match(/\b(sendText|sendDocument|avisarOficina)\(/g) ?? []).length;
     expect(envios, 'control: avisar_cierre.ts manda al menos texto y PDF').toBeGreaterThanOrEqual(2);
     const renglones = PASOS_CIERRE.filter((p) => p.donde.includes('avisar_cierre.ts') && /send(Text|Document)/.test(p.paso));
     expect(renglones.length, 'envíos en avisar_cierre.ts sin renglón en PASOS_CIERRE').toBeGreaterThanOrEqual(envios);
@@ -144,6 +152,61 @@ describe('la contabilidad del cierre', () => {
       expect(p.ms, `${p.paso} sin costo`).toBeGreaterThan(0);
       expect(p.donde, `${p.paso} sin ubicación`).toMatch(/\.ts/);
     }
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 21, CRÍTICO (C2): el margen se dimensionaba contra costos
+  // TÍPICOS (17s vs 14s nominales) mientras los techos duros del propio
+  // sistema —`SEND_TIMEOUT_MS` = 10s por envío, `TOPE_CONSULTA_MS` + gracia =
+  // 9.5s por consulta— sumaban 70-90s en el camino normal del cierre. Estas
+  // pruebas atan el margen a los TECHOS, y los techos al FUENTE que los impone.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('C2: el techo de envío de la tabla ES el SEND_TIMEOUT_MS real de meta/client.ts', () => {
+    const cliente = readFileSync('src/lib/meta/client.ts', 'utf8');
+    const m = /const SEND_TIMEOUT_MS = ([\d_]+)/.exec(cliente);
+    expect(m, 'no se encontró SEND_TIMEOUT_MS en meta/client.ts').not.toBeNull();
+    expect(TECHO_ENVIO_WHATSAPP_MS).toBe(Number(m![1].replace(/_/g, '')));
+  });
+
+  it('C2: cada paso de la tabla lleva un techo que es un techo de verdad', () => {
+    for (const p of PASOS_CIERRE) {
+      expect(p.techoMs, `${p.paso} sin techo`).toBeGreaterThanOrEqual(p.ms);
+      // Solo hay dos clases de paso, y cada una con el techo que le corresponde:
+      expect([TECHO_ENVIO_WHATSAPP_MS, TECHO_PASO_CONSULTA_MS], `${p.paso} con un techo inventado`).toContain(p.techoMs);
+      const esEnvio = /send(Text|Document)/.test(p.paso);
+      expect(p.techoMs, `${p.paso}: clase de techo equivocada`).toBe(esEnvio ? TECHO_ENVIO_WHATSAPP_MS : TECHO_PASO_CONSULTA_MS);
+    }
+  });
+
+  it('C2: el margen cubre A TECHO los pasos que le entregan la verdad al chofer', () => {
+    const criticos = PASOS_CIERRE.filter((p) => p.critico);
+    const nombres = criticos.map((p) => p.paso);
+    // Los irrenunciables: la respuesta, la URL firmada y el PDF del chofer.
+    expect(nombres).toContain('sendText de la respuesta');
+    expect(nombres).toContain('createSignedUrl del PDF');
+    expect(nombres).toContain('sendDocument del PDF');
+    const minimo = criticos.reduce((s, p) => s + p.techoMs, 0)
+      + PASOS_CIERRE.filter((p) => !p.critico).reduce((s, p) => s + p.ms, 0);
+    expect(MARGEN_CIERRE_MS).toBeGreaterThanOrEqual(minimo);
+  });
+
+  it('C2: el peor caso absoluto NO cabe — y por eso existe el re-chequeo del reloj', () => {
+    // Si esto algún día CUPIERA (presupuesto gigante o techos diminutos), el
+    // recorte de pasos accesorios dejaría de ser necesario y habría que
+    // reconsiderarlo. Mientras no quepa, correr la cola a ciegas es apostar.
+    expect(TECHO_CIERRE_MS).toBe(PASOS_CIERRE.reduce((s, p) => s + p.techoMs, 0));
+    expect(TECHO_CIERRE_MS).toBeGreaterThan(PRESUPUESTO_WEBHOOK_MS);
+  });
+
+  it('C2: margenDuro() mide hasta maxDuration, sin descontar el margen', () => {
+    let ahora = 0;
+    const p = crearPresupuesto(120_000, () => ahora);
+    expect(p.margenDuro()).toBe(120_000);
+    ahora = 108_000;
+    expect(p.margenDuro()).toBe(12_000);
+    expect(p.restante(), 'restante sí descuenta el margen').toBe(0);
+    ahora = 130_000;
+    expect(p.margenDuro()).toBe(0);
   });
 
   it('queda holgura para que un solo paso salga lento', () => {
@@ -188,8 +251,8 @@ describe('presupuesto.senal', () => {
   });
 
   it('respeta el tope propio de la etapa cuando es menor que el restante', () => {
-    // Una foto no debe poder comerse los 52s disponibles: tiene su propio techo.
-    const p = crearPresupuesto(60_000, () => 0);
+    // Una foto no debe poder comerse todo lo disponible: tiene su propio techo.
+    const p = crearPresupuesto(120_000, () => 0);
     expect(p.senal(25_000).aborted).toBe(false);
     expect(p.restante()).toBeGreaterThan(25_000);
   });

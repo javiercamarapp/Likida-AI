@@ -62,9 +62,22 @@ export function hrefCorreo(p: ProspectoMapa, t?: TextosProspecto | null): string
   return `mailto:${p.correo}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
 }
 
-/** El href de WhatsApp (lada MX) — misma regla: el mensaje IA manda. */
+/**
+ * El href de WhatsApp (lada MX) — misma regla: el mensaje IA manda.
+ *
+ * ADM-15 (auditoría 24, MEDIO): `p.telefono.replace(/^52/, '')` asumía un
+ * teléfono ya limpio de dígitos. Un teléfono con el formato con el que DENUE
+ * los entrega (`+52 55 1234 5678`, con espacios y el `+`) ni siquiera
+ * empataba el `/^52/` — el string se quedaba intacto y el resultado era
+ * `wa.me/52+52 55 1234 5678`, un link roto. Se limpia a solo dígitos
+ * PRIMERO, y solo entonces se decide si ya trae el 52 de país (no
+ * duplicarlo) o hay que anteponerlo.
+ */
 export function hrefWa(p: ProspectoMapa, t?: TextosProspecto | null): string | null {
   if (!p.telefono) return null;
   const texto = t?.mensajeWaIa ?? mensajeWa(p);
-  return `https://wa.me/52${p.telefono.replace(/^52/, '')}?text=${encodeURIComponent(texto)}`;
+  const digitos = p.telefono.replace(/\D/g, '');
+  if (!digitos) return null;
+  const numero = digitos.startsWith('52') ? digitos : `52${digitos}`;
+  return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
 }

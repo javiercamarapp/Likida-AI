@@ -95,3 +95,17 @@ describe('RFC de la flota mal formado: ni aprueba ni rechaza', () => {
     expect(nota).toContain('Corrige el RFC');
   });
 });
+
+// AUDITORÍA 24, ARQ-1 (ALTO): el encabezado de este archivo dice «el estado
+// correcto es el tercero → a revisión» y ninguno de los `it` de arriba
+// afirmaba `estatus`. Por esa puerta `rfc_receptor_no_verificable` estuvo en
+// POR_CONFIRMAR sin estar en REVISAR desde la auditoría 5: $0 deducible,
+// $11,600 por confirmar y «Cuadrada» en verde.
+describe('ARQ-1: por confirmar el 100% no es «Cuadrada»', () => {
+  it('con el genérico del SAT la liquidación sale a revisar', () => {
+    expect(cuadrar('XAXX010101000').estatus).toBe('revisar');
+  });
+  it('con el RFC mal formado también', () => {
+    expect(cuadrar('TIN010101AAA').estatus).toBe('revisar');
+  });
+});

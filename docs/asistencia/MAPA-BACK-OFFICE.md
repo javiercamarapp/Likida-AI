@@ -31,7 +31,8 @@ bancaria · contabilidad electrónica, póliza, DIOT · custodia · registro de 
 ## DOS CORRECCIONES a lo que creíamos
 1. **`posicion` SÍ tiene escritor**: `processor.ts:132` inserta el pin de WhatsApp. CLAUDE.md
    está desactualizado. Siguen sin escritor: geocerca, terminal, mantenimiento, cotizacion,
-   ticket_mensaje, portal_credencial, invitacion.
+   portal_credencial, invitacion. (`ticket_mensaje` dejó de estar en esta lista el
+   29-ago-2026: la 0268 + `lib/likida/soporte.ts` cierran el ciclo del ticket.)
 2. **La asistencia en carretera NO falta entera**: `talacha_wa.ts` (mig. 0107) ya cierra el
    circuito de avería mecánica. Lo que falta es el SINIESTRO: accidente, robo, aseguradora,
    ajustador. `incidencia.tipo` ni siquiera admite el valor.

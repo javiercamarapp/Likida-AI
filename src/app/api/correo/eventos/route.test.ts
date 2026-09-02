@@ -61,6 +61,12 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
+// c5-12: la supresión se captura — qué direcciones y por qué.
+const suprimidas: Array<{ correo: string; motivo: string }> = [];
+vi.mock('@/lib/likida/agentes/enviador', () => ({
+  suprimirCorreo: async (correo: string, motivo: string) => { suprimidas.push({ correo, motivo }); },
+}));
+
 const { POST } = await import('./route');
 
 const SECRETO_CRUDO = crypto.randomBytes(24);
@@ -85,6 +91,7 @@ const EVENTO = JSON.stringify({ type: 'email.bounced', data: { email_id: 're_123
 beforeEach(() => {
   respuestas.length = 0;
   tabla.length = 0;
+  suprimidas.length = 0;
   // La pieza recién aceptada por Resend: `entrega_estado` NACE NULL (0124).
   tabla.push({ id: 'pz-1', provider_message_id: 're_123', entrega_estado: null });
   process.env.RESEND_EVENTOS_WEBHOOK_SECRET = SECRETO;
@@ -101,6 +108,36 @@ describe('la puerta', () => {
   it('firma inválida: 401; timestamp viejo (replay): 401', async () => {
     expect((await postear(EVENTO, { firmar: false })).status).toBe(401);
     expect((await postear(EVENTO, { ts: Math.floor(Date.now() / 1000) - 3600 })).status).toBe(401);
+  });
+
+  // AUDITORÍA 24, BE-21: era `await req.text()` y el tope se medía DESPUÉS. Un
+  // POST `chunked` (sin `content-length`) y sin una sola cabecera svix entraba
+  // ENTERO a memoria antes del 413. Aquí el emisor manda 128 trozos de 1 KB y
+  // se fija que la lectura se corta pasados los 64 KB: no se le pide al
+  // remitente lo que no cabe.
+  it('BE-21: un cuerpo sin content-length se corta MIENTRAS se lee — 413 sin materializarlo', async () => {
+    const TROZO = 1024;
+    let pedidos = 0;
+    const cuerpo = new ReadableStream<Uint8Array>({
+      pull(c) {
+        pedidos += 1;
+        if (pedidos > 128) { c.close(); return; }
+        c.enqueue(new Uint8Array(TROZO).fill(120));
+      },
+    });
+    const req = new Request('https://app.likida.ai/api/correo/eventos', {
+      method: 'POST',
+      headers: { 'svix-id': 'msg_1', 'svix-timestamp': String(Math.floor(Date.now() / 1000)), 'svix-signature': 'v1,AAAA' },
+      body: cuerpo,
+      // @ts-expect-error `duplex` es obligatorio en Node para un body de stream
+      duplex: 'half',
+    });
+
+    const r = await POST(req);
+
+    expect(r.status).toBe(413);
+    // 64 KB / 1 KB = 64 trozos; se permite el que rebasa y se cancela ahí.
+    expect(pedidos).toBeLessThanOrEqual(66);
   });
 });
 
@@ -150,5 +187,40 @@ describe('el circuito', () => {
   it('base caída: 500 para que Resend reintente — el evento es la única fuente', async () => {
     respuestas.push({ data: null, error: { message: 'db down' } });
     expect((await postear(EVENTO)).status).toBe(500);
+  });
+});
+
+describe('c5-12 — el rebote suprime SOLO al que rebotó; la queja barre todo', () => {
+  it('rebote con la dirección identificada: solo ella se suprime, las copias vivas siguen', async () => {
+    const res = await postear(JSON.stringify({
+      type: 'email.bounced',
+      data: { email_id: 're_123', to: ['principal@x.mx', 'info@x.mx'], bounce: { email: 'info@x.mx' } },
+    }));
+    expect(res.status).toBe(200);
+    expect(suprimidas.map((s) => s.correo)).toEqual(['info@x.mx']);
+  });
+
+  it('rebote sin identificar con UN solo destinatario: no hay ambigüedad, se suprime', async () => {
+    await postear(JSON.stringify({
+      type: 'email.bounced',
+      data: { email_id: 're_123', to: ['unico@x.mx'] },
+    }));
+    expect(suprimidas.map((s) => s.correo)).toEqual(['unico@x.mx']);
+  });
+
+  it('rebote sin identificar con VARIOS destinatarios: NINGUNO se suprime a ciegas (se grita)', async () => {
+    await postear(JSON.stringify({
+      type: 'email.bounced',
+      data: { email_id: 're_123', to: ['a@x.mx', 'b@x.mx'] },
+    }));
+    expect(suprimidas).toHaveLength(0);
+  });
+
+  it('la QUEJA de spam sí barre todas las direcciones del envío', async () => {
+    await postear(JSON.stringify({
+      type: 'email.complained',
+      data: { email_id: 're_123', to: ['a@x.mx', 'b@x.mx'] },
+    }));
+    expect(suprimidas.map((s) => s.correo).sort()).toEqual(['a@x.mx', 'b@x.mx']);
   });
 });

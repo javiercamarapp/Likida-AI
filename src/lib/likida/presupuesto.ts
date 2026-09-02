@@ -35,53 +35,16 @@ import { logger } from '@/lib/logger';
  *
  * Los costos unitarios son los que este archivo ya usaba: 0.3s una consulta,
  * 1.5s un `sendText`, 2.5s un `sendDocument`, 0.5s una URL firmada.
- */
-export const PASOS_CIERRE: ReadonlyArray<{ paso: string; donde: string; ms: number }> = [
-  { paso: 'registrarCosto del turno',              donde: 'processor.ts:591',  ms: 300 },
-  { paso: 'vincularCostosALiquidacion',            donde: 'processor.ts:595',  ms: 300 },
-  { paso: 'guardiaCifras → cuadrarDesdeDB',        donde: 'processor.ts:658',  ms: 300 },
-  { paso: 'sendText de la respuesta',              donde: 'processor.ts:715',  ms: 1_500 },
-  { paso: 'registrarCostoWhatsApp de la respuesta', donde: 'costos.ts',        ms: 300 },
-  { paso: 'getGastos para el aviso de barrera',    donde: 'processor.ts:734',  ms: 300 },
-  { paso: 'sendText del aviso de barrera',         donde: 'processor.ts:735',  ms: 1_500 },
-  { paso: 'registrarCostoWhatsApp de ese aviso',   donde: 'costos.ts',         ms: 300 },
-  { paso: 'createSignedUrl del PDF',               donde: 'processor.ts:755',  ms: 500 },
-  { paso: 'sendDocument del PDF',                  donde: 'processor.ts:757',  ms: 2_500 },
-  { paso: 'registrarCostoWhatsApp del PDF',        donde: 'processor.ts:758',  ms: 300 },
-  // AUDITORÍA 18, ALTO (A24): `avisarCierreAlJefe` añadió CINCO viajes de red
-  // al cierre y la tabla no los tenía — la prueba comparaba la tabla consigo
-  // misma. 13.5s de cierre real contra 12s de reserva. Ahora están, y
-  // `presupuesto.test.ts` cuenta los envíos de `avisar_cierre.ts` en el fuente.
-  { paso: 'createSignedUrl del PDF completo (jefe)', donde: 'processor.ts',     ms: 500 },
-  { paso: 'telefonoParaDineroDe',                  donde: 'contactos.ts',      ms: 300 },
-  { paso: 'resumenDeCierre (2 consultas en paralelo)', donde: 'avisar_cierre.ts', ms: 300 },
-  { paso: 'sendText del aviso al jefe',            donde: 'avisar_cierre.ts',  ms: 1_500 },
-  { paso: 'sendDocument del PDF al jefe',          donde: 'avisar_cierre.ts',  ms: 2_500 },
-  { paso: 'saveConversation',                      donde: 'processor.ts:774',  ms: 500 },
-  { paso: 'releaseViajeLock',                      donde: 'processor.ts:814',  ms: 300 },
-];
-
-/** Suma de la tabla de arriba. 14.0s con los costos unitarios de este archivo. */
-export const COSTO_CIERRE_MS = PASOS_CIERRE.reduce((s, p) => s + p.ms, 0);
-
-/**
- * Tiempo que se aparta para CERRAR, o sea para todo lo que va DESPUÉS del
- * agente. Sin este margen se gasta hasta el último milisegundo y no queda
- * tiempo ni de responder — que es el fallo que esto viene a evitar.
  *
- * 17s contra los 14.0s de `COSTO_CIERRE_MS`: 3.0s de holgura (auditoría 18,
- * A24: eran 12s contra 13.5s reales). El coste es que el agente pierde 5s de
- * techo, y el turno típico usa ~20s.
- *
- * OJO CON LO QUE ESTE NÚMERO **NO** ES: no es un tope. Es una RESERVA, y una
- * reserva solo vale lo que valga el techo de cada paso que la consume. De los
- * trece, los que van a Supabase pasan por `repo.ts` y ahí sí llevan
- * `TOPE_CONSULTA_MS` impuesto; los `sendText`/`sendDocument` de `meta/client.ts`
- * siguen usando `fetch` pelado, y ahí el techo es el default de undici: 300s
- * contra un `maxDuration` de 120. Un solo envío colgado se lleva la invocación
- * entera sin dejar rastro, tenga esta reserva el valor que tenga.
+ * AUDITORÍA 21, CRÍTICO (C2): cada paso lleva además su TECHO duro — el peor
+ * caso que el propio sistema le impone: `SEND_TIMEOUT_MS` (10s, con
+ * `AbortSignal.timeout` real en `meta/client.ts`) para un envío de WhatsApp, y
+ * `TOPE_CONSULTA_MS` + la gracia de la red de seguridad (8s + 1.5s) para una
+ * consulta a Supabase o a Storage. `critico: true` marca los pasos que le
+ * ENTREGAN LA VERDAD al chofer — la respuesta, la URL firmada y el PDF —, los
+ * que no se pueden omitir sin repetir el silencio que este archivo combate.
  */
-export const MARGEN_CIERRE_MS = 17_000;
+export const TECHO_ENVIO_WHATSAPP_MS = 10_000; // = SEND_TIMEOUT_MS de meta/client.ts (prueba compara el fuente)
 
 /**
  * TECHO DURO DE UNA CONSULTA A SUPABASE. Lo impone `repo.ts` en cada llamada.
@@ -114,6 +77,102 @@ export const TOPE_CONSULTA_MS = Number(process.env.LIKIDA_TOPE_CONSULTA_MS) || 8
 
 /** Margen sobre el tope antes de que dispare la red de seguridad. */
 const GRACIA_TOPE_MS = 1_500;
+
+/** El peor caso real de un paso de consulta: el tope MÁS la gracia con la que
+ *  la red de seguridad de `acotada` lo deja correr antes de rendirse. */
+export const TECHO_PASO_CONSULTA_MS = TOPE_CONSULTA_MS + GRACIA_TOPE_MS;
+
+export interface PasoCierre { paso: string; donde: string; ms: number; techoMs: number; critico?: true }
+
+export const PASOS_CIERRE: ReadonlyArray<PasoCierre> = [
+  { paso: 'registrarCosto del turno',              donde: 'processor.ts:591',  ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
+  { paso: 'vincularCostosALiquidacion',            donde: 'processor.ts:595',  ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
+  { paso: 'guardiaCifras → cuadrarDesdeDB',        donde: 'processor.ts:658',  ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
+  { paso: 'sendText de la respuesta',              donde: 'processor.ts:715',  ms: 1_500, techoMs: TECHO_ENVIO_WHATSAPP_MS, critico: true },
+  { paso: 'registrarCostoWhatsApp de la respuesta', donde: 'costos.ts',        ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
+  { paso: 'getGastos para el aviso de barrera',    donde: 'processor.ts:734',  ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
+  { paso: 'sendText del aviso de barrera',         donde: 'processor.ts:735',  ms: 1_500, techoMs: TECHO_ENVIO_WHATSAPP_MS },
+  { paso: 'registrarCostoWhatsApp de ese aviso',   donde: 'costos.ts',         ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
+  { paso: 'createSignedUrl del PDF',               donde: 'processor.ts:755',  ms: 500,   techoMs: TECHO_PASO_CONSULTA_MS, critico: true },
+  { paso: 'sendDocument del PDF',                  donde: 'processor.ts:757',  ms: 2_500, techoMs: TECHO_ENVIO_WHATSAPP_MS, critico: true },
+  { paso: 'registrarCostoWhatsApp del PDF',        donde: 'processor.ts:758',  ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
+  // AUDITORÍA 18, ALTO (A24): `avisarCierreAlJefe` añadió CINCO viajes de red
+  // al cierre y la tabla no los tenía — la prueba comparaba la tabla consigo
+  // misma. 13.5s de cierre real contra 12s de reserva. Ahora están, y
+  // `presupuesto.test.ts` cuenta los envíos de `avisar_cierre.ts` en el fuente.
+  { paso: 'createSignedUrl del PDF completo (jefe)', donde: 'processor.ts',     ms: 500,  techoMs: TECHO_PASO_CONSULTA_MS },
+  { paso: 'telefonoParaDineroDe',                  donde: 'contactos.ts',      ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
+  { paso: 'resumenDeCierre (2 consultas en paralelo)', donde: 'avisar_cierre.ts', ms: 300, techoMs: TECHO_PASO_CONSULTA_MS },
+  { paso: 'sendText del aviso al jefe',            donde: 'avisar_cierre.ts',  ms: 1_500, techoMs: TECHO_ENVIO_WHATSAPP_MS },
+  { paso: 'sendDocument del PDF al jefe',          donde: 'avisar_cierre.ts',  ms: 2_500, techoMs: TECHO_ENVIO_WHATSAPP_MS },
+  { paso: 'saveConversation',                      donde: 'processor.ts:774',  ms: 500,   techoMs: TECHO_PASO_CONSULTA_MS },
+  { paso: 'releaseViajeLock',                      donde: 'processor.ts:814',  ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
+];
+
+/** Suma nominal de la tabla de arriba. 14.0s con los costos unitarios de este archivo. */
+export const COSTO_CIERRE_MS = PASOS_CIERRE.reduce((s, p) => s + p.ms, 0);
+
+/**
+ * El peor caso ABSOLUTO del cierre: los 18 pasos, cada uno a su techo duro.
+ * Suma ~173s — NO CABE en un `maxDuration` de 120s, y por eso ningún margen
+ * puede prometer que la cola completa sobrevive a un mal día generalizado.
+ * Existe para que esa imposibilidad esté escrita y probada, no supuesta: es la
+ * razón de que el processor VUELVA A MIRAR el reloj después del agente
+ * (`margenDuro()`) y recorte los pasos accesorios en vez de correr a ciegas.
+ */
+export const TECHO_CIERRE_MS = PASOS_CIERRE.reduce((s, p) => s + p.techoMs, 0);
+
+/**
+ * Tiempo que se aparta para CERRAR, o sea para todo lo que va DESPUÉS del
+ * agente. Sin este margen se gasta hasta el último milisegundo y no queda
+ * tiempo ni de responder — que es el fallo que esto viene a evitar.
+ *
+ * AUDITORÍA 21, CRÍTICO (C2): eran 17s dimensionados contra los costos
+ * TÍPICOS (14.0s nominales, 3s de holgura) — pero una reserva solo vale lo
+ * que valga el techo de cada paso que la consume, y los techos reales son
+ * `SEND_TIMEOUT_MS` = 10s por envío y `TOPE_CONSULTA_MS` + gracia = 9.5s por
+ * consulta. El cierre normal hace 5 envíos y ~13 consultas: si Meta o
+ * Supabase están LENTOS —no caídos— la cola suma 70-90s contra 17s
+ * reservados, y Vercel mata el proceso a media cola sin excepción ni log.
+ *
+ * El margen ahora se DERIVA de la tabla: los pasos `critico` (los que le
+ * entregan la verdad al chofer: respuesta, URL firmada, PDF) a su TECHO duro,
+ * el resto a su costo nominal — 39.0s con los números de hoy. Cubrir los 18 a
+ * techo es imposible (`TECHO_CIERRE_MS` ~173s > 120s), así que el resto de la
+ * garantía no es este número: es el re-chequeo del reloj después del agente
+ * (`margenDuro()` en `processor.ts`), que omite los pasos accesorios — con
+ * log, no en silencio — cuando el margen real ya no alcanza.
+ *
+ * El coste de subirlo: el agente pierde techo cuando llega tarde (en el peor
+ * caso barrera+mutex al máximo le quedan ~49s de los 40 que pide) y una
+ * invocación por lotes declara `sin_tiempo` antes — la bandeja durable
+ * recupera esos mensajes, que es el camino diseñado para eso.
+ */
+export const MARGEN_CIERRE_MS = PASOS_CIERRE.reduce((s, p) => s + (p.critico ? p.techoMs : p.ms), 0);
+
+/**
+ * Lo IRRENUNCIABLE del cierre: solo los pasos críticos, a su techo duro.
+ *
+ * ── AUDITORÍA 22, AGEN-A1 (ALTO) ──────────────────────────────────────────
+ * `MARGEN_CIERRE_MS` es la RESERVA: `restante()` ya lo descuenta antes de
+ * dárselo al agente. Volver a exigirlo DESPUÉS del agente es contarlo dos
+ * veces, y el resultado no es un borde raro sino una identidad:
+ *
+ *     margenDuro() = restante() + MARGEN_CIERRE_MS
+ *
+ * El agente pide `min(40_000, restante())`. Siempre que ese `min` lo gana
+ * `restante()` —o sea, siempre que el turno llegó con menos de 41 s
+ * utilizables— y el agente consume su tope, `restante()` aterriza en 0 y
+ * `margenDuro()` en `MARGEN_CIERRE_MS − ε`. El chequeo daba FALSO
+ * determinísticamente, y con él se suprimía el único aviso de que la
+ * liquidación salió corta: la alarma se apagaba justo en el caso que existe
+ * para vigilar.
+ *
+ * Lo que el chequeo tiene que responder no es «¿me queda la reserva entera?»
+ * sino «¿alcanzo a hacer lo que no puedo dejar de hacer?»: mandar la
+ * respuesta, firmar el PDF y entregarlo. Eso es esto.
+ */
+export const MARGEN_CIERRE_CRITICO_MS = PASOS_CIERRE.reduce((s, p) => s + (p.critico ? p.techoMs : 0), 0);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TODA CONSULTA DE ESTE ARCHIVO TIENE TECHO.
@@ -211,6 +270,18 @@ export interface Presupuesto {
   /** Milisegundos transcurridos desde el inicio. Para el log. */
   gastado(): number;
   /**
+   * Milisegundos que quedan hasta que Vercel MATE el proceso (`maxDuration`),
+   * SIN descontar el margen de cierre — a diferencia de `restante()`, que lo
+   * descuenta porque mide lo utilizable para trabajo nuevo.
+   *
+   * AUDITORÍA 21, CRÍTICO (C2): es lo que el processor consulta DESPUÉS del
+   * agente y ANTES de la cola de cierre. Si esto ya es menor que
+   * `MARGEN_CIERRE_MS`, la cola completa no cabe con sus techos reales: se
+   * recortan los pasos accesorios —con log, no en silencio— y lo que queda se
+   * gasta en los irrenunciables.
+   */
+  margenDuro(): number;
+  /**
    * Señal que se aborta cuando se acaba lo que queda (o antes, si `topeMs` es
    * menor). Para pasarla a los SDK que aceptan `AbortSignal` y que si no caen a
    * sus defaults —el de OpenAI son 10 minutos contra un webhook de 60s.
@@ -242,6 +313,7 @@ export function crearPresupuesto(totalMs: number, reloj: () => number = Date.now
     acotar: (topeDeseado: number) => Math.min(topeDeseado, restante()),
     alcanza: (costoMs: number) => restante() >= costoMs,
     gastado: () => reloj() - inicio,
+    margenDuro: () => Math.max(0, totalMs - (reloj() - inicio)),
     senal: (topeMs?: number) => {
       const ms = Math.min(topeMs ?? Number.POSITIVE_INFINITY, restante());
       // `AbortSignal.timeout(0)` no aborta de inmediato: se agenda. Cuando ya no

@@ -33,6 +33,9 @@ export const NORMA_POR_DIFERENCIA: Partial<Record<TipoDiferencia, string[]>> = {
   // consumo no lo trae, y lo declara ella misma.
   comprobante_no_fiscal: ['cff-29-A'],
   combustible_efectivo: ['lisr-27-fr-III', 'rfa-2026-2.9'],
+  // Fase 7 (mig. 0199): el REP liberó el IVA a crédito — la regla del mes
+  // del pago es exactamente la fracción III del art. 5 de la LIVA.
+  iva_mes_del_pago: ['liva-art-5'],
   // RFA 2026 regla 2.9 (deber ser, docs/fiscal/rfa-2.9-deber-ser.md):
   // dentro del 15% y elegible → informativo con la misma ficha; el excedente y
   // la flota no elegible son el mismo 27-III sin excepción.
@@ -40,6 +43,7 @@ export const NORMA_POR_DIFERENCIA: Partial<Record<TipoDiferencia, string[]>> = {
   efectivo_sobre_15: ['lisr-27-fr-III', 'rfa-2026-2.9'],
   efectivo_no_elegible: ['lisr-27-fr-III'],
   efectivo_sobre_tope: ['lisr-27-fr-III'],
+  medio_pago_no_admitido: ['lisr-27-fr-III'],
   viatico_excede_fiscal: ['lisr-28-fr-V'],
   alimentacion_sin_soporte: ['lisr-28-fr-V'],
   alimentacion_transporte_sin_tarjeta_credito: ['lisr-28-fr-V'],
@@ -106,6 +110,7 @@ export const SIN_NORMA: Partial<Record<TipoDiferencia, string>> = {
   // veredicto sobre lo que en realidad es un dato pendiente de capturar.
   moneda_extranjera: 'Calidad del dato: el importe no está en pesos y la conversión la hace una persona.',
   fecha_sospechosa: 'Calidad del dato.',
+  gasto_otro_ejercicio: 'Calidad del dato: la fecha, no un veredicto de qué norma exacta rige el periodo fiscal.',
   folio_verificar: 'Calidad del dato.',
   texto_sospechoso: 'Seguridad, no fiscalidad.',
   diesel_desviacion: 'Señal operativa contra el rendimiento esperado.',

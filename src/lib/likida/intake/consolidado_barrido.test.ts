@@ -146,7 +146,7 @@ describe('barrerPorConciliar', () => {
     // El sello es el de `ligarLineaAGasto`: uuid + orden, anclado a tenant y
     // con el guardia de disponibilidad.
     expect(sellos).toHaveLength(1);
-    expect(sellos[0].fila).toEqual({ cfdi_uuid: 'uuid-1', cfdi_orden: 1 });
+    expect(sellos[0].fila).toEqual({ cfdi_uuid: 'uuid-1', cfdi_orden: 1, xml_verificado: true });
     expect(sellos[0].por).toContainEqual(['id', 'g-9']);
     expect(sellos[0].por).toContainEqual(['tenant_id', 't1']);
     expect(sellos[0].por).toContainEqual(['cfdi_uuid', null]);
@@ -240,7 +240,7 @@ describe('barrerPorConciliar', () => {
     // ofrecerle a un contador un gasto ya sellado es un clic a un error.
     expect(r).toEqual({ revisadas: 2, conciliadas: 1, candidatosRefrescados: 1, siguenPendientes: 1 });
     expect(sellos).toHaveLength(1);
-    expect(sellos[0].fila).toEqual({ cfdi_uuid: 'uuid-1', cfdi_orden: 1 });
+    expect(sellos[0].fila).toEqual({ cfdi_uuid: 'uuid-1', cfdi_orden: 1, xml_verificado: true });
     const refresco = escriturasLinea.find((e) => e.por.some(([c, v]) => c === 'id' && v === 'l-2'));
     expect(refresco?.fila.candidatos).toBeNull();
   });

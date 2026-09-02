@@ -19,7 +19,9 @@ vi.mock('@/lib/auth/tenant-api', () => ({ resolverTenantApi: async () => tenant 
 vi.mock('@/lib/auth/llave-api', () => ({ llaveDelHeader: () => null, resolverLlave: async () => ({ ok: false, status: 401, motivo: 'no' }) }));
 vi.mock('@/lib/ratelimit', () => ({ rateLimit: async () => true, clientIp: () => '1.2.3.4' }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
+// `PRESUPUESTO_WEBHOOK_MS` lo consume `conv.ts` al cargar (LEASE_CLAIM_MS),
+// que entra a este grafo vía operacion → carta_porte_wa → contactos.
+vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q, PRESUPUESTO_WEBHOOK_MS: 120_000 }));
 
 /** El registro completo de la flota, ya ordenado como lo ordena la base:
  *  created_at DESC, id DESC. Dos filas comparten instante a propósito. */

@@ -32,8 +32,31 @@ cambio_de_numero: false
 condiciones_de_aplicacion:
   - "Dedicados EXCLUSIVAMENTE al autotransporte terrestre de carga federal"
   - "Tributar en Título II Cap. VII (coordinados) o Título IV Cap. II Secc. I (PF act. empresarial)"
-  - "El efectivo no puede exceder el 15% del total pagado por combustible en el ejercicio"
+  - "El efectivo no puede exceder el 15% del total pagado por combustible — OJO: EL PERIODO LO PONE EL PRODUCTO, NO LA REGLA (ver periodicidad_del_15_no_esta_en_la_norma)"
   - "El CFDI debe consignar el permiso vigente y no suspendido"
+periodicidad_del_15_no_esta_en_la_norma:
+  hallazgo_20_ago_2026: >
+    Esta ficha afirmaba "el 15% del total pagado por combustible EN EL EJERCICIO" como
+    si fuera condición de la regla. NO LO ES. El texto dice sólo "siempre que estos no
+    excedan el 15 por ciento del total de los pagos efectuados por consumo de
+    combustible para realizar su actividad", SIN fijar periodo de medición alguno:
+    ni mensual, ni acumulado, ni anual.
+  verificacion: >
+    Comparado el 20-ago-2026 contra la RFA 2025 (DOF 17-feb-2025), cuya regla 2.9 tiene
+    redacción idéntica y tampoco fija periodo. Buscado además en el Anexo 7 completo
+    (110 pp.), el Anexo 3 y la RMF 2026: ninguno lo aborda.
+  por_que_la_lectura_anual_es_la_razonable: >
+    El denominador "para realizar su actividad" y el hecho de que la RFA sea anual (su
+    transitorio Primero declara las facilidades aplicables "para todo el ejercicio
+    fiscal 2026") apuntan al ejercicio. Pero es INFERENCIA del producto, no mandato de
+    la norma, y así debe declararse ante un cliente y ante el fiscalista.
+  lo_que_hace_el_codigo: >
+    `periodo/combustible.ts` (evaluarTope15, TOPE_EFECTIVO 0.15, alerta al 12%) y
+    `repo.ts` (getAcumuladoCombustible) miden ACUMULADO DEL EJERCICIO. Es la lectura
+    conservadora y la correcta mientras nadie diga lo contrario: un tope anual se
+    rebasa más difícil que uno mensual, así que el motor avisa antes, no después.
+    NO SE CAMBIA EL CÓDIGO — se corrige la ficha, que era la que mentía sobre su base.
+  pregunta_abierta_para_el_fiscalista: "¿Mensual, acumulado o anual? Sin texto que lo resuelva."
 lectura_aplicada_por_el_motor: >
   El "siempre que estos no excedan el 15 por ciento" admite dos lecturas y
   esta ficha NO las resuelve (la condición de aplicación de arriba tampoco).
@@ -47,13 +70,21 @@ lectura_aplicada_por_el_motor: >
   $150,000 de deducción, y una interpretación callada no se puede discutir.
   Pendiente para el fiscalista: confirmar (a) o cambiar el motor a (b).
 limite_importante: >
-  Conserva la DEDUCCIÓN para ISR. NO habilita el acreditamiento del IEPS: son dos
-  beneficios distintos y el efectivo solo salva uno.
+  Conserva la DEDUCCIÓN para ISR, y con ella el acreditamiento del IVA: LIVA 5-I
+  define "estrictamente indispensable" como "deducible para los fines del ISR",
+  así que salvada la deducción, el IVA se acredita en esa misma proporción.
+  Lo que NO habilita es el ESTÍMULO del LIF 20-A (acreditamiento del IEPS del
+  diésel y del 50% del peaje): son dos beneficios distintos y el efectivo solo
+  salva uno. AUDITORÍA 24, FIS-A1: esta ficha decía "NO habilita el
+  acreditamiento del IEPS NI EL IVA", y el agente contador la lee VERBATIM como
+  su único material afirmable — le contestaba "no" al contralor sobre el caso
+  que el PDF de la misma liquidación imprime en verde (rfa29_iva_acreditable.test.ts).
 verificado_por: "ola1 / 03-isr-facilidades.md; verificador adversarial (refutó la versión absoluta de LISR 27-III)"
 verificado_el: 2026-07-27
 usado_en_codigo:
   - "cuadre/engine.ts — la matriz completa de la regla: combustible_efectivo (sin declarar, o sin base medida — fail-closed), combustible_efectivo_dentro15, efectivo_sobre_15 (la frontera del 15% se reparte POR COMPROBANTE vía proporcionDeducible) y efectivo_no_elegible"
-  - "cuadre/engine.ts — SIN_ACREDITAMIENTO: la facilidad salva la deducción de ISR, NO el IEPS ni el IVA"
+  - "cuadre/engine.ts — SIN_ESTIMULO: la facilidad salva la deducción de ISR y con ella el acreditamiento del IVA (LIVA 5-I: el IVA sigue al ISR en la proporción deducible); lo que NO habilita es el ESTÍMULO del LIF 20-A (litros de diésel y peaje), y por eso combustible_efectivo_dentro15 y efectivo_sobre_15 están en SIN_ESTIMULO y NO en SIN_IVA_ACREDITABLE"
+  - "cuadre/engine.ts — SIN_IVA_ACREDITABLE: los tipos que sí tumban el IVA (combustible_efectivo, efectivo_no_elegible), que son los del efectivo que la facilidad NO cubre"
   - "repo.ts — getAcumuladoCombustible (el contador del ejercicio: efectivo y total, paginado con count exact para que PostgREST no lo recorte) y actualizarFacilidad15 (la declaración de elegibilidad de la flota)"
   - "cuadre/desde_db.ts — le pasa al motor el acumulado del ejercicio, best-effort declarado"
   - "periodo/combustible.ts — evaluarTope15 (TOPE_EFECTIVO 0.15, umbral de alerta al 12%)"

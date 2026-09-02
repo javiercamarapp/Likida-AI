@@ -45,7 +45,15 @@ export type TipoIncidencia =
   /** El gasto entró, pero su fecha no cae en la ventana del viaje. */
   | 'fecha_dudosa'
   /** Se leyó, no se pudo probar, y ya no quedaban botones que gastar. */
-  | 'duda';
+  | 'duda'
+  /**
+   * AUDITORÍA 24 · AGEN-11 (BAJO). La MISMA foto otra vez (dedup por hash).
+   * No es un fallo —el comprobante ya está en el viaje— pero sí cuenta en
+   * «de tus N fotos», y sin decirlo la cuenta no cierra: el chofer lee
+   * «de tus 5 fotos… llevo 4 comprobantes», la reenvía, y vuelve el mismo
+   * silencio. No pide nada: no hay nada que hacer con ella.
+   */
+  | 'repetida';
 
 export interface Incidencia {
   tipo: TipoIncidencia;
@@ -82,6 +90,10 @@ interface Bandeja {
   confirmaciones: number;
   /** Acuses de las fotos que entraron bien, pendientes de decidir si se mandan. */
   acuses: string[];
+  /** A quién contestarle si la ráfaga se cierra POR CORTE (auditoría 22,
+   *  AGEN-A2). Se guarda al anotar la foto para no pagar una consulta justo
+   *  cuando el corte ocurre por falta de presupuesto. */
+  telefono: string | null;
 }
 
 /**
@@ -110,7 +122,7 @@ function abrir(viajeId: string): Bandeja {
       const vieja = bandejas.keys().next();
       if (!vieja.done) bandejas.delete(vieja.value);
     }
-    b = { vistas: 0, incidencias: [], confirmaciones: 0, acuses: [] };
+    b = { vistas: 0, incidencias: [], confirmaciones: 0, acuses: [], telefono: null };
     bandejas.set(viajeId, b);
   }
   return b;
@@ -128,9 +140,33 @@ function abrir(viajeId: string): Bandeja {
  * fotos» a quien mandó tres. Una cifra inventada, que es la regla que no se
  * rompe en este repo.
  */
-export function anotarFoto(viajeId: string, empiezaRafaga = false): void {
+export function anotarFoto(viajeId: string, empiezaRafaga = false, telefono?: string): void {
   if (empiezaRafaga) bandejas.delete(viajeId);
-  abrir(viajeId).vistas += 1;
+  const b = abrir(viajeId);
+  b.vistas += 1;
+  // AUDITORÍA 22, AGEN-A2: el teléfono se guarda AQUÍ para que un cierre por
+  // corte pueda hablarle al chofer sin pagar una consulta — y el corte ocurre
+  // justamente cuando ya no queda presupuesto para consultas.
+  if (telefono) b.telefono = telefono;
+}
+
+/**
+ * Las ráfagas que quedaron ABIERTAS en este proceso, con a quién contestarles.
+ *
+ * ── AUDITORÍA 22, AGEN-A2 (ALTO) ──────────────────────────────────────────
+ * La libreta solo se cierra en la foto que no tiene otra detrás en su cadena.
+ * Pero la cadena se corta con `break` cuando `processInbound` devuelve
+ * `'sin_tiempo'`, y ese corte es el caso NORMAL del fajo grande: 22 fotos a
+ * 8-15 s cada una no caben en una invocación.
+ *
+ * Resultado: la libreta con `vistas: 6` y tres incidencias nunca se cerraba, y
+ * el proceso moría con ella. El chofer mandó seis fotos, tres salieron
+ * ilegibles, y no recibió nada — ni el resumen ni el aviso de que tres no se
+ * leyeron. El cron levanta el resto en OTRA invocación, con libreta nueva, así
+ * que nadie va a decirlo después: se perdió con el proceso.
+ */
+export function bandejasAbiertas(): Array<{ viajeId: string; telefono: string | null }> {
+  return [...bandejas.entries()].map(([viajeId, b]) => ({ viajeId, telefono: b.telefono ?? null }));
 }
 
 /**
@@ -217,6 +253,7 @@ export function lineaIncidencias(vistas: number, incidencias: Incidencia[]): str
   const tecnicos = cuenta('fallo_tecnico');
   const ilegibles = cuenta('ilegible');
   const dudosas = cuenta('fecha_dudosa');
+  const repetidas = cuenta('repetida');
 
   // OJO: `duda` NO tiene frase propia aquí. Su renglón lo escribe
   // `mensajeDemasiadasDudas` (acuse_ticket.ts), que además lleva el saldo del
@@ -236,12 +273,32 @@ export function lineaIncidencias(vistas: number, incidencias: Incidencia[]): str
     const detalle = montos.length ? `: ${montos.length === 1 ? 'la de' : 'las de'} ${enumerar(montos)}` : '';
     frases.push(`*${dudosas}* ${dudosas === 1 ? 'trae' : 'traen'} fecha dudosa${detalle}`);
   }
+  if (repetidas) {
+    // AGEN-11: se DICE, no se pide nada. El comprobante ya está contado; lo
+    // único que faltaba era que la resta cuadrara con lo que él mandó.
+    const montos = montosDe(incidencias, 'repetida');
+    const detalle = montos.length ? `: ${montos.length === 1 ? 'la de' : 'las de'} ${enumerar(montos)}` : '';
+    frases.push(`*${repetidas}* ${repetidas === 1 ? 'venía repetida (ya la tenía)' : 'venían repetidas (ya las tenía)'}${detalle}`);
+  }
 
   // Solo había dudas de lectura: las dice `mensajeDemasiadasDudas` y aquí no
   // queda nada. Devolver una frase vacía dejaría un párrafo con un punto solo.
   if (!frases.length) return null;
 
-  const encabezado = vistas > 1 ? `De tus ${vistas} fotos, ` : '';
+  // ── AUDITORÍA 24 · AGEN-8 (MEDIO): EL TOTAL NO SE AFIRMA ────────────────
+  //
+  // `vistas` es lo que vio ESTA invocación, no el fajo del chofer. En el
+  // piloto la cadena se parte: la foto 1 la toma el webhook y cierra su
+  // propia ráfaga de una; las 2-5 esperan al cron, que las lista en lotes de
+  // 40 y puede partirlas otra vez. El chofer mandó 5 y leía «Anotado ✅»,
+  // «De tus 2 fotos…», «De tus 2 fotos…». Ninguna de las tres era mentira
+  // dentro de su proceso, y las tres lo eran para él.
+  //
+  // Contar bien exigiría un contador durable por chofer; lo que se hace es
+  // NO afirmar una cifra que no se midió. El total que sí es verdad —los
+  // comprobantes que hay en el viaje, leídos de la base— ya va en el mismo
+  // mensaje, y ese sí es el que decide si vuelve a fotografiar un ticket.
+  const encabezado = vistas > 1 ? 'De las fotos que me mandaste, ' : '';
   const cuerpo = frases.length === 1
     ? frases[0]
     : `${frases.slice(0, -1).join(', ')} y ${frases[frases.length - 1]}`;

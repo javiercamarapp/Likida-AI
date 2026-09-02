@@ -9,7 +9,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import {
-  getPlanes, getSuscripcion, getFacturasSaas, getUso, cambiarPlan,
+  getPlanes, getSuscripcion, getFacturasSaas, getUso, cambiarPlan, LIMITE_FACTURAS_SAAS,
   type Plan, type Suscripcion, type FacturaSaas, type UsoDelPlan,
 } from '@/lib/saas/suscripcion';
 import { crearPortal, stripeConfigurado, modoStripe } from '@/lib/saas/stripe';
@@ -44,7 +44,13 @@ async function tenantDelAction(tenantPedido?: string): Promise<{ t: string; emai
   if (s.rol === 'superadmin' && tenantPedido) {
     t = await resolverTenantPedido(supabaseAdmin(), t, tenantPedido);
   }
-  const { data: u } = await supabaseAdmin().from('app_user').select('email').eq('id', s.userId).maybeSingle();
+  // H26 (auditoría 24): sin comprobar `error`, una lectura caída de
+  // `app_user` se veía IGUAL que un usuario sin correo — y `accionContratar`
+  // manda ese correo a Stripe como el destinatario del CFDI de la mensualidad.
+  // Silenciarlo mandaba la suscripción con el correo vacío por una falla de
+  // base, no porque el usuario de verdad no tuviera uno.
+  const { data: u, error } = await supabaseAdmin().from('app_user').select('email').eq('id', s.userId).maybeSingle();
+  if (error) throw new Error(`tenantDelAction: no se pudo leer el correo de la cuenta (${error.message})`);
   return { t, email: (u?.email as string) ?? null, rol: s.rol };
 }
 
@@ -88,9 +94,17 @@ export default async function SuscripcionPage({
   const hayStripe = stripeConfigurado();
   const modo = modoStripe();
 
-  const [planes, suscripcion, facturas] = await Promise.all([
+  // H9 (auditoría 24): `getSuscripcion` puede devolver `null` DE VERDAD (esta
+  // flota no tiene suscripción) — un valor legítimo, no una falla. `safe()`
+  // (como el resto de las lecturas de esta página) también convierte una
+  // base caída en `null`, y entonces las dos cosas se ven IGUAL: "no tiene
+  // suscripción" y "no se pudo leer si tiene" no pueden confundirse, porque
+  // la primera manda al cliente a los planes y la segunda es una falla que
+  // hay que reintentar. Se marca aparte.
+  const [planes, [suscripcion, suscripcionCaida], facturas] = await Promise.all([
     safe<Plan[]>(() => getPlanes()),
-    safe<Suscripcion | null>(() => getSuscripcion(tenantId)),
+    getSuscripcion(tenantId).then((v): [Suscripcion | null, boolean] => [v, false])
+      .catch((): [Suscripcion | null, boolean] => [null, true]),
     safe<FacturaSaas[]>(() => getFacturasSaas(tenantId)),
   ]);
 
@@ -132,13 +146,14 @@ export default async function SuscripcionPage({
    */
   async function accionContratar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t, email, rol: r } = await tenantDelAction(sp?.tenant);
-    if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede contratar o cambiar de plan.' };
-
     const clave = String(fd.get('plan') ?? '');
     let destino: string | null;
     let huboCambioDePrice: boolean;
     try {
+      // H26: `tenantDelAction` ahora lanza si falla la lectura del correo —
+      // dentro del try se convierte en un aviso, no en la pantalla caída.
+      const { t, email, rol: r } = await tenantDelAction(sp?.tenant);
+      if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede contratar o cambiar de plan.' };
       const f = await getDatosFiscales(t);
       if (!estanCompletos(f)) {
         return { error: 'Antes de contratar hay que capturar los datos fiscales de arriba: sin ellos no se te puede emitir el CFDI de la mensualidad.' };
@@ -195,6 +210,11 @@ export default async function SuscripcionPage({
         // pantalla, en vez de bloquear la contratación por un dato que se puede
         // capturar después.
         email: String(fd.get('emailFacturacion') ?? ''),
+        // El domicilio del aviso de privacidad (auditoría 19, legal C3 /
+        // C.16): sin él, /aviso/<flota> no puede decir dónde reclamarle al
+        // responsable y el tratamiento de datos de los operadores se queda
+        // frenado en el primer mensaje.
+        domicilioFiscal: String(fd.get('domicilioFiscal') ?? ''),
       });
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'guardar los datos fiscales') };
@@ -231,7 +251,12 @@ export default async function SuscripcionPage({
             Tu plan de Likida, lo que llevas usado y tus facturas
           </span>
         </div>
-        {sp.ok === 'contratado' && <StatusPill estado="ok">Pago recibido</StatusPill>}
+        {/* H8 (auditoría 24): aquí decía "Pago recibido" solo porque la URL
+            traía `?ok=contratado` — un query string lo escribe cualquiera,
+            no una lectura del cobro. La suscripción SÍ se creó (por eso el
+            redirect trae el parámetro), pero "pagado" es una afirmación
+            sobre dinero que nadie verificó aquí; el estado real ya se pinta
+            abajo con `pill` (lee `suscripcion.estado` de la base). */}
         {/* La fecha de corte ya pasó (DAT-40): una prueba con corte vencido se
             leía como cliente al corriente y nadie le cobraba nunca. Se DICE, no
             se apaga nada — el mismo criterio que el límite del plan. */}
@@ -294,7 +319,14 @@ export default async function SuscripcionPage({
           <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
             Tu plan
           </h2>
-          {suscripcion === null ? (
+          {suscripcionCaida ? (
+            <div className="mt-3">
+              <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--warn)' }} />}>
+                No se pudo leer tu suscripción ahora mismo. Esto no significa que no tengas una — vuelve a
+                intentarlo antes de contratar un plan nuevo.
+              </EstadoVacio>
+            </div>
+          ) : suscripcion === null ? (
             <div className="mt-3">
               <EstadoVacio icono={<CreditCard width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                 Esta flota todavía no tiene una suscripción. Abajo están los planes disponibles.
@@ -387,6 +419,14 @@ export default async function SuscripcionPage({
               <Campo nombre="emailFacturacion" etiqueta="Correo para tu factura"
                 valorInicial={fiscales?.email ?? ''} placeholder="contabilidad@miflota.com"
                 ayuda="Ahí te llega el CFDI de cada mensualidad. Si lo dejas vacío, se timbra igual pero no te llega a nadie." />
+              {/* AUDITORÍA 19, CRÍTICO (legal C3 / C.16): la columna existía
+                  desde la 0018 y ninguna pantalla la llenaba, así que el aviso
+                  de privacidad de TODA flota real respondía 404. Este es el
+                  lugar: los mismos datos de la constancia, capturados juntos. */}
+              <Campo nombre="domicilioFiscal" etiqueta="Domicilio fiscal"
+                valorInicial={fiscales?.domicilioFiscal ?? ''}
+                placeholder="Calle 60 #123, Col. Centro, 97000 Mérida, Yuc."
+                ayuda="Completo, como en tu constancia. Es el que aparece en el aviso de privacidad de tus operadores; sin él, tus choferes no pueden mandar comprobantes — la ley obliga a decirles quién es responsable de sus datos y dónde." />
             </FormaConAviso>
           )}
         </section>
@@ -493,19 +533,34 @@ export default async function SuscripcionPage({
                   ))}
                 </tbody>
               </table>
+              {/* H41 (auditoría 24): `getFacturasSaas` topa a 12 sin decirlo
+                  — el tope se declara, como en el resto del panel. */}
+              {facturas.length >= LIMITE_FACTURAS_SAAS && (
+                <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+                  Se muestran las {LIMITE_FACTURAS_SAAS} más recientes.
+                </p>
+              )}
             </div>
           )}
         </section>
 
-        <div className="px-5 pt-4 pb-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <EstadoVacio>
-            El CFDI de estas facturas no se timbra todavía: Stripe cobra, pero la factura fiscal mexicana se emite
-            aparte. Si necesitas CFDI de tu mensualidad, pídeselo a Likida.
-            {suscripcion?.stripeCustomerId && (
-              <> Los recibos de Stripe sí están en el portal de arriba <ExternalLink width={11} height={11} strokeWidth={2} className="inline" />.</>
-            )}
-          </EstadoVacio>
-        </div>
+        {/* H27 (auditoría 24): antes esta leyenda decía "el CFDI no se
+            timbra todavía" SIEMPRE, aunque la columna CFDI de arriba ya
+            mostrara un UUID real cuando sí se había timbrado — dos rótulos
+            contradiciéndose sobre el mismo dato. Ahora hay uno solo: la
+            leyenda genérica solo aparece cuando de verdad ninguna factura
+            trae CFDI; si alguna sí lo tiene, la columna ya lo dice por fila. */}
+        {facturas !== null && facturas.length > 0 && facturas.some((f) => f.cfdiUuid) ? null : (
+          <div className="px-5 pt-4 pb-5 border-t" style={{ borderColor: 'var(--line)' }}>
+            <EstadoVacio>
+              El CFDI de estas facturas no se timbra todavía: Stripe cobra, pero la factura fiscal mexicana se emite
+              aparte. Si necesitas CFDI de tu mensualidad, pídeselo a Likida.
+              {suscripcion?.stripeCustomerId && (
+                <> Los recibos de Stripe sí están en el portal de arriba <ExternalLink width={11} height={11} strokeWidth={2} className="inline" />.</>
+              )}
+            </EstadoVacio>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -46,8 +46,18 @@ export function fechaCorrida(): string {
   return process.env.QA_FECHA || new Date().toISOString().slice(0, 10);
 }
 export const dirCorrida = (fecha: string) => join(REPO, 'docs', 'qa', fecha);
-export const dirEvidencia = (fecha: string, escenario: string, rep: number) =>
-  join(dirCorrida(fecha), 'evidencia', 'operador', `${escenario}-rep${rep}`);
+/**
+ * `familia` era el literal `'operador'`, porque la Fase 1 sólo tenía ese agente.
+ * Con los Modos 4 y 5 (fuzzing y caos) hay tres familias de escenario sobre el
+ * MISMO arnés, y un nombre de ataque podría repetirse entre ellas: sin este
+ * segmento, dos escenarios distintos escribirían su evidencia encima del otro
+ * y el reporte citaría una carpeta con el contenido del que corrió después.
+ *
+ * Sigue con `'operador'` por default: los llamadores viejos —incluido
+ * `pruebas-manuales/qa-agentes/operador-un-escenario.prueba.ts`— no cambian.
+ */
+export const dirEvidencia = (fecha: string, escenario: string, rep: number, familia = 'operador') =>
+  join(dirCorrida(fecha), 'evidencia', familia, `${escenario}-rep${rep}`);
 
 // ── Carga de .env.local (patrón de pruebas-manuales/*.prueba.ts) ────────────
 export function cargaEnvLocal(base: string = REPO): void {

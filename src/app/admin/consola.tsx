@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import {
   getResumenNegocio, getConversacionesActivas, getConteosPlataforma, TOPE_CONVERSACIONES,
-  getUltimaCorridaPorAgente, getCorridasRecientes,
+  getUltimaCorridaPorAgente, getCorridasRecientes, getMrr,
 } from '@/lib/admin/negocio';
 import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
@@ -100,7 +100,7 @@ export async function ConsolaAdmin({
   const filtro = resolverRango(sp?.rango, '7');
   const { rango, ventanaDias } = filtro;
 
-  const [r, conversaciones, conteos, porAgente, corridasRecientes, bandeja] = await Promise.all([
+  const [r, conversaciones, conteos, porAgente, corridasRecientes, bandeja, mrr] = await Promise.all([
     getResumenNegocio(undefined, ventanaDias),
     getConversacionesActivas(),
     getConteosPlataforma(),
@@ -110,6 +110,7 @@ export async function ConsolaAdmin({
     // esa fuente llegan en null ("no se pudo leer" ≠ 0). Por eso puede vivir
     // en una consola que, en sus lecturas core, prefiere caerse entera.
     getBandejaEscalaciones(ahoraMs()),
+    getMrr(),
   ]);
 
   // FE-9: el total REAL de conversaciones ya venía en los conteos de
@@ -185,11 +186,15 @@ export async function ConsolaAdmin({
           saludo={saludo()} nombre={nombre ?? 'Javier'}
           tagline="Toda Likida en una pantalla — cifras reales, de todas las flotas"
           derecha={
-            // MRR real: $0 — Likida no cobra a ningún cliente todavía. No es
-            // un placeholder, es el número verdadero de hoy. 7 dígitos = el
-            // ancho de "1,000,000", la meta. Lo ÚNICO que sobrevivió del
-            // dashboard anterior, por pedido explícito.
-            <ContadorRetro valor={0} digitos={7} prefijo="$" etiqueta="MRR — meta $1,000,000" tamaño="lg" />
+            // ADM-5 (auditoría 24): el MRR era la constante `0` — con el
+            // primer cliente real (o con un plan activo sin precio
+            // configurado) esa cifra habría seguido mintiendo. `getMrr()`
+            // suma `plan.precio_mensual` de las suscripciones activas, o
+            // `null` ("sin medir") si algo no se pudo sumar de verdad. 7
+            // dígitos = el ancho de "1,000,000", la meta.
+            <ContadorRetro valor={mrr.totalMxn} digitos={7} prefijo="$" etiqueta="MRR — meta $1,000,000" tamaño="lg"
+              sinDato="algún plan activo sin precio configurado"
+            />
           }
         />
 
@@ -254,7 +259,11 @@ export async function ConsolaAdmin({
               />
             )}
           </div>
-          {r.tenants <= 1 && (
+          {/* ADM-5 (auditoría 24): `r.tenants <= 1` decía esto con el
+              PRIMER cliente real (1 tenant, pero NO el demo) — se usa
+              `esSoloDemo`, ya calculada arriba y verificada contra el id
+              real del tenant demo. */}
+          {esSoloDemo && (
             <p className="text-xs" style={{ color: 'var(--muted)' }}>
               Cifras reales, no de ejemplo — Likida todavía no tiene clientes, así que son bajas a propósito.
             </p>
@@ -577,8 +586,12 @@ export async function ConsolaAdmin({
                 </table>
               </div>
             )}
+            {/* ADM-5 (auditoría 24): decía "Fase 1 del roadmap" — ya
+                implementado, solo que en la ficha de cada flota
+                (`/admin/flotas/[id]`), no en esta tabla resumen. */}
             <p className="text-xs px-4 pt-2 pb-3" style={{ color: 'var(--muted)' }}>
-              Plan, uso vs. límite y estado de cuenta (activa/en riesgo/morosa) son Fase 1 del roadmap — hoy solo se enseña lo que ya existe.
+              Plan, uso vs. límite y estado de cuenta (activa/en riesgo/morosa) ya existen — en la ficha de cada
+              flota, no en esta tabla resumen.
             </p>
           </section>
 

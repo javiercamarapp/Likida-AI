@@ -31,6 +31,9 @@ const extraerComprobante = vi.fn();
 const getGastos = vi.fn(async () => [] as unknown[]);
 const addGasto = vi.fn(async () => {});
 const ventanaDesdeDB = vi.fn();
+/** AUDITORÍA 24 · AGEN-11: la foto repetida dentro de la ráfaga. */
+const gastoExistePorHash = vi.fn(async () => false);
+const gastoPorHash = vi.fn(async () => null as unknown);
 
 /** El contador de intake REAL: atómico, compartido por las fotos del viaje. */
 let contador = 0;
@@ -41,6 +44,7 @@ const intakeDelta = vi.fn(async (_v: string, d: number) => {
 
 vi.mock('@/lib/likida/tools', () => ({}));
 vi.mock('@/lib/meta/client', () => ({
+  MAX_CUERPO_BOTONES: 1024,
   sendText: vi.fn(async (_to: string, t: string) => { salientes.push(t); return 'wamid.1'; }),
   sendButtons: vi.fn(async (_to: string, cuerpo: string) => { botones.push(cuerpo); return 'wamid.b'; }),
   sendDocument: vi.fn(),
@@ -56,7 +60,8 @@ vi.mock('@/lib/likida/repo', () => ({
   ubicarGastoPorHash: vi.fn(async () => null),
   getHuerfanos: vi.fn(async () => []), resolverHuerfanos: vi.fn(), marcarHuerfanosOfrecidos: vi.fn(),
   updateGastoCfdiXml: vi.fn(), saveCfdiXmlRaw: vi.fn(),
-  gastoExistePorHash: vi.fn(async () => false), gastoPorHash: vi.fn(async () => null),
+  gastoExistePorHash: (...a: unknown[]) => gastoExistePorHash(...(a as [])),
+  gastoPorHash: (...a: unknown[]) => gastoPorHash(...(a as [])),
   corregirFechaGasto: vi.fn(), enriquecerGastoConCodigo: vi.fn(),
   guardarCodigoPendiente: vi.fn(), getCodigosPendientes: vi.fn(async () => []),
   reclamarCodigoPendiente: vi.fn(), getViaje: vi.fn(async () => null),
@@ -121,12 +126,60 @@ const rafaga = (n: number) => Promise.all(
     processInbound({ from: '5219993700779', type: 'image' as const, mediaId: `m${i}`, waMessageId: `wa${i}` })),
 );
 
+/**
+ * Una ráfaga de `n` fotos como route.ts las procesa DE VERDAD desde el
+ * 23-ago-2026: una cadena por chofer, en SERIE dentro de la cadena, con
+ * `hayFotoAntesEnCadena`/`hayFotoDespuesEnCadena` — nunca `Promise.all`.
+ * `rafaga()` de arriba simula el modelo VIEJO (concurrente), que ya no es
+ * cómo corre production; esta es la que reproduce el bug real de
+ * AUDITORÍA 19 (AGEN-19C2-1).
+ */
+const rafagaSerial = async (n: number) => {
+  for (let i = 0; i < n; i++) {
+    await processInbound(
+      { from: '5219993700779', type: 'image' as const, mediaId: `m${i}`, waMessageId: `wa${i}` },
+      { hayFotoAntesEnCadena: i > 0, hayFotoDespuesEnCadena: i < n - 1 },
+    );
+  }
+};
+
+/**
+ * Una cadena MIXTA (fotos + un mensaje que no es foto), tal como route.ts la
+ * manda de verdad: las dos señales se calculan sobre la cadena completa,
+ * contando SOLO mensajes `type: 'image'` — no cualquier mensaje. Reproduce
+ * el hallazgo de la auditoría Fable-5 posterior al merge del PR #72:
+ * `[foto, foto, "listo"]` dejaba la libreta de la última foto abierta para
+ * siempre, porque un "listo" (o cualquier mensaje que no sea foto) nunca
+ * pasa por el camino que la cierra (`msg.type === 'image'`, processor.ts).
+ *
+ * El mensaje no-foto usa `type: 'other'` (no `'listo'` de verdad) a
+ * propósito: lo que este test verifica es que el CONTEO de la cadena ignore
+ * su tipo al calcular `hayFoto…EnCadena` — el camino real que sigue ese
+ * mensaje (agente de texto, cuadre) es otro archivo y no hace falta
+ * levantarlo aquí para probar esta parte.
+ */
+const cadenaMixta = async (tipos: Array<'image' | 'other'>) => {
+  for (let i = 0; i < tipos.length; i++) {
+    const antes = tipos.slice(0, i);
+    const despues = tipos.slice(i + 1);
+    const msg = tipos[i] === 'image'
+      ? { from: '5219993700779', type: 'image' as const, mediaId: `m${i}`, waMessageId: `wa${i}` }
+      : { from: '5219993700779', type: 'other' as const, waMessageId: `wa${i}` };
+    await processInbound(msg, {
+      hayFotoAntesEnCadena: antes.includes('image'),
+      hayFotoDespuesEnCadena: despues.includes('image'),
+    });
+  }
+};
+
 beforeEach(() => {
   salientes.length = 0; botones.length = 0; contador = 0;
   olvidarRafagas();
   extraerComprobante.mockReset(); getGastos.mockReset(); addGasto.mockReset();
   guardarHuerfano.mockClear(); subirComprobante.mockClear();
   ventanaDesdeDB.mockReset(); ventanaDesdeDB.mockResolvedValue(undefined);
+  gastoExistePorHash.mockReset(); gastoExistePorHash.mockResolvedValue(false);
+  gastoPorHash.mockReset(); gastoPorHash.mockResolvedValue(null);
   getGastos.mockResolvedValue([]);
   process.env.WHATSAPP_ACCESS_TOKEN = 'tok';
   process.env.WHATSAPP_PHONE_NUMBER_ID = '123';
@@ -142,7 +195,7 @@ describe('22 fotos que fallan NO son 22 mensajes', () => {
     // se midió el 20-ago (ver el describe de abajo).
     expect(salientes.length, `el chofer recibió ${salientes.length} mensajes: ${JSON.stringify(salientes)}`).toBe(1);
     const todo = salientes.join('\n');
-    expect(todo).toContain('De tus 22 fotos');
+    expect(todo, 'AGEN-8: no se afirma un total que solo vale dentro de esta invocación').toContain('De las fotos que me mandaste,');
     expect(todo).toMatch(/\*22\*/);
     expect(todo).toMatch(/de mi lado/i);
   });
@@ -189,7 +242,7 @@ describe('22 fotos que fallan NO son 22 mensajes', () => {
   // El chofer mandó seis y recibió esto, en este orden:
   //
   //   1. «Se me trabó a mí al leer ese comprobante ⚙️ — no es tu foto…»
-  //   2. «Ya revisé tus fotos… De tus 6 fotos, *6* se me trabaron de mi lado…»
+  //   2. «Ya revisé tus fotos… De las fotos que me mandaste, *6* se me trabaron…»
   //
   // El mismo trabón, dos veces, y la segunda con un número que parecía
   // desmentir a la primera. La causa: `llegoSola` se calculaba como «el
@@ -200,7 +253,7 @@ describe('22 fotos que fallan NO son 22 mensajes', () => {
     await rafaga(6);
 
     expect(salientes, 'un fajo es UN mensaje, no uno suelto más el resumen').toHaveLength(1);
-    expect(salientes[0]).toContain('De tus 6 fotos');
+    expect(salientes[0]).toContain('De las fotos que me mandaste,');
     // El texto individual es correcto para una foto sola; suelto DELANTE del
     // resumen es la repetición que se midió.
     expect(salientes[0]).not.toMatch(/al leer ese comprobante/i);
@@ -265,6 +318,104 @@ describe('22 fotos que fallan NO son 22 mensajes', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 19 (agéntico AGEN-19C2-1) — el 23-ago-2026 route.ts pasó a
+// procesar las fotos de UN chofer en SERIE (antes paralelizaba por mensaje,
+// y un "listo" podía cerrar la liquidación antes de que terminaran las
+// fotos). Bajo esa serialización, el contador de intake vuelve a 0 después
+// de CADA foto —nunca hay dos en vuelo—, así que la libreta de la ráfaga se
+// abría y cerraba en cada una: 22 comprobantes volvían a ser 22 mensajes,
+// exactamente el antipatrón que este archivo entero existe para evitar.
+//
+// Las pruebas de arriba (`rafaga()`) usan `Promise.all` y por eso NO
+// reproducen el bug: siguen viendo concurrencia real. Estas usan
+// `rafagaSerial()`/`cadenaMixta()`, que procesan uno por uno CON
+// `hayFotoAntesEnCadena`/`hayFotoDespuesEnCadena` — la señal que route.ts
+// manda de verdad desde el 23-ago (corregida tras la auditoría Fable-5
+// posterior al merge del PR #72: contar SOLO fotos, no cualquier mensaje).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('AUDITORÍA 19 — la misma ráfaga, pero procesada EN SERIE (route.ts real desde el 23-ago)', () => {
+  it('22 fotos en serie con fallo técnico: SIGUE siendo un solo mensaje, no 22', async () => {
+    extraerComprobante.mockResolvedValue(FALLO_TECNICO);
+    await rafagaSerial(22);
+
+    expect(salientes.length, `el chofer recibió ${salientes.length} mensajes: ${JSON.stringify(salientes)}`).toBe(1);
+    const todo = salientes.join('\n');
+    expect(todo, 'AGEN-8: no se afirma un total que solo vale dentro de esta invocación').toContain('De las fotos que me mandaste,');
+    expect(todo).toMatch(/\*22\*/);
+  });
+
+  it('6 fotos buenas en serie: un solo acuse consolidado, no 6 acuses sueltos', async () => {
+    let n = 0;
+    extraerComprobante.mockImplementation(async () => bueno(100 * (n += 1)));
+    await rafagaSerial(6);
+
+    // AUDITORÍA FABLE-5 (post-merge PR #72): `toBeLessThanOrEqual(1)` dejaba
+    // pasar el CERO — silencio total — como si fuera un éxito. Sin el fix,
+    // cada foto habría cerrado su propia libreta de tamaño 1 y el peldaño
+    // `acusar` (silencio en ráfaga, "Anotado" si viene sola) las habría
+    // contestado las 6 por separado; con la libreta huérfana del bug que
+    // rompía cadenas mixtas, habría contestado CERO veces. Solo `toBe(1)` +
+    // contenido descarta las dos formas de fallar.
+    expect(salientes.length, `el chofer recibió ${salientes.length} mensajes: ${JSON.stringify(salientes)}`).toBe(1);
+    expect(salientes[0]).toContain('Ya revisé tus fotos');
+    expect(salientes[0]).not.toMatch(/no las pude leer|de mi lado|fecha dudosa/i);
+  });
+
+  it('AUDITORÍA FABLE-5: [foto, foto, "listo"] — la ÚLTIMA foto sí cierra la libreta y manda el resumen', async () => {
+    // El bug real post-merge del PR #72: contar CUALQUIER mensaje de la
+    // cadena (no solo fotos) hacía que la segunda foto —la última FOTO,
+    // pero no el último MENSAJE— se creyera "vienen más" porque el "listo"
+    // la sigue. El resumen (y con él, cualquier aviso de que algo no se
+    // pudo leer) se perdía en silencio para siempre.
+    let n = 0;
+    extraerComprobante.mockImplementation(async () => bueno(100 * (n += 1)));
+    await cadenaMixta(['image', 'image', 'other']);
+
+    // El mensaje `other` de la cola tiene su propia respuesta genérica —
+    // ajena a la ráfaga—, así que lo que importa no es el total, es que el
+    // resumen de las fotos SÍ salió (antes del fix: nunca salía).
+    const resumenes = salientes.filter((s) => s.includes('Ya revisé tus fotos'));
+    expect(resumenes, JSON.stringify(salientes)).toHaveLength(1);
+  });
+
+  it('AUDITORÍA FABLE-5: ["listo", foto, foto] — la PRIMERA foto de la cadena no pierde la libreta de una ráfaga previa', async () => {
+    // Simétrico al anterior: `siguienteDeLaMismaCadena` (que evita que
+    // `anotarFoto` borre lo anotado) también contaba CUALQUIER mensaje
+    // anterior. Un texto antes de la primera foto hacía que esa foto se
+    // creyera "no soy la primera de mi cadena" y NO reseteara la libreta —
+    // aquí no hay ráfaga previa que perder, así que el resultado observable
+    // sigue siendo un resumen correcto de las 2 fotos que sí llegaron.
+    let n = 0;
+    extraerComprobante.mockImplementation(async () => bueno(100 * (n += 1)));
+    await cadenaMixta(['other', 'image', 'image']);
+
+    const resumenes = salientes.filter((s) => s.includes('Ya revisé tus fotos'));
+    expect(resumenes, JSON.stringify(salientes)).toHaveLength(1);
+    expect(resumenes[0]).toContain('Ya revisé tus fotos');
+  });
+
+  it('sin hayFotoAntesEnCadena/hayFotoDespuesEnCadena (caller que no sabe de la cadena): sigue como una foto suelta, sin romperse', async () => {
+    // Control de compatibilidad: un llamador viejo (pruebas, el simulador
+    // del demo) que no manda las opciones nuevas se comporta EXACTAMENTE
+    // como antes de esta ronda — la ausencia de las dos banderas es un no-op.
+    extraerComprobante.mockResolvedValue(ILEGIBLE);
+    await processInbound({ from: '5219993700779', type: 'image', mediaId: 'm1', waMessageId: 'wa1' });
+
+    expect(salientes).toHaveLength(1);
+    expect(salientes[0]).toMatch(/difícil de leer/i);
+  });
+
+  it('CONTROL — una ráfaga serial que sale bien no manda nada de más', async () => {
+    let n = 0;
+    extraerComprobante.mockImplementation(async () => bueno(100 * (n += 1)));
+    await rafagaSerial(5);
+
+    const todo = salientes.join('\n');
+    expect(todo).not.toMatch(/no las pude leer|de mi lado|fecha dudosa/i);
+  });
+});
+
 describe('un fallo técnico de OCR ya no pierde el comprobante', () => {
   it('guarda huérfano CON la foto, esperando la subida', async () => {
     extraerComprobante.mockResolvedValue(FALLO_TECNICO);
@@ -289,6 +440,19 @@ describe('un fallo técnico de OCR ya no pierde el comprobante', () => {
     // WhatsApp. Prometerle "captúralo aparte" era mandarlo a hacer nada.
     expect(dicho).not.toMatch(/capturarlo aparte|NO quedó registrado/i);
     expect(dicho).toMatch(/no se pierde/i);
+  });
+
+  it('AUDITORÍA 24 · AGEN-12: NO le promete que se lo ofreceremos en el siguiente viaje', async () => {
+    // Un huérfano de `fallo_ocr` nace con `monto: 0` y la oferta solo saca los
+    // que tienen monto: «te lo ofrezco en el siguiente» era una promesa que el
+    // código no podía cumplir. Lo que de verdad lo recupera es el reenvío, y
+    // eso es lo único que ahora se le pide.
+    extraerComprobante.mockResolvedValue(FALLO_TECNICO);
+    await processInbound({ from: '5219993700779', type: 'image', mediaId: 'm1', waMessageId: 'wa1' });
+
+    const dicho = salientes.join('\n');
+    expect(dicho).not.toMatch(/ofrezco en el siguiente|en el siguiente viaje/i);
+    expect(dicho, 'lo que sí depende de él').toMatch(/reenv/i);
   });
 
   it('si tampoco se puede guardar, se le dice la verdad', async () => {
@@ -328,5 +492,53 @@ describe('MAX_CONFIRMACIONES_SEGUIDAS: el tope estaba escrito y sin cablear', ()
 
     expect(botones).toHaveLength(4);
     expect(salientes.join('\n')).not.toMatch(/no pude leer con seguridad/i);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · AGEN-11 (BAJO) — la foto repetida dentro de la ráfaga era
+// muda: `anotarFoto` ya la había contado en «de tus N fotos», el dedup por
+// hash hacía `return` sin anotar nada, y el resumen decía «llevo N-1
+// comprobantes» sin explicar la resta. El chofer la reenviaba y volvía el
+// mismo silencio.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('AGEN-11 · la foto repetida se cuenta y se dice', () => {
+  it('en una ráfaga, el resumen la nombra en vez de callarla', async () => {
+    extraerComprobante.mockResolvedValue(bueno(1000));
+    // La 3ª de 5 es la misma que ya estaba en el viaje.
+    let i = 0;
+    gastoExistePorHash.mockImplementation(async () => (i += 1) === 3);
+    gastoPorHash.mockResolvedValue({ id: 'g3', monto: 1000, fecha: '2026-08-02' });
+    getGastos.mockResolvedValue([{ id: 'a', concepto: 'diesel', monto: 1000 }]);
+
+    await rafagaSerial(5);
+
+    const todo = salientes.join('\n');
+    expect(todo).toContain('De las fotos que me mandaste,');
+    expect(todo, 'la resta entre «5 fotos» y los comprobantes tiene que estar explicada').toMatch(/repetida/i);
+    expect(todo, 'no se le pide nada: no hay nada que hacer con ella').not.toMatch(/buena luz/i);
+  });
+
+  it('una foto repetida que llegó SOLA sigue en silencio (un doble toque no es una noticia)', async () => {
+    extraerComprobante.mockResolvedValue(bueno(1000));
+    gastoExistePorHash.mockResolvedValue(true);
+    gastoPorHash.mockResolvedValue({ id: 'g1', monto: 1000, fecha: '2026-08-02' });
+
+    await processInbound({ from: '5219993700779', type: 'image', mediaId: 'm1', waMessageId: 'wa1' });
+
+    expect(salientes, `recibió: ${JSON.stringify(salientes)}`).toEqual([]);
+  });
+
+  it('si además trae fecha dudosa, gana el aviso entero de la fecha y NO se cuenta dos veces', async () => {
+    extraerComprobante.mockResolvedValue(bueno(1000));
+    gastoExistePorHash.mockResolvedValue(true);
+    gastoPorHash.mockResolvedValue({ id: 'g1', monto: 45, fecha: '2019-03-02' });
+    ventanaDesdeDB.mockResolvedValue({ inicio: '2026-08-01', fin: '2026-08-05', hoy: '2026-08-04' });
+
+    await processInbound({ from: '5219993700779', type: 'image', mediaId: 'm1', waMessageId: 'wa1' });
+
+    const todo = salientes.join('\n');
+    expect(todo).toMatch(/misma foto/i);
+    expect(todo).not.toMatch(/repetida \(ya la tenía\)/i);
   });
 });

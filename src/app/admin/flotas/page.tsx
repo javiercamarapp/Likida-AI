@@ -171,7 +171,11 @@ export default async function FlotasPage() {
   const onboardingDe = (tenantId: string): OnboardingFlota | null =>
     onboarding === null
       ? null
-      : onboarding.get(tenantId) ?? { credenciales: { total: 0, probadas: 0 }, avisosConfigurados: 0 };
+      : onboarding.get(tenantId) ?? {
+          credenciales: { total: 0, probadas: 0 },
+          avisosConfigurados: 0,
+          avisoPrivacidad: { razonSocial: false, domicilio: false },
+        };
 
   return (
     <main className="h-full">
@@ -356,6 +360,24 @@ export default async function FlotasPage() {
                           : 'Ni un viaje registrado todavía'}
                         href={`/dashboard/viajes?tenant=${f.id}`} accion="ver viajes"
                       />
+                      {/* 6. El aviso de privacidad de la flota (auditoría 19,
+                          legal C3 / C.16). Sin razón social el aviso NO existe
+                          (404) y el tratamiento de datos de choferes queda
+                          frenado en el primer mensaje; sin domicilio existe
+                          pero sale con la fr. I pendiente. */}
+                      <Casilla
+                        estado={ob === null
+                          ? 'sin_medir'
+                          : ob.avisoPrivacidad.razonSocial && ob.avisoPrivacidad.domicilio ? 'ok' : 'pendiente'}
+                        texto={ob === null
+                          ? 'Aviso de privacidad: no se pudo leer (≠ que falte)'
+                          : !ob.avisoPrivacidad.razonSocial
+                            ? 'Aviso de privacidad SIN responsable: falta la razón social — sus choferes no pueden mandar comprobantes'
+                            : !ob.avisoPrivacidad.domicilio
+                              ? 'Aviso de privacidad incompleto: falta el domicilio fiscal (la fr. I sale marcada pendiente)'
+                              : 'Aviso de privacidad completo: razón social y domicilio capturados'}
+                        href={`/dashboard/suscripcion?tenant=${f.id}`} accion="capturar"
+                      />
                     </div>
                   );
                 })}
@@ -462,8 +484,15 @@ export default async function FlotasPage() {
             </p>
           </section>
 
+          {/* ADM-5 (auditoría 24): decía que uso vs. límite, salud
+              (activa/en riesgo/morosa) y el audit log de impersonación
+              "siguen en el roadmap" — ya existen: los dos primeros en la
+              ficha de cada flota (`ficha.tsx`, `lib/saas/suscripcion.ts`), el
+              audit log en `impersonacion_dia`/`bitacora_auditoria`
+              (`tenant-efectivo.ts`). Lo único que de verdad falta es el MRR
+              DESGLOSADO por cliente (hoy `getMrr()` solo trae el total). */}
           <EstadoVacio>
-            &quot;Ver dashboard&quot; ya existe (arriba) — entra al panel real de esa flota con tu propia sesión de superadmin, sin credenciales nuevas. Uso vs. límite, salud (activa/en riesgo/morosa), MRR por cliente y un audit log de qué flota viste y cuándo siguen en el roadmap.
+            &quot;Ver dashboard&quot; ya existe (arriba) — entra al panel real de esa flota con tu propia sesión de superadmin, sin credenciales nuevas. Uso vs. límite y salud (activa/en riesgo/morosa) ya están en la ficha de cada flota; el audit log de qué flota viste y cuándo ya se escribe (impersonación). Lo que falta: MRR desglosado por cliente — hoy solo hay el total de la plataforma.
             <br /><br />
             Retención por cohortes, distribución por plan — necesita más de 1 tenant para decir algo real.
           </EstadoVacio>

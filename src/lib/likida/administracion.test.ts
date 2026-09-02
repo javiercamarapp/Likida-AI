@@ -198,17 +198,90 @@ describe('crearOperador', () => {
     // Es la fuga entre tenants: `resolveOperador` busca por teléfono sin
     // filtrar por tenant, así que con el número repetido el gasto se anota en
     // la flota que salga primero.
-    from.mockImplementation(() => cadena({ data: [{ id: 'o-9', tenant_id: 'OTRA', nombre: 'Pedro' }], error: null }));
+    // `activo: true` no es adorno del fixture: desde la auditoría 20 (H2) es
+    // LA condición del bloqueo. La columna es `not null default true`, así que
+    // en producción toda fila que choca trae la bandera puesta.
+    from.mockImplementation(() => cadena({ data: [{ id: 'o-9', tenant_id: 'OTRA', nombre: 'Pedro', activo: true }], error: null }));
 
     await expect(crearOperador('t-1', { nombre: 'Juan Pérez', telefono: '9993700779' }))
       .rejects.toThrow(/OTRA flota/i);
   });
 
   it('y también si ya está en LA MISMA flota, con un mensaje distinto', async () => {
-    from.mockImplementation(() => cadena({ data: [{ id: 'o-9', tenant_id: 't-1', nombre: 'Pedro' }], error: null }));
+    from.mockImplementation(() => cadena({ data: [{ id: 'o-9', tenant_id: 't-1', nombre: 'Pedro', activo: true }], error: null }));
 
     await expect(crearOperador('t-1', { nombre: 'Juan Pérez', telefono: '9993700779' }))
       .rejects.toThrow(/ya está registrado en esta flota/i);
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 20 (H2) — EL TELÉFONO SE LIBERA CON LA BAJA
+  //
+  // El bloqueo miraba TODAS las filas con ese número, activas o no: más
+  // estricto que `uq_operador_telefono_activo` (0024), que es parcial
+  // `where activo` y cuyo comentario declara al revés la intención ("un
+  // operador dado de baja en la flota A puede reaparecer en la flota B — eso
+  // es una rotación normal y sigue permitido").
+  //
+  // Consecuencia real: el chofer que renunciaba se llevaba su celular a la
+  // tumba. Ninguna otra flota podía contratarlo y la única salida era un
+  // UPDATE a mano. Lo que NO se relaja: `resolveOperador` sigue buscando
+  // `.eq('activo', true)`, así que dos filas ACTIVAS del mismo número —la
+  // ambigüedad que anota el gasto en la flota equivocada— siguen prohibidas.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('BAJA: un teléfono que solo pertenece a un operador INACTIVO de otra flota SÍ se puede dar de alta', async () => {
+    const insertados: unknown[] = [];
+    from.mockImplementation((tabla: string) => {
+      const nodo: Record<string, unknown> = {};
+      for (const m of ['select', 'eq', 'in', 'limit', 'order']) nodo[m] = () => nodo;
+      // Solo la tabla `operador`: el segundo insert de esta llamada es el de
+      // `bitacora_auditoria`, que también tiene que ocurrir pero no es lo que
+      // se está midiendo aquí.
+      nodo.insert = (v: unknown) => { if (tabla === 'operador') insertados.push(v); return nodo; };
+      nodo.maybeSingle = () => Promise.resolve(
+        insertados.length > 0
+          ? { data: { id: 'o-nuevo' }, error: null }
+          : { data: [{ id: 'o-9', tenant_id: 'OTRA', nombre: 'Pedro', activo: false }], error: null },
+      );
+      nodo.then = (r: (v: unknown) => unknown) => Promise.resolve(
+        { data: [{ id: 'o-9', tenant_id: 'OTRA', nombre: 'Pedro', activo: false }], error: null },
+      ).then(r);
+      return nodo;
+    });
+
+    const id = await crearOperador('t-1', { nombre: 'Juan Pérez', telefono: '9993700779' });
+    expect(id).toBe('o-nuevo');
+    // Mutación: sin esta aserción, un `crearOperador` que devolviera un id
+    // inventado sin escribir nada pasaría la prueba de arriba.
+    expect(insertados).toHaveLength(1);
+  });
+
+  it('BAJA: pero si la fila inactiva es de MI PROPIA flota, se pide reactivarla — el otro índice de la 0024 no admite dos fichas', async () => {
+    // `uq_operador_tenant_telefono_norm` es POR TENANT y sobre TODAS las
+    // filas: dos fichas del mismo número en la misma flota partirían el
+    // historial del chofer en dos. Se dice ANTES del insert, y se dice QUÉ
+    // HACER, en vez de dejar que Postgres conteste con el nombre del índice.
+    from.mockImplementation(() => cadena({ data: [{ id: 'o-9', tenant_id: 't-1', nombre: 'Pedro', activo: false }], error: null }));
+
+    await expect(crearOperador('t-1', { nombre: 'Juan Pérez', telefono: '9993700779' }))
+      .rejects.toThrow(/dado de baja en tu flota/i);
+  });
+
+  it('BAJA: una fila ACTIVA sigue bloqueando aunque vengan inactivas antes que ella', async () => {
+    // El `limit(2)` de antes podía llenarse con dos filas de baja y esconder a
+    // la activa que sí choca — el bloqueo se caería justo en el número con más
+    // rotación, que es el que más veces se re-captura.
+    from.mockImplementation(() => cadena({
+      data: [
+        { id: 'o-7', tenant_id: 'VIEJA-A', nombre: 'Ana', activo: false },
+        { id: 'o-8', tenant_id: 'VIEJA-B', nombre: 'Beto', activo: false },
+        { id: 'o-9', tenant_id: 'OTRA', nombre: 'Pedro', activo: true },
+      ],
+      error: null,
+    }));
+
+    await expect(crearOperador('t-1', { nombre: 'Juan Pérez', telefono: '9993700779' }))
+      .rejects.toThrow(/OTRA flota/i);
   });
 
   it('FALLA CERRADO: si no se puede comprobar el duplicado, no da de alta', async () => {

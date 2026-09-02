@@ -1,6 +1,6 @@
 import { Cpu, DollarSign, Bot, Activity } from 'lucide-react';
 import { getResumenNegocio } from '@/lib/admin/negocio';
-import { getConsumoPorAgente, type Insight } from '@/lib/admin/consumo';
+import { getConsumoPorAgente, getPresupuestoPorProposito, type Insight, type GastoProposito } from '@/lib/admin/consumo';
 import { ahoraMs } from '@/lib/saludo';
 import { usd } from '@/lib/utils';
 import { numero } from '@/lib/formato';
@@ -30,9 +30,12 @@ export default async function ConsumoPage() {
   // Resiliencia POR SECCIÓN: el gasto del producto (llm_costo) y el del back
   // office (agente_corrida.costo_usd, 0123) caen por su lado — con la 0123
   // sin aplicar, la mitad de producto sigue viva y la de agentes LO DICE.
-  const [r, consumo] = await Promise.all([
+  const [r, consumo, proposito] = await Promise.all([
     getResumenNegocio().catch(() => null),
     getConsumoPorAgente(ahoraMs()).catch(() => null),
+    // D.23: el presupuesto por propósito cae por su lado; sin la 0244 la
+    // sección LO DICE en vez de pintar ceros.
+    getPresupuestoPorProposito().catch(() => null),
   ]);
   if (r === null && consumo === null) {
     return (
@@ -147,6 +150,108 @@ export default async function ConsumoPage() {
               </tbody>
             </table>
             </div>
+            )}
+          </div>
+
+          {/* ── ADM-6 (auditoría 24) · Por FLOTA — cuánto cuesta cada cliente ──
+              Antes no existía ninguna tabla de "cuánto cuesta Innovativos":
+              `costoIaDeTenant`/`flotas[].costoIaUsd` existían en negocio.ts
+              sin una sola pantalla que los pintara. `r.flotas` ya trae el
+              costo de IA de la MISMA ventana que las tarjetas de arriba (7
+              días por default) — cero lecturas nuevas, solo pintar lo que
+              `getResumenNegocio` ya calcula. */}
+          <div className="card p-4">
+            <TituloSeccion>Por flota — costo de IA de la ventana (7 días)</TituloSeccion>
+            {!r || r.flotas.length === 0 ? (
+              <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>
+                {r ? 'Sin flotas dadas de alta todavía.' : 'No se pudo leer el costo por flota.'}
+              </p>
+            ) : (
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-[12.5px]">
+                  <thead>
+                    <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
+                      <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Flota</th>
+                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Viajes</th>
+                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Costo de IA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...r.flotas].sort((a, b) => b.costoIaUsd - a.costoIaUsd).map((f) => (
+                      <tr key={f.id} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
+                        <td className="py-2">{f.nombre}</td>
+                        <td className="py-2 text-right tabular">{numero(f.viajes)}</td>
+                        <td className="py-2 text-right tabular">{usd(f.costoIaUsd)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* ── D.23 · Por PROPÓSITO — la reserva del camino interactivo ──── */}
+          <div className="card p-4">
+            <TituloSeccion>Presupuesto de IA por propósito — hoy, con su techo</TituloSeccion>
+            {proposito === null ? (
+              <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>
+                No se pudo leer el gasto por propósito. Con la migración 0244 sin aplicar a esta base,
+                es lo esperado — la dimensión de propósito nace ahí.
+              </p>
+            ) : (
+              <>
+                <p className="text-[12px] mt-1 m-0" style={{ color: 'var(--muted)' }}>
+                  Techo diario por flota: <span className="tabular">{usd(proposito.topeTenantDiaUsd)}</span> ·
+                  reserva del camino interactivo (chofer y chats): <span className="tabular">{usd(proposito.reservaInteractivoUsd)}</span>
+                  {' '}({Math.round(proposito.fraccionReserva * 100)}%) — el fondo (OCR de lote y agentes) solo llega a
+                  {' '}<span className="tabular">{usd(proposito.topeTenantDiaUsd - proposito.reservaInteractivoUsd)}</span>.
+                </p>
+                {proposito.filas.length === 0 ? (
+                  <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>Hoy nadie ha gastado todavía (día de México).</p>
+                ) : (
+                  <div className="overflow-x-auto mt-2">
+                    <table className="w-full text-[12.5px]">
+                      <thead>
+                        <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
+                          <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Flota</th>
+                          <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Propósito</th>
+                          <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Llamadas</th>
+                          <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Liquidado hoy</th>
+                          <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Reservado vivo</th>
+                          <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>vs su techo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {proposito.filas.map((f: GastoProposito) => {
+                          // El techo del propósito: el fondo tiene (tope − reserva); el interactivo, el tope completo.
+                          const techo = f.proposito === 'interactivo'
+                            ? proposito.topeTenantDiaUsd
+                            : proposito.topeTenantDiaUsd - proposito.reservaInteractivoUsd;
+                          const usado = f.liquidadoUsd + f.reservadoVivoUsd;
+                          const pct = techo > 0 ? Math.min(100, Math.round((usado / techo) * 100)) : 100;
+                          return (
+                            <tr key={`${f.tenantId}-${f.proposito}`} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
+                              <td className="py-2">{f.tenantNombre}</td>
+                              <td className="py-2"><span className="cifra-mono">{f.proposito}</span></td>
+                              <td className="py-2 text-right tabular">{numero(f.n)}</td>
+                              <td className="py-2 text-right tabular">{usd(f.liquidadoUsd)}</td>
+                              <td className="py-2 text-right tabular">{usd(f.reservadoVivoUsd)}</td>
+                              <td className="py-2 text-right">
+                                <span className="inline-flex items-center gap-2">
+                                  <span className="inline-block w-16 h-1 rounded-full overflow-hidden align-middle" style={{ background: 'var(--line2)' }}>
+                                    <span className="block h-full rounded-full" style={{ width: `${pct}%`, background: pct >= 80 ? 'var(--bad)' : 'var(--marca)' }} />
+                                  </span>
+                                  <span className="tabular text-[11.5px]">{pct}% de {usd(techo)}</span>
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

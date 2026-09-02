@@ -66,7 +66,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 const {
   conciliarLineas, rangoFechasLineas, mensajeConsolidadoRecibido, resolverLineaAMano,
-  claveProdServDeLinea, TOLERANCIA_MONTO_MXN, VENTANA_DIAS_FECHA,
+  claveProdServDeLinea, litrosDeLinea, TOLERANCIA_MONTO_MXN, VENTANA_DIAS_FECHA,
 } = await import('./consolidado');
 
 const linea = (indice: number, monto: number, fecha?: string, extra?: Partial<CfdiLineaXml>): CfdiLineaXml => ({
@@ -321,6 +321,7 @@ describe('resolverLineaAMano — la pantalla que faltaba, contra Supabase mockea
       cfdi_orden: 2,
       clave_prod_serv: '15101505',
       ocr_extra: { producto: 'Diesel', estacion: 'PEMEX 4521', litros: 120.5 },
+      xml_verificado: true,
     });
   });
 
@@ -337,6 +338,7 @@ describe('resolverLineaAMano — la pantalla que faltaba, contra Supabase mockea
       cfdi_uuid: 'uuid-abc',
       cfdi_orden: 2,
       clave_prod_serv: '15101505',
+      xml_verificado: true,
     });
     expect(updateGasto?.payload).not.toHaveProperty('ocr_extra');
     expect(logger.warn).toHaveBeenCalledWith(
@@ -351,9 +353,24 @@ describe('resolverLineaAMano — la pantalla que faltaba, contra Supabase mockea
     expect(r).toEqual({ ok: true });
 
     const updateGasto = updatesVistos.find((u) => u.tabla === 'gasto');
-    expect(updateGasto?.payload).toEqual({ cfdi_uuid: 'uuid-abc', cfdi_orden: 2 });
+    expect(updateGasto?.payload).toEqual({ cfdi_uuid: 'uuid-abc', cfdi_orden: 2, xml_verificado: true });
     // Y ni siquiera se leyó `gasto.ocr_extra`: no hay litros que fusionar.
     expect(filtrosVistos.some((f) => f.tabla === 'gasto' && f.op === 'select')).toBe(false);
+  });
+
+  it('AUDITORÍA 19 (fiscal CRÍTICO F1): TODA línea ligada marca xml_verificado — sin esto, engine.ts:1248 nunca acredita IVA/estímulo/litros de un consolidado', async () => {
+    // Sin litros/clave (p.ej. una caseta) es el caso más fácil de olvidar:
+    // no hay ningún otro campo fiscal que delate que esto es un CFDI
+    // verificado, así que si `xml_verificado` faltara aquí nadie más lo notaría.
+    respLineaLectura = { data: filaLinea({ litros: null, clave_prod_serv: null }), error: null };
+    await resolverLineaAMano('t1', 'linea-1', { tipo: 'ligar', gastoId: 'g1' }, 'user-1');
+
+    const updateGasto = updatesVistos.find((u) => u.tabla === 'gasto');
+    expect(updateGasto?.payload).toMatchObject({ xml_verificado: true });
+    // Y NO se le inventa un desglose que el estándar no da por línea: el motor
+    // debe seguir viendo iva_traslado/ieps_traslado ausentes, no en $0 falso.
+    expect(updateGasto?.payload).not.toHaveProperty('iva_traslado');
+    expect(updateGasto?.payload).not.toHaveProperty('ieps_traslado');
   });
 });
 
@@ -380,12 +397,82 @@ describe('claveProdServDeLinea — FASE 1, la clave SAT de una línea del consol
   it('ninguno de los dos dato → sin clave, no se adivina', () => {
     expect(claveProdServDeLinea({})).toBeUndefined();
   });
+
+  // ── LA MAYÚSCULA QUE COSTABA EL MES ENTERO ──────────────────────────────
+  // La comparación era `=== 'Diesel'`, exacta hasta la caja. Nadie en este
+  // repo ha visto un ECC emitido de verdad (los tres fixtures son sintéticos),
+  // así que nadie sabe con qué tipografía escribe ese atributo un emisor real.
+  // Con `"DIESEL"` la línea se guardaba SIN clave, `datosDieselDeLinea` no
+  // propagaba nada y el gasto llegaba al motor con 0 litros acreditables: el
+  // hueco exacto que la Fase 1 vino a cerrar, sobreviviendo dentro del arreglo.
+  it('ecc12: la MISMA palabra con otra caja, con acento o con espacios sigue siendo diésel', () => {
+    expect(claveProdServDeLinea({ tipoCombustible: 'DIESEL' })).toBe('15101505');
+    expect(claveProdServDeLinea({ tipoCombustible: 'diesel' })).toBe('15101505');
+    expect(claveProdServDeLinea({ tipoCombustible: 'Diésel' })).toBe('15101505');
+    expect(claveProdServDeLinea({ tipoCombustible: 'DIÉSEL' })).toBe('15101505');
+    expect(claveProdServDeLinea({ tipoCombustible: '  Diesel  ' })).toBe('15101505');
+  });
+
+  // Y hasta dónde NO llega la normalización: sigue siendo la palabra, no una
+  // familia de palabras ni un catálogo numérico.
+  it('no se adivina: ni una clave numérica de catálogo ni un nombre comercial que CONTENGA "diesel"', () => {
+    // `c_ClaveTipoCombustible` no está verificado contra fuente en este repo
+    // (no vive en `normas/` ni en `normas/datos/`). Mapear "02" a diésel
+    // acreditaría litros de gasolina: una cifra fiscal inventada.
+    expect(claveProdServDeLinea({ tipoCombustible: '01' })).toBeUndefined();
+    expect(claveProdServDeLinea({ tipoCombustible: '02' })).toBeUndefined();
+    // Nombre de producto del monedero, no el tipo de combustible.
+    expect(claveProdServDeLinea({ tipoCombustible: 'Diesel Fleet' })).toBeUndefined();
+    expect(claveProdServDeLinea({ tipoCombustible: 'Biodiesel' })).toBeUndefined();
+  });
 });
 
-describe('FASE 1 — equivalencia contra un ECC12 real: los litros sobreviven de principio a fin', () => {
-  // El mismo ECC12 verificado contra el XSD oficial que usa cfdi_xml.test.ts
-  // (3 transacciones de diésel, agosto→abril 2026, monedero de tarjeta).
-  const ECC12_REAL = `<?xml version="1.0" encoding="UTF-8"?>
+describe('litrosDeLinea — FASE 1: qué Cantidad es un litro y cuál es un cruce de caseta', () => {
+  // La columna se llama `litros` (mig. 0168) y se llenaba con la `Cantidad` de
+  // CUALQUIER línea. En un consolidado de TAG cada `cfdi:Concepto` de caseta
+  // trae `Cantidad="1"`: la tabla decía que una caseta de $118 tuvo "1 litro".
+  it('ecc12: la Cantidad SIEMPRE es volumen — el complemento se llama Estado de Cuenta de COMBUSTIBLES', () => {
+    expect(litrosDeLinea({ fuente: 'ecc12', cantidad: 120.5, tipoCombustible: 'Diesel' })).toBe(120.5);
+    // Magna tampoco acredita el estímulo, pero SÍ son litros: la clave se
+    // queda en null (no aplica LIF 20-A) y el volumen no se pierde.
+    expect(litrosDeLinea({ fuente: 'ecc12', cantidad: 110, tipoCombustible: 'Magna' })).toBe(110);
+  });
+
+  it('concepto_base de combustible: la Cantidad son litros', () => {
+    expect(litrosDeLinea({ fuente: 'concepto_base', cantidad: 200, claveProdServ: '15101505' })).toBe(200);
+  });
+
+  it('concepto_base de CASETA: `Cantidad = 1` es UN CRUCE, no un litro → null', () => {
+    expect(litrosDeLinea({ fuente: 'concepto_base', cantidad: 1, claveProdServ: '78101803' })).toBeNull();
+  });
+
+  it('concepto_base sin clave: no se sabe qué se midió → null, nunca 0', () => {
+    expect(litrosDeLinea({ fuente: 'concepto_base', cantidad: 3 })).toBeNull();
+  });
+
+  it('sin Cantidad → null ("no se leyó volumen" ≠ "cargó cero litros")', () => {
+    expect(litrosDeLinea({ fuente: 'ecc12' })).toBeNull();
+    expect(litrosDeLinea({ fuente: 'ecc12', cantidad: Number.NaN })).toBeNull();
+  });
+});
+
+describe('FASE 1 — equivalencia sobre un ECC12 SINTÉTICO: los litros sobreviven de principio a fin', () => {
+  // ⚠️ ESTE FIXTURE NO ES UN ECC REAL, y el nombre de esta constante y de este
+  // `describe` lo decían al revés hasta hoy («un ECC12 real», `ECC12_REAL`).
+  // Es un XML construido a mano, verificado contra el XSD oficial en su
+  // ESTRUCTURA: los RFC son de relleno (`edn010101aa1`, `EST010101AAA`), el
+  // UUID es `1111…5555` y el comprobante ni siquiera declara `FormaPago`.
+  // El repo NO tiene —ni ha tenido nunca— un CFDI con complemento ECC emitido
+  // de verdad: no hay un solo archivo `.xml` en el árbol y los otros dos
+  // fixtures ECC (`cfdi_xml.test.ts`, `pruebas-manuales/consolidado-real.
+  // prueba.ts`) son este mismo, con otro nombre.
+  //
+  // Importa decirlo aquí porque el plan de cierre del ciclo pide "prueba de
+  // equivalencia contra un ECC real" Y, con el MISMO documento en la mano,
+  // resolver la pregunta abierta §6.2 (el `FormaPago = 99`). Un fixture que
+  // se llama «real» hace ver esa casilla como palomeada. No lo está: ver
+  // `docs/asistencia/ECC-FORMAPAGO-99.md`.
+  const ECC12_SINTETICO = `<?xml version="1.0" encoding="UTF-8"?>
 <cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" TipoDeComprobante="I" Fecha="2026-04-30T23:59:00" Total="3300.00" SubTotal="2844.83">
   <cfdi:Emisor Rfc="edn010101aa1"/>
   <cfdi:Receptor Rfc="tin950101abc"/>
@@ -405,7 +492,7 @@ describe('FASE 1 — equivalencia contra un ECC12 real: los litros sobreviven de
 </cfdi:Comprobante>`;
 
   it('las 2 líneas de diésel llegan con sus litros exactos y la clave 15101505; la de Magna se queda sin clave', () => {
-    const xml = parseCfdiXml(ECC12_REAL)!;
+    const xml = parseCfdiXml(ECC12_SINTETICO)!;
     expect(xml.lineas).toHaveLength(3);
 
     // Lo que ANTES se leía y se tiraba al persistir (guardarYConciliarConsolidado):

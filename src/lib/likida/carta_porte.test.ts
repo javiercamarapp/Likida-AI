@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   configNoExcedeC2, necesitaCartaPorte, checklistCcp, validarComplemento,
-  generarIdCcp, ID_CCP_RE, CAMPOS_CCP,
+  generarIdCcp, ID_CCP_RE, CAMPOS_CCP, armarBorrador, pesoBrutoDe,
   type EntradaDecision, type DatosChecklist, type ComplementoBorrador,
+  type MercanciaCapturada,
 } from './carta_porte';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -112,12 +113,14 @@ describe('los 37 campos del Apéndice 3', () => {
     expect(c.transportistaListo).toBe(true);
   });
 
-  it('los campos del cliente que Likida no captura salen como faltantes DEL CLIENTE, no se esconden', () => {
+  it('los campos del cliente sin capturar salen como faltantes DEL CLIENTE, no se esconden', () => {
     const c = checklistCcp(DATOS);
-    // peso, mercancías, CP… no tienen casilla en Likida todavía: cuentan.
+    // Desde la 0204 el peso, las mercancías y los CP SÍ tienen casilla —
+    // sin capturar cuentan como FALTA del cliente (`false`), ya no como
+    // "sin casilla en Likida" (`null`).
     expect(c.faltanCliente).toBeGreaterThan(10);
     const peso = c.campos.find((x) => x.clave === 'peso_bruto_total');
-    expect(peso?.presente).toBeNull();
+    expect(peso?.presente).toBe(false);
   });
 
   it('sin unidad asignada, faltan los 8 datos vehiculares y de permiso', () => {
@@ -130,6 +133,107 @@ describe('los 37 campos del Apéndice 3', () => {
     const c = checklistCcp({ ...DATOS, viaje: { ...DATOS.viaje, kmRecorridos: null } });
     const dist = c.campos.find((x) => x.clave === 'total_dist_rec');
     expect(dist?.presente).toBe(false);
+  });
+
+  // ── Los del cliente con casilla desde la 0204 ────────────────────────────
+
+  const MERCANCIA: MercanciaCapturada = {
+    descripcion: 'Cajas de aguacate', bienesTransp: '50301700', cantidad: 120,
+    claveUnidad: 'XBX', pesoKg: 1200, materialPeligroso: false,
+  };
+  const CCP_VIAJE = {
+    origenCp: '64000', destinoCp: '76000', origenEstado: 'Nuevo León',
+    destinoEstado: 'Querétaro', rfcDestinatario: 'DES010101AB1', transpInternac: false,
+  };
+
+  it('con mercancía y datos del cliente completos, el lado del cliente queda en cero faltantes', () => {
+    const c = checklistCcp({ ...DATOS, ccpViaje: CCP_VIAJE, mercancias: [MERCANCIA] });
+    expect(c.faltanCliente).toBe(0);
+  });
+
+  it('el país SOLO se deriva con "no internacional" declarado — sin la declaración, ni MEX se supone', () => {
+    const sinDeclarar = checklistCcp({ ...DATOS, ccpViaje: { ...CCP_VIAJE, transpInternac: null }, mercancias: [MERCANCIA] });
+    expect(sinDeclarar.campos.find((x) => x.clave === 'origen_pais')?.presente).toBe(false);
+    const nacional = checklistCcp({ ...DATOS, ccpViaje: CCP_VIAJE, mercancias: [MERCANCIA] });
+    expect(nacional.campos.find((x) => x.clave === 'origen_pais')?.valor).toBe('MEX');
+  });
+
+  it('una mercancía sin peso tumba el peso bruto TOTAL: una suma parcial no se hace pasar por total', () => {
+    const c = checklistCcp({
+      ...DATOS, ccpViaje: CCP_VIAJE,
+      mercancias: [MERCANCIA, { ...MERCANCIA, pesoKg: null }],
+    });
+    expect(c.campos.find((x) => x.clave === 'peso_bruto_total')?.presente).toBe(false);
+    expect(pesoBrutoDe([MERCANCIA, { ...MERCANCIA, pesoKg: null }])).toBeNull();
+    expect(pesoBrutoDe([MERCANCIA, MERCANCIA])).toBe(2400);
+  });
+});
+
+describe('armarBorrador — el entregable de la Fase C', () => {
+  const MERCANCIA: MercanciaCapturada = {
+    descripcion: 'Cajas de aguacate', bienesTransp: '50301700', cantidad: 120,
+    claveUnidad: 'XBX', pesoKg: 1200, materialPeligroso: false,
+  };
+  const COMPLETO: DatosChecklist = {
+    viaje: { origen: 'Monterrey', destino: 'Querétaro', fechaInicio: '2026-08-14T08:00:00', kmRecorridos: 700 },
+    clienteRfc: 'TME960204P56',
+    unidad: {
+      placas: 'ABC1234', anio: 2019, configVehicular: 'T3S2', pesoBrutoTon: 17.5,
+      aseguradoraRc: 'Qualitas', polizaRcNumero: 'POL-998877',
+      permisoSictTipo: 'TPAF01', permisoSictNumero: '1234567890',
+    },
+    operador: { nombre: 'Juan Pérez', rfc: 'PEPJ800101AAA', licencia: 'LIC123456' },
+    ccpViaje: {
+      origenCp: '64000', destinoCp: '76000', origenEstado: 'Nuevo León',
+      destinoEstado: 'Querétaro', rfcDestinatario: 'DES010101AB1', transpInternac: false,
+    },
+    mercancias: [MERCANCIA],
+  };
+
+  it('con todo capturado arma un borrador de INGRESO que pasa el validador del PAC', () => {
+    const r = armarBorrador(COMPLETO);
+    expect(r.faltantes).toEqual([]);
+    expect(r.borrador).not.toBeNull();
+    expect(r.borrador?.tipoComprobante).toBe('I');
+    expect(r.borrador?.pesoBrutoTotal).toBe(1200);
+    expect(r.borrador?.numTotalMercancias).toBe(1);
+    expect(r.fallas).toEqual([]);
+  });
+
+  it('sin mercancía NO se arma un borrador a medias: null, con el faltante dicho', () => {
+    const r = armarBorrador({ ...COMPLETO, mercancias: [] });
+    expect(r.borrador).toBeNull();
+    expect(r.faltantes.join(' ')).toContain('mercancía');
+  });
+
+  it('la clave SAT que el cliente no ha dado JAMÁS se inventa: el borrador no se arma y lo dice', () => {
+    const r = armarBorrador({ ...COMPLETO, mercancias: [{ ...MERCANCIA, bienesTransp: null }] });
+    expect(r.borrador).toBeNull();
+    expect(r.faltantes.join(' ')).toContain('no se inventa');
+  });
+
+  it('material peligroso sin declarar NO se supone «no»: advierte, y un «sí» declarado también', () => {
+    const sinDeclarar = armarBorrador({ ...COMPLETO, mercancias: [{ ...MERCANCIA, materialPeligroso: null }] });
+    expect(sinDeclarar.advertencias.join(' ')).toContain('sin declarar');
+    const peligroso = armarBorrador({ ...COMPLETO, mercancias: [{ ...MERCANCIA, materialPeligroso: true }] });
+    // Se arma (nada estructural falta) pero el validador marca la póliza de
+    // medio ambiente que el PAC exige — la falla se enseña, no se esconde.
+    expect(peligroso.borrador).not.toBeNull();
+    expect(peligroso.fallas.map((f) => f.campo)).toContain('AseguraMedAmbiente');
+  });
+
+  it('sin RFC del destinatario, sin placas o sin operador: faltantes con nombre y dónde capturarlos', () => {
+    const r = armarBorrador({
+      ...COMPLETO,
+      ccpViaje: { ...(COMPLETO.ccpViaje as NonNullable<DatosChecklist['ccpViaje']>), rfcDestinatario: null },
+      unidad: null,
+      operador: null,
+    });
+    expect(r.borrador).toBeNull();
+    expect(r.faltantes.length).toBeGreaterThanOrEqual(3);
+    expect(r.faltantes.join(' ')).toContain('RFC del destinatario');
+    expect(r.faltantes.join(' ')).toContain('Placas');
+    expect(r.faltantes.join(' ')).toContain('Operador');
   });
 });
 

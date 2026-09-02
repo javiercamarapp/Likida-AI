@@ -1,8 +1,24 @@
 // EL BUS DE MANDO (0127) — lo puro: qué órdenes puede encolar la UI y qué
 // las invalida ANTES de tocar la base (el error debe ser una frase para el
 // teléfono de Javier, no un 23514 de Postgres).
-import { describe, expect, it } from 'vitest';
-import { ORDENES_UI, esOrdenUi, validarOrden } from './bus';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+
+// ADM-12 (auditoría 24, menor): `emailDeActor` — `tu-turno/page.tsx` mandaba
+// `s.userId` (uuid) donde `crearOrden`/`resolverPieza` esperan un correo.
+const respuestas = new Map<string, { email?: string } | null>();
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => ({
+    from: () => ({
+      select: () => ({
+        eq: (_col: string, id: string) => ({
+          maybeSingle: () => Promise.resolve({ data: respuestas.get(id) ?? null, error: null }),
+        }),
+      }),
+    }),
+  }),
+}));
+
+const { ORDENES_UI, esOrdenUi, validarOrden, emailDeActor } = await import('./bus');
 
 describe('bus de mando — órdenes de la UI', () => {
   it('el subconjunto de la UI existe dentro del dominio del CHECK de la 0127', () => {
@@ -31,5 +47,18 @@ describe('bus de mando — órdenes de la UI', () => {
     expect(validarOrden('correr_ahora', 'DOF Diario')).not.toBeNull(); // mayúsculas y espacio
     expect(validarOrden('correr_ahora', 'x')).not.toBeNull();          // muy corto
     expect(validarOrden('kill_switch_on', null)).toBeNull();           // global: sin rutina es válido
+  });
+});
+
+describe('emailDeActor', () => {
+  beforeEach(() => { respuestas.clear(); });
+
+  it('resuelve el correo del uuid', async () => {
+    respuestas.set('u1', { email: 'javier@likida.mx' });
+    expect(await emailDeActor('u1')).toBe('javier@likida.mx');
+  });
+
+  it('sin fila (cuenta borrada, o lectura sin dato) devuelve null — no se inventa un correo', async () => {
+    expect(await emailDeActor('sin-cuenta')).toBeNull();
   });
 });

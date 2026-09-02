@@ -11,7 +11,7 @@ import { contarHuerfanosPendientes } from '@/lib/likida/repo';
 import { getConfig, type LikidaConfig } from '@/lib/likida/config';
 import {
   resolverPeriodo, getGastosFiscales, getGastosFiscalesSeries,
-  resumirPerdidas, resumirFiscal, opcionesDe,
+  resumirPerdidas, resumirFiscal, opcionesDe, ventanaLitrosElegibles,
   type GastoFiscal, type ResumenPerdidas, type ResumenFiscal, type GastosFiscalesSeries,
   type Periodo,
 } from '@/lib/likida/fiscal';
@@ -27,6 +27,8 @@ import { MotorFiscalPeriodo } from '../motor-fiscal-periodo';
 import { AvisoSinFlota } from '../sin-flota';
 import { Bloque, Barra, EsqCifras } from '../bloque';
 import { EstimuloPeaje } from './estimulo-peaje';
+import { PerfilErp } from './perfil-erp';
+import { Timbrado } from './timbrado';
 
 /** Resiliencia por sección: si una consulta falla, devuelve null y la
  *  tarjeta muestra un fallback en vez de tirar toda la pantalla. */
@@ -76,9 +78,11 @@ export async function InicioContador({
   // ejercicio EQUIVOCADO: todo lo fiscal salía en ceros a las 6 de la tarde.
   const hoy = hoyMx(new Date(ahoraMs()));
   const periodoFiscal = resolverPeriodo(undefined, hoy);
-  const diasEjercicio = periodoFiscal.desde
-    ? Math.floor((Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${periodoFiscal.desde}T00:00:00Z`)) / 86_400_000) + 1
-    : undefined;
+  // FE-8 (auditoría 24): misma ventana que `ventanaLitrosElegibles` usa en
+  // combustible-casetas/page.tsx y chat/page.tsx — antes cada pantalla
+  // calculaba "días del ejercicio" a mano, con la misma cita legal (LIF
+  // 2026, Art. 20-A) llegando a cifras distintas entre pantallas.
+  const diasEjercicio = ventanaLitrosElegibles(hoy).dias;
 
   // ── LAS OCHO CONSULTAS, LANZADAS DE UNA (FE-14) ─────────────────────────
   // Sin `await`: salen todas en el mismo tick, igual que en el `Promise.all`
@@ -217,6 +221,14 @@ export async function InicioContador({
               Sin declaración el motor fail-open y pinta un estímulo que
               quizá no toca — esa cifra no puede ser lo primero que se ve. */}
           <EstimuloPeaje searchParams={searchParams} tenantExiste={tenantExiste} />
+
+          {/* PLAN MAESTRO 26-ago, sección B: la plantilla que desbloquea el
+              export a SAP B1/CONTPAQi. Sin ella el export responde 409 para
+              cualquier flota — el lector existía desde la 0178, el escritor
+              es este formulario. */}
+          <PerfilErp searchParams={searchParams} tenantExiste={tenantExiste} />
+
+          <Timbrado searchParams={searchParams} tenantExiste={tenantExiste} sufijo={sufijo} />
 
           {/* Condicional de verdad (solo si hay fuego): sin esqueleto, para no
               reservar un hueco que casi siempre queda vacío. */}

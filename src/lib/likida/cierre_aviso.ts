@@ -127,6 +127,7 @@ export const RUTA_DE_DIFERENCIA: Record<TipoDiferencia, RutaDeAviso> = {
   complemento_hidrocarburos: 'decision',
   ieps_no_desglosado: 'decision',      // sin IEPS desglosado se pierde el estímulo: se pide refacturación
   efectivo_sobre_tope: 'decision',
+  medio_pago_no_admitido: 'decision', // lo confirma el contador: ni deducible ni perdido
   rfc_receptor: 'decision',            // timbrado a otro RFC: se pide refacturación
   rfc_receptor_no_verificable: 'decision', // el RFC de la propia flota no sirve; eso lo arregla el jefe
   alimentacion_transporte_sin_tarjeta_credito: 'decision',
@@ -139,6 +140,8 @@ export const RUTA_DE_DIFERENCIA: Record<TipoDiferencia, RutaDeAviso> = {
   oposicion_titular: 'decision',
   diesel_desviacion: 'decision',       // consumo fuera de rango: puede ser robo
   fecha_sospechosa: 'decision',        // un ticket de otro viaje cobrado aquí es dinero mal asignado
+  gasto_otro_ejercicio: 'decision',    // no deducible en este ejercicio; solo el jefe decide qué hacer con el papel
+  iva_mes_del_pago: 'panel',           // información contable de periodo — la asienta el contador, no la decide el jefe en WhatsApp
   texto_sospechoso: 'decision',        // el papel traía texto dirigido al extractor: lo ve una persona
   renglones_ajenos: 'decision',        // canasta mixta: ¿se le repone todo al operador y qué parte es deducible? Solo el jefe decide
 

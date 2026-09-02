@@ -12,13 +12,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 //    se grita en el log.
 // ═══════════════════════════════════════════════════════════════════════════
 
-type Registro = { tabla: string; op: string; payload: Record<string, unknown> | null; eq: Array<[string, unknown]>; is: Array<[string, unknown]> };
+type Registro = { tabla: string; op: string; payload: Record<string, unknown> | null; eq: Array<[string, unknown]>; is: Array<[string, unknown]>; inn: Array<[string, unknown]> };
 const llamadas: Registro[] = [];
 const respuestas = new Map<string, Array<{ data: unknown; error: { code?: string; message: string } | null }>>();
 const logs = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
 function builder(tabla: string) {
-  const r: Registro = { tabla, op: 'select', payload: null, eq: [], is: [] };
+  const r: Registro = { tabla, op: 'select', payload: null, eq: [], is: [], inn: [] };
   const responder = () => {
     const cola = respuestas.get(tabla);
     return cola && cola.length > 0 ? cola.shift()! : { data: [], error: null };
@@ -28,11 +28,14 @@ function builder(tabla: string) {
     insert: (p: Record<string, unknown>) => { r.op = 'insert'; r.payload = p; llamadas.push(r); return b; },
     update: (p: Record<string, unknown>) => { r.op = 'update'; r.payload = p; llamadas.push(r); return b; },
     delete: () => { r.op = 'delete'; llamadas.push(r); return b; },
-    select: () => b,
+    // Una LECTURA también se registra: `rebotesRecientes` no escribe nada, y
+    // sin esto no habría forma de comprobar contra qué filtra.
+    select: () => { if (r.op === 'select' && !llamadas.includes(r)) llamadas.push(r); return b; },
     eq: (c: string, v: unknown) => { r.eq.push([c, v]); return b; },
     neq: () => b,
     not: () => b,
     is: (c: string, v: unknown) => { r.is.push([c, v]); return b; },
+    in: (c: string, v: unknown) => { r.inn.push([c, v]); return b; },
     gte: () => b,
     lte: () => b,
     order: () => b,
@@ -60,8 +63,12 @@ let resultadoEnvio: { ok: true; id: string } | { ok: false; motivo: 'rechazado' 
 const enviarCorreo = vi.fn<(...a: unknown[]) => Promise<typeof resultadoEnvio>>(async () => resultadoEnvio);
 vi.mock('@/lib/correo/enviar', () => ({ enviarCorreo: (...a: unknown[]) => enviarCorreo(...a) }));
 
-const { encolarPieza, aprobarPieza, rechazarPieza, marcarEnviada, enviarPiezaPorCorreo } = await import('./cola');
+const {
+  encolarPieza, aprobarPieza, rechazarPieza, marcarEnviada, enviarPiezaPorCorreo,
+  rebotesRecientes, correosSuprimidos, aprobadasSinEnviar, TIPOS_ENVIABLES,
+} = await import('./cola');
 const { DatoInvalido } = await import('../errores');
+const { verificarBaja } = await import('@/lib/correo/baja');
 
 const de = (tabla: string, op: string) => llamadas.filter((l) => l.tabla === tabla && l.op === op);
 
@@ -72,6 +79,11 @@ beforeEach(() => {
   logs.error.mockClear();
   enviarCorreo.mockClear();
   resultadoEnvio = { ok: true, id: 're_123' };
+  // La liga de baja de un clic (0266) es OBLIGATORIA para toda campaña — el
+  // grueso de las pruebas de este archivo no es sobre ESE candado, así que
+  // aquí queda configurado por default; el describe dedicado más abajo lo
+  // desconfigura a propósito para probar el fail-closed.
+  process.env.LIKIDA_BAJA_SECRET = 'clave-de-prueba-cola';
 });
 
 describe('encolarPieza', () => {
@@ -169,7 +181,7 @@ describe('marcarEnviada — el eslabón con el historial de contactos (0118)', (
 
 describe('enviarPiezaPorCorreo — el envío REAL (0120, P1 de la auditoría externa)', () => {
   const FILA = {
-    id: 'p-1', titulo: 'Correo día 0', cuerpo: 'Hola,\n\nvi su vacante.', cuerpo_final: null,
+    id: 'p-1', tipo: 'correo_frio', titulo: 'Correo día 0', cuerpo: 'Hola,\n\nvi su vacante.', cuerpo_final: null,
     agente: 'ventas', prospecto_id: 'pr-9', prospecto: { empresa: 'Transportes X', correo: 'contacto@x.mx' },
   };
 
@@ -234,7 +246,7 @@ describe('enviarPiezaPorCorreo — el envío REAL (0120, P1 de la auditoría ext
 
 describe('la guardia de cadencia, ATÓMICA (0124) — una transacción decide, no un SELECT', () => {
   const FILA_G = {
-    id: 'p-1', titulo: 'Correo día 2', cuerpo: 'Seguimiento.', cuerpo_final: null,
+    id: 'p-1', tipo: 'correo_seguimiento', titulo: 'Correo día 2', cuerpo: 'Seguimiento.', cuerpo_final: null,
     agente: 'ventas', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'c@x.mx' },
   };
 
@@ -288,7 +300,7 @@ describe('la guardia de cadencia, ATÓMICA (0124) — una transacción decide, n
 
 describe('el tope diario de correo frío (Fase 2: 20-40/día, configurable)', () => {
   const FILA_T = {
-    id: 'p-1', titulo: 'Correo frío', cuerpo: 'Hola.', cuerpo_final: null,
+    id: 'p-1', tipo: 'correo_frio', titulo: 'Correo frío', cuerpo: 'Hola.', cuerpo_final: null,
     agente: 'redactor', prioridad: 'normal', prospecto_id: null, prospecto: { empresa: 'X', correo: 'c@x.mx' },
   };
   const envAntes = process.env.LIKIDA_TOPE_CORREO_FRIO_DIA;
@@ -340,5 +352,259 @@ describe('el tope diario de correo frío (Fase 2: 20-40/día, configurable)', ()
     ]);
     await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/tope diario/i);
     expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA FABLE CICLO 5 — los bordes de la puerta de salida.
+// ═══════════════════════════════════════════════════════════════════════════
+const { porQueLoRecibes, verificarFormatoCampana } = await import('./cola');
+
+describe('c5-1 — la lista de bajas EN LA PUERTA (camino humano incluido)', () => {
+  const FILA_B = {
+    id: 'p-1', tipo: 'correo_frio', titulo: 'Correo día 0', cuerpo: 'Hola.', cuerpo_final: null,
+    agente: 'redactor', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'contacto@x.mx' },
+  };
+
+  it('el principal suprimido: la pieza NO sale, el claim se revierte y se dice por qué', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_B], error: null },   // el claim
+      { data: null, error: null },       // la reversión
+    ]);
+    respuestas.set('correo_suprimido', [{ data: [{ correo: 'contacto@x.mx' }], error: null }]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/lista de bajas/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+    const reversion = de('cola_aprobacion', 'update')[1];
+    expect(reversion.payload).toMatchObject({ enviado_en: null });
+  });
+
+  it('la lista ilegible = NO se manda (fail closed), también en el camino humano', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_B], error: null },
+      { data: null, error: null },
+    ]);
+    respuestas.set('correo_suprimido', [{ data: null, error: { message: 'base caída' } }]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/lista de bajas/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+
+  it('una copia suprimida se cae del envío sin frenar al principal', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_B], error: null },
+      { data: null, error: null },       // la prueba (provider id)
+    ]);
+    respuestas.set('correo_suprimido', [{ data: [{ correo: 'muerto@x.mx' }], error: null }]);
+    const r = await enviarPiezaPorCorreo('p-1', 'u-1', ['muerto@x.mx', 'vivo@x.mx']);
+    expect(r.ok).toBe(true);
+    const [para] = enviarCorreo.mock.calls[0] as unknown as [string[]];
+    expect(para).toContain('vivo@x.mx');
+    expect(para).not.toContain('muerto@x.mx');
+  });
+});
+
+describe('c5-3 — el timeout de Resend es AMBIGUO: ni reversión ni reenvío automático', () => {
+  const FILA_R = {
+    id: 'p-1', tipo: 'correo_frio', titulo: 'Correo día 0', cuerpo: 'Hola.', cuerpo_final: null,
+    agente: 'redactor', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'contacto@x.mx' },
+  };
+
+  it("motivo 'red': el claim se QUEDA, la reserva de cadencia NO se borra, y el error dice 'verificar en Resend'", async () => {
+    resultadoEnvio = { ok: false, motivo: 'red', detalle: 'The operation was aborted due to timeout' };
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_R], error: null },   // el claim
+      { data: null, error: null },       // la anotación del ambiguo (envio_error)
+    ]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/verificar en resend/i);
+    // La reserva de la RPC NO se compensó: cero deletes sobre el historial.
+    expect(de('prospecto_contacto', 'delete')).toHaveLength(0);
+    // El segundo update anota el ambiguo SIN tocar enviado_en (el claim vive).
+    const anotacion = de('cola_aprobacion', 'update')[1];
+    expect(anotacion.payload).not.toHaveProperty('enviado_en');
+    expect(String((anotacion.payload as { envio_error: string }).envio_error)).toMatch(/AMBIGUO/);
+  });
+
+  it('la llave de idempotencia viaja con el envío (el reintento humano es seguro)', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_R], error: null },
+      { data: null, error: null },
+    ]);
+    await enviarPiezaPorCorreo('p-1', 'u-1');
+    const opciones = enviarCorreo.mock.calls[0][2] as { idempotencyKey?: string };
+    expect(opciones?.idempotencyKey).toBe('pieza-p-1');
+  });
+});
+
+describe('c5-5 — el pie dice POR QUÉ según la fuente real, jamás una vacante que no consta', () => {
+  it('con vacante capturada, la vacante; sin ella, jamás', () => {
+    expect(porQueLoRecibes('censo', 'Liquidador de viajes')).toMatch(/vacante/);
+    expect(porQueLoRecibes('censo', null)).not.toMatch(/vacante/);
+    expect(porQueLoRecibes('censo', null)).toMatch(/directorios públicos/);
+    expect(porQueLoRecibes('landing', null)).toMatch(/calculadora/);
+    expect(porQueLoRecibes('landing', null)).not.toMatch(/vacante/);
+    // La instrucción de BAJA va SIEMPRE.
+    for (const pie of [porQueLoRecibes('censo', 'x'), porQueLoRecibes('landing', null), porQueLoRecibes(null, null)]) {
+      expect(pie).toMatch(/BAJA/);
+    }
+  });
+
+  it('el envío usa la fuente del prospecto (landing → calculadora, sin vacante inventada)', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [{
+        id: 'p-1', tipo: 'correo_frio', titulo: 'T', cuerpo: 'C', cuerpo_final: null, agente: 'redactor',
+        prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'c@x.mx', fuente: 'landing', vacante: null },
+      }], error: null },
+      { data: null, error: null },
+    ]);
+    await enviarPiezaPorCorreo('p-1', 'u-1');
+    const correo = enviarCorreo.mock.calls[0][1] as { porQueLoRecibes: string };
+    expect(correo.porQueLoRecibes).toMatch(/calculadora/);
+    expect(correo.porQueLoRecibes).not.toMatch(/vacante/);
+  });
+});
+
+describe('c5-14 — el formato de campaña se verifica también EN LA PUERTA', () => {
+  it('un cuerpo_final editado con guion largo NO sale: claim revertido y dicho', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [{
+        id: 'p-1', tipo: 'correo_frio', titulo: 'T', cuerpo: 'C', cuerpo_final: 'Edición humana — con guion largo.',
+        agente: 'redactor', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'c@x.mx' },
+      }], error: null },
+      { data: null, error: null },
+    ]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/guion largo/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+
+  it('AGB-4: una pieza que NO es de campaña (p. ej. un parte interno) se RECHAZA de plano — no hay verificador de formato que la salve, porque no debe salir del todo', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [{
+        id: 'p-1', tipo: 'parte_costos', titulo: 'Costos — 2026-08-27', cuerpo: 'Parte — con guiones.', cuerpo_final: null,
+        agente: 'control_costos', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'c@x.mx' },
+      }], error: null },
+      { data: null, error: null },
+    ]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/parte interno/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+
+  it('verificarFormatoCampana vive en la cola y caza los dos guardarraíles', () => {
+    expect(() => verificarFormatoCampana('nuestros clientes reales')).toThrow(/clientes reales/);
+    expect(() => verificarFormatoCampana('texto — con raya')).toThrow(/guion largo/);
+    expect(() => verificarFormatoCampana('en pláticas con transportistas')).not.toThrow();
+  });
+
+  it('AGB-2: un cuerpo con "Transportes Innovativos" o "Grupo GAL" lanza DatoInvalido — TRACCION_PUBLICABLE vacía por default', () => {
+    expect(() => verificarFormatoCampana('Ya estamos en pláticas con Transportes Innovativos.')).toThrow(/tracción/);
+    expect(() => verificarFormatoCampana('Trabajamos con Grupo GAL desde hace meses.')).toThrow(/tracción/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS REBOTES, LEÍBLES (agosto-2026). El webhook de Resend (0124) escribía
+// `entrega_estado` y llenaba `correo_suprimido` (0217) desde hacía meses, y
+// no había un solo lector: el operador no podía enterarse de que un dominio
+// estaba rebotando. Lo que se fija aquí es lo que la pantalla necesita para
+// no mentir: que se filtre por los DOS estados malos, que rebote y queja no
+// se fundan, y que un error de lectura LANCE en vez de devolver [].
+// ═══════════════════════════════════════════════════════════════════════════
+describe('rebotesRecientes y correosSuprimidos — lo que Resend ya sabía', () => {
+  it('filtra por rebotado Y queja, y las distingue en el resultado', async () => {
+    respuestas.set('cola_aprobacion', [{
+      data: [
+        { id: 'p-1', tipo: 'correo_frio', prioridad: 'normal', agente: 'sdr', titulo: 't', cuerpo: 'c', estado: 'aprobado', creado_en: '2026-08-20T00:00:00Z', entrega_estado: 'rebotado', entrega_evento_en: '2026-08-21T00:00:00Z' },
+        { id: 'p-2', tipo: 'correo_frio', prioridad: 'normal', agente: 'sdr', titulo: 't', cuerpo: 'c', estado: 'aprobado', creado_en: '2026-08-19T00:00:00Z', entrega_estado: 'queja', entrega_evento_en: '2026-08-20T00:00:00Z' },
+      ],
+      error: null,
+    }]);
+    const r = await rebotesRecientes(15);
+    expect(r.map((p) => p.entregaEstado)).toEqual(['rebotado', 'queja']);
+
+    const lectura = llamadas.find((l) => l.tabla === 'cola_aprobacion' && l.op === 'select')!;
+    expect(lectura.inn).toEqual([['entrega_estado', ['rebotado', 'queja']]]);
+  });
+
+  it('un error de lectura LANZA: una lista vacía diría «no hay rebotes»', async () => {
+    respuestas.set('cola_aprobacion', [{ data: null, error: { message: 'fetch failed' } }]);
+    await expect(rebotesRecientes()).rejects.toThrow(/rebotesRecientes: fetch failed/);
+  });
+
+  it('la lista de bajas trae el MOTIVO — sin él, «ya no le escribimos» no se puede auditar', async () => {
+    respuestas.set('correo_suprimido', [{
+      data: [{ correo: 'quien@flota.mx', motivo: 'queja de spam (webhook Resend)', creado_en: '2026-08-21T00:00:00Z' }],
+      error: null,
+    }]);
+    const r = await correosSuprimidos();
+    expect(r).toEqual([{ correo: 'quien@flota.mx', motivo: 'queja de spam (webhook Resend)', creadoEn: '2026-08-21T00:00:00Z' }]);
+  });
+
+  it('la lista de bajas también LANZA ante error de lectura', async () => {
+    respuestas.set('correo_suprimido', [{ data: null, error: { message: 'timeout' } }]);
+    await expect(correosSuprimidos()).rejects.toThrow(/correosSuprimidos: timeout/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA LIGA DE BAJA DE UN CLIC (envío autónomo acotado, 0266) — obligatoria en
+// campaña, ausente en el resto: el cumplimiento no es un adorno que se pueda
+// dejar para después.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la liga de baja — obligatoria en campaña, fail-closed sin secreto', () => {
+  const FILA_CAMPANA = {
+    id: 'p-1', tipo: 'correo_frio', titulo: 'Correo día 0', cuerpo: 'Hola.', cuerpo_final: null,
+    agente: 'redactor', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'contacto@x.mx' },
+  };
+  const FILA_NO_CAMPANA = {
+    id: 'p-2', tipo: 'parte_costos', titulo: 'Costos', cuerpo: 'Parte.', cuerpo_final: null,
+    agente: 'control_costos', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'contacto@x.mx' },
+  };
+
+  it('sin LIKIDA_BAJA_SECRET configurado, la campaña NO sale — el claim se revierte y se dice por qué', async () => {
+    delete process.env.LIKIDA_BAJA_SECRET;
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_CAMPANA], error: null },   // el claim
+      { data: null, error: null },             // la reversión
+    ]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/LIKIDA_BAJA_SECRET/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+    const reversion = de('cola_aprobacion', 'update')[1];
+    expect(reversion.payload).toMatchObject({ enviado_en: null });
+  });
+
+  it('con el secreto puesto, el correo de campaña lleva `bajaHref` verificable y las cabeceras List-Unsubscribe', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_CAMPANA], error: null },
+      { data: null, error: null },
+    ]);
+    await enviarPiezaPorCorreo('p-1', 'u-1');
+    const [, correo, opciones] = enviarCorreo.mock.calls[0] as unknown as [string[], { bajaHref?: string }, { listaBajaUrl?: string }];
+    expect(correo.bajaHref).toBeDefined();
+    expect(opciones.listaBajaUrl).toBe(correo.bajaHref);
+    const url = new URL(correo.bajaHref!);
+    expect(verificarBaja(url.searchParams.get('e')!, url.searchParams.get('t')!)).toBe(true);
+  });
+
+  it('AGB-4: una pieza que NO es de campaña se rechaza por el candado de TIPO, ANTES de llegar a la liga de baja — hoy TIPOS_ENVIABLES = TIPOS_CAMPANA, así que "no campaña" y "no enviable" son lo mismo', async () => {
+    delete process.env.LIKIDA_BAJA_SECRET;
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_NO_CAMPANA], error: null },
+      { data: null, error: null },
+    ]);
+    await expect(enviarPiezaPorCorreo('p-2', 'u-1')).rejects.toThrow(/parte interno/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+});
+
+describe('AGB-4 — aprobadasSinEnviar solo lista lo ENVIABLE', () => {
+  it('la consulta filtra por TIPOS_ENVIABLES — un `ficha_prospecto` aprobado no aparece en "Aprobadas por enviar"', async () => {
+    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    await aprobadasSinEnviar();
+    const select = de('cola_aprobacion', 'select')[0];
+    expect(select.inn).toContainEqual(['tipo', [...TIPOS_ENVIABLES]]);
+  });
+
+  it('TIPOS_ENVIABLES no incluye los tipos internos que ya salieron hacia el prospecto en producción', () => {
+    for (const interno of ['ficha_prospecto', 'brief_demo', 'propuesta_comercial']) {
+      expect(TIPOS_ENVIABLES).not.toContain(interno);
+    }
   });
 });

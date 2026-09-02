@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation';
 import { Bug } from 'lucide-react';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { leerCorrida, leerManifiesto, firmarRuta, BUCKET_QA_FOTOS } from '@/lib/admin/qa-storage';
+import { leerCorrida, leerManifiesto, leerLecturasDeCorrida, firmarRutas, BUCKET_QA_FOTOS } from '@/lib/admin/qa-storage';
+import { resumenDeLecturas } from '@/lib/admin/qa-medicion';
+import type { ResumenPrecisionCorrida } from '@/lib/admin/qa-verdad';
 import { BarraPagina } from '../../../dashboard/resumen-visual';
 import { EstadoError } from '../../ui/kit';
 import { CorridaViva, type FotoFirmada, type PdfFirmado } from './corrida-viva';
@@ -41,26 +43,52 @@ export default async function CorridaQaPage({ params }: { params: Promise<{ id: 
 
   // La evidencia firmada de la primera pintada (el polling la refresca).
   //
-  // FE-14 (22-ago-2026): el `for` firmaba las rutas UNA POR UNA —cada
-  // `firmarRuta` es un viaje a Storage— así que una corrida de 20 fotos
-  // sumaba 20 viajes en serie antes del primer byte. Se firman en paralelo;
-  // el orden lo preserva `map`, que es el que la pantalla enseña.
+  // FE-14 (22-ago-2026) puso las firmas en paralelo para no pagar 20 viajes
+  // EN SERIE; el incidente del 28-ago-2026 (corrida 46ad99ca) enseñó el otro
+  // filo: ~90 firmas EN PARALELO por pintada + el poll de /estado saturaban
+  // el pool de Storage API («Too many connections issued to the database», 10
+  // fotos del carril rebotadas). La forma correcta era la tercera: UN solo
+  // request que firma todas (`firmarRutas`). El orden lo preserva el `map`
+  // sobre `fotoIds`, que es el que la pantalla enseña.
   const manifiesto = await leerManifiesto(db);
   const porId = manifiesto.ok ? new Map(manifiesto.datos.map((f) => [f.id, f])) : null;
-  const fotos: FotoFirmada[] = porId === null ? [] : await Promise.all(
-    corrida.parametros.fotoIds.map(async (fotoId) => {
-      const f = porId.get(fotoId);
-      return {
-        id: fotoId,
-        etiqueta: f?.etiqueta ?? '(ya no está en el banco)',
-        url: f ? await firmarRuta(db, BUCKET_QA_FOTOS, f.path) : null,
-      };
-    }),
+  const urls = porId === null ? new Map<string, string | null>() : await firmarRutas(
+    db, BUCKET_QA_FOTOS,
+    corrida.parametros.fotoIds.map((id) => porId.get(id)?.path).filter((p): p is string => p !== undefined),
   );
-  const pdfs: PdfFirmado[] = await Promise.all((corrida.pdfs ?? []).map(async (path) => ({
+  const fotos: FotoFirmada[] = porId === null ? [] : corrida.parametros.fotoIds.map((fotoId) => {
+    const f = porId.get(fotoId);
+    return {
+      id: fotoId,
+      etiqueta: f?.etiqueta ?? '(ya no está en el banco)',
+      url: f ? urls.get(f.path) ?? null : null,
+    };
+  });
+  const urlsPdf = await firmarRutas(db, 'liquidaciones', corrida.pdfs ?? []);
+  const pdfs: PdfFirmado[] = (corrida.pdfs ?? []).map((path) => ({
     path,
-    url: await firmarRuta(db, 'liquidaciones', path),
-  })));
+    url: urlsPdf.get(path) ?? null,
+  }));
 
-  return <CorridaViva corridaInicial={corrida} fotosIniciales={fotos} pdfsIniciales={pdfs} />;
+  // LA PRECISIÓN MEDIDA (qa_foto_lectura) de la primera pintada. Importa
+  // sobre todo en una corrida TERMINADA, donde el polling ya no corre y esta
+  // lectura es la única. Cero lecturas = todavía sin medir (null); un fallo
+  // de lectura se dice aparte, jamás como "sin medir".
+  let medicionInicial: ResumenPrecisionCorrida | null = null;
+  let medicionErrorInicial: string | null = null;
+  const lecturas = await leerLecturasDeCorrida(db, id);
+  if (!lecturas.ok) medicionErrorInicial = lecturas.error;
+  else if (lecturas.datos.length > 0) {
+    medicionInicial = resumenDeLecturas(lecturas.datos, manifiesto.ok ? manifiesto.datos : []);
+  }
+
+  return (
+    <CorridaViva
+      corridaInicial={corrida}
+      fotosIniciales={fotos}
+      pdfsIniciales={pdfs}
+      medicionInicial={medicionInicial}
+      medicionErrorInicial={medicionErrorInicial}
+    />
+  );
 }

@@ -12,6 +12,16 @@ vi.mock('./session', () => ({ getSessionTenant: (...a: unknown[]) => getSessionT
 const leerSeleccionFlota = vi.fn(async (): Promise<string | null> => null);
 vi.mock('./admin-context', () => ({ leerSeleccionFlota: () => leerSeleccionFlota() }));
 
+// SEG-3 (auditoría 24): el veredicto del segundo factor se controla desde
+// aquí; `mfaSuperadminObligatorio` se deja REAL para que la palanca de env sea
+// la que se prueba, no un mock de ella.
+const veredictoMfa = vi.fn(async (): Promise<string> => 'ok');
+vi.mock('./mfa', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  veredictoMfaSuperadmin: () => veredictoMfa(),
+}));
+vi.mock('@/lib/supabase/server', () => ({ supabaseServer: async () => ({}) }));
+
 const { requireSessionTenant, requireSuperadmin } = await import('./guard');
 
 describe('requireSessionTenant', () => {
@@ -81,16 +91,46 @@ describe('requireSessionTenant', () => {
     expect(redirect).toHaveBeenCalledWith(`/admin/elegir-flota?next=${encodeURIComponent('/dashboard')}`);
   });
 
-  it('el "ver como" auditado SIGUE: con `?tenant=`/`?vista=demo`/`?rol=`, la base demo de tenant-efectivo', async () => {
+  it('el "ver como" auditado SIGUE: con `?tenant=`/`?vista=demo`, la base demo de tenant-efectivo', async () => {
     vi.stubEnv('DEMO_TENANT_ID', 'demo-tenant-id');
     getSessionTenant.mockResolvedValue(SUPER);
-    for (const sp of [{ tenant: 't-7' }, { vista: 'demo' }, { rol: 'contador' }]) {
+    for (const sp of [{ tenant: 't-7' }, { vista: 'demo' }]) {
       const r = await requireSessionTenant('/dashboard', sp);
       expect(r.tenantId).toBe('demo-tenant-id');
     }
     expect(redirect).not.toHaveBeenCalled();
     // Y la cookie NI SE LEE en ese camino: el preview no depende de ella.
     expect(leerSeleccionFlota).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
+  // ── ADM-11 (auditoría 24): `?rol=` es cambiar de OJOS, no de FLOTA ──────
+  it('`?rol=` SOLO, con flota elegida, se queda en esa flota (antes saltaba a la demo en silencio)', async () => {
+    vi.stubEnv('DEMO_TENANT_ID', 'demo-tenant-id');
+    getSessionTenant.mockResolvedValue(SUPER);
+    leerSeleccionFlota.mockResolvedValue('t-innovativos');
+    const r = await requireSessionTenant('/dashboard', { rol: 'contador' });
+    expect(r.tenantId).toBe('t-innovativos');
+    expect(redirect).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
+  it('`?rol=` SOLO y SIN flota elegida sigue cayendo a la demo (de ahí vienen esos links), no al selector', async () => {
+    vi.stubEnv('DEMO_TENANT_ID', 'demo-tenant-id');
+    getSessionTenant.mockResolvedValue(SUPER);
+    leerSeleccionFlota.mockResolvedValue(null);
+    const r = await requireSessionTenant('/dashboard', { rol: 'encargado' });
+    expect(r.tenantId).toBe('demo-tenant-id');
+    expect(redirect).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
+  it('`?tenant=` gana sobre la cookie: el preview explícito manda', async () => {
+    vi.stubEnv('DEMO_TENANT_ID', 'demo-tenant-id');
+    getSessionTenant.mockResolvedValue(SUPER);
+    leerSeleccionFlota.mockResolvedValue('t-innovativos');
+    const r = await requireSessionTenant('/dashboard', { tenant: 't-7', rol: 'contador' });
+    expect(r.tenantId).toBe('demo-tenant-id');
     vi.unstubAllEnvs();
   });
 
@@ -133,6 +173,88 @@ describe('requireSuperadmin', () => {
     getSessionTenant.mockResolvedValue(s);
     await expect(requireSuperadmin()).resolves.toEqual(s);
     expect(redirect).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SEG-3 (auditoría 24) — MFA OBLIGATORIO PARA SUPERADMIN, DETRÁS DE PALANCA.
+//
+// Lo que se fija: (a) con la palanca APAGADA no cambia nada ni se pregunta
+// nada — el default no puede dejar a Javier fuera de su consola; (b) con la
+// palanca puesta, sin factor / en AAL1 / sin poder preguntar, las dos puertas
+// rebotan a Mi perfil diciendo cuál de los tres casos es; (c) Mi perfil, que
+// es donde se inscribe, NO se gatea — o sería un círculo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('MFA obligatorio para superadmin (SEG-3)', () => {
+  const SUPER = { userId: 'u-2', tenantId: null, rol: 'superadmin', nombre: 'Javier' };
+  beforeEach(() => {
+    redirect.mockClear(); getSessionTenant.mockReset(); veredictoMfa.mockReset();
+    veredictoMfa.mockResolvedValue('ok');
+    leerSeleccionFlota.mockReset(); leerSeleccionFlota.mockResolvedValue('t-elegida');
+    vi.unstubAllEnvs();
+  });
+
+  it('palanca APAGADA: entra igual que siempre y ni se pregunta por el factor', async () => {
+    getSessionTenant.mockResolvedValue(SUPER);
+    veredictoMfa.mockResolvedValue('inscribir');
+    await expect(requireSuperadmin()).resolves.toEqual(SUPER);
+    await requireSessionTenant('/dashboard');
+    expect(veredictoMfa).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it('un valor distinto de "obligatorio" NO enciende la exigencia', async () => {
+    for (const v of ['true', '1', 'si', 'Obligatorios']) {
+      vi.stubEnv('LIKIDA_SUPERADMIN_MFA', v);
+      getSessionTenant.mockResolvedValue(SUPER);
+      veredictoMfa.mockResolvedValue('inscribir');
+      await expect(requireSuperadmin()).resolves.toEqual(SUPER);
+    }
+    expect(veredictoMfa).not.toHaveBeenCalled();
+  });
+
+  it.each(['inscribir', 'retar', 'no_verificable'])(
+    'palanca puesta y veredicto %s: /admin rebota a Mi perfil diciendo cuál es el caso',
+    async (veredicto) => {
+      vi.stubEnv('LIKIDA_SUPERADMIN_MFA', 'obligatorio');
+      getSessionTenant.mockResolvedValue(SUPER);
+      veredictoMfa.mockResolvedValue(veredicto);
+      await expect(requireSuperadmin()).rejects.toThrow('NEXT_REDIRECT');
+      expect(redirect).toHaveBeenCalledWith(`/dashboard/mi-perfil?exige=${veredicto}`);
+    });
+
+  it('palanca puesta y sin factor: /dashboard también rebota — no hay puerta trasera por el panel', async () => {
+    vi.stubEnv('LIKIDA_SUPERADMIN_MFA', 'obligatorio');
+    getSessionTenant.mockResolvedValue(SUPER);
+    veredictoMfa.mockResolvedValue('inscribir');
+    await expect(requireSessionTenant('/dashboard/viajes')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith('/dashboard/mi-perfil?exige=inscribir');
+  });
+
+  it('Mi perfil NO se gatea, y sin flota elegida resuelve a la demo: si no, el rebote sería un círculo', async () => {
+    vi.stubEnv('LIKIDA_SUPERADMIN_MFA', 'obligatorio');
+    vi.stubEnv('DEMO_TENANT_ID', 'demo-tenant-id');
+    leerSeleccionFlota.mockResolvedValue(null);
+    getSessionTenant.mockResolvedValue(SUPER);
+    veredictoMfa.mockResolvedValue('inscribir');
+    const r = await requireSessionTenant('/dashboard/mi-perfil');
+    expect(r.tenantId).toBe('demo-tenant-id');
+    expect(redirect).not.toHaveBeenCalled();
+    expect(veredictoMfa).not.toHaveBeenCalled();
+  });
+
+  it('con factor y sesión en AAL2 (veredicto ok) entra sin rebote', async () => {
+    vi.stubEnv('LIKIDA_SUPERADMIN_MFA', 'obligatorio');
+    getSessionTenant.mockResolvedValue(SUPER);
+    await expect(requireSuperadmin()).resolves.toEqual(SUPER);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it('un rol que NO es superadmin nunca pasa por esta exigencia', async () => {
+    vi.stubEnv('LIKIDA_SUPERADMIN_MFA', 'obligatorio');
+    getSessionTenant.mockResolvedValue({ userId: 'u-1', tenantId: 't-1', rol: 'flota_admin', nombre: 'Ana' });
+    await requireSessionTenant('/dashboard');
+    expect(veredictoMfa).not.toHaveBeenCalled();
   });
 });
 

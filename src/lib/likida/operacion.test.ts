@@ -98,6 +98,7 @@ const {
   getTableroOperacion, cambiarEstadoIncidencia, crearViaje, asignarUnidad, getPods, rechazarPod,
   DIAS_LIQUIDADOS_CARGA, LIMITE_INCIDENCIAS,
   marcarPodPedido, crearIncidencia, validarUnidad, crearUnidad, editarUnidad,
+  cambiarEstadoUnidad, ESTADOS_UNIDAD,
 } = await import('./operacion');
 const { DatoInvalido } = await import('./errores');
 
@@ -523,6 +524,7 @@ describe('escrituras', () => {
 const CRUDO_VACIO = {
   numeroEconomico: '', placas: '', marca: '', modelo: '', anio: '',
   polizaVence: '', permisoSictVence: '', verificacionVence: '',
+  gpsProveedor: '', gpsDeviceId: '',
 };
 const HOY = new Date('2026-08-14T12:00:00Z');
 
@@ -532,6 +534,7 @@ describe('validarUnidad — la regla pura del formulario', () => {
     expect(v).toEqual({
       numeroEconomico: '47', placas: null, marca: null, modelo: null, anio: null,
       polizaVence: null, permisoSictVence: null, verificacionVence: null,
+      gpsProveedor: null, gpsDeviceId: null,
     });
   });
 
@@ -575,8 +578,33 @@ describe('crearUnidad y editarUnidad — el escritor del panel', () => {
       tenant_id: 't-1', numero_economico: '47', placas: 'ABC-123-A', marca: 'Kenworth',
       modelo: 'T680', anio: 2019,
       poliza_vence: '2026-12-01', permiso_sict_vence: null, verificacion_vence: '2027-01-15',
+      // Sin amarre de GPS capturado, las dos columnas de la 0176 salen `null`
+      // —no cadena vacía—: el poller filtra por `gps_proveedor`, y un '' sería
+      // un proveedor que no existe.
+      gps_proveedor: null, gps_device_id: null,
     });
     expect(id).toBe('unidad-nuevo');
+  });
+
+  it('crearUnidad escribe el amarre de GPS cuando viene completo', async () => {
+    await crearUnidad('t-1', { ...UNIDAD, gpsProveedor: 'samsara', gpsDeviceId: '281474976710656' });
+    const w = escrituras.find((e) => e.tabla === 'unidad')!;
+    expect(w.valores).toMatchObject({ gps_proveedor: 'samsara', gps_device_id: '281474976710656' });
+  });
+
+  it('un dispositivo SIN proveedor no llega al insert — el poller nunca lo casaría', async () => {
+    await expect(crearUnidad('t-1', { ...UNIDAD, gpsDeviceId: '123' })).rejects.toThrow(/no el proveedor de GPS/);
+    expect(escrituras.find((e) => e.tabla === 'unidad')).toBeUndefined();
+  });
+
+  it('un proveedor SIN dispositivo tampoco: las posiciones llegarían huérfanas', async () => {
+    await expect(crearUnidad('t-1', { ...UNIDAD, gpsProveedor: 'samsara' })).rejects.toThrow(/número de dispositivo/);
+    expect(escrituras.find((e) => e.tabla === 'unidad')).toBeUndefined();
+  });
+
+  it('un proveedor fuera del catálogo se rechaza con la lista de los que sí hay', async () => {
+    await expect(crearUnidad('t-1', { ...UNIDAD, gpsProveedor: 'inventado', gpsDeviceId: '1' }))
+      .rejects.toThrow(/no es un proveedor de rastreo del catálogo/);
   });
 
   it('crearUnidad YA VALIDA: un número económico vacío no llega al insert', async () => {
@@ -652,5 +680,132 @@ describe('marcarPodPedido y crearIncidencia — el candado de pertenencia', () =
       'crearIncidencia: el viaje no pertenece a esta flota',
     );
     expect(escrituras.filter((e) => e.tabla === 'incidencia')).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 20 · H4 (MEDIO-ALTO) — `cambiarEstadoUnidad` ESTABA HUÉRFANA.
+//
+// La función existía desde la 0047 con CERO llamadores: `taller` y `baja` eran
+// inalcanzables desde cualquier pantalla, y `unidades/vista.tsx` ya pintaba la
+// etiqueta "Dada de baja" esperando un disparador que nunca existió.
+//
+// El escenario real: venden o chocan un camión. Queda "disponible" PARA
+// SIEMPRE — el despacho lo sigue ofreciendo, las alertas de vigencias lo
+// siguen contando, y el rótulo de la pantalla es una mentira permanente.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const U1 = '44444444-4444-4444-8444-444444444444';
+
+describe('cambiarEstadoUnidad (auditoría 20, H4)', () => {
+  it('la baja apaga `activo` EN EL MISMO UPDATE que escribe el estado', async () => {
+    // Las dos columnas se mueven juntas o el sistema se contradice: `estado`
+    // es lo que la pantalla PINTA y `activo` es lo que `buscarCatalogo` filtra
+    // para los combos de despacho. Desacopladas producen las dos mentiras
+    // simétricas — una unidad "dada de baja" que el despacho sigue ofreciendo,
+    // o una "disponible" que no aparece en ningún combo.
+    await cambiarEstadoUnidad('t-1', U1, 'baja');
+    const w = escrituras.find((e) => e.tabla === 'unidad')!;
+    expect(w.op).toBe('update');
+    expect(w.valores).toEqual({ estado: 'baja', activo: false });
+    expect(w.filtros).toEqual([['id', U1], ['tenant_id', 't-1']]);
+  });
+
+  it('taller NO la saca del parque: sigue activa, solo no está disponible', async () => {
+    await cambiarEstadoUnidad('t-1', U1, 'taller');
+    expect(escrituras.find((e) => e.tabla === 'unidad')!.valores).toEqual({ estado: 'taller', activo: true });
+  });
+
+  it('el regreso a disponible vuelve a encender `activo`', async () => {
+    await cambiarEstadoUnidad('t-1', U1, 'disponible');
+    expect(escrituras.find((e) => e.tabla === 'unidad')!.valores).toEqual({ estado: 'disponible', activo: true });
+  });
+
+  it('un estado FUERA DEL DOMINIO se rechaza aquí, no en Postgres', async () => {
+    // La pantalla manda botones, pero un server action es un endpoint POST y
+    // `estado` llega como texto libre. Sin este cerco, el usuario vería el
+    // nombre del constraint `unidad_estado_dominio` en la cara.
+    await expect(cambiarEstadoUnidad('t-1', U1, 'vendida')).rejects.toBeInstanceOf(DatoInvalido);
+    expect(escrituras.find((e) => e.tabla === 'unidad')).toBeUndefined();
+  });
+
+  it('el dominio es EXACTAMENTE el de la migración 0047', () => {
+    expect(Object.keys(ESTADOS_UNIDAD).sort()).toEqual(['baja', 'disponible', 'en_ruta', 'taller']);
+  });
+
+  // ── AISLAMIENTO ENTRE FLOTAS ──────────────────────────────────────────────
+  it('con el UUID de una unidad de OTRA flota el UPDATE toca cero filas y LANZA', async () => {
+    // Postgres no llama error a un update de cero filas: sin mirar las filas
+    // afectadas, la pantalla diría "dada de baja" sobre un camión ajeno que
+    // sigue rodando — y encima anotaría la baja en bitácora.
+    TOCAN_CERO = new Set(['unidad']);
+    await expect(cambiarEstadoUnidad('t-1', U1, 'baja')).rejects.toBeInstanceOf(DatoInvalido);
+    expect(escrituras.find((e) => e.tabla === 'bitacora_auditoria')).toBeUndefined();
+  });
+
+  it('un id que ni siquiera es UUID se rechaza antes de tocar la base', async () => {
+    await expect(cambiarEstadoUnidad('t-1', 'no-es-uuid', 'baja')).rejects.toBeInstanceOf(DatoInvalido);
+    expect(escrituras).toHaveLength(0);
+  });
+
+  // ── BITÁCORA: quién dio de baja qué camión, y cuándo ──────────────────────
+  it('la baja deja rastro con actor y detalle', async () => {
+    await cambiarEstadoUnidad('t-1', U1, 'baja', { id: 'u-jefe', email: 'duenio@flota.mx' });
+    const b = escrituras.find((e) => e.tabla === 'bitacora_auditoria')!;
+    expect(b.valores).toMatchObject({
+      tenant_id: 't-1',
+      accion: 'unidad.baja',
+      entidad: 'unidad',
+      entidad_id: U1,
+      actor_id: 'u-jefe',
+      actor_email: 'duenio@flota.mx',
+      detalle: { estado: 'baja', activo: false },
+    });
+  });
+
+  it('los movimientos que NO son baja se anotan como `unidad.estado`', async () => {
+    await cambiarEstadoUnidad('t-1', U1, 'taller', { id: 'u-jefe' });
+    expect(escrituras.find((e) => e.tabla === 'bitacora_auditoria')!.valores)
+      .toMatchObject({ accion: 'unidad.estado' });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL EFECTO EN CASCADA DE LA BAJA (auditoría 20, H2 y H4).
+//
+// Los combos de /dashboard/despacho ya filtran `activo` (`buscarCatalogo`),
+// pero eso es la UI. Estas pruebas fijan el candado DEL SERVIDOR: un POST
+// directo —o la pestaña que alguien dejó abierta antes de la baja— no puede
+// volver a poner a rodar un camión vendido ni darle un viaje a un ex empleado.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('un operador o una unidad DE BAJA no reciben viajes nuevos', () => {
+  it('crearViaje RECHAZA una unidad dada de baja, y no inserta el viaje', async () => {
+    TABLAS = { unidad: [{ id: 'u-1', activo: false }] };
+    await expect(crearViaje('t-1', { folio: 'VJ-20', unidadId: 'u-1' })).rejects.toBeInstanceOf(DatoInvalido);
+    expect(escrituras.find((e) => e.tabla === 'viaje')).toBeUndefined();
+  });
+
+  it('crearViaje RECHAZA un operador dado de baja, y no inserta el viaje', async () => {
+    TABLAS = { operador: [{ id: 'o-1', activo: false }] };
+    await expect(crearViaje('t-1', { folio: 'VJ-21', operadorId: 'o-1' })).rejects.toBeInstanceOf(DatoInvalido);
+    expect(escrituras.find((e) => e.tabla === 'viaje')).toBeUndefined();
+  });
+
+  it('asignarUnidad RECHAZA una unidad dada de baja, y no toca el viaje', async () => {
+    TABLAS = { unidad: [{ id: 'u-1', activo: false }] };
+    await expect(asignarUnidad('t-1', 'v-1', 'u-1')).rejects.toBeInstanceOf(DatoInvalido);
+    expect(escrituras.find((e) => e.tabla === 'viaje')).toBeUndefined();
+  });
+
+  it('pero DESASIGNAR sigue permitido: es justo lo que hay que hacer con el viaje del camión que se chocó', async () => {
+    TABLAS = { unidad: [{ id: 'u-1', activo: false }] };
+    await asignarUnidad('t-1', 'v-1', null);
+    expect(escrituras.find((e) => e.tabla === 'viaje')!.valores).toEqual({ unidad_id: null });
+  });
+
+  it('una unidad ACTIVA se sigue asignando igual — el candado no toca el camino normal', async () => {
+    TABLAS = { unidad: [{ id: 'u-1', activo: true }] };
+    await asignarUnidad('t-1', 'v-1', 'u-1');
+    expect(escrituras.find((e) => e.tabla === 'viaje')!.valores).toEqual({ unidad_id: 'u-1' });
   });
 });

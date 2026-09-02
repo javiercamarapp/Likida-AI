@@ -54,7 +54,7 @@ export function hoyMx(fecha: Date = new Date()): string {
  * UTC−6 sin ramas). Vive aquí, junto a `TZ_MX`, porque un `-06:00` tecleado
  * en cada consulta es la misma clase de copia que ya divergió con `mxn()`.
  */
-const OFFSET_MX = '-06:00';
+export const OFFSET_MX = '-06:00';
 
 /**
  * El PRIMER instante de un día de México, en ISO con offset:
@@ -103,6 +103,32 @@ export function finDiaMx(dia: string): string {
 export function round2(n: number): number {
   return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * 100) / 100;
 }
+
+/**
+ * MEDIO CENTAVO: la holgura con la que se decide si un abono cabe en el saldo.
+ *
+ * AUDITORÍA 7, `c7-6` — el portal de pago usaba `saldo + 0.01` y
+ * `registrar_pago_tx` (0159) usa `v_saldo + 0.005`. Dos verdades sobre el mismo
+ * peso, y el hueco entre ellas era un agujero por el que caía dinero real: con
+ * un saldo de $1,160.00 el cliente teclea $1,160.01 —una comisión, un redondeo
+ * del banco—, el portal lo ACEPTA (1160.01 > 1160.01 es falso) y la RPC lo
+ * RECHAZA (1160.01 > 1160.005 es cierto). La propuesta se registraba, salía el
+ * correo al contralor, y al apretar «Conciliar» rebotaba con
+ * `CU011 motivo=sobrepago` para siempre: el cliente veía «por confirmar»
+ * indefinidamente sobre un depósito que ya había hecho.
+ *
+ * Ahora la constante vive UNA vez y la importan los dos lados de TypeScript
+ * (`evaluarAbono` y el validador del portal). La tercera copia es la de SQL, y
+ * no se puede importar: el bloque 192 de `verificaciones.sql` la compara
+ * ejecutando la RPC contra el valor de aquí, que es la única forma de que las
+ * dos no vuelvan a separarse en silencio.
+ *
+ * NO es `TOLERANCIA_CENTAVO` (0.01, en `libro_viaje.ts`): aquélla es la holgura
+ * con la que se PINTA una factura como saldada, la misma que `factura_saldo`.
+ * Ésta decide si un abono ENTRA. Son dos preguntas distintas y por eso son dos
+ * constantes distintas, cada una espejando lo que la base hace en su caso.
+ */
+export const TOLERANCIA_ABONO_MXN = 0.005;
 
 /** % de cambio de `actual` contra `base`, o `null` si no se puede calcular
  *  honesto: sin base (0 o desconocida) un "+100%" o un "$0 → $500" como
@@ -207,6 +233,33 @@ export function numero(n: number): string {
 }
 
 /**
+ * Un porcentaje YA CALCULADO, como lo lee una persona: `42.9%`, `50%`.
+ *
+ * Recibe el número EN PUNTOS PORCENTUALES (42.9 → `"42.9%"`), no la fracción:
+ * es lo que devuelven `pctCambio` y las tasas del repo, y convertir aquí
+ * invitaría a que la mitad de los llamadores pasara `0.429` y la otra mitad
+ * `42.9` sin que nada lo notara.
+ *
+ * AUDITORÍA CICLO 7, c7-34 (regla 10 — formato SOLO por este archivo): el
+ * parte del embudo escribía `${e.tasaPct.toFixed(1)}%` y la promo diaria
+ * `${(factor * 100).toFixed(0)}%` a mano. `toFixed` NO es `toLocaleString`:
+ * no pone separador de millares y ancla el punto decimal del inglés, así que
+ * un `1234.5` salía `1234.5%` en un texto que se pega en LinkedIn con la marca
+ * encima. Aquí se formatea una vez, con la misma configuración regional que el
+ * resto del producto.
+ *
+ * `decimales` fija los decimales EXACTOS (no un máximo): una tasa que se
+ * publica con un decimal tiene que enseñar `50.0%` y no `50%`, porque la
+ * ausencia del decimal en una columna que sí los lleva se lee como otra
+ * precisión.
+ */
+export function porcentaje(n: number, decimales = 1): string {
+  return `${n.toLocaleString('es-MX', {
+    minimumFractionDigits: decimales, maximumFractionDigits: decimales,
+  })}%`;
+}
+
+/**
  * Litros con separador de millares y hasta dos decimales, sin rellenar ceros.
  *
  * El motor redondea a dos decimales, así que el tope no puede recortar
@@ -306,4 +359,48 @@ export function fechaHoraMx(iso?: string | null): string {
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
     timeZone: TZ_MX,
   });
+}
+
+/**
+ * Fecha-hora en el formato del SAT (`AAAA-MM-DDThh:mm:ss`, sin zona), en hora
+ * de México. Es el formato de `FechaHoraSalidaLlegada` del complemento Carta
+ * Porte y de `Fecha` del CFDI: el estándar NO lleva offset — la zona la da el
+ * código postal del emisor, y para una flota mexicana esa hora es la de
+ * `TZ_MX` (fijo UTC−6 desde 2022, ver `OFFSET_MX`).
+ *
+ * Vive aquí y no en carta_porte_xml.ts por el guardia de fechas de
+ * formato.test.ts: toda conversión a hora de México pasa por este archivo,
+ * o dos pantallas terminan afirmando dos horas para el mismo instante.
+ *
+ * `null` para entrada inválida — el llamador decide si eso es faltante o
+ * error; jamás se inventa una fecha.
+ */
+export function fechaHoraSat(iso: string): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const partes = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: TZ_MX,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    }).formatToParts(d).map((p) => [p.type, p.value]),
+  );
+  // `h23` explícito por la misma razón que fechaHoraMx: "24:00" no existe.
+  return `${partes.year}-${partes.month}-${partes.day}T${partes.hour}:${partes.minute}:${partes.second}`;
+}
+
+/**
+ * Tamaño de archivo legible («340 KB», «2.3 MB») — para la bandeja de
+ * insumos (0267) y cualquier otra pantalla que enseñe un archivo subido.
+ * Vive aquí por el mismo guardia que el resto del archivo: un tamaño no se
+ * formatea dos veces distinto en dos pantallas. `null`/negativo/NaN ⇒ '—',
+ * nunca "0 KB" — un tamaño desconocido no es un archivo vacío.
+ */
+export function pesoArchivo(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
 }

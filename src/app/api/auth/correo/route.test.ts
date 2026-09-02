@@ -33,13 +33,14 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 const { POST } = await import('./route');
+const { reiniciarAntiReplay } = await import('./anti_replay');
 
 const LLAVE = crypto.randomBytes(24);
 const SECRETO = `v1,whsec_${LLAVE.toString('base64')}`;
 
-function postear(payload: unknown, opts: { firmar?: boolean; ts?: number; cuerpo?: string } = {}) {
+function postear(payload: unknown, opts: { firmar?: boolean; ts?: number; cuerpo?: string; id?: string } = {}) {
   const cuerpo = opts.cuerpo ?? JSON.stringify(payload);
-  const id = 'msg_1';
+  const id = opts.id ?? 'msg_1';
   const ts = String(opts.ts ?? Math.floor(Date.now() / 1000));
   const firma = crypto.createHmac('sha256', LLAVE).update(`${id}.${ts}.${cuerpo}`).digest('base64');
   return POST(new Request('https://app.likida.ai/api/auth/correo', {
@@ -66,6 +67,9 @@ const MAGIC = {
 beforeEach(() => {
   enviados.length = 0;
   logs.length = 0;
+  // BE-30: el candado anti-replay es un Map de módulo — sin esto, la segunda
+  // prueba que reusa `msg_1` se acusaría como repetida.
+  reiniciarAntiReplay();
   resultadoEnvio = { ok: true, id: 're_1' };
   process.env.SUPABASE_AUTH_HOOK_SECRET = SECRETO;
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://abcdefgh.supabase.co';
@@ -210,10 +214,13 @@ describe('payloads que no se pueden atender', () => {
     expect(ok.status).toBe(200);
     expect(enviados[0].correo).toMatchObject({ codigo: '654321' });
 
+    // Otra ENTREGA, con su propio `webhook-id`: dos payloads distintos no
+    // comparten id en Standard Webhooks, y desde BE-30 el candado anti-replay
+    // lo toma en serio.
     const sinCodigo = await postear({
       user: { email: 'a@b.mx' },
       email_data: { email_action_type: 'reauthentication' },
-    });
+    }, { id: 'msg_2' });
     expect(sinCodigo.status).toBe(400);
   });
 
@@ -253,5 +260,46 @@ describe('el incidente del 18-ago: Supabase manda `magiclink`, no `login`', () =
     const r = await postear({ user: { email: 'a@b.mx' }, email_data: { email_action_type: 'inventada_v3' } });
     expect(r.status).toBe(400);
     expect(enviados).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24, BE-30 — la firma se verifica y el timestamp se acota a ±5 min,
+// pero el MISMO cuerpo firmado se podía reenviar dentro de esa ventana: 50
+// correos de acceso idénticos a una dirección legítima, con nuestro remitente.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('BE-30 — la misma entrega no manda dos correos', () => {
+  it('REPRO: reenviar la MISMA entrega firmada acusa 200 y NO manda otro correo', async () => {
+    expect((await postear(MAGIC)).status).toBe(200);
+    expect(enviados).toHaveLength(1);
+
+    const r = await postear(MAGIC);
+
+    expect(r.status).toBe(200);
+    expect(enviados).toHaveLength(1);
+    expect(logs.some(([n, e]) => n === 'warn' && e === 'auth.correo.entrega_repetida')).toBe(true);
+  });
+
+  it('otra entrega (otro webhook-id) sí manda: no se bloquea a quien pide otro enlace', async () => {
+    await postear(MAGIC);
+    await postear(MAGIC, { id: 'msg_2' });
+    expect(enviados).toHaveLength(2);
+  });
+
+  it('si el envío FALLA, la entrega no se gasta: el reintento de Supabase sí manda', async () => {
+    resultadoEnvio = { ok: false, motivo: 'resend_cayo' };
+    expect((await postear(MAGIC)).status).toBe(500);
+
+    resultadoEnvio = { ok: true, id: 're_2' };
+    const r = await postear(MAGIC);
+
+    expect(r.status).toBe(200);
+    expect(enviados).toHaveLength(2); // el fallido y el bueno
+  });
+
+  it('un id sin firma válida NO entra al candado', async () => {
+    expect((await postear(MAGIC, { firmar: false })).status).toBe(401);
+    expect((await postear(MAGIC)).status).toBe(200);
+    expect(enviados).toHaveLength(1);
   });
 });

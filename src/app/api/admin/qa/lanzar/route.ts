@@ -20,6 +20,7 @@ import { validarLanzar } from '@/lib/admin/qa-tipos';
 import { crearCorrida, ejecutarCorridaRapida, TOPE_DIA_USD } from '@/lib/admin/qa-motor';
 import { gastoHoyUsd, guardarCorrida, leerManifiesto } from '@/lib/admin/qa-storage';
 import { sesionSuperadmin } from '../puerta';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,14 @@ export const maxDuration = 120;
 const MAX_BODY = 64 * 1024;
 
 export async function POST(req: Request) {
+  // Auditoría 21, BAJO-MEDIO: el chequeo CSRF explícito (SEG-9) solo cubría
+  // /api/admin/palette y /v1/*. Lanza una corrida que gasta dinero real,
+  // autenticada solo por cookie de sesión.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('qa_lanzar.origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
+    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+  }
+
   const { error, sesion } = await sesionSuperadmin();
   if (error) return error;
 
@@ -66,20 +75,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `foto(s) fuera del banco: ${faltantes.join(', ')}` }, { status: 400 });
   }
 
-  const corrida = crearCorrida(v.datos.escenario, v.datos.params);
+  const corrida = crearCorrida(v.datos.escenario, v.datos.params, v.datos.carril);
   try {
     await guardarCorrida(db, corrida);
   } catch (e) {
     return NextResponse.json({ error: `no se pudo registrar la corrida: ${e instanceof Error ? e.message : e}` }, { status: 502 });
   }
 
-  logger.info('qa.corrida_lanzada', { corrida: corrida.id, escenario: corrida.escenario, fotos: corrida.parametros.fotoIds.length, por: sesion.userId ?? null });
+  logger.info('qa.corrida_lanzada', { corrida: corrida.id, escenario: corrida.escenario, carril: corrida.carril, fotos: corrida.parametros.fotoIds.length, por: sesion.userId ?? null });
 
-  // El motor corre DESPUÉS de responder — nunca lanza (todo fallo queda
-  // escrito en la corrida, que es lo que el panel pollea).
-  after(async () => {
-    await ejecutarCorridaRapida(corrida);
-  });
+  // ── EL CARRIL DECIDE QUIÉN CORRE ────────────────────────────────────────
+  // Rápido: el motor corre DESPUÉS de responder, en esta misma invocación —
+  // nunca lanza (todo fallo queda escrito en la corrida, que es lo que el
+  // panel pollea).
+  //
+  // Completo: aquí NO se corre nada. Una corrida de 91 fotos no cabe en los
+  // 120 s de esta ruta, y arrancarla acá daría exactamente lo que la Fase C
+  // vino a evitar: una corrida muerta a la mitad. La mueve
+  // `POST /api/admin/qa/<id>/continuar`, pasada por pasada, con su
+  // `maxDuration` de 300 s y su reloj duro — el MISMO camino para la primera
+  // pasada que para la última, que es lo que hace que la continuación esté
+  // probada de verdad y no sólo el caso feliz.
+  if (corrida.carril === 'rapido') {
+    after(async () => {
+      await ejecutarCorridaRapida(corrida);
+    });
+  }
 
-  return NextResponse.json({ id: corrida.id });
+  return NextResponse.json({ id: corrida.id, carril: corrida.carril });
 }

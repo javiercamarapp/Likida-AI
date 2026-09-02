@@ -4,7 +4,8 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { round2 } from '@/lib/formato';
-import type { DatosIntegral } from './privacidad';
+import type { DatosIntegral, SenalGps } from './privacidad';
+import { CONECTORES_GPS } from './conectores/gps';
 import { acotada } from './presupuesto';
 import { traerTodo, conteo } from './pg';
 import type { Gasto, Liquidacion, Viaje, Operador } from '@/types/likida';
@@ -124,24 +125,16 @@ export async function guardarPerfilPatch(
   patch: Record<string, unknown>,
   actualizadoPor: string | null,
 ): Promise<void> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('tenant')
-    .select('perfil')
-    .eq('id', tenantId)
-    .maybeSingle(), 'guardarPerfilPatch.leer');
+  // AUDITORÍA 24, H20/H21/H22: leer+mezclar+escribir en dos statements
+  // dejaba una carrera de "lost update" (dos respuestas de la entrevista de
+  // onboarding casi juntas se pisaban). `tenant_perfil_merge` (mig. 0296)
+  // hace la lectura y la escritura en el MISMO statement.
+  const { error } = await acotada(supabaseAdmin().rpc('tenant_perfil_merge', {
+    p_tenant_id: tenantId,
+    p_patch: patch,
+    p_actualizado_por: actualizadoPor,
+  }), 'guardarPerfilPatch');
   if (error) throw new Error(`perfil: ${error.message}`);
-  if (!data) throw new Error('perfil: tenant no encontrado');
-  const actual = (data.perfil && typeof data.perfil === 'object' && !Array.isArray(data.perfil))
-    ? data.perfil as Record<string, unknown>
-    : {};
-  const { error: errW } = await acotada(supabaseAdmin()
-    .from('tenant')
-    .update({
-      perfil: { ...actual, ...patch },
-      perfil_actualizado_por: actualizadoPor,
-    })
-    .eq('id', tenantId), 'guardarPerfilPatch.escribir');
-  if (errW) throw new Error(`perfil: ${errW.message}`);
 }
 
 export async function guardarDeclaracionEstimuloPeaje(
@@ -156,18 +149,23 @@ export async function guardarDeclaracionEstimuloPeaje(
 export async function getOperador(operadorId: string, tenantId: string): Promise<Operador | null> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('operador')
-    .select('id, nombre, telefono, rfc, oposicion_automatizada, terminal:terminal_id(nombre)')
+    .select('id, nombre, telefono, rfc, activo, oposicion_automatizada, terminal:terminal_id(nombre)')
     .eq('id', operadorId)
     .eq('tenant_id', tenantId)
     .maybeSingle(), 'getOperador');
   if (error) throw new Error(`operador: ${error.message}`);
   if (!data) return null;
   const terminal = data.terminal as { nombre?: string } | null;
+  const activo = (data as { activo?: unknown }).activo;
   return {
     id: data.id as string,
     nombre: data.nombre as string,
     telefono: data.telefono as string,
     rfc: (data.rfc as string | null) ?? undefined,
+    // `undefined` cuando la columna no vino (lectores viejos, dobles de
+    // prueba): "no se preguntó" ≠ "dado de baja", y quien decide sobre la baja
+    // tiene que poder distinguirlas.
+    activo: typeof activo === 'boolean' ? activo : undefined,
     oposicionAutomatizada: (data.oposicion_automatizada as string | null) ?? null,
     terminal: terminal?.nombre,
   };
@@ -328,6 +326,14 @@ export async function listOperadores(
 export async function reasignarOperador(tenantId: string, viajeId: string, operadorId: string): Promise<void> {
   const propio = await getOperador(operadorId, tenantId);
   if (!propio) throw new Error('reasignarOperador: el operador no pertenece a esta flota');
+  // AUDITORÍA 20 (H2): y tiene que SEGUIR trabajando aquí. El combo de
+  // /dashboard/despacho ya no lo ofrece (`buscarCatalogo` filtra `activo`),
+  // pero eso es la UI: un POST directo —o la pestaña que alguien dejó abierta
+  // antes de la baja— le pasaba el viaje a un chofer al que el bot de WhatsApp
+  // ya no le contesta, y ese viaje se quedaba sin quien lo reporte.
+  if (propio.activo === false) {
+    throw new Error('reasignarOperador: el operador está dado de baja en esta flota');
+  }
 
   const { error } = await acotada(supabaseAdmin()
     .from('viaje')
@@ -362,10 +368,13 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     cfdi_esquema_alterno: g.cfdiEsquemaAlterno ?? null,
     xml_verificado: g.xmlVerificado ?? null,
     forma_pago: g.formaPago ?? null,
+    metodo_pago: g.metodoPago ?? null,
     sub_total: g.subTotal ?? null,
     descuento: g.descuento ?? null,
     ieps_traslado: g.iepsTraslado ?? null,
     iva_traslado: g.ivaTraslado ?? null,
+    iva_retenido: g.ivaRetenido ?? null,
+    isr_retenido: g.isrRetenido ?? null,
     folio_norm: g.folioNorm ?? null,
     ocr_extra: g.ocrExtra ?? null,
     img_hash: g.imgHash ?? null,
@@ -525,12 +534,24 @@ export async function guardarHuerfano(
  * cerrar el viaje que sí tiene. Se pierde el ofrecimiento, no el comprobante —
  * las filas siguen ahí para el mensaje siguiente.
  */
-export async function getHuerfanos(tenantId: string, operadorId: string): Promise<Huerfano[]> {
-  const { data, error } = await acotada(supabaseAdmin()
+export async function getHuerfanos(
+  tenantId: string, operadorId: string,
+  opciones: {
+    /** AUDITORÍA 24 · WA-7 (MEDIO): los huérfanos SIN monto (fallo de OCR,
+     *  voucher) nunca se ofrecen, pero ocupaban el tope de 50 por antigüedad
+     *  y a partir del 50º el chofer dejaba de ver los que SÍ tienen monto.
+     *  Con esto el filtro va en la base, ANTES del `limit`. */
+    soloConMonto?: boolean;
+  } = {},
+): Promise<Huerfano[]> {
+  let q = supabaseAdmin()
     .from('comprobante_huerfano')
     .select('id, gasto, motivo, creado_en, ruta_imagen, ofrecido_en')
     .eq('tenant_id', tenantId).eq('operador_id', operadorId)
-    .is('resuelto_en', null)
+    .is('resuelto_en', null);
+  // `->` (jsonb) y no `->>` (texto): PostgREST compara el número como número.
+  if (opciones.soloConMonto) q = q.gt('gasto->monto', 0);
+  const { data, error } = await acotada(q
     .order('creado_en', { ascending: true })
     .limit(50), 'getHuerfanos');
   if (error || !data) return [];
@@ -563,15 +584,24 @@ export async function marcarHuerfanosOfrecidos(tenantId: string, ids: string[]):
  * medias, lo que queda es una fila todavía pendiente —que se vuelve a ofrecer—
  * y no un comprobante marcado como puesto que no está en ningún lado.
  */
+/**
+ * Devuelve si quedó sellado (AUDITORÍA 24 · BE-12): antes tragaba el error
+ * con un log sin ids, y el llamador seguía como si los huérfanos ya no
+ * existieran — en el siguiente viaje se le volvían a ofrecer al chofer.
+ */
 export async function resolverHuerfanos(
   tenantId: string, ids: string[],
   resolucion: 'adjuntado' | 'descartado', viajeId: string | null,
-): Promise<void> {
-  if (!ids.length) return;
+): Promise<boolean> {
+  if (!ids.length) return true;
   const { error } = await acotada(supabaseAdmin().from('comprobante_huerfano').update({
     resuelto_en: new Date().toISOString(), resolucion, viaje_id: viajeId,
   }).in('id', ids).eq('tenant_id', tenantId), 'resolverHuerfanos');
-  if (error) logger.error('huerfano.resolver_error', { err: error.message });
+  if (error) {
+    logger.error('huerfano.resolver_error', { tenant: tenantId, ids, resolucion, viaje: viajeId, err: error.message });
+    return false;
+  }
+  return true;
 }
 
 /** Una fila de la bandeja de la OFICINA (F2 del plan): lo que el humano
@@ -715,7 +745,7 @@ export async function corregirFechaGasto(
 export async function updateGastoCfdiXml(
   tenantId: string,
   gastoId: string,
-  x: { claveProdServ?: string; claveUnidad?: string; tipoComprobante?: string; complementoHidrocarburos?: boolean; esquemaAlterno?: boolean; formaPago?: string; subTotal?: number; descuento?: number; iepsTraslado?: number; ivaTraslado?: number;
+  x: { claveProdServ?: string; claveUnidad?: string; tipoComprobante?: string; complementoHidrocarburos?: boolean; esquemaAlterno?: boolean; formaPago?: string; metodoPago?: string; subTotal?: number; descuento?: number; iepsTraslado?: number; ivaTraslado?: number; ivaRetenido?: number; isrRetenido?: number;
        // Cuando el XML se pega a un TICKET (que no traía UUID), estos tres campos
        // pasan a ser autoritativos: vienen del comprobante timbrado, no del OCR.
        uuid?: string; rfcEmisor?: string; rfcReceptor?: string; total?: number; fecha?: string;
@@ -743,8 +773,23 @@ export async function updateGastoCfdiXml(
   const litrosDelXml = x.claveUnidad === 'LTR' && x.cantidad != null && x.cantidad > 0;
   const monedaDelXml = !!x.moneda || x.tipoCambio != null;
   if (litrosDelXml || monedaDelXml) {
-    const { data: actual } = await acotada(supabaseAdmin().from('gasto')
+    const { data: actual, error: errorLectura } = await acotada(supabaseAdmin().from('gasto')
       .select('ocr_extra').eq('id', gastoId).eq('tenant_id', tenantId).maybeSingle(), 'updateGastoCfdiXml.leerOcrExtra');
+    // FAIL-CLOSED (auditoría 21, backend, ALTO REINCIDENTE desde la 18-c4).
+    // `acotada` entrega el tope agotado POR VALOR —`{ data: null, error }`,
+    // nunca lanza—, igual que cualquier error de Postgres. Sin esta
+    // comprobación, un timeout en esta lectura se leía como "el gasto no
+    // tenía ocr_extra": el merge arrancaba de `{}` y el update de abajo
+    // REEMPLAZABA el jsonb entero, borrando `moneda`, `tipoCambio`,
+    // `montoDiscrepante`, `estacion`… — y el motor de cuadre acreditaba IVA
+    // de un gasto en USD como si fuera en pesos, sin una línea en el log.
+    // Mejor no actualizar que perder datos: se lanza y el ocr_extra viejo
+    // queda intacto, con `code` preservado igual que en el update de abajo.
+    if (errorLectura) {
+      const e = new Error(`updateGastoCfdiXml.leerOcrExtra: ${errorLectura.message}`) as Error & { code?: string };
+      if (errorLectura.code) e.code = errorLectura.code;
+      throw e;
+    }
     const ocrExtra = { ...((actual?.ocr_extra as Record<string, unknown> | null) ?? {}) };
     if (litrosDelXml) ocrExtra.litros = x.cantidad;
     // El XML manda sobre lo que leyó la visión: el emisor declaró la moneda en
@@ -761,10 +806,16 @@ export async function updateGastoCfdiXml(
     complemento_hidrocarburos: x.complementoHidrocarburos ?? null,
     cfdi_esquema_alterno: x.esquemaAlterno ?? null,
     forma_pago: x.formaPago ?? null,
+    metodo_pago: x.metodoPago ?? null,
     sub_total: x.subTotal ?? null,
     descuento: x.descuento ?? null,
     ieps_traslado: x.iepsTraslado ?? null,
     iva_traslado: x.ivaTraslado ?? null,
+    // FIS-A1: las columnas existen desde la 0063 y nadie las escribía. Una
+    // retención no es un gasto: es una cuenta POR PAGAR al SAT, y sin ella la
+    // póliza derivaba un residuo negativo y tiraba el periodo entero.
+    iva_retenido: x.ivaRetenido ?? null,
+    isr_retenido: x.isrRetenido ?? null,
     xml_verificado: true,
   }).eq('id', gastoId).eq('tenant_id', tenantId), 'updateGastoCfdiXml');
   if (error) {
@@ -903,7 +954,7 @@ export async function reclamarCodigoPendiente(tenantId: string, id: string): Pro
 export async function getGastos(viajeId: string, tenantId: string): Promise<Gasto[]> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('gasto')
-    .select('id, concepto, monto, fecha, folio, folio_norm, ocr_extra, rfc_emisor, rfc_receptor, cfdi_uuid, cfdi_orden, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos, efos_revisar, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos, cfdi_esquema_alterno, xml_verificado, forma_pago, sub_total, descuento, ieps_traslado, iva_traslado')
+    .select('id, concepto, monto, fecha, folio, folio_norm, ocr_extra, rfc_emisor, rfc_receptor, cfdi_uuid, cfdi_orden, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos, efos_revisar, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos, cfdi_esquema_alterno, xml_verificado, forma_pago, metodo_pago, pagado_en, pagado_forma, sub_total, descuento, ieps_traslado, iva_traslado, iva_retenido, isr_retenido')
     .eq('tenant_id', tenantId)
     .eq('viaje_id', viajeId), 'getGastos');
   if (error) throw new Error(`getGastos: ${error.message}`);
@@ -932,8 +983,13 @@ export async function getGastos(viajeId: string, tenantId: string): Promise<Gast
     cfdiEsquemaAlterno: r.cfdi_esquema_alterno != null ? Boolean(r.cfdi_esquema_alterno) : undefined,
     xmlVerificado: r.xml_verificado != null ? Boolean(r.xml_verificado) : undefined,
     formaPago: (r.forma_pago as string) || undefined,
+    metodoPago: (r.metodo_pago as string) || undefined,
+    pagadoEn: (r.pagado_en as string) || undefined,
+    pagadoForma: (r.pagado_forma as string) || undefined,
     subTotal: r.sub_total != null ? Number(r.sub_total) : undefined,
     descuento: r.descuento != null ? Number(r.descuento) : undefined,
+    ivaRetenido: r.iva_retenido != null ? Number(r.iva_retenido) : undefined,
+    isrRetenido: r.isr_retenido != null ? Number(r.isr_retenido) : undefined,
     iepsTraslado: r.ieps_traslado != null ? Number(r.ieps_traslado) : undefined,
     ivaTraslado: r.iva_traslado != null ? Number(r.iva_traslado) : undefined,
   }));
@@ -955,6 +1011,44 @@ export const CIERRE_CONTEO_CAMBIO = 'CU003';
 /** ¿El cierre rebotó porque entró un gasto entre el cuadre y el guardado? */
 export function conteoDeGastosCambio(e: unknown): boolean {
   return !!e && typeof e === 'object' && (e as { code?: string }).code === CIERRE_CONTEO_CAMBIO;
+}
+
+/**
+ * ¿ESTE viaje ya tiene liquidación en la base? (AUDITORÍA 22, AGEN-C1, CRÍTICO)
+ *
+ * La base es la autoridad sobre si un cierre ocurrió; el resultado de la tool,
+ * no. `guardar_liquidacion` no mira `ctx.signal`, así que cuando el reloj del
+ * agente vence a mitad de las subidas a Storage, `raceAbort` devuelve
+ * `{success:false, error:'Timeout'}` y el handler SIGUE VIVO: segundos después
+ * `guardar_liquidacion_tx` commitea, el viaje queda `liquidado` y los triggers
+ * 0036/0037 lo vuelven irreversible.
+ *
+ * El processor decidía si hubo cierre leyendo `!t.error` sobre esa cadena, así
+ * que el cierre existía y el chofer recibía lo contrario. Esto es lo que le
+ * permite preguntarle a quien sí sabe.
+ *
+ * Devuelve `undefined` si NO hay, y lanza si no se pudo leer: un error de red
+ * no puede leerse como «no se cerró», que es exactamente el bug que cierra.
+ */
+export async function getLiquidacionDeViaje(
+  tenantId: string,
+  viajeId: string,
+): Promise<{ id: string; pdfUrl: string | null } | undefined> {
+  const { data, error } = await acotada(
+    supabaseAdmin().from('liquidacion')
+      .select('id, pdf_url')
+      .eq('tenant_id', tenantId).eq('viaje_id', viajeId)
+      // Desempate determinista: dos liquidaciones del mismo viaje con el mismo
+      // `created_at` al milisegundo elegirían una al azar, y de esa elección
+      // depende qué PDF se le manda al chofer.
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
+      .limit(1).maybeSingle(),
+    'getLiquidacionDeViaje',
+  );
+  if (error) throw new Error(`getLiquidacionDeViaje: ${error.message}`);
+  if (!data) return undefined;
+  const f = data as { id: unknown; pdf_url: unknown };
+  return { id: String(f.id), pdfUrl: f.pdf_url == null ? null : String(f.pdf_url) };
 }
 
 export async function saveLiquidacion(
@@ -1008,14 +1102,59 @@ export async function saveLiquidacion(
 // persona encargada y solo pone el mecanismo: sin él, la flota no puede cumplir
 // aunque quiera. Detalle verificado en normas/lfpdppp-15-16.yaml.
 
+/** Los ids del catálogo que son de rastreo — derivado, nunca escrito a mano
+ *  (mismo criterio que `IDS_GPS` en conexiones.ts, que sirve a otra pantalla
+ *  con otra semántica de fallo y por eso no se importa de ahí). */
+const IDS_GPS_AVISO: readonly string[] = CONECTORES_GPS.map((c) => c.id);
+
+/**
+ * Lo MEDIDO para el renglón del proveedor de GPS en el aviso (ver `SenalGps`
+ * en privacidad.ts). Se mide donde se escribe la credencial y donde lee el
+ * poller: `conector_credencial` con `activo = true` — CAPACIDAD, no hecho,
+ * porque el consentimiento tiene que ser previo a la primera posición y con
+ * credencial activa el cron va a intentar traerlas en los próximos 5 minutos.
+ *
+ * FALLA CERRADO: cualquier camino de error —el `error` de PostgREST, la
+ * excepción de red, un `count` que no venga— devuelve `no_medible`, que el
+ * aviso trata como el caso AMPLIO (declara el proveedor en condicional).
+ * `null` jamás se convierte en 0: afirmar «sin conector» con la base caída
+ * sería callarle un tratamiento a una flota que sí lo tiene.
+ */
+export async function senalGpsFlota(tenantId: string): Promise<SenalGps> {
+  try {
+    const { count, error } = await acotada(supabaseAdmin()
+      .from('conector_credencial')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .eq('activo', true)
+      .in('conector_id', IDS_GPS_AVISO), 'aviso.senal_gps');
+    if (error) {
+      logger.error('aviso.senal_gps_no_medible', { tenantId, err: error.message });
+      return 'no_medible';
+    }
+    if (count == null) return 'no_medible';
+    return count > 0 ? 'conectado' : 'sin_conector';
+  } catch (e) {
+    logger.error('aviso.senal_gps_no_medible', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return 'no_medible';
+  }
+}
+
 /**
  * Datos de responsable de la flota, para armar el aviso. `null` en cualquiera
  * significa que el tenant no está configurado — y ahí NO se envía nada, porque
  * un aviso sin responsable no dice a quién reclamarle, que es para lo que sirve.
+ *
+ * Trae también la señal de GPS (28-ago-2026): el aviso es POR FLOTA y declara
+ * el rastreo del proveedor solo a la flota que lo tiene conectado. Se mide
+ * aquí —y no en cada llamador— para que el texto y su `versionAviso` salgan
+ * IGUALES en todos los caminos (processor, QA, página del integral): dos
+ * llamadores midiendo distinto producirían dos versiones y un reenvío falso.
  */
 export async function getDatosResponsable(
   tenantId: string,
 ): Promise<DatosIntegral | null> {
+  const gpsPromise = senalGpsFlota(tenantId);
   const { data, error } = await acotada(supabaseAdmin()
     .from('tenant')
     // `contacto_privacidad` (0034) es el art. 29 y solo lo usa el aviso
@@ -1033,13 +1172,23 @@ export async function getDatosResponsable(
     domicilio: (data.domicilio_fiscal as string) ?? '',
     urlAvisoIntegral: (data.url_aviso_privacidad as string) ?? '',
     contactoPrivacidad: (data.contacto_privacidad as string | null) ?? null,
+    // Nunca lanza: sus fallos ya son `no_medible` (caso amplio) adentro.
+    gps: await gpsPromise,
   };
   // La URL del integral NO se exige aquí. Devolver `null` por su ausencia hacía
   // que el operador no recibiera NADA: el aviso simplificado sí se puede armar
   // sin ella —las fracciones I a IV del art. 15 caben enteras en el mensaje— y
   // callarse cumple menos que mandarlo diciendo que la empresa aún no lo publica.
-  // Razón social y domicilio sí se exigen: son la fr. I y no se pueden fingir.
-  return r.razonSocial && r.domicilio ? r : null;
+  //
+  // El DOMICILIO tampoco se exige ya (auditoría 19, legal C3 / C.16): exigirlo
+  // hacía que /aviso/<flota> respondiera 404 para toda flota sin la columna
+  // capturada — y ninguna pantalla de producción la llenaba. Un aviso que
+  // nombra al responsable y DICE que el domicilio está pendiente cumple más
+  // que un 404 mudo; `avisoIntegral` pinta esa sección como pendiente, igual
+  // que hace con el contacto del art. 29. La razón social SÍ se exige: sin
+  // ella el aviso no puede decir NI SIQUIERA a quién reclamarle, y eso ya no
+  // es un aviso a medias — es un documento sin responsable.
+  return r.razonSocial ? r : null;
 }
 
 /**
@@ -1372,5 +1521,103 @@ export async function resolverSolicitudArco(
     return r.ok ? { enviada: true } : { enviada: false, error: r.error };
   } catch (e) {
     return { enviada: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * EJECUTA una solicitud de CANCELACIÓN: anonimiza al titular en la base y
+ * marca la solicitud resuelta con la evidencia de qué se tocó.
+ *
+ * AUDITORÍA 19 (legal, reincidente #5): `ejecutar_arco_cancelacion` existía
+ * desde la 0173/0178 y NADA la llamaba — el derecho de cancelación se
+ * "resolvía" escribiendo un texto (`resolverSolicitudArco`) sin que un solo
+ * byte del titular cambiara en la base. Un ARCO que solo escribe prosa es un
+ * ARCO que no se ejerció.
+ *
+ * EL ORDEN IMPORTA Y ES DELIBERADO: el teléfono del titular se lee ANTES de
+ * ejecutar, porque la RPC anonimiza `operador.telefono` y borra sus
+ * conversaciones — después ya no hay a quién avisarle. La confirmación se
+ * manda DESPUÉS de que la RPC confirmó (nunca antes: avisar "ya quedó" y que
+ * la RPC falle sería una constancia falsa), best-effort al número leído.
+ *
+ * Lo que la RPC conserva y por qué lo dice ella misma: la evidencia fiscal
+ * (imágenes de gasto/CFDI) se retiene por CFF art. 30 y queda desligada del
+ * titular — la resolución escrita lo enuncia.
+ */
+/**
+ * REGISTRA una solicitud de OPOSICIÓN: deja constancia estructurada de que la
+ * oposición del titular está vigente y de que el caso pasa a revisión humana.
+ *
+ * AUDITORÍA 20, hallazgo 8 (BAJO — patrón reincidente #5): `ejecutar_arco_
+ * oposicion` existe desde la 0178, con grant a `service_role`, y NADA la
+ * llamaba. Una oposición se "resolvía" escribiendo prosa en `resolucion`; en
+ * una revisión de privacidad no quedaba rastro verificable de qué se hizo.
+ * Es exactamente el hueco que la auditoría 19 cerró para la CANCELACIÓN, en
+ * la otra función de la misma migración.
+ *
+ * LO QUE ESTA RPC HACE Y LO QUE NO, porque el rótulo del botón depende de
+ * ello: NO cancela datos, NO anonimiza y NO cierra la solicitud. Deja la
+ * solicitud en `en_proceso` con `evidencia.oposicion_automatizada_vigente` y
+ * dice, en la misma evidencia, que requiere revisión humana. La
+ * materialización de la oposición sobre el operador
+ * (`operador.oposicion_automatizada`, 0100) ya ocurrió por el canal de
+ * WhatsApp (`processor.ts`) cuando el titular la pidió; esto es la constancia
+ * del lado de la responsable.
+ *
+ * Por eso NO se avisa al titular desde aquí: no hay nada consumado que
+ * confirmarle todavía. El aviso sale cuando la flota resuelve de verdad, por
+ * `resolverSolicitudArco`, que sí lo manda.
+ */
+export async function ejecutarOposicionArco(
+  tenantId: string, solicitudId: string,
+): Promise<{ ok: boolean; motivo?: string }> {
+  const { data, error } = await acotada(supabaseAdmin().rpc('ejecutar_arco_oposicion', {
+    p_tenant: tenantId,
+    p_solicitud: solicitudId,
+  }), 'ejecutarOposicionArco');
+  if (error) throw new Error(`ejecutarOposicionArco: ${error.message}`);
+
+  const r = (data ?? {}) as { ok?: boolean; motivo?: string };
+  if (r.ok !== true) {
+    // La RPC se niega con motivo (no es una oposición, es de otra flota, no
+    // existe): se propaga tal cual — es la explicación que ve la pantalla.
+    return { ok: false, motivo: r.motivo ?? 'la base no explicó el rechazo' };
+  }
+  return { ok: true };
+}
+
+export async function ejecutarCancelacionArco(
+  tenantId: string, solicitudId: string,
+): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string }> {
+  const { data: sol, error: errLee } = await acotada(supabaseAdmin()
+    .from('solicitud_arco').select('titular_ref, tipo').eq('id', solicitudId).eq('tenant_id', tenantId).maybeSingle(),
+    'ejecutarCancelacionArco.leer');
+  if (errLee) throw new Error(`ejecutarCancelacionArco.leer: ${errLee.message}`);
+  if (!sol) throw new Error('ejecutarCancelacionArco: la solicitud no existe en esta flota');
+  const telefono = (sol.titular_ref as string | null) ?? null;
+
+  const { data, error } = await acotada(supabaseAdmin().rpc('ejecutar_arco_cancelacion', {
+    p_tenant: tenantId,
+    p_solicitud: solicitudId,
+  }), 'ejecutarCancelacionArco');
+  if (error) throw new Error(`ejecutarCancelacionArco: ${error.message}`);
+
+  const r = (data ?? {}) as { ok?: boolean; motivo?: string };
+  if (r.ok !== true) {
+    // La RPC se negó con motivo (tipo equivocado, ya cerrada, otra flota):
+    // se propaga tal cual — es la explicación que la pantalla enseña.
+    return { ok: false, motivo: r.motivo ?? 'la base no explicó el rechazo', avisada: false };
+  }
+
+  if (!telefono) return { ok: true, avisada: false, errorAviso: 'sin teléfono del titular' };
+  try {
+    const { enviarRespuestaArco } = await import('@/lib/meta/client');
+    const aviso = await enviarRespuestaArco(
+      telefono,
+      'Tu solicitud de cancelación de datos quedó ejecutada: tu nombre y tu teléfono ya no están ligados a tu información en el sistema. Los comprobantes fiscales se conservan el tiempo que la ley obliga (CFF art. 30), sin vincularse a tu persona.',
+    );
+    return aviso.ok ? { ok: true, avisada: true } : { ok: true, avisada: false, errorAviso: aviso.error };
+  } catch (e) {
+    return { ok: true, avisada: false, errorAviso: e instanceof Error ? e.message : String(e) };
   }
 }

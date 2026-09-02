@@ -21,6 +21,8 @@ import { traerTodo, conteo } from '../pg';
 import { DatoInvalido } from '../errores';
 import { logger } from '@/lib/logger';
 import { enviarCorreo } from '@/lib/correo/enviar';
+import { urlBaja } from '@/lib/correo/baja';
+import { pieAvisoProspectos } from '@/lib/likida/privacidad';
 import { hoyMx } from '@/lib/formato';
 
 /** El tope de correos FRÍOS aprobados por día (Fase 2: "20–40, máximo" —
@@ -29,6 +31,107 @@ import { hoyMx } from '@/lib/formato';
 export function topeCorreoFrioDia(): number {
   const v = Number(process.env.LIKIDA_TOPE_CORREO_FRIO_DIA);
   return Number.isFinite(v) && v > 0 ? Math.floor(v) : 30;
+}
+
+/** Los tipos de pieza que son CAMPAÑA de prospección — los únicos que el
+ *  enviador auto-resuelve y los únicos cuyo texto pasa por el verificador
+ *  estructural también al ENVIAR (c5-14: la edición humana no lo esquiva). */
+export const TIPOS_CAMPANA = ['correo_frio', 'correo_seguimiento'] as const;
+
+/** AGB-4 (auditoría 24, 1-sep-2026): los ÚNICOS tipos de pieza que se pueden
+ *  mandar a un TERCERO por `enviarPiezaPorCorreo` — hoy, los mismos que
+ *  `TIPOS_CAMPANA`, pero declarados aparte a propósito: son cosas distintas
+ *  que hoy coinciden (campaña ⊂ enviable), no la misma lista con dos nombres.
+ *  Un `ficha_prospecto`/`brief_demo`/`propuesta_comercial` (leads.ts) lleva
+ *  `prospecto_id` para que el HUMANO sepa de quién habla — no para que la
+ *  máquina se lo pueda mandar A ÉL. `cola_aprobacion` mezclaba "piezas para
+ *  un tercero" con "partes para leer" y la cola de salida se definía solo por
+ *  `estado = aprobado ∧ enviado_en null`, sin mirar el tipo: el expediente
+ *  interno del prospecto (nombres, correos "INFERIDO — NO VERIFICADO",
+ *  teléfonos) quedaba a un clic de salir hacia el propio prospecto. */
+export const TIPOS_ENVIABLES: readonly string[] = TIPOS_CAMPANA;
+
+/** AGB-2 (auditoría 24, 1-sep-2026): nombres de prospectos/clientes que SÍ se
+ *  autorizó nombrar como tracción en correo de campaña — VACÍA por default.
+ *  Sin una entrada aquí, a propósito, ningún nombre de tercero sale en un
+ *  correo automático. El SYSTEM del redactor y del SDR permitían literalmente
+ *  "Grupo GAL y Transportes Innovativos" — el nombre del PROSPECTO DEL PILOTO
+ *  saliendo hacia Coca-Cola FEMSA, Pepsi, Nadro, KFC sin su consentimiento.
+ *  Poblar esta lista es una decisión explícita de Javier (acuerdo de
+ *  referencia real), nunca un efecto secundario de que el modelo "decida
+ *  mencionar tracción". */
+export const TRACCION_PUBLICABLE: readonly string[] = [];
+
+/** Los nombres que YA se cazaron saliendo sin autorización (AGB-2) — se
+ *  bloquean SIEMPRE salvo que aparezcan, a propósito, en `TRACCION_PUBLICABLE`. */
+const NOMBRES_TRACCION_CAZADOS = ['Grupo GAL', 'Transportes Innovativos', 'Innovativos'] as const;
+
+function nombreTraccionNoAutorizado(texto: string): string | null {
+  for (const nombre of NOMBRES_TRACCION_CAZADOS) {
+    if (texto.includes(nombre) && !TRACCION_PUBLICABLE.includes(nombre)) return nombre;
+  }
+  return null;
+}
+
+/** El verificador ESTRUCTURAL del formato de campaña — los guardarraíles
+ *  cazados en vivo: jamás "clientes reales" (ninguna empresa ha firmado; la
+ *  frase permitida es "en pláticas con..."), sin guiones largos, y jamás un
+ *  nombre de tercero no autorizado como tracción (AGB-2, `TRACCION_PUBLICABLE`).
+ *  Es código, no prompt. Vive AQUÍ (y no en redactor.ts, que lo re-exporta)
+ *  porque la puerta de salida también lo aplica (c5-14): una edición humana o
+ *  una variante guardada que lo viole tampoco sale. */
+export function verificarFormatoCampana(texto: string): void {
+  if (/clientes?\s+reales/i.test(texto)) {
+    throw new DatoInvalido('El correo dice "clientes reales" — ninguna empresa ha firmado; la frase permitida es "en pláticas con transportistas como...". Pieza descartada.');
+  }
+  if (texto.includes('—')) {
+    throw new DatoInvalido('El correo trae guion largo (—) — el formato de campaña los prohíbe. Pieza descartada.');
+  }
+  const nombreNoAutorizado = nombreTraccionNoAutorizado(texto);
+  if (nombreNoAutorizado) {
+    throw new DatoInvalido(`El correo nombra a "${nombreNoAutorizado}" como tracción — nombre de tercero no autorizado (TRACCION_PUBLICABLE vacía por default). Pieza descartada.`);
+  }
+}
+
+/** La lista de bajas, FAIL-CLOSED: si no se puede leer, LANZA — mandar sin
+ *  consultar las bajas es escribirle a quien pidió que no. Vive AQUÍ (c5-1)
+ *  porque la consulta pertenece a la PUERTA de salida, no a un llamador: el
+ *  camino humano de /admin/aprobaciones la ignoraba y un correo suprimido
+ *  por queja de spam podía volver a recibir campaña con un click. */
+export async function filtrarSuprimidos(correos: string[]): Promise<string[]> {
+  const limpios = [...new Set(correos.map((c) => c.trim().toLowerCase()).filter(Boolean))];
+  if (limpios.length === 0) return [];
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('correo_suprimido')
+    .select('correo')
+    .in('correo', limpios), 'cola.suprimidos');
+  if (error) throw new Error(`filtrarSuprimidos: ${error.message}`);
+  const fuera = new Set(((data ?? []) as Array<{ correo: string }>).map((f) => f.correo));
+  return limpios.filter((c) => !fuera.has(c));
+}
+
+/**
+ * El pie "por qué recibes esto", derivado de la FUENTE REAL del prospecto
+ * (c5-5): el texto anterior afirmaba «tu empresa publicó una vacante» a TODO
+ * destinatario — incluido el que llegó por la calculadora y el del censo sin
+ * vacante capturada. Afirmar una vacante que no consta es inventar un hecho.
+ * Exportada para su prueba.
+ */
+export function porQueLoRecibes(fuente: string | null, vacante: string | null): string {
+  // AUDITORÍA 19 (legal, reincidente #10): el primer toque por correo salía
+  // SIN la liga del aviso de prospectos — `pieAvisoProspectos` tenía un solo
+  // llamador (el mensaje de WhatsApp del Cerebro) y el art. 16 fr. II obliga
+  // a señalar el sitio del aviso integral en CADA obtención por medio
+  // electrónico, no en uno de los canales. La liga va en el mismo pie que la
+  // BAJA: es la primera vez que esta persona sabe que Likida tiene sus datos.
+  const baja = `Si prefieres no recibir estos correos, responde con la palabra BAJA y no volveremos a escribirte. ${pieAvisoProspectos()}`;
+  if (vacante?.trim()) {
+    return `Recibes este correo porque tu empresa publicó una vacante relacionada con liquidación de viajes. ${baja}`;
+  }
+  if (fuente === 'landing') {
+    return `Recibes este correo porque usaste nuestra calculadora de recuperación fiscal en likida.ai. ${baja}`;
+  }
+  return `Recibes este correo porque tu empresa aparece en directorios públicos del autotransporte en México. ${baja}`;
 }
 
 export type PrioridadPieza = 'normal' | 'urgente';
@@ -149,12 +252,19 @@ export async function bandejaPendiente(prioridad: PrioridadPieza): Promise<Pieza
   return filas.map(desdeFila);
 }
 
-/** Las aprobadas que AÚN no se envían — la cola de salida real. */
+/** Las aprobadas que AÚN no se envían — la cola de salida real.
+ *
+ *  AGB-4: acotada a `TIPOS_ENVIABLES`. Una `ficha_prospecto` aprobada NO
+ *  tiene un paso de "envío" pendiente — aprobarla es el final del camino,
+ *  como cualquier parte interno — así que no pertenece a esta lista aunque
+ *  técnicamente sea `aprobado ∧ enviado_en null`; sale por `ultimasResueltas`
+ *  como todo lo demás. */
 export async function aprobadasSinEnviar(limite = 20): Promise<PiezaEnCola[]> {
   const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
     .select(COLUMNAS)
     .eq('estado', 'aprobado')
     .is('enviado_en', null)
+    .in('tipo', [...TIPOS_ENVIABLES])
     .order('resuelto_en', { ascending: true })
     .limit(limite), 'aprobadasSinEnviar');
   if (error) throw new Error(`aprobadasSinEnviar: ${error.message}`);
@@ -171,6 +281,65 @@ async function emailDeActor(actorId: string): Promise<string> {
   const email = (data as { email?: string } | null)?.email;
   if (!email) throw new DatoInvalido('No se pudo confirmar quién resuelve — recarga y vuelve a intentar.');
   return email;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS REBOTES, A LA VISTA (agosto-2026).
+//
+// El webhook de Resend (`/api/correo/eventos`, 0124) lleva meses guardando
+// `entrega_estado` = rebotado/queja y metiendo la dirección en
+// `correo_suprimido` (0217). Ni un solo `.tsx` los renderizaba: el operador
+// no tenía cómo enterarse de que un dominio entero estaba rebotando ni de a
+// quién dejamos de escribirle. Un rebote invisible se paga en reputación del
+// dominio, que es lo que decide si los correos SIGUIENTES llegan.
+//
+// Se leen aquí y no en la pantalla porque `correo_suprimido` es deny-all con
+// `grant` solo a `service_role`: no hay camino desde el cliente.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Las piezas que el proveedor reportó como REBOTADAS o QUEJA, la última
+ * primero. LANZA ante error de lectura: una lista vacía por base caída diría
+ * «no hay rebotes», que es exactamente la conclusión tranquilizadora que hace
+ * que nadie mire.
+ */
+export async function rebotesRecientes(limite = 15): Promise<PiezaEnCola[]> {
+  const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
+    .select(COLUMNAS)
+    .in('entrega_estado', ['rebotado', 'queja'])
+    .order('entrega_evento_en', { ascending: false })
+    .limit(limite), 'rebotesRecientes');
+  if (error) throw new Error(`rebotesRecientes: ${error.message}`);
+  return ((data ?? []) as Array<Record<string, unknown>>).map(desdeFila);
+}
+
+/** Una dirección a la que ya no se le escribe, con el por qué. */
+export interface CorreoSuprimido {
+  correo: string;
+  /** rebote / queja de spam / baja pedida / manual. Lo escribe quien suprime. */
+  motivo: string;
+  creadoEn: string;
+}
+
+/**
+ * La lista de bajas, para MIRARLA (`filtrarSuprimidos` la usa para decidir).
+ *
+ * Suprimir es para siempre y quitar una fila es decisión manual —lo dice el
+ * comentario de la 0217—, así que esta vista es de solo lectura a propósito:
+ * un botón de «reactivar» aquí convertiría una queja de spam en un click.
+ */
+export async function correosSuprimidos(limite = 25): Promise<CorreoSuprimido[]> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('correo_suprimido')
+    .select('correo, motivo, creado_en')
+    .order('creado_en', { ascending: false })
+    .limit(limite), 'correosSuprimidos');
+  if (error) throw new Error(`correosSuprimidos: ${error.message}`);
+  return ((data ?? []) as Array<Record<string, unknown>>).map((f) => ({
+    correo: String(f.correo),
+    motivo: String(f.motivo),
+    creadoEn: String(f.creado_en),
+  }));
 }
 
 /** Las últimas resueltas — el contexto de "qué ha estado saliendo". */
@@ -300,20 +469,32 @@ export interface ResultadoEnvioPieza {
   providerId: string;
 }
 
-export async function enviarPiezaPorCorreo(id: string, actorId: string): Promise<ResultadoEnvioPieza> {
+export async function enviarPiezaPorCorreo(
+  id: string,
+  /** `null` = envío AUTOMÁTICO del Enviador (0217, orden del 27-ago): la
+   *  reserva de cadencia queda sin actor humano — la pieza ya dice qué
+   *  agente la fabricó y la resolución quién (o qué) la aprobó. */
+  actorId: string | null,
+  /** Copias del MISMO correo a los demás correos hallados de la empresa
+   *  (prospecto_correo, ya filtrados de suprimidos por el llamador). Van en
+   *  el mismo envío y bajo la misma reserva de cadencia: para la empresa es
+   *  UN toque, no uno por buzón. */
+  copias: string[] = [],
+): Promise<ResultadoEnvioPieza> {
   // 1) EL CLAIM — anclado y con todo lo necesario para mandar en el RETURNING:
   //    releer después del claim abriría la ventana que el claim cierra.
   const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
     .update({ enviado_en: new Date().toISOString(), envio_error: null })
     .eq('id', id).eq('estado', 'aprobado').is('enviado_en', null)
-    .select('id, titulo, cuerpo, cuerpo_final, agente, prioridad, prospecto_id, prospecto:prospecto_id(empresa, correo)'), 'enviarPiezaPorCorreo.claim');
+    .select('id, tipo, titulo, cuerpo, cuerpo_final, agente, prioridad, prospecto_id, prospecto:prospecto_id(empresa, correo, fuente, vacante)'), 'enviarPiezaPorCorreo.claim');
   if (error) throw new Error(`enviarPiezaPorCorreo: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
     throw new DatoInvalido('Solo una pieza APROBADA y aún no enviada se puede enviar — puede que otro click le ganara a este. Recarga.');
   }
   const fila = data[0] as Record<string, unknown>;
-  const prospecto = fila.prospecto as { empresa?: string; correo?: string } | null;
+  const prospecto = fila.prospecto as { empresa?: string; correo?: string; fuente?: string; vacante?: string } | null;
   const destinatario = prospecto?.correo?.trim() ?? '';
+  const esCampana = (TIPOS_CAMPANA as readonly string[]).includes(String(fila.tipo));
 
   const revertir = async (motivo: string) => {
     const { error: errRevertir } = await supabaseAdmin().from('cola_aprobacion')
@@ -324,9 +505,71 @@ export async function enviarPiezaPorCorreo(id: string, actorId: string): Promise
     if (errRevertir) logger.error('cola.envio_sin_revertir', { pieza: id, motivo, err: errRevertir.message });
   };
 
+  // ── AGB-4: EL CANDADO DE TIPO, EN LA PUERTA ─────────────────────────────
+  // `aprobadasSinEnviar` ya excluye los tipos internos de la lista que ve el
+  // panel, pero esto es la puerta de VERDAD (cola.ts:427-444): un llamador
+  // viejo, un script, o una página sin recargar no puede convertir un
+  // `ficha_prospecto`/`brief_demo`/`propuesta_comercial` (con datos internos
+  // del prospecto, "INFERIDO — NO VERIFICADO") en un correo AL PROPIO
+  // prospecto solo porque alguien lo aprobó pensando "sí, buena ficha".
+  if (!(TIPOS_ENVIABLES as readonly string[]).includes(String(fila.tipo))) {
+    await revertir(`El tipo "${String(fila.tipo)}" no es enviable a terceros — es una pieza interna.`);
+    throw new DatoInvalido(`Esta pieza es de tipo "${String(fila.tipo)}" — un parte interno, no algo que se le mande al prospecto. No hay botón de envío para esto; si necesitas comunicarte con el prospecto, escríbele aparte.`);
+  }
+
   if (!destinatario) {
     await revertir('El prospecto no tiene correo capturado.');
     throw new DatoInvalido('El prospecto de esta pieza no tiene correo capturado — captúralo en Vendedores y vuelve a enviar.');
+  }
+
+  // ── EL FORMATO DE CAMPAÑA, EN LA PUERTA (c5-14) ──────────────────────────
+  // El texto que de verdad va a salir (la edición humana manda) se verifica
+  // AQUÍ, no solo al fabricarse: un `cuerpo_final` editado a mano con
+  // "clientes reales" o un guion largo tampoco sale.
+  const cuerpo = String(fila.cuerpo_final ?? fila.cuerpo);
+  if (esCampana) {
+    try {
+      verificarFormatoCampana(String(fila.titulo));
+      verificarFormatoCampana(cuerpo);
+    } catch (e) {
+      const motivo = e instanceof Error ? e.message : String(e);
+      await revertir(motivo);
+      throw new DatoInvalido(motivo);
+    }
+  }
+
+  // ── LA LIGA DE BAJA DE UN CLIC, OBLIGATORIA EN CAMPAÑA (envío autónomo
+  // acotado, 29-ago-2026) ──────────────────────────────────────────────────
+  // "Responde BAJA" (respuesta_campana.ts) ya cumplía LFPDPPP; esto agrega lo
+  // que un remitente masivo necesita además: un enlace de un clic (art. 16
+  // fr. II + `List-Unsubscribe` que Gmail/Yahoo exigen desde 2024). NO es
+  // cortesía — es la puerta, y por eso FALLA CERRADO igual que la lista de
+  // bajas de abajo: sin `LIKIDA_BAJA_SECRET` configurado no hay liga que
+  // firmar, y sin liga la campaña NO SALE. Un correo transaccional (fuera de
+  // `esCampana`) no la necesita — nadie se "da de baja" de un aviso de acceso.
+  let bajaHref: string | null = null;
+  if (esCampana) {
+    bajaHref = urlBaja(destinatario);
+    if (!bajaHref) {
+      await revertir('Falta LIKIDA_BAJA_SECRET — sin liga de baja funcional, la campaña no sale.');
+      throw new DatoInvalido('No se puede mandar campaña sin una liga de baja funcional (falta configurar LIKIDA_BAJA_SECRET) — el cumplimiento no es opcional. Configúrala y reintenta.');
+    }
+  }
+
+  // ── LA LISTA DE BAJAS, EN LA PUERTA Y FAIL-CLOSED (c5-1) ─────────────────
+  // Cubre el camino humano Y el automático: si la lista no se puede leer, no
+  // se manda; si el principal está suprimido, la pieza no sale y SE DICE.
+  // Las copias suprimidas simplemente se caen del envío.
+  let vivos: string[];
+  try {
+    vivos = await filtrarSuprimidos([destinatario, ...copias]);
+  } catch {
+    await revertir('No se pudo leer la lista de bajas.');
+    throw new DatoInvalido('No se pudo leer la lista de bajas — sin esa lectura no se manda (escribirle a quien pidió baja quema el dominio). Reintenta.');
+  }
+  if (!vivos.includes(destinatario.trim().toLowerCase())) {
+    await revertir('El correo principal está en la lista de bajas.');
+    throw new DatoInvalido('El correo principal de este prospecto está en la lista de bajas — pidió que no se le escribiera (o rebotó). No se envía.');
   }
 
   // ── EL TOPE DIARIO (Fase 2: "20–40 correos aprobados/día, máximo") ──
@@ -386,23 +629,56 @@ export async function enviarPiezaPorCorreo(id: string, actorId: string): Promise
     reservaId = String(reserva);
   }
 
-  // 2) EL PROVEEDOR. Sale la versión FINAL (la edición humana manda).
-  const cuerpo = String(fila.cuerpo_final ?? fila.cuerpo);
-  const r = await enviarCorreo(destinatario, {
+  // 2) EL PROVEEDOR. Sale la versión FINAL (la edición humana manda). Las
+  // copias van en el MISMO envío (Resend acepta lista) — la lista ya pasó
+  // por bajas (c5-1) y se deduplica contra el principal. La instrucción de
+  // BAJA va en el pie de todos: la honra el procesamiento de respuestas
+  // (correo/entrante) y la lista `correo_suprimido` (0217). El pie dice POR
+  // QUÉ recibe el correo según la fuente real del prospecto (c5-5) — jamás
+  // una vacante que no consta. La llave de idempotencia es el id de la pieza
+  // (c5-3): un reintento tras timeout ambiguo no duplica el correo.
+  const paraTodos = [destinatario, ...vivos
+    .filter((c) => c !== destinatario.trim().toLowerCase())];
+  const r = await enviarCorreo(paraTodos, {
     asunto: String(fila.titulo),
     avance: cuerpo.slice(0, 90),
     titulo: String(fila.titulo),
     parrafos: cuerpo.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).slice(0, 12),
-    porQueLoRecibes: 'Recibes este correo porque tu empresa publicó una vacante relacionada con liquidación de viajes.',
-  });
+    porQueLoRecibes: porQueLoRecibes(prospecto?.fuente ?? null, prospecto?.vacante ?? null),
+    // La liga es del destinatario PRINCIPAL — un solo correo con varios
+    // destinatarios (principal + copias) solo puede llevar UN enlace, y
+    // suprimir al principal ya suprime la razón del envío. Una copia que
+    // quiera su propia baja sigue cubierta por "responde BAJA": esa vía lee
+    // el remitente REAL de la respuesta, sea quien sea.
+    ...(bajaHref ? { bajaHref } : {}),
+  }, { idempotencyKey: `pieza-${id}`, ...(bajaHref ? { listaBajaUrl: bajaHref } : {}) });
   if (!r.ok) {
+    // ── LA AMBIGÜEDAD DE RED (c5-3) ────────────────────────────────────────
+    // 'red' incluye el timeout: el POST pudo haber sido ACEPTADO con la
+    // respuesta perdida. Revertir aquí trataría "no sé" como "no salió" y el
+    // reintento mandaría el MISMO correo frío otra vez al mismo contacto.
+    // La pieza queda con su claim puesto y el motivo a la vista ("verificar
+    // en Resend"): jamás reenvío automático; el humano verifica y, si de
+    // verdad no salió, el reintento es seguro por la Idempotency-Key.
+    // La reserva de cadencia TAMPOCO se borra: bloquear 48h de más es el
+    // lado seguro cuando no se sabe si el correo llegó.
+    if (r.motivo === 'red') {
+      const detalle = `AMBIGUO: el proveedor no contestó a tiempo (${'detalle' in r ? r.detalle : 'timeout'}) — el correo PUDO haber salido. Verificar en Resend antes de cualquier reenvío.`;
+      const { error: errAmb } = await supabaseAdmin().from('cola_aprobacion')
+        .update({ envio_error: detalle.slice(0, 300) })
+        .eq('id', id);
+      if (errAmb) logger.error('cola.ambiguo_sin_anotar', { pieza: id, err: errAmb.message });
+      logger.warn('cola.envio_ambiguo', { pieza: id, detalle });
+      throw new DatoInvalido(`${detalle} La pieza queda marcada como enviada-por-confirmar en el panel.`);
+    }
     const motivo = r.motivo === 'sin_configurar'
       ? 'El canal de correo no está configurado (RESEND_API_KEY/RESEND_EMAIL_DOMAIN).'
       : `Resend no aceptó el envío (${r.motivo}: ${'detalle' in r ? r.detalle : ''}).`;
-    // La COMPENSACIÓN de la reserva (0124): el proveedor rechazó, así que el
-    // contacto reservado se borra — dejarlo bloquearía 48h de cadencia por
-    // un correo que nunca salió. Si NI borrarla se puede, queda del lado
-    // seguro (bloquea de más, jamás de menos) y se grita.
+    // La COMPENSACIÓN de la reserva (0124), SOLO ante rechazo DEFINITIVO: el
+    // proveedor dijo que no, así que el contacto reservado se borra —
+    // dejarlo bloquearía 48h de cadencia por un correo que nunca salió. Si
+    // NI borrarla se puede, queda del lado seguro (bloquea de más, jamás de
+    // menos) y se grita.
     if (reservaId) {
       const { error: errComp } = await supabaseAdmin()
         .from('prospecto_contacto').delete().eq('id', reservaId);

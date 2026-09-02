@@ -3,6 +3,7 @@ import { ListChecks, Send, Zap } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import {
   bandejaPendiente, aprobadasSinEnviar, ultimasResueltas,
+  rebotesRecientes, correosSuprimidos,
   aprobarPieza, rechazarPieza, enviarPiezaPorCorreo,
   type PiezaEnCola,
 } from '@/lib/likida/agentes/cola';
@@ -11,26 +12,25 @@ import { fechaHoraMx } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { EstadoVacio, StatusPill } from '../ui/kit';
 import { FormaPieza, FormaEnvio, type ResultadoPieza } from './forma-pieza';
+import { RebotesYBajas } from './rebotes';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * /admin/aprobaciones — la cola de aprobación genérica (0117 + 0120). DOS
- * bandejas con CONSULTA PROPIA cada una (auditoría externa: la urgente tiene
- * SLA en minutos y no puede depender de la salud de la normal), la cola de
- * salida (aprobadas → envío REAL por Resend, con claim anti-doble-click), y
- * las tres acciones por pieza — ni una más.
- */
 export default async function PaginaAprobaciones() {
   await requireSuperadmin();
 
   // Cada lectura cae POR SU LADO: la urgente caída no esconde la normal ni
   // al revés, y "no se pudo leer" jamás se pinta como "no hay nada".
-  const [urgente, normal, porEnviar, resueltas] = await Promise.all([
+  const [urgente, normal, porEnviar, resueltas, rebotes, suprimidos] = await Promise.all([
     bandejaPendiente('urgente').then((p) => ({ ok: p as PiezaEnCola[] | null, error: null as string | null })).catch((e) => ({ ok: null, error: String(e instanceof Error ? e.message : e) })),
     bandejaPendiente('normal').then((p) => ({ ok: p as PiezaEnCola[] | null, error: null as string | null })).catch((e) => ({ ok: null, error: String(e instanceof Error ? e.message : e) })),
     aprobadasSinEnviar().catch(() => null),
     ultimasResueltas(8).catch(() => null),
+    // `null` = no se pudo leer, y la sección lo DICE. Aplastarlo a lista
+    // vacía diría «no hay rebotes», que es la conclusión tranquilizadora
+    // que hace que nadie vuelva a mirar.
+    rebotesRecientes(15).catch(() => null),
+    correosSuprimidos(25).catch(() => null),
   ]);
 
   async function accionResolver(_previo: ResultadoPieza, fd: FormData): Promise<ResultadoPieza> {
@@ -157,6 +157,16 @@ export default async function PaginaAprobaciones() {
               </div>
             </section>
           )}
+
+          {/* ── REBOTES Y QUEJAS (agosto-2026) ─────────────────────────────
+              El webhook de Resend (0124) llevaba meses escribiendo
+              `entrega_estado` y llenando `correo_suprimido` (0217), y NINGÚN
+              `.tsx` lo pintaba. Se pone aquí y no en una pantalla nueva
+              porque es la misma tabla, el mismo operador y la misma sesión de
+              trabajo: quien aprueba lo que sale es quien tiene que ver qué no
+              llegó. La sección no ofrece un botón de «reactivar»: suprimir es
+              para siempre y quitar una fila es decisión manual (0217). */}
+          <RebotesYBajas rebotes={rebotes} suprimidos={suprimidos} />
 
           <EstadoVacio>
             El candado es de base, no de esta pantalla: `cola_enviado_solo_aprobado` (0117) hace imposible

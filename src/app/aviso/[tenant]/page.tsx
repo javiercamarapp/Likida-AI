@@ -33,6 +33,10 @@ import { fechaMx } from '@/lib/formato';
 
 export const dynamic = 'force-dynamic';
 
+/** LEG-12: la fecha del último cambio sustantivo de `avisoIntegral()`, no la
+ *  fecha en que alguien abre la página. Actualizar junto con el texto. */
+const VIGENTE_DESDE = '2026-09-01';
+
 export const metadata = {
   title: 'Aviso de privacidad',
   // El integral es público por obligación legal, pero no es contenido que deba
@@ -62,10 +66,13 @@ export default async function AvisoIntegral({ params }: { params: Promise<{ tena
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant)) notFound();
 
   const datos = await getDatosResponsable(tenant);
-  // `null` también cuando la flota existe pero le falta razón social o
-  // domicilio: un aviso sin responsable no dice a quién reclamarle, que es
-  // justamente para lo que sirve. Mejor 404 que un documento a medias que
-  // aparente cumplimiento.
+  // `null` también cuando la flota existe pero le falta la RAZÓN SOCIAL: un
+  // aviso sin responsable no dice a quién reclamarle, que es justamente para
+  // lo que sirve. El domicilio ya NO tumba la página (auditoría 19, legal
+  // C3 / C.16): con responsable nombrado, la sección de la fr. I se pinta
+  // como pendiente —igual que el contacto del art. 29— porque un aviso que
+  // dice qué le falta cumple más que un 404 mudo que deja al operador sin
+  // documento por un dato que le toca capturar a su empresa.
   if (!datos) notFound();
 
   const secciones = avisoIntegral(datos);
@@ -92,7 +99,14 @@ export default async function AvisoIntegral({ params }: { params: Promise<{ tena
           {datos.razonSocial}
         </h1>
         <p className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>
-          Vigente al {fechaMx(new Date().toISOString())} · Ley Federal de Protección de
+          {/* AUDITORÍA 24 (LEG-12, BAJO, reincidente): esto imprimía
+              `fechaMx(new Date())` — "Vigente al" cambiaba cada día que
+              alguien abriera la página, sin decir nunca cuándo cambió el
+              TEXTO de `avisoIntegral()`. `VIGENTE_DESDE` es la fecha del
+              último cambio sustantivo de ese texto (LEG-3/LEG-8, auditoría
+              24: cámara/telemetría y contacto de emergencia), no la fecha
+              del render. */}
+          Vigente desde el {fechaMx(VIGENTE_DESDE)} · Ley Federal de Protección de
           Datos Personales en Posesión de los Particulares
         </p>
       </header>

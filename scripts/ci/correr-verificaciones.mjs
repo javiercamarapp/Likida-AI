@@ -51,6 +51,7 @@
 
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { extraerBloques, esRaiseDelPropioBloque, extraerMensaje, calificar } from './calificar-verificacion.mjs';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -64,32 +65,10 @@ if (archivos.length === 0) {
   process.exit(2);
 }
 
-/** Parte un archivo en sus bloques `do $$ ... end $$;` de nivel superior. */
-function extraerBloques(sql, archivo) {
-  const bloques = [];
-  const re = /^do \$\$/gm;
-  let m;
-  while ((m = re.exec(sql))) {
-    const inicio = m.index;
-    const marcaCierre = '\nend $$;';
-    const cierre = sql.indexOf(marcaCierre, inicio);
-    if (cierre === -1) {
-      throw new Error(`${archivo}: bloque sin 'end $$;' de cierre, abre en la línea ${linea(sql, inicio)}`);
-    }
-    const fin = cierre + marcaCierre.length;
-    bloques.push({
-      archivo,
-      sql: sql.slice(inicio, fin),
-      linea: linea(sql, inicio),
-    });
-    re.lastIndex = fin;
-  }
-  return bloques;
-}
-
-function linea(sql, offset) {
-  return sql.slice(0, offset).split('\n').length;
-}
+// Las funciones puras (partir bloques, leer el mensaje, calificar) viven en
+// `./calificar-verificacion.mjs` desde PRU-1 (auditoría 24), para poder
+// probarlas sin Postgres. Aquí queda solo lo que habla con `psql` y decide el
+// código de salida.
 
 /** Corre un bloque contra la base. Cada bloque es su propia sesión/transacción. */
 function correrBloque(bloque) {
@@ -98,176 +77,6 @@ function correrBloque(bloque) {
     encoding: 'utf8',
   });
   return { exitCode: r.status, stderr: r.stderr ?? '', stdout: r.stdout ?? '' };
-}
-
-/**
- * ¿El error que psql reportó es el `raise exception` de CIERRE que el propio
- * bloque escribió a propósito, o un error genuino que Postgres levantó por su
- * cuenta (tabla que no existe, columna NOT NULL vacía, permiso denegado)?
- *
- * La distinción no es cosmética: un bloque de esta batería puede fallar por
- * dos motivos MUY distintos —"la protección que prueba se rompió" (eso es lo
- * que el `raise` final está diseñado para reportar) o "el bloque mismo está
- * roto" (referencia una tabla que solo existe en el archivo completo corrido
- * en una sola sesión de SQL editor, no en su transacción aislada)— y
- * mezclarlos como si fueran el mismo caso "reporte, sin (esperado)" escondía
- * el segundo tipo, que es justo el que más importa no perderse.
- *
- * La señal es el CONTEXT que psql imprime: un `raise exception` deja
- * "…at RAISE"; cualquier otro fallo (INSERT, SELECT INTO, una asignación)
- * deja "…at SQL statement" / "…at assignment" / ningún CONTEXT en absoluto.
- */
-function esRaiseDelPropioBloque(stderr) {
-  return /PL\/pgSQL function inline_code_block line \d+ at RAISE/.test(stderr);
-}
-
-/**
- * Del stderr de psql para un bloque que SÍ lanzó, extrae el texto del
- * mensaje de error (entre "ERROR:  " y la siguiente línea "CONTEXT:"/"HINT:",
- * o el final si no hay ninguna). Colapsa saltos de línea internos a un solo
- * espacio: el `(esperado …)` de un bloque siempre vive en la misma "frase"
- * que las claves que califica, aunque el mensaje tenga secciones multilínea
- * más adelante (los dos bloques-reporte, que de todos modos no tienen
- * `(esperado …)` que parsear).
- */
-function extraerMensaje(stderr) {
-  const m = /ERROR:\s{2}([\s\S]*?)(?:\n[A-ZÁÉÍÓÚ]+:\s|$)/.exec(stderr);
-  if (!m) return null;
-  return m[1].replace(/\s+/g, ' ').trim();
-}
-
-/** Separa "clave1=val1  clave2=val2   (esperado a / b)" en sus dos mitades. */
-function partirEnClavesYEsperado(mensaje) {
-  const marcador = mensaje.indexOf('(esperado');
-  if (marcador === -1) return null; // bloque-reporte: nada que calificar
-  let izq = mensaje.slice(0, marcador).trim();
-
-  // Varios bloques hacen una "falsificación" al final: desarman a propósito
-  // la protección que acaban de probar (dropean un índice, quitan un
-  // constraint) para demostrar que la prueba SÍ hubiera reprobado — y narran
-  // eso con más `clave=valor` que la lista `(esperado …)` no cubre (el
-  // `(esperado …)` de esos bloques solo califica la parte de ANTES). Cortar
-  // ahí evita que esa segunda mitad se cuente como si fuera parte de la
-  // primera y desalinee todo lo que sigue.
-  const corteFalsificacion = izq.indexOf('FALSIFICADO');
-  if (corteFalsificacion !== -1) izq = izq.slice(0, corteFalsificacion).trim();
-
-  let der = mensaje.slice(marcador + '(esperado'.length).trim();
-  der = der.replace(/\)\s*$/, ''); // quita el paréntesis de cierre final
-  const esperados = der.split(/\s*\/\s*/).map((s) => s.trim());
-
-  // El ÚLTIMO valor puede traer prosa tras un guion largo ("0 — nunca 2, que
-  // sería ver los dos choferes"): se recorta a lo que hay ANTES del guion.
-  // Ojo con no confundir esto con un valor esperado que sea LITERALMENTE
-  // "—" (el placeholder de "lista vacía" que usan varios bloques, incluido
-  // el propio de este archivo): si no hay nada antes del guion, no es
-  // prosa — es el valor.
-  const ultimo = esperados.length - 1;
-  const conProsa = /^(\S.*?)\s+—\s+\S.*$/.exec(esperados[ultimo]);
-  if (conProsa) esperados[ultimo] = conProsa[1].trim();
-
-  // Claves = todo token `identificador=` en el lado izquierdo, en orden.
-  // El `+` entra en la clase: hay claves como `facturas+2=t` y sin él el parser
-  // partía en el `+`, tomaba "2" como clave y le colgaba a la anterior un valor
-  // de "t facturas+". El bloque PASABA y el CI lo reportaba como fallo — un
-  // parser frágil convierte pruebas buenas en rojo, que es la forma más rápida
-  // de que un equipo deje de mirar el CI. No se añade `/`: en `anon=f/f` la
-  // barra es parte del VALOR, no separador de claves.
-  const clavesRe = /([\wÁÉÍÓÚáéíóúñÑ+-]+)=/g;
-  const posiciones = [];
-  let cm;
-  while ((cm = clavesRe.exec(izq))) posiciones.push({ clave: cm[1], desde: clavesRe.lastIndex });
-  if (posiciones.length === 0) return { izq, esperados, pares: [] };
-
-  const pares = posiciones.map((p, i) => {
-    const hasta = i + 1 < posiciones.length
-      ? izq.lastIndexOf(
-          posiciones[i + 1].clave + '=',
-          posiciones[i + 1].desde - posiciones[i + 1].clave.length - 1,
-        )
-      : izq.length;
-    const valor = izq.slice(p.desde, hasta).trim();
-    return { clave: p.clave, valor };
-  });
-
-  return { izq, esperados, pares };
-}
-
-// Booleano: RAISE imprime `t`/`f` (la salida de texto nativa de Postgres para
-// `boolean`), pero varios `(esperado …)` los escriben "true"/"false" en
-// palabras. Son el mismo valor.
-const BOOL_A_LETRA = { true: 't', false: 'f', verdadero: 't', falso: 'f' };
-// "Lista vacía" tiene tres formas distintas en este archivo, según qué autor
-// escribió el bloque: el placeholder de `string_agg(..., '—')`, la palabra
-// "vacío"/"vacio", y `[algo]` cuando ese algo salió vacío (`[]`).
-const VACIOS = new Set(['—', 'vacío', 'vacio', '[]', '', 'ninguno', 'ninguna']);
-
-function normalizar(v) {
-  const s = v.trim();
-  const low = s.toLowerCase();
-  if (low in BOOL_A_LETRA) return BOOL_A_LETRA[low];
-  if (VACIOS.has(low)) return '∅';
-  return s;
-}
-
-/** ">=1", "<=5", ">0", "<10" — comparación numérica en vez de literal. */
-function comparaDesigualdad(actual, esperado) {
-  const m = /^([<>]=?)\s*(-?\d+(?:\.\d+)?)$/.exec(esperado);
-  if (!m) return null;
-  const n = Number(actual);
-  if (!Number.isFinite(n)) return false;
-  const limite = Number(m[2]);
-  switch (m[1]) {
-    case '>=': return n >= limite;
-    case '<=': return n <= limite;
-    case '>': return n > limite;
-    case '<': return n < limite;
-    default: return null;
-  }
-}
-
-function calificar(mensaje) {
-  const partido = partirEnClavesYEsperado(mensaje);
-  if (partido === null) return { tipo: 'reporte' };
-  const { esperados, pares } = partido;
-  if (esperados.length !== pares.length) {
-    return {
-      tipo: 'sin_calificar',
-      razon: `${pares.length} clave(s) detectada(s) vs ${esperados.length} valor(es) esperado(s)`,
-      pares,
-      esperados,
-    };
-  }
-  const detalle = pares.map((p, i) => {
-    const esp = esperados[i];
-    // Un esperado del tipo "clave=lo-que-sea" que repite el NOMBRE de su
-    // propia clave ("actualiza-con-facilidad=actualiza") no es un valor
-    // literal a comparar — es el autor describiendo la intención en prosa
-    // dentro del mismo paréntesis. Se trata como comodín.
-    const autoReferencial = esp.startsWith(`${p.clave}=`);
-    // Un esperado con espacios adentro ("la url", "cualquier otra cosa es
-    // fuga al chofer") tampoco es un literal — es prosa.
-    const prosa = /\s/.test(esp);
-    if (autoReferencial || prosa) {
-      return { clave: p.clave, actual: p.valor, esperado: esp, comodin: true, ok: true };
-    }
-    const desigualdad = comparaDesigualdad(p.valor, esp);
-    if (desigualdad !== null) {
-      return { clave: p.clave, actual: p.valor, esperado: esp, comodin: false, ok: desigualdad };
-    }
-    // Una columna `numeric` imprime "2300.00"; el `(esperado …)` que un autor
-    // escribe a mano suele decir "2300". Mismo valor, distinta cantidad de
-    // ceros — se comparan como número si LOS DOS lo son (así "PRIMERO" contra
-    // "PRIMERO" sigue yendo por la comparación de texto de abajo).
-    const numActual = Number(p.valor);
-    const numEsp = Number(esp);
-    const sonNumericos = p.valor.trim() !== '' && esp.trim() !== ''
-      && Number.isFinite(numActual) && Number.isFinite(numEsp);
-    const ok = sonNumericos ? numActual === numEsp : normalizar(p.valor) === normalizar(esp);
-    return { clave: p.clave, actual: p.valor, esperado: esp, comodin: false, ok };
-  });
-  const falla = detalle.filter((d) => !d.ok);
-  return { tipo: falla.length === 0 ? 'ok' : 'falla', detalle, falla };
 }
 
 // ── Corrida principal ────────────────────────────────────────────────────
@@ -359,74 +168,35 @@ if (fallas > 0 || noLanzaron > 0) {
   process.exit(1);
 }
 
-// 23-AGO-2026: `sin_calificar` PASA A SER FALLA.
+// ── SIN CALIFICAR = FALLA, SIN LISTA DE EXCEPCIONES ────────────────────────
 //
-// Antes esto solo imprimía un aviso y el proceso salía con 0. Es decir: un
-// bloque que verifica una migración de dinero podía quedar sin calificar y el
-// CI decía "La batería pasó". Un verde que no distingue "verifiqué y está
-// bien" de "no supe leer el resultado" no es una compuerta: es un adorno.
+// 23-ago-2026: `sin_calificar` pasó a ser falla, pero con 19 bloques que el
+// parser no sabía leer metidos en una lista `SIN_CALIFICAR_CONOCIDOS` «que se
+// baja, no se sube». No bajó. La auditoría 24 (PRU-1, CRÍTICO) lo demostró
+// mutando la policy de `tarifa`: `FINANZAS_RLS clientes=0 tarifas=1 …` salía
+// marcado ▲ SIN CALIFICAR, «182 ok · 0 fallos», exit 0 — la única prueba que
+// impide que un encargado lea la lista de precios lo medía, lo imprimía y no
+// reprobaba. Entre los 19 estaban también RPCS_0159 (sobrepago, saldo
+// negativo), STRIPE_0163, AGREGADOS_0150, RESUMEN_POR_TENANT (con su
+// AISLADO=) e INDICES_PAGINACION (2/9 índices en uso, y verde).
 //
-// Si un bloque no se puede calificar, el arreglo es hacer su resultado
-// explícito en verificaciones.sql, no bajarle el listón al CI.
-// ── LOS QUE HOY NO SE PUEDEN CALIFICAR, UNO POR UNO ────────────────────────
-//
-// 23-ago-2026. `sin_calificar` pasa a ser FALLA (antes solo imprimía un aviso y
-// el CI salía verde), pero había 19 bloques que el parser no sabe leer y
-// bloquearlos todos de golpe dejaría el CI rojo para siempre — que es
-// exactamente la enfermedad que esto viene a curar.
-//
-// Así que la deuda se hace NOMINAL: cada uno con su razón. Un bloque NUEVO sin
-// calificar SÍ falla, que es lo que impide que la lista crezca. Y la lista se
-// baja arreglando el mensaje del bloque o el parser, no añadiendo entradas.
-//
-// Las tres formas que el parser no entiende hoy:
-//   A. El `(esperado …)` está en PROSA («4x true», «todo t salvo anon_price=f»)
-//      en vez de ser una lista separada por `/`. Se lee bien a ojo y no se
-//      puede alinear a máquina.
-//   B. Un VALOR contiene `/` (`anon=f/f`, `bucket=8388608/2`), y el parser
-//      parte los esperados justo por ahí.
-//   C. El bloque suelta un PLAN de ejecución de Postgres, que trae `|`, `=` y
-//      paréntesis a mansalva.
-const SIN_CALIFICAR_CONOCIDOS = new Map([
-  ['CLAIM',                'B · `1er/2do=t/f` y el esperado `t/f` usan la barra como parte del valor.'],
-  ['FINANZAS_RLS',         'A · «esperado 0 en las seis» es prosa, no una lista de seis ceros.'],
-  ['INDICE_FACTURACION',   'C · imprime el plan del planeador entero.'],
-  ['INDICES_PAGINACION',   'C · imprime nueve planes del planeador.'],
-  ['RESUMEN_COSTO_IA',     'A · «t×10 / borde>0 / f / f / f / t» agrupa diez claves en un solo esperado.'],
-  ['FALTA_PARA_OPERAR',    'A · «esperado 4x true».'],
-  ['RESUMEN_POR_TENANT',   'A · el esperado describe («t en todo, f en los definer») en vez de listar.'],
-  ['45 ',                  'B · el `FALSIFICADO` trae su propio par clave=valor tras el corte.'],
-  ['48 ',                  'B · idem.'],
-  ['49 ',                  'C · lista nombres de función separados por coma dentro del valor.'],
-  ['52 ',                  'B · `anon=-1` y el esperado `t / 0 / 1 / t` no alinean por el signo.'],
-  ['RETENCION_0104',       'B · `anon=f/f` contra un esperado que ya trae `f/f` partido.'],
-  ['DESGLOSE_0106',        'B · `rls=t/t` con barra dentro del valor.'],
-  ['REGISTRO_0154',        'B · `anon=f/f`.'],
-  ['FISCAL_AGREGADO_0151', 'C · el mensaje trae tres secciones separadas por `|` con sus propias claves.'],
-  ['AGREGADOS_0150',       'A · «esperado 11/t/t/t/t y doce t» resume doce banderas en prosa.'],
-  ['PURGAS_0155',          'B · `bucket=8388608/2` parte el esperado por su barra.'],
-  ['RPCS_0159',            'A · el esperado agrupa nueve banderas.'],
-  ['STRIPE_0163',          'A · «esperado todo t salvo anon_price=f».'],
-]);
-
+// 1-sep-2026: los 19 `raise` se reescribieron como listas alineadas
+// (`a / b / c` contra sus claves, valores sin barra adentro, prosa fuera del
+// paréntesis) y se verificaron uno por uno contra un Postgres 17 efímero con
+// las 257 migraciones. La lista quedó en cero y se BORRA: una lista vacía con
+// mecanismo de excepción es una invitación a volver a llenarla. Un bloque que
+// no se puede calificar es rojo, hoy y siempre; el arreglo es el mensaje del
+// `raise`, no una entrada aquí. `scripts/ci/calificar_verificacion_aud24.test.ts`
+// fija el caso de la fuga: `tarifas=1` contra `esperado 0` es `falla`.
 if (sinCalificar > 0) {
-  const nuevos = sinCalificarMensajes.filter(
-    (m) => ![...SIN_CALIFICAR_CONOCIDOS.keys()].some((k) => m.startsWith(k)),
-  );
-  if (nuevos.length > 0) {
-    console.log(`\n${nuevos.length} bloque(s) NUEVO(S) sin calificar — y eso sí es falla:`);
-    for (const m of nuevos) console.log(`  ${m.slice(0, 140)}`);
-    console.log(
-      '\nUn bloque sin calificar no se puede afirmar que pasó. Arregla el mensaje del `raise`\n' +
-        '(una lista `a / b / c` alineada con sus claves) o el parser. Añadirlo a\n' +
-        'SIN_CALIFICAR_CONOCIDOS solo vale con la razón escrita, y esa lista se baja, no se sube.',
-    );
-    console.log('\nLa batería de verificaciones.sql/capa1 NO pasó.');
-    process.exit(1);
-  }
+  console.log(`\n${sinCalificar} bloque(s) sin calificar — y eso es falla:`);
+  for (const m of sinCalificarMensajes) console.log(`  ${m.slice(0, 140)}`);
   console.log(
-    `\n${sinCalificar} bloque(s) sin calificar, todos conocidos y con razón (ver` +
-      ' SIN_CALIFICAR_CONOCIDOS). Ninguno nuevo.',
+    '\nUn bloque sin calificar no se puede afirmar que pasó. Arregla el mensaje del `raise`:\n' +
+      'una lista `a / b / c` alineada con sus claves, sin `/` dentro de un valor, y la prosa\n' +
+      'fuera del paréntesis (o como último valor, tras un guion largo).',
   );
+  console.log('\nLa batería de verificaciones.sql/capa1 NO pasó.');
+  process.exit(1);
 }
 console.log('\nLa batería pasó.');

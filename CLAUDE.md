@@ -44,7 +44,7 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
 - `wa_mensaje_procesado` NO tiene `tenant_id`: no se puede atribuir a una flota.
 - `viaje.estatus` solo admite `abierto | en_cuadre | liquidado` (constraint
   `viaje_estatus_dominio`). `app_user.rol`: superadmin, flota_admin, contador,
-  operador, encargado.
+  encargado, vendedor (`operador` se retiró en la 0086; `vendedor` entró en la 0105).
 - `cliente`, `unidad`, `tarifa`, `factura_emitida`, `pago_recibido`, `posicion` y
   `geocerca` SÍ EXISTEN (migs. 0047-0050), y `viaje` tiene `km_recorridos` e
   `ingreso_flete`. **Están vacías, pero YA NO por falta de escritor** — la
@@ -53,12 +53,22 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
     tienen quien las escriba** (el panel, `POST /v1/{viajes,unidades}` y
     `facturacion_escritura.ts` — verificado 16-ago con el insert en :279/:406
     llamado desde `/dashboard/facturacion`). Si vas a "construir el escritor",
-    ya existe.
-  - Siguen SIN escritor: `posicion`, `geocerca`, `terminal` (huérfana desde
-    0001: la referencian operador/viaje y solo la lee un join en repo.ts),
-    `mantenimiento`, `cotizacion`, `ticket_mensaje` (el hilo del ticket nunca
-    se implementó), `portal_credencial`, `invitacion`, y las muertas de facto
-    `campania`/`envio_mensaje` (las sustituyó `campana`, 0123).
+    ya existe. **Y desde el 29-ago-2026 también** `posicion` (dos escritores:
+    el pin del chofer por WhatsApp en `processor.ts` y el poller del conector
+    GPS en `conectores/sincronizar_gps.ts` vía `/api/cron/gps`), `cotizacion`
+    (el cotizador de la 0225, `cotizador/lector.ts`), `mantenimiento` (el
+    taller de la 0209, `mantenimiento.ts`) y **`ticket_mensaje`** (el ciclo de
+    soporte de la 0268, `likida/soporte.ts` — responder, tomar, cerrar y
+    reabrir, con las dos pantallas cableadas: /admin/soporte y
+    /dashboard/soporte). Las cuatro se listaban abajo como huérfanas y hacía
+    semanas que no lo eran. El caso de `ticket_mensaje` es el que más costaba:
+    tenía dos LECTORES y cero escritores, y por eso la alarma «sin respuesta»
+    del agente de Éxito era insatisfacible por construcción.
+  - Siguen SIN escritor: `geocerca` (solo lectores: estadías, briefing,
+    facturación), `terminal` (huérfana desde 0001: la referencian
+    operador/viaje y solo la lee un join en repo.ts), `portal_credencial`,
+    `invitacion`, y las muertas de facto `campania`/`envio_mensaje` (las
+    sustituyó `campana`, 0123).
   - La base entera está en cero (0 viajes, 14-ago-2026) porque **no hay
     clientes todavía**, no porque falte código. Ver `project_likida_sin_clientes`.
 
@@ -97,6 +107,11 @@ que no urgían.
   normal en GitHub y el sitio se queda con la versión anterior sin avisar.
   Antes de enseñarle algo a alguien, confirma que el último deployment
   corresponda a tu último commit.
+- **Migraciones ANTES que `[deploy]`:** el `ignoreCommand` corre
+  `scripts/ci/compuerta-deploy.mjs`, que lee `migracion.base` de `/api/health`
+  y NO construye si la base va atrás de la última `supabase/migrations`
+  (`[deploy:forzar]` la salta a la vista; `salud-produccion.yml` pinta el
+  mismo veredicto en rojo).
 
 `NEXT_PUBLIC_APP_URL` debe ser `https://app.likida.ai`; si no coincide con el
 Site URL de Supabase (Auth → URL Configuration), el login deja la cookie en otro

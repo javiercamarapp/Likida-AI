@@ -58,7 +58,7 @@ export function FaltaDato({ children }: { children: React.ReactNode }) {
 }
 
 export function PaginaLegal({
-  etiqueta, bajada, secciones, aviso, pie,
+  etiqueta, bajada, secciones, aviso, pie, vigenteDesde,
 }: {
   /** El rótulo chico de arriba: "Términos de servicio", "Política de privacidad". */
   etiqueta: string;
@@ -73,6 +73,15 @@ export function PaginaLegal({
   /** El recuadro de dato faltante, si aplica. */
   aviso?: React.ReactNode;
   pie?: React.ReactNode;
+  /**
+   * AUDITORÍA 24 (LEG-12, BAJO, reincidente): esta prop antes no existía —
+   * el encabezado imprimía `fechaMx(new Date())`, así que "Vigente al"
+   * cambiaba cada día que alguien abriera la página, sin decir nunca cuándo
+   * cambió el TEXTO. Cada llamador declara aquí la fecha del último cambio
+   * sustantivo de su propio contenido (ISO, YYYY-MM-DD) — un rótulo que sea
+   * verdad en vez de uno que se actualiza solo con el reloj.
+   */
+  vigenteDesde: string;
 }) {
   return (
     <main
@@ -85,7 +94,7 @@ export function PaginaLegal({
         </p>
         <h1 className="mt-2 text-2xl font-semibold" style={{ color: 'var(--ink)' }}>Likida</h1>
         <p className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>
-          Vigente al {fechaMx(new Date().toISOString())} · {bajada}
+          Vigente desde el {fechaMx(vigenteDesde)} · {bajada}
         </p>
       </header>
 

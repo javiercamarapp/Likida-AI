@@ -41,7 +41,73 @@ export type EntidadBitacora =
   | 'agente_definicion'
   | 'cola_aprobacion'
   | 'interruptor'
-  | 'runner';
+  | 'runner'
+  // A19 (0229): las vigilancias que la flota declara en lenguaje natural.
+  // Quién confirmó una regla que manda WhatsApps —y quién la pausó— es
+  // exactamente la clase de acto que esta tabla existe para recordar.
+  | 'regla_vigilancia'
+  // A18 (0228): el portal de pago del cliente. Quién emitió el enlace de una
+  // factura, quién lo revocó, y quién decidió sobre lo que un tercero afirmó
+  // haber pagado — los tres son actos que hay que poder reconstruir.
+  | 'portal_pago_liga'
+  | 'portal_pago_propuesta'
+  | 'rep_emitido'
+  // 0231: la descarga masiva del SAT. Quién declaró CUÁL RFC se descarga y
+  // quién pidió QUÉ periodo son los dos actos que hay que poder reconstruir:
+  // el primero decide de qué contribuyente se lee el buzón, y el segundo
+  // consume el tope diario que ese RFC tiene ante el SAT.
+  | 'sat_descarga_config'
+  | 'sat_descarga_solicitud'
+  // 0243: la bandeja de conciliación. Ligar un CFDI a un gasto, archivarlo o
+  // DESHACER cualquiera de las dos cosas son afirmaciones sobre dinero
+  // deducible: «este comprobante ampara este gasto» es lo que el contador va a
+  // defender ante el SAT. La anotación vive además EN LA FILA
+  // (`resuelto_por_email`) y en el expediente `sat_cfdi_resolucion`; esto es la
+  // copia cross-tenant que /admin reconstruye — mismo reparto que `jornada_dia`.
+  | 'sat_cfdi_descargado'
+  // El permiso de la flota para que Likida guarde su contraseña de portal y
+  // reconecte sola (0233). Es un CONSENTIMIENTO: quién lo dio, cuándo, quién
+  // lo revocó, y cada vez que la máquina lo ejerció. Sin esto, «reconecté
+  // sola el 9 de agosto» sería una frase sin respaldo.
+  | 'portal_relogin'
+  // 0268: el ciclo del ticket de soporte. Quién lo TOMÓ y quién lo CERRÓ son
+  // los dos actos que la fila sola no reconstruye: `asignado_a` guarda al dueño
+  // ACTUAL (se sobrescribe al reasignar) y `estado` guarda el último, no la
+  // secuencia. El hilo (`ticket_mensaje`, con su `autor_id`) ya es el registro
+  // de qué se dijo; esto es el de qué se decidió.
+  | 'ticket_soporte'
+  // 0241: el registro de jornada de la LFT 132 fr. XXXIV. Corregir una hora de
+  // un trabajador, o cerrar su día, son actos con consecuencia jurídica: el
+  // 805 de la propia LFT hace que la ausencia o el desaseo de este documento se
+  // vuelva una presunción en contra del patrón. La anotación vive además EN LA
+  // FILA (`anulado_por_email`, `cerrado_por_email`); esto es la copia
+  // cross-tenant que /admin puede reconstruir sin tocar el expediente.
+  | 'jornada_dia'
+  // Comandos de administración de PLATAFORMA recibidos por WhatsApp (0059,
+  // `admin_comandos_wa.ts`): "aprobar <id>", "correr <rutina>", "estatus".
+  // Van sin tenant (`tenantId: null`, igual que 'cola_aprobacion') porque las
+  // tablas que tocan (`cola_aprobacion`, `bus_*`) tampoco tienen una — son de
+  // Javier, no de una flota. `entidadId` es el id de la pieza, el nombre de
+  // la rutina, o 'general' para un "estatus" sin argumento.
+  | 'comando_admin_wa'
+  // 0260/0265: los accesos MCP (Claude, ChatGPT) de un usuario a los datos de
+  // su flota. Cortarlos es un acto sobre una credencial —de la misma clase que
+  // revocar una `tenant_api_key`— y quién lo cortó no tiene columna en
+  // `mcp_oauth_token`: esta anotación es su única memoria.
+  | 'mcp_oauth_token'
+  // Auditoría 20 (H4): el estado operativo de una unidad. Mandarla a taller o
+  // DARLA DE BAJA son actos sobre un activo de la empresa —un camión vendido,
+  // chocado o siniestrado— que cambian lo que el despacho puede ofrecer y el
+  // denominador de todo lo que se mide por unidad. Quién lo decidió y cuándo
+  // es exactamente lo que hay que poder reconstruir meses después.
+  | 'unidad'
+  // ADM-8 (auditoría 24): una exportación CSV del Cerebro de ventas
+  // (mapa-prospectos/cerebro.tsx) descarga hasta 33k prospectos con
+  // teléfono/correo de decisores y no dejaba ningún rastro. `entidadId`
+  // es 'csv' (no hay una fila de prospecto singular que nombrar — es la
+  // cartera filtrada completa); `detalle` lleva el conteo y los filtros
+  // elegidos, nunca datos de un prospecto.
+  | 'prospecto';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una

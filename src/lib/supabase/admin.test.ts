@@ -86,3 +86,26 @@ describe('supabaseAdmin — backstop de tiempo en el fetch', () => {
     globalFetch.mockRestore();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INCIDENTE 28-AGO-2026 (corrida 46ad99ca) — la hipótesis clásica del «Too
+// many connections» es un cliente nuevo por iteración. Aquí quedó REFUTADA
+// (el cliente es memo de módulo) y esta prueba la deja fijada: si alguien
+// quita el memo, N llamadas volverían a ser N clientes con N pools de fetch.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('supabaseAdmin es UN cliente por proceso — jamás uno por llamada', () => {
+  it('dos llamadas devuelven exactamente la misma instancia', async () => {
+    let creados = 0;
+    vi.doMock('@supabase/supabase-js', () => ({
+      createClient: () => { creados += 1; return { marca: creados } as unknown; },
+    }));
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://ejemplo.supabase.co';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'clave-presente';
+    const { supabaseAdmin } = await import('./admin');
+    const a = supabaseAdmin();
+    const b = supabaseAdmin();
+    vi.doUnmock('@supabase/supabase-js');
+    expect(b).toBe(a);
+    expect(creados).toBe(1);
+  });
+});

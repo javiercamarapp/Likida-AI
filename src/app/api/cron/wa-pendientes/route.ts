@@ -78,6 +78,10 @@ export async function GET(req: Request) {
   // de `leerInterruptor`.
   const global = await leerInterruptor('global');
   if (global === 'ilegible') {
+    // El latido ANTES del 500 (tableros al día, 28-ago-2026): sin él, este
+    // camino era MUDO y /admin/crons tardaba cadencia+20 min en enterarse —
+    // y cuando se enteraba decía «No late» en vez de «falló y por qué».
+    await registrarLatido('wa-pendientes', 'fallo', { codigo: 'interruptor_ilegible' });
     return NextResponse.json({
       corrio: false,
       error: 'No se pudo leer el interruptor global: la bandeja no se drena sin saber si está apagado.',
@@ -87,6 +91,10 @@ export async function GET(req: Request) {
   }
   if (global === 'apagado') {
     logger.warn('cron.wa_pendientes.saltado', { interruptor: 'global' });
+    // Sin este latido, un apagado A PROPÓSITO se veía en /admin/crons como
+    // «No late» en rojo a los 21 minutos, y /api/health alertaba al operador
+    // por una decisión deliberada — mismo contrato que gps/asistencia/jornada.
+    await registrarLatido('wa-pendientes', 'saltado', { interruptor: 'global' });
     return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }
 

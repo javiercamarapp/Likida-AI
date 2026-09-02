@@ -23,6 +23,26 @@
 const CLAVE_STORAGE = 'likida:alertas-flota:leidas';
 const EVENTO_CAMBIO = 'likida:alertas-flota:cambio';
 
+/**
+ * H47 (auditoría 24): tope del set de "leídas".
+ *
+ * El comentario de arriba lo dice: la llave de cada alerta CARGA SU CONTEO
+ * (`huerfanos:3`), y por diseño "si mañana hay 5 huérfanos, el id cambia y
+ * la alerta REAPARECE" — eso es correcto para la campana, pero tiene un
+ * costo que nadie pagaba: el id VIEJO (`huerfanos:3`) nunca se borra de
+ * `leidas`, solo se le suma el nuevo. A 500 viajes/día, con varios tipos de
+ * alerta cuyo conteo cambia varias veces al día, el arreglo que
+ * `JSON.stringify` serializa en CADA clic crece sin límite mientras el mismo
+ * navegador siga abriendo el panel — meses de uso real acumulan miles de ids
+ * muertos que ya no corresponden a ninguna alerta posible, y cada lectura/
+ * escritura los vuelve a parsear/serializar completos. `MAX_LEIDAS` topa el
+ * costo sin cambiar el comportamiento visible: solo se podan los ids MÁS
+ * VIEJOS (los `Set` de JS conservan orden de inserción), nunca los
+ * recientes, así que una alerta marcada hace un minuto no puede reaparecer
+ * por la poda.
+ */
+const MAX_LEIDAS = 500;
+
 /** Referencia estable para el caso "no hay nada leído": `useSyncExternalStore`
  *  entra en bucle si `getSnapshot` devuelve un objeto nuevo en cada render. */
 export const SIN_LEIDAS: ReadonlySet<string> = new Set<string>();
@@ -61,8 +81,12 @@ export function leerLeidas(): ReadonlySet<string> {
 }
 
 function guardar(leidas: Set<string>) {
+  // H47: poda los ids más viejos si se pasó del tope — `[...leidas]`
+  // conserva el orden de inserción, así que `.slice(-MAX_LEIDAS)` se queda
+  // con los MÁS RECIENTES y descarta la cola vieja.
+  const acotadas = leidas.size > MAX_LEIDAS ? new Set([...leidas].slice(-MAX_LEIDAS)) : leidas;
   try {
-    window.localStorage.setItem(CLAVE_STORAGE, JSON.stringify([...leidas]));
+    window.localStorage.setItem(CLAVE_STORAGE, JSON.stringify([...acotadas]));
   } catch {
     // Cuota llena o modo privado: el descarte se pierde al recargar. Preferible
     // a romper el clic — la alerta reaparece, que es el lado seguro del error.

@@ -63,15 +63,24 @@ function Digito({ valor, tamaño }: { valor: string; tamaño: 'md' | 'lg' }) {
  * nunca un tic inventado.
  */
 export default function ContadorRetro({
-  valor, digitos = 4, prefijo, etiqueta, tamaño = 'md',
+  valor, digitos = 4, prefijo, etiqueta, tamaño = 'md', sinDato = 'sin medir',
 }: {
-  valor: number;
+  /**
+   * `null` = NO MEDIBLE (ADM-5, auditoría 24): antes esta prop no aceptaba
+   * `null` y el MRR se mandaba como `valor={0}` LITERAL aunque nadie lo
+   * hubiera calculado — el mismo `$0` fabricado que la regla #1 del
+   * producto prohíbe. Con `null` se pinta "—" y `sinDato` abajo, en vez de
+   * un cero que nadie midió.
+   */
+  valor: number | null;
   digitos?: number;
   prefijo?: string;
   etiqueta: string;
   tamaño?: 'md' | 'lg';
+  /** El pie cuando `valor` es `null`: por qué no hay cifra. */
+  sinDato?: string;
 }) {
-  const [mostrado, setMostrado] = useState(valor);
+  const [mostrado, setMostrado] = useState(valor ?? 0);
   const montadoRef = useRef(false);
 
   useEffect(() => {
@@ -87,7 +96,7 @@ export default function ContadorRetro({
       montadoRef.current = true;
       return;
     }
-    if (valor <= 0) return; // el estado ya arranca en el valor real (0)
+    if (valor === null || valor <= 0) return; // el estado ya arranca en el valor real (0)
     const pasos = Math.min(valor, 30);
     const incremento = Math.max(1, Math.round(valor / pasos));
     let actual = 0;
@@ -98,6 +107,18 @@ export default function ContadorRetro({
     }, 45);
     return () => clearInterval(id);
   }, [valor]);
+
+  if (valor === null) {
+    return (
+      <div className="hidden sm:flex flex-col items-end gap-2 shrink-0">
+        <span className="font-bold tabular-nums" style={{ fontSize: tamaño === 'lg' ? 29 : 18, color: 'var(--muted)' }}>—</span>
+        <span className="text-xs font-semibold uppercase tracking-wide whitespace-nowrap" style={{ color: 'var(--muted)' }}>
+          {etiqueta}
+        </span>
+        <span className="text-[10px] normal-case" style={{ color: 'var(--faint)' }}>{sinDato}</span>
+      </div>
+    );
+  }
 
   const cifras = String(mostrado).padStart(digitos, '0').split('');
 

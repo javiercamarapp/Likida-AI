@@ -16,19 +16,27 @@ const accion = async () => null;
 
 const CONTADOR_CON_TEL: UsuarioRow = {
   id: 'u-1', nombre: 'Ana Ruiz', email: 'ana@flota.mx', rol: 'contador', telefono: '524771234567',
+  activo: true, desactivadoEn: null,
 };
 const ENCARGADO_SIN_TEL: UsuarioRow = {
   id: 'u-2', nombre: null, email: 'trafico@flota.mx', rol: 'encargado', telefono: null,
+  activo: true, desactivadoEn: null,
 };
+const EX_CONTADOR: UsuarioRow = {
+  id: 'u-3', nombre: 'Ex Despacho', email: 'ex@contadores.mx', rol: 'contador', telefono: null,
+  activo: false, desactivadoEn: '2026-10-15T18:00:00Z',
+};
+
+const acciones = { invitar: accion, cambiarRol: accion, darDeBaja: accion, reactivar: accion, reenviarAcceso: accion };
 
 function pintar(p: { usuarios: UsuarioRow[] | null; puedeInvitar: boolean; userId?: string }) {
   return renderToStaticMarkup(
     <VistaUsuarios
       usuarios={p.usuarios}
-      userId={p.userId ?? 'u-1'}
+      userId={p.userId ?? 'u-9'}
       puedeInvitar={p.puedeInvitar}
       roles={ROLES_INVITABLES}
-      invitar={accion}
+      acciones={acciones}
     />,
   );
 }
@@ -81,9 +89,58 @@ describe('la lista dice la verdad de cada renglón', () => {
     expect(html.match(/\(tú\)/g)).toHaveLength(1);
   });
 
-  it('no promete baja ni cambio de rol: app_user no tiene cómo desactivar', () => {
+  it('el rol se pinta con su rótulo de roles.ts, no con el valor crudo', () => {
+    const html = pintar({ usuarios: [CONTADOR_CON_TEL], puedeInvitar: false });
+    expect(html).toContain('Contador');
+    expect(html).not.toContain('>contador<');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24, SEG-1 / H5: la baja, el cambio de rol y el reenvío EXISTEN.
+// Aquí decía «no promete baja ni cambio de rol» y la pantalla lo confesaba
+// textual; ahora se fija lo contrario, y a quién se le ofrece.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('gestión del equipo: baja, rol y reenvío', () => {
+  it('el dueño ve Dar de baja, Cambiar rol y Reenviar acceso en cada cuenta activa ajena', () => {
     const html = pintar({ usuarios: [CONTADOR_CON_TEL], puedeInvitar: true });
-    expect(html).toContain('todavía no existe');
+    expect(html).toContain('Dar de baja');
+    expect(html).toContain('Cambiar rol');
+    expect(html).toContain('Reenviar acceso');
+    expect(html).not.toContain('todavía no existe');
+  });
+
+  it('a un rol sin puedeAdministrar no se le pinta ninguna acción, y se le dice por qué', () => {
+    const html = pintar({ usuarios: [CONTADOR_CON_TEL], puedeInvitar: false });
+    expect(html).not.toContain('Dar de baja');
+    expect(html).not.toContain('Cambiar rol');
+    expect(html).toContain('decisión del dueño de la flota');
+  });
+
+  it('la propia cuenta no se ofrece para baja ni cambio de rol', () => {
+    const html = pintar({ usuarios: [CONTADOR_CON_TEL], puedeInvitar: true, userId: 'u-1' });
+    expect(html).not.toContain('Dar de baja');
+    expect(html).toContain('la administra otro dueño');
+  });
+
+  it('una cuenta dada de baja sigue en la lista, dice desde cuándo, y solo ofrece Reactivar', () => {
+    const html = pintar({ usuarios: [EX_CONTADOR], puedeInvitar: true });
+    expect(html).toContain('dada de baja');
+    expect(html).toContain('Reactivar');
+    expect(html).not.toContain('Dar de baja');
+    expect(html).not.toContain('Reenviar acceso');
+  });
+
+  it('una fila de superadmin no se administra desde el panel del cliente', () => {
+    const html = pintar({ usuarios: [{ ...CONTADOR_CON_TEL, id: 'u-s', rol: 'superadmin' }], puedeInvitar: true });
+    expect(html).toContain('Cuenta de Likida');
+    expect(html).not.toContain('Dar de baja');
+  });
+
+  it('la pantalla dice que hay bitácora y revocación de sesión — porque las hay', () => {
+    const html = pintar({ usuarios: [CONTADOR_CON_TEL], puedeInvitar: true });
+    expect(html).toContain('bitácora de auditoría');
+    expect(html).toContain('su sesión se revoca');
   });
 });
 

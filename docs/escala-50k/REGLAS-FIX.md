@@ -1,6 +1,6 @@
 # Reglas para corregir hallazgos de la auditoría "qué tira producción"
-Reportes: /Users/javiercamaraportepetit/likida-aud18/docs/escala-50k/auditoria-prod/{escala,resiliencia,seguridad}.md
-(lee los tuyos completos; cada ID trae archivo:línea y arreglo propuesto — verifica que siga vivo antes de tocar).
+Reportes: archivados fuera del repo (auditoría de escala-50k, previa a esta ronda).
+(cada ID traía archivo:línea y arreglo propuesto — verifica que el hallazgo siga vivo antes de tocar).
 1. Prueba que reproduce → arreglo → verde. Un commit por hallazgo o cadena, en español, citando el ID, SIN [deploy],
    autor/committer javiercamaraportepetit@gmail.com.
 2. Migraciones: SOLO el número asignado; idempotentes; bloque en verificaciones.sql con el número de bloque asignado;

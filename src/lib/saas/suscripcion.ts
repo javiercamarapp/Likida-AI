@@ -8,7 +8,7 @@ import {
 } from './stripe';
 import { cancelarCfdi, facturapiConfigurado } from './facturapi';
 import { DatoInvalido } from '@/lib/likida/errores';
-import { hoyMx } from '@/lib/formato';
+import { hoyMx, inicioDiaMx } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA SUSCRIPCIÓN DE UNA FLOTA A LIKIDA — lectura para el panel y escritura
@@ -160,7 +160,11 @@ export async function getSuscripcion(tenantId: string): Promise<Suscripcion | nu
   };
 }
 
-export async function getFacturasSaas(tenantId: string, limite = 12): Promise<FacturaSaas[]> {
+/** H41 (auditoría 24): tope por omisión de `getFacturasSaas`, exportado para
+ *  que la pantalla pueda declarar el recorte en vez de dejarlo mudo. */
+export const LIMITE_FACTURAS_SAAS = 12;
+
+export async function getFacturasSaas(tenantId: string, limite: number = LIMITE_FACTURAS_SAAS): Promise<FacturaSaas[]> {
   const r = await supabaseAdmin()
     .from('factura_saas')
     .select('id, periodo_inicio, periodo_fin, monto, subtotal, iva, moneda, estado, pagada_en, url_pago, cfdi_uuid, referencia')
@@ -203,7 +207,11 @@ export interface UsoDelPlan {
  * `null` en el límite es SIN LÍMITE, no cero.
  */
 export async function getUso(tenantId: string, plan: Plan | null, hoy = new Date()): Promise<UsoDelPlan> {
-  const inicioMes = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), 1)).toISOString();
+  // H24 (auditoría 24): antes se cortaba el mes en UTC — entre las 18:00 y
+  // la medianoche de México, "este mes" ya incluía o excluía un día entero
+  // según el caso. El corte es el primer instante del mes DE MÉXICO.
+  const diaMx = hoyMx(hoy);
+  const inicioMes = inicioDiaMx(`${diaMx.slice(0, 7)}-01`);
   const admin = supabaseAdmin();
 
   const [viajes, operadores] = await Promise.all([

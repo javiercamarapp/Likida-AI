@@ -46,7 +46,14 @@ export interface TicketPorFacturar {
   /** Liga leída del ticket o del QR. `null` = no se pudo leer. */
   urlTicket: string | null;
   /** El comercio reconocido, o `null` si no hay respuesta única. */
-  comercio: { clave: string; nombre: string; portal: string; requiereCuenta: boolean } | null;
+  comercio: {
+    clave: string; nombre: string; portal: string; requiereCuenta: boolean;
+    /** El emisor se reconoce pero su página de facturación no se ha
+     *  verificado, así que `portal` viene vacío. Viaja hasta aquí porque
+     *  `enrutar` tiene que devolverlo como incompleto ANTES de meter ese
+     *  vacío en un mensaje de WhatsApp o en `pagina.abrir()`. */
+    portalPendiente?: true;
+  } | null;
   /** Los campos que ese portal pide, ya con su valor. */
   campos: CampoListo[];
   /** `true` cuando se conoce el portal pero no sus etiquetas todavía. */
@@ -249,7 +256,12 @@ export function armar(g: FilaGasto, hoy: string): TicketPorFacturar {
     fecha: g.fecha,
     folio: g.folio,
     urlTicket,
-    comercio: c ? { clave: c.clave, nombre: c.nombre, portal: c.portal, requiereCuenta: c.requiereCuenta } : null,
+    comercio: c
+      ? {
+          clave: c.clave, nombre: c.nombre, portal: c.portal, requiereCuenta: c.requiereCuenta,
+          ...(c.portalPendiente ? { portalPendiente: true as const } : {}),
+        }
+      : null,
     campos,
     camposPendientes: Boolean(c?.camposPendientes),
     plazoVerificado: Boolean(c?.plazoVerificado),

@@ -30,6 +30,8 @@ vi.mock('@/lib/likida/informes_wa', () => ({
   atenderInformeOficina: (...a: unknown[]) => atenderInformeOficina(...a),
 }));
 vi.mock('@/lib/likida/oficina_wa', () => ({
+  // REN-A2: el centinela que el processor compara para soltar el claim.
+  RESPUESTA_OFICINA_SIN_TIEMPO: 'SIN_TIEMPO_SENTINELA',
   pideInformePdf: () => false,
   mandarInformePdf: vi.fn(),
   atenderPreguntaLibre: (...a: unknown[]) => atenderPreguntaLibre(...a),
@@ -167,6 +169,21 @@ describe('processInbound — el dueño que maneja es chofer Y oficina', () => {
 
     expect(atenderPreguntaLibre).toHaveBeenCalled();
     expect(salientes[0]).toContain('el analista contestó');
+  });
+
+  // ── AUDITORÍA 24 · REN-A2 (ALTO): la rama de oficina DENTRO del reloj ────
+  it('REN-A2: si la pregunta libre no cabe en el reloj, se contesta «dame un minuto», se suelta el claim y el turno vuelve como reintentable', async () => {
+    getOpenViaje.mockResolvedValue(null);
+    atenderPreguntaLibre.mockResolvedValue('SIN_TIEMPO_SENTINELA');
+    const conv = await import('@/lib/likida/conv');
+    (conv.releaseMessageClaim as unknown as { mockClear: () => void }).mockClear();
+    const r = await processInbound(msg('¿cuánto llevo gastado en diésel este mes?'));
+    // El reloj de la invocación viajó hasta el analista…
+    expect(atenderPreguntaLibre).toHaveBeenCalledWith(expect.anything(), expect.any(String), expect.objectContaining({ reloj: expect.objectContaining({ restante: expect.any(Function) }) }));
+    // …y como no cupo: se le dice, se suelta el claim y la bandeja lo reintenta.
+    expect(salientes[0]).toBe('SIN_TIEMPO_SENTINELA');
+    expect(r).toBe('reintentable');
+    expect(conv.releaseMessageClaim).toHaveBeenCalled();
   });
 
   it('una FOTO nunca se le ofrece a oficina: es de ruta por definición', async () => {

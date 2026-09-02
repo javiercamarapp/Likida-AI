@@ -61,6 +61,36 @@ export interface ResultadoAgente {
    * fuera un "no se confirmó" se ve idéntico a un "no se emitió".
    */
   emisionSinConfirmar?: boolean;
+  /**
+   * EL PORTAL PIDE INICIAR SESIÓN Y ESO LO HACE UNA PERSONA.
+   *
+   * Likida nunca teclea una contraseña: el login lo hace el contralor UNA vez
+   * en una sesión asistida, y de ahí sale el `storageState` que
+   * `sesion_portal.ts` guarda cifrado para que las corridas siguientes entren
+   * solas. Mientras no exista esa sesión —o mientras esté muerta— el ticket
+   * sale de la cola automática con esta bandera.
+   *
+   * Vive junto a `requiereCaptcha` y por la misma razón: quien tiene que
+   * actuar es el que enruta, y ese no sabe de qué portal viene el resultado.
+   */
+  requiereVinculacion?: boolean;
+  /**
+   * HABÍA sesión guardada y el portal la rechazó. Matiz de
+   * `requiereVinculacion`, no un caso aparte: la acción es la misma
+   * (re-vincular), pero el mensaje no —«se te venció la sesión» y «nunca has
+   * vinculado este portal» mandan a la persona a sitios distintos del panel—.
+   */
+  sesionCaducada?: boolean;
+  /**
+   * SEGUIMOS DENTRO Y EL FORMULARIO YA NO ES EL QUE CONOCEMOS.
+   *
+   * La bandera que el encargo pidió separar de la de arriba, porque el dueño
+   * del arreglo es OTRO: aquí no hay nada que re-vincular —la sesión está
+   * viva— y lo que falla es el mapeo del adaptador, que lo rehace Likida.
+   * Pedirle al cliente que vuelva a entrar lo manda a hacer un login que ya
+   * funciona y deja el problema igual para la corrida siguiente.
+   */
+  portalCambio?: boolean;
 }
 
 /**
@@ -72,6 +102,27 @@ export interface ResultadoAgente {
  */
 export function pideCaptcha(r: Pick<ResultadoAgente, 'requiereCaptcha'>): boolean {
   return r.requiereCaptcha === true;
+}
+
+/**
+ * ¿Este resultado espera a que una PERSONA abra la puerta del portal?
+ *
+ * Igual que `pideCaptcha`: un solo sitio donde se decide, y se lee de bandera
+ * y no del texto del error —un mensaje se reescribe y quien lo reescriba no
+ * tiene por qué saber que alguien lo estaba interpretando—.
+ */
+export function pideVinculacion(r: Pick<ResultadoAgente, 'requiereVinculacion'>): boolean {
+  return r.requiereVinculacion === true;
+}
+
+/**
+ * ¿Lo que falla es NUESTRO mapeo, no el acceso del cliente?
+ *
+ * Existe aparte a propósito: es el único de los tres bloqueos que NO se
+ * arregla haciendo algo en el panel del cliente.
+ */
+export function cambioElPortal(r: Pick<ResultadoAgente, 'portalCambio'>): boolean {
+  return r.portalCambio === true;
 }
 
 /**
@@ -181,6 +232,10 @@ export interface ResultadoLoteAgente {
   captura?: string;
   requiereCaptcha?: boolean;
   emisionSinConfirmar?: boolean;
+  /** Ver `ResultadoAgente`: las tres viajan al lote por la misma razón que el captcha. */
+  requiereVinculacion?: boolean;
+  sesionCaducada?: boolean;
+  portalCambio?: boolean;
   error?: string;
   /** Salió bien pero hay algo que mirar (rechazos parciales, costos ilegibles). */
   aviso?: string;
@@ -255,6 +310,9 @@ async function unoPorUno(
   let captura: string | undefined;
   let requiereCaptcha = false;
   let emisionSinConfirmar = false;
+  let requiereVinculacion = false;
+  let sesionCaducada = false;
+  let portalCambio = false;
   const errores: string[] = [];
 
   for (const t of tickets) {
@@ -265,6 +323,12 @@ async function unoPorUno(
     if (r.captura) captura = r.captura;
     if (pideCaptcha(r)) requiereCaptcha = true;
     if (r.emisionSinConfirmar) emisionSinConfirmar = true;
+    // Un solo ticket que se topó con el muro basta para que el LOTE lo declare:
+    // el muro es del portal, no del ticket, y los que vengan detrás en esta
+    // misma sesión se van a topar con lo mismo.
+    if (pideVinculacion(r)) requiereVinculacion = true;
+    if (r.sesionCaducada) sesionCaducada = true;
+    if (cambioElPortal(r)) portalCambio = true;
     if (r.error) errores.push(`${t.gastoId}: ${r.error}`);
 
     porGasto.push({
@@ -281,6 +345,9 @@ async function unoPorUno(
     modo, porGasto, capturado, captura,
     ...(requiereCaptcha ? { requiereCaptcha } : {}),
     ...(emisionSinConfirmar ? { emisionSinConfirmar } : {}),
+    ...(requiereVinculacion ? { requiereVinculacion } : {}),
+    ...(sesionCaducada ? { sesionCaducada } : {}),
+    ...(portalCambio ? { portalCambio } : {}),
     ...(errores.length > 0 ? { error: errores.join(' · ') } : {}),
   };
 }

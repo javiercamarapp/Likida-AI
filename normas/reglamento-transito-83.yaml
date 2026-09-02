@@ -1,0 +1,100 @@
+id: reglamento-transito-83
+tipo: reglamento
+jerarquia: 2
+instrumento: "Reglamento de Tránsito en Carreteras y Puentes de Jurisdicción Federal"
+articulo_o_regla: "83"
+titulo: "La bitácora de horas de servicio y sus diez campos obligatorios"
+citas_en_codigo: ["Reglamento de Tránsito 83", "RTCPJF 83"]
+texto_vigente: >
+  Artículo 83.- Los conductores de vehículos automotores destinados a los
+  servicios de autotransporte federal, sus servicios auxiliares y transporte
+  privado deberán portar, debidamente requisitada de forma impresa o
+  electrónica, la bitácora de horas de servicio a que se refieren las
+  disposiciones jurídicas aplicables.
+
+  La bitácora de horas de servicio es el registro diario que contiene los datos
+  necesarios para conocer el tiempo efectivo de conducción y determinar el
+  descanso. Los permisionarios deberán dotar a sus conductores de dicha
+  bitácora, la cual contendrá, cuando menos, lo siguiente:
+  I. Nombre o razón social del permisionario y su domicilio;
+  II. Tipo de servicio y modalidad;
+  III. Marca, modelo y placas del vehículo;
+  IV. Fecha de elaboración de la bitácora;
+  V. Nombre del conductor;
+  VI. Número de licencia del conductor y su vigencia;
+  VII. Origen y destino, especificando la ruta a seguir;
+  VIII. Horas: a) De salida y de llegada; b) De servicio conduciendo; c) De
+  servicio sin conducir, a consecuencia de paradas no programadas; d) Fuera de
+  servicio, y e) De descanso;
+  IX. Casos de excepción en los que el conductor pueda excederse de la jornada, y
+  X. Firmas del conductor y del permisionario o de la persona que éste designe.
+
+  La falta de bitácora o la omisión de algún dato será sancionada con multa de
+  20 a 30 veces la cuota diaria.
+fecha_publicacion: 2012-11-22
+ultima_reforma: 2026-05-25
+fecha_vigencia_desde: null
+estado_verificacion: verificado_fuente_primaria
+fuente_url: "https://www.diputados.gob.mx/LeyesBiblio/regla/n354.pdf"
+fuente_tipo: dof_oficial
+fuente: >
+  Texto original del DOF 22-11-2012 (https://www.diputados.gob.mx/LeyesBiblio/regla/n354.pdf
+  y https://dof.gob.mx/nota_detalle.php?codigo=5278684&fecha=22/11/2012) más el
+  decreto de reforma del DOF 25-05-2026
+  (https://dof.gob.mx/nota_detalle.php?codigo=5788377&fecha=25/05/2026), que
+  reformó los párrafos primero y tercero del art. 83. Los párrafos de arriba
+  están armados con el texto vigente de cada uno: primero y tercero del decreto
+  de 2026, segundo del original de 2012 (no reformado).
+nota_verificacion: >
+  Creada el 27-ago-2026 junto con el registro de jornada (mig. 0241).
+
+  ESTA FICHA ACLARA UN ERROR COMÚN: la obligación de la bitácora de horas de
+  servicio NO está en el Reglamento de Autotransporte Federal y Servicios
+  Auxiliares (RAFSA), ni en la Ley de Caminos. Se buscó en los dos:
+
+  · LCPAF (texto vigente, última reforma DOF 14-11-2025,
+    https://www.diputados.gob.mx/LeyesBiblio/pdf/LCPAF.pdf): NO contiene ninguna
+    disposición sobre horas de conducción, descanso, jornada ni bitácora.
+  · RAFSA (https://www.sct.gob.mx/JURE/doc/regl-autotransp-fed.pdf): tampoco.
+    Sus únicas menciones a «conducción» son sobre capacitación y licencias.
+
+  Está aquí, en el art. 83 del Reglamento de Tránsito, y la NOM-087 numeral
+  8.2.1 remite expresamente a él.
+fecha_vigencia_no_verificada: >
+  `fecha_vigencia_desde` queda en NULL A PROPÓSITO, no por descuido. El
+  Transitorio Primero del decreto del 25-05-2026 dice que entra en vigor «al
+  siguiente día de su publicación», así que la redacción de arriba es exigible
+  desde el 26-05-2026; pero NO se pudo verificar el texto CONSOLIDADO del
+  reglamento (las URLs de sct.gob.mx/JURE y ordenjuridico.gob.mx devolvieron
+  HTML de error), y por tanto no se puede afirmar que no existan reformas
+  intermedias al art. 83 entre 2012 y 2026. La regla de la casa manda null
+  cuando nadie lo confirmó.
+contexto_verificado: >
+  El decreto del 25-05-2026 (expedido por Claudia Sheinbaum Pardo) hizo dos
+  cosas al art. 83: permitió expresamente la forma ELECTRÓNICA de la bitácora en
+  el párrafo primero, y puso la multa explícita en el tercero (antes remitía a
+  «el reglamento respectivo»). Además sustituyó, en todo el reglamento, a la
+  Policía Federal por la Guardia Nacional y a la SCT por la SICT.
+
+  Los diez campos del párrafo segundo son el ÚNICO formato legal exacto que este
+  dominio tiene. El registro de jornada de la LFT 132 fr. XXXIV, en cambio, aún
+  no tiene formato: la propia fracción encarga a la STPS unas disposiciones
+  generales que entran en vigor el 1-ene-2027.
+impacto_en_producto: >
+  DOS DOCUMENTOS DISTINTOS, Y NO SE MEZCLAN. El registro de jornada laboral (LFT
+  132 fr. XXXIV, electrónico, inicio y fin, autoridad laboral) y la bitácora de
+  horas de servicio (este artículo, diez campos, autoridad de transporte, dos
+  años de conservación por la NOM-087 8.5) tienen fuentes, formatos, autoridades
+  y sanciones distintas.
+
+  La migración 0241 y el reporte de Likida construyen EL PRIMERO. El reporte
+  exportable declara en su encabezado que no es la bitácora del art. 83 —le
+  faltan campos que Likida no tiene (placas, número y vigencia de licencia en la
+  fila, ruta, firmas)— para que ninguna flota lo enseñe en un retén creyendo que
+  cumple con esto. Prometer que un CSV es la bitácora sería exactamente el
+  «cumple falso» que la casa prohíbe.
+verificado_por: "texto original y decreto de reforma leídos en el DOF; ausencia de la materia en LCPAF y RAFSA verificada por búsqueda en sus textos"
+verificado_el: 2026-08-27
+usado_en_codigo:
+  - "jornada/topes.ts — LEYENDA_NO_ES_BITACORA_83: la advertencia de que el reporte NO es la bitácora de horas de servicio del art. 83"
+  - "jornada/reporte.ts — esa advertencia va en el encabezado del CSV"

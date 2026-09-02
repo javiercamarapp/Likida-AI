@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 // SOLO tipos: lib/admin/bus importa supabaseAdmin y no debe entrar al bundle.
 import type { EstadoBus, ResultadoPrs } from '@/lib/admin/bus';
-import type { BandejaEscalaciones } from '@/lib/admin/escalaciones';
+import { totalEscalaciones as calcularTotalEscalaciones, type BandejaEscalaciones } from '@/lib/admin/escalaciones';
 import type { PiezaEnCola } from '@/lib/likida/agentes/cola';
 import { fechaHoraMx } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -57,7 +57,11 @@ export function VistaTuTurno({
   accionPieza: AccionForm;
   accionOrden: AccionForm;
 }) {
-  const totalEscalaciones = escalaciones.cola.length;
+  // ADM-4 (auditoría 24): `escalaciones.cola.length` subestimaba el total —
+  // tres de las seis fuentes vienen topadas (ver `totalEscalaciones` en
+  // lib/admin/escalaciones.ts) y la cola solo trae hasta el tope de cada
+  // una. La lista de abajo (top 5) sigue siendo `escalaciones.cola`.
+  const totalEscalaciones = calcularTotalEscalaciones(escalaciones);
 
   return (
     <div className="space-y-8">

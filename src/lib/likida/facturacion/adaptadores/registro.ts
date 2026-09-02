@@ -2,8 +2,9 @@ import { logger } from '@/lib/logger';
 import { registrarAdaptador, portalesAutomatizados, type AdaptadorPortal, type ModoAgente } from '../agente';
 import { COMERCIOS, type Comercio } from '../comercios';
 import { registrarCapufe, revisarReceptor, type DatosReceptorCapufe, type OpcionesCapufe } from './capufe';
+import { AdaptadorDeclarativo, motivoSinVerificar, revisarDatosDeGuion } from './guion';
 import { crearPilotoVision } from './piloto_vision';
-import type { ValoresCredencial } from '../../conectores/tipos';
+import { GUIONES } from './portales';
 import type { FabricaDePagina } from './playwright_base';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -77,6 +78,40 @@ import type { FabricaDePagina } from './playwright_base';
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
+ * POR QUÉ ESTE COMERCIO NO LO PUEDE HACER LA MÁQUINA, en una frase, o `null`.
+ *
+ * Lee `noAutomatizable` del catálogo y lo convierte en el mismo tipo de motivo
+ * que ya usa `bloqueado()`. Es lo que hace que la marca del catálogo sea una
+ * RESTRICCIÓN y no un comentario: sin esto, el piloto de visión encendido
+ * volaría el portal sin TLS con la credencial de una flota, e intentaría sacar
+ * campos de ticket de tres portales de TAG que no facturan por ticket.
+ *
+ * El texto lleva la razón Y la medición, porque quien lo lea en un log va a
+ * querer discutirlo con el dato delante, no con nuestra conclusión.
+ */
+export function motivoNoAutomatizable(comercio: string): string | null {
+  const ficha = COMERCIOS.find((c) => c.clave === comercio);
+  if (!ficha?.noAutomatizable) return null;
+
+  const { razon, nota } = ficha.noAutomatizable;
+  // Sin prefijo de comercio: quien llama ya lo antepone, y repetirlo producía
+  // «autozone: autozone: …» en el registro.
+  const encabezado: Record<typeof razon, string> = {
+    sin_tls:
+      'el portal no ofrece HTTPS y ahí se teclea una contraseña. ' +
+      'No se automatiza hasta que exponga TLS — y al cliente se le dice por qué.',
+    factura_mensual_por_cuenta:
+      'no se factura ticket por ticket. El CFDI se emite mensual contra la ' +
+      'cuenta, así que no hay formulario de ticket que llenar ni adaptador que escribir.',
+    muro_anti_bot:
+      'el sitio bloquea navegadores automatizados por decisión suya. ' +
+      'No se rodea: es el control de acceso de un tercero.',
+  };
+
+  return `${encabezado[razon]} (${nota})`;
+}
+
+/**
  * Los datos con los que se factura A NOMBRE de la flota.
  *
  * Los cinco fiscales son los mismos de `saas/fiscal.ts` (`tenant.rfc`,
@@ -98,12 +133,34 @@ export interface OpcionesRegistro {
   /** Ajustes por portal, para cuando uno resulte distinto en campo. */
   capufe?: Omit<Partial<OpcionesCapufe>, 'abrirPagina' | 'receptor'>;
   /**
-   * Las cuentas de portal que ESTA flota compartió, descifradas
-   * (`credencialesDePortales`). Solo las mira el piloto de visión: un portal
-   * con cuenta y sin credencial aquí no se registra, y el ticket va con el
-   * encargado como siempre.
+   * LOS PORTALES CUYA SESIÓN YA ESTÁ VIVA en el navegador de este lote.
+   *
+   * Sustituye a lo que había hasta el 27-ago-2026 (`cuentas`: las credenciales
+   * DESCIFRADAS que el piloto tecleaba en el formulario de login). Ya no se
+   * descifra ninguna contraseña para facturar: lo que abre la puerta es la
+   * sesión que una persona inició, restaurada en el contexto de Playwright
+   * (`SesionNavegador.abrir({ storageState })`).
+   *
+   * Un portal con cuenta y SIN sesión aquí no se registra: el ticket va con el
+   * encargado como siempre, y la pantalla dice «sin vincular» con su botón de
+   * «Vincular ahora». Es el mismo comportamiento de antes para el ticket, con
+   * la diferencia de que ahora se puede arreglar sin darnos una contraseña.
    */
-  cuentas?: ReadonlyMap<string, ValoresCredencial>;
+  sesiones?: ReadonlySet<string>;
+  /**
+   * `Date.now()` a partir del cual los LOTES dejan de tomar tickets nuevos.
+   *
+   * Viaja hasta el adaptador y no se queda en el cron por lo que el PR #152
+   * dejó asentado: el corte por flota y por portal que el cron ya hacía no ve
+   * lo que pasa DENTRO del lote de un portal. Ocho tickets de Office Depot son
+   * ocho pestañas en serie de 10-60 s cada una, y sin este dato el octavo
+   * arranca sin presupuesto y muere a media emisión — una muerte AMBIGUA, que
+   * es como se acaba con dos CFDI por el mismo consumo.
+   *
+   * `undefined` = sin tope. Es lo que usan las pruebas y una llamada a mano; en
+   * producción el cron lo pasa siempre.
+   */
+  venceEn?: number;
 }
 
 export interface ResultadoRegistro {
@@ -122,6 +179,34 @@ export interface ResultadoRegistro {
  */
 const TABLA: ReadonlyArray<{
   comercio: string;
+  /**
+   * Un motivo, INDEPENDIENTE DE LA FLOTA, por el que este portal no puede
+   * facturar hoy. `null`/ausente = puede.
+   *
+   * Va separado de `revisar` porque son dos preguntas con dos dueños. `revisar`
+   * dice qué le falta AL CLIENTE (su RFC, su correo) y se arregla en el panel;
+   * esto dice qué nos falta A NOSOTROS, y hoy tiene un solo caso: un guion cuyos
+   * selectores nunca se midieron contra el portal real.
+   *
+   * ── POR QUÉ ESTO NO PODÍA QUEDARSE SOLO EN `guion.ts` ──────────────────
+   *
+   * El motor ya se niega a emitir con un mapeo sin medir, y eso basta para no
+   * hacer un CFDI malo. Pero NO basta para el producto, y el hueco es fino:
+   * `portalesOperables()` es lo que el cron usa para TOMAR gastos de la cola
+   * (route.ts:684) y lo que `avisar.ts` usa para NO molestar al encargado con
+   * un portal que la máquina va a hacer sola. Un portal que solo sabe ENSAYAR,
+   * contado como operable, se lleva el ticket de las manos del encargado, gasta
+   * una sesión de navegador por vuelta y no emite nunca. El comprobante se
+   * vence sin que nadie lo mire — que es peor que no haber escrito el portal.
+   *
+   * Con el bloqueo declarado aquí, el portal entra a `PORTALES_CONOCIDOS` («sé
+   * qué es y sé operarlo») pero NO a `portalesOperables()` («lo voy a hacer yo
+   * esta vuelta»): el ticket sigue yendo con el encargado, exactamente igual
+   * que antes de escribir la tabla, y en el registro queda un centinela que
+   * dice por qué. El día que alguien corra el pre-vuelo y anote `verificado`,
+   * el portal se enciende solo.
+   */
+  bloqueado?(): string | null;
   /** Qué le falta a esta flota para poder facturar en ESTE portal. */
   revisar(op: OpcionesRegistro): string[];
   registrar(op: OpcionesRegistro): void;
@@ -147,6 +232,54 @@ const TABLA: ReadonlyArray<{
       });
     },
   },
+  // ── LOS PORTALES DECLARATIVOS ────────────────────────────────────────────
+  //
+  // AQUÍ ESTÁ EL PUNTO DE TODA LA RAMA: estas entradas NO se escriben a mano,
+  // se DERIVAN de `GUIONES`. Agregar un portal nuevo es escribir su tabla de
+  // selectores en `portales.ts` y nada más — no se toca este archivo, no se
+  // escribe una clase, no se copia un procedimiento.
+  //
+  // `revisar` usa `revisarDatosDeGuion` y no `revisarReceptor` a propósito:
+  // aquella exige los seis datos fiscales SIEMPRE (CAPUFE los pide todos) y
+  // esta solo los que el guion declare. Es exactamente lo que el comentario de
+  // arriba anticipaba —«el día que entre uno que no necesite régimen fiscal,
+  // no puede quedar fuera porque la flota no lo tenga capturado»— y ese día es
+  // hoy: ninguno de los cuatro primeros guiones pide régimen.
+  ...GUIONES.map((guion) => ({
+    comercio: guion.comercio,
+    // DOS BLOQUEOS, Y EL DEL CATÁLOGO VA PRIMERO A PROPÓSITO.
+    //
+    // `motivoNoAutomatizable` dice que este portal no lo puede hacer la máquina
+    // por una razón del MUNDO —no habla TLS, no factura por ticket, bloquea
+    // robots—; `motivoSinVerificar` dice que no lo hemos MEDIDO. Si se
+    // preguntara primero por el segundo, un guion sin verificar de un portal que
+    // además bloquea robots reportaría "corre el pre-vuelo", y quien lo corriera
+    // se estrellaría contra un 403 sin entender por qué. El orden hace que el
+    // motivo que sale sea el que de verdad manda.
+    bloqueado: () =>
+      motivoNoAutomatizable(guion.comercio) ??
+      (guion.verificado === null ? motivoSinVerificar(guion) : null),
+    revisar: (op: OpcionesRegistro) => revisarDatosDeGuion(guion, op.flota),
+    registrar: (op: OpcionesRegistro) => {
+      registrarAdaptador(op.flota.tenantId, new AdaptadorDeclarativo({
+        guion,
+        abrirPagina: op.abrirPagina,
+        arrancoConSesion: op.sesiones?.has(guion.comercio) === true,
+        venceEn: op.venceEn,
+        // Campo por campo y no un spread de `op.flota`: así el `tenantId` NO
+        // viaja dentro del receptor. Un objeto que lleva de todo es cómo un
+        // identificador interno acaba impreso en un CFDI.
+        receptor: {
+          rfc: op.flota.rfc,
+          nombre: op.flota.nombre,
+          codigoPostal: op.flota.codigoPostal,
+          regimenFiscal: op.flota.regimenFiscal,
+          usoCfdi: op.flota.usoCfdi,
+          correo: op.flota.correo,
+        },
+      }));
+    },
+  })),
 ];
 
 /**
@@ -163,6 +296,24 @@ const TABLA: ReadonlyArray<{
  * habilitada.
  */
 export const PORTALES_CONOCIDOS: readonly string[] = TABLA.map((p) => p.comercio);
+
+/**
+ * LOS QUE DE VERDAD VAN A INTENTAR EMITIR ESTA VUELTA.
+ *
+ * `PORTALES_CONOCIDOS` menos los que declaran un bloqueo nuestro (hoy: los
+ * guiones cuyos selectores nunca se midieron). Ver el comentario de `bloqueado`
+ * en la TABLA para por qué la diferencia importa: esta lista es la que decide
+ * si un ticket sale de las manos del encargado, y un portal que solo sabe
+ * ensayar no puede quitárselo.
+ *
+ * Se recalcula en cada llamada y no se congela en una constante: `bloqueado()`
+ * es una función a propósito, para que el día que un guion se gradúe —o que
+ * alguien agregue un bloqueo que dependa de una palanca— la lista cambie sin
+ * reiniciar el proceso.
+ */
+function portalesQueEmiten(): string[] {
+  return TABLA.filter((p) => (p.bloqueado?.() ?? null) === null).map((p) => p.comercio);
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL PILOTO DE VISIÓN — los portales SIN adaptador escrito, cuando se enciende.
@@ -182,7 +333,30 @@ export function pilotoHabilitado(): boolean {
 
 /** Fichas que el piloto sabría volar: completas y sin adaptador escrito. */
 export const COMERCIOS_PILOTABLES: readonly Comercio[] = COMERCIOS.filter(
-  (c) => c.campos.length > 0 && !c.camposPendientes && !PORTALES_CONOCIDOS.includes(c.clave),
+  // `portalesQueEmiten()` y no `PORTALES_CONOCIDOS`, y la diferencia NO es
+  // cosmética: con `PORTALES_CONOCIDOS` los cuatro guiones nuevos quedarían
+  // fuera del piloto POR TENER TABLA, aunque su tabla todavía no pueda emitir.
+  // O sea que escribir la tabla le habría QUITADO capacidad al producto —
+  // antes de esta rama esos cuatro comercios sí eran pilotables—. Lo que
+  // saca a un comercio del piloto es que ya haya alguien que lo facture de
+  // verdad, no que alguien haya empezado a escribirlo.
+  //
+  // `!c.noAutomatizable` es la condición que el recon del 28-ago-2026 obligó a
+  // añadir, y es la que de verdad muerde: las otras tres filtran por lo que NO
+  // SABEMOS, y esta por lo que SÍ sabemos y es malo.
+  //
+  // Sin ella, el piloto encendido tomaba fichas COMPLETAS —campos leídos, sin
+  // pendientes, así que pasaban los tres filtros de arriba— y las volaba igual.
+  // En concreto habría: tecleado la contraseña de una flota en un portal que la
+  // manda en claro por HTTP (megasur), y gastado visión buscando en el papel un
+  // folio que tres portales de TAG nunca van a pedir porque facturan mensual
+  // contra la cuenta. Un comentario en el catálogo no habría parado ninguna de
+  // las dos cosas.
+  (c) =>
+    c.campos.length > 0 &&
+    !c.camposPendientes &&
+    !c.noAutomatizable &&
+    !portalesQueEmiten().includes(c.clave),
 );
 
 /**
@@ -192,9 +366,13 @@ export const COMERCIOS_PILOTABLES: readonly Comercio[] = COMERCIOS.filter(
  * mandaría al encargado tickets que la máquina va a intentar sola.
  */
 export function portalesOperables(): readonly string[] {
+  // `portalesQueEmiten()` y NO `PORTALES_CONOCIDOS`: un portal que solo sabe
+  // ensayar no es uno que la máquina vaya a hacer sola, y contarlo aquí le
+  // quitaría el ticket al encargado para no facturarlo nunca. Ver `bloqueado`.
+  const escritos = portalesQueEmiten();
   return pilotoHabilitado()
-    ? [...PORTALES_CONOCIDOS, ...COMERCIOS_PILOTABLES.map((c) => c.clave)]
-    : PORTALES_CONOCIDOS;
+    ? [...escritos, ...COMERCIOS_PILOTABLES.map((c) => c.clave)]
+    : escritos;
 }
 
 /** De qué flota son los adaptadores que están puestos ahora mismo. */
@@ -215,6 +393,18 @@ export function registrarPortales(op: OpcionesRegistro): ResultadoRegistro {
   const tenantId = op.flota.tenantId;
 
   for (const portal of TABLA) {
+    // ── Lo que nos falta A NOSOTROS, antes de mirar lo que le falta a la
+    // flota. Va primero porque no depende de ella: pedirle a un cliente sus
+    // datos fiscales para un portal que de todas formas no vamos a operar es
+    // mandarlo a arreglar algo que no está roto de su lado.
+    const bloqueo = portal.bloqueado?.() ?? null;
+    if (bloqueo) {
+      problemas.push(`${portal.comercio}: ${bloqueo}`);
+      registrarAdaptador(tenantId, centinela(portal.comercio, bloqueo));
+      ESTADO.set(marca(tenantId, portal.comercio), 'centinela');
+      continue;
+    }
+
     const falta = portal.revisar(op);
     if (falta.length > 0) {
       problemas.push(`${portal.comercio}: ${falta.join('; ')}`);
@@ -242,17 +432,34 @@ export function registrarPortales(op: OpcionesRegistro): ResultadoRegistro {
         ESTADO.set(marca(tenantId, comercio.clave), 'centinela');
         continue;
       }
-      const credencial = op.cuentas?.get(comercio.clave) ?? null;
-      if (comercio.requiereCuenta && !credencial) {
-        // NO es un problema: es el estado normal de un portal cuya cuenta no
-        // se ha compartido. `enrutar` lo manda con el encargado, que es el
+      const conSesion = op.sesiones?.has(comercio.clave) === true;
+      if (comercio.requiereCuenta && !conSesion) {
+        // NO es un problema: es el estado normal de un portal que nadie ha
+        // vinculado todavía. `enrutar` lo manda con el encargado, que es el
         // camino que siempre funcionó. Ni adaptador ni centinela.
-        ESTADO.delete(marca(tenantId, comercio.clave));
+        //
+        // Hasta el 27-ago-2026 la condición era «no hay credencial en el
+        // cofre», y con credencial el piloto entraba TECLEANDO la contraseña.
+        // Ese camino se retiró entero: ahora lo que habilita el portal es la
+        // SESIÓN que abrió una persona, no un secreto que Likida guarde y
+        // escriba. Una flota con credencial guardada y sin sesión cae aquí, y
+        // la pantalla le ofrece «Vincular ahora» — no se degrada en silencio a
+        // teclear la contraseña.
+        //
+        // SE MARCA COMO CENTINELA, NO SE BORRA LA MARCA. Aquí había un
+        // `ESTADO.delete`, y era correcto solo en un proceso frío: en una
+        // función CALIENTE, `olvidarPortales` del lote anterior ya dejó un
+        // adaptador centinela puesto para este comercio, así que borrar la
+        // marca hacía que `portalesVivos()` lo contara como OPERABLE — o sea,
+        // la pantalla de Conexiones afirmando "N portales operables" incluyendo
+        // uno que no factura nada.
+        ESTADO.set(marca(tenantId, comercio.clave), 'centinela');
         continue;
       }
       registrarAdaptador(tenantId, crearPilotoVision({
         tenantId,
         comercio,
+        arrancoConSesion: conSesion,
         // Campo por campo, no spread: el tenantId no viaja dentro del receptor.
         receptor: {
           rfc: op.flota.rfc,
@@ -263,7 +470,6 @@ export function registrarPortales(op: OpcionesRegistro): ResultadoRegistro {
           correo: op.flota.correo,
         },
         abrirPagina: op.abrirPagina,
-        credencial,
       }));
       ESTADO.set(marca(tenantId, comercio.clave), 'vivo');
       registrados.push(comercio.clave);

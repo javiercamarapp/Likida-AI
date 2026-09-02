@@ -127,26 +127,71 @@ export async function cargarSesionPortal(
   if (error) throw new Error(`cargarSesionPortal: ${error.message}`);
   if (!data || data.activo === false) return null;
 
-  const cifrado = (data as { valores_cifrados?: unknown }).valores_cifrados;
-  if (typeof cifrado !== 'string' || cifrado === '') return null;
+  return interpretar((data as { valores_cifrados?: unknown }).valores_cifrados, tenantId, portalConectorId);
+}
 
+/**
+ * Una fila cifrada a `SesionPortal`, o `null`. NUNCA lanza y NUNCA imprime un
+ * byte del cifrado.
+ *
+ * Una fila con forma rota (llave rotada, dato viejo) se trata como "no hay
+ * sesión" en vez de tumbar la facturación: el peor caso es pedir un login que
+ * ya existía, no perder el ticket.
+ */
+function interpretar(cifrado: unknown, tenantId: string, portal: string): SesionPortal | null {
+  if (typeof cifrado !== 'string' || cifrado === '') return null;
   try {
     const v = descifrar(cifrado) as unknown as SesionPortal;
-    // Una fila de sesión con forma rota (llave rotada, dato viejo) se trata como
-    // "no hay sesión" en vez de tumbar la facturación: el peor caso es pedir un
-    // login que ya existía, no perder el ticket.
     if (!v || typeof v.storageState !== 'string' || typeof v.capturadaEn !== 'string') {
-      logger.warn('sesion_portal.forma_rota', { tenant: tenantId, portal: portalConectorId });
+      logger.warn('sesion_portal.forma_rota', { tenant: tenantId, portal });
       return null;
     }
     return v;
   } catch (e) {
     logger.warn('sesion_portal.descifrado_fallo', {
-      tenant: tenantId, portal: portalConectorId,
+      tenant: tenantId, portal,
       err: e instanceof Error ? e.message : String(e),
     });
     return null;
   }
+}
+
+/**
+ * TODAS las sesiones vivas de los portales de una flota, por `conector_id` del
+ * portal (sin el sufijo `#sesion`).
+ *
+ * UNA consulta y no una por portal: el cron necesita esto ANTES de arrancar
+ * Chromium para poder pasarle el `storageState` al contexto, y trece consultas
+ * en serie ahí dentro se comen el presupuesto de tiempo del lote.
+ *
+ * DEVUELVE `null` SI LA BASE NO CONTESTÓ, y la distinción importa igual que en
+ * `cargarSesionPortal`: un mapa vacío significaría "ninguna sesión guardada" y
+ * el llamador invalidaría vínculos que están perfectamente vivos.
+ */
+export async function sesionesDePortales(
+  tenantId: string,
+): Promise<Map<string, SesionPortal> | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('conector_credencial')
+    .select('conector_id, valores_cifrados')
+    .eq('tenant_id', tenantId)
+    .eq('activo', true)
+    .like('conector_id', `%${SUFIJO_SESION}`), 'sesionesDePortales');
+
+  if (error) {
+    logger.warn('sesion_portal.lote_sin_leer', { tenant: tenantId, err: error.message });
+    return null;
+  }
+
+  const mapa = new Map<string, SesionPortal>();
+  for (const f of (data ?? []) as Array<{ conector_id: unknown; valores_cifrados: unknown }>) {
+    const id = String(f.conector_id ?? '');
+    if (!id.endsWith(SUFIJO_SESION)) continue;
+    const portal = id.slice(0, -SUFIJO_SESION.length);
+    const s = interpretar(f.valores_cifrados, tenantId, portal);
+    if (s) mapa.set(portal, s);
+  }
+  return mapa;
 }
 
 /**
@@ -185,9 +230,16 @@ export async function invalidarSesionPortal(
   portalConectorId: string,
 ): Promise<void> {
   try {
+    // La cookie cifrada se DESTRUYE junto con el apagado (auditoría 19,
+    // reincidente #17 — mismo criterio que `desactivarCredencial`): una
+    // sesión invalidada que conserva su cookie es acceso revocado a medias.
     const { error } = await acotada(supabaseAdmin()
       .from('conector_credencial')
-      .update({ activo: false, ultimo_error: 'sesión caducada o rechazada por el portal' })
+      .update({
+        activo: false,
+        valores_cifrados: `revocada:${new Date().toISOString()}`,
+        ultimo_error: 'sesión caducada o rechazada por el portal',
+      })
       .eq('tenant_id', tenantId)
       .eq('conector_id', idSesion(portalConectorId)), 'invalidarSesionPortal');
     if (error) throw new Error(error.message);

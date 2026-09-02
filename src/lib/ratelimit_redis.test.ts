@@ -13,10 +13,10 @@
 //      que el Map por instancia no podía cerrar);
 //   2. la ventana caduca (TTL) y vuelve a permitir;
 //   3. sin credenciales, se degrada al Map Y LO DICE en el arranque;
-//   4. con credenciales pero el intento falla, NUNCA LANZA y se degrada al
-//      Map por default (fail-open acotado);
-//   5. con `RATELIMIT_REDIS_FALLA_CERRADO=true`, esa misma avería NIEGA en
-//      vez de degradar.
+//   4. con credenciales pero el intento falla, NUNCA LANZA y NIEGA por
+//      default (fail-closed — SEG-4, auditoría 24);
+//   5. con `RATELIMIT_REDIS_FALLA_CERRADO=false` (o `{ fallaCerrado: false }`
+//      por llamada), esa misma avería se degrada al Map local.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -173,40 +173,68 @@ describe('sin credenciales — degrada al Map local y lo DICE en el arranque', (
 });
 
 describe('Redis configurado pero el intento falla — nunca rompe la petición', () => {
-  it('red caída: no lanza, degrada al Map (fail-open acotado, el default)', async () => {
+  it('SEG-4: red caída NIEGA por default (fail-closed), sin lanzar, y no filtra la llave al log', async () => {
     stubCredenciales();
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { rateLimit } = await import('./ratelimit');
+
+    // Ni una sola llamada debe rechazar la promesa — y con Redis caído la
+    // respuesta es «no», no «pasa por el Map de esta instancia».
+    await expect(rateLimit('login:1.2.3.4', 100, 60_000)).resolves.toBe(false);
+    const lineas = [...err.mock.calls, ...warn.mock.calls].map((c) => String(c[0])).join('\n');
+    expect(lineas).toContain('ratelimit.redis_fallo');
+    expect(lineas).toContain('ratelimit.redis_falla_cerrado');
+    // La llave entera lleva la IP (reincidente 22): al log solo va la categoría.
+    expect(lineas).not.toContain('1.2.3.4');
+    expect(lineas).toContain('"llave":"login"');
+  });
+
+  it('RATELIMIT_REDIS_FALLA_CERRADO=false: degrada al Map (fail-open acotado, el Map sigue limitando)', async () => {
+    stubCredenciales();
+    vi.stubEnv('RATELIMIT_REDIS_FALLA_CERRADO', 'false');
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
     const { rateLimit } = await import('./ratelimit');
 
-    // Ni una sola llamada debe rechazar la promesa.
     await expect(rateLimit('avería', 1, 60_000)).resolves.toBe(true);
-    // Y el Map local, que recibió el hit de arriba como fallback, sigue
+    // El Map local, que recibió el hit de arriba como fallback, sigue
     // imponiendo el mismo límite — no es "se apagó la protección".
     await expect(rateLimit('avería', 1, 60_000)).resolves.toBe(false);
   });
 
-  it('timeout: mismo tratamiento que red caída', async () => {
+  it('por llamada: `{ fallaCerrado: false }` degrada aunque el default sea cerrado; `true` niega aunque la env diga false', async () => {
+    stubCredenciales();
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
+    const { rateLimit } = await import('./ratelimit');
+    await expect(rateLimit('sesion', 5, 60_000, { fallaCerrado: false })).resolves.toBe(true);
+    vi.stubEnv('RATELIMIT_REDIS_FALLA_CERRADO', 'false');
+    await expect(rateLimit('publica', 5, 60_000, { fallaCerrado: true })).resolves.toBe(false);
+  });
+
+  it('timeout: mismo tratamiento que red caída (niega, no lanza)', async () => {
     stubCredenciales();
     vi.stubGlobal('fetch', vi.fn(() => new Promise((_res, rej) => {
       const e = new Error('timeout'); e.name = 'TimeoutError'; rej(e);
     })));
     const { rateLimit } = await import('./ratelimit');
-    await expect(rateLimit('timeout-key', 1, 60_000)).resolves.toBe(true);
+    await expect(rateLimit('timeout-key', 1, 60_000)).resolves.toBe(false);
   });
 
-  it('Upstash contesta con error (comando inválido): degrada, no lanza', async () => {
+  it('Upstash contesta con error (comando inválido): niega, no lanza', async () => {
     stubCredenciales();
     vi.stubGlobal('fetch', vi.fn(async () => new Response(
       JSON.stringify({ error: 'ERR algo salió mal' }), { status: 400 },
     )));
     const { rateLimit } = await import('./ratelimit');
-    await expect(rateLimit('err-key', 1, 60_000)).resolves.toBe(true);
+    await expect(rateLimit('err-key', 1, 60_000)).resolves.toBe(false);
   });
 
   it('deja rastro del fallo en el log (no es un silencio)', async () => {
     stubCredenciales();
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { rateLimit } = await import('./ratelimit');
 
     await rateLimit('log-key', 1, 60_000);
@@ -216,22 +244,20 @@ describe('Redis configurado pero el intento falla — nunca rompe la petición',
     expect(linea).toContain('ECONNREFUSED');
   });
 
-  it('RATELIMIT_REDIS_FALLA_CERRADO=true: la misma avería NIEGA en vez de degradar', async () => {
+  it('RATELIMIT_REDIS_FALLA_CERRADO=true sigue negando (compatibilidad con quien ya la tenía puesta)', async () => {
     stubCredenciales();
     vi.stubEnv('RATELIMIT_REDIS_FALLA_CERRADO', 'true');
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
     const { rateLimit } = await import('./ratelimit');
-
-    // Sigue sin lanzar — solo cambia el resultado, nunca la garantía de "nunca lanza".
     await expect(rateLimit('cerrado', 100, 60_000)).resolves.toBe(false);
   });
 
-  it('cualquier valor que no sea el string "true" se comporta como el default', async () => {
+  it('cualquier valor que no sea el string "false" se comporta como el default (cerrado)', async () => {
     stubCredenciales();
-    vi.stubEnv('RATELIMIT_REDIS_FALLA_CERRADO', 'TRUE'); // mayúsculas: no cuenta
+    vi.stubEnv('RATELIMIT_REDIS_FALLA_CERRADO', 'FALSE'); // mayúsculas: no cuenta
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
     const { rateLimit } = await import('./ratelimit');
 
-    await expect(rateLimit('mayus', 5, 60_000)).resolves.toBe(true);
+    await expect(rateLimit('mayus', 5, 60_000)).resolves.toBe(false);
   });
 });

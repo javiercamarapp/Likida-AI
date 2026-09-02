@@ -1,23 +1,54 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const createUser = vi.fn();
+const deleteUser = vi.fn();
 const insert = vi.fn();
 const from = vi.fn(() => ({ insert }));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
-    auth: { admin: { createUser: (...a: unknown[]) => createUser(...a) } },
+    auth: { admin: { createUser: (...a: unknown[]) => createUser(...a), deleteUser: (...a: unknown[]) => deleteUser(...(a as [])) } },
     from: (...a: unknown[]) => from(...(a as [])),
   }),
 }));
+const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+vi.mock('@/lib/logger', () => ({ logger }));
 
 const { provisionarUsuario } = await import('./provisionar');
 
 describe('provisionarUsuario', () => {
   beforeEach(() => {
     createUser.mockReset();
+    deleteUser.mockReset();
+    deleteUser.mockResolvedValue({ data: {}, error: null });
+    logger.error.mockClear();
     insert.mockReset();
     insert.mockResolvedValue({ error: null });
     from.mockClear();
+  });
+
+  // ── H6 (auditoría 24): un insert que rebota no deja un usuario de Auth
+  // huérfano — que podía iniciar sesión y bloqueaba un segundo alta. ──
+  it('si el insert en app_user falla, BORRA el usuario de Auth recién creado y lanza el error original', async () => {
+    createUser.mockResolvedValue({ data: { user: { id: 'u-medias' } }, error: null });
+    insert.mockResolvedValue({ error: { message: 'duplicate key value violates unique constraint "app_user_telefono_uniq"' } });
+    await expect(provisionarUsuario('t-1', 'nuevo@flotademo.mx', 'N', 'contador', '4771234567'))
+      .rejects.toThrow('app_user_telefono_uniq');
+    expect(deleteUser).toHaveBeenCalledWith('u-medias');
+  });
+
+  it('si el rollback también falla, queda en el log con las dos causas y el error original sigue', async () => {
+    createUser.mockResolvedValue({ data: { user: { id: 'u-medias2' } }, error: null });
+    insert.mockResolvedValue({ error: { message: 'fetch failed' } });
+    deleteUser.mockResolvedValueOnce({ data: null, error: { message: 'auth caído' } });
+    await expect(provisionarUsuario('t-1', 'otro@flotademo.mx')).rejects.toThrow('fetch failed');
+    expect(logger.error).toHaveBeenCalledWith('provisionar.rollback_fallo',
+      expect.objectContaining({ userId: 'u-medias2', err: 'auth caído', causa: 'fetch failed' }));
+  });
+
+  it('con alta buena NO se borra nada', async () => {
+    createUser.mockResolvedValue({ data: { user: { id: 'u-ok' } }, error: null });
+    await provisionarUsuario('t-1', 'ok@flotademo.mx');
+    expect(deleteUser).not.toHaveBeenCalled();
   });
 
   it('crea el usuario de Auth y la fila de app_user con rol flota_admin por default', async () => {

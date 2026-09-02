@@ -1,0 +1,211 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# E2E DE NAVEGADOR CONTRA LA APP PROPIA (E.27 de la máquina de auto-mejora).
+#
+# Hasta este workflow, Playwright solo se apuntaba a CAPUFE y al smoke de
+# rutas públicas: existía el navegador, nunca el producto. Aquí se levanta la
+# pila REAL en el runner —Supabase local (GoTrue + PostgREST + Storage +
+# Mailpit) con las migraciones y el seed del demo— y la suite de
+# `pruebas-navegador/` recorre lo que un cliente toca: login por magic link
+# (correo incluido, vía Mailpit), tableros por rol, /admin bloqueado por URL
+# directa, filtros del registro, el camino del dinero en el panel y la vista
+# móvil en un Pixel 7 de catálogo.
+#
+# POR QUÉ UN WORKFLOW APARTE Y NO UN JOB MÁS EN ci.yml:
+#   · Corre EN PARALELO: no alarga ni un segundo las puertas que ya existen
+#     (typecheck/lint/tests/build siguen contestando igual de rápido).
+#   · Aísla el modo de falla: si Docker o el pull de imágenes de Supabase se
+#     cae, se cae ESTE workflow con su nombre — no arrastra al build.
+#   · Necesita su propio build de Next (las NEXT_PUBLIC_* se hornean en el
+#     bundle y aquí apuntan a la pila local, no a los placeholders de ci.yml).
+# Mismos disparadores que ci.yml/ci-postgres.yml a propósito: el trabajo
+# autónomo aterriza en ramas sin PR y esta es justo la clase de regresión
+# (sesión, aislamiento, render real) que ese trabajo puede introducir.
+#
+# SIN SECRETOS, COMO LOS DEMÁS: las llaves que se usan son las de la pila
+# LOCAL del runner (las imprime `supabase status`); las identidades son
+# @likida.test sembradas por scripts/ci/e2e/sembrar-e2e.mjs, que rehúsa
+# cualquier host que no sea 127.0.0.1. Nada aquí puede tocar producción.
+#
+# COSTO, MEDIDO (3 corridas reales en ubuntu-24.04, runner de 4 núcleos,
+# 29-ago-2026): job completo 5m18s–5m31s (`supabase start` + build + suite);
+# la suite de Playwright en sí, 26 pruebas, ~44s. El `timeout-minutes` de
+# abajo es 15 — ~1.7× lo medido, no el doble parejo: un margen menor tiene
+# sentido aquí porque el costo real NO es la suite (44s, ínfimo) sino el
+# arranque de la pila (imágenes de Supabase + build de Next), que ya varió
+# entre corridas por el estado del caché de Actions. Un job que muere por
+# tiempo no dice «falló», dice «no se sabe» — mejor un margen medido que uno
+# puesto a ojo.
+# ═══════════════════════════════════════════════════════════════════════════
+name: E2E navegador (app propia)
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-navegador:
+    name: Pila local + Playwright contra el producto
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # La versión del CLI se pinnea a la que generó supabase/config.toml:
+      # el esquema del config cambia entre menores y "latest" es cómo un
+      # martes cualquiera el workflow amanece rojo sin que nadie tocara nada.
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
+        with:
+          version: 2.115.0
+
+      # `supabase start` sobre runner virgen: baja las imágenes, levanta
+      # Postgres/GoTrue/PostgREST/Storage/Mailpit y aplica las migraciones y
+      # el seed (supabase/config.toml → [db.seed]). Si el seed no aplicó, el
+      # sembrador de abajo lo detecta y falla con nombre — no en silencio.
+      - name: Supabase local (pila completa, migraciones + seed)
+        run: supabase start
+
+      # Las llaves de la pila local, al entorno del job. Fail closed: si el
+      # formato de status cambia y algo llega vacío, el paso truena aquí con
+      # el nombre de la variable — no tres pasos después con un 401 mudo.
+      - name: Llaves de la pila local → entorno del job
+        run: |
+          supabase status -o json > "$RUNNER_TEMP/supabase-status.json"
+          node - "$RUNNER_TEMP/supabase-status.json" >> "$GITHUB_ENV" <<'NODE'
+          const fs = require('fs');
+          const s = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const falta = [];
+          const toma = (k) => { if (!s[k]) falta.push(k); return s[k] ?? ''; };
+          const salida = [
+            `SUPABASE_URL=${toma('API_URL')}`,
+            `SUPABASE_ANON_KEY=${toma('ANON_KEY')}`,
+            `SUPABASE_SERVICE_ROLE_KEY=${toma('SERVICE_ROLE_KEY')}`,
+          ];
+          if (falta.length) {
+            console.error(`supabase status no trajo: ${falta.join(', ')}. Llaves disponibles: ${Object.keys(s).join(', ')}`);
+            process.exit(1);
+          }
+          console.log(salida.join('\n'));
+          NODE
+
+      # `supabase start` NO propaga a anon/authenticated/service_role los
+      # GRANT de tabla que sí trae el bootstrap de la PLATAFORMA en
+      # producción (confirmado con information_schema.role_table_grants
+      # contra el proyecto gestionado) — sin esto, ni la SERVICE_ROLE_KEY del
+      # sembrador de abajo ni una sola sesión real de PostgREST pueden leer
+      # o escribir nada. Vive en un .sql aparte, NO en `supabase/migrations/`:
+      # ese directorio lo barre también `ci-postgres.yml` contra su propio
+      # andamio mínimo, que a propósito usa la AUSENCIA de estos GRANT como
+      # capa de defensa en varias tablas — un regrant ahí tumbó 23
+      # verificaciones que hoy pasan (ver la cabecera de
+      # scripts/ci/e2e/grants-locales.sql).
+      - name: Los GRANT que el Supabase local no trae de fábrica
+        run: |
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres \
+            -v ON_ERROR_STOP=1 -f scripts/ci/e2e/grants-locales.sql
+
+      # Los usuarios de Auth (@likida.test), la Flota E2E B y el PDF del
+      # bucket — lo que seed.sql no puede sembrar. Ver la cabecera del script.
+      - name: Sembrar identidades E2E y PDF de la liquidación
+        run: node scripts/ci/e2e/sembrar-e2e.mjs
+
+      # Build PROPIO de este workflow: las NEXT_PUBLIC_* se hornean en el
+      # bundle del cliente, así que el build de ci.yml (placeholders) no
+      # sirve aquí — este apunta al Supabase del runner.
+      - name: Build apuntado a la pila local
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          # Nadie llama a un modelo en esta suite; si un camino probado lo
+          # intentara, el placeholder lo vuelve un fallo ruidoso, no un gasto.
+          OPENROUTER_API_KEY: e2e-placeholder
+          # Mismo motivo que ci.yml (31-ago-2026): el paso de TypeScript de
+          # `next build` empezó a tronar por heap en el runner estándar.
+          NODE_OPTIONS: --max-old-space-size=6144
+
+      - name: Chromium para Playwright
+        run: npx playwright install --with-deps chromium
+
+      # Mismo patrón que el smoke de ci.yml: nohup + espera por condición.
+      #
+      # `--hostname localhost`, NO `127.0.0.1`: verificado con trazas de
+      # Playwright (E.27) que con `127.0.0.1` el login real SE ROMPE — GoTrue
+      # redirige correcto a `http://127.0.0.1:3000/auth/callback`, pero la
+      # respuesta de ESE mismo route handler (`new URL(dest, req.url)`)
+      # produce un Location con host `localhost`, no `127.0.0.1`: la sesión
+      # queda puesta en el origen equivocado y `/dashboard` rebota a
+      # `/login` sin sesión. No se tocó el código de producción por esto —
+      # Vercel nunca pasa por `next start --hostname`, así que ahí `req.url`
+      # sí trae el host real; es un desajuste de ESTE arnés, no del app.
+      # Con TODO en `localhost` (server, config.toml, PLAYWRIGHT_BASE_URL)
+      # el mismatch desaparece.
+      - name: Iniciar el servidor bajo prueba
+        run: |
+          nohup npm run start -- --hostname localhost --port 3000 > "$RUNNER_TEMP/likida-next.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/likida-next.pid"
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://localhost:3000/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/likida-next.log"
+          exit 1
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          OPENROUTER_API_KEY: e2e-placeholder
+
+      - name: Suite de navegador (pruebas-navegador/)
+        run: npx playwright test
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          MAILPIT_URL: http://127.0.0.1:54324
+          # Solo para la LIMPIEZA del viaje creado (dinero.nav.ts, afterAll);
+          # ninguna prueba se autentica con el service key.
+          SUPABASE_URL: ${{ env.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
+
+      # Los artefactos de una corrida fallida O NO EXISTE la depuración desde
+      # CI: reporte HTML, trazas y screenshots de Playwright, y el log del
+      # servidor Next.
+      - name: Artefactos de la falla (reporte, trazas, log del servidor)
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-navegador-falla
+          path: |
+            pruebas-navegador/.reporte
+            pruebas-navegador/.artefactos
+            ${{ runner.temp }}/likida-next.log
+          if-no-files-found: warn
+          retention-days: 7
+          # `.reporte`/`.artefactos` son carpetas con punto — actions/upload-
+          # artifact las trata como "ocultas" y las descarta con el default
+          # (false), SIN avisar (ni el "if-no-files-found" lo detecta: sube
+          # igual el log y sale en verde). Detectado en la primera corrida
+          # real: la subida "tuvo éxito" con 1 archivo, cero trazas.
+          include-hidden-files: true
+
+      - name: Detener el servidor
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/likida-next.pid" ]; then kill "$(cat "$RUNNER_TEMP/likida-next.pid")" 2>/dev/null || true; fi

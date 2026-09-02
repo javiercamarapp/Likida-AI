@@ -71,16 +71,20 @@ function Seccion({ titulo, items, sufijo, pathname, abierta, onAbrir }: {
 
 /** El MISMO contrato de sufijo en cada link: `?tenant=`/`?vista=`/`?rol=`
  *  del superadmin viajan siempre — perder uno te saca del panel que ves.
- *  (Para superadmin sin parámetro se asume `?vista=demo`: las subpáginas ya
- *  lo mandaron ahí, y un link sin sufijo lo expulsaba del panel.) */
+ *
+ *  H1 (auditoría 24): aquí se INVENTABA `?vista=demo` para un superadmin sin
+ *  parámetros. El supuesto («un superadmin sin sufijo está en la demo») dejó
+ *  de ser cierto el 16-ago-2026, cuando nació /admin/elegir-flota: quien
+ *  eligiera Innovativos y aterrizara en `/dashboard` a secas veía SU panel,
+ *  y el primer clic del menú lo mandaba —con un parámetro que nadie
+ *  escribió— al panel de la demo, sin cinta que lo dijera. Sin sufijo, el
+ *  link va pelón y la cookie firmada decide: exactamente lo que hace el
+ *  servidor (`guard.ts`). */
 function useSufijoYRol(rol: string): { sufijo: string; rolMenu: string } {
   const sp = useSearchParams();
   const tenant = sp.get('tenant');
   const vista = sp.get('vista');
-  const base = tenant
-    ? `?tenant=${tenant}`
-    : vista ? `?vista=${vista}`
-    : rol === 'superadmin' ? '?vista=demo' : '';
+  const base = tenant ? `?tenant=${tenant}` : vista ? `?vista=${vista}` : '';
   const rolVista = sp.get('rol');
   const sufijo = rolVista ? `${base}${base ? '&' : '?'}rol=${rolVista}` : base;
   // El rol con el que se FILTRA el menú es el previsualizado (solo si el

@@ -32,6 +32,7 @@
 //     TRADUCE después, por patrón (`descifrarErrorProvision`).
 // ═══════════════════════════════════════════════════════════════════════════
 import { DatoInvalido } from '@/lib/likida/errores';
+import { ROTULOS_ROL } from './roles';
 
 /**
  * Los roles que un dueño puede invitar, con la verdad de qué ve cada uno —
@@ -46,22 +47,14 @@ import { DatoInvalido } from '@/lib/likida/errores';
  * (0105) tampoco: es un rol de LIKIDA (tenant null, panel /vendedor) y su
  * única puerta es /admin/vendedores — ver `validarInvitacionVendedor`.
  */
+//
+// Los rótulos salen de `roles.ts` (auditoría 24, H18): una sola fuente para
+// esta forma, la de /admin/usuarios/nuevo, la lista del equipo y la cinta de
+// «ver como». Antes cada pantalla tenía su copia y no decían lo mismo.
 export const ROLES_INVITABLES = [
-  {
-    valor: 'contador',
-    rotulo: 'Contador',
-    detalle: 'Ve el dinero y lo fiscal — facturación, cobranza, clientes y tarifas — y puede exportar. No despacha viajes.',
-  },
-  {
-    valor: 'encargado',
-    rotulo: 'Encargado (jefe de tráfico)',
-    detalle: 'Despacha y da seguimiento: viajes, operadores, unidades y mapa. No ve un peso — ni tarifas, ni facturación, ni rentabilidad.',
-  },
-  {
-    valor: 'flota_admin',
-    rotulo: 'Dueño (flota_admin)',
-    detalle: 'Todo el panel: operación, dinero y la administración de la cuenta — incluido invitar y las llaves de API.',
-  },
+  { valor: 'contador', rotulo: ROTULOS_ROL.contador.nombre, detalle: ROTULOS_ROL.contador.detalle },
+  { valor: 'encargado', rotulo: ROTULOS_ROL.encargado.nombre, detalle: ROTULOS_ROL.encargado.detalle },
+  { valor: 'flota_admin', rotulo: ROTULOS_ROL.flota_admin.nombre, detalle: ROTULOS_ROL.flota_admin.detalle },
 ] as const;
 
 export type RolInvitable = (typeof ROLES_INVITABLES)[number]['valor'];
@@ -137,15 +130,42 @@ export function validarInvitacion(c: {
  * Devuelve `null` para todo lo demás: un error desconocido NO es de captura y
  * debe seguir su camino (log completo + mensaje genérico honesto).
  */
+/**
+ * ¿El alta falló porque ese correo YA tiene cuenta en Likida?
+ *
+ * Supabase Auth: "A user with this email address has already been registered"
+ * (y variantes), o el índice único de app_user.email si el duplicado se
+ * colara hasta el insert. Exportado aparte de `descifrarErrorProvision` por
+ * SEG-7 (auditoría 24): la puerta del DUEÑO no puede enseñar este caso con un
+ * mensaje distinto —sería un oráculo de qué correos son clientes de Likida
+ * (de OTRA flota, quizá la competencia)—, así que la página lo detecta con
+ * esto y contesta lo mismo que en el alta buena. La puerta de /admin
+ * (superadmin) sí lo dice con todas sus letras: ahí no hay tercero a quien
+ * ocultárselo.
+ */
+export function esCorreoYaRegistrado(e: unknown): boolean {
+  const m = e instanceof Error ? e.message : '';
+  return /already (been )?registered|email_exists|app_user_email/i.test(m);
+}
+
+/**
+ * El mensaje NEUTRO del alta desde el panel del dueño: el mismo texto salga
+ * bien o choque con una cuenta existente. No afirma que se creó nada ni que
+ * no — dice lo que es verdad en los dos casos. Aquí y no inline en la página
+ * para que la prueba lo fije junto con `esCorreoYaRegistrado`.
+ */
+export function mensajeAltaNeutro(email: string): string {
+  return `Listo. Si ${email} no tenía cuenta en Likida, ya puede entrar con su correo (enlace mágico) y le mandamos un aviso. ` +
+    'Si ya la tenía, no se creó otra: pídele que entre con ese correo y, si no aparece en tu equipo aquí abajo, avísale a Likida.';
+}
+
 export function descifrarErrorProvision(e: unknown): DatoInvalido | null {
   const m = e instanceof Error ? e.message : '';
 
-  // Supabase Auth: "A user with this email address has already been
-  // registered" (y variantes), o el índice único de app_user.email si el
-  // duplicado se colara hasta el insert. OJO con lo que el mensaje NO afirma:
-  // no dice "ya puede entrar" — la cuenta podría existir a medias (Auth sí,
-  // app_user no) o en otra flota, y afirmarlo sería inventar.
-  if (/already (been )?registered|email_exists|app_user_email/i.test(m)) {
+  // OJO con lo que el mensaje NO afirma: no dice "ya puede entrar" — la cuenta
+  // podría existir a medias (Auth sí, app_user no) o en otra flota, y
+  // afirmarlo sería inventar. Ver `esCorreoYaRegistrado`.
+  if (esCorreoYaRegistrado(e)) {
     return new DatoInvalido(
       'Ese correo ya tiene una cuenta registrada en Likida, así que no se puede invitar de nuevo. ' +
       'Si no aparece en tu equipo aquí abajo, avísale a Likida para revisarla.',

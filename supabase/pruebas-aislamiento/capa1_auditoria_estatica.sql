@@ -7,10 +7,10 @@
 -- (b) políticas literalmente `true`. Ese archivo NO SE TOCA desde aquí —vive
 -- fuera de este archivo, y el runner de CI corre los dos.
 --
--- Este archivo cubre los TRES huecos que quedaban entre esos dos mecanismos,
--- los tres con la misma forma: algo que solo se nota si alguien SE ACUERDA de
--- escribir un bloque a mano para la tabla/vista/función nueva. Aquí no hace
--- falta acordarse — se lee del catálogo en cada corrida:
+-- Este archivo cubre los huecos que quedaban entre esos dos mecanismos, todos
+-- con la misma forma: algo que solo se nota si alguien SE ACUERDA de escribir
+-- un bloque a mano para la tabla/vista/función nueva. Aquí no hace falta
+-- acordarse — se lee del catálogo en cada corrida:
 --
 --   1. VISTAS sin `security_invoker = true`. Es la regresión más cara que ha
 --      tenido este repo (0054: `factura_saldo` sin `security_invoker` leía las
@@ -42,6 +42,15 @@
 --      más silencioso — una política que sí filtra por ALGO (`created_by =
 --      auth.uid()`, por ejemplo) pero no por el tenant, que se ve tan
 --      "protegida" en `pg_policies` como una correcta.
+--
+--   4. Funciones NUESTRAS de `public` sin `search_path` fijo. El linter de
+--      Supabase también lo ve, pero lo ve DESPUÉS de aplicar la migración a
+--      producción; esto lo ve en CI, sobre base virgen. Aquí las funciones
+--      son cuerpo de CHECK y de trigger —reglas de integridad—, y una regla
+--      cuyo veredicto depende del `search_path` de quien inserta no
+--      significa lo mismo para todo el que escribe en la tabla. Las de
+--      extensiones se exceptúan solas por `pg_depend`, no por lista de
+--      nombres.
 --
 -- LO QUE NO CUBRE (y por qué no hace falta un cuarto bloque): una tabla con
 -- `tenant_id` y CERO políticas no es un hallazgo — con RLS activo, cero
@@ -165,4 +174,53 @@ begin
 
   raise exception E'DENY_ALL_NOMBRADAS  sin_rls=%  con_alguna_politica=%   (esperado — / —)',
     sin_rls, con_politica;
+end $$;
+
+-- ── E. Ninguna función NUESTRA de `public` con el `search_path` heredado ───
+-- El linter de Supabase lo levanta como `function_search_path_mutable`, pero
+-- lo levanta DESPUÉS de aplicar la migración a producción — cuando ya está
+-- puesto. Esto lo atrapa en CI, sobre base virgen, antes de que salga.
+--
+-- El riesgo clásico (escalar privilegios plantando un objeto que una función
+-- privilegiada llame sin calificar) sólo aplica a `SECURITY DEFINER`, y ésas
+-- ya las cubre el bloque B. Este bloque va por TODAS, DEFINER o no, por una
+-- razón distinta: en este esquema las funciones se usan como cuerpo de CHECK
+-- y de trigger, o sea como REGLAS DE INTEGRIDAD. Una regla cuyo resultado
+-- depende del `search_path` de quien inserta no significa lo mismo para todo
+-- el que escribe en la tabla, y eso la descalifica como regla. Fue el caso de
+-- `qa_verdad_terreno_valida` (0239, arreglada en la 0247).
+--
+-- Las funciones de EXTENSIONES quedan fuera y no por comodidad: no son
+-- nuestras, no las podemos alterar sin pelearnos con el `create extension`, y
+-- volverían este bloque rojo para siempre por algo que no está en nuestras
+-- manos. Se detectan solas por `pg_depend` (deptype 'e'), no por una lista de
+-- nombres — una extensión nueva se exceptúa sin tocar este archivo, que es la
+-- misma disciplina del bloque B.
+do $$
+declare
+  sueltas text;
+  n int;
+begin
+  select coalesce(string_agg(p.proname, ', ' order by p.proname), '—'), count(*)
+    into sueltas, n
+    from pg_proc p
+    join pg_namespace ns on ns.oid = p.pronamespace
+   where ns.nspname = 'public'
+     and p.prokind = 'f'
+     and not exists (
+           select 1 from unnest(coalesce(p.proconfig, '{}'::text[])) c
+            where c like 'search_path=%'
+         )
+     and not exists (
+           select 1 from pg_depend d
+            where d.objid = p.oid
+              and d.classid = 'pg_proc'::regclass
+              and d.deptype = 'e'
+         );
+
+  if n > 0 then
+    raise notice 'funciones de public sin search_path fijo (excluidas las de extensiones): %', sueltas;
+  end if;
+
+  raise exception E'SEARCH_PATH_SUELTO  funciones=%   (esperado 0)', n;
 end $$;

@@ -157,7 +157,7 @@ begin
   r2 := enriquecer_gasto_codigo(v_g, v_t, '{"folioPortal":"SEGUNDO"}'::jsonb, 'uuid-b');
   select ocr_extra, cfdi_uuid into extra, uu from gasto where id = v_g;
 
-  raise exception E'CLAIM  1er/2do=%/%  folio=%  montoDiscrepante-sobrevive=%  uuid=%   (esperado t/f / PRIMERO / true / uuid-a)',
+  raise exception E'CLAIM  primero=%  segundo=%  folio=%  montoDiscrepante-sobrevive=%  uuid=%   (esperado t / f / PRIMERO / t / uuid-a)',
     r1, r2, extra->>'folioPortal', extra->>'montoDiscrepante', uu;
 end $$;
 
@@ -630,8 +630,13 @@ begin
     from pg_class where oid = 'public.wa_mensaje_procesado'::regclass;
 
   anon_intake := has_function_privilege('anon', 'public.intake_delta(uuid,integer)', 'execute');
-  anon_lock   := has_function_privilege('anon', 'public.try_lock_viaje(uuid,integer)', 'execute');
-  anon_unlock := has_function_privilege('anon', 'public.unlock_viaje(uuid)', 'execute');
+  -- AUDITORÍA 24 · BE-11 (mig. 0280): las dos funciones del mutex cambiaron de
+  -- firma para llevar el token del dueño. Se actualizan aquí porque el bloque
+  -- dejaría de compilar contra la firma vieja —`has_function_privilege` lanza
+  -- si la función no existe— y lo que este bloque asevera (que un anónimo no
+  -- puede soltar el mutex de un viaje ajeno) es exactamente lo mismo.
+  anon_lock   := has_function_privilege('anon', 'public.try_lock_viaje(uuid,integer,uuid)', 'execute');
+  anon_unlock := has_function_privilege('anon', 'public.unlock_viaje(uuid,uuid)', 'execute');
   -- Y el pipeline SÍ tiene que poder: una revocación de más rompe la barrera
   -- entera, que es un fallo tan caro como el hueco que cierra.
   svc_intake  := has_function_privilege('service_role', 'public.intake_delta(uuid,integer)', 'execute');
@@ -1135,7 +1140,7 @@ begin
 
   reset role;
 
-  raise exception E'FINANZAS_RLS  clientes=%  tarifas=%  facturas=%  pagos=%  cotizaciones=%  factura_viaje=%   (esperado 0 en las seis — cualquier otra cosa le abre precios y saldos al encargado)',
+  raise exception E'FINANZAS_RLS  clientes=%  tarifas=%  facturas=%  pagos=%  cotizaciones=%  factura_viaje=%   (esperado 0 / 0 / 0 / 0 / 0 / 0 — cualquier otra cosa le abre precios y saldos al encargado)',
     n_cli, n_tar, n_fac, n_pag, n_cot, n_fv;
 end $$;
 
@@ -1230,7 +1235,7 @@ begin
   end;
 end $$;
 
--- ── 32. La bitácora no se corrige ni se borra (mig. 0053) ────────────────────
+-- ── 32. La bitácora no se corrige ni se borra, y no se planta (mig. 0053 + 0195) ──
 -- Un registro de auditoría que su propio dueño puede editar no sirve como
 -- evidencia ante nadie: ni ante el INAI, ni ante un cliente que pregunta quién
 -- tocó su dato. La 0053 le da a `bitacora_auditoria` policies de SELECT e
@@ -1239,15 +1244,27 @@ end $$;
 --
 -- Es fácil de romper sin querer: basta que alguien añada un `for all` "para
 -- que se pueda limpiar" y la tabla deja de ser prueba de nada, en silencio.
--- Esperado: 0 filas modificadas y 0 borradas por un flota_admin.
+--
+-- AUDITORÍA 19 (SEGURIDAD, mig. 0195): la política de INSERT de la 0086 solo
+-- exigía `tenant_id` propio, SIN filtro de rol — cualquier `app_user` de
+-- CUALQUIER rol (no solo `flota_admin`) podía plantar una entrada falsa vía
+-- PostgREST directo. La 0195 revoca `insert` de `authenticated`/`anon` y
+-- quita la política — el único escritor real (`bitacora_escritura.ts`) usa
+-- `service_role`, que bypassa RLS y estos grants por completo.
+--
+-- Esperado: 0 filas modificadas, 0 borradas por un flota_admin, y un
+-- INSERT directo de un `encargado` (rol SIN privilegios de administración)
+-- rebota por falta de privilegio — ni siquiera llega a evaluar la policy.
 do $$
 declare
-  v_t uuid; v_admin uuid := gen_random_uuid();
-  n_lee int; n_upd int; n_del int;
+  v_t uuid; v_admin uuid := gen_random_uuid(); v_encargado uuid := gen_random_uuid();
+  n_lee int; n_upd int; n_del int; planto_encargado boolean;
 begin
   insert into tenant (nombre) values ('ZZZ VERIF BITACORA') returning id into v_t;
   insert into app_user (id, tenant_id, email, rol)
     values (v_admin, v_t, 'zzz-verif-bitacora@likida.test', 'flota_admin');
+  insert into app_user (id, tenant_id, email, rol)
+    values (v_encargado, v_t, 'zzz-verif-bitacora-2@likida.test', 'encargado');
   insert into bitacora_auditoria (tenant_id, actor_id, accion, entidad)
     values (v_t, v_admin, 'liquidacion.emitida', 'liquidacion');
 
@@ -1263,10 +1280,21 @@ begin
   with d as (delete from bitacora_auditoria where tenant_id = v_t returning 1)
   select count(*) into n_del from d;
 
+  -- El plante: un `encargado` (SIN administra_flota()) intenta insertar una
+  -- entrada falsa atribuida a otra persona, en su propio tenant.
+  perform set_config('request.jwt.claims', json_build_object('sub', v_encargado)::text, true);
+  begin
+    insert into bitacora_auditoria (tenant_id, actor_id, accion, entidad)
+      values (v_t, v_admin, 'liquidacion.aprobada.FALSIFICADO', 'liquidacion');
+    planto_encargado := true;
+  exception when insufficient_privilege then
+    planto_encargado := false;
+  end;
+
   reset role;
 
-  raise exception E'BITACORA  lee=%  modifica=%  borra=%   (esperado 1 / 0 / 0 — si modifica o borra pasan de 0, la bitacora ya no prueba nada)',
-    n_lee, n_upd, n_del;
+  raise exception E'BITACORA  lee=%  modifica=%  borra=%  planto_encargado=%   (esperado 1 / 0 / 0 / f — si modifica, borra o planto_encargado pasan de su esperado, la bitacora ya no prueba nada)',
+    n_lee, n_upd, n_del, planto_encargado;
 end $$;
 
 -- ── 33. La vista de saldos respeta el RLS de quien pregunta (mig. 0054) ──────
@@ -1561,7 +1589,16 @@ begin
 
   delete from tenant where id = t;
 
-  raise exception E'INDICE_FACTURACION  el-planeador-usa-el-indice=%   plan=%   (esperado true)',
+  -- PRU-1 (auditoría 24): este bloque decía «(esperado true)» y salía SIN
+  -- CALIFICAR (verde) con `usa-el-indice=f`. Medido el 1-sep-2026 en Postgres
+  -- 17 con las 257 migraciones: el planeador prefiere `gasto_created_at_idx`
+  -- con filtro (cost 2.58 para 9 filas) porque con la mezcla 50/50 del
+  -- fixture el índice parcial no ahorra nada; con `random_page_cost=1.1` da lo
+  -- mismo. Lo que este bloque mide depende del volumen y de la versión del
+  -- planeador, así que se declara REPORTE (sin `(esperado …)`): el runner lo
+  -- lista aparte y nunca lo cuenta como pase. Para volverlo aserción hay que
+  -- sembrar la mezcla de producción (≥95 % ya facturados) y volver a medir.
+  raise exception E'INDICE_FACTURACION  [reporte: depende del volumen y del planeador — ver nota]  el-planeador-usa-el-indice=%  plan=%',
     usa_indice, plan;
 end $$;
 
@@ -1678,8 +1715,17 @@ begin
 
   delete from tenant where nombre like 'ZZZ VERIF PAG %';
 
-  raise exception E'INDICES_PAGINACION  el-planeador-los-usa=%/%   %   (esperado 9/9)',
-    usados, total, coalesce(nullif(fallos, ''), '- todos');
+  -- PRU-1 (auditoría 24): `usados=2/9` contra «esperado 9/9» partía por la
+  -- barra y el bloque quedaba SIN CALIFICAR (verde) con siete índices sin usar.
+  -- Medido el 1-sep-2026 en Postgres 17 con las 257 migraciones: 2/9 — el
+  -- planeador toma el índice de tenant + Sort de ~2,000 filas (cost ~573) en
+  -- vez de `(tenant_id, id)`; con `random_page_cost=1.1` igual. Depende del
+  -- volumen del fixture y de la versión del planeador, así que se declara
+  -- REPORTE (sin `(esperado …)`): el runner lo lista aparte y nunca lo cuenta
+  -- como pase. Para volverlo aserción: sembrar ≥20,000 filas por tenant y
+  -- volver a medir; el `fallos=` trae el plan de cada índice que no se usó.
+  raise exception E'INDICES_PAGINACION  [reporte: depende del volumen y del planeador — ver nota]  usados=%  total=%  fallos=%',
+    usados, total, coalesce(nullif(fallos, ''), '—');
 end $$;
 
 -- ── 41. El resumen de costo de IA suma lo MISMO que sumaba JavaScript (mig. 0062) ──
@@ -1887,7 +1933,7 @@ begin
 
   delete from tenant where nombre like 'ZZZ VERIF AGG %';
 
-  raise exception E'RESUMEN_COSTO_IA  total-cerrado=%  tokens=%  fase=%  modelo=%  fase+modelo=%  dia=%  tenant=%  sin-ventana=%  ventana-vacia=%  borde-semiabierto=%  hay-filas-en-el-borde=%\n                  es-definer=%  anon=%  authenticated=%  service_role=%\n                  esperado-cerrado=%   deriva-float8=%\n                  (esperado t×10 / borde>0 / f / f / f / t)',
+  raise exception E'RESUMEN_COSTO_IA  total-cerrado=%  tokens=%  fase=%  modelo=%  fase+modelo=%  dia=%  tenant=%  sin-ventana=%  ventana-vacia=%  borde-semiabierto=%  hay-filas-en-el-borde=%\n                  es-definer=%  anon=%  authenticated=%  service_role=%\n                  esperado-cerrado=%   deriva-float8=%\n                  (esperado t / t / t / t / t / t / t / t / t / t / >0 / f / f / f / t / cifra de referencia / <0.01)',
     ok_cerrado, ok_tokens, ok_fase, ok_modelo, ok_fasemodelo, ok_dia, ok_tenant,
     ok_todo, ok_vacia, ok_borde, hay_borde,
     definer, anon_ok, auth_ok, svc_ok,
@@ -1950,7 +1996,7 @@ begin
   usa_indice := plan ilike '%gasto_por_facturar_idx%';
 
   delete from tenant where id = t;
-  raise exception E'FALTA_PARA_OPERAR  rechaza-contrasena=%  rls=%  sin-politicas=%  cola-usa-indice=%   (esperado 4x true)',
+  raise exception E'FALTA_PARA_OPERAR  rechaza-contrasena=%  rls=%  sin-politicas=%  cola-usa-indice=%   (esperado t / t / t / t)',
     rechaza_secreto, rls_on, sin_politicas, usa_indice;
 end $$;
 
@@ -2174,7 +2220,11 @@ begin
 
   delete from tenant where nombre like 'ZZZ VERIF T63 %';
 
-  raise exception E'RESUMEN_POR_TENANT\n  costo: cerrado=%  fase=%  viajes=%  tokens=%  AISLADO=%  sin-fase-ajena=%\n  docs:  procesados=%  porMes=%  AISLADO=%  solo-ocr=%\n  ventana-vacia=%  borde-semiabierto=%  hay-filas-en-el-borde=%\n  EL-RECORTE-DABA-MENOS=%   (1000 filas: %  ·  total real: %)\n  permisos costo: definer=% anon=% auth=% svc=%   docs: definer=% anon=% auth=% svc=%\n  (esperado t en todo, f en los definer y en anon/auth)',
+  -- PRU-1 (auditoría 24): sin rótulos sueltos («docs:», «permisos costo:») ni
+  -- paréntesis entre claves — el runner los pegaba al valor anterior («t docs:»)
+  -- y el bloque quedaba SIN CALIFICAR con su AISLADO= adentro. Las dos cifras
+  -- del recorte son informativas: la aserción es `recorte_daba_menos`.
+  raise exception E'RESUMEN_POR_TENANT  costo_cerrado=%  costo_fase=%  costo_viajes=%  costo_tokens=%  costo_AISLADO=%  costo_sin_fase_ajena=%  docs_procesados=%  docs_porMes=%  docs_AISLADO=%  docs_solo_ocr=%  ventana_vacia=%  borde_semiabierto=%  hay_filas_en_el_borde=%  recorte_daba_menos=%  suma_1000_filas=%  total_real=%  costo_definer=%  costo_anon=%  costo_auth=%  costo_svc=%  docs_definer=%  docs_anon=%  docs_auth=%  docs_svc=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t / >0 / t / lo que suman 1000 filas / el total real / f / f / f / t / f / f / f / t)',
     ok_cerrado, ok_fase, ok_viajes, ok_tokens, ok_aislado, ok_sin_fase_ajena,
     ok_docs, ok_mes, ok_docs_aislado, ok_solo_ocr,
     ok_vacia, ok_borde, hay_borde,
@@ -2344,7 +2394,7 @@ begin
   exception when others then sin_check_entra_ant := false;
   end;
 
-  raise exception E'45  rechaza-monto-negativo=%  acepta-monto-cero=%  rechaza-anticipo-negativo=%  acepta-anticipo-cero=%\n    FALSIFICADO (checks caidos): entra-monto-negativo=%  entra-anticipo-negativo=%\n    (esperado: t t t t  /  t t)\n    msg=%',
+  raise exception E'45  rechaza-monto-negativo=%  acepta-monto-cero=%  rechaza-anticipo-negativo=%  acepta-anticipo-cero=%\n    FALSIFICADO (checks caidos): entra-monto-negativo=%  entra-anticipo-negativo=%  msg=%\n    (esperado t / t / t / t)',
     rechaza_neg, acepta_cero, rechaza_ant_neg, acepta_ant_cero,
     sin_check_entra_neg, sin_check_entra_ant, msg;
 end $$;
@@ -2617,7 +2667,7 @@ begin
   exception when others then sin_fk_cruza_entra := false;
   end;
 
-  raise exception E'48  cruza-flotas-rebota=%  los-3-motivos-entran=%  motivo-inventado-rebota=%\n    resolucion-inventada-rebota=%  cierre-a-medias-rebota=%\n    FALSIFICADO (FK compuesta caida): cruza-flotas-ENTRA=%\n    (esperado t t t t t / t)',
+  raise exception E'48  cruza-flotas-rebota=%  los-3-motivos-entran=%  motivo-inventado-rebota=%\n    resolucion-inventada-rebota=%  cierre-a-medias-rebota=%\n    FALSIFICADO (FK compuesta caida): cruza-flotas-ENTRA=%\n    (esperado t / t / t / t / t)',
     cruza_rebota, motivos_validos, motivo_malo_rebota, resol_mala_rebota,
     cierre_a_medias_rebota, sin_fk_cruza_entra;
 end $$;
@@ -2678,7 +2728,7 @@ begin
                        've_finanzas','administra_flota','gasto_no_tras_liquidar')
      and coalesce(array_to_string(p.proconfig,','),'') not like '%pg_temp%';
 
-  raise exception E'49  CON pg_temp: %\n    SIN pg_temp: %   (esperado —)\n    FALSIFICADO (se le quita a is_superadmin): sin-pg_temp = %',
+  raise exception E'49  con-pg_temp=%\n    sin-pg_temp=%\n    FALSIFICADO (se le quita a is_superadmin): sin-pg_temp = %\n    (esperado las que ya lo tienen / —)',
     con_pg_temp, sin_pg_temp, tras_falsificar;
 end $$;
 
@@ -2884,7 +2934,7 @@ begin
   end;
 
   delete from tenant where id = t;
-  raise exception E'52  mismo-indice-rebota=%  anon=%  service_role=%  FALSIFICADO (sin indice): duplicado-entra=%   (esperado t / 0 / 1 / t)',
+  raise exception E'52  mismo-indice-rebota=%  anon=%  service_role=%  FALSIFICADO (sin indice): duplicado-entra=%   (esperado t / <=0 / 1)',
     choco_indice, n_anon, n_service, sin_indice_entra;
 end $$;
 
@@ -3482,7 +3532,9 @@ begin
 
   begin
     insert into agente_notificacion_config (tenant_id, agente) values (t, 'liquidacionn');
-  exception when check_violation then agente_malo := true;
+  -- Desde la 0204 el candado es una FK a `agente_definicion` (la mudanza
+  -- CHECK → FK del bloque 162); la garantía es la misma — el typo rebota.
+  exception when check_violation or foreign_key_violation then agente_malo := true;
   end;
 
   begin
@@ -3878,7 +3930,7 @@ begin
   select count(*) into quedan_cod from public.codigo_pendiente where tenant_id = t;
   select has_function_privilege('anon', 'public.purgar_wa_conversacion(integer, timestamptz)', 'EXECUTE') into anon_conv;
   select has_function_privilege('anon', 'public.purgar_codigo_pendiente(integer, timestamptz)', 'EXECUTE') into anon_cod;
-  raise exception E'RETENCION_0104  conv_purgadas=%  cod_purgados=%  quedan_conv=%  quedan_cod=%  anon=%/%   (esperado >=1/>=1/1/1/f/f)',
+  raise exception E'RETENCION_0104  conv_purgadas=%  cod_purgados=%  quedan_conv=%  quedan_cod=%  anon_conv=%  anon_cod=%   (esperado >=1 / >=1 / 1 / 1 / f / f)',
     (res->>'conversacionesPurgadas'), (res->>'codigosPurgados'), quedan_conv, quedan_cod, anon_conv, anon_cod;
 end $$;
 
@@ -4037,7 +4089,7 @@ begin
   delete from public.desglose_peaje where id = d;
   select count(*) into lineas_tras_borrar from public.desglose_peaje_linea where desglose_id = d;
 
-  raise exception E'DESGLOSE_0106  default_sin_contraparte=%  diferencia_nula=%  estatus_malo_rebota=%  indice_repetido_rebota=%  periodo_malo_rebota=%  rls=%/%  policies=%  indices=%  lineas_tras_borrar=%   (esperado t/t/t/t/t/t/t/0/3/0)',
+  raise exception E'DESGLOSE_0106  default_sin_contraparte=%  diferencia_nula=%  estatus_malo_rebota=%  indice_repetido_rebota=%  periodo_malo_rebota=%  rls_desglose=%  rls_linea=%  policies=%  indices=%  lineas_tras_borrar=%   (esperado t / t / t / t / t / t / t / 0 / 3 / 0)',
     default_ok, dif_nula, estatus_malo, indice_repetido, periodo_malo,
     rls_desglose, rls_linea, policies, indices, lineas_tras_borrar;
 end $$;
@@ -5739,49 +5791,84 @@ begin
     coalesce(publico, true), coalesce(anon_si, true), coalesce(auth_si, true), coalesce(svc_si, false);
 end $$;
 
--- ── 120. Las personas de prospectos fríos se purgan; las de tratos vivos y las frenadas no (mig. 0148) ──
+-- ── 120. Las personas de prospectos fríos se purgan COMPLETAS; las de tratos vivos y las frenadas no (mig. 0148 + 0191) ──
 --
 -- /aviso/prospectos promete "a los 12 meses sin ningún contacto se borran".
 -- Aquí se comprueba que algo lo ejecuta y que NO borra de más: un prospecto
 -- con toque reciente conserva a su gente, uno en `negociacion` también, y
 -- `conservar_hasta` en el futuro frena la purga aunque el prospecto esté
--- frío. `contacto_nombre` del prospecto frío se anula. La llave
--- `prospectoPersonasPurgadas` sale en el jsonb del mantenimiento, y `anon`
--- no puede ejecutar la purga. Todo revierte con el RAISE final.
+-- frío. `anon` no puede ejecutar la purga. Todo revierte con el RAISE final.
 --
--- PENDIENTE DE CORRER CONTRA PRODUCCIÓN (auditoría 18, C2). Esperado:
---   RETENCION_0148  purgadas=1  quedan=3  frio_sin_contacto=t  reciente_con_contacto=t  llave=t  anon=f
+-- AUDITORÍA 19 (legal C4, CRÍTICO): la 0148 solo anulaba `contacto_nombre` —
+-- `telefono`/`correo`/`notas`/`lead_clave` de la MISMA persona quedaban
+-- intactos. La 0191 los anula los cinco, y el bloque ahora siembra los
+-- cinco en el frío para probarlo. `empresa` (el NEGOCIO, no la persona) se
+-- queda a propósito: se comprueba que sigue viva.
+--
+-- Y el caso que la 0148 no cubría: un prospecto del censo puede nacer SIN
+-- `contacto_nombre` pero CON teléfono/correo — antes la condición del
+-- UPDATE (`contacto_nombre is not null`) nunca lo tocaba. `sin_nombre`
+-- simula justo eso.
+--
+-- 0258 (hallazgo 5 de la auditoría de tandas 21-24): `conservar_hasta` ahora
+-- congela el EXPEDIENTE COMPLETO, no solo la fila de la persona — en un ARCO
+-- en disputa los mensajes/atribución del prospecto pueden ser la evidencia
+-- del tratamiento reclamado, y en «escríbanme en enero» anular el correo de
+-- la fila era exactamente al revés de lo pactado. Por eso la persona frenada
+-- ya no se siembra en el MISMO prospecto frío (antes se esperaba purgar a su
+-- vecina y limpiar la fila; hoy eso sería partir un expediente congelado):
+-- vive en su PROPIO prospecto frío `frenado`, y se comprueba que su fila
+-- conserva TODO — persona, contacto y datos.
+--
+-- Esperado:
+--   RETENCION_0148_0191  purgadas=1  quedan=3  frio_limpio=t  sin_nombre_limpio=t  empresa_viva=t  reciente_con_datos=t  frenado_con_datos=t  llave=t  anon=f
 do $$
 declare
-  frio uuid; reciente uuid; trato uuid; res jsonb; purgadas bigint; quedan bigint;
-  frio_sin_contacto boolean; reciente_con_contacto boolean; tiene_llave boolean; anon_ok boolean;
+  frio uuid; sin_nombre uuid; reciente uuid; trato uuid; frenado uuid; res jsonb; purgadas bigint; quedan bigint;
+  frio_limpio boolean; sin_nombre_limpio boolean; empresa_viva boolean; reciente_con_datos boolean;
+  frenado_con_datos boolean;
+  tiene_llave boolean; anon_ok boolean;
 begin
-  insert into public.prospecto (empresa, estado, contacto_nombre, created_at)
-    values ('__verif_0148_frio__', 'contactado', 'Ing. Prueba Frío', now() - interval '400 days') returning id into frio;
-  insert into public.prospecto (empresa, estado, contacto_nombre, created_at)
-    values ('__verif_0148_reciente__', 'contactado', 'Lic. Prueba Reciente', now() - interval '400 days') returning id into reciente;
+  insert into public.prospecto (empresa, estado, contacto_nombre, telefono, correo, notas, lead_clave, created_at)
+    values ('__verif_0148_frio__', 'contactado', 'Ing. Prueba Frío', '5219990000001', 'frio@verif.test', 'notas del vendedor', 'frio@verif.test', now() - interval '400 days') returning id into frio;
+  insert into public.prospecto (empresa, estado, contacto_nombre, telefono, correo, created_at)
+    values ('__verif_0148_sinnombre__', 'nuevo', null, '5219990000002', 'sinnombre@verif.test', now() - interval '400 days') returning id into sin_nombre;
+  insert into public.prospecto (empresa, estado, contacto_nombre, telefono, correo, created_at)
+    values ('__verif_0148_reciente__', 'contactado', 'Lic. Prueba Reciente', '5219990000003', 'reciente@verif.test', now() - interval '400 days') returning id into reciente;
   insert into public.prospecto (empresa, estado, contacto_nombre, created_at)
     values ('__verif_0148_trato__', 'negociacion', 'Prueba Trato', now() - interval '400 days') returning id into trato;
-  -- El reciente tuvo un toque hace 10 días; el frío, ninguno.
+  -- Frío de 400 días con freno vigente: el expediente entero debe sobrevivir.
+  insert into public.prospecto (empresa, estado, contacto_nombre, telefono, correo, mensaje_wa,
+                                mensajes_generados_en, mensajes_modelo, created_at)
+    values ('__verif_0148_frenado__', 'contactado', 'Prueba Frenada', '5219990000004', 'frenado@verif.test',
+            'Hola Prueba, seguimos en enero como quedamos.',
+            now() - interval '400 days', 'modelo-de-prueba', now() - interval '400 days') returning id into frenado;
+  -- El reciente tuvo un toque hace 10 días; los demás fríos, ninguno.
   insert into public.prospecto_contacto (prospecto_id, canal, direccion, resumen, ocurrio_en)
     values (reciente, 'correo', 'salida', '__verif_0148__', now() - interval '10 days');
   insert into public.prospecto_persona (prospecto_id, nombre, origen, created_at) values
     (frio,     '__V148 frío sin freno__',  'directorio', now() - interval '400 days'),
-    (frio,     '__V148 frío con freno__',  'directorio', now() - interval '400 days'),
+    (frenado,  '__V148 frío con freno__',  'directorio', now() - interval '400 days'),
     (reciente, '__V148 reciente__',        'directorio', now() - interval '400 days'),
     (trato,    '__V148 en trato__',        'directorio', now() - interval '400 days');
   update public.prospecto_persona set conservar_hasta = now() + interval '30 days'
-   where prospecto_id = frio and nombre = '__V148 frío con freno__';
+   where prospecto_id = frenado and nombre = '__V148 frío con freno__';
 
   res := public.mantenimiento_de_datos(30);
   purgadas := (res->>'prospectoPersonasPurgadas')::bigint;
   select count(*) into quedan from public.prospecto_persona where nombre like '__V148%';
-  select contacto_nombre is null into frio_sin_contacto from public.prospecto where id = frio;
-  select contacto_nombre is not null into reciente_con_contacto from public.prospecto where id = reciente;
+  select (contacto_nombre is null and telefono is null and correo is null and notas is null and lead_clave is null)
+    into frio_limpio from public.prospecto where id = frio;
+  select (telefono is null and correo is null) into sin_nombre_limpio from public.prospecto where id = sin_nombre;
+  select (empresa = '__verif_0148_frio__') into empresa_viva from public.prospecto where id = frio;
+  select (contacto_nombre is not null and telefono is not null and correo is not null)
+    into reciente_con_datos from public.prospecto where id = reciente;
+  select (contacto_nombre is not null and telefono is not null and correo is not null and mensaje_wa is not null)
+    into frenado_con_datos from public.prospecto where id = frenado;
   tiene_llave := res ? 'prospectoPersonasPurgadas';
   select has_function_privilege('anon', 'public.purgar_prospecto_persona(integer, timestamptz)', 'EXECUTE') into anon_ok;
-  raise exception E'RETENCION_0148  purgadas=%  quedan=%  frio_sin_contacto=%  reciente_con_contacto=%  llave=%  anon=%   (esperado 1/3/t/t/t/f)',
-    purgadas, quedan, frio_sin_contacto, reciente_con_contacto, tiene_llave, anon_ok;
+  raise exception E'RETENCION_0148_0191  purgadas=%  quedan=%  frio_limpio=%  sin_nombre_limpio=%  empresa_viva=%  reciente_con_datos=%  frenado_con_datos=%  llave=%  anon=%   (esperado 1/3/t/t/t/t/t/t/f)',
+    purgadas, quedan, frio_limpio, sin_nombre_limpio, empresa_viva, reciente_con_datos, frenado_con_datos, tiene_llave, anon_ok;
 end $$;
 
 -- ── 121. El claim huérfano se retoma; el completado no (mig. 0149) ──────────
@@ -5971,7 +6058,7 @@ begin
   select has_function_privilege('anon', 'public.viajes_registro_tenant(uuid, text, text, date, timestamptz, uuid, int)', 'execute') into anon_reg;
   select has_function_privilege('anon', 'public.conteos_viajes_tenant(uuid)', 'execute') into anon_con;
 
-  raise exception E'REGISTRO_0154  paginas=%  equivalente=%  filtrado_B=%  escalados_filtro=%  busca_monte=%  conteos_ok=%  tope_100=%  anon=%/%   (esperado 4 / t / t / 1 / 1 / t / t / f/f)',
+  raise exception E'REGISTRO_0154  paginas=%  equivalente=%  filtrado_B=%  escalados_filtro=%  busca_monte=%  conteos_ok=%  tope_100=%  anon_reg=%  anon_con=%   (esperado 4 / t / t / 1 / 1 / t / t / f / f)',
     paginas, (nuevo = viejo), not (nuevo && ids_b), esc, busca, conteos_ok, tope_ok, anon_reg, anon_con;
 end $$;
 
@@ -6093,9 +6180,9 @@ begin
     into sin_cota_n, sin_fecha, bandas
     from jsonb_array_elements(j) c;
 
-  raise exception E'FISCAL_AGREGADO_0151  invoker=%  anon=%  auth=%  svc=%  | periodo: celdas=%  n=%/%  monto=%/%  con_cfdi=%/%  sobre_tope=%  dia_partido=%  B_contamina=%  | sin_cota: n=%  sin_fecha=%  bandas=%   (esperado t/f/f/t | 11 celdas, 11/11, 7680.00/7680.00, 10/10, 1, 900, f | 13, 1, bandas 0,2)',
-    es_invoker, anon_ok, auth_ok, svc_ok, celdas, n_total, n_directo, monto_total, monto_directo,
-    con_cfdi, con_cfdi_directo, sobre_tope, dia_partido, contamina, sin_cota_n, sin_fecha, bandas;
+  raise exception E'FISCAL_AGREGADO_0151  invoker=%  anon=%  auth=%  svc=%  periodo_celdas=%  n_iguales=%  monto_iguales=%  con_cfdi_iguales=%  sobre_tope=%  dia_partido=%  B_contamina=%  sin_cota_n=%  sin_fecha=%  bandas=%   (esperado t / f / f / t / >0 / t / t / t / 1 / 900 / f / 13 / 1 / 0,2)',
+    es_invoker, anon_ok, auth_ok, svc_ok, celdas, (n_total = n_directo), (monto_total = monto_directo),
+    (con_cfdi = con_cfdi_directo), sobre_tope, dia_partido, contamina, sin_cota_n, sin_fecha, bandas;
 end $$;
 
 -- ── 122. Los 11 agregados de la 0150: existen, INVOKER, aislados, cuadran ───
@@ -6313,7 +6400,7 @@ begin
 
   delete from tenant where id in (ta, tb);
 
-  raise exception E'AGREGADOS_0150  funcs=%  invoker=%  ninguna_anon=%  ninguna_auth=%  todas_svc=%  anomalias_ok=%  semanal_ok=%  rutas_ok=%  concepto_ok=%  stats_ok=%  liquidado_ok=%  meses_ok=%  detalle_ok=%  dinero_ok=%  dias_ok=%  consolidado_ok=%  indice_impide_duplicado=%   (esperado 11/t/t/t/t y doce t)',
+  raise exception E'AGREGADOS_0150  funcs=%  invoker=%  ninguna_anon=%  ninguna_auth=%  todas_svc=%  anomalias_ok=%  semanal_ok=%  rutas_ok=%  concepto_ok=%  stats_ok=%  liquidado_ok=%  meses_ok=%  detalle_ok=%  dinero_ok=%  dias_ok=%  consolidado_ok=%  indice_impide_duplicado=%   (esperado 11 / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t)',
     n_funcs, todas_invoker, ninguna_anon, ninguna_auth, todas_svc,
     ok_anom, ok_sem, ok_rutas, ok_conc, ok_stats, ok_liq, ok_meses, ok_det, ok_dinero, ok_dias, ok_cons,
     indice_impide_duplicado;
@@ -6611,7 +6698,7 @@ begin
       or has_function_privilege('anon', 'public.purgar_llm_costo(integer, timestamptz, timestamptz)', 'EXECUTE')
     into anon_ok;
 
-  raise exception E'PURGAS_0155  eventos_borrados=%  viva_queda=%  bitacora_borrada=%  parcial=%  llaves=%  bucket=%/%  resumen_n=%  latido_rebota=%  anon=%   (esperado 2/t/1/f/t/8388608/2/t/t/f)',
+  raise exception E'PURGAS_0155  eventos_borrados=%  viva_queda=%  bitacora_borrada=%  parcial=%  llaves=%  bucket_limite=%  bucket_mimes=%  resumen_n=%  latido_rebota=%  anon=%   (esperado 2 / t / 1 / f / t / 8388608 / 2 / t / t / f)',
     3 - quedan_eventos, viva, bit_antes - bit_despues, (res->>'parcial')::boolean, tiene_llaves,
     coalesce(limite, 0), coalesce(mimes, 0), resumen_n, latido_rebota, anon_ok;
 end $$;
@@ -6768,12 +6855,16 @@ begin
   borrado_explicito := not (cfg ? 'facilidadCombustibleEfectivo') and cfg ? 'estimulos';
 
   -- ── Permisos: nada de esto se ejecuta desde internet ──────────────────────
-  select has_function_privilege('anon', 'public.registrar_pago_tx(uuid, uuid, date, numeric, text, text)', 'EXECUTE')
+  -- La firma lleva SIETE argumentos desde la 0237: el séptimo (`p_propuesta`,
+  -- con default null) es la llave de idempotencia del abono conciliado. La
+  -- firma de seis ya no existe, y preguntar por ella aquí haría fallar el
+  -- bloque con «function does not exist» en vez de medir el permiso.
+  select has_function_privilege('anon', 'public.registrar_pago_tx(uuid, uuid, date, numeric, text, text, uuid)', 'EXECUTE')
       or has_function_privilege('anon', 'public.reabrir_viaje_tx(uuid, uuid)', 'EXECUTE')
       or has_function_privilege('anon', 'public.tenant_config_merge(uuid, jsonb, text[])', 'EXECUTE')
     into anon_ok;
 
-  raise exception E'RPCS_0159  parcial-entra=%  sobrepago-rebota=%  saldo-nunca-negativo=%\n           salda-y-marca-pagada=%  factura-ajena-rebota=%\n           reabrir-rebota-con-liq-viva=%  reabrir-archiva=%  pdf-devuelto=%\n           liq-borrada=%  viaje-abierto=%  id-derivado-del-viaje=%\n           merge-conserva-hermanos=%  merge-profundo-agentes=%\n           llave-inventada-rebota=%  borrado-explicito=%  anon=%   (esperado todo t salvo anon=f)',
+  raise exception E'RPCS_0159  parcial-entra=%  sobrepago-rebota=%  saldo-nunca-negativo=%\n           salda-y-marca-pagada=%  factura-ajena-rebota=%\n           reabrir-rebota-con-liq-viva=%  reabrir-archiva=%  pdf-devuelto=%\n           liq-borrada=%  viaje-abierto=%  id-derivado-del-viaje=%\n           merge-conserva-hermanos=%  merge-profundo-agentes=%\n           llave-inventada-rebota=%  borrado-explicito=%  anon=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / f)',
     parcial_entra, sobrepago_rebota, saldo_no_negativo,
     salda_y_marca, factura_ajena_rebota,
     reabrir_rebota_liq_viva, reabrir_archiva, pdf_devuelto,
@@ -7377,7 +7468,7 @@ begin
   exception when others then reset role; raise;
   end;
 
-  raise exception E'STRIPE_0163  stripe_convive=%  metodo_incoherente_rebota=%  price_viejo_resuelve=%\n           reserva_gana_una=%  reserva_caducada_entra=%  conciliar_gana_una=%\n           cancelado_sin_uuid_rebota=%  anon_price=%   (esperado todo t salvo anon_price=f)',
+  raise exception E'STRIPE_0163  stripe_convive=%  metodo_incoherente_rebota=%  price_viejo_resuelve=%\n           reserva_gana_una=%  reserva_caducada_entra=%  conciliar_gana_una=%\n           cancelado_sin_uuid_rebota=%  anon_price=%   (esperado t / t / t / t / t / t / t / f)',
     stripe_convive, metodo_incoherente_rebota, price_viejo_resuelve,
     reserva_gana_una, reserva_caducada_entra, conciliar_gana_una,
     cancelado_sin_uuid_rebota, anon_price;
@@ -8165,6 +8256,46 @@ begin
     oposicion_revision, retencion_fiscal;
 end $$;
 
+-- ── 210. La cancelación ARCO también anonimiza el RFC y la licencia del operador (mig. 0262) ──
+--
+-- LEG-C2 (auditoría E.28): `ejecutar_arco_cancelacion` anonimizaba nombre y
+-- teléfono pero dejaba intactos `operador.rfc` (0080) y `licencia`/
+-- `licencia_tipo`/`licencia_vence` (0053) — un descuido de alcance en el
+-- UPDATE de 0178, no una decisión: esas columnas son ANTERIORES a 0178 y
+-- nunca se auditó el esquema completo de `operador` al escribirlo. 0262
+-- añade las cuatro al mismo UPDATE. Este bloque prueba justo eso: un
+-- operador con RFC y licencia capturados, tras la cancelación, sale con las
+-- cuatro columnas en NULL — sin tocar la evidencia fiscal ya emitida
+-- (gasto/CFDI), que sigue viva por el mismo bloque de arriba.
+--
+-- Esperado: ARCO_0262  ok=t  rfc_fuera=t  licencia_fuera=t  tipo_fuera=t  vence_fuera=t  seudonimo=t
+do $$
+declare
+  ta uuid; oa uuid; sa uuid;
+  r jsonb;
+  ok boolean;
+  rfc_fuera boolean; licencia_fuera boolean; tipo_fuera boolean; vence_fuera boolean; seudonimo_ok boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ ARCO 0262') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono, rfc, licencia, licencia_tipo, licencia_vence)
+    values (ta, 'Juan Perez', '+520000017303', 'XAXX010101000', 'B12345678', 'B', current_date + 365)
+    returning id into oa;
+
+  insert into solicitud_arco (tenant_id, operador_id, tipo, canal, vence_en)
+    values (ta, oa, 'cancelacion', 'whatsapp', current_date + 15) returning id into sa;
+
+  r := public.ejecutar_arco_cancelacion(ta, sa);
+  ok := (r->>'ok')::boolean;
+
+  select rfc is null, licencia is null, licencia_tipo is null, licencia_vence is null,
+         nombre like 'Operador %'
+    into rfc_fuera, licencia_fuera, tipo_fuera, vence_fuera, seudonimo_ok
+    from operador where id = oa;
+
+  raise exception E'ARCO_0262  ok=%  rfc_fuera=%  licencia_fuera=%  tipo_fuera=%  vence_fuera=%  seudonimo=%   (esperado t / t / t / t / t / t)',
+    ok, rfc_fuera, licencia_fuera, tipo_fuera, vence_fuera, seudonimo_ok;
+end $$;
+
 -- ── 145. Un centavo de redondeo no es una diferencia del operador (mig. 0174) ──
 --
 -- `stats_operador_tenant` (0150) declara en su propio comentario que «centavos
@@ -8660,6 +8791,10 @@ begin
   select count(*) into n_pasos from qa_corrida_paso where corrida_id = v_corrida;
   select nombre into nombre_final from qa_corrida_paso where corrida_id = v_corrida and n = 1;
 
+  -- DATOS-19C2 (barrido MEDIO/BAJO, mig. 0196): antes solo RLS dejaba a
+  -- `anon` a ciegas (0 filas); ahora ni siquiera tiene el GRANT de tabla —
+  -- el intento rebota en el privilegio, antes de que RLS entre a evaluar.
+  -- Más estricto (doble candado), por eso el `esperado` cambió de 0 a -1.
   begin
     set local role anon;
     select count(*) into n_anon from qa_foto where id = v_foto;
@@ -8674,6 +8809,8221 @@ begin
   delete from qa_corrida where id = v_corrida;
   select count(*) into n_tras_cascade from qa_corrida_paso where corrida_id = v_corrida;
 
-  raise exception E'QA_PANEL_0185  hash_rebota=%  confirmacion_rebota=%  carril_rebota=%  pasos=%  nombre_final=%  tras_cascade=%  anon=%  nota=%   (esperado t / t / t / 1 / intake · OCR / 0 / 0 / RLS lo deja a ciegas)',
+  raise exception E'QA_PANEL_0185  hash_rebota=%  confirmacion_rebota=%  carril_rebota=%  pasos=%  nombre_final=%  tras_cascade=%  anon=%  nota=%   (esperado t / t / t / 1 / intake · OCR / 0 / -1 / denegado por privilegios de tabla)',
     hash_rebota, confirmacion_rebota, carril_rebota, n_pasos, nombre_final, n_tras_cascade, n_anon, nota_anon;
+end $$;
+
+-- ── 154. El tope diario de presupuesto de IA usa el día de México, y una reserva muerta vence (mig. 0193) ──
+--
+-- AGEN-19C2-4 — el tope diario reiniciaba en medianoche UTC (18:00 hora de
+-- México), y una reserva de una invocación que muere sin liquidarse (crash,
+-- deploy, OOM) contaba contra el tope para siempre — no vencía.
+--
+-- (a)/(b) prueban la fórmula de "medianoche MX" contra un instante FIJO
+-- (2027-01-01T02:00:00-06:00), no contra `now()` — así el bloque da el mismo
+-- resultado sin importar a qué hora real corra en CI — y confirman que la
+-- función DESPLEGADA (no solo la fórmula en abstracto) la usa.
+-- (c)/(d) prueban que una reserva vencida (`expira_en` en el pasado) deja de
+-- contar contra el tope del tenant, pero una vigente sigue contando igual
+-- que antes — el fix no perdona presupuesto real, solo el fantasma de una
+-- invocación muerta.
+-- ACTUALIZACIÓN (auditoría de graduación de agentes, 2-sep-2026, migración
+-- 0302): este bloque llamaba al overload de 6 argumentos de
+-- `reservar_presupuesto_llm` (booleano) — el que existía cuando se escribió
+-- este bloque, antes de que la 0244 lo sustituyera por el de 8 argumentos
+-- (texto: 'ok'/'tope_tenant'/'tope_proposito'/'tope_run'). La 0302 retiró
+-- ese overload de 6 por huérfano (0 callers reales en `src/`), y este bloque
+-- CI dejó de compilar — "ERROR INESPERADO... function ... does not exist"
+-- (block 154, no llegó ni a su RAISE de cierre). Se migró a la firma de 8
+-- args con `proposito='fondo'` y `reserva_interactivo_usd=0` — con la
+-- reserva de interactivo en cero, el sub-tope de 'fondo' coincide con el
+-- tope del tenant, así que el bloque sigue probando EXACTAMENTE lo mismo
+-- que antes (el tope diario completo, no el reparto por propósito de la
+-- 0244 — eso ya lo prueba el bloque 200/0244). El tipo de retorno cambió de
+-- boolean a text: `acepta_tras_expirada`/`acepta_tras_vigente` ahora
+-- comparan contra 'ok'/'tope_tenant', no contra t/f.
+do $$
+declare
+  t uuid;
+  r_expirada uuid := gen_random_uuid();
+  r_nueva_c  uuid := gen_random_uuid();
+  r_vigente  uuid := gen_random_uuid();
+  r_nueva_d  uuid := gen_random_uuid();
+  ejemplo_mx timestamptz;
+  formula_ok boolean;
+  def_fn text;
+  fn_usa_mx boolean;
+  fn_usa_expira boolean;
+  acepta_tras_expirada text;
+  acepta_tras_vigente text;
+begin
+  insert into public.tenant (nombre) values ('ZZZ VERIF 0193') returning id into t;
+
+  -- (a) 2027-01-01T02:00:00-06:00 es la 01:00 del 1-ene en MX; su medianoche
+  -- MX es el 1-ene 00:00 hora MX = 2027-01-01T00:00:00-06:00 en UTC.
+  ejemplo_mx := date_trunc('day', timestamptz '2027-01-01T02:00:00-06:00' at time zone 'America/Mexico_City')
+                  at time zone 'America/Mexico_City';
+  formula_ok := ejemplo_mx = timestamptz '2027-01-01T00:00:00-06:00';
+
+  -- (b) La función desplegada de verdad usa esa fórmula (y la columna de
+  -- expiración), no `date_trunc('day', now())` a secas.
+  def_fn := pg_get_functiondef('public.reservar_presupuesto_llm(uuid,uuid,uuid,numeric,numeric,numeric,text,numeric)'::regprocedure);
+  fn_usa_mx := def_fn ilike '%America/Mexico_City%';
+  fn_usa_expira := def_fn ilike '%expira_en%';
+
+  -- (c) Una reserva YA EXPIRADA no cuenta contra el tope del tenant.
+  insert into public.llm_presupuesto_reserva (id, tenant_id, run_id, reservado_usd, estado, expira_en)
+    values (r_expirada, t, gen_random_uuid(), 0.90, 'reservado', now() - interval '1 minute');
+  acepta_tras_expirada := public.reservar_presupuesto_llm(r_nueva_c, t, gen_random_uuid(), 0.50, 10.00, 1.00, 'fondo', 0);
+  delete from public.llm_presupuesto_reserva where id in (r_expirada, r_nueva_c);
+
+  -- (d) Pero una reserva VIGENTE (no vencida) SÍ sigue contando: 0.90 + 0.50
+  -- > 1.00 de tope, así que esta debe RECHAZARSE.
+  insert into public.llm_presupuesto_reserva (id, tenant_id, run_id, reservado_usd, estado, expira_en)
+    values (r_vigente, t, gen_random_uuid(), 0.90, 'reservado', now() + interval '10 minutes');
+  acepta_tras_vigente := public.reservar_presupuesto_llm(r_nueva_d, t, gen_random_uuid(), 0.50, 10.00, 1.00, 'fondo', 0);
+
+  delete from public.llm_presupuesto_reserva where tenant_id = t;
+  delete from public.tenant where id = t;
+
+  raise exception 'PRESUPUESTO_LLM_0193  formula_dia_mx_ok=%  fn_usa_mx=%  fn_usa_expira=%  acepta_tras_expirada=%  acepta_tras_vigente=%   (esperado t / t / t / ok / tope_tenant)',
+    formula_ok, fn_usa_mx, fn_usa_expira, acepta_tras_expirada, acepta_tras_vigente;
+end $$;
+
+-- ── 155. El panel de QA sin grants directos, y `escenario` con dominio cerrado (mig. 0196) ──
+-- La 0185 dejó `qa_foto`/`qa_corrida`/`qa_corrida_paso` solo protegidas por
+-- RLS, sin el `revoke` que ya usan sus hermanas de 0186. Un banco de fotos
+-- que guarda OCR con RFC/domicilio real se merece el mismo doble candado.
+-- `escenario` en `qa_corrida` tampoco tenía CHECK, a diferencia de `carril`
+-- y `estado` en la misma tabla.
+do $$
+declare
+  v_id uuid; n_anon int; n_auth int; escenario_malo_rebota boolean; escenario_bueno_entra boolean;
+begin
+  -- (a) Sin grant directo: ni anon ni authenticated pueden leer, con o sin RLS de por medio.
+  begin
+    set local role anon;
+    select count(*) into n_anon from qa_foto;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_anon := -1;
+  end;
+  begin
+    set local role authenticated;
+    select count(*) into n_auth from qa_corrida;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_auth := -1;
+  end;
+
+  -- (b) El dominio cerrado de `escenario`: un valor fuera del catálogo actual rebota.
+  begin
+    insert into qa_corrida (escenario, parametros, estado, tenant_nombre)
+      values ('escenario_inventado', '{}'::jsonb, 'pendiente', 'ZZZ VERIF 0196');
+    escenario_malo_rebota := false;
+  exception when check_violation then
+    escenario_malo_rebota := true;
+  end;
+  insert into qa_corrida (escenario, parametros, estado, tenant_nombre)
+    values ('demo_guion', '{}'::jsonb, 'pendiente', 'ZZZ VERIF 0196')
+    returning id into v_id;
+  escenario_bueno_entra := v_id is not null;
+  delete from qa_corrida where id = v_id;
+
+  raise exception 'QA_PANEL_GRANTS_0196  anon=%  authenticated=%  escenario_malo_rebota=%  escenario_bueno_entra=%   (esperado -1 / -1 / t / t)',
+    n_anon, n_auth, escenario_malo_rebota, escenario_bueno_entra;
+end $$;
+
+-- ── 156. Asistencia en carretera: tipos/prioridad nuevos, candados y bitácora (mig. 0198) ──
+-- El circuito de siniestros amplía `incidencia` (siniestro/robo/emergencia_
+-- medica/varado/bloqueo, prioridad critica) y trae cuatro tablas nuevas.
+-- `flota_poliza` guarda el 800 de siniestros de la aseguradora — un dato que
+-- ni anon ni authenticated deben poder leer (doble candado 0186/0196). Y la
+-- unicidad `(incidencia_id, wa_message_id)` es la idempotencia de la bitácora:
+-- el mismo WhatsApp reentregado no puede duplicar el evento.
+do $$
+declare
+  t uuid; inc uuid; n_anon int;
+  tipo_nuevo_entra boolean; tipo_basura_rebota boolean; critica_entra boolean;
+  evento_repetido_rebota boolean; sin_wa_no_compiten boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ ASISTENCIA 0198') returning id into t;
+
+  -- (a) Los tipos nuevos entran con prioridad crítica; la basura sigue rebotando.
+  begin
+    insert into incidencia (tenant_id, tipo, prioridad, descripcion, hay_lesionados)
+      values (t, 'siniestro', 'critica', 'volcadura km 40', null)
+      returning id into inc;
+    tipo_nuevo_entra := inc is not null;
+    critica_entra := true;
+  exception when check_violation then
+    tipo_nuevo_entra := false; critica_entra := false;
+  end;
+  begin
+    insert into incidencia (tenant_id, tipo) values (t, 'tipo_inventado');
+    tipo_basura_rebota := false;
+  exception when check_violation then
+    tipo_basura_rebota := true;
+  end;
+
+  -- (b) La bitácora: mismo wa_message_id → una sola fila; sin wa_message_id
+  --     los eventos del sistema no compiten entre sí.
+  insert into incidencia_evento (tenant_id, incidencia_id, tipo, wa_message_id)
+    values (t, inc, 'abierta', 'wamid.PRUEBA-0198');
+  begin
+    insert into incidencia_evento (tenant_id, incidencia_id, tipo, wa_message_id)
+      values (t, inc, 'mensaje_adicional', 'wamid.PRUEBA-0198');
+    evento_repetido_rebota := false;
+  exception when unique_violation then
+    evento_repetido_rebota := true;
+  end;
+  insert into incidencia_evento (tenant_id, incidencia_id, tipo) values (t, inc, 'aviso_jefe_enviado');
+  insert into incidencia_evento (tenant_id, incidencia_id, tipo) values (t, inc, 'reconocida');
+  select count(*) = 3 into sin_wa_no_compiten
+    from incidencia_evento where incidencia_id = inc;
+
+  -- (c) El 800 de siniestros fuera del alcance de anon: rebota por privilegio
+  --     de tabla (-1), no "0 filas por RLS" — el doble candado de 0196.
+  begin
+    set local role anon;
+    select count(*) into n_anon from flota_poliza;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_anon := -1;
+  end;
+
+  raise exception 'ASISTENCIA_0198  tipo_nuevo=%  critica=%  basura_rebota=%  evento_repetido_rebota=%  bitacora=%  anon=%   (esperado t / t / t / t / t / -1)',
+    tipo_nuevo_entra, critica_entra, tipo_basura_rebota, evento_repetido_rebota, sin_wa_no_compiten, n_anon;
+end $$;
+
+-- ── 157. El REP libera el IVA a crédito con rastro e idempotencia (mig. 0199) ──
+-- `cfdi_pago` es el registro de cada DoctoRelacionado de cada complemento de
+-- pago ingerido: sin grants directos (solo service_role — mismo doble candado
+-- que 0196), y con unicidad por (tenant, REP, docto) para que el mismo REP
+-- reenviado no duplique. Y `gasto.metodo_pago` con dominio cerrado PUE/PPD:
+-- un valor inventado del OCR o de un XML roto rebota, no se guarda.
+do $$
+declare
+  t uuid; v_op uuid; n_anon int; n_auth int; duplicado_rebota boolean; metodo_malo_rebota boolean;
+begin
+  -- (a) Sin grant directo: ni anon ni authenticated pueden leer cfdi_pago.
+  begin
+    set local role anon;
+    select count(*) into n_anon from cfdi_pago;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_anon := -1;
+  end;
+  begin
+    set local role authenticated;
+    select count(*) into n_auth from cfdi_pago;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_auth := -1;
+  end;
+
+  -- (b) La idempotencia: el mismo (tenant, REP, docto) dos veces rebota.
+  insert into tenant (nombre) values ('ZZZ REP 0199') returning id into t;
+  insert into cfdi_pago (tenant_id, cfdi_uuid, fecha_pago, docto_relacionado_uuid, imp_pagado, imp_saldo_insoluto)
+    values (t, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeee0199', '2026-08-01', '11111111-2222-3333-4444-555555550199', 1160.00, 0);
+  begin
+    insert into cfdi_pago (tenant_id, cfdi_uuid, fecha_pago, docto_relacionado_uuid, imp_pagado, imp_saldo_insoluto)
+      values (t, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeee0199', '2026-08-01', '11111111-2222-3333-4444-555555550199', 1160.00, 0);
+    duplicado_rebota := false;
+  exception when unique_violation then
+    duplicado_rebota := true;
+  end;
+
+  -- (c) El dominio de metodo_pago: basura rebota.
+  begin
+    -- Un UPDATE de 0 filas no evalúa el CHECK: se prueba con un INSERT real.
+    -- `viaje.operador_id` es NOT NULL: se crea un operador de andamiaje antes
+    -- (el fallo original de este bloque en CI fue exactamente ese NOT NULL).
+    insert into operador (tenant_id, nombre, telefono) values (t, 'P', '+520000000199') returning id into v_op;
+    insert into viaje (tenant_id, operador_id, folio) values (t, v_op, 'ZZZ-REP');
+    insert into gasto (tenant_id, viaje_id, concepto, monto, metodo_pago)
+      select t, v.id, 'diesel', 100, 'XXX' from viaje v where v.tenant_id = t limit 1;
+    metodo_malo_rebota := false;
+  exception when check_violation then
+    metodo_malo_rebota := true;
+  end;
+
+  raise exception 'REP_CFDI_PAGO_0199  anon=%  authenticated=%  duplicado_rebota=%  metodo_malo_rebota=%   (esperado -1 / -1 / t / t)',
+    n_anon, n_auth, duplicado_rebota, metodo_malo_rebota;
+end $$;
+
+-- ── 158. Un expediente de asistencia por chofer (mig. 0201) ──
+-- La carrera check-then-create del webhook: dos mensajes ROJO concurrentes
+-- del mismo chofer no pueden abrir dos expedientes con dos 🚨 al jefe. El
+-- índice único parcial deja ganar a uno; se comprueba además que NO compite
+-- con la talacha (`averia` está fuera del predicado), que resolver libera al
+-- chofer para el siguiente expediente, y que las incidencias de oficina
+-- (operador NULL) no chocan entre sí.
+do $$
+declare
+  t uuid; v_op uuid; inc1 uuid;
+  segundo_rebota boolean; talacha_no_compite boolean;
+  resuelta_libera boolean; oficina_no_choca boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ EXPEDIENTE 0201') returning id into t;
+  insert into operador (tenant_id, nombre, telefono) values (t, 'P', '+520000000201') returning id into v_op;
+
+  -- (a) El segundo expediente abierto del mismo chofer rebota.
+  insert into incidencia (tenant_id, operador_id, tipo, prioridad)
+    values (t, v_op, 'varado', 'alta') returning id into inc1;
+  begin
+    insert into incidencia (tenant_id, operador_id, tipo, prioridad)
+      values (t, v_op, 'siniestro', 'critica');
+    segundo_rebota := false;
+  exception when unique_violation then
+    segundo_rebota := true;
+  end;
+
+  -- (b) La talacha del mismo chofer NO compite: `averia` está fuera del predicado.
+  begin
+    insert into incidencia (tenant_id, operador_id, tipo, prioridad)
+      values (t, v_op, 'averia', 'alta');
+    talacha_no_compite := true;
+  exception when unique_violation then
+    talacha_no_compite := false;
+  end;
+
+  -- (c) Resolver el expediente libera al chofer para el siguiente.
+  update incidencia set estado = 'resuelta', resuelta_en = now() where id = inc1;
+  begin
+    insert into incidencia (tenant_id, operador_id, tipo, prioridad)
+      values (t, v_op, 'siniestro', 'critica');
+    resuelta_libera := true;
+  exception when unique_violation then
+    resuelta_libera := false;
+  end;
+
+  -- (d) Dos incidencias de oficina (operador NULL) no chocan entre sí.
+  insert into incidencia (tenant_id, tipo, prioridad) values (t, 'siniestro', 'critica');
+  begin
+    insert into incidencia (tenant_id, tipo, prioridad) values (t, 'robo', 'critica');
+    oficina_no_choca := true;
+  exception when unique_violation then
+    oficina_no_choca := false;
+  end;
+
+  raise exception 'EXPEDIENTE_UNICO_0201  segundo_rebota=%  talacha_no_compite=%  resuelta_libera=%  oficina_no_choca=%   (esperado t / t / t / t)',
+    segundo_rebota, talacha_no_compite, resuelta_libera, oficina_no_choca;
+end $$;
+
+-- ── 159. El sello de avisos de vencimiento: una vez por umbral, ciego para la app (mig. 0202) ──
+-- `aviso_vigencia` es la memoria de "este WhatsApp ya salió": sin la unicidad
+-- de su llave, el barrido horario mandaría el mismo aviso 24 veces al día. Y
+-- como guarda qué papeles de qué flota están por vencer, ni anon ni
+-- authenticated deben poder leerla (doble candado 0196/0198). Los dominios de
+-- objeto/documento/umbral rechazan basura: un sello con umbral inventado
+-- jamás casaría con lo que el barrido busca y el aviso saldría doble.
+do $$
+declare
+  t uuid; u uuid; n_anon int; n_auth int;
+  duplicado_rebota boolean; umbral_malo_rebota boolean; renovacion_entra boolean;
+begin
+  -- (a) Sin grant directo.
+  begin
+    set local role anon;
+    select count(*) into n_anon from aviso_vigencia;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_anon := -1;
+  end;
+  begin
+    set local role authenticated;
+    select count(*) into n_auth from aviso_vigencia;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_auth := -1;
+  end;
+
+  -- (b) El mismo (objeto, documento, umbral, fecha) dos veces rebota…
+  insert into tenant (nombre) values ('ZZZ VIGENCIA 0202') returning id into t;
+  u := gen_random_uuid();
+  insert into aviso_vigencia (tenant_id, objeto, objeto_id, documento, umbral, vence)
+    values (t, 'unidad', u, 'verificacion', 7, '2026-09-15');
+  begin
+    insert into aviso_vigencia (tenant_id, objeto, objeto_id, documento, umbral, vence)
+      values (t, 'unidad', u, 'verificacion', 7, '2026-09-15');
+    duplicado_rebota := false;
+  exception when unique_violation then
+    duplicado_rebota := true;
+  end;
+
+  -- …pero el documento RENOVADO (fecha nueva) SÍ entra: es un ciclo nuevo.
+  begin
+    insert into aviso_vigencia (tenant_id, objeto, objeto_id, documento, umbral, vence)
+      values (t, 'unidad', u, 'verificacion', 7, '2027-09-15');
+    renovacion_entra := true;
+  exception when others then
+    renovacion_entra := false;
+  end;
+
+  -- (c) Umbral fuera del dominio rebota.
+  begin
+    insert into aviso_vigencia (tenant_id, objeto, objeto_id, documento, umbral, vence)
+      values (t, 'unidad', u, 'poliza', 15, '2026-09-15');
+    umbral_malo_rebota := false;
+  exception when check_violation then
+    umbral_malo_rebota := true;
+  end;
+
+  raise exception 'AVISO_VIGENCIA_0202  anon=%  authenticated=%  duplicado_rebota=%  renovacion_entra=%  umbral_malo_rebota=%   (esperado -1 / -1 / t / t / t)',
+    n_anon, n_auth, duplicado_rebota, renovacion_entra, umbral_malo_rebota;
+end $$;
+
+-- ── 160. El agregado GPS cuenta por unidad y día de MÉXICO, sin fugas (mig. 0205) ──
+-- La evidencia GPS de los cruces de peaje se mide por día de America/Mexico_City
+-- (UTC-6 fijo desde 2022): una posición a las 05:59 UTC es del día ANTERIOR en
+-- México y a las 06:00 UTC ya es del día que corre. Se comprueba además que el
+-- margen de ±1 día del filtro por timestamptz NO deja salir días fuera del rango
+-- pedido, que las posiciones de otra unidad no prestan conteo, que el tenant
+-- ajeno no aparece ni pasando su unidad en el arreglo, y que anon/authenticated
+-- no pueden ejecutar el RPC (solo service_role).
+do $$
+declare
+  ta uuid; tb uuid; ua uuid; ub uuid; ux uuid;
+  dia20 bigint; dia21 bigint;
+  fuera boolean; tenant_ajeno boolean;
+  puede_anon boolean; puede_auth boolean; puede_service boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ GPS 0205 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ GPS 0205 B') returning id into tb;
+  insert into unidad (tenant_id, numero_economico, estado) values (ta, 'ZZZ-0205-A', 'disponible') returning id into ua;
+  insert into unidad (tenant_id, numero_economico, estado) values (ta, 'ZZZ-0205-B', 'disponible') returning id into ub;
+  insert into unidad (tenant_id, numero_economico, estado) values (tb, 'ZZZ-0205-X', 'disponible') returning id into ux;
+
+  insert into posicion (tenant_id, unidad_id, lat, lng, medida_en, proveedor) values
+    -- frontera de zona horaria: 05:59 UTC = 23:59 del día 20 en México
+    (ta, ua, 19.6, -99.2, '2026-08-21 05:59:00+00', 'verificacion'),
+    -- 06:00 UTC = 00:00 del día 21 en México
+    (ta, ua, 19.6, -99.2, '2026-08-21 06:00:00+00', 'verificacion'),
+    (ta, ua, 20.1, -99.8, '2026-08-21 18:00:00+00', 'verificacion'),
+    -- día 19 MX: dentro del margen ±1 del filtro, FUERA del rango pedido
+    (ta, ua, 19.6, -99.2, '2026-08-19 12:00:00+00', 'verificacion'),
+    -- otra unidad del mismo tenant, mismo día: no presta conteo a la unidad A
+    (ta, ub, 19.6, -99.2, '2026-08-21 12:00:00+00', 'verificacion'),
+    -- tenant ajeno: no aparece ni pidiéndolo en el arreglo
+    (tb, ux, 19.6, -99.2, '2026-08-21 12:00:00+00', 'verificacion');
+
+  select coalesce(max(n) filter (where dia = '2026-08-20'), 0),
+         coalesce(max(n) filter (where dia = '2026-08-21'), 0)
+    into dia20, dia21
+    from posiciones_por_unidad_dia(ta, array[ua], '2026-08-20', '2026-08-21')
+   where unidad_id = ua;
+
+  select exists (
+    select 1 from posiciones_por_unidad_dia(ta, array[ua], '2026-08-20', '2026-08-21')
+     where dia not between '2026-08-20' and '2026-08-21'
+  ) into fuera;
+
+  select exists (
+    select 1 from posiciones_por_unidad_dia(ta, array[ua, ux], '2026-08-20', '2026-08-21')
+     where unidad_id = ux
+  ) into tenant_ajeno;
+
+  puede_anon := has_function_privilege('anon', 'public.posiciones_por_unidad_dia(uuid, uuid[], date, date)', 'execute');
+  puede_auth := has_function_privilege('authenticated', 'public.posiciones_por_unidad_dia(uuid, uuid[], date, date)', 'execute');
+  puede_service := has_function_privilege('service_role', 'public.posiciones_por_unidad_dia(uuid, uuid[], date, date)', 'execute');
+
+  raise exception 'GPS_POR_DIA_0205  dia20=%  dia21=%  fuera=%  tenant_ajeno=%  anon=%  auth=%  service=%   (esperado 1 / 2 / f / f / f / f / t)',
+    dia20, dia21, fuera, tenant_ajeno, puede_anon, puede_auth, puede_service;
+end $$;
+
+-- ── 161. Eventos de cámara del cliente: idempotencia y doble candado (mig. 0203) ──
+-- `evento_seguridad_flota` guarda lo que las cámaras del CLIENTE detectan.
+-- La unicidad (tenant, proveedor, evento externo) es la idempotencia del
+-- poller de ventana traslapada: releer no duplica NI vuelve a disparar el 🚨.
+-- Y como toda tabla nueva con datos de flota: RLS deny-all + sin grants —
+-- anon/authenticated rebotan por privilegio (-1), no "0 filas".
+do $$
+declare
+  t uuid; v_op uuid; v_uni uuid; n_anon int; n_auth int;
+  duplicado_rebota boolean; unidad_ajena_rebota boolean;
+begin
+  -- (a) Sin grant directo.
+  begin
+    set local role anon;
+    select count(*) into n_anon from evento_seguridad_flota;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_anon := -1;
+  end;
+  begin
+    set local role authenticated;
+    select count(*) into n_auth from evento_seguridad_flota;
+    reset role;
+  exception when insufficient_privilege then
+    reset role; n_auth := -1;
+  end;
+
+  -- (b) La idempotencia: el mismo (tenant, proveedor, evento) dos veces rebota.
+  insert into tenant (nombre) values ('ZZZ EVENTOS 0203') returning id into t;
+  insert into operador (tenant_id, nombre, telefono) values (t, 'P', '+520000000203') returning id into v_op;
+  insert into unidad (tenant_id, numero_economico) values (t, 'ECO-0203') returning id into v_uni;
+  insert into evento_seguridad_flota (tenant_id, proveedor, evento_id_externo, unidad_id, etiquetas, grave, ocurrido_en)
+    values (t, 'samsara', 'evt-0203-a', v_uni, array['Crash'], true, now());
+  begin
+    insert into evento_seguridad_flota (tenant_id, proveedor, evento_id_externo, unidad_id, etiquetas, grave, ocurrido_en)
+      values (t, 'samsara', 'evt-0203-a', v_uni, array['Crash'], true, now());
+    duplicado_rebota := false;
+  exception when unique_violation then
+    duplicado_rebota := true;
+  end;
+
+  -- (c) La FK compuesta (unidad_id, tenant_id): una unidad de OTRA flota no
+  --     se puede colgar aquí — el candado de la 0028/0145 en la tabla nueva.
+  declare
+    t2 uuid;
+  begin
+    insert into tenant (nombre) values ('ZZZ EVENTOS 0203 B') returning id into t2;
+    begin
+      insert into evento_seguridad_flota (tenant_id, proveedor, evento_id_externo, unidad_id, etiquetas, ocurrido_en)
+        values (t2, 'samsara', 'evt-0203-b', v_uni, array['Crash'], now());
+      unidad_ajena_rebota := false;
+    exception when foreign_key_violation then
+      unidad_ajena_rebota := true;
+    end;
+  end;
+
+  raise exception 'EVENTOS_CAMARA_0203  anon=%  authenticated=%  duplicado_rebota=%  unidad_ajena_rebota=%   (esperado -1 / -1 / t / t)',
+    n_anon, n_auth, duplicado_rebota, unidad_ajena_rebota;
+end $$;
+
+-- ── 162. La mercancía de Carta Porte no cruza flotas, y el catálogo de agentes manda (mig. 0204) ──
+-- Tres garantías que solo la base demuestra: (a) la FK COMPUESTA de
+-- `viaje_mercancia` rebota una mercancía colgada del viaje de OTRA flota
+-- aunque el insert traiga un viaje_id real; (b) los CHECKs de captura
+-- (cantidad > 0, clave de 8 dígitos, CP de 5) rebotan basura antes de que un
+-- borrador la tome por dato; (c) la mudanza CHECK → FK de las notificaciones
+-- deja entrar a `carta_porte` (sembrado por la 0204) y rebota a un agente que
+-- NADIE declaró en `agente_definicion`. De paso, el doble candado de permisos:
+-- ni anon ni authenticated tocan `viaje_mercancia` directo.
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; va uuid; vb uuid;
+  fk_cruzada boolean; cantidad_cero_rebota boolean; clave_corta_rebota boolean;
+  cp_formato_rebota boolean; carta_porte_entra boolean; no_declarado_rebota boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ CCP A 0204') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ CCP B 0204') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'A', '+520000002041') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'B', '+520000002042') returning id into ob;
+  insert into viaje (tenant_id, operador_id) values (ta, oa) returning id into va;
+  insert into viaje (tenant_id, operador_id) values (tb, ob) returning id into vb;
+
+  -- (a) La flota A no puede colgar mercancía del viaje de la flota B.
+  begin
+    insert into viaje_mercancia (tenant_id, viaje_id, descripcion, cantidad)
+      values (ta, vb, 'ajena', 1);
+    fk_cruzada := false;
+  exception when foreign_key_violation then
+    fk_cruzada := true;
+  end;
+
+  -- La legítima sí entra (si esto truena, el bloque entero truena — bien).
+  insert into viaje_mercancia (tenant_id, viaje_id, descripcion, bienes_transp, cantidad, clave_unidad, peso_kg, material_peligroso)
+    values (ta, va, 'Cajas de aguacate', '50301700', 120, 'XBX', 1200, false);
+
+  -- (b) Los CHECKs de captura.
+  begin
+    insert into viaje_mercancia (tenant_id, viaje_id, descripcion, cantidad) values (ta, va, 'cero', 0);
+    cantidad_cero_rebota := false;
+  exception when check_violation then
+    cantidad_cero_rebota := true;
+  end;
+  begin
+    insert into viaje_mercancia (tenant_id, viaje_id, descripcion, bienes_transp, cantidad) values (ta, va, 'clave corta', '1234', 1);
+    clave_corta_rebota := false;
+  exception when check_violation then
+    clave_corta_rebota := true;
+  end;
+  begin
+    update viaje set ccp_origen_cp = '6400' where id = va;
+    cp_formato_rebota := false;
+  exception when check_violation then
+    cp_formato_rebota := true;
+  end;
+
+  -- (c) La FK de notificaciones: el declarado entra, el inventado no.
+  begin
+    insert into agente_notificacion_config (tenant_id, agente) values (ta, 'carta_porte');
+    carta_porte_entra := true;
+  exception when foreign_key_violation then
+    carta_porte_entra := false;
+  end;
+  begin
+    insert into agente_notificacion_config (tenant_id, agente) values (ta, 'agente_inventado');
+    no_declarado_rebota := false;
+  exception when foreign_key_violation then
+    no_declarado_rebota := true;
+  end;
+
+  cerrado := not has_table_privilege('anon', 'public.viaje_mercancia', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.viaje_mercancia', 'INSERT')
+    and has_table_privilege('service_role', 'public.viaje_mercancia', 'SELECT');
+
+  raise exception 'CCP_MERCANCIA_0204  fk_cruzada=%  cantidad_cero_rebota=%  clave_corta_rebota=%  cp_formato_rebota=%  carta_porte_entra=%  no_declarado_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t)',
+    fk_cruzada, cantidad_cero_rebota, clave_corta_rebota, cp_formato_rebota, carta_porte_entra, no_declarado_rebota, cerrado;
+end $$;
+
+-- ── 163. Un expediente de asistencia por unidad sin chofer (mig. 0206) ──
+-- El espejo del 0201 para el caso de cámara sin viaje vigente: dos eventos
+-- graves de la misma unidad en corridas solapadas no pueden abrir DOS
+-- incidencias con DOS 🚨. Se comprueba además que NO compite con el candado
+-- por chofer (operador_id puesto → rige el 0201, no este), que resolver
+-- libera a la unidad, y que dos incidencias de oficina sin unidad ni
+-- operador siguen sin chocar.
+do $$
+declare
+  t uuid; v_op uuid; u uuid; inc1 uuid;
+  segundo_rebota boolean; con_chofer_no_compite boolean;
+  resuelta_libera boolean; sin_unidad_no_choca boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ UNIDAD 0206') returning id into t;
+  insert into operador (tenant_id, nombre, telefono) values (t, 'P', '+520000000206') returning id into v_op;
+  insert into unidad (tenant_id, numero_economico, estado) values (t, 'ZZZ-0206-U1', 'disponible') returning id into u;
+
+  -- (a) El segundo expediente abierto de la misma unidad SIN chofer rebota.
+  insert into incidencia (tenant_id, unidad_id, tipo, prioridad)
+    values (t, u, 'siniestro', 'critica') returning id into inc1;
+  begin
+    insert into incidencia (tenant_id, unidad_id, tipo, prioridad)
+      values (t, u, 'siniestro', 'critica');
+    segundo_rebota := false;
+  exception when unique_violation then
+    segundo_rebota := true;
+  end;
+
+  -- (b) Con chofer identificado NO compite: ahí rige el 0201 (por operador).
+  begin
+    insert into incidencia (tenant_id, unidad_id, operador_id, tipo, prioridad)
+      values (t, u, v_op, 'siniestro', 'critica');
+    con_chofer_no_compite := true;
+  exception when unique_violation then
+    con_chofer_no_compite := false;
+  end;
+
+  -- (c) Resolver el expediente libera a la unidad para el siguiente.
+  update incidencia set estado = 'resuelta', resuelta_en = now() where id = inc1;
+  begin
+    insert into incidencia (tenant_id, unidad_id, tipo, prioridad)
+      values (t, u, 'varado', 'alta');
+    resuelta_libera := true;
+  exception when unique_violation then
+    resuelta_libera := false;
+  end;
+
+  -- (d) Dos incidencias de oficina (sin unidad NI operador) no chocan.
+  insert into incidencia (tenant_id, tipo, prioridad) values (t, 'bloqueo', 'alta');
+  begin
+    insert into incidencia (tenant_id, tipo, prioridad) values (t, 'bloqueo', 'alta');
+    sin_unidad_no_choca := true;
+  exception when unique_violation then
+    sin_unidad_no_choca := false;
+  end;
+
+  raise exception 'UNIDAD_UNICA_0206  segundo_rebota=%  con_chofer_no_compite=%  resuelta_libera=%  sin_unidad_no_choca=%   (esperado t / t / t / t)',
+    segundo_rebota, con_chofer_no_compite, resuelta_libera, sin_unidad_no_choca;
+end $$;
+
+-- ── 164. El pacto de detención no cruza flotas y la presencia se mide con aritmética verificable (mig. 0207) ──
+-- Lo que solo la base demuestra: (a) la FK COMPUESTA de `politica_detencion`
+-- rebota un pacto colgado del cliente de OTRA flota; (b) los únicos parciales
+-- dejan UN pacto de flota y UNO por cliente — el duplicado rebota, que es lo
+-- que permite al escritor resolver la carrera con update; (c) los CHECKs
+-- rebotan horas negativas y tarifa en cero (un pacto de $0/h no es un pacto,
+-- es un invento); (d) `presencia_en_sitios` cuenta SOLO las posiciones dentro
+-- del radio y de la ventana — la posición a 5 km o fuera de horario no
+-- fabrica presencia; (e) el doble candado: ni anon ni authenticated tocan la
+-- tabla ni ejecutan la función.
+do $$
+declare
+  ta uuid; tb uuid; ca uuid; cb uuid; v_uni uuid; v_via uuid; v_op uuid;
+  fk_cruzada boolean; flota_duplicada_rebota boolean; cliente_duplicado_rebota boolean;
+  horas_negativas_rebotan boolean; tarifa_cero_rebota boolean;
+  n_presencia bigint; primera_ok boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ DETENCION A 0207') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ DETENCION B 0207') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'CEDIS A') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (tb, 'CEDIS B') returning id into cb;
+
+  -- (a) El pacto de la flota A no puede colgarse del cliente de la flota B.
+  begin
+    insert into politica_detencion (tenant_id, cliente_id, horas_libres, tarifa_hora)
+      values (ta, cb, 2, 500);
+    fk_cruzada := false;
+  exception when foreign_key_violation then
+    fk_cruzada := true;
+  end;
+
+  -- Los legítimos sí entran (si esto truena, el bloque entero truena — bien).
+  insert into politica_detencion (tenant_id, cliente_id, horas_libres, tarifa_hora) values (ta, null, 4, 300);
+  insert into politica_detencion (tenant_id, cliente_id, horas_libres, tarifa_hora) values (ta, ca, 2, 500);
+
+  -- (b) Un solo pacto vigente por alcance: el duplicado rebota.
+  begin
+    insert into politica_detencion (tenant_id, cliente_id, horas_libres) values (ta, null, 8);
+    flota_duplicada_rebota := false;
+  exception when unique_violation then
+    flota_duplicada_rebota := true;
+  end;
+  begin
+    insert into politica_detencion (tenant_id, cliente_id, horas_libres) values (ta, ca, 8);
+    cliente_duplicado_rebota := false;
+  exception when unique_violation then
+    cliente_duplicado_rebota := true;
+  end;
+
+  -- (c) Los CHECKs.
+  begin
+    insert into politica_detencion (tenant_id, cliente_id, horas_libres) values (tb, cb, -1);
+    horas_negativas_rebotan := false;
+  exception when check_violation then
+    horas_negativas_rebotan := true;
+  end;
+  begin
+    insert into politica_detencion (tenant_id, cliente_id, tarifa_hora) values (tb, cb, 0);
+    tarifa_cero_rebota := false;
+  exception when check_violation then
+    tarifa_cero_rebota := true;
+  end;
+
+  -- (d) La presencia medida: dos posiciones dentro del radio (≈22 m y ≈55 m
+  --     del centro), una a ≈5.5 km y una dentro del radio pero FUERA de la
+  --     ventana. Esperado: n=2 y la primera es la de las 10:05.
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'O', '+520000002071') returning id into v_op;
+  insert into unidad (tenant_id, numero_economico) values (ta, 'ECO-0207') returning id into v_uni;
+  insert into viaje (tenant_id, operador_id, unidad_id) values (ta, v_op, v_uni) returning id into v_via;
+  insert into posicion (tenant_id, unidad_id, lat, lng, medida_en, proveedor) values
+    (ta, v_uni, 21.0002, -89.0000, '2026-08-25T10:05:00Z', 'prueba'),
+    (ta, v_uni, 21.0005, -89.0000, '2026-08-25T11:00:00Z', 'prueba'),
+    (ta, v_uni, 21.0500, -89.0000, '2026-08-25T12:00:00Z', 'prueba'),
+    (ta, v_uni, 21.0002, -89.0000, '2026-08-25T09:00:00Z', 'prueba');
+  select n, (primera = '2026-08-25T10:05:00Z'::timestamptz) into n_presencia, primera_ok
+    from presencia_en_sitios(ta, jsonb_build_array(jsonb_build_object(
+      'viaje_id', v_via, 'unidad_id', v_uni,
+      'desde', '2026-08-25T10:00:00Z', 'hasta', '2026-08-25T16:00:00Z',
+      'lat', 21.0, 'lng', -89.0, 'radio_m', 200)));
+
+  cerrado := not has_table_privilege('anon', 'public.politica_detencion', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.politica_detencion', 'INSERT')
+    and has_table_privilege('service_role', 'public.politica_detencion', 'SELECT')
+    and not has_function_privilege('authenticated', 'public.presencia_en_sitios(uuid, jsonb)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.presencia_en_sitios(uuid, jsonb)', 'EXECUTE');
+
+  raise exception 'DETENCION_0207  fk_cruzada=%  flota_duplicada_rebota=%  cliente_duplicado_rebota=%  horas_negativas_rebotan=%  tarifa_cero_rebota=%  n_presencia=%  primera_ok=%  cerrado=%   (esperado t / t / t / t / t / 2 / t / t)',
+    fk_cruzada, flota_duplicada_rebota, cliente_duplicado_rebota, horas_negativas_rebotan, tarifa_cero_rebota, n_presencia, primera_ok, cerrado;
+end $$;
+
+-- ── 166. El taller escribe con candados: una orden por avería, una abierta por rutina+unidad, y el experto fiscal vivo (mig. 0209) ──
+-- Lo que solo la base demuestra: (a) la FK COMPUESTA rebota una orden colgada
+-- de la avería de OTRA flota; (b) una avería abre a lo más UNA orden — el
+-- reintento del webhook rebota; (c) una rutina sin ninguna cadencia rebota
+-- (sin reloj no hay rutina), y la cadencia en cero también; (d) una rutina
+-- con orden NO cerrada en una unidad no abre otra, y al cerrar la primera la
+-- siguiente SÍ entra (el reloj continúa); (e) el nombre de rutina no se
+-- duplica ni cambiando mayúsculas o espacios; (f) `experto_fiscal` quedó
+-- 'vivo' en el catálogo — la Fase 9 encendida es una fila comprobable, no un
+-- comentario; (g) el doble candado: ni anon ni authenticated tocan
+-- `rutina_mantenimiento`.
+do $$
+declare
+  ta uuid; tb uuid; u_a uuid; inc_a uuid; inc_b uuid; rut uuid;
+  fk_cruzada boolean; segunda_orden_rebota boolean;
+  rutina_sin_reloj_rebota boolean; cadencia_cero_rebota boolean;
+  doble_abierta_rebota boolean; tras_cierre_entra boolean;
+  nombre_duplicado_rebota boolean; fiscal_vivo boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ TALLER A 0209') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ TALLER B 0209') returning id into tb;
+  insert into unidad (tenant_id, numero_economico) values (ta, 'ECO-0209') returning id into u_a;
+  insert into incidencia (tenant_id, tipo, descripcion) values (ta, 'averia', 'se tronó la marcha') returning id into inc_a;
+  insert into incidencia (tenant_id, tipo, descripcion) values (tb, 'averia', 'ajena') returning id into inc_b;
+
+  -- (a) La orden de la flota A no puede colgarse de la avería de la flota B.
+  begin
+    insert into mantenimiento (tenant_id, unidad_id, tipo, incidencia_id)
+      values (ta, u_a, 'correctivo', inc_b);
+    fk_cruzada := false;
+  exception when foreign_key_violation then
+    fk_cruzada := true;
+  end;
+
+  -- La legítima entra; (b) el reintento de la MISMA avería rebota.
+  insert into mantenimiento (tenant_id, unidad_id, tipo, incidencia_id)
+    values (ta, u_a, 'correctivo', inc_a);
+  begin
+    insert into mantenimiento (tenant_id, unidad_id, tipo, incidencia_id)
+      values (ta, u_a, 'correctivo', inc_a);
+    segunda_orden_rebota := false;
+  exception when unique_violation then
+    segunda_orden_rebota := true;
+  end;
+
+  -- (c) Sin reloj no hay rutina; y un reloj de 0 días tampoco es reloj.
+  begin
+    insert into rutina_mantenimiento (tenant_id, nombre) values (ta, 'Sin reloj');
+    rutina_sin_reloj_rebota := false;
+  exception when check_violation then
+    rutina_sin_reloj_rebota := true;
+  end;
+  begin
+    insert into rutina_mantenimiento (tenant_id, nombre, cada_dias) values (ta, 'Cero', 0);
+    cadencia_cero_rebota := false;
+  exception when check_violation then
+    cadencia_cero_rebota := true;
+  end;
+
+  -- (d) Una abierta por rutina+unidad; cerrada la primera, la nueva entra.
+  insert into rutina_mantenimiento (tenant_id, nombre, cada_dias) values (ta, 'Servicio de motor', 180) returning id into rut;
+  insert into mantenimiento (tenant_id, unidad_id, tipo, rutina_id) values (ta, u_a, 'preventivo', rut);
+  begin
+    insert into mantenimiento (tenant_id, unidad_id, tipo, rutina_id) values (ta, u_a, 'preventivo', rut);
+    doble_abierta_rebota := false;
+  exception when unique_violation then
+    doble_abierta_rebota := true;
+  end;
+  update mantenimiento set estado = 'cerrada', cerrada_en = now(), km_servicio = 80000
+    where tenant_id = ta and rutina_id = rut and estado <> 'cerrada';
+  begin
+    insert into mantenimiento (tenant_id, unidad_id, tipo, rutina_id) values (ta, u_a, 'preventivo', rut);
+    tras_cierre_entra := true;
+  exception when unique_violation then
+    tras_cierre_entra := false;
+  end;
+
+  -- (e) El nombre no se duplica ni disfrazado.
+  begin
+    insert into rutina_mantenimiento (tenant_id, nombre, cada_km) values (ta, '  servicio DE motor ', 10000);
+    nombre_duplicado_rebota := false;
+  exception when unique_violation then
+    nombre_duplicado_rebota := true;
+  end;
+
+  -- (f) La Fase 9 encendida es una fila, no un comentario.
+  select (estado = 'vivo') into fiscal_vivo from agente_definicion where id = 'experto_fiscal';
+
+  -- (g) Doble candado.
+  cerrado := not has_table_privilege('anon', 'public.rutina_mantenimiento', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.rutina_mantenimiento', 'INSERT')
+    and has_table_privilege('service_role', 'public.rutina_mantenimiento', 'SELECT');
+
+  raise exception 'TALLER_0209  fk_cruzada=%  segunda_orden_rebota=%  rutina_sin_reloj_rebota=%  cadencia_cero_rebota=%  doble_abierta_rebota=%  tras_cierre_entra=%  nombre_duplicado_rebota=%  fiscal_vivo=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t)',
+    fk_cruzada, segunda_orden_rebota, rutina_sin_reloj_rebota, cadencia_cero_rebota, doble_abierta_rebota, tras_cierre_entra, nombre_duplicado_rebota, fiscal_vivo, cerrado;
+end $$;
+
+-- ── 170. La coordinación con el proveedor: una viva por emergencia, y el expediente sobrevive al directorio (mig. 0213) ──
+-- (Los bloques 167-169 quedaron reservados a fases paralelas que no
+-- necesitaron SQL — hueco a propósito, como el 165.)
+-- Lo que solo la base demuestra: (a) la FK COMPUESTA rebota una coordinación
+-- colgada de la incidencia de OTRA flota; (b) el único parcial deja UNA
+-- gestión viva por incidencia — el duplicado rebota, la descartada libera, y
+-- la CONFIRMADA sigue bloqueando (dos servicios comprometidos para la misma
+-- emergencia sería el bug caro); (c) los CHECKs rebotan eta en cero y precio
+-- en cero (un ETA de 0 min o un servicio de $0 no son datos, son inventos);
+-- (d) borrar el proveedor del directorio NO borra el expediente — el set
+-- null acotado deja el snapshot citable; (e) el doble candado: ni anon ni
+-- authenticated tocan la tabla.
+do $$
+declare
+  ta uuid; tb uuid; inc_a uuid; inc_a2 uuid; inc_b uuid; prov uuid; coord uuid;
+  fk_cruzada boolean; duplicada_rebota boolean; descartada_libera boolean;
+  confirmada_bloquea boolean; eta_cero_rebota boolean; precio_cero_rebota boolean;
+  snapshot_queda boolean; cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ COORDINACION A 0213') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ COORDINACION B 0213') returning id into tb;
+  -- Incidencias "de oficina" (sin unidad ni operador): los candados 0201/0206
+  -- no compiten aquí (el bloque 164 ya lo demostró).
+  insert into incidencia (tenant_id, tipo, prioridad) values (ta, 'varado', 'alta') returning id into inc_a;
+  insert into incidencia (tenant_id, tipo, prioridad) values (ta, 'varado', 'alta') returning id into inc_a2;
+  insert into incidencia (tenant_id, tipo, prioridad) values (tb, 'varado', 'alta') returning id into inc_b;
+  insert into proveedor_emergencia (tenant_id, tipo, nombre, telefono)
+    values (ta, 'grua', 'Gruas Prueba 0213', '5299911122233') returning id into prov;
+
+  -- (a) La coordinación de la flota A no puede colgarse de la incidencia de B.
+  begin
+    insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_nombre, proveedor_telefono, mensaje_preparado)
+      values (ta, inc_b, 'Gruas Prueba 0213', '5299911122233', 'msj');
+    fk_cruzada := false;
+  exception when foreign_key_violation then
+    fk_cruzada := true;
+  end;
+
+  -- La legítima sí entra (si esto truena, el bloque entero truena — bien).
+  insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_id, proveedor_nombre, proveedor_telefono, mensaje_preparado)
+    values (ta, inc_a, prov, 'Gruas Prueba 0213', '5299911122233', 'msj') returning id into coord;
+
+  -- (b) Una gestión viva por incidencia: el duplicado rebota...
+  begin
+    insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_nombre, proveedor_telefono, mensaje_preparado)
+      values (ta, inc_a, 'Otra Grua', '5299900000000', 'msj');
+    duplicada_rebota := false;
+  exception when unique_violation then
+    duplicada_rebota := true;
+  end;
+  -- ...la descartada libera para el siguiente candidato...
+  update coordinacion_proveedor set estado = 'descartada', decidida_en = now() where id = coord;
+  begin
+    insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_id, proveedor_nombre, proveedor_telefono, mensaje_preparado)
+      values (ta, inc_a, prov, 'Otra Grua', '5299900000000', 'msj') returning id into coord;
+    descartada_libera := true;
+  exception when unique_violation then
+    descartada_libera := false;
+  end;
+  -- ...y la CONFIRMADA sigue bloqueando.
+  update coordinacion_proveedor set estado = 'confirmada', decidida_en = now() where id = coord;
+  begin
+    insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_nombre, proveedor_telefono, mensaje_preparado)
+      values (ta, inc_a, 'Tercera Grua', '5299900000001', 'msj');
+    confirmada_bloquea := false;
+  exception when unique_violation then
+    confirmada_bloquea := true;
+  end;
+
+  -- (c) Los CHECKs: cifras en cero no son datos.
+  begin
+    insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_nombre, proveedor_telefono, mensaje_preparado, eta_min)
+      values (ta, inc_a2, 'Gruas Prueba 0213', '5299911122233', 'msj', 0);
+    eta_cero_rebota := false;
+  exception when check_violation then
+    eta_cero_rebota := true;
+  end;
+  begin
+    insert into coordinacion_proveedor (tenant_id, incidencia_id, proveedor_nombre, proveedor_telefono, mensaje_preparado, precio)
+      values (ta, inc_a2, 'Gruas Prueba 0213', '5299911122233', 'msj', 0);
+    precio_cero_rebota := false;
+  exception when check_violation then
+    precio_cero_rebota := true;
+  end;
+
+  -- (d) Borrar el proveedor del directorio deja el expediente con su snapshot
+  -- (la confirmada apuntaba a `prov` — el set null acotado suelta la
+  -- referencia y el nombre/teléfono capturados quedan).
+  delete from proveedor_emergencia where id = prov;
+  select (proveedor_id is null and proveedor_nombre = 'Otra Grua')
+    into snapshot_queda
+    from coordinacion_proveedor
+    where tenant_id = ta and incidencia_id = inc_a and estado = 'confirmada';
+
+  -- (e) El doble candado.
+  cerrado := not has_table_privilege('anon', 'public.coordinacion_proveedor', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.coordinacion_proveedor', 'SELECT')
+    and has_table_privilege('service_role', 'public.coordinacion_proveedor', 'SELECT');
+
+  raise exception 'COORDINACION_0213  fk_cruzada=%  duplicada_rebota=%  descartada_libera=%  confirmada_bloquea=%  eta_cero_rebota=%  precio_cero_rebota=%  snapshot_queda=%  cerrado=%   (esperado t / t / t / t / t / t / t / t)',
+    fk_cruzada, duplicada_rebota, descartada_libera, confirmada_bloquea, eta_cero_rebota, precio_cero_rebota, snapshot_queda, cerrado;
+end $$;
+
+-- ── 172. Los 4 agentes financieros vivos y su idempotencia por periodo (mig. 0215) ──
+-- Lo que solo la base demuestra: (a) UN parte por (agente, periodo) — dos
+-- corridas del runner que compitan por el mismo título lo resuelve el índice
+-- único parcial, gana exactamente una; (b) la parcialidad es real: el
+-- Redactor SÍ puede repetir título entre piezas (dos prospectos con el mismo
+-- asunto son legítimos); (c) `finanzas_config` es UNA fila (el segundo INSERT
+-- rebota por PK anclada a true) y el saldo sin fecha rebota (viajan juntos);
+-- (d) el interruptor acepta `agente:control_costos` y sigue rechazando
+-- basura; (e) los cuatro quedaron vivos, habilitados en el runner y CON
+-- techo declarado — el candado 3 del runner es comprobable como fila; (f) el
+-- doble candado: ni anon ni authenticated tocan `finanzas_config`.
+do $$
+declare
+  parte_duplicado_rebota boolean; redactor_repite_ok boolean;
+  segunda_config_rebota boolean; saldo_sin_fecha_rebota boolean;
+  interruptor_acepta boolean; interruptor_rechaza boolean;
+  vivos_con_techo int; cerrado boolean;
+begin
+  -- (a) El mismo periodo, dos veces: la segunda rebota.
+  insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+    values ('parte_costos', 'control_costos', 'Costos — 2099-01-01', 'parte de prueba');
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('parte_costos', 'control_costos', 'Costos — 2099-01-01', 'parte repetido');
+    parte_duplicado_rebota := false;
+  exception when unique_violation then
+    parte_duplicado_rebota := true;
+  end;
+
+  -- (b) La parcialidad: el Redactor repite título sin rebotar.
+  insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+    values ('correo_frio', 'redactor', 'Asunto repetible 0215', 'pieza 1');
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('correo_frio', 'redactor', 'Asunto repetible 0215', 'pieza 2');
+    redactor_repite_ok := true;
+  exception when unique_violation then
+    redactor_repite_ok := false;
+  end;
+
+  -- (c) Una sola config; y saldo sin fecha rebota.
+  --     (id=true explícito en el duplicado: el default ya es true — el
+  --     rebote debe venir de la PK, no de una casualidad.)
+  insert into finanzas_config (saldo_mxn, saldo_fecha) values (100000, '2099-01-01')
+    on conflict (id) do nothing;
+  begin
+    insert into finanzas_config (id, fijos_mxn) values (true, 6500);
+    segunda_config_rebota := false;
+  exception when unique_violation then
+    segunda_config_rebota := true;
+  end;
+  begin
+    update finanzas_config set saldo_mxn = 5, saldo_fecha = null where id;
+    saldo_sin_fecha_rebota := false;
+  exception when check_violation then
+    saldo_sin_fecha_rebota := true;
+  end;
+
+  -- (d) El dominio del interruptor, en las dos direcciones.
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:control_costos', true, 'prueba 0215');
+    interruptor_acepta := true;
+    delete from interruptor where id = 'agente:control_costos' and motivo = 'prueba 0215';
+  exception when check_violation then
+    interruptor_acepta := false;
+  end;
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:inventado_0215', true, 'basura');
+    interruptor_rechaza := false;
+  exception when check_violation then
+    interruptor_rechaza := true;
+  end;
+
+  -- (e) Los cuatro, vivos + habilitados + con techo (candado 3 del runner).
+  select count(*) into vivos_con_techo from agente_definicion
+    where id in ('analista_metricas', 'control_costos', 'tesoreria', 'cierre_mensual')
+      and estado = 'vivo' and runner_habilitado and presupuesto_dia_usd > 0;
+
+  -- (f) El doble candado.
+  cerrado := not has_table_privilege('anon', 'public.finanzas_config', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.finanzas_config', 'SELECT')
+    and has_table_privilege('service_role', 'public.finanzas_config', 'SELECT');
+
+  raise exception 'FINANZAS_0215  parte_duplicado_rebota=%  redactor_repite_ok=%  segunda_config_rebota=%  saldo_sin_fecha_rebota=%  interruptor_acepta=%  interruptor_rechaza=%  vivos_con_techo=%  cerrado=%   (esperado t / t / t / t / t / t / 4 / t)',
+    parte_duplicado_rebota, redactor_repite_ok, segunda_config_rebota, saldo_sin_fecha_rebota,
+    interruptor_acepta, interruptor_rechaza, vivos_con_techo, cerrado;
+end $$;
+
+-- ── 173. La dirección: un reporte por (agente, periodo), sellado y cerrado (mig. 0216) ──
+-- Lo que solo la base demuestra del sello de los reportes de dirección:
+--   (a) el catálogo manda — un reporte de un agente NO declarado rebota (FK
+--       a agente_definicion, patrón 0116);
+--   (b) la idempotencia es el unique (agente, periodo): la carrera de dos
+--       pasadas del runner la gana exactamente una;
+--   (c) el periodo tiene forma fija ('dia-'/'lun-' + fecha) — dos ortografías
+--       del mismo día serían dos sellos y el candado dejaría pasar el doble
+--       correo que existe para impedir;
+--   (d) los cuatro agentes de dirección quedaron VIVOS con techo declarado y
+--       palanca en el dominio del interruptor (candados 1 y 3 del runner);
+--   (e) la tabla está en deny-all: RLS activa, cero policies — solo el
+--       servidor la toca, como prospecto (0105) y cola_aprobacion (0117).
+do $$
+declare
+  fk_rebota boolean; dup_rebota boolean; periodo_rebota boolean;
+  vivos_con_techo boolean; palancas_en_dominio boolean; rls_cerrada boolean;
+begin
+  -- (a) Un autor no declarado no sella nada.
+  begin
+    insert into reporte_direccion (agente, periodo, cuerpo)
+      values ('agente_fantasma_0216', 'dia-2026-01-01', 'x');
+    fk_rebota := false;
+  exception when foreign_key_violation then
+    fk_rebota := true;
+  end;
+
+  -- (b) El mismo periodo del mismo agente sella UNA vez.
+  insert into reporte_direccion (agente, periodo, cuerpo)
+    values ('kpi_whatsapp', 'dia-2026-01-01', 'reporte de prueba 0216');
+  begin
+    insert into reporte_direccion (agente, periodo, cuerpo)
+      values ('kpi_whatsapp', 'dia-2026-01-01', 'el doble que no debe salir');
+    dup_rebota := false;
+  exception when unique_violation then
+    dup_rebota := true;
+  end;
+
+  -- (c) Un periodo con forma libre no entra.
+  begin
+    insert into reporte_direccion (agente, periodo, cuerpo)
+      values ('orquestador', 'semana-1', 'x');
+    periodo_rebota := false;
+  exception when check_violation then
+    periodo_rebota := true;
+  end;
+
+  -- (d) El flip de la 0216: vivos, habilitados, con techo — y con palanca.
+  select count(*) = 4 into vivos_con_techo
+    from agente_definicion
+    where id in ('kpi_whatsapp', 'desempeno_startup', 'orquestador', 'orquestador_semanal')
+      and estado = 'vivo' and runner_habilitado and presupuesto_dia_usd > 0;
+  begin
+    insert into interruptor (id, apagado, motivo)
+      values ('agente:orquestador', true, 'prueba 0216');
+    palancas_en_dominio := true;
+  exception when check_violation then
+    palancas_en_dominio := false;
+  end;
+
+  -- (e) Deny-all de verdad: RLS activa y cero policies.
+  select c.relrowsecurity
+      and not exists (select 1 from pg_policy p where p.polrelid = c.oid)
+    into rls_cerrada
+    from pg_class c
+    where c.oid = 'public.reporte_direccion'::regclass;
+
+  raise exception 'REPORTE_DIRECCION_0216  fk_rebota=%  dup_rebota=%  periodo_rebota=%  vivos_con_techo=%  palancas_en_dominio=%  rls_cerrada=%   (esperado t / t / t / t / t / t)',
+    fk_rebota, dup_rebota, periodo_rebota, vivos_con_techo, palancas_en_dominio, rls_cerrada;
+end $$;
+
+-- ── 174. La máquina de prospección: correos con fuente y sin duplicar, la lista de bajas y sus candados (mig. 0217) ──
+-- (El 171 quedó reservado a una ola paralela que no necesitó SQL — hueco a
+-- propósito, como el 165 y los 167-169.)
+-- Lo que solo la base demuestra: (a) `prospecto_correo_unico` — el mismo
+-- correo de la misma empresa entra UNA vez sin importar mayúsculas (el
+-- investigador corre a diario; su duplicado rebota en el índice, no en un
+-- `if`), y el mismo correo en OTRA empresa sí entra; (b) el CHECK de formato
+-- rebota lo que no es un correo, y el de fuente rebota la fuente vacía — un
+-- correo sin fuente es un correo inventado; (c) `correo_suprimido` es PK (la
+-- baja doble es una) y el CHECK de minúsculas rebota la variante en
+-- mayúsculas que se colaría como "otra" dirección; (d) el dossier es UNO por
+-- prospecto (PK): el segundo insert rebota — el último gana por upsert, no
+-- por duplicado; (e) el CHECK de interruptores acepta los tres kill switches
+-- nuevos y sigue rebotando el nombre inventado; (f) el doble candado: ni
+-- anon ni authenticated tocan las tres tablas nuevas.
+do $$
+declare
+  pra uuid; prb uuid;
+  dup_rebota boolean; otra_empresa_entra boolean; formato_rebota boolean;
+  fuente_vacia_rebota boolean; baja_doble_es_una boolean; mayusculas_rebota boolean;
+  dossier_unico boolean; switch_nuevo_entra boolean; switch_inventado_rebota boolean;
+  cerrado boolean;
+begin
+  insert into prospecto (empresa) values ('ZZZ PROSPECCION A 0217') returning id into pra;
+  insert into prospecto (empresa) values ('ZZZ PROSPECCION B 0217') returning id into prb;
+
+  -- (a) El mismo correo, la misma empresa, dos grafías: una sola fila.
+  insert into prospecto_correo (prospecto_id, correo, fuente)
+    values (pra, 'ventas@zzz0217.mx', 'https://zzz0217.mx/contacto');
+  begin
+    insert into prospecto_correo (prospecto_id, correo, fuente)
+      values (pra, 'VENTAS@zzz0217.mx', 'https://zzz0217.mx/nosotros');
+    dup_rebota := false;
+  exception when unique_violation then
+    dup_rebota := true;
+  end;
+  begin
+    insert into prospecto_correo (prospecto_id, correo, fuente)
+      values (prb, 'ventas@zzz0217.mx', 'https://zzz0217.mx/contacto');
+    otra_empresa_entra := true;
+  exception when unique_violation then
+    otra_empresa_entra := false;
+  end;
+
+  -- (b) Formato y fuente: lo roto y lo sin-fuente no entran.
+  begin
+    insert into prospecto_correo (prospecto_id, correo, fuente)
+      values (pra, 'no-es-correo', 'https://zzz0217.mx');
+    formato_rebota := false;
+  exception when check_violation then
+    formato_rebota := true;
+  end;
+  begin
+    insert into prospecto_correo (prospecto_id, correo, fuente)
+      values (pra, 'otro@zzz0217.mx', '   ');
+    fuente_vacia_rebota := false;
+  exception when check_violation then
+    fuente_vacia_rebota := true;
+  end;
+
+  -- (c) La lista de bajas: la doble es una, y solo minúsculas.
+  insert into correo_suprimido (correo, motivo) values ('baja@zzz0217.mx', 'rebote (prueba)');
+  begin
+    insert into correo_suprimido (correo, motivo) values ('baja@zzz0217.mx', 'queja (prueba)');
+    baja_doble_es_una := false;
+  exception when unique_violation then
+    baja_doble_es_una := true;
+  end;
+  begin
+    insert into correo_suprimido (correo, motivo) values ('BAJA2@zzz0217.mx', 'rebote (prueba)');
+    mayusculas_rebota := false;
+  exception when check_violation then
+    mayusculas_rebota := true;
+  end;
+
+  -- (d) Un dossier por prospecto: el segundo INSERT rebota (el último gana
+  -- por upsert, no acumulando filas).
+  insert into prospecto_dossier (prospecto_id, fuentes) values (pra, '["https://zzz0217.mx"]'::jsonb);
+  begin
+    insert into prospecto_dossier (prospecto_id, fuentes) values (pra, '[]'::jsonb);
+    dossier_unico := false;
+  exception when unique_violation then
+    dossier_unico := true;
+  end;
+
+  -- (e) Los kill switches nuevos entran; el inventado sigue rebotando.
+  begin
+    insert into interruptor (id) values ('agente:enviador');
+    insert into interruptor (id) values ('agente:enriquecedor');
+    insert into interruptor (id) values ('agente:sdr');
+    switch_nuevo_entra := true;
+  exception when check_violation then
+    switch_nuevo_entra := false;
+  end;
+  begin
+    insert into interruptor (id) values ('agente:inventado');
+    switch_inventado_rebota := false;
+  exception when check_violation then
+    switch_inventado_rebota := true;
+  end;
+
+  -- (f) El doble candado en las tres tablas nuevas.
+  cerrado := not has_table_privilege('anon', 'public.prospecto_correo', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.prospecto_correo', 'SELECT')
+    and has_table_privilege('service_role', 'public.prospecto_correo', 'SELECT')
+    and not has_table_privilege('anon', 'public.prospecto_dossier', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.prospecto_dossier', 'SELECT')
+    and has_table_privilege('service_role', 'public.prospecto_dossier', 'SELECT')
+    and not has_table_privilege('anon', 'public.correo_suprimido', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.correo_suprimido', 'SELECT')
+    and has_table_privilege('service_role', 'public.correo_suprimido', 'SELECT');
+
+  raise exception 'PROSPECCION_0217  dup_rebota=%  otra_empresa_entra=%  formato_rebota=%  fuente_vacia_rebota=%  baja_doble_es_una=%  mayusculas_rebota=%  dossier_unico=%  switch_nuevo_entra=%  switch_inventado_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t)',
+    dup_rebota, otra_empresa_entra, formato_rebota, fuente_vacia_rebota, baja_doble_es_una, mayusculas_rebota, dossier_unico, switch_nuevo_entra, switch_inventado_rebota, cerrado;
+end $$;
+
+-- ── 176. Éxito del cliente: una pieza por periodo, y los seis con palanca, reloj y techo (mig. 0218) ──
+-- Lo que solo la base demuestra: (a) UNA pieza por (agente, título) — dos
+-- pasadas del runner que compitan por el mismo parte las resuelve el índice
+-- único parcial, gana exactamente una; (b) la parcialidad es real: el
+-- Redactor SÍ puede repetir título entre piezas (dos prospectos con el mismo
+-- asunto de campaña son legítimos); (c) el interruptor acepta los seis kill
+-- switches nuevos Y SIGUE aceptando los de las olas anteriores — recrear el
+-- CHECK enumerando solo los propios habría borrado en silencio las palancas
+-- de la 0215/0216/0217, que es el modo de falla que este bloque existe para
+-- cazar; (d) y sigue rechazando un id inventado; (e) los seis quedaron
+-- vivos, habilitados, disparados por reloj y CON techo declarado: el candado
+-- 3 del runner, comprobable como fila; (f) una pieza de un agente NO
+-- declarado no entra a la cola — la FK contra agente_definicion es la
+-- trazabilidad mínima de quién preparó qué.
+do $$
+declare
+  pieza_duplicada_rebota boolean; redactor_repite_ok boolean;
+  switches_nuevos_entran boolean; switches_previos_siguen boolean;
+  switch_inventado_rebota boolean; agente_no_declarado_rebota boolean;
+  vivos_con_techo int; en_cron int;
+  s text;
+begin
+  -- (a) Dos partes del mismo agente y periodo: el segundo rebota.
+  insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+    values ('parte_onboarding', 'onboarding_cliente', 'Onboarding — 2026-08-27', 'cuerpo');
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('parte_onboarding', 'onboarding_cliente', 'Onboarding — 2026-08-27', 'otro cuerpo');
+    pieza_duplicada_rebota := false;
+  exception when unique_violation then
+    pieza_duplicada_rebota := true;
+  end;
+
+  -- (b) El Redactor NO entra al índice parcial: repetir asunto es legítimo.
+  insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+    values ('correo_frio', 'redactor', 'Mismo asunto de campaña', 'uno');
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('correo_frio', 'redactor', 'Mismo asunto de campaña', 'dos');
+    redactor_repite_ok := true;
+  exception when unique_violation then
+    redactor_repite_ok := false;
+  end;
+
+  -- (c) Los seis nuevos entran…
+  switches_nuevos_entran := true;
+  foreach s in array array['agente:onboarding_cliente', 'agente:exito_cliente', 'agente:retencion',
+                           'agente:cobranza_saas', 'agente:soporte', 'agente:atencion_faq'] loop
+    begin
+      insert into interruptor (id, apagado, motivo) values (s, true, 'prueba 0218');
+    exception when check_violation then
+      switches_nuevos_entran := false;
+    end;
+  end loop;
+
+  -- …y las palancas de las olas anteriores siguen vivas.
+  switches_previos_siguen := true;
+  foreach s in array array['agente:liquidacion', 'agente:redactor', 'agente:control_costos',
+                           'agente:orquestador_semanal', 'agente:enviador'] loop
+    begin
+      insert into interruptor (id, apagado, motivo) values (s, true, 'prueba 0218');
+    exception when check_violation then
+      switches_previos_siguen := false;
+    end;
+  end loop;
+
+  -- (d) Un id fuera del catálogo sigue rebotando.
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:inventado_0218', true, 'basura');
+    switch_inventado_rebota := false;
+  exception when check_violation then
+    switch_inventado_rebota := true;
+  end;
+
+  -- (e) Los seis: vivos + habilitados + con techo, y por reloj.
+  select count(*) into vivos_con_techo from agente_definicion
+    where id in ('onboarding_cliente', 'exito_cliente', 'retencion', 'cobranza_saas', 'soporte', 'atencion_faq')
+      and estado = 'vivo' and runner_habilitado and presupuesto_dia_usd > 0;
+  select count(*) into en_cron from agente_definicion
+    where id in ('onboarding_cliente', 'exito_cliente', 'retencion', 'cobranza_saas', 'soporte', 'atencion_faq')
+      and disparador = 'cron';
+
+  -- (f) Un agente sin declarar no deja pieza en la cola.
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('parte_onboarding', 'agente_fantasma_0218', 'sin autor declarado', 'y');
+    agente_no_declarado_rebota := false;
+  exception when foreign_key_violation then
+    agente_no_declarado_rebota := true;
+  end;
+
+  raise exception 'EXITO_CLIENTE_0218  pieza_duplicada_rebota=%  redactor_repite_ok=%  switches_nuevos_entran=%  switches_previos_siguen=%  switch_inventado_rebota=%  vivos_con_techo=%  en_cron=%  agente_no_declarado_rebota=%   (esperado t / t / t / t / t / 6 / 6 / t)',
+    pieza_duplicada_rebota, redactor_repite_ok, switches_nuevos_entran, switches_previos_siguen,
+    switch_inventado_rebota, vivos_con_techo, en_cron, agente_no_declarado_rebota;
+end $$;
+
+-- ── 177. El back office restante: un parte por periodo, el registro de talento y sus candados (mig. 0219) ──
+-- Lo que solo la base demuestra del flip de los cuatro últimos del back
+-- office: (a) `cola_parte_backoffice_por_periodo` — dos pasadas del runner
+-- que compitan por el parte de la misma semana las resuelve el índice único
+-- parcial: gana exactamente una; (b) la parcialidad es real y el índice es
+-- por (agente, titulo): DOS agentes distintos con el MISMO título entran los
+-- dos, y el Redactor sigue pudiendo repetir asunto; (c) los cuatro quedaron
+-- vivos, habilitados, con techo y disparando por reloj — los candados 2 y 3
+-- del runner, comprobables como fila; (d) el CHECK del interruptor acepta las
+-- cuatro palancas nuevas y sigue rechazando el nombre inventado; (e) el
+-- pendiente societario se siembra SIN fecha objetivo (la migración no
+-- inventa un compromiso) y su coherencia de cierre rebota el 'cerrado' sin
+-- fecha; (f) `candidato` no admite el mismo correo dos veces en la misma
+-- vacante, ni un puntaje fuera de 0-100, ni un estado avanzado sin
+-- `cribado_en`; (g) el doble candado sobre las tres tablas nuevas: ni anon ni
+-- authenticated las tocan, service_role sí.
+do $$
+declare
+  v uuid;
+  parte_duplicado_rebota boolean; otro_agente_mismo_titulo_ok boolean;
+  vivos_listos int; switch_nuevo_entra boolean; switch_inventado_rebota boolean;
+  societarios_sin_fecha int; cierre_sin_fecha_rebota boolean;
+  correo_repetido_rebota boolean; puntaje_fuera_rebota boolean; criba_incoherente_rebota boolean;
+  cerrado boolean;
+begin
+  -- (a) El mismo parte de la misma semana, dos veces: la segunda rebota.
+  insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+    values ('parte_calidad', 'vigilante_calidad', 'Calidad — semana del 2099-01-05', 'parte de prueba');
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('parte_calidad', 'vigilante_calidad', 'Calidad — semana del 2099-01-05', 'el doble');
+    parte_duplicado_rebota := false;
+  exception when unique_violation then
+    parte_duplicado_rebota := true;
+  end;
+
+  -- (b) El índice es por (agente, titulo): otro agente con el mismo título sí.
+  begin
+    insert into cola_aprobacion (tipo, agente, titulo, cuerpo)
+      values ('parte_documentacion', 'documentacion', 'Calidad — semana del 2099-01-05', 'otro autor');
+    otro_agente_mismo_titulo_ok := true;
+  exception when unique_violation then
+    otro_agente_mismo_titulo_ok := false;
+  end;
+
+  -- (c) El flip de la 0219: vivos, habilitados, con techo y por reloj.
+  select count(*) into vivos_listos from agente_definicion
+    where id in ('vigilante_calidad', 'documentacion', 'legal_compliance', 'talento')
+      and estado = 'vivo' and runner_habilitado and disparador = 'cron'
+      and presupuesto_dia_usd > 0;
+
+  -- (d) El dominio del interruptor, en las dos direcciones.
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:legal_compliance', true, 'prueba 0219');
+    switch_nuevo_entra := true;
+  exception when check_violation then
+    switch_nuevo_entra := false;
+  end;
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:inventado_0219', true, 'basura');
+    switch_inventado_rebota := false;
+  exception when check_violation then
+    switch_inventado_rebota := true;
+  end;
+
+  -- (e) Los societarios sembrados van SIN fecha; y cerrar sin fecha rebota.
+  select count(*) into societarios_sin_fecha from pendiente_societario
+    where id in ('sapi', 'marca_impi') and fecha_objetivo is null;
+  begin
+    update pendiente_societario set estado = 'cerrado' where id = 'sapi';
+    cierre_sin_fecha_rebota := false;
+  exception when check_violation then
+    cierre_sin_fecha_rebota := true;
+  end;
+
+  -- (f) El registro de talento y sus tres candados.
+  insert into vacante (clave, titulo) values ('contador-0219', 'Contador de prueba') returning id into v;
+  insert into candidato (vacante_id, nombre, correo) values (v, 'Ana', 'ana@ejemplo.mx');
+  begin
+    insert into candidato (vacante_id, nombre, correo) values (v, 'Ana otra vez', 'ana@ejemplo.mx');
+    correo_repetido_rebota := false;
+  exception when unique_violation then
+    correo_repetido_rebota := true;
+  end;
+  begin
+    insert into candidato (vacante_id, nombre, correo, puntaje) values (v, 'Beto', 'beto@ejemplo.mx', 140);
+    puntaje_fuera_rebota := false;
+  exception when check_violation then
+    puntaje_fuera_rebota := true;
+  end;
+  begin
+    insert into candidato (vacante_id, nombre, correo, estado) values (v, 'Ceci', 'ceci@ejemplo.mx', 'cribado');
+    criba_incoherente_rebota := false;
+  exception when check_violation then
+    criba_incoherente_rebota := true;
+  end;
+
+  -- (g) El doble candado sobre las tres tablas nuevas.
+  cerrado := not has_table_privilege('anon', 'public.vacante', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.vacante', 'SELECT')
+    and has_table_privilege('service_role', 'public.vacante', 'SELECT')
+    and not has_table_privilege('anon', 'public.candidato', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.candidato', 'SELECT')
+    and has_table_privilege('service_role', 'public.candidato', 'SELECT')
+    and not has_table_privilege('anon', 'public.pendiente_societario', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.pendiente_societario', 'SELECT')
+    and has_table_privilege('service_role', 'public.pendiente_societario', 'SELECT');
+
+  raise exception 'BACKOFFICE_0219  parte_duplicado_rebota=%  otro_agente_mismo_titulo_ok=%  vivos_listos=%  switch_nuevo_entra=%  switch_inventado_rebota=%  societarios_sin_fecha=%  cierre_sin_fecha_rebota=%  correo_repetido_rebota=%  puntaje_fuera_rebota=%  criba_incoherente_rebota=%  cerrado=%   (esperado t / t / 4 / t / t / 2 / t / t / t / t / t)',
+    parte_duplicado_rebota, otro_agente_mismo_titulo_ok, vivos_listos,
+    switch_nuevo_entra, switch_inventado_rebota, societarios_sin_fecha, cierre_sin_fecha_rebota,
+    correo_repetido_rebota, puntaje_fuera_rebota, criba_incoherente_rebota, cerrado;
+end $$;
+
+-- ── 178. El cotizador: costos declarados con candados, y la cotización decidida UNA vez (mig. 0225) ──
+-- (El bloque 175 sigue reservado a una ola paralela — hueco a propósito,
+-- como el 165, 167-169 y 171. El 176 lo tomó la 0218 y el 177 la 0219.)
+-- Lo que solo la base demuestra: (a) `cotizador_config` es UNA fila por
+-- flota — la segunda rebota por PK; (b) los CHECKs de sanidad rebotan el
+-- factor de regreso fuera de 1–3 y el margen fuera de 0–90 (un factor 4 o
+-- un margen 200 cotizarían fantasía con cara de política); (c) el CHECK
+-- `cotizacion_ganada_completa` de la 0051 sigue vivo con las columnas
+-- nuevas: 'ganada' sin precio o sin viaje rebota; (d) el desglose jsonb y el
+-- claim `decidida_en` existen y aceptan escritura; (e) el doble candado:
+-- ni anon ni authenticated tocan `cotizador_config`.
+do $$
+declare
+  ta uuid;
+  segunda_config_rebota boolean; factor_alto_rebota boolean; margen_alto_rebota boolean;
+  ganada_incompleta_rebota boolean; desglose_entra boolean; cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ COTIZADOR 0225') returning id into ta;
+
+  -- (a) Una config por flota.
+  insert into cotizador_config (tenant_id, diesel_por_km) values (ta, 12.5);
+  begin
+    insert into cotizador_config (tenant_id, salario_dia) values (ta, 800);
+    segunda_config_rebota := false;
+  exception when unique_violation then
+    segunda_config_rebota := true;
+  end;
+
+  -- (b) Los CHECKs de sanidad.
+  begin
+    update cotizador_config set factor_regreso_vacio = 4 where tenant_id = ta;
+    factor_alto_rebota := false;
+  exception when check_violation then
+    factor_alto_rebota := true;
+  end;
+  begin
+    update cotizador_config set margen_objetivo_pct = 200 where tenant_id = ta;
+    margen_alto_rebota := false;
+  exception when check_violation then
+    margen_alto_rebota := true;
+  end;
+
+  -- (c) 'ganada' exige precio Y viaje — el candado de la 0051, intacto.
+  begin
+    insert into cotizacion (tenant_id, origen, destino, estado)
+      values (ta, 'León', 'CDMX', 'ganada');
+    ganada_incompleta_rebota := false;
+  exception when check_violation then
+    ganada_incompleta_rebota := true;
+  end;
+
+  -- (d) El desglose citable y el claim entran.
+  begin
+    insert into cotizacion (tenant_id, origen, destino, estado, desglose, decidida_en)
+      values (ta, 'León', 'CDMX', 'borrador',
+              '{"lineas":[{"concepto":"Diésel","monto":100,"supuesto":"prueba"}],"costoTotal":100,"faltantes":[],"precioSugerido":120,"notas":[]}'::jsonb,
+              now());
+    desglose_entra := true;
+  exception when others then
+    desglose_entra := false;
+  end;
+
+  -- (e) El doble candado.
+  cerrado := not has_table_privilege('anon', 'public.cotizador_config', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.cotizador_config', 'SELECT')
+    and has_table_privilege('service_role', 'public.cotizador_config', 'SELECT');
+
+  raise exception 'COTIZADOR_0225  segunda_config_rebota=%  factor_alto_rebota=%  margen_alto_rebota=%  ganada_incompleta_rebota=%  desglose_entra=%  cerrado=%   (esperado t / t / t / t / t / t)',
+    segunda_config_rebota, factor_alto_rebota, margen_alto_rebota, ganada_incompleta_rebota, desglose_entra, cerrado;
+end $$;
+
+-- ── 179. El timbre: uno vigente por viaje, uuid único, formas y doble candado (mig. 0226) ──
+-- Lo que solo la base demuestra: (a) UN timbre vigente por viaje — el doble
+-- clic lo resuelve el índice parcial, gana exactamente uno; (b) cancelado
+-- LIBERA: tras cancelar, el re-timbre de la corrección entra; (c) el mismo
+-- uuid fiscal no entra dos veces (ni cambiando mayúsculas) — el reintento de
+-- un timbre ya aceptado rebota en la base; (d) la FK compuesta: un timbre no
+-- se cuelga del viaje de OTRA flota; (e) las formas del perfil fiscal: RFC
+-- torcido y régimen de 2 dígitos rebotan, y el modo solo admite
+-- sandbox/produccion; (f) el doble candado en las dos tablas nuevas.
+do $$
+declare
+  ta uuid; tb uuid; va uuid; vb uuid; op_a uuid; op_b uuid;
+  segundo_vigente_rebota boolean; recancelado_entra boolean;
+  uuid_repetido_rebota boolean; cruzado_rebota boolean;
+  rfc_torcido_rebota boolean; regimen_corto_rebota boolean; modo_basura_rebota boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0226 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0226 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'Op 0226 A', '+5215550002261') returning id into op_a;
+  -- Dos operadores: `uq_viaje_abierto_por_operador` no admite dos viajes
+  -- abiertos del mismo chofer, y este bloque necesita dos viajes vivos.
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'Op 0226 B', '+5215550002262') returning id into op_b;
+  insert into viaje (tenant_id, operador_id) values (ta, op_a) returning id into va;
+  insert into viaje (tenant_id, operador_id) values (ta, op_b) returning id into vb;
+
+  -- (a) Dos timbres vigentes del mismo viaje: el segundo rebota.
+  insert into ccp_timbre (tenant_id, viaje_id, uuid_fiscal, proveedor, modo, fecha_timbrado, xml)
+    values (ta, va, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001', 'sw', 'sandbox', now(), '<xml/>');
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, uuid_fiscal, proveedor, modo, fecha_timbrado, xml)
+      values (ta, va, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000002', 'sw', 'sandbox', now(), '<xml/>');
+    segundo_vigente_rebota := false;
+  exception when unique_violation then
+    segundo_vigente_rebota := true;
+  end;
+
+  -- (b) Cancelar libera el viaje para el re-timbre de la corrección.
+  update ccp_timbre set estado = 'cancelado'
+    where tenant_id = ta and viaje_id = va and uuid_fiscal = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001';
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, uuid_fiscal, proveedor, modo, fecha_timbrado, xml)
+      values (ta, va, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000002', 'sw', 'sandbox', now(), '<xml/>');
+    recancelado_entra := true;
+  exception when unique_violation then
+    recancelado_entra := false;
+  end;
+
+  -- (c) El mismo uuid fiscal, en mayúsculas, en otro viaje: rebota igual.
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, uuid_fiscal, proveedor, modo, fecha_timbrado, xml)
+      values (ta, vb, 'AAAAAAAA-BBBB-4CCC-8DDD-000000000002', 'sw', 'sandbox', now(), '<xml/>');
+    uuid_repetido_rebota := false;
+  exception when unique_violation then
+    uuid_repetido_rebota := true;
+  end;
+
+  -- (d) El timbre de la flota B sobre el viaje de la flota A: la FK compuesta
+  -- lo rebota (foreign_key_violation, no un filtro de app).
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, uuid_fiscal, proveedor, modo, fecha_timbrado, xml)
+      values (tb, va, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000003', 'sw', 'sandbox', now(), '<xml/>');
+    cruzado_rebota := false;
+  exception when foreign_key_violation then
+    cruzado_rebota := true;
+  end;
+
+  -- (e) Las formas del perfil del emisor y el dominio del modo.
+  begin
+    insert into flota_fiscal (tenant_id, rfc) values (tb, 'no-es-rfc');
+    rfc_torcido_rebota := false;
+  exception when check_violation then
+    rfc_torcido_rebota := true;
+  end;
+  begin
+    insert into flota_fiscal (tenant_id, regimen_fiscal) values (tb, '61');
+    regimen_corto_rebota := false;
+  exception when check_violation then
+    regimen_corto_rebota := true;
+  end;
+  begin
+    insert into flota_fiscal (tenant_id, modo) values (tb, 'demo');
+    modo_basura_rebota := false;
+  exception when check_violation then
+    modo_basura_rebota := true;
+  end;
+
+  -- (f) El doble candado en las dos tablas nuevas.
+  cerrado := not has_table_privilege('anon', 'public.flota_fiscal', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.flota_fiscal', 'SELECT')
+    and has_table_privilege('service_role', 'public.flota_fiscal', 'SELECT')
+    and not has_table_privilege('anon', 'public.ccp_timbre', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.ccp_timbre', 'SELECT')
+    and has_table_privilege('service_role', 'public.ccp_timbre', 'SELECT');
+
+  raise exception 'TIMBRE_0226  segundo_vigente_rebota=%  recancelado_entra=%  uuid_repetido_rebota=%  cruzado_rebota=%  rfc_torcido_rebota=%  regimen_corto_rebota=%  modo_basura_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t / t)',
+    segundo_vigente_rebota, recancelado_entra, uuid_repetido_rebota, cruzado_rebota,
+    rfc_torcido_rebota, regimen_corto_rebota, modo_basura_rebota, cerrado;
+end $$;
+
+-- ── 180. La RESERVA del timbre (claim-then-act) y el dominio del interruptor repuesto (mig. 0227) ──
+-- Lo que solo la base demuestra, y que es EL arreglo de c6-1: (a) la reserva
+-- ('pendiente', sin uuid/fecha/xml) ENTRA — sin eso no hay claim que tomar
+-- antes de llamar al PAC; (b) una SEGUNDA reserva del mismo viaje rebota
+-- contra `ccp_timbre_vigente_unico`, que desde la 0227 cubre 'pendiente': ese
+-- rebote es lo que impide que el perdedor llame al PAC y emita un segundo
+-- CFDI real; (c) una reserva tampoco convive con un timbre vigente del mismo
+-- viaje, ni al revés; (d) el CHECK de coherencia: un 'vigente' SIN uuid/fecha/
+-- xml rebota — relajar los NOT NULL no aflojó la garantía, la condicionó;
+-- (e) la reserva puede llevar uuid a medias (el PAC contestó, la
+-- consolidación no cerró) — es el caso que evita perder un folio fiscal;
+-- (f) `fecha_timbrado_origen` solo admite tfd/pac/servidor; (g) las cuatro
+-- palancas del back office SIGUEN en el dominio del interruptor (la trampa de
+-- c6-11: la 0218 aplicada después de la 0219 las borraba).
+do $$
+declare
+  ta uuid; va uuid; vb uuid; op_a uuid; op_b uuid;
+  reserva_entra boolean; segunda_reserva_rebota boolean;
+  reserva_sobre_vigente_rebota boolean; vigente_incompleto_rebota boolean;
+  reserva_con_uuid_entra boolean; origen_basura_rebota boolean;
+  palancas int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0227') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'Op 0227 A', '+5215550002271') returning id into op_a;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'Op 0227 B', '+5215550002272') returning id into op_b;
+  insert into viaje (tenant_id, operador_id) values (ta, op_a) returning id into va;
+  insert into viaje (tenant_id, operador_id) values (ta, op_b) returning id into vb;
+
+  -- (a) La reserva entra sin uuid, sin fecha y sin xml.
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, estado, proveedor, modo, reservado_en)
+      values (ta, va, 'pendiente', 'sw', 'sandbox', now());
+    reserva_entra := true;
+  exception when others then
+    reserva_entra := false;
+  end;
+
+  -- (b) La SEGUNDA reserva del mismo viaje rebota: es el claim arbitrando.
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, estado, proveedor, modo, reservado_en)
+      values (ta, va, 'pendiente', 'sw', 'sandbox', now());
+    segunda_reserva_rebota := false;
+  exception when unique_violation then
+    segunda_reserva_rebota := true;
+  end;
+
+  -- (c) Un timbre vigente y una reserva del mismo viaje tampoco conviven.
+  insert into ccp_timbre (tenant_id, viaje_id, uuid_fiscal, proveedor, modo, fecha_timbrado, xml)
+    values (ta, vb, 'cccccccc-bbbb-4ccc-8ddd-000000000001', 'sw', 'sandbox', now(), '<xml/>');
+  begin
+    insert into ccp_timbre (tenant_id, viaje_id, estado, proveedor, modo, reservado_en)
+      values (ta, vb, 'pendiente', 'sw', 'sandbox', now());
+    reserva_sobre_vigente_rebota := false;
+  exception when unique_violation then
+    reserva_sobre_vigente_rebota := true;
+  end;
+
+  -- (d) Un 'vigente' incompleto rebota: el hecho del timbre sigue siendo
+  -- obligatorio en cuanto la fila deja de ser una reserva.
+  begin
+    update ccp_timbre set estado = 'vigente'
+      where tenant_id = ta and viaje_id = va and estado = 'pendiente';
+    vigente_incompleto_rebota := false;
+  exception when check_violation then
+    vigente_incompleto_rebota := true;
+  end;
+
+  -- (e) La reserva SÍ puede llevar el uuid a medias — el folio no se pierde
+  -- aunque la consolidación falle.
+  begin
+    update ccp_timbre set uuid_fiscal = 'cccccccc-bbbb-4ccc-8ddd-000000000002'
+      where tenant_id = ta and viaje_id = va and estado = 'pendiente';
+    reserva_con_uuid_entra := true;
+  exception when others then
+    reserva_con_uuid_entra := false;
+  end;
+
+  -- (f) El origen de la fecha es un dominio cerrado: 'inventado' no existe.
+  begin
+    update ccp_timbre set fecha_timbrado_origen = 'inventado'
+      where tenant_id = ta and viaje_id = vb;
+    origen_basura_rebota := false;
+  exception when check_violation then
+    origen_basura_rebota := true;
+  end;
+
+  -- (g) c6-11: las cuatro palancas del back office siguen en el dominio.
+  palancas := 0;
+  begin
+    insert into interruptor (id, apagado) values ('agente:vigilante_calidad', false);
+    palancas := palancas + 1;
+    insert into interruptor (id, apagado) values ('agente:documentacion', false);
+    palancas := palancas + 1;
+    insert into interruptor (id, apagado) values ('agente:legal_compliance', false);
+    palancas := palancas + 1;
+    insert into interruptor (id, apagado) values ('agente:talento', false);
+    palancas := palancas + 1;
+  exception when check_violation then
+    -- palancas se queda en cuántas alcanzaron a entrar: el número dice cuál.
+    null;
+  end;
+
+  raise exception 'TIMBRE_CLAIM_0227  reserva_entra=%  segunda_reserva_rebota=%  reserva_sobre_vigente_rebota=%  vigente_incompleto_rebota=%  reserva_con_uuid_entra=%  origen_basura_rebota=%  palancas_backoffice=%   (esperado t / t / t / t / t / t / 4)',
+    reserva_entra, segunda_reserva_rebota, reserva_sobre_vigente_rebota,
+    vigente_incompleto_rebota, reserva_con_uuid_entra, origen_basura_rebota, palancas;
+end $$;
+
+-- ── 181. El portal de pago: una liga viva por factura, el token que no se puede guardar en claro, y la propuesta que no salda nada (mig. 0228) ──
+-- Lo que solo la base demuestra: (a) UNA liga viva por factura — el doble clic
+-- en "generar enlace" lo resuelve el índice parcial, gana exactamente una;
+-- (b) revocar LIBERA: tras revocar, la liga nueva entra; (c) el token EN CLARO
+-- no cabe en la columna — el CHECK de 64 hex es la red que impide guardarlo
+-- por accidente; (d) idempotencia de la propuesta: la misma referencia con
+-- otras mayúsculas es el mismo movimiento bancario y rebota; (e) la FK
+-- compuesta: la flota B no cuelga su liga de la factura de la flota A; (f) el
+-- estado de la propuesta es coherente — 'conciliada' sin el pago real rebota,
+-- que es el candado de "la conciliación propone, el humano confirma"; (g) el
+-- REP emitido no admite el mismo folio fiscal dos veces ni un UUID en
+-- mayúsculas; (h) LA PROPUESTA NO MUEVE `factura_saldo`: es la afirmación
+-- central de la migración y se comprueba contra la vista, no contra el código;
+-- (i) el doble candado en las cuatro tablas nuevas.
+do $$
+declare
+  ta uuid; tb uuid; ca uuid; cb uuid; fa uuid; fb uuid;
+  liga_a uuid; liga_b uuid; pago_a uuid;
+  segunda_liga_rebota boolean := false;
+  revocada_libera boolean := false;
+  token_en_claro_rebota boolean := false;
+  propuesta_repetida_rebota boolean := false;
+  liga_cruzada_rebota boolean := false;
+  conciliada_sin_pago_rebota boolean := false;
+  rep_uuid_repetido_rebota boolean := false;
+  rep_mayusculas_rebota boolean := false;
+  saldo_antes numeric; saldo_despues numeric; saldo_intacto boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0228 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0228 B') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ cli 0228 A') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (tb, 'ZZZ cli 0228 B') returning id into cb;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, ca, 1000, 160, 1160, 'emitida') returning id into fa;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (tb, cb, 500, 80, 580, 'emitida') returning id into fb;
+
+  -- (a) Una liga viva por factura. La segunda rebota contra el índice parcial.
+  insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+    values (ta, fa, repeat('a', 64), 'pgo_aaaa', now() + interval '90 days')
+    returning id into liga_a;
+  begin
+    insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+      values (ta, fa, repeat('b', 64), 'pgo_bbbb', now() + interval '90 days');
+    segunda_liga_rebota := false;
+  exception when unique_violation then
+    segunda_liga_rebota := true;
+  end;
+
+  -- (b) Revocar LIBERA: el índice es parcial sobre las vivas.
+  update portal_pago_liga set revocada_en = now() where id = liga_a;
+  begin
+    insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+      values (ta, fa, repeat('c', 64), 'pgo_cccc', now() + interval '90 days')
+      returning id into liga_a;
+    revocada_libera := true;
+  exception when others then
+    revocada_libera := false;
+  end;
+
+  -- (c) El token EN CLARO no cabe: 64 hex o nada. Si alguien escribiera el
+  -- token en vez de su sha256, el insert falla en vez de conservarlo.
+  begin
+    insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+      values (tb, fb, 'pgo_EstoEsElTokenEnClaro', 'pgo_Esto', now() + interval '90 days');
+    token_en_claro_rebota := false;
+  exception when check_violation then
+    token_en_claro_rebota := true;
+  end;
+
+  -- (e) La liga de la flota A sobre la factura de la flota B: la FK compuesta
+  -- lo rebota, no un filtro de aplicación.
+  -- Se ataca `fb` y no `fa` A PROPÓSITO: `fa` ya tiene liga viva, y entonces el
+  -- rebote vendría del índice único —la garantía del inciso (a)— y este inciso
+  -- estaría midiendo dos veces lo mismo en vez de la FK. `fb` está libre: el
+  -- (c) rebotó antes de insertar.
+  begin
+    insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+      values (ta, fb, repeat('d', 64), 'pgo_dddd', now() + interval '90 days');
+    liga_cruzada_rebota := false;
+  exception when foreign_key_violation then
+    liga_cruzada_rebota := true;
+  end;
+
+  -- (h) LA PROPUESTA NO MUEVE EL SALDO. Se mide la vista antes y después.
+  select saldo into saldo_antes from factura_saldo where factura_id = fa;
+  insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+    values (ta, liga_a, fa, current_date, 1160, 'REF-8891');
+  select saldo into saldo_despues from factura_saldo where factura_id = fa;
+  saldo_intacto := saldo_antes = 1160 and saldo_despues = 1160;
+
+  -- (d) La misma referencia con otras mayúsculas es el mismo movimiento.
+  begin
+    insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+      values (ta, liga_a, fa, current_date, 1160, 'ref-8891');
+    propuesta_repetida_rebota := false;
+  exception when unique_violation then
+    propuesta_repetida_rebota := true;
+  end;
+
+  -- (f) 'conciliada' EXIGE el pago real. Sin él, la propuesta no puede
+  -- declararse conciliada: es el candado de que solo un abono de verdad cierra
+  -- el circuito.
+  begin
+    update portal_pago_propuesta set estado = 'conciliada', resuelta_en = now()
+      where liga_id = liga_a;
+    conciliada_sin_pago_rebota := false;
+  exception when check_violation then
+    conciliada_sin_pago_rebota := true;
+  end;
+
+  -- (g) El REP emitido: un folio fiscal, una vez, y siempre en minúsculas.
+  insert into pago_recibido (tenant_id, factura_id, monto) values (ta, fa, 1160) returning id into pago_a;
+  insert into rep_emitido (tenant_id, factura_id, pago_id, cfdi_uuid, fecha_pago, imp_pagado)
+    values (ta, fa, pago_a, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001', current_date, 1160);
+  begin
+    insert into rep_emitido (tenant_id, factura_id, pago_id, cfdi_uuid, fecha_pago, imp_pagado)
+      values (ta, fa, pago_a, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001', current_date, 1160);
+    rep_uuid_repetido_rebota := false;
+  exception when unique_violation then
+    rep_uuid_repetido_rebota := true;
+  end;
+  begin
+    insert into rep_emitido (tenant_id, factura_id, pago_id, cfdi_uuid, fecha_pago, imp_pagado)
+      values (ta, fa, pago_a, 'AAAAAAAA-BBBB-4CCC-8DDD-000000000002', current_date, 1160);
+    rep_mayusculas_rebota := false;
+  exception when check_violation then
+    rep_mayusculas_rebota := true;
+  end;
+
+  -- (i) El doble candado en las cuatro tablas nuevas.
+  cerrado := not has_table_privilege('anon', 'public.portal_pago_liga', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.portal_pago_liga', 'SELECT')
+    and has_table_privilege('service_role', 'public.portal_pago_liga', 'SELECT')
+    and not has_table_privilege('anon', 'public.portal_pago_propuesta', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.portal_pago_propuesta', 'SELECT')
+    and has_table_privilege('service_role', 'public.portal_pago_propuesta', 'INSERT')
+    and not has_table_privilege('anon', 'public.rep_emitido', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.rep_emitido', 'SELECT')
+    and not has_table_privilege('anon', 'public.portal_pago_acceso', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.portal_pago_acceso', 'SELECT');
+
+  raise exception 'PORTAL_PAGO_0228  segunda_liga_rebota=%  revocada_libera=%  token_en_claro_rebota=%  liga_cruzada_rebota=%  saldo_intacto=%  propuesta_repetida_rebota=%  conciliada_sin_pago_rebota=%  rep_uuid_repetido_rebota=%  rep_mayusculas_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t)',
+    segunda_liga_rebota, revocada_libera, token_en_claro_rebota, liga_cruzada_rebota,
+    coalesce(saldo_intacto, false), propuesta_repetida_rebota, conciliada_sin_pago_rebota,
+    rep_uuid_repetido_rebota, rep_mayusculas_rebota, cerrado;
+end $$;
+
+-- ── 182. Las reglas en lenguaje natural: la firma humana, el catálogo cerrado y el sello por ciclo (mig. 0229) ──
+-- El bloque 181 es del portal de pago (rama paralela); esta ola toma el 182.
+--
+-- Lo que SOLO la base puede demostrar de A19, y que es donde vive la promesa
+-- entera de la feature:
+--
+--  (a) Una regla NO puede salir de 'pendiente' sin quién la confirmó y
+--      cuándo. La confirmación humana no es un `if` de una server action —es
+--      un CHECK—, así que un POST directo tampoco la puede rodear. Si este
+--      valor sale `f`, el producto está mandando WhatsApps por vigilancias
+--      que nadie leyó.
+--  (b) Con firma sí entra: el candado condiciona, no prohíbe.
+--  (c) El CATÁLOGO ES CERRADO. Una plantilla inventada rebota — es la mitad
+--      que impide guardar una vigilancia que el lector no sabe correr.
+--  (d) `params` tiene que ser un OBJETO: un arreglo o un escalar sería una
+--      regla que `validarParams` no puede leer.
+--  (e) La misma vigilancia con los mismos parámetros no se declara dos veces
+--      mientras esté viva (dos reglas idénticas = dos WhatsApps por el mismo
+--      hecho), y el orden de las llaves del jsonb NO la disfraza. Una
+--      PAUSADA sí deja volver a declararla.
+--  (f) EL SELLO ANTI-SPAM (patrón 0202): el mismo (regla, objeto, ciclo) no
+--      entra dos veces, y un CICLO NUEVO —otra fecha de vencimiento, otro
+--      conteo— sí. Es la diferencia entre avisar una vez y avisar cada hora.
+--  (g) La FK COMPUESTA: un sello de la flota B no se puede colgar de una
+--      regla de la flota A.
+--  (h) El dominio del objeto vigilado.
+--  (i) El doble candado (RLS deny-all + solo service_role) en las dos tablas.
+do $$
+declare
+  ta uuid; tb uuid; ua uuid;
+  regla_a uuid; regla_b uuid; regla_pausada uuid;
+  activa_sin_firma_rebota boolean; activa_con_firma_entra boolean;
+  plantilla_inventada_rebota boolean; params_arreglo_rebota boolean;
+  duplicada_rebota boolean; llaves_al_reves_rebota boolean; sobre_pausada_entra boolean;
+  sello_repetido_rebota boolean; ciclo_nuevo_entra boolean;
+  sello_cruzado_rebota boolean; objeto_inventado_rebota boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0229 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0229 B') returning id into tb;
+  insert into app_user (id, tenant_id, email, rol)
+    values (gen_random_uuid(), ta, 'zzz-verif-0229@likida.test', 'flota_admin') returning id into ua;
+
+  insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+    values (ta, 'gasto_de_concepto_mayor_a', '{"concepto":"caseta","monto":3000}'::jsonb,
+            'avísame si un gasto de caseta pasa de $3,000',
+            'Voy a avisarte cuando entre un comprobante de casetas por más de $3,000.00.')
+    returning id into regla_a;
+
+  -- (a) Sin firma no vigila. Es EL candado del diseño.
+  begin
+    update regla_vigilancia set estado = 'activa' where id = regla_a;
+    activa_sin_firma_rebota := false;
+  exception when check_violation then
+    activa_sin_firma_rebota := true;
+  end;
+
+  -- (b) Con firma sí.
+  begin
+    update regla_vigilancia
+      set estado = 'activa', confirmada_por = ua, confirmada_en = now()
+      where id = regla_a;
+    activa_con_firma_entra := true;
+  exception when others then
+    activa_con_firma_entra := false;
+  end;
+
+  -- (c) El catálogo es cerrado.
+  begin
+    insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+      values (ta, 'avisame_de_todo', '{}'::jsonb, 'x', 'y');
+    plantilla_inventada_rebota := false;
+  exception when check_violation then
+    plantilla_inventada_rebota := true;
+  end;
+
+  -- (d) `params` es un objeto o no es nada.
+  begin
+    insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+      values (ta, 'estadia_mayor_a', '[4]'::jsonb, 'x', 'y');
+    params_arreglo_rebota := false;
+  exception when check_violation then
+    params_arreglo_rebota := true;
+  end;
+
+  -- (e) La misma vigilancia, viva, no se declara dos veces…
+  begin
+    insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+      values (ta, 'gasto_de_concepto_mayor_a', '{"concepto":"caseta","monto":3000}'::jsonb, 'otra vez', 'otra vez');
+    duplicada_rebota := false;
+  exception when unique_violation then
+    duplicada_rebota := true;
+  end;
+  -- …ni disfrazada con las llaves en otro orden (jsonb las normaliza).
+  begin
+    insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+      values (ta, 'gasto_de_concepto_mayor_a', '{"monto":3000,"concepto":"caseta"}'::jsonb, 'al reves', 'al reves');
+    llaves_al_reves_rebota := false;
+  exception when unique_violation then
+    llaves_al_reves_rebota := true;
+  end;
+  -- Una PAUSADA no ocupa el lugar: se puede volver a declarar.
+  insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase, estado, confirmada_por, confirmada_en)
+    values (ta, 'estadia_mayor_a', '{"horas":4}'::jsonb, 'estadias de 4h', 'estadias de 4h', 'pausada', ua, now())
+    returning id into regla_pausada;
+  begin
+    insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+      values (ta, 'estadia_mayor_a', '{"horas":4}'::jsonb, 'otra vez estadias', 'otra vez estadias');
+    sobre_pausada_entra := true;
+  exception when unique_violation then
+    sobre_pausada_entra := false;
+  end;
+
+  -- (f) El sello por ciclo.
+  insert into regla_disparo (tenant_id, regla_id, objeto, objeto_id, clave, evidencia)
+    values (ta, regla_a, 'gasto', '00000000-0000-4000-8000-000000000229', '', '$3,500.00 de casetas');
+  begin
+    insert into regla_disparo (tenant_id, regla_id, objeto, objeto_id, clave, evidencia)
+      values (ta, regla_a, 'gasto', '00000000-0000-4000-8000-000000000229', '', 'el mismo gasto otra vez');
+    sello_repetido_rebota := false;
+  exception when unique_violation then
+    sello_repetido_rebota := true;
+  end;
+  begin
+    insert into regla_disparo (tenant_id, regla_id, objeto, objeto_id, clave, evidencia)
+      values (ta, regla_a, 'gasto', '00000000-0000-4000-8000-000000000229', '2027-01-31', 'ciclo nuevo del mismo objeto');
+    ciclo_nuevo_entra := true;
+  exception when unique_violation then
+    ciclo_nuevo_entra := false;
+  end;
+
+  -- (g) La FK compuesta: el sello de B no se cuelga de la regla de A.
+  insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+    values (tb, 'gasto_sin_cfdi_mayor_a', '{"monto":2000}'::jsonb, 'sin factura', 'sin factura')
+    returning id into regla_b;
+  begin
+    insert into regla_disparo (tenant_id, regla_id, objeto, objeto_id, clave, evidencia)
+      values (tb, regla_a, 'gasto', '00000000-0000-4000-8000-00000000022a', '', 'gasto de otra flota');
+    sello_cruzado_rebota := false;
+  exception when foreign_key_violation then
+    sello_cruzado_rebota := true;
+  end;
+
+  -- (h) El dominio de lo vigilado.
+  begin
+    insert into regla_disparo (tenant_id, regla_id, objeto, objeto_id, clave, evidencia)
+      values (ta, regla_a, 'lo_que_sea', '00000000-0000-4000-8000-00000000022b', '', 'objeto inventado');
+    objeto_inventado_rebota := false;
+  exception when check_violation then
+    objeto_inventado_rebota := true;
+  end;
+
+  -- (i) El doble candado, en las DOS tablas.
+  cerrado := not has_table_privilege('anon', 'public.regla_vigilancia', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.regla_vigilancia', 'SELECT')
+    and has_table_privilege('service_role', 'public.regla_vigilancia', 'SELECT')
+    and not has_table_privilege('anon', 'public.regla_disparo', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.regla_disparo', 'SELECT')
+    and has_table_privilege('service_role', 'public.regla_disparo', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.regla_vigilancia'::regclass)
+    and (select relrowsecurity from pg_class where oid = 'public.regla_disparo'::regclass);
+
+  raise exception 'REGLAS_0229  activa_sin_firma_rebota=%  activa_con_firma_entra=%  plantilla_inventada_rebota=%  params_arreglo_rebota=%  duplicada_rebota=%  llaves_al_reves_rebota=%  sobre_pausada_entra=%  sello_repetido_rebota=%  ciclo_nuevo_entra=%  sello_cruzado_rebota=%  objeto_inventado_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t)',
+    activa_sin_firma_rebota, activa_con_firma_entra, plantilla_inventada_rebota,
+    params_arreglo_rebota, duplicada_rebota, llaves_al_reves_rebota, sobre_pausada_entra,
+    sello_repetido_rebota, ciclo_nuevo_entra, sello_cruzado_rebota, objeto_inventado_rebota, cerrado;
+end $$;
+
+-- ── 183. Crecimiento: los 10 vivos con reloj y techo, una pieza por periodo, y las 40 palancas del dominio (mig. 0230) ──
+-- El bloque 182 es de las reglas en lenguaje natural (rama paralela); esta ola
+-- toma el 183.
+--
+-- Lo que SOLO la base puede demostrar de la 0230:
+--
+--  (a) LOS DIEZ PASAN LOS CANDADOS 2 Y 3 DEL RUNNER. `estado='vivo'` +
+--      `runner_habilitado` + `disparador='cron'` + techo declarado > 0 no es
+--      cosmética: la consulta del runner filtra por los tres primeros y el
+--      candado 3 salta a quien no tenga techo. Si este valor no sale 10, hay
+--      agentes que el PR dice que encendió y que el cron nunca despacha.
+--  (b) EL MODELO SE DECLARA CON LA VERDAD DEL MOTOR. Solo `contenido_fiscal`
+--      trae `modelo_rol`; los otros nueve son deterministas y su NULL dice
+--      «no usa modelo de texto» (convención 0125), no «se nos olvidó».
+--  (c) LAS 40 PALANCAS. Las 10 nuevas entran, y —la trampa que la 0227
+--      corrigió y que se repite en cada ola— las 30 ANTERIORES siguen en el
+--      dominio: si esta migración hubiera enumerado solo las suyas, apagar a
+--      `talento` o a `redactor` rebotaría con check_violation el día del
+--      incidente, que es el peor día para descubrirlo.
+--  (d) Una palanca inventada rebota: el dominio es cerrado.
+--  (e) UNA PIEZA POR PERIODO. El mismo (agente, título) no entra dos veces
+--      para un agente de crecimiento — es el árbitro de la carrera entre dos
+--      pasadas del runner, y por eso la idempotencia es un constraint y no un
+--      `if` que dos procesos concurrentes se saltan.
+--  (f) EL ÍNDICE ES PARCIAL. El Redactor SÍ puede repetir título: dos
+--      prospectos pueden compartir el asunto de un correo legítimamente, y un
+--      índice global rompería la campaña.
+--  (g) `aliado_objetivo` sembrado SIN CONTACTO Y SIN FECHA: los tres del
+--      blueprint existen y ninguno trae contacto ni acercamiento inventado.
+--  (h) Un aliado no puede AVANZAR de estado sin decir cuándo se le tocó (un
+--      estado que avanzó sin fecha no es auditable), y sin avanzar sí puede
+--      quedarse sin fecha.
+--  (i) El dominio cerrado de tipo, y el doble candado (RLS deny-all + grants
+--      solo a service_role) de la tabla nueva.
+do $$
+declare
+  vivos_con_reloj_y_techo int;
+  con_modelo int; sin_modelo int;
+  palancas_nuevas int; palancas_previas int;
+  palanca_inventada_rebota boolean;
+  pieza_repetida_rebota boolean; redactor_repite boolean;
+  aliados_sembrados int; aliados_con_contacto_o_fecha int;
+  avance_sin_fecha_rebota boolean; avance_con_fecha_entra boolean;
+  tipo_inventado_rebota boolean;
+  cerrado boolean;
+begin
+  -- (a) y (b) — el catálogo, tal como el runner lo consulta.
+  select count(*) into vivos_con_reloj_y_techo from agente_definicion
+    where id in ('contenido_fiscal','lead_magnet','seo_distribucion','guiones',
+                 'noticias_mercado','promos_diarias','visuales','video_demo',
+                 'video_marketing','alianzas')
+      and estado = 'vivo' and runner_habilitado and disparador = 'cron'
+      and presupuesto_dia_usd is not null and presupuesto_dia_usd > 0;
+
+  select count(*) into con_modelo from agente_definicion
+    where departamento = 'crecimiento' and modelo_rol is not null;
+  select count(*) into sin_modelo from agente_definicion
+    where departamento = 'crecimiento' and modelo_rol is null;
+
+  -- (c) Las 10 nuevas…
+  palancas_nuevas := 0;
+  begin
+    insert into interruptor (id, apagado) values
+      ('agente:contenido_fiscal', false), ('agente:lead_magnet', false),
+      ('agente:seo_distribucion', false), ('agente:guiones', false),
+      ('agente:noticias_mercado', false), ('agente:promos_diarias', false),
+      ('agente:visuales', false), ('agente:video_demo', false),
+      ('agente:video_marketing', false), ('agente:alianzas', false);
+    palancas_nuevas := 10;
+  exception when check_violation then
+    palancas_nuevas := -1;
+  end;
+  -- …y una muestra de las de CADA ola anterior, que es donde vive la trampa.
+  palancas_previas := 0;
+  begin
+    insert into interruptor (id, apagado) values
+      ('global', false), ('agente:redactor', false),
+      ('agente:tesoreria', false), ('agente:orquestador', false),
+      ('agente:enviador', false), ('agente:atencion_faq', false),
+      ('agente:talento', false);
+    palancas_previas := 7;
+  exception when check_violation then
+    palancas_previas := -1;
+  end;
+
+  -- (d) El dominio es cerrado.
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:inventado_0230', true, 'basura');
+    palanca_inventada_rebota := false;
+  exception when check_violation then
+    palanca_inventada_rebota := true;
+  end;
+
+  -- (e) Una pieza por periodo.
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('promo_diaria', 'normal', 'promos_diarias', 'Promo del dia — 2026-08-27', 'cuerpo');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('promo_diaria', 'normal', 'promos_diarias', 'Promo del dia — 2026-08-27', 'otra corrida');
+    pieza_repetida_rebota := false;
+  exception when unique_violation then
+    pieza_repetida_rebota := true;
+  end;
+
+  -- (f) El índice es PARCIAL: el Redactor sí repite título.
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('correo_frio', 'normal', 'redactor', 'Tu liquidacion de viajes', 'a');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('correo_frio', 'normal', 'redactor', 'Tu liquidacion de viajes', 'b');
+    redactor_repite := true;
+  exception when unique_violation then
+    redactor_repite := false;
+  end;
+
+  -- (g) La siembra: existen y NO traen contacto ni fecha inventados.
+  select count(*) into aliados_sembrados from aliado_objetivo
+    where id in ('canacar', 'anpact', 'tyt');
+  select count(*) into aliados_con_contacto_o_fecha from aliado_objetivo
+    where id in ('canacar', 'anpact', 'tyt')
+      and (contacto_nota is not null or ultimo_toque_en is not null or estado <> 'sin_contacto');
+
+  -- (h) Avanzar de estado exige decir cuándo.
+  begin
+    update aliado_objetivo set estado = 'contactado' where id = 'canacar';
+    avance_sin_fecha_rebota := false;
+  exception when check_violation then
+    avance_sin_fecha_rebota := true;
+  end;
+  begin
+    update aliado_objetivo set estado = 'contactado', ultimo_toque_en = current_date where id = 'canacar';
+    avance_con_fecha_entra := true;
+  exception when others then
+    avance_con_fecha_entra := false;
+  end;
+
+  -- (i) El dominio del tipo…
+  begin
+    insert into aliado_objetivo (id, nombre, tipo) values ('x_0230', 'Lo que sea', 'influencer');
+    tipo_inventado_rebota := false;
+  exception when check_violation then
+    tipo_inventado_rebota := true;
+  end;
+  -- …y el doble candado.
+  cerrado := not has_table_privilege('anon', 'public.aliado_objetivo', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.aliado_objetivo', 'SELECT')
+    and has_table_privilege('service_role', 'public.aliado_objetivo', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.aliado_objetivo'::regclass);
+
+  raise exception 'CRECIMIENTO_0230  vivos_con_reloj_y_techo=%  con_modelo=%  sin_modelo=%  palancas_nuevas=%  palancas_previas=%  palanca_inventada_rebota=%  pieza_repetida_rebota=%  redactor_repite=%  aliados_sembrados=%  aliados_con_contacto_o_fecha=%  avance_sin_fecha_rebota=%  avance_con_fecha_entra=%  tipo_inventado_rebota=%  cerrado=%   (esperado 10 / 1 / 9 / 10 / 7 / t / t / t / 3 / 0 / t / t / t / t)',
+    vivos_con_reloj_y_techo, con_modelo, sin_modelo, palancas_nuevas, palancas_previas,
+    palanca_inventada_rebota, pieza_repetida_rebota, redactor_repite,
+    aliados_sembrados, aliados_con_contacto_o_fecha,
+    avance_sin_fecha_rebota, avance_con_fecha_entra, tipo_inventado_rebota, cerrado;
+end $$;
+
+-- ── 186. El vínculo con cada portal: tres estados con fecha, sin una cookie en claro (mig. 0232) ──
+-- Los bloques 183-185 los toman ramas paralelas de esta misma ola; esta toma
+-- el 186. El último en master antes de escribir esto era el 182 (mig. 0229).
+--
+-- Lo que SOLO la base puede demostrar del estado de vinculación de portales:
+--
+--  (a) EL DOMINIO. 'vinculado', 'sin_vincular' y 'caducada' y nada más. Un
+--      estado inventado que entrara sería una píldora que el panel no sabe
+--      pintar, y `aVinculo()` la descartaría con grito — pero descartarla en
+--      lectura no sirve si la base la dejó escribir.
+--  (b) UN ESTADO SIN SU FECHA REBOTA. 'vinculado' sin `vinculada_en` no le
+--      dice a nadie desde cuándo, y 'caducada' sin `caducada_en` no distingue
+--      lo de hace diez minutos de lo del mes pasado. Los dos CHECK están.
+--  (c) Y CON SU FECHA ENTRA: el candado condiciona, no prohíbe.
+--  (d) NINGUNA COOKIE EN CLARO. `motivo` es una frase para una persona; un
+--      valor que empiece por `{` o `[` sería un storageState o un volcado, y
+--      esta columna la lee el panel SIN descifrar nada. Es la mitad de base
+--      de la regla dura de la casa: la sesión vive cifrada en el cofre y aquí
+--      solo hay palabras.
+--  (e) UNA FILA POR (FLOTA, PORTAL). El escritor hace UPSERT con esa llave —
+--      la idempotencia de dos corridas que ven lo mismo depende de que la
+--      base no admita dos filas del mismo portal para la misma flota.
+--  (f) Y LA MISMA CLAVE DE COMERCIO SÍ ENTRA PARA OTRA FLOTA: el candado es
+--      por tenant, no global. Sin esto, la primera flota que vinculara La Gas
+--      dejaría a todas las demás fuera.
+--  (g) EL BORRADO DE LA FLOTA SE LLEVA SUS VÍNCULOS (cascade). Un estado
+--      huérfano es un renglón que nadie puede leer ni borrar.
+--  (h) La llave `(id, tenant_id)` de la casa (0028/0145) existe, que es lo
+--      que hace posible colgar una FK compuesta de aquí.
+--  (i) El doble candado: RLS deny-all + solo service_role.
+do $$
+declare
+  ta uuid; tb uuid;
+  estado_inventado_rebota boolean; vinculado_sin_fecha_rebota boolean;
+  caducada_sin_fecha_rebota boolean; vinculado_con_fecha_entra boolean;
+  motivo_json_rebota boolean; motivo_frase_entra boolean;
+  duplicado_rebota boolean; otra_flota_entra boolean;
+  cascade_limpia boolean; llave_compuesta boolean; cerrado boolean;
+  quedan integer;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0232 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0232 B') returning id into tb;
+
+  -- (a) El dominio de los tres estados.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado)
+      values (ta, 'la_gas', 'medio_vinculado');
+    estado_inventado_rebota := false;
+  exception when check_violation then
+    estado_inventado_rebota := true;
+  end;
+
+  -- (b) Un estado sin su fecha no se puede pintar.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado)
+      values (ta, 'la_gas', 'vinculado');
+    vinculado_sin_fecha_rebota := false;
+  exception when check_violation then
+    vinculado_sin_fecha_rebota := true;
+  end;
+
+  begin
+    insert into portal_estado (tenant_id, comercio, estado)
+      values (ta, 'g500', 'caducada');
+    caducada_sin_fecha_rebota := false;
+  exception when check_violation then
+    caducada_sin_fecha_rebota := true;
+  end;
+
+  -- (c) Con su fecha sí entra.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado, vinculada_en)
+      values (ta, 'la_gas', 'vinculado', now());
+    vinculado_con_fecha_entra := true;
+  exception when others then
+    vinculado_con_fecha_entra := false;
+  end;
+
+  -- (d) Ninguna cookie en claro: un JSON en `motivo` rebota, una frase entra.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado, caducada_en, motivo)
+      values (ta, 'g500', 'caducada', now(), '{"cookies":[{"name":"ASP.NET_SessionId"}]}');
+    motivo_json_rebota := false;
+  exception when check_violation then
+    motivo_json_rebota := true;
+  end;
+
+  begin
+    insert into portal_estado (tenant_id, comercio, estado, caducada_en, motivo)
+      values (ta, 'g500', 'caducada', now(),
+              'el portal enseña un campo de contraseña (#pass), o sea la pantalla de entrar');
+    motivo_frase_entra := true;
+  exception when others then
+    motivo_frase_entra := false;
+  end;
+
+  -- (e) Una fila por (flota, portal): es de lo que depende el UPSERT.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado)
+      values (ta, 'la_gas', 'sin_vincular');
+    duplicado_rebota := false;
+  exception when unique_violation then
+    duplicado_rebota := true;
+  end;
+
+  -- (f) Pero la misma clave para OTRA flota sí entra: el candado es por tenant.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado, vinculada_en)
+      values (tb, 'la_gas', 'vinculado', now());
+    otra_flota_entra := true;
+  exception when others then
+    otra_flota_entra := false;
+  end;
+
+  -- (g) Borrar la flota se lleva sus vínculos.
+  delete from tenant where id = tb;
+  select count(*) into quedan from portal_estado where tenant_id = tb;
+  cascade_limpia := (quedan = 0);
+
+  -- (h) La llave que hace posibles las FK compuestas de la casa.
+  llave_compuesta := exists (
+    select 1 from pg_constraint
+    where conname = 'portal_estado_id_tenant_key'
+      and conrelid = 'public.portal_estado'::regclass
+      and contype = 'u'
+  );
+
+  -- (i) El doble candado.
+  cerrado := not has_table_privilege('anon', 'public.portal_estado', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.portal_estado', 'SELECT')
+    and has_table_privilege('service_role', 'public.portal_estado', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.portal_estado'::regclass);
+
+  raise exception 'PORTAL_ESTADO_0232  estado_inventado_rebota=%  vinculado_sin_fecha_rebota=%  caducada_sin_fecha_rebota=%  vinculado_con_fecha_entra=%  motivo_json_rebota=%  motivo_frase_entra=%  duplicado_rebota=%  otra_flota_entra=%  cascade_limpia=%  llave_compuesta=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t / t)',
+    estado_inventado_rebota, vinculado_sin_fecha_rebota, caducada_sin_fecha_rebota,
+    vinculado_con_fecha_entra, motivo_json_rebota, motivo_frase_entra,
+    duplicado_rebota, otra_flota_entra, cascade_limpia, llave_compuesta, cerrado;
+end $$;
+
+-- ── 187. La descarga masiva del SAT: la credencial que no cabe, el sello de dedup y el cruce que no puede mentir (mig. 0231) ──
+-- Los bloques 183 y 186 los tomaron las olas de crecimiento (0230) y de
+-- sesión de portal (0232), paralelas a ésta; aquí se toma el 187.
+--
+-- Lo que SOLO la base puede demostrar de esta feature, y que es donde vive
+-- toda su promesa:
+--
+--  (a) LA e.firma NO CABE EN LA TABLA. El diseño entero descansa en que
+--      Likida jamás custodia la firma electrónica del cliente: la FIEL vive
+--      en la bóveda del PAC y aquí solo se guarda una REFERENCIA de 20
+--      dígitos. Si este valor sale `f`, alguien puede pegar una llave privada
+--      en base64 en la columna del certificado y el producto habría roto su
+--      promesa de seguridad sin que ninguna prueba de código se enterara.
+--      Una referencia legítima (20 dígitos) sí entra: el candado acota, no
+--      prohíbe.
+--  (b) EL SELLO DE DEDUP. El mismo folio fiscal no entra dos veces por flota
+--      —dos rangos traslapados, el cron repetido, o el ticket que ya había
+--      llegado por WhatsApp con su XML—. Es la idempotencia por constraint de
+--      toda la ingesta.
+--  (c) Pero la MISMA flota SÍ puede tener muchos folios distintos, y DOS
+--      FLOTAS pueden tener el mismo folio: un CFDI que le timbraron a dos
+--      razones sociales distintas es un caso real, y un unique global lo
+--      rompería.
+--  (d) EL UUID EN MINÚSCULAS Y CON FORMA DE UUID (regla 0158, extendida): un
+--      folio en mayúsculas sería el MISMO comprobante entrando otra vez, y el
+--      unique no lo vería.
+--  (e) EL CRUCE NO PUEDE MENTIR: 'casado' EXIGE con qué gasto casó, y
+--      cualquier otro estatus NO puede traer gasto. Sin este CHECK, una fila
+--      podría afirmar un cruce inexistente — que es exactamente la cifra
+--      inventada que este producto no se permite.
+--  (f) UN SOLO TRÁMITE VIVO POR RANGO. El cron corre cada 6 h y el SAT tarda
+--      hasta 6 días: sin el índice parcial, cada corrida volvería a pedir el
+--      mismo rango y quemaría el tope diario del RFC contra el mismo periodo.
+--      Un rango YA CERRADO (descargada/error/expirada) sí se puede volver a
+--      pedir: un reintento deliberado es legítimo.
+--  (g) LA FK COMPUESTA: el comprobante de la flota A no puede casar con un
+--      gasto de la flota B.
+--  (h) EL CICLO DEL AVISO DE PEAJE (patrón 0202): el mismo (flota, mes,
+--      umbral) no avisa dos veces, pero un MES NUEVO sí — es la diferencia
+--      entre un reloj y un spam. Y el periodo tiene que ser el día 1: guardar
+--      el 15 le daría dos ciclos al mismo mes.
+--  (i) El doble candado (RLS deny-all + solo service_role) en las cuatro.
+do $$
+declare
+  ta uuid; tb uuid; ua uuid; oa uuid; va uuid; ga uuid; gb uuid;
+  sol_a uuid;
+  llave_no_cabe boolean; referencia_entra boolean;
+  folio_repetido_rebota boolean; otro_folio_entra boolean; otra_flota_entra boolean;
+  mayusculas_rebota boolean; no_uuid_rebota boolean;
+  casado_sin_gasto_rebota boolean; disponible_con_gasto_rebota boolean;
+  rango_vivo_repetido_rebota boolean; rango_cerrado_reentra boolean;
+  gasto_cruzado_rebota boolean;
+  aviso_repetido_rebota boolean; mes_nuevo_entra boolean; periodo_a_media_rebota boolean;
+  cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0231 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0231 B') returning id into tb;
+  insert into app_user (id, tenant_id, email, rol)
+    values (gen_random_uuid(), ta, 'zzz-verif-0231@likida.test', 'contador') returning id into ua;
+  insert into operador (tenant_id, nombre, telefono)
+    values (ta, 'ZZZ 0231', '+520000000230') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio) values (ta, oa, 'ZZZ-0231') returning id into va;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha)
+    values (ta, va, 'caseta', 300, current_date) returning id into ga;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha)
+    values (ta, va, 'diesel', 600, current_date) returning id into gb;
+
+  insert into sat_descarga_config (tenant_id, rfc) values (ta, 'EKU9003173C9');
+  insert into sat_descarga_config (tenant_id, rfc) values (tb, 'AAA010101AAA');
+
+  -- (a) LA PRUEBA MADRE: una llave privada no cabe donde va la referencia.
+  -- El valor de ataque se ARMA aquí en vez de escribirse literal: un blob con
+  -- prefijo de certificado real hace que los escáneres de secretos marquen
+  -- este archivo para siempre, y lo que el CHECK vigila es la FORMA (20
+  -- dígitos), no un prefijo concreto. Cualquier base64 largo lo demuestra
+  -- igual de bien.
+  begin
+    update sat_descarga_config
+      set certificado_numero = repeat('QUJDZGVmZ2hpams', 30) || '=='
+      where tenant_id = ta;
+    llave_no_cabe := false;
+  exception when check_violation then
+    llave_no_cabe := true;
+  end;
+  begin
+    update sat_descarga_config set certificado_numero = '30001000000500003282' where tenant_id = ta;
+    referencia_entra := true;
+  exception when others then
+    referencia_entra := false;
+  end;
+
+  insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado, request_id)
+    values (ta, 'recibidos', current_date - 30, current_date, 'en_proceso', 'req-0231-a')
+    returning id into sol_a;
+
+  -- (b) El sello de dedup.
+  insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, solicitud_id, total, fecha)
+    values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000230', sol_a, 300, current_date);
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, total)
+      values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000230', 300);
+    folio_repetido_rebota := false;
+  exception when unique_violation then
+    folio_repetido_rebota := true;
+  end;
+
+  -- (c) Pero otro folio sí, y la MISMA cadena en OTRA flota también.
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, total)
+      values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000231', 600);
+    otro_folio_entra := true;
+  exception when others then
+    otro_folio_entra := false;
+  end;
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, total)
+      values (tb, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000230', 300);
+    otra_flota_entra := true;
+  exception when others then
+    otra_flota_entra := false;
+  end;
+
+  -- (d) Minúsculas y forma de UUID.
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid)
+      values (ta, 'AAAAAAAA-BBBB-4CCC-8DDD-000000000232');
+    mayusculas_rebota := false;
+  exception when check_violation then
+    mayusculas_rebota := true;
+  end;
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid) values (ta, 'no-soy-un-uuid');
+    no_uuid_rebota := false;
+  exception when check_violation then
+    no_uuid_rebota := true;
+  end;
+
+  -- (e) El cruce no puede mentir, en los DOS sentidos.
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus)
+      values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000233', 'casado');
+    casado_sin_gasto_rebota := false;
+  exception when check_violation then
+    casado_sin_gasto_rebota := true;
+  end;
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus, gasto_id)
+      values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000234', 'disponible', ga);
+    disponible_con_gasto_rebota := false;
+  exception when check_violation then
+    disponible_con_gasto_rebota := true;
+  end;
+
+  -- (f) Un solo trámite vivo por rango; uno cerrado sí se vuelve a pedir.
+  -- 27-AGO-2026: el candado cambió de forma. La 0231 lo hacía con el índice
+  -- único parcial `uq_sat_solicitud_viva`, que sólo bloqueaba el PAR EXACTO de
+  -- fechas (c7-22: dos rangos distintos sobre los mismos días entraban los
+  -- dos); la 0236 lo sustituyó por la restricción de exclusión
+  -- `sat_solicitud_viva_sin_traslape`, que cubre el traslape de verdad. Lo que
+  -- este bloque afirma —el mismo rango no se pide dos veces mientras vive, y
+  -- uno cerrado sí— NO cambió; cambió el SQLSTATE con que la base lo dice
+  -- (23P01 en vez de 23505). Se aceptan los dos para que el bloque siga
+  -- probando la GARANTÍA y no el mecanismo. El traslape propiamente dicho lo
+  -- prueba el bloque 191.
+  begin
+    insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado)
+      values (ta, 'recibidos', current_date - 30, current_date, 'solicitada');
+    rango_vivo_repetido_rebota := false;
+  exception when unique_violation or exclusion_violation then
+    rango_vivo_repetido_rebota := true;
+  end;
+  update sat_descarga_solicitud set estado = 'descargada' where id = sol_a;
+  begin
+    insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado)
+      values (ta, 'recibidos', current_date - 30, current_date, 'solicitada');
+    rango_cerrado_reentra := true;
+  exception when unique_violation or exclusion_violation then
+    rango_cerrado_reentra := false;
+  end;
+
+  -- (g) La FK compuesta: el comprobante de B no casa con un gasto de A.
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus, gasto_id)
+      values (tb, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000235', 'casado', ga);
+    gasto_cruzado_rebota := false;
+  exception when foreign_key_violation then
+    gasto_cruzado_rebota := true;
+  end;
+
+  -- (h) El ciclo del aviso de peaje.
+  insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+    values (ta, date_trunc('month', current_date)::date, 7, 3);
+  begin
+    insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+      values (ta, date_trunc('month', current_date)::date, 7, 5);
+    aviso_repetido_rebota := false;
+  exception when unique_violation then
+    aviso_repetido_rebota := true;
+  end;
+  begin
+    insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+      values (ta, (date_trunc('month', current_date) + interval '1 month')::date, 7, 2);
+    mes_nuevo_entra := true;
+  exception when unique_violation then
+    mes_nuevo_entra := false;
+  end;
+  begin
+    insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+      values (ta, (date_trunc('month', current_date) + interval '14 days')::date, 7, 1);
+    periodo_a_media_rebota := false;
+  exception when check_violation then
+    periodo_a_media_rebota := true;
+  end;
+
+  -- (i) El doble candado, en las CUATRO tablas nuevas.
+  cerrado := not has_table_privilege('anon', 'public.sat_descarga_config', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.sat_descarga_config', 'SELECT')
+    and has_table_privilege('service_role', 'public.sat_descarga_config', 'SELECT')
+    and not has_table_privilege('anon', 'public.sat_descarga_solicitud', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.sat_descarga_solicitud', 'SELECT')
+    and not has_table_privilege('anon', 'public.sat_cfdi_descargado', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.sat_cfdi_descargado', 'SELECT')
+    and has_table_privilege('service_role', 'public.sat_cfdi_descargado', 'INSERT')
+    and not has_table_privilege('anon', 'public.peaje_cierre_aviso', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.peaje_cierre_aviso', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.sat_descarga_config'::regclass)
+    and (select relrowsecurity from pg_class where oid = 'public.sat_cfdi_descargado'::regclass);
+
+  raise exception 'DESCARGA_SAT_0231  llave_no_cabe=%  referencia_entra=%  folio_repetido_rebota=%  otro_folio_entra=%  otra_flota_entra=%  mayusculas_rebota=%  no_uuid_rebota=%  casado_sin_gasto_rebota=%  disponible_con_gasto_rebota=%  rango_vivo_repetido_rebota=%  rango_cerrado_reentra=%  gasto_cruzado_rebota=%  aviso_repetido_rebota=%  mes_nuevo_entra=%  periodo_a_media_rebota=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t)',
+    llave_no_cabe, referencia_entra, folio_repetido_rebota, otro_folio_entra,
+    otra_flota_entra, mayusculas_rebota, no_uuid_rebota, casado_sin_gasto_rebota,
+    disponible_con_gasto_rebota, rango_vivo_repetido_rebota, rango_cerrado_reentra,
+    gasto_cruzado_rebota, aviso_repetido_rebota, mes_nuevo_entra,
+    periodo_a_media_rebota, cerrado;
+end $$;
+
+-- ── 188. El permiso para reconectar sola: consentimiento firmado, candado con motivo, y ni una contraseña en claro (mig. 0233) ──
+-- Los bloques 183-187 los tomaron ramas paralelas de esta misma ola; esta toma
+-- el 188. Se escribió como 187 sobre el master de esa mañana y el rebase lo
+-- encontró ocupado por la 0231 (descarga masiva del SAT): renumerado al
+-- reencontrarse con master, que es el momento en que un número de bloque se
+-- puede afirmar de verdad.
+--
+-- Lo que SOLO la base puede demostrar del permiso de re-login automático:
+--
+--  (a) UN CONSENTIMIENTO SIN FIRMA NO ENTRA. `permitido = true` sin saber
+--      QUIÉN lo dio y CUÁNDO es un permiso que nadie dio, y es exactamente el
+--      dato que hay que poder enseñar un año después ("¿quién autorizó que
+--      guardáramos la contraseña de esta cuenta?"). `autorizarRelogin` lo
+--      comprueba también en TypeScript — pero comprobarlo en el escritor no
+--      sirve si la base admite la fila que llegue por cualquier otro camino.
+--  (b) Y CON FIRMA ENTRA: el candado condiciona, no prohíbe.
+--  (c) EL «NO» NO NECESITA FIRMA. `permitido = false` sin autor es el estado
+--      normal de todo portal, y es lo que significa no tener fila. Si el CHECK
+--      exigiera autor siempre, revocar sería imposible.
+--  (d) UN CANDADO SIN MOTIVO REBOTA. `bloqueado = true` sin `ultima_clase`
+--      sería un re-login detenido que nadie sabe cómo reabrir.
+--  (e) EL CATÁLOGO DE CORTES ES CERRADO. La pantalla enseña un texto distinto
+--      por clase; una clase inventada se pintaría como un hueco. Las nueve del
+--      catálogo entran, cualquier otra rebota.
+--  (f) NI UNA CONTRASEÑA NI UNA COOKIE. Igual que en la 0232: `ultimo_motivo`
+--      es una frase para una persona y esta columna la lee el panel EN CLARO.
+--      Un valor que empiece por `{` o `[` sería un volcado.
+--  (g) EL CONTADOR NO PUEDE IR AL REVÉS. Un `intentos_dia` negativo apagaría
+--      el freno antibloqueo — el que impide que Likida le queme los intentos
+--      a la cuenta del cliente. Mejor que reviente ruidoso.
+--  (h) UNA FILA POR (FLOTA, PORTAL): de eso depende el UPSERT del escritor.
+--  (i) Y LA MISMA CLAVE SÍ ENTRA PARA OTRA FLOTA: el candado es por tenant.
+--  (j) EL BORRADO DE LA FLOTA SE LLEVA SUS PERMISOS (cascade).
+--  (k) La llave `(id, tenant_id)` de la casa (0028/0145).
+--  (l) El doble candado: RLS deny-all + solo service_role. Esta tabla decide
+--      si una contraseña se descifra; que `anon` no la pueda ni leer es la
+--      diferencia entre un permiso y una sugerencia.
+do $$
+declare
+  ta uuid; tb uuid;
+  sin_firma_rebota boolean; con_firma_entra boolean; no_sin_firma_entra boolean;
+  bloqueo_sin_clase_rebota boolean; clase_inventada_rebota boolean;
+  clase_catalogo_entra boolean; motivo_json_rebota boolean;
+  intentos_negativos_rebotan boolean; duplicado_rebota boolean;
+  otra_flota_entra boolean; cascade_limpia boolean; llave_compuesta boolean;
+  cerrado boolean;
+  quedan integer;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0233 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0233 B') returning id into tb;
+
+  -- (a) Permiso sin autor ni fecha: no entra.
+  begin
+    insert into portal_relogin (tenant_id, comercio, permitido)
+      values (ta, 'g500', true);
+    sin_firma_rebota := false;
+  exception when check_violation then
+    sin_firma_rebota := true;
+  end;
+
+  -- (b) Con quién y cuándo, sí.
+  begin
+    insert into portal_relogin (tenant_id, comercio, permitido, permitido_por, permitido_en)
+      values (ta, 'g500', true, 'contralor@flota.mx', now());
+    con_firma_entra := true;
+  exception when others then
+    con_firma_entra := false;
+  end;
+
+  -- (c) El «no» no necesita firma: es el estado de todo portal sin autorizar.
+  begin
+    insert into portal_relogin (tenant_id, comercio, permitido)
+      values (ta, 'la_gas', false);
+    no_sin_firma_entra := true;
+  exception when others then
+    no_sin_firma_entra := false;
+  end;
+
+  -- (d) Un candado sin motivo: no entra.
+  begin
+    insert into portal_relogin (tenant_id, comercio, bloqueado)
+      values (ta, 'capufe', true);
+    bloqueo_sin_clase_rebota := false;
+  exception when check_violation then
+    bloqueo_sin_clase_rebota := true;
+  end;
+
+  -- (e) El catálogo cerrado de cortes.
+  begin
+    insert into portal_relogin (tenant_id, comercio, ultima_clase)
+      values (ta, 'capufe', 'resolvi_el_captcha');
+    clase_inventada_rebota := false;
+  exception when check_violation then
+    clase_inventada_rebota := true;
+  end;
+
+  begin
+    insert into portal_relogin (tenant_id, comercio, bloqueado, ultima_clase, ultimo_motivo)
+      values (ta, 'capufe', true, 'credencial_invalida',
+              'El portal rechazó el usuario o la contraseña guardados. NO se vuelve a intentar.');
+    clase_catalogo_entra := true;
+  exception when others then
+    clase_catalogo_entra := false;
+  end;
+
+  -- (f) Ni una cookie ni una contraseña: un JSON en `ultimo_motivo` rebota.
+  begin
+    insert into portal_relogin (tenant_id, comercio, ultima_clase, ultimo_motivo)
+      values (ta, 'megasur', 'captcha', '{"contrasena":"hunter2"}');
+    motivo_json_rebota := false;
+  exception when check_violation then
+    motivo_json_rebota := true;
+  end;
+
+  -- (g) El contador del freno no puede ir al revés.
+  begin
+    insert into portal_relogin (tenant_id, comercio, intentos_dia)
+      values (ta, 'megasur', -1);
+    intentos_negativos_rebotan := false;
+  exception when check_violation then
+    intentos_negativos_rebotan := true;
+  end;
+
+  -- (h) Una fila por (flota, portal): de eso depende el UPSERT.
+  begin
+    insert into portal_relogin (tenant_id, comercio) values (ta, 'la_gas');
+    duplicado_rebota := false;
+  exception when unique_violation then
+    duplicado_rebota := true;
+  end;
+
+  -- (i) Pero la misma clave para OTRA flota sí entra.
+  begin
+    insert into portal_relogin (tenant_id, comercio, permitido, permitido_por, permitido_en)
+      values (tb, 'la_gas', true, 'otro@flota.mx', now());
+    otra_flota_entra := true;
+  exception when others then
+    otra_flota_entra := false;
+  end;
+
+  -- (j) Borrar la flota se lleva sus permisos.
+  delete from tenant where id = tb;
+  select count(*) into quedan from portal_relogin where tenant_id = tb;
+  cascade_limpia := (quedan = 0);
+
+  -- (k) La llave que hace posibles las FK compuestas de la casa.
+  llave_compuesta := exists (
+    select 1 from pg_constraint
+    where conname = 'portal_relogin_id_tenant_key'
+      and conrelid = 'public.portal_relogin'::regclass
+      and contype = 'u'
+  );
+
+  -- (l) El doble candado.
+  cerrado := not has_table_privilege('anon', 'public.portal_relogin', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.portal_relogin', 'SELECT')
+    and has_table_privilege('service_role', 'public.portal_relogin', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.portal_relogin'::regclass);
+
+  raise exception 'PORTAL_RELOGIN_0233  sin_firma_rebota=%  con_firma_entra=%  no_sin_firma_entra=%  bloqueo_sin_clase_rebota=%  clase_inventada_rebota=%  clase_catalogo_entra=%  motivo_json_rebota=%  intentos_negativos_rebotan=%  duplicado_rebota=%  otra_flota_entra=%  cascade_limpia=%  llave_compuesta=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t / t)',
+    sin_firma_rebota, con_firma_entra, no_sin_firma_entra, bloqueo_sin_clase_rebota,
+    clase_inventada_rebota, clase_catalogo_entra, motivo_json_rebota,
+    intentos_negativos_rebotan, duplicado_rebota, otra_flota_entra,
+    cascade_limpia, llave_compuesta, cerrado;
+end $$;
+
+-- ── 189. Ingeniería: los 8 vivos con reloj y techo, las 49 palancas, el registro del despliegue y las cuatro lecturas del catálogo (mig. 0234) ──
+-- Los bloques 183-188 los tomaron las ramas paralelas de esta ola (183
+-- crecimiento, 186 el vínculo de portales, 187 la descarga masiva del SAT,
+-- 188 el re-login de portales); esta toma el 189.
+--
+-- Lo que SOLO la base puede demostrar de la 0234:
+--
+--  (a) LOS OCHO PASAN LOS CANDADOS 2 Y 3 DEL RUNNER. `estado='vivo'` +
+--      `runner_habilitado` + `disparador='cron'` + techo declarado > 0 no es
+--      cosmética: la consulta del runner filtra por los tres primeros y el
+--      candado 3 salta a quien no tenga techo. Si esto no sale 8, hay agentes
+--      que el PR dice que encendió y que el cron nunca despacha. `releases`
+--      es el caso a vigilar: venía con disparador 'manual' desde la 0125.
+--  (b) EL MODELO SE DECLARA CON LA VERDAD DEL MOTOR. Los OCHO son
+--      deterministas y su `modelo_rol` es NULL (convención 0125 = no usa
+--      modelo de texto). La 0125 les había puesto 'codigo'/'analisis'
+--      pensando en agentes que leerían fuentes; el motor construido no llama
+--      a ningún modelo, y dejar el rol haría que /admin/consumo esperara un
+--      costo que nunca llega.
+--  (c) LAS 49 PALANCAS. Las 8 nuevas entran, y —la trampa que la 0227
+--      corrigió y que se repite en cada ola— las 41 ANTERIORES siguen en el
+--      dominio: si esta migración hubiera enumerado solo las suyas, apagar a
+--      `alianzas` o a `redactor` rebotaría con check_violation el día del
+--      incidente, que es el peor día para descubrirlo.
+--  (d) Una palanca inventada rebota: el dominio es cerrado.
+--  (e) UN PARTE POR PERIODO para los ocho, y el índice sigue siendo PARCIAL
+--      (el Redactor sí puede repetir título: dos prospectos comparten asunto).
+--  (f) `despliegue_visto` no admite un SHA que no lo sea, ni un reloj al
+--      revés, ni cero vistas — y lleva el doble candado (RLS + solo
+--      service_role).
+--  (g) LAS CUATRO LECTURAS ESTÁN CERRADAS: revocadas de anon y authenticated,
+--      concedidas solo a service_role, y las dos SECURITY DEFINER traen
+--      `search_path` fijo (sin él, una DEFINER resuelve nombres con el
+--      search_path de quien la llama).
+--  (h) `migraciones_aplicadas()` DEGRADA DICIENDO. En esta base de CI no
+--      existe `supabase_migrations`, así que tiene que contestar
+--      disponible=false CON MOTIVO — jamás una lista vacía que el agente
+--      leería como «no hay migraciones aplicadas».
+--  (i) `contrato_de_esquema()` encuentra el CHECK del interruptor y ve el
+--      índice único nuevo: es lo que el auditor de código compara contra la
+--      constante INTERRUPTORES del bundle.
+do $$
+declare
+  vivos_con_reloj_y_techo int;
+  con_modelo int; sin_modelo int;
+  palancas_nuevas int; palancas_previas int;
+  palanca_inventada_rebota boolean;
+  parte_repetido_rebota boolean; redactor_repite boolean;
+  sha_falso_rebota boolean; reloj_al_reves_rebota boolean; cero_vistas_rebota boolean;
+  despliegue_cerrado boolean;
+  funciones_cerradas int; definer_con_search_path int;
+  migraciones_degrada boolean;
+  check_visto boolean; indice_visto boolean;
+begin
+  -- (a) y (b) — el catálogo, tal como el runner lo consulta.
+  select count(*) into vivos_con_reloj_y_techo from agente_definicion
+    where id in ('migraciones','seguridad','rendimiento','pruebas',
+                 'auditor_codigo','releases','producto','datos_instrumentacion')
+      and estado = 'vivo' and runner_habilitado and disparador = 'cron'
+      and presupuesto_dia_usd is not null and presupuesto_dia_usd > 0;
+
+  select count(*) into con_modelo from agente_definicion
+    where departamento = 'ingenieria' and modelo_rol is not null;
+  select count(*) into sin_modelo from agente_definicion
+    where departamento = 'ingenieria' and modelo_rol is null;
+
+  -- (c) Las 8 nuevas…
+  palancas_nuevas := 0;
+  begin
+    insert into interruptor (id, apagado) values
+      ('agente:migraciones', false), ('agente:seguridad', false),
+      ('agente:rendimiento', false), ('agente:pruebas', false),
+      ('agente:auditor_codigo', false), ('agente:releases', false),
+      ('agente:producto', false), ('agente:datos_instrumentacion', false);
+    palancas_nuevas := 8;
+  exception when check_violation then
+    palancas_nuevas := -1;
+  end;
+  -- …y una muestra de las de CADA ola anterior, que es donde vive la trampa.
+  palancas_previas := 0;
+  begin
+    insert into interruptor (id, apagado) values
+      ('global', false), ('agente:redactor', false),
+      ('agente:tesoreria', false), ('agente:orquestador', false),
+      ('agente:enviador', false), ('agente:atencion_faq', false),
+      ('agente:talento', false), ('agente:alianzas', false),
+      ('agente:descarga_sat', false);
+    palancas_previas := 9;
+  exception when check_violation then
+    palancas_previas := -1;
+  end;
+
+  -- (d) El dominio es cerrado.
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:inventado_0234', true, 'basura');
+    palanca_inventada_rebota := false;
+  exception when check_violation then
+    palanca_inventada_rebota := true;
+  end;
+
+  -- (e) Un parte por periodo.
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('parte_seguridad', 'normal', 'seguridad', 'Seguridad — semana del 2026-08-24', 'cuerpo');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('parte_seguridad', 'normal', 'seguridad', 'Seguridad — semana del 2026-08-24', 'otra corrida');
+    parte_repetido_rebota := false;
+  exception when unique_violation then
+    parte_repetido_rebota := true;
+  end;
+
+  -- (e bis) El índice es PARCIAL: el Redactor sí repite título.
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('correo_frio', 'normal', 'redactor', 'Tu liquidacion 0234', 'a');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('correo_frio', 'normal', 'redactor', 'Tu liquidacion 0234', 'b');
+    redactor_repite := true;
+  exception when unique_violation then
+    redactor_repite := false;
+  end;
+
+  -- (f) El registro del despliegue.
+  begin
+    insert into despliegue_visto (sha, entorno) values ('no-es-un-sha', 'production');
+    sha_falso_rebota := false;
+  exception when check_violation then
+    sha_falso_rebota := true;
+  end;
+  begin
+    insert into despliegue_visto (sha, entorno, primera_vista, ultima_vista)
+      values ('abc1234', 'production', now(), now() - interval '1 day');
+    reloj_al_reves_rebota := false;
+  exception when check_violation then
+    reloj_al_reves_rebota := true;
+  end;
+  begin
+    insert into despliegue_visto (sha, entorno, vistas) values ('def5678', 'production', 0);
+    cero_vistas_rebota := false;
+  exception when check_violation then
+    cero_vistas_rebota := true;
+  end;
+  despliegue_cerrado := not has_table_privilege('anon', 'public.despliegue_visto', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.despliegue_visto', 'SELECT')
+    and has_table_privilege('service_role', 'public.despliegue_visto', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.despliegue_visto'::regclass);
+
+  -- (g) Las cuatro lecturas, cerradas.
+  select count(*) into funciones_cerradas
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname in ('migraciones_aplicadas', 'postura_seguridad', 'perfil_almacenamiento', 'contrato_de_esquema')
+     and not has_function_privilege('anon', p.oid, 'EXECUTE')
+     and not has_function_privilege('authenticated', p.oid, 'EXECUTE')
+     and has_function_privilege('service_role', p.oid, 'EXECUTE');
+
+  select count(*) into definer_con_search_path
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname in ('migraciones_aplicadas', 'postura_seguridad', 'perfil_almacenamiento', 'contrato_de_esquema')
+     and p.prosecdef
+     and exists (select 1 from unnest(coalesce(p.proconfig, array[]::text[])) o where o like 'search_path=%');
+
+  -- (h) Degrada DICIENDO, no con una lista vacía.
+  migraciones_degrada := (
+    to_regclass('supabase_migrations.schema_migrations') is not null
+    or ((public.migraciones_aplicadas()->>'disponible')::boolean = false
+        and length(coalesce(public.migraciones_aplicadas()->>'motivo', '')) > 20));
+
+  -- (i) El contrato ve el CHECK y el índice nuevo.
+  check_visto := position('agente:datos_instrumentacion' in coalesce(public.contrato_de_esquema()->>'interruptor_check', '')) > 0;
+  indice_visto := public.contrato_de_esquema()->'indices_unicos_parciales_cola' ? 'cola_parte_ingenieria_por_periodo';
+
+  raise exception 'INGENIERIA_0234  vivos_con_reloj_y_techo=%  con_modelo=%  sin_modelo=%  palancas_nuevas=%  palancas_previas=%  palanca_inventada_rebota=%  parte_repetido_rebota=%  redactor_repite=%  sha_falso_rebota=%  reloj_al_reves_rebota=%  cero_vistas_rebota=%  despliegue_cerrado=%  funciones_cerradas=%  definer_con_search_path=%  migraciones_degrada=%  check_visto=%  indice_visto=%   (esperado 8 / 0 / 8 / 8 / 9 / t / t / t / t / t / t / t / 4 / 2 / t / t / t)',
+    vivos_con_reloj_y_techo, con_modelo, sin_modelo, palancas_nuevas, palancas_previas,
+    palanca_inventada_rebota, parte_repetido_rebota, redactor_repite,
+    sha_falso_rebota, reloj_al_reves_rebota, cero_vistas_rebota, despliegue_cerrado,
+    funciones_cerradas, definer_con_search_path, migraciones_degrada, check_visto, indice_visto;
+end $$;
+
+-- ── 190. Los nueve que cierran la compañía agente: 60/60 vivos, 58 palancas y una pieza por clave (mig. 0235) ──
+-- Los bloques 188 y 189 los tomaron el re-login de portales (0233) y los ocho
+-- de ingeniería (0234), las dos olas paralelas a ésta; aquí se toma el 190.
+--
+-- Lo que SOLO la base puede demostrar de la 0235:
+--
+--  (a) LOS NUEVE PASAN LOS CANDADOS 2 Y 3 DEL RUNNER. `estado='vivo'` +
+--      `runner_habilitado` + `disparador='cron'` + techo declarado > 0 no es
+--      cosmética: la consulta del runner filtra por los tres primeros y el
+--      candado 3 salta a quien no tenga techo. Si este valor no sale 9, hay
+--      agentes que el PR dice que encendió y que el cron nunca despacha.
+--  (b) EL MODELO SE DECLARA CON LA VERDAD DEL MOTOR. Los nueve motores
+--      construidos son deterministas, así que su `modelo_rol` tiene que ser
+--      NULL (convención 0125). Los nueve traían uno del BLUEPRINT y si alguno
+--      sobrevivió, el catálogo estaría contando un LLM que nadie llama.
+--  (c) DIRECCIÓN Y LEADS QUEDAN COMPLETOS: cero filas de esos dos
+--      departamentos fuera de 'vivo'. Es el hito que esta ola cierra, y es una
+--      afirmación que solo la base puede sostener. (Ingeniería sigue en
+--      'disenado' — la enciende otra ola, y por eso este conteo se acota a los
+--      dos departamentos de esta migración en vez de mirar el catálogo entero;
+--      con la 0234 ya dentro, ingeniería también quedó viva y el catálogo llega
+--      a 60/60, pero afirmarlo aquí ataría este bloque al de la otra ola.)
+--  (d) LAS 58 PALANCAS. Las 9 nuevas entran, y —la trampa que la 0227 corrigió
+--      y que se repite en cada ola— las 49 ANTERIORES siguen en el dominio: si
+--      esta migración hubiera enumerado solo las suyas, apagar a `talento`, a
+--      `redactor`, a `descarga_sat` o a `seguridad` rebotaría con
+--      check_violation el día del incidente, que es el peor día para
+--      descubrirlo. Las 8 de ingeniería se absorbieron EN EL REBASE: la 0234
+--      entró después de escribir esta migración y antes de mergearla, así que
+--      el conteo tuvo que rehacerse contra el dominio vigente.
+--  (e) Una palanca inventada rebota: el dominio es cerrado.
+--  (f) UNA PIEZA POR CLAVE, en los DOS índices nuevos (dirección y leads). El
+--      título es determinista por semana, por mes, por empresa o por
+--      expediente, y estos índices son el árbitro de la carrera entre dos
+--      pasadas del runner: la idempotencia es un constraint, no un `if` que
+--      dos procesos concurrentes se saltan.
+--  (g) LOS ÍNDICES SON PARCIALES. El Redactor SÍ puede repetir título: dos
+--      prospectos pueden compartir el asunto de un correo legítimamente, y un
+--      índice global rompería la campaña.
+--  (h) EL INVARIANTE DEL QUE VIVE `especialistas_incidente`: `hay_lesionados`
+--      admite NULL y NO tiene default. La 0198 lo dice con todas sus letras —
+--      NULL significa NO PREGUNTADO— y el agente cuelga de eso su decisión más
+--      delicada: sobre un NULL no propone avisarle a ninguna familia. Si algún
+--      día alguien le pusiera `default false`, el silencio del chofer se
+--      convertiría en un parte médico y este agente empezaría a callar.
+--  (i) EL INVARIANTE DEL QUE VIVE `propuestas`: `plan.precio_mensual` admite
+--      NULL. Si dejara de admitirlo, el «este borrador va sin precio» dejaría
+--      de tener sentido — y peor, alguien habría tenido que inventar un número
+--      para poder migrar.
+--  (j) EL INVARIANTE DEL QUE VIVE `dossier`: un contacto `inferido` no puede
+--      declararse de confianza `alta`. Es lo que le permite a la ficha rotular
+--      «NO VERIFICADO» sin tener que confiar en el criterio de quien capturó.
+do $$
+declare
+  ta uuid; oa uuid; pa uuid;
+  vivos_con_reloj_y_techo int;
+  con_modelo int; departamentos_incompletos int;
+  palancas_nuevas int; palancas_previas int;
+  palanca_inventada_rebota boolean;
+  pieza_direccion_repetida_rebota boolean; pieza_leads_repetida_rebota boolean;
+  redactor_repite boolean;
+  lesionados_nulo boolean;
+  plan_sin_precio_entra boolean;
+  inferido_alta_rebota boolean; inferido_baja_entra boolean;
+begin
+  -- (a) y (b) — el catálogo, tal como el runner lo consulta.
+  select count(*) into vivos_con_reloj_y_techo from agente_definicion
+    where id in ('automejora','especialistas_incidente','fundraising',
+                 'scorer','dossier','vigia','demo_prep','propuestas','cazador')
+      and estado = 'vivo' and runner_habilitado and disparador = 'cron'
+      and presupuesto_dia_usd is not null and presupuesto_dia_usd > 0;
+
+  select count(*) into con_modelo from agente_definicion
+    where id in ('automejora','especialistas_incidente','fundraising',
+                 'scorer','dossier','vigia','demo_prep','propuestas','cazador')
+      and modelo_rol is not null;
+
+  -- (c) Los dos departamentos de esta ola, completos.
+  select count(*) into departamentos_incompletos from agente_definicion
+    where departamento in ('direccion', 'leads') and estado <> 'vivo';
+
+  -- (d) Las 9 nuevas…
+  palancas_nuevas := 0;
+  begin
+    insert into interruptor (id, apagado) values
+      ('agente:automejora', false), ('agente:especialistas_incidente', false),
+      ('agente:fundraising', false), ('agente:scorer', false),
+      ('agente:dossier', false), ('agente:vigia', false),
+      ('agente:demo_prep', false), ('agente:propuestas', false),
+      ('agente:cazador', false);
+    palancas_nuevas := 9;
+  exception when check_violation then
+    palancas_nuevas := -1;
+  end;
+  -- …y una muestra de las de CADA ola anterior, que es donde vive la trampa.
+  palancas_previas := 0;
+  begin
+    insert into interruptor (id, apagado) values
+      ('global', false), ('agente:redactor', false),
+      ('agente:tesoreria', false), ('agente:orquestador', false),
+      ('agente:enviador', false), ('agente:atencion_faq', false),
+      ('agente:talento', false), ('agente:alianzas', false),
+      ('agente:descarga_sat', false), ('agente:seguridad', false);
+    palancas_previas := 10;
+  exception when check_violation then
+    palancas_previas := -1;
+  end;
+
+  -- (e) El dominio es cerrado.
+  begin
+    insert into interruptor (id, apagado, motivo) values ('agente:inventado_0235', true, 'basura');
+    palanca_inventada_rebota := false;
+  exception when check_violation then
+    palanca_inventada_rebota := true;
+  end;
+
+  -- (f) Una pieza por clave, en los dos índices.
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('parte_automejora', 'normal', 'automejora', 'Automejora - semana del 2026-08-17', 'cuerpo');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('parte_automejora', 'normal', 'automejora', 'Automejora - semana del 2026-08-17', 'otra corrida');
+    pieza_direccion_repetida_rebota := false;
+  exception when unique_violation then
+    pieza_direccion_repetida_rebota := true;
+  end;
+
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('vigilancia_leads', 'normal', 'vigia', 'Vigia de leads - 2026-08-27', 'cuerpo');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('vigilancia_leads', 'normal', 'vigia', 'Vigia de leads - 2026-08-27', 'otra corrida');
+    pieza_leads_repetida_rebota := false;
+  exception when unique_violation then
+    pieza_leads_repetida_rebota := true;
+  end;
+
+  -- (g) Los índices son PARCIALES: el Redactor sí repite título.
+  insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('correo_frio', 'normal', 'redactor', 'Tu cuadre de viajes', 'a');
+  begin
+    insert into cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('correo_frio', 'normal', 'redactor', 'Tu cuadre de viajes', 'b');
+    redactor_repite := true;
+  exception when unique_violation then
+    redactor_repite := false;
+  end;
+
+  -- (h) `hay_lesionados` sin preguntar sigue siendo NULL, no false.
+  insert into tenant (nombre) values ('ZZZ VERIF 0235') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono)
+    values (ta, 'ZZZ 0235', '+520000000235') returning id into oa;
+  insert into incidencia (tenant_id, operador_id, tipo, prioridad, estado)
+    values (ta, oa, 'siniestro', 'critica', 'abierta');
+  select hay_lesionados is null into lesionados_nulo from incidencia
+    where tenant_id = ta;
+
+  -- (i) Un plan sin precio declarado sigue cabiendo.
+  begin
+    insert into plan (clave, nombre, precio_mensual, orden)
+      values ('zzz_0235', 'ZZZ sin precio', null, 99);
+    plan_sin_precio_entra := true;
+  exception when others then
+    plan_sin_precio_entra := false;
+  end;
+
+  -- (j) Un contacto INFERIDO no puede declararse de confianza alta.
+  insert into prospecto (empresa) values ('ZZZ VERIF 0235 SA') returning id into pa;
+  begin
+    insert into prospecto_persona (prospecto_id, nombre, origen, confianza)
+      values (pa, 'ZZZ Persona', 'inferido', 'alta');
+    inferido_alta_rebota := false;
+  exception when check_violation then
+    inferido_alta_rebota := true;
+  end;
+  begin
+    insert into prospecto_persona (prospecto_id, nombre, origen, confianza)
+      values (pa, 'ZZZ Persona', 'inferido', 'baja');
+    inferido_baja_entra := true;
+  exception when others then
+    inferido_baja_entra := false;
+  end;
+
+  raise exception 'AGENTES_0235  vivos_con_reloj_y_techo=%  con_modelo=%  departamentos_incompletos=%  palancas_nuevas=%  palancas_previas=%  palanca_inventada_rebota=%  pieza_direccion_repetida_rebota=%  pieza_leads_repetida_rebota=%  redactor_repite=%  lesionados_nulo=%  plan_sin_precio_entra=%  inferido_alta_rebota=%  inferido_baja_entra=%   (esperado 9 / 0 / 0 / 9 / 10 / t / t / t / t / t / t / t / t)',
+    vivos_con_reloj_y_techo, con_modelo, departamentos_incompletos,
+    palancas_nuevas, palancas_previas, palanca_inventada_rebota,
+    pieza_direccion_repetida_rebota, pieza_leads_repetida_rebota, redactor_repite,
+    lesionados_nulo, plan_sin_precio_entra, inferido_alta_rebota, inferido_baja_entra;
+end $$;
+
+-- ── 191. La descarga del SAT, corregida: borrar SÍ se puede, el traslape rebota y las cifras no se truncan (mig. 0236) ──
+-- El 189 lo tomó la ola de ingeniería (0234) y el 190 el de dirección+leads
+-- (0235), paralelas a ésta; aquí se toma el 191. Los números se confirmaron al
+-- rebasar contra master, que es el momento en que un número se puede afirmar.
+--
+-- Este bloque prueba lo que la auditoría adversarial del ciclo 7 encontró en la
+-- 0231 y que el bloque 187 NO podía ver, porque 187 verifica la feature tal
+-- como se creyó escrita: nunca BORRA nada, y un arreglo de FK que no se prueba
+-- borrando algo no está probado.
+--
+--  (a) c7-3 · BORRAR UN GASTO CON UN CFDI CASADO COLGANDO. La 0231 dejó
+--      `on delete set null` SIN lista de columnas sobre una FK compuesta
+--      `(gasto_id, tenant_id)` — y `tenant_id` es NOT NULL. Postgres intentaba
+--      anular también el tenant y el DELETE del gasto (o del viaje que lo
+--      cascadea, o de la flota entera) reventaba con un error de NOT NULL que
+--      no dice ni una palabra del origen real. Aquí se BORRA de verdad.
+--  (b) …Y EL COMPROBANTE SOBREVIVE, DEGRADADO Y DICIENDO POR QUÉ. No se
+--      cascadea: `sat_cfdi_descargado` es EL SELLO DE DEDUP de toda la
+--      feature, y borrarlo dejaría entrar el mismo folio fiscal otra vez. Pero
+--      tampoco puede seguir diciendo 'casado' sin gasto: eso rompería
+--      `casado_coherente`, que es el candado que impide afirmar un cruce que
+--      no existe. Queda 'disponible' con el motivo escrito.
+--  (c) LO MISMO AL BORRAR LA SOLICITUD, Y AL BORRAR LA FLOTA ENTERA
+--      (`delete from tenant`, que es el camino real de borrado de una flota en
+--      `src/lib/admin/qa-motor.ts`).
+--  (d) EL BARRIDO DEL CATÁLOGO, para que no vuelva a pasar sin que nadie lo
+--      note: NINGUNA FK compuesta de la base puede tener `on delete set null`
+--      sin lista de columnas cuando alguna de sus columnas referenciantes es
+--      NOT NULL. `confdelsetcols` (Postgres 15+) es exactamente esa lista;
+--      vacía significa "anula todas". Esperado: lista vacía. Una migración
+--      futura que copie el patrón aparece aquí con nombre y CI se pone rojo —
+--      que es lo que le faltó al bloque 112, que sólo mira FKs SIMPLES sin
+--      hermana compuesta y nunca miró `confdeltype`.
+--  (e) c7-2 · LA MEMORIA DEL AVANCE. `paquetes_bajados` existe y sólo admite
+--      un ARREGLO: sin ella, una solicitud de más de 3 paquetes re-descargaba
+--      los mismos 3 cada 6 h contra el buzón fiscal real, para siempre.
+--  (f) c7-22 · EL TRASLAPE, NO SÓLO EL PAR EXACTO. Dos rangos DISTINTOS sobre
+--      los mismos días eran dos trámites vivos y dos peticiones al SAT contra
+--      el mismo periodo. Un rango pegado pero sin traslape sí entra (si no,
+--      el calendario no podría avanzar), y un rango ya CERRADO se puede volver
+--      a pedir: un reintento deliberado sigue siendo legítimo.
+--  (g) c7-27 · LOS CONTEOS, CONTADOS EN LA BASE. La pantalla traía 20,000
+--      filas y contaba en JS: con más comprobantes que eso, las cuatro cifras
+--      salían falsas sin que nada lo dijera. Y la función está cerrada a
+--      anon/authenticated como todo lo demás de la feature.
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; va uuid; ga uuid; sol uuid; sol2 uuid;
+  set_null_compuestas text;
+  borrar_gasto_ok boolean; cfdi_sobrevive boolean; cfdi_degradado boolean; motivo_escrito boolean;
+  borrar_solicitud_ok boolean; cfdi_sin_solicitud boolean; borrar_flota_ok boolean;
+  paquetes_objeto_rebota boolean; paquetes_arreglo_entra boolean;
+  traslape_rebota boolean; pegado_entra boolean; cerrado_reentra boolean;
+  conteos_exactos boolean; conteos_cerrados boolean;
+begin
+  -- ── (d) El barrido, ANTES de tocar datos: es catálogo, no filas ──────────
+  select coalesce(string_agg(
+           con.conrelid::regclass::text || '.' || con.conname, ', ' order by con.conname), '—')
+    into set_null_compuestas
+    from pg_constraint con
+    join pg_class c on c.oid = con.conrelid
+    join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public'
+     and con.contype = 'f'
+     and con.confdeltype = 'n'                              -- ON DELETE SET NULL
+     and array_length(con.conkey, 1) > 1                    -- compuesta
+     and coalesce(array_length(con.confdelsetcols, 1), 0) = 0  -- sin lista: anula TODAS
+     and exists (
+       select 1 from pg_attribute a
+        where a.attrelid = con.conrelid
+          and a.attnum = any (con.conkey)
+          and a.attnotnull and not a.attisdropped);
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0236 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0236 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono)
+    values (ta, 'ZZZ 0236', '+520000000236') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio) values (ta, oa, 'ZZZ-0236') returning id into va;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha)
+    values (ta, va, 'caseta', 300, current_date) returning id into ga;
+  insert into sat_descarga_config (tenant_id, rfc) values (ta, 'EKU9003173C9');
+  insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado, request_id)
+    values (ta, 'recibidos', date '2026-08-01', date '2026-08-31', 'en_proceso', 'req-0236-a')
+    returning id into sol;
+
+  -- Un comprobante CASADO con ese gasto: el escenario del hallazgo.
+  insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, solicitud_id, gasto_id, estatus, total, fecha)
+    values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000236', sol, ga, 'casado', 300, current_date);
+  -- Dos más, para que los conteos de (g) tengan algo que contar.
+  insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, solicitud_id, estatus, total)
+    values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000237', sol, 'ambiguo', 100),
+           (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000238', sol, 'disponible', 200);
+
+  -- ── (g) Los conteos, antes de empezar a borrar ───────────────────────────
+  select descargados = 3 and casados = 1 and ambiguos = 1 and disponibles = 1 and ignorados = 0
+    into conteos_exactos
+    from public.sat_descarga_conteos(ta);
+  conteos_cerrados :=
+        not has_function_privilege('anon', 'public.sat_descarga_conteos(uuid)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.sat_descarga_conteos(uuid)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.sat_descarga_conteos(uuid)', 'EXECUTE');
+
+  -- ── (e) c7-2: la memoria del avance ──────────────────────────────────────
+  begin
+    update sat_descarga_solicitud set paquetes_bajados = '{"p1": true}'::jsonb where id = sol;
+    paquetes_objeto_rebota := false;
+  exception when check_violation then
+    paquetes_objeto_rebota := true;
+  end;
+  begin
+    update sat_descarga_solicitud set paquetes_bajados = '["p1","p2"]'::jsonb where id = sol;
+    paquetes_arreglo_entra := true;
+  exception when others then
+    paquetes_arreglo_entra := false;
+  end;
+
+  -- ── (f) c7-22: el traslape ───────────────────────────────────────────────
+  -- Rango DISTINTO (un día menos) que cubre los mismos días: el índice único
+  -- viejo lo dejaba pasar porque el PAR de fechas no era el mismo.
+  begin
+    insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado)
+      values (ta, 'recibidos', date '2026-08-01', date '2026-08-30', 'solicitada');
+    traslape_rebota := false;
+  exception when exclusion_violation then
+    traslape_rebota := true;
+  end;
+  -- Pegado pero SIN traslape: el calendario tiene que poder avanzar.
+  begin
+    insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado)
+      values (ta, 'recibidos', date '2026-09-01', date '2026-09-30', 'solicitada')
+      returning id into sol2;
+    pegado_entra := true;
+  exception when others then
+    pegado_entra := false;
+  end;
+  -- Y un rango CERRADO se puede volver a pedir.
+  update sat_descarga_solicitud set estado = 'descargada' where id = sol2;
+  begin
+    insert into sat_descarga_solicitud (tenant_id, tipo, desde, hasta, estado)
+      values (ta, 'recibidos', date '2026-09-10', date '2026-09-20', 'solicitada');
+    cerrado_reentra := true;
+  exception when others then
+    cerrado_reentra := false;
+  end;
+
+  -- ── (a)(b) c7-3: BORRAR EL GASTO. Lo que hasta la 0236 reventaba ─────────
+  begin
+    delete from gasto where id = ga;
+    borrar_gasto_ok := true;
+  exception when others then
+    borrar_gasto_ok := false;
+  end;
+  select count(*) = 1 into cfdi_sobrevive
+    from sat_cfdi_descargado where cfdi_uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000236';
+  select estatus = 'disponible' and gasto_id is null and tenant_id = ta
+    into cfdi_degradado
+    from sat_cfdi_descargado where cfdi_uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000236';
+  select candidatos ->> 'motivo' like '%se borró%' into motivo_escrito
+    from sat_cfdi_descargado where cfdi_uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000236';
+
+  -- ── (c) Borrar la solicitud, y después la flota entera ───────────────────
+  begin
+    delete from sat_descarga_solicitud where id = sol;
+    borrar_solicitud_ok := true;
+  exception when others then
+    borrar_solicitud_ok := false;
+  end;
+  select solicitud_id is null and tenant_id = ta into cfdi_sin_solicitud
+    from sat_cfdi_descargado where cfdi_uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000236';
+
+  begin
+    delete from tenant where id = ta;
+    borrar_flota_ok := true;
+  exception when others then
+    borrar_flota_ok := false;
+  end;
+
+  raise exception 'DESCARGA_SAT_0236  set-null-compuestas-sin-columna=%  borrar_gasto_ok=%  cfdi_sobrevive=%  cfdi_degradado=%  motivo_escrito=%  borrar_solicitud_ok=%  cfdi_sin_solicitud=%  borrar_flota_ok=%  paquetes_objeto_rebota=%  paquetes_arreglo_entra=%  traslape_rebota=%  pegado_entra=%  cerrado_reentra=%  conteos_exactos=%  conteos_cerrados=%   (esperado — / t / t / t / t / t / t / t / t / t / t / t / t / t / t)',
+    set_null_compuestas, borrar_gasto_ok, cfdi_sobrevive, cfdi_degradado, motivo_escrito,
+    borrar_solicitud_ok, cfdi_sin_solicitud, borrar_flota_ok,
+    paquetes_objeto_rebota, paquetes_arreglo_entra,
+    traslape_rebota, pegado_entra, cerrado_reentra, conteos_exactos, conteos_cerrados;
+end $$;
+
+-- ── 192. La corrección del portal de pago: el abono no se puede duplicar, el REP no se puede colgar de otra factura, y un CFDI cancelado no cobra (mig. 0237) ──
+-- Los bloques 189-191 los toman ramas paralelas de esta misma ola (ingeniería,
+-- dirección+leads y SAT); aquí se toma el 192.
+--
+-- Lo que SOLO la base puede demostrar, y que la auditoría del ciclo 7 encontró
+-- abierto:
+--
+--  (a) `c7-5` — CONCILIAR DOS VECES NO PUEDE CREAR DOS ABONOS. Es el hallazgo
+--      caro: dinero duplicado en la cartera de un cliente real. Se ataca como
+--      pasaba de verdad —la misma propuesta conciliada dos veces— y se exige
+--      que rebote LA BASE (`unique_violation` contra
+--      `pago_recibido_propuesta_unica`), no un `if` de TypeScript. Un `if`
+--      previo no se puede probar aquí, y ese es justamente el punto: lo que no
+--      es una restricción no es una garantía.
+--  (b) El pago TECLEADO a mano no compite por esa llave: `propuesta_id` es NULL
+--      y el índice es parcial, así que dos abonos manuales sobre la misma
+--      factura siguen entrando (los pagos parciales son la norma).
+--  (c) `c7-25` — un REP no se puede colgar del abono de OTRA factura. Con las
+--      FK de dos columnas de la 0228 esto pasaba: solo garantizaban la misma
+--      flota. Ahora la llave es de tres.
+--  (d) Lo mismo para la propuesta conciliada: su `pago_id` tiene que ser un
+--      abono de SU factura.
+--  (e) `c7-18` — la idempotencia de la bandeja es PARCIAL sobre las pendientes:
+--      dos pendientes idénticas chocan, pero una DESCARTADA ya no bloquea que
+--      el cliente vuelva a registrar su depósito (antes la página le contestaba
+--      «ya estaba registrado, no hace falta hacer nada más», que era falso). Y
+--      la llave es por FACTURA, no por liga: revocar el enlace y generar otro
+--      ya no deja entrar la misma referencia dos veces.
+--  (f) `c7-15` — existe un índice que EMPIEZA por `token_prefijo`, que es la
+--      columna por la que busca cada visita de la ruta pública.
+--  (g) `c7-7` — un abono contra una factura CANCELADA rebota en la propia RPC,
+--      y `factura_saldo` SIGUE reportando saldo sobre ella: eso último es la
+--      razón por la que la puerta tiene que estar además en la lectura pública
+--      (`vistaDelPortal` → `no_cobrable`, probado en
+--      `portal_pago_lectura.test.ts`). La vista no miente: calcula total menos
+--      pagos, que es lo suyo; quien no puede confiarse es la página.
+--  (h) La forma de las llaves nuevas: la FK compuesta a la propuesta anula SOLO
+--      su columna (`on delete set null (propuesta_id)`, patrón 0145 — `set
+--      null` a secas reventaría el DELETE contra un `tenant_id` NOT NULL), y la
+--      del REP es de tres columnas.
+do $$
+declare
+  ta uuid; ca uuid; fa uuid; fb uuid; fc uuid;
+  liga_a uuid; liga_b uuid; prop uuid; prop2 uuid;
+  pago_a uuid; pago_b uuid; res jsonb;
+  segundo_abono_rebota boolean := false;
+  abonos_de_la_propuesta int;
+  manuales_entran boolean := false;
+  rep_de_otra_factura_rebota boolean := false;
+  rep_correcto_entra boolean := false;
+  propuesta_con_pago_ajeno_rebota boolean := false;
+  pendiente_repetida_rebota boolean := false;
+  descartada_permite_reintento boolean := false;
+  llave_por_factura_no_por_liga boolean := false;
+  prefijo_indexado boolean;
+  abono_a_cancelada_rebota boolean := false;
+  saldo_de_cancelada_sigue boolean;
+  set_null_por_columna boolean;
+  fk_rep_tres_columnas boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0237') returning id into ta;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ cli 0237') returning id into ca;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, ca, 30000, 4800, 34800, 'emitida') returning id into fa;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, ca, 500, 80, 580, 'emitida') returning id into fb;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, ca, 1000, 160, 1160, 'emitida') returning id into fc;
+  insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+    values (ta, fa, repeat('a', 64), 'pgo_aaaa', now() + interval '90 days')
+    returning id into liga_a;
+
+  -- (a) EL HALLAZGO c7-5, tal como pasaba: dos pestañas del contralor sobre la
+  -- MISMA propuesta de $5,000 contra un saldo de $34,800. Ninguna es sobrepago,
+  -- así que el `for update` de la RPC no rechaza a ninguna: lo único que puede
+  -- impedir el segundo abono es la restricción.
+  insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+    values (ta, liga_a, fa, current_date, 5000, 'SPEI-8891') returning id into prop;
+  res := registrar_pago_tx(ta, fa, current_date, 5000, 'transferencia', 'SPEI-8891', prop);
+  pago_a := (res->>'pago_id')::uuid;
+  begin
+    perform registrar_pago_tx(ta, fa, current_date, 5000, 'transferencia', 'SPEI-8891', prop);
+    segundo_abono_rebota := false;
+  exception when unique_violation then
+    segundo_abono_rebota := true;
+  end;
+  select count(*) into abonos_de_la_propuesta from pago_recibido where propuesta_id = prop;
+
+  -- (b) El pago tecleado a mano NO nace de una propuesta y no compite: dos
+  -- abonos parciales idénticos sobre la misma factura siguen entrando.
+  begin
+    perform registrar_pago_tx(ta, fa, current_date, 1000, 'efectivo', null);
+    perform registrar_pago_tx(ta, fa, current_date, 1000, 'efectivo', null);
+    manuales_entran := true;
+  exception when others then
+    manuales_entran := false;
+  end;
+
+  -- (c) c7-25: el REP de la factura B colgado del abono de la factura A. Con la
+  -- FK de dos columnas de la 0228 esto entraba —ambos son de la misma flota— y
+  -- el portal del cliente enseñaba un importe que fue a otro papel.
+  begin
+    insert into rep_emitido (tenant_id, factura_id, pago_id, cfdi_uuid, fecha_pago, imp_pagado)
+      values (ta, fb, pago_a, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001', current_date, 5000);
+    rep_de_otra_factura_rebota := false;
+  exception when foreign_key_violation then
+    rep_de_otra_factura_rebota := true;
+  end;
+  begin
+    insert into rep_emitido (tenant_id, factura_id, pago_id, cfdi_uuid, fecha_pago, imp_pagado)
+      values (ta, fa, pago_a, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000002', current_date, 5000);
+    rep_correcto_entra := true;
+  exception when others then
+    rep_correcto_entra := false;
+  end;
+
+  -- (d) Y la propuesta conciliada tampoco puede apuntar al abono de otra
+  -- factura. Se arma la fila COMPLETA y coherente (estado + resuelta_en) para
+  -- que lo único que pueda rebotar sea la llave, no el CHECK de estados.
+  insert into pago_recibido (tenant_id, factura_id, monto) values (ta, fb, 100) returning id into pago_b;
+  begin
+    update portal_pago_propuesta
+       set estado = 'conciliada', pago_id = pago_b, resuelta_en = now()
+     where id = prop;
+    propuesta_con_pago_ajeno_rebota := false;
+  exception when foreign_key_violation then
+    propuesta_con_pago_ajeno_rebota := true;
+  end;
+  -- Con SU abono sí se sella.
+  update portal_pago_propuesta
+     set estado = 'conciliada', pago_id = pago_a, resuelta_en = now()
+   where id = prop;
+
+  -- (e) c7-18: dos PENDIENTES idénticas chocan…
+  insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+    values (ta, liga_a, fa, current_date, 700, 'REF-PARCIAL') returning id into prop2;
+  begin
+    insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+      values (ta, liga_a, fa, current_date, 700, 'ref-parcial');
+    pendiente_repetida_rebota := false;
+  exception when unique_violation then
+    pendiente_repetida_rebota := true;
+  end;
+
+  -- … pero una DESCARTADA ya no bloquea. El contralor descarta, el cliente
+  -- revisa su banco, ve que sí pagó y vuelve a registrar: eso tiene que poder
+  -- volver a la bandeja, no recibir un «ya estaba registrado» que era mentira.
+  update portal_pago_propuesta set estado = 'descartada', resuelta_en = now(), nota = 'no aparece en el estado de cuenta'
+   where id = prop2;
+  begin
+    insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+      values (ta, liga_a, fa, current_date, 700, 'REF-PARCIAL');
+    descartada_permite_reintento := true;
+  exception when unique_violation then
+    descartada_permite_reintento := false;
+  end;
+
+  -- Y la llave es por FACTURA, no por liga: se revoca el enlace, se genera otro
+  -- —el flujo normal cuando el link se pierde— y la misma referencia sigue sin
+  -- poder entrar dos veces.
+  update portal_pago_liga set revocada_en = now() where id = liga_a;
+  insert into portal_pago_liga (tenant_id, factura_id, token_hash, token_prefijo, expira_en)
+    values (ta, fa, repeat('b', 64), 'pgo_bbbb', now() + interval '90 days')
+    returning id into liga_b;
+  begin
+    insert into portal_pago_propuesta (tenant_id, liga_id, factura_id, fecha, monto, referencia)
+      values (ta, liga_b, fa, current_date, 700, 'REF-PARCIAL');
+    llave_por_factura_no_por_liga := false;
+  exception when unique_violation then
+    llave_por_factura_no_por_liga := true;
+  end;
+
+  -- (f) c7-15: la ruta pública busca por prefijo en cada visita.
+  prefijo_indexado := exists (
+    select 1 from pg_indexes
+    where schemaname = 'public' and tablename = 'portal_pago_liga'
+      and indexdef like '%(token_prefijo%'
+  );
+
+  -- (g) c7-7: la base rechaza el abono contra una cancelada…
+  update factura_emitida set estatus = 'cancelada' where id = fc;
+  begin
+    perform registrar_pago_tx(ta, fc, current_date, 100, 'transferencia', 'X');
+    abono_a_cancelada_rebota := false;
+  exception when others then
+    abono_a_cancelada_rebota := (sqlerrm like '%cancelada%');
+  end;
+  -- … y AUN ASÍ la vista sigue diciendo que esa factura debe $1,160.00. No es
+  -- un defecto de la vista —calcula total menos pagos, que es lo suyo—: es la
+  -- prueba de que la página pública no puede fiarse del saldo para decidir si
+  -- cobra, y de ahí el `no_cobrable` de `vistaDelPortal`.
+  select coalesce((select saldo from factura_saldo where factura_id = fc), -1) = 1160
+    into saldo_de_cancelada_sigue;
+
+  -- (h) La forma de las llaves nuevas.
+  select exists (
+    select 1 from pg_constraint
+    where conname = 'pago_recibido_propuesta_tenant_fkey'
+      and conrelid = 'public.pago_recibido'::regclass
+      and confdeltype = 'n'
+      and array_length(confdelsetcols, 1) = 1
+  ) into set_null_por_columna;
+  select exists (
+    select 1 from pg_constraint
+    where conname = 'rep_emitido_pago_factura_tenant_fkey'
+      and conrelid = 'public.rep_emitido'::regclass
+      and array_length(conkey, 1) = 3
+  ) into fk_rep_tres_columnas;
+
+  raise exception 'PORTAL_PAGO_0237  segundo_abono_rebota=%  abonos_de_la_propuesta=%  manuales_entran=%  rep_de_otra_factura_rebota=%  rep_correcto_entra=%  propuesta_con_pago_ajeno_rebota=%  pendiente_repetida_rebota=%  descartada_permite_reintento=%  llave_por_factura_no_por_liga=%  prefijo_indexado=%  abono_a_cancelada_rebota=%  saldo_de_cancelada_sigue=%  set_null_por_columna=%  fk_rep_tres_columnas=%   (esperado t / 1 / t / t / t / t / t / t / t / t / t / t / t / t)',
+    segundo_abono_rebota, abonos_de_la_propuesta, manuales_entran,
+    rep_de_otra_factura_rebota, rep_correcto_entra, propuesta_con_pago_ajeno_rebota,
+    pendiente_repetida_rebota, descartada_permite_reintento, llave_por_factura_no_por_liga,
+    prefijo_indexado, abono_a_cancelada_rebota, saldo_de_cancelada_sigue,
+    set_null_por_columna, fk_rep_tres_columnas;
+end $$;
+
+-- ── 193. La correctiva del ciclo 7: el top de plazas contado ENTERO y el sello de peaje como reserva (mig. 0238) ──
+-- Los bloques 189-192 los toman las otras ramas de esta ola (ingeniería,
+-- dirección+leads, SAT y portal de pago); ésta toma el 193.
+--
+-- Lo que SOLO la base puede demostrar de la 0238:
+--
+--  (a) EL TOP-5 ES EL TOP-5. Es el hallazgo c7-4 escrito como prueba: se
+--      siembran ~1,000 prospectos donde la plaza REALMENTE más grande —Nuevo
+--      Laredo— se inserta AL FINAL, así que una lectura truncada por orden
+--      físico se la pierde. Eso es exactamente lo que pasaba: el motor traía
+--      5,000 de 33,071 filas sin `order` y Nuevo Laredo, Manzanillo y Puebla
+--      desaparecían del parte que Javier le enseña a un gremio, mientras
+--      entraban tres plazas que no eran del top. La función cuenta EN LA BASE,
+--      así que el orden de inserción no puede cambiar el resultado — y un
+--      `.order()` del lado del cliente no habría arreglado nada: ordenar una
+--      muestra sesgada da una muestra sesgada ordenada.
+--  (b) EL CRITERIO DE «VIVO» ES EL DEL PARTE. Un duplicado (`duplicado_de`
+--      puesto) y un `perdido` NO cuentan — contarlos inflaría el censo que el
+--      parte afirma, y aquí los dos son de una plaza que si contara ganaría.
+--  (c) LOS SIN CIUDAD SE DICEN, NO SE REPARTEN. Un prospecto sin ciudad (NULL
+--      o cadena de puros espacios) no vive en ninguna plaza; sumarlo a la más
+--      grande sería inventar dónde está.
+--  (d) EL EMPATE ES DETERMINISTA (por nombre de ciudad, ascendente): dos
+--      corridas sobre el mismo censo tienen que producir el MISMO parte, o el
+--      «material del acercamiento» cambiaría de orden sin que nada cambiara.
+--  (e) `p_top` RECORTA DE VERDAD, y un `p_top` absurdo (0 o NULL) ni revienta
+--      ni devuelve el censo entero por accidente.
+--  (f) EL DOBLE CANDADO DE LA FUNCIÓN: ni `anon` ni `authenticated` la pueden
+--      ejecutar, y `service_role` sí. Lee el pipeline comercial de Likida
+--      ENTERO, sin filtro de flota: una sesión de navegador no tiene por qué
+--      poder contarlo.
+--  (g) EL SELLO DEL AVISO DE PEAJE ES UNA RESTRICCIÓN, NO UN `if` (c7-17). La
+--      PK `(tenant_id, periodo, umbral)` rebota la segunda reserva: es lo que
+--      hace que de dos invocaciones solapadas del cron solo UNA mande el
+--      WhatsApp. Antes se preguntaba, se mandaba y se sellaba al final, y el
+--      mensaje duplicado ya estaba en el teléfono cuando el 23505 llegaba.
+--  (h) Y SOLTAR LA RESERVA LA DEJA LIBRE: borrar la fila permite volver a
+--      reservar el MISMO (flota, mes, umbral). Sin esto, un envío fallido
+--      enterraría el aviso del mes — y el umbral es un día exacto que no
+--      vuelve, porque PASE extingue el derecho a facturar el último día del
+--      mes en curso.
+--  (i) DOS UMBRALES DEL MISMO MES SON DOS AVISOS LEGÍTIMOS (el de «faltan 7» y
+--      el de «hoy vence»): el segundo entra, no rebota.
+do $$
+declare
+  mapa jsonb;
+  top1 text; top1_n bigint; top2 text; empate_1 text; empate_2 text;
+  total bigint; sin_ciudad bigint; cuantas_plazas int;
+  top_cero int; top_nulo int;
+  cerrado boolean;
+  ta uuid; original uuid;
+  reserva_repetida_rebota boolean; reserva_tras_soltar_entra boolean;
+  otro_umbral_entra boolean;
+  i int;
+begin
+  -- Tijuana va PRIMERO y con menos; Nuevo Laredo va al FINAL y con más.
+  for i in 1..300 loop
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 tij ' || i, 'Tijuana');
+  end loop;
+  for i in 1..100 loop
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 gdl ' || i, 'Guadalajara');
+  end loop;
+  -- (c) Sin ciudad: NULL y cadena de puros espacios. Ninguno vive en una plaza.
+  for i in 1..50 loop
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 nada ' || i, null);
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 blanco ' || i, '   ');
+  end loop;
+  -- (d) Empate exacto entre dos plazas: el desempate tiene que ser por nombre.
+  for i in 1..7 loop
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 emp_b ' || i, 'Bbb');
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 emp_a ' || i, 'Aaa');
+  end loop;
+  -- (b) Perdidos y duplicados de una plaza que, si contaran, ganaría.
+  for i in 1..400 loop
+    insert into prospecto (empresa, ciudad, estado) values ('ZZZ VERIF 0238 perd ' || i, 'Monterrey', 'perdido');
+  end loop;
+  insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 mty original', 'Monterrey')
+    returning id into original;
+  for i in 1..400 loop
+    insert into prospecto (empresa, ciudad, duplicado_de) values ('ZZZ VERIF 0238 dup ' || i, 'Monterrey', original);
+  end loop;
+  -- El último en entrar, y el más grande de verdad. Con espacios de sobra: la
+  -- misma plaza escrita con holgura no puede volverse otra plaza.
+  for i in 1..500 loop
+    insert into prospecto (empresa, ciudad) values ('ZZZ VERIF 0238 nvl ' || i, ' Nuevo Laredo ');
+  end loop;
+
+  mapa := public.prospecto_mapa_ciudades(5);
+  top1       := mapa -> 'top' -> 0 ->> 'ciudad';
+  top1_n     := (mapa -> 'top' -> 0 ->> 'n')::bigint;
+  top2       := mapa -> 'top' -> 1 ->> 'ciudad';
+  total      := (mapa ->> 'total')::bigint;
+  sin_ciudad := (mapa ->> 'sin_ciudad')::bigint;
+  cuantas_plazas := jsonb_array_length(mapa -> 'top');
+
+  -- (d) El empate, mirado sobre el top completo: Aaa antes que Bbb.
+  mapa := public.prospecto_mapa_ciudades(50);
+  select c ->> 'ciudad' into empate_1
+    from jsonb_array_elements(mapa -> 'top') with ordinality t(c, orden)
+    where c ->> 'ciudad' in ('Aaa', 'Bbb') order by orden limit 1;
+  select c ->> 'ciudad' into empate_2
+    from jsonb_array_elements(mapa -> 'top') with ordinality t(c, orden)
+    where c ->> 'ciudad' in ('Aaa', 'Bbb') order by orden offset 1 limit 1;
+
+  -- (e) Un tope absurdo no revienta ni devuelve el censo entero.
+  top_cero := jsonb_array_length(public.prospecto_mapa_ciudades(0) -> 'top');
+  top_nulo := jsonb_array_length(public.prospecto_mapa_ciudades(null) -> 'top');
+
+  -- (f) El doble candado de la función.
+  cerrado := not has_function_privilege('anon', 'public.prospecto_mapa_ciudades(integer)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.prospecto_mapa_ciudades(integer)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.prospecto_mapa_ciudades(integer)', 'EXECUTE');
+
+  -- (g) La reserva del sello: la PK arbitra la carrera.
+  insert into tenant (nombre) values ('ZZZ VERIF 0238') returning id into ta;
+  insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+    values (ta, date '2026-09-01', 7, 12);
+  begin
+    insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+      values (ta, date '2026-09-01', 7, 12);
+    reserva_repetida_rebota := false;
+  exception when unique_violation then
+    reserva_repetida_rebota := true;
+  end;
+
+  -- (h) Soltarla la deja libre para el reintento de la corrida siguiente.
+  delete from peaje_cierre_aviso where tenant_id = ta and periodo = date '2026-09-01' and umbral = 7;
+  begin
+    insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+      values (ta, date '2026-09-01', 7, 12);
+    reserva_tras_soltar_entra := true;
+  exception when others then
+    reserva_tras_soltar_entra := false;
+  end;
+
+  -- (i) El otro umbral del mismo mes es otro aviso, y entra.
+  begin
+    insert into peaje_cierre_aviso (tenant_id, periodo, umbral, gastos)
+      values (ta, date '2026-09-01', 0, 12);
+    otro_umbral_entra := true;
+  exception when others then
+    otro_umbral_entra := false;
+  end;
+
+  raise exception 'CORRECTIVA_0238  top1=%  top1_n=%  top2=%  total=%  sin_ciudad=%  plazas=%  empate_1=%  empate_2=%  top_cero=%  top_nulo=%  cerrado=%  reserva_repetida_rebota=%  reserva_tras_soltar_entra=%  otro_umbral_entra=%   (esperado Nuevo Laredo / 500 / Tijuana / 1015 / 100 / 5 / Aaa / Bbb / 0 / 5 / t / t / t / t)',
+    top1, top1_n, top2, total, sin_ciudad, cuantas_plazas, empate_1, empate_2,
+    top_cero, top_nulo, cerrado,
+    reserva_repetida_rebota, reserva_tras_soltar_entra, otro_umbral_entra;
+end $$;
+
+-- ── 195. Los portales declarativos y su renglón en `portal_estado` (mig. 0232, sin migración nueva) ──
+-- Los bloques 189-194 los tomaron las ramas paralelas de esta ola; esta toma
+-- el 195. NO trae migración propia: la Fase A de portales es código —el motor
+-- declarativo de `adaptadores/guion.ts` y las tablas de selectores de
+-- `adaptadores/portales.ts`—, y el sitio donde ese motor DICE por qué un
+-- portal no avanzó ya existe: `portal_estado`, de la 0232.
+--
+-- Precisamente por eso hace falta este bloque. La 0232 se escribió cuando el
+-- único portal automatizado era CAPUFE y el único escritor era la vinculación
+-- asistida. Ahora escriben cuatro portales más y un motor que produce mensajes
+-- MUCHO más largos (el de captcha, el de «el portal cambió su HTML» con los
+-- selectores dentro). Lo que se verifica es que los candados de la 0232 sigan
+-- siendo verdad CONTRA ESOS MENSAJES, y no contra los de hace tres semanas:
+--
+--  (a) LAS CUATRO CLAVES NUEVAS CABEN. `portal_estado.comercio` es texto
+--      acotado a 64 y no vacío, a propósito (el catálogo vive en TypeScript y
+--      un enum obligaría a una migración por gasolinera). Se comprueba que
+--      'office_depot', 'controlnet', 'enerser' y 'autozone' entran.
+--  (b) Y CONVIVEN CON CAPUFE EN LA MISMA FLOTA. `portal_estado_unico` es por
+--      (tenant, comercio): cinco portales de una flota son cinco renglones,
+--      no cinco flotas peleándose uno.
+--  (c) EL MOTIVO DEL MOTOR ENTRA TAL CUAL. El mensaje de «el portal cambió su
+--      HTML» lleva DENTRO los selectores que faltaron —«`#folio` ni
+--      `input[name="folio"]`»— con backticks, comillas y corchetes de
+--      atributo. Que un mensaje así entre no es obvio: el CHECK
+--      `portal_estado_motivo_sin_json` rebota lo que EMPIECE por `{` o `[`, y
+--      un selector de atributo empieza por `[`. Si el motor llegara a escribir
+--      un motivo que arranque con el selector, la anotación se perdería EN
+--      SILENCIO (`anotarVinculo` es best-effort y no lanza) y el contralor
+--      vería «caducada» sin motivo. Aquí se fija que el mensaje real entra Y
+--      que uno que empieza por `[` NO.
+--  (d) UNA BOLSA DE COOKIES SIGUE REBOTANDO. Es el candado de la 0232 y no se
+--      relaja porque haya más escritores: esta columna la lee el panel sin
+--      descifrar nada.
+--  (e) EL MENSAJE DE CAPTCHA NO CABE EN 400, Y POR ESO `anotarVinculo`
+--      RECORTA. Se demuestra las dos mitades: el texto entero rebota contra
+--      `portal_estado_motivo_acotado`, y recortado a 400 —lo que hace el
+--      escritor— entra. Sin esta prueba, alguien que suba el mensaje de
+--      captcha rompería la anotación de todos los portales a la vez.
+--  (f) LOS DOS CANDADOS DE FECHA siguen puestos con las claves nuevas:
+--      'vinculado' sin `vinculada_en` y 'caducada' sin `caducada_en` rebotan.
+--      Una píldora sin fecha no se puede pintar.
+--  (g) EL AISLAMIENTO POR FLOTA. El mismo portal, dos flotas, dos renglones.
+--  (h) El doble candado de la casa: RLS deny-all + solo service_role.
+do $$
+declare
+  ta uuid; tb uuid;
+  claves text[] := array['office_depot', 'controlnet', 'enerser', 'autozone'];
+  c text;
+  cuatro_entran boolean := true;
+  conviven integer;
+  motivo_del_motor boolean; motivo_que_empieza_corchete_rebota boolean;
+  cookies_rebotan boolean;
+  captcha_entero_rebota boolean; captcha_recortado_entra boolean;
+  vinculado_sin_fecha_rebota boolean; caducada_sin_fecha_rebota boolean;
+  otra_flota_entra boolean;
+  cerrado boolean;
+  -- El mensaje LITERAL que produce `guion.ts` cuando el pre-vuelo encuentra
+  -- selectores idos. Se escribe entero y no resumido: la mitad del valor de
+  -- este bloque es que el texto de verdad entre, no uno parecido.
+  msg_cambio text := 'https://facturacion.officedepot.com.mx/ ya no tiene estos selectores: el campo "Monto" -> `input[formcontrolname="monto"]` ni `input[name*="monto" i]`. Hay que actualizar el mapeo de "office_depot". La sesion sigue viva: esto NO se arregla volviendo a entrar, lo corrige Likida rehaciendo la tabla del guion.';
+  -- Y el de captcha, que es el largo. `mensajeCaptcha` en `pasos.ts`.
+  msg_captcha text := 'https://facturacion.officedepot.com.mx/ pidio CAPTCHA al abrir el formulario (selector `.g-recaptcha`): hay que facturarlo a mano. No se intento resolverlo - rodear un CAPTCHA es operar contra los terminos del portal y la cuenta que se bloquea es la del CLIENTE, no la de Likida. Esto NO es "no pude", es "no se puede": reintentar no va a cambiar nada, tiene que entrar una persona. Se le deja la pantalla con todo lo leido del ticket para que solo teclee lo que falta.';
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 195 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 195 B') returning id into tb;
+
+  -- (a) Las cuatro claves nuevas entran.
+  foreach c in array claves loop
+    begin
+      insert into portal_estado (tenant_id, comercio, estado, vinculada_en)
+        values (ta, c, 'vinculado', now());
+    exception when others then
+      cuatro_entran := false;
+    end;
+  end loop;
+
+  -- (b) Y conviven con CAPUFE en la MISMA flota: cinco renglones, no uno.
+  insert into portal_estado (tenant_id, comercio, estado, vinculada_en)
+    values (ta, 'capufe', 'vinculado', now());
+  select count(*) into conviven from portal_estado where tenant_id = ta;
+
+  -- (c) El motivo que escribe el motor cuando el portal cambió, tal cual.
+  begin
+    update portal_estado
+      set estado = 'caducada', caducada_en = now(), motivo = left(msg_cambio, 400)
+      where tenant_id = ta and comercio = 'office_depot';
+    motivo_del_motor := true;
+  exception when others then
+    motivo_del_motor := false;
+  end;
+
+  -- … pero uno que EMPIEZA por un selector de atributo rebota. Es la trampa:
+  -- `[` es lo que el CHECK usa para cazar un volcado JSON.
+  begin
+    update portal_estado
+      set motivo = '[data-sitekey] aparecio en la pagina'
+      where tenant_id = ta and comercio = 'controlnet';
+    motivo_que_empieza_corchete_rebota := false;
+  exception when check_violation then
+    motivo_que_empieza_corchete_rebota := true;
+  end;
+
+  -- (d) Una bolsa de cookies sigue sin poder entrar.
+  begin
+    update portal_estado
+      set motivo = '{"cookies":[{"name":"SESSION","value":"abc"}]}'
+      where tenant_id = ta and comercio = 'enerser';
+    cookies_rebotan := false;
+  exception when check_violation then
+    cookies_rebotan := true;
+  end;
+
+  -- (e) El mensaje de captcha ENTERO no cabe; recortado a 400 sí. Las dos
+  -- mitades, porque juntas son las que justifican el `slice` del escritor.
+  begin
+    update portal_estado set motivo = msg_captcha
+      where tenant_id = ta and comercio = 'autozone';
+    captcha_entero_rebota := false;
+  exception when check_violation then
+    captcha_entero_rebota := true;
+  end;
+  begin
+    update portal_estado set motivo = left(msg_captcha, 400)
+      where tenant_id = ta and comercio = 'autozone';
+    captcha_recortado_entra := true;
+  exception when others then
+    captcha_recortado_entra := false;
+  end;
+
+  -- (f) Los dos candados de fecha, con una clave nueva.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado)
+      values (tb, 'office_depot', 'vinculado');
+    vinculado_sin_fecha_rebota := false;
+  exception when check_violation then
+    vinculado_sin_fecha_rebota := true;
+  end;
+  begin
+    insert into portal_estado (tenant_id, comercio, estado)
+      values (tb, 'controlnet', 'caducada');
+    caducada_sin_fecha_rebota := false;
+  exception when check_violation then
+    caducada_sin_fecha_rebota := true;
+  end;
+
+  -- (g) El mismo portal, otra flota: renglón propio.
+  begin
+    insert into portal_estado (tenant_id, comercio, estado, vinculada_en)
+      values (tb, 'office_depot', 'vinculado', now());
+    otra_flota_entra := true;
+  exception when others then
+    otra_flota_entra := false;
+  end;
+
+  -- (h) El doble candado de la casa.
+  cerrado := not has_table_privilege('anon', 'public.portal_estado', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.portal_estado', 'SELECT')
+    and has_table_privilege('service_role', 'public.portal_estado', 'SELECT')
+    and has_table_privilege('service_role', 'public.portal_estado', 'INSERT')
+    and (select relrowsecurity from pg_class where oid = 'public.portal_estado'::regclass);
+
+  raise exception 'PORTALES_FASE_A_195  cuatro_entran=%  conviven=%  motivo_del_motor=%  motivo_que_empieza_corchete_rebota=%  cookies_rebotan=%  captcha_entero_rebota=%  captcha_recortado_entra=%  vinculado_sin_fecha_rebota=%  caducada_sin_fecha_rebota=%  otra_flota_entra=%  cerrado=%   (esperado t / 5 / t / t / t / t / t / t / t / t / t)',
+    cuatro_entran, conviven, motivo_del_motor, motivo_que_empieza_corchete_rebota,
+    cookies_rebotan, captcha_entero_rebota, captcha_recortado_entra,
+    vinculado_sin_fecha_rebota, caducada_sin_fecha_rebota, otra_flota_entra, cerrado;
+end $$;
+
+-- ── 196. El carril completo del panel de QA: la foto no se procesa dos veces y la pasada la arbitra la base (mig. 0240) ──
+-- El bloque 194 lo toma el fork de tickets de esta ola; éste toma el 196 (el
+-- 195 ya estaba escrito).
+--
+-- POR QUÉ ESTE BLOQUE EXISTE. Una corrida de 91 comprobantes no cabe en una
+-- invocación de Vercel, así que avanza en PASADAS. Todo lo que impide que eso
+-- cueste dinero de más vive en la base y no en TypeScript, y un test con
+-- supabase-js mockeado probaría el mock:
+--
+--  (a) LA MISMA FOTO NO SE PUEDE TOMAR DOS VECES. Es la PK
+--      `(corrida_id, foto_id)`. Dos pasadas solapadas —el navegador reintenta,
+--      alguien abre la pantalla en dos pestañas, una pasada que Vercel dio por
+--      muerta sigue viva unos segundos— piden la misma foto: una entra y la
+--      otra rebota con 23505. Un `if (yaProcesada)` leído antes de mandar sería
+--      una carrera, y perderla significa mandar el mismo ticket dos veces al
+--      modelo (dinero real) y contarlo dos veces (una cifra inventada).
+--  (b) PERO LA MISMA FOTO EN OTRA CORRIDA SÍ ENTRA. La llave es por corrida,
+--      no por foto: el banco se reusa entre corridas y una PK demasiado
+--      estrecha convertiría el segundo día de pruebas en un rebote perpetuo.
+--  (c) LA LLAVE DE LA PASADA LA ARBITRA POSTGRES. `tomarPasada` es un UPDATE
+--      con `pasada_en_vuelo is null` en el WHERE. Dos pasadas simultáneas
+--      piden; una toca 1 fila y la otra 0, y la que tocó 0 se va SIN GASTAR.
+--      Se comprueba también el fencing al soltar: quien ya fue relevado no le
+--      quita la llave a quien la tiene (`eq('pasada_en_vuelo', <la mía>)`).
+--  (d) BORRAR UNA FOTO DEL BANCO QUE UNA CORRIDA CITA REBOTA
+--      (`on delete restrict`), en contra del reflejo de poner cascade: lo que
+--      NO puede pasar es que desaparezca en silencio la prueba de que esta
+--      corrida procesó ese ticket y cuánto costó. Fallar cerrado y decirlo.
+--  (e) BORRAR LA CORRIDA SÍ SE LLEVA SU AVANCE (`on delete cascade`): el
+--      avance no significa nada sin la corrida que lo produjo.
+--  (f) `costo_usd` ADMITE NULL Y RECHAZA NEGATIVOS. NULL = NO SE MIDIÓ, y es
+--      distinto de 0: un 0 afirmaría que la foto salió gratis. La columna es
+--      NULL-able a propósito y el CHECK sólo prohíbe lo imposible.
+--  (g) LOS DOMINIOS SE CIERRAN: `estado` de la foto admite los cuatro
+--      —incluido 'interrumpida', que es "no se sabe cómo acabó" y no es ni
+--      acierto ni fallo— y rechaza cualquier otro; `fase` admite las seis y
+--      `corte` sólo 'reloj', 'dinero' o NULL. NULL en `corte` es "no se cortó",
+--      que no es lo mismo que "se cortó por nada".
+--  (h) `n` Y `pasada` SON 1-BASED y `pasadas` no puede ser negativo: la
+--      pantalla dice «foto 47 de 91» leyendo `n`, y un 0 ahí sería un renglón
+--      que ninguna foto ocupa.
+--  (i) EL DOBLE CANDADO DE LA CASA: RLS deny-all + grants sólo a service_role.
+do $$
+declare
+  co1 uuid; co2 uuid; f1 uuid; f2 uuid;
+  p_a uuid := gen_random_uuid(); p_b uuid := gen_random_uuid();
+  segunda_toma_rebota boolean; misma_foto_otra_corrida_entra boolean;
+  gano integer; perdio integer;
+  suelta_ajena integer; suelta_propia integer;
+  borrar_foto_citada_rebota boolean; borrar_corrida_se_lleva_avance integer;
+  costo_nulo_entra boolean; costo_negativo_rebota boolean;
+  cuatro_estados integer := 0; estado_inventado_rebota boolean;
+  seis_fases integer := 0; fase_inventada_rebota boolean;
+  corte_nulo_entra boolean; corte_inventado_rebota boolean;
+  n_cero_rebota boolean; pasadas_negativas_rebotan boolean;
+  cerrado boolean;
+  e text;
+begin
+  insert into qa_foto (hash, path, mime, etiqueta, bytes)
+    values ('zzz-verif-196-a', 'banco/zzz-a.jpg', 'image/jpeg', 'ZZZ VERIF 196 a', 100)
+    returning id into f1;
+  insert into qa_foto (hash, path, mime, etiqueta, bytes)
+    values ('zzz-verif-196-b', 'banco/zzz-b.jpg', 'image/jpeg', 'ZZZ VERIF 196 b', 100)
+    returning id into f2;
+  insert into qa_corrida (escenario, parametros, estado, tenant_nombre, carril)
+    values ('demo_guion', '{"fotoIds":[]}'::jsonb, 'corriendo', 'ZZZ QA VERIF 196 A', 'completo')
+    returning id into co1;
+  insert into qa_corrida (escenario, parametros, estado, tenant_nombre, carril)
+    values ('demo_guion', '{"fotoIds":[]}'::jsonb, 'corriendo', 'ZZZ QA VERIF 196 B', 'completo')
+    returning id into co2;
+
+  -- (a) La misma foto, dos veces en la MISMA corrida: la segunda rebota.
+  insert into qa_corrida_foto (corrida_id, foto_id, n, estado, pasada)
+    values (co1, f1, 1, 'corriendo', 1);
+  begin
+    insert into qa_corrida_foto (corrida_id, foto_id, n, estado, pasada)
+      values (co1, f1, 1, 'corriendo', 2);
+    segunda_toma_rebota := false;
+  exception when unique_violation then
+    segunda_toma_rebota := true;
+  end;
+
+  -- (b) La misma foto en OTRA corrida sí entra: la llave es por corrida.
+  begin
+    insert into qa_corrida_foto (corrida_id, foto_id, n, estado, pasada)
+      values (co2, f1, 1, 'ok', 1);
+    misma_foto_otra_corrida_entra := true;
+  exception when others then
+    misma_foto_otra_corrida_entra := false;
+  end;
+
+  -- (c) La llave de la pasada: dos UPDATE condicionales, uno gana.
+  update qa_corrida set pasada_en_vuelo = p_a
+    where id = co1 and pasada_en_vuelo is null;
+  get diagnostics gano = row_count;
+  update qa_corrida set pasada_en_vuelo = p_b
+    where id = co1 and pasada_en_vuelo is null;
+  get diagnostics perdio = row_count;
+
+  -- Y el fencing al soltar: quien ya fue relevado no suelta la llave ajena.
+  update qa_corrida set pasada_en_vuelo = null
+    where id = co1 and pasada_en_vuelo = p_b;
+  get diagnostics suelta_ajena = row_count;
+  update qa_corrida set pasada_en_vuelo = null
+    where id = co1 and pasada_en_vuelo = p_a;
+  get diagnostics suelta_propia = row_count;
+
+  -- (f) NULL = no se midió; negativo es imposible.
+  begin
+    insert into qa_corrida_foto (corrida_id, foto_id, n, estado, pasada, costo_usd)
+      values (co2, f2, 2, 'interrumpida', 1, null);
+    costo_nulo_entra := true;
+  exception when others then
+    costo_nulo_entra := false;
+  end;
+  begin
+    update qa_corrida_foto set costo_usd = -0.0001 where corrida_id = co2 and foto_id = f2;
+    costo_negativo_rebota := false;
+  exception when check_violation then
+    costo_negativo_rebota := true;
+  end;
+
+  -- (g) Los dominios. Los cuatro estados de la foto entran…
+  foreach e in array array['corriendo', 'ok', 'bad', 'interrumpida'] loop
+    begin
+      update qa_corrida_foto set estado = e where corrida_id = co1 and foto_id = f1;
+      cuatro_estados := cuatro_estados + 1;
+    exception when others then
+      null;
+    end;
+  end loop;
+  begin
+    update qa_corrida_foto set estado = 'pendiente' where corrida_id = co1 and foto_id = f1;
+    estado_inventado_rebota := false;
+  exception when check_violation then
+    estado_inventado_rebota := true;
+  end;
+
+  foreach e in array array['siembra', 'fotos', 'cierre', 'oraculos', 'limpieza', 'terminada'] loop
+    begin
+      update qa_corrida set fase = e where id = co1;
+      seis_fases := seis_fases + 1;
+    exception when others then
+      null;
+    end;
+  end loop;
+  begin
+    update qa_corrida set fase = 'a-medias' where id = co1;
+    fase_inventada_rebota := false;
+  exception when check_violation then
+    fase_inventada_rebota := true;
+  end;
+
+  -- NULL en `corte` = no se cortó. Es un valor legítimo, no un hueco.
+  begin
+    update qa_corrida set corte = null where id = co1;
+    update qa_corrida set corte = 'reloj' where id = co1;
+    update qa_corrida set corte = 'dinero' where id = co1;
+    corte_nulo_entra := true;
+  exception when others then
+    corte_nulo_entra := false;
+  end;
+  begin
+    update qa_corrida set corte = 'cansancio' where id = co1;
+    corte_inventado_rebota := false;
+  exception when check_violation then
+    corte_inventado_rebota := true;
+  end;
+
+  -- (h) 1-based, y las pasadas no cuentan hacia atrás.
+  begin
+    insert into qa_corrida_foto (corrida_id, foto_id, n, estado, pasada)
+      values (co2, f2, 0, 'ok', 1);
+    n_cero_rebota := false;
+  exception when check_violation then
+    n_cero_rebota := true;
+  when unique_violation then
+    n_cero_rebota := null;   -- no debería pasar: f2 ya está en co2 con n=2
+  end;
+  begin
+    update qa_corrida set pasadas = -1 where id = co1;
+    pasadas_negativas_rebotan := false;
+  exception when check_violation then
+    pasadas_negativas_rebotan := true;
+  end;
+
+  -- (d) Borrar del banco una foto que una corrida cita: rebota.
+  begin
+    delete from qa_foto where id = f1;
+    borrar_foto_citada_rebota := false;
+  exception when foreign_key_violation then
+    borrar_foto_citada_rebota := true;
+  end;
+
+  -- (e) Borrar la corrida se lleva su avance.
+  delete from qa_corrida where id = co2;
+  select count(*) into borrar_corrida_se_lleva_avance
+    from qa_corrida_foto where corrida_id = co2;
+
+  -- (i) El doble candado de la casa.
+  cerrado := not has_table_privilege('anon', 'public.qa_corrida_foto', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.qa_corrida_foto', 'SELECT')
+    and not has_table_privilege('anon', 'public.qa_corrida_foto', 'INSERT')
+    and has_table_privilege('service_role', 'public.qa_corrida_foto', 'SELECT')
+    and has_table_privilege('service_role', 'public.qa_corrida_foto', 'INSERT')
+    and has_table_privilege('service_role', 'public.qa_corrida_foto', 'UPDATE')
+    and (select relrowsecurity from pg_class where oid = 'public.qa_corrida_foto'::regclass);
+
+  raise exception 'QA_CARRIL_COMPLETO_0240  segunda_toma_rebota=%  misma_foto_otra_corrida_entra=%  gano=%  perdio=%  suelta_ajena=%  suelta_propia=%  costo_nulo_entra=%  costo_negativo_rebota=%  cuatro_estados=%  estado_inventado_rebota=%  seis_fases=%  fase_inventada_rebota=%  corte_nulo_entra=%  corte_inventado_rebota=%  n_cero_rebota=%  pasadas_negativas_rebotan=%  borrar_foto_citada_rebota=%  avance_tras_borrar_corrida=%  cerrado=%   (esperado t / t / 1 / 0 / 0 / 1 / t / t / 4 / t / 6 / t / t / t / t / t / t / 0 / t)',
+    segunda_toma_rebota, misma_foto_otra_corrida_entra, gano, perdio,
+    suelta_ajena, suelta_propia, costo_nulo_entra, costo_negativo_rebota,
+    cuatro_estados, estado_inventado_rebota, seis_fases, fase_inventada_rebota,
+    corte_nulo_entra, corte_inventado_rebota, n_cero_rebota, pasadas_negativas_rebotan,
+    borrar_foto_citada_rebota, borrar_corrida_se_lleva_avance, cerrado;
+end $$;
+
+-- ── 197. El registro de jornada: la procedencia obligatoria, la corrección que se anota, y el chofer que no se puede borrar (mig. 0241) ──
+-- El bloque 173 que la consigna reservaba YA ESTABA TOMADO (la dirección, mig.
+-- 0216, línea 9712). El 196 se lo llevó el carril de QA (mig. 0240) al entrar
+-- a master mientras esta rama estaba abierta, así que éste toma el 197.
+--
+-- Lo que SOLO la base puede demostrar de la 0241 —y que un `if` en TypeScript
+-- no sostiene, porque el `if` se puede quitar sin que nada truene—:
+--
+--  (a) UN EXPEDIENTE POR OPERADOR Y DÍA. `jornada_dia_unica` arbitra la carrera
+--      entre el chofer declarando su inicio y el cron derivando el hito. Sin
+--      este índice las dos preguntan «¿ya existe el día?», las dos oyen que no,
+--      y quedan DOS expedientes con la mitad de las marcas cada uno — o sea, un
+--      documento laboral que parte la jornada de una persona en dos mitades sin
+--      que nadie lo note.
+--  (b) LA DECLARACIÓN LE GANA A LA DERIVACIÓN, Y NO LO DECIDE UN `if`. Con un
+--      `inicio_jornada` declarado vivo, el asiento derivado del GPS rebota con
+--      23505 contra `jornada_asiento_marca_unica`. El derivador lee ese código
+--      como «ya estaba», no como fallo. Si mañana alguien borra el `if` del
+--      motor, el índice sigue ahí.
+--  (c) Y LA CORRECCIÓN CABE JUSTO CUANDO SE ANOTA. El índice es PARCIAL sobre
+--      `anulado_en is null`: mientras el viejo esté vivo el nuevo NO entra;
+--      anulado el viejo —con motivo, autor y hora— el nuevo sí. Eso es lo que
+--      hace que corregir sea imposible sin dejar rastro: no hay camino de
+--      sustituir una hora que no pase por anular la anterior.
+--  (d) EL DERIVADOR ES IDEMPOTENTE POR EL HECHO, NO POR LA HORA. Dos corridas
+--      del cron sobre el mismo hito producen UN asiento (`origen_ref` único).
+--      Sin esto, un cron que corre cada hora acumula veinticuatro «inicios»
+--      derivados del mismo viaje.
+--  (e) UNA HORA DERIVADA SIN ORIGEN NO ENTRA. `hito_viaje` y `gps` exigen
+--      `origen_ref`: es la diferencia entre un registro que prueba y una hoja
+--      de cálculo. En un juicio laboral una hora sin procedencia no prueba nada.
+--  (f) UNA CAPTURA DE OFICINA SIN FIRMA NO ENTRA, y una ANULACIÓN sin motivo
+--      ni firma tampoco. Un registro editable en silencio es peor que no
+--      tenerlo: destruye su propia credibilidad ante el perito.
+--  (g) LA CONFORMIDAD DEL OPERADOR FALLA CERRADO. El párrafo tercero de la LFT
+--      132 fr. XXXIV pide que el acuerdo se ACREDITE para que el registro haga
+--      prueba plena; sin el id del mensaje de WhatsApp que lo acredita, la
+--      fecha de conformidad no se puede sellar. Una casilla marcada sin
+--      evidencia no es un acuerdo acreditado.
+--  (h) BORRAR AL CHOFER NO BORRA SU JORNADA. `on delete restrict` sobre
+--      `operador`: el art. 804 fr. III obliga a conservar el control de
+--      asistencia «durante el último año y un año después de que se extinga la
+--      relación laboral», y el 805 castiga no exhibirlo con la presunción de
+--      ser ciertos los hechos del actor. Que dar de baja a un operador borrara
+--      su registro sería destruir justo la prueba cuya ausencia se castiga.
+--  (i) BORRAR EL VIAJE SÍ SE PUEDE, Y NO REVIENTA. `on delete set null
+--      (viaje_id)` CON LISTA DE COLUMNAS: a secas anularía también `tenant_id`,
+--      que es NOT NULL, y el DELETE del viaje fallaría — el bug exacto que
+--      arregló la 0236 y que aquí no se reintroduce. La hora trabajada sigue
+--      siendo cierta aunque el viaje ya no esté.
+--  (j) NINGUNA FLOTA TOCA LA JORNADA DE OTRA. Las FK son COMPUESTAS
+--      `(id, tenant_id)`: colgar un día del operador de otra flota rebota, y un
+--      asiento no puede corregir el de otra flota.
+--  (k) EL CATÁLOGO DE CRONS ESTÁ COMPLETO. `jornada` entra, y los dos que
+--      llevaban meses mudos —`asistencia` y `descarga-sat`— también. Un id
+--      inventado rebota. Una lista corta aquí no falla ruidosamente: silencia
+--      latidos, y `/api/health` no puede llamar muerto a un cron del que nunca
+--      tuvo un latido que juzgar.
+--  (l) UN UMBRAL DE CERO HORAS NO ES UN UMBRAL. Marcaría excedido TODO día.
+--      Cero, NaN y más de 24 h rebotan en la base; y una política por flota, no
+--      dos, porque el reporte no sabría cuál enseñó.
+--  (m) EL DOBLE CANDADO DE LA CASA. Aquí el dato no es una cifra de negocio: es
+--      el horario de una persona identificada, dato personal del art. 3 fr. V
+--      de la LFPDPPP.
+do $$
+declare
+  ta uuid; tb uuid; op_a uuid; op_b uuid; uni_a uuid; via_a uuid; usr uuid;
+  dia_a uuid; dia_b uuid; asiento_declarado uuid; asiento_viaje uuid;
+  dia_repetido_rebota boolean; derivado_rebota_si_hay_declarado boolean;
+  corregido_entra_tras_anular boolean; anulado_no_estorba boolean;
+  origen_repetido_rebota boolean; wa_repetido_rebota boolean;
+  dos_sin_wa_conviven boolean; dos_descansos_conviven boolean;
+  derivado_sin_origen_rebota boolean; captura_sin_firma_rebota boolean;
+  anulacion_sin_motivo_rebota boolean; anulacion_sin_firma_rebota boolean;
+  conformidad_sin_mensaje_rebota boolean; cierre_sin_firma_rebota boolean;
+  cierre_incoherente_rebota boolean; procedencia_inventada_rebota boolean;
+  borrar_operador_rebota boolean; borrar_viaje_deja_asiento boolean;
+  tenant_sobrevive boolean; dia_de_otra_flota_rebota boolean;
+  corrige_otra_flota_rebota boolean;
+  jornada_late boolean; asistencia_late boolean; sat_late boolean;
+  cron_inventado_rebota boolean;
+  cero_horas_rebota boolean; nan_rebota boolean; mas_de_24_rebota boolean;
+  dos_politicas_rebotan boolean; cerrado boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0241 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0241 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ Chofer A', '5210000000241') returning id into op_a;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'ZZZ Chofer B', '5210000000242') returning id into op_b;
+  insert into unidad (tenant_id, numero_economico) values (ta, 'ZZZ-0241') returning id into uni_a;
+  insert into viaje (tenant_id, operador_id) values (ta, op_a) returning id into via_a;
+  insert into app_user (id, tenant_id, email) values (gen_random_uuid(), ta, 'zzz-0241@likida.test') returning id into usr;
+
+  insert into jornada_dia (tenant_id, operador_id, dia) values (ta, op_a, date '2026-08-27') returning id into dia_a;
+
+  -- (a) El MISMO operador, el MISMO día: un solo expediente.
+  begin
+    insert into jornada_dia (tenant_id, operador_id, dia) values (ta, op_a, date '2026-08-27');
+    dia_repetido_rebota := false;
+  exception when unique_violation then
+    dia_repetido_rebota := true;
+  end;
+
+  -- (b) El chofer declara su inicio; el GPS intenta derivar otro. Rebota.
+  insert into jornada_asiento (tenant_id, jornada_id, tipo, momento, procedencia, wa_message_id)
+    values (ta, dia_a, 'inicio_jornada', timestamptz '2026-08-27 04:00-06', 'declarado_operador', 'wamid.ZZZ0241A')
+    returning id into asiento_declarado;
+  begin
+    insert into jornada_asiento (tenant_id, jornada_id, tipo, momento, procedencia, origen_ref, unidad_id)
+      values (ta, dia_a, 'inicio_jornada', timestamptz '2026-08-27 05:12-06', 'gps', 'gps:zzz:2026-08-27:primera', uni_a);
+    derivado_rebota_si_hay_declarado := false;
+  exception when unique_violation then
+    derivado_rebota_si_hay_declarado := true;
+  end;
+
+  -- (c) Se anula el declarado —con motivo, autor y hora— y ENTONCES el
+  --     corregido entra. No hay camino de sustituir una hora sin dejar rastro.
+  update jornada_asiento
+     set anulado_en = now(), anulado_por = usr, anulado_por_email = 'zzz-0241@likida.test',
+         anulado_motivo = 'El operador dictó mal la hora por teléfono.'
+   where id = asiento_declarado;
+  begin
+    insert into jornada_asiento (tenant_id, jornada_id, tipo, momento, procedencia,
+                                 registrado_por, registrado_por_email, corrige_a, nota)
+      values (ta, dia_a, 'inicio_jornada', timestamptz '2026-08-27 03:40-06', 'capturado_contralor',
+              usr, 'zzz-0241@likida.test', asiento_declarado, 'Corregido contra la bitácora de patio.');
+    corregido_entra_tras_anular := true;
+  exception when others then
+    corregido_entra_tras_anular := false;
+  end;
+  -- Y el anulado SIGUE en el expediente: anular no es borrar.
+  anulado_no_estorba := exists (
+    select 1 from jornada_asiento where id = asiento_declarado and anulado_en is not null);
+
+  -- (d) El mismo hecho derivado dos veces: un solo asiento.
+  insert into jornada_asiento (tenant_id, jornada_id, tipo, momento, procedencia, origen_ref, viaje_id)
+    values (ta, dia_a, 'fin_jornada', timestamptz '2026-08-27 18:00-06', 'hito_viaje',
+            'viaje:' || via_a || ':aceptado_en', via_a)
+    returning id into asiento_viaje;
+  begin
+    insert into jornada_asiento (tenant_id, jornada_id, tipo, momento, procedencia, origen_ref, viaje_id)
+      values (ta, dia_a, 'inicio_descanso', timestamptz '2026-08-27 13:00-06', 'hito_viaje',
+              'viaje:' || via_a || ':aceptado_en', via_a);
+    origen_repetido_rebota := false;
+  exception when unique_violation then
+    origen_repetido_rebota := true;
+  end;
+
+  -- El mismo mensaje de WhatsApp reentregado por Meta no duplica la marca…
+  begin
+    insert into jornada_asiento (tenant_id, jornada_id, tipo, momento, procedencia, wa_message_id)
+      values (ta, dia_a, 'inicio_descanso', timestamptz '2026-08-27 13:00-06', 'declarado_operador', 'wamid.ZZZ0241A');
+    wa_repetido_rebota := false;
+  exception when unique_violation then
+    wa_repetido_rebota := true;
+  end;
+  -- …pero el índice es PARCIAL: los asientos sin mensaje no compiten entre sí.
+  begin
+    insert into jornada_asiento (tenant_id, jornada_id, tipo, momento, procedencia,
+                                 registrado_por_email)
+      values (ta, dia_a, 'inicio_descanso', timestamptz '2026-08-27 13:00-06', 'capturado_contralor', 'zzz-0241@likida.test');
+    insert into jornada_asiento (tenant_id, jornada_id, tipo, momento, procedencia,
+                                 registrado_por_email)
+      values (ta, dia_a, 'fin_descanso', timestamptz '2026-08-27 13:35-06', 'capturado_contralor', 'zzz-0241@likida.test');
+    dos_sin_wa_conviven := true;
+  exception when others then
+    dos_sin_wa_conviven := false;
+  end;
+  -- Y los DESCANSOS son varios en un día: `marca_unica` no los alcanza.
+  begin
+    insert into jornada_asiento (tenant_id, jornada_id, tipo, momento, procedencia,
+                                 registrado_por_email)
+      values (ta, dia_a, 'inicio_descanso', timestamptz '2026-08-27 16:00-06', 'capturado_contralor', 'zzz-0241@likida.test');
+    dos_descansos_conviven := true;
+  exception when others then
+    dos_descansos_conviven := false;
+  end;
+
+  -- (e) Una hora derivada sin decir de qué hecho salió no entra.
+  begin
+    insert into jornada_asiento (tenant_id, jornada_id, tipo, momento, procedencia)
+      values (ta, dia_a, 'fin_descanso', timestamptz '2026-08-27 16:30-06', 'gps');
+    derivado_sin_origen_rebota := false;
+  exception when check_violation then
+    derivado_sin_origen_rebota := true;
+  end;
+
+  -- (f) Captura de oficina sin firma; anulación sin motivo; anulación sin firma.
+  begin
+    insert into jornada_asiento (tenant_id, jornada_id, tipo, momento, procedencia)
+      values (ta, dia_a, 'fin_descanso', timestamptz '2026-08-27 16:30-06', 'capturado_contralor');
+    captura_sin_firma_rebota := false;
+  exception when check_violation then
+    captura_sin_firma_rebota := true;
+  end;
+  begin
+    update jornada_asiento set anulado_en = now(), anulado_por_email = 'zzz-0241@likida.test'
+     where id = asiento_viaje;
+    anulacion_sin_motivo_rebota := false;
+  exception when check_violation then
+    anulacion_sin_motivo_rebota := true;
+  end;
+  begin
+    update jornada_asiento set anulado_en = now(), anulado_motivo = 'sin firmar'
+     where id = asiento_viaje;
+    anulacion_sin_firma_rebota := false;
+  exception when check_violation then
+    anulacion_sin_firma_rebota := true;
+  end;
+
+  -- Y la lista de procedencias es CERRADA: no hay una quinta que se cuele.
+  begin
+    insert into jornada_asiento (tenant_id, jornada_id, tipo, momento, procedencia)
+      values (ta, dia_a, 'fin_descanso', timestamptz '2026-08-27 16:30-06', 'estimado');
+    procedencia_inventada_rebota := false;
+  exception when check_violation then
+    procedencia_inventada_rebota := true;
+  end;
+
+  -- (g) La conformidad del art. 132 fr. XXXIV párr. 3 falla cerrado.
+  begin
+    update jornada_dia set conforme_operador_en = now() where id = dia_a;
+    conformidad_sin_mensaje_rebota := false;
+  exception when check_violation then
+    conformidad_sin_mensaje_rebota := true;
+  end;
+  -- El cierre sin la firma congelada tampoco pasa…
+  begin
+    update jornada_dia set estado = 'cerrado', cerrado_en = now(), cerrado_por = usr where id = dia_a;
+    cierre_sin_firma_rebota := false;
+  exception when check_violation then
+    cierre_sin_firma_rebota := true;
+  end;
+  -- …ni un expediente que miente sobre su propio estado.
+  begin
+    update jornada_dia set estado = 'cerrado', cerrado_por_email = 'zzz-0241@likida.test' where id = dia_a;
+    cierre_incoherente_rebota := false;
+  exception when check_violation then
+    cierre_incoherente_rebota := true;
+  end;
+
+  -- (h) Dar de baja al chofer NO puede borrar el documento que la ley obliga a
+  --     conservar (LFT 804 fr. III y 805).
+  begin
+    delete from operador where id = op_a;
+    borrar_operador_rebota := false;
+  exception when foreign_key_violation then
+    borrar_operador_rebota := true;
+  end;
+
+  -- (i) Borrar el viaje SÍ se puede: `set null (viaje_id)` con lista, así que
+  --     `tenant_id` sobrevive NOT NULL y el DELETE no revienta (bug de la 0236).
+  begin
+    delete from viaje where id = via_a;
+    borrar_viaje_deja_asiento := exists (select 1 from jornada_asiento where id = asiento_viaje and viaje_id is null);
+    tenant_sobrevive := exists (select 1 from jornada_asiento where id = asiento_viaje and tenant_id = ta);
+  exception when others then
+    borrar_viaje_deja_asiento := false;
+    tenant_sobrevive := false;
+  end;
+
+  -- (j) Ninguna flota toca la jornada de otra. Las FK son compuestas.
+  begin
+    insert into jornada_dia (tenant_id, operador_id, dia) values (ta, op_b, date '2026-08-27');
+    dia_de_otra_flota_rebota := false;
+  exception when foreign_key_violation then
+    dia_de_otra_flota_rebota := true;
+  end;
+  insert into jornada_dia (tenant_id, operador_id, dia) values (tb, op_b, date '2026-08-27') returning id into dia_b;
+  begin
+    insert into jornada_asiento (tenant_id, jornada_id, tipo, momento, procedencia,
+                                 registrado_por_email, corrige_a)
+      values (tb, dia_b, 'inicio_jornada', timestamptz '2026-08-27 05:00-06', 'capturado_contralor',
+              'zzz-0241@likida.test', asiento_declarado);
+    corrige_otra_flota_rebota := false;
+  exception when foreign_key_violation then
+    corrige_otra_flota_rebota := true;
+  end;
+
+  -- (k) El catálogo de crons, COMPLETO. `jornada` entra y los dos mudos también.
+  insert into cron_latido (id) values ('jornada')
+    on conflict (id) do update set ultimo_latido = now();
+  jornada_late := exists (select 1 from cron_latido where id = 'jornada');
+  insert into cron_latido (id) values ('asistencia')
+    on conflict (id) do update set ultimo_latido = now();
+  asistencia_late := exists (select 1 from cron_latido where id = 'asistencia');
+  insert into cron_latido (id) values ('descarga-sat')
+    on conflict (id) do update set ultimo_latido = now();
+  sat_late := exists (select 1 from cron_latido where id = 'descarga-sat');
+  begin
+    insert into cron_latido (id) values ('cron-que-nadie-escribio');
+    cron_inventado_rebota := false;
+  exception when check_violation then
+    cron_inventado_rebota := true;
+  end;
+
+  -- (l) Un umbral de cero horas marcaría excedido TODO día.
+  begin
+    insert into jornada_politica (tenant_id, horas_max_jornada, declarada_por_email)
+      values (ta, 0, 'zzz-0241@likida.test');
+    cero_horas_rebota := false;
+  exception when check_violation then
+    cero_horas_rebota := true;
+  end;
+  begin
+    insert into jornada_politica (tenant_id, horas_max_jornada, declarada_por_email)
+      values (ta, 'NaN'::numeric, 'zzz-0241@likida.test');
+    nan_rebota := false;
+  exception when check_violation then
+    nan_rebota := true;
+  end;
+  begin
+    insert into jornada_politica (tenant_id, horas_max_jornada, declarada_por_email)
+      values (ta, 25, 'zzz-0241@likida.test');
+    mas_de_24_rebota := false;
+  exception when check_violation then
+    mas_de_24_rebota := true;
+  end;
+  insert into jornada_politica (tenant_id, horas_max_jornada, declarada_por_email)
+    values (ta, 11.5, 'zzz-0241@likida.test');
+  begin
+    insert into jornada_politica (tenant_id, horas_max_jornada, declarada_por_email)
+      values (ta, 10, 'zzz-0241@likida.test');
+    dos_politicas_rebotan := false;
+  exception when unique_violation then
+    dos_politicas_rebotan := true;
+  end;
+
+  -- (m) El doble candado. Horario de una persona identificada: dato personal.
+  cerrado := not has_table_privilege('anon', 'public.jornada_dia', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.jornada_dia', 'SELECT')
+    and not has_table_privilege('anon', 'public.jornada_asiento', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.jornada_asiento', 'SELECT')
+    and not has_table_privilege('anon', 'public.jornada_politica', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.jornada_politica', 'SELECT')
+    and has_table_privilege('service_role', 'public.jornada_dia', 'SELECT')
+    and has_table_privilege('service_role', 'public.jornada_asiento', 'INSERT')
+    and has_table_privilege('service_role', 'public.jornada_politica', 'UPDATE')
+    and (select relrowsecurity from pg_class where oid = 'public.jornada_dia'::regclass)
+    and (select relrowsecurity from pg_class where oid = 'public.jornada_asiento'::regclass)
+    and (select relrowsecurity from pg_class where oid = 'public.jornada_politica'::regclass);
+
+  raise exception 'JORNADA_LFT_0241  dia_repetido_rebota=%  derivado_rebota_si_hay_declarado=%  corregido_entra_tras_anular=%  anulado_no_estorba=%  origen_repetido_rebota=%  wa_repetido_rebota=%  dos_sin_wa_conviven=%  dos_descansos_conviven=%  derivado_sin_origen_rebota=%  captura_sin_firma_rebota=%  anulacion_sin_motivo_rebota=%  anulacion_sin_firma_rebota=%  procedencia_inventada_rebota=%  conformidad_sin_mensaje_rebota=%  cierre_sin_firma_rebota=%  cierre_incoherente_rebota=%  borrar_operador_rebota=%  borrar_viaje_deja_asiento=%  tenant_sobrevive=%  dia_de_otra_flota_rebota=%  corrige_otra_flota_rebota=%  jornada_late=%  asistencia_late=%  sat_late=%  cron_inventado_rebota=%  cero_horas_rebota=%  nan_rebota=%  mas_de_24_rebota=%  dos_politicas_rebotan=%  cerrado=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t)',
+    dia_repetido_rebota, derivado_rebota_si_hay_declarado, corregido_entra_tras_anular,
+    anulado_no_estorba, origen_repetido_rebota, wa_repetido_rebota, dos_sin_wa_conviven,
+    dos_descansos_conviven, derivado_sin_origen_rebota, captura_sin_firma_rebota,
+    anulacion_sin_motivo_rebota, anulacion_sin_firma_rebota, procedencia_inventada_rebota,
+    conformidad_sin_mensaje_rebota, cierre_sin_firma_rebota, cierre_incoherente_rebota,
+    borrar_operador_rebota, borrar_viaje_deja_asiento, tenant_sobrevive,
+    dia_de_otra_flota_rebota, corrige_otra_flota_rebota,
+    jornada_late, asistencia_late, sat_late, cron_inventado_rebota,
+    cero_horas_rebota, nan_rebota, mas_de_24_rebota, dos_politicas_rebotan, cerrado;
+end $$;
+-- ── 194. La verdad-de-terreno del banco de QA y sus lecturas (mig. 0239) ────
+-- ═══════════════════════════════════════════════════════════════════════════
+-- CORRECTIVA 0239 — LA VERDAD-DE-TERRENO ES UN CONTRATO DE LA BASE, Y CADA
+-- LECTURA DEL OCR QUEDA ESCRITA CON SU MEDICIÓN
+--
+-- El ordinal es el 194, que el fork del carril completo (#173, bloque 196)
+-- dejó reservado para esta rama al escribir el suyo. El número
+-- del título es lo ÚNICO que `migraciones_verificadas.test.ts` sabe leer para
+-- contestar "¿está comprobada la 0239?", así que tiene que existir aunque el
+-- cuerpo se identifique por el número de migración.
+--
+-- Qué se prueba, y por qué cada punto importa:
+--
+--  (a) EL CONTRATO ACEPTA LA ETIQUETA BIEN FORMADA. Sin esto la migración
+--      podría ser un CHECK que rebota todo, y "nada entra" también es un
+--      contrato — uno inútil.
+--  (b) UN `null` SIN CLASIFICAR REBOTA. Es el caso central: en la etiqueta,
+--      `null` significa "el papel no lo imprime" o "el papel lo imprime y no
+--      se ve", y las dos dan veredictos OPUESTOS al medir el OCR (alucinación
+--      vs campo sin medir). Un null sin clasificar obliga al motor a elegir a
+--      ciegas entre las dos, y el porcentaje que sale se cita en una decisión.
+--  (c) LA MISMA CLAVE EN LAS DOS LISTAS REBOTA: son afirmaciones que se
+--      contradicen, y quedarse con cualquiera de las dos sería inventar.
+--  (d) UN VALOR NO NULO LISTADO COMO ILEGIBLE REBOTA. Ese campo se
+--      descontaría del denominador teniendo un esperado perfectamente bueno:
+--      el porcentaje saldría inflado sobre menos campos de los que se midieron.
+--  (e) LAS 7 CLAVES TIENEN QUE ESTAR PRESENTES, aunque valgan null. Una clave
+--      AUSENTE se leería como null sin que nadie la haya considerado nunca.
+--  (f) EL CHECK DE LA TABLA REBOTA DE VERDAD (no solo la función suelta), y
+--      la etiqueta buena entra con su firma.
+--  (g) LOS TRES CONTADORES DE `qa_foto_lectura` SUMAN 7. Si no suman, la fila
+--      describe una medición que no ocurrió — y es justo el número que luego
+--      se agrega en un porcentaje.
+--  (h) BORRAR LA FOTO SE LLEVA SUS LECTURAS (`on delete cascade`): una lectura
+--      sin su foto no tiene ni imagen que revisar ni etiqueta contra la cual
+--      entenderse.
+--  (i) EL DOBLE CANDADO: RLS activo y `anon`/`authenticated` sin un solo
+--      privilegio sobre `qa_foto_lectura`, que guarda RFC, razón social y
+--      sucursal de comprobantes REALES (art. 2 fr. VI LFPDPPP). Solo
+--      `service_role`.
+do $$
+declare
+  buena jsonb;
+  acepta_buena boolean;
+  null_sin_clasificar boolean; en_las_dos boolean; valor_listado boolean;
+  clave_ausente boolean;
+  check_tabla_rebota boolean; etiqueta_buena_entra boolean;
+  contadores_rebotan boolean;
+  fid uuid; lecturas_tras_borrar bigint;
+  rls_activo boolean; cerrado boolean;
+begin
+  buena := jsonb_build_object(
+    'comercioClave', 'capufe',
+    'emisor', 'Caminos y Puentes Federales',
+    'rfcEmisor', 'CPF890101AAA',
+    'folio', '000123',
+    'monto', 1234.50,
+    'fecha', '2026-07-31',
+    'sucursal', 'Caseta Palmillas',
+    'dominioFacturacion', 'facturacioncapufe.com.mx',
+    'ilegibles', '[]'::jsonb,
+    'noAplica', '[]'::jsonb,
+    'clase', 'ticket',
+    'notas', null
+  );
+
+  -- (a)
+  acepta_buena := public.qa_verdad_terreno_valida(buena);
+
+  -- (b) folio en null y en NINGUNA de las dos listas.
+  null_sin_clasificar := public.qa_verdad_terreno_valida(buena || jsonb_build_object('folio', null));
+
+  -- (c) folio en null y en LAS DOS listas.
+  en_las_dos := public.qa_verdad_terreno_valida(
+    buena || jsonb_build_object('folio', null, 'ilegibles', '["folio"]'::jsonb, 'noAplica', '["folio"]'::jsonb));
+
+  -- (d) folio CON valor, pero listado como ilegible.
+  valor_listado := public.qa_verdad_terreno_valida(buena || jsonb_build_object('ilegibles', '["folio"]'::jsonb));
+
+  -- (e) la clave `sucursal` quitada del objeto entero.
+  clave_ausente := public.qa_verdad_terreno_valida(buena - 'sucursal');
+
+  -- (f) el CHECK de la tabla, con una foto de verdad.
+  insert into qa_foto (hash, path, mime, etiqueta, bytes)
+    values ('zzz-verif-0239-hash', 'banco/zzz-verif-0239.jpg', 'image/jpeg', 'ZZZ VERIF 0239', 100)
+    returning id into fid;
+
+  begin
+    update qa_foto
+      set ocr_esperado = buena || jsonb_build_object('folio', null),
+          confirmado_en = now()
+      where id = fid;
+    check_tabla_rebota := false;
+  exception when check_violation then
+    check_tabla_rebota := true;
+  end;
+
+  begin
+    update qa_foto set ocr_esperado = buena, confirmado_en = now() where id = fid;
+    etiqueta_buena_entra := true;
+  exception when others then
+    etiqueta_buena_entra := false;
+  end;
+
+  -- (g) los contadores que no suman 7 no describen ninguna medición real.
+  begin
+    insert into qa_foto_lectura (foto_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos)
+      values (fid, 'zzz-verif', '{}'::jsonb, '{}'::jsonb, 3, 1, 1);
+    contadores_rebotan := false;
+  exception when check_violation then
+    contadores_rebotan := true;
+  end;
+
+  insert into qa_foto_lectura (foto_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos, costo_usd)
+    values (fid, 'zzz-verif', '{}'::jsonb, '{}'::jsonb, 7, 0, 0, 0.0031);
+
+  -- (h) el cascade.
+  delete from qa_foto where id = fid;
+  select count(*) into lecturas_tras_borrar from qa_foto_lectura where foto_id = fid;
+
+  -- (i) el doble candado.
+  select relrowsecurity into rls_activo from pg_class where oid = 'public.qa_foto_lectura'::regclass;
+  cerrado :=
+    not has_table_privilege('anon', 'public.qa_foto_lectura', 'SELECT')
+    and not has_table_privilege('anon', 'public.qa_foto_lectura', 'INSERT')
+    and not has_table_privilege('authenticated', 'public.qa_foto_lectura', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.qa_foto_lectura', 'INSERT')
+    and has_table_privilege('service_role', 'public.qa_foto_lectura', 'SELECT')
+    and has_table_privilege('service_role', 'public.qa_foto_lectura', 'INSERT');
+
+  raise exception 'CORRECTIVA_0239  acepta_buena=%  null_sin_clasificar=%  en_las_dos=%  valor_listado=%  clave_ausente=%  check_tabla_rebota=%  etiqueta_buena_entra=%  contadores_rebotan=%  lecturas_tras_borrar=%  rls_activo=%  cerrado=%   (esperado t / f / f / f / f / t / t / t / 0 / t / t)',
+    acepta_buena, null_sin_clasificar, en_las_dos, valor_listado, clave_ausente,
+    check_tabla_rebota, etiqueta_buena_entra, contadores_rebotan,
+    lecturas_tras_borrar, rls_activo, cerrado;
+end $$;
+
+-- ── 198. Los litros del consolidado: dominio y el índice de la 3.3.1.7 (mig. 0242) ──
+-- (El ordinal 174 que la consigna reservaba YA ESTABA TOMADO desde la máquina
+--  de prospección, mig. 0217. El máximo vivo era el 197; este es el siguiente.
+--  El conteo de `do $$` es 173 porque seis ordinales quedaron reservados sin
+--  bloque — ver el 171 y los 165, 167-169.)
+--
+-- Lo que solo la base demuestra de la 0242:
+--   (a) un litro NEGATIVO no entra. El motor tiene su propio `litros > 0`
+--       antes de acumular, pero eso protege el cálculo de hoy, no la columna:
+--       cualquier reporte futuro que sume `cfdi_consolidado_linea.litros`
+--       heredaría el negativo, y un negativo entre las líneas del mes RESTA
+--       litros realmente cargados del estímulo de la LIF 2026 art. 20 ap. A;
+--   (b) `null` SÍ entra y significa "esta línea no midió volumen" (una caseta
+--       trae Cantidad=1 y eso es UN CRUCE). `null` ≠ 0, y el CHECK no lo
+--       confunde con un dato faltante que haya que rellenar;
+--   (c) el cero entra: una línea de $0 con 0.000 L es rara pero no imposible
+--       (una corrección del emisor), y rebotarla obligaría al intake a
+--       inventar `null` donde el documento sí midió;
+--   (d) el índice parcial del camino B de `evidenciaMonedero` EXISTE y su
+--       predicado es el del WHERE de `lineasEccParaCuadre` — un índice con
+--       otro predicado no lo usaría el planner y la consulta seguiría
+--       escaneando la cola entera de casetas del tenant en cada cuadre.
+do $$
+declare
+  ta uuid; xid uuid;
+  negativo_rebota boolean; nulo_entra boolean; cero_entra boolean;
+  indice_existe boolean; predicado_correcto boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0242') returning id into ta;
+  insert into cfdi_xml (tenant_id, cfdi_uuid, xml, tiene_multiples_conceptos, total_conceptos)
+    values (ta, 'zzz-verif-0242-uuid', '<x/>', true, 3)
+    returning id into xid;
+
+  -- (a) El litro negativo.
+  begin
+    insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, litros)
+      values (ta, xid, 1, 'ecc12', 1200.00, -450.000);
+    negativo_rebota := false;
+  exception when check_violation then
+    negativo_rebota := true;
+  end;
+
+  -- (b) NULL: "no se midió volumen" sigue siendo un valor legítimo.
+  begin
+    insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, litros)
+      values (ta, xid, 2, 'concepto_base', 118.00, null);
+    nulo_entra := true;
+  exception when others then
+    nulo_entra := false;
+  end;
+
+  -- (c) El cero medido no se confunde con el negativo.
+  begin
+    insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, litros)
+      values (ta, xid, 3, 'ecc12', 0.00, 0.000);
+    cero_entra := true;
+  exception when others then
+    cero_entra := false;
+  end;
+
+  -- (d) El índice del camino B, con SU predicado.
+  select count(*) = 1 into indice_existe
+    from pg_class
+    where relname = 'cfdi_consolidado_linea_ecc_por_fecha_idx' and relkind = 'i';
+  select pg_get_indexdef(c.oid) like '%WHERE%ecc12%estacion_rfc IS NOT NULL%'
+    into predicado_correcto
+    from pg_class c
+    where c.relname = 'cfdi_consolidado_linea_ecc_por_fecha_idx';
+
+  delete from tenant where id = ta;
+
+  raise exception 'CONSOLIDADO_LITROS_0242  negativo_rebota=%  nulo_entra=%  cero_entra=%  indice_existe=%  predicado_correcto=%   (esperado t / t / t / t / t)',
+    negativo_rebota, nulo_entra, cero_entra, indice_existe, predicado_correcto;
+end $$;
+
+-- ── 199. La bandeja de conciliación del SAT: la firma no se pierde, el expediente no se edita, y deshacer no borra (mig. 0243) ──
+-- El bloque 191 tomó la 0236 y el 197 la 0241. El 198 lo tomó la 0242
+-- (litros del consolidado) mientras esta rama trabajaba, así que al rebasar
+-- este bloque se renumeró de 198 a 199 — el siguiente libre.
+--
+-- LO QUE SOLO LA BASE PUEDE DEMOSTRAR, y que hasta la 0243 estaba abierto:
+--
+--  (a) LA FIRMA A MEDIAS NO EXISTE. `resuelto_en` sin `resuelto_por_email`
+--      —o al revés— es un expediente que dice «lo resolvió alguien el
+--      martes». El CHECK lo rebota en los dos sentidos.
+--  (b) LA FIRMA SOBREVIVE AL BORRADO DE LA CUENTA. `resuelto_por` es uuid con
+--      `on delete set null` por ARCO: al borrar al contralor, el uuid se anula
+--      y el CORREO CONGELADO se queda. Sin él, el cruce quedaría firmado por
+--      nadie (misma razón que `cola_aprobacion.resuelto_por_email`, 0120, y
+--      `jornada_dia.cerrado_por_email`, 0241).
+--  (c) EL CHECK DE LA 0231 SIGUE APRETADO. Un 'casado' sin gasto rebota, y un
+--      gasto pegado a un estatus que no es 'casado' también. Resolver un
+--      ambiguo —estatus y gasto en el MISMO update— lo deja contento.
+--  (d) LA FLOTA A NO CASA CON UN GASTO DE LA FLOTA B. La FK compuesta
+--      `(gasto_id, tenant_id)` lo rebota, y el aislamiento no depende de que
+--      el TypeScript se acuerde de filtrar.
+--  (e) EL EXPEDIENTE ES APPEND-ONLY POR PRIVILEGIO, NO POR COMENTARIO.
+--      Supabase concede `update`/`delete` por DEFAULT PRIVILEGES a
+--      `service_role` al crear cualquier tabla nueva: sin el REVOKE explícito
+--      de la 0243, «append-only» habría sido una promesa de comentario. Se
+--      mide con `has_table_privilege`, que es el único que no se puede
+--      contradecir.
+--  (f) UN ACTO QUE QUITA UNA AFIRMACIÓN EXIGE MOTIVO, y todo acto de una
+--      PERSONA exige firma. El único acto sin firma es el de la base
+--      ('degradado'), y por eso se llama distinto.
+--  (g) BORRAR EL GASTO SIGUE SIENDO POSIBLE — y ahora, además, limpia la
+--      firma vieja y escribe su propio renglón. Ésta es la parte que más fácil
+--      se rompe: la 0243 añadió un CHECK de firma Y un insert dentro del
+--      trigger que la acción referencial dispara. Si cualquiera de los dos
+--      estuviera mal, borrar un viaje con gastos casados volvería a reventar —
+--      que es el bug c7-3 que la 0236 cerró, resucitado por su sucesora.
+--      (Se probó con `on delete set null (gasto_id)` sobre el expediente y
+--      REVENTABA: el CHECK `ligado_con_gasto` chocaba con la acción
+--      referencial. Por eso `sat_cfdi_resolucion.gasto_id` NO tiene FK.)
+--  (h) EL EXPEDIENTE NOMBRA UN GASTO QUE YA NO EXISTE. Es el punto entero de
+--      no ponerle FK: «alguien afirmó este cruce» es un hecho que sobrevive a
+--      que el gasto se borre.
+--  (i) BORRAR LA FLOTA ENTERA SIGUE FUNCIONANDO, y se lleva el expediente por
+--      cascade — aunque `service_role` no tenga DELETE sobre esa tabla: las
+--      acciones referenciales corren por dentro.
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; va uuid; vb uuid; ga uuid; gb uuid;
+  usr uuid; cf uuid;
+  firma_a_medias_rebota boolean; firma_sobrevive_borrado boolean;
+  casado_sin_gasto_rebota boolean; gasto_sin_casado_rebota boolean;
+  ambiguo_resuelto_entra boolean; otra_flota_rebota boolean;
+  expediente_cerrado boolean; ignorar_sin_motivo_rebota boolean;
+  revertir_sin_motivo_rebota boolean; acto_humano_sin_firma_rebota boolean;
+  ligado_sin_gasto_rebota boolean; acto_inventado_rebota boolean;
+  borrar_gasto_ok boolean; degradado_limpia_firma boolean;
+  degradado_anotado boolean; expediente_nombra_gasto_muerto boolean;
+  ligado_sobrevive boolean; indice_bandeja_existe boolean;
+  borrar_flota_ok boolean; expediente_barrido boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0243 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0243 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono)
+    values (ta, 'ZZZ 0243 A', '+520000000243') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono)
+    values (tb, 'ZZZ 0243 B', '+520000000244') returning id into ob;
+  insert into viaje (tenant_id, operador_id, folio) values (ta, oa, 'ZZZ-0243-A') returning id into va;
+  insert into viaje (tenant_id, operador_id, folio) values (tb, ob, 'ZZZ-0243-B') returning id into vb;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha)
+    values (ta, va, 'caseta', 300, current_date) returning id into ga;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha)
+    values (tb, vb, 'caseta', 300, current_date) returning id into gb;
+  insert into app_user (id, tenant_id, email)
+    values (gen_random_uuid(), ta, 'zzz-0243@likida.test') returning id into usr;
+
+  -- El comprobante que el motor dejó AMBIGUO: dos gastos empataron y no ligó
+  -- ninguno. Es la fila que existe para que un humano decida.
+  insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus, total, fecha, candidatos)
+    values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000243', 'ambiguo', 300, current_date,
+            '{"candidatos":[{"gastoId":"x","monto":300},{"gastoId":"y","monto":300}]}')
+    returning id into cf;
+
+  -- ── (c) EL CHECK DE LA 0231, en sus dos sentidos ─────────────────────────
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus)
+      values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000244', 'casado');
+    casado_sin_gasto_rebota := false;
+  exception when check_violation then casado_sin_gasto_rebota := true; end;
+
+  begin
+    insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus, gasto_id)
+      values (ta, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000245', 'disponible', ga);
+    gasto_sin_casado_rebota := false;
+  exception when check_violation then gasto_sin_casado_rebota := true; end;
+
+  -- ── (d) LIGAR UN GASTO DE OTRA FLOTA ─────────────────────────────────────
+  begin
+    update sat_cfdi_descargado
+       set estatus = 'casado', gasto_id = gb,
+           resuelto_por = usr, resuelto_por_email = 'zzz-0243@likida.test', resuelto_en = now()
+     where id = cf;
+    otra_flota_rebota := false;
+  exception when foreign_key_violation then otra_flota_rebota := true; end;
+
+  -- ── (c) RESOLVER EL AMBIGUO: estatus y gasto EN EL MISMO UPDATE ─────────
+  begin
+    update sat_cfdi_descargado
+       set estatus = 'casado', gasto_id = ga,
+           resuelto_por = usr, resuelto_por_email = 'zzz-0243@likida.test', resuelto_en = now()
+     where id = cf;
+    ambiguo_resuelto_entra := true;
+  exception when others then ambiguo_resuelto_entra := false; end;
+
+  insert into sat_cfdi_resolucion
+    (tenant_id, cfdi_id, acto, gasto_id, estatus_antes, estatus_despues, actor_id, actor_email)
+    values (ta, cf, 'ligado', ga, 'ambiguo', 'casado', usr, 'zzz-0243@likida.test');
+
+  -- ── (a) LA FIRMA A MEDIAS ────────────────────────────────────────────────
+  begin
+    update sat_cfdi_descargado set resuelto_por_email = null where id = cf;
+    firma_a_medias_rebota := false;
+  exception when check_violation then firma_a_medias_rebota := true; end;
+
+  -- ── (f) LOS CANDADOS DEL EXPEDIENTE ──────────────────────────────────────
+  begin
+    insert into sat_cfdi_resolucion (tenant_id, cfdi_id, acto, estatus_antes, estatus_despues, actor_email)
+      values (ta, cf, 'ignorado', 'disponible', 'ignorado', 'zzz-0243@likida.test');
+    ignorar_sin_motivo_rebota := false;
+  exception when check_violation then ignorar_sin_motivo_rebota := true; end;
+
+  begin
+    insert into sat_cfdi_resolucion (tenant_id, cfdi_id, acto, gasto_id, estatus_antes, estatus_despues, actor_email)
+      values (ta, cf, 'revertido', ga, 'casado', 'disponible', 'zzz-0243@likida.test');
+    revertir_sin_motivo_rebota := false;
+  exception when check_violation then revertir_sin_motivo_rebota := true; end;
+
+  begin
+    insert into sat_cfdi_resolucion (tenant_id, cfdi_id, acto, gasto_id, estatus_antes, estatus_despues, motivo)
+      values (ta, cf, 'revertido', ga, 'casado', 'disponible', 'sin firmar');
+    acto_humano_sin_firma_rebota := false;
+  exception when check_violation then acto_humano_sin_firma_rebota := true; end;
+
+  begin
+    insert into sat_cfdi_resolucion (tenant_id, cfdi_id, acto, estatus_antes, estatus_despues, actor_email)
+      values (ta, cf, 'ligado', 'ambiguo', 'casado', 'zzz-0243@likida.test');
+    ligado_sin_gasto_rebota := false;
+  exception when check_violation then ligado_sin_gasto_rebota := true; end;
+
+  begin
+    insert into sat_cfdi_resolucion (tenant_id, cfdi_id, acto, estatus_antes, estatus_despues, motivo, actor_email)
+      values (ta, cf, 'perdonado', 'casado', 'disponible', 'x', 'zzz-0243@likida.test');
+    acto_inventado_rebota := false;
+  exception when check_violation then acto_inventado_rebota := true; end;
+
+  -- ── (e) APPEND-ONLY POR PRIVILEGIO ───────────────────────────────────────
+  expediente_cerrado :=
+        not has_table_privilege('anon', 'public.sat_cfdi_resolucion', 'SELECT')
+    and not has_table_privilege('anon', 'public.sat_cfdi_resolucion', 'INSERT')
+    and not has_table_privilege('authenticated', 'public.sat_cfdi_resolucion', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.sat_cfdi_resolucion', 'INSERT')
+    and has_table_privilege('service_role', 'public.sat_cfdi_resolucion', 'SELECT')
+    and has_table_privilege('service_role', 'public.sat_cfdi_resolucion', 'INSERT')
+    and not has_table_privilege('service_role', 'public.sat_cfdi_resolucion', 'UPDATE')
+    and not has_table_privilege('service_role', 'public.sat_cfdi_resolucion', 'DELETE');
+
+  -- El índice que hace que la lista se pueda paginar sin barrer la tabla.
+  select count(*) = 1 into indice_bandeja_existe
+    from pg_indexes where schemaname = 'public' and indexname = 'sat_cfdi_descargado_bandeja_idx';
+
+  -- ── (b) LA FIRMA SOBREVIVE AL BORRADO DE LA CUENTA (ARCO) ────────────────
+  delete from app_user where id = usr;
+  select resuelto_por is null and resuelto_por_email = 'zzz-0243@likida.test'
+    into firma_sobrevive_borrado
+    from sat_cfdi_descargado where id = cf;
+
+  -- ── (g)(h) BORRAR EL GASTO ───────────────────────────────────────────────
+  begin
+    delete from gasto where id = ga;
+    borrar_gasto_ok := true;
+  exception when others then borrar_gasto_ok := false; end;
+
+  select estatus = 'disponible' and gasto_id is null
+     and resuelto_por_email is null and resuelto_en is null
+    into degradado_limpia_firma
+    from sat_cfdi_descargado where id = cf;
+
+  select count(*) = 1 into degradado_anotado
+    from sat_cfdi_resolucion
+   where cfdi_id = cf and acto = 'degradado' and actor_email is null
+     and estatus_despues = 'disponible' and motivo like '%zzz-0243@likida.test%';
+
+  -- El expediente NOMBRA el gasto que ya no existe: ése es el punto de que la
+  -- columna no tenga llave foránea.
+  select count(*) = 1 into expediente_nombra_gasto_muerto
+    from sat_cfdi_resolucion where cfdi_id = cf and acto = 'degradado' and gasto_id = ga;
+  select count(*) = 1 into ligado_sobrevive
+    from sat_cfdi_resolucion where cfdi_id = cf and acto = 'ligado' and gasto_id = ga;
+
+  -- ── (i) BORRAR LA FLOTA ENTERA ───────────────────────────────────────────
+  begin
+    delete from tenant where id = ta;
+    borrar_flota_ok := true;
+  exception when others then borrar_flota_ok := false; end;
+  select count(*) = 0 into expediente_barrido from sat_cfdi_resolucion where tenant_id = ta;
+
+  raise exception 'BANDEJA_SAT_0243  casado_sin_gasto_rebota=%  gasto_sin_casado_rebota=%  otra_flota_rebota=%  ambiguo_resuelto_entra=%  firma_a_medias_rebota=%  ignorar_sin_motivo_rebota=%  revertir_sin_motivo_rebota=%  acto_humano_sin_firma_rebota=%  ligado_sin_gasto_rebota=%  acto_inventado_rebota=%  expediente_cerrado=%  indice_bandeja_existe=%  firma_sobrevive_borrado=%  borrar_gasto_ok=%  degradado_limpia_firma=%  degradado_anotado=%  expediente_nombra_gasto_muerto=%  ligado_sobrevive=%  borrar_flota_ok=%  expediente_barrido=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t / t)',
+    casado_sin_gasto_rebota, gasto_sin_casado_rebota, otra_flota_rebota, ambiguo_resuelto_entra,
+    firma_a_medias_rebota, ignorar_sin_motivo_rebota, revertir_sin_motivo_rebota,
+    acto_humano_sin_firma_rebota, ligado_sin_gasto_rebota, acto_inventado_rebota,
+    expediente_cerrado, indice_bandeja_existe, firma_sobrevive_borrado,
+    borrar_gasto_ok, degradado_limpia_firma, degradado_anotado,
+    expediente_nombra_gasto_muerto, ligado_sobrevive, borrar_flota_ok, expediente_barrido;
+end $$;
+
+-- ── 200. El anti-join de anomalías por IGUALDAD y el presupuesto de IA por propósito (mig. 0244) ──
+--
+-- (Renumerado de 199 a 200 al rebasar: la 0243 —bandeja SAT— tomó el 199.)
+--
+-- D.20: `anomalias_gasto_tenant` descartaba "folios que en realidad son un
+-- CFDI conocido" con `position()` contra todos los UUID del tenant — un
+-- escaneo O(grupos × UUIDs) que cinco auditorías señalaron. Ahora es igualdad
+-- contra `uq_gasto_cfdi_uuid` (medido: anti-join de 934 ms → ~1.5 ms con 20k
+-- UUIDs y 110 grupos; la función completa 2 633 → 310 ms).
+--   (a) un folio repetido en 2 viajes cuyo texto ES un UUID timbrado del
+--       tenant NO se reporta como folio_duplicado (ya vive en el mundo CFDI);
+--   (b) un folio repetido normal SÍ se reporta — la igualdad no se comió la
+--       detección;
+--   (c) el cuerpo desplegado ya no contiene `position(` — el pin que evita
+--       que una migración futura lo regrese sin querer.
+--
+-- D.23: la reserva del camino interactivo. El fondo ('ocr_lote'/'fondo') solo
+-- gasta hasta (tope_tenant − reserva_interactivo); el interactivo usa el
+-- techo completo. Un lote de OCR ya no puede dejar al chofer sin servicio.
+--   (d) fondo dentro de su parte → 'ok';
+--   (e) fondo tocando la reserva → 'tope_proposito' (falla cerrado, con
+--       nombre);
+--   (f) interactivo entra HASTA el techo aunque el fondo esté en su límite;
+--   (g) un propósito fuera del dominio LANZA (no se cuela a una cubeta);
+--   (h) anon/authenticated sin execute sobre la RPC de 8 args; service_role sí.
+do $$
+declare
+  t uuid; op1 uuid; op2 uuid; v1 uuid; v2 uuid;
+  j jsonb;
+  folio_uuid_descartado boolean; folio_normal_reportado boolean;
+  sin_position boolean;
+  fondo_ok text; fondo_rebota text; interactivo_entra text;
+  proposito_malo_rebota boolean;
+  rpc_oid oid;
+  anon_ciego boolean; auth_ciego boolean; svc_puede boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0244') returning id into t;
+  insert into operador (tenant_id, nombre, telefono) values (t, 'ZZZ 0244 A', '5215559990244') returning id into op1;
+  insert into operador (tenant_id, nombre, telefono) values (t, 'ZZZ 0244 B', '5215559990245') returning id into op2;
+  insert into viaje (tenant_id, operador_id, folio, estatus, anticipo) values (t, op1, 'ZZZ-0244-1', 'abierto', 100) returning id into v1;
+  insert into viaje (tenant_id, operador_id, folio, estatus, anticipo) values (t, op2, 'ZZZ-0244-2', 'abierto', 100) returning id into v2;
+
+  -- El CFDI timbrado del tenant, y dos tickets sin uuid cuyo FOLIO impreso ES
+  -- ese UUID (mismo concepto y monto, viajes distintos) — el caso que el
+  -- anti-join existe para descartar. Más un folio repetido normal de control.
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, folio, cfdi_uuid, cfdi_orden) values
+    (t, v1, 'diesel', 900, current_date - 3, 'D1', 'deadbeef-0000-4000-8000-000000000244', 1),
+    (t, v1, 'caseta', 333, current_date - 2, 'DEADBEEF-0000-4000-8000-000000000244', null, 1),
+    (t, v2, 'caseta', 333, current_date - 2, 'DEADBEEF-0000-4000-8000-000000000244', null, 1),
+    (t, v1, 'caseta', 200, current_date - 2, 'A-991', null, 1),
+    (t, v2, 'caseta', 200, current_date - 2, 'A-991', null, 1);
+
+  j := anomalias_gasto_tenant(t);
+  folio_uuid_descartado := not exists (
+    select 1 from jsonb_array_elements(j) e
+    where e->>'tipo' = 'folio_duplicado' and e->>'detalle' ilike '%DEADBEEF%');
+  folio_normal_reportado := exists (
+    select 1 from jsonb_array_elements(j) e
+    where e->>'tipo' = 'folio_duplicado' and e->>'detalle' like '%A-991%');
+  sin_position := pg_get_functiondef('public.anomalias_gasto_tenant(uuid)'::regprocedure)
+    not ilike '%position(%';
+
+  -- ── D.23: tope tenant 1.00, reserva interactivo 0.40 → fondo llega a 0.60 ─
+  fondo_ok := public.reservar_presupuesto_llm(gen_random_uuid(), t, gen_random_uuid(), 0.50, 5.00, 1.00, 'ocr_lote', 0.40);
+  fondo_rebota := public.reservar_presupuesto_llm(gen_random_uuid(), t, gen_random_uuid(), 0.20, 5.00, 1.00, 'fondo', 0.40);
+  interactivo_entra := public.reservar_presupuesto_llm(gen_random_uuid(), t, gen_random_uuid(), 0.45, 5.00, 1.00, 'interactivo', 0.40);
+
+  begin
+    perform public.reservar_presupuesto_llm(gen_random_uuid(), t, gen_random_uuid(), 0.01, 5.00, 1.00, 'marketing', 0.40);
+    proposito_malo_rebota := false;
+  exception when others then
+    proposito_malo_rebota := true;
+  end;
+
+  select p.oid into rpc_oid
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'reservar_presupuesto_llm' and p.pronargs = 8;
+  anon_ciego := not has_function_privilege('anon', rpc_oid, 'execute');
+  auth_ciego := not has_function_privilege('authenticated', rpc_oid, 'execute');
+  svc_puede := has_function_privilege('service_role', rpc_oid, 'execute');
+
+  delete from llm_presupuesto_reserva where tenant_id = t;
+  delete from tenant where id = t;
+
+  raise exception 'ANTIJOIN_Y_PROPOSITO_0244  folio_uuid_descartado=%  folio_normal_reportado=%  sin_position=%  fondo_ok=%  fondo_rebota=%  interactivo_entra=%  proposito_malo_rebota=%  anon=%  auth=%  svc=%   (esperado t / t / t / ok / tope_proposito / ok / t / t / t / t)',
+    folio_uuid_descartado, folio_normal_reportado, sin_position, fondo_ok, fondo_rebota, interactivo_entra, proposito_malo_rebota, anon_ciego, auth_ciego, svc_puede;
+end $$;
+
+-- ── 201. La purga de prospectos borra TODO lo que el aviso promete, y el ledger comercial pierde lo personal pero no el hecho (mig. 0245) ──
+--
+-- (Renumerado dos veces al fusionar: nació 199 —la bandeja SAT tomó ese—,
+-- pasó a 200, y el anti-join de la 0244 tomó el 200. La numeración es de
+-- lectura, no de ejecución.)
+--
+-- /aviso/prospectos promete «tu nombre, puesto, correo y teléfono se eliminan
+-- automáticamente… lo único que queda es el registro de la empresa». Tras la
+-- 0191 la fila del prospecto frío CONSERVABA los mensajes redactados (llevan
+-- el nombre de pila ADENTRO, repuesto tras la completion) y la `atribucion`
+-- del lead (fbclid/gclid identifican a quien llenó /getdemo); y un prospecto
+-- 'lost' (el 'perdido' del CRM de la 0181) nunca entraba a la purga porque la
+-- condición de estado se quedó con la lista vieja. La 0245 cierra las tres.
+--
+-- El ledger comercial (comercial_evento, 0181) guardaba el payload ENTERO de
+-- Cal.com —nombre, correo, respuestas del formulario— sin ningún plazo. La
+-- 0245 lo anonimiza a los 365 días: payload fuera, el hecho (fuente, tipo,
+-- fecha) se queda — borrar el renglón mataría la idempotencia del webhook y
+-- el valor del ledger, y el dato personal no vive ahí.
+--
+-- Todo revierte con el RAISE final. Esperado:
+--   PURGA_0245  lost_persona_fuera=t  lost_limpio=t  empresa_viva=t  ledger_viejo_vacio=t  ledger_reciente_intacto=t  llave_nueva=t  llave_120=t  anon=f
+do $$
+declare
+  lost uuid; ev_viejo uuid; ev_reciente uuid; res jsonb;
+  lost_persona_fuera boolean; lost_limpio boolean; empresa_viva boolean;
+  ledger_viejo_vacio boolean; ledger_reciente_intacto boolean;
+  llave_nueva boolean; llave_120 boolean; anon_ok boolean;
+begin
+  -- El prospecto 'lost' de hace 400 días, con TODO lo que la purga promete
+  -- quitar: persona, contacto de cabecera, notas, clave, mensajes redactados
+  -- (con el nombre adentro, como los deja reponerDecisor) y atribución.
+  insert into public.prospecto (
+      empresa, estado, contacto_nombre, telefono, correo, notas, lead_clave,
+      mensaje_wa, mensaje_correo_asunto, mensaje_correo,
+      mensajes_generados_en, mensajes_modelo, atribucion, created_at)
+    values (
+      '__verif_0243_lost__', 'lost', 'Ing. Prueba Lost', '5219990002431', 'lost@verif.test', 'hablar con lost@verif.test',
+      'lost@verif.test',
+      'Hola Prueba, ¿le vienen bien 15 minutos el jueves?', 'Asunto de prueba', 'Hola Prueba, le escribo de…',
+      now() - interval '400 days', 'modelo-de-prueba',
+      '{"fbclid": "verif-0243"}'::jsonb, now() - interval '400 days')
+    returning id into lost;
+  insert into public.prospecto_persona (prospecto_id, nombre, correo, origen, created_at)
+    values (lost, '__V243 lost__', 'lost.persona@verif.test', 'directorio', now() - interval '400 days');
+
+  -- El ledger: un evento de hace 400 días con payload personal, y uno de hace
+  -- 10 días que tiene que quedarse intacto.
+  insert into public.comercial_evento (clave_idempotencia, fuente, tipo, payload, ocurrido_en)
+    values ('__verif_0243_viejo__', 'calcom', 'appointment',
+            '{"attendee": {"name": "Prueba Persona", "email": "persona@verif.test"}}'::jsonb,
+            now() - interval '400 days')
+    returning id into ev_viejo;
+  insert into public.comercial_evento (clave_idempotencia, fuente, tipo, payload, ocurrido_en)
+    values ('__verif_0243_reciente__', 'calcom', 'appointment',
+            '{"attendee": {"name": "Otra Persona"}}'::jsonb, now() - interval '10 days')
+    returning id into ev_reciente;
+
+  res := public.mantenimiento_de_datos(30);
+
+  select count(*) = 0 into lost_persona_fuera from public.prospecto_persona where prospecto_id = lost;
+  select (contacto_nombre is null and telefono is null and correo is null and notas is null
+          and lead_clave is null and mensaje_wa is null and mensaje_correo is null
+          and mensaje_correo_asunto is null and mensajes_generados_en is null
+          and mensajes_modelo is null and atribucion is null)
+    into lost_limpio from public.prospecto where id = lost;
+  select (empresa = '__verif_0243_lost__' and estado = 'lost') into empresa_viva
+    from public.prospecto where id = lost;
+  select (payload = '{}'::jsonb) into ledger_viejo_vacio from public.comercial_evento where id = ev_viejo;
+  select (payload ? 'attendee') into ledger_reciente_intacto from public.comercial_evento where id = ev_reciente;
+  llave_nueva := res ? 'comercialEventosAnonimizados';
+  llave_120 := res ? 'prospectoPersonasPurgadas';
+  select has_function_privilege('anon', 'public.purgar_comercial_evento(integer, timestamptz)', 'EXECUTE') into anon_ok;
+
+  raise exception E'PURGA_0245  lost_persona_fuera=%  lost_limpio=%  empresa_viva=%  ledger_viejo_vacio=%  ledger_reciente_intacto=%  llave_nueva=%  llave_120=%  anon=%   (esperado t/t/t/t/t/t/t/f)',
+    lost_persona_fuera, lost_limpio, empresa_viva, ledger_viejo_vacio, ledger_reciente_intacto, llave_nueva, llave_120, anon_ok;
+end $$;
+
+-- ── 202. La lectura del OCR conoce su corrida, y una corrida no mide dos veces (mig. 0246) ──
+-- (Renumerado tres veces al fusionar: nació 199 —lo tomó la bandeja SAT
+--  (0243)—, pasó a 200 —lo tomó el anti-join del frente D (0244)— y a 201
+--  —lo tomó la purga del frente C legal (0245)—. La numeración es de
+--  lectura, no de ejecución.)
+-- ═══════════════════════════════════════════════════════════════════════════
+-- CORRECTIVA 0246 — `qa_foto_lectura.corrida_id` + el índice único PARCIAL
+-- `qa_foto_lectura_una_por_corrida`.
+--
+-- El agujero medido que la migración cierra: la corrida del 28-ago-2026
+-- procesó las 90 fotos reales ($0.29 de modelo, qa_corrida_foto = 90) y
+-- `qa_foto_lectura` quedó en CERO — nadie comparaba lo leído contra la
+-- verdad-de-terreno. El medidor nuevo (qa-medicion.ts) escribe una fila por
+-- foto, y su idempotencia NO es un `if` en TypeScript: es este índice. Lo que
+-- solo la base puede demostrar, se demuestra aquí:
+--
+--  (a) LA MISMA FOTO EN LA MISMA CORRIDA REBOTA (23505). Repetir la medición
+--      (una pasada muerta a medias, el script corrido dos veces) no puede
+--      duplicar filas: una fila doble entra al porcentaje dos veces y el
+--      número que se cita queda inventado.
+--  (b) LA MISMA FOTO EN OTRA CORRIDA SÍ ENTRA: comparar dos corridas (prompt
+--      A vs prompt B) es exactamente lo que hace útil la medición — una
+--      corrida nueva jamás borra ni bloquea a la anterior.
+--  (c) LAS LECTURAS SUELTAS (corrida_id NULL) SE APILAN LIBRES: el botón del
+--      banco escribe historial, y el índice es parcial justo para no
+--      convertir ese historial en un rebote.
+--  (d) BORRAR LA CORRIDA NO BORRA LA MEDICIÓN (`on delete set null`): la
+--      lectura es historial del modelo contra la foto; la corrida es su
+--      contexto, no su dueña. La fila queda viva y huérfana de corrida.
+do $$
+declare
+  fid uuid; cid uuid;
+  segunda_rebota boolean;
+  misma_foto_otra_corrida integer;
+  sueltas integer;
+  tras_borrar_corrida integer;
+  con_corrida_nula integer;
+begin
+  insert into qa_foto (hash, path, mime, etiqueta, bytes)
+    values ('zzz-verif-0246-hash', 'banco/zzz-verif-0246.jpg', 'image/jpeg', 'ZZZ VERIF 0246', 100)
+    returning id into fid;
+  insert into qa_corrida (escenario, parametros, estado, tenant_nombre)
+    values ('demo_guion', '{}'::jsonb, 'ok', 'ZZZ VERIF 0246')
+    returning id into cid;
+
+  -- (a) la primera entra; la segunda de la MISMA corrida rebota.
+  insert into qa_foto_lectura (foto_id, corrida_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos)
+    values (fid, cid, 'zzz-verif', '{}'::jsonb, '{}'::jsonb, 7, 0, 0);
+  begin
+    insert into qa_foto_lectura (foto_id, corrida_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos)
+      values (fid, cid, 'zzz-verif-2', '{}'::jsonb, '{}'::jsonb, 0, 7, 0);
+    segunda_rebota := false;
+  exception when unique_violation then
+    segunda_rebota := true;
+  end;
+
+  -- (b) la misma foto medida por OTRA corrida entra sin tocar la anterior.
+  insert into qa_corrida (escenario, parametros, estado, tenant_nombre)
+    values ('demo_guion', '{}'::jsonb, 'ok', 'ZZZ VERIF 0246 B')
+    returning id into cid;
+  insert into qa_foto_lectura (foto_id, corrida_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos)
+    values (fid, cid, 'zzz-verif', '{}'::jsonb, '{}'::jsonb, 6, 1, 0);
+  select count(*) into misma_foto_otra_corrida from qa_foto_lectura where foto_id = fid and corrida_id is not null;
+
+  -- (c) las sueltas (sin corrida) se apilan: dos inserts idénticos, dos filas.
+  insert into qa_foto_lectura (foto_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos)
+    values (fid, 'zzz-suelta', '{}'::jsonb, '{}'::jsonb, 7, 0, 0);
+  insert into qa_foto_lectura (foto_id, modelo, ocr_leido, medicion, campos_ok, campos_mal, campos_no_medidos)
+    values (fid, 'zzz-suelta', '{}'::jsonb, '{}'::jsonb, 7, 0, 0);
+  select count(*) into sueltas from qa_foto_lectura where foto_id = fid and corrida_id is null;
+
+  -- (d) borrar la SEGUNDA corrida: su lectura sobrevive, huérfana de corrida.
+  delete from qa_corrida where id = cid;
+  select count(*) into tras_borrar_corrida from qa_foto_lectura where foto_id = fid;
+  select count(*) into con_corrida_nula from qa_foto_lectura where foto_id = fid and corrida_id is null;
+
+  raise exception 'QA_LECTURA_CORRIDA_0246  segunda_rebota=%  misma_foto_otra_corrida=%  sueltas=%  tras_borrar_corrida=%  con_corrida_nula=%   (esperado t / 2 / 2 / 4 / 3)',
+    segunda_rebota, misma_foto_otra_corrida, sueltas, tras_borrar_corrida, con_corrida_nula;
+end $$;
+
+-- ── 203. El vigilante de portales entra al catálogo de crons, y los diez de antes siguen (mig. 0248) ──
+--
+-- Lo que SOLO la base puede demostrar de la 0248, y por qué vale un bloque:
+--
+--  (a) `portales-vivos` ES UN LATIDO LEGÍTIMO. Si no lo fuera, el cron correría
+--      perfecto y cada `registrarLatido` rebotaría contra el CHECK — y como el
+--      latido es best-effort (traga el error con un `warn`), nadie se enteraría.
+--      `/api/health` tampoco podría llamarlo muerto, porque nunca tendría un
+--      latido suyo que juzgar. Es EXACTAMENTE lo que les pasó a `asistencia` y
+--      a `descarga-sat` durante semanas hasta que la 0241 lo cazó, y repetirlo
+--      aquí tendría una ironía especial: el cron silenciado sería justo el que
+--      existe para que nada se pudra en silencio.
+--
+--  (b) LOS DIEZ DE LA 0241 SIGUEN ENTRANDO. Ésta es la mitad que de verdad se
+--      escapa. El CHECK se reescribe ENTERO cada vez que se toca (se hace
+--      `drop` y `add`), así que olvidar un id no da error: lo borra del
+--      catálogo. Una migración que solo comprobara «el nuevo entra» pasaría en
+--      verde habiendo dejado mudos a los diez anteriores. Por eso se prueban
+--      los once, uno por uno.
+--
+--  (c) UN ID INVENTADO SIGUE REBOTANDO. Si el CHECK se hubiera quedado sin
+--      restricción —un `drop` sin su `add`, por ejemplo— (a) y (b) pasarían en
+--      verde igual, porque todo entraría. Esta es la que distingue «la lista es
+--      correcta» de «no hay lista».
+do $$
+declare
+  vigilante_late boolean;
+  faltantes text;
+  cron_inventado_rebota boolean;
+  ids text[] := array[
+    'wa-pendientes','wa-outbox','escalar','facturar','purgar',
+    'runner','gps','asistencia','descarga-sat','jornada','portales-vivos'
+  ];
+  k text;
+  no_entraron text[] := '{}';
+begin
+  -- (a) el nuevo.
+  insert into cron_latido (id) values ('portales-vivos')
+    on conflict (id) do update set ultimo_latido = now();
+  vigilante_late := exists (select 1 from cron_latido where id = 'portales-vivos');
+
+  -- (b) los once, uno por uno: el CHECK se reescribe entero y un olvido no grita.
+  foreach k in array ids loop
+    begin
+      insert into cron_latido (id) values (k)
+        on conflict (id) do update set ultimo_latido = now();
+    exception when check_violation then
+      no_entraron := no_entraron || k;
+    end;
+  end loop;
+  faltantes := coalesce(array_to_string(no_entraron, ','), '');
+  if faltantes = '' then faltantes := 'ninguno'; end if;
+
+  -- (c) y la lista sigue siendo una lista.
+  begin
+    insert into cron_latido (id) values ('cron-que-nadie-escribio');
+    cron_inventado_rebota := false;
+  exception when check_violation then
+    cron_inventado_rebota := true;
+  end;
+
+  raise exception 'CRONS_0248  vigilante_late=%  faltantes=%  cron_inventado_rebota=%   (esperado t / ninguno / t)',
+    vigilante_late, faltantes, cron_inventado_rebota;
+end $$;
+
+-- ── 204. Las palancas de carta_porte y copiloto entran al catálogo, y las 58 de antes siguen (mig. 0250) ──
+--
+-- Lo que SOLO la base puede demostrar de la 0250 (mismo molde que el bloque
+-- 203 le aplicó al `cron_latido_id_dominio` de la 0248):
+--
+--  (a) LAS DOS NUEVAS ENTRAN. `agente:carta_porte` y `agente:copiloto` tienen
+--      desde la 0250 call sites reales que las preguntan (carta_porte_wa.ts y
+--      /api/admin/copiloto): si el CHECK no las admitiera, apagar al agente
+--      desde Observabilidad rebotaría con check_violation justo durante el
+--      incidente para el que la palanca existe.
+--
+--  (b) LAS 58 DE ANTES SIGUEN ENTRANDO. La mitad que de verdad se escapa: el
+--      CHECK se reescribe ENTERO (drop + add) y un id olvidado no da error —
+--      lo borra del catálogo en silencio (el incidente que la 0227 corrigió).
+--      Por eso se prueban los 60, uno por uno, contra la lista del espejo
+--      INTERRUPTORES (interruptores.ts).
+--
+--  (c) UN ID INVENTADO SIGUE REBOTANDO. Si el dominio se hubiera quedado sin
+--      CHECK, los 60 entrarían — y también cualquier basura.
+--
+-- El DO revierte con su excepción final: no queda ni una fila.
+do $$
+declare
+  ids text[] := array[
+    'global',
+    'agente:liquidacion', 'agente:facturas', 'agente:cobranza',
+    'agente:conductores', 'agente:peajes', 'agente:proveedores',
+    'agente:ventas', 'agente:redactor',
+    'agente:analista_metricas', 'agente:control_costos',
+    'agente:tesoreria', 'agente:cierre_mensual',
+    'agente:kpi_whatsapp', 'agente:desempeno_startup',
+    'agente:orquestador', 'agente:orquestador_semanal',
+    'agente:enriquecedor', 'agente:sdr', 'agente:enviador',
+    'agente:soporte', 'agente:onboarding_cliente', 'agente:exito_cliente',
+    'agente:atencion_faq', 'agente:cobranza_saas', 'agente:retencion',
+    'agente:vigilante_calidad', 'agente:documentacion',
+    'agente:legal_compliance', 'agente:talento',
+    'agente:contenido_fiscal', 'agente:lead_magnet', 'agente:seo_distribucion',
+    'agente:guiones', 'agente:noticias_mercado', 'agente:promos_diarias',
+    'agente:visuales', 'agente:video_demo', 'agente:video_marketing',
+    'agente:alianzas',
+    'agente:descarga_sat',
+    'agente:migraciones', 'agente:seguridad', 'agente:rendimiento',
+    'agente:pruebas', 'agente:auditor_codigo', 'agente:releases',
+    'agente:producto', 'agente:datos_instrumentacion',
+    'agente:automejora', 'agente:especialistas_incidente', 'agente:fundraising',
+    'agente:scorer', 'agente:dossier', 'agente:vigia',
+    'agente:demo_prep', 'agente:propuestas', 'agente:cazador',
+    'agente:carta_porte', 'agente:copiloto'
+  ];
+  k text;
+  n_catalogo int;
+  no_entraron text[] := '{}';
+  faltantes text;
+  invento_rebota boolean;
+begin
+  n_catalogo := array_length(ids, 1);
+
+  -- (a)+(b) los 60, uno por uno: el CHECK se reescribe entero y un olvido no grita.
+  foreach k in array ids loop
+    begin
+      insert into public.interruptor (id) values (k)
+        on conflict (id) do nothing;
+    exception when check_violation then
+      no_entraron := no_entraron || k;
+    end;
+  end loop;
+  faltantes := coalesce(array_to_string(no_entraron, ','), '');
+  if faltantes = '' then faltantes := 'ninguno'; end if;
+
+  -- (c) y la lista sigue siendo una lista.
+  begin
+    insert into public.interruptor (id) values ('agente:que_nadie_declaro');
+    invento_rebota := false;
+  exception when check_violation then
+    invento_rebota := true;
+  end;
+
+  raise exception 'PALANCAS_0250  n_catalogo=%  faltantes=%  invento_rebota=%   (esperado 60 / ninguno / t)',
+    n_catalogo, faltantes, invento_rebota;
+end $$;
+
+-- ── 205. La purga alcanza las tablas satélite de `prospecto` y no toca las del vivo (mig. 0258) ──
+--
+-- La 0245 auditó columna por columna la tabla `prospecto` y no miró las
+-- satélite: `prospecto_correo` (1,414 filas de 852 prospectos fríos medidas
+-- en producción, correo+nombre+puesto), las piezas de `cola_aprobacion` (el
+-- borrador completo con el nombre de pila adentro), `prospecto_dossier`
+-- (teléfonos y hallazgos con correos en `datos`) y `prospecto_toque` (prosa
+-- libre en `resumen`). La 0258 las alcanza; aquí se comprueba con corrida
+-- real que el frío pierde exactamente eso, que el prospecto VIVO conserva
+-- todo, y que `mantenimiento_de_datos` reporta las cuatro llaves nuevas.
+-- Todo revierte con el RAISE final. Esperado:
+--   SATELITES_PURGA_0258  correos_frio_fuera=t  pieza_fria_fuera=t  dossier_frio_anonimo=t  empresa_dossier_viva=t  toque_frio_sin_prosa=t  vivo_intacto=t  llaves_nuevas=4
+do $$
+declare
+  frio uuid; vivo uuid; res jsonb;
+  correos_frio_fuera boolean; pieza_fria_fuera boolean; dossier_frio_anonimo boolean;
+  empresa_dossier_viva boolean; toque_frio_sin_prosa boolean; vivo_intacto boolean;
+  llaves_nuevas int;
+begin
+  insert into public.prospecto (empresa, estado, correo, created_at)
+    values ('__verif_0258_frio__', 'contactado', 'frio@verif0258.test', now() - interval '400 days')
+    returning id into frio;
+  insert into public.prospecto (empresa, estado, correo, created_at)
+    values ('__verif_0258_vivo__', 'contactado', 'vivo@verif0258.test', now() - interval '400 days')
+    returning id into vivo;
+  -- El vivo tuvo un toque hace 10 días; el frío, ninguno.
+  insert into public.prospecto_contacto (prospecto_id, canal, direccion, resumen, ocurrio_en)
+    values (vivo, 'correo', 'salida', '__verif_0258__', now() - interval '10 days');
+
+  insert into public.prospecto_correo (prospecto_id, correo, contacto_nombre, puesto, fuente) values
+    (frio, 'ramon.perez@verif0258.test', 'Ramón Pérez', 'Gerente de Tráfico', 'https://verif0258.test/equipo'),
+    (frio, 'contacto@verif0258.test', null, null, 'https://verif0258.test'),
+    (vivo, 'ana.lopez@verif0258.test', 'Ana López', 'Directora', 'https://verif0258.test/equipo');
+  insert into public.cola_aprobacion (tipo, agente, prospecto_id, titulo, cuerpo) values
+    ('correo_frio', 'enviador', frio, 'Correo a Ramón', 'Hola Ramón, ¿le vienen bien 15 minutos el jueves?'),
+    ('correo_frio', 'enviador', vivo, 'Correo a Ana', 'Hola Ana, le escribo de Likida…');
+  insert into public.prospecto_dossier (prospecto_id, historia, telefonos, datos) values
+    (frio, 'Fundada en 1990, 40 unidades.', '["5215590000001"]'::jsonb,
+     '[{"dato": "correo de tráfico: ramon.perez@verif0258.test", "fuente": "https://verif0258.test"}]'::jsonb),
+    (vivo, 'Fundada en 2001.', '["5215590000002"]'::jsonb, '[]'::jsonb);
+  insert into public.prospecto_toque (prospecto_id, canal, resumen, actor) values
+    (frio, 'nota', 'Hablé con Ramón, pide llamar en marzo.', 'javier'),
+    (vivo, 'nota', 'Ana pidió propuesta.', 'javier');
+
+  res := public.mantenimiento_de_datos(30);
+
+  select count(*) = 0 into correos_frio_fuera from public.prospecto_correo where prospecto_id = frio;
+  select count(*) = 0 into pieza_fria_fuera from public.cola_aprobacion where prospecto_id = frio;
+  select (telefonos is null and datos is null) into dossier_frio_anonimo
+    from public.prospecto_dossier where prospecto_id = frio;
+  select (historia = 'Fundada en 1990, 40 unidades.') into empresa_dossier_viva
+    from public.prospecto_dossier where prospecto_id = frio;
+  select (resumen is null) into toque_frio_sin_prosa from public.prospecto_toque where prospecto_id = frio;
+  select ((select count(*) from public.prospecto_correo where prospecto_id = vivo) = 1
+      and (select count(*) from public.cola_aprobacion where prospecto_id = vivo) = 1
+      and (select telefonos is not null from public.prospecto_dossier where prospecto_id = vivo)
+      and (select resumen is not null from public.prospecto_toque where prospecto_id = vivo)
+      and (select correo is not null from public.prospecto where id = vivo))
+    into vivo_intacto;
+  llaves_nuevas := (case when res ? 'prospectoCorreosPurgados' then 1 else 0 end)
+                 + (case when res ? 'prospectoPiezasPurgadas' then 1 else 0 end)
+                 + (case when res ? 'prospectoDossiersAnonimizados' then 1 else 0 end)
+                 + (case when res ? 'prospectoToquesAnonimizados' then 1 else 0 end);
+
+  raise exception E'SATELITES_PURGA_0258  correos_frio_fuera=%  pieza_fria_fuera=%  dossier_frio_anonimo=%  empresa_dossier_viva=%  toque_frio_sin_prosa=%  vivo_intacto=%  llaves_nuevas=%   (esperado t/t/t/t/t/t/4)',
+    correos_frio_fuera, pieza_fria_fuera, dossier_frio_anonimo, empresa_dossier_viva, toque_frio_sin_prosa, vivo_intacto, llaves_nuevas;
+end $$;
+
+-- ── 206. Ninguna tabla colgada de `prospecto` se escapa de la purga sin decisión escrita (estructural, mig. 0258) ──
+--
+-- La lección de tres pasadas (0148 miró una columna, 0191 miró cinco, 0245
+-- miró una tabla): el error no fue nunca la tabla que se arregló, sino la
+-- que nadie enumeró. Este bloque cierra la CLASE: barre `pg_constraint`
+-- buscando toda FK que apunte a `prospecto` (menos el self-FK
+-- `duplicado_de`) y exige que cada tabla satélite esté DECIDIDA — o su
+-- nombre aparece en el fuente de `purgar_prospecto_persona` /
+-- `purgar_comercial_evento` (la purga la conoce), o está en la lista de
+-- exentas de abajo CON su razón escrita. Una tabla satélite nueva sin
+-- decisión pone este bloque en rojo el mismo día que su migración.
+--
+-- LAS EXENTAS Y SUS RAZONES (mantener en sincronía con la 0258):
+--   · prospecto_contacto — índice de la relación SIN datos de persona POR
+--     DISEÑO (0118: «SIN el cuerpo completo ni datos personales de más»;
+--     medido en producción: 0 resúmenes con '@') y es el INSUMO del filtro
+--     de frialdad: purgarlo destruiría el instrumento que decide qué purgar.
+--   · comercial_evento — ya la anonimiza `purgar_comercial_evento` (0245)
+--     por EDAD del evento, con o sin prospecto_id (el payload de Cal.com
+--     llega también huérfano); un segundo camino por frialdad solo taparía
+--     al primero. Además su nombre SÍ se exige en el fuente de esa función.
+--
+-- Esperado:
+--   SATELITES_ESTRUCTURAL_0258  sin_decidir=ninguna  exentas=2  ledger_cubierto=t
+do $$
+declare
+  exentas text[] := array['prospecto_contacto', 'comercial_evento'];
+  src_purga text; src_ledger text;
+  t text; sin_decidir text[] := '{}'; faltantes text; ledger_cubierto boolean;
+begin
+  select p.prosrc into src_purga
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'purgar_prospecto_persona';
+  select p.prosrc into src_ledger
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'purgar_comercial_evento';
+
+  for t in
+    select cl.relname
+      from pg_constraint c
+      join pg_class cl on cl.oid = c.conrelid
+     where c.contype = 'f'
+       and c.confrelid = 'public.prospecto'::regclass
+       and c.conrelid <> c.confrelid
+     group by cl.relname
+     order by cl.relname
+  loop
+    if t = any(exentas) then
+      continue;
+    end if;
+    if position(t in coalesce(src_purga, '')) = 0
+       and position(t in coalesce(src_ledger, '')) = 0 then
+      sin_decidir := sin_decidir || t;
+    end if;
+  end loop;
+
+  faltantes := coalesce(array_to_string(sin_decidir, ','), '');
+  if faltantes = '' then faltantes := 'ninguna'; end if;
+  -- La exención de comercial_evento descansa en que la función del ledger
+  -- exista Y la nombre; si alguien la vacía, la exención deja de valer.
+  ledger_cubierto := position('comercial_evento' in coalesce(src_ledger, '')) > 0;
+
+  raise exception E'SATELITES_ESTRUCTURAL_0258  sin_decidir=%  exentas=%  ledger_cubierto=%   (esperado ninguna / 2 / t)',
+    faltantes, cardinality(exentas), ledger_cubierto;
+end $$;
+
+-- ── 207. Los secretos OAuth del MCP no se pueden guardar en claro, y un código solo se canjea una vez (mig. 0260) ──
+--
+-- Lo que SOLO la base puede demostrar de la 0260 — el código de la app ya
+-- promete hashear y marcar usado con condición; aquí se prueba que la BASE
+-- lo exige aunque el código de la app se equivoque:
+--
+--  (a) EL CHECK DE 64 HEX RECHAZA UN SECRETO EN CLARO. Un token real empieza
+--      con `lk_mcp_at_` y no tiene la forma de un SHA-256: si alguien
+--      intentara guardarlo entero (el bug clásico de "ya luego lo hasheo"),
+--      el insert truena en vez de dejar la credencial legible en la tabla.
+--      Se prueba en las DOS tablas con hash (código y token).
+--
+--  (b) EL DOMINIO DE `tipo` ES CERRADO. Un token que no sea acceso/refresco
+--      no existe: `eterno` rebota con check_violation.
+--
+--  (c) EL CANDADO DEL CANJE ÚNICO VIVE EN LA BASE. El canje marca `usado_en`
+--      con `update … where usado_en is null`: el primer update toca UNA
+--      fila y el segundo (el código robado que se canjea otra vez, o la
+--      carrera de dos canjes simultáneos) toca CERO. Si una migración
+--      futura le quitara la columna o un trigger la rellenara solo, esta
+--      cuenta cambiaría.
+--
+-- El DO revierte con su excepción final: no queda ni cliente, ni código, ni
+-- fila alguna.
+do $$
+declare
+  t uuid := gen_random_uuid();
+  u uuid := gen_random_uuid();
+  cli uuid;
+  cod uuid;
+  claro_rebota_codigo boolean := false;
+  claro_rebota_token boolean := false;
+  tipo_rebota boolean := false;
+  primer_canje int;
+  segundo_canje int;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0260__');
+  insert into public.app_user (id, email, rol, tenant_id)
+    values (u, '__verif_0260__@likida.ai', 'contador', t);
+  insert into public.mcp_oauth_cliente (nombre, redirect_uris)
+    values ('__verif_0260__', '["https://claude.ai/api/mcp/auth_callback"]'::jsonb)
+    returning id into cli;
+
+  -- (a) el secreto en claro no entra: ni como código…
+  begin
+    insert into public.mcp_oauth_codigo
+      (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en)
+    values
+      ('lk_mcp_ac_secreto-en-claro-que-alguien-olvido-hashear', cli, u, t, 'contador',
+       'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '5 min');
+  exception when check_violation then
+    claro_rebota_codigo := true;
+  end;
+  -- …ni como token.
+  begin
+    insert into public.mcp_oauth_token
+      (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values
+      ('lk_mcp_at_secreto-en-claro-que-alguien-olvido-hashear', 'acceso', cli, u, t, 'contador',
+       gen_random_uuid(), now() + interval '8 hours');
+  exception when check_violation then
+    claro_rebota_token := true;
+  end;
+
+  -- (b) el dominio de tipo es cerrado.
+  begin
+    insert into public.mcp_oauth_token
+      (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values
+      (repeat('a', 64), 'eterno', cli, u, t, 'contador', gen_random_uuid(), now() + interval '8 hours');
+  exception when check_violation then
+    tipo_rebota := true;
+  end;
+
+  -- (c) el canje único: un código bien hasheado, dos intentos de marcarlo.
+  insert into public.mcp_oauth_codigo
+    (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en)
+  values
+    (repeat('b', 64), cli, u, t, 'contador',
+     'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '5 min')
+  returning id into cod;
+
+  update public.mcp_oauth_codigo set usado_en = now() where id = cod and usado_en is null;
+  get diagnostics primer_canje = row_count;
+  update public.mcp_oauth_codigo set usado_en = now() where id = cod and usado_en is null;
+  get diagnostics segundo_canje = row_count;
+
+  raise exception 'MCP_OAUTH_0260  claro_rebota_codigo=%  claro_rebota_token=%  tipo_rebota=%  primer_canje=%  segundo_canje=%   (esperado t / t / t / 1 / 0)',
+    claro_rebota_codigo, claro_rebota_token, tipo_rebota, primer_canje, segundo_canje;
+end $$;
+
+-- ── 208. producto_evento se consolida al cerrar el mes, purga su detalle y el lector no ve encoger nada (mig. 0259) ──
+--
+-- (Nació 205 en su rama y se renumeró a 207 al fusionar con la 0258, que tomó
+-- el 205 y el 206; y otra vez a 208 al fusionar con el 207 del MCP — la
+-- numeración es de lectura, no de ejecución, como ya pasó dos veces con el 201.)
+--
+-- La 0251 dejó `uso_producto_mensual()` agrupando la tabla ENTERA sin rango
+-- (cada visita a /admin/crecimiento, force-dynamic, un escaneo completo) y
+-- `producto_evento` sin purga: millones de filas al año con 200 flotas. La
+-- 0259 aplica el patrón de llm_costo (0072/0155): consolidado mensual +
+-- purga del detalle, consolidar ANTES de purgar y en la misma función.
+--
+-- Lo que se fija con corrida real:
+--   · el mes cerrado queda en el consolidado con su conteo exacto;
+--   · el detalle viejo muere y el del mes en curso vive;
+--   · el lector devuelve los DOS meses con las cifras correctas (cerrado
+--     desde el consolidado, en curso desde el detalle) — mismo nombre, misma
+--     firma que la 0251;
+--   · repetir el mantenimiento tras la purga NO encoge el mes consolidado
+--     (`do nothing`: el snapshot del cierre es inmutable — un `do update`
+--     re-agregaría desde un detalle ya parcial);
+--   · el piso de 62 días rebota (PU001): purgar antes de consolidar sería
+--     borrar sin snapshot;
+--   · `anon` no ejecuta el mantenimiento.
+-- Todo revierte con el RAISE final. Esperado:
+--   PRODUCTO_MENSUAL_0259  consolidado=t  detalle_viejo_fuera=t  detalle_vivo=t  lector_dos_meses=t  no_encoge=t  piso_rebota=t  anon=f
+do $$
+declare
+  t uuid; res jsonb; res2 jsonb;
+  -- Día 10 de hace CUATRO meses (local MX): siempre a más de 92 días de hoy
+  -- (mínimo ~107) y nunca pegado a una frontera de mes — la siembra no puede
+  -- volverse intermitente por la hora a la que corra el CI.
+  mes_viejo date := (date_trunc('month', now() at time zone 'America/Mexico_City') - interval '4 months')::date;
+  viejo_ts timestamptz := ((date_trunc('month', now() at time zone 'America/Mexico_City')
+                            - interval '4 months' + interval '10 days') at time zone 'America/Mexico_City');
+  mes_actual date := date_trunc('month', now() at time zone 'America/Mexico_City')::date;
+  consolidado boolean; detalle_viejo_fuera boolean; detalle_vivo boolean;
+  lector_dos_meses boolean; no_encoge boolean; piso_rebota boolean := false; anon_ok boolean;
+begin
+  insert into public.tenant (nombre) values ('__verif_0259__') returning id into t;
+  insert into public.producto_evento (tenant_id, pantalla, accion, created_at) values
+    (t, 'resumen', 'pageview', viejo_ts),
+    (t, 'viajes',  'pageview', viejo_ts + interval '1 hour'),
+    (t, 'resumen', 'pageview', viejo_ts + interval '2 hours'),
+    (t, 'resumen', 'pageview', now()),
+    (t, 'viajes',  'pageview', now());
+
+  res := public.mantener_producto_evento(92, now());
+
+  select (eventos = 3) into consolidado
+    from public.producto_evento_mensual where tenant_id = t and mes = mes_viejo;
+  select count(*) = 2 into detalle_viejo_fuera
+    from public.producto_evento where tenant_id = t;
+  select count(*) = 2 into detalle_vivo
+    from public.producto_evento where tenant_id = t and created_at >= now() - interval '1 day';
+  select count(*) = 2
+     and count(*) filter (where u.mes = mes_viejo and u.eventos = 3) = 1
+     and count(*) filter (where u.mes = mes_actual and u.eventos = 2) = 1
+    into lector_dos_meses
+    from public.uso_producto_mensual() u where u.tenant_id = t;
+
+  -- Repetir tras la purga: el consolidado NO se reescribe desde el detalle
+  -- (ya parcial: las filas del mes viejo murieron).
+  res2 := public.mantener_producto_evento(92, now());
+  select (eventos = 3) into no_encoge
+    from public.producto_evento_mensual where tenant_id = t and mes = mes_viejo;
+
+  begin
+    perform public.mantener_producto_evento(30, now());
+  exception when sqlstate 'PU001' then piso_rebota := true;
+  end;
+
+  select has_function_privilege('anon', 'public.mantener_producto_evento(integer, timestamptz, timestamptz)', 'EXECUTE') into anon_ok;
+
+  raise exception E'PRODUCTO_MENSUAL_0259  consolidado=%  detalle_viejo_fuera=%  detalle_vivo=%  lector_dos_meses=%  no_encoge=%  piso_rebota=%  anon=%   (esperado t/t/t/t/t/t/f)',
+    coalesce(consolidado, false), detalle_viejo_fuera, detalle_vivo,
+    coalesce(lector_dos_meses, false), coalesce(no_encoge, false), piso_rebota, anon_ok;
+end $$;
+
+-- ── 209. La llave de idempotencia del examen del contador (mig. 0254) ──
+-- El banco dorado se sincroniza por upsert sobre (agente, clave): la columna
+-- existe, el índice único rechaza el duplicado con clave, y los casos del
+-- analista (clave null) siguen conviviendo — NULLS DISTINCT, no un candado
+-- accidental sobre lo sembrado en 0134.
+do $$
+declare
+  col_existe boolean;
+  duplicado_rebota boolean;
+  nulls_conviven boolean;
+begin
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'eval_caso' and column_name = 'clave'
+  ) into col_existe;
+
+  -- (a) dos casos del contador con la MISMA clave: el segundo rebota.
+  insert into public.eval_caso (agente, pregunta, espera, tipo, clave)
+    values ('contador_v205', 'p1', 'e1', 'factica', 'Q1');
+  begin
+    insert into public.eval_caso (agente, pregunta, espera, tipo, clave)
+      values ('contador_v205', 'p2', 'e2', 'factica', 'Q1');
+    duplicado_rebota := false;
+  exception when unique_violation then
+    duplicado_rebota := true;
+  end;
+
+  -- (b) dos casos SIN clave del mismo agente conviven (los del analista, 0134).
+  begin
+    insert into public.eval_caso (agente, pregunta, espera, tipo)
+      values ('contador_v205', 'p3', 'e3', 'factica'), ('contador_v205', 'p4', 'e4', 'factica');
+    nulls_conviven := true;
+  exception when unique_violation then
+    nulls_conviven := false;
+  end;
+
+  raise exception 'EXAMEN_CONTADOR_0254  col_existe=%  duplicado_rebota=%  nulls_conviven=%   (esperado t / t / t)',
+    col_existe, duplicado_rebota, nulls_conviven;
+end $$;
+
+-- ── 211. Ligar un CFDI a un gasto es ATÓMICO: un fallo a medio camino no deja la cuña sin salida (mig. 0263, auditoría E.28 C-1) ──
+-- (Nació 210 en su rama; renumerado a 211 al fusionar con el 210 de la 0262
+-- de LEG-C2, que reclamó el mismo número desde otra rama — mismo patrón que
+-- ya le pasó al 201 y al 207 esta noche.)
+--
+-- `ligarComprobante` hacía DOS escrituras sueltas desde TypeScript —primero
+-- el gasto, después el comprobante—, con el expediente escrito después de
+-- las dos como mejor esfuerzo. Los fallos EN BANDA se compensaban soltando
+-- el gasto por su folio, pero una MUERTE DEL PROCESO entre las dos
+-- escrituras no pasaba por ningún `catch`: el gasto quedaba afirmando estar
+-- facturado (`cfdi_uuid` + `xml_verificado=true`) con el CFDI todavía
+-- 'disponible' del otro lado, y esa cuña NO TENÍA SALIDA desde la interfaz
+-- (re-ligar el mismo gasto rebotaba con `gasto_ya_tiene_cfdi`, ligar a otro
+-- violaba `uq_gasto_cfdi_uuid` de la 0065, revertir decía
+-- `nada_que_revertir`).
+--
+-- `sat_cfdi_ligar_tx` mueve las dos escrituras Y el expediente a una sola
+-- función de Postgres. Aquí se prueba con un fallo INYECTADO —un CHECK
+-- temporal que solo dispara para la fila de la prueba (`total = 999999`,
+-- para no estorbar el camino bueno de arriba), y que revienta justo en la
+-- SEGUNDA escritura, después de que la primera (el gasto) ya corrió dentro
+-- de la misma llamada— que Postgres deshace también la escritura del gasto:
+-- no queda «a medias» que reparar a mano. Se prueba además el camino bueno
+-- (las dos escrituras, el expediente y el valor de retorno juntos), el
+-- ancla optimista (`p_estatus_esperado`, que decide la carrera igual que el
+-- `.eq('estatus', …)` que reemplaza) y que solo `service_role` ejecuta el
+-- RPC.
+do $$
+declare
+  v_t uuid; v_o uuid; v_v uuid; v_g uuid; v_a uuid; v_cfdi uuid;
+  res jsonb;
+  exito_gasto boolean; exito_cfdi boolean; exito_expediente boolean; retorno_ok boolean;
+  carrera_rebota boolean := false;
+  falla_sqlstate text := '';
+  gasto_intacto boolean; cfdi_intacto boolean; expediente_vacio boolean;
+  anon_ok boolean; auth_ok boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF LIGAR TX') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P', '520000009210') returning id into v_o;
+  insert into app_user (id, email, rol, tenant_id) values (gen_random_uuid(), '__verif_210__@likida.ai', 'contador', v_t) returning id into v_a;
+  insert into viaje (tenant_id, operador_id) values (v_t, v_o) returning id into v_v;
+
+  -- ── (a) EL CAMINO BUENO: las dos escrituras, el expediente y el retorno ──
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v, 'diesel', 300) returning id into v_g;
+  insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus, total)
+    values (v_t, lower(gen_random_uuid()::text), 'disponible', 300) returning id into v_cfdi;
+
+  res := public.sat_cfdi_ligar_tx(v_t, v_cfdi, v_g, 'disponible', '{}'::jsonb, v_a, 'contralor@verif.test');
+  retorno_ok := (res ->> 'gasto_id') = v_g::text;
+
+  select (cfdi_uuid is not null and xml_verificado is true and cfdi_orden = 1) into exito_gasto
+    from gasto where id = v_g;
+  select (estatus = 'casado' and gasto_id = v_g) into exito_cfdi
+    from sat_cfdi_descargado where id = v_cfdi;
+  select count(*) = 1 into exito_expediente
+    from sat_cfdi_resolucion where cfdi_id = v_cfdi and acto = 'ligado' and gasto_id = v_g;
+
+  -- ── (b) EL ANCLA OPTIMISTA: contra el estatus que YA NO es, rebota CU014 ─
+  begin
+    perform public.sat_cfdi_ligar_tx(v_t, v_cfdi, v_g, 'disponible', '{}'::jsonb, v_a, 'contralor@verif.test');
+  exception when others then carrera_rebota := (sqlstate = 'CU014');
+  end;
+
+  -- ── (c) EL FALLO A MEDIO CAMINO: un CHECK que solo dispara para ESTA fila ─
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v, 'caseta', 200) returning id into v_g;
+  insert into sat_cfdi_descargado (tenant_id, cfdi_uuid, estatus, total)
+    values (v_t, lower(gen_random_uuid()::text), 'disponible', 999999) returning id into v_cfdi;
+
+  execute 'alter table public.sat_cfdi_descargado add constraint __verif_210_falla_a_medias
+             check (not (total = 999999 and estatus = ''casado''))';
+
+  begin
+    perform public.sat_cfdi_ligar_tx(v_t, v_cfdi, v_g, 'disponible', '{}'::jsonb, v_a, 'contralor@verif.test');
+  exception when others then falla_sqlstate := sqlstate;
+  end;
+
+  -- Si la transacción NO hubiera revertido el UPDATE del gasto —que corrió
+  -- PRIMERO, dentro de la misma llamada, antes de que el CHECK reventara en
+  -- la segunda escritura— aquí quedaría con el folio pegado y CERO renglones
+  -- de expediente que lo expliquen: exactamente la cuña que encontró el
+  -- auditor.
+  select (cfdi_uuid is null and xml_verificado is null) into gasto_intacto from gasto where id = v_g;
+  select (estatus = 'disponible' and gasto_id is null) into cfdi_intacto from sat_cfdi_descargado where id = v_cfdi;
+  select count(*) = 0 into expediente_vacio from sat_cfdi_resolucion where cfdi_id = v_cfdi;
+
+  select has_function_privilege('anon', 'public.sat_cfdi_ligar_tx(uuid,uuid,uuid,text,jsonb,uuid,text)', 'EXECUTE') into anon_ok;
+  select has_function_privilege('authenticated', 'public.sat_cfdi_ligar_tx(uuid,uuid,uuid,text,jsonb,uuid,text)', 'EXECUTE') into auth_ok;
+
+  raise exception E'LIGAR_TX_0263  gasto_ok=%  cfdi_ok=%  expediente_ok=%  retorno_ok=%  carrera_rebota=%  falla_sqlstate=%  gasto_intacto=%  cfdi_intacto=%  expediente_vacio=%  anon=%  auth=%   (esperado t/t/t/t/t/23514/t/t/t/f/f)',
+    coalesce(exito_gasto,false), coalesce(exito_cfdi,false), coalesce(exito_expediente,false), coalesce(retorno_ok,false),
+    carrera_rebota, falla_sqlstate, coalesce(gasto_intacto,false), coalesce(cfdi_intacto,false),
+    coalesce(expediente_vacio,false), anon_ok, auth_ok;
+end $$;
+
+-- ── 212. La identidad congelada de un token MCP deja de ser válida el instante en que app_user cambia (mig. 0265, HALLAZGO 1) ──
+--
+-- Esto es lo que un test de TypeScript con Supabase mockeado NO puede
+-- demostrar: que la GARANTÍA vive en la base, contra una fila REAL de
+-- `app_user` que cambia entre el momento en que el token nació y el momento
+-- en que se intenta refrescar. `refrescarTokens` llama exactamente esta RPC
+-- antes de rotar (oauth.ts) — aquí se prueba la RPC misma, con Postgres de
+-- verdad, no con un mock que solo probaría que el mock contesta lo que se le
+-- programó.
+--
+--  (a) Recién consentido: usuario vigente en su tenant y su rol → true.
+--  (b) El ADMIN LE CAMBIA EL ROL (el escenario exacto del hallazgo: "un
+--      contador... el admin le cambia el rol... sin borrar la fila de
+--      app_user") → la MISMA pregunta con el rol viejo ahora contesta false.
+--  (c) Lo mueven a OTRO tenant (incluida la variante que el hallazgo llama
+--      "lo desvincula") → false con el tenant viejo.
+--  (d) Restaurado a su tenant y rol originales → vuelve a true: no es un
+--      candado de una sola vez, es el estado ACTUAL en cada llamada.
+--  (e) La fila de `app_user` ya no existe → false (y, aparte, el FK cascade
+--      de mcp_oauth_token.user_id ya habría borrado el token solo; esta rama
+--      cubre el caso en que la RPC se llama con un user_id que nunca fue, o
+--      cuya fila se borró por otro camino).
+--
+--  (f) `revocar_mcp_oauth_usuario`: tumba TODOS los tokens activos de un
+--      usuario en su tenant de un tiro, deja intacto el de OTRO usuario de
+--      la misma flota, y una segunda llamada no vuelve a tocar lo ya
+--      revocado (idempotente por el propio `where revocado_en is null`).
+do $$
+declare
+  t uuid := gen_random_uuid();
+  t_otro uuid := gen_random_uuid();
+  u uuid := gen_random_uuid();
+  u_otro uuid := gen_random_uuid();
+  cli uuid;
+  tok_a uuid; tok_r uuid; tok_otro uuid;
+  vigente_inicial boolean;
+  vigente_tras_rol boolean;
+  vigente_tras_tenant boolean;
+  vigente_restaurado boolean;
+  vigente_usuario_borrado boolean;
+  revocados_primera bigint;
+  revocados_segunda bigint;
+  otro_token_intacto boolean;
+  ambos_revocados boolean;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0265_a__');
+  insert into public.tenant (id, nombre) values (t_otro, '__verif_0265_b__');
+  insert into public.app_user (id, email, rol, tenant_id) values (u, '__verif_0265_u__@likida.ai', 'contador', t);
+  insert into public.app_user (id, email, rol, tenant_id) values (u_otro, '__verif_0265_v__@likida.ai', 'contador', t);
+  insert into public.mcp_oauth_cliente (nombre, redirect_uris)
+    values ('__verif_0265__', '["https://claude.ai/api/mcp/auth_callback"]'::jsonb)
+    returning id into cli;
+
+  -- (a) recién consentido: la identidad congelada (tenant=t, rol=contador)
+  -- es exactamente la actual.
+  select public.mcp_oauth_usuario_vigente(u, t, 'contador') into vigente_inicial;
+
+  -- (b) EL ESCENARIO DEL HALLAZGO: el admin cambia el rol sin borrar la fila.
+  update public.app_user set rol = 'encargado' where id = u;
+  select public.mcp_oauth_usuario_vigente(u, t, 'contador') into vigente_tras_rol;
+
+  -- (c) lo mueven a otro tenant (con el rol ya restaurado, para aislar la variable).
+  update public.app_user set rol = 'contador', tenant_id = t_otro where id = u;
+  select public.mcp_oauth_usuario_vigente(u, t, 'contador') into vigente_tras_tenant;
+
+  -- (d) restaurado del todo: no es un candado de un solo uso.
+  update public.app_user set tenant_id = t where id = u;
+  select public.mcp_oauth_usuario_vigente(u, t, 'contador') into vigente_restaurado;
+
+  -- (e) la fila ya no existe.
+  select public.mcp_oauth_usuario_vigente(gen_random_uuid(), t, 'contador') into vigente_usuario_borrado;
+
+  -- (f) revocar_mcp_oauth_usuario: dos tokens activos de `u` en `t`, uno de
+  -- `u_otro` en el mismo tenant.
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('1', 64), 'acceso', cli, u, t, 'contador', gen_random_uuid(), now() + interval '8 hours')
+    returning id into tok_a;
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('2', 64), 'refresco', cli, u, t, 'contador', gen_random_uuid(), now() + interval '60 days')
+    returning id into tok_r;
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('3', 64), 'acceso', cli, u_otro, t, 'contador', gen_random_uuid(), now() + interval '8 hours')
+    returning id into tok_otro;
+
+  select public.revocar_mcp_oauth_usuario(t, u) into revocados_primera;
+  select (revocado_en is null) into otro_token_intacto from public.mcp_oauth_token where id = tok_otro;
+  select bool_and(revocado_en is not null) into ambos_revocados
+    from public.mcp_oauth_token where id in (tok_a, tok_r);
+  -- Segunda llamada: ya no hay nada activo que tocar (idempotente).
+  select public.revocar_mcp_oauth_usuario(t, u) into revocados_segunda;
+
+  raise exception 'MCP_OAUTH_VIGENCIA_0265  inicial=%  tras_rol=%  tras_tenant=%  restaurado=%  usuario_borrado=%  revocados_1=%  revocados_2=%  otro_intacto=%  ambos_revocados=%   (esperado t / f / f / t / f / 2 / 0 / t / t)',
+    vigente_inicial, vigente_tras_rol, vigente_tras_tenant, vigente_restaurado, vigente_usuario_borrado,
+    revocados_primera, revocados_segunda, otro_token_intacto, ambos_revocados;
+end $$;
+
+-- ── 213. `mantener_mcp_oauth` purga tokens revocados/expirados, códigos muertos y clientes DCR que nunca completaron un login — y nada más (mig. 0265, HALLAZGO 3) ──
+--
+-- Mismo criterio que el bloque 208 (`mantener_producto_evento`, 0259): lo
+-- que solo Postgres puede demostrar es que el DELETE se detiene exactamente
+-- donde debe. Un cliente DCR SÍ usado (con un token, aunque ya expirado) NO
+-- se borra por su antigüedad — perdería la trazabilidad de qué cliente
+-- consintió qué, que es justo el dato que la 0260 nació para guardar.
+do $$
+declare
+  t uuid := gen_random_uuid();
+  u uuid := gen_random_uuid();
+  cli_vivo uuid; cli_muerto uuid; cli_joven uuid;
+  tok_vivo uuid; tok_revocado_viejo uuid; tok_revocado_reciente uuid; tok_expirado_viejo uuid;
+  cod_viejo uuid; cod_reciente uuid;
+  piso_rebota boolean := false;
+  r jsonb;
+  vivo_token_sigue boolean;
+  revocado_viejo_se_fue boolean;
+  revocado_reciente_sigue boolean;
+  expirado_viejo_se_fue boolean;
+  cliente_vivo_sigue boolean;
+  cliente_muerto_se_fue boolean;
+  cliente_joven_sigue boolean;
+  codigo_viejo_se_fue boolean;
+  codigo_reciente_sigue boolean;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0265_purga__');
+  insert into public.app_user (id, email, rol, tenant_id) values (u, '__verif_0265_purga__@likida.ai', 'contador', t);
+
+  -- El piso (PU001): 29 días rebota, sin tocar nada.
+  begin
+    perform public.mantener_mcp_oauth(29);
+  exception when others then piso_rebota := (sqlstate = 'PU001');
+  end;
+
+  -- Un cliente que SÍ produjo un token (aunque el token ya haya muerto):
+  -- nunca se borra por antigüedad — tiene historia que contar.
+  insert into public.mcp_oauth_cliente (id, nombre, redirect_uris, creado_en)
+    values (gen_random_uuid(), '__cliente_vivo__', '["https://claude.ai/api/mcp/auth_callback"]'::jsonb, now() - interval '200 days')
+    returning id into cli_vivo;
+  -- Un cliente que JAMÁS produjo un token, viejo: el escenario del hallazgo
+  -- (DCR abierto, un escáner que se registra y se va).
+  insert into public.mcp_oauth_cliente (id, nombre, redirect_uris, creado_en)
+    values (gen_random_uuid(), '__cliente_muerto__', '["https://claude.ai/api/mcp/auth_callback"]'::jsonb, now() - interval '200 days')
+    returning id into cli_muerto;
+  -- Un cliente sin token pero RECIÉN registrado: todavía puede estar a
+  -- mitad del primer login — no se toca.
+  insert into public.mcp_oauth_cliente (id, nombre, redirect_uris, creado_en)
+    values (gen_random_uuid(), '__cliente_joven__', '["https://claude.ai/api/mcp/auth_callback"]'::jsonb, now())
+    returning id into cli_joven;
+
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en, revocado_en)
+    values (repeat('4', 64), 'acceso', cli_vivo, u, t, 'contador', gen_random_uuid(), now() + interval '8 hours', null)
+    returning id into tok_vivo;
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en, revocado_en)
+    values (repeat('5', 64), 'refresco', cli_vivo, u, t, 'contador', gen_random_uuid(), now() + interval '60 days', now() - interval '100 days')
+    returning id into tok_revocado_viejo;
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en, revocado_en)
+    values (repeat('6', 64), 'refresco', cli_vivo, u, t, 'contador', gen_random_uuid(), now() + interval '60 days', now() - interval '1 day')
+    returning id into tok_revocado_reciente;
+  insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en, revocado_en)
+    values (repeat('7', 64), 'acceso', cli_vivo, u, t, 'contador', gen_random_uuid(), now() - interval '100 days', null)
+    returning id into tok_expirado_viejo;
+
+  insert into public.mcp_oauth_codigo (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en, usado_en, creado_en)
+    values (repeat('a', 64), cli_vivo, u, t, 'contador', 'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() - interval '10 days', now() - interval '10 days', now() - interval '10 days')
+    returning id into cod_viejo;
+  insert into public.mcp_oauth_codigo (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en, usado_en, creado_en)
+    values (repeat('b', 64), cli_vivo, u, t, 'contador', 'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '3 min', null, now())
+    returning id into cod_reciente;
+
+  r := public.mantener_mcp_oauth(30);
+
+  select exists(select 1 from public.mcp_oauth_token where id = tok_vivo) into vivo_token_sigue;
+  select not exists(select 1 from public.mcp_oauth_token where id = tok_revocado_viejo) into revocado_viejo_se_fue;
+  select exists(select 1 from public.mcp_oauth_token where id = tok_revocado_reciente) into revocado_reciente_sigue;
+  select not exists(select 1 from public.mcp_oauth_token where id = tok_expirado_viejo) into expirado_viejo_se_fue;
+  select exists(select 1 from public.mcp_oauth_cliente where id = cli_vivo) into cliente_vivo_sigue;
+  select not exists(select 1 from public.mcp_oauth_cliente where id = cli_muerto) into cliente_muerto_se_fue;
+  select exists(select 1 from public.mcp_oauth_cliente where id = cli_joven) into cliente_joven_sigue;
+  select not exists(select 1 from public.mcp_oauth_codigo where id = cod_viejo) into codigo_viejo_se_fue;
+  select exists(select 1 from public.mcp_oauth_codigo where id = cod_reciente) into codigo_reciente_sigue;
+
+  raise exception 'MANTENER_MCP_OAUTH_0265  piso_rebota=%  vivo=%  rev_viejo_fue=%  rev_reciente=%  exp_viejo_fue=%  cli_vivo=%  cli_muerto_fue=%  cli_joven=%  cod_viejo_fue=%  cod_reciente=%  borrados=%   (esperado t/t/t/t/t/t/t/t/t/t/{3 tokens,1 codigo,1 cliente})',
+    piso_rebota, vivo_token_sigue, revocado_viejo_se_fue, revocado_reciente_sigue, expirado_viejo_se_fue,
+    cliente_vivo_sigue, cliente_muerto_se_fue, cliente_joven_sigue, codigo_viejo_se_fue, codigo_reciente_sigue, r;
+end $$;
+
+-- ── 214. El estudio de marketing: banco de hooks y personajes/lugares, deny-all con su dominio cerrado (mig. 0266) ──
+--
+-- Lo que solo la base puede demostrar: las dos tablas nuevas (marketing_hook,
+-- marketing_referencia) quedan CERRADAS a anon/authenticated y abiertas solo
+-- a service_role (mismo doble candado que aliado_objetivo, bloque 185), sus
+-- CHECK de "no vacío" rebotan una fila vacía en vez de guardar un hook o una
+-- referencia sin contenido, el dominio de `tipo` es cerrado (personaje/lugar,
+-- nada más), y los dos buckets nuevos (marketing_hooks_video,
+-- marketing_referencias) nacen PRIVADOS — un video o una foto de referencia
+-- interna servida en un bucket público sería indexable por cualquiera que
+-- adivine la ruta (mismo criterio que `comprobantes`, 0039).
+do $$
+declare
+  hook_id uuid;
+  hook_creado boolean;
+  hook_vacio_rebota boolean;
+  ruta_vacia_rebota boolean;
+  ref_id uuid;
+  ref_creado boolean;
+  ref_nombre_vacio_rebota boolean;
+  ref_foto_vacia_rebota boolean;
+  tipo_inventado_rebota boolean;
+  hook_cerrado boolean;
+  referencia_cerrado boolean;
+  bucket_hooks_privado boolean;
+  bucket_referencias_privado boolean;
+begin
+  -- El hook normal entra.
+  insert into public.marketing_hook (video_ruta, hook_texto)
+    values ('verif/0266/video.mp4', 'la pregunta llega igual en todas las flotas')
+    returning id into hook_id;
+  hook_creado := hook_id is not null;
+
+  -- Un hook sin texto (solo espacios) rebota.
+  begin
+    insert into public.marketing_hook (video_ruta, hook_texto) values ('verif/0266/otro.mp4', '   ');
+    hook_vacio_rebota := false;
+  exception when check_violation then
+    hook_vacio_rebota := true;
+  end;
+
+  -- Una ruta vacía también rebota.
+  begin
+    insert into public.marketing_hook (video_ruta, hook_texto) values ('   ', 'algo');
+    ruta_vacia_rebota := false;
+  exception when check_violation then
+    ruta_vacia_rebota := true;
+  end;
+
+  -- La referencia normal entra.
+  insert into public.marketing_referencia (tipo, nombre, foto_ruta)
+    values ('personaje', 'Chofer Ramon', 'verif/0266/ramon.jpg')
+    returning id into ref_id;
+  ref_creado := ref_id is not null;
+
+  -- Un nombre vacío rebota.
+  begin
+    insert into public.marketing_referencia (tipo, nombre, foto_ruta) values ('lugar', '   ', 'verif/0266/x.jpg');
+    ref_nombre_vacio_rebota := false;
+  exception when check_violation then
+    ref_nombre_vacio_rebota := true;
+  end;
+
+  -- Una foto vacía rebota.
+  begin
+    insert into public.marketing_referencia (tipo, nombre, foto_ruta) values ('lugar', 'Patio norte', '   ');
+    ref_foto_vacia_rebota := false;
+  exception when check_violation then
+    ref_foto_vacia_rebota := true;
+  end;
+
+  -- El dominio de tipo es cerrado: ni un tercer valor entra.
+  begin
+    insert into public.marketing_referencia (tipo, nombre, foto_ruta) values ('vehiculo', 'x', 'verif/0266/y.jpg');
+    tipo_inventado_rebota := false;
+  exception when check_violation then
+    tipo_inventado_rebota := true;
+  end;
+
+  -- El doble candado de las dos tablas.
+  hook_cerrado := not has_table_privilege('anon', 'public.marketing_hook', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.marketing_hook', 'SELECT')
+    and has_table_privilege('service_role', 'public.marketing_hook', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.marketing_hook'::regclass);
+  referencia_cerrado := not has_table_privilege('anon', 'public.marketing_referencia', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.marketing_referencia', 'SELECT')
+    and has_table_privilege('service_role', 'public.marketing_referencia', 'SELECT')
+    and (select relrowsecurity from pg_class where oid = 'public.marketing_referencia'::regclass);
+
+  -- Los dos buckets nacen privados.
+  select public = false into bucket_hooks_privado
+    from storage.buckets where id = 'marketing_hooks_video';
+  select public = false into bucket_referencias_privado
+    from storage.buckets where id = 'marketing_referencias';
+
+  raise exception 'ESTUDIO_MARKETING_0266  hook_creado=%  hook_vacio_rebota=%  ruta_vacia_rebota=%  ref_creado=%  ref_nombre_vacio_rebota=%  ref_foto_vacia_rebota=%  tipo_inventado_rebota=%  hook_cerrado=%  referencia_cerrado=%  bucket_hooks_privado=%  bucket_referencias_privado=%   (esperado t / t / t / t / t / t / t / t / t / t / t)',
+    hook_creado, hook_vacio_rebota, ruta_vacia_rebota, ref_creado, ref_nombre_vacio_rebota, ref_foto_vacia_rebota,
+    tipo_inventado_rebota, hook_cerrado, referencia_cerrado, bucket_hooks_privado, bucket_referencias_privado;
+end $$;
+
+-- ── 215. `agente_insumo` es deny-all: ningún `authenticated` —dueño de la fila o no— la lee ni la escribe (mig. 0267) ──
+--
+-- La bandeja de contexto universal (Fase D, plan-de-cierre.md): RLS activa,
+-- CERO policies, y REVOKE ALL de `public, anon, authenticated` — mismo
+-- patrón que `agente_definicion` (0116) y `mcp_oauth_*` (0260). No es solo
+-- RLS: la tabla ni siquiera tiene el GRANT (mismo caso que el bloque 153,
+-- QA_PANEL_0185), así que el intento rebota en el PRIVILEGIO antes de que
+-- RLS entre a evaluar — el candado más fuerte que existe, y por eso el
+-- `esperado` de las lecturas es `-1` ("denegado por privilegio"), no `0`
+-- ("RLS me deja a ciegas").
+--
+-- Se impersonan DOS sesiones (mismo mecanismo del bloque 27): un app_user de
+-- la flota DUEÑA de un insumo con `tenant_id` (el caso reservado para el día
+-- que un agente de producto reciba un insumo de una flota concreta — hoy
+-- casi todo insumo nace con `tenant_id` NULL, ver la cabecera de la 0267) y
+-- un app_user de OTRA flota. Las DOS quedan ciegas exactamente igual: el
+-- candado no depende de a quién pertenezca la fila, que es la demostración
+-- de aislamiento que esta migración pide — ni siquiera el dueño legítimo
+-- entra por el camino de sesión de navegador; el único camino es el
+-- `service_role` del servidor, filtrando `tenant_id` a mano (capa 2).
+do $$
+declare
+  v_agente text := 'control_costos';
+  t_propio uuid := gen_random_uuid();
+  t_ajeno uuid := gen_random_uuid();
+  u_propio uuid := gen_random_uuid();
+  u_ajeno uuid := gen_random_uuid();
+  n_propio int;
+  n_ajeno int;
+  n_sin_rls int;
+  escribe_propio boolean;
+  escribe_ajeno boolean;
+begin
+  insert into public.tenant (id, nombre) values (t_propio, '__verif_0267_propio__');
+  insert into public.tenant (id, nombre) values (t_ajeno, '__verif_0267_ajeno__');
+  insert into public.app_user (id, email, rol, tenant_id) values (u_propio, '__verif_0267_u1__@likida.ai', 'flota_admin', t_propio);
+  insert into public.app_user (id, email, rol, tenant_id) values (u_ajeno, '__verif_0267_u2__@likida.ai', 'flota_admin', t_ajeno);
+
+  -- Un insumo de PLATAFORMA (tenant_id null, el caso normal de hoy) y uno
+  -- hipotético atado a t_propio — las dos formas a la vez.
+  insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+    values (v_agente, null, 'texto', '__verif plataforma__', 'idea de plataforma', u_propio);
+  insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+    values (v_agente, t_propio, 'texto', '__verif de flota__', 'idea de la flota propia', u_propio);
+
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims', json_build_object('sub', u_propio)::text, true);
+    select count(*) into n_propio from public.agente_insumo where agente = v_agente;
+    reset role;
+  exception when insufficient_privilege then
+    reset role;
+    n_propio := -1;
+  end;
+
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims', json_build_object('sub', u_propio)::text, true);
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+      values (v_agente, t_propio, 'texto', 'x', 'x', u_propio);
+    escribe_propio := true;
+    reset role;
+  exception when insufficient_privilege then
+    reset role;
+    escribe_propio := false;
+  end;
+
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims', json_build_object('sub', u_ajeno)::text, true);
+    select count(*) into n_ajeno from public.agente_insumo where agente = v_agente;
+    reset role;
+  exception when insufficient_privilege then
+    reset role;
+    n_ajeno := -1;
+  end;
+
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims', json_build_object('sub', u_ajeno)::text, true);
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+      values (v_agente, t_ajeno, 'texto', 'x', 'x', u_ajeno);
+    escribe_ajeno := true;
+    reset role;
+  exception when insufficient_privilege then
+    reset role;
+    escribe_ajeno := false;
+  end;
+
+  -- Sin cambiar de rol: esta sesión corre con el superusuario de CI, que
+  -- bypassa RLS igual que `service_role` en producción (documentado por
+  -- Supabase, ver cabecera de andamio_ci.sql) — confirma que las DOS filas
+  -- (plataforma y de flota) siguen ahí y son el servidor, no RLS, quien
+  -- tiene que separarlas por tenant.
+  select count(*) into n_sin_rls from public.agente_insumo where agente = v_agente;
+
+  raise exception 'AGENTE_INSUMO_DENY_ALL_0267  ve_propio=%  escribe_propio=%  ve_ajeno=%  escribe_ajeno=%  ve_sin_rls=%   (esperado -1 / false / -1 / false / >=2)',
+    n_propio, escribe_propio, n_ajeno, escribe_ajeno, n_sin_rls;
+end $$;
+
+-- ── 216. Los CHECK de `agente_insumo` rechazan basura: tipo fuera de dominio, contenido en el campo equivocado, y un resumen sin fecha de proceso (mig. 0267) ──
+--
+-- Tres garantías que solo la base puede demostrar con certeza (un mock de
+-- supabase-js jamás ejercita un CHECK real): (1) el dominio de `tipo` es
+-- CERRADO — cualquier palabra que no sea de las cinco del plan rebota; (2) el
+-- contenido vive en EXACTAMENTE el campo de su tipo — un documento sin ruta,
+-- o un documento CON texto además de ruta, o un texto/link sin contenido, o
+-- CON una ruta que no le corresponde, todos rebotan; (3) un `resumen_uso` no
+-- puede existir sin `procesado_en` — la regla de "nunca afirmar un uso que
+-- nadie midió" (CLAUDE.md), aplicada al agente en vez de a una cifra.
+do $$
+declare
+  v_agente text := 'control_costos';
+  u uuid := gen_random_uuid();
+  rebota_tipo boolean := false;
+  rebota_doc_sin_ruta boolean := false;
+  rebota_doc_con_texto boolean := false;
+  rebota_texto_sin_contenido boolean := false;
+  rebota_texto_con_ruta boolean := false;
+  rebota_resumen_sin_proceso boolean := false;
+  acepta_documento boolean := false;
+  acepta_texto boolean := false;
+  acepta_resumen_con_proceso boolean := false;
+begin
+  -- `subido_por` exige un app_user real (FK) — de PLATAFORMA (tenant_id
+  -- null): el superadmin también sube insumos, sin necesitar una flota.
+  insert into public.app_user (id, email, rol, tenant_id) values (u, '__verif_0267_check__@likida.ai', 'superadmin', null);
+
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+      values (v_agente, null, 'video_de_gatos', '__verif__', 'x', u);
+  exception when check_violation then rebota_tipo := true;
+  end;
+
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, storage_path, subido_por)
+      values (v_agente, null, 'documento', '__verif__', null, u);
+  exception when check_violation then rebota_doc_sin_ruta := true;
+  end;
+
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, storage_path, contenido_texto, subido_por)
+      values (v_agente, null, 'documento', '__verif__', 'x/y.pdf', 'texto de más', u);
+  exception when check_violation then rebota_doc_con_texto := true;
+  end;
+
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+      values (v_agente, null, 'texto', '__verif__', null, u);
+  exception when check_violation then rebota_texto_sin_contenido := true;
+  end;
+
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, storage_path, contenido_texto, subido_por)
+      values (v_agente, null, 'texto', '__verif__', 'x/y.pdf', 'idea', u);
+  exception when check_violation then rebota_texto_con_ruta := true;
+  end;
+
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por, resumen_uso)
+      values (v_agente, null, 'texto', '__verif__', 'idea', u, 'ya lo usé sin haberlo procesado');
+  exception when check_violation then rebota_resumen_sin_proceso := true;
+  end;
+
+  -- Las formas buenas SÍ entran — un CHECK demasiado estricto sería tan
+  -- falso como uno demasiado laxo.
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, storage_path, subido_por)
+      values (v_agente, null, 'documento', '__verif ok doc__', 'control_costos/ok.pdf', u);
+    acepta_documento := true;
+  exception when others then acepta_documento := false;
+  end;
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por)
+      values (v_agente, null, 'texto', '__verif ok texto__', 'idea de verdad', u);
+    acepta_texto := true;
+  exception when others then acepta_texto := false;
+  end;
+  begin
+    insert into public.agente_insumo (agente, tenant_id, tipo, titulo, contenido_texto, subido_por, procesado_en, resumen_uso)
+      values (v_agente, null, 'texto', '__verif ok procesado__', 'idea ya usada', u, now(), 'Incluida en el parte de Costos.');
+    acepta_resumen_con_proceso := true;
+  exception when others then acepta_resumen_con_proceso := false;
+  end;
+
+  raise exception 'AGENTE_INSUMO_CHECKS_0267  tipo=%  doc_sin_ruta=%  doc_con_texto=%  texto_sin_contenido=%  texto_con_ruta=%  resumen_sin_proceso=%  ok_doc=%  ok_texto=%  ok_procesado=%   (esperado t / t / t / t / t / t / t / t / t)',
+    rebota_tipo, rebota_doc_sin_ruta, rebota_doc_con_texto, rebota_texto_sin_contenido, rebota_texto_con_ruta, rebota_resumen_sin_proceso, acepta_documento, acepta_texto, acepta_resumen_con_proceso;
+end $$;
+
+-- ── 217. El hilo del ticket: la nota interna NO la ve el cliente y el hilo ajeno ni se lee ni se escribe (mig. 0268, auditoría H1) ──
+--
+-- La 0051 escribió, textual, que «una nota interna no la ve el cliente». Su
+-- policy no lo hacía: `tenant_data` era `for all` con un único predicado de
+-- tenant (y la 0086 la reescribió conservando esa forma), así que un
+-- `flota_admin` con sesión de navegador leía `interna=true` de SUS tickets
+-- igual que cualquier otro mensaje. El comentario prometía una garantía que la
+-- policy no daba — y eso es peor que no prometerla, porque nadie la vuelve a
+-- revisar.
+--
+-- Y LA SUPLANTACIÓN DE AUTOR, que encontró la revisión de Fable (29-ago-2026)
+-- sobre la primera versión de esta migración: la rama tenant del `with check`
+-- no anclaba `autor_id` a `auth.uid()`, así que un flota_admin con sesión de
+-- navegador insertaba un mensaje PÚBLICO firmado con el uuid de OTRO usuario —
+-- un compañero suyo, o un uuid de superadmin filtrado, y entonces la pantalla
+-- lo pinta como "Likida". Ese mensaje falso cumple `cuentaComoRespuesta`
+-- (interna=false, autor≠solicitante) y APAGA la alarma «sin respuesta» del
+-- agente de Éxito sin que nadie haya contestado: el hueco dejaba que el propio
+-- cliente desactivara la garantía que esta migración vino a construir.
+--
+-- Este bloque ataca las esquinas con TRES app_user REALES (dos de la flota A,
+-- uno de la B), impersonados con `set local role authenticated` + el claim del
+-- sub (que es lo que hace PostgREST en cada request):
+--
+--   a) El dueño de A ve el mensaje PÚBLICO de su ticket.                → 1
+--   b) El dueño de A NO ve la nota interna de su propio ticket.         → 0
+--   c) El dueño de B no ve NADA del hilo de A.                          → 0
+--   d) El dueño de B no puede ESCRIBIR en el hilo de A (with check).    → t
+--   e) El dueño de A no puede fabricar una nota interna en su hilo.     → t
+--   f) El dueño de A no puede FIRMAR COMO OTRO usuario de su flota.     → t
+--   g) …pero SÍ puede escribir firmando con su propio uuid.             → t
+--   h) `asignado_a` (0268) existe y acepta el id de un app_user.        → t
+--
+-- (g) NO es relleno: sin un control positivo, una policy que negara TODA
+-- escritura del tenant pasaría este bloque con honores, y el panel del cliente
+-- se habría quedado mudo sin que nada lo dijera.
+--
+-- Lo que este bloque NO prueba, y por eso no se presenta como si lo probara:
+-- el camino REAL del producto corre con `service_role`, que salta RLS. Esa
+-- primera red es el `.eq('interna', false)` de `getHilo` y el rechazo de
+-- `responderTicket`, probados en `src/lib/likida/soporte.test.ts`. Esto es la
+-- segunda red: la que protege una sesión de navegador.
+do $$
+declare
+  v_a uuid; v_b uuid; v_u_a uuid := gen_random_uuid(); v_u_b uuid := gen_random_uuid();
+  -- El COMPAÑERO de flota del dueño de A: la víctima de la suplantación. Tiene
+  -- que ser del MISMO tenant, porque si no el rechazo podría venir del filtro
+  -- de tenant y no del ancla de autor — y entonces el bloque probaría otra cosa.
+  v_u_a2 uuid := gen_random_uuid();
+  v_tk uuid;
+  n_publico_propio int; n_interna_propia int; n_hilo_ajeno int;
+  b_no_escribe boolean := false;
+  a_no_fabrica_interna boolean := false;
+  a_no_suplanta boolean := false;
+  a_firma_propia boolean := false;
+  asignado_ok boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0268 A') returning id into v_a;
+  insert into tenant (nombre) values ('ZZZ VERIF 0268 B') returning id into v_b;
+  insert into app_user (id, tenant_id, email, rol) values (v_u_a, v_a, 'zzz-0268-a@likida.test', 'flota_admin');
+  insert into app_user (id, tenant_id, email, rol) values (v_u_a2, v_a, 'zzz-0268-a2@likida.test', 'encargado');
+  insert into app_user (id, tenant_id, email, rol) values (v_u_b, v_b, 'zzz-0268-b@likida.test', 'flota_admin');
+
+  insert into ticket_soporte (tenant_id, abierto_por, asunto)
+    values (v_a, v_u_a, 'ZZZ ticket 0268') returning id into v_tk;
+  -- El hilo, escrito con service_role (que es como lo escribe el producto):
+  -- una respuesta pública del equipo y una nota interna sobre la misma flota.
+  insert into ticket_mensaje (ticket_id, autor_id, cuerpo, interna)
+    values (v_tk, null, 'Ya lo estamos viendo.', false);
+  insert into ticket_mensaje (ticket_id, autor_id, cuerpo, interna)
+    values (v_tk, null, 'Nota interna: esta flota lleva tres tickets del mismo tema.', true);
+
+  -- `asignado_a` acepta a un app_user (0268). Si la columna no existiera, la
+  -- migración no habría aplicado y esto tronaría antes de llegar aquí.
+  update ticket_soporte set asignado_a = v_u_a where id = v_tk;
+  select (asignado_a = v_u_a) into asignado_ok from ticket_soporte where id = v_tk;
+
+  -- ── El flota_admin de A, impersonado ────────────────────────────────────
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u_a)::text, true);
+
+  select count(*) into n_publico_propio from ticket_mensaje where ticket_id = v_tk and interna = false;
+  select count(*) into n_interna_propia  from ticket_mensaje where ticket_id = v_tk and interna = true;
+
+  begin
+    insert into ticket_mensaje (ticket_id, autor_id, cuerpo, interna)
+      values (v_tk, v_u_a, 'Nota que el cliente NO debería poder fabricar', true);
+  exception when insufficient_privilege then a_no_fabrica_interna := true;
+  end;
+
+  -- LA SUPLANTACIÓN (hallazgo de Fable): mensaje PÚBLICO, en SU propio ticket,
+  -- de SU propia flota — todo legítimo salvo la firma, que es la de su
+  -- compañero. Sin el ancla `autor_id = (select auth.uid())` esto entraba, y
+  -- ese mensaje apagaba la alarma «sin respuesta» sin que nadie contestara.
+  begin
+    insert into ticket_mensaje (ticket_id, autor_id, cuerpo, interna)
+      values (v_tk, v_u_a2, 'Respuesta falsa firmada por otro usuario', false);
+  exception when insufficient_privilege then a_no_suplanta := true;
+  end;
+
+  -- EL CONTROL POSITIVO: lo mismo, firmado con su propio uuid, SÍ entra. Sin
+  -- esto, una policy que negara toda escritura del tenant pasaría el bloque.
+  begin
+    insert into ticket_mensaje (ticket_id, autor_id, cuerpo, interna)
+      values (v_tk, v_u_a, 'Sigo esperando, ¿alguna novedad?', false);
+    a_firma_propia := true;
+  exception when insufficient_privilege then a_firma_propia := false;
+  end;
+
+  reset role;
+
+  -- ── El flota_admin de B, impersonado ────────────────────────────────────
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u_b)::text, true);
+
+  select count(*) into n_hilo_ajeno from ticket_mensaje where ticket_id = v_tk;
+
+  begin
+    insert into ticket_mensaje (ticket_id, autor_id, cuerpo, interna)
+      values (v_tk, v_u_b, 'Mensaje en el hilo de otra flota', false);
+  exception when insufficient_privilege then b_no_escribe := true;
+  end;
+
+  reset role;
+
+  delete from tenant where id in (v_a, v_b);   -- cascade limpia el resto
+  raise exception E'HILO_TICKET_0268  publico-propio=%  interna-propia=%  hilo-ajeno=%  b-no-escribe=%  a-no-fabrica-interna=%  a-no-suplanta=%  a-firma-propia=%  asignado=%   (esperado 1 / 0 / 0 / t / t / t / t / t)',
+    n_publico_propio, n_interna_propia, n_hilo_ajeno, b_no_escribe, a_no_fabrica_interna,
+    a_no_suplanta, a_firma_propia, asignado_ok;
+end $$;
+
+-- ── 218. `cola_correo_frio_por_prospecto`: dos invocaciones que compiten por el mismo prospecto no fabrican dos piezas `correo_frio` pendientes (mig. 0270) ──
+--
+-- (auditoría 21, agéntico, MEDIO.)
+--
+-- El hallazgo: `redactarCorreoFrio` frenaba la duplicada con una LECTURA
+-- previa ("¿hay una pieza pendiente de este prospecto?"), que basta contra un
+-- humano pero no contra el botón del tablero y el cron nivel 2 compitiendo por
+-- el mismo prospecto — las dos pasan la lectura ANTES de que ninguna inserte,
+-- las dos ven cero, las dos intentan encolar. Este bloque simula esa carrera
+-- con dos INSERT consecutivos dentro de la misma transacción (la forma en que
+-- esta batería reproduce una condición de carrera real — mismo patrón que el
+-- bloque 172, `parte_costos`/0215, y el 64, `cobranza_contacto`/0089): si el
+-- índice es el árbitro, el SEGUNDO insert debe rebotar con 23505 sin importar
+-- que la lectura de ambas invocaciones haya dado "cero pendientes".
+--
+-- (a) primera pieza entra; (b) la segunda, MISMO prospecto y MISMO tipo,
+-- rebota — exactamente la carrera del hallazgo; (c) tras esas dos, sigue
+-- habiendo UNA sola pendiente de ese prospecto (el índice no dejó pasar la
+-- segunda ni a medias); (d) resuelto (rechazado) el sobreviviente, el
+-- prospecto queda libre y una TERCERA pieza SÍ entra — la parcialidad a
+-- `estado = 'pendiente'` funciona en el sentido "se resuelve, se libera"; (e)
+-- una pieza `respuesta_ads` (el SDR) del MISMO prospecto convive con un
+-- `correo_frio` pendiente — el índice es parcial también a `tipo`, a
+-- propósito (0270, misma exclusión que 0215/0218 hacen con el Redactor); (f)
+-- dos prospectos DISTINTOS con el MISMO título de campaña no chocan entre
+-- sí — el árbitro es por prospecto, no por título (a diferencia de 0215/0218,
+-- cuyos títulos SÍ son deterministas por periodo).
+do $$
+declare
+  v_p1 uuid; v_p2 uuid;
+  segunda_rebota boolean := false;
+  n_pendientes_tras_carrera int;
+  tercera_entra boolean := false;
+  ads_convive boolean := false;
+  otro_prospecto_entra boolean := false;
+begin
+  insert into prospecto (empresa, fuente) values ('ZZZ VERIF 0270 — uno', 'censo') returning id into v_p1;
+  insert into prospecto (empresa, fuente) values ('ZZZ VERIF 0270 — dos', 'censo') returning id into v_p2;
+
+  -- (a) La primera invocación gana la carrera.
+  insert into cola_aprobacion (tipo, agente, prospecto_id, titulo, cuerpo)
+    values ('correo_frio', 'redactor', v_p1, 'Asunto de campaña 0270', 'pieza de la 1a invocación');
+
+  -- (b) La segunda invocación, la que la LECTURA previa no pudo frenar
+  -- (leyó cero pendientes antes de que la primera terminara de insertar):
+  -- el índice único parcial es quien de verdad arbitra.
+  begin
+    insert into cola_aprobacion (tipo, agente, prospecto_id, titulo, cuerpo)
+      values ('correo_frio', 'redactor', v_p1, 'Asunto de campaña 0270', 'pieza de la 2a invocación (perdedora)');
+  exception when unique_violation then
+    segunda_rebota := true;
+  end;
+
+  -- (c) Sigue habiendo UNA sola pendiente de v_p1.
+  select count(*) into n_pendientes_tras_carrera
+    from cola_aprobacion where prospecto_id = v_p1 and tipo = 'correo_frio' and estado = 'pendiente';
+
+  -- (d) Se resuelve (rechaza) la sobreviviente: el prospecto queda libre.
+  update cola_aprobacion
+    set estado = 'rechazado', motivo_rechazo = 'prueba 0270', resuelto_en = now(), resuelto_por_email = 'verif@likida.ai'
+    where prospecto_id = v_p1 and tipo = 'correo_frio' and estado = 'pendiente';
+  begin
+    insert into cola_aprobacion (tipo, agente, prospecto_id, titulo, cuerpo)
+      values ('correo_frio', 'redactor', v_p1, 'Asunto de campaña 0270', 'pieza de la 3a invocación (tras liberar)');
+    tercera_entra := true;
+  exception when unique_violation then
+    tercera_entra := false;
+  end;
+
+  -- (e) `respuesta_ads` del mismo prospecto convive con el `correo_frio`
+  -- pendiente que acaba de entrar arriba (la 3a invocación sigue pendiente).
+  begin
+    insert into cola_aprobacion (tipo, agente, prospecto_id, titulo, cuerpo)
+      values ('respuesta_ads', 'redactor', v_p1, 'Respondió el ads de Facebook', 'pieza del SDR');
+    ads_convive := true;
+  exception when unique_violation then
+    ads_convive := false;
+  end;
+
+  -- (f) Otro prospecto, MISMO título de campaña: el árbitro es por
+  -- prospecto, no por título — no debe chocar con nada de lo de arriba.
+  begin
+    insert into cola_aprobacion (tipo, agente, prospecto_id, titulo, cuerpo)
+      values ('correo_frio', 'redactor', v_p2, 'Asunto de campaña 0270', 'pieza de otro prospecto, mismo asunto');
+    otro_prospecto_entra := true;
+  exception when unique_violation then
+    otro_prospecto_entra := false;
+  end;
+
+  delete from cola_aprobacion where prospecto_id in (v_p1, v_p2);
+  delete from prospecto where id in (v_p1, v_p2);
+  raise exception E'CORREO_FRIO_UNICO_0270  segunda-rebota=%  pendientes-tras-carrera=%  tercera-entra=%  ads-convive=%  otro-prospecto-entra=%   (esperado t / 1 / t / t / t)',
+    segunda_rebota, n_pendientes_tras_carrera, tercera_entra, ads_convive, otro_prospecto_entra;
+end $$;
+
+-- ── 219. Un token/código MCP con (user_id, tenant_id, rol) cruzados nunca se escribe, y un rol fuera de dominio tampoco (mig. 0271) ──
+--
+-- El hallazgo: `mcp_oauth_codigo`/`mcp_oauth_token` llevaban `user_id` y
+-- `tenant_id` con FK SIMPLES e INDEPENDIENTES a `app_user(id)` y `tenant(id)`
+-- — nada ataba el par, así que un INSERT con el usuario de la flota A y el
+-- `tenant_id` de la flota B pasaba las dos FK. La 0271 cierra esto con la
+-- misma técnica de 0028/0145 (FK compuesta contra una `unique (id, tenant_id,
+-- rol)` en `app_user`) y le agrega a `rol` el dominio cerrado que le faltaba
+-- desde la 0260 — más ESTRECHO que `app_user_rol_dominio` a propósito: solo
+-- los tres roles que `/mcp/autorizar` de verdad deja consentir.
+--
+-- Lo que este bloque demuestra, con las DOS tablas y un solo tenant real de
+-- por medio:
+--
+--  (a) El trío REAL (usuario, SU tenant, SU rol) → el INSERT pasa.
+--  (b) EL ESCENARIO LITERAL DEL HALLAZGO: mismo usuario, `tenant_id` de OTRA
+--      flota → `foreign_key_violation`, en las dos tablas.
+--  (c) Mismo usuario y tenant, un rol que el usuario NO TIENE HOY
+--      (`flota_admin` en vez de su `contador` real) → también
+--      `foreign_key_violation`, aunque ese rol sí sea válido en general —
+--      esto es lo que la FK compuesta cierra y un CHECK de dominio, solo,
+--      jamás habría podido cerrar.
+--  (d) Un rol que NUNCA es de `app_user` (`auditor`) → `check_violation` del
+--      dominio de la 0271, ANTES de que la FK ni se evalúe.
+do $$
+declare
+  ta uuid := gen_random_uuid();
+  tb uuid := gen_random_uuid();
+  u uuid := gen_random_uuid();
+  cli uuid;
+  real_codigo boolean := false; real_token boolean := false;
+  tenant_cruzado_codigo boolean := false; tenant_cruzado_token boolean := false;
+  rol_no_vigente_codigo boolean := false; rol_no_vigente_token boolean := false;
+  rol_fuera_dominio_codigo boolean := false; rol_fuera_dominio_token boolean := false;
+begin
+  insert into public.tenant (id, nombre) values (ta, '__verif_0271_a__');
+  insert into public.tenant (id, nombre) values (tb, '__verif_0271_b__');
+  insert into public.app_user (id, email, rol, tenant_id) values (u, '__verif_0271__@likida.ai', 'contador', ta);
+  insert into public.mcp_oauth_cliente (nombre, redirect_uris)
+    values ('__verif_0271__', '["https://claude.ai/api/mcp/auth_callback"]'::jsonb)
+    returning id into cli;
+
+  -- (a) el trío real: pasa en las dos tablas.
+  begin
+    insert into public.mcp_oauth_codigo
+      (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en)
+    values (repeat('1', 64), cli, u, ta, 'contador',
+      'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '5 min');
+    real_codigo := true;
+  exception when foreign_key_violation then real_codigo := false;
+  end;
+  begin
+    insert into public.mcp_oauth_token
+      (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('1', 64), 'acceso', cli, u, ta, 'contador', gen_random_uuid(), now() + interval '8 hours');
+    real_token := true;
+  exception when foreign_key_violation then real_token := false;
+  end;
+
+  -- (b) el escenario literal del hallazgo: usuario de A, tenant_id de B.
+  begin
+    insert into public.mcp_oauth_codigo
+      (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en)
+    values (repeat('2', 64), cli, u, tb, 'contador',
+      'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '5 min');
+  exception when foreign_key_violation then tenant_cruzado_codigo := true;
+  end;
+  begin
+    insert into public.mcp_oauth_token
+      (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('2', 64), 'acceso', cli, u, tb, 'contador', gen_random_uuid(), now() + interval '8 hours');
+  exception when foreign_key_violation then tenant_cruzado_token := true;
+  end;
+
+  -- (c) tenant correcto, pero un rol que el usuario no tiene HOY (es
+  -- 'contador', no 'flota_admin' — ambos válidos en general, solo uno cierto).
+  begin
+    insert into public.mcp_oauth_codigo
+      (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en)
+    values (repeat('3', 64), cli, u, ta, 'flota_admin',
+      'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '5 min');
+  exception when foreign_key_violation then rol_no_vigente_codigo := true;
+  end;
+  begin
+    insert into public.mcp_oauth_token
+      (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('3', 64), 'acceso', cli, u, ta, 'flota_admin', gen_random_uuid(), now() + interval '8 hours');
+  exception when foreign_key_violation then rol_no_vigente_token := true;
+  end;
+
+  -- (d) un rol que ni siquiera es de app_user: el CHECK de dominio de la
+  -- 0271 lo rechaza antes de tocar la FK.
+  begin
+    insert into public.mcp_oauth_codigo
+      (codigo_hash, cliente_id, user_id, tenant_id, rol, redirect_uri, code_challenge, familia, expira_en)
+    values (repeat('4', 64), cli, u, ta, 'auditor',
+      'https://claude.ai/api/mcp/auth_callback', repeat('E', 43), gen_random_uuid(), now() + interval '5 min');
+  exception when check_violation then rol_fuera_dominio_codigo := true;
+  end;
+  begin
+    insert into public.mcp_oauth_token
+      (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
+    values (repeat('4', 64), 'acceso', cli, u, ta, 'auditor', gen_random_uuid(), now() + interval '8 hours');
+  exception when check_violation then rol_fuera_dominio_token := true;
+  end;
+
+  raise exception E'MCP_OAUTH_IDENTIDAD_ATADA_0271  real-codigo=%  real-token=%  tenant-cruzado-codigo=%  tenant-cruzado-token=%  rol-no-vigente-codigo=%  rol-no-vigente-token=%  rol-fuera-dominio-codigo=%  rol-fuera-dominio-token=%   (esperado t / t / t / t / t / t / t / t)',
+    real_codigo, real_token, tenant_cruzado_codigo, tenant_cruzado_token,
+    rol_no_vigente_codigo, rol_no_vigente_token, rol_fuera_dominio_codigo, rol_fuera_dominio_token;
+end $$;
+
+-- ── 220. `poliza_datos_tenant` entrega los insumos de deducibilidad, y no los clasifica (mig. 0272) ──
+--
+-- AUDITORÍA 22, FIS-C1 (CRÍTICO). La función devolvía UNA base por concepto y
+-- la ruta la cargaba entera a la cuenta de gasto DEDUCIBLE, aunque el motor
+-- hubiera marcado ese comprobante `cfdi_efos` o `efectivo_sobre_tope`: el PDF
+-- decía «No deducible $58,000» y el archivo del ERP lo asentaba como deducible.
+--
+-- Lo que este bloque asevera es la FORMA del contrato nuevo, que es lo que la
+-- base sí puede demostrar:
+--   (a) cada fila trae `gastos`, con un renglón POR COMPROBANTE — no agregado
+--       por concepto — con su `id`, su base y `tieneCfdi`;
+--   (b) cada fila trae `diferencias`, el jsonb que la liquidación ya guarda;
+--   (c) `porConcepto` y `baseDesconocida` SIGUEN ahí: los consumidores previos
+--       no se enteran de este cambio.
+--
+-- Lo que este bloque NO asevera, a propósito: en qué cubeta cae cada gasto. Esa
+-- pregunta tiene UNA definición (`cubetaDe`, cuadre/engine.ts) y vive en TS.
+-- Copiar `NO_DEDUCIBLE_ISR` aquí sería la segunda fuente de verdad que diverge
+-- en la primera auditoría que agregue un tipo. Se prueba en
+-- `poliza_deducibilidad.test.ts` y en el reparto de la ruta.
+do $$
+declare
+  t uuid := gen_random_uuid(); v uuid := gen_random_uuid();
+  l uuid := gen_random_uuid(); g uuid := gen_random_uuid();
+  op uuid := gen_random_uuid();
+  fila jsonb;
+  trae_gastos boolean := false;
+  gasto_por_comprobante boolean := false;
+  trae_diferencias boolean := false;
+  conserva_por_concepto boolean := false;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0272__');
+  -- `viaje.operador_id` es NOT NULL: el fixture necesita un operador real.
+  insert into public.operador (id, tenant_id, nombre, telefono)
+    values (op, t, 'Operador 0272', '+5218100000272');
+  insert into public.viaje (id, tenant_id, operador_id, folio, anticipo, estatus)
+    values (v, t, op, 'VJ-0272', 10000, 'liquidado');
+  insert into public.gasto (id, tenant_id, viaje_id, concepto, monto, sub_total, cfdi_uuid)
+    values (g, t, v, 'hospedaje', 5800, 5000, null);
+  insert into public.liquidacion
+    (id, tenant_id, viaje_id, total_anticipo, total_comprobado, diferencia, iva_acreditable, diferencias)
+    values (l, t, v, 10000, 5800, 4200, 0,
+      jsonb_build_array(jsonb_build_object('tipo','efectivo_sobre_tope','gastoId',g::text,'concepto','hospedaje','monto',0)));
+
+  select x into fila
+    from jsonb_array_elements(public.poliza_datos_tenant(t, current_date - 1, current_date + 1)) x
+   limit 1;
+
+  trae_gastos           := jsonb_typeof(fila->'gastos') = 'array' and jsonb_array_length(fila->'gastos') = 1;
+  gasto_por_comprobante := (fila->'gastos'->0->>'id') = g::text
+                           and (fila->'gastos'->0->>'subtotal')::numeric = 5000
+                           and (fila->'gastos'->0->>'tieneCfdi') = 'false';
+  trae_diferencias      := jsonb_array_length(fila->'diferencias') = 1
+                           and (fila->'diferencias'->0->>'gastoId') = g::text;
+  conserva_por_concepto := jsonb_typeof(fila->'porConcepto') = 'array'
+                           and (fila->'baseDesconocida')::numeric = 0;
+
+  raise exception E'POLIZA_DEDUCIBILIDAD_0272  gastos=%  por-comprobante=%  diferencias=%  conserva-porConcepto=%   (esperado t / t / t / t)',
+    trae_gastos, gasto_por_comprobante, trae_diferencias, conserva_por_concepto;
+end $$;
+
+-- ── 221. La cancelación ARCO retira el texto libre que el titular escribió (mig. 0273) ──
+--
+-- AUDITORÍA 22, LEG-A4 (ALTO). La 0262 declaró su alcance como «el esquema
+-- completo de `operador`», y las tablas donde vive lo que el TITULAR ESCRIBIÓ
+-- quedaron fuera. Si Juan escribió «soy Juan Pérez de la unidad 12, choqué en
+-- el km 84», esa cadena sobrevivía íntegra mientras el panel le confirmaba al
+-- contralor «el titular quedó anonimizado en la base».
+--
+-- Se asevera lo que la base sí puede demostrar, END TO END sobre la RPC real:
+--   (a) `incidencia.descripcion` deja de contener el nombre del titular;
+--   (b) `incidencia.operador_id` queda suelto;
+--   (c) `incidencia_evento.detalle->>'texto'` tampoco lo contiene;
+--   (d) el RENGLÓN de la incidencia SIGUE ahí — es un hecho operativo de la
+--       flota, y borrarlo sería pasarse del derecho que se está ejerciendo;
+--   (e) la evidencia de la solicitud cuenta lo retirado.
+do $$
+declare
+  t uuid := gen_random_uuid(); op uuid := gen_random_uuid();
+  inc uuid := gen_random_uuid(); sol uuid := gen_random_uuid();
+  desc_final text; ev_final jsonb; op_final uuid; txt_evento text;
+  incidencia_viva boolean;
+  sin_nombre_desc boolean := false; sin_nombre_evento boolean := false;
+  operador_suelto boolean := false; evidencia_lo_cuenta boolean := false;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0273__');
+  insert into public.operador (id, tenant_id, nombre, telefono)
+    values (op, t, 'Juan Pérez', '+5218112345678');
+  insert into public.incidencia (id, tenant_id, operador_id, tipo, prioridad, descripcion, hay_lesionados)
+    values (inc, t, op, 'siniestro', 'critica',
+            'soy Juan Pérez de la unidad 12, choqué en el km 84 y me llevaron al IMSS', true);
+  insert into public.incidencia_evento (tenant_id, incidencia_id, tipo, detalle)
+    values (t, inc, 'mensaje_adicional',
+            jsonb_build_object('texto', 'aquí Juan Pérez otra vez, ya llegó la grúa'));
+  -- Dos cosas que el esquema de la 0053 exige y el primer fixture no traía:
+  -- `vence_en` es NOT NULL (la LFPDPPP da plazo de respuesta y se guarda), y
+  -- el estado inicial del dominio es `recibida`, no `pendiente`.
+  insert into public.solicitud_arco (id, tenant_id, operador_id, tipo, estado, vence_en)
+    values (sol, t, op, 'cancelacion', 'recibida', now() + interval '20 days');
+
+  perform public.ejecutar_arco_cancelacion(t, sol);
+
+  select i.descripcion, i.operador_id into desc_final, op_final
+    from public.incidencia i where i.id = inc;
+  select e.detalle->>'texto' into txt_evento
+    from public.incidencia_evento e where e.incidencia_id = inc limit 1;
+  select s.evidencia into ev_final from public.solicitud_arco s where s.id = sol;
+
+  incidencia_viva     := desc_final is not null;
+  sin_nombre_desc     := desc_final not ilike '%Juan Pérez%';
+  sin_nombre_evento   := coalesce(txt_evento, '') not ilike '%Juan Pérez%';
+  operador_suelto     := op_final is null;
+  evidencia_lo_cuenta := (ev_final->>'incidencia_texto_anonimizado')::int >= 1;
+
+  raise exception E'ARCO_TEXTO_LIBRE_0273  incidencia-viva=%  desc-sin-nombre=%  evento-sin-nombre=%  operador-suelto=%  evidencia=%   (esperado t / t / t / t / t)',
+    incidencia_viva, sin_nombre_desc, sin_nombre_evento, operador_suelto, evidencia_lo_cuenta;
+end $$;
+
+-- ── 222. La conversación de WhatsApp se identifica por el teléfono NORMALIZADO (mig. 0274) ──
+--
+-- AUDITORÍA 22, DATOS-1 (ALTO). `wa_conversacion_tenant_tel_uidx` (0005:13) es
+-- `(tenant_id, telefono)` sobre el TEXTO CRUDO. La 0024 diagnosticó este mismo
+-- modo de falla para `operador` y lo cerró con `telefono_normalizado(...)`;
+-- `wa_conversacion` nunca recibió ese tratamiento, aunque `conv.ts:64` documenta
+-- que el mismo celular llega como 52… o 521… según por dónde entre.
+--
+-- Se asevera lo único que la base puede demostrar y que es justo el arreglo:
+--   (a) dos formas del MISMO número chocan contra el índice nuevo;
+--   (b) dos números DISTINTOS de la misma flota siguen conviviendo;
+--   (c) el mismo número en OTRA flota también (el índice es por tenant).
+do $$
+declare
+  ta uuid := gen_random_uuid(); tb uuid := gen_random_uuid();
+  choca_variante boolean := false;
+  otro_numero_ok boolean := false;
+  otra_flota_ok  boolean := false;
+begin
+  insert into public.tenant (id, nombre) values (ta, '__verif_0274_a__');
+  insert into public.tenant (id, nombre) values (tb, '__verif_0274_b__');
+
+  insert into public.wa_conversacion (tenant_id, telefono, estado)
+    values (ta, '529993700779', '{}'::jsonb);
+
+  -- (a) la MISMA persona con el "1" de Telmex: tiene que rebotar.
+  begin
+    insert into public.wa_conversacion (tenant_id, telefono, estado)
+      values (ta, '5219993700779', '{}'::jsonb);
+  exception when unique_violation then choca_variante := true;
+  end;
+
+  -- (b) otro chofer de la misma flota: convive.
+  begin
+    insert into public.wa_conversacion (tenant_id, telefono, estado)
+      values (ta, '528112345678', '{}'::jsonb);
+    otro_numero_ok := true;
+  exception when others then otro_numero_ok := false;
+  end;
+
+  -- (c) el mismo número en otra flota: convive (el índice es por tenant).
+  begin
+    insert into public.wa_conversacion (tenant_id, telefono, estado)
+      values (tb, '5219993700779', '{}'::jsonb);
+    otra_flota_ok := true;
+  exception when others then otra_flota_ok := false;
+  end;
+
+  raise exception E'WA_CONVERSACION_TEL_NORM_0274  variante-choca=%  otro-numero=%  otra-flota=%   (esperado t / t / t)',
+    choca_variante, otro_numero_ok, otra_flota_ok;
+end $$;
+
+-- ── 244. `interruptor_tenant`: el CHECK de motivo, el dominio de pipeline, la PK compuesta y el cascade (mig. 0297) ──
+--
+-- AUDITORÍA 24, ADM-6 (MEDIO). Antes de la 0297 no había NINGUNA palanca para
+-- cortar el pipeline del chofer (whatsapp/ocr/cuadre) de UNA sola flota: las
+-- 58 de `interruptor` (0110) son de agentes de back office, y `global`
+-- apagaría TODAS las flotas de golpe. Esta migración añade una tabla
+-- hermana, deliberadamente SEPARADA (no una columna `tenant_id` nullable en
+-- `interruptor`) para que la ausencia de filtro nunca pueda mezclar los dos
+-- dominios (ver el comentario de la migración).
+--
+-- Se aseveran las CUATRO garantías que solo la base puede demostrar: (1) el
+-- mismo CHECK de motivo obligatorio que ya tiene `interruptor` — apagado sin
+-- motivo, o con motivo en blanco, rebota; (2) el dominio de `pipeline` es
+-- CERRADO a los tres pasos del camino del chofer; (3) la PK es COMPUESTA
+-- (tenant_id, pipeline) — el mismo pipeline convive en dos flotas distintas,
+-- y dos pipelines conviven en la misma flota, pero repetir el MISMO par
+-- choca; (4) borrar el tenant borra en cascada su fila — un tenant demo
+-- purgado en `verificaciones` no deja basura huérfana.
+do $$
+declare
+  ta uuid := gen_random_uuid(); tb uuid := gen_random_uuid();
+  rebota_sin_motivo boolean := false;
+  rebota_motivo_blanco boolean := false;
+  acepta_con_motivo boolean := false;
+  rebota_pipeline_fuera_dominio boolean := false;
+  convive_dos_pipelines_misma_flota boolean := false;
+  convive_mismo_pipeline_otra_flota boolean := false;
+  choca_mismo_par boolean := false;
+  cascade_al_borrar_tenant boolean := false;
+begin
+  insert into public.tenant (id, nombre) values (ta, '__verif_0297_a__');
+  insert into public.tenant (id, nombre) values (tb, '__verif_0297_b__');
+
+  -- (1) apagado=true sin motivo (NULL) rebota.
+  begin
+    insert into public.interruptor_tenant (tenant_id, pipeline, apagado)
+      values (ta, 'ocr', true);
+  exception when check_violation then rebota_sin_motivo := true;
+  end;
+
+  -- (1b) apagado=true con motivo en blanco rebota igual (mismo criterio
+  -- que `interruptor_apagado_con_motivo`, 0110: espacios no son un porqué).
+  begin
+    insert into public.interruptor_tenant (tenant_id, pipeline, apagado, motivo)
+      values (ta, 'ocr', true, '   ');
+  exception when check_violation then rebota_motivo_blanco := true;
+  end;
+
+  -- (2) el dominio de pipeline es cerrado — 'facturacion' no es de los tres.
+  begin
+    insert into public.interruptor_tenant (tenant_id, pipeline, apagado, motivo)
+      values (ta, 'facturacion', true, 'motivo real');
+  exception when check_violation then rebota_pipeline_fuera_dominio := true;
+  end;
+
+  -- La forma buena SÍ entra.
+  begin
+    insert into public.interruptor_tenant (tenant_id, pipeline, apagado, motivo)
+      values (ta, 'ocr', true, 'gasto disparado en Innovativos');
+    acepta_con_motivo := true;
+  exception when others then acepta_con_motivo := false;
+  end;
+
+  -- (3a) otro pipeline de LA MISMA flota convive.
+  begin
+    insert into public.interruptor_tenant (tenant_id, pipeline, apagado, motivo)
+      values (ta, 'cuadre', true, 'otro motivo');
+    convive_dos_pipelines_misma_flota := true;
+  exception when others then convive_dos_pipelines_misma_flota := false;
+  end;
+
+  -- (3b) el MISMO pipeline en OTRA flota convive (la PK es por tenant).
+  begin
+    insert into public.interruptor_tenant (tenant_id, pipeline, apagado, motivo)
+      values (tb, 'ocr', true, 'motivo de la otra flota');
+    convive_mismo_pipeline_otra_flota := true;
+  exception when others then convive_mismo_pipeline_otra_flota := false;
+  end;
+
+  -- (3c) repetir el MISMO (tenant, pipeline) choca contra la PK.
+  begin
+    insert into public.interruptor_tenant (tenant_id, pipeline, apagado, motivo)
+      values (ta, 'ocr', true, 'segundo intento');
+  exception when unique_violation then choca_mismo_par := true;
+  end;
+
+  -- (4) borrar el tenant borra en cascada sus interruptores.
+  delete from public.tenant where id = ta;
+  cascade_al_borrar_tenant := not exists (select 1 from public.interruptor_tenant where tenant_id = ta);
+
+  raise exception E'INTERRUPTOR_TENANT_0297  sin-motivo=%  motivo-blanco=%  ok-con-motivo=%  pipeline-fuera-dominio=%  convive-pipelines=%  convive-flotas=%  choca-mismo-par=%  cascade-tenant=%   (esperado t / t / t / t / t / t / t / t)',
+    rebota_sin_motivo, rebota_motivo_blanco, acepta_con_motivo, rebota_pipeline_fuera_dominio,
+    convive_dos_pipelines_misma_flota, convive_mismo_pipeline_otra_flota, choca_mismo_par, cascade_al_borrar_tenant;
+end $$;
+
+-- ── 249. Los nueve agentes TEATRO se gradúan tras la auditoría, sin tocar al resto del catálogo (mig. 0303) ──
+--
+-- Lo que solo la base puede demostrar de la 0303 (el espejo de la 248/0301):
+--
+--  (a) los NUEVE ids quedan `experimental = false` — uno por uno, porque un
+--      UPDATE con un `where id in (...)` mal escrito deja alguno fuera en
+--      silencio, igual que pudo haber pasado al marcarlos.
+--  (b) los NUEVE quedan con `prompt_ref IS NULL` — cerraban una referencia a
+--      un archivo que nunca se escribió; dejarla apuntando a nada sería la
+--      misma promesa falsa con otro nombre.
+--  (c) los NUEVE quedan con una `descripcion` que YA NO contiene ninguna de
+--      las frases originales de la 0125 que prometían de más ("investiga a
+--      diario el mercado", "reactiva el scraper", "decide dónde se pone
+--      cada pieza", "destila hooks con whisper", "escribe código de
+--      prueba") — el CASE WHEN de la migración de verdad reescribió las
+--      nueve filas, no solo algunas.
+--  (d) un agente REAL del catálogo (`redactor`) NO quedó tocado — la
+--      migración no pudo haber puesto `experimental = false` a TODOS por
+--      accidente, ni tocado su `descripcion`.
+--  (e) el DEFAULT de la columna `experimental` sigue siendo `false` — este
+--      bloque hereda ese sub-check del retirado 248/0301 (ver EXENTAS de
+--      `migraciones_verificadas.test.ts`, entrada 0301): esa migración
+--      solo declaró el default una vez, y la garantía de la base sobre eso
+--      no cambió con la 0303, así que se mueve aquí en vez de perderse.
+do $$
+declare
+  ids text[] := array[
+    'cazador','seo_distribucion','guiones','noticias_mercado',
+    'promos_diarias','visuales','video_demo','video_marketing','pruebas'
+  ];
+  frases_viejas text[] := array[
+    'investiga a diario el mercado', 'reactiva el scraper',
+    'decide dónde se pone cada pieza', 'destila hooks con whisper',
+    'escribe código de prueba'
+  ];
+  k text; f text;
+  no_graduados text[] := '{}';
+  con_prompt_ref text[] := '{}';
+  con_frase_vieja text[] := '{}';
+  descripcion_actual text;
+  redactor_experimental boolean;
+  redactor_descripcion_antes text;
+  redactor_descripcion_despues text;
+  default_es_false boolean;
+begin
+  select descripcion into redactor_descripcion_antes from public.agente_definicion where id = 'redactor';
+
+  foreach k in array ids loop
+    -- (a)
+    if exists (select 1 from public.agente_definicion where id = k and experimental = true) then
+      no_graduados := no_graduados || k;
+    end if;
+    -- (b)
+    if exists (select 1 from public.agente_definicion where id = k and prompt_ref is not null) then
+      con_prompt_ref := con_prompt_ref || k;
+    end if;
+    -- (c)
+    select descripcion into descripcion_actual from public.agente_definicion where id = k;
+    foreach f in array frases_viejas loop
+      if descripcion_actual is not null and lower(descripcion_actual) like '%' || f || '%' then
+        con_frase_vieja := con_frase_vieja || (k || ':' || f);
+      end if;
+    end loop;
+  end loop;
+
+  -- (d) redactor intacto, antes y después de esta migración.
+  select (experimental = false) into redactor_experimental from public.agente_definicion where id = 'redactor';
+  select descripcion into redactor_descripcion_despues from public.agente_definicion where id = 'redactor';
+
+  -- (e) el default de la columna, sobre una fila nueva que no la toca
+  -- (heredado del bloque 248/0301, retirado — ver arriba).
+  insert into public.agente_definicion (id, nombre, departamento)
+    values ('__verif_0303_default__', 'Verificación 0303', 'ingenieria');
+  select (experimental = false) into default_es_false
+    from public.agente_definicion where id = '__verif_0303_default__';
+
+  raise exception E'AGENTES_GRADUADOS_0303  no_graduados=%  con_prompt_ref=%  con_frase_vieja=%  redactor_experimental_false=%  redactor_descripcion_intacta=%  default_es_false=%   (esperado ninguno / ninguno / ninguno / t / t / t)',
+    coalesce(array_to_string(no_graduados, ','), 'ninguno'),
+    coalesce(array_to_string(con_prompt_ref, ','), 'ninguno'),
+    coalesce(array_to_string(con_frase_vieja, ','), 'ninguno'),
+    redactor_experimental,
+    (redactor_descripcion_antes is not distinct from redactor_descripcion_despues),
+    default_es_false;
+end $$;
+
+-- ── 243. `tenant_perfil_merge` mezcla el perfil ATÓMICAMENTE — leer+escribir en el mismo UPDATE, no en dos viajes de Node (mig. 0296, auditoría 24, H20/H21/H22) ──
+--
+-- El hallazgo: `guardarPerfilPatch` (lib/likida/repo.ts) hacía SELECT
+-- perfil → mezclar en JS → UPDATE perfil, en dos statements separados. Dos
+-- respuestas de la entrevista de onboarding mandadas casi juntas (doble
+-- clic, dos pestañas) intercalan sus dos SELECT antes de que cualquiera
+-- escriba: la segunda UPDATE pisa la primera con un `perfil` que nunca vio
+-- su patch — un "lost update" de libro de texto. `tenant_perfil_merge` hace
+-- la lectura Y la escritura en el MISMO statement (`perfil = perfil ||
+-- patch` dentro del propio UPDATE), así que cada invocación siempre parte
+-- del valor MÁS RECIENTE persistido, sin importar cuántas otras invocaciones
+-- corrieron entre medio — a diferencia de un INSERT contra un índice único
+-- (el patrón de los bloques 172/218/64), aquí no hay un árbitro que rechace
+-- a un "perdedor": la prueba de la atomicidad es que DOS llamadas
+-- SECUENCIALES, cada una con SU PROPIO patch y SIN que ninguna reciba el
+-- perfil de la otra como argumento, terminan con las dos contribuciones
+-- presentes — que es precisamente lo que el código viejo NO garantizaba
+-- bajo concurrencia real (ahí sí hacía falta una carrera de verdad para
+-- perder una escritura; aquí la garantía es estructural: el RPC nunca
+-- mantiene una copia del perfil fuera de la fila).
+--
+-- (a) primera llamada aplica su patch sobre un perfil vacío; (b) segunda
+-- llamada, patch DISTINTO, sin arrastrar el resultado de la primera como
+-- argumento — el resultado final trae AMBAS claves; (c) el merge es
+-- superficial: una clave repetida la gana el patch más reciente, las demás
+-- sobreviven; (d) `perfil_actualizado_por` queda en el actor de la ÚLTIMA
+-- llamada; (e) el trigger de la 0169 selló DOS versiones en
+-- `tenant_perfil_version` (una por UPDATE real); (f) un tenant que no existe
+-- falla cerrado (excepción, no perfil vacío ni silencio); (g) un patch que
+-- no es un objeto jsonb (aquí, un arreglo) también falla cerrado, antes de
+-- tocar la fila.
+do $$
+declare
+  t uuid := gen_random_uuid();
+  r1 jsonb; r2 jsonb;
+  u1 uuid := gen_random_uuid(); u2 uuid := gen_random_uuid();
+  perfil_final jsonb;
+  actualizado_final uuid;
+  n_versiones int;
+  tiene_ambas_claves boolean;
+  clave_repetida_gana_ultima boolean;
+  actor_es_ultimo boolean;
+  sella_dos_versiones boolean;
+  tenant_inexistente_falla boolean := false;
+  patch_no_objeto_falla boolean := false;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0296__');
+  insert into public.app_user (id, tenant_id, email, rol) values (u1, t, 'verif-0296-u1@likida.ai', 'flota_admin');
+  insert into public.app_user (id, tenant_id, email, rol) values (u2, t, 'verif-0296-u2@likida.ai', 'contador');
+
+  -- (a) Primera "invocación": declara el stack de GPS.
+  r1 := public.tenant_perfil_merge(t, jsonb_build_object('stackGps', 'samsara'), u1);
+
+  -- (b) Segunda "invocación", CASI JUNTA a la primera en el mundo real: NO
+  -- recibe `r1` como base — el RPC tiene que ir a buscar el valor vigente
+  -- por su cuenta. Declara el umbral de ingresos, y de paso REPITE
+  -- 'stackGps' con un valor distinto (para probar (c)).
+  r2 := public.tenant_perfil_merge(t, jsonb_build_object('ingresosMenoresA300M', true, 'stackGps', 'geotab'), u2);
+
+  select perfil, perfil_actualizado_por into perfil_final, actualizado_final
+    from public.tenant where id = t;
+
+  tiene_ambas_claves := (perfil_final ? 'ingresosMenoresA300M') and (perfil_final->>'ingresosMenoresA300M' = 'true');
+  clave_repetida_gana_ultima := (perfil_final->>'stackGps') = 'geotab';
+  actor_es_ultimo := actualizado_final = u2;
+
+  select count(*) = 2 into sella_dos_versiones
+    from public.tenant_perfil_version where tenant_id = t;
+
+  -- (f) Tenant inexistente: falla cerrado, no devuelve un perfil de mentiras.
+  begin
+    perform public.tenant_perfil_merge(gen_random_uuid(), '{}'::jsonb, u1);
+  exception when others then
+    tenant_inexistente_falla := true;
+  end;
+
+  -- (g) Un patch que no es objeto (aquí, un arreglo jsonb): falla cerrado
+  -- ANTES de tocar la fila — no hay `perfil = perfil || '[1,2]'` silencioso.
+  begin
+    perform public.tenant_perfil_merge(t, '[1,2]'::jsonb, u1);
+  exception when others then
+    patch_no_objeto_falla := true;
+  end;
+
+  raise exception E'TENANT_PERFIL_MERGE_0296  ambas-claves=%  repetida-gana-ultima=%  actor-ultimo=%  dos-versiones=%  tenant-inexistente-falla=%  patch-no-objeto-falla=%   (esperado t / t / t / t / t / t)',
+    tiene_ambas_claves, clave_repetida_gana_ultima, actor_es_ultimo, sella_dos_versiones, tenant_inexistente_falla, patch_no_objeto_falla;
+end $$;
+
+-- ── 245. La terminal gana escritor: unidad.terminal_id atado al tenant, un patio por nombre, y el registro paginado cuenta de verdad (mig. 0298) ──
+--
+-- AUDITORÍA 24 (ADM-2 / producto-completitud, faltante 3). `terminal` era la
+-- huérfana de la 0001 y `unidad` no tenía patio. La 0298 le da columna a la
+-- unidad, unicidad al nombre del patio y lecturas paginadas en SQL para que
+-- 800 tractos no viajen enteros a la pantalla.
+--
+-- Lo que solo la base puede demostrar:
+--   (a) `uq_terminal_tenant_nombre`: «Patio Norte» y « patio norte » de la
+--       MISMA flota chocan; el mismo nombre en OTRA flota convive.
+--   (b) `unidad_terminal_tenant_fkey`: una unidad de la flota A NO puede
+--       colgar de un patio de la flota B aunque el uuid exista.
+--   (c) `on delete set null`: borrar el patio deja la unidad con
+--       terminal_id NULL, no la borra.
+--   (d) `operadores_registro_tenant`: con 3 operadores y límite 2, la página
+--       trae 2 filas y `total`=3 (el total NO es el largo de la página); la
+--       búsqueda «ramirez» encuentra a «Ramírez» (sin acentos).
+--   (e) `unidades_conteos_tenant`: con una unidad vencida ayer, una que vence
+--       en 10 días, una sin papeles y una de baja, los cuatro contadores
+--       salen 1-1-0-1 y la baja no cuenta en ninguno.
+-- Esperado: TERMINAL_ESCRITOR_0298 choca-variante=t otra-flota-ok=t patio-ajeno=f set-null=t pagina=2 total=3 busca=1 conteos=1-1-0-1
+do $$
+declare
+  ta uuid := gen_random_uuid(); tb uuid := gen_random_uuid();
+  pa uuid; pb uuid; u1 uuid;
+  choca_variante boolean := false;
+  otra_flota_ok boolean := false;
+  patio_ajeno boolean := true;
+  set_null boolean := false;
+  r jsonb; c jsonb;
+  n_pagina int; n_total int; n_busca int;
+  conteos text;
+begin
+  insert into public.tenant (id, nombre) values (ta, '__verif_0298_a__');
+  insert into public.tenant (id, nombre) values (tb, '__verif_0298_b__');
+
+  -- (a) un patio por nombre, por flota
+  insert into public.terminal (tenant_id, nombre) values (ta, 'Patio Norte') returning id into pa;
+  begin
+    insert into public.terminal (tenant_id, nombre) values (ta, ' patio norte ');
+  exception when unique_violation then choca_variante := true;
+  end;
+  begin
+    insert into public.terminal (tenant_id, nombre) values (tb, 'Patio Norte') returning id into pb;
+    otra_flota_ok := true;
+  exception when others then otra_flota_ok := false;
+  end;
+
+  -- (b) la unidad de A no cuelga del patio de B
+  begin
+    insert into public.unidad (tenant_id, numero_economico, terminal_id) values (ta, 'T-01', pb);
+    patio_ajeno := true;
+  exception when foreign_key_violation then patio_ajeno := false;
+  end;
+
+  -- (c) borrar el patio deja la unidad, con terminal_id NULL
+  insert into public.unidad (tenant_id, numero_economico, terminal_id) values (ta, 'T-02', pa) returning id into u1;
+  delete from public.terminal where id = pa;
+  select (terminal_id is null) into set_null from public.unidad where id = u1;
+
+  -- (d) el registro paginado cuenta de verdad y busca sin acentos
+  insert into public.operador (tenant_id, nombre, telefono) values
+    (ta, 'Juan Ramírez', '525511111101'),
+    (ta, 'Pedro López', '525511111102'),
+    (ta, 'Ana Torres',  '525511111103');
+  r := public.operadores_registro_tenant(ta, null, 0, 2);
+  n_pagina := jsonb_array_length(r -> 'filas');
+  n_total  := (r ->> 'total')::int;
+  r := public.operadores_registro_tenant(ta, 'ramirez', 0, 25);
+  n_busca := jsonb_array_length(r -> 'filas');
+
+  -- (e) los contadores de papeles van sobre la flota entera, activas nada más
+  insert into public.unidad (tenant_id, numero_economico, poliza_vence) values (ta, 'T-03', date '2026-09-01' - 1);
+  insert into public.unidad (tenant_id, numero_economico, verificacion_vence) values (ta, 'T-04', date '2026-09-01' + 10);
+  insert into public.unidad (tenant_id, numero_economico, poliza_vence, activo) values (ta, 'T-05', date '2026-09-01' - 40, false);
+  -- T-02 (de arriba) es la que no tiene papeles.
+  c := public.unidades_conteos_tenant(ta, date '2026-09-01', 30);
+  conteos := (c ->> 'vencidos') || '-' || (c ->> 'porVencer') || '-' || (c ->> 'vigentes') || '-' || (c ->> 'sinDato');
+
+  raise exception E'TERMINAL_ESCRITOR_0298 choca-variante=% otra-flota-ok=% patio-ajeno=% set-null=% pagina=% total=% busca=% conteos=%   (esperado t / t / f / t / 2 / 3 / 1 / 1-1-0-1)',
+    choca_variante, otra_flota_ok, patio_ajeno, set_null, n_pagina, n_total, n_busca, conteos;
+end $$;
+
+
+-- ── 246. `revisar_liquidacion`: aprobar firma una vez, ajustar en negativo rebota, rechazar reabre a en_cuadre, y la revisión no se toca por fuera (mig. 0299) ──
+--
+-- AUDITORÍA 24, BLOQUEANTE 6. «Tú firmas lo que la máquina cuadró» no tenía
+-- botón: cero UPDATE sobre `liquidacion.revision` porque la columna no
+-- existía. Este bloque ataca la RPC nueva por sus cuatro costados:
+--   (a) un UPDATE suelto de `revision` rebota (LR003): la firma solo entra por
+--       la RPC, que deja quién/cuándo/por qué;
+--   (b) aprobar firma (`aprobada`, revisada_por = la persona) y deja bitácora
+--       en la MISMA transacción;
+--   (c) la segunda aprobación rebota (LR010): una firma no se pone dos veces;
+--   (d) ajustar con monto ≤ 0 rebota (LR016) y NO mueve ni el gasto ni el total;
+--   (e) ajustar bien mueve `gasto.monto`, el total y la diferencia por la
+--       delta, y queda `ajustada` con el arreglo de ajustes;
+--   (f) rechazar deja `rechazada` y devuelve el viaje a `en_cuadre` — y tras
+--       el rechazo el chofer SÍ puede volver a mandar un ticket (la 0036 ya no
+--       cuenta esa liquidación como emitida).
+-- Esperado: REVISAR_LIQUIDACION_0299 suelto-rebota=t aprobada=t bitacora=t doble-rebota=t negativo-rebota=t negativo-intacto=t ajustada=t delta-ok=t rechazada=t en-cuadre=t ticket-tras-rechazo=t
+do $$
+declare
+  v_t uuid; v_u uuid := gen_random_uuid(); v_o uuid; v_o2 uuid; v_o3 uuid;
+  v_v1 uuid; v_v2 uuid; v_v3 uuid; v_l1 uuid; v_l2 uuid; v_l3 uuid; v_g uuid;
+  r jsonb;
+  suelto_rebota boolean := false; aprobada boolean := false; bitacora boolean := false;
+  doble_rebota boolean := false; negativo_rebota boolean := false; negativo_intacto boolean := false;
+  ajustada boolean := false; delta_ok boolean := false; rechazada boolean := false;
+  en_cuadre boolean := false; ticket_tras_rechazo boolean := false;
+  n_monto numeric; n_total numeric; n_dif numeric; est text; rev text; quien uuid;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF REVISION 0299') returning id into v_t;
+  insert into app_user (id, tenant_id, email, rol) values (v_u, v_t, 'zzz-revisa-0299@likida.test', 'flota_admin');
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P1', '520000009901') returning id into v_o;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P2', '520000009902') returning id into v_o2;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P3', '520000009903') returning id into v_o3;
+  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o, 'R-1', 5000) returning id into v_v1;
+  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o2, 'R-2', 5000) returning id into v_v2;
+  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o3, 'R-3', 5000) returning id into v_v3;
+
+  -- Un ticket leído como $800 que era de $8,000 (WA-3), en el viaje 2.
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v2, 'diesel', 800) returning id into v_g;
+
+  v_l1 := guardar_liquidacion_tx(v_t, v_v1, 4200, 5000, 800, 'revisar', '[]'::jsonb, 0,0,0, null, 0);
+  v_l2 := guardar_liquidacion_tx(v_t, v_v2,  800, 5000, 4200, 'revisar', '[]'::jsonb, 0,0,0, null, 0);
+  v_l3 := guardar_liquidacion_tx(v_t, v_v3, 4900, 5000, 100, 'con_diferencias', '[]'::jsonb, 0,0,0, null, 0);
+
+  -- (a) la firma no entra por la puerta de atrás.
+  begin
+    update liquidacion set revision = 'aprobada', revisada_en = now() where id = v_l1;
+  exception when sqlstate 'LR003' then suelto_rebota := true;
+  end;
+
+  -- (b) aprobar.
+  r := revisar_liquidacion(v_t, v_l1, 'aprobar', null, null, v_u, null);
+  select revision, revisada_por into rev, quien from liquidacion where id = v_l1;
+  aprobada := (rev = 'aprobada' and quien = v_u and (r ->> 'revision') = 'aprobada');
+  bitacora := exists (select 1 from bitacora_auditoria
+                       where tenant_id = v_t and accion = 'liquidacion.aprobada'
+                         and entidad = 'liquidacion' and entidad_id = v_l1::text and actor_id = v_u);
+
+  -- (c) no se firma dos veces.
+  begin
+    perform revisar_liquidacion(v_t, v_l1, 'aprobar', null, null, v_u, null);
+  exception when sqlstate 'LR010' then doble_rebota := true;
+  end;
+
+  -- (d) un ajuste a negativo rebota y no deja nada movido.
+  begin
+    perform revisar_liquidacion(v_t, v_l2, 'ajustar', 'se leyó mal',
+      jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', -5)), v_u, null);
+  exception when sqlstate 'LR016' then negativo_rebota := true;
+  end;
+  select monto into n_monto from gasto where id = v_g;
+  select total_comprobado, revision into n_total, rev from liquidacion where id = v_l2;
+  negativo_intacto := (n_monto = 800 and n_total = 800 and rev = 'pendiente');
+
+  -- (e) el ajuste bueno: $800 → $8,000, delta +7,200 sobre el total y la diferencia.
+  r := revisar_liquidacion(v_t, v_l2, 'ajustar', 'el ticket dice 8,000, el OCR leyó 800',
+    jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', 8000)), v_u, null);
+  select monto into n_monto from gasto where id = v_g;
+  select total_comprobado, diferencia, revision into n_total, n_dif, rev from liquidacion where id = v_l2;
+  ajustada := (rev = 'ajustada' and jsonb_array_length((select ajustes from liquidacion where id = v_l2)) = 1);
+  delta_ok := (n_monto = 8000 and n_total = 8000 and n_dif = -3000);
+
+  -- (f) rechazar reabre a en_cuadre y el ticket tardío YA entra.
+  r := revisar_liquidacion(v_t, v_l3, 'rechazar', 'faltan las casetas del regreso', null, v_u, null);
+  select revision into rev from liquidacion where id = v_l3;
+  select estatus into est from viaje where id = v_v3;
+  rechazada := (rev = 'rechazada');
+  en_cuadre := (est = 'en_cuadre');
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v3, 'caseta', 120);
+    ticket_tras_rechazo := true;
+  exception when others then ticket_tras_rechazo := false;
+  end;
+
+  raise exception E'REVISAR_LIQUIDACION_0299  suelto-rebota=%  aprobada=%  bitacora=%  doble-rebota=%  negativo-rebota=%  negativo-intacto=%  ajustada=%  delta-ok=%  rechazada=%  en-cuadre=%  ticket-tras-rechazo=%   (esperado t / t / t / t / t / t / t / t / t / t / t)',
+    suelto_rebota, aprobada, bitacora, doble_rebota, negativo_rebota, negativo_intacto,
+    ajustada, delta_ok, rechazada, en_cuadre, ticket_tras_rechazo;
+end $$;
+
+
+-- ── 247. La revisión en la tabla: cuadró sola = firme por el motor, el re-cierre retira la firma, y viaje.estatus no contradice a la revisión (mig. 0299) ──
+--
+-- Lo que la RPC no puede garantizar sola (DAT-6: «la coherencia se puso en la
+-- RPC y no en la tabla»):
+--   (a) una liquidación `cuadrada` nace `aprobada` con revisada_por NULL (la
+--       firmó el motor): «tú firmas lo que NO cuadró»;
+--   (b) el re-cierre del motor (upsert de guardar_liquidacion_tx) con cifras
+--       distintas RETIRA la firma humana: vuelve a `pendiente` sin firmante;
+--   (c) el mismo re-cierre sobre una RECHAZADA la devuelve a `pendiente` y el
+--       viaje a `liquidado` — el ciclo cierra;
+--   (d) un UPDATE suelto que devuelve a `abierto` un viaje con liquidación
+--       firmada por una persona rebota al confirmar (23514, trigger diferido);
+--   (e) `reabrir_viaje_tx` sobre ese mismo viaje SÍ pasa: abre el viaje y
+--       retira la liquidación en la misma transacción, y al commit no hay
+--       contradicción que comprobar.
+-- Esperado: REVISION_TABLA_0299 sola-firme=t sin-humano=t recierre-retira=t rechazada-vuelve=t viaje-liquidado=t suelto-rebota=t reabrir-pasa=t
+do $$
+declare
+  v_t uuid; v_u uuid := gen_random_uuid(); v_o uuid; v_o2 uuid; v_o3 uuid;
+  v_v1 uuid; v_v2 uuid; v_v3 uuid; v_l1 uuid; v_l2 uuid; v_l3 uuid;
+  sola_firme boolean := false; sin_humano boolean := false; recierre_retira boolean := false;
+  rechazada_vuelve boolean := false; viaje_liquidado boolean := false;
+  suelto_rebota boolean := false; reabrir_pasa boolean := false;
+  rev text; quien uuid; est text;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF REVISION TABLA 0299') returning id into v_t;
+  insert into app_user (id, tenant_id, email, rol) values (v_u, v_t, 'zzz-revisa-tabla-0299@likida.test', 'flota_admin');
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P1', '520000009911') returning id into v_o;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P2', '520000009912') returning id into v_o2;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P3', '520000009913') returning id into v_o3;
+  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o,  'T-1', 5000) returning id into v_v1;
+  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o2, 'T-2', 5000) returning id into v_v2;
+  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o3, 'T-3', 5000) returning id into v_v3;
+
+  -- (a) cuadró sola.
+  v_l1 := guardar_liquidacion_tx(v_t, v_v1, 5000, 5000, 0, 'cuadrada', '[]'::jsonb, 0,0,0, null, 0);
+  select revision, revisada_por into rev, quien from liquidacion where id = v_l1;
+  sola_firme := (rev = 'aprobada');
+  sin_humano := (quien is null);
+
+  -- (b) firmada por persona, luego re-cerrada con otras cifras.
+  v_l2 := guardar_liquidacion_tx(v_t, v_v2, 4200, 5000, 800, 'revisar', '[]'::jsonb, 0,0,0, null, 0);
+  perform revisar_liquidacion(v_t, v_l2, 'aprobar', null, null, v_u, null);
+  perform guardar_liquidacion_tx(v_t, v_v2, 4300, 5000, 700, 'revisar', '[]'::jsonb, 0,0,0, null, 0);
+  select revision, revisada_por into rev, quien from liquidacion where id = v_l2;
+  recierre_retira := (rev = 'pendiente' and quien is null);
+
+  -- (c) rechazada, y el motor vuelve a cuadrar.
+  v_l3 := guardar_liquidacion_tx(v_t, v_v3, 4900, 5000, 100, 'con_diferencias', '[]'::jsonb, 0,0,0, null, 0);
+  perform revisar_liquidacion(v_t, v_l3, 'rechazar', 'faltan casetas', null, v_u, null);
+  perform guardar_liquidacion_tx(v_t, v_v3, 5000, 5000, 0, 'cuadrada', '[]'::jsonb, 0,0,0, null, 0);
+  select revision into rev from liquidacion where id = v_l3;
+  select estatus into est from viaje where id = v_v3;
+  rechazada_vuelve := (rev = 'aprobada');   -- cuadró sola esta vez: firme por el motor
+  viaje_liquidado := (est = 'liquidado');
+
+  -- (d) el S9 de DAT-6: firmada por persona y alguien la abre con un UPDATE.
+  perform revisar_liquidacion(v_t, v_l2, 'aprobar', null, null, v_u, null);
+  begin
+    update viaje set estatus = 'abierto' where id = v_v2;
+    set constraints all immediate;   -- lo que pasaría al commit, ahora
+  exception when check_violation then suelto_rebota := true;
+  end;
+  set constraints all deferred;
+
+  -- (e) el camino auditado sí pasa.
+  begin
+    perform reabrir_viaje_tx(v_t, v_v2);
+    set constraints all immediate;
+    select estatus into est from viaje where id = v_v2;
+    reabrir_pasa := (est = 'abierto' and not exists (select 1 from liquidacion where id = v_l2));
+  exception when others then reabrir_pasa := false;
+  end;
+
+  raise exception E'REVISION_TABLA_0299  sola-firme=%  sin-humano=%  recierre-retira=%  rechazada-vuelve=%  viaje-liquidado=%  suelto-rebota=%  reabrir-pasa=%   (esperado t / t / t / t / t / t / t)',
+    sola_firme, sin_humano, recierre_retira, rechazada_vuelve, viaje_liquidado, suelto_rebota, reabrir_pasa;
+end $$;
+
+-- ── 241. Un usuario dado de baja (`app_user.activo = false`) no tiene tenant ni permisos para RLS (mig. 0294) ──
+--
+-- AUDITORÍA 24, SEG-1 (ALTO) / H5. Hasta la 0294 no había baja: el contador
+-- externo que dejó de trabajar con la flota conservaba su cookie y sus
+-- permisos. Lo que este bloque asevera es la SEGUNDA capa —la base—: con un
+-- JWT todavía vigente, un usuario con `activo = false` obtiene de las cuatro
+-- funciones de RLS lo mismo que un extraño (cero tenants, cero permisos), y
+-- por tanto `tenant_data` no le devuelve una sola fila aunque la capa de app
+-- tuviera un hueco. El usuario ACTIVO de la misma flota sigue entero (control).
+-- Esperado: RLS_USUARIO_INACTIVO_0294 activo-tenants=1 activo-administra=t inactivo-tenants=0 inactivo-finanzas=f inactivo-administra=f inactivo-superadmin=f
+do $$
+declare
+  t uuid := gen_random_uuid();
+  u_activo uuid := gen_random_uuid();
+  u_baja uuid := gen_random_uuid();
+  activo_tenants int; activo_administra boolean;
+  baja_tenants int; baja_finanzas boolean; baja_administra boolean; baja_superadmin boolean;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0294__');
+  insert into public.app_user (id, tenant_id, email, nombre, rol)
+    values (u_activo, t, 'activo-0294@verif.local', 'Activo', 'flota_admin');
+  -- El superadmin dado de baja es el caso más caro: `is_superadmin()` abre
+  -- TODAS las flotas, y es exactamente lo que no puede sobrevivir a la baja.
+  insert into public.app_user (id, tenant_id, email, nombre, rol, activo, desactivado_en, desactivado_por)
+    values (u_baja, t, 'baja-0294@verif.local', 'Baja', 'superadmin', false, now(), u_activo);
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', u_activo)::text, true);
+  activo_tenants    := coalesce(array_length(public.get_user_tenant_ids(), 1), 0);
+  activo_administra := public.administra_flota();
+
+  perform set_config('request.jwt.claims', json_build_object('sub', u_baja)::text, true);
+  baja_tenants    := coalesce(array_length(public.get_user_tenant_ids(), 1), 0);
+  baja_finanzas   := public.ve_finanzas();
+  baja_administra := public.administra_flota();
+  baja_superadmin := public.is_superadmin();
+  reset role;
+
+  raise exception E'RLS_USUARIO_INACTIVO_0294  activo-tenants=%  activo-administra=%  inactivo-tenants=%  inactivo-finanzas=%  inactivo-administra=%  inactivo-superadmin=%   (esperado 1 / t / 0 / f / f / f)',
+    activo_tenants, activo_administra, baja_tenants, baja_finanzas, baja_administra, baja_superadmin;
+end $$;
+
+-- ── 242. Una llave de API puede caducar, y no puede nacer ya vencida (mig. 0294) ──
+--
+-- AUDITORÍA 24, SEG-8. `tenant_api_key.expira_en` es opcional (null = no
+-- caduca, decisión explícita). Lo que la base demuestra: (a) una llave con
+-- `expira_en` anterior a `creada_en` rebota (el CHECK), (b) una con fecha
+-- futura entra, (c) sin fecha sigue entrando. Que el camino caliente la
+-- rechace vencida se prueba en TS (llave-api.test.ts).
+-- Esperado: LLAVE_API_EXPIRA_0294 pasado-rebota=t futuro-ok=t nulo-ok=t
+do $$
+declare
+  t uuid := gen_random_uuid();
+  pasado_rebota boolean := false;
+  futuro_ok boolean := false;
+  nulo_ok boolean := false;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0294_llaves__');
+
+  begin
+    insert into public.tenant_api_key (tenant_id, nombre, prefijo, hash, expira_en)
+      values (t, 'vencida al nacer', 'lk_live_aaaaaa', repeat('a', 64), now() - interval '1 day');
+  exception when check_violation then pasado_rebota := true;
+  end;
+
+  begin
+    insert into public.tenant_api_key (tenant_id, nombre, prefijo, hash, expira_en)
+      values (t, 'un año', 'lk_live_bbbbbb', repeat('b', 64), now() + interval '365 days');
+    futuro_ok := true;
+  exception when others then futuro_ok := false;
+  end;
+
+  begin
+    insert into public.tenant_api_key (tenant_id, nombre, prefijo, hash)
+      values (t, 'sin caducidad', 'lk_live_cccccc', repeat('c', 64));
+    nulo_ok := true;
+  exception when others then nulo_ok := false;
+  end;
+
+  raise exception E'LLAVE_API_EXPIRA_0294  pasado-rebota=%  futuro-ok=%  nulo-ok=%   (esperado t / t / t)',
+    pasado_rebota, futuro_ok, nulo_ok;
+end $$;
+
+-- ── 234. La cancelación ARCO borra la conversación por teléfono NORMALIZADO y su search_path vive en la base (mig. 0286) ──
+--
+-- AUDITORÍA 24, DAT-2 / LEG-2 (CRÍTICO, reincidente de DATOS-23-2). El bloque
+-- 210 pasaba en verde con `"wa_conversacion": 0` porque su fixture no insertaba
+-- conversación; la app la crea por TELÉFONO (`loadConversation`) y nunca llena
+-- `operador_id`, así que el `delete … where operador_id = v_operador` borraba
+-- cero filas mientras el panel decía «el titular quedó anonimizado».
+--
+-- Aquí la conversación se inserta COMO LA CREA LA APP (sin `operador_id`) y
+-- además con OTRA variante del mismo celular (`529…` contra el `521…` del
+-- operador): la 0274 ya declaró que son el mismo número.
+--
+--   (a) la conversación del titular desaparece;
+--   (b) la evidencia lo cuenta (wa_conversacion = 1, envio_mensaje = 1);
+--   (c) DATOS-23-5: el evento de OTRO titular ya anonimizado NO se reescribe;
+--   (d) DAT-1: `pg_proc.proconfig` de la función —EN LA BASE, no en el
+--       archivo— trae `extensions` (sin él, digest() truena en gestionado).
+do $$
+declare
+  t uuid := gen_random_uuid(); op uuid := gen_random_uuid(); otro uuid := gen_random_uuid();
+  inc_otro uuid := gen_random_uuid(); sol uuid := gen_random_uuid();
+  ev jsonb; n_conv int; n_envio int; txt_otro text; cfg text;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0286__');
+  insert into public.operador (id, tenant_id, nombre, telefono)
+    values (op, t, 'Juan Pérez', '5219993700779');
+  -- La conversación tal cual la escribe conv.ts: por teléfono, sin operador_id,
+  -- y en la variante SIN el "1" de Telmex.
+  insert into public.wa_conversacion (tenant_id, telefono, estado)
+    values (t, '529993700779', '{"turns": []}'::jsonb);
+  insert into public.envio_mensaje (tenant_id, telefono, canal, estado)
+    values (t, '+5219993700779', 'whatsapp', 'enviado');
+
+  -- Otro titular, YA anonimizado por una cancelación anterior: su evento no
+  -- debe volver a tocarse (DATOS-23-5).
+  insert into public.operador (id, tenant_id, nombre, telefono, anonimizado_en)
+    values (otro, t, 'Operador AAAAAA', 'anon:0000000000000000', now());
+  insert into public.incidencia (id, tenant_id, operador_id, tipo, prioridad, descripcion, texto_anonimizado_en)
+    values (inc_otro, t, null, 'siniestro', 'critica', '[texto retirado por cancelación ARCO del titular]', now() - interval '1 day');
+  insert into public.incidencia_evento (tenant_id, incidencia_id, tipo, detalle)
+    values (t, inc_otro, 'mensaje_adicional', jsonb_build_object('texto', 'marca intacta del otro titular'));
+
+  insert into public.solicitud_arco (id, tenant_id, operador_id, tipo, canal, vence_en)
+    values (sol, t, op, 'cancelacion', 'whatsapp', current_date + 15);
+
+  perform public.ejecutar_arco_cancelacion(t, sol);
+
+  select count(*) into n_conv from public.wa_conversacion
+    where tenant_id = t and public.telefono_normalizado(telefono) = public.telefono_normalizado('5219993700779');
+  select count(*) into n_envio from public.envio_mensaje
+    where tenant_id = t and public.telefono_normalizado(telefono) = public.telefono_normalizado('5219993700779');
+  select s.evidencia into ev from public.solicitud_arco s where s.id = sol;
+  select e.detalle->>'texto' into txt_otro from public.incidencia_evento e where e.incidencia_id = inc_otro;
+  select array_to_string(p.proconfig, ' ') into cfg
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'ejecutar_arco_cancelacion';
+
+  raise exception E'ARCO_TELEFONO_NORM_0286  conv-vivas=%  envios-vivos=%  evidencia-conv=%  evidencia-envio=%  otro-intacto=%  proconfig-extensions=%   (esperado 0 / 0 / 1 / 1 / t / t)',
+    n_conv, n_envio, ev->>'wa_conversacion', ev->>'envio_mensaje',
+    txt_otro = 'marca intacta del otro titular', cfg like '%extensions%';
+end $$;
+
+-- ── 235. `ultimas_posiciones_tenant` y `estado_rastreo_tenant` sondean por unidad, no barren el tenant (mig. 0287) ──
+--
+-- AUDITORÍA 24, DAT-8 / REN-3 (ALTO). El `distinct on` de la 0269 leía TODAS
+-- las posiciones de la flota para quedarse con 800 (4.5 s con 6.9 M filas).
+-- Se asevera lo que la base puede demostrar:
+--   (a) el RESULTADO es el mismo que el `distinct on`: una fila por unidad
+--       activa, la más reciente, sin la unidad inactiva ni la de otra flota;
+--   (b) el PLAN del cuerpo vigente no tiene nodo `Unique` (no hay distinct
+--       on) y sondea `posicion` con un Index Scan Backward sobre
+--       `uq_posicion_lectura` — con `enable_seqscan` apagado para que la
+--       tabla diminuta de la prueba no esconda la forma;
+--   (c) `estado_rastreo_tenant` conserva su contrato: 2 unidades con
+--       posición (una inactiva cuenta, como en la 0162) y la última fecha;
+--   (d) una lectura fechada en el futuro (reloj del GPS mal) rebota (23514).
+do $$
+declare
+  ta uuid := gen_random_uuid(); tb uuid := gen_random_uuid();
+  u1 uuid := gen_random_uuid(); u2 uuid := gen_random_uuid(); u3 uuid := gen_random_uuid(); ux uuid := gen_random_uuid();
+  n_filas int; lat_u1 double precision; con_unique boolean; con_indice boolean;
+  plan text := ''; linea text; cuerpo text; rastreo jsonb; futura_rebota boolean := false;
+begin
+  insert into public.tenant (id, nombre) values (ta, '__verif_0287_a__'), (tb, '__verif_0287_b__');
+  insert into public.unidad (id, tenant_id, numero_economico, activo) values
+    (u1, ta, 'U1', true), (u2, ta, 'U2', true), (u3, ta, 'U3-baja', false), (ux, tb, 'UX', true);
+  insert into public.posicion (tenant_id, unidad_id, lat, lng, medida_en, proveedor) values
+    (ta, u1, 19.0, -99.0, now() - interval '2 hours', 'samsara'),
+    (ta, u1, 19.5, -99.5, now() - interval '1 hour',  'samsara'),   -- la más reciente de U1
+    (ta, u2, 20.0, -100.0, now() - interval '3 days', 'samsara'),
+    (ta, u3, 21.0, -101.0, now() - interval '1 hour', 'samsara'),   -- inactiva: fuera del mapa
+    (tb, ux, 22.0, -102.0, now() - interval '1 hour', 'samsara');   -- otra flota
+
+  select count(*) into n_filas from public.ultimas_posiciones_tenant(ta);
+  select r.lat into lat_u1 from public.ultimas_posiciones_tenant(ta) r where r.unidad_id = u1;
+
+  -- La función lleva `set search_path`, así que el planificador NO la inlinea
+  -- y `explain select * from f()` solo enseña «Function Scan». Se explica el
+  -- CUERPO vigente leído de pg_proc — lo que de verdad corre en esta base.
+  select prosrc into cuerpo from pg_proc where proname = 'ultimas_posiciones_tenant'
+    and pronamespace = 'public'::regnamespace;
+  -- Con las 2 filas del fixture un Seq Scan es LEGÍTIMAMENTE más barato, así
+  -- que sin esto el plan variaría con el volumen y la prueba sería una moneda
+  -- al aire. Lo que se asevera es la FORMA, no el costo.
+  set local enable_seqscan = off;
+  for linea in execute 'explain (costs off) ' || replace(cuerpo, 'p_tenant', '$1') using ta loop
+    plan := plan || linea || E'\n';
+  end loop;
+  reset enable_seqscan;
+
+  -- `Unique` es la firma del `distinct on` de la 0269: barrer TODAS las
+  -- posiciones del tenant y desduplicar. Es la regresión que esto vigila.
+  con_unique := plan like '%Unique%';
+  -- La forma `lateral`: un sondeo POR UNIDAD (`Nested Loop` + `Limit`) que
+  -- entra por índice a `posicion`. Se comprueba la forma y NO el nombre del
+  -- índice: `uq_posicion_lectura (tenant, unidad, medida_en)` y
+  -- `posicion_unidad_medida_idx (… medida_en desc)` sirven las dos, y cuál
+  -- elige el planificador depende de cuáles existan el día que corra.
+  con_indice := plan like '%Nested Loop%'
+            and plan like '%Limit%'
+            and plan like '%Index Scan%on posicion p%';
+
+  rastreo := public.estado_rastreo_tenant(ta);
+
+  begin
+    insert into public.posicion (tenant_id, unidad_id, lat, lng, medida_en, proveedor)
+      values (ta, u1, 19.0, -99.0, now() + interval '2 hours', 'samsara');
+  exception when check_violation then futura_rebota := true;
+  end;
+
+  raise exception E'POSICIONES_LATERAL_0287  filas=%  u1-mas-reciente=%  plan-sin-unique=%  plan-por-indice=%  rastreo-unidades=%  rastreo-ultima-hoy=%  futura-rebota=%   (esperado 2 / t / t / t / 3 / t / t)',
+    n_filas, lat_u1 = 19.5, not con_unique, con_indice,
+    rastreo->>'unidadesConPosicion', (rastreo->>'ultimaPosicion')::timestamptz > now() - interval '2 hours', futura_rebota;
+end $$;
+
+-- ── 236. `wa_outbox` y `evento_seguridad_flota` tienen plazo, y `posicion` ya no paga índices repetidos (mig. 0288) ──
+--
+-- AUDITORÍA 24, DAT-9 / REN-4 (MEDIO). Dos tablas que crecían sin purga —la
+-- bandeja de salida con su payload y la telemetría de cámara con lat/lng— y
+-- una tabla de 230k filas/día con dos índices repetidos y ninguno que
+-- sirviera al `delete … where medida_en < X` nocturno.
+--
+--   (a) el outbox: lo `sent` viejo se va, lo `sent` reciente y lo `pending`
+--       viejo (trabajo por hacer) se quedan;
+--   (b) los eventos: el leve viejo se va, el grave de 200 días se queda
+--       (dura 365), el grave de 400 se va, el leve reciente se queda;
+--   (c) `mantenimiento_de_datos` los reporta con nombre;
+--   (d) el catálogo de `posicion`: sin `posicion_unidad_medida_idx` ni
+--       `posicion_sin_duplicado`, con `posicion_medida_idx`, y ninguna
+--       pareja de índices con la misma definición.
+do $$
+declare
+  t uuid := gen_random_uuid();
+  o_sent_viejo uuid := gen_random_uuid(); o_sent_nuevo uuid := gen_random_uuid(); o_pending_viejo uuid := gen_random_uuid();
+  r jsonb; m jsonb;
+  outbox_quedan int; leve_viejo int; grave_200 int; grave_400 int; leve_nuevo int;
+  sin_dup boolean; con_medida boolean; repetidos int;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0288__');
+  insert into public.wa_outbox (id, payload, estado, creada_en, enviada_en) values
+    (o_sent_viejo,    '{}'::jsonb, 'sent',    now() - interval '91 days', now() - interval '91 days'),
+    (o_sent_nuevo,    '{}'::jsonb, 'sent',    now() - interval '10 days', now() - interval '10 days'),
+    (o_pending_viejo, '{}'::jsonb, 'pending', now() - interval '200 days', null);
+  insert into public.evento_seguridad_flota (tenant_id, proveedor, evento_id_externo, etiquetas, grave, lat, lng, ocurrido_en) values
+    (t, 'samsara', 'leve-viejo',  '{harsh_brake}', false, 19.0, -99.0, now() - interval '181 days'),
+    (t, 'samsara', 'grave-200',   '{crash}',       true,  19.0, -99.0, now() - interval '200 days'),
+    (t, 'samsara', 'grave-400',   '{crash}',       true,  19.0, -99.0, now() - interval '400 days'),
+    (t, 'samsara', 'leve-nuevo',  '{harsh_brake}', false, 19.0, -99.0, now() - interval '10 days');
+
+  r := public.purgar_wa_outbox(90, now(), null);
+  m := public.mantenimiento_de_datos(30, now());
+
+  select count(*) into outbox_quedan from public.wa_outbox where id in (o_sent_viejo, o_sent_nuevo, o_pending_viejo);
+  select count(*) into leve_viejo from public.evento_seguridad_flota where tenant_id = t and evento_id_externo = 'leve-viejo';
+  select count(*) into grave_200  from public.evento_seguridad_flota where tenant_id = t and evento_id_externo = 'grave-200';
+  select count(*) into grave_400  from public.evento_seguridad_flota where tenant_id = t and evento_id_externo = 'grave-400';
+  select count(*) into leve_nuevo from public.evento_seguridad_flota where tenant_id = t and evento_id_externo = 'leve-nuevo';
+
+  -- Sólo `posicion_sin_duplicado` se retira (un único MÁS LAXO que
+  -- `uq_posicion_lectura`, que ningún `on conflict` de src/ nombra).
+  -- `posicion_unidad_medida_idx` SE QUEDA aunque repita la clave de
+  -- `uq_posicion_lectura`: el bloque GPS_0176 lo asevera por nombre desde
+  -- mucho antes de esta ronda, y retirarlo exige cambiar ese bloque en el
+  -- mismo movimiento. Queda anotado en el CIERRE de la auditoría 24.
+  sin_dup := not exists (select 1 from pg_indexes where schemaname = 'public' and tablename = 'posicion'
+                           and indexname = 'posicion_sin_duplicado');
+  con_medida := exists (select 1 from pg_indexes where schemaname = 'public' and tablename = 'posicion'
+                          and indexname = 'posicion_medida_idx');
+  select count(*) into repetidos from (
+    select regexp_replace(indexdef, '^CREATE (UNIQUE )?INDEX \S+ ON', '') as def
+      from pg_indexes where schemaname = 'public' and tablename = 'posicion'
+     group by 1 having count(*) > 1) d;
+
+  raise exception E'PURGAS_0288  outbox-quedan=%  outbox-borrado-directo=%  leve-viejo=%  grave-200=%  grave-400=%  leve-nuevo=%  mant-outbox=%  mant-eventos=%  sin-indices-repetidos=%  con-indice-purga=%  definiciones-repetidas=%   (esperado 2 / 1 / 0 / 1 / 0 / 1 / t / t / t / t / 0)',
+    outbox_quedan, r->>'borradas', leve_viejo, grave_200, grave_400, leve_nuevo,
+    m ? 'waOutboxPurgado', (m->>'eventosSeguridadPurgados')::int >= 2, sin_dup, con_medida, repetidos;
+end $$;
+
+-- ── 237. La geolocalización del pin de asistencia se retira a los 90 días de resuelta la incidencia (mig. 0289) ──
+--
+-- AUDITORÍA 24, LEG-6 (ALTO). El aviso dice «se borra a los 90 días» y
+-- `incidencia.lat/lng` e `incidencia_evento.detalle->lat/lng` vivían para
+-- siempre. Se asevera:
+--   (a) resuelta hace 91 días: lat/lng en NULL y el evento sin lat/lng pero
+--       CON la marca `geolocalizacion_purgada_en` (el hueco no se lee como
+--       «nunca hubo pin») y con el renglón vivo;
+--   (b) resuelta hace 30 días: intacta;
+--   (c) ABIERTA hace 200 días: intacta — el pin es la herramienta de la mesa
+--       mientras el expediente sigue abierto;
+--   (d) `mantenimiento_de_datos` lo reporta con nombre.
+do $$
+declare
+  t uuid := gen_random_uuid(); op uuid := gen_random_uuid();
+  i91 uuid := gen_random_uuid(); i30 uuid := gen_random_uuid(); iab uuid := gen_random_uuid();
+  r jsonb; m jsonb;
+  lat91 double precision; lat30 double precision; latab double precision;
+  det91 jsonb; det30 jsonb; eventos_91 int;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0289__');
+  insert into public.operador (id, tenant_id, nombre, telefono) values (op, t, 'Chofer', '+520000028901');
+  insert into public.incidencia (id, tenant_id, operador_id, tipo, prioridad, estado, descripcion, lat, lng, resuelta_en) values
+    (i91, t, op, 'siniestro', 'critica', 'resuelta', 'choque km 84', 19.1, -99.1, now() - interval '91 days'),
+    (i30, t, op, 'varado',    'alta',    'resuelta', 'varado',       19.2, -99.2, now() - interval '30 days'),
+    (iab, t, op, 'robo',      'critica', 'abierta',  'robo',         19.3, -99.3, null);
+  insert into public.incidencia_evento (tenant_id, incidencia_id, tipo, detalle) values
+    (t, i91, 'ubicacion_anclada', jsonb_build_object('lat', 19.1, 'lng', -99.1)),
+    (t, i91, 'mensaje_adicional', jsonb_build_object('texto', 'ya llegó la grúa')),
+    (t, i30, 'ubicacion_anclada', jsonb_build_object('lat', 19.2, 'lng', -99.2));
+
+  r := public.purgar_geolocalizacion_incidencia(90, now());
+  m := public.mantenimiento_de_datos(30, now());
+
+  select lat into lat91 from public.incidencia where id = i91;
+  select lat into lat30 from public.incidencia where id = i30;
+  select lat into latab from public.incidencia where id = iab;
+  select detalle into det91 from public.incidencia_evento where incidencia_id = i91 and tipo = 'ubicacion_anclada';
+  select detalle into det30 from public.incidencia_evento where incidencia_id = i30 and tipo = 'ubicacion_anclada';
+  select count(*) into eventos_91 from public.incidencia_evento where incidencia_id = i91;
+
+  raise exception E'GEO_INCIDENCIA_0289  lat-91-nula=%  evento-91-sin-lat=%  evento-91-marcado=%  eventos-91-vivos=%  lat-30=%  evento-30-con-lat=%  lat-abierta=%  purgadas=%  mant-reporta=%   (esperado t / t / t / 2 / 19.2 / t / 19.3 / 1 / t)',
+    lat91 is null, not (det91 ? 'lat'), det91 ? 'geolocalizacion_purgada_en', eventos_91, lat30, det30 ? 'lat', latab,
+    r->>'incidencias', m ? 'incidenciaGeoPurgada';
+end $$;
+
+-- ── 238. Teléfono, RFC y placas tienen forma; el operador ligado es de la flota (mig. 0290) ──
+--
+-- AUDITORÍA 24, DAT-10 y DAT-11 (MEDIO). Lo que se asevera:
+--   (a) `telefono = 'abc'` ya NO entra (23514) — y con eso desaparece el
+--       choque entre flotas: dos operadores sin celular en tenants distintos
+--       reventaban con `uq_operador_telefono_activo Key ()=()`;
+--   (b) un teléfono de verdad sigue entrando, en cualquiera de sus formas;
+--   (c) `rfc` chatarra rebota, `rfc` con molde del SAT pasa, NULL pasa;
+--   (d) `anio = 3000`, `km_actual = -5` y `numero_economico = ' 12'` rebotan;
+--   (e) las mismas placas con otra caja/espacios rebotan DENTRO de la flota
+--       (23505) y sí entran en OTRA flota;
+--   (f) `app_user.operador_id` de otra flota rebota (23503) y el de la propia
+--       entra.
+do $$
+declare
+  ta uuid := gen_random_uuid(); tb uuid := gen_random_uuid();
+  opa uuid := gen_random_uuid(); opb uuid := gen_random_uuid();
+  tel_chatarra text := 'no'; tel_bueno text := 'no'; rfc_malo text := 'no'; rfc_bueno text := 'no';
+  anio_malo text := 'no'; km_malo text := 'no'; eco_malo text := 'no';
+  placa_dup text := 'no'; placa_otra_flota text := 'no';
+  fk_ajena text := 'no'; fk_propia text := 'no';
+begin
+  insert into public.tenant (id, nombre) values (ta, '__verif_0290_a__'), (tb, '__verif_0290_b__');
+
+  -- (a) el teléfono que no es un teléfono
+  begin
+    insert into public.operador (tenant_id, nombre, telefono) values (ta, 'Sin celular', 'abc');
+    tel_chatarra := 'ENTRO';
+  exception when check_violation then tel_chatarra := 'rebota'; end;
+
+  -- (b) el teléfono de verdad, con el 1 de móvil que Meta a veces manda
+  begin
+    insert into public.operador (id, tenant_id, nombre, telefono) values (opa, ta, 'Juan', '+52 1 999 370 0779');
+    tel_bueno := 'entro';
+  exception when others then tel_bueno := 'REBOTO: ' || sqlerrm; end;
+
+  -- (c) RFC
+  begin
+    insert into public.operador (tenant_id, nombre, telefono, rfc) values (ta, 'Malo', '5299937007 80', 'xx');
+    rfc_malo := 'ENTRO';
+  exception when check_violation then rfc_malo := 'rebota'; end;
+  begin
+    insert into public.operador (tenant_id, nombre, telefono, rfc) values (ta, 'Bueno', '5299937007 81', 'PECJ850101H23');
+    rfc_bueno := 'entro';
+  exception when others then rfc_bueno := 'REBOTO: ' || sqlerrm; end;
+
+  -- (d) unidad: año, km y económico
+  begin
+    insert into public.unidad (tenant_id, numero_economico, anio) values (ta, 'U-anio', 3000);
+    anio_malo := 'ENTRO';
+  exception when check_violation then anio_malo := 'rebota'; end;
+  begin
+    insert into public.unidad (tenant_id, numero_economico, km_actual) values (ta, 'U-km', -5);
+    km_malo := 'ENTRO';
+  exception when check_violation then km_malo := 'rebota'; end;
+  begin
+    insert into public.unidad (tenant_id, numero_economico) values (ta, ' 12');
+    eco_malo := 'ENTRO';
+  exception when check_violation then eco_malo := 'rebota'; end;
+
+  -- (e) placas: la misma placa con otra caja, dentro y fuera de la flota
+  insert into public.unidad (tenant_id, numero_economico, placas) values (ta, '12', 'ABC-123-A');
+  begin
+    insert into public.unidad (tenant_id, numero_economico, placas) values (ta, '13', ' abc-123-a ');
+    placa_dup := 'ENTRO';
+  exception when unique_violation then placa_dup := 'rebota'; end;
+  begin
+    insert into public.unidad (tenant_id, numero_economico, placas) values (tb, '12', 'ABC-123-A');
+    placa_otra_flota := 'entro';
+  exception when others then placa_otra_flota := 'REBOTO: ' || sqlerrm; end;
+
+  -- (f) DAT-11: el operador ligado a un usuario es de su flota
+  insert into public.operador (id, tenant_id, nombre, telefono) values (opb, tb, 'Chofer B', '5299937007 82');
+  begin
+    insert into public.app_user (id, tenant_id, email, rol, operador_id)
+      values (gen_random_uuid(), ta, '__verif_0290_a__@likida.test', 'flota_admin', opb);
+    fk_ajena := 'ENTRO';
+  exception when foreign_key_violation then fk_ajena := 'rebota'; end;
+  begin
+    insert into public.app_user (id, tenant_id, email, rol, operador_id)
+      values (gen_random_uuid(), ta, '__verif_0290_b__@likida.test', 'flota_admin', opa);
+    fk_propia := 'entro';
+  exception when others then fk_propia := 'REBOTO: ' || sqlerrm; end;
+
+  raise exception E'OPERADOR_UNIDAD_FORMA_0290  tel-chatarra=%  tel-bueno=%  rfc-malo=%  rfc-bueno=%  anio=%  km=%  eco=%  placa-dup=%  placa-otra-flota=%  fk-ajena=%  fk-propia=%   (esperado rebota / entro / rebota / entro / rebota / rebota / rebota / rebota / entro / rebota / entro)',
+    tel_chatarra, tel_bueno, rfc_malo, rfc_bueno, anio_malo, km_malo, eco_malo,
+    placa_dup, placa_otra_flota, fk_ajena, fk_propia;
+end $$;
+
+-- ── 239. La sesión del contador ya no puede REESCRIBIR la liquidación (mig. 0292) ──
+--
+-- AUDITORÍA 24, SEG-2 (MEDIO). El contador tiene cookie de sesión legítima y
+-- la anon key viaja en el bundle: con `curl` hacía
+-- `PATCH /rest/v1/liquidacion` y `tenant_finanzas_update` lo dejaba pasar —204,
+-- la fila cambiaba, el PDF archivado decía otra cifra y `bitacora_auditoria`
+-- no tenía entrada. Se asevera, actuando DE VERDAD como `authenticated` con
+-- su `sub` en el JWT:
+--   (a) SIGUE LEYENDO su liquidación (no se rompió el panel);
+--   (b) el UPDATE afecta 0 filas;
+--   (c) el INSERT de un gasto rebota;
+--   (d) el DELETE de un operador afecta 0 filas;
+--   (e) no puede borrar ni reescribir la bitácora (0 filas: RLS sin policy);
+--   (f) `service_role` —el rol con el que la app escribe— sí puede.
+do $$
+declare
+  t uuid := gen_random_uuid(); conta uuid := gen_random_uuid();
+  op uuid := gen_random_uuid(); vj uuid := gen_random_uuid(); liq uuid := gen_random_uuid();
+  -- Un viaje ABIERTO aparte: el gasto se prueba contra éste para que lo que
+  -- rebote sea la RLS y no `trg_gasto_no_tras_liquidar` (que ya lo frenaría
+  -- por llegar tarde, y entonces la prueba no mediría nada).
+  vj2 uuid := gen_random_uuid(); op2 uuid := gen_random_uuid();
+  -- Un chofer SIN viajes: si se borrara el de `vj`, lo que rebota es el FK
+  -- `restrict` de `viaje`, no la RLS — y otra vez la prueba no mediría nada.
+  op3 uuid := gen_random_uuid();
+  leidas int; tocadas int; borrados int; bit_tocadas int;
+  gasto_insert text := 'no'; bit_borradas int := -1; por_admin text := 'no';
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0292__');
+  insert into public.app_user (id, tenant_id, email, rol)
+    values (conta, t, '__verif_0292@likida.test', 'contador');
+  insert into public.operador (id, tenant_id, nombre, telefono) values (op, t, 'Juan', '5299937007 91');
+  insert into public.viaje (id, tenant_id, operador_id, folio, estatus, anticipo)
+    values (vj, t, op, 'VJ-0292-0001', 'liquidado', 10000);
+  insert into public.liquidacion (id, tenant_id, viaje_id, estatus, total_anticipo, total_comprobado, diferencia)
+    values (liq, t, vj, 'cuadrada', 10000, 10000, 0);
+  insert into public.operador (id, tenant_id, nombre, telefono) values (op2, t, 'Pedro', '5299937007 92');
+  insert into public.viaje (id, tenant_id, operador_id, folio, estatus, anticipo)
+    values (vj2, t, op2, 'VJ-0292-0002', 'abierto', 0);
+  insert into public.operador (id, tenant_id, nombre, telefono) values (op3, t, 'Sin viajes', '5299937007 93');
+  insert into public.bitacora_auditoria (tenant_id, actor_id, accion, entidad, entidad_id)
+    values (t, conta, 'liquidacion.emitida', 'liquidacion', liq::text);
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', conta)::text, true);
+
+  -- (a) el panel sigue leyendo
+  -- Por `viaje_id` y no por `id`: `liquidacion_id_del_viaje` deriva la llave
+  -- del viaje (md5), así que el id que se insertó arriba no es el que quedó.
+  select count(*) into leidas from public.liquidacion where viaje_id = vj;
+
+  -- (b) el PATCH que inventaba la cifra
+  -- La cifra inventada CUADRA con `liquidacion_diferencia_cuadra`
+  -- (diferencia = anticipo - comprobado): así lo único que puede frenarla es
+  -- la RLS, que es justo lo que se está midiendo. El PDF firmado decía 10,000
+  -- comprobados; esto dice 18,500.
+  update public.liquidacion set total_comprobado = 18500, diferencia = -8500 where viaje_id = vj;
+  get diagnostics tocadas = row_count;
+
+  -- (c) meter un gasto por la puerta de atrás
+  begin
+    insert into public.gasto (tenant_id, viaje_id, concepto, monto, fecha)
+      values (t, vj2, 'diesel', 5800, current_date);
+    gasto_insert := 'ENTRO';
+  exception when insufficient_privilege then gasto_insert := 'rebota'; end;
+
+  -- (d) borrar al chofer
+  delete from public.operador where id = op3;
+  get diagnostics borrados = row_count;
+
+  -- (e) la bitácora es constancia: ni se reescribe ni se borra
+  -- RLS niega por AUSENCIA de policy de escritura: afecta 0 filas, no truena.
+  -- (Revocar además los grants de tabla es el candado pendiente del CIERRE.)
+  begin
+    update public.bitacora_auditoria set accion = 'nada que ver' where tenant_id = t;
+    get diagnostics bit_tocadas = row_count;
+  exception when insufficient_privilege then bit_tocadas := 0; end;
+  begin
+    delete from public.bitacora_auditoria where tenant_id = t;
+    get diagnostics bit_borradas = row_count;
+  exception when insufficient_privilege then bit_borradas := 0; end;
+
+  reset role;
+
+  -- (f) el rol con el que la app SÍ escribe no se tocó
+  begin
+    update public.liquidacion set total_comprobado = 12000, diferencia = -2000 where viaje_id = vj;
+    por_admin := 'entro';
+  exception when others then por_admin := 'REBOTO: ' || sqlerrm; end;
+
+  raise exception E'POLICIES_SOLO_LECTURA_0292  contador-lee=%  update-liquidacion=%  insert-gasto=%  delete-operador=%  update-bitacora=%  delete-bitacora=%  por-service-role=%   (esperado 1 / 0 / rebota / 0 / 0 / 0 / entro)',
+    leidas, tocadas, gasto_insert, borrados, bit_tocadas, bit_borradas, por_admin;
+end $$;
+
+-- ── 240. Los jsonb que el producto lee como objeto, y el expediente ARCO (mig. 0291) ──
+--
+-- AUDITORÍA 24, DAT-13 (BAJO). Se asevera:
+--   (a) `wa_conversacion.estado = '"hola"'` y `tenant.perfil = '[1,2]'`
+--       rebotan —el código hace `estado.turns` / `perfil.algo` sobre lo que
+--       salga— y el objeto de verdad entra;
+--   (b) una solicitud ARCO sin titular (ni `operador_id` ni `titular_ref`)
+--       rebota: un expediente que no dice de quién es no se puede resolver;
+--   (c) una solicitud que VENCE antes de recibirse rebota — el plazo del
+--       art. 32 LFPDPPP se cuenta desde que se recibe, y nacer vencida
+--       dispararía los relojes legales el primer día.
+--
+-- DAT-6 (`liquidado` ⇔ existe `liquidacion`) NO se asevera aquí: quedó
+-- diferido. La cabecera de la 0291 y el CIERRE de la auditoría 24 explican por
+-- qué —16 bloques de esta misma batería usan `estatus='liquidado'` como atajo
+-- de fixture, y `TARDE` (línea 779) asevera que el hueco existe a propósito.
+do $$
+declare
+  t uuid := gen_random_uuid(); op1 uuid := gen_random_uuid();
+  estado_malo text := 'no'; estado_bueno text := 'no'; perfil_malo text := 'no';
+  perfil_bueno text := 'no'; arco_sin_titular text := 'no'; arco_vencida text := 'no';
+  arco_buena text := 'no';
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0291__');
+  insert into public.operador (id, tenant_id, nombre, telefono) values (op1, t, 'Juan', '5299937007 94');
+
+  -- (a) los jsonb que el producto lee como objeto
+  begin
+    insert into public.wa_conversacion (tenant_id, telefono, estado)
+      values (t, '5299937007 96', '"hola"'::jsonb);
+    estado_malo := 'ENTRO';
+  exception when check_violation then estado_malo := 'rebota'; end;
+  begin
+    insert into public.wa_conversacion (tenant_id, telefono, estado)
+      values (t, '5299937007 97', '{"turns": []}'::jsonb);
+    estado_bueno := 'entro';
+  exception when others then estado_bueno := 'REBOTO: ' || sqlerrm; end;
+  begin
+    update public.tenant set perfil = '[1,2]'::jsonb where id = t;
+    perfil_malo := 'ENTRO';
+  exception when check_violation then perfil_malo := 'rebota'; end;
+  begin
+    update public.tenant set perfil = '{"giro": "carga"}'::jsonb where id = t;
+    perfil_bueno := 'entro';
+  exception when others then perfil_bueno := 'REBOTO: ' || sqlerrm; end;
+
+  -- (b) y (c) el expediente ARCO
+  begin
+    insert into public.solicitud_arco (tenant_id, tipo, canal, estado, recibida_en, vence_en)
+      values (t, 'cancelacion', 'whatsapp', 'recibida', now(), (now() + interval '20 days')::date);
+    arco_sin_titular := 'ENTRO';
+  exception when check_violation then arco_sin_titular := 'rebota'; end;
+  begin
+    insert into public.solicitud_arco (tenant_id, operador_id, tipo, canal, estado, recibida_en, vence_en)
+      values (t, op1, 'cancelacion', 'whatsapp', 'recibida', now(), (now() - interval '10 days')::date);
+    arco_vencida := 'ENTRO';
+  exception when check_violation then arco_vencida := 'rebota'; end;
+  begin
+    insert into public.solicitud_arco (tenant_id, operador_id, tipo, canal, estado, recibida_en, vence_en)
+      values (t, op1, 'cancelacion', 'whatsapp', 'recibida', now(), (now() + interval '20 days')::date);
+    arco_buena := 'entro';
+  exception when others then arco_buena := 'REBOTO: ' || sqlerrm; end;
+
+  raise exception E'FORMAS_JSONB_Y_ARCO_0291  estado-chatarra=%  estado-objeto=%  perfil-arreglo=%  perfil-objeto=%  arco-sin-titular=%  arco-nace-vencida=%  arco-buena=%   (esperado rebota / entro / rebota / entro / rebota / rebota / entro)',
+    estado_malo, estado_bueno, perfil_malo, perfil_bueno, arco_sin_titular, arco_vencida, arco_buena;
+end $$;
+
+-- ── 232. Cancelar y abonar se serializan; la cobranza tiene techo (mig. 0284) ──
+--
+-- AUDITORÍA 24, BE-3 (ALTO) + DAT-7 (MEDIO). `cancelarFactura` contaba los
+-- pagos y cancelaba en dos viajes: un abono en medio dejaba un CFDI cancelado
+-- con dinero encima. Y `pago_recibido` aceptaba sobrepagos, abonos sobre
+-- canceladas y «pagada» sin pagos.
+--
+-- Se asevera lo que solo Postgres puede demostrar:
+--   (a) `cancelar_factura_tx` cancela una emitida sin pagos;
+--   (b) con un abono encima rebota CU016 motivo=con_pagos y la factura sigue
+--       `emitida`;
+--   (c) un abono sobre una cancelada rebota 23514 (pago_sobre_factura_viva);
+--   (d) un abono que rebasa el total rebota 23514 (pago_dentro_de_saldo)
+--       aunque entre por INSERT directo, sin pasar por registrar_pago_tx;
+--   (e) `update … set estatus='pagada'` sin dinero rebota 23514;
+--   (f) el camino bueno sigue: registrar_pago_tx salda y marca pagada;
+--   (g) una `pagada` no se cancela desde aquí (CU016 motivo=estatus);
+--   (h) la factura de otra flota ni se traba (CU010);
+--   (i) nada de esto se ejecuta desde internet.
+-- Esperado: CANCELAR_FACTURA_TX_0284 cancela=t con-pagos-rebota=t
+--           sobre-cancelada-rebota=t sobrepago-rebota=t pagada-sin-dinero-rebota=t
+--           salda-y-marca=t pagada-no-se-cancela=t ajena-rebota=t anon=f
+do $$
+declare
+  ta uuid; tb uuid; cli uuid;
+  f_limpia uuid; f_abonada uuid; fx uuid;
+  res jsonb;
+  cancela boolean := false;
+  con_pagos_rebota boolean := false;
+  sobre_cancelada_rebota boolean := false;
+  sobrepago_rebota boolean := false;
+  pagada_sin_dinero_rebota boolean := false;
+  salda_y_marca boolean := false;
+  pagada_no_se_cancela boolean := false;
+  ajena_rebota boolean := false;
+  anon_ok boolean := true;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0284 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0284 B') returning id into tb;
+  insert into cliente (tenant_id, nombre, rfc) values (ta, 'ZZZ cli 0284', 'XAXX010101000') returning id into cli;
+
+  -- (a) Sin pagos: se cancela, y el RPC devuelve de dónde venía.
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, cli, 10000, 1600, 11600, 'emitida') returning id into f_limpia;
+  res := cancelar_factura_tx(ta, f_limpia);
+  cancela := (select estatus from factura_emitida where id = f_limpia) = 'cancelada'
+             and res ->> 'estatus_previo' = 'emitida';
+
+  -- (b) Con un abono encima: NO se cancela. Es el escenario de BE-3 con el
+  -- abono ya dentro; el intercalado imposible lo garantiza el `for update`.
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, cli, 10000, 1600, 11600, 'emitida') returning id into f_abonada;
+  res := registrar_pago_tx(ta, f_abonada, current_date, 10000, 'transferencia', null);
+  begin
+    res := cancelar_factura_tx(ta, f_abonada);
+  exception when sqlstate 'CU016' then
+    con_pagos_rebota := position('motivo=con_pagos' in sqlerrm) > 0
+                        and (select estatus from factura_emitida where id = f_abonada) = 'emitida';
+  end;
+
+  -- (c) Un abono sobre la cancelada de (a) rebota como violación de dominio.
+  begin
+    insert into pago_recibido (tenant_id, factura_id, monto) values (ta, f_limpia, 100);
+  exception when check_violation then sobre_cancelada_rebota := true;
+  end;
+
+  -- (d) Sobrepago por INSERT DIRECTO (saldo 1,600, abono 2,000): rebota sin
+  -- pasar por registrar_pago_tx — que es lo que DAT-7 encontró abierto.
+  begin
+    insert into pago_recibido (tenant_id, factura_id, monto) values (ta, f_abonada, 2000);
+  exception when check_violation then sobrepago_rebota := true;
+  end;
+
+  -- (e) «pagada» sin el dinero encima: rebota.
+  begin
+    update factura_emitida set estatus = 'pagada' where id = f_abonada;
+  exception when check_violation then pagada_sin_dinero_rebota := true;
+  end;
+
+  -- (f) El camino bueno no se rompió: el abono que salda marca `pagada`.
+  res := registrar_pago_tx(ta, f_abonada, current_date, 1600, 'efectivo', 'REF-0284');
+  salda_y_marca := (res ->> 'saldada')::boolean
+                   and (select estatus from factura_emitida where id = f_abonada) = 'pagada';
+
+  -- (g) Y una pagada no se cancela de un clic. El RPC cuenta los abonos ANTES
+  -- de mirar el estatus (una pagada siempre tiene dinero encima), así que el
+  -- motivo que llega es `con_pagos`; lo que se afirma es que NO se canceló.
+  begin
+    res := cancelar_factura_tx(ta, f_abonada);
+  exception when sqlstate 'CU016' then
+    pagada_no_se_cancela := position('motivo=' in sqlerrm) > 0
+                            and (select estatus from factura_emitida where id = f_abonada) = 'pagada';
+  end;
+
+  -- (h) La factura de OTRA flota ni se traba.
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, cli, 100, 16, 116, 'emitida') returning id into fx;
+  begin
+    res := cancelar_factura_tx(tb, fx);
+  exception when sqlstate 'CU010' then ajena_rebota := true;
+  end;
+
+  -- (i) Permisos.
+  select has_function_privilege('anon', 'public.cancelar_factura_tx(uuid, uuid)', 'EXECUTE')
+      or has_function_privilege('authenticated', 'public.cancelar_factura_tx(uuid, uuid)', 'EXECUTE')
+    into anon_ok;
+
+  raise exception E'CANCELAR_FACTURA_TX_0284  cancela=%  con-pagos-rebota=%  sobre-cancelada-rebota=%  sobrepago-rebota=%  pagada-sin-dinero-rebota=%  salda-y-marca=%  pagada-no-se-cancela=%  ajena-rebota=%  anon=%   (esperado t / t / t / t / t / t / t / t / f)',
+    cancela, con_pagos_rebota, sobre_cancelada_rebota, sobrepago_rebota, pagada_sin_dinero_rebota,
+    salda_y_marca, pagada_no_se_cancela, ajena_rebota, anon_ok;
+end $$;
+
+-- ── 233. Cerrar una orden del bus exige ser quien la tomó (mig. 0285) ──────
+--
+-- AUDITORÍA 24, BE-22 (BAJO). `ordenes-resolver` cerraba con `.eq('id', id)` a
+-- secas: el worker B marcaba `hecha` la orden que tomó A, y `resultado` contaba
+-- lo que hizo B sobre el trabajo de A. La ruta ancla ahora por estado Y por
+-- dueño; el dueño no existía en el esquema (la 0127 guarda `creado_por` y
+-- `tomada_en`, no quién tomó) y lo agrega la 0285.
+--
+-- Se asevera lo que solo Postgres puede demostrar:
+--   (a) la columna existe y es anulable (las tomadas antes de la 0285 no
+--       tienen dueño y no se les inventa uno);
+--   (b) el UPDATE anclado a OTRO dueño no toca ni una fila;
+--   (c) el anclado al dueño bueno sí la cierra;
+--   (d) y una orden ya cerrada no se vuelve a cerrar (el ancla por estado).
+--
+-- Esperado: BUS_ORDEN_TOMADA_POR_0285 existe=t anulable=t ajeno=0 propio=1 recierre=0
+do $$
+declare
+  existe boolean;
+  anulable boolean;
+  o uuid;
+  ajeno integer;
+  propio integer;
+  recierre integer;
+begin
+  select true, (is_nullable = 'YES')
+    into existe, anulable
+    from information_schema.columns
+   where table_schema = 'public' and table_name = 'bus_orden' and column_name = 'tomada_por';
+  existe := coalesce(existe, false);
+  anulable := coalesce(anulable, false);
+
+  insert into public.bus_orden (tipo, rutina, creado_por)
+    values ('correr_ahora', 'auditoria-24', 'verificaciones')
+    returning id into o;
+
+  -- El claim, como lo hace la ruta: anclado a `pendiente` y firmando quién.
+  update public.bus_orden
+     set estado = 'tomada', tomada_en = now(), tomada_por = 'worker-a'
+   where id = o and estado = 'pendiente';
+
+  -- (b) El worker B intenta cerrarla: no toca nada.
+  update public.bus_orden
+     set estado = 'hecha', resuelta_en = now(), resultado = 'la cerró B'
+   where id = o and estado = 'tomada' and tomada_por = 'worker-b';
+  get diagnostics ajeno = row_count;
+
+  -- (c) El worker A sí.
+  update public.bus_orden
+     set estado = 'hecha', resuelta_en = now(), resultado = 'la cerró A'
+   where id = o and estado = 'tomada' and tomada_por = 'worker-a';
+  get diagnostics propio = row_count;
+
+  -- (d) Y ya cerrada, nadie la vuelve a cerrar.
+  update public.bus_orden
+     set estado = 'fallida', resuelta_en = now(), resultado = 'segundo cierre'
+   where id = o and estado = 'tomada' and tomada_por = 'worker-a';
+  get diagnostics recierre = row_count;
+
+  raise exception E'BUS_ORDEN_TOMADA_POR_0285  existe=%  anulable=%  ajeno=%  propio=%  recierre=%   (esperado t / t / 0 / 1 / 0)',
+    existe, anulable, ajeno, propio, recierre;
+end $$;
+
+-- ── 228. `poliza_datos_tenant` v281 entrega los insumos por comprobante y `gasto` tiene piso en sus cinco columnas de dinero (mig. 0281) ──
+--
+-- AUDITORÍA 24, FIS-2 + FIS-3 (CRÍTICOS) + DAT-3 (ALTO). La 0272 entregaba
+-- `gastos` sin monto, sin folio, sin forma de pago: la ruta no podía ni
+-- deduplicar (una foto repetida se asentaba dos veces) ni partir un gasto
+-- parcialmente deducible (la comida de $2,000 con tope de $750 se asentaba
+-- entera como deducible). Y las cinco columnas de dinero distintas de `monto`
+-- aceptaban negativos que la póliza volvía cargos.
+--
+-- Lo que este bloque asevera (la FORMA del contrato, que es lo que la base
+-- puede demostrar; la clasificación sigue viviendo en TS — bloque 220):
+--   (a) cada fila trae `version` = 281;
+--   (b) cada gasto trae `monto`, `folioNorm`, `cfdiUuid` y `formaPago` — lo que
+--       `copiasDeComprobante`, `cubetaDe` y `proporcionesDeducibles` leen —, y
+--       las DOS fotos del mismo ticket vienen las dos (deduplica la ruta con la
+--       misma función que el motor, no SQL);
+--   (c) `sub_total = -1` no entra (23514), y un descuento mayor al SubTotal
+--       tampoco.
+do $$
+declare
+  t uuid := gen_random_uuid(); v uuid := gen_random_uuid();
+  l uuid := gen_random_uuid(); op uuid := gen_random_uuid();
+  g1 uuid := gen_random_uuid(); g2 uuid := gen_random_uuid();
+  fila jsonb;
+  version_281 boolean := false;
+  insumos_por_gasto boolean := false;
+  dos_fotos boolean := false;
+  piso_subtotal boolean := false;
+  piso_descuento boolean := false;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0281__');
+  insert into public.operador (id, tenant_id, nombre, telefono)
+    values (op, t, 'Operador 0281', '+5218100000281');
+  insert into public.viaje (id, tenant_id, operador_id, folio, anticipo, estatus)
+    values (v, t, op, 'VJ-0281', 10000, 'liquidado');
+  -- Dos fotos del MISMO ticket de diésel: sin UUID, mismo folio normalizado y
+  -- mismo monto (el caso real de la base: el índice único de (uuid, orden)
+  -- impide la copia por UUID, la copia por folio no la impide nadie).
+  insert into public.gasto (id, tenant_id, viaje_id, concepto, monto, sub_total, folio, folio_norm, forma_pago, fecha)
+    values (g1, t, v, 'diesel', 3480, 3000, '05461', '5461', '01', current_date),
+           (g2, t, v, 'diesel', 3480, 3000, '5461',  '5461', '01', current_date);
+  -- (c) antes de liquidar: con liquidación emitida el trigger de la 0036
+  -- rebota cualquier alta (CU001) y taparía el CHECK que aquí se prueba.
+  begin
+    insert into public.gasto (tenant_id, viaje_id, concepto, monto, sub_total)
+      values (t, v, 'diesel', 100, -1);
+  exception when check_violation then
+    piso_subtotal := true;
+  end;
+  begin
+    insert into public.gasto (tenant_id, viaje_id, concepto, monto, sub_total, descuento)
+      values (t, v, 'caseta', 100, 50, 60);
+  exception when check_violation then
+    piso_descuento := true;
+  end;
+
+  insert into public.liquidacion
+    (id, tenant_id, viaje_id, total_anticipo, total_comprobado, diferencia, iva_acreditable, diferencias)
+    values (l, t, v, 10000, 3480, 6520, 0, '[]'::jsonb);
+
+  select x into fila
+    from jsonb_array_elements(public.poliza_datos_tenant(t, current_date - 1, current_date + 1)) x
+   limit 1;
+
+  version_281       := (fila->>'version')::int = 281;
+  insumos_por_gasto := (fila->'gastos'->0->>'monto')::numeric = 3480
+                       and (fila->'gastos'->0->>'folioNorm') = '5461'
+                       and (fila->'gastos'->0->>'formaPago') = '01'
+                       and (fila->'gastos'->0) ? 'cfdiUuid'
+                       and (fila->'gastos'->0) ? 'pagadoEn'
+                       and (fila->'gastos'->0) ? 'ivaRetenido';
+  dos_fotos         := jsonb_array_length(fila->'gastos') = 2;
+
+  raise exception E'POLIZA_V2_0281  version=%  insumos-por-gasto=%  dos-fotos=%  piso-subtotal=%  piso-descuento=%   (esperado t / t / t / t / t)',
+    version_281, insumos_por_gasto, dos_fotos, piso_subtotal, piso_descuento;
+end $$;
+
+-- ── 229. El agregado fiscal parte las celdas por el sello del complemento de pago (mig. 0282) ──
+--
+-- AUDITORÍA 24, FIS-7 (MEDIO). Dos CFDI '99' idénticos en todo menos en
+-- `pagado_en` caían en UNA celda y el panel del contador negaba el IVA de los
+-- dos. Con la 0282 son DOS celdas, cada una con `pagado` y `pagadoForma`, y
+-- `ivaSostenible` (fiscal.ts) puede sostener el pagado — la ley sigue en TS.
+do $$
+declare
+  t uuid := gen_random_uuid(); v uuid := gen_random_uuid(); op uuid := gen_random_uuid();
+  celdas jsonb;
+  dos_celdas boolean := false;
+  trae_pagado boolean := false;
+  forma_del_rep boolean := false;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0282__');
+  insert into public.operador (id, tenant_id, nombre, telefono)
+    values (op, t, 'Operador 0282', '+5218100000282');
+  insert into public.viaje (id, tenant_id, operador_id, folio, anticipo, estatus)
+    values (v, t, op, 'VJ-0282', 10000, 'abierto');
+  insert into public.gasto (tenant_id, viaje_id, concepto, monto, sub_total, iva_traslado, cfdi_uuid, forma_pago, metodo_pago, fecha, pagado_en, pagado_forma)
+    values (t, v, 'diesel', 1160, 1000, 160, 'aaaaaaaa-0282-0282-0282-000000000001', '99', 'PPD', current_date, null, null),
+           (t, v, 'diesel', 1160, 1000, 160, 'aaaaaaaa-0282-0282-0282-000000000002', '99', 'PPD', current_date, current_date, '03');
+
+  celdas := public.gastos_fiscales_agregados_tenant(t, null, null, 2000, 750, array['alimentacion','viaticos'], '{}'::date[]);
+
+  dos_celdas   := jsonb_array_length(celdas) = 2;
+  trae_pagado  := (select bool_and(x ? 'pagado' and x ? 'pagadoForma') from jsonb_array_elements(celdas) x);
+  forma_del_rep := exists (select 1 from jsonb_array_elements(celdas) x where (x->>'pagado')::boolean and x->>'pagadoForma' = '03' and (x->>'n')::int = 1)
+               and exists (select 1 from jsonb_array_elements(celdas) x where not (x->>'pagado')::boolean and x->'pagadoForma' = 'null'::jsonb and (x->>'n')::int = 1);
+
+  raise exception E'FISCAL_AGREGADO_PAGADO_0282  dos-celdas=%  trae-pagado=%  forma-del-rep=%   (esperado t / t / t)',
+    dos_celdas, trae_pagado, forma_del_rep;
+end $$;
+
+-- ── 230. Lo liquidado no se mueve, y el REP tiene piso y forma (mig. 0283) ──
+--
+-- AUDITORÍA 24, DAT-4 (ALTO) + DAT-12 (MEDIO). Con la liquidación emitida, el
+-- escenario S21 movía el gasto a otro viaje y reescribía retenciones y
+-- descuento sin que el trigger de la 0037/0158 se enterara (solo miraba 10
+-- columnas y solo `new.viaje_id`). S13/S27: `cfdi_pago` aceptaba importes
+-- negativos y UUID en MAYÚSCULAS —el mismo REP dos veces para
+-- `uq_cfdi_pago_docto`, IVA liberado dos veces—, y `codigo_pendiente.monto`
+-- tampoco tenía piso.
+-- Esperado: INMUTABLE_TRAS_LIQUIDAR_0283 mover=t reten=t descuento=t viaje=t
+--           unidad-libre=t rep-negativo=t rep-mayusculas=t codigo-negativo=t
+do $$
+declare
+  t uuid := gen_random_uuid(); v1 uuid := gen_random_uuid(); v2 uuid := gen_random_uuid();
+  op uuid := gen_random_uuid(); op2 uuid := gen_random_uuid();
+  g uuid := gen_random_uuid(); u uuid := gen_random_uuid();
+  mover boolean := false; reten boolean := false; descuento boolean := false;
+  viaje_enc boolean := false; unidad_libre boolean := false;
+  rep_negativo boolean := false; rep_mayusculas boolean := false; codigo_negativo boolean := false;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0283__');
+  -- Dos operadores: `uq_viaje_abierto_por_operador` (0029) solo deja UN viaje
+  -- abierto por operador, y aquí hacen falta dos viajes.
+  insert into public.operador (id, tenant_id, nombre, telefono)
+    values (op,  t, 'Operador 0283 A', '+5218100000283'),
+           (op2, t, 'Operador 0283 B', '+5218100000284');
+  insert into public.unidad (id, tenant_id, numero_economico, placas) values (u, t, 'U-0283', 'V283ABC');
+  insert into public.viaje (id, tenant_id, operador_id, folio, anticipo, estatus, origen, destino, fecha_inicio)
+    values (v1, t, op,  'VJ-0283-A', 10000, 'abierto', 'Monterrey', 'Saltillo', current_date),
+           (v2, t, op2, 'VJ-0283-B', 10000, 'abierto', 'Monterrey', 'Saltillo', current_date);
+  insert into public.gasto (id, tenant_id, viaje_id, concepto, monto, sub_total, iva_traslado, fecha)
+    values (g, t, v1, 'diesel', 5800, 5000, 800, current_date);
+
+  -- El papel: a partir de aquí v1 está firmado.
+  insert into public.liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia)
+    values (t, v1, 5800, 10000, 4200);
+
+  -- (1) Mover el gasto a OTRO viaje — la punta que la 0036 no miraba.
+  begin
+    update public.gasto set viaje_id = v2 where id = g;
+  exception when sqlstate 'CU001' then mover := true;
+  end;
+
+  -- (2) Reescribir las retenciones que la póliza asienta como cuenta por pagar.
+  begin
+    update public.gasto set iva_retenido = 99999, isr_retenido = 99999 where id = g;
+  exception when sqlstate 'CU001' then reten := true;
+  end;
+
+  -- (3) Y el descuento (0171), base del estímulo de peaje.
+  begin
+    update public.gasto set descuento = 4000 where id = g;
+  exception when sqlstate 'CU001' then descuento := true;
+  end;
+
+  -- (4) El encabezado del PDF: origen/destino/fechas/cliente.
+  begin
+    update public.viaje set fecha_inicio = current_date - 30, origen = 'Otra' where id = v1;
+  exception when sqlstate 'CU004' then viaje_enc := true;
+  end;
+
+  -- (5) `unidad_id` sigue LIBRE a propósito (se captura tarde de rutina):
+  --     si esto fallara, el tablero del encargado quedaría trabado.
+  update public.viaje set unidad_id = u where id = v1;
+  unidad_libre := true;
+
+  -- (6) DAT-12: piso del complemento de pago.
+  begin
+    insert into public.cfdi_pago (tenant_id, cfdi_uuid, fecha_pago, docto_relacionado_uuid, imp_pagado)
+      values (t, 'bbbbbbbb-0283-0283-0283-000000000001', current_date, 'bbbbbbbb-0283-0283-0283-000000000002', -500);
+  exception when check_violation then rep_negativo := true;
+  end;
+
+  -- (7) …y su forma: 'AAAA…' y 'aaaa…' no pueden ser dos complementos.
+  begin
+    insert into public.cfdi_pago (tenant_id, cfdi_uuid, fecha_pago, docto_relacionado_uuid, imp_pagado)
+      values (t, 'BBBBBBBB-0283-0283-0283-000000000003', current_date, 'bbbbbbbb-0283-0283-0283-000000000004', 500);
+  exception when check_violation then rep_mayusculas := true;
+  end;
+
+  -- (8) La cola de códigos, misma familia.
+  begin
+    insert into public.codigo_pendiente (tenant_id, viaje_id, codigo_barras, monto)
+      values (t, v2, 'ABC283', -100);
+  exception when check_violation then codigo_negativo := true;
+  end;
+
+  raise exception E'INMUTABLE_TRAS_LIQUIDAR_0283  mover=%  reten=%  descuento=%  viaje=%  unidad-libre=%  rep-negativo=%  rep-mayusculas=%  codigo-negativo=%   (esperado t / t / t / t / t / t / t / t)',
+    mover, reten, descuento, viaje_enc, unidad_libre, rep_negativo, rep_mayusculas, codigo_negativo;
+end $$;
+
+-- ── 225. El techo diario de IA cabe en tenant.config y es un número > 0 (mig. 0278) ──
+-- Esperado: PRESUPUESTO_LLM_TENANT_0278  declara=t  texto-rebota=t  cero-rebota=t  negativo-rebota=t  null-ok=t  hermanas-ok=t  inventada-rebota=t
+--
+-- AUDITORÍA 24, TC-N1 / WA-1 / OP-P7 (CRÍTICO). El techo diario de IA era una
+-- env global; ahora `llm/budget.ts` lee primero `tenant.config.presupuestoLlmUsdDia`.
+-- Pero `config_tenant_valida` (regla 2, 0026) rechaza cualquier llave que no
+-- conozca: sin la 0278 la palanca del piloto NO SE PODÍA GUARDAR. Se asevera lo
+-- único que la base puede demostrar:
+--   (a) la llave con un número > 0 entra;
+--   (b) texto, cero y negativo rebotan (una llave mal puesta no se guarda en
+--       silencio para que nadie la lea);
+--   (c) `null` = sin declarar, entra;
+--   (d) las hermanas siguen vivas: `agentes` (0159) y `politica` conviven con
+--       la llave nueva, y una llave inventada sigue rebotando — o sea, el CHECK
+--       recreado conserva el `- 'agentes'` y la función de siempre.
+do $$
+declare
+  t uuid := gen_random_uuid();
+  declara boolean := false;
+  texto_rebota boolean := false;
+  cero_rebota boolean := false;
+  negativo_rebota boolean := false;
+  null_ok boolean := false;
+  hermanas_ok boolean := false;
+  inventada_rebota boolean := false;
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0278__');
+
+  -- (a) la palanca del piloto se guarda.
+  begin
+    update public.tenant set config = '{"presupuestoLlmUsdDia": 40}'::jsonb where id = t;
+    declara := true;
+  exception when others then declara := false;
+  end;
+
+  -- (b) texto, cero y negativo rebotan.
+  begin
+    update public.tenant set config = '{"presupuestoLlmUsdDia": "40"}'::jsonb where id = t;
+  exception when others then texto_rebota := true;
+  end;
+  begin
+    update public.tenant set config = '{"presupuestoLlmUsdDia": 0}'::jsonb where id = t;
+  exception when others then cero_rebota := true;
+  end;
+  begin
+    update public.tenant set config = '{"presupuestoLlmUsdDia": -3}'::jsonb where id = t;
+  exception when others then negativo_rebota := true;
+  end;
+
+  -- (c) null = sin declarar.
+  begin
+    update public.tenant set config = '{"presupuestoLlmUsdDia": null}'::jsonb where id = t;
+    null_ok := true;
+  exception when others then null_ok := false;
+  end;
+
+  -- (d) convive con `agentes` (0159) y `politica`; la regla 2 sigue viva.
+  begin
+    update public.tenant set config =
+      '{"presupuestoLlmUsdDia": 27.5, "agentes": {"conductores": {"horasEscalacion": 5}}, "politica": [{"concepto": "diesel", "topeMonto": 8000}]}'::jsonb
+      where id = t;
+    hermanas_ok := true;
+  exception when others then hermanas_ok := false;
+  end;
+  begin
+    update public.tenant set config = '{"presupuestoLlmUsdDia": 40, "presupuestoLlmUsdDIa": 40}'::jsonb where id = t;
+  exception when others then inventada_rebota := true;
+  end;
+
+  raise exception E'PRESUPUESTO_LLM_TENANT_0278  declara=%  texto-rebota=%  cero-rebota=%  negativo-rebota=%  null-ok=%  hermanas-ok=%  inventada-rebota=%   (esperado t / t / t / t / t / t / t)',
+    declara, texto_rebota, cero_rebota, negativo_rebota, null_ok, hermanas_ok, inventada_rebota;
+end $$;
+
+-- ── 226. La liquidación lleva los dos sellos de entrega, nulos de fábrica (mig. 0279) ──
+--
+-- AUDITORÍA 24, AGEN-4 (ALTO). Toda muerte posterior al commit del cierre
+-- aterrizaba en «pídeselo a tu contralor» sin mandar el PDF que existe ni avisar
+-- al jefe, porque la entrega no dejaba marca en la base. Se asevera lo que la
+-- base puede demostrar: las dos columnas existen, son timestamptz NULLABLES
+-- (null = «falta entregar»; el reintento del «listo» decide por ellas), nacen
+-- en null sin default (un default now() diría «entregado» sobre un PDF que
+-- nadie mandó), y el índice parcial del barrido existe.
+-- Esperado: LIQUIDACION_SELLOS_ENTREGA_0279 col-operador=t col-oficina=t nulables=t sin-default=t idx-parcial=t
+do $$
+declare
+  col_operador boolean; col_oficina boolean; nulables boolean; sin_default boolean; idx_parcial boolean;
+begin
+  select exists(select 1 from information_schema.columns
+                where table_schema = 'public' and table_name = 'liquidacion'
+                  and column_name = 'entregada_operador_en' and data_type = 'timestamp with time zone') into col_operador;
+  select exists(select 1 from information_schema.columns
+                where table_schema = 'public' and table_name = 'liquidacion'
+                  and column_name = 'avisada_oficina_en' and data_type = 'timestamp with time zone') into col_oficina;
+  select coalesce(bool_and(is_nullable = 'YES'), false) from information_schema.columns
+    where table_schema = 'public' and table_name = 'liquidacion'
+      and column_name in ('entregada_operador_en', 'avisada_oficina_en') into nulables;
+  select coalesce(bool_and(column_default is null), false) from information_schema.columns
+    where table_schema = 'public' and table_name = 'liquidacion'
+      and column_name in ('entregada_operador_en', 'avisada_oficina_en') into sin_default;
+  select exists(select 1 from pg_indexes
+                where schemaname = 'public' and tablename = 'liquidacion'
+                  and indexname = 'liquidacion_entrega_pendiente_idx'
+                  and indexdef ilike '%where%entregada_operador_en is null%') into idx_parcial;
+
+  raise exception E'LIQUIDACION_SELLOS_ENTREGA_0279  col-operador=%  col-oficina=%  nulables=%  sin-default=%  idx-parcial=%   (esperado t / t / t / t / t)',
+    col_operador, col_oficina, nulables, sin_default, idx_parcial;
+end $$;
+
+-- ── 227. El mutex del viaje tiene dueño y el inbox ordena por la hora del mensaje (mig. 0280) ──
+--
+-- AUDITORÍA 24, BE-11 (MEDIO) y AGEN-6 (MEDIO). `unlock_viaje` borraba el lease
+-- de quien fuera —el XML que se pasaba de su TTL le quitaba el lock al cierre y
+-- entraba un segundo «listo» completo— y el orden causal del inbox lo daba
+-- `recibido_en`, la hora de NUESTRO servidor, no la del mensaje: un «listo» que
+-- Meta entregaba antes que la última foto cerraba sin ella, irreversible.
+-- Se asevera lo que la base puede demostrar: la columna del dueño existe, las
+-- dos funciones del lock llevan el parámetro del token, `wa_orden_evento` existe
+-- y es IMMUTABLE (si no, no se puede indexar ni razonar sobre ella), y las dos
+-- RPC del inbox la USAN en su cuerpo.
+-- Esperado: MUTEX_Y_ORDEN_0280 col-token=t unlock-token=t trylock-token=t orden-fn=t orden-inmutable=t listar-usa=t reclamar-usa=t
+do $$
+declare
+  col_token boolean; unlock_token boolean; trylock_token boolean;
+  orden_fn boolean; orden_inmutable boolean; listar_usa boolean; reclamar_usa boolean;
+begin
+  select exists(select 1 from information_schema.columns
+                where table_schema = 'public' and table_name = 'viaje_lock'
+                  and column_name = 'token' and data_type = 'uuid') into col_token;
+
+  select exists(select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                where n.nspname = 'public' and p.proname = 'unlock_viaje'
+                  and pg_get_function_identity_arguments(p.oid) like '%p_token uuid%') into unlock_token;
+  select exists(select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                where n.nspname = 'public' and p.proname = 'try_lock_viaje'
+                  and pg_get_function_identity_arguments(p.oid) like '%p_token uuid%') into trylock_token;
+
+  select exists(select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                where n.nspname = 'public' and p.proname = 'wa_orden_evento') into orden_fn;
+  select coalesce((select p.provolatile = 'i' from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                   where n.nspname = 'public' and p.proname = 'wa_orden_evento' limit 1), false) into orden_inmutable;
+
+  select coalesce((select pg_get_functiondef(p.oid) ilike '%wa_orden_evento%'
+                   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                   where n.nspname = 'public' and p.proname = 'listar_wa_pendientes' limit 1), false) into listar_usa;
+  select coalesce((select pg_get_functiondef(p.oid) ilike '%wa_orden_evento%'
+                   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                   where n.nspname = 'public' and p.proname = 'reclamar_wa_pendiente' limit 1), false) into reclamar_usa;
+
+  raise exception E'MUTEX_Y_ORDEN_0280  col-token=%  unlock-token=%  trylock-token=%  orden-fn=%  orden-inmutable=%  listar-usa=%  reclamar-usa=%   (esperado t / t / t / t / t / t / t)',
+    col_token, unlock_token, trylock_token, orden_fn, orden_inmutable, listar_usa, reclamar_usa;
 end $$;

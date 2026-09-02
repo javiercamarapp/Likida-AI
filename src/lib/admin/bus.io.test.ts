@@ -31,7 +31,15 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => builder(tabla),
     storage: {
-      from: () => ({ createSignedUrl: async () => ({ data: { signedUrl: 'https://firmada/x' } }) }),
+      from: () => ({
+        createSignedUrl: async () => ({ data: { signedUrl: 'https://firmada/x' } }),
+        // Las piezas se firman EN LOTE desde el 28-ago-2026 (un request, no
+        // uno por pieza — ver el incidente en supabase/reintento.ts).
+        createSignedUrls: async (paths: string[]) => ({
+          data: paths.map((p) => ({ path: p, signedUrl: 'https://firmada/x', signedURL: `/${p}`, error: null })),
+          error: null,
+        }),
+      }),
     },
   }),
 }));

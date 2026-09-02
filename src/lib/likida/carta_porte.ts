@@ -192,25 +192,29 @@ export interface CampoCcp {
  */
 export const CAMPOS_CCP: ReadonlyArray<CampoCcp> = [
   // ── Los 19 del cliente ──
-  { clave: 'transp_internac', rotulo: 'Transporte internacional (Sí/No)', responsable: 'cliente', fuente: null },
+  // Desde la 0204 los datos del cliente SÍ tienen casilla: los CCP viven en el
+  // viaje (`viaje.ccp_*`) y la mercancía en `viaje_mercancia` — la fuente
+  // `mercancia.*` es esa tabla. Los dos países son los únicos DERIVADOS: solo
+  // cuando la flota declaró "no es internacional" se puede afirmar MEX-MEX.
+  { clave: 'transp_internac', rotulo: 'Transporte internacional (Sí/No)', responsable: 'cliente', fuente: 'viaje.ccp_transp_internac' },
   { clave: 'origen_ubicacion', rotulo: 'Origen (ubicación)', responsable: 'cliente', fuente: 'viaje.origen' },
   { clave: 'rfc_remitente', rotulo: 'RFC del remitente', responsable: 'cliente', fuente: 'cliente.rfc' },
-  { clave: 'origen_estado', rotulo: 'Estado (domicilio origen)', responsable: 'cliente', fuente: null },
-  { clave: 'origen_pais', rotulo: 'País (origen)', responsable: 'cliente', fuente: null },
-  { clave: 'origen_cp', rotulo: 'Código postal (origen)', responsable: 'cliente', fuente: null },
+  { clave: 'origen_estado', rotulo: 'Estado (domicilio origen)', responsable: 'cliente', fuente: 'viaje.ccp_origen_estado' },
+  { clave: 'origen_pais', rotulo: 'País (origen)', responsable: 'cliente', fuente: 'derivado: MEX si se declaró no internacional' },
+  { clave: 'origen_cp', rotulo: 'Código postal (origen)', responsable: 'cliente', fuente: 'viaje.ccp_origen_cp' },
   { clave: 'destino_ubicacion', rotulo: 'Destino (ubicación)', responsable: 'cliente', fuente: 'viaje.destino' },
-  { clave: 'rfc_destinatario', rotulo: 'RFC del destinatario', responsable: 'cliente', fuente: null },
-  { clave: 'destino_estado', rotulo: 'Estado (domicilio destino)', responsable: 'cliente', fuente: null },
-  { clave: 'destino_pais', rotulo: 'País (destino)', responsable: 'cliente', fuente: null },
-  { clave: 'destino_cp', rotulo: 'Código postal (destino)', responsable: 'cliente', fuente: null },
-  { clave: 'peso_bruto_total', rotulo: 'Peso bruto total de la carga', responsable: 'cliente', fuente: null },
-  { clave: 'unidad_peso', rotulo: 'Unidad de peso', responsable: 'cliente', fuente: null },
-  { clave: 'num_total_mercancias', rotulo: 'Número total de mercancías', responsable: 'cliente', fuente: null },
-  { clave: 'bienes_transp', rotulo: 'Clave de bienes transportados (c_ClaveProdServCP)', responsable: 'cliente', fuente: null },
-  { clave: 'descripcion_mercancia', rotulo: 'Descripción de la mercancía', responsable: 'cliente', fuente: null },
-  { clave: 'cantidad', rotulo: 'Cantidad', responsable: 'cliente', fuente: null },
-  { clave: 'clave_unidad', rotulo: 'Clave de unidad', responsable: 'cliente', fuente: null },
-  { clave: 'peso_en_kg', rotulo: 'Peso en kilogramos (por mercancía)', responsable: 'cliente', fuente: null },
+  { clave: 'rfc_destinatario', rotulo: 'RFC del destinatario', responsable: 'cliente', fuente: 'viaje.ccp_rfc_destinatario' },
+  { clave: 'destino_estado', rotulo: 'Estado (domicilio destino)', responsable: 'cliente', fuente: 'viaje.ccp_destino_estado' },
+  { clave: 'destino_pais', rotulo: 'País (destino)', responsable: 'cliente', fuente: 'derivado: MEX si se declaró no internacional' },
+  { clave: 'destino_cp', rotulo: 'Código postal (destino)', responsable: 'cliente', fuente: 'viaje.ccp_destino_cp' },
+  { clave: 'peso_bruto_total', rotulo: 'Peso bruto total de la carga', responsable: 'cliente', fuente: 'mercancia.peso_kg (suma)' },
+  { clave: 'unidad_peso', rotulo: 'Unidad de peso', responsable: 'cliente', fuente: 'mercancia.peso_kg (KGM)' },
+  { clave: 'num_total_mercancias', rotulo: 'Número total de mercancías', responsable: 'cliente', fuente: 'mercancia (conteo)' },
+  { clave: 'bienes_transp', rotulo: 'Clave de bienes transportados (c_ClaveProdServCP)', responsable: 'cliente', fuente: 'mercancia.bienes_transp' },
+  { clave: 'descripcion_mercancia', rotulo: 'Descripción de la mercancía', responsable: 'cliente', fuente: 'mercancia.descripcion' },
+  { clave: 'cantidad', rotulo: 'Cantidad', responsable: 'cliente', fuente: 'mercancia.cantidad' },
+  { clave: 'clave_unidad', rotulo: 'Clave de unidad', responsable: 'cliente', fuente: 'mercancia.clave_unidad' },
+  { clave: 'peso_en_kg', rotulo: 'Peso en kilogramos (por mercancía)', responsable: 'cliente', fuente: 'mercancia.peso_kg' },
   // ── Los 18 del transportista ──
   { clave: 'version', rotulo: 'Versión del complemento (3.1)', responsable: 'transportista', fuente: 'fija' },
   { clave: 'id_ccp', rotulo: 'IdCCP (folio del complemento)', responsable: 'transportista', fuente: 'generado al emitir' },
@@ -251,6 +255,22 @@ export interface ChecklistCcp {
   transportistaListo: boolean;
 }
 
+/** Un renglón de `viaje_mercancia` tal cual se capturó. Los nullables son los
+ *  campos que el cliente todavía no da — nunca se rellenan por él. */
+export interface MercanciaCapturada {
+  descripcion: string;
+  /** Clave c_ClaveProdServCP (8 dígitos). `null` = el cliente no la ha dado;
+   *  JAMÁS se adivina — el catálogo es del SAT y una clave inventada es un
+   *  complemento con dato falso. */
+  bienesTransp: string | null;
+  cantidad: number;
+  claveUnidad: string | null;
+  pesoKg: number | null;
+  /** `null` = NO DECLARADO (contrato de la 0204): un false supuesto decidiría
+   *  por su cuenta que AseguraMedAmbiente no aplica. */
+  materialPeligroso: boolean | null;
+}
+
 /** Los valores con los que se llena el checklist. Todo nullable: la ausencia
  *  es un estado, no un error. */
 export interface DatosChecklist {
@@ -263,18 +283,63 @@ export interface DatosChecklist {
     permisoSictTipo: string | null; permisoSictNumero: string | null;
   } | null;
   operador: { nombre: string | null; rfc: string | null; licencia: string | null } | null;
+  /** Los datos CCP capturados en el viaje (0204). Opcionales para no romper a
+   *  los llamadores que aún no los juntan — ausentes cuentan como faltantes. */
+  ccpViaje?: {
+    origenCp: string | null; destinoCp: string | null;
+    origenEstado: string | null; destinoEstado: string | null;
+    rfcDestinatario: string | null; transpInternac: boolean | null;
+  } | null;
+  mercancias?: MercanciaCapturada[];
 }
 
 const texto = (v: string | number | null | undefined): string | null =>
   v === null || v === undefined || String(v).trim() === '' ? null : String(v).trim();
 
+const redondea3 = (n: number): number => Math.round(n * 1000) / 1000;
+
+/** Suma de pesos SOLO cuando hay renglones y TODOS traen peso: una suma
+ *  parcial se leería como el peso bruto total y no lo es. */
+export function pesoBrutoDe(mercancias: MercanciaCapturada[]): number | null {
+  if (mercancias.length === 0 || mercancias.some((m) => m.pesoKg === null)) return null;
+  return redondea3(mercancias.reduce((s, m) => s + (m.pesoKg as number), 0));
+}
+
 export function checklistCcp(d: DatosChecklist): ChecklistCcp {
+  const ccp = d.ccpViaje ?? null;
+  const mercs = d.mercancias ?? [];
+  const pesoTotal = pesoBrutoDe(mercs);
+  const todas = (f: (m: MercanciaCapturada) => string | null): string | null => {
+    if (mercs.length === 0) return null;
+    const vals = mercs.map(f);
+    if (vals.some((v) => texto(v) === null)) return null;
+    return [...new Set(vals.map((v) => String(v).trim()))].join(', ');
+  };
+
   // El valor de cada campo capturable, por clave. Un campo sin entrada aquí es
   // uno que Likida no captura todavía (`presente: null`).
   const valores: Record<string, string | null> = {
     origen_ubicacion: texto(d.viaje.origen),
     destino_ubicacion: texto(d.viaje.destino),
     rfc_remitente: texto(d.clienteRfc),
+    // Los del cliente con casilla desde la 0204. El país solo se deriva con la
+    // declaración "no internacional" en la mano — sin ella, ni MEX se supone.
+    transp_internac: ccp?.transpInternac === true ? 'Sí' : ccp?.transpInternac === false ? 'No' : null,
+    origen_estado: texto(ccp?.origenEstado ?? null),
+    origen_cp: texto(ccp?.origenCp ?? null),
+    origen_pais: ccp?.transpInternac === false ? 'MEX' : null,
+    destino_estado: texto(ccp?.destinoEstado ?? null),
+    destino_cp: texto(ccp?.destinoCp ?? null),
+    destino_pais: ccp?.transpInternac === false ? 'MEX' : null,
+    rfc_destinatario: texto(ccp?.rfcDestinatario ?? null),
+    peso_bruto_total: pesoTotal === null ? null : `${pesoTotal} kg`,
+    unidad_peso: pesoTotal === null ? null : 'KGM',
+    num_total_mercancias: mercs.length > 0 ? String(mercs.length) : null,
+    bienes_transp: todas((m) => m.bienesTransp),
+    descripcion_mercancia: todas((m) => m.descripcion),
+    cantidad: todas((m) => String(m.cantidad)),
+    clave_unidad: todas((m) => m.claveUnidad),
+    peso_en_kg: todas((m) => (m.pesoKg === null ? null : String(m.pesoKg))),
     version: '3.1',
     id_ccp: 'se genera al emitir',
     fecha_llegada: 'se declara al emitir',
@@ -435,6 +500,99 @@ export function validarComplemento(c: ComplementoBorrador): FallaCcp[] {
   }
 
   return fallas;
+}
+
+// ── 4. Armar el borrador desde lo capturado ────────────────────────────────
+
+export interface ResultadoBorrador {
+  /** `null` mientras falte algo ESTRUCTURAL: no se arma un complemento a
+   *  medias que después alguien tome por completo. */
+  borrador: ComplementoBorrador | null;
+  /** Lo que impide armar el borrador, en el idioma del que lo va a pedir. */
+  faltantes: string[];
+  /** Lo que no bloquea pero el contralor debe saber antes de emitir. */
+  advertencias: string[];
+  /** `validarComplemento` sobre el borrador armado; vacío si no se armó. */
+  fallas: FallaCcp[];
+}
+
+/**
+ * Convierte lo capturado (viaje + mercancías + unidad + operador) en un
+ * `ComplementoBorrador` tipo INGRESO y lo pasa por el validador de rechazo
+ * seguro. Fase C del blueprint: el entregable es el BORRADOR VALIDADO — el
+ * timbrado no existe aquí (0049) y la fecha estimada de llegada es artefacto
+ * de emisión, igual que el IdCCP.
+ *
+ * PURO: los datos llegan por argumento; los junta `carta_porte_datos.ts`.
+ */
+export function armarBorrador(d: DatosChecklist): ResultadoBorrador {
+  const faltantes: string[] = [];
+  const advertencias: string[] = [];
+  const mercs = d.mercancias ?? [];
+  const ccp = d.ccpViaje ?? null;
+
+  if (mercs.length === 0) {
+    faltantes.push('Ningún renglón de mercancía capturado — el complemento exige al menos uno, con clave, cantidad, unidad y peso.');
+  } else {
+    const sinClave = mercs.filter((m) => texto(m.bienesTransp) === null).length;
+    const sinUnidad = mercs.filter((m) => texto(m.claveUnidad) === null).length;
+    const sinPeso = mercs.filter((m) => m.pesoKg === null).length;
+    if (sinClave > 0) faltantes.push(`${sinClave} renglón(es) de mercancía sin clave c_ClaveProdServCP — la clave la da tu cliente contra el catálogo del SAT; no se inventa.`);
+    if (sinUnidad > 0) faltantes.push(`${sinUnidad} renglón(es) sin clave de unidad (catálogo c_ClaveUnidad, p. ej. KGM, H87, XBX).`);
+    if (sinPeso > 0) faltantes.push(`${sinPeso} renglón(es) sin peso en kilogramos — sin todos los pesos no hay PesoBrutoTotal.`);
+  }
+
+  if (texto(d.clienteRfc) === null) faltantes.push('RFC del remitente — se captura en Clientes.');
+  if (texto(ccp?.rfcDestinatario ?? null) === null) faltantes.push('RFC del destinatario — se captura en los datos del cliente del viaje.');
+  if (texto(d.viaje.fechaInicio) === null) faltantes.push('Fecha y hora de salida del viaje.');
+  if (d.viaje.kmRecorridos === null) faltantes.push('Kilómetros del viaje (TotalDistRec y DistanciaRecorrida del destino).');
+  if (texto(d.unidad?.placas ?? null) === null) faltantes.push('Placas de la unidad — se capturan en Unidades.');
+  if (texto(d.operador?.nombre ?? null) === null) faltantes.push('Operador asignado con nombre — se captura en Operadores.');
+
+  const sinDeclararPeligroso = mercs.filter((m) => m.materialPeligroso === null).length;
+  if (sinDeclararPeligroso > 0) {
+    advertencias.push(`${sinDeclararPeligroso} renglón(es) sin declarar si son material peligroso. Un «no» no se supone: si alguno lo es, el complemento exige la póliza de medio ambiente (AseguraMedAmbiente).`);
+  }
+  if (mercs.some((m) => m.materialPeligroso === true)) {
+    advertencias.push('Hay material peligroso declarado: AseguraMedAmbiente no tiene casilla en Likida todavía — la póliza de medio ambiente se declara al emitir, y el validador lo marca abajo.');
+  }
+
+  if (faltantes.length > 0) return { borrador: null, faltantes, advertencias, fallas: [] };
+
+  const mercancias: MercanciaCcp[] = mercs.map((m) => ({
+    bienesTransp: (m.bienesTransp as string).trim(),
+    descripcion: m.descripcion.trim(),
+    cantidad: m.cantidad,
+    claveUnidad: (m.claveUnidad as string).trim(),
+    pesoEnKg: m.pesoKg as number,
+    ...(m.materialPeligroso === null ? {} : { materialPeligroso: m.materialPeligroso }),
+  }));
+
+  const borrador: ComplementoBorrador = {
+    // INGRESO: la flota cobra el flete y el complemento viaja en su CFDI de
+    // ingreso (2.7.7.1.1). El caso traslado (dedicado, 2.7.7.1.3) se ADVIERTE
+    // aparte — la P40 del fiscalista sigue abierta y aquí no se decide.
+    tipoComprobante: 'I',
+    totalDistRec: d.viaje.kmRecorridos as number,
+    pesoBrutoTotal: pesoBrutoDe(mercs) as number,
+    numTotalMercancias: mercancias.length,
+    mercancias,
+    ubicaciones: [
+      { tipo: 'Origen', rfc: (d.clienteRfc as string).trim(), fechaHora: (d.viaje.fechaInicio as string).trim() },
+      // La fecha de llegada es ESTIMADA y se declara al emitir (mismo contrato
+      // que el checklist); la distancia sí es dato del viaje.
+      { tipo: 'Destino', rfc: (ccp?.rfcDestinatario as string).trim(), fechaHora: 'se declara al emitir', distanciaRecorrida: d.viaje.kmRecorridos },
+    ],
+    placaVm: (d.unidad?.placas as string).trim(),
+    aseguraMedAmbiente: null,
+    figuras: [{
+      tipoFigura: '01',
+      nombre: (d.operador?.nombre as string).trim(),
+      numLicencia: texto(d.operador?.licencia ?? null),
+    }],
+  };
+
+  return { borrador, faltantes, advertencias, fallas: validarComplemento(borrador) };
 }
 
 // ── El IdCCP ───────────────────────────────────────────────────────────────

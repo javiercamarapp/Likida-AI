@@ -70,12 +70,25 @@ export interface Gasto {
   xmlVerificado?: boolean;         // true = se recibió y parseó el XML del CFDI
   // ── Acreditamiento (del XML) ────────────────────────────────────────────────
   formaPago?: string;              // c_FormaPago (01=efectivo…) — deducibilidad por medio de pago
+  metodoPago?: string;             // c_MetodoPago (PUE/PPD) — PPD espera un REP (Fase 7, mig. 0199)
+  /** Fecha de pago del REP que liquidó este CFDI POR COMPLETO. NULL = sin REP
+   *  o pago parcial: el IVA a crédito sigue excluido (LIVA 5-III). Solo lo
+   *  escribe la ingesta del REP (intake/rep.ts) — jamás se infiere. */
+  pagadoEn?: string;
+  /** FormaDePagoP del REP — el medio con el que DE VERDAD se pagó (el 99 del
+   *  CFDI original solo decía "por definir"). */
+  pagadoForma?: string;
   subTotal?: number;               // @SubTotal (base BRUTA del estímulo de peaje 50%)
   /** `@Descuento` del CFDI (opcional). La base del estímulo de peaje es
    *  `subTotal - descuento`, no `subTotal` a secas. `undefined` = sin descuento. */
   descuento?: number;
   iepsTraslado?: number;           // IEPS desglosado (Traslado 003) → acreditable vs ISR
   ivaTraslado?: number;            // IVA desglosado (Traslado 002) → acreditable
+  /** IVA RETENIDO (Retencion 002). No es gasto: es cuenta POR PAGAR al SAT.
+   *  Columnas de la mig. 0063, huérfanas hasta la auditoría 22 (FIS-A1). */
+  ivaRetenido?: number;
+  /** ISR retenido (Retencion 001). Mismo criterio. */
+  isrRetenido?: number;
 }
 
 export type TipoDiferencia =
@@ -97,9 +110,12 @@ export type TipoDiferencia =
   | 'complemento_no_verificable' // factura de combustible sin XML → no se puede verificar el complemento (NIVEL 1, a bandeja)
   | 'combustible_efectivo' // combustible pagado en efectivo → NO deducible (LISR 27-III, sin importar monto)
   | 'efectivo_sobre_tope'  // gasto no-combustible en efectivo > $2,000 → NO deducible (LISR 27-III)
+  | 'medio_pago_no_admitido' // > $2,000 con una forma de pago FUERA de la lista cerrada de LISR 27-III (06, 08, 12, 17, 23, 99…) → por confirmar, sin IVA acreditable
   | 'ieps_no_desglosado'   // CFDI de diésel sin IEPS desglosado → no acreditable (se pierde el estímulo)
   | 'viatico_excede_fiscal' // viático de alimentación > tope fiscal $750/día (LISR 28-V) → porción no deducible
   | 'fecha_sospechosa'     // fecha futura o muy anterior al viaje → periodo/plazo/complemento en riesgo
+  | 'gasto_otro_ejercicio' // comprobante fechado en un ejercicio fiscal anterior → NO deducible en éste (rescatado de rutina-fiscal-wip, 26-ago-2026)
+  | 'iva_mes_del_pago'     // CFDI a crédito liquidado por un REP: el IVA se acredita en el MES DEL PAGO (LIVA 5-III), no en el del comprobante (Fase 7, mig. 0199)
   | 'folio_verificar'      // folio leído con baja confianza en ticket con portal → verificar antes de facturar
   | 'monto_discrepante'    // el total del código y el del OCR no coinciden
   | 'monto_implausible'    // un solo comprobante fuera de escala para el viaje (DAT-18) → revisar
@@ -134,6 +150,21 @@ export interface Diferencia {
 
 export type EstatusLiquidacion = 'cuadrada' | 'con_diferencias' | 'revisar';
 
+/**
+ * LO QUE FIRMÓ UNA PERSONA — no es lo mismo que `EstatusLiquidacion` (mig.
+ * 0299, auditoría 24 · BLOQ-6).
+ *
+ * `estatus` es el veredicto del MOTOR («cuadró», «hay diferencias», «revísala»);
+ * `revision` es el de la PERSONA. Una liquidación puede estar `cuadrada` y
+ * seguir `pendiente` de firma, o estar `con_diferencias` y ya `aprobada`
+ * porque el contralor las dio por buenas. Quien contabilice por `estatus`
+ * asienta cierres que nadie firmó.
+ *
+ * `pendiente` es el estado de nacimiento (salvo que cuadre sola, que nace
+ * `aprobada` con `revisadaPor` vacío = la firmó el motor).
+ */
+export type RevisionLiquidacion = 'pendiente' | 'aprobada' | 'ajustada' | 'rechazada';
+
 /** Resultado del cuadre — lo que consume el PDF y el export a ERP. */
 export interface Liquidacion {
   id: string;
@@ -161,6 +192,15 @@ export interface Liquidacion {
   ivaAcreditable: number;  // Σ IVA de CFDI deducibles (LIVA art. 5)
   peajeAcreditable: number; // Σ SubTotal de casetas × factor (0.5) → estímulo de peaje (LIF 2026 Art. 20-A)
   creadaEn: string;        // ISO
+  // ── La firma humana (0299). Aditivo: lo que ya leía esta forma sigue igual ──
+  /** Ver `RevisionLiquidacion`. Ausente = fila leída antes de la 0299. */
+  revision?: RevisionLiquidacion;
+  /** Correo de quien firmó. `null` con `revision` ≠ pendiente = la firmó el
+   *  motor (cuadró sola), que NO es lo mismo que «la firmó alguien». */
+  revisadaPor?: string | null;
+  revisadaEn?: string | null;
+  /** El motivo escrito al ajustar o rechazar (la base lo exige en esos dos). */
+  motivo?: string | null;
 }
 
 export interface Viaje {
@@ -191,4 +231,9 @@ export interface Operador {
    *  mig. 0100). `null`/ausente = no ejercida. Con fecha, sus liquidaciones
    *  salen a revisión humana. */
   oposicionAutomatizada?: string | null;
+  /** ¿Sigue trabajando en la flota? (auditoría 20, H2). `false` = dado de
+   *  baja: no recibe viajes nuevos ni le contesta el bot de WhatsApp como
+   *  operador. Opcional porque no todo lector lo pide, y `undefined` quiere
+   *  decir "no se preguntó" — que NO es lo mismo que dado de baja. */
+  activo?: boolean;
 }

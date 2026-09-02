@@ -132,3 +132,47 @@ describe('qa-oraculos — la metadata calca la del orquestador', () => {
     expect(fila.severidad).toBe('CRÍTICO');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA EVIDENCIA SE FIRMA EN LOTE — la red del incidente del 28-ago-2026.
+//
+// La corrida 46ad99ca: 10 de 90 fotos 'bad' con «Too many connections issued
+// to the database». La causa medida (storage_logs): el poll de ~2.5 s del
+// panel firmaba las ~90 fotos UNA POR UNA (~90 POST /object/sign por poll,
+// polls traslapados) y el pool de conexiones de Storage API contra Postgres
+// se llenaba a ratos, tumbando las descargas seriales del carril. El arreglo
+// es `firmarRutas` (un request para N rutas); esta prueba impide que un
+// refactor lo devuelva a la forma de una-firma-por-foto.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('las listas de evidencia se firman con UN request, no con N', () => {
+  const listados = [
+    'src/app/api/admin/qa/[id]/estado/route.ts',   // el POLL — el que saturó
+    'src/app/admin/qa/[id]/page.tsx',
+    'src/app/admin/qa/page.tsx',
+    'src/app/api/admin/qa/fotos/route.ts',
+  ];
+
+  /** Lee UNO de los archivos de `listados` — fuente del propio repo, en
+   *  tiempo de prueba; la ruta sale de la constante de arriba, no de ninguna
+   *  entrada de usuario (mismo criterio que salud.test.ts:118). */
+  function fuenteDe(ruta: string): string {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- ruta de la constante `listados`, fuente del propio repo en tiempo de prueba; no viene de ninguna entrada de usuario.
+    return readFileSync(join(REPO, ruta), 'utf8');
+  }
+
+  test('los 4 sitios que enseñan listas usan firmarRutas (el lote)', () => {
+    for (const ruta of listados) {
+      expect(fuenteDe(ruta), `${ruta} debe firmar en lote`).toContain('firmarRutas(');
+    }
+  });
+
+  test('el poll de /estado y las páginas de listas NO firman de a una', () => {
+    // `firmarRuta(` singular solo se tolera en fotos/route.ts (el PATCH firma
+    // UNA foto recién etiquetada — ahí el lote no aporta nada).
+    for (const ruta of listados.slice(0, 3)) {
+      expect(fuenteDe(ruta).match(/firmarRuta\(/g) ?? [], `${ruta} volvió a firmar una por una`).toHaveLength(0);
+    }
+    const fotos = fuenteDe('src/app/api/admin/qa/fotos/route.ts');
+    expect(fotos.match(/firmarRuta\(/g) ?? []).toHaveLength(1);   // solo el PATCH
+  });
+});

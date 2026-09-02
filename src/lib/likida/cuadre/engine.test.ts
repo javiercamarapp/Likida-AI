@@ -169,6 +169,38 @@ describe('cuadrarViaje', () => {
     expect(r.estatus).toBe('revisar');
   });
 
+  // AUDITORÍA 21, CRÍTICO (fiscal): desde que la auditoría 9 quitó —con razón—
+  // el mapeo `'100' → efos: true` (ConsultaCFDIService no distingue presunto de
+  // definitivo), NADA produce `efos: true`, así que un emisor YA publicado en el
+  // listado DEFINITIVO del 69-B llega aquí como `efosRevisar: true`... y
+  // `cfdi_efos_indeterminado` no estaba en POR_CONFIRMAR ni en
+  // SIN_ACREDITAMIENTO. Resultado: el CFDI caía en la cubeta `deducible` y su
+  // IVA se acreditaba completo, en verde, citando LIVA 5 — sobre operaciones que
+  // el CFF 69-B 4º párrafo declara sin "efecto fiscal alguno". El tercer estado
+  // correcto es el de `cfdi_pendiente`: nunca deducible, nunca acreditable,
+  // hasta que alguien coteje el listado a mano.
+  it('AUD-21: EFOS no concluyente NO se afirma deducible ni acredita IVA (CFF 69-B)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'e2', anticipo: 9280, politica: [{ concepto: 'diesel', topeMonto: 20000 }],
+      gastos: [g({
+        concepto: 'diesel', monto: 9280, cfdiUuid: 'efos-1111-2222-3333-444444444444',
+        estadoSat: 'vigente', efosRevisar: true, xmlVerificado: true,
+        ivaTraslado: 1280, formaPago: '04',
+      })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'cfdi_efos_indeterminado')).toBe(true);
+    // El escenario del hallazgo: $8,000.00 + $1,280.00 de IVA de un emisor en
+    // DEFINITIVA salía "Deducible para ISR" e "IVA acreditable" en verde.
+    expect(r.totalDeducible).toBe(0);
+    expect(r.totalPorConfirmar).toBe(9280);
+    expect(r.ivaAcreditable ?? 0).toBe(0);
+    // Sin sobre-bloquear: el servicio no distingue presunto de definitivo, así
+    // que NO es un "no deducible" duro (eso sería declarar fraude sobre un
+    // presunto con derecho a desvirtuar) — es por confirmar.
+    expect(r.totalNoDeducible).toBe(0);
+    expect(r.estatus).toBe('revisar');
+  });
+
   // CR-3: un CFDI que el SAT NO reconoce (fabricado) no debe pasar como cuadrado.
   it('CR-3: CFDI no_encontrado se marca no deducible y manda a revisar', () => {
     const r = cuadrarViaje({
@@ -1423,7 +1455,9 @@ describe('cuadrarViaje — comprobante de otro ejercicio', () => {
       viajeId: 'v1', anticipo: 1000, politica: pol, hoy: '2026-07-28',
       gastos: [g({ concepto: 'diesel', monto: 714.75, fecha: '2024-07-27', cfdiUuid: 'u1' })],
     });
-    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(true);
+    // FISCAL (rutina-fiscal-wip): tipo propio desde ahora — antes era
+    // `fecha_sospechosa` y no excluía el gasto de `totalDeducible`.
+    expect(r.diferencias.some((d) => d.tipo === 'gasto_otro_ejercicio')).toBe(true);
     expect(r.estatus).toBe('revisar');
   });
 
@@ -1432,7 +1466,7 @@ describe('cuadrarViaje — comprobante de otro ejercicio', () => {
       viajeId: 'v1', anticipo: 1000, politica: pol, hoy: '2026-07-28',
       gastos: [g({ concepto: 'diesel', monto: 714.75, fecha: '2026-01-15', cfdiUuid: 'u1' })],
     });
-    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(false);
+    expect(r.diferencias.some((d) => d.tipo === 'gasto_otro_ejercicio')).toBe(false);
   });
 
   it('tampoco se marca uno de diciembre pasado si estamos en enero', () => {
@@ -1442,7 +1476,7 @@ describe('cuadrarViaje — comprobante de otro ejercicio', () => {
       viajeId: 'v1', anticipo: 1000, politica: pol, hoy: '2026-01-05',
       gastos: [g({ concepto: 'diesel', monto: 714.75, fecha: '2025-12-30', cfdiUuid: 'u1' })],
     });
-    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(false);
+    expect(r.diferencias.some((d) => d.tipo === 'gasto_otro_ejercicio')).toBe(false);
   });
 
   it('sin `hoy` no inventa un veredicto', () => {
@@ -1450,7 +1484,7 @@ describe('cuadrarViaje — comprobante de otro ejercicio', () => {
       viajeId: 'v1', anticipo: 1000, politica: pol,
       gastos: [g({ concepto: 'diesel', monto: 714.75, fecha: '2024-07-27', cfdiUuid: 'u1' })],
     });
-    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(false);
+    expect(r.diferencias.some((d) => d.tipo === 'gasto_otro_ejercicio')).toBe(false);
   });
 });
 

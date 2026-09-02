@@ -79,6 +79,9 @@ function cuerpoIlegible(endpoint: string, nombre: string): ResultadoPrueba {
     ok: false,
     detalle: `${nombre} contestó 200 pero no con la respuesta que documenta su API. Suele significar que la URL apunta a un portal web y no al endpoint de la API, o que hay un proxy en medio. NO se puede afirmar que la credencial sirva.`,
     verificadoContra: endpoint,
+    // El propio texto lo dice: no se puede afirmar nada de la credencial. No
+    // se sella (c7-12).
+    sobreLaCredencial: 'no_se_sabe',
   };
 }
 
@@ -147,6 +150,7 @@ export const WIALON: Conector = {
         ok: false,
         detalle: `Wialon rechazó el token (su código de error ${d.error}). Hay que generarlo de nuevo desde la cuenta, o revisar que el servidor sea el correcto.`,
         verificadoContra: endpoint,
+        sobreLaCredencial: 'no_sirve',
       };
     }
     if (typeof d.eid !== 'string' || d.eid.length === 0) return cuerpoIlegible(endpoint, 'Wialon');
@@ -156,6 +160,7 @@ export const WIALON: Conector = {
       // después: no se puede guardar el `sid` y reusarlo mañana.
       detalle: 'Wialon aceptó el token y abrió sesión. Ojo con lo que sigue: la sesión se muere a los 5 minutos sin actividad, así que la sincronización tiene que renovarla, no guardarla.',
       verificadoContra: endpoint,
+      sobreLaCredencial: 'sirve',
     };
   }),
 };
@@ -170,11 +175,11 @@ export const SAMSARA: Conector = {
   formaDeConectar: 'api_en_vivo',
   comoConectaHoy: 'Con un token de API que generas en tu tablero de Samsara. Es el único de los cuatro que no necesita abrir sesión: el token viaja en cada petición.',
   paraSubirDeEscalon: null,
-  capacidades: ['leer_posiciones', 'leer_recorrido', 'leer_unidades'],
+  capacidades: ['leer_posiciones', 'leer_recorrido', 'leer_unidades', 'leer_eventos_seguridad'],
   claveAlmacen: 'samsara',
   fuente: {
     url: 'https://developers.samsara.com/docs/authentication',
-    queConfirma: 'La API vive en https://api.samsara.com y el token se manda como `Authorization: Bearer <token>`. Los tokens llevan scopes granulares; los nuevos nacen con permisos de lectura. `GET /me` devuelve la organización dueña del token (https://developers.samsara.com/changelog/me-api-endpoint).',
+    queConfirma: 'La API vive en https://api.samsara.com y el token se manda como `Authorization: Bearer <token>`. Los tokens llevan scopes granulares; los nuevos nacen con permisos de lectura. `GET /me` devuelve la organización dueña del token (https://developers.samsara.com/changelog/me-api-endpoint). Los eventos de seguridad viven en `GET /safety-events/stream` y exigen el scope «Read Safety Events & Scores» (https://developers.samsara.com/reference/getsafetyeventsv2stream, consultada 26-ago-2026) — sin ese scope las posiciones entran y los eventos no, y el poller lo reporta con nombre.',
     consultadaEn: '2026-08-14',
   },
   credenciales: [
@@ -207,6 +212,7 @@ export const SAMSARA: Conector = {
         ok: false,
         detalle: 'Samsara rechazó la credencial: reconoció el token pero le negó el permiso (403). Suele ser un token con los scopes recortados. Hay que darle lectura de flota, o probar contra /fleet/vehicles.',
         verificadoContra: endpoint,
+        sobreLaCredencial: 'no_sirve',
       };
     }
     const veredicto = veredictoHttp(r, endpoint, 'Samsara');
@@ -292,6 +298,7 @@ export const GEOTAB: Conector = {
         ok: false,
         detalle: 'Geotab rechazó las credenciales (respondió con un error de autenticación). Hay que revisar el nombre de la base de datos, el usuario y la contraseña. Ojo también con el tope de 10 intentos de autenticación por minuto.',
         verificadoContra: endpoint,
+        sobreLaCredencial: 'no_sirve',
       };
     }
     const resultado = d.result;
@@ -313,6 +320,7 @@ export const GEOTAB: Conector = {
       ok: true,
       detalle: `Geotab aceptó las credenciales y abrió sesión.${servidor}`,
       verificadoContra: endpoint,
+      sobreLaCredencial: 'sirve',
     };
   }),
 };
@@ -375,9 +383,13 @@ export const NAVIXY: Conector = {
         ok: false,
         detalle: 'Navixy no confirmó la credencial (su respuesta no trae éxito). Hay que revisar la API key y, sobre todo, que el servidor sea el de tu región: una key buena contra el servidor equivocado se ve igual que una key mala.',
         verificadoContra: endpoint,
+        // «No confirmó» NO es «rechazó»: el propio detalle dice que una key
+        // buena contra el servidor equivocado se ve igual que una mala. La
+        // duda no se sella contra el cliente (c7-12).
+        sobreLaCredencial: 'no_se_sabe',
       };
     }
-    return { ok: true, detalle: 'Navixy aceptó la API key.', verificadoContra: endpoint };
+    return { ok: true, detalle: 'Navixy aceptó la API key.', verificadoContra: endpoint, sobreLaCredencial: 'sirve' };
   }),
 };
 

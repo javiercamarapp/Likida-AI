@@ -113,6 +113,13 @@ export interface AgenteDefinido {
   promptRef: string | null;
   /** El rol de modelo que lo corre (matriz 0125) — null = sin declarar. */
   modeloRol: string | null;
+  /** AGB (auditoría 24, 0301): true = el catálogo promete un motor que el
+   *  código no tiene todavía (o, como en los 9 de "agentes teatro", uno
+   *  deliberadamente acotado) — el runner NO lo despacha en automático hasta
+   *  que se gradúe. Antes de esta pieza no se veía en ningún panel: un
+   *  agente `vivo` con `experimental = true` se pintaba idéntico a uno que
+   *  sí corre, y nadie podía saber por qué nunca aparecía una corrida. */
+  experimental: boolean;
   creadoEn: string;
 }
 
@@ -121,7 +128,7 @@ export interface AgenteDefinido {
 export async function listarAgentes(): Promise<AgenteDefinido[]> {
   const filas = await traerTodo<Record<string, unknown>>(
     (d, h) => acotada(supabaseAdmin().from('agente_definicion')
-      .select('id, nombre, departamento, descripcion, disparador, estado, presupuesto_dia_usd, prompt_ref, modelo_rol, creado_en', conteo(d))
+      .select('id, nombre, departamento, descripcion, disparador, estado, presupuesto_dia_usd, prompt_ref, modelo_rol, experimental, creado_en', conteo(d))
       .order('id').range(d, h), 'listarAgentes'),
     'listarAgentes',
   );
@@ -136,6 +143,7 @@ export async function listarAgentes(): Promise<AgenteDefinido[]> {
     presupuestoDiaUsd: f.presupuesto_dia_usd === null || f.presupuesto_dia_usd === undefined ? null : Number(f.presupuesto_dia_usd),
     promptRef: (f.prompt_ref as string) ?? null,
     modeloRol: (f.modelo_rol as string) ?? null,
+    experimental: f.experimental === true,
     creadoEn: String(f.creado_en),
   })).sort((a, b) => orden[a.estado] - orden[b.estado] || a.departamento.localeCompare(b.departamento) || a.id.localeCompare(b.id));
 }
@@ -161,5 +169,29 @@ export async function darDeAltaAgente(v: DefinicionValida, actorId: string): Pro
     { tenantId: null, actor: { id: actorId }, accion: 'agente.alta', entidad: 'agente_definicion', entidadId: v.id,
       detalle: { departamento: v.departamento, disparador: v.disparador } },
     { evento: 'agentes.bitacora_no_escribio', contexto: { agente: v.id } },
+  );
+}
+
+/**
+ * Gradúa un agente `experimental`: quita la marca para que el runner
+ * empiece a despacharlo (candado 2 de `runner.ts`). Antes de esta función
+ * graduar era un `UPDATE` a mano contra la base — sin registro, sin
+ * bitácora, y sin el candado de "el id existe de verdad" que sí tiene
+ * `darDeAltaAgente`. LANZA si el id no está en el catálogo: graduar algo
+ * que no existe sería una fila fantasma en la bitácora.
+ */
+export async function graduarAgente(id: string, actorId: string): Promise<void> {
+  const { data, error } = await supabaseAdmin().from('agente_definicion')
+    .update({ experimental: false })
+    .eq('id', id)
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error(`graduarAgente: ${error.message}`);
+  if (!data) throw new DatoInvalido(`No existe ningún agente con el id "${id}" — no hay qué graduar.`);
+  // Best-effort, mismo criterio que darDeAltaAgente: la graduación YA
+  // quedó; perder la anotación es mejor que deshacerla.
+  await anotarBitacora(
+    { tenantId: null, actor: { id: actorId }, accion: 'agente.graduado', entidad: 'agente_definicion', entidadId: id, detalle: {} },
+    { evento: 'agentes.bitacora_no_escribio', contexto: { agente: id } },
   );
 }

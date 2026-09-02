@@ -16,7 +16,13 @@ export interface ToolContext {
   operadorId?: string;
   viajeId?: string;
   conversationId?: string;
-  /** Identidad de la corrida; no forma parte de la llave del efecto. */
+  /**
+   * Identidad de la corrida. SÍ forma parte de la llave del efecto (D.21,
+   * frente de escala): sin ella, la fila `succeeded` de un
+   * `guardar_liquidacion` vivía para siempre y un viaje REABIERTO
+   * (`reabrirViaje` → `reabrir_viaje_tx`, 0159) no se podía volver a liquidar
+   * NUNCA — el segundo cierre recibía `cached` con el PDF viejo, en silencio.
+   */
   runId?: string;
   /** Override explícito para una mutación cuyo efecto no se identifica por viaje. */
   mutationKey?: string;
@@ -56,9 +62,25 @@ export interface RegisteredTool {
   isMutation?: boolean;
 }
 
-export function timeoutToolMs(): number {
+function timeoutGenericoMs(): number {
   const value = Number(process.env.LIKIDA_TOOL_TIMEOUT_MS);
   return Number.isFinite(value) && value > 0 ? Math.round(value) : 15_000;
+}
+
+export function timeoutToolMs(isMutation?: boolean): number {
+  if (!isMutation) return timeoutGenericoMs();
+  const value = Number(process.env.LIKIDA_TOOL_MUTATION_TIMEOUT_MS);
+  if (Number.isFinite(value) && value > 0) return Math.round(value);
+  // AGEN-19C2-3 (corregido tras auditoría Fable-5): una tool marcada
+  // `isMutation` (p.ej. `guardar_liquidacion`) hace 2 generaciones de PDF +
+  // 2 subidas + 2 RPCs en serie — del mismo orden de magnitud que el
+  // deadline genérico, y no se puede reintentar sin riesgo de duplicar
+  // efectos si el timeout la corta a medio camino. Sin
+  // `LIKIDA_TOOL_MUTATION_TIMEOUT_MS`, el piso es el MAYOR entre el genérico
+  // y 40s — no un 40s fijo que podía darle MENOS margen que una tool de
+  // sólo lectura si un deployment ya traía `LIKIDA_TOOL_TIMEOUT_MS` subido
+  // por encima de eso.
+  return Math.max(timeoutGenericoMs(), 40_000);
 }
 
 const REGISTRY = new Map<string, RegisteredTool>();
@@ -115,7 +137,7 @@ export async function executeTool(
   if (!tool) {
     return { success: false, result: null, error: `tool desconocida: ${name}`, durationMs: 0 };
   }
-  const toolSignal = combineAbortSignals(ctx.signal, signal, timeoutSignal(timeoutToolMs()));
+  const toolSignal = combineAbortSignals(ctx.signal, signal, timeoutSignal(timeoutToolMs(tool.isMutation)));
   const effectiveCtx = { ...ctx, signal: toolSignal };
   let durable: Awaited<ReturnType<typeof claimMutation>> | null = null;
   if (tool.isMutation && !ctx.runId) {
@@ -150,12 +172,34 @@ export async function executeTool(
     return { success: true, result: durable.result, durationMs: Date.now() - started };
   }
   if (durable?.kind === 'busy') {
-    return { success: false, result: null, error: 'la mutación ya está siendo procesada; no se vuelve a ejecutar', durationMs: Date.now() - started };
+    // AGEN-19C2-8 (barrido MEDIO/BAJO): este texto es el `content` del
+    // mensaje `role:'tool'` que el MODELO lee para decidir cómo
+    // parafrasearlo — no un log técnico. El lease dura hasta 120s
+    // (`LIKIDA_TOOL_IDEMPOTENCY_LEASE_MS`); redactado para que el modelo lo
+    // traduzca a "espera un minuto y vuelve a intentar", no a un error crudo.
+    return { success: false, result: null, error: 'esto ya se está procesando en otro turno tuyo; dile al operador que espere un minuto y vuelva a intentar, no que hubo un error', durationMs: Date.now() - started };
   }
 
   if (durable?.kind === 'execute') {
-    const renewEveryMs = Math.max(1_000, Math.floor((Number(process.env.LIKIDA_TOOL_IDEMPOTENCY_LEASE_MS) || 120_000) / 3));
+    const leaseMs = Number(process.env.LIKIDA_TOOL_IDEMPOTENCY_LEASE_MS) || 120_000;
+    const renewEveryMs = Math.max(1_000, Math.floor(leaseMs / 3));
+    // TOOL-CALLING-19C2-2 (barrido MEDIO/BAJO): si el handler NUNCA asienta
+    // su promesa (no un timeout — de verdad colgado), el `.finally(stopLease)`
+    // encadenado más abajo nunca corre, y este `setInterval` (con `.unref()`,
+    // así que no sostiene el proceso él solo) sigue renovando el lease en la
+    // base mientras el proceso viva por OTRA razón — un contenedor caliente
+    // reusado deja ese viaje en `busy` para siempre. 10 renovaciones (~10
+    // leases de margen) es un techo absoluto independiente de si el handler
+    // llegó a asentar.
+    const MAX_RENOVACIONES = 10;
+    let renovaciones = 0;
     leaseTimer = setInterval(() => {
+      renovaciones += 1;
+      if (renovaciones > MAX_RENOVACIONES) {
+        logger.error('tool.lease_renovacion_techo', { name, renovaciones });
+        stopLease();
+        return;
+      }
       void runWithToolSignal(undefined, () => renewMutation(ctx.tenantId, mutationEffectKey(name, ctx), durable!.token))
         .then((ok) => { if (!ok) logger.error('tool.lease_renovacion_rechazada', { name }); })
         .catch((err) => logger.error('tool.lease_renovacion_error', { name, err: err instanceof Error ? err.message : String(err) }));
@@ -184,7 +228,25 @@ export async function executeTool(
       stopLease();
       // El handler puede haber terminado justo cuando venció la señal. El
       // commit del fencing debe poder archivarse para no repetir el side effect.
-      await runWithToolSignal(undefined, () => completeMutation(ctx.tenantId, mutationEffectKey(name, ctx), durable.token, result));
+      //
+      // Y su fallo NO puede tener la misma voz que el fallo del efecto. Cuando
+      // esto vivía dentro del `try` que decide el éxito de la tool, un
+      // `complete_agente_mutacion` que se pasaba del tope de 8 s de `acotada`
+      // —o un fencing token que otro worker se llevó— hacía que
+      // `guardar_liquidacion` respondiera `success: false` sobre un viaje que
+      // ya estaba `liquidado` e irreversible por los triggers 0036/0037: el
+      // PDF no se mandaba, el jefe no recibía aviso, y el modelo le explicaba
+      // al chofer que su cierre no se pudo. El camino de ERROR de abajo ya
+      // protegía `failMutation` así (`:208`); el de éxito era el que no.
+      //
+      // Perder el sello degrada a repetir trabajo, no a perder el efecto: el
+      // reintento vuelve a entrar por `claim` y el backstop de dinero sigue
+      // siendo la DB (`unique(viaje_id)` + upsert).
+      try {
+        await runWithToolSignal(undefined, () => completeMutation(ctx.tenantId, mutationEffectKey(name, ctx), durable.token, result));
+      } catch (e) {
+        logger.error('tool.idempotencia_sello_fallido', { name, err: e instanceof Error ? e.message : String(e) });
+      }
     }
     return { success: true, result, durationMs: Date.now() - started };
   } catch (err) {
@@ -241,8 +303,34 @@ function raceAbort<T>(promise: Promise<T>, signal: AbortSignal | undefined): Pro
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LA LLAVE DEL EFECTO LLEVA `runId` — D.21 (frente de escala, 28-ago-2026).
+//
+// Sin él, la llave era (tool, tenant, viaje, operador) y la fila `succeeded`
+// de `agente_mutacion_idempotencia` no vence nunca: un viaje que se REABRE
+// (`reabrirViaje`) no se podía volver a liquidar JAMÁS — el claim devolvía
+// `cached` con el resultado del cierre anterior (PDF viejo, cifras viejas) y
+// el handler ni corría. En silencio, que es lo peor.
+//
+// Por qué `runId` en la llave y no un vencimiento de la fila:
+//   · La propiedad que la llave protege es "un reintento del MISMO run no
+//     cobra dos veces" — y `runId` es idéntico dentro de un run, así que esa
+//     propiedad queda INTACTA (claim/lease/fencing por corrida, igual que hoy).
+//   · Un TTL largo sigue bloqueando el caso real (se reabre hoy para corregir
+//     y se cierra HOY); un TTL corto ya no protege ni al reintento tardío del
+//     mismo run. El vencimiento no conserva ninguna de las dos propiedades.
+//   · Entre corridas DISTINTAS el dinero nunca dependió de esta rejilla: lo
+//     protege la base (`liquidacion_viaje_uidx` unique(viaje_id) + el upsert
+//     de `guardar_liquidacion_tx`, invariante de la casa), y la concurrencia
+//     real la serializa `acquireViajeLock` (processor/reabrirViaje).
+// Se consideró también borrar la fila al reabrir (`reabrir_viaje_tx`): casaría
+// la base con el formato de esta llave TS — un acoplamiento que se rompe en
+// silencio el día que la llave cambie. Descartado por eso mismo.
+//
+// El executor ya rechaza mutaciones sin `runId` (arriba, fail-closed), así que
+// el `?? '-'` de aquí no ocurre en una mutación real.
 function mutationEffectKey(name: string, ctx: ToolContext): string {
-  return ctx.mutationKey ?? [name, ctx.tenantId, ctx.viajeId ?? '-', ctx.operadorId ?? '-'].join(':');
+  return ctx.mutationKey ?? [name, ctx.tenantId, ctx.viajeId ?? '-', ctx.operadorId ?? '-', ctx.runId ?? '-'].join(':');
 }
 
 /**

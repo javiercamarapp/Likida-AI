@@ -3,7 +3,7 @@ import {
   resolverPeriodo, periodoAnterior, PERIODO_POR_DEFECTO,
   causasDe, causaDominante, resumirPerdidas, resumirFiscal,
   resumirCombustibleCasetas, tope15DeGastos, diagnosticoRetencion, aFilasExport,
-  esCombustible, esDieselConIeps,
+  esCombustible, esDieselConIeps, ORDEN, TITULOS,
   type GastoFiscal, type OpcionesFiscales,
 } from './fiscal';
 import { hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
@@ -230,6 +230,34 @@ describe('causaDominante', () => {
 
   it('sin causas devuelve null, no una causa vacía', () => {
     expect(causaDominante(gasto(), OPTS)).toBeNull();
+  });
+
+  // AUDITORÍA 20, FISC-C2 (CRÍTICO). `ORDEN` listaba 7 de los 8 miembros de
+  // `CausaPerdida` y se saltaba `efectivo_no_elegible` — la única causa del
+  // union con `gravedad: 'perdida'` que puede coincidir con otra. Como
+  // `causaDominante` recorre `ORDEN` y sólo cae a `cs[0]` cuando NINGUNA causa
+  // está en la lista, un diésel en efectivo de una flota que YA declaró no
+  // calificar a la RFA 2.9 quedaba dominado por `sin_cfdi`, que es
+  // `recuperable`: una pérdida dura impresa en el KPI verde "Recuperable
+  // pidiendo factura".
+  it('el efectivo no elegible domina sobre sin_cfdi: es pérdida, no gestión', () => {
+    const g = gasto({ concepto: 'diesel', cfdiUuid: null, plazoVencido: false, formaPago: '01', monto: 480_000 });
+    const opts: OpcionesFiscales = { ...OPTS, elegible15: false };
+
+    // Las dos causas coexisten: es el caso que destapa el orden.
+    expect(causasDe(g, opts).map((c) => c.causa).sort())
+      .toEqual(['efectivo_no_elegible', 'sin_cfdi']);
+
+    const dom = causaDominante(g, opts);
+    expect(dom?.causa).toBe('efectivo_no_elegible');
+    expect(dom?.gravedad).toBe('perdida');
+  });
+
+  // El contrato general detrás del bug: si un miembro nuevo del union se
+  // agrega y nadie lo mete en `ORDEN`, esta prueba lo caza antes que el
+  // contralor. Se apoya en `TITULOS`, que sí es exhaustivo por el tipo.
+  it('ORDEN cubre TODAS las causas del union, sin faltar ninguna', () => {
+    expect([...ORDEN].sort()).toEqual(Object.keys(TITULOS).sort());
   });
 });
 

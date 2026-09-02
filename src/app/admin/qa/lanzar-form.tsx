@@ -18,7 +18,7 @@ import { TituloSeccion } from '../../dashboard/resumen-visual';
 import { escenarioPorId, ESCENARIOS_QA } from '@/lib/admin/qa-escenarios';
 import { usd, usd4 } from '@/lib/formato';
 import {
-  validarLanzar, MAX_FOTOS_CARRIL_RAPIDO,
+  validarLanzar, carrilPara, MAX_FOTOS_CARRIL_RAPIDO, TECHO_PASADA_MS,
   type EscenarioId, type FotoBanco,
 } from '@/lib/admin/qa-tipos';
 
@@ -34,12 +34,16 @@ function politicaAFilas(politica: Array<{ concepto: string; topeMonto?: number; 
   }));
 }
 
-export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError, topeDiaUsd }: {
+export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError, topeDiaUsd, topeCorridaUsd }: {
   fotosIniciales: FotoConUrl[];
   bancoError: string | null;
   gastoHoyUsd: number | null;
   gastoError: string | null;
   topeDiaUsd: number;
+  /** El tope POR corrida (config.qa.ts del ejército). Llega como prop y no
+   *  por import: este archivo es 'use client' y aquel módulo trae `node:path`
+   *  y `process.cwd()` — importarlo aquí metería node al bundle del navegador. */
+  topeCorridaUsd: number;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -112,10 +116,16 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
     }
   };
 
+  // EL CARRIL, con la MISMA función que usa el servidor: más de
+  // MAX_FOTOS_CARRIL_RAPIDO fotos se van solas al carril completo. No es un
+  // rechazo con otro nombre — es el otro carril, que existe desde la Fase C.
+  const carril = carrilPara(seleccion.size);
+
   // El body EXACTO que validará el servidor — el motivo del botón sale de la
   // misma función, así que nunca cuentan historias distintas.
   const cuerpoLanzar = {
     escenario,
+    carril,
     fotoIds: [...seleccion],
     anticipo: anticipo.trim() === '' ? NaN : Number(anticipo),
     rfcEmpresa: rfc.trim() === '' ? null : rfc.trim(),
@@ -194,9 +204,31 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
 
       {/* ── Fotos: arrastrar N de golpe + el banco ─────────────────────────── */}
       <div>
+        {/* EL RÓTULO QUE DEJÓ DE MENTIR. Decía «máx. 10 por corrida en el
+            carril rápido» y con 91 fotos eso ya no es lo que pasa: la corrida
+            se va al carril completo, que no tiene tope de fotos. Lo que se
+            dice aquí es lo que de verdad ocurre al darle a Lanzar — incluido
+            lo que SÍ la puede parar, que es el reloj y el dinero. */}
         <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--muted)' }}>
-          Fotos del viaje — {seleccion.size} seleccionada{seleccion.size === 1 ? '' : 's'} (máx. {MAX_FOTOS_CARRIL_RAPIDO} por corrida en el carril rápido)
+          Fotos del viaje — {seleccion.size} seleccionada{seleccion.size === 1 ? '' : 's'}
+          {carril === 'completo' ? ' · CARRIL COMPLETO' : ' · carril rápido'}
         </div>
+        <p className="text-[11px] -mt-1 mb-1.5 m-0" style={{ color: 'var(--faint)' }}>
+          {carril === 'completo' ? (
+            <>
+              Sin tope de fotos. La corrida avanza en <strong>pasadas</strong> de hasta {Math.round(TECHO_PASADA_MS / 1000)} s
+              cada una y guarda el avance foto por foto: lo que no alcance en una pasada continúa en la siguiente
+              y no se repite ninguna. Lo que sí la para es el reloj —y entonces sigue— o el dinero: {usd(topeCorridaUsd)} por
+              corrida y {usd(topeDiaUsd)} al día, medidos contra lo que reportó el proveedor del modelo; ahí para de verdad
+              y lo dice con la cifra. Deja abierta la pantalla de la corrida: es la que empuja las pasadas.
+            </>
+          ) : (
+            <>
+              Corre entero dentro de UNA función serverless. Hasta {MAX_FOTOS_CARRIL_RAPIDO} fotos;
+              con más, la corrida se va sola al carril completo (varias pasadas, sin tope de fotos).
+            </>
+          )}
+        </p>
         <div
           onDragOver={(ev) => { ev.preventDefault(); setArrastrando(true); }}
           onDragLeave={() => setArrastrando(false)}

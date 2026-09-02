@@ -399,3 +399,44 @@ describe('la flota elegida por cookie (sin params) — nombre y firma', () => {
     expect(de('impersonacion_dia')).toHaveLength(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 — H2 (la lectura de `?tenant=` que se tragaba el error) y
+// ADM-11 (`?rol=` no cambia de flota).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la lectura de `?tenant=` falla CERRADO (H2)', () => {
+  const SUPER = { userId: 'u-0', tenantId: 'demo', rol: 'superadmin', nombre: 'Javier', operadorId: null, avatarUrl: null };
+
+  it('un error de la consulta NO deja la página apuntando al tenant de la sesión: lanza y lo dice', async () => {
+    colas.set('tenant', [{ data: null, error: { message: 'fetch failed' } }]);
+    requireSessionTenant.mockResolvedValue(SUPER);
+    await expect(resolverTenantEfectivo('/dashboard', { tenant: 't-7' }))
+      .rejects.toThrow(/No se pudo comprobar a qué flota/);
+    expect(logs.warn).toHaveBeenCalledWith('tenant_efectivo.lectura_fallo',
+      expect.objectContaining({ tenant: 't-7', err: 'fetch failed' }));
+  });
+
+  it('CONTROL — con la lectura buena resuelve como siempre', async () => {
+    colas.set('tenant', [{ data: { id: 't-7', nombre: 'Transportes del Norte' }, error: null }]);
+    colas.set('impersonacion_dia', [{ data: [], error: null }]);
+    requireSessionTenant.mockResolvedValue(SUPER);
+    const r = await resolverTenantEfectivo('/dashboard', { tenant: 't-7' });
+    expect(r).toMatchObject({ tenantId: 't-7', tenantNombre: 'Transportes del Norte' });
+  });
+});
+
+describe('ADM-11 · `?rol=` sobre una flota elegida sigue siendo esa flota, con cinta y firma', () => {
+  const de = (tabla: string) => llamadas.filter((l) => l.tabla === tabla);
+  const SUPER_CON_SELECCION = { userId: 'u-0', tenantId: 't-9', rol: 'superadmin', nombre: 'Javier', operadorId: null, avatarUrl: null };
+
+  it('con `?rol=contador` la selección explícita se resuelve igual: nombre en la cinta e impersonación firmada', async () => {
+    colas.set('tenant', [{ data: { id: 't-9', nombre: 'Fletes del Golfo' }, error: null }]);
+    colas.set('impersonacion_dia', [{ data: [{ dia: '2026-09-01' }], error: null }]);
+    requireSessionTenant.mockResolvedValue(SUPER_CON_SELECCION);
+    const r = await resolverTenantEfectivo('/dashboard/contador', { rol: 'contador' });
+    expect(r.tenantId).toBe('t-9');
+    expect(r.tenantNombre).toBe('Fletes del Golfo');
+    expect(r.rol).toBe('contador');
+    expect(de('bitacora_auditoria')).toHaveLength(1);
+  });
+});

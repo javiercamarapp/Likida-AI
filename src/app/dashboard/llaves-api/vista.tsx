@@ -1,7 +1,7 @@
 import { KeyRound } from 'lucide-react';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
-import { AREAS_DE_LLAVE, type LlaveListada } from '@/lib/auth/llave-api-escritura';
+import { AREAS_DE_LLAVE, llaveVencida, type LlaveListada } from '@/lib/auth/llave-api-escritura';
 import { FormaRevocar, type AccionForma } from './forma';
 
 /**
@@ -39,6 +39,7 @@ export function ListaLlaves({ llaves, revocarLlave }: {
             <th className="px-3 py-2 font-medium">Nombre</th>
             <th className="px-3 py-2 font-medium">Área</th>
             <th className="px-3 py-2 font-medium">Creada</th>
+            <th className="px-3 py-2 font-medium">Vence</th>
             <th className="px-3 py-2 font-medium">Último uso</th>
             <th className="px-3 py-2 font-medium" />
           </tr>
@@ -58,9 +59,13 @@ function RenglonLlave({ l, revocarLlave }: {
   revocarLlave: AccionForma;
 }) {
   const revocada = l.revocadaEn !== null;
+  // SEG-8: una llave VENCIDA ya no sirve —`resolverLlave` la rechaza con el
+  // mismo 401 que una revocada—, así que se lee igual de muerta en la lista.
+  const vencida = llaveVencida(l.expiraEn);
+  const muerta = revocada || vencida;
   // Tachada pero VISIBLE: ocultar una llave revocada borraría de la pantalla
   // la evidencia de qué se revocó y cuándo — el renglón es la auditoría.
-  const tachado = revocada ? { textDecoration: 'line-through' as const, color: 'var(--faint)' } : undefined;
+  const tachado = muerta ? { textDecoration: 'line-through' as const, color: 'var(--faint)' } : undefined;
 
   return (
     <tr className="border-t" style={{ borderColor: 'var(--line2)' }}>
@@ -73,6 +78,11 @@ function RenglonLlave({ l, revocarLlave }: {
         {fechaMx(l.creadaEn)}
       </td>
       <td className="px-3 py-2 whitespace-nowrap" style={tachado ?? { color: 'var(--muted)' }}>
+        {/* "no caduca" es la verdad de `expira_en` null, y una verdad
+            incómoda a propósito: una llave eterna se ve como lo que es. */}
+        {l.expiraEn === null ? 'no caduca' : fechaMx(l.expiraEn)}
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap" style={tachado ?? { color: 'var(--muted)' }}>
         {/* La verdad, no un guion: "nunca" es la respuesta a "¿la puedo
             revocar sin romperle nada a nadie?". */}
         {l.ultimoUsoEn === null ? 'nunca' : fechaHoraMx(l.ultimoUsoEn)}
@@ -83,6 +93,16 @@ function RenglonLlave({ l, revocarLlave }: {
             style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
             revocada el {fechaMx(l.revocadaEn)}
           </span>
+        ) : vencida ? (
+          // Vencida pero NO revocada: se deja el botón, porque revocarla sella
+          // la fila y deja constancia de que ya nadie la va a resucitar.
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap"
+              style={{ color: 'var(--bad)', background: 'var(--badbg)' }}>
+              vencida el {fechaMx(l.expiraEn)}
+            </span>
+            <FormaRevocar accion={revocarLlave} id={l.id} nombre={l.nombre} />
+          </div>
         ) : (
           <FormaRevocar accion={revocarLlave} id={l.id} nombre={l.nombre} />
         )}

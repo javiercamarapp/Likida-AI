@@ -613,6 +613,17 @@ export function traducirFalla(evento: string, tenantId: string, e: unknown): Nex
     );
   }
 
+  // AUDITORÍA 24, BE-13: `DatoInvalido` es un mensaje YA redactado para una
+  // persona («ese operador está dado de baja»), no una falla nuestra. Salía
+  // como 500 `error_interno` con «vuelve a intentar en un momento»: el TMS del
+  // cliente reintentaba un error determinista —el chofer no se va a reactivar
+  // solo— y nuestro log se llenaba de «errores» que son validación. Mismo
+  // criterio que `validar()` arriba, que ya lo trata como 400.
+  if (e instanceof DatoInvalido) {
+    logger.warn(`${evento}.dato_invalido`, { tenant: tenantId });
+    return errorApi('parametro_invalido', e.message);
+  }
+
   return fallo(evento, e, { tenant: tenantId });
 }
 

@@ -1,9 +1,16 @@
 import { describe, test, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   validarLanzar, estadoFinalDe, resumenVeredicto, ESCENARIOS_VALIDOS,
   MAX_FOTOS_CARRIL_RAPIDO, TOPE_DIA_USD,
-  type FilaVeredicto,
+  MARGEN_PASADA_MS, COSTO_CIERRE_PASADA_MS, PASOS_CIERRE_PASADA,
+  PRESUPUESTO_MENSAJE_MS, TECHO_PASADA_MS, MAX_DURATION_PASADA_S, PASADA_MUERTA_MS,
+  resumirAvance, carrilPara,
+  validarVerdadTerreno, validarLoteOcr, MAX_FOTOS_OCR,
+  CLAVES_VERDAD, NOMBRE_CLAVE_VERDAD,
+  type FilaVeredicto, type FotoDeCorrida,
 } from './qa-tipos';
+import { COMERCIOS } from '@/lib/likida/facturacion/comercios';
 
 const FOTO = 'aaaaaaaa-0000-4000-8000-000000000001';
 const BASE = {
@@ -41,13 +48,35 @@ describe('validarLanzar — el cliente no es frontera de confianza', () => {
     }
   });
 
-  test(`más de ${MAX_FOTOS_CARRIL_RAPIDO} fotos manda al carril completo — no entra al rápido`, () => {
-    const muchas = Array.from({ length: MAX_FOTOS_CARRIL_RAPIDO + 1 }, (_, i) =>
+  test(`más de ${MAX_FOTOS_CARRIL_RAPIDO} fotos ya no se RECHAZAN: se van al carril completo (Fase C)`, () => {
+    // Hasta la Fase C esto devolvía `ok: false`. El tope de fotos dejó de ser
+    // un rechazo y pasó a ser una elección de carril — 91 comprobantes reales
+    // son el caso que el panel existe para correr, no un error del usuario.
+    const muchas = Array.from({ length: 91 }, (_, i) =>
       `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, '0')}`);
     const r = validarLanzar({ ...BASE, fotoIds: muchas });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.datos.carril).toBe('completo');
+    expect(r.datos.params.fotoIds).toHaveLength(91);
+  });
+
+  test('pedir el carril RÁPIDO con más de diez sí se rechaza, y el motivo manda al completo', () => {
+    const muchas = Array.from({ length: MAX_FOTOS_CARRIL_RAPIDO + 1 }, (_, i) =>
+      `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, '0')}`);
+    const r = validarLanzar({ ...BASE, carril: 'rapido', fotoIds: muchas });
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error).toMatch(/carril completo/);
+    // La cifra que no cabe se dice, no se insinúa.
+    expect(r.error).toContain(String(MAX_FOTOS_CARRIL_RAPIDO + 1));
+  });
+
+  test('diez o menos siguen siendo carril rápido, y un carril inventado se rechaza', () => {
+    expect(validarLanzar(BASE).ok && validarLanzar(BASE)).toMatchObject({ datos: { carril: 'rapido' } });
+    const malo = validarLanzar({ ...BASE, carril: 'turbo' });
+    expect(malo.ok).toBe(false);
+    if (!malo.ok) expect(malo.error).toMatch(/carril desconocido/);
   });
 
   test('cero fotos, anticipo inválido y política vacía se rechazan', () => {
@@ -106,4 +135,259 @@ describe('resumenVeredicto', () => {
 
 test('el tope diario es el del diseño (§6, default $5) — no un número inventado', () => {
   expect(TOPE_DIA_USD).toBe(5);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RELOJ DE LA PASADA — el margen contra su cola, y las copias contra su
+// fuente.
+//
+// `MARGEN_PASADA_MS` es lo que la pasada se guarda para CERRAR: escribir su
+// corte, dejar el estado consistente y soltar la llave. Si se quedara corto,
+// Vercel mataría la invocación a media escritura y la corrida quedaría
+// diciendo 'corriendo' para siempre con la llave puesta — exactamente el
+// fallo mudo que este carril vino a evitar. Justificarlo en prosa no basta:
+// en `agentes/runner.ts` un margen justificado sólo en prosa ya se quedó
+// corto una vez (auditoría ciclo 7, c7-31). Aquí se COMPARA contra la suma.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el margen de la pasada alcanza para lo que la pasada tiene que cerrar', () => {
+  test('la suma de la cola de cierre es la que dice la tabla, paso por paso', () => {
+    expect(PASOS_CIERRE_PASADA).toHaveLength(4);
+    expect(COSTO_CIERRE_PASADA_MS).toBe(PASOS_CIERRE_PASADA.reduce((s, p) => s + p.ms, 0));
+    expect(COSTO_CIERRE_PASADA_MS).toBe(38_000);
+    // Cada paso es una consulta de supabase-js, acotada por `TOPE_CONSULTA_MS`
+    // (8 000) más la gracia del envoltorio (1 500). Los dos números se leen
+    // del ARCHIVO fuente y no de una constante importada: este módulo es
+    // client-safe a propósito y `presupuesto.ts` arrastra `logger` y `node:`.
+    const presupuesto = readFileSync('src/lib/likida/presupuesto.ts', 'utf8');
+    expect(presupuesto).toContain('export const TOPE_CONSULTA_MS = Number(process.env.LIKIDA_TOPE_CONSULTA_MS) || 8_000;');
+    expect(presupuesto).toContain('const GRACIA_TOPE_MS = 1_500;');
+    expect(PASOS_CIERRE_PASADA.every((p) => p.ms === 8_000 + 1_500)).toBe(true);
+  });
+
+  test('el margen es MAYOR que la cola — con holgura, no justo', () => {
+    expect(MARGEN_PASADA_MS).toBeGreaterThan(COSTO_CIERRE_PASADA_MS);
+    // 45 000 − 38 000 = 7 000 ms de holgura. Se fija el número para que
+    // agregar un paso a la cola sin subir el margen ROMPA aquí y no en
+    // producción a las once de la noche.
+    expect(MARGEN_PASADA_MS - COSTO_CIERRE_PASADA_MS).toBe(7_000);
+  });
+
+  test('`PRESUPUESTO_MENSAJE_MS` es la copia declarada de `PRESUPUESTO_WEBHOOK_MS`, y no derivó', () => {
+    const presupuesto = readFileSync('src/lib/likida/presupuesto.ts', 'utf8');
+    expect(presupuesto).toContain('export const PRESUPUESTO_WEBHOOK_MS = 120_000;');
+    expect(PRESUPUESTO_MENSAJE_MS).toBe(120_000);
+  });
+
+  test('el techo de trabajo y el plazo de una pasada muerta salen del maxDuration real', () => {
+    expect(MAX_DURATION_PASADA_S).toBe(300);
+    expect(TECHO_PASADA_MS).toBe(300_000 - MARGEN_PASADA_MS);
+    // Se reclama una pasada ajena sólo tras el `maxDuration` COMPLETO: antes
+    // de eso todavía puede estar viva, y quitarle la llave sería ponerse a
+    // mandar las mismas fotos en paralelo.
+    expect(PASADA_MUERTA_MS).toBe(300_000);
+    expect(PASADA_MUERTA_MS).toBeGreaterThan(TECHO_PASADA_MS);
+  });
+});
+
+describe('el carril y el avance: lo que no se procesó se cuenta y se NOMBRA', () => {
+  test('carrilPara es la misma regla para el formulario y para el servidor', () => {
+    expect(carrilPara(1)).toBe('rapido');
+    expect(carrilPara(MAX_FOTOS_CARRIL_RAPIDO)).toBe('rapido');
+    expect(carrilPara(MAX_FOTOS_CARRIL_RAPIDO + 1)).toBe('completo');
+    expect(carrilPara(91)).toBe('completo');
+  });
+
+  test('resumirAvance separa los cuatro estados y nombra las que no tuvieron turno', () => {
+    const fila = (id: string, estado: FotoDeCorrida['estado'], n: number): FotoDeCorrida => ({
+      fotoId: id, n, estado, pasada: 1, detalle: null, costoUsd: null,
+      inicio: '2026-08-27T15:00:00.000Z', fin: null,
+    });
+    const av = resumirAvance(['a', 'b', 'c', 'd', 'e'], [
+      fila('a', 'ok', 1), fila('b', 'bad', 2),
+      fila('c', 'interrumpida', 3), fila('d', 'corriendo', 4),
+    ]);
+    expect(av).toEqual({
+      total: 5, ok: 1, bad: 1, interrumpidas: 1, enVuelo: 1,
+      sinTurno: 1, sinTurnoIds: ['e'],
+    });
+    // Lo interrumpido NO se suma ni a ok ni a bad: «no se procesó» ≠ «salió
+    // mal», y meterlo en cualquiera de los dos sería afirmar lo que no se sabe.
+    expect(av.ok + av.bad).toBe(2);
+  });
+
+  test('sin una sola fila, TODO está sin turno — jamás un 0 de fotos «procesadas»', () => {
+    const av = resumirAvance(['a', 'b', 'c'], []);
+    expect(av.sinTurno).toBe(3);
+    expect(av.sinTurnoIds).toEqual(['a', 'b', 'c']);
+    expect(av.ok).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA VERDAD-DE-TERRENO — lo que se fija aquí es el invariante del que depende
+// que la medición del OCR signifique algo:
+//
+//   para cada ClaveVerdad, valor null ⟺ está en `ilegibles` XOR en `noAplica`.
+//
+// Los tres modos de romperlo se prueban uno por uno, porque los tres producen
+// un JSON perfectamente válido y una medición equivocada:
+//   · null sin clasificar        → "no se sabe por qué falta"
+//   · en las DOS listas          → dos afirmaciones que se contradicen
+//   · valor no-null pero listado → dice a la vez que se leyó y que no
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Una etiqueta COMPLETA y bien formada: todo leído, nada clasificado. */
+const VERDAD_OK = {
+  comercioClave: COMERCIOS[0].clave,
+  emisor: 'Caminos y Puentes Federales',
+  rfcEmisor: 'CPF890101AAA',
+  folio: '000123',
+  monto: 1234.5,
+  fecha: '2026-07-31',
+  sucursal: 'Caseta Palmillas',
+  dominioFacturacion: 'facturacioncapufe.com.mx',
+  ilegibles: [] as string[],
+  noAplica: [] as string[],
+  clase: 'ticket',
+  notas: null,
+};
+
+describe('validarVerdadTerreno — la vara con la que se mide el OCR', () => {
+  test('acepta la etiqueta completa y normaliza el RFC y el monto', () => {
+    const r = validarVerdadTerreno({ ...VERDAD_OK, rfcEmisor: 'cpf-890101-aaa', monto: 1234.499 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.datos.rfcEmisor).toBe('CPF890101AAA');
+    expect(r.datos.monto).toBe(1234.5);
+    expect(r.datos.clase).toBe('ticket');
+  });
+
+  test('MODO 1 — un null SIN clasificar se rechaza, y dice cuál y qué hacer', () => {
+    const r = validarVerdadTerreno({ ...VERDAD_OK, folio: null });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/folio/);
+    expect(r.error).toMatch(/ilegibles/);
+    expect(r.error).toMatch(/noAplica/);
+  });
+
+  test('MODO 2 — la misma clave en las DOS listas se rechaza: son afirmaciones opuestas', () => {
+    const r = validarVerdadTerreno({
+      ...VERDAD_OK, folio: null, ilegibles: ['folio'], noAplica: ['folio'],
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/ilegibles/);
+    expect(r.error).toMatch(/noAplica/);
+    expect(r.error).toMatch(/las dos cosas no/);
+  });
+
+  test('MODO 3 — un valor no-null listado como ilegible se rechaza (o se leyó, o no)', () => {
+    const r = validarVerdadTerreno({ ...VERDAD_OK, ilegibles: ['folio'] });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/folio/);
+    expect(r.error).toMatch(/tiene valor/);
+  });
+
+  test('un null BIEN clasificado pasa — y las dos clasificaciones son distintas entre sí', () => {
+    const ilegible = validarVerdadTerreno({ ...VERDAD_OK, folio: null, ilegibles: ['folio'] });
+    expect(ilegible.ok).toBe(true);
+    const noAplica = validarVerdadTerreno({ ...VERDAD_OK, rfcEmisor: null, noAplica: ['rfcEmisor'] });
+    expect(noAplica.ok).toBe(true);
+    if (!ilegible.ok || !noAplica.ok) return;
+    expect(ilegible.datos.ilegibles).toEqual(['folio']);
+    expect(noAplica.datos.noAplica).toEqual(['rfcEmisor']);
+  });
+
+  test('comercioClave null es un HALLAZGO válido; una clave inventada NO', () => {
+    const fuera = validarVerdadTerreno({ ...VERDAD_OK, comercioClave: null });
+    expect(fuera.ok).toBe(true);
+    if (fuera.ok) expect(fuera.datos.comercioClave).toBeNull();
+
+    const inventada = validarVerdadTerreno({ ...VERDAD_OK, comercioClave: 'no-existe-en-el-catalogo' });
+    expect(inventada.ok).toBe(false);
+    if (!inventada.ok) expect(inventada.error).toMatch(/COMERCIOS/);
+  });
+
+  test('una cadena vacía NO es un null: se rechaza en vez de colarse como dato', () => {
+    const r = validarVerdadTerreno({ ...VERDAD_OK, emisor: '   ' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/vacía/);
+  });
+
+  test('monto 0 se rechaza — un comprobante no ampara cero y sería indistinguible del null', () => {
+    expect(validarVerdadTerreno({ ...VERDAD_OK, monto: 0 }).ok).toBe(false);
+    expect(validarVerdadTerreno({ ...VERDAD_OK, monto: -5 }).ok).toBe(false);
+  });
+
+  test('una fecha que no existe se rechaza (el 31 de abril no rueda al 1 de mayo)', () => {
+    const r = validarVerdadTerreno({ ...VERDAD_OK, fecha: '2026-04-31' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/fecha/);
+    // Y el formato del ticket (dd/mm/yyyy) tampoco: la etiqueta se teclea en ISO.
+    expect(validarVerdadTerreno({ ...VERDAD_OK, fecha: '31/07/2026' }).ok).toBe(false);
+  });
+
+  test('una clase desconocida y una clave desconocida se rechazan diciendo el catálogo', () => {
+    const clase = validarVerdadTerreno({ ...VERDAD_OK, clase: 'servilleta' });
+    expect(clase.ok).toBe(false);
+    if (!clase.ok) expect(clase.error).toMatch(/voucher_bancario/);
+
+    const clave = validarVerdadTerreno({ ...VERDAD_OK, ilegibles: ['iva'] });
+    expect(clave.ok).toBe(false);
+    if (!clave.ok) expect(clave.error).toMatch(/no es un campo medible/);
+  });
+
+  test('una clave repetida en la misma lista se rechaza — delata una edición a medias', () => {
+    const r = validarVerdadTerreno({ ...VERDAD_OK, folio: null, ilegibles: ['folio', 'folio'] });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/dos veces/);
+  });
+
+  test('las listas AUSENTES se rechazan: ausente no es lo mismo que vacía', () => {
+    const sinListas = { ...VERDAD_OK } as Record<string, unknown>;
+    delete sinListas.ilegibles;
+    const r = validarVerdadTerreno(sinListas);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/ilegibles/);
+  });
+
+  test('un no-objeto se rechaza sin reventar', () => {
+    expect(validarVerdadTerreno(null).ok).toBe(false);
+    expect(validarVerdadTerreno('ticket').ok).toBe(false);
+    expect(validarVerdadTerreno([VERDAD_OK]).ok).toBe(false);
+  });
+
+  test('CLAVES_VERDAD y NOMBRE_CLAVE_VERDAD cubren exactamente lo mismo', () => {
+    expect(CLAVES_VERDAD).toHaveLength(7);
+    expect(Object.keys(NOMBRE_CLAVE_VERDAD).sort()).toEqual([...CLAVES_VERDAD].sort());
+  });
+});
+
+describe('validarLoteOcr — el botón de correr el OCR', () => {
+  const otra = 'aaaaaaaa-0000-4000-8000-000000000002';
+
+  test('acepta uuids y DEDUPLICA (la misma foto dos veces se cobraría dos veces)', () => {
+    const r = validarLoteOcr({ fotoIds: [FOTO, otra, FOTO] });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.fotoIds).toEqual([FOTO, otra]);
+  });
+
+  test('lista vacía, no-uuid y body inválido se rechazan con motivo', () => {
+    expect(validarLoteOcr({ fotoIds: [] }).ok).toBe(false);
+    expect(validarLoteOcr({ fotoIds: ['no-soy-uuid'] }).ok).toBe(false);
+    expect(validarLoteOcr(null).ok).toBe(false);
+  });
+
+  test('pasarse del tope lo DICE con el número, no falla en silencio', () => {
+    const muchas = Array.from({ length: MAX_FOTOS_OCR + 1 }, (_, i) =>
+      `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, '0')}`);
+    const r = validarLoteOcr({ fotoIds: muchas });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toMatch(String(MAX_FOTOS_OCR));
+      expect(r.error).toMatch(String(MAX_FOTOS_OCR + 1));
+    }
+  });
 });

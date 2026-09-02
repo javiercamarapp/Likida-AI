@@ -16,13 +16,16 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Bug, Camera, FileText, MessageCircle } from 'lucide-react';
 import { fechaHoraMx, usd4 } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../../dashboard/resumen-visual';
 import { StatusPill, type Estado } from '../../ui/kit';
 import { PILL_CORRIDA } from '../pantalla';
+import { escenarioPorId } from '@/lib/admin/qa-escenarios';
 import type { CorridaQA, EstadoPaso } from '@/lib/admin/qa-tipos';
+import type { ResumenPrecisionCorrida } from '@/lib/admin/qa-verdad';
+import { MedicionCorrida } from './medicion-corrida';
 
 export interface FotoFirmada { id: string; etiqueta: string; url: string | null }
 export interface PdfFirmado { path: string; url: string | null }
@@ -49,14 +52,18 @@ function json(v: unknown): string {
   return typeof v === 'string' ? v : JSON.stringify(v, null, 1);
 }
 
-export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
+export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, medicionInicial = null, medicionErrorInicial = null }: {
   corridaInicial: CorridaQA;
   fotosIniciales: FotoFirmada[];
   pdfsIniciales: PdfFirmado[];
+  medicionInicial?: ResumenPrecisionCorrida | null;
+  medicionErrorInicial?: string | null;
 }) {
   const [corrida, setCorrida] = useState(corridaInicial);
   const [fotos, setFotos] = useState(fotosIniciales);
   const [pdfs, setPdfs] = useState(pdfsIniciales);
+  const [medicion, setMedicion] = useState<ResumenPrecisionCorrida | null>(medicionInicial);
+  const [medicionError, setMedicionError] = useState<string | null>(medicionErrorInicial);
   const [errorLectura, setErrorLectura] = useState<string | null>(null);
   // FE-20: `useState(() => Date.now())` se evalúa en el SERVIDOR al pintar el
   // HTML y otra vez en el NAVEGADOR al hidratar, con dos relojes distintos —
@@ -90,7 +97,10 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
       setAhora(Date.now());
       try {
         const res = await fetch(`/api/admin/qa/${corrida.id}/estado`, { cache: 'no-store' });
-        const cuerpo = await res.json().catch(() => null) as { corrida?: CorridaQA; fotos?: FotoFirmada[]; pdfs?: PdfFirmado[]; error?: string } | null;
+        const cuerpo = await res.json().catch(() => null) as {
+          corrida?: CorridaQA; fotos?: FotoFirmada[]; pdfs?: PdfFirmado[];
+          medicion?: ResumenPrecisionCorrida | null; medicionError?: string | null; error?: string;
+        } | null;
         if (!res.ok || !cuerpo?.corrida) {
           setErrorLectura(cuerpo?.error ?? `no se pudo leer el estado (HTTP ${res.status})`);
           return;
@@ -99,6 +109,10 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
         setCorrida(cuerpo.corrida);
         if (cuerpo.fotos) setFotos(cuerpo.fotos);
         if (cuerpo.pdfs) setPdfs(cuerpo.pdfs);
+        // Una medición ya pintada NO se borra por un poll que venga sin ella:
+        // sería cambiar una medición por la ausencia de una.
+        if (cuerpo.medicion) setMedicion(cuerpo.medicion);
+        setMedicionError(cuerpo.medicionError ?? null);
       } catch (e) {
         setErrorLectura(e instanceof Error ? e.message : String(e));
       }
@@ -106,20 +120,76 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
     return () => clearInterval(timer);
   }, [viva, corrida.id]);
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // EL CARRIL COMPLETO — esta pantalla es la que EMPUJA las pasadas.
+  //
+  // Una corrida de 91 fotos no cabe en una invocación, así que avanza en
+  // pasadas y alguien tiene que pedir la siguiente. Lo hace aquí y no un cron
+  // a propósito: la corrida es una herramienta de QA que se mira mientras
+  // corre, y un cron cada N minutos convertiría siete pasadas en media hora de
+  // espera. El precio está DICHO en pantalla (si cierras esto, la corrida se
+  // queda pausada donde iba, sin perder nada).
+  //
+  // El candado contra dos empujones a la vez no vive aquí: la ruta toma la
+  // corrida con un UPDATE condicional y la segunda llamada responde sin
+  // gastar. El `ref` sólo evita el ruido de pedirlo mil veces.
+  // ═════════════════════════════════════════════════════════════════════════
+  const empujando = useRef(false);
+  const [avisoPasada, setAvisoPasada] = useState<string | null>(null);
+  const [errorPasada, setErrorPasada] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!viva || corrida.carril !== 'completo') return;
+    let montado = true;
+    const empujar = async () => {
+      if (empujando.current || !montado) return;
+      empujando.current = true;
+      try {
+        const res = await fetch(`/api/admin/qa/${corrida.id}/continuar`, { method: 'POST', cache: 'no-store' });
+        const cuerpo = await res.json().catch(() => null) as { motivo?: string; error?: string } | null;
+        if (!montado) return;
+        if (!res.ok) {
+          setErrorPasada(cuerpo?.error ?? `la pasada no pudo correr (HTTP ${res.status})`);
+          return;
+        }
+        setErrorPasada(null);
+        setAvisoPasada(cuerpo?.motivo ?? null);
+      } catch (e) {
+        if (montado) setErrorPasada(e instanceof Error ? e.message : String(e));
+      } finally {
+        empujando.current = false;
+      }
+    };
+    // El primer empujón sale del `setTimeout` y no del cuerpo del efecto, por
+    // la misma razón que el reloj de arriba: la regla `set-state-in-effect`
+    // pide que el estado se mueva desde el callback de la fuente externa.
+    const t = setTimeout(() => { void empujar(); }, 0);
+    const timer = setInterval(() => { void empujar(); }, 5_000);
+    return () => { montado = false; clearTimeout(t); clearInterval(timer); };
+  }, [viva, corrida.carril, corrida.id]);
+
   const pill = PILL_CORRIDA[corrida.estado] ?? { estado: 'neutral' as Estado, etiqueta: corrida.estado };
   const sinLatidoS = useMemo(() => {
     if (ahora === null) return null;   // todavía sin reloj del cliente
     const t = new Date(corrida.latidoEn).getTime();
     return Number.isFinite(t) ? Math.round((ahora - t) / 1000) : null;
   }, [corrida.latidoEn, ahora]);
-  const posiblementeMuerta = viva && sinLatidoS !== null && sinLatidoS > 90;
+  const enPasada = corrida.pasadaEnVuelo !== null;
+  // «Sin señales» sólo alarma cuando de verdad DEBERÍA haberlas: en el carril
+  // rápido siempre, y en el completo únicamente mientras una pasada tiene la
+  // corrida tomada. Una corrida completa PAUSADA entre pasadas no da señales y
+  // eso no es que se haya muerto — pintarlo en rojo enseñaría a ignorar el
+  // aviso, que es la peor manera de perder una alarma que sí importa.
+  const posiblementeMuerta = viva && sinLatidoS !== null && sinLatidoS > 90
+    && (corrida.carril === 'rapido' || enPasada);
+  const av = corrida.avance;
 
   return (
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
         <BarraPagina
           icono={<Bug {...ICONO} style={{ color: 'var(--muted)' }} />}
-          titulo={`Corrida de QA — ${corrida.escenario === 'demo_guion' ? 'guion del demo' : 'feliz'} — ${corrida.id.slice(0, 8)}`}
+          titulo={`Corrida de QA — ${escenarioPorId(corrida.escenario)?.nombre ?? corrida.escenario} — ${corrida.id.slice(0, 8)}`}
           derecha={
             <Link href="/admin/qa" className="text-xs inline-flex items-center gap-1" style={{ color: 'var(--muted)' }}>
               <ArrowLeft width={12} height={12} strokeWidth={1.75} /> Panel de QA
@@ -152,7 +222,14 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
             </div>
             <div className="hairline rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)' }}>
               <div className="text-xs" style={{ color: 'var(--muted)' }}>Carril</div>
-              <div className="mt-1 text-sm font-medium">rápido — en proceso, pipeline real</div>
+              <div className="mt-1 text-sm font-medium">
+                {corrida.carril === 'completo' ? 'completo — en varias pasadas' : 'rápido — en proceso, pipeline real'}
+              </div>
+              {corrida.carril === 'completo' && (
+                <div className="text-[10px] mt-0.5" style={{ color: 'var(--muted)' }}>
+                  pasada {corrida.pasadas} · {enPasada ? 'trabajando ahora' : viva ? 'pausada entre pasadas' : 'terminada'}
+                </div>
+              )}
             </div>
             <div className="hairline rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)' }}>
               <div className="text-xs" style={{ color: 'var(--muted)' }}>Costo hasta ahora (real)</div>
@@ -167,6 +244,80 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
               </div>
             </div>
           </div>
+
+          {/* ── EL AVANCE DEL CARRIL COMPLETO ─────────────────────────────
+              Cuántas van, cuántas faltan, y —si se cortó— POR QUÉ y CUÁLES
+              quedaron sin turno. Todo medido: cada número sale de una fila de
+              `qa_corrida_foto`, ninguno de una resta a ojo. */}
+          {corrida.carril === 'completo' && av !== null && (
+            <div className="card p-3">
+              <TituloSeccion>El avance, foto por foto</TituloSeccion>
+              <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                <div className="font-display text-[22px] leading-tight font-semibold tabular">
+                  {av.ok} <span className="text-[14px] font-normal" style={{ color: 'var(--muted)' }}>de {av.total} fotos procesadas</span>
+                </div>
+                {av.sinTurno > 0 && (
+                  <span className="text-xs" style={{ color: 'var(--muted)' }}>· {av.sinTurno} sin turno todavía</span>
+                )}
+                {av.enVuelo > 0 && (
+                  <span className="text-xs" style={{ color: 'var(--muted)' }}>· {av.enVuelo} en vuelo</span>
+                )}
+                {av.bad > 0 && (
+                  <span className="text-xs" style={{ color: 'var(--bad)' }}>· {av.bad} con fallo</span>
+                )}
+                {av.interrumpidas > 0 && (
+                  <span className="text-xs" style={{ color: 'var(--warn)' }}>
+                    · {av.interrumpidas} INTERRUMPIDA{av.interrumpidas === 1 ? '' : 'S'} (una pasada murió con
+                    ellas en vuelo — no se sabe cómo acabaron: ni acierto ni fallo)
+                  </span>
+                )}
+              </div>
+              <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--line2)' }}>
+                <div className="h-full" style={{
+                  width: `${av.total > 0 ? Math.round(((av.ok + av.bad) / av.total) * 100) : 0}%`,
+                  background: 'var(--marca)',
+                }} />
+              </div>
+
+              {corrida.corte !== null && (
+                <p className="text-xs mt-2 m-0" style={{ color: corrida.corte === 'dinero' ? 'var(--bad)' : 'var(--muted)' }}>
+                  {corrida.corte === 'dinero'
+                    ? '⛔ La última pasada paró por DINERO — la corrida no vuelve a gastar. El motivo de arriba trae la cifra medida.'
+                    : '⏱ La última pasada paró por RELOJ. Ninguna foto se pierde: la siguiente continúa desde donde iba y no repite las que ya se midieron.'}
+                </p>
+              )}
+
+              {av.sinTurnoIds.length > 0 && (
+                <details className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
+                  <summary className="cursor-pointer">
+                    Las {av.sinTurnoIds.length} que no han tenido turno — dichas por su nombre, no contadas nada más
+                  </summary>
+                  <ul className="mt-1.5 space-y-0.5 max-h-40 overflow-y-auto pr-1">
+                    {av.sinTurnoIds.map((fid) => (
+                      <li key={fid} className="truncate">
+                        · {fotos.find((f) => f.id === fid)?.etiqueta ?? fid}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+              {viva && (
+                <p className="text-[11px] mt-2 m-0" style={{ color: 'var(--faint)' }}>
+                  Esta pantalla es la que empuja las pasadas. Si la cierras, la corrida se queda
+                  pausada exactamente donde iba —sin perder nada— y sigue al volver a abrirla.
+                </p>
+              )}
+              {avisoPasada && (
+                <p className="text-[11px] mt-1 m-0 font-mono" style={{ color: 'var(--faint)' }}>{avisoPasada}</p>
+              )}
+              {errorPasada && (
+                <p className="text-xs mt-1 m-0" style={{ color: 'var(--bad)' }}>
+                  La pasada no pudo correr: {errorPasada}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* ── Los pasos (el ledger en vivo) ─────────────────────────────── */}
           <div className="card p-3">
@@ -246,6 +397,9 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales }: {
               </div>
             )}
           </div>
+
+          {/* ── La precisión del OCR, medida ──────────────────────────────── */}
+          <MedicionCorrida medicion={medicion} error={medicionError} fotos={fotos} viva={viva} />
 
           {/* ── Evidencia clicable ────────────────────────────────────────── */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">

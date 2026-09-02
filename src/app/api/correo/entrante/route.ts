@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { cuerpoAcotado } from '../_cuerpo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { verificarFirma, mensajeDeRechazo } from '@/lib/correo/firma_entrante';
 import { tokenDeDestinatarios } from '@/lib/correo/buzon';
+import { direccionDeCampana, esRespuestaACampana, procesarRespuestaCampana } from '@/lib/correo/respuesta_campana';
 import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
+import { parseRepXml, ingerirRep } from '@/lib/likida/intake/rep';
 import { guardarFacturaProveedor, estadoSatDeCfdi } from '@/lib/likida/proveedores';
 import { estaApagado } from '@/lib/likida/interruptores';
 import { registrarCorrida } from '@/lib/likida/agentes/corridas';
@@ -53,6 +56,11 @@ interface EventoCorreo {
     to?: string[];
     cc?: string[];
     subject?: string;
+    /** El cuerpo de la respuesta — Resend lo entrega en el payload del
+     *  email.received; lo lee SOLO el circuito de respuestas de campaña
+     *  (c5-2) para detectar la BAJA. */
+    text?: string;
+    html?: string;
     attachments?: AdjuntoEntrante[];
   };
 }
@@ -78,34 +86,6 @@ const MAX_WEBHOOK_BYTES = 256 * 1024;
 // (ver `finPresupuesto` abajo). Sin un número explícito aquí, el presupuesto se
 // calcularía contra un default de la plataforma que puede cambiar sin avisar.
 export const maxDuration = 60;
-
-/** Lee sin sobrepasar el tope incluso si el emisor omitió Content-Length. */
-async function cuerpoAcotado(req: Request, maxBytes: number): Promise<string | null> {
-  const declarado = Number(req.headers.get('content-length') ?? 0);
-  if (Number.isFinite(declarado) && declarado > maxBytes) return null;
-  if (!req.body) return '';
-  const lector = req.body.getReader();
-  const partes: Uint8Array[] = [];
-  let total = 0;
-  try {
-    for (;;) {
-      const { done, value } = await lector.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await lector.cancel();
-        return null;
-      }
-      partes.push(value);
-    }
-  } finally {
-    lector.releaseLock();
-  }
-  const combinado = new Uint8Array(total);
-  let offset = 0;
-  for (const parte of partes) { combinado.set(parte, offset); offset += parte.byteLength; }
-  return new TextDecoder().decode(combinado);
-}
 
 export async function POST(req: Request) {
   // El cuerpo CRUDO: `JSON.parse` + `stringify` reordena llaves y la firma
@@ -156,8 +136,25 @@ export async function POST(req: Request) {
   // ── A QUÉ FLOTA ──────────────────────────────────────────────────────────
   // Del DESTINATARIO, jamás del remitente. Y se miran `to` y `cc` porque un
   // reenvío suele poner nuestro buzón en copia.
-  const token = tokenDeDestinatarios([...(d.to ?? []), ...(d.cc ?? [])]);
+  const destinatarios = [...(d.to ?? []), ...(d.cc ?? [])];
+  const token = tokenDeDestinatarios(destinatarios);
   if (!token) {
+    // ── LA RESPUESTA DE CAMPAÑA (c5-2) ─────────────────────────────────────
+    // Antes de descartar como sin_buzon: si el destinatario es el buzón del
+    // que SALE la campaña (avisos@), esto es una respuesta a un correo de
+    // prospección — la BAJA se honra, la respuesta va al historial (detiene
+    // al SDR) y el operador recibe el aviso. Un fallo al escribir contesta
+    // 503 para que Resend reintente: perder la respuesta deja a la máquina
+    // insistiéndole a quien ya contestó.
+    const buzonCampana = direccionDeCampana();
+    if (buzonCampana && esRespuestaACampana(destinatarios, buzonCampana)) {
+      const r = await procesarRespuestaCampana(d);
+      if (!r.ok) {
+        logger.error('correo_entrante.respuesta_campana', { emailId, motivo: r.motivo });
+        return NextResponse.json({ error: 'no se pudo registrar la respuesta' }, { status: 503 });
+      }
+      return NextResponse.json({ ok: true, campana: r.resultado });
+    }
     // No se registra el correo del remitente: es un dato personal y este log no
     // es el lugar. El `email_id` alcanza para rastrearlo en Resend.
     logger.warn('correo_entrante.sin_buzon', { emailId });
@@ -337,6 +334,23 @@ export async function POST(req: Request) {
       // ignora: extraerle el CFDI es OCR, y eso ya tiene su propio camino.
       const xml = parseCfdiXml(texto);
       if (!xml) { ignoradas++; continue; }
+
+      // ── FASE 7 (mig. 0199): un REP adjunto en el correo no es una factura
+      // de proveedor — es el complemento que libera el IVA a crédito de un
+      // gasto ya capturado. Sin este corte entraba a `guardarFacturaProveedor`
+      // con Total=0 y se perdía su único propósito.
+      if (xml.tipoComprobante === 'P') {
+        const rep = parseRepXml(texto);
+        if (rep) {
+          const resumen = await ingerirRep(flota.id as string, rep, texto);
+          logger.info('correo_entrante.rep', { emailId, tenantId: flota.id, rep: rep.uuid, ...resumen });
+          guardadas++;
+        } else {
+          logger.warn('correo_entrante.rep_ilegible', { emailId, tenantId: flota.id });
+          ignoradas++;
+        }
+        continue;
+      }
 
       // El estatus SAT se consulta AQUÍ, con el adjunto ya en la mano:
       // `consultarCFDI` jamás lanza (timeout 4s → 'pendiente'), así que un

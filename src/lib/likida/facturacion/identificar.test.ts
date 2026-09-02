@@ -78,8 +78,15 @@ describe('registro de comercios', () => {
     }
   });
 
+  // MISMO INVARIANTE QUE ANTES, con la excepción DECLARADA que trajo el banco
+  // de tickets reales: un comercio o tiene portal, o lleva `portalPendiente` y
+  // entonces `enrutar` lo devuelve como incompleto sin mandar a nadie a una
+  // liga en blanco. Lo que sigue prohibido —y es lo que esta prueba cuida— es
+  // un portal vacío SIN la marca. Los dos sentidos del ⟺ y la lista cerrada de
+  // pendientes están en el bloque del final del archivo.
   it('ningún comercio se anuncia sin portal a dónde mandar al operador', () => {
     for (const c of COMERCIOS) {
+      if (c.portalPendiente) continue;
       expect(c.portal, `${c.clave} no tiene portal`).toMatch(/^https?:\/\//);
     }
   });
@@ -101,8 +108,19 @@ describe('registro de comercios', () => {
   //
   // Pedirle al operador un dato que el portal no necesita es fricción inventada,
   // y en carretera con el celular la fricción es lo que hace que no facture.
-  it('a G500 le basta el Web ID: lo demás lo resuelve el portal', () => {
-    const requeridos = comercio('g500')!.campos.filter((x) => x.requerido).map((x) => x.clave);
+  // ⚠️ ESTA PRUEBA CAMBIÓ DE SUJETO EL 28-ago-2026, y el porqué es el bug.
+  //
+  // Lo de arriba se midió facturando un ticket de G500 MEGASUR, o sea del
+  // SURESTE — y se asentó en la ficha `g500`, la de la RED. El recon visitó las
+  // dos fichas por separado con contexto limpio y devolvieron LA MISMA PÁGINA:
+  // `g500` seguía apuntando a `megasur.com.mx:8029` aunque su propio comentario
+  // ya dijera que esa entrada era para la red. La prueba estaba certificando
+  // sobre `g500` un hecho que solo es cierto de `megasur`.
+  //
+  // Así que la afirmación se muda a la ficha que sí se facturó, y `g500` pasa a
+  // afirmar lo único que se sabe de la red: que NO se sabe.
+  it('a MEGASUR le basta el Web ID: lo demás lo resuelve el portal', () => {
+    const requeridos = comercio('megasur')!.campos.filter((x) => x.requerido).map((x) => x.clave);
     expect(requeridos).toEqual(['webId']);
   });
 
@@ -110,8 +128,26 @@ describe('registro de comercios', () => {
     // El portal devuelve el folio DENTRO de la descripción de la línea
     // ("1000724 - GASOLINA CONTENIDO MIN. 91 OCTANOS"), así que sirve para
     // confirmar que la línea que trajo es la del ticket que tiene en la mano.
-    const opcionales = comercio('g500')!.campos.filter((x) => !x.requerido).map((x) => x.clave);
+    const opcionales = comercio('megasur')!.campos.filter((x) => !x.requerido).map((x) => x.clave);
     expect(opcionales).toContain('folio');
+  });
+
+  it('G500 (la red) NO hereda ni el portal ni los campos del sureste', () => {
+    // La regresión exacta que se arregló: mientras `portal` apuntara a
+    // `megasur.com.mx:8029`, cualquier ticket G500 de otra región mandaba al
+    // operador a Mérida, donde su WebID no existe. Y las dos fichas declaraban
+    // `requiereCuenta` OPUESTO para la misma página.
+    const red = comercio('g500')!;
+    const sureste = comercio('megasur')!;
+    expect(red.portal).not.toBe(sureste.portal);
+    expect(red.portal).not.toContain('megasur');
+    // Del portal de la red solo se comprobó que responde: ni se abrió ni se
+    // leyó. `camposPendientes` es la forma honesta de decirlo.
+    expect(red.campos).toEqual([]);
+    expect(red.camposPendientes).toBe(true);
+    // Y el plazo verificado era del SURESTE: sostenerlo aquí sería heredar la
+    // prueba de otra página, que es justo lo que creó el bug.
+    expect(red.plazoVerificado).toBe(false);
   });
 
   it('el ITU de Office Depot trae su restricción de largo', () => {
@@ -223,23 +259,109 @@ describe('lo verificado se distingue de la hipótesis', () => {
   // comprobó, así que la lista de verificados es cerrada y esta prueba la fija:
   // meter uno nuevo obliga a pasar por aquí, y a decir cómo se verificó.
   //
-  // Y hay dos grados de "verificado", que conviene no confundir:
+  // Y hay TRES grados de "verificado", que conviene no confundir:
   //   · FACTURANDO — megasur y la_gas: se timbró un CFDI real.
   //   · LEYENDO EL PORTAL — office_depot (maxlength del campo) y g500 (el plazo
   //     impreso en el ticket). Es evidencia de primera mano, pero no probó que
   //     el portal acepte el ticket de punta a punta.
-  const VERIFICADOS = ['g500', 'la_gas', 'megasur', 'office_depot'];
+  //   · LEYENDO EL TICKET REAL (27-ago-2026) — home_depot, tim_hortons,
+  //     conekta360 y bptgroup: el plazo viene IMPRESO en el comprobante que un
+  //     chofer fotografió, y se leyó mirando la foto. Es el grado más débil de
+  //     los tres —no dice nada de si el portal lo respeta— pero es más fuerte
+  //     que el default 'mes_natural', que no lo dice NADIE.
+  //
+  //     Y no es un matiz cosmético: los cuatro contradicen ese default. Home
+  //     Depot da 60 DÍAS (el default lo habría dado por vencido semanas antes),
+  //     y Boston's y la ferretería de Conekta 360 dan 72 y 24 HORAS (el default
+  //     habría jurado que seguían vigentes cuando ya no). Un plazo supuesto
+  //     falla en las dos direcciones, y las dos cuestan dinero.
+  //
+  //     Los otros 14 comercios que entraron en esa misma tanda NO están aquí:
+  //     sus tickets no imprimen plazo, y no imprimirlo no es dar un mes.
+  //   · LEYENDO EL PLAZO EN LA PÁGINA DEL PORTAL (28-ago-2026) — la tanda que
+  //     trajo el reconocimiento de campo. Hasta ese día este catálogo no tenía
+  //     NI UNO de este grado: los plazos "verificados" salían de un ticket de
+  //     papel o del HTML de un campo, nunca de que el portal dijera su plazo con
+  //     sus propias palabras. Ahora hay diez, cada uno con su cita literal en la
+  //     ficha:
+  //       enerser · sevafusa · arco_chihuahua («mes en curso o últimas 72 h»)
+  //       tag_pase · circuito_exterior (30 días) · redviacorta (año fiscal)
+  //       grupo_centra (3 DÍAS — el más corto del catálogo)
+  //       ado y primera_plus (mes de compra + cola; obligaron a ampliar `Plazo`)
+  //       los_taquitos_pm (24 HRS, recon 29-ago-2026 al resolver su portal
+  //       pendiente — mismo plazo que conekta360, pero leído en la página del
+  //       portal y no en un ticket)
+  //
+  //     Y CONTRADICEN EL DEFAULT EN LAS DOS DIRECCIONES, igual que la tanda de
+  //     tickets: Grupo Centra da 3 días donde suponíamos un mes, y Circuito
+  //     Exterior da 30 donde habríamos avisado "vence el 31".
+  //
+  // ⚠️ `g500` SALIÓ DE ESTA LISTA. Su `plazoVerificado: true` venía de leer el
+  // plazo del portal DEL SURESTE, que ya no es el suyo — la ficha apuntaba al
+  // portal equivocado. La prueba lo heredaba sin notarlo.
+  const VERIFICADOS = [
+    'la_gas', 'megasur', 'office_depot',
+    'home_depot', 'tim_hortons', 'conekta360', 'bptgroup',
+    // Leídos en la página del portal, recon del 28-ago-2026.
+    'enerser', 'sevafusa', 'arco_chihuahua', 'tag_pase',
+    'circuito_exterior', 'redviacorta', 'grupo_centra', 'ado', 'primera_plus',
+    // Leído en la página del portal al resolver su `portalPendiente`, 29-ago-2026.
+    'los_taquitos_pm',
+  ];
   const FACTURADOS = ['la_gas', 'megasur'];
+  /** Los que se verificaron mirando la foto de un ticket real, no el portal. */
+  const VERIFICADOS_EN_TICKET = ['bptgroup', 'conekta360', 'home_depot', 'tim_hortons'];
 
   it('la lista de verificados es exactamente ésta', () => {
     const conPlazo = COMERCIOS.filter((c) => c.plazoVerificado).map((c) => c.clave).sort();
     expect(conPlazo).toEqual([...VERIFICADOS].sort());
   });
 
-  it('los 29 restantes NO se anuncian como verificados', () => {
+  it('todos los demás NO se anuncian como verificados', () => {
     const sin = COMERCIOS.filter((c) => !c.plazoVerificado);
     expect(sin.length).toBe(COMERCIOS.length - VERIFICADOS.length);
     for (const c of sin) expect(c.plazoVerificado, c.clave).toBe(false);
+  });
+
+  // TRES DE LOS CUATRO CONTRADICEN EL DEFAULT, y ése es el hallazgo: el
+  // catálogo venía suponiendo 'mes_natural' para todos, y en cuanto se leyeron
+  // comprobantes de verdad resultó falso en tres de cuatro casos — y falso en
+  // las DOS direcciones, que es lo caro. Home Depot da 60 días: con el default
+  // el sistema habría dado por vencido semanas antes un ticket todavía
+  // facturable. Boston's da 72 horas y la ferretería de Conekta 360 da 24: con
+  // el default habría jurado que seguían vigentes cuando ya no.
+  //
+  // Esta prueba fija esa asimetría para que nadie "normalice" estas entradas de
+  // vuelta al default dejándoles la marca de verificadas puesta.
+  const CONTRADICEN_EL_DEFAULT = ['home_depot', 'conekta360', 'bptgroup'];
+
+  it('lo leído en un ticket real desmiente el default en tres de cuatro', () => {
+    for (const k of CONTRADICEN_EL_DEFAULT) {
+      const c = comercio(k);
+      expect(c, `${k} no está en el catálogo`).toBeDefined();
+      expect(c!.plazoVerificado, k).toBe(true);
+      expect(c!.plazo, `${k}: se marcó verificado pero quedó con el default`).not.toBe('mes_natural');
+    }
+    // El cuarto es el caso contrario y por eso vale la pena nombrarlo aparte:
+    // el ticket de Tim Hortons dice "podrá facturarse hasta el último día del
+    // mes", o sea CONFIRMA 'mes_natural'. Es la primera vez que el default de
+    // este catálogo aparece respaldado por un papel en vez de supuesto — y un
+    // default confirmado y un default supuesto valen distinto aunque el valor
+    // que guardan sea idéntico. Eso es justo lo que `plazoVerificado` distingue.
+    expect(comercio('tim_hortons')!.plazo).toBe('mes_natural');
+    expect(comercio('tim_hortons')!.plazoVerificado).toBe(true);
+    expect(VERIFICADOS_EN_TICKET).toEqual([...CONTRADICEN_EL_DEFAULT, 'tim_hortons'].sort());
+  });
+
+  // Dos de los cuatro se miden en HORAS, y ése es el caso por el que
+  // `caducidad.ts` admite `{ horas }`: redondear 24 h a "un día" da por vigente
+  // un ticket que ya venció. `los_taquitos_pm` se sumó el 29-ago-2026 al
+  // resolver su `portalPendiente`: mismas 24 horas que conekta360, pero leídas
+  // en la página del portal en vez de en un ticket de papel.
+  it('hay plazos en HORAS, y salieron de un comprobante o del portal en la mano', () => {
+    const enHoras = COMERCIOS.filter((c) => typeof c.plazo === 'object' && 'horas' in c.plazo);
+    expect(enHoras.map((c) => c.clave).sort()).toEqual(['bptgroup', 'conekta360', 'los_taquitos_pm']);
+    for (const c of enHoras) expect(c.plazoVerificado, c.clave).toBe(true);
   });
 
   it('los facturados de verdad son dos, y hay que poder nombrarlos', () => {
@@ -266,5 +388,164 @@ describe('lo verificado se distingue de la hipótesis', () => {
     for (const k of ['sucursal', 'fecha', 'hora', 'referencia', 'caja', 'transaccion', 'monto']) {
       expect(cs, `PINFRA sin ${k}`).toContain(k);
     }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PORTAL QUE NO SE HA VERIFICADO SE DECLARA, NO SE INVENTA
+//
+// `portal` se usa para ABRIR una página: `vinculacion_asistida.ts` hace
+// `pagina.abrir(ficha.portal)` y `mensajeParaEncargado` la manda por WhatsApp
+// para que una persona la teclee. Una URL supuesta no falla de forma visible —
+// lleva a alguien a un sitio que nadie comprobó.
+//
+// Por eso el catálogo admite exactamente dos estados, y esta prueba fija que no
+// haya un tercero: o el comercio tiene una URL de verdad, o lleva
+// `portalPendiente: true` y `portal` vacío. Lo que NO puede existir es un
+// portal en blanco sin la marca (un descuido que se leería como "no hay
+// portal") ni la marca con una URL puesta (que diría dos cosas contrarias a la
+// vez).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el portal sin verificar se declara con portalPendiente', () => {
+  it('portal vacío ⟺ portalPendiente, en los dos sentidos', () => {
+    for (const c of COMERCIOS) {
+      if (c.portalPendiente) {
+        expect(c.portal, `${c.clave}: lleva portalPendiente y además una URL — di una sola cosa`).toBe('');
+      } else {
+        expect(c.portal, `${c.clave}: portal vacío sin portalPendiente`).not.toBe('');
+        expect(c.portal.startsWith('https://') || c.portal.startsWith('http://'), `${c.clave}: ${c.portal} no es una URL`).toBe(true);
+      }
+    }
+  });
+
+  // La lista es CERRADA a propósito: meter un comercio sin portal obliga a
+  // pasar por aquí y a decir por qué no se pudo verificar, en vez de que el
+  // hueco crezca callado.
+  //
+  // ── HAY DOS CAUSAS DISTINTAS, Y CONVIENE NO MEZCLARLAS ────────────────────
+  //
+  // 1. EL TICKET NO IMPRIME LIGA. No hay dominio que reconocer porque el papel
+  //    no lo trae, así que estos NO pueden tener `reconocer.dominios`: un
+  //    dominio aquí sería la URL inventada entrando por la puerta de atrás.
+  //
+  //    Del banco de 91 fotos entraron TRES así: `walmart` salió de esta lista
+  //    el 29-ago-2026 —se investigó y se MIDIÓ con Chrome headless su portal
+  //    centralizado real, que no viene impreso en ningún ticket pero SÍ se
+  //    verificó navegándolo— y quedan dos, `amg_hospitality` y
+  //    `vaquero_montejo`, donde la búsqueda del 29-ago-2026 NO encontró nada
+  //    lo bastante confiable para escribir (ver la nota de cada uno: un correo
+  //    real mandado por AMG, y un sitio de nombre parecido pero RFC sin
+  //    confirmar para Vaquero Montejo).
+  //
+  // 2. LA LIGA EXISTE PERO NO LLEVA A UN PORTAL (recon del 28-ago-2026, y
+  //    revisitado el 29-ago-2026). Aquí el dominio SÍ está impreso y SÍ sirve
+  //    para reconocer al emisor —es lo único verificado de ellos— pero no hay
+  //    URL honesta que guardar en `portal`:
+  //      · `facturacion_estacion` — el apex sigue siendo una página de
+  //        aparcamiento de GoDaddy (revisitado 29-ago-2026, sin cambio). La
+  //        plataforma existe, pero solo por subdominio de comercio, así que la
+  //        entrada correcta es un PATRÓN, no una URL.
+  //      · `mobil` — sigue sin ser un portal: hoy es un buscador de estaciones
+  //        por mapa que redirige a un operador distinto según dónde se cargó
+  //        (revisitado 29-ago-2026 con Chrome headless: ya no da 403 de Akamai,
+  //        pero el flujo real —"busca tu estación en el mapa, da clic en
+  //        Obtener factura"— sigue sin resolverse a una URL única).
+  //      · `pemex_franquicia` — el sitio se REDISEÑÓ (29-ago-2026): el 403 de
+  //        SiteGround ya no aplica, pero las dos rutas de facturar que ofrece
+  //        hoy (`cargogas.dyndns.ws:8080` y el nuevo
+  //        `factura.cargogas.warelan.com`) siguen siendo HTTP puro, medido con
+  //        Chrome headless — mismo motivo de fondo, evidencia fresca.
+  //
+  //    Guardar cualquiera de esas URLs mandaba al robot —o a una persona— a una
+  //    página de venta de dominios, a un directorio sin resolver o a un
+  //    formulario sin TLS. Vaciarla y marcar el pendiente dice la verdad y
+  //    conserva la capacidad de NOMBRAR al emisor.
+  // 3. LA LIGA ESTÁ IMPRESA PERO NADIE HABÍA ABIERTO SU FORMULARIO (corrida de
+  //    producción del 28-ago-2026, 90 fotos). Los detectó el OCR leyendo el
+  //    dominio del propio ticket, así que el dominio SÍ está verificado — lo que
+  //    faltaba era visitar la página. Es el estado más temprano de una ficha: se
+  //    sabe a quién nombrar y no a dónde mandarlo.
+  //
+  //    `los_taquitos_pm` salió de esta lista el 29-ago-2026: el dominio del
+  //    catálogo (`lostaquitosdelpm.com`) resultó ser un typo que NUNCA iba a
+  //    reconocer un ticket real —NXDOMAIN, cero historial en la Wayback
+  //    Machine—, y el correcto (`lostaquitosdepm.com`) sí se abrió y se midió
+  //    con Chrome headless. Queda `gasolineria_mallorca`: su dominio impreso
+  //    (`facturascas.com`) también da NXDOMAIN, y el candidato más parecido que
+  //    arrojó la búsqueda (`facturasgas.com`) es una plataforma multi-comercio
+  //    sin nada que confirme que esta razón social factura ahí — se anotó como
+  //    hipótesis, no se escribió como dato.
+  const SIN_LIGA_EN_EL_TICKET = ['amg_hospitality', 'vaquero_montejo'];
+  const LIGA_QUE_NO_ES_PORTAL = ['facturacion_estacion', 'mobil', 'pemex_franquicia'];
+  const LIGA_IMPRESA_SIN_VISITAR = ['gasolineria_mallorca'];
+
+  it('son exactamente estos seis, y ninguno finge tener campos leídos', () => {
+    const pendientes = COMERCIOS.filter((c) => c.portalPendiente).map((c) => c.clave).sort();
+    expect(pendientes).toEqual(
+      [...SIN_LIGA_EN_EL_TICKET, ...LIGA_QUE_NO_ES_PORTAL, ...LIGA_IMPRESA_SIN_VISITAR].sort(),
+    );
+    for (const k of pendientes) {
+      const c = comercio(k)!;
+      // Sin portal no se pudo leer el formulario: `campos` vacío y la marca
+      // puesta. Un campo declarado aquí estaría inventado por definición.
+      expect(c.campos, `${k}`).toEqual([]);
+      expect(c.camposPendientes, `${k}`).toBe(true);
+      expect(c.plazoVerificado, `${k}: sin portal no hay plazo verificado`).toBe(false);
+    }
+  });
+
+  // ── NINGÚN `portal` PUEDE SER LA URL DE UN LOGIN ──────────────────────────
+  //
+  // Regresión REAL, cazada el 28-ago-2026 al actualizar el catálogo con el
+  // recon. Se cambió `la_gas` de la raíz a `…/auth/login` con la lógica de "es
+  // la URL final, así no dependemos del redirect" — y rompió la vinculación
+  // asistida en silencio.
+  //
+  // El mecanismo: `pantallaDeLogin` decide si la persona YA ENTRÓ comparando la
+  // URL contra `RUTAS_DE_LOGIN`. Con `/auth/login` guardado en la ficha, la
+  // condición «seguimos en la pantalla de entrar» se vuelve permanentemente
+  // verdadera: el contralor inicia sesión de verdad, el sistema no lo reconoce,
+  // la vinculación expira y la sesión no se guarda. Nadie habría sabido por qué.
+  //
+  // La regla general: `portal` es la página donde se quiere TERMINAR, no la
+  // puerta. Los portales con cuenta ya redirigen solos al login cuando hace
+  // falta; guardarlo a mano solo rompe la señal de "ya entré".
+  it('ningún portal apunta a una pantalla de entrar', () => {
+    // El mismo patrón que usa `vinculo_senales.ts`. Se repite en vez de
+    // importarlo a propósito: si allá lo relajan, esta prueba tiene que seguir
+    // midiendo lo que hoy sabemos que rompe.
+    const RUTAS_DE_LOGIN = /\/(account\/login|login|signin|sign-in|iniciar-?sesion|inicio-?sesion|acceso|autenticar)(\/|\?|#|$)/i;
+    const culpables = COMERCIOS
+      .filter((c) => c.portal && RUTAS_DE_LOGIN.test(c.portal))
+      .map((c) => `${c.clave} → ${c.portal}`);
+    expect(culpables, 'un portal que apunta al login hace que "ya entré" nunca sea cierto').toEqual([]);
+  });
+
+  it('los que SÍ imprimen liga la conservan como dominio, que es lo verificado', () => {
+    // El complemento de la prueba de abajo, y lo que hace que `portalPendiente`
+    // no sea "borrar la ficha": de estos comercios se conoce el dominio impreso
+    // —es como se detectaron— aunque no se conozca su formulario. Perderlo
+    // convertiría un emisor identificable en "emisor desconocido".
+    for (const k of [...LIGA_QUE_NO_ES_PORTAL, ...LIGA_IMPRESA_SIN_VISITAR]) {
+      const c = comercio(k)!;
+      expect(c.reconocer.dominios?.length, `${k}: su liga está impresa y verificada`).toBeGreaterThan(0);
+    }
+  });
+
+  it('los que no imprimen liga tampoco pueden declarar un dominio', () => {
+    for (const k of SIN_LIGA_EN_EL_TICKET) {
+      const c = comercio(k)!;
+      expect(c.reconocer.dominios, `${k}: no imprime liga, no puede tener dominio`).toBeUndefined();
+    }
+  });
+
+  it('el emisor más fotografiado del banco va en UNA entrada, no en tres', () => {
+    // Walmart, Sam's Club y Bodega Aurrera son marcas del MISMO contribuyente
+    // (NWM9709244W4). Tres entradas con el mismo RFC serían tres candidatos
+    // empatados para el mismo ticket, y `identificarComercio` no adivina ante
+    // un empate: los once tickets se quedarían sin comercio.
+    const porRfc = COMERCIOS.filter((c) => c.reconocer.rfc?.includes('NWM9709244W4'));
+    expect(porRfc.map((c) => c.clave)).toEqual(['walmart']);
+    expect(identificarComercio({ rfcEmisor: 'NWM9709244W4' })?.clave).toBe('walmart');
   });
 });

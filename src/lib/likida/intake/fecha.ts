@@ -12,6 +12,45 @@ export function normalizarFecha(s: string | null | undefined): string | undefine
 }
 
 /**
+ * CORRIGE EL VOLTEO DÍA/MES DEL MODELO, determinista y acotado — no adivina.
+ *
+ * El caso MEDIDO (banco de QA, 90 fotos reales, 28-ago-2026): el error de
+ * fecha MÁS repetido del extractor es leer "2/8/2026" como 8 de febrero. La
+ * regla ya está escrita en el prompt —México imprime DÍA/MES— pero el modelo
+ * la viola justo cuando ambos componentes son ≤ 12, que es cuando no hay
+ * componente imposible que lo delate. Aquí se aplica la MISMA regla,
+ * determinista, sobre `fecha_impresa` (la copia literal del papel):
+ *
+ *   se corrige SOLO cuando (a) la impresa es puramente numérica —una fecha
+ *   con el mes en letra ya manda por el prompt—, (b) su lectura DÍA/MES es
+ *   una fecha válida, y (c) la fecha del modelo es EXACTAMENTE la lectura
+ *   MES/DÍA — o sea, el volteo demostrado contra la regla escrita, no una
+ *   discrepancia cualquiera.
+ *
+ * La excepción de COSTCO (el único emisor confirmado que imprime MES/DÍA,
+ * ver el prompt) la aplica quien llama saltándose esta corrección cuando el
+ * emisor leído la nombra. Un papel MES/DÍA sin letra y sin ser Costco NO se
+ * puede resolver por regla — ése es techo, y se queda como salió en vez de
+ * adivinarse. Pura, con prueba.
+ */
+export function corregirVolteoDiaMes(
+  fechaModelo: string | undefined,
+  fechaImpresa: string | null | undefined,
+): string | undefined {
+  if (!fechaModelo || !fechaImpresa) return fechaModelo;
+  // (a) puramente numérica: nada de letras (descarta "01 de JULIO de 2026").
+  const limpia = fechaImpresa.trim();
+  const m = limpia.match(/^(\d{1,2})[/\-. ](\d{1,2})[/\-. ](\d{2,4})(\D|$)/);
+  if (!m || /[a-záéíóú]/i.test(limpia)) return fechaModelo;
+  const anio = m[3].length === 2 ? `20${m[3]}` : m[3];
+  const ddmm = existe(anio, m[2].padStart(2, '0'), m[1].padStart(2, '0'));
+  const mmdd = existe(anio, m[1].padStart(2, '0'), m[2].padStart(2, '0'));
+  // (b) y (c): el volteo exacto, con ambas lecturas válidas y distintas.
+  if (!ddmm || !mmdd || ddmm === mmdd) return fechaModelo;
+  return fechaModelo === mmdd ? ddmm : fechaModelo;
+}
+
+/**
  * Devuelve la fecha ISO solo si el día EXISTE en ese mes.
  *
  * `new Date('2026-04-31')` no truena: rueda al 1 de mayo en silencio. Una fecha

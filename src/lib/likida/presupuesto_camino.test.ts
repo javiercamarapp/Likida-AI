@@ -52,8 +52,12 @@ describe('camino del "listo" — peor caso', () => {
   it('los topes fijos ya caben en el presupuesto, y sobra margen', () => {
     const fijos = TOPE_BARRERA + TOPE_MUTEX + TOPE_AGENTE;   // 72s
     expect(fijos).toBeLessThanOrEqual(PRESUPUESTO_WEBHOOK_MS - MARGEN_CIERRE_MS);
-    // Holgura real sobre el peor caso de topes fijos. Con 60s era negativa.
-    expect(PRESUPUESTO_WEBHOOK_MS - MARGEN_CIERRE_MS - fijos).toBeGreaterThanOrEqual(30_000);
+    // Holgura real sobre el peor caso de topes fijos. Con 60s de presupuesto
+    // era negativa; con el margen de la auditoría 21 —derivado de los TECHOS
+    // duros de los pasos irrenunciables del cierre, no de costos típicos— la
+    // holgura se achicó a propósito: ese tiempo no desapareció, se movió a
+    // garantizar que la respuesta y el PDF del chofer siempre quepan.
+    expect(PRESUPUESTO_WEBHOOK_MS - MARGEN_CIERRE_MS - fijos).toBeGreaterThanOrEqual(5_000);
   });
 
   it('si lo previo y las esperas se comen el presupuesto, el agente NO se lanza', () => {

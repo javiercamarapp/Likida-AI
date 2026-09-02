@@ -36,6 +36,20 @@ begin
     raise exception 'TPS ya existe: corre scripts/demo-5k-limpiar.sql primero';
   end if;
 
+  -- OPERABILIDAD-19C2-4 (barrido MEDIO/BAJO): las dos notas de abajo vivían
+  -- COMO `--` DENTRO del literal `'{...}'::jsonb` del INSERT — no eran
+  -- comentarios SQL de verdad, eran texto crudo metido en medio del JSON,
+  -- así que este INSERT moría con un error de sintaxis JSON en cuanto
+  -- alguien corría el script. Se mueven aquí, fuera del literal.
+  --
+  -- (1) "caseta":{"topeMonto":5000} — una línea del estado del TAG por viaje.
+  -- (2) AUDITORÍA 19 (fiscal F4): `regimenElegible` decía `true`, pero este
+  --     tenant declara `regimen_fiscal='601'` (General de Ley PM) unas
+  --     líneas arriba, y `REGIMENES_ELEGIBLES` (administracion.ts) es la
+  --     lista CERRADA ['624','612'] — 601 NO califica. El seed afirmaba una
+  --     elegibilidad que el motor real nunca produciría para este régimen,
+  --     sin que nadie lo validara. Corregido a lo que 601 de verdad da: no
+  --     elegible (`"regimenElegible":false`).
   insert into tenant (id, nombre, rfc, ciudad, plan, razon_social, domicilio_fiscal,
                       url_aviso_privacidad, contacto_privacidad, regimen_fiscal,
                       codigo_postal_fiscal, uso_cfdi, config)
@@ -45,7 +59,7 @@ begin
           'https://app.likida.ai/aviso/' || t, 'privacidad@tps-demo.mx', '601', '66600', 'G03',
           '{"empresa":{"rfc":"TPE150812AB3"},
             "politica":[{"concepto":"diesel","topeMonto":4000,"requiereCfdi":true},
-                        {"concepto":"caseta","topeMonto":5000},   -- una línea del estado del TAG por viaje
+                        {"concepto":"caseta","topeMonto":5000},
                         {"concepto":"alimentacion","topeMonto":450},
                         {"concepto":"viaticos","topeMonto":450},
                         {"concepto":"hospedaje","topeMonto":900,"requiereCfdi":true},
@@ -55,7 +69,7 @@ begin
                         {"concepto":"otro","topeMonto":1500}],
             "tabulador":{"rendimientoPorDefecto":2.2,"precioDieselPorDefecto":24,"umbralDesviacion":0.06},
             "estimulos":{"efectivoTopeMxn":2000,"viaticosTopeFiscalDiarioMxn":750},
-            "facilidadCombustibleEfectivo":{"dedicacionExclusivaCarga":true,"regimenElegible":true}}'::jsonb);
+            "facilidadCombustibleEfectivo":{"dedicacionExclusivaCarga":true,"regimenElegible":false}}'::jsonb);
 
   for i in 1..25 loop
     insert into terminal (id, tenant_id, nombre, ciudad)
@@ -586,11 +600,18 @@ begin
   from generate_series(1, 42) i;
 
   -- cobranza: 600 facturas (viajes liquidados con cliente), 55 % pagadas, algunas vencidas
+  --
+  -- AUDITORÍA 24, DAT-7/BE-3: el trigger `factura_pagada_con_pagos` (0284)
+  -- rebota una factura que nace `pagada` sin un `pago_recibido` que la
+  -- respalde. Antes este bloque insertaba la factura YA `pagada` y el pago
+  -- después — orden que el trigger nuevo ya no deja pasar. Ahora las que
+  -- van a quedar pagadas nacen `emitida`, reciben su pago, y SOLO ENTONCES
+  -- se marcan `pagada` — el mismo orden que exige el candado real.
   insert into factura_emitida (tenant_id, cliente_id, viaje_id, folio, cfdi_uuid, fecha, subtotal, iva, total, moneda, estatus, vence_en, creada_en)
   select t, v.cliente_id, v.id, 'F-' || lpad((20260000 + v.n)::text, 8, '0'),
          md5('tps-fe-' || v.n)::uuid::text, v.fecha_fin,
          v.ingreso_flete, round(v.ingreso_flete * 0.16, 2), round(v.ingreso_flete * 1.16, 2), 'MXN',
-         case when v.n % 20 < 11 then 'pagada' when v.n % 20 = 19 then 'cancelada' else 'emitida' end,
+         case when v.n % 20 = 19 then 'cancelada' else 'emitida' end,
          v.fecha_fin + c.dias_credito, v.fecha_fin::timestamptz + interval '18 hours'
   from (select id, cliente_id, fecha_fin, ingreso_flete, (regexp_replace(substring(id::text from 25), '\D', '', 'g'))::bigint as n
         from viaje where tenant_id = t and estatus = 'liquidado' and ingreso_flete is not null and fecha_fin <= current_date) v
@@ -599,7 +620,13 @@ begin
   -- facturas "vencidas": las más viejas emitidas a 15 días
   update factura_emitida set vence_en = fecha + 7 where tenant_id = t and estatus = 'emitida' and fecha < current_date - 10;
   insert into pago_recibido (tenant_id, factura_id, fecha, monto, metodo, referencia, registrado_en)
-  select t, id, least(vence_en, current_date), total, 'transferencia', 'SPEI-' || substr(md5(id::text), 1, 10), now()
-  from factura_emitida where tenant_id = t and estatus = 'pagada';
+  select t, fe.id, least(fe.vence_en, current_date), fe.total, 'transferencia', 'SPEI-' || substr(md5(fe.id::text), 1, 10), now()
+  from factura_emitida fe
+  where fe.tenant_id = t and fe.estatus = 'emitida'
+    -- Mismo `n` que el bloque de arriba: folio = 'F-' || (20260000 + n).
+    and ((substring(fe.folio from 3))::bigint - 20260000) % 20 < 11;
+  update factura_emitida set estatus = 'pagada'
+  where tenant_id = t and estatus = 'emitida'
+    and exists (select 1 from pago_recibido pr where pr.factura_id = factura_emitida.id);
   raise notice 'TPS bloque 8 listo';
 end $$;

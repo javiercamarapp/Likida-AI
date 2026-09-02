@@ -29,9 +29,10 @@ import {
 //
 // ── Y SIN EMBARGO ESTA ES LA CATEGORÍA QUE MÁS DINERO MUEVE ─────────────
 //
-// Diésel por monedero y peaje por TAG son ~54% del gasto real de una flota
-// (INEGI EAT 2024, la cifra que ya sostiene `intake/cfdi_xml.ts`). O sea que la
-// categoría sin APIs es justo la que decide si la liquidación cuadra.
+// Diésel por monedero y peaje por TAG son, por estimación interna SIN FUENTE
+// CONFIRMADA (ver la nota en `intake/cfdi_xml.ts`), una fracción grande del
+// gasto real de una flota. O sea que la categoría sin APIs es justo la que
+// decide si la liquidación cuadra.
 //
 // De ahí que el escalón real NO sea "esperamos a que saquen API". Es el
 // ARCHIVO, y está construido y funcionando:

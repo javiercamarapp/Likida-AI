@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { sufijoTenant } from '../sufijo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
@@ -10,7 +11,7 @@ import {
 import { reasignarOperador, buscarCatalogo, contarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/likida/repo';
 import { crearOperador } from '@/lib/likida/administracion';
 import { DatoInvalido } from '@/lib/likida/errores';
-import { getViajes } from '@/lib/likida/analytics';
+import { viajesEnCursoPaginados } from '@/lib/likida/repo_paginado';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { VistaDespacho } from './vista';
@@ -69,15 +70,16 @@ function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 export default async function PaginaDespacho({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; p?: string; q?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/despacho', sp);
   if (!puedeVerRuta(rol, '/dashboard/despacho')) redirect('/dashboard');
 
-  const base = sp.tenant ? `?tenant=${sp.tenant}` : sp.vista ? `?vista=${sp.vista}` : '';
-  const sufijo = sp.rol ? `${base}${base ? '&' : '?'}rol=${sp.rol}` : base;
+  const sufijo = sufijoTenant(sp);
   const destino = `/dashboard/despacho${sufijo}`;
+  const paginaPedida = Math.max(1, Number.parseInt(sp.p ?? '1', 10) || 1);
+  const folioPedido = (sp.q ?? '').trim();
 
   // ── FE-2: LOS CATÁLOGOS YA NO SE CARGAN ─────────────────────────────────
   // Aquí se traían los tres ENTEROS (operadores, clientes, unidades) para
@@ -91,10 +93,14 @@ export default async function PaginaDespacho({
   //
   // `contarCatalogo` no lanza (devuelve `null` y loguea): un conteo caído no
   // puede tumbar el despacho, igual que antes un catálogo caído no lo hacía.
-  const [tablero, sinAsignar, viajes, carga, totalOperadores, totalClientes, totalUnidades] = await Promise.all([
+  // FE-2: "En curso" ya no es un recorte de "los últimos 100 viajes creados"
+  // filtrado en memoria — es su propia consulta, ordenada por urgencia
+  // (primero lo no aceptado, y entre eso lo avisado hace más tiempo), con
+  // `count: 'exact'` y un buscador por folio (`?q=`).
+  const [tablero, sinAsignar, activos, carga, totalOperadores, totalClientes, totalUnidades] = await Promise.all([
     safe(() => getTableroOperacion(tenantId)),
     getViajesSinAsignar(tenantId),
-    getViajes(tenantId, 100),
+    viajesEnCursoPaginados(tenantId, { pagina: paginaPedida, folio: folioPedido }),
     safe(() => getCargaOperadores(tenantId)),
     contarCatalogo(tenantId, 'operador'),
     contarCatalogo(tenantId, 'cliente'),
@@ -169,13 +175,14 @@ export default async function PaginaDespacho({
         kmRecorridos: String(fd.get('kmRecorridos') ?? ''),
       });
 
+      const operadorId = texto('operadorId', 64);
       await crearViaje(tenantId, {
         folio: texto('folio', 40),
         origen: texto('origen', 120),
         destino: texto('destino', 120),
         fechaInicio: fecha,
         anticipo,
-        operadorId: texto('operadorId', 64),
+        operadorId,
         // '' → null (sin unidad, que la base admite). Que el id sea de ESTA
         // flota lo re-verifica `crearViaje` (`unidadPropia`), igual que hace
         // con el operador — el `<select>` es UI, no servidor.
@@ -185,7 +192,33 @@ export default async function PaginaDespacho({
         kmRecorridos: ing.kmRecorridos,
       });
     } catch (err) {
-      logger.error('despacho.crear.fallo', { err: err instanceof Error ? err.message : String(err) });
+      // FE-13: `crearViaje` ya distingue "operador/unidad dado de baja" con
+      // `DatoInvalido` (mensaje escrito para pantalla) — antes ese catch lo
+      // aplastaba igual que cualquier otro fallo ("Revisa los datos…"), el
+      // mensaje MENOS útil posible para el error que a 500 viajes/día va a
+      // ser el más común: "ese operador ya trae un viaje abierto"
+      // (`uq_viaje_abierto_por_operador`, 0029) llega como un 23505 genérico
+      // envuelto por operacion.ts, sin `.code` — el nombre del índice sigue
+      // en el texto del mensaje de Postgres, así que se detecta ahí.
+      if (err instanceof DatoInvalido) return { error: err.message };
+      const detalle = err instanceof Error ? err.message : String(err);
+      if (detalle.includes('uq_viaje_abierto_por_operador')) {
+        const operadorId = texto('operadorId', 64);
+        // El filtro de abajo (tenant+operador+estatus vivo) es exactamente
+        // el de `uq_viaje_abierto_por_operador` (0029): a lo más UNA fila.
+        const { data: abierto } = await supabaseAdmin()
+          .from('viaje').select('folio')
+          .eq('tenant_id', tenantId).eq('operador_id', operadorId)
+          // orden-no-importa: índice único parcial (0029) garantiza ≤1 fila
+          .in('estatus', ['abierto', 'en_cuadre']).limit(1).maybeSingle();
+        const folio = (abierto?.folio as string | undefined) || null;
+        return {
+          error: folio
+            ? `Ese operador ya trae el viaje ${folio} abierto — ciérralo o asígnale otro chofer.`
+            : 'Ese operador ya trae un viaje abierto — ciérralo o asígnale otro chofer.',
+        };
+      }
+      logger.error('despacho.crear.fallo', { err: detalle });
       return { error: 'No se pudo crear el viaje. Revisa los datos e inténtalo de nuevo.' };
     }
     redirect(destino);
@@ -291,7 +324,9 @@ export default async function PaginaDespacho({
     <VistaDespacho
       tablero={tablero}
       sinAsignar={sinAsignar}
-      activos={viajes.filter((v) => v.estatus === 'abierto' || v.estatus === 'en_cuadre')}
+      activos={activos}
+      sufijo={sufijo}
+      folioPedido={folioPedido}
       buscarCatalogo={buscarCatalogoAccion}
       totalOperadores={totalOperadores}
       totalClientes={totalClientes}
