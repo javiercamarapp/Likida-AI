@@ -34,6 +34,7 @@ import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { conReintentoDeSaturacion, esSaturacionStorage, type OpcionesReintento } from '@/lib/supabase/reintento';
 import { logger } from '@/lib/logger';
+import { traerTodo, conteo, LecturaIncompleta } from '@/lib/likida/pg';
 import {
   resumirAvance, PASADA_MUERTA_MS, validarVerdadTerreno,
   type CorridaQA, type FotoBanco, type PasoQA, type EstadoCorrida, type EscenarioId,
@@ -254,12 +255,28 @@ function tabla(error: { code?: string; message?: string } | null, prefijo: strin
  *  fallar cerrado y decirlo). */
 export async function leerManifiesto(db: SupabaseClient): Promise<Resultado<FotoBanco[]>> {
   try {
-    const { data, error } = await db.from('qa_foto')
-      .select(COLS_FOTO)
-      .order('subido_en', { ascending: true });
-    if (error) return { ok: false, error: tabla(error, 'no se pudo leer el banco de fotos') };
-    return { ok: true, datos: ((data ?? []) as FilaFoto[]).map(fotoDeFila) };
+    // AUDITORÍA 24, BE-27: era un select suelto. PostgREST recorta a 1,000
+    // filas EN SILENCIO, y sus tres consumidores (`qa/lanzar`, `qa/fotos/ocr`,
+    // `qa/[id]/estado`) usan el manifiesto para decidir si un id EXISTE: con
+    // 1,000+ fotos en el banco, una foto perfectamente válida se rechazaba
+    // como «no está en el banco». Se pagina demostrando el total; si no se
+    // puede demostrar, se dice — un banco corto con cara de completo no es una
+    // salida (`LecturaIncompleta`, pg.ts).
+    //
+    // Se desempata por `id` además de `subido_en`: dos fotos subidas en el
+    // mismo instante harían que dos páginas repitieran una y se saltaran otra.
+    const filas = await traerTodo<FilaFoto>(
+      (d, h) => db.from('qa_foto').select(COLS_FOTO, conteo(d))
+        .order('subido_en', { ascending: true }).order('id', { ascending: true }).range(d, h),
+      'qa.manifiesto',
+    );
+    return { ok: true, datos: filas.map(fotoDeFila) };
   } catch (e) {
+    if (e instanceof LecturaIncompleta) {
+      return { ok: false, error: `no se pudo leer el banco de fotos completo: ${e.message}` };
+    }
+    const err = e as { code?: string; message?: string } | null;
+    if (err && (err.code || err.message)) return { ok: false, error: tabla(err, 'no se pudo leer el banco de fotos') };
     return { ok: false, error: `no se pudo leer el banco de fotos: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
@@ -751,15 +768,30 @@ export async function leerUltimasLecturas(db: SupabaseClient, limite = 600): Pro
 export async function gastoLecturasHoyUsd(db: SupabaseClient): Promise<Resultado<number>> {
   try {
     const dia = hoyMx();
-    const { data, error } = await db.from('qa_foto_lectura').select('costo_usd')
-      .gte('corrida_en', inicioDiaMx(dia)).lte('corrida_en', finDiaMx(dia));
-    if (error) return { ok: false, error: tablaLectura(error, 'no se pudo leer el gasto de lecturas del día') };
-    const total = ((data ?? []) as Array<{ costo_usd: number | string }>).reduce((s, l) => {
+    // AUDITORÍA 24, BE-23: era un select suelto y PostgREST recorta a 1,000
+    // filas SIN AVISAR. A las 1,001 lecturas del día la suma se congelaba bajo
+    // el tope y el 429 no volvía a dispararse nunca: un candado de dinero que
+    // se apaga solo justo el día de más uso. Se pagina demostrando el total,
+    // como `dashboard/chat/tope.ts` desde que pisó la misma trampa; y si no se
+    // puede demostrar, NO se autoriza a gastar — un tope que no se puede leer
+    // falla cerrado.
+    const filas = await traerTodo<{ costo_usd: number | string }>(
+      (d, h) => db.from('qa_foto_lectura').select('costo_usd, id', conteo(d))
+        .gte('corrida_en', inicioDiaMx(dia)).lte('corrida_en', finDiaMx(dia))
+        .order('id', { ascending: true }).range(d, h),
+      'qa.gasto_lecturas_dia',
+    );
+    const total = filas.reduce((s, l) => {
       const v = Number(l.costo_usd);
       return s + (Number.isFinite(v) ? v : 0);
     }, 0);
     return { ok: true, datos: Math.round(total * 10_000) / 10_000 };
   } catch (e) {
+    if (e instanceof LecturaIncompleta) {
+      return { ok: false, error: `no se pudo leer el gasto de lecturas del día completo: ${e.message}` };
+    }
+    const err = e as { code?: string; message?: string } | null;
+    if (err && (err.code || err.message)) return { ok: false, error: tablaLectura(err, 'no se pudo leer el gasto de lecturas del día') };
     return { ok: false, error: `no se pudo leer el gasto de lecturas del día: ${e instanceof Error ? e.message : String(e)}` };
   }
 }

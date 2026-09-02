@@ -55,7 +55,14 @@ export default async function ElegirFlotaPage({
     const ok = await guardarSeleccionFlota(tenantId);
     if (!ok) redirect(`/admin/elegir-flota?next=${encodeURIComponent(destino)}&error=firma`);
     await anotarSeleccionEnBitacora(userId, tenantId, esDemo);
-    redirect(destino);
+    // H2 (auditoría 24): se aterriza CON la flota en la URL, no solo en la
+    // cookie. El sufijo es el contrato que arrastran el sidebar y todos los
+    // links internos (`sufijo.ts`); llegar sin él dejaba la primera pantalla
+    // dependiendo de una cookie invisible y, si un link se comía el sufijo,
+    // el salto era silencioso. Con `?tenant=` la cinta «viendo como
+    // superadmin · <flota>» sale desde el primer render y la impersonación se
+    // firma por el camino auditado de siempre.
+    redirect(`${destino}${destino.includes('?') ? '&' : '?'}${esDemo ? 'vista=demo' : `tenant=${encodeURIComponent(tenantId)}`}`);
   }
 
   async function quitarSeleccion() {

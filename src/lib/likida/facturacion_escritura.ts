@@ -529,6 +529,25 @@ function traducirErrorDelPago(error: { code?: string; message?: string }, monto:
   return new Error(`registrarPago: ${error.message}`);
 }
 
+/** El rechazo de `cancelar_factura_tx` (0284), en las palabras del contralor.
+ *  `CU016` es el código del RPC de cancelación; `CU010`, factura ajena. */
+const CANCELACION_RECHAZADA = 'CU016';
+function traducirErrorDeCancelacion(error: { code?: string; message?: string }): Error {
+  if (error.code === FACTURA_FUERA_DE_FLOTA) {
+    return new DatoInvalido('Esa factura no está en tu flota. Recarga la pantalla.');
+  }
+  if (error.code === CANCELACION_RECHAZADA) {
+    const motivo = /motivo=([a-z_]+)/.exec(error.message ?? '')?.[1];
+    if (motivo === 'con_pagos') {
+      return new DatoInvalido('Esa factura tiene pagos registrados. Primero aclara ese dinero (con el cliente y con el SAT); cancelarla de un clic dejaría cobros contra nada.');
+    }
+    return new DatoInvalido('Esa factura no se pudo cancelar: puede que ya esté cancelada o pagada. Recarga la pantalla.');
+  }
+  // Base caída, RPC ausente, tope de `acotada`: un error de verdad, no un
+  // rechazo de negocio — no se le dice al contralor que su factura tiene la culpa.
+  return new Error(`cancelarFactura: ${error.message}`);
+}
+
 /**
  * Registra un abono contra una factura EMITIDA.
  *
@@ -614,6 +633,20 @@ export async function registrarPago(
  * ese dinero ya contado tiene que aclararse primero (¿se devuelve? ¿se aplica
  * a otra factura?), y esa decisión no es de un botón.
  *
+ * ── AUDITORÍA 24, BE-3: EL CONTEO Y LA CANCELACIÓN VAN EN LA MISMA TRANSACCIÓN
+ *
+ * Esto eran dos viajes: `count` de `pago_recibido` y después el UPDATE. Entre
+ * los dos cabía un abono —el contador conciliando $10,000 mientras el
+ * contralor pulsaba Cancelar—: `registrar_pago_tx` trababa la factura,
+ * insertaba y la dejaba `emitida` (no saldaba); el UPDATE de aquí la
+ * encontraba `emitida` y cancelaba. $10,000 contra un CFDI que ante el SAT ya
+ * no existe. Es el mismo select-luego-update que `registrarPago` abandonó por
+ * un RPC, y aquí se hace lo mismo: `cancelar_factura_tx` (0284) toma la
+ * factura `for update`, cuenta con la fila trabada y cancela; un abono
+ * concurrente espera y lo rechaza el trigger de la 0284 (la factura ya está
+ * cancelada), o entra antes y entonces el conteo lo ve. La REDACCIÓN sigue
+ * siendo de aquí: la base manda el motivo, este archivo escribe.
+ *
  * ── Y APAGA SU ENLACE PÚBLICO DE PAGO (`c7-7`) ──────────────────────────
  *
  * Cancelar dejaba viva la liga de `/pago/<token>`: el cliente abría el mismo
@@ -622,15 +655,15 @@ export async function registrarPago(
  * Cobrarle a alguien por un CFDI cancelado es lo peor que este producto puede
  * hacer.
  *
- * La revocación va DESPUÉS del cambio de estatus y no antes: si el UPDATE de la
- * factura fallara, habríamos matado el enlace de una factura que sigue viva. Y
- * si la revocación falla, se LANZA —no se traga—, porque el contralor tiene que
+ * La revocación va DESPUÉS del cambio de estatus y no antes: si el RPC
+ * fallara, habríamos matado el enlace de una factura que sigue viva. Y si la
+ * revocación falla, se LANZA —no se traga—, porque el contralor tiene que
  * enterarse de que le quedó un enlace suelto. Aun así, el enlace suelto ya no
  * cobra: `vistaDelPortal` degrada a `no_cobrable` mirando el estatus real. Dos
  * capas, y la de la lectura pública es la que no depende de que esta escritura
  * haya salido bien.
  *
- * El UPDATE se hace aquí con `supabaseAdmin` en vez de llamar a
+ * El UPDATE de las ligas se hace aquí con `supabaseAdmin` en vez de llamar a
  * `revocarLigaPago`: ese verbo vive en `portal_pago_escritura.ts`, que a su vez
  * importa `registrarPago` DE ESTE ARCHIVO. Importarlo de vuelta sería un ciclo
  * entre dos módulos de dinero, y no vale un `import` circular ahorrarse seis
@@ -643,22 +676,11 @@ export async function cancelarFactura(
 ): Promise<void> {
   if (!esUuidValido(facturaId)) throw new DatoInvalido('No se reconoce esa factura. Recarga la pantalla.');
 
-  const { count, error: errP } = await supabaseAdmin().from('pago_recibido')
-    .select('id', { count: 'exact', head: true })
-    .eq('factura_id', facturaId).eq('tenant_id', tenantId);
-  if (errP) throw new Error(`cancelarFactura: no se pudieron contar los pagos: ${errP.message}`);
-  if ((count ?? 0) > 0) {
-    throw new DatoInvalido('Esa factura tiene pagos registrados. Primero aclara ese dinero (con el cliente y con el SAT); cancelarla de un clic dejaría cobros contra nada.');
-  }
-
-  const { data, error } = await acotada(supabaseAdmin().from('factura_emitida')
-    .update({ estatus: 'cancelada' })
-    .eq('id', facturaId).eq('tenant_id', tenantId).in('estatus', ['borrador', 'emitida'])
-    .select('id'), 'cancelarFactura');
-  if (error) throw new Error(`cancelarFactura: ${error.message}`);
-  if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Esa factura no se pudo cancelar: puede que ya esté cancelada o no sea de tu flota. Recarga la pantalla.');
-  }
+  const { error } = await acotada(supabaseAdmin().rpc('cancelar_factura_tx', {
+    p_tenant: tenantId,
+    p_factura: facturaId,
+  }), 'cancelarFactura');
+  if (error) throw traducirErrorDeCancelacion(error);
 
   const { data: ligas, error: errL } = await acotada(supabaseAdmin().from('portal_pago_liga')
     .update({ revocada_en: new Date().toISOString(), revocada_por: actor?.id ?? null })

@@ -17,7 +17,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
   }
   const efectivo = await tenantEfectivoChat(sesion, req.nextUrl.searchParams.get('tenant'));
-  if (!efectivo) return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
+  // AUDITORÍA 24 (auth): `null` con `?tenant=` presente es "no se pudo
+  // verificar la flota" (lectura caída), no "sin permiso" — 503, como
+  // `resolverTenantApi`. Sin `?tenant=` sigue siendo 403 real.
+  if (!efectivo) return NextResponse.json({ error: 'sin acceso' },
+    { status: req.nextUrl.searchParams.get('tenant') ? 503 : 403 });
 
   try {
     const conversaciones = await listarConversaciones(efectivo.tenantId, sesion.userId);

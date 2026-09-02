@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { getViajes, contarEscalados, getEventosConductores } from '@/lib/likida/analytics';
+import { contarEscalados, getEventosConductores } from '@/lib/likida/analytics';
+import { viajesEsperandoAceptarPaginados } from '@/lib/likida/repo_paginado';
 import { acotada } from '@/lib/likida/presupuesto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
@@ -87,7 +88,6 @@ export default async function PaginaAgenteConductores({
   // hasta la carta "Lo que entiende por WhatsApp", que es TEXTO FIJO y no lee
   // nada, esperaba a los cuatro `count` de la flota. Ahora la cáscara sale
   // con el primer flush y cada tarjeta aterriza cuando su consulta contesta.
-  const pViajes = vigilar(getViajes(tenantId));
   const pEscalados = vigilar(contarEscalados(tenantId));
   const pEventos = safe(() => getEventosConductores(tenantId));
   // La ficha de corridas (B3): null = no se pudo leer, y la ficha lo dice.
@@ -110,24 +110,22 @@ export default async function PaginaAgenteConductores({
       ({ vivos, aceptados, esperan, escalados })));
 
   const ahora = ahoraMs();
-  // La cola honesta: avisados que no han dicho que sí (y aún no se escalan).
-  // Sale de los 100 viajes recientes porque "hace N horas" necesita la fila;
-  // `totalEsperan` es el conteo de la flota, y la vista declara la diferencia.
+  // FE-6: la cola honesta ya NO sale de `getViajes(tenantId)` (los 100 viajes
+  // más recientes) filtrada en memoria — a 500 viajes/día eso son ~4.8 h, así
+  // que el viaje avisado hace 6 h (el que el agente escala) ya no estaba en
+  // la ventana. `viajesEsperandoAceptarPaginados` pregunta directo por
+  // `avisado_en not null and aceptado_en is null and escalado_en is null`,
+  // ordenado por antigüedad del aviso — el más urgente primero — con
+  // `count: 'exact'`.
   const pCola: Promise<ColaConductores> = vigilar(
-    Promise.all([pViajes, pEsperan, pSinAvisar]).then(([viajes, totalEsperan, sinAvisar]) => {
-      const vivos = viajes.filter((v) => v.estatus === 'abierto' || v.estatus === 'en_cuadre');
-      const esperan: EsperaAceptar[] = vivos
-        .filter((v) => v.avisadoEn !== null && v.aceptadoEn === null && v.escaladoEn === null)
-        .map((v) => ({
-          id: v.id,
-          folio: v.folio,
-          operadorNombre: v.operadorNombre,
-          horasDesdeAviso: Math.floor((ahora - Date.parse(v.avisadoEn as string)) / 3_600_000),
-          avisos: v.avisosEnviados,
-        }))
-        .sort((a, b) => b.horasDesdeAviso - a.horasDesdeAviso);
-      return { esperan, totalEsperan, sinAvisar };
-    }));
+    Promise.all([viajesEsperandoAceptarPaginados(tenantId, ahora, { porPagina: 20 }), pSinAvisar])
+      .then(([pagina, sinAvisar]) => {
+        const esperan: EsperaAceptar[] = pagina.filas.map((v) => ({
+          id: v.id, folio: v.folio, operadorNombre: v.operadorNombre,
+          horasDesdeAviso: v.horasDesdeAviso, avisos: v.avisosEnviados,
+        }));
+        return { esperan, totalEsperan: pagina.total, sinAvisar, error: pagina.error };
+      }));
 
   async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
     'use server';

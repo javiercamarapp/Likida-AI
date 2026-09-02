@@ -39,18 +39,23 @@ vi.mock('@/lib/supabase/admin', () => ({
       // y cada método queda registrado en `llamadas` para poder asegurar los
       // filtros de fecha (c2-7) sin fingir un PostgREST completo.
       let rango: [number, number] | null = null;
+      // AUDITORÍA 24 (BE-10/BE-31): `limit` también RECORTA, como PostgREST.
+      // Sin esto el mock devolvía las 600 unidades aunque el módulo pidiera
+      // 500, y la prueba del recorte mudo no podía ponerse en rojo.
+      let tope: number | null = null;
       const respuesta = () => {
         const todos = tablas.respuestas.get(tabla) ?? [];
-        if (rango === null) return { data: todos, error: null };
+        if (rango === null) return { data: tope === null ? todos : todos.slice(0, tope), error: null };
         return { data: todos.slice(rango[0], rango[1] + 1), error: null, count: todos.length };
       };
       const api: Record<string, unknown> = {
         upsert: (filas: unknown) => { tablas.upserts.push({ tabla, filas }); return Promise.resolve({ error: null }); },
         maybeSingle: () => Promise.resolve({ data: (tablas.respuestas.get(tabla) ?? [])[0] ?? null, error: null }),
         range: (d: number, h: number) => { rango = [d, h]; return api; },
+        limit: (n: number) => { tope = n; tablas.llamadas.push({ tabla, metodo: 'limit', args: [n] }); return api; },
         then: (res: (v: unknown) => unknown) => Promise.resolve(respuesta()).then(res),
       };
-      for (const m of ['select', 'eq', 'in', 'gte', 'lte', 'neq', 'or', 'not', 'limit', 'order']) {
+      for (const m of ['select', 'eq', 'in', 'gte', 'lte', 'neq', 'or', 'not', 'order']) {
         api[m] = (...args: unknown[]) => { tablas.llamadas.push({ tabla, metodo: m, args }); return api; };
       }
       return api;
@@ -255,6 +260,73 @@ describe('avisarVencimientos — un aviso por umbral, sellado después de mandar
     expect(String(orUnidad?.args[0])).toContain('permiso_sict_vence.gte.2025-08-25');
     expect(String(orUnidad?.args[0])).toContain('verificacion_vence.gte.2025-08-25');
   });
+
+  // ── AUDITORÍA 24 ──────────────────────────────────────────────────────────
+
+  it('BE-10: a 600 unidades, la póliza a 7 días en la posición 550 SÍ entra a candidatos — la lectura no se recorta a 500', async () => {
+    // 549 unidades cuya única fecha en ventana ya venció hace meses (umbral 0,
+    // ya sellado), y en la posición 550 ECO-114 con la póliza a 7 días. Con
+    // `limit(500)` sin `order` ECO-114 no volvía y el latido salía `ok`.
+    const relleno = Array.from({ length: 549 }, (_, i) => ({
+      id: `u-${i}`, tenant_id: 't1', numero_economico: `R-${i}`,
+      poliza_vence: '2026-03-01', permiso_sict_vence: null, verificacion_vence: null,
+    }));
+    tablas.respuestas.set('unidad', [
+      ...relleno,
+      { id: 'eco-114', tenant_id: 't1', numero_economico: 'ECO-114', poliza_vence: '2026-09-02', permiso_sict_vence: null, verificacion_vence: null },
+      ...Array.from({ length: 50 }, (_, i) => ({
+        id: `v-${i}`, tenant_id: 't1', numero_economico: `V-${i}`,
+        poliza_vence: '2026-03-01', permiso_sict_vence: null, verificacion_vence: null,
+      })),
+    ]);
+    tablas.respuestas.set('operador', []);
+    tablas.respuestas.set('flota_poliza', []);
+    // Todos los vencidos ya se avisaron en su momento (sello umbral 0).
+    tablas.respuestas.set('aviso_vigencia', [...relleno.map((u) => ({
+      tenant_id: 't1', objeto: 'unidad', objeto_id: u.id, documento: 'poliza', umbral: 0, vence: '2026-03-01',
+    })), ...Array.from({ length: 50 }, (_, i) => ({
+      tenant_id: 't1', objeto: 'unidad', objeto_id: `v-${i}`, documento: 'poliza', umbral: 0, vence: '2026-03-01',
+    }))]);
+
+    const r = await avisarVencimientos(AHORA);
+    expect(r.candidatos).toBe(600);
+    expect(r.avisados).toBe(1);
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect((sendText.mock.calls[0] as unknown as [string, string])[1]).toContain('ECO-114');
+    // Y las tres lecturas van paginadas con orden único, no topadas a 500.
+    expect(tablas.llamadas.some((l) => l.tabla === 'unidad' && l.metodo === 'limit')).toBe(false);
+    for (const tabla of ['unidad', 'operador', 'flota_poliza']) {
+      expect(tablas.llamadas.some((l) => l.tabla === tabla && l.metodo === 'order' && l.args[0] === 'id')).toBe(true);
+    }
+  });
+
+  it('BE-7: con el reloj vencido no se manda ni se sella — se cuenta como cortado', async () => {
+    tablas.respuestas.set('unidad', [
+      { id: 'u1', tenant_id: 't1', numero_economico: 'C2-08', poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null },
+    ]);
+    tablas.respuestas.set('operador', [{ id: 'o1', tenant_id: 't2', nombre: 'Juan', licencia_vence: '2026-08-30' }]);
+    tablas.respuestas.set('flota_poliza', []);
+    tablas.respuestas.set('aviso_vigencia', []);
+
+    const r = await avisarVencimientos(AHORA, { venceEn: Date.now() - 1 });
+    expect(r.candidatos).toBe(2);
+    expect(r.avisados).toBe(0);
+    expect(r.cortadosPorReloj).toBe(2);
+    expect(sendText).not.toHaveBeenCalled();
+    expect(tablas.upserts).toHaveLength(0);
+  });
+
+  it('BE-7: sin reloj (la Mac, esta suite) el barrido corre hasta el final', async () => {
+    tablas.respuestas.set('unidad', [
+      { id: 'u1', tenant_id: 't1', numero_economico: 'C2-08', poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null },
+    ]);
+    tablas.respuestas.set('operador', []);
+    tablas.respuestas.set('flota_poliza', []);
+    tablas.respuestas.set('aviso_vigencia', []);
+    const r = await avisarVencimientos(AHORA, { venceEn: Date.now() + 60_000 });
+    expect(r.avisados).toBe(1);
+    expect(r.cortadosPorReloj).toBe(0);
+  });
 });
 
 describe('avisarRelojesLegales — los relojes colgados de una incidencia', () => {
@@ -320,7 +392,7 @@ describe('avisarRelojesLegales — los relojes colgados de una incidencia', () =
 
   it('una incidencia ya sellada no vuelve a avisar', async () => {
     tablas.respuestas.set('incidencia', [inc('bloqueo')]);
-    tablas.respuestas.set('incidencia_evento', [{ id: 'e1' }]); // el sello existe
+    tablas.respuestas.set('incidencia_evento', [{ id: 'e1', incidencia_id: 'i1', tenant_id: 't1' }]); // el sello existe
 
     const r = await avisarRelojesLegales(new Date('2026-08-26T18:00:00Z'));
     expect(r.avisadas).toBe(0);
@@ -335,6 +407,52 @@ describe('avisarRelojesLegales — los relojes colgados de una incidencia', () =
 
     const r = await avisarRelojesLegales(new Date('2026-08-26T18:00:00Z'));
     expect(r.avisadas).toBe(0);
+    expect(anotarEventoIncidencia).not.toHaveBeenCalled();
+  });
+
+  // ── AUDITORÍA 24 ──────────────────────────────────────────────────────────
+
+  it('BE-31: 130 incidencias en 72 h con 100 ya selladas — las 30 nuevas se revisan y avisan', async () => {
+    // Con `limit(100)` sin `order` y el sello comprobado una por una, las 100
+    // selladas gastaban las ranuras y las 30 nuevas salían de la ventana en
+    // tres días sin aviso, con `revisadas = 100` y latido `ok`.
+    const selladas = Array.from({ length: 100 }, (_, i) => inc('bloqueo', { id: `s-${i}` }));
+    const nuevas = Array.from({ length: 30 }, (_, i) => inc('bloqueo', { id: `n-${i}` }));
+    tablas.respuestas.set('incidencia', [...selladas, ...nuevas]);
+    // El sello trae SU flota: el anti-join casa por el par (flota, incidencia).
+    tablas.respuestas.set('incidencia_evento', selladas.map((s) => ({ id: `e-${s.id}`, incidencia_id: s.id, tenant_id: s.tenant_id })));
+    tablas.respuestas.set('viaje', [{ folio: 'V-9' }]);
+
+    const r = await avisarRelojesLegales(new Date('2026-08-26T18:00:00Z'));
+    expect(r.revisadas).toBe(30);
+    expect(r.avisadas).toBe(30);
+    expect(sendText).toHaveBeenCalledTimes(30);
+    // La lectura va paginada con orden único, no topada a 100.
+    expect(tablas.llamadas.some((l) => l.tabla === 'incidencia' && l.metodo === 'limit')).toBe(false);
+    expect(tablas.llamadas.some((l) => l.tabla === 'incidencia' && l.metodo === 'order' && l.args[0] === 'abierta_en')).toBe(true);
+  });
+
+  it('BE-31: el sello de OTRA flota no descuenta a la incidencia homónima de la mía', async () => {
+    tablas.respuestas.set('incidencia', [inc('bloqueo', { id: 'i-9', tenant_id: 't1' })]);
+    tablas.respuestas.set('incidencia_evento', [{ id: 'e-1', incidencia_id: 'i-9', tenant_id: 't-otra' }]);
+    tablas.respuestas.set('viaje', [{ folio: 'V-9' }]);
+
+    const r = await avisarRelojesLegales(new Date('2026-08-26T18:00:00Z'));
+
+    expect(r.revisadas).toBe(1);
+    expect(r.avisadas).toBe(1);
+  });
+
+  it('BE-7: con el reloj vencido ninguna incidencia se avisa ni se sella, y se cuentan las cortadas', async () => {
+    tablas.respuestas.set('incidencia', [inc('bloqueo', { id: 'a' }), inc('bloqueo', { id: 'b' })]);
+    tablas.respuestas.set('incidencia_evento', []);
+    tablas.respuestas.set('viaje', [{ folio: 'V-9' }]);
+
+    const r = await avisarRelojesLegales(new Date('2026-08-26T18:00:00Z'), { venceEn: Date.now() - 1 });
+    expect(r.revisadas).toBe(2);
+    expect(r.avisadas).toBe(0);
+    expect(r.cortadasPorReloj).toBe(2);
+    expect(sendText).not.toHaveBeenCalled();
     expect(anotarEventoIncidencia).not.toHaveBeenCalled();
   });
 });

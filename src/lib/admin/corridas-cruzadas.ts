@@ -95,6 +95,64 @@ export async function corridasRecientes(limite = 15): Promise<CorridaCruzada[]> 
   return ((data ?? []) as Array<Record<string, unknown>>).map(desdeFila);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ADM-10 (auditoría 24, MEDIO) — /admin/corridas pintaba las últimas 50 SIN
+// filtro ni paginación. Con 58 agentes despachando por cron/webhook, triage
+// de fallos ("¿qué le pasó a Cobranza hoy?") era desplazarse a ojo entre
+// filas de todo lo demás. `corridasFiltradas` es el mismo patrón que
+// `buscarConversaciones` (ADM-1): filtros opcionales + `count: 'exact'` real
+// (nunca `.length` de una página) + `range` para no traer la tabla entera.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const CORRIDAS_POR_PAGINA = 50;
+
+export interface PaginaCorridas {
+  corridas: CorridaCruzada[];
+  pagina: number;
+  paginas: number;
+  total: number;
+}
+
+/** El dominio real de `agente_corrida.estado` (CHECK de la 0102) — el mismo
+ *  que ya pinta `PILL` en la página. */
+export const ESTADOS_CORRIDA = ['ok', 'parcial', 'fallo'] as const;
+
+export async function corridasFiltradas(params: {
+  agente?: string;
+  estado?: string;
+  tenantId?: string;
+  pagina?: number;
+} = {}): Promise<PaginaCorridas> {
+  const porPagina = CORRIDAS_POR_PAGINA;
+  const paginaPedida = Math.trunc(params.pagina ?? 1);
+  const pagina = Number.isFinite(paginaPedida) && paginaPedida >= 1 ? paginaPedida : 1;
+
+  let consulta = supabaseAdmin()
+    .from('agente_corrida')
+    .select(COLUMNAS, { count: 'exact' })
+    .order('inicio', { ascending: false })
+    .order('id'); // desempata `inicio` repetido entre páginas
+  if (params.agente) consulta = consulta.eq('agente', params.agente);
+  if (params.estado && (ESTADOS_CORRIDA as readonly string[]).includes(params.estado)) {
+    consulta = consulta.eq('estado', params.estado);
+  }
+  if (params.tenantId) consulta = consulta.eq('tenant_id', params.tenantId);
+
+  const desde = (pagina - 1) * porPagina;
+  const { data, error, count } = await acotada(
+    consulta.range(desde, desde + porPagina - 1), 'corridasFiltradas',
+  );
+  if (error) throw new Error(`corridasFiltradas: ${error.message}`);
+  const total = count ?? 0;
+  const paginas = Math.max(1, Math.ceil(total / porPagina));
+  return {
+    corridas: ((data ?? []) as Array<Record<string, unknown>>).map(desdeFila),
+    pagina: Math.min(pagina, paginas),
+    paginas,
+    total,
+  };
+}
+
 export interface CostoVentana {
   llamadas: number;
   tokensIn: number;

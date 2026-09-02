@@ -1,4 +1,4 @@
-import { getResumenNegocio } from '@/lib/admin/negocio';
+import { getResumenNegocio, getMrr } from '@/lib/admin/negocio';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { DollarSign, Truck, CheckCircle2, Presentation } from 'lucide-react';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -8,10 +8,10 @@ import { KpiTile } from '../ui/kit';
 export const dynamic = 'force-dynamic';
 
 /**
- * Ejecutivo / Board — la vista para junta directiva. El MRR es el mismo $0
- * real de Inicio (no un número distinto vestido para el board: es el mismo
- * hecho verdadero visto desde otra perspectiva). Debajo, los únicos tres
- * KPIs que SÍ existen con datos reales: gasto en IA, flotas y viajes
+ * Ejecutivo / Board — la vista para junta directiva. El MRR es el MISMO real
+ * de Inicio (`getMrr()`, no un número distinto vestido para el board: es el
+ * mismo hecho verdadero visto desde otra perspectiva). Debajo, los únicos
+ * tres KPIs que SÍ existen con datos reales: gasto en IA, flotas y viajes
  * procesados. Todo lo que un board típico esperaría — ARR, burn, runway,
  * magic number, LTV/CAC — requiere datos financieros que este panel no
  * captura hoy, así que se dice en tono neutral, sin inventar ni disculparse.
@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic';
  * antes era el subtítulo del header.
  */
 export default async function EjecutivoPage() {
-  const r = await getResumenNegocio();
+  const [r, mrr] = await Promise.all([getResumenNegocio(), getMrr()]);
   const chipsCosto = r.porDia.slice(-8).map((d) => d.costoUsd);
   // AUDITORÍA 10, ALTO — mismo texto fijo de `admin/page.tsx`: "solo el
   // demo" se comprueba contra el id real, no se asume porque el conteo dé 1.
@@ -41,7 +41,9 @@ export default async function EjecutivoPage() {
             <p className="text-sm" style={{ color: 'var(--muted)' }}>
               Cifras reales de Likida, sin proyección ni relleno.
             </p>
-            <ContadorRetro valor={0} digitos={7} prefijo="$" etiqueta="MRR — meta $1,000,000" tamaño="lg" />
+            <ContadorRetro valor={mrr.totalMxn} digitos={7} prefijo="$" etiqueta="MRR — meta $1,000,000" tamaño="lg"
+              sinDato="algún plan activo sin precio configurado"
+            />
           </div>
 
           <section>

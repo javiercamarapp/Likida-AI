@@ -10,6 +10,7 @@ import { randomUUID } from 'crypto';
 import { idLiquidacionDeViaje } from '@/lib/likida/liquidacion/id';
 import { registerTool, type ToolContext } from '@/lib/llm/tool-executor';
 import { cuadrarDesdeDB } from './cuadre/desde_db';
+import { copiasDeComprobante } from './cuadre/engine';
 import { estaApagado } from './interruptores';
 import { registrarCorrida } from './agentes/corridas';
 import { getViaje, getOperador, saveLiquidacion, conteoDeGastosCambio } from './repo';
@@ -93,7 +94,7 @@ registerTool('estado_viaje', {
     type: 'function',
     function: {
       name: 'estado_viaje',
-      description: 'El estado actual del viaje del operador: origen/destino, anticipo, total comprobado, desglose por concepto y litros de diésel leídos. Solo lectura — para dudas del chofer en ruta.',
+      description: 'El estado actual del viaje del operador: origen/destino, anticipo, total comprobado (con la MISMA regla del cuadre: una foto repetida del mismo comprobante no se cuenta — `copias_excluidas` dice cuántas), desglose por concepto y litros de diésel leídos. Solo lectura — para dudas del chofer en ruta.',
       parameters: { type: 'object', properties: {}, additionalProperties: false },
     },
   },
@@ -102,29 +103,59 @@ registerTool('estado_viaje', {
     const admin = supabaseAdmin();
     const [rViaje, rGastos] = await Promise.all([
       admin.from('viaje').select('origen, destino, anticipo, estatus').eq('id', ctx.viajeId).eq('tenant_id', ctx.tenantId).maybeSingle(),
-      admin.from('gasto').select('concepto, monto, ocr_extra').eq('viaje_id', ctx.viajeId).eq('tenant_id', ctx.tenantId),
+      admin.from('gasto').select('id, concepto, monto, folio, folio_norm, cfdi_uuid, cfdi_orden, ocr_extra').eq('viaje_id', ctx.viajeId).eq('tenant_id', ctx.tenantId).order('id'),
     ]);
     // Fallar cerrado: un error de lectura NO se convierte en "cero gastos".
     if (rViaje.error) throw new Error(`estado_viaje/viaje: ${rViaje.error.message}`);
     if (rGastos.error) throw new Error(`estado_viaje/gastos: ${rGastos.error.message}`);
     if (!rViaje.data) return { error: 'viaje_no_encontrado' };
+
+    // ── AUDITORÍA 24, TC-1 (ALTO, 3ª ronda): LA MISMA REGLA DE CUBETAS QUE EL MOTOR
+    // Esta tool sumaba `monto` de CADA fila de `gasto` y contaba cada fila como
+    // comprobante; el motor (`cuadrarViaje`) excluye las copias del mismo
+    // comprobante —por `(uuid, orden)` o por concepto+folioNorm+monto,
+    // `copiasDeComprobante`— y los montos que no son > 0. Con el protocolo de
+    // dos fotos (ticket + acercamiento) y el voucher que sale junto al ticket,
+    // las copias son el flujo normal, no el caso raro: el chofer que escribía
+    // "hola" leía "llevas 4 comprobantes por $25,443" de un anticipo de
+    // $12,000 y al cerrar el PDF decía $9,681. Dos "comprobado" del mismo
+    // viaje. Aquí se usa EXACTAMENTE el predicado exportado del motor, no una
+    // copia de la regla, para que las dos cifras no puedan volver a separarse.
+    const gastos = (rGastos.data ?? []).map((g) => ({
+      id: String(g.id),
+      concepto: g.concepto,
+      monto: typeof g.monto === 'number' ? g.monto : Number(g.monto ?? 0),
+      folio: (g.folio as string | null) || undefined,
+      folioNorm: (g.folio_norm as string | null) || undefined,
+      cfdiUuid: (g.cfdi_uuid as string | null) || undefined,
+      cfdiOrden: g.cfdi_orden != null ? Number(g.cfdi_orden) : undefined,
+      ocrExtra: (g.ocr_extra as Record<string, unknown> | null) ?? undefined,
+    }));
+    const copias = copiasDeComprobante(gastos);
     const porConcepto = new Map<string, { total: number; n: number }>();
     let comprobado = 0;
+    let comprobantes = 0;
     let litrosDiesel = 0;
-    for (const g of rGastos.data ?? []) {
-      const monto = typeof g.monto === 'number' ? g.monto : 0;
-      comprobado += monto;
+    for (const g of gastos) {
+      // Misma regla que `totalComprobado` en engine.ts: ni copias ni montos <= 0.
+      if (copias.has(g.id) || !(g.monto > 0)) continue;
+      comprobado += g.monto;
+      comprobantes += 1;
       const c = porConcepto.get(g.concepto) ?? { total: 0, n: 0 };
-      c.total += monto; c.n += 1;
+      c.total += g.monto; c.n += 1;
       porConcepto.set(g.concepto, c);
-      // Los litros SOLO si el OCR los leyó — jamás se estiman de pesos.
-      const litros = (g.ocr_extra as Record<string, unknown> | null)?.litros;
+      // Los litros SOLO si el OCR los leyó — jamás se estiman de pesos — y
+      // solo del gasto ORIGINAL: la copia del mismo ticket no cargó diésel dos veces.
+      const litros = g.ocrExtra?.litros;
       if (g.concepto === 'diesel' && typeof litros === 'number' && Number.isFinite(litros)) litrosDiesel += litros;
     }
     return {
       origen: rViaje.data.origen, destino: rViaje.data.destino,
       estatus: rViaje.data.estatus, anticipo: rViaje.data.anticipo,
-      comprobado, comprobantes: (rGastos.data ?? []).length,
+      comprobado, comprobantes,
+      // Para que el modelo pueda decir "una foto repetida no se cuenta" en vez
+      // de un número que el PDF después desmiente.
+      copias_excluidas: copias.size,
       por_concepto: [...porConcepto.entries()].map(([concepto, v]) => ({ concepto, total: v.total, n: v.n })),
       litros_diesel_leidos: litrosDiesel > 0 ? litrosDiesel : null,
     };

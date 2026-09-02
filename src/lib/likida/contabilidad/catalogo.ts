@@ -124,3 +124,48 @@ export function armarCatalogo(declarado: Record<string, unknown>): CatalogoConta
   return catalogo;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24 · ARQ-3 (ALTO, NUEVO) — el mismo catálogo tenía dos lectores
+// con dos verdades: este archivo lee el override CRUDO (a propósito, ver la
+// cabecera) y `/dashboard/configuracion` leía `getConfig()`, que FUSIONA
+// `DEMO_CONFIG`. Resultado: el textarea llegaba prellenado con `600-001`…
+// `600-099` —cuentas marcadas 🔴 demo— sin marca de que no eran de la flota, y
+// el primer «Guardar» de CUALQUIER ajuste operativo las escribía en
+// `tenant.config.catalogoCuentas` como DECLARADAS. A partir de ahí el export
+// de póliza las asienta en el ERP del cliente. «Una cuenta inventada no se
+// detecta al importar — se detecta en la auditoría del año siguiente».
+//
+// Éste es el lector que la pantalla necesitaba: el MISMO crudo, sin pasar por
+// `armarCatalogo`, para que una llave que el contador se dejó de nota (o una
+// cuenta de balance nueva) sobreviva el viaje de ida y vuelta por el textarea.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * `concepto=cuenta` tal como ESTA flota lo declaró, para prellenar la pantalla.
+ *
+ * `null` = no declaró NADA (o lo guardado no es un mapa de textos): el textarea
+ * va vacío y la pantalla lo dice. Nunca devuelve defaults — heredar cuentas de
+ * la demo es exactamente el defecto que esto cierra.
+ */
+export function cuentasDeclaradasDe(crudo: unknown): Record<string, string> | null {
+  if (!crudo || typeof crudo !== 'object' || Array.isArray(crudo)) return null;
+  const salida: Record<string, string> = {};
+  for (const [llave, valor] of Object.entries(crudo as Record<string, unknown>)) {
+    if (typeof valor !== 'string') continue;
+    const cuenta = valor.trim();
+    const c = llave.trim();
+    if (c === '' || cuenta === '') continue;
+    salida[c] = cuenta;
+  }
+  return Object.keys(salida).length === 0 ? null : salida;
+}
+
+/** Lo mismo, contra la base. Falla cerrado: una lectura caída NO es «vacío». */
+export async function cuentasDeclaradas(tenantId: string): Promise<Record<string, string> | null> {
+  const { data, error } = await acotada(
+    supabaseAdmin().from('tenant').select('config').eq('id', tenantId).maybeSingle(),
+    'contabilidad.catalogo',
+  );
+  if (error) throw new Error(`cuentasDeclaradas: ${error.message}`);
+  return cuentasDeclaradasDe((data?.config as { catalogoCuentas?: unknown } | null)?.catalogoCuentas);
+}

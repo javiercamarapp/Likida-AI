@@ -1,10 +1,16 @@
-import { getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES } from '@/lib/admin/negocio';
-import { MessageCircle, MessagesSquare, ChevronDown } from 'lucide-react';
+import Link from 'next/link';
+import {
+  getConversacionesActivas, contarConversacionesActivas, buscarConversaciones, TOPE_CONVERSACIONES,
+  type ConversacionActiva,
+} from '@/lib/admin/negocio';
+import { MessageCircle, MessagesSquare, ChevronDown, Search } from 'lucide-react';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { HBars } from '../ui/graficas';
 import { ChartCard, EstadoVacio, KpiTile } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
+
+interface SearchParams { q?: string; p?: string }
 
 /**
  * Conversaciones de WhatsApp — versión dedicada y de ancho completo de la
@@ -18,7 +24,48 @@ export const dynamic = 'force-dynamic';
  * (--g1); cada conversación es una lámina --surface con hairline dentro de
  * la tarjeta, el mismo material que usa la sección gemela de consola.tsx.
  */
-export default async function ConversacionesPage() {
+export default async function ConversacionesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const sp = await searchParams;
+  // ADM-1: sin `?q=` se conserva la vista de siempre (las 20 más recientes,
+  // con las tarjetas y el ranking). CON `?q=` se cambia a `buscarConversaciones`
+  // — búsqueda por teléfono con paginación real (`count exact`), porque las 20
+  // más recientes rotan en minutos con cientos de choferes y no sirven para
+  // encontrar UN teléfono concreto.
+  const q = (sp.q ?? '').trim();
+  const pagina = Math.max(1, Number.parseInt(sp.p ?? '1', 10) || 1);
+
+  if (q) {
+    const resultado = await buscarConversaciones({ q, pagina });
+    return (
+      <main className="h-full">
+        <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
+          <BarraPagina
+            icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
+            titulo="Conversaciones de WhatsApp"
+          />
+          <div className="px-5 py-5 flex-1 space-y-2.5">
+            <CajaBusqueda q={q} />
+            <div className="card p-3">
+              <TituloSeccion>
+                {`"${q}" — ${resultado.total} conversación${resultado.total === 1 ? '' : 'es'}, página ${resultado.pagina} de ${resultado.paginas}`}
+              </TituloSeccion>
+              {resultado.filas.length === 0 ? (
+                <div className="mt-2">
+                  <EstadoVacio icono={<Search width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+                    Ningún teléfono contiene &quot;{q}&quot;.
+                  </EstadoVacio>
+                </div>
+              ) : (
+                <ListaConversaciones conversaciones={resultado.filas} />
+              )}
+              <PaginadorConversaciones q={q} pagina={resultado.pagina} paginas={resultado.paginas} />
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   // FE-9: `getConversacionesActivas` devuelve 20 — un TOPE. El KPI de arriba
   // lo pintaba como "Conversaciones activas: 20" y con 4,000 vivas seguía
   // diciendo 20. El total sale de un `count exact` aparte; `null` = no se
@@ -38,6 +85,8 @@ export default async function ConversacionesPage() {
         />
 
         <div className="px-5 py-5 flex-1 space-y-2.5">
+          <CajaBusqueda q="" />
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <KpiTile
               icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
@@ -72,36 +121,7 @@ export default async function ConversacionesPage() {
                 </EstadoVacio>
               </div>
             ) : (
-              <div className="space-y-1.5 mt-2">
-                {conversaciones.map((c) => (
-                  <details key={`${c.tenantId ?? "sin-flota"}-${c.telefono}`} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
-                    <summary className="px-3 py-2.5 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[var(--canvas)] transition-colors">
-                      <div>
-                        <div className="text-sm font-medium">{c.telefono}</div>
-                        <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{c.tenantNombre}</div>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--muted)' }}>
-                        {c.turns.length > 0 ? `${c.turns.length} mensajes` : 'sin mensajes'}
-                        <ChevronDown width={14} height={14} className="transition-transform group-open:rotate-180" />
-                      </div>
-                    </summary>
-                    {c.turns.length > 0 && (
-                      <div className="px-3 pb-3 pt-1 space-y-2 border-t" style={{ borderColor: 'var(--line2)' }}>
-                        {c.turns.map((t, i) => (
-                          <div key={i} className={`flex ${t.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                            <div className="max-w-[80%] px-3.5 py-2 rounded-xl text-sm whitespace-pre-wrap"
-                              style={t.role === 'user'
-                                ? { background: 'var(--canvas)', border: '1px solid var(--line2)' }
-                                : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                              {t.content}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </details>
-                ))}
-              </div>
+              <ListaConversaciones conversaciones={conversaciones} />
             )}
           </div>
 
@@ -113,5 +133,98 @@ export default async function ConversacionesPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+/**
+ * Formulario GET — sin JS, sin action de servidor. `?q=` se resuelve en
+ * `ConversacionesPage` con `buscarConversaciones` (ADM-1). El detalle de
+ * cada fila enlaza a `/admin/conversaciones/[tenant]/[telefono]`.
+ */
+function CajaBusqueda({ q }: { q: string }) {
+  return (
+    <form className="card p-3 flex items-center gap-2" method="GET">
+      <Search width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} className="shrink-0" />
+      <input
+        type="text" name="q" defaultValue={q} placeholder="Buscar por teléfono…"
+        className="flex-1 bg-transparent text-sm outline-none"
+        style={{ color: 'var(--ink)' }}
+      />
+      <button type="submit" className="text-xs px-2.5 py-1.5 rounded-lg hairline" style={{ color: 'var(--muted)' }}>
+        Buscar
+      </button>
+      {q && (
+        <Link href="/admin/conversaciones" className="text-xs px-2.5 py-1.5 rounded-lg hairline" style={{ color: 'var(--muted)' }}>
+          Limpiar
+        </Link>
+      )}
+    </form>
+  );
+}
+
+/** La lista de conversaciones — cada fila enlaza al detalle cuando se conoce
+ *  el tenant (siempre, salvo la fila rara sin `tenant_id`). */
+function ListaConversaciones({ conversaciones }: { conversaciones: ConversacionActiva[] }) {
+  return (
+    <div className="space-y-1.5 mt-2">
+      {conversaciones.map((c) => {
+        const fila = (
+          <>
+            <div>
+              <div className="text-sm font-medium">{c.telefono}</div>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{c.tenantNombre}</div>
+            </div>
+            <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--muted)' }}>
+              {c.turns.length > 0 ? `${c.turns.length} mensajes` : 'sin mensajes'}
+              <ChevronDown width={14} height={14} className="transition-transform group-open:rotate-180" />
+            </div>
+          </>
+        );
+        return (
+          <details key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
+            <summary className="px-3 py-2.5 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[var(--canvas)] transition-colors">
+              {fila}
+            </summary>
+            {c.turns.length > 0 && (
+              <div className="px-3 pb-3 pt-1 space-y-2 border-t" style={{ borderColor: 'var(--line2)' }}>
+                {c.turns.map((t, i) => (
+                  <div key={i} className={`flex ${t.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                    <div className="max-w-[80%] px-3.5 py-2 rounded-xl text-sm whitespace-pre-wrap"
+                      style={t.role === 'user'
+                        ? { background: 'var(--canvas)', border: '1px solid var(--line2)' }
+                        : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+                      {t.content}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {c.tenantId && (
+              <div className="px-3 pb-2.5">
+                <Link href={`/admin/conversaciones/${c.tenantId}/${encodeURIComponent(c.telefono)}`}
+                  className="text-xs" style={{ color: 'var(--marca)' }}>
+                  Abrir en su propia página →
+                </Link>
+              </div>
+            )}
+          </details>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Paginador de la búsqueda por teléfono — enlaces GET simples, `?q=&p=`. */
+function PaginadorConversaciones({ q, pagina, paginas }: { q: string; pagina: number; paginas: number }) {
+  if (paginas <= 1) return null;
+  const href = (p: number) => `/admin/conversaciones?q=${encodeURIComponent(q)}&p=${p}`;
+  return (
+    <div className="flex items-center justify-between mt-3 text-xs" style={{ color: 'var(--muted)' }}>
+      <span>Página {pagina} de {paginas}</span>
+      <div className="flex gap-2">
+        {pagina > 1 && <Link href={href(pagina - 1)} className="hairline rounded-lg px-2.5 py-1.5">Anterior</Link>}
+        {pagina < paginas && <Link href={href(pagina + 1)} className="hairline rounded-lg px-2.5 py-1.5">Siguiente</Link>}
+      </div>
+    </div>
   );
 }

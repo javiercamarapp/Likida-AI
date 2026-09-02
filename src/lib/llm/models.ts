@@ -224,3 +224,39 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
   transcripcion: { temperature: 0 },          // se escribe lo que se oye, no se redacta
   contador: { temperature: 0 },               // una opinión fiscal no se improvisa
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COSTOS UNITARIOS PARA DIMENSIONAR TOPES (auditoría 24, TC-N1 / WA-1 / ARQ-2).
+//
+// Son las cifras que este mismo archivo y `docs/escala-15k.md` ya citan en
+// prosa; aquí viven como números para que un tope se DERIVE de ellas en vez
+// de copiarlas a mano. No son precios de proveedor (eso es `PRICES` en
+// openrouter.ts): son lo que una operación completa le cuesta al tenant.
+//
+//   · `comprobanteOcr`  medido el 4-ago-2026 contra 18 comprobantes reales con
+//                       `gemini-3.1-flash-lite` (arriba, rol `ocr`): $0.0015-0.0016.
+//   · `liquidacion`     la banda alta de la arquitectura (jul-2026, cabecera):
+//                       $0.03-0.05 por liquidación con Sonnet en el cuadre.
+//   · `fotosPorViaje`   el supuesto central de escala-15k.md (2-4 fotos/viaje).
+//   · `viajeCompleto`   cuadre + OCR de sus fotos: lo que cuesta liquidar UN
+//                       viaje de punta a punta. Con 500 viajes/día son ~$27,
+//                       que es justo la cifra con la que la auditoría 24 mostró
+//                       que el techo global de $5/día se agotaba a media mañana.
+//   · `corridaAgenteSinMedir`  lo que se le CARGA a una corrida de agente de
+//                       fondo cuyo proveedor omitió `usage` (ARQ-2/AGB-9): un
+//                       costo no medido no es cero, y el techo diario tiene que
+//                       contarla con algo. Es la banda alta de una liquidación
+//                       —la llamada más cara del repo— a propósito: sobreestimar
+//                       corta antes; subestimar deja gastar sin freno.
+// ═══════════════════════════════════════════════════════════════════════════
+const COMPROBANTE_OCR_USD = 0.0016;
+const LIQUIDACION_USD = 0.05;
+const FOTOS_POR_VIAJE = 3;
+
+export const COSTO_ESTIMADO_USD = {
+  comprobanteOcr: COMPROBANTE_OCR_USD,
+  liquidacion: LIQUIDACION_USD,
+  fotosPorViaje: FOTOS_POR_VIAJE,
+  viajeCompleto: Number((LIQUIDACION_USD + FOTOS_POR_VIAJE * COMPROBANTE_OCR_USD).toFixed(6)),
+  corridaAgenteSinMedir: LIQUIDACION_USD,
+} as const;

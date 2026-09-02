@@ -179,6 +179,8 @@ describe('listarLlavesApi — la lista dice la verdad o dice que falló', () => 
     expect(r[0]).toEqual({
       id: 'l-2', nombre: 'TMS propio', prefijo: 'lk_live_abc123', area: 'administracion',
       creadaEn: '2026-08-14T10:00:00Z', ultimoUsoEn: null, revocadaEn: null,
+      // Una llave anterior a la 0294 no trae `expira_en`: no caduca (SEG-8).
+      expiraEn: null,
     });
     expect(r[1].revocadaEn).toBe('2026-08-12T08:00:00Z');
 
@@ -193,4 +195,74 @@ describe('listarLlavesApi — la lista dice la verdad o dice que falló', () => 
     respuestas.set('tenant_api_key', { data: null, error: { message: 'fetch failed' } });
     await expect(listarLlavesApi(TENANT)).rejects.toThrow(/listarLlavesApi: fetch failed/);
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SEG-8 (auditoría 24, columna `expira_en` de la 0294) — LAS LLAVES CADUCAN.
+//
+// Una llave de área `administracion` filtrada en el repo del TMS del cliente
+// servía para siempre. Ahora la emisión pide vigencia, con un año por default;
+// «sin caducidad» sigue existiendo pero como decisión elegida, no como el
+// único camino. Que el camino CALIENTE rechace una vencida se prueba en
+// `llave-api.test.ts`; que la base impida emitirla ya muerta, en el bloque 242.
+// ═══════════════════════════════════════════════════════════════════════════
+const { expiraEnDesdeVigencia, llaveVencida, VIGENCIA_DEFAULT } = await import('./llave-api-escritura');
+
+describe('la vigencia que se elige al emitir', () => {
+  const AHORA = Date.parse('2026-09-01T12:00:00Z');
+
+  it('90 días, 1 año y 2 años se convierten en la fecha exacta que la pantalla promete', () => {
+    expect(expiraEnDesdeVigencia('90', AHORA)).toBe(new Date(AHORA + 90 * 86_400_000).toISOString());
+    expect(expiraEnDesdeVigencia('365', AHORA)).toBe(new Date(AHORA + 365 * 86_400_000).toISOString());
+    expect(expiraEnDesdeVigencia('730', AHORA)).toBe(new Date(AHORA + 730 * 86_400_000).toISOString());
+  });
+
+  it('solo el valor EXPLÍCITO «nunca» deja la llave sin caducidad', () => {
+    expect(expiraEnDesdeVigencia('nunca', AHORA)).toBeNull();
+  });
+
+  it('un POST sin vigencia cae al DEFAULT (un año), no a «nunca»: quien no elige no está pidiendo una llave eterna', () => {
+    expect(expiraEnDesdeVigencia(undefined, AHORA)).toBe(expiraEnDesdeVigencia(VIGENCIA_DEFAULT, AHORA));
+    expect(expiraEnDesdeVigencia('', AHORA)).toBe(expiraEnDesdeVigencia(VIGENCIA_DEFAULT, AHORA));
+    expect(expiraEnDesdeVigencia('   ', AHORA)).toBe(expiraEnDesdeVigencia(VIGENCIA_DEFAULT, AHORA));
+  });
+
+  it.each(['0', '-30', '3651', '1.5', 'siempre', 'null'])(
+    'una vigencia inventada (%s) se rechaza con mensaje de captura, no se interpreta',
+    (v) => {
+      expect(() => expiraEnDesdeVigencia(v, AHORA)).toThrow(DatoInvalido);
+    });
+
+  it('emitir manda `expira_en` en el INSERT y lo devuelve para que la pantalla lo diga', async () => {
+    respuestas.set('tenant_api_key', { data: { id: 'l-9' }, error: null });
+    const r = await crearLlaveApi(TENANT, { nombre: 'TMS propio', area: 'operacion', vigencia: '90' });
+    const insert = llamadas.find((l) => l.op === 'insert');
+    const payload = insert!.payload as Record<string, unknown>;
+    expect(typeof payload.expira_en).toBe('string');
+    expect(r.expiraEn).toBe(payload.expira_en);
+    // Y la llave en claro SIGUE sin entrar a la fila.
+    expect(JSON.stringify(payload)).not.toContain(r.enClaro);
+  });
+
+  it('emitir SIN caducidad manda null explícito', async () => {
+    respuestas.set('tenant_api_key', { data: { id: 'l-10' }, error: null });
+    const r = await crearLlaveApi(TENANT, { nombre: 'ERP eterno', area: 'operacion', vigencia: 'nunca' });
+    expect((llamadas.find((l) => l.op === 'insert')!.payload as Record<string, unknown>).expira_en).toBeNull();
+    expect(r.expiraEn).toBeNull();
+  });
+
+  it('una vigencia inválida NO llega a insertar nada: se rechaza antes de generar la llave', async () => {
+    await expect(crearLlaveApi(TENANT, { nombre: 'X', area: 'operacion', vigencia: 'siempre' }))
+      .rejects.toBeInstanceOf(DatoInvalido);
+    expect(llamadas.filter((l) => l.op === 'insert')).toHaveLength(0);
+  });
+});
+
+describe('llaveVencida — el mismo criterio que usa el camino caliente', () => {
+  const AHORA = Date.parse('2026-09-01T12:00:00Z');
+  it('null no vence nunca', () => expect(llaveVencida(null, AHORA)).toBe(false));
+  it('una fecha futura no ha vencido', () => expect(llaveVencida('2026-12-01T00:00:00Z', AHORA)).toBe(false));
+  it('una fecha pasada sí', () => expect(llaveVencida('2026-08-31T00:00:00Z', AHORA)).toBe(true));
+  it('el instante exacto ya cuenta como vencida (se cierra, no se abre)', () =>
+    expect(llaveVencida('2026-09-01T12:00:00Z', AHORA)).toBe(true));
 });

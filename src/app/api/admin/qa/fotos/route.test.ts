@@ -76,3 +76,31 @@ describe('PATCH — la puerta de origen (auditoría 21, BAJO-MEDIO)', () => {
     expect(confirmarVerdadTerreno).toHaveBeenCalledTimes(1);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24, BE-25 — el rótulo prometía 120 MB por lote sobre un runtime
+// que corta el cuerpo en 4.5 MB ANTES de que la ruta exista: el lote moría con
+// el 413 de la plataforma, sin nuestro texto y sin una línea de log. Un número
+// que la plataforma no respeta no es un tope, es una promesa falsa.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('BE-25 — el tope del lote es el que la plataforma respeta', () => {
+  it('REPRO: un lote que declara 8 MB se rechaza con NUESTRO texto, sin leerlo', async () => {
+    const form = new FormData();
+    form.set('archivo', new File(['x'], 'ticket.jpg', { type: 'image/jpeg' }));
+    const r = await POST(new Request('https://app.likida.ai/api/admin/qa/fotos', {
+      method: 'POST',
+      headers: { 'sec-fetch-site': 'same-origin', 'content-length': String(8 * 1024 * 1024) },
+      body: form,
+    }));
+
+    expect(r.status).toBe(413);
+    const j = await r.json() as { error: string };
+    expect(j.error).toContain('4 MB');
+    expect(j.error).not.toContain('120');
+    expect(subirFotos).not.toHaveBeenCalled();
+  });
+
+  it('un lote normal sigue pasando', async () => {
+    expect((await postearForm({ 'sec-fetch-site': 'same-origin' })).status).toBe(200);
+  });
+});

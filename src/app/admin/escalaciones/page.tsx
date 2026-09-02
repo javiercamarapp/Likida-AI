@@ -4,7 +4,7 @@ import {
   ArrowRight, AlertTriangle,
 } from 'lucide-react';
 import {
-  getBandejaEscalaciones, NOMBRE_FUENTE,
+  getBandejaEscalaciones, NOMBRE_FUENTE, conteoDeFuente,
   type BandejaEscalaciones, type FuenteEscalacion, type ItemEscalacion,
 } from '@/lib/admin/escalaciones';
 import { ahoraMs } from '@/lib/saludo';
@@ -61,6 +61,15 @@ const FUENTES: FuenteEscalacion[] = [
  *  siendo de toda la cola — lo acotado es la tabla, y se declara. */
 const TOPE_COLA = 50;
 
+// AUDITORÍA 24, ADM-4 (ALTO): las tarjetas de arriba pintaban
+// `bandeja.fuentes[f].items?.length` — para `corridas`, `tickets` y
+// `liquidaciones` esa lista viene TOPADA (`TOPE_CORRIDAS_FALLIDAS`,
+// `TOPE_TICKETS`, `LIMITE_LIQUIDACIONES_REVISAR`), mientras el pie de la
+// tabla afirmaba "Los conteos de arriba SÍ son de toda la cola". Con 300
+// corridas en fallo la tarjeta decía 20 y el pie mentía sobre esa misma
+// tarjeta. `conteoDeFuente` (lib/admin/escalaciones.ts) ya trae el total
+// REAL de cada fuente — esto solo cambia de dónde lee la tarjeta.
+
 export default async function EscalacionesPage() {
   const ahora = ahoraMs();
   // Nunca lanza: los fallos de lectura vienen por valor DENTRO de la bandeja.
@@ -88,7 +97,7 @@ export default async function EscalacionesPage() {
               const Icono = ICONO_FUENTE[f];
               return (
                 <StatCard key={f} icono={<Icono {...ICONO} />}
-                  etiqueta={NOMBRE_FUENTE[f]} valor={bandeja.fuentes[f].items?.length ?? 0} formato="entero"
+                  etiqueta={NOMBRE_FUENTE[f]} valor={conteoDeFuente(f, bandeja.conteos)} formato="entero"
                 />
               );
             })}

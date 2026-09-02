@@ -49,14 +49,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ accion: string
       case 'corrida-fin': {
         const id = typeof cuerpo?.id === 'string' ? cuerpo.id : '';
         if (!/^[0-9a-f-]{36}$/.test(id)) return NextResponse.json({ error: 'Falta id.' }, { status: 400 });
-        const { error } = await admin.from('bus_corrida').update({
+        // AUDITORÍA 24, BE-22: `.eq('id', id)` a secas re-cerraba una corrida
+        // YA cerrada, pisando su `fin`, su `exit_code` y su veredicto con los
+        // de una entrega repetida (o los de un worker viejo que revivió con el
+        // id en la mano). La bitácora del bus es la única memoria de qué corrió
+        // y cómo acabó: se ancla a que siga abierta, como el claim de las
+        // órdenes ancla a `pendiente`.
+        const { data: cerradas, error } = await admin.from('bus_corrida').update({
           fin: new Date().toISOString(),
           exit_code: typeof cuerpo?.exitCode === 'number' ? cuerpo.exitCode : null,
           pr_url: typeof cuerpo?.prUrl === 'string' ? cuerpo.prUrl.slice(0, 300) : undefined,
           veredicto: typeof cuerpo?.veredicto === 'string' ? cuerpo.veredicto.slice(0, 300) : null,
-        }).eq('id', id);
+        }).eq('id', id).is('fin', null).select('id');
         if (error) throw new Error(error.message);
-        return NextResponse.json({ ok: true });
+        const cerro = (cerradas ?? []).length === 1;
+        if (!cerro) logger.warn('worker.bus.corrida_ya_cerrada', { id, worker: quien.nombre });
+        return NextResponse.json({ ok: true, cerro });
       }
       case 'pieza': {
         const carpeta = typeof cuerpo?.carpeta === 'string' ? cuerpo.carpeta.slice(0, 300) : '';
@@ -115,8 +123,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ accion: string
         const id = typeof cuerpo?.id === 'string' ? cuerpo.id : '';
         if (!/^[0-9a-f-]{36}$/.test(id)) return NextResponse.json({ error: 'Falta id.' }, { status: 400 });
         // El claim anclado a `pendiente` — la atomicidad vive en el WHERE.
+        // AUDITORÍA 24, BE-22: se firma QUIÉN la tomó (0285). El nombre sale
+        // de la llave con la que ya se autenticó el worker, no del cuerpo:
+        // nadie puede reclamar en nombre de otro.
         const { data, error } = await admin.from('bus_orden')
-          .update({ estado: 'tomada', tomada_en: new Date().toISOString() })
+          .update({ estado: 'tomada', tomada_en: new Date().toISOString(), tomada_por: quien.nombre })
           .eq('id', id).eq('estado', 'pendiente').select('id');
         if (error) throw new Error(error.message);
         return NextResponse.json({ tomada: (data ?? []).length === 1 });
@@ -124,13 +135,32 @@ export async function POST(req: Request, ctx: { params: Promise<{ accion: string
       case 'ordenes-resolver': {
         const id = typeof cuerpo?.id === 'string' ? cuerpo.id : '';
         if (!/^[0-9a-f-]{36}$/.test(id)) return NextResponse.json({ error: 'Falta id.' }, { status: 400 });
-        const { error } = await admin.from('bus_orden').update({
+        // AUDITORÍA 24, BE-22: cerrar exige seguir TOMADA y ser QUIEN la tomó.
+        // Sin esto, el worker B marcaba `hecha` la orden de A y `resultado`
+        // contaba lo que hizo B sobre el trabajo de A. `tomada_por` es NULL en
+        // las órdenes anteriores a la 0285: ahí no se adivina un dueño, queda
+        // el ancla por estado (que ya evita el doble cierre).
+        const cierre = {
           estado: cuerpo?.ok === true ? 'hecha' : 'fallida',
           resuelta_en: new Date().toISOString(),
           resultado: String(cuerpo?.resultado ?? '').slice(0, 400) || 'sin detalle',
-        }).eq('id', id);
-        if (error) throw new Error(error.message);
-        return NextResponse.json({ ok: true });
+        };
+        const mio = await admin.from('bus_orden').update(cierre)
+          .eq('id', id).eq('estado', 'tomada').eq('tomada_por', quien.nombre).select('id');
+        if (mio.error) throw new Error(mio.error.message);
+        let resolvio = (mio.data ?? []).length === 1;
+        if (!resolvio) {
+          // Órdenes anteriores a la 0285: sin dueño guardado. No se les inventa
+          // uno; queda el ancla por estado, que ya evita el doble cierre.
+          const vieja = await admin.from('bus_orden').update(cierre)
+            .eq('id', id).eq('estado', 'tomada').is('tomada_por', null).select('id');
+          if (vieja.error) throw new Error(vieja.error.message);
+          resolvio = (vieja.data ?? []).length === 1;
+        }
+        // Un cierre que no aplicó NO es 200 a secas: quien lo mandó cree que
+        // dejó constancia. Se dice por valor y se nombra en el log.
+        if (!resolvio) logger.warn('worker.bus.orden_ajena_o_cerrada', { id, worker: quien.nombre });
+        return NextResponse.json({ ok: true, resolvio });
       }
     }
     return NextResponse.json({ error: 'Acción desconocida.' }, { status: 404 });

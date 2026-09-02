@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { cuerpoAcotado } from '../_cuerpo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { verificarFirma, mensajeDeRechazo } from '@/lib/correo/firma_entrante';
 import { tokenDeDestinatarios } from '@/lib/correo/buzon';
@@ -85,34 +86,6 @@ const MAX_WEBHOOK_BYTES = 256 * 1024;
 // (ver `finPresupuesto` abajo). Sin un número explícito aquí, el presupuesto se
 // calcularía contra un default de la plataforma que puede cambiar sin avisar.
 export const maxDuration = 60;
-
-/** Lee sin sobrepasar el tope incluso si el emisor omitió Content-Length. */
-async function cuerpoAcotado(req: Request, maxBytes: number): Promise<string | null> {
-  const declarado = Number(req.headers.get('content-length') ?? 0);
-  if (Number.isFinite(declarado) && declarado > maxBytes) return null;
-  if (!req.body) return '';
-  const lector = req.body.getReader();
-  const partes: Uint8Array[] = [];
-  let total = 0;
-  try {
-    for (;;) {
-      const { done, value } = await lector.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await lector.cancel();
-        return null;
-      }
-      partes.push(value);
-    }
-  } finally {
-    lector.releaseLock();
-  }
-  const combinado = new Uint8Array(total);
-  let offset = 0;
-  for (const parte of partes) { combinado.set(parte, offset); offset += parte.byteLength; }
-  return new TextDecoder().decode(combinado);
-}
 
 export async function POST(req: Request) {
   // El cuerpo CRUDO: `JSON.parse` + `stringify` reordena llaves y la firma

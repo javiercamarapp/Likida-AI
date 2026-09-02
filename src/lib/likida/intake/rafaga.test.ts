@@ -78,7 +78,7 @@ describe('lineaIncidencias — lo que se le dice al cerrar la ráfaga', () => {
       { tipo: 'fecha_dudosa', monto: 1234.5, etiqueta: 'Diésel' },
       { tipo: 'fecha_dudosa', monto: 560, etiqueta: 'Caseta' },
     ])!;
-    expect(t).toContain('De tus 22 fotos');
+    expect(t).toContain('De las fotos que me mandaste,');
     expect(t).toMatch(/\*3\*/);
     expect(t).toMatch(/\*2\*/);
     // Los montos, con el formato de `formato.ts` y no con uno propio.
@@ -97,7 +97,7 @@ describe('lineaIncidencias — lo que se le dice al cerrar la ráfaga', () => {
   it('un solo tipo no arma una lista con "y" colgando', () => {
     const t = lineaIncidencias(4, [{ tipo: 'ilegible' }])!;
     expect(t).not.toMatch(/, y /);
-    expect(t).toContain('De tus 4 fotos');
+    expect(t).toContain('De las fotos que me mandaste,');
   });
 
   it('con una sola foto vista no dice "de tus 1 fotos"', () => {

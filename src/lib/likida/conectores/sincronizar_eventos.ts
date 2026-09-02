@@ -38,6 +38,7 @@ import { lectorEventosDe, LECTORES_EVENTOS, esEventoGrave, type EventoSeguridadL
 import { dispararAsistenciaPorEventoCamara } from '../asistencia_camara';
 import type { Http } from './tipos';
 import { conPool } from '../lotes';
+import { unidadesSinAvisoPrevio } from '../privacidad';
 
 /** 6× la cadencia del cron: cubre corridas saltadas sin estado por flota. */
 const VENTANA_MS = 30 * 60 * 1000;
@@ -57,6 +58,13 @@ export interface ResultadoSyncEventos {
   disparos: number;
   /** El token sirve pero no trae el scope de eventos: el panel debe decirlo. */
   sinPermiso?: boolean;
+  /**
+   * AUDITORÍA 24, LEG-1 (CRÍTICO). Unidades cuyo operador ACTUAL (viaje vivo)
+   * no ha recibido el aviso de privacidad: sus eventos de cámara —conducta al
+   * volante, con lat/lng y video— NO se guardan. Mismo criterio y misma
+   * compuerta que el poller de posiciones (`privacidad.ts`).
+   */
+  sinAvisoPrevio?: number;
   /** La corrida se quedó sin presupuesto de tiempo ANTES de tocar esta flota.
    *  Sus eventos —incluido el barrido de graves pendientes— quedan para la
    *  corrida siguiente: la ventana traslapada de 30 min y el rebarrido por
@@ -131,9 +139,26 @@ export async function sincronizarEventosDeFlota(
     }
   }
 
+  // ── LEG-1: NO SE TRATA ANTES DE AVISAR ──────────────────────────────────
+  // Se resuelve UNA vez por corrida para las unidades con evento; si la base
+  // no contesta, no se guarda ningún evento de esta flota (fallar cerrado).
+  // Los huérfanos (sin unidad) no están ligados a una persona y siguen igual.
+  const conUnidad = [...new Set(eventos.map((e) => (e.assetId ? porDevice.get(e.assetId) : undefined)).filter((u): u is string => !!u))];
+  let sinAviso = new Set<string>();
+  if (conUnidad.length > 0) {
+    const compuerta = await unidadesSinAvisoPrevio(tenantId, conUnidad);
+    if (compuerta.error) return { ...base, error: `no se guardó ningún evento: ${compuerta.error}` };
+    sinAviso = compuerta.sinAviso;
+    if (sinAviso.size > 0) {
+      base.sinAvisoPrevio = sinAviso.size;
+      logger.warn('eventos.sin_aviso_previo', { tenantId, proveedor: conectorId, unidades: sinAviso.size });
+    }
+  }
+
   for (const e of eventos) {
     const unidadId = e.assetId ? porDevice.get(e.assetId) ?? null : null;
     if (!unidadId) base.huerfanos += 1;
+    if (unidadId && sinAviso.has(unidadId)) continue;
 
     // El INSERT decide si el evento es nuevo: `ignoreDuplicates` con la
     // unicidad de la 0203 hace que la reentrega de la ventana traslapada no

@@ -176,7 +176,16 @@ export async function resolverTenantEfectivo(
   let tenantNombre: string | null = null;
   let tenantExiste = true;
   if (sesionReal.rol === 'superadmin' && sp?.tenant) {
-    const { data: t } = await supabaseAdmin().from('tenant').select('id, nombre').eq('id', sp.tenant).maybeSingle();
+    const { data: t, error } = await supabaseAdmin().from('tenant').select('id, nombre').eq('id', sp.tenant).maybeSingle();
+    // H2 (auditoría 24): sin leer `error`, un parpadeo de Supabase convertía
+    // `?tenant=<Flota B>` en «me quedo con el tenant de la sesión» — es decir,
+    // la DEMO— y la página seguía pintando bajo el mismo encabezado. Una
+    // lectura caída no es «esa flota no existe»: se falla cerrado y se dice,
+    // como `resolverTenantApi` contesta 503 para este mismo caso.
+    if (error) {
+      logger.warn('tenant_efectivo.lectura_fallo', { tenant: sp.tenant, err: error.message });
+      throw new Error(`No se pudo comprobar a qué flota apunta esta pantalla (${error.message}). Recarga en un momento.`);
+    }
     if (t) {
       tenantId = t.id as string;
       tenantNombre = t.nombre as string;
@@ -194,8 +203,13 @@ export async function resolverTenantEfectivo(
   // superadmin" del panel dice la verdad también en este camino) y se FIRMA
   // la impersonación con el mismo dedup por día que el `?tenant=` de arriba:
   // que la selección viaje por cookie no la vuelve menos privilegiada.
+  // ADM-11 (auditoría 24): `?rol=` dejó de descalificar la selección. Antes,
+  // con flota elegida y `?rol=contador` en la URL, la flota real venía de la
+  // cookie pero esta rama no corría: ni cinta con el nombre, ni firma de
+  // impersonación. Mirar el panel de un cliente con los ojos de otro rol
+  // sigue siendo mirar el panel de un cliente.
   const esSeleccionExplicita = sesionReal.rol === 'superadmin'
-    && !sp?.tenant && sp?.vista !== 'demo' && !sp?.rol
+    && !sp?.tenant && sp?.vista !== 'demo'
     && tenantId !== tenantDemo();
   if (esSeleccionExplicita) {
     const { data: t, error } = await supabaseAdmin().from('tenant').select('id, nombre').eq('id', tenantId).maybeSingle();

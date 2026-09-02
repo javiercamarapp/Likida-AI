@@ -184,10 +184,24 @@ describe('cierre sin PDF: ni se manda un documento que no existe, ni se calla', 
   // en segundos, y el objeto lleva folio y montos de un ticket. La línea se
   // tocó la ronda pasada (se le puso `acotada`) y el 3600 se dejó intacto —
   // lo que convirtió el hallazgo de "pendiente" a "revisado y no arreglado".
-  it('la liga firmada del PDF vive 60s, no una hora — Meta la descarga en segundos', async () => {
+  //
+  // AUDITORÍA 24 · AGEN-9 (MEDIO): 60 s dejó de alcanzar cuando se vio lo que
+  // hace el OUTBOX. `sendDocument` encola el payload ENTERO —`link` incluido—
+  // si el POST a Meta se cae por red, y el cron lo reintenta a los 5 minutos:
+  // a esa hora la firma llevaba 240 s vencida, Meta contestaba «medio no
+  // descargable» (no reintentable) y el mensaje moría a la octava con su
+  // alerta de `salida_muerta`. Ocho intentos garantizados de fallar por cada
+  // PDF que tocó una red mala. 15 minutos cubren el reintento de los 5 y los
+  // tres siguientes del backoff; sigue siendo una liga corta de un bucket
+  // privado, no la hora que las rondas 5-9 quitaron.
+  it('la liga firmada del PDF vive 15 min: lo que tarda el outbox en reintentarla, no una hora', async () => {
     runAgent.mockResolvedValue(cierre(true));
     await processInbound(listo);
-    expect(createSignedUrl).toHaveBeenCalledWith(expect.any(String), 60);
+    expect(createSignedUrl).toHaveBeenCalledWith(expect.any(String), 900);
+    // El reintento del outbox (RETRASO_AMBIGUO_SEGUNDOS = 300) tiene que caer
+    // DENTRO de la ventana: ese es todo el hallazgo.
+    const [, ttl] = createSignedUrl.mock.calls[0] as [string, number];
+    expect(ttl).toBeGreaterThan(300);
   });
 
   it('con pdf_generado=true manda el documento (control: sin esto lo de abajo no prueba nada)', async () => {

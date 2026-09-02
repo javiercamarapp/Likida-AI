@@ -1,10 +1,10 @@
 import { Truck, ShieldAlert, ShieldCheck, Clock, CircleDashed, Wrench, Satellite } from 'lucide-react';
 import type { UnidadRow, UnidadCruda } from '@/lib/likida/operacion';
-import { clasificarVigencia, contarVigencias, avisoVigencias, type EstadoVigencia } from '@/lib/likida/vigencias';
+import { clasificarVigencia, avisoVigencias, DIAS_AVISO, type ConteoVigencias, type EstadoVigencia } from '@/lib/likida/vigencias';
 import { numero } from '@/lib/formato';
 import Link from 'next/link';
 import { EstadoVacio } from '@/app/admin/ui/kit';
-import { paginarRegistro, urlRegistro, type ParamsRegistro } from '../paginar-registro';
+import { urlRegistro, type PaginaRegistroUI } from '../paginar-registro';
 import { FiltroRegistro } from '../registro-filtro';
 import { BarraPagina } from '../resumen-visual';
 // El Plegable es el mismo `<details>` de clientes — no hay una segunda
@@ -83,8 +83,22 @@ const INICIAL_VACIO: UnidadCruda = {
  * de edición existe SOLO para la fila que `?editar=<id>` nombra. Las demás
  * llevan un link — que es lo que un `<details>` cerrado siempre debió ser.
  */
-export function VistaUnidades({ unidades, puedeEditar, guardar, cambiarEstado, sp, sufijo, camposOcultos, proveedoresGps }: {
-  unidades: readonly UnidadRow[];
+export function VistaUnidades({ pag, bajas, totalBajas, conteos, totalActivasConocido, puedeEditar, guardar, cambiarEstado, sufijo, camposOcultos, proveedoresGps }: {
+  /** La página del parque ACTIVO, ya cortada y ordenada por la base
+   *  (auditoría 24). El `total` y el `filtrados` los CONTÓ la base; el largo
+   *  de esta página no es ninguno de los dos. */
+  pag: PaginaRegistroUI<UnidadRow>;
+  /** Una página de las dadas de baja. NO son todas: ver `totalBajas`. */
+  bajas: readonly UnidadRow[];
+  /** Cuántas hay dadas de baja EN TOTAL, para no llamar «5» a una lista
+   *  topada en 25. */
+  totalBajas: number;
+  /** El semáforo de papeles sobre la FLOTA ENTERA. `null` = no se pudo
+   *  contar, y entonces se pinta «—»: un 0 se leería como una medición. */
+  conteos: ConteoVigencias & { activas: number } | null;
+  /** ¿Se sabe cuántas unidades activas hay? Cuando no, el pie del filtro no
+   *  puede afirmar el «de N» del parque. */
+  totalActivasConocido: boolean;
   /** Si se PINTA la captura. La puerta real vive dentro del server action. */
   puedeEditar: boolean;
   guardar: AccionForma;
@@ -93,44 +107,24 @@ export function VistaUnidades({ unidades, puedeEditar, guardar, cambiarEstado, s
   cambiarEstado: AccionEstado;
   /** El catálogo de rastreo, ya recortado a `{id, nombre}` en el servidor. */
   proveedoresGps: ProveedorGps[];
-  /** `?q=`/`?p=`/`?editar=` ya leídos por la página. */
-  sp: ParamsRegistro;
   /** `?tenant=`/`?vista=`/`?rol=` del superadmin. */
   sufijo: string;
   camposOcultos: Array<[string, string]>;
 }) {
-  const activas = unidades.filter((u) => u.activo);
   // AUDITORÍA 20 (H4): las bajas ya no se pierden. Esta vista SIEMPRE filtró
   // `activo`, así que hasta hoy una unidad inactiva desaparecía de la pantalla
-  // sin dejar rastro — y como nada la podía inactivar, el hueco nunca se notó.
-  // Ahora que la baja existe, tiene que existir también el camino de vuelta:
-  // un camión que se vendió y no se vendió, o una baja tecleada por error, no
-  // pueden requerir SQL para deshacerse.
-  const dadasDeBaja = unidades.filter((u) => !u.activo);
-  const conteo = contarVigencias(activas);
-  const aviso = avisoVigencias(conteo);
-
-  // El orden es el del trabajo: primero lo vencido, luego lo que va a vencer,
-  // y hasta el final lo que está en regla. Ordenar por número económico
-  // escondería el problema en la fila 40.
-  const PESO: Record<EstadoVigencia, number> = { vencido: 0, por_vencer: 1, sin_dato: 2, vigente: 3 };
-  const ordenadas = [...activas].sort((a, b) => {
-    const va = clasificarVigencia(a.diasAlVencimiento, a.queVence);
-    const vb = clasificarVigencia(b.diasAlVencimiento, b.queVence);
-    if (PESO[va.estado] !== PESO[vb.estado]) return PESO[va.estado] - PESO[vb.estado];
-    // Dentro del mismo estado, lo más urgente primero.
-    return (a.diasAlVencimiento ?? 1e9) - (b.diasAlVencimiento ?? 1e9);
-  });
-
-  // FE-12: qué se pinta. El orden de arriba (lo vencido primero) se conserva
-  // dentro de la página; la búsqueda cubre económico, placas, marca y modelo,
-  // que es como un jefe de tráfico llama a una unidad.
-  const pag = paginarRegistro(
-    ordenadas,
-    (u) => [u.numeroEconomico, u.placas, u.marca, u.modelo].filter(Boolean).join(' '),
-    sp,
-    (u) => u.id,
-  );
+  // sin dejar rastro. Ahora que la baja existe, existe también el camino de
+  // vuelta: un camión que se vendió y no se vendió, o una baja tecleada por
+  // error, no pueden requerir SQL para deshacerse.
+  //
+  // AUDITORÍA 24: ni el orden ni el conteo se hacen ya aquí. El orden es el
+  // del trabajo —lo vencido primero, sin papeles al final— y lo aplica la
+  // base sobre el parque ENTERO; ordenar una página ya cortada solo reordena
+  // 25 filas y escondería lo vencido en la página 3. El semáforo cuenta la
+  // flota entera por el mismo motivo.
+  const aviso = conteos ? avisoVigencias(conteos) : null;
+  const hayFiltro = pag.q !== '';
+  const vacio = !hayFiltro && pag.filtrados === 0 && totalBajas === 0;
 
   return (
     <main className="h-full">
@@ -171,7 +165,7 @@ export function VistaUnidades({ unidades, puedeEditar, guardar, cambiarEstado, s
           {/* `unidades` y no `activas`: con todo el parque dado de baja,
               "todavía no hay unidades dadas de alta" sería falso — y mandaría
               a capturar de nuevo camiones que ya están en la base, abajo. */}
-          {unidades.length === 0 ? (
+          {vacio ? (
             <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
               Todavía no hay unidades dadas de alta. Cuando registres tus tractocamiones con su póliza,
               permiso SICT y verificación, aquí se ve cuál está por vencer antes de que te pare un inspector.
@@ -180,14 +174,17 @@ export function VistaUnidades({ unidades, puedeEditar, guardar, cambiarEstado, s
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
                 {([
-                  ['Vencidos', conteo.vencidos, 'var(--bad)'],
-                  [`Vencen en 30 días`, conteo.porVencer, 'var(--warn)'],
-                  ['En regla', conteo.vigentes, 'var(--ok)'],
-                  ['Sin papeles', conteo.sinDato, 'var(--muted)'],
+                  ['Vencidos', conteos?.vencidos, 'var(--bad)'],
+                  [`Vencen en ${DIAS_AVISO} días`, conteos?.porVencer, 'var(--warn)'],
+                  ['En regla', conteos?.vigentes, 'var(--ok)'],
+                  ['Sin papeles', conteos?.sinDato, 'var(--muted)'],
                 ] as const).map(([rotulo, n, color]) => (
                   <div key={rotulo} className="card p-3.5">
-                    <div className="text-[20px] font-semibold tabular" style={{ color: n > 0 ? color : 'var(--muted)' }}>
-                      {numero(n)}
+                    {/* `—` y no 0 cuando no se pudo contar: un 0 aquí diría
+                        «no hay ninguna vencida», que es la afirmación más cara
+                        que esta pantalla puede hacer en falso. */}
+                    <div className="text-[20px] font-semibold tabular" style={{ color: n !== undefined && n > 0 ? color : 'var(--muted)' }}>
+                      {n === undefined ? '—' : numero(n)}
                     </div>
                     <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>{rotulo}</div>
                   </div>
@@ -196,6 +193,15 @@ export function VistaUnidades({ unidades, puedeEditar, guardar, cambiarEstado, s
 
               <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
                 sustantivo="unidades" camposOcultos={camposOcultos} />
+
+              {hayFiltro && !totalActivasConocido && (
+                // No se pudo contar el parque entero, así que el «de N» del
+                // pie sería un número inventado. Se dice.
+                <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+                  No pude contar el parque completo en este momento: el total de al lado es el de las que
+                  coinciden con la búsqueda, no el de la flota.
+                </p>
+              )}
 
               {pag.filas.length === 0 && (
                 <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
@@ -313,17 +319,17 @@ export function VistaUnidades({ unidades, puedeEditar, guardar, cambiarEstado, s
               se ofrecen en Despacho. Pero SE VEN — un activo dado de baja que
               desaparece de la pantalla se lee como borrado, y no lo está: su
               historial de viajes y de taller sigue completo. */}
-          {dadasDeBaja.length > 0 && (
+          {totalBajas > 0 && (
             <section className="card p-4">
               <h2 className="font-display text-[14px] font-semibold mb-1">
-                Dadas de baja ({dadasDeBaja.length})
+                Dadas de baja ({numero(totalBajas)})
               </h2>
               <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
                 Fuera del parque: no se ofrecen para viajes nuevos y no cuentan en los papeles de arriba.
                 Su historial se conserva.
               </p>
               <ul className="space-y-2">
-                {dadasDeBaja.map((u) => (
+                {bajas.map((u) => (
                   <li key={u.id} className="flex items-start justify-between gap-3 flex-wrap">
                     <div className="min-w-0">
                       <span className="text-[13px] font-medium">{u.numeroEconomico}</span>

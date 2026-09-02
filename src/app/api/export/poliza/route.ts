@@ -30,10 +30,17 @@ import { polizaDeLiquidacion, type LiquidacionParaPoliza } from '@/lib/likida/co
 import { catalogoDeclarado, CUENTAS_BALANCE } from '@/lib/likida/contabilidad/catalogo';
 import { archivoContpaqi, archivoSapB1 } from '@/lib/likida/contabilidad/formatos';
 import { perfilExportacionDeclarado } from '@/lib/likida/contabilidad/perfiles';
-import { cubetaDe } from '@/lib/likida/cuadre/engine';
+import { cubetaDe, copiasDeComprobante, proporcionesDeducibles } from '@/lib/likida/cuadre/engine';
 import type { ConceptoGasto, Diferencia, Gasto } from '@/types/likida';
+// El redondeo a centavos vive SOLO en formato.ts — `formato.test.ts` enrojece
+// con una quinta copia, y esta ruta escribe pesos que se importan a un ERP.
+import { round2 } from '@/lib/formato';
 
 export const runtime = 'nodejs';
+// BE-19 (auditoría 24): sin esto el tope lo pone el default de la plataforma
+// (15 s en Node sin Fluid Compute) y un export de 92 días sobre 45,000
+// liquidaciones muere en 504 mudo. Literal a propósito: Next lo lee en build.
+export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
 
 type Formato = 'contpaqi' | 'sap_b1';
@@ -48,54 +55,134 @@ interface FilaPoliza {
   ivaAcreditable: number;
   porConcepto: Array<{ concepto: ConceptoGasto; subtotal: number | null; baseConocida?: boolean }>;
   baseDesconocida: number;
+  /**
+   * AUDITORÍA 24 (FIS-2/FIS-3/FIS-4): `version` de la RPC. Sin ella, o menor
+   * que `RPC_VERSION_MINIMA`, la ruta contesta 409 en vez de degradar.
+   */
+  version?: number;
   /** FIS-C1: un renglón por comprobante, para clasificarlo con `cubetaDe`. */
-  gastos?: Array<{ id: string; concepto: ConceptoGasto; subtotal: number | null; descuento?: number | null; tieneCfdi: boolean }>;
+  gastos?: GastoRpc[];
   /** FIS-A1: Σ IVA/ISR retenido al proveedor. Va como ABONO en el asiento. */
   retenciones?: number;
   /** Las diferencias que la liquidación ya guarda (`gastoId` + `tipo`). */
   diferencias?: Diferencia[];
 }
 
+/** Un comprobante tal como lo entrega `poliza_datos_tenant` (mig. 0281). */
+interface GastoRpc {
+  id: string;
+  concepto: ConceptoGasto;
+  subtotal: number | null;
+  descuento?: number | null;
+  tieneCfdi: boolean;
+  // Desde la 0281 — lo que `cubetaDe`, `copiasDeComprobante` y
+  // `proporcionesDeducibles` leen. Opcionales en el TIPO solo para poder
+  // detectar la RPC vieja y fallar cerrado; con la 0281 vienen siempre.
+  monto?: number;
+  fecha?: string | null;
+  cfdiUuid?: string | null;
+  cfdiOrden?: number | null;
+  folio?: string | null;
+  folioNorm?: string | null;
+  formaPago?: string | null;
+  pagadoEn?: string | null;
+  pagadoForma?: string | null;
+  ivaRetenido?: number | null;
+  isrRetenido?: number | null;
+}
+
+/**
+ * La migración cuyo contrato esta ruta exige. Antes de la 0272 la RPC no traía
+ * `gastos` y la ruta «conservaba el comportamiento previo: todo a la cubeta
+ * deducible» — la única rama que no puede tener un rótulo verdadero, y la
+ * causa del CRÍTICO FIS-4: producción iba en la 0271 y el archivo del
+ * contador asentaba el 100% como deducible. Aquí se FALLA CERRADO y se dice
+ * qué migración falta.
+ */
+const RPC_VERSION_MINIMA = 281;
+
+function rpcDesactualizada(f: FilaPoliza): string | null {
+  if (!Array.isArray(f.gastos)) return 'la RPC no entrega `gastos` por comprobante (anterior a la 0272)';
+  if (typeof f.version !== 'number' || f.version < RPC_VERSION_MINIMA) {
+    return `la RPC va en una versión anterior a la ${RPC_VERSION_MINIMA} (sin monto, forma de pago ni folio por comprobante)`;
+  }
+  return null;
+}
+
+const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+
+/** El `Gasto` que las tres funciones del motor leen, sin inventar campos. */
+function aGasto(g: GastoRpc): Gasto {
+  return {
+    id: g.id,
+    concepto: g.concepto,
+    monto: num(g.monto) ?? 0,
+    fecha: g.fecha ?? undefined,
+    cfdiUuid: g.cfdiUuid ?? undefined,
+    cfdiOrden: num(g.cfdiOrden),
+    folio: g.folio ?? undefined,
+    folioNorm: g.folioNorm ?? undefined,
+    formaPago: g.formaPago ?? undefined,
+    pagadoEn: g.pagadoEn ?? undefined,
+    pagadoForma: g.pagadoForma ?? undefined,
+    subTotal: num(g.subtotal ?? undefined),
+    descuento: num(g.descuento ?? undefined),
+    ivaRetenido: num(g.ivaRetenido ?? undefined),
+    isrRetenido: num(g.isrRetenido ?? undefined),
+  };
+}
+
 /**
  * AUDITORÍA 22, FIS-C1 (CRÍTICO) — reparte la base de cada concepto en las TRES
- * cubetas del motor.
+ * cubetas del motor. AUDITORÍA 24, FIS-2 + FIS-3: con la MISMA regla, entera.
  *
- * La clasificación NO se reimplementa aquí ni en SQL: se llama a `cubetaDe`,
- * la misma función que el PDF y el panel usan. Si mañana un tipo nuevo entra a
- * `NO_DEDUCIBLE_ISR`, este reparto se entera solo — que es justo lo que no
- * pasaría con las listas copiadas en la RPC.
+ * NADA se reimplementa aquí ni en SQL: se llaman las tres funciones que el PDF
+ * y el panel usan —`copiasDeComprobante` (una deducción por comprobante, no
+ * por fotografía), `cubetaDe` (la cubeta) y `proporcionesDeducibles` (qué
+ * fracción de un gasto parcialmente deducible lo es: tope de alimentación de
+ * LISR 28-V y frontera del 15% de la RFA 2.9)—. Si mañana un tipo nuevo entra
+ * a `NO_DEDUCIBLE_ISR`, este reparto se entera solo.
  *
- * Sin `gastos` (una liquidación vieja, o la RPC anterior a la 0272) se conserva
- * el comportamiento previo: todo a la cubeta deducible. Es lo que había, y
- * degradar en silencio a «todo no deducible» sería peor.
+ * Mismo filtro que `totalComprobado` en el motor: copias y montos ≤ 0 no
+ * cuentan, para que las cubetas de la póliza sumen lo mismo que el PDF.
  */
-function repartirPorCubeta(f: FilaPoliza): LiquidacionParaPoliza['porConcepto'] {
+function repartirPorCubeta(f: FilaPoliza): { porConcepto: LiquidacionParaPoliza['porConcepto']; retenciones: number } {
   const base = (f.porConcepto ?? []).map((c) => ({
-    concepto: c.concepto, subtotal: Number(c.subtotal),
+    concepto: c.concepto, subtotal: 0,
     subtotalNoDeducible: 0, subtotalPorConfirmar: 0,
   }));
-  if (!f.gastos?.length) return base;
-
-  const porConcepto = new Map(base.map((b) => [b.concepto, { ...b, subtotal: 0 }]));
+  const porConcepto = new Map(base.map((b) => [b.concepto, b]));
   const difs = f.diferencias ?? [];
-  for (const g of f.gastos) {
+  const todos = (f.gastos ?? []).map(aGasto);
+  const copias = copiasDeComprobante(todos);
+  const vivos = todos.filter((g) => !copias.has(g.id) && g.monto > 0);
+  const proporciones = proporcionesDeducibles(vivos, difs);
+  let retenciones = 0;
+
+  for (const g of vivos) {
+    // FIS-A1 (22): las retenciones NO restan la base, van como ABONO — y se
+    // suman aquí, sobre los vivos, para que una foto repetida de un flete
+    // retenido no duplique también la cuenta por pagar al SAT.
+    retenciones += (g.ivaRetenido ?? 0) + (g.isrRetenido ?? 0);
     // FIS-A1: la base va NETA de `@Descuento`. El Total del CFDI ya lo está,
     // así que el asiento tiene que estarlo o el residuo sale negativo y el
     // export contesta «dato de origen roto» tirando el periodo entero.
-    const monto = Number(g.subtotal ?? 0) - Number(g.descuento ?? 0);
-    if (!Number.isFinite(monto) || monto === 0) continue;
+    const montoBase = (g.subTotal ?? 0) - (g.descuento ?? 0);
+    if (!Number.isFinite(montoBase) || montoBase === 0) continue;
     const fila = porConcepto.get(g.concepto);
     if (!fila) continue;
-    // `cubetaDe` solo mira el UUID del CFDI y las diferencias del gasto.
-    const cubeta = cubetaDe(
-      { id: g.id, concepto: g.concepto, monto, cfdiUuid: g.tieneCfdi ? 'si' : undefined } as Gasto,
-      difs.filter((d) => d.gastoId === g.id),
-    );
-    if (cubeta === 'no_deducible') fila.subtotalNoDeducible += monto;
-    else if (cubeta === 'por_confirmar') fila.subtotalPorConfirmar += monto;
-    else fila.subtotal += monto;
+    const cubeta = cubetaDe(g, difs.filter((d) => d.gastoId === g.id));
+    if (cubeta === 'no_deducible') { fila.subtotalNoDeducible += montoBase; continue; }
+    if (cubeta === 'por_confirmar') { fila.subtotalPorConfirmar += montoBase; continue; }
+    // Parcial (FIS-2): del viático solo se pierde el EXCEDENTE sobre el tope,
+    // del combustible en efectivo solo lo que rebasa el 15%. Misma aritmética
+    // que el bucle de totales del motor.
+    const p = Math.max(0, Math.min(1, proporciones.get(g.id) ?? 1));
+    const deducible = round2(montoBase * p);
+    fila.subtotal += deducible;
+    fila.subtotalNoDeducible += round2(montoBase - deducible);
   }
-  return [...porConcepto.values()];
+  return { porConcepto: [...porConcepto.values()], retenciones: round2(retenciones) };
 }
 
 const DIAS_MAXIMO = 92;
@@ -227,6 +314,21 @@ export async function GET(req: Request) {
   const polizas: Array<{ folio: string; poliza: ReturnType<typeof polizaDeLiquidacion> }> = [];
   const bloqueos: Array<{ folio: string; falta: string[] }> = [];
 
+  // ── FIS-4 (24): SIN LA RPC CORRECTA NO HAY PÓLIZA ──────────────────────
+  // Se comprueba ANTES de armar nada: una fila con la RPC vieja no se puede
+  // clasificar, y «todo deducible» no es una degradación, es una cifra falsa.
+  const desactualizada = filas.map(rpcDesactualizada).find((m) => m !== null);
+  if (desactualizada) {
+    logger.error('export.poliza.rpc_desactualizada', { tenantId, motivo: desactualizada });
+    return NextResponse.json({
+      error: 'rpc_desactualizada',
+      detalle:
+        `No se puede armar la póliza: ${desactualizada}. Sin esos insumos el archivo asentaría el 100% ` +
+        'de cada gasto como deducible, contradiciendo el PDF de cada liquidación. No se genera.',
+      migracionEsperada: `supabase/migrations/0${RPC_VERSION_MINIMA}_poliza_v2_cubetas_sin_copias.sql`,
+    }, { status: 409 });
+  }
+
   for (const f of filas) {
     const sinBase = (f.porConcepto ?? []).filter((c) => c.baseConocida !== true || c.subtotal === null);
     if (sinBase.length > 0) {
@@ -236,14 +338,16 @@ export async function GET(req: Request) {
       });
       continue;
     }
+    const reparto = repartirPorCubeta(f);
     const liq: LiquidacionParaPoliza = {
       folioViaje: f.folioViaje,
       operador: f.operador,
       fecha: f.fecha,
       anticipo: Number(f.anticipo),
-      porConcepto: repartirPorCubeta(f),
+      porConcepto: reparto.porConcepto,
       ivaAcreditable: Number(f.ivaAcreditable),
-      retenciones: Number(f.retenciones ?? 0),
+      // FIS-3: sin copias (ver `repartirPorCubeta`), no el crudo de la RPC.
+      retenciones: reparto.retenciones,
       diferencia: Number(f.diferencia),
     };
     const r = polizaDeLiquidacion(liq, catalogo);

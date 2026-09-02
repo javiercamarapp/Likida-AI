@@ -124,6 +124,15 @@ export async function POST(req: Request) {
     const mensajeWa = `${reponerDecisor(r.data.mensaje_wa, p.contacto_nombre)}\n${pie}`;
     const correoAsunto = reponerDecisor(r.data.correo_asunto, p.contacto_nombre);
     const correoCuerpo = `${reponerDecisor(r.data.correo_cuerpo, p.contacto_nombre)}\n\n${pie}`;
+    // AUDITORÍA 24, BE-29: el `update` vivía DENTRO de este mismo `try`, así
+    // que un bache al guardar caía en el mismo `catch` que una falla del
+    // modelo y contestaba 502 «El redactor no contestó». Dos mentiras en una:
+    // el redactor SÍ contestó (y ya se pagó), y los tres textos —que estaban
+    // en memoria— se tiraban a la basura en vez de viajar en la respuesta. El
+    // vendedor volvía a apretar el botón y se pagaba el modelo otra vez.
+    //
+    // El guardado es su propio intento: falle o no, lo redactado se entrega.
+    let guardado = true;
     const { error: errEscribir } = await admin
       .from('prospecto')
       .update({
@@ -134,16 +143,24 @@ export async function POST(req: Request) {
         mensajes_modelo: r.model,
       })
       .eq('id', id);
-    if (errEscribir) throw new Error(errEscribir.message);
+    if (errEscribir) {
+      guardado = false;
+      logger.error('cerebro.mensaje_sin_guardar', { prospecto: id, err: errEscribir.message });
+    }
     logger.info('cerebro.mensaje_generado', {
       prospecto: id, modelo: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut,
-      costoUsd: r.cost, actor: sesion.userId,
+      costoUsd: r.cost, actor: sesion.userId, guardado,
     });
     return NextResponse.json({
       mensajeWaIa: mensajeWa,
       correoAsuntoIa: correoAsunto,
       correoCuerpoIa: correoCuerpo,
       mensajesGeneradosEn: ahora,
+      // Un rótulo tiene que ser verdad: si no se guardó, la pantalla no puede
+      // decir «guardado». Se dice, y los textos van igual — cópialos ahora,
+      // porque al recargar la ficha no van a estar.
+      guardado,
+      ...(guardado ? {} : { aviso: 'Los textos se redactaron pero NO se pudieron guardar en la ficha: cópialos antes de salir, al recargar no van a estar.' }),
     });
   } catch (e) {
     logger.error('cerebro.mensaje_fallo', { prospecto: id, err: e instanceof Error ? e.message : String(e) });

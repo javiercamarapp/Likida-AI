@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { sufijoTenant } from '../../sufijo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { getPorFacturar, contarConCfdi, validarUuidCfdi } from '@/lib/likida/facturacion/pendientes';
@@ -38,8 +39,7 @@ export default async function PaginaAgenteFacturas({
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/facturas', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/facturas')) redirect('/dashboard');
 
-  const base = sp.tenant ? `?tenant=${sp.tenant}` : sp.vista ? `?vista=${sp.vista}` : '';
-  const sufijo = sp.rol ? `${base}${base ? '&' : '?'}rol=${sp.rol}` : base;
+  const sufijo = sufijoTenant(sp);
 
   // Sin catch: base caída = página caída, no una lista vacía que afirma
   // "todo facturado" estando ciega. El contador degrada solo (null = se dice).

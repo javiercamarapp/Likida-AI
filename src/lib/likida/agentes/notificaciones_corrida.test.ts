@@ -29,6 +29,11 @@ function tablaFalsa(nombre: string) {
       return Promise.resolve({ error: null });
     },
     eq: (col: string, val: string) => { filtros[col] = val; return encadenable; },
+    // `usuariosAvisables` (FE-34, auditoría 24) agregó `.order('id')` antes
+    // del `.limit()` — sin este método, esa lectura tronaba con "order is
+    // not a function" (se atrapa y se loguea, no tumba la corrida, pero
+    // ensuciaba el log de una prueba que no está probando ESO).
+    order: () => encadenable,
     limit: () => Promise.resolve({ data: [], error: null }),
     maybeSingle: () => Promise.resolve({ data: null, error: null }),
     // El `update()...eq()...eq()` de `cerrarIncidente` se resuelve al await.

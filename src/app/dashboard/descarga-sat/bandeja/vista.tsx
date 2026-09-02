@@ -15,6 +15,7 @@ import {
   ligarComprobante, ignorarComprobante, revertirResolucion,
 } from '@/lib/likida/sat_descarga/resolucion';
 import { numero } from '@/lib/formato';
+import { sufijoTenant } from '../../sufijo';
 import { BarraPagina, TituloSeccion } from '../../resumen-visual';
 import { EstadoVacio } from '../../../admin/ui/kit';
 import { FilaComprobante, type ResultadoFila } from './fila';
@@ -236,7 +237,7 @@ export async function PanelBandeja({
                 {datos.config === null && (
                   <li style={{ color: 'var(--muted)' }}>
                     No has declarado de qué RFC se descarga el buzón.{' '}
-                    <Link href="/dashboard/descarga-sat" className="underline">Decláralo aquí</Link> — sin eso
+                    <Link href={`/dashboard/descarga-sat${sufijoTenant(searchParams)}`} className="underline">Decláralo aquí</Link> — sin eso
                     no se pide nada, y Likida jamás adivina un RFC.
                   </li>
                 )}

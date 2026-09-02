@@ -84,3 +84,24 @@ describe('admin/consola.tsx y admin/ejecutivo: "Flota (solo el demo)" ya no es i
     });
   }
 });
+
+// AUDITORÍA 24, ADM-5 (MEDIO) — "Likida sigue con solo el tenant demo" y
+// "Cifras reales, no de ejemplo…" en consola.tsx (y la MISMA alerta en
+// calcular-alertas.ts) usaban `r.tenants <= 1`: con el PRIMER cliente real
+// (1 tenant, pero NO el demo) seguían afirmando "solo el demo". El criterio
+// correcto es `esSoloDemo` — comprobado contra el id real del tenant demo,
+// no contra "hay como máximo uno". Ver calcular-alertas.test.ts para el
+// caso funcional (llama a `calcularAlertas` de verdad).
+const CALCULAR_ALERTAS = leer('./calcular-alertas.ts');
+
+describe('admin/consola.tsx y calcular-alertas.ts: "solo el tenant demo" ya no es r.tenants <= 1', () => {
+  it('consola.tsx: el párrafo "Cifras reales" ya no cuelga de `r.tenants <= 1`', () => {
+    expect(ADMIN).not.toMatch(/\{r\.tenants <= 1 && \(/);
+    expect(ADMIN).toMatch(/\{esSoloDemo && \(/);
+  });
+
+  it('calcular-alertas.ts: la alerta "solo el tenant demo" ya no cuelga de `r.tenants <= 1`', () => {
+    expect(CALCULAR_ALERTAS).not.toMatch(/if \(r\.tenants <= 1\)/);
+    expect(CALCULAR_ALERTAS).toMatch(/esSoloDemo/);
+  });
+});

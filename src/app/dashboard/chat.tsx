@@ -89,7 +89,7 @@ function respuestaDeBloques(bloques: Array<Record<string, unknown>>): Respuesta 
   return { texto: textos.join(' ') || 'Listo.', visuales: visuales.length > 0 ? visuales : undefined };
 }
 
-function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null): Respuesta {
+export function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null): Respuesta {
   const q = pregunta.toLowerCase();
   const sinLiq = { texto: 'Todavía no hay liquidaciones para calcular esto.' };
   if (q.includes('comprobad') || q.includes('monto')) {
@@ -161,6 +161,28 @@ function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acredita
     };
   }
   return { texto: 'Todavía no sé responder eso — pregúntame sobre lo comprobado, diferencias, diésel, IVA, peaje o tu tasa de cuadre.' };
+}
+
+/**
+ * H4 (auditoría 24): el respondedor local de palabras clave es el
+ * "paracaídas" de `responder()` — corre con lo que YA está en la página
+ * (`kpis`/`acred`), no con una lectura fresca de la operación. Cuando el
+ * analista de verdad falló (el servidor lo dice con `{t:'error'}`, o el
+ * `fetch` reventó), esa diferencia importa: el contralor tiene que saber que
+ * está viendo una respuesta de reserva, no la del agente que acaba de leer su
+ * flota. `motivo` es `null` cuando no hubo fallo (el paracaídas de un `q` que
+ * el respondedor local tampoco entiende no necesita este aviso).
+ */
+export function respuestaLocal(
+  pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null, motivo: string | null,
+): Respuesta {
+  const base = responder(pregunta, kpis, acred);
+  if (!motivo) return base;
+  const aviso = motivo.charAt(0).toUpperCase() + motivo.slice(1);
+  return {
+    ...base,
+    texto: `${aviso.endsWith('.') ? aviso : `${aviso}.`} Esto es lo que puedo contestarte con lo último que ya tenía cargado, no una lectura nueva de tu operación:\n\n${base.texto}`,
+  };
 }
 
 /** La pieza visual de una respuesta — tabla chica, dona o cifra grande,
@@ -313,7 +335,14 @@ export default function ChatFlota({
         fr.onerror = () => rej(fr.error);
         fr.readAsDataURL(archivo);
       });
-      const resp = await fetch('/api/dashboard/ingesta', {
+      // H14 (auditoría 24): a diferencia de /chat y /conversaciones*, esta
+      // llamada NO mandaba `?tenant=` — un superadmin previsualizando una
+      // flota (`?tenant=X&vista=…`) que probara "Leer comprobante" aquí
+      // corría el OCR contra SU PROPIA sesión (sin flota real, o la
+      // equivocada), nunca contra la flota que está viendo. `tenantEfectivoChat`
+      // (chat/tenant.ts) es la misma regla que ya usan sus hermanas.
+      const tenantIngesta = spChat.get('tenant');
+      const resp = await fetch(`/api/dashboard/ingesta${tenantIngesta ? `?tenant=${encodeURIComponent(tenantIngesta)}` : ''}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imagen: dataUrl }),
       });
@@ -522,9 +551,19 @@ export default function ChatFlota({
       } else {
         d = await resp.json().catch(() => null);
       }
+      // H4 (auditoría 24): cuando el analista falla de verdad, el servidor
+      // manda `{t:'error', error:'...'}` con `resp.ok` en 200 (el fallo va
+      // DENTRO del NDJSON, no en el status HTTP) — antes ese `d.error` se
+      // tiraba y la caja pasaba derecho al respondedor local de palabras
+      // clave, que contesta con lo que YA estaba cargado en la página
+      // (`kpis`/`acred`, potencialmente de hace rato). El usuario veía una
+      // respuesta fluida sin ninguna señal de que el analista, el que de
+      // verdad lee su operación completa, no pudo correr. `respuestaLocal`
+      // declara el fallo antes de dar la respuesta de reserva — el mismo
+      // criterio que "fallar cerrado y decirlo" del resto del producto.
       const r: Respuesta = resp.ok && d && Array.isArray(d.bloques)
         ? respuestaDeBloques(d.bloques as Array<Record<string, unknown>>)
-        : responder(q, kpis, acred);
+        : respuestaLocal(q, kpis, acred, d && d.t === 'error' && typeof d.error === 'string' ? d.error : null);
       // El servidor guardó el intercambio (0088) y dice en qué conversación:
       // se ancla para los turnos siguientes y la lista del panel se actualiza
       // localmente (la verdad completa se relee al reabrir la página).
@@ -540,7 +579,10 @@ export default function ChatFlota({
       }
       setHistorial((h) => [...h.slice(0, -1), { q, r }]);
     } catch {
-      setHistorial((h) => [...h.slice(0, -1), { q, r: responder(q, kpis, acred) }]);
+      // Mismo caso que arriba: el `fetch` reventó (red, timeout de 75 s) — el
+      // analista tampoco corrió, y hay que decirlo, no disfrazarlo de
+      // respuesta normal.
+      setHistorial((h) => [...h.slice(0, -1), { q, r: respuestaLocal(q, kpis, acred, 'no se pudo conectar con el analista') }]);
     } finally {
       clearInterval(relojFases);
       setPasosVivos([]);
@@ -744,10 +786,21 @@ export default function ChatFlota({
     // curva easeOutQuint del resto del producto; sticky para quedarse
     // pegado mientras el hilo scrollea, y la altura se midió contra el
     // ancla al abrir (arranca al nivel del gris, cinta de rol incluida).
+    //
+    // H12 (auditoría 24): esos 352px fijos son correctos en escritorio, pero
+    // en un teléfono (<lg) 352px es casi TODO el ancho disponible — el hilo
+    // de la conversación quedaba comprimido a unos pocos píxeles al lado,
+    // ilegible, en vez de que el historial ocupe la pantalla completa como
+    // una cortina. Bajo `lg` y con el historial abierto, el panel se vuelve
+    // un overlay `fixed inset-0` de ancho completo (`!` fuerza el override
+    // sobre el `width` inline, que sigue animando el caso de escritorio).
+    const panelHistorialMovil = historialAbierto
+      ? 'max-lg:!fixed max-lg:!inset-0 max-lg:!top-0 max-lg:!mt-0 max-lg:!w-full max-lg:!h-full max-lg:z-40'
+      : '';
     const panelHistorial = (
-      <div className="shrink-0 self-start sticky top-4 mt-4 overflow-hidden"
+      <div className={`shrink-0 self-start sticky top-4 mt-4 overflow-hidden ${panelHistorialMovil}`}
         style={{ width: historialAbierto ? 352 : 0, height: `calc(100dvh - ${topPanel + 32}px)`, transition: 'width 480ms cubic-bezier(0.22, 1, 0.36, 1)' }}>
-        <div className="w-[320px] mx-4 h-full rounded-2xl hairline flex flex-col p-3 gap-2.5"
+        <div className="w-[320px] mx-4 h-full rounded-2xl hairline flex flex-col p-3 gap-2.5 max-lg:!w-full max-lg:!mx-0 max-lg:!rounded-none"
           style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
           <div className="flex items-center justify-between">
             <button type="button" onClick={nuevoChat}

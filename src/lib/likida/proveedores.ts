@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
-import { traerTodo, conteo } from './pg';
+import { traerTodo, conteo, IDS_POR_TANDA } from './pg';
 import type { CfdiXmlData } from './intake/cfdi_xml';
 import { consultarCFDI, type EstadoSat } from './intake/sat';
 import { createLlmBudget } from '@/lib/llm/budget';
@@ -492,18 +492,32 @@ export async function exportarAprobadas(
  * VALOR: si el marcado falla, el CSV ya se generó y el caller decide cómo
  * decirlo — nunca se tumba una descarga por no poder anotar.
  */
-export async function marcarExportadas(tenantId: string, ids: string[]): Promise<{ error?: string }> {
-  if (ids.length === 0) return {};
-  const { error } = await acotada(supabaseAdmin()
-    .from('factura_proveedor')
-    .update({ exportada_en: new Date().toISOString() })
-    .eq('tenant_id', tenantId)
-    .eq('estado', 'aprobada')
-    .is('exportada_en', null)
-    .in('id', ids), 'proveedores.marcar_exportadas');
-  if (error) {
-    logger.error('proveedores.marcar_exportadas_fallo', { tenantId, err: error.message });
-    return { error: error.message };
+export async function marcarExportadas(tenantId: string, ids: string[]): Promise<{ error?: string; marcadas: number }> {
+  if (ids.length === 0) return { marcadas: 0 };
+  // AUDITORÍA 24, BE-8: la lista entera viajaba EN LA URL de un solo
+  // `.in('id', ids)`. `exportarAprobadas` trae también las ya exportadas, así
+  // que `ids` solo crece: 400 facturas × 37 B ≈ 15 KB de query string ⇒ 414
+  // del proxy ⇒ NINGUNA quedaba marcada y el CSV salía con 200. El contador
+  // reimportaba el mismo archivo al ERP. Se parte en tandas del mismo tamaño
+  // que `traerPorIds` (`IDS_POR_TANDA`), en serie: son escrituras y no hay
+  // prisa —el archivo ya se generó—; y se cuenta lo que SÍ se marcó, para que
+  // un fallo a media lista se pueda nombrar en vez de decir "todo o nada".
+  const sello = new Date().toISOString();
+  let marcadas = 0;
+  for (let i = 0; i < ids.length; i += IDS_POR_TANDA) {
+    const tanda = ids.slice(i, i + IDS_POR_TANDA);
+    const { error } = await acotada(supabaseAdmin()
+      .from('factura_proveedor')
+      .update({ exportada_en: sello })
+      .eq('tenant_id', tenantId)
+      .eq('estado', 'aprobada')
+      .is('exportada_en', null)
+      .in('id', tanda), 'proveedores.marcar_exportadas');
+    if (error) {
+      logger.error('proveedores.marcar_exportadas_fallo', { tenantId, err: error.message, marcadas, pendientes: ids.length - marcadas });
+      return { error: error.message, marcadas };
+    }
+    marcadas += tanda.length;
   }
-  return {};
+  return { marcadas };
 }

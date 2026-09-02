@@ -61,11 +61,24 @@ export default async function PoliticasPage({
   // ¿La política que se ve es SUYA o la heredada de la base? `getConfig` ya las
   // fusionó y no lo distingue, así que se pregunta por la fila cruda. Importa
   // decirlo: al guardar por primera vez, la flota deja de seguir la base.
+  //
+  // H35 (auditoría 24): esta lectura no comprobaba `error` — una consulta
+  // caída se leía IGUAL que "no tiene política propia" (`data` undefined →
+  // `Array.isArray(undefined)` → `false`), y la pantalla afirmaba «Heredada
+  // de la base» sobre una flota que quizás SÍ tiene la suya: no es lo mismo
+  // «no se pudo saber» que «usa la de la base», y la primera lectura, mal
+  // etiquetada como la segunda, empuja al dueño a guardar de nuevo creyendo
+  // que apenas está declarando su primera política.
   let politicaPropia = false;
+  let politicaPropiaFalloLectura = false;
   if (config) {
-    const { data } = await supabaseAdmin().from('tenant').select('config').eq('id', tenantId).maybeSingle();
-    const cfg = data?.config as { politica?: unknown } | null;
-    politicaPropia = Array.isArray(cfg?.politica);
+    const { data, error } = await supabaseAdmin().from('tenant').select('config').eq('id', tenantId).maybeSingle();
+    if (error) {
+      politicaPropiaFalloLectura = true;
+    } else {
+      const cfg = data?.config as { politica?: unknown } | null;
+      politicaPropia = Array.isArray(cfg?.politica);
+    }
   }
 
   const politica = config?.politica ?? [];
@@ -131,7 +144,11 @@ export default async function PoliticasPage({
             <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
               Topes por concepto
             </h2>
-            {!politicaPropia && <StatusPill estado="neutral">Heredada de la base</StatusPill>}
+            {politicaPropiaFalloLectura ? (
+              <StatusPill estado="warn">No se pudo saber si es propia</StatusPill>
+            ) : (
+              !politicaPropia && <StatusPill estado="neutral">Heredada de la base</StatusPill>
+            )}
           </div>
 
           {puedeEditar ? (
@@ -187,7 +204,9 @@ export default async function PoliticasPage({
               <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
                 Vacío es <strong>sin tope</strong>; un 0 es <strong>tope de cero</strong> — el concepto deja de
                 permitirse. No es lo mismo y el motor los trata distinto.
-                {!politicaPropia && ' Esta flota todavía usa la política base: al guardar queda con la suya y deja de seguirla.'}
+                {politicaPropiaFalloLectura
+                  ? ' No se pudo leer si esta flota ya tiene su propia política o sigue la base — recarga antes de decidir si hace falta guardar.'
+                  : !politicaPropia && ' Esta flota todavía usa la política base: al guardar queda con la suya y deja de seguirla.'}
               </p>
             </section>
           ) : politica.length === 0 ? (
@@ -233,19 +252,26 @@ export default async function PoliticasPage({
                   Reglas por ruta
                 </h2>
               </div>
-              <table className="w-full text-sm">
-                <tbody>
-                  {porRuta.map((p) => (
-                    <tr key={`${p.concepto}-${p.ruta}`} className="border-t" style={{ borderColor: 'var(--line)' }}>
-                      <td className="py-2.5 font-medium">{etiquetaConcepto(p.concepto)}</td>
-                      <td className="py-2.5" style={{ color: 'var(--muted)' }}>{p.ruta}</td>
-                      <td className="py-2.5 text-right tabular">
-                        {p.topeMonto === undefined ? '—' : mxn(p.topeMonto)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {/* H39 (auditoría 24): las otras dos tablas de esta página van
+                  envueltas en overflow-x-auto — ésta no, y con nombres de
+                  ruta largos ("CDMX - Nuevo Laredo, Tamaulipas") en un
+                  celular la fila se corta sin forma de deslizar para leer
+                  el resto. Mismo patrón que las dos tablas de arriba. */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <tbody>
+                    {porRuta.map((p) => (
+                      <tr key={`${p.concepto}-${p.ruta}`} className="border-t" style={{ borderColor: 'var(--line)' }}>
+                        <td className="py-2.5 font-medium">{etiquetaConcepto(p.concepto)}</td>
+                        <td className="py-2.5" style={{ color: 'var(--muted)' }}>{p.ruta}</td>
+                        <td className="py-2.5 text-right tabular">
+                          {p.topeMonto === undefined ? '—' : mxn(p.topeMonto)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
                 De solo lectura: el editor de arriba trabaja por concepto y no tiene dónde poner la ruta. Se conservan
                 intactas al guardar — no se editan desde aquí todavía.

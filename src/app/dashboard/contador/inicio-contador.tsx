@@ -11,7 +11,7 @@ import { contarHuerfanosPendientes } from '@/lib/likida/repo';
 import { getConfig, type LikidaConfig } from '@/lib/likida/config';
 import {
   resolverPeriodo, getGastosFiscales, getGastosFiscalesSeries,
-  resumirPerdidas, resumirFiscal, opcionesDe,
+  resumirPerdidas, resumirFiscal, opcionesDe, ventanaLitrosElegibles,
   type GastoFiscal, type ResumenPerdidas, type ResumenFiscal, type GastosFiscalesSeries,
   type Periodo,
 } from '@/lib/likida/fiscal';
@@ -78,9 +78,11 @@ export async function InicioContador({
   // ejercicio EQUIVOCADO: todo lo fiscal salía en ceros a las 6 de la tarde.
   const hoy = hoyMx(new Date(ahoraMs()));
   const periodoFiscal = resolverPeriodo(undefined, hoy);
-  const diasEjercicio = periodoFiscal.desde
-    ? Math.floor((Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${periodoFiscal.desde}T00:00:00Z`)) / 86_400_000) + 1
-    : undefined;
+  // FE-8 (auditoría 24): misma ventana que `ventanaLitrosElegibles` usa en
+  // combustible-casetas/page.tsx y chat/page.tsx — antes cada pantalla
+  // calculaba "días del ejercicio" a mano, con la misma cita legal (LIF
+  // 2026, Art. 20-A) llegando a cifras distintas entre pantallas.
+  const diasEjercicio = ventanaLitrosElegibles(hoy).dias;
 
   // ── LAS OCHO CONSULTAS, LANZADAS DE UNA (FE-14) ─────────────────────────
   // Sin `await`: salen todas en el mismo tick, igual que en el `Promise.all`

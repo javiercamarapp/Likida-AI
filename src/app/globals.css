@@ -339,6 +339,20 @@ html, body {
    (que es el único camino de regreso). El logo vuelve al expandir. */
 :root[data-sidebar='min'] .sb-logo { display: none; }
 :root[data-sidebar='min'] .sb-aside .ml-auto { margin-left: 0; }
+/* H10/H11 (auditoría 24): el user card (avatar + nombre + cerrar sesión) es
+   una fila con `justify-start` cuando el sidebar mide 232px, pero a 72px
+   —el colapso manual en escritorio Y el colapso AUTOMÁTICO de cualquier
+   pantalla bajo `lg` (todo teléfono)— solo caben ~40px de ancho: avatar
+   (28px) + separación + botón (28px) no entran uno junto al otro. Antes
+   "Cerrar sesión" llevaba `hidden lg:block`, así que en un teléfono
+   desaparecía POR COMPLETO — no había ningún control de salir de la cuenta
+   en el panel. Apilar en columna cuando el sidebar está en modo ícono deja
+   los dos elementos visibles (28px de ancho cada uno, uno debajo del otro)
+   sin desbordar la lámina. `.sb-user-card` vive en `chrome.tsx` junto a
+   `lg:flex-row` (que ya cubre el colapso automático por viewport); esta
+   regla cubre el colapso MANUAL en escritorio, donde el viewport sigue
+   siendo `lg` pero el ancho real ya es 72px. */
+:root[data-sidebar='min'] .sb-user-card { flex-direction: column !important; }
 .sb-aside a:focus-visible, .sb-aside button:focus-visible {
   outline: 3px solid var(--accent, var(--marca));
   outline-offset: 2px;

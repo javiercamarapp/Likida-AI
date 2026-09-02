@@ -9,7 +9,8 @@
 // resumen. Un número que no llega a quien decide no arregla nada.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import type { Liquidacion } from '@/types/likida';
+import type { Gasto, Liquidacion } from '@/types/likida';
+import { pagoPendiente, LEYENDA_PAGO_PENDIENTE } from '../cuadre/engine';
 
 /** `condicionado` = el motor no puede sostener la afirmación entera: hay un
  *  requisito legal de la deducción que el sistema no verifica. Mismo
@@ -42,6 +43,13 @@ export function filasDeducibilidad(
     // reparto de cubetas (sin ninguna condición fiscal de por medio) no tienen
     // por qué construir un arreglo vacío a mano.
     diferencias?: { tipo: string }[];
+    /**
+     * AUDITORÍA 24, FIS-6: un comprobante a crédito sin complemento de pago cae
+     * a «por confirmar» por el GASTO mismo, sin diferencia (ver `pagoPendiente`
+     * en cuadre/engine.ts). El PDF trae los gastos; el panel puede no traerlos
+     * — entonces el pie no afirma esa razón, solo las de siempre.
+     */
+    gastos?: Array<Pick<Gasto, 'formaPago' | 'pagadoEn' | 'monto'>>;
   },
 ): FilaDeducibilidad[] | null {
   if (!(liq.totalComprobado > 0)) return null;
@@ -72,11 +80,17 @@ export function filasDeducibilidad(
       : { label: 'Deducible para ISR', monto: liq.totalDeducible, tono: 'bueno' });
   }
   if (liq.totalPorConfirmar > 0) {
+    // FIS-6: si hay un CFDI a crédito sin pagar, el pie lo dice con su ficha —
+    // «se puede recuperar» a secas le esconde al contralor que lo que falta es
+    // el complemento de pago, no una factura.
+    const hayPagoPendiente = (liq.gastos ?? []).some((g) => g.monto > 0 && pagoPendiente(g));
     filas.push({
       label: 'Por confirmar',
       monto: liq.totalPorConfirmar,
       tono: 'pendiente',
-      pie: 'Falta timbrar la factura o acreditar el medio de pago. Se puede recuperar.',
+      pie: hayPagoPendiente
+        ? `${LEYENDA_PAGO_PENDIENTE} Lo demás: falta timbrar la factura o acreditar el medio de pago. Se puede recuperar.`
+        : 'Falta timbrar la factura o acreditar el medio de pago. Se puede recuperar.',
     });
   }
   if (liq.totalNoDeducible > 0) {

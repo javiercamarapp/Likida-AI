@@ -18,6 +18,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const maybeSingle = vi.fn();
 const insertSingle = vi.fn();
 const insertado = vi.fn();
+/** BE-4: con qué se filtra cada lectura (`in` = variantes, `eq` = exacto). */
+const filtros: Array<[string, unknown]> = [];
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
 vi.mock('@/lib/supabase/admin', () => ({
@@ -27,11 +29,11 @@ vi.mock('@/lib/supabase/admin', () => ({
       // `.maybeSingle()`: sirve igual para la lectura de dos filtros
       // (tenant + teléfono) que para la de uno (`getTenantContext`).
       const nodo: Record<string, unknown> = {};
-      nodo.eq = () => nodo;
+      nodo.eq = (col: string, v: unknown) => { filtros.push([`eq:${col}`, v]); return nodo; };
       // AUDITORÍA 22, DATOS-1: `loadConversation` busca por las seis
       // `variantesTelefono` (`.in`) y desempata (`.order`/`.limit`), no por
       // igualdad exacta. El nodo tiene que aceptar esa cadena.
-      nodo.in = () => nodo;
+      nodo.in = (col: string, v: unknown) => { filtros.push([`in:${col}`, v]); return nodo; };
       nodo.order = () => nodo;
       nodo.limit = () => nodo;
       nodo.maybeSingle = maybeSingle;
@@ -53,6 +55,7 @@ const CHOQUE = {
 };
 
 beforeEach(() => {
+  filtros.length = 0;
   maybeSingle.mockReset();
   insertSingle.mockReset();
   insertado.mockReset();
@@ -108,6 +111,39 @@ describe('loadConversation — el insert que pierde la carrera', () => {
     await expect(loadConversation('t1', '+52', 'v1')).rejects.toThrow(/permission denied/);
     // Y NO se relee: solo hay una lectura, la del principio.
     expect(maybeSingle).toHaveBeenCalledTimes(1);
+  });
+
+  // ── AUDITORÍA 24 · BE-4 (MEDIO, reincidente) ────────────────────────────
+  // Desde la 0274 la carrera se pierde contra el índice NORMALIZADO, y la
+  // relectura buscaba con `.eq('telefono', crudo)`: la fila ganadora nacida
+  // con la otra forma del número no aparecía y el turno se perdía con «No
+  // pude consultar tus datos».
+  it('BE-4: el choque contra el índice de la 0274 (`uq_wa_conversacion_tenant_telefono_norm`) TAMBIÉN es esta carrera', async () => {
+    maybeSingle
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: { id: 'c-ganadora', viaje_id: 'v1', estado: { turns: [] } }, error: null });
+    insertSingle.mockResolvedValue({
+      data: null,
+      error: { code: '23505', message: 'duplicate key value violates unique constraint "uq_wa_conversacion_tenant_telefono_norm"', details: 'Key (tenant_id, telefono_normalizado(telefono))=(t1, 529993700779) already exists.' },
+    });
+    const r = await loadConversation('t1', '5219993700779', 'v1');
+    expect(r.id).toBe('c-ganadora');
+    expect(logger.info).toHaveBeenCalledWith('conv.carrera_insert', expect.anything());
+  });
+
+  it('BE-4: la RELECTURA busca por las variantes del número (`.in`), no por el texto exacto — la ganadora pudo nacer con la otra forma', async () => {
+    maybeSingle
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: { id: 'c-ganadora', viaje_id: 'v1', estado: {} }, error: null });
+    insertSingle.mockResolvedValue({ data: null, error: CHOQUE });
+    await loadConversation('t1', '5219993700779', 'v1');
+    const porTelefono = filtros.filter(([k]) => k.endsWith(':telefono'));
+    // Dos lecturas (la inicial y la relectura), las dos por `.in` con las variantes.
+    expect(porTelefono).toHaveLength(2);
+    for (const [k, v] of porTelefono) {
+      expect(k).toBe('in:telefono');
+      expect(v).toEqual(expect.arrayContaining(['5219993700779', '529993700779']));
+    }
   });
 
   it('un 23505 contra OTRO índice tampoco se confunde con esta carrera', async () => {

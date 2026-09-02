@@ -87,3 +87,58 @@ export const MSG_STEP_UP =
 
 export const MSG_MFA_NO_VERIFICABLE =
   'No pude comprobar tu segundo factor en este momento (el servicio de autenticación no contestó). Por seguridad la acción no se ejecuta; inténtalo de nuevo en un minuto.';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MFA OBLIGATORIO PARA EL SUPERADMIN — auditoría 24, SEG-3 (MEDIO).
+//
+// La política de arriba es incremental por diseño: quien NO inscribió factor
+// pasa. Para el superadmin eso es demasiado barato. Su cuenta cruza TODOS los
+// tenants (`is_superadmin()` abre la RLS entera, `?tenant=` abre el panel de
+// cualquier flota y `/api/export/*` sus liquidaciones), y la puerta de entrada
+// es un enlace mágico al correo: un phishing que consiga que Javier pegue un
+// código de seis dígitos entrega la base de todos los clientes.
+//
+// La palanca (`LIKIDA_SUPERADMIN_MFA=obligatorio`) existe porque encender esto
+// sin haber inscrito el factor deja a Javier fuera de su propia consola. Con
+// la palanca APAGADA (default) el comportamiento es EXACTAMENTE el de antes.
+// La secuencia de encendido está en DEPLOY.md, sección Auth.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** ¿Está encendida la exigencia? Solo el valor exacto `obligatorio` la prende
+ *  — un `true`, un `1` o una errata NO encienden algo que puede dejar fuera
+ *  al dueño del sistema. */
+export function mfaSuperadminObligatorio(): boolean {
+  return (process.env.LIKIDA_SUPERADMIN_MFA ?? '').trim().toLowerCase() === 'obligatorio';
+}
+
+export type VeredictoMfaSuperadmin =
+  /** Factor inscrito y la sesión ya está en AAL2. */
+  | 'ok'
+  /** No tiene factor: hay que inscribirlo antes de seguir. */
+  | 'inscribir'
+  /** Tiene factor pero la sesión sigue en AAL1: falta el código. */
+  | 'retar'
+  /** No se pudo preguntar. Se trata como "no cumple" — fail CERRADO, igual
+   *  que `exigirAal2SiHayFactor` con `no_verificable`. */
+  | 'no_verificable';
+
+export async function veredictoMfaSuperadmin(sb: SupabaseClient): Promise<VeredictoMfaSuperadmin> {
+  const e = await estadoMfa(sb);
+  if (!e.legible) return 'no_verificable';
+  if (!e.inscrito) return 'inscribir';
+  if (e.aal !== 'aal2') return 'retar';
+  return 'ok';
+}
+
+/** Lo que la pantalla de Mi perfil le dice a un superadmin que llegó rebotado
+ *  por esta política. Uno por veredicto: «no se pudo comprobar» y «te falta
+ *  inscribirlo» son cosas distintas y decir la segunda por la primera sería
+ *  inventar. */
+export const MSG_MFA_SUPERADMIN: Record<Exclude<VeredictoMfaSuperadmin, 'ok'>, string> = {
+  inscribir: 'Tu cuenta de Likida entra a todas las flotas, así que necesita segundo factor. '
+    + 'Inscríbelo aquí abajo con tu app de autenticación y vuelve a la consola.',
+  retar: 'Tu sesión todavía no está verificada con el segundo factor. Escribe el código de tu app '
+    + 'aquí abajo y vuelve a la consola.',
+  no_verificable: 'No pude comprobar tu segundo factor en este momento (el servicio de autenticación '
+    + 'no contestó). Por seguridad la consola no se abre; vuelve a intentarlo en un minuto.',
+};

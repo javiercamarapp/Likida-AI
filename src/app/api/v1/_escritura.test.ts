@@ -124,6 +124,8 @@ const {
   reiniciarIdempotencia, leerLlaveIdempotencia, leerCuerpo, huella,
   CABECERA_IDEMPOTENCIA, LARGO_MIN_LLAVE, MAX_CUERPO_BYTES,
 } = await import('./_escritura');
+const { logger } = await import('@/lib/logger');
+const { DatoInvalido } = await import('@/lib/likida/errores');
 const { POST: postViaje } = await import('./viajes/route');
 const { POST: postUnidad } = await import('./unidades/route');
 
@@ -728,6 +730,37 @@ describe('nada de lo que pasa por dentro cruza al cuerpo', () => {
     // Ni el nombre del índice ni el vocabulario de Postgres.
     expect(c.error?.mensaje).not.toContain('uq_viaje');
     expect(c.error?.mensaje).not.toContain('duplicate key');
+  });
+
+  // AUDITORÍA 24, BE-13: los candados de baja (`operadorDeBaja`,
+  // `unidadDeBaja`, auditoría 20 H2/H4) lanzan `DatoInvalido` con el mensaje ya
+  // escrito para una persona. `traducirFalla` no lo distinguía: salía 500
+  // `error_interno` con «vuelve a intentar en un momento». El TMS del cliente
+  // reintentaba un error que nunca se va a arreglar solo.
+  it('BE-13: un operador dado de baja es 400 con SU mensaje, no un 500 «vuelve a intentar»', async () => {
+    (logger.error as ReturnType<typeof vi.fn>).mockClear();
+    crearViaje.mockImplementationOnce(async () => {
+      throw new DatoInvalido('Ese operador está dado de baja en tu flota. Vuelve a marcarlo como activo en Operadores, o asigna el viaje a otro chofer.');
+    });
+
+    const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo() }));
+    const c = await cuerpoDe(r);
+
+    expect(r.status).toBe(400);
+    expect(c.error?.codigo).toBe('parametro_invalido');
+    expect(c.error?.mensaje).toContain('dado de baja');
+    expect(c.error?.mensaje).not.toMatch(/vuelve a intentar/i);
+    // Y no ensucia el log de errores: esto es validación, no una falla nuestra.
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('BE-13: lo mismo para una unidad dada de baja', async () => {
+    crearViaje.mockImplementationOnce(async () => {
+      throw new DatoInvalido('Esa unidad está dada de baja. Si volvió al parque, vuelve a ponerla disponible en Unidades antes de asignarla.');
+    });
+    const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo() }));
+    expect(r.status).toBe(400);
+    expect((await cuerpoDe(r)).error?.mensaje).toContain('dada de baja');
   });
 
   it('si la BÚSQUEDA por llave natural falla, se falla cerrado: no se lee como "no existe"', async () => {

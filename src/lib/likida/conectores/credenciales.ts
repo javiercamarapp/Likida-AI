@@ -44,6 +44,71 @@ async function anotar(
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24, SEG-6 (BAJO) — EL `base_url` QUE APUNTABA HACIA ADENTRO.
+//
+// Ocho conectores (4 de GPS, 3 de ERP, 1 de peaje) piden `base_url` y
+// `gps.ts:54` sólo le quitaba la diagonal final: ni esquema ni host. Un
+// flota_admin podía guardar `http://10.0.0.5:9200` y apretar «Probar»; la
+// función de Vercel hacía el POST desde DENTRO y la pantalla enseñaba el
+// veredicto por código HTTP y `e.message` — un oráculo del estado de lo que
+// haya en esa dirección. Lo acota que sólo llega ahí quien administra la flota
+// y que la red de Vercel no expone servicios internos de Likida; no lo acota
+// la CSP, porque el POST no sale del navegador.
+//
+// Se valida al GUARDAR y no al usar: es el único punto por el que el valor
+// entra, y así el conector no tiene que desconfiar de su propia credencial.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Lo que nunca es el portal de un proveedor de GPS: la propia máquina, la
+ *  red privada, y los nombres que sólo resuelven dentro de una nube. */
+function hostHaciaAdentro(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '');
+  if (h === 'localhost' || h === '::1' || h.endsWith('.localhost')) return true;
+  if (h.endsWith('.internal') || h.endsWith('.local') || h.endsWith('.localdomain')) return true;
+  // IPv4 literal: se juzga por rangos, no por texto.
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    if ([a, b, Number(v4[3]), Number(v4[4])].some((n) => n > 255)) return true;
+    if (a === 10 || a === 127 || a === 0) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;          // link-local y el metadata de las nubes
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+    return false;
+  }
+  // IPv6 literal: loopback, link-local (fe80::) y única local (fc00::/7).
+  if (h.includes(':')) return h === '::' || h.startsWith('fe80:') || h.startsWith('fc') || h.startsWith('fd');
+  return false;
+}
+
+/**
+ * `base_url` (y cualquier credencial que termine en `_url`) tiene que ser una
+ * dirección pública por HTTPS. Lanza `DatoInvalido` con el porqué: la pantalla
+ * de Conexiones lo enseña tal cual, y el dueño de la flota necesita saber que
+ * lo que escribió no es el portal de su proveedor.
+ */
+export function validarUrlDeCredencial(clave: string, valor: string): void {
+  let u: URL;
+  try {
+    u = new URL(valor);
+  } catch {
+    throw new DatoInvalido(`El campo ${clave} no es una dirección válida. Se espera la dirección del portal de tu proveedor, con https:// al principio.`);
+  }
+  if (u.protocol !== 'https:') {
+    throw new DatoInvalido(`El campo ${clave} tiene que ir por https:// — por ${u.protocol.replace(':', '')} la credencial viajaría sin cifrar.`);
+  }
+  if (hostHaciaAdentro(u.hostname)) {
+    throw new DatoInvalido(`El campo ${clave} apunta a una dirección de red interna (${u.hostname}). Se espera el portal público de tu proveedor.`);
+  }
+}
+
+/** `base_url`, `api_url`, … — la convención del catálogo de conectores. */
+function esCampoUrl(clave: string): boolean {
+  return clave === 'url' || clave.endsWith('_url');
+}
+
 /**
  * Guarda (o reemplaza) los accesos de un conector para la flota.
  *
@@ -87,6 +152,12 @@ export async function guardarCredencial(
   const falta = faltantes(conector, limpios);
   if (falta.length > 0) {
     throw new DatoInvalido(`Faltan datos para guardar ${conector.nombre}: ${falta.join(', ')}.`);
+  }
+
+  // SEG-6: antes de cifrar. Una dirección interna guardada ya es el oráculo,
+  // aunque nadie apriete «Probar»: el poller la usaría cada 5 minutos.
+  for (const [clave, valor] of Object.entries(limpios)) {
+    if (esCampoUrl(clave)) validarUrlDeCredencial(clave, valor);
   }
 
   const { data, error } = await acotada(supabaseAdmin().from('conector_credencial').upsert({

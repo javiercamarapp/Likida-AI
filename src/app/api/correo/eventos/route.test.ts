@@ -109,6 +109,36 @@ describe('la puerta', () => {
     expect((await postear(EVENTO, { firmar: false })).status).toBe(401);
     expect((await postear(EVENTO, { ts: Math.floor(Date.now() / 1000) - 3600 })).status).toBe(401);
   });
+
+  // AUDITORÍA 24, BE-21: era `await req.text()` y el tope se medía DESPUÉS. Un
+  // POST `chunked` (sin `content-length`) y sin una sola cabecera svix entraba
+  // ENTERO a memoria antes del 413. Aquí el emisor manda 128 trozos de 1 KB y
+  // se fija que la lectura se corta pasados los 64 KB: no se le pide al
+  // remitente lo que no cabe.
+  it('BE-21: un cuerpo sin content-length se corta MIENTRAS se lee — 413 sin materializarlo', async () => {
+    const TROZO = 1024;
+    let pedidos = 0;
+    const cuerpo = new ReadableStream<Uint8Array>({
+      pull(c) {
+        pedidos += 1;
+        if (pedidos > 128) { c.close(); return; }
+        c.enqueue(new Uint8Array(TROZO).fill(120));
+      },
+    });
+    const req = new Request('https://app.likida.ai/api/correo/eventos', {
+      method: 'POST',
+      headers: { 'svix-id': 'msg_1', 'svix-timestamp': String(Math.floor(Date.now() / 1000)), 'svix-signature': 'v1,AAAA' },
+      body: cuerpo,
+      // @ts-expect-error `duplex` es obligatorio en Node para un body de stream
+      duplex: 'half',
+    });
+
+    const r = await POST(req);
+
+    expect(r.status).toBe(413);
+    // 64 KB / 1 KB = 64 trozos; se permite el que rebasa y se cancela ahí.
+    expect(pedidos).toBeLessThanOrEqual(66);
+  });
 });
 
 describe('el circuito', () => {

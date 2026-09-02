@@ -364,3 +364,42 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
 
   return { fuentes, cola, conteos };
 }
+
+// ── Los conteos REALES, por fuente y en total (ADM-4, auditoría 24) ────────
+//
+// `corridas`, `tickets` y `liquidaciones` traen su cola TOPADA
+// (`TOPE_CORRIDAS_FALLIDAS`, `TOPE_TICKETS`, `LIMITE_LIQUIDACIONES_REVISAR`):
+// `fuentes[f].items.length` de esas tres es el tamaño de la página, no el
+// total. `conteos` ya trae el total contado en base para esas tres, y para
+// las otras tres (`arco`, `talachas`, `facturas_proveedor`, que NO tienen
+// tope — usan `traerTodo`) el total coincide con `items.length`. Exportado
+// para que cualquier pantalla que necesite "cuántos hay" lea DE AQUÍ, nunca
+// de `items.length`.
+
+/** El conteo real de UNA fuente. `null` = esa fuente no se pudo leer (no 0). */
+export function conteoDeFuente(f: FuenteEscalacion, conteos: ConteosEscalaciones): number | null {
+  switch (f) {
+    case 'arco': return conteos.arco;
+    case 'corridas': return conteos.corridasFallo;
+    case 'talachas': return conteos.talachas;
+    case 'facturas_proveedor': return conteos.facturasProveedor;
+    // "tickets" en la cola son los NO cerrados (ver el `.filter` de arriba) —
+    // el mismo universo que `ticketsAbiertos`. `ticketsVencidos` es un
+    // SUBCONJUNTO de esos, no una fuente aparte: sumarlo también duplicaría.
+    case 'tickets': return conteos.ticketsAbiertos;
+    case 'liquidaciones': return conteos.liquidacionesRevisar;
+    default: return null;
+  }
+}
+
+const TODAS_LAS_FUENTES: FuenteEscalacion[] = [
+  'arco', 'corridas', 'talachas', 'facturas_proveedor', 'tickets', 'liquidaciones',
+];
+
+/** El total de la bandeja ENTERA — suma los reales de cada fuente (una
+ *  fuente ilegible aporta 0, igual que antes aportaba 0 por no tener items
+ *  en la cola: no es peor que el comportamiento previo, solo ya no se queda
+ *  corto en las tres fuentes topadas). */
+export function totalEscalaciones(b: BandejaEscalaciones): number {
+  return TODAS_LAS_FUENTES.reduce((s, f) => s + (conteoDeFuente(f, b.conteos) ?? 0), 0);
+}

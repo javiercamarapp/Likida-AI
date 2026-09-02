@@ -3,7 +3,7 @@ import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { strip_accents } from './cuadre/util';
 import { esAfirmacion, esNegacion } from './intake/huerfanos';
-import { ConsultaFallida, getOpenViaje } from './conv';
+import { ConsultaFallida, getOpenViaje, variantesTelefono } from './conv';
 import {
   resolverOperadorPorNombre, resolverUnidadPorEconomico, OperadorNombreAmbiguo,
 } from './crear_viaje_wa';
@@ -154,11 +154,25 @@ interface AsignacionPendiente {
   en: string;
 }
 
+// ── AUDITORÍA 24, DAT-5 (ALTO) ────────────────────────────────────────────
+// Era `.eq('telefono', telefono)`: igualdad EXACTA sobre el texto crudo, la
+// misma que la auditoría 22 (DATOS-1) ya había quitado de `conv.ts`. Meta
+// entrega el primer mensaje del jefe como `5219993700779` y el «sí» como
+// `529993700779`: el pendiente se guardaba bajo una forma y se buscaba bajo
+// otra, así que `cargarPendiente` devolvía `null` y la asignación que el jefe
+// acababa de confirmar no ocurría. Con el índice de la 0274
+// (`telefono_normalizado(telefono)` único por tenant) el INSERT de la otra
+// forma además choca con 23505. Se lee por las seis variantes —el índice
+// garantiza que a lo más una fila las cumple— y se escribe SIEMPRE contra el
+// teléfono que la fila ya tiene, para no estrenar una segunda.
+
 async function cargarPendiente(tenantId: string, telefono: string, ahora: Date): Promise<AsignacionPendiente | null> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
     .select('estado')
-    .eq('tenant_id', tenantId).eq('telefono', telefono)
+    .eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono))
+    .order('updated_at', { ascending: false }).order('id', { ascending: false })
+    .limit(1)
     .maybeSingle(), 'asignarWa.cargarPendiente');
   if (error) {
     logger.warn('asignar_wa.pendiente_ilegible', { err: error.message });
@@ -177,12 +191,18 @@ async function guardarPendiente(tenantId: string, telefono: string, p: Asignacio
   // en vez de bloquear la asignación por un tropiezo transitorio.
   const { data: filaActual, error: errLectura } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
-    .select('estado')
-    .eq('tenant_id', tenantId).eq('telefono', telefono)
+    .select('telefono, estado')
+    .eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono))
+    .order('updated_at', { ascending: false }).order('id', { ascending: false })
+    .limit(1)
     .maybeSingle(), 'asignarWa.guardarPendiente.leer');
   if (errLectura) {
     logger.warn('asignar_wa.pendiente_fusion_ilegible', { err: errLectura.message });
   }
+  // DAT-5: el teléfono CANÓNICO es el que la fila ya trae. Escribir con la
+  // forma que trajo este webhook estrenaría una segunda conversación para el
+  // mismo jefe (o chocaría contra el índice de la 0274).
+  const telefonoFila = (filaActual as { telefono?: string } | null)?.telefono ?? telefono;
   const previo = (filaActual?.estado as Record<string, unknown> | null) ?? {};
   const fusionado: Record<string, unknown> = { ...previo };
   if (p) fusionado.asignacionPendiente = p; else delete fusionado.asignacionPendiente;
@@ -194,7 +214,7 @@ async function guardarPendiente(tenantId: string, telefono: string, p: Asignacio
     .from('wa_conversacion')
     .upsert({
       tenant_id: tenantId,
-      telefono,
+      telefono: telefonoFila,
       estado: fusionado,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'tenant_id,telefono' }), 'asignarWa.guardarPendiente');
@@ -217,7 +237,9 @@ async function reclamarPendiente(tenantId: string, telefono: string): Promise<'r
   const { data: filaActual, error: errLectura } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
     .select('estado')
-    .eq('tenant_id', tenantId).eq('telefono', telefono)
+    .eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono))
+    .order('updated_at', { ascending: false }).order('id', { ascending: false })
+    .limit(1)
     .maybeSingle(), 'asignarWa.reclamarPendiente.leer');
   if (errLectura) {
     logger.error('asignar_wa.reclamo_lectura_fallo', { err: errLectura.message });
@@ -229,7 +251,7 @@ async function reclamarPendiente(tenantId: string, telefono: string): Promise<'r
   const { data, error } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
     .update({ estado: sinPendiente, updated_at: new Date().toISOString() })
-    .eq('tenant_id', tenantId).eq('telefono', telefono)
+    .eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono))
     .not('estado->asignacionPendiente', 'is', null)
     .select('telefono'), 'asignarWa.reclamarPendiente');
   if (error) {

@@ -177,7 +177,12 @@ export async function drenarBandeja(inicioInvocacion: number, req: Request, vuel
       logger.error('cron.wa_pendientes.cartas_muertas', { muertas });
       await alertarOperador('cron.wa_pendientes', { error: `${muertas} mensaje(s) de WhatsApp agotaron sus reintentos en la bandeja del apagado`, codigo: 'cartas_muertas' });
     }
-    await registrarLatido('wa-pendientes', fallidos > 0 ? 'fallo' : 'ok', { procesados, fallidos, pospuestos, vuelta });
+    // AUDITORÍA 24, BE-14: `pospuestos` no era del latido. Un lote de 40 fotos
+    // donde la primera se come el presupuesto y 39 vuelven `sin_tiempo` latía
+    // `ok` (procesados=0, fallidos=0) y la bandeja crecía minuto a minuto con
+    // el tablero en verde. Lo pospuesto es trabajo que quedó: `parcial`,
+    // como gps/jornada/facturar/runner en su corte.
+    await registrarLatido('wa-pendientes', fallidos > 0 ? 'fallo' : pospuestos > 0 ? 'parcial' : 'ok', { procesados, fallidos, pospuestos, vuelta });
     return { procesados, fallidos, pospuestos, cartasMuertas: muertas, encolado };
   } catch (e) {
     huboFalloDeCron = true;

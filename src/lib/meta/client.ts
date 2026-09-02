@@ -569,6 +569,44 @@ async function avisarFalloMedia(paso: string, mediaId: string, res: Response): P
   });
 }
 
+/**
+ * Lo que Meta dice de un media ANTES de bajarlo (AUDITORÍA 24 · WA-8).
+ *
+ * WhatsApp acepta documentos de hasta 100 MB, y `downloadMediaAsText` los
+ * bajaba ENTEROS a memoria —`bin.text()` sobre lo que fuera— para después
+ * descubrir que no era un XML. El PDF de tres páginas del CFDI de casetas y
+ * el HEIC del iPhone que el chofer manda «como archivo para no perder
+ * calidad» entraban por ahí, dentro del presupuesto de la invocación.
+ *
+ * Con esto se decide QUÉ es y CUÁNTO pesa con una sola llamada barata, antes
+ * de tocar el binario. `null` = no se pudo preguntar (ya logueado).
+ */
+export async function metadatosMedia(
+  mediaId: string,
+): Promise<{ mimeType: string; fileSize: number | null } | null> {
+  try {
+    const meta = await fetch(`${GRAPH}/${mediaId}`, {
+      headers: { Authorization: `Bearer ${token()}` },
+      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    });
+    if (!meta.ok) { await avisarFalloMedia('metadatos', mediaId, meta); return null; }
+    const { mime_type, file_size } = (await meta.json()) as { mime_type?: string; file_size?: number };
+    return { mimeType: mime_type ?? '', fileSize: typeof file_size === 'number' ? file_size : null };
+  } catch (e) {
+    logger.warn('wa.metadatosMedia', { err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
+/**
+ * Tope del XML del CFDI (AUDITORÍA 24 · WA-8). Un CFDI de un ticket ronda los
+ * 4 KB; uno consolidado de un monedero con miles de renglones no llega al
+ * megabyte. 5 MB es holgura, no un límite que alguien vaya a rozar — y es lo
+ * que impide que un documento de 100 MB se lea entero a memoria para
+ * descubrir, después, que no era un XML.
+ */
+export const MAX_XML_BYTES = 5 * 1024 * 1024;
+
 /** Descarga un media entrante de Meta como TEXTO (para el XML del CFDI). */
 export async function downloadMediaAsText(mediaId: string): Promise<string | null> {
   try {
@@ -577,13 +615,25 @@ export async function downloadMediaAsText(mediaId: string): Promise<string | nul
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
     if (!meta.ok) { await avisarFalloMedia('metadatos', mediaId, meta); return null; }
-    const { url } = (await meta.json()) as { url: string };
+    const { url, file_size } = (await meta.json()) as { url: string; file_size?: number };
+    // WA-8: el tope se comprueba ANTES de bajar (con lo que Meta reporta) y
+    // otra vez sobre el texto ya leído, por si `file_size` faltara — la misma
+    // guardia en dos puntos, igual que la de la imagen pesada de abajo.
+    if (typeof file_size === 'number' && file_size > MAX_XML_BYTES) {
+      logger.warn('wa.documento_demasiado_pesado', { mediaId, bytes: file_size, etapa: 'metadatos' });
+      return null;
+    }
     const bin = await fetch(url, {
       headers: { Authorization: `Bearer ${token()}` },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
     if (!bin.ok) { await avisarFalloMedia('contenido', mediaId, bin); return null; }
-    return await bin.text();
+    const texto = await bin.text();
+    if (texto.length > MAX_XML_BYTES) {
+      logger.warn('wa.documento_demasiado_pesado', { mediaId, bytes: texto.length, etapa: 'contenido' });
+      return null;
+    }
+    return texto;
   } catch (e) {
     logger.warn('wa.downloadMediaText', { err: e instanceof Error ? e.message : String(e) });
     return null;

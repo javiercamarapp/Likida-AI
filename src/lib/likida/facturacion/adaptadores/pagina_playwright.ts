@@ -699,6 +699,20 @@ export class PaginaPlaywright implements PaginaPortal {
   }
 
   /**
+   * Cuántos elementos casan con el selector. Es la guarda que el piloto de
+   * visión consulta ANTES de escribir o hacer clic (auditoría 24, TC-2):
+   * `uno()` ante ambigüedad solo avisa y toma el PRIMERO, que para un
+   * formulario duplicado (pestañas, un modal) es justo el botón que timbra.
+   * Los adaptadores de guion siguen con `uno()` —sus selectores se midieron
+   * contra el portal— y el piloto, que arma el suyo con un modelo, no adivina.
+   *
+   * LANZA si no se puede contar: un conteo que no se pudo hacer no es un 1.
+   */
+  async contar(selector: string): Promise<number> {
+    return acotar(() => this.page.locator(selector).count(), this.topes.lectura, `contar \`${selector}\``);
+  }
+
+  /**
    * `null` cuando el selector no está. NUNCA lanza — lo dice el contrato, y de
    * él depende que la ausencia del cuadro de error no se lea como un fallo.
    *

@@ -15,6 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '@/lib/likida/presupuesto';
 
 export interface EntradaBitacora {
   id: number;
@@ -55,9 +56,16 @@ export async function ultimasEntradasBitacora(
     .select('id, tenant_id, actor_id, actor_email, accion, entidad, entidad_id, detalle, ocurrio_en, tenant:tenant_id(nombre), actor:actor_id(nombre, email)');
   // El filtro ANTES de order/limit: sobre el builder ya transformado el
   // `.ilike` no existe (y filtrar las 50 recortadas mentiría sobre el resto).
-  const { data, error } = await (filtro ? base.ilike('accion', `%${filtro}%`) : base)
-    .order('ocurrio_en', { ascending: false })
-    .limit(limite);
+  //
+  // ADM-12 (auditoría 24, menor): esta lectura era la única de lib/admin sin
+  // `acotada` — un socket que Supabase acepta y no contesta colgaba hasta el
+  // default de undici en vez de fallar rápido con su propio tope.
+  const { data, error } = await acotada(
+    (filtro ? base.ilike('accion', `%${filtro}%`) : base)
+      .order('ocurrio_en', { ascending: false })
+      .limit(limite),
+    'ultimasEntradasBitacora',
+  );
   if (error) throw new Error(`ultimasEntradasBitacora: ${error.message}`);
 
   return ((data ?? []) as Array<Record<string, unknown>>).map((f): EntradaBitacora => {

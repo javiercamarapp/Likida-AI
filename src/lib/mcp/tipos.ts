@@ -35,6 +35,16 @@ export interface Herramienta<T> {
    */
   descripcion: string;
   area: Area;
+  /**
+   * AUDITORÍA 24, TC-N4 (MEDIO, reincidente de la 22): `search`/`fetch` —las
+   * dos que ChatGPT exige por nombre— viven en `operacion`, y el contador
+   * (`['dinero']`) no las alcanzaba: su primera pregunta fallaba y ensuciaba
+   * el feed de seguridad con `acceso_denegado`. Una herramienta puede
+   * declarar que CUALQUIERA de estas áreas la alcanza; `area` sigue siendo la
+   * principal (la que se reporta y la que decide el mensaje). `fetch` ya
+   * degrada por sí sola la sección de dinero según `alcanza('dinero')`.
+   */
+  areasQueAlcanzan?: readonly Area[];
   esquema: z.ZodType<T>;
   ejecutar: (tenantId: string, args: T, contexto: ContextoHerramienta) => Promise<ResultadoHerramienta>;
 }

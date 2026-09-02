@@ -101,7 +101,8 @@ vi.mock('@/lib/supabase/admin', () => ({
     storage: { from: () => ({ upload: async () => ({ error: null }), createSignedUrl: async () => ({ data: null, error: { message: 'sin storage' } }) }) },
   }),
 }));
-vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+vi.mock('@/lib/logger', () => ({ logger }));
 
 const { processInbound } = await import('./processor');
 
@@ -252,6 +253,50 @@ describe('processInbound — pedir la re-foto y saber recibirla', () => {
     expect(dicho, 'sin las señas el operador no sabe cuál ticket es').toContain('NUEVA WAL MART');
     expect(dicho).toContain('05461');
     expect(dicho).toContain('01/08/26');
+  });
+
+  // ── AUDITORÍA 24 · PRU-7 (MEDIO) ────────────────────────────────────────
+  //
+  // La mutación M24 apagaba esta rama entera (`if (dudosa)` → nunca) y las 26
+  // pruebas de `processor_*`/`rafaga`/`correccion_fecha`/`ventana_dia_mx`
+  // seguían en verde: `fecha_dudosa.ts` está al 100 %, pero la COSTURA donde
+  // el processor la usa para avisar no estaba anclada por su propio nombre.
+  // Esto la ancla por los dos lados que un operador puede ver: la línea del
+  // log con la que se caza el caso en producción, y el motivo que distingue
+  // «fuera del viaje» de «otro ejercicio» — dos consecuencias fiscales
+  // distintas (un gasto de otro ejercicio no se deduce en éste).
+  it('PRU-7: la costura queda anclada — se registra `foto.fecha_dudosa` con su motivo', async () => {
+    extraerComprobante.mockResolvedValue({
+      legible: true,
+      gasto: {
+        concepto: 'alimentacion', monto: 45, fecha: '2026-01-08', folio: '05461',
+        ocrExtra: { emisor: 'NUEVA WAL MART DE MEXICO S DE RL DE CV', fechaImpresa: '01/08/26' },
+      },
+      costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
+    });
+
+    await processInbound(foto);
+
+    expect(logger.info).toHaveBeenCalledWith('foto.fecha_dudosa',
+      expect.objectContaining({ motivo: 'fuera_de_rango', fecha: '2026-01-08' }));
+  });
+
+  it('PRU-7: un ticket de OTRO EJERCICIO se distingue del que solo cae fuera del viaje', async () => {
+    // No es cosmético: un gasto de un ejercicio anterior NO se deduce en éste,
+    // y el texto que se le manda al chofer es otro.
+    extraerComprobante.mockResolvedValue({
+      legible: true,
+      gasto: {
+        concepto: 'alimentacion', monto: 45, fecha: '2024-07-27', folio: '05461',
+        ocrExtra: { emisor: 'NUEVA WAL MART DE MEXICO S DE RL DE CV', fechaImpresa: '27/07/24' },
+      },
+      costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
+    });
+
+    await processInbound(foto);
+
+    expect(logger.info).toHaveBeenCalledWith('foto.fecha_dudosa',
+      expect.objectContaining({ motivo: 'otro_ejercicio' }));
   });
 
   it('con la fecha buena no le dice nada de fechas', async () => {

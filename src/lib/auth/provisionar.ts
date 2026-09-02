@@ -13,6 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
+import { logger } from '@/lib/logger';
 
 /** El dominio de `app_user_rol_dominio` menos `operador` (sin login desde el
  *  7-ago-2026). `vendedor` (0105) es rol de LIKIDA: siempre con tenantId
@@ -58,7 +59,21 @@ export async function provisionarUsuario(
     id: data.user.id, tenant_id: tenantId, email, nombre: nombre ?? null, rol,
     telefono: telefonoCanonico,
   });
-  if (errInsert) throw new Error(errInsert.message);
+  if (errInsert) {
+    // ── ROLLBACK (auditoría 24, H6). Sin esto, un insert que rebota (el
+    // teléfono ya identifica a otra cuenta — índice 0059—, un bache) dejaba
+    // un usuario de Auth SIN fila en app_user: una cuenta que puede iniciar
+    // sesión (magic link) y aterriza en /sin-acceso, y que además bloquea
+    // para siempre un segundo alta con el mismo correo («already
+    // registered»). Se borra el usuario de Auth que ESTA llamada creó; si el
+    // borrado también falla, se dice en el log y el error original sigue su
+    // camino — el llamador ya sabe que el alta no se completó.
+    const { error: errBorrar } = await admin.auth.admin.deleteUser(data.user.id);
+    if (errBorrar) {
+      logger.error('provisionar.rollback_fallo', { userId: data.user.id, err: errBorrar.message, causa: errInsert.message });
+    }
+    throw new Error(errInsert.message);
+  }
 
   return { userId: data.user.id };
 }

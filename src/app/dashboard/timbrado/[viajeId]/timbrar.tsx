@@ -9,6 +9,9 @@ import {
   leerContextoTimbre, timbrarViaje, guardarReceptorFiscal, motivoDeReservaViva,
 } from '@/lib/likida/carta_porte_timbre';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
+// FE-23: las cifras del panel SOLO salen de aquí. Éstas se leen junto al botón
+// que emite un CFDI irreversible, así que con más razón.
+import { mxn } from '@/lib/formato';
 import { sufijoTenant } from '../../sufijo';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../../admin/ui/forma';
 
@@ -67,17 +70,33 @@ export async function SeccionTimbrado({ v, searchParams }: {
     const metodo = String(fd.get('metodoPago')) === 'PUE' ? 'PUE' as const : 'PPD' as const;
     // Con PPD la forma ES 99 (Anexo 20) — el selector de forma solo aplica a PUE.
     const forma = metodo === 'PPD' ? '99' : (t(fd.get('formaPago')) ?? '');
-    const r = await timbrarViaje(s.tenantId, v.viajeId, { metodoPago: metodo, formaPago: forma }, { id: s.userId });
-    revalidatePath(rutaActual);
-    if (!r.ok) {
-      const detalle = r.faltantes && r.faltantes.length > 0 ? ` · ${r.faltantes.join(' · ')}` : '';
-      return { error: `${r.motivo}${detalle}` };
+    // AUDITORÍA 24, FE-24 (MEDIO): esto NO estaba en try/catch. Un fallo de
+    // red con el PAC lanzaba dentro de la server action, tiraba la página
+    // entera al `error.tsx` y —peor— se saltaba el `revalidatePath`: el
+    // contador no leía el «SIN RESPUESTA DEL PAC — verifica en el panel del
+    // PAC» que la ruta controlada sí da (carta_porte_timbre.ts:359) y podía
+    // reintentar creyendo que no pasó nada. Un CFDI se puede haber emitido.
+    // El `finally` revalida SIEMPRE, también cuando lanzó: si el timbre salió
+    // y la respuesta se perdió, la pantalla recargada lo enseña.
+    try {
+      const r = await timbrarViaje(s.tenantId, v.viajeId, { metodoPago: metodo, formaPago: forma }, { id: s.userId });
+      if (!r.ok) {
+        const detalle = r.faltantes && r.faltantes.length > 0 ? ` · ${r.faltantes.join(' · ')}` : '';
+        return { error: `${r.motivo}${detalle}` };
+      }
+      return {
+        ok: r.yaExistia
+          ? `Este viaje ya tenía su timbre: ${r.uuid} (${r.modo}).`
+          : `Timbrado ${r.modo === 'sandbox' ? 'DE PRUEBA (no ampara nada)' : ''} — folio fiscal ${r.uuid}.`,
+      };
+    } catch (e) {
+      return {
+        error: `${mensajeParaPantalla(e, 'timbrar')} No des el timbre por fallido: si el PAC alcanzó a sellar, ` +
+          'el CFDI existe. Recarga esta pantalla y, si sigue sin folio fiscal, verifica en el panel de tu PAC antes de reintentar.',
+      };
+    } finally {
+      revalidatePath(rutaActual);
     }
-    return {
-      ok: r.yaExistia
-        ? `Este viaje ya tenía su timbre: ${r.uuid} (${r.modo}).`
-        : `Timbrado ${r.modo === 'sandbox' ? 'DE PRUEBA (no ampara nada)' : ''} — folio fiscal ${r.uuid}.`,
-    };
   }
 
   async function guardarReceptor(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
@@ -205,17 +224,32 @@ export async function SeccionTimbrado({ v, searchParams }: {
       {ensayo.ok && puedeEmitir && (
         <div className="space-y-1">
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-            Flete {String(ensayo.subTotal)} + IVA 16% {String(ensayo.iva)}
-            {ensayo.retencionIva !== null ? ` − retención IVA 4% ${String(ensayo.retencionIva)} (receptor persona moral, LIVA 1-A II c)` : ''}
-            {' '}= <span className="font-medium">Total {String(ensayo.total)} MXN</span>.
+            Flete {mxn(ensayo.subTotal)} + IVA 16% {mxn(ensayo.iva)}
+            {ensayo.retencionIva !== null ? ` − retención IVA 4% ${mxn(ensayo.retencionIva)} (receptor persona moral, LIVA 1-A II c)` : ''}
+            {' '}= <span className="font-medium">Total {mxn(ensayo.total)}</span>.
           </p>
           <FormaConAviso accion={timbrar} boton={ctx.emisor.modo === 'sandbox' ? 'Timbrar (PRUEBA)' : 'Timbrar'} columnas="md:grid-cols-2">
-            <Selector nombre="metodoPago" etiqueta="Método de pago" valorInicial="PPD" opciones={[
+            {/* AUDITORÍA 24, FIS-8 (MEDIO): el valor por defecto era PPD, y un
+                CFDI PPD OBLIGA a emitir después un complemento de pago (CFDI
+                de Pagos 2.0) al cobrar. Likida no lo emite todavía —
+                `pac/sw.ts` lo declara, la pantalla no— y sin el REP el cliente
+                de la flota no puede acreditar su IVA y la flota queda con una
+                obligación pendiente que su sistema no le dijo. El defecto pasa
+                a PUE (pago en una exhibición: se agota con el timbre y no
+                arrastra nada) y PPD queda como elección explícita, con lo que
+                arrastra escrito al lado. */}
+            <Selector nombre="metodoPago" etiqueta="Método de pago" valorInicial="PUE" opciones={[
+              { valor: 'PUE', texto: 'PUE — pago en una exhibición (ya cobrado o se cobra al entregar)' },
               { valor: 'PPD', texto: 'PPD — pago en parcialidades/diferido (forma 99)' },
-              { valor: 'PUE', texto: 'PUE — pago en una exhibición' },
             ]} />
-            <Campo nombre="formaPago" etiqueta="Forma de pago (solo con PUE)" placeholder="03 transferencia · 01 efectivo" ayuda="Con PPD se envía 99 «Por definir» (Anexo 20). PUE con 99 se rechaza aquí mismo: se contradicen." />
+            <Campo nombre="formaPago" etiqueta="Forma de pago (obligatoria con PUE)" placeholder="03 transferencia · 01 efectivo" ayuda="Con PPD se envía 99 «Por definir» (Anexo 20) y este campo se ignora. PUE con 99 se rechaza aquí mismo: se contradicen." />
           </FormaConAviso>
+          <p className="text-[11.5px]" style={{ color: 'var(--warn)' }}>
+            Si eliges PPD: ese CFDI te obliga a emitir un complemento de pago cuando cobres, y Likida
+            todavía no lo emite. Mientras no exista, tu cliente no puede acreditar su IVA y la
+            obligación queda abierta a tu nombre. Elige PPD solo si tu contador va a emitir el
+            complemento por su cuenta.
+          </p>
         </div>
       )}
     </section>

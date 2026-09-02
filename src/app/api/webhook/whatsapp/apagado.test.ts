@@ -28,8 +28,21 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn, error: vi.fn() }
 const flushObservabilidad = vi.fn(async () => {});
 vi.mock('@/lib/observability/sentry', () => ({ flushObservabilidad }));
 
-const estaApagado = vi.fn(async () => false);
-vi.mock('@/lib/likida/interruptores', () => ({ estaApagado }));
+// AUDITORÍA 24 · AGEN-7: la ruta lee `leerInterruptor` y no `estaApagado`,
+// porque «apagado» y «no pude leer la palanca» merecen respuestas distintas:
+// solo el primero es mantenimiento del que se puede avisar; el segundo es el
+// fail-closed de un parpadeo de la base de cinco segundos.
+const leerInterruptor = vi.fn(async () => 'encendido' as 'encendido' | 'apagado' | 'ilegible');
+const estaApagado = vi.fn(async () => (await leerInterruptor()) !== 'encendido');
+vi.mock('@/lib/likida/interruptores', () => ({ estaApagado, leerInterruptor }));
+
+// El aviso de mantenimiento es el único envío que sale de esta ruta.
+const salientes: Array<{ to: string; texto: string }> = [];
+const sendText = vi.fn(async (to: string, texto: string) => { salientes.push({ to, texto }); return 'wamid.OUT'; });
+vi.mock('@/lib/meta/client', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  sendText: (...a: unknown[]) => sendText(...(a as [string, string])),
+}));
 
 // La bandeja durable (0119, P1 de la auditoría externa): apagado ya no
 // descarta — guarda. El doble registra QUÉ se guardó para poder afirmarlo.
@@ -64,6 +77,7 @@ vi.mock('next/server', async (orig) => {
 });
 
 const { POST } = await import('./route');
+const { olvidarAvisosDeApagado } = await import('./avisos_apagado');
 
 const firmar = (body: string) =>
   'sha256=' + crypto.createHmac('sha256', SECRETO).update(body).digest('hex');
@@ -91,7 +105,10 @@ async function postear(cuerpo: string) {
 beforeEach(() => {
   processInbound.mockReset(); processInbound.mockImplementation(async () => {});
   flushObservabilidad.mockReset(); flushObservabilidad.mockImplementation(async () => {});
+  leerInterruptor.mockReset(); leerInterruptor.mockImplementation(async () => 'encendido');
   estaApagado.mockReset(); estaApagado.mockImplementation(async () => false);
+  sendText.mockClear(); salientes.length = 0;
+  olvidarAvisosDeApagado();
   warn.mockReset();
   guardarEventosPendientes.mockClear();
   guardados.length = 0;
@@ -106,7 +123,7 @@ describe('el interruptor global apaga el WhatsApp entrante', () => {
   });
 
   it('con el sistema APAGADO, NINGÚN mensaje llega al procesador — y TODOS quedan GUARDADOS', async () => {
-    estaApagado.mockImplementation(async () => true);
+    leerInterruptor.mockImplementation(async () => 'apagado');
     const cuerpo = payload('5219990001002', [{ id: 'wamid.OFF', type: 'text', text: { body: 'hola' } }]);
     const res = await postear(cuerpo);
 
@@ -121,7 +138,7 @@ describe('el interruptor global apaga el WhatsApp entrante', () => {
   });
 
   it('apagado, una RÁFAGA entera queda guardada — ningún mensaje se descarta', async () => {
-    estaApagado.mockImplementation(async () => true);
+    leerInterruptor.mockImplementation(async () => 'apagado');
     const cuerpo = payload('5219990001007', [
       { id: 'wamid.G1', type: 'image', image: { id: 'media-1' } },
       { id: 'wamid.G2', type: 'image', image: { id: 'media-2' } },
@@ -144,7 +161,7 @@ describe('el interruptor global apaga el WhatsApp entrante', () => {
     // DENTRO del pool —o la pone por mensaje en vez de antes del lote— el caso
     // de un solo mensaje sigue pasando y éste no: el primero se colaría antes
     // de que la comprobación corriera.
-    estaApagado.mockImplementation(async () => true);
+    leerInterruptor.mockImplementation(async () => 'apagado');
     const cuerpo = payload('5219990001003', [
       { id: 'wamid.R1', type: 'image', image: { id: 'media-1' } },
       { id: 'wamid.R2', type: 'image', image: { id: 'media-2' } },
@@ -157,7 +174,7 @@ describe('el interruptor global apaga el WhatsApp entrante', () => {
   it('apagado, deja rastro con los ids para poder cruzarlos después', async () => {
     // El mensaje no se pierde —Meta reintenta lo que no confirmamos— pero el
     // log es lo único que dice QUÉ entró mientras estaba apagado.
-    estaApagado.mockImplementation(async () => true);
+    leerInterruptor.mockImplementation(async () => 'apagado');
     const cuerpo = payload('5219990001004', [{ id: 'wamid.LOG', type: 'text', text: { body: 'x' } }]);
     await postear(cuerpo);
 
@@ -170,14 +187,64 @@ describe('el interruptor global apaga el WhatsApp entrante', () => {
     // Vercel congela la invocación en cuanto la promesa de `after()` termina.
     // Sin el flush, el propio `wa.entrante_apagado` se queda dentro y nunca
     // sale — o sea que el rastro del punto anterior no existiría.
-    estaApagado.mockImplementation(async () => true);
+    leerInterruptor.mockImplementation(async () => 'apagado');
     await postear(payload('5219990001005', [{ id: 'wamid.F', type: 'text', text: { body: 'x' } }]));
     expect(flushObservabilidad).toHaveBeenCalled();
   });
 
   it('se consulta el interruptor GLOBAL, no otro', async () => {
     await postear(payload('5219990001006', [{ id: 'wamid.G', type: 'text', text: { body: 'x' } }]));
-    expect(estaApagado).toHaveBeenCalledWith('global');
+    expect(leerInterruptor).toHaveBeenCalledWith('global');
+  });
+
+  // ── AUDITORÍA 24 · AGEN-7 (MEDIO): APAGADO NO PUEDE SER MUDO ────────────
+  //
+  // El interruptor cortaba y conservaba, pero no hablaba: el chofer mandaba
+  // cinco fotos y un «listo» a las 11:20, recibía la palomita y NADA durante
+  // las tres horas del apagado. Para él el sistema no está apagado: está
+  // roto, y llama a la oficina — que tampoco sabe.
+  it('apagado: se le dice UNA vez que estamos en mantenimiento y que quedó guardado', async () => {
+    leerInterruptor.mockImplementation(async () => 'apagado');
+    await postear(payload('5219990002001', [{ id: 'wamid.M1', type: 'text', text: { body: 'listo' } }]));
+
+    expect(salientes).toHaveLength(1);
+    expect(salientes[0].to).toBe('5219990002001');
+    expect(salientes[0].texto).toMatch(/mantenimiento/i);
+    expect(salientes[0].texto, 'lo que de verdad pasa con su mensaje').toMatch(/queda guardado/i);
+    expect(processInbound, 'avisar no es procesar').not.toHaveBeenCalled();
+  });
+
+  it('una ráfaga de cinco fotos es UN aviso, no cinco', async () => {
+    leerInterruptor.mockImplementation(async () => 'apagado');
+    await postear(payload('5219990002002', [1, 2, 3, 4, 5].map((i) => ({
+      id: `wamid.R${i}`, type: 'image', image: { id: `media-${i}` },
+    }))));
+    expect(salientes).toHaveLength(1);
+  });
+
+  it('y el segundo POST del mismo número tampoco lo repite', async () => {
+    leerInterruptor.mockImplementation(async () => 'apagado');
+    await postear(payload('5219990002003', [{ id: 'wamid.A1', type: 'text', text: { body: 'hola' } }]));
+    await postear(payload('5219990002003', [{ id: 'wamid.A2', type: 'text', text: { body: 'listo' } }]));
+    expect(salientes).toHaveLength(1);
+  });
+
+  it('ILEGIBLE (el fail-closed de un blip de la base) NO anuncia mantenimiento', async () => {
+    // Un parpadeo de cinco segundos de Supabase deja la palanca ilegible y el
+    // sistema para —bien—, pero decirle al chofer que hay mantenimiento sería
+    // afirmar algo que nadie declaró.
+    leerInterruptor.mockImplementation(async () => 'ilegible');
+    await postear(payload('5219990002004', [{ id: 'wamid.B1', type: 'text', text: { body: 'x' } }]));
+    expect(processInbound, 'seguir parado sí').not.toHaveBeenCalled();
+    expect(salientes, 'pero callado').toHaveLength(0);
+  });
+
+  it('si el aviso no sale, el mensaje del chofer queda guardado igual', async () => {
+    leerInterruptor.mockImplementation(async () => 'apagado');
+    sendText.mockRejectedValueOnce(new Error('Meta caída'));
+    const res = await postear(payload('5219990002005', [{ id: 'wamid.C1', type: 'text', text: { body: 'x' } }]));
+    expect(res.status).toBe(200);
+    expect(guardados.map((g) => g.waMessageId)).toContain('wamid.C1');
   });
 
   it('si NI GUARDAR se pudo, se contesta 503 — jamás un 200 mentiroso (la cola durable es la de Meta)', async () => {

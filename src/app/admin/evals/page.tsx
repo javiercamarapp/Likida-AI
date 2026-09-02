@@ -1,8 +1,10 @@
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { Bug } from 'lucide-react';
 import { getEstadoEvals, veredictoAgregado, type AgenteExaminado, type EstadoEvals } from '@/lib/admin/evals';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '@/app/dashboard/resumen-visual';
 import { EstadoVacio } from '../ui/kit';
@@ -24,16 +26,33 @@ async function marcarResultado(fd: FormData) {
   const admin = supabaseAdmin();
   // Solo lo que sigue en revisión se marca — un veredicto emitido no se
   // reescribe en silencio (el WHERE es el candado).
-  const { data } = await admin.from('eval_resultado')
+  //
+  // ADM-14 (auditoría 24, MEDIO): las TRES escrituras de aquí abajo
+  // descartaban su `error` — el juez humano hacía clic en "pasó" creyendo
+  // que quedó registrado y podía no ser cierto. `redirect('?error=marcar')`
+  // en vez de un `return` mudo: el clic tiene que decir si de verdad pegó.
+  const { data, error: errMarcar } = await admin.from('eval_resultado')
     .update({ veredicto, detalle: `juez humano: ${veredicto}` })
     .eq('id', id).eq('veredicto', 'revisar').select('id');
-  if (!data?.length) return;
-  const { data: todos } = await admin.from('eval_resultado')
+  if (errMarcar) {
+    logger.error('evals.marcar_no_escrito', { id, err: errMarcar.message });
+    redirect('/admin/evals?error=marcar');
+  }
+  if (!data?.length) return; // ya no estaba en 'revisar' (otro juez lo marcó primero) — no es un error
+  const { data: todos, error: errLeer } = await admin.from('eval_resultado')
     .select('veredicto').eq('corrida_id', corridaId);
+  if (errLeer) {
+    logger.error('evals.recalculo_no_leido', { corridaId, err: errLeer.message });
+    redirect('/admin/evals?error=marcar');
+  }
   if (todos) {
-    await admin.from('eval_corrida')
+    const { error: errAgregado } = await admin.from('eval_corrida')
       .update({ veredicto: veredictoAgregado(todos.map((t) => t.veredicto as 'paso' | 'fallo' | 'revisar')) })
       .eq('id', corridaId);
+    if (errAgregado) {
+      logger.error('evals.veredicto_corrida_no_escrito', { corridaId, err: errAgregado.message });
+      redirect('/admin/evals?error=marcar');
+    }
   }
   revalidatePath('/admin/evals');
 }
@@ -56,16 +75,28 @@ const COLOR: Record<string, string> = { paso: 'var(--ok)', fallo: 'var(--bad)', 
  * página lo acusa en grande. Los exámenes se corren a mano (cuestan llamadas
  * reales); el comando de cada uno está en su tarjeta.
  */
-export default async function Evals() {
+export default async function Evals({
+  searchParams,
+}: { searchParams: Promise<{ error?: string }> }) {
+  const sp = await searchParams;
   const admin = supabaseAdmin();
   const secciones: Array<{ agente: AgenteExaminado; titulo: string; comando: string; estado: EstadoEvals | null; porCaso: PorCaso[] }> = [];
   let corridas: Array<{ id: string; agente: string; veredicto: string | null; iniciada_en: string; casos: number | null; costo_usd: number | null; prompt_hash: string }> = [];
+  // ADM-14 (auditoría 24, MEDIO): `r.data ?? []` sin comprobar `r.error` —
+  // una lectura caída se pintaba idéntica a "ninguna corrida todavía", que
+  // es justo lo contrario ("no se sabe" ≠ "no hay"). `corridasError` guarda
+  // el porqué para que la pantalla lo diga.
+  let corridasError: string | null = null;
   try {
     const r = await admin.from('eval_corrida')
       .select('id, agente, veredicto, iniciada_en, casos, costo_usd, prompt_hash')
       .order('iniciada_en', { ascending: false }).limit(10);
+    if (r.error) throw new Error(r.error.message);
     corridas = r.data ?? [];
-  } catch { corridas = []; }
+  } catch (e) {
+    corridas = [];
+    corridasError = e instanceof Error ? e.message : 'no se pudo leer';
+  }
 
   for (const def of AGENTES) {
     let estado: EstadoEvals | null = null;
@@ -76,6 +107,12 @@ export default async function Evals() {
         const rr = await admin.from('eval_resultado')
           .select('id, veredicto, detalle, eval_caso(pregunta, tipo, clave)')
           .eq('corrida_id', estado.ultima.id).order('creado_en');
+        // ADM-14: mismo hueco — `rr.data ?? []` sin mirar `rr.error` pintaba
+        // "Aún no hay corrida registrada" sobre una lectura que en realidad
+        // FALLÓ. Se lanza para que el catch de este bloque haga `estado =
+        // null` (el mismo camino que ya usa la pantalla para "no se pudo
+        // leer el estado del examen").
+        if (rr.error) throw new Error(rr.error.message);
         porCaso = (rr.data ?? []).map((f) => {
           const caso = f.eval_caso as unknown as { pregunta: string; tipo: string; clave: string | null } | null;
           return { id: f.id, veredicto: f.veredicto, detalle: f.detalle, pregunta: caso?.pregunta ?? '—', tipo: caso?.tipo ?? '—', clave: caso?.clave ?? null };
@@ -90,6 +127,11 @@ export default async function Evals() {
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
         <BarraPagina icono={<Bug width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />} titulo="Evals — los exámenes de los agentes" />
         <div className="px-5 py-5 flex-1 space-y-4">
+          {sp.error === 'marcar' && (
+            <p className="text-sm rounded-xl px-4 py-2.5" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+              No se pudo registrar el veredicto — la escritura falló. Vuelve a marcarlo.
+            </p>
+          )}
           {secciones.map(({ agente, titulo, comando, estado, porCaso }) => (
             <section key={agente} className="space-y-3">
               <TituloSeccion>{titulo}</TituloSeccion>
@@ -175,7 +217,14 @@ export default async function Evals() {
           <div className="card p-4">
             <TituloSeccion>Corridas (todos los agentes)</TituloSeccion>
             <div className="mt-2">
-              {corridas.length === 0 && <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Ninguna todavía.</p>}
+              {corridasError !== null && (
+                <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+                  No se pudo leer — {corridasError}. Esto NO significa que no haya corridas.
+                </p>
+              )}
+              {corridasError === null && corridas.length === 0 && (
+                <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Ninguna todavía.</p>
+              )}
               {corridas.map((c) => (
                 <div key={c.id} className="flex items-center gap-3 py-1 text-[12px]" style={{ borderBottom: '1px solid var(--line)' }}>
                   <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--muted)' }}>{c.agente}</span>

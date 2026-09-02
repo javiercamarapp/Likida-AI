@@ -33,6 +33,8 @@ import { acotada } from '../presupuesto';
 import { estaApagado, INTERRUPTORES, type NombreInterruptor } from '../interruptores';
 import { hoyMx } from '@/lib/formato';
 import { LlmBudgetExceededError, createLlmBudget, type LlmBudget } from '@/lib/llm/budget';
+import { alertarOperador } from '@/lib/observability/alerta';
+import { DatoInvalido } from '../errores';
 import { redactarCorreoFrio } from './redactor';
 import { AGENTES_FINANCIEROS, correrAgenteFinanciero, esAgenteFinanciero } from './finanzas';
 import { candidatosSinDossier, investigarProspecto } from './investigador';
@@ -52,6 +54,81 @@ export function topePiezasPorCorrida(): number {
 export function topePendientesBandeja(): number {
   const v = Number(process.env.LIKIDA_RUNNER_TOPE_PENDIENTES);
   return Number.isFinite(v) && v > 0 ? Math.floor(v) : 20;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AGB-5 (auditoría 24, 1-sep-2026) — CONTRAPRESIÓN GLOBAL de la bandeja.
+//
+// Antes SOLO el Redactor miraba su propia bandeja (`correo_frio` pendientes,
+// candado de arriba); los otros 44 agentes que encolan un parte no miraban
+// nada. Medido en producción: 107 pendientes, CERO resoluciones humanas en
+// 15 días, y la vuelta seguía fabricando partes con el latido en verde. El
+// candado de abajo mira la bandeja ENTERA (todos los tipos) y por DOS
+// razones: demasiadas piezas sin resolver, o la más vieja lleva demasiado
+// tiempo esperando (una bandeja que "solo" tiene 10 piezas pero la más vieja
+// tiene un mes tampoco se está atendiendo). Fail closed: sin poder leerla,
+// no se fabrica encima.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** El tope de pendientes TOTALES (cualquier tipo) a partir del cual ningún
+ *  agente que encola un parte sigue fabricando. */
+export function topeBandejaGlobal(): number {
+  const v = Number(process.env.LIKIDA_RUNNER_TOPE_BANDEJA_GLOBAL);
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : 40;
+}
+
+/** Los días que una pieza pendiente puede esperar antes de que la bandeja se
+ *  considere "sin atender" — el VENCIMIENTO de la pieza (AGB-5): pasado este
+ *  plazo, ya no importa cuántas haya, la señal es que nadie está mirando. */
+export function diasVencimientoPieza(): number {
+  const v = Number(process.env.LIKIDA_RUNNER_DIAS_VENCIMIENTO_PIEZA);
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : 7;
+}
+
+/** La parte PURA: dado lo que la base contestó, ¿la bandeja está sin
+ *  atender, y por qué? Separada de la lectura para poder probarla sin base.
+ *  `pendientesVistos` es lo que trajo una consulta con `.limit(tope)`
+ *  ordenada por `creado_en` ascendente — no hace falta un COUNT aparte:
+ *  llegar al tope ya contesta "sí, hay al menos `tope`", y la PRIMERA fila
+ *  de esa misma consulta YA es la más vieja de toda la bandeja. Una sola
+ *  consulta, dos preguntas. */
+export function motivoBandejaGlobalSinAtender(
+  pendientesVistos: number,
+  piezaMasViejaCreadaEn: string | null,
+  ahoraMs: number = Date.now(),
+): string | null {
+  const tope = topeBandejaGlobal();
+  if (pendientesVistos >= tope) {
+    return `bandeja con ≥ ${tope} piezas pendientes (cualquier tipo) — aprobar es humano; el runner no fabrica encima ("bandeja sin atender")`;
+  }
+  if (piezaMasViejaCreadaEn) {
+    const edadDias = (ahoraMs - new Date(piezaMasViejaCreadaEn).getTime()) / 86_400_000;
+    const plazo = diasVencimientoPieza();
+    if (edadDias > plazo) {
+      return `la pieza pendiente más vieja de la bandeja lleva ${edadDias.toFixed(1)} días esperando (> ${plazo}) — vencida sin que nadie la haya mirado ("bandeja sin atender")`;
+    }
+  }
+  return null;
+}
+
+/** La parte con I/O: UNA consulta —`creado_en` de las pendientes, más viejas
+ *  primero, topada al mismo `topeBandejaGlobal()`— basta para las dos
+ *  preguntas de arriba. Fail closed: sin poder leerla, se trata como
+ *  "sin atender", el mismo criterio que el resto del runner. */
+async function leerBandejaGlobalSinAtender(): Promise<string | null> {
+  const tope = topeBandejaGlobal();
+  const { data, error } = await supabaseAdmin()
+    .from('cola_aprobacion')
+    .select('creado_en')
+    .eq('estado', 'pendiente')
+    .order('creado_en', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(tope);
+  if (error) {
+    return 'no se pudo leer la bandeja global — fail closed ("bandeja sin atender")';
+  }
+  const filas = (data ?? []) as Array<{ creado_en: string }>;
+  return motivoBandejaGlobalSinAtender(filas.length, filas[0]?.creado_en ?? null);
 }
 
 /** Los cuatro reporteros de dirección (0216). Se sube a constante —antes era
@@ -366,11 +443,19 @@ export async function corridasSinCostoMedidoHoy(agente: string): Promise<number>
  *  (los más viejos primero — los del SLA), cortando por la reserva/run central.
  *  Las guardas por prospecto (cadencia 48h, pieza pendiente, estado) viven
  *  DENTRO de redactarCorreoFrio — aquí solo se seleccionan candidatos. */
+/** AGB-11 (auditoría 24): el tope de fallos SEGUIDOS del modelo (no de
+ *  guardas — una guarda que rebota es la máquina funcionando, no rota) antes
+ *  de cortar el lote. Medido en producción: 21 de 48 corridas en fallo, el
+ *  mismo error ("sin variante A legible"), y el runner seguía pagando el
+ *  modelo cuatro veces más aunque las tres primeras ya hubieran reventado
+ *  igual — 100 s de reloj por 0 piezas. */
+const TOPE_FALLOS_MODELO_SEGUIDOS = 3;
+
 async function loteRedactor(
   budget: LlmBudget | null,
   /** EL RELOJ DE LA VUELTA, adentro del motor (c7-1). Ver la nota del `for`. */
   venceEn: number,
-): Promise<{ piezas: number; saltados: number; costoUsd: number | null; sinTurno: number }> {
+): Promise<{ piezas: number; saltados: number; costoUsd: number | null; sinTurno: number; motivoCorte: string | null }> {
   const tope = topePiezasPorCorrida();
   // ── EL OVERFETCH: era ×4 (20 candidatos para 5 piezas), ahora ×2 (10) ──────
   //
@@ -399,11 +484,19 @@ async function loteRedactor(
   // Y el número ya no es el freno: el freno es el reloj del `for`. El límite
   // ahora solo dimensiona la pila de candidatos; el que decide cuándo parar es
   // el tiempo, que es lo que de verdad se acaba.
+  // AGB-3 (auditoría 24): antes esta consulta no filtraba por correo — medido
+  // en producción, muchos de los "N más viejos" en `nuevo` son prospectos SIN
+  // correo capturado (redactarCorreoFrio los deja pasar con AVISO, pero la
+  // pieza que producen no se puede enviar ni resolver, AGB-4/AGB-5), así que
+  // esa parte de la ventana se re-fabricaba sin avanzar. `.not(...)` los
+  // excluye en la CONSULTA — la ventana avanza sola hacia los enviables, y
+  // los que quedan fuera no vuelven a aparecer mientras no tengan correo.
   const { data, error } = await acotada(supabaseAdmin()
     .from('prospecto')
     .select('id, vendedor:vendedor_id(nombre)')
     .is('duplicado_de', null)
     .eq('estado', 'nuevo')
+    .not('correo', 'is', null)
     .order('created_at', { ascending: true })
     .limit(tope * 2), 'runner.candidatos');
   if (error) throw new Error(`loteRedactor.candidatos: ${error.message}`);
@@ -413,6 +506,12 @@ async function loteRedactor(
   // cero y el agregado salía con cara de medido.
   let piezas = 0, saltados = 0, sinTurno = 0;
   let costoUsd: number | null = 0;
+  // AGB-11: fallos SEGUIDOS del modelo — se resetea con cualquier resultado
+  // que no sea uno (éxito o rebote de guarda), así que solo cuenta una racha
+  // real de "el modelo no está contestando", no fallos intercalados con
+  // guardas rebotando con normalidad.
+  let fallosModeloSeguidos = 0;
+  let motivoCorte: string | null = null;
   for (let i = 0; i < candidatos.length; i++) {
     const c = candidatos[i];
     // ── EL RELOJ, ADENTRO DEL MOTOR (auditoría ciclo 7, c7-1) ───────────────
@@ -453,6 +552,7 @@ async function loteRedactor(
       } : { plataforma: true });
       piezas += 1;
       costoUsd = (costoUsd === null || r.costoUsd === null) ? null : costoUsd + r.costoUsd;
+      fallosModeloSeguidos = 0;
     } catch (e) {
       // La RPC central ya hizo la decisión atómica. No se trata como un
       // prospecto inválido ni se sigue fabricando: el techo es de la corrida.
@@ -461,10 +561,31 @@ async function loteRedactor(
       // atorado no puede parar el lote entero. El detalle ya quedó en la
       // corrida/log del redactor.
       saltados += 1;
-      logger.info('runner.redactor.saltado', { prospecto: c.id, motivo: e instanceof Error ? e.message.slice(0, 160) : String(e) });
+      const motivo = e instanceof Error ? e.message.slice(0, 160) : String(e);
+      logger.info('runner.redactor.saltado', { prospecto: c.id, motivo });
+      // AGB-11: solo las llamadas que de verdad tocaron el modelo y
+      // reventaron cuentan para la racha — `redactarCorreoFrio` envuelve
+      // ESE fallo, y solo ESE, en este mensaje exacto (redactor.ts:437); una
+      // guarda (cadencia, ICP, pieza pendiente) tiene su propio texto y no
+      // cuenta como "el modelo no está contestando".
+      const esFalloDeModelo = e instanceof DatoInvalido && e.message.includes('no pudo escribir en este momento');
+      if (esFalloDeModelo) {
+        fallosModeloSeguidos += 1;
+        if (fallosModeloSeguidos >= TOPE_FALLOS_MODELO_SEGUIDOS) {
+          motivoCorte = `el lote se cortó tras ${fallosModeloSeguidos} fallos del modelo SEGUIDOS — pagar más llamadas contra un modelo que no está contestando no produce piezas, y sí gasta`;
+          logger.error('runner.redactor.fallos_seguidos', { fallosModeloSeguidos, prospecto: c.id });
+          await alertarOperador('redactor.fallos_seguidos', {
+            error: `El Redactor falló ${fallosModeloSeguidos} veces seguidas contra el modelo ("${motivo.slice(0, 200)}") — el lote se cortó antes de seguir pagando llamadas que no producen nada.`,
+            codigo: 'redactor_fallos_modelo_seguidos',
+          });
+          break;
+        }
+      } else {
+        fallosModeloSeguidos = 0;
+      }
     }
   }
-  return { piezas, saltados, costoUsd, sinTurno };
+  return { piezas, saltados, costoUsd, sinTurno, motivoCorte };
 }
 
 /** El motivo que lleva un agente cuyo LOTE se cortó a la mitad por el reloj.
@@ -504,6 +625,14 @@ export async function correrRunner(
   const avance = opts.avance ?? nuevoAvanceRunner();
   const agentes: AgenteDelRunner[] = avance.agentes;
   const saltadosPorReloj: string[] = avance.saltadosPorReloj;
+  // AGB-5: la contrapresión global se lee UNA vez por vuelta, no una vez por
+  // agente — memoizada localmente a esta llamada (nunca a nivel de módulo:
+  // dos vueltas concurrentes no deben compartir la lectura de la otra).
+  let bandejaGlobalCache: string | null | undefined;
+  const bandejaGlobalSinAtender = async (): Promise<string | null> => {
+    if (bandejaGlobalCache === undefined) bandejaGlobalCache = await leerBandejaGlobalSinAtender();
+    return bandejaGlobalCache;
+  };
 
   if (await estaApagado('global')) {
     avance.apagadoGlobal = true;
@@ -512,13 +641,13 @@ export async function correrRunner(
 
   const { data, error } = await acotada(supabaseAdmin()
     .from('agente_definicion')
-    .select('id, presupuesto_dia_usd')
+    .select('id, presupuesto_dia_usd, experimental')
     .eq('estado', 'vivo')
     .eq('runner_habilitado', true)
     .eq('disparador', 'cron')
     .order('id'), 'runner.agentes');
   if (error) throw new Error(`correrRunner: ${error.message}`);
-  const habilitados = ordenarPorCosto(((data ?? []) as Array<{ id: string; presupuesto_dia_usd: number | null }>)
+  const habilitados = ordenarPorCosto(((data ?? []) as Array<{ id: string; presupuesto_dia_usd: number | null; experimental: boolean | null }>)
     .filter((a) => !soloAgente || a.id === soloAgente));
 
   const venceEn = opts.venceEn ?? Date.now() + PLAZO_RUNNER_MS;
@@ -555,6 +684,19 @@ export async function correrRunner(
     const interruptor = `agente:${a.id}`;
     if (!(INTERRUPTORES as readonly string[]).includes(interruptor)) {
       agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'sin kill switch declarado (interruptores.ts + CHECK 0110) — un autónomo inapagable no corre' });
+      continue;
+    }
+    // Candado 2 — EXPERIMENTAL (auditoría 24, "agentes teatro", 0301). Nueve
+    // agentes del catálogo (cazador, seo_distribucion, guiones,
+    // noticias_mercado, promos_diarias, visuales, video_demo,
+    // video_marketing, pruebas) prometen un motor que el código no tiene
+    // todavía — producen texto sin motor detrás, o su promesa no
+    // corresponde con lo que corre. Siguen `vivo` en el organigrama (Javier
+    // los puede ver y graduar) pero el runner NO los despacha por default:
+    // presentarlos junto a los agentes reales como "back office completo"
+    // fue justo lo que esta auditoría vino a corregir.
+    if (a.experimental) {
+      agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'experimental (agente_definicion.experimental) — el catálogo promete un motor que el código no tiene todavía; no se despacha en automático hasta que se gradúe' });
       continue;
     }
     try {
@@ -611,10 +753,15 @@ export async function correrRunner(
         const budget = budgetTenantId
           ? createLlmBudget(budgetTenantId, randomUUID(), 'fondo', { maxTenantDailyUsd: a.presupuesto_dia_usd })
           : null;
-        const { sinTurno, ...cifras } = await loteRedactor(budget, venceEn);
+        const { sinTurno, motivoCorte, ...cifras } = await loteRedactor(budget, venceEn);
         agentes.push({
           agente: a.id, resultado: 'corrio', ...cifras,
-          ...(sinTurno > 0 ? { motivo: motivoLoteCortado(sinTurno) } : {}),
+          // AGB-11: el corte por fallos seguidos manda sobre el de reloj —
+          // son mutuamente excluyentes en la práctica (el corte de fallos
+          // sale de un `break` propio, antes de que el reloj lo alcance),
+          // pero si algún día coincidieran, la RAZÓN real (el modelo no
+          // contesta) es más útil que "sin turno".
+          ...(motivoCorte ? { motivo: motivoCorte } : sinTurno > 0 ? { motivo: motivoLoteCortado(sinTurno) } : {}),
         });
         // Un lote cortado a la mitad ES trabajo que el reloj le quitó a este
         // agente, y tiene que hacer que el latido diga `'parcial'` igual que un
@@ -626,6 +773,22 @@ export async function correrRunner(
         agentes.push({ agente: a.id, resultado: 'saltado', motivo: e instanceof Error ? e.message.slice(0, 200) : 'fallo del lote' });
       }
       continue;
+    }
+
+    // Candado 5 — CONTRAPRESIÓN GLOBAL de la bandeja (AGB-5). Todo lo que
+    // sigue de aquí en adelante ENCOLA UN PARTE en `cola_aprobacion`, salvo
+    // los cuatro de `DIRECCION` (mandan correo directo a Javier, 0216) y
+    // `enviador`/`enriquecedor` (no encolan ahí: mandan correo o escriben el
+    // dossier). El Redactor ya se despachó arriba con su propio candado más
+    // estrecho (solo mira `correo_frio`); este es el candado ANCHO, y
+    // aplicarlo también a `redactor` de nuevo aquí no aplica porque ya hizo
+    // `continue`.
+    if (!DIRECCION.includes(a.id) && a.id !== 'enviador' && a.id !== 'enriquecedor') {
+      const motivo = await bandejaGlobalSinAtender();
+      if (motivo) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo });
+        continue;
+      }
     }
 
     // Los 4 financieros (0215): deterministas, gasto de modelo $0 (el techo
@@ -706,6 +869,19 @@ export async function correrRunner(
     if (AGENTES_EXITO_CLIENTE.includes(a.id)) {
       if (a.id === 'atencion_faq') {
         try {
+          // AUDITORÍA 24, ARQ-2 / AGB-9 (ALTO, reincidente 22→23→24): `faq.ts`
+          // anota `costo_usd = NULL` cuando el proveedor omite `usage`, y
+          // `gastoDelDiaUsd` SOLO suma lo medido — así que 30 llamadas/día con
+          // el proveedor callado leían $0.00 contra $1.00 y el techo nunca
+          // cortaba. Un costo no medido no es cero: si hay corridas de hoy sin
+          // medir, el gasto real del día es desconocido y no se despacha contra
+          // un techo que no se puede verificar (mismo candado que
+          // `contenido_fiscal`, más abajo).
+          const sinMedir = await corridasSinCostoMedidoHoy(a.id);
+          if (sinMedir > 0) {
+            agentes.push({ agente: a.id, resultado: 'saltado', motivo: `${sinMedir} corrida(s) de hoy con costo NO MEDIDO: el gasto real del día es desconocido y un costo desconocido no es cero — no se despacha contra un techo que no se puede verificar` });
+            continue;
+          }
           const gastado = await gastoDelDiaUsd(a.id);
           if (gastado >= a.presupuesto_dia_usd) {
             agentes.push({ agente: a.id, resultado: 'saltado', motivo: `techo diario alcanzado (${gastado.toFixed(2)} de ${a.presupuesto_dia_usd} USD)` });

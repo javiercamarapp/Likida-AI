@@ -146,7 +146,19 @@ vi.mock('@/lib/likida/cuadre/resumen', () => ({
 }));
 
 const { LlmBudgetExceededError } = await import('@/lib/llm/budget');
+const { PartialExecutionError } = await import('@/lib/llm/openrouter');
 const { processInbound } = await import('./processor');
+
+/** El tope de $/día TAL COMO LLEGA AL PROCESSOR en producción: `generateWithTools`
+ *  envuelve cualquier excepción del ciclo en `PartialExecutionError` con la
+ *  causa real en `.cause` (`openrouter.ts`). AUDITORÍA 24, TC-N1: la prueba
+ *  anterior rechazaba con el error DESNUDO, que en producción nunca llega así,
+ *  y por eso estaba verde sobre una rama muerta. */
+const presupuestoAgotadoEnvuelto = () => new PartialExecutionError(
+  'presupuesto de IA del día agotado para esta flota: se requieren $0.056 USD y el techo diario es $5.000000 USD',
+  new LlmBudgetExceededError('tenant', 5.2, 5.0),
+  [], 0, 0, 0,
+);
 const listo = { from: '5219993700779', type: 'text' as const, text: 'listo', waMessageId: 'wa1' };
 
 beforeEach(() => {
@@ -194,6 +206,15 @@ describe('RES-15 — el LLM caído no puede dejar al operador sin su cuadre', ()
     expect(textos().join(' | ')).toContain('cerrado=false');
   });
 
+  it('AUDITORÍA 24, AGEN-10: el cuadre degradado DICE que no cerró y qué hacer (reincidente desde la 22)', async () => {
+    runAgent.mockRejectedValue(provedorCaido());
+    await processInbound(listo);
+    const dichos = textos().join(' | ');
+    expect(dichos).toMatch(/NO\*? cerré/);
+    expect(dichos).toMatch(/sigue abierto/);
+    expect(dichos).toMatch(/\*listo\*/);
+  });
+
   it('un 429 también degrada (es el caso de todos los días, no el exótico)', async () => {
     runAgent.mockRejectedValue(Object.assign(new Error('Rate limited'), { status: 429 }));
     await processInbound(listo);
@@ -210,7 +231,8 @@ describe('RES-15 — el LLM caído no puede dejar al operador sin su cuadre', ()
   });
 
   it('AUDITORÍA 19 (tool-calling CRÍTICO): el tope de $/día agotado también degrada — no es un bug, es un freno de dinero, y el motor puede cuadrar solo', async () => {
-    runAgent.mockRejectedValue(new LlmBudgetExceededError('tenant', 5.2, 5.0));
+    // AUDITORÍA 24, TC-N1: el error ENVUELTO, como llega de verdad.
+    runAgent.mockRejectedValue(presupuestoAgotadoEnvuelto());
     await processInbound(listo);
 
     expect(cuadrarDesdeDB).toHaveBeenCalledWith('t1', 'v1');
@@ -218,6 +240,35 @@ describe('RES-15 — el LLM caído no puede dejar al operador sin su cuadre', ()
     expect(dichos).toContain('CUADRE REAL');
     expect(dichos).not.toContain('reenvías');
     expect(logger.error).toHaveBeenCalledWith('agent.fail', expect.objectContaining({ transitorio: true, agotoPresupuesto: true }));
+  });
+
+  it('TC-N1: con el tope agotado el chofer recibe un mensaje HONESTO — no cerré, tus comprobantes quedan, mañana o que suban el tope', async () => {
+    runAgent.mockRejectedValue(presupuestoAgotadoEnvuelto());
+    await processInbound(listo);
+    const dichos = textos().join(' | ');
+    expect(dichos).toMatch(/cupo de IA/);
+    expect(dichos).toMatch(/NO\*? cerré/);
+    expect(dichos).toMatch(/contralor/);
+    expect(dichos, 'le pidió reenviar: reenviar falla igual el resto del día').not.toContain('reenvías');
+  });
+
+  it('TC-N1: el desnudo sigue reconociéndose (defensa en profundidad), y un envoltorio de un TypeError NO se disfraza de cuadre', async () => {
+    runAgent.mockRejectedValue(new LlmBudgetExceededError('tenant', 5.2, 5.0));
+    await processInbound(listo);
+    expect(logger.error).toHaveBeenCalledWith('agent.fail', expect.objectContaining({ agotoPresupuesto: true }));
+
+    salientes.length = 0; cuadrarDesdeDB.mockClear(); logger.error.mockReset();
+    runAgent.mockRejectedValue(new PartialExecutionError('boom', new TypeError('x is undefined'), [], 0, 0, 0));
+    await processInbound({ ...listo, waMessageId: 'wa2' });
+    expect(cuadrarDesdeDB).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith('agent.fail', expect.objectContaining({ transitorio: false, agotoPresupuesto: false }));
+  });
+
+  it('TC-N1: un proveedor caído ENVUELTO también degrada — `isTransientError` mira la causa de fondo', async () => {
+    runAgent.mockRejectedValue(new PartialExecutionError('ciclo abortado', provedorCaido(), [], 0, 0, 0));
+    await processInbound(listo);
+    expect(textos().join(' | ')).toContain('CUADRE REAL');
+    expect(logger.error).toHaveBeenCalledWith('agent.fail', expect.objectContaining({ transitorio: true }));
   });
 
   it('si ni el cuadre se puede calcular, queda el mensaje honesto de antes', async () => {

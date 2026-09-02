@@ -39,7 +39,12 @@ vi.mock('@/lib/agents/copiloto-acciones', () => ({
   // para el step-up. Se declara chico y fiel a los ids que estas pruebas usan.
   CATALOGO_ACCIONES: [
     { id: 'apagar_agente', gateo: 'confirma', implementada: true },
-    { id: 'correr_runner', gateo: 'confirma', implementada: true },
+    // ADM-13 (auditoría 24, MEDIO): `correr_runner` puede disparar al
+    // `enviador` (correo real por su cuenta, sin borrador que revisar) —
+    // exigía la MISMA confirmación de un solo POST que "apagar una
+    // palanca". Pasa a 'doble' (motivo + dos POSTs + step-up MFA), mismo
+    // nivel que las acciones con efecto legal/de dinero.
+    { id: 'correr_runner', gateo: 'doble', implementada: true },
     { id: 'encender_agente', gateo: 'doble', implementada: false },
   ],
 }));
@@ -285,19 +290,59 @@ describe("gateo 'doble' — dos POSTs con el mismo intent, motivo obligatorio", 
     );
   });
 
-  it("las dos acciones vivas ('confirma') siguen ejecutando con UN solo intent", async () => {
-    // La declaración del catálogo real: apagar_agente y correr_runner son
-    // 'confirma' — el flujo de un POST les basta (el de arriba lo prueba
-    // para apagar_agente vía proponer(); aquí correr_runner).
-    const i = await crearIntent({ actorId: 'u-javier', accion: 'correr_runner', objetivo: 'runner', gateo: 'confirma' });
-    const r = await POST(pedir({ intentId: i.id, accion: { id: 'correr_runner', objetivo: 'runner', motivo: 'adelantar el cron' } }));
+  it("'apagar_agente' ('confirma') sigue ejecutando con UN solo intent", async () => {
+    // La declaración del catálogo real: apagar_agente es 'confirma' — el
+    // flujo de un POST le basta (el de arriba lo prueba vía proponer();
+    // ver el describe de ADM-13 más abajo para correr_runner, que ahora
+    // es 'doble').
+    const i = await crearIntent({ actorId: 'u-javier', accion: 'apagar_agente', objetivo: 'agente:cobranza', gateo: 'confirma' });
+    const r = await POST(pedir({ intentId: i.id, accion: { id: 'apagar_agente', objetivo: 'agente:cobranza', motivo: 'manda de más' } }));
     expect(r.status).toBe(200);
+    expect(ejecutarAccionCopiloto).toHaveBeenCalledTimes(1);
+    expect(ejecutarAccionCopiloto).toHaveBeenCalledWith(
+      'apagar_agente',
+      { id: 'agente:cobranza', motivo: 'manda de más' },
+      'u-javier',
+    );
+  });
+});
+
+// ADM-13 (auditoría 24, MEDIO) — `correr_runner` puede disparar al
+// `enviador` (correo real, sin borrador que revisar) y hasta esta ronda
+// exigía la misma confirmación de un clic que apagar una palanca. Ahora
+// exige lo mismo que `encender_agente`: motivo + DOS POSTs + step-up MFA.
+describe("ADM-13 — correr_runner ahora es 'doble': un solo POST NO ejecuta", () => {
+  it('un solo POST con motivo ARMA (no ejecuta); el segundo POST ejecuta', async () => {
+    const i = await crearIntent({ actorId: 'u-javier', accion: 'correr_runner', objetivo: 'runner', gateo: 'doble' });
+    const r1 = await POST(pedir({ intentId: i.id, accion: { id: 'correr_runner', objetivo: 'runner', motivo: 'adelantar el cron' } }));
+    expect(r1.status).toBe(200);
+    expect(await r1.json()).toMatchObject({ ok: true, armado: true });
+    expect(ejecutarAccionCopiloto).not.toHaveBeenCalled();
+
+    const r2 = await POST(pedir({ intentId: i.id, accion: { id: 'correr_runner', objetivo: 'runner', motivo: 'texto cambiado' } }));
+    expect(r2.status).toBe(200);
     expect(ejecutarAccionCopiloto).toHaveBeenCalledTimes(1);
     expect(ejecutarAccionCopiloto).toHaveBeenCalledWith(
       'correr_runner',
       { id: 'runner', motivo: 'adelantar el cron' },
       'u-javier',
     );
+  });
+
+  it('sin motivo NO arma: 400, el ejecutor ni se toca', async () => {
+    const i = await crearIntent({ actorId: 'u-javier', accion: 'correr_runner', objetivo: 'runner', gateo: 'doble' });
+    const r = await POST(pedir({ intentId: i.id, accion: { id: 'correr_runner', objetivo: 'runner', motivo: '  ' } }));
+    expect(r.status).toBe(400);
+    expect(ejecutarAccionCopiloto).not.toHaveBeenCalled();
+  });
+
+  it('con AAL1 (segundo factor inscrito, sin verificar) → 403, SIN gastar el intent', async () => {
+    stepUp.mockImplementation(async () => ({ ok: false, motivo: 'verificar' }));
+    const i = await crearIntent({ actorId: 'u-javier', accion: 'correr_runner', objetivo: 'runner', gateo: 'doble' });
+    const r = await POST(pedir({ intentId: i.id, accion: { id: 'correr_runner', objetivo: 'runner', motivo: 'x' } }));
+    expect(r.status).toBe(403);
+    expect(ejecutarAccionCopiloto).not.toHaveBeenCalled();
+    stepUp.mockImplementation(async () => ({ ok: true }));
   });
 });
 

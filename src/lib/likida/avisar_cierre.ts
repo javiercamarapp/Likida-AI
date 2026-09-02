@@ -1,7 +1,10 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
-import { sendText, sendDocument } from '@/lib/meta/client';
+import { sendDocument } from '@/lib/meta/client';
+import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
+import { appUrl } from '@/lib/env';
+import { alertarOperador } from '@/lib/observability/alerta';
 import { variantesTelefono } from './conv';
 import { armarAvisoJefe, type ResumenLiquidacion, type DiferenciaResumen } from './cierre_aviso';
 import { telefonoParaDineroDe } from './contactos';
@@ -39,6 +42,11 @@ export interface ResultadoAvisoCierre {
   enviado: boolean;
   /** Por qué no salió, en palabras que digan qué arreglar. */
   motivo?: string;
+  /** Por dónde salió el texto de decisión (AGEN-5): fuera de la ventana de
+   *  24 h Meta solo deja pasar la plantilla. */
+  via?: 'texto' | 'plantilla';
+  /** El texto rebotó por ventana cerrada y la plantilla tampoco salió. */
+  fueraDeVentana?: boolean;
 }
 
 /**
@@ -149,10 +157,31 @@ export async function avisarCierreAlJefe(args: {
   // más necesita el documento que YA estaba firmado y listo. El fallo del
   // texto se sigue reportando (`enviado: false`), pero ya no corta el PDF:
   // la garantía del encabezado es "el PDF siempre".
+  //
+  // AUDITORÍA 24 · AGEN-5 / WA-4 (ALTO): el jefe de una flota grande RECIBE y
+  // no escribe, así que su ventana de 24 h está cerrada casi siempre y el
+  // texto libre rebotaba con 131047 — no reintentable, sin plantilla, solo un
+  // `warn`. Sale por `avisarOficina`: texto y, si Meta lo rechaza por
+  // ventana, la plantilla `aviso_operacion_v1`. Si NI la plantilla sale, la
+  // liquidación que requiere decisión se queda sin quien la decida: alerta
+  // operativa, no un warn.
   let motivoTexto: string | null = null;
+  let via: ResultadoAvisoCierre['via'];
+  let fueraDeVentana = false;
   if (requiereDecision) {
-    const id = await sendText(tel, texto);
-    if (!id) motivoTexto = 'WhatsApp no aceptó el mensaje al jefe.';
+    const r = await avisarOficina(tel, texto, {
+      parametros: parametrosAvisoOficina(resumen.operador, `Liquidación ${resumen.folio}: requiere tu decisión`, `${appUrl()}/dashboard/viajes`),
+      contexto: { tenant: args.tenantId, viaje: args.viajeId, evento: 'cierre' },
+    });
+    if (r.ok) {
+      via = r.via;
+    } else {
+      motivoTexto = `WhatsApp no aceptó el mensaje al jefe: ${r.motivo}`;
+      fueraDeVentana = r.fueraDeVentana;
+      if (r.fueraDeVentana) {
+        await alertarOperador('cierre.jefe_sin_ventana', { tenant: args.tenantId, viaje: args.viajeId, folio: resumen.folio, motivo: r.motivo, codigo: r.codigo }).catch(() => {});
+      }
+    }
   }
 
   if (args.urlPdf) {
@@ -180,8 +209,8 @@ export async function avisarCierreAlJefe(args: {
   // El fallo del texto se reporta DESPUÉS de intentar el PDF: el llamador
   // sigue viendo `enviado: false` (y loguea `cierre.jefe_no_avisado`), pero
   // el documento ya se intentó mandar de todos modos.
-  if (motivoTexto) return { enviado: false, motivo: motivoTexto };
+  if (motivoTexto) return { enviado: false, motivo: motivoTexto, fueraDeVentana };
 
-  logger.info('cierre.avisado_al_jefe', { viaje: args.viajeId, requiereDecision });
-  return { enviado: true };
+  logger.info('cierre.avisado_al_jefe', { viaje: args.viajeId, requiereDecision, via });
+  return via ? { enviado: true, via } : { enviado: true };
 }

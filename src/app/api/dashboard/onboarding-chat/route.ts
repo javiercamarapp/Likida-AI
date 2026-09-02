@@ -50,7 +50,11 @@ export async function POST(req: NextRequest) {
   }
 
   const efectivo = await tenantEfectivoChat(sesion, req.nextUrl.searchParams.get('tenant'));
-  if (!efectivo) return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
+  // AUDITORÍA 24 (auth): `null` con `?tenant=` presente es "no se pudo
+  // verificar la flota" (lectura caída), no "sin permiso" — 503, como
+  // `resolverTenantApi`. Sin `?tenant=` sigue siendo 403 real.
+  if (!efectivo) return NextResponse.json({ error: 'sin acceso' },
+    { status: req.nextUrl.searchParams.get('tenant') ? 503 : 403 });
 
   if (!(await rateLimit(`onboarding-chat:${sesion.userId}`, TURNOS_POR_MINUTO, 60_000))) {
     return NextResponse.json({ error: 'demasiados turnos seguidos; espera un minuto' }, { status: 429 });

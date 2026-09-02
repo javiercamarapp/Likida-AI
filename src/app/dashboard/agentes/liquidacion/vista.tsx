@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Route, ArrowRight, Inbox, Bot, BellRing, Flag, Link2, Settings } from 'lucide-react';
+import { Route, ArrowRight, Bot, BellRing, Flag, Link2, Settings } from 'lucide-react';
 import type { LiqRow, DashboardKpis, HechoSolo, DineroObservadoTipo } from '@/lib/likida/analytics';
 import { etiquetaConcepto, type PoliticaGasto } from '@/lib/likida/cuadre/engine';
 import { mxn, mxnCompacto, numero, fechaCorta } from '@/lib/formato';
@@ -8,6 +8,7 @@ import { CalendarHeatmap, HBars } from '@/app/admin/ui/graficas';
 import { Dona } from '@/app/admin/charts';
 import { BarraPagina } from '../../resumen-visual';
 import { Bloque, Barra, EsqTabla } from '../../bloque';
+import { SeccionCola, type ColaProps } from './cola';
 
 // El rótulo de cada tipo de diferencia vive en `rotulo-diferencia.ts`, tipado
 // contra `TipoDiferencia` completo (M10) — aquí había 3 renglones para ~35 tipos.
@@ -66,14 +67,18 @@ export interface ExtraAgenteLiquidacion {
  * consultas, cada una con un esqueleto de su alto.
  */
 export function VistaAgenteLiquidacion({
-  kpis, liquidaciones, extra, sufijo, notificaciones,
+  kpis, liquidaciones, cola, extra, sufijo, notificaciones,
 }: {
   /** Primario: falla CERRADO. Su bloque enseña `EstadoError` — nunca un
    *  "0 por revisar" que nadie midió. */
   kpis: Promise<DashboardKpis>;
-  /** Las 50 liquidaciones más recientes: de aquí salen la cola (`revisar`) y
-   *  los últimos cierres. Una sola lectura para las dos tarjetas. */
+  /** Las 50 liquidaciones más recientes — SOLO para «últimos cierres».
+   *  La cola YA NO sale de aquí (FE-5): un recorte de 2.4 h escondía justo a
+   *  las que más llevaban esperando firma. */
   liquidaciones: Promise<LiqRow[]>;
+  /** La cola de revisión de verdad: su propia consulta, por antigüedad, por
+   *  llave y con `count` real. Ver `cola.tsx`. */
+  cola: ColaProps;
   extra: ExtraAgenteLiquidacion;
   sufijo: string;
   /** La sección de Notificaciones, ya renderizada en el servidor
@@ -106,7 +111,7 @@ export function VistaAgenteLiquidacion({
           </Bloque>
 
           <Bloque mensaje="No se pudo leer la cola de revisión." esqueleto={<EsqTabla filas={5} />}>
-            <BloqueCola liquidaciones={liquidaciones} kpis={kpis} sufijo={sufijo} />
+            <SeccionCola {...cola} />
           </Bloque>
 
           {/* ── La evidencia de que trabaja ── */}
@@ -171,41 +176,15 @@ async function BloqueKpis({ kpis: pKpis }: { kpis: Promise<DashboardKpis> }) {
           abrevia SOLO a partir del millón; debajo es `mxn()` exacto. */}
       <Kpi titulo="Monto comprobado" valor={mxnCompacto(kpis.montoComprobado)} nota="histórico" />
       <Kpi titulo="Tasa de cuadre" valor={`${numero(kpis.tasaCuadre)}%`} nota={`${numero(kpis.viajesLiquidados)} liquidaciones`} />
-      <Kpi titulo="Por revisar" valor={numero(kpis.porRevisar)} tono={kpis.porRevisar > 0 ? 'warn' : undefined} />
+      {/* BLOQ-6: desde la 0299 hay DOS estados y este KPI es el del MOTOR
+          («no pude cuadrarla»), no el de la firma. La cola de abajo cuenta lo
+          que espera FIRMA —que incluye las de diferencias— y sale de su
+          propia consulta: dos números distintos con su rótulo distinto, en vez
+          de dos versiones del mismo. */}
+      <Kpi titulo="Por revisar" valor={numero(kpis.porRevisar)} nota="el agente no pudo cuadrarlas"
+        tono={kpis.porRevisar > 0 ? 'warn' : undefined} />
       <Kpi titulo="Con diferencias" valor={numero(kpis.conDiferencias)} tono={kpis.conDiferencias > 0 ? 'bad' : undefined} />
     </div>
-  );
-}
-
-async function BloqueCola({ liquidaciones, kpis: pKpis, sufijo }: {
-  liquidaciones: Promise<LiqRow[]>; kpis: Promise<DashboardKpis>; sufijo: string;
-}) {
-  const [liqs, kpis] = await Promise.all([liquidaciones, pKpis]);
-  const cola = liqs.filter((l) => l.estatus === 'revisar');
-  return (
-    <section className="card p-4">
-      <h2 className="font-display text-[15px] font-semibold mb-3">Esperan tu revisión</h2>
-      {cola.length === 0 ? (
-        <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-          No hay liquidaciones esperando a un humano — cuando el agente no pueda cuadrar
-          una solo, la vas a ver aquí.
-        </EstadoVacio>
-      ) : (
-        <>
-          <TablaLiqs filas={cola} sufijo={sufijo} conVer />
-          {/* FE-13: la cola sale de las 50 liquidaciones más recientes,
-              pero `porRevisar` lo cuenta la base sobre TODAS. Cuando no
-              cuadran, se dice: una tabla de 12 filas bajo un KPI que
-              marca 340 se lee como que faltan 328 sin explicación. */}
-          {kpis.porRevisar > cola.length && (
-            <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
-              Se listan {numero(cola.length)} de {numero(kpis.porRevisar)} — las más recientes.
-              El resto está en el registro de viajes.
-            </p>
-          )}
-        </>
-      )}
-    </section>
   );
 }
 

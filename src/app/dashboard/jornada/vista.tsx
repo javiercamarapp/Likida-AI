@@ -60,7 +60,7 @@ function hora(iso: string): string {
 }
 
 export function VistaJornada({
-  filas, semanas, motivoIlegible, truncada, politica, desde, hasta, sufijo, operador, abrir, puedeCorregir,
+  filas, semanas, motivoIlegible, truncada, politica, desde, hasta, sufijo, operador, operadores, abrir, puedeCorregir,
   anularMarca, capturarMarca, cerrarElDia, declararPolitica,
 }: {
   filas: FilaJornada[] | null;
@@ -75,6 +75,9 @@ export function VistaJornada({
   hasta: string;
   sufijo: string;
   operador: string | null;
+  /** FE-19: el catálogo completo para el `<select>` — `null` = no se pudo
+   *  leer (el filtro por URL sigue funcionando, solo no hay de dónde elegir). */
+  operadores: Array<{ id: string; nombre: string }> | null;
   abrir: string | null;
   puedeCorregir: boolean;
   anularMarca: AccionJornada;
@@ -160,6 +163,11 @@ export function VistaJornada({
                 incluida la liga de descarga. Un rótulo que dice «del X al Y»
                 tiene que ser cierto para las dos cosas. */}
             <form method="get" className="flex items-end gap-2 flex-wrap">
+              {/* El sufijo de previsualización del superadmin, como hidden —
+                  un GET plano sin esto apagaba `?tenant=`/`?vista=`/`?rol=` al
+                  filtrar (mismo patrón que `viajes/vista.tsx`). */}
+              {[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]
+                .map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
               <label className="text-[11px] font-medium">
                 Desde
                 <input type="date" name="desde" defaultValue={desde}
@@ -170,10 +178,28 @@ export function VistaJornada({
                 <input type="date" name="hasta" defaultValue={hasta}
                   className="block hairline rounded-lg px-3 h-9 text-[13px] outline-none mt-1.5" />
               </label>
+              {/* FE-19: con cientos de choferes, la ventana por omisión nace
+                  truncada casi siempre — sin este selector, la única forma de
+                  ver la jornada de UN operador era teclear su id en la URL. */}
+              <label className="text-[11px] font-medium">
+                Operador
+                <select name="operador" defaultValue={operador ?? ''}
+                  disabled={operadores === null || operadores.length === 0}
+                  aria-label="Filtrar por operador"
+                  className="block hairline rounded-lg px-3 h-9 text-[13px] outline-none mt-1.5 max-w-[220px]">
+                  <option value="">Todos</option>
+                  {(operadores ?? []).map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+                </select>
+              </label>
               <button type="submit" className="h-9 px-4 rounded-lg text-[13px] font-medium hairline hover:opacity-85 transition-opacity">
                 Ver
               </button>
             </form>
+            {operadores === null && (
+              <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
+                No se pudo leer el catálogo de operadores — el filtro por URL (<code>?operador=</code>) sigue funcionando.
+              </p>
+            )}
 
             {truncada && (
               <EstadoError mensaje="Este periodo trae más expedientes de los que caben en una lectura. Lo que se ve NO es el periodo entero: pídelo en rangos más cortos." />

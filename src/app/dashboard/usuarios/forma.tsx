@@ -48,9 +48,9 @@ function Aviso({ estado }: { estado: ResultadoForma }) {
 }
 
 /**
- * Invitar a alguien del equipo. Solo ALTA, sin `id` oculto: cambiar rol y dar
- * de baja no existen todavía (`app_user` no tiene columna para desactivar), y
- * un formulario que fingiera editar prometería algo que la base no sabe hacer.
+ * Invitar a alguien del equipo. Solo ALTA, sin `id` oculto: cambiar rol, dar
+ * de baja y reenviar el acceso son formas APARTE por renglón (abajo), cada una
+ * con su propio server action y su propia puerta.
  *
  * El tenant NO viaja en el formulario, ni oculto: el server action lo saca de
  * la sesión re-resuelta. Aquí solo se captura QUIÉN entra, no A DÓNDE.
@@ -119,6 +119,108 @@ export function FormaInvitar({ accion, roles }: {
 
       <Aviso estado={estado} />
       <Boton />
+    </form>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LAS ACCIONES POR RENGLÓN (auditoría 24, SEG-1 / H5): cambiar rol, dar de
+// baja, reactivar, reenviar acceso. Cada una es su propio <form> con su
+// `useActionState`, así el aviso sale JUNTO al renglón que lo produjo. El
+// `id` viaja oculto porque es el objetivo, no la autorización: el server
+// action lo vuelve a leer ANCLADO al tenant de la sesión.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function BotonChico({ etiqueta, ocupado, tono = 'neutral' }: {
+  etiqueta: string; ocupado: string; tono?: 'neutral' | 'bad';
+}) {
+  const { pending } = useFormStatus();
+  const estilo = tono === 'bad'
+    ? { color: 'var(--bad)', background: 'var(--badbg)' }
+    : { color: 'var(--ink)', background: 'var(--surface)' };
+  return (
+    <button type="submit" disabled={pending}
+      className="h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85 disabled:opacity-50 whitespace-nowrap"
+      style={estilo}>
+      {pending ? ocupado : etiqueta}
+    </button>
+  );
+}
+
+/** Cambiar el rol: un select con el catálogo invitable y un botón. */
+export function FormaCambiarRol({ accion, id, rolActual, roles }: {
+  accion: AccionForma;
+  id: string;
+  rolActual: string;
+  roles: ReadonlyArray<OpcionRol>;
+}) {
+  const [estado, despachar] = useActionState(accion, null);
+  return (
+    <form action={despachar} className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <input type="hidden" name="id" value={id} />
+        <select name="rol" defaultValue={rolActual} aria-label="Nuevo rol"
+          className="hairline rounded-lg px-2 h-8 text-[12px] outline-none" style={{ background: 'var(--surface)' }}>
+          {roles.map((r) => <option key={r.valor} value={r.valor}>{r.rotulo}</option>)}
+        </select>
+        <BotonChico etiqueta="Cambiar rol" ocupado="Cambiando…" />
+      </div>
+      <Aviso estado={estado} />
+    </form>
+  );
+}
+
+/**
+ * Dar de baja, con confirmación en DOS pasos pero SIN `confirm()`: el
+ * diálogo nativo bloquea headless y no se puede mirar en un screenshot. Un
+ * `<details>` deja el botón real detrás de un clic explícito.
+ */
+export function FormaDarDeBaja({ accion, id, nombre }: {
+  accion: AccionForma;
+  id: string;
+  nombre: string;
+}) {
+  const [estado, despachar] = useActionState(accion, null);
+  return (
+    <details>
+      <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
+        style={{ color: 'var(--bad)' }}>
+        Dar de baja
+      </summary>
+      <div className="pt-2 space-y-2">
+        <p className="text-[11.5px] m-0" style={{ color: 'var(--muted)' }}>
+          &ldquo;{nombre}&rdquo; deja de entrar al panel en su siguiente clic y su
+          sesión se revoca. No se borra nada: queda en la lista como dada de baja
+          y se puede reactivar.
+        </p>
+        <Aviso estado={estado} />
+        <form action={despachar}>
+          <input type="hidden" name="id" value={id} />
+          <BotonChico etiqueta="Sí, dar de baja" ocupado="Dando de baja…" tono="bad" />
+        </form>
+      </div>
+    </details>
+  );
+}
+
+export function FormaReactivar({ accion, id }: { accion: AccionForma; id: string }) {
+  const [estado, despachar] = useActionState(accion, null);
+  return (
+    <form action={despachar} className="space-y-1.5">
+      <input type="hidden" name="id" value={id} />
+      <BotonChico etiqueta="Reactivar" ocupado="Reactivando…" />
+      <Aviso estado={estado} />
+    </form>
+  );
+}
+
+export function FormaReenviarAcceso({ accion, id }: { accion: AccionForma; id: string }) {
+  const [estado, despachar] = useActionState(accion, null);
+  return (
+    <form action={despachar} className="space-y-1.5">
+      <input type="hidden" name="id" value={id} />
+      <BotonChico etiqueta="Reenviar acceso" ocupado="Enviando…" />
+      <Aviso estado={estado} />
     </form>
   );
 }

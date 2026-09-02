@@ -22,7 +22,9 @@
 //      El respaldo contra el silencio es Sentry, cuyo fingerprint agrupa.
 //   3. Sin `ALERTA_EMAIL` no manda y NO es un error: es un canal opcional, como
 //      Sentry sin DSN. Se dice una vez por instancia a nivel `info` y el
-//      arranque lo grita aparte (`SILENCIOSAS` en arranque.ts).
+//      arranque lo grita aparte (`SILENCIOSAS` en arranque.ts). Desde la
+//      auditoría 24 (OP-P5) hay un segundo canal opcional, `ALERTA_WA`, solo
+//      para los eventos de dinero (ver `esEventoDeDinero`).
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { appUrl } from '@/lib/env';
@@ -105,19 +107,110 @@ async function reservarPiso(evento: string, ahora: number, pisoMs: number = PISO
 }
 
 /**
- * OP-A3: qué hace distinto a un incidente de otro dentro del mismo evento.
+ * OP-A3 (auditoría 22) y su reincidencia (auditoría 24, OP-P5 / PRU-A3): qué
+ * hace distinto a un incidente de otro dentro del mismo evento.
  *
- * Se toman las llaves de identidad y el código de error, no el mensaje entero:
- * un timeout que cambia de milisegundos entre reintentos es el MISMO incidente
- * y tiene que seguir dedupeándose. Ordenadas para que el orden del objeto no
- * fabrique huellas distintas.
+ * La versión anterior solo miraba llaves «de identidad» que NINGÚN llamador
+ * emite: los ~40 llamadores del repo mandan `{ error, codigo }` y meten al
+ * viaje, la reserva o el folio DENTRO de `error`. Medido: doce viajes que
+ * fallan al timbrar en la misma hora = un correo, y el contralor sabía de uno.
+ *
+ * La huella se arma con lo que de verdad viaja: el código, las llaves de
+ * identidad que sí existen (`prospectoId`, `interruptor`, `status`, `causa`…)
+ * y TODO UUID que aparezca en cualquier valor de texto — un UUID es una
+ * identidad (viaje, reserva, folio fiscal) y dos incidentes con UUIDs
+ * distintos son dos alarmas. Un timeout que cambia de milisegundos entre
+ * reintentos sigue siendo el MISMO incidente: los números sueltos del texto no
+ * entran a la huella. Ordenada para que el orden del objeto no fabrique
+ * huellas distintas.
  */
-function huellaDeDetalle(detalle: Record<string, unknown>): string {
-  const SALIENTES = ['codigo', 'code', 'viajeId', 'viaje', 'gastoId', 'operadorId', 'tenantId', 'cron', 'uuid'];
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+export function huellaDeDetalle(detalle: Record<string, unknown>): string {
+  const SALIENTES = [
+    'codigo', 'code', 'viajeId', 'viaje', 'gastoId', 'operadorId', 'tenantId', 'cron', 'uuid', 'uuidFiscal',
+    'prospectoId', 'reservaId', 'interruptor', 'status', 'causa', 'cual',
+  ];
   const partes = SALIENTES
     .filter((k) => detalle[k] !== undefined && detalle[k] !== null)
     .map((k) => `${k}=${String(detalle[k]).slice(0, 64)}`);
+  const ids = new Set<string>();
+  for (const v of Object.values(detalle)) {
+    if (typeof v !== 'string') continue;
+    for (const m of v.match(UUID_RE) ?? []) ids.add(m.toLowerCase());
+  }
+  if (ids.size > 0) partes.push(`ids=${[...ids].sort().slice(0, 8).join(',')}`);
   return partes.length > 0 ? partes.sort().join('&') : '_';
+}
+
+/**
+ * PRU-A3 (auditoría 24, reincidente de OP-A2): los llamadores de `timbre.*`
+ * meten el folio fiscal DENTRO de `error` («el PAC timbró el uuid …»), y
+ * `redactarTexto` lo convertía en `id:33ab7e19c0d1`: el correo decía que
+ * existía un CFDI ante el SAT que Likida no podía nombrar. En un evento de
+ * timbrado, el UUID que el texto NOMBRA como «uuid» o «folio» es el folio
+ * fiscal —un documento, no una persona— y se conserva íntegro; cualquier
+ * otro UUID del texto (el viaje, la reserva) y el resto (RFC, teléfonos,
+ * CLABE) se redactan igual que siempre.
+ */
+const EVENTOS_CON_FOLIO_FISCAL = /^timbre\./;
+// Alternación en vez de `folio(?:\s+fiscal)?`: un `+` dentro de un `?` es
+// altura de estrella 2 y `security/detect-unsafe-regex` lo marca. La rama
+// larga va primero para que «folio fiscal» no se quede en «folio».
+const FOLIO_NOMBRADO_RE = /\b(uuid|folio\s+fiscal|folio)\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
+
+export function redactarConservandoFolio(texto: string): string {
+  const folios: string[] = [];
+  const marcado = texto.replace(FOLIO_NOMBRADO_RE, (_m, palabra: string, uuid: string) => {
+    folios.push(uuid);
+    return `${palabra} \u0000${folios.length - 1}\u0000`;
+  });
+  return redactarTexto(marcado).replace(/\u0000(\d+)\u0000/g, (_, i: string) => folios[Number(i)] ?? '');
+}
+
+// ── OP-P5 (auditoría 24): EL CANAL DE MADRUGADA PARA EL DINERO ──────────────
+//
+// A las 3 a.m. el único canal era un correo. Un incidente del camino del
+// dinero —un CFDI timbrado que Likida no registró, un lote de facturación que
+// no salió, una cobranza rechazada en masa— esperaba a que alguien abriera el
+// correo. `ALERTA_WA` es el WhatsApp del operador del sistema: opcional, como
+// `ALERTA_EMAIL`. Cuando está, los eventos de dinero salen TAMBIÉN por ahí,
+// por el mismo `enviarTexto` que usa el producto y bajo el MISMO piso (ya
+// reservado arriba: si el correo no sale por piso, el WhatsApp tampoco).
+//
+// Texto libre y no plantilla: Meta solo lo entrega si hay ventana de 24 h
+// abierta con ese número; el operador la abre escribiéndole al número de
+// Likida, y si no hay ventana `enviarTexto` lo reporta y lo encola. El cuerpo
+// no lleva cifras: el evento, el código y el texto ya redactado.
+const EVENTOS_DE_DINERO = /^(timbre\.|finanzas\.|stripe\.|cron\.facturar|cron\.cobranza|wa\.rechazo_masivo)/;
+
+/** ¿Este evento toca dinero? Solo esos salen por WhatsApp. */
+export function esEventoDeDinero(evento: string): boolean {
+  return EVENTOS_DE_DINERO.test(evento);
+}
+
+/** Para /admin/salud-sistema: hay un WhatsApp del operador al que avisar.
+ *  Un número real en E.164 sin «+» (10 a 15 dígitos); un marcador o un
+ *  hueco no cuentan como puesto — mismo criterio que `envPuesta`. */
+export function alertaWhatsAppConfigurada(): boolean {
+  const v = process.env.ALERTA_WA;
+  return typeof v === 'string' && /^\d{10,15}$/.test(v.trim());
+}
+
+async function avisarPorWhatsApp(evento: string, datos: Array<[string, string]>): Promise<void> {
+  try {
+    // Import dinámico: `meta/client` arrastra el outbox y Supabase, y este
+    // módulo lo importan crons y el health — no se paga ese árbol si no hay
+    // número configurado.
+    const { enviarTexto } = await import('@/lib/meta/client');
+    const lineas = datos.filter(([k]) => k !== 'Evento').map(([k, v]) => `${k}: ${v.slice(0, 200)}`);
+    const cuerpo = [`Likida — falló ${evento}`, ...lineas, `Detalle en ${APP}/admin/salud-sistema`]
+      .join('\n').slice(0, 1500);
+    const r = await enviarTexto(String(process.env.ALERTA_WA), cuerpo);
+    if (!r.ok) logger.warn('alerta.wa_no_salio', { evento, motivo: r.error, status: r.status ?? null });
+  } catch (e) {
+    logger.warn('alerta.wa_fallo', { evento, error: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /** Para decir "sin configurar" UNA vez por instancia, no en cada corrida. */
@@ -158,7 +251,8 @@ const LLAVES_SIN_REDACTAR = new Set([
 export async function alertarOperador(evento: string, detalle: Record<string, unknown>): Promise<void> {
   try {
     const para = process.env.ALERTA_EMAIL;
-    if (!para) {
+    const porWhatsApp = alertaWhatsAppConfigurada() && esEventoDeDinero(evento);
+    if (!para && !porWhatsApp) {
       if (!avisadoSinConfigurar) {
         logger.info('alerta.sin_configurar', { evento });
         avisadoSinConfigurar = true;
@@ -174,19 +268,17 @@ export async function alertarOperador(evento: string, detalle: Record<string, un
     // ── AUDITORÍA 22, OP-A3 (ALTO): EL PISO ERA POR NOMBRE DE EVENTO ───────
     // `carta_porte_timbre.ts` manda cinco alertas distintas bajo el mismo
     // `evento`, así que el SEGUNDO incidente de la hora se descartaba en
-    // silencio: dos viajes que fallan al timbrar en la misma hora producían UN
-    // correo, y el contralor solo sabía de uno. En el camino del dinero eso no
-    // es ruido ahorrado: es un incidente perdido.
-    //
-    // El piso ahora incluye una huella del detalle SALIENTE (el código de error
-    // y las llaves de identidad), así que dos incidentes distintos son dos
-    // alarmas y el mismo incidente repitiéndose sigue siendo una.
-    // Sin nada saliente que distinguir, la llave se queda como estaba: no hay
-    // dos incidentes que separar y cambiar el formato por gusto rompería la
-    // continuidad del piso ya reservado en Redis entre despliegues.
+    // silencio. El piso incluye una huella del detalle SALIENTE (ver
+    // `huellaDeDetalle`: código, identidades y los UUIDs del texto), así que
+    // dos incidentes distintos son dos alarmas y el mismo repitiéndose es una.
+    // Sin nada saliente que distinguir, la llave se queda como estaba.
     const huella = huellaDeDetalle(detalle);
     if (!(await reservarPiso(huella === '_' ? evento : `${evento}|${huella}`, ahora))) return;
 
+    // PRU-A3: en un evento de timbrado el UUID que el texto nombra como
+    // «uuid»/«folio» es el folio fiscal y se conserva; el resto se redacta igual.
+    const conservaFolio = EVENTOS_CON_FOLIO_FISCAL.test(evento);
+    const redactar = (v: unknown) => (conservaFolio ? redactarConservandoFolio(String(v)) : redactarTexto(String(v)));
     const datos: Array<[string, string]> = [
       ['Evento', evento],
       ['Cuándo', fechaHoraMx(new Date(ahora).toISOString())],
@@ -196,26 +288,30 @@ export async function alertarOperador(evento: string, detalle: Record<string, un
         k,
         // OP-A2: un folio fiscal se entrega tal cual — es la única llave para
         // reconstruir un comprobante que ya existe ante el SAT.
-        (LLAVES_SIN_REDACTAR.has(k) ? String(v) : redactarTexto(String(v))).slice(0, 300),
+        (LLAVES_SIN_REDACTAR.has(k) ? String(v) : redactar(v)).slice(0, 300),
       ] as [string, string]),
     ];
 
-    const r = await enviarCorreo(para, {
-      asunto: `[Likida] Falló ${evento}`,
-      avance: 'Un proceso de fondo falló y va a reintentarse solo; el detalle va adentro.',
-      titulo: `Falló ${evento}`,
-      parrafos: [
-        'Un proceso de fondo del sistema no completó su corrida. El trabajo se reintenta en la siguiente corrida programada; lo que este correo pide es mirar POR QUÉ falló, porque un cron que falla en silencio puede llevar días fallando.',
-        'De este evento no va a llegar otro correo en la próxima hora aunque siga fallando; la serie completa está en Sentry.',
-      ],
-      datos,
-      boton: { texto: 'Ver salud del sistema', href: `${APP}/admin/salud-sistema` },
-      tono: 'urgente',
-      porQueLoRecibes: 'Recibes esta alerta porque ALERTA_EMAIL apunta a esta dirección: es el canal del operador del sistema, no de una flota.',
-    });
-    // `enviarCorreo` nunca lanza; devuelve el motivo. Aquí solo se deja
-    // constancia — el respaldo si esto no sale es Sentry.
-    if (!r.ok) logger.warn('alerta.no_salio', { evento, motivo: r.motivo });
+    if (para) {
+      const r = await enviarCorreo(para, {
+        asunto: `[Likida] Falló ${evento}`,
+        avance: 'Un proceso de fondo falló y va a reintentarse solo; el detalle va adentro.',
+        titulo: `Falló ${evento}`,
+        parrafos: [
+          'Un proceso de fondo del sistema no completó su corrida. El trabajo se reintenta en la siguiente corrida programada; lo que este correo pide es mirar POR QUÉ falló, porque un cron que falla en silencio puede llevar días fallando.',
+          'De este evento no va a llegar otro correo en la próxima hora aunque siga fallando; la serie completa está en Sentry.',
+        ],
+        datos,
+        boton: { texto: 'Ver salud del sistema', href: `${APP}/admin/salud-sistema` },
+        tono: 'urgente',
+        porQueLoRecibes: 'Recibes esta alerta porque ALERTA_EMAIL apunta a esta dirección: es el canal del operador del sistema, no de una flota.',
+      });
+      // `enviarCorreo` nunca lanza; devuelve el motivo. Aquí solo se deja
+      // constancia — el respaldo si esto no sale es Sentry.
+      if (!r.ok) logger.warn('alerta.no_salio', { evento, motivo: r.motivo });
+    }
+    // OP-P5: el dinero también suena en el teléfono, si hay número.
+    if (porWhatsApp) await avisarPorWhatsApp(evento, datos);
   } catch (e) {
     // Cinturón sobre los tirantes: nada de este canal puede propagar al cron.
     logger.warn('alerta.fallo', { evento, error: e instanceof Error ? e.message : String(e) });

@@ -59,6 +59,15 @@ vi.mock('@/lib/likida/fiscal', () => ({
   opcionesDe: vi.fn(() => ({})),
 }));
 vi.mock('@/lib/saludo', () => ({ ahoraMs: () => AHORA }));
+// AUDITORÍA 24, TC-N3: `total` ya no es el largo de la lista sino un `count`
+// real de la flota (chat-tools_aud24.test.ts lo prueba a fondo); aquí se le da
+// a la caja un conteo distinto del largo para que la aserción no confunda los dos.
+const CONTEO: Record<string, number> = { viaje: 1_234, liquidacion: 5_678 };
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => ({
+    from: (tabla: string) => ({ select: () => ({ eq: async () => ({ data: null, count: CONTEO[tabla], error: null }) }) }),
+  }),
+}));
 
 await import('./chat-tools');
 const { toolSchemas, makeExecutor } = await import('@/lib/llm/tool-executor');
@@ -171,16 +180,16 @@ describe('cada tool consulta la flota del contexto y ninguna otra', () => {
 describe('el resultado se RECORTA antes de llegar al modelo', () => {
   // No es cosmético: cada campo que viaja son tokens que el cliente paga y que
   // el modelo puede repetir en pantalla.
-  it('viajes_flota corta en 25 y dice cuántos hay en total', async () => {
+  it('viajes_flota corta en 25 y dice cuántos hay en total (el conteo de la flota, no los cargados — TC-N3)', async () => {
     const r = (await correr('viajes_flota')).result as { total: number; mostrando: number; viajes: unknown[] };
-    expect(r.total).toBe(30);
+    expect(r.total).toBe(1_234);
     expect(r.mostrando).toBe(25);
     expect(r.viajes).toHaveLength(25);
   });
 
   it('liquidaciones_flota corta en 20', async () => {
     const r = (await correr('liquidaciones_flota')).result as { total: number; mostrando: number; liquidaciones: unknown[] };
-    expect(r.total).toBe(25);
+    expect(r.total).toBe(5_678);
     expect(r.mostrando).toBe(20);
     expect(r.liquidaciones).toHaveLength(20);
   });

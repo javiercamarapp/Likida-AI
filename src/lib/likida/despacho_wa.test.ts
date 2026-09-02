@@ -45,7 +45,10 @@ vi.mock('@/lib/supabase/admin', () => ({
           if (habia) estadoGuardado = actualizando.estado;
           return Promise.resolve({ data: habia ? [{ telefono: '5215550000001' }] : [], error: null });
         },
-        eq: () => b, not: () => b,
+        // AUDITORÍA 24, DAT-5: la lectura ahora va por `.in(variantesTelefono)`
+        // con desempate, porque el mismo jefe entra como 521… y como 52…. El
+        // arnés no filtra (nunca lo hizo): sólo tiene que dejar pasar la cadena.
+        eq: () => b, not: () => b, in: () => b, order: () => b, limit: () => b,
         update: (fila: { estado: Record<string, unknown> }) => { actualizando = fila; return b; },
         maybeSingle: async () => ({ data: estadoGuardado ? { estado: estadoGuardado } : null, error: null }),
         upsert: (fila: { estado: Record<string, unknown> }) => {

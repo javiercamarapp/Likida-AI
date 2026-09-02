@@ -9,10 +9,12 @@ import {
   guardarAjustesOperativos, guardarRfcsAdicionales, parsearRfcsAdicionales,
   MAX_RFCS_ADICIONALES, mensajeParaPantalla,
 } from '@/lib/likida/administracion';
-import { validarAjustes, formatearCuentas, type AjustesCrudos } from '@/lib/likida/ajustes_operativos';
+import { validarAjustes } from '@/lib/likida/ajustes_operativos';
+import { cuentasDeclaradas } from '@/lib/likida/contabilidad/catalogo';
 import { EstadoVacio } from '../../admin/ui/kit';
 import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 import { FormaAjustes, type ResultadoGuardar } from './forma';
+import { ajustesIniciales, type EstadoCatalogo } from './inicial';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +62,19 @@ export default async function ConfiguracionPage({
     : null;
 
   const unidades = config ? Object.entries(config.unidades) : [];
+
+  // AUDITORÍA 24, ARQ-3: el catálogo se lee del OVERRIDE de la flota, no de
+  // `config` (que trae las cuentas demo fusionadas). Fallar cerrado: una
+  // lectura caída no es «no declaró nada», y por eso tiene su propio estado —
+  // si se enseñara vacío, el siguiente «Guardar» borraría el catálogo real.
+  let cuentas: Record<string, string> | null = null;
+  let estadoCatalogo: EstadoCatalogo;
+  try {
+    cuentas = await cuentasDeclaradas(tenantId);
+    estadoCatalogo = cuentas ? 'declarado' : 'sin_declarar';
+  } catch {
+    estadoCatalogo = 'ilegible';
+  }
 
   async function guardar(_previo: ResultadoGuardar, fd: FormData): Promise<ResultadoGuardar> {
     'use server';
@@ -122,18 +137,7 @@ export default async function ConfiguracionPage({
     }
   }
 
-  const inicial: AjustesCrudos = config ? {
-    rendimientoPorDefecto: String(config.tabulador.rendimientoPorDefecto),
-    factorCarga: String(config.tabulador.factorCarga),
-    precioDieselPorDefecto: String(config.tabulador.precioDieselPorDefecto),
-    // De fracción a porcentaje: el motor guarda 0.15, la persona lee 15.
-    umbralDesviacionPct: String(Math.round(config.tabulador.umbralDesviacion * 10000) / 100),
-    salida: config.salida,
-    cuentas: formatearCuentas(config.catalogoCuentas),
-  } : {
-    rendimientoPorDefecto: '', factorCarga: '', precioDieselPorDefecto: '',
-    umbralDesviacionPct: '', salida: 'csv', cuentas: '',
-  };
+  const inicial = ajustesIniciales(config, cuentas);
 
   return (
     <div className="flex flex-col gap-4">
@@ -210,7 +214,7 @@ export default async function ConfiguracionPage({
             <h2 className="text-xs font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--muted)' }}>
               Ajustes de tu operación
             </h2>
-            <FormaAjustes inicial={inicial} ejemploKm={ejemploKm} guardar={guardar} />
+            <FormaAjustes inicial={inicial} ejemploKm={ejemploKm} guardar={guardar} catalogo={estadoCatalogo} />
           </section>
 
           <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>

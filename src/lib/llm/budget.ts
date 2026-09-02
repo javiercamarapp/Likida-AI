@@ -1,6 +1,9 @@
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
+import { logger } from '@/lib/logger';
+import { hoyMx } from '@/lib/formato';
+import { COSTO_ESTIMADO_USD } from './models';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // D.23 (frente de escala) — EL PRESUPUESTO TIENE DIMENSIÓN DE PROPÓSITO.
@@ -44,6 +47,33 @@ export class LlmBudgetExceededError extends Error {
   }
 }
 
+/**
+ * ¿Este error ES (o ENVUELVE) un tope de presupuesto de IA?
+ *
+ * AUDITORÍA 24, TC-N1 (CRÍTICO). `generateWithTools` envuelve CUALQUIER
+ * excepción del ciclo —incluida la de `reserveLlmBudget`— en
+ * `PartialExecutionError` (openrouter.ts), así que el
+ * `e instanceof LlmBudgetExceededError` del processor era `false` en
+ * producción: la rama que degrada a cuadre determinístico (la del CRÍTICO de
+ * la auditoría 19) era código muerto y el chofer recibía "se me trabó el
+ * sistema" hasta medianoche. La prueba que la cubría rechazaba con el error
+ * DESNUDO, que en producción nunca llega así.
+ *
+ * Atraviesa la cadena de `cause` (acotada, por si alguien la hace circular) y
+ * reconoce el error por CLASE o por NOMBRE: un `instanceof` falla entre dos
+ * copias del módulo (vitest con mocks parciales, bundles duplicados) y el
+ * nombre es lo que `LlmBudgetExceededError` fija en su constructor.
+ */
+export function esErrorDePresupuesto(err: unknown): err is LlmBudgetExceededError {
+  let actual: unknown = err;
+  for (let profundidad = 0; profundidad < 6 && actual && typeof actual === 'object'; profundidad++) {
+    if (actual instanceof LlmBudgetExceededError) return true;
+    if ((actual as { name?: unknown }).name === 'LlmBudgetExceededError') return true;
+    actual = (actual as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 export interface LlmBudget {
   tenantId: string;
   runId: string;
@@ -54,7 +84,21 @@ export interface LlmBudget {
   /** Parte del techo diario que SOLO el camino interactivo puede tocar. */
   reservaInteractivoUsd: number;
   reservadoRunUsd: number;
+  /**
+   * De dónde salió `maxTenantDailyUsd` (auditoría 24, TC-N1/WA-1):
+   *   · 'explicito' — el llamador lo pasó en `limits` (runner de agentes).
+   *   · 'tenant'    — `tenant.config.presupuestoLlmUsdDia` (mig. 0278).
+   *   · 'plan'      — derivado de `plan.limite_viajes_mes` × costo por viaje.
+   *   · 'piso'      — la env global `LIKIDA_LLM_TENANT_DAILY_BUDGET_USD` (o $5).
+   * Hasta la primera reserva vale 'piso' salvo que sea explícito: la lectura
+   * de la flota es asíncrona y se hace en `reserveLlmBudget`, no aquí.
+   */
+  origenTope?: OrigenTopeTenant;
+  /** `true` cuando el techo de la flota ya se leyó (o era explícito). */
+  topeTenantResuelto?: boolean;
 }
+
+export type OrigenTopeTenant = 'explicito' | 'tenant' | 'plan' | 'piso';
 
 export interface LlmBudgetLimits {
   maxRunUsd?: number;
@@ -125,6 +169,166 @@ export function topesPresupuestoIa(): { topeTenantDiaUsd: number; reservaInterac
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// EL TECHO DIARIO ES POR FLOTA, NO UNA ENV GLOBAL (auditoría 24, TC-N1 / WA-1).
+//
+// Hasta la 24 el techo era UNA variable (`LIKIDA_LLM_TENANT_DAILY_BUDGET_USD`,
+// $5.00) para todas las flotas. Con el tráfico del piloto (500 viajes y 1,500
+// fotos al día en UNA flota, ~$27/día de IA medidos con `COSTO_ESTIMADO_USD`)
+// el tope caía hacia las 10 de la mañana; y subir la env a $60 para salvar el
+// piloto subía el techo de TODAS las flotas — el freno de dinero dejaba de
+// ser freno.
+//
+// El orden de prioridad, de más específico a más general:
+//   1. `limits.maxTenantDailyUsd` explícito del llamador (el runner lo pasa
+//      con `agente_definicion.presupuesto_dia_usd`).
+//   2. `tenant.config.presupuestoLlmUsdDia` — la flota lo declara (mig. 0278
+//      valida número > 0). Es la palanca para el piloto: se sube UNA flota.
+//   3. Derivado del plan: `plan.limite_viajes_mes / 30` viajes/día × lo que
+//      cuesta liquidar un viaje completo (`COSTO_ESTIMADO_USD.viajeCompleto`),
+//      acotado entre el piso y `LIKIDA_LLM_TENANT_DAILY_BUDGET_MAX_USD`.
+//   4. El piso: la env global de siempre, o $5.00 si no está.
+//
+// La lectura es asíncrona y `createLlmBudget` no lo es (lo llaman 14 sitios
+// síncronos), así que el techo se resuelve UNA vez en la primera
+// `reserveLlmBudget` del budget — antes de la RPC, que es la que lo aplica —
+// y se cachea por flota un minuto: con 1,500 fotos/día una consulta por
+// reserva sería ruido, y un minuto de retraso en aplicar un cambio de tope
+// no le cuesta nada a nadie. Si la lectura falla se usa el PISO y se dice
+// (`presupuesto_llm.tope_tenant_ilegible`): fallar cerrado es gastar MENOS,
+// nunca más.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** La llave de `tenant.config` que declara el techo diario de IA de la flota (mig. 0278). */
+export const LLAVE_PRESUPUESTO_LLM_TENANT = 'presupuestoLlmUsdDia';
+const PISO_TOPE_TENANT_USD = 5.00;
+/** Techo del tope DERIVADO del plan (no del declarado): ver .env.example. */
+const TECHO_DERIVADO_POR_DEFECTO_USD = 60;
+const TTL_TOPE_TENANT_MS = 60_000;
+/** Los estados de `suscripcion` que cuentan como viva — el mismo criterio de `getSuscripcion`. */
+const ESTADOS_SUSCRIPCION_VIVA = ['prueba', 'activa', 'morosa', 'pausada'];
+
+export interface TopeTenantResuelto { topeUsd: number; origen: OrigenTopeTenant }
+
+const topesPorTenant = new Map<string, { hasta: number; tope: TopeTenantResuelto }>();
+
+/** Para pruebas y para que un cambio de tope en el panel se aplique al instante. */
+export function olvidarTopesDeTenant(): void {
+  topesPorTenant.clear();
+  alertadoTopeTenant.clear();
+}
+
+/** El piso del techo diario: la env global de siempre, o $5.00. */
+export function pisoTopeTenantUsd(): number {
+  return positiveEnv(process.env.LIKIDA_LLM_TENANT_DAILY_BUDGET_USD, PISO_TOPE_TENANT_USD);
+}
+
+/**
+ * El techo diario que le corresponde a una flota SIN llave declarada, a partir
+ * del tamaño de su plan: viajes/día × costo de liquidar un viaje completo,
+ * acotado entre el piso y `LIKIDA_LLM_TENANT_DAILY_BUDGET_MAX_USD`.
+ * Puro, para que la prueba lo ancle con cifras.
+ */
+export function topeDerivadoDelPlan(limiteViajesMes: number, piso = pisoTopeTenantUsd()): number {
+  const techo = positiveEnv(process.env.LIKIDA_LLM_TENANT_DAILY_BUDGET_MAX_USD, TECHO_DERIVADO_POR_DEFECTO_USD);
+  if (!Number.isFinite(limiteViajesMes) || limiteViajesMes <= 0) return piso;
+  const derivado = (limiteViajesMes / 30) * COSTO_ESTIMADO_USD.viajeCompleto;
+  return Number(Math.min(Math.max(derivado, piso), Math.max(techo, piso)).toFixed(6));
+}
+
+type LectorTenant = {
+  from?: (tabla: string) => {
+    select: (cols: string) => {
+      eq: (col: string, v: string) => {
+        maybeSingle: () => PromiseLike<{ data: Record<string, unknown> | null; error: { message: string } | null }>;
+        in: (col: string, v: string[]) => {
+          maybeSingle: () => PromiseLike<{ data: Record<string, unknown> | null; error: { message: string } | null }>;
+        };
+      };
+    };
+  };
+};
+
+/**
+ * El techo diario de IA de una flota, resuelto con el orden de arriba y
+ * cacheado un minuto. NUNCA lanza: ante una base que no contesta devuelve el
+ * piso y lo registra — el error real lo va a dar la RPC de reserva, que sí
+ * es fail-closed y ruidosa.
+ */
+export async function topeDiarioDelTenant(tenantId: string): Promise<TopeTenantResuelto> {
+  const ahora = Date.now();
+  const cacheado = topesPorTenant.get(tenantId);
+  if (cacheado && cacheado.hasta > ahora) return cacheado.tope;
+
+  const piso = pisoTopeTenantUsd();
+  let tope: TopeTenantResuelto = { topeUsd: piso, origen: 'piso' };
+  const admin = supabaseAdmin() as unknown as LectorTenant;
+  // Los tests de integración mockean Supabase solo con `rpc` (el contrato del
+  // ledger). Sin lector no se finge una lectura: es el piso, igual que antes
+  // de la auditoría 24. En producción el cliente real siempre trae `from`.
+  if (typeof admin.from !== 'function') return tope;
+
+  try {
+    const rTenant = await acotada(admin.from('tenant').select('config').eq('id', tenantId).maybeSingle(), 'presupuestoLlm.tenant');
+    if (rTenant.error) throw new Error(`tenant.config: ${rTenant.error.message}`);
+    const config = (rTenant.data?.config ?? null) as Record<string, unknown> | null;
+    const declarado = config && typeof config === 'object' ? config[LLAVE_PRESUPUESTO_LLM_TENANT] : undefined;
+    if (typeof declarado === 'number' && Number.isFinite(declarado) && declarado > 0) {
+      tope = { topeUsd: declarado, origen: 'tenant' };
+    } else {
+      const rSus = await acotada(
+        admin.from('suscripcion').select('plan(limite_viajes_mes)').eq('tenant_id', tenantId)
+          .in('estado', ESTADOS_SUSCRIPCION_VIVA).maybeSingle(),
+        'presupuestoLlm.plan',
+      );
+      if (rSus.error) throw new Error(`suscripcion.plan: ${rSus.error.message}`);
+      const rel = rSus.data?.plan as { limite_viajes_mes?: unknown } | Array<{ limite_viajes_mes?: unknown }> | null | undefined;
+      const limite = Array.isArray(rel) ? rel[0]?.limite_viajes_mes : rel?.limite_viajes_mes;
+      const n = typeof limite === 'number' ? limite : typeof limite === 'string' ? Number(limite) : NaN;
+      if (Number.isFinite(n) && n > 0) tope = { topeUsd: topeDerivadoDelPlan(n, piso), origen: 'plan' };
+    }
+  } catch (e) {
+    logger.error('presupuesto_llm.tope_tenant_ilegible', {
+      tenantId, topeUsd: piso, err: e instanceof Error ? e.message : String(e),
+      msg: 'No se pudo leer el techo diario de IA de la flota; se aplica el piso global. Es fallar cerrado: se gasta menos, no más.',
+    });
+    // Un fallo de lectura no se cachea el minuto entero: se reintenta pronto.
+    topesPorTenant.set(tenantId, { hasta: ahora + 5_000, tope });
+    return tope;
+  }
+  topesPorTenant.set(tenantId, { hasta: ahora + TTL_TOPE_TENANT_MS, tope });
+  return tope;
+}
+
+/** tenantId → día MX en que ya se avisó el primer `tope_tenant`. */
+const alertadoTopeTenant = new Map<string, string>();
+
+/**
+ * AUDITORÍA 24, TC-N1 (4): al PRIMER `tope_tenant` del día de cada flota se
+ * avisa al operador. Antes el tope se veía en el log como un `agent.fail`
+ * cualquiera y nadie en la oficina sabía por qué dejaron de cerrar viajes.
+ * `alertarOperador` trae su propio piso por hora; este mapa evita hasta la
+ * llamada en los cientos de rebotes que siguen al primero. Best-effort: un
+ * correo que no sale no puede tapar el error de presupuesto que sí importa.
+ */
+async function avisarTopeTenant(budget: LlmBudget, pedidoUsd: number): Promise<void> {
+  const dia = hoyMx();
+  if (alertadoTopeTenant.get(budget.tenantId) === dia) return;
+  alertadoTopeTenant.set(budget.tenantId, dia);
+  try {
+    // Import dinámico: `alerta.ts` arrastra el correo, y este módulo lo
+    // importan 18 sitios (y sus pruebas) que no necesitan nada de eso.
+    const { alertarOperador } = await import('@/lib/observability/alerta');
+    await alertarOperador('presupuesto_ia.tope_tenant', {
+      tenantId: budget.tenantId, dia, proposito: budget.proposito,
+      topeUsd: budget.maxTenantDailyUsd, origenTope: budget.origenTope ?? 'piso', pedidoUsd,
+      msg: 'La flota agotó su techo diario de IA: el cuadre degrada a determinístico y las fotos esperan. Sube `tenant.config.presupuestoLlmUsdDia` si el tope quedó corto.',
+    });
+  } catch (e) {
+    logger.warn('presupuesto_llm.alerta_tope_fallo', { tenantId: budget.tenantId, err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 export function createLlmBudget(
   tenantId: string | null | undefined,
   runId: string,
@@ -137,13 +341,16 @@ export function createLlmBudget(
   if (!PROPOSITOS.includes(proposito)) {
     throw new Error(`presupuesto_llm: propósito desconocido: ${String(proposito)}`);
   }
-  const maxTenantDailyUsd = limits.maxTenantDailyUsd && limits.maxTenantDailyUsd > 0
-    ? limits.maxTenantDailyUsd
-    : positiveEnv(process.env.LIKIDA_LLM_TENANT_DAILY_BUDGET_USD, 5.00);
+  const explicito = Boolean(limits.maxTenantDailyUsd && limits.maxTenantDailyUsd > 0);
+  const maxTenantDailyUsd = explicito
+    ? (limits.maxTenantDailyUsd as number)
+    : pisoTopeTenantUsd();
   return {
     tenantId: resolvedTenantId,
     runId,
     proposito,
+    origenTope: explicito ? 'explicito' : 'piso',
+    topeTenantResuelto: explicito,
     // Seis rondas de Sonnet con 4k de salida caben en este techo; el límite
     // sigue siendo duro y puede bajarse sin desplegar.
     maxRunUsd: limits.maxRunUsd && limits.maxRunUsd > 0
@@ -160,6 +367,15 @@ export async function reserveLlmBudget(budget: LlmBudget, amountUsd: number): Pr
   if (!Number.isFinite(amountUsd) || amountUsd <= 0) throw new Error('reserva de IA inválida');
   if (budget.reservadoRunUsd + amountUsd > budget.maxRunUsd + 1e-9) {
     throw new LlmBudgetExceededError('run', budget.reservadoRunUsd + amountUsd, budget.maxRunUsd);
+  }
+  // El techo de la FLOTA se resuelve aquí, una vez por budget, antes de que
+  // la RPC lo aplique (ver el bloque de arriba: tenant → plan → piso).
+  if (!budget.topeTenantResuelto) {
+    const t = await topeDiarioDelTenant(budget.tenantId);
+    budget.maxTenantDailyUsd = t.topeUsd;
+    budget.origenTope = t.origen;
+    budget.reservaInteractivoUsd = Number((t.topeUsd * fraccionReservaInteractivo()).toFixed(6));
+    budget.topeTenantResuelto = true;
   }
 
   const id = randomUUID();
@@ -192,7 +408,10 @@ export async function reserveLlmBudget(budget: LlmBudget, amountUsd: number): Pr
   // La RPC dice CUÁL techo frenó — y aquí se le pone el monto de ese techo,
   // no uno genérico. Cualquier respuesta fuera del contrato LANZA: tratarla
   // como éxito sería gastar sin reserva.
-  if (data === 'tope_tenant') throw new LlmBudgetExceededError('tenant', amountUsd, budget.maxTenantDailyUsd);
+  if (data === 'tope_tenant') {
+    await avisarTopeTenant(budget, amountUsd);
+    throw new LlmBudgetExceededError('tenant', amountUsd, budget.maxTenantDailyUsd);
+  }
   if (data === 'tope_proposito') {
     throw new LlmBudgetExceededError('proposito', amountUsd, Math.max(0, budget.maxTenantDailyUsd - budget.reservaInteractivoUsd));
   }

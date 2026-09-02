@@ -60,6 +60,9 @@ export const herramientaSearch: Herramienta<z.infer<typeof esquemaSearch>> = {
   descripcion:
     'Busca viajes de tu flota por folio, origen o destino y devuelve una lista de resultados con id, título y liga al panel. Úsala para encontrar el viaje del que se habla; el detalle se pide después con fetch. Solo lectura.',
   area: 'operacion',
+  // TC-N4: el contador (solo `dinero`) también busca; lo que ve de cada viaje
+  // lo decide `fetch` con `alcanza('dinero')`.
+  areasQueAlcanzan: ['operacion', 'dinero'],
   esquema: esquemaSearch,
   ejecutar: ejecutarSearch,
 };
@@ -110,6 +113,7 @@ export const herramientaFetch: Herramienta<z.infer<typeof esquemaFetch>> = {
   descripcion:
     'Devuelve el detalle de un viaje a partir del id que entregó search: estado operativo y de comprobantes siempre, y las cifras de dinero solo si tu acceso las alcanza. Solo lectura.',
   area: 'operacion',
+  areasQueAlcanzan: ['operacion', 'dinero'],
   esquema: esquemaFetch,
   ejecutar: ejecutarFetch,
 };

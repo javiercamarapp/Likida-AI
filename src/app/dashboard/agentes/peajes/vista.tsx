@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Scale, ArrowRight, Inbox, CircleCheck, CircleAlert, CircleSlash, FileDown, FileSpreadsheet } from 'lucide-react';
-import type { ConciliacionConsolidado, LineaPorConciliar, DesgloseRecibido } from '@/lib/likida/analytics';
+import type { ConciliacionConsolidado, ColaPorConciliar, DesgloseRecibido } from '@/lib/likida/analytics';
 // SOLO tipos: el módulo importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ResumenDesglose, DetalleDesglose, LineaDesgloseVista } from '@/lib/likida/intake/desglose_peaje';
 import type { ResumenEvidenciaGps, EvidenciaGpsLinea } from '@/lib/likida/peajes/evidencia_gps';
@@ -44,7 +44,11 @@ export function VistaAgentePeajes({
   notificaciones,
 }: {
   conciliacion: ConciliacionConsolidado | null;
-  lineas: LineaPorConciliar[] | null;
+  // FE-10: `ColaPorConciliar`, no `LineaPorConciliar[]` a secas — sin el
+  // tipo con `.total` el prop perdía el conteo REAL que `getLineasPorConciliar`
+  // ya trae, y la pantalla se quedaba con `lineas.length` (tope 200) como si
+  // fuera el total.
+  lineas: ColaPorConciliar | null;
   desgloses: DesgloseRecibido[] | null;
   /** Peaje con factor 0.5 ya aplicado por el motor, histórico. null = no se pudo leer. */
   peajeAcreditable: number | null;
@@ -119,7 +123,11 @@ export function VistaAgentePeajes({
                 El barrido las re-cruza contra los gastos que llegaron después.
               </p>
               <div className="mb-3">
-                <BotonEjecutar ejecutarAhora={ejecutarAhora} pendientes={lineas === null ? null : lineas.length} />
+                {/* FE-10: `.total` (medido, `count: 'exact'`), no `.length`
+                    (tope 200) — a un TAG de 800 tractos, decenas de miles de
+                    cruces/mes topan la mesa en "200 pendientes" cuando hay
+                    muchas más. */}
+                <BotonEjecutar ejecutarAhora={ejecutarAhora} pendientes={lineas === null ? null : lineas.total} />
               </div>
               {lineas === null ? (
                 <Leyenda>No se pudo leer la cola ahora mismo.</Leyenda>
@@ -138,9 +146,9 @@ export function VistaAgentePeajes({
                       </span>
                     </div>
                   ))}
-                  {lineas.length > 6 && (
+                  {lineas.total > 6 && (
                     <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>
-                      y {numero(lineas.length - 6)} más en la mesa.
+                      y {numero(lineas.total - 6)} más en la mesa.
                     </p>
                   )}
                 </div>

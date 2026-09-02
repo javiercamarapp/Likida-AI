@@ -14,6 +14,11 @@ import { sufijoTenant } from '../sufijo';
 import { estadoDeColor } from './vista';
 import { DetalleLiquidacion } from './detalle';
 import { etiquetaEstatus } from '../estatus';
+import {
+  leerRevision, revisarLiquidacion, normalizarAjustes, puedeFirmarLiquidacion,
+  type AccionRevision, type RevisionDetalle,
+} from '@/lib/likida/revision';
+import { mxn } from '@/lib/formato';
 
 export const dynamic = 'force-dynamic';
 
@@ -124,7 +129,16 @@ export default async function Detalle({
     }
   }
 
-  async function reasignar(formData: FormData) {
+  /**
+   * FE-11: devuelve el rechazo, no lo lanza.
+   *
+   * Antes esto era `(fd) => Promise<void>` con un `await reasignarOperador`
+   * pelón: un chofer dado de baja o un fallo de red lanzaba DENTRO de la
+   * action y `error.tsx` se llevaba la pantalla entera —«No se pudo cargar el
+   * panel»— por un cambio de chofer. Y el rechazo de permiso era un `redirect`
+   * mudo: la pantalla volvía igual, sin decir que no se hizo.
+   */
+  async function reasignar(_previo: ResultadoAccion, formData: FormData): Promise<ResultadoAccion> {
     'use server';
     // Repite la comprobación de permiso EN el server action: el `puedeAsignar`
     // de arriba solo decide si el <form> se pinta. Sin este segundo chequeo,
@@ -132,15 +146,22 @@ export default async function Detalle({
     // botón) podría reasignar igual — el mismo criterio que ya usa
     // `requireSessionTenant` para no confiar solo en lo que el proxy filtra.
     const { tenantId: tDemo, rol: r } = await requireSessionTenant(`/dashboard/${id}`, sp);
-    if (!puedeAsignar(r)) redirect(`/dashboard/${id}${sufijo}`);
+    if (!puedeAsignar(r)) return { error: 'Tu rol no puede reasignar choferes.' };
     let t = tDemo;
     if (r === 'superadmin' && sp?.tenant) {
       t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
     }
     const operadorId = String(formData.get('operadorId') ?? '');
-    if (!operadorId) redirect(`/dashboard/${id}${sufijo}`);
-    await reasignarOperador(t, d!.viajeId, operadorId);
-    redirect(`/dashboard/${id}${sufijo}`);
+    if (!operadorId) {
+      return { error: 'Elige un chofer de la lista: escribir un nombre a medias no basta, y adivinar a quién te referías no es cosa de este panel.' };
+    }
+    try {
+      await reasignarOperador(t, d!.viajeId, operadorId);
+      revalidatePath(`/dashboard/${id}`);
+      return { ok: 'Listo: el viaje quedó a nombre del chofer que elegiste.' };
+    } catch (err) {
+      return { error: mensajeParaPantalla(err, 'reasignar el chofer') };
+    }
   }
 
   /**
@@ -167,6 +188,70 @@ export default async function Detalle({
     return buscarCatalogo(t, 'operador', typeof q === 'string' ? q : '');
   }
 
+  // ── LA FIRMA HUMANA (auditoría 24, BLOQ-6 — mig. 0299) ──────────────────
+  //
+  // Hasta hoy no había NI UN `update` sobre `liquidacion` en toda la app: el
+  // agente cerraba y nadie firmaba. `leerRevision` degrada solo — si no se
+  // pudo leer, el panel NO se pinta: unos botones sin saber si la liquidación
+  // ya está firmada invitan a firmarla dos veces.
+  const revisionEstado: RevisionDetalle | null = await leerRevision(tenantId, id).catch(() => null);
+  const puedeFirmar = puedeFirmarLiquidacion(rol);
+
+  /**
+   * Aprobar / ajustar / rechazar. TODO pasa por la RPC `revisar_liquidacion`
+   * (la tabla rebota cualquier otro camino con LR003), que deja la bitácora en
+   * la misma transacción. Aquí solo se re-gatea el permiso con el rol REAL —
+   * el `puedeFirmar` de arriba decide si el panel se pinta, no si la petición
+   * se acepta — y se traducen los rechazos a mensajes para la persona.
+   */
+  async function revisar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await requireSessionTenant(`/dashboard/${id}`, sp);
+    if (!puedeVerArea(s.rol, 'dinero') || !puedeFirmarLiquidacion(s.rol)) {
+      return { error: 'Tu rol no firma liquidaciones. Pídeselo al dueño de la flota o a tu contador.' };
+    }
+    let t = s.tenantId;
+    if (s.rol === 'superadmin' && sp?.tenant) {
+      t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
+    }
+    const accion = String(fd.get('accion') ?? '') as AccionRevision;
+    try {
+      // Los ajustes viajan como `monto:<gastoId>`; los vacíos se saltan en
+      // `normalizarAjustes` — un campo en blanco es "no lo toques", no un cero.
+      const ajustes = accion === 'ajustar'
+        ? normalizarAjustes([...fd.entries()]
+          .filter(([k]) => k.startsWith('monto:'))
+          .map(([k, v]) => ({ gastoId: k.slice('monto:'.length), montoNuevo: v })))
+        : null;
+      const r = await revisarLiquidacion({
+        tenantId: t, liquidacionId: id, accion, ajustes,
+        motivo: String(fd.get('motivo') ?? ''),
+        // El correo lo resuelve la RPC desde `app_user` con este id (y lo
+        // copia a la fila para que sobreviva a la baja del usuario).
+        actor: { id: s.userId },
+      });
+      revalidatePath(`/dashboard/${id}`);
+      revalidatePath('/dashboard/agentes/liquidacion');
+      if (r.revision === 'rechazada') {
+        return {
+          ok: `${r.folio} se rechazó y el viaje volvió a cuadre.${
+            r.choferAvisado ? ' Al operador ya le llegó el motivo por WhatsApp.'
+              : ' No se le pudo avisar al operador por WhatsApp: márcale tú.'}`,
+        };
+      }
+      if (r.revision === 'ajustada') {
+        const cuantos = r.ajustes.length;
+        return {
+          ok: `${r.folio}: ${cuantos === 1 ? 'se corrigió 1 comprobante' : `se corrigieron ${cuantos} comprobantes`}. `
+            + `El comprobado quedó en ${mxn(r.totalComprobado)} y la diferencia en ${mxn(r.diferencia)}.`,
+        };
+      }
+      return { ok: `${r.folio} quedó aprobada con tu firma.` };
+    } catch (err) {
+      return { error: mensajeParaPantalla(err, 'firmar la liquidación') };
+    }
+  }
+
   // Cuántos choferes activos hay — `count exact, head`, cero filas de vuelta.
   // Solo para la pista "20 de N" y para no pintar el control cuando de verdad
   // no hay ninguno. `null` (no se pudo contar) NO apaga el control: no saber
@@ -188,6 +273,15 @@ export default async function Detalle({
         }
         : null}
       reabrir={puedeReabrir ? reabrir : null}
+      revision={revisionEstado ? {
+        estado: revisionEstado,
+        // Solo los comprobantes CON id se pueden ajustar: sin id no hay a qué
+        // fila apuntarle, y la RPC lo rebotaría (LR017).
+        gastos: d.gastos.filter((g) => g.id).map((g) => ({
+          id: g.id as string, etiqueta: etiquetaGasto(g), monto: g.monto,
+        })),
+        accion: puedeFirmar ? revisar : null,
+      } : null}
     />
   );
 }

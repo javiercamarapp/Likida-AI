@@ -91,8 +91,15 @@ function dbFalsa(): SupabaseClient {
     let filas: Fila[] | null = null;      // resultado a devolver
     let error: ErrPg = null;
     let seleccionando = false;
-    let orden: { col: string; asc: boolean } | null = null;
+    // AUDITORÍA 24 (BE-23/BE-27): los órdenes se ACUMULAN. `traerTodo` exige
+    // un orden único y los llamadores desempatan con `id`: guardar solo el
+    // último haría que el doble se viera igual que el simple.
+    const orden: Array<{ col: string; asc: boolean }> = [];
     let tope: number | null = null;
+    let rango: [number, number] | null = null;
+    let conteoExacto = false;
+    /** El recorte REAL de PostgREST: nunca más de `max_rows` por respuesta. */
+    const MAX_ROWS = 1_000;
     // El UPDATE es PEREZOSO: en postgrest los filtros llegan DESPUÉS
     // (`.update(x).eq('id', …).select()`), así que aquí sólo se guarda el
     // parche y se aplica en `then`, cuando los predicados ya están puestos.
@@ -102,7 +109,11 @@ function dbFalsa(): SupabaseClient {
     const b: Record<string, unknown> = {};
     const yo = () => b;
 
-    b.select = () => { seleccionando = true; return yo(); };
+    b.select = (_cols?: string, opt?: { count?: string }) => {
+      seleccionando = true;
+      if (opt?.count === 'exact') conteoExacto = true;
+      return yo();
+    };
     b.eq = (c: string, v: unknown) => { preds.push((f) => f[c] === v); return yo(); };
     b.in = (c: string, vs: unknown[]) => { preds.push((f) => vs.includes(f[c])); return yo(); };
     // Comparación por INSTANTE, no por texto: `creada_en` sale de
@@ -132,8 +143,9 @@ function dbFalsa(): SupabaseClient {
       });
       return yo();
     };
-    b.order = (col: string, o?: { ascending?: boolean }) => { orden = { col, asc: o?.ascending !== false }; return yo(); };
+    b.order = (col: string, o?: { ascending?: boolean }) => { orden.push({ col, asc: o?.ascending !== false }); return yo(); };
     b.limit = (n: number) => { tope = n; return yo(); };
+    b.range = (d: number, h: number) => { rango = [d, h]; return yo(); };
 
     b.update = (f: Fila) => {
       if (tabla === 'qa_foto' && errorUpdateFoto) { error = errorUpdateFoto; filas = []; }
@@ -167,18 +179,26 @@ function dbFalsa(): SupabaseClient {
       return yo();
     };
 
-    b.then = (res: (r: { data: unknown; error: ErrPg }) => void) => {
+    b.then = (res: (r: { data: unknown; error: ErrPg; count?: number | null }) => void) => {
       if (errorTabla) return res({ data: null, error: errorTabla });
       if (fallaTabla === tabla) return res({ data: null, error: { message: 'fetch failed' } });
       if (error || filas !== null) return res({ data: filas, error });
       let out = tablas[tabla].filter((f) => preds.every((p) => p(f)));
       if (parche) out = out.map((f) => Object.assign(f, parche));
-      if (orden) {
-        const { col, asc } = orden;
-        out = [...out].sort((x, y) => String(x[col]).localeCompare(String(y[col])) * (asc ? 1 : -1));
+      if (orden.length > 0) {
+        out = [...out].sort((x, y) => {
+          for (const { col, asc } of orden) {
+            const c = String(x[col]).localeCompare(String(y[col])) * (asc ? 1 : -1);
+            if (c !== 0) return c;
+          }
+          return 0;
+        });
       }
+      const total = out.length;
       if (tope !== null) out = out.slice(0, tope);
-      return res({ data: seleccionando ? out : [], error: null });
+      if (rango) out = out.slice(rango[0], Math.min(rango[1] + 1, rango[0] + MAX_ROWS));
+      else out = out.slice(0, MAX_ROWS);
+      return res({ data: seleccionando ? out : [], error: null, count: conteoExacto ? total : null });
     };
     return b;
   };
@@ -293,6 +313,32 @@ describe('el banco de fotos', () => {
     const r = await leerManifiesto(dbFalsa());
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain('fetch failed');
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 24, BE-27 — el manifiesto era un select suelto. PostgREST
+  // recorta a 1,000 filas SIN AVISAR, y sus tres consumidores lo usan para
+  // decidir si un id EXISTE: con 1,000+ fotos en el banco, `qa/lanzar` y
+  // `qa/fotos/ocr` rechazaban una foto perfectamente válida como «no está en
+  // el banco».
+  // ═══════════════════════════════════════════════════════════════════════
+  it('BE-27 (REPRO): con 1,200 fotos vienen las 1,200 — la 1,150 no "deja de existir"', async () => {
+    for (let i = 0; i < 1_200; i++) {
+      tablas.qa_foto.push({
+        id: `foto-${String(i).padStart(5, '0')}`, hash: `h${i}`, path: `banco/f${i}.jpg`,
+        mime: 'image/jpeg', etiqueta: null, bytes: 10,
+        subido_en: `2026-08-${String((i % 28) + 1).padStart(2, '0')}T12:00:00Z`,
+        ocr_esperado: null, confirmado_en: null,
+      });
+    }
+    const r = await leerManifiesto(dbFalsa());
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.datos).toHaveLength(1_200);
+      // Y sin repetir ni saltarse ninguna: el orden desempata por `id`.
+      expect(new Set(r.datos.map((f) => f.id)).size).toBe(1_200);
+      expect(r.datos.some((f) => f.id === 'foto-01150')).toBe(true);
+    }
   });
 
   it('si la migración 0185 no está aplicada, lo DICE con el número — no un error de Postgres', async () => {
@@ -860,5 +906,25 @@ describe('qa_foto_lectura — la historia de la medición', () => {
     expect(caida.ok).toBe(false);
     // Jamás un 0 sobre una lectura que falló: eso autorizaría a gastar a ciegas.
     if (!caida.ok) expect(caida.error).toMatch(/gasto de lecturas/);
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 24, BE-23 — era un select suelto y PostgREST recorta a 1,000
+  // filas SIN AVISAR. A las 1,001 lecturas del día la suma se congelaba bajo
+  // el tope y el 429 no volvía a dispararse: un candado de dinero que se apaga
+  // solo justo el día de más uso.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('BE-23 (REPRO): con 1,200 lecturas del día la suma trae las 1,200, no 1,000', async () => {
+    const hoy = new Date().toISOString();
+    for (let i = 0; i < 1_200; i++) {
+      tablas.qa_foto_lectura.push({
+        id: `l-${String(i).padStart(5, '0')}`, foto_id: 'f', corrida_en: hoy, modelo: 'm',
+        ocr_leido: {}, medicion: {}, campos_ok: 0, campos_mal: 0, campos_no_medidos: 7,
+        costo_usd: 0.01, motivo: null,
+      });
+    }
+    const r = await gastoLecturasHoyUsd(dbFalsa());
+    // 1,200 × $0.01 = $12. Con el recorte mudo daba $10 y el tope no cerraba.
+    expect(r).toEqual({ ok: true, datos: 12 });
   });
 });

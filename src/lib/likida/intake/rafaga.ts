@@ -45,7 +45,15 @@ export type TipoIncidencia =
   /** El gasto entró, pero su fecha no cae en la ventana del viaje. */
   | 'fecha_dudosa'
   /** Se leyó, no se pudo probar, y ya no quedaban botones que gastar. */
-  | 'duda';
+  | 'duda'
+  /**
+   * AUDITORÍA 24 · AGEN-11 (BAJO). La MISMA foto otra vez (dedup por hash).
+   * No es un fallo —el comprobante ya está en el viaje— pero sí cuenta en
+   * «de tus N fotos», y sin decirlo la cuenta no cierra: el chofer lee
+   * «de tus 5 fotos… llevo 4 comprobantes», la reenvía, y vuelve el mismo
+   * silencio. No pide nada: no hay nada que hacer con ella.
+   */
+  | 'repetida';
 
 export interface Incidencia {
   tipo: TipoIncidencia;
@@ -245,6 +253,7 @@ export function lineaIncidencias(vistas: number, incidencias: Incidencia[]): str
   const tecnicos = cuenta('fallo_tecnico');
   const ilegibles = cuenta('ilegible');
   const dudosas = cuenta('fecha_dudosa');
+  const repetidas = cuenta('repetida');
 
   // OJO: `duda` NO tiene frase propia aquí. Su renglón lo escribe
   // `mensajeDemasiadasDudas` (acuse_ticket.ts), que además lleva el saldo del
@@ -264,12 +273,32 @@ export function lineaIncidencias(vistas: number, incidencias: Incidencia[]): str
     const detalle = montos.length ? `: ${montos.length === 1 ? 'la de' : 'las de'} ${enumerar(montos)}` : '';
     frases.push(`*${dudosas}* ${dudosas === 1 ? 'trae' : 'traen'} fecha dudosa${detalle}`);
   }
+  if (repetidas) {
+    // AGEN-11: se DICE, no se pide nada. El comprobante ya está contado; lo
+    // único que faltaba era que la resta cuadrara con lo que él mandó.
+    const montos = montosDe(incidencias, 'repetida');
+    const detalle = montos.length ? `: ${montos.length === 1 ? 'la de' : 'las de'} ${enumerar(montos)}` : '';
+    frases.push(`*${repetidas}* ${repetidas === 1 ? 'venía repetida (ya la tenía)' : 'venían repetidas (ya las tenía)'}${detalle}`);
+  }
 
   // Solo había dudas de lectura: las dice `mensajeDemasiadasDudas` y aquí no
   // queda nada. Devolver una frase vacía dejaría un párrafo con un punto solo.
   if (!frases.length) return null;
 
-  const encabezado = vistas > 1 ? `De tus ${vistas} fotos, ` : '';
+  // ── AUDITORÍA 24 · AGEN-8 (MEDIO): EL TOTAL NO SE AFIRMA ────────────────
+  //
+  // `vistas` es lo que vio ESTA invocación, no el fajo del chofer. En el
+  // piloto la cadena se parte: la foto 1 la toma el webhook y cierra su
+  // propia ráfaga de una; las 2-5 esperan al cron, que las lista en lotes de
+  // 40 y puede partirlas otra vez. El chofer mandó 5 y leía «Anotado ✅»,
+  // «De tus 2 fotos…», «De tus 2 fotos…». Ninguna de las tres era mentira
+  // dentro de su proceso, y las tres lo eran para él.
+  //
+  // Contar bien exigiría un contador durable por chofer; lo que se hace es
+  // NO afirmar una cifra que no se midió. El total que sí es verdad —los
+  // comprobantes que hay en el viaje, leídos de la base— ya va en el mismo
+  // mensaje, y ese sí es el que decide si vuelve a fotografiar un ticket.
+  const encabezado = vistas > 1 ? 'De las fotos que me mandaste, ' : '';
   const cuerpo = frases.length === 1
     ? frases[0]
     : `${frases.slice(0, -1).join(', ')} y ${frases[frases.length - 1]}`;

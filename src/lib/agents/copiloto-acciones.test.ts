@@ -180,23 +180,29 @@ describe('correr_runner y su bitácora — el contrato que el comentario declara
 const { objetivoDelRunner } = await import('./copiloto-acciones');
 
 describe('M30 — correr_runner respeta el objetivo que Javier confirmó', () => {
+  // AUDITORÍA 24, AGB-7 (integración): `correrRunner` ahora recibe un tercer
+  // argumento con `venceEn` (la ruta del copiloto tiene maxDuration=60; sin
+  // reloj el runner podía correr más de lo que la invocación aguanta). El
+  // objetivo (primer argumento) sigue siendo lo que este bloque prueba —
+  // `expect.any(Number)` en el tercer argumento no ancla un instante exacto
+  // de `Date.now()`, ancla que SE MANDÓ un reloj.
   it('objetivo "redactor" → correrRunner("redactor"), y la bitácora lo anota', async () => {
     await ejecutarAccionCopiloto('correr_runner', { id: 'redactor', motivo: 'adelantar la demo' }, 'u-javier');
-    expect(correrRunner).toHaveBeenCalledWith('redactor');
+    expect(correrRunner).toHaveBeenCalledWith('redactor', undefined, { venceEn: expect.any(Number) });
     const detalle = insertBitacora.mock.calls[0][0].detalle as Record<string, unknown>;
     expect(detalle.objetivo).toBe('redactor');
   });
 
   it('"agente:redactor" (la forma del catálogo de interruptores) también acota', async () => {
     await ejecutarAccionCopiloto('correr_runner', { id: 'agente:redactor', motivo: 'x' }, 'u-1');
-    expect(correrRunner).toHaveBeenCalledWith('redactor');
+    expect(correrRunner).toHaveBeenCalledWith('redactor', undefined, { venceEn: expect.any(Number) });
   });
 
   it('"runner" / vacío = la vuelta completa (lo que describe `efecto`)', async () => {
     await ejecutarAccionCopiloto('correr_runner', { id: 'runner', motivo: 'x' }, 'u-1');
-    expect(correrRunner).toHaveBeenCalledWith(undefined);
+    expect(correrRunner).toHaveBeenCalledWith(undefined, undefined, { venceEn: expect.any(Number) });
     await ejecutarAccionCopiloto('correr_runner', { motivo: 'x' }, 'u-1');
-    expect(correrRunner).toHaveBeenLastCalledWith(undefined);
+    expect(correrRunner).toHaveBeenLastCalledWith(undefined, undefined, { venceEn: expect.any(Number) });
   });
 
   it('un agente que no está habilitado para el runner se DICE, no se finge una vuelta', async () => {

@@ -4,7 +4,7 @@ import { Inbox } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { listarAgentes, DEPARTAMENTOS } from '@/lib/likida/agentes/definiciones';
 import {
-  tiposAceptadosPorAgente, listarInsumosDeAgente, urlsFirmadasInsumos,
+  tiposAceptadosPorAgente, listarInsumosDeAgente, contarInsumosDeAgente, urlsFirmadasInsumos,
   crearInsumoArchivo, crearInsumoTexto, subirArchivoInsumo,
   esTipoInsumo, TIPOS_ARCHIVO, TIPOS_TEXTO, type InsumoAgente,
 } from '@/lib/likida/agentes/insumos';
@@ -38,6 +38,7 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
 
   const tiposAceptados = tiposAceptadosPorAgente(agente.id, departamento);
   const insumos = await listarInsumosDeAgente(agente.id);
+  const totalInsumos = await contarInsumosDeAgente(agente.id);
   const rutas = insumos.map((i) => i.storagePath).filter((p): p is string => p !== null);
   const firmas = await urlsFirmadasInsumos(rutas);
 
@@ -116,7 +117,9 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
 
           <div className="card overflow-hidden">
             <div className="px-4 pt-3 pb-1">
-              <TituloSeccion>Qué le has dado — {insumos.length}</TituloSeccion>
+              <TituloSeccion>
+                Qué le has dado — {totalInsumos > insumos.length ? `${insumos.length} de ${totalInsumos}` : insumos.length}
+              </TituloSeccion>
             </div>
             {insumos.length === 0 ? (
               <div className="px-4 pt-2 pb-4">

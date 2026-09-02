@@ -61,10 +61,17 @@ const telefonoJefeDe = vi.fn();
 vi.mock('./contactos', () => ({ telefonoJefeDe: (...a: unknown[]) => telefonoJefeDe(...a) }));
 const sendText = vi.fn();
 const sendButtons = vi.fn();
+// AGEN-5 / WA-4: el reenvío al jefe sale por `avisarOficina` (texto →
+// plantilla fuera de la ventana de 24 h); estos son sus dos bordes.
+const enviarTexto = vi.fn();
+const sendTemplate = vi.fn();
 vi.mock('@/lib/meta/client', () => ({
   MAX_CUERPO_BOTONES: 1024,
   sendText: (...a: unknown[]) => sendText(...a),
   sendButtons: (...a: unknown[]) => sendButtons(...a),
+  enviarTexto: (...a: unknown[]) => enviarTexto(...a),
+  sendTemplate: (...a: unknown[]) => sendTemplate(...a),
+  motivoDeFalloWhatsApp: (e: string) => e,
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 // Capa C: la cascada se mockea para probar el CABLEADO (que viaja en el 🚨 y
@@ -106,6 +113,10 @@ function baseFeliz() {
   telefonoJefeDe.mockResolvedValue('5215550000009');
   sendButtons.mockResolvedValue('wamid.BTN');
   sendText.mockResolvedValue('wamid.TXT');
+  enviarTexto.mockReset();
+  enviarTexto.mockResolvedValue({ ok: true, id: 'wamid.JEFE' });
+  sendTemplate.mockReset();
+  sendTemplate.mockResolvedValue({ ok: false, error: 'no aprobada', codigo: 132001 });
   crearIncidencia.mockResolvedValue(INC);
 }
 
@@ -354,7 +365,7 @@ describe('atenderAsistenciaChofer', () => {
       && (e.payload as { tipo?: string }).tipo === 'mensaje_adicional')).toBe(true);
     // 92-D: la bitácora del panel NO basta — el texto se le reenvía al jefe
     // de verdad (antes se prometía "se lo paso" sin pasar nada).
-    const [telJefe, textoJefe] = sendText.mock.calls[0] as [string, string];
+    const [telJefe, textoJefe] = enviarTexto.mock.calls[0] as [string, string];
     expect(telJefe).toBe('5215550000009');
     expect(textoJefe).toContain('sigue el choque');
     expect(r.respuesta).toContain('Le acabo de pasar este mensaje a tu jefe');
@@ -363,7 +374,7 @@ describe('atenderAsistenciaChofer', () => {
   it('92-D: si el reenvío al jefe falla, al chofer NO se le miente', async () => {
     baseFeliz();
     respuestas[SELECT_ABIERTA] = { data: [filaAbierta()], error: null };
-    sendText.mockResolvedValue(null);   // Meta rechazó el reenvío
+    enviarTexto.mockResolvedValue({ ok: false, error: 'número inválido', codigo: 131030 });   // Meta rechazó el reenvío (no es de ventana)
     const r = await atenderAsistenciaChofer({
       tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
       texto: 'sigue el choque',
@@ -384,8 +395,41 @@ describe('atenderAsistenciaChofer', () => {
     expect(escrituras.some((e) => e.clave === 'incidencia.claim'
       && (e.payload as { hay_lesionados?: boolean }).hay_lesionados === true)).toBe(true);
     // …y el reenvío al jefe lo dice con todas sus letras.
-    const textoJefe = String(sendText.mock.calls[0][1]);
+    const textoJefe = String(enviarTexto.mock.calls[0][1]);
     expect(textoJefe).toContain('LESIONADOS');
+  });
+
+  // AUDITORÍA 24 · AGEN-5 / WA-4 (ALTO): el jefe que no ha escrito en 24 h
+  // recibía 131047 en silencio y el chofer leía «le acabo de pasar».
+  it('AGEN-5: fuera de la ventana de 24 h (131047) el reenvío sale por PLANTILLA y al chofer se le confirma', async () => {
+    baseFeliz();
+    respuestas[SELECT_ABIERTA] = { data: [filaAbierta()], error: null };
+    enviarTexto.mockResolvedValue({ ok: false, error: 'Re-engagement message', codigo: 131047 });
+    sendTemplate.mockResolvedValue({ ok: true, id: 'wamid.PLANTILLA' });
+    const r = await atenderAsistenciaChofer({
+      tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
+      texto: 'sigue el choque',
+      asistencia: { nivel: 'rojo', modoMudo: false },
+    });
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
+    const [tel, nombre, opts] = sendTemplate.mock.calls[0] as [string, string, { parametros: string[] }];
+    expect(tel).toBe('5215550000009');
+    expect(nombre).toBe('aviso_operacion_v1');
+    expect(opts.parametros[1]).toContain('sigue reportando');
+    expect(r.respuesta).toContain('Le acabo de pasar este mensaje a tu jefe');
+  });
+
+  it('AGEN-5: si NI la plantilla sale, al chofer NO se le miente', async () => {
+    baseFeliz();
+    respuestas[SELECT_ABIERTA] = { data: [filaAbierta()], error: null };
+    enviarTexto.mockResolvedValue({ ok: false, error: 'Re-engagement message', codigo: 131047 });
+    const r = await atenderAsistenciaChofer({
+      tenantId: 't1', viajeId: 'v1', operadorId: 'o1',
+      texto: 'sigue el choque',
+      asistencia: { nivel: 'rojo', modoMudo: false },
+    });
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
+    expect(r.respuesta).toContain('NO pude reenviárselo');
   });
 
   it('92-C: un ROJO sobre un expediente ámbar ESCALA la misma fila y el jefe recibe 🚨 nuevo', async () => {

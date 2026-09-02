@@ -8,12 +8,20 @@
 //
 //   · SOLO piezas de campaña (`correo_frio` / `correo_seguimiento`) — nada
 //     más se auto-resuelve; el resto de la cola sigue siendo humano.
-//   · VENTANA DE REVISIÓN opcional (LIKIDA_ENVIADOR_VENTANA_MIN): las piezas
-//     esperan N minutos en la bandeja antes de auto-aprobarse, para que un
-//     humano pueda vetar. 0 = inmediato (el default de la orden).
-//   · La resolución automática es LEGAL en el esquema: el CHECK 0120 exige
-//     `resuelto_por_email`, no el uuid — queda 'enviador@automatico', visible
-//     en la bandeja como cualquier resolución.
+//   · VENTANA DE REVISIÓN (LIKIDA_ENVIADOR_VENTANA_MIN): las piezas esperan N
+//     minutos en la bandeja antes de auto-aprobarse, para que un humano pueda
+//     vetar. Desde AGB-1 (auditoría 24, 1-sep-2026): default 24 h y piso
+//     duro de 1 h — NUNCA 0 ("inmediato" fue justo lo que dejó salir, en 47 ms
+//     de aprobado-a-enviado, el correo del 28-ago a una constructora ajena al
+//     giro). Ver `ventanaRevisionMin()`.
+//   · AUTO-APROBACIÓN (LIKIDA_ENVIADOR_AUTOAPROBAR, AGB-1): segundo candado,
+//     independiente de la ventana. Por default ('no') el enviador NUNCA
+//     aprueba solo — solo manda lo que un humano ya aprobó a mano en
+//     /admin/aprobaciones. Encenderla ('si') es la decisión explícita de que
+//     la máquina puede aprobar sola; ver `autoaprobarActivo()`.
+//   · La resolución automática (cuando SÍ está activa) es LEGAL en el
+//     esquema: el CHECK 0120 exige `resuelto_por_email`, no el uuid — queda
+//     'enviador@automatico', visible en la bandeja como cualquier resolución.
 //   · El ENVÍO no estrena puerta: pasa por `enviarPiezaPorCorreo` con su
 //     claim anclado, su CHECK enviar-solo-aprobado, el tope diario de frío y
 //     la cadencia atómica 48h (0124). Las copias son los correos hallados por
@@ -32,8 +40,12 @@
 //     interruptor MAESTRO, en código, sin tabla que sembrar: por default
 //     (ausente o cualquier valor que no sea 'true') el enviador NO manda
 //     nada, y lo dice. Javier lo prende a propósito en Vercel cuando decida
-//     que el envío autónomo puede empezar; el kill switch de incidente
-//     sigue funcionando exactamente igual encima de esto.
+//     que el envío autónomo puede empezar; el kill switch de incidente sigue
+//     funcionando exactamente igual encima de esto. Cada cambio de estado de
+//     este interruptor de env queda anotado en `bitacora_auditoria`
+//     (`anotarSiCambioElMaestro`, AGB-1): el env no tiene bitácora propia,
+//     pero el enviador la escribe al arrancar, comparando contra el último
+//     registro — así "se prendió el 28-ago" deja de ser un hecho sin rastro.
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
@@ -42,6 +54,7 @@ import { estaApagado } from '../interruptores';
 import { correoConfigurado } from '@/lib/correo/enviar';
 import { enviarPiezaPorCorreo, topeCorreoFrioDia, filtrarSuprimidos, TIPOS_CAMPANA } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
+import { anotarBitacora } from '../bitacora_escritura';
 import { logger } from '@/lib/logger';
 
 // La lista de bajas vive ahora en la PUERTA (cola.ts, c5-1) para que el
@@ -54,11 +67,85 @@ export { filtrarSuprimidos };
  *  máquina. */
 export const RESOLUTOR_AUTOMATICO = 'enviador@automatico';
 
+/** AGB-1 (auditoría 24): la ventana "0 = inmediato" del comentario de arriba
+ *  fue justo lo que dejó salir, en 47 ms de aprobado-a-enviado, el correo del
+ *  28-ago-2026 a una constructora ajena al giro. Un humano no alcanza a vetar
+ *  nada en 0 minutos. El default ahora es 24 h (tiempo real de veto), y el
+ *  piso — incluso con `LIKIDA_ENVIADOR_VENTANA_MIN` puesto a mano en 0 o en
+ *  negativo — es 1 h: la ventana de veto NUNCA es 0 en producción. */
+const VENTANA_REVISION_DEFAULT_MIN = 24 * 60;
+const VENTANA_REVISION_PISO_MIN = 60;
+
 /** Minutos que una pieza espera en la bandeja antes de auto-aprobarse — la
- *  ventana en la que un humano puede editarla o rechazarla. 0 = inmediato. */
+ *  ventana en la que un humano puede editarla o rechazarla. Nunca 0: ver
+ *  AGB-1 arriba. */
 export function ventanaRevisionMin(): number {
-  const v = Number(process.env.LIKIDA_ENVIADOR_VENTANA_MIN);
-  return Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+  const raw = process.env.LIKIDA_ENVIADOR_VENTANA_MIN;
+  if (raw === undefined || raw.trim() === '') return VENTANA_REVISION_DEFAULT_MIN;
+  const v = Number(raw);
+  if (!Number.isFinite(v)) return VENTANA_REVISION_DEFAULT_MIN;
+  return Math.max(VENTANA_REVISION_PISO_MIN, Math.floor(v));
+}
+
+/**
+ * AGB-1: el segundo candado, además de la ventana. Con esta palanca en su
+ * default ('no' — ausente, vacía o cualquier valor que no sea 'si'), el
+ * enviador JAMÁS auto-aprueba una pieza: solo envía las que un HUMANO ya
+ * aprobó a mano en `/admin/aprobaciones` (`resuelto_por` con un actor real,
+ * nunca null — la auto-aprobación de esta misma máquina deja `resuelto_por:
+ * null` a propósito, ver más abajo). Encenderla es la decisión explícita de
+ * que la máquina puede aprobar sola, no un efecto secundario de prender
+ * `LIKIDA_ENVIADOR_ENCENDIDO`.
+ */
+export function autoaprobarActivo(): boolean {
+  return process.env.LIKIDA_ENVIADOR_AUTOAPROBAR === 'si';
+}
+
+/** El nombre bajo el que este candado deja huella en `bitacora_auditoria`
+ *  (entidad `'runner'`, ya declarada — no hace falta ampliar el catálogo de
+ *  `bitacora_escritura.ts` para un interruptor que vive en env). */
+const BITACORA_ENTIDAD_ID_MAESTRO = 'enviador_encendido';
+
+/**
+ * AGB-1: `LIKIDA_ENVIADOR_ENCENDIDO` vive en una variable de entorno de
+ * Vercel — nadie audita cuándo cambió ni quién lo cambió. Esta función lee el
+ * ÚLTIMO estado que quedó anotado y, si el estado ACTUAL es distinto, deja
+ * una fila nueva. Se corre al arrancar cada corrida (encendida o apagada) para
+ * que apagar el maestro también quede escrito, no solo encenderlo. Best-effort
+ * y silencioso: un fallo aquí no debe impedir ni el envío ni el rechazo.
+ */
+async function anotarSiCambioElMaestro(encendidoAhora: boolean): Promise<void> {
+  try {
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('bitacora_auditoria')
+      .select('detalle')
+      .eq('entidad', 'runner')
+      .eq('entidad_id', BITACORA_ENTIDAD_ID_MAESTRO)
+      .order('ocurrio_en', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(1), 'enviador.bitacora_ultimo_estado');
+    if (error) {
+      logger.warn('enviador.bitacora_ilegible', { err: error.message });
+      return;
+    }
+    const fila = (data?.[0] ?? null) as { detalle?: { encendido?: boolean } } | null;
+    const ultimo = fila?.detalle?.encendido;
+    // Sin registro previo, el estado apagado (el default seguro) no es un
+    // acto que valga la pena anotar — solo la primera vez que alguien lo
+    // enciende, o cualquier cambio posterior en cualquier dirección.
+    if (ultimo === undefined && !encendidoAhora) return;
+    if (ultimo === encendidoAhora) return;
+    await anotarBitacora({
+      tenantId: null,
+      actor: 'sistema',
+      accion: encendidoAhora ? 'enviador.maestro_encendido' : 'enviador.maestro_apagado',
+      entidad: 'runner',
+      entidadId: BITACORA_ENTIDAD_ID_MAESTRO,
+      detalle: { encendido: encendidoAhora },
+    }, { evento: 'enviador.bitacora_no_escrita' });
+  } catch (e) {
+    logger.warn('enviador.bitacora_ilegible', { err: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /**
@@ -110,10 +197,15 @@ export async function correrEnviador(
   venceEn?: number,
 ): Promise<ResultadoEnviador> {
   const inicio = new Date();
-  // EL INTERRUPTOR MAESTRO, primero y sin I/O (fail-fast barato): el envío
-  // autónomo arranca apagado hasta que alguien lo prenda a propósito en
-  // Vercel — nunca por default de un deploy o de una migración.
-  if (!enviadorEncendido()) {
+  const encendidoAhora = enviadorEncendido();
+  // AGB-1: deja huella del interruptor de env ANTES del throw de abajo, para
+  // que apagarlo también quede anotado (no solo encenderlo). Nunca bloquea.
+  await anotarSiCambioElMaestro(encendidoAhora);
+  // EL INTERRUPTOR MAESTRO, primero y sin más I/O que la anotación de arriba
+  // (fail-fast barato): el envío autónomo arranca apagado hasta que alguien
+  // lo prenda a propósito en Vercel — nunca por default de un deploy o de
+  // una migración.
+  if (!encendidoAhora) {
     throw new DatoInvalido('El envío autónomo de campaña arranca APAGADO por decisión explícita — enciéndelo con LIKIDA_ENVIADOR_ENCENDIDO=true cuando decidas que puede empezar.');
   }
   if (await estaApagado('agente:enviador')) {
@@ -136,12 +228,29 @@ export async function correrEnviador(
   // retoman las del propio enviador (resuelto_por_email) — una aprobada por
   // HUMANO sin enviar es suya y vive en el panel. Las ambiguas (c5-3) traen
   // enviado_en puesto, así que no entran aquí: jamás reenvío automático.
+  // AGB-1, segundo candado: sin `LIKIDA_ENVIADOR_AUTOAPROBAR=si`, NINGÚN
+  // `pendiente` entra a la consulta — el enviador solo retoma piezas que un
+  // humano ya aprobó a mano (`resuelto_por` con un actor real). La máquina
+  // puede seguir MANDANDO lo aprobado por un humano; lo que no puede es
+  // aprobar sola sin que alguien lo haya prendido a propósito.
+  const autoaprobar = autoaprobarActivo();
   const corte = new Date(Date.now() - ventanaRevisionMin() * 60_000).toISOString();
+  const filtroCandidatas = autoaprobar
+    ? `and(estado.eq.pendiente,creado_en.lte.${corte}),and(estado.eq.aprobado,enviado_en.is.null,resuelto_por_email.eq.${RESOLUTOR_AUTOMATICO})`
+    : `and(estado.eq.aprobado,enviado_en.is.null,resuelto_por.not.is.null)`;
+  // AGB-3 (auditoría 24): antes esta consulta traía las N más viejas SIN
+  // filtrar por correo — medido en producción, las 10 más viejas eran
+  // sistemáticamente piezas de prospectos SIN correo capturado (Nadro, Pepsi,
+  // ManpowerGroup...), así que las piezas CON correo (que sí se pueden
+  // enviar) nunca alcanzaban turno tras el `limit`. `!inner` + `.not(...)`
+  // excluye esas piezas en la CONSULTA, no en el bucle: con ellas fuera, la
+  // ventana avanza sola hacia las que sí son enviables.
   const { data, error } = await acotada(supabaseAdmin()
     .from('cola_aprobacion')
-    .select('id, tipo, estado, prospecto_id, prospecto:prospecto_id(empresa, correo)')
-    .or(`and(estado.eq.pendiente,creado_en.lte.${corte}),and(estado.eq.aprobado,enviado_en.is.null,resuelto_por_email.eq.${RESOLUTOR_AUTOMATICO})`)
+    .select('id, tipo, estado, prospecto_id, prospecto:prospecto_id!inner(empresa, correo)')
+    .or(filtroCandidatas)
     .in('tipo', [...TIPOS_CAMPANA])
+    .not('prospecto.correo', 'is', null)
     .order('creado_en', { ascending: true })
     .limit(Math.min(limite, topeCorreoFrioDia())), 'enviador.candidatas');
   if (error) throw new Error(`correrEnviador: ${error.message}`);
@@ -189,6 +298,12 @@ export async function correrEnviador(
       // ventana, cero filas y la pieza es suya, no nuestra). Las retomadas
       // (c5-6) ya vienen aprobadas por esta máquina: se saltan este paso y
       // van directo a la puerta de envío, que re-aplica tope/cadencia/bajas.
+      // AGB-1: candado de PROFUNDIDAD además del filtro de la consulta — si
+      // por lo que sea una `pendiente` llegara hasta aquí con la palanca en
+      // su default ('no'), se rechaza en vez de aprobarla sola.
+      if (pieza.estado === 'pendiente' && !autoaprobar) {
+        throw new DatoInvalido('autoaprobación desactivada (LIKIDA_ENVIADOR_AUTOAPROBAR≠si) — la pieza pendiente no se aprueba sola');
+      }
       if (pieza.estado === 'pendiente') {
         const { data: ap, error: errAp } = await supabaseAdmin()
           .from('cola_aprobacion')
@@ -231,7 +346,7 @@ export async function correrEnviador(
     inicio, fin: new Date(), estado: saltadas > 0 && piezasEnviadas === 0 && candidatas.length > 0 ? 'parcial' : 'ok',
     disparo,
     tareasHechas: piezasEnviadas, tareasTotal: candidatas.length,
-    resumen: { piezas: piezasEnviadas, destinatarios, saltadas, sinTurno, motivos: motivos.slice(0, 10) },
+    resumen: { piezas: piezasEnviadas, destinatarios, saltadas, sinTurno, autoaprobar, motivos: motivos.slice(0, 10) },
   });
   return { piezasEnviadas, destinatarios, saltadas, motivos, sinTurno };
 }

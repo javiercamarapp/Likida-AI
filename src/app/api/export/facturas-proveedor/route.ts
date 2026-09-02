@@ -10,6 +10,10 @@ import { logger } from '@/lib/logger';
 import { LecturaIncompleta } from '@/lib/likida/pg';
 
 export const runtime = 'nodejs';
+// BE-19 (auditoría 24): sin esto el tope lo pone el default de la plataforma
+// (15 s en Node sin Fluid Compute) y un export de 92 días sobre 45,000
+// liquidaciones muere en 504 mudo. Literal a propósito: Next lo lee en build.
+export const maxDuration = 120;
 
 /** `?formato=` → layout. Sin parámetro sigue saliendo el genérico de la 0091
  *  (hay quien ya lo descarga); un valor inventado es 400, no un default
@@ -69,16 +73,28 @@ export async function GET(req: Request) {
     // salida. (Antes: `.limit(5000)` recortado a 1,000 por PostgREST y un
     // `recortado` que jamás se cumplía.)
     const { filas, ids } = await exportarAprobadas(t.tenantId, formato);
-    const csv = toCsv(filas);
+    const cuerpo = toCsv(filas);
 
     // El archivo ya existe: lo que sigue anota, no decide.
     const marca = await marcarExportadas(t.tenantId, ids);
+    // AUDITORÍA 24, BE-8: el aviso vivía SOLO en `agente_corrida`. Quien
+    // descarga el CSV no abre la bitácora del agente: veía un 200 con archivo
+    // y lo importaba al ERP; como `exportada_en` seguía NULL, las mismas
+    // facturas reaparecían «sin exportar» y las volvía a importar — CFDI y
+    // UUID duplicados en la contabilidad de la flota. La advertencia va DENTRO
+    // del archivo, como en export/jornada: en la primera línea, comentada con
+    // `#` para que el importador la salte.
+    const csv = marca.error
+      ? `# AVISO: el archivo está completo, pero NO se pudo marcar como exportadas ${ids.length - marca.marcadas} de ${ids.length} facturas. ` +
+        'Van a reaparecer en la bandeja como «sin exportar»: NO las vuelvas a importar al ERP sin revisar antes cuáles ya entraron.\n' +
+        cuerpo
+      : cuerpo;
     await registrarCorrida(t.tenantId, 'proveedores', {
       inicio,
       fin: new Date(),
       estado: marca.error ? 'parcial' : 'ok',
       disparo: 'manual',
-      tareasHechas: ids.length,
+      tareasHechas: marca.error ? marca.marcadas : ids.length,
       tareasTotal: ids.length,
       resumen: { accion: 'export', formato, facturas: ids.length },
       error: marca.error

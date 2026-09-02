@@ -96,6 +96,11 @@ function tablaSimple(respuesta: unknown) {
   const b = {
     select: () => b,
     eq: () => b,
+    // FE-34 (auditoría 24): `usuariosAvisables` agregó `.order('id')` antes
+    // del `.limit()` (desempate determinista, mismo contrato de `pg.ts`) —
+    // sin este método el mock tronaba con "b.order is not a function" y
+    // `avisarCorridaFallida` se quedaba sin destinatarios.
+    order: () => b,
     maybeSingle: () => Promise.resolve(respuesta),
     limit: () => Promise.resolve(respuesta),
   };

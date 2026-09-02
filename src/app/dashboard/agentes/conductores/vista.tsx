@@ -44,6 +44,9 @@ export interface ColaConductores {
   /** Vivos SIN aviso — el fallo silencioso que se enseña. `null` = no se
    *  pudo contar, y entonces no se pinta la frase. */
   sinAvisar: number | null;
+  /** FE-6: `viajesEsperandoAceptarPaginados` no lanza — un fallo viaja aquí,
+   *  para que la sección lo diga en vez de pintar "nadie debe respuesta". */
+  error: string | null;
 }
 
 /**
@@ -179,10 +182,13 @@ async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConductores> })
   );
 }
 
-async function BloqueCola({ cola, sufijo }: {
+/** Exportado para pruebas: `renderToStaticMarkup` no monta `<Bloque>`
+ *  (Suspense de servidor), así que la prueba de FE-6 llama esta pieza
+ *  directamente con la promesa ya resuelta. */
+export async function BloqueCola({ cola, sufijo }: {
   cola: Promise<ColaConductores>; sufijo: string;
 }) {
-  const { esperan, totalEsperan, sinAvisar } = await cola;
+  const { esperan, totalEsperan, sinAvisar, error } = await cola;
   return (
     /* La cola honesta de aceptación */
     <section className="card p-4 flex flex-col">
@@ -190,7 +196,9 @@ async function BloqueCola({ cola, sufijo }: {
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
         Avisados sin respuesta — a las {HORAS_PARA_ESCALAR} horas el agente escala al jefe solo
       </p>
-      {esperan.length === 0 ? (
+      {error !== null ? (
+        <Leyenda>No se pudo leer la cola de aceptación ahora mismo.</Leyenda>
+      ) : esperan.length === 0 ? (
         <Leyenda>Nadie debe respuesta ahora mismo — cada viaje avisado
           está aceptado o ya se escaló.</Leyenda>
       ) : (
@@ -214,10 +222,13 @@ async function BloqueCola({ cola, sufijo }: {
           100 viajes recientes (para decir "hace N horas" hace falta la
           fila); el conteo de arriba es el de la flota. Callar la
           diferencia haría que la lista pareciera la cola completa. */}
+      {/* FE-6: la lista ya viene ordenada por antigüedad del aviso (el más
+          urgente primero) — lo que sobra del tope son los avisados hace MENOS
+          tiempo, no viajes "más antiguos" que la lista no alcanzó a leer. */}
       {totalEsperan !== null && totalEsperan > esperan.length && (
         <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
-          Se listan {numero(esperan.length)} de {numero(totalEsperan)} — los demás son de viajes
-          más antiguos; están en el <Link href={`/dashboard/viajes${sufijo}`} className="underline">registro</Link>.
+          Se listan {numero(esperan.length)} de {numero(totalEsperan)}, los más urgentes primero — el resto
+          espera menos tiempo; están en el <Link href={`/dashboard/viajes${sufijo}`} className="underline">registro</Link>.
         </p>
       )}
       {sinAvisar !== null && sinAvisar > 0 && (

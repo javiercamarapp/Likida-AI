@@ -7,7 +7,7 @@ import { getSessionTenant } from '@/lib/auth/session';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { ControlCampanas, type AccionCampana } from './campanas';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
-import { listarProspectos, ESTADOS_PROSPECTO, conteosVacios } from '@/lib/likida/vendedores';
+import { listarProspectos, ESTADOS_PROSPECTO, conteosVacios, esEstadoProspecto } from '@/lib/likida/vendedores';
 import { getEmbudoActivacion, getCohortesUso } from '@/lib/admin/instrumentacion';
 import { usd } from '@/lib/utils';
 import { numero, fechaCorta } from '@/lib/formato';
@@ -141,8 +141,18 @@ export default async function CrecimientoPage() {
               </p>
             </div>
           ) : prospectos.length > 0 && (() => {
+            // AUDITORÍA 24, ADM-15 (parte 2): un prospecto en un estado de
+            // Cal.com (appointment/rescheduled/…, ESTADOS_FUNNEL) no está en
+            // ESTADOS_PROSPECTO — sin la guardia, `porEstado[p.estado]++`
+            // indexaba una llave inexistente en silencio y ese prospecto
+            // desaparecía del embudo sin aviso, aunque siguiera contando en
+            // el denominador de "N prospectos del censo".
             const porEstado = conteosVacios();
-            for (const p of prospectos) porEstado[p.estado]++;
+            let enEstadosDeAgenda = 0;
+            for (const p of prospectos) {
+              if (esEstadoProspecto(p.estado)) porEstado[p.estado]++;
+              else enEstadosDeAgenda++;
+            }
             const embudo = ESTADOS_PROSPECTO
               .filter((e) => e.valor !== 'perdido')
               .map((e) => ({ etiqueta: e.rotulo, valor: porEstado[e.valor] }));
@@ -160,6 +170,7 @@ export default async function CrecimientoPage() {
                     ? `Conversión a cierre: ${porEstado.cerrado} de ${numero(prospectos.length)}.`
                     : 'Sin cierres todavía — la conversión no se inventa con cero cerrados.'}
                   {porEstado.perdido > 0 && ` ${numero(porEstado.perdido)} perdidos.`}
+                  {enEstadosDeAgenda > 0 && ` ${numero(enEstadosDeAgenda)} en estados de agenda (Cal.com), fuera de este embudo.`}
                   {' '}El detalle por vendedor vive en <Link href="/admin/vendedores" className="underline">Vendedores</Link>;
                   lo que espera tu aprobación, en <Link href="/admin/aprobaciones" className="underline">Aprobaciones</Link>.
                 </p>

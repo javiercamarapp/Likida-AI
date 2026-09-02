@@ -293,6 +293,78 @@ describe('refrescarTokens', () => {
       if (!r.ok) expect(r.error).toBe('no_disponible');
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 24, BE-18 — se revocaba el refresco viejo ANTES de emitir el
+  // par nuevo. Si la emisión fallaba (503), el cliente reintentaba con el
+  // único refresco que tiene —el viejo, ya marcado— y arriba se leía como
+  // REUSO: familia entera abajo e `invalid_grant`. Un parpadeo de la base le
+  // costaba al contralor reautorizar el MCP a mano.
+  // ═══════════════════════════════════════════════════════════════════════
+  describe('BE-18 — una emisión fallida no quema el refresco', () => {
+    /** Cadena que ADEMÁS anota qué método se llamó con qué. */
+    function cadenaEspia(resultado: Resultado, anotar: (m: string, args: unknown[]) => void): unknown {
+      const p = Promise.resolve(resultado);
+      const proxy: unknown = new Proxy({}, {
+        get(_t, prop) {
+          if (typeof prop === 'symbol') return undefined;
+          if (prop === 'then') return p.then.bind(p);
+          if (prop === 'catch') return p.catch.bind(p);
+          if (prop === 'finally') return p.finally.bind(p);
+          return (...args: unknown[]) => { anotar(String(prop), args); return proxy; };
+        },
+      });
+      return proxy;
+    }
+
+    it('REPRO: si `emitirPar` falla, el refresco viejo vuelve a `revocado_en = null`', async () => {
+      const pasos: Array<{ metodo: string; args: unknown[] }> = [];
+      // 1) lectura del refresco  2) UPDATE de rotación  3) INSERT del par
+      // (revienta)  4) UPDATE que deshace la rotación.
+      const respuestas = [OK(filaRefresco()), OK([{ id: 'tok-r' }]), FALLA('la base no contestó'), OK([{ id: 'tok-r' }])];
+      let i = 0;
+      sbMock.mockReturnValue({
+        from: () => cadenaEspia(respuestas[Math.min(i++, respuestas.length - 1)], (m, a) => pasos.push({ metodo: m, args: a })),
+        rpc: () => cadenaEspia(OK(true), () => {}),
+      });
+
+      const r = await refrescarTokens(REFRESCO, 'cli-1');
+
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toBe('no_disponible'); // reintentable, no `invalid_grant`
+      const updates = pasos.filter((x) => x.metodo === 'update').map((x) => x.args[0]);
+      expect(updates).toHaveLength(2);
+      // El primero puso el sello; el ÚLTIMO lo quitó.
+      expect(updates[1]).toEqual({ revocado_en: null });
+      // Y se deshizo anclando por ESE sello, no a ciegas.
+      const anclas = pasos.filter((x) => x.metodo === 'eq').map((x) => x.args);
+      expect(anclas).toContainEqual(['revocado_en', (updates[0] as { revocado_en: string }).revocado_en]);
+    });
+
+    it('si el propio deshacer falla, se nombra en el log y el error sigue siendo reintentable', async () => {
+      conTablas({
+        mcp_oauth_token: [OK(filaRefresco()), OK([{ id: 'tok-r' }]), FALLA(), FALLA('no se pudo deshacer')],
+      });
+      const r = await refrescarTokens(REFRESCO, 'cli-1');
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toBe('no_disponible');
+    });
+
+    it('una emisión BUENA no deshace nada', async () => {
+      const pasos: Array<{ metodo: string; args: unknown[] }> = [];
+      const respuestas = [OK(filaRefresco()), OK([{ id: 'tok-r' }]), OK(null)];
+      let i = 0;
+      sbMock.mockReturnValue({
+        from: () => cadenaEspia(respuestas[Math.min(i++, respuestas.length - 1)], (m, a) => pasos.push({ metodo: m, args: a })),
+        rpc: () => cadenaEspia(OK(true), () => {}),
+      });
+
+      const r = await refrescarTokens(REFRESCO, 'cli-1');
+
+      expect(r.ok).toBe(true);
+      expect(pasos.filter((x) => x.metodo === 'update')).toHaveLength(1);
+    });
+  });
 });
 
 describe('validarAcceso', () => {

@@ -4,7 +4,15 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { getUnidades, validarUnidad, crearUnidad, editarUnidad, cambiarEstadoUnidad, ESTADOS_UNIDAD } from '@/lib/likida/operacion';
+import { validarUnidad, crearUnidad, editarUnidad, cambiarEstadoUnidad, ESTADOS_UNIDAD } from '@/lib/likida/operacion';
+import {
+  getUnidadesRegistro, getUnidadesConteos, UNIDADES_POR_PAGINA,
+  type FilaRegistroUnidad,
+} from '@/lib/likida/administracion';
+import { DIAS_AVISO } from '@/lib/likida/vigencias';
+import { hoyMx } from '@/lib/formato';
+import { ahoraMs } from '@/lib/saludo';
+import { sanearQ, type PaginaRegistroUI } from '../paginar-registro';
 import { CONECTORES_GPS } from '@/lib/likida/conectores/gps';
 import { sufijoTenant } from '../sufijo';
 import { camposDeSufijo } from '../paginar-campos';
@@ -55,7 +63,52 @@ export default async function PaginaUnidades({
   // sacaría de la flota que estaba viendo.
   const camposOcultos = camposDeSufijo(sp);
 
-  const unidades = await getUnidades(tenantId);
+  // ── LA PÁGINA LA CORTA LA BASE, NO LA PANTALLA (auditoría 24, ADM-2) ────
+  //
+  // Antes: `getUnidades(tenantId)` traía el parque COMPLETO —`traerTodo`, que
+  // es lo correcto para DEMOSTRAR un conteo, pero no para pintar 25
+  // renglones— y `paginarRegistro` lo ordenaba y rebanaba en memoria. Con 800
+  // tractos, el catálogo entero viajaba a la pantalla en cada render.
+  //
+  // Ahora `unidades_registro_tenant` (0298) corta la página sobre un orden
+  // TOTAL —lo que vence antes primero, sin papeles al final, desempate por
+  // económico e id— y devuelve el `total` real en la misma respuesta.
+  const hoy = hoyMx(new Date(ahoraMs()));
+  const q = sanearQ(sp.q);
+  const pCruda = Number(sp.p);
+  const paginaPedida = Number.isInteger(pCruda) && pCruda >= 1 ? pCruda : 1;
+
+  const registro = await getUnidadesRegistro(tenantId, hoy, {
+    q, pagina: paginaPedida, porPagina: UNIDADES_POR_PAGINA, activo: true,
+  });
+
+  // Las bajas van en su propia sección y en su propia lectura, ACOTADA: un
+  // parque con cientos de bajas no puede arrastrarlas todas a la pantalla solo
+  // para llenar un plegable. Se pide una página y se dice cuántas hay.
+  const bajas = await getUnidadesRegistro(tenantId, hoy, {
+    q: '', pagina: 1, porPagina: UNIDADES_POR_PAGINA, activo: false,
+  });
+
+  // El semáforo cuenta la FLOTA ENTERA, no la página: calculado sobre 25 de
+  // 800 diría que no hay nada vencido porque los vencidos cayeron en la página
+  // 3. `null` = no se pudo contar, y entonces se pinta «—», no un 0.
+  const conteos = await getUnidadesConteos(tenantId, hoy, DIAS_AVISO);
+
+  const pag: PaginaRegistroUI<FilaRegistroUnidad> = {
+    filas: registro.filas,
+    pagina: registro.pagina,
+    paginas: registro.paginas,
+    // `total` es el parque ACTIVO entero (lo que el pie compara contra los que
+    // coinciden); `filtrados`, los que casan con la búsqueda. Los dos los
+    // cuenta la base.
+    total: conteos?.activas ?? registro.total,
+    filtrados: registro.total,
+    q,
+    editando: (() => {
+      const e = (sp.editar ?? '').trim().slice(0, 64);
+      return e && registro.filas.some((u) => u.id === e) ? e : null;
+    })(),
+  };
 
   async function guardarUnidad(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
@@ -162,8 +215,11 @@ export default async function PaginaUnidades({
   return (
     <>
       <VistaUnidades
-        unidades={unidades}
-        sp={sp}
+        pag={pag}
+        bajas={bajas.filas}
+        totalBajas={bajas.total}
+        conteos={conteos}
+        totalActivasConocido={conteos !== null}
         sufijo={sufijo}
         camposOcultos={camposOcultos}
         cambiarEstado={cambiarEstado}

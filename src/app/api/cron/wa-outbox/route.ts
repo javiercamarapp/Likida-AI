@@ -73,18 +73,35 @@ export async function GET(req: Request) {
     return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }
 
+  // AUDITORÍA 24, BE-15: el check del canal iba DENTRO del pool, por fila y
+  // DESPUÉS de reclamar. Un token de Meta rotado en Preview y no en
+  // Production quemaba un intento de cada salida reclamada (`intentos + 1`
+  // en el claim, 0180) cada minuto: con backoff 15·2^n, a la hora todo lo
+  // encolado —acuses de POD, «tu viaje se reasignó», cobranza— estaba
+  // `dead` por una condición que no es de la fila. Se comprueba ANTES de
+  // reclamar y se sale con latido `fallo`: nada se toca hasta que el canal
+  // exista.
+  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneId) {
+    logger.error('cron.wa_outbox.sin_config', { token: Boolean(token), phoneId: Boolean(phoneId), codigo: 'canal_no_configurado' });
+    await alertarOperador('cron.wa_outbox', {
+      error: 'El canal de WhatsApp no está configurado (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID): el outbox no se drena y nada se reclama hasta que esté.',
+      codigo: 'canal_no_configurado',
+    });
+    await registrarLatido('wa-outbox', 'fallo', { codigo: 'canal_no_configurado' });
+    return NextResponse.json({
+      corrio: false,
+      error: 'El canal de WhatsApp no está configurado; el outbox queda intacto para cuando lo esté.',
+      codigo: 'canal_no_configurado',
+    }, { status: 500 });
+  }
+
   try {
     const salidas = await reclamarSalidasWhatsApp();
     let enviadas = 0;
     let fallidas = 0;
     await conPool(salidas, 4, async (s) => {
-      const token = process.env.WHATSAPP_ACCESS_TOKEN;
-      const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-      if (!token || !phoneId) {
-        fallidas++;
-        await finalizarYAvisarSiMurio(s, undefined, 'canal de WhatsApp no configurado');
-        return;
-      }
       try {
         const r = await fetch(`${GRAPH}/${phoneId}/messages`, {
           method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },

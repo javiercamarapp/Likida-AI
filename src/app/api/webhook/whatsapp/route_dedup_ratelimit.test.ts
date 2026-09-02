@@ -27,7 +27,12 @@ vi.mock('@/lib/likida/processor', () => ({ processInbound: () => processInbound(
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/observability/sentry', () => ({ flushObservabilidad: vi.fn(async () => {}) }));
-vi.mock('@/lib/likida/interruptores', () => ({ estaApagado: vi.fn(async () => false) }));
+// AUDITORÍA 24 · AGEN-7: la ruta lee `leerInterruptor` (distingue «apagado»
+// de «no pude leer la palanca»); `estaApagado` se conserva para el resto.
+vi.mock('@/lib/likida/interruptores', () => ({
+  estaApagado: vi.fn(async () => false),
+  leerInterruptor: vi.fn(async () => 'encendido' as const),
+}));
 
 const pendientes: Array<() => unknown> = [];
 vi.mock('next/server', async (orig) => {

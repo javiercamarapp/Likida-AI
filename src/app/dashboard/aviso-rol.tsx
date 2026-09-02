@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Eye, ArrowLeft } from 'lucide-react';
+import { ROTULOS_ROL } from '@/lib/auth/roles';
 
-const NOMBRE: Record<string, string> = {
-  flota_admin: 'Dueño de la flota',
-  encargado: 'Jefe de tráfico',
-  contador: 'Contador',
-};
+/** Los tres roles que un superadmin puede previsualizar (`PREVISUALIZABLES`
+ *  de visibilidad.ts). El NOMBRE sale de `roles.ts` — H18 (auditoría 24):
+ *  esta cinta decía «Jefe de tráfico» y la lista del equipo «Encargado» para
+ *  el mismo rol, y dos nombres se leen como dos roles. `visibilidad.ts` no se
+ *  importa aquí a propósito: este es un Client Component. */
+const PREVISUALIZABLES = ['flota_admin', 'encargado', 'contador'] as const;
 
 /**
  * La cinta que avisa "estás viendo el panel con los ojos de otro rol".
@@ -45,7 +47,9 @@ export default function AvisoRol({ rolReal }: { rolReal: string }) {
 
   if (rolReal !== 'superadmin') return null;
 
-  const comoRol = rolVista && NOMBRE[rolVista] ? NOMBRE[rolVista] : null;
+  const comoRol = rolVista && (PREVISUALIZABLES as readonly string[]).includes(rolVista)
+    ? ROTULOS_ROL[rolVista].nombre
+    : null;
   // Sin rol previsualizado, esta cinta solo aplica al "ver como" por query
   // string (`?vista=demo` o `?tenant=`). Un superadmin SIN esos params está en
   // la flota que eligió en /admin/elegir-flota (cookie de admin-context.ts,

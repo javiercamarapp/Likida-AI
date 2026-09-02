@@ -40,10 +40,16 @@ export default async function ConfiguracionPage() {
                 ))}
               </div>
             )}
+            {/* ADM-5 (auditoría 24): esta tarjeta pintaba `tenant.plan` (una
+                etiqueta de texto suelta) y afirmaba "sin lógica de límites
+                detrás" — falso: `lib/saas/suscripcion.ts` (`getUso`) SÍ
+                calcula uso vs. `limite_viajes_mes`/`limite_operadores` por
+                suscripción, solo que esta pantalla no la lee todavía. */}
             <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-              Límites y precio por plan editables, upgrade/downgrade, pricing outcome-based — no existen controles de
-              esto hoy, los planes son solo una etiqueta de texto en la base (<code className="font-mono">tenant.plan</code>),
-              sin lógica de límites detrás.
+              El plan de arriba es la etiqueta de texto en <code className="font-mono">tenant.plan</code>. La lógica
+              de límites y uso REAL vive en <code className="font-mono">lib/saas/suscripcion.ts</code> (suscripción y
+              plan por flota, con precio y tope de viajes/operadores) — esta pantalla todavía no la muestra por
+              flota; editar precio/límites y upgrade/downgrade desde aquí no existen hoy.
             </p>
           </div>
 

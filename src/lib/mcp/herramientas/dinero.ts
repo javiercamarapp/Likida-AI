@@ -173,7 +173,7 @@ async function ejecutarFiscal(tenantId: string, args: z.infer<typeof esquemaFisc
     ...(r.conCfdiSinDesglose > 0
       ? [`• ${numero(r.conCfdiSinDesglose)} comprobantes con CFDI pero sin XML leído: su IVA existe en papel y aquí no se afirma.`]
       : []),
-    `• IEPS de diésel documentado: ${mxn(r.iepsDieselDocumentado)}.`,
+    `• IEPS trasladado en CFDI de diésel con pago admitido (LISR 27-III) — NO es el estímulo (cuota × litros): ${mxn(r.iepsDieselDocumentado)}.`,
     `• Validación ante el SAT: ${numero(r.vigentes)} vigentes, ${numero(r.cancelados)} cancelados, ${numero(r.porValidar)} sin validar todavía.`,
     ...(perdidas.montoTotal > 0
       ? [

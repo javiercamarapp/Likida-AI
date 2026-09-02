@@ -48,14 +48,19 @@ beforeEach(() => {
 });
 
 describe('el outbox avisa cuando una salida MUERE, no en cualquier fallo', () => {
-  it('canal no configurado y la fila muere: avisa al operador', async () => {
-    delete process.env.WHATSAPP_ACCESS_TOKEN;
+  // AUDITORÍA 24, BE-15: esta prueba usaba «sin token de Meta» como vehículo
+  // para matar la fila. Ya no lo es: un canal no configurado no es culpa de la
+  // fila y ahora la ruta se sale ANTES de reclamar (ver route.test.ts). El
+  // vehículo pasa a ser lo que sí es de la fila: la red se cae en su envío.
+  it('la red se cae en su envío y la fila muere: avisa al operador', async () => {
     reclamarSalidasWhatsApp.mockResolvedValue([salida('a')]);
     finalizarSalidaWhatsApp.mockResolvedValue({ muerta: true });
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNRESET'); }));
 
     await GET(peticion());
 
     expect(alertarOperador).toHaveBeenCalledWith('cron.wa_outbox', expect.objectContaining({ codigo: 'salida_muerta' }));
+    vi.unstubAllGlobals();
   });
 
   it('un fallo transitorio que NO mata la fila (va a reintentar sola): sin alerta', async () => {

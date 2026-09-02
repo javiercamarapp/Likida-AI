@@ -20,9 +20,13 @@ vi.mock('@/lib/likida/escalar_viaje', () => ({
 // en cero para que las pruebas del reparto del reloj y los interruptores
 // sigan midiendo SOLO a sus dos motores — los relojes tienen su propia
 // suite (relojes_legales.test.ts).
+// AUDITORÍA 24 (BE-7): son `vi.fn` para poder mirar el reloj que reciben y
+// para colgar uno en la prueba del techo duro.
+const avisarRelojesLegales = vi.fn(async (..._a: unknown[]) => ({ revisadas: 0, avisadas: 0, fallos: 0, cortadasPorReloj: 0 }));
+const avisarVencimientos = vi.fn(async (..._a: unknown[]) => ({ candidatos: 0, avisados: 0, fallos: 0, cortadosPorReloj: 0 }));
 vi.mock('@/lib/likida/relojes_legales', () => ({
-  avisarRelojesLegales: async () => ({ revisadas: 0, avisadas: 0, fallos: 0 }),
-  avisarVencimientos: async () => ({ candidatos: 0, avisados: 0, fallos: 0 }),
+  avisarRelojesLegales: (...a: unknown[]) => avisarRelojesLegales(...a),
+  avisarVencimientos: (...a: unknown[]) => avisarVencimientos(...a),
 }));
 vi.mock('@/lib/likida/agentes/cobranza', () => ({
   ejecutarCobranzaGlobal: (...a: unknown[]) => ejecutarCobranzaGlobal(...a),
@@ -365,5 +369,83 @@ describe('el vigilante de reglas (A19) corre aquí, y falla como los demás', ()
     const res = await GET(peticion('Bearer secreto-de-prueba'));
     expect(res.status).toBe(200);
     expect(vigilarReglas).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 24, BE-7 (ALTO): los barridos de después de la cobranza corrían
+// sin reloj y el latido era la última línea. Con la cobranza gastando sus
+// 105 s, `avisarVencimientos` arrancaba a t=105 mandando WhatsApp y sellando
+// después; Vercel mataba la lambda a los 120 s con flotas avisadas sin sello
+// (reenvío la hora siguiente) y sin latido («escalar no late», sin causa).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('BE-7 — los barridos ven el reloj y la corrida tiene techo duro', () => {
+  beforeEach(() => {
+    escalarViajesSinAceptar.mockReset().mockResolvedValue({ escalados: 0, cortadosPorReloj: 0 });
+    ejecutarCobranzaGlobal.mockReset().mockResolvedValue({ tenants: 0, contactados: 0, cortadosPorReloj: 0, fallos: [] });
+    avisarRelojesLegales.mockReset().mockResolvedValue({ revisadas: 0, avisadas: 0, fallos: 0, cortadasPorReloj: 0 });
+    avisarVencimientos.mockReset().mockResolvedValue({ candidatos: 0, avisados: 0, fallos: 0, cortadosPorReloj: 0 });
+    alertarOperador.mockClear();
+    registrarLatido.mockClear();
+    logger.error.mockClear();
+    latidoPrevio = null;
+    estaApagado.mockReset().mockResolvedValue(false);
+  });
+
+  it('los relojes legales y los vencimientos reciben el MISMO vencimiento que la cobranza', async () => {
+    await GET(peticion('Bearer secreto-de-prueba'));
+    const { venceEn: venceCobranza } = ejecutarCobranzaGlobal.mock.calls[0][1] as { venceEn: number };
+    expect((avisarRelojesLegales.mock.calls[0][1] as { venceEn: number }).venceEn).toBe(venceCobranza);
+    expect((avisarVencimientos.mock.calls[0][1] as { venceEn: number }).venceEn).toBe(venceCobranza);
+  });
+
+  it('un barrido que cortó por reloj cuenta en la racha y el latido sale `parcial`', async () => {
+    avisarVencimientos.mockResolvedValue({ candidatos: 9, avisados: 2, fallos: 0, cortadosPorReloj: 7 });
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect((await res.json()).cortadosPorReloj).toBe(7);
+    expect(registrarLatido).toHaveBeenCalledWith('escalar', 'parcial', { cortesSeguidos: 1, cortados: 7 });
+  });
+
+  it('si un barrido se cuelga más allá del techo, la ruta responde y LATE igual — `parcial`, con el motor en vuelo nombrado', async () => {
+    vi.useFakeTimers();
+    try {
+      // `avisarVencimientos` no contesta nunca: un `fetch` sin tope, un motor
+      // que ignoró su reloj. Antes esto era una lambda muerta a los 120 s sin
+      // latido; ahora la ruta gana la carrera a los 110 s.
+      avisarVencimientos.mockImplementation(() => new Promise(() => {}));
+      const pendiente = GET(peticion('Bearer secreto-de-prueba'));
+      await vi.advanceTimersByTimeAsync(111_000);
+      const res = await pendiente;
+      const cuerpo = await res.json();
+      expect(cuerpo.corteDuro).toMatchObject({ motorEnVuelo: 'relojes' });
+      expect(registrarLatido).toHaveBeenCalledTimes(1);
+      expect(registrarLatido).toHaveBeenCalledWith('escalar', 'parcial', expect.objectContaining({ corteDuro: 'relojes', cortesSeguidos: 1 }));
+      expect(logger.error).toHaveBeenCalledWith('cron.escalar.corte_duro', expect.objectContaining({ enVuelo: 'relojes' }));
+      // Los dos motores de antes SÍ corrieron y su parte viaja en el cuerpo.
+      expect(cuerpo.aceptacion).toEqual({ escalados: 0, cortadosPorReloj: 0 });
+      expect(cuerpo.comprobacion).toEqual({ tenants: 0, contactados: 0, cortadosPorReloj: 0, fallos: [] });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('con todos los motores a tiempo el techo duro nunca gana: latido `ok` en cero, una sola vez', async () => {
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(registrarLatido).toHaveBeenCalledTimes(1);
+    expect(registrarLatido).toHaveBeenCalledWith('escalar', 'ok', { cortesSeguidos: 0, cortados: 0 });
+  });
+
+  it('el latido se escribe aunque la corrida reviente fuera de los try de los motores (finally)', async () => {
+    // `leerLatido` sí está protegido; lo que no lo estaba era el cuerpo entero.
+    // Un `NextResponse.json` que no puede serializar el resultado es la clase
+    // de fallo que antes salía sin latido.
+    const ciclico: Record<string, unknown> = {};
+    ciclico.yo = ciclico;
+    escalarViajesSinAceptar.mockResolvedValue(ciclico);
+    await expect(GET(peticion('Bearer secreto-de-prueba'))).rejects.toThrow();
+    expect(registrarLatido).toHaveBeenCalledTimes(1);
+    expect(registrarLatido).toHaveBeenCalledWith('escalar', 'fallo', { codigo: 'corrida_sin_cerrar' });
   });
 });

@@ -11,7 +11,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { reiniciarLimites } from '@/lib/ratelimit';
 
-const { POST } = await import('./route');
+const { POST, GET } = await import('./route');
 
 function peticion(init: { crudo: string; conLargo?: boolean }): Request {
   const headers = new Headers({ 'content-type': 'application/json' });
@@ -55,5 +55,15 @@ describe('POST /api/demo — el cuerpo se mide también sin content-length', () 
     const r = await POST(peticion({ crudo: 'esto no es json' }));
     expect(r.status).toBe(400);
     expect((await r.json()).error).toMatch(/JSON inválido/);
+  });
+});
+
+describe('GET /api/demo — SEG-8 (auditoría 24): no expone la salud de configuración', () => {
+  it('contesta ok y nada más: ni `config`, ni qué integraciones están puestas', async () => {
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const cuerpo = await res.json();
+    expect(cuerpo).toEqual({ ok: true });
+    expect(JSON.stringify(cuerpo)).not.toMatch(/llm|whatsapp|supabase|config/i);
   });
 });

@@ -96,6 +96,59 @@ describe('lo que se salta bajo cobertura sí corre en CI', () => {
     expect(CI).toMatch(/npm run test:coverage/);
   });
 
+  it('el typecheck declara un techo de heap que le alcanza en frío', () => {
+    // ═════════════════════════════════════════════════════════════════════
+    // AUDITORÍA 24 · OP-1 — LA COMPUERTA NO PODÍA CORRER.
+    //
+    // El PR #303 afirmaba «`tsc --noEmit`: limpio» y era cierto EN LA MÁQUINA
+    // DONDE SE ESCRIBIÓ. En CI el paso Typecheck moría con
+    // `FATAL ERROR: Ineffective mark-compacts near heap limit — JavaScript
+    // heap out of memory`, exit 134, en las dos corridas.
+    //
+    // Lo que hacía invisible el modo de falla: `tsconfig.json` tiene
+    // `incremental: true`, y `tsconfig.tsbuildinfo` está en `.gitignore:10`.
+    // O sea que en local el typecheck corre CALIENTE (con el .tsbuildinfo de
+    // la corrida anterior) y en CI corre siempre en FRÍO, sobre un clon
+    // nuevo. Medido el 2-sep-2026 sobre este árbol:
+    //
+    //   caliente @ 2048 MiB → exit 0     ← lo que ve quien lo corre en local
+    //   FRÍO     @ 2048 MiB → exit 134   ← lo que ve CI, siempre
+    //   FRÍO, pico real de RSS: 2,672 MiB
+    //
+    // Por eso la verificación local no podía atraparlo nunca: el caso que
+    // revienta es justo el que en local no se da. El techo se declara en el
+    // script de npm y no en el workflow a propósito — así lo heredan los DOS
+    // workflows que corren `npm run typecheck` (ci.yml y
+    // deploy-preview-promote.yml) y cualquiera que se agregue después.
+    //
+    // El número no es un adorno: 4096 es el piso con margen sobre los 2,672
+    // medidos. Si esta prueba se pone roja porque alguien lo bajó, vuelve a
+    // medir el pico en frío antes de tocarla — `rm tsconfig.tsbuildinfo` y
+    // vigila VmHWM. No la relajes.
+    // ═════════════════════════════════════════════════════════════════════
+    const paquete = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> };
+    const techo = Number(paquete.scripts.typecheck?.match(/--max-old-space-size=(\d+)/)?.[1] ?? 0);
+
+    expect(
+      techo,
+      'package.json → scripts.typecheck no declara --max-old-space-size. ' +
+      'En frío el typecheck pica en 2,672 MiB y el runner de GitHub muere en ~2 GB con exit 134.',
+    ).toBeGreaterThanOrEqual(4096);
+
+    // Y que los dos workflows sigan entrando por el script, que es donde vive
+    // el techo. Un `npx tsc --noEmit` suelto se lo saltaría entero.
+    //
+    // Las dos rutas se leen literales y no por un bucle sobre un arreglo: el
+    // `readFileSync` con argumento variable dispara
+    // `security/detect-non-literal-fs-filename` y el trinquete de lint —que
+    // es lo que cazó esto antes del primer commit— rechaza el warning nuevo.
+    const promote = readFileSync('.github/workflows/deploy-preview-promote.yml', 'utf8');
+    for (const [nombre, texto] of [['ci.yml', CI], ['deploy-preview-promote.yml', promote]] as const) {
+      expect(texto, `${nombre} dejó de invocar el typecheck por su script de npm`).toMatch(/npm run typecheck/);
+      expect(texto, `${nombre} invoca tsc directo y se salta el techo de heap del script`).not.toMatch(/npx tsc --noEmit/);
+    }
+  });
+
   it('el ayudante de pruebas no se cuela al producto', () => {
     // `src/lib/pruebas/` existe solo para las redes estructurales. Si algo del
     // producto lo importara, `node:fs` entraría a un bundle del servidor.

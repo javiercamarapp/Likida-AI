@@ -349,6 +349,9 @@ describe('LEG-C1: sin aviso previo no se deriva expediente laboral', () => {
 
     expect(r.sinAvisoPrevio).toBe(1);
     expect(asegurarDiaJornada).not.toHaveBeenCalled();
-    expect(logger.error).toHaveBeenCalledWith('jornada.aviso_previo_ilegible', expect.anything());
+    // AUDITORÍA 24, LEG-1: la compuerta se extrajo a `privacidad.ts` para que
+    // el poller de GPS y el de cámara pasen por la MISMA pregunta, así que el
+    // evento ya no lleva prefijo de jornada — lo comparten los tres.
+    expect(logger.error).toHaveBeenCalledWith('privacidad.aviso_previo_ilegible', expect.anything());
   });
 });

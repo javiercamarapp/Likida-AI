@@ -3,12 +3,16 @@ import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
-import { getOperadoresDetalle } from '@/lib/likida/analytics';
-import { actualizarOperador, mensajeParaPantalla } from '@/lib/likida/administracion';
+import {
+  actualizarOperador, mensajeParaPantalla,
+  getOperadoresRegistro, getOperadoresConteos, OPERADORES_POR_PAGINA,
+} from '@/lib/likida/administracion';
+import { DIAS_AVISO } from '@/lib/likida/vigencias';
 import { ahoraMs } from '@/lib/saludo';
 import { hoyMx } from '@/lib/formato';
 import { sufijoTenant } from '../sufijo';
 import { camposDeSufijo } from '../paginar-campos';
+import { sanearQ, type PaginaRegistroUI } from '../paginar-registro';
 import { VistaOperadores, type FilaOperador } from './vista';
 import type { ResultadoForma } from './forma';
 
@@ -55,22 +59,46 @@ export default async function PaginaOperadores({
   const sufijo = sufijoTenant(sp);
   const camposOcultos = camposDeSufijo(sp);
 
+  // El día del CHOFER (México), no el UTC del servidor — a las 6pm de CDMX
+  // una licencia que vence "hoy" ya se marcaba vencida con el día UTC.
+  const hoy = hoyMx(new Date(ahoraMs()));
+
+  // ── LA PÁGINA LA CORTA LA BASE, NO LA PANTALLA (auditoría 24, ADM-2) ─────
+  //
+  // Antes: `getOperadoresDetalle(tenantId)` traía el padrón COMPLETO y
+  // `paginarRegistro` lo filtraba y rebanaba en memoria. Con el padrón de una
+  // flota de 800 tractos —varios cientos de choferes— eso es traer el catálogo
+  // entero a cada pintado para enseñar 25 filas, y encima los KPIs se contaban
+  // sobre la lista cargada.
+  //
+  // Ahora `operadores_registro_tenant` (0298) corta la página sobre un orden
+  // TOTAL y devuelve el `total` en la MISMA respuesta, y
+  // `operadores_conteos_tenant` cuenta los KPIs sobre la FLOTA ENTERA. El
+  // «25 de N» del pie vuelve a ser verdad sin traerse las N filas.
+  const q = sanearQ(sp.q);
+  const pCruda = Number(sp.p);
+  const paginaPedida = Number.isInteger(pCruda) && pCruda >= 1 ? pCruda : 1;
+
   // ── UNA LECTURA CAÍDA NO TUMBA LA PANTALLA (auditoría de frontend, FE-3) ─
-  // `getOperadoresDetalle` lee tablas del tenant y LANZA cuando no puede
-  // leerlas completas (`LecturaIncompleta`, pg.ts) — a escala eso deja de ser
-  // hipotético. Sin este catch, la excepción sube al render y el usuario ve la
-  // pantalla de error de Next en lugar del registro: pierde también el alta y
-  // la edición, que no dependen de esa lectura. Con él, la vista pinta la
-  // sección caída DICIÉNDOLO, que no es lo mismo que una lista vacía
-  // ("aún no hay operadores dados de alta" sería mentira, y la peor).
-  let detalle: Awaited<ReturnType<typeof getOperadoresDetalle>> | null;
+  // Estas lecturas LANZAN cuando no pueden demostrar lo que devuelven. Sin
+  // este catch, la excepción sube al render y el usuario ve la pantalla de
+  // error de Next en lugar del registro: pierde también la edición, que no
+  // depende de esa lectura. Con él, la vista pinta la sección caída
+  // DICIÉNDOLO, que no es lo mismo que una lista vacía ("aún no hay
+  // operadores dados de alta" sería mentira, y la peor).
+  let registro: Awaited<ReturnType<typeof getOperadoresRegistro>> | null;
+  let conteos: Awaited<ReturnType<typeof getOperadoresConteos>> = null;
   try {
-    detalle = await getOperadoresDetalle(tenantId);
+    registro = await getOperadoresRegistro(tenantId, { q, pagina: paginaPedida, porPagina: OPERADORES_POR_PAGINA });
+    // Los KPIs son de la FLOTA ENTERA, no de la página: un semáforo calculado
+    // sobre 25 de 800 diría que no hay licencias vencidas porque cayeron en la
+    // página 12. `null` = no se pudo contar, y la vista pinta «—».
+    conteos = await getOperadoresConteos(tenantId, hoy, DIAS_AVISO);
   } catch {
-    detalle = null;
+    registro = null;
   }
 
-  const filas: FilaOperador[] = (detalle ?? []).map((o) => ({
+  const filas: FilaOperador[] = (registro?.filas ?? []).map((o) => ({
     operadorId: o.operadorId,
     nombre: o.nombre,
     telefono: o.telefono,
@@ -83,9 +111,32 @@ export default async function PaginaOperadores({
     rfc: o.rfc,
   }));
 
-  // El día del CHOFER (México), no el UTC del servidor — a las 6pm de CDMX
-  // una licencia que vence "hoy" ya se marcaba vencida con el día UTC.
-  const hoy = hoyMx(new Date(ahoraMs()));
+  // ── EL «N de M» DEL PIE TIENE QUE SER VERDAD ────────────────────────────
+  //
+  // `filtrados` es el conteo REAL de los que casan con la búsqueda (lo cuenta
+  // la base, no es el largo de esta página). `total` es el padrón entero, y
+  // sale de `conteos` — que es la única lectura que lo sabe. Si `conteos` no
+  // respondió Y hay búsqueda, el «de M» no se puede afirmar: se deja igual a
+  // `filtrados` SOLO cuando no hay filtro (donde los dos son el mismo número
+  // por definición), y con filtro la vista lo dice en vez de inventarlo.
+  const filtrados = registro?.total ?? 0;
+  const totalFlota = conteos?.total ?? (q === '' ? filtrados : null);
+
+  const pag: PaginaRegistroUI<FilaOperador> = {
+    filas,
+    pagina: registro?.pagina ?? 1,
+    paginas: registro?.paginas ?? 1,
+    total: totalFlota ?? filtrados,
+    filtrados,
+    q,
+    // Solo la fila que `?editar=` nombra Y que está en ESTA página trae su
+    // formulario: uno abierto que no se ve sería HTML de una fila que nadie
+    // está mirando.
+    editando: (() => {
+      const e = (sp.editar ?? '').trim().slice(0, 64);
+      return e && filas.some((f) => f.operadorId === e) ? e : null;
+    })(),
+  };
 
   async function guardarOperador(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
@@ -109,6 +160,10 @@ export default async function PaginaOperadores({
 
       await actualizarOperador(s.tenantId, operadorId, {
         nombre: String(fd.get('nombre') ?? ''),
+        // FE-4. Va en CADA guardado igual que los demás (es un reemplazo de
+        // fila, no un parche); `actualizarOperador` lee el anterior y solo
+        // comprueba duplicados y anota bitácora cuando de verdad cambió.
+        telefono: String(fd.get('telefono') ?? ''),
         numeroEmpleado: String(fd.get('numeroEmpleado') ?? ''),
         licencia: String(fd.get('licencia') ?? ''),
         licenciaTipo: String(fd.get('licenciaTipo') ?? ''),
@@ -137,10 +192,12 @@ export default async function PaginaOperadores({
   return (
     <VistaOperadores
       filas={filas}
-      sp={sp}
+      pag={pag}
+      conteos={conteos}
+      totalConocido={totalFlota !== null}
       sufijo={sufijo}
       camposOcultos={camposOcultos}
-      ilegible={detalle === null}
+      ilegible={registro === null}
       hoy={hoy}
       puedeEditar={puedeAdministrar(rol)}
       guardarOperador={guardarOperador}
