@@ -125,7 +125,16 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca }: { acc
         </td>
         <td className="px-4 py-2.5" style={{ color: 'var(--muted)' }}>{rotuloDepartamento.get(a.departamento) ?? a.departamento}</td>
         <td className="px-4 py-2.5">
-          <StatusPill estado={PILL_ESTADO[a.estado] ?? 'neutral'}>{rotuloEstado.get(a.estado) ?? a.estado}</StatusPill>
+          <span className="inline-flex items-center gap-1.5 flex-wrap">
+            <StatusPill estado={PILL_ESTADO[a.estado] ?? 'neutral'}>{rotuloEstado.get(a.estado) ?? a.estado}</StatusPill>
+            {a.experimental && (
+              <StatusPill estado="warn">
+                <span title="El catálogo lo declara vivo, pero el runner no lo despacha en automático hasta que se gradúe (agente_definicion.experimental) — AGB, auditoría 24.">
+                  Experimental
+                </span>
+              </StatusPill>
+            )}
+          </span>
         </td>
         <td className="px-4 py-2.5" style={{ color: 'var(--muted)' }}>{a.disparador}</td>
         <td className="px-4 py-2.5 text-[12.5px]">

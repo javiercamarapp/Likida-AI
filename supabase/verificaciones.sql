@@ -15531,6 +15531,77 @@ begin
     col_existe, faltantes, redactor_intacto, default_es_false;
 end $$;
 
+-- ── 249. Los nueve agentes TEATRO se gradúan tras la auditoría, sin tocar al resto del catálogo (mig. 0303) ──
+--
+-- Lo que solo la base puede demostrar de la 0303 (el espejo de la 248/0301):
+--
+--  (a) los NUEVE ids quedan `experimental = false` — uno por uno, porque un
+--      UPDATE con un `where id in (...)` mal escrito deja alguno fuera en
+--      silencio, igual que pudo haber pasado al marcarlos.
+--  (b) los NUEVE quedan con `prompt_ref IS NULL` — cerraban una referencia a
+--      un archivo que nunca se escribió; dejarla apuntando a nada sería la
+--      misma promesa falsa con otro nombre.
+--  (c) los NUEVE quedan con una `descripcion` que YA NO contiene ninguna de
+--      las frases originales de la 0125 que prometían de más ("investiga a
+--      diario el mercado", "reactiva el scraper", "decide dónde se pone
+--      cada pieza", "destila hooks con whisper", "escribe código de
+--      prueba") — el CASE WHEN de la migración de verdad reescribió las
+--      nueve filas, no solo algunas.
+--  (d) un agente REAL del catálogo (`redactor`) NO quedó tocado — la
+--      migración no pudo haber puesto `experimental = false` a TODOS por
+--      accidente, ni tocado su `descripcion`.
+do $$
+declare
+  ids text[] := array[
+    'cazador','seo_distribucion','guiones','noticias_mercado',
+    'promos_diarias','visuales','video_demo','video_marketing','pruebas'
+  ];
+  frases_viejas text[] := array[
+    'investiga a diario el mercado', 'reactiva el scraper',
+    'decide dónde se pone cada pieza', 'destila hooks con whisper',
+    'escribe código de prueba'
+  ];
+  k text; f text;
+  no_graduados text[] := '{}';
+  con_prompt_ref text[] := '{}';
+  con_frase_vieja text[] := '{}';
+  descripcion_actual text;
+  redactor_experimental boolean;
+  redactor_descripcion_antes text;
+  redactor_descripcion_despues text;
+begin
+  select descripcion into redactor_descripcion_antes from public.agente_definicion where id = 'redactor';
+
+  foreach k in array ids loop
+    -- (a)
+    if exists (select 1 from public.agente_definicion where id = k and experimental = true) then
+      no_graduados := no_graduados || k;
+    end if;
+    -- (b)
+    if exists (select 1 from public.agente_definicion where id = k and prompt_ref is not null) then
+      con_prompt_ref := con_prompt_ref || k;
+    end if;
+    -- (c)
+    select descripcion into descripcion_actual from public.agente_definicion where id = k;
+    foreach f in array frases_viejas loop
+      if descripcion_actual is not null and lower(descripcion_actual) like '%' || f || '%' then
+        con_frase_vieja := con_frase_vieja || (k || ':' || f);
+      end if;
+    end loop;
+  end loop;
+
+  -- (d) redactor intacto, antes y después de esta migración.
+  select (experimental = false) into redactor_experimental from public.agente_definicion where id = 'redactor';
+  select descripcion into redactor_descripcion_despues from public.agente_definicion where id = 'redactor';
+
+  raise exception E'AGENTES_GRADUADOS_0303  no_graduados=%  con_prompt_ref=%  con_frase_vieja=%  redactor_experimental_false=%  redactor_descripcion_intacta=%   (esperado ninguno / ninguno / ninguno / t / t)',
+    coalesce(array_to_string(no_graduados, ','), 'ninguno'),
+    coalesce(array_to_string(con_prompt_ref, ','), 'ninguno'),
+    coalesce(array_to_string(con_frase_vieja, ','), 'ninguno'),
+    redactor_experimental,
+    (redactor_descripcion_antes is not distinct from redactor_descripcion_despues);
+end $$;
+
 -- ── 243. `tenant_perfil_merge` mezcla el perfil ATÓMICAMENTE — leer+escribir en el mismo UPDATE, no en dos viajes de Node (mig. 0296, auditoría 24, H20/H21/H22) ──
 --
 -- El hallazgo: `guardarPerfilPatch` (lib/likida/repo.ts) hacía SELECT
