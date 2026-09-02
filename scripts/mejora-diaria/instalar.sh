@@ -8,10 +8,10 @@
 # que ya no existan aquí se DESCARGAN (una rutina retirada que sigue
 # corriendo es el peor drift).
 set -euo pipefail
-REPO="$HOME/javiercamarapp/likida"
-TALLER="$HOME/javiercamarapp/likida-mejoras"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+TALLER="$(dirname "$REPO")/likida-mejoras"
 
-mkdir -p "$REPO/.mejora-diaria/logs" "$HOME/javiercamarapp/likida-marketing-cola"
+mkdir -p "$REPO/.mejora-diaria/logs" "$(dirname "$REPO")/likida-marketing-cola"
 
 # 1 · El taller: worktree del mismo repo (comparte .git — menos disco que un
 #     clon) donde los fixes corren SIN chocar con las sesiones del principal.

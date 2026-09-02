@@ -1,0 +1,618 @@
+{
+  "corrida": "2026-08-29-simulacion-mes",
+  "tope": 2,
+  "filas": [
+    {
+      "t": "2026-08-29T18:39:51.683Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-144045/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5354,
+      "tokOut": 284,
+      "cost": 0.001765
+    },
+    {
+      "t": "2026-08-29T18:39:51.683Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-144045/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 260,
+      "cost": 0.001733
+    },
+    {
+      "t": "2026-08-29T18:39:51.683Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-144045/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 300,
+      "cost": 0.001793
+    },
+    {
+      "t": "2026-08-29T18:43:41.714Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-144045/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 14762,
+      "tokOut": 483,
+      "cost": 0.023268
+    },
+    {
+      "t": "2026-08-29T18:43:41.714Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-144045/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5354,
+      "tokOut": 284,
+      "cost": 0.001765
+    },
+    {
+      "t": "2026-08-29T18:43:41.714Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-144045/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 263,
+      "cost": 0.001388
+    },
+    {
+      "t": "2026-08-29T18:45:13.481Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-144045/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 13645,
+      "tokOut": 389,
+      "cost": 0.01187
+    },
+    {
+      "t": "2026-08-29T18:45:13.482Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-144045/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3956,
+      "tokOut": 284,
+      "cost": 0.001415
+    },
+    {
+      "t": "2026-08-29T18:45:46.656Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-341561/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 14295,
+      "tokOut": 499,
+      "cost": 0.01427
+    },
+    {
+      "t": "2026-08-29T18:45:46.657Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-341561/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 263,
+      "cost": 0.001388
+    },
+    {
+      "t": "2026-08-29T18:45:46.657Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-341561/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 301,
+      "cost": 0.001794
+    },
+    {
+      "t": "2026-08-29T18:46:26.917Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-412605/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 259,
+      "cost": 0.001731
+    },
+    {
+      "t": "2026-08-29T18:46:26.917Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-412605/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 299,
+      "cost": 0.001442
+    },
+    {
+      "t": "2026-08-29T18:46:26.917Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-412605/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5354,
+      "tokOut": 284,
+      "cost": 0.001765
+    },
+    {
+      "t": "2026-08-29T18:46:26.917Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-412605/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 15120,
+      "tokOut": 550,
+      "cost": 0.01643
+    },
+    {
+      "t": "2026-08-29T18:47:03.610Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-286103/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 300,
+      "cost": 0.001793
+    },
+    {
+      "t": "2026-08-29T18:47:03.611Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-286103/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 267,
+      "cost": 0.001743
+    },
+    {
+      "t": "2026-08-29T18:47:03.611Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-286103/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 15146,
+      "tokOut": 442,
+      "cost": 0.015402
+    },
+    {
+      "t": "2026-08-29T18:47:03.611Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-286103/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3956,
+      "tokOut": 284,
+      "cost": 0.001415
+    },
+    {
+      "t": "2026-08-29T18:47:34.810Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-944845/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 257,
+      "cost": 0.001379
+    },
+    {
+      "t": "2026-08-29T18:47:34.811Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-944845/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 300,
+      "cost": 0.001443
+    },
+    {
+      "t": "2026-08-29T18:47:34.811Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-944845/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 14289,
+      "tokOut": 408,
+      "cost": 0.013348
+    },
+    {
+      "t": "2026-08-29T18:48:09.124Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-967518/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3956,
+      "tokOut": 283,
+      "cost": 0.001414
+    },
+    {
+      "t": "2026-08-29T18:48:09.125Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-967518/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 14033,
+      "tokOut": 365,
+      "cost": 0.012406
+    },
+    {
+      "t": "2026-08-29T18:48:09.125Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-967518/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 301,
+      "cost": 0.001445
+    },
+    {
+      "t": "2026-08-29T18:48:42.179Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-608732/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 14304,
+      "tokOut": 582,
+      "cost": 0.015118
+    },
+    {
+      "t": "2026-08-29T18:48:42.180Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-608732/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 300,
+      "cost": 0.001793
+    },
+    {
+      "t": "2026-08-29T18:48:42.180Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-608732/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 259,
+      "cost": 0.001382
+    },
+    {
+      "t": "2026-08-29T18:49:18.741Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-504119/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 300,
+      "cost": 0.001793
+    },
+    {
+      "t": "2026-08-29T18:49:18.742Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-504119/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 259,
+      "cost": 0.001382
+    },
+    {
+      "t": "2026-08-29T18:49:18.742Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-504119/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 15120,
+      "tokOut": 455,
+      "cost": 0.01548
+    },
+    {
+      "t": "2026-08-29T18:49:18.742Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-504119/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3956,
+      "tokOut": 284,
+      "cost": 0.001415
+    },
+    {
+      "t": "2026-08-29T18:49:52.054Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-285088/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 261,
+      "cost": 0.001385
+    },
+    {
+      "t": "2026-08-29T18:49:52.055Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-285088/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 14298,
+      "tokOut": 396,
+      "cost": 0.013246
+    },
+    {
+      "t": "2026-08-29T18:49:52.055Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-285088/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 299,
+      "cost": 0.001791
+    },
+    {
+      "t": "2026-08-29T18:50:27.550Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-723272/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 15151,
+      "tokOut": 479,
+      "cost": 0.015782
+    },
+    {
+      "t": "2026-08-29T18:50:27.550Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-723272/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5354,
+      "tokOut": 285,
+      "cost": 0.001766
+    },
+    {
+      "t": "2026-08-29T18:50:27.551Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-723272/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 300,
+      "cost": 0.001793
+    },
+    {
+      "t": "2026-08-29T18:50:27.551Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-723272/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 267,
+      "cost": 0.001394
+    },
+    {
+      "t": "2026-08-29T18:50:59.417Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-519457/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 14300,
+      "tokOut": 350,
+      "cost": 0.01279
+    },
+    {
+      "t": "2026-08-29T18:50:59.418Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-519457/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 300,
+      "cost": 0.001793
+    },
+    {
+      "t": "2026-08-29T18:50:59.418Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-519457/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 260,
+      "cost": 0.001383
+    },
+    {
+      "t": "2026-08-29T18:51:42.311Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-961608/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 15111,
+      "tokOut": 736,
+      "cost": 0.018272
+    },
+    {
+      "t": "2026-08-29T18:51:42.311Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-961608/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3956,
+      "tokOut": 284,
+      "cost": 0.001415
+    },
+    {
+      "t": "2026-08-29T18:51:42.311Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-961608/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 299,
+      "cost": 0.001442
+    },
+    {
+      "t": "2026-08-29T18:51:42.312Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-961608/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 267,
+      "cost": 0.001743
+    },
+    {
+      "t": "2026-08-29T18:52:09.267Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-986475/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 13240,
+      "tokOut": 292,
+      "cost": 0.01009
+    },
+    {
+      "t": "2026-08-29T18:52:09.267Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-986475/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 301,
+      "cost": 0.001794
+    },
+    {
+      "t": "2026-08-29T18:52:38.378Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-508831/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 298,
+      "cost": 0.00144
+    },
+    {
+      "t": "2026-08-29T18:52:38.378Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-508831/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 13230,
+      "tokOut": 386,
+      "cost": 0.01101
+    },
+    {
+      "t": "2026-08-29T18:53:08.768Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-187077/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 301,
+      "cost": 0.001445
+    },
+    {
+      "t": "2026-08-29T18:53:08.768Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-187077/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 13227,
+      "tokOut": 496,
+      "cost": 0.012104
+    },
+    {
+      "t": "2026-08-29T18:53:40.939Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-116221/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 14268,
+      "tokOut": 419,
+      "cost": 0.013416
+    },
+    {
+      "t": "2026-08-29T18:53:40.940Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-116221/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 301,
+      "cost": 0.001794
+    },
+    {
+      "t": "2026-08-29T18:53:40.940Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-116221/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 257,
+      "cost": 0.001379
+    },
+    {
+      "t": "2026-08-29T18:54:18.911Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-577654/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 15109,
+      "tokOut": 436,
+      "cost": 0.015268
+    },
+    {
+      "t": "2026-08-29T18:54:18.912Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-577654/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 263,
+      "cost": 0.001737
+    },
+    {
+      "t": "2026-08-29T18:54:18.912Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-577654/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3956,
+      "tokOut": 284,
+      "cost": 0.001415
+    },
+    {
+      "t": "2026-08-29T18:54:18.912Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-577654/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 301,
+      "cost": 0.001445
+    },
+    {
+      "t": "2026-08-29T18:54:48.531Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-110513/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 13207,
+      "tokOut": 365,
+      "cost": 0.010754
+    },
+    {
+      "t": "2026-08-29T18:54:48.531Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-110513/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 300,
+      "cost": 0.001793
+    },
+    {
+      "t": "2026-08-29T18:55:28.076Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-976742/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 260,
+      "cost": 0.001733
+    },
+    {
+      "t": "2026-08-29T18:55:28.077Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-976742/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 15123,
+      "tokOut": 444,
+      "cost": 0.015376
+    },
+    {
+      "t": "2026-08-29T18:55:28.077Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-976742/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3973,
+      "tokOut": 302,
+      "cost": 0.001446
+    },
+    {
+      "t": "2026-08-29T18:55:28.078Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-976742/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5354,
+      "tokOut": 284,
+      "cost": 0.001765
+    },
+    {
+      "t": "2026-08-29T18:55:59.949Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-861493/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 300,
+      "cost": 0.001793
+    },
+    {
+      "t": "2026-08-29T18:55:59.949Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-861493/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5371,
+      "tokOut": 262,
+      "cost": 0.001736
+    },
+    {
+      "t": "2026-08-29T18:55:59.950Z",
+      "corrida": "2026-08-29-simulacion-mes",
+      "quien": "QAMES-861493/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 14306,
+      "tokOut": 361,
+      "cost": 0.012912
+    }
+  ]
+}
