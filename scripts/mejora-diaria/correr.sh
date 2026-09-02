@@ -24,8 +24,8 @@
 set -uo pipefail
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
-REPO="$HOME/javiercamarapp/likida"
-TALLER="$HOME/javiercamarapp/likida-mejoras"       # el worktree aislado
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+TALLER="$(dirname "$REPO")/likida-mejoras"       # el worktree aislado
 CARPETA="$REPO/.mejora-diaria"
 REGISTRO="$CARPETA/registro.jsonl"
 TOPE="${MEJORA_TOPE_DIA:-3}"

@@ -19,7 +19,7 @@ caben en una pantalla de teléfono.
 
 ## El mensaje (el formato exacto)
 
-Escríbelo a `~/javiercamarapp/likida/.mejora-diaria/reportes/jarvis-hoy.txt`
+Escríbelo a `~/likida/.mejora-diaria/reportes/jarvis-hoy.txt`
 (se sobrescribe a diario) con esta forma, SIN markdown pesado (WhatsApp):
 
 ☀️/🌙 <fecha corta>
@@ -29,7 +29,7 @@ Escríbelo a `~/javiercamarapp/likida/.mejora-diaria/reportes/jarvis-hoy.txt`
 💡 <UNA recomendación concreta del día, una línea>
 
 Después mándalo tú mismo:
-`bash ~/javiercamarapp/likida/scripts/mejora-diaria/wa-notificar.sh "$(cat ~/javiercamarapp/likida/.mejora-diaria/reportes/jarvis-hoy.txt)"`
+`bash ~/likida/scripts/mejora-diaria/wa-notificar.sh "$(cat ~/likida/.mejora-diaria/reportes/jarvis-hoy.txt)"`
 
 Reglas: cada cifra sale de un archivo/comando que leíste; cero relleno
 motivacional; si no hay nada pendiente, el brief entero son 3 líneas y eso

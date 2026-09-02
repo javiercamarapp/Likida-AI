@@ -22,7 +22,7 @@ bucket mecánico de dependencias".
    (conventional, español, SIN "[deploy]", pie Co-Authored-By de la casa).
    NO hagas push.
 
-Reporte a `~/javiercamarapp/likida/.mejora-diaria/reportes/salud-<año>-<mes>.md`
+Reporte a `~/likida/.mejora-diaria/reportes/salud-<año>-<mes>.md`
 con: advisories reales vs ruido, bumps aplicados/revertidos/pendientes-major,
 y los PRs añejos. Termina con UNA línea:
 VEREDICTO: <n> bumps aplicados, <n> advisories reales, <n> majors pendientes, suite en verde

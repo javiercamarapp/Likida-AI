@@ -6,8 +6,8 @@
 set -uo pipefail
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
-REPO="$HOME/javiercamarapp/likida"
-COLA="$HOME/javiercamarapp/likida-marketing-cola"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+COLA="$(dirname "$REPO")/likida-marketing-cola"
 
 [ -f "$REPO/.mejora-diaria/APAGADO" ] && exit 0
 

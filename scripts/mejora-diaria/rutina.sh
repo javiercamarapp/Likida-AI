@@ -16,8 +16,8 @@
 set -uo pipefail
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
-REPO="$HOME/javiercamarapp/likida"
-TALLER="$HOME/javiercamarapp/likida-mejoras"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+TALLER="$(dirname "$REPO")/likida-mejoras"
 CARPETA="$REPO/.mejora-diaria"
 RUTINA="${1:?uso: rutina.sh <nombre-de-encargo> [tools-extra]}"
 EXTRA_TOOLS="${2:-}"   # p.ej. "mcp__higgsfield" para la rutina de visuales
@@ -90,7 +90,7 @@ find "$CARPETA/reportes" -type f -newer "$CENTINELA" 2>/dev/null | head -2 | whi
   bash "$WA" "📄 $RUTINA: $(basename "$F")" "$F" || true
 done
 # Piezas nuevas en la cola de marketing (hasta 4 imágenes + el copy):
-COLA="$HOME/javiercamarapp/likida-marketing-cola"
+COLA="$(dirname "$REPO")/likida-marketing-cola"
 find "$COLA" -type f \( -name '*.png' -o -name '*.jpg' \) -newer "$CENTINELA" 2>/dev/null | head -4 | while read -r F; do
   bash "$WA" "🖼 $RUTINA: $(basename "$(dirname "$F")")/$(basename "$F")" "$F" || true
 done
