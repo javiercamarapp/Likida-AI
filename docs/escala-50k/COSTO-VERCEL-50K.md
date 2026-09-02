@@ -63,7 +63,7 @@ le suman las vueltas encadenadas por QStash, que sí dependen del tráfico:
 
 | # | Supuesto | De dónde sale | Cómo se mide de verdad |
 |---|---|---|---|
-| S1 | **350,000 – 790,000 mensajes de WhatsApp al mes** | El rango 490–1,100 msg/hora de ESC-1 (`docs/escala-50k/auditoria-prod/escala.md`), × 720 h | `select count(*) from wa_evento_pendiente where recibido_en >= now() - interval '30 days'` — la bandeja durable recibe **una fila por mensaje** (`webhook/route.ts:194`) |
+| S1 | **350,000 – 790,000 mensajes de WhatsApp al mes** | El rango 490–1,100 msg/hora de ESC-1 (auditoría de escala-50k, reporte archivado fuera del repo), × 720 h | `select count(*) from wa_evento_pendiente where recibido_en >= now() - interval '30 days'` — la bandeja durable recibe **una fila por mensaje** (`webhook/route.ts:194`) |
 | S2 | **~8 s de duración media** de la invocación del webhook | Una foto paga visión (OCR) más el cuadre; un texto no. Mezcla 60/40 | El p95 y la media reales están en el panel de Vercel (Observability → Functions), por ruta |
 | S3 | **~5 s de duración media** de una corrida de `wa-pendientes` con trabajo, ~0.3 s en vacío | Mismo motor que el webhook, 40 mensajes con 5 en vuelo | Igual que S2 |
 | S4 | **1.75 GB de memoria** por función | Es el default de Vercel hoy; el repo **no** fija memoria en ningún lado | Vercel → Project → Settings → Functions. **Verificarlo antes de multiplicar**: si el default cambió, toda la columna de GB-h cambia con él |
