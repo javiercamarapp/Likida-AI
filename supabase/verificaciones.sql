@@ -15808,19 +15808,33 @@ begin
   exception when sqlstate 'LR010' then doble_rebota := true;
   end;
 
-  -- (d) un ajuste a negativo rebota y no deja nada movido.
+  -- (d) un ajuste a negativo rebota y no deja nada movido. p_recalculo va
+  -- con CUALQUIER forma válida a propósito (mig. 0306): lo que este caso
+  -- prueba es que el monto negativo (LR016) rebota ANTES de llegar a
+  -- comparar el recálculo con nada.
   begin
     perform revisar_liquidacion(v_t, v_l2, 'ajustar', 'se leyó mal',
-      jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', -5)), v_u, null);
+      jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', -5)), v_u, null,
+      jsonb_build_object('totalComprobado', 0, 'diferencia', 0, 'estatus', 'revisar', 'diferencias', '[]'::jsonb,
+        'iepsAcreditable', 0, 'litrosDieselAcreditables', 0, 'ivaAcreditable', 0, 'peajeAcreditable', 0));
   exception when sqlstate 'LR016' then negativo_rebota := true;
   end;
   select monto into n_monto from gasto where id = v_g;
   select total_comprobado, revision into n_total, rev from liquidacion where id = v_l2;
   negativo_intacto := (n_monto = 800 and n_total = 800 and rev = 'pendiente');
 
-  -- (e) el ajuste bueno: $800 → $8,000, delta +7,200 sobre el total y la diferencia.
+  -- (e) el ajuste bueno: $800 → $8,000, delta +7,200 sobre el total y la
+  -- diferencia. AUDITORÍA 25 (mig. 0306): p_recalculo ya es obligatorio —
+  -- el octavo argumento es lo que `revision_recalculo.ts` arma con
+  -- `cuadrarDesdeDB` en TypeScript; aquí se le da el mismo total/diferencia
+  -- que la delta ya predice, que es justo lo que LR020 exige que coincida.
   r := revisar_liquidacion(v_t, v_l2, 'ajustar', 'el ticket dice 8,000, el OCR leyó 800',
-    jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', 8000)), v_u, null);
+    jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', 8000)), v_u, null,
+    jsonb_build_object(
+      'totalComprobado', 8000, 'diferencia', -3000, 'estatus', 'con_diferencias',
+      'diferencias', '[]'::jsonb, 'iepsAcreditable', 0, 'litrosDieselAcreditables', 0,
+      'ivaAcreditable', 1200, 'peajeAcreditable', 0
+    ));
   select monto into n_monto from gasto where id = v_g;
   select total_comprobado, diferencia, revision into n_total, n_dif, rev from liquidacion where id = v_l2;
   ajustada := (rev = 'ajustada' and jsonb_array_length((select ajustes from liquidacion where id = v_l2)) = 1);
@@ -17075,4 +17089,100 @@ begin
 
   raise exception E'LLM_COSTO_FASE_0304  existe=%  sobre-llm-costo=%  siete=%  transcripcion=%   (esperado t / t / t / t)',
     existe, sobre_tabla, siete, tiene_transcripcion;
+end $$;
+
+-- ── 251. Ajustar EXIGE y USA el recálculo del motor — no una delta a mano sobre el desglose (mig. 0306, AUDITORÍA 25 BE-C1a/BE-C1b/DATOS-C1) ──
+--
+-- Hasta la 0306, `revisar_liquidacion(..., 'ajustar')` movía `total_comprobado`
+-- y `diferencia` por una delta aritmética y dejaba `iva_acreditable`,
+-- `ieps_acreditable`, `peaje_acreditable`, `litros_diesel_acreditables`,
+-- `diferencias` y `estatus` con la cifra de ANTES del ajuste — la póliza
+-- contable de `poliza.ts` ya había declarado esa divergencia como «un IVA no
+-- acreditable inventado», y el PDF archivado se quedaba con el número viejo.
+--
+-- Lo que este bloque asevera, todo contra Postgres real:
+--   (a) ajustar SIN el octavo argumento (`p_recalculo`) rebota (LR021): la
+--       RPC ya no acepta un ajuste sin el recálculo completo del motor;
+--   (b) un `p_recalculo` cuyo `totalComprobado` NO coincide con la delta que
+--       la propia RPC acaba de aplicar rebota (LR020) y NO deja NADA
+--       movido — ni el monto del gasto, ni una sola columna de la
+--       liquidación: la RPC es transaccional, un rebote no dejä a medias;
+--   (c) un ajuste BUENO sustituye TODO el desglose por el recálculo —no solo
+--       total_comprobado/diferencia— incluidas las cifras que antes se
+--       quedaban con el valor viejo;
+--   (d) `pdf_historial` nace `[]` y `agregar_pdf_historial` le empuja
+--       entradas con `||` sin pisar lo que ya había.
+-- Esperado: AJUSTAR_RECALCULO_0306  sin-recalculo-rebota=t  mismatch-rebota=t  mismatch-nada-movido=t  bueno-total=t  bueno-iva=t  bueno-ieps=t  bueno-peaje=t  bueno-litros=t  bueno-estatus=t  bueno-diferencias=t  historial-nace-vacio=t  historial-acumula=t
+do $$
+declare
+  v_t uuid; v_u uuid := gen_random_uuid(); v_o uuid;
+  v_v uuid; v_l uuid; v_g uuid;
+  r jsonb;
+  sin_recalculo_rebota boolean := false; mismatch_rebota boolean := false; mismatch_nada_movido boolean := false;
+  bueno_total boolean := false; bueno_iva boolean := false; bueno_ieps boolean := false;
+  bueno_peaje boolean := false; bueno_litros boolean := false; bueno_estatus boolean := false; bueno_diferencias boolean := false;
+  historial_nace_vacio boolean := false; historial_acumula boolean := false;
+  n_monto numeric; n_total numeric; n_iva numeric; n_ieps numeric; n_peaje numeric; n_litros numeric;
+  n_estatus text; n_diferencias jsonb; n_hist jsonb;
+  recalculo_bueno jsonb := jsonb_build_object(
+    'totalComprobado', 8000, 'diferencia', -3000, 'estatus', 'con_diferencias',
+    'diferencias', '[{"tipo":"sobre_politica"}]'::jsonb, 'iepsAcreditable', 15.5,
+    'litrosDieselAcreditables', 42.123, 'ivaAcreditable', 1200.75, 'peajeAcreditable', 60
+  );
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF AJUSTAR RECALCULO 0306') returning id into v_t;
+  insert into app_user (id, tenant_id, email, rol) values (v_u, v_t, 'zzz-recalculo-0306@likida.test', 'flota_admin');
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P1', '520000009920') returning id into v_o;
+  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o, 'RC-1', 5000) returning id into v_v;
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v, 'diesel', 800) returning id into v_g;
+  -- Con desglose VIEJO ya asentado, para comprobar que el ajuste lo SUSTITUYE
+  -- (y no solo mueve total_comprobado/diferencia, que es el bug que cierra).
+  v_l := guardar_liquidacion_tx(v_t, v_v, 800, 5000, 4200, 'revisar', '[{"tipo":"sobre_tope"}]'::jsonb, 3, 9, 5, null, 7);
+
+  historial_nace_vacio := (select pdf_historial = '[]'::jsonb from liquidacion where id = v_l);
+
+  -- (a) sin p_recalculo.
+  begin
+    perform revisar_liquidacion(v_t, v_l, 'ajustar', 'sin recálculo a propósito',
+      jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', 8000)), v_u, null);
+  exception when sqlstate 'LR021' then sin_recalculo_rebota := true;
+  end;
+
+  -- (b) p_recalculo que NO coincide con la delta (800 + 7200 = 8000, no 9999).
+  begin
+    perform revisar_liquidacion(v_t, v_l, 'ajustar', 'recálculo que no cuadra',
+      jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', 8000)), v_u, null,
+      jsonb_build_object('totalComprobado', 9999, 'diferencia', -1799, 'estatus', 'con_diferencias',
+        'diferencias', '[]'::jsonb, 'iepsAcreditable', 0, 'litrosDieselAcreditables', 0, 'ivaAcreditable', 0, 'peajeAcreditable', 0));
+  exception when sqlstate 'LR020' then mismatch_rebota := true;
+  end;
+  select monto into n_monto from gasto where id = v_g;
+  select total_comprobado into n_total from liquidacion where id = v_l;
+  mismatch_nada_movido := (n_monto = 800 and n_total = 800);
+
+  -- (c) el ajuste bueno: el desglose ENTERO se sustituye por el recálculo.
+  r := revisar_liquidacion(v_t, v_l, 'ajustar', 'el ticket dice 8,000',
+    jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', 8000)), v_u, null, recalculo_bueno);
+  select total_comprobado, iva_acreditable, ieps_acreditable, peaje_acreditable,
+         litros_diesel_acreditables, estatus, diferencias
+    into n_total, n_iva, n_ieps, n_peaje, n_litros, n_estatus, n_diferencias
+    from liquidacion where id = v_l;
+  bueno_total := (n_total = 8000 and (r ->> 'total_comprobado')::numeric = 8000);
+  bueno_iva := (n_iva = 1200.75);
+  bueno_ieps := (n_ieps = 15.5);
+  bueno_peaje := (n_peaje = 60);
+  bueno_litros := (n_litros = 42.123);
+  bueno_estatus := (n_estatus = 'con_diferencias');
+  bueno_diferencias := (n_diferencias = '[{"tipo":"sobre_politica"}]'::jsonb);
+
+  -- (d) pdf_historial acumula con `||`, sin pisar lo que ya había.
+  perform agregar_pdf_historial(v_t, v_l, jsonb_build_object('url', 't1/x-ajustada-1.pdf', 'archivadaEn', now()));
+  perform agregar_pdf_historial(v_t, v_l, jsonb_build_object('url', 't1/x-ajustada-2.pdf', 'archivadaEn', now()));
+  select pdf_historial into n_hist from liquidacion where id = v_l;
+  historial_acumula := (jsonb_array_length(n_hist) = 2
+    and n_hist -> 0 ->> 'url' = 't1/x-ajustada-1.pdf' and n_hist -> 1 ->> 'url' = 't1/x-ajustada-2.pdf');
+
+  raise exception E'AJUSTAR_RECALCULO_0306  sin-recalculo-rebota=%  mismatch-rebota=%  mismatch-nada-movido=%  bueno-total=%  bueno-iva=%  bueno-ieps=%  bueno-peaje=%  bueno-litros=%  bueno-estatus=%  bueno-diferencias=%  historial-nace-vacio=%  historial-acumula=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t)',
+    sin_recalculo_rebota, mismatch_rebota, mismatch_nada_movido, bueno_total, bueno_iva, bueno_ieps,
+    bueno_peaje, bueno_litros, bueno_estatus, bueno_diferencias, historial_nace_vacio, historial_acumula;
 end $$;

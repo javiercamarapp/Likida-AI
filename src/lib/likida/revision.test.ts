@@ -21,12 +21,17 @@ vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 interface Consulta {
   tabla: string; select: string; opciones: Record<string, unknown> | undefined;
   eq: Array<[string, unknown]>; gte: Array<[string, unknown]>; lte: Array<[string, unknown]>;
-  or: string | null; orden: Array<[string, boolean]>; rango: [number, number] | null;
+  or: string | null; orden: Array<[string, boolean]>; rango: [number, number] | null; single: boolean;
 }
 const consultas: Consulta[] = [];
 let filasBase: Array<Record<string, unknown>> = [];
 let conteoBase: number | null = 0;
 let errorBase: { message: string } | null = null;
+// AUDITORÍA 25 (BE-C1a/BE-C1b): `viajeIdDeLiquidacion` lee UNA fila con
+// `.maybeSingle()` — distinto de `colaRevision`, que lee un arreglo con
+// `.range()`. `filasBase`/`conteoBase` siguen siendo la lista; esto es
+// SOLO lo que una consulta `.maybeSingle()` debe devolver.
+let filaSingle: Record<string, unknown> | null = null;
 
 const rpc = vi.fn();
 
@@ -34,7 +39,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     rpc,
     from: (tabla: string) => {
-      const c: Consulta = { tabla, select: '', opciones: undefined, eq: [], gte: [], lte: [], or: null, orden: [], rango: null };
+      const c: Consulta = { tabla, select: '', opciones: undefined, eq: [], gte: [], lte: [], or: null, orden: [], rango: null, single: false };
       consultas.push(c);
       const b: Record<string, unknown> = {};
       Object.assign(b, {
@@ -45,9 +50,10 @@ vi.mock('@/lib/supabase/admin', () => ({
         or: (f: string) => { c.or = f; return b; },
         order: (col: string, o?: { ascending?: boolean }) => { c.orden.push([col, o?.ascending !== false]); return b; },
         range: (d: number, h: number) => { c.rango = [d, h]; return b; },
-        maybeSingle: () => b,
+        maybeSingle: () => { c.single = true; return b; },
         then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) => {
           if (errorBase) return Promise.resolve({ data: null, error: errorBase, count: null }).then(res, rej);
+          if (c.single) return Promise.resolve({ data: filaSingle, error: null, count: null }).then(res, rej);
           const [d, h] = c.rango ?? [0, filasBase.length - 1];
           return Promise.resolve({ data: filasBase.slice(d, h + 1), error: null, count: conteoBase }).then(res, rej);
         },
@@ -55,6 +61,13 @@ vi.mock('@/lib/supabase/admin', () => ({
       return b;
     },
   }),
+}));
+
+const recalcularParaAjuste = vi.fn();
+const regenerarPdfTrasAjuste = vi.fn();
+vi.mock('./revision_recalculo', () => ({
+  recalcularParaAjuste: (...a: unknown[]) => recalcularParaAjuste(...a),
+  regenerarPdfTrasAjuste: (...a: unknown[]) => regenerarPdfTrasAjuste(...a),
 }));
 
 const {
@@ -75,8 +88,12 @@ beforeEach(() => {
   filasBase = [];
   conteoBase = 0;
   errorBase = null;
+  filaSingle = null;
   rpc.mockReset();
   sendText.mockClear();
+  recalcularParaAjuste.mockReset();
+  regenerarPdfTrasAjuste.mockReset();
+  regenerarPdfTrasAjuste.mockResolvedValue({ regenerado: true });
 });
 
 describe('los filtros de la URL', () => {
@@ -191,16 +208,90 @@ describe('revisarLiquidacion', () => {
     const r = await revisarLiquidacion({ tenantId: 't', liquidacionId: U(1), accion: 'aprobar', actor });
     expect(rpc).toHaveBeenCalledWith('revisar_liquidacion', {
       p_tenant: 't', p_liquidacion: U(1), p_accion: 'aprobar', p_motivo: null, p_ajustes: null, p_actor: U(77), p_actor_email: 'contralor@flota.mx',
+      p_recalculo: null,
     });
     expect(r).toMatchObject({ revision: 'aprobada', folio: 'F-9', totalComprobado: 4200, diferencia: 800, ajustes: [], choferAvisado: null });
     expect(sendText).not.toHaveBeenCalled();
   });
 
-  it('ajustar manda los ajustes y trae la delta aplicada', async () => {
-    rpc.mockResolvedValueOnce({ data: { revision: 'ajustada', viaje_id: U(9), folio: 'F-9', total_comprobado: 8000, diferencia: -3000, ajustes: [{ gasto_id: U(3), concepto: 'diesel', monto_anterior: 800, monto_nuevo: 8000 }] }, error: null });
+  // ── AUDITORÍA 25, BE-C1a/BE-C1b/DATOS-C1 (CRÍTICO) ────────────────────────
+  const RECALCULO = {
+    totalComprobado: 8000, diferencia: -3000, estatus: 'con_diferencias',
+    diferencias: [{ tipo: 'sobre_politica' }], iepsAcreditable: 10, litrosDieselAcreditables: 120,
+    ivaAcreditable: 1200, peajeAcreditable: 50,
+  };
+  const CUADRE_RECALCULADO = { ...RECALCULO, viajeId: U(9), totalAnticipo: 5000, gastos: [], totalDeducible: 0, totalNoDeducible: 0, totalPorConfirmar: 0 };
+
+  it('ajustar RECALCULA el motor sobre los gastos vivos ANTES de llamar a la RPC, y manda el recálculo como p_recalculo', async () => {
+    filaSingle = { viaje_id: U(9) };
+    recalcularParaAjuste.mockResolvedValueOnce({ recalculo: RECALCULO, cuadre: CUADRE_RECALCULADO });
+    rpc.mockResolvedValueOnce({
+      data: {
+        revision: 'ajustada', viaje_id: U(9), folio: 'F-9', total_comprobado: 8000, diferencia: -3000,
+        ajustes: [{ gasto_id: U(3), concepto: 'diesel', monto_anterior: 800, monto_nuevo: 8000 }],
+        revisada_por_email: 'contralor@flota.mx', revisada_en: '2026-09-03T10:00:00Z',
+      },
+      error: null,
+    });
     const r = await revisarLiquidacion({ tenantId: 't', liquidacionId: U(1), accion: 'ajustar', motivo: 'el ticket dice 8,000', ajustes: [{ gastoId: U(3), montoNuevo: 8000 }], actor });
-    expect(rpc.mock.calls[0][1]).toMatchObject({ p_accion: 'ajustar', p_motivo: 'el ticket dice 8,000', p_ajustes: [{ gastoId: U(3), montoNuevo: 8000 }] });
+
+    // El recálculo se pidió ANTES de la RPC (viajeId resuelto por fuera) y con
+    // los MISMOS ajustes que se le mandan a la base.
+    expect(recalcularParaAjuste).toHaveBeenCalledWith('t', U(9), [{ gastoId: U(3), montoNuevo: 8000 }]);
+    expect(rpc.mock.calls[0][1]).toMatchObject({
+      p_accion: 'ajustar', p_motivo: 'el ticket dice 8,000', p_ajustes: [{ gastoId: U(3), montoNuevo: 8000 }],
+      p_recalculo: RECALCULO,
+    });
     expect(r.ajustes).toEqual([{ gastoId: U(3), concepto: 'diesel', montoAnterior: 800, montoNuevo: 8000 }]);
+
+    // Y DESPUÉS de que la base confirmó, se regenera el papel con el MISMO
+    // cuadre recalculado y el sello de quién/cuándo firmó — no un `now()` a
+    // ciegas ni el actor que LLEGÓ (el que la RPC resolvió puede ser otro).
+    expect(regenerarPdfTrasAjuste).toHaveBeenCalledWith('t', U(9), U(1), CUADRE_RECALCULADO, 'contralor@flota.mx', '2026-09-03T10:00:00Z');
+  });
+
+  it('sin liquidación que resolver, ni el recálculo ni la RPC se llaman — no se gasta el motor para nada', async () => {
+    filaSingle = null; // viajeIdDeLiquidacion no encuentra la fila
+    await expect(revisarLiquidacion({
+      tenantId: 't', liquidacionId: U(1), accion: 'ajustar', motivo: 'x', ajustes: [{ gastoId: U(3), montoNuevo: 100 }], actor,
+    })).rejects.toThrow(DatoInvalido);
+    expect(recalcularParaAjuste).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('si el recálculo del motor falla, la RPC nunca se llama — no se ajusta con un desglose que no se pudo calcular', async () => {
+    filaSingle = { viaje_id: U(9) };
+    recalcularParaAjuste.mockRejectedValueOnce(new Error('el comprobante no es de este viaje'));
+    await expect(revisarLiquidacion({
+      tenantId: 't', liquidacionId: U(1), accion: 'ajustar', motivo: 'x', ajustes: [{ gastoId: U(3), montoNuevo: 100 }], actor,
+    })).rejects.toThrow(/el comprobante no es de este viaje/);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('un PDF que no se pudo regenerar no tumba el ajuste YA firme en la base — se dice, no se revierte', async () => {
+    filaSingle = { viaje_id: U(9) };
+    recalcularParaAjuste.mockResolvedValueOnce({ recalculo: RECALCULO, cuadre: CUADRE_RECALCULADO });
+    regenerarPdfTrasAjuste.mockResolvedValueOnce({ regenerado: false });
+    rpc.mockResolvedValueOnce({
+      data: { revision: 'ajustada', viaje_id: U(9), folio: 'F-9', total_comprobado: 8000, diferencia: -3000, ajustes: [] },
+      error: null,
+    });
+    const r = await revisarLiquidacion({ tenantId: 't', liquidacionId: U(1), accion: 'ajustar', motivo: 'x', ajustes: [{ gastoId: U(3), montoNuevo: 8000 }], actor });
+    expect(r.revision).toBe('ajustada');
+  });
+
+  it('LR020 (el recálculo no coincide con el ajuste — una carrera) sale como mensaje para la persona; LR021 (recálculo faltante) es falla del sistema', async () => {
+    filaSingle = { viaje_id: U(9) };
+    recalcularParaAjuste.mockResolvedValue({ recalculo: RECALCULO, cuadre: CUADRE_RECALCULADO });
+
+    rpc.mockResolvedValueOnce({ data: null, error: { code: 'LR020', message: 'el recálculo no coincide con el ajuste aplicado: vuelve a intentar' } });
+    await expect(revisarLiquidacion({ tenantId: 't', liquidacionId: U(1), accion: 'ajustar', motivo: 'x', ajustes: [{ gastoId: U(3), montoNuevo: 100 }], actor }))
+      .rejects.toThrow(/vuelve a intentar/);
+
+    rpc.mockResolvedValueOnce({ data: null, error: { code: 'LR021', message: 'ajustar exige el recálculo del motor' } });
+    const e = await revisarLiquidacion({ tenantId: 't', liquidacionId: U(1), accion: 'ajustar', motivo: 'x', ajustes: [{ gastoId: U(3), montoNuevo: 100 }], actor }).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(Error);
+    expect(e).not.toBeInstanceOf(DatoInvalido);
   });
 
   it('rechazar avisa al chofer DESPUÉS de que la base confirmó, con el folio y el motivo y sin cifras', async () => {
