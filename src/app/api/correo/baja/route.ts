@@ -1,5 +1,6 @@
 import { verificarBaja } from '@/lib/correo/baja';
 import { suprimirCorreo } from '@/lib/likida/agentes/enviador';
+import { borrarDatosPersonaPorBajaPorCorreo } from '@/lib/correo/respuesta_campana';
 import { esc } from '@/lib/correo/plantilla';
 import { logger } from '@/lib/logger';
 
@@ -85,6 +86,10 @@ export async function POST(req: Request) {
   }
   try {
     await suprimirCorreo(correo, 'baja solicitada por liga de correo (un clic)');
+    // AUDITORÍA 25 (ALTO): esta vía hacía lo mismo que `respuesta_campana.ts`
+    // hacía ANTES del arreglo — suprimir y nada más. Ahora borra los mismos
+    // datos de persona que borraría una respuesta de correo con BAJA.
+    await borrarDatosPersonaPorBajaPorCorreo(correo);
   } catch (e) {
     // `suprimirCorreo` ya atrapa y registra sus propios errores (best-effort,
     // nunca lanza) — este catch es una segunda red por si acaso, no la
