@@ -1,41 +1,38 @@
-fecha_corrida: 2026-09-02 (miércoles)
-ultimo_dia_barrido: 2026-08-30 (sin avance — el rango debido hoy, 31-ago a
-  01-sep, no se pudo barrer por bloqueo de egress; ver estado)
-rango_debido: 31-ago-2026 (lunes) a 01-sep-2026 (martes) — 2 días, no barridos
-notas_revisadas: 0
-notas_por_edicion: no_aplica — bloqueo de red impidió cualquier consulta
+fecha_corrida: 2026-09-02 (miércoles, 21:30)
+ultimo_dia_barrido: 2026-09-02 (matutina; vespertina no publicada hoy —
+  confirmado por diarios/porFecha, no es fallo de infra)
+rango_barrido: 2026-08-31..2026-09-02 (3 días; cierra el backlog que las dos
+  corridas previas —lunes 31-ago y hoy temprano, 09:52— no pudieron barrer
+  por egress bloqueado en la sesión de nube)
+notas_revisadas: 244 (31-ago: 68 [mat 2ª pág + ves], 01-sep: 108 [mat], 02-sep:
+  68 [mat]) — recuento por 'titulo' en el JSON de cada fecha, cruzado contra
+  diarios/porFecha para confirmar ediciones reales (31-ago: mat+ves; 01 y
+  02-sep: solo mat, ves null en ambos días vía porFecha)
+estado: "OK — egress disponible en esta sesión local (a diferencia de las dos
+  corridas en la nube del 31-ago y de esta mañana 02-sep, ambas
+  EGRESS_BLOCKED). Backlog de 3 días cerrado en un solo barrido."
 fichas_disparadas: 0
-etag_sat: no_aplica_hoy (hoy es MIÉRCOLES, no lunes; el chequeo semanal no
-  corresponde a esta corrida)
-deriva_ley_check: no_aplica (no es día 1 de trimestre)
-estado: "INFRA egress bloqueado — confirmado por DOS vías independientes:
-  curl directo devolvió 'CONNECT tunnel failed, response 403' contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha), y el estado del proxy
-  (__agentproxy/status) registra 'connect_rejected: gateway answered 403 to
-  CONNECT (policy denial or upstream failure)' para ese host. La
-  herramienta WebFetch devolvió por separado EGRESS_BLOCKED para el mismo
-  dominio. Cero acceso a sidofqa.segob.gob.mx desde esta sesión de nube; no
-  se llegó a probar sat.gob.mx ni diputados.gob.mx porque hoy no tocaban
-  (no es lunes ni día 1 de trimestre), pero el latido anterior
-  (2026-08-31) ya había reportado el mismo bloqueo también contra
-  www.sat.gob.mx. Van al menos DOS corridas consecutivas (31-ago y 02-sep)
-  con el barrido diario del DOF completamente inoperante por política de
-  red del entorno, no por caída del SIDOF."
+falsos_positivos_revisados: >
+  Diccionario disparó por substring en 3 fechas ('UMA' dentro de 'DERECHOS
+  HUMANOS' y en campos JSON ajenos, 'IVA' dentro de 'federativas',
+  'administrativo', 'efectivas', etc., 'LIF' dentro de 'simplificación').
+  Un hit real de 'Fe de erratas' (31-ago, codNota 5797558) es sobre el
+  Programa Nacional de Seguridad Pública 2026-2030, ajeno al dominio. Un hit
+  real de 'datos personales' (31-ago, codNota 5797491) son lineamientos de
+  transparencia INTERNOS de la Autoridad Garante del Tribunal Electoral/TDJ/
+  OAJ — no modifica LFPDPPP, no aplica a las fichas lfpdppp-*. Sin cuota
+  IEPS diésel nueva: no hubo viernes en el rango (la de 28-ago, vigencia
+  29ago-4sep, ya está capturada desde el commit c7c3d1ce).
+etag_sat: no_recheck — próxima ventana lunes 07-sep-2026
+deriva_ley_check: no_aplica — no es día 1 de trimestre
 sin_verificar_esta_corrida: >
-  Las notas del DOF del 31-ago y 01-sep (2 días, 3 ediciones cada uno):
-  bloqueado por egress. Las 34 fichas de normas/*.yaml no se releyeron
-  contra fuente primaria porque no se pudo bajar ni una nota. ETag del SAT
-  y deriva de ley: no correspondían a esta corrida (no es lunes / no es
-  día 1 de trimestre), pero siguen sin verificarse desde que existe la
-  rutina.
+  ETag del minisitio SAT sin chequear esta semana (ventana es lunes). Las 34
+  fichas de normas/*.yaml no se releyeron contra fuente primaria completa —
+  esta rutina solo marca contradicho si el barrido diario choca con una.
 accion_requerida: >
-  Repetido y ahora confirmado en dos corridas: esta sesión de nube no tiene
-  salida a sidofqa.segob.gob.mx (403 CONNECT del proxy de salida, y
-  EGRESS_BLOCKED de WebFetch). Sin acceso a ese dominio, NINGUNA parte de
-  esta rutina puede correr — ni el barrido diario, ni el chequeo semanal
-  del SAT, ni la deriva trimestral. Hace falta que un administrador agregue
-  sidofqa.segob.gob.mx (y www.sat.gob.mx, diputados.gob.mx cuando toque) a
-  la política de salida de las sesiones de nube programadas, o mover esta
-  rutina a un entorno con ese egress. Mientras tanto, las 34 fichas de
-  normas/ llevan acumulando días sin ninguna verificación real contra
-  fuente primaria.
+  Van ya varias corridas programadas en la nube (31-ago, 02-sep temprano)
+  bloqueadas por egress y cerradas manualmente desde sesión local en el
+  mismo día o al siguiente. Sigue pendiente decidir si la cadencia diaria
+  de esta rutina se ancla a un entorno con egress garantizado a
+  sidofqa.segob.gob.mx, o si un admin agrega ese host a la allowlist de
+  las sesiones de nube programadas.
