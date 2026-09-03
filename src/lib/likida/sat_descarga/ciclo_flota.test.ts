@@ -63,7 +63,7 @@ vi.mock('@/lib/supabase/admin', () => ({
         eq: (c: string, v: unknown) => { op.filtros[c] = v; return cadena(); },
         in: (c: string, v: unknown) => { op.filtros[c] = v; return cadena(); },
         is: (c: string, v: unknown) => { op.filtros[c] = v; return cadena(); },
-        gte: cadena, lte: cadena, order: cadena, limit: cadena,
+        gte: cadena, lte: cadena, order: cadena, limit: cadena, range: cadena,
         single: cadena, maybeSingle: cadena,
         then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
           Promise.resolve(manejar(op)).then(res, rej),

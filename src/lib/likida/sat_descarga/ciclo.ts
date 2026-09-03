@@ -21,6 +21,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
+import { traerTodo, conteo } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
 import type { Gasto } from '@/types/likida';
@@ -160,24 +161,39 @@ export function rangoPendiente(
   return { desde, hasta: tope < hoy ? tope : hoy };
 }
 
-/** Los gastos de la flota que TODAVÍA no tienen comprobante — el fondo contra
- *  el que se cruza. Se acota por fecha alrededor del rango bajado: cruzar
- *  contra el histórico entero sería lento y no más correcto (el CFDI y su
- *  ticket son del mismo periodo). */
-async function gastosSinCfdi(tenantId: string, desde: string, hasta: string): Promise<Gasto[]> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('gasto')
-    .select('id, concepto, monto, fecha, rfc_emisor, cfdi_uuid, ocr_extra')
-    .eq('tenant_id', tenantId)
-    .is('cfdi_uuid', null)
-    // Un día de holgura a cada lado: la fecha del ticket (OCR) y la del
-    // timbrado pueden diferir en uno, igual que en la conciliación de
-    // consolidados (VENTANA_DIAS_FECHA, 0076).
-    .gte('fecha', sumarDias(desde, -1))
-    .lte('fecha', sumarDias(hasta, 1))
-    .limit(5000), 'sat_descarga.gastos_sin_cfdi');
-  if (error) throw new Error(`gastosSinCfdi: ${error.message}`);
-  return (data ?? []).map((r) => ({
+/**
+ * Los gastos de la flota que TODAVÍA no tienen comprobante — el fondo contra
+ * el que se cruza. Se acota por fecha alrededor del rango bajado: cruzar
+ * contra el histórico entero sería lento y no más correcto (el CFDI y su
+ * ticket son del mismo periodo).
+ *
+ * AUDITORÍA 25, MEDIO (REND-A5): era `.limit(5000)`, que PostgREST recorta a
+ * 1,000 en silencio (`pg.ts:38-48`). Con una flota de 100 unidades y ~2,000
+ * gastos sin comprobante en el mes, `decidirCruce` solo veía la mitad del
+ * fondo: los CFDI cuyo ticket cayó fuera del corte se marcaban `disponible`
+ * en vez de `casado`, y el sello de dedup impide una segunda oportunidad
+ * automática. `traerTodo` trae el fondo COMPLETO o lanza.
+ */
+export async function gastosSinCfdi(tenantId: string, desde: string, hasta: string): Promise<Gasto[]> {
+  const data = await traerTodo<{
+    id: string; concepto: unknown; monto: unknown; fecha: unknown;
+    rfc_emisor: unknown; cfdi_uuid: unknown; ocr_extra: unknown;
+  }>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('gasto')
+      .select('id, concepto, monto, fecha, rfc_emisor, cfdi_uuid, ocr_extra', conteo(d))
+      .eq('tenant_id', tenantId)
+      .is('cfdi_uuid', null)
+      // Un día de holgura a cada lado: la fecha del ticket (OCR) y la del
+      // timbrado pueden diferir en uno, igual que en la conciliación de
+      // consolidados (VENTANA_DIAS_FECHA, 0076).
+      .gte('fecha', sumarDias(desde, -1))
+      .lte('fecha', sumarDias(hasta, 1))
+      .order('id')
+      .range(d, h), 'sat_descarga.gastos_sin_cfdi'),
+    'sat_descarga.gastos_sin_cfdi',
+  );
+  return data.map((r) => ({
     id: r.id as string,
     concepto: r.concepto as Gasto['concepto'],
     monto: Number(r.monto),
