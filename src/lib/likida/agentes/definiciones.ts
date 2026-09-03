@@ -171,27 +171,3 @@ export async function darDeAltaAgente(v: DefinicionValida, actorId: string): Pro
     { evento: 'agentes.bitacora_no_escribio', contexto: { agente: v.id } },
   );
 }
-
-/**
- * Gradúa un agente `experimental`: quita la marca para que el runner
- * empiece a despacharlo (candado 2 de `runner.ts`). Antes de esta función
- * graduar era un `UPDATE` a mano contra la base — sin registro, sin
- * bitácora, y sin el candado de "el id existe de verdad" que sí tiene
- * `darDeAltaAgente`. LANZA si el id no está en el catálogo: graduar algo
- * que no existe sería una fila fantasma en la bitácora.
- */
-export async function graduarAgente(id: string, actorId: string): Promise<void> {
-  const { data, error } = await supabaseAdmin().from('agente_definicion')
-    .update({ experimental: false })
-    .eq('id', id)
-    .select('id')
-    .maybeSingle();
-  if (error) throw new Error(`graduarAgente: ${error.message}`);
-  if (!data) throw new DatoInvalido(`No existe ningún agente con el id "${id}" — no hay qué graduar.`);
-  // Best-effort, mismo criterio que darDeAltaAgente: la graduación YA
-  // quedó; perder la anotación es mejor que deshacerla.
-  await anotarBitacora(
-    { tenantId: null, actor: { id: actorId }, accion: 'agente.graduado', entidad: 'agente_definicion', entidadId: id, detalle: {} },
-    { evento: 'agentes.bitacora_no_escribio', contexto: { agente: id } },
-  );
-}
