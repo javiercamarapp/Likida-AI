@@ -17,6 +17,13 @@ describe('OP-P1: [deploy] con la base atrás NO construye, y dice qué aplicar',
     expect(v.motivo).toContain('faltan 5 migración(es) (0272..0276)');
   });
 
+  it('atrás = 1 — el único caso que ocurre en la vida real (auditoría 25, PRU-MEDIO REINCIDENTE): bloquea igual', () => {
+    const v = decidir({ asunto: 'chore: migración suelta [deploy]', codigo: '0304', health: sana('0303') });
+    expect(v.construir).toBe(false);
+    expect(v.nivel).toBe('error');
+    expect(v.motivo).toContain('faltan 1 migración(es) (0304..0304)');
+  });
+
   it('a la par: construye', () => {
     const v = decidir({ asunto: 'chore: algo [deploy]', codigo: '0276', health: sana('0276') });
     expect(v).toMatchObject({ construir: true, nivel: 'ok' });

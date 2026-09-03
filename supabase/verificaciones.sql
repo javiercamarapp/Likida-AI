@@ -2752,14 +2752,26 @@ end $$;
 --
 -- Corrida REAL, salida copiada tal cual:
 --
---   50  candado-borrado-con-el-viaje=0
---       constraints: viaje_ingreso_no_negativo=true  viaje_km_sanos=true
+--   50  candado-borrado-con-el-viaje=0  viaje_ingreso_no_negativo=t  viaje_km_sanos=t
 --       FALSIFICADO sin FK: candado-huerfano-que-queda-para-siempre=1
 --       FALSIFICADO not-valid: viaje_km_sanos.convalidated=f
+--
+-- PRU-ALTO1 (auditoría 25): el `raise` original metía las tres mediciones
+-- reales Y las dos de FALSIFICACIÓN en un solo `%` de texto (`validadas`,
+-- concatenado a mano) con CUATRO grupos `(esperado …)` intercalados —el único
+-- bloque de los 226 con más de uno—. El calificador solo lee el PRIMER
+-- `(esperado`: el resto del mensaje, con espacios adentro, se leía como un
+-- comodín de prosa y pasaba «✓ ok» con las cuatro mediciones mal (medido
+-- contra Postgres real). Reescrito a la forma que usan los otros 17 bloques
+-- con FALSIFICACIÓN (45, 48, 49, 52, …): cada valor real en su propio `%`,
+-- un solo `(esperado …)` al final, y la sección `FALSIFICADO` narrativa
+-- ANTES de él (el calificador la recorta a propósito — no es una aserción,
+-- es la prueba de que la detección funciona).
 
 do $$
 declare
-  t uuid; o uuid; v uuid; quedan int; quedan_sin_fk int; validadas text; tras_falsificar bool;
+  t uuid; o uuid; v uuid; quedan int; quedan_sin_fk int;
+  ing_no_negativo bool; km_sanos bool; tras_falsificar bool;
 begin
   insert into tenant(nombre) values ('ZZZ VERIF B50 '||gen_random_uuid()) returning id into t;
   insert into operador(tenant_id,nombre,telefono) values (t,'Op','5215500002001') returning id into o;
@@ -2769,9 +2781,10 @@ begin
   delete from viaje where id = v;
   select count(*) into quedan from viaje_lock where viaje_id = v;
 
-  select coalesce(string_agg(conname||'='||convalidated::text, '  '), '—') into validadas
-    from pg_constraint
-   where conrelid='viaje'::regclass and conname in ('viaje_ingreso_no_negativo','viaje_km_sanos');
+  select convalidated into ing_no_negativo from pg_constraint
+   where conrelid='viaje'::regclass and conname='viaje_ingreso_no_negativo';
+  select convalidated into km_sanos from pg_constraint
+   where conrelid='viaje'::regclass and conname='viaje_km_sanos';
 
   -- ═══ FALSIFICACIÓN 1: sin la FK, el candado sobrevive al viaje ═══
   alter table viaje_lock drop constraint viaje_lock_viaje_id_fkey;
@@ -2787,8 +2800,8 @@ begin
   select convalidated into tras_falsificar from pg_constraint
    where conrelid='viaje'::regclass and conname='viaje_km_sanos';
 
-  raise exception E'50  candado-borrado-con-el-viaje=%  (esperado 0)\n    constraints: %  (esperado las dos =true)\n    FALSIFICADO sin FK: candado-huerfano-que-queda-para-siempre=%  (esperado 1)\n    FALSIFICADO not-valid: viaje_km_sanos.convalidated=%  (esperado f)',
-    quedan, validadas, quedan_sin_fk, tras_falsificar;
+  raise exception E'50  candado-borrado-con-el-viaje=%  viaje_ingreso_no_negativo=%  viaje_km_sanos=%\n    FALSIFICADO sin FK: candado-huerfano-que-queda-para-siempre=%\n    FALSIFICADO not-valid: viaje_km_sanos.convalidated=%\n    (esperado 0 / t / t)',
+    quedan, ing_no_negativo, km_sanos, quedan_sin_fk, tras_falsificar;
 end $$;
 
 -- ── 51. El desglose de la mensualidad no se puede desincronizar (mig. 0066) ──

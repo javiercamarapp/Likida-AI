@@ -21,7 +21,8 @@ vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 interface Consulta {
   tabla: string; select: string; opciones: Record<string, unknown> | undefined;
   eq: Array<[string, unknown]>; gte: Array<[string, unknown]>; lte: Array<[string, unknown]>;
-  or: string | null; orden: Array<[string, boolean]>; rango: [number, number] | null; single: boolean;
+  or: string | null; orden: Array<[string, boolean]>; rango: [number, number] | null;
+  unaSola: boolean;
 }
 const consultas: Consulta[] = [];
 let filasBase: Array<Record<string, unknown>> = [];
@@ -30,8 +31,9 @@ let errorBase: { message: string } | null = null;
 // AUDITORÍA 25 (BE-C1a/BE-C1b): `viajeIdDeLiquidacion` lee UNA fila con
 // `.maybeSingle()` — distinto de `colaRevision`, que lee un arreglo con
 // `.range()`. `filasBase`/`conteoBase` siguen siendo la lista; esto es
-// SOLO lo que una consulta `.maybeSingle()` debe devolver.
-let filaSingle: Record<string, unknown> | null = null;
+// SOLO lo que una consulta `.maybeSingle()` debe devolver — la misma que
+// consume `leerRevision` (PRU-ALTO2/PRU-MEDIO).
+let filaUnica: Record<string, unknown> | null = null;
 
 const rpc = vi.fn();
 
@@ -39,7 +41,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     rpc,
     from: (tabla: string) => {
-      const c: Consulta = { tabla, select: '', opciones: undefined, eq: [], gte: [], lte: [], or: null, orden: [], rango: null, single: false };
+      const c: Consulta = { tabla, select: '', opciones: undefined, eq: [], gte: [], lte: [], or: null, orden: [], rango: null, unaSola: false };
       consultas.push(c);
       const b: Record<string, unknown> = {};
       Object.assign(b, {
@@ -50,10 +52,10 @@ vi.mock('@/lib/supabase/admin', () => ({
         or: (f: string) => { c.or = f; return b; },
         order: (col: string, o?: { ascending?: boolean }) => { c.orden.push([col, o?.ascending !== false]); return b; },
         range: (d: number, h: number) => { c.rango = [d, h]; return b; },
-        maybeSingle: () => { c.single = true; return b; },
+        maybeSingle: () => { c.unaSola = true; return b; },
         then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) => {
           if (errorBase) return Promise.resolve({ data: null, error: errorBase, count: null }).then(res, rej);
-          if (c.single) return Promise.resolve({ data: filaSingle, error: null, count: null }).then(res, rej);
+          if (c.unaSola) return Promise.resolve({ data: filaUnica, error: null, count: null }).then(res, rej);
           const [d, h] = c.rango ?? [0, filasBase.length - 1];
           return Promise.resolve({ data: filasBase.slice(d, h + 1), error: null, count: conteoBase }).then(res, rej);
         },
@@ -73,6 +75,7 @@ vi.mock('./revision_recalculo', () => ({
 const {
   colaRevision, leerFiltrosCola, hayFiltrosCola, codificarCursorCola, decodificarCursorCola,
   revisarLiquidacion, normalizarAjustes, textoRechazoChofer, contarPendientes, COLA_POR_PAGINA,
+  puedeFirmarLiquidacion, leerRevision,
 } = await import('./revision');
 const { DatoInvalido } = await import('./errores');
 
@@ -88,7 +91,7 @@ beforeEach(() => {
   filasBase = [];
   conteoBase = 0;
   errorBase = null;
-  filaSingle = null;
+  filaUnica = null;
   rpc.mockReset();
   sendText.mockClear();
   recalcularParaAjuste.mockReset();
@@ -194,6 +197,64 @@ describe('normalizarAjustes', () => {
   });
 });
 
+describe('puedeFirmarLiquidacion', () => {
+  it('dueño y contador firman; el jefe de tráfico y un rol desconocido, no (fallar cerrado)', () => {
+    expect(puedeFirmarLiquidacion('flota_admin')).toBe(true);
+    expect(puedeFirmarLiquidacion('contador')).toBe(true);
+    expect(puedeFirmarLiquidacion('superadmin')).toBe(true);
+    expect(puedeFirmarLiquidacion('encargado')).toBe(false);
+    expect(puedeFirmarLiquidacion('vendedor')).toBe(false);
+    expect(puedeFirmarLiquidacion('lo-que-sea')).toBe(false);
+    expect(puedeFirmarLiquidacion('')).toBe(false);
+  });
+});
+
+describe('leerRevision — firmable', () => {
+  const filaBase = {
+    revision: 'pendiente' as const, revisada_por: null, revisada_por_email: null,
+    revisada_en: null, motivo: null, ajustes: [],
+    viaje: { estatus: 'liquidado' }, revisor: null,
+  };
+
+  it('sin la liquidación, devuelve null', async () => {
+    filaUnica = null;
+    expect(await leerRevision('t-1', 'x')).toBeNull();
+  });
+
+  it('pendiente y sin firmar por nadie: firmable', async () => {
+    filaUnica = { ...filaBase, revision: 'pendiente' };
+    const r = await leerRevision('t-1', 'x');
+    expect(r?.firmable).toBe(true);
+  });
+
+  it('cuadró sola (aprobada por el motor, nadie humano firmó): firmable — la persona la puede corregir', async () => {
+    filaUnica = { ...filaBase, revision: 'aprobada', revisada_por: null, revisada_por_email: null };
+    const r = await leerRevision('t-1', 'x');
+    expect(r?.firmable).toBe(true);
+  });
+
+  it('ya la firmó una persona: NO firmable, no se firma dos veces', async () => {
+    filaUnica = {
+      ...filaBase, revision: 'ajustada', revisada_por: 'u-1',
+      revisor: { nombre: 'Contralor', email: 'c@flota.mx' },
+    };
+    const r = await leerRevision('t-1', 'x');
+    expect(r?.firmable).toBe(false);
+  });
+
+  it('firmada solo por correo (sin id de usuario): también cuenta como humana, NO firmable', async () => {
+    filaUnica = { ...filaBase, revision: 'aprobada', revisada_por: null, revisada_por_email: 'c@flota.mx' };
+    const r = await leerRevision('t-1', 'x');
+    expect(r?.firmable).toBe(false);
+  });
+
+  it('rechazada: NUNCA firmable, aunque nadie humano la haya tocado', async () => {
+    filaUnica = { ...filaBase, revision: 'rechazada', revisada_por: null, revisada_por_email: null };
+    const r = await leerRevision('t-1', 'x');
+    expect(r?.firmable).toBe(false);
+  });
+});
+
 describe('revisarLiquidacion', () => {
   const actor = { id: U(77), email: 'contralor@flota.mx' };
 
@@ -223,7 +284,7 @@ describe('revisarLiquidacion', () => {
   const CUADRE_RECALCULADO = { ...RECALCULO, viajeId: U(9), totalAnticipo: 5000, gastos: [], totalDeducible: 0, totalNoDeducible: 0, totalPorConfirmar: 0 };
 
   it('ajustar RECALCULA el motor sobre los gastos vivos ANTES de llamar a la RPC, y manda el recálculo como p_recalculo', async () => {
-    filaSingle = { viaje_id: U(9) };
+    filaUnica = { viaje_id: U(9) };
     recalcularParaAjuste.mockResolvedValueOnce({ recalculo: RECALCULO, cuadre: CUADRE_RECALCULADO });
     rpc.mockResolvedValueOnce({
       data: {
@@ -251,7 +312,7 @@ describe('revisarLiquidacion', () => {
   });
 
   it('sin liquidación que resolver, ni el recálculo ni la RPC se llaman — no se gasta el motor para nada', async () => {
-    filaSingle = null; // viajeIdDeLiquidacion no encuentra la fila
+    filaUnica = null; // viajeIdDeLiquidacion no encuentra la fila
     await expect(revisarLiquidacion({
       tenantId: 't', liquidacionId: U(1), accion: 'ajustar', motivo: 'x', ajustes: [{ gastoId: U(3), montoNuevo: 100 }], actor,
     })).rejects.toThrow(DatoInvalido);
@@ -260,7 +321,7 @@ describe('revisarLiquidacion', () => {
   });
 
   it('si el recálculo del motor falla, la RPC nunca se llama — no se ajusta con un desglose que no se pudo calcular', async () => {
-    filaSingle = { viaje_id: U(9) };
+    filaUnica = { viaje_id: U(9) };
     recalcularParaAjuste.mockRejectedValueOnce(new Error('el comprobante no es de este viaje'));
     await expect(revisarLiquidacion({
       tenantId: 't', liquidacionId: U(1), accion: 'ajustar', motivo: 'x', ajustes: [{ gastoId: U(3), montoNuevo: 100 }], actor,
@@ -269,7 +330,7 @@ describe('revisarLiquidacion', () => {
   });
 
   it('un PDF que no se pudo regenerar no tumba el ajuste YA firme en la base — se dice, no se revierte', async () => {
-    filaSingle = { viaje_id: U(9) };
+    filaUnica = { viaje_id: U(9) };
     recalcularParaAjuste.mockResolvedValueOnce({ recalculo: RECALCULO, cuadre: CUADRE_RECALCULADO });
     regenerarPdfTrasAjuste.mockResolvedValueOnce({ regenerado: false });
     rpc.mockResolvedValueOnce({
@@ -281,7 +342,7 @@ describe('revisarLiquidacion', () => {
   });
 
   it('LR020 (el recálculo no coincide con el ajuste — una carrera) sale como mensaje para la persona; LR021 (recálculo faltante) es falla del sistema', async () => {
-    filaSingle = { viaje_id: U(9) };
+    filaUnica = { viaje_id: U(9) };
     recalcularParaAjuste.mockResolvedValue({ recalculo: RECALCULO, cuadre: CUADRE_RECALCULADO });
 
     rpc.mockResolvedValueOnce({ data: null, error: { code: 'LR020', message: 'el recálculo no coincide con el ajuste aplicado: vuelve a intentar' } });
