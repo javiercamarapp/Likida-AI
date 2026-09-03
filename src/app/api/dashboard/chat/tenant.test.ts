@@ -12,12 +12,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 type Respuesta = { data: unknown; error: { message: string } | null };
 let respuesta: Respuesta = { data: null, error: null };
+/** Cuando está puesta, cada `maybeSingle()` sucesivo saca la SIGUIENTE
+ *  respuesta de la cola en vez de repetir `respuesta` — para las pruebas que
+ *  necesitan distinguir la lectura del `?tenant=` pedido de la del fallback. */
+let cola: Respuesta[] | null = null;
 
 function builder() {
   const b: Record<string, unknown> = {};
   b.select = () => b;
   b.eq = () => b;
-  b.maybeSingle = async () => respuesta;
+  b.maybeSingle = async () => (cola ? cola.shift()! : respuesta);
   return b;
 }
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => builder() }) }));
@@ -31,6 +35,7 @@ const SUPER = { userId: 'u-0', tenantId: null, rol: 'superadmin', nombre: 'Javie
 
 beforeEach(() => {
   respuesta = { data: null, error: null };
+  cola = null;
   logger.error.mockClear();
   vi.stubEnv('DEMO_TENANT_ID', 'demo-fija');
 });
@@ -48,9 +53,27 @@ describe('tenantEfectivoChat', () => {
     expect(await tenantEfectivoChat(SUPER, 't-b')).toEqual({ tenantId: 't-b', nombreFlota: 'Flota B' });
   });
 
-  it('un uuid que simplemente NO existe sigue cayendo al de la sesión: eso es un enlace viejo, no una caída', async () => {
+  // MEDIO (auditoría 25): un uuid de `?tenant=` que no existe cae al tenant de
+  // la sesión — pero ese fallback pasa por la MISMA validación de existencia
+  // que la rama `else`. ANTES esta prueba fijaba lo contrario (`tenantId:
+  // 'demo-fija'` SIN comprobar que ese demo existiera), que es exactamente el
+  // bug que resucitó `chat.analista.fallo` en producción el 3-sep-2026 con un
+  // `DEMO_TENANT_ID` fantasma.
+  it('un uuid que simplemente NO existe cae al de la sesión, y ESE también se valida', async () => {
+    // El mock comparte `respuesta` entre las dos lecturas: ni el `?tenant=`
+    // pedido ni el tenant de sesión/demo existen.
     respuesta = { data: null, error: null };
-    expect(await tenantEfectivoChat(SUPER, 't-fantasma')).toEqual({ tenantId: 'demo-fija', nombreFlota: 'tu flota' });
+    expect(await tenantEfectivoChat(SUPER, 't-fantasma')).toBeNull();
+    expect(logger.error).toHaveBeenCalledWith('chat.tenant_sesion_fantasma',
+      expect.objectContaining({ tenant: 'demo-fija' }));
+  });
+
+  it('un uuid que NO existe cae al de la sesión, y ESE sí existe: se usa', async () => {
+    cola = [
+      { data: null, error: null }, // el `?tenant=` pedido: no existe
+      { data: { nombre: 'Flota de la sesión' }, error: null }, // el fallback: sí
+    ];
+    expect(await tenantEfectivoChat(SUPER, 't-fantasma')).toEqual({ tenantId: 'demo-fija', nombreFlota: 'Flota de la sesión' });
     expect(logger.error).not.toHaveBeenCalled();
   });
 
