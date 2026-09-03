@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cuadrarViaje, NO_DEDUCIBLE_ISR } from './engine';
+import { cuadrarViaje, NO_DEDUCIBLE_ISR, POR_CONFIRMAR } from './engine';
 import { DEMO_CONFIG } from '../config';
 import type { Gasto } from '@/types/likida';
 
@@ -14,11 +14,21 @@ import type { Gasto } from '@/types/likida';
 // sumaba de todas formas. El PDF le decía al contralor una cosa y le cobraba
 // dinero por la otra.
 //
-// El arreglo separa el caso en su propio tipo (`gasto_otro_ejercicio`, en
-// `NO_DEDUCIBLE_ISR`) del caso genuinamente distinto de "fecha fuera del rango
-// del viaje pero dentro del ejercicio" (`fecha_sospechosa`, que sigue sin
-// excluirse sola — puede ser un simple error de captura del viaje, no un
-// hecho fiscal consumado).
+// El arreglo separa el caso en su propio tipo (`gasto_otro_ejercicio`) del
+// caso genuinamente distinto de "fecha fuera del rango del viaje pero dentro
+// del ejercicio" (`fecha_sospechosa`, que sigue sin excluirse sola — puede
+// ser un simple error de captura del viaje, no un hecho fiscal consumado).
+//
+// AUDITORÍA 25, ALTO FISCAL (fiscal.md línea 282) — `gasto_otro_ejercicio`
+// nació en `NO_DEDUCIBLE_ISR`, el veredicto MÁS CARO del motor («No deducible
+// $X.00» en rojo), pero el propio repo declara la diferencia como CALIDAD DEL
+// DATO, no un veredicto de qué norma exacta rige el periodo fiscal
+// (`normas/por_diferencia.ts:113`) — y no tiene ficha. El gasto SÍ es
+// deducible, solo que en OTRO ejercicio: el motor no puede afirmar la
+// deducción (no es de este año) ni negarla de plano (si es real y a tiempo,
+// el contador la toma en el ejercicio correcto). Se mueve a `POR_CONFIRMAR`,
+// el tercer estado que ya usa el resto del motor para "ni se afirma ni se
+// pierde, lo decide una persona".
 // ═══════════════════════════════════════════════════════════════════════════
 
 const g = (over: Partial<Gasto> = {}): Gasto => ({
@@ -43,16 +53,23 @@ describe('un comprobante de otro ejercicio no se cuenta como deducible en este',
     expect(dif.some((d) => d.tipo === 'fecha_sospechosa')).toBe(false);
   });
 
-  it('ANTES DEL ARREGLO esto habría entrado a totalDeducible pese a la nota — ahora no', () => {
+  it('esto NO entra a totalDeducible — pero tampoco se da por perdido en totalNoDeducible', () => {
     const r = cuadre(g({ fecha: '2025-08-01' }));
-    // El único gasto del viaje es del ejercicio pasado: si el motor lo contara
-    // como deducible, totalDeducible sería 1000. La cifra correcta es 0.
+    // El único gasto del viaje es del ejercicio pasado: el motor no puede
+    // afirmar la deducción (no es de este año), pero tampoco negarla de
+    // plano — «calidad del dato, no un veredicto» (por_diferencia.ts:113).
+    // AUDITORÍA 25, ALTO FISCAL (línea 282): va a POR_CONFIRMAR, no a
+    // NO_DEDUCIBLE_ISR. El escenario del hallazgo: CFDI de $116,000 fechado
+    // 2025-12-30 — antes salía «No deducible $116,000.00» en rojo; el gasto
+    // SÍ es deducible, solo que en 2025.
     expect(r.totalDeducible).toBe(0);
-    expect(r.totalNoDeducible).toBe(1000);
+    expect(r.totalPorConfirmar).toBe(1000);
+    expect(r.totalNoDeducible).toBe(0);
   });
 
-  it('gasto_otro_ejercicio vive en NO_DEDUCIBLE_ISR', () => {
-    expect(NO_DEDUCIBLE_ISR).toContain('gasto_otro_ejercicio');
+  it('gasto_otro_ejercicio vive en POR_CONFIRMAR, no en NO_DEDUCIBLE_ISR', () => {
+    expect(POR_CONFIRMAR).toContain('gasto_otro_ejercicio');
+    expect(NO_DEDUCIBLE_ISR).not.toContain('gasto_otro_ejercicio');
   });
 
   it('un comprobante DENTRO del ejercicio se sigue deduciendo como siempre (control)', () => {
