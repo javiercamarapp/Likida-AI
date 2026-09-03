@@ -19,15 +19,18 @@ import { EnlaceCuenta } from './enlace-cuenta';
  * layout con `redirect()` adentro no se puede renderizar sin sesión.
  */
 /** Cómo se lee cada rol en el badge del sidebar. Las cinco claves son el
- *  dominio REAL de `app_user.rol` (0044_rol_encargado.sql:23) — no una
- *  etiqueta de adorno: decía "FLOTA" fijo para todos, y quien entra es un
- *  `flota_admin`, un contador o un encargado, que no ven lo mismo. Un rol
- *  nuevo cae al `??` y sale con su clave cruda, nunca vacío. */
+ *  dominio REAL de `app_user.rol` (constraint `app_user_rol_dominio`:
+ *  0044_rol_encargado.sql lo abrió, 0086_retirar_rol_operador.sql retiró
+ *  `operador` —el chofer ya no tiene login, solo WhatsApp— y
+ *  0105_zona_vendedores.sql agregó `vendedor`) — no una etiqueta de adorno:
+ *  decía "FLOTA" fijo para todos, y quien entra es un `flota_admin`, un
+ *  contador o un encargado, que no ven lo mismo. Un rol nuevo cae al `??` y
+ *  sale con su clave cruda, nunca vacío. */
 const ROL_BADGE: Record<string, string> = {
   flota_admin: 'ADMIN FLOTA',
   encargado: 'ENCARGADO',
   contador: 'CONTADOR',
-  operador: 'OPERADOR',
+  vendedor: 'VENDEDOR',
   superadmin: 'SUPERADMIN',
 };
 
