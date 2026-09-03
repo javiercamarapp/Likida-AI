@@ -67,9 +67,13 @@ export const DOCUMENTOS_UNIDAD = ['poliza', 'permiso_sict', 'verificacion'] as c
 export const DOCUMENTOS_VIGILABLES = [...DOCUMENTOS_UNIDAD, 'licencia'] as const;
 export type DocumentoVigilable = (typeof DOCUMENTOS_VIGILABLES)[number];
 
-/** Cómo se nombra cada papel en el aviso. Mismo texto que `ROTULO_DOC` de
- *  relojes_legales.ts: dos nombres para el mismo papel se leen como dos
- *  papeles. */
+/** Cómo se nombra cada papel EN UNA FRASE (minúsculas, "verificación
+ *  físico-mecánica" sin "de la unidad"). NO es el mismo texto que `ROTULO_DOC`
+ *  de relojes_legales.ts —ese es la etiqueta suelta ("Verificación
+ *  físico-mecánica", con mayúscula y sin `poliza_flota` aquí)— y esa
+ *  distinción es deliberada, no una divergencia accidental: uno arma una
+ *  oración, el otro es un rótulo aislado. (ARQUITECTURA 25, MEDIO: el
+ *  comentario anterior afirmaba que eran «el mismo texto» y no lo eran.) */
 export const ROTULO_DOCUMENTO: Record<DocumentoVigilable, string> = {
   poliza: 'póliza',
   permiso_sict: 'permiso SICT',
