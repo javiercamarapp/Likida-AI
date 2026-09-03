@@ -195,7 +195,7 @@ describe('getViajesSinAsignar', () => {
 });
 
 describe('getUnidades — el papel que vence primero', () => {
-  const hoy = new Date('2026-08-03T12:00:00Z');
+  const hoy = '2026-08-03';
 
   it('elige el vencimiento MÁS PRÓXIMO de los tres, no el primero capturado', async () => {
     TABLAS = {
@@ -239,6 +239,31 @@ describe('getUnidades — el papel que vence primero', () => {
     };
     const [u] = await getUnidades('t-1', hoy);
     expect(u.ordenesAbiertas).toBe(2);
+  });
+
+  // ARQUITECTURA 25 (MEDIO, REINCIDENTE) — el escenario exacto del reporte:
+  // 19:00 del 2-sep en CDMX (México no cambia de horario desde 2022) es
+  // 2026-09-03T01:00Z. Sin este arreglo, `getUnidades()` sin `hoy` anclaba a
+  // `Date.UTC` y decía "vence HOY" (día de México todavía 09-02) mientras
+  // `/dashboard/unidades` (día de México) decía "vence mañana" — el mismo
+  // desfase cambiaba la unidad de `porVencer` a `vencidos`.
+  it('SIN pasar `hoy`, ancla al día de MÉXICO — no al de UTC', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-03T01:00:00Z')); // 2026-09-02 19:00 CDMX
+    try {
+      TABLAS = {
+        unidad: [{
+          id: 'u-1', numero_economico: 'C2-08', placas: null, marca: null, modelo: null, anio: null,
+          estado: 'disponible', km_actual: null,
+          poliza_vence: '2026-09-03', permiso_sict_vence: null, verificacion_vence: null, activo: true,
+        }],
+        mantenimiento: [],
+      };
+      const [u] = await getUnidades('t-1');
+      expect(u.diasAlVencimiento).toBe(1); // "vence mañana", como /dashboard/unidades
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
