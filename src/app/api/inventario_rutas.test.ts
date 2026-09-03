@@ -45,7 +45,16 @@ import { join, relative, sep } from 'node:path';
 // 1-sep-2026 (auditoría 24, BLOQ-6): +1 por `v1/liquidaciones/route.ts`.
 // Su puerta: `abrir(req, 'dinero')` —llave API por área o cookie+CSRF— antes
 // de tocar la base, y `.eq('tenant_id', acceso.tenantId)` en la única consulta.
-const RUTAS_API_REVISADAS = 66; // 65 (masivo: v1/operadores) + 1 (revision: v1/liquidaciones)
+// 3-sep-2026 (auditoría 25, ALTO): +1 por `client-error/route.ts`. SIN
+// sesión a propósito, mismo criterio que `health/route.ts` y `lead/route.ts`:
+// es el destino de un fallo de CLIENTE (el layout raíz truena antes de que
+// la sesión se pueda leer), así que exigir sesión sería pedirle al reporte
+// del fallo la misma cosa que acaba de fallar. Su puerta es otra: rate limit
+// por IP (`client-error:${clientIp}`, 20/min), tope de cuerpo (4 KB) medido
+// dos veces (`bodyExcede` + el texto real), `level` acotado a {warn,error} y
+// `msg`/`meta` saneados (sin saltos de línea, `meta` solo si es objeto plano)
+// ANTES de tocar `logger.error`/Sentry — no filtra dato de negocio ni tenant.
+const RUTAS_API_REVISADAS = 67; // 66 (revision: v1/liquidaciones) + 1 (nueva: client-error)
 
 function rutasApi(): string[] {
   const raiz = join(process.cwd(), 'src', 'app', 'api');
