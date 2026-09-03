@@ -24,6 +24,21 @@ const UNIDADES = vi.hoisted(() => [
   { id: 'u-ajena', tenant_id: 't-OTRO', gps_proveedor: 'samsara', gps_device_id: 'dev-1' },
 ]);
 
+// AUDITORÍA 25 (LEG-1, ALTO): la compuerta de privacidad (`unidadesSinAvisoPrevio`)
+// ahora exige viaje vivo + aviso confirmado para guardar un evento de cámara
+// (`sinViajeVivo: 'bloquear'`) — lo que este archivo prueba es OTRA cosa
+// (idempotencia, sello, fan-out), así que sus unidades llevan viaje vivo con
+// aviso ya dado, y el candado en sí tiene su propia batería en
+// `sincronizar_eventos_aud24.test.ts`.
+const VIAJES = vi.hoisted(() => [
+  { tenant_id: 't-1', unidad_id: 'u-1', operador_id: 'op-1', estatus: 'abierto' },
+  { tenant_id: 't-OTRO', unidad_id: 'u-ajena', operador_id: 'op-ajena', estatus: 'abierto' },
+]);
+const OPERADORES = vi.hoisted(() => [
+  { id: 'op-1', tenant_id: 't-1', aviso_privacidad_en: '2026-08-01T00:00:00Z' },
+  { id: 'op-ajena', tenant_id: 't-OTRO', aviso_privacidad_en: '2026-08-01T00:00:00Z' },
+]);
+
 // La "tabla" evento_seguridad_flota: unicidad (tenant, proveedor, evento) y,
 // desde c2-1, el estado de sellado — el barrido lee lo grave NO sellado, así
 // que el mock lo simula de verdad: `sellados` marca las llaves ya procesadas
@@ -91,6 +106,21 @@ vi.mock('@/lib/supabase/admin', () => ({
             ? { data: null, error: { message: estado.errorCredenciales } }
             : { data: estado.credenciales, error: null },
         );
+      } else if (tabla === 'viaje') {
+        api.then = (res: (v: unknown) => unknown) => res({
+          data: VIAJES.filter((v) =>
+            v.tenant_id === filtros.tenant_id &&
+            (filtros['in:estatus'] as string[]).includes(v.estatus) &&
+            (filtros['in:unidad_id'] as string[]).includes(v.unidad_id)),
+          error: null,
+        });
+      } else if (tabla === 'operador') {
+        api.then = (res: (v: unknown) => unknown) => res({
+          data: OPERADORES.filter((o) =>
+            o.tenant_id === filtros.tenant_id &&
+            (filtros['in:id'] as string[]).includes(o.id)),
+          error: null,
+        });
       }
       return api;
     },

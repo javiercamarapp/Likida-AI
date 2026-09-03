@@ -9,18 +9,34 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const respuestas = new Map<string, Array<{ data: unknown; error: { message: string } | null }>>();
 const inserts: Array<{ tabla: string; payload: Record<string, unknown> }> = [];
+const updates: Array<{ tabla: string; payload: Record<string, unknown>; filtros: Record<string, unknown> }> = [];
+const deletes: Array<{ tabla: string; filtros: Record<string, unknown> }> = [];
 
 function builder(tabla: string) {
   const responder = () => {
     const cola = respuestas.get(tabla);
     return cola && cola.length > 0 ? cola.shift()! : { data: [], error: null };
   };
+  const filtros: Record<string, unknown> = {};
+  let op: 'select' | 'update' | 'delete' = 'select';
+  let payload: Record<string, unknown> | undefined;
   const b: Record<string, unknown> = {};
   Object.assign(b, {
-    select: () => b, eq: () => b, ilike: () => b, is: () => b, limit: () => b,
+    select: () => b,
+    eq: (k: string, v: unknown) => { filtros[k] = v; return b; },
+    ilike: (k: string, v: unknown) => { filtros[k] = v; return b; },
+    is: (k: string, v: unknown) => { filtros[k] = v; return b; },
+    or: () => b,
+    limit: () => b,
     insert: (p: Record<string, unknown>) => { inserts.push({ tabla, payload: p }); return b; },
+    update: (p: Record<string, unknown>) => { op = 'update'; payload = p; return b; },
+    delete: () => { op = 'delete'; return b; },
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
-      Promise.resolve().then(responder).then(res, rej),
+      Promise.resolve().then(() => {
+        if (op === 'update') updates.push({ tabla, payload: payload!, filtros: { ...filtros } });
+        if (op === 'delete') deletes.push({ tabla, filtros: { ...filtros } });
+        return responder();
+      }).then(res, rej),
   });
   return b;
 }
@@ -31,9 +47,15 @@ const alertas: Array<{ evento: string }> = [];
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: async (evento: string) => { alertas.push({ evento }); } }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { esBaja, extraerCorreo, esRespuestaACampana, procesarRespuestaCampana } = await import('./respuesta_campana');
+const {
+  esBaja, extraerCorreo, esRespuestaACampana, procesarRespuestaCampana,
+  borrarDatosPersonaPorBaja, borrarDatosPersonaPorBajaPorCorreo,
+} = await import('./respuesta_campana');
 
-beforeEach(() => { respuestas.clear(); inserts.length = 0; alertas.length = 0; suprimir.mockClear(); });
+beforeEach(() => {
+  respuestas.clear(); inserts.length = 0; updates.length = 0; deletes.length = 0;
+  alertas.length = 0; suprimir.mockClear();
+});
 
 describe('los detectores puros', () => {
   it('BAJA es palabra completa, con o sin texto alrededor, sin importar mayúsculas', () => {
@@ -88,5 +110,56 @@ describe('procesarRespuestaCampana', () => {
     respuestas.set('prospecto_contacto', [{ data: null, error: { message: 'base caída' } }]);
     const r = await procesarRespuestaCampana({ from: 'g@empresa.mx', subject: 'hola', text: '' });
     expect(r.ok).toBe(false);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 25, ALTO (línea 89): "Contesta BAJA y se borran tus datos" no
+  // borraba nada, y el historial que SÍ escribía reiniciaba el reloj de 365
+  // días de `purgar_prospecto_persona` — ejercer el derecho alargaba la
+  // retención en vez de acortarla.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  it('una BAJA con contacto de cabecera borra prospecto_persona y prospecto_correo, y anonimiza el prospecto', async () => {
+    respuestas.set('prospecto', [{ data: [{ id: 'pr-1' }], error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: null, error: null }]);
+    await procesarRespuestaCampana({ from: 'Laura <laura@transportesdelnorte.mx>', subject: 'BAJA', text: '' });
+
+    const borraPersona = deletes.find((d) => d.tabla === 'prospecto_persona');
+    expect(borraPersona?.filtros).toMatchObject({ prospecto_id: 'pr-1', correo: 'laura@transportesdelnorte.mx' });
+    const borraCopia = deletes.find((d) => d.tabla === 'prospecto_correo');
+    expect(borraCopia?.filtros).toMatchObject({ prospecto_id: 'pr-1' });
+    const anonimiza = updates.find((u) => u.tabla === 'prospecto');
+    expect(anonimiza?.filtros).toMatchObject({ id: 'pr-1' });
+    expect(anonimiza?.payload).toMatchObject({ contacto_nombre: null, telefono: null, correo: null });
+  });
+
+  it('una BAJA de un remitente que solo era COPIA no anonimiza el contacto de cabecera (es de otra persona)', async () => {
+    respuestas.set('prospecto', [{ data: [], error: null }]);
+    respuestas.set('prospecto_correo', [{ data: [{ prospecto_id: 'pr-7' }], error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: null, error: null }]);
+    await procesarRespuestaCampana({ from: 'compras@empresa.mx', subject: 'BAJA ya', text: '' });
+
+    expect(deletes.some((d) => d.tabla === 'prospecto_persona' && d.filtros.prospecto_id === 'pr-7')).toBe(true);
+    expect(updates.find((u) => u.tabla === 'prospecto')).toBeUndefined();
+  });
+
+  it('una respuesta que NO pide baja no borra ni anonimiza nada', async () => {
+    respuestas.set('prospecto', [{ data: [{ id: 'pr-1' }], error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: null, error: null }]);
+    await procesarRespuestaCampana({ from: 'g@empresa.mx', subject: 'Me interesa', text: 'cuéntame más' });
+    expect(deletes.length).toBe(0);
+    expect(updates.length).toBe(0);
+  });
+
+  it('borrarDatosPersonaPorBaja nunca lanza aunque una tabla truene — mejor esfuerzo', async () => {
+    respuestas.set('prospecto_persona', [{ data: null, error: { message: 'base caída' } }]);
+    await expect(borrarDatosPersonaPorBaja('pr-1', 'x@y.mx', true)).resolves.toBeUndefined();
+  });
+
+  it('borrarDatosPersonaPorBajaPorCorreo (la liga de un clic) resuelve el prospecto y borra igual', async () => {
+    respuestas.set('prospecto', [{ data: [{ id: 'pr-9' }], error: null }]);
+    await borrarDatosPersonaPorBajaPorCorreo('otra@empresa.mx');
+    const anonimiza = updates.find((u) => u.tabla === 'prospecto');
+    expect(anonimiza?.filtros).toMatchObject({ id: 'pr-9' });
   });
 });

@@ -143,10 +143,18 @@ export async function sincronizarEventosDeFlota(
   // Se resuelve UNA vez por corrida para las unidades con evento; si la base
   // no contesta, no se guarda ningún evento de esta flota (fallar cerrado).
   // Los huérfanos (sin unidad) no están ligados a una persona y siguen igual.
+  //
+  // AUDITORÍA 25 (ALTO, REINCIDENTE de la 24): `sinViajeVivo: 'bloquear'` —
+  // a diferencia de la posición (sincronizar_gps.ts), un evento de cámara
+  // puede traer la liga al video de quién va al volante. Una unidad SIN
+  // viaje vivo no tiene, hoy, otra forma de saber quién la conduce; sin esa
+  // señal no hay cómo confirmar que el conductor de hoy dio su aviso, así
+  // que se trata como sin-aviso y el evento NO se guarda — en vez de la
+  // lectura anterior ("sin viaje = sin persona", válida solo para GPS).
   const conUnidad = [...new Set(eventos.map((e) => (e.assetId ? porDevice.get(e.assetId) : undefined)).filter((u): u is string => !!u))];
   let sinAviso = new Set<string>();
   if (conUnidad.length > 0) {
-    const compuerta = await unidadesSinAvisoPrevio(tenantId, conUnidad);
+    const compuerta = await unidadesSinAvisoPrevio(tenantId, conUnidad, { sinViajeVivo: 'bloquear' });
     if (compuerta.error) return { ...base, error: `no se guardó ningún evento: ${compuerta.error}` };
     sinAviso = compuerta.sinAviso;
     if (sinAviso.size > 0) {
