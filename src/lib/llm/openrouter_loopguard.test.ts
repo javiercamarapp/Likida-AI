@@ -185,6 +185,56 @@ describe('A30 — la tool terminal sobrevive al loop-guard y cierra el ciclo', (
     expect(create).toHaveBeenCalledTimes(2);
     expect(r.toolCalls).toHaveLength(2);
   });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 25 (MEDIO, tool-calling.md:141) — `entregar_respuesta` NO
+  // LANZA cuando sus bloques no validan (es su contrato: devuelve `{ok:
+  // false, error}` para que el mensaje viaje como `content` de la tool).
+  // `exec.success` solo dice "el handler no lanzó" — con eso solo, este
+  // caso (el real, el que el handler de verdad produce) se leía IGUAL que
+  // un éxito, y el mensaje "vuelve a llamar entregar_respuesta" nunca lo
+  // leía nadie. La prueba de arriba ("si la terminal FALLA...") usa
+  // `success: false`, que YA se manejaba bien — ésta reproduce el caso que
+  // de verdad falla: `success: true` con `result.ok === false`.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('EL HALLAZGO: la terminal NO LANZA pero su resultado trae ok:false — el ciclo sigue, no se da por entregado', async () => {
+    create
+      .mockResolvedValueOnce(respuesta([{ name: 'entregar_respuesta', args: { bloques: 'mal' } }]))
+      .mockResolvedValueOnce(respuesta([{ name: 'entregar_respuesta', args: { bloques: [1] } }]));
+    let intento = 0;
+    const r = await generateWithTools({
+      role: 'chat', system: 's', messages: [{ role: 'user', content: 'x' }],
+      tools: TOOLS,
+      toolExecutor: async () => {
+        intento++;
+        // El handler real de entregar_respuesta: NUNCA lanza, y el primer
+        // intento devuelve ok:false como RESULTADO, no como excepción.
+        return intento === 1
+          ? { success: true, result: { ok: false, error: 'bloques inválidos: vuelve a llamar entregar_respuesta' }, durationMs: 1 }
+          : { success: true, result: { ok: true }, durationMs: 1 };
+      },
+      maxToolRounds: 5,
+      terminalTools: ['entregar_respuesta'],
+    });
+    // Dos rondas: la primera NO cerró el ciclo pese a `success: true`.
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(r.toolCalls).toHaveLength(2);
+    expect(r.toolCalls[0].result).toEqual({ ok: false, error: 'bloques inválidos: vuelve a llamar entregar_respuesta' });
+  });
+
+  it('una terminal SIN el campo `ok` en su resultado sigue cerrando el ciclo con solo success:true (compatibilidad)', async () => {
+    create.mockResolvedValueOnce(respuesta([{ name: 'entregar_respuesta', args: { bloques: [1] } }]));
+    const r = await generateWithTools({
+      role: 'chat', system: 's', messages: [{ role: 'user', content: 'x' }],
+      tools: TOOLS,
+      // Resultado SIN `ok` — una tool terminal que no sigue esa convención.
+      toolExecutor: async () => ({ success: true, result: { instruccion: 'listo' }, durationMs: 1 }),
+      maxToolRounds: 5,
+      terminalTools: ['entregar_respuesta'],
+    });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(r.toolCalls).toHaveLength(1);
+  });
 });
 
 // B16 — `finish_reason: 'length'` CON tool_calls se reportaba al modelo como

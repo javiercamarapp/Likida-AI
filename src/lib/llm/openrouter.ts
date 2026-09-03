@@ -781,6 +781,28 @@ const READ_PREFIXES = ['get_', 'check_', 'list_', 'find_', 'consultar_', 'valida
 const isReadOnly = (n: string) => READ_PREFIXES.some((p) => n.startsWith(p));
 
 /**
+ * AUDITORÍA 25 (MEDIO, tool-calling.md:141) — `exec.success` solo dice "el
+ * handler no lanzó", no "la entrega aterrizó". Las tools terminales del repo
+ * (`entregar_respuesta`, `entregar_respuesta_admin`) NO lanzan cuando sus
+ * bloques no validan: devuelven `{ ok: false, error: '...' }` como resultado
+ * — un contrato deliberado, para que el mensaje de error viaje al modelo
+ * como `content` de la tool y no como una excepción que el ciclo atrapa
+ * distinto. Con solo `exec.success`, ese `ok: false` cerraba el turno igual
+ * que un `ok: true`: el mensaje que le pide al modelo "vuelve a llamar
+ * entregar_respuesta" quedaba escrito pero era, por construcción,
+ * inalcanzable — nadie más lo iba a leer.
+ *
+ * Se lee el campo `ok` del resultado SOLO cuando existe: una tool terminal
+ * que no siga esta convención (no declara `ok` en su resultado) conserva el
+ * criterio de antes — `exec.success` basta — para no exigirle un contrato
+ * que nunca prometió.
+ */
+function entregaTerminalAterrizo(result: unknown): boolean {
+  if (result && typeof result === 'object' && 'ok' in result) return Boolean((result as { ok: unknown }).ok);
+  return true;
+}
+
+/**
  * Nombres de tools cuyo schema NO declara ni un solo parámetro.
  *
  * PARA ELLAS, LOS `arguments` NO SIGNIFICAN NADA: el handler recibe `_args` y no
@@ -1174,7 +1196,7 @@ export async function generateWithTools(opts: {
           // sirve el mismo error desde memoria, y nadie vuelve a preguntarle a
           // una base que ya se curó sola.
           if (esLectura(call.function.name) && exec.success) crossRound.set(key, { ...exec, args: entry.args });
-          if (exec.success && terminales.has(call.function.name)) entregada = true;
+          if (exec.success && terminales.has(call.function.name) && entregaTerminalAterrizo(exec.result)) entregada = true;
           executed.push({ toolName: call.function.name, args: entry.args, result: exec.result, durationMs: exec.durationMs, error: exec.error });
           return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify(exec.success ? exec.result : { error: exec.error }) };
         }),
