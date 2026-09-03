@@ -105,13 +105,29 @@ export async function reclamarEscalacionAsistencia(
 /** Teléfono de un rol concreto de la flota (el dueño para el nivel 2+).
  *  `null` = ese rol no tiene teléfono capturado — se dice, no se inventa. */
 async function telefonoDeRol(tenantId: string, rol: string): Promise<string | null> {
+  // AUDITORÍA 25, CRÍTICO (AGEN-C1): `activo`. Es la tercera salida que el
+  // hallazgo de la 24 nombraba y el arreglo `70dd5c6` no tocó. Por aquí sale el
+  // 🚨 de la escalada, que lleva la UBICACIÓN del chofer: mandárselo a alguien
+  // a quien la flota ya le quitó el acceso es el peor de los tres casos.
+  // El `.limit(1)` cuenta filas del SERVIDOR, así que el filtro tiene que ir en
+  // la base o una fila de baja se lleva el cupo y esconde a la viva; y otra vez
+  // en TS, porque una regla en dos capas no es una regla repetida.
+  //
+  // CORRECCIÓN (reauditoría de la 25): la rama `activo.is.null` no es una red
+  // para la base vieja. La 0294 crea la columna `not null default true`
+  // (`0294:47`): aplicada, NULL es imposible; sin aplicar, la columna no existe
+  // y este `select` da 42703 — esta función LANZA. El caso sí queda cubierto,
+  // pero por otro lado: la compuerta de despliegue no construye si la base va
+  // atrás, y aquí el `catch` de arriba alerta al operador igual.
   const { data, error } = await acotada(supabaseAdmin()
-    .from('app_user').select('telefono')
+    .from('app_user').select('telefono, activo')
     .eq('tenant_id', tenantId).eq('rol', rol)
+    .or('activo.is.null,activo.eq.true')
     .not('telefono', 'is', null)
     .limit(1), 'asistencia.telefonoRol');
   if (error) throw new Error(`telefonoDeRol: ${error.message}`);
-  return ((data ?? [])[0]?.telefono as string) ?? null;
+  const vivo = (data ?? []).find((f) => (f as { activo?: boolean }).activo !== false);
+  return (vivo?.telefono as string) ?? null;
 }
 
 const ADVERTENCIA_ROBO =
