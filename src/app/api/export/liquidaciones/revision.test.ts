@@ -16,7 +16,10 @@ vi.mock('@/lib/auth/tenant-api', () => ({ resolverTenantApi: async () => ({ ok: 
 vi.mock('@/lib/auth/permisos', () => ({ puedeExportar: () => true }));
 vi.mock('@/lib/auth/visibilidad', () => ({ puedeVerArea: () => true }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
+vi.mock('@/lib/likida/presupuesto', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/likida/presupuesto')>()),
+  acotada: (q: unknown) => q,
+}));
 
 interface Consulta { eq: Array<[string, unknown]>; neq: Array<[string, unknown]>; in: Array<[string, unknown]> }
 let consultas: Consulta[] = [];
