@@ -20,6 +20,7 @@ export async function tenantEfectivoChat(
   }
 
   let nombreFlota = 'tu flota';
+  let resuelto = false;
   if (tenantPedido && sesion.rol === 'superadmin') {
     // BE-16 (auditoría 24): `error` SE MIRA. `acotada` resuelve por valor
     // —`{data:null,error}` en un timeout—, así que sin esta rama un parpadeo
@@ -29,7 +30,10 @@ export async function tenantEfectivoChat(
     // `guardarIntercambio` persistía el historial en el tenant equivocado.
     // Se devuelve `null` —el mismo fail-closed de `resolverTenantApi`— y quien
     // llama corta. Un uuid que simplemente no existe SÍ sigue cayendo al de la
-    // sesión: eso es un enlace viejo, no una lectura caída.
+    // sesión: eso es un enlace viejo, no una lectura caída — pero ese fallback
+    // pasa por la MISMA validación de abajo (MEDIO auditoría 25: antes se
+    // quedaba con `tenantId` sin comprobar que esa flota existiera, que es
+    // precisamente lo que esta rama vino a arreglar).
     const { data: t, error } = await acotada(
       supabaseAdmin().from('tenant').select('id, nombre').eq('id', tenantPedido).maybeSingle(),
       'chat.tenant');
@@ -37,13 +41,15 @@ export async function tenantEfectivoChat(
       logger.error('chat.tenant_pedido_ilegible', { tenant: tenantPedido, err: error.message });
       return null;
     }
-    if (t) { tenantId = t.id as string; nombreFlota = (t.nombre as string) ?? nombreFlota; }
-  } else {
+    if (t) { tenantId = t.id as string; nombreFlota = (t.nombre as string) ?? nombreFlota; resuelto = true; }
+  }
+  if (!resuelto) {
     // Mismo fail-closed que BE-16 arriba, pero para el tenant de la SESIÓN o
-    // el de `tenantDemo()` — antes esta rama ni miraba `error` ni comprobaba
-    // que `t` existiera: un `DEMO_TENANT_ID` fantasma (o una sesión con un
-    // tenant ya borrado) pasaba de largo con `tenantId` intacto, y
-    // `reservar_presupuesto_llm` tronaba por FK violation en cada turno —
+    // el de `tenantDemo()` (incluido el fallback de la rama de arriba cuando
+    // el `?tenant=` pedido no existe) — antes esta rama ni miraba `error` ni
+    // comprobaba que `t` existiera: un `DEMO_TENANT_ID` fantasma (o una
+    // sesión con un tenant ya borrado) pasaba de largo con `tenantId` intacto,
+    // y `reservar_presupuesto_llm` tronaba por FK violation en cada turno —
     // visto en producción el 3-sep-2026 (`chat.analista.fallo`, 12 fallos en
     // 5 minutos, siempre el mismo tenant_id inexistente).
     const { data: t, error } = await acotada(
