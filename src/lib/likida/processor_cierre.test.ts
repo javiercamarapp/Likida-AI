@@ -146,6 +146,18 @@ vi.mock('@/lib/likida/intake/cfdi_xml', () => ({
 const avisarCierreAlJefe = vi.fn(async (_a: unknown) => ({ enviado: true }));
 vi.mock('./avisar_cierre', () => ({ avisarCierreAlJefe: (a: unknown) => avisarCierreAlJefe(a) }));
 
+// AUDITORÍA 25, MEDIO REINCIDENTE — una liquidación CERRADA cuyo PDF no llegó
+// al chofer solo producía un `logger.error`: el camino del dinero (la cifra
+// ya se afirmó, `pdf_url` ya quedó escrito) sin ninguna alerta real.
+// `importOriginal`: el módulo tiene otros exports que sí se usan de verdad
+// más abajo en la cadena de imports (p.ej. `contadorDeFallos` en
+// `intake/ocr.ts`) — solo se espía `alertarOperador`, todo lo demás real.
+const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
+vi.mock('@/lib/observability/alerta', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [string, Record<string, unknown>])),
+}));
+
 const { processInbound } = await import('./processor');
 const { PartialExecutionError } = await import('@/lib/llm/openrouter');
 
@@ -161,6 +173,7 @@ beforeEach(() => {
   salientes.length = 0; media.clear();
   runAgent.mockReset(); createSignedUrl.mockReset();
   logger.info.mockReset(); logger.warn.mockReset(); logger.error.mockReset();
+  alertarOperador.mockReset();
   getOpenViaje.mockReset(); getOpenViaje.mockResolvedValue('v1');
   claimMessage.mockReset(); claimMessage.mockResolvedValue('nuevo');
   saveCfdiXmlRaw.mockReset();
@@ -232,6 +245,17 @@ describe('cierre sin PDF: ni se manda un documento que no existe, ni se calla', 
     expect(logger.error).toHaveBeenCalledWith('pdf.no_entregado', expect.objectContaining({ viaje: 'v1', pdfGenerado: false }));
   });
 
+  // AUDITORÍA 25, MEDIO REINCIDENTE — el log solo no bastaba: una liquidación
+  // CERRADA (la cifra ya se afirmó, `pdf_url` ya quedó escrito) cuyo PDF no
+  // llega al chofer es el camino del dinero. Antes de este arreglo, NADA
+  // llamaba a `alertarOperador` para `pdf.no_entregado` — `grep -n
+  // "alertarOperador" processor.ts` no devolvía nada.
+  it('con pdf_generado=false TAMBIÉN dispara una alerta real al operador, no solo el log', async () => {
+    runAgent.mockResolvedValue(cierre(false));
+    await processInbound(listo);
+    expect(alertarOperador).toHaveBeenCalledWith('pdf.no_entregado', expect.objectContaining({ viaje: 'v1', pdfGenerado: false }));
+  });
+
   it('con pdf_generado=false se lo dice al operador, en vez de dejarlo esperando', async () => {
     runAgent.mockResolvedValue(cierre(false));
     await processInbound(listo);
@@ -244,6 +268,7 @@ describe('cierre sin PDF: ni se manda un documento que no existe, ni se calla', 
     await processInbound(listo);
     expect(documentos()).toHaveLength(0);
     expect(logger.error).toHaveBeenCalledWith('pdf.no_entregado', expect.objectContaining({ err: 'Object not found' }));
+    expect(alertarOperador).toHaveBeenCalledWith('pdf.no_entregado', expect.objectContaining({ err: 'Object not found' }));
     // Y con `codigo` estable (AUDITORÍA 18, M14): es lo que separa esta causa
     // de la siguiente en el fingerprint de Sentry — sin él, la segunda cae en
     // el issue viejo y no notifica.
