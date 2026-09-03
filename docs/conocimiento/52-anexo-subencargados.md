@@ -62,6 +62,8 @@ Verificado contra el texto vigente en `normas/lfpdppp-2-XII-XX.yaml`.
 | 5 | **Sentry** | Solo `warn` y `error`, **ya redactados** | `src/lib/observability/sentry.ts` |
 | 6 | **Resend** (correo transaccional, salida Y ENTRADA) | Salida: el **correo** de quien recibe el aviso y el contenido del aviso (folios, número económico, conteos). **Y desde el 18-ago-2026, el correo de ACCESO** (`api/auth/correo/route.ts`, Send Email Hook de Supabase Auth): la dirección de una persona identificada **más el enlace de un solo uso que abre su sesión** (`token_hash` en la liga de `/auth/v1/verify`); el OTP de 6 dígitos solo viaja en la reautenticación. Es la clase de dato más sensible que pasa por este eslabón y por el 6a. Entrada (desde ago-2026): **el correo entrante del proveedor completo y sus adjuntos — es decir, el CFDI entero: RFC de emisor y receptor, montos, UUID** | Salida: `api.resend.com` en `src/lib/correo/enviar.ts`. Entrada: webhook `api/correo/entrante/route.ts` — Resend recibe y ALMACENA el correo antes de entregárnoslo |
 | 6a | └ Amazon Web Services (SES) | Lo mismo, en las dos direcciones: Resend entrega Y recibe por SES | Comprobado en el DNS de `mail.likida.ai`: `v=spf1 include:amazonses.com` y `feedback-smtp.us-east-1.amazonses.com` (el MX de recepción es el mismo eslabón) |
+| 7 | **Stripe** | El correo y los datos de pago de quien contrata el servicio, y los eventos de su suscripción (alta, cobro, cancelación) | `src/lib/saas/stripe.ts` (`api.stripe.com`), webhook en `/api/stripe/webhook` — ya declarada como encargada en `/privacidad` (LEG-10, auditoría 24) pero faltaba en esta cadena |
+| 8 | **Cal.com** | El **nombre, correo y las respuestas libres** que el prospecto escribe al agendar una demo — el `payload` completo del proveedor, sin filtrar | `src/lib/admin/calcom.ts` (`api.cal.com`), webhook `src/app/api/webhook/calcom/route.ts:71` (`registrarEventoComercial({ payload: input.payload })`, sin filtro) |
 
 **Sobre Resend (dado de alta el 14-ago-2026).** Entra a la cadena porque los
 avisos por correo salen de `avisos@mail.likida.ai`. Lo que viaja es el correo de
@@ -149,6 +151,34 @@ redactar—. Sin `SENTRY_DSN` no se carga el paquete siquiera.
 > que es como se pierde la hora de un evento. El camino que lo destapó fue
 > `src/app/api/webhook/whatsapp/route.ts` (`logger.warn('wa.ratelimit', { from })`
 > con el `from` sin normalizar), y `warn` se replica a Sentry.
+
+**Sobre Stripe y Cal.com (agregados el 3-sep-2026, auditoría 25).** Los dos
+existían en el código desde antes de esta fecha y no estaban en esta tabla —
+el anexo se había quedado como foto del 28-jul-2026, no como artefacto con
+dueño (ver "Trampa a evitar" arriba, que ya advertía de exactamente este
+problema con `package.json`, no con integraciones vivas).
+
+**Stripe** ya estaba declarado como encargada del lado de `/privacidad`
+(LEG-10, auditoría 24); lo que faltaba era esta tabla, que es la que
+`/privacidad` promete mantener actualizada.
+
+**Cal.com** es nuevo en el anexo. El webhook (`route.ts:71` →
+`registrarEventoComercial`, `calcom.ts:92-100`) guarda el **payload íntegro**
+que Cal.com manda en `comercial_evento.payload`, sin filtrar: eso incluye
+cualquier respuesta libre que la persona escriba al agendar (p. ej. el campo
+"¿algo que debamos saber?"), además de su nombre y correo. `purgar_comercial_evento`
+(`0245_purga_prospecto_entera_y_ledger_comercial.sql:124-148`) vacía ese
+`payload` a los **365 días** — la fila del ledger se queda (es append-only y
+su valor es el hecho, no la persona), pero el dato personal desaparece en
+ese plazo. **Este plazo de 365 días no está en `/aviso/prospectos`**
+(`privacidad.ts`, sección "Qué datos tenemos"), que enumera nombre, puesto,
+correo, teléfono, perfil e identificadores de campaña pero no las respuestas
+libres de la demo ni su plazo — revisión legal humana recomendada antes de
+publicar cualquier cambio a ese aviso para cerrar esta brecha.
+
+El atenuante honesto: `/api/webhook/calcom` responde 503 sin
+`CALCOM_WEBHOOK_SECRET` (`route.ts:42-43`), así que este flujo depende de que
+la integración esté encendida en el entorno. Stripe no tiene ese atenuante.
 
 ### El SAT no es subencargado
 
