@@ -15497,12 +15497,16 @@ end $$;
 --  (b) los NUEVE quedan con `prompt_ref IS NULL` — cerraban una referencia a
 --      un archivo que nunca se escribió; dejarla apuntando a nada sería la
 --      misma promesa falsa con otro nombre.
---  (c) los NUEVE quedan con una `descripcion` que YA NO contiene ninguna de
---      las frases originales de la 0125 que prometían de más ("investiga a
---      diario el mercado", "reactiva el scraper", "decide dónde se pone
---      cada pieza", "destila hooks con whisper", "escribe código de
---      prueba") — el CASE WHEN de la migración de verdad reescribió las
---      nueve filas, no solo algunas.
+--  (c) los NUEVE quedan con una `descripcion` que YA NO contiene la frase
+--      VIGENTE de cada uno al llegar la 0303 (la de 0230/0234/0235, no la
+--      de la 0125 original — ésa ya la habían reemplazado tres migraciones
+--      antes) — cada agente contra SU PROPIA frase, una por una, para que
+--      un `CASE WHEN` borrado (o que dejara alguna fila sin tocar) sí
+--      dispare la sonda de esa fila en vez de depender de un texto que
+--      ninguna descripción real llegó a tener nunca (auditoría 25, DATOS-M2:
+--      la lista anterior probaba contra la 0125, que 0230/0234/0235 ya
+--      habían sobrescrito por completo antes de que la 0303 corriera —
+--      cero de esas cinco frases podía dispararse).
 --  (d) un agente REAL del catálogo (`redactor`) NO quedó tocado — la
 --      migración no pudo haber puesto `experimental = false` a TODOS por
 --      accidente, ni tocado su `descripcion`.
@@ -15517,12 +15521,22 @@ declare
     'cazador','seo_distribucion','guiones','noticias_mercado',
     'promos_diarias','visuales','video_demo','video_marketing','pruebas'
   ];
+  -- Una frase por id, EN EL MISMO ORDEN que `ids` — la que su descripción
+  -- vigente traía justo antes de la 0303 (0230 para los siete de mercadeo,
+  -- 0234 para pruebas, 0235 para cazador), verificada de que NO aparece en
+  -- la descripción que la 0303 escribe.
   frases_viejas text[] := array[
-    'investiga a diario el mercado', 'reactiva el scraper',
-    'decide dónde se pone cada pieza', 'destila hooks con whisper',
-    'escribe código de prueba'
+    'el encargo de caza sobre lo que ya está en la base',                    -- cazador       (0235)
+    'el <title> que de verdad se sirve',                                     -- seo_distribucion (0230)
+    'no tiene los videos de referencia ni whisper',                          -- guiones       (0230)
+    'no navega la web y no finge una investigación',                        -- noticias_mercado (0230)
+    'cada beneficio del catálogo declara qué símbolo del producto lo sostiene', -- promos_diarias (0230)
+    'produce el encargo de la pieza gráfica',                                -- visuales      (0230)
+    'produce el encargo del video que se manda antes de la llamada',        -- video_demo    (0230)
+    'produce el encargo del reel para el gremio',                           -- video_marketing (0230)
+    'vigila los resultados que sí llegan a la base'                          -- pruebas       (0234)
   ];
-  k text; f text;
+  i int; k text; f text;
   no_graduados text[] := '{}';
   con_prompt_ref text[] := '{}';
   con_frase_vieja text[] := '{}';
@@ -15534,7 +15548,9 @@ declare
 begin
   select descripcion into redactor_descripcion_antes from public.agente_definicion where id = 'redactor';
 
-  foreach k in array ids loop
+  for i in 1..array_length(ids, 1) loop
+    k := ids[i];
+    f := frases_viejas[i];
     -- (a)
     if exists (select 1 from public.agente_definicion where id = k and experimental = true) then
       no_graduados := no_graduados || k;
@@ -15543,13 +15559,11 @@ begin
     if exists (select 1 from public.agente_definicion where id = k and prompt_ref is not null) then
       con_prompt_ref := con_prompt_ref || k;
     end if;
-    -- (c)
+    -- (c) la frase vigente ANTES de la 0303, contra SU PROPIO id.
     select descripcion into descripcion_actual from public.agente_definicion where id = k;
-    foreach f in array frases_viejas loop
-      if descripcion_actual is not null and lower(descripcion_actual) like '%' || f || '%' then
-        con_frase_vieja := con_frase_vieja || (k || ':' || f);
-      end if;
-    end loop;
+    if descripcion_actual is not null and lower(descripcion_actual) like '%' || f || '%' then
+      con_frase_vieja := con_frase_vieja || (k || ':' || f);
+    end if;
   end loop;
 
   -- (d) redactor intacto, antes y después de esta migración.
@@ -17256,4 +17270,130 @@ begin
 
   raise exception E'RECHAZADA_NO_CUENTA_0307  poliza-sin-rechazada=%  poliza-con-pendiente=%  reasignar-tras-rechazo=%  reasignar-tras-aprobada-rebota=%   (esperado t / t / t / t)',
     poliza_sin_rechazada, poliza_con_pendiente, reasignar_tras_rechazo, reasignar_tras_aprobada_rebota;
+-- ── 253. El upsert del webhook de Stripe contra `factura_saas` YA NO revienta con 42P10 (mig. 0309) ──
+--
+-- AUDITORÍA 25, DATOS-A2 (ALTO). `factura_saas_stripe_unica` nació PARCIAL
+-- (0052:105-106, `where stripe_invoice_id is not null`) y `aplicarFactura`
+-- (suscripcion.ts) la usa como blanco de `.upsert({...}, { onConflict:
+-- 'stripe_invoice_id' })`. PostgREST traduce eso a un `ON CONFLICT
+-- (stripe_invoice_id) DO UPDATE` SIN predicado — Postgres solo infiere un
+-- único PARCIAL si el ON CONFLICT repite su WHERE, que PostgREST no puede
+-- escribir. La 0309 lo dejó NO parcial, la misma lección que la 0176 ya
+-- aplicó a `uq_posicion_lectura`.
+--
+-- Este bloque reproduce el `INSERT … ON CONFLICT (stripe_invoice_id) DO
+-- UPDATE …` EXACTO que PostgREST emite (sin WHERE), tal como lo haría el
+-- primer webhook de Stripe: si el índice siguiera parcial, `upsert_sin_where`
+-- saldría en `f` (rebota 42P10, atrapado por el `exception when others`).
+-- También confirma que el segundo intento con el MISMO `stripe_invoice_id`
+-- ACTUALIZA la misma fila (no inserta una segunda) y que el predicado viejo
+-- era decorativo: dos facturas SIN `stripe_invoice_id` (pago por
+-- transferencia) siguen conviviendo sin chocar contra el único no-parcial —
+-- la semántica estándar de Postgres para NULLs en un índice único.
+-- Esperado: STRIPE_ONCONFLICT_0309  no_parcial=t  upsert_sin_where=t
+--   segunda_actualiza=t  una_sola_fila=t  nulos_conviven=t
+do $$
+declare
+  v_t uuid;
+  no_parcial boolean;
+  upsert_sin_where boolean := false;
+  v_f uuid;
+  segunda_actualiza boolean := false;
+  una_sola_fila boolean := false;
+  nulos_conviven boolean := false;
+begin
+  select indpred is null into no_parcial
+    from pg_index
+   where indexrelid = 'public.factura_saas_stripe_unica'::regclass;
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0309') returning id into v_t;
+
+  -- El upsert real de aplicarFactura, tal cual lo arma PostgREST: SIN WHERE.
+  begin
+    insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro, stripe_invoice_id)
+      values (v_t, date '2026-09-01', date '2026-09-30', 2900, 'stripe', 'in_zzz_0309')
+      on conflict (stripe_invoice_id) do update set monto = excluded.monto
+      returning id into v_f;
+    upsert_sin_where := true;
+  exception when others then upsert_sin_where := false;
+  end;
+
+  -- El reintento de Stripe con el MISMO invoice: debe pisar la misma fila.
+  insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro, stripe_invoice_id)
+    values (v_t, date '2026-09-01', date '2026-09-30', 3200, 'stripe', 'in_zzz_0309')
+    on conflict (stripe_invoice_id) do update set monto = excluded.monto
+    returning id into v_f;
+
+  select (monto = 3200) into segunda_actualiza from factura_saas where id = v_f;
+  select (count(*) = 1) into una_sola_fila from factura_saas where stripe_invoice_id = 'in_zzz_0309';
+
+  -- El predicado viejo era decorativo: dos filas SIN invoice (transferencia)
+  -- ya convivían sin él — un único no-parcial no compite entre NULLs.
+  insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro)
+    values (v_t, date '2026-09-01', date '2026-09-30', 1000, 'transferencia');
+  insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro)
+    values (v_t, date '2026-09-01', date '2026-09-30', 1500, 'transferencia');
+  select (count(*) = 2) into nulos_conviven
+    from factura_saas where tenant_id = v_t and stripe_invoice_id is null;
+
+  raise exception E'STRIPE_ONCONFLICT_0309  no_parcial=%  upsert_sin_where=%  segunda_actualiza=%  una_sola_fila=%  nulos_conviven=%   (esperado t / t / t / t / t)',
+    no_parcial, upsert_sin_where, segunda_actualiza, una_sola_fila, nulos_conviven;
+end $$;
+
+-- ── 254. Borrar un operador vacía SOLO `app_user.operador_id`, nunca `tenant_id` (mig. 0310) ──
+--
+-- AUDITORÍA 25, DATOS-M3 (MEDIO, REINCIDENTE DATOS-24). La 0290 dejó
+-- `app_user_operador_tenant_fkey` con `on delete set null` SIN lista de
+-- columnas — en Postgres eso anula TODAS las columnas de la FK compuesta, no
+-- solo `operador_id`. `app_user.tenant_id` es nullable a propósito (0001:17,
+-- «null = superadmin»), así que borrar un operador dejaba al encargado que lo
+-- tenía con la FORMA reservada al superadmin: `get_user_tenant_ids()` le
+-- devuelve `[]` y `/dashboard` le pinta su flota vacía sin un solo error.
+--
+-- La 0310 recreó la FK con `on delete set null (operador_id)`. Este bloque
+-- hace el `DELETE FROM operador` real y mide las dos columnas por separado —
+-- es justo la distinción que un `on delete set null` sin lista no puede
+-- hacer, así que es lo único que puede demostrar que se corrigió.
+-- Esperado: OPERADOR_TENANT_SET_NULL_0310  operador_id_null=t  tenant_id_intacto=t
+do $$
+declare
+  ta uuid := gen_random_uuid();
+  op uuid := gen_random_uuid();
+  au uuid := gen_random_uuid();
+  operador_id_null boolean;
+  tenant_id_intacto boolean;
+begin
+  insert into public.tenant (id, nombre) values (ta, '__verif_0310__');
+  insert into public.operador (id, tenant_id, nombre, telefono) values (op, ta, 'Duplicado', '5299937007 83');
+  insert into public.app_user (id, tenant_id, email, rol, operador_id)
+    values (au, ta, '__verif_0310__@likida.test', 'encargado', op);
+
+  delete from public.operador where id = op;
+
+  select (operador_id is null) into operador_id_null from public.app_user where id = au;
+  select (tenant_id = ta) into tenant_id_intacto from public.app_user where id = au;
+
+  raise exception E'OPERADOR_TENANT_SET_NULL_0310  operador_id_null=%  tenant_id_intacto=%   (esperado t / t)',
+    operador_id_null, tenant_id_intacto;
+end $$;
+
+-- ── 255. `tenant_perfil_merge` ya no lo puede ejecutar `anon`/`authenticated` (mig. 0312) ──
+--
+-- AUDITORÍA 25, DATOS-B2 (BAJO, REINCIDENTE DE LA 24). La 0296 solo traía
+-- `grant execute ... to service_role` — Postgres concede EXECUTE a PUBLIC por
+-- default en funciones nuevas, y Supabase además concede explícito a
+-- `anon`/`authenticated` por sus default privileges (0284:110-112). Un
+-- `grant` a `service_role` no retira eso: hacía falta el `revoke` explícito.
+-- Esperado: TENANT_PERFIL_MERGE_REVOKE_0312  anon=f  authenticated=f
+do $$
+declare
+  anon_ok boolean; authenticated_ok boolean;
+begin
+  select has_function_privilege('anon', 'public.tenant_perfil_merge(uuid, jsonb, uuid)', 'EXECUTE')
+    into anon_ok;
+  select has_function_privilege('authenticated', 'public.tenant_perfil_merge(uuid, jsonb, uuid)', 'EXECUTE')
+    into authenticated_ok;
+
+  raise exception E'TENANT_PERFIL_MERGE_REVOKE_0312  anon=%  authenticated=%   (esperado f / f)',
+    anon_ok, authenticated_ok;
 end $$;
