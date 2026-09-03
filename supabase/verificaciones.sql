@@ -17090,3 +17090,73 @@ begin
   raise exception E'LLM_COSTO_FASE_0304  existe=%  sobre-llm-costo=%  siete=%  transcripcion=%   (esperado t / t / t / t)',
     existe, sobre_tabla, siete, tiene_transcripcion;
 end $$;
+
+-- ── 251. El upsert del webhook de Stripe contra `factura_saas` YA NO revienta con 42P10 (mig. 0305) ──
+--
+-- AUDITORÍA 25, DATOS-A2 (ALTO). `factura_saas_stripe_unica` nació PARCIAL
+-- (0052:105-106, `where stripe_invoice_id is not null`) y `aplicarFactura`
+-- (suscripcion.ts) la usa como blanco de `.upsert({...}, { onConflict:
+-- 'stripe_invoice_id' })`. PostgREST traduce eso a un `ON CONFLICT
+-- (stripe_invoice_id) DO UPDATE` SIN predicado — Postgres solo infiere un
+-- único PARCIAL si el ON CONFLICT repite su WHERE, que PostgREST no puede
+-- escribir. La 0305 lo dejó NO parcial, la misma lección que la 0176 ya
+-- aplicó a `uq_posicion_lectura`.
+--
+-- Este bloque reproduce el `INSERT … ON CONFLICT (stripe_invoice_id) DO
+-- UPDATE …` EXACTO que PostgREST emite (sin WHERE), tal como lo haría el
+-- primer webhook de Stripe: si el índice siguiera parcial, `upsert_sin_where`
+-- saldría en `f` (rebota 42P10, atrapado por el `exception when others`).
+-- También confirma que el segundo intento con el MISMO `stripe_invoice_id`
+-- ACTUALIZA la misma fila (no inserta una segunda) y que el predicado viejo
+-- era decorativo: dos facturas SIN `stripe_invoice_id` (pago por
+-- transferencia) siguen conviviendo sin chocar contra el único no-parcial —
+-- la semántica estándar de Postgres para NULLs en un índice único.
+-- Esperado: STRIPE_ONCONFLICT_0305  no_parcial=t  upsert_sin_where=t
+--   segunda_actualiza=t  una_sola_fila=t  nulos_conviven=t
+do $$
+declare
+  v_t uuid;
+  no_parcial boolean;
+  upsert_sin_where boolean := false;
+  v_f uuid;
+  segunda_actualiza boolean := false;
+  una_sola_fila boolean := false;
+  nulos_conviven boolean := false;
+begin
+  select indpred is null into no_parcial
+    from pg_index
+   where indexrelid = 'public.factura_saas_stripe_unica'::regclass;
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0305') returning id into v_t;
+
+  -- El upsert real de aplicarFactura, tal cual lo arma PostgREST: SIN WHERE.
+  begin
+    insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro, stripe_invoice_id)
+      values (v_t, date '2026-09-01', date '2026-09-30', 2900, 'stripe', 'in_zzz_0305')
+      on conflict (stripe_invoice_id) do update set monto = excluded.monto
+      returning id into v_f;
+    upsert_sin_where := true;
+  exception when others then upsert_sin_where := false;
+  end;
+
+  -- El reintento de Stripe con el MISMO invoice: debe pisar la misma fila.
+  insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro, stripe_invoice_id)
+    values (v_t, date '2026-09-01', date '2026-09-30', 3200, 'stripe', 'in_zzz_0305')
+    on conflict (stripe_invoice_id) do update set monto = excluded.monto
+    returning id into v_f;
+
+  select (monto = 3200) into segunda_actualiza from factura_saas where id = v_f;
+  select (count(*) = 1) into una_sola_fila from factura_saas where stripe_invoice_id = 'in_zzz_0305';
+
+  -- El predicado viejo era decorativo: dos filas SIN invoice (transferencia)
+  -- ya convivían sin él — un único no-parcial no compite entre NULLs.
+  insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro)
+    values (v_t, date '2026-09-01', date '2026-09-30', 1000, 'transferencia');
+  insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro)
+    values (v_t, date '2026-09-01', date '2026-09-30', 1500, 'transferencia');
+  select (count(*) = 2) into nulos_conviven
+    from factura_saas where tenant_id = v_t and stripe_invoice_id is null;
+
+  raise exception E'STRIPE_ONCONFLICT_0305  no_parcial=%  upsert_sin_where=%  segunda_actualiza=%  una_sola_fila=%  nulos_conviven=%   (esperado t / t / t / t / t)',
+    no_parcial, upsert_sin_where, segunda_actualiza, una_sola_fila, nulos_conviven;
+end $$;
