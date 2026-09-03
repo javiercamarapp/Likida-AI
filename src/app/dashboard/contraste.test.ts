@@ -160,3 +160,55 @@ describe('modo oscuro: el mismo token, el otro color', () => {
   // bloque `[data-theme="dark"]` se conserva por si algún día hay un switch
   // manual — eso sí seguiría midiéndose arriba.
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25, MEDIO — la columna «Región» de top-rutas.tsx pintaba con hex
+// fijos dentro del .tsx (`style={{ color: hex, background: color-mix(hex
+// 12%, transparent) }}`), invisibles para las pruebas de arriba (que solo
+// leen `globals.css`) y reprobaban AA: en claro, Golfo #0891b2 medía 3.20:1;
+// en oscuro las siete caían entre 2.79:1 y 4.43:1. Ahora son tokens
+// `--region-*` con pareja clara/oscura. La superficie que se mide es el
+// fondo COMPUESTO real — el propio tono al 12% sobre --surface, como lo
+// pinta `color-mix()` — no --surface a secas: contra blanco puro casi
+// cualquier tono pasa, pero eso no es lo que hay detrás del texto.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('columna «Región» del Resumen: siete tokens categóricos, no hex en línea', () => {
+  const REGIONES = [
+    'region-centro', 'region-occidente', 'region-noreste',
+    'region-noroeste', 'region-golfo', 'region-sureste', 'region-sur',
+  ];
+
+  /** Reproduce `color-mix(in srgb, ${fg} 12%, transparent)` compuesto sobre
+   *  una superficie opaca — lo que el navegador termina pintando detrás del
+   *  texto de la píldora. */
+  function compuesto(fg: string, superficie: string): string {
+    const f = [1, 3, 5].map((i) => parseInt(fg.slice(i, i + 2), 16));
+    const s = [1, 3, 5].map((i) => parseInt(superficie.slice(i, i + 2), 16));
+    const m = f.map((c, idx) => Math.round(0.12 * c + 0.88 * s[idx]));
+    return `#${m.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  it('pasan AA en claro contra su propio fondo al 12% sobre --surface', () => {
+    const SUPERFICIE = '#ffffff';
+    for (const nombre of REGIONES) {
+      const fg = token(':root', `--${nombre}`);
+      expect(contraste(fg, compuesto(fg, SUPERFICIE)), nombre).toBeGreaterThanOrEqual(AA_TEXTO);
+    }
+  });
+
+  it('pasan AA en oscuro contra su propio fondo al 12% sobre --surface', () => {
+    const SUPERFICIE = '#131316'; // --surface del bloque [data-theme="dark"]
+    for (const nombre of REGIONES) {
+      const fg = token(':root[data-theme="dark"]', `--${nombre}`);
+      expect(contraste(fg, compuesto(fg, SUPERFICIE)), nombre).toBeGreaterThanOrEqual(AA_TEXTO);
+    }
+  });
+
+  it('cada región tiene un color DISTINTO en claro y en oscuro', () => {
+    for (const nombre of REGIONES) {
+      const claro = token(':root', `--${nombre}`);
+      const oscuro = token(':root[data-theme="dark"]', `--${nombre}`);
+      expect(claro, nombre).not.toBe(oscuro);
+    }
+  });
+});
