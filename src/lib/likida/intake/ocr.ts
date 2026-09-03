@@ -16,7 +16,7 @@ import { generateStructured, StructuredError, TruncatedError, resumenCausa } fro
 import type { LlmBudget } from '@/lib/llm/budget';
 import { alertarOperador, contadorDeFallos } from '@/lib/observability/alerta';
 import { bufferFromDataUrl, esRfcValido, esUuidValido, rfcChecksumOk } from './cfdi';
-import { decodeCodigosFromImage } from './cfdi_imagen';
+import { decodeCodigosFromImage, redimensionarParaVision } from './cfdi_imagen';
 import { normalizarFecha, corregirVolteoDiaMes } from './fecha';
 import { hoyMx } from '@/lib/formato';
 import { sanitizarFolio, sanitizarTexto, sanitizarProducto } from './sanitizar';
@@ -391,7 +391,22 @@ export async function extraerComprobante(
   // La foto sin código es la del ticket completo (el acercamiento se tomó PARA
   // el código, así que trae poco texto). Si todas traen código, la primera.
   const iSinCodigo = codigosPorFoto.findIndex((c) => c.length === 0);
-  const principal = fotos[iSinCodigo >= 0 ? iSinCodigo : 0];
+  const principalOriginal = fotos[iSinCodigo >= 0 ? iSinCodigo : 0];
+
+  // AUDITORÍA 25, BAJO (REND-A9, REINCIDENTE): la foto iba al modelo de visión
+  // a resolución NATIVA aunque `decodeCodigosFromImage` ya calculó (y tiró) el
+  // mismo buffer reducido dos líneas arriba. Un ticket de iPhone reciente
+  // (4032×3024, ~4-5 MB) sube 5.3-6.7 MB de base64 dentro del cuerpo JSON, y
+  // ese cuerpo se reenvía hasta cuatro veces por la escalera de reintentos de
+  // `openrouter.ts`. Si el redimensionado falla, se manda el original: la
+  // foto nunca se pierde por un problema de `sharp`.
+  let principal = principalOriginal;
+  try {
+    const reducida = await redimensionarParaVision(bufferFromDataUrl(principalOriginal));
+    principal = `data:image/jpeg;base64,${reducida.toString('base64')}`;
+  } catch (e) {
+    logger.warn('ocr.redimension_fallo', { err: e instanceof Error ? e.message : String(e) });
+  }
 
   let res: Awaited<ReturnType<typeof generateStructured<z.infer<typeof ExtraccionSchema>>>>;
   try {
