@@ -1661,9 +1661,12 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // multiplica por la cuota que él tenga fechada.
       //
       // El medio de pago es requisito del 4º párrafo de la LIF 20-A-IV (monedero,
-      // tarjeta, cheque nominativo o transferencia) y NO tiene la válvula del 15%
-      // que la RFA 2.9 sí concede para ISR: la facilidad salva la deducción, no
-      // el acreditamiento.
+      // tarjeta, cheque nominativo o transferencia) — AUDITORÍA 25, BAJO FISCAL
+      // (línea 347): re-verificado contra el PDF oficial de diputados.gob.mx,
+      // el párrafo existe tal cual y ahora está transcrito en
+      // `normas/lif-2026-20-A.yaml` (estimulo_diesel_transporte.texto_vigente).
+      // Y NO tiene la válvula del 15% que la RFA 2.9 sí concede para ISR: la
+      // facilidad salva la deducción, no el acreditamiento.
       // Los litros los lee el OCR del ticket y viven en `ocrExtra` (el XML del
       // CFDI no siempre trae la cantidad desglosada por concepto).
       const litros = Number((g.ocrExtra as Record<string, unknown> | undefined)?.litros ?? 0);
