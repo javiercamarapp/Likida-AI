@@ -20,6 +20,10 @@ let seCallaDesde = Infinity;
 const llamadas: Array<{ filtros: Array<[string, unknown]>; rango: [number, number] | null; conteo: boolean; limit: number | null; update: Record<string, unknown> | null; enIds: string[] | null }> = [];
 /** A partir de esta tanda de UPDATE (0-based), la base contesta error. */
 let updateFallaDesde = Infinity;
+/** Ids que la "base" trata como YA exportados: el `.is('exportada_en', null)`
+ *  real los excluiría del `update ... returning`, aunque sigan viajando en
+ *  el `.in()` de la tanda (BAJO-290). */
+let yaExportados = new Set<string>();
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
@@ -40,7 +44,12 @@ vi.mock('@/lib/supabase/admin', () => ({
           if (llamada.update) {
             const nEsta = llamadas.filter((l) => l.update).indexOf(llamada);
             const error = nEsta >= updateFallaDesde ? { message: '414 URI Too Long' } : null;
-            return Promise.resolve({ data: null, error }).then(res, rej);
+            // BAJO-290: `.select('id')` encadenado al update — la "base"
+            // devuelve solo los ids que de verdad se marcaron (excluye los
+            // que `.is('exportada_en', null)` habría dejado fuera).
+            const data = error ? null : (llamada.enIds ?? [])
+              .filter((id) => !yaExportados.has(id)).map((id) => ({ id }));
+            return Promise.resolve({ data, error }).then(res, rej);
           }
           const [d, h] = llamada.rango ?? [0, (llamada.limit ?? MAX_ROWS) - 1];
           // El recorte REAL de PostgREST: nunca más de max_rows por respuesta.
@@ -63,7 +72,7 @@ const factura = (i: number) => ({
   decidido_por: null, decidido_en: null, created_at: '2026-08-10T00:00:00Z', origen: 'xml', ocr_confianza: null, estado_sat: null, exportada_en: null,
 });
 
-beforeEach(() => { llamadas.length = 0; facturas = []; seCallaDesde = Infinity; updateFallaDesde = Infinity; });
+beforeEach(() => { llamadas.length = 0; facturas = []; seCallaDesde = Infinity; updateFallaDesde = Infinity; yaExportados = new Set(); });
 
 describe('ESC-8 — el export de proveedor trae TODAS las aprobadas o lanza', () => {
   it('REPRO: 1,001 aprobadas salen las 1,001 (antes: 1,000 calladas)', async () => {
@@ -138,5 +147,18 @@ describe('BE-8 — el marcado sale por tandas y dice cuántas alcanzó', () => {
   it('sin ids no toca la base', async () => {
     expect(await marcarExportadas('t-1', [])).toEqual({ marcadas: 0 });
     expect(llamadas.filter((l) => l.update)).toHaveLength(0);
+  });
+
+  it('BAJO-290 (auditoría 25, REINCIDENTE): cuenta lo que el UPDATE marcó, no los ids que mandó', async () => {
+    // 120 de los 400 ids ya traían `exportada_en` puesto (otro export previo,
+    // o dos pestañas del mismo contador exportando a la vez): el
+    // `.is('exportada_en', null)` real los excluye del update.
+    const todos = ids(400);
+    yaExportados = new Set(todos.slice(0, 120));
+
+    const r = await marcarExportadas('t-1', todos);
+
+    expect(r.marcadas).toBe(280);
+    expect(r).not.toEqual({ marcadas: 400 });
   });
 });
