@@ -26,7 +26,11 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => {
       const nodo: Record<string, unknown> = {};
-      for (const m of ['select', 'eq', 'in', 'order', 'limit']) {
+      // `or` entra con la ALTO de la reauditoría 25: el filtro de la baja va
+      // también en la base. El doble devuelve la tabla entera igual que con
+      // los demás encadenados, así que lo que las pruebas de abajo ejercen es
+      // la capa de TS — que es donde vive la regla.
+      for (const m of ['select', 'eq', 'in', 'order', 'limit', 'or']) {
         nodo[m] = (...a: unknown[]) => { filtros.push([`${tabla}.${m}`, a]); return nodo; };
       }
       nodo.then = (r: (v: unknown) => unknown) => Promise.resolve(cuentas).then(r);
@@ -137,6 +141,42 @@ describe('cuando falta algo, NO se arma una flota a medias', () => {
     expect(flota).toBeNull();
     expect(falta.join(' ')).toMatch(/código postal/);
     expect(falta.join(' ')).toMatch(/uso de CFDI/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25 · ALTO (reauditoría) — LA BAJA CERRABA WHATSAPP Y DEJABA
+// ABIERTO EL CORREO. Misma causa raíz exacta que AGEN-C1 (commit 24ce4c2,
+// contactos.ts): `desactivarUsuario` escribe `activo=false` y NO borra
+// `app_user.email`, así que esta consulta lo seguía encontrando.
+//
+// Escenario medido: Innovativos da de baja a Marisol, su contadora. El panel
+// la echa, la RLS la echa, el WhatsApp también — pero el cron de facturación
+// seguía resolviendo `correoDeFacturacion('innovativos')` a
+// `marisol@despacho-anterior.mx`, y el portal le mandaba el CFDI de la flota:
+// RFC, razón social e importe, a un despacho que ya no es el suyo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('ALTO (reauditoría 25) · el correo también respeta la baja', () => {
+  it('un contador DADO DE BAJA no recibe el CFDI aunque sea la única cuenta', async () => {
+    cuentas = { data: [{ rol: 'contador', email: 'marisol@despacho-anterior.mx', activo: false }], error: null };
+    expect((await getFiscalDeFlota('t-1')).flota).toBeNull();
+  });
+
+  it('con el contador de baja, el CFDI cae al flota_admin VIVO, no al ex-contador', async () => {
+    cuentas = {
+      data: [
+        { rol: 'contador', email: 'marisol@despacho-anterior.mx', activo: false },
+        { rol: 'flota_admin', email: 'jefe@flota.mx', activo: true },
+      ],
+      error: null,
+    };
+    const { flota } = await getFiscalDeFlota('t-1');
+    expect(flota?.correo).toBe('jefe@flota.mx');
+  });
+
+  it('un `activo` ausente en la fila NO da de baja: solo el false explícito (base sin la 0294)', async () => {
+    cuentas = { data: [{ rol: 'flota_admin', email: 'jefe@flota.mx' }], error: null };
+    expect((await getFiscalDeFlota('t-1')).flota?.correo).toBe('jefe@flota.mx');
   });
 });
 
