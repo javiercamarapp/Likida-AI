@@ -112,6 +112,13 @@ async function telefonoDeRol(tenantId: string, rol: string): Promise<string | nu
   // El `.limit(1)` cuenta filas del SERVIDOR, así que el filtro tiene que ir en
   // la base o una fila de baja se lleva el cupo y esconde a la viva; y otra vez
   // en TS, porque una regla en dos capas no es una regla repetida.
+  //
+  // CORRECCIÓN (reauditoría de la 25): la rama `activo.is.null` no es una red
+  // para la base vieja. La 0294 crea la columna `not null default true`
+  // (`0294:47`): aplicada, NULL es imposible; sin aplicar, la columna no existe
+  // y este `select` da 42703 — esta función LANZA. El caso sí queda cubierto,
+  // pero por otro lado: la compuerta de despliegue no construye si la base va
+  // atrás, y aquí el `catch` de arriba alerta al operador igual.
   const { data, error } = await acotada(supabaseAdmin()
     .from('app_user').select('telefono, activo')
     .eq('tenant_id', tenantId).eq('rol', rol)

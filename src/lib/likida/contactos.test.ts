@@ -141,7 +141,14 @@ describe('AGEN-C1 · la salida también respeta la baja', () => {
     expect(await telefonoParaDineroDe('t-1')).toBe('5219990000002');
   });
 
-  it('telefonoParaDineroDe sigue funcionando con la columna ausente (base sin la 0294)', async () => {
+  // Ojo con el nombre que esta prueba tenía antes («base sin la 0294»): eso NO
+  // es lo que ejerce, y la reauditoría de la 25 lo cazó. La 0294 declara
+  // `activo boolean not null default true` (`0294:47`), así que una base sin
+  // ella no devuelve filas sin la llave: no tiene la columna, el `select` da
+  // 42703 y la función LANZA. Lo que esta prueba fija es lo otro, que sigue
+  // valiendo: la capa de TS juzga por `!== false`, no por ausencia de `true`,
+  // así que un `undefined` no da de baja a nadie por accidente.
+  it('un `activo` ausente en la fila NO da de baja: solo el false explícito', async () => {
     TABLAS.app_user = [c({})];
     expect(await telefonoParaDineroDe('t-1')).toBe('5219993700779');
   });
