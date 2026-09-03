@@ -32,6 +32,7 @@ const getGastosFiscales = vi.fn();
 const resumirFiscal = vi.fn();
 const resumirPerdidas = vi.fn();
 const opcionesDe = vi.fn();
+const opcionesFiscalesDelPeriodo = vi.fn();
 const resolverPeriodo = vi.fn();
 const getConfig = vi.fn();
 const getKpis = vi.fn();
@@ -56,6 +57,7 @@ vi.mock('@/lib/likida/fiscal', () => ({
   resumirFiscal: (...a: unknown[]) => resumirFiscal(...a),
   resumirPerdidas: (...a: unknown[]) => resumirPerdidas(...a),
   opcionesDe: (...a: unknown[]) => opcionesDe(...a),
+  opcionesFiscalesDelPeriodo: (...a: unknown[]) => opcionesFiscalesDelPeriodo(...a),
   resolverPeriodo: (...a: unknown[]) => resolverPeriodo(...a),
 }));
 vi.mock('@/lib/likida/config', () => ({ getConfig: (...a: unknown[]) => getConfig(...a) }));
@@ -365,6 +367,7 @@ describe('herramientaResumenFiscal.ejecutar', () => {
   beforeEach(() => {
     resolverPeriodo.mockReturnValue({ clave: 'ejercicio', desde: null, hasta: null, etiqueta: 'el ejercicio 2026' });
     opcionesDe.mockReturnValue({});
+    opcionesFiscalesDelPeriodo.mockResolvedValue({});
     getGastosFiscales.mockResolvedValue([]);
   });
 
