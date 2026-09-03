@@ -536,10 +536,18 @@ export function aQuienLlamar(inc: Incidente): Telefono[] {
   // es un daño que no se deshace.
   if (inc.hayLesionados === true) {
     for (const c of inc.contactosFamilia.filter((x) => x.avisarSiLesionados)) {
+      // AUDITORÍA 25 (ALTO, REINCIDENTE): este `quien` viaja tal cual al
+      // cuerpo de `armarParteIncidente`, que se encola en `cola_aprobacion`
+      // (la bandeja de /admin) — una tabla SIN alcance de purga ni de
+      // cancelación ARCO (no tiene FK a operador ni a contacto_emergencia).
+      // El arreglo de la 24 ya ocultó el NÚMERO por esta misma razón; el
+      // nombre y el parentesco del familiar se quedaron. Mismo criterio:
+      // se remite al expediente (que SÍ está dentro del ciclo de purga/ARCO
+      // del tenant) en vez de reproducirlos aquí.
       t.push({
-        quien: `${c.nombre}${c.parentesco ? ` (${c.parentesco})` : ''} — familia de ${inc.operadorNombre ?? 'el operador'}`,
+        quien: `Contacto de emergencia — familia de ${inc.operadorNombre ?? 'el operador'} (nombre y parentesco: en el expediente, no reproducidos aquí)`,
         numero: c.telefono,
-        respaldo: 'contacto_emergencia, capturado por la flota con la casilla «avisar si hay lesionados» marcada. HAY LESIONADOS CONFIRMADOS en el expediente.',
+        respaldo: 'contacto_emergencia, capturado por la flota con la casilla «avisar si hay lesionados» marcada. El estado de salud confirmado vive en el expediente — no se repite aquí.',
       });
     }
   }
@@ -595,11 +603,15 @@ export function armarParteIncidente(inc: Incidente, telefonos: Telefono[], dia: 
     // vez de repetirlo.
     `  · Descripción: revísala en el panel de tu flota (expediente ${inc.id}) — este parte no la reproduce.`,
   ];
+  // AUDITORÍA 25 (ALTO, REINCIDENTE): el estado de salud es dato SENSIBLE
+  // (LFPDPPP art. 2 fr. VI, agravado por el art. 59 fr. IV) y esta pieza
+  // vive en `cola_aprobacion`, sin alcance de purga ni de ARCO — mismo
+  // criterio que la descripción, arriba: se remite al expediente en vez de
+  // afirmar el valor aquí. El caso NULL se queda igual: "no se preguntó" no
+  // es un dato de salud, es la ausencia de uno.
   l.push(inc.hayLesionados === null
     ? '  · ¿Hay lesionados? NO SE PREGUNTÓ. La columna está en NULL, y NULL aquí significa exactamente eso — no significa «no hay». Es la PRIMERA pregunta de la llamada, y hasta que se conteste este parte no propone avisarle a ninguna familia.'
-    : inc.hayLesionados
-      ? '  · ¿Hay lesionados? SÍ, CONFIRMADO en el expediente.'
-      : '  · ¿Hay lesionados? NO, y está confirmado en el expediente (alguien lo contestó, no es un default).');
+    : `  · ¿Hay lesionados? Ya se contestó en el expediente (${inc.id}) — revísalo en el panel de tu flota; este parte no reproduce el dato de salud.`);
   l.push(inc.unidadMovible === null
     ? '  · ¿La unidad se puede mover? NO SE PREGUNTÓ. De la respuesta depende si hace falta grúa.'
     : inc.unidadMovible
@@ -783,13 +795,17 @@ async function correrEspecialistasIncidente(disparo: DisparoCorrida, hoy: string
     // la bandeja. Los teléfonos NO viajan en `fuentes` — el cuerpo ya los
     // lleva para quien lo lee, y duplicarlos en el jsonb de trazabilidad
     // esparciría datos personales por una columna que nadie mira.
+    //
+    // AUDITORÍA 25 (ALTO, REINCIDENTE): por la misma razón, `lesionados`
+    // (dato de salud, art. 2 fr. VI) NO viaja aquí — se retiró. `fuentes`
+    // es de `cola_aprobacion`, sin alcance de purga ni de ARCO; `hay_lesionados`
+    // SÍ vive dentro de ese ciclo en `incidencia`, que es de donde se lee.
     const res = await encolarPiezaDireccion(agente, 'parte_incidente', tituloIncidente(inc.id), armarParteIncidente(inc, telefonos, hoy), {
       incidencia: inc.id,
       tipo: inc.tipo,
       prioridad: inc.prioridad,
       telefonos_disponibles: telefonos.length,
       con_poliza: inc.poliza !== null,
-      lesionados: inc.hayLesionados,
       consultas: ['incidencia (emergencias sin resolver)', 'flota_poliza', 'proveedor_emergencia', 'contacto_emergencia'],
     }, inc.tenantId);
     await anotarCorrida(agente, inicio, 'ok', disparo, { pieza: res, incidencia: inc.id, telefonos: telefonos.length });

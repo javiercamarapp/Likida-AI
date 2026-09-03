@@ -810,6 +810,14 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         // estaba en ninguna lista, y el Carta Porte lleva RFC y licencia del
         // operador.
         `También les llegan **tus notas de voz**, completas, para transcribirlas a texto.`,
+        // AUDITORÍA 25 (ALTO, REINCIDENTE de la 24): esta cláusula faltaba.
+        // El asistente del panel (`/dashboard`, chat-tools.ts → viajes_flota)
+        // le manda al mismo modelo tu nombre junto con el anticipo de tus
+        // viajes cuando alguien de tu empresa le pregunta por la flota —un
+        // flujo distinto del de arriba (que sale de TU conversación) y que
+        // no estaba dicho.
+        // revisión legal humana recomendada antes de publicar
+        `Y cuando alguien de tu empresa usa el **asistente del panel** para preguntar por los viajes de la flota, ese modelo también puede recibir tu **nombre** junto con **montos de tus viajes** —el anticipo, por ejemplo— para poder contestarle.`,
         `Y cuando tu empresa emite un complemento **Carta Porte**, el comprobante viaja al **proveedor autorizado de certificación (PAC)** que lo timbra ante el SAT, y dentro de él van **tu RFC y el número de tu licencia**: el SAT los exige en ese documento.`,
         `Transferencias que sí lo son y no necesitan tu consentimiento: a la autoridad fiscal cuando la ley lo exige, y al contador de la empresa para cumplir sus obligaciones.`,
         `**Si algún día se quisiera transferir tus datos para algo distinto, se te pedirá permiso antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
@@ -983,7 +991,14 @@ export function avisoProspectos(d: DatosAvisoProspectos): SeccionAviso[] {
       parrafos: [
         `**Una sola finalidad comercial:** contactarte, por correo, WhatsApp o teléfono, para ofrecerle a tu empresa el servicio de liquidación de viajes de Likida y, si te interesa, agendar una demostración.`,
         `Para decidir a quién escribirle primero, un programa **ordena la lista de empresas** con un puntaje que cuenta si hay forma de contactarlas y qué tan parecida es la empresa al cliente que Likida busca. Ese puntaje ordena una cola de llamadas; **no decide nada sobre ti** ni produce efectos jurídicos en tu persona.`,
-        `Cuando un programa redacta el primer mensaje, **tu nombre no sale de Likida**: la ficha que recibe el modelo de lenguaje lleva un marcador en lugar de tu nombre, y sin tus datos de contacto; tu nombre de pila se pone después, dentro de Likida.`,
+        `Cuando un programa redacta el primer mensaje, **tu nombre no sale de Likida para esa redacción**: la ficha que recibe el modelo de lenguaje para escribir el texto lleva un marcador en lugar de tu nombre, y sin tus datos de contacto; tu nombre de pila se pone después, dentro de Likida.`,
+        // AUDITORÍA 25 (ALTO): esta cláusula faltaba. Un programa investigador
+        // lee las páginas del sitio de tu empresa y se las manda a un modelo de
+        // lenguaje pidiéndole que extraiga nombre, puesto, correo y teléfono de
+        // las personas que aparecen — un flujo distinto del de arriba, que sí
+        // debe decirse.
+        // revisión legal humana recomendada antes de publicar
+        `**Para investigar a tu empresa antes del primer contacto, es distinto:** un programa lee las páginas públicas del sitio de tu empresa (por ejemplo, la de contacto) y se las manda completas —incluyendo tu nombre, tu puesto, tu correo y tu teléfono si ahí aparecen— a un modelo de lenguaje, para que arme un resumen y localice esos datos de contacto. Ese modelo es uno de los "proveedores encargados" de la sección "Con quién se comparten", más abajo.`,
         `Cualquier uso que no esté escrito aquí requiere pedirte permiso. La ley vigente ya no admite ampararse en fines "compatibles o análogos".`,
       ],
     },
@@ -1009,7 +1024,12 @@ export function avisoProspectos(d: DatosAvisoProspectos): SeccionAviso[] {
       titulo: 'Con quién se comparten',
       fundamento: 'LFPDPPP art. 35 · art. 2 fr. XX',
       parrafos: [
-        `**No se venden ni se comparten con nadie para que los use por su cuenta.** Pasan por proveedores que trabajan por instrucción de Likida —alojamiento de la base de datos, envío de correo y mensajería—, que la ley llama personas encargadas (art. 2 fr. XII) y cuyo uso **no es una transferencia** (art. 2 fr. XX).`,
+        `**No se venden ni se comparten con nadie para que los use por su cuenta.** Pasan por proveedores que trabajan por instrucción de Likida —alojamiento de la base de datos, envío de correo y mensajería, y los modelos de lenguaje que investigan a tu empresa y redactan el primer contacto—, que la ley llama personas encargadas (art. 2 fr. XII) y cuyo uso **no es una transferencia** (art. 2 fr. XX).`,
+        // AUDITORÍA 25 (ALTO): la investigación de tu empresa (ver arriba) le
+        // manda al modelo tu nombre, correo y teléfono si aparecen en el
+        // sitio de tu empresa — a diferencia de la redacción del primer
+        // mensaje, que sí va seudonimizada.
+        `**A diferencia de la redacción del primer mensaje, la investigación previa no va seudonimizada:** si tu nombre, correo o teléfono aparecen en el sitio de tu empresa, le llegan al modelo tal cual, para que los localice.`,
       ],
     },
     {
@@ -1073,13 +1093,25 @@ export async function tieneAvisoPrevio(
 }
 
 /**
- * Las unidades cuyo operador ACTUAL no ha recibido el aviso.
+ * Las unidades cuyo operador ACTUAL no ha recibido el aviso — o, si el
+ * llamador trata un dato que identifica a quien va al volante aunque no
+ * haya viaje abierto (`sinViajeVivo: 'bloquear'`), las unidades sin forma de
+ * saber si su conductor dio ese aviso.
  *
  * «Actual» = el del viaje vivo (`abierto`/`en_cuadre`) que lleva esa unidad.
- * Una unidad sin viaje vivo no está ligada a ninguna persona: su posición es
- * la de un camión, no la de un titular, y se guarda. Una unidad con viaje
- * vivo cuyo operador tiene `aviso_privacidad_en` NULL es tratamiento sin
- * aviso, y NO se persiste nada suyo — ni posición ni evento de cámara.
+ * Una unidad sin viaje vivo NO tiene, hoy, otra forma de saber quién la
+ * conduce — el esquema no tiene una columna "operador actual" fuera de
+ * `viaje`. Para la POSICIÓN eso es aceptable por diseño: su GPS es del
+ * camión, no de un titular, y se guarda igual (`sinViajeVivo: 'permitir'`,
+ * el default).
+ *
+ * AUDITORÍA 25 (ALTO): para un EVENTO DE CÁMARA no es aceptable — el evento
+ * puede traer una liga al video de quién va al volante, y eso identifica a
+ * una persona exista o no un viaje abierto para su unidad. Un llamador que
+ * trate ese tipo de dato debe pedir `sinViajeVivo: 'bloquear'`: sin forma de
+ * saber si el conductor de hoy dio su aviso, la unidad se trata como
+ * sin-aviso y no se persiste nada suyo — el mismo criterio de "fallar
+ * cerrado" que ya rige cuando la base no contesta.
  *
  * Devuelve `error` cuando la base no contestó: el llamador debe tratar la
  * corrida entera como no autorizada (fallar cerrado), no como «sin aviso: 0».
@@ -1087,9 +1119,11 @@ export async function tieneAvisoPrevio(
 export async function unidadesSinAvisoPrevio(
   tenantId: string,
   unidadIds: readonly string[],
+  opciones: { sinViajeVivo?: 'permitir' | 'bloquear' } = {},
 ): Promise<{ sinAviso: Set<string>; error?: string }> {
   const sinAviso = new Set<string>();
   if (unidadIds.length === 0) return { sinAviso };
+  const bloquearSinViajeVivo = opciones.sinViajeVivo === 'bloquear';
 
   const operadorPorUnidad = new Map<string, string>();
   for (let i = 0; i < unidadIds.length; i += IDS_POR_CONSULTA) {
@@ -1107,7 +1141,10 @@ export async function unidadesSinAvisoPrevio(
       if (v.unidad_id && v.operador_id) operadorPorUnidad.set(String(v.unidad_id), String(v.operador_id));
     }
   }
-  if (operadorPorUnidad.size === 0) return { sinAviso };
+  if (operadorPorUnidad.size === 0) {
+    if (bloquearSinViajeVivo) for (const unidadId of unidadIds) sinAviso.add(unidadId);
+    return { sinAviso };
+  }
 
   const operadores = [...new Set(operadorPorUnidad.values())];
   const conAviso = new Set<string>();
@@ -1126,7 +1163,13 @@ export async function unidadesSinAvisoPrevio(
     }
   }
 
-  for (const [unidadId, operadorId] of operadorPorUnidad) {
+  for (const unidadId of unidadIds) {
+    const operadorId = operadorPorUnidad.get(unidadId);
+    if (!operadorId) {
+      // Sin viaje vivo: sin forma de saber quién la conduce hoy.
+      if (bloquearSinViajeVivo) sinAviso.add(unidadId);
+      continue;
+    }
     if (!conAviso.has(operadorId)) sinAviso.add(unidadId);
   }
   return { sinAviso };

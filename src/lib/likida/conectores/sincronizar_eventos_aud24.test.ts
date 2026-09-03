@@ -121,12 +121,18 @@ describe('LEG-1 · el evento de cámara no se guarda sin aviso previo', () => {
     expect(guardadasDe()).not.toContain('u-1');
   });
 
-  it('la unidad sin viaje vivo no está ligada a nadie: su evento entra', async () => {
+  // AUDITORÍA 25 (ALTO, REINCIDENTE): esta prueba afirmaba lo CONTRARIO —que
+  // el evento de una unidad sin viaje vivo entraba sin aviso— citando el
+  // mismo argumento que sí vale para la posición ("sin viaje = sin
+  // persona"), pero un evento de cámara puede traer la liga al video de
+  // quién va al volante, exista o no un viaje abierto. Corregida: ahora se
+  // trata como sin-aviso y NO se guarda (`sinViajeVivo: 'bloquear'`).
+  it('la unidad sin viaje vivo NO tiene forma de confirmar el aviso de su conductor: su evento NO entra', async () => {
     const r = await sincronizarEventosDeFlota(
       't-1', 'samsara', CRED, samsaraCon([evento('e-1', 'dev-1')]), AHORA,
     );
-    expect(r.sinAvisoPrevio).toBeUndefined();
-    expect(guardadasDe()).toEqual(['u-1']);
+    expect(r.sinAvisoPrevio).toBe(1);
+    expect(guardadasDe()).toEqual([]);
   });
 
   it('si la base no contesta, NO se guarda ningún evento de la flota', async () => {

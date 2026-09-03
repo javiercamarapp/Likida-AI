@@ -214,6 +214,24 @@ describe('especialistas_incidente: ni un teléfono que no esté en la base', () 
     expect(c).toContain('no significa «no hay»');
   });
 
+  // AUDITORÍA 25 (ALTO, REINCIDENTE): el dato de salud (¿hay lesionados?) y
+  // el nombre/parentesco del familiar viajaban COMPLETOS hacia
+  // `cola_aprobacion` — una tabla sin alcance de purga ni de ARCO. Mismo
+  // criterio que la descripción y el teléfono, ya redactados en la 24: se
+  // remite al expediente en vez de reproducirlos.
+  it('con lesionados confirmados, el parte NO afirma el dato de salud — remite al expediente', () => {
+    const c = armarParteIncidente({ ...inc, hayLesionados: true }, [], HOY);
+    expect(c).not.toContain('SÍ, CONFIRMADO en el expediente');
+    expect(c).toContain('Ya se contestó en el expediente');
+    expect(c).not.toMatch(/¿Hay lesionados\? SÍ/);
+  });
+
+  it('con lesionados descartados, el parte NO afirma el dato de salud — remite al expediente', () => {
+    const c = armarParteIncidente({ ...inc, hayLesionados: false }, [], HOY);
+    expect(c).not.toContain('NO, y está confirmado en el expediente');
+    expect(c).toContain('Ya se contestó en el expediente');
+  });
+
   it('sobre un NULL NO propone avisarle a la familia, aunque haya contactos', () => {
     const t = aQuienLlamar({
       ...inc,
@@ -222,7 +240,7 @@ describe('especialistas_incidente: ni un teléfono que no esté en la base', () 
     expect(t).toHaveLength(0);
   });
 
-  it('con lesionados CONFIRMADOS la familia va PRIMERO, y solo la marcada', () => {
+  it('con lesionados CONFIRMADOS la familia va PRIMERO, y solo la marcada — SIN su nombre ni parentesco (AUD-25)', () => {
     const t = aQuienLlamar({
       ...inc, hayLesionados: true,
       poliza: { aseguradora: 'ZZZ Seguros', numeroPoliza: 'P-1', telefono: '+528000000000', vigenciaHasta: '2027-01-01' },
@@ -231,9 +249,17 @@ describe('especialistas_incidente: ni un teléfono que no esté en la base', () 
         { nombre: 'Fam no', telefono: '+522222222222', parentesco: 'primo', avisarSiLesionados: false },
       ],
     });
-    expect(t[0].quien).toContain('Fam sí');
+    // AUDITORÍA 25 (ALTO, REINCIDENTE): el nombre y el parentesco del
+    // familiar NO deben aparecer — esta pieza va a `cola_aprobacion`, sin
+    // alcance de purga ni de ARCO.
+    expect(t[0].quien).not.toContain('Fam sí');
+    expect(t[0].quien).toContain('familia de');
     expect(t.map((x) => x.quien).join(' ')).not.toContain('Fam no');
+    expect(t.map((x) => x.quien).join(' ')).not.toMatch(/esposa|primo/);
     expect(t[1].quien).toContain('ZZZ Seguros');
+    // El teléfono sigue siendo el real (lo consume `armarParteIncidente`,
+    // que lo redirige él mismo al expediente).
+    expect(t[0].numero).toBe('+521111111111');
   });
 
   it('un proveedor sin verificar se rotula CAPTURADO PERO NO VERIFICADO', () => {
@@ -313,6 +339,9 @@ describe('especialistas_incidente: ni un teléfono que no esté en la base', () 
     expect(p.tenantId).toBe('t1');
     expect(JSON.stringify(p.fuentes)).not.toContain('+52');
     expect(p.cuerpo).toContain('+528000000000');
+    // AUDITORÍA 25 (ALTO, REINCIDENTE): `lesionados` (dato de salud) tampoco
+    // viaja al jsonb de trazabilidad — mismo criterio que los teléfonos.
+    expect(p.fuentes).not.toHaveProperty('lesionados');
   });
 });
 
