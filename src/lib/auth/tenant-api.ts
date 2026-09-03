@@ -2,6 +2,7 @@ import { logger } from '@/lib/logger';
 import { getSessionTenant } from './session';
 import { tenantDemo } from './tenant-demo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { mfaSuperadminObligatorio, veredictoMfaSuperadmin } from './mfa';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DE QUÉ FLOTA HABLA UNA RUTA DE API.
@@ -42,6 +43,23 @@ export type ResultadoTenantApi =
 export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi> {
   const s = await getSessionTenant();
   if (!s) return { ok: false, status: 401, motivo: 'Necesitas iniciar sesión.' };
+
+  // AUDITORÍA 25, SEGURIDAD (ALTO, línea 166, REINCIDENTE). `guard.ts` cierra
+  // /admin con el segundo factor (SEG-3, auditoría 24) cuando
+  // `LIKIDA_SUPERADMIN_MFA=obligatorio`, pero esta puerta —la que de verdad
+  // decide de qué flota habla cada ruta de `/api/export/*` y `/api/v1`— no lo
+  // preguntaba: una cookie de superadmin phishada (sin el factor) seguía
+  // entregando la exportación de CUALQUIER flota con solo cambiar `?tenant=`.
+  // Mismo veredicto que `guard.ts`, sin duplicar su lógica: fail cerrado ante
+  // `no_verificable`, igual que allá.
+  if (s.rol === 'superadmin' && mfaSuperadminObligatorio()) {
+    const { supabaseServer } = await import('@/lib/supabase/server');
+    const veredicto = await veredictoMfaSuperadmin(await supabaseServer());
+    if (veredicto !== 'ok') {
+      logger.warn('mfa.superadmin_exigido_api', { veredicto });
+      return { ok: false, status: 403, motivo: 'Verifica tu segundo factor para continuar.' };
+    }
+  }
 
   let tenantId = s.tenantId;
   if (!tenantId) {
