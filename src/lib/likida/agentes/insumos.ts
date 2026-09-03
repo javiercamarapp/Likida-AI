@@ -27,6 +27,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
+import { traerTodo, conteo as conteoDesde } from '../pg';
 import { DatoInvalido } from '../errores';
 import { pesoArchivo } from '@/lib/formato';
 import {
@@ -120,22 +121,27 @@ export async function insumosPendientes(agenteId: string, limite = 20): Promise<
 /**
  * Cuántos insumos PENDIENTES tiene cada agente — para el badge de la tabla
  * de `/admin/agentes`. Una sola lectura de plataforma (cross-tenant a
- * propósito, ver cabecera) reducida en memoria, mismo patrón que
- * `exitoTreintaDias` en `admin/agentes/contenido.tsx`: 5,000 filas pendientes
- * a la vez es muy por encima de la escala de hoy, y si algún día se
- * recortara el `.limit()` lo delataría un conteo que deja de crecer.
+ * propósito, ver cabecera) reducida en memoria.
+ *
+ * AUDITORÍA 25, MEDIO (REND-A5): era `.limit(5000)`, y su propio comentario
+ * decía "si algún día se recortara el `.limit()` lo delataría un conteo que
+ * deja de crecer" — YA ESTABA recortado, a 1,000, por PostgREST
+ * (`max_rows`, `pg.ts:38-48`) desde siempre, así que ese aviso nunca podía
+ * dispararse. `traerTodo` trae el conteo COMPLETO o lanza.
  * LANZA ante error de lectura.
  */
 export async function contarPendientesPorAgente(): Promise<Map<string, number>> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('agente_insumo')
-    .select('agente')
-    .is('procesado_en', null)
-    .order('id')
-    .limit(5000), 'insumos.contar_pendientes');
-  if (error) throw new Error(`contarPendientesPorAgente: ${error.message}`);
+  const data = await traerTodo<{ id: unknown; agente: string }>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('agente_insumo')
+      .select('id, agente', conteoDesde(d))
+      .is('procesado_en', null)
+      .order('id')
+      .range(d, h), 'insumos.contar_pendientes'),
+    'insumos.contar_pendientes',
+  );
   const conteo = new Map<string, number>();
-  for (const f of (data ?? []) as Array<{ agente: string }>) conteo.set(f.agente, (conteo.get(f.agente) ?? 0) + 1);
+  for (const f of data) conteo.set(f.agente, (conteo.get(f.agente) ?? 0) + 1);
   return conteo;
 }
 

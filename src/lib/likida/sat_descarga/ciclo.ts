@@ -21,6 +21,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
+import { traerTodo, conteo } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
 import type { Gasto } from '@/types/likida';
@@ -160,24 +161,39 @@ export function rangoPendiente(
   return { desde, hasta: tope < hoy ? tope : hoy };
 }
 
-/** Los gastos de la flota que TODAVÍA no tienen comprobante — el fondo contra
- *  el que se cruza. Se acota por fecha alrededor del rango bajado: cruzar
- *  contra el histórico entero sería lento y no más correcto (el CFDI y su
- *  ticket son del mismo periodo). */
-async function gastosSinCfdi(tenantId: string, desde: string, hasta: string): Promise<Gasto[]> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('gasto')
-    .select('id, concepto, monto, fecha, rfc_emisor, cfdi_uuid, ocr_extra')
-    .eq('tenant_id', tenantId)
-    .is('cfdi_uuid', null)
-    // Un día de holgura a cada lado: la fecha del ticket (OCR) y la del
-    // timbrado pueden diferir en uno, igual que en la conciliación de
-    // consolidados (VENTANA_DIAS_FECHA, 0076).
-    .gte('fecha', sumarDias(desde, -1))
-    .lte('fecha', sumarDias(hasta, 1))
-    .limit(5000), 'sat_descarga.gastos_sin_cfdi');
-  if (error) throw new Error(`gastosSinCfdi: ${error.message}`);
-  return (data ?? []).map((r) => ({
+/**
+ * Los gastos de la flota que TODAVÍA no tienen comprobante — el fondo contra
+ * el que se cruza. Se acota por fecha alrededor del rango bajado: cruzar
+ * contra el histórico entero sería lento y no más correcto (el CFDI y su
+ * ticket son del mismo periodo).
+ *
+ * AUDITORÍA 25, MEDIO (REND-A5): era `.limit(5000)`, que PostgREST recorta a
+ * 1,000 en silencio (`pg.ts:38-48`). Con una flota de 100 unidades y ~2,000
+ * gastos sin comprobante en el mes, `decidirCruce` solo veía la mitad del
+ * fondo: los CFDI cuyo ticket cayó fuera del corte se marcaban `disponible`
+ * en vez de `casado`, y el sello de dedup impide una segunda oportunidad
+ * automática. `traerTodo` trae el fondo COMPLETO o lanza.
+ */
+export async function gastosSinCfdi(tenantId: string, desde: string, hasta: string): Promise<Gasto[]> {
+  const data = await traerTodo<{
+    id: string; concepto: unknown; monto: unknown; fecha: unknown;
+    rfc_emisor: unknown; cfdi_uuid: unknown; ocr_extra: unknown;
+  }>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('gasto')
+      .select('id, concepto, monto, fecha, rfc_emisor, cfdi_uuid, ocr_extra', conteo(d))
+      .eq('tenant_id', tenantId)
+      .is('cfdi_uuid', null)
+      // Un día de holgura a cada lado: la fecha del ticket (OCR) y la del
+      // timbrado pueden diferir en uno, igual que en la conciliación de
+      // consolidados (VENTANA_DIAS_FECHA, 0076).
+      .gte('fecha', sumarDias(desde, -1))
+      .lte('fecha', sumarDias(hasta, 1))
+      .order('id')
+      .range(d, h), 'sat_descarga.gastos_sin_cfdi'),
+    'sat_descarga.gastos_sin_cfdi',
+  );
+  return data.map((r) => ({
     id: r.id as string,
     concepto: r.concepto as Gasto['concepto'],
     monto: Number(r.monto),
@@ -221,7 +237,26 @@ async function ligar(tenantId: string, gastoId: string, cfdiUuid: string): Promi
  */
 interface ConteoSolicitud { nuevos: number; repetidos: number }
 
-/** Ingiere los XML de un paquete: dedup por folio, cruce y escritura. */
+/**
+ * Ingiere los XML de un paquete: dedup por folio, cruce y escritura.
+ *
+ * AUDITORÍA 25, ALTO (REND-A3): un paquete real del SAT es «un ZIP con
+ * MILES de CFDI» (cabecera del archivo) y a 3-4 viajes de red por CFDI aquí
+ * dentro caben ~311 en los 280s de `venceEn` — un paquete de 2,000 pide
+ * ~1,800s contra un `maxDuration` de 300. Sin reloj propio, Vercel mataba la
+ * función A MEDIO PAQUETE: el heartbeat del cron nunca se escribía y el aviso
+ * de cierre de peaje que corre DESPUÉS nunca llegaba, para NINGUNA flota.
+ *
+ * El checkpoint/reanudación no es nuevo: YA EXISTE, es el sello de dedup —
+ * cada CFDI se marca en `sat_cfdi_descargado` en cuanto se ingiere, así que
+ * re-ingerir el mismo XML dos veces es barato (una consulta que dice
+ * "repetido" y sigue) en vez de re-procesarlo entero. Lo que faltaba era
+ * SOLTAR el reloj a tiempo para que ese checkpoint sirviera de algo: cortar
+ * aquí, antes de que Vercel corte, deja que el llamador NO marque el paquete
+ * como bajado (`bajados.push` no corre) y la corrida siguiente lo re-baja
+ * — el SAT permite bajar un paquete dos veces — y retoma justo donde se
+ * quedó, saltando en un viaje de red cada CFDI ya sellado.
+ */
 async function ingerir(
   cfg: ConfigFlota,
   solicitudId: string,
@@ -229,7 +264,8 @@ async function ingerir(
   rango: { desde: string; hasta: string },
   r: ResumenFlota,
   conteo: ConteoSolicitud,
-): Promise<void> {
+  venceEn?: number,
+): Promise<{ completo: boolean }> {
   const gastos = await gastosSinCfdi(cfg.tenantId, rango.desde, rango.hasta);
   // El fondo se consume: un gasto que ya casó en este mismo paquete no puede
   // volver a casar con el siguiente CFDI. Sin esto, dos comprobantes del mismo
@@ -237,7 +273,15 @@ async function ingerir(
   // el segundo en silencio.
   const fondo = new Map(gastos.map((g) => [g.id, g]));
 
-  for (const xml of xmls) {
+  for (let ix = 0; ix < xmls.length; ix++) {
+    if (venceEn !== undefined && Date.now() >= venceEn) {
+      logger.warn('sat.ingerir.corte_por_reloj', {
+        tenantId: cfg.tenantId, solicitudId, sinIngerir: xmls.length - ix,
+      });
+      r.sinTurno += xmls.length - ix;
+      return { completo: false };
+    }
+    const xml = xmls[ix];
     const cfdi = parseCfdiXml(xml);
     if (cfdi === null || !cfdi.uuid) {
       // Un XML ilegible NO se cuenta como comprobante inexistente: se dice.
@@ -317,6 +361,7 @@ async function ingerir(
     await marcar(cfg.tenantId, uuid, 'disponible', null, { motivo: decision.motivo });
     r.disponibles++;
   }
+  return { completo: true };
 }
 
 async function marcar(
@@ -570,10 +615,23 @@ export async function correrFlota(
         continue;
       }
       const conteo: ConteoSolicitud = { nuevos: 0, repetidos: 0 };
-      await ingerir(cfg, s.id as string, d.xmls, rango, r, conteo);
-      bajados.push(p);
+      const resultado = await ingerir(cfg, s.id as string, d.xmls, rango, r, conteo, venceEn);
       nuevosDeLaSolicitud += conteo.nuevos;
       repetidosDeLaSolicitud += conteo.repetidos;
+
+      // AUDITORÍA 25, ALTO (REND-A3): `ingerir` cortó por reloj a media pila
+      // de XML del paquete. El paquete YA se descargó (`d.xmls` completo), así
+      // que lo ingerido hasta el corte SÍ se cuenta abajo — solo NO se marca
+      // como bajado (`bajados.push` se omite): el SAT deja bajarlo una segunda
+      // vez, la corrida siguiente lo re-descarga e `ingerir` retoma barato
+      // gracias al sello de dedup (cada CFDI ya sellado responde "repetido"
+      // en un solo viaje de red, no se re-procesa). Los paquetes restantes de
+      // esta vuelta ni se intentan.
+      if (resultado.completo) bajados.push(p);
+      else {
+        todoBien = false;
+        r.sinTurno += pendientes.length - ip - 1;
+      }
 
       // El avance se anota PAQUETE POR PAQUETE, no al final: si la función
       // muere aquí (Vercel corta a los 300 s), lo ingerido ya está contado y
@@ -593,6 +651,7 @@ export async function correrFlota(
         todoBien = false;
         break;
       }
+      if (!resultado.completo) break;
     }
 
     if (todoBien) {
