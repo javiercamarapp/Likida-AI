@@ -88,10 +88,20 @@ function candidatoDe(g: Gasto): CandidatoCruce {
  * así `emparejarXmlConTicket` lo re-verifica — dos redes sobre el mismo dinero.
  */
 export function decidirCruce(
-  cfdi: Pick<CfdiXmlData, 'total' | 'fecha' | 'rfcEmisor' | 'uuid' | 'lineas'>,
+  cfdi: Pick<CfdiXmlData, 'total' | 'fecha' | 'rfcEmisor' | 'uuid' | 'lineas' | 'tipoComprobante'>,
   gastos: readonly Gasto[],
   lineasEcc: readonly LineaEccRef[] = [],
 ): DestinoCfdi {
+  // ── Regla 0 (AUDITORÍA 25, ALTO FISCAL, línea 218): una NOTA DE CRÉDITO ───
+  // (TipoDeComprobante=E) no se cruza contra ningún gasto. Documenta una
+  // devolución o bonificación — resta una deducción y restituye IVA ya
+  // acreditado (LIVA art. 7) —, no una erogación nueva. `ciclo.ts` bajaba
+  // TODO CFDI del buzón y lo cruzaba solo por total/fecha/RFC del emisor, así
+  // que una nota de crédito casaba con el ticket original y lo dejaba
+  // `xml_verificado` con signo contrario.
+  if (cfdi.tipoComprobante === 'E') {
+    return { destino: 'disponible', motivo: 'Es una nota de crédito (TipoDeComprobante E): no se cruza como gasto — resta una deducción o restituye IVA, no la documenta.' };
+  }
   // ── Regla 1: el CFDI del emisor de monedero no se cruza 1:1 ──────────────
   // Se pregunta ANTES que nada: da igual cuántos gastos empaten por total, un
   // consolidado no le pertenece a ninguno solo.
