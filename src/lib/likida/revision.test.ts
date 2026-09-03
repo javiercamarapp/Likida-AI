@@ -22,11 +22,14 @@ interface Consulta {
   tabla: string; select: string; opciones: Record<string, unknown> | undefined;
   eq: Array<[string, unknown]>; gte: Array<[string, unknown]>; lte: Array<[string, unknown]>;
   or: string | null; orden: Array<[string, boolean]>; rango: [number, number] | null;
+  unaSola: boolean;
 }
 const consultas: Consulta[] = [];
 let filasBase: Array<Record<string, unknown>> = [];
 let conteoBase: number | null = 0;
 let errorBase: { message: string } | null = null;
+/** Solo la consume `maybeSingle()` (una fila, no una página): `leerRevision`. */
+let filaUnica: Record<string, unknown> | null = null;
 
 const rpc = vi.fn();
 
@@ -34,7 +37,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     rpc,
     from: (tabla: string) => {
-      const c: Consulta = { tabla, select: '', opciones: undefined, eq: [], gte: [], lte: [], or: null, orden: [], rango: null };
+      const c: Consulta = { tabla, select: '', opciones: undefined, eq: [], gte: [], lte: [], or: null, orden: [], rango: null, unaSola: false };
       consultas.push(c);
       const b: Record<string, unknown> = {};
       Object.assign(b, {
@@ -45,9 +48,10 @@ vi.mock('@/lib/supabase/admin', () => ({
         or: (f: string) => { c.or = f; return b; },
         order: (col: string, o?: { ascending?: boolean }) => { c.orden.push([col, o?.ascending !== false]); return b; },
         range: (d: number, h: number) => { c.rango = [d, h]; return b; },
-        maybeSingle: () => b,
+        maybeSingle: () => { c.unaSola = true; return b; },
         then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) => {
           if (errorBase) return Promise.resolve({ data: null, error: errorBase, count: null }).then(res, rej);
+          if (c.unaSola) return Promise.resolve({ data: filaUnica, error: null, count: null }).then(res, rej);
           const [d, h] = c.rango ?? [0, filasBase.length - 1];
           return Promise.resolve({ data: filasBase.slice(d, h + 1), error: null, count: conteoBase }).then(res, rej);
         },
@@ -60,6 +64,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 const {
   colaRevision, leerFiltrosCola, hayFiltrosCola, codificarCursorCola, decodificarCursorCola,
   revisarLiquidacion, normalizarAjustes, textoRechazoChofer, contarPendientes, COLA_POR_PAGINA,
+  puedeFirmarLiquidacion, leerRevision,
 } = await import('./revision');
 const { DatoInvalido } = await import('./errores');
 
@@ -75,6 +80,7 @@ beforeEach(() => {
   filasBase = [];
   conteoBase = 0;
   errorBase = null;
+  filaUnica = null;
   rpc.mockReset();
   sendText.mockClear();
 });
@@ -174,6 +180,64 @@ describe('normalizarAjustes', () => {
     expect(() => normalizarAjustes([{ gastoId: U(1), montoNuevo: '80000000' }])).toThrow(DatoInvalido);
     expect(() => normalizarAjustes([{ gastoId: 'x', montoNuevo: '1' }])).toThrow(DatoInvalido);
     expect(() => normalizarAjustes([{ gastoId: U(1), montoNuevo: 'ocho mil' }])).toThrow(DatoInvalido);
+  });
+});
+
+describe('puedeFirmarLiquidacion', () => {
+  it('dueño y contador firman; el jefe de tráfico y un rol desconocido, no (fallar cerrado)', () => {
+    expect(puedeFirmarLiquidacion('flota_admin')).toBe(true);
+    expect(puedeFirmarLiquidacion('contador')).toBe(true);
+    expect(puedeFirmarLiquidacion('superadmin')).toBe(true);
+    expect(puedeFirmarLiquidacion('encargado')).toBe(false);
+    expect(puedeFirmarLiquidacion('vendedor')).toBe(false);
+    expect(puedeFirmarLiquidacion('lo-que-sea')).toBe(false);
+    expect(puedeFirmarLiquidacion('')).toBe(false);
+  });
+});
+
+describe('leerRevision — firmable', () => {
+  const filaBase = {
+    revision: 'pendiente' as const, revisada_por: null, revisada_por_email: null,
+    revisada_en: null, motivo: null, ajustes: [],
+    viaje: { estatus: 'liquidado' }, revisor: null,
+  };
+
+  it('sin la liquidación, devuelve null', async () => {
+    filaUnica = null;
+    expect(await leerRevision('t-1', 'x')).toBeNull();
+  });
+
+  it('pendiente y sin firmar por nadie: firmable', async () => {
+    filaUnica = { ...filaBase, revision: 'pendiente' };
+    const r = await leerRevision('t-1', 'x');
+    expect(r?.firmable).toBe(true);
+  });
+
+  it('cuadró sola (aprobada por el motor, nadie humano firmó): firmable — la persona la puede corregir', async () => {
+    filaUnica = { ...filaBase, revision: 'aprobada', revisada_por: null, revisada_por_email: null };
+    const r = await leerRevision('t-1', 'x');
+    expect(r?.firmable).toBe(true);
+  });
+
+  it('ya la firmó una persona: NO firmable, no se firma dos veces', async () => {
+    filaUnica = {
+      ...filaBase, revision: 'ajustada', revisada_por: 'u-1',
+      revisor: { nombre: 'Contralor', email: 'c@flota.mx' },
+    };
+    const r = await leerRevision('t-1', 'x');
+    expect(r?.firmable).toBe(false);
+  });
+
+  it('firmada solo por correo (sin id de usuario): también cuenta como humana, NO firmable', async () => {
+    filaUnica = { ...filaBase, revision: 'aprobada', revisada_por: null, revisada_por_email: 'c@flota.mx' };
+    const r = await leerRevision('t-1', 'x');
+    expect(r?.firmable).toBe(false);
+  });
+
+  it('rechazada: NUNCA firmable, aunque nadie humano la haya tocado', async () => {
+    filaUnica = { ...filaBase, revision: 'rechazada', revisada_por: null, revisada_por_email: null };
+    const r = await leerRevision('t-1', 'x');
+    expect(r?.firmable).toBe(false);
   });
 });
 
