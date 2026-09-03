@@ -17027,3 +17027,52 @@ begin
   raise exception E'MUTEX_Y_ORDEN_0280  col-token=%  unlock-token=%  trylock-token=%  orden-fn=%  orden-inmutable=%  listar-usa=%  reclamar-usa=%   (esperado t / t / t / t / t / t / t)',
     col_token, unlock_token, trylock_token, orden_fn, orden_inmutable, listar_usa, reclamar_usa;
 end $$;
+
+-- ── 250. `transcripcion` entra al dominio de fases del costo (mig. 0304) ──
+--
+-- AUDITORÍA 25, DATOS-A1 (ALTO). `llm_costo_fase_dominio` nació en la 0025 con
+-- SEIS fases y ninguna migración lo recreó; `FaseCosto` (costos.ts) tiene SIETE
+-- desde el 29-ago-2026. El INSERT de cada nota de voz rebotaba con 23514 y
+-- `registrarCosto` —best-effort a propósito— se lo tragaba: el costo de la voz
+-- no entraba a la medición con la que se fija el precio del producto, y nada
+-- visible fallaba.
+--
+-- Se asevera lo que SOLO la base puede demostrar: que el constraint existe,
+-- que cuelga de `llm_costo`, y que su expresión vigente nombra las SIETE fases
+-- —en particular `transcripcion`, que es la que faltaba—.
+--
+-- Lo que este bloque NO hace, a propósito: insertar una fila de prueba.
+-- `llm_costo.tenant_id` es `not null references tenant(id)` (0003:9) y la base
+-- de producción está en cero tenants, así que el INSERT fallaría por la FK y
+-- este bloque reportaría rojo por una razón que no es la suya. Un chequeo que
+-- falla por el motivo equivocado es peor que no tenerlo — es la lección que la
+-- 0030 dejó escrita.
+--
+-- La otra mitad del arnés vive en TS y no puede vivir aquí: `costos_dominio.test.ts`
+-- cruza esta misma lista contra `FaseCosto` en cada corrida de CI, sin base de
+-- datos, y sale en rojo en cuanto las dos vuelvan a divergir. Esa es la
+-- comprobación que impide la reincidencia; esta confirma que la base de verdad
+-- se aplicó.
+-- Esperado: LLM_COSTO_FASE_0304 existe=t sobre-llm-costo=t siete=t transcripcion=t
+do $$
+declare
+  expr text; existe boolean; sobre_tabla boolean; siete boolean; tiene_transcripcion boolean;
+begin
+  select pg_get_constraintdef(c.oid) into expr
+    from pg_constraint c
+   where c.conname = 'llm_costo_fase_dominio'
+     and c.conrelid = 'public.llm_costo'::regclass
+     and c.contype = 'c';
+
+  existe := expr is not null;
+  sobre_tabla := coalesce(expr ilike '%fase%', false);
+  tiene_transcripcion := coalesce(expr ilike '%''transcripcion''%', false);
+
+  siete := coalesce(
+    expr ilike '%''ocr''%' and expr ilike '%''cuadre''%' and expr ilike '%''escalacion''%'
+    and expr ilike '%''chat''%' and expr ilike '%''router''%' and expr ilike '%''whatsapp''%'
+    and expr ilike '%''transcripcion''%', false);
+
+  raise exception E'LLM_COSTO_FASE_0304  existe=%  sobre-llm-costo=%  siete=%  transcripcion=%   (esperado t / t / t / t)',
+    existe, sobre_tabla, siete, tiene_transcripcion;
+end $$;

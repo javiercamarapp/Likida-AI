@@ -34,16 +34,22 @@ function cadenaIncidencia(payload: Record<string, unknown>) {
 }
 
 const telefonoDueno = vi.hoisted(() => vi.fn(async (): Promise<string | null> => '5210000000002'));
+// AGEN-C1 (auditoría 25): `null` = base sin la 0294, y esa fila NO está de baja.
+const duenoActivo = vi.hoisted(() => ({ valor: null as boolean | null }));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => {
       if (tabla === 'incidencia') return { update: (p: Record<string, unknown>) => cadenaIncidencia(p) };
       if (tabla === 'app_user') {
         const cadena: Record<string, unknown> = {};
-        for (const m of ['select', 'eq', 'not']) cadena[m] = () => cadena;
+        // `or` entra con AGEN-C1 (auditoría 25): el filtro de la baja va también
+        // en la base. Igual que en `contactos.test.ts`, el doble devuelve la
+        // misma fila con o sin el encadenado, así que lo que estas pruebas
+        // ejercen es la capa de TS — que es donde vive la regla.
+        for (const m of ['select', 'eq', 'not', 'or']) cadena[m] = () => cadena;
         cadena.limit = async () => {
           const tel = await telefonoDueno();
-          return { data: tel ? [{ telefono: tel }] : [], error: null };
+          return { data: tel ? [{ telefono: tel, activo: duenoActivo.valor }] : [], error: null };
         };
         return cadena;
       }
@@ -114,6 +120,9 @@ beforeEach(() => {
   filasPendientes.mockReturnValue([]);
   telefonoJefeDe.mockResolvedValue('5210000000001');
   telefonoDueno.mockResolvedValue('5210000000002');
+  // Se resetea AQUÍ, no al final de la prueba que lo mueve: si esa prueba falla
+  // en su assert, la línea de limpieza no corre y contamina las 16 siguientes.
+  duenoActivo.valor = null;
   sendButtons.mockResolvedValue('wamid.esc');
   polizaVigenteDe.mockResolvedValue(null);
   contactoSiLesionadosDe.mockResolvedValue(null);
@@ -177,6 +186,17 @@ describe('escalarAsistenciasPendientes — claim, destinatarios y ventana', () =
 
     vi.clearAllMocks();
     telefonoDueno.mockResolvedValue(null);
+    filasPendientes.mockReturnValue([fila({ nivel_escalado: 1, abierta_en: abiertaHace(11 * 60_000) })]);
+    await escalarAsistenciasPendientes(AHORA);
+    expect((sendButtons.mock.calls[0] as unknown as [string])[0]).toBe('5210000000001');
+  });
+
+  // AGEN-C1 (auditoría 25): el 🚨 de la escalada lleva la UBICACIÓN del chofer.
+  // `telefonoDeRol` no miraba `activo`, así que al dueño dado de baja le seguía
+  // llegando. Cae al jefe, que es lo que ya hace cuando el dueño no tiene
+  // teléfono: no se calla, se lo manda a alguien que sí sigue en la flota.
+  it('nivel 2 NO va al dueño dado de baja: cae al jefe con el 🚨 y su ubicación', async () => {
+    duenoActivo.valor = false;
     filasPendientes.mockReturnValue([fila({ nivel_escalado: 1, abierta_en: abiertaHace(11 * 60_000) })]);
     await escalarAsistenciasPendientes(AHORA);
     expect((sendButtons.mock.calls[0] as unknown as [string])[0]).toBe('5210000000001');
