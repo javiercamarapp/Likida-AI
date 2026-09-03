@@ -942,7 +942,15 @@ export async function cancelarFacturaDeStripe(
     // NO se lanza: puede ser el reembolso de un cobro que nunca registramos
     // (una factura de Stripe anterior a que existiera esta tabla). Lanzar haría
     // que Stripe reintentara para siempre algo que ningún reintento arregla.
+    //
+    // Aun así se sella el orden: si el `invoice.paid` de este mismo invoice
+    // sigue en vuelo (reintento de Stripe) y llega DESPUÉS de esta anulación,
+    // `aplicarFactura` tiene que verla como fuera de orden y descartarla — no
+    // resucitar como 'pagada' algo que ya se anuló.
     logger.warn('stripe.anulacion_sin_factura', { stripeInvoiceId, motivo });
+    if (eventoCreadoUnix !== undefined) {
+      await sellarOrden(stripeInvoiceId, eventoCreadoUnix, 'orden_factura');
+    }
     return 'sin_factura';
   }
   if (f.estado === 'cancelada') return 'ya_cancelada';
