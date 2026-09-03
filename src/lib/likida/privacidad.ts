@@ -810,6 +810,14 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         // estaba en ninguna lista, y el Carta Porte lleva RFC y licencia del
         // operador.
         `También les llegan **tus notas de voz**, completas, para transcribirlas a texto.`,
+        // AUDITORÍA 25 (ALTO, REINCIDENTE de la 24): esta cláusula faltaba.
+        // El asistente del panel (`/dashboard`, chat-tools.ts → viajes_flota)
+        // le manda al mismo modelo tu nombre junto con el anticipo de tus
+        // viajes cuando alguien de tu empresa le pregunta por la flota —un
+        // flujo distinto del de arriba (que sale de TU conversación) y que
+        // no estaba dicho.
+        // revisión legal humana recomendada antes de publicar
+        `Y cuando alguien de tu empresa usa el **asistente del panel** para preguntar por los viajes de la flota, ese modelo también puede recibir tu **nombre** junto con **montos de tus viajes** —el anticipo, por ejemplo— para poder contestarle.`,
         `Y cuando tu empresa emite un complemento **Carta Porte**, el comprobante viaja al **proveedor autorizado de certificación (PAC)** que lo timbra ante el SAT, y dentro de él van **tu RFC y el número de tu licencia**: el SAT los exige en ese documento.`,
         `Transferencias que sí lo son y no necesitan tu consentimiento: a la autoridad fiscal cuando la ley lo exige, y al contador de la empresa para cumplir sus obligaciones.`,
         `**Si algún día se quisiera transferir tus datos para algo distinto, se te pedirá permiso antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
