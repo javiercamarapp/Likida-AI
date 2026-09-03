@@ -11,7 +11,7 @@ import { contarHuerfanosPendientes } from '@/lib/likida/repo';
 import { getConfig, type LikidaConfig } from '@/lib/likida/config';
 import {
   resolverPeriodo, getGastosFiscales, getGastosFiscalesSeries,
-  resumirPerdidas, resumirFiscal, opcionesDe, ventanaLitrosElegibles,
+  resumirPerdidas, resumirFiscal, opcionesDe, opcionesFiscalesDelPeriodo, ventanaLitrosElegibles,
   type GastoFiscal, type ResumenPerdidas, type ResumenFiscal, type GastosFiscalesSeries,
   type Periodo,
 } from '@/lib/likida/fiscal';
@@ -128,9 +128,13 @@ export async function InicioContador({
           historico: resumirPerdidas(series.historico, opcionesDe(cfg)),
         }
         : null);
+  // AUDITORÍA 25, FIS-C1/FIS-C2 (CRÍTICO): `resumirFiscal` necesita el
+  // acumulado REAL del ejercicio (`combustibleEjercicio`) para partir el IVA
+  // del diésel en efectivo igual que el motor — `opcionesDe(cfg)` solo trae
+  // la config, no ese acumulado.
   const pResumenFiscal: Promise<ResumenFiscal | null> =
-    Promise.all([pCfgFiscal, pGastosFiscales]).then(([cfg, gastos]) =>
-      cfg && gastos ? resumirFiscal(gastos, opcionesDe(cfg)) : null);
+    Promise.all([pCfgFiscal, pGastosFiscales]).then(async ([cfg, gastos]) =>
+      cfg && gastos ? resumirFiscal(gastos, await opcionesFiscalesDelPeriodo(tenantId, periodoFiscal, cfg)) : null);
 
   // Los accesos del final salen del MISMO mapa que gatea las páginas
   // (`areaDeRuta`), no de una lista escrita a mano: una pantalla de dinero

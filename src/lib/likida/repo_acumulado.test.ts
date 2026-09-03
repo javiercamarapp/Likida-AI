@@ -39,6 +39,10 @@ type Fila = {
   forma_pago: string | null;
   concepto: string;
   clave_prod_serv?: string | null;
+  /** El sello del complemento de pago (mig. 0199) — AUDITORÍA 25, FIS-C1/FIS-C2
+   *  (mig. 0305): un '99' con `pagado_en` se juzga por `pagado_forma`, no por '99'. */
+  pagado_en?: string | null;
+  pagado_forma?: string | null;
 };
 
 /** n cargas: la mitad en efectivo ('01') a $1 000, la otra mitad con tarjeta a $2 000. */
@@ -81,13 +85,13 @@ function round2(n: number): number {
 
 /**
  * EL REDUCTOR SQL — escrito de forma INDEPENDIENTE a `legacyAcumuladoJs`,
- * espejando `sumar_combustible_ejercicio` (0084, corregida por la 0112, y por
- * la 0190 — AUDITORÍA 19 fiscal F2) línea por línea: mismo `where` (incluido
- * el `monto > 0` que la RPC NO tenía antes de la 0112), y desde la 0190 el
- * numerador ya NO es `forma_pago = '01'` sino la lista CERRADA que la LISR
- * 27-III admite (`medioNoAdmitidoCombustible`, engine.ts:153) — dinero
- * electrónico, vales, dación en pago, compensación y novación también
- * cuentan como "medio distinto", no solo efectivo. Simula lo que la RPC
+ * espejando `sumar_combustible_ejercicio` (0084, corregida por la 0112, la
+ * 0190 — AUDITORÍA 19 fiscal F2 — y la 0305 — AUDITORÍA 25 FIS-C1/FIS-C2)
+ * línea por línea: mismo `where` (incluido el `monto > 0` que la RPC NO tenía
+ * antes de la 0112), la lista CERRADA que la LISR 27-III admite
+ * (`medioNoAdmitidoCombustible`, engine.ts:153) desde la 0190, y desde la
+ * 0305 la forma de pago EFECTIVA — un `99` con `pagado_en` (REP) se juzga por
+ * `pagado_forma`, no por `99`; sin REP no se juzga. Simula lo que la RPC
  * devolvería sobre el MISMO dataset — es lo que el mock de `.rpc()` usa como
  * respuesta, para que la prueba de equivalencia compare dos
  * IMPLEMENTACIONES DISTINTAS del mismo cálculo, no la misma copiada dos
@@ -95,6 +99,11 @@ function round2(n: number): number {
  * `returns table (total numeric, efectivo numeric)`.
  */
 const MEDIOS_ADMITIDOS_LISR_27_III = ['02', '03', '04', '05', '28', '29'];
+/** `formaPagoJuzgable` (engine.ts:636-638) espejado en SQL: mig. 0305. */
+function formaPagoEfectivaSql(g: Fila): string | null {
+  if (g.forma_pago !== '99') return g.forma_pago;
+  return g.pagado_en != null ? (g.pagado_forma ?? null) : null;
+}
 function sqlEquivalente(
   filas: Fila[],
   tenantId: string,
@@ -108,7 +117,7 @@ function sqlEquivalente(
     && (g.concepto === 'diesel' || (claves !== null && claves.length > 0 && claves.includes(g.clave_prod_serv ?? ''))));
   const total = candidatas.reduce((s, g) => s + g.monto, 0);
   const efectivo = candidatas
-    .filter((g) => g.forma_pago != null && g.forma_pago !== '99' && !MEDIOS_ADMITIDOS_LISR_27_III.includes(g.forma_pago))
+    .filter((g) => { const f = formaPagoEfectivaSql(g); return f != null && !MEDIOS_ADMITIDOS_LISR_27_III.includes(f); })
     .reduce((s, g) => s + g.monto, 0);
   return { total, efectivo };
 }
@@ -271,5 +280,36 @@ describe('AUDITORÍA 19 (fiscal F2, CRÍTICO): el numerador ya no es solo forma_
     ];
     const r = await getAcumuladoCombustible('t1', 2026);
     expect(r).toEqual({ efectivo: 0, totalCombustible: 1_500 });
+  });
+});
+
+describe('AUDITORÍA 25, FIS-C1/FIS-C2 (CRÍTICO, mig. 0305): el numerador juzga la forma de pago EFECTIVA, no la cruda', () => {
+  it("un '99' cuyo REP dice que se pagó en efectivo ('01') SÍ cuenta como medio distinto — el REP manda, no el CFDI original", async () => {
+    servidor.filas = [
+      // CFDI PPD ($8,000), liquidado por un REP con FormaDePagoP '01'.
+      { tenant_id: 't1', ejercicio: 2026, monto: 8_000, forma_pago: '99', concepto: 'diesel', pagado_en: '2026-02-15', pagado_forma: '01' },
+      { tenant_id: 't1', ejercicio: 2026, monto: 2_000, forma_pago: '04', concepto: 'diesel' }, // admitido: no cuenta
+    ];
+    const r = await getAcumuladoCombustible('t1', 2026);
+    // Antes del arreglo (mig. 0190): `forma_pago <> '99'` excluía este CFDI
+    // ENTERO del numerador — el ejercicio se veía holgado con $0 de efectivo
+    // cuando en realidad ya llevaba $8,000 pagados en efectivo por el REP.
+    expect(r).toEqual({ efectivo: 8_000, totalCombustible: 10_000 });
+  });
+
+  it("un '99' sin REP todavía (sin `pagado_en`) sigue SIN juzgarse — no se sabe cómo se va a pagar", async () => {
+    servidor.filas = [
+      { tenant_id: 't1', ejercicio: 2026, monto: 8_000, forma_pago: '99', concepto: 'diesel' },
+    ];
+    const r = await getAcumuladoCombustible('t1', 2026);
+    expect(r).toEqual({ efectivo: 0, totalCombustible: 8_000 });
+  });
+
+  it("un '99' cuyo REP dice tarjeta de crédito ('04') NO cuenta — el REP también puede LIBRAR del cubo del 15%", async () => {
+    servidor.filas = [
+      { tenant_id: 't1', ejercicio: 2026, monto: 8_000, forma_pago: '99', concepto: 'diesel', pagado_en: '2026-02-15', pagado_forma: '04' },
+    ];
+    const r = await getAcumuladoCombustible('t1', 2026);
+    expect(r).toEqual({ efectivo: 0, totalCombustible: 8_000 });
   });
 });

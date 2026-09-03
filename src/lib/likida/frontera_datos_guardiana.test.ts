@@ -39,8 +39,18 @@ import { join, relative } from 'node:path';
  * en los carriles de `datos`/`auth`/`admin`. Ninguno migra código YA
  * existente fuera de la frontera; todos son funcionalidad nueva del
  * piloto que cuenta contra el techo como cualquier otro módulo directo.
+ *
+ * AUDITORÍA 25 — 251 → 252 (BE-C1a/BE-C1b/DATOS-C1). Un módulo nuevo,
+ * `revision_recalculo.ts`: sube/archiva el PDF regenerado en Storage
+ * (`.storage.from(...)`, que la misma regexp de este guardia cuenta —
+ * "`.from(`" sin distinguir tabla de bucket) y llama la RPC dedicada
+ * `agregar_pdf_historial`. Ninguno de los dos cabe en `repo.ts` como un
+ * wrapper más sin que `repo.ts` empiece a saber de PDFs y de la ruta del
+ * bucket de `liquidaciones` — el mismo molde que ya siguen `tools.ts` y
+ * `processor.ts` (ambos fuera de la frontera, ambos suben a ese bucket
+ * directo). Funcionalidad nueva, no código migrado.
  */
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 251;
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 252;
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
 
