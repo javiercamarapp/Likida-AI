@@ -983,7 +983,14 @@ export function avisoProspectos(d: DatosAvisoProspectos): SeccionAviso[] {
       parrafos: [
         `**Una sola finalidad comercial:** contactarte, por correo, WhatsApp o teléfono, para ofrecerle a tu empresa el servicio de liquidación de viajes de Likida y, si te interesa, agendar una demostración.`,
         `Para decidir a quién escribirle primero, un programa **ordena la lista de empresas** con un puntaje que cuenta si hay forma de contactarlas y qué tan parecida es la empresa al cliente que Likida busca. Ese puntaje ordena una cola de llamadas; **no decide nada sobre ti** ni produce efectos jurídicos en tu persona.`,
-        `Cuando un programa redacta el primer mensaje, **tu nombre no sale de Likida**: la ficha que recibe el modelo de lenguaje lleva un marcador en lugar de tu nombre, y sin tus datos de contacto; tu nombre de pila se pone después, dentro de Likida.`,
+        `Cuando un programa redacta el primer mensaje, **tu nombre no sale de Likida para esa redacción**: la ficha que recibe el modelo de lenguaje para escribir el texto lleva un marcador en lugar de tu nombre, y sin tus datos de contacto; tu nombre de pila se pone después, dentro de Likida.`,
+        // AUDITORÍA 25 (ALTO): esta cláusula faltaba. Un programa investigador
+        // lee las páginas del sitio de tu empresa y se las manda a un modelo de
+        // lenguaje pidiéndole que extraiga nombre, puesto, correo y teléfono de
+        // las personas que aparecen — un flujo distinto del de arriba, que sí
+        // debe decirse.
+        // revisión legal humana recomendada antes de publicar
+        `**Para investigar a tu empresa antes del primer contacto, es distinto:** un programa lee las páginas públicas del sitio de tu empresa (por ejemplo, la de contacto) y se las manda completas —incluyendo tu nombre, tu puesto, tu correo y tu teléfono si ahí aparecen— a un modelo de lenguaje, para que arme un resumen y localice esos datos de contacto. Ese modelo es uno de los "proveedores encargados" de la sección "Con quién se comparten", más abajo.`,
         `Cualquier uso que no esté escrito aquí requiere pedirte permiso. La ley vigente ya no admite ampararse en fines "compatibles o análogos".`,
       ],
     },
@@ -1009,7 +1016,12 @@ export function avisoProspectos(d: DatosAvisoProspectos): SeccionAviso[] {
       titulo: 'Con quién se comparten',
       fundamento: 'LFPDPPP art. 35 · art. 2 fr. XX',
       parrafos: [
-        `**No se venden ni se comparten con nadie para que los use por su cuenta.** Pasan por proveedores que trabajan por instrucción de Likida —alojamiento de la base de datos, envío de correo y mensajería—, que la ley llama personas encargadas (art. 2 fr. XII) y cuyo uso **no es una transferencia** (art. 2 fr. XX).`,
+        `**No se venden ni se comparten con nadie para que los use por su cuenta.** Pasan por proveedores que trabajan por instrucción de Likida —alojamiento de la base de datos, envío de correo y mensajería, y los modelos de lenguaje que investigan a tu empresa y redactan el primer contacto—, que la ley llama personas encargadas (art. 2 fr. XII) y cuyo uso **no es una transferencia** (art. 2 fr. XX).`,
+        // AUDITORÍA 25 (ALTO): la investigación de tu empresa (ver arriba) le
+        // manda al modelo tu nombre, correo y teléfono si aparecen en el
+        // sitio de tu empresa — a diferencia de la redacción del primer
+        // mensaje, que sí va seudonimizada.
+        `**A diferencia de la redacción del primer mensaje, la investigación previa no va seudonimizada:** si tu nombre, correo o teléfono aparecen en el sitio de tu empresa, le llegan al modelo tal cual, para que los localice.`,
       ],
     },
     {
