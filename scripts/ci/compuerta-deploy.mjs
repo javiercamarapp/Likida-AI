@@ -124,15 +124,41 @@ function asuntoDelCommit(args) {
   }
 }
 
-async function leerHealth(url) {
-  try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(20_000), headers: { 'user-agent': 'likida-compuerta-deploy' } });
-    // 503 también trae cuerpo (degraded): lo que importa es `migracion`.
-    return await r.json();
-  } catch (e) {
-    console.log(`compuerta: ${url} no contestó (${e instanceof Error ? e.message : String(e)})`);
+// AUDITORÍA 25, ALTO REINCIDENTE — `/api/health` responde 429 (rateLimit sin
+// Redis, "Upstash parpadea") ANTES de calcular `migracion`: el cuerpo es
+// `{ok:false,status:'fail',error:'demasiadas peticiones'}`, SIN el campo
+// `migracion`. Leer ese cuerpo igual que un 200/503 hacía que `decidir()`
+// cayera en la puerta de escape pensada para el ARRANQUE ("el health
+// desplegado no publica migracion, versión anterior a la auditoría 24") y
+// CONSTRUYERA con la base atrás del código — la pieza BLOQUEANTE se volvía
+// no-op justo en el escenario que vino a impedir.
+//
+// La regla ahora: solo 200 y 503 cuentan como "health leído" (son los dos
+// códigos que la propia ruta usa a propósito). Cualquier otro código —429
+// incluido— NO se lee; se reintenta unas veces con backoff (Upstash
+// parpadea, no está caído) y si sigue sin responder bien se devuelve `null`,
+// que `decidir()` ya trata como "no se pudo leer: sin base cotejada no se
+// despliega" — fail closed, no una puerta de escape.
+export async function leerHealth(url, intentos = 3) {
+  for (let i = 0; i < intentos; i++) {
+    let r;
+    try {
+      r = await fetch(url, { signal: AbortSignal.timeout(20_000), headers: { 'user-agent': 'likida-compuerta-deploy' } });
+    } catch (e) {
+      console.log(`compuerta: ${url} no contestó (${e instanceof Error ? e.message : String(e)})`);
+      if (i === intentos - 1) return null;
+      continue;
+    }
+    if (r.status === 200 || r.status === 503) return await r.json();
+    if (r.status === 429 && i < intentos - 1) {
+      console.log(`compuerta: ${url} respondió 429 (intento ${i + 1}/${intentos}): reintentando…`);
+      await new Promise((res) => setTimeout(res, 2000 * (i + 1)));
+      continue;
+    }
+    console.log(`compuerta: ${url} respondió ${r.status}: no se cuenta como health leído.`);
     return null;
   }
+  return null;
 }
 
 async function main() {
