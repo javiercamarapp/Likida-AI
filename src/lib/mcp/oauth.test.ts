@@ -449,6 +449,42 @@ describe('validarAcceso', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe('no_valido');
   });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 25 · SEG-A1 — LA BAJA CERRABA TODO MENOS EL TOKEN MCP.
+  //
+  // `desactivarUsuario` escribe `activo=false`, banea en Auth y la pantalla
+  // contesta, textual: «ya no entra al panel y su sesión quedó revocada».
+  // Las tres puertas de SEG-1 se cierran de verdad: `getSessionTenant` da null,
+  // las cuatro funciones de RLS filtran `and activo`, y el ban mata el refresh.
+  //
+  // El token MCP no pasaba por ninguna: la baja NO cambia `tenant_id` ni `rol`
+  // —solo `activo`—, así que la revalidación de identidad de la 21 daba por
+  // bueno el embed y devolvía la sesión. Y las herramientas leen con
+  // `supabaseAdmin()` (service_role), que NO pasa por RLS: el `and activo` de
+  // la 0294 nunca llega a evaluarse por este camino. Peor que una sesión que
+  // caduca: el refresco ROTA y se renueva otros 60 días en cada uso.
+  //
+  // Es la misma raíz que AGEN-C1 de esta ronda: un resolutor de identidad que
+  // no mira `activo`. Y la misma regla: solo el `false` EXPLÍCITO da de baja —
+  // una base sin la 0294 no puede quedarse sin MCP de golpe.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('la cuenta dada de baja (activo=false) ya no vale como token MCP', async () => {
+    conTablas({ mcp_oauth_token: [OK(filaAcceso({ app_user: { tenant_id: 't-1', rol: 'contador', activo: false } }))] });
+    const r = await validarAcceso(ACCESO);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe('no_valido');
+  });
+
+  it('activo=true sigue entrando igual que antes', async () => {
+    conTablas({ mcp_oauth_token: [OK(filaAcceso({ app_user: { tenant_id: 't-1', rol: 'contador', activo: true } }))] });
+    expect((await validarAcceso(ACCESO)).ok).toBe(true);
+  });
+
+  it('la columna ausente (base sin la 0294) NO deja a nadie sin MCP', async () => {
+    conTablas({ mcp_oauth_token: [OK(filaAcceso())] });
+    expect((await validarAcceso(ACCESO)).ok).toBe(true);
+  });
 });
 
 describe('registrarCliente', () => {
