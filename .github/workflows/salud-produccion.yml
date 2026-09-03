@@ -131,7 +131,14 @@ jobs:
         run: |
           set -u
           version=$(curl -sS --max-time 20 https://app.likida.ai/api/health | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
-          ultimo=$(git log -i --grep='\[deploy' -1 --pretty=%H)
+          # AUDITORÍA 25, ALTO REINCIDENTE: `git log --grep` casa contra asunto
+          # Y CUERPO. Un merge commit cuyo asunto no lleva [deploy] pero cuyo
+          # cuerpo lo hereda del commit mergeado (el caso real de `4f94490`,
+          # 3-sep-2026) pasaba el filtro igual, y el detector se anclaba en un
+          # commit que Vercel nunca pudo construir — rojo permanente. Este
+          # script usa la MISMA regla que decidir() aplica al tip de master:
+          # solo la primera línea.
+          ultimo=$(node scripts/ci/ultimo-deploy-en-asunto.mjs)
           echo "desplegado=${version:-?} ultimo_[deploy]=$(printf '%s' "$ultimo" | cut -c1-7)"
           if [ -z "$version" ] || [ "$version" = "local" ]; then echo "::error::/api/health no publicó una versión."; exit 1; fi
           if [ -z "$ultimo" ]; then echo "master no tiene ningún commit con [deploy]: nada que cotejar."; exit 0; fi
