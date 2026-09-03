@@ -31,6 +31,48 @@ import { inicioDiaMx, finDiaMx } from '@/lib/formato';
 export type RevisionLiquidacion = 'pendiente' | 'aprobada' | 'ajustada' | 'rechazada';
 export const REVISIONES: readonly RevisionLiquidacion[] = ['pendiente', 'aprobada', 'ajustada', 'rechazada'];
 
+// ── EL VOCABULARIO COMPARTIDO DE `?revision=` EN LAS DOS SALIDAS DE LIQUIDACIONES ──
+//
+// ARQUITECTURA 25 (ALTO, REINCIDENTE). `/api/export/liquidaciones` (el CSV,
+// sesión de navegador) y `/api/v1/liquidaciones` (el ERP, llave API) nacieron
+// con la MISMA pregunta —«¿qué revisiones entran?»— contestada por separado:
+// dos listas de valores válidos, dos funciones llamadas igual
+// (`leerFiltroRevision`) y dos defaults distintos. Un integrador que copia el
+// valor de un export al otro se llevaba 400 `parametro_invalido` porque
+// `sin_rechazadas` solo existía en uno de los dos. El vocabulario ahora es
+// UNO — el default por endpoint SÍ sigue siendo distinto a propósito
+// (tesorería quiere "todo menos lo rechazado" por omisión; el ERP quiere
+// "solo lo firmado", porque asienta pesos) y esa diferencia se documenta en
+// cada llamador, no se esconde.
+export const FILTROS_REVISION_EXPORT = ['pendiente', 'aprobada', 'ajustada', 'rechazada', 'firmadas', 'sin_rechazadas', 'todas'] as const;
+export type FiltroRevisionExport = (typeof FILTROS_REVISION_EXPORT)[number];
+
+/** La leyenda que le explica el corte a quien reciba el archivo o la respuesta. */
+export const LEYENDA_REVISION_EXPORT: Record<FiltroRevisionExport, string> = {
+  sin_rechazadas: 'todas menos las rechazadas',
+  firmadas: 'solo las aprobadas o ajustadas',
+  pendiente: 'solo las que esperan firma',
+  aprobada: 'solo las aprobadas',
+  ajustada: 'solo las ajustadas',
+  rechazada: 'solo las rechazadas',
+  todas: 'todas, firmadas o no',
+};
+
+/**
+ * Lee `?revision=` contra el vocabulario ÚNICO de arriba. `porOmision` lo
+ * decide cada llamador (el CSV y el ERP defienden defaults distintos a
+ * propósito); lo que ya no puede diferir es QUÉ VALORES se aceptan.
+ */
+export function leerFiltroRevisionExport(crudo: string | null, porOmision: FiltroRevisionExport):
+  | { ok: true; filtro: FiltroRevisionExport }
+  | { ok: false; motivo: string } {
+  if (crudo === null || crudo === '') return { ok: true, filtro: porOmision };
+  if (!(FILTROS_REVISION_EXPORT as readonly string[]).includes(crudo)) {
+    return { ok: false, motivo: `\`revision\` solo acepta: ${FILTROS_REVISION_EXPORT.join(', ')}.` };
+  }
+  return { ok: true, filtro: crudo as FiltroRevisionExport };
+}
+
 // ── QUIÉN FIRMA ─────────────────────────────────────────────────────────────
 //
 // Mismo criterio que `puedeTimbrar` en `auth/permisos.ts` y por la misma
