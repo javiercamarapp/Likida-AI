@@ -34,6 +34,9 @@ function tablaFalsa(nombre: string) {
     // not a function" (se atrapa y se loguea, no tumba la corrida, pero
     // ensuciaba el log de una prueba que no está probando ESO).
     order: () => encadenable,
+    // Mismo motivo, para `.or('activo.is.null,activo.eq.true')` (AUDITORÍA
+    // 25, ALTO, reauditoría).
+    or: () => encadenable,
     limit: () => Promise.resolve({ data: [], error: null }),
     maybeSingle: () => Promise.resolve({ data: null, error: null }),
     // El `update()...eq()...eq()` de `cerrarIncidente` se resuelve al await.

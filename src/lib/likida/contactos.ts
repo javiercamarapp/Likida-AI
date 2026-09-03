@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { variantesTelefono } from './conv';
 import { acotada } from './presupuesto';
+import { traerTodo } from './pg';
 import { ordenAvisoDeclarado, type RolAviso } from './perfil/preguntas';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -190,15 +191,26 @@ export async function telefonosJefe(tenantIds: string[]): Promise<Record<string,
   // Por este mapa salen los ~20 avisos operativos (escalación de viajes, la
   // talacha con botones de autorizar, la carta porte, los relojes legales): un
   // ex-empleado no puede seguir recibiéndolos ni autorizando desde ellos.
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('app_user')
-    .select('tenant_id, rol, telefono, activo')
-    .in('tenant_id', ids)
-    .in('rol', ROLES_OFICINA_CONSULTA)
-    .or('activo.is.null,activo.eq.true')
-    .not('telefono', 'is', null), 'telefonosJefe');
-
-  if (error) throw new Error(`telefonosJefe: ${error.message}`);
+  //
+  // AUDITORÍA 25, BAJO (reauditoría): el "con techo" de arriba era de
+  // PALABRA, no de código — no había `.limit()` ni `traerTodo()`, y
+  // `escalar_viaje.ts` llama esta función con TODOS los tenants que tienen
+  // viajes vencidos en una corrida. Con más de 1,000 filas de `app_user` en
+  // el lote, PostgREST recorta EN SILENCIO y las flotas fuera del corte
+  // salían del mapa como si no tuvieran contacto. `traerTodo` pagina y LANZA
+  // si no puede demostrar que trajo todo, en vez de devolver el recorte.
+  const data = await traerTodo<{ tenant_id: string; rol: string; telefono: string; activo: boolean | null }>(
+    (desde, hasta) => acotada(supabaseAdmin()
+      .from('app_user')
+      .select('tenant_id, rol, telefono, activo')
+      .in('tenant_id', ids)
+      .in('rol', ROLES_OFICINA_CONSULTA)
+      .or('activo.is.null,activo.eq.true')
+      .not('telefono', 'is', null)
+      .order('id')
+      .range(desde, hasta), 'telefonosJefe'),
+    'telefonosJefe',
+  );
 
   const ordenPorTenant = await ordenesAvisoDe(ids);
 

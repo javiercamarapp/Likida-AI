@@ -19,7 +19,6 @@ export async function tenantEfectivoChat(
     tenantId = tenantDemo();
   }
 
-  let nombreFlota = 'tu flota';
   if (tenantPedido && sesion.rol === 'superadmin') {
     // BE-16 (auditoría 24): `error` SE MIRA. `acotada` resuelve por valor
     // —`{data:null,error}` en un timeout—, así que sin esta rama un parpadeo
@@ -29,7 +28,12 @@ export async function tenantEfectivoChat(
     // `guardarIntercambio` persistía el historial en el tenant equivocado.
     // Se devuelve `null` —el mismo fail-closed de `resolverTenantApi`— y quien
     // llama corta. Un uuid que simplemente no existe SÍ sigue cayendo al de la
-    // sesión: eso es un enlace viejo, no una lectura caída.
+    // sesión: eso es un enlace viejo, no una lectura caída — y ese fallback se
+    // VERIFICA abajo, igual que cualquier otro tenantId (MEDIO, reauditoría
+    // 25: antes esta rama, al no encontrar `tenantPedido`, seguía de largo con
+    // el `tenantId` original SIN comprobar que existiera — y para un
+    // superadmin sin flota propia eso es `tenantDemo()`, el mismo uuid
+    // fantasma que el resto de esta función acababa de aprender a rechazar).
     const { data: t, error } = await acotada(
       supabaseAdmin().from('tenant').select('id, nombre').eq('id', tenantPedido).maybeSingle(),
       'chat.tenant');
@@ -37,27 +41,27 @@ export async function tenantEfectivoChat(
       logger.error('chat.tenant_pedido_ilegible', { tenant: tenantPedido, err: error.message });
       return null;
     }
-    if (t) { tenantId = t.id as string; nombreFlota = (t.nombre as string) ?? nombreFlota; }
-  } else {
-    // Mismo fail-closed que BE-16 arriba, pero para el tenant de la SESIÓN o
-    // el de `tenantDemo()` — antes esta rama ni miraba `error` ni comprobaba
-    // que `t` existiera: un `DEMO_TENANT_ID` fantasma (o una sesión con un
-    // tenant ya borrado) pasaba de largo con `tenantId` intacto, y
-    // `reservar_presupuesto_llm` tronaba por FK violation en cada turno —
-    // visto en producción el 3-sep-2026 (`chat.analista.fallo`, 12 fallos en
-    // 5 minutos, siempre el mismo tenant_id inexistente).
-    const { data: t, error } = await acotada(
-      supabaseAdmin().from('tenant').select('nombre').eq('id', tenantId).maybeSingle(),
-      'chat.tenant');
-    if (error) {
-      logger.error('chat.tenant_sesion_ilegible', { tenant: tenantId, err: error.message });
-      return null;
-    }
-    if (!t) {
-      logger.error('chat.tenant_sesion_fantasma', { tenant: tenantId });
-      return null;
-    }
-    if (t.nombre) nombreFlota = t.nombre as string;
+    if (t) return { tenantId: t.id as string, nombreFlota: (t.nombre as string) ?? 'tu flota' };
   }
-  return { tenantId, nombreFlota };
+
+  // Mismo fail-closed que BE-16 arriba, pero para el tenant que de verdad se
+  // va a usar: el de la SESIÓN, el de `tenantDemo()`, o el de respaldo cuando
+  // el `?tenant=` pedido no existe. Antes esta rama ni miraba `error` ni
+  // comprobaba que `t` existiera: un `DEMO_TENANT_ID` fantasma (o una sesión
+  // con un tenant ya borrado) pasaba de largo con `tenantId` intacto, y
+  // `reservar_presupuesto_llm` tronaba por FK violation en cada turno — visto
+  // en producción el 3-sep-2026 (`chat.analista.fallo`, 12 fallos en 5
+  // minutos, siempre el mismo tenant_id inexistente).
+  const { data: t, error } = await acotada(
+    supabaseAdmin().from('tenant').select('nombre').eq('id', tenantId).maybeSingle(),
+    'chat.tenant');
+  if (error) {
+    logger.error('chat.tenant_sesion_ilegible', { tenant: tenantId, err: error.message });
+    return null;
+  }
+  if (!t) {
+    logger.error('chat.tenant_sesion_fantasma', { tenant: tenantId });
+    return null;
+  }
+  return { tenantId, nombreFlota: (t.nombre as string) ?? 'tu flota' };
 }

@@ -224,32 +224,9 @@ export async function verificarMigracionesCriticas(): Promise<void> {
       // ANTES que el código que la lee, y el arranque lo comprueba.
       ...Object.entries(COLUMNAS_RECIENTES).map(([clave, c]) => columna(admin, c.tabla, c.columna, `FALTA la migración ${clave} (${c.tabla}.${c.columna}): ${c.consecuencia} Corre \`supabase db push\`.`)),
 
-      // 0172: CHECK tenant_regimen_fiscal_dominio con 624. No hay columna
-      // nueva que leer: se inserta un tenant throwaway y se borra. 23514 =
-      // el CHECK de 0056 sigue vigente y un coordinado no puede declararse.
-      async () => {
-        const PROBE = '__likida_probe_624__';
-        await acotada(admin.from('tenant').delete().eq('nombre', PROBE), 'startup.0172.cleanup');
-        try {
-          const { data, error } = await acotada(
-            admin.from('tenant').insert({ nombre: PROBE, regimen_fiscal: '624' }).select('id'),
-            'startup.0172',
-          );
-          if (error) {
-            if (error.code === '23514' || /tenant_regimen_fiscal_dominio|regimen_fiscal/i.test(error.message ?? '')) {
-              reportarProbe(error, 'FALTA la migración 0172 (CHECK 624 Coordinados): el catálogo del código admite 624 y la base lo rechaza. Un coordinado no puede declararse. Corre `supabase db push`.');
-              return true;
-            }
-            if (error.code) reportarProbe(error, `Sondeo 0172 (CHECK 624) contestó ${error.code}: ${error.message ?? ''}`);
-            return false;
-          }
-          const id = Array.isArray(data) ? data[0]?.id : undefined;
-          if (id) await acotada(admin.from('tenant').delete().eq('id', id), 'startup.0172.cleanup');
-          return false;
-        } finally {
-          await acotada(admin.from('tenant').delete().eq('nombre', PROBE), 'startup.0172.cleanup');
-        }
-      },
+      // El sondeo de la 0172 (CHECK 624 Coordinados) NO vive aquí: es el único
+      // de todos estos que ESCRIBE, y por eso `register()` lo espera aparte —
+      // ver `verificarSondeoEscritura0172` más abajo.
     ];
 
     const resultados = await Promise.allSettled(sondeos.map((s) => s()));
@@ -261,6 +238,51 @@ export async function verificarMigracionesCriticas(): Promise<void> {
       logger.warn('startup.migraciones_sondeo_fallo', { err: r.reason instanceof Error ? r.reason.message : String(r.reason) });
     }
     if (!faltan) logger.info('startup.migraciones', { ok: true });
+  } catch (e) {
+    // Sin env/DB (p. ej. durante el build) → no romper, solo avisar.
+    logger.warn('startup.migraciones_skip', { err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/**
+ * El sondeo de la migración 0172 (CHECK `tenant_regimen_fiscal_dominio` con
+ * 624). No hay columna nueva que leer: se inserta un `tenant` throwaway y se
+ * borra. 23514 = el CHECK de 0056 sigue vigente y un coordinado no puede
+ * declararse.
+ *
+ * MEDIO REINCIDENTE (auditoría 24 y 25, `agentico.md`): este es el ÚNICO de
+ * los sondeos de `verificarMigracionesCriticas` que ESCRIBE, y por eso vive
+ * en su propia función en vez de en ese arreglo — `register()` lo AWAITEA en
+ * vez de dispararlo con `void` como el resto. Con `void`, en Vercel el
+ * webhook contesta 200 en ~40 ms y la instancia se congela con el `delete`
+ * del `finally` en vuelo; `lib/admin/negocio.ts:384` no filtra el nombre
+ * `__likida_probe_624__`, así que la fila fantasma aparece en `/admin` como
+ * una flota más, con plan `demo`, y suma en el conteo. Con 0 clientes reales,
+ * una flota fantasma es la mitad de la lista.
+ */
+export async function verificarSondeoEscritura0172(): Promise<void> {
+  try {
+    const admin = supabaseAdmin();
+    const PROBE = '__likida_probe_624__';
+    await acotada(admin.from('tenant').delete().eq('nombre', PROBE), 'startup.0172.cleanup');
+    try {
+      const { data, error } = await acotada(
+        admin.from('tenant').insert({ nombre: PROBE, regimen_fiscal: '624' }).select('id'),
+        'startup.0172',
+      );
+      if (error) {
+        if (error.code === '23514' || /tenant_regimen_fiscal_dominio|regimen_fiscal/i.test(error.message ?? '')) {
+          reportarProbe(error, 'FALTA la migración 0172 (CHECK 624 Coordinados): el catálogo del código admite 624 y la base lo rechaza. Un coordinado no puede declararse. Corre `supabase db push`.');
+        } else if (error.code) {
+          reportarProbe(error, `Sondeo 0172 (CHECK 624) contestó ${error.code}: ${error.message ?? ''}`);
+        }
+        return;
+      }
+      const id = Array.isArray(data) ? data[0]?.id : undefined;
+      if (id) await acotada(admin.from('tenant').delete().eq('id', id), 'startup.0172.cleanup');
+    } finally {
+      await acotada(admin.from('tenant').delete().eq('nombre', PROBE), 'startup.0172.cleanup');
+    }
   } catch (e) {
     // Sin env/DB (p. ej. durante el build) → no romper, solo avisar.
     logger.warn('startup.migraciones_skip', { err: e instanceof Error ? e.message : String(e) });
