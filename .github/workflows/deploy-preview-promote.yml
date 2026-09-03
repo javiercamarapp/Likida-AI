@@ -90,6 +90,14 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
           SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+          # 2-sep-2026: el mismo "JavaScript heap out of memory" que ci.yml ya
+          # documentó el 31-ago (el paso de TypeScript de `next build` truena
+          # en el runner estándar de 7 GB tras crecer el repo) — a este
+          # workflow le faltaba el mismo NODE_OPTIONS que ci.yml ya le puso a
+          # su propio build. Reproducido: falló dos veces seguidas, mismo
+          # punto exacto (heap OOM en "Running TypeScript..." dentro del
+          # build), antes de este fix.
+          NODE_OPTIONS: --max-old-space-size=6144
 
   supabase-dry-run:
     name: Supabase staging — migraciones dry-run
