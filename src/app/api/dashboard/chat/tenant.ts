@@ -39,10 +39,25 @@ export async function tenantEfectivoChat(
     }
     if (t) { tenantId = t.id as string; nombreFlota = (t.nombre as string) ?? nombreFlota; }
   } else {
-    const { data: t } = await acotada(
+    // Mismo fail-closed que BE-16 arriba, pero para el tenant de la SESIÓN o
+    // el de `tenantDemo()` — antes esta rama ni miraba `error` ni comprobaba
+    // que `t` existiera: un `DEMO_TENANT_ID` fantasma (o una sesión con un
+    // tenant ya borrado) pasaba de largo con `tenantId` intacto, y
+    // `reservar_presupuesto_llm` tronaba por FK violation en cada turno —
+    // visto en producción el 3-sep-2026 (`chat.analista.fallo`, 12 fallos en
+    // 5 minutos, siempre el mismo tenant_id inexistente).
+    const { data: t, error } = await acotada(
       supabaseAdmin().from('tenant').select('nombre').eq('id', tenantId).maybeSingle(),
       'chat.tenant');
-    if (t?.nombre) nombreFlota = t.nombre as string;
+    if (error) {
+      logger.error('chat.tenant_sesion_ilegible', { tenant: tenantId, err: error.message });
+      return null;
+    }
+    if (!t) {
+      logger.error('chat.tenant_sesion_fantasma', { tenant: tenantId });
+      return null;
+    }
+    if (t.nombre) nombreFlota = t.nombre as string;
   }
   return { tenantId, nombreFlota };
 }
