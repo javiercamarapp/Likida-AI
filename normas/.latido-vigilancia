@@ -1,38 +1,37 @@
-fecha_corrida: 2026-09-02 (miércoles, 21:30)
-ultimo_dia_barrido: 2026-09-02 (matutina; vespertina no publicada hoy —
-  confirmado por diarios/porFecha, no es fallo de infra)
-rango_barrido: 2026-08-31..2026-09-02 (3 días; cierra el backlog que las dos
-  corridas previas —lunes 31-ago y hoy temprano, 09:52— no pudieron barrer
-  por egress bloqueado en la sesión de nube)
-notas_revisadas: 244 (31-ago: 68 [mat 2ª pág + ves], 01-sep: 108 [mat], 02-sep:
-  68 [mat]) — recuento por 'titulo' en el JSON de cada fecha, cruzado contra
-  diarios/porFecha para confirmar ediciones reales (31-ago: mat+ves; 01 y
-  02-sep: solo mat, ves null en ambos días vía porFecha)
-estado: "OK — egress disponible en esta sesión local (a diferencia de las dos
-  corridas en la nube del 31-ago y de esta mañana 02-sep, ambas
-  EGRESS_BLOCKED). Backlog de 3 días cerrado en un solo barrido."
+fecha_corrida: 2026-09-03 (jueves, corrida programada)
+ultimo_dia_barrido: 2026-09-02 (sin cambio — esta corrida no pudo barrer nada
+  nuevo)
+rango_barrido: vacío — el día siguiente al último barrido (03-sep) es hoy
+  mismo; el barrido diario opera sobre "ayer" (02-sep), que la corrida
+  anterior (2026-09-02 21:30) ya cubrió. No había rango pendiente que
+  cerrar aun si el egress hubiera funcionado.
+notas_revisadas: 0
+estado: "INFRA — egress bloqueado a nivel de proxy de organización en esta
+  sesión de nube. No es un fallo específico de sidofqa: CONNECT rechazado
+  con 403 también contra www.sat.gob.mx, diputados.gob.mx y hasta
+  www.google.com (ver recentRelayFailures en /__agentproxy/status). No se
+  pudo hacer ni una sola petición de verificación esta corrida."
 fichas_disparadas: 0
-falsos_positivos_revisados: >
-  Diccionario disparó por substring en 3 fechas ('UMA' dentro de 'DERECHOS
-  HUMANOS' y en campos JSON ajenos, 'IVA' dentro de 'federativas',
-  'administrativo', 'efectivas', etc., 'LIF' dentro de 'simplificación').
-  Un hit real de 'Fe de erratas' (31-ago, codNota 5797558) es sobre el
-  Programa Nacional de Seguridad Pública 2026-2030, ajeno al dominio. Un hit
-  real de 'datos personales' (31-ago, codNota 5797491) son lineamientos de
-  transparencia INTERNOS de la Autoridad Garante del Tribunal Electoral/TDJ/
-  OAJ — no modifica LFPDPPP, no aplica a las fichas lfpdppp-*. Sin cuota
-  IEPS diésel nueva: no hubo viernes en el rango (la de 28-ago, vigencia
-  29ago-4sep, ya está capturada desde el commit c7c3d1ce).
-etag_sat: no_recheck — próxima ventana lunes 07-sep-2026
+etag_sat: no_recheck — hoy es jueves, no lunes; ventana siguiente:
+  07-sep-2026 (y ese día también dependerá de que el egress esté abierto)
 deriva_ley_check: no_aplica — no es día 1 de trimestre
 sin_verificar_esta_corrida: >
-  ETag del minisitio SAT sin chequear esta semana (ventana es lunes). Las 34
-  fichas de normas/*.yaml no se releyeron contra fuente primaria completa —
-  esta rutina solo marca contradicho si el barrido diario choca con una.
+  Todo. Ninguna petición de red se completó (SIDOF, SAT, diputados,
+  incluso un host de control como google.com). No hay forma de distinguir
+  "sin novedades" de "no pude ver" en esta corrida — se reporta como INFRA,
+  no como SIN CAMBIOS.
 accion_requerida: >
-  Van ya varias corridas programadas en la nube (31-ago, 02-sep temprano)
-  bloqueadas por egress y cerradas manualmente desde sesión local en el
-  mismo día o al siguiente. Sigue pendiente decidir si la cadencia diaria
-  de esta rutina se ancla a un entorno con egress garantizado a
-  sidofqa.segob.gob.mx, o si un admin agrega ese host a la allowlist de
-  las sesiones de nube programadas.
+  Esta es la TERCERA vez que una corrida programada en la nube de esta
+  rutina cae por egress bloqueado (31-ago, 02-sep temprano, y ahora
+  03-sep) — las dos previas se cerraron manualmente desde una sesión local
+  con egress abierto. El bloqueo no es específico de sidofqa.segob.gob.mx:
+  esta corrida confirmó que NINGÚN host externo es alcanzable desde esta
+  sesión de nube programada (ni siquiera google.com), así que no es cosa
+  de agregar un dominio a una allowlist fina — es que las sesiones
+  programadas de esta rutina corren bajo una política de red sin egress
+  saliente en absoluto. Sigue pendiente decidir: (a) mover la cadencia
+  diaria de esta rutina a un entorno/sesión con egress general habilitado,
+  o (b) que un admin habilite egress saliente (al menos a los hosts de
+  fuentes.md) para las sesiones de nube donde corre este cron. Sin
+  resolver esto, cada corrida programada seguirá siendo un no-op de
+  infraestructura que alguien tiene que notar y cerrar a mano.
