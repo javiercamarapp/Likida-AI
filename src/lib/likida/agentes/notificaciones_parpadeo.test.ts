@@ -101,6 +101,12 @@ function tablaSimple(respuesta: unknown) {
     // sin este método el mock tronaba con "b.order is not a function" y
     // `avisarCorridaFallida` se quedaba sin destinatarios.
     order: () => b,
+    // AUDITORÍA 25, ALTO (reauditoría): `usuariosAvisables` agregó
+    // `.or('activo.is.null,activo.eq.true')` — mismo motivo que `.order()`
+    // arriba. El doble no evalúa la condición (igual que `contactos.test.ts`
+    // con AGEN-C1): devuelve la tabla entera, así que lo que las pruebas de
+    // este archivo ejercen es la fila que la propia `respuesta` ya trae.
+    or: () => b,
     maybeSingle: () => Promise.resolve(respuesta),
     limit: () => Promise.resolve(respuesta),
   };
