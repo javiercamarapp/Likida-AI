@@ -527,6 +527,11 @@ export interface FichaAgente {
   runnerHabilitado: boolean;
   descripcion: string | null;
   promptRef: string | null;
+  /** El rol de modelo (models.ts) con el que corre, o NULL si es determinista
+   *  (0125). Un agente determinista no llama a un modelo con un prompt
+   *  externo, así que no tiene `prompt_ref` que documentar — exigírselo
+   *  produce una alarma que nadie puede apagar nunca (auditoría 25, DATOS-M1). */
+  modeloRol: string | null;
 }
 
 /** Una entrada del censo: estado, runner y HUELLA de la descripción (no el
@@ -608,7 +613,7 @@ export function compararCatalogo(actual: FichaAgente[], previo: Censo | null): C
     const faltas: string[] = [];
     if (d.length === 0) faltas.push('sin descripción');
     else if (d.length < MIN_DESCRIPCION_UTIL) faltas.push(`descripción de ${numero(d.length)} caracteres (mínimo útil declarado: ${MIN_DESCRIPCION_UTIL})`);
-    if (!f.promptRef || !f.promptRef.trim()) faltas.push('sin prompt_ref al blueprint');
+    if (f.modeloRol && (!f.promptRef || !f.promptRef.trim())) faltas.push('sin prompt_ref al blueprint');
     if (faltas.length > 0) {
       cambios.push({ tipo: 'sin_descripcion', agente: f.id, detalle: `VIVO Y SIN DOCUMENTAR: ${faltas.join(' · ')}.` });
     }
@@ -660,7 +665,7 @@ export function armarParteDocumentacion(
 async function leerCatalogo(): Promise<FichaAgente[]> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('agente_definicion')
-    .select('id, nombre, departamento, estado, runner_habilitado, descripcion, prompt_ref')
+    .select('id, nombre, departamento, estado, runner_habilitado, descripcion, prompt_ref, modelo_rol')
     .order('id')
     .limit(500), 'backoffice.catalogo');
   if (error) throw new Error(`leerCatalogo: ${error.message}`);
@@ -672,6 +677,7 @@ async function leerCatalogo(): Promise<FichaAgente[]> {
     runnerHabilitado: f.runner_habilitado === true,
     descripcion: (f.descripcion as string | null) ?? null,
     promptRef: (f.prompt_ref as string | null) ?? null,
+    modeloRol: (f.modelo_rol as string | null) ?? null,
   }));
 }
 

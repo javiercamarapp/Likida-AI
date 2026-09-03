@@ -74,7 +74,7 @@ const corrida = (p: Partial<Corrida> & { agente: string }): Corrida => ({
 const ficha = (p: Partial<Ficha> & { id: string }): Ficha => ({
   nombre: 'Agente', departamento: 'back_office', estado: 'vivo', runnerHabilitado: true,
   descripcion: 'Una descripción suficientemente larga para pasar el mínimo útil.',
-  promptRef: 'blueprint.md', ...p,
+  promptRef: 'blueprint.md', modeloRol: 'chat', ...p,
 });
 
 beforeEach(() => {
@@ -337,6 +337,17 @@ describe('documentación: el drift del catálogo contra el censo propio', () => 
     expect(huecos).toHaveLength(1);
     expect(huecos[0].agente).toBe('vivo_pelon');
     expect(huecos[0].detalle).toContain('sin prompt_ref');
+  });
+
+  it('un VIVO determinista (modeloRol null) sin prompt_ref NO se marca como deuda documental (auditoría 25, DATOS-M1)', () => {
+    // 0303 dejó `prompt_ref = NULL` en nueve agentes vivos deterministas a
+    // propósito: no llaman a un modelo con un prompt externo, así que no hay
+    // referencia que documentar. Antes de este arreglo, esto disparaba una
+    // alarma permanente que nadie podía apagar — con descripción útil y todo.
+    const cambios = compararCatalogo([
+      ficha({ id: 'cazador', promptRef: null, modeloRol: null }),
+    ], null);
+    expect(cambios.filter((c) => c.tipo === 'sin_descripcion')).toHaveLength(0);
   });
 
   it('huellaDescripcion distingue textos y trata el nulo como cadena vacía', () => {
