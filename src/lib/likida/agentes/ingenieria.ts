@@ -59,6 +59,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
+import { traerTodo, conteo } from '../pg';
 import { hoyMx, numero, usd, usd4, round2 } from '@/lib/formato';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { encolarPieza } from './cola';
@@ -1184,17 +1185,29 @@ export function armarParteRendimiento(hallazgos: Hallazgo[], perfil: Perfil, lun
   return lineas.join('\n');
 }
 
-/** El costo por agente en la ventana. NULL ≠ 0: se cuentan aparte las
- *  corridas que no midieron. LANZA si la bitácora no se puede leer. */
+/**
+ * El costo por agente en la ventana. NULL ≠ 0: se cuentan aparte las
+ * corridas que no midieron. LANZA si la bitácora no se puede leer.
+ *
+ * AUDITORÍA 25, MEDIO (REND-A5): era `.limit(5000)`, que PostgREST recorta a
+ * `min(limit, max_rows)` = 1,000 en SILENCIO (`pg.ts:38-48`). Con ~34 agentes
+ * habilitados × 6 pasadas/día son ~1,428 filas/semana — pasa las mil, y el
+ * parte «Rendimiento» reportaba «costo por corrida» sobre una muestra
+ * arbitraria del planner con cara de censo. `traerTodo` pagina de verdad y
+ * LANZA en vez de devolver un recorte silencioso.
+ */
 export async function leerCostos(desdeIso: string): Promise<CostoPorAgente[]> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('agente_corrida')
-    .select('agente, costo_usd')
-    .gte('inicio', desdeIso)
-    .limit(5000), 'ingenieria.costos');
-  if (error) throw new Error(`leerCostos: ${error.message}`);
+  const data = await traerTodo<{ id: unknown; agente: string; costo_usd: unknown }>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('agente_corrida')
+      .select('id, agente, costo_usd', conteo(d))
+      .gte('inicio', desdeIso)
+      .order('id')
+      .range(d, h), 'ingenieria.costos'),
+    'ingenieria.costos',
+  );
   const acc = new Map<string, CostoPorAgente>();
-  for (const f of (data ?? []) as Array<{ agente: string; costo_usd: unknown }>) {
+  for (const f of data) {
     const a = acc.get(f.agente) ?? { agente: f.agente, corridas: 0, conCosto: 0, totalUsd: 0 };
     a.corridas += 1;
     if (f.costo_usd !== null && f.costo_usd !== undefined) {
