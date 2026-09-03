@@ -103,7 +103,40 @@ estimulo_diesel_transporte:
     combustible... con los ajustes que, en su caso, correspondan, vigente en el
     momento en que se haya realizado la importación o adquisición del diésel..., por
     el número de litros importados o adquiridos.
+    ---
+    El acreditamiento a que se refiere esta fracción únicamente podrá efectuarse
+    contra el impuesto sobre la renta causado en el ejercicio que tenga la persona
+    contribuyente, correspondiente al mismo ejercicio en que se importe o adquiera el
+    diésel o biodiésel y sus mezclas, utilizando la forma oficial que mediante reglas
+    de carácter general dé a conocer el Servicio de Administración Tributaria; en
+    caso de no hacerlo, perderá el derecho a realizarlo con posterioridad.
+    ---
+    Para que proceda el acreditamiento a que se refiere esta fracción, el pago por la
+    importación o adquisición de diésel o de biodiésel y sus mezclas a distribuidores
+    o estaciones de servicio, deberá efectuarse con: monedero electrónico autorizado
+    por el Servicio de Administración Tributaria; tarjeta de crédito, débito o de
+    servicios, expedida a favor de la persona contribuyente que pretenda hacer el
+    acreditamiento; con cheque nominativo expedido por la persona importadora o
+    adquirente para abono en cuenta del enajenante, o bien, transferencia electrónica
+    de fondos desde cuentas abiertas a nombre de la persona contribuyente en
+    instituciones que componen el sistema financiero y las entidades que para tal
+    efecto autorice el Banco de México.
   como_se_calcula: "cuota IEPS vigente al momento de la compra × LITROS. No es el IEPS trasladado en el CFDI."
+  # AUDITORÍA 25, BAJO FISCAL (fiscal.md línea 347) — el hallazgo apuntaba a que
+  # este párrafo de MEDIO DE PAGO no estaba transcrito aquí (solo el hecho
+  # generador y la fórmula lo estaban) mientras `engine.ts:1650-1653` y
+  # `fiscal.ts:867-870` ya condicionaban los litros elegibles a él, citando un
+  # "4º párrafo" que la ficha no respaldaba. Se re-verificó contra el PDF
+  # oficial (diputados.gob.mx/LeyesBiblio/pdf/LIF_2026.pdf, extraído con
+  # `pdftotext -layout`, página 21 de 47): el párrafo SÍ EXISTE, es
+  # efectivamente el CUARTO de la fracción IV (1: hecho generador; 2: fórmula
+  # cuota×litros; 3: contra qué ejercicio se acredita; 4: el medio de pago), y
+  # transcribe exactamente los medios que el motor ya exige —monedero
+  # electrónico, tarjeta de crédito/débito/servicios, cheque nominativo,
+  # transferencia electrónica—, el mismo conjunto de `MEDIOS_LISR_27_III`
+  # (c_FormaPago 02/03/04/05/28/29). El código estaba bien; lo que faltaba era
+  # que esta ficha lo dijera.
+  medio_de_pago_verificado_el: 2026-09-03
   advertencia_critica: >
     "con los ajustes que, en su caso, correspondan" es la cuota DISMINUIDA, y la
     cuota cambia SEMANALMENTE. Ver criterio-1-LIF-PI: usar la cuota entera es
