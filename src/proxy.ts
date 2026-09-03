@@ -44,13 +44,15 @@ import { COOKIES_DE_SESION } from '@/lib/supabase/cookies';
  *   comprobante son URLs firmadas/públicas de Storage
  *   (`admin/mi-perfil/page.tsx:52`) — el navegador las pide directo, sin
  *   pasar por `/api`.
- * - `connect-src 'self'` y nada más: los dos `fetch(` que existen en
- *   componentes cliente (`dashboard/rail.tsx`, `demo/page.tsx`) son a rutas
- *   propias. Sentry vive SOLO en `SENTRY_DSN` (server, sin
+ * - `connect-src 'self'` y nada más: los `fetch(` que existen en código de
+ *   cliente (`dashboard/rail.tsx`, `demo/page.tsx`, y `logger.ts` reportando
+ *   un fallo de cliente a `/api/client-error` — auditoría 25) son TODOS a
+ *   rutas propias. Sentry vive SOLO en `SENTRY_DSN` (server, sin
  *   `NEXT_PUBLIC_SENTRY_DSN` ni `instrumentation-client.ts`) — el navegador
- *   nunca le habla. WhatsApp (Graph API) es server-only. Stripe se navega
- *   por `redirect()` de un server action (top-level, no XHR) — no hay
- *   Stripe.js ni Elements embebidos.
+ *   nunca le habla directo; lo que sale de un fallo de cliente pasa primero
+ *   por `/api/client-error`, que sí corre en servidor. WhatsApp (Graph API)
+ *   es server-only. Stripe se navega por `redirect()` de un server action
+ *   (top-level, no XHR) — no hay Stripe.js ni Elements embebidos.
  * - `frame-src 'none'`: cero `<iframe>` en el repo.
  * - `frame-ancestors 'none'`: mismo candado que `X-Frame-Options: DENY`,
  *   pero por CSP — cinturón y tirantes, como el resto de este archivo.
