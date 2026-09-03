@@ -514,7 +514,7 @@ export async function validarAcceso(token: string): Promise<ResultadoAcceso> {
   // acto, no solo en el siguiente refresco.
   const { data, error } = await supabaseAdmin()
     .from('mcp_oauth_token')
-    .select('id, tipo, user_id, user_email, tenant_id, rol, expira_en, revocado_en, app_user:user_id(tenant_id, rol)')
+    .select('id, tipo, user_id, user_email, tenant_id, rol, expira_en, revocado_en, app_user:user_id(tenant_id, rol, activo)')
     .eq('token_hash', hashDeLlave(token))
     .maybeSingle();
   if (error) {
@@ -530,7 +530,23 @@ export async function validarAcceso(token: string): Promise<ResultadoAcceso> {
   // default; en runtime, PostgREST devuelve un objeto (o null) porque la FK
   // es de mcp_oauth_token HACIA app_user (muchos-a-uno) — de ahí el paso por
   // `unknown` que el propio compilador pide.
-  const identidadActual = data.app_user as unknown as { tenant_id: string; rol: string } | null;
+  const identidadActual = data.app_user as unknown as { tenant_id: string; rol: string; activo?: boolean } | null;
+
+  // AUDITORÍA 25, SEG-A1 (ALTO): la BAJA también cierra el token MCP.
+  // `desactivarUsuario` escribe `activo=false`, banea en Auth, y la pantalla
+  // promete que «su sesión quedó revocada». Las tres puertas de SEG-1 cumplen
+  // —`getSessionTenant`, la RLS de la 0294 y el ban—, pero este camino no pasa
+  // por ninguna: la baja NO mueve `tenant_id` ni `rol`, así que la revalidación
+  // de identidad de abajo la daba por buena; y las herramientas leen con
+  // service_role, que no pasa por RLS, así que el `and activo` de la 0294 nunca
+  // se evalúa aquí. El refresco además ROTA y se renueva 60 días en cada uso.
+  // Misma raíz que AGEN-C1 de esta ronda, y misma regla: solo el `false`
+  // EXPLÍCITO da de baja, para que una base sin la 0294 no se quede sin MCP.
+  if (identidadActual && identidadActual.activo === false) {
+    logger.warn('mcp.oauth.usuario_de_baja', { tokenId: String(data.id) });
+    return { ok: false, error: 'no_valido', detalle: ACCESO_INVALIDO };
+  }
+
   if (
     !identidadActual ||
     identidadActual.tenant_id !== data.tenant_id ||
