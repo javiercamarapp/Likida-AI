@@ -154,3 +154,69 @@ describe('logger — lo que sí es dato personal se borra entero', () => {
     expect(ultimaLinea(spy)).toContain('1785312000000');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25, ALTO REINCIDENTE — un fallo SOLO-DE-CLIENTE (el layout raíz
+// truena después de hidratar) no dejaba rastro en ninguna parte: la réplica a
+// Sentry vive tras SENTRY_DSN, que en el bundle de cliente es `undefined`
+// (no es NEXT_PUBLIC_*). `reportarAlServidor` es el puente: solo EN EL
+// NAVEGADOR (`typeof window !== 'undefined'`), un warn/error hace un POST
+// best-effort a `/api/client-error` — la única ruta que la CSP
+// `connect-src 'self'` permite.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('logger — un fallo de CLIENTE llega también al servidor', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('en el navegador (window existe), un error hace POST a /api/client-error', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('window', {});
+    const fetchSpy = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () => new Response('{}', { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+
+    logger.error('app.global_error', { digest: 'abc123' });
+    await Promise.resolve(); // el fetch es fire-and-forget: deja correr el microtask
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/client-error', expect.objectContaining({
+      method: 'POST',
+      keepalive: true,
+    }));
+    const init = fetchSpy.mock.calls[0][1] as RequestInit;
+    const enviado = JSON.parse(String(init.body));
+    expect(enviado).toMatchObject({ level: 'error', msg: 'app.global_error', meta: { digest: 'abc123' } });
+  });
+
+  it('SIN window (servidor), no hace ningún fetch — ya se logueó por la vía normal', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    logger.error('server.fallo', { x: 1 });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('en el navegador, info/debug NO disparan el POST — solo warn/error merecen el viaje', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.stubGlobal('window', {});
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    logger.info('algo.normal', {});
+    await Promise.resolve();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('un fetch que lanza (red caída) no revienta el logger — best-effort, nunca lanza', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('window', {});
+    vi.stubGlobal('fetch', vi.fn(() => { throw new Error('red caída'); }));
+
+    expect(() => logger.error('app.global_error', {})).not.toThrow();
+  });
+});

@@ -1,0 +1,79 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# AVISO — [deploy] se perdería al mergear este PR (auditoría 25, OP-C1, CRÍTICO)
+#
+# `scripts/ci/compuerta-deploy.mjs` lee A PROPÓSITO solo el ASUNTO (primera
+# línea) del commit — así lo explica CLAUDE.md § Despliegue: leer el mensaje
+# completo hacía que cualquier commit que MENCIONARA "desplegar" disparara un
+# build. La consecuencia que este workflow existe para avisar: un merge commit
+# normal de GitHub ("Merge pull request #N from <rama>") NUNCA lleva el título
+# del PR en su asunto — la bandera, si el título la trae, queda enterrada en el
+# CUERPO del merge commit, y la compuerta no la ve.
+#
+# Pasó de verdad el 3-sep-2026: el PR #318, abierto exclusivamente para
+# publicar (rama `deploy/trigger-chat-fix`, título con `[deploy]`), se mergeó
+# con merge commit y el `[deploy]` no construyó nada — sin que nada lo avisara
+# ANTES. Este workflow es la salvaguarda: no toca la compuerta (que sigue
+# leyendo solo la primera línea a propósito), solo avisa con tiempo de sobra
+# para elegir squash-merge, Redeploy manual, o un commit directo con la
+# bandera después del merge.
+#
+# NO bloquea el merge (no es un check requerido, no falla el job): un PR que
+# lleva [deploy] en el título sigue siendo válido para mergear normal si la
+# intención es publicar por otro camino (Redeploy manual, por ejemplo). Solo
+# se asegura de que quien mergea lo sepa de antemano.
+# ═══════════════════════════════════════════════════════════════════════════
+name: Aviso — [deploy] se perdería al mergear
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  avisar:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Detectar si un merge commit normal perdería el [deploy] del título
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -u
+          if ! printf '%s' "$PR_TITLE" | grep -qiE '\[deploy(:forzar)?\]'; then
+            echo "El título del PR no lleva [deploy]: nada que avisar."
+            exit 0
+          fi
+
+          # El asunto que GitHub le pone a un merge commit normal es SIEMPRE
+          # "Merge pull request #<N> from <org>/<rama>" (o "from <rama>" en el
+          # mismo repo) — nunca incluye el título del PR. compuerta-deploy.mjs
+          # lee solo esa primera línea, así que ese merge commit NO construiría
+          # aunque este PR sí lleve la bandera.
+          aviso=$(cat <<EOF
+⚠️ **Este PR lleva \`[deploy]\` en el título, pero un merge commit normal no lo conserva.**
+
+Un merge estándar de GitHub le pone al commit resultante el asunto \`Merge pull request #$PR_NUMBER from $PR_HEAD_REF\` — nunca el título del PR. \`scripts/ci/compuerta-deploy.mjs\` (el \`ignoreCommand\` de Vercel, y el mismo veredicto en \`salud-produccion.yml\`) lee **solo la primera línea** del commit a propósito (ver \`CLAUDE.md\` § Despliegue), así que ese merge commit **no publicaría nada** — el push se vería normal en GitHub y producción se quedaría atrás sin avisar.
+
+Para que \`[deploy]\` sí publique, en este PR:
+- **Squash-merge** con el asunto del commit final llevando \`[deploy]\` (así lo hace \`auto-merge-rutina.yml\`, y por eso los \`[deploy]\` con \`(#NNN)\` en el asunto sí construyen), o
+- Mergea normal y luego usa **Redeploy** en el panel de Vercel sobre el deployment que corresponde, o
+- Empuja después del merge un commit directo a \`master\` con \`[deploy]\` en el asunto.
+
+Antes de publicar: recuerda que las migraciones van ANTES que \`[deploy]\` (ver \`CLAUDE.md\`).
+EOF
+)
+          echo "$aviso" >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning::[deploy] en el título de este PR se perdería en un merge commit normal — ver el comentario en el PR."
+
+          # Un solo aviso por PR: no se duplica en cada push a la misma rama.
+          existente=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json comments --jq '.comments[] | select(.body | test("se perdería al mergear")) | .id' | head -1)
+          if [ -n "$existente" ]; then
+            echo "Ya había un aviso en este PR (comentario $existente); no se duplica."
+            exit 0
+          fi
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$aviso"

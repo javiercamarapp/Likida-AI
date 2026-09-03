@@ -45,6 +45,11 @@ export function prefijosMigraciones(dir = 'supabase/migrations') {
   return [...vistos].sort();
 }
 
+// La MISMA regex que `decidir()` aplica a la primera línea del commit —
+// exportada para que nadie más la reimplemente (ver `ultimoConDeployEnAsunto`
+// abajo: auditoría 25, ALTO — `git log --grep` casaba contra asunto Y cuerpo).
+export const FLAG_DEPLOY_RE = /\[deploy(?::forzar)?\]/i;
+
 /** El prefijo de cuatro dígitos más alto en `supabase/migrations`. */
 export function ultimaMigracion(dir = 'supabase/migrations') {
   const prefijos = prefijosMigraciones(dir);
@@ -53,6 +58,29 @@ export function ultimaMigracion(dir = 'supabase/migrations') {
 
 function siguiente(prefijo) {
   return String(Number(prefijo) + 1).padStart(4, '0');
+}
+
+/**
+ * PURA. `commits` = lista de `{ sha, asunto }`, más nuevo primero (como
+ * `git log --format='%H%x1f%s'`). Devuelve el `sha` del primer commit cuyo
+ * ASUNTO (no el cuerpo) lleva `[deploy]`/`[deploy:forzar]` — la MISMA regla
+ * que `decidir()` aplica al tip de `master` — o `null` si ninguno lo lleva.
+ *
+ * AUDITORÍA 25, ALTO REINCIDENTE: `salud-produccion.yml` cotejaba con
+ * `git log -i --grep='\[deploy' -1`, y `--grep` de git casa contra asunto Y
+ * CUERPO. Un merge commit cuyo asunto es "Merge pull request #N from <rama>"
+ * (sin la bandera) pero cuyo cuerpo la hereda del commit mergeado pasaba el
+ * filtro igual — exactamente lo que le pasó a `4f94490` el 3-sep-2026: el
+ * detector se ancló en un commit que Vercel nunca pudo construir (su asunto
+ * no lleva `[deploy]`) y quedó en rojo permanente. Esta función es la única
+ * fuente de verdad para "el último commit que la compuerta habría publicado",
+ * y por eso comparte la regex con `decidir()` en vez de reimplementarla.
+ */
+export function ultimoConDeployEnAsunto(commits) {
+  for (const { sha, asunto } of commits) {
+    if (FLAG_DEPLOY_RE.test(String(asunto ?? '').split('\n')[0])) return sha;
+  }
+  return null;
 }
 
 /**
@@ -65,7 +93,7 @@ function siguiente(prefijo) {
  */
 export function decidir({ asunto, codigo, prefijosCodigo = null, health }) {
   const primera = String(asunto ?? '').split('\n')[0];
-  if (!/\[deploy(?::forzar)?\]/i.test(primera)) {
+  if (!FLAG_DEPLOY_RE.test(primera)) {
     return { construir: false, nivel: 'ok', motivo: 'el asunto no lleva [deploy]: este push NO construye a propósito (vercel.json).' };
   }
   const forzar = /\[deploy:forzar\]/i.test(primera);
@@ -128,15 +156,41 @@ function asuntoDelCommit(args) {
   }
 }
 
-async function leerHealth(url) {
-  try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(20_000), headers: { 'user-agent': 'likida-compuerta-deploy' } });
-    // 503 también trae cuerpo (degraded): lo que importa es `migracion`.
-    return await r.json();
-  } catch (e) {
-    console.log(`compuerta: ${url} no contestó (${e instanceof Error ? e.message : String(e)})`);
+// AUDITORÍA 25, ALTO REINCIDENTE — `/api/health` responde 429 (rateLimit sin
+// Redis, "Upstash parpadea") ANTES de calcular `migracion`: el cuerpo es
+// `{ok:false,status:'fail',error:'demasiadas peticiones'}`, SIN el campo
+// `migracion`. Leer ese cuerpo igual que un 200/503 hacía que `decidir()`
+// cayera en la puerta de escape pensada para el ARRANQUE ("el health
+// desplegado no publica migracion, versión anterior a la auditoría 24") y
+// CONSTRUYERA con la base atrás del código — la pieza BLOQUEANTE se volvía
+// no-op justo en el escenario que vino a impedir.
+//
+// La regla ahora: solo 200 y 503 cuentan como "health leído" (son los dos
+// códigos que la propia ruta usa a propósito). Cualquier otro código —429
+// incluido— NO se lee; se reintenta unas veces con backoff (Upstash
+// parpadea, no está caído) y si sigue sin responder bien se devuelve `null`,
+// que `decidir()` ya trata como "no se pudo leer: sin base cotejada no se
+// despliega" — fail closed, no una puerta de escape.
+export async function leerHealth(url, intentos = 3) {
+  for (let i = 0; i < intentos; i++) {
+    let r;
+    try {
+      r = await fetch(url, { signal: AbortSignal.timeout(20_000), headers: { 'user-agent': 'likida-compuerta-deploy' } });
+    } catch (e) {
+      console.log(`compuerta: ${url} no contestó (${e instanceof Error ? e.message : String(e)})`);
+      if (i === intentos - 1) return null;
+      continue;
+    }
+    if (r.status === 200 || r.status === 503) return await r.json();
+    if (r.status === 429 && i < intentos - 1) {
+      console.log(`compuerta: ${url} respondió 429 (intento ${i + 1}/${intentos}): reintentando…`);
+      await new Promise((res) => setTimeout(res, 2000 * (i + 1)));
+      continue;
+    }
+    console.log(`compuerta: ${url} respondió ${r.status}: no se cuenta como health leído.`);
     return null;
   }
+  return null;
 }
 
 async function main() {
