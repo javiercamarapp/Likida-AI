@@ -117,3 +117,26 @@ describe('estímulo de diésel — el medio de pago es requisito (LIF 2026 20-A,
     expect(litros(diesel('03', { ocrExtra: {} }))).toBe(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25, BAJO FISCAL (fiscal.md línea 347) — la ficha `lif-2026-20-A`
+// citaba el hecho generador y la fórmula del estímulo, pero NO transcribía el
+// párrafo de medio de pago que este archivo ya prueba como comportamiento del
+// motor: el "4º párrafo" no tenía dónde verificarse. Se re-verificó contra el
+// PDF oficial de diputados.gob.mx (LIF_2026.pdf, página 21 de 47): el párrafo
+// SÍ EXISTE, es el cuarto de la fracción IV, y transcribe exactamente los
+// medios que el motor ya exige.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la ficha lif-2026-20-A ya transcribe el párrafo del medio de pago', () => {
+  it('estimulo_diesel_transporte.texto_vigente menciona los cuatro medios admitidos', async () => {
+    const { readFileSync } = await import('node:fs');
+    const txt = readFileSync(new URL('../../../../normas/lif-2026-20-A.yaml', import.meta.url), 'utf8');
+    // El YAML plegado envuelve líneas a ~80 columnas: se normaliza el espacio
+    // en blanco antes de buscar la frase, igual que hace el parser YAML.
+    const plano = txt.replace(/\s+/g, ' ');
+    expect(plano).toMatch(/monedero electrónico/i);
+    expect(plano).toMatch(/tarjeta de crédito, débito o de servicios/i);
+    expect(plano).toMatch(/cheque nominativo/i);
+    expect(plano).toMatch(/transferencia electrónica/i);
+  });
+});

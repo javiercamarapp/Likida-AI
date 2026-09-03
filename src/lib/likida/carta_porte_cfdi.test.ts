@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { armarCfdiTimbrable, type EmisorFiscal, type ReceptorFiscal } from './carta_porte_cfdi';
 import { armarBorrador, checklistCcp, necesitaCartaPorte, generarIdCcp, type DatosChecklist } from './carta_porte';
 import type { ViajeCcp } from './carta_porte_datos';
+import { NORMAS } from './normas/indice';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // El CFDI timbrable (0226). Lo que estas pruebas fijan:
@@ -205,5 +207,31 @@ describe('armarCfdiTimbrable — el CFDI completo sin sellar', () => {
     expect(r.total).toBe(3733.33);    // 3333.33 + 533.33 − 133.33
     expect(r.xml).toContain('SubTotal="3333.33"');
     expect(r.xml).toContain('Total="3733.33"');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25, MEDIO FISCAL, REINCIDENTE de la 23 y la 24 (fiscal.md línea
+// 322) — la retención del 4% que Likida TIMBRA no tenía ficha en `normas/`, y
+// el comentario que la fundaba citaba la regla equivocada: "la regla 3.1.2 de
+// la RMF fija el 4%" — esa regla es del Título 3 (ISR), no del IVA. La tasa
+// vive en el art. 3, fracción II del Reglamento de la LIVA.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la retención del 4% cita la norma correcta y tiene ficha', () => {
+  const fuente = readFileSync(new URL('./carta_porte_cfdi.ts', import.meta.url), 'utf8');
+
+  it('el comentario ya NO cita la regla 3.1.2 de la RMF para la tasa', () => {
+    expect(fuente).not.toMatch(/3\.1\.2 de la RMF fija el 4%/);
+  });
+
+  it('el comentario cita RLIVA 3-II', () => {
+    expect(fuente).toMatch(/RLIVA 3-II/);
+  });
+
+  it('existe una ficha verificada para RLIVA 3-II', () => {
+    const n = NORMAS['rliva-3-fr-II'];
+    expect(n, 'falta la entrada en el índice de normas').toBeDefined();
+    expect(n.estado).toBe('verificado_fuente_primaria');
+    expect(n.citas).toContain('RLIVA 3-II');
   });
 });

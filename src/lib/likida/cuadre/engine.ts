@@ -277,7 +277,7 @@ export const LECTURA_RFA_29_PRORRATEO =
   'la lectura literal del "siempre que" de la regla 2.9 negaría la facilidad a TODO el combustible en efectivo ' +
   'del ejercicio — confírmela con su contador.';
 
-export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible', 'gasto_otro_ejercicio'];
+export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
 // AUDITORÍA 21, CRÍTICO (fiscal): `cfdi_efos_indeterminado` entra a
 // POR_CONFIRMAR (y a SIN_IVA_ACREDITABLE, abajo) por el mismo camino que
 // `cfdi_pendiente`. Desde que la auditoría 9 quitó —con razón— el mapeo
@@ -293,7 +293,20 @@ export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancela
 // fraude sería el falso positivo que `intake/sat.ts` documenta como peor que
 // el falso negativo. Tercer estado: ni deducible ni no-deducible, a cotejar el
 // listado del DOF a mano.
-export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'cfdi_efos_indeterminado', 'consumo_bar', 'ticket_monedero', 'renglones_ajenos', 'medio_pago_no_admitido'];
+//
+// AUDITORÍA 25, ALTO FISCAL (fiscal.md línea 282): `gasto_otro_ejercicio`
+// entra aquí, no a NO_DEDUCIBLE_ISR. El propio repo declara la diferencia
+// como CALIDAD DEL DATO —"la fecha, no un veredicto de qué norma exacta rige
+// el periodo fiscal" (`normas/por_diferencia.ts:113`)— y no tiene ficha, pero
+// emitía el veredicto MÁS CARO del motor: «No deducible $X.00» en rojo sobre
+// un CFDI que sí es deducible, solo que en OTRO ejercicio. El motor no puede
+// afirmar la deducción (no es de este año) ni negarla de plano (si es real y
+// a tiempo, el contador la toma en el ejercicio correcto) — el tercer estado
+// de siempre. Sigue SIN entrar a SIN_IVA_ACREDITABLE (abajo): eso es
+// deliberado y no cambia con este hallazgo — LIVA 5-I exige acreditar "en la
+// proporción en que las erogaciones sean deducibles", y la proporción de ESTE
+// ejercicio sigue siendo cero.
+export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'cfdi_efos_indeterminado', 'consumo_bar', 'ticket_monedero', 'renglones_ajenos', 'medio_pago_no_admitido', 'gasto_otro_ejercicio'];
 
 // ── AUDITORÍA 22, FIS-C2 (CRÍTICO): DOS PREGUNTAS, DOS LISTAS ─────────────
 // Esto era UNA lista para dos preguntas distintas —«¿acredita IVA?» y
@@ -1648,9 +1661,12 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // multiplica por la cuota que él tenga fechada.
       //
       // El medio de pago es requisito del 4º párrafo de la LIF 20-A-IV (monedero,
-      // tarjeta, cheque nominativo o transferencia) y NO tiene la válvula del 15%
-      // que la RFA 2.9 sí concede para ISR: la facilidad salva la deducción, no
-      // el acreditamiento.
+      // tarjeta, cheque nominativo o transferencia) — AUDITORÍA 25, BAJO FISCAL
+      // (línea 347): re-verificado contra el PDF oficial de diputados.gob.mx,
+      // el párrafo existe tal cual y ahora está transcrito en
+      // `normas/lif-2026-20-A.yaml` (estimulo_diesel_transporte.texto_vigente).
+      // Y NO tiene la válvula del 15% que la RFA 2.9 sí concede para ISR: la
+      // facilidad salva la deducción, no el acreditamiento.
       // Los litros los lee el OCR del ticket y viven en `ocrExtra` (el XML del
       // CFDI no siempre trae la cantidad desglosada por concepto).
       const litros = Number((g.ocrExtra as Record<string, unknown> | undefined)?.litros ?? 0);

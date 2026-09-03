@@ -3020,6 +3020,22 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           return;
         }
 
+        // ── AUDITORÍA 25, ALTO FISCAL (hallazgo, línea 218) — UNA NOTA DE
+        // CRÉDITO (TipoDeComprobante=E) NO ES UN GASTO DEDUCIBLE ────────────
+        // Un CFDI de egreso documenta una devolución, descuento o bonificación:
+        // RESTA una deducción y RESTITUYE IVA ya acreditado (LIVA art. 7); no
+        // ampara una erogación nueva (LIVA art. 5 fr. I). Antes de este corte,
+        // el camino 1:1 de abajo lo trataba como cualquier ticket de gasolinera
+        // — lo casaba con un ticket existente o daba de alta un gasto nuevo,
+        // con `xml_verificado: true`, acreditando su IVA de signo contrario. El
+        // XML sí se conserva (CFF 30); lo que no se hace es contarlo como gasto.
+        if (xml.tipoComprobante === 'E') {
+          logger.warn('xml.nota_credito', { tenant: op.tenantId, viaje: viajeId, uuid: xml.uuid });
+          await saveCfdiXmlRaw(op.tenantId, xml.uuid, null, xmlText!);
+          await say('Ese XML es una *nota de crédito* (comprobante de egreso), no un gasto 🧾. No la registro como deducible — es una devolución o bonificación sobre otra factura. Guardé el archivo; si el gasto original no está registrado, mándame su ticket o su XML de ingreso.');
+          return;
+        }
+
         // ── AUDITORÍA 10, CRÍTICO FISCAL — CONSOLIDADO, NO TICKET 1:1 ───────
         // Un CFDI de monedero/TAG ampara MUCHAS transacciones de MUCHOS días
         // — nunca es "el ticket de este viaje". El camino de abajo
