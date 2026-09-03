@@ -502,8 +502,35 @@ export class TruncatedError extends StructuredError {
  */
 export const TOKENS_POR_IMAGEN = 4_000;
 
+/**
+ * `input_audio.data` es, igual que la imagen, base64 crudo cuyo TAMAÑO no
+ * tiene relación con lo que el proveedor cobra: el audio se cobra por
+ * duración (~32 tok/s medido, ver tabla 2 de `docs/auditoria-25/rendimiento.md`),
+ * no por byte. Contarlo a un token por carácter (como el resto del texto)
+ * hacía que 1.24 MB de audio —una nota de 78 s cuyo costo real es ~$0.0008—
+ * reservaran el tope entero de la corrida ($0.50, `budget.ts`) y el chofer en
+ * emergencia se quedara sin canal de voz.
+ *
+ * Se estima la duración asumiendo el bitrate comprimido MÁS BAJO razonable
+ * para voz (16 kbps): una cota conservadora, no una medición. WhatsApp manda
+ * sus notas nativas en opus a ~24-32 kbps y un audio reenviado suele ir más
+ * alto (128 kbps o más); asumir el piso hace que la duración estimada quede
+ * SIEMPRE por arriba de la real, así que la reserva sigue sobre-cotizando el
+ * costo real — solo que ya no por un factor de cientos.
+ */
+const BITS_POR_SEGUNDO_AUDIO_MIN = 16_000;
+/** ~32 tok/s medido; ×3 de margen deliberado sobre la medición. */
+const TOKENS_POR_SEGUNDO_AUDIO = 100;
+
+function tokensPorAudioBase64(base64: string): number {
+  const bytes = (base64.length * 3) / 4;
+  const segundos = (bytes * 8) / BITS_POR_SEGUNDO_AUDIO_MIN;
+  return Math.ceil(segundos * TOKENS_POR_SEGUNDO_AUDIO);
+}
+
 export function cotaEntradaEnTokens(messages: unknown): number {
   let imagenes = 0;
+  let tokensAudio = 0;
   const sinDataUrl = JSON.stringify(messages, (clave, valor) => {
     // Solo el `url` de una parte `image_url`; cualquier otro string se cuenta
     // entero, que es lo que mantiene la cota conservadora para el texto.
@@ -511,9 +538,21 @@ export function cotaEntradaEnTokens(messages: unknown): number {
       imagenes += 1;
       return '';
     }
+    // Una parte `input_audio`: su `data` se descuenta del conteo por
+    // carácter y se reemplaza por la estimación por duración de arriba.
+    if (
+      valor &&
+      typeof valor === 'object' &&
+      (valor as { type?: unknown }).type === 'input_audio' &&
+      typeof (valor as { input_audio?: { data?: unknown } }).input_audio?.data === 'string'
+    ) {
+      const audio = valor as { input_audio: { data: string; format?: string } };
+      tokensAudio += tokensPorAudioBase64(audio.input_audio.data);
+      return { type: 'input_audio', input_audio: { data: '', format: audio.input_audio.format } };
+    }
     return valor;
   });
-  return (sinDataUrl?.length ?? 0) + imagenes * TOKENS_POR_IMAGEN;
+  return (sinDataUrl?.length ?? 0) + imagenes * TOKENS_POR_IMAGEN + tokensAudio;
 }
 
 export async function generateStructured<T>(opts: {
