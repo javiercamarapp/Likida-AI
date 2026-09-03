@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "totalWarnings": 173,
+  "totalWarnings": 175,
   "byFileRule": {
     "src/app/admin/evals/error_comprobado.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/app/admin/mi-perfil/avatar_validado.test.ts::security/detect-non-literal-fs-filename": 1,
@@ -41,6 +41,7 @@
     "src/lib/env_no_fallback_privilegios.test.ts::security/detect-non-literal-fs-filename": 2,
     "src/lib/formato.test.ts::security/detect-non-literal-fs-filename": 4,
     "src/lib/likida/acotada_guardiana.test.ts::security/detect-non-literal-fs-filename": 1,
+    "src/lib/likida/activo_filtro_en_base.test.ts::security/detect-non-literal-fs-filename": 2,
     "src/lib/likida/agentes/estrategia.ts::security/detect-unsafe-regex": 1,
     "src/lib/likida/arnes_ticket_real.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/likida/asignar_wa.ts::security/detect-unsafe-regex": 1,
