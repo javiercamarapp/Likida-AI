@@ -24,7 +24,7 @@ let respuesta: { data: unknown; error: unknown } = { data: null, error: null };
 
 const from = vi.fn((tabla: string) => {
   const enlace: Record<string, unknown> = {};
-  for (const m of ['select', 'eq']) {
+  for (const m of ['select', 'eq', 'order']) {
     enlace[m] = (...a: unknown[]) => { llamadas.push({ tabla, metodo: m, args: a }); return enlace; };
   }
   enlace.then = (r: (v: unknown) => unknown) => Promise.resolve(respuesta).then(r);
@@ -70,6 +70,21 @@ describe('getGastos — filtra por tenant y por viaje', () => {
     expect(eqs).toEqual([
       { tabla: 'gasto', metodo: 'eq', args: ['tenant_id', 't-9'] },
       { tabla: 'gasto', metodo: 'eq', args: ['viaje_id', 'v-55'] },
+    ]);
+  });
+
+  // AUDITORÍA 25 · TC-1 (ALTO, tool-calling.md:30): `copiasDeComprobante`
+  // conserva la PRIMERA aparición del arreglo como el original. Sin un
+  // `.order` explícito y estable, este camino (el que alimenta el motor y el
+  // PDF) y `estado_viaje` (tools.ts, el que lee el chofer) pueden elegir DOS
+  // originales distintos de las mismas filas — dos "comprobado" del mismo
+  // viaje. `created_at` es el único valor que no cambia tras el insert.
+  it('ordena por created_at ascendente — la MISMA regla de orden que estado_viaje, para que ambos elijan el mismo original', async () => {
+    respuesta = { data: [], error: null };
+    await getGastos('v-55', 't-9');
+    const orders = llamadas.filter((l) => l.metodo === 'order');
+    expect(orders).toEqual([
+      { tabla: 'gasto', metodo: 'order', args: ['created_at', { ascending: true }] },
     ]);
   });
 

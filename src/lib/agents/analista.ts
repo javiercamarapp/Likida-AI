@@ -407,6 +407,19 @@ export async function ejecutarAnalista(opts: {
     if (!bloques || !cifrasRespaldadas(bloques, respaldo)) {
       reintento = true;
       logger.warn('chat.reintento_correctivo', { tenantId: opts.tenantId });
+      // AUDITORÍA 25 (ALTO, tool-calling.md:87): `CAPTURAS` es el canal
+      // lateral por el que `entregar_respuesta` le pasa los bloques al
+      // orquestador — se llavea por `runId`, y el reintento corre con el
+      // MISMO `runId`. Sin este borrado, si el segundo ciclo no vuelve a
+      // llamar la tool terminal (el modo de falla que dispara el reintento
+      // es justo ese: "flash-lite a veces contesta en texto plano"),
+      // `CAPTURAS.get(runId)` de la línea de abajo seguía trayendo los
+      // bloques del PRIMER ciclo — los que la guardia acababa de rechazar —
+      // y la respuesta real del segundo ciclo quedaba inalcanzable detrás
+      // del `??`. Peor: esos bloques viejos se volvían a juzgar más abajo
+      // contra un `respaldo` que creció con las tools del segundo ciclo —
+      // el mismo texto rechazado, con una vara más baja la segunda vez.
+      CAPTURAS.delete(runId);
       // M28 (auditoría 18): si ESTE segundo ciclo truena (loop-guard, abort),
       // el error que sube al route solo traía lo gastado por el segundo ciclo;
       // la primera vuelta —que ya resolvió y ya se pagó— desaparecía de

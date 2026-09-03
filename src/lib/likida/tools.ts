@@ -103,7 +103,14 @@ registerTool('estado_viaje', {
     const admin = supabaseAdmin();
     const [rViaje, rGastos] = await Promise.all([
       admin.from('viaje').select('origen, destino, anticipo, estatus').eq('id', ctx.viajeId).eq('tenant_id', ctx.tenantId).maybeSingle(),
-      admin.from('gasto').select('id, concepto, monto, folio, folio_norm, cfdi_uuid, cfdi_orden, ocr_extra').eq('viaje_id', ctx.viajeId).eq('tenant_id', ctx.tenantId).order('id'),
+      // AUDITORÍA 25 · TC-1 (ALTO, tool-calling.md:30): `.order('id')` ordenaba
+      // por el uuid aleatorio de `gasto.id` — una permutación sin relación con
+      // el orden de llegada. `copiasDeComprobante` conserva la PRIMERA
+      // aparición como original, así que ese orden decidía cuál copia se
+      // contaba, y `getGastos` (repo.ts, el camino del motor/PDF) ordena
+      // distinto. `created_at` es el valor que no cambia tras el insert: es lo
+      // que hace que esta tool y el motor elijan la MISMA copia.
+      admin.from('gasto').select('id, concepto, monto, folio, folio_norm, cfdi_uuid, cfdi_orden, ocr_extra').eq('viaje_id', ctx.viajeId).eq('tenant_id', ctx.tenantId).order('created_at', { ascending: true }),
     ]);
     // Fallar cerrado: un error de lectura NO se convierte en "cero gastos".
     if (rViaje.error) throw new Error(`estado_viaje/viaje: ${rViaje.error.message}`);
