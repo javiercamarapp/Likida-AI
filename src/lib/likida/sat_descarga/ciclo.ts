@@ -221,7 +221,26 @@ async function ligar(tenantId: string, gastoId: string, cfdiUuid: string): Promi
  */
 interface ConteoSolicitud { nuevos: number; repetidos: number }
 
-/** Ingiere los XML de un paquete: dedup por folio, cruce y escritura. */
+/**
+ * Ingiere los XML de un paquete: dedup por folio, cruce y escritura.
+ *
+ * AUDITORÍA 25, ALTO (REND-A3): un paquete real del SAT es «un ZIP con
+ * MILES de CFDI» (cabecera del archivo) y a 3-4 viajes de red por CFDI aquí
+ * dentro caben ~311 en los 280s de `venceEn` — un paquete de 2,000 pide
+ * ~1,800s contra un `maxDuration` de 300. Sin reloj propio, Vercel mataba la
+ * función A MEDIO PAQUETE: el heartbeat del cron nunca se escribía y el aviso
+ * de cierre de peaje que corre DESPUÉS nunca llegaba, para NINGUNA flota.
+ *
+ * El checkpoint/reanudación no es nuevo: YA EXISTE, es el sello de dedup —
+ * cada CFDI se marca en `sat_cfdi_descargado` en cuanto se ingiere, así que
+ * re-ingerir el mismo XML dos veces es barato (una consulta que dice
+ * "repetido" y sigue) en vez de re-procesarlo entero. Lo que faltaba era
+ * SOLTAR el reloj a tiempo para que ese checkpoint sirviera de algo: cortar
+ * aquí, antes de que Vercel corte, deja que el llamador NO marque el paquete
+ * como bajado (`bajados.push` no corre) y la corrida siguiente lo re-baja
+ * — el SAT permite bajar un paquete dos veces — y retoma justo donde se
+ * quedó, saltando en un viaje de red cada CFDI ya sellado.
+ */
 async function ingerir(
   cfg: ConfigFlota,
   solicitudId: string,
@@ -229,7 +248,8 @@ async function ingerir(
   rango: { desde: string; hasta: string },
   r: ResumenFlota,
   conteo: ConteoSolicitud,
-): Promise<void> {
+  venceEn?: number,
+): Promise<{ completo: boolean }> {
   const gastos = await gastosSinCfdi(cfg.tenantId, rango.desde, rango.hasta);
   // El fondo se consume: un gasto que ya casó en este mismo paquete no puede
   // volver a casar con el siguiente CFDI. Sin esto, dos comprobantes del mismo
@@ -237,7 +257,15 @@ async function ingerir(
   // el segundo en silencio.
   const fondo = new Map(gastos.map((g) => [g.id, g]));
 
-  for (const xml of xmls) {
+  for (let ix = 0; ix < xmls.length; ix++) {
+    if (venceEn !== undefined && Date.now() >= venceEn) {
+      logger.warn('sat.ingerir.corte_por_reloj', {
+        tenantId: cfg.tenantId, solicitudId, sinIngerir: xmls.length - ix,
+      });
+      r.sinTurno += xmls.length - ix;
+      return { completo: false };
+    }
+    const xml = xmls[ix];
     const cfdi = parseCfdiXml(xml);
     if (cfdi === null || !cfdi.uuid) {
       // Un XML ilegible NO se cuenta como comprobante inexistente: se dice.
@@ -317,6 +345,7 @@ async function ingerir(
     await marcar(cfg.tenantId, uuid, 'disponible', null, { motivo: decision.motivo });
     r.disponibles++;
   }
+  return { completo: true };
 }
 
 async function marcar(
@@ -570,10 +599,23 @@ export async function correrFlota(
         continue;
       }
       const conteo: ConteoSolicitud = { nuevos: 0, repetidos: 0 };
-      await ingerir(cfg, s.id as string, d.xmls, rango, r, conteo);
-      bajados.push(p);
+      const resultado = await ingerir(cfg, s.id as string, d.xmls, rango, r, conteo, venceEn);
       nuevosDeLaSolicitud += conteo.nuevos;
       repetidosDeLaSolicitud += conteo.repetidos;
+
+      // AUDITORÍA 25, ALTO (REND-A3): `ingerir` cortó por reloj a media pila
+      // de XML del paquete. El paquete YA se descargó (`d.xmls` completo), así
+      // que lo ingerido hasta el corte SÍ se cuenta abajo — solo NO se marca
+      // como bajado (`bajados.push` se omite): el SAT deja bajarlo una segunda
+      // vez, la corrida siguiente lo re-descarga e `ingerir` retoma barato
+      // gracias al sello de dedup (cada CFDI ya sellado responde "repetido"
+      // en un solo viaje de red, no se re-procesa). Los paquetes restantes de
+      // esta vuelta ni se intentan.
+      if (resultado.completo) bajados.push(p);
+      else {
+        todoBien = false;
+        r.sinTurno += pendientes.length - ip - 1;
+      }
 
       // El avance se anota PAQUETE POR PAQUETE, no al final: si la función
       // muere aquí (Vercel corta a los 300 s), lo ingerido ya está contado y
@@ -593,6 +635,7 @@ export async function correrFlota(
         todoBien = false;
         break;
       }
+      if (!resultado.completo) break;
     }
 
     if (todoBien) {
