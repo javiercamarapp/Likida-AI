@@ -96,6 +96,7 @@ import { transcribirNotaDeVoz, RESPUESTA_NO_ENTENDI, RESPUESTA_SIN_PRESUPUESTO }
 import { avisarCierreAlJefe } from './avisar_cierre';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { alertarOperador } from '@/lib/observability/alerta';
 import { codigoDeError } from '@/lib/observability/sentry';
 
 export interface InboundMessage {
@@ -1057,6 +1058,7 @@ async function entregarCierrePendiente(op: ResolvedOperador, telefono: string, l
       const r = await sendDocument(telefono, firma.data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
       if (!r.ok) {
         logger.error('pdf.no_entregado', { ...ctx, codigo: r.codigo, error: r.error });
+        await alertarOperador('pdf.no_entregado', { ...ctx, codigo: r.codigo, error: r.error });
         pdf = 'fallo';
       } else {
         await registrarCostoWhatsApp(op.tenantId, liq.viajeId);
@@ -1065,6 +1067,7 @@ async function entregarCierrePendiente(op: ResolvedOperador, telefono: string, l
       }
     } catch (e) {
       logger.error('pdf.no_entregado', { ...ctx, err: e instanceof Error ? e.message : String(e), codigo: codigoDeError(e) });
+      await alertarOperador('pdf.no_entregado', { ...ctx, err: e instanceof Error ? e.message : String(e), codigo: codigoDeError(e) });
       pdf = 'fallo';
     }
   }
@@ -4284,6 +4287,9 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           logger.error('pdf.no_entregado', {
             viaje: viajeId, tenant: op.tenantId, codigo: enviado.codigo, error: enviado.error,
           });
+          await alertarOperador('pdf.no_entregado', {
+            viaje: viajeId, tenant: op.tenantId, codigo: enviado.codigo, error: enviado.error,
+          });
           // AUDITORÍA 13, BAJO (residual del cierre de la ronda 12): el rechazo
           // de Meta dejaba rastro pero SILENCIO en el teléfono del chofer — se
           // quedaba esperando el PDF que el prompt le prometió. Se le dice la
@@ -4305,6 +4311,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // de pdf-lib mañana — la segunda causa caía en el issue viejo y no
         // notificaba. Mismo discriminador que los cron.
         logger.error('pdf.no_entregado', {
+          tenant: op.tenantId, viaje: viajeId, pdfGenerado,
+          err: e instanceof Error ? e.message : String(e),
+          codigo: codigoDeError(e),
+        });
+        await alertarOperador('pdf.no_entregado', {
           tenant: op.tenantId, viaje: viajeId, pdfGenerado,
           err: e instanceof Error ? e.message : String(e),
           codigo: codigoDeError(e),

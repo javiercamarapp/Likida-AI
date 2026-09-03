@@ -182,7 +182,13 @@ export function redactarConservandoFolio(texto: string): string {
 // abierta con ese número; el operador la abre escribiéndole al número de
 // Likida, y si no hay ventana `enviarTexto` lo reporta y lo encola. El cuerpo
 // no lleva cifras: el evento, el código y el texto ya redactado.
-const EVENTOS_DE_DINERO = /^(timbre\.|finanzas\.|stripe\.|cron\.facturar|cron\.cobranza|wa\.rechazo_masivo)/;
+//
+// `pdf\.no_entregado` (auditoría 25, MEDIO REINCIDENTE): una liquidación
+// CERRADA cuyo PDF no llegó al chofer es el camino del dinero tanto como un
+// timbrado que falla — el `pdf_url` ya quedó escrito, la cifra ya se afirmó,
+// y sin este evento lo único que quedaba era un `logger.error` que nadie
+// mira a las 3 a.m.
+const EVENTOS_DE_DINERO = /^(timbre\.|finanzas\.|stripe\.|cron\.facturar|cron\.cobranza|wa\.rechazo_masivo|pdf\.no_entregado)/;
 
 /** ¿Este evento toca dinero? Solo esos salen por WhatsApp. */
 export function esEventoDeDinero(evento: string): boolean {

@@ -301,6 +301,14 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
+      # AUDITORÍA 25, ALTO — "migration repair" NUNCA ejecuta SQL (solo
+      # bookkeeping). Antes de marcar nada "applied", falla si la lista trae
+      # una migración que nunca corrió de verdad (por encima del techo que
+      # APLICAR-EN-PRODUCCION.md declara aplicado) — ese caso pasa por
+      # "Producción — aplicar migraciones reales" (production_migrations /
+      # promote), no por aquí. Ver scripts/ci/verificar-huerfanas-repair.mjs.
+      - name: Verificar que el bookkeeping no marque como aplicado lo que nunca corrió
+        run: node scripts/ci/verificar-huerfanas-repair.mjs
       - name: Reparar (reverted -> applied) y confirmar con dry-run
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

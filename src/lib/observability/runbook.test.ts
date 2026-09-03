@@ -172,4 +172,24 @@ describe('DEPLOY.md pide lo que hace falta para que el sistema no arranque ciego
     // a esa hora se necesita.
     expect(deploy()).toMatch(/vercel logs|runtime log/i);
   });
+
+  // AUDITORÍA 25, MEDIO REINCIDENTE — la PRIMERA pantalla del runbook
+  // anunciaba «backup programado de Storage», y 84 líneas después el propio
+  // documento decía en negritas «Este proyecto no tiene respaldo automático
+  // ni PITR». Las dos son ciertas a su manera (hay un script que SÍ respalda
+  // Storage, bajo demanda) pero la primera, la que se lee primero, no lo decía.
+  it('la primera pantalla no promete un backup "programado" sin la salvedad de que está apagado', () => {
+    const primeraPantalla = deploy().slice(0, 600);
+    expect(primeraPantalla).toMatch(/backup/i);
+    // Si menciona backup de Storage arriba, tiene que traer la salvedad EN LA
+    // MISMA pantalla — no 84 líneas después, donde nadie la lee primero.
+    expect(primeraPantalla).toMatch(/apagad[oa]|bajo demanda|no hay backup programado/i);
+  });
+
+  it('sigue siendo verdad, y consistente con RESILIENCIA-DEPLOY.md: el schedule diario está apagado a propósito', () => {
+    const resiliencia = readFileSync(join(RAIZ, 'docs/operacion/RESILIENCIA-DEPLOY.md'), 'utf8');
+    expect(resiliencia).toMatch(/schedule.*apagad[oa] a propósito/is);
+    const wf = readFileSync(join(RAIZ, '.github/workflows/backup-storage.yml'), 'utf8');
+    expect(wf).not.toMatch(/^\s*schedule:/m);
+  });
 });

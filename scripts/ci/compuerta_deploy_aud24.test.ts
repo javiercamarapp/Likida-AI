@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { decidir, ultimaMigracion, prefijosMigraciones } from './compuerta-deploy.mjs';
+import { decidir, ultimaMigracion, prefijosMigraciones, ultimoConDeployEnAsunto } from './compuerta-deploy.mjs';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 24 · OP-P1 / OP-P3 — la compuerta que ata `[deploy]` a las
@@ -94,6 +94,56 @@ describe('ARQ-25: el cotejo por CONJUNTO ve el hueco que el cotejo por MÁXIMO n
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25 · ALTO REINCIDENTE — el detector de deriva por schedule usaba
+// `git log --grep`, que casa contra ASUNTO y CUERPO. Un merge commit cuyo
+// asunto no lleva [deploy] pero cuyo cuerpo lo hereda del commit mergeado
+// pasaba el filtro igual: el detector se anclaba en un commit que Vercel
+// nunca pudo construir (`4f94490`, 3-sep-2026) y quedaba en rojo permanente.
+//
+// `decidir()` arriba SÍ implementaba bien "solo la primera línea" — el BAJO
+// de la 25 señaló que la suite lo prueba (línea 29-32 de este archivo, la
+// prueba "sin [deploy] en el asunto…") pero nunca ejercitaba la lógica
+// REAL que usaba `salud-produccion.yml:134`, así que ninguna prueba podía
+// reprobar exactamente lo que el sistema acababa de violar. Estas pruebas
+// reproducen el escenario real con `ultimoConDeployEnAsunto` (la función que
+// ahora reemplaza al `git log --grep` roto) y habrían fallado con la versión
+// vieja (equivalente a un `--grep` sobre asunto+cuerpo).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('OP-A (25, ALTO REINCIDENTE): el ancla de la deriva mira solo el ASUNTO, no el cuerpo', () => {
+  it('un merge commit sin [deploy] en el asunto NO cuenta, aunque su cuerpo lo herede del commit mergeado — el escenario real de 4f94490', () => {
+    const commits = [
+      { sha: 'merge4f94490', asunto: 'Merge pull request #318 from javiercamarapp/deploy/trigger-chat-fix' },
+      { sha: 'flag5a14012', asunto: '[deploy] promueve el fix del chat con tenant fantasma (PR #314) a producción' },
+      { sha: 'anterior', asunto: 'chore: algo sin relación' },
+    ];
+    // El commit del merge (el más nuevo) NO lleva [deploy] en su asunto: se
+    // salta, y el ancla cae en el commit de abajo que sí lo lleva.
+    expect(ultimoConDeployEnAsunto(commits)).toBe('flag5a14012');
+  });
+
+  it('el commit efectivo real de la ronda 25: 3cc8ead, no 4f94490 ni 5a14012 (que nunca fue tip)', () => {
+    const commits = [
+      { sha: '4f94490', asunto: 'Merge pull request #318 from javiercamarapp/deploy/trigger-chat-fix' },
+      { sha: '9d8fea4', asunto: 'chore: algo intermedio sin bandera' },
+      { sha: '3cc8ead', asunto: '[deploy] docs: confirma migraciones 0272→0301 aplicadas' },
+    ];
+    expect(ultimoConDeployEnAsunto(commits)).toBe('3cc8ead');
+  });
+
+  it('ninguno lleva [deploy]: null, no una cadena vacía ni el HEAD por defecto', () => {
+    expect(ultimoConDeployEnAsunto([{ sha: 'a', asunto: 'fix: x' }, { sha: 'b', asunto: 'chore: y' }])).toBeNull();
+  });
+
+  it('lista vacía: null, sin lanzar', () => {
+    expect(ultimoConDeployEnAsunto([])).toBeNull();
+  });
+
+  it('usa la MISMA regex que decidir() — [deploy:forzar] también cuenta', () => {
+    expect(ultimoConDeployEnAsunto([{ sha: 'x', asunto: 'hotfix [deploy:forzar]' }])).toBe('x');
+  });
+});
+
 describe('el cableado', () => {
   it('ultimaMigracion lee el repo real y da el mismo prefijo que next.config.ts inlinea', () => {
     expect(ultimaMigracion()).toMatch(/^\d{4}$/);
@@ -114,5 +164,14 @@ describe('el cableado', () => {
     expect(wf).toContain('scripts/ci/compuerta-deploy.mjs');
     expect(wf).toContain("github.event_name != 'push'");
     expect(wf).toContain('issues: write');
+  });
+
+  it('el cotejo por schedule usa ultimo-deploy-en-asunto.mjs, no git log --grep (asunto+cuerpo)', () => {
+    const wf = readFileSync('.github/workflows/salud-produccion.yml', 'utf8');
+    expect(wf).toContain('scripts/ci/ultimo-deploy-en-asunto.mjs');
+    // La invocación rota era exactamente esta forma (`--grep` sobre git log,
+    // que casa asunto+cuerpo); el comentario que explica el porqué del
+    // cambio SÍ puede seguir mencionando "--grep" en prosa.
+    expect(wf).not.toContain("git log -i --grep");
   });
 });

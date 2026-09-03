@@ -9,6 +9,16 @@
 > `[deploy]`. Esta sección se deja como referencia histórica de por qué el
 > orden de aplicación no es un detalle — sigue aplicando para la PRÓXIMA
 > tanda de migraciones.
+>
+> **El repo ya trae 0302 y 0303** (`5180c72`, 2-sep 16:06, cinco horas
+> después de esta actualización) — **sin la misma confirmación de arriba**:
+> nadie las cotejó todavía contra `schema_migrations` ni contra el esquema en
+> vivo. NO se dan por aplicadas aquí (auditoría 25, operabilidad ALTO: el job
+> `repair_migrations` llegó a marcarlas "applied" por bookkeeping sin correr
+> su SQL — un sello de goma que este documento no va a repetir). Antes del
+> siguiente `[deploy]`, aplícalas de verdad (`supabase db push`, o el job
+> "Producción — aplicar migraciones reales") y confirma con
+> `/api/health` → `migracion.base = "0303"`.
 
 > **AUDITORÍA 24, DAT-1 (ALTO), contexto histórico.** Producción iba en la
 > **0271**. `master` ya llamaba funciones que nacían en la **0272** y en
@@ -63,6 +73,8 @@ Esto está **probado** (S41 de la auditoría 24) y **vigilado**: el bloque
 | **0291** | Forma de `wa_conversacion.estado`, `tenant.perfil` y del expediente ARCO (DAT-13) | Una solicitud ARCO puede nacer sin titular y ya vencida. |
 | **0292** | Las policies `tenant_data`/`tenant_finanzas` quedan de **solo lectura** (SEG-2) | Un contador con su cookie y la anon key puede `PATCH /rest/v1/liquidacion` con `curl`: la cifra cambia, el PDF archivado dice otra, y la bitácora no tiene entrada. |
 | **0300** | Reconcilia `gasto_no_tras_liquidar()`: la 0283 (fiscal) y la 0299 (revision) redefinieron la MISMA función en paralelo sin saberlo, y `create or replace` se queda con la última entera — la 0299 se llevó la mitad de la 0283 (mover un gasto FUERA de un viaje liquidado dejaba de rebotar). Solo lo encontró la batería completa contra Postgres real, no ninguna prueba de TypeScript. | Un gasto puede moverse de un viaje ya liquidado a uno abierto sin que el trigger lo impida: la liquidación firmada deja de reflejar los gastos reales del viaje. |
+| **0302** | Retira el overload huérfano de 6 argumentos de `reservar_presupuesto_llm` (el de 8, el único con caller real desde la 0244, sigue intacto). Limpieza de superficie muerta, no cambia comportamiento. | Sin efecto funcional — el overload de 6 sigue sin caller, solo más superficie para que el próximo cambio toque la función que no es. |
+| **0303** | Gradúa los 9 agentes que la 0301 marcó `experimental` (ya auditados: `cazador`, `guiones`, `noticias_mercado`, `promos_diarias`, `seo_distribucion`, `visuales`, `video_demo`, `video_marketing`, `pruebas`) — pone `experimental = false`, corrige `descripcion` a lo que el motor real hace y limpia `prompt_ref` (apuntaba a markdown que nunca se escribió). | `/admin/agentes` sigue pintando los 9 como `experimental` aunque ya se auditaron limpios — la etiqueta que la 0301 puso para avisar la promesa recortada del catálogo se queda sin la graduación que la cierra. |
 
 ## Antes de aplicar
 
