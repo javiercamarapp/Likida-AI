@@ -386,6 +386,17 @@ export const NORMAS: Record<string, Norma> = {
     estado: "verificado_fuente_primaria",
     ficha: "normas/rlisr-57.yaml",
   },
+  'rliva-3-fr-II': {
+    id: 'rliva-3-fr-II',
+    instrumento: "Reglamento de la Ley del Impuesto al Valor Agregado",
+    articulo: "3",
+    fraccion: "II",
+    titulo: "Retención del 4% de IVA por servicios de autotransporte terrestre de bienes",
+    citas: ["RLIVA 3-II"],
+    jerarquia: 2,
+    estado: "verificado_fuente_primaria",
+    ficha: "normas/rliva-3-fr-II.yaml",
+  },
   'rmf-2026-2.7.1.21': {
     id: 'rmf-2026-2.7.1.21',
     instrumento: "Resolución Miscelánea Fiscal para 2026",
