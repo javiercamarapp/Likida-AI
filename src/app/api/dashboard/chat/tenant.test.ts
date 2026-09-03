@@ -65,4 +65,22 @@ describe('tenantEfectivoChat', () => {
     expect(await tenantEfectivoChat(
       { userId: 'u-2', tenantId: null, rol: 'contador', nombre: null, operadorId: null, avatarUrl: null }, null)).toBeNull();
   });
+
+  // 3-sep-2026, producción: `DEMO_TENANT_ID` apuntaba a una flota que ya no
+  // existe. Sin esta rama, `tenantId` seguía de largo hacia `ejecutarAnalista`
+  // y `reservar_presupuesto_llm` tronaba por FK violation en cada turno
+  // (`chat.analista.fallo`, 12 fallos en 5 minutos, mismo tenant fantasma).
+  it('el demo de tenantDemo() ya no existe: null, fail-closed (ANTES seguía de largo)', async () => {
+    respuesta = { data: null, error: null };
+    expect(await tenantEfectivoChat(SUPER, null)).toBeNull();
+    expect(logger.error).toHaveBeenCalledWith('chat.tenant_sesion_fantasma',
+      expect.objectContaining({ tenant: 'demo-fija' }));
+  });
+
+  it('lectura CAÍDA del tenant de sesión/demo: null, fail-closed', async () => {
+    respuesta = { data: null, error: { message: 'fetch failed' } };
+    expect(await tenantEfectivoChat(SUPER, null)).toBeNull();
+    expect(logger.error).toHaveBeenCalledWith('chat.tenant_sesion_ilegible',
+      expect.objectContaining({ tenant: 'demo-fija', err: 'fetch failed' }));
+  });
 });
