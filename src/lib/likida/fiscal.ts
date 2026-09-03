@@ -41,8 +41,16 @@ import {
 } from './cuadre/tope_alimentacion';
 // La constante vive en el motor a propósito: el panel y el motor tienen que
 // juzgar «no pagado» con el MISMO valor, o vuelven las dos cifras (FISC-C3-2).
-import { FORMA_PAGO_SIN_PAGAR, MEDIOS_LISR_27_III, medioNoAdmitidoCombustible } from './cuadre/engine';
+// AUDITORÍA 25, FIS-C1/FIS-C2/ARQ-C1 (CRÍTICO): `proporcionesDeducibles` es
+// LA MISMA función que usa el motor para partir el IVA del 15% de la RFA 2.9
+// — se importa aquí a propósito, en vez de reinventar la fórmula, para que
+// el panel y el PDF no vuelvan a decir dos cifras del mismo comprobante.
+import {
+  FORMA_PAGO_SIN_PAGAR, MEDIOS_LISR_27_III, medioNoAdmitidoCombustible, proporcionesDeducibles,
+} from './cuadre/engine';
 import { getConfig, type LikidaConfig } from './config';
+import { getAcumuladoCombustible } from './repo';
+import { logger } from '@/lib/logger';
 
 // ── La fila de `gasto` leída con ojos de contador ──────────────────────────
 
@@ -361,6 +369,90 @@ export interface OpcionesFiscales {
    *  undefined = sin declarar. AUDITORÍA 14, ALTO: sin esto el panel ofrecía
    *  la válvula a flotas que el motor declara no elegibles. */
   elegible15?: boolean;
+  /**
+   * AUDITORÍA 25, FIS-C1/FIS-C2/ARQ-C1 (CRÍTICO). El acumulado REAL del
+   * ejercicio para el cubo del 15% (RFA 2026 regla 2.9) — el MISMO que
+   * `desde_db.ts` le manda al motor (`getAcumuladoCombustible`). Sin esto el
+   * panel no tiene con qué partir el IVA del diésel en efectivo y el
+   * comprobante se acreditaba COMPLETO así el motor ya lo hubiera negado.
+   * `undefined` = no se pudo anclar el periodo a UN solo ejercicio (o la
+   * consulta falló): el panel NO acredita ese diésel en vez de adivinar
+   * (`proporcionCombustible15`, fail closed).
+   */
+  combustibleEjercicio?: { efectivo: number; totalCombustible: number };
+}
+
+/**
+ * El acumulado del ejercicio para el cubo del 15% (RFA 2026 regla 2.9),
+ * anclado al MISMO año que `getAcumuladoCombustible` usa en `desde_db.ts`.
+ *
+ * El tope es del EJERCICIO, no del periodo que se está mirando: un mes por
+ * sí solo no dice si la flota va holgada o al límite. Solo hay un ejercicio
+ * que declarar cuando el periodo cae DENTRO de un único año calendario —
+ * 'mes', 'mes_anterior' y 'ejercicio' siempre caen; 'todo' (`desde` nulo) o
+ * un rango que cruza el 31 de diciembre no, y entonces se devuelve
+ * `undefined` a propósito: mejor no acreditar ese diésel que adivinar contra
+ * un ejercicio que no es el suyo.
+ *
+ * Best-effort como el resto de este contador (`desde_db.ts` hace lo mismo):
+ * un fallo de la RPC no puede tumbar el panel entero, solo esta cifra.
+ */
+export async function combustibleEjercicioDe(
+  tenantId: string,
+  periodo: Pick<Periodo, 'desde' | 'hasta'>,
+  clavesCombustible: string[],
+): Promise<{ efectivo: number; totalCombustible: number } | undefined> {
+  const anio = periodo.desde?.slice(0, 4);
+  if (!anio || anio !== periodo.hasta?.slice(0, 4)) return undefined;
+  try {
+    return await getAcumuladoCombustible(tenantId, Number(anio), clavesCombustible);
+  } catch (e) {
+    logger.warn('fiscal.combustible_ejercicio_no_disponible', {
+      tenantId, err: e instanceof Error ? e.message : String(e),
+    });
+    return undefined;
+  }
+}
+
+/** `opcionesDe(cfg)` más el acumulado del ejercicio (ver `combustibleEjercicioDe`). */
+export async function opcionesFiscalesDelPeriodo(
+  tenantId: string,
+  periodo: Periodo,
+  cfg: LikidaConfig,
+): Promise<OpcionesFiscales> {
+  const o = opcionesDe(cfg);
+  return { ...o, combustibleEjercicio: await combustibleEjercicioDe(tenantId, periodo, o.clavesCombustible) };
+}
+
+/**
+ * Qué fracción del IVA de combustible pagado en efectivo (o con un medio que
+ * la LISR 27-III no admite) sostiene el acreditamiento — la misma pregunta
+ * que `proporcionesDeducibles` (`cuadre/engine.ts`) resuelve por comprobante
+ * DENTRO de un viaje, aquí resuelta en AGREGADO sobre el ejercicio completo.
+ *
+ * Por qué el agregado reproduce la cifra del motor al centavo (y no una
+ * aproximación): la asignación del motor es `dentro_i = min(monto_i,
+ * tope − previoAcumulado)`, y la SUMA de `dentro_i` sobre cualquier orden de
+ * comprobantes es siempre `min(efectivoTotal, tope)` — es aritmética de un
+ * acumulador con techo, no depende de en qué orden se cerraron los viajes.
+ * Con eso, tratar TODO el efectivo del ejercicio como un solo comprobante
+ * sintético y pasarlo por `proporcionesDeducibles` da la MISMA proporción
+ * agregada que sumar el resultado real del motor viaje por viaje — exacta
+ * cuando `gastos` cubre el ejercicio completo (periodo 'ejercicio', el panel
+ * por omisión); una estimación ponderada por el resto de los periodos, que
+ * siguen siendo mejores que el `?? 1` que acreditaba el IVA completo.
+ */
+function proporcionCombustible15(o: OpcionesFiscales): number {
+  if (!o.combustibleEjercicio) return 0;
+  const { efectivo, totalCombustible } = o.combustibleEjercicio;
+  if (!(efectivo > 0)) return 0;
+  const tope = 0.15 * Math.max(0, totalCombustible);
+  const excedente = Math.max(0, efectivo - tope);
+  const mapa = proporcionesDeducibles(
+    [{ id: '__ejercicio__', concepto: 'diesel', monto: efectivo }],
+    [{ tipo: 'efectivo_sobre_15', gastoId: '__ejercicio__', monto: excedente, esperado: excedente }],
+  );
+  return mapa.get('__ejercicio__') ?? 0;
 }
 
 /**
@@ -835,6 +927,11 @@ export function resumirFiscal(gastos: GastoFiscal[], o: OpcionesFiscales): Resum
     return dia?.proporcionTimbrado ?? 1;
   };
 
+  // AUDITORÍA 25, FIS-C1/FIS-C2/ARQ-C1 (CRÍTICO): calculada UNA vez — depende
+  // solo de `o`, no de cada gasto — y reutilizada abajo para todo el diésel
+  // (o combustible del SAT) pagado con un medio que la LISR 27-III no admite.
+  const propCombustible15 = proporcionCombustible15(o);
+
   for (const g of gastos) {
     const peso = pesoDe(g);
     gastoTotal += g.monto;
@@ -847,7 +944,15 @@ export function resumirFiscal(gastos: GastoFiscal[], o: OpcionesFiscales): Resum
     }
     if (g.ivaTraslado !== null && g.ivaTraslado > 0) {
       if (ivaSostenible(g, o)) {
-        const proporcion = Math.max(0, Math.min(1, g.celda ? proporcionDeCelda(g) : (proporciones.get(g.id) ?? 1)));
+        // AUDITORÍA 25, FIS-C1/FIS-C2/ARQ-C1 (CRÍTICO, reincidente 23/24): un
+        // diésel en efectivo con `elegible15` pasaba `ivaSostenible` (la
+        // facilidad SALVA la deducción) y caía aquí sin proporción — el
+        // `?? 1` de antes acreditaba el IVA COMPLETO donde el motor solo
+        // acreditaba la fracción dentro del 15% del ejercicio.
+        const esCombustibleEfectivo = medioNoAdmitidoCombustible(formaPagoEfectiva(g)) && esCombustible(g, o);
+        const proporcion = Math.max(0, Math.min(1, esCombustibleEfectivo
+          ? propCombustible15
+          : (g.celda ? proporcionDeCelda(g) : (proporciones.get(g.id) ?? 1))));
         ivaAcreditable += g.ivaTraslado * proporcion;
         // El resto del traslado existe en el papel y NO se acredita: va a la
         // otra cubeta para que las dos sigan sumando el IVA desglosado.

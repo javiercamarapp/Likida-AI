@@ -20,7 +20,15 @@ vi.mock('@/app/api/v1/_comun', async (orig) => {
   return { ...real, abrir: (...a: [Request, string]) => abrir(...a) };
 });
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
+// AUDITORÍA 25 (BE-C1a/BE-C1b): `revision.ts` importa ahora `revision_recalculo.ts`
+// (el recálculo del ajuste), que arrastra `repo.ts` y de ahí `conv.ts`, que sí
+// usa `PRESUPUESTO_WEBHOOK_MS` — un mock que solo daba `acotada` rompía esa
+// cadena aunque esta ruta nunca ejercita el camino de ajuste. `importOriginal`
+// conserva el resto del módulo real y solo sustituye `acotada`.
+vi.mock('@/lib/likida/presupuesto', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  acotada: (q: unknown) => q,
+}));
 
 interface Consulta {
   eq: Array<[string, unknown]>; in: Array<[string, unknown]>; or: string | null;
