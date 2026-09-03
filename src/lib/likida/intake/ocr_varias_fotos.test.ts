@@ -14,6 +14,17 @@ vi.mock('@/lib/llm/openrouter', async (orig) => {
   return { ...actual, generateStructured: (...a: unknown[]) => generateStructured(...a) };
 });
 
+// AUDITORÍA 25 (REND-A9): `extraerComprobante` ahora redimensiona la foto
+// principal antes de mandarla a visión (ver `cfdi_imagen.test.ts` para la
+// prueba de ESE comportamiento con `sharp` real). Aquí se sustituye por una
+// identidad para que las pruebas de ESTE archivo —qué foto se ELIGE como
+// principal— sigan comparando por igualdad de bytes sin acoplarse a la
+// codificación jpeg que produce un resize real.
+vi.mock('./cfdi_imagen', async (orig) => {
+  const actual = (await orig()) as Record<string, unknown>;
+  return { ...actual, redimensionarParaVision: async (buf: Buffer) => buf };
+});
+
 const { extraerComprobante } = await import('./ocr');
 
 // Acercamiento real al ticket de Office Depot: QR con la liga (folio y total en
@@ -101,10 +112,15 @@ describe('extraerComprobante — varias fotos del mismo comprobante', () => {
   it('el OCR corre sobre la foto del ticket completo, no sobre el acercamiento', async () => {
     // El acercamiento se tomó PARA el código: casi no trae texto. Se reconoce
     // sin etiquetas porque es el que SÍ soltó código.
+    //
+    // El redimensionado (REND-A9, mockeado arriba como identidad) reenvuelve
+    // el mismo buffer en un data-URL `image/jpeg`, así que se compara el
+    // payload base64 —los bytes— y no el prefijo del mime.
     generateStructured.mockResolvedValue(respuesta());
     await extraerComprobante([CERCA, TICKET]);
     const args = generateStructured.mock.calls[0][0] as { images: string[] };
-    expect(args.images).toEqual([TICKET]);
+    expect(args.images).toHaveLength(1);
+    expect(args.images[0].split(',')[1]).toBe(TICKET.split(',')[1]);
   });
 
   it('una sola foto sigue funcionando igual que antes', async () => {
