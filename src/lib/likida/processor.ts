@@ -2928,7 +2928,17 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // Con UNA sola foto no se resume: su mensaje de arriba ya habló.
           if (ultima && rafaga && huboRafaga) {
             const puestos = await getGastos(viajeId, op.tenantId);
-            const total = puestos.reduce((s, g) => s + (g.monto > 0 ? g.monto : 0), 0);
+            // AUDITORÍA 25 (ALTO, agentico.md:426) — MISMO `copiasDeComprobante`
+            // que el motor y el PDF. Este resumen sumaba TODAS las filas sin
+            // excluir copias; el protocolo normal de dos fotos por ticket (el
+            // ticket entero + el acercamiento al QR) deja dos filas del mismo
+            // comprobante, y el chofer leía un total que el «listo» del mismo
+            // hilo desmentía minutos después. Un segundo cálculo aquí se
+            // separaría del cuadre en silencio, el error que este repo ya pagó.
+            const copias = copiasDeComprobante(puestos);
+            const comprobantes = puestos.filter((g) => !copias.has(g.id)).length;
+            const total = puestos.reduce(
+              (s, g) => (copias.has(g.id) || !(g.monto > 0) ? s : s + g.monto), 0);
             // Las que se pasaron del tope de botones llevan su propia frase, que
             // es la que `mensajeDemasiadasDudas` ya escribía y nadie llamaba.
             const dudas = rafaga.incidencias.filter((i) => i.tipo === 'duda').length;
@@ -2936,11 +2946,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
               ? `\n\n${mensajeDemasiadasDudas(dudas, await estadoDelViaje(op.tenantId, viajeId).catch(() => null))}`
               : '';
             logger.info('foto.resumen_rafaga', {
-              viaje: viajeId, gastos: puestos.length,
+              viaje: viajeId, gastos: puestos.length, comprobantes, copias: copias.size,
               vistas: rafaga.vistas, incidencias: rafaga.incidencias.length,
             });
             await sendText(msg.from,
-              `📸 Ya revisé tus fotos. En este viaje llevo *${puestos.length} ${puestos.length === 1 ? 'comprobante' : 'comprobantes'}* por *${mxn(total)}*.\n\n` +
+              `📸 Ya revisé tus fotos. En este viaje llevo *${comprobantes} ${comprobantes === 1 ? 'comprobante' : 'comprobantes'}* por *${mxn(total)}*.\n\n` +
               (incidencias ? `${incidencias}\n\n` : '') +
               `Si te falta alguno, mándalo otra vez. Cuando termines, escribe *listo*. 👍${cola}`);
           }

@@ -956,7 +956,15 @@ export async function getGastos(viajeId: string, tenantId: string): Promise<Gast
     .from('gasto')
     .select('id, concepto, monto, fecha, folio, folio_norm, ocr_extra, rfc_emisor, rfc_receptor, cfdi_uuid, cfdi_orden, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos, efos_revisar, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos, cfdi_esquema_alterno, xml_verificado, forma_pago, metodo_pago, pagado_en, pagado_forma, sub_total, descuento, ieps_traslado, iva_traslado, iva_retenido, isr_retenido')
     .eq('tenant_id', tenantId)
-    .eq('viaje_id', viajeId), 'getGastos');
+    .eq('viaje_id', viajeId)
+    // AUDITORÍA 25 · TC-1 (ALTO, tool-calling.md:30): `copiasDeComprobante`
+    // conserva la PRIMERA aparición como original — es de un arreglo, así que
+    // el resultado depende del orden en que le llegan las filas. Sin `.order`
+    // aquí, PostgREST devuelve el orden físico de la tabla (no el de llegada,
+    // y cambia con cualquier UPDATE que reescriba una fila). `created_at` es
+    // el único valor que no cambia después del insert: es lo que hace que este
+    // camino y `estado_viaje` (tools.ts) elijan la MISMA copia como original.
+    .order('created_at', { ascending: true }), 'getGastos');
   if (error) throw new Error(`getGastos: ${error.message}`);
   return (data ?? []).map((r) => ({
     id: r.id as string,
