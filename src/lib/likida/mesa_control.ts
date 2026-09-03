@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
-import { traerTodo } from './pg';
+import { traerTodo, conteo } from './pg';
 import { anotarEventoIncidencia, cerrarCoordinacionesDeIncidencia, TIPOS_ASISTENCIA } from './asistencia_wa';
 import { NIVEL_MAXIMO } from './asistencia_escalamiento';
 
@@ -77,14 +77,20 @@ const ORDEN_PRIORIDAD: Record<string, number> = { critica: 0, alta: 1, media: 2,
  */
 export async function listarMesaAsistencia(tenantId: string): Promise<IncidenciaMesa[]> {
   const admin = supabaseAdmin();
+  // AUDITORÍA 25, MEDIO (REND-A7, REINCIDENTE): ordenaba solo por
+  // `abierta_en` (empata entre incidencias abiertas en el mismo instante) y
+  // no pedía `conteo()`. Sin `count`, `traerTodo` cae a la prueba de la
+  // página vacía — la que un salto de filas por un empate satisface igual—,
+  // así que una incidencia podía quedar fuera sin que nada lo dijera.
   const filas = await traerTodo<Record<string, unknown>>(
     (desde, hasta) => admin
       .from('incidencia')
-      .select('id, tipo, prioridad, estado, nivel_escalado, abierta_en, descripcion, hay_lesionados, reconocida_en, reconocida_por, operador_id, unidad_id, viaje_id')
+      .select('id, tipo, prioridad, estado, nivel_escalado, abierta_en, descripcion, hay_lesionados, reconocida_en, reconocida_por, operador_id, unidad_id, viaje_id', conteo(desde))
       .eq('tenant_id', tenantId)
       .in('tipo', [...TIPOS_ASISTENCIA])
       .neq('estado', 'resuelta')
       .order('abierta_en', { ascending: true })
+      .order('id', { ascending: true })
       .range(desde, hasta),
     'mesa.incidencias',
   );
@@ -105,13 +111,17 @@ export async function listarMesaAsistencia(tenantId: string): Promise<Incidencia
   // El timeline de TODAS las abiertas en una sola pasada — las incidencias
   // vivas de asistencia son pocas por definición (una por chofer, 0201; una
   // por unidad sin chofer, 0206), así que la consulta es corta.
+  // AUDITORÍA 25, MEDIO (REND-A7, REINCIDENTE): mismo defecto que arriba —
+  // ordenaba solo por `created_at` (empata entre eventos del mismo instante)
+  // y no pedía `conteo()`.
   const eventos = await traerTodo<Record<string, unknown>>(
     (desde, hasta) => admin
       .from('incidencia_evento')
-      .select('incidencia_id, tipo, detalle, created_at')
+      .select('id, incidencia_id, tipo, detalle, created_at', conteo(desde))
       .eq('tenant_id', tenantId)
       .in('incidencia_id', ids)
       .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
       .range(desde, hasta),
     'mesa.eventos',
   );
