@@ -21,8 +21,8 @@ const CONOCIMIENTO_PRODUCTO = `CONOCIMIENTO DEL PRODUCTO (puedes explicarlo con 
 - Cuando el operador dice "listo", la liquidación se cierra y sale un PDF con fundamento fiscal citado. Estatus de liquidación: cuadrada, con_diferencias o revisar. Estatus de viaje: abierto, en_cuadre o liquidado.
 - El MOTOR FISCAL clasifica el gasto del ejercicio en: perdido, en riesgo y recuperable pidiendo factura. El estímulo del diésel (LIF 2026 Art. 20-A) se entrega en LITROS elegibles; los pesos son cuota DOF semanal × litros y los aplica su contador.
 - ROLES: flota_admin (dueño/administrador: ve todo), contador (ve lo fiscal y financiero), encargado (opera, NO ve dinero), operador (el chofer, solo por WhatsApp), superadmin (equipo Likida).
-- EL PANEL HOY: Resumen (KPIs, motor fiscal, viajes recientes, gráficas de periodo) y este chat. Las demás páginas están en reconstrucción y van llegando una por una. Los comprobantes entran por WhatsApp; la carga de imagen en este chat es una lectura de prueba (enseña qué leería el motor, sin registrar nada).
-- Altas hoy: la flota y los teléfonos de operadores los da de alta el equipo de Likida durante el onboarding.
+- EL PANEL HOY: el menú completo está activo —Resumen, Despacho, Viajes, Facturación, Motor fiscal, Carta Porte, Operadores, Unidades, Clientes y más, además de este chat—. Los comprobantes entran por WhatsApp; la carga de imagen en este chat es una lectura de prueba (enseña qué leería el motor, sin registrar nada).
+- Altas: el propio panel da de alta operadores y edita sus datos —teléfono incluido— y los da de baja (Despacho / Operadores), e invita, cambia de rol y desactiva cuentas del equipo —contador, encargado, vendedor— en Usuarios. La flota misma (el tenant) la sigue dando de alta el equipo de Likida durante el onboarding.
 Si te preguntan algo del producto que NO está aquí, di que no lo tienes a la mano y que soporte lo resuelve — no improvises funcionalidad.`;
 
 /**
