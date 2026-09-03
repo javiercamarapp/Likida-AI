@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { getLibroViaje, rotuloFacturacion, rotuloCobro, type RenglonLibro } from '@/lib/likida/libro_viaje';
 import { getPorFacturar, resumen as resumenPorFacturar } from '@/lib/likida/facturacion/pendientes';
 import {
-  getGastosFiscales, resumirFiscal, resumirPerdidas, opcionesDe, resolverPeriodo,
+  getGastosFiscales, resumirFiscal, resumirPerdidas, opcionesDe, opcionesFiscalesDelPeriodo, resolverPeriodo,
 } from '@/lib/likida/fiscal';
 import { getConfig } from '@/lib/likida/config';
 import { getKpis } from '@/lib/likida/analytics';
@@ -155,9 +155,15 @@ const esquemaFiscal = z.object({
 
 async function ejecutarFiscal(tenantId: string, args: z.infer<typeof esquemaFiscal>): Promise<ResultadoHerramienta> {
   const periodo = resolverPeriodo(args.periodo, hoyMx());
-  const opciones = opcionesDe(await getConfig(tenantId));
+  const cfg = await getConfig(tenantId);
+  const opciones = opcionesDe(cfg);
   const gastos = await getGastosFiscales(tenantId, periodo, hoyMx(), opciones);
-  const r = resumirFiscal(gastos, opciones);
+  // AUDITORÍA 25, FIS-C1/FIS-C2/ARQ-C1 (CRÍTICO): esta herramienta imprime la
+  // MISMA cifra que `/dashboard/contador` — necesita el acumulado del
+  // ejercicio para partir el IVA del diésel en efectivo igual que el motor,
+  // o un agente la dicta distinta al PDF (el hallazgo era literal: la
+  // divergencia «ya la puede dictar un agente»).
+  const r = resumirFiscal(gastos, await opcionesFiscalesDelPeriodo(tenantId, periodo, cfg));
   const perdidas = resumirPerdidas(gastos, opciones);
   if (r.n === 0) {
     return {
