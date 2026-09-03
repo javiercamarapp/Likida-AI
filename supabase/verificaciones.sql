@@ -17160,3 +17160,40 @@ begin
   raise exception E'STRIPE_ONCONFLICT_0305  no_parcial=%  upsert_sin_where=%  segunda_actualiza=%  una_sola_fila=%  nulos_conviven=%   (esperado t / t / t / t / t)',
     no_parcial, upsert_sin_where, segunda_actualiza, una_sola_fila, nulos_conviven;
 end $$;
+
+-- ── 252. Borrar un operador vacía SOLO `app_user.operador_id`, nunca `tenant_id` (mig. 0306) ──
+--
+-- AUDITORÍA 25, DATOS-M3 (MEDIO, REINCIDENTE DATOS-24). La 0290 dejó
+-- `app_user_operador_tenant_fkey` con `on delete set null` SIN lista de
+-- columnas — en Postgres eso anula TODAS las columnas de la FK compuesta, no
+-- solo `operador_id`. `app_user.tenant_id` es nullable a propósito (0001:17,
+-- «null = superadmin»), así que borrar un operador dejaba al encargado que lo
+-- tenía con la FORMA reservada al superadmin: `get_user_tenant_ids()` le
+-- devuelve `[]` y `/dashboard` le pinta su flota vacía sin un solo error.
+--
+-- La 0306 recreó la FK con `on delete set null (operador_id)`. Este bloque
+-- hace el `DELETE FROM operador` real y mide las dos columnas por separado —
+-- es justo la distinción que un `on delete set null` sin lista no puede
+-- hacer, así que es lo único que puede demostrar que se corrigió.
+-- Esperado: OPERADOR_TENANT_SET_NULL_0306  operador_id_null=t  tenant_id_intacto=t
+do $$
+declare
+  ta uuid := gen_random_uuid();
+  op uuid := gen_random_uuid();
+  au uuid := gen_random_uuid();
+  operador_id_null boolean;
+  tenant_id_intacto boolean;
+begin
+  insert into public.tenant (id, nombre) values (ta, '__verif_0306__');
+  insert into public.operador (id, tenant_id, nombre, telefono) values (op, ta, 'Duplicado', '5299937007 83');
+  insert into public.app_user (id, tenant_id, email, rol, operador_id)
+    values (au, ta, '__verif_0306__@likida.test', 'encargado', op);
+
+  delete from public.operador where id = op;
+
+  select (operador_id is null) into operador_id_null from public.app_user where id = au;
+  select (tenant_id = ta) into tenant_id_intacto from public.app_user where id = au;
+
+  raise exception E'OPERADOR_TENANT_SET_NULL_0306  operador_id_null=%  tenant_id_intacto=%   (esperado t / t)',
+    operador_id_null, tenant_id_intacto;
+end $$;
