@@ -1,4 +1,5 @@
 import { readdirSync } from 'node:fs';
+import { logger } from '@/lib/logger';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 24, OP-P1 (BLOQUEANTE) · ¿LA BASE VA A LA PAR DEL CÓDIGO?
@@ -95,13 +96,27 @@ export async function cotejarMigracion(leerAplicadas: LectorAplicadas): Promise<
   const codigo = migracionDelCodigo();
   try {
     const { data, error } = await leerAplicadas();
-    if (error) return cotejar(null, codigo, `migraciones_aplicadas() no contestó: ${error.message}`);
+    if (error) {
+      // AUDITORÍA 25, SEGURIDAD (MEDIO, línea 194, REINCIDENTE). `/api/health`
+      // es público a propósito (`_comun.ts:74` fija la regla para TODA la API
+      // pública: «NUNCA lleva el mensaje de Postgres»). `error.message` es
+      // texto crudo de PostgREST/supabase-js — puede traer detalle de
+      // conexión o de credencial — y antes salía intacto en el JSON público.
+      // El detalle sigue disponible para quien opera: aquí, en el log
+      // privado; `motivo` en la respuesta es fijo, en español, sin eco.
+      logger.error('health.migracion_rpc_error', { err: error.message });
+      return cotejar(null, codigo, 'migraciones_aplicadas() no contestó: no se pudo leer el registro de migraciones de la base.');
+    }
     const r = data as { disponible?: unknown; motivo?: unknown; filas?: unknown } | null;
     if (!r || r.disponible !== true || !Array.isArray(r.filas)) {
+      // `r.motivo`, cuando viene, lo escribe la propia RPC (0234) — es texto
+      // fijo nuestro, no un mensaje de Postgres, así que sí es seguro
+      // publicarlo tal cual.
       return cotejar(null, codigo, typeof r?.motivo === 'string' ? r.motivo : 'migraciones_aplicadas() no devolvió el registro');
     }
     return cotejar(ultimaMigracionAplicada(r.filas as Array<{ nombre?: unknown }>), codigo);
   } catch (e) {
-    return cotejar(null, codigo, `migraciones_aplicadas() lanzó: ${e instanceof Error ? e.message : String(e)}`);
+    logger.error('health.migracion_rpc_excepcion', { err: e instanceof Error ? e.message : String(e) });
+    return cotejar(null, codigo, 'migraciones_aplicadas() lanzó: no se pudo leer el registro de migraciones de la base.');
   }
 }
