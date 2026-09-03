@@ -100,6 +100,25 @@ import type { FabricaDePagina, InventarioPagina, PaginaConInventario, PaginaPort
  *  aquí es estar dando vueltas, y cada vuelta cuesta una llamada de visión. */
 export const PASOS_MAXIMOS = 14;
 
+/**
+ * AUDITORÍA 25, MEDIO (REND-A8, REINCIDENTE): el `for` de pasos no consultaba
+ * el reloj. `MARGEN_LOTE_MS` (`lote.ts`) le promete 150 s a la sesión de UN
+ * portal que YA está en vuelo — el número con el que se dimensionó viene de
+ * sumar los techos de OTRO adaptador (`pagina_playwright.ts`/`capufe.ts`,
+ * ~147 s). Este piloto no tiene ese techo: cada paso es una llamada de visión
+ * SIN `signal` (10-12 s típicos, hasta 120 s en el peor caso de la escalera de
+ * reintentos), y 14 pasos típicos ya suman 140-168 s — por arriba de los 150 s
+ * que el cron le promete a la sesión abierta.
+ *
+ * No se puede pedir el `venceEn` real del cron sin cambiar la firma pública de
+ * `AdaptadorPortal.facturar` (usada por cada adaptador registrado); en su
+ * lugar se BAJA EL PEOR CASO: un presupuesto propio, por debajo de
+ * `MARGEN_LOTE_MS`, que el piloto se autoimpone y consulta ANTES de cada paso
+ * nuevo — el mismo patrón que el resto del repo usa donde no se puede
+ * cancelar una llamada en vuelo.
+ */
+const PRESUPUESTO_SESION_MS = 130_000;
+
 /** Lo que el portal exige saber del receptor. Mismos campos que todo adaptador. */
 export interface ReceptorPiloto {
   rfc: string;
@@ -238,8 +257,18 @@ async function volar(op: OpcionesPiloto, campos: CampoListo[], modo: ModoAgente)
     let terminado: AccionPiloto | null = null;
     /** TC-5: el botón ante el que el veto se detuvo SIN haber llenado nada. */
     let vetadoAntesDeLlenar: string | null = null;
+    /** REND-A8: el reloj propio de la sesión — ver el comentario de la constante. */
+    const venceSesionEn = Date.now() + PRESUPUESTO_SESION_MS;
+    let sinTiempo = false;
 
     for (let paso = 1; paso <= PASOS_MAXIMOS; paso++) {
+      // El corte, ANTES del siguiente paso, no a la mitad de uno: lo que no
+      // arrancó no deja el navegador a medio clic en un formulario fiscal.
+      if (Date.now() >= venceSesionEn) {
+        sinTiempo = true;
+        logger.warn('piloto.sin_tiempo', { comercio: op.comercio.clave, paso, pasosHechos: historial.length });
+        break;
+      }
       const inv = await pagina.inventario();
 
       // Regla 3: ¿esta pantalla es la de entrar? Se mira ANTES que nada más
@@ -328,6 +357,10 @@ async function volar(op: OpcionesPiloto, campos: CampoListo[], modo: ModoAgente)
       historial.push(`${paso}. ${accion.tipo} ${accion.selector ?? ''} ${accion.valor ?? ''}`.trim());
     }
 
+    if (!terminado && sinTiempo) {
+      captura = await capturaSegura(pagina);
+      return { modo: modoReal, ok: false, capturado, captura, error: `El piloto se quedó sin tiempo de sesión (${Math.round(PRESUPUESTO_SESION_MS / 1000)} s) antes de terminar el formulario, en el paso ${historial.length + 1}. No es un fallo del portal: la corrida siguiente lo retoma.` };
+    }
     if (!terminado && historial.length >= PASOS_MAXIMOS) {
       return { modo: modoReal, ok: false, capturado, captura, error: `El piloto agotó sus ${PASOS_MAXIMOS} pasos sin terminar el formulario. El historial quedó en el log.` };
     }

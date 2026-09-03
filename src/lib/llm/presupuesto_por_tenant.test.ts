@@ -71,13 +71,39 @@ describe('el techo diario que llega a la RPC sale de la FLOTA, no de una env glo
     vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_USD', '5');
     vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_MAX_USD', '60');
     tablas.set('tenant', { data: { config: { politica: [{ concepto: 'diesel' }] } }, error: null });
+    // AUDITORÍA 25 (REND-A4): con la constante corregida ($0.18, medida —antes
+    // $0.05, banda de diseño) 15,000 viajes/mes YA PASA el techo por defecto de
+    // $60/día (ver la prueba de abajo). Aquí se usa un plan más chico para
+    // seguir probando el camino sin acotar: derivado > piso y < techo.
+    tablas.set('suscripcion', { data: { plan: { limite_viajes_mes: 8_000 } }, error: null });
+    const budget = createLlmBudget('innovativos', RUN, 'interactivo');
+    await reserveLlmBudget(budget, 0.05);
+    const esperado = (8_000 / 30) * COSTO_ESTIMADO_USD.viajeCompleto;
+    expect(esperado).toBeGreaterThan(5);
+    expect(esperado).toBeLessThan(60);
+    expect(reservaEnviada()?.p_tope_tenant_usd).toBeCloseTo(esperado, 4);
+    expect(budget.origenTope).toBe('plan');
+  });
+
+  // AUDITORÍA 25, ALTO (REND-A4): éste es el escenario exacto de la auditoría
+  // — una flota de 15,000 viajes/mes. Con el $0.05 declarado (falso) el
+  // derivado daba ~$27/día y CABÍA cómodo bajo el techo de $60, dando una
+  // falsa sensación de holgura. Con el costo MEDIDO ($0.18/liquidación) el
+  // derivado real es ~$92/día: pasa el techo, y `topeDerivadoDelPlan` lo
+  // acota ahí — a la vista, no en silencio. Subir el techo por defecto es una
+  // decisión de producto (cuánto puede gastar una flota grande por día) que
+  // esta auditoría no toca; lo que sí corrige es que el número del que ese
+  // techo se deriva ya no mienta.
+  it('REND-A4: una flota de 15,000 viajes/mes con el costo medido pasa el techo por defecto, y queda acotada ahí', async () => {
+    vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_USD', '5');
+    vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_MAX_USD', '60');
+    tablas.set('tenant', { data: { config: { politica: [{ concepto: 'diesel' }] } }, error: null });
     tablas.set('suscripcion', { data: { plan: { limite_viajes_mes: 15_000 } }, error: null });
     const budget = createLlmBudget('innovativos', RUN, 'interactivo');
     await reserveLlmBudget(budget, 0.05);
-    const esperado = (15_000 / 30) * COSTO_ESTIMADO_USD.viajeCompleto;
-    expect(esperado).toBeGreaterThan(5);   // el escenario de la auditoría: ~$27/día
-    expect(esperado).toBeLessThan(60);
-    expect(reservaEnviada()?.p_tope_tenant_usd).toBeCloseTo(esperado, 4);
+    const derivadoReal = (15_000 / 30) * COSTO_ESTIMADO_USD.viajeCompleto;
+    expect(derivadoReal).toBeGreaterThan(60); // el punto de esta prueba
+    expect(reservaEnviada()?.p_tope_tenant_usd).toBeCloseTo(60, 6);
     expect(budget.origenTope).toBe('plan');
   });
 
