@@ -23,6 +23,7 @@ import { HBars } from '../../admin/ui/graficas';
 import { Dona } from '../../admin/charts';
 import { sufijoTenant } from '../sufijo';
 import { LineasPorConciliar, NINGUNO_VALOR } from './vista-consolidado';
+import { calcularSinCfdi } from './sin-cfdi';
 
 export const dynamic = 'force-dynamic';
 
@@ -171,11 +172,11 @@ export default async function CombustibleCasetasPage({
 
   const diesel = porConcepto?.find((c) => c.concepto === 'diesel');
   const caseta = porConcepto?.find((c) => c.concepto === 'caseta');
-  // "Sin CFDI" solo se puede afirmar sobre los comprobantes que SÍ se leyeron;
-  // si la consulta falló, no se afirma nada.
-  const combustibleYCasetas = docs?.filter((d) => d.concepto === 'diesel' || d.concepto === 'caseta') ?? [];
-  const sinCfdi = combustibleYCasetas.filter((d) => !d.cfdiUuid).length;
-  const pctSinCfdi = combustibleYCasetas.length > 0 ? Math.round((sinCfdi / combustibleYCasetas.length) * 100) : null;
+  // "Sin CFDI" solo se puede afirmar sobre los comprobantes que SÍ se
+  // leyeron; si la consulta falló, no se afirma nada — y se distingue de
+  // "la consulta funcionó y no hay comprobantes" (auditoría 25, MEDIO:
+  // antes las dos se leían como la misma frase).
+  const sinCfdiEstado = calcularSinCfdi(docs);
   const anomaliasCombustible = anomalias?.filter((a) => /diesel|caseta/i.test(a.detalle)) ?? [];
 
   return (
@@ -226,12 +227,18 @@ export default async function CombustibleCasetasPage({
                 vacio={acred === null ? 'No se pudo leer lo acreditable' : undefined}
                 nota={vl.nota} />
               <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                // AUDITORÍA 1, ALTO: sin comprobantes, `pctSinCfdi` es null — se
+                // AUDITORÍA 1, ALTO: sin comprobantes, el valor es null — se
                 // PRESERVA para que el encabezado diga "—" y no un "0%" que se
                 // lee como "todo facturado" (buena noticia falsa en un vistazo).
-                etiqueta="Sin CFDI (combustible y casetas)" valor={pctSinCfdi} formato="porcentaje"
-                vacio={pctSinCfdi === null ? 'Sin comprobantes de estos conceptos todavía' : undefined}
-                nota={pctSinCfdi === null ? undefined : `${sinCfdi} de ${combustibleYCasetas.length} sin factura entre los últimos ${numero(VENTANA_DOCUMENTOS)} comprobantes registrados — es deducible que se pierde`} />
+                // AUDITORÍA 25, MEDIO: "sin comprobantes" (`sin_datos`) y "la
+                // consulta falló" (`error`) ya no comparten el mismo mensaje.
+                etiqueta="Sin CFDI (combustible y casetas)" valor={sinCfdiEstado.pct} formato="porcentaje"
+                vacio={
+                  sinCfdiEstado.estado === 'error' ? 'No se pudo leer si hay CFDI de estos conceptos'
+                  : sinCfdiEstado.estado === 'sin_datos' ? 'Sin comprobantes de estos conceptos todavía'
+                  : undefined
+                }
+                nota={sinCfdiEstado.estado === 'ok' ? `${sinCfdiEstado.sinCfdi} de ${sinCfdiEstado.total} sin factura entre los últimos ${numero(VENTANA_DOCUMENTOS)} comprobantes registrados — es deducible que se pierde` : undefined} />
             </div>
           )}
         </section>
