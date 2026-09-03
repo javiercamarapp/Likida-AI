@@ -348,9 +348,10 @@ export async function canjearCodigo(
   // Marcar usado con la condición EN la base: dos canjes simultáneos del mismo
   // código compiten por este UPDATE y solo uno encuentra la fila con
   // `usado_en` null. El perdedor recibe cero filas y se niega.
+  const selloUso = new Date().toISOString();
   const marcado = await supabaseAdmin()
     .from('mcp_oauth_codigo')
-    .update({ usado_en: new Date().toISOString() })
+    .update({ usado_en: selloUso })
     .eq('id', fila.id)
     .is('usado_en', null)
     .select('id');
@@ -371,7 +372,31 @@ export async function canjearCodigo(
     .lt('expira_en', new Date(Date.now() - 24 * 60 * 60_000).toISOString())
     .then(({ error: e }) => { if (e) logger.warn('mcp.oauth.limpieza_codigos', { err: e.message }); });
 
-  return emitirPar(fila);
+  const par = await emitirPar(fila);
+
+  // BAJO-308 (auditoría 25): mismo BE-18 que `refrescarTokens`, aplicado a la
+  // mitad del archivo que la 24 no revisó. Si `emitirPar` falla (parpadeo del
+  // insert), el código ya quedó quemado (`usado_en` puesto arriba) y el 503
+  // que el RFC le dice al cliente que puede reintentar entraba por el camino
+  // de "código reusado": `revocarFamilia` de una familia que nunca emitió
+  // nada, e `invalid_grant` — el contralor tiene que rehacer el flujo de
+  // autorización completo. Se destraba SOLO si sigue siendo el sello que
+  // pusimos aquí (`usado_en` = `selloUso`): si otro canje ganó la carrera en
+  // medio, no se toca nada.
+  if (!par.ok) {
+    const vuelta = await supabaseAdmin()
+      .from('mcp_oauth_codigo')
+      .update({ usado_en: null })
+      .eq('id', fila.id)
+      .eq('usado_en', selloUso)
+      .select('id');
+    if (vuelta.error) {
+      logger.error('mcp.oauth.canje_sin_deshacer', { err: vuelta.error.message });
+    } else if (!vuelta.data || vuelta.data.length === 0) {
+      logger.warn('mcp.oauth.canje_sin_deshacer', { motivo: 'la fila ya no traía nuestro sello' });
+    }
+  }
+  return par;
 }
 
 // ── El refresco: rotación con detección de reuso ───────────────────────────

@@ -169,4 +169,29 @@ describe('cancelarFacturaDeStripe — un invoice.paid reentregado no resucita lo
 
     expect(ops.filter((o) => o.tabla === 'factura_saas')).toHaveLength(0);
   });
+
+  it('ALT-112: anula ANTES de que exista la fila y el invoice.paid reintentado después NO la resucita', async () => {
+    const { cancelarFacturaDeStripe } = await import('./suscripcion');
+
+    // Aún no hay fila: el `invoice.paid` original sigue en vuelo (reintento
+    // de Stripe tras un 500), así que `aplicarFactura` nunca corrió todavía.
+    expect(filas['factura_saas'] ?? []).toHaveLength(0);
+
+    // El voided llega primero, más tarde que el paid original en el reloj de
+    // Stripe (`created`), y encuentra la tabla vacía.
+    const r = await cancelarFacturaDeStripe('in_1XYZ', '02', undefined, PAGO_1020 + 3600);
+    expect(r).toBe('sin_factura');
+
+    ops.length = 0;
+    // El reintento del invoice.paid original entra después, sin saber que ya
+    // se anuló.
+    await aplicarFactura({ ...factura(true, PAGO_1020), stripeInvoiceId: 'in_1XYZ' });
+
+    // No debe resucitarla como pagada: el evento llega antes que el sello de
+    // la anulación, así que `aplicarFactura` lo descarta por fuera de orden.
+    expect(ops.filter((o) => o.tabla === 'factura_saas')).toHaveLength(0);
+    expect(logger.warn).toHaveBeenCalledWith('stripe.evento_fuera_de_orden', expect.objectContaining({
+      factura: 'in_1XYZ',
+    }));
+  });
 });
