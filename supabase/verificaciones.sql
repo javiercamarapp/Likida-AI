@@ -17186,3 +17186,74 @@ begin
     sin_recalculo_rebota, mismatch_rebota, mismatch_nada_movido, bueno_total, bueno_iva, bueno_ieps,
     bueno_peaje, bueno_litros, bueno_estatus, bueno_diferencias, historial_nace_vacio, historial_acumula;
 end $$;
+-- ── 252. Una liquidación RECHAZADA no cuenta: ni para la póliza (0281), ni para bloquear la reasignación del viaje (0158/0283) (mig. 0307, AUDITORÍA 25) ──
+--
+-- backend.md MEDIO (línea 226) + datos.md ALTO DATOS-24 (línea 194,
+-- REINCIDENTE de la 24). La MISMA causa raíz en dos consumidores: la columna
+-- `liquidacion.revision` (0299) nunca se propagó a todos los lugares que
+-- preguntan «¿esta liquidación cuenta?».
+--
+-- Lo que este bloque asevera, contra Postgres real:
+--   (a) `poliza_datos_tenant` YA NO trae la fila de una liquidación
+--       rechazada — el MISMO criterio que `api/export/liquidaciones`
+--       (`sin_rechazadas` por omisión, probado en TS) — y SÍ sigue trayendo
+--       una `pendiente` (el filtro es solo `<> 'rechazada'`, no "solo
+--       firmadas": eso lo decide la ruta, no esta RPC);
+--   (b) reasignar `operador_id` de un viaje con una liquidación RECHAZADA ya
+--       NO rebota con CU004 — el escenario medido: el contralor rechaza,
+--       el encargado reasigna al chofer correcto, y antes de la 0307 el
+--       trigger lo bloqueaba con «ya tiene liquidación emitida» sobre una
+--       liquidación que el propio panel acababa de invalidar;
+--   (c) el MISMO viaje, con una liquidación APROBADA (no rechazada), SIGUE
+--       bloqueando la reasignación — la 0307 no abre la puerta de más.
+-- Esperado: RECHAZADA_NO_CUENTA_0307  poliza-sin-rechazada=t  poliza-con-pendiente=t  reasignar-tras-rechazo=t  reasignar-tras-aprobada-rebota=t
+do $$
+declare
+  v_t uuid; v_u uuid := gen_random_uuid(); v_o1 uuid; v_o2 uuid;
+  v_v1 uuid; v_v2 uuid; v_l1 uuid; v_l2 uuid;
+  j jsonb;
+  poliza_sin_rechazada boolean; poliza_con_pendiente boolean;
+  reasignar_tras_rechazo boolean := false; reasignar_tras_aprobada_rebota boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF RECHAZADA NO CUENTA 0307') returning id into v_t;
+  insert into app_user (id, tenant_id, email, rol) values (v_u, v_t, 'zzz-rechazada-0307@likida.test', 'flota_admin');
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P1', '520000009930') returning id into v_o1;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P2', '520000009931') returning id into v_o2;
+
+  -- (a) una liquidación que se RECHAZA por la RPC de verdad (el único camino
+  -- que la tabla acepta — un INSERT/UPDATE directo de `revision` rebota con
+  -- LR003) y una que se queda PENDIENTE, mismo periodo.
+  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o1, 'RN-1', 5000) returning id into v_v1;
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v1, 'diesel', 4900);
+  v_l1 := guardar_liquidacion_tx(v_t, v_v1, 4900, 5000, 100, 'con_diferencias', '[]'::jsonb, 0, 0, 0, null, 0);
+  perform revisar_liquidacion(v_t, v_l1, 'rechazar', 'no es de este viaje', null, v_u, null);
+  -- El rechazo YA devolvió el viaje a 'en_cuadre' (0299) — el escenario real.
+
+  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o1, 'RN-2', 5000) returning id into v_v2;
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v2, 'diesel', 5000);
+  v_l2 := guardar_liquidacion_tx(v_t, v_v2, 5000, 5000, 0, 'con_diferencias', '[]'::jsonb, 0, 0, 0, null, 0); -- nace 'pendiente'
+
+  j := poliza_datos_tenant(v_t, current_date - 1, current_date + 1);
+  poliza_sin_rechazada := not (j::text like '%RN-1%');
+  poliza_con_pendiente := (j::text like '%RN-2%');
+
+  -- (b) el viaje de la RECHAZADA (v_v1, ya en 'en_cuadre') SÍ acepta
+  -- reasignar operador ahora — antes de la 0307, CU004 lo bloqueaba.
+  begin
+    update viaje set operador_id = v_o2 where id = v_v1;
+    reasignar_tras_rechazo := true;
+  exception when others then
+    reasignar_tras_rechazo := false;
+  end;
+
+  -- (c) control: una liquidación APROBADA (no rechazada, también por la RPC)
+  -- SIGUE bloqueando la reasignación — la 0307 no abre la puerta de más.
+  perform revisar_liquidacion(v_t, v_l2, 'aprobar', null, null, v_u, null);
+  begin
+    update viaje set operador_id = v_o2 where id = v_v2;
+  exception when sqlstate 'CU004' then reasignar_tras_aprobada_rebota := true;
+  end;
+
+  raise exception E'RECHAZADA_NO_CUENTA_0307  poliza-sin-rechazada=%  poliza-con-pendiente=%  reasignar-tras-rechazo=%  reasignar-tras-aprobada-rebota=%   (esperado t / t / t / t)',
+    poliza_sin_rechazada, poliza_con_pendiente, reasignar_tras_rechazo, reasignar_tras_aprobada_rebota;
+end $$;
