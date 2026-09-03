@@ -341,7 +341,8 @@ export async function InicioContenido({
               pAcred={pAcred} pKpis={pKpis} pAnomalias={pAnomalias} pViajes={pViajes}
               pSeriesKpis={pSeriesKpis} pGastoSemanal={pGastoSemanal}
               pLiquidadoSemanal={pLiquidadoSemanal} pTopRutas={pTopRutas}
-              pViajesPorMes={pViajesPorMes} pCfgFiscal={pCfgFiscal} pGastosFiscales={pGastosFiscales} />
+              pViajesPorMes={pViajesPorMes} pCfgFiscal={pCfgFiscal} pGastosFiscales={pGastosFiscales}
+              pEscalados={pEscalados} pHuerfanos={pHuerfanos} />
           </Bloque>
 
           {/* ── KPIs (caja interna + delta como texto, referencia) ──
@@ -529,9 +530,9 @@ async function BloqueAlertas({ pKpis, pEscalados, pHuerfanos, pAnomalias, sufijo
   );
 }
 
-async function AvisoEstado({
+export async function AvisoEstado({
   pAcred, pKpis, pAnomalias, pViajes, pSeriesKpis, pGastoSemanal, pLiquidadoSemanal,
-  pTopRutas, pViajesPorMes, pCfgFiscal, pGastosFiscales,
+  pTopRutas, pViajesPorMes, pCfgFiscal, pGastosFiscales, pEscalados, pHuerfanos,
 }: {
   pAcred: Promise<Acreditables | null>;
   pKpis: Promise<DashboardKpis | null>;
@@ -544,13 +545,22 @@ async function AvisoEstado({
   pViajesPorMes: Promise<Array<{ dia: string; valor: number }> | null>;
   pCfgFiscal: Promise<LikidaConfig | null>;
   pGastosFiscales: Promise<GastoFiscal[] | null>;
+  // AUDITORÍA 25, MEDIO: faltaban aquí — una caída de `contarEscalados` o
+  // `contarHuerfanosPendientes` borraba el renglón de alerta (BloqueAlertas)
+  // Y no encendía este aviso, así que el Resumen quedaba IDÉNTICO al de una
+  // flota sin escalados ni huérfanos. Mismas promesas que ya recibe
+  // `BloqueAlertas` — ninguna consulta nueva.
+  pEscalados: Promise<number | null>;
+  pHuerfanos: Promise<number | null>;
 }) {
   const [
     acred, kpis, anomalias, viajes, seriesKpis, gastoSemanalSeries,
     liquidadoSemanalSeries, topRutasSeries, viajesPorMes, cfgFiscal, gastosFiscales,
+    escalados, huerfanos,
   ] = await Promise.all([
     pAcred, pKpis, pAnomalias, pViajes, pSeriesKpis, pGastoSemanal,
     pLiquidadoSemanal, pTopRutas, pViajesPorMes, pCfgFiscal, pGastosFiscales,
+    pEscalados, pHuerfanos,
   ]);
 
   // AUDITORÍA 10, ALTO: el estado se decide con VIAJES reales filtrados a
@@ -558,9 +568,13 @@ async function AvisoEstado({
   // (siempre traía 7/30 elementos y la rama 'vacio' era inalcanzable).
   const estado = estadoPanel({
     acreditables: acred, kpis, liquidaciones: liquidacionesDeViajes(viajes), anomalias,
-    // A13: las consultas del selector y las fiscales también cuentan — una
-    // caída aquí enseña el banner de "pantalla incompleta", no un vacío.
-    secundarias: { seriesKpis, gastoSemanalSeries, liquidadoSemanalSeries, topRutasSeries, viajesPorMes, cfgFiscal, gastosFiscales },
+    // A13 + AUDITORÍA 25 MEDIO: las consultas del selector, las fiscales Y
+    // las dos alertas (escalados/huérfanos) cuentan — una caída aquí enseña
+    // el banner de "pantalla incompleta", no un vacío silencioso.
+    secundarias: {
+      seriesKpis, gastoSemanalSeries, liquidadoSemanalSeries, topRutasSeries, viajesPorMes,
+      cfgFiscal, gastosFiscales, escalados, huerfanos,
+    },
   });
 
   if (estado === 'error') {
