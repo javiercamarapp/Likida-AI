@@ -57,6 +57,33 @@ describe('la póliza cuadra o no sale', () => {
     expect(r.falta.join(' ')).toContain('no cuadra');
   });
 
+  it('AUDITORÍA 24/25, PRU-MEDIO REINCIDENTE — un descuadre de aritmética normal (redondeo pieza por pieza) también se NIEGA, y por la rama correcta', () => {
+    // Repro medida de docs/auditoria-24/pruebas.md: 5 conceptos de subtotal
+    // 100.005 (el SubTotal que sale de despejar el 16% de un importe bruto)
+    // se redondean UNO POR UNO al armar cada movimiento (100.005 → 100.01,
+    // ×5 = 500.05), pero `subtotalDeclarado` redondea la SUMA cruda una sola
+    // vez (500.025 → 500.03). Con anticipo 1000, ivaAcreditable 80 y
+    // diferencia 419.97, el impuesto no acreditado sale exactamente 0 (no
+    // dispara el freno de «dato de origen roto» que prueba el caso de
+    // arriba), y el asiento llega a cargos 1000.02 vs abonos 1000.00 — dos
+    // centavos que la rama `cargos !== abonos` (poliza.ts:~300) tiene que
+    // atrapar. Antes de esta prueba, `grep -rn "no cuadra: cargos" src` no
+    // encontraba ninguna prueba que llegara a esa rama.
+    const descuadrada: LiquidacionParaPoliza = {
+      folioViaje: 'VJ-2026-0099',
+      operador: 'Redondeo SA',
+      fecha: '2026-08-20',
+      anticipo: 1000,
+      porConcepto: Array.from({ length: 5 }, () => ({ concepto: 'diesel' as const, subtotal: 100.005 })),
+      ivaAcreditable: 80,
+      diferencia: 419.97,
+    };
+    const r = polizaDeLiquidacion(descuadrada, CATALOGO);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.falta.join(' ')).toContain('no cuadra: cargos 1000.02 vs abonos 1000.00');
+  });
+
   it('el operador que puso de su bolsa genera un ABONO a por-pagar', () => {
     const debe = { ...LIQ, anticipo: 4000, diferencia: -640 };
     const r = polizaDeLiquidacion(debe, CATALOGO);
