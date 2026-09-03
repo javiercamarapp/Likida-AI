@@ -17076,3 +17076,46 @@ begin
   raise exception E'LLM_COSTO_FASE_0304  existe=%  sobre-llm-costo=%  siete=%  transcripcion=%   (esperado t / t / t / t)',
     existe, sobre_tabla, siete, tiene_transcripcion;
 end $$;
+
+-- ── 251. `viaje` y `cfdi_consolidado_linea` entran al dominio de ve_finanzas() (mig. 0305) ──
+--
+-- AUDITORÍA 25, SEGURIDAD (ALTO, línea 88). El jefe de tráfico (`encargado`)
+-- no debe ver el dinero de la flota — `visibilidad.ts:41` solo le da
+-- 'operacion' — pero el panel lee con `supabaseAdmin()` (service_role, salta
+-- RLS): la única frontera real contra un `curl` directo a PostgREST con la
+-- cookie del propio encargado es esta policy. `viaje.anticipo`/`ingreso_flete`
+-- y `cfdi_consolidado_linea.monto` se quedaron fuera de `ve_finanzas()` desde
+-- que la 0048 empezó a aplicarla tabla por tabla — la 0158 partió la policy de
+-- `viaje` en `tenant_data_select`/`_insert`/`_update` (por eso NO es
+-- `tenant_data` como en el resto: la 0292 solo barre policies con ESE nombre
+-- exacto) y `cfdi_consolidado_linea` nunca pasó por ninguna de las dos rondas.
+--
+-- Se impersona a un ENCARGADO. Esperado: 0 filas en las dos tablas.
+do $$
+declare
+  v_t uuid; v_op uuid; v_cfdi uuid; v_u1 uuid := gen_random_uuid();
+  n_viaje int; n_cfdi int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF SEG88 RLS') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'ZZZ operador seg88', '5215559990188') returning id into v_op;
+  insert into viaje (tenant_id, operador_id, folio, anticipo, ingreso_flete)
+    values (v_t, v_op, 'ZZZ-SEG88', 5000.00, 18500.00);
+  insert into cfdi_xml (tenant_id, cfdi_uuid, xml, tiene_multiples_conceptos)
+    values (v_t, 'zzz-seg88-uuid', '<xml/>', true) returning id into v_cfdi;
+  insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, descripcion, estacion_rfc, fecha)
+    values (v_t, v_cfdi, 1, 'ecc12', 1234.56, 'diesel zzz', 'XAXX010101000', now());
+
+  insert into app_user (id, tenant_id, email, rol)
+    values (v_u1, v_t, 'zzz-verif-encargado-seg88@likida.test', 'encargado');
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u1)::text, true);
+
+  select count(*) into n_viaje from viaje where tenant_id = v_t;
+  select count(*) into n_cfdi from cfdi_consolidado_linea where tenant_id = v_t;
+
+  reset role;
+
+  raise exception E'SEG88_RLS_DINERO  viaje_visible_a_encargado=%  cfdi_visible_a_encargado=%   (esperado 0 / 0 — cualquier otra cosa le abre el dinero de la flota al jefe de tráfico)',
+    n_viaje, n_cfdi;
+end $$;
