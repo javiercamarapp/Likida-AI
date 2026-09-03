@@ -78,7 +78,17 @@ function siteUrl(): string {
 async function dentroDelLimite(llave: string): Promise<boolean> {
   const h = await headers();
   const ip = (h.get('x-forwarded-for')?.split(',')[0].trim() || h.get('x-real-ip')) ?? 'desconocida';
-  return await rateLimit(`${llave}:${ip}`, 10, 5 * 60_000);
+  // AUDITORÍA 25, SEGURIDAD (ALTO, línea 181, REINCIDENTE). `rateLimit` falla
+  // CERRADO por default ante un blip de Redis (SEG-4, auditoría 24) — la
+  // decisión correcta para casi todo, pero /login es la ÚNICA vía de entrada
+  // al panel: un blip de Upstash, sin esta válvula, negaba TODOS los
+  // intentos —Google y correo, de cualquier IP— hasta que Redis volviera, no
+  // solo los de quien de verdad se pasó del límite. `fallaCerrado: false`
+  // degrada al Map local (por instancia, más débil pero NO cero) en vez de
+  // negar de golpe: el mismo trade-off que ya elegía `RATELIMIT_REDIS_FALLA_
+  // CERRADO=false` a nivel de despliegue, aquí anclado al único endpoint
+  // donde un falso "no" cierra la entrada entera, no solo un intento.
+  return await rateLimit(`${llave}:${ip}`, 10, 5 * 60_000, { fallaCerrado: false });
 }
 
 /**
