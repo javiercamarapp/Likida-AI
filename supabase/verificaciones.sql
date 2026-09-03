@@ -17119,3 +17119,19 @@ begin
   raise exception E'SEG88_RLS_DINERO  viaje_visible_a_encargado=%  cfdi_visible_a_encargado=%   (esperado 0 / 0 — cualquier otra cosa le abre el dinero de la flota al jefe de tráfico)',
     n_viaje, n_cfdi;
 end $$;
+
+-- ── 252. `tenant_perfil_merge` no es ejecutable por anon/authenticated (mig. 0306) ──
+--
+-- AUDITORÍA 25, SEGURIDAD (MEDIO, línea 202, REINCIDENTE). La 0296 concedía
+-- `execute` a `service_role` sobre una función que ESCRIBE en `public.tenant`
+-- sin el `revoke from public, anon, authenticated` que cierra el default
+-- privilege de Postgres (lección de la 0013, mismo molde que 0284:110-113).
+do $$
+declare anon_puede boolean; authenticated_puede boolean; service_role_puede boolean;
+begin
+  anon_puede := has_function_privilege('anon', 'public.tenant_perfil_merge(uuid,jsonb,uuid)', 'EXECUTE');
+  authenticated_puede := has_function_privilege('authenticated', 'public.tenant_perfil_merge(uuid,jsonb,uuid)', 'EXECUTE');
+  service_role_puede := has_function_privilege('service_role', 'public.tenant_perfil_merge(uuid,jsonb,uuid)', 'EXECUTE');
+  raise exception E'GRANT_TENANT_PERFIL_MERGE_0306  anon-ejecuta=%  authenticated-ejecuta=%  service-role-ejecuta=%   (esperado false / false / true)',
+    anon_puede, authenticated_puede, service_role_puede;
+end $$;
