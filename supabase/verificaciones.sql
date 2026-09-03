@@ -15497,12 +15497,16 @@ end $$;
 --  (b) los NUEVE quedan con `prompt_ref IS NULL` — cerraban una referencia a
 --      un archivo que nunca se escribió; dejarla apuntando a nada sería la
 --      misma promesa falsa con otro nombre.
---  (c) los NUEVE quedan con una `descripcion` que YA NO contiene ninguna de
---      las frases originales de la 0125 que prometían de más ("investiga a
---      diario el mercado", "reactiva el scraper", "decide dónde se pone
---      cada pieza", "destila hooks con whisper", "escribe código de
---      prueba") — el CASE WHEN de la migración de verdad reescribió las
---      nueve filas, no solo algunas.
+--  (c) los NUEVE quedan con una `descripcion` que YA NO contiene la frase
+--      VIGENTE de cada uno al llegar la 0303 (la de 0230/0234/0235, no la
+--      de la 0125 original — ésa ya la habían reemplazado tres migraciones
+--      antes) — cada agente contra SU PROPIA frase, una por una, para que
+--      un `CASE WHEN` borrado (o que dejara alguna fila sin tocar) sí
+--      dispare la sonda de esa fila en vez de depender de un texto que
+--      ninguna descripción real llegó a tener nunca (auditoría 25, DATOS-M2:
+--      la lista anterior probaba contra la 0125, que 0230/0234/0235 ya
+--      habían sobrescrito por completo antes de que la 0303 corriera —
+--      cero de esas cinco frases podía dispararse).
 --  (d) un agente REAL del catálogo (`redactor`) NO quedó tocado — la
 --      migración no pudo haber puesto `experimental = false` a TODOS por
 --      accidente, ni tocado su `descripcion`.
@@ -15517,12 +15521,22 @@ declare
     'cazador','seo_distribucion','guiones','noticias_mercado',
     'promos_diarias','visuales','video_demo','video_marketing','pruebas'
   ];
+  -- Una frase por id, EN EL MISMO ORDEN que `ids` — la que su descripción
+  -- vigente traía justo antes de la 0303 (0230 para los siete de mercadeo,
+  -- 0234 para pruebas, 0235 para cazador), verificada de que NO aparece en
+  -- la descripción que la 0303 escribe.
   frases_viejas text[] := array[
-    'investiga a diario el mercado', 'reactiva el scraper',
-    'decide dónde se pone cada pieza', 'destila hooks con whisper',
-    'escribe código de prueba'
+    'el encargo de caza sobre lo que ya está en la base',                    -- cazador       (0235)
+    'el <title> que de verdad se sirve',                                     -- seo_distribucion (0230)
+    'no tiene los videos de referencia ni whisper',                          -- guiones       (0230)
+    'no navega la web y no finge una investigación',                        -- noticias_mercado (0230)
+    'cada beneficio del catálogo declara qué símbolo del producto lo sostiene', -- promos_diarias (0230)
+    'produce el encargo de la pieza gráfica',                                -- visuales      (0230)
+    'produce el encargo del video que se manda antes de la llamada',        -- video_demo    (0230)
+    'produce el encargo del reel para el gremio',                           -- video_marketing (0230)
+    'vigila los resultados que sí llegan a la base'                          -- pruebas       (0234)
   ];
-  k text; f text;
+  i int; k text; f text;
   no_graduados text[] := '{}';
   con_prompt_ref text[] := '{}';
   con_frase_vieja text[] := '{}';
@@ -15534,7 +15548,9 @@ declare
 begin
   select descripcion into redactor_descripcion_antes from public.agente_definicion where id = 'redactor';
 
-  foreach k in array ids loop
+  for i in 1..array_length(ids, 1) loop
+    k := ids[i];
+    f := frases_viejas[i];
     -- (a)
     if exists (select 1 from public.agente_definicion where id = k and experimental = true) then
       no_graduados := no_graduados || k;
@@ -15543,13 +15559,11 @@ begin
     if exists (select 1 from public.agente_definicion where id = k and prompt_ref is not null) then
       con_prompt_ref := con_prompt_ref || k;
     end if;
-    -- (c)
+    -- (c) la frase vigente ANTES de la 0303, contra SU PROPIO id.
     select descripcion into descripcion_actual from public.agente_definicion where id = k;
-    foreach f in array frases_viejas loop
-      if descripcion_actual is not null and lower(descripcion_actual) like '%' || f || '%' then
-        con_frase_vieja := con_frase_vieja || (k || ':' || f);
-      end if;
-    end loop;
+    if descripcion_actual is not null and lower(descripcion_actual) like '%' || f || '%' then
+      con_frase_vieja := con_frase_vieja || (k || ':' || f);
+    end if;
   end loop;
 
   -- (d) redactor intacto, antes y después de esta migración.
