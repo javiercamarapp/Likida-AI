@@ -145,6 +145,15 @@ export async function telefonoParaDineroDe(tenantId: string): Promise<string | n
   // que esta consulta seguía encontrándolo y por aquí salen las CIFRAS del
   // cierre y el ejemplar del CONTRALOR. Mismas dos capas y misma regla que
   // arriba: solo el `false` explícito da de baja.
+  //
+  // CORRECCIÓN (reauditoría de la 25): la rama `activo.is.null` es cinturón
+  // sobre tirantes, no una red para la base vieja. La 0294 declara la columna
+  // `not null default true` (`0294:47`), así que **aplicada, `activo` nunca es
+  // NULL**; y **sin aplicar, la columna no existe** y este `select` devuelve
+  // 42703 — esta función LANZA, no «sigue avisando». El supuesto sin comprobar
+  // lo heredan las cuatro consultas de este camino, `resolverCuentaOficina`
+  // incluida, desde la 24. Lo que de verdad cubre ese caso es la compuerta de
+  // despliegue, que se niega a construir si la base va atrás de las migraciones.
   const { data, error } = await acotada(supabaseAdmin()
     .from('app_user')
     .select('rol, telefono, activo')

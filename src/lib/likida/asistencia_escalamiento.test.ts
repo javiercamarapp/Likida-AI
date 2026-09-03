@@ -120,6 +120,9 @@ beforeEach(() => {
   filasPendientes.mockReturnValue([]);
   telefonoJefeDe.mockResolvedValue('5210000000001');
   telefonoDueno.mockResolvedValue('5210000000002');
+  // Se resetea AQUÍ, no al final de la prueba que lo mueve: si esa prueba falla
+  // en su assert, la línea de limpieza no corre y contamina las 16 siguientes.
+  duenoActivo.valor = null;
   sendButtons.mockResolvedValue('wamid.esc');
   polizaVigenteDe.mockResolvedValue(null);
   contactoSiLesionadosDe.mockResolvedValue(null);
@@ -197,7 +200,6 @@ describe('escalarAsistenciasPendientes — claim, destinatarios y ventana', () =
     filasPendientes.mockReturnValue([fila({ nivel_escalado: 1, abierta_en: abiertaHace(11 * 60_000) })]);
     await escalarAsistenciasPendientes(AHORA);
     expect((sendButtons.mock.calls[0] as unknown as [string])[0]).toBe('5210000000001');
-    duenoActivo.valor = null;
   });
 
   it('lesionados: el salto 0→2 va en UN claim y UN aviso, con el contacto de emergencia en el texto', async () => {
