@@ -1093,13 +1093,25 @@ export async function tieneAvisoPrevio(
 }
 
 /**
- * Las unidades cuyo operador ACTUAL no ha recibido el aviso.
+ * Las unidades cuyo operador ACTUAL no ha recibido el aviso — o, si el
+ * llamador trata un dato que identifica a quien va al volante aunque no
+ * haya viaje abierto (`sinViajeVivo: 'bloquear'`), las unidades sin forma de
+ * saber si su conductor dio ese aviso.
  *
  * «Actual» = el del viaje vivo (`abierto`/`en_cuadre`) que lleva esa unidad.
- * Una unidad sin viaje vivo no está ligada a ninguna persona: su posición es
- * la de un camión, no la de un titular, y se guarda. Una unidad con viaje
- * vivo cuyo operador tiene `aviso_privacidad_en` NULL es tratamiento sin
- * aviso, y NO se persiste nada suyo — ni posición ni evento de cámara.
+ * Una unidad sin viaje vivo NO tiene, hoy, otra forma de saber quién la
+ * conduce — el esquema no tiene una columna "operador actual" fuera de
+ * `viaje`. Para la POSICIÓN eso es aceptable por diseño: su GPS es del
+ * camión, no de un titular, y se guarda igual (`sinViajeVivo: 'permitir'`,
+ * el default).
+ *
+ * AUDITORÍA 25 (ALTO): para un EVENTO DE CÁMARA no es aceptable — el evento
+ * puede traer una liga al video de quién va al volante, y eso identifica a
+ * una persona exista o no un viaje abierto para su unidad. Un llamador que
+ * trate ese tipo de dato debe pedir `sinViajeVivo: 'bloquear'`: sin forma de
+ * saber si el conductor de hoy dio su aviso, la unidad se trata como
+ * sin-aviso y no se persiste nada suyo — el mismo criterio de "fallar
+ * cerrado" que ya rige cuando la base no contesta.
  *
  * Devuelve `error` cuando la base no contestó: el llamador debe tratar la
  * corrida entera como no autorizada (fallar cerrado), no como «sin aviso: 0».
@@ -1107,9 +1119,11 @@ export async function tieneAvisoPrevio(
 export async function unidadesSinAvisoPrevio(
   tenantId: string,
   unidadIds: readonly string[],
+  opciones: { sinViajeVivo?: 'permitir' | 'bloquear' } = {},
 ): Promise<{ sinAviso: Set<string>; error?: string }> {
   const sinAviso = new Set<string>();
   if (unidadIds.length === 0) return { sinAviso };
+  const bloquearSinViajeVivo = opciones.sinViajeVivo === 'bloquear';
 
   const operadorPorUnidad = new Map<string, string>();
   for (let i = 0; i < unidadIds.length; i += IDS_POR_CONSULTA) {
@@ -1127,7 +1141,10 @@ export async function unidadesSinAvisoPrevio(
       if (v.unidad_id && v.operador_id) operadorPorUnidad.set(String(v.unidad_id), String(v.operador_id));
     }
   }
-  if (operadorPorUnidad.size === 0) return { sinAviso };
+  if (operadorPorUnidad.size === 0) {
+    if (bloquearSinViajeVivo) for (const unidadId of unidadIds) sinAviso.add(unidadId);
+    return { sinAviso };
+  }
 
   const operadores = [...new Set(operadorPorUnidad.values())];
   const conAviso = new Set<string>();
@@ -1146,7 +1163,13 @@ export async function unidadesSinAvisoPrevio(
     }
   }
 
-  for (const [unidadId, operadorId] of operadorPorUnidad) {
+  for (const unidadId of unidadIds) {
+    const operadorId = operadorPorUnidad.get(unidadId);
+    if (!operadorId) {
+      // Sin viaje vivo: sin forma de saber quién la conduce hoy.
+      if (bloquearSinViajeVivo) sinAviso.add(unidadId);
+      continue;
+    }
     if (!conAviso.has(operadorId)) sinAviso.add(unidadId);
   }
   return { sinAviso };
