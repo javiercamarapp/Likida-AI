@@ -136,7 +136,7 @@ vi.mock('@/lib/likida/cuadre/resumen', () => ({
   resumenCuadre: (_liq: unknown, cerrado: boolean) => `CUADRE REAL (cerrado=${cerrado})`,
 }));
 
-const avisarCierreAlJefe = vi.fn(async (_a: unknown) => ({ enviado: true }));
+const avisarCierreAlJefe = vi.fn(async (_a: unknown): Promise<{ enviado: boolean; pdfEnviado?: boolean | null }> => ({ enviado: true }));
 vi.mock('./avisar_cierre', () => ({ avisarCierreAlJefe: (a: unknown) => avisarCierreAlJefe(a) }));
 
 const { processInbound } = await import('./processor');
@@ -349,6 +349,9 @@ describe('C1 — el reintento sin viaje abierto no niega un cierre reciente', ()
 
   it('AGEN-4: con PDF en la base y sin sellos, ENTREGA el PDF, avisa al jefe con el ejemplar del contralor y sella los dos', async () => {
     liquidacionReciente.mockResolvedValue(cerradaSinEntregar());
+    // El PDF que se le pasa SÍ llega al jefe (agentico.md:526): sin esto,
+    // `avisada_oficina_en` no se sella con el mock genérico de `{enviado:true}`.
+    avisarCierreAlJefe.mockResolvedValueOnce({ enviado: true, pdfEnviado: true });
     await processInbound(listo);
     // El PDF del operador salió por WhatsApp, firmado en storage.
     expect(documentos()).toHaveLength(1);
@@ -383,6 +386,46 @@ describe('C1 — el reintento sin viaje abierto no niega un cierre reciente', ()
     expect(avisarCierreAlJefe).toHaveBeenCalledWith(expect.objectContaining({ urlPdf: null }));
     expect(sellarEntregaLiquidacion.mock.calls.map((c) => c[2])).toEqual(['avisada_oficina_en']);
     expect(textos().join(' | ')).toMatch(/no se generó/i);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 25 (MEDIO, agentico.md:526) — una firma de PDF fallida (o un
+  // `sendDocument` que Meta rechaza DENTRO de `avisarCierreAlJefe`) sellaba
+  // `avisada_oficina_en` de todos modos si el TEXTO había salido — el
+  // ejemplar del contralor se perdía para siempre porque el sello le decía
+  // a `entregarCierrePendiente` que ya no había nada pendiente.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  it('agentico.md:526: si createSignedUrl falla para el PDF del jefe, NO se sella avisada_oficina_en aunque el texto sí saliera', async () => {
+    liquidacionReciente.mockResolvedValue(cerradaSinEntregar());
+    // Firma el PDF del OPERADOR bien; falla SOLO la del ejemplar del jefe.
+    createSignedUrl.mockImplementation(async (path: string) => (
+      path === 't1/v1.pdf'
+        ? { data: null, error: { message: 'blip de Storage' } }
+        : { data: { signedUrl: 'https://x/liq.pdf' }, error: null }
+    ));
+    // El texto SÍ sale (el WhatsApp al jefe no depende del papel, M27) —
+    // `avisarCierreAlJefe` recibe `urlPdf: null` y no intenta el PDF aquí.
+    avisarCierreAlJefe.mockResolvedValueOnce({ enviado: true, pdfEnviado: null });
+    await processInbound(listo);
+
+    expect(avisarCierreAlJefe).toHaveBeenCalledWith(expect.objectContaining({ urlPdf: null }));
+    // El PDF del operador SÍ se selló — ese sí llegó.
+    const sellos = sellarEntregaLiquidacion.mock.calls.map((c) => c[2]);
+    expect(sellos).toContain('entregada_operador_en');
+    // Pero el del jefe NO: sigue pendiente para el siguiente reintento.
+    expect(sellos).not.toContain('avisada_oficina_en');
+  });
+
+  it('agentico.md:526: si sendDocument falla DENTRO de avisarCierreAlJefe (Meta rechaza el adjunto al jefe), tampoco se sella', async () => {
+    liquidacionReciente.mockResolvedValue(cerradaSinEntregar());
+    // La firma sale bien — el fallo es que Meta rechaza el documento al
+    // jefe, algo que solo `avisarCierreAlJefe` sabe (aquí, mockeado).
+    avisarCierreAlJefe.mockResolvedValueOnce({ enviado: true, pdfEnviado: false });
+    await processInbound(listo);
+
+    expect(avisarCierreAlJefe).toHaveBeenCalledWith(expect.objectContaining({ urlPdf: 'https://x/liq.pdf' }));
+    expect(sellarEntregaLiquidacion.mock.calls.map((c) => c[2])).not.toContain('avisada_oficina_en');
   });
 
   it('AGEN-4: si Meta rechaza el PDF, NO se sella la entrega y al chofer no se le afirma que ya lo tiene', async () => {
