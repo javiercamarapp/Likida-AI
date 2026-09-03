@@ -23,7 +23,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 
 interface Consulta {
-  eq: Array<[string, unknown]>; in: Array<[string, unknown]>; or: string | null;
+  eq: Array<[string, unknown]>; in: Array<[string, unknown]>; neq: Array<[string, unknown]>; or: string | null;
   orden: Array<[string, boolean]>; rango: [number, number] | null; opciones: Record<string, unknown> | undefined;
 }
 let consulta: Consulta;
@@ -33,12 +33,13 @@ let conteo: number | null = null;
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: () => {
-      consulta = { eq: [], in: [], or: null, orden: [], rango: null, opciones: undefined };
+      consulta = { eq: [], in: [], neq: [], or: null, orden: [], rango: null, opciones: undefined };
       const b: Record<string, unknown> = {};
       Object.assign(b, {
         select: (_c: string, opt?: Record<string, unknown>) => { consulta.opciones = opt; return b; },
         eq: (c: string, v: unknown) => { consulta.eq.push([c, v]); return b; },
         in: (c: string, v: unknown) => { consulta.in.push([c, v]); return b; },
+        neq: (c: string, v: unknown) => { consulta.neq.push([c, v]); return b; },
         or: (f: string) => { consulta.or = f; return b; },
         order: (c: string, o?: { ascending?: boolean }) => { consulta.orden.push([c, o?.ascending !== false]); return b; },
         range: (d: number, h: number) => { consulta.rango = [d, h]; return b; },
@@ -101,6 +102,20 @@ describe('GET /v1/liquidaciones', () => {
     await pedir('?revision=todas');
     expect(consulta.eq).toEqual([['tenant_id', 't-1']]);
     expect(consulta.in).toEqual([]);
+  });
+
+  // ARQUITECTURA 25 (ALTO) — antes de este arreglo, `sin_rechazadas` era
+  // válido en `/api/export/liquidaciones` (el CSV) y 400 aquí, aunque las
+  // dos rutas contestan la misma pregunta («¿qué revisiones entran?»). El
+  // vocabulario ahora es uno solo (`lib/likida/revision.ts`).
+  it('`?revision=sin_rechazadas` — el mismo valor que acepta el CSV — ya no es 400 aquí', async () => {
+    filas = [fila(1, 'pendiente')];
+    const r = await pedir('?revision=sin_rechazadas');
+    expect(r.status).toBe(200);
+    expect(consulta.neq).toEqual([['revision', 'rechazada']]);
+    const cuerpo = await r.json() as { filtro: { revision: string; significado: string } };
+    expect(cuerpo.filtro.revision).toBe('sin_rechazadas');
+    expect(cuerpo.filtro.significado).toMatch(/rechazad/);
   });
 
   it('un `?revision=` desconocido es 400 — no se recorta en silencio al default', async () => {
