@@ -55,7 +55,7 @@ describe('PRU-1: la fuga de FINANZAS_RLS reprueba, no queda «sin calificar»', 
 describe('PRU-1: los 19 `raise` reescritos se alinean clave por clave', () => {
   const NOMBRES = [
     'CLAIM ', 'FINANZAS_RLS', 'INDICE_FACTURACION', 'INDICES_PAGINACION', 'RESUMEN_COSTO_IA',
-    'FALTA_PARA_OPERAR', 'RESUMEN_POR_TENANT', '45 ', '48 ', '49 ', '52 ', 'RETENCION_0104',
+    'FALTA_PARA_OPERAR', 'RESUMEN_POR_TENANT', '45 ', '48 ', '49 ', '50 ', '52 ', 'RETENCION_0104',
     'DESGLOSE_0106', 'REGISTRO_0154', 'FISCAL_AGREGADO_0151', 'AGREGADOS_0150', 'PURGAS_0155',
     'RPCS_0159', 'STRIPE_0163',
   ];
@@ -92,5 +92,54 @@ describe('PRU-1: los 19 `raise` reescritos se alinean clave por clave', () => {
     const runner = readFileSync('scripts/ci/correr-verificaciones.mjs', 'utf8');
     expect(runner).not.toMatch(/const SIN_CALIFICAR_CONOCIDOS\s*=/);
     expect(runner).toMatch(/if \(sinCalificar > 0\) \{[\s\S]*?process\.exit\(1\)/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25 · PRU-ALTO1 — el bloque 50 traía CUATRO grupos `(esperado …)`
+// intercalados (el único de los 226 con más de uno): `partirEnClavesYEsperado`
+// solo lee el PRIMER `(esperado`, así que las tres mediciones restantes caían
+// dentro del "valor esperado" del primer grupo como un solo string con
+// espacios → comodín de prosa → `ok: true` incondicional. Medido contra
+// Postgres 16 real: con las CUATRO mediciones rotas (`quedan=999`, las dos
+// constraints desvalidadas, la falsificación sin FK que no reprodujo la fuga)
+// el bloque calificaba `✓ ok`.
+//
+// El arreglo está en `verificaciones.sql`, no aquí: el `raise` se reescribió
+// a la forma de los otros 17 bloques con FALSIFICACIÓN (un solo `(esperado
+// …)` al final, cada valor real en su propio `%`). Esta prueba fija esa
+// forma leyendo el bloque real del archivo y calificándolo con los valores
+// medidos — sanos y rotos — para que una futura reescritura no reintroduzca
+// el grupo múltiple.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('PRU-ALTO1: el bloque 50 (candado del viaje) reprueba con sus valores medidos mal', () => {
+  const sql = readFileSync('supabase/verificaciones.sql', 'utf8');
+  const bloque50 = extraerBloques(sql, 'verificaciones.sql').find((b) => /raise exception E'50 /.test(b.sql));
+
+  it('el bloque existe y trae un solo grupo `(esperado …)`', () => {
+    expect(bloque50, 'no encontré el bloque 50').toBeDefined();
+    const m = bloque50!.sql.match(/\(esperado/g) ?? [];
+    expect(m.length, 'volvió a tener más de un grupo (esperado …)').toBe(1);
+  });
+
+  /** Sustituye los `%` del `raise` del bloque 50 en orden, como psql. */
+  function mensajeBloque50(valores: string[]): string {
+    const m = /raise exception E'((?:[^'\\]|\\.)*)'/.exec(bloque50!.sql);
+    if (!m) throw new Error('bloque 50 sin raise');
+    let i = 0;
+    return m[1].replace(/\\n/g, ' ').replace(/%/g, () => valores[i++]).replace(/\s+/g, ' ').trim();
+  }
+
+  it('sano (candado borrado con su viaje, las dos constraints validadas): ok', () => {
+    const r = calificar(mensajeBloque50(['0', 't', 't', '1', 'f']));
+    expect(r.tipo).toBe('ok');
+  });
+
+  it('roto — los valores medidos de la auditoría 25 (candado huérfano sobrevive, constraints sin validar): falla, con las tres claves reales señaladas', () => {
+    const r = calificar(mensajeBloque50(['999', 'f', 'f', '0', 't']));
+    expect(r.tipo).toBe('falla');
+    expect(r.falla?.map((f: { clave: string }) => f.clave).sort()).toEqual(
+      ['candado-borrado-con-el-viaje', 'viaje_ingreso_no_negativo', 'viaje_km_sanos'].sort(),
+    );
   });
 });
