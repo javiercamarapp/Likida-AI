@@ -113,6 +113,24 @@
   --warnbg: #fbf3e0;
   --bad: #b91c1c;
   --badbg: #fbeaea;
+
+  /* Colores de CATEGORÍA (no de magnitud) — la columna «Región» de
+     top-rutas.tsx: siete regiones, un color cada una, sin orden de
+     magnitud entre ellas. Auditoría 25, MEDIO: antes eran hex fijos
+     dentro del componente (`Record<string,string>` en un .tsx), invisibles
+     para contraste.test.ts (que solo lee este archivo) — y reprobaban AA:
+     el mismo tono pintado como tinta Y, al 12%, como fondo de su propia
+     píldora. Medidos contra ese fondo COMPUESTO (el tono mezclado 12% con
+     --surface, no --surface a secas — ver contraste.test.ts), no contra
+     --surface: --surface a secas los deja pasar de sobra pero no es lo que
+     de verdad se pinta detrás del texto. */
+  --region-centro: #7c2d12;
+  --region-occidente: #1d4ed8;
+  --region-noreste: #166534;
+  --region-noroeste: #6d28d9;
+  --region-golfo: #155e75;
+  --region-sureste: #9a3412;
+  --region-sur: #be123c;
 }
 
 /* Antes había un `@media (prefers-color-scheme: dark)` aquí que cambiaba el
@@ -147,6 +165,13 @@
   --ok: #4ade80;  --okbg: #132a1d;
   --warn: #fbbf24; --warnbg: #2b230f;
   --bad: #f87171; --badbg: #2b1517;
+  --region-centro: #fb923c;
+  --region-occidente: #60a5fa;
+  --region-noreste: #4ade80;
+  --region-noroeste: #a78bfa;
+  --region-golfo: #67e8f9;
+  --region-sureste: #fdba74;
+  --region-sur: #fb7185;
   /* La sombra difusa no existe sobre negro: el relieve lo dan las hairlines. */
   --shadow-card: 0 0 0 1px rgba(255,255,255,0.02);
   --shadow-pop: 0 0 0 1px rgba(255,255,255,0.03);

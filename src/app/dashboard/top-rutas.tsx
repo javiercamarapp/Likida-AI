@@ -5,14 +5,20 @@ import type { RutaConRegion } from '@/lib/likida/analytics';
  *  por lo demás es naranja monocromo: la región es una categoría, no una
  *  magnitud, y siete tonos de naranja no se distinguen entre sí a simple
  *  vista. `null` (sin clasificar) usa el gris neutro de `--muted`, nunca
- *  un color que sugiera una región que no se pudo confirmar. */
-const COLOR_REGION: Record<string, string> = {
-  Centro: '#c2410c', Occidente: '#0369a1', Noreste: '#15803d',
-  Noroeste: '#7c3aed', Golfo: '#0891b2', Sureste: '#b45309', Sur: '#be123c',
+ *  un color que sugiera una región que no se pudo confirmar.
+ *
+ *  Los colores viven como TOKENS en globals.css (`--region-*`), con pareja
+ *  clara/oscura medida contra AA — no como hex aquí. Un hex en línea es
+ *  invisible para `contraste.test.ts` y no cambia con el tema (auditoría
+ *  25, MEDIO). */
+const VAR_REGION: Record<string, string> = {
+  Centro: '--region-centro', Occidente: '--region-occidente', Noreste: '--region-noreste',
+  Noroeste: '--region-noroeste', Golfo: '--region-golfo', Sureste: '--region-sureste', Sur: '--region-sur',
 };
 
 function colorDe(region: string | null): string {
-  return region ? (COLOR_REGION[region] ?? 'var(--muted)') : 'var(--muted)';
+  const v = region ? VAR_REGION[region] : undefined;
+  return v ? `var(${v})` : 'var(--muted)';
 }
 
 /**
