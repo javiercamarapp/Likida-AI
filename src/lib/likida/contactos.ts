@@ -139,15 +139,22 @@ export const ORDEN_AVISO_DINERO: RolOficina[] = ['flota_admin', 'contador'];
  *  dinero tiene teléfono capturado — y entonces no se manda a nadie, nunca
  *  al encargado "por lo menos". */
 export async function telefonoParaDineroDe(tenantId: string): Promise<string | null> {
+  // AUDITORÍA 25, CRÍTICO (AGEN-C1): `activo`, igual que en la ENTRADA.
+  // El arreglo de la 24 cerró `resolverCuentaOficina` y dejó abierta la salida:
+  // `desactivarUsuario` escribe `activo=false` pero NO borra el teléfono, así
+  // que esta consulta seguía encontrándolo y por aquí salen las CIFRAS del
+  // cierre y el ejemplar del CONTRALOR. Mismas dos capas y misma regla que
+  // arriba: solo el `false` explícito da de baja.
   const { data, error } = await acotada(supabaseAdmin()
     .from('app_user')
-    .select('rol, telefono')
+    .select('rol, telefono, activo')
     .eq('tenant_id', tenantId)
     .in('rol', ORDEN_AVISO_DINERO)
+    .or('activo.is.null,activo.eq.true')
     .not('telefono', 'is', null), 'telefonoParaDineroDe');
   if (error) throw new Error(`telefonoParaDineroDe: ${error.message}`);
   for (const rol of ORDEN_AVISO_DINERO) {
-    const u = (data ?? []).find((f) => f.rol === rol && f.telefono);
+    const u = (data ?? []).find((f) => f.rol === rol && f.telefono && f.activo !== false);
     if (u) return u.telefono as string;
   }
   return null;
@@ -170,11 +177,16 @@ export async function telefonosJefe(tenantIds: string[]): Promise<Record<string,
   if (ids.length === 0) return {};
 
   // AUDITORÍA 18, ALTO (A23): con techo — `telefonoJefeDe` corre en el cierre.
+  // AUDITORÍA 25, CRÍTICO (AGEN-C1): `activo`, por la misma razón que arriba.
+  // Por este mapa salen los ~20 avisos operativos (escalación de viajes, la
+  // talacha con botones de autorizar, la carta porte, los relojes legales): un
+  // ex-empleado no puede seguir recibiéndolos ni autorizando desde ellos.
   const { data, error } = await acotada(supabaseAdmin()
     .from('app_user')
-    .select('tenant_id, rol, telefono')
+    .select('tenant_id, rol, telefono, activo')
     .in('tenant_id', ids)
     .in('rol', ROLES_OFICINA_CONSULTA)
+    .or('activo.is.null,activo.eq.true')
     .not('telefono', 'is', null), 'telefonosJefe');
 
   if (error) throw new Error(`telefonosJefe: ${error.message}`);
@@ -187,7 +199,7 @@ export async function telefonosJefe(tenantIds: string[]): Promise<Record<string,
   for (const tenantId of ids) {
     const orden = ordenPorTenant[tenantId] ?? ORDEN_AVISO;
     for (const rol of orden) {
-      const u = (data ?? []).find((f) => f.tenant_id === tenantId && f.rol === rol && f.telefono);
+      const u = (data ?? []).find((f) => f.tenant_id === tenantId && f.rol === rol && f.telefono && f.activo !== false);
       if (u) { mapa[tenantId] = u.telefono as string; break; }
     }
   }

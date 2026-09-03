@@ -23,7 +23,7 @@ function builder() {
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => builder() }) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { resolverCuentaOficina, TelefonoAmbiguo, telefonoJefeDe } = await import('./contactos');
+const { resolverCuentaOficina, TelefonoAmbiguo, telefonoJefeDe, telefonoParaDineroDe, telefonosJefe } = await import('./contactos');
 
 beforeEach(() => { TABLAS.app_user = []; errorSiguiente = null; });
 
@@ -96,5 +96,68 @@ describe('resolverCuentaOficina — quién es el teléfono', () => {
 
   it('telefonoJefeDe devuelve null sin jefe asignado', async () => {
     expect(await telefonoJefeDe('t-1')).toBeNull();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25 · AGEN-C1 — LA BAJA CERRABA LA ENTRADA Y DEJABA ABIERTA LA SALIDA.
+//
+// El hallazgo de la 24 (AGEN-1) nombraba TRES resolutores de "a qué número se
+// le escribe". El arreglo `70dd5c6` tocó UNO: `resolverCuentaOficina`, la
+// puerta de ENTRADA. Las dos de SALIDA que viven en este archivo siguieron
+// preguntando por `tenant_id` y `rol` sin mirar `activo`, y `desactivarUsuario`
+// (`usuarios_escritura.ts:191`) escribe `activo=false` pero NO borra
+// `app_user.telefono`: el número se queda ahí para que estas consultas lo
+// encuentren.
+//
+// Escenario medido: a la contadora dada de baja el viernes le seguían saliendo,
+// el lunes, el texto con anticipo/comprobado/diferencia y el `sendDocument` del
+// ejemplar del CONTRALOR (RFC, folios y los veredictos SOLO_CONTRALOR).
+//
+// El caso canónico es el CONTADOR, no el dueño: `usuarios_escritura.ts:186`
+// impide dar de baja al ÚNICO `flota_admin` activo, pero no hay guarda análoga
+// para `contador` — y con dos dueños el `.find()` puede quedarse igual con la
+// fila de baja, porque el orden de las filas no está definido.
+//
+// Misma regla que la 24 y por la misma razón: solo el `false` EXPLÍCITO da de
+// baja. Una fila sin la columna (base sin la 0294) sigue entrando; la columna
+// nueva no puede dejar sin avisos a toda la base.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('AGEN-C1 · la salida también respeta la baja', () => {
+  const c = (p: Record<string, unknown>) => ({ tenant_id: 't-1', rol: 'contador', telefono: '5219993700779', ...p });
+
+  it('telefonoParaDineroDe NO devuelve el teléfono de una cuenta dada de baja', async () => {
+    TABLAS.app_user = [c({ activo: false })];
+    expect(await telefonoParaDineroDe('t-1')).toBeNull();
+  });
+
+  it('telefonoParaDineroDe prefiere la cuenta VIVA aunque la de baja venga primero', async () => {
+    // Sin el filtro, `.find()` se queda con la primera fila del rol y manda las
+    // cifras del cierre al ex-empleado teniendo al contador vivo al lado.
+    TABLAS.app_user = [
+      c({ rol: 'flota_admin', telefono: '5219990000001', activo: false }),
+      c({ rol: 'flota_admin', telefono: '5219990000002', activo: true }),
+    ];
+    expect(await telefonoParaDineroDe('t-1')).toBe('5219990000002');
+  });
+
+  it('telefonoParaDineroDe sigue funcionando con la columna ausente (base sin la 0294)', async () => {
+    TABLAS.app_user = [c({})];
+    expect(await telefonoParaDineroDe('t-1')).toBe('5219993700779');
+  });
+
+  it('telefonosJefe deja la flota FUERA del mapa si su único contacto está de baja', async () => {
+    // Incompleto, no inventado: quien llama ya trata la ausencia como "no hay a
+    // quién avisar". Meter al de baja es peor que no tener a nadie.
+    TABLAS.app_user = [c({ rol: 'encargado', activo: false })];
+    expect(await telefonosJefe(['t-1'])).toEqual({});
+  });
+
+  it('telefonosJefe salta al siguiente rol del orden cuando el primero está de baja', async () => {
+    TABLAS.app_user = [
+      c({ rol: 'encargado', telefono: '5219990000003', activo: false }),
+      c({ rol: 'flota_admin', telefono: '5219990000004', activo: true }),
+    ];
+    expect(await telefonosJefe(['t-1'])).toEqual({ 't-1': '5219990000004' });
   });
 });
