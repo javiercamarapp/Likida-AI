@@ -1081,11 +1081,16 @@ async function entregarCierrePendiente(op: ResolvedOperador, telefono: string, l
         else urlPdfJefe = firma.data.signedUrl;
       }
       const rj = await avisarCierreAlJefe({ tenantId: op.tenantId, viajeId: liq.viajeId, urlPdf: urlPdfJefe, telefonoOperador: telefono });
-      if (rj.enviado) {
+      // AUDITORÍA 25 (MEDIO, agentico.md:526): mismo candado que el camino
+      // feliz — si había PDF del contralor (`liq.pdfUrl`) y no llegó, no se
+      // sella. Ésta es precisamente la reentrega (AGEN-4): si sella aquí sin
+      // el PDF, ya no queda ningún turno futuro que lo reintente.
+      const pdfJefeOk = !liq.pdfUrl || rj.pdfEnviado === true;
+      if (rj.enviado && pdfJefeOk) {
         await sellarEntregaLiquidacion(op.tenantId, liq.liquidacionId, 'avisada_oficina_en');
         jefe = 'avisado';
       } else {
-        logger.warn('cierre.jefe_no_avisado', { ...ctx, motivo: rj.motivo });
+        logger.warn('cierre.jefe_no_avisado', { ...ctx, motivo: rj.motivo, pdfJefeOk });
         jefe = 'fallo';
       }
     } catch (e) {
@@ -4343,7 +4348,17 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           }
         }
         const rj = await avisarCierreAlJefe({ tenantId: op.tenantId, viajeId, urlPdf: urlPdfJefe, telefonoOperador: msg.from });
+        // AUDITORÍA 25 (MEDIO, agentico.md:526): antes se sellaba con solo
+        // `rj.enviado` — que es "el TEXTO salió", no "el jefe tiene su
+        // PDF". Si había un PDF del contralor y no llegó (createSignedUrl
+        // falló arriba, o `sendDocument` falló dentro de
+        // `avisarCierreAlJefe`), el sello se ponía igual y
+        // `entregarCierrePendiente` nunca volvía a intentar el PDF: el
+        // ejemplar que el contralor necesita para su contador se perdía
+        // para siempre detrás de un sello que decía "ya avisado".
+        const pdfJefeOk = !pdfContralorGenerado || rj.pdfEnviado === true;
         if (!rj.enviado) logger.warn('cierre.jefe_no_avisado', { viaje: viajeId, motivo: rj.motivo });
+        else if (!pdfJefeOk) logger.warn('cierre.jefe_avisado_sin_pdf', { viaje: viajeId, teniaUrlFirmada: urlPdfJefe != null });
         // AGEN-4: sello — el reintento de un «listo» no vuelve a avisar.
         else await sellarEntregaLiquidacion(op.tenantId, liqIdCerrada, 'avisada_oficina_en');
       } catch (e) {
