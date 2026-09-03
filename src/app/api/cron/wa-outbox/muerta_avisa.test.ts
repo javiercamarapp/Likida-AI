@@ -87,6 +87,25 @@ describe('el outbox avisa cuando una salida MUERE, no en cualquier fallo', () =>
     vi.unstubAllGlobals();
   });
 
+  it('MEDIO-278 (auditoría 25, REINCIDENTE): un 200 sin wamid es Meta ACEPTANDO — se marca sent, no se reencola', async () => {
+    reclamarSalidasWhatsApp.mockResolvedValue([salida('e')]);
+    finalizarSalidaWhatsApp.mockResolvedValue({ muerta: false });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ messages: [] }), { status: 200 })));
+
+    const r = await GET(peticion());
+    const body = await r.json() as { fallidas: number; enviadas: number };
+
+    expect(alertarOperador).not.toHaveBeenCalled();
+    expect(body.fallidas).toBe(0);
+    expect(body.enviadas).toBe(1);
+    // Nunca se manda con `undefined`/vacío: eso reencolaría por la RPC
+    // (`p_message_id is null` → 'pending'/'dead'), duplicando un envío que
+    // Meta ya aceptó.
+    expect(finalizarSalidaWhatsApp).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'e' }), expect.stringMatching(/^sin_wamid:/), undefined);
+    vi.unstubAllGlobals();
+  });
+
   it('un HTTP de error de Meta que SÍ agota reintentos: avisa', async () => {
     reclamarSalidasWhatsApp.mockResolvedValue([salida('d')]);
     finalizarSalidaWhatsApp.mockResolvedValue({ muerta: true });
