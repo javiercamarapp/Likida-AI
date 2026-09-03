@@ -14,7 +14,9 @@ function builder() {
   // `or` entra con AGEN-1: el filtro de la baja va también en la base. El doble
   // devuelve la tabla entera igual que con los demás encadenados, así que lo que
   // las pruebas de abajo ejercen es la capa de TS — que es donde vive la regla.
-  for (const m of ['select', 'in', 'limit', 'eq', 'not', 'or']) b[m] = self;
+  // `range`/`order` entran con el BAJO de la reauditoría 25 (`telefonosJefe`
+  // ahora pasa por `traerTodo`) — mismo motivo, no-op en el doble.
+  for (const m of ['select', 'in', 'limit', 'eq', 'not', 'or', 'range', 'order']) b[m] = self;
   b.then = (ok: (v: unknown) => unknown) => Promise.resolve({
     data: errorSiguiente ? null : (TABLAS.app_user ?? []), error: errorSiguiente,
   }).then(ok);
@@ -22,10 +24,25 @@ function builder() {
 }
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => builder() }) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+// `telefonosJefe` (BAJO, reauditoría 25) pasa por `traerTodo` para no
+// recortarse en silencio a 1,000 filas. Se mockea como UN solo viaje —la
+// paginación real de `pg.ts` tiene su propia suite (`pg.test.ts`)— para que
+// estas pruebas sigan ejerciendo el filtro de `activo`, no la paginación; y
+// como `vi.fn` para poder comprobar que `telefonosJefe` de verdad pasa por
+// aquí y no por un `.limit()` a secas.
+const traerTodo = vi.hoisted(() => vi.fn(async (
+  construir: (desde: number, hasta: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>,
+  consulta: string,
+) => {
+  const { data, error } = await construir(0, 999);
+  if (error) throw new Error(`${consulta}: ${error.message}`);
+  return data ?? [];
+}));
+vi.mock('./pg', () => ({ traerTodo }));
 
 const { resolverCuentaOficina, TelefonoAmbiguo, telefonoJefeDe, telefonoParaDineroDe, telefonosJefe } = await import('./contactos');
 
-beforeEach(() => { TABLAS.app_user = []; errorSiguiente = null; });
+beforeEach(() => { TABLAS.app_user = []; errorSiguiente = null; traerTodo.mockClear(); });
 
 describe('resolverCuentaOficina — quién es el teléfono', () => {
   const u = (p: Record<string, unknown>) => ({ id: 'u-1', tenant_id: 't-1', rol: 'encargado', nombre: 'Ana', email: 'ana@x.mx', telefono: '529991234567', ...p });
@@ -166,5 +183,22 @@ describe('AGEN-C1 · la salida también respeta la baja', () => {
       c({ rol: 'flota_admin', telefono: '5219990000004', activo: true }),
     ];
     expect(await telefonosJefe(['t-1'])).toEqual({ 't-1': '5219990000004' });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BAJO (reauditoría 25) — `telefonosJefe` no tenía techo de filas.
+// `escalar_viaje.ts` la llama con TODOS los tenants que tienen viajes
+// vencidos en una corrida; sin `traerTodo` (o `.limit()`), PostgREST recorta
+// a 1,000 filas EN SILENCIO y las flotas fuera del corte desaparecen del mapa
+// como si no tuvieran contacto (CLAUDE.md: "PostgREST recorta a 1,000 filas
+// en silencio" — la trampa que este archivo evita en el resto de sus
+// consultas desde la auditoría 18/A23).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('BAJO (reauditoría 25) · telefonosJefe pagina en vez de recortarse en silencio', () => {
+  it('la consulta pasa por `traerTodo`, no por un `.limit()` a secas', async () => {
+    TABLAS.app_user = [{ tenant_id: 't-1', rol: 'flota_admin', telefono: '5219990000005', activo: true }];
+    await telefonosJefe(['t-1']);
+    expect(traerTodo).toHaveBeenCalledWith(expect.any(Function), 'telefonosJefe');
   });
 });
