@@ -86,4 +86,18 @@ describe('la ventana de despliegue (0280 sin aplicar) NO abre el mutex', () => {
     expect(await intentarLockViaje('v1', { maxWaitMs: 2000 })).toBe('obtenido');
     expect(logger.error).toHaveBeenCalledWith('viaje.lock_rpc_ausente', expect.anything());
   });
+
+  it('ALT-151 (auditoría 25, REINCIDENTE): si la SEGUNDA llamada (sin token) también falla, NO se abre el mutex', async () => {
+    // Falta la firma de tres argumentos (ventana de despliegue) y el
+    // reintento sin token se topa con un error TRANSITORIO (timeout, pool
+    // agotado) — no con "función ausente". Antes esto caía por gravedad al
+    // `return 'obtenido'`: el mutex se concedía sobre una base que no
+    // contestó dos veces seguidas.
+    const timeout = { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } };
+    // Primera llamada: sinFirmaNueva. Todas las siguientes: timeout.
+    rpc.mockResolvedValueOnce(sinFirmaNueva).mockResolvedValue(timeout);
+    const r = await intentarLockViaje('v1', { token: 'tok-1', maxWaitMs: 300 });
+    expect(r).toBe('indeterminado');
+    expect(logger.error, 'no debe fallar abierto').not.toHaveBeenCalledWith('viaje.lock_rpc_ausente', expect.anything());
+  });
 });

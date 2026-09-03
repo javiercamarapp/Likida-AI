@@ -859,11 +859,29 @@ export async function intentarLockViaje(viajeId: string, opts?: { ttlMs?: number
             logger.warn('viaje.lock_sin_token', { nota: 'la 0280 no está aplicada; el lease queda sin dueño' });
             return 'obtenido';
           }
-          if (!viejo.error) { ultimoError = null; }
-          else { ultimoError = viejo.error; }
           if (!viejo.error) {
             // Existía y está OCUPADO: el bucle sigue como siempre.
+            ultimoError = null;
             if (Date.now() - start >= maxWaitMs) return 'ocupado';
+            await sleep(delay);
+            delay = Math.min(delay * 2, 1500);
+            continue;
+          }
+          // ALT-151 (auditoría 25, REINCIDENTE): la SEGUNDA llamada (sin
+          // token) también falló. Antes esto caía por gravedad al
+          // `return 'obtenido'` de abajo — abriendo el mutex sobre una base
+          // que no contestó dos veces seguidas. Si el error de la segunda
+          // llamada es OTRO "función ausente" (las dos firmas faltan, no solo
+          // la de tres argumentos), sí es el caso legítimo de "no hay mutex
+          // desplegado" y se abre igual que antes. Cualquier otro error es
+          // TRANSITORIO: se trata como el resto del bucle, sin abrir nada.
+          if (!rpcAusente(viejo.error)) {
+            ultimoError = viejo.error;
+            logger.warn('viaje.lock_error_transitorio', { code: viejo.error.code, msg: viejo.error.message });
+            if (Date.now() - start >= maxWaitMs) {
+              logger.error('viaje.lock_error_persistente', { code: viejo.error.code, msg: viejo.error.message });
+              return 'indeterminado';
+            }
             await sleep(delay);
             delay = Math.min(delay * 2, 1500);
             continue;

@@ -506,18 +506,26 @@ export async function marcarExportadas(tenantId: string, ids: string[]): Promise
   let marcadas = 0;
   for (let i = 0; i < ids.length; i += IDS_POR_TANDA) {
     const tanda = ids.slice(i, i + IDS_POR_TANDA);
-    const { error } = await acotada(supabaseAdmin()
+    // BAJO-290 (auditoría 25, REINCIDENTE): se cuenta lo que el `update`
+    // DEVOLVIÓ (`.select('id')`), no el tamaño de la tanda — el mismo
+    // contraejemplo que `importarViajes`. Sin esto, una tanda con ids que ya
+    // traían `exportada_en` (el `.is(...,null)` de arriba las excluye del
+    // update pero no del conteo) reportaba «marcadas: 400» habiendo marcado
+    // 280, y el aviso «no se pudo marcar N de M» del CSV mide una resta que
+    // nunca ocurrió.
+    const { data, error } = await acotada(supabaseAdmin()
       .from('factura_proveedor')
       .update({ exportada_en: sello })
       .eq('tenant_id', tenantId)
       .eq('estado', 'aprobada')
       .is('exportada_en', null)
-      .in('id', tanda), 'proveedores.marcar_exportadas');
+      .in('id', tanda)
+      .select('id'), 'proveedores.marcar_exportadas');
     if (error) {
       logger.error('proveedores.marcar_exportadas_fallo', { tenantId, err: error.message, marcadas, pendientes: ids.length - marcadas });
       return { error: error.message, marcadas };
     }
-    marcadas += tanda.length;
+    marcadas += (data ?? []).length;
   }
   return { marcadas };
 }

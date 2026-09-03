@@ -19,6 +19,7 @@ const telefonoParaDineroDe = vi.hoisted(() => vi.fn(async () => '5210000000002')
 const anotarEventoIncidencia = vi.hoisted(() => vi.fn(async () => 'anotado' as const));
 const tablas = vi.hoisted(() => ({
   respuestas: new Map<string, unknown[]>(),
+  errores: new Map<string, { message: string }>(),
   upserts: [] as Array<{ tabla: string; filas: unknown }>,
   llamadas: [] as Array<{ tabla: string; metodo: string; args: unknown[] }>,
 }));
@@ -50,7 +51,11 @@ vi.mock('@/lib/supabase/admin', () => ({
       };
       const api: Record<string, unknown> = {
         upsert: (filas: unknown) => { tablas.upserts.push({ tabla, filas }); return Promise.resolve({ error: null }); },
-        maybeSingle: () => Promise.resolve({ data: (tablas.respuestas.get(tabla) ?? [])[0] ?? null, error: null }),
+        maybeSingle: () => Promise.resolve(
+          tablas.errores.has(tabla)
+            ? { data: null, error: tablas.errores.get(tabla) }
+            : { data: (tablas.respuestas.get(tabla) ?? [])[0] ?? null, error: null },
+        ),
         range: (d: number, h: number) => { rango = [d, h]; return api; },
         limit: (n: number) => { tope = n; tablas.llamadas.push({ tabla, metodo: 'limit', args: [n] }); return api; },
         then: (res: (v: unknown) => unknown) => Promise.resolve(respuesta()).then(res),
@@ -71,6 +76,7 @@ const {
 
 beforeEach(() => {
   tablas.respuestas.clear();
+  tablas.errores.clear();
   tablas.upserts.length = 0;
   tablas.llamadas.length = 0;
   sendText.mockClear();
@@ -361,6 +367,23 @@ describe('avisarRelojesLegales — los relojes colgados de una incidencia', () =
     expect(r.avisadas).toBe(0);
     expect(sendText).not.toHaveBeenCalled();
     expect(anotarEventoIncidencia).toHaveBeenCalledWith('t1', 'i1', 'reloj_legal_avisado', { aviso: 'sin_relojes_aplicables' });
+  });
+
+  it('ALT-176 (auditoría 25, REINCIDENTE): un blip leyendo el perfil NO sella "sin_relojes_aplicables" — cuenta como fallo y reintenta', async () => {
+    tablas.respuestas.set('incidencia', [inc('siniestro')]);
+    tablas.respuestas.set('incidencia_evento', []);
+    tablas.respuestas.set('viaje', [{ folio: 'V-9' }]);
+    tablas.respuestas.set('factura_emitida', []);
+    tablas.respuestas.set('factura_viaje', []);
+    tablas.errores.set('tenant', { message: 'fetch failed' });
+
+    const r = await avisarRelojesLegales(new Date('2026-08-26T18:00:00Z'));
+    expect(r.avisadas).toBe(0);
+    expect(r.fallos).toBe(1);
+    expect(sendText).not.toHaveBeenCalled();
+    // NO debe sellar: si sella, la próxima corrida lo descarta por el
+    // anti-join y el aviso real (si hazmat era `true`) nunca sale.
+    expect(anotarEventoIncidencia).not.toHaveBeenCalled();
   });
 
   it('la flota que declaró hazmat recibe los relojes matpel por el canal del JEFE', async () => {

@@ -334,17 +334,20 @@ async function facturaEmitidaDelViaje(tenantId: string, viajeId: string): Promis
   return null;
 }
 
+/** ALT-176 (auditoría 25, REINCIDENTE): antes tragaba el `error` de
+ *  supabase-js y devolvía `null` — el MISMO valor que "la flota no declaró
+ *  hazmat". `avisarRelojesDeIncidencia` no distingue esos dos casos, así que
+ *  un blip de red sellaba `sin_relojes_aplicables` PARA SIEMPRE (el anti-join
+ *  de sellos lo descarta en cada corrida futura). Ahora se LANZA ante
+ *  `error`, igual que la hermana `facturaEmitidaDelViaje`: el `try/catch` de
+ *  `avisarRelojesLegales` lo cuenta como `fallos` y reintenta en la próxima
+ *  corrida, en vez de sellar. */
 async function flotaDeclaraHazmat(tenantId: string): Promise<boolean | null> {
-  try {
-    const { data } = await acotada(supabaseAdmin()
-      .from('tenant').select('perfil')
-      .eq('id', tenantId).maybeSingle(), 'relojes.hazmat');
-    return hazmatDeclarado(data?.perfil ?? null);
-  } catch (e) {
-    // Fail-closed del reloj: sin poder leer el perfil no se afirma hazmat.
-    logger.warn('relojes.hazmat_ilegible', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
-    return null;
-  }
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('tenant').select('perfil')
+    .eq('id', tenantId).maybeSingle(), 'relojes.hazmat');
+  if (error) throw new Error(`relojes.hazmat: ${error.message}`);
+  return hazmatDeclarado(data?.perfil ?? null);
 }
 
 // ── 4. Vencimientos de flota: 30/7/0 días, un aviso por umbral ─────────────
