@@ -169,7 +169,7 @@ export async function GET(req: NextRequest) {
   // con `atras > 0`.
   const migracion = db === 'ok'
     ? await cotejarMigracion(() => acotada(supabaseAdmin().rpc('migraciones_aplicadas'), 'health.migracion'))
-    : { base: null, codigo: null, atras: null, motivo: 'base caída: no se cotejó' };
+    : { base: null, codigo: null, atras: null, aplicados: null, motivo: 'base caída: no se cotejó' };
   if (migracion.atras !== 0) {
     logger.error('health.migracion', { base: migracion.base, codigo: migracion.codigo, atras: migracion.atras, motivo: migracion.motivo });
   }

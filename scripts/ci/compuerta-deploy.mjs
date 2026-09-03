@@ -34,13 +34,20 @@ import { pathToFileURL } from 'node:url';
 
 export const HEALTH_URL = 'https://app.likida.ai/api/health';
 
+/** TODOS los prefijos de cuatro dígitos en `supabase/migrations` (sin repetir, ordenados). */
+export function prefijosMigraciones(dir = 'supabase/migrations') {
+  const vistos = new Set(
+    readdirSync(dir)
+      .map((f) => /^(\d{4})_.*\.sql$/.exec(f)?.[1])
+      .filter((p) => p !== undefined),
+  );
+  if (vistos.size === 0) throw new Error(`${dir} sin migraciones`);
+  return [...vistos].sort();
+}
+
 /** El prefijo de cuatro dígitos más alto en `supabase/migrations`. */
 export function ultimaMigracion(dir = 'supabase/migrations') {
-  const prefijos = readdirSync(dir)
-    .map((f) => /^(\d{4})_.*\.sql$/.exec(f)?.[1])
-    .filter((p) => p !== undefined)
-    .sort();
-  if (prefijos.length === 0) throw new Error(`${dir} sin migraciones`);
+  const prefijos = prefijosMigraciones(dir);
   return prefijos[prefijos.length - 1];
 }
 
@@ -50,10 +57,13 @@ function siguiente(prefijo) {
 
 /**
  * PURA. `asunto` = primera línea del commit; `codigo` = última migración del
- * repo; `health` = el JSON de /api/health, o `null` si no se pudo leer.
- * Devuelve `{ construir, nivel: 'ok'|'aviso'|'error', motivo }`.
+ * repo; `prefijosCodigo` = TODOS los prefijos del repo (para el cotejo por
+ * CONJUNTO, no por máximo — ver el comentario de arriba y `Migracion.aplicados`
+ * en `src/app/api/health/migracion.ts`); `health` = el JSON de /api/health, o
+ * `null` si no se pudo leer. Devuelve `{ construir, nivel: 'ok'|'aviso'|'error', motivo }`.
+ * @param {{ asunto: string, codigo: string, prefijosCodigo?: string[] | null, health: unknown }} p
  */
-export function decidir({ asunto, codigo, health }) {
+export function decidir({ asunto, codigo, prefijosCodigo = null, health }) {
   const primera = String(asunto ?? '').split('\n')[0];
   if (!/\[deploy(?::forzar)?\]/i.test(primera)) {
     return { construir: false, nivel: 'ok', motivo: 'el asunto no lleva [deploy]: este push NO construye a propósito (vercel.json).' };
@@ -76,6 +86,28 @@ export function decidir({ asunto, codigo, health }) {
   if (!m || typeof m !== 'object' || typeof m.base !== 'string' || !/^\d{4}$/.test(m.base)) {
     return bloquear(`la base no se pudo cotejar (${(m && m.motivo) || 'sin motivo'}).`);
   }
+
+  // ARQUITECTURA 25 (MEDIO): `base`/`codigo` son MÁXIMOS, y máximo-contra-máximo
+  // es fail-OPEN el día que una rama cortada abajo aterrice con un prefijo
+  // MENOR al que producción ya trae — `atras` sale en 0 con esa migración sin
+  // aplicar. Si el health trae el CONJUNTO completo (`m.aplicados`, desde esta
+  // ronda) y aquí tenemos el repo completo (`prefijosCodigo`), se coteja el
+  // CONJUNTO: cualquier prefijo del repo que la base no tenga aplicado
+  // bloquea, sea o no el más alto.
+  if (Array.isArray(m.aplicados) && Array.isArray(prefijosCodigo)) {
+    const aplicadosSet = new Set(m.aplicados);
+    const faltantes = prefijosCodigo.filter((p) => !aplicadosSet.has(p));
+    if (faltantes.length > 0) {
+      return bloquear(
+        `la base no tiene aplicada(s) ${faltantes.length} migración(es) del repo: ${faltantes.slice(0, 12).join(', ')}${faltantes.length > 12 ? '…' : ''}. ` +
+        'Aplícalas primero (scripts/aplicar-migraciones-y-humos.sh), confirma /api/health y vuelve a pushear con [deploy].',
+      );
+    }
+    return { construir: true, nivel: 'ok', motivo: `base ${m.base} tiene aplicado el CONJUNTO completo de migraciones del código (${prefijosCodigo.length}): se construye.` };
+  }
+
+  // Sin `m.aplicados` (health de una versión anterior a esta ronda): el
+  // cotejo débil, máximo contra máximo — se documenta que es el débil.
   const atras = Number(codigo) - Number(m.base);
   if (atras > 0) {
     return bloquear(
@@ -83,7 +115,7 @@ export function decidir({ asunto, codigo, health }) {
       'Aplícalas primero (scripts/aplicar-migraciones-y-humos.sh), confirma /api/health con migracion.atras=0 y vuelve a pushear con [deploy].',
     );
   }
-  return { construir: true, nivel: 'ok', motivo: `base ${m.base} a la par del código ${codigo}: se construye.` };
+  return { construir: true, nivel: 'ok', motivo: `base ${m.base} a la par del código ${codigo} (cotejo por máximo, health anterior a esta ronda): se construye.` };
 }
 
 function asuntoDelCommit(args) {
@@ -112,9 +144,10 @@ async function main() {
   const iUrl = args.indexOf('--health');
   const url = iUrl !== -1 && args[iUrl + 1] ? args[iUrl + 1] : HEALTH_URL;
   const asunto = asuntoDelCommit(args);
-  const codigo = ultimaMigracion();
+  const prefijosCodigo = prefijosMigraciones();
+  const codigo = prefijosCodigo[prefijosCodigo.length - 1];
   const health = await leerHealth(url);
-  const v = decidir({ asunto, codigo, health });
+  const v = decidir({ asunto, codigo, prefijosCodigo, health });
   const enActions = !!process.env.GITHUB_ACTIONS;
   const prefijo = v.nivel === 'error' ? (enActions ? '::error::' : 'ERROR: ') : v.nivel === 'aviso' ? (enActions ? '::warning::' : 'AVISO: ') : '';
   console.log(`compuerta de despliegue · asunto="${asunto.slice(0, 80)}" · código=${codigo} · base=${health?.migracion?.base ?? '?'}`);

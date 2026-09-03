@@ -394,7 +394,7 @@ describe('OP-P1: el health coteja la migración de la base contra la del código
     const r = await GET(peticion());
     const c = await r.json();
     expect(r.status).toBe(200);
-    expect(c.migracion).toEqual({ base: CODIGO, codigo: CODIGO, atras: 0 });
+    expect(c.migracion).toEqual({ base: CODIGO, codigo: CODIGO, atras: 0, aplicados: [CODIGO] });
   });
 
   it('la base va atrás: degraded, con cuántas faltan y qué aplicar', async () => {
