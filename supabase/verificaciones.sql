@@ -17197,3 +17197,24 @@ begin
   raise exception E'OPERADOR_TENANT_SET_NULL_0306  operador_id_null=%  tenant_id_intacto=%   (esperado t / t)',
     operador_id_null, tenant_id_intacto;
 end $$;
+
+-- ── 253. `tenant_perfil_merge` ya no lo puede ejecutar `anon`/`authenticated` (mig. 0308) ──
+--
+-- AUDITORÍA 25, DATOS-B2 (BAJO, REINCIDENTE DE LA 24). La 0296 solo traía
+-- `grant execute ... to service_role` — Postgres concede EXECUTE a PUBLIC por
+-- default en funciones nuevas, y Supabase además concede explícito a
+-- `anon`/`authenticated` por sus default privileges (0284:110-112). Un
+-- `grant` a `service_role` no retira eso: hacía falta el `revoke` explícito.
+-- Esperado: TENANT_PERFIL_MERGE_REVOKE_0308  anon=f  authenticated=f
+do $$
+declare
+  anon_ok boolean; authenticated_ok boolean;
+begin
+  select has_function_privilege('anon', 'public.tenant_perfil_merge(uuid, jsonb, uuid)', 'EXECUTE')
+    into anon_ok;
+  select has_function_privilege('authenticated', 'public.tenant_perfil_merge(uuid, jsonb, uuid)', 'EXECUTE')
+    into authenticated_ok;
+
+  raise exception E'TENANT_PERFIL_MERGE_REVOKE_0308  anon=%  authenticated=%   (esperado f / f)',
+    anon_ok, authenticated_ok;
+end $$;
