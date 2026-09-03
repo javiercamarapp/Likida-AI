@@ -17,9 +17,12 @@
 //     de carga NO es tasa 0 ni exento.
 //   · Retención de IVA del 4% SOLO cuando el receptor es persona MORAL:
 //     LIVA 1-A fracción II inciso c) obliga a las morales que reciben
-//     servicios de autotransporte terrestre de bienes a retener; la regla
-//     3.1.2 de la RMF fija el 4%. Persona moral = RFC de 12 caracteres
-//     (las físicas tienen 13) — es estructura del RFC, no una suposición.
+//     servicios de autotransporte terrestre de bienes a retener; la TASA del
+//     4% la fija el art. 3, fracción II del Reglamento de la LIVA (RLIVA 3-II,
+//     ficha `normas/rliva-3-fr-II.yaml` — NO la regla 3.1.2 de la RMF, que
+//     además es de ISR, no de IVA; auditoría 25, MEDIO fiscal, línea 322).
+//     Persona moral = RFC de 12 caracteres (las físicas tienen 13) — es
+//     estructura del RFC, no una suposición.
 //   · Fecha = ahora en hora de México MENOS 2 minutos: el SAT rechaza fechas
 //     futuras y los relojes de servidor difieren en segundos; dos minutos
 //     atrás siguen dentro de las 72 h que el timbre admite y nunca caen "en
