@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSessionTenant } from '@/lib/auth/session';
+import { sesionSuperadmin } from '@/lib/auth/api-superadmin';
 import { listarInterruptores, apagar, encender } from '@/lib/likida/interruptores';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { DatoInvalido } from '@/lib/likida/errores';
@@ -21,17 +21,15 @@ export const dynamic = 'force-dynamic';
 // misma que usan los server actions de /admin/observabilidad — dos puertas,
 // un solo mecanismo, una sola bitácora.
 //
-// LA PUERTA SE RE-CHEQUEA AQUÍ: las rutas /api no pasan por el layout de
-// /admin, así que este archivo es su propia puerta. Sin sesión: 401. Con
-// sesión de otro rol: 403. Ninguna de las dos dice qué hay detrás.
+// LA PUERTA: las rutas /api no pasan por el layout de /admin, así que esta
+// familia re-chequea sesión vía `@/lib/auth/api-superadmin` — la misma puerta
+// compartida de mapa-prospectos/, qa/ y copiloto/ (auditoría 25, línea 166,
+// REINCIDENTE: este archivo traía su PROPIA copia que solo comprobaba
+// `rol === 'superadmin'`, sin preguntar por el segundo factor — SEC-1/RT-1,
+// re-auditoría). Sin sesión: 401. Con sesión de otro rol: 403. Con el segundo
+// factor exigido (SEG-3) y sin verificar: 403. Ninguna respuesta dice qué hay
+// detrás.
 // ═══════════════════════════════════════════════════════════════════════════
-
-async function sesionSuperadmin() {
-  const s = await getSessionTenant();
-  if (!s) return { error: new NextResponse(null, { status: 401 }), sesion: null };
-  if (s.rol !== 'superadmin') return { error: new NextResponse(null, { status: 403 }), sesion: null };
-  return { error: null, sesion: s };
-}
 
 export async function GET() {
   const { error: puerta, sesion } = await sesionSuperadmin();
