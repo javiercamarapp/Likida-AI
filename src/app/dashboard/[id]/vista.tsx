@@ -3,7 +3,7 @@ import { AlertTriangle, Check } from 'lucide-react';
 import { StatusPill, type Estado } from '@/app/admin/ui/kit';
 import { mxn, fechaHoraMx } from '@/lib/formato';
 // Las cubetas del motor, importadas — nunca copiadas. Ver `TIPOS_MALOS` abajo.
-import { NO_DEDUCIBLE_ISR, POR_CONFIRMAR } from '@/lib/likida/cuadre/engine';
+import { NO_DEDUCIBLE_ISR, POR_CONFIRMAR, pagoPendiente } from '@/lib/likida/cuadre/engine';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS PIEZAS DEL DETALLE DE LIQUIDACIÓN v2 (22-ago-2026).
@@ -197,7 +197,7 @@ export const TIPOS_TOPE = new Set(['sobre_politica', 'viatico_excede_fiscal', 'e
  * por revisar › validado.
  */
 export function estadoRenglon(
-  g: { cfdiUuid?: string; estadoSat?: string; cfdiValido?: boolean },
+  g: { cfdiUuid?: string; estadoSat?: string; cfdiValido?: boolean; formaPago?: string; pagadoEn?: string },
   tipos: string[],
 ): EstadoRenglon {
   if (tipos.some((t) => TIPOS_MALOS.has(t))) return { estado: 'bad', etiqueta: 'No deducible' };
@@ -207,6 +207,12 @@ export function estadoRenglon(
   if (tipos.some((t) => TIPOS_TOPE.has(t))) return { estado: 'warn', etiqueta: 'Sobre tope' };
   if (tipos.some((t) => TIPOS_POR_CONFIRMAR.has(t))) return { estado: 'warn', etiqueta: 'Por confirmar' };
   if (tipos.length > 0) return { estado: 'warn', etiqueta: 'Por revisar' };
+  // ARQ-25 (ALTO): `cubetaDe` (engine.ts) manda a `por_confirmar` un gasto a
+  // crédito (forma '99') sin REP aunque el motor no emita ninguna diferencia
+  // para él — el renglón no puede afirmar "CFDI vigente" sobre un comprobante
+  // que el motor todavía no cuenta como deducible. Se importa `pagoPendiente`
+  // del motor a propósito: la misma pregunta, la misma función.
+  if (pagoPendiente(g)) return { estado: 'warn', etiqueta: 'Por confirmar' };
   if (g.estadoSat === 'vigente') return { estado: 'ok', etiqueta: 'CFDI vigente', validado: true };
   if (g.cfdiValido) return { estado: 'ok', etiqueta: 'CFDI validado', validado: true };
   if (g.cfdiUuid) return { estado: 'neutral', etiqueta: 'CFDI sin validar' };

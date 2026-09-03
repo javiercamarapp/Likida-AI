@@ -2,6 +2,7 @@ import { PlugZap } from 'lucide-react';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
 import type { ClienteMcpConectado, SesionMcpUsuario } from '@/lib/mcp/sesiones';
+import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
 import { FormaCortar, type AccionForma } from './forma';
 
 /**
@@ -15,12 +16,6 @@ import { FormaCortar, type AccionForma } from './forma';
  *   · /dashboard/sesiones-mcp → `ListaSesionesMcp`, las de toda la flota.
  * Una copia por pantalla se desincroniza y termina siendo dos productos.
  */
-
-const ROL_LABEL: Record<string, string> = {
-  flota_admin: 'Dueño / Admin de flota',
-  encargado: 'Encargado',
-  contador: 'Contador',
-};
 
 /** El rótulo del cliente. El nombre lo eligió quien se registró por DCR, no
  *  Likida — la pantalla de consentimiento ya lo advierte y aquí se sostiene
@@ -99,13 +94,13 @@ function TarjetaUsuarioMcp({ s, cortarSesiones }: {
         <div>
           <p className="text-[13px] font-medium">{quien}</p>
           <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
-            {s.email ?? 'sin correo en el padrón'} · {ROL_LABEL[s.rol] ?? s.rol}
+            {s.email ?? 'sin correo en el padrón'} · {ROL_LABEL[s.rol as RolAppUser] ?? s.rol}
           </p>
           <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
             {/* El rol del TOKEN, no el de hoy: es el que decide qué lee el
                 cliente MCP mientras el acceso siga vivo. */}
             El acceso lee lo que ve el rol con el que se autorizó
-            ({ROL_LABEL[s.rol] ?? s.rol}), nunca escribe.
+            ({ROL_LABEL[s.rol as RolAppUser] ?? s.rol}), nunca escribe.
           </p>
         </div>
         <FormaCortar accion={cortarSesiones} usuarioId={s.userId} quien={quien} cuantos={s.clientes.length} />

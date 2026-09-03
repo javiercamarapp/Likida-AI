@@ -2,14 +2,11 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { UserRound, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
 import { BarraPagina } from '../../dashboard/resumen-visual';
 import AvatarUploader from './avatar-uploader';
 
 export const dynamic = 'force-dynamic';
-
-const ROL_LABEL: Record<string, string> = {
-  superadmin: 'Superadmin', flota_admin: 'Dueño / Admin de flota', encargado: 'Encargado', contador: 'Contador', operador: 'Operador / Chofer',
-};
 
 /** Tipos de imagen que el bucket acepta. Un `.svg` puede traer script
  *  adentro y el bucket `avatares` es PÚBLICO — servirlo desde nuestro
@@ -135,7 +132,7 @@ export default async function MiPerfilPage({
               </div>
               <div className="flex justify-between gap-4">
                 <dt style={{ color: 'var(--muted)' }}>Rol</dt>
-                <dd className="text-right">{ROL_LABEL[s.rol] ?? s.rol}</dd>
+                <dd className="text-right">{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</dd>
               </div>
             </dl>
             <p className="text-xs mt-4" style={{ color: 'var(--muted)' }}>

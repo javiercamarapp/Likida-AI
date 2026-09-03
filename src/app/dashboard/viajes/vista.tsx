@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Truck, ArrowRight, Inbox, Search, FileUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { numero, fechaMx, mxn } from '@/lib/formato';
 import { EstadoVacio, StatusPill, type Estado } from '@/app/admin/ui/kit';
-import { BarraPagina } from '../resumen-visual';
+import { BarraPagina, PILL_ESTATUS } from '../resumen-visual';
 import { PillAviso } from '../despacho/vista';
 import { ImportarViajes, type AccionImportar } from './importar';
 
@@ -27,12 +27,6 @@ export interface FilaRegistroViaje {
   liqId: string | null;
   liqEstatus: string | null;
 }
-
-const PILL_ESTATUS: Record<string, { etiqueta: string; estado: Estado }> = {
-  liquidado: { etiqueta: 'Liquidado', estado: 'ok' },
-  en_cuadre: { etiqueta: 'En cuadre', estado: 'warn' },
-  abierto: { etiqueta: 'Abierto', estado: 'neutral' },
-};
 
 const ROTULO_FILTRO: Record<FiltroViajes, string> = {
   todos: 'Todos', abiertos: 'Abiertos', en_cuadre: 'En cuadre',

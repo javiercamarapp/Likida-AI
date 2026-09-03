@@ -7,10 +7,18 @@
 // dejaban fuera precisamente lo que la oficina necesita actuar: el viaje de
 // ayer que nadie aceptó, el operador que lleva 6 horas esperando aviso.
 //
-// NINGUNA de estas funciones LANZA por un fallo de lectura: como en
-// `sat_descarga/bandeja.ts`, el fallo se atrapa aquí y viaja en `error` — el
-// llamador decide cómo pintarlo (nunca como lista vacía, que es una
-// afirmación distinta de "no se pudo leer").
+// Las paginadas (`viajesEnCursoPaginados`, `viajesEsperandoAceptarPaginados`)
+// NUNCA LANZAN por un fallo de lectura: como en `sat_descarga/bandeja.ts`, el
+// fallo se atrapa en `leerPagina` y viaja en `Pagina.error` — el llamador
+// decide cómo pintarlo (nunca como lista vacía, que es una afirmación
+// distinta de "no se pudo leer").
+//
+// `buscarViajesVivos` (el combo del huérfano) es la excepción DECLARADA: no
+// devuelve una `Pagina`, devuelve `OpcionViaje[]` sin dónde colgar un
+// `error`, así que un fallo de lectura —de cualquiera de sus DOS
+// consultas— LANZA. Un fallo a medias (la primera consulta bien, la segunda
+// callada) sería peor que lanzar: se leería como "no hay resultados" cuando
+// lo que pasó fue un timeout del pooler (ARQUITECTURA 25, BAJO).
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -262,11 +270,17 @@ export async function buscarViajesVivos(tenantId: string, q: string): Promise<Op
         .limit(TOPE_BUSCADOR_VIAJES - filas.length),
       'repo_paginado.buscar_viajes_operador',
     );
-    if (!errOp && porOperador) {
-      const vistos = new Set(filas.map((f) => f.id));
-      for (const f of porOperador as typeof filas) {
-        if (!vistos.has(f.id)) filas.push(f);
-      }
+    // ARQUITECTURA 25 (BAJO, REINCIDENTE). Un `errOp` truthy se descartaba en
+    // silencio y la función devolvía la lista corta de la primera consulta
+    // (por folio) como si fuera completa: el operario que buscó por nombre
+    // ("Ramírez") se llevaba "sin resultados" cuando lo que pasó fue un
+    // timeout del pooler, no que el viaje no existiera. Esta función YA lanza
+    // sobre el fallo de la primera consulta (arriba); la segunda tiene que
+    // fallar cerrado igual — no a medias.
+    if (errOp) throw new Error(errOp.message);
+    const vistos = new Set(filas.map((f) => f.id));
+    for (const f of (porOperador ?? []) as typeof filas) {
+      if (!vistos.has(f.id)) filas.push(f);
     }
   }
 

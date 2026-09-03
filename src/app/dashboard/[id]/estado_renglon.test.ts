@@ -75,4 +75,23 @@ describe('ARQ-C3-1 · el renglón del panel y la cubeta del motor dicen lo mismo
     expect(e.etiqueta).toBe('CFDI vigente');
     expect(e.validado).toBe(true);
   });
+
+  // ARQ-25 (ALTO) — el motor pone `pagoPendiente` (a crédito, forma '99', sin
+  // REP) en `por_confirmar` vía `cubetaDe`, pero `estadoRenglon` solo mira
+  // `tipos` (las diferencias) y el motor no emite ninguna para este caso
+  // (`medioNoAdmitidoCombustible('99') === false` a propósito). El renglón
+  // salía «CFDI vigente ✓» en verde mientras el bloque de deducibilidad de la
+  // MISMA pantalla decía «Por confirmar» sobre el mismo comprobante.
+  it('a crédito (forma 99) y sin pagar → «Por confirmar», nunca verde, aunque el motor no emita diferencias', () => {
+    const gastoACredito = { cfdiUuid: 'uuid-2', estadoSat: 'vigente', cfdiValido: true, formaPago: '99' };
+    const e = estadoRenglon(gastoACredito, []);
+    expect(e.etiqueta).toBe('Por confirmar');
+    expect(e.estado).toBe('warn');
+  });
+
+  it('a crédito (forma 99) pero YA pagado (con REP) sí puede salir verde', () => {
+    const gastoPagado = { cfdiUuid: 'uuid-3', estadoSat: 'vigente', cfdiValido: true, formaPago: '99', pagadoEn: '2026-08-01' };
+    const e = estadoRenglon(gastoPagado, []);
+    expect(e.etiqueta).toBe('CFDI vigente');
+  });
 });
