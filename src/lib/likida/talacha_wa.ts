@@ -107,6 +107,10 @@ interface PendienteExistente {
   monto: number | null;
   evidencia: string | null;
   gastoId: string | null;
+  /** `false` si `avisada_jefe_en` sigue NULL: el aviso al jefe nunca se
+   *  entregó (falló Meta, o la incidencia se creó sin teléfono). El HECHO
+   *  persistido, no una variable local del turno que lo intentó. */
+  avisadoJefe: boolean;
 }
 
 /** La talacha pendiente de este viaje, si la hay. Lanza ante error de base:
@@ -114,7 +118,7 @@ interface PendienteExistente {
 async function pendienteDelViaje(tenantId: string, viajeId: string): Promise<PendienteExistente | null> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('incidencia')
-    .select('id, monto_estimado, evidencia_path, gasto_id')
+    .select('id, monto_estimado, evidencia_path, gasto_id, avisada_jefe_en')
     .eq('tenant_id', tenantId).eq('viaje_id', viajeId)
     .eq('tipo', 'averia').eq('autorizacion', 'pendiente')
     .order('abierta_en', { ascending: false })
@@ -127,6 +131,7 @@ async function pendienteDelViaje(tenantId: string, viajeId: string): Promise<Pen
     monto: f.monto_estimado == null ? null : Number(f.monto_estimado),
     evidencia: (f.evidencia_path as string) || null,
     gastoId: (f.gasto_id as string) || null,
+    avisadoJefe: f.avisada_jefe_en != null,
   };
 }
 
@@ -187,7 +192,21 @@ async function avisarAlJefe(args: {
     { id: `tal_si:${args.incidenciaId}`, titulo: 'Autorizar' },
     { id: `tal_no:${args.incidenciaId}`, titulo: 'Rechazar' },
   ]);
-  return Boolean(enviado);
+  if (!enviado) return false;
+  // Sella el HECHO — no una variable local del turno que lo intenta — para
+  // que el turno SIGUIENTE (agentico.md:455) sepa si de verdad puede decir
+  // «tu jefe ya tiene la solicitud» o si todavía tiene que reintentar.
+  const { error } = await acotada(supabaseAdmin()
+    .from('incidencia')
+    .update({ avisada_jefe_en: new Date().toISOString() })
+    .eq('id', args.incidenciaId).eq('tenant_id', args.tenantId), 'talacha.sellarAvisoJefe');
+  if (error) {
+    // El WhatsApp SÍ salió — no se le miente al chofer por esto — pero sin
+    // sello el próximo turno reintentará el aviso: mejor un jefe avisado dos
+    // veces que uno que se queda sin avisar.
+    logger.error('talacha.sello_aviso_fallo', { incidencia: args.incidenciaId, err: error.message });
+  }
+  return true;
 }
 
 /** Lo que se le contesta al chofer cuando la solicitud SÍ le llegó al jefe. */
@@ -240,7 +259,27 @@ export async function atenderTalachaChofer(args: {
     if (!pendiente.gastoId && args.gastoId) cambios.gasto_id = args.gastoId;
 
     if (Object.keys(cambios).length === 0) {
-      return 'Ya tengo anotada esa avería y tu jefe tiene la solicitud 👍. En cuanto decida, te aviso por aquí.';
+      // AUDITORÍA 25 (ALTO, agentico.md:455): antes esto se contestaba a
+      // ciegas. Si `avisada_jefe_en` sigue NULL, el primer intento falló
+      // (Meta 131047, un blip de red) y nadie volvió a intentarlo — se
+      // reintenta aquí, con la verdad de si esta vez sí llegó.
+      if (pendiente.avisadoJefe) {
+        return 'Ya tengo anotada esa avería y tu jefe tiene la solicitud 👍. En cuanto decida, te aviso por aquí.';
+      }
+      const etiquetas = await etiquetasAviso(args.tenantId, args.viajeId, args.operadorId);
+      const avisado = await avisarAlJefe({
+        tenantId: args.tenantId,
+        incidenciaId: pendiente.id,
+        chofer: etiquetas.chofer,
+        folio: etiquetas.folio,
+        descripcion: args.texto,
+        monto: pendiente.monto,
+        conFoto: Boolean(pendiente.evidencia),
+      });
+      logger.info('talacha.reintento_aviso', { incidencia: pendiente.id, avisado });
+      return avisado
+        ? 'Ya tengo anotada esa avería y ahora sí le llegó a tu jefe la solicitud 👍. En cuanto decida, te aviso por aquí.'
+        : 'Ya tengo anotada esa avería, pero SIGO sin poder avisarle a tu jefe por WhatsApp — márcale directo para que la autorice.';
     }
     const { error } = await acotada(supabaseAdmin()
       .from('incidencia')
@@ -272,7 +311,27 @@ export async function atenderTalachaChofer(args: {
         : `Anoté los ${mxn(args.monto!)} 🔧, pero NO pude reenviarle la solicitud a tu jefe por WhatsApp — márcale directo para que la autorice.`;
     }
     logger.info('talacha.completada', { incidencia: pendiente.id, cambios: Object.keys(cambios) });
-    return 'Listo, quedó la foto de evidencia en tu reporte 📸. Tu jefe ya tiene la solicitud — en cuanto decida te aviso.';
+    // AUDITORÍA 25 (ALTO, agentico.md:455), misma causa que arriba: esta
+    // rama se llega DESPUÉS de que el aviso falló (monto ya estaba puesto,
+    // así que no entró al `if` de arriba) — no se afirma que el jefe la
+    // tiene sin haberlo comprobado.
+    if (pendiente.avisadoJefe) {
+      return 'Listo, quedó la foto de evidencia en tu reporte 📸. Tu jefe ya tiene la solicitud — en cuanto decida te aviso.';
+    }
+    const etiquetas = await etiquetasAviso(args.tenantId, args.viajeId, args.operadorId);
+    const avisado = await avisarAlJefe({
+      tenantId: args.tenantId,
+      incidenciaId: pendiente.id,
+      chofer: etiquetas.chofer,
+      folio: etiquetas.folio,
+      descripcion: args.texto,
+      monto: pendiente.monto,
+      conFoto: true,
+    });
+    logger.info('talacha.reintento_aviso', { incidencia: pendiente.id, avisado });
+    return avisado
+      ? 'Listo, quedó la foto de evidencia en tu reporte 📸, y ahora sí le llegó la solicitud a tu jefe — en cuanto decida te aviso.'
+      : 'Listo, quedó la foto de evidencia en tu reporte 📸, pero SIGO sin poder avisarle a tu jefe por WhatsApp — márcale directo para que la autorice.';
   }
 
   // No hay pendiente: se abre la incidencia con TODO lo que este mensaje trajo.

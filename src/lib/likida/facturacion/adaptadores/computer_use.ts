@@ -1,6 +1,7 @@
 import type OpenAI from 'openai';
 import { generateWithTools } from '@/lib/llm/openrouter';
 import type { LlmBudget } from '@/lib/llm/budget';
+import { claimMutation, completeMutation, failMutation } from '@/lib/llm/tool-idempotency';
 import { logger } from '@/lib/logger';
 import type { CampoListo } from '../pendientes';
 import type { AdaptadorPortal, ModoAgente, ResultadoAgente } from '../agente';
@@ -57,6 +58,26 @@ export type AbrirPagina = () => Promise<PaginaPlaywright>;
 // En `emitir` sí existe, y aun así pasa por `PROHIBIDOS`, la lista de cosas que
 // no se tocan nunca —el checkbox de partidos políticos, que ya estaba prohibido
 // por nombre en el adaptador de CAPUFE—.
+//
+// ── Y EL MISMO CANDADO QUE LAS DEMÁS TOOLS DE ESCRITURA (AUDITORÍA 25) ────
+//
+// `emitir` corre FUERA del executor normal (`tool-executor.ts`): este archivo
+// le pasa su propio `toolExecutor` directo a `generateWithTools`, así que
+// nunca pasa por `claimMutation`/lease/fencing. Sin eso, el handler de
+// `emitir` no llevaba bandera de "ya emití": si el portal se re-renderiza y
+// el botón sigue en el inventario —o el modelo elige otro selector del mismo
+// botón—, una segunda llamada en la misma corrida se ejecutaba tal cual, y
+// eso es un SEGUNDO CFDI timbrado ante el SAT por el mismo ticket.
+//
+// Se reusa el MISMO mecanismo durable que usan las tools de escritura del
+// repo (`claimMutation`/`completeMutation`/`failMutation`, la RPC en
+// Postgres), en vez de una bandera en memoria: una bandera local no
+// sobrevive un proceso que muere entre el clic y la respuesta, y es
+// exactamente ese hueco el que este candado cierra. La llave del efecto la
+// arman los CAMPOS del ticket (folio/webId/monto/…) porque
+// `AdaptadorPortal.facturar(campos, modo)` — la interfaz que comparten los
+// 37 comercios — no recibe un id de ticket; cambiarla para dárselo tocaría
+// los otros adaptadores por un hallazgo que es solo de éste.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Cuántas vueltas de decisión antes de rendirse. Un portal normal necesita 6-10. */
@@ -81,6 +102,9 @@ export interface DatosReceptorPortal {
 }
 
 export interface OpcionesComputerUse {
+  /** De qué flota es la emisión — la llave del candado de `emitir` va scoped
+   *  a esto, igual que toda mutación del repo. */
+  tenantId: string;
   comercio: string;
   portal: string;
   receptor: DatosReceptorPortal;
@@ -161,6 +185,74 @@ async function inventario(pagina: PaginaPlaywright): Promise<string> {
   return JSON.stringify(inv);
 }
 
+/**
+ * La llave del efecto "emitir este CFDI" — estable entre reintentos del
+ * MISMO ticket (mismos campos), distinta entre tickets. Se arma de las
+ * claves que YA identifican al ticket (folio, webId, monto…) porque
+ * `facturar(campos, modo)` no recibe un id de ticket — ver la cabecera.
+ */
+function efectoEmitir(comercio: string, campos: CampoListo[]): string {
+  const partes = campos
+    .filter((c) => c.valor)
+    .map((c) => `${c.clave}=${c.valor}`)
+    .sort();
+  return `facturacion.computer_use.emitir:${comercio}:${partes.join('|')}`;
+}
+
+type ReclamoEmision =
+  /** `protegido: false` = no hay candado durable detrás (solo pruebas sin
+   *  Postgres): `sellarEmision` no intenta sellar lo que nunca se reclamó. */
+  | { kind: 'execute'; token: string; protegido: boolean }
+  /** Ya se emitió antes (o está emitiéndose ahora): el mensaje es lo que lee
+   *  el modelo — nunca se le dice "error", porque no lo es. */
+  | { kind: 'detenido'; mensaje: string };
+
+/**
+ * Reclama el candado antes de apretar el botón. Fail-closed fuera de
+ * pruebas: si Postgres no puede confirmar que nadie más está emitiendo este
+ * mismo ticket, NO se aprieta el botón — un acto fiscal irreversible no se
+ * arriesga a una condición de carrera por no poder demostrar que está solo.
+ */
+async function reclamarEmision(tenantId: string, efectoId: string): Promise<ReclamoEmision> {
+  try {
+    const c = await claimMutation(tenantId, efectoId, 'facturacion.computer_use.emitir');
+    if (c.kind === 'cached') {
+      return { kind: 'detenido', mensaje: 'Este CFDI YA SE EMITIÓ en un intento anterior de este mismo ticket. NO vuelvas a apretar el botón de emitir aunque el inventario lo siga mostrando — usa rendirse si el portal insiste en pedir la emisión.' };
+    }
+    if (c.kind === 'busy') {
+      return { kind: 'detenido', mensaje: 'La emisión de este ticket ya se está procesando en otro intento. NO reintentes el clic — usa rendirse.' };
+    }
+    return { kind: 'execute', token: c.token, protegido: true };
+  } catch (e) {
+    const detalle = e instanceof Error ? e.message : String(e);
+    if (process.env.NODE_ENV === 'test') {
+      // Mismo criterio que `tool-executor.ts`: los tests de este archivo no
+      // montan Postgres, así que ejercitan el handler sin falsear una
+      // garantía de producción.
+      logger.warn('facturacion.computer_use.idempotencia_mock', { err: detalle });
+      return { kind: 'execute', token: '', protegido: false };
+    }
+    logger.error('facturacion.computer_use.idempotencia_no_disponible', { err: detalle });
+    return { kind: 'detenido', mensaje: 'No se pudo proteger esta emisión contra un doble clic (falla de infraestructura). NO se debe apretar emitir sin esa protección — usa rendirse y repórtalo.' };
+  }
+}
+
+/** Sella el resultado del clic. Best-effort: el clic YA ocurrió (o falló) —
+ *  perder el sello degrada a "puede reintentar de más", nunca a perder el
+ *  candado sobre un clic que no pasó. */
+async function sellarEmision(
+  tenantId: string, efectoId: string, reclamo: { token: string; protegido: boolean },
+  resultado: { ok: true } | { ok: false; error: string },
+): Promise<void> {
+  if (!reclamo.protegido) return;   // nada que sellar: nunca se reclamó de verdad.
+  try {
+    if (resultado.ok) await completeMutation(tenantId, efectoId, reclamo.token, { clicado: true });
+    else await failMutation(tenantId, efectoId, reclamo.token, resultado.error);
+  } catch (e) {
+    logger.error('facturacion.computer_use.sello_fallido', { err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 const SISTEMA = `Operas el portal de facturación de un proveedor mexicano para obtener el CFDI de un ticket de gasto de una flota de carga.
 
 Recibes el INVENTARIO del formulario en pantalla (campos visibles con su selector, tipo, etiqueta y opciones; botones con su selector y texto; y el texto visible de la página) y decides UNA acción a la vez.
@@ -193,6 +285,7 @@ export class AdaptadorComputerUse implements AdaptadorPortal {
     let uuid: string | undefined;
     let rendido: string | null = null;
     let captcha = false;
+    const efectoId = efectoEmitir(this.comercio, campos);
 
     try {
       const p = await this.op.abrirPagina();
@@ -240,9 +333,24 @@ export class AdaptadorComputerUse implements AdaptadorPortal {
           case 'clic':
             await p.hacerClic(selector);
             return `clic en ${selector}. Inventario nuevo: ${await inventario(p)}`;
-          case 'emitir':
-            await p.hacerClic(selector);
-            return `EMITIDO. Inventario nuevo: ${await inventario(p)}`;
+          case 'emitir': {
+            // AUDITORÍA 25 (BAJO, tool-calling.md:209): el mismo candado
+            // durable que usan las demás tools de escritura — ver la
+            // cabecera del archivo. Sin él, un segundo `emitir` en la MISMA
+            // corrida (botón que sigue en el inventario, o un selector
+            // distinto del mismo botón) volvía a apretarlo tal cual.
+            const reclamo = await reclamarEmision(this.op.tenantId, efectoId);
+            if (reclamo.kind === 'detenido') return reclamo.mensaje;
+            try {
+              await p.hacerClic(selector);
+            } catch (e) {
+              await sellarEmision(this.op.tenantId, efectoId, reclamo, { ok: false, error: e instanceof Error ? e.message : String(e) });
+              throw e;
+            }
+            const inv = await inventario(p);
+            await sellarEmision(this.op.tenantId, efectoId, reclamo, { ok: true });
+            return `EMITIDO. Inventario nuevo: ${inv}`;
+          }
           case 'rendirse':
             rendido = String(args.motivo ?? 'sin motivo');
             if (/captcha/i.test(rendido)) captcha = true;

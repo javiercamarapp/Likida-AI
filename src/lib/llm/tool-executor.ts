@@ -90,11 +90,32 @@ export function registerTool(name: string, tool: RegisteredTool): void {
   REGISTRY.set(name, tool);
 }
 
-/** Devuelve los schemas (ChatCompletionTool) para los nombres dados. */
+/**
+ * Devuelve los schemas (ChatCompletionTool) para los nombres dados.
+ *
+ * AUDITORÍA 25 (BAJO, tool-calling.md:176): un nombre sin handler registrado
+ * antes desaparecía en silencio — sin `logger.warn`, sin que el llamador
+ * pudiera comparar largos. Las tools del agente de dinero se registran por
+ * un import de puro efecto colateral (`processor.ts`, `import
+ * '@/lib/likida/tools'`); si ese import se pierde algún día (un pase de
+ * "quitar imports sin usar", un bundler con `sideEffects:false`),
+ * `toolSchemas` devolvía `[]`, el agente se quedaba sin tools y contestaba
+ * prosa — cero errores, cero logs, el viaje nunca se cierra. Este `warn` es
+ * la única señal que existiría de que "pedí N y me dieron menos".
+ */
 export function toolSchemas(names: string[]): OpenAI.Chat.ChatCompletionTool[] {
-  return names
-    .map((n) => REGISTRY.get(n)?.schema)
+  const faltantes: string[] = [];
+  const schemas = names
+    .map((n) => {
+      const s = REGISTRY.get(n)?.schema;
+      if (!s) faltantes.push(n);
+      return s;
+    })
     .filter((s): s is OpenAI.Chat.ChatCompletionTool => Boolean(s));
+  if (faltantes.length > 0) {
+    logger.warn('tool.schema_faltante', { pedidos: names.length, encontrados: schemas.length, faltantes });
+  }
+  return schemas;
 }
 
 // BAJO (auditoría 10, reincidente) — EL ERROR CRUDO DE POSTGRES NO CRUZA HACIA

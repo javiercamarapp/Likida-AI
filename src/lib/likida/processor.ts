@@ -1081,11 +1081,16 @@ async function entregarCierrePendiente(op: ResolvedOperador, telefono: string, l
         else urlPdfJefe = firma.data.signedUrl;
       }
       const rj = await avisarCierreAlJefe({ tenantId: op.tenantId, viajeId: liq.viajeId, urlPdf: urlPdfJefe, telefonoOperador: telefono });
-      if (rj.enviado) {
+      // AUDITORÍA 25 (MEDIO, agentico.md:526): mismo candado que el camino
+      // feliz — si había PDF del contralor (`liq.pdfUrl`) y no llegó, no se
+      // sella. Ésta es precisamente la reentrega (AGEN-4): si sella aquí sin
+      // el PDF, ya no queda ningún turno futuro que lo reintente.
+      const pdfJefeOk = !liq.pdfUrl || rj.pdfEnviado === true;
+      if (rj.enviado && pdfJefeOk) {
         await sellarEntregaLiquidacion(op.tenantId, liq.liquidacionId, 'avisada_oficina_en');
         jefe = 'avisado';
       } else {
-        logger.warn('cierre.jefe_no_avisado', { ...ctx, motivo: rj.motivo });
+        logger.warn('cierre.jefe_no_avisado', { ...ctx, motivo: rj.motivo, pdfJefeOk });
         jefe = 'fallo';
       }
     } catch (e) {
@@ -2928,7 +2933,17 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // Con UNA sola foto no se resume: su mensaje de arriba ya habló.
           if (ultima && rafaga && huboRafaga) {
             const puestos = await getGastos(viajeId, op.tenantId);
-            const total = puestos.reduce((s, g) => s + (g.monto > 0 ? g.monto : 0), 0);
+            // AUDITORÍA 25 (ALTO, agentico.md:426) — MISMO `copiasDeComprobante`
+            // que el motor y el PDF. Este resumen sumaba TODAS las filas sin
+            // excluir copias; el protocolo normal de dos fotos por ticket (el
+            // ticket entero + el acercamiento al QR) deja dos filas del mismo
+            // comprobante, y el chofer leía un total que el «listo» del mismo
+            // hilo desmentía minutos después. Un segundo cálculo aquí se
+            // separaría del cuadre en silencio, el error que este repo ya pagó.
+            const copias = copiasDeComprobante(puestos);
+            const comprobantes = puestos.filter((g) => !copias.has(g.id)).length;
+            const total = puestos.reduce(
+              (s, g) => (copias.has(g.id) || !(g.monto > 0) ? s : s + g.monto), 0);
             // Las que se pasaron del tope de botones llevan su propia frase, que
             // es la que `mensajeDemasiadasDudas` ya escribía y nadie llamaba.
             const dudas = rafaga.incidencias.filter((i) => i.tipo === 'duda').length;
@@ -2936,11 +2951,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
               ? `\n\n${mensajeDemasiadasDudas(dudas, await estadoDelViaje(op.tenantId, viajeId).catch(() => null))}`
               : '';
             logger.info('foto.resumen_rafaga', {
-              viaje: viajeId, gastos: puestos.length,
+              viaje: viajeId, gastos: puestos.length, comprobantes, copias: copias.size,
               vistas: rafaga.vistas, incidencias: rafaga.incidencias.length,
             });
             await sendText(msg.from,
-              `📸 Ya revisé tus fotos. En este viaje llevo *${puestos.length} ${puestos.length === 1 ? 'comprobante' : 'comprobantes'}* por *${mxn(total)}*.\n\n` +
+              `📸 Ya revisé tus fotos. En este viaje llevo *${comprobantes} ${comprobantes === 1 ? 'comprobante' : 'comprobantes'}* por *${mxn(total)}*.\n\n` +
               (incidencias ? `${incidencias}\n\n` : '') +
               `Si te falta alguno, mándalo otra vez. Cuando termines, escribe *listo*. 👍${cola}`);
           }
@@ -4349,7 +4364,17 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           }
         }
         const rj = await avisarCierreAlJefe({ tenantId: op.tenantId, viajeId, urlPdf: urlPdfJefe, telefonoOperador: msg.from });
+        // AUDITORÍA 25 (MEDIO, agentico.md:526): antes se sellaba con solo
+        // `rj.enviado` — que es "el TEXTO salió", no "el jefe tiene su
+        // PDF". Si había un PDF del contralor y no llegó (createSignedUrl
+        // falló arriba, o `sendDocument` falló dentro de
+        // `avisarCierreAlJefe`), el sello se ponía igual y
+        // `entregarCierrePendiente` nunca volvía a intentar el PDF: el
+        // ejemplar que el contralor necesita para su contador se perdía
+        // para siempre detrás de un sello que decía "ya avisado".
+        const pdfJefeOk = !pdfContralorGenerado || rj.pdfEnviado === true;
         if (!rj.enviado) logger.warn('cierre.jefe_no_avisado', { viaje: viajeId, motivo: rj.motivo });
+        else if (!pdfJefeOk) logger.warn('cierre.jefe_avisado_sin_pdf', { viaje: viajeId, teniaUrlFirmada: urlPdfJefe != null });
         // AGEN-4: sello — el reintento de un «listo» no vuelve a avisar.
         else await sellarEntregaLiquidacion(op.tenantId, liqIdCerrada, 'avisada_oficina_en');
       } catch (e) {

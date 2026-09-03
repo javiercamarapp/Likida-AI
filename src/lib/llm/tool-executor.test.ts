@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { registerTool, makeExecutor } from './tool-executor';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { registerTool, makeExecutor, toolSchemas } from './tool-executor';
+import { logger } from '@/lib/logger';
 import type OpenAI from 'openai';
 
 const schema = (name: string): OpenAI.Chat.ChatCompletionTool => ({
@@ -96,5 +97,45 @@ describe('la dedup de mutaciones mira el EFECTO, no cómo se escribió la llamad
     expect((await exec('test_mut_args_fail', {})).success).toBe(false);
     expect((await exec('test_mut_args_fail', { otro: 1 })).success).toBe(true);
     expect(calls).toBe(2);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25 (BAJO, tool-calling.md:176) — `toolSchemas` fallaba ABIERTO:
+// un nombre sin handler registrado desaparecía de la lista sin un solo log.
+// Con las tools de dinero registradas por un import de puro efecto
+// colateral (`processor.ts`, `import '@/lib/likida/tools'`), perder ese
+// import algún día dejaría al agente sin tools —contestando prosa— con la
+// suite en verde y cero rastro en el log.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('toolSchemas — un nombre sin handler ya no desaparece en silencio', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('pedidos que SÍ están registrados: sin warn, todos presentes', () => {
+    registerTool('ts_existe', { schema: schema('ts_existe'), handler: async () => ({}) });
+    const warn = vi.spyOn(logger, 'warn');
+    const s = toolSchemas(['ts_existe']);
+    expect(s).toHaveLength(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('un nombre sin handler se cae de la lista Y deja un warn con el nombre exacto', () => {
+    registerTool('ts_si_existe', { schema: schema('ts_si_existe'), handler: async () => ({}) });
+    const warn = vi.spyOn(logger, 'warn');
+    const s = toolSchemas(['ts_si_existe', 'ts_no_existe']);
+
+    expect(s.map((x) => (x.type === 'function' ? x.function.name : '?'))).toEqual(['ts_si_existe']);
+    expect(warn).toHaveBeenCalledWith('tool.schema_faltante', expect.objectContaining({
+      pedidos: 2, encontrados: 1, faltantes: ['ts_no_existe'],
+    }));
+  });
+
+  it('todos los pedidos sin registrar: la lista queda vacía y el warn nombra los dos', () => {
+    const warn = vi.spyOn(logger, 'warn');
+    const s = toolSchemas(['ts_fantasma_a', 'ts_fantasma_b']);
+    expect(s).toEqual([]);
+    expect(warn).toHaveBeenCalledWith('tool.schema_faltante', expect.objectContaining({
+      pedidos: 2, encontrados: 0, faltantes: ['ts_fantasma_a', 'ts_fantasma_b'],
+    }));
   });
 });

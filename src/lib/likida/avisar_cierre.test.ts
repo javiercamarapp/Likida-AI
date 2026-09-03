@@ -122,7 +122,7 @@ describe('avisarCierreAlJefe · lo básico', () => {
   it('sin teléfono de jefe no manda nada y lo dice', async () => {
     telefonoParaDineroDe.mockResolvedValue(null);
     const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
-    expect(r).toEqual({ enviado: false, motivo: 'Esa flota no tiene un teléfono de oficina registrado.' });
+    expect(r).toEqual({ enviado: false, motivo: 'Esa flota no tiene un teléfono de oficina registrado.', pdfEnviado: null });
     expect(enviarTexto).not.toHaveBeenCalled();
     expect(sendDocument).not.toHaveBeenCalled();
   });
@@ -130,7 +130,7 @@ describe('avisarCierreAlJefe · lo básico', () => {
   it('sin liquidación encontrada no manda nada', async () => {
     liq = { data: null, error: null };
     const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
-    expect(r).toEqual({ enviado: false, motivo: 'No se encontró la liquidación cerrada.' });
+    expect(r).toEqual({ enviado: false, motivo: 'No se encontró la liquidación cerrada.', pdfEnviado: null });
   });
 
   it('un error de la base al leer la liquidación NO se traga: lanza', async () => {
@@ -143,7 +143,7 @@ describe('avisarCierreAlJefe · lo básico', () => {
     const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
     expect(enviarTexto).toHaveBeenCalledTimes(1);
     expect(sendDocument).toHaveBeenCalledTimes(1);
-    expect(r).toEqual({ enviado: true, via: 'texto' });
+    expect(r).toEqual({ enviado: true, via: 'texto', pdfEnviado: true });
   });
 
   // AUDITORÍA 21 (agéntico, ALTO): antes el fallo del texto hacía `return`
@@ -157,7 +157,7 @@ describe('avisarCierreAlJefe · lo básico', () => {
     enviarTexto.mockResolvedValue({ ok: false, error: 'número inválido', codigo: 131030 });
     const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
     // El fallo del texto se sigue reportando, para que el llamador loguee...
-    expect(r).toEqual({ enviado: false, motivo: 'WhatsApp no aceptó el mensaje al jefe: número inválido (131030)', fueraDeVentana: false });
+    expect(r).toEqual({ enviado: false, motivo: 'WhatsApp no aceptó el mensaje al jefe: número inválido (131030)', fueraDeVentana: false, pdfEnviado: true });
     expect(sendTemplate).not.toHaveBeenCalled();
     // ...pero el documento que YA estaba listo se intentó igual.
     expect(sendDocument).toHaveBeenCalledTimes(1);
@@ -188,7 +188,7 @@ describe('avisarCierreAlJefe · fuera de la ventana de 24 h (AGEN-5)', () => {
     conDecision();
     enviarTexto.mockResolvedValue({ ok: false, error: 'Re-engagement message', codigo: 131047 });
     const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
-    expect(r).toEqual({ enviado: true, via: 'plantilla' });
+    expect(r).toEqual({ enviado: true, via: 'plantilla', pdfEnviado: true });
     expect(sendTemplate).toHaveBeenCalledTimes(1);
     const [tel, nombre, opts] = sendTemplate.mock.calls[0] as [string, string, { parametros: string[] }];
     expect(tel).toBe(TEL);
@@ -216,7 +216,27 @@ describe('avisarCierreAlJefe · fuera de la ventana de 24 h (AGEN-5)', () => {
     const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
     expect(enviarTexto).not.toHaveBeenCalled();
     expect(sendTemplate).not.toHaveBeenCalled();
-    expect(r).toEqual({ enviado: true });
+    expect(r).toEqual({ enviado: true, pdfEnviado: true });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 25 (MEDIO, agentico.md:526) — `pdfEnviado` es lo que le
+  // permite al llamador (`processor.ts`) distinguir "el texto salió" de "el
+  // jefe ya tiene su PDF", que antes se leían como la misma cosa.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('agentico.md:526: si sendDocument falla, pdfEnviado sale false aunque el texto SÍ haya salido', async () => {
+    conDecision();
+    sendDocument.mockResolvedValue({ ok: false, error: 'Media upload error', codigo: 131053 });
+    const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
+    expect(r.enviado).toBe(true);       // el texto sí llegó
+    expect(r.pdfEnviado).toBe(false);   // pero el PDF no
+  });
+
+  it('agentico.md:526: sin urlPdf, pdfEnviado es null (nada que enviar aquí) — no false, que se leería como un intento fallido', async () => {
+    conDecision();
+    const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1' });
+    expect(r.pdfEnviado).toBeNull();
+    expect(sendDocument).not.toHaveBeenCalled();
   });
 });
 
