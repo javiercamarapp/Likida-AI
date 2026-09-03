@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { decidir, ultimaMigracion } from './compuerta-deploy.mjs';
+import { decidir, ultimaMigracion, prefijosMigraciones } from './compuerta-deploy.mjs';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 24 · OP-P1 / OP-P3 — la compuerta que ata `[deploy]` a las
@@ -57,9 +57,51 @@ describe('OP-P3: lo que no se pudo cotejar no es verde', () => {
   });
 });
 
+// ARQUITECTURA 25 (MEDIO, REINCIDENTE) — el escenario exacto del reporte: una
+// rama cortada abajo aterriza con `0295_*.sql` cuando producción ya está en
+// `0303`. `codigo` (el máximo del repo) sigue en `0303` — 0295 no lo mueve —
+// así que el cotejo por MÁXIMO (`base === codigo === '0303'`) sale verde con
+// 0295 sin aplicar. El cotejo por CONJUNTO (`m.aplicados`) sí lo ve.
+describe('ARQ-25: el cotejo por CONJUNTO ve el hueco que el cotejo por MÁXIMO no ve', () => {
+  const prefijosCodigo = ['0271', '0295', '0303']; // el repo, con 0295 recién llegado
+  const aplicadosSinElHueco = ['0271', '0303']; // la base: todo menos 0295
+
+  it('SIN el conjunto (health de antes de esta ronda): máximo=máximo, construye — el bug', () => {
+    const v = decidir({
+      asunto: 'x [deploy]', codigo: '0303', prefijosCodigo,
+      health: { migracion: { base: '0303', codigo: '0303', atras: 0 } }, // sin `aplicados`
+    });
+    expect(v.construir).toBe(true); // fail-open: publica con 0295 sin aplicar
+  });
+
+  it('CON el conjunto, bloquea y nombra el prefijo que falta (0295), no un rango', () => {
+    const v = decidir({
+      asunto: 'x [deploy]', codigo: '0303', prefijosCodigo,
+      health: { migracion: { base: '0303', codigo: '0303', atras: 0, aplicados: aplicadosSinElHueco } },
+    });
+    expect(v.construir).toBe(false);
+    expect(v.nivel).toBe('error');
+    expect(v.motivo).toContain('0295');
+  });
+
+  it('CON el conjunto y la base completa, construye y lo dice', () => {
+    const v = decidir({
+      asunto: 'x [deploy]', codigo: '0303', prefijosCodigo,
+      health: { migracion: { base: '0303', codigo: '0303', atras: 0, aplicados: prefijosCodigo } },
+    });
+    expect(v).toMatchObject({ construir: true, nivel: 'ok' });
+    expect(v.motivo).toContain('CONJUNTO completo');
+  });
+});
+
 describe('el cableado', () => {
   it('ultimaMigracion lee el repo real y da el mismo prefijo que next.config.ts inlinea', () => {
     expect(ultimaMigracion()).toMatch(/^\d{4}$/);
+  });
+
+  it('prefijosMigraciones incluye el máximo que da ultimaMigracion', () => {
+    const prefijos = prefijosMigraciones();
+    expect(prefijos.at(-1)).toBe(ultimaMigracion());
   });
 
   it('vercel.json corre la compuerta y conserva la inversión de exit del ignoreCommand', () => {
