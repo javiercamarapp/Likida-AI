@@ -299,9 +299,15 @@ describe('la medición', () => {
 
 describe('EL RELOJ — nada de cortes mudos', () => {
   it('lo que no alcanza turno sale POR SU NOMBRE en sinTurno y NO se corre', async () => {
-    // Cada foto quema 60 s de un presupuesto de 105 s: la primera y la segunda
-    // arrancan (el reloj se consulta ANTES, no después), y la tercera ya no.
-    msPorFoto = 60_000;
+    // AUDITORÍA 25 (REND-A6, REINCIDENTE): el presupuesto subió de 105s a
+    // 170s (maxDuration 120→300, con margen real para el peor caso de UNA
+    // foto en vuelo — 120s de escalera de reintentos, `openrouter.ts:699-725`
+    // — más el colchón de escritura). Cada foto quema 150 s: con el
+    // presupuesto VIEJO (105s) solo la primera habría arrancado; con el
+    // NUEVO (170s) arrancan la primera Y la segunda (0<170, 150<170), y la
+    // tercera ya no (300≥170). Este valor DISTINGUE el arreglo: con la
+    // constante vieja esta prueba habría fallado en rojo.
+    msPorFoto = 150_000;
     respuestasOcr = [lecturaBuena, lecturaBuena, lecturaBuena];
     const r = await pedir({ fotoIds: [ID_A, ID_B, ID_C] });
     const d = await r.json() as RespuestaOcrBanco;
