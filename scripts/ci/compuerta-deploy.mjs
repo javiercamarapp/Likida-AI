@@ -34,6 +34,11 @@ import { pathToFileURL } from 'node:url';
 
 export const HEALTH_URL = 'https://app.likida.ai/api/health';
 
+// La MISMA regex que `decidir()` aplica a la primera línea del commit —
+// exportada para que nadie más la reimplemente (ver `ultimoConDeployEnAsunto`
+// abajo: auditoría 25, ALTO — `git log --grep` casaba contra asunto Y cuerpo).
+export const FLAG_DEPLOY_RE = /\[deploy(?::forzar)?\]/i;
+
 /** El prefijo de cuatro dígitos más alto en `supabase/migrations`. */
 export function ultimaMigracion(dir = 'supabase/migrations') {
   const prefijos = readdirSync(dir)
@@ -49,13 +54,36 @@ function siguiente(prefijo) {
 }
 
 /**
+ * PURA. `commits` = lista de `{ sha, asunto }`, más nuevo primero (como
+ * `git log --format='%H%x1f%s'`). Devuelve el `sha` del primer commit cuyo
+ * ASUNTO (no el cuerpo) lleva `[deploy]`/`[deploy:forzar]` — la MISMA regla
+ * que `decidir()` aplica al tip de `master` — o `null` si ninguno lo lleva.
+ *
+ * AUDITORÍA 25, ALTO REINCIDENTE: `salud-produccion.yml` cotejaba con
+ * `git log -i --grep='\[deploy' -1`, y `--grep` de git casa contra asunto Y
+ * CUERPO. Un merge commit cuyo asunto es "Merge pull request #N from <rama>"
+ * (sin la bandera) pero cuyo cuerpo la hereda del commit mergeado pasaba el
+ * filtro igual — exactamente lo que le pasó a `4f94490` el 3-sep-2026: el
+ * detector se ancló en un commit que Vercel nunca pudo construir (su asunto
+ * no lleva `[deploy]`) y quedó en rojo permanente. Esta función es la única
+ * fuente de verdad para "el último commit que la compuerta habría publicado",
+ * y por eso comparte la regex con `decidir()` en vez de reimplementarla.
+ */
+export function ultimoConDeployEnAsunto(commits) {
+  for (const { sha, asunto } of commits) {
+    if (FLAG_DEPLOY_RE.test(String(asunto ?? '').split('\n')[0])) return sha;
+  }
+  return null;
+}
+
+/**
  * PURA. `asunto` = primera línea del commit; `codigo` = última migración del
  * repo; `health` = el JSON de /api/health, o `null` si no se pudo leer.
  * Devuelve `{ construir, nivel: 'ok'|'aviso'|'error', motivo }`.
  */
 export function decidir({ asunto, codigo, health }) {
   const primera = String(asunto ?? '').split('\n')[0];
-  if (!/\[deploy(?::forzar)?\]/i.test(primera)) {
+  if (!FLAG_DEPLOY_RE.test(primera)) {
     return { construir: false, nivel: 'ok', motivo: 'el asunto no lleva [deploy]: este push NO construye a propósito (vercel.json).' };
   }
   const forzar = /\[deploy:forzar\]/i.test(primera);
