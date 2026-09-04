@@ -82,16 +82,21 @@ jobs:
       # de inmediato — nunca se llega ni al reintento ni al "dejar pasar".
       - name: Auditoría completa de dependencias
         run: |
+          # OJO: este script corre bajo `bash -e` (default de Actions). Un
+          # `var=$(cmd_que_falla)` SUELTO aborta el script en el acto por el
+          # -e, ANTES de que el resto de este código (incluida la captura
+          # del exit code) llegue a correr — pasó una vez, cada corrida
+          # moría con 'Process completed with exit code 124' sin imprimir
+          # nada del reintento. Por eso el comando va como condición de un
+          # if: eso SÍ está exento de -e.
           intentos=4
           espera=10
-          salida=""
           for i in $(seq 1 "$intentos"); do
-            salida=$(timeout 25 npm audit --omit=dev --audit-level=high 2>&1)
-            ec=$?
-            echo "$salida"
-            if [ "$ec" -eq 0 ]; then
+            if salida=$(timeout 25 npm audit --omit=dev --audit-level=high 2>&1); then
+              echo "$salida"
               exit 0
             fi
+            echo "$salida"
             # Un reporte REAL de vulnerabilidades trae "N vulnerabilities" o
             # "N vulnerability" en la salida — eso SIEMPRE bloquea de
             # inmediato, sin reintentar ni degradar.
