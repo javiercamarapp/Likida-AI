@@ -4476,7 +4476,8 @@ end $$;
 --   (esperado 4/t/t/t/t/2/t/2300/1500/t/t/t/t)
 do $$
 declare
-  ta uuid; tb uuid; oa uuid; ob uuid; va1 uuid; va2 uuid; vb1 uuid;
+  ta uuid; tb uuid; oa uuid; ob uuid; va1 uuid; va2 uuid; vb1 uuid; ua uuid;
+  l1 uuid; l2 uuid;
   anio int := extract(year from current_date)::int;
   n_funcs int; todas_invoker boolean; ninguna_anon boolean; ninguna_auth boolean; todas_svc boolean;
   r_comb record;
@@ -4491,6 +4492,7 @@ begin
      and conname in ('gasto_monto_no_negativo', 'gasto_monto_no_nan');
   -- ── FLOTA A: la que se mide ────────────────────────────────────────────
   insert into tenant (nombre) values ('ZZZ VERIF 0112 A') returning id into ta;
+  insert into app_user (tenant_id, email, rol) values (ta, 'zzz-0112@likida.test', 'flota_admin') returning id into ua;
   insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0112 A', '5215559990112') returning id into oa;
   insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
     values (ta, oa, 'ZZZ-0112-A1', 'liquidado', current_date - 3, 1000) returning id into va1;
@@ -4519,19 +4521,33 @@ begin
 
   -- RE-AUDITORÍA 25, FIS-P1 (mig. 0308): `acreditables_liquidacion_tenant`
   -- ahora exige `revision in ('aprobada','ajustada')` — una liquidación
-  -- 'pendiente' (el default) ya no cuenta. Las dos de A se siembran
-  -- 'aprobada' a propósito: este bloque mide que SUMA bien lo acreditable,
-  -- no el filtro de revisión (eso lo cubre el bloque de FIS-P1 aparte).
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus, revision, diferencias,
+  -- 'pendiente' (el default) ya no cuenta. La propia compuerta de la 0299
+  -- (`liquidacion_revision_regla`, LR003) PROHÍBE sembrar `revision` distinto
+  -- de 'pendiente' en el INSERT — nace pendiente o firmada por el motor
+  -- ('cuadrada' → 'aprobada' automático), nunca firmada por una persona sin
+  -- pasar por `revisar_liquidacion(...)`.
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus, diferencias,
       ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
-    values (ta, va1, 1500, 1500, 'con_diferencias', 'aprobada',
+    values (ta, va1, 1500, 1500, 'con_diferencias',
       '[{"tipo":"sobre_politica","monto":120},{"tipo":"duplicado","monto":80},{"tipo":"folio_verificar","monto":0}]'::jsonb,
-      50, 240, 30, 400.5);
+      50, 240, 30, 400.5)
+    returning id into l1;
+  -- va1 ya está 'liquidado' (precondición de revisar_liquidacion): una
+  -- persona la aprueba de verdad, como en producción.
+  perform revisar_liquidacion(ta, l1, 'aprobar', null, null, ua, null);
+
   -- La SEGUNDA liquidación va sobre va2, no sobre va1: `liquidacion_viaje_uidx`
   -- admite UNA liquidación por viaje (trampa que atrapó la primera corrida).
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus, revision,
+  -- `estatus = 'cuadrada'` (cuadró sola, sin diferencias): la MISMA regla de
+  -- la 0299 la aprueba sola en el INSERT — no necesita `revisar_liquidacion`,
+  -- y de hecho no podría: va2 se deja 'abierto' a propósito (ver más abajo,
+  -- `serie_comparativa_tenant` cuenta viajesLiquidados por `viaje.estatus`,
+  -- distinto del criterio de `kpis_liquidacion_tenant`), y la RPC exige el
+  -- viaje 'liquidado'.
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus,
       ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
-    values (ta, va2, 700, 700, 'cuadrada', 'aprobada', 10, 60, 5, 90);
+    values (ta, va2, 700, 700, 'cuadrada', 10, 60, 5, 90)
+    returning id into l2;
 
   -- ── FLOTA B: solo para probar que NO contamina a A ─────────────────────
   insert into tenant (nombre) values ('ZZZ VERIF 0112 B') returning id into tb;
