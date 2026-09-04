@@ -192,6 +192,32 @@ export const LEYENDA_PAGO_PENDIENTE =
  *   en el motor — ver el seguimiento interno de auditorías, no se resuelve
  *   en esta función.
  */
+/**
+ * La forma de pago que se puede JUZGAR, que no siempre es la del comprobante.
+ * `'99 Por definir'` no es un medio de pago sino la ausencia de uno (RMF
+ * 2.7.1.29 fr. II): con su complemento de pago ingerido (FASE 7, mig. 0199) el
+ * medio real es el `FormaDePagoP` del REP; sin él todavía no hay nada que
+ * juzgar y devuelve `undefined` («no opino»), que es como esta familia de
+ * funciones trata una forma de pago ausente.
+ *
+ * AUDITORÍA 26, FIS-C2 (CRÍTICO, reincidente de la 23, la 24 y la 25). Vivía
+ * como constante local dentro del recorrido de `cuadrarViaje` (`:682`), así
+ * que el OTRO término del cubo del 15% —`efectivoDeEsteViaje` en
+ * `desde_db.ts`, que se le RESTA al acumulado de `sumar_combustible_ejercicio`
+ * (mig. 0305)— no podía usarla y seguía juzgando la forma CRUDA. Los dos
+ * términos de una resta juzgando con criterios distintos es exactamente cómo
+ * un comprobante consume su propio cupo antes de evaluarse. Es la MISMA regla
+ * que la 0305 escribió en SQL, y por eso se exporta en vez de reimplementarse:
+ * la tercera copia es la que diverge.
+ */
+export function formaPagoJuzgableDe(
+  g: Pick<Gasto, 'formaPago' | 'pagadoEn' | 'pagadoForma'>,
+): string | undefined {
+  return g.formaPago === FORMA_PAGO_SIN_PAGAR
+    ? (g.pagadoEn ? g.pagadoForma : undefined)
+    : g.formaPago;
+}
+
 export function medioNoAdmitidoCombustible(formaPago: string | null | undefined): boolean {
   if (!formaPago) return false;
   if (formaPago === FORMA_PAGO_SIN_PAGAR) return false;
@@ -679,9 +705,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // Es la misma idea que `formaPagoEfectiva` (`:1397`) ya aplica al IVA, al
     // peaje electrónico y al IEPS del diésel; se calcula aquí porque aquella
     // vive en otro recorrido, 800 líneas más abajo.
-    const formaPagoJuzgable = g.formaPago === FORMA_PAGO_SIN_PAGAR
-      ? (g.pagadoEn ? g.pagadoForma : undefined)
-      : g.formaPago;
+    const formaPagoJuzgable = formaPagoJuzgableDe(g);
 
     // FASE 2 · RMF 3.3.1.7 — ticket de monedero no es factura de estación.
     // Solo con evidencia (padrón o línea ECC día/estación/monto). Sin
