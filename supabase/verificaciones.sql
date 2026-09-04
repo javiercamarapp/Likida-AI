@@ -14448,6 +14448,14 @@ end $$;
 --      cubre el caso en que la RPC se llama con un user_id que nunca fue, o
 --      cuya fila se borró por otro camino).
 --
+--  (g) SEC-3 (auditoría 25, MEDIO, re-auditoría, mig. 03xx): dado de baja
+--      (`activo = false`) SIN cambiar tenant ni rol — el escenario que el
+--      comentario original de la 0265 decía que no existía todavía
+--      ("app_user no tiene columna de estatus/activo"). Desde la 0294 sí la
+--      tiene: la identidad congelada (tenant, rol) sigue siendo cierta, pero
+--      la cuenta ya no debe poder refrescar. → false. Reactivado → true de
+--      nuevo (no es un candado de un solo uso, igual que (d)).
+--
 --  (f) `revocar_mcp_oauth_usuario`: tumba TODOS los tokens activos de un
 --      usuario en su tenant de un tiro, deja intacto el de OTRO usuario de
 --      la misma flota, y una segunda llamada no vuelve a tocar lo ya
@@ -14465,6 +14473,8 @@ declare
   vigente_tras_tenant boolean;
   vigente_restaurado boolean;
   vigente_usuario_borrado boolean;
+  vigente_desactivado boolean;
+  vigente_reactivado boolean;
   revocados_primera bigint;
   revocados_segunda bigint;
   otro_token_intacto boolean;
@@ -14497,6 +14507,12 @@ begin
   -- (e) la fila ya no existe.
   select public.mcp_oauth_usuario_vigente(gen_random_uuid(), t, 'contador') into vigente_usuario_borrado;
 
+  -- (g) SEC-3: dado de baja SIN tocar tenant ni rol.
+  update public.app_user set activo = false, desactivado_en = now() where id = u;
+  select public.mcp_oauth_usuario_vigente(u, t, 'contador') into vigente_desactivado;
+  update public.app_user set activo = true, desactivado_en = null where id = u;
+  select public.mcp_oauth_usuario_vigente(u, t, 'contador') into vigente_reactivado;
+
   -- (f) revocar_mcp_oauth_usuario: dos tokens activos de `u` en `t`, uno de
   -- `u_otro` en el mismo tenant.
   insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
@@ -14516,8 +14532,9 @@ begin
   -- Segunda llamada: ya no hay nada activo que tocar (idempotente).
   select public.revocar_mcp_oauth_usuario(t, u) into revocados_segunda;
 
-  raise exception 'MCP_OAUTH_VIGENCIA_0265  inicial=%  tras_rol=%  tras_tenant=%  restaurado=%  usuario_borrado=%  revocados_1=%  revocados_2=%  otro_intacto=%  ambos_revocados=%   (esperado t / f / f / t / f / 2 / 0 / t / t)',
+  raise exception 'MCP_OAUTH_VIGENCIA_0265  inicial=%  tras_rol=%  tras_tenant=%  restaurado=%  usuario_borrado=%  desactivado=%  reactivado=%  revocados_1=%  revocados_2=%  otro_intacto=%  ambos_revocados=%   (esperado t / f / f / t / f / f / t / 2 / 0 / t / t)',
     vigente_inicial, vigente_tras_rol, vigente_tras_tenant, vigente_restaurado, vigente_usuario_borrado,
+    vigente_desactivado, vigente_reactivado,
     revocados_primera, revocados_segunda, otro_token_intacto, ambos_revocados;
 end $$;
 
