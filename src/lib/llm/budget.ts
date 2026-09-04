@@ -215,10 +215,19 @@ const PISO_TOPE_TENANT_USD = 5.00;
 // `REND-A4` en `presupuesto_por_tenant.test.ts`).
 const VIAJES_DIA_OBJETIVO_ESCALA = 500;
 const MARGEN_OPERATIVO_TECHO = 1.5;
-/** Techo del tope DERIVADO del plan (no del declarado): ver .env.example. */
-const TECHO_DERIVADO_POR_DEFECTO_USD = Number(
-  (VIAJES_DIA_OBJETIVO_ESCALA * COSTO_ESTIMADO_USD.viajeCompleto * MARGEN_OPERATIVO_TECHO).toFixed(2),
-);
+/**
+ * Techo del tope DERIVADO del plan (no del declarado): ver .env.example.
+ *
+ * Función y no una constante de módulo: `COSTO_ESTIMADO_USD` se calcula en
+ * `models.ts`, y varias pruebas de este archivo mockean ese módulo sin
+ * `COSTO_ESTIMADO_USD` (les basta `modelFor`). Una constante de módulo
+ * evaluaría la cuenta AL IMPORTAR, y reventaría esas pruebas por un cambio
+ * ajeno a lo que ellas verifican; como función, solo se evalúa cuando
+ * `topeDerivadoDelPlan` de verdad la necesita.
+ */
+function techoDerivadoPorDefectoUsd(): number {
+  return Number((VIAJES_DIA_OBJETIVO_ESCALA * COSTO_ESTIMADO_USD.viajeCompleto * MARGEN_OPERATIVO_TECHO).toFixed(2));
+}
 const TTL_TOPE_TENANT_MS = 60_000;
 /** Los estados de `suscripcion` que cuentan como viva — el mismo criterio de `getSuscripcion`. */
 const ESTADOS_SUSCRIPCION_VIVA = ['prueba', 'activa', 'morosa', 'pausada'];
@@ -245,7 +254,7 @@ export function pisoTopeTenantUsd(): number {
  * Puro, para que la prueba lo ancle con cifras.
  */
 export function topeDerivadoDelPlan(limiteViajesMes: number, piso = pisoTopeTenantUsd()): number {
-  const techo = positiveEnv(process.env.LIKIDA_LLM_TENANT_DAILY_BUDGET_MAX_USD, TECHO_DERIVADO_POR_DEFECTO_USD);
+  const techo = positiveEnv(process.env.LIKIDA_LLM_TENANT_DAILY_BUDGET_MAX_USD, techoDerivadoPorDefectoUsd());
   if (!Number.isFinite(limiteViajesMes) || limiteViajesMes <= 0) return piso;
   const derivado = (limiteViajesMes / 30) * COSTO_ESTIMADO_USD.viajeCompleto;
   return Number(Math.min(Math.max(derivado, piso), Math.max(techo, piso)).toFixed(6));
