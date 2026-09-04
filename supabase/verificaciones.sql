@@ -4476,7 +4476,8 @@ end $$;
 --   (esperado 4/t/t/t/t/2/t/2300/1500/t/t/t/t)
 do $$
 declare
-  ta uuid; tb uuid; oa uuid; ob uuid; va1 uuid; va2 uuid; vb1 uuid; ua uuid;
+  ta uuid; tb uuid; oa uuid; ob uuid; va1 uuid; va2 uuid; vb1 uuid;
+  ua uuid := gen_random_uuid();
   l1 uuid; l2 uuid;
   anio int := extract(year from current_date)::int;
   n_funcs int; todas_invoker boolean; ninguna_anon boolean; ninguna_auth boolean; todas_svc boolean;
@@ -4492,7 +4493,7 @@ begin
      and conname in ('gasto_monto_no_negativo', 'gasto_monto_no_nan');
   -- ── FLOTA A: la que se mide ────────────────────────────────────────────
   insert into tenant (nombre) values ('ZZZ VERIF 0112 A') returning id into ta;
-  insert into app_user (tenant_id, email, rol) values (ta, 'zzz-0112@likida.test', 'flota_admin') returning id into ua;
+  insert into app_user (id, tenant_id, email, rol) values (ua, ta, 'zzz-0112@likida.test', 'flota_admin');
   insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0112 A', '5215559990112') returning id into oa;
   insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
     values (ta, oa, 'ZZZ-0112-A1', 'liquidado', current_date - 3, 1000) returning id into va1;
