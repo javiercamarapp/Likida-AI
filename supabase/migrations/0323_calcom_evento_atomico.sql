@@ -136,6 +136,7 @@ begin
          ce.externo_id is not null or ce.externo_aliases <> '{}'::text[]
          or ce.externo_anterior_aliases <> '{}'::text[]
          or ce.clave_idempotencia not like 'purgado:calcom:%'
+         or ce.clave_replay_hash is not null
          or ce.estado_proceso in ('pendiente','esperando_vinculo','sin_prospecto','cuarentena')
        ))
      );
@@ -363,6 +364,7 @@ declare
   v_pend_precedencia smallint;
   v_pend_destino text;
   v_antiguo boolean;
+  v_muy_futuro boolean;
 begin
   if nullif(btrim(p_clave), '') is null
       or nullif(v_tipo, '') is null
@@ -374,6 +376,8 @@ begin
   -- idempotencia y se devuelve el estado actual sin rehidratar PII.
   v_antiguo := p_creado_en is not null
     and p_creado_en < clock_timestamp() - interval '365 days';
+  v_muy_futuro := p_creado_en is not null
+    and p_creado_en > clock_timestamp() + interval '365 days';
   if v_antiguo then
     select ce.id, ce.estado_proceso, ce.prospecto_id
       into v_evento_id, v_evento_estado, v_evento_prospecto
@@ -382,7 +386,13 @@ begin
      order by (ce.clave_idempotencia = p_clave) desc, ce.creado_en, ce.id
      limit 1
      for update;
-    if found then
+    if found and v_evento_estado in ('aplicado', 'ignorado', 'legado') then
+      return query select 'repetido'::text,
+        (select pr.estado from public.prospecto pr
+          where pr.id = coalesce(v_evento_prospecto, p_prospecto)
+            and pr.duplicado_de is null);
+      return;
+    elsif found then
       update public.comercial_evento
          set estado_proceso = 'ignorado', procesado_en = clock_timestamp(),
              error = case when estado_proceso = 'legado' then error else 'evento_fuera_retencion' end
@@ -392,6 +402,17 @@ begin
       (select pr.estado from public.prospecto pr
         where pr.id = coalesce(v_evento_prospecto, p_prospecto)
           and pr.duplicado_de is null);
+    return;
+  end if;
+
+  -- Un reloj muy adelantado no se hace durable: así no se conserva payload/
+  -- correo que pudiera rehidratarse tras una purga antes de que llegue el
+  -- evento real. Una deriva pequeña sigue usando cuarentena para tolerar
+  -- desajustes de reloj operativos.
+  if v_muy_futuro then
+    return query select 'ignorado'::text,
+      (select pr.estado from public.prospecto pr
+        where pr.id = p_prospecto and pr.duplicado_de is null);
     return;
   end if;
 
