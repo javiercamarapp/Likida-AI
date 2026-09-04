@@ -17273,7 +17273,7 @@ end $$;
 -- Esperado: RECHAZADA_NO_CUENTA_0307  poliza-sin-rechazada=t  poliza-con-pendiente=t  reasignar-tras-rechazo=t  reasignar-tras-aprobada-rebota=t
 do $$
 declare
-  v_t uuid; v_u uuid := gen_random_uuid(); v_o1 uuid; v_o2 uuid;
+  v_t uuid; v_u uuid := gen_random_uuid(); v_o1 uuid; v_o2 uuid; v_o3 uuid;
   v_v1 uuid; v_v2 uuid; v_l1 uuid; v_l2 uuid;
   j jsonb;
   poliza_sin_rechazada boolean; poliza_con_pendiente boolean;
@@ -17283,6 +17283,13 @@ begin
   insert into app_user (id, tenant_id, email, rol) values (v_u, v_t, 'zzz-rechazada-0307@likida.test', 'flota_admin');
   insert into operador (tenant_id, nombre, telefono) values (v_t, 'P1', '520000009930') returning id into v_o1;
   insert into operador (tenant_id, nombre, telefono) values (v_t, 'P2', '520000009931') returning id into v_o2;
+  -- v_o1 sigue con RN-1 en 'en_cuadre' tras el rechazo (más abajo): un
+  -- SEGUNDO viaje 'abierto' para el MISMO operador chocaría con
+  -- `uq_viaje_abierto_por_operador` (0029, cubre abierto|en_cuadre) antes de
+  -- llegar a nada de lo que este bloque quiere medir. RN-2 nace con un
+  -- operador NUEVO — v_o2 se deja libre, es el blanco de las dos
+  -- reasignaciones de abajo.
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P3', '520000009932') returning id into v_o3;
 
   -- (a) una liquidación que se RECHAZA por la RPC de verdad (el único camino
   -- que la tabla acepta — un INSERT/UPDATE directo de `revision` rebota con
@@ -17293,7 +17300,7 @@ begin
   perform revisar_liquidacion(v_t, v_l1, 'rechazar', 'no es de este viaje', null, v_u, null);
   -- El rechazo YA devolvió el viaje a 'en_cuadre' (0299) — el escenario real.
 
-  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o1, 'RN-2', 5000) returning id into v_v2;
+  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o3, 'RN-2', 5000) returning id into v_v2;
   insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v2, 'diesel', 5000);
   v_l2 := guardar_liquidacion_tx(v_t, v_v2, 5000, 5000, 0, 'con_diferencias', '[]'::jsonb, 0, 0, 0, null, 0); -- nace 'pendiente'
 
@@ -17379,11 +17386,15 @@ begin
   select (count(*) = 1) into una_sola_fila from factura_saas where stripe_invoice_id = 'in_zzz_0309';
 
   -- El predicado viejo era decorativo: dos filas SIN invoice (transferencia)
-  -- ya convivían sin él — un único no-parcial no compite entre NULLs.
+  -- ya convivían sin él — un único no-parcial no compite entre NULLs. Con
+  -- periodos DISTINTOS a propósito: mismo periodo chocaría con la unicidad
+  -- real y anterior `factura_saas_una_por_periodo` (0057, sí parcial a
+  -- 'transferencia') — un constraint correcto y sin relación con lo que este
+  -- bloque mide (los NULL de `stripe_invoice_id`).
   insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro)
     values (v_t, date '2026-09-01', date '2026-09-30', 1000, 'transferencia');
   insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro)
-    values (v_t, date '2026-09-01', date '2026-09-30', 1500, 'transferencia');
+    values (v_t, date '2026-10-01', date '2026-10-31', 1500, 'transferencia');
   select (count(*) = 2) into nulos_conviven
     from factura_saas where tenant_id = v_t and stripe_invoice_id is null;
 
