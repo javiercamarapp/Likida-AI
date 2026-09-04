@@ -2,7 +2,7 @@
 // Fuente única de verdad del cuadre; la usan las tools del agente Y la guardia
 // determinística del processor (para no depender de que el LLM llame la tool).
 
-import { cuadrarViaje, medioNoAdmitidoCombustible } from './engine';
+import { cuadrarViaje, medioNoAdmitidoCombustible, formaPagoJuzgableDe } from './engine';
 import { ventanaDelViaje } from './fecha_dudosa';
 import { getViaje, getGastos, getOperador, getAcumuladoCombustible, getPerfilCrudo } from '../repo';
 import { getConfig } from '../config';
@@ -140,9 +140,20 @@ export async function cuadrarDesdeDB(
   // la LISR 27-III. Sin este cambio, restar solo el '01' de este viaje contra
   // un total SQL que ahora sí cuenta los demás medios habría dejado el
   // "previo" con la porción no-'01' de ESTE viaje contada DOS veces.
+  //
+  // AUDITORÍA 26, FIS-C2 (CRÍTICO, reincidente de la 23, la 24 y la 25): la
+  // misma frontera, un nivel más adentro. La mig. 0305 movió el ACUMULADO a la
+  // forma EFECTIVA (un '99' con REP cuenta por `pagado_forma`) y dejó esta
+  // resta con la CRUDA, sobre la premisa —escrita en su cabecera y falsa— de
+  // que `Gasto` no trae `pagadoForma`; `repo.ts` lo mapea desde siempre. Con
+  // los dos términos juzgando distinto, un diésel '99' cuyo REP dice efectivo
+  // entraba al acumulado y NO se restaba: el comprobante consumía su propio
+  // cupo del 15% antes de evaluarse y salía «No deducible» en el PDF contra lo
+  // que la RFA 2026 2.9 concede. `formaPagoJuzgableDe` es la MISMA regla que
+  // la 0305 escribió en SQL, importada del motor en vez de reimplementada.
   const efectivoDeEsteViaje = gastos
     .filter((g) => (g.fecha?.slice(0, 4) ?? anioEjercicio) === anioEjercicio
-      && medioNoAdmitidoCombustible(g.formaPago) && (g.concepto === 'diesel' || clavesCombustible.includes(g.claveProdServ ?? '')))
+      && medioNoAdmitidoCombustible(formaPagoJuzgableDe(g)) && (g.concepto === 'diesel' || clavesCombustible.includes(g.claveProdServ ?? '')))
     .reduce((s, g) => s + Number(g.monto ?? 0), 0);
   const efectivoPrevEjercicio = Math.max(0, totalesEjercicio.efectivo - efectivoDeEsteViaje);
   const totalCombustibleEjercicio = totalesEjercicio.totalCombustible;
