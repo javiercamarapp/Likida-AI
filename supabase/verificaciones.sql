@@ -4517,16 +4517,21 @@ begin
     negativo_rechazado := true;
   end;
 
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus, diferencias,
+  -- RE-AUDITORÍA 25, FIS-P1 (mig. 0308): `acreditables_liquidacion_tenant`
+  -- ahora exige `revision in ('aprobada','ajustada')` — una liquidación
+  -- 'pendiente' (el default) ya no cuenta. Las dos de A se siembran
+  -- 'aprobada' a propósito: este bloque mide que SUMA bien lo acreditable,
+  -- no el filtro de revisión (eso lo cubre el bloque de FIS-P1 aparte).
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus, revision, diferencias,
       ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
-    values (ta, va1, 1500, 1500, 'con_diferencias',
+    values (ta, va1, 1500, 1500, 'con_diferencias', 'aprobada',
       '[{"tipo":"sobre_politica","monto":120},{"tipo":"duplicado","monto":80},{"tipo":"folio_verificar","monto":0}]'::jsonb,
       50, 240, 30, 400.5);
   -- La SEGUNDA liquidación va sobre va2, no sobre va1: `liquidacion_viaje_uidx`
   -- admite UNA liquidación por viaje (trampa que atrapó la primera corrida).
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus,
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus, revision,
       ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
-    values (ta, va2, 700, 700, 'cuadrada', 10, 60, 5, 90);
+    values (ta, va2, 700, 700, 'cuadrada', 'aprobada', 10, 60, 5, 90);
 
   -- ── FLOTA B: solo para probar que NO contamina a A ─────────────────────
   insert into tenant (nombre) values ('ZZZ VERIF 0112 B') returning id into tb;
