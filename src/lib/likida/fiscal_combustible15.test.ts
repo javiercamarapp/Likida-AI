@@ -37,7 +37,7 @@ function diesel(id: string, subTotal: number): GastoFiscal {
     subTotal, ivaTraslado, iepsTraslado: null,
     claveProdServ: null, tipoComprobante: 'I', xmlVerificado: true,
     ocrConfianza: 0.95, viajeFolio: `VJ-${id}`, operadorNombre: 'Juan',
-    plazoVencido: null,
+    plazoVencido: null, liquidacionFirmada: true,
   };
 }
 

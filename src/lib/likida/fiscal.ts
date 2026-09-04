@@ -112,6 +112,19 @@ export interface GastoFiscal {
    */
   plazoVencido: boolean | null;
   /**
+   * RE-AUDITORÍA 25, FIS-REAUD-1 (CRÍTICO): ¿el viaje de este comprobante
+   * tiene YA una liquidación FIRMADA (`revision` aprobada|ajustada — mismo
+   * criterio que la 0308, `acreditables_liquidacion_tenant`)? `false` cubre
+   * tanto "sin liquidación todavía" (viaje abierto/en cuadre) como
+   * "liquidación pendiente de firma" o "rechazada". Solo lo consulta
+   * `ivaSostenible`: sin liquidación firmada no hay liquidación (con su
+   * propio veredicto) que sostenga el acreditamiento de LIVA 5 — el resto de
+   * `resumirFiscal`/`resumirPerdidas` (gastoTotal, sinCfdi, "pídelo antes de
+   * que venza") NO se filtra por esto, porque existe precisamente para
+   * pescar comprobantes de viajes TODAVÍA abiertos.
+   */
+  liquidacionFirmada: boolean;
+  /**
    * Presente cuando la fila es una CELDA AGREGADA (mig. 0151): representa
    * `celda.n` comprobantes con EXACTAMENTE las mismas dimensiones fiscales
    * (concepto, clave, forma de pago, estado SAT, EFOS, con/sin CFDI, con/sin
@@ -836,6 +849,13 @@ export interface ResumenFiscal {
  */
 function ivaSostenible(g: GastoFiscal, o: OpcionesFiscales): boolean {
   if (!g.cfdiUuid) return false;
+  // RE-AUDITORÍA 25, FIS-REAUD-1 (CRÍTICO, reincidente de la 0308 por otra
+  // puerta): sin una liquidación FIRMADA (aprobada|ajustada) sobre el viaje
+  // de este comprobante, no hay liquidación que sostenga el requisito de
+  // deducibilidad de LIVA 5 — mismo criterio que ya usa
+  // `acreditables_liquidacion_tenant` (0308). Cubre viajes sin liquidación
+  // todavía, liquidaciones pendientes de firma y liquidaciones rechazadas.
+  if (!g.liquidacionFirmada) return false;
   if (g.estadoSat === 'cancelado') return false;
   if (g.estadoSat === 'pendiente' || g.estadoSat === 'no_encontrado') return false;
   if (g.efos === true) return false;
@@ -1173,6 +1193,8 @@ interface CeldaCruda {
   sobreTopeEfectivo: boolean;
   banda: number | null; rfcEmisor: string | null; host: string | null; emisor: string | null;
   totalTimbradoDia: number | null;
+  /** RE-AUDITORÍA 25, FIS-REAUD-1 (mig. 0316): ¿el viaje tiene liquidación FIRMADA? */
+  liquidacionFirmada: boolean;
   n: number; monto: number; iva: number; ieps: number; iepsNulos: number;
   subTotal: number; subTotalNulos: number;
   muestraId: string; muestraCfdi: string | null; fechaMax: string | null;
@@ -1221,6 +1243,7 @@ function leerCelda(x: unknown, i: number): CeldaCruda {
     sobreTopeEfectivo: boolReq('sobreTopeEfectivo'),
     banda: numOpt('banda'), rfcEmisor: str('rfcEmisor'), host: str('host'), emisor: str('emisor'),
     totalTimbradoDia: numOpt('totalTimbradoDia'),
+    liquidacionFirmada: boolReq('liquidacionFirmada'),
     n, monto: num('monto'), iva: num('iva'), ieps: num('ieps'), iepsNulos: num('iepsNulos'),
     subTotal: num('subTotal'), subTotalNulos: num('subTotalNulos'),
     muestraId: strReq('muestraId'), muestraCfdi: str('muestraCfdi'), fechaMax: str('fechaMax'),
@@ -1407,6 +1430,7 @@ function aGastoFiscal(c: CeldaCruda, cortes: CortesPlazo): GastoFiscal {
     viajeFolio: null,
     operadorNombre: null,
     plazoVencido: plazoVencidoDeCelda(c, cortes),
+    liquidacionFirmada: c.liquidacionFirmada,
     celda: {
       n: c.n,
       sobreTopeEfectivo: c.sobreTopeEfectivo,

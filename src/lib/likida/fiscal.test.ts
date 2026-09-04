@@ -43,6 +43,10 @@ function gasto(over: Partial<GastoFiscal> = {}): GastoFiscal {
     claveProdServ: null, tipoComprobante: 'I', xmlVerificado: true,
     ocrConfianza: 0.9, viajeFolio: 'VJ-1', operadorNombre: 'Juan',
     plazoVencido: null,
+    // Default: liquidación firmada — la mayoría de las pruebas de este
+    // archivo ejercitan otras reglas de `ivaSostenible` y no quieren que la
+    // puerta de FIS-REAUD-1 las tape. Las pruebas de esa puerta la pisan.
+    liquidacionFirmada: true,
     ...over,
   };
 }
@@ -591,6 +595,32 @@ describe('AUDITORÍA 13 — el estándar del motor se propaga al panel del conta
   });
 });
 
+// ── RE-AUDITORÍA 25, FIS-REAUD-1 (CRÍTICO) ──────────────────────────────────
+describe('FIS-REAUD-1 — «IVA acreditable documentado» exige liquidación FIRMADA (mismo criterio que la 0308)', () => {
+  it('sin liquidación todavía (viaje abierto/en cuadre) NO acredita', () => {
+    const r = resumirFiscal([gasto({ ivaTraslado: 137.93, liquidacionFirmada: false })], OPTS);
+    expect(r.ivaAcreditable).toBe(0);
+    expect(r.ivaNoAcreditable).toBe(137.93);
+  });
+
+  it('con liquidación firmada SÍ acredita (no-regresión)', () => {
+    const r = resumirFiscal([gasto({ ivaTraslado: 137.93, liquidacionFirmada: true })], OPTS);
+    expect(r.ivaAcreditable).toBe(137.93);
+  });
+
+  it('sin liquidación firmada NO tapa el resto del panel: gastoTotal y conCfdi la siguen viendo', () => {
+    const r = resumirFiscal([gasto({ monto: 1000, ivaTraslado: 137.93, liquidacionFirmada: false })], OPTS);
+    expect(r.gastoTotal).toBe(1000);
+    expect(r.conCfdi).toBe(1);
+    expect(r.n).toBe(1);
+  });
+
+  it('sin liquidación firmada NO tapa "pérdidas" (recuperable pidiendo factura sigue viendo tickets sin CFDI de un viaje abierto)', () => {
+    const r = resumirPerdidas([gasto({ cfdiUuid: null, plazoVencido: false, liquidacionFirmada: false })], OPTS);
+    expect(r.montoRecuperable).toBeGreaterThan(0);
+  });
+});
+
 // ── Celdas agregadas (mig. 0151) ───────────────────────────────────────────
 
 describe('celdas agregadas — la ley pesa una celda por sus n comprobantes', () => {
@@ -628,6 +658,12 @@ describe('celdas agregadas — la ley pesa una celda por sus n comprobantes', ()
     const r = resumirFiscal([celda(5, { concepto: 'caseta', subTotal: 900 }, { subTotalNulos: 2 })], OPTS);
     expect(r.subTotalCasetas).toBe(900);
     expect(r.casetasSinSubTotal).toBe(2);
+  });
+
+  it('FIS-REAUD-1: una celda de comprobantes sin liquidación firmada no acredita su IVA', () => {
+    const r = resumirFiscal([celda(3, { ivaTraslado: 300, liquidacionFirmada: false }, { ivaEstado: 'positivo' })], OPTS);
+    expect(r.ivaAcreditable).toBe(0);
+    expect(r.ivaNoAcreditable).toBe(300);
   });
 
   it('resumirPerdidas: porCausa.n y sinFormaPago/sinFecha pesan n', () => {
