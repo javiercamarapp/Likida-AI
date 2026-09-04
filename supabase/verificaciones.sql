@@ -14425,7 +14425,7 @@ begin
     coalesce(expediente_vacio,false), anon_ok, auth_ok;
 end $$;
 
--- ── 212. La identidad congelada de un token MCP deja de ser válida el instante en que app_user cambia (mig. 0265, HALLAZGO 1) ──
+-- ── 212. La identidad congelada de un token MCP deja de ser válida el instante en que app_user cambia (mig. 0265 + 0316, HALLAZGO 1 + SEC-3) ──
 --
 -- Esto es lo que un test de TypeScript con Supabase mockeado NO puede
 -- demostrar: que la GARANTÍA vive en la base, contra una fila REAL de
