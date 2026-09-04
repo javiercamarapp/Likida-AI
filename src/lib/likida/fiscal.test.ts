@@ -47,6 +47,11 @@ function gasto(over: Partial<GastoFiscal> = {}): GastoFiscal {
     // archivo ejercitan otras reglas de `ivaSostenible` y no quieren que la
     // puerta de FIS-REAUD-1 las tape. Las pruebas de esa puerta la pisan.
     liquidacionFirmada: true,
+    // Default: receptor de la propia empresa, sin ninguna de las 7 señales
+    // de FIS-REAUD-2 encendida — las pruebas de esas puertas las pisan.
+    rfcReceptor: 'REC010101AA1',
+    monedaExtranjera: false, renglonesAjenos: false, consumoBar: false,
+    complementoHidrocarburosFalta: false, otroEjercicio: false,
     ...over,
   };
 }
@@ -618,6 +623,73 @@ describe('FIS-REAUD-1 — «IVA acreditable documentado» exige liquidación FIR
   it('sin liquidación firmada NO tapa "pérdidas" (recuperable pidiendo factura sigue viendo tickets sin CFDI de un viaje abierto)', () => {
     const r = resumirPerdidas([gasto({ cfdiUuid: null, plazoVencido: false, liquidacionFirmada: false })], OPTS);
     expect(r.montoRecuperable).toBeGreaterThan(0);
+  });
+});
+
+// ── RE-AUDITORÍA 25, FIS-REAUD-2 (CRÍTICO) ──────────────────────────────────
+// Las 7 causas de SIN_IVA_ACREDITABLE (engine.ts) que le faltaban a
+// `ivaSostenible`: rfc_receptor, rfc_receptor_no_verificable,
+// moneda_extranjera, renglones_ajenos, consumo_bar,
+// complemento_hidrocarburos y gasto_otro_ejercicio.
+describe('FIS-REAUD-2 — «IVA acreditable documentado» iguala las 7 causas que le faltaban frente a SIN_IVA_ACREDITABLE', () => {
+  it('receptor ausente (rfc_receptor_no_verificable): NO acredita', () => {
+    const r = resumirFiscal([gasto({ ivaTraslado: 100, rfcReceptor: null })], OPTS);
+    expect(r.ivaAcreditable).toBe(0);
+    expect(r.ivaNoAcreditable).toBe(100);
+  });
+
+  it('receptor que NO es de la flota (rfc_receptor): NO acredita — aunque fuera el RFC del operador (RLISR 57), el panel agregado no lo sabe y falla cerrado', () => {
+    const o: OpcionesFiscales = { ...OPTS, rfcsPropios: new Set(['EMP010101AA1']), empresaRfcConfigurado: true };
+    const r = resumirFiscal([gasto({ ivaTraslado: 100, rfcReceptor: 'TER010101AA1' })], o);
+    expect(r.ivaAcreditable).toBe(0);
+  });
+
+  it('receptor que SÍ es de la flota: acredita (no-regresión), sin importar mayúsculas/espacios', () => {
+    const o: OpcionesFiscales = { ...OPTS, rfcsPropios: new Set(['EMP010101AA1']), empresaRfcConfigurado: true };
+    const r = resumirFiscal([gasto({ ivaTraslado: 100, rfcReceptor: ' emp010101aa1 ' })], o);
+    expect(r.ivaAcreditable).toBe(100);
+  });
+
+  it('RFC de empresa capturado pero inválido (rfcsPropios vacío) y receptor presente: NO acredita (rfc_receptor_no_verificable)', () => {
+    const o: OpcionesFiscales = { ...OPTS, rfcsPropios: new Set(), empresaRfcConfigurado: true };
+    const r = resumirFiscal([gasto({ ivaTraslado: 100, rfcReceptor: 'REC010101AA1' })], o);
+    expect(r.ivaAcreditable).toBe(0);
+  });
+
+  it('sin NINGÚN RFC de empresa capturado, el receptor no se juzga (mismo criterio que cuadrarViaje)', () => {
+    const o: OpcionesFiscales = { ...OPTS, rfcsPropios: new Set(), empresaRfcConfigurado: false };
+    const r = resumirFiscal([gasto({ ivaTraslado: 100, rfcReceptor: 'REC010101AA1' })], o);
+    expect(r.ivaAcreditable).toBe(100);
+  });
+
+  it('moneda_extranjera: NO acredita', () => {
+    const r = resumirFiscal([gasto({ ivaTraslado: 100, monedaExtranjera: true })], OPTS);
+    expect(r.ivaAcreditable).toBe(0);
+  });
+
+  it('renglones_ajenos: NO acredita', () => {
+    const r = resumirFiscal([gasto({ ivaTraslado: 100, renglonesAjenos: true })], OPTS);
+    expect(r.ivaAcreditable).toBe(0);
+  });
+
+  it('consumo_bar: NO acredita', () => {
+    const r = resumirFiscal([gasto({ ivaTraslado: 100, consumoBar: true })], OPTS);
+    expect(r.ivaAcreditable).toBe(0);
+  });
+
+  it('complemento_hidrocarburos (veredicto duro): NO acredita', () => {
+    const r = resumirFiscal([gasto({ ivaTraslado: 100, complementoHidrocarburosFalta: true })], OPTS);
+    expect(r.ivaAcreditable).toBe(0);
+  });
+
+  it('gasto_otro_ejercicio: NO acredita', () => {
+    const r = resumirFiscal([gasto({ ivaTraslado: 100, otroEjercicio: true })], OPTS);
+    expect(r.ivaAcreditable).toBe(0);
+  });
+
+  it('sin ninguna de las 7 señales: acredita (no-regresión)', () => {
+    const r = resumirFiscal([gasto({ ivaTraslado: 100 })], OPTS);
+    expect(r.ivaAcreditable).toBe(100);
   });
 });
 

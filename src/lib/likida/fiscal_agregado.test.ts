@@ -39,7 +39,17 @@ type Fila = {
    *  `left join liquidacion` que la RPC hace de verdad; aquí, un campo
    *  directo alcanza para probar la equivalencia. */
   liquidacion_firmada: boolean;
+  /** RE-AUDITORÍA 25, FIS-REAUD-2 (mig. 0317). */
+  rfc_receptor: string | null;
+  complemento_hidrocarburos: boolean | null;
+  cfdi_esquema_alterno: boolean | null;
 };
+
+/** MISMO umbral y patrón que engine.ts (`UMBRAL_RENGLONES_AJENOS`,
+ *  `SENAL_BAR`) — se importan de verdad en fiscal.ts; aquí, literales
+ *  escritos de forma independiente alcanzan para probar la equivalencia. */
+const UMBRAL_RENGLONES = 0.15;
+const PATRON_BAR = /\b(bar|bares|cantina|cervecer[ií]a|pulquer[ií]a|antro|cabaret|table\s*dance|vinos\s+y\s+licores)\b/i;
 
 const HOY = '2026-08-22';
 const T = 'tenant-a';
@@ -55,6 +65,7 @@ function fila(over: Partial<Fila>): Fila {
     iva_traslado: null, ieps_traslado: null, clave_prod_serv: null, tipo_comprobante: 'I',
     xml_verificado: true, ocr_confianza: 0.9, ocr_extra: null,
     liquidacion_firmada: true,
+    rfc_receptor: 'REC010101AA1', complemento_hidrocarburos: null, cfdi_esquema_alterno: null,
     ...over,
   };
 }
@@ -106,6 +117,53 @@ function dataset(): Fila[] {
   ];
 }
 
+// RE-AUDITORÍA 25, FIS-REAUD-2: las fórmulas de las 7 causas nuevas, UNA vez
+// —lo que este archivo prueba es que la AGREGACIÓN (legacy fila-por-fila vs.
+// SQL-emulado-y-celdas) no cambia ninguna cifra visible; que la FÓRMULA de
+// cada causa es correcta ya lo prueba `fiscal.test.ts` directo contra
+// `ivaSostenible`, con datasets propios por causa.
+function monedaExtranjeraDe(f: Fila): boolean {
+  const m = f.ocr_extra?.moneda;
+  return typeof m === 'string' && m !== '' && m !== 'MXN';
+}
+function renglonesAjenosDe(f: Fila): boolean {
+  const renglones = f.ocr_extra?.renglones;
+  if (!Array.isArray(renglones) || !(f.monto > 0)) return false;
+  const suma = renglones
+    .filter((r): r is { ajenoAlViaje: boolean; importe: number } =>
+      Boolean(r) && typeof r === 'object' && (r as { ajenoAlViaje?: unknown }).ajenoAlViaje === true
+      && typeof (r as { importe?: unknown }).importe === 'number' && Number.isFinite((r as { importe: number }).importe))
+    .reduce((s, r) => s + r.importe, 0);
+  return suma > 0 && suma / f.monto >= UMBRAL_RENGLONES;
+}
+function consumoBarDe(f: Fila): boolean {
+  if (f.concepto !== 'alimentacion') return false;
+  const textos = [f.ocr_extra?.emisor, f.ocr_extra?.producto].filter((v): v is string => typeof v === 'string' && v.length > 0);
+  return textos.some((t) => PATRON_BAR.test(t));
+}
+function complementoHidrocarburosFaltaDe(f: Fila, clavesCombustible: string[], vigenteDesde: string, exigibleDesde: string | null): boolean {
+  const esCombustible = f.concepto === 'diesel' || clavesCombustible.includes(f.clave_prod_serv ?? '');
+  if (!esCombustible) return false;
+  if (f.tipo_comprobante !== 'I' && f.tipo_comprobante !== 'E') return false;
+  const miraElComplemento = f.fecha === null || f.fecha >= vigenteDesde;
+  if (!miraElComplemento) return false;
+  if (f.cfdi_esquema_alterno) return false;
+  if (f.complemento_hidrocarburos) return false;
+  if (f.xml_verificado !== true) return false;
+  if (exigibleDesde === null) return false;
+  return f.fecha === null || f.fecha >= exigibleDesde;
+}
+function otroEjercicioDe(f: Fila, hoy: string): boolean {
+  if (f.fecha === null) return false;
+  const ejercicioHoy = Number(hoy.slice(0, 4));
+  const ejercicioGasto = Number(f.fecha.slice(0, 4));
+  const enero = hoy.slice(5, 7) === '01';
+  return ejercicioGasto < ejercicioHoy - (enero ? 1 : 0);
+}
+/** Config sintética de hidrocarburos para las pruebas de este archivo — sin
+ *  fecha de exigibilidad respaldada, como en producción hoy (`NORMAS`). */
+const HIDROCARBUROS = { claves: ['15101505', '15101514', '15101515'], vigenteDesde: '2026-04-24', exigibleDesde: null as string | null };
+
 // ── EL CAMINO VIEJO, congelado: el mapeo fila→GastoFiscal de getGastosFiscales
 //    antes de la 0151 (sin el contexto de viaje, que ninguna cifra usa). ──
 import type { GastoFiscal, OpcionesFiscales } from './fiscal';
@@ -134,6 +192,12 @@ function legacyMapear(filas: Fila[], tenantId: string, desde: string | null, has
         tipoComprobante: f.tipo_comprobante || null, xmlVerificado: bool(f.xml_verificado), ocrConfianza: num(f.ocr_confianza),
         viajeFolio: null, operadorNombre: null, plazoVencido,
         liquidacionFirmada: f.liquidacion_firmada,
+        rfcReceptor: f.rfc_receptor || null,
+        monedaExtranjera: monedaExtranjeraDe(f),
+        renglonesAjenos: renglonesAjenosDe(f),
+        consumoBar: consumoBarDe(f),
+        complementoHidrocarburosFalta: complementoHidrocarburosFaltaDe(f, HIDROCARBUROS.claves, HIDROCARBUROS.vigenteDesde, HIDROCARBUROS.exigibleDesde),
+        otroEjercicio: otroEjercicioDe(f, hoy),
       };
     });
 }
@@ -143,6 +207,8 @@ type ArgsRpc = {
   p_tenant: string; p_desde: string | null; p_hasta: string | null;
   p_tope_efectivo: number; p_tope_alimentacion: number | null;
   p_conceptos_alimentacion: string[]; p_cortes: string[];
+  p_claves_combustible: string[]; p_vigente_desde: string | null; p_exigible_desde: string | null;
+  p_umbral_renglones_ajenos: number; p_patron_bar: string; p_hoy: string;
 };
 function hostDe(url: unknown): string | null {
   if (typeof url !== 'string' || !url) return null;
@@ -190,6 +256,12 @@ function sqlAgregadoEquivalente(filas: Fila[], a: ArgsRpc): unknown[] {
       diaViaje: enDia ? b.viaje_id : null, diaDia: enDia ? b.dia : null,
       totalTimbradoDia: enDia ? dias.get(`${b.viaje_id}|${b.dia}`)! : null,
       liquidacionFirmada: b.liquidacion_firmada,
+      rfcReceptor: nz(b.rfc_receptor),
+      monedaExtranjera: monedaExtranjeraDe(b),
+      renglonesAjenos: renglonesAjenosDe(b),
+      consumoBar: consumoBarDe(b),
+      complementoHidrocarburosFalta: complementoHidrocarburosFaltaDe(b, a.p_claves_combustible, a.p_vigente_desde ?? HIDROCARBUROS.vigenteDesde, a.p_exigible_desde),
+      otroEjercicio: otroEjercicioDe(b, a.p_hoy),
     };
     const k = JSON.stringify(dims);
     const c = celdas.get(k) ?? { ...dims, n: 0, monto: 0, iva: 0, ieps: 0, iepsNulos: 0, subTotal: 0, subTotalNulos: 0, muestraId: b.id, muestraCfdi: b.cfdi_uuid, fechaMax: b.fecha };
@@ -394,6 +466,22 @@ describe('getGastosFiscales — los argumentos viajan a la RPC', () => {
     await getGastosFiscales(T, resolverPeriodo('mes', HOY), HOY, { ...OPTS, viaticosTopeFiscalDiarioMxn: null });
     expect(llamadasRpc[0].args.p_tope_alimentacion).toBeNull();
   });
+
+  it('RE-AUDITORÍA 25, FIS-REAUD-2: manda las claves de combustible, el umbral, el patrón de bar traducido a `\\y` y `hoy`', async () => {
+    await getGastosFiscales(T, resolverPeriodo('mes', HOY), HOY, OPTS);
+    const a = llamadasRpc[0].args;
+    expect(a.p_claves_combustible).toEqual(OPTS.clavesCombustible);
+    expect(a.p_umbral_renglones_ajenos).toBe(UMBRAL_RENGLONES);
+    expect(a.p_patron_bar).not.toContain('\\b');
+    expect(a.p_hoy).toBe(HOY);
+  });
+
+  it('sin RFC/hidrocarburos declarados en OpcionesFiscales, manda null (el panel no restringe de más)', async () => {
+    await getGastosFiscales(T, resolverPeriodo('mes', HOY), HOY, OPTS);
+    const a = llamadasRpc[0].args;
+    expect(a.p_vigente_desde).toBeNull();
+    expect(a.p_exigible_desde).toBeNull();
+  });
 });
 
 describe('getGastosFiscales — fail-closed (mig. 0151)', () => {
@@ -408,7 +496,12 @@ describe('getGastosFiscales — fail-closed (mig. 0151)', () => {
   it('una celda sin `n` o con `monto` que no es número LANZA — nunca `?? 0`', async () => {
     forzarForma = [{ concepto: 'diesel', monto: '12' }];
     await expect(getGastosFiscales(T, resolverPeriodo('mes', HOY), HOY, OPTS)).rejects.toThrow(/forma esperada/);
-    forzarForma = [{ ...(sqlAgregadoEquivalente(dataset(), { p_tenant: T, p_desde: null, p_hasta: null, p_tope_efectivo: 2000, p_tope_alimentacion: 750, p_conceptos_alimentacion: ['alimentacion'], p_cortes: [] })[0] as object), n: 0 }];
+    forzarForma = [{ ...(sqlAgregadoEquivalente(dataset(), {
+      p_tenant: T, p_desde: null, p_hasta: null, p_tope_efectivo: 2000, p_tope_alimentacion: 750,
+      p_conceptos_alimentacion: ['alimentacion'], p_cortes: [],
+      p_claves_combustible: HIDROCARBUROS.claves, p_vigente_desde: HIDROCARBUROS.vigenteDesde, p_exigible_desde: null,
+      p_umbral_renglones_ajenos: UMBRAL_RENGLONES, p_patron_bar: PATRON_BAR.source, p_hoy: HOY,
+    })[0] as object), n: 0 }];
     await expect(getGastosFiscales(T, resolverPeriodo('mes', HOY), HOY, OPTS)).rejects.toThrow(/`n`/);
   });
 });
