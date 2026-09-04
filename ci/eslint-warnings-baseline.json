@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "totalWarnings": 193,
+  "totalWarnings": 194,
   "byFileRule": {
     "src/app/admin/evals/error_comprobado.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/app/admin/mi-perfil/avatar_validado.test.ts::security/detect-non-literal-fs-filename": 1,
@@ -87,7 +87,7 @@
     "src/lib/likida/pruebas_en_ci.test.ts::security/detect-non-literal-fs-filename": 3,
     "src/lib/likida/regex_sin_redos.test.ts::security/detect-unsafe-regex": 4,
     "src/lib/likida/ruta_pdf_sincronizada.test.ts::security/detect-non-literal-fs-filename": 1,
-    "src/lib/likida/seed_guard.test.ts::security/detect-non-literal-fs-filename": 14,
+    "src/lib/likida/seed_guard.test.ts::security/detect-non-literal-fs-filename": 15,
     "src/lib/likida/storage_borrado.test.ts::@typescript-eslint/no-unused-vars": 1,
     "src/lib/likida/talacha_wa.ts::security/detect-unsafe-regex": 3,
     "src/lib/likida/tools.ts::@typescript-eslint/no-unused-vars": 1,
