@@ -218,7 +218,7 @@ describe('desactivarUsuario — la baja en tres capas', () => {
   // hasta 8h y su refresco hasta 60 días (0265) — sin esto, la baja no
   // tumbaba esos tokens de inmediato: dependía de que el próximo refresco
   // topara con `mcp_oauth_usuario_vigente()` (que además, antes de la
-  // migración 0316, ni siquiera preguntaba por `activo`).
+  // migración 0318, ni siquiera preguntaba por `activo`).
   // ═══════════════════════════════════════════════════════════════════════
   it('también tumba de un tiro los tokens MCP vivos del usuario (revocar_mcp_oauth_usuario)', async () => {
     colas.set('app_user', [{ data: fila() }, { data: [{ id: U }] }]);

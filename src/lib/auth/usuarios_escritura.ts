@@ -218,7 +218,7 @@ export async function desactivarUsuario(
   // REFRESH de la cookie del panel, pero no toca un token MCP — un acceso
   // sigue vivo hasta 8h y su refresco hasta 60 días (0265), y sin esto la
   // baja dependía de que el SIGUIENTE refresco topara con
-  // `mcp_oauth_usuario_vigente()` (que la migración 0316 hizo mirar
+  // `mcp_oauth_usuario_vigente()` (que la migración 0318 hizo mirar
   // `activo`, pero eso solo cierra el refresco, no lo que ya estaba vivo).
   // `revocar_mcp_oauth_usuario` (la RPC hermana de la propia 0265) tumba de
   // un tiro TODOS los tokens vivos de esta persona en esta flota. Best-effort
