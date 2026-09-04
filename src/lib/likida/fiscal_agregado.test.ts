@@ -34,6 +34,11 @@ type Fila = {
   forma_pago: string | null; sub_total: number | null; iva_traslado: number | null; ieps_traslado: number | null;
   clave_prod_serv: string | null; tipo_comprobante: string | null; xml_verificado: boolean | null;
   ocr_confianza: number | null; ocr_extra: Record<string, unknown> | null;
+  /** RE-AUDITORÍA 25, FIS-REAUD-1 (mig. 0316): el viaje de este gasto ya
+   *  tiene liquidación firmada (aprobada|ajustada) — de pie por el
+   *  `left join liquidacion` que la RPC hace de verdad; aquí, un campo
+   *  directo alcanza para probar la equivalencia. */
+  liquidacion_firmada: boolean;
 };
 
 const HOY = '2026-08-22';
@@ -49,6 +54,7 @@ function fila(over: Partial<Fila>): Fila {
     estado_sat: 'vigente', efos: false, efos_revisar: null, forma_pago: '04', sub_total: null,
     iva_traslado: null, ieps_traslado: null, clave_prod_serv: null, tipo_comprobante: 'I',
     xml_verificado: true, ocr_confianza: 0.9, ocr_extra: null,
+    liquidacion_firmada: true,
     ...over,
   };
 }
@@ -127,6 +133,7 @@ function legacyMapear(filas: Fila[], tenantId: string, desde: string | null, has
         ivaTraslado: num(f.iva_traslado), iepsTraslado: num(f.ieps_traslado), claveProdServ: f.clave_prod_serv || null,
         tipoComprobante: f.tipo_comprobante || null, xmlVerificado: bool(f.xml_verificado), ocrConfianza: num(f.ocr_confianza),
         viajeFolio: null, operadorNombre: null, plazoVencido,
+        liquidacionFirmada: f.liquidacion_firmada,
       };
     });
 }
@@ -182,6 +189,7 @@ function sqlAgregadoEquivalente(filas: Fila[], a: ArgsRpc): unknown[] {
       emisor: sinCfdi ? nz(((b.ocr_extra?.emisor as string | undefined)?.trim().toUpperCase()) ?? null) : null,
       diaViaje: enDia ? b.viaje_id : null, diaDia: enDia ? b.dia : null,
       totalTimbradoDia: enDia ? dias.get(`${b.viaje_id}|${b.dia}`)! : null,
+      liquidacionFirmada: b.liquidacion_firmada,
     };
     const k = JSON.stringify(dims);
     const c = celdas.get(k) ?? { ...dims, n: 0, monto: 0, iva: 0, ieps: 0, iepsNulos: 0, subTotal: 0, subTotalNulos: 0, muestraId: b.id, muestraCfdi: b.cfdi_uuid, fechaMax: b.fecha };
@@ -349,6 +357,21 @@ describe('getGastosFiscales — equivalencia: la ley sobre filas crudas vs sobre
     const fundida = celdas.find((c) => c.monto === 600)!;
     expect(fundida.celda?.n).toBe(3);
     expect(celdas.some((c) => c.monto === 400 && c.celda?.n === 1)).toBe(true);
+  });
+});
+
+describe('getGastosFiscales — FIS-REAUD-1 (mig. 0316): sin liquidación firmada, la celda no acredita su IVA', () => {
+  it('un comprobante de un viaje SIN liquidación firmada llega marcado y `ivaSostenible` lo niega', async () => {
+    servidor.filas = [
+      fila({ tenant_id: T, monto: 1160, iva_traslado: 160, liquidacion_firmada: false }),
+      fila({ tenant_id: T, monto: 1160, iva_traslado: 160, liquidacion_firmada: true }),
+    ];
+    const celdas = await getGastosFiscales(T, resolverPeriodo('todo', HOY), HOY, OPTS);
+    expect(celdas).toHaveLength(2);
+    const r = resumirFiscal(celdas, OPTS);
+    expect(r.ivaAcreditable).toBe(160);
+    expect(r.ivaNoAcreditable).toBe(160);
+    expect(cifras(celdas, OPTS)).toEqual(cifras(legacyMapear(servidor.filas, T, null, null, HOY), OPTS));
   });
 });
 
