@@ -209,6 +209,69 @@ describe('canjearCodigo', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe('no_disponible');
   });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // BAJO-308 (auditoría 25) — mismo BE-18 que `refrescarTokens`, en la mitad
+  // del archivo que la 24 no revisó. El código se marcaba `usado_en` ANTES
+  // de emitir el par. Si `emitirPar` fallaba (503, reintentable por RFC), el
+  // cliente reintentaba con el ÚNICO código que tiene —el mismo, ya
+  // quemado— y arriba se leía como REUSO: familia entera abajo e
+  // `invalid_grant`. El contralor tenía que rehacer el flujo de autorización
+  // completo desde su cliente MCP en vez de reintentar.
+  // ═══════════════════════════════════════════════════════════════════════
+  describe('BAJO-308 — una emisión fallida no quema el código', () => {
+    /** Cadena que ADEMÁS anota, por TABLA, qué método se llamó con qué. */
+    function cadenaEspia(resultado: Resultado, anotar: (m: string, args: unknown[]) => void): unknown {
+      const p = Promise.resolve(resultado);
+      const proxy: unknown = new Proxy({}, {
+        get(_t, prop) {
+          if (typeof prop === 'symbol') return undefined;
+          if (prop === 'then') return p.then.bind(p);
+          if (prop === 'catch') return p.catch.bind(p);
+          if (prop === 'finally') return p.finally.bind(p);
+          return (...args: unknown[]) => { anotar(String(prop), args); return proxy; };
+        },
+      });
+      return proxy;
+    }
+
+    it('REPRO: si `emitirPar` falla, el código vuelve a `usado_en = null`', async () => {
+      const pasos: Array<{ tabla: string; metodo: string; args: unknown[] }> = [];
+      // Por `mcp_oauth_codigo`: 1) lectura  2) UPDATE que marca usado
+      // 3) DELETE de limpieza (fire-and-forget)  4) UPDATE que deshace.
+      const porCodigo = [OK(filaCodigo()), OK([{ id: 'cod-1' }]), OK([]), OK([{ id: 'cod-1' }])];
+      let iCodigo = 0;
+      sbMock.mockReturnValue({
+        from: (tabla: string) => {
+          const resultado = tabla === 'mcp_oauth_token'
+            ? FALLA('la base no contestó') // el INSERT del par, dentro de emitirPar
+            : porCodigo[Math.min(iCodigo++, porCodigo.length - 1)];
+          return cadenaEspia(resultado, (m, a) => pasos.push({ tabla, metodo: m, args: a }));
+        },
+      });
+
+      const r = await canjearCodigo(CODIGO, 'cli-1', 'https://claude.ai/api/mcp/auth_callback', VERIFIER_RFC);
+
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toBe('no_disponible'); // reintentable, no `invalid_grant`
+      const updatesCodigo = pasos.filter((x) => x.tabla === 'mcp_oauth_codigo' && x.metodo === 'update').map((x) => x.args[0]);
+      expect(updatesCodigo).toHaveLength(2);
+      // El primero puso el sello (`usado_en`); el ÚLTIMO lo quitó.
+      expect(updatesCodigo[1]).toEqual({ usado_en: null });
+      // Y se deshizo anclando por ESE sello, no a ciegas.
+      const anclas = pasos.filter((x) => x.tabla === 'mcp_oauth_codigo' && x.metodo === 'eq').map((x) => x.args);
+      expect(anclas).toContainEqual(['usado_en', (updatesCodigo[0] as { usado_en: string }).usado_en]);
+    });
+
+    it('una emisión BUENA no deshace nada', async () => {
+      conTablas({
+        mcp_oauth_codigo: [OK(filaCodigo()), OK([{ id: 'cod-1' }]), OK([])],
+        mcp_oauth_token: [OK(null)],
+      });
+      const r = await canjearCodigo(CODIGO, 'cli-1', 'https://claude.ai/api/mcp/auth_callback', VERIFIER_RFC);
+      expect(r.ok).toBe(true);
+    });
+  });
 });
 
 describe('refrescarTokens', () => {

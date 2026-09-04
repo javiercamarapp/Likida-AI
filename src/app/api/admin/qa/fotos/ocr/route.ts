@@ -35,6 +35,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { extraerComprobante } from '@/lib/likida/intake/ocr';
+import { TIMEOUT_LLM_MS } from '@/lib/llm/openrouter';
 import { TOPE_DIA_USD, validarLoteOcr } from '@/lib/admin/qa-tipos';
 import {
   leerManifiesto, dataUrlDeFoto, guardarLectura, gastoHoyUsd, gastoLecturasHoyUsd,
@@ -48,21 +49,35 @@ import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-// El mismo techo probado del repo que usa /api/admin/qa/lanzar (y el webhook).
-export const maxDuration = 120;
+// AUDITORÍA 25, MEDIO (REND-A6, REINCIDENTE de la 24): con 120 s el margen
+// (15 s) no cubría el PEOR CASO de una sola foto en vuelo cuando el reloj se
+// consultó (hasta 120 s: cuatro intentos de `extraerComprobante` a
+// `TIMEOUT_LLM_MS` cada uno, ver más abajo) — la invocación podía morir A
+// MEDIO PAQUETE con el `sinTurno` del mecanismo de reloj sin oportunidad de
+// escribirse. `maxDuration = 300`, como `/api/admin/qa/[id]/continuar`
+// (mismo tipo de ruta, mismo problema), le da margen real a ese peor caso.
+export const maxDuration = 300;
 
 /**
- * El presupuesto de reloj de ESTA invocación, con margen para escribir la
- * respuesta. `maxDuration` es 120 s; se corta en 105 y quedan 15 s para que la
- * última foto en vuelo termine de escribir su fila y para serializar el JSON.
- * Mismo criterio que `TECHO_CORRIDA_MS` (110 s) de qa-motor, un poco más
- * conservador porque aquí la última llamada de visión ya está en curso cuando
- * el reloj se consulta.
+ * Cuánto se aparta para lo que YA está en vuelo cuando el reloj corta: el
+ * peor caso de UNA llamada de visión (la escalera de reintentos completa de
+ * `generateStructured`, `openrouter.ts:699-725`: primer intento, reintento
+ * por truncamiento, reintento con nota, fallback cross-provider — cuatro
+ * intentos a `TIMEOUT_LLM_MS` cada uno) más un colchón para escribir la fila
+ * y serializar el JSON de respuesta.
+ */
+const MARGEN_ESCRITURA_MS = 10_000;
+const PEOR_CASO_UNA_FOTO_MS = 4 * TIMEOUT_LLM_MS;
+
+/**
+ * El presupuesto de reloj de ESTA invocación: se deja de arrancar fotos
+ * NUEVAS cuando lo que resta de `maxDuration` ya no alcanza para que la foto
+ * que arrancaría ahora, en su PEOR caso, termine con margen para escribirse.
  *
  * No se exporta: Next 16 rechaza cualquier export de un `route.ts` que no sea
  * un handler o una de sus opciones de segmento.
  */
-const PRESUPUESTO_MS = 105_000;
+const PRESUPUESTO_MS = maxDuration * 1_000 - PEOR_CASO_UNA_FOTO_MS - MARGEN_ESCRITURA_MS;
 
 const MAX_BODY = 8 * 1024;
 

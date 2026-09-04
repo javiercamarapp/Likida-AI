@@ -21,6 +21,27 @@ import { logger } from '@/lib/logger';
 export type RolAppUser = 'superadmin' | 'flota_admin' | 'contador' | 'encargado' | 'vendedor';
 
 /**
+ * LA ÚNICA traducción de `RolAppUser` a texto de pantalla.
+ *
+ * ARQUITECTURA 25 (BAJO, REINCIDENTE). Había cuatro copias de este mapa
+ * (`admin/equipo`, `admin/mi-perfil`, `dashboard/mi-perfil`,
+ * `dashboard/sesiones-mcp`) y ya habían divergido: dos seguían nombrando
+ * `operador` (retirado del dominio en la 0086, sin login desde el
+ * 7-ago-2026) y ninguna de las tres copias sin tipar traía `vendedor`
+ * (0105) — ese superadmin salía con su rol crudo, "vendedor", en vez de un
+ * rótulo. `Record<RolAppUser, string>` (exhaustivo, TypeScript avisa si
+ * falta un rol) es la forma correcta; las otras tres eran
+ * `Record<string, string>` y caían a `?? s.rol` en silencio.
+ */
+export const ROL_LABEL: Record<RolAppUser, string> = {
+  superadmin: 'Superadmin',
+  flota_admin: 'Dueño / Admin de flota',
+  encargado: 'Encargado',
+  contador: 'Contador',
+  vendedor: 'Vendedor (Likida)',
+};
+
+/**
  * Normaliza el teléfono de oficina EXACTAMENTE como el del operador
  * (`administracion.ts:registrarOperador`): solo dígitos, lada 52 si vienen 10,
  * y la forma canónica de `destinatarioWhatsApp` — que es la que

@@ -142,6 +142,37 @@ function redactMeta(meta: Record<string, unknown>): Record<string, unknown> {
 
 type Level = 'debug' | 'info' | 'warn' | 'error';
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25, ALTO REINCIDENTE — un fallo SOLO-DE-CLIENTE (el layout raíz
+// truena después de hidratar: `global-error.tsx`, `dashboard/error.tsx`, los
+// `error.tsx` de /admin) llamaba a `logger.error` igual que el servidor, pero
+// en el navegador `console.error` solo llega a la consola DEL CONTRALOR y la
+// réplica a Sentry de abajo nunca se dispara: `SENTRY_DSN` no es
+// `NEXT_PUBLIC_*` (a propósito, ver proxy.ts), así que en el bundle de
+// cliente es `undefined`. `onRequestError` (instrumentation.ts) tampoco se
+// entera: no hubo petición al servidor. Resultado: la pantalla dice "La
+// aplicación no pudo continuar" y no queda NADA que buscar después.
+//
+// `reportarAlServidor` cierra ese hueco por el único camino que la CSP
+// `connect-src 'self'` permite: un POST a una ruta PROPIA
+// (`/api/client-error`), que ahí sí corre `logger.error` de servidor —con
+// Sentry si hay DSN, y con línea de log siempre haya o no DSN. Best-effort a
+// propósito (mismo criterio que `alertarOperador`: nunca lanza): un fallo de
+// ESTA llamada no puede sumarle un fallo al fallo que ya se está reportando.
+function reportarAlServidor(level: Level, msg: string, meta?: Record<string, unknown>) {
+  if (typeof window === 'undefined') return; // servidor: ya se logueó arriba, no hay nada que replicar
+  try {
+    void fetch('/api/client-error', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ level, msg, meta }),
+      keepalive: true, // sobrevive a la navegación si el fallo ocurre justo antes de salir de la página
+    }).catch(() => {});
+  } catch {
+    // best-effort: fetch puede no existir en algún entorno raro de pruebas
+  }
+}
+
 function emit(level: Level, msg: string, meta?: Record<string, unknown>) {
   const redactado = meta ? redactMeta(meta) : undefined;
   // `t` iba vacío "para no romper determinismo de tests" y ninguna prueba lo
@@ -156,6 +187,13 @@ function emit(level: Level, msg: string, meta?: Record<string, unknown>) {
   // perezoso para no arrastrar el paquete en tests ni en el cliente.
   if ((level === 'error' || level === 'warn') && process.env.SENTRY_DSN) {
     void import('./observability/sentry').then((s) => s.reportar(level, msg, redactado));
+  }
+
+  // Y del cliente al servidor, para que un fallo solo-de-cliente deje rastro
+  // en alguna parte además de la consola del contralor (ver la cabecera de
+  // `reportarAlServidor`). Ya redactado — el POST nunca lleva PII cruda.
+  if (level === 'error' || level === 'warn') {
+    reportarAlServidor(level, msg, redactado);
   }
 }
 

@@ -1,0 +1,55 @@
+id: rliva-3-fr-II
+tipo: reglamento
+jerarquia: 2
+instrumento: "Reglamento de la Ley del Impuesto al Valor Agregado"
+articulo_o_regla: "3"
+fraccion: "II"
+titulo: "Retención del 4% de IVA por servicios de autotransporte terrestre de bienes"
+citas_en_codigo: ["RLIVA 3-II"]
+texto_vigente: >
+  Artículo 3. Para los efectos del artículo 1o.-A, último párrafo de la Ley, las
+  personas morales obligadas a efectuar la retención del impuesto que se les
+  traslade, lo harán en una cantidad menor, en los casos siguientes:
+
+  II. La retención se hará por el 4% del valor de la contraprestación pagada
+  efectivamente, cuando reciban los servicios de autotransporte terrestre de
+  bienes que sean considerados como tales en los términos de las leyes de la
+  materia.
+
+  Las personas físicas o morales que presten los servicios de autotransporte de
+  bienes a que se refiere el párrafo anterior, deberán poner a disposición del
+  Servicio de Administración Tributaria, de conformidad con las disposiciones
+  fiscales, la documentación comprobatoria, de las cantidades adicionales al
+  valor de la contraprestación pactada por los citados servicios, que
+  efectivamente se cobren a quien los reciba, por contribuciones distintas al
+  impuesto al valor agregado, viáticos, gastos de toda clase, reembolsos,
+  intereses normales o moratorios, penas convencionales y por cualquier otro
+  concepto, identificando dicha documentación con tales erogaciones.
+estado_verificacion: verificado_fuente_primaria
+fuente_url: "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LIVA_250914.pdf"
+fuente_tipo: diputados_oficial
+verificado_el: 2026-09-03
+por_que_importa: >
+  AUDITORÍA 25, MEDIO FISCAL, REINCIDENTE de la 23 y la 24 (fiscal.md línea
+  322) — Likida TIMBRA esta cifra ante el SAT (`carta_porte_cfdi.ts`, cada CFDI
+  de flete a un receptor persona moral) y hasta esta ficha no tenía fundamento
+  en `normas/`: era la única cifra fiscal que el producto imprime sin una
+  ficha detrás, y encima el comentario que la fundaba citaba la norma
+  equivocada por partida doble.
+
+  El art. 1-A fr. II inciso c) de la LIVA es la fuente de la OBLIGACIÓN de
+  retener sobre servicios de autotransporte terrestre de bienes — eso el
+  comentario ya lo tenía bien. Pero la TASA del 4% no vive en "la regla 3.1.2
+  de la RMF" (que además es del Título 3 de ISR, no del IVA): vive aquí, en el
+  artículo 3, fracción II de este Reglamento — el artículo 1-A, último párrafo
+  de la Ley es el que remite al Reglamento para fijar "una cantidad menor" a
+  retener, y este artículo es esa remisión.
+estado_implementacion: >
+  IMPLEMENTADO Y CORRECTO en el cálculo: `carta_porte_cfdi.ts` retiene 4% de
+  `SubTotal` cuando el RFC del receptor tiene 12 caracteres (persona moral) y
+  0 cuando tiene 13 (persona física) — coincide con la fracción II, que solo
+  aplica a personas MORALES. Lo que este hallazgo cierra es la CITA en el
+  comentario y la ausencia de ficha, no el cálculo.
+usado_en_codigo:
+  - "carta_porte_cfdi.ts — ret = esMoral ? dinero(sub * 0.04) : null: la tasa del 4%, solo cuando el receptor es persona moral (RFC de 12 caracteres)"
+  - "carta_porte_cfdi.ts — TasaOCuota=\"0.040000\" dentro del nodo cfdi:Retencion del XML que el PAC sella"

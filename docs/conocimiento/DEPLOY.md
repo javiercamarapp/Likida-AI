@@ -2,8 +2,12 @@
 
 La operación de resiliencia/deploy automatizada vive en
 [`docs/operacion/RESILIENCIA-DEPLOY.md`](../operacion/RESILIENCIA-DEPLOY.md):
-backup programado de Storage, manifiestos y hashes, restore drill seguro,
-Preview→smoke→promote, rollback aprobado y objetivos RPO/RTO.
+backup de Storage **bajo demanda** (`workflow_dispatch`; el `schedule` diario
+está apagado a propósito hasta terminar su primera configuración externa — no
+hay backup programado corriendo solo todavía), manifiestos y hashes, restore
+drill seguro, Preview→smoke→promote, rollback aprobado y objetivos RPO/RTO
+—objetivos, no un SLA, hasta la primera corrida programada y un restore drill
+con cronómetro—.
 
 Producción: **https://app.likida.ai** — proyecto `likida/likida.ai` en Vercel,
 plan Pro. Ya está desplegado y sirviendo WhatsApp real; este documento es para

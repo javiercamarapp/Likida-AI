@@ -139,26 +139,53 @@ export async function sincronizarEventosDeFlota(
     }
   }
 
-  // ── LEG-1: NO SE TRATA ANTES DE AVISAR ──────────────────────────────────
-  // Se resuelve UNA vez por corrida para las unidades con evento; si la base
-  // no contesta, no se guarda ningún evento de esta flota (fallar cerrado).
-  // Los huérfanos (sin unidad) no están ligados a una persona y siguen igual.
-  const conUnidad = [...new Set(eventos.map((e) => (e.assetId ? porDevice.get(e.assetId) : undefined)).filter((u): u is string => !!u))];
+  // ── LEG-1 / LEG-OP-1: NO SE TRATA ANTES DE AVISAR — PERO SOLO LO RUTINARIO ─
+  // La compuerta de aviso previo (art. 16 LFPDPPP) protege el DATO PERSONAL de
+  // conducta al volante. Un evento GRAVE (choque/volcadura, `esEventoGrave`)
+  // es harina de otro costal: hay una persona en riesgo físico real, y esa
+  // urgencia pesa más que el aviso previo de datos — de hecho, sin viaje vivo
+  // el expediente se abre por UNIDAD, sin `operador_id` (ver
+  // `asistencia_camara.ts`), así que ni siquiera ata el evento a una persona
+  // identificada. Por eso la compuerta se calcula y se aplica SOLO sobre los
+  // eventos RUTINARIOS: un evento grave se guarda y dispara SIEMPRE, exista o
+  // no viaje vivo, le hayan avisado o no a su operador.
+  //
+  // AUDITORÍA 25, LEG-OP-1 (CRÍTICO, sobre el arreglo de LEG-1 de esta misma
+  // ronda, commit 6ebfa53f): ese arreglo bloqueaba TODO evento de una unidad
+  // sin viaje vivo antes de mirar la gravedad — un choque o volcadura real
+  // entre viajes se perdía en silencio, sin expediente y sin aviso al jefe.
+  //
+  // Si la base no contesta quién va al volante, fallar cerrado sigue
+  // aplicando — pero solo a lo RUTINARIO: los graves no dependen de esta
+  // consulta y siguen su curso aunque falle. Los huérfanos (sin unidad) no
+  // están ligados a una persona y siguen entrando como siempre.
+  const rutinarios = eventos.filter((e) => !esEventoGrave(e.etiquetas));
+  const conUnidadRutinaria = [...new Set(rutinarios.map((e) => (e.assetId ? porDevice.get(e.assetId) : undefined)).filter((u): u is string => !!u))];
   let sinAviso = new Set<string>();
-  if (conUnidad.length > 0) {
-    const compuerta = await unidadesSinAvisoPrevio(tenantId, conUnidad);
-    if (compuerta.error) return { ...base, error: `no se guardó ningún evento: ${compuerta.error}` };
-    sinAviso = compuerta.sinAviso;
-    if (sinAviso.size > 0) {
-      base.sinAvisoPrevio = sinAviso.size;
-      logger.warn('eventos.sin_aviso_previo', { tenantId, proveedor: conectorId, unidades: sinAviso.size });
+  if (conUnidadRutinaria.length > 0) {
+    const compuerta = await unidadesSinAvisoPrevio(tenantId, conUnidadRutinaria, { sinViajeVivo: 'bloquear' });
+    if (compuerta.error) {
+      // Fail cerrado, pero acotado a lo rutinario: los graves no pasan por
+      // esta compuerta y no deben quedar rehenes de que esta consulta falle.
+      base.error = `no se guardó ningún evento rutinario: ${compuerta.error}`;
+      for (const u of conUnidadRutinaria) sinAviso.add(u);
+      logger.error('eventos.aviso_previo_ilegible', { tenantId, proveedor: conectorId, err: compuerta.error });
+    } else {
+      sinAviso = compuerta.sinAviso;
+      if (sinAviso.size > 0) {
+        base.sinAvisoPrevio = sinAviso.size;
+        logger.warn('eventos.sin_aviso_previo', { tenantId, proveedor: conectorId, unidades: sinAviso.size });
+      }
     }
   }
 
   for (const e of eventos) {
     const unidadId = e.assetId ? porDevice.get(e.assetId) ?? null : null;
     if (!unidadId) base.huerfanos += 1;
-    if (unidadId && sinAviso.has(unidadId)) continue;
+    const grave = esEventoGrave(e.etiquetas);
+    // La compuerta de aviso previo NUNCA bloquea un evento grave: ver el
+    // bloque de comentarios arriba (LEG-OP-1).
+    if (!grave && unidadId && sinAviso.has(unidadId)) continue;
 
     // El INSERT decide si el evento es nuevo: `ignoreDuplicates` con la
     // unicidad de la 0203 hace que la reentrega de la ventana traslapada no
@@ -173,7 +200,7 @@ export async function sincronizarEventosDeFlota(
           evento_id_externo: e.eventoId,
           unidad_id: unidadId,
           etiquetas: e.etiquetas,
-          grave: esEventoGrave(e.etiquetas),
+          grave,
           lat: e.lat,
           lng: e.lng,
           ocurrido_en: e.ocurridoEn,

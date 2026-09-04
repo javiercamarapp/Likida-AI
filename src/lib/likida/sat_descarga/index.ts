@@ -52,6 +52,31 @@ export type {
 /** Los proveedores que el resolvedor conoce. Uno construido, uno declarado. */
 export const PROVEEDORES_CONOCIDOS = ['sw', 'sat_directo'] as const;
 
+/** El único host al que 'sw' habla para gestión de descarga (ver sw.ts:5). */
+const HOST_SW_GESTION = 'api.sw.com.mx';
+
+/**
+ * AUDITORÍA 25, SEGURIDAD (BAJO, línea 212, REINCIDENTE). La contraseña
+ * HEREDADA (`LIKIDA_SAT_PASSWORD` ausente → cae a `LIKIDA_PAC_PASSWORD`) es
+ * la MISMA que timbra el CFDI de la flota. Nada comprobaba a qué host viajaba
+ * `LIKIDA_SAT_URL` antes de mandarla: un valor mal escrito, o apuntado a otro
+ * lado, la expone a quien sea que atienda ahí. Con una contraseña PROPIA
+ * (`LIKIDA_SAT_PASSWORD` sí capturada) no se restringe el host: es la
+ * responsabilidad de quien la capturó junto con esa URL, no una herencia
+ * silenciosa. Fail closed ante una URL ilegible, igual que ante un host
+ * equivocado — nunca se adivina a dónde iba.
+ */
+function hostSwSinVerificar(proveedor: string, urlBase: string): boolean {
+  if (proveedor !== 'sw' || urlBase === '') return false;
+  const passwordHeredada = (process.env.LIKIDA_SAT_PASSWORD ?? '') === '';
+  if (!passwordHeredada) return false;
+  try {
+    return new URL(urlBase).hostname.toLowerCase() !== HOST_SW_GESTION;
+  } catch {
+    return true;
+  }
+}
+
 export interface EstadoDescargaSat {
   configurado: boolean;
   proveedor: string | null;
@@ -81,6 +106,13 @@ export function estadoDescargaSat(): EstadoDescargaSat {
       motivo: `LIKIDA_SAT_PROVEEDOR dice «${proveedor}», que no es un proveedor conocido. Los conocidos son: ${PROVEEDORES_CONOCIDOS.join(', ')}.`,
     };
   }
+  const urlBase = process.env.LIKIDA_SAT_URL?.trim().replace(/\/+$/, '') ?? '';
+  if (hostSwSinVerificar(proveedor, urlBase)) {
+    return {
+      configurado: false, proveedor: null,
+      motivo: `LIKIDA_SAT_URL no apunta al host que se espera del proveedor (${HOST_SW_GESTION}): con la contraseña heredada del PAC, mandarla a otro host expondría la MISMA credencial que timbra el CFDI de la flota. Corrige LIKIDA_SAT_URL, o captura LIKIDA_SAT_USUARIO/LIKIDA_SAT_PASSWORD propios si de verdad es otro proveedor.`,
+    };
+  }
   if (resolverDescargaSat() === null) {
     return {
       configurado: false, proveedor: null,
@@ -102,5 +134,6 @@ export function resolverDescargaSat(): ProveedorDescargaSat | null {
   // Proveedor desconocido —o declarado y no construido— = no configurado.
   // Jamás adivinar, jamás simular una descarga.
   if (proveedor !== 'sw') return null;
+  if (hostSwSinVerificar(proveedor, urlBase)) return null;
   return crearProveedorSatSw({ urlBase, usuario, password });
 }

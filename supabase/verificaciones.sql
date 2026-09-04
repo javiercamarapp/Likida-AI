@@ -2752,14 +2752,26 @@ end $$;
 --
 -- Corrida REAL, salida copiada tal cual:
 --
---   50  candado-borrado-con-el-viaje=0
---       constraints: viaje_ingreso_no_negativo=true  viaje_km_sanos=true
+--   50  candado-borrado-con-el-viaje=0  viaje_ingreso_no_negativo=t  viaje_km_sanos=t
 --       FALSIFICADO sin FK: candado-huerfano-que-queda-para-siempre=1
 --       FALSIFICADO not-valid: viaje_km_sanos.convalidated=f
+--
+-- PRU-ALTO1 (auditoría 25): el `raise` original metía las tres mediciones
+-- reales Y las dos de FALSIFICACIÓN en un solo `%` de texto (`validadas`,
+-- concatenado a mano) con CUATRO grupos `(esperado …)` intercalados —el único
+-- bloque de los 226 con más de uno—. El calificador solo lee el PRIMER
+-- `(esperado`: el resto del mensaje, con espacios adentro, se leía como un
+-- comodín de prosa y pasaba «✓ ok» con las cuatro mediciones mal (medido
+-- contra Postgres real). Reescrito a la forma que usan los otros 17 bloques
+-- con FALSIFICACIÓN (45, 48, 49, 52, …): cada valor real en su propio `%`,
+-- un solo `(esperado …)` al final, y la sección `FALSIFICADO` narrativa
+-- ANTES de él (el calificador la recorta a propósito — no es una aserción,
+-- es la prueba de que la detección funciona).
 
 do $$
 declare
-  t uuid; o uuid; v uuid; quedan int; quedan_sin_fk int; validadas text; tras_falsificar bool;
+  t uuid; o uuid; v uuid; quedan int; quedan_sin_fk int;
+  ing_no_negativo bool; km_sanos bool; tras_falsificar bool;
 begin
   insert into tenant(nombre) values ('ZZZ VERIF B50 '||gen_random_uuid()) returning id into t;
   insert into operador(tenant_id,nombre,telefono) values (t,'Op','5215500002001') returning id into o;
@@ -2769,9 +2781,10 @@ begin
   delete from viaje where id = v;
   select count(*) into quedan from viaje_lock where viaje_id = v;
 
-  select coalesce(string_agg(conname||'='||convalidated::text, '  '), '—') into validadas
-    from pg_constraint
-   where conrelid='viaje'::regclass and conname in ('viaje_ingreso_no_negativo','viaje_km_sanos');
+  select convalidated into ing_no_negativo from pg_constraint
+   where conrelid='viaje'::regclass and conname='viaje_ingreso_no_negativo';
+  select convalidated into km_sanos from pg_constraint
+   where conrelid='viaje'::regclass and conname='viaje_km_sanos';
 
   -- ═══ FALSIFICACIÓN 1: sin la FK, el candado sobrevive al viaje ═══
   alter table viaje_lock drop constraint viaje_lock_viaje_id_fkey;
@@ -2787,8 +2800,8 @@ begin
   select convalidated into tras_falsificar from pg_constraint
    where conrelid='viaje'::regclass and conname='viaje_km_sanos';
 
-  raise exception E'50  candado-borrado-con-el-viaje=%  (esperado 0)\n    constraints: %  (esperado las dos =true)\n    FALSIFICADO sin FK: candado-huerfano-que-queda-para-siempre=%  (esperado 1)\n    FALSIFICADO not-valid: viaje_km_sanos.convalidated=%  (esperado f)',
-    quedan, validadas, quedan_sin_fk, tras_falsificar;
+  raise exception E'50  candado-borrado-con-el-viaje=%  viaje_ingreso_no_negativo=%  viaje_km_sanos=%\n    FALSIFICADO sin FK: candado-huerfano-que-queda-para-siempre=%\n    FALSIFICADO not-valid: viaje_km_sanos.convalidated=%\n    (esperado 0 / t / t)',
+    quedan, ing_no_negativo, km_sanos, quedan_sin_fk, tras_falsificar;
 end $$;
 
 -- ── 51. El desglose de la mensualidad no se puede desincronizar (mig. 0066) ──
@@ -4464,6 +4477,8 @@ end $$;
 do $$
 declare
   ta uuid; tb uuid; oa uuid; ob uuid; va1 uuid; va2 uuid; vb1 uuid;
+  ua uuid := gen_random_uuid();
+  l1 uuid; l2 uuid;
   anio int := extract(year from current_date)::int;
   n_funcs int; todas_invoker boolean; ninguna_anon boolean; ninguna_auth boolean; todas_svc boolean;
   r_comb record;
@@ -4478,6 +4493,7 @@ begin
      and conname in ('gasto_monto_no_negativo', 'gasto_monto_no_nan');
   -- ── FLOTA A: la que se mide ────────────────────────────────────────────
   insert into tenant (nombre) values ('ZZZ VERIF 0112 A') returning id into ta;
+  insert into app_user (id, tenant_id, email, rol) values (ua, ta, 'zzz-0112@likida.test', 'flota_admin');
   insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0112 A', '5215559990112') returning id into oa;
   insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
     values (ta, oa, 'ZZZ-0112-A1', 'liquidado', current_date - 3, 1000) returning id into va1;
@@ -4504,16 +4520,35 @@ begin
     negativo_rechazado := true;
   end;
 
+  -- RE-AUDITORÍA 25, FIS-P1 (mig. 0308): `acreditables_liquidacion_tenant`
+  -- ahora exige `revision in ('aprobada','ajustada')` — una liquidación
+  -- 'pendiente' (el default) ya no cuenta. La propia compuerta de la 0299
+  -- (`liquidacion_revision_regla`, LR003) PROHÍBE sembrar `revision` distinto
+  -- de 'pendiente' en el INSERT — nace pendiente o firmada por el motor
+  -- ('cuadrada' → 'aprobada' automático), nunca firmada por una persona sin
+  -- pasar por `revisar_liquidacion(...)`.
   insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus, diferencias,
       ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
     values (ta, va1, 1500, 1500, 'con_diferencias',
       '[{"tipo":"sobre_politica","monto":120},{"tipo":"duplicado","monto":80},{"tipo":"folio_verificar","monto":0}]'::jsonb,
-      50, 240, 30, 400.5);
+      50, 240, 30, 400.5)
+    returning id into l1;
+  -- va1 ya está 'liquidado' (precondición de revisar_liquidacion): una
+  -- persona la aprueba de verdad, como en producción.
+  perform revisar_liquidacion(ta, l1, 'aprobar', null, null, ua, null);
+
   -- La SEGUNDA liquidación va sobre va2, no sobre va1: `liquidacion_viaje_uidx`
   -- admite UNA liquidación por viaje (trampa que atrapó la primera corrida).
+  -- `estatus = 'cuadrada'` (cuadró sola, sin diferencias): la MISMA regla de
+  -- la 0299 la aprueba sola en el INSERT — no necesita `revisar_liquidacion`,
+  -- y de hecho no podría: va2 se deja 'abierto' a propósito (ver más abajo,
+  -- `serie_comparativa_tenant` cuenta viajesLiquidados por `viaje.estatus`,
+  -- distinto del criterio de `kpis_liquidacion_tenant`), y la RPC exige el
+  -- viaje 'liquidado'.
   insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus,
       ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
-    values (ta, va2, 700, 700, 'cuadrada', 10, 60, 5, 90);
+    values (ta, va2, 700, 700, 'cuadrada', 10, 60, 5, 90)
+    returning id into l2;
 
   -- ── FLOTA B: solo para probar que NO contamina a A ─────────────────────
   insert into tenant (nombre) values ('ZZZ VERIF 0112 B') returning id into tb;
@@ -6156,8 +6191,17 @@ begin
 
   -- Ejercicio (últimos 30 días aquí), tope efectivo 2000, tope alimentación 750,
   -- cortes: hace 60 y hace 30 días (mes_siguiente / mes_natural simulados).
+  -- RE-AUDITORÍA 25, FIS-REAUD-2 (mig. 0317): la firma ganó 6 parámetros —
+  -- se pasan con nombre para no depender del orden, y con valores que NO
+  -- disparan ninguna de las 7 causas nuevas sobre esta siembra (mismo
+  -- comportamiento que antes de la 0317 para lo que este bloque mide).
   j := gastos_fiscales_agregados_tenant(ta, current_date - 30, current_date, 2000, 750,
-         array['alimentacion','viaticos'], array[(current_date - 60)::date, (current_date - 30)::date]);
+         array['alimentacion','viaticos'], array[(current_date - 60)::date, (current_date - 30)::date],
+         p_claves_combustible => array['15101505','15101514','15101515'],
+         p_vigente_desde => '2026-04-24'::date, p_exigible_desde => null::date,
+         p_umbral_renglones_ajenos => 0.15,
+         p_patron_bar => '\y(bar|bares|cantina|cervecer[ií]a|pulquer[ií]a|antro|cabaret|table\s*dance|vinos\s+y\s+licores)\y',
+         p_hoy => current_date);
 
   select count(*), sum((c->>'n')::int), sum((c->>'monto')::numeric),
          sum((c->>'n')::int) filter (where (c->>'tieneCfdi')::boolean),
@@ -6174,7 +6218,12 @@ begin
 
   -- Sin cota: entran la vieja (banda 2) y la sin fecha
   j := gastos_fiscales_agregados_tenant(ta, null, null, 2000, 750,
-         array['alimentacion','viaticos'], array[(current_date - 60)::date, (current_date - 30)::date]);
+         array['alimentacion','viaticos'], array[(current_date - 60)::date, (current_date - 30)::date],
+         p_claves_combustible => array['15101505','15101514','15101515'],
+         p_vigente_desde => '2026-04-24'::date, p_exigible_desde => null::date,
+         p_umbral_renglones_ajenos => 0.15,
+         p_patron_bar => '\y(bar|bares|cantina|cervecer[ií]a|pulquer[ií]a|antro|cabaret|table\s*dance|vinos\s+y\s+licores)\y',
+         p_hoy => current_date);
   select sum((c->>'n')::int), sum((c->>'n')::int) filter (where (c->>'sinFecha')::boolean),
          string_agg(c->>'banda', ',' order by c->>'banda') filter (where c->>'banda' is not null)
     into sin_cota_n, sin_fecha, bandas
@@ -14412,7 +14461,7 @@ begin
     coalesce(expediente_vacio,false), anon_ok, auth_ok;
 end $$;
 
--- ── 212. La identidad congelada de un token MCP deja de ser válida el instante en que app_user cambia (mig. 0265, HALLAZGO 1) ──
+-- ── 212. La identidad congelada de un token MCP deja de ser válida el instante en que app_user cambia (mig. 0265 + 0318, HALLAZGO 1 + SEC-3) ──
 --
 -- Esto es lo que un test de TypeScript con Supabase mockeado NO puede
 -- demostrar: que la GARANTÍA vive en la base, contra una fila REAL de
@@ -14435,6 +14484,14 @@ end $$;
 --      cubre el caso en que la RPC se llama con un user_id que nunca fue, o
 --      cuya fila se borró por otro camino).
 --
+--  (g) SEC-3 (auditoría 25, MEDIO, re-auditoría, mig. 0318): dado de baja
+--      (`activo = false`) SIN cambiar tenant ni rol — el escenario que el
+--      comentario original de la 0265 decía que no existía todavía
+--      ("app_user no tiene columna de estatus/activo"). Desde la 0294 sí la
+--      tiene: la identidad congelada (tenant, rol) sigue siendo cierta, pero
+--      la cuenta ya no debe poder refrescar. → false. Reactivado → true de
+--      nuevo (no es un candado de un solo uso, igual que (d)).
+--
 --  (f) `revocar_mcp_oauth_usuario`: tumba TODOS los tokens activos de un
 --      usuario en su tenant de un tiro, deja intacto el de OTRO usuario de
 --      la misma flota, y una segunda llamada no vuelve a tocar lo ya
@@ -14452,6 +14509,8 @@ declare
   vigente_tras_tenant boolean;
   vigente_restaurado boolean;
   vigente_usuario_borrado boolean;
+  vigente_desactivado boolean;
+  vigente_reactivado boolean;
   revocados_primera bigint;
   revocados_segunda bigint;
   otro_token_intacto boolean;
@@ -14484,6 +14543,12 @@ begin
   -- (e) la fila ya no existe.
   select public.mcp_oauth_usuario_vigente(gen_random_uuid(), t, 'contador') into vigente_usuario_borrado;
 
+  -- (g) SEC-3: dado de baja SIN tocar tenant ni rol.
+  update public.app_user set activo = false, desactivado_en = now() where id = u;
+  select public.mcp_oauth_usuario_vigente(u, t, 'contador') into vigente_desactivado;
+  update public.app_user set activo = true, desactivado_en = null where id = u;
+  select public.mcp_oauth_usuario_vigente(u, t, 'contador') into vigente_reactivado;
+
   -- (f) revocar_mcp_oauth_usuario: dos tokens activos de `u` en `t`, uno de
   -- `u_otro` en el mismo tenant.
   insert into public.mcp_oauth_token (token_hash, tipo, cliente_id, user_id, tenant_id, rol, familia, expira_en)
@@ -14503,8 +14568,9 @@ begin
   -- Segunda llamada: ya no hay nada activo que tocar (idempotente).
   select public.revocar_mcp_oauth_usuario(t, u) into revocados_segunda;
 
-  raise exception 'MCP_OAUTH_VIGENCIA_0265  inicial=%  tras_rol=%  tras_tenant=%  restaurado=%  usuario_borrado=%  revocados_1=%  revocados_2=%  otro_intacto=%  ambos_revocados=%   (esperado t / f / f / t / f / 2 / 0 / t / t)',
+  raise exception 'MCP_OAUTH_VIGENCIA_0265  inicial=%  tras_rol=%  tras_tenant=%  restaurado=%  usuario_borrado=%  desactivado=%  reactivado=%  revocados_1=%  revocados_2=%  otro_intacto=%  ambos_revocados=%   (esperado t / f / f / t / f / f / t / 2 / 0 / t / t)',
     vigente_inicial, vigente_tras_rol, vigente_tras_tenant, vigente_restaurado, vigente_usuario_borrado,
+    vigente_desactivado, vigente_reactivado,
     revocados_primera, revocados_segunda, otro_token_intacto, ambos_revocados;
 end $$;
 
@@ -15497,12 +15563,16 @@ end $$;
 --  (b) los NUEVE quedan con `prompt_ref IS NULL` — cerraban una referencia a
 --      un archivo que nunca se escribió; dejarla apuntando a nada sería la
 --      misma promesa falsa con otro nombre.
---  (c) los NUEVE quedan con una `descripcion` que YA NO contiene ninguna de
---      las frases originales de la 0125 que prometían de más ("investiga a
---      diario el mercado", "reactiva el scraper", "decide dónde se pone
---      cada pieza", "destila hooks con whisper", "escribe código de
---      prueba") — el CASE WHEN de la migración de verdad reescribió las
---      nueve filas, no solo algunas.
+--  (c) los NUEVE quedan con una `descripcion` que YA NO contiene la frase
+--      VIGENTE de cada uno al llegar la 0303 (la de 0230/0234/0235, no la
+--      de la 0125 original — ésa ya la habían reemplazado tres migraciones
+--      antes) — cada agente contra SU PROPIA frase, una por una, para que
+--      un `CASE WHEN` borrado (o que dejara alguna fila sin tocar) sí
+--      dispare la sonda de esa fila en vez de depender de un texto que
+--      ninguna descripción real llegó a tener nunca (auditoría 25, DATOS-M2:
+--      la lista anterior probaba contra la 0125, que 0230/0234/0235 ya
+--      habían sobrescrito por completo antes de que la 0303 corriera —
+--      cero de esas cinco frases podía dispararse).
 --  (d) un agente REAL del catálogo (`redactor`) NO quedó tocado — la
 --      migración no pudo haber puesto `experimental = false` a TODOS por
 --      accidente, ni tocado su `descripcion`.
@@ -15517,12 +15587,22 @@ declare
     'cazador','seo_distribucion','guiones','noticias_mercado',
     'promos_diarias','visuales','video_demo','video_marketing','pruebas'
   ];
+  -- Una frase por id, EN EL MISMO ORDEN que `ids` — la que su descripción
+  -- vigente traía justo antes de la 0303 (0230 para los siete de mercadeo,
+  -- 0234 para pruebas, 0235 para cazador), verificada de que NO aparece en
+  -- la descripción que la 0303 escribe.
   frases_viejas text[] := array[
-    'investiga a diario el mercado', 'reactiva el scraper',
-    'decide dónde se pone cada pieza', 'destila hooks con whisper',
-    'escribe código de prueba'
+    'el encargo de caza sobre lo que ya está en la base',                    -- cazador       (0235)
+    'el <title> que de verdad se sirve',                                     -- seo_distribucion (0230)
+    'no tiene los videos de referencia ni whisper',                          -- guiones       (0230)
+    'no navega la web y no finge una investigación',                        -- noticias_mercado (0230)
+    'cada beneficio del catálogo declara qué símbolo del producto lo sostiene', -- promos_diarias (0230)
+    'produce el encargo de la pieza gráfica',                                -- visuales      (0230)
+    'produce el encargo del video que se manda antes de la llamada',        -- video_demo    (0230)
+    'produce el encargo del reel para el gremio',                           -- video_marketing (0230)
+    'vigila los resultados que sí llegan a la base'                          -- pruebas       (0234)
   ];
-  k text; f text;
+  i int; k text; f text;
   no_graduados text[] := '{}';
   con_prompt_ref text[] := '{}';
   con_frase_vieja text[] := '{}';
@@ -15534,7 +15614,9 @@ declare
 begin
   select descripcion into redactor_descripcion_antes from public.agente_definicion where id = 'redactor';
 
-  foreach k in array ids loop
+  for i in 1..array_length(ids, 1) loop
+    k := ids[i];
+    f := frases_viejas[i];
     -- (a)
     if exists (select 1 from public.agente_definicion where id = k and experimental = true) then
       no_graduados := no_graduados || k;
@@ -15543,13 +15625,11 @@ begin
     if exists (select 1 from public.agente_definicion where id = k and prompt_ref is not null) then
       con_prompt_ref := con_prompt_ref || k;
     end if;
-    -- (c)
+    -- (c) la frase vigente ANTES de la 0303, contra SU PROPIO id.
     select descripcion into descripcion_actual from public.agente_definicion where id = k;
-    foreach f in array frases_viejas loop
-      if descripcion_actual is not null and lower(descripcion_actual) like '%' || f || '%' then
-        con_frase_vieja := con_frase_vieja || (k || ':' || f);
-      end if;
-    end loop;
+    if descripcion_actual is not null and lower(descripcion_actual) like '%' || f || '%' then
+      con_frase_vieja := con_frase_vieja || (k || ':' || f);
+    end if;
   end loop;
 
   -- (d) redactor intacto, antes y después de esta migración.
@@ -15808,19 +15888,33 @@ begin
   exception when sqlstate 'LR010' then doble_rebota := true;
   end;
 
-  -- (d) un ajuste a negativo rebota y no deja nada movido.
+  -- (d) un ajuste a negativo rebota y no deja nada movido. p_recalculo va
+  -- con CUALQUIER forma válida a propósito (mig. 0306): lo que este caso
+  -- prueba es que el monto negativo (LR016) rebota ANTES de llegar a
+  -- comparar el recálculo con nada.
   begin
     perform revisar_liquidacion(v_t, v_l2, 'ajustar', 'se leyó mal',
-      jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', -5)), v_u, null);
+      jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', -5)), v_u, null,
+      jsonb_build_object('totalComprobado', 0, 'diferencia', 0, 'estatus', 'revisar', 'diferencias', '[]'::jsonb,
+        'iepsAcreditable', 0, 'litrosDieselAcreditables', 0, 'ivaAcreditable', 0, 'peajeAcreditable', 0));
   exception when sqlstate 'LR016' then negativo_rebota := true;
   end;
   select monto into n_monto from gasto where id = v_g;
   select total_comprobado, revision into n_total, rev from liquidacion where id = v_l2;
   negativo_intacto := (n_monto = 800 and n_total = 800 and rev = 'pendiente');
 
-  -- (e) el ajuste bueno: $800 → $8,000, delta +7,200 sobre el total y la diferencia.
+  -- (e) el ajuste bueno: $800 → $8,000, delta +7,200 sobre el total y la
+  -- diferencia. AUDITORÍA 25 (mig. 0306): p_recalculo ya es obligatorio —
+  -- el octavo argumento es lo que `revision_recalculo.ts` arma con
+  -- `cuadrarDesdeDB` en TypeScript; aquí se le da el mismo total/diferencia
+  -- que la delta ya predice, que es justo lo que LR020 exige que coincida.
   r := revisar_liquidacion(v_t, v_l2, 'ajustar', 'el ticket dice 8,000, el OCR leyó 800',
-    jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', 8000)), v_u, null);
+    jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', 8000)), v_u, null,
+    jsonb_build_object(
+      'totalComprobado', 8000, 'diferencia', -3000, 'estatus', 'con_diferencias',
+      'diferencias', '[]'::jsonb, 'iepsAcreditable', 0, 'litrosDieselAcreditables', 0,
+      'ivaAcreditable', 1200, 'peajeAcreditable', 0
+    ));
   select monto into n_monto from gasto where id = v_g;
   select total_comprobado, diferencia, revision into n_total, n_dif, rev from liquidacion where id = v_l2;
   ajustada := (rev = 'ajustada' and jsonb_array_length((select ajustes from liquidacion where id = v_l2)) = 1);
@@ -16774,7 +16868,13 @@ begin
     values (t, v, 'diesel', 1160, 1000, 160, 'aaaaaaaa-0282-0282-0282-000000000001', '99', 'PPD', current_date, null, null),
            (t, v, 'diesel', 1160, 1000, 160, 'aaaaaaaa-0282-0282-0282-000000000002', '99', 'PPD', current_date, current_date, '03');
 
-  celdas := public.gastos_fiscales_agregados_tenant(t, null, null, 2000, 750, array['alimentacion','viaticos'], '{}'::date[]);
+  -- RE-AUDITORÍA 25, FIS-REAUD-2 (mig. 0317): la firma ganó 6 parámetros — ver el bloque 123.
+  celdas := public.gastos_fiscales_agregados_tenant(t, null, null, 2000, 750, array['alimentacion','viaticos'], '{}'::date[],
+    p_claves_combustible => array['15101505','15101514','15101515'],
+    p_vigente_desde => '2026-04-24'::date, p_exigible_desde => null::date,
+    p_umbral_renglones_ajenos => 0.15,
+    p_patron_bar => '\y(bar|bares|cantina|cervecer[ií]a|pulquer[ií]a|antro|cabaret|table\s*dance|vinos\s+y\s+licores)\y',
+    p_hoy => current_date);
 
   dos_celdas   := jsonb_array_length(celdas) = 2;
   trae_pagado  := (select bool_and(x ? 'pagado' and x ? 'pagadoForma') from jsonb_array_elements(celdas) x);
@@ -17075,4 +17175,367 @@ begin
 
   raise exception E'LLM_COSTO_FASE_0304  existe=%  sobre-llm-costo=%  siete=%  transcripcion=%   (esperado t / t / t / t)',
     existe, sobre_tabla, siete, tiene_transcripcion;
+end $$;
+
+-- ── 251. Ajustar EXIGE y USA el recálculo del motor — no una delta a mano sobre el desglose (mig. 0306, AUDITORÍA 25 BE-C1a/BE-C1b/DATOS-C1) ──
+--
+-- Hasta la 0306, `revisar_liquidacion(..., 'ajustar')` movía `total_comprobado`
+-- y `diferencia` por una delta aritmética y dejaba `iva_acreditable`,
+-- `ieps_acreditable`, `peaje_acreditable`, `litros_diesel_acreditables`,
+-- `diferencias` y `estatus` con la cifra de ANTES del ajuste — la póliza
+-- contable de `poliza.ts` ya había declarado esa divergencia como «un IVA no
+-- acreditable inventado», y el PDF archivado se quedaba con el número viejo.
+--
+-- Lo que este bloque asevera, todo contra Postgres real:
+--   (a) ajustar SIN el octavo argumento (`p_recalculo`) rebota (LR021): la
+--       RPC ya no acepta un ajuste sin el recálculo completo del motor;
+--   (b) un `p_recalculo` cuyo `totalComprobado` NO coincide con la delta que
+--       la propia RPC acaba de aplicar rebota (LR020) y NO deja NADA
+--       movido — ni el monto del gasto, ni una sola columna de la
+--       liquidación: la RPC es transaccional, un rebote no dejä a medias;
+--   (c) un ajuste BUENO sustituye TODO el desglose por el recálculo —no solo
+--       total_comprobado/diferencia— incluidas las cifras que antes se
+--       quedaban con el valor viejo;
+--   (d) `pdf_historial` nace `[]` y `agregar_pdf_historial` le empuja
+--       entradas con `||` sin pisar lo que ya había.
+-- Esperado: AJUSTAR_RECALCULO_0306  sin-recalculo-rebota=t  mismatch-rebota=t  mismatch-nada-movido=t  bueno-total=t  bueno-iva=t  bueno-ieps=t  bueno-peaje=t  bueno-litros=t  bueno-estatus=t  bueno-diferencias=t  historial-nace-vacio=t  historial-acumula=t
+do $$
+declare
+  v_t uuid; v_u uuid := gen_random_uuid(); v_o uuid;
+  v_v uuid; v_l uuid; v_g uuid;
+  r jsonb;
+  sin_recalculo_rebota boolean := false; mismatch_rebota boolean := false; mismatch_nada_movido boolean := false;
+  bueno_total boolean := false; bueno_iva boolean := false; bueno_ieps boolean := false;
+  bueno_peaje boolean := false; bueno_litros boolean := false; bueno_estatus boolean := false; bueno_diferencias boolean := false;
+  historial_nace_vacio boolean := false; historial_acumula boolean := false;
+  n_monto numeric; n_total numeric; n_iva numeric; n_ieps numeric; n_peaje numeric; n_litros numeric;
+  n_estatus text; n_diferencias jsonb; n_hist jsonb;
+  recalculo_bueno jsonb := jsonb_build_object(
+    'totalComprobado', 8000, 'diferencia', -3000, 'estatus', 'con_diferencias',
+    'diferencias', '[{"tipo":"sobre_politica"}]'::jsonb, 'iepsAcreditable', 15.5,
+    'litrosDieselAcreditables', 42.123, 'ivaAcreditable', 1200.75, 'peajeAcreditable', 60
+  );
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF AJUSTAR RECALCULO 0306') returning id into v_t;
+  insert into app_user (id, tenant_id, email, rol) values (v_u, v_t, 'zzz-recalculo-0306@likida.test', 'flota_admin');
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P1', '520000009920') returning id into v_o;
+  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o, 'RC-1', 5000) returning id into v_v;
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v, 'diesel', 800) returning id into v_g;
+  -- Con desglose VIEJO ya asentado, para comprobar que el ajuste lo SUSTITUYE
+  -- (y no solo mueve total_comprobado/diferencia, que es el bug que cierra).
+  v_l := guardar_liquidacion_tx(v_t, v_v, 800, 5000, 4200, 'revisar', '[{"tipo":"sobre_tope"}]'::jsonb, 3, 9, 5, null, 7);
+
+  historial_nace_vacio := (select pdf_historial = '[]'::jsonb from liquidacion where id = v_l);
+
+  -- (a) sin p_recalculo.
+  begin
+    perform revisar_liquidacion(v_t, v_l, 'ajustar', 'sin recálculo a propósito',
+      jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', 8000)), v_u, null);
+  exception when sqlstate 'LR021' then sin_recalculo_rebota := true;
+  end;
+
+  -- (b) p_recalculo que NO coincide con la delta (800 + 7200 = 8000, no 9999).
+  begin
+    perform revisar_liquidacion(v_t, v_l, 'ajustar', 'recálculo que no cuadra',
+      jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', 8000)), v_u, null,
+      jsonb_build_object('totalComprobado', 9999, 'diferencia', -1799, 'estatus', 'con_diferencias',
+        'diferencias', '[]'::jsonb, 'iepsAcreditable', 0, 'litrosDieselAcreditables', 0, 'ivaAcreditable', 0, 'peajeAcreditable', 0));
+  exception when sqlstate 'LR020' then mismatch_rebota := true;
+  end;
+  select monto into n_monto from gasto where id = v_g;
+  select total_comprobado into n_total from liquidacion where id = v_l;
+  mismatch_nada_movido := (n_monto = 800 and n_total = 800);
+
+  -- (c) el ajuste bueno: el desglose ENTERO se sustituye por el recálculo.
+  r := revisar_liquidacion(v_t, v_l, 'ajustar', 'el ticket dice 8,000',
+    jsonb_build_array(jsonb_build_object('gastoId', v_g, 'montoNuevo', 8000)), v_u, null, recalculo_bueno);
+  select total_comprobado, iva_acreditable, ieps_acreditable, peaje_acreditable,
+         litros_diesel_acreditables, estatus, diferencias
+    into n_total, n_iva, n_ieps, n_peaje, n_litros, n_estatus, n_diferencias
+    from liquidacion where id = v_l;
+  bueno_total := (n_total = 8000 and (r ->> 'total_comprobado')::numeric = 8000);
+  bueno_iva := (n_iva = 1200.75);
+  bueno_ieps := (n_ieps = 15.5);
+  bueno_peaje := (n_peaje = 60);
+  bueno_litros := (n_litros = 42.123);
+  bueno_estatus := (n_estatus = 'con_diferencias');
+  bueno_diferencias := (n_diferencias = '[{"tipo":"sobre_politica"}]'::jsonb);
+
+  -- (d) pdf_historial acumula con `||`, sin pisar lo que ya había.
+  perform agregar_pdf_historial(v_t, v_l, jsonb_build_object('url', 't1/x-ajustada-1.pdf', 'archivadaEn', now()));
+  perform agregar_pdf_historial(v_t, v_l, jsonb_build_object('url', 't1/x-ajustada-2.pdf', 'archivadaEn', now()));
+  select pdf_historial into n_hist from liquidacion where id = v_l;
+  historial_acumula := (jsonb_array_length(n_hist) = 2
+    and n_hist -> 0 ->> 'url' = 't1/x-ajustada-1.pdf' and n_hist -> 1 ->> 'url' = 't1/x-ajustada-2.pdf');
+
+  raise exception E'AJUSTAR_RECALCULO_0306  sin-recalculo-rebota=%  mismatch-rebota=%  mismatch-nada-movido=%  bueno-total=%  bueno-iva=%  bueno-ieps=%  bueno-peaje=%  bueno-litros=%  bueno-estatus=%  bueno-diferencias=%  historial-nace-vacio=%  historial-acumula=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t)',
+    sin_recalculo_rebota, mismatch_rebota, mismatch_nada_movido, bueno_total, bueno_iva, bueno_ieps,
+    bueno_peaje, bueno_litros, bueno_estatus, bueno_diferencias, historial_nace_vacio, historial_acumula;
+end $$;
+-- ── 252. Una liquidación RECHAZADA no cuenta: ni para la póliza (0281), ni para bloquear la reasignación del viaje (0158/0283) (mig. 0307, AUDITORÍA 25) ──
+--
+-- backend.md MEDIO (línea 226) + datos.md ALTO DATOS-24 (línea 194,
+-- REINCIDENTE de la 24). La MISMA causa raíz en dos consumidores: la columna
+-- `liquidacion.revision` (0299) nunca se propagó a todos los lugares que
+-- preguntan «¿esta liquidación cuenta?».
+--
+-- Lo que este bloque asevera, contra Postgres real:
+--   (a) `poliza_datos_tenant` YA NO trae la fila de una liquidación
+--       rechazada — el MISMO criterio que `api/export/liquidaciones`
+--       (`sin_rechazadas` por omisión, probado en TS) — y SÍ sigue trayendo
+--       una `pendiente` (el filtro es solo `<> 'rechazada'`, no "solo
+--       firmadas": eso lo decide la ruta, no esta RPC);
+--   (b) reasignar `operador_id` de un viaje con una liquidación RECHAZADA ya
+--       NO rebota con CU004 — el escenario medido: el contralor rechaza,
+--       el encargado reasigna al chofer correcto, y antes de la 0307 el
+--       trigger lo bloqueaba con «ya tiene liquidación emitida» sobre una
+--       liquidación que el propio panel acababa de invalidar;
+--   (c) el MISMO viaje, con una liquidación APROBADA (no rechazada), SIGUE
+--       bloqueando la reasignación — la 0307 no abre la puerta de más.
+-- Esperado: RECHAZADA_NO_CUENTA_0307  poliza-sin-rechazada=t  poliza-con-pendiente=t  reasignar-tras-rechazo=t  reasignar-tras-aprobada-rebota=t
+do $$
+declare
+  v_t uuid; v_u uuid := gen_random_uuid(); v_o1 uuid; v_o2 uuid; v_o3 uuid;
+  v_v1 uuid; v_v2 uuid; v_l1 uuid; v_l2 uuid;
+  j jsonb;
+  poliza_sin_rechazada boolean; poliza_con_pendiente boolean;
+  reasignar_tras_rechazo boolean := false; reasignar_tras_aprobada_rebota boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF RECHAZADA NO CUENTA 0307') returning id into v_t;
+  insert into app_user (id, tenant_id, email, rol) values (v_u, v_t, 'zzz-rechazada-0307@likida.test', 'flota_admin');
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P1', '520000009930') returning id into v_o1;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P2', '520000009931') returning id into v_o2;
+  -- v_o1 sigue con RN-1 en 'en_cuadre' tras el rechazo (más abajo): un
+  -- SEGUNDO viaje 'abierto' para el MISMO operador chocaría con
+  -- `uq_viaje_abierto_por_operador` (0029, cubre abierto|en_cuadre) antes de
+  -- llegar a nada de lo que este bloque quiere medir. RN-2 nace con un
+  -- operador NUEVO — v_o2 se deja libre, es el blanco de las dos
+  -- reasignaciones de abajo.
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P3', '520000009932') returning id into v_o3;
+
+  -- (a) una liquidación que se RECHAZA por la RPC de verdad (el único camino
+  -- que la tabla acepta — un INSERT/UPDATE directo de `revision` rebota con
+  -- LR003) y una que se queda PENDIENTE, mismo periodo.
+  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o1, 'RN-1', 5000) returning id into v_v1;
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v1, 'diesel', 4900);
+  v_l1 := guardar_liquidacion_tx(v_t, v_v1, 4900, 5000, 100, 'con_diferencias', '[]'::jsonb, 0, 0, 0, null, 0);
+  perform revisar_liquidacion(v_t, v_l1, 'rechazar', 'no es de este viaje', null, v_u, null);
+  -- El rechazo YA devolvió el viaje a 'en_cuadre' (0299) — el escenario real.
+
+  insert into viaje (tenant_id, operador_id, folio, anticipo) values (v_t, v_o3, 'RN-2', 5000) returning id into v_v2;
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v2, 'diesel', 5000);
+  v_l2 := guardar_liquidacion_tx(v_t, v_v2, 5000, 5000, 0, 'con_diferencias', '[]'::jsonb, 0, 0, 0, null, 0); -- nace 'pendiente'
+
+  j := poliza_datos_tenant(v_t, current_date - 1, current_date + 1);
+  poliza_sin_rechazada := not (j::text like '%RN-1%');
+  poliza_con_pendiente := (j::text like '%RN-2%');
+
+  -- (b) el viaje de la RECHAZADA (v_v1, ya en 'en_cuadre') SÍ acepta
+  -- reasignar operador ahora — antes de la 0307, CU004 lo bloqueaba.
+  begin
+    update viaje set operador_id = v_o2 where id = v_v1;
+    reasignar_tras_rechazo := true;
+  exception when others then
+    reasignar_tras_rechazo := false;
+  end;
+
+  -- (c) control: una liquidación APROBADA (no rechazada, también por la RPC)
+  -- SIGUE bloqueando la reasignación — la 0307 no abre la puerta de más.
+  perform revisar_liquidacion(v_t, v_l2, 'aprobar', null, null, v_u, null);
+  begin
+    update viaje set operador_id = v_o2 where id = v_v2;
+  exception when sqlstate 'CU004' then reasignar_tras_aprobada_rebota := true;
+  end;
+
+  raise exception E'RECHAZADA_NO_CUENTA_0307  poliza-sin-rechazada=%  poliza-con-pendiente=%  reasignar-tras-rechazo=%  reasignar-tras-aprobada-rebota=%   (esperado t / t / t / t)',
+    poliza_sin_rechazada, poliza_con_pendiente, reasignar_tras_rechazo, reasignar_tras_aprobada_rebota;
+end $$;
+-- ── 253. El upsert del webhook de Stripe contra `factura_saas` YA NO revienta con 42P10 (mig. 0309) ──
+--
+-- AUDITORÍA 25, DATOS-A2 (ALTO). `factura_saas_stripe_unica` nació PARCIAL
+-- (0052:105-106, `where stripe_invoice_id is not null`) y `aplicarFactura`
+-- (suscripcion.ts) la usa como blanco de `.upsert({...}, { onConflict:
+-- 'stripe_invoice_id' })`. PostgREST traduce eso a un `ON CONFLICT
+-- (stripe_invoice_id) DO UPDATE` SIN predicado — Postgres solo infiere un
+-- único PARCIAL si el ON CONFLICT repite su WHERE, que PostgREST no puede
+-- escribir. La 0309 lo dejó NO parcial, la misma lección que la 0176 ya
+-- aplicó a `uq_posicion_lectura`.
+--
+-- Este bloque reproduce el `INSERT … ON CONFLICT (stripe_invoice_id) DO
+-- UPDATE …` EXACTO que PostgREST emite (sin WHERE), tal como lo haría el
+-- primer webhook de Stripe: si el índice siguiera parcial, `upsert_sin_where`
+-- saldría en `f` (rebota 42P10, atrapado por el `exception when others`).
+-- También confirma que el segundo intento con el MISMO `stripe_invoice_id`
+-- ACTUALIZA la misma fila (no inserta una segunda) y que el predicado viejo
+-- era decorativo: dos facturas SIN `stripe_invoice_id` (pago por
+-- transferencia) siguen conviviendo sin chocar contra el único no-parcial —
+-- la semántica estándar de Postgres para NULLs en un índice único.
+-- Esperado: STRIPE_ONCONFLICT_0309  no_parcial=t  upsert_sin_where=t
+--   segunda_actualiza=t  una_sola_fila=t  nulos_conviven=t
+do $$
+declare
+  v_t uuid;
+  no_parcial boolean;
+  upsert_sin_where boolean := false;
+  v_f uuid;
+  segunda_actualiza boolean := false;
+  una_sola_fila boolean := false;
+  nulos_conviven boolean := false;
+begin
+  select indpred is null into no_parcial
+    from pg_index
+   where indexrelid = 'public.factura_saas_stripe_unica'::regclass;
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0309') returning id into v_t;
+
+  -- El upsert real de aplicarFactura, tal cual lo arma PostgREST: SIN WHERE.
+  begin
+    insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro, stripe_invoice_id)
+      values (v_t, date '2026-09-01', date '2026-09-30', 2900, 'stripe', 'in_zzz_0309')
+      on conflict (stripe_invoice_id) do update set monto = excluded.monto
+      returning id into v_f;
+    upsert_sin_where := true;
+  exception when others then upsert_sin_where := false;
+  end;
+
+  -- El reintento de Stripe con el MISMO invoice: debe pisar la misma fila.
+  insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro, stripe_invoice_id)
+    values (v_t, date '2026-09-01', date '2026-09-30', 3200, 'stripe', 'in_zzz_0309')
+    on conflict (stripe_invoice_id) do update set monto = excluded.monto
+    returning id into v_f;
+
+  select (monto = 3200) into segunda_actualiza from factura_saas where id = v_f;
+  select (count(*) = 1) into una_sola_fila from factura_saas where stripe_invoice_id = 'in_zzz_0309';
+
+  -- El predicado viejo era decorativo: dos filas SIN invoice (transferencia)
+  -- ya convivían sin él — un único no-parcial no compite entre NULLs. Con
+  -- periodos DISTINTOS a propósito: mismo periodo chocaría con la unicidad
+  -- real y anterior `factura_saas_una_por_periodo` (0057, sí parcial a
+  -- 'transferencia') — un constraint correcto y sin relación con lo que este
+  -- bloque mide (los NULL de `stripe_invoice_id`).
+  insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro)
+    values (v_t, date '2026-09-01', date '2026-09-30', 1000, 'transferencia');
+  insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro)
+    values (v_t, date '2026-10-01', date '2026-10-31', 1500, 'transferencia');
+  select (count(*) = 2) into nulos_conviven
+    from factura_saas where tenant_id = v_t and stripe_invoice_id is null;
+
+  raise exception E'STRIPE_ONCONFLICT_0309  no_parcial=%  upsert_sin_where=%  segunda_actualiza=%  una_sola_fila=%  nulos_conviven=%   (esperado t / t / t / t / t)',
+    no_parcial, upsert_sin_where, segunda_actualiza, una_sola_fila, nulos_conviven;
+end $$;
+
+-- ── 254. Borrar un operador vacía SOLO `app_user.operador_id`, nunca `tenant_id` (mig. 0310) ──
+--
+-- AUDITORÍA 25, DATOS-M3 (MEDIO, REINCIDENTE DATOS-24). La 0290 dejó
+-- `app_user_operador_tenant_fkey` con `on delete set null` SIN lista de
+-- columnas — en Postgres eso anula TODAS las columnas de la FK compuesta, no
+-- solo `operador_id`. `app_user.tenant_id` es nullable a propósito (0001:17,
+-- «null = superadmin»), así que borrar un operador dejaba al encargado que lo
+-- tenía con la FORMA reservada al superadmin: `get_user_tenant_ids()` le
+-- devuelve `[]` y `/dashboard` le pinta su flota vacía sin un solo error.
+--
+-- La 0310 recreó la FK con `on delete set null (operador_id)`. Este bloque
+-- hace el `DELETE FROM operador` real y mide las dos columnas por separado —
+-- es justo la distinción que un `on delete set null` sin lista no puede
+-- hacer, así que es lo único que puede demostrar que se corrigió.
+-- Esperado: OPERADOR_TENANT_SET_NULL_0310  operador_id_null=t  tenant_id_intacto=t
+do $$
+declare
+  ta uuid := gen_random_uuid();
+  op uuid := gen_random_uuid();
+  au uuid := gen_random_uuid();
+  operador_id_null boolean;
+  tenant_id_intacto boolean;
+begin
+  insert into public.tenant (id, nombre) values (ta, '__verif_0310__');
+  insert into public.operador (id, tenant_id, nombre, telefono) values (op, ta, 'Duplicado', '5299937007 83');
+  insert into public.app_user (id, tenant_id, email, rol, operador_id)
+    values (au, ta, '__verif_0310__@likida.test', 'encargado', op);
+
+  delete from public.operador where id = op;
+
+  select (operador_id is null) into operador_id_null from public.app_user where id = au;
+  select (tenant_id = ta) into tenant_id_intacto from public.app_user where id = au;
+
+  raise exception E'OPERADOR_TENANT_SET_NULL_0310  operador_id_null=%  tenant_id_intacto=%   (esperado t / t)',
+    operador_id_null, tenant_id_intacto;
+end $$;
+
+-- ── 255. `tenant_perfil_merge` ya no lo puede ejecutar `anon`/`authenticated` (mig. 0312) ──
+--
+-- AUDITORÍA 25, DATOS-B2 (BAJO, REINCIDENTE DE LA 24). La 0296 solo traía
+-- `grant execute ... to service_role` — Postgres concede EXECUTE a PUBLIC por
+-- default en funciones nuevas, y Supabase además concede explícito a
+-- `anon`/`authenticated` por sus default privileges (0284:110-112). Un
+-- `grant` a `service_role` no retira eso: hacía falta el `revoke` explícito.
+-- Esperado: TENANT_PERFIL_MERGE_REVOKE_0312  anon=f  authenticated=f
+do $$
+declare
+  anon_ok boolean; authenticated_ok boolean;
+begin
+  select has_function_privilege('anon', 'public.tenant_perfil_merge(uuid, jsonb, uuid)', 'EXECUTE')
+    into anon_ok;
+  select has_function_privilege('authenticated', 'public.tenant_perfil_merge(uuid, jsonb, uuid)', 'EXECUTE')
+    into authenticated_ok;
+
+  raise exception E'TENANT_PERFIL_MERGE_REVOKE_0312  anon=%  authenticated=%   (esperado f / f)',
+    anon_ok, authenticated_ok;
+end $$;
+-- ── 256. `viaje` y `cfdi_consolidado_linea` entran al dominio de ve_finanzas() (mig. 0314) ──
+--
+-- AUDITORÍA 25, SEGURIDAD (ALTO, línea 88). El jefe de tráfico (`encargado`)
+-- no debe ver el dinero de la flota — `visibilidad.ts:41` solo le da
+-- 'operacion' — pero el panel lee con `supabaseAdmin()` (service_role, salta
+-- RLS): la única frontera real contra un `curl` directo a PostgREST con la
+-- cookie del propio encargado es esta policy. `viaje.anticipo`/`ingreso_flete`
+-- y `cfdi_consolidado_linea.monto` se quedaron fuera de `ve_finanzas()` desde
+-- que la 0048 empezó a aplicarla tabla por tabla — la 0158 partió la policy de
+-- `viaje` en `tenant_data_select`/`_insert`/`_update` (por eso NO es
+-- `tenant_data` como en el resto: la 0292 solo barre policies con ESE nombre
+-- exacto) y `cfdi_consolidado_linea` nunca pasó por ninguna de las dos rondas.
+--
+-- Se impersona a un ENCARGADO. Esperado: 0 filas en las dos tablas.
+do $$
+declare
+  v_t uuid; v_op uuid; v_cfdi uuid; v_u1 uuid := gen_random_uuid();
+  n_viaje int; n_cfdi int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF SEG88 RLS') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'ZZZ operador seg88', '5215559990188') returning id into v_op;
+  insert into viaje (tenant_id, operador_id, folio, anticipo, ingreso_flete)
+    values (v_t, v_op, 'ZZZ-SEG88', 5000.00, 18500.00);
+  insert into cfdi_xml (tenant_id, cfdi_uuid, xml, tiene_multiples_conceptos)
+    values (v_t, 'zzz-seg88-uuid', '<xml/>', true) returning id into v_cfdi;
+  insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, descripcion, estacion_rfc, fecha)
+    values (v_t, v_cfdi, 1, 'ecc12', 1234.56, 'diesel zzz', 'XAXX010101000', now());
+
+  insert into app_user (id, tenant_id, email, rol)
+    values (v_u1, v_t, 'zzz-verif-encargado-seg88@likida.test', 'encargado');
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u1)::text, true);
+
+  select count(*) into n_viaje from viaje where tenant_id = v_t;
+  select count(*) into n_cfdi from cfdi_consolidado_linea where tenant_id = v_t;
+
+  reset role;
+
+  raise exception E'SEG88_RLS_DINERO  viaje_visible_a_encargado=%  cfdi_visible_a_encargado=%   (esperado 0 / 0 — cualquier otra cosa le abre el dinero de la flota al jefe de tráfico)',
+    n_viaje, n_cfdi;
+end $$;
+
+-- ── 257. `tenant_perfil_merge` no es ejecutable por anon/authenticated (mig. 0315) ──
+--
+-- AUDITORÍA 25, SEGURIDAD (MEDIO, línea 202, REINCIDENTE). La 0296 concedía
+-- `execute` a `service_role` sobre una función que ESCRIBE en `public.tenant`
+-- sin el `revoke from public, anon, authenticated` que cierra el default
+-- privilege de Postgres (lección de la 0013, mismo molde que 0284:110-113).
+do $$
+declare anon_puede boolean; authenticated_puede boolean; service_role_puede boolean;
+begin
+  anon_puede := has_function_privilege('anon', 'public.tenant_perfil_merge(uuid,jsonb,uuid)', 'EXECUTE');
+  authenticated_puede := has_function_privilege('authenticated', 'public.tenant_perfil_merge(uuid,jsonb,uuid)', 'EXECUTE');
+  service_role_puede := has_function_privilege('service_role', 'public.tenant_perfil_merge(uuid,jsonb,uuid)', 'EXECUTE');
+  raise exception E'GRANT_TENANT_PERFIL_MERGE_0315  anon-ejecuta=%  authenticated-ejecuta=%  service-role-ejecuta=%   (esperado false / false / true)',
+    anon_puede, authenticated_puede, service_role_puede;
 end $$;

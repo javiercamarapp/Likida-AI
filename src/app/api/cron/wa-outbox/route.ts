@@ -115,7 +115,20 @@ export async function GET(req: Request) {
         }
         let id: string | undefined;
         try { id = (JSON.parse(body) as { messages?: Array<{ id?: string }> }).messages?.[0]?.id; } catch { /* no wamid */ }
-        if (!id) { fallidas++; await finalizarYAvisarSiMurio(s, undefined, 'Meta aceptó sin wamid'); return; }
+        if (!id) {
+          // MEDIO (auditoría 25, REINCIDENTE): `r.ok` YA es Meta ACEPTANDO —
+          // menos ambiguo que el `catch` de red de abajo, que sí razona la
+          // ambigüedad. Tratar esto como fallo reencolaba un mensaje que YA
+          // SALIÓ: el chofer/jefe lo recibía otra vez cada 15·2^intentos
+          // segundos hasta 8 veces. Se marca 'sent' con un marcador que NO
+          // puede confundirse con un wamid real (los de Meta empiezan por
+          // "wamid.") — queda visible en la fila que Meta no devolvió id,
+          // sin reencolar un mensaje que sí se entregó.
+          logger.warn('wa.outbox_sin_wamid', { id: s.id, cuerpo: body.slice(0, 300) });
+          enviadas++;
+          await finalizarSalidaWhatsApp(s, `sin_wamid:${s.id}`);
+          return;
+        }
         enviadas++;
         await finalizarSalidaWhatsApp(s, id);
       } catch (e) {

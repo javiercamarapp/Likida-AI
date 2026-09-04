@@ -21,7 +21,7 @@ function builder(tabla: string) {
   };
   const b: Record<string, unknown> = {};
   Object.assign(b, {
-    select: () => b, eq: () => b, is: () => b, in: () => b, order: () => b, limit: () => b, single: () => b,
+    select: () => b, eq: () => b, is: () => b, in: () => b, order: () => b, limit: () => b, range: () => b, single: () => b,
     insert: (payload: unknown) => { llamadas.push({ tabla, metodo: 'insert', payload }); return b; },
     update: (payload: unknown) => { llamadas.push({ tabla, metodo: 'update', payload }); return b; },
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>

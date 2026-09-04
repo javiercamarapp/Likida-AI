@@ -95,7 +95,10 @@ vi.mock('@/lib/supabase/admin', () => ({
     rpc,
   }),
 }));
-vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
+vi.mock('@/lib/likida/presupuesto', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/likida/presupuesto')>()),
+  acotada: (q: unknown) => q,
+}));
 
 // Los generadores de las otras dos rutas: dobles que registran el tenant con
 // el que se les llamó — lo que importa es que sea el de la SESIÓN.

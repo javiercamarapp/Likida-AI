@@ -237,6 +237,14 @@ export async function ejecutarCopiloto(opts: {
     // UN reintento correctivo, mismo criterio que el analista.
     if (!bloques || !cifrasRespaldadas(bloques, respaldo)) {
       logger.warn('copiloto.reintento_correctivo', {});
+      // AUDITORÍA 25 (ALTO, tool-calling.md:87), mismo arreglo que
+      // analista.ts: `CAPTURAS` se llavea por `runId`, y el reintento corre
+      // con el MISMO `runId`. Sin este borrado, si el segundo ciclo no
+      // vuelve a llamar la tool terminal, la lectura de abajo seguía
+      // trayendo los bloques del PRIMER ciclo — los que la guardia acababa
+      // de rechazar — y la respuesta real del segundo ciclo quedaba
+      // inalcanzable.
+      CAPTURAS.delete(runId);
       const res2 = await generateWithTools({
         role: 'analisis',
         system,

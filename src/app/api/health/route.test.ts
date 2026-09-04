@@ -394,7 +394,7 @@ describe('OP-P1: el health coteja la migración de la base contra la del código
     const r = await GET(peticion());
     const c = await r.json();
     expect(r.status).toBe(200);
-    expect(c.migracion).toEqual({ base: CODIGO, codigo: CODIGO, atras: 0 });
+    expect(c.migracion).toEqual({ base: CODIGO, codigo: CODIGO, atras: 0, aplicados: [CODIGO] });
   });
 
   it('la base va atrás: degraded, con cuántas faltan y qué aplicar', async () => {
@@ -423,6 +423,31 @@ describe('OP-P1: el health coteja la migración de la base contra la del código
     expect(r.status).toBe(503);
     expect(c.migracion).toMatchObject({ base: null, codigo: CODIGO, atras: null });
     expect(c.migracion.motivo).toMatch(/no contestó/);
+  });
+
+  // AUDITORÍA 25, SEGURIDAD (MEDIO, línea 194, REINCIDENTE). `/api/health` es
+  // público a propósito, y `_comun.ts:74` fija la regla para TODA la API
+  // pública: el mensaje que se publica «NUNCA lleva el mensaje de Postgres».
+  // Los dos casos de abajo mandaban el `error.message`/la excepción CRUDOS
+  // de PostgREST/supabase-js directo al JSON público.
+  it('el error de PostgREST NO se publica crudo (solo un motivo fijo, en español)', async () => {
+    rpcMigraciones = () => ({
+      data: null,
+      error: { message: 'password authentication failed for user "postgres" at 10.0.4.17:5432' },
+    });
+    const c = await (await GET(peticion())).json();
+    expect(c.migracion.motivo).not.toMatch(/postgres/i);
+    expect(c.migracion.motivo).not.toMatch(/10\.0\.4\.17/);
+    expect(c.migracion.motivo).toMatch(/no contestó/);
+  });
+
+  it('si la llamada LANZA, tampoco se publica el mensaje crudo de la excepción', async () => {
+    rpcMigraciones = (): never => { throw new Error('ECONNREFUSED 10.0.4.17:5432'); };
+    const c = await (await GET(peticion())).json();
+    expect(c.migracion).toMatchObject({ base: null, codigo: CODIGO, atras: null });
+    expect(c.migracion.motivo).not.toMatch(/ECONNREFUSED/);
+    expect(c.migracion.motivo).not.toMatch(/10\.0\.4\.17/);
+    expect(c.migracion.motivo).toMatch(/lanzó/);
   });
 
   it('la RPC contesta «no disponible» (CI local sin schema_migrations): mismo trato honesto', async () => {

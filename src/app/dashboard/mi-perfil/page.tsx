@@ -5,6 +5,7 @@ import { estadoMfa, MSG_MFA_SUPERADMIN, type VeredictoMfaSuperadmin } from '@/li
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
 import {
   listarMisClientesMcp, revocarSesionesMcp, type ClienteMcpConectado,
 } from '@/lib/mcp/sesiones';
@@ -14,14 +15,6 @@ import { sufijoTenant } from '../sufijo';
 import { TablaClientesMcp } from '../sesiones-mcp/vista';
 
 export const dynamic = 'force-dynamic';
-
-const ROL_LABEL: Record<string, string> = {
-  superadmin: 'Superadmin',
-  flota_admin: 'Dueño / Admin de flota',
-  encargado: 'Encargado',
-  contador: 'Contador',
-  operador: 'Operador / Chofer',
-};
 
 /** Tipos de imagen que el bucket acepta. Un `.svg` puede traer script
  *  adentro y el bucket `avatares` es PÚBLICO — servirlo desde nuestro
@@ -413,7 +406,7 @@ export default async function MiPerfilFlota({
               </div>
               <div className="flex justify-between gap-4">
                 <dt style={{ color: 'var(--muted)' }}>Rol</dt>
-                <dd className="text-right">{ROL_LABEL[s.rol] ?? s.rol}</dd>
+                <dd className="text-right">{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</dd>
               </div>
             </dl>
             <p className="text-[11px] mt-4" style={{ color: 'var(--faint)' }}>

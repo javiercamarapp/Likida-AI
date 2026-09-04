@@ -63,7 +63,7 @@ vi.mock('@/lib/supabase/admin', () => ({
         eq: (c: string, v: unknown) => { op.filtros[c] = v; return cadena(); },
         in: (c: string, v: unknown) => { op.filtros[c] = v; return cadena(); },
         is: (c: string, v: unknown) => { op.filtros[c] = v; return cadena(); },
-        gte: cadena, lte: cadena, order: cadena, limit: cadena,
+        gte: cadena, lte: cadena, order: cadena, limit: cadena, range: cadena,
         single: cadena, maybeSingle: cadena,
         then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
           Promise.resolve(manejar(op)).then(res, rej),
@@ -412,11 +412,14 @@ describe('c7-1 · el reloj de la vuelta corta el ciclo del SAT sin quemar cuota 
 
       // CORTA: solo se bajó el primero; p2 y p3 no gastaron cuota del SAT.
       expect(llamadas.descargar).toEqual(['p1']);
-      // NO DEJA EL ESTADO A MEDIAS, y aquí está lo que de verdad importa:
-      //  · lo que SÍ se bajó quedó ANOTADO, así que la próxima corrida reanuda
-      //    en p2 y no vuelve a pedir p1 (que sería quemar cuota otra vez);
-      expect(db.solicitudes[0].paquetes_bajados).toEqual(['p1']);
-      expect(db.cfdis).toHaveLength(2);
+      // NO DEJA EL ESTADO A MEDIAS. AUDITORÍA 25 (REND-A3): ahora `ingerir`
+      // TAMBIÉN mira el reloj, así que aquí el corte llega ANTES de ingerir
+      // ni un solo CFDI de p1 (el reloj ya estaba vencido cuando `ingerir`
+      // hizo su primera pregunta) — p1 se bajó (gastó cuota del SAT) pero no
+      // se anota como bajado, así que la próxima corrida lo re-baja y el
+      // sello de dedup hace que retomar sea barato.
+      expect(db.solicitudes[0].paquetes_bajados).toEqual([]);
+      expect(db.cfdis).toHaveLength(0);
       //  · la solicitud NO se cierra…
       expect(db.solicitudes[0].estado).not.toBe('descargada');
       expect(r.descargadas).toBe(0);
@@ -424,7 +427,49 @@ describe('c7-1 · el reloj de la vuelta corta el ciclo del SAT sin quemar cuota 
       //    protege contra la pérdida silenciosa de datos fiscales.
       const avances = db.solicitudes.filter((s) => s.estado === 'descargada');
       expect(avances).toHaveLength(0);
-      // CUENTA: los dos paquetes que no alcanzaron turno se dicen.
+      // CUENTA: los dos CFDI de p1 que no se ingirieron, más p2 y p3 que ni
+      // se intentaron.
+      expect(r.sinTurno).toBe(4);
+    } finally {
+      reloj.mockRestore();
+    }
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 25, ALTO (REND-A3) — el reloj ahora también corre DENTRO de
+  // `ingerir`, no solo antes de `prov.descargar`. Un paquete real es «un ZIP
+  // con MILES de CFDI»: sin este chequeo, un paquete que no cabe en `venceEn`
+  // corría completo y Vercel lo mataba a medio bucle sin que nadie tuviera
+  // ocasión de anotar nada.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('REND-A3: un paquete que no cabe entero en el tiempo se ingiere PARCIAL y no se marca bajado', async () => {
+    const db = base([solicitudViva()]);
+    let llamadasReloj = 0;
+    // El reloj sigue dentro de tope mientras se procesan los dos primeros CFDI
+    // del paquete, y se vence justo antes del tercero — el caso real de un
+    // paquete con más CFDI de los que caben en `venceEn`. Las primeras dos
+    // preguntas son las de `correrFlota` (antes de la solicitud y antes del
+    // paquete); las siguientes, una por CFDI dentro de `ingerir`.
+    const reloj = vi.spyOn(Date, 'now').mockImplementation(() => { llamadasReloj++; return llamadasReloj <= 4 ? 1_000 : 999_999; });
+    try {
+      const prov: ProveedorDescargaSat = {
+        nombre: 'sw',
+        async solicitar() { return { ok: true, requestId: 'req-x' }; },
+        async verificar() { return { ok: true, estado: 'lista', paquetes: ['p1'], cfdis: null, mensaje: null }; },
+        async descargar(p: string) { return { ok: true, xmls: [`${p}-a`, `${p}-b`, `${p}-c`, `${p}-d`] }; },
+        async credencial() { return { ok: true, numero: '3'.repeat(20), venceEn: null }; },
+      };
+
+      const r = await correrFlota(CFG(), prov, '2026-08-27', AHORA, 500_000);
+
+      // Se ingirieron los CFDI que cupieron antes del corte, ni uno más.
+      expect(db.cfdis).toHaveLength(2);
+      // El paquete se descargó (gastó cuota) pero no se anota como bajado:
+      // la corrida siguiente lo re-baja y retoma barato vía el sello de dedup.
+      expect(db.solicitudes[0].paquetes_bajados).toEqual([]);
+      // La solicitud no se cierra ni el calendario avanza con CFDI faltantes.
+      expect(db.solicitudes[0].estado).not.toBe('descargada');
+      // Los dos CFDI que no alcanzaron turno se cuentan, no se pierden mudos.
       expect(r.sinTurno).toBe(2);
     } finally {
       reloj.mockRestore();

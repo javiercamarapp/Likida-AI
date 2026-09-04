@@ -709,8 +709,18 @@ export async function aplicarSuscripcion(datos: {
     // quitaría features a una flota que quizá acaba de recontratar.
     if (otra.legible) plan = otra.planClave ?? 'demo';
   }
+  // MEDIO (auditoría 25): este `error` degradaba a `warn` y la función
+  // seguía de largo hasta sellar el orden y contestar 200 — Stripe nunca
+  // reintentaba. Con un `customer.subscription.deleted` que cancela bien la
+  // fila de `suscripcion` pero pierde ESTE segundo write (p.ej. un timeout
+  // del pooler), `tenant.plan` se quedaba en el plan pagado PARA SIEMPRE: no
+  // hay reconciliador que lo revise después (el único escritor de esta
+  // columna es esta línea). Se lanza, igual que el resto de escrituras de
+  // esta función: el webhook contesta 500, Stripe reintenta, y el reintento
+  // es seguro — `suscripcion` ya quedó en el estado correcto, así que
+  // reaplicar solo repite este `update`.
   const t = await admin.from('tenant').update({ plan }).eq('id', datos.tenantId);
-  if (t.error) logger.warn('stripe.tenant_plan', { err: t.error.message });
+  if (t.error) throw new Error(`aplicarSuscripcion.tenant_plan: ${t.error.message}`);
 
   // El sello del orden va AL FINAL: si algo de arriba falló, la función lanzó
   // y el reintento de Stripe tiene que poder volver a aplicar este mismo
@@ -942,7 +952,15 @@ export async function cancelarFacturaDeStripe(
     // NO se lanza: puede ser el reembolso de un cobro que nunca registramos
     // (una factura de Stripe anterior a que existiera esta tabla). Lanzar haría
     // que Stripe reintentara para siempre algo que ningún reintento arregla.
+    //
+    // Aun así se sella el orden: si el `invoice.paid` de este mismo invoice
+    // sigue en vuelo (reintento de Stripe) y llega DESPUÉS de esta anulación,
+    // `aplicarFactura` tiene que verla como fuera de orden y descartarla — no
+    // resucitar como 'pagada' algo que ya se anuló.
     logger.warn('stripe.anulacion_sin_factura', { stripeInvoiceId, motivo });
+    if (eventoCreadoUnix !== undefined) {
+      await sellarOrden(stripeInvoiceId, eventoCreadoUnix, 'orden_factura');
+    }
     return 'sin_factura';
   }
   if (f.estado === 'cancelada') return 'ya_cancelada';

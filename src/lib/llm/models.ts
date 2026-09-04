@@ -235,8 +235,23 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
 //
 //   · `comprobanteOcr`  medido el 4-ago-2026 contra 18 comprobantes reales con
 //                       `gemini-3.1-flash-lite` (arriba, rol `ocr`): $0.0015-0.0016.
-//   · `liquidacion`     la banda alta de la arquitectura (jul-2026, cabecera):
-//                       $0.03-0.05 por liquidación con Sonnet en el cuadre.
+//   · `liquidacion`     AUDITORÍA 25 (REND-A4, ALTO): NO es la banda alta de la
+//                       arquitectura ($0.05, jul-2026) — esa cifra era una
+//                       estimación de diseño que la medición real del propio
+//                       repo contradice 3×. `openrouter.ts:938-942` MIDIÓ el
+//                       4-ago-2026 sobre las 4 liquidaciones reales que una
+//                       liquidación de 21 comprobantes reenvía ~72,000 tokens
+//                       de entrada en 8 vueltas con `anthropic/claude-sonnet-5`
+//                       ($2/$10 por M, arriba): 72,000 × $2/1e6 = $0.144 de
+//                       entrada sola; la caché de prompt (10% de lectura,
+//                       `openrouter.ts:944`) rescata ~$0.0197 porque solo cubre
+//                       el `system` (1,560 tokens de los ~21,000 que se
+//                       reenvían por ronda) → entrada neta ≈ $0.125; salida
+//                       ≈600 tok × 8 rondas × $10/1e6 ≈ $0.048. Total medido
+//                       ≈ $0.17. De este número deriva `topeDerivadoDelPlan`
+//                       (`budget.ts:235`) el freno diario de IA de cada flota:
+//                       con el $0.05 viejo, una flota de 15,000 viajes/mes se
+//                       quedaba sin IA al 31% del día.
 //   · `fotosPorViaje`   el supuesto central de escala-15k.md (2-4 fotos/viaje).
 //   · `viajeCompleto`   cuadre + OCR de sus fotos: lo que cuesta liquidar UN
 //                       viaje de punta a punta. Con 500 viajes/día son ~$27,
@@ -250,7 +265,9 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
 //                       corta antes; subestimar deja gastar sin freno.
 // ═══════════════════════════════════════════════════════════════════════════
 const COMPROBANTE_OCR_USD = 0.0016;
-const LIQUIDACION_USD = 0.05;
+/** $0.17 medido (ver el bloque de arriba); $0.18 para no citar un número más
+ *  fino de lo que la medición de 4 liquidaciones sostiene. */
+const LIQUIDACION_USD = 0.18;
 const FOTOS_POR_VIAJE = 3;
 
 export const COSTO_ESTIMADO_USD = {

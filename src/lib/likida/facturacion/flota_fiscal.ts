@@ -104,19 +104,32 @@ export async function getFiscalDeFlota(tenantId: string): Promise<FiscalDeFlota>
  * barato que dos viajes.
  */
 async function correoDeFacturacion(tenantId: string): Promise<string | null> {
+  // AUDITORÍA 25, ALTO (reauditoría, misma causa raíz que AGEN-C1 en
+  // contactos.ts, commit 24ce4c2): `activo`. `desactivarUsuario`
+  // (usuarios_escritura.ts:191) escribe `activo=false` pero NO borra
+  // `app_user.email` — el correo se queda ahí para que esta consulta lo
+  // encuentre. AGEN-C1 cerró las TRES salidas de WhatsApp; esta es una salida
+  // de CORREO y se le había quedado sin filtrar: el ex-contador de una flota
+  // seguía recibiendo los CFDI de esa flota semanas después de la baja, con el
+  // RFC, la razón social y el importe DENTRO del comprobante. Dos capas y
+  // misma regla que allá: el `.limit(50)` cuenta filas del SERVIDOR, así que
+  // sin el filtro de la base una fila de baja se puede llevar el cupo; y solo
+  // el `false` EXPLÍCITO da de baja, para que una fila sin la columna (base
+  // sin la 0294) no se quede sin dónde mandar su CFDI.
   const { data, error } = await supabaseAdmin()
     .from('app_user')
-    .select('rol, email, created_at')
+    .select('rol, email, activo, created_at')
     .eq('tenant_id', tenantId)
     .in('rol', [...ROLES_QUE_RECIBEN])
+    .or('activo.is.null,activo.eq.true')
     .order('created_at', { ascending: true })
     .limit(50);
 
   if (error) throw new Error(`correoDeFacturacion: ${error.message}`);
 
-  const filas = (data ?? []) as Array<{ rol: string; email: string | null }>;
+  const filas = (data ?? []) as Array<{ rol: string; email: string | null; activo?: boolean | null }>;
   for (const rol of ROLES_QUE_RECIBEN) {
-    const f = filas.find((x) => x.rol === rol && typeof x.email === 'string' && x.email.trim());
+    const f = filas.find((x) => x.rol === rol && x.activo !== false && typeof x.email === 'string' && x.email.trim());
     if (f?.email) return f.email.trim();
   }
   return null;

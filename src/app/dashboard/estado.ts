@@ -32,6 +32,12 @@ export interface SeccionesPanel {
     viajesPorMes: unknown | null;
     cfgFiscal: unknown | null;
     gastosFiscales: unknown | null;
+    /** AUDITORÍA 25, MEDIO: `contarEscalados`/`contarHuerfanosPendientes`
+     *  fallan cerrado (`null`) en la capa de datos, pero antes de esta ronda
+     *  ninguna pantalla vigilaba esa caída — el renglón de alerta
+     *  simplemente desaparecía y `estadoPanel` no se enteraba. */
+    escalados: unknown | null;
+    huerfanos: unknown | null;
   }>;
 }
 

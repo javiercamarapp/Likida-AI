@@ -68,28 +68,22 @@ export function leerPeriodo(q: URLSearchParams):
 // Las columnas del CSV no cambian (el ERP del contador ya las lee).
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const FILTROS_REVISION = ['sin_rechazadas', 'firmadas', 'pendiente', 'aprobada', 'ajustada', 'rechazada', 'todas'] as const;
-export type FiltroRevisionExport = (typeof FILTROS_REVISION)[number];
-export const FILTRO_REVISION_DEFECTO: FiltroRevisionExport = 'sin_rechazadas';
+// El vocabulario de `?revision=` (valores válidos y sus leyendas) es el
+// ÚNICO de `lib/likida/revision.ts` — lo comparte con `/api/v1/liquidaciones`
+// para que el mismo valor sea válido en las dos salidas (ARQUITECTURA 25,
+// ALTO). El default de ESTE endpoint (todo menos lo rechazado) sigue siendo
+// propio: es la decisión de tesorería, no la del ERP.
+export {
+  FILTROS_REVISION_EXPORT as FILTROS_REVISION,
+  LEYENDA_REVISION_EXPORT as LEYENDA_REVISION,
+  type FiltroRevisionExport,
+} from '@/lib/likida/revision';
+import { leerFiltroRevisionExport, type FiltroRevisionExport as TFiltro } from '@/lib/likida/revision';
+
+export const FILTRO_REVISION_DEFECTO: TFiltro = 'sin_rechazadas';
 
 export function leerFiltroRevision(q: URLSearchParams):
-  | { ok: true; filtro: FiltroRevisionExport }
+  | { ok: true; filtro: TFiltro }
   | { ok: false; motivo: string } {
-  const crudo = q.get('revision');
-  if (crudo === null || crudo === '') return { ok: true, filtro: FILTRO_REVISION_DEFECTO };
-  if (!(FILTROS_REVISION as readonly string[]).includes(crudo)) {
-    return { ok: false, motivo: `\`revision\` solo acepta: ${FILTROS_REVISION.join(', ')}.` };
-  }
-  return { ok: true, filtro: crudo as FiltroRevisionExport };
+  return leerFiltroRevisionExport(q.get('revision'), FILTRO_REVISION_DEFECTO);
 }
-
-/** Cómo se le explica el corte a quien abra el archivo. */
-export const LEYENDA_REVISION: Record<FiltroRevisionExport, string> = {
-  sin_rechazadas: 'todas menos las rechazadas',
-  firmadas: 'solo las aprobadas o ajustadas',
-  pendiente: 'solo las que esperan firma',
-  aprobada: 'solo las aprobadas',
-  ajustada: 'solo las ajustadas',
-  rechazada: 'solo las rechazadas',
-  todas: 'todas, firmadas o no',
-};

@@ -542,3 +542,31 @@ describe('AGEN-11 · la foto repetida se cuenta y se dice', () => {
     expect(todo).not.toMatch(/repetida \(ya la tenía\)/i);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25 · [ALTO] agentico.md:426 — el resumen consolidado de la ráfaga
+// sumaba TODAS las filas de `gasto` sin pasar por `copiasDeComprobante`, la
+// MISMA regla que ya usan el motor y el PDF. El protocolo normal de dos fotos
+// por ticket (el completo + el acercamiento al QR) deja dos filas con el mismo
+// `cfdi_uuid`; el motor las cuenta una vez y el resumen de la ráfaga las
+// contaba dos — el chofer leía un total que el «listo» del mismo hilo
+// desmentía minutos después.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('AUDITORÍA 25 · el resumen de la ráfaga no cuenta las copias dos veces', () => {
+  it('dos fotos del MISMO comprobante (mismo cfdi_uuid) cuentan como uno solo', async () => {
+    let n = 0;
+    extraerComprobante.mockImplementation(async () => bueno(100 * (n += 1)));
+    getGastos.mockResolvedValue([
+      { id: 'a', concepto: 'diesel', monto: 8340.50, cfdiUuid: 'ABC-123' },
+      { id: 'b', concepto: 'diesel', monto: 8340.50, cfdiUuid: 'ABC-123' },
+    ]);
+
+    await rafaga(2);
+
+    const todo = salientes.join('\n');
+    expect(todo, `salió: ${JSON.stringify(salientes)}`).toMatch(/\*1 comprobante\*/);
+    expect(todo).toContain('$8,340.50');
+    expect(todo).not.toMatch(/\*2 comprobantes\*/);
+    expect(todo).not.toContain('$16,681.00');
+  });
+});

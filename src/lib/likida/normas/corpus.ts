@@ -478,6 +478,21 @@ export const NORMAS: readonly Norma[] = [
     ]
   },
   {
+    "archivo": "rliva-3-fr-II.yaml",
+    "id": "rliva-3-fr-II",
+    "tipo": "reglamento",
+    "instrumento": "Reglamento de la Ley del Impuesto al Valor Agregado",
+    "articulo_o_regla": "3",
+    "titulo": "Retención del 4% de IVA por servicios de autotransporte terrestre de bienes",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LIVA_250914.pdf",
+    "verificado_el": "2026-09-03",
+    "jerarquia": 2,
+    "citasEnCodigo": [
+      "RLIVA 3-II"
+    ]
+  },
+  {
     "archivo": "rmf-2026-2.7.1.21.yaml",
     "id": "rmf-2026-2.7.1.21",
     "tipo": "regla_general",
