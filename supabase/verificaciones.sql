@@ -6169,8 +6169,17 @@ begin
 
   -- Ejercicio (últimos 30 días aquí), tope efectivo 2000, tope alimentación 750,
   -- cortes: hace 60 y hace 30 días (mes_siguiente / mes_natural simulados).
+  -- RE-AUDITORÍA 25, FIS-REAUD-2 (mig. 0317): la firma ganó 6 parámetros —
+  -- se pasan con nombre para no depender del orden, y con valores que NO
+  -- disparan ninguna de las 7 causas nuevas sobre esta siembra (mismo
+  -- comportamiento que antes de la 0317 para lo que este bloque mide).
   j := gastos_fiscales_agregados_tenant(ta, current_date - 30, current_date, 2000, 750,
-         array['alimentacion','viaticos'], array[(current_date - 60)::date, (current_date - 30)::date]);
+         array['alimentacion','viaticos'], array[(current_date - 60)::date, (current_date - 30)::date],
+         p_claves_combustible => array['15101505','15101514','15101515'],
+         p_vigente_desde => '2026-04-24'::date, p_exigible_desde => null::date,
+         p_umbral_renglones_ajenos => 0.15,
+         p_patron_bar => '\y(bar|bares|cantina|cervecer[ií]a|pulquer[ií]a|antro|cabaret|table\s*dance|vinos\s+y\s+licores)\y',
+         p_hoy => current_date);
 
   select count(*), sum((c->>'n')::int), sum((c->>'monto')::numeric),
          sum((c->>'n')::int) filter (where (c->>'tieneCfdi')::boolean),
@@ -6187,7 +6196,12 @@ begin
 
   -- Sin cota: entran la vieja (banda 2) y la sin fecha
   j := gastos_fiscales_agregados_tenant(ta, null, null, 2000, 750,
-         array['alimentacion','viaticos'], array[(current_date - 60)::date, (current_date - 30)::date]);
+         array['alimentacion','viaticos'], array[(current_date - 60)::date, (current_date - 30)::date],
+         p_claves_combustible => array['15101505','15101514','15101515'],
+         p_vigente_desde => '2026-04-24'::date, p_exigible_desde => null::date,
+         p_umbral_renglones_ajenos => 0.15,
+         p_patron_bar => '\y(bar|bares|cantina|cervecer[ií]a|pulquer[ií]a|antro|cabaret|table\s*dance|vinos\s+y\s+licores)\y',
+         p_hoy => current_date);
   select sum((c->>'n')::int), sum((c->>'n')::int) filter (where (c->>'sinFecha')::boolean),
          string_agg(c->>'banda', ',' order by c->>'banda') filter (where c->>'banda' is not null)
     into sin_cota_n, sin_fecha, bandas
@@ -16815,7 +16829,13 @@ begin
     values (t, v, 'diesel', 1160, 1000, 160, 'aaaaaaaa-0282-0282-0282-000000000001', '99', 'PPD', current_date, null, null),
            (t, v, 'diesel', 1160, 1000, 160, 'aaaaaaaa-0282-0282-0282-000000000002', '99', 'PPD', current_date, current_date, '03');
 
-  celdas := public.gastos_fiscales_agregados_tenant(t, null, null, 2000, 750, array['alimentacion','viaticos'], '{}'::date[]);
+  -- RE-AUDITORÍA 25, FIS-REAUD-2 (mig. 0317): la firma ganó 6 parámetros — ver el bloque 123.
+  celdas := public.gastos_fiscales_agregados_tenant(t, null, null, 2000, 750, array['alimentacion','viaticos'], '{}'::date[],
+    p_claves_combustible => array['15101505','15101514','15101515'],
+    p_vigente_desde => '2026-04-24'::date, p_exigible_desde => null::date,
+    p_umbral_renglones_ajenos => 0.15,
+    p_patron_bar => '\y(bar|bares|cantina|cervecer[ií]a|pulquer[ií]a|antro|cabaret|table\s*dance|vinos\s+y\s+licores)\y',
+    p_hoy => current_date);
 
   dos_celdas   := jsonb_array_length(celdas) = 2;
   trae_pagado  := (select bool_and(x ? 'pagado' and x ? 'pagadoForma') from jsonb_array_elements(celdas) x);
