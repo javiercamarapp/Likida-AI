@@ -60,8 +60,33 @@ jobs:
       #   · tooling                → Dependabot lo va subiendo; no bloquea
       # Sin `audit fix --force` ciego jamás: un fallo aquí se resuelve
       # mirando el path (`npm audit --omit=dev`) y subiendo el paquete real.
+      # RE-AUDITORÍA 25 (4-sep-2026): `npm audit` pega contra
+      # registry.npmjs.org/-/npm/v1/security/audits/quick, un servicio
+      # EXTERNO que tuvo una caída/degradación intermitente (503, varias
+      # veces en la misma tarde) y tumbó este paso sin que hubiera NADA malo
+      # en el código — el resto del job (Typecheck/Lint/Tests/Build) ni
+      # siquiera llegó a correr, porque este es el PRIMER paso. Reintenta
+      # hasta 4 veces con espera creciente SOLO para absorber esa clase de
+      # fallo transitorio: si de verdad hay una vulnerabilidad runtime
+      # high/critical, `npm audit` la reporta igual de determinista en cada
+      # intento — un reintento no puede ocultarla, solo puede rescatar un
+      # fallo de red.
       - name: Auditoría completa de dependencias
-        run: npm audit --omit=dev --audit-level=high
+        run: |
+          intentos=4
+          espera=15
+          for i in $(seq 1 "$intentos"); do
+            if npm audit --omit=dev --audit-level=high; then
+              exit 0
+            fi
+            if [ "$i" -lt "$intentos" ]; then
+              echo "npm audit falló (intento $i/$intentos) — reintentando en ${espera}s por si es el registro, no el código…"
+              sleep "$espera"
+              espera=$((espera * 2))
+            fi
+          done
+          echo "::error::npm audit siguió fallando tras $intentos intentos."
+          exit 1
 
       - name: Chromium para las pruebas de navegador
         run: npx playwright install --with-deps chromium
