@@ -909,6 +909,20 @@ export interface ResumenFiscal {
   vigentes: number;
   /** Con CFDI y respuesta del SAT `cancelado`. */
   cancelados: number;
+  /**
+   * RE-AUDITORÍA 25, FIS-REAUD-3 (ALTO). `true` = una parte de
+   * `ivaAcreditable` pasó por el prorrateo del 15% de la RFA 2.9 calculado
+   * contra el acumulado de combustible del ejercicio A HOY
+   * (`combustibleEjercicioDe`/`proporcionCombustible15`). Cada liquidación
+   * FIRMADA fijó su propio reparto contra el acumulado que existía AL
+   * MOMENTO de cerrarse — uno más chico que el de hoy, casi siempre — así
+   * que esta cifra puede "perdonar" retroactivamente un excedente que un PDF
+   * más viejo ya negó. El llamador (el panel, la herramienta de chat) tiene
+   * que decirlo en vez de imprimir el número solo: mismo espíritu que
+   * `derivoLaConfig` en analytics.ts para el detalle de un viaje, adaptado a
+   * un periodo con muchas liquidaciones en vez de una.
+   */
+  combustible15SujetoADeriva: boolean;
 }
 
 /**
@@ -1012,6 +1026,10 @@ export function resumirFiscal(gastos: GastoFiscal[], o: OpcionesFiscales): Resum
   let iepsDieselDocumentado = 0, subTotalCasetas = 0;
   let conCfdi = 0, conCfdiSinDesglose = 0, casetasSinSubTotal = 0;
   let porValidar = 0, vigentes = 0, cancelados = 0;
+  // RE-AUDITORÍA 25, FIS-REAUD-3 (ALTO): cuánto de `ivaAcreditable` pasó por
+  // la proporción del 15% de la RFA 2.9 EN VIVO (`propCombustible15`, abajo)
+  // — la que decide `combustible15SujetoADeriva` al final.
+  let ivaViaCombustible15 = 0;
 
   // AUDITORÍA 4, E4: esto sumaba el IVA COMPLETO de un viático que el motor
   // acreditaba en proporción al tope de LISR 28-V (LIVA 5-I: "en la proporción
@@ -1083,6 +1101,12 @@ export function resumirFiscal(gastos: GastoFiscal[], o: OpcionesFiscales): Resum
         // El resto del traslado existe en el papel y NO se acredita: va a la
         // otra cubeta para que las dos sigan sumando el IVA desglosado.
         ivaNoAcreditable += g.ivaTraslado * (1 - proporcion);
+        // RE-AUDITORÍA 25, FIS-REAUD-3: este crédito depende del acumulado de
+        // combustible A HOY (`propCombustible15`/`o.combustibleEjercicio`),
+        // que sigue creciendo cada día — una liquidación FIRMADA hace tres
+        // meses fijó su reparto contra el acumulado que existía ENTONCES, no
+        // contra éste. Se marca aparte para que el llamador lo diga.
+        if (esCombustibleEfectivo) ivaViaCombustible15 += g.ivaTraslado * proporcion;
       } else {
         ivaNoAcreditable += g.ivaTraslado;
       }
@@ -1122,6 +1146,10 @@ export function resumirFiscal(gastos: GastoFiscal[], o: OpcionesFiscales): Resum
     porValidar,
     vigentes,
     cancelados,
+    // RE-AUDITORÍA 25, FIS-REAUD-3: `> 0` y no `!== 0` — un residuo de
+    // redondeo de un centavo no es "hay combustible en efectivo tocando el
+    // 15% del ejercicio", y marcar por eso desconfiaría del panel siempre.
+    combustible15SujetoADeriva: round2(ivaViaCombustible15) > 0,
   };
 }
 
