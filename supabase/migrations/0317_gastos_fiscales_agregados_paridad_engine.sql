@@ -71,6 +71,13 @@ as $$
       nullif(g.estado_sat, '')      as estado_sat,
       g.efos, g.efos_revisar,
       nullif(g.forma_pago, '')      as forma_pago,
+      -- AUDITORÍA 24, FIS-7 (mig. 0282): el sello del complemento de pago.
+      -- Solo lo escribe intake/rep.ts cuando un REP liquidó el CFDI entero.
+      -- RE-AUDITORÍA 25: restaurado — el `drop`+`create` de esta migración
+      -- partió de una copia anterior a la 0282 y se lo había llevado, lo que
+      -- dejaba `formaPagoEfectiva` (fiscal.ts) siempre en null.
+      (g.pagado_en is not null)     as pagado,
+      nullif(g.pagado_forma, '')    as pagado_forma,
       g.sub_total, g.iva_traslado, g.ieps_traslado,
       nullif(g.clave_prod_serv, '') as clave_prod_serv,
       (nullif(g.cfdi_uuid, '') is not null) as tiene_cfdi,
@@ -176,7 +183,10 @@ as $$
       case when not b.tiene_cfdi
            then substring(lower(b.ocr_extra->>'urlFacturacion') from '^(?:[a-z][a-z0-9+.-]*://)?([^/?#]+)')
       end as host,
-      case when not b.tiene_cfdi then nullif(b.ocr_extra->>'emisor', '') end as emisor,
+      -- AUDITORÍA 19 (REND-19c2-2): normalizado con upper/trim. RE-AUDITORÍA
+      -- 25: restaurado — la copia de la que salió esta migración era anterior
+      -- a esa normalización (ver la nota de `pagado` arriba).
+      case when not b.tiene_cfdi then nullif(upper(trim(b.ocr_extra->>'emisor')), '') end as emisor,
       d.viaje_id      as dia_viaje,
       d.dia           as dia_dia,
       d.total_timbrado as total_timbrado_dia
@@ -188,7 +198,7 @@ as $$
   ),
   celdas as (
     select
-      concepto, clave_prod_serv, forma_pago, efos, efos_revisar, estado_sat, tiene_cfdi,
+      concepto, clave_prod_serv, forma_pago, pagado, pagado_forma, efos, efos_revisar, estado_sat, tiene_cfdi,
       (fecha is null) as sin_fecha, iva_estado, sobre_tope,
       banda, rfc_sin_cfdi, host, emisor,
       dia_viaje, dia_dia, total_timbrado_dia, liquidacion_firmada,
@@ -205,12 +215,14 @@ as $$
       min(cfdi_uuid)                                  as muestra_cfdi,
       max(fecha)                                      as fecha_max
     from filas
-    group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
+    group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26
   )
   select coalesce(jsonb_agg(jsonb_build_object(
     'concepto', concepto,
     'claveProdServ', clave_prod_serv,
     'formaPago', forma_pago,
+    'pagado', pagado,
+    'pagadoForma', pagado_forma,
     'efos', efos,
     'efosRevisar', efos_revisar,
     'estadoSat', estado_sat,
@@ -245,7 +257,7 @@ as $$
 $$;
 
 comment on function public.gastos_fiscales_agregados_tenant(uuid, date, date, numeric, numeric, text[], date[], text[], date, date, numeric, text, date) is
-  'Comprobantes de UNA flota en un periodo (fecha del comprobante; nulos = sin cota) AGREGADOS por las dimensiones fiscales que fiscal.ts consulta por fila: concepto, clave, forma de pago, estado SAT, EFOS, con/sin CFDI, con/sin desglose de IVA, monto > p_tope_efectivo, banda de fecha (sin CFDI) vs p_cortes + RFC/host/emisor, alimentación timbrada sobre p_tope_alimentacion (viaje+día y su total), liquidación FIRMADA del viaje (RE-AUDITORÍA 25 FIS-REAUD-1, mig. 0316), y las 7 causas de FIS-REAUD-2 (mig. 0317) que completan la paridad con SIN_IVA_ACREDITABLE de engine.ts: rfcReceptor, monedaExtranjera, renglonesAjenos (>= p_umbral_renglones_ajenos), consumoBar (match con p_patron_bar), complementoHidrocarburosFalta (veredicto duro solo con p_exigible_desde no nulo) y otroEjercicio (contra p_hoy). NO evalúa deducibilidad: la ley sigue en resumirFiscal/resumirPerdidas (TS), que pesan cada celda por n. SECURITY INVOKER; p_tenant sin default.';
+  'Comprobantes de UNA flota en un periodo (fecha del comprobante; nulos = sin cota) AGREGADOS por las dimensiones fiscales que fiscal.ts consulta por fila: concepto, clave, forma de pago, pagado/pagadoForma (el sello del complemento de pago, AUDITORÍA 24 FIS-7 mig. 0282 — restaurado en la RE-AUDITORÍA 25 tras perderse en el drop+create de esta misma migración), estado SAT, EFOS, con/sin CFDI, con/sin desglose de IVA, monto > p_tope_efectivo, banda de fecha (sin CFDI) vs p_cortes + RFC/host/emisor (emisor normalizado upper/trim, AUDITORÍA 19 REND-19c2-2, también restaurado), alimentación timbrada sobre p_tope_alimentacion (viaje+día y su total), liquidación FIRMADA del viaje (RE-AUDITORÍA 25 FIS-REAUD-1, mig. 0316), y las 7 causas de FIS-REAUD-2 (mig. 0317) que completan la paridad con SIN_IVA_ACREDITABLE de engine.ts: rfcReceptor, monedaExtranjera, renglonesAjenos (>= p_umbral_renglones_ajenos), consumoBar (match con p_patron_bar), complementoHidrocarburosFalta (veredicto duro solo con p_exigible_desde no nulo) y otroEjercicio (contra p_hoy). NO evalúa deducibilidad: la ley sigue en resumirFiscal/resumirPerdidas (TS), que pesan cada celda por n. SECURITY INVOKER; p_tenant sin default.';
 
 revoke all on function public.gastos_fiscales_agregados_tenant(uuid, date, date, numeric, numeric, text[], date[], text[], date, date, numeric, text, date) from public, anon, authenticated;
 grant execute on function public.gastos_fiscales_agregados_tenant(uuid, date, date, numeric, numeric, text[], date[], text[], date, date, numeric, text, date) to service_role;
