@@ -66,21 +66,28 @@ jobs:
       # veces en la misma tarde) y tumbó este paso sin que hubiera NADA malo
       # en el código — el resto del job (Typecheck/Lint/Tests/Build) ni
       # siquiera llegó a correr, porque este es el PRIMER paso. Reintenta
-      # hasta 4 veces con espera creciente SOLO para absorber esa clase de
-      # fallo transitorio: si de verdad hay una vulnerabilidad runtime
+      # con espera creciente SOLO para absorber esa clase de fallo
+      # transitorio: si de verdad hay una vulnerabilidad runtime
       # high/critical, `npm audit` la reporta igual de determinista en cada
       # intento — un reintento no puede ocultarla, solo puede rescatar un
       # fallo de red.
+      #
+      # OJO (corregido en el mismo día): un intento sin `timeout` puede
+      # colgarse esperando al registro en vez de fallar rápido con 503 —
+      # eso hizo que el job entero topara con su límite de 15 min y se
+      # cancelara SOLO, sin que la última línea de este script llegara a
+      # imprimir nada. Cada intento va acotado a 25s; 4 intentos + backoff
+      # 10/20/30s ⇒ peor caso ≈ 160s, muy por debajo del resto del job.
       - name: Auditoría completa de dependencias
         run: |
           intentos=4
-          espera=15
+          espera=10
           for i in $(seq 1 "$intentos"); do
-            if npm audit --omit=dev --audit-level=high; then
+            if timeout 25 npm audit --omit=dev --audit-level=high; then
               exit 0
             fi
             if [ "$i" -lt "$intentos" ]; then
-              echo "npm audit falló (intento $i/$intentos) — reintentando en ${espera}s por si es el registro, no el código…"
+              echo "npm audit falló o se colgó (intento $i/$intentos) — reintentando en ${espera}s por si es el registro, no el código…"
               sleep "$espera"
               espera=$((espera * 2))
             fi
