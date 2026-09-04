@@ -124,6 +124,34 @@ describe('FIS-C2 · el previo del 15% juzga la forma de pago EFECTIVA, igual que
     expect(entradaDelMotor().efectivoPrevEjercicio).toBe(40000);
   });
 
+  // ── REAUDITORÍA DEL ARREGLO (misma ronda) ──────────────────────────────
+  // El `.filter` de TS tiene que espejar el `where` de la RPC en TODOS sus
+  // términos, no solo en el de la forma de pago. La 0305 filtra
+  // `fecha >= make_date(anio,1,1) and fecha <= make_date(anio,12,31)`, y una
+  // `fecha` NULL falla las dos comparaciones: el gasto sin fecha NO entra al
+  // acumulado. El `?? anioEjercicio` de TS hacía lo contrario —lo daba por
+  // del ejercicio— y lo restaba de un total que nunca lo contó, dejando el
+  // previo CORTO y regalando cupo del 15% que la RFA 2.9 no concede.
+  //
+  // No es un caso de laboratorio: el prompt del OCR (`intake/ocr.ts`) ordena
+  // devolver la fecha en null cuando el ticket no la trae legible, y el
+  // comentario de la AUDITORÍA 16 aquí arriba ya declaraba esta regla — dice
+  // «un gasto de otro año (o sin fecha) no está en el contador». La mitad de
+  // «otro año» estaba implementada; la de «sin fecha», no.
+  it('un gasto de combustible SIN fecha no se resta: la RPC tampoco lo contó', async () => {
+    getAcumuladoCombustible.mockResolvedValue({ efectivo: 145000, totalCombustible: 1000000 });
+    getGastos.mockResolvedValue([
+      {
+        id: U(5), concepto: 'diesel', monto: 80000, // sin `fecha`: el OCR no la pudo leer
+        formaPago: '01', cfdiUuid: 'UUID-SIN-FECHA', estadoSat: 'vigente',
+      },
+    ]);
+
+    await cuadrarDesdeDB(U(7), U(9));
+
+    expect(entradaDelMotor().efectivoPrevEjercicio).toBe(145000);
+  });
+
   it('el efectivo en mano («01») se sigue restando: el arreglo no cambia el caso que ya funcionaba', async () => {
     getAcumuladoCombustible.mockResolvedValue({ efectivo: 150000, totalCombustible: 1000000 });
     getGastos.mockResolvedValue([

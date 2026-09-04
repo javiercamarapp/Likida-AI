@@ -149,10 +149,24 @@ export async function cuadrarDesdeDB(
   // los dos términos juzgando distinto, un diésel '99' cuyo REP dice efectivo
   // entraba al acumulado y NO se restaba: el comprobante consumía su propio
   // cupo del 15% antes de evaluarse y salía «No deducible» en el PDF contra lo
-  // que la RFA 2026 2.9 concede. `formaPagoJuzgableDe` es la MISMA regla que
-  // la 0305 escribió en SQL, importada del motor en vez de reimplementada.
+  // que la RFA 2026 2.9 concede. `formaPagoJuzgableDe` se importa del motor en
+  // vez de reimplementarse; es la regla de la 0305 salvo en un caso que sigue
+  // divergiendo y queda anotado como hallazgo abierto (un REP cuyo
+  // `FormaDePagoP` es a su vez '99': la RPC lo cuenta y este predicado no lo
+  // juzga).
+  //
+  // AUDITORÍA 26, REAUDITORÍA DEL ARREGLO: el `.filter` tiene que espejar el
+  // `where` de la RPC en TODOS sus términos, no solo en el de la forma de
+  // pago. La 0305 acota `fecha >= make_date(anio,1,1) and fecha <=
+  // make_date(anio,12,31)`, y una `fecha` NULL falla las dos comparaciones: el
+  // gasto SIN FECHA no entra al acumulado. El `?? anioEjercicio` lo daba por
+  // del ejercicio y lo restaba igual, dejando el previo CORTO — el error hacia
+  // el otro lado: regalar cupo del 15% que la regla no concede. El comentario
+  // de la AUDITORÍA 16 aquí arriba ya declaraba la regla completa («un gasto
+  // de otro año O SIN FECHA no está en el contador»); solo la mitad de «otro
+  // año» estaba implementada.
   const efectivoDeEsteViaje = gastos
-    .filter((g) => (g.fecha?.slice(0, 4) ?? anioEjercicio) === anioEjercicio
+    .filter((g) => g.fecha != null && g.fecha.slice(0, 4) === anioEjercicio
       && medioNoAdmitidoCombustible(formaPagoJuzgableDe(g)) && (g.concepto === 'diesel' || clavesCombustible.includes(g.claveProdServ ?? '')))
     .reduce((s, g) => s + Number(g.monto ?? 0), 0);
   const efectivoPrevEjercicio = Math.max(0, totalesEjercicio.efectivo - efectivoDeEsteViaje);
