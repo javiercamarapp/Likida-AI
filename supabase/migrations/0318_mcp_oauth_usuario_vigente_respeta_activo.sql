@@ -1,5 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- 0316 — mcp_oauth_usuario_vigente() TAMBIÉN respeta app_user.activo.
+-- 0318 — mcp_oauth_usuario_vigente() TAMBIÉN respeta app_user.activo.
+-- (Renumerada de 0316 a 0318: colisión con las migraciones 0316/0317 de la
+-- rama paralela claude/audit25-fase3-fiscal, fusionadas en el mismo integrador.)
 -- AUDITORÍA 25, SEGURIDAD (MEDIO, re-auditoría). SEC-3.
 --
 -- `mcp_oauth_usuario_vigente(user, tenant, rol)` (0265) es la RPC que
@@ -53,7 +55,7 @@ as $$
 $$;
 
 comment on function public.mcp_oauth_usuario_vigente is
-  'HALLAZGO 1 (auditoría final 2026-08-29) + SEC-3 (auditoría 25, MEDIO, re-auditoría, 0316): ¿la fila de app_user congelada en un token MCP (tenant_id, rol) sigue siendo cierta AHORA, y sigue activa? refrescarTokens la llama por RPC antes de rotar; false = revoca la familia y niega, igual que el reuso de un refresco. El criterio es identidad + tenant + rol exactos + activo=true — una baja (0294) sin cambiar tenant ni rol también corta el refresco, no solo el access token de 8h (SEG-A1, validarAcceso).';
+  'HALLAZGO 1 (auditoría final 2026-08-29) + SEC-3 (auditoría 25, MEDIO, re-auditoría, 0318): ¿la fila de app_user congelada en un token MCP (tenant_id, rol) sigue siendo cierta AHORA, y sigue activa? refrescarTokens la llama por RPC antes de rotar; false = revoca la familia y niega, igual que el reuso de un refresco. El criterio es identidad + tenant + rol exactos + activo=true — una baja (0294) sin cambiar tenant ni rol también corta el refresco, no solo el access token de 8h (SEG-A1, validarAcceso).';
 
 revoke all on function public.mcp_oauth_usuario_vigente(uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.mcp_oauth_usuario_vigente(uuid, uuid, text) to service_role;

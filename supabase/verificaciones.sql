@@ -14439,7 +14439,7 @@ begin
     coalesce(expediente_vacio,false), anon_ok, auth_ok;
 end $$;
 
--- ── 212. La identidad congelada de un token MCP deja de ser válida el instante en que app_user cambia (mig. 0265 + 0316, HALLAZGO 1 + SEC-3) ──
+-- ── 212. La identidad congelada de un token MCP deja de ser válida el instante en que app_user cambia (mig. 0265 + 0318, HALLAZGO 1 + SEC-3) ──
 --
 -- Esto es lo que un test de TypeScript con Supabase mockeado NO puede
 -- demostrar: que la GARANTÍA vive en la base, contra una fila REAL de
@@ -14462,7 +14462,7 @@ end $$;
 --      cubre el caso en que la RPC se llama con un user_id que nunca fue, o
 --      cuya fila se borró por otro camino).
 --
---  (g) SEC-3 (auditoría 25, MEDIO, re-auditoría, mig. 03xx): dado de baja
+--  (g) SEC-3 (auditoría 25, MEDIO, re-auditoría, mig. 0318): dado de baja
 --      (`activo = false`) SIN cambiar tenant ni rol — el escenario que el
 --      comentario original de la 0265 decía que no existía todavía
 --      ("app_user no tiene columna de estatus/activo"). Desde la 0294 sí la
