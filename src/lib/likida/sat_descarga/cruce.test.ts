@@ -161,3 +161,27 @@ describe('decidirCruce — la regla del monedero (RMF 3.3.1.7)', () => {
     expect(r.motivo).toMatch(/3\.3\.1\.7/);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25, ALTO FISCAL (fiscal.md línea 218) — una NOTA DE CRÉDITO
+// (TipoDeComprobante=E) NUNCA se cruza 1:1, aunque su total y RFC empaten
+// perfecto con un ticket sin factura. `ciclo.ts` cruza automáticamente TODO
+// CFDI bajado del buzón — notas de crédito incluidas — solo por total, fecha
+// y RFC del emisor.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('decidirCruce — una nota de crédito no se cruza contra ningún gasto', () => {
+  it('con total y RFC idénticos a un ticket sin factura, NO casa: queda disponible', () => {
+    const r = decidirCruce(
+      { ...CFDI_BASE, tipoComprobante: 'E' },
+      [gasto({ id: 'g1', monto: 1160 })],
+    );
+    expect(r.destino).toBe('disponible');
+    if (r.destino !== 'disponible') return;
+    expect(r.motivo).toMatch(/nota de crédito/i);
+  });
+
+  it('CONTROL — el mismo CFDI sin tipoComprobante E casa como siempre', () => {
+    const r = decidirCruce(CFDI_BASE, [gasto({ id: 'g1', monto: 1160 })]);
+    expect(r).toEqual({ destino: 'casado', gastoId: 'g1' });
+  });
+});

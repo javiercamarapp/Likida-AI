@@ -31,10 +31,31 @@ export async function ventanaDesdeDB(tenantId: string, viajeId: string) {
   );
 }
 
-export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise<Omit<Liquidacion, 'id' | 'creadaEn'>> {
-  const [viaje, gastos, config, perfilCrudo] = await Promise.all([
+export async function cuadrarDesdeDB(
+  tenantId: string,
+  viajeId: string,
+  /**
+   * AUDITORÍA 25, BE-C1a/BE-C1b/DATOS-C1 (CRÍTICO): cuando `revisar_liquidacion`
+   * ajusta un monto a mano, `revision.ts` necesita el cuadre RECALCULADO con
+   * ese monto nuevo ANTES de escribirlo en `gasto` (la RPC es quien lo
+   * escribe, dentro de su propia transacción) — así que aquí se puede pasar
+   * la lista de gastos YA CORREGIDA en vez de leerla de la base. `undefined`
+   * (el default) es el camino de siempre: se lee `gasto` tal cual está.
+   *
+   * Nota: el contador del 15% de combustible (abajo) sigue leyendo el
+   * acumulado del ejercicio de la BASE, que en este camino todavía no tiene
+   * el monto nuevo — para un ajuste sobre diésel en efectivo de una flota con
+   * la facilidad del 15% activa, `efectivoPrevEjercicio` puede quedar
+   * calculado contra el monto VIEJO de este mismo comprobante hasta que la
+   * RPC lo persista. Ventana angosta y ya documentada; no es un caso nuevo
+   * de "cifra inventada" — es la misma naturaleza aproximada que ya declara
+   * el resto de este contador.
+   */
+  gastosOverride?: Gasto[],
+): Promise<Omit<Liquidacion, 'id' | 'creadaEn'>> {
+  const [viaje, gastosDb, config, perfilCrudo] = await Promise.all([
     getViaje(viajeId, tenantId),
-    getGastos(viajeId, tenantId),
+    gastosOverride ? Promise.resolve(gastosOverride) : getGastos(viajeId, tenantId),
     getConfig(tenantId),
     // El perfil solo gobierna un BENEFICIO fiscal. Si no se puede leer, el
     // viaje puede cerrarse, pero el estímulo no se concede: `null` llega al
@@ -44,6 +65,7 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
       return {};
     }),
   ]);
+  const gastos = gastosOverride ?? gastosDb;
   if (!viaje) throw new Error('viaje no encontrado');
   // `elegible: null` (perfil sin declarar o ilegible) se traduce a
   // `undefined`; el motor no acredita estímulo sin una declaración positiva.

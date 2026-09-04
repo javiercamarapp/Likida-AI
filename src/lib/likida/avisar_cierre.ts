@@ -47,6 +47,17 @@ export interface ResultadoAvisoCierre {
   via?: 'texto' | 'plantilla';
   /** El texto rebotó por ventana cerrada y la plantilla tampoco salió. */
   fueraDeVentana?: boolean;
+  /**
+   * AUDITORÍA 25 (MEDIO, agentico.md:526) — si el jefe SÍ recibió el PDF.
+   * `null` = no se le pasó `urlPdf` a esta llamada (nada que enviar aquí, o
+   * ya lo tiene por otro hilo — ver `cierre.jefe_es_el_chofer`); `true`/
+   * `false` = se intentó y el resultado. `enviado: true` con
+   * `pdfEnviado: false` es justo el caso que antes se leía como éxito
+   * completo sin serlo: el llamador NO debe sellar `avisada_oficina_en` en
+   * ese caso, para que el siguiente «listo» (`entregarCierrePendiente`)
+   * reintente el PDF en vez de darlo por entregado para siempre.
+   */
+  pdfEnviado: boolean | null;
 }
 
 /**
@@ -120,7 +131,7 @@ export async function avisarCierreAlJefe(args: {
     // ERROR y no WARN: esta flota no se va a enterar de NINGÚN cierre hasta que
     // alguien capture el teléfono, y no hay otro lugar donde se note.
     logger.error('cierre.sin_telefono_de_jefe', { tenantId: args.tenantId, viaje: args.viajeId });
-    return { enviado: false, motivo: 'Esa flota no tiene un teléfono de oficina registrado.' };
+    return { enviado: false, motivo: 'Esa flota no tiene un teléfono de oficina registrado.', pdfEnviado: null };
   }
 
   // ── DUEÑO-OPERADOR: UN SOLO NÚMERO, UN SOLO AVISO ───────────────────────
@@ -141,12 +152,15 @@ export async function avisarCierreAlJefe(args: {
     const delChofer = new Set(variantesTelefono(args.telefonoOperador));
     if (variantesTelefono(tel).some((v) => delChofer.has(v))) {
       logger.info('cierre.jefe_es_el_chofer', { viaje: args.viajeId });
-      return { enviado: true, motivo: 'el jefe y el chofer son el mismo número: ya lo recibió por su propio hilo' };
+      // pdfEnviado:true — no se intenta OTRO envío (es justo lo que este
+      // caso evita), pero el papel YA lo tiene por el hilo del chofer: no
+      // hay nada pendiente que el sello deba dejar para reintentar.
+      return { enviado: true, motivo: 'el jefe y el chofer son el mismo número: ya lo recibió por su propio hilo', pdfEnviado: true };
     }
   }
 
   const resumen = await resumenDeCierre(args.tenantId, args.viajeId);
-  if (!resumen) return { enviado: false, motivo: 'No se encontró la liquidación cerrada.' };
+  if (!resumen) return { enviado: false, motivo: 'No se encontró la liquidación cerrada.', pdfEnviado: null };
 
   const { texto, requiereDecision } = armarAvisoJefe(resumen);
 
@@ -184,6 +198,13 @@ export async function avisarCierreAlJefe(args: {
     }
   }
 
+  // AUDITORÍA 25 (MEDIO, agentico.md:526): `null` = no se pasó `urlPdf`
+  // (nada que enviar aquí — puede ser que nunca hubo PDF del contralor, y
+  // eso lo decide el LLAMADOR, no esta función). `true`/`false` = si de
+  // verdad se intentó y llegó. El `warn` de abajo ya existía; lo que
+  // faltaba era que este hecho saliera de la función, porque antes se
+  // perdía en el log y `enviado: true` lo tapaba entero.
+  let pdfEnviado: boolean | null = null;
   if (args.urlPdf) {
     // En su propio try: el texto ya salió, y perder el adjunto no debe borrar
     // el aviso que sí llegó.
@@ -200,8 +221,10 @@ export async function avisarCierreAlJefe(args: {
     try {
       const r = await sendDocument(tel, args.urlPdf, `liquidacion-${resumen.folio}.pdf`,
         `Liquidación de ${resumen.operador} — ${resumen.folio}`);
+      pdfEnviado = r.ok;
       if (!r.ok) logger.warn('cierre.pdf_al_jefe_falló', { viaje: args.viajeId, err: r.error });
     } catch (e) {
+      pdfEnviado = false;
       logger.warn('cierre.pdf_al_jefe_falló', { viaje: args.viajeId, err: e instanceof Error ? e.message : String(e) });
     }
   }
@@ -209,8 +232,8 @@ export async function avisarCierreAlJefe(args: {
   // El fallo del texto se reporta DESPUÉS de intentar el PDF: el llamador
   // sigue viendo `enviado: false` (y loguea `cierre.jefe_no_avisado`), pero
   // el documento ya se intentó mandar de todos modos.
-  if (motivoTexto) return { enviado: false, motivo: motivoTexto, fueraDeVentana };
+  if (motivoTexto) return { enviado: false, motivo: motivoTexto, fueraDeVentana, pdfEnviado };
 
-  logger.info('cierre.avisado_al_jefe', { viaje: args.viajeId, requiereDecision, via });
-  return via ? { enviado: true, via } : { enviado: true };
+  logger.info('cierre.avisado_al_jefe', { viaje: args.viajeId, requiereDecision, via, pdfEnviado });
+  return via ? { enviado: true, via, pdfEnviado } : { enviado: true, pdfEnviado };
 }

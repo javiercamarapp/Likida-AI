@@ -20,7 +20,10 @@ vi.mock('@/lib/auth/tenant-api', () => ({
 }));
 vi.mock('@/lib/ratelimit', () => ({ rateLimit: async () => true, clientIp: () => '1.2.3.4' }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
+vi.mock('@/lib/likida/presupuesto', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/likida/presupuesto')>()),
+  acotada: (q: unknown) => q,
+}));
 
 /** Cada método de la cadena, en el orden en que se llamó. */
 const llamadas: string[] = [];

@@ -14,6 +14,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type OpenAI from 'openai';
 import type { ToolExecutor } from '@/lib/llm/openrouter';
+import type { MutationClaim } from '@/lib/llm/tool-idempotency';
 
 /** Lo que el adaptador le pasó al ciclo del LLM en la última corrida. */
 let capturadoTools: OpenAI.Chat.ChatCompletionTool[] = [];
@@ -36,6 +37,18 @@ vi.mock('@/lib/llm/openrouter', () => ({
   }),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+
+// AUDITORÍA 25 (BAJO, tool-calling.md:209): el candado durable de `emitir` —
+// se mockea para controlar sus tres salidas (execute/cached/busy) sin montar
+// Postgres, igual que el resto de este archivo no monta un portal real.
+const { claimMutation, completeMutation, failMutation } = vi.hoisted(() => ({
+  claimMutation: vi.fn<(tenantId: string, effectKey: string, toolName: string) => Promise<MutationClaim>>(
+    async () => ({ kind: 'execute', token: 'tok-1' }),
+  ),
+  completeMutation: vi.fn(async (_t: string, _k: string, _tok: string, _r: unknown) => {}),
+  failMutation: vi.fn(async (_t: string, _k: string, _tok: string, _err: string) => {}),
+}));
+vi.mock('@/lib/llm/tool-idempotency', () => ({ claimMutation, completeMutation, failMutation }));
 
 const { AdaptadorComputerUse, extraerUuid } = await import('./computer_use');
 
@@ -74,6 +87,7 @@ const RECEPTOR = {
 const CAMPOS = [{ clave: 'webId' as const, etiqueta: 'WebID', valor: '5498441008183', requerido: true }];
 
 const armar = () => new AdaptadorComputerUse({
+  tenantId: 't-1',
   comercio: 'megasur', portal: 'http://portal.example/',
   receptor: RECEPTOR,
   abrirPagina: async () => paginaFalsa() as never,
@@ -82,6 +96,9 @@ const armar = () => new AdaptadorComputerUse({
 beforeEach(() => {
   escrito.length = 0; clicado.length = 0;
   guion = []; textoFinal = ''; capturadoTools = []; capturadoExecutor = null;
+  claimMutation.mockReset().mockResolvedValue({ kind: 'execute', token: 'tok-1' });
+  completeMutation.mockReset().mockResolvedValue(undefined);
+  failMutation.mockReset().mockResolvedValue(undefined);
 });
 
 describe('el modelo NO puede inventar un dato fiscal', () => {
@@ -138,6 +155,171 @@ describe('el botón de emitir', () => {
     expect(r.ok).toBe(true);
     // ARQ-19C2-5: normalizado a minúsculas, igual que `repo.ts`.
     expect(r.cfdiUuid).toBe('b0800a68-8565-47d9-90e0-cda7803c50e4');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25 (BAJO, tool-calling.md:209) — `emitir` corre fuera del
+// executor normal, así que este es el ÚNICO sitio del repo donde el candado
+// de una-sola-vez de una mutación se prueba sin `tool-executor.test.ts`.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('emitir lleva el mismo candado de una-sola-vez que las demás tools de escritura', () => {
+  it('reclama el candado ANTES del clic, con la llave scoped al tenant, y lo sella al terminar', async () => {
+    guion = [{ tool: 'emitir', args: { selector: '#facturar' } }];
+    await armar().facturar(CAMPOS, 'emitir');
+
+    expect(claimMutation).toHaveBeenCalledTimes(1);
+    const [tenantId, llave, nombreTool] = claimMutation.mock.calls[0] as [string, string, string];
+    expect(tenantId).toBe('t-1');
+    expect(llave).toContain('megasur');
+    expect(nombreTool).toBe('facturacion.computer_use.emitir');
+    expect(clicado).toEqual(['#facturar']);
+    expect(completeMutation).toHaveBeenCalledTimes(1);
+    expect(completeMutation).toHaveBeenCalledWith('t-1', llave, 'tok-1', { clicado: true });
+    expect(failMutation).not.toHaveBeenCalled();
+  });
+
+  it('un SEGUNDO emitir del MISMO ticket en la misma corrida (botón que sigue en el inventario) no vuelve a apretarlo: la RPC ya lo tiene "cached"', async () => {
+    // Esto es exactamente lo que la RPC real devolvería tras el `completeMutation`
+    // del primer intento: se mockea la secuencia, no se reinventa su SQL.
+    claimMutation
+      .mockResolvedValueOnce({ kind: 'execute', token: 'tok-1' })
+      .mockResolvedValueOnce({ kind: 'cached', result: { clicado: true } });
+    guion = [
+      { tool: 'emitir', args: { selector: '#facturar' } },
+      // El modelo insiste con OTRO selector del mismo botón — el caso que el
+      // hallazgo describe como el más probable de los dos.
+      { tool: 'emitir', args: { selector: '#facturar-reintento' } },
+    ];
+    await armar().facturar(CAMPOS, 'emitir');
+
+    expect(clicado).toEqual(['#facturar']);   // nunca el segundo selector
+    expect(completeMutation).toHaveBeenCalledTimes(1);   // no se vuelve a sellar
+  });
+
+  it('si la RPC dice "busy" (otra corrida está emitiendo este mismo ticket ahora), no se aprieta el botón', async () => {
+    claimMutation.mockResolvedValueOnce({ kind: 'busy' });
+    guion = [{ tool: 'emitir', args: { selector: '#facturar' } }];
+    const r = await armar().facturar(CAMPOS, 'emitir');
+
+    expect(clicado).toHaveLength(0);
+    expect(r.ok).toBe(false);
+  });
+
+  it('si el clic falla, se sella como FALLO (no éxito) — no bloquea un reintento legítimo de este ticket', async () => {
+    const pagina = paginaFalsa();
+    pagina.hacerClic = vi.fn(async () => { throw new Error('timeout de red'); });
+    guion = [{ tool: 'emitir', args: { selector: '#facturar' } }];
+
+    await new AdaptadorComputerUse({
+      tenantId: 't-1', comercio: 'megasur', portal: 'http://portal.example/',
+      receptor: RECEPTOR, abrirPagina: async () => pagina as never,
+    }).facturar(CAMPOS, 'emitir');
+
+    expect(failMutation).toHaveBeenCalledTimes(1);
+    expect(failMutation).toHaveBeenCalledWith('t-1', expect.any(String), 'tok-1', expect.stringContaining('timeout de red'));
+    expect(completeMutation).not.toHaveBeenCalled();
+  });
+
+  it('FAIL-CLOSED: si Postgres no puede confirmar el candado fuera de pruebas, NO se aprieta el botón', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    try {
+      claimMutation.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+      guion = [{ tool: 'emitir', args: { selector: '#facturar' } }];
+      const r = await armar().facturar(CAMPOS, 'emitir');
+
+      expect(clicado).toHaveLength(0);
+      expect(r.ok).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('en pruebas, si la RPC no está disponible, se degrada a SIN protección (para no exigir Postgres en cada prueba) — pero eso no es lo que corre en producción', async () => {
+    claimMutation.mockRejectedValueOnce(new Error('supabaseAdmin no configurado'));
+    guion = [{ tool: 'emitir', args: { selector: '#facturar' } }];
+    await armar().facturar(CAMPOS, 'emitir');
+
+    // Sin protección real, el clic SÍ ocurre — es la degradación de pruebas,
+    // no la de producción (probada arriba).
+    expect(clicado).toEqual(['#facturar']);
+    // Y no se intenta sellar un candado que nunca se reclamó de verdad.
+    expect(completeMutation).not.toHaveBeenCalled();
+  });
+
+  it('dos tickets DISTINTOS arman llaves de candado DISTINTAS (el candado es por ticket, no por comercio)', async () => {
+    const camposB = [{ clave: 'webId' as const, etiqueta: 'WebID', valor: 'OTRO-TICKET-999', requerido: true }];
+    guion = [{ tool: 'emitir', args: { selector: '#facturar' } }];
+
+    await armar().facturar(CAMPOS, 'emitir');
+    const llaveA = claimMutation.mock.calls[0][1] as string;
+
+    claimMutation.mockClear();
+    await armar().facturar(camposB, 'emitir');
+    const llaveB = claimMutation.mock.calls[0][1] as string;
+
+    expect(llaveA).not.toBe(llaveB);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RE-AUDITORÍA 25, FASE 3 (TC-CANDADO-CLIC-BYPASS, MEDIO) — el candado de
+// arriba solo envolvía `case 'emitir'`. La tool hermana `clic` podía apretar
+// EL MISMO botón físico sin pasar por `reclamarEmision`/`sellarEmision`.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('TC-CANDADO-CLIC-BYPASS: `clic` sobre el botón de emisión lleva el MISMO candado que `emitir`', () => {
+  it('un solo `clic` en el botón de emisión reclama y sella el candado — exactamente como `emitir`', async () => {
+    guion = [{ tool: 'clic', args: { selector: '#facturar' } }];
+    await armar().facturar(CAMPOS, 'emitir');
+
+    expect(claimMutation).toHaveBeenCalledTimes(1);
+    const [tenantId, llave, nombreTool] = claimMutation.mock.calls[0] as [string, string, string];
+    expect(tenantId).toBe('t-1');
+    expect(nombreTool).toBe('facturacion.computer_use.emitir');
+    expect(clicado).toEqual(['#facturar']);
+    expect(completeMutation).toHaveBeenCalledTimes(1);
+    expect(completeMutation).toHaveBeenCalledWith('t-1', llave, 'tok-1', { clicado: true });
+  });
+
+  it('el bypass exacto del hallazgo: `emitir` primero y luego `clic` sobre el MISMO botón NO lo vuelve a apretar', async () => {
+    claimMutation
+      .mockResolvedValueOnce({ kind: 'execute', token: 'tok-1' })
+      .mockResolvedValueOnce({ kind: 'cached', result: { clicado: true } });
+    guion = [
+      { tool: 'emitir', args: { selector: '#facturar' } },
+      // El modelo, en vez de reintentar con `emitir`, usa `clic` sobre el
+      // botón que sigue en el inventario — la ruta que antes NO pasaba por
+      // el candado.
+      { tool: 'clic', args: { selector: '#facturar' } },
+    ];
+    await armar().facturar(CAMPOS, 'emitir');
+
+    expect(clicado).toEqual(['#facturar']);              // un solo clic físico
+    expect(completeMutation).toHaveBeenCalledTimes(1);    // no se vuelve a sellar
+  });
+
+  it('si la llave de emisión coincide con "busy", `clic` tampoco aprieta el botón', async () => {
+    claimMutation.mockResolvedValueOnce({ kind: 'busy' });
+    guion = [{ tool: 'clic', args: { selector: '#facturar' } }];
+    await armar().facturar(CAMPOS, 'emitir');
+
+    expect(clicado).toHaveLength(0);
+  });
+
+  it('CONTROL — `clic` en un botón que NO es el de emisión sigue sin candado (no rompe el uso normal de `clic`)', async () => {
+    guion = [{ tool: 'clic', args: { selector: '#validar' } }];
+    await armar().facturar(CAMPOS, 'emitir');
+
+    expect(clicado).toEqual(['#validar']);
+    expect(claimMutation).not.toHaveBeenCalled();
+  });
+
+  it('CONTROL — "ver factura"/"descargar factura" no disparan el candado: solo la ACCIÓN de emitir, no la palabra "factura"', async () => {
+    guion = [{ tool: 'clic', args: { selector: 'a:has-text("Descargar factura")' } }];
+    await armar().facturar(CAMPOS, 'emitir');
+
+    expect(clicado).toEqual(['a:has-text("Descargar factura")']);
+    expect(claimMutation).not.toHaveBeenCalled();
   });
 });
 

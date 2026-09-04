@@ -502,8 +502,35 @@ export class TruncatedError extends StructuredError {
  */
 export const TOKENS_POR_IMAGEN = 4_000;
 
+/**
+ * `input_audio.data` es, igual que la imagen, base64 crudo cuyo TAMAÑO no
+ * tiene relación con lo que el proveedor cobra: el audio se cobra por
+ * duración (~32 tok/s medido, ver tabla 2 de `docs/auditoria-25/rendimiento.md`),
+ * no por byte. Contarlo a un token por carácter (como el resto del texto)
+ * hacía que 1.24 MB de audio —una nota de 78 s cuyo costo real es ~$0.0008—
+ * reservaran el tope entero de la corrida ($0.50, `budget.ts`) y el chofer en
+ * emergencia se quedara sin canal de voz.
+ *
+ * Se estima la duración asumiendo el bitrate comprimido MÁS BAJO razonable
+ * para voz (16 kbps): una cota conservadora, no una medición. WhatsApp manda
+ * sus notas nativas en opus a ~24-32 kbps y un audio reenviado suele ir más
+ * alto (128 kbps o más); asumir el piso hace que la duración estimada quede
+ * SIEMPRE por arriba de la real, así que la reserva sigue sobre-cotizando el
+ * costo real — solo que ya no por un factor de cientos.
+ */
+const BITS_POR_SEGUNDO_AUDIO_MIN = 16_000;
+/** ~32 tok/s medido; ×3 de margen deliberado sobre la medición. */
+const TOKENS_POR_SEGUNDO_AUDIO = 100;
+
+function tokensPorAudioBase64(base64: string): number {
+  const bytes = (base64.length * 3) / 4;
+  const segundos = (bytes * 8) / BITS_POR_SEGUNDO_AUDIO_MIN;
+  return Math.ceil(segundos * TOKENS_POR_SEGUNDO_AUDIO);
+}
+
 export function cotaEntradaEnTokens(messages: unknown): number {
   let imagenes = 0;
+  let tokensAudio = 0;
   const sinDataUrl = JSON.stringify(messages, (clave, valor) => {
     // Solo el `url` de una parte `image_url`; cualquier otro string se cuenta
     // entero, que es lo que mantiene la cota conservadora para el texto.
@@ -511,9 +538,21 @@ export function cotaEntradaEnTokens(messages: unknown): number {
       imagenes += 1;
       return '';
     }
+    // Una parte `input_audio`: su `data` se descuenta del conteo por
+    // carácter y se reemplaza por la estimación por duración de arriba.
+    if (
+      valor &&
+      typeof valor === 'object' &&
+      (valor as { type?: unknown }).type === 'input_audio' &&
+      typeof (valor as { input_audio?: { data?: unknown } }).input_audio?.data === 'string'
+    ) {
+      const audio = valor as { input_audio: { data: string; format?: string } };
+      tokensAudio += tokensPorAudioBase64(audio.input_audio.data);
+      return { type: 'input_audio', input_audio: { data: '', format: audio.input_audio.format } };
+    }
     return valor;
   });
-  return (sinDataUrl?.length ?? 0) + imagenes * TOKENS_POR_IMAGEN;
+  return (sinDataUrl?.length ?? 0) + imagenes * TOKENS_POR_IMAGEN + tokensAudio;
 }
 
 export async function generateStructured<T>(opts: {
@@ -779,6 +818,28 @@ export class PartialExecutionError extends Error {
 // se pueden adivinar por prefijo: el llamador las declara en `readOnlyTools`.
 const READ_PREFIXES = ['get_', 'check_', 'list_', 'find_', 'consultar_', 'validar_', 'cuadrar_', 'estado_'];
 const isReadOnly = (n: string) => READ_PREFIXES.some((p) => n.startsWith(p));
+
+/**
+ * AUDITORÍA 25 (MEDIO, tool-calling.md:141) — `exec.success` solo dice "el
+ * handler no lanzó", no "la entrega aterrizó". Las tools terminales del repo
+ * (`entregar_respuesta`, `entregar_respuesta_admin`) NO lanzan cuando sus
+ * bloques no validan: devuelven `{ ok: false, error: '...' }` como resultado
+ * — un contrato deliberado, para que el mensaje de error viaje al modelo
+ * como `content` de la tool y no como una excepción que el ciclo atrapa
+ * distinto. Con solo `exec.success`, ese `ok: false` cerraba el turno igual
+ * que un `ok: true`: el mensaje que le pide al modelo "vuelve a llamar
+ * entregar_respuesta" quedaba escrito pero era, por construcción,
+ * inalcanzable — nadie más lo iba a leer.
+ *
+ * Se lee el campo `ok` del resultado SOLO cuando existe: una tool terminal
+ * que no siga esta convención (no declara `ok` en su resultado) conserva el
+ * criterio de antes — `exec.success` basta — para no exigirle un contrato
+ * que nunca prometió.
+ */
+function entregaTerminalAterrizo(result: unknown): boolean {
+  if (result && typeof result === 'object' && 'ok' in result) return Boolean((result as { ok: unknown }).ok);
+  return true;
+}
 
 /**
  * Nombres de tools cuyo schema NO declara ni un solo parámetro.
@@ -1174,7 +1235,7 @@ export async function generateWithTools(opts: {
           // sirve el mismo error desde memoria, y nadie vuelve a preguntarle a
           // una base que ya se curó sola.
           if (esLectura(call.function.name) && exec.success) crossRound.set(key, { ...exec, args: entry.args });
-          if (exec.success && terminales.has(call.function.name)) entregada = true;
+          if (exec.success && terminales.has(call.function.name) && entregaTerminalAterrizo(exec.result)) entregada = true;
           executed.push({ toolName: call.function.name, args: entry.args, result: exec.result, durationMs: exec.durationMs, error: exec.error });
           return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify(exec.success ? exec.result : { error: exec.error }) };
         }),

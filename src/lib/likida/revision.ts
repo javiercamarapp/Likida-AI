@@ -27,9 +27,52 @@ import { DatoInvalido } from '@/lib/likida/errores';
 import { sendText } from '@/lib/meta/client';
 import { logger } from '@/lib/logger';
 import { inicioDiaMx, finDiaMx } from '@/lib/formato';
+import { recalcularParaAjuste, regenerarPdfTrasAjuste, type RecalculoAjuste } from './revision_recalculo';
 
 export type RevisionLiquidacion = 'pendiente' | 'aprobada' | 'ajustada' | 'rechazada';
 export const REVISIONES: readonly RevisionLiquidacion[] = ['pendiente', 'aprobada', 'ajustada', 'rechazada'];
+
+// ── EL VOCABULARIO COMPARTIDO DE `?revision=` EN LAS DOS SALIDAS DE LIQUIDACIONES ──
+//
+// ARQUITECTURA 25 (ALTO, REINCIDENTE). `/api/export/liquidaciones` (el CSV,
+// sesión de navegador) y `/api/v1/liquidaciones` (el ERP, llave API) nacieron
+// con la MISMA pregunta —«¿qué revisiones entran?»— contestada por separado:
+// dos listas de valores válidos, dos funciones llamadas igual
+// (`leerFiltroRevision`) y dos defaults distintos. Un integrador que copia el
+// valor de un export al otro se llevaba 400 `parametro_invalido` porque
+// `sin_rechazadas` solo existía en uno de los dos. El vocabulario ahora es
+// UNO — el default por endpoint SÍ sigue siendo distinto a propósito
+// (tesorería quiere "todo menos lo rechazado" por omisión; el ERP quiere
+// "solo lo firmado", porque asienta pesos) y esa diferencia se documenta en
+// cada llamador, no se esconde.
+export const FILTROS_REVISION_EXPORT = ['pendiente', 'aprobada', 'ajustada', 'rechazada', 'firmadas', 'sin_rechazadas', 'todas'] as const;
+export type FiltroRevisionExport = (typeof FILTROS_REVISION_EXPORT)[number];
+
+/** La leyenda que le explica el corte a quien reciba el archivo o la respuesta. */
+export const LEYENDA_REVISION_EXPORT: Record<FiltroRevisionExport, string> = {
+  sin_rechazadas: 'todas menos las rechazadas',
+  firmadas: 'solo las aprobadas o ajustadas',
+  pendiente: 'solo las que esperan firma',
+  aprobada: 'solo las aprobadas',
+  ajustada: 'solo las ajustadas',
+  rechazada: 'solo las rechazadas',
+  todas: 'todas, firmadas o no',
+};
+
+/**
+ * Lee `?revision=` contra el vocabulario ÚNICO de arriba. `porOmision` lo
+ * decide cada llamador (el CSV y el ERP defienden defaults distintos a
+ * propósito); lo que ya no puede diferir es QUÉ VALORES se aceptan.
+ */
+export function leerFiltroRevisionExport(crudo: string | null, porOmision: FiltroRevisionExport):
+  | { ok: true; filtro: FiltroRevisionExport }
+  | { ok: false; motivo: string } {
+  if (crudo === null || crudo === '') return { ok: true, filtro: porOmision };
+  if (!(FILTROS_REVISION_EXPORT as readonly string[]).includes(crudo)) {
+    return { ok: false, motivo: `\`revision\` solo acepta: ${FILTROS_REVISION_EXPORT.join(', ')}.` };
+  }
+  return { ok: true, filtro: crudo as FiltroRevisionExport };
+}
 
 // ── QUIÉN FIRMA ─────────────────────────────────────────────────────────────
 //
@@ -323,7 +366,7 @@ export interface ResultadoRevision {
 }
 
 /** Los SQLSTATE propios de la RPC cuyo mensaje está escrito para la persona. */
-const CODIGOS_PARA_PANTALLA = new Set(['LR001', 'LR010', 'LR011', 'LR012', 'LR013', 'LR014', 'LR015', 'LR016', 'LR017', 'LR018', 'LR019']);
+const CODIGOS_PARA_PANTALLA = new Set(['LR001', 'LR010', 'LR011', 'LR012', 'LR013', 'LR014', 'LR015', 'LR016', 'LR017', 'LR018', 'LR019', 'LR020']);
 
 /**
  * Lo que se le dice al chofer cuando su liquidación se regresa. Tono llano,
@@ -350,6 +393,23 @@ export function normalizarAjustes(crudos: Array<{ gastoId: string; montoNuevo: u
   return salida;
 }
 
+/**
+ * El `viaje_id` de una liquidación — lo necesita `recalcularParaAjuste` ANTES
+ * de llamar a la RPC (que resuelve el suyo propio por dentro, en su propia
+ * transacción; este es un vistazo previo, no un candado). `null` si la
+ * liquidación no existe en esta flota: la RPC lo iba a rechazar con LR002 de
+ * todos modos, mejor no gastar el recálculo del motor para nada.
+ */
+async function viajeIdDeLiquidacion(tenantId: string, liquidacionId: string): Promise<string | null> {
+  const res = await acotada(
+    supabaseAdmin().from('liquidacion').select('viaje_id')
+      .eq('tenant_id', tenantId).eq('id', liquidacionId).maybeSingle(),
+    'revision.viajeIdDeLiquidacion',
+  );
+  const fila = exigir(res, 'revision.viajeIdDeLiquidacion') as { viaje_id: unknown } | null;
+  return fila?.viaje_id ? String(fila.viaje_id) : null;
+}
+
 export async function revisarLiquidacion(p: PeticionRevision): Promise<ResultadoRevision> {
   if (!(ACCIONES_REVISION as readonly string[]).includes(p.accion)) {
     throw new DatoInvalido('Acción desconocida.');
@@ -364,6 +424,26 @@ export async function revisarLiquidacion(p: PeticionRevision): Promise<Resultado
     throw new DatoInvalido('Para ajustar, captura el monto correcto de al menos un comprobante.');
   }
 
+  // ── AUDITORÍA 25, BE-C1a/BE-C1b/DATOS-C1 (CRÍTICO) ──────────────────────
+  // Ajustar exige el recálculo COMPLETO del motor (LR021 en la 0306): antes
+  // de llamar a la RPC se vuelve a correr `cuadrarDesdeDB` sobre los gastos
+  // vivos del viaje con el/los monto(s) ajustado(s) ya aplicados en memoria
+  // (nada se escribe todavía). Ver `revision_recalculo.ts` para por qué no
+  // se prorratea a mano el desglose por comprobante.
+  let recalculo: RecalculoAjuste | undefined;
+  let cuadreRecalculado: Awaited<ReturnType<typeof recalcularParaAjuste>>['cuadre'] | undefined;
+  if (p.accion === 'ajustar') {
+    const viajeId = await viajeIdDeLiquidacion(p.tenantId, p.liquidacionId);
+    if (!viajeId) throw new DatoInvalido('Esa liquidación no existe en esta flota.');
+    try {
+      const r = await recalcularParaAjuste(p.tenantId, viajeId, p.ajustes!);
+      recalculo = r.recalculo;
+      cuadreRecalculado = r.cuadre;
+    } catch (e) {
+      throw new Error(`revisarLiquidacion.recalculo: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   const { data, error } = await acotada(
     supabaseAdmin().rpc('revisar_liquidacion', {
       p_tenant: p.tenantId,
@@ -373,6 +453,7 @@ export async function revisarLiquidacion(p: PeticionRevision): Promise<Resultado
       p_ajustes: p.accion === 'ajustar' ? (p.ajustes ?? []) : null,
       p_actor: p.actor.id,
       p_actor_email: p.actor.email ?? null,
+      p_recalculo: recalculo ?? null,
     }),
     'revision.rpc',
   );
@@ -400,6 +481,24 @@ export async function revisarLiquidacion(p: PeticionRevision): Promise<Resultado
     })),
     choferAvisado: null,
   };
+
+  // ── AUDITORÍA 25, BE-C1a/BE-C1b/DATOS-C1 (CRÍTICO) ──────────────────────
+  // El ajuste YA quedó firme en la base (con el desglose recalculado). Ahora
+  // el papel: imprime, sube y VERSIONA el PDF con esas mismas cifras, y
+  // limpia los sellos de entrega para que el chofer pueda volver a
+  // recibirlo. Best-effort — `regenerarPdfTrasAjuste` nunca lanza — porque
+  // la firma humana ya es un hecho consumado; perder el papel nuevo no
+  // puede deshacerla.
+  if (p.accion === 'ajustar' && cuadreRecalculado) {
+    const revisadaPor = typeof r.revisada_por_email === 'string' ? r.revisada_por_email : (p.actor.email ?? 'el sistema');
+    const revisadaEn = typeof r.revisada_en === 'string' ? r.revisada_en : new Date().toISOString();
+    const { regenerado } = await regenerarPdfTrasAjuste(
+      p.tenantId, resultado.viajeId, p.liquidacionId, cuadreRecalculado, revisadaPor, revisadaEn,
+    );
+    if (!regenerado) {
+      logger.warn('revision.pdf_no_regenerado', { tenantId: p.tenantId, liquidacion: p.liquidacionId, viaje: resultado.viajeId });
+    }
+  }
 
   if (p.accion === 'rechazar') {
     // Best-effort y DESPUÉS de que la base confirmó: la liquidación ya está

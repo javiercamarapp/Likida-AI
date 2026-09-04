@@ -52,7 +52,7 @@ export const TEMAS: Record<TemaNormativo, readonly string[]> = {
     'lif-2026-art-20-A', 'rmf-2026-9.1.7', 'rmf-2026-9.1.8',
     'red-nacional-autopistas', 'tesis-autotransporte',
   ],
-  carta_porte: ['rmf-2026-2.7.7'],
+  carta_porte: ['rmf-2026-2.7.7', 'rliva-3-fr-II'],
   viaticos_y_efectivo: [
     'lisr-27-fr-III', 'lisr-28-fr-V', 'lisr-28-fr-XX', 'rlisr-57',
     'rfa-2026-2.2', 'lft-110-111-263',
@@ -61,7 +61,7 @@ export const TEMAS: Record<TemaNormativo, readonly string[]> = {
     'cff-29-A', 'criterio-1-CFF-PI', 'cff-69-B', 'rmf-2026-2.7.1.21',
     'rmf-2026-2.7.1.48', 'politica-portales-plazos-facturacion',
   ],
-  iva_acreditable: ['liva-art-5', 'lif-2026-art-20-A'],
+  iva_acreditable: ['liva-art-5', 'lif-2026-art-20-A', 'rliva-3-fr-II'],
   nomina_imss_y_descuentos: [
     'lss-27', 'criterios-imss-sbc', 'lft-110-111-263', 'rlisr-57',
     'rfa-2026-2.1',

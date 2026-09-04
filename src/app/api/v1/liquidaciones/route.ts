@@ -27,7 +27,9 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { exigir } from '@/lib/likida/pg';
-import { REVISIONES, type RevisionLiquidacion } from '@/lib/likida/revision';
+import {
+  type RevisionLiquidacion, type FiltroRevisionExport, leerFiltroRevisionExport,
+} from '@/lib/likida/revision';
 import {
   abrir, leerPagina, leerCursor, sobre, fallo, errorApi, codificarCursor,
   type Pagina, type Cursor, type CuerpoError,
@@ -36,10 +38,12 @@ import {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** Lo que se puede pedir en `?revision=`. `firmadas` es el default y NO es una
+/** Lo que se puede pedir en `?revision=`. El vocabulario es el de
+ *  `lib/likida/revision.ts` — el MISMO que `/api/export/liquidaciones` (ARQUITECTURA
+ *  25, ALTO): antes de esto, `?revision=sin_rechazadas` era válido en el CSV
+ *  y 400 aquí. `firmadas` sigue siendo el default de ESTA ruta y NO es una
  *  columna: es «aprobada o ajustada», o sea lo asentable. */
-type FiltroRevision = RevisionLiquidacion | 'firmadas' | 'todas';
-const FILTROS: readonly FiltroRevision[] = [...REVISIONES, 'firmadas', 'todas'];
+type FiltroRevision = FiltroRevisionExport;
 const FILTRO_DEFECTO: FiltroRevision = 'firmadas';
 
 interface LiquidacionApi {
@@ -110,15 +114,14 @@ function aLiquidacionApi(r: FilaCruda): LiquidacionApi {
  *  «te devuelvo el default» — el integrador que escribió `aprobadas` en plural
  *  se llevaría una lista que no es la que pidió. */
 function leerFiltroRevision(url: string): { ok: true; filtro: FiltroRevision } | { ok: false; respuesta: NextResponse<CuerpoError> } {
-  const crudo = new URL(url).searchParams.get('revision');
-  if (crudo === null || crudo === '') return { ok: true, filtro: FILTRO_DEFECTO };
-  if (!(FILTROS as readonly string[]).includes(crudo)) {
+  const r = leerFiltroRevisionExport(new URL(url).searchParams.get('revision'), FILTRO_DEFECTO);
+  if (!r.ok) {
     return {
       ok: false,
-      respuesta: errorApi('parametro_invalido', `\`revision\` solo acepta: ${FILTROS.join(', ')}. Por omisión son las firmadas (aprobada o ajustada), que es lo asentable.`),
+      respuesta: errorApi('parametro_invalido', `${r.motivo} Por omisión son las firmadas (aprobada o ajustada), que es lo asentable.`),
     };
   }
-  return { ok: true, filtro: crudo as FiltroRevision };
+  return r;
 }
 
 async function leerLiquidaciones(
@@ -134,6 +137,7 @@ async function leerLiquidaciones(
     .eq('tenant_id', tenantId);
 
   if (filtro === 'firmadas') q = q.in('revision', ['aprobada', 'ajustada']);
+  else if (filtro === 'sin_rechazadas') q = q.neq('revision', 'rechazada');
   else if (filtro !== 'todas') q = q.eq('revision', filtro);
 
   // `(created_at, id) < (c, i)` en el dialecto de PostgREST — el mismo cursor
@@ -197,7 +201,9 @@ export async function GET(req: Request) {
           ? 'Solo las que una persona aprobó o ajustó. Las pendientes de firma y las rechazadas no vienen: pídelas con ?revision=pendiente o ?revision=rechazada.'
           : rev.filtro === 'todas'
             ? 'Todas, firmadas o no. Mira `revision` de cada una antes de asentarla.'
-            : `Solo las que están en revisión «${rev.filtro}».`,
+            : rev.filtro === 'sin_rechazadas'
+              ? 'Todas menos las rechazadas: incluye las que todavía esperan firma.'
+              : `Solo las que están en revisión «${rev.filtro}».`,
       },
     });
   } catch (e) {

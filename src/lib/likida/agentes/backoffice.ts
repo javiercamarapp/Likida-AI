@@ -38,6 +38,7 @@
 import { createHash } from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
+import { traerTodo } from '../pg';
 import { hoyMx, usd, numero, round2 } from '@/lib/formato';
 import { appUrl } from '@/lib/env';
 import { estadoLegalProduccion } from '@/lib/legal/config';
@@ -425,16 +426,22 @@ async function leerCorridas(desdeIso: string, hastaIso: string): Promise<{ corri
 /** La vara: costo por corrida de cada agente en los 28 días ANTERIORES a la
  *  ventana. Solo corridas con costo medido — las nulas no promedian. */
 async function leerBaseCosto(desdeIso: string, hastaIso: string): Promise<BaseCosto[]> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('agente_corrida')
-    .select('agente, costo_usd')
-    .not('costo_usd', 'is', null)
-    .gte('inicio', desdeIso)
-    .lt('inicio', hastaIso)
-    .limit(5000), 'backoffice.calidad_base');
-  if (error) throw new Error(`leerBaseCosto: ${error.message}`);
+  const admin = supabaseAdmin();
+  // CAP-2 (re-auditoría 25, MEDIO): `.limit(5000)` recortaba en silencio a los
+  // 1,000 que PostgREST entrega por default — `traerTodo` pagina y LANZA en
+  // vez de devolver una base de costo truncada.
+  const data = await traerTodo<{ agente: string; costo_usd: unknown }>(
+    (d, h) => acotada(admin.from('agente_corrida')
+      .select('agente, costo_usd')
+      .not('costo_usd', 'is', null)
+      .gte('inicio', desdeIso)
+      .lt('inicio', hastaIso)
+      .order('id')
+      .range(d, h), 'backoffice.calidad_base'),
+    'backoffice.calidad_base',
+  );
   const acc = new Map<string, { suma: number; n: number }>();
-  for (const f of (data ?? []) as Array<{ agente: string; costo_usd: unknown }>) {
+  for (const f of data) {
     const a = acc.get(f.agente) ?? { suma: 0, n: 0 };
     a.suma += Number(f.costo_usd);
     a.n += 1;
@@ -445,15 +452,20 @@ async function leerBaseCosto(desdeIso: string, hastaIso: string): Promise<BaseCo
 
 /** Las piezas que un humano resolvió en la ventana. LANZA si no se leen. */
 async function leerPiezasResueltas(desdeIso: string, hastaIso: string): Promise<PiezaResuelta[]> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('cola_aprobacion')
-    .select('agente, estado, titulo, motivo_rechazo')
-    .neq('estado', 'pendiente')
-    .gte('resuelto_en', desdeIso)
-    .lt('resuelto_en', hastaIso)
-    .limit(2000), 'backoffice.calidad_piezas');
-  if (error) throw new Error(`leerPiezasResueltas: ${error.message}`);
-  return ((data ?? []) as Array<Record<string, unknown>>).map((f) => ({
+  const admin = supabaseAdmin();
+  // CAP-2 (re-auditoría 25, MEDIO): `.limit(2000)` recortaba en silencio a los
+  // 1,000 que PostgREST entrega por default.
+  const data = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(admin.from('cola_aprobacion')
+      .select('agente, estado, titulo, motivo_rechazo')
+      .neq('estado', 'pendiente')
+      .gte('resuelto_en', desdeIso)
+      .lt('resuelto_en', hastaIso)
+      .order('id')
+      .range(d, h), 'backoffice.calidad_piezas'),
+    'backoffice.calidad_piezas',
+  );
+  return data.map((f) => ({
     agente: String(f.agente),
     estado: f.estado as PiezaResuelta['estado'],
     titulo: String(f.titulo ?? ''),
@@ -527,6 +539,11 @@ export interface FichaAgente {
   runnerHabilitado: boolean;
   descripcion: string | null;
   promptRef: string | null;
+  /** El rol de modelo (models.ts) con el que corre, o NULL si es determinista
+   *  (0125). Un agente determinista no llama a un modelo con un prompt
+   *  externo, así que no tiene `prompt_ref` que documentar — exigírselo
+   *  produce una alarma que nadie puede apagar nunca (auditoría 25, DATOS-M1). */
+  modeloRol: string | null;
 }
 
 /** Una entrada del censo: estado, runner y HUELLA de la descripción (no el
@@ -608,7 +625,7 @@ export function compararCatalogo(actual: FichaAgente[], previo: Censo | null): C
     const faltas: string[] = [];
     if (d.length === 0) faltas.push('sin descripción');
     else if (d.length < MIN_DESCRIPCION_UTIL) faltas.push(`descripción de ${numero(d.length)} caracteres (mínimo útil declarado: ${MIN_DESCRIPCION_UTIL})`);
-    if (!f.promptRef || !f.promptRef.trim()) faltas.push('sin prompt_ref al blueprint');
+    if (f.modeloRol && (!f.promptRef || !f.promptRef.trim())) faltas.push('sin prompt_ref al blueprint');
     if (faltas.length > 0) {
       cambios.push({ tipo: 'sin_descripcion', agente: f.id, detalle: `VIVO Y SIN DOCUMENTAR: ${faltas.join(' · ')}.` });
     }
@@ -660,7 +677,7 @@ export function armarParteDocumentacion(
 async function leerCatalogo(): Promise<FichaAgente[]> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('agente_definicion')
-    .select('id, nombre, departamento, estado, runner_habilitado, descripcion, prompt_ref')
+    .select('id, nombre, departamento, estado, runner_habilitado, descripcion, prompt_ref, modelo_rol')
     .order('id')
     .limit(500), 'backoffice.catalogo');
   if (error) throw new Error(`leerCatalogo: ${error.message}`);
@@ -672,6 +689,7 @@ async function leerCatalogo(): Promise<FichaAgente[]> {
     runnerHabilitado: f.runner_habilitado === true,
     descripcion: (f.descripcion as string | null) ?? null,
     promptRef: (f.prompt_ref as string | null) ?? null,
+    modeloRol: (f.modelo_rol as string | null) ?? null,
   }));
 }
 

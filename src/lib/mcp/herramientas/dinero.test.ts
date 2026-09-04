@@ -32,6 +32,7 @@ const getGastosFiscales = vi.fn();
 const resumirFiscal = vi.fn();
 const resumirPerdidas = vi.fn();
 const opcionesDe = vi.fn();
+const opcionesFiscalesDelPeriodo = vi.fn();
 const resolverPeriodo = vi.fn();
 const getConfig = vi.fn();
 const getKpis = vi.fn();
@@ -56,6 +57,7 @@ vi.mock('@/lib/likida/fiscal', () => ({
   resumirFiscal: (...a: unknown[]) => resumirFiscal(...a),
   resumirPerdidas: (...a: unknown[]) => resumirPerdidas(...a),
   opcionesDe: (...a: unknown[]) => opcionesDe(...a),
+  opcionesFiscalesDelPeriodo: (...a: unknown[]) => opcionesFiscalesDelPeriodo(...a),
   resolverPeriodo: (...a: unknown[]) => resolverPeriodo(...a),
 }));
 vi.mock('@/lib/likida/config', () => ({ getConfig: (...a: unknown[]) => getConfig(...a) }));
@@ -350,7 +352,7 @@ function resumenFiscalBase() {
   return {
     n: 0, gastoTotal: 0, conCfdi: 0, sinCfdi: 0, ivaAcreditable: 0, ivaNoAcreditable: 0,
     conCfdiSinDesglose: 0, iepsDieselDocumentado: 0, subTotalCasetas: 0, casetasSinSubTotal: 0,
-    porValidar: 0, vigentes: 0, cancelados: 0,
+    porValidar: 0, vigentes: 0, cancelados: 0, combustible15SujetoADeriva: false,
   };
 }
 function perdidasBase() {
@@ -365,6 +367,7 @@ describe('herramientaResumenFiscal.ejecutar', () => {
   beforeEach(() => {
     resolverPeriodo.mockReturnValue({ clave: 'ejercicio', desde: null, hasta: null, etiqueta: 'el ejercicio 2026' });
     opcionesDe.mockReturnValue({});
+    opcionesFiscalesDelPeriodo.mockResolvedValue({});
     getGastosFiscales.mockResolvedValue([]);
   });
 
@@ -403,6 +406,20 @@ describe('herramientaResumenFiscal.ejecutar', () => {
     resumirPerdidas.mockReturnValue(perdidasBase());
     const r = await herramientaResumenFiscal.ejecutar('t1', {}, { alcanza: () => true });
     expect(r.texto).toContain('Sin pérdidas de deducibilidad detectadas en el periodo.');
+  });
+
+  it('RE-AUDITORÍA 25, FIS-REAUD-3: con IVA acreditable vía el 15% en vivo, avisa que puede no coincidir con una liquidación ya firmada', async () => {
+    resumirFiscal.mockReturnValue({ ...resumenFiscalBase(), n: 3, ivaAcreditable: 500, combustible15SujetoADeriva: true });
+    resumirPerdidas.mockReturnValue(perdidasBase());
+    const r = await herramientaResumenFiscal.ejecutar('t1', {}, { alcanza: () => true });
+    expect(r.texto).toContain('puede no coincidir con lo que ya firmó una liquidación vieja');
+  });
+
+  it('sin esa deriva, NO agrega el aviso del 15%', async () => {
+    resumirFiscal.mockReturnValue({ ...resumenFiscalBase(), n: 3, ivaAcreditable: 500, combustible15SujetoADeriva: false });
+    resumirPerdidas.mockReturnValue(perdidasBase());
+    const r = await herramientaResumenFiscal.ejecutar('t1', {}, { alcanza: () => true });
+    expect(r.texto).not.toContain('liquidación vieja');
   });
 
   it('pasa el `periodo` pedido a resolverPeriodo, y el resultado llega a getGastosFiscales', async () => {

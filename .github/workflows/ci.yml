@@ -60,8 +60,58 @@ jobs:
       #   · tooling                → Dependabot lo va subiendo; no bloquea
       # Sin `audit fix --force` ciego jamás: un fallo aquí se resuelve
       # mirando el path (`npm audit --omit=dev`) y subiendo el paquete real.
+      # RE-AUDITORÍA 25 (4-sep-2026): `npm audit` pega contra
+      # registry.npmjs.org/-/npm/v1/security/audits/quick, un servicio
+      # EXTERNO que estuvo INALCANZABLE varias HORAS seguidas (503 rápido al
+      # principio, degradado a colgarse sin responder después — confirmado
+      # con curl directo, por fuera del runner, en el mismo lapso) y tumbaba
+      # este paso sin que hubiera NADA malo en el código — el resto del job
+      # (Typecheck/Lint/Tests/Build) ni siquiera llegaba a correr, porque
+      # este es el PRIMER paso.
+      #
+      # Reintenta con espera creciente, cada intento acotado a 25s con
+      # `timeout` (si no, un intento colgado tumba el job entero por pasar
+      # su límite de 15 min — ya pasó una vez). Si tras agotar los intentos
+      # la salida de npm SIGUE sin traer un reporte real de vulnerabilidades
+      # (o sea, todo indica que nunca pudo conectar: timeout, ENOTFOUND,
+      # ECONNREFUSED, 503, "audit endpoint returned an error" — y NUNCA una
+      # línea "N vulnerabilities"), este paso avisa FUERTE y deja pasar en
+      # vez de bloquear indefinidamente por una caída externa que puede
+      # durar horas. Si `npm audit` SÍ logra correr y encuentra una
+      # vulnerabilidad runtime high/critical de verdad, sigue fallando DURO
+      # de inmediato — nunca se llega ni al reintento ni al "dejar pasar".
       - name: Auditoría completa de dependencias
-        run: npm audit --omit=dev --audit-level=high
+        run: |
+          # OJO: este script corre bajo `bash -e` (default de Actions). Un
+          # `var=$(cmd_que_falla)` SUELTO aborta el script en el acto por el
+          # -e, ANTES de que el resto de este código (incluida la captura
+          # del exit code) llegue a correr — pasó una vez, cada corrida
+          # moría con 'Process completed with exit code 124' sin imprimir
+          # nada del reintento. Por eso el comando va como condición de un
+          # if: eso SÍ está exento de -e.
+          intentos=4
+          espera=10
+          for i in $(seq 1 "$intentos"); do
+            if salida=$(timeout 25 npm audit --omit=dev --audit-level=high 2>&1); then
+              echo "$salida"
+              exit 0
+            fi
+            echo "$salida"
+            # Un reporte REAL de vulnerabilidades trae "N vulnerabilities" o
+            # "N vulnerability" en la salida — eso SIEMPRE bloquea de
+            # inmediato, sin reintentar ni degradar.
+            if echo "$salida" | grep -qE '[0-9]+ vulnerabilit'; then
+              echo "::error::npm audit SÍ corrió y encontró vulnerabilidades reales — esto no se reintenta ni se degrada."
+              exit 1
+            fi
+            if [ "$i" -lt "$intentos" ]; then
+              echo "npm audit no pudo conectar (intento $i/$intentos) — reintentando en ${espera}s…"
+              sleep "$espera"
+              espera=$((espera * 2))
+            fi
+          done
+          echo "::warning::npm audit no logró conectar con registry.npmjs.org tras $intentos intentos (ningún intento devolvió un reporte de vulnerabilidades, todos fallaron por red/timeout) — se deja pasar para que Typecheck/Lint/Tests/Build sí corran. Esto NO es un veredicto de 'sin vulnerabilidades': es 'no se pudo preguntar'. Revisar a mano cuando el registro se recupere."
+          exit 0
 
       - name: Chromium para las pruebas de navegador
         run: npx playwright install --with-deps chromium

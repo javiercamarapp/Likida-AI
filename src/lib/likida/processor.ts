@@ -96,6 +96,7 @@ import { transcribirNotaDeVoz, RESPUESTA_NO_ENTENDI, RESPUESTA_SIN_PRESUPUESTO }
 import { avisarCierreAlJefe } from './avisar_cierre';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { alertarOperador } from '@/lib/observability/alerta';
 import { codigoDeError } from '@/lib/observability/sentry';
 
 export interface InboundMessage {
@@ -1057,6 +1058,7 @@ async function entregarCierrePendiente(op: ResolvedOperador, telefono: string, l
       const r = await sendDocument(telefono, firma.data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
       if (!r.ok) {
         logger.error('pdf.no_entregado', { ...ctx, codigo: r.codigo, error: r.error });
+        await alertarOperador('pdf.no_entregado', { ...ctx, codigo: r.codigo, error: r.error });
         pdf = 'fallo';
       } else {
         await registrarCostoWhatsApp(op.tenantId, liq.viajeId);
@@ -1065,6 +1067,7 @@ async function entregarCierrePendiente(op: ResolvedOperador, telefono: string, l
       }
     } catch (e) {
       logger.error('pdf.no_entregado', { ...ctx, err: e instanceof Error ? e.message : String(e), codigo: codigoDeError(e) });
+      await alertarOperador('pdf.no_entregado', { ...ctx, err: e instanceof Error ? e.message : String(e), codigo: codigoDeError(e) });
       pdf = 'fallo';
     }
   }
@@ -1081,11 +1084,16 @@ async function entregarCierrePendiente(op: ResolvedOperador, telefono: string, l
         else urlPdfJefe = firma.data.signedUrl;
       }
       const rj = await avisarCierreAlJefe({ tenantId: op.tenantId, viajeId: liq.viajeId, urlPdf: urlPdfJefe, telefonoOperador: telefono });
-      if (rj.enviado) {
+      // AUDITORÍA 25 (MEDIO, agentico.md:526): mismo candado que el camino
+      // feliz — si había PDF del contralor (`liq.pdfUrl`) y no llegó, no se
+      // sella. Ésta es precisamente la reentrega (AGEN-4): si sella aquí sin
+      // el PDF, ya no queda ningún turno futuro que lo reintente.
+      const pdfJefeOk = !liq.pdfUrl || rj.pdfEnviado === true;
+      if (rj.enviado && pdfJefeOk) {
         await sellarEntregaLiquidacion(op.tenantId, liq.liquidacionId, 'avisada_oficina_en');
         jefe = 'avisado';
       } else {
-        logger.warn('cierre.jefe_no_avisado', { ...ctx, motivo: rj.motivo });
+        logger.warn('cierre.jefe_no_avisado', { ...ctx, motivo: rj.motivo, pdfJefeOk });
         jefe = 'fallo';
       }
     } catch (e) {
@@ -2928,7 +2936,17 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // Con UNA sola foto no se resume: su mensaje de arriba ya habló.
           if (ultima && rafaga && huboRafaga) {
             const puestos = await getGastos(viajeId, op.tenantId);
-            const total = puestos.reduce((s, g) => s + (g.monto > 0 ? g.monto : 0), 0);
+            // AUDITORÍA 25 (ALTO, agentico.md:426) — MISMO `copiasDeComprobante`
+            // que el motor y el PDF. Este resumen sumaba TODAS las filas sin
+            // excluir copias; el protocolo normal de dos fotos por ticket (el
+            // ticket entero + el acercamiento al QR) deja dos filas del mismo
+            // comprobante, y el chofer leía un total que el «listo» del mismo
+            // hilo desmentía minutos después. Un segundo cálculo aquí se
+            // separaría del cuadre en silencio, el error que este repo ya pagó.
+            const copias = copiasDeComprobante(puestos);
+            const comprobantes = puestos.filter((g) => !copias.has(g.id)).length;
+            const total = puestos.reduce(
+              (s, g) => (copias.has(g.id) || !(g.monto > 0) ? s : s + g.monto), 0);
             // Las que se pasaron del tope de botones llevan su propia frase, que
             // es la que `mensajeDemasiadasDudas` ya escribía y nadie llamaba.
             const dudas = rafaga.incidencias.filter((i) => i.tipo === 'duda').length;
@@ -2936,11 +2954,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
               ? `\n\n${mensajeDemasiadasDudas(dudas, await estadoDelViaje(op.tenantId, viajeId).catch(() => null))}`
               : '';
             logger.info('foto.resumen_rafaga', {
-              viaje: viajeId, gastos: puestos.length,
+              viaje: viajeId, gastos: puestos.length, comprobantes, copias: copias.size,
               vistas: rafaga.vistas, incidencias: rafaga.incidencias.length,
             });
             await sendText(msg.from,
-              `📸 Ya revisé tus fotos. En este viaje llevo *${puestos.length} ${puestos.length === 1 ? 'comprobante' : 'comprobantes'}* por *${mxn(total)}*.\n\n` +
+              `📸 Ya revisé tus fotos. En este viaje llevo *${comprobantes} ${comprobantes === 1 ? 'comprobante' : 'comprobantes'}* por *${mxn(total)}*.\n\n` +
               (incidencias ? `${incidencias}\n\n` : '') +
               `Si te falta alguno, mándalo otra vez. Cuando termines, escribe *listo*. 👍${cola}`);
           }
@@ -3017,6 +3035,22 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // intentar registrarlo como gasto de $0.
           logger.warn('rep.ilegible', { tenant: op.tenantId, uuid: xml.uuid });
           await say('Recibí un complemento de pago pero no pude leer ningún pago adentro 🤔. Verifica que sea el XML timbrado completo y reenvíalo.');
+          return;
+        }
+
+        // ── AUDITORÍA 25, ALTO FISCAL (hallazgo, línea 218) — UNA NOTA DE
+        // CRÉDITO (TipoDeComprobante=E) NO ES UN GASTO DEDUCIBLE ────────────
+        // Un CFDI de egreso documenta una devolución, descuento o bonificación:
+        // RESTA una deducción y RESTITUYE IVA ya acreditado (LIVA art. 7); no
+        // ampara una erogación nueva (LIVA art. 5 fr. I). Antes de este corte,
+        // el camino 1:1 de abajo lo trataba como cualquier ticket de gasolinera
+        // — lo casaba con un ticket existente o daba de alta un gasto nuevo,
+        // con `xml_verificado: true`, acreditando su IVA de signo contrario. El
+        // XML sí se conserva (CFF 30); lo que no se hace es contarlo como gasto.
+        if (xml.tipoComprobante === 'E') {
+          logger.warn('xml.nota_credito', { tenant: op.tenantId, viaje: viajeId, uuid: xml.uuid });
+          await saveCfdiXmlRaw(op.tenantId, xml.uuid, null, xmlText!);
+          await say('Ese XML es una *nota de crédito* (comprobante de egreso), no un gasto 🧾. No la registro como deducible — es una devolución o bonificación sobre otra factura. Guardé el archivo; si el gasto original no está registrado, mándame su ticket o su XML de ingreso.');
           return;
         }
 
@@ -4253,6 +4287,9 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           logger.error('pdf.no_entregado', {
             viaje: viajeId, tenant: op.tenantId, codigo: enviado.codigo, error: enviado.error,
           });
+          await alertarOperador('pdf.no_entregado', {
+            viaje: viajeId, tenant: op.tenantId, codigo: enviado.codigo, error: enviado.error,
+          });
           // AUDITORÍA 13, BAJO (residual del cierre de la ronda 12): el rechazo
           // de Meta dejaba rastro pero SILENCIO en el teléfono del chofer — se
           // quedaba esperando el PDF que el prompt le prometió. Se le dice la
@@ -4274,6 +4311,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // de pdf-lib mañana — la segunda causa caía en el issue viejo y no
         // notificaba. Mismo discriminador que los cron.
         logger.error('pdf.no_entregado', {
+          tenant: op.tenantId, viaje: viajeId, pdfGenerado,
+          err: e instanceof Error ? e.message : String(e),
+          codigo: codigoDeError(e),
+        });
+        await alertarOperador('pdf.no_entregado', {
           tenant: op.tenantId, viaje: viajeId, pdfGenerado,
           err: e instanceof Error ? e.message : String(e),
           codigo: codigoDeError(e),
@@ -4333,7 +4375,17 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           }
         }
         const rj = await avisarCierreAlJefe({ tenantId: op.tenantId, viajeId, urlPdf: urlPdfJefe, telefonoOperador: msg.from });
+        // AUDITORÍA 25 (MEDIO, agentico.md:526): antes se sellaba con solo
+        // `rj.enviado` — que es "el TEXTO salió", no "el jefe tiene su
+        // PDF". Si había un PDF del contralor y no llegó (createSignedUrl
+        // falló arriba, o `sendDocument` falló dentro de
+        // `avisarCierreAlJefe`), el sello se ponía igual y
+        // `entregarCierrePendiente` nunca volvía a intentar el PDF: el
+        // ejemplar que el contralor necesita para su contador se perdía
+        // para siempre detrás de un sello que decía "ya avisado".
+        const pdfJefeOk = !pdfContralorGenerado || rj.pdfEnviado === true;
         if (!rj.enviado) logger.warn('cierre.jefe_no_avisado', { viaje: viajeId, motivo: rj.motivo });
+        else if (!pdfJefeOk) logger.warn('cierre.jefe_avisado_sin_pdf', { viaje: viajeId, teniaUrlFirmada: urlPdfJefe != null });
         // AGEN-4: sello — el reintento de un «listo» no vuelve a avisar.
         else await sellarEntregaLiquidacion(op.tenantId, liqIdCerrada, 'avisada_oficina_en');
       } catch (e) {

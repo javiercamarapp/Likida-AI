@@ -345,4 +345,45 @@ describe('resolverDescargaSat / estadoDescargaSat', () => {
     vi.stubEnv('LIKIDA_SAT_PASSWORD', CLAVE_FALSA);
     expect(estadoDescargaSat().motivo).toMatch(/LIKIDA_SAT_URL/);
   });
+
+  // AUDITORÍA 25, SEGURIDAD (BAJO, línea 212, REINCIDENTE). La contraseña del
+  // PAC se hereda cuando LIKIDA_SAT_PASSWORD no está —misma cuenta de SW,
+  // ver la cabecera del archivo— pero nada comprobaba a qué host viajaba:
+  // un LIKIDA_SAT_URL mal escrito (o apuntado a otro lado) mandaba la
+  // credencial del PAC a un host sin verificar. El host esperado para el
+  // proveedor 'sw' es exactamente api.sw.com.mx (sw.ts:5).
+  describe('la contraseña HEREDADA del PAC no viaja a un host sin verificar', () => {
+    it('LIKIDA_SAT_URL apunta a otro host: no se configura, no se toca la red', () => {
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'sw');
+      vi.stubEnv('LIKIDA_SAT_URL', 'https://api.sw.com.mx.evil.example/');
+      vi.stubEnv('LIKIDA_SAT_USUARIO', '');
+      vi.stubEnv('LIKIDA_SAT_PASSWORD', '');
+      vi.stubEnv('LIKIDA_PAC_USUARIO', 'u@likida.test');
+      vi.stubEnv('LIKIDA_PAC_PASSWORD', CLAVE_FALSA);
+      expect(resolverDescargaSat()).toBeNull();
+      expect(estadoDescargaSat().configurado).toBe(false);
+      expect(estadoDescargaSat().motivo).toMatch(/api\.sw\.com\.mx/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('el host correcto (api.sw.com.mx) sí configura, con la contraseña heredada', () => {
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'sw');
+      vi.stubEnv('LIKIDA_SAT_URL', 'https://api.sw.com.mx');
+      vi.stubEnv('LIKIDA_SAT_USUARIO', '');
+      vi.stubEnv('LIKIDA_SAT_PASSWORD', '');
+      vi.stubEnv('LIKIDA_PAC_USUARIO', 'u@likida.test');
+      vi.stubEnv('LIKIDA_PAC_PASSWORD', CLAVE_FALSA);
+      expect(resolverDescargaSat()).not.toBeNull();
+    });
+
+    it('con credencial PROPIA (no heredada) el host no se restringe: es responsabilidad de quien la capturó', () => {
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'sw');
+      vi.stubEnv('LIKIDA_SAT_URL', 'https://api.propio');
+      vi.stubEnv('LIKIDA_SAT_USUARIO', 'propio@likida.test');
+      vi.stubEnv('LIKIDA_SAT_PASSWORD', CLAVE_FALSA_2);
+      vi.stubEnv('LIKIDA_PAC_USUARIO', '');
+      vi.stubEnv('LIKIDA_PAC_PASSWORD', '');
+      expect(resolverDescargaSat()).not.toBeNull();
+    });
+  });
 });

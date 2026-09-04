@@ -255,20 +255,33 @@ export async function getTaller(tenantId: string, hoy = new Date()): Promise<Tal
         .eq('tenant_id', tenantId).order('nombre').range(d, h), 'taller.rutinas'),
       'taller.rutinas',
     ),
+    // AUDITORÍA 25, MEDIO (REND-A7, REINCIDENTE de las 23 y 24): ordenaba
+    // solo por `abierta_en`, que empata entre órdenes abiertas en el mismo
+    // instante — `range()` por posición sobre una tabla viva salta o repite
+    // filas en un empate aunque el `count` (ya pedido) coincida.
     traerTodo<Record<string, unknown>>(
       (d, h) => acotada(admin.from('mantenimiento')
         .select('id, unidad_id, tipo, estado, descripcion, abierta_en, incidencia_id, rutina_id', conteo(d))
         .eq('tenant_id', tenantId).neq('estado', 'cerrada')
-        .order('abierta_en', { ascending: false }).range(d, h), 'taller.abiertas'),
+        .order('abierta_en', { ascending: false }).order('id', { ascending: false }).range(d, h), 'taller.abiertas'),
       'taller.abiertas',
     ),
     // Solo las cerradas QUE NACIERON DE RUTINA alimentan el reloj — la
     // correctiva de una avería no "cuenta como servicio" de la preventiva.
+    //
+    // AUDITORÍA 25, MEDIO (REND-A7, REINCIDENTE): ordenaba por `cerrada_en`
+    // sin desempate y sin pedir `id` en el `.select()` — una flota de 800
+    // unidades con servicio mensual genera ~9,600 filas al año, cruza las
+    // 1,000 de `PAGINA` en cinco semanas, y con orden descendente por tiempo
+    // cada cierre que ocurre DURANTE la lectura entra en la posición 0: la
+    // última fila de una página se repite como primera de la siguiente y una
+    // fila real se pierde sin que `LecturaIncompleta` se dispare (`count`
+    // también creció, así que `filas.length >= esperadas` se cumple igual).
     traerTodo<Record<string, unknown>>(
       (d, h) => acotada(admin.from('mantenimiento')
-        .select('rutina_id, unidad_id, cerrada_en, km_servicio', conteo(d))
+        .select('id, rutina_id, unidad_id, cerrada_en, km_servicio', conteo(d))
         .eq('tenant_id', tenantId).eq('estado', 'cerrada').not('rutina_id', 'is', null)
-        .order('cerrada_en', { ascending: false }).range(d, h), 'taller.cerradas'),
+        .order('cerrada_en', { ascending: false }).order('id', { ascending: false }).range(d, h), 'taller.cerradas'),
       'taller.cerradas',
     ),
   ]);

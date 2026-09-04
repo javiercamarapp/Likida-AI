@@ -22,6 +22,8 @@ import { conteo, traerTodo } from './pg';
 import { DatoInvalido } from './errores';
 import { esNumero, esNumeroONulo, esObjeto, esTextoONulo, formaInesperada } from './comercial';
 import { CONECTORES_GPS } from './conectores/gps';
+import { papelMasProximo } from './administracion';
+import { hoyMx } from '@/lib/formato';
 
 /** Los tres estatus que `viaje` de verdad admite (`viaje_estatus_dominio`,
  *  0025). Un cuarto valor no se traduce ni se esconde: se cuenta aparte. */
@@ -154,9 +156,7 @@ export interface UnidadRow {
   activo: boolean;
 }
 
-const DIA_MS = 86_400_000;
-
-export async function getUnidades(tenantId: string, hoy = new Date()): Promise<UnidadRow[]> {
+export async function getUnidades(tenantId: string, hoy: string = hoyMx()): Promise<UnidadRow[]> {
   const admin = supabaseAdmin();
   const [unidades, ordenes] = await Promise.all([
     traerTodo<Record<string, unknown>>(
@@ -178,29 +178,23 @@ export async function getUnidades(tenantId: string, hoy = new Date()): Promise<U
     abiertasPorUnidad.set(k, (abiertasPorUnidad.get(k) ?? 0) + 1);
   }
 
-  const base = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate());
-
   return unidades.map((u) => {
     // El vencimiento que importa es el MÁS PRÓXIMO de los tres, no el primero
     // que esté lleno: enseñar la póliza al día mientras el permiso SICT lleva
     // un mes vencido es peor que no enseñar nada.
-    const papeles: Array<[string, unknown]> = [
-      ['Póliza', u.poliza_vence],
-      ['Permiso SICT', u.permiso_sict_vence],
-      ['Verificación', u.verificacion_vence],
-    ];
-    let diasAlVencimiento: number | null = null;
-    let queVence: string | null = null;
-    for (const [nombre, valor] of papeles) {
-      if (!valor) continue;
-      const t = Date.parse(`${String(valor)}T00:00:00Z`);
-      if (Number.isNaN(t)) continue;
-      const dias = Math.round((t - base) / DIA_MS);
-      if (diasAlVencimiento === null || dias < diasAlVencimiento) {
-        diasAlVencimiento = dias;
-        queVence = nombre;
-      }
-    }
+    //
+    // ARQUITECTURA 25 (MEDIO, REINCIDENTE). Esta función tenía SU PROPIA
+    // segunda implementación de «cuál papel vence antes», anclada a `Date.UTC`
+    // en vez de al día de México — con la póliza vigente hasta las 18:00
+    // CDMX, el Inicio (`Date.UTC`) y el Registro (`papelMasProximo`, día de
+    // México) contestaban «vence hoy» y «vence mañana» sobre EL MISMO papel.
+    // Se importa `papelMasProximo` (`administracion.ts`) en vez de
+    // reconstruirla: misma función, mismo ancla, mismos nombres
+    // (`PAPELES_UNIDAD`, vía `administracion.ts`).
+    const { diasAlVencimiento, queVence } = papelMasProximo(
+      { polizaVence: (u.poliza_vence as string) || null, permisoSictVence: (u.permiso_sict_vence as string) || null, verificacionVence: (u.verificacion_vence as string) || null },
+      hoy,
+    );
 
     return {
       id: u.id as string,

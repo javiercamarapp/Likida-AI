@@ -1,5 +1,5 @@
 import { getEquipo } from '@/lib/admin/negocio';
-import type { RolAppUser } from '@/lib/auth/provisionar';
+import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
 import { Users } from 'lucide-react';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { paginarRegistro } from '../../dashboard/paginar-registro';
@@ -7,19 +7,6 @@ import { FiltroRegistro } from '../../dashboard/registro-filtro';
 import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
-
-/** Los 5 roles reales del dominio (constraint `app_user_rol_dominio`:
- *  0044 metió `encargado`, 0086 retiró `operador` — el chofer ya no tiene
- *  login —, 0105 metió `vendedor`) — etiqueta legible para cada uno.
- *  Cualquier valor que no esté en este mapa (no debería pasar, la base ya lo
- *  restringe) se enseña tal cual en vez de esconderse. */
-const ROL_LABEL: Record<RolAppUser, string> = {
-  superadmin: 'Superadmin',
-  flota_admin: 'Dueño / Admin de flota',
-  encargado: 'Encargado',
-  contador: 'Contador',
-  vendedor: 'Vendedor (Likida)',
-};
 
 const ORDEN_ROL: RolAppUser[] = ['superadmin', 'vendedor', 'flota_admin', 'encargado', 'contador'];
 

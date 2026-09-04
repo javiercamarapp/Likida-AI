@@ -77,6 +77,12 @@ function prepararZxing(): Promise<void> {
   return zxingPreparado;
 }
 
+/** El ancho al que se reescala una foto antes de leer sus códigos — la
+ *  primera pasada de `decodeCodigosFromImage` y la que `redimensionarParaVision`
+ *  reusa para la llamada de visión (ver AUDITORÍA 25, BAJO, REND-A9). Una sola
+ *  constante para que las dos no se desincronicen. */
+export const ANCHO_PRINCIPAL_PX = 1600;
+
 /**
  * Lee TODOS los códigos de una foto: QR y códigos de barras 1D.
  *
@@ -106,7 +112,7 @@ export async function decodeCodigosFromImage(image: Buffer): Promise<CodigoLeido
     // temprano cuando ya apareció el dato que de verdad importa —CFDI o liga—,
     // no con cualquier código.
     const vistos = new Map<string, CodigoLeido>();
-    for (const ancho of [1600, 1000]) {
+    for (const ancho of [ANCHO_PRINCIPAL_PX, 1000]) {
       const buf = await sharp(image).rotate().resize({ width: ancho, withoutEnlargement: true }).jpeg().toBuffer();
       const leidos = await readBarcodes(new Blob([new Uint8Array(buf)]), { tryHarder: true });
       for (const r of leidos) {
@@ -120,6 +126,23 @@ export async function decodeCodigosFromImage(image: Buffer): Promise<CodigoLeido
   } catch {
     return [];
   }
+}
+
+/**
+ * La foto reescalada a `ANCHO_PRINCIPAL_PX` (jpeg, orientación EXIF aplicada)
+ * — la misma pasada que `decodeCodigosFromImage` ya hace, expuesta para que
+ * el llamador que manda la foto al modelo de VISIÓN la reuse en vez de
+ * mandar el original a resolución nativa.
+ *
+ * AUDITORÍA 25, BAJO (REND-A9, REINCIDENTE de la 24): `extraerComprobante`
+ * (ocr.ts) ya calculaba este mismo buffer reducido dos líneas antes —dentro
+ * de `decodeCodigosFromImage`— y lo tiraba, para acto seguido mandar el
+ * data-URL ORIGINAL (hasta 6 MB, `MAX_IMAGEN_WHATSAPP_BYTES`) al modelo, y esa
+ * misma llamada se reenvía hasta cuatro veces por la escalera de reintentos
+ * de `openrouter.ts`.
+ */
+export async function redimensionarParaVision(image: Buffer): Promise<Buffer> {
+  return sharp(image).rotate().resize({ width: ANCHO_PRINCIPAL_PX, withoutEnlargement: true }).jpeg().toBuffer();
 }
 
 /**

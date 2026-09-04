@@ -35,6 +35,11 @@ type LiqFila = {
   iva_acreditable: number;
   peaje_acreditable: number;
   litros_diesel_acreditables: number;
+  // AUDITORÍA 25, ALTO FISCAL (línea 145, mig. 0305): `acreditables_liquidacion_tenant`
+  // ahora solo suma liquidaciones FIRMADAS (aprobada|ajustada) — ver
+  // `sqlAcreditablesEquivalente`. `kpis_liquidacion_tenant` (0112) no toca
+  // `revision`, así que no participa en `sqlKpisEquivalente`.
+  revision: 'pendiente' | 'aprobada' | 'ajustada' | 'rechazada';
 };
 
 function round2(n: number): number {
@@ -100,9 +105,10 @@ function sqlKpisEquivalente(filas: LiqFila[], tenantId: string, pDesde: string |
   };
 }
 
-/** EL REDUCTOR SQL de `acreditables_liquidacion_tenant`. */
+/** EL REDUCTOR SQL de `acreditables_liquidacion_tenant` (mig. 0305: solo
+ *  `revision in ('aprobada', 'ajustada')` — ver auditoría 25, línea 145). */
 function sqlAcreditablesEquivalente(filas: LiqFila[], tenantId: string, pDesde: string | null) {
-  const rows = filas.filter((f) => enVentana(f, tenantId, pDesde));
+  const rows = filas.filter((f) => enVentana(f, tenantId, pDesde) && (f.revision === 'aprobada' || f.revision === 'ajustada'));
   return {
     litrosDiesel: rows.reduce((s, r) => s + r.litros_diesel_acreditables, 0),
     ieps: rows.reduce((s, r) => s + r.ieps_acreditable, 0),
@@ -157,6 +163,7 @@ function liq(over: Partial<LiqFila>): LiqFila {
     tenant_id: 't1', created_at: '2026-08-10T12:00:00Z', total_comprobado: 0,
     estatus: 'cuadrada', diferencias: null,
     ieps_acreditable: 0, iva_acreditable: 0, peaje_acreditable: 0, litros_diesel_acreditables: 0,
+    revision: 'aprobada',
     ...over,
   };
 }
@@ -255,6 +262,48 @@ describe('getAcreditables — equivalencia JS viejo vs RPC nueva (mig. 0112)', (
   });
 
   it('un tenant sin liquidaciones da ceros MEDIDOS', async () => {
+    const r = await getAcreditables('t1');
+    expect(r).toEqual({ ieps: 0, iva: 0, peaje: 0, litrosDiesel: 0 });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 25, ALTO FISCAL (línea 145) — el contralor RECHAZÓ la
+  // liquidación (o nadie la ha firmado todavía) y sus cifras acreditables
+  // seguían sumando en la tarjeta «IVA acreditable — LIVA art. 5», aunque el
+  // CSV y la API pública, sobre los MISMOS datos, ya se abstenían
+  // (`FILTRO_REVISION_DEFECTO = 'sin_rechazadas'`, `?revision=firmadas`).
+  // ═════════════════════════════════════════════════════════════════════
+  it('una liquidación RECHAZADA no cuenta: sus columnas acreditables siguen en la fila pero no se suman', async () => {
+    servidor.filas = [
+      liq({ revision: 'aprobada', iva_acreditable: 100, peaje_acreditable: 10, litros_diesel_acreditables: 50 }),
+      liq({ revision: 'rechazada', iva_acreditable: 16000, peaje_acreditable: 2500, litros_diesel_acreditables: 1200 }),
+    ];
+    const r = await getAcreditables('t1');
+    expect(r).toEqual({ ieps: 0, iva: 100, peaje: 10, litrosDiesel: 50 });
+  });
+
+  it('una liquidación PENDIENTE (nadie la ha firmado) tampoco cuenta', async () => {
+    servidor.filas = [
+      liq({ revision: 'aprobada', iva_acreditable: 100 }),
+      liq({ revision: 'pendiente', iva_acreditable: 999 }),
+    ];
+    const r = await getAcreditables('t1');
+    expect(r.iva).toBe(100);
+  });
+
+  it('una liquidación AJUSTADA sí cuenta (firmada, igual que "aprobada")', async () => {
+    servidor.filas = [liq({ revision: 'ajustada', iva_acreditable: 250 })];
+    const r = await getAcreditables('t1');
+    expect(r.iva).toBe(250);
+  });
+
+  it('el escenario del hallazgo: viaje 4471 rechazado con motivo — $16,000 de IVA no aparecen', async () => {
+    servidor.filas = [
+      liq({
+        revision: 'rechazada', iva_acreditable: 16000, peaje_acreditable: 2500,
+        litros_diesel_acreditables: 1200,
+      }),
+    ];
     const r = await getAcreditables('t1');
     expect(r).toEqual({ ieps: 0, iva: 0, peaje: 0, litrosDiesel: 0 });
   });

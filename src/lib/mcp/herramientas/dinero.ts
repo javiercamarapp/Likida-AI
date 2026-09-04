@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { getLibroViaje, rotuloFacturacion, rotuloCobro, type RenglonLibro } from '@/lib/likida/libro_viaje';
 import { getPorFacturar, resumen as resumenPorFacturar } from '@/lib/likida/facturacion/pendientes';
 import {
-  getGastosFiscales, resumirFiscal, resumirPerdidas, opcionesDe, resolverPeriodo,
+  getGastosFiscales, resumirFiscal, resumirPerdidas, opcionesDe, opcionesFiscalesDelPeriodo, resolverPeriodo,
 } from '@/lib/likida/fiscal';
 import { getConfig } from '@/lib/likida/config';
 import { getKpis } from '@/lib/likida/analytics';
@@ -155,9 +155,15 @@ const esquemaFiscal = z.object({
 
 async function ejecutarFiscal(tenantId: string, args: z.infer<typeof esquemaFiscal>): Promise<ResultadoHerramienta> {
   const periodo = resolverPeriodo(args.periodo, hoyMx());
-  const opciones = opcionesDe(await getConfig(tenantId));
+  const cfg = await getConfig(tenantId);
+  const opciones = opcionesDe(cfg);
   const gastos = await getGastosFiscales(tenantId, periodo, hoyMx(), opciones);
-  const r = resumirFiscal(gastos, opciones);
+  // AUDITORÍA 25, FIS-C1/FIS-C2/ARQ-C1 (CRÍTICO): esta herramienta imprime la
+  // MISMA cifra que `/dashboard/contador` — necesita el acumulado del
+  // ejercicio para partir el IVA del diésel en efectivo igual que el motor,
+  // o un agente la dicta distinta al PDF (el hallazgo era literal: la
+  // divergencia «ya la puede dictar un agente»).
+  const r = resumirFiscal(gastos, await opcionesFiscalesDelPeriodo(tenantId, periodo, cfg));
   const perdidas = resumirPerdidas(gastos, opciones);
   if (r.n === 0) {
     return {
@@ -170,6 +176,13 @@ async function ejecutarFiscal(tenantId: string, args: z.infer<typeof esquemaFisc
     `• ${numero(r.n)} comprobantes por ${mxn(r.gastoTotal)} de gasto total.`,
     `• Con CFDI: ${numero(r.conCfdi)} · Sin CFDI: ${numero(r.sinCfdi)}.`,
     `• IVA acreditable documentado: ${mxn(r.ivaAcreditable)} · IVA desglosado que NO se acredita: ${mxn(r.ivaNoAcreditable)}.`,
+    // RE-AUDITORÍA 25, FIS-REAUD-3 (ALTO): esta cifra incluye combustible en
+    // efectivo prorrateado al 15% de la RFA 2.9 contra el acumulado del
+    // ejercicio A HOY — distinto del acumulado que tenía cada liquidación al
+    // firmarse. No la dictes como si coincidiera con un PDF ya firmado.
+    ...(r.combustible15SujetoADeriva
+      ? ['• Ese IVA acreditable incluye combustible en efectivo prorrateado al 15% con el acumulado de HOY: puede no coincidir con lo que ya firmó una liquidación vieja del mismo periodo — la cifra archivada, que sí coincide con cada PDF, está en el panel del contador ("IVA acreditable de tus liquidaciones").']
+      : []),
     ...(r.conCfdiSinDesglose > 0
       ? [`• ${numero(r.conCfdiSinDesglose)} comprobantes con CFDI pero sin XML leído: su IVA existe en papel y aquí no se afirma.`]
       : []),

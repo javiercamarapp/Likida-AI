@@ -702,19 +702,36 @@ export async function usuariosAvisables(tenantId: string): Promise<UsuarioAvisab
   // `.order('id')` lo vuelve determinista; el reparto real de avisos sigue
   // filtrando por rol después (`repartoDe`), así que el orden no cambia a
   // quién le llega qué.
+  //
+  // AUDITORÍA 25, ALTO (reauditoría, misma causa raíz que AGEN-C1 en
+  // contactos.ts, commit 24ce4c2): `activo`. Esta función alimenta tres
+  // consumidores vivos —el reparto de las alarmas de los agentes
+  // (`notificaciones.ts:926` → `repartoDe`), el aviso de una propuesta de
+  // PAGO (`portal_pago_aviso.ts`) y la pantalla que le enseña a la flota «a
+  // quién le llega» (`/dashboard/agentes`)— y ninguno miraba `activo`:
+  // `desactivarUsuario` (usuarios_escritura.ts:191) escribe `activo=false`
+  // pero NO borra `app_user.email`, así que una cuenta de baja seguía
+  // recibiendo alarmas y avisos de dinero, y el panel la pintaba como
+  // destinataria en `/dashboard/agentes` mientras `/dashboard/usuarios` la
+  // pintaba, dos clics más allá, como dada de baja. Doble capa y misma regla
+  // que allá: solo el `false` EXPLÍCITO da de baja, para que una fila sin la
+  // columna (base sin la 0294) no se quede sin sus avisos.
   const { data, error } = await supabaseAdmin()
     .from('app_user')
-    .select('id, nombre, email, rol')
+    .select('id, nombre, email, rol, activo')
     .eq('tenant_id', tenantId)
+    .or('activo.is.null,activo.eq.true')
     .order('id')
     .limit(200);
   if (error) throw new Error(`usuariosAvisables: ${error.message}`);
-  return (data ?? []).map((u) => ({
-    id: u.id as string,
-    nombre: (u.nombre as string | null) ?? null,
-    email: (u.email as string | null) ?? null,
-    rol: u.rol as string,
-  }));
+  return (data ?? [])
+    .filter((u) => (u as { activo?: boolean | null }).activo !== false)
+    .map((u) => ({
+      id: u.id as string,
+      nombre: (u.nombre as string | null) ?? null,
+      email: (u.email as string | null) ?? null,
+      rol: u.rol as string,
+    }));
 }
 
 // ── EL ESTADO DEL ANTI-RUIDO (una fila por tenant + agente + evento) ───────

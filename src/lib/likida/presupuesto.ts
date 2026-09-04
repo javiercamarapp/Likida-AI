@@ -96,6 +96,12 @@ export const PASOS_CIERRE: ReadonlyArray<PasoCierre> = [
   { paso: 'createSignedUrl del PDF',               donde: 'processor.ts:755',  ms: 500,   techoMs: TECHO_PASO_CONSULTA_MS, critico: true },
   { paso: 'sendDocument del PDF',                  donde: 'processor.ts:757',  ms: 2_500, techoMs: TECHO_ENVIO_WHATSAPP_MS, critico: true },
   { paso: 'registrarCostoWhatsApp del PDF',        donde: 'processor.ts:758',  ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
+  // AUDITORÍA 25, ALTO (REND-A2, REINCIDENTE): AGEN-4 (auditoría 24) añadió
+  // los DOS sellos de `sellarEntregaLiquidacion` (`0279`) sin su renglón —
+  // cada uno es un UPDATE real sobre `liquidacion`, envuelto en `acotada`
+  // igual que cualquier otra consulta. La tabla se quedó en 18 pasos con el
+  // cierre real haciendo 20 desde que `4f94490` llegó a `master`.
+  { paso: 'sellarEntregaLiquidacion (PDF operador)', donde: 'processor.ts:4266', ms: 300, techoMs: TECHO_PASO_CONSULTA_MS },
   // AUDITORÍA 18, ALTO (A24): `avisarCierreAlJefe` añadió CINCO viajes de red
   // al cierre y la tabla no los tenía — la prueba comparaba la tabla consigo
   // misma. 13.5s de cierre real contra 12s de reserva. Ahora están, y
@@ -105,6 +111,9 @@ export const PASOS_CIERRE: ReadonlyArray<PasoCierre> = [
   { paso: 'resumenDeCierre (2 consultas en paralelo)', donde: 'avisar_cierre.ts', ms: 300, techoMs: TECHO_PASO_CONSULTA_MS },
   { paso: 'sendText del aviso al jefe',            donde: 'avisar_cierre.ts',  ms: 1_500, techoMs: TECHO_ENVIO_WHATSAPP_MS },
   { paso: 'sendDocument del PDF al jefe',          donde: 'avisar_cierre.ts',  ms: 2_500, techoMs: TECHO_ENVIO_WHATSAPP_MS },
+  // AUDITORÍA 25, ALTO (REND-A2, REINCIDENTE): el segundo sello, el del aviso
+  // a la oficina (`processor.ts:4338`) — mismo hallazgo que el de arriba.
+  { paso: 'sellarEntregaLiquidacion (aviso oficina)', donde: 'processor.ts:4338', ms: 300, techoMs: TECHO_PASO_CONSULTA_MS },
   { paso: 'saveConversation',                      donde: 'processor.ts:774',  ms: 500,   techoMs: TECHO_PASO_CONSULTA_MS },
   { paso: 'releaseViajeLock',                      donde: 'processor.ts:814',  ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
 ];

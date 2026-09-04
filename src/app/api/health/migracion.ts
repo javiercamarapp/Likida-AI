@@ -1,4 +1,5 @@
 import { readdirSync } from 'node:fs';
+import { logger } from '@/lib/logger';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 24, OP-P1 (BLOQUEANTE) · ¿LA BASE VA A LA PAR DEL CÓDIGO?
@@ -38,6 +39,17 @@ export interface Migracion {
   atras: number | null;
   /** Solo cuando algo no cuadra: por qué. */
   motivo?: string;
+  /**
+   * TODOS los prefijos que la base registra como aplicados (no solo el más
+   * alto), o `null` si no se pudo leer. ARQUITECTURA 25 (MEDIO): `base`/`atras`
+   * cotejan MÁXIMO contra MÁXIMO, que es fail-open cuando una rama cortada
+   * abajo aterriza con un prefijo MENOR al máximo ya aplicado en producción —
+   * `atras` sale en 0 con esa migración sin aplicar. `compuerta-deploy.mjs`
+   * SÍ tiene el repo local (a diferencia de G5 en `ingenieria.ts`, que
+   * declara por escrito que no lo tiene) y con este campo puede cotejar el
+   * CONJUNTO completo, no solo la cima.
+   */
+  aplicados: string[] | null;
 }
 
 const PREFIJO = /^(\d{4})_/;
@@ -67,19 +79,29 @@ export function ultimaMigracionAplicada(filas: Array<{ nombre?: unknown }>): str
   return max;
 }
 
+/** TODOS los prefijos (sin repetir, ordenados) que la base registra aplicados. */
+export function prefijosAplicados(filas: Array<{ nombre?: unknown }>): string[] {
+  const vistos = new Set<string>();
+  for (const f of filas) {
+    const p = typeof f.nombre === 'string' ? PREFIJO.exec(f.nombre)?.[1] : undefined;
+    if (p !== undefined) vistos.add(p);
+  }
+  return [...vistos].sort();
+}
+
 /** Puro, para probarlo: arma el veredicto a partir de los dos prefijos. */
-export function cotejar(base: string | null, codigo: string | null, motivoBase?: string): Migracion {
+export function cotejar(base: string | null, codigo: string | null, motivoBase?: string, aplicados: string[] | null = null): Migracion {
   if (codigo === null) {
-    return { base, codigo, atras: null, motivo: 'no se pudo saber la última migración del código (LIKIDA_MIGRACION_CODIGO ausente y sin carpeta supabase/migrations)' };
+    return { base, codigo, atras: null, aplicados: null, motivo: 'no se pudo saber la última migración del código (LIKIDA_MIGRACION_CODIGO ausente y sin carpeta supabase/migrations)' };
   }
   if (base === null) {
-    return { base, codigo, atras: null, motivo: motivoBase ?? 'no se pudo leer qué migración tiene aplicada la base' };
+    return { base, codigo, atras: null, aplicados: null, motivo: motivoBase ?? 'no se pudo leer qué migración tiene aplicada la base' };
   }
   const atras = Math.max(0, Number(codigo) - Number(base));
   if (atras > 0) {
-    return { base, codigo, atras, motivo: `la base va ${atras} migración(es) atrás del código: aplica ${siguiente(base)}..${codigo} antes de desplegar` };
+    return { base, codigo, atras, aplicados, motivo: `la base va ${atras} migración(es) atrás del código: aplica ${siguiente(base)}..${codigo} antes de desplegar` };
   }
-  return { base, codigo, atras: 0 };
+  return { base, codigo, atras: 0, aplicados };
 }
 
 function siguiente(prefijo: string): string {
@@ -95,13 +117,28 @@ export async function cotejarMigracion(leerAplicadas: LectorAplicadas): Promise<
   const codigo = migracionDelCodigo();
   try {
     const { data, error } = await leerAplicadas();
-    if (error) return cotejar(null, codigo, `migraciones_aplicadas() no contestó: ${error.message}`);
+    if (error) {
+      // AUDITORÍA 25, SEGURIDAD (MEDIO, línea 194, REINCIDENTE). `/api/health`
+      // es público a propósito (`_comun.ts:74` fija la regla para TODA la API
+      // pública: «NUNCA lleva el mensaje de Postgres»). `error.message` es
+      // texto crudo de PostgREST/supabase-js — puede traer detalle de
+      // conexión o de credencial — y antes salía intacto en el JSON público.
+      // El detalle sigue disponible para quien opera: aquí, en el log
+      // privado; `motivo` en la respuesta es fijo, en español, sin eco.
+      logger.error('health.migracion_rpc_error', { err: error.message });
+      return cotejar(null, codigo, 'migraciones_aplicadas() no contestó: no se pudo leer el registro de migraciones de la base.');
+    }
     const r = data as { disponible?: unknown; motivo?: unknown; filas?: unknown } | null;
     if (!r || r.disponible !== true || !Array.isArray(r.filas)) {
+      // `r.motivo`, cuando viene, lo escribe la propia RPC (0234) — es texto
+      // fijo nuestro, no un mensaje de Postgres, así que sí es seguro
+      // publicarlo tal cual.
       return cotejar(null, codigo, typeof r?.motivo === 'string' ? r.motivo : 'migraciones_aplicadas() no devolvió el registro');
     }
-    return cotejar(ultimaMigracionAplicada(r.filas as Array<{ nombre?: unknown }>), codigo);
+    const filas = r.filas as Array<{ nombre?: unknown }>;
+    return cotejar(ultimaMigracionAplicada(filas), codigo, undefined, prefijosAplicados(filas));
   } catch (e) {
-    return cotejar(null, codigo, `migraciones_aplicadas() lanzó: ${e instanceof Error ? e.message : String(e)}`);
+    logger.error('health.migracion_rpc_excepcion', { err: e instanceof Error ? e.message : String(e) });
+    return cotejar(null, codigo, 'migraciones_aplicadas() lanzó: no se pudo leer el registro de migraciones de la base.');
   }
 }

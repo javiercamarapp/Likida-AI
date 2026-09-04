@@ -78,9 +78,11 @@ const CHOFER = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1' };
 /** El caso común: no hay pendiente, hay jefe, todo se puede leer. */
 function baseFeliz() {
   respuestas = {
-    'incidencia.select:id, monto_estimado, evidencia_path, gasto_id': { data: [], error: null },
+    'incidencia.select:id, monto_estimado, evidencia_path, gasto_id, avisada_jefe_en': { data: [], error: null },
     'operador.select:nombre': { data: { nombre: 'Juan Pérez' }, error: null },
     'viaje.select:folio': { data: { folio: 'VJ-2026-0847' }, error: null },
+    // El sello de `avisarAlJefe` tras un envío exitoso (agentico.md:455).
+    'incidencia.update': { error: null },
   };
   telefonoJefeDe.mockResolvedValue('5215550000009');
   sendButtons.mockResolvedValue('wamid.BTN');
@@ -197,7 +199,7 @@ describe('atenderTalachaChofer — abrir la solicitud', () => {
 
   it('con la base caída NO se crea a ciegas: fallar cerrado y decirlo', async () => {
     respuestas = {
-      'incidencia.select:id, monto_estimado, evidencia_path, gasto_id': { data: null, error: { message: 'boom' } },
+      'incidencia.select:id, monto_estimado, evidencia_path, gasto_id, avisada_jefe_en': { data: null, error: { message: 'boom' } },
     };
     const r = await atenderTalachaChofer({ ...CHOFER, texto: 'talacha', monto: null });
     expect(crearIncidencia).not.toHaveBeenCalled();
@@ -208,8 +210,9 @@ describe('atenderTalachaChofer — abrir la solicitud', () => {
 describe('atenderTalachaChofer — el reporte repetido NO duplica', () => {
   it('con pendiente completa, el mismo reporte contesta "ya lo tengo" sin crear ni reavisar', async () => {
     baseFeliz();
-    respuestas['incidencia.select:id, monto_estimado, evidencia_path, gasto_id'] = {
-      data: [{ id: INC, monto_estimado: 800, evidencia_path: 'ruta/x.jpg', gasto_id: 'g1' }], error: null,
+    respuestas['incidencia.select:id, monto_estimado, evidencia_path, gasto_id, avisada_jefe_en'] = {
+      data: [{ id: INC, monto_estimado: 800, evidencia_path: 'ruta/x.jpg', gasto_id: 'g1', avisada_jefe_en: '2026-08-14T10:00:00Z' }],
+      error: null,
     };
     const r = await atenderTalachaChofer({ ...CHOFER, texto: 'se me ponchó una llanta, son 800', monto: 800 });
     expect(crearIncidencia).not.toHaveBeenCalled();
@@ -219,7 +222,7 @@ describe('atenderTalachaChofer — el reporte repetido NO duplica', () => {
 
   it('el monto que llega DESPUÉS completa la pendiente y se le reenvía al jefe con cifra', async () => {
     baseFeliz();
-    respuestas['incidencia.select:id, monto_estimado, evidencia_path, gasto_id'] = {
+    respuestas['incidencia.select:id, monto_estimado, evidencia_path, gasto_id, avisada_jefe_en'] = {
       data: [{ id: INC, monto_estimado: null, evidencia_path: null, gasto_id: null }], error: null,
     };
     respuestas['incidencia.update'] = { error: null };
@@ -236,8 +239,9 @@ describe('atenderTalachaChofer — el reporte repetido NO duplica', () => {
 
   it('la foto que llega después deja su evidencia sin pisar el monto ya reportado', async () => {
     baseFeliz();
-    respuestas['incidencia.select:id, monto_estimado, evidencia_path, gasto_id'] = {
-      data: [{ id: INC, monto_estimado: 800, evidencia_path: null, gasto_id: null }], error: null,
+    respuestas['incidencia.select:id, monto_estimado, evidencia_path, gasto_id, avisada_jefe_en'] = {
+      data: [{ id: INC, monto_estimado: 800, evidencia_path: null, gasto_id: null, avisada_jefe_en: '2026-08-14T10:00:00Z' }],
+      error: null,
     };
     respuestas['incidencia.update'] = { error: null };
     const r = await atenderTalachaChofer({
@@ -247,6 +251,72 @@ describe('atenderTalachaChofer — el reporte repetido NO duplica', () => {
     // El monto YA reportado (800) manda: el 999 posterior no lo pisa.
     expect(upd?.payload).toEqual({ evidencia_path: 'comp/foto.jpg', gasto_id: 'g7' });
     expect(r).toContain('evidencia');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 25 (ALTO, agentico.md:455, REINCIDENTE de la 24) — «tu jefe ya
+// tiene la solicitud» NO se afirma sin comprobarlo. `avisada_jefe_en` NULL en
+// la pendiente es la prueba de que el primer aviso nunca llegó: el turno
+// siguiente reintenta en vez de reafirmar una entrega que nunca pasó.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('atenderTalachaChofer — el aviso al jefe que falló se reintenta, nunca se da por hecho', () => {
+  it('reporte repetido sin nada nuevo, pero el aviso ANTERIOR falló: se reintenta y esta vez sí llega', async () => {
+    baseFeliz();
+    respuestas['incidencia.select:id, monto_estimado, evidencia_path, gasto_id, avisada_jefe_en'] = {
+      // avisada_jefe_en ausente == NULL: el primer intento nunca se selló.
+      data: [{ id: INC, monto_estimado: 800, evidencia_path: 'ruta/x.jpg', gasto_id: 'g1' }], error: null,
+    };
+    const r = await atenderTalachaChofer({ ...CHOFER, texto: 'se me ponchó una llanta, son 800', monto: 800 });
+    expect(crearIncidencia).not.toHaveBeenCalled();
+    // Se reintenta de VERDAD — no se asume.
+    expect(sendButtons).toHaveBeenCalledTimes(1);
+    // Y el sello queda escrito para que el turno de después no vuelva a dudar.
+    const sello = escrituras.find((e) => e.clave === 'incidencia.update'
+      && typeof e.payload === 'object' && e.payload !== null && 'avisada_jefe_en' in (e.payload as object));
+    expect(sello).toBeDefined();
+    expect(r).toContain('ahora sí le llegó');
+    expect(r).not.toContain('Ya tengo anotada esa avería y tu jefe tiene la solicitud 👍');
+  });
+
+  it('reporte repetido sin nada nuevo, y el reintento TAMBIÉN falla: se dice la verdad, no "ya la tiene"', async () => {
+    baseFeliz();
+    sendButtons.mockResolvedValue(null);
+    respuestas['incidencia.select:id, monto_estimado, evidencia_path, gasto_id, avisada_jefe_en'] = {
+      data: [{ id: INC, monto_estimado: 800, evidencia_path: 'ruta/x.jpg', gasto_id: 'g1' }], error: null,
+    };
+    const r = await atenderTalachaChofer({ ...CHOFER, texto: 'se me ponchó una llanta, son 800', monto: 800 });
+    expect(r).toContain('SIGO sin poder avisarle a tu jefe');
+    expect(r).not.toContain('tu jefe tiene la solicitud');
+  });
+
+  it('la evidencia llega después del monto, pero el aviso con monto nunca se entregó: se reintenta, no se afirma', async () => {
+    baseFeliz();
+    respuestas['incidencia.select:id, monto_estimado, evidencia_path, gasto_id, avisada_jefe_en'] = {
+      // monto ya puesto, avisada_jefe_en NULL: el aviso con la cifra falló.
+      data: [{ id: INC, monto_estimado: 800, evidencia_path: null, gasto_id: null }], error: null,
+    };
+    respuestas['incidencia.update'] = { error: null };
+    const r = await atenderTalachaChofer({
+      ...CHOFER, texto: 'talacha, son 800', monto: 800, evidenciaPath: 'comp/foto.jpg', gastoId: 'g7',
+    });
+    expect(sendButtons).toHaveBeenCalledTimes(1);
+    expect(r).toContain('ahora sí le llegó la solicitud');
+    expect(r).not.toContain('Tu jefe ya tiene la solicitud — en cuanto decida te aviso.');
+  });
+
+  it('la evidencia llega y el reintento del aviso TAMBIÉN falla: se dice la verdad', async () => {
+    baseFeliz();
+    sendButtons.mockResolvedValue(null);
+    respuestas['incidencia.select:id, monto_estimado, evidencia_path, gasto_id, avisada_jefe_en'] = {
+      data: [{ id: INC, monto_estimado: 800, evidencia_path: null, gasto_id: null }], error: null,
+    };
+    respuestas['incidencia.update'] = { error: null };
+    const r = await atenderTalachaChofer({
+      ...CHOFER, texto: 'talacha, son 800', monto: 800, evidenciaPath: 'comp/foto.jpg', gastoId: 'g7',
+    });
+    expect(r).toContain('SIGO sin poder avisarle a tu jefe');
+    expect(r).not.toContain('Tu jefe ya tiene la solicitud');
   });
 });
 

@@ -32,6 +32,20 @@ describe('/login no se autoregistra ni se queda sin límite', () => {
     expect(PAGINA).toMatch(/dentroDelLimite\('login:email'\)/);
   });
 
+  // AUDITORÍA 25, SEGURIDAD (ALTO, línea 181, REINCIDENTE). El default de
+  // `rateLimit` es fail-CERRADO ante un blip de Upstash (SEG-4, auditoría
+  // 24) — correcto para casi todo, pero `/login` es la ÚNICA vía de entrada
+  // al panel: un blip de Redis, sin válvula de escape, negaba TODOS los
+  // intentos (Google y correo) para TODO el mundo, no solo al que se pasó
+  // del límite. `OpcionesRateLimit.fallaCerrado: false` ya existe para
+  // esto —degrada al Map local en vez de negar— y ningún llamador del repo
+  // lo usaba (`grep -rn fallaCerrado src/` fuera de ratelimit.ts y su
+  // prueba: cero). `dentroDelLimite` es el único punto por el que pasan los
+  // dos caminos de login; pasar la opción ahí cierra los dos de una vez.
+  it('con Redis caído, login degrada al límite local en vez de negar TODO intento (válvula de escape)', () => {
+    expect(PAGINA).toMatch(/fallaCerrado:\s*false/);
+  });
+
   it('la decisión enviado/error pasa por respuestaOtp y el piso de tiempo (M24)', () => {
     // Si esto se rompe, /login vuelve a ser un oráculo para enumerar qué
     // correos son contralores reales. La regla vive en `respuesta_otp.ts`

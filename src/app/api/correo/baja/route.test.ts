@@ -11,6 +11,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const suprimirCorreo = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/likida/agentes/enviador', () => ({ suprimirCorreo: (...a: unknown[]) => suprimirCorreo(...a) }));
+// AUDITORÍA 25 (ALTO): el POST ahora también borra los datos de persona del
+// prospecto que pidió la baja — mockeado aquí porque este archivo prueba el
+// contrato de la RUTA (quién puede suprimir), no el borrado en sí, que ya
+// tiene su propia batería en `respuesta_campana.test.ts`.
+const borrarDatosPersonaPorBajaPorCorreo = vi.fn(async (..._a: unknown[]) => {});
+vi.mock('@/lib/correo/respuesta_campana', () => ({
+  borrarDatosPersonaPorBajaPorCorreo: (...a: unknown[]) => borrarDatosPersonaPorBajaPorCorreo(...a),
+}));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const { GET, POST } = await import('./route');
@@ -20,6 +28,7 @@ const envAntes = process.env.LIKIDA_BAJA_SECRET;
 beforeEach(() => {
   process.env.LIKIDA_BAJA_SECRET = 'secreto-de-prueba-de-la-ruta';
   suprimirCorreo.mockClear();
+  borrarDatosPersonaPorBajaPorCorreo.mockClear();
 });
 afterEach(() => {
   if (envAntes === undefined) delete process.env.LIKIDA_BAJA_SECRET;
@@ -54,18 +63,20 @@ describe('GET — la tarjeta de confirmación, NUNCA suprime', () => {
 });
 
 describe('POST — la única vía que de verdad suprime', () => {
-  it('con token válido, suprime EXACTAMENTE ese correo y responde 200', async () => {
+  it('con token válido, suprime EXACTAMENTE ese correo, BORRA sus datos de persona y responde 200', async () => {
     const token = firmarBaja('prospecto@flota.mx')!;
     const r = await POST(new Request(url('prospecto@flota.mx', token), { method: 'POST' }));
     expect(r.status).toBe(200);
     expect(suprimirCorreo).toHaveBeenCalledWith('prospecto@flota.mx', expect.any(String));
+    expect(borrarDatosPersonaPorBajaPorCorreo).toHaveBeenCalledWith('prospecto@flota.mx');
   });
 
-  it('con token de OTRO correo, no suprime nada', async () => {
+  it('con token de OTRO correo, no suprime ni borra nada', async () => {
     const token = firmarBaja('uno@x.mx')!;
     const r = await POST(new Request(url('otro@x.mx', token), { method: 'POST' }));
     expect(r.status).toBe(400);
     expect(suprimirCorreo).not.toHaveBeenCalled();
+    expect(borrarDatosPersonaPorBajaPorCorreo).not.toHaveBeenCalled();
   });
 
   it('con token tocado, no suprime nada', async () => {

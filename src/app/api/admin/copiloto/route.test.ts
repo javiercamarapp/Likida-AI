@@ -30,6 +30,11 @@ vi.mock('@/lib/auth/mfa', () => ({
   exigirAal2SiHayFactor: () => stepUp(),
   MSG_STEP_UP: 'Esta acción exige tu segundo factor',
   MSG_MFA_NO_VERIFICABLE: 'No pude comprobar tu segundo factor',
+  // SEG-3 (auditoría 24) vía `@/lib/auth/api-superadmin` (auditoría 25, línea
+  // 166): apagada por default, igual que en el resto de la suite — estas
+  // pruebas no ejercitan esa palanca, solo el step-up de la acción.
+  mfaSuperadminObligatorio: () => false,
+  veredictoMfaSuperadmin: async () => 'ok',
 }));
 
 const ejecutarAccionCopiloto = vi.fn(async (..._a: unknown[]) => ({ ok: true, mensaje: 'hecho' }));

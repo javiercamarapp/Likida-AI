@@ -264,6 +264,48 @@ export const MEDIOS_ELECTRONICOS_PEAJE = ['03', '04', '05', '06', '28', '29'] as
  */
 export const SENAL_BAR = /\b(bar|bares|cantina|cervecer[ií]a|pulquer[ií]a|antro|cabaret|table\s*dance|vinos\s+y\s+licores)\b/i;
 
+/**
+ * AUDITORÍA 25 (REAUDITORÍA), FIS-REAUD-2: el umbral de `renglones_ajenos` de
+ * abajo, con NOMBRE, para que `fiscal.ts` (y la migración de la RPC agregada
+ * que alimenta el panel) lo IMPORTEN y lo pasen a SQL como parámetro en vez
+ * de escribir su propio 0.15 — la misma disciplina que ya sigue
+ * `MEDIOS_LISR_27_III` y `medioNoAdmitidoCombustible` en este archivo. Un
+ * umbral duplicado que se mueve aquí y no allá es la clase exacta de "dos
+ * cálculos" que este dominio no puede permitirse.
+ */
+export const UMBRAL_RENGLONES_AJENOS = 0.15;
+
+/** El RFC de "público en general" del SAT — capturarlo es lo mismo que no
+ *  haber capturado un RFC real. */
+export const RFC_GENERICO = 'XAXX010101000';
+
+/** El mismo normalizador de RFC que usa la comparación de receptor de abajo:
+ *  mayúsculas, sin acentos, sin espacios. Exportado para que `fiscal.ts`
+ *  compare el RFC del receptor contra el MISMO criterio (RE-AUDITORÍA 25,
+ *  FIS-REAUD-2) sin reinventar la normalización. */
+export function normalizarRfc(r: string): string {
+  return strip_accents(r.toUpperCase().replace(/\s/g, ''));
+}
+
+/**
+ * Los RFC de la flota que SÍ sirven para comparar contra el receptor de un
+ * CFDI — extraído de `cuadrarViaje` (RE-AUDITORÍA 25, FIS-REAUD-2) para que
+ * `fiscal.ts` compare el mismo conjunto en vez de reinventar el filtro:
+ * descarta vacíos, el genérico del SAT y cualquiera que no pase el dígito
+ * verificador. Vacío = ningún RFC utilizable (sin capturar, o capturado pero
+ * inválido/genérico) — `cuadrarViaje` distingue esos dos casos con
+ * `empresaRfc` aparte; este conjunto por sí solo no lo dice.
+ */
+export function rfcsUtilizablesDe(empresaRfc: string | undefined, rfcsAdicionales: string[] | undefined): Set<string> {
+  return new Set(
+    [empresaRfc, ...(rfcsAdicionales ?? [])]
+      .filter(Boolean)
+      .map((r) => normalizarRfc(r as string))
+      .filter((r) => r !== RFC_GENERICO)
+      .filter((r) => esRfcValido(r) && rfcChecksumOk(r)),
+  );
+}
+
 /** ¿El ticket de alimentación parece un bar? Mira la razón social y el producto leídos del papel. */
 export function pareceBar(g: Pick<Gasto, 'concepto' | 'ocrExtra'>): boolean {
   if (g.concepto !== 'alimentacion') return false;
@@ -277,7 +319,7 @@ export const LECTURA_RFA_29_PRORRATEO =
   'la lectura literal del "siempre que" de la regla 2.9 negaría la facilidad a TODO el combustible en efectivo ' +
   'del ejercicio — confírmela con su contador.';
 
-export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible', 'gasto_otro_ejercicio'];
+export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
 // AUDITORÍA 21, CRÍTICO (fiscal): `cfdi_efos_indeterminado` entra a
 // POR_CONFIRMAR (y a SIN_IVA_ACREDITABLE, abajo) por el mismo camino que
 // `cfdi_pendiente`. Desde que la auditoría 9 quitó —con razón— el mapeo
@@ -293,7 +335,20 @@ export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancela
 // fraude sería el falso positivo que `intake/sat.ts` documenta como peor que
 // el falso negativo. Tercer estado: ni deducible ni no-deducible, a cotejar el
 // listado del DOF a mano.
-export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'cfdi_efos_indeterminado', 'consumo_bar', 'ticket_monedero', 'renglones_ajenos', 'medio_pago_no_admitido'];
+//
+// AUDITORÍA 25, ALTO FISCAL (fiscal.md línea 282): `gasto_otro_ejercicio`
+// entra aquí, no a NO_DEDUCIBLE_ISR. El propio repo declara la diferencia
+// como CALIDAD DEL DATO —"la fecha, no un veredicto de qué norma exacta rige
+// el periodo fiscal" (`normas/por_diferencia.ts:113`)— y no tiene ficha, pero
+// emitía el veredicto MÁS CARO del motor: «No deducible $X.00» en rojo sobre
+// un CFDI que sí es deducible, solo que en OTRO ejercicio. El motor no puede
+// afirmar la deducción (no es de este año) ni negarla de plano (si es real y
+// a tiempo, el contador la toma en el ejercicio correcto) — el tercer estado
+// de siempre. Sigue SIN entrar a SIN_IVA_ACREDITABLE (abajo): eso es
+// deliberado y no cambia con este hallazgo — LIVA 5-I exige acreditar "en la
+// proporción en que las erogaciones sean deducibles", y la proporción de ESTE
+// ejercicio sigue siendo cero.
+export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'cfdi_efos_indeterminado', 'consumo_bar', 'ticket_monedero', 'renglones_ajenos', 'medio_pago_no_admitido', 'gasto_otro_ejercicio'];
 
 // ── AUDITORÍA 22, FIS-C2 (CRÍTICO): DOS PREGUNTAS, DOS LISTAS ─────────────
 // Esto era UNA lista para dos preguntas distintas —«¿acredita IVA?» y
@@ -528,10 +583,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     });
   }
 
-  const norm = (r: string) => strip_accents(r.toUpperCase().replace(/\s/g, ''));
-  // RFC genérico del SAT: si el tenant no capturó su RFC real, NO se valida el
-  // receptor (evita marcar toda factura como "no es de la empresa"). AL-6.
-  const RFC_GENERICO = 'XAXX010101000';
+  const norm = normalizarRfc;
   // Un RFC de empresa MAL FORMADO es un dato que falta, no un dato contra el que
   // comparar. El tenant de demo traía 'TIN010101AAA' —falla el dígito
   // verificador, lo rechaza nuestro propio validador— y `getConfig` lo mete en
@@ -540,13 +592,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // receptor no fuera él salía `rfc_receptor` → NO DEDUCIBLE. Enseñar un CFDI
   // real en una demostración y que el sistema lo declare no deducible es peor
   // que no validar. Se descartan igual que el genérico.
-  const rfcsOk = new Set(
-    [input.empresaRfc, ...(input.rfcsAdicionales ?? [])]
-      .filter(Boolean)
-      .map((r) => norm(r as string))
-      .filter((r) => r !== RFC_GENERICO)
-      .filter((r) => esRfcValido(r) && rfcChecksumOk(r)),
-  );
+  const rfcsOk = rfcsUtilizablesDe(input.empresaRfc, input.rfcsAdicionales);
   // "No hay RFC configurado" y "hay uno y no sirve" NO son lo mismo, y tratarlos
   // igual fue una regresión mía del 28-jul: al descartar el RFC mal formado,
   // `rfcsOk` quedaba vacía, la comprobación entera se saltaba, y un CFDI de
@@ -900,7 +946,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // Un solo renglón de a peso no vale una observación: el ruido le quita
       // autoridad a la señal. El umbral es relativo al propio ticket —lo que
       // importa es qué PARTE del gasto no es del viaje, no el monto absoluto.
-      if (ajenos.length > 0 && sumaAjena > 0 && g.monto > 0 && sumaAjena / g.monto >= 0.15) {
+      if (ajenos.length > 0 && sumaAjena > 0 && g.monto > 0 && sumaAjena / g.monto >= UMBRAL_RENGLONES_AJENOS) {
         const lista = ajenos.slice(0, 4).map((r) => `${r.descripcion} ${mxn(r.importe)}`).join(', ');
         const mas = ajenos.length > 4 ? ` y ${ajenos.length - 4} más` : '';
         diferencias.push({
@@ -1648,9 +1694,12 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // multiplica por la cuota que él tenga fechada.
       //
       // El medio de pago es requisito del 4º párrafo de la LIF 20-A-IV (monedero,
-      // tarjeta, cheque nominativo o transferencia) y NO tiene la válvula del 15%
-      // que la RFA 2.9 sí concede para ISR: la facilidad salva la deducción, no
-      // el acreditamiento.
+      // tarjeta, cheque nominativo o transferencia) — AUDITORÍA 25, BAJO FISCAL
+      // (línea 347): re-verificado contra el PDF oficial de diputados.gob.mx,
+      // el párrafo existe tal cual y ahora está transcrito en
+      // `normas/lif-2026-20-A.yaml` (estimulo_diesel_transporte.texto_vigente).
+      // Y NO tiene la válvula del 15% que la RFA 2.9 sí concede para ISR: la
+      // facilidad salva la deducción, no el acreditamiento.
       // Los litros los lee el OCR del ticket y viven en `ocrExtra` (el XML del
       // CFDI no siempre trae la cantidad desglosada por concepto).
       const litros = Number((g.ocrExtra as Record<string, unknown> | undefined)?.litros ?? 0);
