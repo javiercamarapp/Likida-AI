@@ -1544,7 +1544,7 @@ async function ventanaComprobantes(
  * `filasDeducibilidad`, y por la misma razón.
  */
 type FilaImprimibleConFiscal = {
-  formaPago?: string; cfdiUuid?: string; estadoSat?: string; cfdiValido?: boolean;
+  formaPago?: string; pagadoEn?: string; cfdiUuid?: string; estadoSat?: string; cfdiValido?: boolean;
 };
 
 async function reconstruir(
@@ -1637,6 +1637,11 @@ async function reconstruir(
             folio: g.folio || undefined,
             fecha: g.fecha || undefined,
             formaPago: x.formaPago || undefined,
+            // Segunda mitad de `pagoPendiente`, igual que en `leerGastos`. Los
+            // dos caminos llenan esta misma tabla: si uno trae el campo y el
+            // otro no, la misma liquidación pinta el renglón de dos colores
+            // según un portón que el contralor no ve (auditoría 26, FE-1b).
+            pagadoEn: x.pagadoEn || undefined,
             cfdiUuid: x.cfdiUuid || undefined,
             estadoSat: x.estadoSat || undefined,
             cfdiValido: x.cfdiValido,
