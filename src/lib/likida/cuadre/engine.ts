@@ -763,12 +763,24 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
         // que no se midió". Ese gasto va a revisión con nota honesta; la
         // facilidad solo aplica con la base medida.
         const anioComprobante = g.fecha ? g.fecha.slice(0, 4) : null;
-        const mismoEjercicio = !anioComprobante || anioComprobante === input.anioEjercicio;
+        // AUDITORÍA 26 · continuación, FIS-C2c (CRÍTICO): «sin año» NO es «de
+        // este año». El numerador y el denominador del 15% son el mismo
+        // universo, y el denominador lo mide la RPC de la 0305, cuyo `where`
+        // acota `fecha` entre el 1-ene y el 31-dic: una `fecha` NULL falla las
+        // DOS comparaciones y queda fuera de `total`. Contarlo aquí arriba
+        // producía una razón que no se puede reconstruir con el total que el
+        // propio renglón imprime ($261,000 sobre $1,000,000 = 26.1%). El
+        // comprobante de OTRO ejercicio ya se abstenía; el que no trae año, del
+        // que se sabe MENOS, recibía el veredicto más tajante.
+        const mismoEjercicio = anioComprobante != null && anioComprobante === input.anioEjercicio;
         const total = input.totalCombustibleEjercicio ?? 0;
         if (!mismoEjercicio || !(total > 0)) {
           const motivo = !(total > 0)
             ? 'no se pudo calcular el total de combustible del ejercicio (el contador no respondió) — la facilidad del 15% (RFA 2026 regla 2.9) no se evaluó'
-            : `este comprobante es de ${anioComprobante} y la facilidad se mide contra el ejercicio ${input.anioEjercicio} — se revisa aparte`;
+            : anioComprobante == null
+              // El rótulo tiene que ser verdad: sin año no se puede decir «es de».
+              ? `este comprobante no trae fecha legible y la facilidad del 15% (RFA 2026 regla 2.9) se mide contra el ejercicio ${input.anioEjercicio} — se revisa aparte`
+              : `este comprobante es de ${anioComprobante} y la facilidad se mide contra el ejercicio ${input.anioEjercicio} — se revisa aparte`;
           diferencias.push({
             tipo: 'combustible_efectivo', concepto: g.concepto, monto: 0,
             nota: `${etiqueta} ${medio} — ${motivo}. No se afirma deducible ni no deducible; no acredita IEPS.`,
