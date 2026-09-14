@@ -52,20 +52,43 @@ describe('resumirDeriva — el veredicto', () => {
   });
 });
 
-// El doble de `execSync`: la firma real acepta Buffer, y la prueba solo
-// necesita la variante de texto. Se estrecha aquí para no tocar el script.
+// El doble de `correrGit`: recibe los argumentos de git como arreglo (sin
+// shell, ver el comentario de `commitsSinDesplegar`) y devuelve texto. Se
+// estrecha aquí para no tocar el script.
 const sinDesplegar = commitsSinDesplegar as (
-  desplegado: string, ref: string, ejecutar: (c: string) => string,
+  desplegado: string, ref: string, ejecutar: (args: string[]) => string,
 ) => Array<{ sha: string; asunto: string }>;
 
 describe('commitsSinDesplegar — qué le pregunta a git', () => {
   it('acota el rango a lo que CORRE: src/ y supabase/, no docs/ ni normas/', () => {
-    let cmd = '';
-    sinDesplegar('cfa00ab', 'origin/master', (c: string) => { cmd = c; return ''; });
-    expect(cmd).toContain('cfa00ab..origin/master');
-    for (const ruta of RUTAS_QUE_CORREN) expect(cmd).toContain(ruta);
-    expect(cmd).not.toContain('docs/');
-    expect(cmd).not.toContain('normas/');
+    let args: string[] = [];
+    sinDesplegar('cfa00ab', 'origin/master', (a: string[]) => { args = a; return ''; });
+    expect(args).toContain('cfa00ab..origin/master');
+    for (const ruta of RUTAS_QUE_CORREN) expect(args).toContain(ruta);
+    expect(args).not.toContain('docs/');
+    expect(args).not.toContain('normas/');
+  });
+
+  // El ref entra por `process.argv` y, en el workflow, sale de un `curl` a
+  // `/api/health`: es entrada externa. Si viajara dentro de una cadena para el
+  // shell, `a;rm -rf /` sería una inyección de comandos — la clase que CodeQL
+  // marca en `security-and-quality`. Con argumentos sueltos no hay shell que
+  // interprete nada: el ref raro llega ENTERO como un argumento más y git lo
+  // rechaza por inválido.
+  it('los refs viajan como ARGUMENTOS, nunca dentro de una cadena para el shell', () => {
+    let args: string[] = [];
+    sinDesplegar('a;rm -rf /', 'origin/master', (a: string[]) => { args = a; return ''; });
+    expect(args, 'el ref con `;` tiene que llegar entero, no partido en dos comandos')
+      .toContain('a;rm -rf /..origin/master');
+    expect(Array.isArray(args)).toBe(true);
+  });
+
+  it('el script no le pasa una cadena al shell: usa execFileSync con argumentos', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('scripts/ci/deriva-sin-desplegar.mjs', 'utf8');
+    expect(src).toContain('execFileSync');
+    expect(src, 'un `execSync` con plantilla es la inyección que este arreglo quitó')
+      .not.toMatch(/execSync\(`/);
   });
 
   it('parsea sha y asunto con el separador de unidad (un asunto con | no lo rompe)', () => {

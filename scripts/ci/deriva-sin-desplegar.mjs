@@ -19,11 +19,14 @@
 // no cambian»)— pero deja de ser silencioso: el resumen de la mañana nombra
 // los commits, para que «no desplegué» sea una decisión y no un descubrimiento.
 // ═══════════════════════════════════════════════════════════════════════════
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 /** Las rutas cuyo contenido CORRE en producción. `docs/`, `normas/` y los
  *  workflows no cambian lo que el contralor ve en pantalla. */
 export const RUTAS_QUE_CORREN = ['src/', 'supabase/'];
+
+/** `git` con argumentos sueltos y sin shell. */
+const correrGit = (args) => execFileSync('git', args, { encoding: 'utf8' });
 
 /**
  * El veredicto, puro y testeable: a partir de los commits que master tiene y
@@ -52,12 +55,20 @@ export function resumirDeriva(commits) {
   };
 }
 
-/** Los commits que `ref` tiene y `desplegado` no, acotados a lo que corre. */
-export function commitsSinDesplegar(desplegado, ref = 'HEAD', ejecutar = execSync) {
-  const salida = ejecutar(
-    `git log --format='%H%x1f%s' ${desplegado}..${ref} -- ${RUTAS_QUE_CORREN.join(' ')}`,
-    { encoding: 'utf8' },
-  );
+/**
+ * Los commits que `ref` tiene y `desplegado` no, acotados a lo que corre.
+ *
+ * `execFileSync` con ARGUMENTOS, nunca una plantilla para el shell: los dos
+ * refs entran por `process.argv` y, en el workflow, `$version` sale de un
+ * `curl` a `/api/health` — o sea que son entrada externa. Interpolarlos en una
+ * cadena que pasa por `sh` es inyección de comandos, y CodeQL
+ * (`security-and-quality`) lo marca con razón. Sin shell no hay nada que
+ * escapar: un ref con `;` o con comillas es un ref inválido y git lo rechaza.
+ */
+export function commitsSinDesplegar(desplegado, ref = 'HEAD', ejecutar = correrGit) {
+  const salida = ejecutar([
+    'log', '--format=%H%x1f%s', `${desplegado}..${ref}`, '--', ...RUTAS_QUE_CORREN,
+  ]);
   return salida.split('\n').filter(Boolean).map((linea) => {
     const i = linea.indexOf('\x1f');
     return { sha: linea.slice(0, i), asunto: linea.slice(i + 1) };
