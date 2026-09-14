@@ -40,12 +40,27 @@ const { BotonEjecutar } = await import('./controles');
 
 function acuse(resumen: ResumenBarrido): string {
   estadoFingido = { resumen };
-  const html = renderToStaticMarkup(
+  return renderToStaticMarkup(
     <BotonEjecutar ejecutarAhora={async () => null} pendientes={resumen.revisadas + resumen.cortadosPorReloj} />,
   );
-  // El acuse se lee como lo lee una persona: sin etiquetas y sin `&nbsp;`.
-  return html.replace(/<[^>]+>/g, '').replace(/&#x27;|&quot;/g, '').replace(/\s+/g, ' ');
 }
+
+/**
+ * La cifra tal como sale renderizada, con sus fronteras de etiqueta: el acuse
+ * pinta cada número dentro de su propio `<span>`, así que `>1000<` distingue
+ * la cifra impresa de un `1000` que apareciera en un nombre de clase.
+ *
+ * Antes esto quitaba las etiquetas con `/<[^>]+>/g` y comparaba texto pelado.
+ * Se cambió por dos razones, y la segunda NO es la que parecía:
+ *   · `toContain('3')` sobre texto pelado casa con cualquier 3 de la página
+ *     —el de un `text-[12px]` incluido—, así que afirmaba menos de lo que
+ *     aparentaba;
+ *   · se investigó como candidato al rojo de CodeQL en este PR y **quedó
+ *     descartado**: ese mismo patrón vive desde antes en `investigador.ts`,
+ *     `respuesta_campana.ts` y `scripts/cosecha/*.mjs`, sobre corridas verdes.
+ *     No es el hallazgo.
+ */
+const cifra = (n: number) => `>${n}<`;
 
 const VACIA: ResumenBarrido = {
   revisadas: 0, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 0, cortadosPorReloj: 0,
@@ -58,7 +73,7 @@ describe('acuse del barrido de peajes — el corte por reloj no se puede leer co
       texto,
       'decirle «no había nada» a un contralor con mil líneas sin conciliar es la cifra inventada que el producto prohíbe',
     ).not.toContain('No había nada pendiente');
-    expect(texto).toContain('1000');
+    expect(texto).toContain(cifra(1000));
   });
 
   it('con la cola de verdad vacía sigue diciéndolo tal cual', () => {
@@ -69,8 +84,8 @@ describe('acuse del barrido de peajes — el corte por reloj no se puede leer co
     const texto = acuse({
       revisadas: 3, conciliadas: 1, candidatosRefrescados: 1, siguenPendientes: 2, cortadosPorReloj: 997,
     });
-    expect(texto).toContain('3');
-    expect(texto).toContain('997');
+    expect(texto).toContain(cifra(3));
+    expect(texto).toContain(cifra(997));
     expect(texto).not.toContain('No había nada pendiente');
   });
 });
