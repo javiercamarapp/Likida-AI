@@ -31,3 +31,34 @@ Una línea por acción, escrita mientras avanza.
 | 12:31 | **Hallazgo nuevo** salido del intento: `pdfEstadoDe` es insegura y `processor.ts:1192` ya la usa **en producción** | propuesto, no tocado: arreglarlo cambia el contrato de `sendDocument` (4 emisores) |
 | 12:34 | `tablero.html` + captura | primera captura **truncada** a 2,560 px → recapturada a 3,600 px; mirada: 12 rubros, suma 57, global 4.8 |
 | 12:40 | `00-SINTESIS.md` y `RESULTADO.md` | cierre |
+
+---
+
+# Continuación — 14-sep-2026 (misma rama, mismo PR #462)
+
+| Hora (UTC) | Acción | Resultado |
+|---|---|---|
+| 10:56 | `list_pull_requests(open)` vía MCP (no hay `gh` en esta imagen) | **PR #462 abierto**, rama `claude/auditoria-31` → **RONDA DE CONTINUACIÓN** por regla, no ronda nueva |
+| 10:56 | `git log 4e36c82..HEAD -- src/ supabase/ normas/` | 3 commits, todos ya dentro de la 31 → `origin/master` sigue en `4047a50`: **el código de master no se movió desde que los 12 escribieron** |
+| 10:57 | Inventario de rubros | los **12 archivos existen** → 0 auditores a relanzar por archivo faltante; 0 por código cambiado. La ronda vale por el **presupuesto de arreglo**, no por auditar de nuevo |
+| 10:58 | `npm ci` | exit 0 (el clon de la nube no traía `node_modules`) — INFRA de la corrida, no fallo |
+| 11:07 | Compuerta base | `npm test` **984 / 12,939 pasan / 6 saltadas**, exit 0 · `tsc` exit 0 · `lint` 0 errores / 154 avisos. Idéntica a la del cierre de la 31 → confirma árbol sin cambios |
+| 11:05 | **Verificado con comando, sigue vivo hoy:** los arreglos de la 30 están en `master` y **no en producción** | último `[deploy]` en asunto = `cfa00ab` (10-sep); `git diff --stat cfa00ab..origin/master -- src/ supabase/` = `cuadre/desde_db.ts` + `sat_descarga/ciclo.ts` (+3 tests). Segundo día consecutivo |
+| 11:10 | **REN-31-C1 verificado** abriendo `route.ts:58`, `asistencia_escalamiento.ts:200-360`, `presupuesto.ts:399` | reproducido: `venceEn + 91.5 s = 186.5 s` contra `maxDuration = 120`. Las 2 pruebas nuevas **rojas** (`expected 1789384420984 to be less than or equal to 1789384349484`) |
+| 11:12 | Arreglo REN-31-C1 → 31/31 verdes en sus dos archivos | margen derivado + `acotada()` en el `select` de `viaje` |
+| 11:14 | **Mutación en los dos sentidos** | literal `15` de vuelta → 2 rojas; sin `acotada()` → 1 roja. Restaurado, 31/31 |
+| 11:20 | `npm test` completo + `tsc` + `lint` + `ratchet` | 984 / **12,943** pasan, exit 0 · tsc 0 · 0 errores · 0 nuevos |
+| 11:21 | **`f4fde69`** — arreglo de REN-31-C1 retenido | commit atómico, un solo hallazgo. **Vuelta 1 de 3** |
+| 11:23 | **REN-30-C1 verificado** en `consolidado.ts:749-912` y `peajes/page.tsx:225` | cero `Date.now()` en el bucle; el hermano `cobranza/page.tsx:117` sí presta reloj. 3 pruebas nuevas **rojas** |
+| 11:26 | Arreglo REN-30-C1 → 13/13 verdes | `venceEn` + `cortadosPorReloj`; `revisadas` pasa a contarse. 7 aserciones viejas actualizadas al contrato nuevo |
+| 11:28 | **Mutación** (`if (false)` en el chequeo de reloj) | 2 de 3 rojas → la prueba muerde. Restaurado |
+| 11:30 | `npm test` completo | 984 / **12,946** pasan, exit 0 |
+| 11:31 | **`54bddb2`** — arreglo de REN-30-C1 retenido | **Vuelta 2 de 3** |
+| 11:34 | **OP-A6 reproducido con la historia real** | `git log cfa00ab..origin/master -- src/ supabase/` → `5ce91b2`, el merge de la 30 con los dos archivos fiscales. El cotejo viejo sale 0 sobre exactamente eso |
+| 11:36 | Prueba de cableado **roja** antes del paso nuevo | `expected '# El consumidor de /api/health…' to contain 'deriva-sin-desplegar.mjs'` |
+| 11:40 | Arreglo OP-A6 → 8/8 verdes; YAML validado con `yaml.safe_load` | el detector corrido contra la historia real nombra `5ce91b2` |
+| 11:44 | `npm test` completo + `tsc` + `lint` + `ratchet` | **985** archivos / **12,954** pasan / 6 saltadas, exit 0 · tsc 0 · 0 errores / 154 avisos · 0 nuevos |
+| 11:45 | **`30e5e14`** — arreglo de OP-A6 retenido | **Vuelta 3 de 3 — tope de presupuesto gastado** |
+| 11:47 | `MAPA-continuacion.md`, **neutral por diseño** | cumple la acción de cierre de la 31: ninguna frase sugiere dirección para las notas; se pide un número contable detrás de cada movimiento |
+| 11:48 | 2 auditores relanzados en un solo mensaje | **rendimiento** y **operabilidad** — los únicos dos rubros cuyo código cambió. Escriben `<rubro>-continuacion.md`; el archivo de la 31 se conserva para leer el delta |
+| 11:05 | **Dato de entorno nuevo, sin confirmar:** hay binarios de PostgreSQL 16 (`/usr/lib/postgresql/16`) y `docker` en la imagen, sin servidor corriendo | las rondas anteriores asumieron que `supabase/tests/*.sql` no se podía correr en la nube. Queda como lead para la 32, no como hecho |
