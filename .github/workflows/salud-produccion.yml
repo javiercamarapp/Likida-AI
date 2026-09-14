@@ -157,6 +157,27 @@ jobs:
             exit 1
           fi
 
+      # ── OP-A6 (auditoría 31, ALTO), SOLO MEDIR Y AVISAR ─────────────────
+      # El paso de arriba pregunta por la INTENCIÓN: «¿aterrizó lo último que
+      # se pidió publicar?». Con eso, producción puede quedarse arbitrariamente
+      # atrás de master mientras nadie pida un deploy, y el pulso sale verde.
+      # Ya pasó con el camino del dinero: `5ce91b2` (12-sep-2026, asunto sin
+      # `[deploy]`) trae `cuadre/desde_db.ts` —el cubo del 15 %, $90,600
+      # impresos donde lo correcto son $95,300— y siete corridas seguidas
+      # salieron `success`.
+      #
+      # Este paso pregunta por el ESTADO. No falla el job: quedarse atrás a
+      # propósito es el flujo que CLAUDE.md documenta. Solo deja de ser
+      # silencioso.
+      - name: Deriva de código sin publicar (aviso, no bloquea)
+        if: always() && github.event_name != 'push'
+        run: |
+          set -u
+          version=$(curl -sS --max-time 20 https://app.likida.ai/api/health | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+          if [ -z "$version" ] || [ "$version" = "local" ]; then echo "Sin versión publicada: el paso anterior ya lo reportó."; exit 0; fi
+          if ! git rev-parse --verify --quiet "${version}^{commit}" >/dev/null; then echo "El sha desplegado no está en master: el paso anterior ya lo reportó."; exit 0; fi
+          node scripts/ci/deriva-sin-desplegar.mjs "$version" origin/master
+
       # ── OP-A2 (auditoría 28, ALTO), SOLO MEDIR Y AVISAR ─────────────────
       # El `cron: '*/30 * * * *'` de arriba es lo DECLARADO. GitHub degrada
       # los `schedule` bajo carga y no garantiza esa cadencia: la auditoría
