@@ -301,8 +301,13 @@ async function escalarUna(inc: IncidenciaEscalable, ahora: Date): Promise<'sin_c
     try {
       let operadorId = inc.operadorId;
       if (!operadorId && inc.viajeId) {
-        const { data: v } = await supabaseAdmin().from('viaje').select('operador_id')
-          .eq('id', inc.viajeId).eq('tenant_id', inc.tenantId).maybeSingle();
+        // REN-31-C1: esta era la única consulta de la cadena sin `acotada()` —
+        // sin techo hereda los 300 s de undici, y el margen del cron (derivado
+        // de 7 consultas + 2 envíos) es aritmética sobre un supuesto falso. Se
+        // colgaba justo en el camino de la volcadura con lesionados, después
+        // del claim, y la incidencia salía del barrido para siempre.
+        const { data: v } = await acotada(supabaseAdmin().from('viaje').select('operador_id')
+          .eq('id', inc.viajeId).eq('tenant_id', inc.tenantId).maybeSingle(), 'asistencia.operador_del_viaje');
         operadorId = (v?.operador_id as string) ?? null;
       }
       if (operadorId) contacto = await contactoSiLesionadosDe(inc.tenantId, operadorId);

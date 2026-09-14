@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { margenUnidadAtomicaMs, TECHO_PASO_CONSULTA_MS, TECHO_ENVIO_WHATSAPP_MS } from '@/lib/likida/presupuesto';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON DEL RELOJ MUERTO OBEDECE LA PALANCA DESDE SU PRIMER DÍA.
@@ -40,7 +41,7 @@ vi.mock('@/lib/observability/alerta', () => ({
 }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'codigo-prueba' }));
 
-import { GET } from './route';
+import { GET, maxDuration } from './route';
 
 const CON_SECRETO = { headers: { authorization: 'Bearer secreto-de-prueba' } };
 const URL_CRON = 'https://likida.ai/api/cron/asistencia';
@@ -95,5 +96,72 @@ describe('cron asistencia — kill switch y contrato de fallo', () => {
     });
     await GET(new Request(URL_CRON, CON_SECRETO));
     expect(registrarLatido).toHaveBeenCalledWith('asistencia', 'parcial', expect.anything());
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RELOJ RESERVA LA UNIDAD ATÓMICA COMPLETA (REN-31-C1, auditoría 31).
+//
+// El margen era el literal `15` y la unidad que despacha vale 91.5 s: una
+// escalada admitida a 1 s de `venceEn` se muere a mitad de camino — y se muere
+// DESPUÉS del claim (`reclamarEscalacionAsistencia` escribe `nivel_escalado =
+// objetivo` antes de mandar el WhatsApp), así que la consulta del barrido
+// siguiente —`.lt('nivel_escalado', NIVEL_MAXIMO)`— ya no la lista. Un nivel 4
+// que muere ahí no se reintenta NUNCA: el dueño con un chofer lesionado no
+// recibe el aviso y no queda una fila que diga que no lo recibió.
+//
+// Es la misma lección de REN-A4/REN-A5 (auditoría 28) que `gps` y
+// `descarga-sat` ya aprendieron: el margen se DERIVA de los techos de la
+// cadena real, no se teclea. El precio es la ventana de despacho — con 120 s
+// de `maxDuration` quedan ~28.5 s para admitir trabajo, y lo que no entra cae
+// en `cortadosPorReloj` y lo agarra la corrida de 5 minutos después, que es
+// exactamente el contrato que el comentario de la ruta ya declaraba.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('cron asistencia — el reloj reserva la unidad atómica (REN-31-C1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    interruptor = 'encendido';
+  });
+
+  // La cadena más cara de `escalarUna`, contada sobre el código:
+  //   1. reclamarEscalacionAsistencia (RPC del claim)      → 1 consulta
+  //   2. polizaVigenteDe                                   → 1 consulta
+  //   3. select de `viaje` (operador_id, si falta)         → 1 consulta
+  //   4. contactoSiLesionadosDe                            → 1 consulta
+  //   5. telefonoDeRol('flota_admin')                      → 1 consulta
+  //   6. telefonoJefeDe (el dueño sin teléfono)            → 1 consulta
+  //   7. anotarEventoIncidencia                            → 1 consulta
+  //   8. sendButtons al destinatario                       → 1 envío
+  //   9. alertarOperador (nivel 4 o aviso fallido) que,
+  //      con ALERTA_WA puesto, manda WhatsApp              → 1 envío
+  //                                        TOTAL: 7 consultas, 2 envíos
+  const PEOR_CASO_ESCALADA_MS = 7 * TECHO_PASO_CONSULTA_MS + 2 * TECHO_ENVIO_WHATSAPP_MS;
+
+  it('una escalada admitida en el último instante cabe ENTERA antes del maxDuration', async () => {
+    const antes = Date.now();
+    await GET(new Request(URL_CRON, CON_SECRETO));
+
+    const opts = (escalarAsistenciasPendientes.mock.calls[0] as unknown[])[1] as { venceEn: number };
+    // El corazón del hallazgo: si el peor caso de UNA unidad no cabe entre
+    // `venceEn` y el `maxDuration`, Vercel mata la función con el claim ya
+    // quemado y sin `sendButtons`, sin `alertarOperador` y sin bitácora.
+    expect(
+      opts.venceEn + PEOR_CASO_ESCALADA_MS,
+      'una escalada que arranque justo en `venceEn` tiene que terminar antes del hachazo de Vercel',
+    ).toBeLessThanOrEqual(antes + maxDuration * 1000);
+  });
+
+  it('usa el margen DERIVADO de los techos, no un literal que se le parezca', async () => {
+    const margen = margenUnidadAtomicaMs({ consultas: 7, envios: 2 });
+    expect(margen, 'el margen derivado tiene que cubrir el peor caso de la cadena')
+      .toBeGreaterThan(PEOR_CASO_ESCALADA_MS);
+
+    const antes = Date.now();
+    await GET(new Request(URL_CRON, CON_SECRETO));
+
+    const opts = (escalarAsistenciasPendientes.mock.calls[0] as unknown[])[1] as { venceEn: number };
+    expect(opts.venceEn).toBeGreaterThanOrEqual(antes + maxDuration * 1000 - margen);
+    expect(opts.venceEn).toBeLessThanOrEqual(Date.now() + maxDuration * 1000 - margen);
   });
 });

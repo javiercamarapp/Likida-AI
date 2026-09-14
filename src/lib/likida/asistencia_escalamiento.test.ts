@@ -346,3 +346,40 @@ describe('textoEscalada — lo que cada nivel dice', () => {
     expect(t).toContain('último aviso automático');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NINGÚN PASO DE LA ESCALADA SE QUEDA SIN TECHO (REN-31-C1, auditoría 31).
+//
+// El margen de reloj del cron (`api/cron/asistencia/route.ts`) se deriva de los
+// TECHOS de esta cadena: 7 consultas y 2 envíos. Un paso sin `acotada()` no
+// tiene techo —hereda el default de undici, 300 s— y con eso el margen es
+// aritmética sobre un supuesto falso: una sola consulta colgada se come los
+// 120 s de la función DESPUÉS del claim, y la incidencia sale del barrido
+// (`.lt('nivel_escalado', NIVEL_MAXIMO)`) para siempre.
+//
+// El que se había colado: el `select` de `viaje` que busca al operador cuando
+// hay lesionados — el camino de la volcadura con heridos, justo el que menos
+// puede fallar.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('la cadena de la escalada no tiene consultas sin tope', () => {
+  it('asistencia_escalamiento.ts no llama a supabaseAdmin() en crudo', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { sinComentarios } = await import('@/lib/pruebas/codigo');
+    const src = sinComentarios(readFileSync('src/lib/likida/asistencia_escalamiento.ts', 'utf8'));
+    const crudas = [...src.matchAll(/await supabaseAdmin\(\)/g)].length;
+    expect(
+      crudas,
+      'un paso de la escalada sin `acotada()` hereda los 300 s de undici y rompe el margen ' +
+      'derivado del cron: la función muere con el claim ya escrito y la emergencia ' +
+      'desaparece del barrido.',
+    ).toBe(0);
+  });
+
+  it('y hay consultas acotadas de verdad que contar (si no, esto no vigila nada)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { sinComentarios } = await import('@/lib/pruebas/codigo');
+    const src = sinComentarios(readFileSync('src/lib/likida/asistencia_escalamiento.ts', 'utf8'));
+    expect([...src.matchAll(/acotada\(supabaseAdmin\(\)/g)].length).toBeGreaterThan(0);
+  });
+});
