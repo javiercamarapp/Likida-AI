@@ -684,6 +684,11 @@ export interface ResumenBarrido {
   candidatosRefrescados: number;
   /** Cuántas siguen esperando a un humano. */
   siguenPendientes: number;
+  /** REN-30-C1: cuántas quedaron fuera porque se acabó el reloj. El barrido es
+   *  re-entrante —lo que no entró lo toma la corrida siguiente—, pero el acuse
+   *  tiene que decirlo: sin este número, «revisé 40 líneas» sobre una cola de
+   *  1,000 se lee como que la cola está limpia. */
+  cortadosPorReloj: number;
 }
 
 /** Una fila de `cfdi_consolidado_linea` tal como la devuelve el SELECT del
@@ -746,7 +751,21 @@ function mismosCandidatos(a: CandidatoConciliacion[], b: CandidatoConciliacion[]
  * llegó después del XML JAMÁS se puede elegir a mano — el hueco que este
  * barrido existe para cerrar.
  */
-export async function barrerPorConciliar(tenantId: string): Promise<ResumenBarrido> {
+export async function barrerPorConciliar(
+  tenantId: string,
+  opts: { venceEn?: number } = {},
+): Promise<ResumenBarrido> {
+  // REN-30-C1 (auditoría 30, reincidente en la 31): este bucle recorría la cola
+  // completa —hasta 1,000 líneas, 3 consultas cada una— sin un solo chequeo de
+  // reloj, desde una Server Action que no declara `maxDuration`. Medido: 3,047
+  // viajes de red y 914 s nominales contra los 300 s que es el techo de
+  // cualquier ruta del repo. Cuando la plataforma cortaba, cortaba a media
+  // línea: el sello del gasto ya escrito, la línea sin marcar, y el contador
+  // mirando un error genérico. El patrón es el del hermano de Cobranza
+  // (`cobranza.ts`, `cobranza/page.tsx:117`): el llamador presta el reloj y el
+  // resumen dice cuántas quedaron fuera. Sin `venceEn`, infinito — el
+  // comportamiento de siempre para quien no lo pasa.
+  const venceEn = opts.venceEn ?? Number.POSITIVE_INFINITY;
   // 1) La cola completa del tenant. Error de lectura LANZA: "no hay nada que
   //    barrer" y "no pude leer la cola" llevan a acuses opuestos. El límite es
   //    explícito porque PostgREST recorta a 1,000 en silencio (CLAUDE.md); el
@@ -761,8 +780,11 @@ export async function barrerPorConciliar(tenantId: string): Promise<ResumenBarri
   if (errFilas) throw new Error(`barrerPorConciliar: ${errFilas.message}`);
 
   const pendientes = (filas ?? []) as FilaPendiente[];
+  // `revisadas` se CUENTA, no se afirma por adelantado: con el reloj de corte,
+  // decir «revisé 1,000» porque eso fue lo que se leyó de la cola sería
+  // exactamente el rótulo que no es verdad.
   const resumen: ResumenBarrido = {
-    revisadas: pendientes.length, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 0,
+    revisadas: 0, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 0, cortadosPorReloj: 0,
   };
   if (pendientes.length === 0) {
     logger.info('peajes.barrido', { tenant: tenantId, ...resumen });
@@ -822,7 +844,9 @@ export async function barrerPorConciliar(tenantId: string): Promise<ResumenBarri
     if (g) g.push(f); else grupos.set(k, [f]);
   }
 
+  let cortado = false;
   for (const [xmlId, filasGrupo] of grupos) {
+    if (cortado) break;
     filasGrupo.sort((a, b) => Number(a.indice) - Number(b.indice));
     const uuid = uuidPorXmlId.get(xmlId) ?? null;
     const resultados = conciliarLineas(filasGrupo.map(lineaDesdeFila), disponibles);
@@ -830,6 +854,15 @@ export async function barrerPorConciliar(tenantId: string): Promise<ResumenBarri
     // `conciliarLineas` devuelve un resultado por línea EN EL MISMO ORDEN, así
     // que el índice del arreglo alinea resultado con su fila de la base.
     for (let i = 0; i < resultados.length; i++) {
+      // El corte va ANTES de tocar la línea, nunca a media línea: `ligarLineaAGasto`
+      // sella el gasto y el UPDATE siguiente cierra la línea, y una muerte entre
+      // los dos deja el sello escrito sobre una línea que sigue `por_conciliar`.
+      if (Date.now() > venceEn) {
+        resumen.cortadosPorReloj = pendientes.length - resumen.revisadas;
+        cortado = true;
+        break;
+      }
+      resumen.revisadas++;
       const r = resultados[i];
       const lineaId = String(filasGrupo[i].id);
 

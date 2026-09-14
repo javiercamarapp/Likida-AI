@@ -77,6 +77,14 @@ export function BotonEjecutar({ ejecutarAhora, pendientes }: {
               <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.conciliadas}</span> contra
               gastos nuevos; refresqué candidatos de <span className="cifra-mono">{r.candidatosRefrescados}</span>;
               {' '}{r.siguenPendientes === 1 ? 'sigue' : 'siguen'} <span className="cifra-mono">{r.siguenPendientes}</span>.
+              {/* REN-30-C1: sin esta línea, «revisé 40» sobre una cola de 1,000
+                  se lee como que la cola quedó limpia. */}
+              {r.cortadosPorReloj > 0 && (
+                <>
+                  {' '}Quedaron <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.cortadosPorReloj}</span>{' '}
+                  fuera de esta pasada por tiempo: vuelve a ejecutar para seguir donde se quedó.
+                </>
+              )}
             </>
           )}
         </p>
