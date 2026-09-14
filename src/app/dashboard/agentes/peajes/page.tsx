@@ -236,10 +236,16 @@ export default async function PaginaAgentePeajes({
       await registrarCorrida(tenantId, 'peajes', {
         inicio,
         fin: new Date(),
-        estado: 'ok',
+        // REN-31C-C1: una corrida que dejó líneas fuera por reloj no es una
+        // corrida sana. Con `estado: 'ok'` fijo, la que no tocó ninguna de
+        // 1,000 quedaba archivada igual que la que barrió la cola entera —
+        // el mismo criterio que el latido `parcial` de los crons.
+        estado: resumen.cortadosPorReloj > 0 ? 'parcial' : 'ok',
         disparo: 'manual',
         tareasHechas: resumen.conciliadas,
-        tareasTotal: resumen.revisadas,
+        // El total de la corrida es lo que había, no lo que alcanzó: con el
+        // corte, `revisadas` sola reporta «0 de 0» sobre una cola llena.
+        tareasTotal: resumen.revisadas + resumen.cortadosPorReloj,
         resumen: { ...resumen },
       });
       return { resumen };
