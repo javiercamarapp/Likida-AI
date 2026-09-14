@@ -1,28 +1,34 @@
 ---
-fecha_corrida: 2026-09-12 14:09 UTC (sábado)
-ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — no se pudo barrer. Sigue pendiente para la
-  próxima corrida (arranca en 09-11, no en 09-12).
-notas_revisadas: 0 — ningún endpoint respondió.
+fecha_corrida: 2026-09-14 (lunes)
+ultimo_dia_barrido: 2026-09-10 — SIN CAMBIO respecto al latido anterior.
+rango_pendiente: 2026-09-11 al 2026-09-13 (3 días hábiles/no hábiles sin
+  barrer: jue, vie, sáb) — sigue acumulándose. Próxima corrida arranca
+  en 09-11, no en 09-14.
+notas_revisadas: 0 — ningún endpoint respondió, igual que la corrida anterior.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha no
   hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, pero el acuerdo de la
-  semana 12-18 sep (esperado el viernes 11-sep vespertina) tampoco se pudo
-  verificar por el mismo corte de red. Revisar en la próxima corrida.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+cuota_diesel: no_evaluable — el acuerdo del viernes 11-sep (vespertina) y el
+  del 18-sep (si ya salió) siguen sin verificar por el mismo corte de red.
+etag_sat: no_evaluable_hoy — HOY SÍ ERA LUNES (tocaba), pero
+  www.sat.gob.mx también fue rechazado por el proxy — mismo bloqueo.
+deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026).
 estado: >
-  INFRA — los cuatro dominios de references/fuentes.md
-  (sidofqa.segob.gob.mx, dof.gob.mx, www.sat.gob.mx, diputados.gob.mx)
-  fueron rechazados por el proxy de egreso de ESTA SESIÓN con
-  "CONNECT tunnel failed, response 403" (política de organización, no
-  caída del sitio — confirmado en
-  http://127.0.0.1:38161/__agentproxy/status: connect_rejected en los
-  cuatro). Control: github.com respondió (400, alcanzable) y google.com
-  también fue rechazado con el mismo 403 — el bloqueo es de política de
-  egreso para estos hosts, no una caída general de la red del contenedor.
+  INFRA (persistente, 2ª corrida consecutiva) — los cuatro dominios de
+  references/fuentes.md (sidofqa.segob.gob.mx, dof.gob.mx, www.sat.gob.mx,
+  diputados.gob.mx) fueron rechazados por el proxy de egreso de ESTA SESIÓN
+  con "CONNECT tunnel failed, response 403" / EGRESS_BLOCKED (confirmado
+  también vía la herramienta WebFetch, no solo curl). Verificado en
+  http://127.0.0.1:33639/__agentproxy/status: connect_rejected en los
+  cuatro, política de organización. Control: github.com respondió (400,
+  alcanzable); google.com y www.dof.gob.mx también fueron rechazados con
+  el mismo 403 — el bloqueo cubre el egreso general a estos dominios, no
+  es una caída puntual de un sitio.
+  Esta es la MISMA falla que el latido del 2026-09-12: dos corridas
+  seguidas (sáb 12-sep y lun 14-sep) sin poder tocar ningún endpoint de
+  references/fuentes.md. No es un blip transitorio — algo en la política
+  de egreso de este entorno (o del proxy de esta sesión) sigue bloqueando
+  estos hosts. Requiere intervención humana para desbloquear el dominio
+  en la configuración de red del entorno; la rutina no puede autoresolverlo.
   No se leyó ninguna nota del DOF. No se tocó ninguna ficha de normas/.
-  Sin veredicto sobre si hubo publicaciones relevantes el 11-sep
-  (viernes — la cuota de diésel suele salir ese día en vespertina).
----
+  No se hizo el HEAD al minisitio del SAT que tocaba hoy por ser lunes.
