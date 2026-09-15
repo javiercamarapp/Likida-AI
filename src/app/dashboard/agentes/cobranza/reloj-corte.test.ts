@@ -26,4 +26,24 @@ describe('Cobranza "Ejecutar ahora": reloj de corte declarado (FE-14)', () => {
     const src = leer('./controles.tsx');
     expect(src).toMatch(/r\.cortadosPorReloj/);
   });
+
+  // FE-31C2-A1: el acuse de `controles.tsx` vive en `useActionState` y se
+  // evapora con el primer `router.refresh()`. Lo DURABLE es el renglón que
+  // `registrarCorrida` escribe, y ese renglón decía «OK · 40/40» sobre una cola
+  // de 400 que el reloj cortó a los 40. El veredicto se calcula ahora en
+  // `corridaDeCobranza` (probado con valores en
+  // `lib/likida/agentes/cobranza_bitacora.test.ts`); aquí se fija que la página
+  // lo USE, porque una función correcta que nadie llama no arregla nada.
+  it('la bitácora durable deriva su estado del resultado COMPLETO, no solo de `fallos`', () => {
+    const src = leer('./page.tsx');
+    const llamada = src.slice(src.indexOf("registrarCorrida(tenantId, 'cobranza'"));
+    const fin = llamada.indexOf('});');
+    const cuerpo = llamada.slice(0, fin > 0 ? fin : undefined);
+    expect(cuerpo).toContain('corridaDeCobranza(resultado)');
+    expect(
+      cuerpo,
+      'un `estado:` literal aquí es el bug de vuelta: el veredicto se deriva, no se teclea',
+    ).not.toMatch(/\n\s*estado:/);
+    expect(cuerpo).not.toMatch(/\n\s*tareasTotal:/);
+  });
 });

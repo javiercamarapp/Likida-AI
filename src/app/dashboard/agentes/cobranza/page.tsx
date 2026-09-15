@@ -5,7 +5,7 @@ import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import {
   colaCobranza, bitacoraCobranza, leerConfigCobranza, guardarConfigCobranza,
-  ejecutarCobranza, dentroDeVentana,
+  ejecutarCobranza, dentroDeVentana, corridaDeCobranza,
 } from '@/lib/likida/agentes/cobranza';
 import { logger } from '@/lib/logger';
 import { ahoraMs } from '@/lib/saludo';
@@ -118,14 +118,17 @@ export default async function PaginaAgenteCobranza({
       ignorarVentana: true, venceEn: ahoraMs() + 25_000,
     });
     // La bitácora de corridas (B3). `registrarCorrida` nunca lanza.
+    //
+    // FE-31C2-A1: el estado y el total salen de `corridaDeCobranza`, no de
+    // `fallos` a secas. Con 400 en cola y el reloj cortando a los 40, este
+    // renglón —que es lo único durable, porque el acuse de pantalla vive en
+    // `useActionState`— decía «OK · 40/40»; y con el agente pausado entre el
+    // render y el clic, «OK · 0/0» sobre una corrida que no corrió.
     await registrarCorrida(tenantId, 'cobranza', {
       inicio,
       fin: new Date(),
-      estado: resultado.fallos.length > 0 ? 'parcial' : 'ok',
       disparo: 'manual',
-      tareasHechas: resultado.contactados,
-      tareasTotal: resultado.contactados + resultado.fallos.length,
-      resumen: { contactados: resultado.contactados, fallos: resultado.fallos.length },
+      ...corridaDeCobranza(resultado),
     });
     return { resultado };
   }
