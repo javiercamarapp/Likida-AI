@@ -170,6 +170,7 @@ jobs:
       # propósito es el flujo que CLAUDE.md documenta. Solo deja de ser
       # silencioso.
       - name: Deriva de código sin publicar (aviso, no bloquea)
+        id: deriva
         if: always() && github.event_name != 'push'
         run: |
           set -u
@@ -177,6 +178,48 @@ jobs:
           if [ -z "$version" ] || [ "$version" = "local" ]; then echo "Sin versión publicada: el paso anterior ya lo reportó."; exit 0; fi
           if ! git rev-parse --verify --quiet "${version}^{commit}" >/dev/null; then echo "El sha desplegado no está en master: el paso anterior ya lo reportó."; exit 0; fi
           node scripts/ci/deriva-sin-desplegar.mjs "$version" origin/master
+
+      # ── OP-31C-A1 (auditoría 31 cont., ALTO): EL AVISO TIENE QUE LLEGAR ──
+      # El paso de arriba mide bien y avisa en un canal que nadie lee. GitHub
+      # solo manda correo cuando un workflow programado FALLA, y ese paso tiene
+      # PROHIBIDO fallar, así que su `::warning::` muere en el log: el auditor
+      # midió que, con el detector mergeado, las 14 corridas verdes sobre el
+      # arreglo fiscal sin publicar habrían mandado CERO avisos. El 15-sep ya
+      # van tres días con `cuadre/desde_db.ts` en master y no en producción.
+      #
+      # El issue va con ETIQUETA PROPIA (`deriva-sin-desplegar`): si compartiera
+      # `salud-produccion`, el paso «Cerrar el issue al recuperarse» lo cerraría
+      # en la primera corrida verde — que es todas, porque la deriva no tumba el
+      # pulso. Un issue por episodio, sin comentar mientras siga abierto (48
+      # comentarios al día es la enfermedad que la auditoría 24 documentó), y se
+      # cierra solo cuando el detector dice que ya no hay deriva.
+      #
+      # `hay` vacío = el detector no corrió (paso saltado, o murió antes de
+      # publicar su salida). Ni abre ni cierra: la lección de OP-C2 es que solo
+      # quien comprobó el invariante puede declarar la recuperación.
+      - name: Abrir el issue de deriva sin publicar
+        if: always() && steps.deriva.outputs.hay == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          MENSAJE: ${{ steps.deriva.outputs.mensaje }}
+        run: |
+          set -u
+          abierto=$(gh issue list --label deriva-sin-desplegar --state open --json number --jq '.[0].number // empty')
+          if [ -n "$abierto" ]; then echo "Ya hay un issue abierto (#$abierto); no se duplica."; exit 0; fi
+          gh label create deriva-sin-desplegar --color FBCA04 --description 'Producción está atrás de master en src/ o supabase/' --force >/dev/null 2>&1 || true
+          gh issue create --title 'Producción está atrás de master (código sin publicar)' --label deriva-sin-desplegar --body "$(printf '%s\n\nPulso que lo detectó: %s\n\nEste issue se cierra solo cuando producción alcance a master.\n' "$MENSAJE" "$RUN_URL")"
+
+      - name: Cerrar el issue de deriva cuando producción alcanza a master
+        if: always() && steps.deriva.outputs.hay == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -u
+          for n in $(gh issue list --label deriva-sin-desplegar --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "Producción ya corre todo el código de master: $RUN_URL"
+          done
 
       # ── OP-A2 (auditoría 28, ALTO), SOLO MEDIR Y AVISAR ─────────────────
       # El `cron: '*/30 * * * *'` de arriba es lo DECLARADO. GitHub degrada

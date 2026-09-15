@@ -20,6 +20,7 @@
 // los commits, para que «no desplegué» sea una decisión y no un descubrimiento.
 // ═══════════════════════════════════════════════════════════════════════════
 import { execFileSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
 
 /** Las rutas cuyo contenido CORRE en producción. `docs/`, `normas/` y los
  *  workflows no cambian lo que el contralor ve en pantalla. */
@@ -75,6 +76,46 @@ export function commitsSinDesplegar(desplegado, ref = 'HEAD', ejecutar = correrG
   });
 }
 
+/**
+ * Los canales por los que sale el aviso, separados del veredicto para poder
+ * probarlos sin escribir en disco.
+ *
+ * OP-31C-A1 (auditoría 31, continuación, ALTO): `::warning::` pinta una
+ * anotación en la corrida y nada más. GitHub manda correo cuando un workflow
+ * programado FALLA, y este paso tiene prohibido fallar, así que el aviso moría
+ * en el log — el mismo sitio donde OP-C1 lleva seis rondas atascado. Medido por
+ * el auditor: con el detector mergeado, las 14 corridas verdes sobre el arreglo
+ * fiscal sin publicar habrían mandado CERO avisos.
+ *
+ * Dos canales que sí se leen: el RESUMEN de la corrida (se ve sin abrir el log)
+ * y, vía `$GITHUB_OUTPUT`, el ISSUE que abre el workflow — lo único que
+ * notifica de verdad. Fuera de Actions no escribe nada: correrlo en local no
+ * ensucia ningún archivo.
+ *
+ * @param {{hay: boolean, cuantos: number, mensaje: string}} r
+ * @param {Record<string, string|undefined>} env
+ * @param {(ruta: string, texto: string) => void} anexar
+ * @returns {string[]} los canales por los que salió
+ */
+export function publicarDeriva(r, env = process.env, anexar = appendFileSync) {
+  const canales = [];
+  if (env.GITHUB_STEP_SUMMARY) {
+    anexar(env.GITHUB_STEP_SUMMARY, `${r.hay ? '⚠️ ' : ''}${r.mensaje}\n`);
+    canales.push('resumen');
+  }
+  if (env.GITHUB_OUTPUT) {
+    // El formato de `$GITHUB_OUTPUT` parte por salto de línea: un mensaje
+    // multilínea sin delimitador llega cortado en la primera línea, y el issue
+    // saldría sin la lista de commits, que es justo el dato que se necesita.
+    anexar(
+      env.GITHUB_OUTPUT,
+      `hay=${r.hay ? '1' : '0'}\ncuantos=${r.cuantos}\nmensaje<<FIN_DERIVA\n${r.mensaje}\nFIN_DERIVA\n`,
+    );
+    canales.push('salida');
+  }
+  return canales;
+}
+
 // `import.meta.main` no existe en Node 22; el patrón del repo es comparar argv.
 if (process.argv[1] && process.argv[1].endsWith('deriva-sin-desplegar.mjs')) {
   const desplegado = process.argv[2];
@@ -84,6 +125,7 @@ if (process.argv[1] && process.argv[1].endsWith('deriva-sin-desplegar.mjs')) {
     process.exit(0);
   }
   const r = resumirDeriva(commitsSinDesplegar(desplegado, ref));
+  publicarDeriva(r);
   // `::warning::` y NUNCA `exit 1`: el pulso rojo está reservado para
   // producción caída o para un [deploy] que no aterrizó. Un aviso que se
   // aprende a ignorar es peor que no tenerlo (la lección de las 40 corridas

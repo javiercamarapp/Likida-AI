@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { resumirDeriva, commitsSinDesplegar, RUTAS_QUE_CORREN } from './deriva-sin-desplegar.mjs';
+import {
+  resumirDeriva, commitsSinDesplegar, publicarDeriva, RUTAS_QUE_CORREN,
+} from './deriva-sin-desplegar.mjs';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // OP-A6 (auditoría 31, ALTO) — el invariante del cotejo se tragó dos archivos
@@ -101,11 +103,110 @@ describe('commitsSinDesplegar — qué le pregunta a git', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// OP-31C-A1 (auditoría 31, continuación, ALTO) — el aviso no salía del log.
+//
+// `::warning::` pinta una anotación en la corrida y nada más. GitHub manda
+// correo cuando un workflow programado FALLA, y este paso tiene PROHIBIDO
+// fallar (quedarse atrás a propósito es el flujo documentado), así que el aviso
+// moría donde OP-C1 lleva seis rondas atascado: el log. Medido por el auditor:
+// con el detector mergeado, las 14 corridas verdes sobre el arreglo fiscal sin
+// publicar habrían mandado CERO avisos — y hoy, 15-sep, van tres días.
+//
+// Los dos canales que sí se leen: el RESUMEN de la corrida (se ve sin abrir el
+// log) y un ISSUE con dueño (es lo único que notifica de verdad). El issue lo
+// abre el workflow; el script le pasa el veredicto por `$GITHUB_OUTPUT`.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('publicarDeriva — a qué canal llega el aviso', () => {
+  const conDeriva = resumirDeriva([
+    { sha: '5ce91b207729d04b0a6058e041d6e44783b7fd1f', asunto: 'Auditoría 30 (#460)' },
+  ]);
+
+  it('escribe el aviso en el RESUMEN de la corrida, no solo en el log', () => {
+    const escrito: Array<[string, string]> = [];
+    const canales = publicarDeriva(
+      conDeriva,
+      { GITHUB_STEP_SUMMARY: '/tmp/resumen' },
+      (ruta: string, texto: string) => { escrito.push([ruta, texto]); },
+    );
+    expect(canales).toContain('resumen');
+    expect(escrito).toHaveLength(1);
+    expect(escrito[0][0]).toBe('/tmp/resumen');
+    expect(escrito[0][1], 'el resumen tiene que nombrar el commit sin publicar').toContain('5ce91b2');
+  });
+
+  it('deja el veredicto en GITHUB_OUTPUT para que el workflow pueda abrir el issue', () => {
+    const escrito: string[] = [];
+    const canales = publicarDeriva(
+      conDeriva,
+      { GITHUB_OUTPUT: '/tmp/salida' },
+      (_ruta: string, texto: string) => { escrito.push(texto); },
+    );
+    expect(canales).toContain('salida');
+    expect(escrito[0]).toContain('hay=1');
+    expect(escrito[0]).toContain('cuantos=1');
+    // El mensaje es multilínea: sin delimitador, `$GITHUB_OUTPUT` se traga
+    // todo menos la primera línea y el issue sale sin la lista de commits.
+    expect(escrito[0], 'un mensaje multilínea necesita su delimitador').toMatch(/mensaje<<\w+/);
+    expect(escrito[0]).toContain('5ce91b2');
+  });
+
+  it('sin deriva lo dice con hay=0: es lo que permite CERRAR el issue al publicar', () => {
+    const escrito: string[] = [];
+    publicarDeriva(
+      resumirDeriva([]),
+      { GITHUB_OUTPUT: '/tmp/salida' },
+      (_r: string, t: string) => { escrito.push(t); },
+    );
+    expect(escrito[0]).toContain('hay=0');
+    expect(escrito[0]).toContain('cuantos=0');
+  });
+
+  it('fuera de Actions no escribe nada: correrlo en local no ensucia ningún archivo', () => {
+    const escrito: string[] = [];
+    const canales = publicarDeriva(conDeriva, {}, (_r: string, t: string) => { escrito.push(t); });
+    expect(canales).toEqual([]);
+    expect(escrito).toEqual([]);
+  });
+});
+
 describe('salud-produccion.yml — cableado del detector', () => {
   const wf = readFileSync('.github/workflows/salud-produccion.yml', 'utf8');
 
+  /** Los pasos del job como bloques {nombre, cuerpo}. El cableado se afirma
+   *  sobre el PASO, no sobre el archivo entero: `toContain` sobre todo el YAML
+   *  sobrevive a mover una línea de un paso a otro, que es exactamente la
+   *  mutación que la prueba vieja no mataba (OP-31C-M2). */
+  const pasos = wf.split(/\n      - name: /).slice(1).map((bloque) => ({
+    nombre: bloque.slice(0, bloque.indexOf('\n')).trim(),
+    cuerpo: bloque,
+  }));
+  const pasoDe = (fragmento: string) => pasos.find((p) => p.cuerpo.includes(fragmento));
+
   it('corre el detector de deriva', () => {
     expect(wf).toContain('deriva-sin-desplegar.mjs');
+  });
+
+  it('el paso del detector tiene `id`: sin él sus salidas no existen para nadie', () => {
+    const paso = pasoDe('deriva-sin-desplegar.mjs');
+    expect(paso, 'no hay paso que corra el detector').toBeDefined();
+    expect(paso!.cuerpo).toMatch(/\n +id: deriva\n/);
+  });
+
+  it('un paso abre issue CUANDO hay deriva, y lee la salida del detector', () => {
+    const paso = pasos.find((p) => p.cuerpo.includes('gh issue create') && p.cuerpo.includes('deriva'));
+    expect(paso, 'nadie abre issue por deriva: el aviso se queda en el log').toBeDefined();
+    expect(paso!.cuerpo, 'el issue tiene que depender del veredicto del detector, no de `failure()`')
+      .toContain("steps.deriva.outputs.hay == '1'");
+    expect(paso!.cuerpo).toContain('gh issue create');
+    expect(paso!.cuerpo, 'sin etiqueta propia lo cerraría el paso de recuperación del pulso')
+      .toContain('deriva-sin-desplegar');
+  });
+
+  it('ese mismo issue se CIERRA cuando la deriva desaparece', () => {
+    const paso = pasos.find((p) => p.cuerpo.includes('gh issue close') && p.cuerpo.includes('deriva'));
+    expect(paso, 'un issue que no se cierra solo se aprende a ignorar').toBeDefined();
+    expect(paso!.cuerpo).toContain("steps.deriva.outputs.hay == '0'");
   });
 
   it('avisa sin tumbar el pulso: quedarse atrás a propósito es el flujo documentado', () => {
