@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { margenUnidadAtomicaMs, TECHO_PASO_CONSULTA_MS, TECHO_ENVIO_WHATSAPP_MS } from '@/lib/likida/presupuesto';
+import { margenUnidadAtomicaMs, TECHO_PASO_CONSULTA_MS, TECHO_ENVIO_WHATSAPP_MS, COLCHON_LATIDO_CRON_MS } from '@/lib/likida/presupuesto';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON DEL RELOJ MUERTO OBEDECE LA PALANCA DESDE SU PRIMER DÍA.
@@ -41,6 +41,7 @@ const escalarAsistenciasPendientes = vi.fn(async () => ({
 }));
 vi.mock('@/lib/likida/asistencia_escalamiento', () => ({
   escalarAsistenciasPendientes: (...a: unknown[]) => escalarAsistenciasPendientes(...(a as [])),
+  EXTRA_LATIDO_MS: TECHO_PASO_CONSULTA_MS - COLCHON_LATIDO_CRON_MS,
 }));
 
 const alertarOperador = vi.fn(async () => {});
@@ -49,7 +50,8 @@ vi.mock('@/lib/observability/alerta', () => ({
 }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'codigo-prueba' }));
 
-import { GET, maxDuration, EXTRA_LATIDO_MS } from './route';
+import { GET, maxDuration } from './route';
+import { EXTRA_LATIDO_MS } from '@/lib/likida/asistencia_escalamiento';
 
 const CON_SECRETO = { headers: { authorization: 'Bearer secreto-de-prueba' } };
 const URL_CRON = 'https://likida.ai/api/cron/asistencia';

@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { escalarAsistenciasPendientes } from '@/lib/likida/asistencia_escalamiento';
+import { escalarAsistenciasPendientes, EXTRA_LATIDO_MS } from '@/lib/likida/asistencia_escalamiento';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
-import { margenUnidadAtomicaMs, COLCHON_LATIDO_CRON_MS, TECHO_PASO_CONSULTA_MS } from '@/lib/likida/presupuesto';
+import { margenUnidadAtomicaMs } from '@/lib/likida/presupuesto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,18 +33,6 @@ export const maxDuration = 120;
 // 200 saltado; ilegible → 500 con código), latido al cerrar, y un motor
 // reventado responde 500 — nunca un verde de mentira.
 // ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Lo que `COLCHON_LATIDO_CRON_MS` (5.0 s) se queda corto para el latido real.
- *
- * REN-31-C1, parte restante: `registrarLatido` corre DESPUÉS del bucle y es una
- * escritura a Supabase — su techo es `TECHO_PASO_CONSULTA_MS` (9.5 s), no 5.0.
- * Se corrige AQUÍ y no en la constante compartida a propósito: subirla
- * re-presupuesta de golpe los otros cinco crons que la usan, y eso lo tiene que
- * pricear el auditor de rendimiento con la cadena de cada uno a la vista. Queda
- * anotado como hallazgo nuevo, no arreglado de paso.
- */
-export const EXTRA_LATIDO_MS = TECHO_PASO_CONSULTA_MS - COLCHON_LATIDO_CRON_MS;
 
 export async function GET(req: Request) {
   // El hachazo de Vercel cuenta desde que ENTRÓ la petición, no desde que esta
