@@ -1,5 +1,6 @@
 COMPLETA: los 12 rubros auditados, 1 arreglo retenido con prueba, 1 revertido por la suite, global 5.2 → 4.8.
 CONTINUACIÓN (14-sep-2026): 2 rubros reauditados, 4 arreglos retenidos con prueba, 0 revertidos, global 4.8 → 4.8 (=).
+CONTINUACIÓN 2 (15-sep-2026): 4 rubros reauditados, 3 arreglos retenidos con prueba, 0 revertidos, global 4.8 → 4.7 (▼0.1).
 
 ---
 
@@ -117,3 +118,38 @@ CONTINUACIÓN (14-sep-2026): 2 rubros reauditados, 4 arreglos retenidos con prue
   la imagen, todo lo de GitHub salió del MCP; sin red saliente, nada se consultó
   contra `app.likida.ai`; `docs/auditoria-*/` está en `.gitignore:36` y se
   commitea con `git add -f`.
+
+
+---
+
+# Continuación 2 del 15-sep-2026 — CONTINUACIÓN
+
+- **Tipo:** ronda de **CONTINUACIÓN**, decidida antes de gastar un token en
+  auditores: `list_pull_requests(open)` → **PR #462 abierto** (rama
+  `claude/auditoria-31`) → se continúa sobre él, no se abre PR nuevo.
+  `git log claude/auditoria-31..origin/master` → **vacío**; `origin/master`
+  sigue en `4047a50`. Árbol limpio → autofix habilitado.
+- **Auditores relanzados: 4 de 12, y por la regla** — frontend, seguridad,
+  pruebas y operabilidad, los únicos cuyo código cambió desde que escribieron.
+  Escribieron `<rubro>-continuacion-2.md`; los archivos previos quedan intactos.
+- **Global: 4.7** (ayer **4.8**) · **▼0.1**. Se movió una sola nota:
+  **operabilidad 5 → 4**, *deuda que cobró factura* con la factura fechada
+  (producción se degradó el 14-sep 22:50Z y el nombre del cron no sobrevive en
+  ningún artefacto). Las otras tres reauditadas argumentaron por escrito por qué
+  ninguna de las tres razones movía su nota.
+- **Arreglado: 3**, en 3 commits atómicos, cada uno con prueba que lo reproduce,
+  rojo medido → verde y mutación verificada en los dos sentidos:
+  `c361379` (OP-31C-A1, ALTO), `6098cc8` (REN-31-C1 parte restante, CRÍTICO),
+  `e48a6f9` (FE-31C2-A1, ALTO). **Revertidos: 0.** Tope de 3 vueltas gastado.
+- **Lo que urge y no es código, TERCER día:** el arreglo fiscal de la 30 sigue en
+  `master` y no en producción (último `[deploy]` en asunto: `cfa00ab`, 10-sep).
+  18 corridas del pulso en verde sobre ese estado. Notificado al dueño.
+- **INFRA de esta corrida, la trampa nueva:** el clon trajo
+  `refs/remotes/origin/master` **rancio** en `7bcc319` (8-sep), anterior al HEAD
+  del contenedor; el primer cotejo de deriva salió con 7,298 borrados falsos. Se
+  corrigió con `git fetch origin master`. Primer paso obligatorio de la 32:
+  `git ls-remote origin master` antes de cualquier `git diff`.
+- **Compuerta al cerrar:** `npm test` **988 archivos / 12,976 pasan / 6 saltadas
+  / 0 fallan**, exit 0 · `tsc --noEmit` exit 0 · `lint` 0 errores, 154 avisos ·
+  `lint:ratchet` 0 nuevos. `npm run build` no corre en la nube.
+- **Tablero:** `tablero-continuacion-2.html` + `.png`, capturado **y mirado**.

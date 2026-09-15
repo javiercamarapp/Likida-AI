@@ -62,3 +62,37 @@ Una línea por acción, escrita mientras avanza.
 | 11:47 | `MAPA-continuacion.md`, **neutral por diseño** | cumple la acción de cierre de la 31: ninguna frase sugiere dirección para las notas; se pide un número contable detrás de cada movimiento |
 | 11:48 | 2 auditores relanzados en un solo mensaje | **rendimiento** y **operabilidad** — los únicos dos rubros cuyo código cambió. Escriben `<rubro>-continuacion.md`; el archivo de la 31 se conserva para leer el delta |
 | 11:05 | **Dato de entorno nuevo, sin confirmar:** hay binarios de PostgreSQL 16 (`/usr/lib/postgresql/16`) y `docker` en la imagen, sin servidor corriendo | las rondas anteriores asumieron que `supabase/tests/*.sql` no se podía correr en la nube. Queda como lead para la 32, no como hecho |
+
+---
+
+# Continuación 2 — 15-sep-2026 (misma rama, mismo PR #462)
+
+| Hora (UTC) | Acción | Resultado |
+|---|---|---|
+| 10:58 | `list_pull_requests(open)` vía MCP (no hay `gh` en esta imagen) | **PR #462 abierto**, rama `claude/auditoria-31` → **CONTINUACIÓN** por regla; no se abre PR nuevo |
+| 10:59 | `git log claude/auditoria-31..origin/master` | vacío → la rama contiene todo master |
+| 11:00 | `npm ci` | exit 0 (el clon de la nube no traía `node_modules`) — INFRA, no fallo |
+| 11:02 | Inventario: los 12 archivos existen; cruce de rutas tocadas contra el archivo más reciente de cada rubro | **4 relanzados** (frontend, seguridad, pruebas, operabilidad) — los únicos cuyo código cambió. Detalle en `MAPA-continuacion-2.md` |
+| 11:03 | **INFRA verificada, y es una trampa nueva:** `refs/remotes/origin/master` del clon venía **rancio en `7bcc319` (8-sep)** | `git ls-remote origin master` → `4047a50`. El primer `git diff cfa00ab..origin/master` salió con **7,298 borrados falsos**. Se corrigió con `git fetch origin master`. Una ronda que confíe en el `origin/master` del clon mide contra un árbol que no existe |
+| 11:04 | Compuerta base | `npm test` **986 archivos / 12,960 pasan / 6 saltadas**, exit 0 · `tsc` exit 0 · `lint` 0 errores / 154 avisos · `ratchet` 0 nuevos |
+| 11:05 | **Verificado con comando, TERCER día:** el arreglo fiscal de la 30 sigue en master y no en producción | último `[deploy]` en asunto = `cfa00ab` (10-sep); `git diff --stat cfa00ab..origin/master -- src/ supabase/` = `cuadre/desde_db.ts` + `sat_descarga/ciclo.ts` (+3 pruebas). **Notificado al dueño en el momento** |
+| 11:06 | 4 auditores lanzados en un solo mensaje | escriben `<rubro>-continuacion-2.md`; ninguno toca código del repo |
+| 11:16 | **OP-31C-A1 verificado por mí** abriendo `salud-produccion.yml:172-179` y `deriva-sin-desplegar.mjs` | `grep -c GITHUB_STEP_SUMMARY` en el script = **0**; el único `gh issue create` está bajo `if: failure()`; el paso del detector sale 0 siempre → el aviso no puede notificar a nadie. Prueba nueva **roja: 7 de 17** |
+| 11:18 | Arreglo OP-31C-A1 → 17/17 verdes; YAML validado con `yaml.safe_load` (12 pasos) | `publicarDeriva` + `id: deriva` + issue con etiqueta propia que se abre y se cierra por el veredicto |
+| 11:19 | **Mutación en los dos sentidos** | quitar `id: deriva` → 1 roja; apagar el resumen → 1 roja; cambiar la condición del issue por `failure()` → 1 roja. Restaurado |
+| 11:22 | `npm test` + `tsc` + `lint` + `ratchet` | 986 archivos / **12,967** pasan, exit 0 · tsc 0 · 0 errores / 154 avisos · 0 nuevos |
+| 11:23 | **`c361379`** — OP-31C-A1 retenido | **Vuelta 1 de 3** |
+| 11:24 | Entregan los 4 auditores | seguridad **5=5** · frontend **5=5** · pruebas **6=6** · operabilidad **5→4**. 1 CRÍTICO nuevo (ninguno), 13 críticos reincidentes vivos |
+| 11:26 | **REN-31-C1 resto verificado** en `route.ts:75`, `asistencia_escalamiento.ts:278` y `agentes/cobranza.ts:39` | la cadena real tiene **8** consultas, no 7: `leerConfigCobranza` corre en el camino ámbar ANTES del claim **y era la única sin `acotada()`** |
+| 11:29 | Arreglo REN-31-C1 resto → 11/11 verdes en sus dos archivos | ancla de entrada + 8ª consulta contada + techo real del latido → peor caso **120.0 s exactos** contra 120 |
+| 11:30 | **Mutación en los dos sentidos** | ancla de vuelta a `Date.now()` → 1 roja; cuenta de vuelta a `{consultas: 7}` → 4 rojas; sin `acotada()` la consulta queda colgada y la prueba lo dice con esas palabras (`SIGUE COLGADA`) |
+| 11:33 | `npm test` completo | **987** archivos / **12,970** pasan, exit 0 |
+| 11:34 | **`6098cc8`** — REN-31-C1 resto retenido | **Vuelta 2 de 3** |
+| 11:36 | **FE-31C2-A1 verificado** en `cobranza/page.tsx:124-128` contra el hermano ya arreglado `peajes/page.tsx:243-249` | reproducido con valores: 400 en cola, corte a los 40 → la ficha archivaba «OK · 40/40»; agente pausado → «OK · 0/0». Prueba nueva **roja: 5 de 5** |
+| 11:39 | Arreglo FE-31C2-A1 → 8/8 verdes | `corridaDeCobranza` en el módulo puro + cableado en la página |
+| 11:40 | **Mutación en los dos sentidos** | veredicto de vuelta a `fallos` a secas → 2 rojas; `estado` tecleado de vuelta en la página → 1 roja |
+| 11:43 | `npm test` + `tsc` + `lint` + `ratchet` | **988** archivos / **12,976** pasan / 6 saltadas, exit 0 · tsc 0 · 0 errores / 154 avisos · 0 nuevos |
+| 11:44 | **`e48a6f9`** — FE-31C2-A1 retenido | **Vuelta 3 de 3 — tope de presupuesto gastado** |
+| 11:44 | **Revertidos: 0.** La suite terminó verde en los tres | |
+| 11:45 | `tablero-continuacion-2.html` + captura con Chromium headless | **mirado**: 12 filas, suma 56, global 4.7, una sola flecha (▼1 operabilidad), los 10 puntos de la serie dentro del `viewBox`. Mirarlo encontró que el tablero de ayer rotuló la serie histórica **corrida una ronda**; corregido aquí |
+| 11:50 | `00-SINTESIS-continuacion-2.md` y `RESULTADO.md` | cierre |
