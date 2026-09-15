@@ -5,7 +5,7 @@ import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
-import { margenUnidadAtomicaMs } from '@/lib/likida/presupuesto';
+import { margenUnidadAtomicaMs, COLCHON_LATIDO_CRON_MS, TECHO_PASO_CONSULTA_MS } from '@/lib/likida/presupuesto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,7 +34,24 @@ export const maxDuration = 120;
 // reventado responde 500 — nunca un verde de mentira.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Lo que `COLCHON_LATIDO_CRON_MS` (5.0 s) se queda corto para el latido real.
+ *
+ * REN-31-C1, parte restante: `registrarLatido` corre DESPUÉS del bucle y es una
+ * escritura a Supabase — su techo es `TECHO_PASO_CONSULTA_MS` (9.5 s), no 5.0.
+ * Se corrige AQUÍ y no en la constante compartida a propósito: subirla
+ * re-presupuesta de golpe los otros cinco crons que la usan, y eso lo tiene que
+ * pricear el auditor de rendimiento con la cadena de cada uno a la vista. Queda
+ * anotado como hallazgo nuevo, no arreglado de paso.
+ */
+export const EXTRA_LATIDO_MS = TECHO_PASO_CONSULTA_MS - COLCHON_LATIDO_CRON_MS;
+
 export async function GET(req: Request) {
+  // El hachazo de Vercel cuenta desde que ENTRÓ la petición, no desde que esta
+  // función decide su plazo: con `venceEn` anclado después del prólogo, la
+  // corrida se regalaba todo lo que el prólogo tardó (dos consultas, hasta
+  // 9.5 s cada una) y el techo medido se iba a 130.2 s contra 120.
+  const entrada = Date.now();
   const puerta = await puertaCron('asistencia', req, 'El reloj de emergencias no corre sin él.');
   if (puerta) return puerta;
 
@@ -72,8 +89,16 @@ export async function GET(req: Request) {
   // de 5 minutos después — que es el contrato que el comentario de arriba ya
   // declaraba. Una emergencia atendida un ciclo tarde se recupera; una que se
   // perdió del barrido, no.
-  const MARGEN_MS = margenUnidadAtomicaMs({ consultas: 7, envios: 2 });
-  const venceEn = Date.now() + maxDuration * 1000 - MARGEN_MS;
+  //
+  // PARTE RESTANTE, cerrada aquí (auditoría 31, continuación 2): la cuenta
+  // eran 7 consultas y la cadena real tiene 8 — `escalarUna` lee
+  // `leerConfigCobranza` en el camino ámbar (`asistencia_escalamiento.ts:278`)
+  // ANTES del claim. Con esa octava, más el techo real del latido, el peor caso
+  // queda en 120.0 s exactos contra `maxDuration = 120`. El precio declarado:
+  // la ventana para admitir trabajo baja a ~14.5 s, y lo que no entra lo toma
+  // la corrida de 5 minutos después.
+  const MARGEN_MS = margenUnidadAtomicaMs({ consultas: 8, envios: 2, extraMs: EXTRA_LATIDO_MS });
+  const venceEn = entrada + maxDuration * 1000 - MARGEN_MS;
   try {
     const r = await escalarAsistenciasPendientes(new Date(), { venceEn });
     logger.info('cron.asistencia.ok', { ...r });
