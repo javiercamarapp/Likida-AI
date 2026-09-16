@@ -63,7 +63,10 @@ vi.mock('@/lib/supabase/admin', () => ({
     },
   }),
 }));
-vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
+vi.mock('@/lib/likida/presupuesto', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/likida/presupuesto')>();
+  return { ...real, acotada: (q: unknown) => q };
+});
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const filasPendientes = vi.hoisted(() => vi.fn((): Record<string, unknown>[] => []));
