@@ -16,3 +16,5 @@ un diario que se escribe al final no existe cuando se necesita.
 | 11:06 | Compuerta base: `npx tsc --noEmit -p .` | exit 0, sin salida |
 | 11:06 | Compuerta base: `npm run lint` | **0 errores**, 154 avisos, exit 0 |
 | 11:07 | Lanzados los 3 auditores en un solo mensaje (paralelo real) | fiscal · legal · arquitectura |
+| 11:10 | Cotejo de deriva sin publicar (trabajo del orquestador, no de un auditor) | Último `[deploy]` en asunto sigue siendo `cfa00ab` (10-sep). **CUARTO día.** `git diff --name-only cfa00ab origin/master -- src/ supabase/` → **21 archivos**, entre ellos `cuadre/desde_db.ts` (ARQ-C2, el cubo del 15 %) y `sat_descarga/ciclo.ts` (AG-C1) |
+| 11:14 | Reverificación del orquestador de **ARQ-C1** (9ª aparición en la 31) | **Abierto e intacto → 10ª aparición.** `src/app/api/export/poliza/route.ts:363-367` mete al arreglo `bloqueos` cualquier liquidación `ajustada` cuyo desglose no cuadre, y `:394-402` corta el export **del periodo completo** con 409 en cuanto `bloqueos.length > 0`. Verificado leyendo el archivo, no heredado del reporte |
