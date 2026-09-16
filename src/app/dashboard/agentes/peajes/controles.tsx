@@ -68,8 +68,19 @@ export function BotonEjecutar({ ejecutarAhora, pendientes }: {
       {estado?.error && <p className="text-[12px] mt-1" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
       {r && !confirmando && (
         <p className="text-[12px] mt-1.5" style={{ color: 'var(--muted)' }}>
-          {r.revisadas === 0 ? (
+          {/* REN-31C-C1: `revisadas === 0` dejó de significar «la cola está
+              vacía» cuando el barrido ganó reloj (REN-30-C1) — un corte antes
+              de la primera línea da 0 revisadas sobre 1,000 pendientes. La
+              cola vacía es la que además no cortó nada. */}
+          {r.revisadas === 0 && r.cortadosPorReloj === 0 ? (
             'No había nada pendiente que barrer.'
+          ) : r.revisadas === 0 ? (
+            <>
+              No alcancé a revisar ninguna en esta pasada: quedaron{' '}
+              <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.cortadosPorReloj}</span>{' '}
+              {r.cortadosPorReloj === 1 ? 'línea pendiente' : 'líneas pendientes'} fuera por tiempo.
+              Vuelve a ejecutar para seguir donde se quedó.
+            </>
           ) : (
             <>
               Revisé <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.revisadas}</span>{' '}
@@ -77,6 +88,14 @@ export function BotonEjecutar({ ejecutarAhora, pendientes }: {
               <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.conciliadas}</span> contra
               gastos nuevos; refresqué candidatos de <span className="cifra-mono">{r.candidatosRefrescados}</span>;
               {' '}{r.siguenPendientes === 1 ? 'sigue' : 'siguen'} <span className="cifra-mono">{r.siguenPendientes}</span>.
+              {/* REN-30-C1: sin esta línea, «revisé 40» sobre una cola de 1,000
+                  se lee como que la cola quedó limpia. */}
+              {r.cortadosPorReloj > 0 && (
+                <>
+                  {' '}Quedaron <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.cortadosPorReloj}</span>{' '}
+                  fuera de esta pasada por tiempo: vuelve a ejecutar para seguir donde se quedó.
+                </>
+              )}
             </>
           )}
         </p>

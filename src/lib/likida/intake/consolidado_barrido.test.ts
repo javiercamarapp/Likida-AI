@@ -114,10 +114,10 @@ beforeEach(() => {
 describe('barrerPorConciliar', () => {
   it('sin pendientes: resumen en ceros, ni un update, y el log lo registra igual', async () => {
     const r = await barrerPorConciliar('t1');
-    expect(r).toEqual({ revisadas: 0, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 0 });
+    expect(r).toEqual({ revisadas: 0, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 0, cortadosPorReloj: 0 });
     expect(sellos).toEqual([]);
     expect(escriturasLinea).toEqual([]);
-    expect(logger.info).toHaveBeenCalledWith('peajes.barrido', { tenant: 't1', revisadas: 0, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 0 });
+    expect(logger.info).toHaveBeenCalledWith('peajes.barrido', { tenant: 't1', revisadas: 0, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 0, cortadosPorReloj: 0 });
   });
 
   it('UN ERROR DE LECTURA LANZA: una base caída no es una cola vacía', async () => {
@@ -142,7 +142,7 @@ describe('barrerPorConciliar', () => {
 
     const r = await barrerPorConciliar('t1');
 
-    expect(r).toEqual({ revisadas: 1, conciliadas: 1, candidatosRefrescados: 0, siguenPendientes: 0 });
+    expect(r).toEqual({ revisadas: 1, conciliadas: 1, candidatosRefrescados: 0, siguenPendientes: 0, cortadosPorReloj: 0 });
     // El sello es el de `ligarLineaAGasto`: uuid + orden, anclado a tenant y
     // con el guardia de disponibilidad.
     expect(sellos).toHaveLength(1);
@@ -167,7 +167,7 @@ describe('barrerPorConciliar', () => {
 
     const r = await barrerPorConciliar('t1');
 
-    expect(r).toEqual({ revisadas: 1, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 1 });
+    expect(r).toEqual({ revisadas: 1, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 1, cortadosPorReloj: 0 });
     expect(escriturasLinea).toEqual([]);   // ni conciliada ni refresco a medias
   });
 
@@ -191,7 +191,7 @@ describe('barrerPorConciliar', () => {
 
     const r = await barrerPorConciliar('t1');
 
-    expect(r).toEqual({ revisadas: 1, conciliadas: 0, candidatosRefrescados: 1, siguenPendientes: 1 });
+    expect(r).toEqual({ revisadas: 1, conciliadas: 0, candidatosRefrescados: 1, siguenPendientes: 1, cortadosPorReloj: 0 });
     expect(sellos).toEqual([]);
     expect(escriturasLinea).toHaveLength(1);
     expect(escriturasLinea[0].fila.candidatos).toEqual([
@@ -215,7 +215,7 @@ describe('barrerPorConciliar', () => {
 
     const r = await barrerPorConciliar('t1');
 
-    expect(r).toEqual({ revisadas: 1, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 1 });
+    expect(r).toEqual({ revisadas: 1, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 1, cortadosPorReloj: 0 });
     expect(escriturasLinea).toEqual([]);
   });
 
@@ -238,7 +238,7 @@ describe('barrerPorConciliar', () => {
     // El grupo xml-1 se lleva a g-1; para xml-2 ya no está disponible, así que
     // su línea sigue pendiente y su lista —que aún lo ofrecía— queda vacía:
     // ofrecerle a un contador un gasto ya sellado es un clic a un error.
-    expect(r).toEqual({ revisadas: 2, conciliadas: 1, candidatosRefrescados: 1, siguenPendientes: 1 });
+    expect(r).toEqual({ revisadas: 2, conciliadas: 1, candidatosRefrescados: 1, siguenPendientes: 1, cortadosPorReloj: 0 });
     expect(sellos).toHaveLength(1);
     expect(sellos[0].fila).toEqual({ cfdi_uuid: 'uuid-1', cfdi_orden: 1, xml_verificado: true });
     const refresco = escriturasLinea.find((e) => e.por.some(([c, v]) => c === 'id' && v === 'l-2'));
@@ -253,8 +253,72 @@ describe('barrerPorConciliar', () => {
 
     const r = await barrerPorConciliar('t1');
 
-    expect(r).toEqual({ revisadas: 1, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 1 });
+    expect(r).toEqual({ revisadas: 1, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 1, cortadosPorReloj: 0 });
     expect(sellos).toEqual([]);
     expect(escriturasLinea).toEqual([]);   // [] contra null guardado no es un cambio
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RELOJ DEL BARRIDO (REN-30-C1, reincidente de la auditoría 30).
+//
+// El «Ejecutar ahora» de Peajes recorría la cola entera —hasta 1,000 líneas,
+// `await` por `await`, 3 consultas por línea— sin un solo chequeo de reloj,
+// desde una Server Action que no declara `maxDuration`. Medido por la 31:
+// 3,047 viajes de red, 914 s nominales contra los 300 s que es lo máximo que
+// declara cualquier ruta de este repo. Cuando la plataforma corta a medias, el
+// contador ve un error genérico sobre un barrido que SÍ amarró líneas.
+//
+// El hermano exacto ya tenía la respuesta: `cobranza/page.tsx:117` le pasa
+// `venceEn: ahoraMs() + 25_000` a su motor y la vista pinta `cortadosPorReloj`.
+// Lo que estas pruebas fijan:
+//   · con el reloj vencido no se toca NADA y el resumen lo dice;
+//   · `revisadas` cuenta lo que de verdad se revisó — nunca afirma haber
+//     mirado una línea que el corte dejó fuera (CLAUDE.md: «un rótulo tiene
+//     que ser verdad»);
+//   · sin `venceEn` el comportamiento es el de siempre (reloj infinito).
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('barrerPorConciliar — el reloj de corte (REN-30-C1)', () => {
+  it('con el reloj YA vencido no sella ni marca nada, y el resumen no miente sobre lo revisado', async () => {
+    respLineas = { data: [filaPendiente(), filaPendiente({ id: 'l-2', indice: 2 })], error: null };
+    respGastos = { data: [gasto('g-9'), gasto('g-8', 500, '2026-08-10')], error: null };
+
+    const r = await barrerPorConciliar('t1', { venceEn: Date.now() - 1 });
+
+    expect(r.cortadosPorReloj, 'las dos líneas quedaron fuera del corte').toBe(2);
+    expect(r.revisadas, 'no se revisó ninguna: afirmar 2 sería el rótulo falso').toBe(0);
+    expect(r.conciliadas).toBe(0);
+    expect(sellos, 'un sello escrito después del corte es el gasto que nadie contó').toEqual([]);
+    expect(escriturasLinea).toEqual([]);
+  });
+
+  it('corta A MEDIAS y cuenta bien las dos mitades', async () => {
+    // El reloj alcanza para la primera línea y vence antes de la segunda: el
+    // barrido es re-entrante, así que lo que no entró lo toma la corrida
+    // siguiente — pero el acuse tiene que decir cuántas fueron.
+    respLineas = { data: [filaPendiente(), filaPendiente({ id: 'l-2', indice: 2 })], error: null };
+    respGastos = { data: [gasto('g-9')], error: null };
+
+    let llamadas = 0;
+    const ahoraReal = Date.now;
+    const t0 = ahoraReal();
+    vi.spyOn(Date, 'now').mockImplementation(() => (llamadas++ === 0 ? t0 : t0 + 60_000));
+
+    const r = await barrerPorConciliar('t1', { venceEn: t0 + 1_000 });
+    vi.mocked(Date.now).mockRestore();
+
+    expect(r.revisadas).toBe(1);
+    expect(r.cortadosPorReloj).toBe(1);
+  });
+
+  it('sin `venceEn` el reloj es infinito: el barrido de siempre, intacto', async () => {
+    respLineas = { data: [filaPendiente()], error: null };
+    respGastos = { data: [gasto('g-9')], error: null };
+
+    const r = await barrerPorConciliar('t1');
+
+    expect(r).toEqual({ revisadas: 1, conciliadas: 1, candidatosRefrescados: 0, siguenPendientes: 0, cortadosPorReloj: 0 });
+    expect(sellos).toHaveLength(1);
   });
 });

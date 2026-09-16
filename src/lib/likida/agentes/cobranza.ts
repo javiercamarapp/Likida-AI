@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { acotada } from '../presupuesto';
 import { traerTodo, traerPorIds, conteo } from '../pg';
 import { avisarCorridasPorFlota } from './notificaciones';
 import { registrarCorrida } from './corridas';
@@ -36,11 +37,17 @@ export * from './cobranza_pura';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function leerConfigCobranza(tenantId: string): Promise<ConfigCobranza> {
-  const { data, error } = await supabaseAdmin()
+  // REN-31-C1 (auditoría 31, parte restante): esta consulta corre DENTRO del
+  // cron de emergencias —`escalarUna` la llama en el camino ámbar antes del
+  // claim— y era la que quedaba sin techo. Sin `acotada()` hereda los 300 s por
+  // defecto de undici: un `agente_cobranza_config` que no contesta se come
+  // entero el `maxDuration = 120` del cron, y la aritmética del margen que
+  // decide cuánto trabajo admitir queda montada sobre un supuesto falso.
+  const { data, error } = await acotada(supabaseAdmin()
     .from('agente_cobranza_config')
     .select('activo, tiers, hora_inicio, hora_fin, dias_semana, instrucciones, firma')
     .eq('tenant_id', tenantId)
-    .maybeSingle();
+    .maybeSingle(), 'cobranza.config');
   if (error) throw new Error(`leerConfigCobranza: ${error.message}`);
   const base = (() => {
     if (!data) return CONFIG_COBRANZA_DEFAULT;
