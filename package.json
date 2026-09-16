@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@sentry/nextjs": "^10.74.0",
-    "@sparticuz/chromium": "^149.0.0",
+    "@sparticuz/chromium": "^153.0.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
     "@types/leaflet": "^1.9.22",
