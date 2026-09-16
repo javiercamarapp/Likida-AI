@@ -118,3 +118,48 @@ export function armarMensajeCobranza(
   if (config.firma) lineas.push('', `— ${config.firma}`);
   return lineas.join('\n');
 }
+
+/**
+ * Lo que la bitácora DURABLE de corridas afirma de una corrida de cobranza.
+ *
+ * FE-31C2-A1 (auditoría 31, continuación 2): `estado` y `tareasTotal` se
+ * derivaban solo de `fallos` —un eje de tres reducido a uno—. Con 400 en cola y
+ * el reloj cortando a los 40, la ficha archivaba «OK · 40/40»; con el agente
+ * pausado entre el render y el clic, archivaba «OK · 0/0» para una corrida que
+ * no corrió. El acuse que sí decía la verdad vive en `useActionState` y se
+ * evapora con el primer `router.refresh()`: el renglón es lo único que queda.
+ *
+ * Es el mismo cableado que `065f699` le puso al hermano de Peajes. Vive aquí,
+ * en el módulo puro, para poder afirmarlo con valores en vez de con un grep del
+ * fuente.
+ */
+export function corridaDeCobranza(r: {
+  revisados: number;
+  contactados: number;
+  sinTelefono: number;
+  omitido?: string;
+  fallos: string[];
+  cortadosPorReloj: number;
+}): {
+  estado: 'ok' | 'parcial';
+  tareasHechas: number;
+  tareasTotal: number;
+  resumen: Record<string, number | string>;
+} {
+  const sana = r.fallos.length === 0 && r.cortadosPorReloj === 0 && !r.omitido;
+  return {
+    estado: sana ? 'ok' : 'parcial',
+    tareasHechas: r.contactados,
+    // El total es lo que HABÍA, no lo que alcanzó: `revisados` ya cuenta la
+    // cola entera (con teléfono y sin él), que es la misma cifra que el acuse
+    // en pantalla usa para su «de N».
+    tareasTotal: r.revisados,
+    resumen: {
+      contactados: r.contactados,
+      fallos: r.fallos.length,
+      cortadosPorReloj: r.cortadosPorReloj,
+      sinTelefono: r.sinTelefono,
+      ...(r.omitido ? { omitido: r.omitido } : {}),
+    },
+  };
+}

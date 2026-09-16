@@ -15,6 +15,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { cuadrarViaje, TOPE_EFECTIVO_LISR_27_III, type PoliticaGasto } from './engine';
+import { DEMO_CONFIG, fusionarConfig } from '../config';
 import type { Gasto } from '@/types/likida';
 
 const politica: PoliticaGasto[] = [{ concepto: 'hospedaje', topeMonto: 100_000 }];
@@ -51,5 +52,52 @@ describe('PRU-2: el tope de efectivo por defecto es el de la ficha, y se prueba 
   it('el tope declarado por el tenant manda: con $5,000, $4,999 pasa', () => {
     expect(tipos(4999, { efectivoTopeMxn: 5000 })).not.toContain('efectivo_sobre_tope');
     expect(tipos(5000.01, { efectivoTopeMxn: 5000 })).toContain('efectivo_sobre_tope');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 31 · PRU-31-C2 (CRÍTICO) — el bloque de arriba ancló la constante
+// de la rama que producción NUNCA toma.
+//
+// `engine.ts:754` lee `input.estimulos?.efectivoTopeMxn ?? TOPE_EFECTIVO_LISR_27_III`.
+// El `??` solo dispara cuando no llega `estimulos` — y el camino real siempre
+// lo manda: `desde_db.ts:215` pasa `estimulos: config.estimulos`, con `config`
+// saliendo de `getConfig()` → `fusionarConfig(DEMO_CONFIG, override)`. O sea
+// que el número que de verdad juzga un comprobante en efectivo es el de
+// `config.ts:129`, y ése no tenía una sola aserción sobre su valor: moverlo de
+// `2000` a `20000` pasaba 10,177 pruebas en verde (medido en la auditoría 31).
+//
+// La misma cifra viaja al agregado SQL del panel por `fiscal.ts:586`
+// (`p_tope_efectivo`), así que el hueco alcanzaba al PDF y al tablero fiscal.
+//
+// Se ancla en los dos puntos que producción sí pisa: el default de
+// `DEMO_CONFIG` y la frontera de comportamiento con ese default puesto como lo
+// pone el camino real.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('PRU-31-C2: el tope que llega al motor por el camino real también está anclado', () => {
+  it('el default de DEMO_CONFIG es el de la ficha: $2,000.00', () => {
+    expect(DEMO_CONFIG.estimulos.efectivoTopeMxn).toBe(2000);
+  });
+
+  it('un tenant sin override conserva el tope de la ficha al fusionar', () => {
+    // La forma exacta de `getConfig()` para un tenant que no declaró nada.
+    expect(fusionarConfig(DEMO_CONFIG, {}).estimulos.efectivoTopeMxn).toBe(2000);
+    expect(fusionarConfig(DEMO_CONFIG, null).estimulos.efectivoTopeMxn).toBe(2000);
+  });
+
+  it('CON los `estimulos` que manda el camino real, $2,000.01 en efectivo no es deducible', () => {
+    expect(tipos(2000.01, DEMO_CONFIG.estimulos)).toContain('efectivo_sobre_tope');
+  });
+
+  it('CON los `estimulos` del camino real, $2,000.00 exacto sí pasa («exceda de»)', () => {
+    expect(tipos(2000, DEMO_CONFIG.estimulos)).not.toContain('efectivo_sobre_tope');
+  });
+
+  it('la banda de $2,000–$20,000 en efectivo NO es deducible por el camino real', () => {
+    // El rango que la mutación abría: hospedaje de carretera, casetas y diésel
+    // sin monedero pagados en efectivo.
+    for (const monto of [2500, 5000, 12_000, 19_999]) {
+      expect(tipos(monto, DEMO_CONFIG.estimulos)).toContain('efectivo_sobre_tope');
+    }
   });
 });

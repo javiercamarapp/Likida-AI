@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { margenUnidadAtomicaMs, TECHO_PASO_CONSULTA_MS, TECHO_ENVIO_WHATSAPP_MS, COLCHON_LATIDO_CRON_MS } from '@/lib/likida/presupuesto';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON DEL RELOJ MUERTO OBEDECE LA PALANCA DESDE SU PRIMER DÍA.
@@ -11,8 +12,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 
 let interruptor: 'encendido' | 'apagado' | 'ilegible' = 'encendido';
+/** Lo que tarda el prólogo antes de que la ruta fije su plazo. En producción
+ *  `leerInterruptor` es una consulta a Supabase y `puertaCron` otra: las dos
+ *  pueden costar hasta `TECHO_PASO_CONSULTA_MS`. Aquí basta con que NO sea 0
+ *  para que el ancla del reloj sea observable. */
+let demoraInterruptorMs = 0;
 vi.mock('@/lib/likida/interruptores', () => ({
-  leerInterruptor: async () => interruptor,
+  leerInterruptor: async () => {
+    if (demoraInterruptorMs > 0) await new Promise((r) => setTimeout(r, demoraInterruptorMs));
+    return interruptor;
+  },
 }));
 
 const { logger } = vi.hoisted(() => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -32,6 +41,7 @@ const escalarAsistenciasPendientes = vi.fn(async () => ({
 }));
 vi.mock('@/lib/likida/asistencia_escalamiento', () => ({
   escalarAsistenciasPendientes: (...a: unknown[]) => escalarAsistenciasPendientes(...(a as [])),
+  EXTRA_LATIDO_MS: TECHO_PASO_CONSULTA_MS - COLCHON_LATIDO_CRON_MS,
 }));
 
 const alertarOperador = vi.fn(async () => {});
@@ -40,7 +50,8 @@ vi.mock('@/lib/observability/alerta', () => ({
 }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'codigo-prueba' }));
 
-import { GET } from './route';
+import { GET, maxDuration } from './route';
+import { EXTRA_LATIDO_MS } from '@/lib/likida/asistencia_escalamiento';
 
 const CON_SECRETO = { headers: { authorization: 'Bearer secreto-de-prueba' } };
 const URL_CRON = 'https://likida.ai/api/cron/asistencia';
@@ -95,5 +106,122 @@ describe('cron asistencia — kill switch y contrato de fallo', () => {
     });
     await GET(new Request(URL_CRON, CON_SECRETO));
     expect(registrarLatido).toHaveBeenCalledWith('asistencia', 'parcial', expect.anything());
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RELOJ RESERVA LA UNIDAD ATÓMICA COMPLETA (REN-31-C1, auditoría 31).
+//
+// El margen era el literal `15` y la unidad que despacha vale 91.5 s: una
+// escalada admitida a 1 s de `venceEn` se muere a mitad de camino — y se muere
+// DESPUÉS del claim (`reclamarEscalacionAsistencia` escribe `nivel_escalado =
+// objetivo` antes de mandar el WhatsApp), así que la consulta del barrido
+// siguiente —`.lt('nivel_escalado', NIVEL_MAXIMO)`— ya no la lista. Un nivel 4
+// que muere ahí no se reintenta NUNCA: el dueño con un chofer lesionado no
+// recibe el aviso y no queda una fila que diga que no lo recibió.
+//
+// Es la misma lección de REN-A4/REN-A5 (auditoría 28) que `gps` y
+// `descarga-sat` ya aprendieron: el margen se DERIVA de los techos de la
+// cadena real, no se teclea. El precio es la ventana de despacho — con la
+// cadena completa (8 consultas, 2 envíos y el latido del cierre) quedan
+// ~14.5 s de los 120 para admitir trabajo, y lo que no entra cae en
+// `cortadosPorReloj` y lo agarra la corrida de 5 minutos después, que es
+// exactamente el contrato que el comentario de la ruta ya declaraba.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('cron asistencia — el reloj reserva la unidad atómica (REN-31-C1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    interruptor = 'encendido';
+  });
+
+  // La cadena más cara de `escalarUna`, contada sobre el código:
+  //   0. leerConfigCobranza, la ventana de la flota, en el camino ÁMBAR
+  //      (`asistencia_escalamiento.ts:278`) — ANTES del claim  → 1 consulta
+  //   1. reclamarEscalacionAsistencia (RPC del claim)      → 1 consulta
+  //   2. polizaVigenteDe                                   → 1 consulta
+  //   3. select de `viaje` (operador_id, si falta)         → 1 consulta
+  //   4. contactoSiLesionadosDe                            → 1 consulta
+  //   5. telefonoDeRol('flota_admin')                      → 1 consulta
+  //   6. telefonoJefeDe (el dueño sin teléfono)            → 1 consulta
+  //   7. anotarEventoIncidencia                            → 1 consulta
+  //   8. sendButtons al destinatario                       → 1 envío
+  //   9. alertarOperador (nivel 4 o aviso fallido) que,
+  //      con ALERTA_WA puesto, manda WhatsApp              → 1 envío
+  //                                        TOTAL: 8 consultas, 2 envíos
+  //
+  // La octava (la ventana de cobranza) la encontró la continuación 2 de la
+  // auditoría 31: el `{consultas: 7}` original no la contaba, y el auditor de
+  // pruebas demostró que una consulta de más pasaba con 31/31 verdes.
+  const PEOR_CASO_ESCALADA_MS = 8 * TECHO_PASO_CONSULTA_MS + 2 * TECHO_ENVIO_WHATSAPP_MS;
+
+  it('una escalada admitida en el último instante cabe ENTERA antes del maxDuration', async () => {
+    const antes = Date.now();
+    await GET(new Request(URL_CRON, CON_SECRETO));
+
+    const opts = (escalarAsistenciasPendientes.mock.calls[0] as unknown[])[1] as { venceEn: number };
+    // El corazón del hallazgo: si el peor caso de UNA unidad no cabe entre
+    // `venceEn` y el `maxDuration`, Vercel mata la función con el claim ya
+    // quemado y sin `sendButtons`, sin `alertarOperador` y sin bitácora.
+    expect(
+      opts.venceEn + PEOR_CASO_ESCALADA_MS,
+      'una escalada que arranque justo en `venceEn` tiene que terminar antes del hachazo de Vercel',
+    ).toBeLessThanOrEqual(antes + maxDuration * 1000);
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // REN-31-C1, PARTE RESTANTE (auditoría 31 cont.). El arreglo `f4fde69`
+  // cerró el modo de falla —`sendButtons` siempre se alcanza— y NO el techo.
+  // El auditor que lo reauditó lo midió: hasta 130.2 s contra `maxDuration =
+  // 120`, por dos huecos que la prueba de arriba no ve porque sus mocks
+  // contestan en 0 ms.
+  // ═════════════════════════════════════════════════════════════════════════
+
+  it('el reloj arranca al ENTRAR la petición, no después de la puerta y el interruptor', async () => {
+    // El hachazo de Vercel cuenta desde que ENTRÓ la petición. Anclar `venceEn`
+    // después del prólogo le regala a la corrida todo lo que el prólogo tardó.
+    demoraInterruptorMs = 60;
+    const margen = margenUnidadAtomicaMs({ consultas: 8, envios: 2, extraMs: EXTRA_LATIDO_MS });
+    const antes = Date.now();
+    await GET(new Request(URL_CRON, CON_SECRETO));
+    demoraInterruptorMs = 0;
+
+    const opts = (escalarAsistenciasPendientes.mock.calls[0] as unknown[])[1] as { venceEn: number };
+    expect(
+      opts.venceEn,
+      'el plazo se corrió tanto como tardó el prólogo: en producción son dos consultas, hasta 9.5 s cada una',
+    ).toBeLessThanOrEqual(antes + maxDuration * 1000 - margen);
+  });
+
+  it('el peor caso REAL cabe entero: 8 consultas —la ventana de cobranza es la octava—, 2 envíos y el latido del cierre', async () => {
+    // Dos cosas que la cuenta de `f4fde69` dejaba fuera:
+    //  · `escalarUna` consulta `leerConfigCobranza` en el camino ámbar
+    //    (`asistencia_escalamiento.ts:278`) ANTES del claim — una octava
+    //    consulta que el `{consultas: 7}` no contaba.
+    //  · `registrarLatido` corre DESPUÉS del bucle y es una escritura a
+    //    Supabase: cuesta hasta `TECHO_PASO_CONSULTA_MS`, no los 5.0 s que
+    //    `COLCHON_LATIDO_CRON_MS` reserva.
+    const PEOR_CASO_REAL_MS = 8 * TECHO_PASO_CONSULTA_MS + 2 * TECHO_ENVIO_WHATSAPP_MS;
+    const antes = Date.now();
+    await GET(new Request(URL_CRON, CON_SECRETO));
+
+    const opts = (escalarAsistenciasPendientes.mock.calls[0] as unknown[])[1] as { venceEn: number };
+    expect(
+      opts.venceEn + PEOR_CASO_REAL_MS + TECHO_PASO_CONSULTA_MS,
+      'una escalada ámbar admitida en el último instante, más su latido, tiene que terminar antes del hachazo',
+    ).toBeLessThanOrEqual(antes + maxDuration * 1000);
+  });
+
+  it('usa el margen DERIVADO de los techos, no un literal que se le parezca', async () => {
+    const margen = margenUnidadAtomicaMs({ consultas: 8, envios: 2, extraMs: EXTRA_LATIDO_MS });
+    expect(margen, 'el margen derivado tiene que cubrir el peor caso de la cadena')
+      .toBeGreaterThan(PEOR_CASO_ESCALADA_MS);
+
+    const antes = Date.now();
+    await GET(new Request(URL_CRON, CON_SECRETO));
+
+    const opts = (escalarAsistenciasPendientes.mock.calls[0] as unknown[])[1] as { venceEn: number };
+    expect(opts.venceEn).toBeGreaterThanOrEqual(antes + maxDuration * 1000 - margen);
+    expect(opts.venceEn).toBeLessThanOrEqual(Date.now() + maxDuration * 1000 - margen);
   });
 });

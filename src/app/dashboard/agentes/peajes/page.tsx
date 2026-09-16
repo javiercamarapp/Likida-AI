@@ -18,6 +18,7 @@ import { VistaAgentePeajes } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import { registrarCorrida, ultimasCorridas } from '@/lib/likida/agentes/corridas';
+import { ahoraMs } from '@/lib/saludo';
 import type { EstadoImportar } from './subir-desglose';
 import type { EstadoConciliar } from './conciliar-desglose';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
@@ -223,15 +224,28 @@ export default async function PaginaAgentePeajes({
 
     const inicio = new Date();
     try {
-      const resumen = await barrerPorConciliar(tenantId);
+      // REN-30-C1: el mismo reloj que Cobranza le presta a su motor
+      // (`cobranza/page.tsx:117`). Ninguna Server Action de `src/app/dashboard`
+      // declara `maxDuration`, y este bucle recorre hasta 1,000 líneas con 3
+      // consultas cada una: sin corte, la plataforma mata la acción a media
+      // cola y el contador ve un error genérico sobre un barrido que SÍ amarró
+      // líneas. El barrido es re-entrante y el acuse dice cuántas quedaron
+      // fuera, así que cortar no pierde trabajo — solo lo pospone y lo declara.
+      const resumen = await barrerPorConciliar(tenantId, { venceEn: ahoraMs() + 25_000 });
       // La bitácora de corridas (B3). `registrarCorrida` nunca lanza.
       await registrarCorrida(tenantId, 'peajes', {
         inicio,
         fin: new Date(),
-        estado: 'ok',
+        // REN-31C-C1: una corrida que dejó líneas fuera por reloj no es una
+        // corrida sana. Con `estado: 'ok'` fijo, la que no tocó ninguna de
+        // 1,000 quedaba archivada igual que la que barrió la cola entera —
+        // el mismo criterio que el latido `parcial` de los crons.
+        estado: resumen.cortadosPorReloj > 0 ? 'parcial' : 'ok',
         disparo: 'manual',
         tareasHechas: resumen.conciliadas,
-        tareasTotal: resumen.revisadas,
+        // El total de la corrida es lo que había, no lo que alcanzó: con el
+        // corte, `revisadas` sola reporta «0 de 0» sobre una cola llena.
+        tareasTotal: resumen.revisadas + resumen.cortadosPorReloj,
         resumen: { ...resumen },
       });
       return { resumen };
