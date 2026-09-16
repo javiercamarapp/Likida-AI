@@ -109,5 +109,4 @@ done
 
 rm -f "$CENTINELA"
 
-osascript -e "display notification \"$RESUMEN\" with title \"Likida · $RUTINA\"" 2>/dev/null || true
 log "Fin."
