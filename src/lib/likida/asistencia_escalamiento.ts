@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
-import { acotada } from './presupuesto';
+import { acotada, COLCHON_LATIDO_CRON_MS, TECHO_PASO_CONSULTA_MS } from './presupuesto';
 import { traerTodo, conteo } from './pg';
 import { anotarEventoIncidencia, TIPOS_ASISTENCIA } from './asistencia_wa';
 import { telefonoJefeDe } from './contactos';
@@ -49,6 +49,23 @@ export const NIVEL_MAXIMO = 4;
  *  minutos — que es el punto: nadie lo atendió en 20 minutos. */
 export const RELOJ_ROJO_MS = 5 * 60_000;
 export const RELOJ_AMBAR_MS = 15 * 60_000;
+
+/**
+ * Lo que `COLCHON_LATIDO_CRON_MS` (5.0 s) se queda corto para el latido real
+ * del cron de emergencias (`api/cron/asistencia/route.ts`).
+ *
+ * REN-31-C1, parte restante: `registrarLatido` corre DESPUÉS del bucle y es una
+ * escritura a Supabase — su techo es `TECHO_PASO_CONSULTA_MS` (9.5 s), no 5.0.
+ * Se corrige AQUÍ y no en la constante compartida a propósito: subirla
+ * re-presupuesta de golpe los otros cinco crons que la usan, y eso lo tiene que
+ * pricear el auditor de rendimiento con la cadena de cada uno a la vista.
+ *
+ * Vive en este módulo (y no exportada desde `route.ts`) porque Next.js valida
+ * cada export nombrado de un `route.ts` contra las claves de configuración de
+ * ruta conocidas (`runtime`, `dynamic`, `maxDuration`, …) — un export ajeno
+ * como este rompe el typecheck de rutas tipadas en el build.
+ */
+export const EXTRA_LATIDO_MS = TECHO_PASO_CONSULTA_MS - COLCHON_LATIDO_CRON_MS;
 
 export interface IncidenciaEscalable {
   id: string;
@@ -301,8 +318,13 @@ async function escalarUna(inc: IncidenciaEscalable, ahora: Date): Promise<'sin_c
     try {
       let operadorId = inc.operadorId;
       if (!operadorId && inc.viajeId) {
-        const { data: v } = await supabaseAdmin().from('viaje').select('operador_id')
-          .eq('id', inc.viajeId).eq('tenant_id', inc.tenantId).maybeSingle();
+        // REN-31-C1: esta era la única consulta de la cadena sin `acotada()` —
+        // sin techo hereda los 300 s de undici, y el margen del cron (derivado
+        // de 7 consultas + 2 envíos) es aritmética sobre un supuesto falso. Se
+        // colgaba justo en el camino de la volcadura con lesionados, después
+        // del claim, y la incidencia salía del barrido para siempre.
+        const { data: v } = await acotada(supabaseAdmin().from('viaje').select('operador_id')
+          .eq('id', inc.viajeId).eq('tenant_id', inc.tenantId).maybeSingle(), 'asistencia.operador_del_viaje');
         operadorId = (v?.operador_id as string) ?? null;
       }
       if (operadorId) contacto = await contactoSiLesionadosDe(inc.tenantId, operadorId);

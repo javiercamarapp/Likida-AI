@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="es" data-palette="#2a78d6">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auditoría 31 · continuación — Likida · 14-sep-2026</title>
+<style>
+  :root{
+    --surface-0:#f4f3f0; --surface-1:#fcfcfb; --borde:#e2e0da;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#82807a;
+    --good:#0ca30c; --warning:#fab219; --critical:#d03b3b; --serie:#2a78d6;
+    --good-ink:#0a7d0a; --warning-ink:#8a6000; --critical-ink:#b02f2f;
+    --grid:#e6e4de;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --surface-0:#111110; --surface-1:#1a1a19; --borde:#34342f;
+      --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#8e8d84;
+      --good:#0ca30c; --warning:#fab219; --critical:#d03b3b; --serie:#3987e5;
+      --good-ink:#3cc23c; --warning-ink:#fab219; --critical-ink:#e66767;
+      --grid:#2b2b27;
+    }
+  }
+  :root[data-theme="dark"]{
+    --surface-0:#111110; --surface-1:#1a1a19; --borde:#34342f;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#8e8d84;
+    --good:#0ca30c; --warning:#fab219; --critical:#d03b3b; --serie:#3987e5;
+    --good-ink:#3cc23c; --warning-ink:#fab219; --critical-ink:#e66767;
+    --grid:#2b2b27;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--surface-0); color:var(--text-primary);
+    font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:24px 16px 56px;
+  }
+  .wrap{max-width:1120px; margin:0 auto}
+  header{margin-bottom:20px}
+  h1{font-size:21px; margin:0 0 4px; letter-spacing:-.01em}
+  .sub{color:var(--text-secondary); font-size:13px; margin:0}
+  h2{font-size:13px; text-transform:uppercase; letter-spacing:.07em;
+     color:var(--text-muted); margin:32px 0 12px; font-weight:600}
+
+  /* ── barra de compuerta ─────────────────────────────────────────── */
+  .compuerta{display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 4px}
+  .chip{display:flex; align-items:center; gap:7px; background:var(--surface-1);
+        border:1px solid var(--borde); border-radius:8px; padding:7px 11px; font-size:12.5px}
+  .chip b{font-weight:600; color:var(--text-primary)}
+  .chip span{color:var(--text-secondary)}
+  .pip{width:9px; height:9px; border-radius:50%; flex:none}
+  .pip.ok{background:var(--good)} .pip.warn{background:var(--warning)}
+
+  /* ── hero ───────────────────────────────────────────────────────── */
+  .hero{display:flex; flex-wrap:wrap; align-items:baseline; gap:14px;
+        background:var(--surface-1); border:1px solid var(--borde);
+        border-radius:12px; padding:18px 20px; margin-top:16px}
+  .hero .n{font-size:44px; font-weight:650; letter-spacing:-.02em; line-height:1}
+  .hero .d{font-size:17px; font-weight:600}
+  .hero .t{color:var(--text-secondary); font-size:13px; flex:1 1 260px; min-width:0}
+
+  /* ── rejilla de rubros ──────────────────────────────────────────── */
+  .rejilla{display:grid; grid-template-columns:repeat(auto-fill,minmax(258px,1fr)); gap:10px}
+  .card{background:var(--surface-1); border:1px solid var(--borde);
+        border-radius:10px; padding:13px 14px; display:flex; flex-direction:column; gap:8px}
+  .card .top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px}
+  .card .nom{font-weight:600; font-size:13.5px; line-height:1.3}
+  .nota{display:flex; align-items:baseline; gap:6px; flex:none}
+  .nota .v{font-size:27px; font-weight:650; line-height:1; letter-spacing:-.02em}
+  .nota .dl{font-size:12px; font-weight:600}
+  .v.g{color:var(--good-ink)} .v.w{color:var(--warning-ink)} .v.c{color:var(--critical-ink)}
+  .dl.up{color:var(--good-ink)} .dl.down{color:var(--critical-ink)} .dl.eq{color:var(--text-muted)}
+  .riesgo{color:var(--text-secondary); font-size:12.2px; line-height:1.45}
+  .sev{display:flex; gap:5px; flex-wrap:wrap; margin-top:auto; padding-top:2px}
+  .s{font-size:11px; padding:2px 6px; border-radius:5px; border:1px solid var(--borde);
+     color:var(--text-secondary); background:var(--surface-0); white-space:nowrap}
+  .s.c{border-color:var(--critical); color:var(--critical-ink); font-weight:600}
+  .spark{height:26px; width:100%; display:block}
+
+  /* ── tablas ─────────────────────────────────────────────────────── */
+  .scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;
+          background:var(--surface-1); border:1px solid var(--borde); border-radius:10px}
+  table{border-collapse:collapse; width:100%; min-width:640px; font-size:12.8px}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--grid); vertical-align:top}
+  th{color:var(--text-muted); font-weight:600; font-size:11.5px;
+     text-transform:uppercase; letter-spacing:.05em; white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  td.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .badge{display:inline-block; font-size:10.5px; font-weight:600; padding:2px 6px;
+         border-radius:5px; white-space:nowrap}
+  .b-arr{background:rgba(12,163,12,.14); color:var(--good-ink)}
+  .b-pen{background:rgba(250,178,25,.18); color:var(--warning-ink)}
+  .b-rev{background:rgba(208,59,59,.14); color:var(--critical-ink)}
+  .b-pro{background:rgba(130,128,122,.16); color:var(--text-secondary)}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11.8px;
+       background:var(--surface-0); padding:1px 4px; border-radius:4px; border:1px solid var(--borde)}
+  .nota-pie{color:var(--text-muted); font-size:11.8px; margin-top:9px; line-height:1.5}
+  .leyenda{display:flex; gap:14px; flex-wrap:wrap; color:var(--text-secondary);
+           font-size:11.8px; margin-top:10px; align-items:center}
+  .leyenda i{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px}
+</style></head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Auditoría 31 — continuación</h1>
+  <p class="sub">14-sep-2026 · ronda de <b>CONTINUACIÓN</b> sobre el PR #462 (rama <code>claude/auditoria-31</code>) · 2 rubros reauditados de 12 · árbol limpio, autofix habilitado</p>
+
+  <div class="compuerta">
+    <div class="chip"><span class="pip ok"></span><b>npm test</b><span>986 archivos · 12,958 pasan · 6 saltadas · 173 s</span></div>
+    <div class="chip"><span class="pip ok"></span><b>tsc --noEmit</b><span>exit 0</span></div>
+    <div class="chip"><span class="pip ok"></span><b>eslint</b><span>0 errores · 154 avisos</span></div>
+    <div class="chip"><span class="pip ok"></span><b>lint:ratchet</b><span>0 nuevos</span></div>
+    <div class="chip"><span class="pip warn"></span><b>build</b><span>no corre en la nube (sin credenciales)</span></div>
+  </div>
+
+  <div class="hero">
+    <div class="n">4.8</div>
+    <div class="d" style="color:var(--text-muted)">= 0.0</div>
+    <p class="t"><b>Cuatro arreglos retenidos y la global no se movió, y eso es el resultado.</b> Los dos auditores relanzados —los únicos dos cuyo código cambió— midieron los arreglos y dejaron su nota igual: uno porque el arreglo abrió un crítico nuevo en la pantalla del contralor, el otro porque el aviso que añadió no llega a nadie. Un arreglo que no mueve el ancla del rubro no mueve la nota.</p>
+  </div>
+</header>
+
+<h2>Lo que esta continuación cambió</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>sha</th><th>ID</th><th>Qué se arregló</th><th>Veredicto del auditor que lo midió</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>f4fde69</code></td><td><code>REN-31-C1</code></td>
+      <td>El cron de emergencias derivaba su margen de reloj de un literal <code>15</code> para una unidad de 91.5 s, y quemaba el claim de escalación antes del WhatsApp: un nivel 4 que moría ahí no se reintentaba nunca.</td>
+      <td><span class="badge b-pen">cierra a medias</span> Cierra el modo de falla —<code>sendButtons</code> se alcanza siempre—, no el techo: <b>130.2 s contra 120</b> porque <code>venceEn</code> se ancla después de <code>leerInterruptor</code>.</td>
+    </tr>
+    <tr>
+      <td><code>54bddb2</code></td><td><code>REN-30-C1</code></td>
+      <td>El «Ejecutar ahora» de Peajes recorría hasta 1,000 líneas sin un solo chequeo de reloj: 914 s nominales contra un techo de 300.</td>
+      <td><span class="badge b-rev">no cierra</span> El bucle queda acotado, pero el prólogo (hasta 100 páginas de <code>gasto</code>, 30 s) corre <b>antes</b> del único chequeo. Y rompió dos rótulos.</td>
+    </tr>
+    <tr>
+      <td><code>30e5e14</code></td><td><code>OP-A6</code></td>
+      <td>El cotejo de despliegue preguntaba por la intención declarada y no por el estado: dos archivos del camino fiscal llevan días en <code>master</code> y no en producción, con el pulso verde.</td>
+      <td><span class="badge b-rev">no cierra</span> Lo mueve de sitio. El <code>::warning::</code> no escribe en <code>$GITHUB_STEP_SUMMARY</code>, no abre issue y no manda correo: las 14 corridas verdes habrían mandado <b>cero</b> notificaciones.</td>
+    </tr>
+    <tr>
+      <td><code>065f699</code></td><td><code>REN-31C-C1</code></td>
+      <td><b>Regresión propia:</b> con el reloj nuevo, un corte antes de la primera línea dejaba <code>revisadas = 0</code> y la pantalla decía «No había nada pendiente que barrer» sobre 1,000 líneas sin conciliar. La bitácora la archivaba como <code>ok</code>.</td>
+      <td><span class="badge b-arr">arreglado después de la medición</span> Prueba de render sobre el componente real; muere al quitar la guarda.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<p class="nota-pie"><b>Los cuatro traen prueba que muere al revertir el arreglo</b>, verificada por mutación en los dos sentidos. Ninguno se revirtió: la suite terminó verde en los cuatro. Que tres de ellos se midan como «cierra a medias» o «no cierra» no los invalida —el peor caso bajó de 202.2 s a 130.2 s y el bucle de peajes pasó de no tener reloj a tenerlo—; significa que el hallazgo sigue abierto con su parte restante escrita.</p>
+
+<h2>Los 2 rubros reauditados</h2>
+<div class="rejilla">
+  <div class="card"><div class="top"><div class="nom">Rendimiento y costo</div><div class="nota"><span class="v c">4</span><span class="dl eq">=</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:6 29:5 30:5 31:4 cont:4"><polyline points="2,13.0 26.5,16.25 51,16.25 75.5,19.5 100,19.5" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="19.5" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo"><b>Las tres razones aplican a la vez y se cancelan.</b> Bajaron dos peores casos (202.2→130.2 s; 914 s sin reloj → bucle acotado), el arreglo de peajes abrió un crítico en la pantalla del contralor, y la mirada más profunda encontró que <code>gps</code> (314.0/300) y <code>descarga-sat</code> (323.5/300) —que la 31 tenía en «está bien»— <b>también exceden</b>.</div>
+    <div class="sev"><span class="s c">2 críticos</span><span class="s">7 altos</span><span class="s">4 medios</span><span class="s">3 bajos</span></div></div>
+
+  <div class="card"><div class="top"><div class="nom">Operabilidad y DX</div><div class="nota"><span class="v w">5</span><span class="dl eq">=</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:6 29:6 30:7 31:5 cont:5"><polyline points="2,13.0 26.5,13.0 51,6.5 75.5,16.25 100,16.25" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="16.25" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo"><b>El arreglo es real y no mueve ninguna ancla del rubro</b>, y en la misma ventana las tres cifras que sostenían el 5 empeoraron: 7→<b>14</b> corridas verdes sobre el arreglo fiscal sin publicar, hueco del pulso 310→345 min, respaldo de Storage 18→19 días sin intento.</div>
+    <div class="sev"><span class="s c">1 crítico</span><span class="s">7 altos</span><span class="s">9 medios</span><span class="s">1 bajo</span></div></div>
+</div>
+
+<h2>Los 12 rubros — 10 conservan la nota de la 31 (no auditados esta ronda)</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Rubro</th><th class="num">31</th><th class="num">Hoy</th><th class="num">Δ</th><th>Estado en esta continuación</th></tr></thead>
+  <tbody>
+    <tr><td>Modelo de datos</td><td class="num">7</td><td class="num">7</td><td class="num">=</td><td>no auditado esta ronda</td></tr>
+    <tr><td>Backend y API</td><td class="num">6</td><td class="num">6</td><td class="num">=</td><td>no auditado esta ronda</td></tr>
+    <tr><td>Pruebas</td><td class="num">6</td><td class="num">6</td><td class="num">=</td><td>no auditado esta ronda</td></tr>
+    <tr><td>Frontend</td><td class="num">5</td><td class="num">5</td><td class="num">=</td><td>no auditado esta ronda · <code>FE-C1</code> reverificado abierto (<code>visibilidad.ts:41</code>, <code>forma-viaje.tsx:90</code>)</td></tr>
+    <tr><td>Seguridad</td><td class="num">5</td><td class="num">5</td><td class="num">=</td><td>no auditado esta ronda</td></tr>
+    <tr><td>Tool calling</td><td class="num">5</td><td class="num">5</td><td class="num">=</td><td>no auditado esta ronda</td></tr>
+    <tr><td><b>Operabilidad y DX</b></td><td class="num">5</td><td class="num"><b>5</b></td><td class="num">=</td><td><b>reauditado</b> — se atacó y no movió el ancla</td></tr>
+    <tr><td>Sistema agéntico</td><td class="num">4</td><td class="num">4</td><td class="num">=</td><td>no auditado esta ronda</td></tr>
+    <tr><td><b>Rendimiento y costo</b></td><td class="num">4</td><td class="num"><b>4</b></td><td class="num">=</td><td><b>reauditado</b> — tres razones que se cancelan</td></tr>
+    <tr><td>Arquitectura</td><td class="num">4</td><td class="num">4</td><td class="num">=</td><td>no auditado esta ronda · <code>ARQ-C1</code> reverificado abierto (<code>poliza/route.ts:363-367</code>)</td></tr>
+    <tr><td>Cumplimiento legal</td><td class="num">3</td><td class="num">3</td><td class="num">=</td><td>no auditado esta ronda</td></tr>
+    <tr><td>Cumplimiento fiscal</td><td class="num">3</td><td class="num">3</td><td class="num">=</td><td>no auditado esta ronda</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="nota-pie">Suma <b>57</b> · global <b>57 / 12 = 4.75 → 4.8</b>. Idéntica a la de la 31 porque los dos únicos rubros que se podían mover no se movieron, y los otros diez no se auditaron: una nota que no se auditó no cambia de valor por haber pasado un día.</p>
+
+<h2>Serie histórica de la global</h2>
+<div class="scroll" style="padding:16px 18px 10px">
+  <svg viewBox="0 0 664 150" style="width:100%;height:auto;display:block" role="img" aria-label="Serie: 25:6.2 26:5.3 27:6.0 28:5.3 29:4.4 30:6.0 31:4.8 cont:4.8">
+    <line x1="40" y1="120" x2="640" y2="120" stroke="var(--grid)" stroke-width="1"/>
+    <line x1="40" y1="20" x2="640" y2="20" stroke="var(--grid)" stroke-width="1"/>
+    <text x="24" y="124" fill="var(--text-muted)" font-size="11" text-anchor="end">4</text>
+    <text x="24" y="24" fill="var(--text-muted)" font-size="11" text-anchor="end">7</text>
+    <polyline points="60,46.7 140,76.7 220,53.3 300,76.7 380,106.7 460,53.3 540,93.3 620,93.3"
+              fill="none" stroke="var(--serie)" stroke-width="2.5" vector-effect="non-scaling-stroke" clip-path="inset(0 0 0 0)"/>
+    <circle cx="620" cy="93.3" r="4.5" fill="var(--serie)"/>
+    <text x="60"  y="140" fill="var(--text-muted)" font-size="10.5" text-anchor="middle">25 · 6.2</text>
+    <text x="140" y="140" fill="var(--text-muted)" font-size="10.5" text-anchor="middle">26 · 5.3</text>
+    <text x="220" y="140" fill="var(--text-muted)" font-size="10.5" text-anchor="middle">27 · 6.0</text>
+    <text x="300" y="140" fill="var(--text-muted)" font-size="10.5" text-anchor="middle">28 · 5.3</text>
+    <text x="380" y="140" fill="var(--text-muted)" font-size="10.5" text-anchor="middle">29 · 4.4</text>
+    <text x="460" y="140" fill="var(--text-muted)" font-size="10.5" text-anchor="middle">30 · 6.0</text>
+    <text x="540" y="140" fill="var(--text-muted)" font-size="10.5" text-anchor="middle">31 · 4.8</text>
+    <text x="620" y="140" fill="var(--text-primary)" font-size="10.5" text-anchor="middle" font-weight="600">cont · 4.8</text>
+  </svg>
+  <p class="nota-pie" style="margin-top:2px">El primer punto plano de la serie en ocho rondas. Las tres anteriores fueron ▼0.7, ▲1.6 y ▼1.2 — bandazos que la 30 y la 31 diagnosticaron como el encargo y no el código. Esta ronda el <code>MAPA</code> no sugirió ninguna dirección y los dos auditores relanzados argumentaron por escrito por qué ninguna de las tres razones movía su nota.</p>
+</div>
+
+<h2>Lo que impide llegar al demo — los críticos hoy</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>ID</th><th>Rubro</th><th>Qué pasa</th><th>Estado</th></tr></thead>
+  <tbody>
+    <tr><td><code>REN-31C-C1</code></td><td>Rendimiento</td><td>El acuse decía «No había nada pendiente que barrer» sobre una cola de 1,000 que el reloj cortó</td><td><span class="badge b-arr">arreglado · 065f699</span></td></tr>
+    <tr><td><code>REN-30-C2</code></td><td>Rendimiento</td><td><code>candidatosDeGasto</code> sola (427.5 s) excede el <code>maxDuration</code> del cron y va ANTES del único avance durable</td><td><span class="badge b-pen">pendiente · reincidente</span></td></tr>
+    <tr><td><code>OP-C1</code></td><td>Operabilidad</td><td><code>crons=degraded</code> sigue sin decir cuál — <b>6ª ronda</b>, cero líneas cambiadas</td><td><span class="badge b-pen">pendiente · decisión de producto</span></td></tr>
+    <tr><td><code>FIS-C1</code> <code>FIS-C2</code></td><td>Fiscal</td><td>El cotejo contra la clave del SAT corre DESPUÉS de la escritura que vigila</td><td><span class="badge b-pen">pendiente · no reauditado</span></td></tr>
+    <tr><td><code>ARQ-A3</code></td><td>Arquitectura</td><td>El dedup del ejercicio colapsa comprobantes que NO son copias: el PDF regala cupo del 15 %</td><td><span class="badge b-pen">pendiente · sin Postgres aquí</span></td></tr>
+    <tr><td><code>ARQ-C1</code></td><td>Arquitectura</td><td>Un ajuste firmado tira el export contable del periodo completo — 9ª aparición, reverificado hoy</td><td><span class="badge b-pen">pendiente</span></td></tr>
+    <tr><td><code>LEG-C1</code> <code>LEG-31-C1</code></td><td>Legal</td><td>La coordenada del operador en texto plano; la foto que el aviso promete borrar y tres candados retienen</td><td><span class="badge b-pen">pendiente · no reauditado</span></td></tr>
+    <tr><td><code>PRU-C1</code></td><td>Pruebas</td><td>La cifra de dinero impresa sigue en 0 de 12: la puerta de cobertura excluye la capa entera</td><td><span class="badge b-pen">pendiente · no reauditado</span></td></tr>
+    <tr><td><code>FE-C1</code></td><td>Frontend</td><td>El despacho no ofrece el Anticipo: el viaje nace en 0 y la firma presenta ese cero como medición — 6ª ronda, reverificado hoy</td><td><span class="badge b-pen">pendiente</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Fuera de la tabla: lo que urge y no es código</h2>
+<div class="hero" style="border-color:var(--critical)">
+  <p class="t" style="flex:1 1 100%"><b>Segundo día consecutivo: el arreglo fiscal de la ronda 30 sigue en <code>master</code> y no en producción.</b>
+  <code>cuadre/desde_db.ts</code> (ARQ-C2 — el cubo del 15 %: con acumulado $100,000 y un ticket de diésel en efectivo de $4,700 fotografiado dos veces, el previo sale <b>$90,600</b> donde lo correcto son <b>$95,300</b>) y <code>sat_descarga/ciclo.ts</code> (AG-C1) entraron con <code>5ce91b2</code>, cuyo asunto no lleva <code>[deploy]</code>.
+  Último <code>[deploy]</code> en asunto: <code>cfa00ab</code>, del <b>10-sep</b>. El auditor de operabilidad contó <b>14</b> corridas verdes del pulso sobre ese estado (la 31 contó 7).
+  Se arregla con <b>Redeploy</b> en el panel de Vercel, o con un commit cuyo asunto lleve la bandera.</p>
+</div>
+
+<div class="leyenda">
+  <span><i style="background:var(--good)"></i>≥ 7</span>
+  <span><i style="background:var(--warning)"></i>5–6</span>
+  <span><i style="background:var(--critical)"></i>≤ 4</span>
+  <span>El color codifica la nota, nunca el delta.</span>
+</div>
+
+<p class="nota-pie">Ronda de continuación sobre el PR #462 · compuerta verde · 4 arreglos retenidos, 0 revertidos · los 12 archivos de rubro de la 31 se conservan; los 2 reauditados escriben <code>&lt;rubro&gt;-continuacion.md</code> aparte para poder leer el delta.</p>
+
+</div>
+</body>
+</html>

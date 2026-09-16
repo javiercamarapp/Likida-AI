@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="es" data-palette="#2a78d6">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auditoría 31 — Likida · 13-sep-2026</title>
+<style>
+  :root{
+    --surface-0:#f4f3f0; --surface-1:#fcfcfb; --borde:#e2e0da;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#82807a;
+    --good:#0ca30c; --warning:#fab219; --critical:#d03b3b; --serie:#2a78d6;
+    --good-ink:#0a7d0a; --warning-ink:#8a6000; --critical-ink:#b02f2f;
+    --grid:#e6e4de;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --surface-0:#111110; --surface-1:#1a1a19; --borde:#34342f;
+      --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#8e8d84;
+      --good:#0ca30c; --warning:#fab219; --critical:#d03b3b; --serie:#3987e5;
+      --good-ink:#3cc23c; --warning-ink:#fab219; --critical-ink:#e66767;
+      --grid:#2b2b27;
+    }
+  }
+  :root[data-theme="dark"]{
+    --surface-0:#111110; --surface-1:#1a1a19; --borde:#34342f;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#8e8d84;
+    --good:#0ca30c; --warning:#fab219; --critical:#d03b3b; --serie:#3987e5;
+    --good-ink:#3cc23c; --warning-ink:#fab219; --critical-ink:#e66767;
+    --grid:#2b2b27;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--surface-0); color:var(--text-primary);
+    font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:24px 16px 56px;
+  }
+  .wrap{max-width:1120px; margin:0 auto}
+  header{margin-bottom:20px}
+  h1{font-size:21px; margin:0 0 4px; letter-spacing:-.01em}
+  .sub{color:var(--text-secondary); font-size:13px; margin:0}
+  h2{font-size:13px; text-transform:uppercase; letter-spacing:.07em;
+     color:var(--text-muted); margin:32px 0 12px; font-weight:600}
+
+  /* ── barra de compuerta ─────────────────────────────────────────── */
+  .compuerta{display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 4px}
+  .chip{display:flex; align-items:center; gap:7px; background:var(--surface-1);
+        border:1px solid var(--borde); border-radius:8px; padding:7px 11px; font-size:12.5px}
+  .chip b{font-weight:600; color:var(--text-primary)}
+  .chip span{color:var(--text-secondary)}
+  .pip{width:9px; height:9px; border-radius:50%; flex:none}
+  .pip.ok{background:var(--good)} .pip.warn{background:var(--warning)}
+
+  /* ── hero ───────────────────────────────────────────────────────── */
+  .hero{display:flex; flex-wrap:wrap; align-items:baseline; gap:14px;
+        background:var(--surface-1); border:1px solid var(--borde);
+        border-radius:12px; padding:18px 20px; margin-top:16px}
+  .hero .n{font-size:44px; font-weight:650; letter-spacing:-.02em; line-height:1}
+  .hero .d{font-size:17px; font-weight:600}
+  .hero .t{color:var(--text-secondary); font-size:13px; flex:1 1 260px; min-width:0}
+
+  /* ── rejilla de rubros ──────────────────────────────────────────── */
+  .rejilla{display:grid; grid-template-columns:repeat(auto-fill,minmax(258px,1fr)); gap:10px}
+  .card{background:var(--surface-1); border:1px solid var(--borde);
+        border-radius:10px; padding:13px 14px; display:flex; flex-direction:column; gap:8px}
+  .card .top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px}
+  .card .nom{font-weight:600; font-size:13.5px; line-height:1.3}
+  .nota{display:flex; align-items:baseline; gap:6px; flex:none}
+  .nota .v{font-size:27px; font-weight:650; line-height:1; letter-spacing:-.02em}
+  .nota .dl{font-size:12px; font-weight:600}
+  .v.g{color:var(--good-ink)} .v.w{color:var(--warning-ink)} .v.c{color:var(--critical-ink)}
+  .dl.up{color:var(--good-ink)} .dl.down{color:var(--critical-ink)} .dl.eq{color:var(--text-muted)}
+  .riesgo{color:var(--text-secondary); font-size:12.2px; line-height:1.45}
+  .sev{display:flex; gap:5px; flex-wrap:wrap; margin-top:auto; padding-top:2px}
+  .s{font-size:11px; padding:2px 6px; border-radius:5px; border:1px solid var(--borde);
+     color:var(--text-secondary); background:var(--surface-0); white-space:nowrap}
+  .s.c{border-color:var(--critical); color:var(--critical-ink); font-weight:600}
+  .spark{height:26px; width:100%; display:block}
+
+  /* ── tablas ─────────────────────────────────────────────────────── */
+  .scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;
+          background:var(--surface-1); border:1px solid var(--borde); border-radius:10px}
+  table{border-collapse:collapse; width:100%; min-width:640px; font-size:12.8px}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--grid); vertical-align:top}
+  th{color:var(--text-muted); font-weight:600; font-size:11.5px;
+     text-transform:uppercase; letter-spacing:.05em; white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  td.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .badge{display:inline-block; font-size:10.5px; font-weight:600; padding:2px 6px;
+         border-radius:5px; white-space:nowrap}
+  .b-arr{background:rgba(12,163,12,.14); color:var(--good-ink)}
+  .b-pen{background:rgba(250,178,25,.18); color:var(--warning-ink)}
+  .b-rev{background:rgba(208,59,59,.14); color:var(--critical-ink)}
+  .b-pro{background:rgba(130,128,122,.16); color:var(--text-secondary)}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11.8px;
+       background:var(--surface-0); padding:1px 4px; border-radius:4px; border:1px solid var(--borde)}
+  .nota-pie{color:var(--text-muted); font-size:11.8px; margin-top:9px; line-height:1.5}
+  .leyenda{display:flex; gap:14px; flex-wrap:wrap; color:var(--text-secondary);
+           font-size:11.8px; margin-top:10px; align-items:center}
+  .leyenda i{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Auditoría 31 — Likida</h1>
+  <p class="sub">13-sep-2026 · ronda COMPLETA, 12 rubros · rama <code>claude/auditoria-31</code> sobre <code>4047a50</code> · árbol limpio, autofix habilitado</p>
+
+  <div class="compuerta">
+    <div class="chip"><span class="pip ok"></span><b>npm test</b><span>984 archivos · 12,939 pasan · 6 saltadas · 144 s</span></div>
+    <div class="chip"><span class="pip ok"></span><b>tsc --noEmit</b><span>exit 0</span></div>
+    <div class="chip"><span class="pip ok"></span><b>eslint</b><span>0 errores · 154 avisos</span></div>
+    <div class="chip"><span class="pip ok"></span><b>lint:ratchet</b><span>0 nuevos</span></div>
+    <div class="chip"><span class="pip warn"></span><b>build</b><span>no corre en la nube (sin credenciales)</span></div>
+  </div>
+
+  <div class="hero">
+    <div class="n">4.8</div>
+    <div class="d" style="color:var(--critical-ink)">▼ 0.4</div>
+    <p class="t"><b>La ventana no trajo una línea de código.</b> Los dos commits desde la ronda 30 tocan solo <code>normas/.latido-*</code>. El árbol es, byte por byte, el que la 30 calificó con 5.2 — así que este ▼0.4 no mide el código: mide el instrumento.</p>
+  </div>
+</header>
+
+<h2>¿Qué me impide llegar al demo? — los 13 críticos</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>ID</th><th>Rubro</th><th>Qué pasa</th><th>Estado</th></tr></thead>
+  <tbody>
+    <tr><td><code>PRU-31-C2</code></td><td>Pruebas</td><td>El tope de efectivo de LISR 27-III que llega al motor no tenía ancla: <code>2000&nbsp;→&nbsp;20000</code> pasaba la suite entera</td><td><span class="badge b-arr">arreglado · fd66be6</span></td></tr>
+    <tr><td><code>FIS-C1</code></td><td>Fiscal</td><td>El cotejo contra la clave del SAT corre DESPUÉS de la escritura que vigila; el motor deduce igual</td><td><span class="badge b-pen">pendiente · 3ª forma</span></td></tr>
+    <tr><td><code>FIS-C2</code></td><td>Fiscal</td><td>El cotejo es de una dirección y un momento: cambiar la clave después no recalcula nada</td><td><span class="badge b-pen">pendiente</span></td></tr>
+    <tr><td><code>ARQ-A3</code></td><td>Arquitectura</td><td>El dedup del ejercicio colapsa comprobantes que NO son copias: el PDF regala cupo del 15 %</td><td><span class="badge b-pen">pendiente</span></td></tr>
+    <tr><td><code>ARQ-C1</code></td><td>Arquitectura</td><td>Un ajuste firmado tira el export contable del periodo completo — 9ª aparición</td><td><span class="badge b-pen">pendiente</span></td></tr>
+    <tr><td><code>LEG-31-C1</code></td><td>Legal</td><td>El aviso promete que la foto sin gasto «se elimina sola»; tres candados garantizan que no se borra nunca</td><td><span class="badge b-pro">propuesto · nuevo</span></td></tr>
+    <tr><td><code>LEG-C1</code></td><td>Legal</td><td>La coordenada exacta del operador queda en texto; ni la purga de 90 días ni ARCO la alcanzan</td><td><span class="badge b-pen">pendiente</span></td></tr>
+    <tr><td><code>REN-31-C1</code></td><td>Rendimiento</td><td>El cron de emergencias reserva 15 s para una unidad de 81.5 s y quema el claim antes del WhatsApp</td><td><span class="badge b-pro">propuesto · nuevo</span></td></tr>
+    <tr><td><code>REN-30-C1</code></td><td>Rendimiento</td><td>«Ejecutar ahora» del Agente de Peajes: 914 s nominales contra un techo de 300 s</td><td><span class="badge b-pen">pendiente</span></td></tr>
+    <tr><td><code>REN-30-C2</code></td><td>Rendimiento</td><td><code>candidatosDeGasto</code> sola (427.5 s) excede el <code>maxDuration</code> del cron</td><td><span class="badge b-pen">pendiente</span></td></tr>
+    <tr><td><code>OP-C1</code></td><td>Operabilidad</td><td><code>crons=degraded</code> sigue sin decir cuál — 5ª ronda, cero líneas cambiadas</td><td><span class="badge b-pen">pendiente</span></td></tr>
+    <tr><td><code>PRU-C1</code></td><td>Pruebas</td><td>La cifra de dinero impresa sigue en 0 de 12: <code>vitest.config.ts:104</code> excluye <code>src/app/**/*.tsx</code> de la puerta</td><td><span class="badge b-pen">pendiente</span></td></tr>
+    <tr><td><code>FE-C1</code></td><td>Frontend</td><td>El despacho no ofrece el Anticipo: el viaje nace en 0 y la firma presenta ese cero como medición — 6ª ronda</td><td><span class="badge b-pen">pendiente</span></td></tr>
+  </tbody>
+</table>
+</div>
+<p class="nota-pie"><b>Fuera de la tabla, y es el hallazgo operativo de la ronda:</b> los dos arreglos que la ronda 30 commiteó —<code>cuadre/desde_db.ts</code> (ARQ-C2) y <code>sat_descarga/ciclo.ts</code> (AG-C1)— están en <code>master</code> y <b>no en producción</b>: el merge no llevó la bandera <code>[deploy]</code> en el asunto. Último <code>[deploy]</code> = <code>cfa00ab</code>, del 10-sep. El pulso de salud sale verde igual porque mide «¿aterrizó lo último que se pidió publicar?», no «¿producción está al día?».</p>
+
+<h2>Los 12 rubros</h2>
+<div class="rejilla">
+
+  <div class="card"><div class="top"><div class="nom">Modelo de datos</div><div class="nota"><span class="v g">7</span><span class="dl eq">=</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:6 29:7 30:7 31:7"><polyline points="2,13.0 34.7,6.5 67.3,6.5 100,6.5" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="6.5" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo">Ninguna de las tres razones aplica: no entró esquema. 155/155 tablas con RLS y 21/21 <code>onConflict</code> respaldados; el hueco es <code>factura_proveedor</code> sin piso en importes.</div>
+    <div class="sev"><span class="s">0 críticos</span><span class="s">0 altos</span><span class="s">5 medios</span><span class="s">9 bajos</span></div></div>
+
+  <div class="card"><div class="top"><div class="nom">Backend y API</div><div class="nota"><span class="v w">6</span><span class="dl down">▼1</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:4 29:6 30:7 31:6"><polyline points="2,19.5 34.7,13.0 67.3,6.5 100,13.0" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="13.0" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo">Mirada más profunda. El predicado de «liquidación vigente» está escrito <b>31 veces a mano</b> (14 TS + 17 SQL) y faltan 2 lectores vivos. La cola de borrado de Storage se atasca para siempre y el cron late <code>ok</code>.</div>
+    <div class="sev"><span class="s">0 críticos</span><span class="s">5 altos</span><span class="s">3 medios</span><span class="s">3 bajos</span></div></div>
+
+  <div class="card"><div class="top"><div class="nom">Pruebas</div><div class="nota"><span class="v w">6</span><span class="dl eq">=</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:6 29:7 30:6 31:6"><polyline points="2,13.0 34.7,6.5 67.3,13.0 100,13.0" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="13.0" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo">Dos fuerzas medibles se cancelan: el motor de cuadre sí está anclado (20/23 mutaciones mueren, 87 %), y la cifra de dinero impresa sigue en <b>0 de 12</b>. 45 mutaciones, 24 muertas.</div>
+    <div class="sev"><span class="s c">2 críticos</span><span class="s">4 altos</span><span class="s">4 medios</span><span class="s">1 bajo</span></div></div>
+
+  <div class="card"><div class="top"><div class="nom">Frontend</div><div class="nota"><span class="v w">5</span><span class="dl eq">=</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:4 29:6 30:5 31:5"><polyline points="2,19.5 34.7,13.0 67.3,16.25 100,16.25" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="16.25" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo">Cero cierres, segunda ronda seguida: los 6 abiertos existen exactamente como se describieron. Nuevo: la cola de Timbrado topa en 25 en silencio, tira las MÁS viejas e imprime el tope como total.</div>
+    <div class="sev"><span class="s c">1 crítico</span><span class="s">2 altos</span><span class="s">3 medios</span><span class="s">2 bajos</span></div></div>
+
+  <div class="card"><div class="top"><div class="nom">Seguridad</div><div class="nota"><span class="v w">5</span><span class="dl down">▼1</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:7 29:7 30:6 31:5"><polyline points="2,6.5 34.7,6.5 67.3,13.0 100,16.25" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="16.25" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo">Mirada más profunda: dos afirmaciones de la nota anterior salieron más angostas al medirlas. Crítico descartado <b>por escrito</b>: 156/156 tablas con RLS, 6/7 buckets privados, <code>npm audit</code> 0/751.</div>
+    <div class="sev"><span class="s">0 críticos</span><span class="s">1 alto</span><span class="s">4 medios</span><span class="s">4 bajos</span></div></div>
+
+  <div class="card"><div class="top"><div class="nom">Tool calling</div><div class="nota"><span class="v w">5</span><span class="dl eq">=</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:5 29:7 30:5 31:5"><polyline points="2,16.25 34.7,6.5 67.3,16.25 100,16.25" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="16.25" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo">El árbol es byte por byte el que calificó la 30 y ninguna de las tres razones aplica. Las 33 tools siguen respetando <code>properties: {}</code>; 10 reincidentes verificados uno por uno.</div>
+    <div class="sev"><span class="s">0 críticos</span><span class="s">3 altos</span><span class="s">6 medios</span><span class="s">4 bajos</span></div></div>
+
+  <div class="card"><div class="top"><div class="nom">Operabilidad y DX</div><div class="nota"><span class="v w">5</span><span class="dl down">▼2</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:3 29:6 30:7 31:5"><polyline points="2,22.75 34.7,13.0 67.3,6.5 100,16.25" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="16.25" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo"><b>Deuda que cobró factura.</b> La medición que sostenía el 7 —cobertura de publicación 100 %— se invirtió a <b>0 %</b> en una ventana, y lo que quedó sin publicar son los dos arreglos fiscales de la 30.</div>
+    <div class="sev"><span class="s c">1 crítico</span><span class="s">6 altos</span><span class="s">5 medios</span><span class="s">1 bajo</span></div></div>
+
+  <div class="card"><div class="top"><div class="nom">Sistema agéntico</div><div class="nota"><span class="v c">4</span><span class="dl eq">=</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:4 29:7 30:4 31:4"><polyline points="2,19.5 34.7,6.5 67.3,19.5 100,19.5" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="19.5" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo">Se cancelan: AG-C1 quedó <b>cerrado de verdad</b> (verificado en <code>ciclo.ts:342-357</code>) y aparece un ALTO nuevo en el camino feliz del demo — el PDF encolado que se reporta como no entregado.</div>
+    <div class="sev"><span class="s">0 críticos</span><span class="s">4 altos</span><span class="s">1 medio</span><span class="s">3 bajos</span></div></div>
+
+  <div class="card"><div class="top"><div class="nom">Rendimiento y costo</div><div class="nota"><span class="v c">4</span><span class="dl down">▼1</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:4 29:6 30:5 31:4"><polyline points="2,19.5 34.7,13.0 67.3,16.25 100,19.5" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="19.5" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo">Mirada más profunda: tres techos reventados más que nadie había sumado, en rutas que la 30 dio por buenas. La suma sigue en <b>331.2 s contra 300</b>, sin moverse un segundo desde la 29.</div>
+    <div class="sev"><span class="s c">3 críticos</span><span class="s">5 altos</span><span class="s">6 medios</span><span class="s">2 bajos</span></div></div>
+
+  <div class="card"><div class="top"><div class="nom">Arquitectura</div><div class="nota"><span class="v c">4</span><span class="dl up">▲1</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:3 29:4 30:3 31:4"><polyline points="2,22.75 34.7,19.5 67.3,22.75 100,19.5" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="19.5" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo"><b>Se atacó y subió</b>, topado por el ancla: la misma lógica de dinero sigue en más de un archivo. ARQ-C2 y ARQ-A1 cerrados de verdad, y el guardia TS↔SQL ya <b>deriva</b> su objetivo en vez de teclearlo.</div>
+    <div class="sev"><span class="s c">2 críticos</span><span class="s">3 altos</span><span class="s">4 medios</span><span class="s">3 bajos</span></div></div>
+
+  <div class="card"><div class="top"><div class="nom">Cumplimiento legal</div><div class="nota"><span class="v c">3</span><span class="dl down">▼1</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:4 29:5 30:4 31:3"><polyline points="2,19.5 34.7,16.25 67.3,19.5 100,22.75" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="22.75" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo">El ancla dice «3 o menos si hay transferencia sin cobertura», y hay <b>dos</b> abiertas y reconfirmadas. Las 3 tablas con dato personal de esta ronda no aparecen en ninguna de las 18 funciones de mantenimiento.</div>
+    <div class="sev"><span class="s c">2 críticos</span><span class="s">7 altos</span><span class="s">5 medios</span><span class="s">1 bajo</span></div></div>
+
+  <div class="card"><div class="top"><div class="nom">Cumplimiento fiscal</div><div class="nota"><span class="v c">3</span><span class="dl eq">=</span></div></div>
+    <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="28:3 29:4 30:3 31:3"><polyline points="2,22.75 34.7,19.5 67.3,22.75 100,22.75" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98" cy="22.75" r="2.6" fill="var(--serie)"/></svg>
+    <div class="riesgo">Los 13 abiertos siguen intactos y ninguno estaba mal reportado. Nuevo: la calculadora pública imprime el estímulo de IEPS <b>en pesos</b> con la cuota de una semana × un año de litros — 3.80× de dispersión.</div>
+    <div class="sev"><span class="s c">2 críticos</span><span class="s">4 altos</span><span class="s">7 medios</span><span class="s">4 bajos</span></div></div>
+
+</div>
+<div class="leyenda">
+  <span><i style="background:var(--good)"></i>≥ 7 · con red</span>
+  <span><i style="background:var(--warning)"></i>5–6 · los bordes son fe</span>
+  <span><i style="background:var(--critical)"></i>≤ 4 · hace algo mal y nadie se entera</span>
+  <span>El color codifica la NOTA, nunca el delta: un rubro que sube de 3 a 4 sigue en rojo.</span>
+</div>
+
+<h2>¿Voy mejorando o me estoy contando una historia?</h2>
+<div class="scroll" style="padding:18px 16px 10px">
+  <svg viewBox="0 0 720 180" width="100%" height="180" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Serie histórica de la nota global: ronda 24 6.2, 25 5.3, 26 6.0, 27 5.3, 28 4.4, 29 6.0, 30 5.2, 31 4.8">
+    <line x1="44" y1="16"  x2="712" y2="16"  stroke="var(--grid)" stroke-width="1"/>
+    <line x1="44" y1="56"  x2="712" y2="56"  stroke="var(--grid)" stroke-width="1"/>
+    <line x1="44" y1="96"  x2="712" y2="96"  stroke="var(--grid)" stroke-width="1"/>
+    <line x1="44" y1="136" x2="712" y2="136" stroke="var(--grid)" stroke-width="1"/>
+    <text x="34" y="20"  text-anchor="end" fill="var(--text-muted)" font-size="11">7</text>
+    <text x="34" y="60"  text-anchor="end" fill="var(--text-muted)" font-size="11">6</text>
+    <text x="34" y="100" text-anchor="end" fill="var(--text-muted)" font-size="11">5</text>
+    <text x="34" y="140" text-anchor="end" fill="var(--text-muted)" font-size="11">4</text>
+    <polyline points="76,48 167,84 258,56 349,84 440,120 531,56 622,88 713,104"
+              fill="none" stroke="var(--serie)" stroke-width="2" stroke-linejoin="round"/>
+    <g fill="var(--serie)">
+      <circle cx="76" cy="48" r="4"/><circle cx="167" cy="84" r="4"/><circle cx="258" cy="56" r="4"/>
+      <circle cx="349" cy="84" r="4"/><circle cx="440" cy="120" r="4"/><circle cx="531" cy="56" r="4"/>
+      <circle cx="622" cy="88" r="4"/>
+    </g>
+    <circle cx="713" cy="104" r="5.5" fill="var(--serie)" stroke="var(--surface-1)" stroke-width="2"/>
+    <g fill="var(--text-secondary)" font-size="11" text-anchor="middle">
+      <text x="76" y="38">6.2</text><text x="167" y="74">5.3</text><text x="258" y="46">6.0</text>
+      <text x="349" y="74">5.3</text><text x="440" y="110">4.4</text><text x="531" y="46">6.0</text>
+      <text x="622" y="78">5.2</text>
+    </g>
+    <text x="713" y="94" fill="var(--text-primary)" font-size="12" font-weight="600" text-anchor="middle">4.8</text>
+    <g fill="var(--text-muted)" font-size="11" text-anchor="middle">
+      <text x="76" y="168">24</text><text x="167" y="168">25</text><text x="258" y="168">26</text>
+      <text x="349" y="168">27</text><text x="440" y="168">28</text><text x="531" y="168">29</text>
+      <text x="622" y="168">30</text><text x="713" y="168">31</text>
+    </g>
+  </svg>
+</div>
+<p class="nota-pie">Ocho rondas, amplitud de <b>1.8 puntos</b> sobre un producto que casi no cambió de forma. La 31 es la primera corrida con el MAPA escrito a propósito <b>sin sugerir dirección</b> — la acción de cierre que dejó la 30 — y sobre código congelado. Resultado: <b>5 de 12 rubros no movieron su nota</b> y lo dijeron con esas palabras («ninguna de las tres razones aplica»), contra 1 de 12 en la 30.</p>
+
+<h2>Hallazgos: 148 en total · 13 críticos · 89 reincidentes</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Rubro</th><th class="num">Nota</th><th class="num">Δ</th><th class="num">Crít.</th><th class="num">Altos</th><th class="num">Medios</th><th class="num">Bajos</th><th class="num">Total</th><th>Razón del movimiento</th></tr></thead>
+  <tbody>
+    <tr><td>Modelo de datos</td><td class="num">7</td><td class="num">=</td><td class="num">0</td><td class="num">0</td><td class="num">5</td><td class="num">9</td><td class="num">14</td><td>Ninguna de las tres aplica — no entró esquema</td></tr>
+    <tr><td>Backend y API</td><td class="num">6</td><td class="num">▼1</td><td class="num">0</td><td class="num">5</td><td class="num">3</td><td class="num">3</td><td class="num">11</td><td>Mirada más profunda</td></tr>
+    <tr><td>Pruebas</td><td class="num">6</td><td class="num">=</td><td class="num">2</td><td class="num">4</td><td class="num">4</td><td class="num">1</td><td class="num">11</td><td>Dos fuerzas medibles se cancelan</td></tr>
+    <tr><td>Frontend</td><td class="num">5</td><td class="num">=</td><td class="num">1</td><td class="num">2</td><td class="num">3</td><td class="num">2</td><td class="num">9</td><td>Ninguna de las tres aplica</td></tr>
+    <tr><td>Seguridad</td><td class="num">5</td><td class="num">▼1</td><td class="num">0</td><td class="num">1</td><td class="num">4</td><td class="num">4</td><td class="num">9</td><td>Mirada más profunda</td></tr>
+    <tr><td>Tool calling</td><td class="num">5</td><td class="num">=</td><td class="num">0</td><td class="num">3</td><td class="num">6</td><td class="num">4</td><td class="num">13</td><td>Ninguna de las tres aplica</td></tr>
+    <tr><td>Operabilidad y DX</td><td class="num">5</td><td class="num">▼2</td><td class="num">1</td><td class="num">6</td><td class="num">5</td><td class="num">1</td><td class="num">13</td><td><b>Deuda que cobró factura</b></td></tr>
+    <tr><td>Sistema agéntico</td><td class="num">4</td><td class="num">=</td><td class="num">0</td><td class="num">4</td><td class="num">1</td><td class="num">3</td><td class="num">8</td><td>Un cierre real y un ALTO nuevo se cancelan</td></tr>
+    <tr><td>Rendimiento y costo</td><td class="num">4</td><td class="num">▼1</td><td class="num">3</td><td class="num">5</td><td class="num">6</td><td class="num">2</td><td class="num">16</td><td>Mirada más profunda</td></tr>
+    <tr><td>Arquitectura</td><td class="num">4</td><td class="num">▲1</td><td class="num">2</td><td class="num">3</td><td class="num">4</td><td class="num">3</td><td class="num">12</td><td><b>Se atacó y subió</b></td></tr>
+    <tr><td>Cumplimiento legal</td><td class="num">3</td><td class="num">▼1</td><td class="num">2</td><td class="num">7</td><td class="num">5</td><td class="num">1</td><td class="num">15</td><td>Mirada más profunda</td></tr>
+    <tr><td>Cumplimiento fiscal</td><td class="num">3</td><td class="num">=</td><td class="num">2</td><td class="num">4</td><td class="num">7</td><td class="num">4</td><td class="num">17</td><td>Ninguna de las tres aplica</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="nota-pie">Global = media aritmética de los 12: <b>57 / 12 = 4.75 → 4.8</b>.</p>
+
+<h2>Arreglos de la ronda</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Hallazgo</th><th>Qué se hizo</th><th>Prueba</th><th>Estado</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>PRU-31-C2</code><br><span style="color:var(--text-muted)">CRÍTICO</span></td>
+      <td>Anclado el tope de efectivo de LISR 27-III <b>en la rama que producción sí toma</b>: el default de <code>DEMO_CONFIG</code> y la frontera de comportamiento con ese default puesto como lo pone <code>desde_db.ts:215</code>.</td>
+      <td>Rojo medido → verde: con <code>2000→20000</code> mueren 4 de las 5 aserciones nuevas; antes pasaban 593 pruebas de <code>cuadre</code>+<code>config</code> en verde.</td>
+      <td><span class="badge b-arr">retenido · fd66be6</span></td>
+    </tr>
+    <tr>
+      <td><code>AG-31-A1</code><br><span style="color:var(--text-muted)">ALTO</span></td>
+      <td>Intentado: usar <code>pdfEstadoDe</code> en el cierre para no reportar como «no entregado» un PDF que el outbox ya tiene.</td>
+      <td>La prueba reproducía el bug (2 rojas, control verde), pero <b>la suite completa lo rechazó</b>: un 400 de Meta sin <code>code</code> parseable da <code>codigo: undefined</code>, que <code>pdfEstadoDe</code> traduce a «encolado» — y ese caso <b>no</b> se encola. El arreglo habría sellado como entregado un PDF perdido.</td>
+      <td><span class="badge b-rev">revertido → pendiente</span></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<p class="nota-pie"><b>Lo que ese intento fallido destapó, y vale más que el arreglo:</b> <code>pdfEstadoDe</code> no puede distinguir «el catch de red encoló» de «un 400 sin código, que no encola», porque <code>client.ts:571</code> no devuelve <code>status</code>. El llamador que <b>ya</b> la usa —<code>processor.ts:1192</code>, el camino de reentrega— tiene ese defecto <b>vivo hoy</b>: con un 400 sin código sella la entrega y se calla, y el chofer nunca recibe su PDF. Hallazgo nuevo, propuesto: arreglarlo es cambiar el contrato de <code>sendDocument</code>, que usan cuatro emisores.</p>
+
+</div>
+</body>
+</html>

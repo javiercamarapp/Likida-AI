@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { escalarAsistenciasPendientes } from '@/lib/likida/asistencia_escalamiento';
+import { escalarAsistenciasPendientes, EXTRA_LATIDO_MS } from '@/lib/likida/asistencia_escalamiento';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
+import { margenUnidadAtomicaMs } from '@/lib/likida/presupuesto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,11 @@ export const maxDuration = 120;
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function GET(req: Request) {
+  // El hachazo de Vercel cuenta desde que ENTRÓ la petición, no desde que esta
+  // función decide su plazo: con `venceEn` anclado después del prólogo, la
+  // corrida se regalaba todo lo que el prólogo tardó (dos consultas, hasta
+  // 9.5 s cada una) y el techo medido se iba a 130.2 s contra 120.
+  const entrada = Date.now();
   const puerta = await puertaCron('asistencia', req, 'El reloj de emergencias no corre sin él.');
   if (puerta) return puerta;
 
@@ -55,7 +61,32 @@ export async function GET(req: Request) {
     return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }
 
-  const venceEn = Date.now() + (maxDuration - 15) * 1000;
+  // REN-31-C1 (auditoría 31): el margen era el literal `15` y la unidad que
+  // este cron despacha vale 91.5 s. `escalarUna` escribe el claim
+  // (`nivel_escalado = objetivo`) ANTES de mandar el WhatsApp, y el barrido
+  // siguiente filtra `.lt('nivel_escalado', NIVEL_MAXIMO)`: una escalada
+  // admitida a 1 s de `venceEn` moría a mitad de camino con el claim ya
+  // quemado, y la emergencia desaparecía del barrido para siempre — sin
+  // `sendButtons`, sin `alertarOperador` y sin fila de bitácora que dijera que
+  // el aviso no salió. Es REN-A4/REN-A5 de la 28 otra vez: el margen se DERIVA
+  // de los techos de la cadena real (7 consultas + 2 envíos, contados paso por
+  // paso en `route.test.ts`), nunca se teclea.
+  //
+  // El precio, declarado: la ventana para admitir trabajo baja a ~28.5 s de
+  // los 120. Lo que no entra sale en `cortadosPorReloj` y lo toma la corrida
+  // de 5 minutos después — que es el contrato que el comentario de arriba ya
+  // declaraba. Una emergencia atendida un ciclo tarde se recupera; una que se
+  // perdió del barrido, no.
+  //
+  // PARTE RESTANTE, cerrada aquí (auditoría 31, continuación 2): la cuenta
+  // eran 7 consultas y la cadena real tiene 8 — `escalarUna` lee
+  // `leerConfigCobranza` en el camino ámbar (`asistencia_escalamiento.ts:278`)
+  // ANTES del claim. Con esa octava, más el techo real del latido, el peor caso
+  // queda en 120.0 s exactos contra `maxDuration = 120`. El precio declarado:
+  // la ventana para admitir trabajo baja a ~14.5 s, y lo que no entra lo toma
+  // la corrida de 5 minutos después.
+  const MARGEN_MS = margenUnidadAtomicaMs({ consultas: 8, envios: 2, extraMs: EXTRA_LATIDO_MS });
+  const venceEn = entrada + maxDuration * 1000 - MARGEN_MS;
   try {
     const r = await escalarAsistenciasPendientes(new Date(), { venceEn });
     logger.info('cron.asistencia.ok', { ...r });
