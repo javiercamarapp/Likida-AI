@@ -182,3 +182,43 @@ it('rechaza una nota de crédito antes de persistir líneas o tocar gastos, incl
   expect(gastoUpdates).toHaveLength(0);
   expect(lineasUpsertPayload).toBeNull();
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REN-30-C2 (auditorías 29-32, CRÍTICO) — el reloj de la invocación tiene que
+// llegar hasta la lectura de candidatos, y el corte tiene que ocurrir ANTES
+// del primer avance durable.
+//
+// `sat_descarga/ciclo.ts` mira la hora UNA vez por XML (`:277`) y despacha
+// `guardarYConciliarConsolidado` sin volver a mirarla. Dentro, la lectura de
+// candidatos puede correr 100 páginas de `gasto` —30.0 s nominales, hasta
+// 950 s a techos— contra un margen reservado de 43.5 s y un `maxDuration` de
+// 300. La invocación moría con los sellos a medio escribir y sin
+// `registrarLatido`.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('guardarYConciliarConsolidado — el reloj de la invocación (REN-30-C2)', () => {
+  it('con el reloj agotado LANZA y no deja ni un avance durable escrito', async () => {
+    await expect(guardarYConciliarConsolidado(
+      't1',
+      xmlConsolidado([linea(0, 100, '2026-01-10'), linea(1, 200, '2026-01-11')]),
+      '<xml/>',
+      Date.now() - 1,
+    )).rejects.toThrow(/el reloj de la invocación se agotó/);
+
+    // Lo que hace re-entrante al corte: nada de la decisión llegó a disco, así
+    // que el comprobante queda sin sellar y la vuelta siguiente lo retoma.
+    expect(gastoUpdates, 'selló gastos con una lista de candidatos que nunca terminó de leer').toEqual([]);
+    expect(lineasUpsertPayload, 'escribió líneas de conciliación tras quedarse sin reloj').toBeNull();
+  });
+
+  it('con reloj de sobra concilia exactamente igual que sin reloj', async () => {
+    const sinReloj = await guardarYConciliarConsolidado(
+      't1', xmlConsolidado([linea(0, 100, '2026-01-10')]), '<xml/>',
+    );
+    gastoUpdates = [];
+    lineasUpsertPayload = null;
+    const conReloj = await guardarYConciliarConsolidado(
+      't1', xmlConsolidado([linea(0, 100, '2026-01-10')]), '<xml/>', Date.now() + 60_000,
+    );
+    expect(conReloj).toEqual(sinReloj);
+  });
+});

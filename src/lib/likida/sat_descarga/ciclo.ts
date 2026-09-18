@@ -338,7 +338,7 @@ async function ingerir(
       // vuelve a entrar aquí y retoma justo donde se quedó, en vez de saltarlo
       // para siempre. Se reintenta siempre, no solo cuando es nuevo.
       try {
-        await guardarYConciliarConsolidado(cfg.tenantId, cfdi, xml);
+        await guardarYConciliarConsolidado(cfg.tenantId, cfdi, xml, venceEn);
         // AG-C1 (auditoría 30): `marcar` va FUERA del `if (!yaDescargado)`.
         // Reintentar la conciliación y no cerrar el ciclo es peor que no
         // reintentarla: el sello nace en 'disponible' —que es literalmente
