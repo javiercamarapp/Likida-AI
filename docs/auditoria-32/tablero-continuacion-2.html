@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auditoría 32 — continuación 2</title>
+<style>
+  :root {
+    --bg:#f7f7f5; --surface:#ffffff; --border:#e3e2dd; --grid:#ececE8;
+    --text:#1f1f1d; --text-secondary:#4a4a45; --text-muted:#76756e;
+    --good:#0ca30c; --warning:#fab219; --critical:#d03b3b; --serie:#2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#17171a; --surface:#1f1f23; --border:#33333a; --grid:#2b2b31;
+      --text:#f2f2ef; --text-secondary:#c5c5bf; --text-muted:#908f88;
+      --good:#39c439; --warning:#f5c04e; --critical:#ef6b6b; --serie:#3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#17171a; --surface:#1f1f23; --border:#33333a; --grid:#2b2b31;
+    --text:#f2f2ef; --text-secondary:#c5c5bf; --text-muted:#908f88;
+    --good:#39c439; --warning:#f5c04e; --critical:#ef6b6b; --serie:#3987e5;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    padding:24px 16px 48px; }
+  .lienzo { max-width:960px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; letter-spacing:-0.01em; }
+  .sub { color:var(--text-muted); margin:0 0 20px; font-size:13px; }
+  .tarjetas { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+  .tarjeta { flex:1 1 168px; background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:12px 14px; }
+  .tarjeta .k { color:var(--text-muted); font-size:11.5px; text-transform:uppercase;
+    letter-spacing:0.05em; margin-bottom:4px; }
+  .tarjeta .v { font-size:26px; font-weight:600; letter-spacing:-0.02em; }
+  .tarjeta .v small { font-size:13px; font-weight:400; color:var(--text-muted); margin-left:4px; }
+  .panel { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:16px; margin-bottom:20px; }
+  .panel h2 { font-size:14px; margin:0 0 12px; letter-spacing:-0.005em; }
+  .desliz { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; min-width:620px; }
+  th { text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:0.05em;
+    color:var(--text-muted); font-weight:500; padding:0 10px 8px 0; border-bottom:1px solid var(--border); }
+  td { padding:9px 10px 9px 0; border-bottom:1px solid var(--grid); vertical-align:top; }
+  tr:last-child td { border-bottom:none; }
+  .rubro { font-weight:500; white-space:nowrap; }
+  .nota { font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; white-space:nowrap; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; vertical-align:middle; }
+  .dot.good { background:var(--good); } .dot.warning { background:var(--warning); }
+  .dot.critical { background:var(--critical); }
+  .delta { font-variant-numeric:tabular-nums; white-space:nowrap; font-size:13px; }
+  .delta.baja { color:var(--critical); font-weight:600; }
+  .delta.sube { color:var(--good); font-weight:600; }
+  .delta.igual { color:var(--text-muted); }
+  .sparkcell { width:110px; }
+  .spark { width:100px; height:26px; display:block; }
+  .porque { color:var(--text-secondary); font-size:12.5px; min-width:260px; }
+  .pill { display:inline-block; font-size:10.5px; padding:1px 7px; border-radius:99px;
+    border:1px solid var(--border); color:var(--text-muted); margin-left:6px;
+    font-weight:400; vertical-align:1px; }
+  .pill.auditada { border-color:var(--serie); color:var(--serie); }
+  .compuerta { display:flex; flex-wrap:wrap; gap:10px; }
+  .chk { flex:1 1 190px; display:flex; gap:9px; align-items:flex-start;
+    border:1px solid var(--border); border-radius:8px; padding:10px 12px; }
+  .chk .ico { font-size:13px; line-height:1.45; }
+  .chk .t { font-weight:500; font-size:13px; }
+  .chk .d { color:var(--text-muted); font-size:12px; font-variant-numeric:tabular-nums; }
+  ul.lista { margin:0; padding-left:18px; color:var(--text-secondary); font-size:12.5px; }
+  ul.lista li { margin-bottom:7px; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px;
+    background:var(--grid); padding:1px 4px; border-radius:4px; }
+  .pie { color:var(--text-muted); font-size:12px; margin-top:6px; }
+  .serieglobal { width:100%; height:auto; display:block; }
+  .ejelab { font-size:9px; fill:var(--text-muted); }
+  .vallab { font-size:9.5px; fill:var(--text-secondary); font-variant-numeric:tabular-nums; }
+  @media (max-width:520px) { body { padding:16px 16px 40px; } h1 { font-size:18px; } }
+
+  .v.ok { color:var(--good); }
+  .pill.sev { border-color:var(--critical); color:var(--critical); }
+  .nota-pie { color:var(--text-muted); font-size:12.5px; margin:10px 0 0; line-height:1.55; }
+  .alerta { background:#fff8e6; border:1px solid #e8d9a8; border-left:3px solid var(--warning);
+            padding:12px 14px; border-radius:6px; font-size:13.5px; line-height:1.6; margin:0; }
+  .nocorre { color:var(--text-muted); font-style:italic; }
+</style></head>
+</head>
+<body>
+  <h1>Auditoría 32 — continuación del 18-sep</h1>
+  <p class="sub">Ronda de <strong>continuación</strong> sobre el PR #477 (rama <code>claude/auditoria-32</code>) · <strong>6 rubros rotados</strong> de 12 · árbol limpio al arrancar, autofix habilitado · <code>origin/master</code> sin moverse desde el 16-sep</p>
+  <section class="tarjetas">
+    <div class="tarjeta"><div class="k">Global</div><div class="v">4.25<small>▼0.08 vs 4.33</small></div></div>
+    <div class="tarjeta"><div class="k">Suma de las 12</div><div class="v">51<small>▼1 vs 52</small></div></div>
+    <div class="tarjeta"><div class="k">Rubros auditados</div><div class="v">6<small>5 sin archivo + 1 por código cambiado</small></div></div>
+    <div class="tarjeta"><div class="k">Arreglos retenidos</div><div class="v">3<small>2 CRÍTICOS + 1 ALTO · 0 revertidos</small></div></div>
+    <div class="tarjeta"><div class="k">Compuerta</div><div class="v ok">verde<small>989 arch · 12,990 pasan · 0 fallan</small></div></div>
+  </section>
+  <section>
+    <h2>Los doce rubros — 6 rotados, 6 con nota heredada</h2>
+    <table>
+      <thead><tr><th>Rubro</th><th>Nota</th><th>Δ</th><th>28 → hoy</th><th>Porqué del movimiento</th></tr></thead>
+      <tbody>
+    <tr>
+      <td class="rubro">Modelo de datos y esquema <span class="pill auditada">auditado hoy</span></td>
+      <td class="nota"><span class="dot good" aria-hidden="true"></span>6</td>
+      <td class="delta sube">▲1</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:6 29:7 30:7 31:7 31·c1:7 31·c2:7 32:7 32·c1:5 hoy:6"><polyline points="2.0,10.80 14.0,8.60 26.0,8.60 38.0,8.60 50.0,8.60 62.0,8.60 74.0,8.60 86.0,13.00 98.0,10.80" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="10.80" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque"><b>Se atacó y subió.</b> Los dos CRÍTICOS de ayer cerraron de verdad: verificado contra Postgres 16 propio con las 336 migraciones limpias, <code>pg_get_functiondef</code> diffeado, rojo real en los dos sentidos, idempotentes y con la ACL intacta. Contra eso: ARQ-A3 sigue abierto en su mitad más frecuente y el espejo motor↔panel sigue roto por el eje del folio.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Backend y API <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot good" aria-hidden="true"></span>6</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:6 30:7 31:6 31·c1:6 31·c2:6 32:6 32·c1:6 hoy:6"><polyline points="2.0,15.20 14.0,10.80 26.0,8.60 38.0,10.80 50.0,10.80 62.0,10.80 74.0,10.80 86.0,10.80 98.0,10.80" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="10.80" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Frontend <span class="pill auditada">auditado hoy</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>5</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:6 30:5 31:5 31·c1:5 31·c2:5 32:5 32·c1:5 hoy:5"><polyline points="2.0,15.20 14.0,10.80 26.0,13.00 38.0,13.00 50.0,13.00 62.0,13.00 74.0,13.00 86.0,13.00 98.0,13.00" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="13.00" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque"><b>Ninguna neta:</b> dos formas aplicaron y se cancelaron, con su número. <b>+</b> primer cierre en cuatro rondas (FE-31C2-A1, ALTO, verificado por dentro). <b>−</b> FE-C1 entra en su <b>8ª ronda</b> y los abiertos pasan de 13 a 15. El techo lo fija FE-C1: mientras el comprador pueda ver «Anticipo $0.00», el ancla del rubro toca la nota.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Pruebas <span class="pill auditada">auditado hoy</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>5</td>
+      <td class="delta baja">▼1</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:6 29:7 30:6 31:6 31·c1:6 31·c2:6 32:6 32·c1:6 hoy:5"><polyline points="2.0,10.80 14.0,8.60 26.0,10.80 38.0,10.80 50.0,10.80 62.0,10.80 74.0,10.80 86.0,10.80 98.0,13.00" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="13.00" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque"><b>Mirada más profunda.</b> El hueco que sostuvo el 6 durante ocho rondas —«cero mutaciones de SQL»— se abrió hoy con Postgres real, y lo que había detrás es peor de lo supuesto: la función de dinero del panel fiscal se rompe en <b>cuatro</b> sitios con los 21 arneses SQL y los 243 bloques en verde. 26 mutaciones, 9 mueren (34.6 %).</td>
+    </tr>
+    <tr>
+      <td class="rubro">Seguridad <span class="pill auditada">auditado hoy</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>4</td>
+      <td class="delta baja">▼1</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:7 29:7 30:6 31:5 31·c1:5 31·c2:5 32:5 32·c1:5 hoy:4"><polyline points="2.0,8.60 14.0,8.60 26.0,10.80 38.0,13.00 50.0,13.00 62.0,13.00 74.0,13.00 86.0,13.00 98.0,15.20" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="15.20" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque"><b>Deuda que cobró factura</b>, medida: <code>andamio_ci.sql:99-104</code> omite por escrito el <code>alter default privileges … on functions</code> de Supabase. Las mismas 336 migraciones levantadas dos veces: 239 ok / 0 fallos con el andamio tal cual, 237 ok / <b>2 fallos</b> al añadir esa única línea — y los dos bloques rojos son los que certifican que ninguna RPC interna es ejecutable por un anónimo.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Operabilidad y DX <span class="pill auditada">auditado hoy</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>4</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:3 29:6 30:7 31:5 31·c1:5 31·c2:4 32:4 32·c1:4 hoy:4"><polyline points="2.0,17.40 14.0,10.80 26.0,8.60 38.0,13.00 50.0,13.00 62.0,15.20 74.0,15.20 86.0,15.20 98.0,15.20" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="15.20" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque"><b>Dos formas se cancelan.</b> <b>+</b> OP-A6 cerró tras seis rondas: issues #474 y #476 con etiqueta propia, la primera vez que la bandeja se entera sola de un problema de estado. <b>−</b> ese mismo arreglo trajo OP-32C2-C1, con factura fechada (16-sep 08:21:57Z). De fondo, OP-C1 va por su 8ª ronda y el respaldo de Storage pasó de 20 a 23 días.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Tool calling <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>4</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:5 29:7 30:5 31:5 31·c1:5 31·c2:5 32:5 32·c1:4 hoy:4"><polyline points="2.0,13.00 14.0,8.60 26.0,13.00 38.0,13.00 50.0,13.00 62.0,13.00 74.0,13.00 86.0,15.20 98.0,15.20" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="15.20" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Rendimiento y costo <span class="pill auditada">auditado hoy</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>4</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:6 30:5 31:4 31·c1:4 31·c2:4 32:4 32·c1:4 hoy:4"><polyline points="2.0,15.20 14.0,10.80 26.0,13.00 38.0,15.20 50.0,15.20 62.0,15.20 74.0,15.20 86.0,15.20 98.0,15.20" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="15.20" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque"><b>Ninguna neta.</b> <b>+</b> 4 de 6 abiertos cerraron de verdad, incluido su único CRÍTICO previo, y <code>cron/asistencia</code> bajó de 158.7 a 135.2 s. <b>−</b> el ancla («4 o menos si el peor caso excede el límite y falla callado») se cumple hoy en <b>nueve</b> cadenas contra ocho, dos nunca sumadas por nadie.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Arquitectura y mantenibilidad <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>4</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:3 29:4 30:3 31:4 31·c1:4 31·c2:4 32:4 32·c1:4 hoy:4"><polyline points="2.0,17.40 14.0,15.20 26.0,17.40 38.0,15.20 50.0,15.20 62.0,15.20 74.0,15.20 86.0,15.20 98.0,15.20" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="15.20" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla. ARQ-C1 sigue abierto, 11ª aparición.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Sistema agéntico <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot critical" aria-hidden="true"></span>3</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:7 30:4 31:4 31·c1:4 31·c2:4 32:4 32·c1:3 hoy:3"><polyline points="2.0,15.20 14.0,8.60 26.0,15.20 38.0,15.20 50.0,15.20 62.0,15.20 74.0,15.20 86.0,17.40 98.0,17.40" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="17.40" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Cumplimiento fiscal <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot critical" aria-hidden="true"></span>3</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:5 30:4 31:3 31·c1:3 31·c2:3 32:3 32·c1:3 hoy:3"><polyline points="2.0,15.20 14.0,13.00 26.0,15.20 38.0,17.40 50.0,17.40 62.0,17.40 74.0,17.40 86.0,17.40 98.0,17.40" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="17.40" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Cumplimiento legal <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot critical" aria-hidden="true"></span>3</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:3 29:4 30:3 31:3 31·c1:3 31·c2:3 32:3 32·c1:3 hoy:3"><polyline points="2.0,17.40 14.0,15.20 26.0,17.40 38.0,17.40 50.0,17.40 62.0,17.40 74.0,17.40 86.0,17.40 98.0,17.40" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="17.40" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+      </tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Nota global, rondas 24 a hoy</h2>
+    <svg class="serieglobal" viewBox="0 0 700 150" role="img" aria-label="Nota global por ronda: 24 6.2, 25 5.3, 26 6, 27 5.3, 28 4.4, 29 6, 30 5.2, 31 4.8, 31·c1 4.8, 31·c2 4.7, 32 4.7, 32·c1 4.3, hoy 4.25">
+      <polyline points="40.0,39.3 91.7,73.1 143.3,46.8 195.0,73.1 246.7,107.0 298.3,46.8 350.0,76.9 401.7,91.9 453.3,91.9 505.0,95.7 556.7,95.7 608.3,110.7 660.0,112.6" fill="none" stroke="var(--serie)" stroke-width="2"/>
+      <circle cx="40.0" cy="39.3" r="3" fill="var(--serie)"/><text class="vallab" x="40.0" y="31.3" text-anchor="middle">6.2</text><text class="ejelab" x="40.0" y="142.0" text-anchor="middle">24</text>
+      <circle cx="91.7" cy="73.1" r="3" fill="var(--serie)"/><text class="vallab" x="91.7" y="65.1" text-anchor="middle">5.3</text><text class="ejelab" x="91.7" y="142.0" text-anchor="middle">25</text>
+      <circle cx="143.3" cy="46.8" r="3" fill="var(--serie)"/><text class="vallab" x="143.3" y="38.8" text-anchor="middle">6</text><text class="ejelab" x="143.3" y="142.0" text-anchor="middle">26</text>
+      <circle cx="195.0" cy="73.1" r="3" fill="var(--serie)"/><text class="vallab" x="195.0" y="65.1" text-anchor="middle">5.3</text><text class="ejelab" x="195.0" y="142.0" text-anchor="middle">27</text>
+      <circle cx="246.7" cy="107.0" r="3" fill="var(--serie)"/><text class="vallab" x="246.7" y="99.0" text-anchor="middle">4.4</text><text class="ejelab" x="246.7" y="142.0" text-anchor="middle">28</text>
+      <circle cx="298.3" cy="46.8" r="3" fill="var(--serie)"/><text class="vallab" x="298.3" y="38.8" text-anchor="middle">6</text><text class="ejelab" x="298.3" y="142.0" text-anchor="middle">29</text>
+      <circle cx="350.0" cy="76.9" r="3" fill="var(--serie)"/><text class="vallab" x="350.0" y="68.9" text-anchor="middle">5.2</text><text class="ejelab" x="350.0" y="142.0" text-anchor="middle">30</text>
+      <circle cx="401.7" cy="91.9" r="3" fill="var(--serie)"/><text class="vallab" x="401.7" y="83.9" text-anchor="middle">4.8</text><text class="ejelab" x="401.7" y="142.0" text-anchor="middle">31</text>
+      <circle cx="453.3" cy="91.9" r="3" fill="var(--serie)"/><text class="vallab" x="453.3" y="83.9" text-anchor="middle">4.8</text><text class="ejelab" x="453.3" y="142.0" text-anchor="middle">31·c1</text>
+      <circle cx="505.0" cy="95.7" r="3" fill="var(--serie)"/><text class="vallab" x="505.0" y="87.7" text-anchor="middle">4.7</text><text class="ejelab" x="505.0" y="142.0" text-anchor="middle">31·c2</text>
+      <circle cx="556.7" cy="95.7" r="3" fill="var(--serie)"/><text class="vallab" x="556.7" y="87.7" text-anchor="middle">4.7</text><text class="ejelab" x="556.7" y="142.0" text-anchor="middle">32</text>
+      <circle cx="608.3" cy="110.7" r="3" fill="var(--serie)"/><text class="vallab" x="608.3" y="102.7" text-anchor="middle">4.3</text><text class="ejelab" x="608.3" y="142.0" text-anchor="middle">32·c1</text>
+      <circle cx="660.0" cy="112.6" r="3" fill="var(--serie)"/><text class="vallab" x="660.0" y="104.6" text-anchor="middle">4.25</text><text class="ejelab" x="660.0" y="142.0" text-anchor="middle">hoy</text>
+    </svg>
+    <p class="nota-pie">Con un decimal la cifra no se mueve (4.3 → 4.3); la suma de las doce sí: <b>52 → 51</b>. Se muestran dos decimales para no esconder el movimiento detrás del redondeo.</p>
+  </section>
+  <section>
+    <h2>Lo que se arregló hoy, y cómo se probó</h2>
+    <table>
+      <thead><tr><th>sha</th><th>Hallazgo</th><th>Qué fallaba</th><th>Rojo medido y mutación</th></tr></thead>
+      <tbody>
+    <tr>
+      <td class="nota"><code>2c38766</code></td>
+      <td class="rubro">OP-32C2-C1 <span class="pill sev">CRÍTICO</span></td>
+      <td class="porque">El cierre del issue de deriva se disparaba con el detector <i>saltado</i>: <code>null == '0'</code> es verdadera en GitHub. La corrida #671 cerró el issue #474 con «Producción ya corre todo el código de master» mientras producción iba 2 commits atrás. Ventana ciega de 2 h 54 min.</td>
+      <td class="porque">Rojo medido sobre el caso real de #671. Mutación en los dos sentidos: quitar la guarda de evento y quitar el <code>format()</code> ponen roja la prueba por separado.</td>
+    </tr>
+    <tr>
+      <td class="nota"><code>fc811a0</code></td>
+      <td class="rubro">REN-30-C2 <span class="pill sev">CRÍTICO</span></td>
+      <td class="porque">La lectura de candidatos del consolidado corría hasta 100 páginas de <code>gasto</code> —30.0 s nominales, hasta 950 s a techos— dentro de una unidad que el reloj de <code>descarga-sat</code> ya había dado por despachada, con 43.5 s reservados y <code>maxDuration = 300</code>. Reincidente desde la 29.</td>
+      <td class="porque">Rojo medido pidiendo <b>100 páginas</b> donde deben ser 0. Tres pruebas: el motor, la ausencia de avance durable, y <b>el cableado</b> — esta última porque las dos primeras pasaban en verde con el cableado desconectado.</td>
+    </tr>
+    <tr>
+      <td class="nota"><code>e47f974</code></td>
+      <td class="rubro">PRU-31C-A1 <span class="pill sev">ALTO</span></td>
+      <td class="porque">Borrar <code>{ venceEn: … }</code> de la única llamada de producción de <code>barrerPorConciliar</code> compila y devuelve el barrido a ~914 s contra 300 de techo, con <b>613 pruebas en verde</b>. Reincidente de la 31 y la 32.</td>
+      <td class="porque">Dos mutaciones medidas: la del auditor (2 rojas) y <code>venceEn: 0</code>, que desarma el corte igual de bien y que una sola aserción de presencia habría dejado pasar (1 roja).</td>
+    </tr>
+      </tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Compuerta, sobre el árbol final</h2>
+    <table>
+      <thead><tr><th>Comando</th><th>Resultado</th><th>Al arrancar</th></tr></thead>
+      <tbody>
+    <tr><td class="rubro"><code>npx vitest run</code></td><td class="porque">989 archivos · <b>12,990 pasan</b> · 6 saltadas · <b>0 fallan</b> · exit 0</td><td class="porque">988 · 12,976 · 6 · 0</td></tr>
+    <tr><td class="rubro"><code>npx tsc --noEmit -p .</code></td><td class="porque">exit 0, sin salida</td><td class="porque">exit 0</td></tr>
+    <tr><td class="rubro"><code>npm run lint</code></td><td class="porque">0 errores · 154 avisos</td><td class="porque">0 errores · 154 avisos</td></tr>
+    <tr><td class="rubro"><code>npm run lint:ratchet</code></td><td class="porque"><b>0 nuevos</b> · 154/194 heredados</td><td class="porque">0 nuevos</td></tr>
+    <tr><td class="rubro"><code>npm run build</code></td><td class="porque"><span class="nocorre">no se corre en la nube</span> — pide Supabase, OpenRouter, Facturapi y Upstash</td><td class="porque">—</td></tr>
+      </tbody>
+    </table>
+    <p class="nota-pie">El intermitente de <code>cron/asistencia/route.test.ts</code> <b>no reapareció</b>: <code>4b84716</code> lo cerró ayer y hoy la suite corrió limpia en las cuatro pasadas completas de la ronda.</p>
+  </section>
+  <section>
+    <h2>Lo que urge y no es código — SEXTO día</h2>
+    <p class="alerta">El último commit con <code>[deploy]</code> en el asunto sigue siendo <code>cfa00ab</code>, del <b>10-sep — hace 8 días</b>. Hay <b>21 archivos</b> de <code>src/</code>/<code>supabase/</code> en <code>master</code> que nunca llegaron a producción, entre ellos el cubo del 15 % (ARQ-C2: $90,600 impresos donde lo correcto son $95,300). El pulso sale verde igual porque mide «¿aterrizó lo último que se pidió publicar?», no «¿producción está al día?». <b>Se arregla con Redeploy en Vercel.</b> No es un hallazgo de ningún rubro: es una acción del dueño.</p>
+  </section>
+</body></html>

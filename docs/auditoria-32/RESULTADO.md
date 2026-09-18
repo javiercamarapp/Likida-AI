@@ -1,4 +1,6 @@
 LIGERA: fiscal, legal, arquitectura — 3 rubros rotados de 12, 1 arreglo retenido con prueba (ARQ-A3, CRÍTICO), 0 revertidos, global 4.7 → 4.7 (=).
+CONTINUACIÓN (17-sep-2026): 4 rubros rotados, 3 arreglos retenidos con prueba (2 CRÍTICOS + 1 ALTO), 0 revertidos, global 4.7 → 4.3 (▼0.4).
+CONTINUACIÓN 2 (18-sep-2026): 6 rubros rotados, 3 arreglos retenidos con prueba (2 CRÍTICOS + 1 ALTO), 0 revertidos, global 4.33 → 4.25 (▼0.08; suma 52 → 51, con un decimal 4.3 → 4.3).
 
 ---
 
@@ -116,4 +118,69 @@ CONTINUACIÓN (17-sep-2026): 4 rubros rotados, 3 arreglos retenidos con prueba y
 - **Tablero:** `tablero-continuacion.html` + `.png`, capturado **y mirado** —
   mirarlo encontró que la tarjeta de la compuerta desbordaba su caja. Corregido
   y recapturado.
+- **PR:** #477, `claude/auditoria-32`, actualizado con `push --force`.
+
+
+---
+
+# Continuación 2 del 18-sep-2026 — CONTINUACIÓN
+
+- **Tipo:** ronda de **CONTINUACIÓN**, decidida antes de gastar un token en
+  auditores: `list_pull_requests(open)` → **PR #477 abierto** (rama
+  `claude/auditoria-32`) → se continúa sobre él, **no se abre PR nuevo**.
+  `git ls-remote origin master` → `69becdb`, fresco; `git log
+  claude/auditoria-32..origin/master` → **vacío**: master no se ha movido desde
+  el 16-sep. `mergeable_state: clean`. Árbol limpio → **autofix habilitado**.
+- **Auditores: 6 de 12, y por la regla.** Cinco porque su archivo **faltaba** en
+  `docs/auditoria-32/` —frontend, seguridad, pruebas, operabilidad y
+  rendimiento— y **modelo de datos** por la cláusula de código cambiado: las
+  migraciones 0358 y 0359 se escribieron DESPUÉS de que ese auditor entregara, y
+  son el arreglo a sus propios dos CRÍTICOS. Con estos seis, los doce rubros
+  quedan cubiertos en la ventana del 13 al 18 de septiembre.
+- **El resultado de la ronda: por primera vez en tres, el arreglo del
+  orquestador sobrevivió entero a la revisión del auditor cuyo código tocó.**
+  0358 y 0359 **cerraron de verdad** — 336 migraciones limpias sobre base
+  virgen, `pg_get_functiondef` diffeado, rojo en los dos sentidos, idempotentes,
+  ACL intacta. La 31 había encontrado que 3 de 4 arreglos cerraban a medias; la
+  32, que uno traía dos CRÍTICOS nuevos. **La regla se está pagando sola.**
+- **El hallazgo metodológico:** pruebas baja 6 → 5 por *mirada más profunda* con
+  número — llevaba **ocho rondas** calificándose sin haber mutado nunca una
+  línea de SQL. Hoy se pudo: la función de dinero del panel fiscal se rompe en
+  **cuatro** sitios con los 21 arneses SQL y los 243 bloques en verde. 26
+  mutaciones, 9 mueren (34.6 %). No es que las pruebas empeoraran: es que por
+  primera vez se vieron enteras.
+- **Global: 4.25** (antes **4.33**) · **▼0.08**. Suma **52 → 51**. Con un
+  decimal la cifra no se mueve (4.3 → 4.3), y se reporta con dos para no
+  esconder el movimiento detrás del redondeo. Sube 1, bajan 2, se quedan 9.
+- **Arreglado: 3**, en 3 commits atómicos, cada uno con prueba que lo reproduce,
+  rojo medido → verde y **mutación verificada en los dos sentidos**.
+  **Revertidos: 0.** Tope de 3 vueltas gastado.
+  - `2c38766` — **OP-32C2-C1 (CRÍTICO)**: el cierre del issue de deriva se
+    disparaba con el detector saltado (`null == '0'` es verdadera en GitHub) y
+    dejó escrita una afirmación falsa sobre producción. Caso medido: corrida
+    #671, issue #474, ventana ciega de 2 h 54 min.
+  - `fc811a0` — **REN-30-C2 (CRÍTICO, reincidente desde la 29)**: el reloj de la
+    invocación ahora llega hasta la lectura de candidatos del consolidado, que
+    podía correr 100 páginas de `gasto` (hasta 950 s) dentro de un margen de
+    43.5 s.
+  - `e47f974` — **PRU-31C-A1 (ALTO, reincidente)**: el `venceEn` del «Ejecutar
+    ahora» de Peajes deja de ser un argumento que ninguna prueba vigila.
+- **Pendientes con razón escrita: 4 CRÍTICOS.** FE-C1 (8ª ronda) y OP-C1 (8ª)
+  **no se arreglaron a propósito**: las dos salidas de cada uno son una decisión
+  de producto, no un parche de madrugada. PRU32C2-C1 merece una ronda dedicada
+  (son arneses SQL nuevos). PRU-C1 (5ª) tiene su causa raíz escrita: la puerta
+  de cobertura excluye por configuración la capa donde el dinero se imprime.
+- **Lo que urge y no es código, SEXTO día:** último `[deploy]` en asunto sigue
+  siendo `cfa00ab` (10-sep, hace 8 días); **21 archivos** de `src/`/`supabase/`
+  en master sin llegar a producción, entre ellos el cubo del 15 %. Redeploy en
+  Vercel. **Novedad que lo empeora:** el único artefacto que lo gritaba (issue
+  #476) se apagaba solo con el primer push a master — el merge de esta rama
+  habría sido ese push. Con `2c38766` ya no.
+- **Compuerta al cerrar:** `npx vitest run` **989 archivos / 12,990 pasan / 6
+  saltadas / 0 fallan**, exit 0 · `tsc --noEmit` exit 0 · `lint` 0 errores, 154
+  avisos · `lint:ratchet` **0 nuevos**. Línea base al arrancar 988 / 12,976,
+  idéntica al cierre de ayer. `npm run build` no corre en la nube.
+- **Tablero:** `tablero-continuacion-2.html` + `.png`, capturado **y mirado** —
+  mirarlo encontró dos etiquetas `c·1` en el mismo eje, que hacían la serie
+  ilegible. Corregido y recapturado.
 - **PR:** #477, `claude/auditoria-32`, actualizado con `push --force`.
