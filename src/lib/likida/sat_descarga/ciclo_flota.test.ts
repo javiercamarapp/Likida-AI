@@ -34,7 +34,10 @@ vi.mock('../intake/cfdi_xml', () => ({
 // por prueba — el resto del archivo (destino fijo 'disponible') sigue igual,
 // las pruebas de REN-C1 son las únicas que llaman a `decidirCruce.mockReturnValueOnce`.
 const { guardarYConciliarConsolidado, decidirCruce } = vi.hoisted(() => ({
-  guardarYConciliarConsolidado: vi.fn(async () => {}),
+  // La firma se declara completa —incluido el 4.º argumento, el `venceEn` de
+  // REN-30-C2— porque un doble sin parámetros deja el cableado sin tipo y
+  // `mock.calls[0][3]` no compila.
+  guardarYConciliarConsolidado: vi.fn(async (_tenantId: string, _xml: unknown, _xmlText: string, _venceEn?: number) => {}),
   decidirCruce: vi.fn((_cfdi: { uuid?: string }): DestinoCfdi => ({ destino: 'disponible', motivo: 'ningún gasto le corresponde' })),
 }));
 vi.mock('../intake/consolidado', () => ({ guardarYConciliarConsolidado }));
@@ -605,5 +608,57 @@ describe('REN-C1 · el sello de dedup ya puesto no debe impedir reintentar un co
     // 'disponible' (mock por omisión), no otro consolidado.
     expect(db.solicitudes[0].cfdis_nuevos).toBe(2);
     expect(db.solicitudes[0].cfdis_repetidos).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REN-30-C2 (auditorías 29-32, CRÍTICO) — EL CABLEADO, no el motor.
+//
+// El reloj ya se miraba por XML (`:277`), pero `guardarYConciliarConsolidado`
+// se despachaba SIN él y a partir de ahí nadie volvía a mirar la hora: dentro,
+// la lectura de candidatos puede correr 100 páginas de `gasto` —hasta 950 s—
+// contra un margen reservado de 43.5 s y un `maxDuration` de 300.
+//
+// Esta prueba existe porque la del motor (pg.test.ts, consolidado_orquestador)
+// pasaba en verde con el cableado desconectado: es el defecto que `PRU-31C-A1`
+// lleva dos rondas reportando —«el ancla prueba el motor y deja el cableado
+// desnudo»— aplicado a este arreglo antes de commitearlo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('REN-30-C2 · el reloj de la invocación llega hasta la conciliación del consolidado', () => {
+  afterEach(() => {
+    decidirCruce.mockImplementation(() => ({ destino: 'disponible' as const, motivo: 'ningún gasto le corresponde' }));
+  });
+
+  it('el `venceEn` de la ruta se le pasa a guardarYConciliarConsolidado, no solo al bucle', async () => {
+    const db = base([solicitudViva({ paquetes_bajados: null })]);
+    db.cfdis.push({ cfdi_uuid: 'p1-cfdi-1', solicitud_id: 'sol-1' });
+    decidirCruce.mockImplementation((cfdi: { uuid?: string }): DestinoCfdi =>
+      cfdi.uuid === 'p1-cfdi-1'
+        ? { destino: 'consolidado' as const, emisor: 'Banco X (monedero)' }
+        : { destino: 'disponible' as const, motivo: 'ningún gasto le corresponde' });
+    const { prov } = proveedor(['p1']);
+    const VENCE_EN = Date.now() + 600_000;
+
+    await correrFlota(CFG(), prov, '2026-08-27', AHORA, VENCE_EN);
+
+    expect(guardarYConciliarConsolidado).toHaveBeenCalled();
+    expect(
+      guardarYConciliarConsolidado.mock.calls[0][3],
+      'la unidad atómica corre sin reloj: dentro puede paginar 100 veces `gasto` sin volver a mirar la hora',
+    ).toBe(VENCE_EN);
+  });
+
+  it('sin reloj en la ruta, la conciliación también lo recibe sin reloj — el parámetro es opcional', async () => {
+    const db = base([solicitudViva({ paquetes_bajados: null })]);
+    db.cfdis.push({ cfdi_uuid: 'p1-cfdi-1', solicitud_id: 'sol-1' });
+    decidirCruce.mockImplementation((cfdi: { uuid?: string }): DestinoCfdi =>
+      cfdi.uuid === 'p1-cfdi-1'
+        ? { destino: 'consolidado' as const, emisor: 'Banco X (monedero)' }
+        : { destino: 'disponible' as const, motivo: 'ningún gasto le corresponde' });
+    const { prov } = proveedor(['p1']);
+
+    await correrFlota(CFG(), prov, '2026-08-27', AHORA);
+
+    expect(guardarYConciliarConsolidado.mock.calls[0][3]).toBeUndefined();
   });
 });
