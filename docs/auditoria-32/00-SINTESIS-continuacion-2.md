@@ -124,7 +124,7 @@ cerró con el comentario «Producción ya corre todo el código de master» mien
 producción corría `cfa00ab` y master llevaba `8b01aec` y `5ce91b2` sin publicar.
 El detector había salido `skipped` y no midió nada: la salida de un paso saltado
 es `null`, y GitHub convierte ambos lados a número, así que **`null == '0'` es
-verdadera**. Ventana ciega de **2 h 54 min**, episodio partido en dos issues.
+verdadera**. Ventana ciega de **1 h 47 min** (ver la corrección al final: el auditor dijo 2 h 54 y esa es otra cosa), episodio partido en dos issues.
 
 Es el defecto que la auditoría 27 ya documentó en el paso hermano (issue #339).
 La lección quedó escrita en `:292` y **nunca se copió** al cierre de la deriva.
@@ -260,6 +260,31 @@ mirarlo encontró que el eje de la serie global traía **dos etiquetas `c·1`**
 (la continuación de la 31 y la de la 32), que hacía la serie ilegible. Corregido
 a `31·c1` / `32·c1` y recapturado. Verificado en la imagen: 12 rubros, 6 pastillas
 «auditado hoy», suma 51, global 4.25.
+
+## Corrección del orquestador, sobre una cifra de esta misma síntesis
+
+El auditor de operabilidad escribió «la ventana ciega fue de **2 h 54 min**» y
+yo la propagué al commit `2c38766`, a esta síntesis y al cuerpo del PR. **Está
+mal, y la verifiqué contra la fuente primaria** (`list_issues` con etiqueta
+`deriva-sin-desplegar`):
+
+```
+#474  creado  2026-09-16T05:27:22Z   cerrado (falsamente) 2026-09-16T08:21:57Z
+#476  creado  2026-09-16T10:09:12Z   sigue ABIERTO, nombra los mismos 2 commits
+```
+
+- **2 h 54 min 35 s** es lo que el issue estuvo **correctamente abierto** antes
+  del cierre falso (05:27:22 → 08:21:57).
+- **La ventana ciega —sin ningún issue abierto pese a haber deriva real— es de
+  1 h 47 min 15 s** (08:21:57 → 10:09:12).
+
+El hallazgo no cambia: el cierre fue falso, y que `#476` reabriera el episodio
+con los **mismos dos commits** (`8b01aec` y `5ce91b2`) es la prueba
+independiente de que la deriva seguía ahí cuando se declaró resuelta. Lo que
+cambia es la magnitud, y se corrige porque la regla que define este producto es
+no dar por buena una cifra que no se midió. El commit `2c38766` quedó con la
+cifra vieja en su mensaje; no se reescribe el historial por eso — se corrige
+aquí, que es donde se lee.
 
 ## INFRA de esta corrida
 

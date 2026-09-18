@@ -157,8 +157,10 @@ CONTINUACIÓN (17-sep-2026): 4 rubros rotados, 3 arreglos retenidos con prueba y
   **Revertidos: 0.** Tope de 3 vueltas gastado.
   - `2c38766` — **OP-32C2-C1 (CRÍTICO)**: el cierre del issue de deriva se
     disparaba con el detector saltado (`null == '0'` es verdadera en GitHub) y
-    dejó escrita una afirmación falsa sobre producción. Caso medido: corrida
-    #671, issue #474, ventana ciega de 2 h 54 min.
+    dejó escrita una afirmación falsa sobre producción. Caso medido contra la
+    fuente primaria: corrida #671, issue #474 cerrado a las 08:21:57Z y episodio
+    reabierto como #476 a las 10:09:12Z → **ventana ciega de 1 h 47 min**
+    (el auditor dijo 2 h 54; eso es lo que estuvo correctamente abierto).
   - `fc811a0` — **REN-30-C2 (CRÍTICO, reincidente desde la 29)**: el reloj de la
     invocación ahora llega hasta la lectura de candidatos del consolidado, que
     podía correr 100 páginas de `gasto` (hasta 950 s) dentro de un margen de
