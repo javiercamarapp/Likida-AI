@@ -21,7 +21,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { traerTodo, traerTodoDesdeId, conteo, exigir, LecturaIncompleta, PAGINA, MAX_PAGINAS } = await import('./pg');
+const { traerTodo, traerTodoDesdeId, conteo, exigir, LecturaIncompleta, LecturaCortadaPorReloj, PAGINA, MAX_PAGINAS } = await import('./pg');
 const { logger } = await import('@/lib/logger');
 
 type Fila = { id: number };
@@ -320,5 +320,85 @@ describe('traerTodoDesdeId — mismo contrato que traerTodo: completo Y demostra
       () => Promise.resolve({ data: null, error: { message: 'fetch failed' } }),
       'candidatosDb',
     )).rejects.toThrow('candidatosDb: fetch failed');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REN-30-C2 (auditorías 29-32, CRÍTICO) — EL TECHO ESTRUCTURAL DE ESTA LECTURA
+// ES TRES VECES EL `maxDuration` DE CUALQUIER RUTA DEL REPO.
+//
+// `candidatosDeGasto` (consolidado.ts) es el único llamador en producción, y
+// corre DENTRO de `guardarYConciliarConsolidado`, que `sat_descarga/ciclo.ts`
+// despacha después de su único chequeo de reloj (`:277`, por XML). A partir de
+// ahí nadie vuelve a mirar la hora: `MAX_PAGINAS × PAGINA` son 100,000 filas,
+// 30.0 s nominales y hasta 950 s a techos, contra un `maxDuration = 300` y un
+// margen reservado de 43.5 s para ESA unidad. La invocación muere con los
+// sellos a medio escribir y sin `registrarLatido`: el tablero dice «no late»
+// para el cron que recoge los CFDI del SAT, cada seis horas, sin decir por qué.
+//
+// El corte LANZA y no devuelve lo leído. Media lista de candidatos concilia de
+// menos y sella el CFDI como si se hubiera revisado entero — sería cambiar una
+// caída ruidosa por una cifra fiscal equivocada y silenciosa. Como el corte
+// ocurre ANTES del primer avance durable, el comprobante queda sin sellar y la
+// vuelta siguiente lo retoma entero.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('traerTodoDesdeId — el reloj de la invocación corta la lectura (REN-30-C2)', () => {
+  it('con el reloj agotado LANZA en vez de seguir paginando', async () => {
+    const base = idsOrdenados(MAX_PAGINAS + 5, 1);
+    const tabla = tablaViva(base, () => {});
+    let paginasPedidas = 0;
+    await expect(traerTodoDesdeId<{ id: string }>(
+      (cursor) => { paginasPedidas += 1; return Promise.resolve(tabla.porCursor(cursor, 1)); },
+      'candidatosDb',
+      { venceEn: Date.now() - 1 },
+    )).rejects.toThrow(LecturaCortadaPorReloj);
+    // Lo que separa el arreglo del bug: sin reloj serían MAX_PAGINAS.
+    expect(paginasPedidas, 'el corte tiene que ocurrir ANTES de pedir la primera página').toBe(0);
+  });
+
+  it('corta a media lectura, y NO devuelve las filas que alcanzó a leer', async () => {
+    vi.useFakeTimers();
+    try {
+      const base = idsOrdenados(MAX_PAGINAS + 5, 1);
+      const tabla = tablaViva(base, () => {});
+      let paginasPedidas = 0;
+      // El reloj alcanza para tres páginas: se agota cuando la 4ª iba a pedirse.
+      const venceEn = Date.now() + 1_000;
+      await expect(traerTodoDesdeId<{ id: string }>(
+        (cursor) => {
+          paginasPedidas += 1;
+          if (paginasPedidas === 3) vi.advanceTimersByTime(1_001);
+          return Promise.resolve(tabla.porCursor(cursor, 1));
+        },
+        'candidatosDb',
+        { venceEn },
+      )).rejects.toThrow(/el reloj de la invocación se agotó/);
+      expect(paginasPedidas, 'siguió paginando después de que el reloj venció').toBe(3);
+      expect(logger.error).toHaveBeenCalledWith('pg.lectura_cortada_por_reloj',
+        expect.objectContaining({ consulta: 'candidatosDb', leidas: 3, paginas: 3 }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('sin `venceEn` el comportamiento es exactamente el de antes: nadie más cambia', async () => {
+    const base = idsOrdenados(4);
+    const tabla = tablaViva(base, () => {});
+    const filas = await traerTodoDesdeId<{ id: string }>(
+      (cursor) => Promise.resolve(tabla.porCursor(cursor, PAGINA)),
+      'x',
+    );
+    expect(filas.map((f) => f.id)).toEqual(base);
+  });
+
+  it('con reloj de sobra la lectura se completa igual que sin reloj', async () => {
+    const base = idsOrdenados(4);
+    const tabla = tablaViva(base, () => {});
+    const filas = await traerTodoDesdeId<{ id: string }>(
+      (cursor) => Promise.resolve(tabla.porCursor(cursor, PAGINA)),
+      'x',
+      { venceEn: Date.now() + 60_000 },
+    );
+    expect(filas.map((f) => f.id)).toEqual(base);
   });
 });
