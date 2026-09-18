@@ -206,7 +206,131 @@ describe('salud-produccion.yml — cableado del detector', () => {
   it('ese mismo issue se CIERRA cuando la deriva desaparece', () => {
     const paso = pasos.find((p) => p.cuerpo.includes('gh issue close') && p.cuerpo.includes('deriva'));
     expect(paso, 'un issue que no se cierra solo se aprende a ignorar').toBeDefined();
-    expect(paso!.cuerpo).toContain("steps.deriva.outputs.hay == '0'");
+    // El cierre depende del veredicto del detector. Se afirma sobre la SALIDA
+    // que lee, no sobre la forma exacta de la comparación: la forma la fija la
+    // prueba de OP-32C2-C1, que evalúa la condición en vez de buscarla.
+    expect(paso!.cuerpo).toContain('steps.deriva.outputs.hay');
+  });
+
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // OP-32C2-C1 (auditoría 32 cont. 2, CRÍTICO) — EL CIERRE NO PUEDE DECLARAR
+  // UNA RECUPERACIÓN QUE NADIE MIDIÓ.
+  //
+  // El caso real, medido: corrida #671 (push de `69becdb` a master, 16-sep
+  // 08:21:45Z). El paso del detector salió `skipped` —su guarda es
+  // `github.event_name != 'push'`— y aun así el paso de cierre corrió y dejó:
+  //   ✓ Closed issue javiercamarapp/Likida-AI#474
+  // con el comentario «Producción ya corre todo el código de master», que era
+  // FALSO: producción corría `cfa00ab` (10-sep) y master llevaba `8b01aec` y
+  // `5ce91b2` sin publicar. La ventana ciega duró 2 h 54 min, hasta que la
+  // corrida #672 reabrió el episodio con número nuevo (#476).
+  //
+  // El mecanismo es la coerción de GitHub: cuando los tipos NO coinciden, los
+  // dos lados se convierten a número. La salida de un paso saltado es `null`,
+  // y `null == '0'` se evalúa como `0 == 0` → VERDADERA. (La apertura,
+  // `hay == '1'`, es inmune por el mismo cálculo: `0 != 1`.)
+  //
+  // Es el mismo defecto que la auditoría 27 documentó en el paso hermano
+  // (`Cerrar el issue al recuperarse`, issue #339 cerrado por un push con
+  // producción 224 commits atrás). Ahí la lección quedó escrita como
+  // `success() && github.event_name != 'push'`; a este paso no se copió.
+  //
+  // Esta prueba NO es un `grep` del fuente: evalúa la condición real del paso
+  // bajo las reglas de coerción documentadas de GitHub, para los tres estados
+  // en que puede quedar la salida del detector.
+  // ═════════════════════════════════════════════════════════════════════════
+
+  /** Evaluador mínimo de una expresión `if:` de GitHub Actions, con las reglas
+   *  de coerción documentadas: `==`/`!=` comparan como cadenas cuando los dos
+   *  lados son cadenas, y convierten AMBOS a número cuando los tipos difieren
+   *  (`null` → 0, `''` → 0). Soporta lo que estas condiciones usan y nada más:
+   *  `&&`, `always()`, `success()`, `format('{0}', x)`, literales y contextos. */
+  const evaluarIf = (expr: string, ctx: Record<string, string | null>): boolean => {
+    const valorDe = (t: string): string | null => {
+      const token = t.trim();
+      if (token.startsWith("'")) return token.slice(1, -1);
+      const fmt = /^format\(\s*'\{0\}'\s*,\s*(.+?)\s*\)$/.exec(token);
+      if (fmt) return String(valorDe(fmt[1]) ?? '');
+      if (token in ctx) return ctx[token];
+      throw new Error(`token no soportado en la condición: ${token}`);
+    };
+    const iguales = (a: string | null, b: string | null): boolean => {
+      if (typeof a === 'string' && typeof b === 'string') return a === b;
+      const num = (v: string | null) => (v === null || v === '' ? 0 : Number(v));
+      return num(a) === num(b);
+    };
+    return expr.split('&&').every((termino) => {
+      const t = termino.trim();
+      if (t === 'always()' || t === 'success()') return true;
+      const ne = t.split('!=');
+      if (ne.length === 2) return !iguales(valorDe(ne[0]), valorDe(ne[1]));
+      const eq = t.split('==');
+      if (eq.length === 2) return iguales(valorDe(eq[0]), valorDe(eq[1]));
+      throw new Error(`término no soportado: ${t}`);
+    });
+  };
+
+  /** La condición `if:` de un paso, tal cual está escrita en el YAML. */
+  const condicionDe = (paso: { cuerpo: string }): string => {
+    const m = /\n +if: (.+)\n/.exec(paso.cuerpo);
+    expect(m, 'el paso no tiene `if:`').not.toBeNull();
+    return m![1].trim();
+  };
+
+  it('el cierre de la deriva NO se dispara cuando el detector no midió (OP-32C2-C1)', () => {
+    const paso = pasos.find((p) => p.cuerpo.includes('gh issue close') && p.cuerpo.includes('deriva'));
+    expect(paso, 'nadie cierra el issue de deriva').toBeDefined();
+    const cond = condicionDe(paso!);
+
+    // 1) El caso MEDIDO que cerró #474: push a master, detector saltado.
+    expect(
+      evaluarIf(cond, { 'github.event_name': 'push', 'steps.deriva.outputs.hay': null }),
+      'corrida #671: el detector salió `skipped` y el cierre comentó «Producción ya corre ' +
+        'todo el código de master» sobre producción 2 commits atrás',
+    ).toBe(false);
+
+    // 2) El detector corrió pero se rindió sin publicar salida (`exit 0` de
+    //    :178/:179: producción sin versión, o sha desplegado fuera de master).
+    //    Producción caída no puede limpiar la alarma de deriva.
+    expect(
+      evaluarIf(cond, { 'github.event_name': 'schedule', 'steps.deriva.outputs.hay': null }),
+      'una salida que nadie escribió no es una medición de «no hay deriva»',
+    ).toBe(false);
+
+    // 3) Y el cierre legítimo sigue funcionando: el detector midió cero.
+    expect(
+      evaluarIf(cond, { 'github.event_name': 'schedule', 'steps.deriva.outputs.hay': '0' }),
+      'el issue tiene que cerrarse solo cuando la deriva desaparece de verdad',
+    ).toBe(true);
+
+    // Y el invariante que la auditoría 27 dejó escrito, aquí como estructura:
+    // quien DECLARA la recuperación repite las guardas de quien la MIDE. Si
+    // mañana el detector gana una guarda nueva, el cierre tiene que ganarla
+    // también, o vuelve a declarar recuperaciones que nadie comprobó.
+    const medidor = pasoDe('deriva-sin-desplegar.mjs');
+    const guardasDelMedidor = condicionDe(medidor!)
+      .split('&&')
+      .map((t) => t.trim())
+      .filter((t) => t !== 'always()' && t !== 'success()');
+    for (const guarda of guardasDelMedidor) {
+      expect(cond, `el cierre no repite la guarda del detector: ${guarda}`).toContain(guarda);
+    }
+  });
+
+  it('la apertura solo ocurre con una medición positiva, y sigue siendo inmune a la coerción', () => {
+    const paso = pasos.find((p) => p.cuerpo.includes('gh issue create') && p.cuerpo.includes('deriva'));
+    const cond = condicionDe(paso!);
+    expect(evaluarIf(cond, { 'github.event_name': 'push', 'steps.deriva.outputs.hay': null })).toBe(false);
+    expect(evaluarIf(cond, { 'github.event_name': 'schedule', 'steps.deriva.outputs.hay': '1' })).toBe(true);
+  });
+
+  it('el evaluador reproduce la coerción de GitHub que causó el fallo', () => {
+    // Si esto deja de ser cierto, el evaluador dejó de modelar a GitHub y las
+    // dos pruebas de arriba pasan a no probar nada.
+    expect(evaluarIf("steps.x.outputs.y == '0'", { 'steps.x.outputs.y': null })).toBe(true);
+    expect(evaluarIf("steps.x.outputs.y == '1'", { 'steps.x.outputs.y': null })).toBe(false);
+    expect(evaluarIf("format('{0}', steps.x.outputs.y) == '0'", { 'steps.x.outputs.y': null })).toBe(false);
   });
 
   it('avisa sin tumbar el pulso: quedarse atrás a propósito es el flujo documentado', () => {
