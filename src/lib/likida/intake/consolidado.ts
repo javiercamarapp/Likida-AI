@@ -339,7 +339,11 @@ function datosDieselDeLinea(l: Pick<CfdiLineaXml, 'cantidad' | 'claveProdServ' |
  * (`id` mayor al último visto), inmune a inserciones/borrados en cualquier
  * otra parte de la tabla mientras se pagina. Ver `pg.ts`.
  */
-async function candidatosDeGasto(tenantId: string, rango: { desde: string; hasta: string }): Promise<Gasto[]> {
+async function candidatosDeGasto(
+  tenantId: string,
+  rango: { desde: string; hasta: string },
+  venceEn?: number,
+): Promise<Gasto[]> {
   const data = await traerTodoDesdeId<{ id: string; concepto: unknown; monto: unknown; fecha: unknown }>(
     (despuesDe) => {
       let q = supabaseAdmin()
@@ -353,6 +357,7 @@ async function candidatosDeGasto(tenantId: string, rango: { desde: string; hasta
       return acotada(q.order('id').limit(PAGINA), 'consolidado.candidatos_gasto');
     },
     'consolidado.candidatos_gasto',
+    { venceEn },
   );
   return data.map((g) => ({
     id: g.id,
@@ -378,6 +383,13 @@ export async function guardarYConciliarConsolidado(
   tenantId: string,
   xml: CfdiXmlData,
   xmlText: string,
+  /** REN-30-C2: el reloj de la invocación que despachó esta unidad. El llamador
+   *  (`sat_descarga/ciclo.ts`) mira la hora UNA vez por XML y a partir de ahí no
+   *  vuelve a mirarla; sin esto, la lectura de candidatos de aquí abajo puede
+   *  correr 100 páginas de `gasto` —hasta 950 s— dentro de un margen de 43.5 s.
+   *  El corte ocurre ANTES del primer avance durable (`enLotes`), así que el
+   *  comprobante queda sin sellar y la vuelta siguiente lo retoma entero. */
+  venceEn?: number,
 ): Promise<ResumenConciliacion> {
   // Defensa del escritor: también puede llamarse sin pasar por esConsolidado.
   if (xml.tipoComprobante === 'E') {
@@ -470,7 +482,7 @@ export async function guardarYConciliarConsolidado(
   );
 
   const rango = rangoFechasLineas(xml.lineas);
-  const candidatosDb = rango ? await candidatosDeGasto(tenantId, rango) : [];
+  const candidatosDb = rango ? await candidatosDeGasto(tenantId, rango, venceEn) : [];
 
   // Las líneas cuya decisión YA quedó sellada en `gasto` no se re-adivinan;
   // el JOIN corre solo para el resto.

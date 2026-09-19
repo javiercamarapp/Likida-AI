@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auditoría 32 — 16-sep-2026</title>
+<style>
+  :root {
+    --bg:#f7f7f5; --surface:#ffffff; --border:#e3e2dd; --grid:#ececE8;
+    --text:#1f1f1d; --text-secondary:#4a4a45; --text-muted:#76756e;
+    --good:#0ca30c; --warning:#fab219; --critical:#d03b3b; --serie:#2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#17171a; --surface:#1f1f23; --border:#33333a; --grid:#2b2b31;
+      --text:#f2f2ef; --text-secondary:#c5c5bf; --text-muted:#908f88;
+      --good:#39c439; --warning:#f5c04e; --critical:#ef6b6b; --serie:#3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#17171a; --surface:#1f1f23; --border:#33333a; --grid:#2b2b31;
+    --text:#f2f2ef; --text-secondary:#c5c5bf; --text-muted:#908f88;
+    --good:#39c439; --warning:#f5c04e; --critical:#ef6b6b; --serie:#3987e5;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    padding:24px 16px 48px; }
+  .lienzo { max-width:960px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; letter-spacing:-0.01em; }
+  .sub { color:var(--text-muted); margin:0 0 20px; font-size:13px; }
+  .tarjetas { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+  .tarjeta { flex:1 1 168px; background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:12px 14px; }
+  .tarjeta .k { color:var(--text-muted); font-size:11.5px; text-transform:uppercase;
+    letter-spacing:0.05em; margin-bottom:4px; }
+  .tarjeta .v { font-size:26px; font-weight:600; letter-spacing:-0.02em; }
+  .tarjeta .v small { font-size:13px; font-weight:400; color:var(--text-muted); margin-left:4px; }
+  .panel { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:16px; margin-bottom:20px; }
+  .panel h2 { font-size:14px; margin:0 0 12px; letter-spacing:-0.005em; }
+  .desliz { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; min-width:620px; }
+  th { text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:0.05em;
+    color:var(--text-muted); font-weight:500; padding:0 10px 8px 0; border-bottom:1px solid var(--border); }
+  td { padding:9px 10px 9px 0; border-bottom:1px solid var(--grid); vertical-align:top; }
+  tr:last-child td { border-bottom:none; }
+  .rubro { font-weight:500; white-space:nowrap; }
+  .nota { font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; white-space:nowrap; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; vertical-align:middle; }
+  .dot.good { background:var(--good); } .dot.warning { background:var(--warning); }
+  .dot.critical { background:var(--critical); }
+  .delta { font-variant-numeric:tabular-nums; white-space:nowrap; font-size:13px; }
+  .delta.baja { color:var(--critical); font-weight:600; }
+  .delta.sube { color:var(--good); font-weight:600; }
+  .delta.igual { color:var(--text-muted); }
+  .sparkcell { width:110px; }
+  .spark { width:100px; height:26px; display:block; }
+  .porque { color:var(--text-secondary); font-size:12.5px; min-width:260px; }
+  .pill { display:inline-block; font-size:10.5px; padding:1px 7px; border-radius:99px;
+    border:1px solid var(--border); color:var(--text-muted); margin-left:6px;
+    font-weight:400; vertical-align:1px; }
+  .pill.auditada { border-color:var(--serie); color:var(--serie); }
+  .compuerta { display:flex; flex-wrap:wrap; gap:10px; }
+  .chk { flex:1 1 190px; display:flex; gap:9px; align-items:flex-start;
+    border:1px solid var(--border); border-radius:8px; padding:10px 12px; }
+  .chk .ico { font-size:13px; line-height:1.45; }
+  .chk .t { font-weight:500; font-size:13px; }
+  .chk .d { color:var(--text-muted); font-size:12px; font-variant-numeric:tabular-nums; }
+  ul.lista { margin:0; padding-left:18px; color:var(--text-secondary); font-size:12.5px; }
+  ul.lista li { margin-bottom:7px; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px;
+    background:var(--grid); padding:1px 4px; border-radius:4px; }
+  .pie { color:var(--text-muted); font-size:12px; margin-top:6px; }
+  .serieglobal { width:100%; height:auto; display:block; }
+  .ejelab { font-size:9px; fill:var(--text-muted); }
+  .vallab { font-size:9.5px; fill:var(--text-secondary); font-variant-numeric:tabular-nums; }
+  @media (max-width:520px) { body { padding:16px 16px 40px; } h1 { font-size:18px; } }
+</style></head>
+<body>
+<div class="lienzo">
+  <h1>Auditoría 32 — ronda ligera de rotación</h1>
+  <p class="sub">16-sep-2026 · rama <code>claude/auditoria-32</code> sobre <code>69becdb</code> ·
+     3 rubros rotados de 12 · sin commits en <code>src/</code>, <code>supabase/</code> ni <code>normas/</code> desde la ronda 31</p>
+
+  <div class="tarjetas">
+    <div class="tarjeta"><div class="k">Nota global</div>
+      <div class="v">4.7<small>= vs 4.7</small></div></div>
+    <div class="tarjeta"><div class="k">Suma de rubros</div>
+      <div class="v">56<small>/ 120</small></div></div>
+    <div class="tarjeta"><div class="k">Rotados hoy</div>
+      <div class="v">3<small>/ 12</small></div></div>
+    <div class="tarjeta"><div class="k">Compuerta</div>
+      <div class="v">verde<small>1 intermitente preexistente</small></div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Los doce rubros — 3 rotados, 9 con nota heredada</h2>
+    <div class="desliz"><table>
+      <thead><tr><th>Rubro</th><th>Nota</th><th>Δ</th><th>28 → hoy</th><th>Porqué del movimiento</th></tr></thead>
+      <tbody>
+    <tr>
+      <td class="rubro">Modelo de datos y esquema <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot good" aria-hidden="true"></span>7</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:6 29:7 30:7 31:7 c1:7 c2:7 32:7"><polyline points="2.0,10.80 18.0,8.60 34.0,8.60 50.0,8.60 66.0,8.60 82.0,8.60 98.0,8.60" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="8.60" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Backend y API <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot good" aria-hidden="true"></span>6</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:6 30:7 31:6 c1:6 c2:6 32:6"><polyline points="2.0,15.20 18.0,10.80 34.0,8.60 50.0,10.80 66.0,10.80 82.0,10.80 98.0,10.80" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="10.80" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Pruebas <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot good" aria-hidden="true"></span>6</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:6 29:7 30:6 31:6 c1:6 c2:6 32:6"><polyline points="2.0,10.80 18.0,8.60 34.0,10.80 50.0,10.80 66.0,10.80 82.0,10.80 98.0,10.80" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="10.80" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla. Queda para la 33 el intermitente de <code>cron/asistencia</code> que esta ronda documentó.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Frontend <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>5</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:6 30:5 31:5 c1:5 c2:5 32:5"><polyline points="2.0,15.20 18.0,10.80 34.0,13.00 50.0,13.00 66.0,13.00 82.0,13.00 98.0,13.00" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="13.00" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Seguridad <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>5</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:7 29:7 30:6 31:5 c1:5 c2:5 32:5"><polyline points="2.0,8.60 18.0,8.60 34.0,10.80 50.0,13.00 66.0,13.00 82.0,13.00 98.0,13.00" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="13.00" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Tool calling <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>5</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:5 29:7 30:5 31:5 c1:5 c2:5 32:5"><polyline points="2.0,13.00 18.0,8.60 34.0,13.00 50.0,13.00 66.0,13.00 82.0,13.00 98.0,13.00" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="13.00" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Operabilidad y DX <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>4</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:3 29:6 30:7 31:5 c1:5 c2:4 32:4"><polyline points="2.0,17.40 18.0,10.80 34.0,8.60 50.0,13.00 66.0,13.00 82.0,15.20 98.0,15.20" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="15.20" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda. La deriva sin publicar va en su <strong>cuarto día</strong> y creció a 21 archivos, pero el rubro no se rotó y su nota no se mueve sin auditor.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Sistema agéntico <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>4</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:7 30:4 31:4 c1:4 c2:4 32:4"><polyline points="2.0,15.20 18.0,8.60 34.0,15.20 50.0,15.20 66.0,15.20 82.0,15.20 98.0,15.20" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="15.20" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — perdió el desempate con arquitectura por el lead de ARQ-A3. Primero en la cola de la 33.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Rendimiento y costo <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>4</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:6 30:5 31:4 c1:4 c2:4 32:4"><polyline points="2.0,15.20 18.0,10.80 34.0,13.00 50.0,15.20 66.0,15.20 82.0,15.20 98.0,15.20" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="15.20" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Arquitectura y mantenibilidad <span class="pill auditada">auditado hoy</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>4</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:3 29:4 30:3 31:4 c1:4 c2:4 32:4"><polyline points="2.0,17.40 18.0,15.20 34.0,17.40 50.0,15.20 66.0,15.20 82.0,15.20 98.0,15.20" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="15.20" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque"><strong>Ninguna de las tres razones aplica.</strong> El ancla («4 o menos si la misma lógica de dinero vive en más de un archivo») ya topaba en 4 y sigue topando: <code>copiasDeComprobante</code> y la función SQL siguen siendo dos. ARQ-A3 reproducido con cifras es <em>la misma deuda, mejor medida</em>, no deuda nueva. <strong>No subo por mi propio arreglo</strong> con el auditor ya ido — lo decide la 33.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Cumplimiento legal <span class="pill auditada">auditado hoy</span></td>
+      <td class="nota"><span class="dot critical" aria-hidden="true"></span>3</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:5 30:4 31:3 c1:3 c2:3 32:3"><polyline points="2.0,15.20 18.0,13.00 34.0,15.20 50.0,17.40 66.0,17.40 82.0,17.40 98.0,17.40" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="17.40" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque"><strong>Ninguna de las tres razones aplica.</strong> 16/16 abiertos reconfirmados, 0 cerrados. El ancla («3 o menos si hay transferencia sin cobertura») la fijan LEG-A1 y LEG-A5, reverificadas hoy. El nuevo LEG-32-A1 sostiene mejor el 3, no lo empeora.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Cumplimiento fiscal <span class="pill auditada">auditado hoy</span></td>
+      <td class="nota"><span class="dot critical" aria-hidden="true"></span>3</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:3 29:4 30:3 31:3 c1:3 c2:3 32:3"><polyline points="2.0,17.40 18.0,15.20 34.0,17.40 50.0,17.40 66.0,17.40 82.0,17.40 98.0,17.40" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="17.40" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque"><strong>Ninguna de las tres razones aplica.</strong> El ancla la clava FIS-C1, reverificado hoy línea por línea y abierto. El arreglo de ARQ-A3 toca el cubo del 15 % pero entró después de que el auditor entregara: no se califica solo.</td>
+    </tr>
+      </tbody></table></div>
+    <p class="pie">Los 9 marcados <em>no auditado</em> conservan su nota por regla:
+       un rubro sin archivo es un rubro sin auditar, y su nota no se mueve.
+       Suma 56 / 12 = <strong>4.7</strong>.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Nota global, ronda por ronda</h2>
+    <svg viewBox="0 0 640 150" class="serieglobal" role="img" aria-label="Nota global por ronda: 24 6.2, 25 5.3, 26 6.0, 27 5.3, 28 4.4, 29 6.0, 30 5.2, 31 4.8, c·1 4.8, c·2 4.7, 32 4.7"><line x1="30" x2="614" y1="124.0" y2="124.0" stroke="var(--grid)" stroke-width="1"/><text x="24" y="127.5" text-anchor="end" class="ejelab">4.0</text><line x1="30" x2="614" y1="102.0" y2="102.0" stroke="var(--grid)" stroke-width="1"/><text x="24" y="105.5" text-anchor="end" class="ejelab">4.5</text><line x1="30" x2="614" y1="80.0" y2="80.0" stroke="var(--grid)" stroke-width="1"/><text x="24" y="83.5" text-anchor="end" class="ejelab">5.0</text><line x1="30" x2="614" y1="58.0" y2="58.0" stroke="var(--grid)" stroke-width="1"/><text x="24" y="61.5" text-anchor="end" class="ejelab">5.5</text><line x1="30" x2="614" y1="36.0" y2="36.0" stroke="var(--grid)" stroke-width="1"/><text x="24" y="39.5" text-anchor="end" class="ejelab">6.0</text><line x1="30" x2="614" y1="14.0" y2="14.0" stroke="var(--grid)" stroke-width="1"/><text x="24" y="17.5" text-anchor="end" class="ejelab">6.5</text><polyline points="30.0,27.2 88.4,66.8 146.8,36.0 205.2,66.8 263.6,106.4 322.0,36.0 380.4,71.2 438.8,88.8 497.2,88.8 555.6,93.2 614.0,93.2" fill="none" stroke="var(--serie)" stroke-width="2"/><circle cx="30.0" cy="27.2" r="2.8" fill="var(--serie)"/><circle cx="88.4" cy="66.8" r="2.8" fill="var(--serie)"/><circle cx="146.8" cy="36.0" r="2.8" fill="var(--serie)"/><circle cx="205.2" cy="66.8" r="2.8" fill="var(--serie)"/><circle cx="263.6" cy="106.4" r="2.8" fill="var(--serie)"/><circle cx="322.0" cy="36.0" r="2.8" fill="var(--serie)"/><circle cx="380.4" cy="71.2" r="2.8" fill="var(--serie)"/><circle cx="438.8" cy="88.8" r="2.8" fill="var(--serie)"/><circle cx="497.2" cy="88.8" r="2.8" fill="var(--serie)"/><circle cx="555.6" cy="93.2" r="2.8" fill="var(--serie)"/><circle cx="614.0" cy="93.2" r="4" fill="var(--serie)"/><text x="30.0" y="142" text-anchor="start" class="ejelab">24</text><text x="30.0" y="19.2" text-anchor="start" class="vallab">6.2</text><text x="88.4" y="142" text-anchor="middle" class="ejelab">25</text><text x="88.4" y="58.8" text-anchor="middle" class="vallab">5.3</text><text x="146.8" y="142" text-anchor="middle" class="ejelab">26</text><text x="146.8" y="28.0" text-anchor="middle" class="vallab">6.0</text><text x="205.2" y="142" text-anchor="middle" class="ejelab">27</text><text x="205.2" y="58.8" text-anchor="middle" class="vallab">5.3</text><text x="263.6" y="142" text-anchor="middle" class="ejelab">28</text><text x="263.6" y="98.4" text-anchor="middle" class="vallab">4.4</text><text x="322.0" y="142" text-anchor="middle" class="ejelab">29</text><text x="322.0" y="28.0" text-anchor="middle" class="vallab">6.0</text><text x="380.4" y="142" text-anchor="middle" class="ejelab">30</text><text x="380.4" y="63.2" text-anchor="middle" class="vallab">5.2</text><text x="438.8" y="142" text-anchor="middle" class="ejelab">31</text><text x="438.8" y="80.8" text-anchor="middle" class="vallab">4.8</text><text x="497.2" y="142" text-anchor="middle" class="ejelab">c·1</text><text x="497.2" y="80.8" text-anchor="middle" class="vallab">4.8</text><text x="555.6" y="142" text-anchor="middle" class="ejelab">c·2</text><text x="555.6" y="85.2" text-anchor="middle" class="vallab">4.7</text><text x="614.0" y="142" text-anchor="end" class="ejelab">32</text><text x="614.0" y="85.2" text-anchor="end" class="vallab">4.7</text></svg>
+  </div>
+
+  <div class="panel">
+    <h2>La compuerta, medida en esta corrida</h2>
+    <div class="compuerta">
+      <div class="chk"><div class="ico">✅</div><div><div class="t">npx vitest run</div>
+        <div class="d">988 archivos · 12,976 pasan · 6 saltadas · 2 de 3 corridas limpias; la 3a trae el intermitente PREEXISTENTE de cron/asistencia (misma tasa sobre HEAD sin tocar)</div></div></div>
+      <div class="chk"><div class="ico">✅</div><div><div class="t">npx tsc --noEmit</div>
+        <div class="d">exit 0 · sin salida</div></div></div>
+      <div class="chk"><div class="ico">✅</div><div><div class="t">npm run lint</div>
+        <div class="d">0 errores · 154 avisos</div></div></div>
+      <div class="chk"><div class="ico">⊘</div><div><div class="t">npm run build</div>
+        <div class="d">no corre en la nube</div></div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Lo que esta ronda deja escrito</h2>
+    <ul class="lista">
+      <li><strong>ARQ-A3 (CRÍTICO) arreglado y commiteado</strong> — <code>f0645f9</code>. Reproducido primero con cifras contra un Postgres 16 efímero y las 333 migraciones: dos tickets de $2,500 de estaciones distintas con folio 1234 contaban como uno. Mutación verificada en los dos sentidos.</li>
+      <li><strong>Este contenedor SÍ puede correr Postgres.</strong> Los binarios están en <code>/usr/lib/postgresql/16/bin/</code>, fuera del PATH — por eso <code>which</code> engaña, y ésa fue la hora perdida en la ronda 31. <code>initdb</code> falla como root: hay que <code>su postgres</code>. Lo que vive en SQL ya no hay que deducirlo.</li>
+      <li><strong>Deriva sin publicar, cuarto día.</strong> El último <code>[deploy]</code> en asunto sigue siendo <code>cfa00ab</code> (10-sep) y ya son <strong>21 archivos</strong> de <code>src/</code> en master sin llegar a producción, entre ellos el cubo del 15 %. No es código: es un Redeploy en Vercel.</li>
+      <li><strong>ARQ-C1 cumple 10 rondas seguidas</strong> — <code>export/poliza/route.ts:363-367</code> + <code>:394-402</code>. Un ajuste firmado sigue tirando el export contable del periodo completo.</li>
+      <li><strong>Hallazgo nuevo que nadie pidió:</strong> <code>cron/asistencia/route.test.ts</code> falla <strong>1 de cada 5 corridas sobre HEAD sin tocar nada</strong>. El margen derivado tiene cero holgura: <code>venceEn</code> se ancla un tick después de <code>antes</code> y la aserción se voltea por 1 ms. Anotado, no tocado — el rubro no se rotó hoy.</li>
+    </ul>
+  </div>
+</div>
+</body></html>

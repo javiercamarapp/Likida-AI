@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auditoría 32 · continuación — 17-sep-2026</title>
+<style>
+  :root {
+    --bg:#f7f7f5; --surface:#ffffff; --border:#e3e2dd; --grid:#ececE8;
+    --text:#1f1f1d; --text-secondary:#4a4a45; --text-muted:#76756e;
+    --good:#0ca30c; --warning:#fab219; --critical:#d03b3b; --serie:#2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#17171a; --surface:#1f1f23; --border:#33333a; --grid:#2b2b31;
+      --text:#f2f2ef; --text-secondary:#c5c5bf; --text-muted:#908f88;
+      --good:#39c439; --warning:#f5c04e; --critical:#ef6b6b; --serie:#3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#17171a; --surface:#1f1f23; --border:#33333a; --grid:#2b2b31;
+    --text:#f2f2ef; --text-secondary:#c5c5bf; --text-muted:#908f88;
+    --good:#39c439; --warning:#f5c04e; --critical:#ef6b6b; --serie:#3987e5;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    padding:24px 16px 48px; }
+  .lienzo { max-width:960px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; letter-spacing:-0.01em; }
+  .sub { color:var(--text-muted); margin:0 0 20px; font-size:13px; }
+  .tarjetas { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+  .tarjeta { flex:1 1 168px; background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:12px 14px; }
+  .tarjeta .k { color:var(--text-muted); font-size:11.5px; text-transform:uppercase;
+    letter-spacing:0.05em; margin-bottom:4px; }
+  .tarjeta .v { font-size:26px; font-weight:600; letter-spacing:-0.02em; }
+  .tarjeta .v small { font-size:13px; font-weight:400; color:var(--text-muted); margin-left:4px; }
+  .panel { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:16px; margin-bottom:20px; }
+  .panel h2 { font-size:14px; margin:0 0 12px; letter-spacing:-0.005em; }
+  .desliz { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; min-width:620px; }
+  th { text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:0.05em;
+    color:var(--text-muted); font-weight:500; padding:0 10px 8px 0; border-bottom:1px solid var(--border); }
+  td { padding:9px 10px 9px 0; border-bottom:1px solid var(--grid); vertical-align:top; }
+  tr:last-child td { border-bottom:none; }
+  .rubro { font-weight:500; white-space:nowrap; }
+  .nota { font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; white-space:nowrap; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; vertical-align:middle; }
+  .dot.good { background:var(--good); } .dot.warning { background:var(--warning); }
+  .dot.critical { background:var(--critical); }
+  .delta { font-variant-numeric:tabular-nums; white-space:nowrap; font-size:13px; }
+  .delta.baja { color:var(--critical); font-weight:600; }
+  .delta.sube { color:var(--good); font-weight:600; }
+  .delta.igual { color:var(--text-muted); }
+  .sparkcell { width:110px; }
+  .spark { width:100px; height:26px; display:block; }
+  .porque { color:var(--text-secondary); font-size:12.5px; min-width:260px; }
+  .pill { display:inline-block; font-size:10.5px; padding:1px 7px; border-radius:99px;
+    border:1px solid var(--border); color:var(--text-muted); margin-left:6px;
+    font-weight:400; vertical-align:1px; }
+  .pill.auditada { border-color:var(--serie); color:var(--serie); }
+  .compuerta { display:flex; flex-wrap:wrap; gap:10px; }
+  .chk { flex:1 1 190px; display:flex; gap:9px; align-items:flex-start;
+    border:1px solid var(--border); border-radius:8px; padding:10px 12px; }
+  .chk .ico { font-size:13px; line-height:1.45; }
+  .chk .t { font-weight:500; font-size:13px; }
+  .chk .d { color:var(--text-muted); font-size:12px; font-variant-numeric:tabular-nums; }
+  ul.lista { margin:0; padding-left:18px; color:var(--text-secondary); font-size:12.5px; }
+  ul.lista li { margin-bottom:7px; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px;
+    background:var(--grid); padding:1px 4px; border-radius:4px; }
+  .pie { color:var(--text-muted); font-size:12px; margin-top:6px; }
+  .serieglobal { width:100%; height:auto; display:block; }
+  .ejelab { font-size:9px; fill:var(--text-muted); }
+  .vallab { font-size:9.5px; fill:var(--text-secondary); font-variant-numeric:tabular-nums; }
+  @media (max-width:520px) { body { padding:16px 16px 40px; } h1 { font-size:18px; } }
+</style></head>
+<body>
+<div class="lienzo">
+  <h1>Auditoría 32 — continuación del 17-sep</h1>
+  <p class="sub">Ronda de <strong>continuación</strong> sobre el PR #477 (rama <code>claude/auditoria-32</code>) ·
+     4 rubros rotados de 12 · <code>origin/master</code> sin moverse desde la 32 (<code>69becdb</code>)</p>
+
+  <div class="tarjetas">
+    <div class="tarjeta"><div class="k">Nota global</div>
+      <div class="v">4.3<small>▼0.4 vs 4.7</small></div></div>
+    <div class="tarjeta"><div class="k">Suma de rubros</div>
+      <div class="v">52<small>/ 120</small></div></div>
+    <div class="tarjeta"><div class="k">Rotados hoy</div>
+      <div class="v">4<small>/ 12</small></div></div>
+    <div class="tarjeta"><div class="k">Críticos cerrados</div>
+      <div class="v">2<small>+ 1 alto</small></div></div>
+    <div class="tarjeta"><div class="k">Compuerta</div>
+      <div class="v">verde<small>0 fallan</small></div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Los doce rubros — 4 rotados, 8 con nota heredada</h2>
+    <div class="desliz"><table>
+      <thead><tr><th>Rubro</th><th>Nota</th><th>Δ</th><th>28 → hoy</th><th>Porqué del movimiento</th></tr></thead>
+      <tbody>
+    <tr>
+      <td class="rubro">Pruebas <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot good" aria-hidden="true"></span>6</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:6 29:7 30:6 31:6 c1:6 c2:6 32:6 hoy:6"><polyline points="2.0,10.84 15.7,8.68 29.4,10.84 43.1,10.84 56.9,10.84 70.6,10.84 84.3,10.84 98.0,10.84" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="10.84" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla. El intermitente que la 32 le dejó anotado se midió hoy (4 de 10 rojas) y se cerró: la nota la mueve su auditor en la 33, no el orquestador que lo arregló.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Backend y API <span class="pill auditada">auditado hoy</span></td>
+      <td class="nota"><span class="dot good" aria-hidden="true"></span>6</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:6 30:7 31:6 c1:6 c2:6 32:6 hoy:6"><polyline points="2.0,15.16 15.7,10.84 29.4,8.68 43.1,10.84 56.9,10.84 70.6,10.84 84.3,10.84 98.0,10.84" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="10.84" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque"><strong>Ninguna de las tres razones aplica</strong>, con el saldo detrás: un MEDIO nuevo contra <strong>cinco refutaciones</strong> en nueve caminos que la 31 dejó sin revisar. Y refutó que «un cron falla y late <code>ok</code>» fuera una clase: lo persiguió en los once crons y solo <code>purgar</code> lo tiene. 0 CRÍTICOS.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Frontend <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>5</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:6 30:5 31:5 c1:5 c2:5 32:5 hoy:5"><polyline points="2.0,15.16 15.7,10.84 29.4,13.00 43.1,13.00 56.9,13.00 70.6,13.00 84.3,13.00 98.0,13.00" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="13.00" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Seguridad <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>5</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:7 29:7 30:6 31:5 c1:5 c2:5 32:5 hoy:5"><polyline points="2.0,8.68 15.7,8.68 29.4,10.84 43.1,13.00 56.9,13.00 70.6,13.00 84.3,13.00 98.0,13.00" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="13.00" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Modelo de datos y esquema <span class="pill auditada">auditado hoy</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>5</td>
+      <td class="delta baja">▼2</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:6 29:7 30:7 31:7 c1:7 c2:7 32:7 hoy:5"><polyline points="2.0,10.84 15.7,8.68 29.4,8.68 43.1,8.68 56.9,8.68 70.6,8.68 84.3,8.68 98.0,13.00" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="13.00" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque"><strong>Deuda que cobró factura</strong>, y con la factura fechada ayer: la única migración de la ventana (<code>0357</code>) abrió <strong>dos regresiones CRÍTICAS</strong> medidas contra Postgres 16 con las 334 migraciones. El esquema estático no se movió; el SQL que ejecuta, sí. De pilón, corrigió como <strong>falso</strong> uno de sus propios hallazgos de la 31 (DAT31-M1): el CHECK existía desde <code>0144:23</code>.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Operabilidad y DX <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>4</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:3 29:6 30:7 31:5 c1:5 c2:4 32:4 hoy:4"><polyline points="2.0,17.32 15.7,10.84 29.4,8.68 43.1,13.00 56.9,13.00 70.6,15.16 84.3,15.16 98.0,15.16" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="15.16" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda. La deriva sin publicar va en su <strong>quinto día</strong> y sigue en 21 archivos, pero el rubro no se rotó y su nota no se mueve sin auditor.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Tool calling <span class="pill auditada">auditado hoy</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>4</td>
+      <td class="delta baja">▼1</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:5 29:7 30:5 31:5 c1:5 c2:5 32:5 hoy:4"><polyline points="2.0,13.00 15.7,8.68 29.4,13.00 43.1,13.00 56.9,13.00 70.6,13.00 84.3,13.00 98.0,15.16" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="15.16" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque"><strong>Mirada más profunda</strong> con dos números detrás: <strong>2 ALTOS nuevos</strong> y reincidentes en su 3ª, 4ª y <strong>5ª</strong> ronda sin cerrarse. El ancla («4 o menos si el modelo puede influir en qué fila se escribe») la fija TC30-A1: el piloto de visión deja que el modelo escriba el VALOR que se teclea en el formulario fiscal, y el único candado es la regla 5 del prompt.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Rendimiento y costo <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>4</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:6 30:5 31:4 c1:4 c2:4 32:4 hoy:4"><polyline points="2.0,15.16 15.7,10.84 29.4,13.00 43.1,15.16 56.9,15.16 70.6,15.16 84.3,15.16 98.0,15.16" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="15.16" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Arquitectura y mantenibilidad <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot warning" aria-hidden="true"></span>4</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:3 29:4 30:3 31:4 c1:4 c2:4 32:4 hoy:4"><polyline points="2.0,17.32 15.7,15.16 29.4,17.32 43.1,15.16 56.9,15.16 70.6,15.16 84.3,15.16 98.0,15.16" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="15.16" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda. ARQ-C1 reverificado por el orquestador y abierto: <strong>11ª aparición</strong>.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Sistema agéntico <span class="pill auditada">auditado hoy</span></td>
+      <td class="nota"><span class="dot critical" aria-hidden="true"></span>3</td>
+      <td class="delta baja">▼1</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:7 30:4 31:4 c1:4 c2:4 32:4 hoy:3"><polyline points="2.0,15.16 15.7,8.68 29.4,15.16 43.1,15.16 56.9,15.16 70.6,15.16 84.3,15.16 98.0,17.32" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="17.32" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque"><strong>Mirada más profunda</strong>, y el número es <strong>3 hallazgos nuevos en áreas que la 31 listó como no revisadas</strong> — no es releer el mismo código. El ancla («3 o menos si la base dice una cosa y el usuario cree otra») la fija el nuevo ALTO de <code>processor.ts:1689</code>: se le promete «Dame un minuto y te contesto» y el turno muere como carta muerta que nadie sella.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Cumplimiento fiscal <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot critical" aria-hidden="true"></span>3</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:4 29:5 30:4 31:3 c1:3 c2:3 32:3 hoy:3"><polyline points="2.0,15.16 15.7,13.00 29.4,15.16 43.1,17.32 56.9,17.32 70.6,17.32 84.3,17.32 98.0,17.32" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="17.32" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla. Los dos arreglos de hoy son suyos por materia, y los califica su auditor en la 33.</td>
+    </tr>
+    <tr>
+      <td class="rubro">Cumplimiento legal <span class="pill heredada">no auditado</span></td>
+      <td class="nota"><span class="dot critical" aria-hidden="true"></span>3</td>
+      <td class="delta igual">=</td>
+      <td class="sparkcell"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img" aria-label="28:3 29:4 30:3 31:3 c1:3 c2:3 32:3 hoy:3"><polyline points="2.0,17.32 15.7,15.16 29.4,17.32 43.1,17.32 56.9,17.32 70.6,17.32 84.3,17.32 98.0,17.32" fill="none" stroke="var(--serie)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="98.0" cy="17.32" r="2.6" fill="var(--serie)"/></svg></td>
+      <td class="porque">No auditado esta ronda — conserva su nota por regla.</td>
+    </tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="panel">
+    <h2>Nota global, rondas 24 a hoy</h2>
+    <svg class="serieglobal" viewBox="0 0 700 150" role="img" aria-label="Nota global por ronda: 24 6.2, 25 5.3, 26 6.0, 27 5.3, 28 4.4, 29 6.0, 30 5.2, 31 4.8, c·1 4.8, c·2 4.7, 32 4.7, hoy 4.3">
+      <line x1="40" y1="122" x2="670" y2="122" stroke="var(--grid)" stroke-width="1"/>
+      <polyline points="40.0,35.8 97.3,71.0 154.5,43.6 211.8,71.0 269.1,106.3 326.4,43.6 383.6,75.0 440.9,90.6 498.2,90.6 555.5,94.6 612.7,94.6 670.0,110.2" fill="none" stroke="var(--serie)" stroke-width="2"/>
+      <circle cx="40.0" cy="35.8" r="3" fill="var(--serie)"/><text class="vallab" x="40.0" y="27.8" text-anchor="middle">6.2</text><text class="ejelab" x="40.0" y="142.0" text-anchor="middle">24</text><circle cx="97.3" cy="71.0" r="3" fill="var(--serie)"/><text class="vallab" x="97.3" y="63.0" text-anchor="middle">5.3</text><text class="ejelab" x="97.3" y="142.0" text-anchor="middle">25</text><circle cx="154.5" cy="43.6" r="3" fill="var(--serie)"/><text class="vallab" x="154.5" y="35.6" text-anchor="middle">6.0</text><text class="ejelab" x="154.5" y="142.0" text-anchor="middle">26</text><circle cx="211.8" cy="71.0" r="3" fill="var(--serie)"/><text class="vallab" x="211.8" y="63.0" text-anchor="middle">5.3</text><text class="ejelab" x="211.8" y="142.0" text-anchor="middle">27</text><circle cx="269.1" cy="106.3" r="3" fill="var(--serie)"/><text class="vallab" x="269.1" y="98.3" text-anchor="middle">4.4</text><text class="ejelab" x="269.1" y="142.0" text-anchor="middle">28</text><circle cx="326.4" cy="43.6" r="3" fill="var(--serie)"/><text class="vallab" x="326.4" y="35.6" text-anchor="middle">6.0</text><text class="ejelab" x="326.4" y="142.0" text-anchor="middle">29</text><circle cx="383.6" cy="75.0" r="3" fill="var(--serie)"/><text class="vallab" x="383.6" y="67.0" text-anchor="middle">5.2</text><text class="ejelab" x="383.6" y="142.0" text-anchor="middle">30</text><circle cx="440.9" cy="90.6" r="3" fill="var(--serie)"/><text class="vallab" x="440.9" y="82.6" text-anchor="middle">4.8</text><text class="ejelab" x="440.9" y="142.0" text-anchor="middle">31</text><circle cx="498.2" cy="90.6" r="3" fill="var(--serie)"/><text class="vallab" x="498.2" y="82.6" text-anchor="middle">4.8</text><text class="ejelab" x="498.2" y="142.0" text-anchor="middle">c·1</text><circle cx="555.5" cy="94.6" r="3" fill="var(--serie)"/><text class="vallab" x="555.5" y="86.6" text-anchor="middle">4.7</text><text class="ejelab" x="555.5" y="142.0" text-anchor="middle">c·2</text><circle cx="612.7" cy="94.6" r="3" fill="var(--serie)"/><text class="vallab" x="612.7" y="86.6" text-anchor="middle">4.7</text><text class="ejelab" x="612.7" y="142.0" text-anchor="middle">32</text><circle cx="670.0" cy="110.2" r="3" fill="var(--serie)"/><text class="vallab" x="670.0" y="102.2" text-anchor="middle">4.3</text><text class="ejelab" x="670.0" y="142.0" text-anchor="middle">hoy</text>
+    </svg>
+    <p class="pie">El eje va de 4.0 a 6.5. Con el código congelado desde el 13-sep salvo por los arreglos de las
+       propias rondas, la serie mide sobre todo el instrumento — por eso la 32 exigió que todo movimiento trajera
+       un número contable detrás. Hoy los cuatro lo traen.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Lo que se cerró hoy, y de dónde salió</h2>
+    <ul class="lista">
+      <li><strong>DAT32C-C1 (CRÍTICO) — <code>53740a1</code>, migración 0358.</strong> La 0357 de ayer metió
+        <code>rfc_emisor</code> a la llave de dedup, y es el único campo de esa llave que el OCR puede perder entero
+        (<code>ocr.ts:560</code>). Dos fotos del MISMO ticket de $2,500 con el RFC leído en una sola sumaban
+        <strong>$5,000</strong>. Mutación medida en los dos sentidos.</li>
+      <li><strong>DAT32C-C2 (CRÍTICO) — <code>5c1734e</code>, migración 0359.</strong> El arreglo de ARQ-A3 cerró
+        una de las dos copias del predicado: sobre las mismas dos filas el motor del 15 % decía $5,000 y el panel
+        del contador <strong>$2,500 con $344.83 de IVA</strong>, y la segunda estación desaparecía de la celda.</li>
+      <li><strong>PRU32C-A1 (ALTO) — el intermitente que la 32 dejó anotado.</strong> No era ruido del runner:
+        dos aserciones del mismo archivo tenían holgura <strong>exactamente 0 ms</strong> y se volteaban si el reloj
+        avanzaba 1 ms. Medido <strong>4 de 10 rojas</strong> antes, <strong>0 de 25</strong> después, con la mutación
+        que prueba que no perdió los dientes.</li>
+      <li><strong>Los dos críticos son regresiones que introdujo el arreglo de la ronda anterior</strong>, y los
+        encontró un auditor revisando el trabajo del orquestador. Es la segunda ronda seguida en que eso pasa, y es
+        el argumento más fuerte a favor de auditar el rubro cuyo código tocó la propia auditoría.</li>
+    </ul>
+  </div>
+
+  <div class="panel">
+    <h2>Compuerta, sobre el árbol final</h2>
+    <div class="compuerta">
+      <div class="chk"><span class="ico">✅</span><div><div class="t">npx vitest run</div>
+        <div class="d">988 archivos · 12,976 pasan · 6 saltadas · 0 fallan</div></div></div>
+      <div class="chk"><span class="ico">✅</span><div><div class="t">tsc --noEmit</div><div class="d">exit 0</div></div></div>
+      <div class="chk"><span class="ico">✅</span><div><div class="t">eslint src/</div>
+        <div class="d">0 errores · 154 avisos</div></div></div>
+      <div class="chk"><span class="ico">✅</span><div><div class="t">Postgres 16 efímero</div>
+        <div class="d">336 migraciones limpias sobre base virgen · 21/21 pruebas SQL</div></div></div>
+      <div class="chk"><span class="ico">⛔</span><div><div class="t">npm run build</div>
+        <div class="d">no se corre en la nube: pide Supabase, OpenRouter, Facturapi y Upstash</div></div></div>
+    </div>
+    <p class="pie">La única prueba SQL en rojo del contenedor es <code>wa_leases_fencing.sql</code>, que pide pgTAP
+       y aquí no está instalado. Es <strong>INFRA</strong>, no código: en CI corre verde.</p>
+  </div>
+</div>
+</body></html>
