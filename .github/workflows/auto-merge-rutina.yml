@@ -63,9 +63,23 @@ jobs:
           # sin terminar) caía derecho al "🔴 no se mergea" en el primer
           # intento. Se separa el comando del `if` para capturar su código de
           # verdad.
+          # OP-32C3-A1 (auditoría 32 c3): `|| CODE=$?`, NO el comando desnudo.
+          #
+          # La corrección de arriba sacó el comando del `if` para poder ver su
+          # código de verdad… y con eso lo dejó suelto en el cuerpo de un `for`.
+          # GitHub corre este paso con `bash -e` (no declara `shell:`), y bajo
+          # `set -e` un comando suelto que devuelve distinto de cero mata el
+          # paso EN ESA LÍNEA: `CODE=$?` no se ejecuta, la rama de «en curso»
+          # no existe y el comentario de «🔴 no se mergea» tampoco. Medido en
+          # las corridas #1678 (11-sep) y #1480 (8-sep): exit 8 y CERO líneas
+          # de salida. Los PR de las rutinas se apilaban sin mergear y sin que
+          # nadie supiera por qué.
+          #
+          # `|| CODE=$?` pone el comando en contexto de condición, que es la
+          # excepción documentada de `set -e`, y conserva el código real.
           for i in $(seq 1 30); do
-            gh pr checks "$NUM" --repo "$REPO" > /tmp/checks.txt 2>&1
-            CODE=$?
+            CODE=0
+            gh pr checks "$NUM" --repo "$REPO" > /tmp/checks.txt 2>&1 || CODE=$?
             if [ "$CODE" = "0" ]; then
               echo "Todos los checks en verde para el PR #$NUM."
               break
