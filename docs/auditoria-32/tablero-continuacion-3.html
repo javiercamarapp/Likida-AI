@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auditoría 32 · continuación 3</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface-0:#f4f4f2; --surface-1:#fcfcfb; --borde:#dedcd4;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#78766f;
+    --serie:#2a78d6;
+    --bien:#0ca30c; --aviso:#fab219; --grave:#ec835a; --critico:#d03b3b;
+    --grid:#e6e4dc;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme: dark;
+      --surface-0:#111110; --surface-1:#1a1a19; --borde:#35342f;
+      --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#98968c;
+      --serie:#3987e5; --grid:#2b2a26;
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --surface-0:#111110; --surface-1:#1a1a19; --borde:#35342f;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#98968c;
+    --serie:#3987e5; --grid:#2b2a26;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-0);color:var(--text-primary);
+    font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    padding:24px 16px 56px;overflow-x:hidden}
+  .wrap{max-width:1180px;margin:0 auto}
+  h1{font-size:1.45rem;margin:0 0 4px;letter-spacing:-.01em}
+  .sub{color:var(--text-secondary);margin:0 0 20px;font-size:.92rem}
+  .tarjeta{background:var(--surface-1);border:1px solid var(--borde);border-radius:12px;padding:16px}
+  .banda{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:20px}
+  .kpi .n{font-size:1.9rem;font-weight:650;letter-spacing:-.02em;line-height:1.1}
+  .kpi .e{font-size:.74rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px}
+  .kpi .p{font-size:.8rem;color:var(--text-secondary);margin-top:3px}
+  h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);
+     margin:26px 0 10px;font-weight:600}
+  .rejilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:10px}
+  .rubro{background:var(--surface-1);border:1px solid var(--borde);border-radius:10px;padding:13px 14px;
+    border-left:4px solid var(--nota-color)}
+  .rubro .cab{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .rubro .nom{font-weight:600;font-size:.93rem}
+  .rubro .val{font-size:1.5rem;font-weight:650;color:var(--nota-color);letter-spacing:-.02em}
+  .rubro .d{font-size:.78rem;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+  .rubro .r{font-size:.82rem;color:var(--text-secondary);margin-top:7px}
+  .rubro.quieto{opacity:.72}
+  .et{display:inline-block;font-size:.68rem;padding:1px 6px;border-radius:999px;
+    border:1px solid var(--borde);color:var(--text-muted);margin-top:8px}
+  table{width:100%;border-collapse:collapse;font-size:.87rem}
+  .scroll{overflow-x:auto;background:var(--surface-1);border:1px solid var(--borde);border-radius:10px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--borde);vertical-align:top}
+  th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:600;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85em;color:var(--text-secondary)}
+  .sev{font-weight:650;white-space:nowrap}
+  .sev.c{color:var(--critico)} .sev.a{color:var(--grave)} .sev.m{color:var(--aviso)}
+  .est{font-size:.72rem;padding:2px 7px;border-radius:999px;border:1px solid var(--borde);white-space:nowrap;color:var(--text-secondary)}
+  .est.ok{border-color:var(--bien);color:var(--bien)}
+  .compuerta{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:var(--surface-1);border:1px solid var(--borde);border-radius:8px;padding:9px 13px;font-size:.84rem}
+  .chip b{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:600;margin-bottom:2px}
+  .chip.verde{border-color:var(--bien)}
+  figure{margin:0}
+  figcaption{font-size:.8rem;color:var(--text-secondary);margin-top:6px}
+  .aviso{background:var(--surface-1);border:1px solid var(--critico);border-left-width:4px;
+    border-radius:10px;padding:13px 15px;margin-bottom:20px}
+  .aviso b{color:var(--critico)}
+</style></head>
+<body><div class="wrap">
+
+<h1>Auditoría 32 · continuación 3</h1>
+<p class="sub">19-sep-2026 · ronda de <b>CONTINUACIÓN</b> sobre el PR #477, rama <code>claude/auditoria-32</code> · 6 de 12 rubros reauditados, los 6 por la cláusula de código cambiado</p>
+
+<div class="aviso">
+  <b>Lo que se rompió y ayer estaba bien.</b> Las migraciones 0358/0359 que esta misma rama commiteó el 17-sep dejaron el PDF y <code>/dashboard/fiscal</code> dando cifras distintas sobre las mismas filas: 2 comprobantes/$5,000/$689.66 de IVA contra 1/$2,500 con un renglón «duplicado» encima de un ticket real. Lo encontraron <b>dos auditores independientes</b> —fiscal desde la norma, arquitectura desde la estructura—, cada uno midiendo contra Postgres 16 por su lado. <b>Arreglado en <code>790900d</code></b>, con prueba que lo reproduce y mutación en los dos sentidos.
+</div>
+
+<div class="banda">
+  <div class="tarjeta kpi"><div class="e">Global</div><div class="n">4.0</div><div class="p">▼ 0.25 · antes 4.25 · suma 51 → 48</div></div>
+  <div class="tarjeta kpi"><div class="e">Rubros hoy</div><div class="n">6 / 12</div><div class="p">bajan 4 · sube 1 · queda 1</div></div>
+  <div class="tarjeta kpi"><div class="e">Críticos abiertos</div><div class="n">12</div><div class="p">2 cerrados esta ronda</div></div>
+  <div class="tarjeta kpi"><div class="e">Arreglos retenidos</div><div class="n">3</div><div class="p">0 revertidos · tope de 3 vueltas gastado</div></div>
+  <div class="tarjeta kpi"><div class="e">Compuerta</div><div class="n" style="color:var(--bien)">verde</div><div class="p">991 archivos · 13,007 pasan · 0 fallan</div></div>
+</div>
+
+<h2>Compuerta, con la cifra real</h2>
+<div class="compuerta">
+  <div class="chip verde"><b>npx vitest run</b>991 archivos · 13,007 pasan · 6 saltadas · <b style="display:inline">0 fallan</b> · exit 0</div>
+  <div class="chip verde"><b>npx tsc --noEmit</b>exit 0</div>
+  <div class="chip verde"><b>npm run lint</b>0 errores · 154 avisos</div>
+  <div class="chip verde"><b>lint:ratchet</b>0 nuevos · 154/194 heredados</div>
+  <div class="chip"><b>npm run build</b>no corre en la nube (pide Supabase, OpenRouter, Facturapi, Upstash)</div>
+  <div class="chip"><b>Intermitente de cron/asistencia</b>cerrado · 0 rojas de 20 corridas aisladas</div>
+</div>
+
+<h2>Los 12 rubros — el color codifica la nota, nunca el delta</h2>
+<div class="rejilla" id="rejilla"></div>
+
+<h2>La global, ronda a ronda</h2>
+<figure class="tarjeta">
+  <svg id="serie" viewBox="0 0 880 210" width="100%" height="210" role="img"
+       aria-label="Serie de la calificación global, ocho puntos: 6.0 en la ronda 30, 5.2 en la 31, 4.8 y 4.7 en sus dos continuaciones, 4.7 en la ronda 32, y 4.3, 4.25 y 4.0 en las suyas."></svg>
+  <figcaption>Ocho puntos, del 12 al 19 de septiembre. Una sola serie: sin leyenda, el título la nombra.</figcaption>
+</figure>
+
+<h2>Lo que impide llegar al demo — críticos, con su estado</h2>
+<div class="scroll"><table>
+<thead><tr><th>Sev</th><th>ID</th><th>Dónde</th><th>Qué pasa</th><th>Estado</th></tr></thead>
+<tbody id="criticos"></tbody>
+</table></div>
+
+<h2>Reincidentes — un hallazgo que vuelve es peor noticia que uno nuevo</h2>
+<div class="scroll"><table>
+<thead><tr><th>ID</th><th>Rondas</th><th>Dónde</th><th>Por qué sigue abierto</th></tr></thead>
+<tbody id="reinc"></tbody>
+</table></div>
+
+<h2>Descartados y corregidos por el orquestador</h2>
+<div class="scroll"><table>
+<thead><tr><th>Qué</th><th>Razón</th></tr></thead>
+<tbody id="desc"></tbody>
+</table></div>
+
+<script>
+const RUBROS = [
+  {n:'Modelo de datos y esquema', v:6, a:6, r:'No auditado esta ronda.', q:1},
+  {n:'Backend y API', v:5, a:6, r:'Mirada más profunda. Un consolidado cuya conciliación lanza deja el paquete marcado como ingerido ENTERO: el ECC queda «disponible» para siempre y nadie vuelve por él.'},
+  {n:'Frontend', v:5, a:5, r:'No auditado esta ronda.', q:1},
+  {n:'Pruebas', v:4, a:5, r:'Mirada más profunda. Los tres sitios de ESCRITURA de dinero en TS estaban sin medir en ocho rondas; los tres están desnudos. 36 mutaciones, 10 mueren (27.8 %).'},
+  {n:'Seguridad', v:4, a:4, r:'No auditado esta ronda.', q:1},
+  {n:'Operabilidad y DX', v:5, a:4, r:'Se atacó y subió: OP-32C2-C1 cerró entero y verificado en los tres estados de la salida del detector. No pasa de 5: sigue sin haber identificador para reconstruir un fallo de las 3 a.m.'},
+  {n:'Tool calling', v:4, a:4, r:'No auditado esta ronda.', q:1},
+  {n:'Rendimiento y costo', v:4, a:4, r:'Ninguna neta. Hubo ataque real y mirada más profunda, y se cancelan contra el ancla: el peor caso excede el límite y falla callado en ONCE cadenas, contra nueve ayer.'},
+  {n:'Arquitectura y mantenibilidad', v:3, a:4, r:'Deuda que cobró factura. Seis implementaciones de «el mismo comprobante», en dos lenguajes, con TRES semánticas donde antes había una.'},
+  {n:'Sistema agéntico', v:3, a:3, r:'No auditado esta ronda.', q:1},
+  {n:'Cumplimiento fiscal', v:2, a:3, r:'Deuda que cobró factura. Las migraciones de esta rama llegaron a UN solo lado de la resta: el PDF niega una deducción que la RFA 2026 2.9 concede.'},
+  {n:'Cumplimiento legal', v:3, a:3, r:'No auditado esta ronda.', q:1},
+];
+const color = v => v<=4 ? 'var(--critico)' : (v<=6 ? 'var(--aviso)' : 'var(--bien)');
+document.getElementById('rejilla').innerHTML = RUBROS.map(x=>{
+  const d = x.v - x.a;
+  const flecha = d===0 ? '= 0.0' : (d>0 ? '▲ '+d : '▼ '+Math.abs(d));
+  return `<div class="rubro ${x.q?'quieto':''}" style="--nota-color:${color(x.v)}">
+    <div class="cab"><span class="nom">${x.n}</span><span class="val">${x.v}</span></div>
+    <div class="d">${flecha} · antes ${x.a}</div>
+    <div class="r">${x.r}</div>
+    ${x.q?'<span class="et">no auditado esta ronda</span>':''}
+  </div>`;
+}).join('');
+
+const CRIT = [
+  ['C','FIS-C3 / ARQ32C3-C2','engine.ts:514 · 0359:161','El PDF y el panel fiscal dan cifras distintas sobre las mismas dos filas. Lo introdujo esta rama.','arreglado 790900d','ok'],
+  ['C','REN-32C3-C1','ciclo.ts:269','315.0 s nominales contra maxDuration=300; 1,225.5 s a techos contra un margen de 43.5 s.','arreglado 95f497c','ok'],
+  ['C','ARQ32C3-C1','desde_db.ts:184 · 0358:101','El contador del ejercicio previo se quedó con dinero que ese viaje sí gastó: $15,500 donde van $13,000.','pendiente — el otro lado del espejo, rediseño',''],
+  ['C','ARQ-C1','poliza/route.ts:366','12ª aparición: un ajuste firmado sigue tirando el export contable del periodo completo.','pendiente — 12ª ronda, necesita decisión del dueño',''],
+  ['C','FIS-C1','onboarding/page.tsx:67','4ª ronda: el cotejo del régimen corre DESPUÉS de la escritura que vigila.','pendiente',''],
+  ['C','FIS-C2','saas/fiscal.ts:222','Cambiar la clave del SAT después no recalcula nada.','pendiente',''],
+  ['C','PRU32C3-C1','consolidado.ts:523 y :536','Escribir todas las líneas de un ECC con monto 0 y litros null: 989 archivos / 12,990 pruebas / 0 fallos.','pendiente — medido hoy por primera vez',''],
+  ['C','PRU32C3-C2','api/v1/_escritura.ts:837','13 de 14 comparaciones de la guarda se pueden borrar una por una con 207/207 verdes, las 4 de dinero incluidas.','pendiente',''],
+  ['C','PRU32C2-C1','panel fiscal (SQL)','2ª ronda: la función de dinero del panel se rompe en 4 sitios con los 21 arneses y los 243 bloques en verde.','pendiente — merece ronda dedicada',''],
+  ['C','PRU-C1','la capa que imprime','6ª ronda: la cifra que la pantalla imprime sigue en 0 de 24 pruebas.','pendiente — la puerta de cobertura excluye esa capa',''],
+  ['C','OP-C1','/api/health','9ª ronda: las degradaciones rojas dejan una palabra, degraded, y ningún identificador.','pendiente — decisión de producto',''],
+  ['C','FE-C1','visibilidad.ts:41','9ª ronda: el comprador ve «Anticipo $0.00 · entregado al operador».','pendiente — no auditado hoy; decisión de producto',''],
+  ['A','OP-32C3-A1','auto-merge-rutina.yml:67','Bajo bash -e el paso moría en la 1ª vuelta: exit 8 y cero salida. Por eso los PR de las rutinas se apilaban.','arreglado 8863b04','ok'],
+];
+document.getElementById('criticos').innerHTML = CRIT.map(r=>
+  `<tr><td class="sev ${r[0].toLowerCase()}">${r[0]==='C'?'CRÍTICO':'ALTO'}</td><td><code>${r[1]}</code></td><td><code>${r[2]}</code></td><td>${r[3]}</td><td><span class="est ${r[5]}">${r[4]}</span></td></tr>`).join('');
+
+const REINC = [
+  ['ARQ-C1','12ª','poliza/route.ts:366','Las dos salidas son una decisión de producto, no un parche de madrugada.'],
+  ['PRU-C1','6ª','la capa que imprime','Causa raíz escrita: la puerta de cobertura excluye por configuración la capa donde el dinero se imprime.'],
+  ['OP-C1','9ª','/api/health','Exige decidir qué publica la ruta; no se puede resolver sin el dueño.'],
+  ['FE-C1','9ª','visibilidad.ts:41','O encargado captura dinero, o el 0 deja de escribirse. Elige el dueño.'],
+  ['FIS-C1','4ª','onboarding/page.tsx:67','Reincidente; no entró en las 3 vueltas de arreglo de hoy.'],
+  ['REN-31C-A1','3ª','gps 314.0/300 · descarga-sat 323.5/300','Dos de las tres cadenas no recibieron el arreglo de la 31.'],
+  ['PRU-31C-A2','3ª','cron/asistencia/route.test.ts','El margen se sigue anclando contra sí mismo. Esta ronda lo pisó: mi arreglo le corrió la secuencia y hubo que mover el ancla de 4 a 5.'],
+  ['Storage borrado','3ª','storage_borrado.ts:93','La cola se atasca para siempre con un lote mixto y el cron late ok.'],
+  ['Margen real medido','3ª','auditor_cobranza.ts:582','Suma el costo comprobado de liquidaciones que el contralor RECHAZÓ.'],
+];
+document.getElementById('reinc').innerHTML = REINC.map(r=>
+  `<tr><td><code>${r[0]}</code></td><td>${r[1]}</td><td><code>${r[2]}</code></td><td>${r[3]}</td></tr>`).join('');
+
+const DESC = [
+  ['La ventana ciega de OP-32C2-C1 no era 2 h 54 sino 1 h 47','Corregido en la ronda anterior contra la fuente primaria; se deja anotado porque la cifra vieja sigue en el mensaje de 2c38766.'],
+  ['«El arreglo de REN-30-C2 cerró» (afirmación de ayer)','FALSA a medias, y la corrigió su propio auditor: fc811a0 llegó a 1 de los 4 llamadores y a 1 de las 4 lecturas paginadas. De ahí sale REN-32C3-C1.'],
+  ['Mi primera versión del arreglo de REN-32C3-C1','Miraba Date.now() también sin reloj y le corría la secuencia a REND-A3. Detectado por la suite antes de commitear y corregido con la guarda venceEn !== undefined.'],
+  ['Mutación monto: 0 viva en el árbol durante la ronda','No era un descuido: era una sonda deliberada del auditor de pruebas, restaurada al pedírselo. Dejó un hallazgo (PRU32C3-C1). Ningún commit usó git add -A.'],
+];
+document.getElementById('desc').innerHTML = DESC.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+
+// ── Serie histórica: una sola serie, marcas finas, grid recesiva ──────────
+(function(){
+  const pts = [
+    ['30 · 12-sep',6.0],['31 · 13-sep',5.2],['31c1 · 14',4.8],['31c2 · 15',4.7],
+    ['32 · 16-sep',4.7],['32c1 · 17',4.3],['32c2 · 18',4.25],['32c3 · 19',4.0],
+  ];
+  const W=880,H=210,ml=44,mr=18,mt=18,mb=42;
+  const iw=W-ml-mr, ih=H-mt-mb;
+  const lo=3.5, hi=6.5;
+  const x=i=>ml+(pts.length===1?iw/2:i*iw/(pts.length-1));
+  const y=v=>mt+ih-((v-lo)/(hi-lo))*ih;
+  let s='';
+  for(let t=4;t<=6;t++){
+    s+=`<line x1="${ml}" y1="${y(t)}" x2="${W-mr}" y2="${y(t)}" stroke="var(--grid)" stroke-width="1"/>`;
+    s+=`<text x="${ml-9}" y="${y(t)+4}" text-anchor="end" font-size="11" fill="var(--text-muted)">${t}.0</text>`;
+  }
+  s+=`<polyline fill="none" stroke="var(--serie)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+       points="${pts.map((p,i)=>`${x(i)},${y(p[1])}`).join(' ')}"/>`;
+  pts.forEach((p,i)=>{
+    s+=`<circle cx="${x(i)}" cy="${y(p[1])}" r="4.5" fill="var(--serie)" stroke="var(--surface-1)" stroke-width="2"/>`;
+    // Etiqueta directa sólo en los extremos: nunca un número en cada punto.
+    if(i===0||i===pts.length-1){
+      const anchor = i===0?'start':'end';
+      s+=`<text x="${x(i)+(i===0?6:-6)}" y="${y(p[1])-11}" text-anchor="${anchor}" font-size="12.5"
+           font-weight="650" fill="var(--text-primary)">${p[1].toFixed(2).replace(/0$/,'').replace(/\.$/,'.0')}</text>`;
+    }
+    s+=`<text x="${x(i)}" y="${H-14}" text-anchor="middle" font-size="10.5" fill="var(--text-muted)">${p[0]}</text>`;
+  });
+  document.getElementById('serie').innerHTML=s;
+})();
+</script>
+</div></body></html>

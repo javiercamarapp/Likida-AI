@@ -1,6 +1,7 @@
 LIGERA: fiscal, legal, arquitectura — 3 rubros rotados de 12, 1 arreglo retenido con prueba (ARQ-A3, CRÍTICO), 0 revertidos, global 4.7 → 4.7 (=).
 CONTINUACIÓN (17-sep-2026): 4 rubros rotados, 3 arreglos retenidos con prueba (2 CRÍTICOS + 1 ALTO), 0 revertidos, global 4.7 → 4.3 (▼0.4).
 CONTINUACIÓN 2 (18-sep-2026): 6 rubros rotados, 3 arreglos retenidos con prueba (2 CRÍTICOS + 1 ALTO), 0 revertidos, global 4.33 → 4.25 (▼0.08; suma 52 → 51, con un decimal 4.3 → 4.3).
+CONTINUACIÓN 3 (19-sep-2026): 6 rubros reauditados, 3 arreglos retenidos con prueba y mutación en los dos sentidos (2 CRÍTICOS + 1 ALTO), 0 revertidos, global 4.25 → 4.0 (▼0.25; suma 51 → 48).
 
 ---
 
@@ -186,3 +187,67 @@ CONTINUACIÓN (17-sep-2026): 4 rubros rotados, 3 arreglos retenidos con prueba y
   mirarlo encontró dos etiquetas `c·1` en el mismo eje, que hacían la serie
   ilegible. Corregido y recapturado.
 - **PR:** #477, `claude/auditoria-32`, actualizado con `push --force`.
+
+
+---
+
+# Continuación 3 del 19-sep-2026 — CONTINUACIÓN
+
+- **Tipo:** ronda de **CONTINUACIÓN**, decidida antes de gastar un token en
+  auditores: `list_pull_requests(open)` → **PR #477 abierto** (rama
+  `claude/auditoria-32`, draft, `mergeable_state: clean`, CI verde en los 5
+  workflows) → se continúa sobre él, **no se abre PR nuevo**. `git ls-remote
+  origin master` → `69becdb`, fresco y sin moverse desde el 16-sep. Árbol limpio
+  → **autofix habilitado**.
+- **Auditores: 6 de 12, y los seis por la MISMA cláusula** —código cambiado—
+  porque los doce archivos de rubro existen: operabilidad, rendimiento y pruebas
+  (el orquestador arregló su propio código el 18-sep), backend (`pg.ts` y
+  `consolidado.ts` cambiaron de contrato), y fiscal y arquitectura (las
+  migraciones 0358/0359 reescribieron el predicado de dinero después de que
+  entregaran el 16-sep).
+- **El resultado de la ronda: dos auditores independientes encontraron el mismo
+  CRÍTICO por dos caminos distintos, y lo había metido esta rama.** Al alinear
+  entre sí las dos funciones SQL, las migraciones 0358/0359 dejaron fuera la
+  **tercera** definición del predicado —`copiasDeComprobante` en `engine.ts`, la
+  que imprime el PDF—. Fiscal lo vio desde la norma (FIS-C3: el PDF niega una
+  deducción que la RFA 2026 2.9 concede) y arquitectura desde la estructura
+  (ARQ32C3-C2: sobre las mismas dos filas, el panel dice 2/$5,000/$689.66 y el
+  PDF dice 1/$2,500 con un renglón «duplicado»). Los dos midieron contra
+  Postgres 16 por su lado. **Cuarta ronda seguida en que el arreglo del
+  orquestador no cierra o cierra de menos** — y la regla de rotar por derecho
+  propio el rubro cuyo código tocó es lo único que lo ha atrapado.
+- **Global: 4.0** (antes **4.25**) · **▼0.25**. Suma **51 → 48**. De los 6
+  reauditados bajan 4 (fiscal 3→2, arquitectura 4→3, backend 6→5, pruebas 5→4),
+  sube 1 (operabilidad 4→5, por un arreglo de la ronda ANTERIOR juzgado por un
+  auditor independiente) y se queda 1 (rendimiento).
+- **Arreglado: 3**, en 3 commits atómicos, cada uno con prueba que lo reproduce,
+  rojo medido → verde y **mutación verificada en los dos sentidos**.
+  **Revertidos: 0.** Tope de 3 vueltas gastado.
+  - `95f497c` — **REN-32C3-C1 (CRÍTICO)**: la misma lectura de 100 páginas de
+    `gasto` que `fc811a0` acotó vivía 72 líneas más arriba, sin reloj y en TODOS
+    los paquetes. 315.0 s nominales contra `maxDuration = 300`.
+  - `790900d` — **FIS-C3 / ARQ32C3-C2 (CRÍTICO)**: el motor dedupa por emisor
+    con la semántica de la **0358**, no la de la 0357. La prueba distingue las
+    dos, que es la regresión que costó dos CRÍTICOS la ronda pasada.
+  - `8863b04` — **OP-32C3-A1 (ALTO)**: bajo `bash -e` el paso que mergea los PR
+    de las rutinas moría en la primera vuelta con exit 8 y cero salida. **Explica
+    por qué estos PR se apilaban abiertos.**
+- **Pendientes con razón escrita: 10 CRÍTICOS**, cuatro de ellos (ARQ-C1 en su
+  12ª ronda, FE-C1 y OP-C1 en su 9ª, y el otro lado del espejo ARQ32C3-C1) por
+  ser decisión de producto o rediseño, no parche de madrugada.
+- **Lo que urge y no es código, SÉPTIMO día:** último `[deploy]` en asunto sigue
+  siendo `cfa00ab` (10-sep, hace 9 días); 21 archivos de `src/`/`supabase/` en
+  master sin llegar a producción. Redeploy en Vercel. Notificado al dueño.
+- **Higiene:** un auditor dejó viva una mutación de pruebas (`monto: 0`) en el
+  árbol; era deliberada, la restauró al pedírselo, y otros tres auditores la
+  detectaron sin tocarla. Ningún commit usó `git add -A`. Una suite intermedia
+  no contó como compuerta por haber corrido con esa mutación puesta, y se
+  repitió con el árbol quieto.
+- **Compuerta al cerrar:** `npx vitest run` **991 archivos / 13,007 pasan / 6
+  saltadas / 0 fallan**, exit 0 · `tsc --noEmit` exit 0 · `lint` 0 errores, 154
+  avisos · `lint:ratchet` 0 nuevos. `npm run build` no corre en la nube.
+- **Tablero:** `tablero-continuacion-3.html` + `.png`, capturado **y mirado** —
+  mirarlo encontró que la serie histórica tenía 4.8 donde va 4.7 (el tablero
+  mentía sobre una nota) y que el pie decía «nueve puntos» habiendo ocho.
+  Corregidos y recapturado.
+- **PR:** #477, `claude/auditoria-32`.
