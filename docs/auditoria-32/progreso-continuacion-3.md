@@ -57,3 +57,31 @@ del orquestador que tocó su código**, que es la regla que se ha pagado sola tr
 rondas seguidas.
 
 ## Acciones
+
+### 1 · REN-32C3-C1 (CRÍTICO) — arreglado y retenido · `95f497c`
+
+- Verificado por mí antes de tocar nada: `gastosSinCfdi` (`ciclo.ts:177-195`)
+  pagina con `traerTodo` sin techo y se llama en `:269`, **antes** del único
+  `Date.now() >= venceEn`, que vive en `:275`.
+- Rojo medido: la prueba del motor pedía **100,000 filas** donde deben ser 0 y
+  lanzaba `LecturaIncompleta` en vez de cortar.
+- Verde tras el arreglo. **Mutación en los dos sentidos:** quitar el cableado
+  → 2 rojas; quitar el corte del motor → 4 rojas.
+- Un daño colateral encontrado y corregido dentro del mismo arreglo: la primera
+  versión miraba `Date.now()` **también sin reloj** y le corría la secuencia a
+  `REND-A3`. Se guarda con `venceEn !== undefined` antes de la mirada.
+- `REND-A3` movió su ancla de 4 a 5 miradas al reloj (una legítima nueva, la
+  del prólogo). Aserciones intactas y mordiendo en los dos sentidos.
+
+### INFRA / higiene de la ronda
+
+- **Un auditor dejó una mutación viva en el árbol**: `intake/consolidado.ts:523`
+  con `monto: 0`. Era deliberada (mutación de pruebas durante una corrida de
+  suite) y su autor la restauró al pedírselo; otros dos auditores la detectaron
+  y la reportaron sin tocarla, que es la conducta correcta. **Ningún commit de
+  esta ronda usó `git add -A`**: los cinco se armaron con rutas explícitas.
+- El dato que dejó esa mutación **es un hallazgo**: escribir todas las líneas de
+  un ECC con `monto = 0` no pone roja **ni una** de las 12,990 pruebas.
+- Consecuencia medida: la suite completa que lancé a las 11:2x corrió con
+  mutaciones de otro agente en el árbol (`_escritura.ts`), así que **no cuenta
+  como compuerta**. Se vuelve a correr con el árbol quieto antes de cerrar.
