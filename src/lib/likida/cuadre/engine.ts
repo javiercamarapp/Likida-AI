@@ -516,6 +516,36 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
   const vistoFolio = new Map<string, string>();
   /** copia → el gasto original del que es copia. */
   const originalDe = new Map<string, string>();
+
+  // FIS-C3 / ARQ32C3-C2 (auditoría 32 c3, CRÍTICO): EL ESPEJO DE LA 0358.
+  //
+  // El folio lo numera cada estación y se reinicia por emisor, así que dos
+  // tickets legítimos de $2,500 con folio 1234 de gasolineras distintas son DOS
+  // comprobantes. Las migraciones 0357/0358/0359 se lo enseñaron al SQL y esta
+  // función se quedó atrás: sobre las mismas dos filas `/dashboard/fiscal`
+  // decía 2 / $5,000 / $689.66 de IVA y el PDF decía 1 / $2,500 con un renglón
+  // «duplicado» encima de un ticket real.
+  //
+  // SE ESPEJA LA 0358, NO LA 0357. El emisor discrimina SÓLO CUANDO SE CONOCE,
+  // porque es el único campo de esta llave que el OCR puede perder entero: la
+  // 0357 lo metió a secas y con eso dos fotos del MISMO ticket —una con el RFC
+  // leído y otra sin él— volvían a sumar $5,000. La fila sin emisor hereda el
+  // del grupo, y un grupo entero sin emisor se comporta como antes de la 0357.
+  //
+  // `min()` sobre los conocidos, igual que `0358:80-82`: ignora los ausentes y
+  // sale vacío sólo cuando NINGUNA fila del grupo trae emisor. Se calcula sobre
+  // todas las filas con folio —también las que traen UUID— porque ésa es la
+  // partición que la ventana de la 0358 abre sobre `candidatos`.
+  const grupoDeFolio = (g: Gasto): string =>
+    `${strip_accents(g.concepto.toLowerCase())}|${g.folioNorm || g.folio}|${g.monto}`;
+  const emisorDelGrupo = new Map<string, string>();
+  for (const g of gastos) {
+    if (!g.folio || !g.rfcEmisor) continue;
+    const k = grupoDeFolio(g);
+    const previo = emisorDelGrupo.get(k);
+    if (previo === undefined || g.rfcEmisor < previo) emisorDelGrupo.set(k, g.rfcEmisor);
+  }
+
   for (const g of gastos) {
     if (g.cfdiUuid) {
       // POR `(uuid, orden)`, NO POR EL UUID SOLO.
@@ -553,8 +583,11 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
       // solo difieran en ceros a la izquierda, con el mismo concepto y el mismo
       // total al centavo— es justo la definición de un duplicado, no un caso
       // legítimo que se pierda.
-      const llaveFolio = g.folioNorm || g.folio;
-      const key = `${strip_accents(g.concepto.toLowerCase())}|${llaveFolio}|${g.monto}`;
+      // El `''` final es el caso «todo el grupo sin emisor», que conserva
+      // intacta la regla anterior a la 0357.
+      const grupo = grupoDeFolio(g);
+      const emisor = g.rfcEmisor ?? emisorDelGrupo.get(grupo) ?? '';
+      const key = `${grupo}|${emisor}`;
       const previo = vistoFolio.get(key);
       if (previo) originalDe.set(g.id, previo);
       else vistoFolio.set(key, g.id);
