@@ -1,34 +1,33 @@
 ---
-fecha_corrida: 2026-09-15 14:10 UTC (martes)
+fecha_corrida: 2026-09-19 (sábado)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-14 (4 días hábiles, incluye el
-  viernes 11-sep) no se pudieron barrer. Sigue pendiente para la próxima
-  corrida (arranca en 09-11, no en 09-15).
+rango_pendiente: 2026-09-11 — 2026-09-18 (8 días, incluye DOS viernes —
+  11-sep y 18-sep, vespertina, ventana habitual de la cuota IEPS diésel —
+  y el domingo 13-sep) no se pudieron barrer. Sigue pendiente para la
+  próxima corrida (arranca en 09-11, no en 09-19).
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha no
   hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, pero el acuerdo de la
-  semana 12-18-sep (esperado el viernes 11-sep vespertina) tampoco se pudo
-  verificar por el mismo corte de red. Sigue sin verificar desde la
-  corrida anterior (12-sep). Revisar en la próxima corrida.
-etag_sat: no_aplica_hoy — no es lunes.
+cuota_diesel: no_evaluable_hoy — dos viernes vespertina sin verificar
+  (11-sep y 18-sep) además del 12-sep ya arrastrado. Tres semanas seguidas
+  sin poder confirmar el acuerdo vigente.
+etag_sat: no_aplica_hoy — no es lunes (sábado). Nota: aun si fuera lunes,
+  el mismo bloqueo de egreso habría impedido el HEAD.
 deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
 estado: >
-  INFRA — SEGUNDA corrida consecutiva bloqueada (la anterior, 12-sep-2026,
-  reportó el mismo corte). Los cuatro dominios de references/fuentes.md
-  (sidofqa.segob.gob.mx, dof.gob.mx, www.sat.gob.mx, www.diputados.gob.mx)
-  fueron rechazados por el proxy de egreso de ESTA SESIÓN con
-  "CONNECT tunnel failed, response 403" (política de organización, no
-  caída del sitio — confirmado en
-  http://127.0.0.1:34221/__agentproxy/status: connect_rejected en los
-  cuatro, recentRelayFailures vacío i.e. no es un reset de conexión).
-  Control: github.com respondió (400, alcanzable) y google.com también
-  fue rechazado con el mismo 403 — el bloqueo es de política de egreso
-  para estos hosts (y aparentemente dominios no-Anthropic en general),
-  no una caída general de la red del contenedor. Per README del proxy
-  (/root/.ccr/README.md): un 403 de política NO se reintenta ni se
-  rodea, se reporta. No se leyó ninguna nota del DOF. No se tocó
-  ninguna ficha de normas/. Sin veredicto sobre publicaciones relevantes
-  entre el 11 y el 14-sep (viernes 11-sep incluido — la cuota de diésel
-  suele salir ese día en vespertina).
+  INFRA — TERCERA corrida consecutiva bloqueada (12-sep-2026 y 15-sep-2026
+  reportaron el mismo corte). Probado por DOS rutas independientes en esta
+  sesión: curl a través del proxy de egreso (CONNECT tunnel failed,
+  response 403 en sidofqa.segob.gob.mx, dof.gob.mx, www.sat.gob.mx,
+  www.diputados.gob.mx, y también www.google.com) Y la tool WebFetch
+  (EGRESS_BLOCKED explícito sobre sidofqa.segob.gob.mx). No es un corte de
+  red del contenedor: github.com respondió (400, alcanzable). Es un
+  bloqueo de política de egreso para estos hosts, ya persistente por
+  tres corridas (09-12, 09-15, 09-19) y ocho días calendario sin barrer.
+  No se leyó ninguna nota del DOF. No se tocó ninguna ficha de normas/.
+  Sin veredicto sobre publicaciones relevantes entre el 11 y el 18-sep
+  (los dos viernes incluidos). Requiere que alguien con acceso a la
+  configuración de la organización habilite estos dominios en la política
+  de egreso — no es algo que la próxima corrida automatizada vaya a
+  resolver por sí sola.
