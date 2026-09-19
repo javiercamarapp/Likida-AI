@@ -402,3 +402,72 @@ describe('traerTodoDesdeId — el reloj de la invocación corta la lectura (REN-
     expect(filas.map((f) => f.id)).toEqual(base);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REN-32C3-C1 (auditoría 32 c3, CRÍTICO) — LA OTRA LECTURA DE 100 PÁGINAS DE
+// `gasto`, 72 LÍNEAS POR ENCIMA DE LA QUE ARREGLÓ `fc811a0`.
+//
+// `fc811a0` le puso reloj a `traerTodoDesdeId` porque `candidatosDeGasto` corría
+// sin techo dentro de la unidad que `sat_descarga/ciclo.ts` ya había dado por
+// despachada. Pero `gastosSinCfdi` (`ciclo.ts:177`) hace LA MISMA lectura
+// paginada de `gasto` con `traerTodo`, se llama en `ciclo.ts:269` —ANTES del
+// primer `Date.now() >= venceEn`, que vive en `:275`— y corre en TODOS los
+// paquetes, no solo en los que traen un consolidado.
+//
+// 19.0 + 256.5 + 30.0 + 9.5 = 315.0 s nominales contra el `maxDuration = 300`
+// de la ruta, y 1,225.5 s a techos contra un margen reservado de 43.5 s.
+//
+// El reloj es OPCIONAL: quien no lo pasa se comporta exactamente como antes.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('traerTodo — el reloj de la invocación corta la lectura (REN-32C3-C1)', () => {
+  it('con el reloj agotado LANZA en vez de seguir paginando', async () => {
+    const base = baseFalsa(240_000);
+    await expect(traerTodo<Fila>(
+      (d, h) => base.consultar(d, h, { count: 'exact' }),
+      'sat_descarga.gastos_sin_cfdi',
+      { venceEn: Date.now() - 1 },
+    )).rejects.toThrow(LecturaCortadaPorReloj);
+    // Lo que separa el arreglo del bug: sin reloj serían MAX_PAGINAS páginas.
+    expect(base.rangos.length, 'el corte tiene que ocurrir ANTES de pedir la primera página').toBe(0);
+  });
+
+  it('el corte a media lectura NO devuelve lo ya leído', async () => {
+    const base = baseFalsa(240_000);
+    // El reloj vence después de la 3ª página: lo leído hasta ahí es una lista
+    // de candidatos incompleta, y devolverla conciliaría de menos en silencio.
+    let vistas = 0;
+    const venceEn = Date.now() + 60_000;
+    const reloj = vi.spyOn(Date, 'now');
+    reloj.mockImplementation(() => {
+      // Las tres primeras miradas caen dentro del plazo; la cuarta, fuera.
+      vistas += 1;
+      return vistas <= 3 ? venceEn - 1_000 : venceEn + 1;
+    });
+    try {
+      await expect(traerTodo<Fila>(
+        (d, h) => base.consultar(d, h, { count: 'exact' }),
+        'sat_descarga.gastos_sin_cfdi',
+        { venceEn },
+      )).rejects.toThrow(LecturaCortadaPorReloj);
+    } finally {
+      reloj.mockRestore();
+    }
+    expect(base.rangos.length, 'tres páginas leídas y ninguna cuarta').toBe(3);
+  });
+
+  it('sin reloj se comporta exactamente como antes', async () => {
+    const base = baseFalsa(2_500);
+    const filas = await traerTodo<Fila>((d, h) => base.consultar(d, h, { count: 'exact' }), 'x');
+    expect(filas).toHaveLength(2_500);
+  });
+
+  it('con reloj de sobra la lectura se completa igual que sin reloj', async () => {
+    const base = baseFalsa(2_500);
+    const filas = await traerTodo<Fila>(
+      (d, h) => base.consultar(d, h, { count: 'exact' }),
+      'x',
+      { venceEn: Date.now() + 60_000 },
+    );
+    expect(filas).toHaveLength(2_500);
+  });
+});

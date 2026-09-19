@@ -21,7 +21,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { traerTodo, conteo } from '@/lib/likida/pg';
+import { traerTodo, conteo, LecturaCortadaPorReloj } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
 import type { Gasto } from '@/types/likida';
@@ -174,7 +174,9 @@ export function rangoPendiente(
  * en vez de `casado`, y el sello de dedup impide una segunda oportunidad
  * automática. `traerTodo` trae el fondo COMPLETO o lanza.
  */
-export async function gastosSinCfdi(tenantId: string, desde: string, hasta: string): Promise<Gasto[]> {
+export async function gastosSinCfdi(
+  tenantId: string, desde: string, hasta: string, venceEn?: number,
+): Promise<Gasto[]> {
   const data = await traerTodo<{
     id: string; concepto: unknown; monto: unknown; fecha: unknown;
     rfc_emisor: unknown; cfdi_uuid: unknown; ocr_extra: unknown;
@@ -192,6 +194,7 @@ export async function gastosSinCfdi(tenantId: string, desde: string, hasta: stri
       .order('id')
       .range(d, h), 'sat_descarga.gastos_sin_cfdi'),
     'sat_descarga.gastos_sin_cfdi',
+    { venceEn },
   );
   return data.map((r) => ({
     id: r.id as string,
@@ -266,7 +269,23 @@ async function ingerir(
   conteo: ConteoSolicitud,
   venceEn?: number,
 ): Promise<{ completo: boolean }> {
-  const gastos = await gastosSinCfdi(cfg.tenantId, rango.desde, rango.hasta);
+  // REN-32C3-C1: este prólogo corría SIN reloj, 72 líneas por encima de la
+  // lectura que `fc811a0` acotó, y en TODOS los paquetes —no solo en los que
+  // traen consolidado—. El corte se traduce al contrato que este archivo ya
+  // tiene para «se acabó el tiempo» (`completo: false`, unas líneas más abajo)
+  // en vez de propagarse: un throw se saltaría el `update` de avance del
+  // llamador, que es lo que hace barata la vuelta siguiente.
+  let gastos: Gasto[];
+  try {
+    gastos = await gastosSinCfdi(cfg.tenantId, rango.desde, rango.hasta, venceEn);
+  } catch (e) {
+    if (!(e instanceof LecturaCortadaPorReloj)) throw e;
+    logger.warn('sat.ingerir.corte_por_reloj_en_prologo', {
+      tenantId: cfg.tenantId, solicitudId, sinIngerir: xmls.length,
+    });
+    r.sinTurno += xmls.length;
+    return { completo: false };
+  }
   // El fondo se consume: un gasto que ya casó en este mismo paquete no puede
   // volver a casar con el siguiente CFDI. Sin esto, dos comprobantes del mismo
   // importe se pegarían los dos al mismo ticket… y el update optimista dejaría
