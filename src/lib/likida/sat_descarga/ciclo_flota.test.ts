@@ -469,8 +469,16 @@ describe('c7-1 · el reloj de la vuelta corta el ciclo del SAT sin quemar cuota 
     // del paquete, y se vence justo antes del tercero — el caso real de un
     // paquete con más CFDI de los que caben en `venceEn`. Las primeras dos
     // preguntas son las de `correrFlota` (antes de la solicitud y antes del
-    // paquete); las siguientes, una por CFDI dentro de `ingerir`.
-    const reloj = vi.spyOn(Date, 'now').mockImplementation(() => { llamadasReloj++; return llamadasReloj <= 4 ? 1_000 : 999_999; });
+    // paquete); la TERCERA es la del prólogo de `ingerir` (REN-32C3-C1: la
+    // lectura de `gasto` mira el reloj antes de paginar); las siguientes, una
+    // por CFDI dentro de `ingerir`.
+    //
+    // ESTE 5 ES UN CONTEO EXACTO CON HOLGURA CERO, que es justo lo que
+    // `PRU-31C-A2` reporta como frágil: se movió de 4 a 5 porque el arreglo de
+    // REN-32C3-C1 añade UNA mirada legítima, no porque estorbara. Las
+    // aserciones de abajo no se tocaron, y siguen mordiendo en los dos
+    // sentidos: sin el chequeo del prólogo entrarían TRES CFDI, no dos.
+    const reloj = vi.spyOn(Date, 'now').mockImplementation(() => { llamadasReloj++; return llamadasReloj <= 5 ? 1_000 : 999_999; });
     try {
       const prov: ProveedorDescargaSat = {
         nombre: 'sw',
@@ -660,5 +668,94 @@ describe('REN-30-C2 · el reloj de la invocación llega hasta la conciliación d
     await correrFlota(CFG(), prov, '2026-08-27', AHORA);
 
     expect(guardarYConciliarConsolidado.mock.calls[0][3]).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REN-32C3-C1 (auditoría 32 c3, CRÍTICO) — EL CABLEADO de la OTRA lectura.
+//
+// `fc811a0` (REN-30-C2) le puso reloj a la lectura de candidatos que corre
+// DENTRO de `guardarYConciliarConsolidado`. Pero `gastosSinCfdi` hace LA MISMA
+// lectura paginada de `gasto` —`traerTodo`, techo estructural de 100,000
+// filas— en el PRÓLOGO de `ingerir` (`ciclo.ts:269`), 72 líneas por encima, y
+// ANTES del único `Date.now() >= venceEn` de la cadena, que vive en `:275`.
+// Peor: corre en TODOS los paquetes, no solo en los que traen un consolidado.
+//
+// 19.0 + 256.5 + 30.0 + 9.5 = 315.0 s nominales contra `maxDuration = 300`;
+// 1,225.5 s a techos contra un margen reservado de 43.5 s.
+//
+// POR QUÉ ESTA PRUEBA MIRA «¿SE LEYÓ `gasto`?» Y NO «¿SE MARCÓ EL PAQUETE?»:
+// con el reloj vencido el paquete YA no se marcaba —lo impide el chequeo de
+// `:275`, que corre después— así que esa aserción pasa en verde con el bug
+// puesto. Lo único que separa el arreglo del bug es si la lectura cara SALIÓ.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('REN-32C3-C1 · el reloj llega al prólogo de `ingerir`, no solo a su bucle', () => {
+  let restaurarManejar: (() => void) | null = null;
+  let restaurarReloj: (() => void) | null = null;
+
+  afterEach(() => {
+    restaurarManejar?.(); restaurarManejar = null;
+    restaurarReloj?.(); restaurarReloj = null;
+  });
+
+  /** Cuenta las lecturas de `gasto` y deja pasar todo lo demás. */
+  function contarLecturasDeGasto() {
+    const original = manejar;
+    const cuenta = { gasto: 0 };
+    manejar = (op) => {
+      if (op.tabla === 'gasto' && op.verbo === 'select') cuenta.gasto += 1;
+      return original(op);
+    };
+    restaurarManejar = () => { manejar = original; };
+    return cuenta;
+  }
+
+  it('con el reloj agotado al entrar, la lectura de `gasto` NO sale', async () => {
+    const db = base([solicitudViva({ paquetes_bajados: null })]);
+    const cuenta = contarLecturasDeGasto();
+    const { prov, llamadas } = proveedor(['p1']);
+
+    // El reloj se agota DENTRO de la descarga del paquete, que es lo que pasa
+    // en producción: la invocación llega a `ingerir` con el plazo ya cumplido.
+    let ahoraFalso = 1_000_000;
+    const VENCE_EN = ahoraFalso + 60_000;
+    const espia = vi.spyOn(Date, 'now').mockImplementation(() => ahoraFalso);
+    restaurarReloj = () => espia.mockRestore();
+    const descargar = prov.descargar.bind(prov);
+    prov.descargar = async (p: string) => { ahoraFalso = VENCE_EN + 1; return descargar(p); };
+
+    const r = await correrFlota(CFG(), prov, '2026-08-27', AHORA, VENCE_EN);
+
+    expect(llamadas.descargar, 'el paquete sí se alcanzó a descargar').toEqual(['p1']);
+    expect(
+      cuenta.gasto,
+      'el prólogo corre sin reloj: paginaría hasta 100,000 filas de `gasto` con el plazo ya vencido',
+    ).toBe(0);
+    // Y el contrato del archivo se respeta: el paquete NO se marca como bajado,
+    // así que la vuelta siguiente lo re-baja y lo retoma entero.
+    expect(db.solicitudes[0].paquetes_bajados ?? []).toEqual([]);
+    expect(r.sinTurno).toBeGreaterThan(0);
+  });
+
+  it('con reloj de sobra la lectura de `gasto` sale y el paquete se marca — sin cambio de comportamiento', async () => {
+    const db = base([solicitudViva({ paquetes_bajados: null })]);
+    const cuenta = contarLecturasDeGasto();
+    const { prov } = proveedor(['p1']);
+
+    await correrFlota(CFG(), prov, '2026-08-27', AHORA, Date.now() + 600_000);
+
+    expect(cuenta.gasto).toBe(1);
+    expect(db.solicitudes[0].paquetes_bajados).toEqual(['p1']);
+  });
+
+  it('sin reloj en la ruta, el prólogo se comporta exactamente como antes', async () => {
+    const db = base([solicitudViva({ paquetes_bajados: null })]);
+    const cuenta = contarLecturasDeGasto();
+    const { prov } = proveedor(['p1']);
+
+    await correrFlota(CFG(), prov, '2026-08-27', AHORA);
+
+    expect(cuenta.gasto).toBe(1);
+    expect(db.solicitudes[0].paquetes_bajados).toEqual(['p1']);
   });
 });
