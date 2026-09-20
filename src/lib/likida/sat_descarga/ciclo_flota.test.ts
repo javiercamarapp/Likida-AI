@@ -758,4 +758,62 @@ describe('REN-32C3-C1 · el reloj llega al prólogo de `ingerir`, no solo a su b
     expect(cuenta.gasto).toBe(1);
     expect(db.solicitudes[0].paquetes_bajados).toEqual(['p1']);
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PRU32C4-A1 (auditoría 32 c4, ALTO): EL GUARDIA QUE NADIE VIGILABA.
+  //
+  // El `catch` que `95f497c` puso en el prólogo (`ciclo.ts:281-288`) traduce
+  // UN error —`LecturaCortadaPorReloj`— al contrato de «se acabó el tiempo», y
+  // RE-LANZA todo lo demás (`ciclo.ts:282`). Esa segunda mitad es la que
+  // cumple «fallar cerrado y decirlo» de CLAUDE.md, y no tenía arnés: borrar
+  // la línea del rethrow dejaba la suite entera en verde —607 archivos, 9,208
+  // pruebas, 0 fallos, medido— mientras una base caída se registraba como un
+  // corte por reloj.
+  //
+  // POR QUÉ ESO IMPORTA Y NO ES UN MATIZ: las dos condiciones se ven iguales
+  // desde afuera (`completo: false`, `sinTurno` alto) y se resuelven al revés.
+  // Un corte por reloj es NORMAL: la vuelta siguiente retoma. Una base caída
+  // deja la ventana fiscal sin bajar, y presentada como corte por reloj nadie
+  // va a mirarla — es exactamente la forma de ceguera que `exigir()` existe
+  // para impedir.
+  //
+  // Esta prueba NO acompaña un arreglo: el guardia ya estaba puesto y correcto.
+  // Lo que faltaba era la medición. El rojo está en la mutación, no en el árbol.
+  // ─────────────────────────────────────────────────────────────────────────
+  it('una base caída NO se disfraza de corte por reloj: se propaga', async () => {
+    base([solicitudViva({ paquetes_bajados: null })]);
+    const { prov } = proveedor(['p1']);
+
+    // La lectura del prólogo falla como falla de verdad: supabase-js reporta
+    // el error POR VALOR, no lo lanza.
+    const original = manejar;
+    manejar = (op) => (op.tabla === 'gasto' && op.verbo === 'select'
+      ? { data: null, error: { message: 'terminating connection due to administrator command' } }
+      : original(op));
+    restaurarManejar = () => { manejar = original; };
+
+    // Con reloj de sobra: no hay ninguna razón legítima para que esto se lea
+    // como «se acabó el tiempo».
+    await expect(
+      correrFlota(CFG(), prov, '2026-08-27', AHORA, Date.now() + 600_000),
+    ).rejects.toThrow(/terminating connection/);
+  });
+
+  it('y el corte por reloj de verdad SÍ se traduce, no se propaga', async () => {
+    const db = base([solicitudViva({ paquetes_bajados: null })]);
+    const { prov } = proveedor(['p1']);
+
+    let ahoraFalso = 1_000_000;
+    const VENCE_EN = ahoraFalso + 60_000;
+    const espia = vi.spyOn(Date, 'now').mockImplementation(() => ahoraFalso);
+    restaurarReloj = () => espia.mockRestore();
+    const descargar = prov.descargar.bind(prov);
+    prov.descargar = async (p: string) => { ahoraFalso = VENCE_EN + 1; return descargar(p); };
+
+    // No lanza: devuelve el resumen con el paquete sin marcar. Es el par de la
+    // prueba de arriba — juntas dicen que las DOS condiciones se distinguen.
+    const r = await correrFlota(CFG(), prov, '2026-08-27', AHORA, VENCE_EN);
+    expect(r.sinTurno).toBeGreaterThan(0);
+    expect(db.solicitudes[0].paquetes_bajados ?? []).toEqual([]);
+  });
 });
