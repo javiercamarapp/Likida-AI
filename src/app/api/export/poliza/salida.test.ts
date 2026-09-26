@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import filasSql342 from './fixtures/poliza342_rpc.json';
+import filasSql361 from './fixtures/poliza361_rpc.json';
 import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -96,8 +96,9 @@ const SANA = {
   anticipo: 5000, comprobado: 3480, diferencia: 1520, ivaAcreditable: 480,
   porConcepto: [{ concepto: 'diesel', subtotal: 3000, baseConocida: true }],
   baseDesconocida: 0,
-  // Forma de la RPC 0281 (auditoría 24): `version` y los insumos por comprobante.
-  version: 342, revision: 'aprobada',
+  // Forma de la RPC 0361 (auditoría 32 c5): `version`, los insumos por comprobante
+  // y `rfcEmisor` — sin él la ruta contesta 409 y nombra la migración que falta.
+  version: 361, revision: 'aprobada',
   gastos: [{ id: 'g1', concepto: 'diesel', monto: 3480, subtotal: 3000, descuento: null, tieneCfdi: true, cfdiUuid: 'u-g1', formaPago: '03' }],
   diferencias: [],
   retenciones: 0,
@@ -127,8 +128,8 @@ describe('póliza: un caché intermedio no debe reutilizar la respuesta entre fl
 describe('póliza y revisión humana: no inventar impuestos ni asentar sin firma', () => {
   it('un periodo mixto no entrega un archivo parcial ni acredita una pendiente', async () => {
     filas = [
-      { ...SANA, version: 342, revision: 'aprobada' },
-      { ...SANA, version: 342, liquidacionId: 'pendiente', folioViaje: 'SIN-FIRMA', revision: 'pendiente' },
+      { ...SANA, version: 361, revision: 'aprobada' },
+      { ...SANA, version: 361, liquidacionId: 'pendiente', folioViaje: 'SIN-FIRMA', revision: 'pendiente' },
     ];
     const r = await pedir();
     expect(r.status).toBe(409);
@@ -140,7 +141,7 @@ describe('póliza y revisión humana: no inventar impuestos ni asentar sin firma
 
   it.each([5480, 1480])('nombra el ajuste incompatible a %s sin inventar un impuesto ni llamarlo dato roto', async (monto) => {
     filas = [{
-      ...SANA, version: 342, revision: 'ajustada',
+      ...SANA, version: 361, revision: 'ajustada',
       comprobado: monto, diferencia: SANA.anticipo - monto,
       gastos: [{ ...SANA.gastos[0], monto, ivaTraslado: 480, iepsTraslado: 0 }],
     }];
@@ -266,7 +267,7 @@ describe('FIS-4: sin la RPC correcta NO hay póliza — se dice qué migración 
     expect(r.status).toBe(409);
     const j = await r.json();
     expect(j.error).toBe('rpc_desactualizada');
-    expect(j.migracionEsperada).toContain('0342');
+    expect(j.migracionEsperada).toContain('0361');
   });
 
   it('la RPC 0272 (con `gastos` pero sin `version`) también: sin monto ni forma de pago no se clasifica', async () => {
@@ -477,12 +478,14 @@ describe('PRU-A2: `Line_ID` numera los renglones dentro de cada JdtNum', () => {
   });
 });
 
-// Captura sintética real de supabase/tests/0342_poliza_revision_y_desglose.sql.
+// Captura sintética real de supabase/tests/0342_poliza_revision_y_desglose.sql,
+// releída con el esquema 0361 (por eso la `version` es 361 y cada comprobante
+// trae la clave `rfcEmisor`).
 // Se crea por guardar_liquidacion_tx → revisar_liquidacion → poliza_datos_tenant.
 // El transporte devuelve esa captura; la clasificación y el archivo son reales.
-describe('contrato SQL 0342 hasta la salida contable', () => {
+describe('contrato SQL 0342/0361 hasta la salida contable', () => {
   it('el periodo real con pendiente no genera archivo parcial', async () => {
-    filas = filasSql342;
+    filas = filasSql361;
     const r = await pedir();
     expect(r.status).toBe(409);
     expect(await r.json()).toMatchObject({ error: 'liquidaciones_sin_firma', folios: ['PENDIENTE'] });
@@ -491,7 +494,7 @@ describe('contrato SQL 0342 hasta la salida contable', () => {
 
   it.each(['AJUSTE-SUBE-INCOMPATIBLE', 'AJUSTE-BAJA-INCOMPATIBLE'])(
     '%s conserva tributos del CFDI y bloquea el asiento', async (folio) => {
-      filas = filasSql342.filter((f) => f.folioViaje === folio);
+      filas = filasSql361.filter((f) => f.folioViaje === folio);
       expect(filas).toHaveLength(1);
       const r = await pedir();
       expect(r.status).toBe(409);
@@ -504,7 +507,7 @@ describe('contrato SQL 0342 hasta la salida contable', () => {
 
   it.each(['APROBADA', 'AJUSTE-SUBE-COHERENTE', 'AJUSTE-BAJA-COHERENTE'])(
     '%s permite el asiento con los impuestos documentados', async (folio) => {
-      filas = filasSql342.filter((f) => f.folioViaje === folio);
+      filas = filasSql361.filter((f) => f.folioViaje === folio);
       expect(filas).toHaveLength(1);
       const r = await pedir();
       expect(r.status).toBe(200);
@@ -540,7 +543,7 @@ it('XML sin traslado IEPS produce cero conocido, coincide con SQL y permite la c
   expect(parsed.ivaTraslado).toBe(480);
   // La captura SQL real ya recorrió la corrección 2000→3480 y conservó
   // exactamente estos tributos (repo_escritura prueba que el cero no es NULL).
-  const sql = filasSql342.find((f) => f.folioViaje === 'AJUSTE-SUBE-COHERENTE')!;
+  const sql = filasSql361.find((f) => f.folioViaje === 'AJUSTE-SUBE-COHERENTE')!;
   expect(sql.gastos[0].iepsTraslado).toBe(parsed.iepsTraslado);
   expect(sql.gastos[0].ivaTraslado).toBe(parsed.ivaTraslado);
   filas = [sql];
