@@ -38,6 +38,60 @@ describe('cifrasRespaldadas', () => {
     expect(cifrasRespaldadas(bloques, respaldo)).toBe(true);
   });
 
+  // ══════════════════════════════════════════════════════════════════════
+  // TC-32C5-A1 (auditoría 32 c5, ALTO) — LA MISMA CANTIDAD, EN LETRAS.
+  //
+  // `extraerNumeros` sólo aplica un regex de DÍGITOS (`analista.ts:131`). Un
+  // texto sin un solo dígito dejaba `usadas` vacío, el bucle de `:181` no
+  // iteraba ni una vez y la función devolvía `true` en `:195`. Devolver `true`
+  // no es «verificado»: es «no encontré nada que verificar», y aguas arriba
+  // significa APROBADO — se saltaba el reintento correctivo (`:414`), la red
+  // determinística (`:479`) y hasta el `logger.warn('chat.guardia_cifra')`.
+  //
+  // El hueco ya se había encontrado y cerrado EN EL OTRO CANAL hace 19
+  // auditorías. `cuadre/cifras.ts:173-175`: «AUDITORÍA 13, MEDIO: los
+  // cardinales en palabras también se cotejan — un "ochocientos" que NO
+  // coincide con nada respaldado sale como cifra sin respaldo (antes ni se
+  // extraía y pasaba en silencio)». El panel —el canal del COMPRADOR— nunca
+  // recibió esa defensa: `grep cardinalesEnPalabras src/lib/agents/` daba 0.
+  //
+  // Redondear a letras es exactamente como se habla de dinero en México, y el
+  // modelo de este carril es de español coloquial (`models.ts:81`).
+  // ══════════════════════════════════════════════════════════════════════
+  it('TC-32C5-A1: BLOQUEA la misma cantidad escrita en LETRAS, igual que en dígitos', () => {
+    const enDigitos: Bloque[] = [{ tipo: 'texto', texto: 'Llevas $1,284,000.00 comprobados.' }];
+    const enLetras: Bloque[] = [{ tipo: 'texto', texto: 'Llevas un millón doscientos ochenta y cuatro mil pesos comprobados; te faltan ochocientos mil por comprobar.' }];
+    // El control: en dígitos ya bloqueaba. Si esto se pone verde, la guardia
+    // se rompió por otro lado.
+    expect(cifrasRespaldadas(enDigitos, respaldo)).toBe(false);
+    // Lo que no bloqueaba.
+    expect(cifrasRespaldadas(enLetras, respaldo)).toBe(false);
+  });
+
+  it('TC-32C5-A1: una diferencia narrada en letras que ninguna tool devolvió NO pasa', () => {
+    const bloques: Bloque[] = [{ tipo: 'texto', texto: 'Tu diferencia del periodo es de ocho mil quinientos pesos a favor de la empresa.' }];
+    expect(cifrasRespaldadas(bloques, respaldo)).toBe(false);
+  });
+
+  it('TC-32C5-A1: los cardinales chicos y los de porcentaje siguen pasando — la pantalla no se muere', () => {
+    // `BLANCOS` cubre 0..12, 50 y 100: «tres rutas», «al cincuenta por ciento»
+    // y «cien por ciento» no delatan invención y bloquearlos convertiría la
+    // respuesta en una pantalla muerta. Es el trade-off que ya estaba escrito.
+    for (const texto of [
+      'Te muestro tres rutas y dos unidades.',
+      'El peaje se recupera al cincuenta por ciento.',
+      'La tasa de cuadre es del cien por ciento en ese grupo.',
+    ]) {
+      expect(cifrasRespaldadas([{ tipo: 'texto', texto }], respaldo)).toBe(true);
+    }
+  });
+
+  it('TC-32C5-A1: un cardinal en letras que SÍ salió de una tool pasa', () => {
+    // `tasaCuadre: 87` está en el respaldo; narrarlo «ochenta y siete» es
+    // narrar un dato real, no inventar uno.
+    expect(cifrasRespaldadas([{ tipo: 'texto', texto: 'La tasa de cuadre es de ochenta y siete por ciento.' }], respaldo)).toBe(true);
+  });
+
   it('BLOQUEA un monto que ninguna tool devolvió', () => {
     const bloques: Bloque[] = [{ tipo: 'texto', texto: 'Te puedes ahorrar unos $12,500 al mes.' }];
     expect(cifrasRespaldadas(bloques, respaldo)).toBe(false);
