@@ -46,14 +46,14 @@
     "playwright-core": "^1.63.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.5",
     "xlsx": "file:vendor/xlsx-0.20.3.tgz",
     "zod": "^4.6.5",
     "zxing-wasm": "^3.1.4"
   },
   "//overrides": "sharp procesa las fotos que llegan por WhatsApp — entrada NO autenticada. Next trae su propia copia anidada, así que subir la dependencia directa no basta: sin este override quedaba un sharp <0.35.0 vulnerable (CVE-2026-33327/33328/35590/35591 en libvips) en el árbol, alcanzable desde la primera foto de un chofer.",
   "overrides": {
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
@@ -65,7 +65,7 @@
     "@vitest/coverage-v8": "4.1.11",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.5",
-    "eslint-plugin-security": "^4.0.1",
+    "eslint-plugin-security": "^4.1.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
     "vitest": "4.1.11"
