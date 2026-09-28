@@ -200,8 +200,12 @@ const VALOR_CARDINAL: Record<string, number> = {
 };
 
 /** Los cardinales del texto, convertidos a número. Compuestos simples se
- *  suman por aproximación ("treinta y dos" → 30+2=32); sin parseador completo
- *  es mejor verificar de más (un compuesto mal sumado cae a 'fuera'). */
+ *  suman por aproximación ("treinta y dos" → 30+2=32) salvo `mil`, que
+ *  MULTIPLICA cuando va después de un valor menor ("ochocientos mil" → 800,000;
+ *  "mil ochocientos" → 1,800). Sin parseador completo es mejor verificar de más
+ *  (un compuesto mal sumado cae a 'fuera') — y por eso `millón` queda fuera del
+ *  vocabulario: hace que "un millón ochocientos mil" no cuadre con nada en vez
+ *  de cuadrar con la cifra equivocada. Ver AUDITORÍA 32 c7 en el cuerpo. */
 export function cardinalesEnPalabras(texto: string): number[] {
   const out: number[] = [];
   const tokens = texto.toLowerCase().match(/[a-záéíóúñ]+/g) ?? [];
@@ -216,8 +220,27 @@ export function cardinalesEnPalabras(texto: string): number[] {
     while (j < tokens.length && (siguiente === 'y' || VALOR_CARDINAL[siguiente] !== undefined)) {
       if (siguiente === 'y') { j++; siguiente = tokens[j]; continue; }
       const vj = VALOR_CARDINAL[siguiente];
-      // "mil ochocientos": mil + 800 = 1800; "doscientos cincuenta": 200+50.
-      suma = vj > suma || v >= 1000 ? suma + vj : (suma >= 100 ? suma + vj : vj + suma);
+      // AUDITORÍA 32 c7 (ARQ/AG/TC/REN-32C7): `mil` es un MULTIPLICADOR cuando
+      // va DESPUÉS de un valor menor que mil, y un sumando cuando va antes.
+      // Las tres ramas del ternario anterior eran todas sumas —sólo reordenaban
+      // los addendos, así que daban el mismo número— y por eso "ochocientos mil"
+      // valía 800+1000 = 1800 en vez de 800,000.
+      //
+      // Fallaba en LAS DOS direcciones. ABIERTA, que es la cara: un respaldo real
+      // de $1,800 aprobaba el texto "un millón ochocientos mil pesos" — un error
+      // de 1000x con el sello de la guardia, y `5aeda80` (la c5) acababa de
+      // exponer este parser a la frontera del panel al extender la guardia para
+      // que leyera letras. CERRADA pero costosa: "doce mil pesos" con 12,000
+      // respaldado daba 1012 y salía como cifra sin respaldo, y el llamador paga
+      // un segundo ciclo de modelo (`copiloto.ts:267`) o tira la pieza entera sin
+      // reintento (`agentes/contenido.ts:194`, `agentes/faq.ts:264`).
+      //
+      // "mil ochocientos" sigue siendo 1800 (mil va primero, suma > 1000 → suma),
+      // y `millón` sigue fuera del vocabulario A PROPÓSITO: sin él, "un millón
+      // ochocientos mil" da 800,000, que NO coincide con 1,800,000 y por tanto
+      // cae a 'fuera'. Verificar de más es la dirección segura que esta función
+      // ya declaraba querer; sumar la escala al revés era la insegura.
+      suma = vj === 1000 && suma < 1000 ? suma * vj : suma + vj;
       j++; siguiente = tokens[j];
     }
     out.push(suma);

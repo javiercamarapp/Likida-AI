@@ -194,3 +194,52 @@ describe('AUDITORÍA 13 — cardinales en palabras dentro del cotejo', () => {
     expect(cardinalesEnPalabras('son mil ochocientos pesos')).toContain(1800);
   });
 });
+
+// ── AUDITORÍA 32 c7 · ARQ/AG/TC/REN-32C7: `mil` MULTIPLICA, no suma ─────────
+// Tres auditores independientes de la ronda (agéntico, tool calling y
+// rendimiento) llegaron al mismo defecto por caminos distintos: el acumulador
+// sumaba SIEMPRE, así que "ochocientos mil" daba 800+1000 = 1800 en vez de
+// 800,000. `5aeda80` (la c5) extendió la guardia del panel para que leyera
+// letras reusando esta función, y con eso expuso el colapso de escala a la
+// frontera donde una cifra mal cotejada llega al contralor.
+//
+// Falla en las DOS direcciones, y la primera es la cara:
+//  · ABIERTA: un respaldo real de $1,800 APRUEBA el texto "un millón
+//    ochocientos mil pesos" — un error de 1000x con el sello de la guardia.
+//  · CERRADA pero costosa: "doce mil pesos" con 12,000 respaldado daba 1012,
+//    salía como cifra sin respaldo, y el llamador paga un segundo ciclo de
+//    modelo (`copiloto.ts:267`) o tira la pieza entera sin reintento
+//    (`agentes/contenido.ts:194`, `agentes/faq.ts:264`).
+describe('AUDITORÍA 32 c7 — el colapso de escala de `mil`', () => {
+  it('«ochocientos mil» vale 800000, no 1800 (si no, $1,800 respaldados aprueban un millón ochocientos mil)', () => {
+    expect(cardinalesEnPalabras('ochocientos mil pesos')).toEqual([800000]);
+  });
+
+  it('«doce mil» vale 12000, no 1012 (el falso positivo que cuesta un ciclo de modelo)', () => {
+    expect(cardinalesEnPalabras('son doce mil pesos')).toEqual([12000]);
+  });
+
+  it('«doscientos cincuenta mil» vale 250000, no 1250', () => {
+    expect(cardinalesEnPalabras('doscientos cincuenta mil pesos')).toEqual([250000]);
+  });
+
+  it('«dos mil veintiséis» vale 2026, no 1028 — un año en prosa normal', () => {
+    expect(cardinalesEnPalabras('el ejercicio dos mil veintiséis')).toEqual([2026]);
+  });
+
+  it('la suma sigue mandando cuando `mil` va PRIMERO: «mil ochocientos» sigue siendo 1800', () => {
+    expect(cardinalesEnPalabras('son mil ochocientos pesos')).toEqual([1800]);
+  });
+
+  it('«mil» solo sigue valiendo 1000, y «cien mil» 100000', () => {
+    expect(cardinalesEnPalabras('te quedan mil por comprobar')).toEqual([1000]);
+    expect(cardinalesEnPalabras('cien mil pesos')).toEqual([100000]);
+  });
+
+  it('un respaldo de 1800 ya NO aprueba «un millón ochocientos mil»: la cifra sale como sin respaldo', () => {
+    const fuera = cifrasSinRespaldo('El ahorro es de un millón ochocientos mil pesos.', [
+      { politica: { topes: { diesel: 1800 } } },
+    ]);
+    expect(fuera).not.toEqual([]);
+  });
+});
