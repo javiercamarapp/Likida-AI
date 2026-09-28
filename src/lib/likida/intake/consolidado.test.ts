@@ -325,9 +325,45 @@ describe('resolverLineaAMano — la pantalla que faltaba, contra Supabase mockea
     });
   });
 
-  it('FASE 1 — si leer ocr_extra falla, sella el uuid SIN pisar el jsonb (no se inventa un extra vacío)', async () => {
+  // BE-32C7-A1 (auditoría 32, c7). Esta prueba afirmaba `ok: true` y un payload
+  // SIN `ocr_extra`, es decir BENDECÍA la pérdida: el `update` sellaba
+  // `cfdi_uuid` + `xml_verificado: true` y los litros se perdían para siempre,
+  // porque el guardia `.is('cfdi_uuid', null)` impide que una segunda pasada
+  // vuelva a entrar y la línea queda `conciliada` (las tres vías que la
+  // tocarían anclan a `por_conciliar`). Con `litros` en 0,
+  // `cuadre/engine.ts:1790` exige `litros > 0` y se salta el bloque ENTERO del
+  // estímulo sin emitir ninguna `diferencia`: `litrosDieselAcreditables` sale
+  // de menos y ninguna pantalla sabe que falta algo.
+  //
+  // El contrato correcto es FALLAR CERRADO: si no se pudo leer `ocr_extra` y
+  // hay litros que fusionar, NO se sella nada. La línea se queda
+  // `por_conciliar` y los tres llamadores ya saben qué hacer con un `false`
+  // (log de error, `siguenPendientes++`, o `ok: false`) — se reintenta, que es
+  // justo lo que la pérdida silenciosa impedía.
+  it('BE-32C7-A1 — si leer ocr_extra falla con litros por fusionar, NO sella el gasto: falla cerrado y la línea sigue reintentable', async () => {
     respLineaLectura = { data: filaLinea({ litros: 120.5, clave_prod_serv: '15101505' }), error: null };
     // `acotada()` al tope resuelve `{ data: null, error }` — no lanza.
+    respGastoLectura = { data: null, error: { message: 'sin respuesta en 1500 ms (tope de consulta)' } };
+
+    const r = await resolverLineaAMano('t1', 'linea-1', { tipo: 'ligar', gastoId: 'g1' }, 'user-1');
+    expect(r.ok).toBe(false);
+
+    // Lo esencial: NO se ejecutó NINGÚN update sobre `gasto`. Sin esto el
+    // `xml_verificado: true` viajaba con los litros perdidos.
+    expect(updatesVistos.find((u) => u.tabla === 'gasto')).toBeUndefined();
+    // Y tampoco se cerró la línea: sigue `por_conciliar` para el reintento.
+    expect(updatesVistos.find((u) => u.tabla === 'cfdi_consolidado_linea')).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'consolidado.ligar_ocr_extra_ilegible',
+      expect.objectContaining({ gasto: 'g1' }),
+    );
+  });
+
+  // El contraste que prueba que el arreglo es acotado: SIN litros que fusionar
+  // (una caseta), `ligarLineaAGasto` nunca lee `ocr_extra`, así que un fallo de
+  // esa lectura no puede afectarla y liga igual que siempre.
+  it('BE-32C7-A1 — una línea sin diésel liga igual aunque la lectura de ocr_extra estuviera rota (no la consulta)', async () => {
+    respLineaLectura = { data: filaLinea({ litros: null, clave_prod_serv: null }), error: null };
     respGastoLectura = { data: null, error: { message: 'sin respuesta en 1500 ms (tope de consulta)' } };
 
     const r = await resolverLineaAMano('t1', 'linea-1', { tipo: 'ligar', gastoId: 'g1' }, 'user-1');
@@ -337,14 +373,8 @@ describe('resolverLineaAMano — la pantalla que faltaba, contra Supabase mockea
     expect(updateGasto?.payload).toEqual({
       cfdi_uuid: 'uuid-abc',
       cfdi_orden: 2,
-      clave_prod_serv: '15101505',
       xml_verificado: true,
     });
-    expect(updateGasto?.payload).not.toHaveProperty('ocr_extra');
-    expect(logger.warn).toHaveBeenCalledWith(
-      'consolidado.ligar_ocr_extra_ilegible',
-      expect.objectContaining({ gasto: 'g1' }),
-    );
   });
 
   it('FASE 1 — una línea sin litros (p.ej. caseta) liga igual que siempre, sin tocar ocr_extra ni clave_prod_serv', async () => {

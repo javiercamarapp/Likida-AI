@@ -294,14 +294,32 @@ async function ligarLineaAGasto(
       .select('ocr_extra').eq('id', gastoId).eq('tenant_id', tenantId).maybeSingle(), 'consolidado.ligar_leer_ocr_extra') as {
         data: { ocr_extra?: unknown } | null; error: { message: string } | null;
       };
-    cambios.clave_prod_serv = diesel.claveProdServ;
     if (leido.error) {
+      // AUDITORÍA 32 c7, BE-32C7-A1 (ALTO): antes esto solo logueaba y SEGUÍA,
+      // y el `update` de abajo sellaba `cfdi_uuid` + `xml_verificado: true` sin
+      // los litros. La pérdida era DEFINITIVA, no un reintento pendiente: el
+      // guardia `.is('cfdi_uuid', null)` impide que una segunda pasada vuelva a
+      // entrar, y la línea queda `conciliada` mientras las tres vías que la
+      // tocarían anclan a `por_conciliar`. Con `litros` en 0,
+      // `cuadre/engine.ts:1790` exige `litros > 0` y se salta el bloque ENTERO
+      // del estímulo de la LIF 20-A-IV **sin emitir ninguna `diferencia`**:
+      // `litrosDieselAcreditables` sale de menos y ninguna pantalla sabe que
+      // falta algo (la línea dice `conciliada`, el gasto dice `xml_verificado`,
+      // el acuse dice 40 de 40). El dato seguía en
+      // `cfdi_consolidado_linea.litros` y NADIE lo reconciliaba.
+      //
+      // Se falla CERRADO: no se escribe nada. Los tres llamadores ya saben qué
+      // hacer con un `false` —log de error en el camino automático (`:511`),
+      // `siguenPendientes++` en el barrido (`:894`), `ok: false` a mano
+      // (`:652`)— y la línea se queda `por_conciliar`, o sea reintentable, que
+      // es justo lo que la pérdida silenciosa impedía. Fallar cerrado y decirlo.
       logger.warn('consolidado.ligar_ocr_extra_ilegible', { tenant: tenantId, gasto: gastoId, err: leido.error.message });
-    } else {
-      const ocrExtra = { ...((leido.data?.ocr_extra as Record<string, unknown> | null) ?? {}) };
-      ocrExtra.litros = diesel.litros;
-      cambios.ocr_extra = ocrExtra;
+      return false;
     }
+    cambios.clave_prod_serv = diesel.claveProdServ;
+    const ocrExtra = { ...((leido.data?.ocr_extra as Record<string, unknown> | null) ?? {}) };
+    ocrExtra.litros = diesel.litros;
+    cambios.ocr_extra = ocrExtra;
   }
   const { data, error } = await acotada(supabaseAdmin()
     .from('gasto')
