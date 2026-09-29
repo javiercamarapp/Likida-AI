@@ -524,15 +524,41 @@ export async function guardarYConciliarConsolidado(
     r.estatus === 'conciliada' && r.gastoId && !selladoPorIndice.has(r.linea.indice));
   const ligados = await enLotes(porLigar, 10, (r) =>
     ligarLineaAGasto(tenantId, xml.uuid!, r.linea.indice, r.gastoId as string, datosDieselDeLinea(r.linea)));
+  // BE-32C8-C1 (auditoría 32 c8, CRÍTICO): las líneas cuya ligadura NO ocurrió.
+  // `69c4e0d` hizo que `ligarLineaAGasto` fallara CERRADO —no sella el gasto y
+  // devuelve `false`—, pero aquí ese `false` sólo se registraba en el log: más
+  // abajo `filasLinea` se construye desde `r.estatus`, que sigue diciendo
+  // `'conciliada'`, con `gasto_id` puesto. La línea quedaba apuntando a un gasto
+  // que nunca se selló, y la pérdida era DEFINITIVA: `barrerPorConciliar` sólo
+  // toma líneas `por_conciliar` y nunca volvía a mirar ésta, y el reenvío del
+  // mismo XML corta en el bloque de reanudación. Los litros se quedaban en
+  // `cfdi_consolidado_linea.litros` sin que nadie los reconciliara, el motor se
+  // saltaba el bloque del estímulo del diésel sin emitir una sola `diferencia`,
+  // y el acuse le decía al contralor «los N coincidieron uno a uno».
+  //
+  // El arnés de `69c4e0d` no lo veía porque entró por `resolverLineaAMano` —el
+  // llamador MANUAL—, y el escenario que el propio commit describe es éste, el
+  // automático. Es literalmente el hallazgo `PRU-32C8-C1`.
+  const noLigados = new Set<number>();
   ligados.forEach((l, i) => {
     if ('error' in l) {
+      noLigados.add(porLigar[i].linea.indice);
       logger.error('consolidado.ligar_lanzo', { tenant: tenantId, gasto: porLigar[i].gastoId, err: l.error instanceof Error ? l.error.message : String(l.error) });
     } else if (!l.ok) {
+      noLigados.add(porLigar[i].linea.indice);
       logger.error('consolidado.marcar_gasto_no_disponible', { tenant: tenantId, gasto: porLigar[i].gastoId });
     }
   });
+  // Se degrada ANTES de construir las filas y el resumen, para que las dos
+  // salidas —la tabla y el acuse— digan lo mismo. `por_conciliar` sin `gasto_id`
+  // es el único estado que el barrido vuelve a tomar: la línea queda
+  // reintentable, que es justo lo que la pérdida silenciosa impedía.
+  const resueltos: ResultadoLinea[] = noLigados.size === 0 ? resultados : resultados.map((r) =>
+    noLigados.has(r.linea.indice)
+      ? { ...r, estatus: 'por_conciliar' as const, gastoId: null }
+      : r);
 
-  const filasLinea = resultados.map((r) => ({
+  const filasLinea = resueltos.map((r) => ({
     tenant_id: tenantId,
     cfdi_xml_id: cfdiXmlId,
     indice: r.linea.indice,
@@ -544,7 +570,10 @@ export async function guardarYConciliarConsolidado(
     estacion_clave: r.linea.estacionClave ?? null,
     folio_operacion: r.linea.folioOperacion ?? null,
     estatus: r.estatus,
-    gasto_id: r.gastoId,
+    // BE-32C8-C1: explícito a `null`, no `undefined`. Un `undefined` se omite
+    // del payload y el `upsert` con `onConflict` deja la columna COMO ESTABA —
+    // que en una segunda pasada es justo el `gasto_id` que hay que soltar.
+    gasto_id: r.gastoId ?? null,
     candidatos: r.candidatos.length ? r.candidatos : null,
     // FASE 1: se guarda para que la resolución a mano y el barrido —que
     // vuelven a leer esta fila, nunca el XML— liguen con los mismos litros
@@ -568,8 +597,8 @@ export async function guardarYConciliarConsolidado(
     throw new Error(`guardarYConciliarConsolidado: no se pudieron guardar las líneas — ${errLineas.message}`);
   }
 
-  const conciliadas = resultados.filter((r) => r.estatus === 'conciliada').length;
-  return { cfdiXmlId, totalLineas: resultados.length, conciliadas, porConciliar: resultados.length - conciliadas };
+  const conciliadas = resueltos.filter((r) => r.estatus === 'conciliada').length;
+  return { cfdiXmlId, totalLineas: resueltos.length, conciliadas, porConciliar: resueltos.length - conciliadas };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
