@@ -243,3 +243,75 @@ describe('AUDITORÍA 32 c7 — el colapso de escala de `mil`', () => {
     expect(fuera).not.toEqual([]);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 32 c8 — `millón` no existía para la guardia, y era la mitad grande
+// del mismo agujero que la c7 dejó a medias.
+//
+// AG-32C8-C1 (CRÍTICO) y TC-32C8-A1 (ALTO), encontrados por separado por el
+// auditor agéntico y el de tool calling sobre el arreglo de la c7 (`3ed4fd8`).
+//
+// Dos huecos distintos, una sola causa: la palabra no estaba en ningún lado.
+//
+//  1. EL PARSER (`cardinalesEnPalabras`). `millón` no está en `VALOR_CARDINAL`,
+//     así que el token se salta y sólo sale el multiplicando chico. MEDIDO antes
+//     del arreglo:
+//         'dos millones de pesos'   → [2]
+//         'tres millones de pesos'  → [3]
+//         'cien millones de pesos'  → [100]
+//         'un millón de pesos'      → []
+//     Un respaldo real que contenga 3 —y `esDerivada` acepta enteros chicos—
+//     APRUEBA el texto «tres millones de pesos» con el sello de la guardia
+//     puesto. Es el mismo error de 1000x que la c7 cerró para `mil`, con la
+//     escala de arriba y por la puerta de al lado.
+//
+//  2. EL PORTÓN (`tieneCifrasDeDinero`). El regex decía `millones?`, que es
+//     "millone" + "s" opcional: NO casa `millón` ni `millon`. MEDIDO:
+//         tieneCifrasDeDinero('Facturaste un millón de pesos.')  → false
+//     El plural sí se atrapaba, y por eso nadie lo había visto. En falso el
+//     texto sale verbatim por WhatsApp sin `logger.warn` y sin reintento.
+//
+// LA DIRECCIÓN DEL ARREGLO es la que este archivo ya declaraba querer:
+// verificar de más. `millón` como multiplicador da números grandes que no
+// empatan con nada del respaldo, así que el texto cae a 'fuera' y se reemplaza
+// por el resumen determinístico del motor. Lo que NO se pretende es que el
+// parser sea completo: «un millón ochocientos mil» sigue sin dar 1,800,000
+// —da 1,001,800— y eso está bien, porque tampoco empata: el caso peligroso es
+// el que empata por accidente, no el que no empata.
+describe('AUDITORÍA 32 c8 — `millón` para la guardia de cifras', () => {
+  it('«dos millones» vale 2000000, no 2 (si no, un respaldo con un 2 aprueba dos millones de pesos)', () => {
+    expect(cardinalesEnPalabras('dos millones de pesos')).toEqual([2000000]);
+  });
+
+  it('«tres millones» vale 3000000, no 3 — el caso que midió el auditor agéntico', () => {
+    expect(cardinalesEnPalabras('Llevas tres millones de pesos')).toEqual([3000000]);
+  });
+
+  it('el SINGULAR cuenta igual que el plural: «un millón» vale 1000000, no nada', () => {
+    expect(cardinalesEnPalabras('un millón de pesos')).toEqual([1000000]);
+    expect(cardinalesEnPalabras('un millon de pesos')).toEqual([1000000]);
+  });
+
+  it('«cien millones» vale 100000000 y «mil millones» 1000000000', () => {
+    expect(cardinalesEnPalabras('cien millones de pesos')).toEqual([100000000]);
+    expect(cardinalesEnPalabras('mil millones de pesos')).toEqual([1000000000]);
+  });
+
+  it('el portón ve el SINGULAR con acento y sin él, no sólo el plural', () => {
+    for (const t of ['Facturaste un millón de pesos.', 'Facturaste un millon de pesos.', 'medio millón de pesos'])
+      expect(tieneCifrasDeDinero(t), t).toBe(true);
+  });
+
+  it('un respaldo con un 3 ya NO aprueba «tres millones de pesos»', () => {
+    const fuera = cifrasSinRespaldo('Llevas tres millones de pesos.', [
+      { politica: { topes: { diesel: 3 } } },
+    ]);
+    expect(fuera).not.toEqual([]);
+  });
+
+  it('lo que la c7 cerró sigue cerrado: `mil` no se rompe al entrar `millón`', () => {
+    expect(cardinalesEnPalabras('ochocientos mil pesos')).toEqual([800000]);
+    expect(cardinalesEnPalabras('son mil ochocientos pesos')).toEqual([1800]);
+    expect(cardinalesEnPalabras('el ejercicio dos mil veintiséis')).toEqual([2026]);
+  });
+});
