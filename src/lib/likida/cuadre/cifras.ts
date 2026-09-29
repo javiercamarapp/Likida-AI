@@ -26,7 +26,7 @@ const DINERO_EXPLICITO =
  * mil pesos" ni le aparecía.
  */
 const DINERO_EN_PALABRAS =
-  /\b(?:un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos)\s+(?:mil|millones?|pesos?)\b/i;
+  /\b(?:un|una|uno|medi[oa]|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos)\s+(?:mil|mill[oó]n(?:es)?|pesos?)\b/i;
 
 /**
  * Cardinales SUELTOS (sin "pesos"/"mil" pegado). AUDITORÍA 12, MEDIO: "te
@@ -197,15 +197,18 @@ const VALOR_CARDINAL: Record<string, number> = {
   cuatrocientos: 400, cuatrocientas: 400, quinientos: 500, quinientas: 500, seiscientos: 600, seiscientas: 600,
   setecientos: 700, setecientas: 700, ochocientos: 800, ochocientas: 800, novecientos: 900, novecientas: 900,
   mil: 1000,
+  // AUDITORÍA 32 c8 (AG-32C8-C1 / TC-32C8-A1): `millón` faltaba, y sin él el
+  // token se saltaba y salía sólo el multiplicando chico — «tres millones» → 3.
+  'millón': 1_000_000, millon: 1_000_000, millones: 1_000_000,
 };
 
 /** Los cardinales del texto, convertidos a número. Compuestos simples se
  *  suman por aproximación ("treinta y dos" → 30+2=32) salvo `mil`, que
  *  MULTIPLICA cuando va después de un valor menor ("ochocientos mil" → 800,000;
- *  "mil ochocientos" → 1,800). Sin parseador completo es mejor verificar de más
- *  (un compuesto mal sumado cae a 'fuera') — y por eso `millón` queda fuera del
- *  vocabulario: hace que "un millón ochocientos mil" no cuadre con nada en vez
- *  de cuadrar con la cifra equivocada. Ver AUDITORÍA 32 c7 en el cuerpo. */
+ *  "mil ochocientos" → 1,800). `millón` sigue la MISMA regla una escala arriba
+ *  ("tres millones" → 3,000,000; "mil millones" → 1,000,000,000). Sin parseador
+ *  completo es mejor verificar de más: un compuesto mal sumado cae a 'fuera', y
+ *  'fuera' es el lado seguro. Ver AUDITORÍA 32 c7 y c8 en el cuerpo. */
 export function cardinalesEnPalabras(texto: string): number[] {
   const out: number[] = [];
   const tokens = texto.toLowerCase().match(/[a-záéíóúñ]+/g) ?? [];
@@ -235,12 +238,26 @@ export function cardinalesEnPalabras(texto: string): number[] {
       // un segundo ciclo de modelo (`copiloto.ts:267`) o tira la pieza entera sin
       // reintento (`agentes/contenido.ts:194`, `agentes/faq.ts:264`).
       //
-      // "mil ochocientos" sigue siendo 1800 (mil va primero, suma > 1000 → suma),
-      // y `millón` sigue fuera del vocabulario A PROPÓSITO: sin él, "un millón
-      // ochocientos mil" da 800,000, que NO coincide con 1,800,000 y por tanto
-      // cae a 'fuera'. Verificar de más es la dirección segura que esta función
-      // ya declaraba querer; sumar la escala al revés era la insegura.
-      suma = vj === 1000 && suma < 1000 ? suma * vj : suma + vj;
+      // "mil ochocientos" sigue siendo 1800 (mil va primero, suma > 1000 → suma).
+      //
+      // AUDITORÍA 32 c8 (AG-32C8-C1, TC-32C8-A1): este bloque decía que `millón`
+      // quedaba fuera del vocabulario A PROPÓSITO. Ese rótulo era falso en lo que
+      // importa. Fuera del vocabulario, el token se SALTA y sale el multiplicando
+      // chico — medido: "tres millones de pesos" → [3], "cien millones" → [100],
+      // "un millón de pesos" → []. Un respaldo real que traiga un 3 aprobaba
+      // "tres millones de pesos" con el sello de la guardia puesto: el mismo
+      // error de 1000x de la c7, con la escala de arriba y por la puerta de al
+      // lado. Con `millón` dentro, esos textos dan números que no empatan con
+      // nada y caen a 'fuera', que es a donde tienen que caer.
+      //
+      // Lo que NO cambia y se dice para que nadie lo lea como promesa: el parser
+      // sigue sin ser completo. "un millón ochocientos mil" da 1,001,800, no
+      // 1,800,000 — y está bien, porque tampoco empata. El caso peligroso es el
+      // que empata por accidente, no el que no empata.
+      // AUDITORÍA 32 c8 (AG-32C8-C1 / TC-32C8-A1): la misma regla, una escala
+      // arriba. `millón` multiplica cuando va DESPUÉS de un valor menor que un
+      // millón, igual que `mil` con mil. Así «mil millones» da 1e9 y no 1000.
+      suma = vj >= 1000 && suma < vj ? suma * vj : suma + vj;
       j++; siguiente = tokens[j];
     }
     out.push(suma);
