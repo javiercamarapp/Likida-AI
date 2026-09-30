@@ -315,3 +315,68 @@ describe('AUDITORÍA 32 c8 — `millón` para la guardia de cifras', () => {
     expect(cardinalesEnPalabras('el ejercicio dos mil veintiséis')).toEqual([2026]);
   });
 });
+
+describe('AUDITORÍA 32 c9 — SEG-32C9-C1: un monto con marca de dinero no es un año', () => {
+  // El respaldo que devuelve `estado_viaje`: anticipo 8000, comprobado 6000. El
+  // modelo DERIVA el saldo y lo escribe; nadie lo calculó.
+  const estado = [{ anticipo: 8000, comprobado: 6000, comprobantes: 4 }];
+  const conSaldo = (s: string) =>
+    `De tus $8,000.00 de anticipo comprobaste $6,000.00, te sobran ${s}.`;
+
+  // `ANIO` corre DENTRO de `cifrasSinRespaldo`, y su lookbehind `(?<![\w-])` deja
+  // pasar el `$`: los 200 enteros de 1900 a 2099 se borraban del texto antes del
+  // cotejo, y una lista vacía significa «todo respaldado». La única diferencia
+  // entre que la guardia atrape la cifra y que la apruebe era la coma de miles.
+  it('un saldo de $2000 sin coma de miles NO se cuenta como respaldado', () => {
+    expect(cifrasSinRespaldo(conSaldo('$2000'), estado)).toEqual([2000]);
+  });
+
+  it('la banda entera 1900-2099 se coteja: $1950 y $2099', () => {
+    expect(cifrasSinRespaldo(conSaldo('$1950'), estado)).toEqual([1950]);
+    expect(cifrasSinRespaldo(conSaldo('$2099'), estado)).toEqual([2099]);
+  });
+
+  it('con la palabra «pesos» o «MXN» pegada tampoco es un año', () => {
+    expect(cifrasSinRespaldo(conSaldo('2000 pesos'), estado)).toEqual([2000]);
+    expect(cifrasSinRespaldo(conSaldo('2050 MXN'), estado)).toEqual([2050]);
+  });
+
+  it('`$ 2000` con espacio se coteja igual que `$2000`', () => {
+    expect(cifrasSinRespaldo(conSaldo('$ 2000'), estado)).toEqual([2000]);
+  });
+
+  // El peor caso medido: borraba el `2000` y dejaba el `.50` suelto, así que
+  // reportaba 50 — una cifra que el modelo nunca escribió.
+  it('`$2000.50` se reporta como 2000.5, no como 50', () => {
+    expect(cifrasSinRespaldo(conSaldo('$2000.50'), estado)).toEqual([2000.5]);
+  });
+
+  // La otra mitad, y es la razón por la que `ANIO` existe: un año de verdad
+  // sigue sin ser dinero. Si esto se cayera, un folio o una cita a una norma
+  // dispararían el reemplazo y el operador recibiría el cuadre entero en
+  // respuesta a «¿sigue abierto mi viaje?».
+  //
+  // Se afirma sobre el AÑO y no sobre la lista completa a propósito: dos de
+  // estos textos ya reportan otra cosa hoy («regla 2.9» → 2.9, «01/01/2026» →
+  // 1) y eso es un falso positivo PRE-EXISTENTE, ajeno a este hallazgo, que
+  // sólo cuesta que se sustituya el texto por el resumen del motor. Afirmar
+  // `toEqual([])` aquí ataría esta prueba a un defecto que no viene a arreglar.
+  it('los años de verdad siguen fuera del cotejo', () => {
+    const casos = [
+      'El viaje VJ-2026-0847 cerró en 2026 con $6,000.00 comprobados de $8,000.00.',
+      'Comprobaste $6,000.00 de $8,000.00 el 01/01/2026.',
+      'La RFA 2026 aplica; comprobaste $6,000.00 de $8,000.00.',
+      'La regla 2.9 de la RFA 2026 aplica; comprobaste $6,000.00 de $8,000.00.',
+    ];
+    for (const t of casos) {
+      expect(cifrasSinRespaldo(t, estado)).not.toContain(2026);
+    }
+    // Y el caso limpio sigue dando lista vacía, sin nada que lo enturbie.
+    expect(
+      cifrasSinRespaldo(
+        'El viaje VJ-2026-0847 cerró en 2026 con $6,000.00 comprobados de $8,000.00.',
+        estado,
+      ),
+    ).toEqual([]);
+  });
+})
