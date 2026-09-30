@@ -62,9 +62,55 @@ const NUMERO_SUELTO = /(?<![\w-])\d{2,}(?:[.,]\d+)?(?![\w-])/;
 /**
  * Años. Un "2026" suelto casi nunca es dinero, y aparece en fechas, folios y
  * referencias a normas. Un monto de $2,026 sí se distingue: lleva símbolo o coma
- * de miles, y esos ya los atrapa DINERO_EXPLICITO antes de llegar aquí.
+ * de miles, y esos ya los atrapa DINERO_EXPLICITO antes de llegar aquí — cierto
+ * para el PORTÓN de abajo, que es el único que consulta DINERO_EXPLICITO.
  */
 const ANIO = /(?<![\w-])(?:19|20)\d{2}(?![\w-])/g;
+
+/** Un `$` (con o sin espacio) justo antes: es un monto, no un año. */
+const MARCA_DE_DINERO_ANTES = /\$\s?$/;
+/** `pesos`/`mxn`/`m.n.` justo después, o una cola decimal que lo vuelve monto. */
+const MARCA_DE_DINERO_DESPUES = /^(?:\s*(?:pesos?|mxn|m\.?\s?n\.?)\b|[.,]\d)/i;
+
+/**
+ * Quita los años del texto ANTES del cotejo, respetando los montos.
+ *
+ * SEG-32C9-C1 (AUDITORÍA 32 c9, CRÍTICO). El cotejo borraba los años con `ANIO`
+ * a secas, y el lookbehind `(?<![\w-])` deja pasar el `$`: los 200 enteros de
+ * 1900 a 2099 desaparecían del texto antes de compararse contra el respaldo, y
+ * la lista salía VACÍA — que significa «todo respaldado». La única diferencia
+ * entre que la guardia atrape la cifra y que la apruebe era la coma de miles.
+ * Lo que justificaba borrarlos —«esos ya los atrapa DINERO_EXPLICITO antes de
+ * llegar aquí»— vale para el portón y NO vale aquí: en el cotejo no hay ningún
+ * «antes de llegar aquí», el reemplazo corre incondicionalmente y
+ * DINERO_EXPLICITO no participa. Medido con el respaldo real de `estado_viaje`
+ * (anticipo 8000, comprobado 6000):
+ *
+ *     "…te sobran $2,000.00."  → [2000]  se sustituye por el resumen del motor
+ *     "…te sobran $2000."      → []      SALÍA TAL CUAL al WhatsApp del chofer
+ *     "…te sobran 2000 pesos." → []      ídem
+ *     "…te sobran $2000.50."   → [50]    reportaba una cifra que nadie escribió
+ *
+ * Y no había segunda capa: `hablaDeDineroSinCifraVerificable` tampoco lo salva
+ * cuando el texto trae otros montos, porque entonces `MONEY_G` sí encuentra algo.
+ *
+ * La asimetría del archivo manda igual que en el portón: ante la duda se
+ * CONSERVA el número, porque conservarlo cuesta que se sustituya el texto por el
+ * resumen determinístico del motor —correcto y hasta más útil— y borrarlo cuesta
+ * la garantía sobre la que se vende el producto.
+ *
+ * El portón (`tieneCifrasDeDinero`) sigue con `ANIO` a secas a propósito: ahí el
+ * agujero no existe porque `DINERO_EXPLICITO` corre ANTES y marca `$2000` y
+ * `2000 pesos` sin llegar al reemplazo (medido: portón `true` en los cuatro
+ * casos de arriba). Su falso negativo es otro y es SEG-32C9-C2.
+ */
+function sinAniosQueNoSeanMonto(texto: string): string {
+  return texto.replace(ANIO, (anio: string, pos: number) => {
+    if (MARCA_DE_DINERO_ANTES.test(texto.slice(Math.max(0, pos - 2), pos))) return anio;
+    if (MARCA_DE_DINERO_DESPUES.test(texto.slice(pos + anio.length))) return anio;
+    return ' ';
+  });
+}
 
 /**
  * Divide el texto en cláusulas para que "comprobantes" en una parte del
@@ -154,7 +200,7 @@ function numerosDe(valor: unknown, acc: number[], profundidad = 0): number[] {
  */
 export function hablaDeDineroSinCifraVerificable(texto: string): boolean {
   if (!tieneCifrasDeDinero(texto)) return false;
-  return [...texto.replace(ANIO, ' ').matchAll(MONEY_G)].length === 0;
+  return [...sinAniosQueNoSeanMonto(texto).matchAll(MONEY_G)].length === 0;
 }
 
 export function cifrasSinRespaldo(texto: string, resultados: unknown[]): number[] {
@@ -162,7 +208,7 @@ export function cifrasSinRespaldo(texto: string, resultados: unknown[]): number[
   const fuera: number[] = [];
   // Los años se quitan antes: aparecen en fechas y referencias a normas, y no
   // son cifras que el modelo tenga que justificar contra una tool.
-  for (const m of texto.replace(ANIO, ' ').matchAll(MONEY_G)) {
+  for (const m of sinAniosQueNoSeanMonto(texto).matchAll(MONEY_G)) {
     const crudo = m.slice(1).find((g) => g != null);
     if (!crudo) continue;
     const n = Number(crudo.replace(/,/g, ''));
