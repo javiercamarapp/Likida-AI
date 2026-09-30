@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   validarFactura, validarPago, evaluarAbono, sumarDias, mensajeFolioRepetido,
+  filaFacturaEmitida,
   type FacturaCruda, type PagoCrudo,
 } from './facturacion_escritura';
 import { DatoInvalido } from './errores';
@@ -11,6 +12,13 @@ import { DatoInvalido } from './errores';
 // decide DINERO — qué factura es válida, cuánto abono cabe, cuándo se salda y
 // cuándo vence. Las escrituras (`crearFactura`, `registrarPago`) no se prueban
 // contra un mock de Supabase: eso demostraría que el mock funciona.
+//
+// PRU-32C7-C1 (AUDITORÍA 32 c9, CRÍTICO en su 3ª aparición): ese argumento es
+// bueno y la conclusión que se sacaba de él no. Que la ESCRITURA no se pruebe
+// con un doble no significa que el MAPEO de las cuatro cifras fiscales a sus
+// columnas quede sin mirar: intercambiar `subtotal` con `iva` dejaba 37 archivos
+// y 703 pruebas en verde. El mapeo se volvió puro (`filaFacturaEmitida`) y se
+// prueba abajo sin mock y sin ceder el argumento.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CLIENTE = '11111111-2222-3333-4444-555555555555';
@@ -259,5 +267,68 @@ describe('el choque de folio dice CONTRA QUÉ se comparó (RES-22)', () => {
   it('avisa que la cancelada sigue ocupando su folio', () => {
     expect(mensajeFolioRepetido({ serie: null, folio: '1', fecha: '2026-01-01' }))
       .toContain('cancelada');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PRU-32C7-C1 · El mapeo a las columnas de `factura_emitida`
+// ═══════════════════════════════════════════════════════════════════════════
+describe('filaFacturaEmitida — cada cifra fiscal en SU columna', () => {
+  const TENANT = '99999999-8888-7777-6666-555555555555';
+  const VIAJE_A = 'aaaaaaaa-1111-4111-8111-111111111111';
+  const VIAJE_B = 'bbbbbbbb-2222-4222-8222-222222222222';
+
+  // Cuatro cifras DISTINTAS entre sí a propósito: con valores repetidos, un
+  // intercambio de columnas pasa desapercibido y la prueba no probaría nada.
+  const valida = validarFactura({
+    ...FACTURA_OK,
+    subtotal: '10000',
+    iva: '1600',
+    retencion: '400',
+    serie: 'A',
+    folio: '123',
+    cfdiUuid: UUID_CFDI,
+  } as FacturaCruda);
+
+  it('las cuatro cifras no se cruzan entre columnas', () => {
+    const fila = filaFacturaEmitida(TENANT, valida, '2026-09-13');
+    expect(fila.subtotal).toBe(10000);
+    expect(fila.iva).toBe(1600);
+    expect(fila.retencion_iva).toBe(400);
+    // El total no se teclea, se calcula: 10000 + 1600 - 400.
+    expect(fila.total).toBe(11200);
+  });
+
+  it('el tenant sale del argumento, nunca del formulario', () => {
+    const fila = filaFacturaEmitida(TENANT, valida, null);
+    expect(fila.tenant_id).toBe(TENANT);
+    expect(fila.cliente_id).toBe(CLIENTE);
+  });
+
+  it('serie, folio, uuid y fecha van cada uno a su columna', () => {
+    const fila = filaFacturaEmitida(TENANT, valida, null);
+    expect(fila.serie).toBe(valida.serie);
+    expect(fila.folio).toBe(valida.folio);
+    expect(fila.cfdi_uuid).toBe(valida.cfdiUuid);
+    expect(fila.fecha).toBe('2026-08-14');
+    expect(fila.moneda).toBe('MXN');
+    expect(fila.estatus).toBe(valida.estatus);
+  });
+
+  it('`vence_en` es el que se le pasa, y NULL es un valor válido', () => {
+    expect(filaFacturaEmitida(TENANT, valida, '2026-09-13').vence_en).toBe('2026-09-13');
+    expect(filaFacturaEmitida(TENANT, valida, null).vence_en).toBeNull();
+  });
+
+  // La columna directa solo se llena cuando la factura ampara EXACTAMENTE un
+  // viaje; con dos, la liga fina vive en `factura_viaje` y esta columna DEBE ir
+  // nula, o `libro_viaje.ts` le atribuiría a un viaje una factura de dos.
+  it('`viaje_id` solo se llena con UN viaje amparado', () => {
+    const uno = validarFactura({ ...FACTURA_OK, viajeIds: [VIAJE_A] } as FacturaCruda);
+    const dos = validarFactura({ ...FACTURA_OK, viajeIds: [VIAJE_A, VIAJE_B] } as FacturaCruda);
+    const cero = validarFactura({ ...FACTURA_OK, viajeIds: [] } as FacturaCruda);
+    expect(filaFacturaEmitida(TENANT, uno, null).viaje_id).toBe(VIAJE_A);
+    expect(filaFacturaEmitida(TENANT, dos, null).viaje_id).toBeNull();
+    expect(filaFacturaEmitida(TENANT, cero, null).viaje_id).toBeNull();
   });
 });
