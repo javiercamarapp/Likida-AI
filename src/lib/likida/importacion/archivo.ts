@@ -19,6 +19,13 @@ export const TOPE_FILAS_IMPORTACION = 2_000;
 /** Un CSV de 800 unidades pesa ~60 KB; 4 MB ya es el archivo equivocado. */
 export const MAX_ARCHIVO_BYTES = 4 * 1024 * 1024;
 
+/** Cuántas filas se LEEN del archivo como máximo (encabezado incluido), aunque
+ *  traiga más. Un .xlsx de 100 KB puede descomprimirse a millones de filas (una
+ *  bomba de descompresión): sin tope el parser se come la memoria de la función
+ *  antes de que el tope de 2,000 filas de negocio pueda decir nada. Con él, el
+ *  archivo gigante se lee hasta aquí y se rechaza DICIENDO que rebasa el tope. */
+export const FILAS_MAX_LECTURA = 10_001;
+
 /** Cuántas filas se escriben por tanda. Una tanda es UN insert. */
 export const FILAS_POR_TANDA = 200;
 
@@ -38,7 +45,7 @@ export function normalizarEncabezado(v: unknown): string {
 /** La matriz cruda (fila 0 = encabezados) de un CSV o Excel. Lanza si el
  *  archivo no se puede leer — el llamador lo dice en palabras. */
 export function matrizDeArchivo(buffer: ArrayBuffer): unknown[][] {
-  const libro = leerLibro(buffer, { type: 'array' });
+  const libro = leerLibro(buffer, { type: 'array', sheetRows: FILAS_MAX_LECTURA });
   const hoja = libro.Sheets[libro.SheetNames[0]];
   if (!hoja) return [];
   return xlsxUtils.sheet_to_json(hoja, { header: 1, raw: true }) as unknown[][];
@@ -81,9 +88,11 @@ export function avisoDeTope(matriz: unknown[][]): Descartada | null {
   const filasDeDatos = Math.max(0, matriz.length - 1);
   if (filasDeDatos <= TOPE_FILAS_IMPORTACION) return null;
   const tope = numero(TOPE_FILAS_IMPORTACION);
+  // Un archivo gigante se lee hasta `FILAS_MAX_LECTURA`: ahí el conteo es un piso.
+  const trae = `${numero(filasDeDatos)}${matriz.length >= FILAS_MAX_LECTURA ? ' o más' : ''}`;
   return {
     fila: TOPE_FILAS_IMPORTACION + 1,
-    motivo: `El archivo trae ${numero(filasDeDatos)} filas y el tope es ${tope}: se leyeron las primeras ${tope}. Pártelo y sube el resto aparte.`,
+    motivo: `El archivo trae ${trae} filas y el tope es ${tope}: se leyeron las primeras ${tope}. Pártelo y sube el resto aparte.`,
   };
 }
 
