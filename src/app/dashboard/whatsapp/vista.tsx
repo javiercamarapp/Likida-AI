@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { QrCode, MessageCircle, TriangleAlert, Smartphone } from 'lucide-react';
+import { MessageCircle, TriangleAlert, Smartphone } from 'lucide-react';
 import { numero } from '@/lib/formato';
 import { EstadoError } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../resumen-visual';
