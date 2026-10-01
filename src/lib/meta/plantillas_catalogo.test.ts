@@ -137,6 +137,7 @@ describe('el código no manda plantillas que el catálogo no conoce', () => {
   it('todo nombre de plantilla literal en esos archivos está en el catálogo', () => {
     const nombres = new Set<string>();
     for (const a of archivos) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- rutas fijas de esta prueba
       const src = readFileSync(join(RAIZ, a), 'utf8');
       for (const m of src.matchAll(/(?:name:\s*(?=[^\n]*language)|PLANTILLA\w*\s*=\s*|PLANTILLA_AVISO_OFICINA_DEFAULT\s*=\s*|sendTemplate\([^,]+,\s*)'([a-z][a-z0-9_]+)'/g)) nombres.add(m[1]);
     }
@@ -160,6 +161,7 @@ describe('docs/operacion/plantillas-meta.md', () => {
   });
   it('los archivos de scripts referenciados existen', () => {
     for (const f of ['scripts/verificar-plantillas-meta.ts', 'scripts/generar-doc-plantillas.ts']) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- rutas fijas de esta prueba
       expect(statSync(join(RAIZ, f)).isFile()).toBe(true);
     }
     expect(readdirSync(join(RAIZ, 'docs/operacion'))).toContain('plantillas-meta.md');
