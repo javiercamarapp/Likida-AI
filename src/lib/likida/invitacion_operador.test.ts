@@ -280,3 +280,85 @@ describe('ayudas', () => {
     expect(motivoCorto('   ')).toBe('Meta rechazó el mensaje');
   });
 });
+
+describe('estadoInvitaciones — lo que enseña el registro', () => {
+  it('enviada / pendiente / fallo, y un reclamo en curso cuenta como pendiente (todavía no hay constancia)', async () => {
+    base.tabla('operador').push(
+      op(1, { invitacion_enviada_en: '2026-10-01T10:00:00Z', invitacion_via: 'plantilla' }),
+      op(2),
+      op(3, { invitacion_fallo: 'Sin WhatsApp.', invitacion_fallo_en: '2026-10-01T10:00:00Z' }),
+      op(4, { invitacion_enviada_en: '2026-10-01T10:00:00Z', invitacion_via: 'reclamada' }),
+      op(5, { tenant_id: OTRA }),
+    );
+    const { estadoInvitaciones } = await import('./invitacion_operador');
+    const m = await estadoInvitaciones(T, [1, 2, 3, 4, 5].map(uuid).concat(["x' or 1=1"]));
+    expect(m.get(uuid(1))).toEqual({ estado: 'enviada', via: 'plantilla', fallo: null });
+    expect(m.get(uuid(2))).toEqual({ estado: 'pendiente', via: null, fallo: null });
+    expect(m.get(uuid(3))).toEqual({ estado: 'fallo', via: null, fallo: 'Sin WhatsApp.' });
+    expect(m.get(uuid(4))?.estado).toBe('pendiente');
+    expect(m.has(uuid(5))).toBe(false); // otra flota
+  });
+
+  it('una lectura caída LANZA (no se pinta «pendiente» sobre lo que no se pudo leer)', async () => {
+    base.fallarProxima('operador', 'select', { message: 'se cayó' });
+    const { estadoInvitaciones } = await import('./invitacion_operador');
+    await expect(estadoInvitaciones(T, [uuid(1)])).rejects.toThrow(/estadoInvitaciones/);
+  });
+});
+
+describe('reintentarFallidas', () => {
+  it('reintenta SOLO a los que tienen fallo vigente, y un éxito limpia el fallo', async () => {
+    base.tabla('operador').push(
+      op(1, { invitacion_fallo: 'Número inválido.', invitacion_fallo_en: '2026-10-01T10:00:00Z' }),
+      op(2), // pendiente normal: NO es de «reintentar»
+      op(3, { invitacion_enviada_en: '2026-10-01T10:00:00Z', invitacion_via: 'plantilla' }),
+    );
+    const { reintentarFallidas } = await import('./invitacion_operador');
+    const r = await reintentarFallidas(T, flota);
+    expect(r.enviadas).toBe(1);
+    expect(enviar.mock.calls.map((c) => c[0])).toEqual(['525500000001']);
+    expect(base.tabla('operador')[0]).toMatchObject({ invitacion_fallo: null, invitacion_via: 'plantilla' });
+    expect(base.tabla('operador')[1].invitacion_enviada_en).toBeNull();
+  });
+
+  it('sin fallidos no manda nada; un jefe con patio solo reintenta los de su patio', async () => {
+    base.tabla('operador').push(
+      op(1, { terminal_id: P2, invitacion_fallo: 'x', invitacion_fallo_en: '2026-10-01T10:00:00Z' }),
+    );
+    const { reintentarFallidas } = await import('./invitacion_operador');
+    const r = await reintentarFallidas(T, { alcance: { tipo: 'patio', terminalId: P1 } });
+    expect(r.enviadas).toBe(0);
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it('si no se pueden leer los ids: no manda nada y lo dice', async () => {
+    base.fallarProxima('operador', 'select', { message: 'se cayó' });
+    const { reintentarFallidas } = await import('./invitacion_operador');
+    const r = await reintentarFallidas(T, flota);
+    expect(r.error).toMatch(/No pude leer/);
+    expect(enviar).not.toHaveBeenCalled();
+  });
+});
+
+describe('mensajeDeInvitacion — dice lo que pasó, no lo que se pidió', () => {
+  const base0 = { enviadas: 0, fallidas: [], pendientesRestantes: 0, saltadas: 0 };
+  it('éxito simple, con plural', async () => {
+    const { mensajeDeInvitacion } = await import('./invitacion_operador');
+    expect(mensajeDeInvitacion({ ...base0, enviadas: 1 })).toMatchObject({ ok: true, mensaje: 'Se enviaron 1 invitación.' });
+    expect(mensajeDeInvitacion({ ...base0, enviadas: 38 })).toMatchObject({ mensaje: 'Se enviaron 38 invitaciones.' });
+  });
+  it('con fallos, saltadas y pendientes lo dice todo', async () => {
+    const { mensajeDeInvitacion } = await import('./invitacion_operador');
+    const m = mensajeDeInvitacion({ enviadas: 38, fallidas: [{ operadorId: 'a', nombre: 'A', motivo: 'x' }, { operadorId: 'b', nombre: 'B', motivo: 'y' }], pendientesRestantes: 120, saltadas: 3 });
+    expect(m).toMatchObject({ ok: true, mensaje: 'Se enviaron 38 invitaciones; 2 no salieron; 3 ya estaban invitados. Quedan 120 por invitar: vuelve a enviar para seguir.' });
+  });
+  it('nada que hacer no es un éxito engañoso', async () => {
+    const { mensajeDeInvitacion } = await import('./invitacion_operador');
+    expect(mensajeDeInvitacion({ ...base0, saltadas: 2 })).toMatchObject({ ok: true, mensaje: expect.stringMatching(/No había nada que invitar/) });
+    expect(mensajeDeInvitacion(base0)).toMatchObject({ mensaje: 'No hay operadores pendientes de invitar.' });
+  });
+  it('un error de preparación se propaga como error, nunca como éxito', async () => {
+    const { mensajeDeInvitacion } = await import('./invitacion_operador');
+    expect(mensajeDeInvitacion({ ...base0, error: 'No pude preparar.' })).toEqual({ ok: false, error: 'No pude preparar.' });
+  });
+});

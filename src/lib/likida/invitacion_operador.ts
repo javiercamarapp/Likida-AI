@@ -169,6 +169,41 @@ async function soltarReclamo(tenantId: string, id: string, fallo: string | null)
   if (error) logger.warn('invitacion_operador.reclamo_no_soltado', { tenantId, operadorId: id, err: error.message });
 }
 
+export type EstadoInvitacion = 'enviada' | 'pendiente' | 'fallo';
+
+export interface InvitacionDeOperador {
+  estado: EstadoInvitacion;
+  /** Por qué canal salió (texto / botones / plantilla), si salió. */
+  via: string | null;
+  /** El motivo, si falló. */
+  fallo: string | null;
+}
+
+/** El estado de la invitación de cada operador de una página (UN `in(...)`).
+ *  `reclamada` —un envío en curso o colgado— se cuenta como pendiente: todavía no
+ *  hay constancia de que haya salido. Falla cerrado: sin poder leer, lanza. */
+export async function estadoInvitaciones(tenantId: string, ids: string[]): Promise<Map<string, InvitacionDeOperador>> {
+  const validos = [...new Set(ids.filter(esUuidValido))];
+  const salida = new Map<string, InvitacionDeOperador>();
+  if (validos.length === 0) return salida;
+  const { data, error } = await acotada(
+    supabaseAdmin().from('operador')
+      .select('id, invitacion_enviada_en, invitacion_via, invitacion_fallo, invitacion_fallo_en')
+      .eq('tenant_id', tenantId).in('id', validos),
+    'estadoInvitaciones',
+  );
+  if (error) throw new Error(`estadoInvitaciones: ${error.message}`);
+  for (const f of (data ?? []) as Array<Record<string, unknown>>) {
+    const via = typeof f.invitacion_via === 'string' ? f.invitacion_via : null;
+    const enviada = f.invitacion_enviada_en != null && via !== null && via !== 'reclamada';
+    const fallo = typeof f.invitacion_fallo === 'string' && f.invitacion_fallo !== '' ? f.invitacion_fallo : null;
+    salida.set(String(f.id), enviada
+      ? { estado: 'enviada', via, fallo: null }
+      : fallo ? { estado: 'fallo', via: null, fallo } : { estado: 'pendiente', via: null, fallo: null });
+  }
+  return salida;
+}
+
 async function nombreDeLaFlota(tenantId: string): Promise<string> {
   const { data, error } = await acotada(
     supabaseAdmin().from('tenant').select('nombre').eq('id', tenantId).maybeSingle(),
@@ -268,4 +303,51 @@ export async function invitarOperadores(
     tenantId, modo: modo.tipo, enviadas: resultado.enviadas, fallidas: resultado.fallidas.length, saltadas: resultado.saltadas,
   });
   return resultado;
+}
+
+/**
+ * Reintenta a los que tienen un fallo vigente (el teléfono se corrigió, o Meta
+ * ya los acepta). Elige hasta `LIMITE_POR_LLAMADA` con fallo y los manda por la
+ * vía de ids, que SÍ reclama a quien tiene fallo (a diferencia de «pendientes»).
+ */
+export async function reintentarFallidas(
+  tenantId: string,
+  opciones: { alcance: AlcancePatio; actor?: { id?: string; email?: string }; ahora?: Date },
+): Promise<ResultadoInvitacion> {
+  let q = supabaseAdmin().from('operador').select('id').eq('tenant_id', tenantId).eq('activo', true)
+    .not('invitacion_fallo_en', 'is', null).order('invitacion_fallo_en').order('id').limit(LIMITE_POR_LLAMADA);
+  if (opciones.alcance.tipo === 'patio') q = q.eq('terminal_id', opciones.alcance.terminalId);
+  const { data, error } = await acotada(q, 'reintentarFallidas.ids');
+  if (error) {
+    logger.error('invitacion_operador.reintento_ilegible', { tenantId, err: error.message });
+    return { enviadas: 0, fallidas: [], pendientesRestantes: 0, saltadas: 0, error: 'No pude leer a quién reintentar. Vuelve a intentar.' };
+  }
+  const ids = ((data ?? []) as Array<{ id: unknown }>).map((f) => String(f.id));
+  if (ids.length === 0) return { enviadas: 0, fallidas: [], pendientesRestantes: 0, saltadas: 0 };
+  return invitarOperadores(tenantId, { ids, alcance: opciones.alcance, actor: opciones.actor, ahora: opciones.ahora });
+}
+
+/**
+ * El mensaje que la pantalla enseña tras un envío, dicho con lo que PASÓ y no con
+ * lo que se pidió: «se enviaron 38», «2 no salieron», «quedan 120 pendientes».
+ * PURA.
+ */
+export function mensajeDeInvitacion(r: ResultadoInvitacion):
+  | { ok: true; mensaje: string; fallidas: FalloInvitacion[] }
+  | { ok: false; error: string } {
+  if (r.error) return { ok: false, error: r.error };
+  if (r.enviadas === 0 && r.fallidas.length === 0) {
+    return {
+      ok: true, fallidas: [],
+      mensaje: r.saltadas > 0
+        ? 'No había nada que invitar: ya estaban invitados, están de baja o no son de tu patio.'
+        : 'No hay operadores pendientes de invitar.',
+    };
+  }
+  const partes = [`Se enviaron ${r.enviadas} ${r.enviadas === 1 ? 'invitación' : 'invitaciones'}`];
+  if (r.fallidas.length > 0) partes.push(`${r.fallidas.length} no ${r.fallidas.length === 1 ? 'salió' : 'salieron'}`);
+  if (r.saltadas > 0) partes.push(`${r.saltadas} ya estaban invitados`);
+  let mensaje = `${partes.join('; ')}.`;
+  if (r.pendientesRestantes > 0) mensaje += ` Quedan ${r.pendientesRestantes} por invitar: vuelve a enviar para seguir.`;
+  return { ok: true, mensaje, fallidas: r.fallidas };
 }
