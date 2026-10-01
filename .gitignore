@@ -34,6 +34,10 @@ pruebas-manuales/imagenes/
 # reales de prospectos. Vive fuera del repo, en likida-archivo-privado/
 # (16-ago-2026, para lectura externa tipo VC/diligence).
 docs/auditoria-*/
+# Cartera de prospectos de la fase de outreach (correos, teléfonos y nombres de
+# terceros, LFPDPPP). NUNCA se rastrea: sin consentimiento de esas personas no
+# puede vivir en un repo público. Prueba de CI: sin_datos_privados_rastreados.test.ts.
+staging_canacar/
 docs/comercial/
 docs/REPORTE-ESTADO.md
 PROMPT-SESION-NUEVA.md

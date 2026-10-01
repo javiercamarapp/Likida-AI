@@ -135,14 +135,88 @@ describe('el techo diario que llega a la RPC sale de la FLOTA, no de una env glo
     expect(budget.origenTope).toBe('plan');
   });
 
-  it('sin llave y sin plan (o plan sin límite) queda el piso de siempre', async () => {
+  it('sin llave y sin suscripción (o plan cuyo embed no vino) queda el piso de siempre', async () => {
     vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_USD', '7');
     tablas.set('tenant', { data: { config: null }, error: null });
-    tablas.set('suscripcion', { data: { plan: { limite_viajes_mes: null } }, error: null });
+    tablas.set('suscripcion', { data: null, error: null });
     const budget = createLlmBudget('g3m', RUN, 'interactivo');
     await reserveLlmBudget(budget, 0.05);
     expect(reservaEnviada()?.p_tope_tenant_usd).toBe(7);
     expect(budget.origenTope).toBe('piso');
+    olvidarTopesDeTenant();
+    rpc.mockClear();
+    tablas.set('suscripcion', { data: { plan: null }, error: null });
+    const b2 = createLlmBudget('g3m', RUN, 'interactivo');
+    await reserveLlmBudget(b2, 0.05);
+    expect(reservaEnviada()?.p_tope_tenant_usd).toBe(7);
+  });
+
+  // AUDITORÍA OLA 1, #17: el plan 'empresa' se inserta con limite_viajes_mes NULL
+  // (0052) y ese NULL caía al piso de $5/día — ~27 viajes de IA al día para una
+  // flota de 250 camiones. Ilimitado no es «sin dato».
+  describe('plan sin límite de viajes (empresa): el techo es el de escala, no el piso', () => {
+    it('limite_viajes_mes NULL deriva el techo por defecto y se rotula "plan"', async () => {
+      vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_USD', '5');
+      tablas.set('tenant', { data: { config: null }, error: null });
+      tablas.set('suscripcion', { data: { plan: { limite_viajes_mes: null } }, error: null });
+      const budget = createLlmBudget('innovativos', RUN, 'interactivo');
+      await reserveLlmBudget(budget, 0.05);
+      const techoEscala = Number((500 * COSTO_ESTIMADO_USD.viajeCompleto * 1.5).toFixed(2));
+      expect(techoEscala).toBeGreaterThan(100);
+      expect(reservaEnviada()?.p_tope_tenant_usd).toBeCloseTo(techoEscala, 4);
+      expect(budget.origenTope).toBe('plan');
+      // y entra con holgura a los ~5,000 viajes/mes de una flota de 250 camiones
+      expect(techoEscala).toBeGreaterThan((5_000 / 30) * COSTO_ESTIMADO_USD.viajeCompleto);
+    });
+
+    it('el plan puede venir como arreglo de uno (embed de PostgREST)', async () => {
+      vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_USD', '5');
+      tablas.set('tenant', { data: { config: null }, error: null });
+      tablas.set('suscripcion', { data: { plan: [{ limite_viajes_mes: null }] }, error: null });
+      const r = await topeDiarioDelTenant('emp-arreglo');
+      expect(r.origen).toBe('plan');
+      expect(r.topeUsd).toBeGreaterThan(100);
+    });
+
+    it('respeta LIKIDA_LLM_TENANT_DAILY_BUDGET_MAX_USD si se fijó', async () => {
+      vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_USD', '5');
+      vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_MAX_USD', '80');
+      tablas.set('tenant', { data: { config: null }, error: null });
+      tablas.set('suscripcion', { data: { plan: { limite_viajes_mes: null } }, error: null });
+      expect((await topeDiarioDelTenant('emp-max')).topeUsd).toBe(80);
+    });
+
+    it('nunca queda por debajo del piso aunque el MAX sea menor', async () => {
+      vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_USD', '50');
+      vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_MAX_USD', '10');
+      tablas.set('tenant', { data: { config: null }, error: null });
+      tablas.set('suscripcion', { data: { plan: { limite_viajes_mes: null } }, error: null });
+      expect((await topeDiarioDelTenant('emp-piso')).topeUsd).toBe(50);
+    });
+
+    it('la llave declarada de la flota sigue ganando al plan ilimitado', async () => {
+      tablas.set('tenant', { data: { config: { [LLAVE_PRESUPUESTO_LLM_TENANT]: 250 } }, error: null });
+      tablas.set('suscripcion', { data: { plan: { limite_viajes_mes: null } }, error: null });
+      const r = await topeDiarioDelTenant('emp-llave');
+      expect(r).toEqual({ topeUsd: 250, origen: 'tenant' });
+    });
+
+    it('un plan con límite 0 o inválido NO es ilimitado: sigue en el piso', async () => {
+      vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_USD', '5');
+      tablas.set('tenant', { data: { config: null }, error: null });
+      tablas.set('suscripcion', { data: { plan: { limite_viajes_mes: 0 } }, error: null });
+      expect(await topeDiarioDelTenant('emp-cero')).toEqual({ topeUsd: 5, origen: 'piso' });
+    });
+
+    it('con el techo de escala, el reparto por propósito deja a ocr_lote y fondo más que el piso', async () => {
+      vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_USD', '5');
+      tablas.set('tenant', { data: { config: null }, error: null });
+      tablas.set('suscripcion', { data: { plan: { limite_viajes_mes: null } }, error: null });
+      const budget = createLlmBudget('emp-lote', RUN, 'ocr_lote');
+      await reserveLlmBudget(budget, 0.05);
+      // la reserva del camino interactivo (0.4 × techo) ya no es $2 sino ~$55
+      expect(reservaEnviada()!.p_reserva_interactivo_usd).toBeGreaterThan(40);
+    });
   });
 
   it('una llave inválida (texto, cero, negativo) no cuenta: cae al plan/piso, no a NaN', async () => {

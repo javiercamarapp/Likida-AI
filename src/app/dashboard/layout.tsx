@@ -5,6 +5,7 @@ import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { topeDiaUsd, gastoChatHoyUsd } from '@/app/api/dashboard/chat/tope';
 import DashboardChrome from './chrome';
 import { PulsoProducto } from './pulso-producto';
+import { AvisoLegalPendiente } from './aviso-legal';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +53,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           ruta. El servidor decide tenant (sesión) y pantalla (catálogo
           cerrado); el superadmin en preview se descarta allá. */}
       <PulsoProducto />
+      <AvisoLegalPendiente sesion={sesion} />
       {children}
     </DashboardChrome>
   );

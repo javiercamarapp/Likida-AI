@@ -82,13 +82,19 @@ describe('el arranque comprueba que la liga del aviso EXISTE, no solo que esté 
     expect(logger.error).not.toHaveBeenCalled();
   });
 
-  it('sin razón social ni domicilio avisa de lo que de verdad bloquea', async () => {
-    // `getDatosResponsable` devuelve null y el tratamiento se detiene en el
-    // primer mensaje: eso es más grave que una liga rota y merece su propio texto.
+  it('un tenant que no existe se dice y no se sondea nada', async () => {
     getDatosResponsable.mockResolvedValue(null);
     await verificarAvisoDePrivacidad();
     expect(sondearAvisoIntegral).not.toHaveBeenCalled();
-    expect(String(logger.error.mock.calls.at(-1)?.[1]?.msg ?? '')).toContain('razon_social');
+    expect(String(logger.error.mock.calls.at(-1)?.[1]?.msg ?? '')).toContain('DEMO_TENANT_ID');
+  });
+
+  it('sin razón social ni domicilio YA NO bloquea (auditoría ola 1, #10): avisa con warn y sigue al sondeo de la liga', async () => {
+    getDatosResponsable.mockResolvedValue({ razonSocial: '', domicilio: '', urlAvisoIntegral: 'https://app.likida.ai/aviso/x', contactoPrivacidad: null });
+    sondearAvisoIntegral.mockResolvedValue({ abre: true });
+    await verificarAvisoDePrivacidad();
+    expect(String(logger.warn.mock.calls.find((c) => c[0] === 'startup.aviso_privacidad')?.[1]?.msg ?? '')).toContain('no se bloquea');
+    expect(sondearAvisoIntegral).toHaveBeenCalled();
   });
 });
 

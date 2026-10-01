@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
+import { sanearPayloadWhatsApp } from '@/lib/meta/plantilla_payload';
 import { reclamarSalidasWhatsApp, finalizarSalidaWhatsApp, reconciliarReceiptsWhatsApp, purgarReceiptsWhatsApp } from '@/lib/likida/wa_outbox';
 import { conPool } from '@/lib/likida/lotes';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { alertarOperador } from '@/lib/observability/alerta';
-import { esReintentableMeta } from '@/lib/meta/client';
+import { esReintentableMeta, esTokenMetaInvalido, sondearTokenWhatsApp, avisarTokenVencido } from '@/lib/meta/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -106,6 +107,22 @@ export async function GET(req: Request) {
     }, { status: 500 });
   }
 
+  // AUDITORÍA OLA 1, #27: el token VENCIDO tampoco quema intentos. Se sondea
+  // (GET barato, cacheado 5 min) ANTES de reclamar: con el token malo no se toca
+  // nada —lo encolado espera— y se avisa a Javier (piso de una hora en
+  // `alertarOperador`). Un sondeo `indeterminado` (Meta caído, red) NO bloquea:
+  // no es un veredicto sobre el token, y el envío real dirá la verdad.
+  const sondeo = await sondearTokenWhatsApp();
+  if (sondeo.estado === 'vencido') {
+    await avisarTokenVencido('sondeo', sondeo.codigo, sondeo.status);
+    await registrarLatido('wa-outbox', 'fallo', { codigo: 'token_vencido' });
+    return NextResponse.json({
+      corrio: false,
+      error: 'El token de WhatsApp está vencido (Meta contesta 190): el outbox no se drena y nada se reclama hasta que se renueve.',
+      codigo: 'token_vencido',
+    }, { status: 500 });
+  }
+
   try {
     const fallosBackstop: string[] = [];
     try {
@@ -129,14 +146,17 @@ export async function GET(req: Request) {
       try {
         const r = await fetch(`${GRAPH}/${phoneId}/messages`, {
           method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(s.payload), signal: AbortSignal.timeout(10_000),
+          // Última defensa del 132018: filas viejas del outbox con parámetros crudos.
+          body: JSON.stringify(sanearPayloadWhatsApp(s.payload)), signal: AbortSignal.timeout(10_000),
         });
         const body = await r.text();
         if (!r.ok) {
           fallidas++;
           let metaCodigo: number | undefined;
           try { metaCodigo = Number((JSON.parse(body) as { error?: { code?: number } }).error?.code); } catch { /* cuerpo no JSON */ }
-          const retryable = esReintentableMeta(Number.isFinite(metaCodigo) ? metaCodigo : undefined, r.status);
+          const codigoMeta = Number.isFinite(metaCodigo) ? metaCodigo : undefined;
+          // El 190 NO es terminal para la fila: es del token, y se arregla renovándolo.
+          const retryable = esReintentableMeta(codigoMeta, r.status) || esTokenMetaInvalido(codigoMeta, r.status);
           const codigo = retryable ? 'retryable:' : 'terminal:';
           await finalizarYAvisarSiMurio(s, undefined, `${codigo}HTTP ${r.status}: ${body.slice(0, 300)}`);
           return;

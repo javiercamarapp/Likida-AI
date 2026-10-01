@@ -114,6 +114,11 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
       const r = await ejecutarCancelacionArco(tenantEfectivo, solicitudId);
       revalidatePath(RUTA);
       if (!r.ok) return { error: `No se ejecutó la cancelación: ${r.motivo}` };
+      // 0442: titular que es cuenta de oficina — si el login de Auth no se pudo
+      // borrar, se DICE (quedó baneado), no se afirma un borrado que no ocurrió.
+      if (r.errorAuth) {
+        return { error: `La cuenta quedó anonimizada y dada de baja, pero el acceso de inicio de sesión NO se pudo borrar (${r.errorAuth}); quedó bloqueado (ban permanente). Pide a soporte que lo borre de Auth.` };
+      }
       return r.avisada
         ? { ok: `${ALCANCE_CANCELACION} Se confirmó por WhatsApp.` }
         : { ok: `${ALCANCE_CANCELACION} La confirmación NO salió por WhatsApp${r.errorAviso ? ` (${r.errorAviso})` : ''} — entrégasela por otro canal.` };
@@ -261,6 +266,10 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
                               la documentación fiscal, los eventos de cámara y telemetría ligados a su persona (180 días, o 365
                               si fueron graves), su contacto de emergencia y su registro de jornada laboral; esas categorías
                               requieren revisión con el responsable de privacidad. No se puede deshacer la eliminación de conversaciones.
+                              Si el titular es una cuenta de oficina (dueño, contador, encargado), se sustituyen su nombre y
+                              su correo, se da de baja y se borra su acceso, sus conversaciones de WhatsApp, del analista y del
+                              copiloto; se conserva la bitácora de auditoría. No se ejecuta si es el único dueño activo de la
+                              flota: nombra a otro dueño primero.
                             </span>
                           </div>
                         ) : (

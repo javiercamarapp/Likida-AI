@@ -198,6 +198,10 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0354_cierre_insumos_hash_v2.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0370_liquidacion_externa.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0375_peajes_conciliacion.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0440_mcp_oauth_cliente_estado.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0441_presupuesto_llm_indice_por_run.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0442_arco_cancelacion_cuenta_de_oficina.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0443_aceptacion_legal.sql
           PGUSER=postgres bash supabase/tests/0375_peajes_claim_concurrencia.sh localhost 5432 postgres
           PGUSER=postgres bash supabase/tests/0341_gps_alerta_minima_concurrencia.sh localhost 5432 postgres
           PGUSER=postgres bash supabase/tests/0360_ventana_wa.sh localhost 5432 postgres

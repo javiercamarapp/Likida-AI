@@ -295,9 +295,16 @@ export async function verificarAvisoDePrivacidad(): Promise<void> {
     const datos = await getDatosResponsable(tenantId);
     if (!datos) {
       logger.error('startup.aviso_privacidad', {
-        msg: 'El tenant no tiene razón social o domicilio fiscal, así que NO se puede armar el aviso de privacidad y el tratamiento de datos se detiene en el primer mensaje. Captura `razon_social` y `domicilio_fiscal` en la tabla `tenant`.',
+        msg: 'DEMO_TENANT_ID no corresponde a ningún tenant: no se puede armar el aviso de privacidad ni resolver a quién se le manda.',
       });
       return;
+    }
+    if (!datos.razonSocial?.trim() || !datos.domicilio?.trim()) {
+      // Auditoría ola 1, #10: ya NO bloquea. El aviso sale con esos datos dichos
+      // como pendientes; aquí queda el diagnóstico de qué le falta capturar a la flota.
+      logger.warn('startup.aviso_privacidad', {
+        msg: 'El tenant no tiene razón social o domicilio fiscal capturados: el aviso SALE igual, con esos datos señalados como pendientes (el chofer no se bloquea). El dueño los captura en /dashboard/legal.',
+      });
     }
 
     const sondeo = await sondearAvisoIntegral(datos.urlAvisoIntegral);

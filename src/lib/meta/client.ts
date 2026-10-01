@@ -5,6 +5,7 @@
 
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
+import { alertarOperador } from '@/lib/observability/alerta';
 import {
   encolarSalidaWhatsApp, encolarSalidaWhatsAppDedupe, RETRASO_AMBIGUO_SEGUNDOS,
   type SalidaOutboxDedupe,
@@ -199,6 +200,96 @@ export function esReintentableMeta(codigo?: number, status?: number): boolean {
   return false;
 }
 
+// ── EL TOKEN VENCIDO NO PUEDE MORIR EN SILENCIO (auditoría ola 1, #27) ──────
+//
+// `WHATSAPP_ACCESS_TOKEN` caduca (un token de usuario normal dura horas o ~60 días;
+// el permanente es el de usuario de sistema). Meta contesta 190 (OAuthException) y,
+// como 190 NO está en CODIGOS_META_REINTENTABLES, cada salida se PERDÍA con un
+// logger.error que solo llega a Sentry: cierres, PDF, avisos y escalaciones a 250
+// choferes se descartaban sin cola ni aviso hasta que alguien miraba Sentry.
+//
+// Tres piezas:
+//   1. `esTokenMetaInvalido`: 190 (o un 401 sin código) = token vencido/revocado.
+//   2. `alFallarPorToken`: en CUALQUIER envío que reciba 190, avisa al operador
+//      (`alertarOperador`, con su piso de una hora por evento) y ENCOLA la salida
+//      en lugar de tirarla — espera en `wa_outbox`.
+//   3. `sondearTokenWhatsApp`: un GET barato a `/{phone-number-id}` que el cron del
+//      outbox corre ANTES de reclamar. Con el token malo NO se reclama nada (así no
+//      se queman intentos de las filas: la condición no es de la fila) y se alerta;
+//      cuando se renueva el token, la cola se drena sola.
+
+/** 190 = token de acceso inválido/vencido. Un 401 sin código también lo es. */
+export function esTokenMetaInvalido(codigo?: number, status?: number): boolean {
+  return codigo === 190 || (codigo === undefined && status === 401);
+}
+
+/** Reintento de una salida que chocó con el token vencido: largo, porque nada se
+ *  arregla en un minuto; el cron del outbox además ni la reclama con el token malo. */
+export const RETRASO_TOKEN_SEGUNDOS = 600;
+
+async function alFallarPorToken(
+  payload: Record<string, unknown>, codigo: number | undefined, status: number | undefined, crudo: string,
+): Promise<void> {
+  await encolarSalidaWhatsApp(payload, `token:HTTP ${status ?? '?'}: ${crudo}`, RETRASO_TOKEN_SEGUNDOS);
+  await avisarTokenVencido('envio', codigo, status);
+}
+
+/** El aviso a Javier. NUNCA lanza (`alertarOperador` ya no lo hace) y el piso de una
+ *  hora por evento es de `alerta.ts`: cientos de envíos fallidos = UN correo. */
+export async function avisarTokenVencido(origen: 'envio' | 'sondeo', codigo?: number, status?: number): Promise<void> {
+  logger.error('wa.token_vencido', { origen, codigo, status });
+  await alertarOperador('whatsapp.token_vencido', {
+    error: 'El token de acceso de WhatsApp (WHATSAPP_ACCESS_TOKEN) está vencido o fue revocado: Meta contesta 190. Mientras no se renueve NO sale ningún mensaje a choferes, jefes ni clientes (las salidas quedan en cola). Genera un token de USUARIO DEL SISTEMA permanente en Meta Business Manager y ponlo en Vercel.',
+    codigo: String(codigo ?? status ?? 'token_vencido'),
+    origen,
+  });
+}
+
+export type EstadoTokenWhatsApp =
+  | { estado: 'ok' }
+  | { estado: 'vencido'; codigo?: number; status?: number }
+  | { estado: 'sin_config' }
+  | { estado: 'indeterminado'; detalle: string };
+
+const TTL_SONDEO_MS = 5 * 60_000;
+let sondeoCache: { hasta: number; resultado: EstadoTokenWhatsApp } | null = null;
+/** Para pruebas, y para que renovar el token se note en la siguiente corrida. */
+export function olvidarSondeoToken(): void { sondeoCache = null; }
+
+/**
+ * ¿El token sirve? `GET /{phone-number-id}?fields=id` es la lectura más barata de
+ * la Graph API y exige un token válido. Se cachea 5 min (el cron del outbox corre
+ * cada minuto; no hay por qué preguntarle a Meta 1,440 veces al día). Un fallo de
+ * RED o un 5xx es `indeterminado` y NO se cachea ni se toma por token vencido: una
+ * caída de Meta no es un token malo. Nunca lanza.
+ */
+export async function sondearTokenWhatsApp(ahora: number = Date.now()): Promise<EstadoTokenWhatsApp> {
+  const t = process.env.WHATSAPP_ACCESS_TOKEN;
+  const id = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!t || !id) return { estado: 'sin_config' };
+  if (sondeoCache && sondeoCache.hasta > ahora) return sondeoCache.resultado;
+  try {
+    const res = await fetch(`${GRAPH}/${encodeURIComponent(id)}?fields=id`, {
+      headers: { Authorization: `Bearer ${t}` },
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    });
+    if (res.ok) {
+      sondeoCache = { hasta: ahora + TTL_SONDEO_MS, resultado: { estado: 'ok' } };
+      return sondeoCache.resultado;
+    }
+    const crudo = await res.text().catch(() => '');
+    const { codigo } = errorDeMeta(crudo);
+    if (esTokenMetaInvalido(codigo, res.status)) {
+      sondeoCache = { hasta: ahora + TTL_SONDEO_MS, resultado: { estado: 'vencido', codigo, status: res.status } };
+      return sondeoCache.resultado;
+    }
+    // 4xx de otra índole (permisos del recurso) o 5xx: no es un veredicto sobre el token.
+    return { estado: 'indeterminado', detalle: `HTTP ${res.status}${codigo ? ` (código ${codigo})` : ''}` };
+  } catch (e) {
+    return { estado: 'indeterminado', detalle: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /**
  * Manda texto libre con el MISMO contrato que `sendTemplate` y `sendDocument`
  * (auditoría prod, RES-18): `{ok:false, error, codigo}` y NUNCA lanza.
@@ -241,7 +332,8 @@ export async function enviarTexto(to: string, body: string): Promise<EnvioWhatsA
     const crudo = await res.text().catch(() => '');
     const { codigo, mensaje } = errorDeMeta(crudo);
     logger.error('wa.sendText', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
-    if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+    if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo);
+    else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
     return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
   }
   // El ÉXITO también deja rastro. Sin esta línea, "se envió" y "nunca se llamó"
@@ -388,7 +480,8 @@ export async function enviarBotones(to: string, cuerpo: string, botones: BotonAc
       const crudo = await res.text().catch(() => '');
       const { codigo, mensaje } = errorDeMeta(crudo);
       logger.error('wa.sendButtons', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
-      if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+      if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo);
+    else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
       return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
     }
     const id = await idDeRespuesta(res);
@@ -449,7 +542,8 @@ export async function enviarSolicitudUbicacion(to: string, cuerpo: string): Prom
     const crudo = await res.text().catch(() => '');
     const { codigo, mensaje } = errorDeMeta(crudo);
     logger.error('wa.solicitudUbicacion', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
-    if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+    if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo);
+    else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
     return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
   }
   const id = await idDeRespuesta(res);
@@ -474,15 +568,20 @@ export async function encolarBotonesWhatsApp(
   // Las alertas GPS pueden iniciar una conversación fuera de la ventana de
   // 24 h: una plantilla aprobada es obligatoria. La quick reply conserva el
   // acuse semántico aunque Meta ya no acepte un interactive de sesión.
+  // El cuerpo lleva saltos de línea (las alertas se arman en párrafos) y Meta
+  // rechaza con 132018 (terminal) un parámetro con \n, tabs o >4 espacios: el
+  // armador central los aplana y rechaza vacío/largo ANTES de encolar.
+  const armado = armarComponentesPlantilla({
+    parametros: [cuerpo],
+    botones: [{ tipo: 'respuesta_rapida', indice: 0, payload: botones[0].id }],
+  });
+  if (!armado.ok) {
+    logger.error('wa.encolarButtons.invalido', { error: armado.error });
+    return null;
+  }
   const payload = {
     messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'template',
-    template: {
-      name: 'gps_alerta_critica', language: { code: 'es_MX' },
-      components: [
-        { type: 'body', parameters: [{ type: 'text', text: cuerpo }] },
-        { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: botones[0].id }] },
-      ],
-    },
+    template: { name: 'gps_alerta_critica', language: { code: 'es_MX' }, components: armado.componentes },
   };
   return encolarSalidaWhatsAppDedupe(dedupeKey, payload, 'alerta GPS pendiente de entrega');
 }
@@ -548,7 +647,8 @@ export async function sendTemplate(
     const crudo = await res.text().catch(() => '');
     const { codigo, mensaje } = errorDeMeta(crudo);
     logger.error('wa.sendTemplate', { plantilla, para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
-    if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+    if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo);
+    else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
     return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo };
   }
 
@@ -639,7 +739,8 @@ export async function sendDocument(
     const crudo = await res.text().catch(() => '');
     const { codigo, mensaje } = errorDeMeta(crudo);
     logger.error('wa.sendDocument', { filename, para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
-    if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+    if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo);
+    else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
     return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo };
   }
 
@@ -828,12 +929,16 @@ export async function enviarRespuestaArco(telefono: string, respuesta: string): 
       const j = JSON.parse(crudo) as { error?: { code?: number } };
       const FUERA_VENTANA = [131047, 131026, 131042];
       if (j.error?.code && FUERA_VENTANA.includes(j.error.code)) {
+        // La respuesta ARCO suele traer saltos de línea: sin aplanar, Meta
+        // contesta 132018 y el titular nunca recibe su respuesta.
+        const armado = armarComponentesPlantilla({ parametros: ['la flota', respuesta] });
+        if (!armado.ok) {
+          logger.warn('arco.envio_plantilla_invalida', { para, error: armado.error });
+          return { ok: false, error: 'fuera de la ventana de 24h y la respuesta no cabe en la plantilla' };
+        }
         const tpl = await envia({
           type: 'template',
-          template: {
-            name: 'respuesta_arco_v2', language: { code: 'es' },
-            components: [{ type: 'body', parameters: [{ type: 'text', text: 'la flota' }, { type: 'text', text: respuesta }] }],
-          },
+          template: { name: 'respuesta_arco_v2', language: { code: 'es' }, components: armado.componentes },
         });
         if (tpl.ok) { logger.info('arco.envio_plantilla_ok', { para }); return { ok: true }; }
         const tplCrudo = await tpl.text().catch(() => '');

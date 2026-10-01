@@ -211,6 +211,25 @@ describe('cuadrarViaje', () => {
     expect(r.estatus).toBe('revisar');
   });
 
+  // AUDITORÍA OLA 1, #7 / criterio P36 del fiscalista: el 602 del SAT es AMBIGUO (un
+  // UUID, un RFC o un total mal leídos devuelven lo mismo que un comprobante que no
+  // existe). El texto que ve el contador y le llega al jefe NO acusa de «inexistente
+  // o fabricado» a un proveedor que puede ser legítimo: dice que NO SE PUDO CONFIRMAR.
+  it('602: el texto dice «no se pudo confirmar» y NO acusa de inexistente/fabricado', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v9b', anticipo: 1000, politica,
+      gastos: [g({ concepto: 'factura', monto: 1000, folio: 'F4', cfdiUuid: 'u4', estadoSat: 'no_encontrado' })],
+    });
+    const d = r.diferencias.find((x) => x.tipo === 'cfdi_no_encontrado')!;
+    expect(d.nota).toMatch(/no pudo confirmar/);
+    expect(d.nota).toMatch(/602/);
+    expect(d.nota).toMatch(/mal le[ií]dos/);
+    expect(d.nota).not.toMatch(/fabricad|inexistente|apócrif|falsific/i);
+    // El veredicto de dinero NO cambia con el texto: sigue sin tomarse como deducible.
+    expect(d.nota).toMatch(/no se toma como deducible/);
+    expect(r.estatus).toBe('revisar');
+  });
+
   // ME-5: un monto ≤ 0 no debe reducir el total ni sesgar la diferencia.
   it('ME-5: monto negativo no reduce el total y se marca monto_invalido', () => {
     const r = cuadrarViaje({

@@ -24,9 +24,9 @@
 // Enviador usa como lista de copias de la empresa.
 // ═══════════════════════════════════════════════════════════════════════════
 import { z } from 'zod';
-import { lookup } from 'node:dns/promises';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { esIpPublica, hostNoPublico } from '@/lib/http/destino_publico';
+import { hostNoPublico } from '@/lib/http/destino_publico';
+import { httpsPublico } from '@/lib/http/https_publico';
 import { acotada } from '../presupuesto';
 import { DatoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
@@ -152,102 +152,58 @@ export function enlacesInstitucionales(html: string, base: URL): string[] {
 /** Redirects máximos que se siguen — validando el host de CADA salto. */
 const MAX_REDIRECTS = 3;
 
-/** Resuelve el host y exige que TODAS las direcciones que el DNS devuelva
- *  sean públicas (c5-11 / ARQ-M3, auditoría 28): antes esta función tenía su
- *  propia lista de redes privadas escrita a mano, con reglas distintas a
- *  `lib/http/destino_publico.ts` (la que ya usa `conectores/credenciales.ts`)
- *  — `100.64.0.1` (CGNAT) pasaba aquí como pública y era privada allá;
- *  `::ffff:169.254.169.254` (metadatos del cloud, mapeada) y `64:ff9b::7f00:1`
- *  (NAT64 de loopback) pasaban aquí como públicas y la otra implementación
- *  las rechazaba. Ahora hay UNA sola respuesta: `hostNoPublico`/`esIpPublica`.
- *  Mínimo elegido de las dos opciones del prompt (a): sigue resolviendo con
- *  `lookup` y validando ANTES del `fetch`, ahora exigiendo `esIpPublica` en
- *  TODAS las direcciones (`all: true`), no solo la primera — pero el `fetch`
- *  de `bajarPagina` vuelve a resolver por su cuenta, así que la ventana de
- *  rebinding entre este lookup y el socket real que abre `fetch` SIGUE
- *  ABIERTA. Cerrarla del todo exigiría enrutar por `httpsPublico` (que valida
- *  dentro del socket, como hace `credenciales.ts`), pero eso solo cubre
- *  `https:` y no admite un límite de bytes distinto al suyo (8 MiB vs. los
- *  300 KB de `MAX_BYTES_PAGINA`) sin tocar `lib/http/*` — fuera del alcance
- *  de este lote (ARQ-M3), documentado para quien retome el rebinding. Un DNS
- *  que no contesta cuenta como no-permitido: fail closed. Exportada para su
- *  prueba: es la frontera SSRF que `bajarPagina` consulta antes de cada
- *  `fetch` (incluido cada salto de redirect). */
-export async function hostPublico(hostname: string): Promise<boolean> {
-  if (hostNoPublico(hostname)) return false;
-  const limpio = hostname.replace(/^\[|\]$/g, '');
-  try {
-    const direcciones = await lookup(limpio, { all: true });
-    return direcciones.length > 0 && direcciones.every((d) => esIpPublica(d.address));
-  } catch {
-    return false;
-  }
-}
+/** Tipos de contenido que valen la lectura (el resto no se descarga). */
+const TIPOS_PAGINA = /text\/html|text\/plain|application\/xhtml/i;
 
-/** Lee el cuerpo POR STREAM con corte real en `maxBytes` (c5-11: el
- *  `r.text()` anterior materializaba el cuerpo ENTERO en memoria y el tope
- *  de 300KB solo recortaba después — un servidor rápido metía cientos de MB
- *  dentro de los 8s). */
-async function leerAcotado(r: Response, maxBytes: number): Promise<string> {
-  if (!r.body) return '';
-  const lector = r.body.getReader();
-  const partes: Uint8Array[] = [];
-  let total = 0;
+/**
+ * Baja UNA página y, si responde con redirect, sigue hasta MAX_REDIRECTS saltos
+ * validando CADA salto.
+ *
+ * SSRF / DNS REBINDING (auditoría ola 1, #3 — antes ABIERTO): esta función
+ * resolvía el DNS con `lookup`, validaba, y luego `fetch` volvía a resolver por
+ * su cuenta; un dominio hostil con TTL 0 contestaba una IP pública al
+ * chequeo y `169.254.169.254` o `127.0.0.1` al socket. Ahora NO hay un chequeo
+ * aparte: la petición va por `httpsPublico` (lib/http/https_publico.ts), cuyo
+ * `lookup` valida TODAS las direcciones (`esIpPublica`) y es el MISMO que
+ * entrega las IP al socket — no existe una segunda resolución que cambiar.
+ * Conserva los mismos topes que antes: 300 KB (con corte real del stream, sin
+ * materializar el resto), 8 s, sin credenciales en la URL, sin redirects
+ * automáticos (cada `Location` se vuelve a pedir por el mismo camino validado)
+ * y solo text/html|plain|xhtml. Un DNS que no contesta o una dirección privada
+ * hacen que `httpsPublico` lance: fail closed, la página cuenta como caída.
+ */
+export async function bajarPagina(url: string): Promise<Pagina | null> {
   try {
-    for (;;) {
-      const { done, value } = await lector.read();
-      if (done) break;
-      total += value.byteLength;
-      partes.push(value);
-      if (total >= maxBytes) {
-        await lector.cancel();
-        break;
-      }
-    }
-  } finally {
-    lector.releaseLock();
-  }
-  const combinado = new Uint8Array(Math.min(total, maxBytes));
-  let offset = 0;
-  for (const parte of partes) {
-    const cabe = Math.min(parte.byteLength, combinado.length - offset);
-    if (cabe <= 0) break;
-    combinado.set(parte.subarray(0, cabe), offset);
-    offset += cabe;
-  }
-  return new TextDecoder().decode(combinado);
-}
-
-async function bajarPagina(url: string): Promise<Pagina | null> {
-  try {
-    // Redirects A MANO (c5-11): `redirect: 'follow'` no deja validar los
-    // saltos — un sitio inocente podía redirigir a la red interna.
     let actual = new URL(url);
     for (let salto = 0; salto <= MAX_REDIRECTS; salto++) {
       if (!/^https?:$/.test(actual.protocol)) return null;
-      if (!(await hostPublico(actual.hostname))) {
+      if (hostNoPublico(actual.hostname)) {
         logger.warn('investigador.host_no_publico', { url: actual.origin });
         return null;
       }
-      const r = await fetch(actual.href, {
-        signal: AbortSignal.timeout(TIMEOUT_PAGINA_MS),
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LikidaBot/1.0; +https://likida.ai)' },
-        redirect: 'manual',
-      });
-      if (r.status >= 300 && r.status < 400) {
-        const destino = r.headers.get('location');
+      const r = await httpsPublico({
+        url: actual.href,
+        metodo: 'GET',
+        encabezados: { 'User-Agent': 'Mozilla/5.0 (compatible; LikidaBot/1.0; +https://likida.ai)' },
+        permitirHttp: true,
+        maxBytes: MAX_BYTES_PAGINA,
+        truncar: true,
+        // Un redirect no trae cuerpo que leer; un tipo ajeno (PDF, imagen) tampoco.
+        aceptar: (estado, enc) =>
+          estado >= 300 && estado < 400 ? false : estado >= 200 && estado < 300 && TIPOS_PAGINA.test(enc['content-type'] ?? ''),
+      }, TIMEOUT_PAGINA_MS);
+      if (r.estado >= 300 && r.estado < 400) {
+        const destino = r.encabezados['location'];
         if (!destino || salto === MAX_REDIRECTS) return null;
         actual = new URL(destino, actual);
         continue;
       }
-      if (!r.ok) {
-        logger.info('investigador.pagina_no_ok', { url: actual.href, status: r.status });
+      if (r.estado < 200 || r.estado >= 300) {
+        logger.info('investigador.pagina_no_ok', { url: actual.href, status: r.estado });
         return null;
       }
-      const tipo = r.headers.get('content-type') ?? '';
-      if (!/text\/html|text\/plain|application\/xhtml/i.test(tipo)) return null;
-      const cuerpo = await leerAcotado(r, MAX_BYTES_PAGINA);
-      return { url: actual.href, texto: cuerpo };
+      if (!TIPOS_PAGINA.test(r.encabezados['content-type'] ?? '')) return null;
+      return { url: actual.href, texto: r.cuerpo };
     }
     return null;
   } catch (e) {
