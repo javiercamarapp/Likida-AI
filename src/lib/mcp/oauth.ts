@@ -94,6 +94,83 @@ export function redirectUriAceptable(cruda: string): boolean {
   return false;
 }
 
+// ── Anfitriones conocidos y estado de aprobación del cliente ───────────────
+//
+// AUDITORÍA OLA 1, #2 (consent phishing). El registro dinámico es abierto, y
+// aceptar «cualquier https» dejaba que un atacante registrara un cliente
+// llamado «Claude» con SU redirect_uri y mandara a un contralor el enlace de
+// consentimiento: el código de autorización llegaba al atacante, que es el
+// cliente y por tanto posee el verifier PKCE. PKCE no protege ahí.
+//
+// Defensa en tres capas (las otras dos viven en la pantalla de consentimiento):
+//   1. un cliente solo nace `aprobado` si TODAS sus redirect_uri están en un
+//      host de esta lista o son loopback; el resto nace `pendiente` y nadie
+//      puede consentir ni canjear hasta que el superadmin lo apruebe;
+//   2. la lista es de HOSTS EXACTOS (nada de sufijos: `claude.ai.atacante.tld`
+//      y `atacante.tld/claude.ai` no pasan), https y puerto por omisión;
+//   3. loopback http se acepta porque el código no sale de la máquina del
+//      usuario (RFC 8252 §7.3).
+//
+// Si Anthropic u OpenAI publican otro host oficial de callback, se añade AQUÍ
+// con su justificación — y mientras tanto el cliente cae en `pendiente`, que
+// falla cerrado y se destraba desde /admin/mcp-clientes.
+
+export const HOSTS_CONOCIDOS: readonly string[] = [
+  'claude.ai',
+  'claude.com',
+  'chatgpt.com',
+  'chat.openai.com',
+  'platform.openai.com',
+  'openai.com',
+];
+
+export type EstadoCliente = 'pendiente' | 'aprobado' | 'rechazado';
+
+function esHostLoopback(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
+}
+
+/** El host (con puerto si no es el de omisión) de una redirect_uri, tal como se
+ *  le enseña a la persona que consiente. `null` si no es una URL. */
+export function anfitrionDeUri(cruda: string): string | null {
+  try {
+    return new URL(cruda).host || null;
+  } catch {
+    return null;
+  }
+}
+
+/** ¿Esta redirect_uri apunta a un destino de confianza sin aprobación manual? */
+export function redirectUriDeConfianza(cruda: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(cruda);
+  } catch {
+    return false;
+  }
+  if (u.username || u.password) return false;
+  if (u.protocol === 'http:') return esHostLoopback(u.hostname);
+  if (u.protocol !== 'https:') return false;
+  // `u.port` es '' en el puerto por omisión (443): cualquier otro puerto en un
+  // host conocido es otro servicio y no hereda la confianza.
+  return u.port === '' && HOSTS_CONOCIDOS.includes(u.hostname);
+}
+
+/** El estado con el que nace un cliente según sus redirect_uri. */
+export function estadoInicialDe(uris: readonly string[]): EstadoCliente {
+  return uris.length > 0 && uris.every(redirectUriDeConfianza) ? 'aprobado' : 'pendiente';
+}
+
+/** Los hosts DISTINTOS de una lista de redirect_uri, para enseñarlos. */
+export function anfitrionesDe(uris: readonly string[]): string[] {
+  const vistos = new Set<string>();
+  for (const u of uris) {
+    const h = anfitrionDeUri(u);
+    if (h) vistos.add(h);
+  }
+  return [...vistos];
+}
+
 /**
  * ¿La URI pedida está entre las registradas?
  *
@@ -138,6 +215,8 @@ export interface ClienteRegistrado {
   clientId: string;
   nombre: string | null;
   redirectUris: string[];
+  /** 0440: solo un cliente `aprobado` puede consentir y canjear. */
+  estado: EstadoCliente;
 }
 
 export type ResultadoRegistro = { ok: true; cliente: ClienteRegistrado } | FalloOauth;
@@ -155,16 +234,17 @@ export async function registrarCliente(nombre: unknown, redirectUris: unknown): 
   }
   const nombreLimpio = typeof nombre === 'string' && nombre.trim().length > 0 ? nombre.trim().slice(0, 120) : null;
 
+  const estado = estadoInicialDe(uris);
   const { data, error } = await supabaseAdmin()
     .from('mcp_oauth_cliente')
-    .insert({ nombre: nombreLimpio, redirect_uris: uris })
+    .insert({ nombre: nombreLimpio, redirect_uris: uris, estado, estado_en: estado === 'aprobado' ? new Date().toISOString() : null })
     .select('id')
     .single();
   if (error || !data) {
     logger.error('mcp.oauth.registro', { err: error?.message ?? 'sin fila' });
     return { ok: false, error: 'no_disponible', detalle: 'No se pudo registrar el cliente. Intenta de nuevo.' };
   }
-  return { ok: true, cliente: { clientId: String(data.id), nombre: nombreLimpio, redirectUris: uris } };
+  return { ok: true, cliente: { clientId: String(data.id), nombre: nombreLimpio, redirectUris: uris, estado } };
 }
 
 export async function leerCliente(clientId: string): Promise<{ ok: true; cliente: ClienteRegistrado } | FalloOauth> {
@@ -173,7 +253,7 @@ export async function leerCliente(clientId: string): Promise<{ ok: true; cliente
   }
   const { data, error } = await supabaseAdmin()
     .from('mcp_oauth_cliente')
-    .select('id, nombre, redirect_uris')
+    .select('id, nombre, redirect_uris, estado')
     .eq('id', clientId)
     .maybeSingle();
   if (error) {
@@ -182,7 +262,10 @@ export async function leerCliente(clientId: string): Promise<{ ok: true; cliente
   }
   if (!data) return { ok: false, error: 'no_valido', detalle: 'client_id desconocido.' };
   const uris = Array.isArray(data.redirect_uris) ? data.redirect_uris.map(String) : [];
-  return { ok: true, cliente: { clientId: String(data.id), nombre: (data.nombre as string) ?? null, redirectUris: uris } };
+  // Fallar cerrado: cualquier valor que no sea EXACTAMENTE un estado conocido
+  // (columna ausente en una base sin la 0440 incluida) cuenta como pendiente.
+  const estado: EstadoCliente = data.estado === 'aprobado' || data.estado === 'rechazado' ? data.estado : 'pendiente';
+  return { ok: true, cliente: { clientId: String(data.id), nombre: (data.nombre as string) ?? null, redirectUris: uris, estado } };
 }
 
 // ── La identidad congelada al consentir ────────────────────────────────────
@@ -266,6 +349,14 @@ interface FilaCodigo {
   familia: string;
   expira_en: string;
   usado_en: string | null;
+  /** 0440: el embed del cliente. Ausente o distinto de 'aprobado' = se niega. */
+  cliente?: { estado?: unknown } | Array<{ estado?: unknown }> | null;
+}
+
+/** ¿El cliente del embed está aprobado? Falla cerrado: sin embed, no. */
+function clienteAprobado(c: FilaCodigo['cliente']): boolean {
+  const uno = Array.isArray(c) ? c[0] : c;
+  return uno?.estado === 'aprobado';
 }
 
 async function emitirPar(
@@ -319,7 +410,7 @@ export async function canjearCodigo(
   }
   const { data, error } = await supabaseAdmin()
     .from('mcp_oauth_codigo')
-    .select('id, cliente_id, user_id, user_email, tenant_id, rol, redirect_uri, code_challenge, resource, familia, expira_en, usado_en')
+    .select('id, cliente_id, user_id, user_email, tenant_id, rol, redirect_uri, code_challenge, resource, familia, expira_en, usado_en, cliente:cliente_id(estado)')
     .eq('codigo_hash', hashDeLlave(codigo))
     .maybeSingle();
   if (error) {
@@ -336,6 +427,9 @@ export async function canjearCodigo(
     return { ok: false, error: 'no_valido', detalle: CANJE_INVALIDO };
   }
   if (fila.cliente_id !== clientId) return { ok: false, error: 'no_valido', detalle: CANJE_INVALIDO };
+  // 0440: un cliente rechazado (o devuelto a pendiente) después de consentir no
+  // canjea el código que ya tenía en la mano.
+  if (!clienteAprobado(fila.cliente)) return { ok: false, error: 'no_valido', detalle: CANJE_INVALIDO };
   if (Date.parse(fila.expira_en) <= Date.now()) return { ok: false, error: 'no_valido', detalle: CANJE_INVALIDO };
   if (fila.redirect_uri !== redirectUri) return { ok: false, error: 'no_valido', detalle: CANJE_INVALIDO };
   if (typeof codeVerifier !== 'string' || codeVerifier.length < 43 || codeVerifier.length > 128) {
@@ -409,7 +503,7 @@ export async function refrescarTokens(refresco: string, clientId: string): Promi
   }
   const { data, error } = await supabaseAdmin()
     .from('mcp_oauth_token')
-    .select('id, cliente_id, user_id, user_email, tenant_id, rol, familia, expira_en, revocado_en, tipo')
+    .select('id, cliente_id, user_id, user_email, tenant_id, rol, familia, expira_en, revocado_en, tipo, cliente:cliente_id(estado)')
     .eq('token_hash', hashDeLlave(refresco))
     .maybeSingle();
   if (error) {
@@ -418,6 +512,10 @@ export async function refrescarTokens(refresco: string, clientId: string): Promi
   }
   if (!data || data.tipo !== 'refresco') return { ok: false, error: 'no_valido', detalle: REFRESCO_INVALIDO };
   if (data.cliente_id !== clientId) return { ok: false, error: 'no_valido', detalle: REFRESCO_INVALIDO };
+  // 0440: el refresco de un cliente que ya no está aprobado no rota.
+  if (!clienteAprobado(data.cliente as FilaCodigo['cliente'])) {
+    return { ok: false, error: 'no_valido', detalle: REFRESCO_INVALIDO };
+  }
 
   // Un refresco YA ROTADO que vuelve a aparecer es la señal de robo: tumba la
   // familia entera (OAuth 2.1 §4.3.1).
@@ -602,4 +700,85 @@ export async function validarAcceso(token: string): Promise<ResultadoAcceso> {
       rol: String(data.rol),
     },
   };
+}
+
+// ── La cola del superadmin: aprobar o rechazar clientes ────────────────────
+
+export interface ClienteParaRevision {
+  clientId: string;
+  nombre: string | null;
+  redirectUris: string[];
+  anfitriones: string[];
+  estado: EstadoCliente;
+  creadoEn: string;
+}
+
+/** Clientes pendientes (los más nuevos primero). LANZA si la base falla: «no hay
+ *  nada por revisar» pintado sobre una base caída es la mentira que evitamos. */
+export async function listarClientesPendientes(limite = 100): Promise<ClienteParaRevision[]> {
+  const { data, error } = await supabaseAdmin()
+    .from('mcp_oauth_cliente')
+    .select('id, nombre, redirect_uris, estado, creado_en')
+    .eq('estado', 'pendiente')
+    .order('creado_en', { ascending: false })
+    .limit(Math.max(1, Math.min(limite, 200)));
+  if (error) throw new Error(`mcp_oauth_cliente: ${error.message}`);
+  return (data ?? []).map((f) => {
+    const uris = Array.isArray(f.redirect_uris) ? f.redirect_uris.map(String) : [];
+    return {
+      clientId: String(f.id),
+      nombre: (f.nombre as string) ?? null,
+      redirectUris: uris,
+      anfitriones: anfitrionesDe(uris),
+      estado: 'pendiente' as const,
+      creadoEn: String(f.creado_en),
+    };
+  });
+}
+
+/**
+ * El superadmin decide. `rechazado` además REVOCA todo token vivo del cliente
+ * (acceso y refresco): rechazar un cliente que ya tenía conexiones tiene que
+ * cortarlas, no solo impedir las nuevas. Solo se decide sobre `pendiente` (o se
+ * revierte un `aprobado` a `rechazado`); el UPDATE lleva la condición en la base.
+ */
+export async function decidirCliente(
+  clientId: string,
+  decision: 'aprobado' | 'rechazado',
+  porUserId: string,
+): Promise<{ ok: true; revocados: number } | FalloOauth> {
+  if (!/^[0-9a-f-]{36}$/i.test(clientId)) {
+    return { ok: false, error: 'no_valido', detalle: 'client_id desconocido.' };
+  }
+  const antes = decision === 'aprobado' ? ['pendiente', 'rechazado'] : ['pendiente', 'aprobado'];
+  const marcado = await supabaseAdmin()
+    .from('mcp_oauth_cliente')
+    .update({ estado: decision, estado_en: new Date().toISOString(), estado_por: porUserId })
+    .eq('id', clientId)
+    .in('estado', antes)
+    .select('id');
+  if (marcado.error) {
+    logger.error('mcp.oauth.cliente_decision', { err: marcado.error.message });
+    return { ok: false, error: 'no_disponible', detalle: 'No se pudo guardar la decisión. Intenta de nuevo.' };
+  }
+  if (!marcado.data || marcado.data.length === 0) {
+    return { ok: false, error: 'no_valido', detalle: 'El cliente no existe o ya tenía esa decisión.' };
+  }
+  let revocados = 0;
+  if (decision === 'rechazado') {
+    const rev = await supabaseAdmin()
+      .from('mcp_oauth_token')
+      .update({ revocado_en: new Date().toISOString() })
+      .eq('cliente_id', clientId)
+      .is('revocado_en', null)
+      .select('id');
+    if (rev.error) {
+      // La decisión ya quedó guardada y el refresco ya no rota (clienteAprobado);
+      // solo el acceso vigente (≤ 8 h) sobrevive. Se dice, no se esconde.
+      logger.error('mcp.oauth.cliente_revocar_tokens', { err: rev.error.message });
+      return { ok: false, error: 'no_disponible', detalle: 'El cliente quedó rechazado, pero no se pudieron revocar sus tokens vivos; reintenta el rechazo.' };
+    }
+    revocados = rev.data?.length ?? 0;
+  }
+  return { ok: true, revocados };
 }

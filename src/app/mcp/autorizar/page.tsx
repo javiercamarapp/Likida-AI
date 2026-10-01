@@ -25,6 +25,7 @@ import { redirect } from 'next/navigation';
 import { getSessionTenant, SIN_ROL } from '@/lib/auth/session';
 import { areasDe } from '@/lib/auth/visibilidad';
 import { leerCliente, emitirCodigo, redirectUriRegistrada, recursoCanonico, SCOPE_LECTURA } from '@/lib/mcp/oauth';
+import { perfilDeDestino, requiereConfirmacionReforzada, evaluarConsentimiento } from '@/lib/mcp/consentimiento';
 import { appUrl } from '@/lib/env';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { Logo } from '../../logo';
@@ -129,6 +130,24 @@ export default async function Autorizar({
     return <PaginaError titulo="Dirección de retorno no registrada" detalle="La dirección a la que habría que devolver la autorización no coincide con la que este cliente registró. Por seguridad no se redirige a direcciones no verificadas." />;
   }
 
+  // 0440: un cliente que Likida no ha aprobado NO llega a la pantalla de
+  // consentimiento. Se muestra a dónde apuntaba, para que quien recibió el enlace
+  // vea que no era Claude ni ChatGPT.
+  const destino = perfilDeDestino(redirectUri);
+  if (rc.cliente.estado !== 'aprobado' || !destino) {
+    return (
+      <PaginaError
+        titulo={rc.cliente.estado === 'rechazado' ? 'Cliente no autorizado' : 'Cliente pendiente de aprobación'}
+        detalle={
+          `Este cliente (${destino ? `devolvería la autorización a «${destino.host}»` : 'dirección inválida'}) ` +
+          'no es uno de los conocidos por Likida (Claude, ChatGPT) y todavía no ha sido aprobado por el equipo de Likida, ' +
+          'así que no se puede conectar. Si lo conectaste tú a propósito, pide su aprobación a soporte; ' +
+          'si recibiste este enlace por correo o mensaje sin esperarlo, ciérralo: puede ser un intento de acceder a los datos de tu flota.'
+        }
+      />
+    );
+  }
+
   // ── 2. La forma de la petición (la redirect ya está verificada) ──────────
   if (responseType !== 'code') {
     redirect(volverA(redirectUri, { error: 'unsupported_response_type', state }));
@@ -158,6 +177,7 @@ export default async function Autorizar({
   }
 
   const areas = areasDe(s.rol);
+  const reforzada = requiereConfirmacionReforzada(areas);
   const nombreCliente = rc.cliente.nombre ?? 'Un cliente MCP';
   const params: ParamsAutorizar = { client_id: clientId, redirect_uri: redirectUri, state, code_challenge: codeChallenge, resource };
 
@@ -172,6 +192,7 @@ export default async function Autorizar({
       code_challenge: String(formData.get('code_challenge') ?? ''),
       resource: (formData.get('resource') as string | null) || null,
     };
+    const confirmacion = String(formData.get('confirmacion') ?? '');
 
     // La identidad SIEMPRE se relee de la sesión en el momento de firmar.
     const sesion = await getSessionTenant();
@@ -185,6 +206,25 @@ export default async function Autorizar({
     }
     if (decision !== 'autorizar') {
       redirect(volverA(p.redirect_uri, { error: 'access_denied', state: p.state }));
+    }
+    // 0440: se RE-evalúa aquí (cliente aprobado + confirmación reforzada si hay
+    // dinero en el alcance). Quien salta el formulario con un POST a mano no se
+    // salta esto.
+    const veredicto = evaluarConsentimiento({
+      estadoCliente: cliente.cliente.estado,
+      areas: areasDe(sesion.rol),
+      redirectUri: p.redirect_uri,
+      confirmacion,
+    });
+    if (!veredicto.ok) {
+      // Sin redirect de vuelta al cliente: no se le regala nada a quien lo intenta.
+      const propia = new URLSearchParams({
+        client_id: p.client_id, redirect_uri: p.redirect_uri, response_type: 'code',
+        code_challenge: p.code_challenge, code_challenge_method: 'S256', error: veredicto.motivo,
+      });
+      if (p.state !== null) propia.set('state', p.state);
+      if (p.resource !== null) propia.set('resource', p.resource);
+      redirect(`/mcp/autorizar?${propia.toString()}`);
     }
     if (p.code_challenge.length < 43 || p.code_challenge.length > 128) {
       redirect(volverA(p.redirect_uri, { error: 'invalid_request', state: p.state }));
@@ -217,7 +257,7 @@ export default async function Autorizar({
         accion: 'mcp.consentimiento',
         entidad: 'tenant',
         entidadId: sesion.tenantId,
-        detalle: { cliente: cliente.cliente.nombre ?? p.client_id, rol: sesion.rol },
+        detalle: { cliente: cliente.cliente.nombre ?? p.client_id, rol: sesion.rol, destino: perfilDeDestino(p.redirect_uri)?.host ?? null, confirmacion_reforzada: requiereConfirmacionReforzada(areasDe(sesion.rol)) },
       },
       { evento: 'mcp.bitacora' },
     );
@@ -238,17 +278,49 @@ export default async function Autorizar({
           <li key={a}>{ROTULO_AREA[a] ?? a}</li>
         ))}
       </ul>
+      {uno(sp.error) === 'falta_confirmacion' ? (
+        <p className="mt-4 max-w-lg text-sm" role="alert" style={{ color: 'var(--ink)', fontWeight: 600 }}>
+          El dominio que escribiste no coincide con el de destino. Revísalo y vuelve a intentar.
+        </p>
+      ) : null}
+      <div
+        className="mt-5 max-w-lg rounded-xl px-4 py-3 text-sm"
+        style={{ border: '1px solid var(--muted)', lineHeight: 1.5 }}
+        role="note"
+      >
+        <p>
+          El código de autorización se entregará a: <strong style={{ fontSize: 16 }}>{destino.host}</strong>
+          {destino.loopback ? ' (tu propia máquina)' : ''}
+        </p>
+        <p className="mt-1" style={{ color: 'var(--muted)' }}>
+          {destino.conocido
+            ? 'Likida reconoce este destino como el de un cliente conocido.'
+            : 'Cliente no verificado por Likida: aprobado manualmente por el equipo. Si ese dominio no es el de la aplicación que estás conectando, pulsa «No autorizar».'}
+        </p>
+      </div>
       <p className="mt-4 max-w-lg text-sm" style={{ color: 'var(--faint, var(--muted))', lineHeight: 1.5 }}>
         El nombre «{nombreCliente}» lo declaró quien se registró, no Likida. El acceso expira solo y las
         acciones con efecto (cerrar liquidaciones, timbrar, enviar mensajes) seguirán firmándose en el panel.
         Alcance: {SCOPE_LECTURA}.
       </p>
-      <form action={autorizar} className="mt-8 flex gap-3">
+      <form action={autorizar} className="mt-8 flex flex-wrap items-end gap-3">
         <input type="hidden" name="client_id" value={params.client_id} />
         <input type="hidden" name="redirect_uri" value={params.redirect_uri} />
         {params.state !== null ? <input type="hidden" name="state" value={params.state} /> : null}
         <input type="hidden" name="code_challenge" value={params.code_challenge} />
         {params.resource !== null ? <input type="hidden" name="resource" value={params.resource} /> : null}
+        {reforzada ? (
+          <label className="flex flex-col gap-1 text-sm" style={{ color: 'var(--muted)' }}>
+            <span>
+              Este acceso incluye <strong>dinero</strong> (cuadres, facturación, estado fiscal). Para confirmar,
+              escribe el dominio de destino: <strong>{destino.hostname}</strong>
+            </span>
+            <input
+              name="confirmacion" type="text" autoComplete="off" spellCheck={false}
+              className="rounded-lg px-3 py-2" style={{ border: '1px solid var(--muted)', color: 'var(--ink)', background: 'transparent' }}
+            />
+          </label>
+        ) : null}
         <button
           type="submit" name="decision" value="autorizar"
           className="rounded-full px-6 py-2.5 text-sm font-medium"
