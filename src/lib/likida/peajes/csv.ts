@@ -12,10 +12,9 @@ import type { Celda } from './formatos';
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Decodifica el archivo: UTF-8 (con o sin BOM) y, si no es UTF-8 válido, latin1/Windows-1252. */
-export function decodificarTexto(buffer: Buffer | Uint8Array): string {
-  const b = Buffer.from(buffer);
-  let texto = b.toString('utf8');
-  if (texto.includes('�')) texto = b.toString('latin1');
+export function decodificarTexto(bytes: Uint8Array): string {
+  let texto = new TextDecoder('utf-8').decode(bytes);
+  if (texto.includes('\uFFFD')) texto = new TextDecoder('windows-1252').decode(bytes);
   return texto.charCodeAt(0) === 0xfeff ? texto.slice(1) : texto;
 }
 
@@ -67,6 +66,6 @@ export function matrizDeCsvTexto(texto: string): Celda[][] {
   return filas;
 }
 
-export function matrizDeCsv(buffer: Buffer | Uint8Array): Celda[][] {
+export function matrizDeCsv(buffer: Uint8Array): Celda[][] {
   return matrizDeCsvTexto(decodificarTexto(buffer));
 }

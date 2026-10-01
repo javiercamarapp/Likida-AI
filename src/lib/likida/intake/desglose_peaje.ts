@@ -44,8 +44,7 @@ import { leerArchivoUniversal, ArchivoNoSoportado } from './archivo';
 import { diasDeDiferencia, VENTANA_DIAS_FECHA, TOLERANCIA_MONTO_MXN } from './consolidado';
 import { registrarCorrida } from '../agentes/corridas';
 import { contextoEvidenciaGps, llaveUnidadDia } from '../peajes/evidencia_gps';
-import { cargarMapaTags, cargarMapeo, listarCasetas } from '../peajes/datos';
-import { evaluarGpsDeLineas } from '../peajes/cruce_gps_datos';
+import { cargarMapaTags, cargarMapeo, listarCasetas, evaluarGpsDeLineas } from '../peajes/datos';
 import { normalizarTag } from '../peajes/formatos';
 import { matrizDeCsv } from '../peajes/csv';
 import {

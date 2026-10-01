@@ -7,6 +7,7 @@ import { matrizDeArchivoCatalogo } from './archivo';
 import { parsearCasetasMatriz, type CasetaCatalogo } from './casetas';
 import { parsearTagsMatriz, resolverUnidadesDeTags } from './tags';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
+import { planificarGps, evaluarCruceGps, type LineaParaGps, type VeredictoGps, type Muestra } from './cruce_gps';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL I/O DE LOS CATÁLOGOS DE PEAJES: TAGs, casetas, geocercas, mapeos.
@@ -99,7 +100,7 @@ export interface ResultadoImportacionCatalogo {
   error?: string;
 }
 
-export async function importarTagsArchivo(tenantId: string, nombre: string, buffer: Buffer): Promise<ResultadoImportacionCatalogo> {
+export async function importarTagsArchivo(tenantId: string, nombre: string, buffer: Uint8Array): Promise<ResultadoImportacionCatalogo> {
   const falla = (error: string): ResultadoImportacionCatalogo => ({ ok: false, guardadas: 0, actualizadas: 0, rechazadas: [], error });
   const m = matrizDeArchivoCatalogo(nombre, buffer);
   if (!m.ok) return falla(m.motivo);
@@ -163,7 +164,7 @@ export async function listarCasetas(tenantId: string, soloActivas = false): Prom
   }));
 }
 
-export async function importarCasetasArchivo(tenantId: string, nombre: string, buffer: Buffer, fuenteDefault: string): Promise<ResultadoImportacionCatalogo> {
+export async function importarCasetasArchivo(tenantId: string, nombre: string, buffer: Uint8Array, fuenteDefault: string): Promise<ResultadoImportacionCatalogo> {
   const falla = (error: string): ResultadoImportacionCatalogo => ({ ok: false, guardadas: 0, actualizadas: 0, rechazadas: [], error });
   const m = matrizDeArchivoCatalogo(nombre, buffer);
   if (!m.ok) return falla(m.motivo);
@@ -300,4 +301,105 @@ export async function borrarMapeo(tenantId: string, id: string): Promise<boolean
   const { error } = await acotada(supabaseAdmin().from('peaje_mapeo_columnas').delete().eq('tenant_id', tenantId).eq('id', id), 'peajes.borrar_mapeo');
   if (error) logger.error('peajes.borrar_mapeo', { tenant: tenantId, err: error.message });
   return !error;
+}
+
+// ── El buzón firmado: configuración de la flota (0376) ──────────────────────
+export interface ConfigBuzon { activa: boolean; rotacion: number }
+
+/** La configuración del buzón de la flota, o null si nunca se activó. Lanza ante error de base. */
+export async function leerConfigBuzon(tenantId: string): Promise<ConfigBuzon | null> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_ingesta_config')
+    .select('rotacion, activa').eq('tenant_id', tenantId).maybeSingle(), 'peajes.config_buzon');
+  if (error) throw new Error(`leerConfigBuzon: ${error.message}`);
+  return data ? { activa: data.activa !== false, rotacion: Number(data.rotacion) } : null;
+}
+
+/** Activa el buzón (o lo reactiva conservando la rotación vigente). */
+export async function activarBuzon(tenantId: string): Promise<boolean> {
+  const actual = await leerConfigBuzon(tenantId);
+  const { error } = await acotada(supabaseAdmin().from('peaje_ingesta_config').upsert({
+    tenant_id: tenantId, rotacion: actual?.rotacion ?? 1, activa: true, updated_at: new Date().toISOString(),
+  }, { onConflict: 'tenant_id' }), 'peajes.activar_buzon');
+  if (error) logger.error('peajes.activar_buzon', { tenant: tenantId, err: error.message });
+  return !error;
+}
+
+export async function desactivarBuzon(tenantId: string): Promise<boolean> {
+  const { error } = await acotada(supabaseAdmin().from('peaje_ingesta_config')
+    .update({ activa: false, updated_at: new Date().toISOString() }).eq('tenant_id', tenantId), 'peajes.desactivar_buzon');
+  if (error) logger.error('peajes.desactivar_buzon', { tenant: tenantId, err: error.message });
+  return !error;
+}
+
+/** Sube la rotación: la llave anterior deja de servir al instante. Solo si el buzón existe. */
+export async function rotarLlaveBuzon(tenantId: string): Promise<boolean> {
+  const actual = await leerConfigBuzon(tenantId);
+  if (!actual) return false;
+  const { error } = await acotada(supabaseAdmin().from('peaje_ingesta_config')
+    .update({ rotacion: actual.rotacion + 1, updated_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId).eq('rotacion', actual.rotacion), 'peajes.rotar_llave');
+  if (error) logger.error('peajes.rotar_llave', { tenant: tenantId, err: error.message });
+  return !error;
+}
+
+export interface ArchivoIngestaVista {
+  id: string; nombre: string; proveedor: string | null; estado: string; intentos: number; bytes: number;
+  recibidaEn: string; procesadaEn: string | null; ultimoError: string | null; desgloseId: string | null; reintentable: boolean;
+}
+
+/** Los últimos archivos recibidos por el buzón (sin el contenido). */
+export async function listarArchivosIngesta(tenantId: string, limite = 20): Promise<ArchivoIngestaVista[]> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
+    .select('id, nombre, proveedor, estado, intentos, bytes, recibida_en, procesada_en, ultimo_error, desglose_id')
+    .eq('tenant_id', tenantId).order('recibida_en', { ascending: false }).limit(limite), 'peajes.archivos_ingesta');
+  if (error) throw new Error(`listarArchivosIngesta: ${error.message}`);
+  return (data ?? []).map((f) => ({
+    id: String(f.id), nombre: String(f.nombre), proveedor: (f.proveedor as string | null) ?? null, estado: String(f.estado),
+    intentos: Number(f.intentos), bytes: Number(f.bytes), recibidaEn: String(f.recibida_en),
+    procesadaEn: (f.procesada_en as string | null) ?? null, ultimoError: (f.ultimo_error as string | null) ?? null,
+    desgloseId: (f.desglose_id as string | null) ?? null, reintentable: f.estado === 'fallida',
+  }));
+}
+
+// ── El cruce por caseta: posiciones por ventana + motor puro (antes cruce_gps_datos.ts) ──
+// Lanza ante error de base — un contexto a medias produciría «sin posiciones»
+// falsos, que es el hueco que este módulo no inventa.
+
+/** Ventanas por consulta: 100 ventanas × ~8 posiciones (cadencia de 5 min) ≈ 800 filas por tanda. */
+const VENTANAS_POR_TANDA = 100;
+
+export interface ResultadoGpsLinea { lineaId: string; casetaId: string | null; veredicto: VeredictoGps }
+
+export async function evaluarGpsDeLineas(
+  tenantId: string,
+  lineas: readonly LineaParaGps[],
+  catalogo: readonly CasetaCatalogo[],
+): Promise<ResultadoGpsLinea[]> {
+  const planes = planificarGps(lineas, catalogo);
+  const listos = planes.filter((p): p is Extract<typeof p, { listo: true }> => p.listo);
+
+  const muestrasPorLinea = new Map<string, Muestra[]>();
+  for (let i = 0; i < listos.length; i += VENTANAS_POR_TANDA) {
+    const tanda = listos.slice(i, i + VENTANAS_POR_TANDA);
+    const ventanas = tanda.map((p) => ({ linea_id: p.lineaId, unidad_id: p.unidadId, desde: p.desde, hasta: p.hasta }));
+    const filas = await traerTodo<{ linea_id: unknown; lat: unknown; lng: unknown; medida_en: unknown }>(
+      (d, h) => acotada(
+        supabaseAdmin().rpc('peaje_posiciones_ventana', { p_tenant: tenantId, p_ventanas: ventanas }, conteo(d))
+          .order('linea_id').order('medida_en').range(d, h),
+        'peajes.posiciones_ventana',
+      ),
+      'peajes.posiciones_ventana',
+    );
+    for (const f of filas) {
+      const id = String(f.linea_id);
+      const l = muestrasPorLinea.get(id) ?? [];
+      l.push({ lat: Number(f.lat), lng: Number(f.lng), t: Date.parse(String(f.medida_en)) });
+      muestrasPorLinea.set(id, l);
+    }
+  }
+
+  return planes.map((p) => {
+    if (!p.listo) return { lineaId: p.lineaId, casetaId: p.casetaId, veredicto: p.veredicto };
+    return { lineaId: p.lineaId, casetaId: p.casetaId, veredicto: evaluarCruceGps(p.cruceMs, p.caseta, muestrasPorLinea.get(p.lineaId) ?? []) };
+  });
 }

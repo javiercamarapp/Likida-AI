@@ -1,4 +1,4 @@
-import { round2 } from '@/lib/formato';
+import { round2, TZ_MX } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS FORMATOS DE CELDA DEL DESGLOSE DE PEAJE — el lector tolerante.
@@ -189,7 +189,7 @@ export function aInstanteMx(fecha: string | null, hora: string | null): string |
 }
 
 const FORMATO_MX = new Intl.DateTimeFormat('en-US', {
-  timeZone: 'America/Mexico_City', hourCycle: 'h23',
+  timeZone: TZ_MX, hourCycle: 'h23',
   year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
 });
 

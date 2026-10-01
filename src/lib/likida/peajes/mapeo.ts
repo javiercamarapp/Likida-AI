@@ -125,7 +125,8 @@ const SINONIMOS: Record<CampoMapeo, readonly string[]> = {
 
 function distancia(a: string, b: string): number {
   if (a === b) return 0;
-  const fila = Array.from({ length: b.length + 1 }, (_, j) => j);
+  const fila: number[] = [];
+  for (let j = 0; j <= b.length; j++) fila.push(j);
   for (let i = 1; i <= a.length; i++) {
     let previo = fila[0];
     fila[0] = i;
