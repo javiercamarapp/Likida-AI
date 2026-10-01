@@ -12,13 +12,21 @@ import { VistaAgenteConductores, type EsperaAceptar, type ConteosConductores, ty
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import { ultimasCorridas } from '@/lib/likida/agentes/corridas';
-import { puedeAdministrar } from '@/lib/auth/permisos';
+import { puedeAdministrar, puedeAsignar } from '@/lib/auth/permisos';
 import { getConfig, type LikidaConfig } from '@/lib/likida/config';
 import { validarHorasEscalacion, guardarEstrategiaAgente } from '@/lib/likida/agentes/estrategia';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { revalidatePath } from 'next/cache';
 import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrategia-forma';
 import { Bloque, EsqTabla, vigilar } from '../../bloque';
+import { leerConfigConductor } from '@/lib/likida/conductor/repo';
+import { leerCatalogosFiltro, leerDatosTablero, leerIndicadores, listarSitios, type FiltrosTablero } from '@/lib/likida/conductor/repo_validacion';
+import { asignarSitiosDelPanel } from '@/lib/likida/conductor/acciones_sitios';
+import { armarTablero, filtrarPorSemaforo, indicadoresVista, type Semaforo } from '@/lib/likida/conductor/tablero';
+import { ejecutarAccionOficina, leerAccion } from '@/lib/likida/conductor/acciones_oficina';
+import { emailDeUsuario } from '@/lib/likida/conductor/trabajo';
+import { TableroHitos, ORDEN_SEMAFORO, type FiltrosVista } from './tablero-hitos';
+import type { ResultadoOficina } from './acciones-forma';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,7 +85,10 @@ function consultaVivos(tenantId: string) {
 export default async function PaginaAgenteConductores({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
+  searchParams: Promise<{
+    vista?: string; tenant?: string; rol?: string;
+    terminal?: string; cliente?: string; chofer?: string; semaforo?: string; dias?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
@@ -127,6 +138,58 @@ export default async function PaginaAgenteConductores({
         return { esperan, totalEsperan: pagina.total, sinAvisar, error: pagina.error, truncada: pagina.truncada };
       }));
 
+  // ── 0385: EL TABLERO DE HITOS ─────────────────────────────────────────
+  // Los filtros viajan en la URL (se pueden compartir y sobreviven a la recarga) y SE VALIDAN: un id que no es
+  // uuid se ignora, y un semáforo desconocido también (nunca llegan crudos a una consulta).
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const uuidONada = (v: string | undefined) => (v && UUID.test(v) ? v.toLowerCase() : '');
+  const filtrosVista: FiltrosVista = {
+    terminalId: uuidONada(sp.terminal), clienteId: uuidONada(sp.cliente), operadorId: uuidONada(sp.chofer),
+    semaforo: (ORDEN_SEMAFORO as string[]).includes(sp.semaforo ?? '') ? (sp.semaforo as Semaforo) : '',
+    dias: ['1', '7', '30'].includes(sp.dias ?? '') ? Number(sp.dias) : 7,
+  };
+  const filtrosRepo: FiltrosTablero = {
+    terminalId: filtrosVista.terminalId || undefined, clienteId: filtrosVista.clienteId || undefined, operadorId: filtrosVista.operadorId || undefined,
+  };
+  const puedeActuar = puedeAsignar(rol);
+  const pTablero = vigilar(Promise.all([leerDatosTablero(tenantId, filtrosRepo), leerConfigConductor(tenantId)])
+    .then(([datos, config]) => filtrarPorSemaforo(armarTablero(datos, config, new Date()), filtrosVista.semaforo || null)));
+  const pIndicadores = safe(async () => {
+    const hasta = new Date();
+    return indicadoresVista(await leerIndicadores(tenantId, new Date(hasta.getTime() - filtrosVista.dias * 86_400_000), new Date(hasta.getTime() + 60_000), filtrosRepo));
+  });
+  const pCatalogos = safe(() => leerCatalogosFiltro(tenantId));
+  // Los sitios que se pueden asignar a un viaje (solo los activos; hasta 500). Sin lectura, la forma de asignar no ofrece nada.
+  const pSitios = safe(async () => (await listarSitios(tenantId, { limite: 500 })).sitios.filter((x) => x.activa).map((x) => ({ id: x.id, nombre: x.nombre, tipo: x.tipo })));
+  const ocultos: Record<string, string> = {};
+  if (sp.tenant) ocultos.tenant = sp.tenant; else if (sp.vista) ocultos.vista = sp.vista;
+  if (sp.rol) ocultos.rol = sp.rol;
+
+  async function accionOficina(_previo: ResultadoOficina, fd: FormData): Promise<ResultadoOficina> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
+    // Dos candados: la ruta (¿puede ver esta pantalla?) y la acción (¿puede mover un hito?). El segundo también vive
+    // dentro de `ejecutarAccionOficina`: una acción de servidor es un endpoint, no un botón.
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/conductores') || !puedeAsignar(s.rol)) {
+      return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico pueden hacer esto.' };
+    }
+    const pedida = leerAccion(fd);
+    if ('error' in pedida) return { ok: false, error: pedida.error };
+    const email = await emailDeUsuario(s.userId).catch(() => null);
+    const r = await ejecutarAccionOficina({ tenantId: s.tenantId, rol: s.rol, usuarioId: s.userId, email }, pedida.ok);
+    if (r.ok) revalidatePath('/dashboard/agentes/conductores');
+    return r;
+  }
+
+  async function accionSitios(_previo: ResultadoOficina, fd: FormData): Promise<ResultadoOficina> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/conductores')) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico pueden hacer esto.' };
+    const r = await asignarSitiosDelPanel({ tenantId: s.tenantId, rol: s.rol }, fd);
+    if (r.ok) revalidatePath('/dashboard/agentes/conductores');
+    return r;
+  }
+
   async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
@@ -145,6 +208,14 @@ export default async function PaginaAgenteConductores({
 
   return (
     <VistaAgenteConductores
+      tablero={
+        <Bloque mensaje="No se pudo leer el tablero de hitos." esqueleto={<EsqTabla filas={6} />}>
+          <BloqueTableroHitos
+            pTablero={pTablero} pIndicadores={pIndicadores} pCatalogos={pCatalogos} pSitios={pSitios} filtros={filtrosVista} ocultos={ocultos}
+            accionUrl="/dashboard/agentes/conductores" puedeActuar={puedeActuar} accion={accionOficina} accionSitios={accionSitios}
+          />
+        </Bloque>
+      }
       kpis={pConteos}
       cola={pCola}
       eventos={pEventos}
@@ -169,6 +240,22 @@ export default async function PaginaAgenteConductores({
         </>
       }
     />
+  );
+}
+
+async function BloqueTableroHitos({ pTablero, pIndicadores, pCatalogos, pSitios, filtros, ocultos, accionUrl, puedeActuar, accion, accionSitios }: {
+  pTablero: Promise<ReturnType<typeof armarTablero>>;
+  pIndicadores: Promise<ReturnType<typeof indicadoresVista> | null>;
+  pCatalogos: Promise<Awaited<ReturnType<typeof leerCatalogosFiltro>> | null>;
+  pSitios: Promise<Array<{ id: string; nombre: string; tipo: string }> | null>;
+  filtros: FiltrosVista; ocultos: Record<string, string>; accionUrl: string; puedeActuar: boolean;
+  accion: (previo: ResultadoOficina, fd: FormData) => Promise<ResultadoOficina>;
+  accionSitios: (previo: ResultadoOficina, fd: FormData) => Promise<ResultadoOficina>;
+}) {
+  const [tablero, indicadores, catalogos, sitios] = await Promise.all([pTablero, pIndicadores, pCatalogos, pSitios]);
+  return (
+    <TableroHitos tablero={tablero} indicadores={indicadores} dias={filtros.dias} filtros={filtros} catalogos={catalogos}
+      ocultos={ocultos} accionUrl={accionUrl} puedeActuar={puedeActuar} accion={accion} accionSitios={accionSitios} sitios={sitios ?? []} />
   );
 }
 

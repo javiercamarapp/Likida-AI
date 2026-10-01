@@ -108,7 +108,38 @@ import { join, relative, sep } from 'node:path';
 //     `agente:peajes`;
 //   · `api/export/bitacora-conciliada/route.ts` — sesión + área dinero +
 //     puedeExportar, rate limit y siempre acotada al tenant de la sesión.
-const RUTAS_APP_REVISADAS = 78;
+//
+// 78 → 83 (loop punta a punta, Agente 5 «Conductor», 2-oct-2026): cinco rutas,
+// cada una con su propia puerta —
+//   · `api/cron/conductor-hitos/route.ts` — puertaCron (CRON_SECRET), palancas
+//     global y `agente:conductores` (ambas fail-closed) y latido en todo camino
+//     de salida;
+//   · `api/v1/hitos/route.ts` y `api/v1/hitos/eventos/route.ts` — llave API por
+//     área o cookie, área `operacion` (`abrir(req, 'operacion')`) antes de leer;
+//     SIEMPRE acotadas al tenant de la credencial (`.eq('tenant_id', …)`);
+//   · `api/v1/viajes/[id]/citas/route.ts` — `abrir(req, 'administracion')` +
+//     CSRF para la cookie; el UPDATE lleva `.eq('tenant_id', …)` y «no existe» y
+//     «no es de tu flota» contestan lo mismo (404);
+//   · `api/v1/conductor/config/route.ts` — `abrir(req, 'administracion')` también
+//     para LEER (trae teléfonos de personas); el PUT fusiona con la config de la
+//     flota de la credencial, un `tenant_id` en el cuerpo es 400 y la terminal
+//     de otra flota la rechaza la FK compuesta.
+//
+// 83 → 86 (loop punta a punta, Agente 5 «Conductor», 2.ª entrega, 2-oct-2026): tres rutas, cada una
+// con su propia puerta (`abrir()` resuelve credencial → flota → ÁREA antes de tocar un dato) —
+//   · `api/v1/estadias/route.ts` — área `dinero` (trae el monto propuesto de cobro: el jefe de tráfico,
+//     que ve operación y nada de pesos, no la lee); fechas validadas (días de México, máx. 93), filtros
+//     uuid, CSV con neutralización de fórmulas; SIEMPRE acotada al tenant de la credencial (`?tenant=` se borra
+//     en el borde) y la lectura truncada se declara;
+//   · `api/v1/sitios/route.ts` — área `operacion`, solo lectura del catálogo de la flota de la credencial;
+//   · `api/v1/viajes/[id]/sitios/route.ts` — área `administracion` + CSRF para la cookie; el sitio se resuelve
+//     (código o id) DENTRO de la flota de la credencial y el UPDATE lleva `.eq('tenant_id', …)`; «no existe» y «no es
+//     de tu flota» contestan lo mismo (404); un `tenant_id` en el cuerpo es 400.
+//
+// 86 → 87 (misma entrega): `api/v1/evidencias/[id]/route.ts` — `abrir(req, 'operacion')`; busca la evidencia SIEMPRE
+//   con `.eq('tenant_id', …)` de la credencial, firma solo rutas que cuelgan del prefijo de esa flota y redirige (302) a una
+//   URL de 10 minutos del bucket privado: el archivo nunca se sirve ni es público.
+const RUTAS_APP_REVISADAS = 87;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

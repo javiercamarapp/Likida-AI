@@ -123,8 +123,31 @@ import { join, relative } from 'node:path';
  * pestañear deja de medir nada — igual que el de arriba, se sube a mano, en
  * el commit que explica por qué.
  */
+//
+// LOOP PUNTA A PUNTA (2-oct-2026), Agente 5 «Conductor» — 259 → 261 archivos y
+// 1,347 → 1,390 llamadas (medido con el barrido completo). UN solo archivo
+// nuevo: `lib/likida/conductor/repo.ts` junta TODO el acceso a datos del módulo
+// (los hitos y sus bitácoras de la 0380, la config por flota, los contactos de
+// tráfico, el claim de avisos, la siembra, la lectura de /v1 y el mantenimiento de
+// privacidad) en vez de repartirlo en un archivo por tabla —el mismo molde que
+// `liquidacion_externa/repo.ts`—: el motor, el intérprete, el planificador y las
+// rutas no tienen ni un `.from(`/`.rpc(`, y el ejecutor entra por los puertos
+// `PuertosConductor`. Las 43 llamadas (38 de las lecturas/escrituras del motor y 5 del
+// escritor de config y contactos de `PUT /v1/conductor/config`) son las consultas nuevas,
+// todas con `acotada`, acotadas por tenant y las de lotes con `traerTodo`.
+// Funcionalidad nueva, no código migrado.
+//
+// LOOP PUNTA A PUNTA (2-oct-2026), Agente 5 «Conductor», 2.ª entrega (0385) — 261 → 262
+// archivos y 1,390 → 1,432 llamadas (medido con el barrido completo). UN solo archivo nuevo:
+// `lib/likida/conductor/repo_validacion.ts` junta el acceso a datos de la entrega (catálogo de
+// sitios y su importador, posiciones para validar, veredictos, evidencia, acciones de oficina,
+// indicadores y las lecturas del tablero y de las estadías) APARTE de `conductor/repo.ts` para no
+// volverlo un archivo de mil líneas; los barridos del cron que cruzan flotas se sumaron a
+// `conductor/trabajo.ts` (ya exento y ya contado). Todas con `acotada`, acotadas por tenant (las vigila
+// `consultas_admin_filtran_tenant.test.ts`) y las lecturas por lotes con `traerPorIds`. Funcionalidad
+// nueva, no código migrado.
 const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 262;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_383;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_432;
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
 
