@@ -72,7 +72,9 @@ function horaPrevia(hitos: readonly HitoFila[], tipo: TipoHito): { tipo: TipoHit
  * sido aceptado y no hay nada de qué colgarse): el cron no lo persigue todavía.
  */
 export function anclaDe(
-  hito: HitoFila, viaje: ViajeContexto, hitos: readonly HitoFila[], config: ConfigConductor,
+  hito: HitoFila,
+  viaje: Pick<ViajeContexto, 'aceptadoEn' | 'citaOrigenEn' | 'citaDestinoEn' | 'etaOrigenEn' | 'etaDestinoEn'>,
+  hitos: readonly HitoFila[], config: ConfigConductor,
 ): Date | null {
   const min = 60_000;
   const aceptado = ms(viaje.aceptadoEn);
