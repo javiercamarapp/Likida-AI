@@ -111,7 +111,7 @@ export const estatusViajeReal: ServicioEstatusViaje = {
       .eq('tenant_id', tenantId).eq('cliente_id', clienteId).in('estatus', ESTATUS_EN_CURSO)
       // Sin `regreso_en`: un viaje que ya va de regreso se entregó.
       .is('regreso_en', null)
-      .order('created_at', { ascending: false }).limit(10), 'vigia.viajes_en_curso');
+      .order('created_at', { ascending: false }).order('id').limit(10), 'vigia.viajes_en_curso');
     const filas = exigir('viajes_en_curso', { data, error }) ?? [];
     return (filas as Fila[]).map((f): ResumenViaje => ({ viajeId: String(f.id), folio: str(f.folio), origen: str(f.origen), destino: str(f.destino) }));
   },
@@ -133,7 +133,7 @@ export const estatusViajeReal: ServicioEstatusViaje = {
       const p = exigir('estatus_posicion', await acotada(db.from('posicion')
         .select('lat, lng, medida_en')
         .eq('tenant_id', tenantId).eq('unidad_id', unidadId)
-        .order('medida_en', { ascending: false }).limit(1), 'vigia.estatus_posicion')) as Fila[] | null;
+        .order('medida_en', { ascending: false }).order('id', { ascending: false }).limit(1), 'vigia.estatus_posicion')) as Fila[] | null;
       const fila = p?.[0];
       if (fila && typeof fila.lat === 'number' && typeof fila.lng === 'number' && typeof fila.medida_en === 'string') {
         posicion = { lat: fila.lat, lng: fila.lng, medidaEn: fila.medida_en };
@@ -145,7 +145,7 @@ export const estatusViajeReal: ServicioEstatusViaje = {
     let documentos: EstatusViaje['documentos'] = null;
     try {
       const pods = exigir('estatus_pod', await acotada(db.from('pod')
-        .select('id').eq('tenant_id', tenantId).eq('viaje_id', viajeId).eq('estado', 'subido').limit(1), 'vigia.estatus_pod')) as Fila[] | null;
+        .select('id').eq('tenant_id', tenantId).eq('viaje_id', viajeId).eq('estado', 'subido').order('id').limit(1), 'vigia.estatus_pod')) as Fila[] | null;
       podRecibido = (pods?.length ?? 0) > 0;
       documentos = [{ nombre: 'Comprobante de entrega (POD)', estado: podRecibido ? 'entregado' : 'pendiente' }];
     } catch (e) {
@@ -154,15 +154,15 @@ export const estatusViajeReal: ServicioEstatusViaje = {
     let facturaEmitida: boolean | null = null;
     try {
       const f1 = exigir('estatus_factura', await acotada(db.from('factura_emitida')
-        .select('id').eq('tenant_id', tenantId).eq('viaje_id', viajeId).in('estatus', ['emitida', 'pagada']).limit(1), 'vigia.estatus_factura')) as Fila[] | null;
+        .select('id').eq('tenant_id', tenantId).eq('viaje_id', viajeId).in('estatus', ['emitida', 'pagada']).order('id').limit(1), 'vigia.estatus_factura')) as Fila[] | null;
       let hay = (f1?.length ?? 0) > 0;
       if (!hay) {
         const ligas = exigir('estatus_factura_viaje', await acotada(db.from('factura_viaje')
-          .select('factura_id').eq('viaje_id', viajeId).limit(20), 'vigia.estatus_factura_viaje')) as Fila[] | null;
+          .select('factura_id').eq('viaje_id', viajeId).order('factura_id').limit(20), 'vigia.estatus_factura_viaje')) as Fila[] | null;
         const ids = (ligas ?? []).map((l) => String(l.factura_id));
         if (ids.length > 0) {
           const f2 = exigir('estatus_factura_2', await acotada(db.from('factura_emitida')
-            .select('id').eq('tenant_id', tenantId).in('id', ids).in('estatus', ['emitida', 'pagada']).limit(1), 'vigia.estatus_factura_2')) as Fila[] | null;
+            .select('id').eq('tenant_id', tenantId).in('id', ids).in('estatus', ['emitida', 'pagada']).order('id').limit(1), 'vigia.estatus_factura_2')) as Fila[] | null;
           hay = (f2?.length ?? 0) > 0;
         }
       }
@@ -202,7 +202,7 @@ export function crearRepoVigia(): RepoVigia {
     // atención usa el `tenantId` del contacto que vuelve de aquí.
     async contactoPorTelefono(telefono) {
       const filas = exigir('contacto_por_telefono', await acotada(supabaseAdmin().from('vigia_contacto')
-        .select(COLS_CONTACTO).eq('telefono', normalizarTelefonoWa(telefono)).in('estado', ['activo', 'baja']).limit(5), 'vigia.contacto_por_telefono')) as Fila[] | null;
+        .select(COLS_CONTACTO).eq('telefono', normalizarTelefonoWa(telefono)).in('estado', ['activo', 'baja']).order('id').limit(5), 'vigia.contacto_por_telefono')) as Fila[] | null;
       const lista = (filas ?? []).map(aContacto);
       return lista.find((c) => c.estado === 'activo') ?? lista[0] ?? null;
     },
@@ -254,14 +254,14 @@ export function crearRepoVigia(): RepoVigia {
     async ultimoEntranteId(tenantId, conversacionId) {
       const f = exigir('ultimo_entrante', await acotada(supabaseAdmin().from('vigia_mensaje')
         .select('id').eq('tenant_id', tenantId).eq('conversacion_id', conversacionId).eq('direccion', 'entrante')
-        .order('created_at', { ascending: false }).limit(1), 'vigia.ultimo_entrante')) as Fila[] | null;
+        .order('created_at', { ascending: false }).order('id').limit(1), 'vigia.ultimo_entrante')) as Fila[] | null;
       return f?.[0] ? String(f[0].id) : null;
     },
 
     async entrantesRecientes(tenantId, conversacionId, desde, limite) {
       const f = exigir('entrantes_recientes', await acotada(supabaseAdmin().from('vigia_mensaje')
         .select('texto, created_at').eq('tenant_id', tenantId).eq('conversacion_id', conversacionId).eq('direccion', 'entrante')
-        .gte('created_at', desde.toISOString()).order('created_at', { ascending: true }).limit(limite), 'vigia.entrantes_recientes')) as Fila[] | null;
+        .gte('created_at', desde.toISOString()).order('created_at', { ascending: true }).order('id').limit(limite), 'vigia.entrantes_recientes')) as Fila[] | null;
       return (f ?? []).map((x) => ({ texto: typeof x.texto === 'string' ? x.texto : null, creadoEn: String(x.created_at) }));
     },
 
@@ -283,7 +283,7 @@ export function crearRepoVigia(): RepoVigia {
       // 23505 = ya hay una respuesta del agente para ese entrante (índice único de la 0400): otra pasada la redactó.
       if (error?.code === '23505' && n.respuestaA) {
         const previo = exigir('crear_saliente_previo', await acotada(db.from('vigia_mensaje')
-          .select('id').eq('tenant_id', tenantId).eq('respuesta_a', n.respuestaA).eq('autor', 'agente').limit(1), 'vigia.crear_saliente_previo')) as Fila[] | null;
+          .select('id').eq('tenant_id', tenantId).eq('respuesta_a', n.respuestaA).eq('autor', 'agente').order('id').limit(1), 'vigia.crear_saliente_previo')) as Fila[] | null;
         if (previo?.[0]) return { id: String(previo[0].id), creado: false };
       }
       throw new Error(`vigia.crear_saliente: ${error?.message ?? 'sin datos'}`);
@@ -334,7 +334,7 @@ export function crearRepoVigia(): RepoVigia {
     async pendientesDeHilo(tenantId, conversacionId) {
       const f = exigir('pendientes_de_hilo', await acotada(supabaseAdmin().from('vigia_mensaje')
         .select('id').eq('tenant_id', tenantId).eq('conversacion_id', conversacionId).eq('direccion', 'saliente')
-        .in('estado', ['pendiente_aprobacion', 'borrador']).limit(50), 'vigia.pendientes_de_hilo')) as Fila[] | null;
+        .in('estado', ['pendiente_aprobacion', 'borrador']).order('id').limit(50), 'vigia.pendientes_de_hilo')) as Fila[] | null;
       return (f ?? []).map((x) => String(x.id));
     },
 
@@ -403,7 +403,7 @@ export function crearRepoVigia(): RepoVigia {
       }
       const f = exigir('destinatario_dueno', await acotada(supabaseAdmin().from('app_user')
         .select('id, telefono, activo').eq('tenant_id', tenantId).eq('rol', 'flota_admin')
-        .or('activo.is.null,activo.eq.true').not('telefono', 'is', null).limit(5), 'vigia.destinatario_dueno')) as Fila[] | null;
+        .or('activo.is.null,activo.eq.true').not('telefono', 'is', null).order('id').limit(5), 'vigia.destinatario_dueno')) as Fila[] | null;
       const dueno = (f ?? []).find((x) => x.activo !== false && str(x.telefono));
       return dueno ? { userId: String(dueno.id), telefono: normalizarTelefonoWa(String(dueno.telefono)) } : null;
     },
@@ -413,7 +413,7 @@ export function crearRepoVigia(): RepoVigia {
       const db = supabaseAdmin();
       const convs = (exigir('en_espera', await acotada(db.from('vigia_conversacion')
         .select(COLS_CONV).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null)
-        .order('sin_respuesta_desde', { ascending: true }).limit(limite), 'vigia.en_espera')) as Fila[] | null ?? []).map(aConversacion);
+        .order('sin_respuesta_desde', { ascending: true }).order('id').limit(limite), 'vigia.en_espera')) as Fila[] | null ?? []).map(aConversacion);
       if (convs.length === 0) return [];
       const tenants = [...new Set(convs.map((c) => c.tenantId))];
       const configs = (exigir('en_espera_config', await acotada(db.from('vigia_config')
@@ -432,7 +432,7 @@ export function crearRepoVigia(): RepoVigia {
 
     async aprobadosAtorados(antesDe, limite) {
       const f = exigir('aprobados_atorados', await acotada(supabaseAdmin().from('vigia_mensaje')
-        .select('id, tenant_id').eq('direccion', 'saliente').eq('estado', 'aprobado').lt('aprobado_en', antesDe.toISOString()).limit(limite), 'vigia.aprobados_atorados')) as Fila[] | null;
+        .select('id, tenant_id').eq('direccion', 'saliente').eq('estado', 'aprobado').lt('aprobado_en', antesDe.toISOString()).order('id').limit(limite), 'vigia.aprobados_atorados')) as Fila[] | null;
       return (f ?? []).map((x) => ({ tenantId: String(x.tenant_id), id: String(x.id) }));
     },
 
@@ -509,14 +509,14 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
 
   const convRows = (exigir('tablero_conv', await acotada(db.from('vigia_conversacion')
     .select(COLS_CONV).eq('tenant_id', tenantId).eq('estado', 'activa')
-    .order('updated_at', { ascending: false }).limit(100), 'vigia.tablero_conv')) as Fila[] | null ?? []).map(aConversacion);
+    .order('updated_at', { ascending: false }).order('id').limit(100), 'vigia.tablero_conv')) as Fila[] | null ?? []).map(aConversacion);
 
   const contactosRows = (exigir('tablero_contactos', await acotada(db.from('vigia_contacto')
     .select(COLS_CONTACTO).eq('tenant_id', tenantId).neq('estado', 'suprimido')
-    .order('created_at', { ascending: false }).limit(200), 'vigia.tablero_contactos')) as Fila[] | null ?? []).map(aContacto);
+    .order('created_at', { ascending: false }).order('id').limit(200), 'vigia.tablero_contactos')) as Fila[] | null ?? []).map(aContacto);
 
   const clientesRows = (exigir('tablero_clientes', await acotada(db.from('cliente')
-    .select('id, nombre').eq('tenant_id', tenantId).eq('activo', true).order('nombre').limit(500), 'vigia.tablero_clientes')) as Fila[] | null ?? [])
+    .select('id, nombre').eq('tenant_id', tenantId).eq('activo', true).order('nombre').order('id').limit(500), 'vigia.tablero_clientes')) as Fila[] | null ?? [])
     .map((f) => ({ id: String(f.id), nombre: String(f.nombre) }));
   const nombreCliente = new Map(clientesRows.map((c) => [c.id, c.nombre]));
   const contactoPorId = new Map(contactosRows.map((c) => [c.id, c]));
@@ -527,7 +527,7 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
   if (idsConv.length > 0) {
     const ent = (exigir('tablero_ultimos', await acotada(db.from('vigia_mensaje')
       .select('conversacion_id, texto, created_at').eq('tenant_id', tenantId).eq('direccion', 'entrante').in('conversacion_id', idsConv)
-      .order('created_at', { ascending: false }).limit(300), 'vigia.tablero_ultimos')) as Fila[] | null ?? []);
+      .order('created_at', { ascending: false }).order('id').limit(300), 'vigia.tablero_ultimos')) as Fila[] | null ?? []);
     for (const m of ent) if (!ultimos.has(String(m.conversacion_id))) ultimos.set(String(m.conversacion_id), recorta(m.texto, 160));
   }
 
@@ -541,7 +541,7 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
   // Cola de aprobación.
   const pend = (exigir('tablero_pendientes', await acotada(db.from('vigia_mensaje')
     .select(COLS_MSG).eq('tenant_id', tenantId).eq('direccion', 'saliente').eq('estado', 'pendiente_aprobacion')
-    .order('created_at', { ascending: true }).limit(50), 'vigia.tablero_pendientes')) as Fila[] | null ?? []).map(aMensaje);
+    .order('created_at', { ascending: true }).order('id').limit(50), 'vigia.tablero_pendientes')) as Fila[] | null ?? []).map(aMensaje);
   const respuestaIds = pend.map((m) => m.respuestaA).filter((x): x is string => !!x);
   const entrantesDe = new Map<string, string | null>();
   if (respuestaIds.length > 0) {
@@ -560,7 +560,7 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
   const desde24 = new Date(ahora.getTime() - 24 * 3_600_000).toISOString();
   const fallidos = (exigir('tablero_fallidos', await acotada(db.from('vigia_mensaje')
     .select(COLS_MSG).eq('tenant_id', tenantId).eq('direccion', 'saliente').eq('estado', 'fallido').gte('created_at', desde24)
-    .order('created_at', { ascending: false }).limit(20), 'vigia.tablero_fallidos')) as Fila[] | null ?? []).map(aMensaje)
+    .order('created_at', { ascending: false }).order('id').limit(20), 'vigia.tablero_fallidos')) as Fila[] | null ?? []).map(aMensaje)
     .map((m): FalloTablero => ({ id: m.id, conversacionId: m.conversacionId, clienteNombre: clienteDeConv.get(m.conversacionId) ?? null, error: m.error, creadoEn: m.createdAt }));
 
   // Bitácora reciente (sin texto de clientes).
@@ -573,7 +573,7 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
   const desde7 = new Date(ahora.getTime() - 7 * 86_400_000).toISOString();
   const enviadas = (exigir('tablero_enviadas', await acotada(db.from('vigia_mensaje')
     .select('respuesta_a, enviado_en').eq('tenant_id', tenantId).eq('direccion', 'saliente').eq('estado', 'enviado')
-    .not('respuesta_a', 'is', null).gte('enviado_en', desde7).order('enviado_en', { ascending: false }).limit(100), 'vigia.tablero_enviadas')) as Fila[] | null ?? []);
+    .not('respuesta_a', 'is', null).gte('enviado_en', desde7).order('enviado_en', { ascending: false }).order('id').limit(100), 'vigia.tablero_enviadas')) as Fila[] | null ?? []);
   const tiempos: number[] = [];
   if (enviadas.length > 0) {
     const ents = (exigir('tablero_enviadas_ent', await acotada(db.from('vigia_mensaje')
@@ -592,7 +592,7 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
   };
 
   const gerentes = (exigir('tablero_gerentes', await acotada(db.from('app_user')
-    .select('id, nombre, rol, activo').eq('tenant_id', tenantId).in('rol', ['flota_admin', 'encargado']).or('activo.is.null,activo.eq.true').limit(50), 'vigia.tablero_gerentes')) as Fila[] | null ?? [])
+    .select('id, nombre, rol, activo').eq('tenant_id', tenantId).in('rol', ['flota_admin', 'encargado']).or('activo.is.null,activo.eq.true').order('id').limit(50), 'vigia.tablero_gerentes')) as Fila[] | null ?? [])
     .filter((f) => f.activo !== false).map((f) => ({ id: String(f.id), nombre: str(f.nombre), rol: String(f.rol) }));
 
   return {

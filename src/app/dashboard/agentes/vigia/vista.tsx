@@ -121,7 +121,7 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
 function EsqKpis() {
   return (
     <div role="status" aria-label="Cargando" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      {Array.from({ length: 4 }).map((_, i) => (
+      {[0, 1, 2, 3].map((i) => (
         <div key={i} className="card p-3.5"><Barra alto={10} ancho="55%" /><div className="mt-1.5"><Barra alto={20} ancho="60%" /></div></div>
       ))}
     </div>
