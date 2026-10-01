@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
+import { sanearPayloadWhatsApp } from '@/lib/meta/plantilla_payload';
 import { reclamarSalidasWhatsApp, finalizarSalidaWhatsApp, reconciliarReceiptsWhatsApp, purgarReceiptsWhatsApp } from '@/lib/likida/wa_outbox';
 import { conPool } from '@/lib/likida/lotes';
 import { leerInterruptor } from '@/lib/likida/interruptores';
@@ -129,7 +130,8 @@ export async function GET(req: Request) {
       try {
         const r = await fetch(`${GRAPH}/${phoneId}/messages`, {
           method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(s.payload), signal: AbortSignal.timeout(10_000),
+          // Última defensa del 132018: filas viejas del outbox con parámetros crudos.
+          body: JSON.stringify(sanearPayloadWhatsApp(s.payload)), signal: AbortSignal.timeout(10_000),
         });
         const body = await r.text();
         if (!r.ok) {
