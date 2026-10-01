@@ -26,6 +26,19 @@ const tablas = vi.hoisted(() => ({
 
 vi.mock('@/lib/meta/client', () => ({
   MAX_CUERPO_BOTONES: 1024, sendText }));
+// `avisarOficina` (texto con la ventana abierta / plantilla `aviso_operacion_v1`
+// con la cerrada) se simula sobre `sendText`: aquí se prueba el contrato de los
+// relojes (sello después de mandar, canal por canal); la selección de canal tiene
+// sus propias pruebas (enviar_con_fallback.test.ts).
+const llamadasAviso: Array<{ parametros: string[]; contexto?: Record<string, unknown> }> = [];
+vi.mock('@/lib/meta/aviso_oficina', () => ({
+  parametrosAvisoOficina: (a: string, b: string, c: string) => [a, b, c],
+  avisarOficina: async (t: string, b: string, o: { parametros: string[]; contexto?: Record<string, unknown> }) => {
+    llamadasAviso.push(o);
+    const id = await sendText(t, b);
+    return id ? { ok: true, via: 'texto', id } : { ok: false, motivo: 'rechazado', fueraDeVentana: false };
+  },
+}));
 vi.mock('./contactos', () => ({ telefonoJefeDe, telefonoParaDineroDe }));
 vi.mock('./asistencia_wa', () => ({ anotarEventoIncidencia }));
 vi.mock('./presupuesto', () => ({ acotada: (q: unknown) => q }));
@@ -81,6 +94,7 @@ beforeEach(() => {
   tablas.llamadas.length = 0;
   sendText.mockClear();
   sendText.mockResolvedValue('wamid.OK');
+  llamadasAviso.length = 0;
   telefonoJefeDe.mockClear();
   telefonoJefeDe.mockResolvedValue('5210000000001');
   telefonoParaDineroDe.mockClear();
@@ -179,6 +193,22 @@ describe('avisarVencimientos — un aviso por umbral, sellado después de mandar
     expect(texto).toContain('Juan');
     // El sello, con umbral y fecha en la llave.
     expect(tablas.upserts.filter((u) => u.tabla === 'aviso_vigencia')).toHaveLength(1);
+  });
+
+  it('P0-B: sale por avisarOficina con los parámetros de la plantilla de respaldo (resumen ≤ 60, liga al panel, tenant en el contexto)', async () => {
+    tablas.respuestas.set('unidad', [
+      { id: 'u1', tenant_id: 't1', numero_economico: 'C2-08', poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null },
+    ]);
+    tablas.respuestas.set('operador', []);
+    tablas.respuestas.set('flota_poliza', []);
+    tablas.respuestas.set('aviso_vigencia', []);
+    await avisarVencimientos(AHORA);
+    expect(llamadasAviso).toHaveLength(1);
+    const [chofer, resumen, liga] = llamadasAviso[0].parametros;
+    expect(chofer).toBe('Likida');
+    expect(resumen.length).toBeLessThanOrEqual(60);
+    expect(liga).toMatch(/^https:\/\/.+\/dashboard$/);
+    expect(llamadasAviso[0].contexto).toMatchObject({ agente: 'vencimientos', tenantId: 't1' });
   });
 
   it('lo ya sellado NO se re-avisa', async () => {
