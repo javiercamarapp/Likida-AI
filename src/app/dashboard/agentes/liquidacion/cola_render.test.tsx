@@ -85,7 +85,9 @@ describe('SeccionCola', () => {
     // El link de la siguiente página lleva el cursor Y conserva el contexto.
     expect(html).toContain('cursor=cursor-2');
     expect(html).toContain('tenant=flota-1');
-    expect(html).toContain('Siguientes');
+    // El enlace estándar de paginación (`EnlacePagina`): «Siguiente», rel="next", dentro de un <nav> con nombre.
+    expect(html).toContain('rel="next"');
+    expect(html).toContain('aria-label="Paginación"');
   });
 
   it('sin nombre de operador pinta un guion — no inventa uno', async () => {
@@ -95,7 +97,7 @@ describe('SeccionCola', () => {
 
   it('sin cursor no hay «siguientes»: la cola no promete una página que no existe', async () => {
     const html = await pintar(pagina([fila(1)], 1));
-    expect(html).not.toContain('Siguientes');
+    expect(html).not.toContain('rel="next"');
   });
 
   it('vacío CON filtros dice que es el filtro, no que no haya nada que firmar', async () => {
