@@ -35,7 +35,7 @@ vi.mock('@/lib/meta/aviso_oficina', () => ({
   parametrosAvisoOficina: (a: string, b: string, c: string) => [a, b, c],
   avisarOficina: async (t: string, b: string, o: { parametros: string[]; contexto?: Record<string, unknown> }) => {
     llamadasAviso.push(o);
-    const id = await sendText(t, b);
+    const id = await (sendText as unknown as (t: string, b: string) => Promise<string | null>)(t, b);
     return id ? { ok: true, via: 'texto', id } : { ok: false, motivo: 'rechazado', fueraDeVentana: false };
   },
 }));
