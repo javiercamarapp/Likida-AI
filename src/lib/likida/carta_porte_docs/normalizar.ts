@@ -64,12 +64,15 @@ function armarFecha(a: number, m: number, d: number, h?: number, mi?: number, s?
 /** Interpreta una fecha mexicana (día primero). `null` = no es una fecha reconocible. */
 export function normalizarFecha(crudo: string): { valor: string | null; nota?: string } {
   const t = crudo.trim().toLowerCase().replace(/\s+/g, ' ');
-  // Hora opcional al final: 10:30 o 10:30:15 (con a. m. / p. m. no se interpreta).
-  const hora = /(?:[ t,]+(?:a las )?)(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(?:hrs?\.?|h)?$/.exec(t);
-  const sinHora = hora ? t.slice(0, hora.index).trim() : t;
+  // Hora opcional al final: 10:30 o 10:30:15 (sin cuantificadores anidados: se quita el sufijo «hrs» y luego se prueba cada forma).
+  const base = t.replace(/\s+a las\s+/, ' ').replace(/\s*(hrs|hr|h)\.?$/, '');
+  const conSeg = /[ t,]+(\d{1,2}):(\d{2}):(\d{2})$/.exec(base);
+  const sinSeg = conSeg ? null : /[ t,]+(\d{1,2}):(\d{2})$/.exec(base);
+  const hora = conSeg ?? sinSeg;
+  const sinHora = (hora ? base.slice(0, hora.index) : base).trim().replace(/\s+de\s+/g, ' ');
   const h = hora ? Number(hora[1]) : undefined;
   const mi = hora ? Number(hora[2]) : undefined;
-  const s = hora?.[3] ? Number(hora[3]) : 0;
+  const s = conSeg ? Number(conSeg[3]) : 0;
 
   let m: RegExpExecArray | null;
   // ISO: 2026-10-15
@@ -84,14 +87,14 @@ export function normalizarFecha(crudo: string): { valor: string | null; nota?: s
     return { valor: armarFecha(2000 + +m[3], +m[2], +m[1], h, mi, s), nota: 'Año de dos dígitos leído como 20' + m[3] + '.' };
   }
   // 15 de octubre de 2026 · 15-oct-2026 · 15 oct 2026
-  if ((m = /^(\d{1,2})(?:\s+de)?[\s-]+([a-záéíóú]+)\.?(?:\s+de)?[\s-]+(\d{4})$/.exec(sinHora))) {
+  if ((m = /^(\d{1,2})[\s-]+([a-záéíóú]+)\.?[\s-]+(\d{4})$/.exec(sinHora))) {
     const mes = MESES[m[2].normalize('NFD').replace(/[̀-ͯ]/g, '')];
     if (mes) return { valor: armarFecha(+m[3], mes, +m[1], h, mi, s) };
   }
   // 20261015 (compacto)
   if ((m = /^(\d{4})(\d{2})(\d{2})$/.exec(sinHora))) return { valor: armarFecha(+m[1], +m[2], +m[3], h, mi, s) };
   // Serial de Excel
-  if (/^\d{5}(\.\d+)?$/.test(sinHora)) {
+  if (/^\d{5}$/.test(sinHora) || /^\d{5}\.\d+$/.test(sinHora)) {
     const p = deSerialExcel(Number(sinHora));
     if (p) {
       const conHora = p[3] !== 0 || p[4] !== 0 || p[5] !== 0;
@@ -101,13 +104,25 @@ export function normalizarFecha(crudo: string): { valor: string | null; nota?: s
   return { valor: null };
 }
 
+/** Lo que puede ir pegado a una cifra del documento y no es parte de ella. */
+const SUFIJOS_NUMERO: ReadonlySet<string> = new Set(['kg', 'kgs', 'kilo', 'kilos', 'ton', 'tons', 'tonelada', 'toneladas', 'lb', 'lbs', 'pza', 'pzas', 'mxn', 'usd', 'mn', 'm.n']);
+
+/** `1,234,567` / `1.234.567`: un grupo de 1 a 3 dígitos y uno o más de EXACTAMENTE 3, separados por `sep`. */
+function esMilesAgrupados(t: string, sep: ',' | '.'): boolean {
+  const partes = t.replace(/^[+-]/, '').split(sep);
+  return partes.length >= 2 && /^\d{1,3}$/.test(partes[0]) && partes.slice(1).every((p) => /^\d{3}$/.test(p));
+}
+
 /**
  * «1,234.50», «1.234,50», «1 234,5», «1234,5 kg» → `1234.5`. `null` si no es un número.
  * `ambiguo` = «1.500» o «1,500»: puede ser mil quinientos o uno punto cinco.
  */
 export function normalizarNumero(crudo: string | number, miles?: ',' | '.'): { valor: number | null; ambiguo: boolean } {
   if (typeof crudo === 'number') return { valor: Number.isFinite(crudo) ? Math.round(crudo * 1000) / 1000 : null, ambiguo: false };
-  let t = crudo.replace(CONTROL, ' ').trim().replace(/^\$/, '').replace(/\s*(kgs?|kilos?|ton(?:s|eladas?)?|lbs?|pzas?|mxn|usd|m\.?n\.?)\.?$/i, '').trim();
+  let t = crudo.replace(CONTROL, ' ').trim().replace(/^\$/, '').trim();
+  // Una unidad o moneda pegada al número («30 ton», «1,250 MXN»): se quita la última palabra si es una de las conocidas.
+  const sufijo = /\s+([a-z.]{1,12})$/i.exec(t);
+  if (sufijo && SUFIJOS_NUMERO.has(sufijo[1].toLowerCase().replace(/\.+$/, ''))) t = t.slice(0, sufijo.index).trim();
   t = t.replace(/\s+/g, '');
   if (t === '' || !/^[+-]?[\d.,]+$/.test(t)) return { valor: null, ambiguo: false };
   let ambiguo = false;
@@ -127,11 +142,11 @@ export function normalizarNumero(crudo: string | number, miles?: ',' | '.'): { v
     limpio = t.split(mil).join('').replace(dec, '.');
   } else if (comas > 0) {
     if (comas === 1 && /^[+-]?\d{1,3},\d{3}$/.test(t)) { ambiguo = true; limpio = t.replace(',', ''); }
-    else if (comas > 1 && /^[+-]?\d{1,3}(,\d{3})+$/.test(t)) limpio = t.replace(/,/g, '');
+    else if (comas > 1 && esMilesAgrupados(t, ',')) limpio = t.replace(/,/g, '');
     else if (comas === 1) limpio = t.replace(',', '.');
     else return { valor: null, ambiguo: false };
   } else if (puntos > 1) {
-    if (/^[+-]?\d{1,3}(\.\d{3})+$/.test(t)) limpio = t.replace(/\./g, '');
+    if (esMilesAgrupados(t, '.')) limpio = t.replace(/\./g, '');
     else return { valor: null, ambiguo: false };
   } else if (puntos === 1 && /^[+-]?\d{1,3}\.\d{3}$/.test(t)) {
     // En México el punto es decimal: «1.500» se lee 1.5 — y se marca ambiguo.

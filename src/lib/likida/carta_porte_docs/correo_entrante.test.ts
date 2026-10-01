@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-vi.mock('./repo', async () => (await import('./repo_falso.test.util')).api);
+vi.mock('./repo', async () => (await import('./repo_falso.fixture')).api);
 vi.mock('../bitacora_escritura', () => ({ anotarBitacora: vi.fn(async () => true) }));
-import { estado, reset } from './repo_falso.test.util';
-import { A, B, lecturaAtlas, sembrarFlotas } from './escenario.test.util';
+import { estado, reset } from './repo_falso.fixture';
+import { A, B, lecturaAtlas, sembrarFlotas } from './escenario.fixture';
 import {
   MAX_ADJUNTO_BYTES, atenderCorreoCartaPorte, direccionCp, generarTokenCp, remitenteReconocido, tokenCpDeDestinatarios, tokenCpDeDireccion, type DepsCorreo,
 } from './correo_entrante';
-import { llmFalso, lecturaBoreal } from './llm_falso.test.util';
-import { correoTexto, defectuosos, excelAtlas, pdfBoreal, xmlCartaPorte } from './fixtures.test.util';
+import { llmFalso, lecturaBoreal } from './llm_falso.fixture';
+import { correoTexto, defectuosos, excelAtlas, pdfBoreal, xmlCartaPorte } from './documentos_sinteticos.fixture';
 import * as repo from './repo';
 
 const DOM = 'mail.likida.test';

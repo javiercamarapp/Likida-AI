@@ -4,7 +4,7 @@ import { detectarFormato, prepararContenido, MAX_BYTES_DOC, MAX_FILAS_HOJA, MAX_
 import { extraerCartaPorteXml } from './xml_ccp';
 import {
   csvAtlas, correoTexto, defectuosos, emlConAsunto, excelAtlas, fotoRemision, pdfBoreal, pdfEscaneado, xmlCartaPorte, xmlPropio, RFC,
-} from './fixtures.test.util';
+} from './documentos_sinteticos.fixture';
 
 async function leer(bytes: Uint8Array) {
   const d = detectarFormato(bytes);

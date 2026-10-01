@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { folioDelViaje, operadorPorNombre, planDeViaje } from './salida';
-import { cv, extraccionAtlasOk } from './fixtures.test.util';
+import { cv, extraccionAtlasOk } from './documentos_sinteticos.fixture';
 
 describe('planDeViaje (pura)', () => {
   const doc = { id: 'd1', sha256: 'ab'.repeat(32) };

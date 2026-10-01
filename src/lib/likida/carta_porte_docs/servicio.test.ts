@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./repo', async () => (await import('./repo_falso.test.util')).api);
+vi.mock('./repo', async () => (await import('./repo_falso.fixture')).api);
 vi.mock('../bitacora_escritura', () => ({ anotarBitacora: vi.fn(async () => true) }));
 
-import { estado, reset } from './repo_falso.test.util';
-import { A, B, lecturaAtlas, llmBoreal, sembrarFlotas, sinAgenteApagado, subir, subirYProcesar } from './escenario.test.util';
+import { estado, reset } from './repo_falso.fixture';
+import { A, B, lecturaAtlas, llmBoreal, sembrarFlotas, sinAgenteApagado, subir, subirYProcesar } from './escenario.fixture';
 import { DIAS_RETENCION, MAX_INTENTOS, nombreArchivoSeguro, procesarDocumento, recibirDocumento, validarDocumento } from './servicio';
-import { defectuosos, excelAtlas, fotoRemision, pdfBoreal, pdfEscaneado, xmlCartaPorte, csvAtlas, correoTexto, extraccionAtlasOk, RFC } from './fixtures.test.util';
-import { llmFalso, lecturaBoreal, salida } from './llm_falso.test.util';
+import { defectuosos, excelAtlas, fotoRemision, pdfBoreal, pdfEscaneado, xmlCartaPorte, csvAtlas, correoTexto, extraccionAtlasOk, RFC } from './documentos_sinteticos.fixture';
+import { llmFalso, lecturaBoreal, salida } from './llm_falso.fixture';
 import * as repo from './repo';
 
 beforeEach(() => { reset(); sembrarFlotas(); });
@@ -148,7 +148,7 @@ describe('procesarDocumento', () => {
   it('dos procesos concurrentes: UNO extrae y le paga al modelo; el otro no puede reclamar', async () => {
     const r = await subir(A, await pdfBoreal());
     let llamadas = 0;
-    const lento = llmFalso(() => { llamadas++; return llmBoreal().llamadas && lecturaBoreal(); });
+    const lento = llmFalso((e) => { llamadas++; return lecturaBoreal(e.nivel); });
     const [x, y] = await Promise.all([
       procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => lento }),
       procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => lento }),
@@ -239,7 +239,7 @@ describe('procesarDocumento', () => {
 
   it('si otro cambio llegó mientras el modelo leía, se detecta y no se pisa', async () => {
     const r = await subir(A, await pdfBoreal());
-    const llm = llmFalso((e) => { estado.docs.get(r.documentoId)!.version += 5; return llmBoreal.length ? lecturaAtlas(e.nivel) : lecturaAtlas(e.nivel); });
+    const llm = llmFalso((e) => { estado.docs.get(r.documentoId)!.version += 5; return lecturaAtlas(e.nivel); });
     const p = await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => llm });
     expect(p).toMatchObject({ ok: false, motivo: 'perdi_el_lease' });
     expect(estado.docs.get(r.documentoId)!.extraccion).toBeNull();

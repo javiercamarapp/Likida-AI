@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Extraccion } from './campos';
 import { completarDerivados } from './derivar';
 import { confianzaMinimaCritica, problemaRfc, validarExtraccion } from './validacion';
-import { cv, extraccionAtlasOk, RFC, rfcValido } from './fixtures.test.util';
+import { cv, extraccionAtlasOk, RFC, rfcValido } from './documentos_sinteticos.fixture';
 
 const AHORA = new Date('2026-10-01T12:00:00Z');
 const validar = (e: Extraccion, op = {}) => validarExtraccion(e, { ahora: AHORA, ...op });

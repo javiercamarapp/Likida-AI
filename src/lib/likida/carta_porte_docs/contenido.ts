@@ -12,6 +12,7 @@
 
 import * as XLSX from 'xlsx';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { aBuffer, textoDeBase64, textoDeBytes, utf8DeLatin1 } from './bytes';
 
 export type FormatoDoc = 'pdf_texto' | 'pdf_escaneado' | 'imagen' | 'excel' | 'csv' | 'xml' | 'correo';
 
@@ -93,7 +94,7 @@ export function detectarFormato(bytes: Uint8Array): DeteccionFormato {
   if (empieza(bytes, 0x50, 0x4b, 0x03, 0x04)) {
     // Un zip: solo es Excel si trae el libro adentro. Los nombres de las entradas
     // viajan en claro en las cabeceras locales.
-    const muestra = Buffer.from(bytes.subarray(0, Math.min(bytes.length, 65_536))).toString('latin1');
+    const muestra = textoDeBytes(bytes, 'latin1', 65_536);
     if (muestra.includes('xl/workbook.xml') || muestra.includes('xl/_rels') || (muestra.includes('[Content_Types].xml') && muestra.includes('xl/'))) {
       return { ok: true, clase: 'excel', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
     }
@@ -109,7 +110,7 @@ export function detectarFormato(bytes: Uint8Array): DeteccionFormato {
   for (const b of muestra) if (b === 0) nulos++;
   if (nulos > 2) return { ok: false, motivo: 'No reconocí el formato del archivo (ni PDF, ni foto, ni Excel, ni texto).' };
 
-  const t = Buffer.from(bytes).toString('utf8').replace(/^\ufeff/, '');
+  const t = textoDeBytes(bytes).replace(/^\ufeff/, '');
   const ini = t.trimStart();
   if (ini.startsWith('<?xml') || /^<[A-Za-z_][\w:.-]*[\s>/]/.test(ini)) {
     if (/^<!doctype\s+html|^<html[\s>]/i.test(ini)) return { ok: true, clase: 'correo', mime: 'text/html' };
@@ -130,7 +131,7 @@ function limpiarTextoPdf(t: string): string {
 
 async function prepararPdf(bytes: Uint8Array, avisos: string[]): Promise<ContenidoDoc> {
   const { PDFParse } = await import('pdf-parse');
-  const parser = new PDFParse({ data: Buffer.from(bytes) });
+  const parser = new PDFParse({ data: aBuffer(bytes) });
   try {
     const r = await parser.getText({ first: MAX_PAGINAS_TEXTO });
     const texto = limpiarTextoPdf(r.text ?? '');
@@ -153,7 +154,7 @@ async function prepararPdf(bytes: Uint8Array, avisos: string[]): Promise<Conteni
 async function prepararImagen(bytes: Uint8Array, avisos: string[]): Promise<ContenidoDoc> {
   const sharp = (await import('sharp')).default;
   // limitInputPixels: una imagen de 40 000 × 40 000 px cabe en pocos KB y reventaría la memoria.
-  const buf = await sharp(Buffer.from(bytes), { limitInputPixels: 40_000_000, failOn: 'error' })
+  const buf = await sharp(aBuffer(bytes), { limitInputPixels: 40_000_000, failOn: 'error' })
     .rotate()
     .resize({ width: 1800, height: 1800, fit: 'inside', withoutEnlargement: true })
     .jpeg({ quality: 82 })
@@ -187,9 +188,9 @@ function prepararHoja(bytes: Uint8Array, esCsv: boolean, avisos: string[]): Cont
   let libro: XLSX.WorkBook;
   if (esCsv) {
     // raw: el CSV se lee como TEXTO — «01000» no se vuelve 1000 y «1/2/2026» no se reinterpreta.
-    libro = XLSX.read(Buffer.from(bytes).toString('utf8').replace(/^\ufeff/, ''), { type: 'string', raw: true, cellDates: false });
+    libro = XLSX.read(textoDeBytes(bytes).replace(/^\ufeff/, ''), { type: 'string', raw: true, cellDates: false });
   } else {
-    libro = XLSX.read(Buffer.from(bytes), { type: 'buffer', cellDates: true, cellFormula: false, cellHTML: false, cellStyles: false, sheetRows: MAX_FILAS_HOJA + 1 });
+    libro = XLSX.read(aBuffer(bytes), { type: 'buffer', cellDates: true, cellFormula: false, cellHTML: false, cellStyles: false, sheetRows: MAX_FILAS_HOJA + 1 });
   }
   if (libro.SheetNames.length > MAX_HOJAS) avisos.push(`El libro tiene ${libro.SheetNames.length} hojas; se leyeron ${MAX_HOJAS}.`);
   const hojas: Hoja[] = libro.SheetNames.slice(0, MAX_HOJAS)
@@ -215,7 +216,7 @@ export function parsearXml(texto: string): unknown {
 }
 
 function prepararXml(bytes: Uint8Array, avisos: string[]): ContenidoDoc {
-  const texto = Buffer.from(bytes).toString('utf8').replace(/^\ufeff/, '');
+  const texto = textoDeBytes(bytes).replace(/^\ufeff/, '');
   if (/<!ENTITY/i.test(texto)) throw new Error('El XML declara entidades (<!ENTITY): no se lee.');
   // fast-xml-parser perdona casi todo (etiquetas sin cerrar, texto suelto): el validador estricto va primero.
   if (XMLValidator.validate(texto) !== true) throw new Error('El XML está mal formado.');
@@ -253,8 +254,8 @@ function cuerpoMime(crudo: string, profundidad = 0): string {
   const tipo = (cabecera(cab, 'Content-Type') ?? 'text/plain').toLowerCase();
   const cte = (cabecera(cab, 'Content-Transfer-Encoding') ?? '').toLowerCase();
   const dec = (s: string): string => {
-    if (cte === 'base64') return Buffer.from(s.replace(/\s+/g, ''), 'base64').toString('utf8');
-    if (cte === 'quoted-printable') return Buffer.from(decodificarQp(s), 'latin1').toString('utf8');
+    if (cte === 'base64') return textoDeBase64(s.replace(/\s+/g, ''));
+    if (cte === 'quoted-printable') return utf8DeLatin1(decodificarQp(s));
     return s;
   };
   const frontera = /boundary="?([^";\s]+)"?/i.exec(cabecera(cab, 'Content-Type') ?? '')?.[1];
@@ -279,7 +280,7 @@ function cuerpoMime(crudo: string, profundidad = 0): string {
 
 /** Un .eml o el cuerpo de un correo (texto o HTML) a texto leíble. Los adjuntos de un .eml NO se abren. */
 function prepararCorreo(bytes: Uint8Array, avisos: string[]): ContenidoDoc {
-  const crudo = Buffer.from(bytes).toString('utf8').replace(/^\ufeff/, '');
+  const crudo = textoDeBytes(bytes).replace(/^\ufeff/, '');
   let de: string | null = null; let asunto: string | null = null; let fecha: string | null = null;
   let cuerpo: string;
   if (parecenCabecerasDeCorreo(crudo)) {

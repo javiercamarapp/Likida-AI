@@ -1,6 +1,6 @@
 // Doble del LLM: salidas DETERMINISTAS por guion. Nunca llama a la red.
 import type { EntradaLlm, LlmExtractor, NivelModelo, SalidaLlm } from './extractor';
-import { RFC } from './fixtures.test.util';
+import { RFC } from './documentos_sinteticos.fixture';
 
 export type Item = [valor: string | null, confianza: number, evidencia?: string | null];
 export type Fila = Record<string, Item>;

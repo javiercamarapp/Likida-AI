@@ -100,8 +100,18 @@ import { join, relative } from 'node:path';
  * pestañear deja de medir nada — igual que el de arriba, se sube a mano, en
  * el commit que explica por qué.
  */
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 259;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_347;
+//
+// LOOP PUNTA A PUNTA (1-oct-2026), Agente 3 «Carta Porte multi-formato» — 259 → 261
+// archivos y 1,347 → 1,401 llamadas (medido con el barrido completo contra el mismo
+// commit base: 259 y 1,347). Dos archivos nuevos: `carta_porte_docs/repo.ts`, que junta
+// en UNO TODO el acceso a datos del módulo (las siete tablas de la 0420, el bucket
+// `cartaporte-docs`, las RPC de claim/retención/correo y la escritura de viaje y
+// mercancía) en vez de repartirlo por tabla —49 de las 54 llamadas—, y
+// `carta_porte_docs/bytes.ts`, que existe SOLO para sacar de contenido.ts, whatsapp.ts y
+// repo.ts las conversiones `Buffer.from(` que esta regexp cuenta como `.from(` (cinco
+// llamadas, ninguna a Supabase). Funcionalidad nueva, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 261;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_401;
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
 

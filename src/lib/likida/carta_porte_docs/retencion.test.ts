@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-vi.mock('./repo', async () => (await import('./repo_falso.test.util')).api);
-import { estado, reset } from './repo_falso.test.util';
-import { A, B, sembrarFlotas, sinAgenteApagado, subir } from './escenario.test.util';
+vi.mock('./repo', async () => (await import('./repo_falso.fixture')).api);
+import { estado, reset } from './repo_falso.fixture';
+import { A, B, sembrarFlotas, sinAgenteApagado, subir } from './escenario.fixture';
 import { purgarDocumentosVencidos } from './retencion';
-import { pdfBoreal } from './fixtures.test.util';
+import { pdfBoreal } from './documentos_sinteticos.fixture';
 
 beforeEach(() => { reset(); sembrarFlotas(); });
 

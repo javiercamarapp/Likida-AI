@@ -102,8 +102,10 @@ export type Celda = string | number | boolean | null;
 
 function formatearFecha(iso: string, modo: ExportConfig['fecha']): string {
   if (modo === 'iso') return iso;
-  const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}:\d{2}))?/.exec(iso);
-  return m ? `${m[3]}/${m[2]}/${m[1]}${m[4] ? ` ${m[4]}` : ''}` : iso;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  const h = /T(\d{2}:\d{2})/.exec(iso);
+  return `${m[3]}/${m[2]}/${m[1]}${h ? ` ${h[1]}` : ''}`;
 }
 
 function transformar(v: string, t: ColumnaExport['transformacion']): string {

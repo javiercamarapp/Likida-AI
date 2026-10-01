@@ -108,7 +108,15 @@ import { join, relative, sep } from 'node:path';
 //     `agente:peajes`;
 //   · `api/export/bitacora-conciliada/route.ts` — sesión + área dinero +
 //     puedeExportar, rate limit y siempre acotada al tenant de la sesión.
-const RUTAS_APP_REVISADAS = 78;
+//
+// 78 → 79 (loop punta a punta, Agente 3 «Carta Porte multi-formato», 1-oct-2026): una ruta,
+//   · `api/export/carta-porte-docs/route.ts` — rate limit por IP y por flota,
+//     `resolverTenantApi` (sesión → flota), área `operacion` de la bandeja de documentos
+//     + `puedeExportar`, y todas las lecturas acotadas al tenant de la sesión (un `?ids=`
+//     de otra flota no exporta nada de ella). Solo exporta documentos APROBADOS; no emite
+//     ni timbra nada. El correo `cp-<token>@…` NO suma ruta: comparte el webhook firmado de
+//     `api/correo/entrante/route.ts`, que verifica la firma Svix antes de leer el cuerpo.
+const RUTAS_APP_REVISADAS = 79;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
