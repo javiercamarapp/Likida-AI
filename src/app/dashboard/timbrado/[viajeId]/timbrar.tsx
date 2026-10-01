@@ -7,6 +7,7 @@ import { armarCfdiTimbrable } from '@/lib/likida/carta_porte_cfdi';
 import { generarIdCcp } from '@/lib/likida/carta_porte';
 import {
   leerContextoTimbre, timbrarViaje, guardarReceptorFiscal, motivoDeReservaViva,
+  liberarReservaTimbre, MINUTOS_MIN_LIBERAR_RESERVA,
 } from '@/lib/likida/carta_porte_timbre';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 // FE-23: las cifras del panel SOLO salen de aquí. Éstas se leen junto al botón
@@ -104,6 +105,26 @@ export async function SeccionTimbrado({ v, searchParams }: {
     }
   }
 
+  // AUDITORÍA OLA 1, #26: una reserva ambigua del PAC bloqueaba el viaje SIN salida.
+  // Quien la libera DECLARA que verificó en el panel del PAC que no hay CFDI.
+  async function liberarReserva(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, searchParams);
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
+    if (!puedeTimbrar(s.rol)) {
+      return { error: 'Tu rol no puede liberar el bloqueo: es del dueño de la flota o del contador.' };
+    }
+    try {
+      const r = await liberarReservaTimbre(s.tenantId, v.viajeId, { id: s.userId }, fd.get('verificadoEnPac') === 'on');
+      if (!r.ok) return { error: r.motivo };
+      return { ok: 'Bloqueo liberado. Ya puedes volver a timbrar este viaje.' };
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'liberar el bloqueo de timbrado') };
+    } finally {
+      revalidatePath(rutaActual);
+    }
+  }
+
   async function guardarReceptor(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const s = await resolverTenantEfectivo(RUTA, searchParams);
@@ -165,6 +186,21 @@ export async function SeccionTimbrado({ v, searchParams }: {
           <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
             Apartado desde {ctx.reservaPendiente.reservadoEn}.
           </p>
+        )}
+        {/* Sin folio fiscal (el PAC no contestó): la salida existe, con candado. */}
+        {ctx.reservaPendiente.uuidFiscal === null && puedeEmitir && (
+          <div className="space-y-2 pt-2">
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+              Si ya verificaste en el panel de tu PAC que NO existe un CFDI de este viaje, puedes liberar el
+              bloqueo (solo después de {MINUTOS_MIN_LIBERAR_RESERVA} minutos de apartado). Queda en la bitácora.
+            </p>
+            <FormaConAviso accion={liberarReserva} boton="Liberar el bloqueo" columnas="md:grid-cols-1">
+              <label className="flex items-start gap-2 text-[12px]">
+                <input type="checkbox" name="verificadoEnPac" />
+                <span>Verifiqué en el panel de mi PAC que NO existe un CFDI de este viaje.</span>
+              </label>
+            </FormaConAviso>
+          </div>
         )}
       </section>
     );
