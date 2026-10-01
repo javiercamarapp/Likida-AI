@@ -68,7 +68,7 @@ describe('la corrida', () => {
     const r = await llamar();
     expect(await j(r)).toMatchObject({ corrio: true, tomados: 2, procesados: 2 });
     expect(registrarLatido).toHaveBeenCalledWith('peajes', 'ok', expect.objectContaining({ procesados: 2 }));
-    expect(procesar).toHaveBeenCalledWith(expect.objectContaining({ limite: 5, venceEn: expect.any(Number) }));
+    expect(procesar).toHaveBeenCalledWith(expect.objectContaining({ limite: 3, venceEn: expect.any(Number) }));
   });
 
   it.each([{ fallidos: 1 }, { reintentar: 1 }, { claimPerdido: 1 }])('trabajo que no terminó bien (%o) → latido `parcial`, ni ok ni fallo', async (extra) => {

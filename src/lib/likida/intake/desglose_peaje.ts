@@ -301,8 +301,9 @@ export function parsearDesgloseHoja(filas: Celda[][], opciones: OpcionesParseo =
     if (fecha === null && esFilaDeTotal(fila)) { saltadasTotales++; continue; }
     const monto = montoDeCelda(fila[columnas.monto]);
     if (monto === null) { saltadasSinMonto++; continue; }
-    const caseta = String(fila[columnas.caseta] ?? '').trim() || null;
-    const tag = columnas.tag === null ? null : String(fila[columnas.tag] ?? '').trim() || null;
+    // Acotados: una celda de megabytes en «caseta» o «tag» no debe viajar a la base ni al CSV de salida.
+    const caseta = String(fila[columnas.caseta] ?? '').trim().slice(0, 120) || null;
+    const tag = columnas.tag === null ? null : String(fila[columnas.tag] ?? '').trim().slice(0, 60) || null;
 
     // La hora: la que traiga la celda de fecha, o la columna propia. Una hora
     // ilegible NO descarta la línea: entra sin hora y se cuenta.

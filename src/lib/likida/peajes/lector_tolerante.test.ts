@@ -187,6 +187,14 @@ describe('hostil', () => {
     expect(r.lineas[0].caseta).toBe('=HYPERLINK("http://x")\nsegunda línea');
     expect(r.lineas[0].tag).toBe('IMDM,10000001');
   });
+  it('una celda gigante en caseta o TAG se acota (no viaja entera a la base ni al CSV de salida)', async () => {
+    const csv = `Fecha,Caseta,Importe,Tag\n05/08/2026,${'C'.repeat(50_000)},189.00,${'T'.repeat(50_000)}\n`;
+    const r = await parsearArchivoDesglose('x.csv', Buffer.from(csv));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.lineas[0].caseta).toHaveLength(120);
+    expect(r.lineas[0].tag).toHaveLength(60);
+  });
   it('un XML se redirige al camino del CFDI consolidado', async () => {
     const r = await parsearArchivoDesglose('cfdi.xml', Buffer.from('<x/>'));
     expect(r.ok).toBe(false);
