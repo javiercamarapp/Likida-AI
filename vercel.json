@@ -62,6 +62,10 @@
     {
       "path": "/api/cron/conductor-hitos",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/vigia",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

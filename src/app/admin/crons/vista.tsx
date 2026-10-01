@@ -45,6 +45,7 @@ const RUTA: Record<CronId, string> = {
   'liquidaciones-externas': '/api/cron/liquidaciones-externas',
   peajes: '/api/cron/peajes',
   'conductor-hitos': '/api/cron/conductor-hitos',
+  vigia: '/api/cron/vigia',
 };
 
 /** Qué hace cada reloj, en una línea, para que el rojo se pueda priorizar. */
@@ -63,6 +64,7 @@ const OFICIO: Record<CronId, string> = {
   'liquidaciones-externas': 'entrega y concilia las liquidaciones que calcula el sistema del cliente',
   peajes: 'importa y concilia los desgloses de peaje que el proveedor mandó por el buzón firmado',
   'conductor-hitos': 'pide, persigue y escala los hitos del viaje (llegada, salida, regreso) a los choferes',
+  vigia: 'vigila el SLA de los clientes finales, escala por niveles y purga lo que ya cumplió su retención',
 };
 
 /**

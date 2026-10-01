@@ -139,7 +139,15 @@ import { join, relative, sep } from 'node:path';
 // 86 → 87 (misma entrega): `api/v1/evidencias/[id]/route.ts` — `abrir(req, 'operacion')`; busca la evidencia SIEMPRE
 //   con `.eq('tenant_id', …)` de la credencial, firma solo rutas que cuelgan del prefijo de esa flota y redirige (302) a una
 //   URL de 10 minutos del bucket privado: el archivo nunca se sirve ni es público.
-const RUTAS_APP_REVISADAS = 87;
+// 87 → 88 (loop punta a punta, Agente 4 «Vigía de servicio al cliente», 1-oct-2026):
+//   · `api/cron/vigia/route.ts` — puertaCron (CRON_SECRET, comparación en tiempo
+//     constante) y palanca `global` (falla cerrado si no se puede leer); latido en
+//     todo camino de salida. Barre el SLA de TODAS las flotas con el agente
+//     encendido (`vigia_config.habilitado`, apagado por omisión) y cada acción
+//     usa el tenant de la propia conversación. No acepta cuerpo ni parámetros.
+//     El tablero del Vigía NO añade rutas: sus acciones son server actions de la
+//     página, con la sesión, el rol y el tenant de la cookie.
+const RUTAS_APP_REVISADAS = 88;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
