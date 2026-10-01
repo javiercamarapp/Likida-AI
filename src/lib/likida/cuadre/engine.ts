@@ -1111,7 +1111,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     if (g.estadoSat === 'cancelado') {
       diferencias.push({ tipo: 'cfdi_cancelado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} está CANCELADO ante el SAT — no deducible.`, gastoId: g.id });
     } else if (g.estadoSat === 'no_encontrado' && g.cfdiUuid) {
-      diferencias.push({ tipo: 'cfdi_no_encontrado', concepto: g.concepto, monto: 0, nota: `El SAT NO reconoce el CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} (UUID inexistente o fabricado) — no deducible.`, gastoId: g.id });
+      diferencias.push({ tipo: 'cfdi_no_encontrado', concepto: g.concepto, monto: 0, nota: `El SAT no pudo confirmar el CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} con los datos capturados: el código 602 del servicio es ambiguo (un UUID, un RFC o un total mal leídos devuelven lo mismo que un comprobante que no existe). Verifica el folio fiscal, el RFC y el total contra el XML o el PDF del proveedor — mientras no se confirme no se toma como deducible.`, gastoId: g.id });
     } else if (g.efos === true) {
       diferencias.push({ tipo: 'cfdi_efos', concepto: g.concepto, monto: 0, nota: `El emisor del CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} está en lista negra del SAT (EFOS) — no deducible.`, gastoId: g.id });
     } else if (g.efosRevisar) {

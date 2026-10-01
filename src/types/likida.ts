@@ -103,7 +103,7 @@ export type TipoDiferencia =
   | 'cfdi_cancelado'       // CFDI cancelado ante el SAT → no deducible
   | 'cfdi_efos'            // emisor en lista negra 69-B → no deducible
   | 'cfdi_efos_indeterminado' // SAT devolvió código EFOS no concluyente → a bandeja (no fraude)
-  | 'cfdi_no_encontrado'   // el SAT no reconoce el UUID (fabricado/inexistente) → no deducible
+  | 'cfdi_no_encontrado'   // el SAT no pudo confirmar el UUID (602, AMBIGUO: también un UUID/RFC/total mal leído) → no se toma como deducible hasta confirmarlo
   | 'cfdi_pendiente'       // no se pudo validar con el SAT (continuar, revisar después)
   | 'monto_invalido'       // monto ≤ 0 (OCR erróneo / nota de crédito) → revisar a mano
   | 'complemento_hidrocarburos'  // CFDI de combustible SIN el complemento requerido → NO deducible (NIVEL 2, del XML)
