@@ -46,6 +46,11 @@ vi.mock('./agente', async (importOriginal) => ({
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
 
+/** 0443: el mandato POR FLOTA. Por omisión vigente (las pruebas de abajo ejercen
+ *  el candado GLOBAL de la auditoría 10); la sección del final lo apaga. */
+const mandatoFlotaVigente = vi.fn(async (_t: string) => true);
+vi.mock('@/lib/legal/aceptacion', () => ({ mandatoFlotaVigente: (t: string) => mandatoFlotaVigente(t) }));
+
 /**
  * Lo que devuelve el SELECT del gasto. `facturarAlVuelo` lee UNA fila
  * (`.maybeSingle()`); `facturarLoteAlVuelo` lee VARIAS (`.in('id', …)`) — el
@@ -1031,5 +1036,45 @@ describe('facturarLoteAlVuelo · el vínculo con el portal', () => {
       modo: 'ensayo', ok: true, capturado: {}, porGasto: [{ gastoId: 'g-1', incluido: true }],
     });
     expect((await correr()).vinculo).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA OLA 1, #48 — EL MANDATO ES POR FLOTA, NO UNA VARIABLE GLOBAL.
+//
+// Además de FACTURACION_MANDATO_ACEPTADO=si (el interruptor de Javier), `emitir`
+// exige que ESTA flota tenga el mandato vigente en `aceptacion_legal` (0443).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('facturarAlVuelo · el mandato por flota (aceptacion_legal)', () => {
+  it('con el interruptor global puesto pero SIN el mandato de la flota, `emitir` baja a `ensayo` y se grita', async () => {
+    process.env.FACTURACION_MANDATO_ACEPTADO = 'si';
+    mandatoFlotaVigente.mockResolvedValueOnce(false);
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-sin-mandato', modo: 'emitir', hoy: HOY });
+    const [llamada] = facturarConAgente.mock.calls[0] as [{ modo: string }];
+    expect(llamada.modo).toBe('ensayo');
+    expect(mandatoFlotaVigente).toHaveBeenCalledWith('t-sin-mandato');
+    expect(logger.error).toHaveBeenCalledWith('autofactura.mandato_flota_no_otorgado', expect.objectContaining({ tenantId: 't-sin-mandato' }));
+  });
+
+  it('con interruptor global Y mandato de la flota, `emitir` llega como `emitir`', async () => {
+    process.env.FACTURACION_MANDATO_ACEPTADO = 'si';
+    mandatoFlotaVigente.mockResolvedValueOnce(true);
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    const [llamada] = facturarConAgente.mock.calls[0] as [{ modo: string }];
+    expect(llamada.modo).toBe('emitir');
+  });
+
+  it('el mandato de la flota NO sustituye al interruptor global: sin él, `ensayo` aunque la flota lo tenga', async () => {
+    delete process.env.FACTURACION_MANDATO_ACEPTADO;
+    mandatoFlotaVigente.mockResolvedValue(true);
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    const [llamada] = facturarConAgente.mock.calls[0] as [{ modo: string }];
+    expect(llamada.modo).toBe('ensayo');
+  });
+
+  it('`ensayo` no consulta el mandato (no hay nada que autorizar)', async () => {
+    mandatoFlotaVigente.mockClear();
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'ensayo', hoy: HOY });
+    expect(mandatoFlotaVigente).not.toHaveBeenCalled();
   });
 });

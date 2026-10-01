@@ -80,6 +80,14 @@ import { join, relative } from 'node:path';
  * registrar_entrante_wa / ventana_estado_wa y el registro de decisiones de envío).
  * Funcionalidad nueva, no código migrado.
  *
+ * LOOP PUNTA A PUNTA (1-oct-2026), stream W2 seguridad — 259 → 260 archivos y
+ * 1,347 → 1,355 llamadas: el módulo nuevo es `lib/legal/aceptacion.ts` (mig.
+ * 0443: registrar/revocar/consultar la aceptación de Términos, Aviso y mandato
+ * de autofacturación por flota, 3 RPC + 1 lectura, todo en UN archivo) y
+ * `lib/mcp/oauth.ts` (ya fuera de la frontera) suma 3 llamadas por la cola de
+ * aprobación de clientes OAuth desconocidos (mig. 0440). Funcionalidad nueva,
+ * no código migrado.
+ *
  * AUDITORÍA 28, ARQ-M1 (LA UNIDAD EQUIVOCADA): hasta aquí el techo vivía en
  * ARCHIVOS — y con 252 archivos medidos contra un techo de 252, este guardia
  * llevaba CERO margen: cualquier archivo nuevo con un solo `.from(`/`.rpc(`
@@ -100,8 +108,8 @@ import { join, relative } from 'node:path';
  * pestañear deja de medir nada — igual que el de arriba, se sube a mano, en
  * el commit que explica por qué.
  */
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 259;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_347;
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 260;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_355;
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
 

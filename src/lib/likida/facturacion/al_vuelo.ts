@@ -6,6 +6,7 @@ import { armar, type TicketPorFacturar } from './pendientes';
 import { enrutar } from './enrutar';
 import { cuentasCompartidas } from './cuentas';
 import { modoEfectivo } from './modo';
+import { mandatoFlotaVigente } from '@/lib/legal/aceptacion';
 import {
   facturarConAgente,
   facturarLoteConAgente,
@@ -72,6 +73,25 @@ export type MotivoNoFactura =
   | 'bloqueado'          // la máquina se rindió a propósito: entra una persona
   | 'ya_facturado'
   | 'ya_en_proceso';     // otra corrida lo tomó primero y su claim sigue vivo
+
+/**
+ * EL CANDADO POR FLOTA (auditoría ola 1, #48). `modoEfectivo` solo mira el
+ * interruptor GLOBAL (`FACTURACION_MANDATO_ACEPTADO`): una variable para todas las
+ * flotas, sin quién ni cuándo. Para `emitir` se exige además que ESTA flota tenga
+ * el mandato vigente en `aceptacion_legal` (0443) — la evidencia de que su dueño
+ * lo otorgó, con la versión del texto. Sin él, ensayo y se grita. Falla cerrado:
+ * una base que no contesta cuenta como «sin mandato».
+ */
+async function modoDeFlota(tenantId: string, pedido: 'ensayo' | 'emitir'): Promise<'ensayo' | 'emitir'> {
+  const global = modoEfectivo(pedido);
+  if (global !== 'emitir') return global;
+  if (await mandatoFlotaVigente(tenantId)) return 'emitir';
+  logger.error('autofactura.mandato_flota_no_otorgado', {
+    tenantId,
+    detalle: 'emitir ignorado: la flota no tiene el mandato de autofacturación vigente (aceptacion_legal) — el dueño lo otorga en /dashboard/legal',
+  });
+  return 'ensayo';
+}
 
 export interface DecisionAutofactura {
   procede: boolean;
@@ -251,7 +271,7 @@ export async function facturarAlVuelo(args: {
     return { intentado: false, facturado: false, motivo: decision.motivo, detalle: decision.detalle };
   }
 
-  const modo = modoEfectivo(args.modo ?? 'ensayo');
+  const modo = await modoDeFlota(args.tenantId, args.modo ?? 'ensayo');
   // RES-10: LA MARCA DE "EMISIÓN EN CURSO" VA ANTES DE ABRIR LA SESIÓN.
   // Solo en `emitir`: un ensayo no timbra nada y no hay qué proteger.
   if (modo === 'emitir' && !(await marcarEmisionEnCurso(admin, [args.gastoId], args.tenantId, args.ahora))) {
@@ -463,7 +483,7 @@ export async function facturarLoteAlVuelo(args: {
 
   if (tickets.length === 0) return { porGasto, facturados: 0, bloqueados };
 
-  const modo = modoEfectivo(args.modo ?? 'ensayo');
+  const modo = await modoDeFlota(args.tenantId, args.modo ?? 'ensayo');
   // RES-10: la marca de "emisión en curso" para TODO el lote, en un UPDATE,
   // antes de abrir la sesión. Sin marca confirmada no se toca el portal.
   if (modo === 'emitir' && !(await marcarEmisionEnCurso(admin, tickets.map((x) => x.gastoId), args.tenantId, args.ahora))) {

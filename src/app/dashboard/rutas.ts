@@ -149,6 +149,8 @@ export const SISTEMA: Item[] = [
   { href: '/dashboard/onboarding', nombre: 'Perfil de la flota', Icono: ClipboardList },
   { href: '/dashboard/politicas', nombre: 'Políticas de gasto', Icono: Scale },
   { href: '/dashboard/arco', nombre: 'Solicitudes ARCO', Icono: ShieldCheck },
+  // 0443: aceptación de Términos/Aviso y mandato de autofacturación, con evidencia.
+  { href: '/dashboard/legal', nombre: 'Términos y mandato', Icono: Scale3d },
   // AUDITORÍA 20 (H6, 29-ago-2026): los hilos bot↔chofer de ESTA flota. Se
   // leían solo desde /admin —el proveedor veía la conversación de cualquier
   // flota y el dueño no veía la de su propio chofer—. Va en SISTEMA y no en

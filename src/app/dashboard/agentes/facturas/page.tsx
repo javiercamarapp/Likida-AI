@@ -5,6 +5,7 @@ import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { getPorFacturar, contarConCfdi, validarUuidCfdi } from '@/lib/likida/facturacion/pendientes';
 import { mandatoFiscalAceptado, modoEfectivo } from '@/lib/likida/facturacion/modo';
+import { mandatoFlotaVigente } from '@/lib/legal/aceptacion';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { PORTALES_CONOCIDOS } from '@/lib/likida/facturacion/adaptadores/registro';
@@ -93,10 +94,13 @@ export default async function PaginaAgenteFacturas({
       };
     });
 
+  // 0443: `emite` es verdad solo con el candado GLOBAL (modo + interruptor) Y el
+  // mandato vigente de ESTA flota — el mismo que aplica al_vuelo.ts (`modoDeFlota`).
+  // Falla cerrado (`mandatoFlotaVigente` devuelve false ante una base caída).
   const emite = modoEfectivo(
     process.env.FACTURACION_MODO === 'emitir' ? 'emitir' : 'ensayo',
     mandatoFiscalAceptado(),
-  ) === 'emitir';
+  ) === 'emitir' && await mandatoFlotaVigente(tenantId);
 
   async function marcarFacturada(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
