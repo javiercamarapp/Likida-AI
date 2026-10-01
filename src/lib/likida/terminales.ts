@@ -11,6 +11,13 @@
 // selector de importar/editar necesita para que «Patio Norte» sea UNA fila y
 // no ochocientas cadenas distintas.
 //
+// W2 «producto» (1-oct-2026) le suma lo que la pantalla de Patios necesita para
+// que un tenant nuevo opere sin tocar la base: editar y borrar un patio,
+// contarlo (operadores, unidades y jefes, en UNA consulta agrupada — 0461),
+// asignar operadores y jefes de tráfico, y leer el patio de un registro para
+// que el permiso del jefe («solo mi patio») se decida con el dato de la base y
+// no con lo que mande el formulario.
+//
 // ESTE MÓDULO NO DECIDE PERMISOS: el server action que lo llama repite el
 // chequeo de rol adentro (patrón de administracion.ts).
 // ═══════════════════════════════════════════════════════════════════════════
@@ -97,12 +104,10 @@ export async function crearTerminal(
   const id = (data as { id?: unknown } | null)?.id;
   if (!id) throw new Error('crearTerminal: el insert no devolvió id');
 
-  // `entidad: 'tenant'` y no `'terminal'`: `EntidadBitacora` (bitacora_escritura.ts)
-  // no conoce la terminal y ese archivo no es de esta entrega. El detalle
-  // trae el id del patio, así que el rastro no pierde nada — solo el nombre
-  // de la columna `entidad`. Queda anotado en CIERRE.md como cambio propuesto.
+  // La entidad es `terminal` desde W2 (antes firmaba como `tenant` porque
+  // `EntidadBitacora` no conocía el patio); el id del patio es `entidadId`.
   await anotarBitacora({
-    tenantId, actor: actor ?? {}, accion: 'terminal.creada', entidad: 'tenant', entidadId: tenantId,
+    tenantId, actor: actor ?? {}, accion: 'terminal.creada', entidad: 'terminal', entidadId: String(id),
     detalle: { terminalId: String(id), nombre, ciudad },
   });
   return String(id);
@@ -151,6 +156,232 @@ export async function asignarTerminalUnidad(
   }
   await anotarBitacora({
     tenantId, actor: actor ?? {}, accion: 'unidad.terminal', entidad: 'unidad', entidadId: unidadId,
+    detalle: { terminalId: terminal },
+  });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// W2 «producto»: editar, borrar, contar y asignar.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface TerminalConConteos extends Terminal {
+  /** Operadores ACTIVOS del patio. */
+  operadores: number;
+  /** Unidades ACTIVAS del patio. */
+  unidades: number;
+  /** Jefes de tráfico (usuarios activos) amarrados al patio. */
+  jefes: number;
+}
+
+/** Cada patio con sus conteos, sobre la flota ENTERA (RPC 0461). Falla
+ *  cerrado: unos conteos a medias dirían «patio vacío» de uno con 40 camiones. */
+export async function getTerminalesConConteos(tenantId: string): Promise<TerminalConConteos[]> {
+  const patios = await getTerminales(tenantId);
+  if (patios.length === 0) return [];
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('terminales_conteos_tenant', { p_tenant: tenantId }),
+    'getTerminalesConConteos',
+  );
+  if (error) throw new Error(`getTerminalesConConteos: ${error.message}`);
+  const porId = new Map<string, { operadores: number; unidades: number; jefes: number }>();
+  for (const f of (data ?? []) as Array<Record<string, unknown>>) {
+    porId.set(String(f.terminal_id), {
+      operadores: Number(f.operadores) || 0, unidades: Number(f.unidades) || 0, jefes: Number(f.jefes) || 0,
+    });
+  }
+  return patios.map((p) => ({ ...p, ...(porId.get(p.id) ?? { operadores: 0, unidades: 0, jefes: 0 }) }));
+}
+
+/** Cambia nombre y ciudad de un patio de ESTA flota. El choque contra el único
+ *  de nombre se dice en palabras de quien capturó. */
+export async function editarTerminal(
+  tenantId: string,
+  terminalId: string,
+  t: { nombre: string; ciudad?: string | null },
+  actor?: { id?: string; email?: string },
+): Promise<void> {
+  if (!esUuidValido(terminalId)) throw new DatoInvalido('No se reconoce ese patio. Vuelve a abrir la pantalla.');
+  const nombre = normalizarNombreTerminal(t.nombre);
+  const ciudad = t.ciudad?.replace(/\s+/g, ' ').trim() || null;
+  if (ciudad && ciudad.length > 80) throw new DatoInvalido('La ciudad no puede pasar de 80 caracteres.');
+
+  const { data, error } = await acotada(
+    supabaseAdmin().from('terminal').update({ nombre, ciudad })
+      .eq('id', terminalId).eq('tenant_id', tenantId).select('id'),
+    'editarTerminal',
+  );
+  if (error) {
+    if (error.message.includes('uq_terminal_tenant_nombre')) {
+      throw new DatoInvalido(`Ya tienes otro patio llamado «${nombre}». Usa un nombre distinto.`);
+    }
+    throw new Error(`editarTerminal: ${error.message}`);
+  }
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new DatoInvalido('No se encontró ese patio en tu flota. Recarga la pantalla.');
+  }
+  await anotarBitacora({
+    tenantId, actor: actor ?? {}, accion: 'terminal.editada', entidad: 'terminal', entidadId: terminalId,
+    detalle: { nombre, ciudad },
+  });
+}
+
+/**
+ * Borra un patio de ESTA flota. Las FKs son `on delete set null`: los
+ * operadores, unidades y viajes que lo tenían quedan SIN patio (nunca se
+ * borran) y los jefes quedan sin patio (= ven toda la flota). Por eso el
+ * llamador enseña los conteos ANTES de confirmar y la bitácora los guarda.
+ */
+export async function eliminarTerminal(
+  tenantId: string,
+  terminalId: string,
+  actor?: { id?: string; email?: string },
+): Promise<{ operadores: number; unidades: number; jefes: number }> {
+  if (!esUuidValido(terminalId)) throw new DatoInvalido('No se reconoce ese patio. Vuelve a abrir la pantalla.');
+  const antes = (await getTerminalesConConteos(tenantId)).find((p) => p.id === terminalId);
+  if (!antes) throw new DatoInvalido('No se encontró ese patio en tu flota. Recarga la pantalla.');
+
+  const { data, error } = await acotada(
+    supabaseAdmin().from('terminal').delete().eq('id', terminalId).eq('tenant_id', tenantId).select('id'),
+    'eliminarTerminal',
+  );
+  if (error) throw new Error(`eliminarTerminal: ${error.message}`);
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new DatoInvalido('No se encontró ese patio en tu flota. Recarga la pantalla.');
+  }
+  const soltados = { operadores: antes.operadores, unidades: antes.unidades, jefes: antes.jefes };
+  await anotarBitacora({
+    tenantId, actor: actor ?? {}, accion: 'terminal.eliminada', entidad: 'terminal', entidadId: terminalId,
+    detalle: { nombre: antes.nombre, quedaronSinPatio: soltados },
+  });
+  return soltados;
+}
+
+/** El patio de un registro de ESTA flota, o `encontrado: false` si no es de la
+ *  flota. Es la lectura con que el permiso del jefe («solo mi patio») se decide
+ *  con la base, no con lo que mande el formulario. Lanza si no pudo leer. */
+export async function terminalDeRegistro(
+  tabla: 'operador' | 'unidad',
+  tenantId: string,
+  id: string,
+): Promise<{ encontrado: boolean; terminalId: string | null }> {
+  if (!esUuidValido(id)) return { encontrado: false, terminalId: null };
+  const { data, error } = await acotada(
+    supabaseAdmin().from(tabla).select('id, terminal_id').eq('id', id).eq('tenant_id', tenantId).maybeSingle(),
+    `terminalDeRegistro.${tabla}`,
+  );
+  if (error) throw new Error(`terminalDeRegistro(${tabla}): ${error.message}`);
+  if (!data) return { encontrado: false, terminalId: null };
+  const t = (data as { terminal_id?: unknown }).terminal_id;
+  return { encontrado: true, terminalId: typeof t === 'string' && t ? t : null };
+}
+
+/** El patio de cada registro de una página (un `in(...)`, no una consulta por
+ *  fila). Los ids que no son de la flota no aparecen. */
+export async function terminalesDeRegistros(
+  tabla: 'operador' | 'unidad',
+  tenantId: string,
+  ids: string[],
+): Promise<Map<string, string | null>> {
+  const validos = [...new Set(ids.filter(esUuidValido))];
+  const salida = new Map<string, string | null>();
+  if (validos.length === 0) return salida;
+  const { data, error } = await acotada(
+    supabaseAdmin().from(tabla).select('id, terminal_id').eq('tenant_id', tenantId).in('id', validos),
+    `terminalesDeRegistros.${tabla}`,
+  );
+  if (error) throw new Error(`terminalesDeRegistros(${tabla}): ${error.message}`);
+  for (const f of (data ?? []) as Array<{ id: unknown; terminal_id: unknown }>) {
+    salida.set(String(f.id), typeof f.terminal_id === 'string' && f.terminal_id ? f.terminal_id : null);
+  }
+  return salida;
+}
+
+/** El patio de un usuario del panel. `undefined` = no se pudo leer (el llamador
+ *  falla CERRADO: no saber el patio de un jefe no es «ve toda la flota»). */
+export async function terminalDeUsuario(tenantId: string, userId: string): Promise<string | null | undefined> {
+  if (!esUuidValido(userId)) return undefined;
+  const { data, error } = await acotada(
+    supabaseAdmin().from('app_user').select('terminal_id').eq('id', userId).eq('tenant_id', tenantId).maybeSingle(),
+    'terminalDeUsuario',
+  );
+  if (error || !data) return undefined;
+  const t = (data as { terminal_id?: unknown }).terminal_id;
+  return typeof t === 'string' && t ? t : null;
+}
+
+/** Cuelga (o descuelga) un operador de un patio. Mismo molde que
+ *  `asignarTerminalUnidad`: UPDATE anclado al tenant, filas contadas. */
+export async function asignarTerminalOperador(
+  tenantId: string,
+  operadorId: string,
+  terminalId: string | null,
+  actor?: { id?: string; email?: string },
+): Promise<void> {
+  if (!esUuidValido(operadorId)) throw new DatoInvalido('No se reconoce ese operador. Vuelve a abrir la pantalla.');
+  const terminal = await resolverTerminalDeFlota(tenantId, terminalId);
+  const { data, error } = await acotada(
+    supabaseAdmin().from('operador').update({ terminal_id: terminal })
+      .eq('id', operadorId).eq('tenant_id', tenantId).select('id'),
+    'asignarTerminalOperador',
+  );
+  if (error) throw new Error(`asignarTerminalOperador: ${error.message}`);
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new DatoInvalido('No se encontró ese operador en tu flota. Recarga la pantalla.');
+  }
+  await anotarBitacora({
+    tenantId, actor: actor ?? {}, accion: 'operador.terminal', entidad: 'operador', entidadId: operadorId,
+    detalle: { terminalId: terminal },
+  });
+}
+
+export interface JefeDeTrafico {
+  userId: string;
+  nombre: string | null;
+  email: string;
+  terminalId: string | null;
+}
+
+/** Los jefes de tráfico (rol encargado, activos) de la flota con su patio. */
+export async function getJefesDeTrafico(tenantId: string): Promise<JefeDeTrafico[]> {
+  const filas = await traerTodo<{ id: unknown; nombre: unknown; email: unknown; terminal_id: unknown }>(
+    (d, h) => acotada(
+      supabaseAdmin().from('app_user').select('id, nombre, email, terminal_id', conteo(d))
+        .eq('tenant_id', tenantId).eq('rol', 'encargado').neq('activo', false).order('id').range(d, h),
+      'getJefesDeTrafico',
+    ),
+    'getJefesDeTrafico',
+  );
+  return filas.map((f) => ({
+    userId: String(f.id),
+    nombre: typeof f.nombre === 'string' && f.nombre ? f.nombre : null,
+    email: String(f.email ?? ''),
+    terminalId: typeof f.terminal_id === 'string' && f.terminal_id ? f.terminal_id : null,
+  })).sort((a, b) => (a.nombre ?? a.email).localeCompare(b.nombre ?? b.email, 'es'));
+}
+
+/** Amarra (o suelta) a un jefe de tráfico de un patio. Solo el rol encargado
+ *  lleva patio: asignárselo a un dueño o a un contador no limitaría nada y
+ *  confundiría a quien lea la ficha. */
+export async function asignarTerminalJefe(
+  tenantId: string,
+  userId: string,
+  terminalId: string | null,
+  actor?: { id?: string; email?: string },
+): Promise<void> {
+  if (!esUuidValido(userId)) throw new DatoInvalido('No se reconoce a ese usuario. Vuelve a abrir la pantalla.');
+  const terminal = await resolverTerminalDeFlota(tenantId, terminalId);
+  const { data, error } = await acotada(
+    supabaseAdmin().from('app_user').update({ terminal_id: terminal })
+      .eq('id', userId).eq('tenant_id', tenantId).eq('rol', 'encargado').select('id'),
+    'asignarTerminalJefe',
+  );
+  if (error) throw new Error(`asignarTerminalJefe: ${error.message}`);
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new DatoInvalido('No se encontró a ese jefe de tráfico en tu flota. Solo los usuarios con rol «Encargado» llevan patio.');
+  }
+  await anotarBitacora({
+    tenantId, actor: actor ?? {}, accion: 'app_user.terminal', entidad: 'app_user', entidadId: userId,
     detalle: { terminalId: terminal },
   });
 }
