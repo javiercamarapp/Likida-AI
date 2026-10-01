@@ -240,6 +240,9 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // quien decide sobre una grúa a las 3 a.m. es el jefe de tráfico o el dueño.
   '/dashboard/asistencia': 'operacion',
   '/dashboard/llaves-api': 'administracion',
+  // Términos, Aviso y MANDATO de autofacturación de la flota (0443, auditoría ola 1
+  // #48): lo acepta y lo otorga quien obliga a la empresa — el dueño.
+  '/dashboard/legal': 'administracion',
   // Sesiones MCP (H3, auditoría de dashboards 29-ago-2026): los accesos que
   // Claude/ChatGPT tienen a los datos de la flota vía OAuth (0260). MISMO
   // criterio que las llaves de API, porque es la MISMA clase de cosa: una
