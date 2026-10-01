@@ -214,3 +214,66 @@ export const PLANTILLA_CSV_SITIOS =
   'codigo,nombre,tipo,lat,lng,radio_m,direccion,cliente,padre\n'
   + 'EJEMPLO-PL1,REEMPLAZA: nombre de la planta,planta,,,300,REEMPLAZA: dirección,,\n'
   + 'EJEMPLO-AN1,REEMPLAZA: nombre del andén,anden,,,60,,,EJEMPLO-PL1\n';
+
+// ── La captura manual (el editor del panel) ─────────────────────────────────
+
+export interface SitioManual {
+  id?: string;
+  nombre: string;
+  tipo: TipoSitio;
+  codigo: string | null;
+  direccion: string | null;
+  lat: number;
+  lng: number;
+  radioM: number;
+  clienteId: string | null;
+  padreId: string | null;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Lee el formulario del editor de sitios con las MISMAS reglas que el CSV: ni una coordenada se calcula, se adivina o se
+ * «arregla». Acepta coma decimal (el teclado en español) solo cuando es inequívoca: un campo con UNA coma y ningún punto.
+ */
+export function leerSitioManual(fd: { get(k: string): unknown }): { ok: SitioManual } | { error: string } {
+  const txt = (k: string): string => (typeof fd.get(k) === 'string' ? (fd.get(k) as string).trim() : '');
+  const nombre = txt('nombre').replace(/\s+/g, ' ');
+  if (!nombre || nombre.length > 120) return { error: 'El nombre es obligatorio y de hasta 120 caracteres.' };
+  const tipo = ALIAS_TIPO[clave(txt('tipo'))];
+  if (!tipo) return { error: `Elige el tipo de sitio: ${TIPOS_SITIO.join(', ')}.` };
+  const codigo = txt('codigo');
+  if (codigo.length > 40) return { error: 'El código admite hasta 40 caracteres.' };
+  const direccion = txt('direccion').replace(/\s+/g, ' ');
+  if (direccion.length > 200) return { error: 'La dirección admite hasta 200 caracteres.' };
+
+  const decimal = (k: string): number | null => {
+    let t = txt(k);
+    if (/^-?\d+,\d+$/.test(t)) t = t.replace(',', '.');
+    return numero(t, false);
+  };
+  const lat = decimal('lat');
+  const lng = decimal('lng');
+  if (lat === null || lng === null) return { error: 'Escribe la latitud y la longitud en grados decimales (p. ej. 20.7200 y -103.3900). No se calculan a partir de la dirección.' };
+  if (coordenadasValidas(lng, lat) && dentroDeMexico(lng, lat)) return { error: 'La latitud y la longitud parecen ir intercambiadas.' };
+  if (!coordenadasValidas(lat, lng)) return { error: 'Las coordenadas están fuera del rango geográfico.' };
+  if (!dentroDeMexico(lat, lng)) return { error: 'Las coordenadas caen fuera de México: revisa el signo de la longitud (en México es negativa).' };
+
+  const radioTxt = txt('radio_m');
+  const radio = /^\d+$/.test(radioTxt) ? Number(radioTxt) : null;
+  if (radio === null || radio < 25 || radio > 100_000) return { error: 'El radio va de 25 a 100,000 metros (por debajo de 25 m el GPS civil entra y sale solo).' };
+
+  const id = txt('id');
+  if (id && !UUID.test(id)) return { error: 'No reconozco el sitio que intentas editar.' };
+  const clienteId = txt('cliente_id');
+  const padreId = txt('padre_id');
+  if (clienteId && !UUID.test(clienteId)) return { error: 'No reconozco el cliente elegido.' };
+  if (padreId && !UUID.test(padreId)) return { error: 'No reconozco el sitio padre elegido.' };
+  if (id && padreId && id.toLowerCase() === padreId.toLowerCase()) return { error: 'Un sitio no puede ser su propio padre.' };
+  return {
+    ok: {
+      ...(id ? { id: id.toLowerCase() } : {}), nombre, tipo, codigo: codigo || null, direccion: direccion || null, lat, lng, radioM: radio,
+      clienteId: clienteId ? clienteId.toLowerCase() : null, padreId: padreId ? padreId.toLowerCase() : null,
+    },
+  };
+}

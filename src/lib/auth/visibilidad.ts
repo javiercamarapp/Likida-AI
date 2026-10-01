@@ -107,6 +107,9 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // su usuario diario es el jefe de tráfico. Sus hermanos
   // (liquidación/facturas/cobranza) siguen en dinero.
   '/dashboard/agentes/conductores': 'operacion',
+  // 0385: el catálogo de sitios y las estadías en andén del Agente 5 — operación, cero pesos en pantalla (el cobro va por el CSV de /v1/estadias).
+  '/dashboard/agentes/conductores/sitios': 'operacion',
+  '/dashboard/agentes/conductores/estadias': 'operacion',
   // El Agente de Carta Porte (Fases B-C, 25-ago-2026): mismo criterio que su
   // pantalla /dashboard/carta-porte — cero pesos, y la declaración de ruta es
   // del jefe de tráfico. La página del borrador
