@@ -230,6 +230,10 @@ begin
   update public.cp_documento set intentos = 4 where id = '42000000-0000-4000-8000-0000000000d3';
   select intentos into v1 from public.cp_documento_reclamar('42000000-0000-4000-8000-0000000000a1', '42000000-0000-4000-8000-0000000000d3', 60);
   if v1 is distinct from 5 then raise exception '0420: el claim con 4 intentos previos no devolvió 5'; end if;
+  -- Cada claim sube la versión (el candado optimista de quien procesa): 3 claims = versión 4.
+  if (select version from public.cp_documento where id = '42000000-0000-4000-8000-0000000000d3') is distinct from 4 then
+    raise exception '0420: los claims no subieron la versión del documento';
+  end if;
   -- Un lease fuera de rango se rechaza.
   begin
     perform * from public.cp_documento_reclamar('42000000-0000-4000-8000-0000000000a1', '42000000-0000-4000-8000-0000000000d3', 5);
