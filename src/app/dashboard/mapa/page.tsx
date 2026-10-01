@@ -27,8 +27,15 @@ const VIVOS = ['abierto', 'en_cuadre'];
 
 /** Cuántos viajes vivos se DIBUJAN. El mapa es un dibujo: pasado cierto
  *  número de trayectos deja de decir nada aunque los datos estén bien, y
- *  cargar 50,000 sería una pantalla que no abre. Se declara en el pie. */
-const TOPE_MAPA = 200;
+ *  cargar 50,000 sería una pantalla que no abre. Se declara en el pie.
+ *
+ *  W2 (auditoría de producto): era 200 y Innovativos tiene 250 camiones — con
+ *  toda la flota rodando salían 200 y se omitían los 50 viajes MÁS ANTIGUOS (los
+ *  que llevan más tiempo en ruta, justo los que importan). 600 deja más del doble
+ *  de margen sobre el parque objetivo; el mapa agrupa los pines (markercluster),
+ *  así que no depende de dibujar 600 marcadores sueltos. Si algún día se rebasa,
+ *  el pie lo sigue diciendo con las cifras reales. */
+const TOPE_MAPA = 600;
 
 interface FilaViva {
   id: string; folio: string; origen: string | null; destino: string | null;

@@ -206,7 +206,7 @@ export async function InicioOperacion({
               <BloqueSinAsignar pSinAsignar={pSinAsignar} />
             </Bloque>
             <Bloque mensaje="No se pudo leer la carga por operador." esqueleto={<EsqTabla filas={4} />}>
-              <BloqueCarga pCarga={pCarga} />
+              <BloqueCarga pCarga={pCarga} sufijo={sufijo} />
             </Bloque>
           </div>
 
@@ -236,7 +236,7 @@ async function BloqueArranque({ pPasos, sufijo }: {
   return (
     <>
       <div className="mt-3"><PrimeraLiquidacion datos={pasos} sufijo={sufijo} /></div>
-      <div className="mt-3"><OperaWhatsApp rol="jefe" /></div>
+      <div className="mt-3"><OperaWhatsApp rol="jefe" sufijo={sufijo} /></div>
     </>
   );
 }
@@ -477,7 +477,7 @@ async function BloqueSinAsignar({ pSinAsignar }: { pSinAsignar: Promise<ViajeSin
   );
 }
 
-async function BloqueCarga({ pCarga }: { pCarga: Promise<CargaOperador[] | null> }) {
+async function BloqueCarga({ pCarga, sufijo }: { pCarga: Promise<CargaOperador[] | null>; sufijo: string }) {
   const carga = await pCarga;
   return (
     <section className="card overflow-hidden">
@@ -488,7 +488,7 @@ async function BloqueCarga({ pCarga }: { pCarga: Promise<CargaOperador[] | null>
       {carga === null ? (
         <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la carga.</div>
       ) : (
-        <TablaCarga carga={carga} />
+        <TablaCarga carga={carga} sufijo={sufijo} />
       )}
     </section>
   );

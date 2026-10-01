@@ -15,6 +15,9 @@ import {
   CalendarClock,
   Scale3d,
   PlugZap,
+  MapPin,
+  QrCode,
+  ListChecks,
 } from 'lucide-react';
 
 /**
@@ -54,6 +57,9 @@ export const AUTOMATIZACIONES: Item[] = [
 ];
 
 export const OPERACION: Item[] = [
+  // La puesta en marcha (W2): el checklist guiado de una flota nueva, con estado
+  // real de cada paso. Va primero: es lo que se abre el día uno.
+  { href: '/dashboard/arranque', nombre: 'Puesta en marcha', Icono: ListChecks },
   { href: '/dashboard/despacho', nombre: 'Despacho', Icono: ClipboardList },
   // El Registro (F2): la fuente de verdad navegable. Acción en Despacho;
   // aquí se consulta y se cruza.
@@ -65,6 +71,9 @@ export const OPERACION: Item[] = [
   { href: '/dashboard/jornada', nombre: 'Jornada', Icono: CalendarClock },
   // El activo que produce el dinero, con sus vigencias de ley (14-ago-2026).
   { href: '/dashboard/unidades', nombre: 'Unidades', Icono: Container },
+  // Los patios (W2): de dónde salen las unidades; con ellos cada jefe de tráfico
+  // ve y corrige lo suyo.
+  { href: '/dashboard/patios', nombre: 'Patios', Icono: MapPin },
   // F3: los viajes vivos sobre México — trayecto ilustrativo, sin GPS, y la
   // página lo declara. La /dashboard/mapa vieja (borrada el 10-ago) no
   // dibujaba nada; esta dibuja lo que SÍ es verdad.
@@ -79,6 +88,10 @@ export const OPERACION: Item[] = [
   // Capa F del agente de ayuda en ruta: las incidencias vivas con su timeline
   // y los botones de intervención — el humano siempre puede tomar el control.
   { href: '/dashboard/asistencia', nombre: 'Mesa de control', Icono: RadioTower },
+  // La guía de arranque del chofer (W2): a qué número de WhatsApp escribe, el
+  // enlace, el QR y qué pasa después. Al final de OPERACIÓN: es lo que se abre
+  // una vez, el día que se da de alta a la gente.
+  { href: '/dashboard/whatsapp', nombre: 'WhatsApp del operador', Icono: QrCode },
 ];
 
 export const DINERO_FISCAL: Item[] = [

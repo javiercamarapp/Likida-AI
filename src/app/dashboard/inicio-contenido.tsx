@@ -81,11 +81,15 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  * terminara.
  */
 export async function InicioContenido({
-  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '',
+  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', avisoFiscalPospuesto = false,
 }: {
   tenantId: string;
   tenantNombre: string | null;
   nombre: string | null;
+  /** El dueño eligió «lo confirmo con mi contador» y el perfil fiscal sigue sin
+   *  declarar (W2): el Resumen se abre, con un aviso PERMANENTE de que el estímulo
+   *  de peaje sigue en $0 hasta que lo declare. */
+  avisoFiscalPospuesto?: boolean;
   /** `false` cuando el uuid al que apunta la página no tiene fila en `tenant`
    *  — ver `sin-flota.tsx`. Default `true` para no cambiar el render de
    *  ningún cliente real, cuyo tenant existe por llave foránea. */
@@ -307,6 +311,18 @@ export async function InicioContenido({
             <div className="mt-3"><AvisoSinFlota tenantId={tenantId} /></div>
           )}
 
+          {/* EL ESTÍMULO SIGUE EN $0 (W2). Quien no conoce de memoria sus ingresos
+              anuales ya no queda sin Resumen, pero tampoco se le deja creer que el
+              motor fiscal está completo: mientras las dos preguntas sigan sin
+              contestarse, el estímulo de peaje del 50 % no se acredita. */}
+          {avisoFiscalPospuesto && (
+            <p role="status" className="mt-3 rounded-lg px-3.5 py-2.5 text-[12.5px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
+              Tu perfil fiscal sigue sin declararse, así que el <strong>estímulo de peaje</strong> se muestra en $0 y no se acredita
+              hasta que lo hagas.{' '}
+              <a href={`/dashboard/onboarding${sufijo}`} className="underline">Declararlo cuando ya tengas los datos</a>.
+            </p>
+          )}
+
           {/* La guía del arranque y el canal (auditoría 5): condicionales de
               verdad —solo mientras no exista la primera liquidación—, así que
               su hueco NO se reserva: un esqueleto que casi siempre se resuelve
@@ -445,7 +461,7 @@ async function BloqueArranque({ pPasos, sufijo }: {
       {/* El canal, presentado con sus mensajes literales — solo mientras
           la flota arranca: ya operando, el guion lo tiene aprendido y la
           tarjeta cede el lugar a las cifras. */}
-      <div className="mt-3"><OperaWhatsApp rol="jefe" /></div>
+      <div className="mt-3"><OperaWhatsApp rol="jefe" sufijo={sufijo} /></div>
     </>
   );
 }

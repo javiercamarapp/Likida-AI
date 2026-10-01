@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { Calculator } from 'lucide-react';
+import { Calculator, TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
@@ -300,7 +300,14 @@ function Fila({
           {q.tarifaCatalogo && (
             <p className="mt-2" style={{ color: 'var(--ink2)' }}>
               Tarifa del catálogo: {q.tarifaCatalogo.monto !== null ? mxn(q.tarifaCatalogo.monto) : 'sin monto (falta un dato de la tarifa)'}
-              {' '}— {q.tarifaCatalogo.porque}{q.tarifaCatalogo.ambigua ? ' · ⚠️ el catálogo tiene dos verdades para esta ruta' : ''}
+              {' '}— {q.tarifaCatalogo.porque}
+              {q.tarifaCatalogo.ambigua && (
+                // El triángulo del sistema y no el emoji (MARCA.md §2.1: «sin emojis como iconos»).
+                <span className="inline-flex items-center gap-1" style={{ color: 'var(--warn)' }}>
+                  {' · '}<TriangleAlert aria-hidden width={12} height={12} strokeWidth={1.75} />
+                  el catálogo tiene dos verdades para esta ruta
+                </span>
+              )}
             </p>
           )}
           {q.desglose.faltantes.length > 0 && (

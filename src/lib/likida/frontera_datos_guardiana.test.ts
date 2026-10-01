@@ -90,6 +90,19 @@ import { join, relative } from 'node:path';
  * de razón social, domicilio y contacto de privacidad (auditoría ola 1, #10), UN
  * archivo con su lectura y su escritura. Funcionalidad nueva, no código migrado.
  *
+ * LOOP PUNTA A PUNTA (1-oct-2026), W2 «producto» — 259 → 260 archivos y 1,347 →
+ * 1,371 llamadas (medido con el barrido completo del guardia). Un módulo nuevo,
+ * `invitacion_operador.ts` (10 llamadas): el reclamo atómico de la invitación por
+ * WhatsApp (UPDATE condicionado a «sin invitar», 0460/0462), el estado de cada
+ * operador de la página y los conteos de pendientes y fallidos; es UN archivo con
+ * su contrato probado contra una base en memoria que aplica los filtros, y no cabe
+ * en `repo.ts` sin que éste empiece a saber de plantillas de WhatsApp. El resto
+ * (+14) vive en archivos que YA estaban fuera de la frontera: `terminales.ts` (+13:
+ * editar, borrar, contar por patio con la RPC 0461, asignar operadores, jefes y lo
+ * que quedó sin patio, y leer el patio de un registro para el alcance del jefe) y
+ * `administracion.ts` (+1: `politicaPropiaDeclarada`). Funcionalidad nueva, no
+ * código migrado.
+ *
  * AUDITORÍA 28, ARQ-M1 (LA UNIDAD EQUIVOCADA): hasta aquí el techo vivía en
  * ARCHIVOS — y con 252 archivos medidos contra un techo de 252, este guardia
  * llevaba CERO margen: cualquier archivo nuevo con un solo `.from(`/`.rpc(`
@@ -110,8 +123,8 @@ import { join, relative } from 'node:path';
  * pestañear deja de medir nada — igual que el de arriba, se sube a mano, en
  * el commit que explica por qué.
  */
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 261;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_359;
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 262;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_383;
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
 

@@ -3,7 +3,7 @@
 //
 // Innovativos tiene cientos de choferes y hasta hoy el alta era uno por uno
 // (`crearOperador`) o SQL a mano. Este módulo es UN motor con dos puertas:
-// el archivo CSV/XLSX de `/dashboard/operadores/importar` y el lote de
+// la carga desde Excel/CSV de `/dashboard/operadores` (bloque «Cargar operadores») y el lote de
 // `POST /v1/operadores`. Las dos validan con las MISMAS funciones que el alta
 // unitaria (`normalizarTelefonoOperador`, `normalizarRfcOperador`,
 // `normalizarFechaLicencia`) — un número que el alta acepta y el importador
@@ -60,6 +60,9 @@ export interface OperadorCrudo {
   licenciaTipo?: string | null;
   /** ISO AAAA-MM-DD (el archivo ya viene normalizado por `leerFechaImportada`). */
   licenciaVence?: string | null;
+  /** El patio como lo escribió el archivo (W2). Se resuelve contra los patios
+   *  de la flota en `asignarPatios` (patios.ts); aquí solo viaja el texto. */
+  patio?: string | null;
 }
 
 /** Una fila ya válida, lista para escribir. `fila` es el renglón del archivo
@@ -74,6 +77,11 @@ export interface OperadorImportado {
   licencia: string | null;
   licenciaTipo: string | null;
   licenciaVence: string | null;
+  /** El patio como lo escribió el archivo, o null (W2). */
+  patio?: string | null;
+  /** El patio YA resuelto contra la flota por `asignarPatios`. Si viene, manda
+   *  sobre el `terminalId` general de `importarOperadores`. */
+  terminalId?: string | null;
 }
 
 /**
@@ -94,6 +102,7 @@ export function validarOperadorImportado(c: OperadorCrudo, fila: number): Operad
     rfc: normalizarRfcOperador(c.rfc),
     licencia, licenciaTipo,
     licenciaVence: normalizarFechaLicencia(c.licenciaVence),
+    patio: (c.patio ?? '').replace(/\s+/g, ' ').trim().slice(0, 80) || null,
   };
 }
 
@@ -108,12 +117,13 @@ export const COLUMNAS_OPERADOR = {
   licencia: ['licencia', 'no licencia', 'no. licencia', 'numero de licencia', 'licencia federal'],
   licenciaTipo: ['tipo de licencia', 'tipo licencia', 'categoria', 'tipo'],
   licenciaVence: ['vence licencia', 'licencia vence', 'vencimiento licencia', 'vigencia licencia', 'vence', 'vigencia'],
+  patio: ['patio', 'terminal', 'base', 'sucursal', 'patio terminal'],
 } as const;
 
 /** La plantilla que se descarga. El orden es el que se lee. */
 export const PLANTILLA_OPERADORES = {
-  encabezados: ['nombre', 'telefono', 'numero de empleado', 'rfc', 'licencia', 'tipo de licencia', 'vence licencia'],
-  ejemplo: [`Juan Pérez ${MARCA_EJEMPLO}`, '5512345678', 'E-104', '', 'MEX123456', 'E', '2027-03-15'],
+  encabezados: ['nombre', 'telefono', 'numero de empleado', 'rfc', 'licencia', 'tipo de licencia', 'vence licencia', 'patio'],
+  ejemplo: [`Juan Pérez ${MARCA_EJEMPLO}`, '5512345678', 'E-104', '', 'MEX123456', 'E', '2027-03-15', 'Patio Norte'],
 } as const;
 
 export function plantillaOperadoresCsv(): string {
@@ -169,6 +179,7 @@ export function interpretarFilasOperadores(matriz: unknown[][]): LecturaOperador
         licencia: celda('licencia', 40),
         licenciaTipo: celda('licenciaTipo', 10),
         licenciaVence: vence,
+        patio: celda('patio', 80),
       }, numero);
       const repetida = telefonosVistos.get(v.telefono);
       if (repetida !== undefined) {
@@ -258,7 +269,9 @@ function clasificar(tenantId: string, f: OperadorImportado, existentes: FilaExis
   return null;
 }
 
-function filaParaInsertar(tenantId: string, f: OperadorImportado, terminalId: string | null): Record<string, unknown> {
+function filaParaInsertar(tenantId: string, f: OperadorImportado, terminalGeneral: string | null): Record<string, unknown> {
+  // El patio de la FILA (resuelto contra la flota) manda; si no trae, el general.
+  const terminalId = f.terminalId !== undefined ? f.terminalId : terminalGeneral;
   return {
     tenant_id: tenantId,
     nombre: f.nombre,
@@ -270,6 +283,42 @@ function filaParaInsertar(tenantId: string, f: OperadorImportado, terminalId: st
     rfc: f.rfc,
     terminal_id: terminalId,
   };
+}
+
+export interface PlanOperadores {
+  /** Las filas que SÍ se escribirían. */
+  nuevas: OperadorImportado[];
+  /** Ya estaban en ESTA flota. */
+  duplicados: OperadorDuplicado[];
+  /** No se escribirían, y por qué (otra flota, de baja). */
+  errores: FilaConError[];
+  /** Solo cuando no se pudo leer el catálogo y NO se puede afirmar nada. */
+  error?: string;
+}
+
+/**
+ * Qué pasaría con estas filas, SIN escribir nada: la misma lectura y la misma
+ * clasificación que usa `importarOperadores` (una sola función, así la vista
+ * previa no puede prometer algo que la escritura luego no hace). Falla cerrado:
+ * sin poder leer los teléfonos existentes no se afirma nada.
+ */
+export async function planificarOperadores(tenantId: string, filas: OperadorImportado[]): Promise<PlanOperadores> {
+  const plan: PlanOperadores = { nuevas: [], duplicados: [], errores: [] };
+  if (!filas.length) return plan;
+  let existentes: Map<string, FilaExistente[]>;
+  try {
+    existentes = await buscarExistentes(filas.map((f) => f.telefono));
+  } catch (e) {
+    logger.error('importar_operadores.catalogo_ilegible', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ...plan, error: 'No pude comprobar qué teléfonos ya existen — no importé nada. Vuelve a intentar.' };
+  }
+  for (const f of filas) {
+    const c = clasificar(tenantId, f, existentes.get(f.telefono) ?? []);
+    if (!c) plan.nuevas.push(f);
+    else if (c.tipo === 'duplicado') plan.duplicados.push(c.d);
+    else plan.errores.push(c.e);
+  }
+  return plan;
 }
 
 const RESTRICCIONES_TELEFONO = ['uq_operador_tenant_telefono_norm', 'uq_operador_telefono_activo', 'operador_tenant_id_telefono_key'];
@@ -295,24 +344,20 @@ export async function importarOperadores(
   if (!filas.length) return salida;
 
   // El patio se resuelve UNA vez: es de la flota o no lo es, y si no lo es no
-  // se importa nada (un `DatoInvalido` que la pantalla enseña tal cual).
+  // se importa nada (un `DatoInvalido` que la pantalla enseña tal cual). Los
+  // patios por FILA (columna «patio» del archivo, ya resueltos por `asignarPatios`)
+  // se vuelven a comprobar aquí contra la flota: defensa en profundidad, la FK
+  // compuesta de la 0298 es la última red.
   const terminalId = await resolverTerminalDeFlota(tenantId, opciones.terminalId);
-
-  let existentes: Map<string, FilaExistente[]>;
-  try {
-    existentes = await buscarExistentes(filas.map((f) => f.telefono));
-  } catch (e) {
-    logger.error('importar_operadores.catalogo_ilegible', { tenantId, err: e instanceof Error ? e.message : String(e) });
-    return { ...salida, error: 'No pude comprobar qué teléfonos ya existen — no importé nada. Vuelve a intentar.' };
+  for (const t of new Set(filas.map((f) => f.terminalId).filter((t): t is string => typeof t === 'string' && t !== ''))) {
+    await resolverTerminalDeFlota(tenantId, t);
   }
 
-  const porEscribir: OperadorImportado[] = [];
-  for (const f of filas) {
-    const c = clasificar(tenantId, f, existentes.get(f.telefono) ?? []);
-    if (!c) porEscribir.push(f);
-    else if (c.tipo === 'duplicado') salida.duplicados.push(c.d);
-    else salida.errores.push(c.e);
-  }
+  const plan = await planificarOperadores(tenantId, filas);
+  if (plan.error) return { ...salida, error: plan.error };
+  salida.duplicados.push(...plan.duplicados);
+  salida.errores.push(...plan.errores);
+  const porEscribir = plan.nuevas;
 
   const admin = supabaseAdmin();
   const tandas = enTandas(porEscribir);

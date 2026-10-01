@@ -2,7 +2,10 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { puedeAdministrar } from '@/lib/auth/permisos';
+import { puedeAdministrar, puedeEditarCatalogoOperativo } from '@/lib/auth/permisos';
+import { alcanceDePatio, dentroDelAlcance, exigirDentroDelAlcance, type AlcancePatio } from '@/lib/auth/patio';
+import { terminalDeJornada, terminalesDeRegistros } from '@/lib/likida/terminales';
+import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { hoyMx, OFFSET_MX } from '@/lib/formato';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
@@ -47,13 +50,47 @@ type ParamsPuerta = { vista?: string; tenant?: string; rol?: string };
  * funcionar. Lo vigila `server_actions_sin_closures.test.ts`, que fue quien lo
  * cazó aquí.
  */
-async function puerta(sp: ParamsPuerta): Promise<{ tenantId: string; userId: string } | ResultadoAccion> {
+async function puerta(
+  sp: ParamsPuerta,
+  nivel: 'correccion' | 'politica' = 'correccion',
+): Promise<{ tenantId: string; userId: string; alcance: AlcancePatio } | ResultadoAccion> {
   const s = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no ve el registro de jornada.' };
-  if (!puedeAdministrar(s.rol)) {
-    return { ok: false, error: 'Solo quien administra la flota corrige el registro de jornada.' };
+  if (nivel === 'politica') {
+    // Los UMBRALES de la flota son configuración de la cuenta: solo el dueño.
+    if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota declara los umbrales de jornada.' };
+    return { tenantId: s.tenantId, userId: s.userId, alcance: { tipo: 'flota' } };
   }
-  return { tenantId: s.tenantId, userId: s.userId };
+  // Corregir una marca, capturarla o cerrar el día: el dueño y el JEFE DE TRÁFICO
+  // (W2) — este último solo en los operadores de su patio (se comprueba por
+  // operación con `fueraDeAlcance`). Con la bitácora y la firma de siempre.
+  if (!puedeEditarCatalogoOperativo(s.rol)) {
+    return { ok: false, error: 'Solo quien administra la flota o el jefe de tráfico de ese patio corrige el registro de jornada.' };
+  }
+  const alcance = await alcanceDePatio(s.tenantId, s.userId, s.rol);
+  if (!alcance) return { ok: false, error: 'No pude comprobar tu patio — no se corrigió nada. Vuelve a intentarlo.' };
+  return { tenantId: s.tenantId, userId: s.userId, alcance };
+}
+
+/**
+ * ¿El operador dueño de esta jornada (o marca) cae fuera del alcance del jefe?
+ * Devuelve el rechazo para la pantalla, o `null` si puede seguir. El patio se
+ * LEE DE LA BASE por id y tenant: un POST con el id de una jornada de otro patio
+ * rebota aquí. Vive a nivel de módulo por la misma razón que `puerta`.
+ */
+async function fueraDeAlcance(
+  tenantId: string,
+  alcance: AlcancePatio,
+  ref: { jornadaId: string } | { asientoId: string },
+): Promise<ResultadoAccion | null> {
+  try {
+    const t = await terminalDeJornada(tenantId, ref);
+    if (!t.encontrado) return { ok: false, error: 'Esa jornada no existe en tu flota. Recarga la pantalla.' };
+    exigirDentroDelAlcance(alcance, t.terminalId);
+    return null;
+  } catch (e) {
+    return { ok: false, error: mensajeParaPantalla(e, 'comprobar el patio del operador') };
+  }
 }
 
 /**
@@ -77,11 +114,14 @@ async function firma(userId: string): Promise<{ id: string; email: string } | nu
  * a qué hora salió cada quien y el único que puede corregirlo con conocimiento.
  * Mismo criterio que /dashboard/operadores y /dashboard/unidades.
  *
- * ── VER ES `operacion`; CORREGIR ES `puedeAdministrar` ───────────────────
+ * ── VER ES `operacion`; CORREGIR ES DEL DUEÑO Y DEL JEFE DE SU PATIO ──────
  * Corregir la hora registrada de un trabajador es un acto con consecuencia
  * jurídica —el art. 805 de la LFT convierte el desaseo de este documento en
  * una presunción en contra del patrón—, así que se pide el mismo permiso que
- * para tocar los datos de un operador. Y LAS DOS PUERTAS SE VUELVEN A
+ * para tocar los datos de un operador (W2: `puedeEditarCatalogoOperativo`, o
+ * sea el dueño y el jefe de tráfico — que es quien sabe a qué hora salió cada
+ * quien — y este último solo con los operadores de SU patio). Los UMBRALES de la
+ * flota siguen siendo solo del dueño: son configuración de la cuenta. Y LAS DOS PUERTAS SE VUELVEN A
  * COMPROBAR DENTRO DE CADA SERVER ACTION: el rol del render es el del momento
  * en que se pintó, y una server action es un POST alcanzable sin pasar por
  * aquí.
@@ -106,9 +146,11 @@ export default async function PaginaJornada({
   // el del render sería firmar una corrección con el usuario que pintó la
   // pantalla, que puede no ser el que la envió — y aquí la firma es lo que hace
   // que la anotación valga.
-  const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
+  const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
+  // El alcance SOLO decide qué botones se pintan; cada acción lo vuelve a decidir.
+  const alcanceVista = await alcanceDePatio(tenantId, userId, rol);
 
   const hoy = hoyMx(new Date());
   const fecha = /^\d{4}-\d{2}-\d{2}$/;
@@ -165,8 +207,17 @@ export default async function PaginaJornada({
         conformeOperadorEn: d.conformeOperadorEn,
         jornada,
         riesgo,
+        editable: false,
       };
     });
+    // El patio de cada operador de la tabla, en UN `in(...)`: solo se pintan las
+    // formas de corrección de las jornadas de operadores dentro del alcance. Si no
+    // se pudo leer, un jefe con patio no corrige nada (la flota entera sí puede).
+    let patioPorOperador: Map<string, string | null> | null = null;
+    try { patioPorOperador = await terminalesDeRegistros('operador', tenantId, filas.map((f) => f.operadorId)); } catch { /* ver arriba */ }
+    for (const f of filas) {
+      f.editable = alcanceVista?.tipo === 'flota' || (patioPorOperador !== null && dentroDelAlcance(alcanceVista, patioPorOperador.get(f.operadorId) ?? null));
+    }
   }
 
   // ── EL EJE SEMANAL (tableros al día, 28-ago-2026) ────────────────────────
@@ -196,6 +247,8 @@ export default async function PaginaJornada({
     }
 
     const asientoId = String(fd.get('asientoId') ?? '').trim();
+    const rechazoPatio = await fueraDeAlcance(p.tenantId, p.alcance, { asientoId });
+    if (rechazoPatio) return rechazoPatio;
     const motivo = String(fd.get('motivo') ?? '').trim();
     if (!asientoId) return { ok: false, error: 'Falta la marca que se va a anular.' };
     if (motivo.length < 5) {
@@ -230,6 +283,8 @@ export default async function PaginaJornada({
     }
 
     const jornadaId = String(fd.get('jornadaId') ?? '').trim();
+    const rechazoPatio = await fueraDeAlcance(p.tenantId, p.alcance, { jornadaId });
+    if (rechazoPatio) return rechazoPatio;
     const tipo = String(fd.get('tipo') ?? '') as TipoAsiento;
     // `datetime-local` manda 'AAAA-MM-DDTHH:MM' SIN zona. Se ancla al huso de
     // México a mano: interpretarlo como UTC movería la hora capturada seis
@@ -287,6 +342,8 @@ export default async function PaginaJornada({
 
     const jornadaId = String(fd.get('jornadaId') ?? '').trim();
     if (!jornadaId) return { ok: false, error: 'Falta el día que se va a cerrar.' };
+    const rechazoPatio = await fueraDeAlcance(p.tenantId, p.alcance, { jornadaId });
+    if (rechazoPatio) return rechazoPatio;
 
     const r = await cerrarDia({ tenantId: p.tenantId, jornadaId, usuarioId: f.id, usuarioEmail: f.email });
     if (!r.ok) return { ok: false, error: r.error };
@@ -305,7 +362,7 @@ export default async function PaginaJornada({
 
   async function declararPolitica(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const p = await puerta(sp);
+    const p = await puerta(sp, 'politica');
     if ('ok' in p) return p;
     const f = await firma(p.userId);
     if (!f) return { ok: false, error: 'No pude confirmar tu correo, y declarar un umbral lleva firma. Vuelve a intentarlo.' };
@@ -370,7 +427,8 @@ export default async function PaginaJornada({
       operador={sp.operador ?? null}
       operadores={operadores}
       abrir={sp.abrir ?? null}
-      puedeCorregir={puedeAdministrar(rol)}
+      puedeCorregir={puedeEditarCatalogoOperativo(rol)}
+      puedeDeclararPolitica={puedeAdministrar(rol)}
       anularMarca={anularMarca}
       capturarMarca={capturarMarca}
       cerrarElDia={cerrarElDia}

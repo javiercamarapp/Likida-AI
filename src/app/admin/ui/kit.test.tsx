@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Fuel } from 'lucide-react';
-import { KpiTile, ChartCard, StatCard } from './kit';
+import { KpiTile, ChartCard, StatCard, EstadoVacio } from './kit';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 10, ALTO — `KpiTile` manda "$0.00" en el HTML servido, sea cual
@@ -233,5 +233,20 @@ describe('KpiTile / StatCard / WidgetUso — prueba de ancho con $999,999,999.00
     expect(html).toContain(`US${GRANDE_TXT}`);
     expect(html).toContain(`title="US${GRANDE_TXT}"`);
     expect(html).toContain('overflow-hidden text-ellipsis whitespace-nowrap');
+  });
+});
+
+describe('EstadoVacio — el vacío dice cómo se llena', () => {
+  it('con `accion` pinta un enlace REAL al siguiente paso', () => {
+    const html = renderToStaticMarkup(
+      <EstadoVacio accion={{ href: '/dashboard/operadores#importar', texto: 'Dar de alta operadores' }}>Aún no hay operadores.</EstadoVacio>,
+    );
+    expect(html).toContain('Aún no hay operadores.');
+    expect(html).toMatch(/<a[^>]*href="\/dashboard\/operadores#importar"[^>]*>Dar de alta operadores<\/a>/);
+  });
+
+  it('sin `accion` no inventa ningún enlace', () => {
+    const html = renderToStaticMarkup(<EstadoVacio>Sin datos.</EstadoVacio>);
+    expect(html).not.toContain('<a');
   });
 });

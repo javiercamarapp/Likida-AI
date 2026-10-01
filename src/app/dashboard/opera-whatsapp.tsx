@@ -1,4 +1,6 @@
+import Link from 'next/link';
 import { MessageCircle } from 'lucide-react';
+import { numeroWhatsAppDeLikida, enlaceWaMe } from '@/lib/likida/arranque_whatsapp';
 
 /**
  * "TU FLOTA SE OPERA POR WHATSAPP" (17-ago-2026) — la presentación del canal
@@ -28,7 +30,18 @@ const GUION_CONTADOR: Burbuja[] = [
   { de: 'likida', texto: 'El reporte formal con el canon de la casa, directo al chat. 📊' },
 ];
 
-export function OperaWhatsApp({ rol }: { rol: 'jefe' | 'contador' }) {
+/**
+ * A QUÉ NÚMERO. Antes la tarjeta enseñaba qué escribirle al bot sin decir a qué
+ * número (auditoría de producto, W2). Ahora lo dice —con enlace `wa.me` y la guía
+ * completa— y, si Likida todavía no lo activó en la cuenta, lo dice también: no se
+ * inventa un teléfono. `numero` se inyecta para poder probar los tres estados.
+ */
+export function OperaWhatsApp({ rol, numero = numeroWhatsAppDeLikida(), sufijo = '' }: {
+  rol: 'jefe' | 'contador';
+  numero?: ReturnType<typeof numeroWhatsAppDeLikida>;
+  /** `?tenant=`/`?vista=` del superadmin para el enlace a la guía. */
+  sufijo?: string;
+}) {
   const guion = rol === 'contador' ? GUION_CONTADOR : GUION_JEFE;
   return (
     <section className="hairline rounded-2xl p-5" style={{ background: 'var(--surface)' }}>
@@ -37,7 +50,22 @@ export function OperaWhatsApp({ rol }: { rol: 'jefe' | 'contador' }) {
         <h2 className="text-[15px] font-semibold" style={{ color: 'var(--ink)' }}>Tu flota se opera por WhatsApp</h2>
       </div>
       <p className="text-[12.5px] mb-4" style={{ color: 'var(--muted)' }}>
-        El ciclo completo vive en el chat — este panel es donde lo ves todo junto. Escríbele así:
+        El ciclo completo vive en el chat — este panel es donde lo ves todo junto.{' '}
+        {numero.estado === 'configurado' ? (
+          <>
+            Escríbele a Likida al{' '}
+            <a href={enlaceWaMe(numero.digitos, 'Hola')} className="font-medium underline" rel="noopener noreferrer"
+              style={{ color: 'var(--ink)' }}>{numero.visible}</a>
+            {numero.esPrueba && <> (número de PRUEBA: aún no atiende a choferes reales)</>}
+            {' '}—{' '}
+            <Link href={`/dashboard/whatsapp${sufijo}`} className="underline">el enlace, el QR y cómo arranca tu chofer</Link>. Así:
+          </>
+        ) : (
+          <>
+            El número de WhatsApp de Likida todavía no está activado en tu cuenta —<Link href={`/dashboard/whatsapp${sufijo}`} className="underline">ve qué falta</Link>—.
+            Cuando lo esté, escríbele así:
+          </>
+        )}
       </p>
       <div className="space-y-2">
         {guion.map((b, i) => (

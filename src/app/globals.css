@@ -271,6 +271,9 @@ html, body {
   to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
 }
 .animate-in { animation: fadeSlideIn 0.25s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-in { animation: none; }
+}
 
 /* Shimmer de carga (§E del complemento: "skeleton shimmer, no spinners
    genéricos") — un solo barrido de brillo cruzando el bloque gris, en vez

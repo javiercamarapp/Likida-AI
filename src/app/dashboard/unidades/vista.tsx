@@ -10,7 +10,8 @@ import { BarraPagina } from '../resumen-visual';
 // El Plegable es el mismo `<details>` de clientes — no hay una segunda
 // librería de UI, y un plegable propio sería su segunda copia.
 import { Plegable } from '../clientes/forma';
-import { FormaUnidad, type AccionForma, type ProveedorGps } from './forma';
+import { FormaUnidad, type AccionForma, type ProveedorGps, type PatioOpcion } from './forma';
+import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
 import { AccionesEstadoUnidad, ReactivarUnidad, type AccionEstado } from './estado';
 
 const PILL: Record<EstadoVigencia, { fg: string; bg: string; Icono: typeof ShieldCheck }> = {
@@ -83,7 +84,10 @@ const INICIAL_VACIO: UnidadCruda = {
  * de edición existe SOLO para la fila que `?editar=<id>` nombra. Las demás
  * llevan un link — que es lo que un `<details>` cerrado siempre debió ser.
  */
-export function VistaUnidades({ pag, bajas, totalBajas, conteos, totalActivasConocido, puedeEditar, guardar, cambiarEstado, sufijo, camposOcultos, proveedoresGps }: {
+export function VistaUnidades({
+  pag, bajas, totalBajas, conteos, totalActivasConocido, puedeEditar, guardar, cambiarEstado, sufijo, camposOcultos, proveedoresGps,
+  patios, patioDelJefe, terminalPorUnidad, editablePorUnidad, cargarUnidades, plantillaCsv, hrefPatios,
+}: {
   /** La página del parque ACTIVO, ya cortada y ordenada por la base
    *  (auditoría 24). El `total` y el `filtrados` los CONTÓ la base; el largo
    *  de esta página no es ninguno de los dos. */
@@ -110,7 +114,21 @@ export function VistaUnidades({ pag, bajas, totalBajas, conteos, totalActivasCon
   /** `?tenant=`/`?vista=`/`?rol=` del superadmin. */
   sufijo: string;
   camposOcultos: Array<[string, string]>;
+  /** Los patios de la flota (W2). */
+  patios: PatioOpcion[];
+  /** El nombre del patio de un jefe CON patio (altas y cargas caen ahí); null = toda la flota. */
+  patioDelJefe: string | null;
+  /** uuid de unidad → uuid de su patio (null = sin patio). */
+  terminalPorUnidad: Record<string, string | null>;
+  /** uuid de unidad → ¿cae dentro del alcance del usuario? (un jefe con patio
+   *  solo edita las de su patio). Lo decide el servidor con el patio leído de la base. */
+  editablePorUnidad: Record<string, boolean>;
+  cargarUnidades: AccionImportacion;
+  /** El CSV de la plantilla (con BOM), armado en el servidor. */
+  plantillaCsv: string;
+  hrefPatios: string;
 }) {
+  const nombrePatio = new Map(patios.map((p) => [p.id, p.nombre] as const));
   // AUDITORÍA 20 (H4): las bajas ya no se pierden. Esta vista SIEMPRE filtró
   // `activo`, así que hasta hoy una unidad inactiva desaparecía de la pantalla
   // sin dejar rastro. Ahora que la baja existe, existe también el camino de
@@ -157,18 +175,30 @@ export function VistaUnidades({ pag, bajas, totalBajas, conteos, totalActivasCon
                 Con sus vigencias capturadas, Likida avisa qué papel vence primero.
               </p>
               <Plegable resumen="Capturar unidad">
-                <FormaUnidad accion={guardar} inicial={INICIAL_VACIO} idPrefijo="alta" proveedoresGps={proveedoresGps} />
+                <FormaUnidad accion={guardar} inicial={INICIAL_VACIO} idPrefijo="alta" proveedoresGps={proveedoresGps}
+                  patios={patios} terminalId="" patioFijo={patioDelJefe !== null} />
               </Plegable>
             </section>
+          )}
+
+          {puedeEditar && (
+            <ImportadorMasivo
+              entidad="unidades" accion={cargarUnidades} plantillaCsv={plantillaCsv}
+              archivoPlantilla="plantilla-unidades.csv"
+              columnas="Obligatoria: placas. Número económico (si no lo traes, se usa la placa), marca, modelo, año, vencimiento de póliza, permiso SICT y verificación, y patio."
+              hrefPatios={hrefPatios} patioDelJefe={patioDelJefe} tope={2_000}
+            />
           )}
 
           {/* `unidades` y no `activas`: con todo el parque dado de baja,
               "todavía no hay unidades dadas de alta" sería falso — y mandaría
               a capturar de nuevo camiones que ya están en la base, abajo. */}
           {vacio ? (
-            <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+            <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+              accion={puedeEditar ? { href: '#importar', texto: 'Cargar mi flota desde Excel' } : undefined}>
               Todavía no hay unidades dadas de alta. Cuando registres tus tractocamiones con su póliza,
               permiso SICT y verificación, aquí se ve cuál está por vencer antes de que te pare un inspector.
+              {puedeEditar ? ' Puedes darlas de alta una por una arriba, o cargar toda tu flota de una vez desde un Excel o CSV.' : ''}
             </EstadoVacio>
           ) : (
             <>
@@ -226,6 +256,11 @@ export function VistaUnidades({ pag, bajas, totalBajas, conteos, totalActivasCon
                             style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
                             {ESTADO_UNIDAD[u.estado] ?? u.estado}
                           </span>
+                          {patios.length > 0 && (
+                            <span className="text-[11.5px]" style={{ color: terminalPorUnidad[u.id] ? 'var(--ink2)' : 'var(--faint)' }}>
+                              {nombrePatio.get(terminalPorUnidad[u.id] ?? '') ?? 'Sin patio'}
+                            </span>
+                          )}
                         </div>
 
                         {(u.marca || u.modelo || u.anio) && (
@@ -271,11 +306,12 @@ export function VistaUnidades({ pag, bajas, totalBajas, conteos, totalActivasCon
                         {/* UNA forma de edición por página, la de `?editar=`.
                             Antes cada fila traía la suya plegada: 5,000
                             formularios servidos para escribir en uno. */}
-                        {puedeEditar && (
+                        {puedeEditar && editablePorUnidad[u.id] && (
                           pag.editando === u.id ? (
                             <div className="mt-3">
                               <FormaUnidad accion={guardar} id={u.id} inicial={aInicial(u)} idPrefijo={`u-${u.id}`}
-                                proveedoresGps={proveedoresGps} gpsVistoEn={u.gpsVistoEn} />
+                                proveedoresGps={proveedoresGps} gpsVistoEn={u.gpsVistoEn}
+                                patios={patios} terminalId={terminalPorUnidad[u.id] ?? ''} patioFijo={patioDelJefe !== null} />
                               <Link href={urlRegistro('/dashboard/unidades', sufijo, { q: pag.q || null, p: pag.pagina, editar: null })}
                                 className="inline-block mt-2 text-[12px] underline hover:opacity-70 transition-opacity"
                                 style={{ color: 'var(--muted)' }}>
@@ -296,8 +332,8 @@ export function VistaUnidades({ pag, bajas, totalBajas, conteos, totalActivasCon
                             ("se fue al taller", "la vendimos"), no un campo que
                             se captura junto a las placas. Va siempre visible,
                             no solo en la fila que `?editar=` abrió. */}
-                        {puedeEditar && (
-                          <AccionesEstadoUnidad accion={cambiarEstado} unidadId={u.id} estado={u.estado} />
+                        {puedeEditar && editablePorUnidad[u.id] && (
+                          <AccionesEstadoUnidad accion={cambiarEstado} unidadId={u.id} estado={u.estado} numeroEconomico={u.numeroEconomico} />
                         )}
                       </div>
                     </div>
@@ -342,7 +378,7 @@ export function VistaUnidades({ pag, bajas, totalBajas, conteos, totalActivasCon
                         </p>
                       )}
                     </div>
-                    {puedeEditar && <ReactivarUnidad accion={cambiarEstado} unidadId={u.id} />}
+                    {puedeEditar && editablePorUnidad[u.id] && <ReactivarUnidad accion={cambiarEstado} unidadId={u.id} />}
                   </li>
                 ))}
               </ul>

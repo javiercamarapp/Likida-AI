@@ -2,7 +2,14 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { puedeAdministrar } from '@/lib/auth/permisos';
+import { puedeEditarCatalogoOperativo } from '@/lib/auth/permisos';
+import {
+  alcanceDePatio, dentroDelAlcance, exigirDentroDelAlcance, movimientoPermitido, patioParaCrear,
+} from '@/lib/auth/patio';
+import { getTerminales, terminalDeRegistro, terminalesDeRegistros } from '@/lib/likida/terminales';
+import { cargarUnidadesDesdeArchivo } from '@/lib/likida/importacion/panel';
+import { plantillaUnidadesCsv } from '@/lib/likida/importacion/unidades';
+import type { ResultadoImportacionUI } from '@/lib/likida/importacion/resultado_ui';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { validarUnidad, crearUnidad, editarUnidad, cambiarEstadoUnidad, ESTADOS_UNIDAD } from '@/lib/likida/operacion';
 import {
@@ -34,9 +41,12 @@ const RUTA = '/dashboard/unidades';
  * ── DOS PUERTAS DISTINTAS, el patrón de clientes ──────────────────────────
  *  · VER es área `operacion` (`puedeVerRuta`): el jefe de tráfico es
  *    exactamente quien debe enterarse de que una unidad no puede salir.
- *  · ESCRIBIR es `puedeAdministrar` (superadmin y flota_admin): una unidad es
- *    un activo de la empresa y su alta cambia el denominador de todo lo que
- *    se mide por unidad — misma puerta que `POST /v1/unidades`.
+ *  · ESCRIBIR es `puedeEditarCatalogoOperativo` (W2): el dueño, el soporte y el
+ *    JEFE DE TRÁFICO. Antes era solo el dueño, y en una flota de 250 camiones
+ *    con unidades que entran y salen de taller a diario quien marca «fuera de
+ *    servicio» es el jefe, no el dueño. Un jefe con patio asignado (0460) solo
+ *    toca las unidades de SU patio y da de alta en el suyo (`lib/auth/patio.ts`);
+ *    sin patio, toda la flota. La baja pide confirmación y todo deja bitácora.
  *
  * LAS DOS SE RE-COMPRUEBAN DENTRO del server action: el `rol` del render es
  * el del momento en que se pintó, y una server action es un endpoint
@@ -55,9 +65,19 @@ export default async function PaginaUnidades({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; q?: string; p?: string; editar?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
+  const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
+
+  // ── EL ALCANCE (W2). `null` = no edita (rol sin el permiso, o un jefe cuyo
+  // patio no se pudo leer: «no sé de qué patio es» no es «de toda la flota»).
+  const alcance = await alcanceDePatio(tenantId, userId, rol);
+  const puedeEditar = alcance !== null;
+  let patios: Awaited<ReturnType<typeof getTerminales>> = [];
+  try { patios = await getTerminales(tenantId); } catch { /* el selector no se pinta; el servidor sigue exigiendo el alcance */ }
+  const patioDelJefe = alcance?.tipo === 'patio'
+    ? (patios.find((p) => p.id === alcance.terminalId)?.nombre ?? 'tu patio')
+    : null;
   // Un `<form method="get">` reemplaza el query string ENTERO, así que el
   // sufijo del superadmin tiene que viajar como campo oculto o la búsqueda lo
   // sacaría de la flota que estaba viendo.
@@ -110,17 +130,49 @@ export default async function PaginaUnidades({
     })(),
   };
 
+  // El patio de CADA unidad de la página y de las bajas, en UN `in(...)`. Si no se
+  // pudo leer, no se inventa: un jefe con patio no edita lo que no sabe de quién es.
+  const idsVisibles = [...registro.filas.map((u) => u.id), ...bajas.filas.map((u) => u.id)];
+  let patioPorId: Map<string, string | null> | null = null;
+  try { patioPorId = await terminalesDeRegistros('unidad', tenantId, idsVisibles); } catch { /* ver arriba */ }
+  const terminalPorUnidad: Record<string, string | null> = {};
+  const editablePorUnidad: Record<string, boolean> = {};
+  for (const id of idsVisibles) {
+    terminalPorUnidad[id] = patioPorId?.get(id) ?? null;
+    editablePorUnidad[id] = alcance?.tipo === 'flota' || (patioPorId !== null && dentroDelAlcance(alcance, patioPorId.get(id) ?? null));
+  }
+
   async function guardarUnidad(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
     const s = await resolverTenantEfectivo(RUTA, sp);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver las unidades.' };
-    if (!puedeAdministrar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota da de alta y edita unidades.' };
+    if (!puedeEditarCatalogoOperativo(s.rol)) {
+      return { ok: false, error: 'Tu rol no puede dar de alta ni editar unidades.' };
     }
+    const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
+    if (!alcanceAccion) return { ok: false, error: 'No pude comprobar tu patio — no se guardó nada. Vuelve a intentar.' };
 
     const id = String(fd.get('id') ?? '').trim();
     const eco = String(fd.get('numeroEconomico') ?? '').trim();
     try {
+      // El patio del registro sale de la BASE, no del formulario: un POST directo
+      // con el id de una unidad de otro patio rebota aquí, antes de escribir.
+      let terminalId: string | null | undefined;
+      if (id) {
+        const actual = await terminalDeRegistro('unidad', s.tenantId, id);
+        if (!actual.encontrado) return { ok: false, error: 'No se encontró esa unidad en tu flota. Recarga la pantalla.' };
+        exigirDentroDelAlcance(alcanceAccion, actual.terminalId);
+        if (fd.has('terminalId')) {
+          const pedido = String(fd.get('terminalId') ?? '').trim() || null;
+          if (pedido !== actual.terminalId) {
+            if (!movimientoPermitido(alcanceAccion, pedido)) return { ok: false, error: 'Solo quien administra la flota mueve una unidad de patio.' };
+            terminalId = pedido;
+          }
+        }
+      } else {
+        // El ALTA: un jefe con patio crea SIEMPRE en el suyo, pida lo que pida el formulario.
+        terminalId = patioParaCrear(alcanceAccion, String(fd.get('terminalId') ?? ''));
+      }
       // La validación del navegador (required, max) avisa temprano; ÉSTA es
       // la que manda, y es la misma función que prueba `operacion.test.ts`.
       const valores = validarUnidad({
@@ -139,8 +191,8 @@ export default async function PaginaUnidades({
         gpsDeviceId: String(fd.get('gpsDeviceId') ?? ''),
       });
 
-      if (id) await editarUnidad(s.tenantId, id, valores);
-      else await crearUnidad(s.tenantId, valores);
+      if (id) await editarUnidad(s.tenantId, id, { ...valores, ...(terminalId !== undefined ? { terminalId } : {}) }, { id: s.userId });
+      else await crearUnidad(s.tenantId, { ...valores, terminalId }, { id: s.userId });
 
       revalidatePath(RUTA);
       const sinPapeles = !valores.polizaVence && !valores.permisoSictVence && !valores.verificacionVence;
@@ -189,13 +241,19 @@ export default async function PaginaUnidades({
     'use server';
     const s = await resolverTenantEfectivo(RUTA, sp);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver las unidades.' };
-    if (!puedeAdministrar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota cambia el estado de una unidad.' };
+    if (!puedeEditarCatalogoOperativo(s.rol)) {
+      return { ok: false, error: 'Tu rol no puede cambiar el estado de una unidad.' };
     }
+    const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
+    if (!alcanceAccion) return { ok: false, error: 'No pude comprobar tu patio — no se cambió nada. Vuelve a intentar.' };
 
     const unidadId = String(fd.get('unidadId') ?? '').trim();
     const estado = String(fd.get('estado') ?? '').trim();
     try {
+      // El patio de la unidad sale de la BASE: el jefe de otro patio no la da de baja.
+      const actual = await terminalDeRegistro('unidad', s.tenantId, unidadId);
+      if (!actual.encontrado) return { ok: false, error: 'No se encontró esa unidad en tu flota. Recarga la pantalla.' };
+      exigirDentroDelAlcance(alcanceAccion, actual.terminalId);
       // El actor viaja para que la bitácora pueda contestar "quién dio de baja
       // este camión y cuándo" — la pregunta del seguro y la del contador que
       // lo deduce.
@@ -212,6 +270,23 @@ export default async function PaginaUnidades({
     }
   }
 
+  /** La carga masiva: revisar (no escribe) y confirmar. Mismo motor que `POST /v1/unidades`. */
+  async function cargarUnidades(_previo: ResultadoImportacionUI | null, fd: FormData): Promise<ResultadoImportacionUI | null> {
+    'use server';
+    const vacio = (error: string): ResultadoImportacionUI => ({
+      error, paso: 'previsualizar', huella: '', archivo: '', leidas: 0, nuevas: 0, yaEstaban: 0, conProblema: 0,
+      muestra: [], problemas: [], patiosDesconocidos: [], avisos: [], excedeTope: false,
+    });
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA)) return vacio('Tu rol no puede ver las unidades.');
+    if (!puedeEditarCatalogoOperativo(s.rol)) return vacio('Tu rol no puede dar de alta unidades.');
+    const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
+    if (!alcanceAccion) return vacio('No pude comprobar tu patio — no se cargó nada. Vuelve a intentar.');
+    const r = await cargarUnidadesDesdeArchivo({ tenantId: s.tenantId, alcance: alcanceAccion, actor: { id: s.userId }, datos: fd });
+    if (r.confirmado) revalidatePath(RUTA);
+    return r;
+  }
+
   return (
     <>
       <VistaUnidades
@@ -225,8 +300,15 @@ export default async function PaginaUnidades({
         cambiarEstado={cambiarEstado}
         // El gateo de la UI solo decide si la forma SE PINTA; la puerta real se
         // re-comprueba adentro del action (alcanzable por POST directo).
-        puedeEditar={puedeAdministrar(rol)}
+        puedeEditar={puedeEditar}
         guardar={guardarUnidad}
+        patios={patios.map((p) => ({ id: p.id, nombre: p.nombre }))}
+        patioDelJefe={patioDelJefe}
+        terminalPorUnidad={terminalPorUnidad}
+        editablePorUnidad={editablePorUnidad}
+        cargarUnidades={cargarUnidades}
+        plantillaCsv={plantillaUnidadesCsv()}
+        hrefPatios={`/dashboard/patios${sufijo}`}
         // Al cliente viaja SOLO id+nombre: el catálogo trae los `probar()` y
         // las fuentes de cada fabricante, y nada de eso va al navegador.
         proveedoresGps={CONECTORES_GPS.map((c) => ({ id: c.id, nombre: c.nombre }))}

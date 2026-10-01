@@ -8,6 +8,7 @@ import {
   ESTADOS_CUADRE, REVISIONES, hayFiltrosCola,
   type FiltrosCola, type PaginaCola, type FilaCola, type RevisionLiquidacion,
 } from '@/lib/likida/revision';
+import { EnlacePagina, NavPaginas } from '../../paginador';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // «ESPERAN TU REVISIÓN» — LA COLA DE VERDAD (auditoría 24, FE-5 · BLOQ-6).
@@ -109,13 +110,12 @@ export async function SeccionCola({ cola, filtros, terminales, buscar, contexto,
               Por antigüedad. La firma se pone en el detalle de cada una.
             </p>
             {pagina.siguiente && (
-              <Link
-                href={`?${new URLSearchParams([...contexto, ...paramsDeFiltros(filtros), ['cursor', pagina.siguiente]]).toString()}`}
-                className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity"
-                style={{ color: 'var(--marca)' }}
-              >
-                Siguientes <ArrowRight width={12} height={12} strokeWidth={2} />
-              </Link>
+              <NavPaginas>
+                <EnlacePagina
+                  href={`?${new URLSearchParams([...contexto, ...paramsDeFiltros(filtros), ['cursor', pagina.siguiente]]).toString()}`}
+                  direccion="siguiente"
+                />
+              </NavPaginas>
             )}
           </div>
         </>
