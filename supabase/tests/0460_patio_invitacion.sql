@@ -71,6 +71,23 @@ begin
   end if;
 end $$;
 
+-- (e) 0461: los conteos por patio son de la flota ENTERA pedida y no mezclan flotas
+insert into public.terminal (id, tenant_id, nombre) values
+  ('46000000-0000-4000-8000-0000000000b2', '46000000-0000-4000-8000-0000000000b1', 'Patio B');
+update public.operador set terminal_id = '46000000-0000-4000-8000-0000000000a2'
+  where id = '46000000-0000-4000-8000-0000000000a3';
+do $$
+declare op int; je int; filas int; filas_b int;
+begin
+  select operadores, jefes into op, je from public.terminales_conteos_tenant('46000000-0000-4000-8000-0000000000a1')
+    where terminal_id = '46000000-0000-4000-8000-0000000000a2';
+  select count(*) into filas from public.terminales_conteos_tenant('46000000-0000-4000-8000-0000000000a1');
+  select count(*) into filas_b from public.terminales_conteos_tenant('46000000-0000-4000-8000-0000000000b1');
+  if op <> 1 or je <> 1 or filas <> 1 or filas_b <> 1 then
+    raise exception 'CONTEOS_0461 operadores=% jefes=% filasA=% filasB=% (esperado 1 / 1 / 1 / 1)', op, je, filas, filas_b;
+  end if;
+end $$;
+
 -- (b) borrar el patio: el jefe queda sin patio, vivo y en su flota
 delete from public.terminal where id = '46000000-0000-4000-8000-0000000000a2';
 do $$
