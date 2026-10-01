@@ -339,7 +339,7 @@ on conflict (id) do nothing;
 -- suelte el documento; el tope de intentos evita pagar al modelo para siempre por
 -- un archivo que no se deja leer.
 create or replace function public.cp_documento_reclamar(p_tenant uuid, p_id uuid, p_lease_segundos int default 120)
-returns table (intentos int)
+returns table (intentos int, version int)
 language plpgsql
 security invoker
 set search_path = public, pg_temp
@@ -363,7 +363,7 @@ begin
        d.estado in ('recibido', 'fallido')
        or (d.estado = 'procesando' and d.procesando_hasta < now())
      )
-  returning d.intentos;
+  returning d.intentos, d.version;
 end;
 $$;
 revoke all on function public.cp_documento_reclamar(uuid, uuid, int) from public, anon, authenticated;
