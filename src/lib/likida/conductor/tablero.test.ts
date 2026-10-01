@@ -157,6 +157,7 @@ describe('la línea de tiempo del viaje', () => {
     ];
     const t = armarTablero(datos([viaje('1')], hs, { evidencias }), cfg(), AHORA);
     expect(t.filas[0].hitos[1].evidencias).toBe(1);
+    expect(t.filas[0].hitos[1].fotos).toEqual([{ id: 'e2', tipo: 'sello' }]);
   });
 
   it('los nombres de sitio salen del catálogo', () => {

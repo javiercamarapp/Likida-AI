@@ -33,6 +33,7 @@ function pintar(datos: DatosTablero, o: { puedeActuar?: boolean; ind?: ReturnTyp
       tablero={armarTablero(datos, cfg, AHORA)} indicadores={o.ind === undefined ? IND : o.ind} dias={7} filtros={o.filtros ?? FILTROS}
       catalogos={{ terminales: [{ id: 'tm1', nombre: 'Tlaquepaque' }], clientes: [{ id: 'c1', nombre: 'Cliente A' }], operadores: [{ id: 'o1', nombre: 'Chofer 1' }] }}
       ocultos={{ tenant: 't-9' }} accionUrl="/dashboard/agentes/conductores" puedeActuar={o.puedeActuar ?? true} accion={accion}
+      accionSitios={accion} sitios={[{ id: 's1', nombre: 'Planta Zapopan', tipo: 'planta' }]}
     />,
   );
 }
@@ -120,8 +121,28 @@ describe('el tablero de hitos — lo que ve el jefe de tráfico', () => {
     expect(html).toContain('vía oficina');
   });
 
-  it('sin sitios asignados lo dice (las llegadas no se pueden validar)', () => {
-    expect(pintar(datos([V('1')], H('1', {})))).toContain('Sin sitios asignados');
+  it('sin sitios asignados lo dice (las llegadas no se pueden validar) y ofrece asignarlos con el catálogo', () => {
+    const html = pintar(datos([V('1')], H('1', {})));
+    expect(html).toContain('Sin sitios asignados');
+    expect(html).toContain('Asignar sitios');
+    expect(html).toContain('Sitio de carga');
+    expect(html).toContain('Planta Zapopan');
+    expect(html).toContain('Quitar el sitio');
+  });
+
+  it('SIN permiso de actuar tampoco se ofrece asignar sitios', () => {
+    expect(pintar(datos([V('1')], H('1', {})), { puedeActuar: false })).not.toContain('Asignar sitios');
+  });
+
+  it('las fotos de evidencia se abren con GET /v1/evidencias/{id} (enlace de corta vida), una por papel', () => {
+    const evidencias = [
+      { id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0e1', hitoId: '1-salida_carga', ciclo: 1, tipo: 'sello' as const, ruta: 'x', creadaEn: hace(10) },
+      { id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0e2', hitoId: '1-salida_carga', ciclo: 1, tipo: 'otra' as const, ruta: null, creadaEn: hace(9) },
+    ];
+    const html = pintar(datos([V('1')], H('1', { llegada_carga: hace(100), salida_carga: hace(50) }), { evidencias }));
+    expect(html).toContain('href="/api/v1/evidencias/4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0e1"');
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).not.toContain('d0e2'); // la purgada (sin ruta) no se ofrece
   });
 
   it('los filtros: patio, cliente, chofer, semáforo y periodo; y conservan el tenant de la vista de superadmin', () => {

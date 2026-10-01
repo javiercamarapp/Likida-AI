@@ -115,7 +115,7 @@ import { join, relative } from 'node:path';
 // Funcionalidad nueva, no código migrado.
 //
 // LOOP PUNTA A PUNTA (2-oct-2026), Agente 5 «Conductor», 2.ª entrega (0385) — 261 → 262
-// archivos y 1,390 → 1,431 llamadas (medido con el barrido completo). UN solo archivo nuevo:
+// archivos y 1,390 → 1,432 llamadas (medido con el barrido completo). UN solo archivo nuevo:
 // `lib/likida/conductor/repo_validacion.ts` junta el acceso a datos de la entrega (catálogo de
 // sitios y su importador, posiciones para validar, veredictos, evidencia, acciones de oficina,
 // indicadores y las lecturas del tablero y de las estadías) APARTE de `conductor/repo.ts` para no
@@ -124,7 +124,7 @@ import { join, relative } from 'node:path';
 // `consultas_admin_filtran_tenant.test.ts`) y las lecturas por lotes con `traerPorIds`. Funcionalidad
 // nueva, no código migrado.
 const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 262;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_431;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_432;
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
 

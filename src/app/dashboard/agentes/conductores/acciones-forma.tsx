@@ -89,3 +89,33 @@ export function AccionesHito({ accion, modos, hitoId, viajeId }: {
     </div>
   );
 }
+
+// ── Asignar el sitio de carga y de descarga de un viaje ─────────────────────
+
+export type ResultadoSitios = ResultadoOficina;
+export interface OpcionSitio { id: string; nombre: string; tipo: string }
+
+export function FormaAsignarSitios({ accion, viajeId, sitios }: { accion: AccionOficinaServidor; viajeId: string; sitios: OpcionSitio[] }) {
+  const [estado, enviar] = useActionState(accion, null);
+  const opciones = (
+    <>
+      <option value="">(sin cambio)</option>
+      <option value="__quitar">Quitar el sitio</option>
+      {sitios.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+    </>
+  );
+  return (
+    <details className="text-[12px]">
+      <summary className="cursor-pointer select-none underline-offset-2 hover:underline" style={{ color: 'var(--muted)' }}>Asignar sitios</summary>
+      <form action={enviar} className="mt-2 space-y-2 max-w-[52ch]">
+        <input type="hidden" name="viajeId" value={viajeId} />
+        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Contra estos sitios se compara cada «ya llegué». Sin sitio, la llegada queda «sin dato» (nunca «no coincide»).</p>
+        <div className="grid sm:grid-cols-2 gap-2">
+          <label className="block"><span className="block text-[11px] font-medium mb-1">Sitio de carga</span><select name="origen" defaultValue="" className={`${CAMPO} w-full`}>{opciones}</select></label>
+          <label className="block"><span className="block text-[11px] font-medium mb-1">Sitio de descarga</span><select name="destino" defaultValue="" className={`${CAMPO} w-full`}>{opciones}</select></label>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap"><Enviar texto="Guardar sitios" /><Resultado r={estado} /></div>
+      </form>
+    </details>
+  );
+}

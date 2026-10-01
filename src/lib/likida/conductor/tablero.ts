@@ -43,6 +43,8 @@ export interface HitoVista {
   validacion: { resultado: ResultadoValidacion; texto: string; distanciaM: number | null } | null;
   validadoPor: HitoFila['validadoPor'];
   evidencias: number;
+  /** Cada foto viva del ciclo vigente (para abrirla con GET /v1/evidencias/{id}). */
+  fotos: Array<{ id: string; tipo: 'sello' | 'anden' | 'recibido' | 'otra' }>;
   escaladoEn: string | null;
   escalacionNivel: number;
   atendidaEn: string | null;
@@ -122,9 +124,13 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
     const hs = [...(hitosPorViaje.get(viaje.id) ?? [])].sort((a, b) => TIPOS_HITO.indexOf(a.tipo) - TIPOS_HITO.indexOf(b.tipo));
     // Las evidencias cuentan solo las del CICLO vigente del hito (una corrección retira el hito, no las fotos viejas del historial).
     const evidenciasVigentes = new Map<string, number>();
+    const fotosVigentes = new Map<string, Array<{ id: string; tipo: 'sello' | 'anden' | 'recibido' | 'otra' }>>();
     for (const e of datos.evidencias) {
       const h = hs.find((x) => x.id === e.hitoId);
-      if (h && e.ciclo === h.ciclo && e.ruta !== null) evidenciasVigentes.set(h.id, (evidenciasVigentes.get(h.id) ?? 0) + 1);
+      if (h && e.ciclo === h.ciclo && e.ruta !== null) {
+        evidenciasVigentes.set(h.id, (evidenciasVigentes.get(h.id) ?? 0) + 1);
+        fotosVigentes.set(h.id, [...(fotosVigentes.get(h.id) ?? []), { id: e.id, tipo: e.tipo }]);
+      }
     }
     const validaciones = new Map<string, ResultadoValidacion>();
     for (const h of hs) { const v = veredictoVigente(h, veredictos); if (v) validaciones.set(h.id, v.resultado); }
@@ -176,7 +182,7 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
         contacto: h.contactoNombre ? (h.contactoArea ? `${h.contactoNombre} (${h.contactoArea})` : h.contactoNombre) : null,
         sinContacto: h.sinContacto,
         validacion: v ? { resultado: v.resultado, texto: textoVeredicto(aVeredicto(v), sitioNombre), distanciaM: v.distanciaM } : null,
-        validadoPor: h.validadoPor, evidencias: evidenciasVigentes.get(h.id) ?? 0,
+        validadoPor: h.validadoPor, evidencias: evidenciasVigentes.get(h.id) ?? 0, fotos: fotosVigentes.get(h.id) ?? [],
         escaladoEn: h.escaladoEn, escalacionNivel: h.escalacionNivel, atendidaEn: h.escalacionAtendidaEn,
         tocaDesde: activo && activo.id === h.id && tocaDesde ? tocaDesde.toISOString() : null,
         accionesOficina: accionesDe(h.id),

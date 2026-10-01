@@ -135,7 +135,11 @@ import { join, relative, sep } from 'node:path';
 //   · `api/v1/viajes/[id]/sitios/route.ts` — área `administracion` + CSRF para la cookie; el sitio se resuelve
 //     (código o id) DENTRO de la flota de la credencial y el UPDATE lleva `.eq('tenant_id', …)`; «no existe» y «no es
 //     de tu flota» contestan lo mismo (404); un `tenant_id` en el cuerpo es 400.
-const RUTAS_APP_REVISADAS = 86;
+//
+// 86 → 87 (misma entrega): `api/v1/evidencias/[id]/route.ts` — `abrir(req, 'operacion')`; busca la evidencia SIEMPRE
+//   con `.eq('tenant_id', …)` de la credencial, firma solo rutas que cuelgan del prefijo de esa flota y redirige (302) a una
+//   URL de 10 minutos del bucket privado: el archivo nunca se sirve ni es público.
+const RUTAS_APP_REVISADAS = 87;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
