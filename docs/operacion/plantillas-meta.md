@@ -184,7 +184,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Botones:** ninguno
 
-## Plantillas nuevas, listas para enviar a aprobación (10)
+## Plantillas nuevas, listas para enviar a aprobación (11)
 
 ### `regla_aviso_v1`
 
@@ -388,4 +388,23 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 | `{{5}}` | última ubicación conocida | Carretera 15D km 120 |
 
 - **Botones:** «Ya lo atiendo» (respuesta rápida, payload `jefe_atiendo:<viaje_id>`); «Abrir tablero» (URL fija https://app.likida.ai/dashboard/despacho)
+
+### `operador_invitacion_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** undefined. Invitar al chofer recién dado de alta (alta masiva o ficha) a escribirle a Likida: inicia su conversación y abre la ventana de 24 h. Solo se manda si la flota lo confirma.
+- **Llamador en código:** src/lib/likida/invitacion_operador.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, {{2}} te dio de alta en Likida para que mandes por WhatsApp las fotos de tus tickets y comprobantes de viaje. Responde a este mensaje con un «Hola» para empezar; aquí mismo te llegan tus viajes y tu liquidación.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan Pérez |
+| `{{2}}` | nombre de la flota | Transportes del Norte |
+
+- **Botones:** ninguno
 

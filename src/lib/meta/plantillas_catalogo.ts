@@ -56,7 +56,7 @@ export type EncabezadoCatalogo =
 
 export type AgenteDestino =
   | 'chofer_asignacion' | 'chofer_cobranza' | 'oficina' | 'facturacion' | 'privacidad_arco'
-  | 'gps' | 'asistencia' | 'mis_reglas' | 'agente5_conductor';
+  | 'gps' | 'asistencia' | 'mis_reglas' | 'agente5_conductor' | 'onboarding_operador';
 
 export interface PlantillaCatalogo {
   nombre: string;
@@ -286,6 +286,15 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     ],
     textoVerificado: true, estado: 'nueva_para_aprobacion',
   },
+  {
+    nombre: 'operador_invitacion_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'onboarding_operador',
+    proposito: 'Invitar al chofer recién dado de alta (alta masiva o ficha) a escribirle a Likida: inicia su conversación y abre la ventana de 24 h. Solo se manda si la flota lo confirma.',
+    llamador: 'src/lib/likida/invitacion_operador.ts',
+    cuerpo: 'Hola {{1}}, {{2}} te dio de alta en Likida para que mandes por WhatsApp las fotos de tus tickets y comprobantes de viaje. Responde a este mensaje con un «Hola» para empezar; aquí mismo te llegan tus viajes y tu liquidación.',
+    ejemplos: ['Juan Pérez', 'Transportes del Norte'],
+    variables: ['nombre del chofer', 'nombre de la flota'],
+    botones: [], textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
 ];
 
 /** Nombres que usa el código (evita literales sueltos). */
@@ -306,6 +315,7 @@ export const PLANTILLA = {
   plazoFactura: 'plazo_factura',
   respuestaArco: 'respuesta_arco_v2',
   reglaAviso: 'regla_aviso_v1',
+  operadorInvitacion: 'operador_invitacion_v1',
 } as const;
 
 export function plantillaDeCatalogo(nombre: string): PlantillaCatalogo | undefined {
