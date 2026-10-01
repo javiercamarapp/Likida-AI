@@ -60,7 +60,7 @@ export type EncabezadoCatalogo =
 
 export type AgenteDestino =
   | 'chofer_asignacion' | 'chofer_cobranza' | 'oficina' | 'facturacion' | 'privacidad_arco'
-  | 'gps' | 'asistencia' | 'mis_reglas' | 'agente5_conductor' | 'onboarding_operador';
+  | 'gps' | 'asistencia' | 'mis_reglas' | 'agente5_conductor' | 'onboarding_operador' | 'vigia_cliente';
 
 export interface PlantillaCatalogo {
   nombre: string;
@@ -326,6 +326,40 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     variables: ['nombre del chofer', 'nombre de la flota'],
     botones: [], textoVerificado: true, estado: 'nueva_para_aprobacion',
   },
+  // ── Agente 4 — Vigía de servicio al cliente (mig. 0400) ─────────────────
+  {
+    nombre: 'vigia_respuesta_cliente_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'vigia_cliente',
+    proposito: 'Respuesta de la flota a un CLIENTE (ya aprobada por el gerente) cuando su ventana de 24 h está cerrada. Solo sale a clientes con consentimiento y sin baja.',
+    llamador: 'src/lib/likida/vigia/enviar.ts',
+    cuerpo: 'Respuesta de {{1}} sobre tu servicio de transporte: {{2}} Si ya no quieres recibir mensajes por este medio, responde BAJA.',
+    ejemplos: ['Transportes del Norte', 'Tu viaje F-1042 va en curso; la última posición del GPS es de hace 12 minutos.'],
+    variables: ['razón social de la flota', 'texto de la respuesta (≤ 300 caracteres, sin saltos de línea)'],
+    botones: [], textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'vigia_aprobacion_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'vigia_cliente',
+    proposito: 'Pedir al gerente, con un toque, que apruebe la respuesta que el Vigía redactó para un cliente (respaldo fuera de su ventana de 24 h).',
+    llamador: 'src/lib/likida/vigia/avisos.ts',
+    cuerpo: 'Vigía de servicio: {{1}} escribió «{{2}}». Respuesta propuesta: «{{3}}». ¿La envío?',
+    ejemplos: ['Compras Acme', '¿Dónde va mi viaje F-1042?', 'Tu viaje F-1042 va en curso; última posición hace 12 minutos.'],
+    variables: ['cliente', 'mensaje del cliente (≤ 160 caracteres)', 'respuesta propuesta (≤ 280 caracteres)'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Enviar', payloadPrefijo: 'vig_ok' },
+      { tipo: 'QUICK_REPLY', texto: 'No enviar', payloadPrefijo: 'vig_no' },
+      { tipo: 'QUICK_REPLY', texto: 'Yo me encargo', payloadPrefijo: 'vig_tomo' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'vigia_escalamiento_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'vigia_cliente',
+    proposito: 'Escalar al gerente responsable (nivel 1) o al dueño (nivel 2) un cliente molesto, que pide un humano o que lleva más del SLA sin respuesta.',
+    llamador: 'src/lib/likida/vigia/avisos.ts',
+    cuerpo: 'Vigía de servicio: el cliente {{1}} necesita atención ({{2}}). Nivel {{3}} de escalamiento. Revísalo en {{4}} o toca «Yo me encargo».',
+    ejemplos: ['Compras Acme', 'lleva 45 minutos sin respuesta', '1', 'https://app.likida.ai/dashboard/agentes/vigia'],
+    variables: ['cliente', 'motivo (sin respuesta, molestia, pide un humano…)', 'nivel (1 o 2)', 'liga al tablero del Vigía'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Yo me encargo', payloadPrefijo: 'vig_tomo' }],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
 ];
 
 /** Nombres que usa el código (evita literales sueltos). */
@@ -347,6 +381,9 @@ export const PLANTILLA = {
   respuestaArco: 'respuesta_arco_v2',
   reglaAviso: 'regla_aviso_v1',
   operadorInvitacion: 'operador_invitacion_v1',
+  vigiaRespuestaCliente: 'vigia_respuesta_cliente_v1',
+  vigiaAprobacion: 'vigia_aprobacion_v1',
+  vigiaEscalamiento: 'vigia_escalamiento_v1',
 } as const;
 
 export function plantillaDeCatalogo(nombre: string): PlantillaCatalogo | undefined {

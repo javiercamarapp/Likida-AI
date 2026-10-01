@@ -103,6 +103,17 @@ import { join, relative } from 'node:path';
  * `administracion.ts` (+1: `politicaPropiaDeclarada`). Funcionalidad nueva, no
  * código migrado.
  *
+ * LOOP PUNTA A PUNTA (1-oct-2026), Agente 4 «Vigía de servicio al cliente» — 259 → 260
+ * archivos y 1,347 → 1,404 llamadas (+57, todas en UN archivo). El módulo nuevo es
+ * `lib/likida/vigia/repo.ts`, que junta TODO el acceso a datos del Vigía en vez de
+ * repartirlo por tabla: las cinco tablas de la 0400 (config, contacto, conversación,
+ * mensaje, evento), las tres RPC (`vigia_recibir_mensaje`, `vigia_purgar`,
+ * `vigia_suprimir_contacto`), el servicio de estatus de viaje real (viaje, posicion,
+ * pod, factura de UN cliente en UNA flota) y las lecturas/acciones del tablero. Cada
+ * consulta filtra por tenant (las dos que cruzan flotas a propósito —el número del
+ * webhook y el barrido del cron— están rotuladas) y `repo.test.ts` lo comprueba con
+ * un cliente grabador. Funcionalidad nueva, no código migrado.
+ *
  * AUDITORÍA 28, ARQ-M1 (LA UNIDAD EQUIVOCADA): hasta aquí el techo vivía en
  * ARCHIVOS — y con 252 archivos medidos contra un techo de 252, este guardia
  * llevaba CERO margen: cualquier archivo nuevo con un solo `.from(`/`.rpc(`
@@ -146,8 +157,8 @@ import { join, relative } from 'node:path';
 // `conductor/trabajo.ts` (ya exento y ya contado). Todas con `acotada`, acotadas por tenant (las vigila
 // `consultas_admin_filtran_tenant.test.ts`) y las lecturas por lotes con `traerPorIds`. Funcionalidad
 // nueva, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 262;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_432;
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 266;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_525;
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
 

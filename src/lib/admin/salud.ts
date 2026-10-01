@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -83,6 +83,11 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // el grano de 5 min es lo que tarda un recordatorio en salir tras vencer su
   // minuto, sin que dos corridas cercanas lo dupliquen (el claim lo impide).
   'conductor-hitos': 300_000,
+  // El barrido del Vigía de servicio al cliente (0400). Cada 5 minutos: el SLA de
+  // respuesta se mide en minutos (5 como mínimo configurable) y un cliente molesto
+  // no puede esperar a que el cron de la hora vuelva a pasar. Sin modelo: solo mide
+  // relojes, escala por niveles y purga lo vencido.
+  vigia: 300_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */
