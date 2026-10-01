@@ -24,6 +24,16 @@ const RUTA = '/dashboard/carta-porte/documentos';
 const DIAS_VENTANA = 90;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * La sesión y el área, DE NUEVO, dentro de cada acción. A nivel de módulo a propósito: una función declarada en el
+ * cuerpo del componente y usada dentro de un `'use server'` se captura por closure y Next no puede serializarla.
+ */
+async function sesionDeAccion(sp: { tenant?: string; rol?: string; vista?: string }): Promise<{ tenantId: string; userId: string } | { error: string }> {
+  const s = await resolverTenantEfectivo(RUTA, sp);
+  if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede administrar los documentos de Carta Porte.' };
+  return { tenantId: s.tenantId, userId: s.userId };
+}
+
 /** La lectura de la bandeja. Fuera del componente: «hace 90 días» depende del reloj y un render no debe leerlo. */
 async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
   try {
@@ -68,17 +78,9 @@ export default async function PaginaDocumentos({
   // Una base que no contesta NO se pinta como bandeja vacía.
   const datos = await cargarDatos(tenantId);
 
-  /** La sesión y el área, DE NUEVO, dentro de cada acción. */
-  async function sesion(): Promise<{ tenantId: string; userId: string } | { error: string }> {
-    const s = await resolverTenantEfectivo(RUTA, sp);
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede administrar los documentos de Carta Porte.' };
-    return { tenantId: s.tenantId, userId: s.userId };
-  }
-  const refrescar = () => revalidatePath(RUTA);
-
   async function subir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesion();
+    const s = await sesionDeAccion(sp);
     if ('error' in s) return { ok: false, error: s.error };
     try {
       if (!(await rateLimit(`cp-docs-subir:${s.tenantId}`, 30, 60_000))) return { ok: false, error: 'Demasiados documentos en poco tiempo. Espera un minuto.' };
@@ -90,9 +92,9 @@ export default async function PaginaDocumentos({
         canal: 'manual', nombre: archivo.name, bytes: new Uint8Array(await archivo.arrayBuffer()), clienteId: UUID.test(clienteId) ? clienteId : null, actorId: s.userId,
       });
       if (!r.ok) return { ok: false, error: r.mensaje };
-      if (r.duplicado) { refrescar(); return { ok: true, mensaje: 'Ese archivo ya estaba en la bandeja: no se duplicó.' }; }
+      if (r.duplicado) { revalidatePath(RUTA); return { ok: true, mensaje: 'Ese archivo ya estaba en la bandeja: no se duplicó.' }; }
       const p = r.estado === 'recibido' ? await procesarDocumento(s.tenantId, r.documentoId, {}) : null;
-      refrescar();
+      revalidatePath(RUTA);
       if (p && !p.ok) return { ok: false, error: `Se guardó, pero no se pudo leer: ${p.mensaje} Queda en la bandeja para reintentar.` };
       return { ok: true, mensaje: 'Documento leído. Ya está en la bandeja para revisar.' };
     } catch (e) {
@@ -102,7 +104,7 @@ export default async function PaginaDocumentos({
 
   async function procesar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesion();
+    const s = await sesionDeAccion(sp);
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const id = String(fd.get('documentoId') ?? '');
@@ -110,7 +112,7 @@ export default async function PaginaDocumentos({
       if (!(await repo.leerDocumento(s.tenantId, id))) return { ok: false, error: 'Ese documento no está en tu flota.' };
       if (!(await rateLimit(`cp-docs-subir:${s.tenantId}`, 30, 60_000))) return { ok: false, error: 'Demasiadas lecturas en poco tiempo. Espera un minuto.' };
       const p = await procesarDocumento(s.tenantId, id, {});
-      refrescar();
+      revalidatePath(RUTA);
       return p.ok ? { ok: true, mensaje: 'Documento leído.' } : { ok: false, error: p.mensaje };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'leer el documento') };
@@ -119,11 +121,11 @@ export default async function PaginaDocumentos({
 
   async function activarBuzon(): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesion();
+    const s = await sesionDeAccion(sp);
     if ('error' in s) return { ok: false, error: s.error };
     try {
       await repo.crearBuzon(s.tenantId, generarTokenCp());
-      refrescar();
+      revalidatePath(RUTA);
       return { ok: true, mensaje: 'Buzón activado.' };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'activar el buzón') };
@@ -132,7 +134,7 @@ export default async function PaginaDocumentos({
 
   async function guardarRemitentes(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesion();
+    const s = await sesionDeAccion(sp);
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const lista = String(fd.get('remitentes') ?? '').split(/\r?\n/).map((x) => x.trim().toLowerCase()).filter(Boolean);
@@ -140,7 +142,7 @@ export default async function PaginaDocumentos({
       const mala = lista.find((x) => !/^@?[a-z0-9._%+-]*@?[a-z0-9.-]+\.[a-z]{2,}$/.test(x) || x.length > 120);
       if (mala) return { ok: false, error: `«${mala.slice(0, 60)}» no parece un correo ni un dominio.` };
       await repo.configurarBuzon(s.tenantId, { remitentesPermitidos: [...new Set(lista)] });
-      refrescar();
+      revalidatePath(RUTA);
       return { ok: true, mensaje: lista.length === 0 ? 'Sin lista: se aceptan correos de cualquier remitente (todos pasan por revisión).' : `Guardados ${lista.length} remitentes.` };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar los remitentes') };
@@ -149,7 +151,7 @@ export default async function PaginaDocumentos({
 
   async function guardarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesion();
+    const s = await sesionDeAccion(sp);
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const nombre = String(fd.get('nombre') ?? '').trim();
@@ -161,7 +163,7 @@ export default async function PaginaDocumentos({
       const v = validarConfigExport(crudo);
       if (!v.ok) return { ok: false, error: `El mapeo no es válido: ${v.errores.slice(0, 4).join(' · ')}` };
       await repo.guardarExportConfig(s.tenantId, { nombre, formato, config: v.config as unknown as Record<string, unknown> });
-      refrescar();
+      revalidatePath(RUTA);
       return { ok: true, mensaje: `Formato «${nombre}» guardado. Ya aparece en las descargas.` };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar el formato') };
@@ -170,13 +172,13 @@ export default async function PaginaDocumentos({
 
   async function borrarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesion();
+    const s = await sesionDeAccion(sp);
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const id = String(fd.get('id') ?? '');
       if (!UUID.test(id)) return { ok: false, error: 'No se reconoce ese formato.' };
       await repo.borrarExportConfig(s.tenantId, id);
-      refrescar();
+      revalidatePath(RUTA);
       return { ok: true, mensaje: 'Formato quitado.' };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'quitar el formato') };
@@ -185,7 +187,7 @@ export default async function PaginaDocumentos({
 
   async function volverVersion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesion();
+    const s = await sesionDeAccion(sp);
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const perfilId = String(fd.get('perfilId') ?? '');
@@ -193,7 +195,7 @@ export default async function PaginaDocumentos({
       if (!UUID.test(perfilId) || !Number.isInteger(version) || version < 1) return { ok: false, error: 'No se reconoce esa versión.' };
       const ok = await repo.activarVersionPerfil(s.tenantId, perfilId, version);
       if (!ok) return { ok: false, error: 'Esa versión no existe en tu flota.' };
-      refrescar();
+      revalidatePath(RUTA);
       return { ok: true, mensaje: `El perfil volvió a la versión ${version}. Las versiones nuevas no se borran.` };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'cambiar la versión') };

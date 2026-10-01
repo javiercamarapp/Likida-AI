@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./repo', async () => (await import('./repo_falso.fixture')).api);
-const bitacora = vi.hoisted(() => ({ anotarBitacora: vi.fn(async () => true) }));
+const bitacora = vi.hoisted(() => ({ anotarBitacora: vi.fn(async (_entrada: unknown, _opciones?: unknown) => true) }));
 vi.mock('../bitacora_escritura', () => bitacora);
 const borrador = vi.hoisted(() => ({ getBorradorViaje: vi.fn(async () => null as unknown) }));
 vi.mock('../carta_porte_datos', async (orig) => ({ ...(await orig<typeof import('../carta_porte_datos')>()), getBorradorViaje: borrador.getBorradorViaje }));
@@ -9,7 +9,7 @@ vi.mock('../carta_porte_datos', async (orig) => ({ ...(await orig<typeof import(
 import { estado, reset } from './repo_falso.fixture';
 import { A, ACTOR, B, USUARIO_B, lecturaAtlas, llmBoreal, sembrarFlotas, subir, subirYProcesar } from './escenario.fixture';
 import {
-  ConflictoDeVersion, MAX_SEGUNDOS_REVISION_MEDIBLE, abrirRevision, aplicarCambiosAExtraccion, aprobarDocumento, corregirCampos, crearViajeDeDocumento,
+  ConflictoDeVersion, MAX_SEGUNDOS_REVISION_MEDIBLE, abrirRevision, aplicarCambiosAExtraccion, aprobarDocumento, corregirCampos, crearViajeDeDocumento, eliminarDocumento,
   motivosDeBloqueo, quitarRenglon, quitarRenglonDeExtraccion, rechazarDocumento, reabrirDocumento,
 } from './bandeja';
 import { DatoInvalido } from '../errores';
@@ -498,5 +498,39 @@ describe('métricas sobre lo real', () => {
     expect(m.minutosAhorradosPorEmbarque).toBe(6);   // (12-2 + 12-10) / 2
     expect(m.minutosAhorradosTotal).toBe(12);
     expect(m.porOrigen.llm).toEqual({ documentos: 2, sinCorreccion: 1 });
+  });
+});
+
+describe('eliminar un documento (cancelación ARCO / subido por error)', () => {
+  it('borra el archivo, la fila y su rastro; conserva las mercancías ya pasadas al viaje; deja constancia sin datos', async () => {
+    const { id, doc } = await documentoBoreal();
+    await aprobarDocumento(A, id, doc().version, ACTOR);
+    const ruta = doc().storageRuta!;
+    expect(estado.mercancias).toHaveLength(1);
+    await eliminarDocumento(A, id, ACTOR);
+    expect(estado.docs.has(id)).toBe(false);
+    expect(estado.archivos.has(ruta)).toBe(false);
+    expect(estado.eventos.filter((e) => e.documentoId === id)).toEqual([]);
+    expect(estado.mercancias).toHaveLength(1);
+    expect(estado.mercancias[0].documentoId).toBeNull();
+    const llamada = bitacora.anotarBitacora.mock.calls.map((c) => c[0] as { accion: string; detalle?: Record<string, unknown> }).find((x) => x.accion === 'ccp.documento_eliminado');
+    expect(llamada?.detalle).toMatchObject({ documentoId: id, conViaje: true });
+    expect(JSON.stringify(llamada)).not.toMatch(/Hernandez|Boreal/);
+  });
+
+  it('si Storage no borra el archivo, la fila se queda (no se declara eliminado lo que sigue ahí)', async () => {
+    const { id } = await documentoBoreal();
+    estado.fallar.set('borrarArchivo', new Error('storage caído'));
+    await expect(eliminarDocumento(A, id, ACTOR)).rejects.toThrow(/storage/);
+    expect(estado.docs.has(id)).toBe(true);
+  });
+
+  it('no se elimina uno que se está leyendo, ni uno de otra flota', async () => {
+    const r = await subir(A, await pdfBoreal({ folio: 'LEYENDO' }));
+    const d = estado.docs.get(r.documentoId)!;
+    d.estado = 'procesando'; d.procesandoHasta = new Date(Date.now() + 60_000).toISOString();
+    await expect(eliminarDocumento(A, r.documentoId, ACTOR)).rejects.toThrow(/se está leyendo/);
+    await expect(eliminarDocumento(B, r.documentoId, { id: USUARIO_B })).rejects.toThrow(/no está en tu flota/);
+    expect(estado.docs.has(r.documentoId)).toBe(true);
   });
 });

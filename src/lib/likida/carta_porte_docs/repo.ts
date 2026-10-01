@@ -537,6 +537,12 @@ export async function finalizarCorreo(emailId: string, token: string, ok: boolea
   return !r.error && r.data === true;
 }
 
+/** Borra el documento (la cascada se lleva sus eventos y correcciones; los renglones de mercancía quedan, sin la liga). */
+export async function borrarDocumento(tenantId: string, id: string): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('cp_documento').delete().eq('tenant_id', tenantId).eq('id', id).select('id'), 'cpdocs.borrar_doc');
+  return ((exigir(r, 'cpdocs.borrar_doc') ?? []) as unknown[]).length > 0;
+}
+
 // ── Retención ───────────────────────────────────────────────────────────────
 
 export async function documentosVencidos(limite = 100): Promise<Array<{ id: string; tenantId: string; storageRuta: string | null }>> {

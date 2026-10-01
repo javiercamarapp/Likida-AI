@@ -191,6 +191,13 @@ describe('VistaRevision', () => {
     expect(h).toMatch(/No hay archivo\./);
   });
 
+  it('eliminar solo se ofrece a quien administra, y no mientras se lee', () => {
+    expect(conIntencion(montar(doc(), { puedeEliminar: true }), 'eliminar')).toBe(true);
+    expect(conIntencion(montar(doc()), 'eliminar')).toBe(false);
+    expect(conIntencion(montar(doc({ estado: 'procesando' }), { puedeEliminar: true }), 'eliminar')).toBe(false);
+    expect(montar(doc(), { puedeEliminar: true })).toMatch(/solicitud de cancelación/);
+  });
+
   it('sin permiso (acción nula) no hay formulario', () => {
     expect(montar(doc(), { acciones: { revisar: null } })).toMatch(/Tu rol no puede revisar este documento/);
   });
