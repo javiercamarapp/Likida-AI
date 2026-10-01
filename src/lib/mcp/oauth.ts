@@ -721,6 +721,7 @@ export async function listarClientesPendientes(limite = 100): Promise<ClientePar
     .select('id, nombre, redirect_uris, estado, creado_en')
     .eq('estado', 'pendiente')
     .order('creado_en', { ascending: false })
+    .order('id')
     .limit(Math.max(1, Math.min(limite, 200)));
   if (error) throw new Error(`mcp_oauth_cliente: ${error.message}`);
   return (data ?? []).map((f) => {

@@ -98,6 +98,7 @@ export async function aceptacionesDeFlota(tenantId: string): Promise<AceptacionF
     .select('documento, version, aceptado_en, user_id, revocado_en')
     .eq('tenant_id', tenantId)
     .order('aceptado_en', { ascending: false })
+    .order('id')
     .limit(200), 'legal.aceptaciones');
   if (error) throw new Error(`aceptacion_legal: ${error.message}`);
   return (data ?? []).map((f) => ({

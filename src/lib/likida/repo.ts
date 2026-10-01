@@ -1828,8 +1828,12 @@ export async function ejecutarCancelacionArco(
   // aviso y su fallo se DICE (no se afirma un borrado que no ocurrió).
   let errorAuth: string | undefined;
   if (titularUserId) {
+    // El cliente de Auth Admin se toma UNA vez (no es una consulta de datos: no
+    // lleva `acotada`, y `tope_consulta.test.ts` mira `await supabaseAdmin()` crudo).
+    let authAdmin: ReturnType<typeof supabaseAdmin>['auth']['admin'] | null = null;
     try {
-      const { error: errDel } = await supabaseAdmin().auth.admin.deleteUser(titularUserId);
+      authAdmin = supabaseAdmin().auth.admin;
+      const { error: errDel } = await authAdmin.deleteUser(titularUserId);
       if (errDel) errorAuth = errDel.message;
     } catch (e) {
       errorAuth = e instanceof Error ? e.message : String(e);
@@ -1837,7 +1841,7 @@ export async function ejecutarCancelacionArco(
     if (errorAuth) {
       logger.error('arco.auth_no_borrado', { tenant: tenantId, usuario: titularUserId, err: errorAuth });
       // Segunda línea: que al menos no pueda entrar (ban permanente), como la baja normal.
-      try { await supabaseAdmin().auth.admin.updateUserById(titularUserId, { ban_duration: '876000h' }); } catch { /* ya está logueado arriba */ }
+      try { await authAdmin?.updateUserById(titularUserId, { ban_duration: '876000h' }); } catch { /* ya está logueado arriba */ }
     }
   }
 
