@@ -44,6 +44,10 @@ export interface FilaJornada {
   conformeOperadorEn: string | null;
   jornada: JornadaCompuesta;
   riesgo: RiesgoDia;
+  /** ¿Cae dentro del alcance de quien mira? (W2: un jefe con patio solo corrige las
+   *  jornadas de los operadores de su patio.) Lo decide el servidor con el patio
+   *  leído de la base; las acciones lo vuelven a comprobar. */
+  editable: boolean;
 }
 
 const TONO: Record<string, { fondo: string; texto: string }> = {
@@ -61,7 +65,7 @@ function hora(iso: string): string {
 
 export function VistaJornada({
   filas, semanas, motivoIlegible, truncada, politica, desde, hasta, sufijo, operador, operadores, abrir, puedeCorregir,
-  anularMarca, capturarMarca, cerrarElDia, declararPolitica,
+  puedeDeclararPolitica, anularMarca, capturarMarca, cerrarElDia, declararPolitica,
 }: {
   filas: FilaJornada[] | null;
   /** El eje semanal (tableros al día, 28-ago-2026): solo semanas ENTERAS de
@@ -79,7 +83,10 @@ export function VistaJornada({
    *  leer (el filtro por URL sigue funcionando, solo no hay de dónde elegir). */
   operadores: Array<{ id: string; nombre: string }> | null;
   abrir: string | null;
+  /** El rol puede corregir (dueño y jefe de tráfico); por fila se acota con `editable`. */
   puedeCorregir: boolean;
+  /** Solo el dueño declara los umbrales de la flota. */
+  puedeDeclararPolitica: boolean;
   anularMarca: AccionJornada;
   capturarMarca: AccionJornada;
   cerrarElDia: AccionJornada;
@@ -255,7 +262,7 @@ export function VistaJornada({
           {abrir !== null && lista.some((f) => f.jornadaId === abrir) && (
             <FormasJornada
               fila={lista.find((f) => f.jornadaId === abrir)!}
-              puedeCorregir={puedeCorregir}
+              puedeCorregir={puedeCorregir && lista.find((f) => f.jornadaId === abrir)!.editable}
               anularMarca={anularMarca}
               capturarMarca={capturarMarca}
               cerrarElDia={cerrarElDia}
@@ -264,7 +271,7 @@ export function VistaJornada({
 
           <PoliticaSeccion
             politica={politica}
-            puedeCorregir={puedeCorregir}
+            puedeCorregir={puedeDeclararPolitica}
             declararPolitica={declararPolitica}
           />
         </div>

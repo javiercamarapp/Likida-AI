@@ -36,7 +36,7 @@ const {
   getTerminales, crearTerminal, normalizarNombreTerminal,
   resolverTerminalDeFlota, asignarTerminalUnidad, MAX_TERMINALES,
   getTerminalesConConteos, editarTerminal, eliminarTerminal, terminalDeRegistro, terminalesDeRegistros,
-  terminalDeUsuario, asignarTerminalOperador, asignarTerminalJefe, getJefesDeTrafico,
+  terminalDeUsuario, asignarTerminalOperador, asignarTerminalJefe, getJefesDeTrafico, contarSinPatio, asignarSinPatio,
 } = await import('./terminales');
 const { DatoInvalido } = await import('./errores');
 
@@ -302,14 +302,23 @@ describe('eliminarTerminal', () => {
   it('borra anclado al tenant y la bitácora guarda cuántos quedaron SIN patio', async () => {
     let borro = false;
     from.mockImplementation(() => cadena({ data: [{ id: UUID, nombre: 'Patio Norte', ciudad: null }], error: null, count: 1 }, { alDelete: () => { borro = true; } }));
-    rpc.mockResolvedValue({ data: [{ terminal_id: UUID, operadores: 5, unidades: 4, jefes: 1 }], error: null });
+    rpc.mockResolvedValue({ data: [{ terminal_id: UUID, operadores: 5, unidades: 4, jefes: 0 }], error: null });
     // Las dos lecturas y el delete comparten el mismo falso: el `delete().select('id')` responde con una fila.
     const r = await eliminarTerminal('t-1', UUID, { id: 'u-1' });
     expect(borro).toBe(true);
-    expect(r).toEqual({ operadores: 5, unidades: 4, jefes: 1 });
+    expect(r).toEqual({ operadores: 5, unidades: 4, jefes: 0 });
     expect(anotarBitacora.mock.calls[0][0]).toMatchObject({
-      accion: 'terminal.eliminada', entidad: 'terminal', detalle: { nombre: 'Patio Norte', quedaronSinPatio: { operadores: 5, unidades: 4, jefes: 1 } },
+      accion: 'terminal.eliminada', entidad: 'terminal', detalle: { nombre: 'Patio Norte', quedaronSinPatio: { operadores: 5, unidades: 4, jefes: 0 } },
     });
+  });
+
+  it('un patio CON jefes de tráfico NO se borra: sin patio un jefe vería toda la flota (alcance ampliado en silencio)', async () => {
+    let borro = false;
+    from.mockImplementation(() => cadena({ data: [{ id: UUID, nombre: 'Patio Norte', ciudad: null }], error: null, count: 1 }, { alDelete: () => { borro = true; } }));
+    rpc.mockResolvedValue({ data: [{ terminal_id: UUID, operadores: 5, unidades: 4, jefes: 2 }], error: null });
+    await expect(eliminarTerminal('t-1', UUID, { id: 'u-1' })).rejects.toThrow(/tiene 2 jefes de tráfico asignados.*sin que nadie lo decidiera/);
+    expect(borro).toBe(false);
+    expect(anotarBitacora).not.toHaveBeenCalled();
   });
 
   it('un patio que no es de la flota no se borra (ni se llega al delete)', async () => {
@@ -425,5 +434,46 @@ describe('asignarTerminalJefe / getJefesDeTrafico', () => {
     const j = await getJefesDeTrafico('t-1');
     expect(j.map((x) => x.nombre)).toEqual(['Ana', 'Zoe']);
     expect(j[0].terminalId).toBe(UUID);
+  });
+});
+
+describe('contarSinPatio / asignarSinPatio — el arranque de una flota que ya cargó su gente', () => {
+  it('cuenta operadores y unidades ACTIVOS sin patio', async () => {
+    from.mockImplementation((t: string) => cadena({ data: null, error: null }, { cuenta: { count: t === 'operador' ? 37 : 12, error: null } }));
+    expect(await contarSinPatio('t-1')).toEqual({ operadores: 37, unidades: 12 });
+  });
+
+  it('una lectura caída LANZA (no se afirma «0 sin patio»)', async () => {
+    from.mockImplementation(() => cadena({ data: null, error: null }, { cuenta: { count: null, error: { message: 'se cayó' } } }));
+    await expect(contarSinPatio('t-1')).rejects.toThrow(/contarSinPatio/);
+  });
+
+  it('un solo UPDATE condicionado a «sin patio», y la bitácora lleva cuántos y los ids', async () => {
+    let actualizado: Record<string, unknown> = {};
+    from.mockImplementation((t: string) => t === 'terminal'
+      ? cadena({ data: { id: UUID }, error: null })
+      : cadena({ data: [{ id: 'a' }, { id: 'b' }, { id: 'c' }], error: null }, { alUpdate: (f) => { actualizado = f; } }));
+    const n = await asignarSinPatio('unidad', 't-1', UUID, { id: 'u-1' });
+    expect(n).toBe(3);
+    expect(actualizado).toEqual({ terminal_id: UUID });
+    expect(anotarBitacora.mock.calls[0][0]).toMatchObject({
+      accion: 'unidad.terminal_masivo', entidad: 'terminal', entidadId: UUID, detalle: { movidos: 3, ids: ['a', 'b', 'c'] },
+    });
+  });
+
+  it('si no había nada sin patio mueve 0 y NO deja bitácora', async () => {
+    from.mockImplementation((t: string) => t === 'terminal' ? cadena({ data: { id: UUID }, error: null }) : cadena({ data: [], error: null }));
+    expect(await asignarSinPatio('operador', 't-1', UUID)).toBe(0);
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('un patio de otra flota o vacío se rebota antes de escribir', async () => {
+    let escribio = false;
+    from.mockImplementation((t: string) => t === 'terminal'
+      ? cadena({ data: null, error: null })
+      : cadena({ data: [{ id: 'a' }], error: null }, { alUpdate: () => { escribio = true; } }));
+    await expect(asignarSinPatio('operador', 't-1', UUID)).rejects.toThrow(/no existe en tu flota/);
+    await expect(asignarSinPatio('operador', 't-1', '')).rejects.toThrow(/Elige el patio/);
+    expect(escribio).toBe(false);
   });
 });

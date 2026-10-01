@@ -240,6 +240,15 @@ export async function eliminarTerminal(
   if (!esUuidValido(terminalId)) throw new DatoInvalido('No se reconoce ese patio. Vuelve a abrir la pantalla.');
   const antes = (await getTerminalesConConteos(tenantId)).find((p) => p.id === terminalId);
   if (!antes) throw new DatoInvalido('No se encontró ese patio en tu flota. Recarga la pantalla.');
+  // Un jefe de tráfico SIN patio ve y corrige TODA la flota. Si se borra un patio
+  // con jefes adentro, esos jefes ampliarían su alcance sin que nadie lo decidiera:
+  // es el efecto de seguridad que esta comprobación impide.
+  if (antes.jefes > 0) {
+    throw new DatoInvalido(
+      `El patio «${antes.nombre}» tiene ${antes.jefes} ${antes.jefes === 1 ? 'jefe de tráfico asignado' : 'jefes de tráfico asignados'}. ` +
+      'Asígnales otro patio (o «toda la flota») antes de borrarlo: si no, pasarían a ver y corregir toda la flota sin que nadie lo decidiera.',
+    );
+  }
 
   const { data, error } = await acotada(
     supabaseAdmin().from('terminal').delete().eq('id', terminalId).eq('tenant_id', tenantId).select('id'),
@@ -384,4 +393,83 @@ export async function asignarTerminalJefe(
     tenantId, actor: actor ?? {}, accion: 'app_user.terminal', entidad: 'app_user', entidadId: userId,
     detalle: { terminalId: terminal },
   });
+}
+
+/** Cuántos operadores y unidades ACTIVOS no tienen patio — lo que la pantalla de
+ *  Patios ofrece asignar de una vez. Falla cerrado (lanza). */
+export async function contarSinPatio(tenantId: string): Promise<{ operadores: number; unidades: number }> {
+  const contar = async (tabla: 'operador' | 'unidad') => {
+    const { count, error } = await acotada(
+      supabaseAdmin().from(tabla).select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId).eq('activo', true).is('terminal_id', null),
+      `contarSinPatio.${tabla}`,
+    );
+    if (error) throw new Error(`contarSinPatio(${tabla}): ${error.message}`);
+    return count ?? 0;
+  };
+  return { operadores: await contar('operador'), unidades: await contar('unidad') };
+}
+
+/**
+ * Cuelga de un patio TODOS los operadores (o unidades) ACTIVOS que no tienen
+ * patio: el arranque de una flota que ya cargó su gente y apenas creó sus
+ * patios. Un solo UPDATE condicionado a «sin patio» —atómico e idempotente: dos
+ * clics no mueven nada la segunda vez, y no pisa a quien ya tiene patio—, anclado
+ * al tenant. Devuelve cuántos movió.
+ */
+export async function asignarSinPatio(
+  tabla: 'operador' | 'unidad',
+  tenantId: string,
+  terminalId: string,
+  actor?: { id?: string; email?: string },
+): Promise<number> {
+  const terminal = await resolverTerminalDeFlota(tenantId, terminalId);
+  if (!terminal) throw new DatoInvalido('Elige el patio al que quieres asignarlos.');
+  const { data, error } = await acotada(
+    supabaseAdmin().from(tabla).update({ terminal_id: terminal })
+      .eq('tenant_id', tenantId).eq('activo', true).is('terminal_id', null).select('id'),
+    `asignarSinPatio.${tabla}`,
+  );
+  if (error) throw new Error(`asignarSinPatio(${tabla}): ${error.message}`);
+  const movidos = Array.isArray(data) ? data.length : 0;
+  if (movidos > 0) {
+    await anotarBitacora({
+      tenantId, actor: actor ?? {}, accion: `${tabla}.terminal_masivo`, entidad: 'terminal', entidadId: terminal,
+      detalle: { tabla, movidos, ids: (data as Array<{ id: unknown }>).map((f) => String(f.id)) },
+    });
+  }
+  return movidos;
+}
+
+/**
+ * El patio del OPERADOR dueño de una jornada (o de una marca de jornada), leído de
+ * la base: la corrección de una jornada es del jefe de SU patio (W2). Dos lecturas
+ * encadenadas (marca → día → operador → patio), todas ancladas al tenant. Lanza si
+ * no pudo leer; `encontrado: false` si la jornada/marca no es de la flota.
+ */
+export async function terminalDeJornada(
+  tenantId: string,
+  ref: { jornadaId: string } | { asientoId: string },
+): Promise<{ encontrado: boolean; terminalId: string | null }> {
+  let jornadaId: string | null = 'jornadaId' in ref ? ref.jornadaId : null;
+  if ('asientoId' in ref) {
+    if (!esUuidValido(ref.asientoId)) return { encontrado: false, terminalId: null };
+    const { data, error } = await acotada(
+      supabaseAdmin().from('jornada_asiento').select('jornada_id').eq('id', ref.asientoId).eq('tenant_id', tenantId).maybeSingle(),
+      'terminalDeJornada.asiento',
+    );
+    if (error) throw new Error(`terminalDeJornada: ${error.message}`);
+    const j = (data as { jornada_id?: unknown } | null)?.jornada_id;
+    if (typeof j !== 'string') return { encontrado: false, terminalId: null };
+    jornadaId = j;
+  }
+  if (!jornadaId || !esUuidValido(jornadaId)) return { encontrado: false, terminalId: null };
+  const { data: dia, error: errDia } = await acotada(
+    supabaseAdmin().from('jornada_dia').select('operador_id').eq('id', jornadaId).eq('tenant_id', tenantId).maybeSingle(),
+    'terminalDeJornada.dia',
+  );
+  if (errDia) throw new Error(`terminalDeJornada: ${errDia.message}`);
+  const operadorId = (dia as { operador_id?: unknown } | null)?.operador_id;
+  if (typeof operadorId !== 'string') return { encontrado: false, terminalId: null };
+  return terminalDeRegistro('operador', tenantId, operadorId);
 }
