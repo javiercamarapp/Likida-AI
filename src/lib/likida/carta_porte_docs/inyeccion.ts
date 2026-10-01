@@ -26,7 +26,7 @@ const PATRONES: ReadonlyArray<[string, RegExp]> = [
   ['cambiar_rol', /\b(ahora\s+eres|eres\s+un\s+(asistente|modelo|bot|ia)|act[uú]a\s+como|you\s+are\s+(now|a|an)\b|pretend\s+(to\s+be|you)|from\s+now\s+on)\b/i],
   ['ordena_salida', /\b(responde|contesta|devuelve|regresa|escribe|reply|respond|output|return|answer)\b.{0,30}\b(con|solo|únicamente|unicamente|exactamente|only|exactly|json|true|false)\b.{0,40}\b(confianza|confidence|rfc|aprob|valor|value)/i],
   ['forzar_confianza', /\b(confianza|confidence)\b.{0,15}(=|:|a|de|to|of|of\s+1|1\.0|100\s*%|alta|high|máxima|maxima)/i],
-  ['aprobar_sin_revision', /\b(aprueba|aprobar|approve|auto-?aprob|sin\s+revis|skip\s+(the\s+)?review|no\s+revises|do\s+not\s+review|no\s+requiere\s+revisi)/i],
+  ['aprobar_sin_revision', /\b(aprueba|aprobar|approve|auto-?aprob|sin\s+revis|skip\s+the\s+review|skip\s+review|no\s+revises|do\s+not\s+review|no\s+requiere\s+revisi)/i],
   ['marcadores_chat', /(<\|?(im_start|im_end|system|assistant|user)\|?>|\[\/?(INST|SYS|SYSTEM)\]|^\s*(system|assistant|developer)\s*:)/im],
   ['exfiltrar', /\b(env[ií]a|manda|send|post|exfiltrate|reveal|muestra|imprime|print)\b.{0,40}\b(prompt|api[\s_-]?key|token|secret|contrase[ñn]a|password|credencial)/i],
   ['url_accion', /\b(visita|abre|navega|visit|open|go\s+to|click)\b.{0,20}https?:\/\//i],

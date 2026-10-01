@@ -57,7 +57,13 @@ export interface OpcionesValidacion {
 const RFC_MORAL = /^[A-ZÑ&]{3}\d{6}[A-Z0-9]{3}$/;
 const RFC_FISICA = /^[A-ZÑ&]{4}\d{6}[A-Z0-9]{3}$/;
 const RFC_GENERICOS = new Set(['XAXX010101000', 'XEXX010101000']);
-const FECHA_RE = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2}))?$/;
+const FECHA_DIA_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const FECHA_HORA_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/;
+/** `[año, mes, día, hora?, minuto?]` o `null` si no es una fecha ISO del módulo (sin cuantificadores anidados). */
+const partesFecha = (v: string | null | undefined): number[] | null => {
+  const m = FECHA_HORA_RE.exec(v ?? '') ?? FECHA_DIA_RE.exec(v ?? '');
+  return m ? m.slice(1).map(Number) : null;
+};
 const PLACA_RE = /^[A-Z0-9]{5,7}$/;
 const PESO_MAX_BLOQUEO_KG = 80_000;
 const PESO_ALERTA_KG = 60_000;
@@ -105,7 +111,7 @@ function validarFormato(def: CampoDoc, c: CampoValor, renglon: number | null, re
       if (!CODIGOS_ESTADO.has(v)) aqui('confirmar', 'estado_no_catalogo', `«${v}» no es una clave del catálogo c_Estado (p. ej. JAL, NLE, CMX).`);
       break;
     case 'fecha': {
-      if (!FECHA_RE.test(v)) aqui('confirmar', 'fecha_forma', `«${v}» no se reconoció como fecha.`);
+      if (partesFecha(v) === null) aqui('confirmar', 'fecha_forma', `«${v}» no se reconoció como fecha.`);
       break;
     }
     case 'numero': {
@@ -134,7 +140,7 @@ function validarFormato(def: CampoDoc, c: CampoValor, renglon: number | null, re
       break;
     }
     case 'fraccion':
-      if (!/^\d{8}(\d{2})?$/.test(v)) aqui('bloqueo', 'fraccion_forma', `«${v}» no es una fracción arancelaria (8 dígitos, o 10 con NICO).`);
+      if (!/^\d+$/.test(v) || (v.length !== 8 && v.length !== 10)) aqui('bloqueo', 'fraccion_forma', `«${v}» no es una fracción arancelaria (8 dígitos, o 10 con NICO).`);
       break;
     case 'moneda':
       if (!/^[A-Z]{3}$/.test(v)) aqui('bloqueo', 'moneda_forma', `«${v}» no es una clave de moneda ISO (MXN, USD…).`);
@@ -210,13 +216,13 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
       }
     }
   }
-  const f1 = FECHA_RE.exec(e.campos.fecha_salida?.valor ?? ''); const f2 = FECHA_RE.exec(e.campos.fecha_llegada?.valor ?? '');
+  const f1 = partesFecha(e.campos.fecha_salida?.valor); const f2 = partesFecha(e.campos.fecha_llegada?.valor);
   if (f1 && f2) {
-    const a = Date.UTC(+f1[1], +f1[2] - 1, +f1[3], +(f1[4] ?? 0), +(f1[5] ?? 0)); const b = Date.UTC(+f2[1], +f2[2] - 1, +f2[3], +(f2[4] ?? 0), +(f2[5] ?? 0));
+    const a = Date.UTC(f1[0], f1[1] - 1, f1[2], f1[3] ?? 0, f1[4] ?? 0); const b = Date.UTC(f2[0], f2[1] - 1, f2[2], f2[3] ?? 0, f2[4] ?? 0);
     if (b < a) reg({ campo: 'fecha_llegada', renglon: null, severidad: 'confirmar', codigo: 'fecha_orden', mensaje: 'La llegada es anterior a la salida.', relacionados: [{ campo: 'fecha_salida', renglon: null }] });
   }
   if (f1) {
-    const dias = (Date.UTC(+f1[1], +f1[2] - 1, +f1[3]) - ahora.getTime()) / 86_400_000;
+    const dias = (Date.UTC(f1[0], f1[1] - 1, f1[2]) - ahora.getTime()) / 86_400_000;
     if (dias < -365 || dias > 365) reg({ campo: 'fecha_salida', renglon: null, severidad: 'aviso', codigo: 'fecha_lejana', mensaje: 'La fecha de salida está a más de un año de hoy.' });
   }
   if (e.campos.origen_cp?.valor && e.campos.origen_cp.valor === e.campos.destino_cp?.valor) {

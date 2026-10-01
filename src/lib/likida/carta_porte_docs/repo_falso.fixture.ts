@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-possible-timing-attacks -- doble de prueba en memoria: comparar un token aquí no es una frontera de seguridad */
 // ═══════════════════════════════════════════════════════════════════════════
 // UN `repo.ts` EN MEMORIA, SOLO PARA PRUEBAS.
 //
@@ -271,6 +272,12 @@ export const api: typeof Real = {
     const d = estado.docs.get(id);
     if (!d || d.tenantId !== tenantId) throw new Error('cartaporte_docs vincular: el documento ya no existe');
     d.viajeId = viajeId;
+  },
+
+  async marcarExportado(tenantId, ids, ahora = new Date()) {
+    let n = 0;
+    for (const id of ids) { const d = estado.docs.get(id); if (d && d.tenantId === tenantId && d.estado === 'aprobado') { d.exportadoEn = ahora.toISOString(); n++; } }
+    return n;
   },
 
   async reclamarCorreo(emailId) {

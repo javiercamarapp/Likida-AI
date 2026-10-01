@@ -6,7 +6,7 @@ import {
 } from './perfiles';
 import { campoDoc, type Extraccion } from './campos';
 import { normalizarNumero, normalizarValor } from './normalizar';
-import { cv, csvAtlas, excelAtlas, extraccionAtlasOk, filaAtlas, EMBARQUE_ATLAS, pdfBoreal, RFC, xmlPropio, correoTexto } from './fixtures.test.util';
+import { cv, csvAtlas, excelAtlas, extraccionAtlasOk, filaAtlas, EMBARQUE_ATLAS, pdfBoreal, RFC, xmlPropio, correoTexto } from './documentos_sinteticos.fixture';
 
 async function contenido(bytes: Uint8Array): Promise<ContenidoDoc> {
   const d = detectarFormato(bytes);

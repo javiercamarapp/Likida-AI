@@ -4,6 +4,7 @@ import {
   // `Blocks` se fue con la entrada de «Integraciones», fusionada en Conexiones.
   ChartNoAxesCombined, UserRound, BookOpen, Container, Handshake, FileText, KeyRound,
   ScrollText,
+  FileInput,
   UsersRound,
   ShieldCheck,
   Siren,
@@ -73,6 +74,8 @@ export const OPERACION: Item[] = [
   // complemento y qué dato falta — partido 19 del cliente / 18 del
   // transportista, que es como la ley parte la responsabilidad.
   { href: '/dashboard/carta-porte', nombre: 'Carta Porte', Icono: ScrollText },
+  // Agente 3 (0420): los documentos que mandan los clientes grandes, para revisar y aprobar lado a lado.
+  { href: '/dashboard/carta-porte/documentos', nombre: 'Documentos de clientes', Icono: FileInput },
   // Fase 5: el directorio que el escalamiento de emergencias consulta — la
   // grúa, la póliza con su 800 de siniestros y los contactos del operador.
   { href: '/dashboard/emergencias', nombre: 'Emergencias', Icono: Siren },

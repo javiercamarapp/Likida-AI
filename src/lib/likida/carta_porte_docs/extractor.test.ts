@@ -6,8 +6,8 @@ import {
 import { campoDoc } from './campos';
 import { validarExtraccion } from './validacion';
 import { aprender, firmaDe, type Perfil } from './perfiles';
-import { cv, extraccionAtlasOk, pdfBoreal, fotoRemision, xmlCartaPorte, excelAtlas, correoTexto, RFC, xmlPropio } from './fixtures.test.util';
-import { MODELO_POR_NIVEL, lecturaBoreal, llmFalso, salida } from './llm_falso.test.util';
+import { cv, extraccionAtlasOk, pdfBoreal, fotoRemision, xmlCartaPorte, excelAtlas, correoTexto, RFC, xmlPropio } from './documentos_sinteticos.fixture';
+import { MODELO_POR_NIVEL, lecturaBoreal, llmFalso, salida } from './llm_falso.fixture';
 
 async function contenido(bytes: Uint8Array): Promise<ContenidoDoc> {
   const d = detectarFormato(bytes);

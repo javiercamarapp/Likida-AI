@@ -1,21 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./repo', async () => (await import('./repo_falso.test.util')).api);
+vi.mock('./repo', async () => (await import('./repo_falso.fixture')).api);
 const bitacora = vi.hoisted(() => ({ anotarBitacora: vi.fn(async () => true) }));
 vi.mock('../bitacora_escritura', () => bitacora);
 const borrador = vi.hoisted(() => ({ getBorradorViaje: vi.fn(async () => null as unknown) }));
 vi.mock('../carta_porte_datos', async (orig) => ({ ...(await orig<typeof import('../carta_porte_datos')>()), getBorradorViaje: borrador.getBorradorViaje }));
 
-import { estado, reset } from './repo_falso.test.util';
-import { A, ACTOR, B, USUARIO_B, lecturaAtlas, llmBoreal, sembrarFlotas, sinAgenteApagado, subir, subirYProcesar } from './escenario.test.util';
+import { estado, reset } from './repo_falso.fixture';
+import { A, ACTOR, B, USUARIO_B, lecturaAtlas, llmBoreal, sembrarFlotas, subir, subirYProcesar } from './escenario.fixture';
 import {
   ConflictoDeVersion, MAX_SEGUNDOS_REVISION_MEDIBLE, abrirRevision, aplicarCambiosAExtraccion, aprobarDocumento, corregirCampos, crearViajeDeDocumento,
   motivosDeBloqueo, quitarRenglon, quitarRenglonDeExtraccion, rechazarDocumento, reabrirDocumento,
 } from './bandeja';
 import { DatoInvalido } from '../errores';
-import { procesarDocumento } from './servicio';
-import { cv, excelAtlas, extraccionAtlasOk, filaAtlas, EMBARQUE_ATLAS, pdfBoreal, RFC } from './fixtures.test.util';
-import { llmFalso, lecturaBoreal } from './llm_falso.test.util';
+import { cv, excelAtlas, extraccionAtlasOk, filaAtlas, EMBARQUE_ATLAS, pdfBoreal, RFC } from './documentos_sinteticos.fixture';
+import { llmFalso, lecturaBoreal } from './llm_falso.fixture';
 import { calcularMetricas } from './metricas';
 import * as repo from './repo';
 

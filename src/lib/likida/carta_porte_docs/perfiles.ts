@@ -239,8 +239,6 @@ function aplicarTabla(m: Mapeo[], c: ContenidoDoc, e: Extraccion, avisos: string
   }
 }
 
-const escapar = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
 /** El valor que sigue a «Etiqueta:» en el texto (hasta el fin de línea o el siguiente separador). */
 export function valorDeEtiqueta(texto: string, etiqueta: string): { valor: string; linea: string } | null {
   const lineas = texto.split(/\r?\n/);

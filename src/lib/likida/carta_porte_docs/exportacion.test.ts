@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { aCsv, aJson, celdaCsv, configEstandar, construirFilas, exportarDocumentos, nombreSeguro, resolverRuta, validarConfigExport, aExportable, type ExportConfig } from './exportacion';
-import { cv, extraccionAtlasOk } from './fixtures.test.util';
+import { cv, extraccionAtlasOk } from './documentos_sinteticos.fixture';
 import type { DocumentoFila } from './repo';
 
 const docAprobado = (over: Partial<DocumentoFila> = {}, ext = extraccionAtlasOk()): DocumentoFila => ({

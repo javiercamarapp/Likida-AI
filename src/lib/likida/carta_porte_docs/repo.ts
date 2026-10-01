@@ -16,6 +16,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { exigir } from '../pg';
+import { aBuffer } from './bytes';
 import type { Extraccion } from './campos';
 import type { ResultadoValidacion } from './validacion';
 import type { FormatoDoc } from './contenido';
@@ -113,7 +114,7 @@ export function aDocumento(r: Fila): DocumentoFila {
 // ── Storage ─────────────────────────────────────────────────────────────────
 
 export async function subirArchivo(ruta: string, bytes: Uint8Array, mime: string): Promise<void> {
-  const res = await acotada(supabaseAdmin().storage.from(BUCKET).upload(ruta, Buffer.from(bytes), { contentType: mime, upsert: true }), 'cpdocs.subir');
+  const res = await acotada(supabaseAdmin().storage.from(BUCKET).upload(ruta, aBuffer(bytes), { contentType: mime, upsert: true }), 'cpdocs.subir');
   if (res.error) throw new Error(`cartaporte_docs subir: ${res.error.message}`);
 }
 
@@ -508,6 +509,14 @@ export async function vincularViaje(tenantId: string, id: string, viajeId: strin
   const r = await acotada(supabaseAdmin().from('cp_documento').update({ viaje_id: viajeId, updated_at: new Date().toISOString() })
     .eq('tenant_id', tenantId).eq('id', id).select('id'), 'cpdocs.vincular_viaje');
   if (((exigir(r, 'cpdocs.vincular_viaje') ?? []) as unknown[]).length === 0) throw new Error('cartaporte_docs vincular: el documento ya no existe');
+}
+
+/** Sella que el documento salió en una exportación (la última gana). No toca la versión de la revisión. */
+export async function marcarExportado(tenantId: string, ids: string[], ahora = new Date()): Promise<number> {
+  if (ids.length === 0) return 0;
+  const r = await acotada(supabaseAdmin().from('cp_documento').update({ exportado_en: ahora.toISOString(), updated_at: ahora.toISOString() })
+    .eq('tenant_id', tenantId).eq('estado', 'aprobado').in('id', ids).select('id'), 'cpdocs.exportado');
+  return ((exigir(r, 'cpdocs.exportado') ?? []) as unknown[]).length;
 }
 
 // ── El claim de un correo entrante (rpc 0177, compartida con el buzón de facturas) ──

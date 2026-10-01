@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-vi.mock('./repo', async () => (await import('./repo_falso.test.util')).api);
+vi.mock('./repo', async () => (await import('./repo_falso.fixture')).api);
 vi.mock('../bitacora_escritura', () => ({ anotarBitacora: vi.fn(async () => true) }));
-import { estado, reset } from './repo_falso.test.util';
-import { A, USUARIO_A, sembrarFlotas } from './escenario.test.util';
+import { estado, reset } from './repo_falso.fixture';
+import { A, USUARIO_A, sembrarFlotas } from './escenario.fixture';
 import { esCandidatoCartaPorte, ingerirDesdeWhatsapp, MAX_BYTES_WA, type DepsWhatsapp } from './whatsapp';
-import { llmFalso, lecturaBoreal } from './llm_falso.test.util';
-import { fotoRemision, pdfBoreal, excelAtlas, xmlCartaPorte, defectuosos } from './fixtures.test.util';
+import { llmFalso, lecturaBoreal } from './llm_falso.fixture';
+import * as repo from './repo';
+import { fotoRemision, pdfBoreal, excelAtlas, xmlCartaPorte, defectuosos } from './documentos_sinteticos.fixture';
 
 const aDataUrl = (b: Uint8Array, mime: string) => `data:${mime};base64,${Buffer.from(b).toString('base64')}`;
 
@@ -23,7 +24,7 @@ function deps(medios: Record<string, { mime: string; bytes: Uint8Array | null; s
 }
 const entrada = (mensaje: { type: string; mediaId?: string; text?: string }, over = {}) => ({ tenantId: A, userId: USUARIO_A, mensaje, nombreRemitente: 'Ana', urlBandeja: 'https://app.test/dashboard/carta-porte/documentos', ...over });
 
-beforeEach(() => { reset(); sembrarFlotas(); });
+beforeEach(async () => { reset(); sembrarFlotas(); await repo.crearBuzon(A, 'abcdefghjkmnpqrstvwxyz23'); });
 
 describe('esCandidatoCartaPorte', () => {
   it('un documento siempre; una foto solo si el pie lo dice; el resto no', () => {
@@ -38,6 +39,18 @@ describe('esCandidatoCartaPorte', () => {
 });
 
 describe('ingerirDesdeWhatsapp', () => {
+  it('una flota que NO activó el agente (sin buzón) o lo apagó: sigue su camino, sin modelo ni archivos', async () => {
+    const d = deps({ m1: { mime: 'application/pdf', bytes: await pdfBoreal() } });
+    estado.buzones.clear();
+    expect(await ingerirDesdeWhatsapp(entrada({ type: 'document', mediaId: 'm1' }), d)).toBe('no_aplica');
+    await repo.crearBuzon(A, 'abcdefghjkmnpqrstvwxyz23');
+    await repo.configurarBuzon(A, { activo: false });
+    expect(await ingerirDesdeWhatsapp(entrada({ type: 'document', mediaId: 'm1' }), d)).toBe('no_aplica');
+    expect(estado.docs.size).toBe(0);
+    expect(estado.archivos.size).toBe(0);
+    expect(d.respuestas).toEqual([]);
+  });
+
   it('un PDF de la oficina: se guarda en SU flota, se lee y se le contesta con la liga a la bandeja', async () => {
     const d = deps({ m1: { mime: 'application/pdf', bytes: await pdfBoreal() } });
     const r = await ingerirDesdeWhatsapp(entrada({ type: 'document', mediaId: 'm1' }), d);

@@ -1,10 +1,10 @@
 // Utilidades de ESCENARIO para las pruebas de servicio/bandeja/salida: dos flotas, operadores,
 // un LLM de guion y atajos para subir y procesar un documento.
-import { estado } from './repo_falso.test.util';
+import { estado } from './repo_falso.fixture';
 import { recibirDocumento, procesarDocumento, type DepsServicio } from './servicio';
 import type { LlmExtractor } from './extractor';
-import { lecturaBoreal, llmFalso, salida, type LlmFalso } from './llm_falso.test.util';
-import { RFC } from './fixtures.test.util';
+import { lecturaBoreal, llmFalso, salida, type LlmFalso } from './llm_falso.fixture';
+import { RFC } from './documentos_sinteticos.fixture';
 
 export const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 export const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';

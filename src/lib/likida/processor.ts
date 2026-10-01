@@ -43,6 +43,7 @@ import { puedeAsignar } from '@/lib/auth/permisos';
 import { atenderDespachoOficina } from '@/lib/likida/despacho_wa';
 import { interpretarTalacha, atenderTalachaChofer, atenderAutorizacionTalacha } from '@/lib/likida/talacha_wa';
 import { atenderCcpOficina } from '@/lib/likida/carta_porte_wa';
+import { esCandidatoCartaPorte, ingerirDesdeWhatsapp as ingerirCartaPorteDoc } from '@/lib/likida/carta_porte_docs/whatsapp';
 import { atenderAcuseLiquidacionExterna } from '@/lib/likida/liquidacion_externa/acuse';
 import { interpretarAsistencia, atenderAsistenciaChofer, atenderReconocimientoAsistencia, atenderAsistenciaOficina, anclarUbicacionIncidencia } from '@/lib/likida/asistencia_wa';
 import { atenderCoordinacionOficina, atenderMensajeProveedor, atenderMedioProveedorSinTexto } from '@/lib/likida/asistencia_coordinacion';
@@ -1676,6 +1677,32 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             // abajo en vez de dejar al remitente sin ninguna respuesta.
             logger.error('oficina.xml_consolidado_error', { tenant: cuenta.tenantId, err: e instanceof Error ? e.message : String(e) });
           }
+        }
+
+        // ── CARTA PORTE MULTI-FORMATO (Agente 3, mig. 0420) ──────────────────
+        // La oficina reenvía el documento de un cliente grande (PDF, Excel, foto con pie
+        // «carta porte», XML con complemento): entra a la bandeja de revisión de SU flota.
+        // Solo para quien puede despachar y solo en flotas que activaron el agente (su
+        // buzón); un XML que no es Carta Porte, o una foto sin pie, siguen su camino.
+        if (cuenta.tenantId && puedeAsignar(cuenta.rol) && msg.mediaId && esCandidatoCartaPorte(msg)) {
+          const tenantCp = cuenta.tenantId;
+          const liga = `${appUrl()}/dashboard/carta-porte/documentos`;
+          const atendido = await ingerirCartaPorteDoc(
+            { tenantId: tenantCp, userId: cuenta.userId, mensaje: msg, nombreRemitente: cuenta.nombre ?? null, urlBandeja: liga },
+            {
+              metadatos: metadatosMedia,
+              descargar: (id) => downloadMediaAsDataUrl(id).catch(() => null),
+              restanteMs: () => reloj.restante(),
+              senal: (ms) => reloj.senal(ms),
+              responder: async (texto) => {
+                await avisarOficina(msg.from, texto, {
+                  parametros: parametrosAvisoOficina(cuenta.nombre ?? 'Oficina', 'Documento de Carta Porte recibido', liga),
+                  contexto: { tenantId: tenantCp, agente: 'carta_porte_docs' },
+                });
+              },
+            },
+          );
+          if (atendido === 'atendido') return;
         }
 
         // ── LOS MANDOS DE OFICINA, TODOS EN UN SITIO ─────────────────────────

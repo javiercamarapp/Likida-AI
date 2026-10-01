@@ -8,6 +8,8 @@
 // siempre, salvo un XML que no es Carta Porte (ese es el CFDI de un proveedor y lo
 // atiende otro agente).
 //
+// Solo funciona en las flotas que ACTIVARON el agente (tienen su buzón de Carta Porte).
+//
 // La respuesta a la oficina va por el selector de canal (`avisarOficina` →
 // `enviarConFallback`: texto dentro de la ventana de 24 h, plantilla fuera) — se
 // inyecta como `responder`, aquí no se habla con Meta.
@@ -16,6 +18,8 @@
 import { logger } from '@/lib/logger';
 import { detectarFormato } from './contenido';
 import { procesarDocumento, recibirDocumento, type DepsServicio } from './servicio';
+import * as repo from './repo';
+import { bytesDeBase64, textoDeBytes } from './bytes';
 
 export const MAX_BYTES_WA = 12 * 1024 * 1024;
 const PIE_CARTA_PORTE = /\b(carta\s*porte|cartaporte|embarque|ccp)\b/i;
@@ -53,7 +57,7 @@ export interface EntradaWhatsapp {
 function bytesDeDataUrl(url: string): Uint8Array | null {
   const i = url.indexOf(',');
   if (i < 0) return null;
-  try { return new Uint8Array(Buffer.from(url.slice(i + 1), 'base64')); } catch { return null; }
+  try { return bytesDeBase64(url.slice(i + 1)); } catch { return null; }
 }
 
 const EXT_POR_MIME: Record<string, string> = {
@@ -69,6 +73,10 @@ export async function ingerirDesdeWhatsapp(e: EntradaWhatsapp, deps: DepsWhatsap
   if (!esCandidatoCartaPorte(e.mensaje)) return 'no_aplica';
   const mediaId = e.mensaje.mediaId as string;
   try {
+    // La flota ACTIVÓ el agente (tiene su buzón): sin eso, un PDF de la oficina sigue su camino de siempre y
+    // nadie gasta modelo en una flota que no lo pidió.
+    const buzon = await repo.buzonDeFlota(e.tenantId);
+    if (!buzon || !buzon.activo) return 'no_aplica';
     const meta = await deps.metadatos(mediaId);
     if (!meta) { await deps.responder('No pude abrir ese archivo 😕. Reenvíalo, o súbelo desde el panel de Carta Porte.'); return 'atendido'; }
     if (/^image\/hei[cf]/i.test(meta.mimeType)) {
@@ -86,7 +94,7 @@ export async function ingerirDesdeWhatsapp(e: EntradaWhatsapp, deps: DepsWhatsap
 
     // Un XML que no es Carta Porte es la factura de un proveedor: no es de este agente.
     const f = detectarFormato(bytes);
-    if (f.ok && f.clase === 'xml' && !/CartaPorte/i.test(Buffer.from(bytes.subarray(0, 400_000)).toString('utf8'))) return 'no_aplica';
+    if (f.ok && f.clase === 'xml' && !/CartaPorte/i.test(textoDeBytes(bytes, 'utf8', 400_000))) return 'no_aplica';
 
     const ext = EXT_POR_MIME[meta.mimeType] ?? (f.ok ? { pdf: 'pdf', imagen: 'jpg', excel: 'xlsx', csv: 'csv', xml: 'xml', correo: 'txt' }[f.clase] : 'bin');
     const r = await recibirDocumento(e.tenantId, {
