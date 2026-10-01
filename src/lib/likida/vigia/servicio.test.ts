@@ -71,13 +71,19 @@ describe('ruteo: quién es cliente y quién no', () => {
     expect(alGerente).toEqual([]);
   });
 
-  it('la base no contesta al resolver el número: «reintentar» (no se afirma que no existe)', async () => {
+  it('la búsqueda del número falla (base caída o 0400 sin aplicar): cae a «no_es_cliente» y no se queda reintentando', async () => {
     const { repo } = escenario();
     repo.fallaEn.contactoPorTelefono = true;
-    expect(await atenderMensajeCliente(msg('hola'), armar(repo).deps)).toBe('reintentar');
-    const r2 = escenario();
-    r2.repo.fallaEn.recibir = true;
-    expect(await atenderMensajeCliente(msg('hola'), armar(r2.repo).deps)).toBe('reintentar');
+    expect(await atenderMensajeCliente(msg('hola'), armar(repo).deps)).toBe('no_es_cliente');
+  });
+
+  it('ya es un cliente conocido y la base falla al leer su config o al guardar: «reintentar» (no se le dice «no te tengo registrado»)', async () => {
+    const a = escenario();
+    a.repo.fallaEn.config = true;
+    expect(await atenderMensajeCliente(msg('hola'), armar(a.repo).deps)).toBe('reintentar');
+    const b = escenario();
+    b.repo.fallaEn.recibir = true;
+    expect(await atenderMensajeCliente(msg('hola'), armar(b.repo).deps)).toBe('reintentar');
   });
 });
 
@@ -571,7 +577,7 @@ describe('toma de control humana', () => {
     const { deps, alCliente } = armar(repo);
     await atenderMensajeCliente(msg('hola'), deps);
     const conv = [...repo.conversaciones.values()][0];
-    expect((await responderComoHumano({ tenantId: T1, userId: 'u' }, conv.id, '   ​ ', deps)).ok).toBe(false);
+    expect((await responderComoHumano({ tenantId: T1, userId: 'u' }, conv.id, '   \u200B ', deps)).ok).toBe(false);
     expect((await responderComoHumano({ tenantId: T2, userId: 'u' }, conv.id, 'hola', deps)).ok).toBe(false);
     expect(alCliente).toEqual([]);
   });

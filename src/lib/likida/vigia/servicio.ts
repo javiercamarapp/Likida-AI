@@ -71,17 +71,29 @@ export async function atenderMensajeCliente(msg: MensajeEntrante, deps: DepsVigi
   const { repo } = deps;
   const ahora = ahoraDe(deps);
 
-  // ── Antes de guardar nada: si la base no contesta, NO se afirma nada ─────
+  // ── ¿Es un cliente autorizado? ───────────────────────────────────────────
+  // Si la búsqueda FALLA (la base, o una migración 0400 aún sin aplicar), se devuelve
+  // `no_es_cliente`: el número cae a la regla de siempre («no te tengo registrado») en
+  // vez de quedarse el webhook reintentando para siempre. Se loguea como error: es
+  // una alerta, no un caso normal.
   let contacto: Contacto | null;
-  let config: ConfigVigia | null = null;
   try {
     contacto = await repo.contactoPorTelefono(normalizarTelefonoWa(msg.from));
-    if (contacto) config = await repo.config(contacto.tenantId);
   } catch (e) {
-    logger.error('vigia.entrada_no_resuelta', { err: e instanceof Error ? e.message : String(e) });
+    logger.error('vigia.contacto_no_resuelto', { err: e instanceof Error ? e.message : String(e) });
+    return 'no_es_cliente';
+  }
+  if (!contacto) return 'no_es_cliente';
+
+  // Ya es un cliente conocido: desde aquí, si la base falla, se REINTENTA (no se le
+  // dice «no te tengo registrado» a quien sí tenemos).
+  let config: ConfigVigia;
+  try {
+    config = await repo.config(contacto.tenantId);
+  } catch (e) {
+    logger.error('vigia.config_no_leida', { tenant: contacto.tenantId, err: e instanceof Error ? e.message : String(e) });
     return 'reintentar';
   }
-  if (!contacto || !config) return 'no_es_cliente';
 
   // El contacto es de la allowlist, pero su flota apagó el agente, o él pidió la
   // baja: no se le contesta y TAMPOCO se le dice «no te tengo registrado» (sí lo
@@ -162,7 +174,7 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
     // Una foto, un audio o un pin del cliente: el agente no los lee. Una persona los ve.
     cl = { intencion: 'otro', secundarias: [], confianza: 0, clasificador: 'ninguno', senales: ['no_texto'] };
   } else {
-    cl = await clasificar(c.texto, deps.modelo);
+    cl = await clasificar(c.texto, deps.modelo, tenantId);
   }
   await repo.anotarClasificacion(tenantId, recibido.mensajeId, cl);
   await repo.evento(tenantId, { conversacionId: conv.id, tipo: 'entrante', detalle: { intencion: cl.intencion, clasificador: cl.clasificador } });
@@ -235,7 +247,7 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
     primerContacto: !contacto.avisoPrivacidadEn, avisoPrivacidadUrl: config.avisoPrivacidadUrl ?? `${appUrl()}/privacidad`,
   });
   const folio = viaje.tipo === 'uno' ? viaje.estatus.folio : null;
-  const pulido = await pulirBorrador(borrador, c.texto, folio, deps.pulir);
+  const pulido = await pulirBorrador(borrador, c.texto, folio, deps.pulir, tenantId);
   borrador = pulido.borrador;
   if (pulido.motivoDescartado) logger.info('vigia.pulido_descartado', { tenant: tenantId, motivo: pulido.motivoDescartado });
 

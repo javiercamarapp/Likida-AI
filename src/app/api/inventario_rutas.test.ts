@@ -108,7 +108,15 @@ import { join, relative, sep } from 'node:path';
 //     `agente:peajes`;
 //   · `api/export/bitacora-conciliada/route.ts` — sesión + área dinero +
 //     puedeExportar, rate limit y siempre acotada al tenant de la sesión.
-const RUTAS_APP_REVISADAS = 78;
+// 78 → 79 (loop punta a punta, Agente 4 «Vigía de servicio al cliente», 1-oct-2026):
+//   · `api/cron/vigia/route.ts` — puertaCron (CRON_SECRET, comparación en tiempo
+//     constante) y palanca `global` (falla cerrado si no se puede leer); latido en
+//     todo camino de salida. Barre el SLA de TODAS las flotas con el agente
+//     encendido (`vigia_config.habilitado`, apagado por omisión) y cada acción
+//     usa el tenant de la propia conversación. No acepta cuerpo ni parámetros.
+//     El tablero del Vigía NO añade rutas: sus acciones son server actions de la
+//     página, con la sesión, el rol y el tenant de la cookie.
+const RUTAS_APP_REVISADAS = 79;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

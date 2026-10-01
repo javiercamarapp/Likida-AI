@@ -3,8 +3,8 @@ import { limpiarTexto, normalizar, detectarInyeccion, esSpam, MAX_TEXTO_CLIENTE,
 
 describe('limpiarTexto — el texto del cliente es dato no confiable', () => {
   it('quita controles y caracteres invisibles que esconden instrucciones', () => {
-    expect(limpiarTexto('ho​la\u0000 ‮mundo⁠')).toBe('hola mundo');
-    expect(limpiarTexto('a﻿b\u0007c')).toBe('abc');
+    expect(limpiarTexto('ho\u200Bla\u0000 \u202Emundo\u2060')).toBe('hola mundo');
+    expect(limpiarTexto('a\uFEFFb\u0007c')).toBe('abc');
   });
   it('colapsa espacios y saltos, y recorta', () => {
     expect(limpiarTexto('  hola   \t  mundo \n\n\n\n adiós  ')).toBe('hola mundo \n\n adiós');

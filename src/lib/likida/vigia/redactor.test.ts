@@ -237,28 +237,28 @@ describe('guardia anti-invención del texto pulido', () => {
       pulir: async () => { if (r instanceof Error) throw r; return r; },
     });
     it('sin modelo: el borrador intacto', async () => {
-      const r = await pulirBorrador(borrador, 'x', 'F-1042', null);
+      const r = await pulirBorrador(borrador, 'x', 'F-1042', null, 't1');
       expect(r.borrador).toBe(borrador);
     });
     it('un pulido que pasa la guardia se usa y se marca origen modelo', async () => {
       const liga = borrador.texto.match(/https:\/\/\S+/)![0];
-      const r = await pulirBorrador(borrador, 'x', 'F-1042', modelo(`Hola María 👋 tu viaje F-1042 sigue en camino. Posición hace 12 min: ${liga}`));
+      const r = await pulirBorrador(borrador, 'x', 'F-1042', modelo(`Hola María 👋 tu viaje F-1042 sigue en camino. Posición hace 12 min: ${liga}`), 't1');
       expect(r.borrador.origen).toBe('modelo');
       expect(r.motivoDescartado).toBeNull();
     });
     it('un pulido con cifra inventada se TIRA: sale el determinista', async () => {
-      const r = await pulirBorrador(borrador, 'x', 'F-1042', modelo('Tu viaje F-1042 llega mañana a las 7:30 con 3 horas de retraso'));
+      const r = await pulirBorrador(borrador, 'x', 'F-1042', modelo('Tu viaje F-1042 llega mañana a las 7:30 con 3 horas de retraso'), 't1');
       expect(r.borrador).toBe(borrador);
       expect(r.motivoDescartado).toBe('cifra_sin_respaldo');
     });
     it('el modelo caído o mudo no rompe nada', async () => {
-      expect((await pulirBorrador(borrador, 'x', 'F-1042', modelo(new Error('timeout')))).motivoDescartado).toBe('modelo_caido');
-      expect((await pulirBorrador(borrador, 'x', 'F-1042', modelo(null))).motivoDescartado).toBe('modelo_sin_respuesta');
+      expect((await pulirBorrador(borrador, 'x', 'F-1042', modelo(new Error('timeout')), 't1')).motivoDescartado).toBe('modelo_caido');
+      expect((await pulirBorrador(borrador, 'x', 'F-1042', modelo(null), 't1')).motivoDescartado).toBe('modelo_sin_respuesta');
     });
     it('un borrador que pide humano o es de riesgo alto no se embellece', async () => {
       const queja = redactarBorrador(base({ clasificacion: { intencion: 'queja', secundarias: [], senales: [] } }));
       let llamado = false;
-      const r = await pulirBorrador(queja, 'x', null, { pulir: async () => { llamado = true; return 'otro'; } });
+      const r = await pulirBorrador(queja, 'x', null, { pulir: async () => { llamado = true; return 'otro'; } }, 't1');
       expect(llamado).toBe(false);
       expect(r.borrador).toBe(queja);
     });
