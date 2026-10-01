@@ -72,6 +72,15 @@ import { join, relative, sep } from 'node:path';
  * para no tenerlos (como las cuatro públicas de arriba) — ANTES de procesar
  * nada. Ni el proxy ni este inventario la van a salvar.
  */
+// 1-oct-2026 (loop punta a punta, Agente 1 «liquidación externa», 0370): +3.
+//   · `v1/liquidaciones-externas/route.ts` — llave API por área (`abrir(req,
+//     'administracion')` para el POST, `'dinero'` para el GET) antes de leer el
+//     cuerpo; tenant de la credencial (un `tenant_id` en el cuerpo es 400);
+//     idempotencia por `claveExterna` y 409 ante otro contenido.
+//   · `export/liquidaciones-externas/route.ts` — sesión → flota → área `dinero`
+//     → `puedeExportar`; el PDF se busca CON el tenant de la sesión.
+//   · `cron/liquidaciones-externas/route.ts` — secreto de cron (`puertaCron`),
+//     palanca global y del agente, latido en todo camino de salida.
 // 1-sep-2026 (auditoría 24, BLOQ-6): +1 por `v1/liquidaciones/route.ts`.
 // Su puerta: `abrir(req, 'dinero')` —llave API por área o cookie+CSRF— antes
 // de tocar la base, y `.eq('tenant_id', acceso.tenantId)` en la única consulta.
@@ -87,7 +96,7 @@ import { join, relative, sep } from 'node:path';
 // 7-sep-2026 (auditoría 28, SEG-B1): 67 → 72. El escaneo deja de limitarse a
 // `src/app/api` y cubre `src/app` entero (ver el comentario de arriba con el
 // detalle de las cinco rutas que aparecen).
-const RUTAS_APP_REVISADAS = 72;
+const RUTAS_APP_REVISADAS = 73;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
