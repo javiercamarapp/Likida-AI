@@ -12,6 +12,8 @@ import {
   aceptacionesDeFlota, registrarAceptacion, revocarMandato, pendientesDeUsuario, mandatoDe,
   type AceptacionFila,
 } from '@/lib/legal/aceptacion';
+import { guardarDatosResponsable, leerDatosResponsable, type CamposResponsable } from '@/lib/legal/datos_responsable';
+import { Campo } from '@/app/admin/ui/forma';
 import {
   ETIQUETA_DOCUMENTO, MANDATO_AUTOFACTURACION, VERSION_TERMINOS, VERSION_AVISO_PRIVACIDAD,
 } from '@/lib/legal/documentos';
@@ -82,12 +84,33 @@ export default async function PaginaLegal({
     return { ok: 'Mandato retirado. Likida vuelve a preparar las facturas sin emitirlas.' };
   }
 
+  async function accionGuardarDatos(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await sesionDeDueno(sp);
+    if (!s) return { error: SOLO_DUENO };
+    // El tenant sale de la SESIÓN; del formulario solo vienen los tres textos.
+    const r = await guardarDatosResponsable(s.tenantId, {
+      razonSocial: fd.get('razonSocial'),
+      domicilio: fd.get('domicilio'),
+      contactoPrivacidad: fd.get('contactoPrivacidad'),
+    }, { id: s.userId });
+    if (!r.ok) return { error: r.error };
+    revalidatePath(RUTA);
+    return { ok: 'Datos guardados. El aviso de privacidad de tus choferes se actualiza solo y se les reenvía.' };
+  }
+
   // Error DICHO: una base caída no se pinta como «no has aceptado nada».
   let filas: AceptacionFila[] | null = null;
   try {
     filas = await aceptacionesDeFlota(tenantId);
   } catch {
     filas = null;
+  }
+  let responsable: CamposResponsable | null = null;
+  try {
+    responsable = await leerDatosResponsable(tenantId);
+  } catch {
+    responsable = null;
   }
   const pendientes = filas ? pendientesDeUsuario(filas, userId) : null;
   const mandato = filas ? mandatoDe(filas) : null;
@@ -105,6 +128,26 @@ export default async function PaginaLegal({
             <EstadoError mensaje="No pude leer el registro de aceptaciones. No significa que no hayas aceptado nada: la consulta falló." />
           ) : (
             <>
+              <section className="space-y-2" aria-labelledby="h-resp">
+                <h2 id="h-resp" className="text-sm font-semibold">Responsable de privacidad de tu flota</h2>
+                <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+                  El aviso de privacidad que reciben tus choferes nombra a tu empresa como responsable de sus datos. Si
+                  aún no los capturas, el aviso <strong>sale igual</strong> y dice qué falta: tus choferes no se quedan sin
+                  servicio, pero conviene completarlo. Al guardar, el aviso se actualiza solo.
+                </p>
+                {responsable === null ? (
+                  <EstadoError mensaje="No pude leer los datos de tu flota. No significa que estén vacíos: la consulta falló." />
+                ) : esDueno ? (
+                  <FormaConAviso accion={accionGuardarDatos} boton="Guardar datos del responsable" columnas="md:grid-cols-1">
+                    <Campo nombre="razonSocial" etiqueta="Razón social (como en tu RFC)" valorInicial={responsable.razonSocial ?? ''} />
+                    <Campo nombre="domicilio" etiqueta="Domicilio fiscal" valorInicial={responsable.domicilio ?? ''} />
+                    <Campo nombre="contactoPrivacidad" etiqueta="Contacto de privacidad (correo o teléfono)" valorInicial={responsable.contactoPrivacidad ?? ''} />
+                  </FormaConAviso>
+                ) : (
+                  <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{SOLO_DUENO}</p>
+                )}
+              </section>
+
               <section className="space-y-2" aria-labelledby="h-docs">
                 <h2 id="h-docs" className="text-sm font-semibold">Documentos vigentes</h2>
                 <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>

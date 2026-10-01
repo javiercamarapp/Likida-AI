@@ -85,8 +85,10 @@ import { join, relative } from 'node:path';
  * 0443: registrar/revocar/consultar la aceptación de Términos, Aviso y mandato
  * de autofacturación por flota, 3 RPC + 1 lectura, todo en UN archivo) y
  * `lib/mcp/oauth.ts` (ya fuera de la frontera) suma 3 llamadas por la cola de
- * aprobación de clientes OAuth desconocidos (mig. 0440). Funcionalidad nueva,
- * no código migrado.
+ * aprobación de clientes OAuth desconocidos (mig. 0440). Y 260 → 261 archivos y
+ * 1,355 → 1,359 llamadas por `lib/legal/datos_responsable.ts`: la captura por flota
+ * de razón social, domicilio y contacto de privacidad (auditoría ola 1, #10), UN
+ * archivo con su lectura y su escritura. Funcionalidad nueva, no código migrado.
  *
  * AUDITORÍA 28, ARQ-M1 (LA UNIDAD EQUIVOCADA): hasta aquí el techo vivía en
  * ARCHIVOS — y con 252 archivos medidos contra un techo de 252, este guardia
@@ -108,8 +110,8 @@ import { join, relative } from 'node:path';
  * pestañear deja de medir nada — igual que el de arriba, se sube a mano, en
  * el commit que explica por qué.
  */
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 260;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_355;
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 261;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_359;
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
 

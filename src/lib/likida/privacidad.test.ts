@@ -49,11 +49,38 @@ describe('avisoSimplificado', () => {
     expect(avisoSimplificado(flota)).toMatch(/Likida/);
   });
 
-  it('SIN la identidad del responsable devuelve null: no se inventa uno', () => {
-    // Un aviso con el nombre equivocado es peor que no tenerlo: sale mal el dato
-    // de a quién reclamarle, que es justo para lo que sirve el aviso.
-    expect(avisoSimplificado({ ...flota, razonSocial: '' })).toBeNull();
-    expect(avisoSimplificado({ ...flota, domicilio: '' })).toBeNull();
+  // AUDITORÍA OLA 1, #10: antes devolvía null (y el chofer quedaba SIN servicio desde
+  // su primer mensaje, con la foto descartada). Un hueco de la FLOTA no se le cobra
+  // al titular: el aviso sale, DICE qué falta y no inventa a un responsable.
+  describe('SIN la identidad del responsable: sale igual, con el hueco dicho y sin inventar', () => {
+    it('sin razón social: nombra a la flota por su nombre de alta y dice que la razón social está pendiente', () => {
+      const a = avisoSimplificado({ ...flota, razonSocial: '', nombreFlota: 'Transportes Pérez' });
+      expect(a).not.toBeNull();
+      expect(a).toMatch(/Responsable de tus datos: \*Transportes Pérez\*/);
+      expect(a).toMatch(/razón social inscrita/);
+      expect(a).toMatch(/PRIVACIDAD por este mismo chat/);
+      // No inventa: no afirma un domicilio que no existe
+      expect(a).not.toContain('con domicilio en');
+    });
+    it('sin razón social ni nombre de alta: «tu empresa», jamás vacío ni undefined', () => {
+      const a = avisoSimplificado({ ...flota, razonSocial: '   ', nombreFlota: null });
+      expect(a).toMatch(/Responsable de tus datos: \*tu empresa\*/);
+      expect(a).not.toMatch(/undefined|null|\*\*/);
+    });
+    it('sin domicilio: nombra la razón social y dice que el domicilio está pendiente', () => {
+      const a = avisoSimplificado({ ...flota, domicilio: '' });
+      expect(a).toContain(`Responsable de tus datos: *${flota.razonSocial}*. Su domicilio aún no está capturado`);
+      expect(a).not.toContain('con domicilio en');
+    });
+    it('con los datos COMPLETOS el renglón es el de siempre (ninguna flota ya configurada recibe un reenvío)', () => {
+      expect(avisoSimplificado(flota)).toContain(`Responsable de tus datos: *${flota.razonSocial}*, con domicilio en ${flota.domicilio}.`);
+    });
+    it('el resto del aviso (fracciones II a VI) sale completo aunque falte la identidad', () => {
+      const completo = avisoSimplificado(flota)!;
+      const hueco = avisoSimplificado({ ...flota, razonSocial: '', domicilio: '' })!;
+      const resto = (t: string) => t.split('\n').slice(3).join('\n');
+      expect(resto(hueco)).toBe(resto(completo));
+    });
   });
 
   it('advierte del tratamiento automatizado y del derecho a oponerse', () => {
@@ -301,9 +328,12 @@ describe('versionAvisoVigente — la firma cubre los DOS textos (LEG-A4)', () =>
     expect(versionAvisoVigente(otro)?.version).not.toBe(versionAvisoVigente(flotaIntegral)?.version);
   });
 
-  it('sin razón social (o sin domicilio) da null, igual que avisoSimplificado', () => {
-    expect(versionAvisoVigente({ ...flotaIntegral, razonSocial: '' })).toBeNull();
-    expect(versionAvisoVigente({ ...flotaIntegral, domicilio: '' })).toBeNull();
+  it('sin razón social (o sin domicilio) YA NO da null: hay versión, y completar los datos la cambia (reenvío art. 15 fr. VI)', () => {
+    const completa = versionAvisoVigente(flotaIntegral).version;
+    const sinRazon = versionAvisoVigente({ ...flotaIntegral, razonSocial: '' }).version;
+    const sinDomicilio = versionAvisoVigente({ ...flotaIntegral, domicilio: '' }).version;
+    expect(sinRazon).toMatch(/./);
+    expect(new Set([completa, sinRazon, sinDomicilio]).size).toBe(3);
   });
 
   it('no depende de la hora ni de VIGENTE_DESDE: dos relojes distintos dan la misma firma', () => {
