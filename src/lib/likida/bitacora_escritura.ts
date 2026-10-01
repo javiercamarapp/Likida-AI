@@ -107,7 +107,12 @@ export type EntidadBitacora =
   // es 'csv' (no hay una fila de prospecto singular que nombrar — es la
   // cartera filtrada completa); `detalle` lleva el conteo y los filtros
   // elegidos, nunca datos de un prospecto.
-  | 'prospecto';
+  | 'prospecto'
+  // W2 «producto»: los patios. Crear, editar y BORRAR uno cambia dónde caen
+  // operadores, unidades y jefes (borrarlo los deja sin patio), y quién lo hizo
+  // es lo que hay que poder reconstruir. Hasta hoy `crearTerminal` firmaba como
+  // `tenant`; el id del patio vive en `entidadId`.
+  | 'terminal';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una
