@@ -90,7 +90,11 @@ const FALLBACK: Record<string, string> = {
   // pasar por aquí: no hay error, no hay log, solo deja de haber plan B.
   'google/gemini-3.1-flash-lite': 'anthropic/claude-haiku-4.5',
   'google/gemini-3.6-flash': 'anthropic/claude-haiku-4.5',
+  // Carta Porte (visión): el escalón 1 (3.8 Flash) cae a Haiku 4.5 (Anthropic, lee
+  // imagen) y el escalón 2 (Sonnet 5.5) a Luna (otro proveedor) si Anthropic cae.
   'google/gemini-3.5-flash-lite': 'openai/gpt-5.6-luna',
+  'google/gemini-3.8-flash': 'anthropic/claude-haiku-4.5',
+  'anthropic/claude-sonnet-5.5': 'openai/gpt-5.6-luna',
   // El conserje del chat del panel (chat_ligero): si OpenAI se cae, el
   // saludo lo contesta flash-lite — cruce de proveedor, texto puro.
   'openai/gpt-5-nano': 'google/gemini-3.5-flash-lite',
@@ -192,6 +196,10 @@ const PRICES: Record<string, [number, number]> = {
   // Verificado contra el catálogo público de OpenRouter el 12-ago-2026.
   'openai/gpt-5-nano': [0.05, 0.4],
   'google/gemini-3.5-flash-lite': [0.3, 2.5],
+  // Escalones del extractor de Carta Porte (modelos-precios.md, 1-oct-2026). 3.8 Flash
+  // duplica precio el 1-ene-2027: re-verificar entonces.
+  'google/gemini-3.8-flash': [0.75, 3.75],
+  'anthropic/claude-sonnet-5.5': [2, 10],
   // Añadidos el 4-ago-2026 al medir OCR: sin ellos, `calcCost` caía a la red de
   // seguridad (tarifa más cara) y reportaba ~$0.030 por comprobante donde el
   // costo real es ~$0.0016. La red hizo su trabajo —salió alto y por eso se
