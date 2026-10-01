@@ -100,8 +100,20 @@ import { join, relative } from 'node:path';
  * pestañear deja de medir nada — igual que el de arriba, se sube a mano, en
  * el commit que explica por qué.
  */
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 259;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_347;
+//
+// LOOP PUNTA A PUNTA (2-oct-2026), Agente 5 «Conductor» — 259 → 261 archivos y
+// 1,347 → 1,385 llamadas (medido con el barrido completo). UN solo archivo
+// nuevo: `lib/likida/conductor/repo.ts` junta TODO el acceso a datos del módulo
+// (los hitos y sus bitácoras de la 0380, la config por flota, los contactos de
+// tráfico, el claim de avisos, la siembra, la lectura de /v1 y el mantenimiento de
+// privacidad) en vez de repartirlo en un archivo por tabla —el mismo molde que
+// `liquidacion_externa/repo.ts`—: el motor, el intérprete, el planificador y las
+// rutas no tienen ni un `.from(`/`.rpc(`, y el ejecutor entra por los puertos
+// `PuertosConductor`. Las 38 llamadas son las consultas nuevas de ese archivo,
+// todas con `acotada`, acotadas por tenant y las de lotes con `traerTodo`.
+// Funcionalidad nueva, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 261;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_385;
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
 

@@ -33,7 +33,7 @@ import {
   bandejasAbiertas,
 } from '@/lib/likida/intake/rafaga';
 import { versionAvisoVigente, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/likida/privacidad';
-import { interpretarHito, sellarHito, mensajeHito } from '@/lib/likida/hitos_viaje';
+import { atenderConductor, atenderAcuseJefe, adjuntarUbicacionAHito } from '@/lib/likida/conductor/atender';
 import {
   interpretarMarcaJornada, interpretarConformidadJornada,
   atenderMarcaJornada, atenderConformidadJornada, resumenParaOperador,
@@ -1605,6 +1605,20 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       return;
     }
 
+    // ── «YA LO ATIENDO»: EL ACUSE DEL JEFE O DEL PATIO (Agente 5, 0380) ─────────
+    //
+    // El botón de la escalación llega de un número que puede no ser chofer NI
+    // cuenta de la app (un patio responsable configurado solo por teléfono), así que
+    // se atiende ANTES de resolver al operador. `atenderAcuseJefe` exige que el
+    // teléfono sea de la flota del viaje (contacto de tráfico o cuenta de oficina).
+    if (msg.type === 'text' && msg.text) {
+      const acuseJefe = await atenderAcuseJefe(msg.from, msg.text);
+      if (acuseJefe !== null) {
+        await sendText(msg.from, acuseJefe);
+        return;
+      }
+    }
+
     const op = await resolveOperador(msg.from);
     if (!op) {
       // ── ¿ES UNA CUENTA DE OFICINA? ───────────────────────────────────────
@@ -2236,6 +2250,9 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // asistencia vivo, el pin se ancla ahí y el jefe recibe el link.
       if (msg.type === 'location' && typeof msg.lat === 'number' && typeof msg.lng === 'number') {
         const anclada = await anclarUbicacionIncidencia(op.tenantId, op.operadorId, msg.lat, msg.lng);
+      // Agente 5: el pin se ADJUNTA como evidencia al hito que acaba de registrar (≤ 30 min).
+      // No registra ningún hito por sí solo. Best-effort y mudo.
+      if (viajeId) await adjuntarUbicacionAHito(op.tenantId, viajeId, msg.lat, msg.lng);
         if (anclada) {
           const avisado = await avisarUbicacionAlJefe(op, `https://maps.google.com/?q=${msg.lat},${msg.lng}`, 'compartió su ubicación (emergencia en curso)', { operador: op.operadorId });
           await sendText(msg.from, avisado
@@ -3723,23 +3740,43 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       }
     }
 
-    // ── ¿HITO DEL VIAJE? "ya llegué" / "descargando" / "de regreso" (0090) ──
+    // ── ¿HITO DEL VIAJE? (0090 → Agente 5 «Conductor», 0380) ─────────────────
+    //
+    // "ya llegué", "ya estoy en andén", "me atiende Juan de recibo", "ya cargué",
+    // "salgo para allá", «voy con retraso», «corrijo»… y los botones de las
+    // solicitudes del agente (`hito_*`, `recordatorio_*`, `pedir_ubicacion`).
     //
     // ANTES del freno de cierre A PROPÓSITO: `pareceCierre` arranca con
-    // ^(listo|ya|...) y se comería "ya llegué" como intento de cerrar. Y
-    // después de botones/consultas, que son respuestas a preguntas nuestras.
-    // La lista de frases es CERRADA y anclada (hitos_viaje.ts): lo que traiga
-    // más contexto sigue su camino al agente.
-    const hito = interpretarHito(msg.text);
-    if (hito) {
-      // DAT-38: la hora del MENSAJE, no la del procesamiento. El acuse dice
-      // «anotado: llegaste a las 14:32» y esa hora tiene que ser la que el
-      // chofer vivió, no la que este servidor tenía cuando le tocó el turno.
-      // Sin timestamp de Meta se cae al reloj local, como siempre.
-      const ahoraHito = msg.timestampMs ? new Date(msg.timestampMs) : new Date();
-      const sello = await sellarHito(op.tenantId, viajeId, hito, ahoraHito);
-      logger.info('hito.viaje', { viaje: viajeId, hito, sello });
-      await say(mensajeHito(hito, sello, ahoraHito));
+    // ^(listo|ya|...) y se comería "ya llegué" como intento de cerrar. Y después
+    // de botones/consultas, que son respuestas a preguntas nuestras.
+    //
+    // QUÉ HITO ES lo decide la máquina de estados mirando lo que el viaje ya tiene
+    // registrado (conductor/maquina.ts): un «ya llegué» en el ORIGEN ya no sella la
+    // llegada al DESTINO, que era el defecto de las tres columnas de la 0090.
+    // El módulo atiende lo que las reglas entienden (o el respaldo con modelo, si
+    // el texto parece hablar de un hito); todo lo demás sigue su camino al agente.
+    //
+    // DAT-38: la hora es la del MENSAJE (Meta), no la del procesamiento; sin ella,
+    // el reloj local.
+    const rConductor = await atenderConductor({
+      tenantId: op.tenantId,
+      operadorId: op.operadorId,
+      telefono: msg.from,
+      viajeAbiertoId: viajeId,
+      texto: msg.text,
+      mensajeEn: msg.timestampMs ? new Date(msg.timestampMs) : null,
+      waMessageId: msg.waMessageId ?? null,
+      senal: reloj.senal(15_000),
+    });
+    if (rConductor) {
+      for (const m of rConductor.mensajes) {
+        // Con botones (p. ej. «Es en descarga»): si Meta los rechaza, el texto sale solo.
+        if (m.botones && m.botones.length > 0) {
+          const id = await sendButtons(msg.from, m.texto, m.botones);
+          if (id) { await registrarCostoWhatsApp(op.tenantId, viajeId); continue; }
+        }
+        await say(m.texto);
+      }
       return;
     }
 
