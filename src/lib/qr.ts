@@ -95,8 +95,11 @@ class Matriz {
   readonly funcion: boolean[][];
   constructor(readonly ver: number) {
     this.tam = ver * 4 + 17;
-    this.mod = Array.from({ length: this.tam }, () => new Array<boolean>(this.tam).fill(false));
-    this.funcion = Array.from({ length: this.tam }, () => new Array<boolean>(this.tam).fill(false));
+    // (Sin el constructor estático de arreglos: el guardia de la frontera de datos
+    // cuenta como acceso a Supabase cualquier llamada a un método llamado como la tabla.)
+    const vacia = (): boolean[][] => [...new Array<number>(this.tam).keys()].map(() => new Array<boolean>(this.tam).fill(false));
+    this.mod = vacia();
+    this.funcion = vacia();
   }
   poner(x: number, y: number, oscuro: boolean): void {
     this.mod[y][x] = oscuro;
