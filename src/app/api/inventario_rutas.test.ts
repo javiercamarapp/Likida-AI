@@ -96,7 +96,7 @@ import { join, relative, sep } from 'node:path';
 // 7-sep-2026 (auditoría 28, SEG-B1): 67 → 72. El escaneo deja de limitarse a
 // `src/app/api` y cubre `src/app` entero (ver el comentario de arriba con el
 // detalle de las cinco rutas que aparecen).
-const RUTAS_APP_REVISADAS = 73;
+const RUTAS_APP_REVISADAS = 74;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
