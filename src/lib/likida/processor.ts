@@ -306,7 +306,7 @@ async function pegarCodigoEnEspera(tenantId: string, viajeId: string, gasto: Gas
  * Nunca lanza: dejar sin respuesta a quien ejerce un derecho es peor que
  * cualquier fallo que se pueda registrar.
  */
-async function atenderPrivacidad(tenantId: string, operadorId: string | null, telefono: string, texto: string): Promise<void> {
+async function atenderPrivacidad(tenantId: string, operadorId: string | null, telefono: string, texto: string, titularUserId: string | null = null): Promise<void> {
   try {
     // ── LA CONSTANCIA SE DEJA SIEMPRE, antes de decidir qué contestar ──────
     // AUDITORÍA 12, ALTO (legal): el aviso promete "queda registrada tu
@@ -330,6 +330,7 @@ async function atenderPrivacidad(tenantId: string, operadorId: string | null, te
       await registrarSolicitudArco({
         tenantId,
         operadorId,
+        titularUserId,
         titularRef: telefono,
         tipo,
         canal: 'whatsapp',
@@ -1594,11 +1595,13 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // consulta, con el id), y solo si no hay operador (cuenta de oficina) se
       // cae al tenant-only.
       const porOperador = await buscarOperadorPorTelefono(msg.from).catch(() => null);
-      const tenantId = porOperador?.tenantId
-        ?? (await resolverCuentaOficina(msg.from).catch(() => null))?.tenantId
-        ?? null;
+      // 0442 (auditoría ola 1 #46): la cuenta de oficina se conserva COMPLETA
+      // (no solo su tenant): su `userId` es el titular de la solicitud ARCO, y sin
+      // él la cancelación de un dueño/contador/encargado no tenía sobre quién ejecutarse.
+      const cuentaOficina = porOperador ? null : await resolverCuentaOficina(msg.from).catch(() => null);
+      const tenantId = porOperador?.tenantId ?? cuentaOficina?.tenantId ?? null;
       if (tenantId) {
-        await atenderPrivacidad(tenantId, porOperador?.operadorId ?? null, msg.from, msg.text);
+        await atenderPrivacidad(tenantId, porOperador?.operadorId ?? null, msg.from, msg.text, cuentaOficina?.userId ?? null);
       } else {
         await sendText(msg.from, 'Claro. No te tengo identificado con una flota en Likida, así que no sé a qué empresa reclamarle. Si trabajaste con una flota que usa Likida, pídeles que te confirmen qué hicieron con tus datos. 🙏');
       }

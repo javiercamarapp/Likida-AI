@@ -1543,6 +1543,9 @@ export async function getAcumuladoCombustible(
 export async function registrarSolicitudArco(opts: {
   tenantId: string;
   operadorId: string | null;
+  /** 0442: el titular cuando NO es operador (cuenta de oficina). Sin esto la
+   *  cancelación de un dueño/contador/encargado no tiene sobre quién ejecutarse. */
+  titularUserId?: string | null;
   titularRef: string;
   tipo: string;
   canal: string;
@@ -1551,6 +1554,8 @@ export async function registrarSolicitudArco(opts: {
   const { data, error } = await acotada(supabaseAdmin().from('solicitud_arco').insert({
     tenant_id: opts.tenantId,
     operador_id: opts.operadorId,
+    // Solo si no es operador: un titular es UNO u otro.
+    titular_user_id: opts.operadorId ? null : (opts.titularUserId ?? null),
     titular_ref: opts.titularRef,
     tipo: opts.tipo,
     canal: opts.canal,
@@ -1789,13 +1794,14 @@ export async function ejecutarOposicionArco(
 
 export async function ejecutarCancelacionArco(
   tenantId: string, solicitudId: string,
-): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string }> {
+): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string; errorAuth?: string }> {
   const { data: sol, error: errLee } = await acotada(supabaseAdmin()
-    .from('solicitud_arco').select('titular_ref, tipo').eq('id', solicitudId).eq('tenant_id', tenantId).maybeSingle(),
+    .from('solicitud_arco').select('titular_ref, tipo, titular_user_id').eq('id', solicitudId).eq('tenant_id', tenantId).maybeSingle(),
     'ejecutarCancelacionArco.leer');
   if (errLee) throw new Error(`ejecutarCancelacionArco.leer: ${errLee.message}`);
   if (!sol) throw new Error('ejecutarCancelacionArco: la solicitud no existe en esta flota');
   const telefono = (sol.titular_ref as string | null) ?? null;
+  const titularUserId = (sol.titular_user_id as string | null) ?? null;
 
   const { data, error } = await acotada(supabaseAdmin().rpc('ejecutar_arco_cancelacion', {
     p_tenant: tenantId,
@@ -1810,9 +1816,36 @@ export async function ejecutarCancelacionArco(
     return { ok: false, motivo: r.motivo ?? 'la base no explicó el rechazo', avisada: false };
   }
 
-  if (!telefono) return { ok: true, avisada: false, errorAviso: 'sin teléfono del titular' };
+  // 0442 (cuenta de oficina): la RPC ya seudonimizó la fila y la dio de baja; el
+  // LOGIN vive en Supabase Auth y solo se borra desde aquí. Se hace ANTES del
+  // aviso y su fallo se DICE (no se afirma un borrado que no ocurrió).
+  let errorAuth: string | undefined;
+  if (titularUserId) {
+    try {
+      const { error: errDel } = await supabaseAdmin().auth.admin.deleteUser(titularUserId);
+      if (errDel) errorAuth = errDel.message;
+    } catch (e) {
+      errorAuth = e instanceof Error ? e.message : String(e);
+    }
+    if (errorAuth) {
+      logger.error('arco.auth_no_borrado', { tenant: tenantId, usuario: titularUserId, err: errorAuth });
+      // Segunda línea: que al menos no pueda entrar (ban permanente), como la baja normal.
+      try { await supabaseAdmin().auth.admin.updateUserById(titularUserId, { ban_duration: '876000h' }); } catch { /* ya está logueado arriba */ }
+    }
+  }
+
+  if (!telefono) return { ok: true, avisada: false, errorAviso: errorAuth ? `sin teléfono del titular; además el login de Auth no se pudo borrar (${errorAuth})` : 'sin teléfono del titular', ...(errorAuth ? { errorAuth } : {}) };
   try {
     const { enviarRespuestaArco } = await import('@/lib/meta/client');
+    if (titularUserId) {
+      const aviso = await enviarRespuestaArco(
+        telefono,
+        'Se sustituyeron tu nombre y tu correo de cuenta, se quitó tu teléfono y tu foto, se dio de baja tu acceso y se eliminaron tus conversaciones de WhatsApp, del analista y del copiloto. Se conservan la bitácora de auditoría (el registro de quién hizo qué en la plataforma) y la documentación fiscal de la flota (CFF art. 30).',
+      );
+      return aviso.ok
+        ? { ok: true, avisada: true, ...(errorAuth ? { errorAuth } : {}) }
+        : { ok: true, avisada: false, errorAviso: aviso.error, ...(errorAuth ? { errorAuth } : {}) };
+    }
     // AUDITORÍA 28, LEG-A6 [ALTO]: esta lista era CERRADA y le faltaban tres
     // categorías que `ejecutar_arco_cancelacion` (0286/0290, texto 0340) SÍ
     // deja intactas: los eventos de cámara/telemetría ligados al operador
