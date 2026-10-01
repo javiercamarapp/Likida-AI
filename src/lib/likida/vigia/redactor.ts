@@ -243,7 +243,7 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
 
 export interface PuertoPulir {
   /** Devuelve el texto reescrito o `null`. Puede lanzar. */
-  pulir(borrador: string): Promise<string | null>;
+  pulir(borrador: string, ctx: { tenantId: string }): Promise<string | null>;
 }
 
 const LIGA = /https?:\/\/[^\s)]+/g;
@@ -280,13 +280,13 @@ export function guardiaDePulido(pulido: string, borrador: Borrador, mensajeClien
 
 /** Pule el borrador con el modelo SI pasa la guardia; si no, devuelve el original. Nunca lanza. */
 export async function pulirBorrador(
-  borrador: Borrador, mensajeCliente: string, folio: string | null, modelo: PuertoPulir | null | undefined,
+  borrador: Borrador, mensajeCliente: string, folio: string | null, modelo: PuertoPulir | null | undefined, tenantId: string = '',
 ): Promise<{ borrador: Borrador; motivoDescartado: string | null }> {
   // Un borrador que pide humano, trae faltantes o responde una queja no se «embellece»: se manda como está.
-  if (!modelo || borrador.requiereHumano || borrador.riesgo === 'alto') return { borrador, motivoDescartado: null };
+  if (!modelo || !tenantId || borrador.requiereHumano || borrador.riesgo === 'alto') return { borrador, motivoDescartado: null };
   let pulido: string | null;
   try {
-    pulido = await modelo.pulir(borrador.texto);
+    pulido = await modelo.pulir(borrador.texto, { tenantId });
   } catch {
     return { borrador, motivoDescartado: 'modelo_caido' };
   }

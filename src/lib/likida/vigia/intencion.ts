@@ -69,10 +69,20 @@ const FACTURA_POD: readonly RegExp[] = [
   /\b(pod|comprobante de entrega|prueba de entrega|acuse de (entrega|recibo)|evidencia de entrega|foto de (la )?entrega|remision firmada|firmada de recibido)\b/,
 ];
 
-const SALUDO: readonly RegExp[] = [
-  /^(hola|buenas|buenos dias|buen dia|buenas tardes|buenas noches|que tal|saludos|hey|hi|ola)( [a-z]+)?$/,
-  /^(gracias|muchas gracias|ok|enterado|listo|perfecto|de acuerdo|vale|excelente|muy bien)( [a-z]+)?$/,
-];
+// Saludos y acuses cortos: se comparan como FRASE (hasta una palabra extra: «hola María»),
+// no con una regex —así no hay cuantificadores anidados que vigilar.
+const SALUDOS = new Set([
+  'hola', 'buenas', 'buenos dias', 'buen dia', 'buenas tardes', 'buenas noches', 'que tal', 'saludos', 'hey', 'hi', 'ola',
+  'gracias', 'muchas gracias', 'ok', 'enterado', 'listo', 'perfecto', 'de acuerdo', 'vale', 'excelente', 'muy bien',
+]);
+
+function esSaludo(n: string): boolean {
+  if (SALUDOS.has(n)) return true;
+  const i = n.lastIndexOf(' ');
+  if (i <= 0) return false;
+  const resto = n.slice(i + 1);
+  return resto.length <= 20 && /^[a-z]+$/.test(resto) && SALUDOS.has(n.slice(0, i));
+}
 
 function coincide(n: string, reglas: readonly RegExp[]): boolean {
   return reglas.some((r) => r.test(n));
@@ -112,7 +122,7 @@ export function clasificarPorReglas(texto: string): Clasificacion | null {
       clasificador: 'reglas', senales: [],
     };
   }
-  if (coincide(n, SALUDO)) {
+  if (esSaludo(n)) {
     return { intencion: 'saludo', secundarias: [], confianza: 0.9, clasificador: 'reglas', senales: [] };
   }
   return null;

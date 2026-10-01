@@ -27,8 +27,9 @@ export const INTENCIONES_MODELO = [
 export const CONFIANZA_MINIMA_MODELO = 0.6;
 
 export interface PuertoModelo {
-  /** Devuelve la etiqueta cruda del modelo, o `null` si no contestó. Puede lanzar. */
-  clasificar(texto: string): Promise<{ intencion: unknown; confianza: unknown } | null>;
+  /** Devuelve la etiqueta cruda del modelo, o `null` si no contestó. Puede lanzar.
+   *  `tenantId` es de quien se carga el gasto (el presupuesto de IA es por flota). */
+  clasificar(texto: string, ctx: { tenantId: string }): Promise<{ intencion: unknown; confianza: unknown } | null>;
 }
 
 export interface ResultadoClasificacion extends Clasificacion {
@@ -36,7 +37,7 @@ export interface ResultadoClasificacion extends Clasificacion {
   textoLimpio: string;
 }
 
-export async function clasificar(textoCrudo: unknown, modelo?: PuertoModelo | null): Promise<ResultadoClasificacion> {
+export async function clasificar(textoCrudo: unknown, modelo?: PuertoModelo | null, tenantId: string = ''): Promise<ResultadoClasificacion> {
   const textoLimpio = limpiarTexto(textoCrudo);
   const senales: string[] = [];
   if (detectarInyeccion(textoLimpio)) senales.push('inyeccion');
@@ -51,11 +52,12 @@ export async function clasificar(textoCrudo: unknown, modelo?: PuertoModelo | nu
   // Texto vacío, o con intento de manipulación: el modelo ni lo ve.
   if (!textoLimpio) return otro('ninguno', ['vacio']);
   if (senales.includes('inyeccion')) return otro('ninguno');
-  if (!modelo) return otro('ninguno');
+  // Sin tenant no hay a quién cargarle el gasto: fail-closed, no se llama al modelo.
+  if (!modelo || !tenantId) return otro('ninguno');
 
   let crudo: { intencion: unknown; confianza: unknown } | null;
   try {
-    crudo = await modelo.clasificar(textoLimpio);
+    crudo = await modelo.clasificar(textoLimpio, { tenantId });
   } catch {
     return otro('ninguno', ['modelo_caido']);
   }

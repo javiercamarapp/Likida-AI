@@ -24,8 +24,7 @@ export const MAX_TEXTO_CLIENTE = 1000;
 
 // Controles C0/C1 (salvo \n y \t) y caracteres invisibles que se usan para
 // esconder texto: ancho cero, marcas de dirección, BOM, separadores de línea.
-// eslint-disable-next-line no-control-regex -- justamente se quitan los controles
-const INVISIBLES = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F​-‏‪-‮⁠-⁤⁦-⁩﻿]/g;
+const INVISIBLES = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
 
 export function limpiarTexto(crudo: unknown): string {
   const t = typeof crudo === 'string' ? crudo : '';

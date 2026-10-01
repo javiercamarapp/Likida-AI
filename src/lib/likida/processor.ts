@@ -46,6 +46,9 @@ import { atenderCcpOficina } from '@/lib/likida/carta_porte_wa';
 import { atenderAcuseLiquidacionExterna } from '@/lib/likida/liquidacion_externa/acuse';
 import { interpretarAsistencia, atenderAsistenciaChofer, atenderReconocimientoAsistencia, atenderAsistenciaOficina, anclarUbicacionIncidencia } from '@/lib/likida/asistencia_wa';
 import { atenderCoordinacionOficina, atenderMensajeProveedor, atenderMedioProveedorSinTexto } from '@/lib/likida/asistencia_coordinacion';
+import { atenderMensajeCliente, atenderDecisionVigia } from './vigia/servicio';
+import { crearDepsVigia } from './vigia/deps';
+import { crearRepoVigia } from './vigia/repo';
 import { esCaptionPod, guardarPodDelChofer, mensajePod } from '@/lib/likida/pod_wa';
 import { atenderInformeOficina } from '@/lib/likida/informes_wa';
 import { pideInformePdf, mandarInformePdf, atenderPreguntaLibre, RESPUESTA_OFICINA_SIN_TIEMPO } from '@/lib/likida/oficina_wa';
@@ -692,6 +695,24 @@ async function atenderTextoOficina(
     }
   } catch (e) {
     logger.error('oficina.coordinacion_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+  }
+
+  // ── VIGÍA DE SERVICIO AL CLIENTE (0400): los botones del gerente ────────
+  // `vig_ok:` / `vig_no:` / `vig_tomo:<uuid>` responden a avisos concretos que el Vigía
+  // le mandó (aprobar la respuesta a un cliente, descartarla o tomar el hilo). El tenant
+  // sale de la CUENTA que escribe; el rol se verifica adentro (solo flota_admin y
+  // encargado). Cualquier otro texto devuelve null y sigue su camino.
+  try {
+    const rVigia = await atenderDecisionVigia(
+      { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId }, texto, crearDepsVigia(),
+    );
+    if (rVigia) {
+      logger.info('oficina.vigia_decision', { user: cuenta.userId, rol: cuenta.rol });
+      await sendText(from, rVigia);
+      return true;
+    }
+  } catch (e) {
+    logger.error('oficina.vigia_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
   }
 
   // ── COMANDOS DE ADMINISTRACIÓN DE PLATAFORMA (admin_comandos_wa.ts) ──────
@@ -1596,6 +1617,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       const porOperador = await buscarOperadorPorTelefono(msg.from).catch(() => null);
       const tenantId = porOperador?.tenantId
         ?? (await resolverCuentaOficina(msg.from).catch(() => null))?.tenantId
+        // Un CLIENTE de la flota (Vigía, 0400) también ejerce sus derechos por aquí: la
+        // solicitud queda a nombre de SU flota. El teléfono se guarda como `titularRef`
+        // (igual que con un chofer); la supresión de sus chats la ejecuta la flota desde
+        // el tablero del Vigía.
+        ?? (await crearRepoVigia().contactoPorTelefono(msg.from).catch(() => null))?.tenantId
         ?? null;
       if (tenantId) {
         await atenderPrivacidad(tenantId, porOperador?.operadorId ?? null, msg.from, msg.text);
@@ -1743,6 +1769,20 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           return;
         }
       }
+
+      // ── ¿ES UN CLIENTE AUTORIZADO DE LA FLOTA? (Vigía de servicio al cliente, 0400) ──
+      // Último intento ANTES de decirle «no te tengo registrado»: un cliente que la flota
+      // dio de alta (allowlist con consentimiento) tiene su propio camino —clasificación,
+      // respuesta con datos reales y aprobación del gerente—. Quien NO está en esa lista
+      // sigue recibiendo la regla de siempre (`no_es_cliente`). Cualquier falla al
+      // buscarlo también cae ahí (ver `atenderMensajeCliente`): el Vigía no puede
+      // dejar a un desconocido sin su respuesta de siempre.
+      const rCliente = await atenderMensajeCliente(msg, crearDepsVigia()).catch((e) => {
+        logger.error('vigia.mensaje_error', { err: e instanceof Error ? e.message : String(e) });
+        return 'no_es_cliente' as const;
+      });
+      if (rCliente === 'reintentar') { await soltarClaim(); return; }
+      if (rCliente === 'atendido') return;
 
       await sendText(msg.from, 'Hola, no te tengo registrado como operador. Pídele a tu flota que te dé de alta en Likida. 🚛');
       return;
