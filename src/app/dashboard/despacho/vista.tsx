@@ -7,13 +7,13 @@ import { BarraPagina } from '../resumen-visual';
 import { FormaViaje, type AccionCrearViaje } from '../forma-viaje';
 import type { BuscarCatalogo } from '../combo-catalogo';
 import { AsignarFila, AsignarUnidadFila, BotonReenviar, AltaOperador, type AccionDespacho } from './acciones';
+import { EnlacePagina, NavPaginas } from '../paginador';
 
 /** Tope de "Por asignar" — declarado en pantalla cuando recorta. "En curso"
  *  ya no usa esta constante: FE-2 le dio su propia paginación con `count`
  *  real (`activos`, abajo). */
 const MAX_FILAS = 12;
 
-const BTN_PAGINA = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]';
 
 /** El link a otra página de "En curso", conservando folio buscado y sufijo
  *  de previsualización — mismo patrón que `rentabilidad/vista.tsx`. */
@@ -230,18 +230,12 @@ export function VistaDespacho({
                   </p>
                   <div className="flex items-center gap-3 flex-wrap justify-center text-[12px]" style={{ color: 'var(--faint)' }}>
                     <span>0–0 de {numero(activos.total ?? 0)} en curso</span>
-                    <div className="flex gap-1.5">
-                      {activos.pagina > 1 && (
-                        <Link href={hrefPaginaActivos(sufijo, folioPedido, activos.pagina - 1)} className={BTN_PAGINA} style={{ background: 'var(--surface)' }}>
-                          ← Anterior
-                        </Link>
-                      )}
+                    <NavPaginas>
+                      {activos.pagina > 1 && <EnlacePagina href={hrefPaginaActivos(sufijo, folioPedido, activos.pagina - 1)} direccion="anterior" />}
                       {ultimaPaginaConDatos !== null && ultimaPaginaConDatos !== activos.pagina && (
-                        <Link href={hrefPaginaActivos(sufijo, folioPedido, ultimaPaginaConDatos)} className={BTN_PAGINA} style={{ background: 'var(--surface)' }}>
-                          Ir a la última página ({numero(ultimaPaginaConDatos)})
-                        </Link>
+                        <EnlacePagina href={hrefPaginaActivos(sufijo, folioPedido, ultimaPaginaConDatos)} direccion="siguiente" etiqueta={`Ir a la última página (${numero(ultimaPaginaConDatos)})`} />
                       )}
-                    </div>
+                    </NavPaginas>
                   </div>
                 </div>
               ) : (
@@ -303,18 +297,10 @@ export function VistaDespacho({
                         : `Página ${numero(activos.pagina)} — no se pudo contar el total.`}
                     </p>
                     {(activos.pagina > 1 || activosPuedeAvanzar) && (
-                      <div className="flex gap-1.5">
-                        {activos.pagina > 1 && (
-                          <Link href={hrefPaginaActivos(sufijo, folioPedido, activos.pagina - 1)} className={BTN_PAGINA} style={{ background: 'var(--surface)' }}>
-                            ← Anterior
-                          </Link>
-                        )}
-                        {activosPuedeAvanzar && (
-                          <Link href={hrefPaginaActivos(sufijo, folioPedido, activos.pagina + 1)} className={BTN_PAGINA} style={{ background: 'var(--surface)' }}>
-                            Siguiente →
-                          </Link>
-                        )}
-                      </div>
+                      <NavPaginas>
+                        {activos.pagina > 1 && <EnlacePagina href={hrefPaginaActivos(sufijo, folioPedido, activos.pagina - 1)} direccion="anterior" />}
+                        {activosPuedeAvanzar && <EnlacePagina href={hrefPaginaActivos(sufijo, folioPedido, activos.pagina + 1)} direccion="siguiente" />}
+                      </NavPaginas>
                     )}
                   </div>
                   {/* FE-B1: `truncada` se declara, no se esconde — al tope de

@@ -165,15 +165,16 @@ describe('vacíos y paginación', () => {
     expect(html).toContain('Total no disponible');
   });
 
-  it('«Siguientes» lleva el cursor, el filtro y el contexto', async () => {
+  it('«Siguiente» lleva el cursor, el filtro y el contexto', async () => {
     const html = await pintar([fila()], { siguiente: 'CURSOR123', filtro: 'enviada' });
     expect(html).toContain('ext_cursor=CURSOR123');
     expect(html).toContain('ext_estado=enviada');
     expect(html).toContain('tenant=flota-1');
+    expect(html).toContain('rel="next"');
   });
 
-  it('sin siguiente no hay link de siguientes', async () => {
-    expect(await pintar([fila()])).not.toContain('Siguientes');
+  it('sin siguiente no hay link de siguiente', async () => {
+    expect(await pintar([fila()])).not.toContain('rel="next"');
   });
 });
 
