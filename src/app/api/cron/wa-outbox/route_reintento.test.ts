@@ -21,6 +21,14 @@ vi.mock('@/lib/admin/salud', () => ({
 const alertarOperador = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => {}));
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador }));
 
+
+/** El sondeo del token (auditoría ola 1, #27) se controla desde la prueba; por omisión sirve. */
+const sondeoToken = vi.hoisted(() => ({ estado: { estado: 'ok' } as Record<string, unknown> }));
+vi.mock('@/lib/meta/client', async (importar) => ({
+  ...(await importar<typeof import('@/lib/meta/client')>()),
+  sondearTokenWhatsApp: async () => sondeoToken.estado,
+}));
+
 const PAYLOAD_PLANTILLA = {
   messaging_product: 'whatsapp', to: '525512345678', type: 'template',
   template: {
@@ -52,6 +60,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.WHATSAPP_ACCESS_TOKEN = 'tok'; process.env.WHATSAPP_PHONE_NUMBER_ID = '999';
   salidas = [salida()];
+  sondeoToken.estado = { estado: 'ok' };
   finalizar.mockResolvedValue({ ok: true, muerta: false });
 });
 
@@ -78,6 +87,13 @@ describe('cron wa-outbox: cada respuesta de Meta', () => {
     const res = await llamar();
     expect(await res.json()).toMatchObject({ enviadas: 0, fallidas: 1 });
     expect(finalizar).toHaveBeenCalledWith(expect.anything(), undefined, expect.stringContaining(prefijo));
+  });
+
+  it('190 (token vencido) en el envío NO es terminal: vuelve a la cola (retryable:) — se arregla renovando el token', async () => {
+    const f = vi.fn(async (..._a: unknown[]) => meta(400, { error: { code: 190, message: 'Error validating access token' } }));
+    vi.stubGlobal('fetch', f);
+    await llamar();
+    expect(finalizar).toHaveBeenCalledWith(expect.objectContaining({ id: 'out-1' }), undefined, expect.stringMatching(/^retryable:/));
   });
 
   it('200 sin wamid: queda muerta para revisión manual (reenviar duplicaría) y NO cuenta como enviada', async () => {
