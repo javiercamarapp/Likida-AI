@@ -1419,6 +1419,63 @@ function documento(servidor: string) {
           },
         },
       },
+      '/v1/viajes/{id}/sitios': {
+        put: {
+          operationId: 'asignarSitiosDeViaje',
+          'x-likida-area': 'administracion',
+          summary: 'Qué sitio espera cada hito de un viaje: el de carga y el de descarga.',
+          description: 'Área `administracion`. Cada lado es el CÓDIGO del sitio (el del sistema del cliente) o su id, resuelto DENTRO de la flota de la credencial; `null` desasigna. Sin sitio asignado, las llegadas del viaje quedan «sin dato» al validarlas contra la ubicación (nunca «no coincide»). PUT es idempotente. «No existe» y «no es de tu flota» contestan lo mismo (404).',
+          tags: ['hitos', 'viajes'],
+          parameters: [parametroIdViaje],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { type: 'object', properties: {
+              origen: { type: 'string', nullable: true, maxLength: 40, description: 'Sitio de CARGA (código o uuid).' },
+              destino: { type: 'string', nullable: true, maxLength: 40, description: 'Sitio de DESCARGA (código o uuid).' },
+            }, additionalProperties: false } } },
+          },
+          responses: {
+            '200': { description: 'Lo guardado.', content: { 'application/json': { schema: { type: 'object' } } } },
+            '404': noEncontrado,
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/sitios': {
+        get: {
+          operationId: 'listarSitios',
+          'x-likida-area': 'operacion',
+          summary: 'El catálogo de sitios (clientes, plantas y andenes) con su centro y su radio.',
+          description: 'Área `operacion`. Hasta 200 sitios; `hayMas` dice si faltan. `fuente` es de dónde salió la coordenada: `manual` (captura humana) o `csv` (importación). Ninguna coordenada se calcula ni se inventa.',
+          tags: ['hitos'],
+          parameters: [
+            { name: 'q', in: 'query', required: false, schema: { type: 'string', maxLength: 60 } },
+            { name: 'tipo', in: 'query', required: false, schema: { type: 'string', enum: ['cliente', 'planta', 'anden', 'patio', 'punto_interes'] } },
+          ],
+          responses: { '200': { description: 'Sitios de la flota.', content: { 'application/json': { schema: { type: 'object' } } } }, ...respuestasError },
+        },
+      },
+      '/v1/estadias': {
+        get: {
+          operationId: 'listarEstadias',
+          'x-likida-area': 'dinero',
+          summary: 'Las estadías en andén (llegada→salida de cada carga y descarga) para el cobro de estadías.',
+          description: 'Área `dinero` (trae el monto propuesto). `desde`/`hasta`: días de México inclusive (por defecto los últimos 7, máximo 93). `formato=csv` devuelve UTF-8 con BOM listo para Excel. Cada fila lleva la hora EXACTA del mensaje del chofer (o la declarada por la oficina) y de dónde salió, si la ubicación la validó y cuántas fotos la respaldan. El monto es una PROPUESTA: sin horas libres pactadas no hay «excedido», sin tarifa no hay monto, y una parada que sigue corriendo (`en_curso`) no es cobrable. Si hay más viajes de los que una lectura trae, `truncada` es `true` (y el encabezado `X-Estadias-Truncada` en el CSV).',
+          tags: ['hitos'],
+          parameters: [
+            { name: 'desde', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+            { name: 'hasta', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+            { name: 'formato', in: 'query', required: false, schema: { type: 'string', enum: ['json', 'csv'], default: 'json' } },
+            { name: 'terminalId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+            { name: 'clienteId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+            { name: 'operadorId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+          ],
+          responses: {
+            '200': { description: 'Estadías del periodo.', content: { 'application/json': { schema: { type: 'object' } }, 'text/csv': { schema: { type: 'string' } } } },
+            ...respuestasError,
+          },
+        },
+      },
       '/v1/conductor/config': {
         get: {
           operationId: 'obtenerConfigConductor',
