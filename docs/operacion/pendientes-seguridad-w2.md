@@ -16,7 +16,7 @@ Orden: 0440, 0441, 0442, 0443 (independientes entre sí; todas idempotentes) y D
 | 0443 | `aceptacion_legal` | **La emisión de CFDI por portales exige además el mandato vigente de la flota** (`/dashboard/legal`); sin él, ensayo |
 
 SQL contra Postgres real: `supabase/tests/0440_*.sql … 0443_*.sql` (ya enganchados en `ci-postgres.yml`).
-Corridos localmente contra PG 17 con las 340 migraciones aplicadas en orden.
+Corridos localmente contra PG 17 con todas las migraciones aplicadas en orden sobre una base virgen.
 
 ## Bloqueos externos (no se pueden cerrar por código)
 
@@ -28,7 +28,6 @@ Corridos localmente contra PG 17 con las 340 migraciones aplicadas en orden.
    ```bash
    cd ~/likida && git switch -c deps/next-16.3.6
    npm install next@16.3.6 --save-exact           # o fusionar el PR #492 de Dependabot
-   npm install --save-dev --package-lock-only     # no hace falta
    # overrides para brace-expansion y fast-uri en package.json ("overrides": {...}) con las versiones parcheadas de `npm audit`
    npm audit --omit=dev && npm run typecheck && npx vitest run src/app src/lib/mcp
    ```

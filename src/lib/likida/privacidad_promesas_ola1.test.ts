@@ -48,6 +48,7 @@ describe('el aviso integral no promete un borrado que el código no hace', () =>
 
 describe('la premisa del aviso sigue siendo verdad en la base', () => {
   const MIGS = 'supabase/migrations';
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- ruta armada con constantes de esta prueba (directorio de migraciones + prefijo fijo); sin entrada de usuario.
   const sql = (n: string) => readFileSync(`${MIGS}/${readdirSync(MIGS).find((f) => f.startsWith(n))!}`, 'utf8');
 
   it('el barrido de huérfanos de Storage excluye lo nombrado por comprobante_huerfano.ruta_imagen (0165)', () => {
