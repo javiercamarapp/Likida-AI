@@ -16,16 +16,23 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => { t
 const leerHitos = vi.fn(async (..._a: unknown[]) => ({ filas: [{ id: 'h1' }], hayMas: false }));
 const leerEventos = vi.fn(async (..._a: unknown[]) => ({ filas: [{ id: 7 }, { id: 9 }], hayMas: true }));
 const guardarCitas = vi.fn(async (..._a: unknown[]): Promise<'ok' | 'no_encontrado'> => 'ok');
+const leerConfig = vi.fn(async (..._a: unknown[]) => ({ ...{ activo: true, solicitudesMin: [0, 15, 30, 45], escalarTrasMin: 90, segundoNivelMin: 30, horaInicio: 6, horaFin: 22, diasSemana: [1, 2, 3, 4, 5, 6, 7], topeDiarioChofer: 12, anticipoCitaMin: 30, esperaSinCitaMin: 120, esperaCargaMin: 120, trayectoSinEtaMin: 480, esperaDescargaMin: 120, regresoMin: 30, posponerMin: 30, ventanaCorreccionMin: 60, usarLlm: true, avisarOficinaLlegada: false, avisarOficinaSalida: false, confirmarAlChofer: true } }));
+const cargarContactos = vi.fn(async (..._a: unknown[]) => [{ nombre: 'Patio', telefono: '523312345678', nivel: 1, terminalId: null }]);
+const guardarConfig = vi.fn(async (..._a: unknown[]): Promise<'ok' | 'terminal_ajena'> => 'ok');
 vi.mock('@/lib/likida/conductor/repo', async (orig) => ({
   ...(await orig<typeof import('@/lib/likida/conductor/repo')>()),
   leerHitos: (...a: unknown[]) => leerHitos(...a),
   leerEventos: (...a: unknown[]) => leerEventos(...a),
   guardarCitas: (...a: unknown[]) => guardarCitas(...a),
+  leerConfigConductor: (...a: unknown[]) => leerConfig(...a),
+  cargarContactosTrafico: (...a: unknown[]) => cargarContactos(...a),
+  guardarConfigConductor: (...a: unknown[]) => guardarConfig(...a),
 }));
 
 const hitos = await import('./route');
 const eventos = await import('./eventos/route');
 const citas = await import('../viajes/[id]/citas/route');
+const configRuta = await import('../conductor/config/route');
 
 const BASE = 'https://app.likida.ai/api/v1';
 const json = async (r: Response) => (await r.json()) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -37,7 +44,7 @@ const put = (id: string, cuerpo: unknown) => citas.PUT(
 
 beforeEach(() => {
   abrir.mockReset(); abrir.mockResolvedValue({ ok: true, tenantId: 't-1', rol: 'llave:operacion' });
-  leerHitos.mockClear(); leerEventos.mockClear(); guardarCitas.mockClear();
+  leerHitos.mockClear(); leerEventos.mockClear(); guardarCitas.mockClear(); guardarConfig.mockClear(); leerConfig.mockClear(); cargarContactos.mockClear();
 });
 
 describe('GET /v1/hitos', () => {
@@ -137,5 +144,60 @@ describe('PUT /v1/viajes/{id}/citas', () => {
   it('un cuerpo enorme se rechaza antes de parsearlo', async () => {
     const r = await put(V, JSON.stringify({ citaOrigen: '2026-10-02T08:00:00Z', basura: 'x'.repeat(20_000) }));
     expect(r.status).toBe(400);
+  });
+});
+
+describe('GET/PUT /v1/conductor/config', () => {
+  const putConfig = (cuerpo: unknown) => configRuta.PUT(new Request(`${BASE}/conductor/config`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo) }));
+
+  it('GET pide el área administracion (trae teléfonos) y acota a la flota de la credencial', async () => {
+    const r = await configRuta.GET(new Request(`${BASE}/conductor/config?tenant=t-OTRA`));
+    expect(abrir.mock.calls[0][1]).toBe('administracion');
+    expect(leerConfig.mock.calls[0][0]).toBe('t-1');
+    expect(cargarContactos.mock.calls[0][0]).toBe('t-1');
+    expect((await json(r)).datos.config.solicitudesMin).toEqual([0, 15, 30, 45]);
+  });
+
+  it('PUT fusiona con la config actual, valida y guarda para la flota de la credencial', async () => {
+    const r = await putConfig({ solicitudesMin: [0, 10, 20], avisarOficinaLlegada: true, contactos: [{ nivel: 2, nombre: 'Jefe', telefono: '3312345678' }] });
+    expect(r.status).toBe(200);
+    expect(abrir.mock.calls[0][1]).toBe('administracion');
+    const [tenant, config, contactos] = guardarConfig.mock.calls[0] as [string, Record<string, unknown>, unknown[]];
+    expect(tenant).toBe('t-1');
+    expect(config).toMatchObject({ solicitudesMin: [0, 10, 20], avisarOficinaLlegada: true, escalarTrasMin: 90 });
+    expect(contactos).toEqual([{ nivel: 2, nombre: 'Jefe', telefono: '523312345678', terminalId: null }]);
+  });
+
+  it('un tenant_id en el cuerpo es una llave desconocida: no es una puerta a otra flota', async () => {
+    const r = await putConfig({ tenant_id: 't-OTRA', activo: false });
+    expect(r.status).toBe(400);
+    expect(guardarConfig).not.toHaveBeenCalled();
+  });
+
+  it('una config inválida no se guarda a medias', async () => {
+    expect((await putConfig({ solicitudesMin: [0, 60, 120] })).status).toBe(400);
+    expect((await putConfig('{roto')).status).toBe(400);
+    expect(guardarConfig).not.toHaveBeenCalled();
+  });
+
+  it('una terminal de OTRA flota es 400 (la FK compuesta lo dice) y no se confirma como guardado', async () => {
+    guardarConfig.mockResolvedValueOnce('terminal_ajena');
+    const r = await putConfig({ contactos: [{ nivel: 1, nombre: 'X', telefono: '3312345678', terminalId: '38000000-0000-4000-8000-0000000000b5' }] });
+    expect(r.status).toBe(400);
+    expect((await json(r)).error.mensaje).toContain('terminal');
+  });
+
+  it('una llave de solo operacion no puede cambiar ni leer la estrategia', async () => {
+    abrir.mockResolvedValue({ ok: false, respuesta: new Response('{}', { status: 403 }) });
+    expect((await putConfig({ activo: false })).status).toBe(403);
+    expect((await configRuta.GET(new Request(`${BASE}/conductor/config`))).status).toBe(403);
+    expect(guardarConfig).not.toHaveBeenCalled();
+  });
+
+  it('el mensaje interno de una falla de la base no cruza', async () => {
+    guardarConfig.mockRejectedValueOnce(new Error('relation "agente_conductor_config" does not exist'));
+    const r = await putConfig({ activo: false });
+    expect(r.status).toBe(500);
+    expect(JSON.stringify(await json(r))).not.toContain('agente_conductor_config');
   });
 });

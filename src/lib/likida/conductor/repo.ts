@@ -579,3 +579,54 @@ export async function guardarCitas(tenantId: string, viajeId: string, cambio: Ca
   const filas = exigir(res as never, 'v1.citas') as unknown[] | null;
   return filas && filas.length > 0 ? 'ok' : 'no_encontrado';
 }
+
+// ── La config y los contactos: escritura desde PUT /v1/conductor/config ──────
+
+/** Guarda la config COMPLETA de la flota (ya validada) y, si viene, REEMPLAZA sus contactos de escalamiento. */
+export async function guardarConfigConductor(
+  tenantId: string, c: ConfigConductor, contactos: ContactoTrafico[] | undefined,
+): Promise<'ok' | 'terminal_ajena'> {
+  const { error } = await acotada(supabaseAdmin().from('agente_conductor_config').upsert({
+    tenant_id: tenantId, activo: c.activo, solicitudes_min: c.solicitudesMin, escalar_tras_min: c.escalarTrasMin,
+    segundo_nivel_min: c.segundoNivelMin, hora_inicio: c.horaInicio, hora_fin: c.horaFin, dias_semana: c.diasSemana,
+    tope_diario_chofer: c.topeDiarioChofer, anticipo_cita_min: c.anticipoCitaMin, espera_sin_cita_min: c.esperaSinCitaMin,
+    espera_carga_min: c.esperaCargaMin, trayecto_sin_eta_min: c.trayectoSinEtaMin, espera_descarga_min: c.esperaDescargaMin,
+    regreso_min: c.regresoMin, posponer_min: c.posponerMin, ventana_correccion_min: c.ventanaCorreccionMin, usar_llm: c.usarLlm,
+    avisar_oficina_llegada: c.avisarOficinaLlegada, avisar_oficina_salida: c.avisarOficinaSalida,
+    confirmar_al_chofer: c.confirmarAlChofer, updated_at: new Date().toISOString(),
+  }, { onConflict: 'tenant_id' }), 'v1.conductor_config');
+  if (error) throw new Error(`v1.conductor_config: ${error.message}`);
+  if (contactos === undefined) return 'ok';
+
+  const previos = await acotada(supabaseAdmin().from('conductor_contacto_trafico').select('id, nivel, telefono, terminal_id').eq('tenant_id', tenantId).limit(500), 'v1.conductor_contactos');
+  const filas = (exigir(previos as never, 'v1.conductor_contactos') ?? []) as unknown as Fila[];
+  const clave = (nivel: number, telefono: string, terminal: string | null) => `${terminal ?? ''}|${nivel}|${telefono}`;
+  const nuevos = new Map(contactos.map((x) => [clave(x.nivel, x.telefono, x.terminalId), x]));
+  const existentes = new Map(filas.map((f) => [clave(Number(f.nivel), String(f.telefono), typeof f.terminal_id === 'string' ? f.terminal_id : null), String(f.id)]));
+
+  // Primero se agregan los nuevos (si una terminal es ajena, la FK compuesta lo dice y NO se borra nada),
+  // y solo después se retiran los que ya no están.
+  const aInsertar = contactos.filter((x) => !existentes.has(clave(x.nivel, x.telefono, x.terminalId)));
+  if (aInsertar.length > 0) {
+    const { error: e2 } = await acotada(supabaseAdmin().from('conductor_contacto_trafico').insert(
+      aInsertar.map((x) => ({ tenant_id: tenantId, terminal_id: x.terminalId, nivel: x.nivel, nombre: x.nombre, telefono: x.telefono, activo: true })),
+    ), 'v1.conductor_contactos_alta');
+    if (e2) {
+      if ((e2 as { code?: string }).code === '23503') return 'terminal_ajena';
+      throw new Error(`v1.conductor_contactos_alta: ${e2.message}`);
+    }
+  }
+  const aBorrar = [...existentes.entries()].filter(([k]) => !nuevos.has(k)).map(([, id]) => id);
+  if (aBorrar.length > 0) {
+    const { error: e3 } = await acotada(supabaseAdmin().from('conductor_contacto_trafico').delete().eq('tenant_id', tenantId).in('id', aBorrar), 'v1.conductor_contactos_baja');
+    if (e3) throw new Error(`v1.conductor_contactos_baja: ${e3.message}`);
+  }
+  // Los que se conservan pueden haber cambiado de nombre.
+  for (const [k, x] of nuevos) {
+    const id = existentes.get(k);
+    if (!id) continue;
+    const { error: e4 } = await acotada(supabaseAdmin().from('conductor_contacto_trafico').update({ nombre: x.nombre, activo: true }).eq('tenant_id', tenantId).eq('id', id), 'v1.conductor_contactos_nombre');
+    if (e4) throw new Error(`v1.conductor_contactos_nombre: ${e4.message}`);
+  }
+  return 'ok';
+}
