@@ -157,8 +157,19 @@ import { join, relative } from 'node:path';
 // `conductor/trabajo.ts` (ya exento y ya contado). Todas con `acotada`, acotadas por tenant (las vigila
 // `consultas_admin_filtran_tenant.test.ts`) y las lecturas por lotes con `traerPorIds`. Funcionalidad
 // nueva, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 266;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_525;
+//
+// LOOP PUNTA A PUNTA (1-oct-2026), Agente 3 «Carta Porte multi-formato» — 259 → 261
+// archivos y 1,347 → 1,402 llamadas (medido con el barrido completo contra el mismo
+// commit base: 259 y 1,347). Dos archivos nuevos: `carta_porte_docs/repo.ts`, que junta
+// en UNO TODO el acceso a datos del módulo (las siete tablas de la 0420, el bucket
+// `cartaporte-docs`, las RPC de claim/retención/correo y la escritura de viaje y
+// mercancía) en vez de repartirlo por tabla —50 de las 55 llamadas—, y
+// `carta_porte_docs/bytes.ts`, que existe SOLO para sacar de contenido.ts, whatsapp.ts y
+// repo.ts las conversiones `Buffer.from(` que esta regexp cuenta como `.from(` (cinco
+// llamadas, ninguna a Supabase). Funcionalidad nueva, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 267;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_580;
+
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
 
