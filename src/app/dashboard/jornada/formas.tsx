@@ -2,10 +2,11 @@
 
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { TriangleAlert, CheckCircle2, Lock, Plus, Ban } from 'lucide-react';
+import { Lock, Plus, Ban } from 'lucide-react';
 import { TZ_MX } from '@/lib/formato';
 import { ROTULO_PROCEDENCIA, type Asiento, type JornadaCompuesta } from '@/lib/likida/jornada/modelo';
 import type { RiesgoDia, PoliticaFlota } from '@/lib/likida/jornada/riesgo';
+import { AvisoResultado } from '../../admin/ui/aviso-resultado';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS CORRECCIONES DEL CONTRALOR — y por qué ninguna sobreescribe una hora.
@@ -45,24 +46,9 @@ function Boton({ texto, cargando, icono }: { texto: string; cargando: string; ic
   );
 }
 
-/** El aviso del resultado. El error sale VERBATIM: está escrito para leerse
- *  aquí y es lo único que dice QUÉ corregir. */
-function Aviso({ estado }: { estado: ResultadoAccion }) {
-  if (estado.ok && !estado.mensaje) return null;
-  return estado.ok ? (
-    <div className="flex items-center gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
-      style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
-      <CheckCircle2 width={15} height={15} strokeWidth={1.75} />
-      {estado.mensaje}
-    </div>
-  ) : (
-    <div className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
-      style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-      <TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-      {estado.error}
-    </div>
-  );
-}
+/** El aviso del resultado: el UNICO del panel (`admin/ui/aviso-resultado`). El error
+ *  del servidor se enseña VERBATIM: los `DatoInvalido` están escritos para leerse aquí. */
+const Aviso = AvisoResultado;
 
 function hora(iso: string): string {
   return new Intl.DateTimeFormat('es-MX', {
