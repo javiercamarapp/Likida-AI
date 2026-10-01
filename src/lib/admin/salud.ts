@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -68,6 +68,11 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // esos sitios ya bloquean robots; el vigilante no puede ser el que provoque
   // el problema que vino a detectar.
   'portales-vivos': 7 * 86_400_000,
+  // La entrega y conciliación de las liquidaciones externas (0370). Cada 5
+  // minutos: es lo que tarda un chofer fuera de la ventana de 24 h en recibir
+  // su plantilla tras el rechazo de la sesión, y el outbox ya reintenta por su
+  // cuenta cada minuto — este cron solo concilia y reencola lo que no pudo.
+  'liquidaciones-externas': 300_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */
