@@ -78,6 +78,13 @@ espera "authenticated no lee wa_ventana_contacto" "f" "select has_table_privileg
 espera "RLS activada en wa_ventana_contacto" "t" "select relrowsecurity from pg_class where oid='public.wa_ventana_contacto'::regclass"
 espera "RLS activada en wa_envio_registro" "t" "select relrowsecurity from pg_class where oid='public.wa_envio_registro'::regclass"
 
+# Retención de la ventana: solo lo viejo (>= 2 días), nunca una ventana viva.
+q "update public.wa_ventana_contacto set ultimo_entrante_en = now() - interval '30 days' where telefono='529993600003'"
+espera "purga de ventanas borra solo las viejas" "t" "select public.purgar_wa_ventana_contacto(7, 100) >= 1"
+espera "…la vieja ya no está"  "0" "select count(*) from public.wa_ventana_contacto where telefono='529993600003'"
+espera "…las vivas siguen"     "1" "select count(*) from public.wa_ventana_contacto where telefono='529993600001'"
+if q "select public.purgar_wa_ventana_contacto(1, 100)" >/dev/null 2>&1; then echo "FALLA purga de 1 día aceptada"; fallos=$((fallos+1)); else echo "ok   purga de ventanas con menos de 2 días rechazada"; fi
+
 # Registro de decisiones: restricciones y retención.
 q "insert into public.wa_envio_registro(contexto,contacto_ult4,ventana,canal,motivo,ok) values ('prueba0360 vieja','0001','cerrada','plantilla','ventana_cerrada',true)"
 q "update public.wa_envio_registro set creado_en = now() - interval '200 days' where contexto='prueba0360 vieja'"

@@ -113,6 +113,32 @@ grant execute on function public.registrar_entrante_wa(text, timestamptz, text) 
 grant execute on function public.ventana_estado_wa(text, timestamptz) to service_role;
 grant execute on function public.ventana_abierta(text, timestamptz) to service_role;
 
+-- Retención: la ventana vive 24 h, así que una fila de más de unos días no sirve
+-- para nada y es un teléfono guardado de más (también el de remitentes que no son
+-- choferes). Mínimo 2 días para no tocar una ventana viva. NO hay cron que la
+-- llame todavía: quien programe el mantenimiento la invoca (ver BLOQUEOS/pendientes).
+create or replace function public.purgar_wa_ventana_contacto(
+  p_dias integer default 7, p_limite integer default 5000
+) returns integer
+language plpgsql security definer
+set search_path = ''
+as $$
+declare v_n integer;
+begin
+  if p_dias < 2 or p_limite < 1 then raise exception 'parámetros de purga inválidos'; end if;
+  with viejas as (
+    select telefono from public.wa_ventana_contacto
+     where ultimo_entrante_en < now() - make_interval(days => p_dias)
+     order by ultimo_entrante_en limit p_limite
+  )
+  delete from public.wa_ventana_contacto w using viejas v where w.telefono = v.telefono;
+  get diagnostics v_n = row_count;
+  return v_n;
+end $$;
+revoke all on function public.purgar_wa_ventana_contacto(integer, integer) from public, anon, authenticated;
+grant execute on function public.purgar_wa_ventana_contacto(integer, integer) to service_role;
+grant delete on table public.wa_ventana_contacto to service_role;
+
 -- ── 3. El motivo de cada decisión de envío ──────────────────────────────────
 -- Una fila por aviso proactivo: por qué canal salió y por qué. El teléfono NO se
 -- guarda (solo los últimos 4 dígitos, igual que los logs).
