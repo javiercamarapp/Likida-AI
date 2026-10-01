@@ -60,6 +60,7 @@ export const BUCKET = 'cartaporte-docs';
 export const api: typeof Real = {
   BUCKET,
   COLUMNAS_DOC: '',
+  COLUMNAS_LISTA: '',
   aDocumento: (r) => r as unknown as DocumentoFila,
 
   async subirArchivo(ruta, bytes) { falla('subirArchivo'); estado.archivos.set(ruta, new Uint8Array(bytes)); },

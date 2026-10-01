@@ -48,9 +48,16 @@ describe('calcularMetricas', () => {
     expect(m.costoUsdPorDocumento).toBeCloseTo(0.001333, 6);
   });
 
-  it('desglose por origen de la extracción', () => {
-    const xml = doc('x', { extraccion: { campos: {}, mercancias: [], meta: { origen: 'xml', nivel: 0, escalamientos: [], avisos: [], notasModelo: [], indiciosInyeccion: [] } } });
-    const m = calcularMetricas([xml, doc('l')], new Map([['l', 1]]));
-    expect(m.porOrigen).toEqual({ xml: { documentos: 1, sinCorreccion: 1 }, llm: { documentos: 1, sinCorreccion: 0 } });
+  it('desglose por origen de la lectura, sacado de las columnas (la lista liviana no trae la extracción)', () => {
+    const m = calcularMetricas([
+      doc('x', { nivelModelo: 0, perfilId: null, extraccion: null }),
+      doc('p', { nivelModelo: 0, perfilId: 'p1', extraccion: null }),
+      doc('pl', { nivelModelo: 2, perfilId: 'p1', extraccion: null }),
+      doc('l'),
+    ], new Map([['l', 1]]));
+    expect(m.porOrigen).toEqual({
+      xml: { documentos: 1, sinCorreccion: 1 }, perfil: { documentos: 1, sinCorreccion: 1 },
+      'perfil+llm': { documentos: 1, sinCorreccion: 1 }, llm: { documentos: 1, sinCorreccion: 0 },
+    });
   });
 });

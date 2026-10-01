@@ -53,6 +53,12 @@ export interface MetricasAgente {
 
 const r1 = (x: number): number => Math.round(x * 10) / 10;
 
+/** Cómo se leyó el documento, SIN abrir la extracción (la lista liviana no la trae): sale de las columnas. */
+export function origenDeLectura(d: Pick<DocumentoFila, 'nivelModelo' | 'perfilId'>): 'xml' | 'perfil' | 'perfil+llm' | 'llm' {
+  if (d.nivelModelo === 0) return d.perfilId === null ? 'xml' : 'perfil';
+  return d.perfilId === null ? 'llm' : 'perfil+llm';
+}
+
 export function calcularMetricas(docs: DocumentoFila[], correcciones: Map<string, number>): MetricasAgente {
   const por = (e: DocumentoFila['estado']) => docs.filter((d) => d.estado === e);
   const aprobados = por('aprobado');
@@ -64,7 +70,7 @@ export function calcularMetricas(docs: DocumentoFila[], correcciones: Map<string
 
   const porOrigen: MetricasAgente['porOrigen'] = {};
   for (const d of aprobados) {
-    const o = d.extraccion?.meta?.origen ?? 'desconocido';
+    const o = origenDeLectura(d);
     porOrigen[o] ??= { documentos: 0, sinCorreccion: 0 };
     porOrigen[o].documentos++;
     if ((correcciones.get(d.id) ?? 0) === 0) porOrigen[o].sinCorreccion++;

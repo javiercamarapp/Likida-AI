@@ -75,7 +75,7 @@ it('subir: un cliente que no es uuid se ignora; sin archivo, vacío o pesado se 
   dobles.recibirDocumento.mockClear();
   expect(await p.props.acciones.subir(null, fd({ clienteId: '' }))).toMatchObject({ ok: false, error: 'Elige un archivo.' });
   expect(await p.props.acciones.subir(null, fd({ archivo: new File([], 'vacio.pdf') }))).toMatchObject({ ok: false, error: 'Elige un archivo.' });
-  expect(await p.props.acciones.subir(null, fd({ archivo: new File([new Uint8Array(12 * 1024 * 1024 + 1)], 'gigante.pdf') }))).toMatchObject({ ok: false, error: expect.stringMatching(/12 MB/) });
+  expect(await p.props.acciones.subir(null, fd({ archivo: new File([new Uint8Array(9 * 1024 * 1024 + 1)], 'gigante.pdf') }))).toMatchObject({ ok: false, error: expect.stringMatching(/9 MB/) });
   expect(dobles.recibirDocumento).not.toHaveBeenCalled();
 });
 

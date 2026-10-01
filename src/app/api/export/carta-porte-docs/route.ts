@@ -65,7 +65,7 @@ export async function GET(req: Request) {
       cfg = v.config; nombre = guardada.nombre; formato = formatoParam === 'csv' || formatoParam === 'json' ? formatoParam : guardada.formato;
     }
 
-    const { filas } = await repo.listarDocumentos(t.tenantId, { estados: ['aprobado'], limite: MAX_DOCS });
+    const { filas } = await repo.listarDocumentos(t.tenantId, { estados: ['aprobado'], limite: MAX_DOCS, completo: true });
     const elegidos = idsParam ? filas.filter((d) => idsParam.includes(d.id)) : filas.filter((d) => d.exportadoEn === null);
     if (elegidos.length === 0) return new NextResponse('No hay documentos aprobados para exportar.', { status: 404 });
 
