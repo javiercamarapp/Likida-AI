@@ -299,6 +299,15 @@ export const api: typeof Real = {
     const ahora = estado.reloj.ahora().toISOString();
     return [...estado.docs.values()].filter((d) => !d.purgadoEn && d.retenerHasta < ahora).slice(0, limite).map((d) => ({ id: d.id, tenantId: d.tenantId, storageRuta: d.storageRuta }));
   },
+  async borrarDocumento(tenantId, id) {
+    const d = estado.docs.get(id);
+    if (!d || d.tenantId !== tenantId) return false;
+    estado.docs.delete(id);
+    estado.eventos = estado.eventos.filter((e) => e.documentoId !== id);
+    estado.correcciones = estado.correcciones.filter((c) => c.documentoId !== id);
+    estado.mercancias.forEach((m) => { if (m.documentoId === id) m.documentoId = null; });
+    return true;
+  },
   async marcarPurgado(tenantId, id) {
     const d = estado.docs.get(id);
     if (!d || d.tenantId !== tenantId || d.purgadoEn) return false;

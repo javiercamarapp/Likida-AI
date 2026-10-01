@@ -18,6 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
+import { anotarBitacora } from '../bitacora_escritura';
 import { DatoInvalido } from '../errores';
 import { CAMPOS_DOC, CAMPOS_MERCANCIA, MAX_MERCANCIAS, campoDoc, campoMercancia, etiquetaCampo, type CampoValor, type Extraccion } from './campos';
 import { detectarFormato, prepararContenido, type ContenidoDoc } from './contenido';
@@ -318,6 +319,25 @@ export async function reabrirDocumento(tenantId: string, id: string, versionVist
   if (!r) throw new ConflictoDeVersion();
   await repo.registrarEvento(tenantId, id, 'reabierto', actorId, { teniaViaje: d.viajeId !== null });
   return r;
+}
+
+/**
+ * Elimina un documento y su archivo (derecho de cancelación del titular, o un documento subido por error). Primero el
+ * archivo: si Storage no lo borra, la fila se queda (declarar eliminado un archivo que sigue ahí sería mentir).
+ * No se elimina uno que se está leyendo. Los renglones de mercancía que ya pasaron al viaje se conservan (son datos
+ * del viaje), sin la liga al documento.
+ */
+export async function eliminarDocumento(tenantId: string, id: string, actor: { id: string | null; email?: string }): Promise<void> {
+  const d = await cargar(tenantId, id);
+  if (d.estado === 'procesando' && d.procesandoHasta && new Date(d.procesandoHasta) > new Date()) {
+    throw new DatoInvalido('El documento se está leyendo ahora mismo. Espera un momento y vuelve a intentarlo.');
+  }
+  if (d.storageRuta) await repo.borrarArchivo(d.storageRuta);
+  if (!(await repo.borrarDocumento(tenantId, id))) throw new DatoInvalido('Ese documento ya no existe.');
+  await anotarBitacora(
+    { tenantId, actor: { id: actor.id ?? undefined, email: actor.email }, accion: 'ccp.documento_eliminado', entidad: 'tenant', entidadId: tenantId, detalle: { documentoId: id, formato: d.formato, estado: d.estado, conViaje: d.viajeId !== null } },
+    { evento: 'carta_porte_docs.bitacora_no_escribio' },
+  );
 }
 
 /** Lo que la pantalla de revisión necesita para pintar los rótulos de los campos. */

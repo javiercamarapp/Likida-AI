@@ -2,9 +2,10 @@ import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { puedeAdministrar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { DatoInvalido, mensajeParaPantalla } from '@/lib/likida/errores';
-import { aprobarDocumento, abrirRevision, corregirCampos, crearViajeDeDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento } from '@/lib/likida/carta_porte_docs/bandeja';
+import { aprobarDocumento, abrirRevision, corregirCampos, crearViajeDeDocumento, eliminarDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento } from '@/lib/likida/carta_porte_docs/bandeja';
 import { detectarFormato, prepararContenido } from '@/lib/likida/carta_porte_docs/contenido';
 import { cambiosDeFormulario } from '@/lib/likida/carta_porte_docs/formulario';
 import { revisionDe } from '@/lib/likida/carta_porte_docs/presentacion';
@@ -130,6 +131,13 @@ export default async function PaginaRevision({
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
         return { ok: true, mensaje: 'Documento reabierto: ya se puede corregir.' };
       }
+      if (intencion === 'eliminar') {
+        // Borrar datos personales de terceros es un acto de administración, no de revisión.
+        if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota puede eliminar un documento.' };
+        await eliminarDocumento(s.tenantId, id, actor);
+        revalidatePath(RUTA_PADRE);
+        return { ok: true, mensaje: 'Documento y archivo eliminados. Vuelve a la bandeja.' };
+      }
       if (intencion === 'viaje') {
         const r = await crearViajeDeDocumento(s.tenantId, id, actor, operador);
         revalidatePath(ruta);
@@ -153,6 +161,7 @@ export default async function PaginaRevision({
       acciones={{ revisar }}
       sufijo={sufijoTenant(sp)}
       salida={viaje ? { folio: viaje.folio ?? viaje.id.slice(0, 8) } : null}
+      puedeEliminar={puedeAdministrar(rol)}
     />
   );
 }

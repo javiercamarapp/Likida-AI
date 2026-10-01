@@ -172,3 +172,14 @@ it('la acción usa el tenant de la SESIÓN: con otra flota el documento «no est
   expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/no está en tu flota/) });
   expect(estado.docs.get(ID)!.extraccion!.campos.origen_cp.valor).toBe('44100');
 });
+
+it('eliminar: solo quien ADMINISTRA la flota; el encargado (que sí revisa) no', async () => {
+  sembrarDoc({ estado: 'rechazado', rechazoMotivo: 'x' });
+  const p = await montar();
+  sesion = { ...sesion, rol: 'encargado' };
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: ver(), intencion: 'eliminar' }))).toEqual({ ok: false, error: 'Solo quien administra la flota puede eliminar un documento.' });
+  expect(estado.docs.has(ID)).toBe(true);
+  sesion = { ...sesion, rol: 'flota_admin' };
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: ver(), intencion: 'eliminar' }))).toMatchObject({ ok: true });
+  expect(estado.docs.has(ID)).toBe(false);
+});

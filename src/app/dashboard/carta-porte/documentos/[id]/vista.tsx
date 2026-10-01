@@ -75,7 +75,7 @@ function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
   );
 }
 
-export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', salida = null }: {
+export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', salida = null, puedeEliminar = false }: {
   doc: DocumentoFila;
   revision: Revision | null;
   original: OriginalVista;
@@ -85,6 +85,8 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
   sufijo?: string;
   /** El resultado de la salida al viaje ya conocido (viaje ligado). */
   salida?: { folio: string } | null;
+  /** Quien administra la flota puede eliminar el documento y su archivo (cancelación ARCO / subido por error). */
+  puedeEliminar?: boolean;
 }) {
   const editable = doc.estado === 'por_revisar';
   const meta = doc.extraccion?.meta;
@@ -226,6 +228,18 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
           )}
         </section>
       </div>
+
+      {puedeEliminar && acciones.revisar && doc.estado !== 'procesando' && (
+        <FormaAccion accion={acciones.revisar} className="card p-3.5 space-y-2 max-w-xl">
+          <input type="hidden" name="documentoId" value={doc.id} />
+          <input type="hidden" name="version" value={doc.version} />
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+            Eliminar borra el archivo y todo lo leído de él (nombres, licencias y RFC de terceros). Úsalo para una solicitud de cancelación o un documento subido por error.
+            Las mercancías que ya pasaron a un viaje se conservan.
+          </p>
+          <BotonEnvio variante="peligro" intencion="eliminar" etiqueta="Eliminar documento y archivo" pendiente="Eliminando…" icono={<Trash2 width={13} height={13} strokeWidth={1.75} />} />
+        </FormaAccion>
+      )}
 
       {eventos.length > 0 && (
         <details className="card p-3.5">
