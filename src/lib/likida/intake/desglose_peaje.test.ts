@@ -395,3 +395,18 @@ describe('bitacoraACsv', () => {
     expect(csv).toContain('Sin líneas conciliadas todavía');
   });
 });
+
+describe('bitacoraACsv — texto del proveedor no se abre como fórmula en Excel', () => {
+  it('neutraliza =, +, - y @ en caseta, tag, folio, origen y destino; los montos no se tocan', () => {
+    const b: BitacoraRmf918 = {
+      desgloseId: 'd1', proveedor: 'PASE', periodoDesde: '2026-08-01', periodoHasta: '2026-08-02', leyendas: LEYENDAS_BITACORA_RMF_918,
+      filas: [{
+        viajeFolio: '=1+1', origen: '+52 55', destino: '@SUM(A1)', fechaCruce: '2026-08-01', caseta: '-cmd|calc', tag: 'IMDM1',
+        montoConciliado: -189.5, posicionesGpsDia: null,
+      }],
+    };
+    const csv = bitacoraACsv(b);
+    const fila = csv.trim().split('\n').pop()!;
+    expect(fila).toBe("'=1+1,'+52 55,'@SUM(A1),2026-08-01,'-cmd|calc,IMDM1,-189.5,sin datos");
+  });
+});
