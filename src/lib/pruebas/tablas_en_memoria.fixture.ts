@@ -75,17 +75,30 @@ export interface BaseEnMemoria {
   /** Sustituye a `supabaseAdmin()`. */
   cliente: { from: (t: string) => unknown; rpc: (n: string, a?: unknown) => unknown };
   tabla: (t: string) => Fila[];
-  /** La próxima operación `op` sobre `tabla` devuelve este error (una sola vez). */
-  fallarProxima: (tabla: string, op: 'select' | 'update' | 'insert' | 'delete', error: ErrorDb) => void;
+  /** La próxima operación `op` sobre `tabla` devuelve este error (una sola vez);
+   *  con `saltar = n` deja pasar las primeras n y falla la siguiente. */
+  fallarProxima: (tabla: string, op: 'select' | 'update' | 'insert' | 'delete', error: ErrorDb, saltar?: number) => void;
   /** Programa la respuesta de una RPC. */
   rpcRespuesta: (nombre: string, f: (args: unknown) => { data: unknown; error: ErrorDb | null }) => void;
   /** Todas las operaciones ejecutadas, en orden (para afirmar «no se llamó a…»). */
   bitacora: Array<{ tabla: string; op: string; payload?: Fila | Fila[] }>;
 }
 
-export function crearBaseEnMemoria(inicial: Record<string, Fila[]> = {}): BaseEnMemoria {
+/** Una restricción UNIQUE que el doble hace cumplir al insertar, con el nombre del
+ *  índice real (el código de producción reconoce el 23505 por ese nombre). */
+export interface RestriccionUnica { tabla: string; nombre: string; columnas: string[] }
+
+/** Los DEFAULT de las columnas que la base rellena sola al insertar (p. ej.
+ *  `activo` = true): sin ellos una fila recién creada no se parece a una real. */
+export type ValoresPorOmision = Record<string, Fila>;
+
+export function crearBaseEnMemoria(
+  inicial: Record<string, Fila[]> = {},
+  restricciones: RestriccionUnica[] = [],
+  porOmision: ValoresPorOmision = {},
+): BaseEnMemoria {
   const tablas = new Map<string, Fila[]>(Object.entries(inicial).map(([k, v]) => [k, v.map((f) => ({ ...f }))]));
-  const fallos: Array<{ tabla: string; op: string; error: ErrorDb }> = [];
+  const fallos: Array<{ tabla: string; op: string; error: ErrorDb; saltar: number }> = [];
   const rpcs = new Map<string, (a: unknown) => { data: unknown; error: ErrorDb | null }>();
   const bitacora: BaseEnMemoria['bitacora'] = [];
   const filasDe = (t: string): Fila[] => { if (!tablas.has(t)) tablas.set(t, []); return tablas.get(t)!; };
@@ -135,7 +148,10 @@ export function crearBaseEnMemoria(inicial: Record<string, Fila[]> = {}): BaseEn
     private ejecutar(): { data: unknown; error: ErrorDb | null; count?: number | null } {
       bitacora.push({ tabla: this.t, op: this.op, payload: this.payload ?? undefined });
       const i = fallos.findIndex((x) => x.tabla === this.t && x.op === this.op);
-      if (i >= 0) { const [{ error }] = fallos.splice(i, 1); return { data: null, error }; }
+      if (i >= 0) {
+        if (fallos[i].saltar > 0) fallos[i].saltar--;
+        else { const [{ error }] = fallos.splice(i, 1); return { data: null, error }; }
+      }
       const filas = filasDe(this.t);
       const cumple = (f: Fila) => this.filtros.every((p) => p(f));
       const proyectar = (f: Fila): Fila => {
@@ -154,13 +170,26 @@ export function crearBaseEnMemoria(inicial: Record<string, Fila[]> = {}): BaseEn
 
       if (this.op === 'insert') {
         const lote = Array.isArray(this.payload) ? this.payload : [this.payload as Fila];
+        // Un insert es ATÓMICO (como en Postgres): si una fila choca contra un
+        // UNIQUE, ninguna del lote entra.
+        if (!this.opcionesInsert?.ignoreDuplicates) {
+          const vistas: Fila[] = [...filas];
+          for (const f of lote) {
+            for (const r of restricciones.filter((x) => x.tabla === this.t)) {
+              if (vistas.some((x) => r.columnas.every((k) => x[k] === f[k]))) {
+                return { data: null, error: { message: `duplicate key value violates unique constraint "${r.nombre}"`, code: '23505' } };
+              }
+            }
+            vistas.push(f);
+          }
+        }
         const nuevos: Fila[] = [];
         for (const f of lote) {
           if (this.opcionesInsert?.onConflict && this.opcionesInsert.ignoreDuplicates) {
             const llaves = this.opcionesInsert.onConflict.split(',');
             if (filas.some((x) => llaves.every((k) => x[k] === f[k]))) continue;
           }
-          const fila = { id: f.id ?? `${this.t}-${filas.length + 1}`, ...f };
+          const fila = { id: f.id ?? `${this.t}-${filas.length + 1}`, ...(porOmision[this.t] ?? {}), ...f };
           filas.push(fila);
           nuevos.push(fila);
         }
@@ -211,7 +240,7 @@ export function crearBaseEnMemoria(inicial: Record<string, Fila[]> = {}): BaseEn
       },
     },
     tabla: filasDe,
-    fallarProxima: (tabla, op, error) => { fallos.push({ tabla, op, error }); },
+    fallarProxima: (tabla, op, error, saltar = 0) => { fallos.push({ tabla, op, error, saltar }); },
     rpcRespuesta: (nombre, f) => { rpcs.set(nombre, f); },
     bitacora,
   };
