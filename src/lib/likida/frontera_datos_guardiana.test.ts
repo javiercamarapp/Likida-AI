@@ -50,6 +50,16 @@ import { join, relative } from 'node:path';
  * `processor.ts` (ambos fuera de la frontera, ambos suben a ese bucket
  * directo). Funcionalidad nueva, no código migrado.
  *
+ * LOOP PUNTA A PUNTA (1-oct-2026), Agente 1 «liquidación externa» — 252 → 254
+ * archivos (las llamadas, 1,284 → ~1,300, caben en el margen y no se tocan).
+ * Dos módulos nuevos, ambos deliberadamente PEGADOS al mínimo: `liquidacion_externa/
+ * repo.ts` junta TODO el acceso a datos del módulo (tablas de la 0370, Storage del
+ * bucket `liquidaciones`, lectura del outbox, razón social) en vez de repartirlo
+ * en un archivo por tabla, y `liquidacion_externa/trabajo.ts` existe aparte
+ * porque es la ÚNICA consulta que cruza flotas (el cron barre la cola de todas) y
+ * `consultas_admin_filtran_tenant.test.ts` tiene que poder exentar SOLO esa sin
+ * exentar el resto. Funcionalidad nueva, no código migrado.
+ *
  * AUDITORÍA 28, ARQ-M1 (LA UNIDAD EQUIVOCADA): hasta aquí el techo vivía en
  * ARCHIVOS — y con 252 archivos medidos contra un techo de 252, este guardia
  * llevaba CERO margen: cualquier archivo nuevo con un solo `.from(`/`.rpc(`
@@ -70,7 +80,7 @@ import { join, relative } from 'node:path';
  * pestañear deja de medir nada — igual que el de arriba, se sube a mano, en
  * el commit que explica por qué.
  */
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 252;
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 254;
 const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_328;
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
