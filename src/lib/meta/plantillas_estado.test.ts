@@ -90,7 +90,7 @@ describe('compararConMeta', () => {
 
   it('el resumen cuenta usables y faltantes', () => {
     const r = compararConMeta(TODAS.slice(0, 3));
-    expect(resumenEstado(r)).toMatch(/3 de 18 usables hoy; 15 por someter/);
+    expect(resumenEstado(r)).toMatch(new RegExp(`3 de ${TODAS.length} usables hoy; ${TODAS.length - 3} por someter`));
   });
 });
 

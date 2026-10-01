@@ -184,7 +184,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Botones:** ninguno
 
-## Plantillas nuevas, listas para enviar a aprobación (10)
+## Plantillas nuevas, listas para enviar a aprobación (13)
 
 ### `regla_aviso_v1`
 
@@ -388,4 +388,64 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 | `{{5}}` | última ubicación conocida | Carretera 15D km 120 |
 
 - **Botones:** «Ya lo atiendo» (respuesta rápida, payload `jefe_atiendo:<viaje_id>`); «Abrir tablero» (URL fija https://app.likida.ai/dashboard/despacho)
+
+### `vigia_respuesta_cliente_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 4 — Vigía de servicio al cliente. Respuesta de la flota a un CLIENTE (ya aprobada por el gerente) cuando su ventana de 24 h está cerrada. Solo sale a clientes con consentimiento y sin baja.
+- **Llamador en código:** src/lib/likida/vigia/enviar.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Respuesta de {{1}} sobre tu servicio de transporte: {{2}} Si ya no quieres recibir mensajes por este medio, responde BAJA.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | razón social de la flota | Transportes del Norte |
+| `{{2}}` | texto de la respuesta (≤ 300 caracteres, sin saltos de línea) | Tu viaje F-1042 va en curso; la última posición del GPS es de hace 12 minutos. |
+
+- **Botones:** ninguno
+
+### `vigia_aprobacion_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 4 — Vigía de servicio al cliente. Pedir al gerente, con un toque, que apruebe la respuesta que el Vigía redactó para un cliente (respaldo fuera de su ventana de 24 h).
+- **Llamador en código:** src/lib/likida/vigia/avisos.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Vigía de servicio: {{1}} escribió «{{2}}». Respuesta propuesta: «{{3}}». ¿La envío?
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | cliente | Compras Acme |
+| `{{2}}` | mensaje del cliente (≤ 160 caracteres) | ¿Dónde va mi viaje F-1042? |
+| `{{3}}` | respuesta propuesta (≤ 280 caracteres) | Tu viaje F-1042 va en curso; última posición hace 12 minutos. |
+
+- **Botones:** «Enviar» (respuesta rápida, payload `vig_ok:<viaje_id>`); «No enviar» (respuesta rápida, payload `vig_no:<viaje_id>`); «Yo me encargo» (respuesta rápida, payload `vig_tomo:<viaje_id>`)
+
+### `vigia_escalamiento_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 4 — Vigía de servicio al cliente. Escalar al gerente responsable (nivel 1) o al dueño (nivel 2) un cliente molesto, que pide un humano o que lleva más del SLA sin respuesta.
+- **Llamador en código:** src/lib/likida/vigia/avisos.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Vigía de servicio: el cliente {{1}} necesita atención ({{2}}). Nivel {{3}} de escalamiento. Revísalo en {{4}} o toca «Yo me encargo».
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | cliente | Compras Acme |
+| `{{2}}` | motivo (sin respuesta, molestia, pide un humano…) | lleva 45 minutos sin respuesta |
+| `{{3}}` | nivel (1 o 2) | 1 |
+| `{{4}}` | liga al tablero del Vigía | https://app.likida.ai/dashboard/agentes/vigia |
+
+- **Botones:** «Yo me encargo» (respuesta rápida, payload `vig_tomo:<viaje_id>`)
 
