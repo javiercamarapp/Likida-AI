@@ -473,7 +473,7 @@ export async function aprobarMensaje(actor: Actor, mensajeId: string, deps: Deps
 
   // El reclamo condicional es lo que impide el doble envío (dos toques, o el botón y el tablero a la vez).
   const reclamado = await repo.reclamarEstado(actor.tenantId, mensajeId, [...ESTADOS_DECIDIBLES], 'aprobado', {
-    aprobadoPor: actor.userId, editado: texto !== undefined && texto !== (m.texto ?? ''), ...(texto !== undefined ? { texto } : {}),
+    aprobadoPor: actor.userId, editado: texto !== undefined && texto !== limpiarTexto(m.texto ?? '').slice(0, MAX_TEXTO_AL_CLIENTE), ...(texto !== undefined ? { texto } : {}),
   });
   if (!reclamado) {
     const actual = await repo.mensaje(actor.tenantId, mensajeId);
