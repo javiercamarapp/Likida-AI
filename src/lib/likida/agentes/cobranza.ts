@@ -4,7 +4,8 @@ import { acotada } from '../presupuesto';
 import { traerTodo, traerPorIds, conteo } from '../pg';
 import { avisarCorridasPorFlota } from './notificaciones';
 import { registrarCorrida } from './corridas';
-import { enviarTexto, sendTemplate, motivoDeFalloWhatsApp, esReintentableMeta } from '@/lib/meta/client';
+import { enviarConFallback } from '@/lib/meta/enviar_con_fallback';
+import { PLANTILLA } from '@/lib/meta/plantillas_catalogo';
 import { alertarOperador } from '@/lib/observability/alerta';
 import {
   CONFIG_COBRANZA_DEFAULT, validarConfigCobranza, dentroDeVentana,
@@ -309,39 +310,34 @@ export async function ejecutarCobranza(
     /** RES-1: el rechazo fue "vuelve más tarde" y el tier NO debe consumirse. */
     let reintentable = false;
     try {
-      // `enviarTexto` (RES-1): el mismo envío que `sendText`, con el código de
-      // Meta — que es lo único que distingue "este teléfono no sirve" de "vas
-      // demasiado rápido", y de eso depende si el tier se quema o no.
-      const envio = await enviarTexto(v.operadorTelefono as string, armarMensajeCobranza(v.folio, v.dias, config));
-      enviado = envio.ok;
-      if (!enviado) {
-        // LA PLANTILLA CUANDO EL TEXTO NO PUEDE SALIR (auditoría 3, AG-A2).
-        // La población objetivo de este agente es el chofer que lleva DÍAS
-        // sin escribir — exactamente el que trae la ventana de 24 h cerrada,
-        // donde Meta rechaza todo texto libre. Sin este fallback el agente
-        // era mudo para quien existe: el claim consumía el tier en bitácora
-        // y el chofer no recibía NI UNO de los tres contactos. Mismo patrón
-        // que la escalación (escalar_viaje.ts): el texto bueno primero, la
-        // plantilla aprobada solo cuando Meta lo rechaza. El cuerpo de
-        // `recordatorio_cierre` se escribió para el cierre de liquidación —
-        // menos preciso que el texto con los días y la firma, pero es lo
-        // ÚNICO que WhatsApp entrega con la ventana cerrada, y habla del
-        // mismo pendiente: cerrar el viaje.
-        const env = await sendTemplate(v.operadorTelefono as string, 'recordatorio_cierre', {
-          parametros: [v.operadorNombre ?? 'Operador', v.folio ?? 'sin folio'],
-        });
-        if (env.ok) {
-          enviado = true;
-          detalle = 'plantilla recordatorio_cierre (ventana de 24 h cerrada)';
-        } else {
-          detalle = `WhatsApp rechazó el texto libre y la plantilla también falló: ${motivoDeFalloWhatsApp(env.error, env.codigo)}`;
-          // ── RES-1: UN 429 NO ES UN TIER GASTADO ────────────────────────
-          // El claim es el INSERT con unique(viaje, tier): si se queda ahí
-          // ante un rate limit, ese tier NO SE REINTENTA NUNCA (`tierPendiente`
-          // lo cuenta como contacto hecho) y el chofer se queda sin uno de sus
-          // tres avisos sin que nadie haya podido mandárselo.
-          reintentable = esReintentableMeta(env.codigo) || esReintentableMeta(undefined, (envio as { status?: number }).status);
-        }
+      // `enviarConFallback` (P0-B, 0360): el texto con los días y la firma cuando
+      // la ventana de 24 h está abierta, y la plantilla `recordatorio_cierre`
+      // cuando no — decidido por el registro de la ventana del chofer, sin gastar
+      // una llamada de texto que Meta rechazaría con 131047.
+      //
+      // LA POBLACIÓN OBJETIVO de este agente es el chofer que lleva DÍAS sin
+      // escribir (auditoría 3, AG-A2): exactamente el de la ventana cerrada. El
+      // cuerpo de `recordatorio_cierre` es menos preciso que el texto, pero es lo
+      // ÚNICO que WhatsApp entrega ahí y habla del mismo pendiente: cerrar el viaje.
+      //
+      // RES-1: `reintentable` dice si fue «vuelve más tarde» (429, bloqueo): en ese
+      // caso el tier NO se consume. Un rechazo que no es de ventana ya no cae a
+      // plantilla (el texto reintentable ya quedó en `wa_outbox`; mandar además la
+      // plantilla duplicaba el aviso al reintentarse).
+      const envio = await enviarConFallback(v.operadorTelefono as string, {
+        texto: armarMensajeCobranza(v.folio, v.dias, config),
+        plantilla: { nombre: PLANTILLA.recordatorioCierre, parametros: [v.operadorNombre ?? 'Operador', v.folio ?? 'sin folio'] },
+        contexto: 'cobranza.comprobantes',
+        tenantId,
+      });
+      if (envio.ok) {
+        enviado = true;
+        if (envio.via === 'plantilla') detalle = 'plantilla recordatorio_cierre (ventana de 24 h cerrada)';
+      } else {
+        detalle = envio.fueraDeVentana
+          ? `WhatsApp rechazó el texto libre y la plantilla también falló: ${envio.mensaje}`
+          : `WhatsApp rechazó el mensaje: ${envio.mensaje}`;
+        reintentable = envio.reintentable;
       }
     } catch (e) {
       detalle = e instanceof Error ? e.message : 'error inesperado al enviar';
