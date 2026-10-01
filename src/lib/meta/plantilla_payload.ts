@@ -179,3 +179,42 @@ export function armarComponentesPlantilla(op: OpcionesPlantilla = {}): ArmadoPla
 
   return { ok: true, componentes: componentes.length > 0 ? componentes : undefined };
 }
+
+/**
+ * EL SANEADOR CENTRAL de los parámetros de texto de un payload de plantilla
+ * (auditoría ola 1, #25 — error de Meta 132018).
+ *
+ * `armarComponentesPlantilla` ya normaliza lo que PASA por él (sendTemplate), pero
+ * había payloads de plantilla armados a mano que le pasaban a Meta el texto crudo:
+ * `encolarBotonesWhatsApp` (gps_alerta_critica: la alerta de colisión de la cámara
+ * lleva «\n\n») y las filas que YA estaban en `wa_outbox`. 132018 es un código
+ * terminal: la fila queda `dead` y el jefe nunca se entera de la colisión.
+ *
+ * Esta función recorre `template.components[].parameters[]` y aplana TODO
+ * parámetro `type: 'text'` (saltos de línea, tabuladores y espacios repetidos →
+ * un espacio). No toca `payload` de botones (id interno), `link`/`filename`
+ * (no son parámetros de texto) ni mensajes que no son plantilla. Devuelve una
+ * COPIA; no muta el original. Se aplica en dos sitios: al armar el payload y, como
+ * última defensa, justo antes de que el cron del outbox llame a Meta.
+ */
+export function sanearPayloadWhatsApp<T>(payload: T): T {
+  if (!payload || typeof payload !== 'object') return payload;
+  const p = payload as Record<string, unknown>;
+  if (p.type !== 'template' || !p.template || typeof p.template !== 'object') return payload;
+  const tpl = p.template as Record<string, unknown>;
+  if (!Array.isArray(tpl.components)) return payload;
+  const componentes = tpl.components.map((c: unknown) => {
+    if (!c || typeof c !== 'object') return c;
+    const comp = c as Record<string, unknown>;
+    if (!Array.isArray(comp.parameters)) return c;
+    return {
+      ...comp,
+      parameters: comp.parameters.map((par: unknown) => {
+        if (!par || typeof par !== 'object') return par;
+        const q = par as Record<string, unknown>;
+        return q.type === 'text' && typeof q.text === 'string' ? { ...q, text: normalizarParametro(q.text) } : par;
+      }),
+    };
+  });
+  return { ...p, template: { ...tpl, components: componentes } } as T;
+}

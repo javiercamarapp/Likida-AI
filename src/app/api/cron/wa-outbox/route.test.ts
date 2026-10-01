@@ -164,3 +164,41 @@ describe('receipts del dominio no ocultan un backstop fallido', () => {
     expect(registrarLatido).toHaveBeenLastCalledWith('wa-outbox', 'parcial', expect.any(Object));
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA OLA 1, #25 — ÚLTIMA DEFENSA DEL 132018: filas viejas del outbox con
+// parámetros de plantilla crudos (saltos de línea) salen aplanadas.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cron wa-outbox — parámetros de plantilla con saltos de línea (132018)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    interruptor = 'encendido';
+    process.env.WHATSAPP_ACCESS_TOKEN = 'token-de-prueba';
+    process.env.WHATSAPP_PHONE_NUMBER_ID = '123456';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ messages: [{ id: 'wamid.PRUEBA' }] }), { status: 200 },
+    )));
+  });
+
+  it('una fila encolada con \\n\\n en el parámetro sale sin saltos de línea ni tabs', async () => {
+    reclamarSalidasWhatsApp.mockResolvedValueOnce([{
+      id: 'out-gps',
+      payload: {
+        messaging_product: 'whatsapp', to: '5215512345678', type: 'template',
+        template: {
+          name: 'gps_alerta_critica', language: { code: 'es_MX' },
+          components: [
+            { type: 'body', parameters: [{ type: 'text', text: '🚨 Colisión.\n\nMárcale ahora.\tYa.      Gracias' }] },
+            { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: 'asi_ok:1' }] },
+          ],
+        },
+      },
+    }] as never);
+    await GET(new Request('https://likida.ai/api/cron/wa-outbox', CON_SECRETO));
+    const [, init] = (fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0];
+    const enviado = JSON.parse(String(init.body));
+    expect(enviado.template.components[0].parameters[0].text).toBe('🚨 Colisión. Márcale ahora. Ya. Gracias');
+    // el payload del botón no se toca
+    expect(enviado.template.components[1].parameters[0].payload).toBe('asi_ok:1');
+  });
+});

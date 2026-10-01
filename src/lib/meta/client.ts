@@ -474,15 +474,20 @@ export async function encolarBotonesWhatsApp(
   // Las alertas GPS pueden iniciar una conversación fuera de la ventana de
   // 24 h: una plantilla aprobada es obligatoria. La quick reply conserva el
   // acuse semántico aunque Meta ya no acepte un interactive de sesión.
+  // El cuerpo lleva saltos de línea (las alertas se arman en párrafos) y Meta
+  // rechaza con 132018 (terminal) un parámetro con \n, tabs o >4 espacios: el
+  // armador central los aplana y rechaza vacío/largo ANTES de encolar.
+  const armado = armarComponentesPlantilla({
+    parametros: [cuerpo],
+    botones: [{ tipo: 'respuesta_rapida', indice: 0, payload: botones[0].id }],
+  });
+  if (!armado.ok) {
+    logger.error('wa.encolarButtons.invalido', { error: armado.error });
+    return null;
+  }
   const payload = {
     messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'template',
-    template: {
-      name: 'gps_alerta_critica', language: { code: 'es_MX' },
-      components: [
-        { type: 'body', parameters: [{ type: 'text', text: cuerpo }] },
-        { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: botones[0].id }] },
-      ],
-    },
+    template: { name: 'gps_alerta_critica', language: { code: 'es_MX' }, components: armado.componentes },
   };
   return encolarSalidaWhatsAppDedupe(dedupeKey, payload, 'alerta GPS pendiente de entrega');
 }
@@ -828,12 +833,16 @@ export async function enviarRespuestaArco(telefono: string, respuesta: string): 
       const j = JSON.parse(crudo) as { error?: { code?: number } };
       const FUERA_VENTANA = [131047, 131026, 131042];
       if (j.error?.code && FUERA_VENTANA.includes(j.error.code)) {
+        // La respuesta ARCO suele traer saltos de línea: sin aplanar, Meta
+        // contesta 132018 y el titular nunca recibe su respuesta.
+        const armado = armarComponentesPlantilla({ parametros: ['la flota', respuesta] });
+        if (!armado.ok) {
+          logger.warn('arco.envio_plantilla_invalida', { para, error: armado.error });
+          return { ok: false, error: 'fuera de la ventana de 24h y la respuesta no cabe en la plantilla' };
+        }
         const tpl = await envia({
           type: 'template',
-          template: {
-            name: 'respuesta_arco_v2', language: { code: 'es' },
-            components: [{ type: 'body', parameters: [{ type: 'text', text: 'la flota' }, { type: 'text', text: respuesta }] }],
-          },
+          template: { name: 'respuesta_arco_v2', language: { code: 'es' }, components: armado.componentes },
         });
         if (tpl.ok) { logger.info('arco.envio_plantilla_ok', { para }); return { ok: true }; }
         const tplCrudo = await tpl.text().catch(() => '');
