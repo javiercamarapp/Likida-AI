@@ -87,10 +87,12 @@ export type LecturaCuerpo =
  * sin esa cabecera, el contador de bytes corta el stream antes de materializar
  * un cuerpo chunked completo.
  */
-export async function leerCuerpo(req: Request): Promise<LecturaCuerpo> {
-  const lectura = await leerTextoAcotado(req, MAX_CUERPO_BYTES);
+export async function leerCuerpo(req: Request, maxBytes: number = MAX_CUERPO_BYTES): Promise<LecturaCuerpo> {
+  // `maxBytes` solo lo sube una ruta que de verdad recibe un archivo (el PDF de
+  // `/v1/liquidaciones-externas`, en base64). Las demás conservan los 16 KB.
+  const lectura = await leerTextoAcotado(req, maxBytes);
   if (!lectura.ok && lectura.motivo === 'demasiado_grande') {
-    return { ok: false, respuesta: errorApi('parametro_invalido', `El cuerpo no puede pasar de ${MAX_CUERPO_BYTES} bytes.`) };
+    return { ok: false, respuesta: errorApi('parametro_invalido', `El cuerpo no puede pasar de ${maxBytes} bytes.`) };
   }
   if (!lectura.ok) {
     return { ok: false, respuesta: errorApi('parametro_invalido', 'No se pudo leer el cuerpo de la petición.') };

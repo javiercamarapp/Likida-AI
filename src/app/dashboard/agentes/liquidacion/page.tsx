@@ -19,6 +19,12 @@ import { FormaEstrategiaLiquidacion, type ResultadoEstrategia } from '../estrate
 import { Bloque, EsqTabla, vigilar } from '../../bloque';
 import { colaRevision, leerFiltrosCola, decodificarCursorCola, listarTerminales } from '@/lib/likida/revision';
 import { buscarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/likida/repo';
+import {
+  contarPorEstado, contarNoCoincide, listarLiquidacionesExternas, type FiltroListado,
+} from '@/lib/likida/liquidacion_externa/repo';
+import { reintentarLiquidacionExterna } from '@/lib/likida/liquidacion_externa/servicio';
+import { decodificarCursor, codificarCursor } from '@/app/api/v1/_comun';
+import { SeccionExternas, leerFiltroExterno, leerMensajeExterno } from './externas';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +65,9 @@ export default async function PaginaAgenteLiquidacion({
     vista?: string; tenant?: string; rol?: string;
     rev?: string; estado?: string; operador?: string; unidad?: string;
     terminal?: string; desde?: string; hasta?: string; cursor?: string;
+    // La sección «Liquidaciones externas» (0370) tiene SUS parámetros, con
+    // prefijo, para que su filtro no pise a los de la cola de arriba.
+    ext_estado?: string; ext_cursor?: string; ext_msg?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -119,6 +128,45 @@ export default async function PaginaAgenteLiquidacion({
     ...(sp.rol ? [['rol', sp.rol] as [string, string]] : []),
   ];
 
+  // ── LIQUIDACIONES EXTERNAS (0370) ───────────────────────────────────────
+  // Su propia consulta y su propio `Bloque`: primarias (sin `safe`) — una
+  // sección que no se pudo leer enseña su error, jamás «ninguna liquidación».
+  const filtroExterno = leerFiltroExterno(sp.ext_estado);
+  const filtroListado: FiltroListado = filtroExterno === 'no_coincide'
+    ? { acuseTipo: 'no_coincide' }
+    : filtroExterno ? { estado: filtroExterno } : {};
+  const cursorExterno = sp.ext_cursor ? decodificarCursor(sp.ext_cursor) : null;
+  const pFichasExternas = vigilar(Promise.all([contarPorEstado(tenantId), contarNoCoincide(tenantId)])
+    .then(([porEstado, noCoincide]) => ({ porEstado, noCoincide })));
+  const pPaginaExterna = vigilar(listarLiquidacionesExternas(tenantId, filtroListado, 20, cursorExterno, true)
+    .then((r) => {
+      const ultima = r.filas.at(-1);
+      return {
+        filas: r.filas, hayMas: r.hayMas, total: r.total,
+        siguiente: r.hayMas && ultima ? codificarCursor({ creadoEn: ultima.creadaEn, id: ultima.id }) : null,
+      };
+    }));
+
+  /** Reintenta UNA entrega fallida. Re-gatea con la sesión REAL (es alcanzable
+   *  por POST directo) y siempre vuelve a la pantalla con el resultado en la
+   *  URL: ni un éxito ni un fallo pasan en silencio. */
+  async function reintentarExterna(fd: FormData): Promise<void> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
+    const id = String(fd.get('id') ?? '');
+    let resultado: 'reintentada' | 'no_aplica' | 'no_encontrada' | 'error' = 'no_encontrada';
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      try {
+        resultado = await reintentarLiquidacionExterna(s.tenantId, id.toLowerCase(), s.userId);
+      } catch {
+        resultado = 'error';
+      }
+    }
+    revalidatePath('/dashboard/agentes/liquidacion');
+    redirect(`/dashboard/agentes/liquidacion?${new URLSearchParams([...contexto, ['ext_msg', resultado]]).toString()}#liquidaciones-externas`);
+  }
+
   // Derivadas: `.then` sobre promesas YA lanzadas — no añaden espera, solo
   // dicen qué hacer cuando lleguen, y agrupan lo que una MISMA tarjeta pinta.
   const extra: ExtraAgenteLiquidacion = {
@@ -166,6 +214,15 @@ export default async function PaginaAgenteLiquidacion({
       kpis={pKpis}
       liquidaciones={pLiqs}
       cola={{ cola: pCola, filtros, terminales: pTerminales, buscar: buscarFiltro, contexto, sufijo }}
+      externas={
+        <Bloque mensaje="No se pudieron leer las liquidaciones externas." esqueleto={<EsqTabla filas={4} />}>
+          <SeccionExternas
+            fichas={pFichasExternas} pagina={pPaginaExterna} filtroEstado={filtroExterno}
+            contexto={contexto} mensaje={leerMensajeExterno(sp.ext_msg)}
+            puedeReintentar reintentar={reintentarExterna}
+          />
+        </Bloque>
+      }
       extra={extra}
       sufijo={sufijo}
       notificaciones={

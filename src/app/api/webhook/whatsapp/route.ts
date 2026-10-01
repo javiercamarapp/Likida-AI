@@ -612,6 +612,12 @@ interface WaWebhook {
             type?: string;
             button_reply?: { id?: string; title?: string };
           };
+          // El botón de RESPUESTA RÁPIDA de una PLANTILLA. Meta lo manda como
+          // `type: 'button'` (no `interactive`) con el `payload` que pusimos al
+          // enviar la plantilla. Es el botón que llega cuando la conversación la
+          // inició Likida fuera de la ventana de 24 h (p. ej. la liquidación
+          // externa), y hasta ahora se descartaba como `other`.
+          button?: { payload?: string; text?: string };
         }>;
         // Acuses de ENTREGA. Meta los manda por el mismo webhook y con el mismo
         // `field: 'messages'`, en un arreglo aparte. Ver `extractStatuses`.
@@ -738,6 +744,11 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
         // le llegaría al procesador como un mensaje en blanco del operador.
         else if (m.type === 'interactive' && m.interactive?.type === 'button_reply' && m.interactive.button_reply?.id) {
           out.push({ ...base, type: 'text', text: m.interactive.button_reply.id });
+        }
+        // Mismo trato para el botón de plantilla: el `payload` es el dato (lo
+        // elegimos nosotros), `text` es el rótulo que vio el chofer y no se usa.
+        else if (m.type === 'button' && m.button?.payload) {
+          out.push({ ...base, type: 'text', text: m.button.payload });
         }
         // ── AUDITORÍA 24 · WA-9 (MEDIO): UN 👍 NO ES UN TURNO ──────────────
         //

@@ -11,6 +11,7 @@ import {
   importarDesglose, conciliarDesglose, listarDesgloses, detalleDesglose,
 } from '@/lib/likida/intake/desglose_peaje';
 import { evidenciaGpsDeDesglose } from '@/lib/likida/peajes/evidencia_gps';
+import { bitacoraConciliada } from '@/lib/likida/peajes/bitacora_conciliada';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../../sufijo';
 import { avisoAgentePeajesApagado } from './apagado';
@@ -76,7 +77,7 @@ export default async function PaginaAgentePeajes({
   // FE-33: las dos lecturas de abajo solo dependen de `desgloseSel` — nada
   // de la segunda depende del resultado de la primera —, así que van en
   // paralelo en vez de en serie.
-  const [detalleSel, evidenciaSel] = desgloseSel
+  const [detalleSel, evidenciaSel, verificacionSel] = desgloseSel
     ? await Promise.all([
         safe(() => detalleDesglose(tenantId, desgloseSel.desgloseId)),
         // La evidencia GPS del desglose seleccionado (post-plan-maestro #1).
@@ -88,8 +89,14 @@ export default async function PaginaAgentePeajes({
           // El Map → objeto plano: la vista solo anota las líneas visibles.
           return { resumen: e.resumen, porLinea: Object.fromEntries(e.porLinea) };
         }),
+        // El estado conciliado (cuadra / sin respaldo / por verificar): solo el
+        // resumen viaja a la vista; el detalle línea a línea es el CSV.
+        safe(async () => {
+          const b = await bitacoraConciliada(tenantId, desgloseSel.desgloseId);
+          return b ? { resumen: b.resumen, sinEvaluarGps: b.sinEvaluarGps } : null;
+        }),
       ])
-    : [null, null];
+    : [null, null, null];
 
   async function subirDesglose(
     _prev: { error?: string; resumen?: { totalLineas: number; conciliadas: number; porConciliar: number } } | null,
@@ -196,7 +203,7 @@ export default async function PaginaAgentePeajes({
       // `conciliarDesglose` acota al tenant de la SESIÓN: un id ajeno en el
       // form no alcanza datos de otra flota — truena como "no existe".
       const r = await conciliarDesglose(tenantId, desgloseId, 'manual');
-      return { resumen: { total: r.total, cuadra: r.cuadra, noCuadra: r.noCuadra, sinContraparte: r.sinContraparte, noEscritas: r.noEscritas } };
+      return { resumen: { total: r.total, cuadra: r.cuadra, noCuadra: r.noCuadra, sinContraparte: r.sinContraparte, noEscritas: r.noEscritas, gpsConfirma: r.gpsConfirma, gpsNoCoincide: r.gpsNoCoincide, gpsSinDatos: r.gpsSinDatos } };
     } catch (e) {
       logger.error('peajes.conciliar_desglose_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
       return { error: 'No se pudo correr el cruce. Inténtalo de nuevo.' };
@@ -275,6 +282,7 @@ export default async function PaginaAgentePeajes({
       desgloseSeleccionado={desgloseSel}
       detalleSeleccionado={detalleSel}
       evidenciaGps={evidenciaSel}
+      verificacion={verificacionSel}
       importarDesglose={importarYCruzarDesglose}
       conciliarDesglose={conciliarDesgloseAhora}
       notificaciones={

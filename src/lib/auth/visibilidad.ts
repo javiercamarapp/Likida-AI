@@ -145,6 +145,11 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/agentes/cobranza': 'dinero',
   // El conciliador (F5): montos del estado de cuenta a la vista — dinero.
   '/dashboard/agentes/peajes': 'dinero',
+  // La configuración del conciliador (Agente 2, 1-oct-2026): TAGs de telepeaje,
+  // catálogo de casetas, geocercas, mapeo de columnas por proveedor y el buzón
+  // firmado. Mismo área que la ventana del agente: dinero. La llave del buzón
+  // se enseña solo con `administracion` (adentro de la página).
+  '/dashboard/agentes/peajes/configuracion': 'dinero',
   // Proveedores (F6): facturas y totales — dinero, y la decisión es del
   // contador/dueño.
   '/dashboard/agentes/proveedores': 'dinero',
