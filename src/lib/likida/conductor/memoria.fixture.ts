@@ -43,6 +43,9 @@ export function crearMemoria(opts: { viajes?: ViajeContexto[]; config?: Partial<
   const oficina: Array<{ hito: string; contacto: unknown }> = [];
   const config: ConfigConductor = { ...CONFIG_CONDUCTOR_DEFAULT, solicitudesMin: [...CONFIG_CONDUCTOR_DEFAULT.solicitudesMin], diasSemana: [...CONFIG_CONDUCTOR_DEFAULT.diasSemana], ...opts.config };
   const fallos = { registrar: false, config: false };
+  const validaciones: Array<{ hito: string; tipo: string; pin: boolean }> = [];
+  const validarResultado: { valor: Awaited<ReturnType<DepsAtender['validarHito']>> } = { valor: null };
+  const evidencias: Array<{ hitoId: string; ciclo: number; tipo: string; ruta: string; sha256: string; waMessageId: string | null }> = [];
   let n = 0;
 
   const sembrar = (viajeId: string) => {
@@ -128,6 +131,24 @@ export function crearMemoria(opts: { viajes?: ViajeContexto[]; config?: Partial<
     avisarOficina: async (a) => { oficina.push({ hito: a.hito.id, contacto: a.contacto }); return 'enviado'; },
     escalarPorProblema: async () => 'ok',
     solicitarUbicacion: async () => true,
+    validarHito: async (e) => { validaciones.push({ hito: e.hito.id, tipo: e.hito.tipo, pin: Boolean(e.pin) }); return validarResultado.valor; },
+    hitoLlegadaReciente: async (t, viajeId) => {
+      const h = de(viajeId).filter((x) => x.tenantId === t && ['llegada_carga', 'llegada_descarga'].includes(x.tipo) && x.estado === 'recibido');
+      return h.length ? { ...h[h.length - 1] } : null;
+    },
+    adjuntarUbicacion: async (_t, viajeId, lat, lng) => {
+      const h = de(viajeId).filter((x) => x.estado === 'recibido' && x.lat === null).pop();
+      if (!h) return null;
+      set(h.id, { lat, lng });
+      return { ...h, lat, lng };
+    },
+    cargarHitos: async (_t, viajeId) => de(viajeId).map((h) => ({ ...h })),
+    guardarEvidencia: async (a) => {
+      if (evidencias.some((x) => x.waMessageId && x.waMessageId === a.waMessageId) || evidencias.some((x) => x.hitoId === a.hito.id && x.ciclo === a.hito.ciclo && x.sha256 === a.sha256)) return 'duplicada';
+      if (!['recibido', 'validado'].includes(poId(a.hito.id).estado)) return 'hito_cambio';
+      evidencias.push({ hitoId: a.hito.id, ciclo: a.hito.ciclo, tipo: a.tipo, ruta: a.ruta, sha256: a.sha256, waMessageId: a.waMessageId });
+      return 'ok';
+    },
   };
 
   /** Atajo: un hito ya registrado a las `hora` (UTC, hoy 2026-10-02). */
@@ -137,7 +158,7 @@ export function crearMemoria(opts: { viajes?: ViajeContexto[]; config?: Partial<
     set(h.id, { estado: 'recibido', fuente: 'texto', interpretacion: 'regla', mensajeEn: iso, recibidoEn: iso, ...extra });
   };
 
-  return { deps, hitos, de, viajes, eventos, legado, oficina, config, fallos, sembrar, registrar, mensajesVistos };
+  return { deps, hitos, de, viajes, eventos, legado, oficina, config, fallos, sembrar, registrar, mensajesVistos, validaciones, validarResultado, evidencias };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

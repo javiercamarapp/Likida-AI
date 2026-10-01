@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { correrConductor, puertosReales } from '@/lib/likida/conductor/ejecutor';
+import { correrAlertasEstadia, type ResultadoAlertasEstadia } from '@/lib/likida/conductor/alertas_estadia';
+import { barridoValidacion, depsValidacionReales, type ResultadoBarrido } from '@/lib/likida/conductor/validar_hito';
+import { leerCandidatosValidacion } from '@/lib/likida/conductor/trabajo';
 import { horaYDiaMx } from '@/lib/likida/conductor/config';
-import { correrMantenimientoConductor } from '@/lib/likida/conductor/repo';
+import { correrMantenimientoConductor, leerConfigConductor } from '@/lib/likida/conductor/repo';
 import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
@@ -75,7 +78,28 @@ export async function GET(req: Request) {
   let latido: { estado: EstadoLatido; detalle: Record<string, unknown> } = { estado: 'fallo', detalle: { codigo: 'corrida_sin_cerrar' } };
   try {
     const inicio = Date.now();
-    const r = await correrConductor(puertosReales(), { venceEn: inicio + (maxDuration * 1000) - MARGEN_MS });
+    const venceEn = inicio + (maxDuration * 1000) - MARGEN_MS;
+    const r = await correrConductor(puertosReales(), { venceEn });
+
+    // 0385: las dos pasadas nuevas. Cada una aislada: si una revienta, la otra corre y el latido sale `parcial`
+    // con el motivo (un `try` global las haría caer juntas y taparía cuál falló).
+    const extras: string[] = [];
+    let alertas: ResultadoAlertasEstadia | undefined;
+    let validacion: ResultadoBarrido | undefined;
+    try {
+      alertas = await correrAlertasEstadia(puertosReales(), { venceEn });
+      extras.push(...alertas.fallos);
+    } catch (e) {
+      extras.push(`alertas de estadía: ${e instanceof Error ? e.message : String(e)}`);
+      logger.error('cron.conductor_hitos.alertas_estadia_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
+    try {
+      validacion = await barridoValidacion({ candidatos: leerCandidatosValidacion, configDe: leerConfigConductor, deps: depsValidacionReales }, new Date(), venceEn);
+      if (validacion.fallos > 0) extras.push(`validación: ${validacion.fallos} hito(s) sin poder validar`);
+    } catch (e) {
+      extras.push(`validación de ubicación: ${e instanceof Error ? e.message : String(e)}`);
+      logger.error('cron.conductor_hitos.validacion_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
 
     // Mantenimiento de privacidad: una vez al día, a las 03:xx de México.
     let mantenimiento: Record<string, number | string> | undefined;
@@ -84,7 +108,7 @@ export async function GET(req: Request) {
       mantenimiento = await correrMantenimientoConductor();
     }
 
-    const huboFallo = r.fallos.length > 0 || r.configIlegible > 0 || r.sinDestinatario > 0;
+    const huboFallo = r.fallos.length > 0 || r.configIlegible > 0 || r.sinDestinatario > 0 || extras.length > 0;
     const incompleto = r.cortadosPorReloj > 0 || r.cortadaPorRechazoMasivo;
     logger.info('cron.conductor_hitos.ok', { ...r, fallos: r.fallos.length });
     const estado: EstadoLatido = huboFallo || incompleto ? 'parcial' : 'ok';
@@ -92,8 +116,9 @@ export async function GET(req: Request) {
       estado,
       detalle: {
         sembrados: r.sembrados, viajes: r.viajes, solicitudes: r.solicitudes, recordatorios: r.recordatorios,
-        escalaciones: r.escalaciones, fallos: r.fallos.length, cortadosPorReloj: r.cortadosPorReloj,
+        escalaciones: r.escalaciones, fallos: r.fallos.length + extras.length, cortadosPorReloj: r.cortadosPorReloj,
         rechazoMasivo: r.cortadaPorRechazoMasivo,
+        alertasEstadia: alertas?.alertas ?? null, validados: validacion?.validados ?? null, sinCoincidencia: validacion?.sinCoincidencia ?? null,
       },
     };
     if (r.cortadaPorRechazoMasivo) {
@@ -102,7 +127,10 @@ export async function GET(req: Request) {
         codigo: 'wa_rechazo_masivo',
       });
     }
-    return NextResponse.json({ corrio: true, ...r, fallos: r.fallos.slice(0, 20), ...(mantenimiento ? { mantenimiento } : {}) });
+    return NextResponse.json({
+      corrio: true, ...r, fallos: [...r.fallos, ...extras].slice(0, 20), alertasEstadia: alertas, validacion,
+      ...(mantenimiento ? { mantenimiento } : {}),
+    });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     const codigo = codigoDeError(e);
