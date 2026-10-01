@@ -13,6 +13,7 @@ const AGENTES: Record<PlantillaCatalogo['agente'], string> = {
   asistencia: 'Asistencia en carretera',
   mis_reglas: 'Mis reglas (vigilante)',
   agente5_conductor: 'Agente 5 — Conductor',
+  vigia_cliente: 'Agente 4 — Vigía de servicio al cliente',
 };
 
 function botonTexto(b: BotonCatalogo): string {
