@@ -44,6 +44,7 @@ const RUTA: Record<CronId, string> = {
   'portales-vivos': '/api/cron/portales-vivos',
   'liquidaciones-externas': '/api/cron/liquidaciones-externas',
   peajes: '/api/cron/peajes',
+  'conductor-hitos': '/api/cron/conductor-hitos',
 };
 
 /** Qué hace cada reloj, en una línea, para que el rojo se pueda priorizar. */
@@ -61,6 +62,7 @@ const OFICIO: Record<CronId, string> = {
   'portales-vivos': 'comprueba que los portales de facturación sigan en pie',
   'liquidaciones-externas': 'entrega y concilia las liquidaciones que calcula el sistema del cliente',
   peajes: 'importa y concilia los desgloses de peaje que el proveedor mandó por el buzón firmado',
+  'conductor-hitos': 'pide, persigue y escala los hitos del viaje (llegada, salida, regreso) a los choferes',
 };
 
 /**

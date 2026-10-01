@@ -761,6 +761,48 @@ function documento(servidor: string) {
           },
           required: ['id', 'folio', 'origen', 'destino', 'estatus', 'fechaInicio', 'operador', 'intakePendientes', 'avisadoEn', 'aceptadoEn', 'escaladoEn', 'avisosEnviados'],
         },
+        Hito: {
+          type: 'object',
+          description: 'Un hito del viaje que el Agente 5 «Conductor» pide al chofer por WhatsApp. La hora es la del MENSAJE del chofer (Meta), no telemetría del evento físico.',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            viajeId: { type: 'string', format: 'uuid' },
+            folio: { type: 'string', nullable: true },
+            tipo: { type: 'string', enum: ['llegada_carga', 'salida_carga', 'llegada_descarga', 'salida_descarga', 'regreso'] },
+            estado: { type: 'string', enum: ['esperado', 'recibido', 'validado', 'omitido', 'escalado'], description: '`omitido` = se infirió por un hito posterior y no trae hora; `escalado` = se agotaron los recordatorios y sigue pendiente.' },
+            fuente: { type: 'string', nullable: true, enum: ['texto', 'boton', 'ubicacion', 'foto', 'sistema', null] },
+            interpretacion: { type: 'string', nullable: true, enum: ['regla', 'boton', 'llm', 'ubicacion', 'foto', 'sistema', null] },
+            horaMensaje: { type: 'string', format: 'date-time', nullable: true, description: 'Cuándo escribió el chofer, según Meta.' },
+            recibidoEn: { type: 'string', format: 'date-time', nullable: true, description: 'Cuándo lo recibió Likida.' },
+            validadoEn: { type: 'string', format: 'date-time', nullable: true },
+            validadoPor: { type: 'string', nullable: true, enum: ['oficina', 'gps', 'sistema', null] },
+            contacto: { type: 'object', nullable: true, properties: { nombre: { type: 'string' }, area: { type: 'string', nullable: true } }, description: 'Con quién se reportó en el andén (datos de un tercero; se retiran con la retención y la cancelación ARCO).' },
+            sinContacto: { type: 'boolean', description: 'El chofer dijo que no tiene contacto.' },
+            coordenadas: { type: 'object', nullable: true, properties: { lat: { type: 'number' }, lng: { type: 'number' } } },
+            omitidoMotivo: { type: 'string', nullable: true },
+            recordatoriosEnviados: { type: 'integer' },
+            escaladoEn: { type: 'string', format: 'date-time', nullable: true },
+            escalacionNivel: { type: 'integer', description: '0 = no escalado; 1 = patio responsable; 2 = jefe general.' },
+            atendidaEn: { type: 'string', format: 'date-time', nullable: true, description: 'Cuando el jefe tocó «Ya lo atiendo».' },
+            correcciones: { type: 'integer' },
+            ciclo: { type: 'integer', description: 'Sube cada vez que el hito se retira o se pospone.' },
+          },
+          required: ['id', 'viajeId', 'folio', 'tipo', 'estado', 'fuente', 'interpretacion', 'horaMensaje', 'recibidoEn', 'validadoEn', 'validadoPor', 'contacto', 'sinContacto', 'coordenadas', 'omitidoMotivo', 'recordatoriosEnviados', 'escaladoEn', 'escalacionNivel', 'atendidaEn', 'correcciones', 'ciclo'],
+        },
+        HitoEvento: {
+          type: 'object',
+          description: 'Un evento del feed incremental. Sin datos personales: ids, estados y fuentes.',
+          properties: {
+            id: { type: 'integer', description: 'Solo crece. Guarda el último que procesaste y pídelo en `?despues=`.' },
+            viajeId: { type: 'string', format: 'uuid' },
+            hitoId: { type: 'string', format: 'uuid' },
+            tipoHito: { type: 'string', enum: ['llegada_carga', 'salida_carga', 'llegada_descarga', 'salida_descarga', 'regreso'] },
+            evento: { type: 'string', enum: ['solicitado', 'recibido', 'validado', 'omitido', 'escalado', 'corregido', 'pospuesto', 'atendido', 'contacto'] },
+            detalle: { type: 'object' },
+            creadoEn: { type: 'string', format: 'date-time' },
+          },
+          required: ['id', 'viajeId', 'hitoId', 'tipoHito', 'evento', 'detalle', 'creadoEn'],
+        },
         ViajeDetalle: {
           type: 'object',
           properties: {
@@ -1303,6 +1345,76 @@ function documento(servidor: string) {
                 },
               },
             },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/hitos': {
+        get: {
+          operationId: 'listarHitos',
+          'x-likida-area': 'operacion',
+          summary: 'Los hitos del viaje (llegada/salida de carga y descarga, regreso) que el Agente Conductor pide por WhatsApp.',
+          description:
+            'Área `operacion`. Más reciente primero. `desde` (fecha-hora ISO) trae solo lo actualizado desde entonces: sincronización incremental; para un feed sin huecos usa `/v1/hitos/eventos`.\n\n'
+            + 'LA HORA ES LA DEL MENSAJE del chofer (`horaMensaje`), no la del evento físico. Aquí NO sale el texto que escribió el chofer.',
+          tags: ['hitos'],
+          parameters: [
+            ...parametrosPagina,
+            { name: 'viajeId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+            { name: 'folio', in: 'query', required: false, schema: { type: 'string', maxLength: 64 } },
+            { name: 'estado', in: 'query', required: false, schema: { type: 'string', enum: ['esperado', 'recibido', 'validado', 'omitido', 'escalado'] } },
+            { name: 'tipo', in: 'query', required: false, schema: { type: 'string', enum: ['llegada_carga', 'salida_carga', 'llegada_descarga', 'salida_descarga', 'regreso'] } },
+            { name: 'desde', in: 'query', required: false, schema: { type: 'string', format: 'date-time' } },
+          ],
+          responses: {
+            '200': {
+              description: 'Página de hitos.',
+              content: { 'application/json': { schema: { type: 'object', properties: { datos: { type: 'array', items: { $ref: '#/components/schemas/Hito' } }, pagina: paginaSobre }, required: ['datos', 'pagina'] } } },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/hitos/eventos': {
+        get: {
+          operationId: 'listarEventosDeHitos',
+          'x-likida-area': 'operacion',
+          summary: 'Feed incremental de eventos de hitos.',
+          description: 'Área `operacion`. Del más viejo al más nuevo, con id creciente: pide `?despues=<último id que procesaste>`. `pagina.siguiente` es el id con el que seguir (si no hay eventos nuevos, el mismo que mandaste). Es PULL: no hay webhook saliente.',
+          tags: ['hitos'],
+          parameters: [
+            { name: 'despues', in: 'query', required: false, schema: { type: 'integer', minimum: 0 } },
+            { name: 'limite', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 200, default: 50 } },
+          ],
+          responses: {
+            '200': {
+              description: 'Eventos nuevos.',
+              content: { 'application/json': { schema: { type: 'object', properties: { datos: { type: 'array', items: { $ref: '#/components/schemas/HitoEvento' } }, pagina: { type: 'object', properties: { limite: { type: 'integer' }, devueltos: { type: 'integer' }, hayMas: { type: 'boolean' }, siguiente: { type: 'string' } } } }, required: ['datos', 'pagina'] } } },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/viajes/{id}/citas': {
+        put: {
+          operationId: 'fijarCitasDeViaje',
+          'x-likida-area': 'administracion',
+          summary: 'La cita y la ETA de origen y destino de un viaje.',
+          description: 'Área `administracion`. Le dice al Agente Conductor CUÁNDO pedir cada hito. Todas las llaves son opcionales (al menos una); `null` borra el valor. Fecha-hora ISO CON zona horaria. PUT es idempotente. «No existe» y «no es de tu flota» contestan lo mismo (404).',
+          tags: ['hitos', 'viajes'],
+          parameters: [parametroIdViaje],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { type: 'object', properties: {
+              citaOrigen: { type: 'string', format: 'date-time', nullable: true },
+              citaDestino: { type: 'string', format: 'date-time', nullable: true },
+              etaOrigen: { type: 'string', format: 'date-time', nullable: true },
+              etaDestino: { type: 'string', format: 'date-time', nullable: true },
+            }, additionalProperties: false } } },
+          },
+          responses: {
+            '200': { description: 'Lo guardado.', content: { 'application/json': { schema: { type: 'object' } } } },
+            '404': noEncontrado,
             ...respuestasError,
           },
         },

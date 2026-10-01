@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -78,6 +78,11 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // nada; 15 min es lo que tarda un archivo recién recibido en importarse y
   // cruzarse, y el claim con lease recupera lo que un worker muerto dejó a medias.
   peajes: 15 * 60_000,
+  // El Agente 5 «Conductor» (0380): pide, persigue y escala los hitos del viaje.
+  // Cada 5 minutos: la escalera por defecto avanza de 15 en 15 (0/+15/+30/+45) y
+  // el grano de 5 min es lo que tarda un recordatorio en salir tras vencer su
+  // minuto, sin que dos corridas cercanas lo dupliquen (el claim lo impide).
+  'conductor-hitos': 300_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */
