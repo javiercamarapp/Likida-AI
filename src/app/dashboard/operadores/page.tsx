@@ -2,11 +2,22 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { puedeAdministrar } from '@/lib/auth/permisos';
+import { puedeEditarCatalogoOperativo } from '@/lib/auth/permisos';
 import {
-  actualizarOperador, mensajeParaPantalla,
+  alcanceDePatio, dentroDelAlcance, exigirDentroDelAlcance, movimientoPermitido, patioParaCrear,
+} from '@/lib/auth/patio';
+import {
+  actualizarOperador, crearOperador, mensajeParaPantalla,
   getOperadoresRegistro, getOperadoresConteos, OPERADORES_POR_PAGINA,
 } from '@/lib/likida/administracion';
+import { getTerminales, terminalDeRegistro, terminalesDeRegistros } from '@/lib/likida/terminales';
+import {
+  invitarOperadores, reintentarFallidas, estadoInvitaciones, contarPendientes, contarConFallo, mensajeDeInvitacion,
+  type InvitacionDeOperador,
+} from '@/lib/likida/invitacion_operador';
+import { cargarOperadoresDesdeArchivo } from '@/lib/likida/importacion/panel';
+import { plantillaOperadoresCsv } from '@/lib/likida/importacion/operadores';
+import type { ResultadoImportacionUI } from '@/lib/likida/importacion/resultado_ui';
 import { DIAS_AVISO } from '@/lib/likida/vigencias';
 import { ahoraMs } from '@/lib/saludo';
 import { hoyMx } from '@/lib/formato';
@@ -15,6 +26,7 @@ import { camposDeSufijo } from '../paginar-campos';
 import { sanearQ, type PaginaRegistroUI } from '../paginar-registro';
 import { VistaOperadores, type FilaOperador } from './vista';
 import type { ResultadoForma } from './forma';
+import type { ResultadoInvitar } from './invitaciones';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,10 +48,12 @@ const RUTA = '/dashboard/operadores';
  *
  * ── DOS PUERTAS, como en /dashboard/clientes ──────────────────────────────
  *  · VER es área `operacion` (`puedeVerRuta`).
- *  · EDITAR es `puedeAdministrar`: el mismo criterio de `permisos.ts` que
- *    reparte control sobre los datos operativos de la flota — un operador no
- *    corrige su propia licencia (no tiene login desde el 7-ago-2026), lo hace
- *    quien administra.
+ *  · EDITAR es `puedeEditarCatalogoOperativo` (W2): el dueño, el soporte y el
+ *    JEFE DE TRÁFICO — antes solo el dueño, aunque `roles.ts` le anuncia al
+ *    encargado «despacha y da seguimiento: viajes, operadores, unidades». Un
+ *    jefe con patio asignado (`app_user.terminal_id`, 0460) solo corrige los de
+ *    SU patio (`lib/auth/patio.ts`); sin patio, toda la flota. Un operador no
+ *    corrige su propia licencia (no tiene login desde el 7-ago-2026).
  *
  * LAS DOS SE VUELVEN A COMPROBAR DENTRO DEL SERVER ACTION: el rol del render
  * es el del momento en que se pintó, y una server action es un endpoint POST
@@ -54,9 +68,19 @@ export default async function PaginaOperadores({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; q?: string; p?: string; editar?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
+  const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
+
+  // ── EL ALCANCE (W2). `null` = no edita (rol sin el permiso, o un jefe cuyo
+  // patio no se pudo leer: «no sé de qué patio es» no es «de toda la flota»).
+  const alcance = await alcanceDePatio(tenantId, userId, rol);
+  const puedeEditar = alcance !== null;
+  let patios: Awaited<ReturnType<typeof getTerminales>> = [];
+  try { patios = await getTerminales(tenantId); } catch { /* el selector no se pinta; el servidor sigue exigiendo el alcance */ }
+  const patioDelJefe = alcance?.tipo === 'patio'
+    ? (patios.find((p) => p.id === alcance.terminalId)?.nombre ?? 'tu patio')
+    : null;
   const camposOcultos = camposDeSufijo(sp);
 
   // El día del CHOFER (México), no el UTC del servidor — a las 6pm de CDMX
@@ -98,7 +122,32 @@ export default async function PaginaOperadores({
     registro = null;
   }
 
+  // El patio y la invitación de CADA fila de la página, en un `in(...)` cada uno
+  // (no una consulta por fila). Si no se pueden leer, no se inventa: sin patio
+  // conocido, un jefe con patio no edita la fila; sin invitación conocida, no se
+  // pinta el estado.
+  const idsPagina = (registro?.filas ?? []).map((o) => o.operadorId);
+  let patioPorId: Map<string, string | null> | null = null;
+  let invitacionPorId: Map<string, InvitacionDeOperador> | null = null;
+  try { patioPorId = await terminalesDeRegistros('operador', tenantId, idsPagina); } catch { /* ver arriba */ }
+  try { invitacionPorId = await estadoInvitaciones(tenantId, idsPagina); } catch { /* ver arriba */ }
+  const nombreDePatio = new Map(patios.map((p) => [p.id, p.nombre] as const));
+
+  let invitaciones: { pendientes: number; conFallo: number } | null = null;
+  if (puedeEditar) {
+    try {
+      const a = alcance ?? { tipo: 'flota' as const };
+      invitaciones = { pendientes: await contarPendientes(tenantId, a), conFallo: await contarConFallo(tenantId, a) };
+    } catch { /* la tarjeta no se pinta: contar mal sería afirmar «0 pendientes» */ }
+  }
+
   const filas: FilaOperador[] = (registro?.filas ?? []).map((o) => ({
+    terminalId: patioPorId?.get(o.operadorId) ?? null,
+    terminalNombre: nombreDePatio.get(patioPorId?.get(o.operadorId) ?? '') ?? null,
+    invitacion: invitacionPorId?.get(o.operadorId) ?? null,
+    // Con alcance de flota se edita todo; con patio, solo lo que se pudo LEER
+    // como de ese patio (`patioPorId` nulo = no se pudo leer = no se edita).
+    editable: alcance?.tipo === 'flota' || (patioPorId !== null && dentroDelAlcance(alcance, patioPorId.get(o.operadorId) ?? null)),
     operadorId: o.operadorId,
     nombre: o.nombre,
     telefono: o.telefono,
@@ -142,34 +191,51 @@ export default async function PaginaOperadores({
     'use server';
     const s = await resolverTenantEfectivo(RUTA, sp);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver el registro de operadores.' };
-    if (!puedeAdministrar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota corrige los datos de un operador.' };
+    if (!puedeEditarCatalogoOperativo(s.rol)) {
+      return { ok: false, error: 'Tu rol no puede corregir los datos de un operador.' };
     }
+    const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
+    if (!alcanceAccion) return { ok: false, error: 'No pude comprobar tu patio — no se guardó nada. Vuelve a intentar.' };
 
     const operadorId = String(fd.get('operadorId') ?? '').trim();
     try {
-      // La validación del navegador (required, minLength) avisa temprano;
-      // `actualizarOperador` es la que manda — misma función que prueba
-      // `administracion.test.ts`. Los CINCO campos van siempre, aunque no
-      // hayan cambiado: es un reemplazo de fila, no un parche, y así lo prueba
-      // el test "actualiza los campos editables".
-      // Un checkbox NO viaja en el FormData cuando está desmarcado: su
-      // ausencia ES el "false". Leerlo con `=== 'on'` (mismo criterio que
-      // `/dashboard/clientes`) es lo que convierte el hueco en la baja.
-      const activo = fd.get('activo') === 'on';
+      // El patio del registro sale de la BASE, no del formulario: un POST directo
+      // con el id de un operador de otro patio rebota aquí, antes de escribir.
+      const actual = await terminalDeRegistro('operador', s.tenantId, operadorId);
+      if (!actual.encontrado) return { ok: false, error: 'No se encontró ese operador en tu flota. Recarga la pantalla.' };
+      exigirDentroDelAlcance(alcanceAccion, actual.terminalId);
 
+      // El patio nuevo, solo si la forma lo mandó. Un jefe con patio no puede
+      // mover al operador a otro patio (ni sacarlo de su patio).
+      let terminalId: string | null | undefined;
+      if (fd.has('terminalId')) {
+        const pedido = String(fd.get('terminalId') ?? '').trim() || null;
+        if (pedido !== actual.terminalId) {
+          if (!movimientoPermitido(alcanceAccion, pedido)) {
+            return { ok: false, error: 'Solo quien administra la flota mueve a un operador de patio.' };
+          }
+          terminalId = pedido;
+        }
+      }
+
+      // La baja y la reactivación son BOTONES (no un checkbox): `accion` lo dice.
+      // Sin `accion` (guardar) el estado de alta NO se toca.
+      const accion = String(fd.get('accion') ?? 'guardar');
+      const activo = accion === 'baja' ? false : accion === 'reactivar' ? true : undefined;
+
+      // `actualizarOperador` es la que manda (misma función que prueba
+      // `administracion.test.ts`); anota la bitácora con el actor, y la baja y
+      // la reactivación con su propio nombre.
       await actualizarOperador(s.tenantId, operadorId, {
         nombre: String(fd.get('nombre') ?? ''),
-        // FE-4. Va en CADA guardado igual que los demás (es un reemplazo de
-        // fila, no un parche); `actualizarOperador` lee el anterior y solo
-        // comprueba duplicados y anota bitácora cuando de verdad cambió.
         telefono: String(fd.get('telefono') ?? ''),
         numeroEmpleado: String(fd.get('numeroEmpleado') ?? ''),
         licencia: String(fd.get('licencia') ?? ''),
         licenciaTipo: String(fd.get('licenciaTipo') ?? ''),
         licenciaVence: String(fd.get('licenciaVence') ?? ''),
         rfc: String(fd.get('rfc') ?? ''),
-        activo,
+        ...(activo !== undefined ? { activo } : {}),
+        ...(terminalId !== undefined ? { terminalId } : {}),
       }, { id: s.userId });
 
       revalidatePath(RUTA);
@@ -178,14 +244,79 @@ export default async function PaginaOperadores({
       // recibir mensajes del bot y de aparecer en despacho.
       return {
         ok: true,
-        mensaje: activo
-          ? 'Datos del operador actualizados.'
-          : 'Operador dado de baja. Ya no recibe mensajes del bot ni aparece en Despacho; su historial queda completo.',
+        mensaje: activo === false
+          ? 'Operador dado de baja. Ya no recibe mensajes del bot ni aparece en Despacho; su historial queda completo.'
+          : activo === true ? 'Operador reactivado. Vuelve a aparecer en Despacho y el bot lo atiende otra vez.'
+            : 'Datos del operador actualizados.',
       };
     } catch (e) {
       // `DatoInvalido` sale VERBATIM (dice qué corregir); cualquier otra cosa
       // se loguea y sale como falla del sistema.
       return { ok: false, error: mensajeParaPantalla(e, 'guardar los datos del operador') };
+    }
+  }
+
+  /** El alta de UN operador (la guía de arranque mandaba aquí y solo se editaba). */
+  async function altaOperador(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver el registro de operadores.' };
+    if (!puedeEditarCatalogoOperativo(s.rol)) return { ok: false, error: 'Tu rol no puede dar de alta operadores.' };
+    const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
+    if (!alcanceAccion) return { ok: false, error: 'No pude comprobar tu patio — no se dio de alta a nadie. Vuelve a intentar.' };
+    try {
+      const nombre = String(fd.get('nombre') ?? '');
+      await crearOperador(s.tenantId, {
+        nombre,
+        telefono: String(fd.get('telefono') ?? ''),
+        numeroEmpleado: String(fd.get('numeroEmpleado') ?? '') || undefined,
+        // Un jefe con patio da de alta SIEMPRE en el suyo; el dueño, donde pida.
+        terminalId: patioParaCrear(alcanceAccion, String(fd.get('terminalId') ?? '')),
+      }, { id: s.userId });
+      revalidatePath(RUTA);
+      return { ok: true, mensaje: `${nombre.trim()} quedó dado de alta. Cuando le escriba a Likida desde ese número, el bot ya lo reconoce.` };
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'dar de alta al operador') };
+    }
+  }
+
+  /** La carga masiva: revisar (no escribe) y confirmar. Mismo motor que `POST /v1/operadores`. */
+  async function cargarOperadores(_previo: ResultadoImportacionUI | null, fd: FormData): Promise<ResultadoImportacionUI | null> {
+    'use server';
+    const vacio = (error: string): ResultadoImportacionUI => ({
+      error, paso: 'previsualizar', huella: '', archivo: '', leidas: 0, nuevas: 0, yaEstaban: 0, conProblema: 0,
+      muestra: [], problemas: [], patiosDesconocidos: [], avisos: [], excedeTope: false,
+    });
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA)) return vacio('Tu rol no puede ver el registro de operadores.');
+    if (!puedeEditarCatalogoOperativo(s.rol)) return vacio('Tu rol no puede dar de alta operadores.');
+    const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
+    if (!alcanceAccion) return vacio('No pude comprobar tu patio — no se cargó nada. Vuelve a intentar.');
+    const r = await cargarOperadoresDesdeArchivo({ tenantId: s.tenantId, alcance: alcanceAccion, actor: { id: s.userId }, datos: fd });
+    if (r.confirmado) revalidatePath(RUTA);
+    return r;
+  }
+
+  /** Las invitaciones por WhatsApp: a uno, a los pendientes, o reintento de los fallidos. */
+  async function invitar(_previo: ResultadoInvitar, fd: FormData): Promise<ResultadoInvitar> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver el registro de operadores.' };
+    if (!puedeEditarCatalogoOperativo(s.rol)) return { ok: false, error: 'Tu rol no puede invitar operadores.' };
+    const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
+    if (!alcanceAccion) return { ok: false, error: 'No pude comprobar tu patio — no se mandó nada. Vuelve a intentar.' };
+    try {
+      const modo = String(fd.get('modo') ?? '');
+      const actor = { id: s.userId };
+      const r = modo === 'uno'
+        ? await invitarOperadores(s.tenantId, { ids: [String(fd.get('operadorId') ?? '')], alcance: alcanceAccion, actor })
+        : modo === 'fallidas'
+          ? await reintentarFallidas(s.tenantId, { alcance: alcanceAccion, actor })
+          : await invitarOperadores(s.tenantId, { alcance: alcanceAccion, actor });
+      revalidatePath(RUTA);
+      return mensajeDeInvitacion(r);
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'enviar las invitaciones') };
     }
   }
 
@@ -199,8 +330,17 @@ export default async function PaginaOperadores({
       camposOcultos={camposOcultos}
       ilegible={registro === null}
       hoy={hoy}
-      puedeEditar={puedeAdministrar(rol)}
+      puedeEditar={puedeEditar}
       guardarOperador={guardarOperador}
+      patios={patios.map((p) => ({ id: p.id, nombre: p.nombre }))}
+      patioDelJefe={patioDelJefe}
+      altaOperador={altaOperador}
+      cargarOperadores={cargarOperadores}
+      invitar={invitar}
+      plantillaCsv={plantillaOperadoresCsv()}
+      invitaciones={invitaciones}
+      hrefPatios={`/dashboard/patios${sufijo}`}
+      hrefGuia={`/dashboard/whatsapp${sufijo}`}
     />
   );
 }

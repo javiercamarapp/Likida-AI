@@ -11,7 +11,10 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: ['/blog', '/calculadora', '/privacidad', '/terminos', '/aviso/prospectos'],
-        disallow: ['/admin', '/dashboard', '/api', '/login', '/auth', '/cuenta', '/vendedor'],
+        // `/demo` y `/mcp` (W2): /demo es una simulación con una promesa de PDF que no
+        // entrega y /mcp es documentación de una integración privada — no son páginas que
+        // un buscador deba ofrecer como si fueran el producto.
+        disallow: ['/admin', '/dashboard', '/api', '/login', '/auth', '/cuenta', '/vendedor', '/demo', '/mcp'],
       },
     ],
     sitemap: `${appUrl()}/sitemap.xml`,

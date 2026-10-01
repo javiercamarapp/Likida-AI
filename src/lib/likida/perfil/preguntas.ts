@@ -309,6 +309,21 @@ export function onboardingFiscalListo(perfilCrudo: unknown): boolean {
   return calificaEstimuloPeaje(perfilCrudo).elegible !== null;
 }
 
+/** Llave de `tenant.perfil` donde queda la decisión «lo confirmo con mi contador». */
+export const LLAVE_ONBOARDING_POSPUESTO = 'onboarding_pospuesto_en';
+
+/**
+ * El dueño eligió «lo confirmo con mi contador» en lugar de contestar las dos
+ * preguntas del umbral de peaje (W2). NO equivale a declarar: el estímulo de
+ * peaje SIGUE en $0 y el Resumen lo dice con un aviso permanente mientras
+ * `onboardingFiscalListo` sea falso. Solo evita que quien no conoce de memoria sus
+ * ingresos anuales quede sin Resumen hasta que consulte a su contador.
+ */
+export function onboardingPospuesto(perfilCrudo: unknown): boolean {
+  const v = (perfilCrudo as Record<string, unknown> | null | undefined)?.[LLAVE_ONBOARDING_POSPUESTO];
+  return typeof v === 'string' && !Number.isNaN(Date.parse(v));
+}
+
 export function stackDeclarado(perfilCrudo: unknown): {
   gps: string | null;
   erp: string | null;

@@ -7,6 +7,7 @@ import AvisoRol from './aviso-rol';
 import { Logo } from '../logo';
 import { EnlaceCuenta } from './enlace-cuenta';
 import { ROL_BADGE, type RolAppUser } from '@/lib/auth/provisionar';
+import { ProveedorNotificaciones } from '../admin/ui/notificaciones';
 
 /**
  * El marco visual de /dashboard — fondo shader, sidebar glass con el logo,
@@ -40,9 +41,19 @@ export default function DashboardChrome({
   children: React.ReactNode;
 }) {
   return (
+    <ProveedorNotificaciones>
     <div className="min-h-dvh tema-neutro" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
       <Fondo />
-            <div className={MARCO_FILA}>
+      {/* Saltar al contenido: con teclado, sin esto hay que recorrer más de 30
+          enlaces del sidebar en CADA página antes de llegar al contenido
+          (auditoría de producto, hallazgo de accesibilidad). Invisible hasta
+          que recibe el foco. */}
+      <a href="#contenido-principal"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[70] focus:rounded-lg focus:px-4 focus:py-2 focus:text-[13px] focus:font-medium"
+        style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+        Saltar al contenido
+      </a>
+      <div className={MARCO_FILA}>
         <aside className={`${MARCO_SIDEBAR} sb-aside`}>
           <div className="px-3 py-3 flex items-center justify-center lg:justify-start gap-1.5 sb-centrable">
             <span className="sb-logo min-w-0"><Logo alto="h-[18px]" /></span>
@@ -59,7 +70,7 @@ export default function DashboardChrome({
                 no hay badge. */}
           </div>
 
-          <nav className="flex-1 overflow-y-auto px-2 space-y-2 pb-3">
+          <nav aria-label="Navegación principal" className="flex-1 overflow-y-auto px-2 space-y-2 pb-3">
             <SidebarNav rol={rol} />
           </nav>
 
@@ -112,7 +123,9 @@ export default function DashboardChrome({
         </aside>
 
         <div className={`${MARCO_COLUMNA} ${CLASE_COLUMNA_CENTRO}`}>
-          <div className={MARCO_SCROLL}>
+          {/* `tabIndex={-1}`: el enlace de arriba mueve el foco AQUÍ (un div sin
+              tabindex no lo recibe y el salto no haría nada para el teclado). */}
+          <div id="contenido-principal" tabIndex={-1} className={`${MARCO_SCROLL} outline-none`}>
             <AvisoRol rolReal={rol} />
             {children}
           </div>
@@ -124,5 +137,6 @@ export default function DashboardChrome({
             endpoint /api/dashboard/asistente. */}
       </div>
     </div>
+    </ProveedorNotificaciones>
   );
 }

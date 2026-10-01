@@ -23,6 +23,8 @@ import { DatoInvalido } from './errores';
 import { esNumero, esNumeroONulo, esObjeto, esTextoONulo, formaInesperada } from './comercial';
 import { CONECTORES_GPS } from './conectores/gps';
 import { papelMasProximo } from './administracion';
+import { resolverTerminalDeFlota } from './terminales';
+import { anotarBitacora } from './bitacora_escritura';
 import { hoyMx } from '@/lib/formato';
 
 /** Los tres estatus que `viaje` de verdad admite (`viaje_estatus_dominio`,
@@ -926,6 +928,9 @@ export interface NuevaUnidad {
   gpsProveedor?: string | null;
   /** El id del dispositivo EN EL SISTEMA DEL PROVEEDOR. */
   gpsDeviceId?: string | null;
+  /** Patio (0298, W2). `undefined` = no se toca (en la edición) / sin patio (en
+   *  el alta); `null` o `''` = sin patio. Se comprueba que sea de la flota. */
+  terminalId?: string | null;
 }
 
 /** Lo que llega del formulario de unidades: puros strings. `''` = sin dato. */
@@ -1082,13 +1087,20 @@ function aCruda(u: NuevaUnidad): UnidadCruda {
   };
 }
 
-export async function crearUnidad(tenantId: string, u: NuevaUnidad): Promise<string> {
+export async function crearUnidad(
+  tenantId: string,
+  u: NuevaUnidad,
+  actor?: { id?: string; email?: string },
+): Promise<string> {
   // TODO camino pasa por `validarUnidad`, aunque el llamador ya haya validado
   // (el panel valida en su server action; `POST /v1/unidades` normaliza en su
   // borde con los MISMOS topes). Este es el único cuello por el que se escribe
   // `unidad`: re-validar aquí garantiza que el llamador nuevo de mañana no
   // inserte sin reglas. Antes esta función no validaba nada.
   const v = validarUnidad(aCruda(u));
+  // El patio se comprueba contra la flota ANTES de insertar (la FK compuesta de la
+  // 0298 es la última red, pero su mensaje no dice nada a quien captura).
+  const terminalId = await resolverTerminalDeFlota(tenantId, u.terminalId);
   // El choque contra `unidad_economico_unico` NO se traduce aquí a propósito:
   // `POST /v1/unidades` reconoce ese nombre en el mensaje (`chocoContra`) para
   // resolver la carrera de dos peticiones en paralelo. El panel lo traduce él.
@@ -1104,18 +1116,33 @@ export async function crearUnidad(tenantId: string, u: NuevaUnidad): Promise<str
     verificacion_vence: v.verificacionVence,
     gps_proveedor: v.gpsProveedor,
     gps_device_id: v.gpsDeviceId,
+    ...(terminalId !== null ? { terminal_id: terminalId } : {}),
   }).select('id').single(), 'crearUnidad');
   if (error) throw new Error(`crearUnidad: ${error.message}`);
   const id = (data as { id?: unknown } | null)?.id;
   if (!id) throw new Error('crearUnidad: el insert no devolvió id');
+  // Con actor (el panel) se firma; la API por llave no trae persona y no escribe.
+  if (actor) {
+    await anotarBitacora({
+      tenantId, actor, accion: 'unidad.creada', entidad: 'unidad', entidadId: id as string,
+      detalle: { numeroEconomico: v.numeroEconomico, terminalId },
+    });
+  }
   return id as string;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function editarUnidad(tenantId: string, unidadId: string, u: NuevaUnidad): Promise<void> {
+export async function editarUnidad(
+  tenantId: string,
+  unidadId: string,
+  u: NuevaUnidad,
+  actor?: { id?: string; email?: string },
+): Promise<void> {
   if (!UUID_RE.test(unidadId)) throw new DatoInvalido('No se reconoce esa unidad. Vuelve a abrir la pantalla.');
   const v = validarUnidad(aCruda(u));
+  // Solo se toca el patio si la edición lo mandó (`undefined` = no se toca).
+  const terminalId = u.terminalId === undefined ? undefined : await resolverTerminalDeFlota(tenantId, u.terminalId);
 
   // Mismo candado que `editarCliente`: el UPDATE anclado a tenant toca cero
   // filas ante un id ajeno y Postgres no lo llama error — se mira lo devuelto.
@@ -1130,6 +1157,7 @@ export async function editarUnidad(tenantId: string, unidadId: string, u: NuevaU
     verificacion_vence: v.verificacionVence,
     gps_proveedor: v.gpsProveedor,
     gps_device_id: v.gpsDeviceId,
+    ...(terminalId !== undefined ? { terminal_id: terminalId } : {}),
   }).eq('id', unidadId).eq('tenant_id', tenantId).select('id'), 'editarUnidad');
 
   if (error) {
@@ -1149,6 +1177,12 @@ export async function editarUnidad(tenantId: string, unidadId: string, u: NuevaU
   }
   if (!Array.isArray(data) || data.length === 0) {
     throw new DatoInvalido('No se encontró esa unidad en tu flota. Puede que alguien la haya borrado — recarga la pantalla.');
+  }
+  if (actor) {
+    await anotarBitacora({
+      tenantId, actor, accion: 'unidad.editada', entidad: 'unidad', entidadId: unidadId,
+      detalle: { numeroEconomico: v.numeroEconomico, ...(terminalId !== undefined ? { terminalId } : {}) },
+    });
   }
 }
 

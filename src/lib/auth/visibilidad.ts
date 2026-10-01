@@ -85,6 +85,16 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // `dinero_por_area.test.ts` los escanea).
   '/dashboard/viajes': 'operacion',
   '/dashboard/operadores': 'operacion',
+  // Los PATIOS (W2, 1-oct-2026): crear/editar/borrar los administra el dueño (se
+  // re-comprueba `puedeAdministrar` adentro de cada acción); el jefe de tráfico
+  // los VE para saber cuál es el suyo. Cero pesos en pantalla.
+  '/dashboard/patios': 'operacion',
+  // La puesta en marcha (W2): el checklist guiado con estado real. Cero pesos.
+  '/dashboard/arranque': 'operacion',
+  // La guía de arranque del chofer (W2): el número de WhatsApp de Likida, el
+  // enlace wa.me, el QR y el flujo. No enseña un peso; su lector natural es el
+  // jefe de tráfico.
+  '/dashboard/whatsapp': 'operacion',
   // El registro de jornada (LFT 132 fr. XXXIV, mig. 0241). Es `operacion` y no
   // `dinero` por dos razones: no enseña un peso, y el usuario natural es el
   // jefe de tráfico —él sabe a qué hora salió cada quien y es el único que

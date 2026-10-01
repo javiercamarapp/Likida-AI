@@ -17,8 +17,10 @@ export function PrimeraLiquidacion({ datos, sufijo = '' }: { datos: PrimerosPaso
     {
       hecho: datos.operadores > 0,
       titulo: 'Da de alta a tu primer operador',
-      detalle: 'Nombre y teléfono — con eso Likida ya sabe de quién es cada comprobante.',
-      href: '/dashboard/operadores', cta: 'Ir a Operadores',
+      detalle: 'Nombre y WhatsApp — con eso Likida ya sabe de quién es cada comprobante. ¿Son muchos? Cárgalos desde un Excel o CSV.',
+      // La pantalla de Operadores YA tiene el alta (uno por uno y desde Excel/CSV):
+      // antes mandaba a una pantalla que solo editaba y la guía era un callejón.
+      href: '/dashboard/operadores#alta', cta: 'Dar de alta operadores',
     },
     {
       hecho: datos.viajes > 0,
@@ -30,7 +32,9 @@ export function PrimeraLiquidacion({ datos, sufijo = '' }: { datos: PrimerosPaso
       hecho: datos.comprobantes > 0,
       titulo: 'Que el operador mande una foto del ticket por WhatsApp',
       detalle: 'Una foto real desde su teléfono — Likida la lee, la clasifica y la cuelga del viaje.',
-      href: '/dashboard/soporte', cta: 'Cómo conectar WhatsApp',
+      // El número al que escribe el chofer, el enlace y el QR (antes mandaba a
+      // Soporte, que no dice a qué número escribirle al bot).
+      href: '/dashboard/whatsapp', cta: 'Número y enlace para el chofer',
     },
     {
       hecho: datos.liquidaciones > 0,
@@ -76,7 +80,8 @@ export function PrimeraLiquidacion({ datos, sufijo = '' }: { datos: PrimerosPaso
       </ol>
       <p className="text-[11.5px] mt-4 flex items-center gap-1.5" style={{ color: 'var(--muted)' }}>
         <MessageCircle width={13} height={13} strokeWidth={1.75} />
-        ¿Prefieres preguntar? El chat de tus datos te lleva de la mano — y por WhatsApp también.
+        ¿Arrancas una flota completa?{' '}
+        <Link href={`/dashboard/arranque${sufijo}`} className="underline">Ver la puesta en marcha paso a paso</Link>.
       </p>
     </section>
   );

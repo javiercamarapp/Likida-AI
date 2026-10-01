@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Truck, ArrowRight, Download, RefreshCw, FileText } from 'lucide-react';
+import { Truck, Download, RefreshCw, FileText } from 'lucide-react';
 import { fechaCorta, numero, hoyMx, fechaHoraMx } from '@/lib/formato';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
@@ -8,6 +8,7 @@ import { motivoDeFallo } from '@/lib/likida/liquidacion_externa/api';
 import {
   ESTADOS, type EstadoLiquidacionExterna, type LiquidacionExterna,
 } from '@/lib/likida/liquidacion_externa/repo';
+import { EnlacePagina, NavPaginas } from '../../paginador';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // «LIQUIDACIONES EXTERNAS» — el tablero del modo «solo entrega».
@@ -194,10 +195,12 @@ export async function SeccionExternas(p: ExternasProps) {
           <div className="flex items-center justify-between gap-3 mt-2.5">
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>De la más nueva a la más vieja.</p>
             {pagina.siguiente && (
-              <Link href={query(p.contexto, [...(p.filtroEstado ? [['ext_estado', p.filtroEstado] as [string, string]] : []), ['ext_cursor', pagina.siguiente]])}
-                className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--marca)' }}>
-                Siguientes <ArrowRight width={12} height={12} strokeWidth={2} />
-              </Link>
+              <NavPaginas>
+                <EnlacePagina
+                  href={query(p.contexto, [...(p.filtroEstado ? [['ext_estado', p.filtroEstado] as [string, string]] : []), ['ext_cursor', pagina.siguiente]])}
+                  direccion="siguiente"
+                />
+              </NavPaginas>
             )}
           </div>
         </>

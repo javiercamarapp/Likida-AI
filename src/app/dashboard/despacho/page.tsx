@@ -9,6 +9,7 @@ import {
   asignarUnidad,
 } from '@/lib/likida/operacion';
 import { reasignarOperador, buscarCatalogo, contarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/likida/repo';
+import { alcanceDePatio, patioParaCrear } from '@/lib/auth/patio';
 import { crearOperador } from '@/lib/likida/administracion';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { viajesEnCursoPaginados, PAGINA_MAX_VIAJES_EN_CURSO } from '@/lib/likida/repo_paginado';
@@ -322,10 +323,15 @@ export default async function PaginaDespacho({
     if (!nombre || !telefono) return { error: 'Faltan el nombre o el WhatsApp.' };
 
     const sesion = await requireSessionTenant('/dashboard/despacho');
+    // W2: un jefe de tráfico CON patio da de alta SIEMPRE en el suyo. Si su patio
+    // no se pudo leer, no se da de alta a nadie: un operador sin patio quedaría
+    // fuera de su alcance y nadie de su patio podría corregirlo.
+    const alcance = await alcanceDePatio(tenantId, sesion.userId, sesion.rol);
+    if (!alcance) return { error: 'No pude comprobar tu patio — no se dio de alta a nadie. Inténtalo de nuevo.' };
     try {
       // `crearOperador` normaliza la lada 52 y falla CERRADO ante duplicados
       // (incluso entre flotas) — sus mensajes están escritos para pantalla.
-      await crearOperador(tenantId, { nombre, telefono }, { id: sesion.userId });
+      await crearOperador(tenantId, { nombre, telefono, terminalId: patioParaCrear(alcance, null) }, { id: sesion.userId });
     } catch (err) {
       if (err instanceof DatoInvalido) return { error: err.message };
       logger.error('despacho.alta_operador.fallo', { err: err instanceof Error ? err.message : String(err) });
