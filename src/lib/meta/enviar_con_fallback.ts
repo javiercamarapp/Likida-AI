@@ -165,7 +165,7 @@ export async function enviarConFallback(
   } catch (e) {
     // Los envíos no lanzan; esto es el cinturón (p. ej. una variable de entorno
     // de Meta ausente lanza dentro de `token()` antes del fetch).
-    const error = e instanceof Error ? e.message : String(e);
+    const error = e instanceof Error ? e.message : 'error inesperado al enviar';
     logger.error('wa.envio_con_fallback.lanzo', { contexto: op.contexto, error });
     return {
       ok: false, motivo: 'rechazo_no_ventana', mensaje: error, fueraDeVentana: false, reintentable: false, ventana: ventana.estado,

@@ -33,6 +33,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // fallo es que el código de Meta se traduzca a algo que alguien pueda accionar.
 // ═══════════════════════════════════════════════════════════════════════════
 
+let rechazoTexto: { codigo?: number; status?: number } = { codigo: 131047, status: 400 };
+let estadoVentana: 'abierta' | 'cerrada' | 'desconocida' = 'desconocida';
+
 const { sendText, sendTemplate, avisarAlChofer, telefonosJefe, avisar, avisarCorridasPorFlota, registrarCorrida } = vi.hoisted(() => ({
   sendText: vi.fn(),
   sendTemplate: vi.fn(),
@@ -52,8 +55,15 @@ vi.mock('@/lib/meta/client', async (original) => ({
   // mock delega en el de siempre y las pruebas viejas siguen midiendo lo mismo.
   enviarTexto: async (to: string, body: string) => {
     const id = await sendText(to, body);
-    return id ? { ok: true, id } : { ok: false, error: 'rechazado por Meta' };
+    // El rechazo por defecto es la ventana de 24 h cerrada (131047): lo único que
+    // el selector (enviarConFallback) cubre con la plantilla. Un 429 u otro
+    // código se simula con `rechazoTexto`.
+    return id ? { ok: true, id } : { ok: false, error: 'rechazado por Meta', ...rechazoTexto };
   },
+}));
+vi.mock('./wa_ventana', () => ({
+  ventanaDeContacto: async () => ({ estado: estadoVentana, ultimoEntranteEn: null, expiraEn: null }),
+  registrarDecisionEnvio: async () => {},
 }));
 vi.mock('./operacion', () => ({ avisarAlChofer }));
 vi.mock('./contactos', () => ({ telefonosJefe }));
@@ -169,6 +179,7 @@ beforeEach(() => {
   from.mockClear();
   registrarCorrida.mockReset();
   registrarCorrida.mockResolvedValue(undefined);
+  rechazoTexto = { codigo: 131047, status: 400 }; estadoVentana = 'desconocida';
   sendText.mockReset();
   // `null` por defecto: fuera de la ventana de 24 h, que es el caso probable de
   // alguien que lleva 5 horas sin contestar. Así se ejerce la ruta real —texto
@@ -773,5 +784,38 @@ describe('la bitácora de corridas no puede tumbar la escalación', () => {
     // El cierre de corrida_fallida y el aviso de escalado salieron igual.
     expect(avisarCorridasPorFlota).toHaveBeenCalledTimes(1);
     expect(avisar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('escalarViajesSinAceptar — con el registro de la ventana y el selector (P0-B)', () => {
+  it('ventana del jefe CERRADA: plantilla directa, sin intento de texto, y el aviso cuenta', async () => {
+    estadoVentana = 'cerrada';
+    lectura = { data: [fila({ operador: { nombre: 'Juan Pérez', telefono: '529990000009' } })], error: null };
+    const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+    expect(r.escalados).toBe(1);
+    expect(sendTemplate).toHaveBeenCalledWith(TEL['t-1'], 'recordatorio_cierre', expect.objectContaining({ parametros: ['Juan Pérez', 'VJ-104'] }));
+    // Ni el texto al jefe ni el recordatorio de texto al chofer se intentan (ambas ventanas cerradas).
+    expect(sendText).not.toHaveBeenCalled();
+    expect(avisarAlChofer).toHaveBeenCalledWith('t-1', 'o-1', 'v-1');
+  });
+
+  it('ventana ABIERTA: texto al jefe y a la plantilla no se toca', async () => {
+    estadoVentana = 'abierta';
+    sendText.mockResolvedValue('wamid.OK');
+    lectura = { data: [fila()], error: null };
+    const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+    expect(r.escalados).toBe(1);
+    expect(sendTemplate).not.toHaveBeenCalled();
+  });
+
+  it('un 429 del TEXTO al jefe: ya no se manda además la plantilla y el claim se libera (RES-1)', async () => {
+    estadoVentana = 'abierta';
+    rechazoTexto = { codigo: undefined, status: 429 };
+    lectura = { data: [fila()], error: null };
+    const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(r.rechazosReintentables).toBe(1);
+    expect(r.escalados).toBe(0);
+    expect(r.fallos[0]).toMatch(/se reintenta en la siguiente corrida/);
   });
 });
