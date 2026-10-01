@@ -11,11 +11,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 // ARQ-M3 (auditoría 28): investigador.ts ya NO tiene su propia lista de redes
-// privadas — usa `hostNoPublico`/`esIpPublica` de `lib/http/destino_publico.ts`
-// (la misma que `conectores/credenciales.ts`). `hostPublico` resuelve DNS,
-// así que se mockea aquí para probar el caso de direcciones MIXTAS sin red real.
-const dnsDoble = vi.hoisted(() => ({ lookup: vi.fn() }));
-vi.mock('node:dns/promises', () => ({ lookup: dnsDoble.lookup }));
+// privadas — usa `hostNoPublico`/`esIpPublica` de `lib/http/destino_publico.ts`.
 
 // AGB-3: builder real por tabla, con una cola de respuestas por tabla — el
 // mismo patrón que enviador.test.ts — para poder ejercer `candidatosSinDossier`
@@ -143,7 +139,7 @@ describe('textoVisible y enlacesInstitucionales — el rastreo mínimo', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA FABLE CICLO 5 — c5-4 (compuerta de dominio) y c5-11 (SSRF).
 // ═══════════════════════════════════════════════════════════════════════════
-const { separarPorDominio, hostPublico, MAX_CORREOS_EMPRESA } = await import('./investigador');
+const { separarPorDominio, MAX_CORREOS_EMPRESA } = await import('./investigador');
 const { esIpPublica } = await import('@/lib/http/destino_publico');
 
 describe('c5-4 — la compuerta de dominio: correos de terceros JAMÁS entran a la lista de envío', () => {
@@ -219,32 +215,9 @@ describe('c5-11 — la frontera SSRF, ahora a través del predicado COMPARTIDO (
   });
 });
 
-describe('hostPublico — la frontera SSRF que bajarPagina consulta antes de cada fetch', () => {
-  it('rechaza si CUALQUIERA de las direcciones que el DNS resuelve es privada (rebinding parcial)', async () => {
-    dnsDoble.lookup.mockResolvedValueOnce([
-      { address: '8.8.8.8', family: 4 },
-      { address: '169.254.169.254', family: 4 },
-    ]);
-    await expect(hostPublico('mixto.example')).resolves.toBe(false);
-  });
-
-  it('acepta cuando TODAS las direcciones que el DNS resuelve son públicas', async () => {
-    dnsDoble.lookup.mockResolvedValueOnce([{ address: '8.8.8.8', family: 4 }]);
-    await expect(hostPublico('publico.example')).resolves.toBe(true);
-  });
-
-  it('un DNS que no contesta cuenta como no-permitido — fail closed', async () => {
-    dnsDoble.lookup.mockRejectedValueOnce(new Error('ENOTFOUND'));
-    await expect(hostPublico('caido.example')).resolves.toBe(false);
-  });
-
-  it('rechaza de entrada por sufijo/host reservado, sin llamar al DNS', async () => {
-    dnsDoble.lookup.mockClear();
-    await expect(hostPublico('localhost')).resolves.toBe(false);
-    await expect(hostPublico('algo.internal')).resolves.toBe(false);
-    expect(dnsDoble.lookup).not.toHaveBeenCalled();
-  });
-});
+// La frontera SSRF (resolución + validación + socket) se prueba en
+// investigador_ssrf.test.ts con un servidor real: `hostPublico` ya no existe
+// (resolvía aparte del socket y dejaba abierto el DNS rebinding).
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AGB-3 (auditoría 24, 1-sep-2026) — `candidatosSinDossier` con una ventana
