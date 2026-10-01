@@ -24,7 +24,12 @@ vi.mock('@/lib/likida/conductor/ejecutor', () => ({ correrConductor: (...a: unkn
 let horaMx = 12;
 vi.mock('@/lib/likida/conductor/config', () => ({ horaYDiaMx: () => ({ hora: horaMx, dia: 5 }) }));
 const mantenimiento = vi.fn(async (): Promise<Record<string, number | string>> => ({ anonimizar_conductor_hitos: 3, purgar_conductor_auditoria: 3 }));
-vi.mock('@/lib/likida/conductor/repo', () => ({ correrMantenimientoConductor: () => mantenimiento() }));
+vi.mock('@/lib/likida/conductor/repo', () => ({ correrMantenimientoConductor: () => mantenimiento(), leerConfigConductor: async () => ({}) }));
+const alertasEstadia = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisadas: 1, alertas: 1, yaReclamadas: 0, sinDestinatario: 0, fueraDeVentana: 0, rechazosReintentables: 0, fallos: [] }));
+vi.mock('@/lib/likida/conductor/alertas_estadia', () => ({ correrAlertasEstadia: () => alertasEstadia() }));
+const barrido = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisados: 2, validados: 1, sinCoincidencia: 0, sinDato: 1, saltados: 0, fallos: 0 }));
+vi.mock('@/lib/likida/conductor/validar_hito', () => ({ barridoValidacion: () => barrido(), depsValidacionReales: {} }));
+vi.mock('@/lib/likida/conductor/trabajo', () => ({ leerCandidatosValidacion: async () => [] }));
 const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
@@ -36,7 +41,7 @@ const j = async (r: Response) => (await r.json()) as Record<string, any>; // esl
 
 beforeEach(() => {
   autorizado = 'si'; interruptores = {}; horaMx = 12;
-  correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear();
+  correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear(); alertasEstadia.mockClear(); barrido.mockClear();
 });
 
 describe('la puerta y las palancas', () => {
@@ -71,6 +76,47 @@ describe('la puerta y las palancas', () => {
     expect(await j(r)).toMatchObject({ codigo: 'interruptor_ilegible' });
     expect(correr).not.toHaveBeenCalled();
     expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'fallo', { codigo: 'interruptor_ilegible' });
+  });
+});
+
+describe('las pasadas de la 0385 (alertas de estadía y validación de ubicación)', () => {
+  it('corren después del motor y su resumen viaja en la respuesta y en el latido', async () => {
+    const r = await j(await llamar());
+    expect(alertasEstadia).toHaveBeenCalledTimes(1);
+    expect(barrido).toHaveBeenCalledTimes(1);
+    expect(r.alertasEstadia).toMatchObject({ alertas: 1 });
+    expect(r.validacion).toMatchObject({ validados: 1 });
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'ok', expect.objectContaining({ alertasEstadia: 1, validados: 1 }));
+  });
+
+  it('las alertas revientan: la validación corre igual, el latido sale parcial y el motivo queda a la vista', async () => {
+    alertasEstadia.mockRejectedValueOnce(new Error('boom alertas'));
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(barrido).toHaveBeenCalledTimes(1);
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.anything());
+    expect(JSON.stringify((await j(r)).fallos)).toContain('boom alertas');
+  });
+
+  it('la validación revienta: las alertas ya corrieron y el latido sale parcial', async () => {
+    barrido.mockRejectedValueOnce(new Error('boom barrido'));
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(alertasEstadia).toHaveBeenCalledTimes(1);
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.anything());
+  });
+
+  it('un fallo de alerta de envío (plantilla sin aprobar) también deja el latido parcial', async () => {
+    alertasEstadia.mockResolvedValueOnce({ revisadas: 1, alertas: 0, fallos: ['estadía F-1: plantilla sin aprobar'] });
+    await llamar();
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.anything());
+  });
+
+  it('el motor principal lanza: ni alertas ni validación corren (500 y latido fallo)', async () => {
+    correr.mockRejectedValueOnce(new Error('base caída'));
+    await llamar();
+    expect(alertasEstadia).not.toHaveBeenCalled();
+    expect(barrido).not.toHaveBeenCalled();
   });
 });
 

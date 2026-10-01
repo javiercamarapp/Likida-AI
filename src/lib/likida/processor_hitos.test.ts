@@ -15,7 +15,11 @@ const runAgent = vi.fn();
 const resolveOperador = vi.fn();
 const atenderConductor = vi.fn();
 const atenderAcuseJefe = vi.fn();
-const adjuntarUbicacionAHito = vi.fn();
+const atenderPinConductor = vi.fn();
+const hitoParaEvidenciaDelChofer = vi.fn();
+const registrarEvidenciaDelChofer = vi.fn();
+const subirComprobante = vi.fn();
+const enviarSolicitudUbicacion = vi.fn();
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 
 vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...a) }));
@@ -24,7 +28,17 @@ vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...
 vi.mock('@/lib/likida/conductor/atender', () => ({
   atenderConductor: (...a: unknown[]) => atenderConductor(...a),
   atenderAcuseJefe: (...a: unknown[]) => atenderAcuseJefe(...a),
-  adjuntarUbicacionAHito: (...a: unknown[]) => adjuntarUbicacionAHito(...a),
+  atenderPinConductor: (...a: unknown[]) => atenderPinConductor(...a),
+  hitoParaEvidenciaDelChofer: (...a: unknown[]) => hitoParaEvidenciaDelChofer(...a),
+  registrarEvidenciaDelChofer: (...a: unknown[]) => registrarEvidenciaDelChofer(...a),
+}));
+vi.mock('@/lib/likida/intake/almacen', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  subirComprobante: (...a: unknown[]) => subirComprobante(...a),
+}));
+vi.mock('@/lib/meta/client', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  enviarSolicitudUbicacion: (...a: unknown[]) => enviarSolicitudUbicacion(...a),
 }));
 vi.mock('@/lib/likida/conv', async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -72,12 +86,13 @@ vi.mock('@/lib/logger', () => ({ logger }));
 const { processInbound } = await import('./processor');
 
 const salientes: string[] = [];
-const fetchSpy = vi.fn(async (_url: string, init?: RequestInit) => {
+const envioPorDefecto = async (_url: string, init?: RequestInit) => {
   const body = JSON.parse(String(init?.body ?? '{}'));
   salientes.push(String((body.text as { body?: string } | undefined)?.body ?? ''));
   return new Response(JSON.stringify({ messages: [{ id: 'wamid.TEST' }] }),
     { status: 200, headers: { 'content-type': 'application/json' } });
-});
+};
+const fetchSpy = vi.fn(envioPorDefecto);
 
 function msg(text: string, timestampMs?: number) {
   return { from: '5219993700779', type: 'text' as const, text, waMessageId: `wa-${text.slice(0, 8)}`, timestampMs };
@@ -86,12 +101,15 @@ function msg(text: string, timestampMs?: number) {
 describe('processInbound — los hitos del chofer, cableados', () => {
   beforeEach(() => {
     salientes.length = 0;
-    runAgent.mockReset(); resolveOperador.mockReset(); atenderConductor.mockReset(); atenderAcuseJefe.mockReset(); adjuntarUbicacionAHito.mockReset();
+    runAgent.mockReset(); resolveOperador.mockReset(); atenderConductor.mockReset(); atenderAcuseJefe.mockReset();
+    atenderPinConductor.mockReset(); hitoParaEvidenciaDelChofer.mockReset(); registrarEvidenciaDelChofer.mockReset(); subirComprobante.mockReset(); enviarSolicitudUbicacion.mockReset();
+    atenderPinConductor.mockResolvedValue(null); hitoParaEvidenciaDelChofer.mockResolvedValue(null); enviarSolicitudUbicacion.mockResolvedValue({ ok: true });
     resolveOperador.mockResolvedValue({ tenantId: 't1', operadorId: 'o1' });
     atenderConductor.mockResolvedValue(null);
     atenderAcuseJefe.mockResolvedValue(null);
     vi.stubGlobal('fetch', fetchSpy);
-    fetchSpy.mockClear();
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(envioPorDefecto);
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
     process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
   });
@@ -178,5 +196,104 @@ describe('processInbound — los hitos del chofer, cableados', () => {
     await processInbound(msg('ya llegué'));
     expect(atenderAcuseJefe).toHaveBeenCalledTimes(1);
     expect(salientes.length).toBeLessThanOrEqual(1);
+  });
+
+  // ── 0385: la ubicación y la evidencia ──────────────────────────────────────
+  it('tras el acuse de una llegada «sin ubicación», le PIDE el pin (después del acuse, no antes)', async () => {
+    atenderConductor.mockResolvedValue({ mensajes: [{ texto: 'Anotado ✅ llegaste a CARGAR.' }], solicitarUbicacion: '📍 Para dejar tu llegada confirmada, comparte tu ubicación.' });
+    const orden: string[] = [];
+    fetchSpy.mockImplementation(async (_u: string, init?: RequestInit) => {
+      const b = JSON.parse(String(init?.body ?? '{}'));
+      orden.push(`texto:${String((b.text as { body?: string } | undefined)?.body ?? '')}`);
+      return new Response(JSON.stringify({ messages: [{ id: 'wamid.T' }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    enviarSolicitudUbicacion.mockImplementation(async () => { orden.push('pin'); return { ok: true }; });
+    await processInbound(msg('ya llegué'));
+    expect(enviarSolicitudUbicacion).toHaveBeenCalledWith('5219993700779', expect.stringContaining('comparte tu ubicación'));
+    expect(orden).toEqual(['texto:Anotado ✅ llegaste a CARGAR.', 'pin']);
+  });
+
+  it('si Meta rechaza la solicitud de ubicación, el acuse ya salió y nada se rompe', async () => {
+    atenderConductor.mockResolvedValue({ mensajes: [{ texto: 'Anotado ✅' }], solicitarUbicacion: 'pide' });
+    enviarSolicitudUbicacion.mockRejectedValue(new Error('red'));
+    await expect(processInbound(msg('ya llegué'))).resolves.not.toThrow();
+    expect(salientes).toEqual(['Anotado ✅']);
+  });
+
+  it('sin `solicitarUbicacion` no se manda ninguna solicitud', async () => {
+    atenderConductor.mockResolvedValue({ mensajes: [{ texto: 'Anotado ✅' }] });
+    await processInbound(msg('ya llegué'));
+    expect(enviarSolicitudUbicacion).not.toHaveBeenCalled();
+  });
+
+  it('el pin DENTRO de un viaje se entrega al Conductor (esta llamada vivía en el bloque «sin viaje» y nunca corría) y su línea se agrega a la respuesta', async () => {
+    atenderPinConductor.mockResolvedValue('✅ Con tu ubicación quedó confirmada tu llegada a cargar en «Planta Zapopan».');
+    await processInbound({ from: '5219993700779', type: 'location' as const, lat: 20.72, lng: -103.39, waMessageId: 'wa-pin', timestampMs: 1788534000000 });
+    expect(atenderPinConductor).toHaveBeenCalledTimes(1);
+    expect(atenderPinConductor.mock.calls[0][0]).toMatchObject({ tenantId: 't1', operadorId: 'o1', viajeId: 'v1', lat: 20.72, lng: -103.39 });
+    expect((atenderPinConductor.mock.calls[0][0] as { enviadoEn: Date }).enviadoEn.getTime()).toBe(1788534000000);
+    expect(salientes).toHaveLength(1);
+    expect(salientes[0]).toMatch(/Recibida tu ubicación/);
+    expect(salientes[0]).toMatch(/quedó confirmada tu llegada a cargar/);
+  });
+
+  it('el pin sin nada que decir deja la respuesta de siempre', async () => {
+    await processInbound({ from: '5219993700779', type: 'location' as const, lat: 20.72, lng: -103.39, waMessageId: 'wa-pin2' });
+    expect(salientes).toHaveLength(1);
+    expect(salientes[0]).toMatch(/Recibida tu ubicación/);
+    expect(salientes[0]).not.toMatch(/confirmada/);
+  });
+
+  describe('la foto de evidencia (caption «sello», «andén», «recibido»)', () => {
+    const foto = (caption?: string) => ({
+      from: '5219993700779', type: 'image' as const, mediaId: 'media-1', text: caption, waMessageId: 'wa-foto',
+      mediaDataUrlQA: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////',
+    });
+    const hito = { id: 'abcdef12-0000-4000-8000-000000000001', tipo: 'salida_carga', ciclo: 1 };
+
+    it('sube la foto con el pipeline del POD (nombre por hito) y registra la evidencia', async () => {
+      hitoParaEvidenciaDelChofer.mockResolvedValue({ tipo: 'sello', hito });
+      subirComprobante.mockResolvedValue('t1/v1/ev_abcdef12_x.jpg');
+      registrarEvidenciaDelChofer.mockResolvedValue('Recibí la foto de el sello ✅');
+      await processInbound(foto('sello'));
+      expect(hitoParaEvidenciaDelChofer.mock.calls[0][0]).toMatchObject({ tenantId: 't1', operadorId: 'o1', viajeId: 'v1', caption: 'sello' });
+      expect(subirComprobante).toHaveBeenCalledWith('t1', 'v1', expect.stringMatching(/^ev_abcdef12_[0-9a-f]{24}$/), expect.stringContaining('data:image'));
+      expect(registrarEvidenciaDelChofer.mock.calls[0][0]).toMatchObject({
+        tenantId: 't1', hito, tipo: 'sello', ruta: 't1/v1/ev_abcdef12_x.jpg', waMessageId: 'wa-foto', sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      });
+      expect(salientes).toEqual(['Recibí la foto de el sello ✅']);
+      expect(runAgent).not.toHaveBeenCalled();
+    });
+
+    it('un caption que no es de evidencia sigue el camino de comprobante (no se sube como evidencia)', async () => {
+      hitoParaEvidenciaDelChofer.mockResolvedValue(null);
+      await processInbound(foto('diésel 800')).catch(() => {});
+      expect(subirComprobante).not.toHaveBeenCalledWith('t1', 'v1', expect.stringMatching(/^ev_/), expect.anything());
+      expect(registrarEvidenciaDelChofer).not.toHaveBeenCalled();
+    });
+
+    it('sin hito al cual colgarla: se lo dice y NO descarga ni sube nada', async () => {
+      hitoParaEvidenciaDelChofer.mockResolvedValue({ tipo: 'sello', hito: null });
+      await processInbound(foto('sello'));
+      expect(salientes[0]).toMatch(/Primero dime/);
+      expect(subirComprobante).not.toHaveBeenCalled();
+      expect(registrarEvidenciaDelChofer).not.toHaveBeenCalled();
+    });
+
+    it('si la subida falla, se le dice y no se registra una evidencia sin archivo', async () => {
+      hitoParaEvidenciaDelChofer.mockResolvedValue({ tipo: 'anden', hito });
+      subirComprobante.mockResolvedValue(undefined);
+      await processInbound(foto('andén'));
+      expect(salientes[0]).toMatch(/No pude guardar esa foto/);
+      expect(registrarEvidenciaDelChofer).not.toHaveBeenCalled();
+    });
+
+    it('si registrar lanza, también se le dice (nunca silencio)', async () => {
+      hitoParaEvidenciaDelChofer.mockResolvedValue({ tipo: 'recibido', hito });
+      subirComprobante.mockResolvedValue('t1/v1/x.jpg');
+      registrarEvidenciaDelChofer.mockRejectedValue(new Error('base caída'));
+      await processInbound(foto('recibido'));
+      expect(salientes[0]).toMatch(/No pude guardar esa foto/);
+    });
   });
 });

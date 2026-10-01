@@ -56,6 +56,8 @@ export interface EntradaValidarHito {
 
 export interface SalidaValidar {
   veredicto: Veredicto;
+  /** El nombre del sitio comparado (para decirle al chofer o al jefe contra QUÉ se comparó). */
+  sitioNombre: string | null;
   aplicado: ResultadoVeredicto;
   /** `true` = el veredicto es «sin ubicación» y vale la pena pedirle el pin al chofer (hay sitio con qué compararlo). */
   pedirUbicacion: boolean;
@@ -83,7 +85,7 @@ export async function validarHitoContraSitio(d: DepsValidacion, e: EntradaValida
     const aplicado = await d.aplicar(e.viaje.tenantId, e.hito, veredicto, e.ahora);
     logger.info('hito.validacion', { viaje: e.viaje.id, hito: e.hito.tipo, resultado: veredicto.resultado, motivo: veredicto.motivo, aplicado });
     return {
-      veredicto, aplicado,
+      veredicto, aplicado, sitioNombre: sitio?.nombre ?? null,
       pedirUbicacion: e.config.pedirUbicacion && !e.pin && veredicto.motivo === 'sin_ubicacion' && aplicado !== 'fallo' && aplicado !== 'hito_cambio',
     };
   } catch (err) {

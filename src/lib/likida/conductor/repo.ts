@@ -511,10 +511,10 @@ export async function marcarHitoEscalado(h: HitoFila, nivel: 1 | 2, ahora: Date)
   return Boolean(data && data.length > 0);
 }
 
-/** Retención de privacidad: anonimiza el dato personal viejo y purga la bitácora. Devuelve filas por función. */
+/** Retención de privacidad: anonimiza el dato personal viejo, purga la bitácora y desliga/encola la evidencia fotográfica vieja. Devuelve filas por función. */
 export async function correrMantenimientoConductor(): Promise<Record<string, number | string>> {
   const salida: Record<string, number | string> = {};
-  for (const rpc of ['anonimizar_conductor_hitos', 'purgar_conductor_auditoria'] as const) {
+  for (const rpc of ['anonimizar_conductor_hitos', 'purgar_conductor_auditoria', 'purgar_conductor_evidencia'] as const) {
     const { data, error } = await acotada(supabaseAdmin().rpc(rpc), `conductor.${rpc}`);
     if (error) {
       logger.error('conductor.mantenimiento_fallo', { rpc, err: error.message });
