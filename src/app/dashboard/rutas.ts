@@ -43,6 +43,9 @@ export const AUTOMATIZACIONES: Item[] = [
   { href: '/dashboard/agentes/cobranza', nombre: 'Seguimiento de comprobantes', Icono: BellRing },
   // F4: habla con los choferes — avisos, hitos, despacho por WA.
   { href: '/dashboard/agentes/conductores', nombre: 'Comunicación con operadores', Icono: MessagesSquare },
+  // Agente 4 (0400): atiende a los CLIENTES de la flota — clasifica, responde con datos reales,
+  // el gerente aprueba con un toque y lo molesto o sin respuesta escala.
+  { href: '/dashboard/agentes/vigia', nombre: 'Servicio al cliente', Icono: UsersRound },
   // F5: el conciliador del "martirio" — estado de cuenta del TAG/monedero
   // contra los gastos reales de los viajes.
   { href: '/dashboard/agentes/peajes', nombre: 'Conciliación de peajes', Icono: Scale },

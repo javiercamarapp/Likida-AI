@@ -107,6 +107,10 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // su usuario diario es el jefe de tráfico. Sus hermanos
   // (liquidación/facturas/cobranza) siguen en dinero.
   '/dashboard/agentes/conductores': 'operacion',
+  // El Vigía de servicio al cliente (Agente 4, 0400): su usuario diario es el gerente de
+  // servicio (flota_admin y encargado). Cero pesos en pantalla; el contador no atiende
+  // clientes y no ve chats de clientes (la 0400 también se lo niega en la base).
+  '/dashboard/agentes/vigia': 'operacion',
   // El Agente de Carta Porte (Fases B-C, 25-ago-2026): mismo criterio que su
   // pantalla /dashboard/carta-porte — cero pesos, y la declaración de ruta es
   // del jefe de tráfico. La página del borrador
