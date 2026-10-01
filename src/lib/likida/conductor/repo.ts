@@ -156,7 +156,8 @@ export async function cargarViajeContexto(tenantId: string, viajeId: string): Pr
 // ── Bitácora de eventos (feed de /v1) ───────────────────────────────────────
 
 export type EventoHito =
-  | 'solicitado' | 'recibido' | 'validado' | 'omitido' | 'escalado' | 'corregido' | 'pospuesto' | 'atendido' | 'contacto';
+  | 'solicitado' | 'recibido' | 'validado' | 'omitido' | 'escalado' | 'corregido' | 'pospuesto' | 'atendido' | 'contacto'
+  | 'validacion' | 'evidencia' | 'captura_manual' | 'alerta_estadia';
 
 /** Best-effort: perder un renglón de bitácora no puede romper el registro del hito. SIN datos personales en `detalle`. */
 export async function registrarEvento(
@@ -400,6 +401,13 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     avisarOficinaLlegada: f.avisar_oficina_llegada as boolean,
     avisarOficinaSalida: f.avisar_oficina_salida as boolean,
     confirmarAlChofer: f.confirmar_al_chofer as boolean,
+    validarUbicacion: f.validar_ubicacion as boolean,
+    toleranciaUbicacionM: Number(f.tolerancia_ubicacion_m),
+    ventanaUbicacionMin: Number(f.ventana_ubicacion_min),
+    pedirUbicacion: f.pedir_ubicacion as boolean,
+    estadiaAlertaCargaMin: n(f.estadia_alerta_carga_min),
+    estadiaAlertaDescargaMin: n(f.estadia_alerta_descarga_min),
+    pedirFotoEvidencia: f.pedir_foto_evidencia as boolean,
   });
   if ('error' in v) {
     // La base tiene CHECKs equivalentes; llegar aquí es una fila corrupta. Se grita y se opera
@@ -593,7 +601,10 @@ export async function guardarConfigConductor(
     espera_carga_min: c.esperaCargaMin, trayecto_sin_eta_min: c.trayectoSinEtaMin, espera_descarga_min: c.esperaDescargaMin,
     regreso_min: c.regresoMin, posponer_min: c.posponerMin, ventana_correccion_min: c.ventanaCorreccionMin, usar_llm: c.usarLlm,
     avisar_oficina_llegada: c.avisarOficinaLlegada, avisar_oficina_salida: c.avisarOficinaSalida,
-    confirmar_al_chofer: c.confirmarAlChofer, updated_at: new Date().toISOString(),
+    confirmar_al_chofer: c.confirmarAlChofer, validar_ubicacion: c.validarUbicacion,
+    tolerancia_ubicacion_m: c.toleranciaUbicacionM, ventana_ubicacion_min: c.ventanaUbicacionMin, pedir_ubicacion: c.pedirUbicacion,
+    estadia_alerta_carga_min: c.estadiaAlertaCargaMin, estadia_alerta_descarga_min: c.estadiaAlertaDescargaMin,
+    pedir_foto_evidencia: c.pedirFotoEvidencia, updated_at: new Date().toISOString(),
   }, { onConflict: 'tenant_id' }), 'v1.conductor_config');
   if (error) throw new Error(`v1.conductor_config: ${error.message}`);
   if (contactos === undefined) return 'ok';

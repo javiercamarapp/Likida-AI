@@ -32,6 +32,19 @@ export interface ConfigConductor {
   avisarOficinaLlegada: boolean;
   avisarOficinaSalida: boolean;
   confirmarAlChofer: boolean;
+  /** 0385: comparar cada llegada contra el sitio del viaje (pin de WhatsApp / GPS). */
+  validarUbicacion: boolean;
+  /** Metros que se SUMAN al radio del sitio antes de decir «no coincide» (supuesto, no medición). */
+  toleranciaUbicacionM: number;
+  /** Máxima diferencia (min) entre la hora del mensaje y la de la posición comparada. */
+  ventanaUbicacionMin: number;
+  /** Pedir el pin al chofer cuando falta (solo si el viaje tiene sitio asignado). */
+  pedirUbicacion: boolean;
+  /** Minutos en andén tras la llegada a carga/descarga que disparan la alerta de estadía. null = sin alerta. */
+  estadiaAlertaCargaMin: number | null;
+  estadiaAlertaDescargaMin: number | null;
+  /** Invitar al chofer a mandar la foto del sello / andén / recibido tras la salida. */
+  pedirFotoEvidencia: boolean;
 }
 
 export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze({
@@ -55,6 +68,13 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   avisarOficinaLlegada: false,
   avisarOficinaSalida: false,
   confirmarAlChofer: true,
+  validarUbicacion: true,
+  toleranciaUbicacionM: 150,
+  ventanaUbicacionMin: 30,
+  pedirUbicacion: true,
+  estadiaAlertaCargaMin: null,
+  estadiaAlertaDescargaMin: null,
+  pedirFotoEvidencia: false,
 });
 
 /** El tope de aplazamientos por hito: pasado esto «voy con retraso» ya no calla al agente. */
@@ -123,6 +143,21 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
     num[campo] = v;
   }
 
+  const toleranciaUbicacionM = entero(b.toleranciaUbicacionM, 0, 5000);
+  if (toleranciaUbicacionM === null) return { error: 'La tolerancia de ubicación va de 0 a 5,000 metros.' };
+  const ventanaUbicacionMin = entero(b.ventanaUbicacionMin, 5, 180);
+  if (ventanaUbicacionMin === null) return { error: 'La ventana para comparar la ubicación va de 5 a 180 minutos.' };
+  // null = alerta apagada; un número fuera de rango NO se toma por «apagada».
+  const alerta = (v: unknown, nombre: string): { ok: number | null } | { error: string } => {
+    if (v === null || v === undefined || v === '') return { ok: null };
+    const n = entero(v, 15, 4320);
+    return n === null ? { error: `La alerta de estadía de ${nombre} va de 15 a 4,320 minutos (o vacía para apagarla).` } : { ok: n };
+  };
+  const alertaCarga = alerta(b.estadiaAlertaCargaMin, 'carga');
+  if ('error' in alertaCarga) return { error: alertaCarga.error };
+  const alertaDescarga = alerta(b.estadiaAlertaDescargaMin, 'descarga');
+  if ('error' in alertaDescarga) return { error: alertaDescarga.error };
+
   return {
     ok: {
       activo: Boolean(b.activo),
@@ -145,6 +180,13 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       avisarOficinaLlegada: Boolean(b.avisarOficinaLlegada),
       avisarOficinaSalida: Boolean(b.avisarOficinaSalida),
       confirmarAlChofer: Boolean(b.confirmarAlChofer),
+      validarUbicacion: Boolean(b.validarUbicacion),
+      toleranciaUbicacionM,
+      ventanaUbicacionMin,
+      pedirUbicacion: Boolean(b.pedirUbicacion),
+      estadiaAlertaCargaMin: alertaCarga.ok,
+      estadiaAlertaDescargaMin: alertaDescarga.ok,
+      pedirFotoEvidencia: Boolean(b.pedirFotoEvidencia),
     },
   };
 }

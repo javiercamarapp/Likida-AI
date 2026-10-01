@@ -82,3 +82,43 @@ export async function contarEnviadosPorChofer(operadorIds: string[], desde: Date
   }
   return cuenta;
 }
+
+/**
+ * Las llegadas recientes que aún no se pudieron validar contra la ubicación: sin veredicto del ciclo
+ * vigente, o «sin dato» por falta de posición (el GPS reporta con minutos de retraso). Cruza flotas
+ * a propósito (el barrido es del cron); cada candidato trae su `tenantId` y todo lo posterior se
+ * ancla a él. Solo viajes abiertos.
+ */
+export async function leerCandidatosValidacion(desde: Date, limite: number): Promise<Array<{ hito: HitoFila; viaje: ViajeContexto }>> {
+  const res = await acotada(supabaseAdmin()
+    .from('viaje_hito').select(COLUMNAS_HITO)
+    .in('tipo', ['llegada_carga', 'llegada_descarga']).eq('estado', 'recibido').gte('recibido_en', desde.toISOString())
+    .order('recibido_en', { ascending: false }).limit(limite * 2), 'conductor.candidatos_validacion');
+  const hitos = ((exigir(res as never, 'conductor.candidatos_validacion') ?? []) as unknown as Fila[]).map(filaAHito);
+  if (hitos.length === 0) return [];
+
+  const vistos = new Map<string, { ciclo: number; resultado: string; motivo: string | null }>();
+  for (const ids of trozos(hitos.map((h) => h.id), 150)) {
+    const rv = await acotada(supabaseAdmin()
+      .from('viaje_hito_validacion').select('viaje_hito_id, ciclo, resultado, motivo').in('viaje_hito_id', ids), 'conductor.candidatos_veredictos');
+    for (const f of (exigir(rv as never, 'conductor.candidatos_veredictos') ?? []) as unknown as Fila[]) {
+      vistos.set(`${f.viaje_hito_id}|${f.ciclo}`, { ciclo: Number(f.ciclo), resultado: String(f.resultado), motivo: typeof f.motivo === 'string' ? f.motivo : null });
+    }
+  }
+  const pendientes = hitos.filter((h) => {
+    const v = vistos.get(`${h.id}|${h.ciclo}`);
+    return !v || (v.resultado === 'sin_dato' && (v.motivo === 'sin_ubicacion' || v.motivo === 'ubicacion_fuera_de_ventana'));
+  }).slice(0, limite);
+  if (pendientes.length === 0) return [];
+
+  const viajes = new Map<string, ViajeContexto>();
+  for (const ids of trozos([...new Set(pendientes.map((h) => h.viajeId))], 150)) {
+    const rv = await acotada(supabaseAdmin().from('viaje').select(COLUMNAS_VIAJE_CTX).in('id', ids).eq('estatus', 'abierto'), 'conductor.candidatos_viajes');
+    for (const f of (exigir(rv as never, 'conductor.candidatos_viajes') ?? []) as unknown as Fila[]) viajes.set(String(f.id), filaAViajeCtx(f));
+  }
+  // El hito y su viaje SON de la misma flota: se comprueba, no se supone.
+  return pendientes.flatMap((h) => {
+    const v = viajes.get(h.viajeId);
+    return v && v.tenantId === h.tenantId ? [{ hito: h, viaje: v }] : [];
+  });
+}

@@ -23,7 +23,7 @@ import type { ViajeContexto } from './repo';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface AvisoReclamado {
-  clase: 'solicitud' | 'recordatorio' | 'escalacion' | 'confirmacion' | 'aviso_oficina';
+  clase: 'solicitud' | 'recordatorio' | 'escalacion' | 'confirmacion' | 'aviso_oficina' | 'ubicacion' | 'alerta_estadia';
   nivel: number;
   /** El claim es del ciclo ACTUAL del hito. */
   ciclo: number;
