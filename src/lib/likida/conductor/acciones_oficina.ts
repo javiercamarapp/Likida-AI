@@ -36,12 +36,18 @@ const texto = (v: unknown): string => (typeof v === 'string' ? v : '');
  * la zona de la flota. Devuelve `null` si no es una fecha-hora real (el 31 de febrero no existe).
  */
 export function horaMxAUtc(local: string): Date | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(local.trim());
-  if (!m) return null;
-  const [y, mo, d, h, mi, s] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6] ?? 0)];
-  const comoUtc = Date.UTC(y, mo - 1, d, h, mi, s);
+  // Sin una sola expresión con grupo opcional (el segundo es opcional: se separa a mano).
+  const [fecha, resto, ...sobra] = local.trim().replace(' ', 'T').split('T');
+  if (sobra.length > 0 || !fecha || !resto) return null;
+  const f = fecha.split('-');
+  const h = resto.split(':');
+  if (f.length !== 3 || h.length < 2 || h.length > 3) return null;
+  if (!/^\d{4}$/.test(f[0]) || !/^\d{2}$/.test(f[1]) || !/^\d{2}$/.test(f[2])) return null;
+  if (!h.every((x) => /^\d{2}$/.test(x))) return null;
+  const [y, mo, d, hh, mi, s] = [Number(f[0]), Number(f[1]), Number(f[2]), Number(h[0]), Number(h[1]), Number(h[2] ?? 0)];
+  const comoUtc = Date.UTC(y, mo - 1, d, hh, mi, s);
   const prueba = new Date(comoUtc);
-  if (prueba.getUTCFullYear() !== y || prueba.getUTCMonth() !== mo - 1 || prueba.getUTCDate() !== d || h > 23 || mi > 59 || s > 59) return null;
+  if (prueba.getUTCFullYear() !== y || prueba.getUTCMonth() !== mo - 1 || prueba.getUTCDate() !== d || hh > 23 || mi > 59 || s > 59) return null;
   // Se busca el instante cuyo reloj de México marca esa hora (sin suponer el huso: ya no hay horario de verano, pero la
   // frontera norte lo conserva en algunos municipios y TZ_MX es la zona de la flota).
   const marca = (t: number): number => {

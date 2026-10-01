@@ -1461,7 +1461,7 @@ function documento(servidor: string) {
           'x-likida-area': 'dinero',
           summary: 'Las estadías en andén (llegada→salida de cada carga y descarga) para el cobro de estadías.',
           description: 'Área `dinero` (trae el monto propuesto). `desde`/`hasta`: días de México inclusive (por defecto los últimos 7, máximo 93). `formato=csv` devuelve UTF-8 con BOM listo para Excel. Cada fila lleva la hora EXACTA del mensaje del chofer (o la declarada por la oficina) y de dónde salió, si la ubicación la validó y cuántas fotos la respaldan. El monto es una PROPUESTA: sin horas libres pactadas no hay «excedido», sin tarifa no hay monto, y una parada que sigue corriendo (`en_curso`) no es cobrable. Si hay más viajes de los que una lectura trae, `truncada` es `true` (y el encabezado `X-Estadias-Truncada` en el CSV).',
-          tags: ['hitos'],
+          tags: ['hitos', 'dinero'],
           parameters: [
             { name: 'desde', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
             { name: 'hasta', in: 'query', required: false, schema: { type: 'string', format: 'date' } },

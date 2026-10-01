@@ -106,7 +106,7 @@ function numero(valor: string, decimalComa: boolean): number | null {
   if (t === '') return null;
   if (decimalComa) t = t.replace(',', '.');
   // Solo dígitos, signo y un punto: nada de «20°43'» ni de notación científica.
-  if (!/^-?\d+(\.\d+)?$/.test(t)) return null;
+  if (!/^-?\d+$/.test(t) && !/^-?\d+\.\d+$/.test(t)) return null;
   const n = Number(t);
   return Number.isFinite(n) ? n : null;
 }

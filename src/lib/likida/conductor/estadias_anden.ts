@@ -232,7 +232,8 @@ export function horaExactaMx(iso: string | null): string {
 export function celdaCsv(v: string | number | null): string {
   if (v === null || v === undefined) return '';
   let t = String(v);
-  if (/^[=+\-@\t\r]/.test(t) && !/^-?\d+(\.\d+)?$/.test(t)) t = `'${t}`;
+  // Solo el TEXTO puede ser una fórmula: un número (incluso negativo) es un número.
+  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(t)) t = `'${t}`;
   return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
 }
 

@@ -87,7 +87,6 @@ async function chofer(w: Mundo, texto: string, cuando: Date, extra: { operadorId
 const cron = (w: Mundo, cuando: Date) => correrConductor(w.puertos, { ahora: cuando });
 const hitoDe = (w: Mundo, tipo: string, viajeId = V1) => w.m.de(viajeId).find((h) => h.tipo === tipo)!;
 const estados = (w: Mundo, viajeId = V1) => Object.fromEntries(w.m.de(viajeId).map((h) => [h.tipo, h.estado]));
-const tipos = () => meta.salientes.map((s) => `${s.tipo}${s.plantilla ? `:${s.plantilla}` : ''}`);
 
 beforeEach(() => { meta.reiniciar(); meta.estado.reloj = T('13:00'); });
 
