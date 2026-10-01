@@ -1,3 +1,6 @@
+import { normalizarTelefonoWa } from '../wa_ventana';
+import { validarConfigConductor, type ConfigConductor } from './config';
+import type { ContactoTrafico } from './escalamiento';
 import { ESTADOS_HITO, TIPOS_HITO, type EstadoHito, type HitoFila, type TipoHito } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -143,4 +146,74 @@ export function validarCitas(cuerpo: unknown, ahora: Date = new Date()): { ok: C
     return { error: 'Manda al menos una de: citaOrigen, citaDestino, etaOrigen, etaDestino.' };
   }
   return { ok: cambio };
+}
+
+// ── La config por flota y los contactos de escalamiento (PUT /v1/conductor/config) ──
+
+/** Las llaves de config que acepta el PUT (camelCase, las mismas de `ConfigConductor`). */
+const LLAVES_CONFIG: readonly (keyof ConfigConductor)[] = [
+  'activo', 'solicitudesMin', 'escalarTrasMin', 'segundoNivelMin', 'horaInicio', 'horaFin', 'diasSemana', 'topeDiarioChofer',
+  'anticipoCitaMin', 'esperaSinCitaMin', 'esperaCargaMin', 'trayectoSinEtaMin', 'esperaDescargaMin', 'regresoMin', 'posponerMin',
+  'ventanaCorreccionMin', 'usarLlm', 'avisarOficinaLlegada', 'avisarOficinaSalida', 'confirmarAlChofer',
+];
+
+export const MAX_CONTACTOS_TRAFICO = 20;
+
+export interface CambioConfig {
+  /** La config COMPLETA ya validada (la actual + lo que mandó el integrador). */
+  config: ConfigConductor;
+  /** `undefined` = no tocar los contactos; una lista = REEMPLAZA todos los de la flota. */
+  contactos?: ContactoTrafico[];
+}
+
+/**
+ * Valida el cuerpo de `PUT /v1/conductor/config` contra la config ACTUAL: se manda solo lo que cambia.
+ * Una llave desconocida es 400 (un typo no puede dejar a la flota corriendo con la escalera que creía
+ * haber cambiado, el mismo criterio de `config_tenant_valida`).
+ */
+export function validarCambioConfig(cuerpo: unknown, actual: ConfigConductor): { ok: CambioConfig } | { error: string } {
+  if (!cuerpo || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) return { error: 'El cuerpo tiene que ser un objeto JSON.' };
+  const o = cuerpo as Record<string, unknown>;
+  const desconocidas = Object.keys(o).filter((k) => k !== 'contactos' && !(LLAVES_CONFIG as readonly string[]).includes(k));
+  if (desconocidas.length > 0) {
+    return { error: `Llaves desconocidas: ${desconocidas.slice(0, 5).join(', ')}. Las válidas son: ${[...LLAVES_CONFIG, 'contactos'].join(', ')}.` };
+  }
+  if (Object.keys(o).length === 0) return { error: 'Manda al menos una llave de configuración o `contactos`.' };
+
+  const fusion: Partial<ConfigConductor> = { ...actual };
+  for (const k of LLAVES_CONFIG) {
+    if (k in o) (fusion as Record<string, unknown>)[k] = o[k];
+  }
+  const v = validarConfigConductor(fusion);
+  if ('error' in v) return { error: v.error };
+
+  let contactos: ContactoTrafico[] | undefined;
+  if ('contactos' in o) {
+    if (!Array.isArray(o.contactos)) return { error: '`contactos` tiene que ser una lista.' };
+    if (o.contactos.length > MAX_CONTACTOS_TRAFICO) return { error: `\`contactos\` admite hasta ${MAX_CONTACTOS_TRAFICO}.` };
+    contactos = [];
+    const vistos = new Set<string>();
+    for (const [i, c] of o.contactos.entries()) {
+      if (!c || typeof c !== 'object' || Array.isArray(c)) return { error: `contactos[${i}] tiene que ser un objeto.` };
+      const x = c as Record<string, unknown>;
+      const nivel = x.nivel;
+      if (nivel !== 1 && nivel !== 2) return { error: `contactos[${i}].nivel tiene que ser 1 (patio responsable) o 2 (jefe general).` };
+      const nombre = typeof x.nombre === 'string' ? x.nombre.replace(/\s+/g, ' ').trim() : '';
+      if (nombre.length < 1 || nombre.length > 80) return { error: `contactos[${i}].nombre tiene que tener entre 1 y 80 caracteres.` };
+      const tel = typeof x.telefono === 'string' || typeof x.telefono === 'number' ? normalizarTelefonoWa(String(x.telefono)) : '';
+      // Diez dígitos mexicanos se completan con la lada 52; el resto debe traer ya la forma 52 + 10.
+      const telefono = /^\d{10}$/.test(tel) ? `52${tel}` : tel;
+      if (!/^52\d{10}$/.test(telefono)) return { error: `contactos[${i}].telefono tiene que ser un número mexicano de 10 dígitos (o 52 + 10).` };
+      let terminalId: string | null = null;
+      if (x.terminalId !== undefined && x.terminalId !== null) {
+        if (typeof x.terminalId !== 'string' || !UUID.test(x.terminalId)) return { error: `contactos[${i}].terminalId tiene que ser un uuid o null.` };
+        terminalId = x.terminalId.toLowerCase();
+      }
+      const clave = `${terminalId ?? ''}|${nivel}|${telefono}`;
+      if (vistos.has(clave)) return { error: `contactos[${i}] repite el mismo teléfono, nivel y terminal.` };
+      vistos.add(clave);
+      contactos.push({ nivel, nombre, telefono, terminalId });
+    }
+  }
+  return { ok: { config: v.ok, contactos } };
 }

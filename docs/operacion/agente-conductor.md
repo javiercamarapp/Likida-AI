@@ -91,6 +91,7 @@ A los `escalar_tras_min` (90) con la escalera agotada:
 |---|---|---|
 | `GET /v1/hitos` | `operacion` | Hitos con filtros `viajeId`, `folio`, `estado`, `tipo`, `desde` (incremental) y paginación. Trae contacto en andén y coordenadas; **no** el texto crudo del chofer. |
 | `GET /v1/hitos/eventos?despues=<id>` | `operacion` | Feed incremental de eventos (recibido, validado, omitido, escalado, corregido, pospuesto, atendido, contacto), sin datos personales. Pull. |
+| `GET/PUT /v1/conductor/config` | `administracion` | La estrategia de la flota (escalera, ventana, tope diario, plazos, avisos a oficina) y los contactos de escalamiento. PUT manda solo lo que cambia, se valida entero (llave desconocida = 400); `contactos[]` (`nivel` 1 patio / 2 jefe general, `telefono`, `terminalId?`) REEMPLAZA la lista. |
 | `PUT /v1/viajes/{id}/citas` | `administracion` | `citaOrigen`, `citaDestino`, `etaOrigen`, `etaDestino` (ISO **con zona horaria**; `null` borra). Es lo que dice al agente cuándo pedir cada hito. |
 
 Siempre acotado por la flota de la credencial. **No hay webhook saliente**: exige política de destinos (SSRF), secretos y reintentos que no se inventaron aquí (ver pendientes).
@@ -107,8 +108,8 @@ Datos personales nuevos: el nombre de un **tercero** (quien recibe en el andén)
 ## Operación
 
 - Palancas: `global` y `agente:conductores` (fail-closed: ilegible = no corre). Latido `conductor-hitos` (parcial = fallos de envío, cortes por reloj o rechazo masivo).
-- Config por flota: `agente_conductor_config` (sin fila = defaults del código, `conductor/config.ts`). No hay pantalla todavía (ver pendientes).
-- Contactos de escalamiento: `conductor_contacto_trafico` (alta por SQL/servidor hoy; teléfonos en forma 52+10).
+- Config por flota: `agente_conductor_config` (sin fila = defaults del código, `conductor/config.ts`), editable con `PUT /v1/conductor/config`. No hay pantalla todavía (ver pendientes).
+- Contactos de escalamiento: `conductor_contacto_trafico`, por el mismo `PUT /v1/conductor/config` (teléfonos normalizados a 52+10).
 - Modelo: `LIKIDA_MODEL_CONDUCTOR_HITO` cambia el modelo sin deploy.
 
 ## Bloqueos externos (no cerrables por código)
@@ -122,7 +123,7 @@ Datos personales nuevos: el nombre de un **tercero** (quien recibe en el andén)
 ## Pendientes conocidos (no hechos en esta tarea)
 
 - Validación automática contra geocerca/GPS (`validado` por `gps`), editor de geocercas y foto/evidencia por hito (el modelo ya tiene `fuente = 'foto'`, `evidencia_ruta` y coordenadas; no hay cableado de la foto como hito).
-- Tablero ampliado y pantalla de configuración (escalera, ventana, contactos) en `/dashboard/agentes/conductores`; hoy el tablero sigue mostrando los 6 sellos de siempre.
+- Tablero ampliado y pantalla de configuración (escalera, ventana, contactos) en `/dashboard/agentes/conductores`; hoy la config se edita por API y el tablero sigue mostrando los 6 sellos de siempre.
 - Webhook saliente hacia el sistema del cliente.
 - Un pin de ubicación se **adjunta** al hito recién registrado (≤ 30 min); no registra un hito por sí solo.
 - Aviso por correo/Notificaciones a la flota cuando el agente no logra entregar escalaciones (el patrón de `escalar_viaje.ts`).

@@ -1419,6 +1419,25 @@ function documento(servidor: string) {
           },
         },
       },
+      '/v1/conductor/config': {
+        get: {
+          operationId: 'obtenerConfigConductor',
+          'x-likida-area': 'administracion',
+          summary: 'La estrategia del Agente Conductor de la flota y sus contactos de escalamiento.',
+          description: 'Área `administracion` (trae teléfonos de personas). Sin fila guardada, los defaults: escalera 0/+15/+30/+45 min, escalación a los 90, ventana 06:00–22:00.',
+          tags: ['hitos'],
+          responses: { '200': { description: 'Config y contactos.', content: { 'application/json': { schema: { type: 'object' } } } }, ...respuestasError },
+        },
+        put: {
+          operationId: 'guardarConfigConductor',
+          'x-likida-area': 'administracion',
+          summary: 'Cambia la estrategia del Agente Conductor y, si mandas `contactos`, REEMPLAZA los contactos de escalamiento.',
+          description: 'Requiere el área `administracion`. Manda SOLO lo que cambia; se fusiona con la config actual y se valida entera. Una llave desconocida es 400 (la flota sale de la credencial, nunca del cuerpo). `contactos[]`: `{ nivel: 1|2, nombre, telefono (10 dígitos o 52+10), terminalId? }`; nivel 1 = patio responsable de esa terminal, nivel 2 = jefe general.',
+          tags: ['hitos'],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } },
+          responses: { '200': { description: 'Lo guardado.', content: { 'application/json': { schema: { type: 'object' } } } }, ...respuestasError },
+        },
+      },
       '/v1/openapi': {
         get: {
           operationId: 'obtenerOpenapi',

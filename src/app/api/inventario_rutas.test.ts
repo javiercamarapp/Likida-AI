@@ -109,7 +109,7 @@ import { join, relative, sep } from 'node:path';
 //   · `api/export/bitacora-conciliada/route.ts` — sesión + área dinero +
 //     puedeExportar, rate limit y siempre acotada al tenant de la sesión.
 //
-// 78 → 82 (loop punta a punta, Agente 5 «Conductor», 2-oct-2026): cuatro rutas,
+// 78 → 83 (loop punta a punta, Agente 5 «Conductor», 2-oct-2026): cinco rutas,
 // cada una con su propia puerta —
 //   · `api/cron/conductor-hitos/route.ts` — puertaCron (CRON_SECRET), palancas
 //     global y `agente:conductores` (ambas fail-closed) y latido en todo camino
@@ -119,8 +119,12 @@ import { join, relative, sep } from 'node:path';
 //     SIEMPRE acotadas al tenant de la credencial (`.eq('tenant_id', …)`);
 //   · `api/v1/viajes/[id]/citas/route.ts` — `abrir(req, 'administracion')` +
 //     CSRF para la cookie; el UPDATE lleva `.eq('tenant_id', …)` y «no existe» y
-//     «no es de tu flota» contestan lo mismo (404).
-const RUTAS_APP_REVISADAS = 82;
+//     «no es de tu flota» contestan lo mismo (404);
+//   · `api/v1/conductor/config/route.ts` — `abrir(req, 'administracion')` también
+//     para LEER (trae teléfonos de personas); el PUT fusiona con la config de la
+//     flota de la credencial, un `tenant_id` en el cuerpo es 400 y la terminal
+//     de otra flota la rechaza la FK compuesta.
+const RUTAS_APP_REVISADAS = 83;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
