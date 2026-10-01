@@ -14,6 +14,7 @@ const { parsearArchivoDesglose, parsearDesgloseHoja } = await import('../intake/
 // ejercita un modo de falla del mundo real.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- solo lee los fixtures sintéticos de este directorio
 const fx = (n: string) => readFileSync(join(__dirname, 'fixtures', n));
 const leer = (n: string, opciones = {}) => parsearArchivoDesglose(n, fx(n), opciones);
 

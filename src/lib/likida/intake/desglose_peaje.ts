@@ -49,7 +49,7 @@ import { evaluarGpsDeLineas } from '../peajes/cruce_gps_datos';
 import { normalizarTag } from '../peajes/formatos';
 import { matrizDeCsv } from '../peajes/csv';
 import {
-  fechaHoraDeCelda, horaDeCelda, aInstanteMx, montoDeCelda as montoDeCeldaBase, normalizarNombre,
+  fechaHoraDeCelda, horaDeCelda, aInstanteMx, montoDeCelda as montoDeCeldaBase,
 } from '../peajes/formatos';
 import {
   resolverMapeo, sugerirColumnas, listarEncabezados, type ConfigMapeo, type CampoMapeo,
@@ -613,7 +613,9 @@ export function cruzarLineasDesglose(
 
 export type ResultadoImportar =
   | { ok: true; desgloseId: string; totalLineas: number; avisos: string[] }
-  | { ok: false; motivo: string };
+  /** `causa`: `formato` (el archivo no se entiende o no cabe — reintentar no lo arregla; es el default) o
+   *  `infraestructura` (la base no dejó guardar — reintentar sí puede). La cola de ingesta decide con esto. */
+  | { ok: false; motivo: string; causa?: 'formato' | 'infraestructura' };
 
 /**
  * Importa el archivo del proveedor: parsea, mide el periodo (min/max real de
@@ -690,7 +692,7 @@ export async function importarDesglose(
     .single(), 'desglose_peaje.insertar');
   if (errDesglose || !fila) {
     logger.error('desglose_peaje.insertar_error', { tenant: tenantId, err: errDesglose?.message ?? 'sin id' });
-    return { ok: false, motivo: 'No se pudo guardar el desglose. Inténtalo de nuevo.' };
+    return { ok: false, motivo: 'No se pudo guardar el desglose. Inténtalo de nuevo.', causa: 'infraestructura' };
   }
   const desgloseId = fila.id as string;
 
@@ -722,7 +724,7 @@ export async function importarDesglose(
     // Limpieza best-effort: el cascade borra las líneas que sí entraron.
     const { error: errBorrar } = await supabaseAdmin().from('desglose_peaje').delete().eq('id', desgloseId).eq('tenant_id', tenantId);
     if (errBorrar) logger.error('desglose_peaje.limpieza_error', { tenant: tenantId, desglose: desgloseId, err: errBorrar.message });
-    return { ok: false, motivo: 'No se pudieron guardar las líneas del desglose. No quedó a medias: inténtalo de nuevo.' };
+    return { ok: false, motivo: 'No se pudieron guardar las líneas del desglose. No quedó a medias: inténtalo de nuevo.', causa: 'infraestructura' };
   }
 
   return { ok: true, desgloseId, totalLineas: parseo.lineas.length, avisos: parseo.avisos };

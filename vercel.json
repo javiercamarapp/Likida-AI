@@ -54,6 +54,10 @@
     {
       "path": "/api/cron/liquidaciones-externas",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/peajes",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

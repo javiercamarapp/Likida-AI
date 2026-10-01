@@ -96,7 +96,17 @@ import { join, relative, sep } from 'node:path';
 // 7-sep-2026 (auditoría 28, SEG-B1): 67 → 72. El escaneo deja de limitarse a
 // `src/app/api` y cubre `src/app` entero (ver el comentario de arriba con el
 // detalle de las cinco rutas que aparecen).
-const RUTAS_APP_REVISADAS = 75;
+//
+// 75 → 77 (loop punta a punta, Agente 2, 1-oct-2026): dos rutas de la
+// ingesta automática de peajes, cada una con su propia puerta —
+//   · `api/peajes/ingesta/route.ts` — SIN sesión a propósito (la llama el
+//     sistema del proveedor/cliente): su puerta es la firma HMAC por flota
+//     (cuerpo crudo + timestamp ±5 min + comparación en tiempo constante),
+//     fail-closed sin PEAJES_INGESTA_SECRETO o con la flota sin activar, tope de
+//     cuerpo, rate limit y cola con tope de pendientes;
+//   · `api/cron/peajes/route.ts` — puertaCron (CRON_SECRET) y palancas global y
+//     `agente:peajes`.
+const RUTAS_APP_REVISADAS = 77;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

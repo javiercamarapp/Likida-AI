@@ -102,6 +102,7 @@ describe('conciliarDesglose: tag↔unidad, caseta y GPS', () => {
     for (const l of db.llamadas.filter((x) => x.op !== 'rpc')) {
       expect(l.filtros.some(([c, o, v]) => c === 'tenant_id' && o === 'eq' && v === T), `${l.tabla}.${l.op} sin tenant`).toBe(true);
     }
+    // y el RPC de posiciones recibe SIEMPRE el tenant (lo verifica la fábrica del RPC con expect)
   });
 
   it('es idempotente: re-conciliar deja exactamente lo mismo', async () => {
