@@ -152,7 +152,10 @@ describe('parsearDesgloseTextoPdf — la capa de texto de un PDF', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.lineas).toHaveLength(2);
-    expect(r.lineas[0]).toEqual({ indice: 0, fecha: '2026-08-05', caseta: 'Tepotzotlán', monto: 189, tag: 'IMDM12345678' });
+    // La hora del cobro ya NO se descarta (0375): es lo que usa el cruce por caseta con el GPS.
+    expect(r.lineas[0]).toEqual({ indice: 0, fecha: '2026-08-05', caseta: 'Tepotzotlán', monto: 189, tag: 'IMDM12345678', hora: '10:21:00' });
+    // La línea sin hora NO inventa una: la clave queda ausente.
+    expect(r.lineas[1]).not.toHaveProperty('hora');
   });
 
   it('un PDF sin renglones reconocibles se rechaza pidiendo el Excel/CSV', () => {
