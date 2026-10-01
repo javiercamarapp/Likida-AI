@@ -1,6 +1,6 @@
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
-import { cambiarEstadoSitio, guardarSitio, importarSitios } from './repo_validacion';
+import { asignarSitiosViaje, cambiarEstadoSitio, guardarSitio, importarSitios } from './repo_validacion';
 import { leerSitioManual, parsearCsvSitios } from './sitios';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -19,8 +19,9 @@ export interface DepsSitios {
   guardar: typeof guardarSitio;
   importar: typeof importarSitios;
   estado: typeof cambiarEstadoSitio;
+  asignar: typeof asignarSitiosViaje;
 }
-export const depsSitiosReales: DepsSitios = { guardar: guardarSitio, importar: importarSitios, estado: cambiarEstadoSitio };
+export const depsSitiosReales: DepsSitios = { guardar: guardarSitio, importar: importarSitios, estado: cambiarEstadoSitio, asignar: asignarSitiosViaje };
 
 export interface ContextoSitios { tenantId: string; rol: string }
 
@@ -79,6 +80,38 @@ export async function archivarSitioDelPanel(ctx: ContextoSitios, id: string, act
     return hecho ? { ok: true, mensaje: activa ? 'Sitio reactivado.' : 'Sitio archivado.' } : { ok: false, error: 'Ese sitio ya no existe.' };
   } catch (e) {
     logger.error('sitios.estado_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, error: FALLO };
+  }
+}
+
+/** El valor del `<select>` que significa «quítale el sitio». */
+export const QUITAR_SITIO = '__quitar';
+
+/**
+ * Asigna el sitio de carga y/o de descarga de UN viaje desde el tablero. Cada lado: '' = no tocar, `__quitar` = desasignar,
+ * o el id de un sitio de la flota (la base resuelve el id DENTRO de la flota de la sesión: uno ajeno es «no existe»).
+ */
+export async function asignarSitiosDelPanel(ctx: ContextoSitios, fd: { get(k: string): unknown }, d: DepsSitios = depsSitiosReales): Promise<ResultadoAccionSitio> {
+  if (!puedeAsignar(ctx.rol)) return { ok: false, error: SIN_PERMISO };
+  const txt = (k: string): string => (typeof fd.get(k) === 'string' ? (fd.get(k) as string).trim() : '');
+  const viajeId = txt('viajeId');
+  if (!UUID.test(viajeId)) return { ok: false, error: 'No reconozco el viaje.' };
+  const cambio: { origen?: string | null; destino?: string | null } = {};
+  for (const lado of ['origen', 'destino'] as const) {
+    const v = txt(lado);
+    if (v === '') continue;
+    if (v === QUITAR_SITIO) { cambio[lado] = null; continue; }
+    if (!UUID.test(v)) return { ok: false, error: 'No reconozco el sitio elegido.' };
+    cambio[lado] = v.toLowerCase();
+  }
+  if (Object.keys(cambio).length === 0) return { ok: false, error: 'Elige el sitio de carga, el de descarga o los dos.' };
+  try {
+    const r = await d.asignar(ctx.tenantId, viajeId.toLowerCase(), cambio);
+    if (r === 'viaje_no_encontrado') return { ok: false, error: 'Ese viaje ya no existe.' };
+    if (r === 'sitio_no_encontrado') return { ok: false, error: 'Alguno de los sitios no existe en tu catálogo.' };
+    return { ok: true, mensaje: 'Listo: las próximas llegadas de este viaje se comparan contra esos sitios.' };
+  } catch (e) {
+    logger.error('sitios.asignar_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: FALLO };
   }
 }

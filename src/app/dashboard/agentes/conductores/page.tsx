@@ -20,7 +20,8 @@ import { revalidatePath } from 'next/cache';
 import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrategia-forma';
 import { Bloque, EsqTabla, vigilar } from '../../bloque';
 import { leerConfigConductor } from '@/lib/likida/conductor/repo';
-import { leerCatalogosFiltro, leerDatosTablero, leerIndicadores, type FiltrosTablero } from '@/lib/likida/conductor/repo_validacion';
+import { leerCatalogosFiltro, leerDatosTablero, leerIndicadores, listarSitios, type FiltrosTablero } from '@/lib/likida/conductor/repo_validacion';
+import { asignarSitiosDelPanel } from '@/lib/likida/conductor/acciones_sitios';
 import { armarTablero, filtrarPorSemaforo, indicadoresVista, type Semaforo } from '@/lib/likida/conductor/tablero';
 import { ejecutarAccionOficina, leerAccion } from '@/lib/likida/conductor/acciones_oficina';
 import { emailDeUsuario } from '@/lib/likida/conductor/trabajo';
@@ -158,6 +159,8 @@ export default async function PaginaAgenteConductores({
     return indicadoresVista(await leerIndicadores(tenantId, new Date(hasta.getTime() - filtrosVista.dias * 86_400_000), new Date(hasta.getTime() + 60_000), filtrosRepo));
   });
   const pCatalogos = safe(() => leerCatalogosFiltro(tenantId));
+  // Los sitios que se pueden asignar a un viaje (solo los activos; hasta 500). Sin lectura, la forma de asignar no ofrece nada.
+  const pSitios = safe(async () => (await listarSitios(tenantId, { limite: 500 })).sitios.filter((x) => x.activa).map((x) => ({ id: x.id, nombre: x.nombre, tipo: x.tipo })));
   const ocultos: Record<string, string> = {};
   if (sp.tenant) ocultos.tenant = sp.tenant; else if (sp.vista) ocultos.vista = sp.vista;
   if (sp.rol) ocultos.rol = sp.rol;
@@ -174,6 +177,15 @@ export default async function PaginaAgenteConductores({
     if ('error' in pedida) return { ok: false, error: pedida.error };
     const email = await emailDeUsuario(s.userId).catch(() => null);
     const r = await ejecutarAccionOficina({ tenantId: s.tenantId, rol: s.rol, usuarioId: s.userId, email }, pedida.ok);
+    if (r.ok) revalidatePath('/dashboard/agentes/conductores');
+    return r;
+  }
+
+  async function accionSitios(_previo: ResultadoOficina, fd: FormData): Promise<ResultadoOficina> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/conductores')) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico pueden hacer esto.' };
+    const r = await asignarSitiosDelPanel({ tenantId: s.tenantId, rol: s.rol }, fd);
     if (r.ok) revalidatePath('/dashboard/agentes/conductores');
     return r;
   }
@@ -199,8 +211,8 @@ export default async function PaginaAgenteConductores({
       tablero={
         <Bloque mensaje="No se pudo leer el tablero de hitos." esqueleto={<EsqTabla filas={6} />}>
           <BloqueTableroHitos
-            pTablero={pTablero} pIndicadores={pIndicadores} pCatalogos={pCatalogos} filtros={filtrosVista} ocultos={ocultos}
-            accionUrl="/dashboard/agentes/conductores" puedeActuar={puedeActuar} accion={accionOficina}
+            pTablero={pTablero} pIndicadores={pIndicadores} pCatalogos={pCatalogos} pSitios={pSitios} filtros={filtrosVista} ocultos={ocultos}
+            accionUrl="/dashboard/agentes/conductores" puedeActuar={puedeActuar} accion={accionOficina} accionSitios={accionSitios}
           />
         </Bloque>
       }
@@ -231,17 +243,19 @@ export default async function PaginaAgenteConductores({
   );
 }
 
-async function BloqueTableroHitos({ pTablero, pIndicadores, pCatalogos, filtros, ocultos, accionUrl, puedeActuar, accion }: {
+async function BloqueTableroHitos({ pTablero, pIndicadores, pCatalogos, pSitios, filtros, ocultos, accionUrl, puedeActuar, accion, accionSitios }: {
   pTablero: Promise<ReturnType<typeof armarTablero>>;
   pIndicadores: Promise<ReturnType<typeof indicadoresVista> | null>;
   pCatalogos: Promise<Awaited<ReturnType<typeof leerCatalogosFiltro>> | null>;
+  pSitios: Promise<Array<{ id: string; nombre: string; tipo: string }> | null>;
   filtros: FiltrosVista; ocultos: Record<string, string>; accionUrl: string; puedeActuar: boolean;
   accion: (previo: ResultadoOficina, fd: FormData) => Promise<ResultadoOficina>;
+  accionSitios: (previo: ResultadoOficina, fd: FormData) => Promise<ResultadoOficina>;
 }) {
-  const [tablero, indicadores, catalogos] = await Promise.all([pTablero, pIndicadores, pCatalogos]);
+  const [tablero, indicadores, catalogos, sitios] = await Promise.all([pTablero, pIndicadores, pCatalogos, pSitios]);
   return (
     <TableroHitos tablero={tablero} indicadores={indicadores} dias={filtros.dias} filtros={filtros} catalogos={catalogos}
-      ocultos={ocultos} accionUrl={accionUrl} puedeActuar={puedeActuar} accion={accion} />
+      ocultos={ocultos} accionUrl={accionUrl} puedeActuar={puedeActuar} accion={accion} accionSitios={accionSitios} sitios={sitios ?? []} />
   );
 }
 

@@ -5,7 +5,7 @@ import type { CatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
 import { textoTiempo } from '@/lib/likida/conductor/planificador';
 import type { Excepcion, FilaTablero, HitoVista, IndicadoresVista, Semaforo, Tablero, TipoExcepcion } from '@/lib/likida/conductor/tablero';
 import type { Estancia } from '@/lib/likida/conductor/estadias_anden';
-import { AccionesHito, type AccionOficinaServidor, type ModoAccion } from './acciones-forma';
+import { AccionesHito, FormaAsignarSitios, type AccionOficinaServidor, type ModoAccion, type OpcionSitio } from './acciones-forma';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL TABLERO DE HITOS (0385) — la pantalla del jefe de tráfico.
@@ -176,6 +176,7 @@ export function ColaExcepciones({ excepciones, puedeActuar, accion }: { excepcio
   );
 }
 
+const FOTO_TEXTO: Record<string, string> = { sello: 'sello', anden: 'andén', recibido: 'recibido', otra: 'foto' };
 const FUENTE_TEXTO: Record<string, string> = { texto: 'texto', boton: 'botón', ubicacion: 'ubicación', foto: 'foto', sistema: 'sistema', oficina: 'oficina' };
 
 function CeldaHito({ h, puedeActuar, accion, viajeId }: { h: HitoVista; puedeActuar: boolean; accion: AccionOficinaServidor; viajeId: string }) {
@@ -204,7 +205,11 @@ function CeldaHito({ h, puedeActuar, accion, viajeId }: { h: HitoVista; puedeAct
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]" style={{ color: 'var(--muted)' }}>
           {h.fuente && <span>vía {FUENTE_TEXTO[h.fuente] ?? h.fuente}</span>}
           {h.validadoPor && <span style={{ color: 'var(--ok)' }}>validado ({h.validadoPor === 'gps' ? 'ubicación' : h.validadoPor})</span>}
-          {h.evidencias > 0 && <span className="inline-flex items-center gap-0.5"><Camera width={11} height={11} aria-hidden />{h.evidencias}</span>}
+          {h.fotos.map((f) => (
+            <a key={f.id} href={`/api/v1/evidencias/${f.id}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 underline" title="Abrir la foto (el enlace dura 10 minutos)">
+              <Camera width={11} height={11} aria-hidden />{FOTO_TEXTO[f.tipo]}
+            </a>
+          ))}
         </div>
       )}
       {h.contacto && <div className="text-[11px]" style={{ color: 'var(--muted)' }}>Lo atiende {h.contacto}</div>}
@@ -234,7 +239,9 @@ function ResumenEstancia({ e }: { e: Estancia }) {
   return <span>{e.lugar === 'carga' ? 'En carga' : 'En descarga'}: <span className="cifra-mono">{texto}</span></span>;
 }
 
-export function TarjetaViaje({ f, puedeActuar, accion }: { f: FilaTablero; puedeActuar: boolean; accion: AccionOficinaServidor }) {
+export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios }: {
+  f: FilaTablero; puedeActuar: boolean; accion: AccionOficinaServidor; accionSitios: AccionOficinaServidor; sitios: OpcionSitio[];
+}) {
   const v = f.viaje;
   return (
     <li className="card p-3.5 space-y-2.5" aria-label={`Viaje ${v.folio ?? v.id}`}>
@@ -253,6 +260,7 @@ export function TarjetaViaje({ f, puedeActuar, accion }: { f: FilaTablero; puede
       ) : (
         <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Sin sitios asignados: las llegadas de este viaje no se pueden validar contra la ubicación.</p>
       )}
+      {puedeActuar && <FormaAsignarSitios accion={accionSitios} viajeId={v.id} sitios={sitios} />}
       <ol className="flex flex-wrap gap-x-4 gap-y-3">
         {f.hitos.map((h) => <CeldaHito key={h.id} h={h} puedeActuar={puedeActuar} accion={accion} viajeId={v.id} />)}
       </ol>
@@ -266,10 +274,12 @@ export function TarjetaViaje({ f, puedeActuar, accion }: { f: FilaTablero; puede
 }
 
 export function TableroHitos({
-  tablero, indicadores, dias, filtros, catalogos, ocultos, accionUrl, puedeActuar, accion,
+  tablero, indicadores, dias, filtros, catalogos, ocultos, accionUrl, puedeActuar, accion, accionSitios, sitios,
 }: {
   tablero: Tablero; indicadores: IndicadoresVista | null; dias: number; filtros: FiltrosVista; catalogos: CatalogosFiltro | null;
   ocultos: Record<string, string>; accionUrl: string; puedeActuar: boolean; accion: AccionOficinaServidor;
+  /** Asignar el sitio de carga y de descarga de un viaje (misma firma que las demás acciones del tablero). */
+  accionSitios: AccionOficinaServidor; sitios: OpcionSitio[];
 }) {
   return (
     <div className="space-y-4">
@@ -300,7 +310,7 @@ export function TableroHitos({
         </section>
       ) : (
         <ul className="space-y-3">
-          {tablero.filas.map((f) => <TarjetaViaje key={f.viaje.id} f={f} puedeActuar={puedeActuar} accion={accion} />)}
+          {tablero.filas.map((f) => <TarjetaViaje key={f.viaje.id} f={f} puedeActuar={puedeActuar} accion={accion} accionSitios={accionSitios} sitios={sitios} />)}
         </ul>
       )}
     </div>

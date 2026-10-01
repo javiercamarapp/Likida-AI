@@ -1,6 +1,6 @@
 # Agente 5 «Conductor» — los hitos del viaje por WhatsApp
 
-> Estado al 2-oct-2026: **construido y probado con dobles/fixtures; NO operando.** Todo lo que depende de WhatsApp real (número/WABA, plantillas aprobadas por Meta) está en «Bloqueos externos». Migración: `0380_conductor_hitos.sql`.
+> Estado al 2-oct-2026: **construido y probado con dobles/fixtures; NO operando.** Todo lo que depende de WhatsApp real (número/WABA, plantillas aprobadas por Meta) está en «Bloqueos externos». Migraciones: `0380_conductor_hitos.sql` (hitos, escalera, escalamiento) y `0385_conductor_validacion_sitios_evidencia.sql` (sitios, validación contra la ubicación, evidencia, acciones de oficina, indicadores). La segunda entrega está descrita desde «Segunda entrega (0385)».
 
 ## Qué hace
 
@@ -120,11 +120,109 @@ Datos personales nuevos: el nombre de un **tercero** (quien recibe en el andén)
 4. **Política de retención** del dato del tercero (365 días propuesto).
 5. Plazos por defecto sin cita (120/120/480/120/30 min) son **supuestos**: validarlos con su operación.
 
-## Pendientes conocidos (no hechos en esta tarea)
+## Pendientes de la primera entrega (estado actual)
 
-- Validación automática contra geocerca/GPS (`validado` por `gps`), editor de geocercas y foto/evidencia por hito (el modelo ya tiene `fuente = 'foto'`, `evidencia_ruta` y coordenadas; no hay cableado de la foto como hito).
-- Tablero ampliado y pantalla de configuración (escalera, ventana, contactos) en `/dashboard/agentes/conductores`; hoy la config se edita por API y el tablero sigue mostrando los 6 sellos de siempre.
-- Webhook saliente hacia el sistema del cliente.
-- Un pin de ubicación se **adjunta** al hito recién registrado (≤ 30 min); no registra un hito por sí solo.
+- ~~Validación automática contra geocerca/GPS, editor de geocercas y foto/evidencia por hito~~ → hecho en la 0385 (ver abajo).
+- ~~Tablero ampliado~~ → hecho (0385). **Sigue pendiente la pantalla de configuración** (escalera, ventana, contactos y las perillas nuevas de la 0385): la config se edita por `PUT /v1/conductor/config`.
+- Webhook saliente hacia el sistema del cliente (exige política de destinos/SSRF, secretos y reintentos que no se inventaron).
 - Aviso por correo/Notificaciones a la flota cuando el agente no logra entregar escalaciones (el patrón de `escalar_viaje.ts`).
-- La migración 0380 reescribe enteros los dominios de `cron_latido` y `agente_definicion_modelo_rol_dominio`; al integrar con otras ramas que también los amplían, **reconciliar las listas** (las pruebas `salud.test.ts` y `agente_definicion_modelo_rol_dominio.test.ts` lo detectan).
+- La migración 0380 reescribe enteros los dominios de `cron_latido` y `agente_definicion_modelo_rol_dominio`; al integrar con otras ramas que también los amplían, **reconciliar las listas** (las pruebas `salud.test.ts` y `agente_definicion_modelo_rol_dominio.test.ts` lo detectan). La 0385 NO toca esos dominios (el cron es el mismo).
+
+---
+
+# Segunda entrega (0385) — sitios, validación, evidencia, estadías y tablero
+
+## 1. Catálogo de sitios (clientes, plantas y andenes)
+
+Se **amplía `geocerca`** (0050) en vez de crear otra tabla: tipos nuevos `cliente`, `planta` y `anden`; `codigo` (el del sistema del cliente, único **por flota**), `direccion` (solo referencia), `cliente_id`, `padre_id` (un andén cuelga de su planta, FK compuestas: nada cuelga de otra flota) y `fuente` (`manual` | `csv`). Cada viaje apunta a su **sitio de carga** (`viaje.origen_geocerca_id`) y de **descarga** (`viaje.destino_geocerca_id`).
+
+**Ninguna coordenada se inventa**: no se geocodifica por dirección, no se «arreglan» una lat/lng intercambiadas ni una longitud sin signo (se rechazan y se dice qué parece), una fila sin coordenadas es **error**, y el radio o viene en el archivo o lo declara quien importa. La plantilla de ejemplo trae las coordenadas en blanco a propósito.
+
+| Cómo | Dónde |
+|---|---|
+| Importador CSV **todo o nada** (idempotente por `codigo`; la base resuelve cliente/padre/nombre y devuelve `Línea N: …`) | `/dashboard/agentes/conductores/sitios`, RPC `importar_sitios_conductor` |
+| Editor mínimo (alta, edición, archivar/reactivar) | misma pantalla |
+| Asignar el sitio de carga/descarga de un viaje | tablero (forma «Asignar sitios» por viaje) o `PUT /v1/viajes/{id}/sitios` (código o id, resuelto dentro de la flota) |
+| Lectura | `GET /v1/sitios` (`operacion`) |
+
+Columnas del CSV: `codigo, nombre, tipo, lat, lng, radio_m, direccion, cliente, padre`. Separador coma, `;` o tabulador (con `;` el decimal puede ser coma). Máx. 2,000 filas y 1 MB. Un CSV con `=`, `+`, `@`… al inicio de una celda se guarda tal cual como texto y se **neutraliza** al exportar.
+
+> `/dashboard/agentes/peajes/configuracion` ya tenía un editor de geocercas sobre la **misma tabla**. Comparten catálogo a propósito; su upsert por `(tenant, nombre)` puede cambiar el `tipo` de un sitio de este catálogo a uno de los suyos (el resto de las columnas no se toca).
+
+## 2. Validación de cada llegada contra la ubicación
+
+Se validan las **llegadas** (carga y descarga); las salidas no (el camión ya se está yendo). Tres veredictos (`viaje_hito_validacion`, uno por hito y ciclo):
+
+| Veredicto | Cuándo | Qué hace con el hito |
+|---|---|---|
+| `validado` | la posición cae dentro de `radio + tolerancia_ubicacion_m` | lo pasa a `validado` (`validado_por = gps`) |
+| `sin_coincidencia` | hay posición y sitio, y cae fuera | **nada**: sigue `recibido`. Se lista en la cola de excepciones «para revisar» con una frase que **no acusa** (puede ser una muestra vieja, otra entrada del sitio o un radio mal capturado) |
+| `sin_dato` | no hay sitio asignado, no hay posición, la posición es de otra hora (> `ventana_ubicacion_min`) o las coordenadas no son válidas | nada. **Jamás** se convierte en «no coincide» por defecto |
+
+Fuentes: el **pin de WhatsApp** del chofer (la más directa) y la **posición de GPS** más cercana *en el tiempo* a la hora del mensaje (no «la última»). Haversine con R = 6,371,000 m (la misma aritmética que la RPC de presencia de la 0207). El veredicto **solo mejora** (`sin_dato → sin_coincidencia → validado`, lo garantiza `aplicar_validacion_hito`): una posición lejana posterior no desdice una evidencia positiva.
+
+Tres momentos: al **registrar** la llegada (GPS cercano), cuando llega el **pin** (`atenderPinConductor`) y el **barrido del cron** (reintenta las llegadas de las últimas 3 h que quedaron «sin dato» porque el GPS reporta con minutos de retraso).
+
+**Solicitar la ubicación cuando falta**: si la llegada quedó sin posición **y el viaje tiene sitio asignado**, el motor devuelve el texto de la solicitud y el processor lo manda **después del acuse** con el botón nativo «compartir ubicación». El texto dice para qué se usa («solo se usa para comprobar que estás en el sitio del viaje»). Sin sitio, no se pide (no habría con qué compararlo). Se apaga con `pedir_ubicacion`.
+
+Configurable por flota (`PUT /v1/conductor/config`): `validarUbicacion` (true), `toleranciaUbicacionM` (150 m, **supuesto** no medición, 0–5,000), `ventanaUbicacionMin` (30, 5–180), `pedirUbicacion` (true).
+
+**Bug corregido de la primera entrega**: `adjuntarUbicacionAHito` se llamaba dentro del bloque `if (!viajeId)` del processor, donde `viajeId` es siempre nulo: el pin **nunca** se adjuntaba. Ahora se llama en la rama del pin **con** viaje (`atenderPinConductor`), cubierto por `processor_hitos.test.ts`.
+
+## 3. Foto/evidencia por hito (sello, andén, sello de recibido)
+
+Mismo criterio y pipeline que el POD: el **caption** decide qué papel es (`sello`, `andén`, `recibido` y formas cerradas; «mi sello de diésel» **no** cuenta y sigue como comprobante). El processor resuelve **primero** a qué hito va (sin hito no paga la descarga y se lo dice al chofer: «primero dime ya llegué»), descarga, sube al bucket `comprobantes` con el helper del POD (nombre por hito: la misma foto como evidencia de dos hitos son dos archivos) y registra en `viaje_hito_evidencia` (ruta + sha256; único por mensaje de WhatsApp y por foto/hito/ciclo). No es un gasto: no toca el OCR, la liquidación ni la barrera del «listo».
+
+- Ver la foto: `GET /v1/evidencias/{id}` → 302 a una **URL firmada de 10 min** del bucket privado; la ruta debe colgar del prefijo de la flota. Desde el tablero, un enlace por foto.
+- **Retención y ARCO**: `purgar_conductor_evidencia(p_dias = 365, mín. 30)` (en el cron de las 03:xx) y el disparador de cancelación ARCO desligan la ruta y **encolan el archivo en `storage_huerfano_candidato`** (Supabase prohíbe borrar de `storage.objects` desde SQL, 0165); el borrado real lo hace `borrarStorageMarcado` por la Storage API. El plazo de 365 días es una **propuesta**.
+- Invitación opcional (`pedir_foto_evidencia`, apagada): el acuse de cada hito agrega «si puedes, manda la foto del sello y escribe “sello”».
+
+## 4. Estadías en andén
+
+`llegada→salida` de **cada parada** (carga y descarga), con la hora exacta del mensaje del chofer (o la declarada por la oficina), de dónde salió, el veredicto de ubicación y las fotos. Fases: `cerrada`, `en_curso` (llegó y no ha salido; los minutos corren), `sin_salida` (viaje cerrado sin salida: **no se inventa** la duración), `incoherente` (salida antes que llegada) y `sin_llegada`.
+
+- **Alerta por exceso** (`estadia_alerta_carga_min` / `estadia_alerta_descarga_min`, `NULL` = apagada, que es el default): UN aviso al patio responsable con la hora exacta de la llegada; claim `alerta_estadia` sobre el hito de llegada; solo dentro de la ventana de la flota; por `enviarConFallback` (ventana abierta → texto; cerrada → `aviso_operacion_v1`).
+- **Exportable para cobro**: `GET /v1/estadias?desde=&hasta=&formato=csv|json` (**área `dinero`**; el jefe de tráfico no ve pesos). Reusa `calcularDetencion` y el pacto de `politica_detencion` (0207; el del cliente gana): sin horas libres no hay «excedido», sin tarifa no hay monto, una parada `en_curso` no es cobrable (monto en blanco). CSV con BOM, fórmulas neutralizadas, `X-Estadias-Truncada` si hay más viajes de los que una lectura trae. **Supuesto declarado**: las horas libres del pacto se aplican **por parada**. Es una *propuesta*: el contralor decide y factura.
+- Pantalla `/dashboard/agentes/conductores/estadias` (operación, **cero pesos**): periodo, filtros, tiempo medio **solo sobre paradas cerradas** y «sobre N».
+
+## 5. Tablero de hitos (`/dashboard/agentes/conductores`)
+
+- **Línea de tiempo** por viaje con los 5 hitos: hora del mensaje, fuente, contacto en andén, veredicto, fotos y quién actuó desde la oficina y por qué.
+- **Semáforo** con la **misma escalera que el agente**: `completo`, `a_tiempo`, `atrasado` (ya pasó el primer recordatorio), `sin_reporte` (escalado, o pasó el umbral de escalación aunque el cron aún no escale), `sin_ancla` (un viaje sin hitos o sin de qué colgarse **no** se pinta verde).
+- **Cola de excepciones** (más urgente primero): escalado sin atender (3), sin reporte / sin coincidencia / estadía excedida (2), atrasado / horas incoherentes (1). «Sin dato» **no** es excepción.
+- **Filtros** por patio, cliente, chofer, semáforo y periodo de indicadores; el filtro mueve **todo** lo de debajo.
+- **Indicadores** (agregados en SQL, `conductor_indicadores`): tasa de hitos reportados **sin insistencia** (resuelto con a lo más un mensaje del agente en el ciclo vigente y sin escalar), tiempo medio de respuesta (solo donde el agente pidió el hito), escalados, validados con ubicación. Sin datos dice «sin datos», nunca 0. La ventana filtra por `viaje_hito.updated_at` (hitos con actividad en el periodo) y así se rotula.
+- **Acciones del jefe** (dueño de flota, encargado y superadmin; **el contador no ve ni la pantalla**; el permiso lo comprueba el servidor, no el botón): **capturar a mano** (hora de México no futura ni anterior a la aceptación; omite los pendientes anteriores), **validar** y **marcar atendido**. Todas con **motivo obligatorio (5–200)** y bitácora `conductor_accion_oficina` (append-only: quién, cuándo, por qué) escrita en la **misma transacción** que el cambio. Un hito capturado queda `fuente = oficina`.
+
+## 6. Servicios para los demás agentes (`conductor/servicios.ts`)
+
+| Servicio | Para quién | Qué entrega |
+|---|---|---|
+| `estatusViaje(tenant, viaje)` | el futuro **Vigía** | último hito, siguiente hito con su **cita/ETA** (la cita manda), semáforo, y si el chofer está en andén (parada y minutos). No es telemetría y lo dice |
+| `estadiasDelPeriodo(...)` / `estadiasDeViaje(tenant, viaje)` | **liquidación** / cobro | las estancias con el pacto de detención aplicado y el monto **propuesto** |
+| `evidenciaJornadaDeViaje(tenant, operador, día)` | **jornada** | el último hito del día (cota inferior del **fin**) y el primero (**informativo, NO usable como inicio**) |
+
+**Lo que NO hace, a propósito (jornada)**: no escribe en `jornada_asiento`. (a) `jornada/derivar.ts` ya dejó escrito que «ya llegué» no es «empecé a trabajar»: un inicio derivado de un hito acortaría la jornada registrada; (b) el único escritor de marcas derivadas es el derivador (claims con lease, versionado y la puerta del aviso de privacidad, 0319/0325): un segundo escritor sin esa puerta crearía expedientes de personas que nunca recibieron su aviso. La RPC `asentar_extremo_jornada_derivado` ya admite procedencia `hito_viaje` para el **fin**; engancharla es trabajo del dueño de ese protocolo (ver pendientes). Tampoco se cableó la liquidación (PDF) para consumir las estadías: el servicio está listo y probado.
+
+## 7. Pruebas
+
+- `supabase/tests/0385_conductor_validacion_sitios.sql` corre contra **Postgres real** (CHECKs, unicidad, FK compuestas entre flotas, «solo mejora», atomicidad hito+bitácora, append-only incluso para `service_role`, indicadores, retención/ARCO de la evidencia, RLS —el contador no ve—, funciones no ejecutables por `authenticated`). Se agregó (junto con la de la 0380, que faltaba) a `ci-postgres.yml`.
+- `conductor/ciclo_completo.e2e.test.ts` (38): ciclo completo con dobles de WhatsApp y el **selector real** `enviarConFallback` — viaje feliz con validación y evidencia, chofer que no contesta (escalera exacta minuto a minuto, patio a los 90, jefe a los 120, «Ya lo atiendo»), fuera de orden, duplicados y corridas solapadas, chofer/flota equivocados, fuera de ventana de 24 h (plantilla del catálogo con los mismos botones, registro de ventana viejo, plantilla sin aprobar, 429), validación sin acusar y aislamiento entre flotas en la misma pasada.
+- Unitarias: geometría, veredicto, CSV, estadías y su CSV, alertas, evidencia, tablero, acciones y permisos, servicios, rutas `/v1`, pantallas (SSR) y que ninguna pantalla de operación formatea dinero.
+
+## 8. Supuestos y límites (honestos)
+
+- Tolerancia de 150 m, ventana de ±30 min, 12 h de vida de una foto sobre su hito, 3 h de reintento de validaciones sin dato y la regla del semáforo (atrasado = primer recordatorio) son **supuestos de ingeniería**, no mediciones; la flota ajusta los que son perilla.
+- El pin de WhatsApp **no trae precisión** (HDOP): no se puede distinguir un pin exacto de uno impreciso. Por eso `sin_coincidencia` no acusa.
+- `leerHitosDeOperador` (evidencia de jornada) mira los viajes creados en los 14 días previos al día pedido.
+- Las lecturas del tablero/estadías están acotadas (400 viajes activos; 1,500 viajes por periodo) y **lo dicen** cuando recortan.
+- Nada se probó contra WhatsApp, GPS ni Storage reales: dobles y fixtures. Los textos ES-MX de las solicitudes de ubicación/foto no pasan por Meta (son texto libre dentro de la ventana de 24 h abierta por el mismo mensaje del chofer); no hay plantilla nueva.
+
+## 9. Pendientes reales
+
+- **Pantalla de configuración** de la flota (las perillas de la 0385 y la escalera): hoy solo `PUT /v1/conductor/config`.
+- **Jornada**: enganchar el fin derivado de hitos al derivador con su puerta de aviso de privacidad (la RPC ya acepta `hito_viaje`); y que la **liquidación** consuma `estadiasDeViaje`.
+- Evidencia: no hay visor integrado ni recorte/compresión de la foto, ni detección de la foto repetida entre viajes; la retención de 365 días es propuesta.
+- Concurrencia: el claim de avisos y `aplicar_validacion_hito` tienen su garantía en SQL y se probaron en una sola sesión de Postgres; **no** se probó con varias sesiones en paralelo (el CI de dos sesiones para la 0332/0375 es el molde).
+- `ci-postgres.yml`: se agregaron las dos líneas SQL; no se ejecutó CI (sin push, por instrucción).
+- Aplicar la 0385 (y la 0380) a la base real requiere autorización y respaldo previo; hoy solo se aplicó a una base local desechable.

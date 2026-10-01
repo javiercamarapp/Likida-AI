@@ -1455,6 +1455,17 @@ function documento(servidor: string) {
           responses: { '200': { description: 'Sitios de la flota.', content: { 'application/json': { schema: { type: 'object' } } } }, ...respuestasError },
         },
       },
+      '/v1/evidencias/{id}': {
+        get: {
+          operationId: 'abrirEvidenciaDeHito',
+          'x-likida-area': 'operacion',
+          summary: 'Abre la foto de evidencia de un hito (sello, andén, sello de recibido).',
+          description: 'Área `operacion`. Contesta 302 a una URL FIRMADA de 10 minutos (el bucket es privado): no sigas el enlace para guardarlo, vuelve a pedirlo. La evidencia se busca dentro de la flota de la credencial; «no existe», «es de otra flota» y «ya se purgó por retención» contestan lo mismo (404).',
+          tags: ['hitos'],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: { '302': { description: 'Redirige a la URL firmada.' }, '404': noEncontrado, ...respuestasError },
+        },
+      },
       '/v1/estadias': {
         get: {
           operationId: 'listarEstadias',

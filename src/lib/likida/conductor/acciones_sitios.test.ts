@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
-vi.mock('./repo_validacion', () => ({ cambiarEstadoSitio: vi.fn(), guardarSitio: vi.fn(), importarSitios: vi.fn() }));
+vi.mock('./repo_validacion', () => ({ asignarSitiosViaje: vi.fn(), cambiarEstadoSitio: vi.fn(), guardarSitio: vi.fn(), importarSitios: vi.fn() }));
 
-const { archivarSitioDelPanel, guardarSitioDelPanel, importarCsvDelPanel } = await import('./acciones_sitios');
+const { archivarSitioDelPanel, asignarSitiosDelPanel, guardarSitioDelPanel, importarCsvDelPanel, QUITAR_SITIO } = await import('./acciones_sitios');
 type Deps = import('./acciones_sitios').DepsSitios;
 
 const U1 = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d001';
@@ -12,12 +12,13 @@ const fd = (o: Record<string, string>) => ({ get: (k: string) => o[k] ?? null })
 const valido = { nombre: 'Planta Zapopan', tipo: 'planta', lat: '20.72', lng: '-103.39', radio_m: '300' };
 const CSV = 'codigo,nombre,tipo,lat,lng,radio_m\nPL-1,Planta Uno,planta,20.72,-103.39,300\nAN-1,Andén Uno,anden,20.7201,-103.3901,60';
 
-function deps(o: { guardar?: unknown; importar?: unknown; estado?: unknown } = {}) {
+function deps(o: { guardar?: unknown; importar?: unknown; estado?: unknown; asignar?: unknown } = {}) {
   return {
+    asignar: vi.fn(async () => o.asignar ?? 'ok'),
     guardar: vi.fn(async () => o.guardar ?? 'ok'),
     importar: vi.fn(async () => o.importar ?? { ok: true, creados: 2, actualizados: 0 }),
     estado: vi.fn(async () => o.estado ?? true),
-  } as unknown as Deps & { guardar: ReturnType<typeof vi.fn>; importar: ReturnType<typeof vi.fn>; estado: ReturnType<typeof vi.fn> };
+  } as unknown as Deps & { guardar: ReturnType<typeof vi.fn>; importar: ReturnType<typeof vi.fn>; estado: ReturnType<typeof vi.fn>; asignar: ReturnType<typeof vi.fn> };
 }
 
 describe('permisos: dueño, encargado y superadmin; nadie más (fail closed)', () => {
@@ -26,6 +27,7 @@ describe('permisos: dueño, encargado y superadmin; nadie más (fail closed)', (
     expect((await guardarSitioDelPanel(ctx(rol), fd(valido), d)).ok).toBe(true);
     expect((await importarCsvDelPanel(ctx(rol), { texto: CSV, radioDefecto: null }, d)).ok).toBe(true);
     expect((await archivarSitioDelPanel(ctx(rol), U1, false, d)).ok).toBe(true);
+    expect((await asignarSitiosDelPanel(ctx(rol), fd({ viajeId: U1, origen: U1 }), d)).ok).toBe(true);
   });
 
   it.each(['contador', 'vendedor', 'operador', 'sin_rol', '', 'otro'])('%s NO puede y no toca la base', async (rol) => {
@@ -33,6 +35,8 @@ describe('permisos: dueño, encargado y superadmin; nadie más (fail closed)', (
     expect(await guardarSitioDelPanel(ctx(rol), fd(valido), d)).toMatchObject({ ok: false });
     expect(await importarCsvDelPanel(ctx(rol), { texto: CSV, radioDefecto: null }, d)).toMatchObject({ ok: false });
     expect(await archivarSitioDelPanel(ctx(rol), U1, false, d)).toMatchObject({ ok: false });
+    expect(await asignarSitiosDelPanel(ctx(rol), fd({ viajeId: U1, origen: U1 }), d)).toMatchObject({ ok: false });
+    expect(d.asignar).not.toHaveBeenCalled();
     expect(d.guardar).not.toHaveBeenCalled();
     expect(d.importar).not.toHaveBeenCalled();
     expect(d.estado).not.toHaveBeenCalled();
@@ -62,7 +66,7 @@ describe('guardar sitio', () => {
     expect(await guardarSitioDelPanel(ctx(), fd(valido), deps({ guardar: res }))).toMatchObject({ ok: false, error: expect.stringMatching(re) });
   });
   it('una base que lanza se dice sin filtrar el detalle', async () => {
-    const d = { guardar: vi.fn(async () => { throw new Error('relation geocerca'); }), importar: vi.fn(), estado: vi.fn() } as unknown as Deps;
+    const d = { guardar: vi.fn(async () => { throw new Error('relation geocerca'); }), importar: vi.fn(), estado: vi.fn(), asignar: vi.fn() } as unknown as Deps;
     const r = await guardarSitioDelPanel(ctx(), fd(valido), d);
     expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/No pude guardarlo/) });
     expect(JSON.stringify(r)).not.toContain('relation');
@@ -105,7 +109,7 @@ describe('importar CSV (todo o nada)', () => {
     expect(await importarCsvDelPanel(ctx(), { texto: '\u0000\u0001<<<<', radioDefecto: null }, deps())).toMatchObject({ ok: false });
   });
   it('una base que lanza: no se guardó nada, y se dice', async () => {
-    const d = { guardar: vi.fn(), importar: vi.fn(async () => { throw new Error('boom'); }), estado: vi.fn() } as unknown as Deps;
+    const d = { guardar: vi.fn(), importar: vi.fn(async () => { throw new Error('boom'); }), estado: vi.fn(), asignar: vi.fn() } as unknown as Deps;
     expect(await importarCsvDelPanel(ctx(), { texto: CSV, radioDefecto: null }, d)).toMatchObject({ ok: false, error: expect.stringMatching(/No se guardó nada/) });
   });
 });
@@ -123,5 +127,33 @@ describe('archivar y reactivar', () => {
   });
   it('un sitio de otra flota (la base no lo encuentra) es «ya no existe»', async () => {
     expect(await archivarSitioDelPanel(ctx(), U1, true, deps({ estado: false }))).toMatchObject({ ok: false, error: expect.stringMatching(/ya no existe/) });
+  });
+});
+
+describe('asignar sitios a un viaje desde el tablero', () => {
+  const U2 = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d002';
+  const V = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0aa';
+  it('cada lado: vacío no se toca, __quitar desasigna, un id se asigna; siempre en la flota de la SESIÓN', async () => {
+    const d = deps();
+    await asignarSitiosDelPanel(ctx(), fd({ viajeId: V.toUpperCase(), origen: U1.toUpperCase(), destino: QUITAR_SITIO, tenant_id: 't-otra' }), d);
+    expect(d.asignar).toHaveBeenCalledWith('t-sesion', V, { origen: U1, destino: null });
+    d.asignar.mockClear();
+    await asignarSitiosDelPanel(ctx(), fd({ viajeId: V, destino: U2 }), d);
+    expect(d.asignar).toHaveBeenCalledWith('t-sesion', V, { destino: U2 });
+  });
+  it('sin ningún lado elegido, o con ids que no son uuid, no llega a la base', async () => {
+    const d = deps();
+    expect(await asignarSitiosDelPanel(ctx(), fd({ viajeId: V }), d)).toMatchObject({ ok: false, error: expect.stringMatching(/Elige el sitio/) });
+    expect(await asignarSitiosDelPanel(ctx(), fd({ viajeId: V, origen: "x'; --" }), d)).toMatchObject({ ok: false });
+    expect(await asignarSitiosDelPanel(ctx(), fd({ viajeId: 'no-uuid', origen: U1 }), d)).toMatchObject({ ok: false });
+    expect(d.asignar).not.toHaveBeenCalled();
+  });
+  it('un viaje o un sitio que no son de la flota se dicen en palabras (la base los resuelve dentro de la flota)', async () => {
+    expect(await asignarSitiosDelPanel(ctx(), fd({ viajeId: V, origen: U1 }), deps({ asignar: 'viaje_no_encontrado' }))).toMatchObject({ ok: false, error: expect.stringMatching(/viaje ya no existe/) });
+    expect(await asignarSitiosDelPanel(ctx(), fd({ viajeId: V, origen: U1 }), deps({ asignar: 'sitio_no_encontrado' }))).toMatchObject({ ok: false, error: expect.stringMatching(/catálogo/) });
+  });
+  it('una base que lanza se dice', async () => {
+    const d = { asignar: vi.fn(async () => { throw new Error('boom'); }), guardar: vi.fn(), importar: vi.fn(), estado: vi.fn() } as unknown as Deps;
+    expect(await asignarSitiosDelPanel(ctx(), fd({ viajeId: V, origen: U1 }), d)).toMatchObject({ ok: false, error: expect.stringMatching(/No pude guardarlo/) });
   });
 });

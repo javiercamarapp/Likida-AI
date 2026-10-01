@@ -274,6 +274,14 @@ export async function leerEvidencias(tenantId: string, viajeIds: string[]): Prom
   }));
 }
 
+/** La ruta de UNA evidencia de ESA flota (para firmar su URL). `null` = no existe, es de otra flota o ya se purgó. */
+export async function rutaDeEvidencia(tenantId: string, evidenciaId: string): Promise<string | null> {
+  if (!UUID.test(evidenciaId)) return null;
+  const res = await acotada(supabaseAdmin().from('viaje_hito_evidencia').select('ruta').eq('tenant_id', tenantId).eq('id', evidenciaId.toLowerCase()).maybeSingle(), 'evidencia.por_id');
+  const f = exigir(res as never, 'evidencia.por_id') as Fila | null;
+  return f ? s(f.ruta) : null;
+}
+
 /** URL firmada de corta vida (10 min) para ver una evidencia. Solo firma rutas de ESTA flota. */
 export async function urlFirmadaEvidencia(tenantId: string, ruta: string): Promise<string | null> {
   if (!ruta.startsWith(`${tenantId}/`) || ruta.includes('..')) return null;
