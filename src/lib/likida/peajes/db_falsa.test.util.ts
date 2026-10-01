@@ -59,6 +59,7 @@ export function crearDbFalsa(
     gte(c: string, v: unknown) { this.filtros.push([c, 'gte', v]); return this; }
     lte(c: string, v: unknown) { this.filtros.push([c, 'lte', v]); return this; }
     is(c: string, v: unknown) { this.filtros.push([c, 'is', v]); return this; }
+    not(c: string, o: string, v: unknown) { this.filtros.push([c, o === 'is' ? 'nis' : o, v]); return this; }
     lt(c: string, v: unknown) { this.filtros.push([c, 'lt', v]); return this; }
     order(c: string, o?: { ascending?: boolean }) { this.orden.push([c, o?.ascending !== false]); return this; }
     range(d: number, h: number) { this.desde = d; this.hasta = h; return this; }
@@ -72,6 +73,7 @@ export function crearDbFalsa(
         if (o === 'eq') return x === v;
         if (o === 'in') return (v as unknown[]).includes(x);
         if (o === 'is') return v === null ? x === null || x === undefined : x === v;
+        if (o === 'nis') return v === null ? x !== null && x !== undefined : x !== v;
         if (x === null || x === undefined) return false;
         if (o === 'gte') return (x as string | number) >= (v as string | number);
         if (o === 'lte') return (x as string | number) <= (v as string | number);

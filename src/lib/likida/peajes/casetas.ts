@@ -49,6 +49,8 @@ const COLS: Record<'nombre' | 'lat' | 'lng' | 'radio' | 'alias' | 'fuente', stri
 export function coordenadaDeCelda(v: Celda): number | null {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
   const s = String(v ?? '').trim().replace(',', '.');
+  if (s.length > 30) return null;
+  // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada a una celda; un solo cuantificador opcional
   if (!/^-?\d+(\.\d+)?$/.test(s)) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;

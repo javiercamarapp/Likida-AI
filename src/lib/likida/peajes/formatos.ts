@@ -64,6 +64,8 @@ const pad2 = (n: number) => String(n).padStart(2, '0');
 
 /** «14:32», «14:32:05», «2:32 p. m.», «02:32 PM». null si no es una hora válida. */
 export function horaDeTexto(texto: string): string | null {
+  if (texto.length > 40) return null;
+  // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada (≤ 80 caracteres, validado arriba) y sin cuantificadores anidados sobre los mismos caracteres
   const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(a\.?\s?m\.?|p\.?\s?m\.?)?$/i.exec(texto.trim());
   if (!m) return null;
   let h = Number(m[1]);
@@ -121,14 +123,17 @@ export function fechaHoraDeCelda(v: Celda): FechaHora {
     return { fecha, hora: frac > 1e-9 ? horaDeFraccion(frac) : null };
   }
   const s = String(v ?? '').trim();
-  if (!s) return nada;
+  if (!s || s.length > 80) return nada;
 
   // Separa «fecha» y «resto» (la hora) por el primer espacio o «T» tras la fecha.
   let fecha: string | null = null;
   let resto = '';
 
+  // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada (≤ 80 caracteres, validado arriba) y sin cuantificadores anidados sobre los mismos caracteres
   const iso = /^(\d{4})-(\d{2})-(\d{2})(?:[T\s]+(.*))?$/.exec(s);
+  // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada (≤ 80 caracteres, validado arriba) y sin cuantificadores anidados sobre los mismos caracteres
   const mx = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})(?:[\sT]+(.*))?$/.exec(s);
+  // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada (≤ 80 caracteres, validado arriba) y sin cuantificadores anidados sobre los mismos caracteres
   const textual = /^(\d{1,2})(?:\s+de)?[\s/\-.]*([A-Za-zÁÉÍÓÚáéíóú]{3,10})\.?(?:[\s/\-.]*(?:de)?[\s/\-.]*(\d{2,4}))(?:[\sT,]+(.*))?$/i.exec(s);
   if (iso) {
     fecha = validarYmd(Number(iso[1]), Number(iso[2]), Number(iso[3]));
@@ -207,7 +212,7 @@ function offsetMxMinutos(utcMs: number): number {
 export function montoDeCelda(v: Celda): number | null {
   if (typeof v === 'number') return Number.isFinite(v) ? round2(v) : null;
   let s = String(v ?? '').replace(/mxn|mn|pesos?|\$|\s/gi, '');
-  if (!s) return null;
+  if (!s || s.length > 40) return null;
   let negativo = false;
   const par = /^\((.*)\)$/.exec(s);
   if (par) { negativo = true; s = par[1]; }
@@ -227,17 +232,20 @@ export function montoDeCelda(v: Celda): number | null {
   } else if (comas > 0) {
     if (comas === 1 && /^\d+,\d{1,2}$/.test(s)) {
       normal = s.replace(',', '.'); // «189,50»
+    // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada (≤ 80 caracteres, validado arriba) y sin cuantificadores anidados sobre los mismos caracteres
     } else if (/^\d{1,3}(,\d{3})+$/.test(s)) {
       normal = s.replace(/,/g, ''); // «1,234» / «1,234,567»
     } else {
       return null;
     }
   } else if (puntos > 1) {
+    // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada (≤ 80 caracteres, validado arriba) y sin cuantificadores anidados sobre los mismos caracteres
     if (!/^\d{1,3}(\.\d{3})+$/.test(s)) return null; // «1.234.567» miles; otra cosa, ilegible
     normal = s.replace(/\./g, '');
   } else {
     normal = s;
   }
+  // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada (≤ 80 caracteres, validado arriba) y sin cuantificadores anidados sobre los mismos caracteres
   if (!/^\d+(\.\d+)?$/.test(normal)) return null;
   const n = Number(normal);
   if (!Number.isFinite(n)) return null;
