@@ -65,7 +65,7 @@ export default function Demo() {
       if (obs.length) {
         setBubbles((b) => [...b, { from: 'likida', text: 'Ojo con esto:\n' + obs.map((d: { nota: string }) => `• ${d.nota}`).join('\n') }]);
       }
-      setBubbles((b) => [...b, { from: 'likida', text: '📄 Te mando tu liquidación en PDF. ¡Buen viaje! 🚛' }]);
+      setBubbles((b) => [...b, { from: 'likida', text: '📄 Así te llegaría tu liquidación en PDF cuando cierres tu viaje. ¡Buen viaje! 🚛' }]);
     } catch {
       // ME-16: si el cuadre falla (red/servidor), avisar en vez de colgar el demo.
       setBubbles((b) => [...b, { from: 'likida', text: 'Uy, no pude cerrar el cuadre ahorita. Inténtalo de nuevo en un momento.' }]);
