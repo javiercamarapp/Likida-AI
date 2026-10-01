@@ -84,3 +84,23 @@ describe('FE-24: un fallo de red con el PAC no tira la página ni se traga el ti
     expect(accion).toMatch(/panel de tu PAC/);
   });
 });
+
+// AUDITORÍA OLA 1, #26: la reserva ambigua tiene SALIDA en pantalla (con candado) y la
+// ruta declara maxDuration (el PAC puede tardar 20 s de auth + 20 s de timbrado).
+describe('#26: la reserva ambigua del PAC y la duración de la ruta', () => {
+  it('la sección de reserva ofrece liberar el bloqueo SOLO con la declaración de haber verificado en el PAC', () => {
+    expect(FUENTE).toContain('liberarReservaTimbre');
+    expect(FUENTE).toMatch(/name="verificadoEnPac"/);
+    expect(FUENTE).toMatch(/Verifiqué en el panel de mi PAC que NO existe un CFDI/);
+    // el verbo: dueño o contador, no el jefe de tráfico
+    const accion = FUENTE.slice(FUENTE.indexOf('async function liberarReserva'));
+    expect(accion).toContain('puedeTimbrar(s.rol)');
+  });
+  it('y solo se muestra cuando la reserva no tiene folio fiscal', () => {
+    expect(FUENTE).toMatch(/ctx\.reservaPendiente\.uuidFiscal === null && puedeEmitir/);
+  });
+  it('la página declara `export const maxDuration = 60;` (literal, que es lo que Next lee en build)', () => {
+    const pagina = readFileSync(fileURLToPath(new URL('./page.tsx', import.meta.url)), 'utf8');
+    expect(pagina).toMatch(/^export const maxDuration = 60;$/m);
+  });
+});
