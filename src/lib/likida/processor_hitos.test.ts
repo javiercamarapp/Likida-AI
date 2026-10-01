@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// El CABLEADO de los hitos (0090) en el dispatcher — lo que la unidad de
-// hitos_viaje.test.ts no puede probar: que "ya llegué" se atiende ANTES del
-// freno de cierre y que "listo" sigue siendo del cierre, no de los hitos.
+// El CABLEADO de los hitos (0090 → Agente 5 «Conductor», 0380) en el dispatcher —
+// lo que las unidades del módulo no pueden probar: que "ya llegué" se atiende
+// ANTES del freno de cierre, que "listo" sigue siendo del cierre, que la hora que
+// llega al motor es la del MENSAJE (DAT-38) y que el «Ya lo atiendo» del jefe se
+// atiende ANTES de resolver al operador.
 // (Desde AUD3 AG-A1 el regex de `pareceCierre` ya NO empata el "ya" pelón, así
 // que "ya llegué" tampoco le parece cierre — pero el orden hito-antes-de-freno
 // sigue siendo el contrato que este archivo fija.)
@@ -11,14 +13,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const runAgent = vi.fn();
 const resolveOperador = vi.fn();
-const sellarHito = vi.fn();
+const atenderConductor = vi.fn();
+const atenderAcuseJefe = vi.fn();
+const adjuntarUbicacionAHito = vi.fn();
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 
 vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...a) }));
-vi.mock('@/lib/likida/hitos_viaje', async (original) => ({
-  // El matcher y el acuse son los REALES: lo mockeado es solo el sello (DB).
-  ...(await original<Record<string, unknown>>()),
-  sellarHito: (...a: unknown[]) => sellarHito(...a),
+// El motor de hitos (conductor/atender.ts) tiene sus propias pruebas con una base en
+// memoria (atender.test.ts); AQUÍ se prueba el CABLEADO en el dispatcher.
+vi.mock('@/lib/likida/conductor/atender', () => ({
+  atenderConductor: (...a: unknown[]) => atenderConductor(...a),
+  atenderAcuseJefe: (...a: unknown[]) => atenderAcuseJefe(...a),
+  adjuntarUbicacionAHito: (...a: unknown[]) => adjuntarUbicacionAHito(...a),
 }));
 vi.mock('@/lib/likida/conv', async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -80,71 +86,97 @@ function msg(text: string, timestampMs?: number) {
 describe('processInbound — los hitos del chofer, cableados', () => {
   beforeEach(() => {
     salientes.length = 0;
-    runAgent.mockReset(); sellarHito.mockReset();
+    runAgent.mockReset(); resolveOperador.mockReset(); atenderConductor.mockReset(); atenderAcuseJefe.mockReset(); adjuntarUbicacionAHito.mockReset();
     resolveOperador.mockResolvedValue({ tenantId: 't1', operadorId: 'o1' });
-    sellarHito.mockResolvedValue('sellado');
+    atenderConductor.mockResolvedValue(null);
+    atenderAcuseJefe.mockResolvedValue(null);
     vi.stubGlobal('fetch', fetchSpy);
     fetchSpy.mockClear();
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
     process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
   });
 
-  it('"ya llegué" sella la llegada y NO cae al freno de cierre ni al agente', async () => {
+  it('"ya llegué" lo atiende el Conductor con el contexto del chofer, y NO cae al freno de cierre ni al agente', async () => {
+    atenderConductor.mockResolvedValue({ mensajes: [{ texto: 'Anotado ✅ llegaste a CARGAR a las 14:32.' }] });
     await processInbound(msg('ya llegué'));
-    expect(sellarHito).toHaveBeenCalledWith('t1', 'v1', 'llegada', expect.any(Date));
-    expect(salientes).toHaveLength(1);
-    expect(salientes[0]).toMatch(/Anotado: llegaste a las \d{2}:\d{2}/);
+    expect(atenderConductor).toHaveBeenCalledTimes(1);
+    expect(atenderConductor.mock.calls[0][0]).toMatchObject({
+      tenantId: 't1', operadorId: 'o1', viajeAbiertoId: 'v1', texto: 'ya llegué', telefono: '5219993700779', waMessageId: 'wa-ya llegu',
+    });
+    expect(salientes).toEqual(['Anotado ✅ llegaste a CARGAR a las 14:32.']);
     expect(runAgent).not.toHaveBeenCalled();
   });
 
-  it('"descargando" sella la descarga con su acuse', async () => {
-    await processInbound(msg('descargando'));
-    expect(sellarHito).toHaveBeenCalledWith('t1', 'v1', 'descarga', expect.any(Date));
-    expect(salientes[0]).toMatch(/descargando desde las/);
+  it('un acuse con BOTONES sale como mensaje interactivo (y el texto de respaldo si Meta lo rechaza)', async () => {
+    atenderConductor.mockResolvedValue({ mensajes: [{ texto: '¿Ya llegaste a DESCARGAR?', botones: [{ id: 'hito_llegada_descarga:v1', titulo: 'Llegué a descargar' }] }] });
+    const cuerpos: Array<Record<string, unknown>> = [];
+    fetchSpy.mockImplementation(async (_u: string, init?: RequestInit) => {
+      const b = JSON.parse(String(init?.body ?? '{}'));
+      cuerpos.push(b);
+      if (b.type === 'interactive') return new Response(JSON.stringify({ error: { code: 131009, message: 'rechazado' } }), { status: 400 });
+      salientes.push(String((b.text as { body?: string } | undefined)?.body ?? ''));
+      return new Response(JSON.stringify({ messages: [{ id: 'wamid.T' }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    await processInbound(msg('ya llegué'));
+    expect(cuerpos[0].type).toBe('interactive');
+    expect(salientes).toEqual(['¿Ya llegaste a DESCARGAR?']);
   });
 
-  it('el hito repetido no miente con una hora nueva', async () => {
-    sellarHito.mockResolvedValue('ya_estaba');
-    await processInbound(msg('voy de regreso'));
-    expect(salientes[0]).toMatch(/Ya lo tenía anotado/);
-  });
-
-  it('"listo" sigue siendo del CIERRE: ningún hito se sella', async () => {
+  it('"listo" sigue siendo del CIERRE: si el Conductor no lo reclama, nadie se lo come', async () => {
     await processInbound(msg('listo', 1788534000000));
-    expect(sellarHito).not.toHaveBeenCalled();
+    expect(atenderConductor).toHaveBeenCalledTimes(1);
     // El freno de cierre contesta (pregunta si va sin comprobantes) — lo que
     // importa aquí es que el mensaje NO se lo comió el módulo de hitos.
     expect(salientes).toHaveLength(1);
     expect(salientes[0]).not.toMatch(/Anotado/);
   });
 
-  it('el sello fallido se dice — no se finge la anotación', async () => {
-    sellarHito.mockResolvedValue('fallo');
-    await processInbound(msg('ya llegamos'));
-    expect(salientes[0]).toMatch(/No pude anotarlo/);
+  it('un mensaje que el Conductor no reclama sigue su camino al resto del dispatcher', async () => {
+    atenderConductor.mockResolvedValue(null);
+    await processInbound(msg('ya quedó'));
+    expect(atenderConductor).toHaveBeenCalledTimes(1);
   });
 
   // ── DAT-38 · LA HORA ES LA DEL MENSAJE, NO LA DEL PROCESAMIENTO ──────────
-  //
-  // Entre que el chofer aprieta enviar y que este código corre caben los
-  // reintentos de Meta, el aplazamiento del rate limit y hasta cinco minutos de
-  // la bandeja durable. El sello se hacía con `new Date()`, así que el acuse le
-  // decía «anotado: llegaste a las 14:32» sobre una hora que él no vivió — y la
-  // flota va a cruzar ese sello contra la bitácora de su cliente.
-  it('sella con la hora de META, no con la del servidor', async () => {
-    const metaMs = Date.UTC(2026, 7, 1, 20, 32, 0); // 14:32 en México (UTC-6)
+  it('le pasa al motor la hora de META, no la del servidor', async () => {
+    const metaMs = Date.UTC(2026, 7, 1, 20, 32, 0);
     await processInbound(msg('ya llegué', metaMs));
-
-    const [, , , sellada] = sellarHito.mock.calls[0] as [string, string, string, Date];
-    expect(sellada.getTime()).toBe(metaMs);
-    // Y el acuse enseña ESA hora, no la de ahora.
-    expect(salientes[0]).toMatch(/llegaste a las 14:32/);
+    const { mensajeEn } = atenderConductor.mock.calls[0][0] as { mensajeEn: Date | null };
+    expect(mensajeEn).toBeInstanceOf(Date);
+    expect(mensajeEn!.getTime()).toBe(metaMs);
   });
 
-  it('sin hora de Meta (QA, simulador) se cae al reloj local, como siempre', async () => {
-    const antes = Date.now();
+  it('sin hora de Meta (QA, simulador) no inventa una: el motor usa su reloj', async () => {
     await processInbound(msg('descargando'));
-    const [, , , sellada] = sellarHito.mock.calls[0] as [string, string, string, Date];
-    expect(sellada.getTime()).toBeGreaterThanOrEqual(antes);
+    expect((atenderConductor.mock.calls[0][0] as { mensajeEn: Date | null }).mensajeEn).toBeNull();
+  });
+
+  it('si el Conductor responde varios mensajes, salen todos en orden', async () => {
+    atenderConductor.mockResolvedValue({ mensajes: [{ texto: 'uno' }, { texto: 'dos' }] });
+    await processInbound(msg('me equivoqué'));
+    expect(salientes).toEqual(['uno', 'dos']);
+  });
+
+  it('con `mensajes: []` el hito se atendió en silencio y el mensaje NO sigue al agente', async () => {
+    atenderConductor.mockResolvedValue({ mensajes: [] });
+    await processInbound(msg('ya llegué'));
+    expect(salientes).toHaveLength(0);
+    expect(runAgent).not.toHaveBeenCalled();
+  });
+
+  // ── «YA LO ATIENDO»: el botón del jefe se atiende ANTES de resolver al operador ──
+  it('el acuse del jefe/patio se contesta sin resolver al operador (puede no ser chofer ni cuenta)', async () => {
+    atenderAcuseJefe.mockResolvedValue('Anotado ✅ lo marqué como atendido; ya no insisto por este viaje.');
+    await processInbound({ from: '5219990000099', type: 'text' as const, text: 'jefe_atiendo:4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d001', waMessageId: 'wa-jefe' });
+    expect(atenderAcuseJefe).toHaveBeenCalledWith('5219990000099', 'jefe_atiendo:4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d001');
+    expect(resolveOperador).not.toHaveBeenCalled();
+    expect(atenderConductor).not.toHaveBeenCalled();
+    expect(salientes).toEqual(['Anotado ✅ lo marqué como atendido; ya no insisto por este viaje.']);
+  });
+
+  it('un mensaje común nunca pasa por el acuse del jefe con costo: solo texto lo evalúa', async () => {
+    await processInbound(msg('ya llegué'));
+    expect(atenderAcuseJefe).toHaveBeenCalledTimes(1);
+    expect(salientes.length).toBeLessThanOrEqual(1);
   });
 });
