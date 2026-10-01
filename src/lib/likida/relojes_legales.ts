@@ -2,7 +2,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { traerTodo, traerPorIds, conteo } from './pg';
-import { sendText } from '@/lib/meta/client';
+import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
+import { appUrl } from '@/lib/env';
 import { telefonoJefeDe, telefonoParaDineroDe } from './contactos';
 import { anotarEventoIncidencia } from './asistencia_wa';
 import { hazmatDeclarado } from './perfil/preguntas';
@@ -307,13 +308,24 @@ async function avisarRelojesDeIncidencia(
   let dineroEnviadoAhora = false;
   if (partesDinero.length > 0 && !yaAvisado.dinero) {
     const tel = await telefonoParaDineroDe(inc.tenantId);
-    if (tel && await sendText(tel, partesDinero.join('\n\n'))) dineroEnviadoAhora = true;
+    // P0-B (0360): `avisarOficina` = texto con la ventana abierta, plantilla
+    // `aviso_operacion_v1` con la cerrada. Antes `sendText` a secas: el contador
+    // que llevaba >24 h sin escribirle al número no se enteraba del plazo legal.
+    const envio = tel ? await avisarOficina(tel, partesDinero.join('\n\n'), {
+      parametros: parametrosAvisoOficina('Likida', 'plazo legal de un siniestro por atender', `${appUrl()}/dashboard/asistencia`),
+      contexto: { agente: 'relojes_legales.dinero', tenantId: inc.tenantId, incidencia: inc.id },
+    }) : null;
+    if (envio?.ok) dineroEnviadoAhora = true;
     else logger.warn('relojes.dinero_sin_destinatario', { incidencia: inc.id, tenia_telefono: Boolean(tel) });
   }
   let operacionEnviadoAhora = false;
   if (partesOperacion.length > 0 && !yaAvisado.operacion) {
     const tel = await telefonoJefeDe(inc.tenantId);
-    if (tel && await sendText(tel, partesOperacion.join('\n\n'))) operacionEnviadoAhora = true;
+    const envio = tel ? await avisarOficina(tel, partesOperacion.join('\n\n'), {
+      parametros: parametrosAvisoOficina('Likida', 'plazo legal de un siniestro por atender', `${appUrl()}/dashboard/asistencia`),
+      contexto: { agente: 'relojes_legales.operacion', tenantId: inc.tenantId, incidencia: inc.id },
+    }) : null;
+    if (envio?.ok) operacionEnviadoAhora = true;
     else logger.warn('relojes.operacion_sin_destinatario', { incidencia: inc.id, tenia_telefono: Boolean(tel) });
   }
 
@@ -595,8 +607,14 @@ export async function avisarVencimientos(ahora: Date = new Date(), opts: Opcione
       const texto =
         `📋 Papeles de la flota por vencer:\n${lineas.join('\n')}\n` +
         `Renovar toma días hábiles (cita, taller, pago) — por eso el aviso sale con tiempo. Los detalles están en Unidades y Operadores del panel.`;
-      const enviado = await sendText(tel, texto);
-      if (!enviado) {
+      // P0-B (0360): plantilla de respaldo fuera de la ventana de 24 h (antes
+      // `sendText` a secas: el jefe sin conversación reciente nunca se enteraba
+      // del vencimiento y el aviso se reintentaba cada corrida sin llegar).
+      const enviado = await avisarOficina(tel, texto, {
+        parametros: parametrosAvisoOficina('Likida', 'papeles de la flota por vencer', `${appUrl()}/dashboard`),
+        contexto: { agente: 'vencimientos', tenantId },
+      });
+      if (!enviado.ok) {
         r.fallos++;
         logger.warn('vencimientos.no_enviado', { tenant: tenantId });
         continue; // sin sello: se reintenta a la siguiente corrida

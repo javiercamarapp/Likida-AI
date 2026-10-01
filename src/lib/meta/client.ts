@@ -9,6 +9,7 @@ import {
   encolarSalidaWhatsApp, encolarSalidaWhatsAppDedupe, RETRASO_AMBIGUO_SEGUNDOS,
   type SalidaOutboxDedupe,
 } from '@/lib/likida/wa_outbox';
+import { armarComponentesPlantilla, type OpcionesPlantilla } from './plantilla_payload';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const DOWNLOAD_TIMEOUT_MS = 15_000;
@@ -348,13 +349,28 @@ function motivoBotonesInvalidos(cuerpo: string, botones: BotonAcuse[]): Record<s
  * ya diagnosticado.
  */
 export async function sendButtons(to: string, cuerpo: string, botones: BotonAcuse[]): Promise<string | null> {
+  const r = await enviarBotones(to, cuerpo, botones);
+  return r.ok ? r.id : null;
+}
+
+/**
+ * `sendButtons` con el código de Meta: mismo envío, mismo outbox, pero devuelve
+ * `{ok:false, codigo, status}` en vez de un `null` mudo. Lo necesita
+ * `enviarConFallback` para distinguir «fuera de ventana (131047) → plantilla» de
+ * «429 → ya quedó en el outbox, NO mandar la plantilla también» (duplicaría).
+ * Nunca lanza.
+ */
+export async function enviarBotones(to: string, cuerpo: string, botones: BotonAcuse[]): Promise<EnvioWhatsApp> {
   let payload: Record<string, unknown> | null = null;
   try {
     // La frontera es pública en tiempo de ejecución aunque TypeScript diga
     // BotonAcuse. Un adapter o feature flag roto no puede tirar el processor
     // solo porque `titulo` vino null: este helper promete nunca lanzar.
     const invalido = motivoBotonesInvalidos(cuerpo, botones);
-    if (invalido) { logger.error('wa.sendButtons.invalido', invalido); return null; }
+    if (invalido) {
+      logger.error('wa.sendButtons.invalido', invalido);
+      return { ok: false, error: `botones inválidos: ${String(invalido.motivo)}` };
+    }
 
     payload = {
       messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'interactive',
@@ -370,24 +386,75 @@ export async function sendButtons(to: string, cuerpo: string, botones: BotonAcus
     });
     if (!res.ok) {
       const crudo = await res.text().catch(() => '');
-      const { codigo } = errorDeMeta(crudo);
+      const { codigo, mensaje } = errorDeMeta(crudo);
       logger.error('wa.sendButtons', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
       if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
-      return null;
+      return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
     }
     const id = await idDeRespuesta(res);
     logger.info('wa.sendButtons.ok', { id, botones: botones.length });
-    return id ?? null;
+    return { ok: true, id: id ?? null };
   } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
     logger.error('wa.sendButtons', {
-      para: destinatarioEnmascarado(to), status: 0, codigo: 'network',
-      body: e instanceof Error ? e.message.slice(0, 400) : String(e).slice(0, 400),
+      para: destinatarioEnmascarado(to), status: 0, codigo: 'network', body: error.slice(0, 400),
     });
     // AUDITORÍA E.28 (H1): mismo caso que `sendText` — la respuesta nunca
     // llegó, así que Meta pudo haber aceptado el mensaje igual.
-    if (payload) await encolarSalidaWhatsApp(payload, e instanceof Error ? e.message : String(e), RETRASO_AMBIGUO_SEGUNDOS);
-    return null;
+    if (payload) await encolarSalidaWhatsApp(payload, error, RETRASO_AMBIGUO_SEGUNDOS);
+    return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}`, status: 503 };
   }
+}
+
+/** Texto del cuerpo de la solicitud de ubicación (mismo tope que los botones). */
+const MAX_CUERPO_UBICACION = 1024;
+
+/**
+ * Pide al chofer que comparta su ubicación (`interactive` / `location_request_message`).
+ *
+ * Contrato de Meta (consultado 1-oct-2026):
+ * https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/location-request-messages
+ * — cuerpo de texto + botón «Enviar ubicación»; la respuesta llega al webhook como
+ * un mensaje `location` normal (ya lo procesa `registrarUbicacionChofer`).
+ *
+ * ═══ SOLO DENTRO DE LA VENTANA DE 24 H ═══
+ * Es un mensaje interactivo, NO una plantilla: una plantilla no puede pedir
+ * ubicación. Fuera de ventana usa una plantilla con botón de respuesta rápida
+ * («Compartir ubicación») y contesta con esto cuando el chofer lo apriete.
+ */
+export async function enviarSolicitudUbicacion(to: string, cuerpo: string): Promise<EnvioWhatsApp> {
+  const texto = typeof cuerpo === 'string' ? cuerpo.trim() : '';
+  if (!texto || texto.length > MAX_CUERPO_UBICACION) {
+    logger.error('wa.solicitudUbicacion.invalida', { largo: texto.length, max: MAX_CUERPO_UBICACION });
+    return { ok: false, error: 'el cuerpo de la solicitud de ubicación está vacío o es demasiado largo' };
+  }
+  const payload = {
+    messaging_product: 'whatsapp', recipient_type: 'individual', to: destinatarioWhatsApp(to), type: 'interactive',
+    interactive: { type: 'location_request_message', body: { text: texto }, action: { name: 'send_location' } },
+  };
+  let res: Response;
+  try {
+    res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload), signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    });
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    logger.error('wa.solicitudUbicacion.red', { para: destinatarioEnmascarado(to), error });
+    await encolarSalidaWhatsApp(payload, error, RETRASO_AMBIGUO_SEGUNDOS);
+    return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}`, status: 503 };
+  }
+  if (!res.ok) {
+    const crudo = await res.text().catch(() => '');
+    const { codigo, mensaje } = errorDeMeta(crudo);
+    logger.error('wa.solicitudUbicacion', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
+    if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+    return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
+  }
+  const id = await idDeRespuesta(res);
+  logger.info('wa.solicitudUbicacion.ok', { id });
+  return { ok: true, id: id ?? null };
 }
 
 /** Construye el mismo sobre que `sendButtons`, pero sólo registra una
@@ -443,17 +510,22 @@ export async function encolarBotonesWhatsApp(
 export async function sendTemplate(
   to: string,
   plantilla: string,
-  opciones: { idioma?: string; parametros?: string[] } = {},
+  opciones: { idioma?: string } & OpcionesPlantilla = {},
 ): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }> {
-  const { idioma = 'es_MX', parametros = [] } = opciones;
+  const { idioma = 'es_MX', ...resto } = opciones;
 
-  const componentes = parametros.length > 0
-    ? [{ type: 'body', parameters: parametros.map((t) => ({ type: 'text', text: t })) }]
-    : undefined;
+  // Encabezado (texto/documento/imagen), cuerpo y botones (respuesta rápida/URL):
+  // se validan ANTES de llamar a Meta — ver plantilla_payload.ts para el
+  // contrato y para por qué NO existe «solicitud de ubicación» en una plantilla.
+  const armado = armarComponentesPlantilla(resto);
+  if (!armado.ok) {
+    logger.warn('wa.sendTemplate.invalida', { plantilla, error: armado.error });
+    return { ok: false, error: `Plantilla ${plantilla} mal armada: ${armado.error}` };
+  }
 
   const payload = {
     messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'template',
-    template: { name: plantilla, language: { code: idioma }, components: componentes },
+    template: { name: plantilla, language: { code: idioma }, components: armado.componentes },
   };
   let res: Response;
   try {
