@@ -113,7 +113,7 @@ export function clasificarVerificacion(e: EntradaVerificacion): Verificacion {
   }
   return {
     estado: 'sin_respaldo', motivo: 'sin_gasto_sin_gps',
-    explicacion: `Ningún gasto de caseta respalda este cobro y el GPS no aporta evidencia (${textoMotivoGps(e.gpsMotivo)}). No hay respaldo en los datos de Likida; no se afirma que el cobro sea indebido.`,
+    explicacion: `Ningún gasto de caseta respalda este cobro y el GPS no aporta evidencia: ${textoMotivoGps(e.gpsMotivo)}. No hay respaldo en los datos de Likida; no se afirma que el cobro sea indebido.`,
   };
 }
 

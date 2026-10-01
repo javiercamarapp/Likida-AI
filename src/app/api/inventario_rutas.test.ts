@@ -97,16 +97,18 @@ import { join, relative, sep } from 'node:path';
 // `src/app/api` y cubre `src/app` entero (ver el comentario de arriba con el
 // detalle de las cinco rutas que aparecen).
 //
-// 75 → 77 (loop punta a punta, Agente 2, 1-oct-2026): dos rutas de la
-// ingesta automática de peajes, cada una con su propia puerta —
+// 75 → 78 (loop punta a punta, Agente 2, 1-oct-2026): tres rutas de la
+// conciliación de peajes, cada una con su propia puerta —
 //   · `api/peajes/ingesta/route.ts` — SIN sesión a propósito (la llama el
 //     sistema del proveedor/cliente): su puerta es la firma HMAC por flota
 //     (cuerpo crudo + timestamp ±5 min + comparación en tiempo constante),
 //     fail-closed sin PEAJES_INGESTA_SECRETO o con la flota sin activar, tope de
 //     cuerpo, rate limit y cola con tope de pendientes;
 //   · `api/cron/peajes/route.ts` — puertaCron (CRON_SECRET) y palancas global y
-//     `agente:peajes`.
-const RUTAS_APP_REVISADAS = 77;
+//     `agente:peajes`;
+//   · `api/export/bitacora-conciliada/route.ts` — sesión + área dinero +
+//     puedeExportar, rate limit y siempre acotada al tenant de la sesión.
+const RUTAS_APP_REVISADAS = 78;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

@@ -1276,6 +1276,9 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
  * enseña como celdas de texto): un CSV que viaja sin su leyenda es una
  * bitácora que afirma de más en cuanto alguien la reenvía.
  */
+/** Antepone «'» a un texto que Excel leería como fórmula. Vacío y números pasan igual. */
+const textoCsvSeguro = (t: string): string => (/^[=+\-@\t\r]/.test(t) ? `'${t}` : t);
+
 export function bitacoraACsv(b: BitacoraRmf918): string {
   const encabezado = [
     ...b.leyendas.map((l) => `# ${l}`),
@@ -1285,12 +1288,13 @@ export function bitacoraACsv(b: BitacoraRmf918): string {
   const tabla = b.filas.length === 0
     ? '# (Sin líneas conciliadas todavía: la bitácora se llena con los cruces que cuadran.)\n'
     : toCsv(b.filas.map((f) => ({
-      viaje: f.viajeFolio,
-      origen: f.origen,
-      destino: f.destino,
+      // Texto del proveedor/del viaje: neutraliza «=…», «+…», «@…» (CSV injection).
+      viaje: textoCsvSeguro(f.viajeFolio),
+      origen: textoCsvSeguro(f.origen),
+      destino: textoCsvSeguro(f.destino),
       fecha_cruce: f.fechaCruce,
-      caseta: f.caseta,
-      tag: f.tag,
+      caseta: textoCsvSeguro(f.caseta),
+      tag: textoCsvSeguro(f.tag),
       monto_conciliado: f.montoConciliado,
       // «sin datos», no 0: un cero se leería como "la unidad no se movió",
       // que es más de lo que sabemos (ver leyenda).
