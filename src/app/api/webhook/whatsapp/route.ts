@@ -12,6 +12,7 @@ import { logger } from '@/lib/logger';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { flushObservabilidad, codigoDeError } from '@/lib/observability/sentry';
 import { leerInterruptor } from '@/lib/likida/interruptores';
+import { registrarEntrantesWhatsApp } from '@/lib/likida/wa_ventana';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { avisadosDeApagado, VENTANA_AVISO_APAGADO_MS } from './avisos_apagado';
 import {
@@ -150,6 +151,13 @@ export async function POST(req: NextRequest) {
   }
 
   const messages = extractMessages(payload);
+  // ── VENTANA DE 24 H (mig. 0360) ───────────────────────────────────────────
+  // Todo mensaje entrante válido (firma ya verificada) abre/renueva la ventana
+  // de servicio de ESE contacto, con la hora de META y antes de cualquier rate
+  // limit o apagado: la ventana es un hecho de WhatsApp, no del procesamiento.
+  // Idempotente y a prueba de reentregas/desorden (la hora solo avanza); nunca
+  // lanza ni cambia el código de respuesta — es una caché, no un requisito.
+  if (messages.length) await registrarEntrantesWhatsApp(messages);
   // ── RATE LIMIT POR TELÉFONO (no por IP: todo Meta viene de sus IPs) ────────
   //
   // LO QUE PASA DE ESTE TECHO YA NO SE DESCARTA: SE APLAZA. Es el cambio del

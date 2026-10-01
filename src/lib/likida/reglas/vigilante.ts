@@ -18,7 +18,9 @@
 // puede dejar sin vigilancia a las otras veintinueve de la misma flota, ni a
 // las de las demás flotas.
 // ═══════════════════════════════════════════════════════════════════════════
-import { sendText } from '@/lib/meta/client';
+import { enviarConFallback } from '@/lib/meta/enviar_con_fallback';
+import { PLANTILLA, parametrosReglaAviso } from '@/lib/meta/plantillas_catalogo';
+import { appUrl } from '@/lib/env';
 import { telefonoJefeDe, telefonoParaDineroDe } from '../contactos';
 import { logger } from '@/lib/logger';
 import { CATALOGO } from './catalogo';
@@ -89,11 +91,26 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<number> {
     throw new Error(`la flota no tiene teléfono registrado para avisos de ${plantilla.canal}`);
   }
 
-  const enviado = await sendText(telefono, mensajeDeRegla(regla.frase, nuevos.map((d) => d.evidencia)));
-  if (!enviado) {
+  // ── FUERA DE LA VENTANA DE 24 H TAMBIÉN SALE (auditoría 6-7-9-10-12-13, §13) ─
+  // `sendText` a secas fallaba con 131047 cuando el jefe llevaba más de 24 h sin
+  // escribirle al número: `correrRegla` lanzaba, no sellaba y reintentaba cada
+  // hora SIN LLEGAR JAMÁS. Ahora el selector manda el texto completo dentro de
+  // la ventana y la plantilla `regla_aviso_v1` fuera de ella. La semántica no
+  // cambia: se manda primero y se sella solo si Meta ACEPTÓ.
+  const casos = nuevos.length;
+  const envio = await enviarConFallback(telefono, {
+    texto: mensajeDeRegla(regla.frase, nuevos.map((d) => d.evidencia)),
+    plantilla: {
+      nombre: PLANTILLA.reglaAviso,
+      parametros: parametrosReglaAviso(casos, regla.frase, `${appUrl()}/dashboard/reglas`),
+    },
+    contexto: `reglas.vigilante.${regla.plantilla}`,
+    tenantId: regla.tenantId,
+  });
+  if (!envio.ok) {
     // Sin sello: se reintenta a la siguiente corrida. Es exactamente el
     // contrato de `avisarVencimientos`.
-    throw new Error('el WhatsApp no salió');
+    throw new Error(`el WhatsApp no salió: ${envio.mensaje}`);
   }
 
   await sellarDisparos(regla.tenantId, regla.id, nuevos);
