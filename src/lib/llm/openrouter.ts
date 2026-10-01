@@ -113,6 +113,19 @@ const FALLBACK: Record<string, string> = {
   'openai/gpt-5.6-luna': 'google/gemini-3.5-flash-lite',
   'openai/gpt-oss-120b': 'google/gemini-3.5-flash-lite',
   'openai/gpt-oss-20b': 'google/gemini-3.5-flash-lite',
+  // GPT-6 Luna: respaldo cruzado del rol `conductor_hito` (ver FALLBACK_POR_ROL);
+  // su propio respaldo regresa a Google.
+  'openai/gpt-6-luna': 'google/gemini-3.5-flash-lite',
+};
+
+/**
+ * Respaldo POR ROL, que manda sobre `FALLBACK[modelo]`. Existe para que un rol
+ * nuevo elija su plan B sin cambiar el de los demás roles que comparten modelo
+ * (`gemini-3.5-flash-lite` es también el de `chat` y `transcripcion`).
+ * Solo lo lee `generateStructured`.
+ */
+const FALLBACK_POR_ROL: Partial<Record<ModelRole, string>> = {
+  conductor_hito: 'openai/gpt-6-luna',
 };
 
 /**
@@ -215,6 +228,10 @@ const PRICES: Record<string, [number, number]> = {
   // contra el catálogo público de OpenRouter el 16-ago-2026.
   'openai/gpt-oss-120b': [0.03, 0.17],
   'openai/gpt-oss-20b': [0.03, 0.13],
+  // GPT-6 Luna (22-sep-2026), estándar: $0.10/$0.50 por M (catálogo de OpenRouter
+  // y developers.openai.com/api/docs/pricing, 1-oct-2026). Mide el respaldo del
+  // rol `conductor_hito`.
+  'openai/gpt-6-luna': [0.10, 0.50],
 };
 
 /**
@@ -625,7 +642,7 @@ export async function generateStructured<T>(opts: {
   budget?: LlmBudget;
 }): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }> }> {
   const model = modelFor(opts.role);
-  const fallback = FALLBACK[model] ?? null;
+  const fallback = FALLBACK_POR_ROL[opts.role] ?? FALLBACK[model] ?? null;
   const jsonSchema = z.toJSONSchema(opts.schema, { target: 'draft-7' }) as Record<string, unknown>;
 
   // OpenRouter/OpenAI json_schema exige additionalProperties:false en cada objeto.

@@ -36,7 +36,7 @@
 
 import { envPuesta } from '../env';
 
-export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto' | 'transcripcion' | 'contador';
+export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto' | 'transcripcion' | 'contador' | 'conductor_hito';
 
 const DEFAULTS: Record<ModelRole, string> = {
   // OCR de comprobantes (visión + JSON en una sola llamada).
@@ -156,6 +156,15 @@ const DEFAULTS: Record<ModelRole, string> = {
   // cuadre) deja la corrida de 32 preguntas en el orden de lo presupuestado
   // en 22-evaluacion.md, no en el de una corrida sin caché.
   contador: 'anthropic/claude-sonnet-5',        // $2/$10 (lectura de caché al 10%)
+  // AGENTE 5 «CONDUCTOR» (1-oct-2026): clasifica el texto libre del chofer cuando
+  // las reglas deterministas no lo entienden («ya estoy en la puerta, me atiende
+  // Pedro de recibo»). Las reglas van SIEMPRE primero (conductor/interprete.ts):
+  // este modelo solo ve lo que ellas no resolvieron y su salida se valida antes
+  // de tocar nada. Gemini 3.5 Flash-Lite: mejor extracción de datos medida entre
+  // los baratos (91.8 %, #8/53), ~1.5 s y $0.30/$2.50; su respaldo cruzado de
+  // proveedor es GPT-6 Luna (FALLBACK_POR_ROL en openrouter.ts). Fuente:
+  // scratchpad/modelos-precios.md. Precios y slug se re-verifican antes de firmar.
+  conductor_hito: 'google/gemini-3.5-flash-lite', // $0.30/$2.50
 
   // ── QUÉ ROL CORRE HOY Y CUÁL NO (verificado el 23-ago-2026) ──────────────
   // Tienen llamador en producción: ocr, cuadre, chat, analisis, marketing,
@@ -194,6 +203,7 @@ const ENV_KEY: Record<ModelRole, string> = {
   piloto: 'LIKIDA_MODEL_PILOTO',
   transcripcion: 'LIKIDA_MODEL_TRANSCRIPCION',
   contador: 'LIKIDA_MODEL_CONTADOR',
+  conductor_hito: 'LIKIDA_MODEL_CONDUCTOR_HITO',
 };
 
 /** Devuelve el slug del modelo para un rol, respetando override por env.
@@ -223,6 +233,7 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
   piloto: { temperature: 0 },                 // un formulario fiscal no se improvisa
   transcripcion: { temperature: 0 },          // se escribe lo que se oye, no se redacta
   contador: { temperature: 0 },               // una opinión fiscal no se improvisa
+  conductor_hito: { temperature: 0 },         // clasificar no es redactar: el mismo texto, la misma intención
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
