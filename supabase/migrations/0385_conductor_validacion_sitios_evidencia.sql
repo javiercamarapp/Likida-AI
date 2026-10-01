@@ -353,6 +353,14 @@ begin
          pospuesto_hasta = null, updated_at = p_ahora
    where id = h.id and tenant_id = p_tenant;
 
+  -- Los sellos de la 0090 que el motor sigue escribiendo (el primero gana): una captura de oficina del mismo hito los
+  -- completa igual, o la espera en patio y el tablero viejo se quedarían sin la hora.
+  if h.tipo = 'llegada_descarga' then
+    update public.viaje set llegada_en = p_hora where id = h.viaje_id and tenant_id = p_tenant and llegada_en is null;
+  elsif h.tipo = 'regreso' then
+    update public.viaje set regreso_en = p_hora where id = h.viaje_id and tenant_id = p_tenant and regreso_en is null;
+  end if;
+
   idx := array_position(array['llegada_carga', 'salida_carga', 'llegada_descarga', 'salida_descarga', 'regreso'], h.tipo);
   update public.viaje_hito x
      set estado = 'omitido', omitido_motivo = 'inferido_por_' || h.tipo, updated_at = p_ahora
@@ -542,6 +550,9 @@ declare
 begin
   if p_tenant is null or p_filas is null or jsonb_typeof(p_filas) <> 'array' then raise exception 'importar_sitios: entrada inválida'; end if;
   if jsonb_array_length(p_filas) = 0 or jsonb_array_length(p_filas) > 2000 then raise exception 'importar_sitios: entre 1 y 2000 filas'; end if;
+  -- Dos importaciones de la MISMA flota a la vez se serializan: la segunda ve los sitios de la primera y actualiza en
+  -- vez de chocar con el unique (código, nombre). Por flota, no global: otra flota no espera.
+  perform pg_advisory_xact_lock(hashtextextended('importar_sitios_conductor:' || p_tenant::text, 0));
 
   -- Pasada 1: revisar sin escribir.
   for f in select * from jsonb_array_elements(p_filas) loop

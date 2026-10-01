@@ -290,6 +290,16 @@ begin
   if public.capturar_hito_oficina('38500000-0000-4000-8000-0000000000b1', (select id from public.viaje_hito where viaje_id = v and tipo = 'regreso'), now() - interval '1 hour', null, 'x@test.invalid', 'intento desde otra flota', now()) <> 'hito_cambio' then
     raise exception '0385: la flota B capturó un hito de A';
   end if;
+  -- La captura de la salida de descarga NO sella llegada_en (solo la llegada a descarga y el regreso lo hacen).
+  if (select llegada_en from public.viaje where id = v) is not null then raise exception '0385: capturar la salida de descarga selló llegada_en'; end if;
+  -- Capturar la LLEGADA a descarga (estaba omitida por la captura posterior) y el REGRESO completa los sellos de la 0090.
+  r := public.capturar_hito_oficina(t, ld, now() - interval '90 minutes', c, 'encargado-0385@test.invalid', 'el cliente confirmó la hora', now());
+  if r <> 'ok' then raise exception '0385: no se pudo capturar la llegada a descarga omitida (%)', r; end if;
+  if (select llegada_en from public.viaje where id = v) is null then raise exception '0385: la captura de la llegada a descarga no selló llegada_en (0090)'; end if;
+  r := public.capturar_hito_oficina(t, (select id from public.viaje_hito where viaje_id = v and tipo = 'regreso'), now() - interval '30 minutes', c, 'encargado-0385@test.invalid', 'va de regreso, confirmado por radio', now());
+  if r <> 'ok' or (select regreso_en from public.viaje where id = v) is null then raise exception '0385: la captura del regreso no selló regreso_en (0090)'; end if;
+  update public.viaje_hito set estado = 'esperado', fuente = null, interpretacion = null, mensaje_en = null, recibido_en = null where viaje_id = v and tipo = 'regreso';
+  update public.viaje set regreso_en = null where id = v;
   -- Validar por oficina: recibido → validado; y no repetible.
   if public.validar_hito_oficina(t, sc, c, 'encargado-0385@test.invalid', 'confirmado con el cliente', now()) <> 'ok'
      or (select validado_por from public.viaje_hito where id = sc) <> 'oficina' then
@@ -335,20 +345,20 @@ do $$
 declare ind jsonb;
 begin
   ind := public.conductor_indicadores('38500000-0000-4000-8000-0000000000a1', now() - interval '1 day', now() + interval '1 hour');
-  -- Recibidos de A: llegada_carga (validado), salida_carga (validado oficina), salida_descarga (recibido) = 3.
-  if (ind->>'recibidos')::int <> 3 then raise exception '0385: recibidos incorrecto (%): %', ind->>'recibidos', ind; end if;
-  if (ind->>'sin_insistencia')::int <> 3 then raise exception '0385: sin_insistencia incorrecto: %', ind; end if;
+  -- Recibidos de A: llegada_carga (validado), salida_carga (validado oficina), llegada_descarga y salida_descarga (capturados) = 4.
+  if (ind->>'recibidos')::int <> 4 then raise exception '0385: recibidos incorrecto (%): %', ind->>'recibidos', ind; end if;
+  if (ind->>'sin_insistencia')::int <> 4 then raise exception '0385: sin_insistencia incorrecto: %', ind; end if;
   if (ind->>'con_respuesta_medida')::int <> 1 or (ind->>'minutos_respuesta_promedio')::numeric <> 10.0 then
     raise exception '0385: el tiempo de respuesta medido es incorrecto: %', ind;
   end if;
-  if (ind->>'escalados')::int <> 1 or (ind->>'omitidos')::int <> 1 then raise exception '0385: escalados/omitidos incorrectos: %', ind; end if;
-  if (ind->>'validados_ubicacion')::int <> 1 or (ind->>'capturados_oficina')::int <> 2 then raise exception '0385: validados/capturados incorrectos: %', ind; end if;
+  if (ind->>'escalados')::int <> 1 or (ind->>'omitidos')::int <> 0 then raise exception '0385: escalados/omitidos incorrectos: %', ind; end if;
+  if (ind->>'validados_ubicacion')::int <> 1 or (ind->>'capturados_oficina')::int <> 3 then raise exception '0385: validados/capturados incorrectos: %', ind; end if;
   -- Filtro por chofer: otro chofer de A (sin viajes) da cero, no los de otro.
   ind := public.conductor_indicadores('38500000-0000-4000-8000-0000000000a1', now() - interval '1 day', now() + interval '1 hour', null, null, '38500000-0000-4000-8000-0000000000b2');
   if (ind->>'recibidos')::int <> 0 then raise exception '0385: el filtro por chofer dejó pasar hitos ajenos: %', ind; end if;
   -- Filtro por cliente.
   ind := public.conductor_indicadores('38500000-0000-4000-8000-0000000000a1', now() - interval '1 day', now() + interval '1 hour', null, '38500000-0000-4000-8000-0000000000e1', null);
-  if (ind->>'recibidos')::int <> 3 then raise exception '0385: el filtro por cliente no encontró los hitos de su viaje: %', ind; end if;
+  if (ind->>'recibidos')::int <> 4 then raise exception '0385: el filtro por cliente no encontró los hitos de su viaje: %', ind; end if;
   -- Ventana vacía: ceros reales y promedio nulo (jamás un 0 que parezca medición).
   ind := public.conductor_indicadores('38500000-0000-4000-8000-0000000000a1', now() + interval '2 days', now() + interval '3 days');
   if (ind->>'recibidos')::int <> 0 or (ind->'minutos_respuesta_promedio') <> 'null'::jsonb then
