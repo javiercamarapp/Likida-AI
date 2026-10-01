@@ -100,6 +100,7 @@ describe('#26: la reserva ambigua del PAC y la duración de la ruta', () => {
     expect(FUENTE).toMatch(/ctx\.reservaPendiente\.uuidFiscal === null && puedeEmitir/);
   });
   it('la página declara `export const maxDuration = 60;` (literal, que es lo que Next lee en build)', () => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- archivo HERMANO resuelto de `import.meta.url`; sin entrada de usuario.
     const pagina = readFileSync(fileURLToPath(new URL('./page.tsx', import.meta.url)), 'utf8');
     expect(pagina).toMatch(/^export const maxDuration = 60;$/m);
   });

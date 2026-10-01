@@ -87,7 +87,7 @@ vi.mock('@/lib/auth/session', async (importOriginal) => {
 
 const leerCliente = vi.fn(async () => ({
   ok: true as const,
-  cliente: { clientId: 'c1', nombre: 'Claude', redirectUris: ['https://claude.ai/api/mcp/callback'], estado: 'aprobado' as const },
+  cliente: { clientId: 'c1', nombre: 'Claude', redirectUris: ['https://claude.ai/api/mcp/callback'], estado: 'aprobado' as 'aprobado' | 'pendiente' | 'rechazado' },
 }));
 vi.mock('@/lib/mcp/oauth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/mcp/oauth')>();
