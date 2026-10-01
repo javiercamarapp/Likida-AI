@@ -69,6 +69,22 @@ const ANIO = /(?<![\w-])(?:19|20)\d{2}(?![\w-])/g;
 
 /** Un `$` (con o sin espacio) justo antes: es un monto, no un año. */
 const MARCA_DE_DINERO_ANTES = /\$\s?$/;
+/**
+ * Lo que vuelve AÑO a un entero de la banda 1900-2099, y la única razón para
+ * borrarlo. SEG/AG/TC-32C10-C1 (AUDITORÍA 32 c10, CRÍTICO): hasta aquí el
+ * criterio estaba INVERTIDO —se borraba salvo que hubiera marca de dinero—, así
+ * que un monto pelado (`te sobran 2000`), que es como se escribe en WhatsApp,
+ * desaparecía antes de cotejarse y la guardia lo sellaba como respaldado.
+ *
+ * Una preposición o un sustantivo de periodo delante (`en 2026`, `del 2026 al
+ * 2027`, `el ejercicio 2026`), o una referencia normativa (`RFA 2026`, `regla
+ * 2.9 de la RFA 2026`), o un separador de fecha pegado (`01/01/2026`, y el
+ * `-` cubre además lo que el lookbehind de `ANIO` ya excluye). Nada más.
+ */
+const CONTEXTO_DE_ANIO_ANTES =
+  /(?:\b(?:en|del|de|al|para|desde|hasta|durante|hacia|entre|ejercicio|a[nñ]o|ciclo|RFA|RMF|LIF|LISR|LIVA|CFF|circular|regla|norma|anexo|DOF)\s+|[/-]\s*)$/i;
+/** Un separador de fecha justo después: `2026/01/01`, `2026-01-01`. */
+const CONTEXTO_DE_ANIO_DESPUES = /^\s*[/-]\d/;
 /** `pesos`/`mxn`/`m.n.` justo después, o una cola decimal que lo vuelve monto. */
 const MARCA_DE_DINERO_DESPUES = /^(?:\s*(?:pesos?|mxn|m\.?\s?n\.?)\b|[.,]\d)/i;
 
@@ -99,16 +115,34 @@ const MARCA_DE_DINERO_DESPUES = /^(?:\s*(?:pesos?|mxn|m\.?\s?n\.?)\b|[.,]\d)/i;
  * resumen determinístico del motor —correcto y hasta más útil— y borrarlo cuesta
  * la garantía sobre la que se vende el producto.
  *
- * El portón (`tieneCifrasDeDinero`) sigue con `ANIO` a secas a propósito: ahí el
- * agujero no existe porque `DINERO_EXPLICITO` corre ANTES y marca `$2000` y
- * `2000 pesos` sin llegar al reemplazo (medido: portón `true` en los cuatro
- * casos de arriba). Su falso negativo es otro y es SEG-32C9-C2.
+ * CORRECCIÓN (AUDITORÍA 32 c10, SEG/AG/TC-32C10-C1). Esta cabecera afirmaba que
+ * «el portón sigue con `ANIO` a secas a propósito: ahí el agujero no existe
+ * porque `DINERO_EXPLICITO` corre ANTES». **Era cierto para los cuatro casos que
+ * enumeraba y falso para el quinto, que no enumeró:** un monto PELADO no lleva
+ * marca, así que `DINERO_EXPLICITO` no encaja y `ANIO` lo borraba igual. Medido
+ * sobre este archivo, con el respaldo real (anticipo 8000, comprobado 6000):
+ *
+ *     "…te sobran 2000."  → cotejo []  y portón false   los DOS carriles ciegos
+ *     "…te sobran 1950."  → ídem        (200 enteros, 1900-2099, contiguos)
+ *     "…te sobran 3200."  → cotejo [3200] y portón true  fuera de la banda
+ *
+ * La única diferencia entre que la guardia atrape la cifra y que la selle como
+ * respaldada era caer en la banda de los años. Arreglado invirtiendo el default
+ * en LOS DOS carriles: se borra sólo con marca de AÑO
+ * (`CONTEXTO_DE_ANIO_ANTES`/`_DESPUES`), nunca por omisión de marca de dinero.
+ * El falso negativo de la cláusula sigue abierto y es SEG-32C9-C2.
  */
 function sinAniosQueNoSeanMonto(texto: string): string {
   return texto.replace(ANIO, (anio: string, pos: number) => {
-    if (MARCA_DE_DINERO_ANTES.test(texto.slice(Math.max(0, pos - 2), pos))) return anio;
-    if (MARCA_DE_DINERO_DESPUES.test(texto.slice(pos + anio.length))) return anio;
-    return ' ';
+    const antes = texto.slice(0, pos);
+    const despues = texto.slice(pos + anio.length);
+    if (MARCA_DE_DINERO_ANTES.test(antes.slice(-2))) return anio;
+    if (MARCA_DE_DINERO_DESPUES.test(despues)) return anio;
+    // SEG/AG/TC-32C10-C1: se borra SÓLO con marca de año. Antes se borraba por
+    // defecto, y el default es lo que decide el caso que nadie enumeró.
+    if (CONTEXTO_DE_ANIO_ANTES.test(antes)) return ' ';
+    if (CONTEXTO_DE_ANIO_DESPUES.test(despues)) return ' ';
+    return anio; // ante la duda se CONSERVA: es la asimetría declarada arriba.
   });
 }
 
@@ -130,7 +164,11 @@ export function tieneCifrasDeDinero(texto: string): boolean {
   // comprobantes" sigue sin marcar (el 3 y "comprobantes" viven juntos), pero
   // "Llevas 6 comprobantes y te sobran 3200 del anticipo" sí marca (el 3200
   // vive en una cláusula sin ninguna palabra de la lista).
-  const sinAnios = texto.replace(ANIO, ' ');
+  // SEG/AG/TC-32C10-C1: era `texto.replace(ANIO, ' ')` a secas, y por eso el
+  // portón NO veía `Te sobran 2000 del anticipo.` mientras sí veía `3200`. Ahora
+  // usa el MISMO criterio que el cotejo, que es lo que impide que los dos
+  // carriles tengan agujeros distintos.
+  const sinAnios = sinAniosQueNoSeanMonto(texto);
   const clausulas = sinAnios.split(SEPARADOR_DE_CLAUSULA);
   return clausulas.some((c) =>
     (NUMERO_SUELTO.test(c) || CARDINAL_SUELTO.test(c)) && !NO_ES_DINERO.test(c),
