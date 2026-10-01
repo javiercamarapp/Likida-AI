@@ -392,7 +392,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 ### `operador_invitacion_v1`
 
 - **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
-- **Agente / uso:** undefined. Invitar al chofer recién dado de alta (alta masiva o ficha) a escribirle a Likida: inicia su conversación y abre la ventana de 24 h. Solo se manda si la flota lo confirma.
+- **Agente / uso:** Alta de operadores (invitación del chofer). Invitar al chofer recién dado de alta (alta masiva o ficha) a escribirle a Likida: inicia su conversación y abre la ventana de 24 h. Solo se manda si la flota lo confirma.
 - **Llamador en código:** src/lib/likida/invitacion_operador.ts
 - **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
 - **Cuerpo exacto:**

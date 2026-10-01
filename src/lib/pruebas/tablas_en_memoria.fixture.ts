@@ -92,6 +92,14 @@ export interface RestriccionUnica { tabla: string; nombre: string; columnas: str
  *  `activo` = true): sin ellos una fila recién creada no se parece a una real. */
 export type ValoresPorOmision = Record<string, Fila>;
 
+let secuencia = 0;
+/** Un uuid con forma válida (v4) y determinista: los ids reales lo son, y el código
+ *  de producción rechaza lo que no lo parece. */
+function uuidSecuencial(): string {
+  secuencia += 1;
+  return `00000000-0000-4000-8000-${String(secuencia).padStart(12, '0')}`;
+}
+
 export function crearBaseEnMemoria(
   inicial: Record<string, Fila[]> = {},
   restricciones: RestriccionUnica[] = [],
@@ -189,7 +197,7 @@ export function crearBaseEnMemoria(
             const llaves = this.opcionesInsert.onConflict.split(',');
             if (filas.some((x) => llaves.every((k) => x[k] === f[k]))) continue;
           }
-          const fila = { id: f.id ?? `${this.t}-${filas.length + 1}`, ...(porOmision[this.t] ?? {}), ...f };
+          const fila = { id: f.id ?? uuidSecuencial(), ...(porOmision[this.t] ?? {}), ...f };
           filas.push(fila);
           nuevos.push(fila);
         }

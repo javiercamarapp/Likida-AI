@@ -38,11 +38,16 @@ export interface PropsDialogo {
   pendiente?: boolean;
   /** `submit` (dentro de un `<form>`) o `button` con `onConfirmar`. */
   tipoConfirmar?: 'submit' | 'button';
+  /** `name`/`value` del botón que confirma: un formulario con DOS salidas (revisar
+   *  y confirmar) dice cuál se eligió con `paso=confirmar`. */
+  nombreConfirmar?: string;
+  valorConfirmar?: string;
 }
 
 export function DialogoConfirmar({
   abierto, titulo, descripcion, etiquetaConfirmar, etiquetaCancelar = 'Cancelar',
   tono = 'peligro', onConfirmar, onCancelar, pendiente = false, tipoConfirmar = 'button',
+  nombreConfirmar, valorConfirmar,
 }: PropsDialogo) {
   const ref = useRef<HTMLDialogElement>(null);
   const idTitulo = useId();
@@ -80,7 +85,7 @@ export function DialogoConfirmar({
           className="hairline h-9 rounded-lg px-4 text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
           {etiquetaCancelar}
         </button>
-        <button type={tipoConfirmar} disabled={pendiente} data-foco-inicial={peligro ? undefined : ''}
+        <button type={tipoConfirmar} name={nombreConfirmar} value={valorConfirmar} disabled={pendiente} data-foco-inicial={peligro ? undefined : ''}
           onClick={onConfirmar}
           className="h-9 rounded-lg px-4 text-[13px] font-medium transition-opacity hover:opacity-85 disabled:opacity-50"
           style={peligro
@@ -100,6 +105,7 @@ export function DialogoConfirmar({
  */
 export function BotonConfirmar({
   etiqueta, titulo, descripcion, etiquetaConfirmar, tono = 'peligro', className, style, icono, deshabilitado = false,
+  nombreConfirmar, valorConfirmar,
 }: {
   etiqueta: string;
   titulo: string;
@@ -110,6 +116,8 @@ export function BotonConfirmar({
   style?: React.CSSProperties;
   icono?: React.ReactNode;
   deshabilitado?: boolean;
+  nombreConfirmar?: string;
+  valorConfirmar?: string;
 }) {
   const [abierto, setAbierto] = useState(false);
   return (
@@ -120,7 +128,8 @@ export function BotonConfirmar({
       <DialogoConfirmar
         abierto={abierto} titulo={titulo} descripcion={descripcion}
         etiquetaConfirmar={etiquetaConfirmar} tono={tono}
-        tipoConfirmar="submit" onConfirmar={() => setAbierto(false)} onCancelar={() => setAbierto(false)}
+        tipoConfirmar="submit" nombreConfirmar={nombreConfirmar} valorConfirmar={valorConfirmar}
+        onConfirmar={() => setAbierto(false)} onCancelar={() => setAbierto(false)}
       />
     </>
   );
