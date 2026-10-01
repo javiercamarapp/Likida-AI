@@ -206,7 +206,7 @@ Mismo criterio y pipeline que el POD: el **caption** decide qué papel es (`sell
 
 ## 7. Pruebas
 
-- `supabase/tests/0385_conductor_validacion_sitios.sql` corre contra **Postgres real** (CHECKs, unicidad, FK compuestas entre flotas, «solo mejora», atomicidad hito+bitácora, append-only incluso para `service_role`, indicadores, retención/ARCO de la evidencia, RLS —el contador no ve—, funciones no ejecutables por `authenticated`). Se agregó (junto con la de la 0380, que faltaba) a `ci-postgres.yml`.
+- `supabase/tests/0385_conductor_validacion_sitios.sql` corre contra **Postgres real** (CHECKs, unicidad, FK compuestas entre flotas, «solo mejora», atomicidad hito+bitácora, append-only incluso para `service_role`, indicadores, retención/ARCO de la evidencia, RLS —el contador no ve—, funciones no ejecutables por `authenticated`). `0385_conductor_concurrencia.sh` repite lo atómico con **sesiones reales en paralelo** (24 veredictos mezclados, 12 capturas, 12 atenciones, 8 importaciones del mismo catálogo; el importador se serializa por flota con un advisory lock). Las pruebas SQL y la de concurrencia se agregaron (junto con la de la 0380, que faltaba) a `ci-postgres.yml`.
 - `conductor/ciclo_completo.e2e.test.ts` (38): ciclo completo con dobles de WhatsApp y el **selector real** `enviarConFallback` — viaje feliz con validación y evidencia, chofer que no contesta (escalera exacta minuto a minuto, patio a los 90, jefe a los 120, «Ya lo atiendo»), fuera de orden, duplicados y corridas solapadas, chofer/flota equivocados, fuera de ventana de 24 h (plantilla del catálogo con los mismos botones, registro de ventana viejo, plantilla sin aprobar, 429), validación sin acusar y aislamiento entre flotas en la misma pasada.
 - Unitarias: geometría, veredicto, CSV, estadías y su CSV, alertas, evidencia, tablero, acciones y permisos, servicios, rutas `/v1`, pantallas (SSR) y que ninguna pantalla de operación formatea dinero.
 
@@ -223,6 +223,6 @@ Mismo criterio y pipeline que el POD: el **caption** decide qué papel es (`sell
 - **Pantalla de configuración** de la flota (las perillas de la 0385 y la escalera): hoy solo `PUT /v1/conductor/config`.
 - **Jornada**: enganchar el fin derivado de hitos al derivador con su puerta de aviso de privacidad (la RPC ya acepta `hito_viaje`); y que la **liquidación** consuma `estadiasDeViaje`.
 - Evidencia: no hay visor integrado ni recorte/compresión de la foto, ni detección de la foto repetida entre viajes; la retención de 365 días es propuesta.
-- Concurrencia: el claim de avisos y `aplicar_validacion_hito` tienen su garantía en SQL y se probaron en una sola sesión de Postgres; **no** se probó con varias sesiones en paralelo (el CI de dos sesiones para la 0332/0375 es el molde).
+- Concurrencia: lo nuevo de la 0385 (veredictos, captura/atención de oficina, importador) **sí** se probó con sesiones reales en paralelo (`0385_conductor_concurrencia.sh`). Sigue **sin** probarse así el claim de avisos de la 0380 (`viaje_hito_aviso`): su garantía es un unique y se probó en una sola sesión y con concurrencia simulada en memoria.
 - `ci-postgres.yml`: se agregaron las dos líneas SQL; no se ejecutó CI (sin push, por instrucción).
 - Aplicar la 0385 (y la 0380) a la base real requiere autorización y respaldo previo; hoy solo se aplicó a una base local desechable.
