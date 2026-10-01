@@ -6,7 +6,6 @@ import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { dominioBuzon } from '@/lib/correo/buzon';
-import { MAX_BYTES_DOC } from '@/lib/likida/carta_porte_docs/contenido';
 import { direccionCp, generarTokenCp } from '@/lib/likida/carta_porte_docs/correo_entrante';
 import { validarConfigExport } from '@/lib/likida/carta_porte_docs/exportacion';
 import { calcularMetricas } from '@/lib/likida/carta_porte_docs/metricas';
@@ -22,6 +21,8 @@ export const maxDuration = 120;
 
 const RUTA = '/dashboard/carta-porte/documentos';
 const DIAS_VENTANA = 90;
+/** Las server actions de Next aceptan hasta 10 MB de cuerpo (next.config.ts): 9 MB deja lugar al multipart. */
+const MAX_BYTES_SUBIDA = 9 * 1024 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -86,7 +87,7 @@ export default async function PaginaDocumentos({
       if (!(await rateLimit(`cp-docs-subir:${s.tenantId}`, 30, 60_000))) return { ok: false, error: 'Demasiados documentos en poco tiempo. Espera un minuto.' };
       const archivo = fd.get('archivo');
       if (!(archivo instanceof File) || archivo.size === 0) return { ok: false, error: 'Elige un archivo.' };
-      if (archivo.size > MAX_BYTES_DOC) return { ok: false, error: 'El archivo pesa más de 12 MB.' };
+      if (archivo.size > MAX_BYTES_SUBIDA) return { ok: false, error: 'El archivo pesa más de 9 MB. Mándalo por correo (hasta 8 MB por adjunto) o reduce su tamaño.' };
       const clienteId = String(fd.get('clienteId') ?? '');
       const r = await recibirDocumento(s.tenantId, {
         canal: 'manual', nombre: archivo.name, bytes: new Uint8Array(await archivo.arrayBuffer()), clienteId: UUID.test(clienteId) ? clienteId : null, actorId: s.userId,

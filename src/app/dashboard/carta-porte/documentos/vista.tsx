@@ -140,7 +140,7 @@ function Subir({ accion, clientes }: { accion: AccionDoc; clientes: Array<{ id: 
       <FormaAccion accion={accion} enctype="multipart/form-data">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label htmlFor="cp-archivo" className={ETIQUETA}>Archivo (PDF, foto, Excel, CSV, XML o correo .eml — hasta 12 MB)</label>
+            <label htmlFor="cp-archivo" className={ETIQUETA}>Archivo (PDF, foto, Excel, CSV, XML o correo .eml — hasta 9 MB)</label>
             <input id="cp-archivo" name="archivo" type="file" required accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.xml,.eml,.txt" className={`${CAMPO} py-1.5 h-auto`} style={{ background: 'var(--surface)' }} />
           </div>
           <div>

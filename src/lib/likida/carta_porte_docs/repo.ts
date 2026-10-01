@@ -90,6 +90,11 @@ export const COLUMNAS_DOC =
   + 'tokens_in, tokens_out, costo_usd, viaje_id, procesando_hasta, intentos, ultimo_error, abierto_en, revisado_por, aprobado_por, aprobado_en, '
   + 'rechazo_motivo, tiempo_revision_seg, exportado_en, retener_hasta, purgado_en, created_at, updated_at';
 
+/** La bandeja NO trae el texto ni la extracción (hasta 60 KB + decenas de KB por documento, ×200): eso solo lo lee la revisión. */
+export const COLUMNAS_LISTA = COLUMNAS_DOC
+  .replace(' texto_extracto,', '')
+  .replace(' extraccion,', '');
+
 type Fila = Record<string, unknown>;
 const s = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
 const n = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
@@ -183,11 +188,15 @@ export async function leerDocumento(tenantId: string, id: string): Promise<Docum
   return d ? aDocumento(d as unknown as Fila) : null;
 }
 
-export interface FiltroDocumentos { estados?: EstadoDoc[]; desde?: string; limite?: number }
+export interface FiltroDocumentos {
+  estados?: EstadoDoc[]; desde?: string; limite?: number;
+  /** Con el texto y la extracción (la exportación los necesita); por omisión la lista es liviana. */
+  completo?: boolean;
+}
 
-/** La bandeja: sin el texto ni la extracción completa (pesan), ordenada por lo más urgente. */
+/** La bandeja: liviana por omisión (sin texto ni extracción), de lo más reciente a lo más antiguo. */
 export async function listarDocumentos(tenantId: string, f: FiltroDocumentos = {}): Promise<{ filas: DocumentoFila[]; total: number }> {
-  let q = supabaseAdmin().from('cp_documento').select(COLUMNAS_DOC, { count: 'exact' }).eq('tenant_id', tenantId);
+  let q = supabaseAdmin().from('cp_documento').select(f.completo ? COLUMNAS_DOC : COLUMNAS_LISTA, { count: 'exact' }).eq('tenant_id', tenantId);
   if (f.estados && f.estados.length > 0) q = q.in('estado', f.estados);
   if (f.desde) q = q.gte('created_at', f.desde);
   const r = await acotada(q.order('created_at', { ascending: false }).limit(Math.min(f.limite ?? 100, 500)), 'cpdocs.listar');
