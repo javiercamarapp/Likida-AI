@@ -63,6 +63,9 @@ describe('BotonConfirmar', () => {
         <BotonConfirmar etiqueta="Importar" titulo="t" descripcion="d" etiquetaConfirmar="Sí, importar" nombreConfirmar="paso" valorConfirmar="confirmar" tono="normal" />
       </form>,
     );
-    expect(html).toMatch(/<button type="submit" name="paso" value="confirmar"[^>]*>Sí, importar<\/button>/);
+    const boton = [...html.matchAll(/<button[^>]*>[^<]*<\/button>/g)].map((m) => m[0]).find((b) => b.endsWith('>Sí, importar</button>'))!;
+    expect(boton).toContain('type="submit"');
+    expect(boton).toContain('name="paso"');
+    expect(boton).toContain('value="confirmar"');
   });
 });
