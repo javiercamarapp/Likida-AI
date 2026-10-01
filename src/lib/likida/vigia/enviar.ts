@@ -45,10 +45,13 @@ export type Enviador = (telefono: string, op: Parameters<typeof enviarConFallbac
 /** ¿Se le puede escribir a este contacto? Devuelve el motivo si no. PURA. */
 export function puedeEscribirseA(
   c: EntradaEnvioCliente['contacto'], tenantId: string, agenteHabilitado: boolean,
+  opciones: { confirmacionDeBaja?: boolean } = {},
 ): MotivoNoEnviado | null {
   if (!agenteHabilitado) return 'agente_apagado';
   // El contacto tiene que ser de ESTA flota: un id de contacto ajeno no recibe nada.
   if (c.tenantId !== tenantId) return 'contacto_no_activo';
+  // La ÚNICA excepción a la baja: el acuse de la baja misma (una vez, como respuesta a su BAJA).
+  if (opciones.confirmacionDeBaja) return c.estado === 'baja' && c.consentimientoEn ? null : 'contacto_no_activo';
   if (c.optoutEn) return 'con_baja';
   if (c.estado === 'baja') return 'con_baja';
   if (c.estado !== 'activo') return 'contacto_no_activo';
@@ -56,8 +59,10 @@ export function puedeEscribirseA(
   return null;
 }
 
-export async function enviarAlCliente(e: EntradaEnvioCliente, enviar: Enviador = enviarConFallback): Promise<ResultadoEnvioCliente> {
-  const no = puedeEscribirseA(e.contacto, e.tenantId, e.agenteHabilitado);
+export async function enviarAlCliente(
+  e: EntradaEnvioCliente, enviar: Enviador = enviarConFallback, opciones: { confirmacionDeBaja?: boolean } = {},
+): Promise<ResultadoEnvioCliente> {
+  const no = puedeEscribirseA(e.contacto, e.tenantId, e.agenteHabilitado, opciones);
   if (no) return { ok: false, motivo: no, mensaje: textoDeMotivo(no), reintentable: false };
 
   const texto = e.texto.trim();

@@ -56,6 +56,18 @@ describe('límites ANTES de tocar a Meta', () => {
     });
   }
 
+  it('la ÚNICA excepción a la baja es el acuse de la baja misma', async () => {
+    ventana('abierta');
+    const baja = contacto({ estado: 'baja', optoutEn: '2026-10-01T00:00:00Z' });
+    expect(await enviarAlCliente(base({ contacto: baja, texto: 'Listo, ya no te escribiremos.' }), undefined, { confirmacionDeBaja: true })).toMatchObject({ ok: true });
+    expect(enviarTexto).toHaveBeenCalledTimes(1);
+    // …pero no vale para un contacto activo, suprimido ni de otra flota, ni para el agente apagado
+    expect(puedeEscribirseA(contacto(), T1, true, { confirmacionDeBaja: true })).toBe('contacto_no_activo');
+    expect(puedeEscribirseA(contacto({ estado: 'suprimido' }), T1, true, { confirmacionDeBaja: true })).toBe('contacto_no_activo');
+    expect(puedeEscribirseA(contacto({ estado: 'baja', tenantId: T2 }), T1, true, { confirmacionDeBaja: true })).toBe('contacto_no_activo');
+    expect(puedeEscribirseA(baja, T1, false, { confirmacionDeBaja: true })).toBe('agente_apagado');
+  });
+
   it('puedeEscribirseA es la misma regla, pura', () => {
     expect(puedeEscribirseA(contacto(), T1, true)).toBeNull();
     expect(puedeEscribirseA(contacto(), T1, false)).toBe('agente_apagado');
