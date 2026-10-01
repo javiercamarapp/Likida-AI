@@ -137,7 +137,7 @@ describe('lo que NO es un hito sigue su camino', () => {
     'listo', 'ya', 'ya quedó', 'gracias jefe', 'buenos días', 'sí', 'ok',
     'llegué a cargar diésel en Querétaro', 'ya llegué a la caseta', 'se me ponchó una llanta, ya llegué a la talacha',
     'ya llegué a Monterrey y descargué dos tarimas', 'cargué 300 litros', 'pagué 800 pesos de caseta',
-    'choque, ya llegué', 'hay un herido, estoy en la planta',
+    'choque, ya llegué', 'hay un herido, estoy en la planta', 'llegué a la gasolinera',
   ])('«%s» → null', (t) => {
     expect(interpretarTexto(t)).toBeNull();
   });
@@ -185,9 +185,23 @@ describe('botones de las plantillas', () => {
     expect(b('hito_sigue_descargando')?.intencion).toEqual({ clase: 'sigue', lugar: 'descarga' });
     expect(b('hito_aun_no_regreso')?.intencion).toEqual({ clase: 'aun_no_regreso' });
     expect(b('hito_corrige_llegada')?.intencion).toEqual({ clase: 'correccion', como: 'llegada_descarga' });
-    expect(b('recordatorio_registrar')?.intencion).toEqual({ clase: 'registrar_activo' });
+    expect(b('recordatorio_registrar')?.intencion).toEqual({ clase: 'registrar_activo', hito: null });
     expect(b('recordatorio_problema')?.intencion).toEqual({ clase: 'problema' });
     expect(b('pedir_ubicacion')?.intencion).toEqual({ clase: 'pedir_ubicacion' });
+  });
+
+  it('el botón de un recordatorio nombra SU hito; solo esos botones pueden traerlo', () => {
+    expect(interpretarBoton(`recordatorio_registrar:${V}:salida_carga`)?.intencion).toEqual({ clase: 'registrar_activo', hito: 'salida_carga' });
+    expect(interpretarBoton(`recordatorio_problema:${V}:regreso`)?.intencion).toEqual({ clase: 'problema' });
+    for (const t of [
+      `recordatorio_registrar:${V}:inventado`, `hito_llegada_carga:${V}:salida_carga`, `jefe_atiendo:${V}:regreso`,
+      `recordatorio_registrar:${V}:salida_carga:x`,
+    ]) expect(interpretarBoton(t), t).toBeNull();
+  });
+
+  it('«ya estoy en la planta» y «ya estoy en la puerta» son llegadas', () => {
+    expect(clase('ya estoy en la planta')).toEqual({ clase: 'llegada', lugar: 'carga' });
+    expect(clase('ya estoy en la puerta')).toEqual({ clase: 'llegada', lugar: null });
   });
 
   it('el botón del jefe NO es del chofer', () => {

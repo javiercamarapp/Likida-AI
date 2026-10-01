@@ -12,7 +12,7 @@ const viaje = viajeBase({ id: V, citaOrigenEn: '2026-10-02T14:00:00.000Z' }); //
 const hito = (tipo: TipoHito) => hitoVacio({ id: 'h', tipo, viajeId: V });
 
 /** Texto y plantilla DICEN LO MISMO: el chofer no nota por cuál canal le llegó. */
-function coinciden(m: MensajeSaliente) {
+function coinciden(m: MensajeSaliente, sufijoDeBoton = '') {
   const p = plantillaDeCatalogo(m.plantilla.nombre);
   expect(p, m.plantilla.nombre).toBeDefined();
   expect(textoRenderizado(m.plantilla.nombre, m.plantilla.parametros ?? [])).toBe(m.texto);
@@ -20,7 +20,7 @@ function coinciden(m: MensajeSaliente) {
   expect((m.plantilla.parametros ?? []).length).toBe(variablesDeTexto(p!.cuerpo).length);
   // Los botones del texto y los de la plantilla llevan el MISMO payload.
   const rapidos = p!.botones.filter((b) => b.tipo === 'QUICK_REPLY');
-  expect(m.botones.map((b) => b.id)).toEqual(rapidos.map((b) => `${(b as { payloadPrefijo: string }).payloadPrefijo}:${V}`));
+  expect(m.botones.map((b) => b.id)).toEqual(rapidos.map((b) => `${(b as { payloadPrefijo: string }).payloadPrefijo}:${V}${sufijoDeBoton}`));
   expect(m.botones.map((b) => b.titulo)).toEqual(rapidos.map((b) => b.texto));
   // Los payloads que viajan en la plantilla son los del texto.
   expect((m.plantilla.botones ?? []).map((b) => (b as { payload: string }).payload)).toEqual(m.botones.map((b) => b.id));
@@ -81,11 +81,14 @@ describe('los recordatorios 1, 2 y 3', () => {
   it.each([1, 2, 3])('nivel %i: texto y plantilla coinciden', (n) => {
     const m = armarRecordatorio(hito('salida_carga'), viaje, n, 35);
     expect(m.plantilla.nombre).toBe(`conductor_recordatorio_${n}_v1`);
-    coinciden(m);
+    // Los botones del recordatorio nombran SU hito: `<prefijo>:<viaje>:<hito>`.
+    coinciden(m, ':salida_carga');
+    expect(m.botones.map((b) => b.id)).toEqual([`recordatorio_registrar:${V}:salida_carga`, `recordatorio_problema:${V}:salida_carga`]);
   });
 
   it('del cuarto en adelante se queda en el tercero (el último aviso)', () => {
     expect(armarRecordatorio(hito('regreso'), viaje, 7, 50).plantilla.nombre).toBe('conductor_recordatorio_3_v1');
+    expect(armarRecordatorio(hito('regreso'), viaje, 7, 50).botones[0].id).toBe(`recordatorio_registrar:${V}:regreso`);
   });
 
   it('dicen CUÁNTO lleva pendiente y cuál hito', () => {

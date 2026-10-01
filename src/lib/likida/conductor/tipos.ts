@@ -117,7 +117,12 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export interface BotonLeido {
   prefijo: string;
   viajeId: string;
+  /** Solo los botones de recordatorio llevan el hito al que se refieren (`<prefijo>:<viaje>:<hito>`). */
+  hito: TipoHito | null;
 }
+
+/** Los botones que, además del viaje, nombran EL HITO que se recordó: así un recordatorio viejo no registra otro hito. */
+const PREFIJOS_CON_HITO: readonly string[] = [PREFIJO_BOTON.recordatorioRegistrar, PREFIJO_BOTON.recordatorioProblema];
 
 /**
  * ¿El texto es el payload de uno de NUESTROS botones? Anclado y con el uuid
@@ -128,11 +133,14 @@ export function leerBotonConductor(texto: string | undefined): BotonLeido | null
   if (typeof texto !== 'string') return null;
   const t = texto.trim();
   if (t.length > 128) return null;
-  const i = t.indexOf(':');
-  if (i < 1) return null;
-  const prefijo = t.slice(0, i);
-  const viajeId = t.slice(i + 1);
+  const partes = t.split(':');
+  if (partes.length < 2 || partes.length > 3) return null;
+  const [prefijo, viajeId, hito] = partes;
   if (!(Object.values(PREFIJO_BOTON) as string[]).includes(prefijo)) return null;
   if (!UUID.test(viajeId)) return null;
-  return { prefijo, viajeId: viajeId.toLowerCase() };
+  if (partes.length === 3) {
+    if (!PREFIJOS_CON_HITO.includes(prefijo) || !esTipoHito(hito)) return null;
+    return { prefijo, viajeId: viajeId.toLowerCase(), hito };
+  }
+  return { prefijo, viajeId: viajeId.toLowerCase(), hito: null };
 }

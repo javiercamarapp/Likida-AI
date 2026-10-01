@@ -264,6 +264,9 @@ export function decidir(e: EntradaMaquina): Decision {
     }
 
     case 'registrar_activo': {
+      // Un recordatorio nombra SU hito: tocarlo cuando ya se registró (o ya se pasó a otra etapa)
+      // contesta duplicado en vez de registrar el hito que hoy toca.
+      if (i.hito) return registrarObjetivo(m, i.hito, e, false);
       const activo = hitoActivo(e.hitos);
       if (!activo) return { accion: 'rechazar', motivo: 'sin_hito_pendiente' };
       return registrarObjetivo(m, activo.tipo, e, false);

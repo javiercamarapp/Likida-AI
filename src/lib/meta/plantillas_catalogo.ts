@@ -39,6 +39,10 @@
 // Convención: `<payloadPrefijo>:<viaje_id>` (≤ 128 caracteres). El webhook
 // entrega ese texto como cuerpo del mensaje del botón (ver route.ts, «BOTÓN
 // APRETADO»). Quien interprete el botón (Agente 5) parte por el primer `:`.
+// EXCEPCIÓN: los botones de los recordatorios (`recordatorio_registrar`,
+// `recordatorio_problema`) llevan además el hito al que se refieren,
+// `<prefijo>:<viaje_id>:<hito>`, para que un recordatorio viejo no registre el
+// hito que hoy toca (conductor/tipos.ts, `leerBotonConductor`).
 // ═══════════════════════════════════════════════════════════════════════════
 import type { OpcionesPlantilla, BotonPlantilla } from './plantilla_payload';
 

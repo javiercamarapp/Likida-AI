@@ -98,27 +98,29 @@ export function armarRecordatorio(hito: HitoFila, v: ViajeContexto, nivel: numbe
   const folio = folioDe(v);
   const que = ETIQUETA[hito.tipo].chofer;
   const tiempo = textoTiempo(minutosPendiente);
-  const botones = [b(PREFIJO_BOTON.recordatorioRegistrar, v.id, 'Registrar ahora'), b(PREFIJO_BOTON.recordatorioProblema, v.id, 'Tengo un problema')];
+  // «Registrar ahora» nombra el hito recordado (`<viaje>:<hito>`): un recordatorio viejo no registra el hito de hoy.
+  const idRecordatorio = `${v.id}:${hito.tipo}`;
+  const botones = [b(PREFIJO_BOTON.recordatorioRegistrar, idRecordatorio, 'Registrar ahora'), b(PREFIJO_BOTON.recordatorioProblema, idRecordatorio, 'Tengo un problema')];
   const n = Math.min(Math.max(nivel, 1), 3);
 
   if (n === 1) {
     return {
       texto: `Hola ${nombre}, todavía no tenemos registrado «${que}» del viaje ${folio}. Toca «Registrar ahora» o responde por aquí.`,
       botones,
-      plantilla: { nombre: 'conductor_recordatorio_1_v1', ...opcionesDeEnvio('conductor_recordatorio_1_v1', { cuerpo: [nombre, que, folio], idsBotones: v.id }) },
+      plantilla: { nombre: 'conductor_recordatorio_1_v1', ...opcionesDeEnvio('conductor_recordatorio_1_v1', { cuerpo: [nombre, que, folio], idsBotones: idRecordatorio }) },
     };
   }
   if (n === 2) {
     return {
       texto: `Hola ${nombre}, segundo aviso: sigue pendiente «${que}» del viaje ${folio} desde hace ${tiempo}. Si ya lo hiciste, toca «Registrar ahora»; si tienes un problema, dinos qué pasó.`,
       botones,
-      plantilla: { nombre: 'conductor_recordatorio_2_v1', ...opcionesDeEnvio('conductor_recordatorio_2_v1', { cuerpo: [nombre, que, folio, tiempo], idsBotones: v.id }) },
+      plantilla: { nombre: 'conductor_recordatorio_2_v1', ...opcionesDeEnvio('conductor_recordatorio_2_v1', { cuerpo: [nombre, que, folio, tiempo], idsBotones: idRecordatorio }) },
     };
   }
   return {
     texto: `Hola ${nombre}, último aviso antes de avisar a tu jefe de tráfico: «${que}» del viaje ${folio} sigue pendiente desde hace ${tiempo}. Responde ahora para evitar la escalación.`,
     botones,
-    plantilla: { nombre: 'conductor_recordatorio_3_v1', ...opcionesDeEnvio('conductor_recordatorio_3_v1', { cuerpo: [nombre, que, folio, tiempo], idsBotones: v.id }) },
+    plantilla: { nombre: 'conductor_recordatorio_3_v1', ...opcionesDeEnvio('conductor_recordatorio_3_v1', { cuerpo: [nombre, que, folio, tiempo], idsBotones: idRecordatorio }) },
   };
 }
 

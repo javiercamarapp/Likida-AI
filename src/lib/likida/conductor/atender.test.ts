@@ -262,9 +262,17 @@ describe('botones: nadie toca un viaje que no es suyo', () => {
   it('«Registrar ahora» registra el hito que se estaba pidiendo', async () => {
     const m = nueva();
     m.registrar(V1, 'llegada_carga', AHORA.toISOString());
-    await dice(m, `recordatorio_registrar:${V1}`);
+    await dice(m, `recordatorio_registrar:${V1}:salida_carga`);
     expect(estado(m, 'salida_carga').estado).toBe('recibido');
     expect(estado(m, 'salida_carga').fuente).toBe('boton');
+  });
+
+  it('un recordatorio VIEJO tocado tarde no registra el hito que hoy toca', async () => {
+    const m = nueva();
+    m.registrar(V1, 'llegada_carga', AHORA.toISOString());
+    const r = await dice(m, `recordatorio_registrar:${V1}:llegada_carga`);
+    expect(estado(m, 'salida_carga').estado).toBe('esperado');
+    expect(textos(r)).toBe('Ya lo tenía anotado. 👍');
   });
 });
 

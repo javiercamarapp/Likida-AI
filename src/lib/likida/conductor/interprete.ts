@@ -39,8 +39,8 @@ export type Intencion =
   | { clase: 'contacto'; lugar: Lugar | null }
   /** Retirar lo último; `como` re-registra otro hito en su lugar (botón «Es en descarga»). */
   | { clase: 'correccion'; como: TipoHito | null }
-  /** Botón «Registrar ahora»: el hito que se le estaba pidiendo. */
-  | { clase: 'registrar_activo' }
+  /** Botón «Registrar ahora»: el hito que se le recordó (`hito`) o, si no lo trae, el activo. */
+  | { clase: 'registrar_activo'; hito: TipoHito | null }
   | { clase: 'problema' }
   | { clase: 'pedir_ubicacion' }
   /** «Sigo cargando / descargando» (botón): sigue en el lugar, sin registrar nada nuevo. */
@@ -80,7 +80,7 @@ const MAX_LARGO_REGLAS = 160;
 // ── Palabras de OTRO tema: si aparece una, esto no es un hito ───────────────
 const OTRO_TEMA = new RegExp(
   '\\b(' + [
-    'diesel', 'gasolina', 'magna', 'premium', 'combustible', 'litros?', 'lts', 'pesos', 'monto', 'factura', 'ticket',
+    'diesel', 'gasolina', 'gasolinera', 'gasolineria', 'magna', 'premium', 'combustible', 'litros?', 'lts', 'pesos', 'monto', 'factura', 'ticket',
     'tickets', 'comprobante', 'comprobantes', 'peaje', 'peajes', 'caseta', 'casetas', 'viatico', 'viaticos', 'hotel',
     'comida', 'comi', 'talacha', 'llanta', 'ponche', 'aceite', 'mecanico', 'mecanica', 'averia', 'descompuso', 'choque',
     'choque', 'chocamos', 'choco', 'volcadura', 'volcamos', 'accidente', 'robo', 'robaron', 'asalto', 'asaltaron',
@@ -191,7 +191,7 @@ const RE_SALIDA_CARGA = /\b(ya )?(cargue|cargamos|me cargaron|termine de cargar|
 const RE_SALIDA_DESCARGA = /\b(ya )?(descargue|descargamos|me descargaron|termine de descargar|terminamos de descargar|ya quede descargado|ya descargaron|sali de(l)? (cedis|destino|cliente|descarga)|ya me liberaron|me liberaron)\b/;
 const RE_SALIDA = /\b(sali|salimos|salgo|ya me voy|me voy|me retiro|me dieron salida|ya salgo|salida)\b/;
 const RE_REGRESO = /\b(de regreso|voy de regreso|vengo de regreso|regresando|de vuelta|voy de vuelta|ya regreso|me regreso|rumbo a (la )?(base|terminal|patio|casa))\b/;
-const RE_LLEGADA = /\b(llegue|llegamos|ya llego|llegada|ya estoy aqui|estoy aqui|estamos aqui|ya estamos|ya entre|ya entramos|ya estoy dentro|en (el )?(anden|andenes|porteria|garita|patio|destino|planta|cedis)|ya en destino)\b/;
+const RE_LLEGADA = /\b(llegue|llegamos|ya llego|llegada|ya estoy aqui|estoy aqui|estamos aqui|ya estamos|ya entre|ya entramos|ya estoy dentro|en (el |la )?(anden|andenes|porteria|garita|patio|destino|planta|cedis|puerta)|ya en destino)\b/;
 
 /**
  * El texto libre → intención, o `null` si NO es un hito (sigue al agente).
@@ -260,7 +260,7 @@ export function interpretarBoton(texto: string | undefined): Interpretacion | nu
     case P.sigueDescargando: return base({ clase: 'sigue', lugar: 'descarga' });
     case P.aunNoRegreso: return base({ clase: 'aun_no_regreso' });
     case P.corrigeLlegada: return base({ clase: 'correccion', como: 'llegada_descarga' });
-    case P.recordatorioRegistrar: return base({ clase: 'registrar_activo' });
+    case P.recordatorioRegistrar: return base({ clase: 'registrar_activo', hito: b.hito });
     case P.recordatorioProblema: return base({ clase: 'problema' });
     case P.pedirUbicacion: return base({ clase: 'pedir_ubicacion' });
     default: return null; // `jefe_atiendo` es del jefe, no del chofer

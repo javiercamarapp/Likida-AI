@@ -236,9 +236,17 @@ describe('retraso y «sigo cargando»', () => {
     expect(decidir(entrada(viaje({ llegada_carga: { estado: 'recibido' } }), { clase: 'sigue', lugar: 'carga' }))).toMatchObject({ accion: 'posponer', objetivo: 'salida_carga' });
   });
 
-  it('«Registrar ahora» registra el hito activo', () => {
+  it('«Registrar ahora» sin hito registra el activo', () => {
     const hs = viaje({ llegada_carga: { estado: 'recibido' } });
-    expect(registra(decidir(entrada(hs, { clase: 'registrar_activo' }))).objetivo).toBe('salida_carga');
+    expect(registra(decidir(entrada(hs, { clase: 'registrar_activo', hito: null }))).objetivo).toBe('salida_carga');
+  });
+
+  it('«Registrar ahora» de un recordatorio VIEJO no registra el hito de hoy: es un duplicado del suyo', () => {
+    // El recordatorio era de la llegada a carga; el chofer ya la avisó y hoy toca la salida.
+    const hs = viaje({ llegada_carga: { estado: 'recibido' } });
+    expect(decidir(entrada(hs, { clase: 'registrar_activo', hito: 'llegada_carga' }))).toMatchObject({ accion: 'duplicado', objetivo: 'llegada_carga' });
+    // Y un recordatorio vigente sí registra SU hito.
+    expect(registra(decidir(entrada(hs, { clase: 'registrar_activo', hito: 'salida_carga' }))).objetivo).toBe('salida_carga');
   });
 });
 
