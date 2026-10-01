@@ -724,10 +724,15 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         // que la foto se borre", y la 0178 decidió lo contrario para la foto
         // que YA es comprobante de un gasto: es evidencia fiscal y se
         // conserva (CFF art. 30) — el ejecutor ARCO la desliga del titular,
-        // no la borra. Lo que SÍ se borra solo es la imagen que no respalda
-        // ningún gasto (cola de huérfanos, mig. 0165). El aviso ahora dice
-        // esa frontera con todas sus letras, porque prometer un borrado que
-        // la base rechaza es una promesa con evidencia escrita de romperse.
+        // no la borra. (AUDITORÍA OLA 1, #45: este comentario decía «lo que SÍ
+        // se borra solo es la imagen que no respalda ningún gasto» y el texto
+        // lo prometía, pero `limpiar_storage_huerfano` (0165) NUNCA toca un
+        // objeto nombrado por `comprobante_huerfano.ruta_imagen` y la 0104/0178
+        // decidieron tratar al huérfano como evidencia fiscal conservadora: no
+        // se borra solo. El aviso ahora dice eso: se conserva y por qué.) El
+        // aviso dice esa frontera con todas sus letras, porque prometer un
+        // borrado que la base rechaza es una promesa con evidencia escrita de
+        // romperse.
         // AUDITORÍA 22, LEG-A1 (ALTO): la nota de voz viaja ÍNTEGRA al
         // proveedor que la transcribe (`voz_transcrita.ts`) y no estaba
         // enumerada ni como dato ni como salida. La voz es dato personal por
@@ -763,7 +768,7 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         // enseña al contralor como `textoTicket`. Se declara el tratamiento
         // real: qué se descarta, qué se conserva y por qué, con la
         // recomendación honesta que se sigue de eso.
-        `**Un dato de salud, y solo uno:** si avisas por el chat de un accidente o una emergencia, se guarda **si hay personas lesionadas** y el texto con el que lo describes, para poder escalarlo a tu empresa y atenderlo. No se usa para tu liquidación ni para evaluarte. **Fuera de ese caso no se piden ni se conservan datos sensibles:** ni origen racial o étnico, ni creencias, ni afiliación sindical, ni preferencias sexuales, ni datos biométricos. Cada foto se procesa completa por el motor de lectura para extraer los campos del comprobante; si en ella aparece por accidente algo sensible —un ticket de farmacia, por ejemplo—, el filtro descarta la línea del **producto** (el medicamento) cuando la reconoce, pero **el nombre del comercio, su RFC, el monto, la fecha y la imagen sí se guardan**, porque son tu comprobante fiscal: ese gasto entra a tu liquidación igual que cualquier otro. Por eso, si un ticket no es un gasto de la flota, lo más seguro es no mandarlo como comprobante. La imagen que no respalda ningún gasto se elimina sola del almacenamiento. **Lo que no se puede borrar ni pidiéndolo:** la foto que ya es comprobante de un gasto — esa se conserva por obligación fiscal (CFF art. 30). Lo que sí puedes pedir es que se **desligue de tu persona**, y eso es lo que la cancelación ejecuta.`,
+        `**Un dato de salud, y solo uno:** si avisas por el chat de un accidente o una emergencia, se guarda **si hay personas lesionadas** y el texto con el que lo describes, para poder escalarlo a tu empresa y atenderlo. No se usa para tu liquidación ni para evaluarte. **Fuera de ese caso no se piden ni se conservan datos sensibles:** ni origen racial o étnico, ni creencias, ni afiliación sindical, ni preferencias sexuales, ni datos biométricos. Cada foto se procesa completa por el motor de lectura para extraer los campos del comprobante; si en ella aparece por accidente algo sensible —un ticket de farmacia, por ejemplo—, el filtro descarta la línea del **producto** (el medicamento) cuando la reconoce, pero **el nombre del comercio, su RFC, el monto, la fecha y la imagen sí se guardan**, porque son tu comprobante fiscal: ese gasto entra a tu liquidación igual que cualquier otro. Por eso, si un ticket no es un gasto de la flota, lo más seguro es no mandarlo como comprobante. **La imagen de un comprobante que todavía no respalda ningún gasto NO se borra sola:** se conserva —igual que un comprobante ya asignado— porque no podemos saber si es un papel fiscal de la flota antes de que alguien lo revise, y borrar uno que sí lo sea contravendría la conservación del CFF art. 30. Mientras no se asigne no entra a ninguna liquidación; si resulta que no era un gasto de la flota, pídele a tu empresa que lo revise y, si procede, se desliga de tu persona. **Lo que no se puede borrar ni pidiéndolo:** la foto que es o puede ser comprobante de un gasto — esa se conserva por obligación fiscal (CFF art. 30). Lo que sí puedes pedir es que se **desligue de tu persona**, y eso es lo que la cancelación ejecuta.`,
         // AUDITORÍA 24 (LEG-8, MEDIO, reincidente ×3): `grep 'familiar|contacto
         // de emergencia'` en los dos avisos daba 0 — el nombre 24, teléfono y
         // parentesco del contacto de emergencia (`contacto_emergencia`, 0198)
