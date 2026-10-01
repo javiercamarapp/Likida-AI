@@ -293,6 +293,31 @@ describe('ARCO sin datos del responsable', () => {
     expect(sendText.mock.calls.some((c) => String(c[1]).includes('quedó registrada'))).toBe(true);
   });
 
+  it('AUDITORÍA OLA 1 #46: una cuenta de OFICINA que escribe PRIVACIDAD deja la solicitud con su userId como titular', async () => {
+    const repo = await import('@/lib/likida/repo');
+    const conv = await import('@/lib/likida/conv');
+    vi.spyOn(conv, 'buscarOperadorPorTelefono').mockResolvedValue(null);
+    resolverCuentaOficina.mockResolvedValue({ userId: 'u-contador', tenantId: 't1', rol: 'contador', nombre: 'Cony', email: 'c@x.mx', telefono: '5219993700781' });
+    vi.mocked(repo.getDatosResponsable).mockResolvedValueOnce(null);
+    vi.mocked(repo.registrarSolicitudArco).mockClear();
+    await processInbound({ from: '5219993700781', type: 'text', text: 'quiero ejercer mis derechos ARCO y que borren mi cuenta', waMessageId: 'wa-arco-oficina' });
+    expect(repo.registrarSolicitudArco).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 't1', operadorId: null, titularUserId: 'u-contador', tipo: 'cancelacion',
+    }));
+  });
+
+  it('un operador que escribe PRIVACIDAD NO manda titularUserId (ni se consulta la cuenta de oficina)', async () => {
+    const repo = await import('@/lib/likida/repo');
+    const conv = await import('@/lib/likida/conv');
+    vi.spyOn(conv, 'buscarOperadorPorTelefono').mockResolvedValue({ tenantId: 't1', operadorId: 'op1' });
+    resolverCuentaOficina.mockClear();
+    vi.mocked(repo.getDatosResponsable).mockResolvedValueOnce(null);
+    vi.mocked(repo.registrarSolicitudArco).mockClear();
+    await processInbound({ from: '5219993700779', type: 'text', text: 'quiero que borren mis datos, derecho ARCO', waMessageId: 'wa-arco-op2' });
+    expect(repo.registrarSolicitudArco).toHaveBeenCalledWith(expect.objectContaining({ operadorId: 'op1', titularUserId: null }));
+    expect(resolverCuentaOficina).not.toHaveBeenCalled();
+  });
+
   it('AUDITORÍA 28, LEG-C1: la oposición por esta ruta ya lleva el operadorId real, no null fijo', async () => {
     // Antes: esta ruta (operador resuelto solo por `buscarTenantPorTelefono`,
     // sin id) pasaba `operadorId: null` fijo a `atenderPrivacidad`, así que

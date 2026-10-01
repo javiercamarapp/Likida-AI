@@ -95,6 +95,9 @@ export type EntidadBitacora =
   // revocar una `tenant_api_key`— y quién lo cortó no tiene columna en
   // `mcp_oauth_token`: esta anotación es su única memoria.
   | 'mcp_oauth_token'
+  // 0440: la aprobación o el rechazo de un cliente OAuth desconocido por el
+  // superadmin (/admin/mcp-clientes): decide qué dominios pueden recibir accesos.
+  | 'mcp_oauth_cliente'
   // Auditoría 20 (H4): el estado operativo de una unidad. Mandarla a taller o
   // DARLA DE BAJA son actos sobre un activo de la empresa —un camión vendido,
   // chocado o siniestrado— que cambian lo que el despacho puede ofrecer y el

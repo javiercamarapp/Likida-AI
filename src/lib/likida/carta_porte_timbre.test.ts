@@ -124,7 +124,7 @@ const XML_TIMBRADO = [
 const {
   leerContextoTimbre, timbrarViaje, leerXmlTimbrado, listarTimbrado,
   fechaTimbradoDeTfd, marcarXmlSandbox, motivoDeReservaViva, AVISO_SANDBOX_XML,
-  guardarPerfilFiscal, guardarReceptorFiscal,
+  guardarPerfilFiscal, guardarReceptorFiscal, liberarReservaTimbre, MINUTOS_MIN_LIBERAR_RESERVA,
 } = await import('./carta_porte_timbre');
 
 const T = 'tenant-1';
@@ -609,5 +609,88 @@ describe('el perfil del emisor y el receptor: enviar es declarar', () => {
       expect.objectContaining({ accion: 'timbre.receptor_guardado' }),
       expect.anything(),
     );
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA OLA 1, #26 — LA RESERVA 'pendiente' AMBIGUA TENÍA PROMESA DE SALIDA
+// («soporte libera el bloqueo») Y NINGUNA SALIDA. `liberarReservaTimbre` es esa
+// salida, estrecha: el humano declara que verificó en el panel del PAC, solo sin
+// uuid, solo tras 30 min, con las mismas condiciones EN el DELETE y bitácora.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('liberarReservaTimbre', () => {
+  const AHORA = new Date('2026-10-01T18:00:00.000Z');
+  const hace = (min: number) => new Date(AHORA.getTime() - min * 60_000).toISOString();
+  const fila = (o: Record<string, unknown> = {}) => ({ data: { id: 'res-1', uuid_fiscal: null, reservado_en: hace(45), ...o }, error: null });
+  const borradas: Resp = { data: [{ id: 'res-1' }], error: null };
+
+  it('sin la declaración de haber verificado en el PAC, ni toca la base', async () => {
+    const r = await liberarReservaTimbre(T, V, ACTOR, false, AHORA);
+    expect(r.ok).toBe(false);
+    expect(llamadas).toHaveLength(0);
+  });
+
+  it('una reserva ambigua con más de 30 min y sin uuid se libera, con el DELETE condicionado en la base y bitácora', async () => {
+    respuestas['ccp_timbre'] = [fila(), borradas];
+    const r = await liberarReservaTimbre(T, V, ACTOR, true, AHORA);
+    expect(r).toEqual({ ok: true });
+    const del = llamadas.find((l) => l.op === 'delete')!;
+    expect(del.filtros).toEqual(expect.arrayContaining([
+      `eq:"tenant_id","${T}"`, 'eq:"id","res-1"', 'eq:"estado","pendiente"', 'is:"uuid_fiscal",null',
+      `lt:"reservado_en","${new Date(AHORA.getTime() - MINUTOS_MIN_LIBERAR_RESERVA * 60_000).toISOString()}"`,
+    ]));
+    expect(anotarBitacora).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: T, accion: 'ccp.reserva_liberada', entidadId: V, actor: ACTOR,
+        detalle: expect.objectContaining({ reserva: 'res-1', verificado_en_pac: true }) }),
+      expect.anything(),
+    );
+    expect(logger.warn).toHaveBeenCalledWith('timbre.reserva_liberada', expect.objectContaining({ viajeId: V }));
+  });
+
+  it('una reserva con uuid NO se libera: ese CFDI existe ante el SAT', async () => {
+    respuestas['ccp_timbre'] = [fila({ uuid_fiscal: UUID })];
+    const r = await liberarReservaTimbre(T, V, ACTOR, true, AHORA);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.motivo).toContain(UUID);
+    expect(llamadas.some((l) => l.op === 'delete')).toBe(false);
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('una reserva reciente (puede haber un timbrado en curso) NO se libera', async () => {
+    respuestas['ccp_timbre'] = [fila({ reservado_en: hace(5) })];
+    const r = await liberarReservaTimbre(T, V, ACTOR, true, AHORA);
+    expect(!r.ok && r.motivo).toMatch(/menos de 30 minutos/);
+    expect(llamadas.some((l) => l.op === 'delete')).toBe(false);
+  });
+
+  it('sin fecha de reserva legible tampoco: ante la duda, no se libera', async () => {
+    respuestas['ccp_timbre'] = [fila({ reservado_en: null })];
+    expect((await liberarReservaTimbre(T, V, ACTOR, true, AHORA)).ok).toBe(false);
+  });
+
+  it('sin reserva pendiente no hay nada que liberar', async () => {
+    respuestas['ccp_timbre'] = [{ data: null, error: null }];
+    const r = await liberarReservaTimbre(T, V, ACTOR, true, AHORA);
+    expect(!r.ok && r.motivo).toMatch(/no tiene una reserva/);
+  });
+
+  it('la carrera: si entre leer y borrar la fila cambió (se consolidó), el DELETE no toca nada y se dice', async () => {
+    respuestas['ccp_timbre'] = [fila(), { data: [], error: null }];
+    const r = await liberarReservaTimbre(T, V, ACTOR, true, AHORA);
+    expect(!r.ok && r.motivo).toMatch(/cambió mientras tanto/);
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('un error de lectura o de borrado LANZA (no se finge que se liberó)', async () => {
+    respuestas['ccp_timbre'] = [{ data: null, error: { message: 'caída' } }];
+    await expect(liberarReservaTimbre(T, V, ACTOR, true, AHORA)).rejects.toThrow(/caída/);
+    respuestas['ccp_timbre'] = [fila(), { data: null, error: { message: 'no borró' } }];
+    await expect(liberarReservaTimbre(T, V, ACTOR, true, AHORA)).rejects.toThrow(/no borró/);
+  });
+
+  it('aislamiento: la lectura y el borrado van filtrados por la flota', async () => {
+    respuestas['ccp_timbre'] = [fila(), borradas];
+    await liberarReservaTimbre('otra-flota', V, ACTOR, true, AHORA);
+    expect(llamadas.filter((l) => l.tabla === 'ccp_timbre').every((l) => l.filtros.includes('eq:"tenant_id","otra-flota"'))).toBe(true);
   });
 });

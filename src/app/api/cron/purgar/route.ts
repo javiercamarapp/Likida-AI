@@ -374,6 +374,30 @@ export async function GET(req: Request) {
       await alertarOperador('cron.purgar.mcp_oauth', { error });
     }
 
+    // ── PRESUPUESTO DE IA: reservas liquidadas viejas y reservas vencidas ────
+    // (0441, auditoría ola 1 #18). `llm_presupuesto_reserva` crece ~55 mil filas
+    // al mes por flota y nada la purgaba. RPC hermana, mismo patrón que arriba.
+    // Su fallo no tumba la corrida, pero se grita y se alerta.
+    let llmPresupuesto: Record<string, unknown> | null = null;
+    try {
+      const lp = await supabaseAdmin().rpc('mantener_llm_presupuesto', {
+        p_dias: 35,
+        p_ahora: ahoraRetencion,
+        p_vence: new Date(venceRetencionMs).toISOString(),
+      });
+      if (lp.error) {
+        const codigo = codigoDeError(lp.error);
+        logger.error('cron.purgar.llm_presupuesto_falló', { error: lp.error.message, codigo });
+        await alertarOperador('cron.purgar.llm_presupuesto', { error: lp.error.message, codigo });
+      } else {
+        llmPresupuesto = (lp.data ?? {}) as Record<string, unknown>;
+      }
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      logger.error('cron.purgar.llm_presupuesto_excepcion', { error });
+      await alertarOperador('cron.purgar.llm_presupuesto', { error });
+    }
+
     // 0332 separa la señal de las purgas restantes: si conversación/códigos
     // ya se drenaron fuera de la RPC, no conservamos un `parcial` obsoleto de
     // la última tanda de mantenimiento. En rollout sobre una BD anterior se
@@ -383,7 +407,7 @@ export async function GET(req: Request) {
     const estado = erroresRetencion0104.length > 0 || productoEventoError !== null
       ? 'fallo'
       : parcialGlobal ? 'parcial' : 'ok';
-    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth };
+    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto };
     if (estado === 'fallo') logger.error('cron.purgar.retencion_0104_incompleta', detalleFinal);
     else if (estado === 'parcial') logger.warn('cron.purgar.incompleta', detalleFinal);
     else logger.info('cron.purgar.ok', detalleFinal);
@@ -396,7 +420,7 @@ export async function GET(req: Request) {
       productoEventoError,
     });
     return NextResponse.json(
-      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth },
+      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto },
       { status: estado === 'fallo' ? 500 : 200 },
     );
   } catch (e) {

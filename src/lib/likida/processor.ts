@@ -306,7 +306,7 @@ async function pegarCodigoEnEspera(tenantId: string, viajeId: string, gasto: Gas
  * Nunca lanza: dejar sin respuesta a quien ejerce un derecho es peor que
  * cualquier fallo que se pueda registrar.
  */
-async function atenderPrivacidad(tenantId: string, operadorId: string | null, telefono: string, texto: string): Promise<void> {
+async function atenderPrivacidad(tenantId: string, operadorId: string | null, telefono: string, texto: string, titularUserId: string | null = null): Promise<void> {
   try {
     // ── LA CONSTANCIA SE DEJA SIEMPRE, antes de decidir qué contestar ──────
     // AUDITORÍA 12, ALTO (legal): el aviso promete "queda registrada tu
@@ -330,6 +330,7 @@ async function atenderPrivacidad(tenantId: string, operadorId: string | null, te
       await registrarSolicitudArco({
         tenantId,
         operadorId,
+        titularUserId,
         titularRef: telefono,
         tipo,
         canal: 'whatsapp',
@@ -430,20 +431,25 @@ export async function ponerAvisoADisposicion(
   try {
     const datos = await getDatosResponsable(tenantId);
     if (!datos) {
-      // El tenant no tiene razón social, domicilio o liga del aviso integral.
-      // NO se manda un aviso a medias: uno con el responsable equivocado —o sin
-      // él— no dice a quién reclamarle, que es justo para lo que sirve.
+      // La flota NO EXISTE (o su fila no se pudo resolver). Un tenant sin razón
+      // social o domicilio YA NO cae aquí (auditoría ola 1, #10): su aviso sale
+      // con esos datos dichos como pendientes — ver `lineaResponsable`.
       logger.error('privacidad.tenant_sin_datos_responsable', { tenantId });
       return 'sin_datos';
+    }
+    if (!datos.razonSocial?.trim() || !datos.domicilio?.trim()) {
+      // No bloquea al chofer, pero SÍ se grita: la empresa tiene que capturarlos
+      // (/dashboard/legal) y hasta entonces el aviso sale con el hueco dicho.
+      logger.warn('privacidad.aviso_con_datos_pendientes', {
+        tenantId, sinRazonSocial: !datos.razonSocial?.trim(), sinDomicilio: !datos.domicilio?.trim(),
+      });
     }
     // AUDITORÍA 28, LEG-A4: la firma que decide si se reenvía tiene que cubrir
     // los DOS textos que el aviso promete comunicar (art. 15 fr. VI) — el
     // simplificado, que es el que SALE, y el integral, que antes podía
     // cambiar (p. ej. #401/LEG-B1, plazo de borrado de cámara) sin que ningún
     // operador con constancia recibiera nada.
-    const vigente = versionAvisoVigente(datos);
-    if (!vigente) return 'sin_datos';
-    const { texto, version } = vigente;
+    const { texto, version } = versionAvisoVigente(datos);
     // El claim vive en SQL: el primer mensaje puede llegar por dos caminos a la
     // vez, y sin él el operador recibiría el aviso dos o tres veces seguidas.
     // Ya se le puso a disposición antes: se puede tratar, y no se repite.
@@ -1594,11 +1600,13 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // consulta, con el id), y solo si no hay operador (cuenta de oficina) se
       // cae al tenant-only.
       const porOperador = await buscarOperadorPorTelefono(msg.from).catch(() => null);
-      const tenantId = porOperador?.tenantId
-        ?? (await resolverCuentaOficina(msg.from).catch(() => null))?.tenantId
-        ?? null;
+      // 0442 (auditoría ola 1 #46): la cuenta de oficina se conserva COMPLETA
+      // (no solo su tenant): su `userId` es el titular de la solicitud ARCO, y sin
+      // él la cancelación de un dueño/contador/encargado no tenía sobre quién ejecutarse.
+      const cuentaOficina = porOperador ? null : await resolverCuentaOficina(msg.from).catch(() => null);
+      const tenantId = porOperador?.tenantId ?? cuentaOficina?.tenantId ?? null;
       if (tenantId) {
-        await atenderPrivacidad(tenantId, porOperador?.operadorId ?? null, msg.from, msg.text);
+        await atenderPrivacidad(tenantId, porOperador?.operadorId ?? null, msg.from, msg.text, cuentaOficina?.userId ?? null);
       } else {
         await sendText(msg.from, 'Claro. No te tengo identificado con una flota en Likida, así que no sé a qué empresa reclamarle. Si trabajaste con una flota que usa Likida, pídeles que te confirmen qué hicieron con tus datos. 🙏');
       }

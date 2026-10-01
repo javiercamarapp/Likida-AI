@@ -35,7 +35,7 @@ const { avisoSimplificado, avisoIntegral } = await import('./privacidad');
 
 beforeEach(() => { fila = null; });
 
-describe('getDatosResponsable — sin razón social o domicilio, no hay responsable', () => {
+describe('getDatosResponsable — sin razón social o domicilio devuelve lo que hay (el aviso lo dice como pendiente)', () => {
   it('con razón social y domicilio, devuelve los datos', async () => {
     fila = { razon_social: 'FLOTA SA DE CV', domicilio_fiscal: 'Calle 1, Mérida', url_aviso_privacidad: '', contacto_privacidad: null };
     const r = await getDatosResponsable('t1');
@@ -43,23 +43,35 @@ describe('getDatosResponsable — sin razón social o domicilio, no hay responsa
     expect(r?.razonSocial).toBe('FLOTA SA DE CV');
   });
 
-  it('con domicilio vacío SÍ devuelve datos (la página los pinta con la fr. I pendiente), pero el aviso del canal se sigue negando', async () => {
+  it('con domicilio vacío devuelve datos: la página pinta la fr. I pendiente Y el aviso del canal SALE con el hueco dicho', async () => {
     fila = { razon_social: 'FLOTA SA DE CV', domicilio_fiscal: '', url_aviso_privacidad: '', contacto_privacidad: null };
     const r = await getDatosResponsable('t1');
     expect(r).not.toBeNull();
     expect(r?.domicilio).toBe('');
-    // La guarda que ANTES vivía aquí ahora vive donde le toca: sin domicilio
-    // no sale el aviso simplificado (art. 15 fr. I) y el tratamiento por
-    // WhatsApp se queda frenado — pero la página pública SÍ dice qué falta.
-    expect(avisoSimplificado(r!)).toBeNull();
+    // Auditoría ola 1, #10: ya no se frena el tratamiento por WhatsApp.
+    expect(avisoSimplificado(r!)).toMatch(/Su domicilio aún no está capturado/);
     const frI = avisoIntegral(r!).find((s) => s.fundamento.includes('15 fr. I'))!;
     expect(frI.pendiente).toBe(true);
     expect(frI.parrafos.join('\n')).toMatch(/aún no ha capturado su domicilio/i);
   });
 
-  it('con razón social vacía, NO devuelve datos aunque haya domicilio', async () => {
-    fila = { razon_social: '', domicilio_fiscal: 'Calle 1, Mérida', url_aviso_privacidad: '', contacto_privacidad: null };
-    expect(await getDatosResponsable('t1')).toBeNull();
+  it('con razón social vacía SÍ devuelve datos (nombre de alta incluido): ni 404 en /aviso ni chofer bloqueado', async () => {
+    fila = { nombre: 'Transportes Pérez', razon_social: '', domicilio_fiscal: 'Calle 1, Mérida', url_aviso_privacidad: '', contacto_privacidad: null };
+    const r = await getDatosResponsable('t1');
+    expect(r).not.toBeNull();
+    expect(r?.razonSocial).toBe('');
+    expect(r?.nombreFlota).toBe('Transportes Pérez');
+    const frI = avisoIntegral(r!).find((s) => s.fundamento.includes('15 fr. I'))!;
+    expect(frI.pendiente).toBe(true);
+    expect(frI.parrafos.join('\n')).toMatch(/Transportes Pérez/);
+    expect(frI.parrafos.join('\n')).toMatch(/razón social inscrita/);
+  });
+
+  it('una razón social de solo espacios cuenta como vacía (no se imprime en blanco)', async () => {
+    fila = { nombre: 'Flota X', razon_social: '   ', domicilio_fiscal: '  ', url_aviso_privacidad: '', contacto_privacidad: null };
+    const r = await getDatosResponsable('t1');
+    expect(r?.razonSocial).toBe('');
+    expect(r?.domicilio).toBe('');
   });
 
   it('sin fila en la base, NO devuelve datos', async () => {

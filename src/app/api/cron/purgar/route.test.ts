@@ -29,6 +29,8 @@ let rpcRespuesta: { data: unknown; error: { message: string; code?: string } | n
 let rpcProductoRespuesta: { data: unknown; error: { message: string; code?: string } | null };
 /** Lo que contesta la RPC hermana `mantener_mcp_oauth` (0265). */
 let rpcMcpOauthRespuesta: { data: unknown; error: { message: string; code?: string } | null };
+/** Lo que contesta la RPC hermana `mantener_llm_presupuesto` (0441). */
+let rpcLlmPresupuestoRespuesta: { data: unknown; error: { message: string; code?: string } | null };
 type RespuestaRpc = { data: unknown; error: { message: string; code?: string } | null };
 let rpcConversacionRespuestas: RespuestaRpc[];
 let rpcCodigoRespuestas: RespuestaRpc[];
@@ -37,6 +39,7 @@ let rpcCodigoDefault: RespuestaRpc;
 const rpc = vi.fn(async (nombre?: unknown) => {
   if (nombre === 'mantener_producto_evento') return rpcProductoRespuesta;
   if (nombre === 'mantener_mcp_oauth') return rpcMcpOauthRespuesta;
+  if (nombre === 'mantener_llm_presupuesto') return rpcLlmPresupuestoRespuesta;
   if (nombre === 'purgar_wa_conversacion') return rpcConversacionRespuestas.shift() ?? rpcConversacionDefault;
   if (nombre === 'purgar_codigo_pendiente') return rpcCodigoRespuestas.shift() ?? rpcCodigoDefault;
   return rpcRespuesta;
@@ -80,6 +83,7 @@ beforeEach(() => {
   }, error: null };
   rpcProductoRespuesta = { data: { mesesConsolidados: 0, detalleBorrado: 0, parcial: false }, error: null };
   rpcMcpOauthRespuesta = { data: { tokensBorrados: 0, codigosBorrados: 0, clientesBorrados: 0, parcial: false }, error: null };
+  rpcLlmPresupuestoRespuesta = { data: { liquidadasBorradas: 0, vencidasBorradas: 0, parcial: false }, error: null };
   rpcConversacionRespuestas = [];
   rpcCodigoRespuestas = [];
   rpcConversacionDefault = { data: { borradas: 0, parcial: false, agotado: true }, error: null };
@@ -137,6 +141,9 @@ describe('la corrida', () => {
       p_vence: expect.any(String),
     }));
     expect(rpc).toHaveBeenCalledWith('mantener_mcp_oauth');
+    // 0441: la purga del ledger de presupuesto de IA corre en la misma vuelta.
+    expect(rpc).toHaveBeenCalledWith('mantener_llm_presupuesto', expect.objectContaining({ p_dias: 35 }));
+    expect(cuerpo).toMatchObject({ llmPresupuesto: { liquidadasBorradas: 0, vencidasBorradas: 0, parcial: false } });
     expect(llamadasPurga('purgar_wa_conversacion')).toBe(0);
     expect(llamadasPurga('purgar_codigo_pendiente')).toBe(0);
     expect(cuerpo).toMatchObject({ estado: 'ok', parcial: false });
@@ -151,6 +158,15 @@ describe('la corrida', () => {
     expect(cuerpo.corrio).toBe(true);
     expect(cuerpo.mcpOauth).toBeNull();
     expect(alertarOperador).toHaveBeenCalledWith('cron.purgar.mcp_oauth', expect.objectContaining({ error: 'no existe' }));
+  });
+
+  it('si la RPC de llm_presupuesto falla, la corrida NO se cae — se alerta y el cuerpo dice null', async () => {
+    rpcLlmPresupuestoRespuesta = { data: null, error: { message: 'no existe', code: '42883' } };
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    const cuerpo = await res.json();
+    expect(res.status).toBe(200);
+    expect(cuerpo.llmPresupuesto).toBeNull();
+    expect(alertarOperador).toHaveBeenCalledWith('cron.purgar.llm_presupuesto', expect.objectContaining({ error: 'no existe' }));
   });
 
   it('si producto_evento falla, responde 500, late fallo y conserva la causa', async () => {

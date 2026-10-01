@@ -209,7 +209,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
               <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
                 {extra.emite
                   ? 'Sin cuenta y con todo leído: los factura sola en la próxima corrida'
-                  : 'La emisión hoy está en ensayo (llena el portal sin emitir) — puedes capturarlos tú con los datos ya listos'}
+                  : 'La emisión hoy está en ensayo (llena el portal sin emitir): si tu empresa aún no otorgó el mandato, el dueño lo hace en Términos y mandato. Mientras tanto puedes capturarlos tú con los datos ya listos'}
               </p>
               {maquina.length === 0 ? (
                 <Leyenda>Nada en la cola automática ahora mismo.</Leyenda>

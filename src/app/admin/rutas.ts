@@ -3,7 +3,7 @@ import {
   LayoutGrid, ScanText, Calculator, MessagesSquare, MessageCircle, UserPlus,
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
-  Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge, Handshake, Inbox,
+  Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, PlugZap, Gauge, Handshake, Inbox,
   Bot, Bug, ListChecks, Sparkles, Hand, Globe2, AlarmClock, Clapperboard,
 } from 'lucide-react';
 
@@ -96,6 +96,7 @@ export const SISTEMA: Item[] = [
   { href: '/admin/salud-sistema', nombre: 'Salud del sistema', Icono: HeartPulse },
   { href: '/admin/actividad-codigo', nombre: 'Actividad de código', Icono: GitCommitHorizontal },
   { href: '/admin/soporte', nombre: 'Soporte', Icono: LifeBuoy },
+  { href: '/admin/mcp-clientes', nombre: 'Clientes MCP', Icono: PlugZap },
   { href: '/admin/capacidad-forecast', nombre: 'Capacidad & Forecast', Icono: Gauge },
 ];
 
