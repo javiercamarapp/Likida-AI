@@ -90,7 +90,8 @@ describe('compararConMeta', () => {
 
   it('el resumen cuenta usables y faltantes', () => {
     const r = compararConMeta(TODAS.slice(0, 3));
-    expect(resumenEstado(r)).toMatch(new RegExp(`3 de ${TODAS.length} usables hoy; ${TODAS.length - 3} por someter`));
+    // El total sale del catálogo: añadir una plantilla no puede romper esta prueba.
+    expect(resumenEstado(r)).toContain(`3 de ${TODAS.length} usables hoy; ${TODAS.length - 3} por someter`);
   });
 });
 

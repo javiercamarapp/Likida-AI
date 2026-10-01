@@ -37,13 +37,15 @@ describe('mediaDataUrlQA — el gancho de QA no toca el webhook real', () => {
     expect(conMencion).toEqual([]);
   });
 
-  test('processor.ts lo usa SOLO como fallback, en exactamente 3 sitios', () => {
+  test('processor.ts lo usa SOLO como fallback, en exactamente 4 sitios', () => {
     const fuente = readFileSync(join(REPO, 'src/lib/likida/processor.ts'), 'utf8');
     const forma = /msg\.mediaDataUrlQA \?\? await downloadMediaAsDataUrl\(msg\.mediaId\)/g;
-    expect(fuente.match(forma) ?? []).toHaveLength(3);
-    // Ninguna descarga de media quedó SIN el gancho (una cuarta llamada
+    // 3 → 4 (Agente 5 «Conductor», 0385): la foto de EVIDENCIA de un hito (caption «sello»/«andén»/«recibido») es una
+    // descarga más y lleva el mismo gancho que la del POD, para que el panel de QA la pueda recorrer sin Meta.
+    expect(fuente.match(forma) ?? []).toHaveLength(4);
+    // Ninguna descarga de media quedó SIN el gancho (una quinta llamada
     // directa dejaría al panel ciego en ese camino).
-    expect(fuente.match(/await downloadMediaAsDataUrl\(msg\.mediaId\)/g) ?? []).toHaveLength(3);
+    expect(fuente.match(/await downloadMediaAsDataUrl\(msg\.mediaId\)/g) ?? []).toHaveLength(4);
   });
 
   test('fuera del motor de QA y processor, nadie construye el campo en src/', () => {

@@ -39,6 +39,10 @@
 // Convención: `<payloadPrefijo>:<viaje_id>` (≤ 128 caracteres). El webhook
 // entrega ese texto como cuerpo del mensaje del botón (ver route.ts, «BOTÓN
 // APRETADO»). Quien interprete el botón (Agente 5) parte por el primer `:`.
+// EXCEPCIÓN: los botones de los recordatorios (`recordatorio_registrar`,
+// `recordatorio_problema`) llevan además el hito al que se refieren,
+// `<prefijo>:<viaje_id>:<hito>`, para que un recordatorio viejo no registre el
+// hito que hoy toca (conductor/tipos.ts, `leerBotonConductor`).
 // ═══════════════════════════════════════════════════════════════════════════
 import type { OpcionesPlantilla, BotonPlantilla } from './plantilla_payload';
 
@@ -172,7 +176,7 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
   {
     nombre: 'conductor_solicitud_llegada_carga_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
     proposito: 'Pedir al chofer que reporte su llegada a cargar (cita de carga próxima).',
-    llamador: null,
+    llamador: 'src/lib/likida/conductor/ejecutor.ts',
     cuerpo: 'Hola {{1}}, tu viaje {{2}} tiene cita de carga en {{3}} a las {{4}}. Cuando llegues, toca «Ya llegué» para registrar tu llegada.',
     ejemplos: ['Juan', 'F-1042', 'Planta Zapopan', '08:00'],
     variables: ['nombre del chofer', 'folio', 'lugar de carga', 'hora de la cita'],
@@ -198,7 +202,7 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
   {
     nombre: 'conductor_salida_carga_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
     proposito: 'Confirmar la salida de la carga (y pedir la foto de la carta porte o remisión).',
-    llamador: null,
+    llamador: 'src/lib/likida/conductor/ejecutor.ts',
     cuerpo: 'Hola {{1}}, ¿ya saliste de la carga del viaje {{2}}? Toca «Ya salí» para registrar tu salida y manda por aquí la foto de tu carta porte o remisión.',
     ejemplos: ['Juan', 'F-1042'],
     variables: ['nombre del chofer', 'folio'],
@@ -211,7 +215,7 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
   {
     nombre: 'conductor_llegada_descarga_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
     proposito: 'Pedir que reporte su llegada al destino de descarga.',
-    llamador: null,
+    llamador: 'src/lib/likida/conductor/ejecutor.ts',
     cuerpo: 'Hola {{1}}, tu viaje {{2}} descarga en {{3}}. Cuando llegues, toca «Ya llegué» para registrar tu llegada.',
     ejemplos: ['Juan', 'F-1042', 'CEDIS Monterrey'],
     variables: ['nombre del chofer', 'folio', 'lugar de descarga'],
@@ -224,7 +228,7 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
   {
     nombre: 'conductor_salida_descarga_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
     proposito: 'Confirmar el fin de la descarga y pedir la foto del comprobante de entrega (POD).',
-    llamador: null,
+    llamador: 'src/lib/likida/conductor/ejecutor.ts',
     cuerpo: 'Hola {{1}}, ¿ya terminaste de descargar el viaje {{2}}? Toca «Ya salí» para registrar tu salida y manda por aquí la foto del comprobante de entrega.',
     ejemplos: ['Juan', 'F-1042'],
     variables: ['nombre del chofer', 'folio'],
@@ -237,7 +241,7 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
   {
     nombre: 'conductor_recordatorio_1_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
     proposito: 'Recordatorio escalonado 1 de 3: un hito del viaje sigue sin registrarse.',
-    llamador: null,
+    llamador: 'src/lib/likida/conductor/ejecutor.ts',
     cuerpo: 'Hola {{1}}, todavía no tenemos registrado «{{2}}» del viaje {{3}}. Toca «Registrar ahora» o responde por aquí.',
     ejemplos: ['Juan', 'tu llegada a cargar', 'F-1042'],
     variables: ['nombre del chofer', 'hito pendiente', 'folio'],
@@ -250,7 +254,7 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
   {
     nombre: 'conductor_recordatorio_2_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
     proposito: 'Recordatorio escalonado 2 de 3.',
-    llamador: null,
+    llamador: 'src/lib/likida/conductor/ejecutor.ts',
     cuerpo: 'Hola {{1}}, segundo aviso: sigue pendiente «{{2}}» del viaje {{3}} desde hace {{4}}. Si ya lo hiciste, toca «Registrar ahora»; si tienes un problema, dinos qué pasó.',
     ejemplos: ['Juan', 'tu salida de la carga', 'F-1042', '30 minutos'],
     variables: ['nombre del chofer', 'hito pendiente', 'folio', 'tiempo pendiente'],
@@ -263,7 +267,7 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
   {
     nombre: 'conductor_recordatorio_3_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
     proposito: 'Recordatorio escalonado 3 de 3: último aviso antes de escalar al jefe de tráfico.',
-    llamador: null,
+    llamador: 'src/lib/likida/conductor/ejecutor.ts',
     cuerpo: 'Hola {{1}}, último aviso antes de avisar a tu jefe de tráfico: «{{2}}» del viaje {{3}} sigue pendiente desde hace {{4}}. Responde ahora para evitar la escalación.',
     ejemplos: ['Juan', 'tu llegada a descarga', 'F-1042', '1 hora'],
     variables: ['nombre del chofer', 'hito pendiente', 'folio', 'tiempo pendiente'],
@@ -274,9 +278,36 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     textoVerificado: true, estado: 'nueva_para_aprobacion',
   },
   {
+    nombre: 'conductor_llegada_carga_sin_cita_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
+    proposito: 'Pedir al chofer que reporte su llegada a cargar cuando el viaje NO trae cita de carga capturada.',
+    llamador: 'src/lib/likida/conductor/ejecutor.ts',
+    cuerpo: 'Hola {{1}}, tu viaje {{2}} carga en {{3}}. Cuando llegues, toca «Ya llegué» para registrar tu llegada.',
+    ejemplos: ['Juan', 'F-1042', 'Planta Zapopan'],
+    variables: ['nombre del chofer', 'folio', 'lugar de carga'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Ya llegué', payloadPrefijo: 'hito_llegada_carga' },
+      { tipo: 'QUICK_REPLY', texto: 'Voy con retraso', payloadPrefijo: 'hito_retraso_carga' },
+      { tipo: 'QUICK_REPLY', texto: 'Compartir ubicación', payloadPrefijo: 'pedir_ubicacion' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'conductor_solicitud_regreso_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
+    proposito: 'Preguntar al chofer si ya va de regreso (hito de regreso) después de la descarga.',
+    llamador: 'src/lib/likida/conductor/ejecutor.ts',
+    cuerpo: 'Hola {{1}}, ya registramos tu salida de la descarga del viaje {{2}}. Cuando vayas de regreso, toca «Voy de regreso» para avisarnos.',
+    ejemplos: ['Juan', 'F-1042'],
+    variables: ['nombre del chofer', 'folio'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Voy de regreso', payloadPrefijo: 'hito_regreso' },
+      { tipo: 'QUICK_REPLY', texto: 'Aún no', payloadPrefijo: 'hito_aun_no_regreso' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
     nombre: 'aviso_jefe_trafico_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
     proposito: 'Escalación al jefe de tráfico: un chofer no registró un hito tras los tres recordatorios.',
-    llamador: null,
+    llamador: 'src/lib/likida/conductor/ejecutor.ts',
     cuerpo: 'Atención, jefe de tráfico: {{1}} no ha registrado «{{2}}» del viaje {{3}} ({{4}}). Última ubicación conocida: {{5}}. Revísalo en el tablero o llámale.',
     ejemplos: ['Juan Pérez', 'su llegada a descarga', 'F-1042', 'sin respuesta a 3 recordatorios', 'Carretera 15D km 120'],
     variables: ['chofer', 'hito pendiente', 'folio', 'motivo de la escalación', 'última ubicación conocida'],

@@ -33,7 +33,8 @@ import {
   bandejasAbiertas,
 } from '@/lib/likida/intake/rafaga';
 import { versionAvisoVigente, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/likida/privacidad';
-import { interpretarHito, sellarHito, mensajeHito } from '@/lib/likida/hitos_viaje';
+import { mensajeEvidencia } from '@/lib/likida/conductor/evidencia';
+import { atenderConductor, atenderAcuseJefe, atenderPinConductor, hitoParaEvidenciaDelChofer, registrarEvidenciaDelChofer } from '@/lib/likida/conductor/atender';
 import {
   interpretarMarcaJornada, interpretarConformidadJornada,
   atenderMarcaJornada, atenderConformidadJornada, resumenParaOperador,
@@ -81,7 +82,7 @@ import {
 } from '@/lib/likida/conv';
 import { registrarCosto, registrarCostoWhatsApp, faseDeModelo, vincularCostosALiquidacion } from '@/lib/likida/costos';
 import { descartarCartaMuerta } from '@/lib/likida/wa_pendientes';
-import { sendText, sendButtons, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText, metadatosMedia, MAX_XML_BYTES, ImagenDemasiadoPesadaError, destinatarioEnmascarado } from '@/lib/meta/client';
+import { sendText, sendButtons, sendDocument, enviarSolicitudUbicacion, downloadMediaAsDataUrl, downloadMediaAsText, metadatosMedia, MAX_XML_BYTES, ImagenDemasiadoPesadaError, destinatarioEnmascarado } from '@/lib/meta/client';
 import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
 import {
   decidirAcuse, mensajeConfirmar, mensajeAcuse, mensajeRefoto, esPeticionDeFoto,
@@ -1613,6 +1614,20 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       return;
     }
 
+    // ── «YA LO ATIENDO»: EL ACUSE DEL JEFE O DEL PATIO (Agente 5, 0380) ─────────
+    //
+    // El botón de la escalación llega de un número que puede no ser chofer NI
+    // cuenta de la app (un patio responsable configurado solo por teléfono), así que
+    // se atiende ANTES de resolver al operador. `atenderAcuseJefe` exige que el
+    // teléfono sea de la flota del viaje (contacto de tráfico o cuenta de oficina).
+    if (msg.type === 'text' && msg.text) {
+      const acuseJefe = await atenderAcuseJefe(msg.from, msg.text);
+      if (acuseJefe !== null) {
+        await sendText(msg.from, acuseJefe);
+        return;
+      }
+    }
+
     const op = await resolveOperador(msg.from);
     if (!op) {
       // ── ¿ES UNA CUENTA DE OFICINA? ───────────────────────────────────────
@@ -2397,6 +2412,45 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         } catch (e) {
           logger.error('pod.error', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
           await say(mensajePod('fallo'));
+        }
+        return;
+      }
+
+      // ── ¿ES EVIDENCIA DE UN HITO? (sello, andén, sello de recibido — 0385) ──────
+      //
+      // Mismo criterio que el POD: el CAPTION decide qué papel es y sin él la foto sigue como comprobante.
+      // Se resuelve PRIMERO a qué hito pertenece (sin hito no se paga la descarga) y se sube con el mismo
+      // pipeline y bucket que el POD. No es un gasto: no toca el OCR, la liquidación ni la barrera del «listo».
+      const evidenciaPrevia = await hitoParaEvidenciaDelChofer({ tenantId: op.tenantId, operadorId: op.operadorId, viajeId, caption: msg.text });
+      if (evidenciaPrevia) {
+        if (!evidenciaPrevia.hito) {
+          await say(mensajeEvidencia('sin_hito', evidenciaPrevia.tipo));
+          return;
+        }
+        try {
+          let dataUrl: string | null;
+          try {
+            dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
+          } catch (e) {
+            if (e instanceof ImagenDemasiadoPesadaError) { await say(MENSAJE_FOTO_PESADA); return; }
+            throw e;
+          }
+          if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
+          const huella = await hashImagen(dataUrl);
+          // El nombre lleva el hito: la misma foto como evidencia de dos hitos son dos archivos, y purgar una no
+          // le quita el archivo a la otra.
+          const ruta = await subirComprobante(op.tenantId, viajeId, `ev_${evidenciaPrevia.hito.id.slice(0, 8)}_${huella.slice(0, 24)}`, dataUrl);
+          if (!ruta) {
+            logger.error('conductor.evidencia_sin_guardar', { viaje: viajeId, tenant: op.tenantId });
+            await say(mensajeEvidencia('fallo', evidenciaPrevia.tipo));
+            return;
+          }
+          await say(await registrarEvidenciaDelChofer({
+            tenantId: op.tenantId, hito: evidenciaPrevia.hito, tipo: evidenciaPrevia.tipo, ruta, sha256: huella, waMessageId: msg.waMessageId ?? null,
+          }));
+        } catch (e) {
+          logger.error('conductor.evidencia_error', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+          await say(mensajeEvidencia('fallo', evidenciaPrevia.tipo));
         }
         return;
       }
@@ -3620,6 +3674,13 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // respuesta creyendo que nadie la vio es peor.
     if (msg.type === 'location' && typeof msg.lat === 'number' && typeof msg.lng === 'number') {
       const avisadoJefe = await registrarUbicacionChofer(op, viajeId, msg.lat, msg.lng);
+      // Agente 5 (0385): el pin se ADJUNTA a la llegada que el chofer acaba de reportar y se compara contra el sitio
+      // del viaje. (Antes esta llamada vivía en el bloque «sin viaje», donde `viajeId` es siempre nulo: nunca corría.)
+      // No registra ningún hito por sí solo. Best-effort: devuelve la línea que se agrega a la respuesta, o nada.
+      const lineaConductor = await atenderPinConductor({
+        tenantId: op.tenantId, operadorId: op.operadorId, viajeId, lat: msg.lat, lng: msg.lng,
+        enviadoEn: msg.timestampMs ? new Date(msg.timestampMs) : null,
+      });
       // c4-6: el pin que el propio bot pide ("mándame tu ubicación") ahora SÍ
       // llega a donde la cascada y el mensaje al proveedor lo van a usar — el
       // expediente de asistencia vivo del chofer, si lo hay. Best-effort.
@@ -3627,9 +3688,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // AGEN-5 / WA-4: «ya se la pasé a tu jefe» solo cuando Meta la aceptó
       // (texto o plantilla). Si no, se dice y se le da la salida.
       const donde = anclada ? 'quedó en tu viaje Y en tu reporte de emergencia' : 'queda registrada en tu viaje';
-      await say(avisadoJefe
+      const respuestaPin = avisadoJefe
         ? `📍 Recibida tu ubicación — ${donde}, y ya se la pasé a tu jefe.`
-        : `📍 Recibida tu ubicación — ${donde}, pero NO pude pasársela a tu jefe por WhatsApp. Si es urgente, márcale directo.`);
+        : `📍 Recibida tu ubicación — ${donde}, pero NO pude pasársela a tu jefe por WhatsApp. Si es urgente, márcale directo.`;
+      await say(lineaConductor ? `${respuestaPin}\n${lineaConductor}` : respuestaPin);
       return;
     }
 
@@ -3731,23 +3793,49 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       }
     }
 
-    // ── ¿HITO DEL VIAJE? "ya llegué" / "descargando" / "de regreso" (0090) ──
+    // ── ¿HITO DEL VIAJE? (0090 → Agente 5 «Conductor», 0380) ─────────────────
+    //
+    // "ya llegué", "ya estoy en andén", "me atiende Juan de recibo", "ya cargué",
+    // "salgo para allá", «voy con retraso», «corrijo»… y los botones de las
+    // solicitudes del agente (`hito_*`, `recordatorio_*`, `pedir_ubicacion`).
     //
     // ANTES del freno de cierre A PROPÓSITO: `pareceCierre` arranca con
-    // ^(listo|ya|...) y se comería "ya llegué" como intento de cerrar. Y
-    // después de botones/consultas, que son respuestas a preguntas nuestras.
-    // La lista de frases es CERRADA y anclada (hitos_viaje.ts): lo que traiga
-    // más contexto sigue su camino al agente.
-    const hito = interpretarHito(msg.text);
-    if (hito) {
-      // DAT-38: la hora del MENSAJE, no la del procesamiento. El acuse dice
-      // «anotado: llegaste a las 14:32» y esa hora tiene que ser la que el
-      // chofer vivió, no la que este servidor tenía cuando le tocó el turno.
-      // Sin timestamp de Meta se cae al reloj local, como siempre.
-      const ahoraHito = msg.timestampMs ? new Date(msg.timestampMs) : new Date();
-      const sello = await sellarHito(op.tenantId, viajeId, hito, ahoraHito);
-      logger.info('hito.viaje', { viaje: viajeId, hito, sello });
-      await say(mensajeHito(hito, sello, ahoraHito));
+    // ^(listo|ya|...) y se comería "ya llegué" como intento de cerrar. Y después
+    // de botones/consultas, que son respuestas a preguntas nuestras.
+    //
+    // QUÉ HITO ES lo decide la máquina de estados mirando lo que el viaje ya tiene
+    // registrado (conductor/maquina.ts): un «ya llegué» en el ORIGEN ya no sella la
+    // llegada al DESTINO, que era el defecto de las tres columnas de la 0090.
+    // El módulo atiende lo que las reglas entienden (o el respaldo con modelo, si
+    // el texto parece hablar de un hito); todo lo demás sigue su camino al agente.
+    //
+    // DAT-38: la hora es la del MENSAJE (Meta), no la del procesamiento; sin ella,
+    // el reloj local.
+    const rConductor = await atenderConductor({
+      tenantId: op.tenantId,
+      operadorId: op.operadorId,
+      telefono: msg.from,
+      viajeAbiertoId: viajeId,
+      texto: msg.text,
+      mensajeEn: msg.timestampMs ? new Date(msg.timestampMs) : null,
+      waMessageId: msg.waMessageId ?? null,
+      senal: reloj.senal(15_000),
+    });
+    if (rConductor) {
+      for (const m of rConductor.mensajes) {
+        // Con botones (p. ej. «Es en descarga»): si Meta los rechaza, el texto sale solo.
+        if (m.botones && m.botones.length > 0) {
+          const id = await sendButtons(msg.from, m.texto, m.botones);
+          if (id) { await registrarCostoWhatsApp(op.tenantId, viajeId); continue; }
+        }
+        await say(m.texto);
+      }
+      // 0385: la llegada quedó sin ubicación y el viaje tiene un sitio con qué compararla: se le pide el pin,
+      // DESPUÉS del acuse (la ventana de 24 h acaba de abrirse con su mensaje). Best-effort.
+      if (rConductor.solicitarUbicacion) {
+        const r = await enviarSolicitudUbicacion(msg.from, rConductor.solicitarUbicacion).catch(() => ({ ok: false }));
+        if (!r.ok) logger.warn('conductor.solicitud_ubicacion_no_enviada', { viaje: viajeId });
+      }
       return;
     }
 
