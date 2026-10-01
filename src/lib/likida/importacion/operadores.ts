@@ -3,7 +3,7 @@
 //
 // Innovativos tiene cientos de choferes y hasta hoy el alta era uno por uno
 // (`crearOperador`) o SQL a mano. Este módulo es UN motor con dos puertas:
-// el archivo CSV/XLSX de `/dashboard/operadores/importar` y el lote de
+// la carga desde Excel/CSV de `/dashboard/operadores` (bloque «Cargar operadores») y el lote de
 // `POST /v1/operadores`. Las dos validan con las MISMAS funciones que el alta
 // unitaria (`normalizarTelefonoOperador`, `normalizarRfcOperador`,
 // `normalizarFechaLicencia`) — un número que el alta acepta y el importador
