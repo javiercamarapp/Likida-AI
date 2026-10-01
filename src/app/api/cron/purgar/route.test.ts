@@ -63,6 +63,11 @@ vi.mock('@/lib/likida/interruptores', () => ({
     ilegibles.has(nombre) ? 'ilegible' : (await estaApagado(nombre)) ? 'apagado' : 'encendido',
 }));
 
+// Carta Porte multi-formato (0420): la purga de documentos vencidos cuelga de este cron. Aquí solo se prueba
+// que se llama, que se reporta y que su fallo NO tumba la corrida; su lógica vive en carta_porte_docs/retencion.test.ts.
+const purgaCartaPorte = vi.fn(async (_limite?: number) => ({ revisados: 0, purgados: 0, fallidos: 0 }));
+vi.mock('@/lib/likida/carta_porte_docs/retencion', () => ({ purgarDocumentosVencidos: (n?: number) => purgaCartaPorte(n) }));
+
 process.env.CRON_SECRET = 'secreto-de-prueba';
 const { GET } = await import('./route');
 
@@ -405,5 +410,31 @@ describe('el kill switch (0110)', () => {
     await GET(peticion('Bearer secreto-de-prueba'));
     expect(estaApagado.mock.calls.map((c) => c[0])).toEqual(['global']);
     expect(llamadasMantenimiento()).toBe(1);
+  });
+});
+
+describe('la purga de documentos de Carta Porte (0420)', () => {
+  beforeEach(() => { purgaCartaPorte.mockReset().mockResolvedValue({ revisados: 4, purgados: 3, fallidos: 1 }); });
+
+  it('corre en la misma vuelta con tope de 100 y su resultado viaja en el cuerpo', async () => {
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(purgaCartaPorte).toHaveBeenCalledWith(100);
+    expect(await res.json()).toMatchObject({ cartaPorteDocs: { revisados: 4, purgados: 3, fallidos: 1 } });
+    expect(logger.warn).toHaveBeenCalledWith('cron.purgar.carta_porte_docs_con_fallos', expect.objectContaining({ fallidos: 1 }));
+  });
+
+  it('si lanza, la corrida sigue en 200 y el cuerpo dice null (nunca un 0 inventado)', async () => {
+    purgaCartaPorte.mockRejectedValue(new Error('base caída'));
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect((await res.json()).cartaPorteDocs).toBeNull();
+    expect(logger.error).toHaveBeenCalledWith('cron.purgar.carta_porte_docs_excepcion', expect.objectContaining({ error: 'base caída' }));
+  });
+
+  it('con el interruptor global apagado ni se intenta', async () => {
+    estaApagado.mockResolvedValue(true);
+    await GET(peticion('Bearer secreto-de-prueba'));
+    expect(purgaCartaPorte).not.toHaveBeenCalled();
   });
 });

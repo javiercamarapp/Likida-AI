@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { registrarLatido, puertaCron } from '@/lib/admin/salud';
+import { purgarDocumentosVencidos } from '@/lib/likida/carta_porte_docs/retencion';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -398,6 +399,19 @@ export async function GET(req: Request) {
       await alertarOperador('cron.purgar.llm_presupuesto', { error });
     }
 
+    // ── CARTA PORTE MULTI-FORMATO (mig. 0420): documentos de clientes vencidos ──
+    // El archivo y el texto del documento (datos personales de terceros) se borran al vencer
+    // `retener_hasta`; la fila queda de constancia. Su fallo NO tumba la corrida —las purgas de arriba
+    // ya corrieron— y se queda en el log: la corrida de mañana lo reintenta (si el archivo no se pudo
+    // borrar, la fila NO se marca purgada). `null` en el cuerpo = no se pudo, dicho; jamás un 0 inventado.
+    let cartaPorteDocs: Awaited<ReturnType<typeof purgarDocumentosVencidos>> | null = null;
+    try {
+      cartaPorteDocs = await purgarDocumentosVencidos(100);
+      if (cartaPorteDocs.fallidos > 0) logger.warn('cron.purgar.carta_porte_docs_con_fallos', { ...cartaPorteDocs });
+    } catch (e) {
+      logger.error('cron.purgar.carta_porte_docs_excepcion', { error: e instanceof Error ? e.message : String(e) });
+    }
+
     // 0332 separa la señal de las purgas restantes: si conversación/códigos
     // ya se drenaron fuera de la RPC, no conservamos un `parcial` obsoleto de
     // la última tanda de mantenimiento. En rollout sobre una BD anterior se
@@ -407,7 +421,7 @@ export async function GET(req: Request) {
     const estado = erroresRetencion0104.length > 0 || productoEventoError !== null
       ? 'fallo'
       : parcialGlobal ? 'parcial' : 'ok';
-    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto };
+    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs };
     if (estado === 'fallo') logger.error('cron.purgar.retencion_0104_incompleta', detalleFinal);
     else if (estado === 'parcial') logger.warn('cron.purgar.incompleta', detalleFinal);
     else logger.info('cron.purgar.ok', detalleFinal);
@@ -420,7 +434,7 @@ export async function GET(req: Request) {
       productoEventoError,
     });
     return NextResponse.json(
-      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto },
+      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs },
       { status: estado === 'fallo' ? 500 : 200 },
     );
   } catch (e) {

@@ -3,7 +3,9 @@ import { logger } from '@/lib/logger';
 import { cuerpoAcotado } from '../_cuerpo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { verificarFirma, mensajeDeRechazo } from '@/lib/correo/firma_entrante';
-import { tokenDeDestinatarios } from '@/lib/correo/buzon';
+import { tokenDeDestinatarios, dominioBuzon } from '@/lib/correo/buzon';
+import { atenderCorreoCartaPorte, tokenCpDeDestinatarios } from '@/lib/likida/carta_porte_docs/correo_entrante';
+import { descargadorResend } from '@/lib/likida/carta_porte_docs/resend';
 import { direccionDeCampana, esRespuestaACampana, procesarRespuestaCampana } from '@/lib/correo/respuesta_campana';
 import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
 import { parseRepXml, ingerirRep } from '@/lib/likida/intake/rep';
@@ -137,6 +139,22 @@ export async function POST(req: Request) {
   // Del DESTINATARIO, jamás del remitente. Y se miran `to` y `cc` porque un
   // reenvío suele poner nuestro buzón en copia.
   const destinatarios = [...(d.to ?? []), ...(d.cc ?? [])];
+
+  // ── CARTA PORTE MULTI-FORMATO (Agente 3, mig. 0420) ──────────────────────
+  // El buzón `cp-<token>@…` es OTRO canal que comparte este webhook (mismo dominio, misma firma
+  // Svix, ya verificada arriba). La flota sale del token del DESTINATARIO, igual que en el buzón de
+  // facturas. Va ANTES del buzón de facturas: un correo a `cp-…` jamás se lee como factura.
+  const tokenCp = tokenCpDeDestinatarios(destinatarios, dominioBuzon());
+  if (tokenCp) {
+    const finCp = Date.now() + (maxDuration * 1000 - 3_000);
+    const restanteCp = () => finCp - Date.now();
+    const r = await atenderCorreoCartaPorte(
+      tokenCp,
+      { emailId, from: d.from, subject: d.subject, text: d.text, html: d.html, attachments: d.attachments },
+      { descargar: descargadorResend(process.env.RESEND_API_KEY ?? '', restanteCp), restanteMs: restanteCp },
+    );
+    return NextResponse.json(r.cuerpo, { status: r.status });
+  }
   const token = tokenDeDestinatarios(destinatarios);
   if (!token) {
     // ── LA RESPUESTA DE CAMPAÑA (c5-2) ─────────────────────────────────────

@@ -113,6 +113,11 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // de ruta ("¿pisa federal?") es del jefe de tráfico — la regla 2.7.7.2.1
   // exige plena certeza de quien CONOCE la ruta, no del que ve el dinero.
   '/dashboard/carta-porte': 'operacion',
+  // Documentos de clientes grandes (Agente 3, mig. 0420): la bandeja donde una persona revisa lo que el agente
+  // leyó de un PDF/foto/Excel/XML/correo. Mismo criterio que /dashboard/carta-porte: cero pesos del negocio y su
+  // usuario diario es el jefe de tráfico. La revisión (/dashboard/carta-porte/documentos/<uuid>) es dinámica y se
+  // gatea con esta llave.
+  '/dashboard/carta-porte/documentos': 'operacion',
   // El Agente de Conductores (F4) es agente de operación: no toca un peso y
   // su usuario diario es el jefe de tráfico. Sus hermanos
   // (liquidación/facturas/cobranza) siguen en dinero.
