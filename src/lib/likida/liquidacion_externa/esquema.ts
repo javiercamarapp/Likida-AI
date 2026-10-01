@@ -25,7 +25,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { createHash } from 'node:crypto';
-import { CampoInvalido, texto, uuid, fecha, monto } from '@/app/api/v1/_escritura';
+import { CampoInvalido, texto, uuid, fecha, monto } from '@/lib/http/campos_cuerpo';
 import { normalizarTelefonoOperador } from '../administracion';
 import { DatoInvalido } from '../errores';
 

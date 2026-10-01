@@ -73,6 +73,13 @@ import { join, relative } from 'node:path';
  * firma). Funcionalidad nueva, no código migrado; `intake/desglose_peaje.ts`
  * (ya fuera de la frontera) suma 4 llamadas por la lectura de TAGs y el barrido.
  *
+ * LOOP PUNTA A PUNTA (1-oct-2026), integración — 258 → 259 archivos y 1,344 →
+ * 1,347 llamadas, medido tras fusionar las ramas de WhatsApp y de agentes 1-2:
+ * el módulo nuevo es `lib/likida/wa_ventana.ts` (Agente WhatsApp), que junta en
+ * UN archivo el acceso a la ventana de 24 h por contacto (mig. 0360: RPC de
+ * registrar_entrante_wa / ventana_estado_wa y el registro de decisiones de envío).
+ * Funcionalidad nueva, no código migrado.
+ *
  * AUDITORÍA 28, ARQ-M1 (LA UNIDAD EQUIVOCADA): hasta aquí el techo vivía en
  * ARCHIVOS — y con 252 archivos medidos contra un techo de 252, este guardia
  * llevaba CERO margen: cualquier archivo nuevo con un solo `.from(`/`.rpc(`
@@ -93,8 +100,8 @@ import { join, relative } from 'node:path';
  * pestañear deja de medir nada — igual que el de arriba, se sube a mano, en
  * el commit que explica por qué.
  */
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 258;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_344;
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 259;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_347;
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
 
