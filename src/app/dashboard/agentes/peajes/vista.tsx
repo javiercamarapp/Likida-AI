@@ -1,9 +1,10 @@
 import Link from 'next/link';
-import { Scale, ArrowRight, Inbox, CircleCheck, CircleAlert, CircleSlash, FileDown, FileSpreadsheet } from 'lucide-react';
+import { Scale, ArrowRight, Inbox, CircleCheck, CircleAlert, CircleSlash, FileDown, FileSpreadsheet, Settings2 } from 'lucide-react';
 import type { ConciliacionConsolidado, ColaPorConciliar, DesgloseRecibido } from '@/lib/likida/analytics';
 // SOLO tipos: el módulo importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ResumenDesglose, DetalleDesglose, LineaDesgloseVista } from '@/lib/likida/intake/desglose_peaje';
 import type { ResumenEvidenciaGps, EvidenciaGpsLinea } from '@/lib/likida/peajes/evidencia_gps';
+import type { ResumenVerificacion } from '@/lib/likida/peajes/verificacion';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { EstadoVacio } from '@/app/admin/ui/kit';
@@ -40,7 +41,7 @@ import { BotonConciliar, type AccionConciliar } from './conciliar-desglose';
  */
 export function VistaAgentePeajes({
   conciliacion, lineas, desgloses, peajeAcreditable, sufijo, subirDesglose, ejecutarAhora,
-  desglosesProveedor, desgloseSeleccionado, detalleSeleccionado, evidenciaGps, importarDesglose, conciliarDesglose,
+  desglosesProveedor, desgloseSeleccionado, detalleSeleccionado, evidenciaGps, verificacion, importarDesglose, conciliarDesglose,
   notificaciones,
 }: {
   conciliacion: ConciliacionConsolidado | null;
@@ -63,6 +64,8 @@ export function VistaAgentePeajes({
   /** Evidencia GPS del desglose seleccionado (post-plan-maestro #1). null =
    *  no se pudo leer — y se dice, en vez de un cero que parecería medición. */
   evidenciaGps: { resumen: ResumenEvidenciaGps; porLinea: Record<string, EvidenciaGpsLinea> } | null;
+  /** El estado conciliado del desglose abierto (cuadra / sin respaldo / por verificar). null = no se pudo leer. */
+  verificacion: { resumen: ResumenVerificacion; sinEvaluarGps: number } | null;
   importarDesglose: AccionImportar;
   conciliarDesglose: AccionConciliar;
   /** La sección de Notificaciones, ya renderizada en el servidor
@@ -198,11 +201,20 @@ export function VistaAgentePeajes({
             <h2 className="font-display text-[15px] font-semibold mb-1">Desglose del proveedor de peaje</h2>
             <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
               El Excel/CSV (o PDF con texto) que IAVE, PASE, TeleVía o el convenio directo mandan
-              cada corte. El agente lo cruza contra los gastos de caseta de los viajes — por fecha
-              (±1 día) y monto — y separa tres cubetas: cuadra, con discrepancia, sin contraparte.
-              De lo que cuadra sale la bitácora de la RMF 9.1.8. (El cruce contra el GPS del TMS es
-              v2: requiere acceso al TMS del cliente; hoy se cruza contra lo que Likida ya registró.)
+              cada corte — a mano aquí, o solo por el buzón firmado (ver Configuración). El agente lo
+              cruza contra los gastos de caseta de los viajes — por fecha (±1 día) y monto, usando el
+              TAG de cada unidad para desempatar — y, cuando hay catálogo de casetas con coordenadas y
+              la unidad tiene GPS, valida con la hora del cobro que la unidad estuvo en la caseta.
+              Cada línea queda <b>cuadra</b>, <b>sin respaldo</b> o <b>por verificar</b>: lo que el dato
+              no alcanza a afirmar no se acusa. De lo que cuadra sale la bitácora de la RMF 9.1.8.
             </p>
+            <div className="mb-3">
+              <Link href={`/dashboard/agentes/peajes/configuracion${sufijo}`}
+                className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg hairline transition-colors hover:bg-[var(--canvas)]"
+                style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+                <Settings2 width={13} height={13} strokeWidth={2} /> Configuración: TAGs, casetas, geocercas, mapeo de columnas y buzón
+              </Link>
+            </div>
             <SubirDesgloseProveedor importar={importarDesglose} />
 
             {desglosesProveedor === null ? (
@@ -266,7 +278,13 @@ export function VistaAgentePeajes({
                           La bitácora RMF 9.1.8 se habilita cuando al menos una línea cuadre.
                         </span>
                       )}
+                      <a href={`/api/export/bitacora-conciliada?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
+                        className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg hairline transition-colors hover:bg-[var(--canvas)]"
+                        style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+                        <FileDown width={13} height={13} strokeWidth={2} /> Bitácora conciliada (CSV)
+                      </a>
                     </div>
+                    <EstadoConciliado v={verificacion} />
                     {detalleSeleccionado === null ? (
                       <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
                         No se pudo leer el detalle de este desglose ahora mismo.
@@ -363,6 +381,28 @@ const EVIDENCIA_LEGIBLE: Record<string, string> = {
 
 /** El renglón chico bajo cada línea: viaje, diferencia medida, porqué y
  *  evidencia GPS — separados por «·» SOLO entre partes presentes. */
+/** El estado conciliado del desglose: tres cubetas honestas, con el dinero de cada una. */
+function EstadoConciliado({ v }: { v: { resumen: ResumenVerificacion; sinEvaluarGps: number } | null }) {
+  if (v === null) {
+    return <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>No se pudo calcular el estado conciliado ahora mismo.</p>;
+  }
+  const r = v.resumen;
+  return (
+    <div className="mb-3">
+      <div className="grid grid-cols-3 gap-2">
+        <Kpi titulo="Cuadran" valor={numero(r.cuadra)} nota={mxn(r.montoCuadra)} />
+        <Kpi titulo="Por verificar" valor={numero(r.porVerificar)} nota={`${mxn(r.montoPorVerificar)} · el dato no alcanza o hay una señal`} tono={r.porVerificar > 0 ? 'warn' : undefined} />
+        <Kpi titulo="Sin respaldo" valor={numero(r.sinRespaldo)} nota={`${mxn(r.montoSinRespaldo)} · no es acusación`} tono={r.sinRespaldo > 0 ? 'bad' : undefined} />
+      </div>
+      {v.sinEvaluarGps > 0 && (
+        <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
+          {numero(v.sinEvaluarGps)} líneas no tienen evaluación GPS (el cruce es anterior a la hora del cobro): pulsa «Conciliar» para evaluarlas.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function MetaLinea({ linea, evidencia }: { linea: LineaDesgloseVista; evidencia?: EvidenciaGpsLinea }) {
   const partes: React.ReactNode[] = [];
   if (linea.viajeFolio) partes.push(<span key="v">viaje {linea.viajeFolio}</span>);
