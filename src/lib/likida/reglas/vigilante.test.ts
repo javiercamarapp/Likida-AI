@@ -16,7 +16,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //      medida. Ni una cifra redactada.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const sendText = vi.hoisted(() => vi.fn(async () => 'wamid.OK' as string | null));
+const OK_ENVIO = { ok: true, via: 'texto', id: 'wamid.OK', motivo: 'ventana_abierta', ventana: 'abierta' };
+const KO_ENVIO = { ok: false, motivo: 'plantilla_rechazada', mensaje: 'La plantilla no está aprobada', fueraDeVentana: true, reintentable: false, ventana: 'cerrada' };
+// El selector (enviarConFallback) sustituye al `enviarConFallback` directo: texto dentro
+// de la ventana, plantilla `regla_aviso_v1` fuera. Aquí se prueba el CONTRATO del
+// vigilante (mandar primero, sellar después); el selector tiene sus propias pruebas.
+const enviarConFallback = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => OK_ENVIO as Record<string, unknown>));
 const telefonoJefeDe = vi.hoisted(() => vi.fn(async () => '5210000000001' as string | null));
 const telefonoParaDineroDe = vi.hoisted(() => vi.fn(async () => '5210000000002' as string | null));
 const logger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
@@ -27,7 +32,7 @@ const sellosDe = vi.hoisted(() => vi.fn(async () => new Set<string>()));
 const sellarDisparos = vi.hoisted(() => vi.fn(async () => {}));
 const anotarCorrida = vi.hoisted(() => vi.fn(async () => {}));
 
-vi.mock('@/lib/meta/client', () => ({ sendText }));
+vi.mock('@/lib/meta/enviar_con_fallback', () => ({ enviarConFallback }));
 vi.mock('../contactos', () => ({ telefonoJefeDe, telefonoParaDineroDe }));
 vi.mock('@/lib/logger', () => ({ logger }));
 vi.mock('./lectores', () => ({ evaluar }));
@@ -56,7 +61,7 @@ const REGLA_OPERACION = {
 const DISPARO = { objeto: 'gasto' as const, objetoId: 'g-1', clave: '', evidencia: '$3,500.00 de casetas el 2026-08-27' };
 
 beforeEach(() => {
-  sendText.mockReset().mockResolvedValue('wamid.OK');
+  enviarConFallback.mockReset().mockResolvedValue(OK_ENVIO);
   telefonoJefeDe.mockReset().mockResolvedValue('5210000000001');
   telefonoParaDineroDe.mockReset().mockResolvedValue('5210000000002');
   evaluar.mockReset().mockResolvedValue([]);
@@ -99,10 +104,14 @@ describe('el barrido', () => {
     const r = await vigilarReglas(AHORA);
 
     expect(r).toEqual({ reglas: 1, disparadas: 1, avisos: 1, fallos: 0 });
-    expect(sendText).toHaveBeenCalledWith('5210000000002', expect.stringContaining('$3,500.00'));
+    expect(enviarConFallback).toHaveBeenCalledWith('5210000000002', expect.objectContaining({
+      texto: expect.stringContaining('$3,500.00'),
+      plantilla: expect.objectContaining({ nombre: 'regla_aviso_v1', parametros: expect.arrayContaining(['1']) }),
+      tenantId: 't-1',
+    }));
     expect(sellarDisparos).toHaveBeenCalledWith('t-1', 'r-1', [DISPARO]);
     // El orden es el contrato: primero el envío, después el sello.
-    expect(sendText.mock.invocationCallOrder[0]).toBeLessThan(sellarDisparos.mock.invocationCallOrder[0]);
+    expect(enviarConFallback.mock.invocationCallOrder[0]).toBeLessThan(sellarDisparos.mock.invocationCallOrder[0]);
     expect(anotarCorrida).toHaveBeenCalledWith('t-1', 'r-1', AHORA, 1);
   });
 
@@ -119,7 +128,7 @@ describe('el barrido', () => {
     evaluar.mockResolvedValue([DISPARO]);
     sellosDe.mockResolvedValue(new Set(['gasto|g-1|']));
     const r = await vigilarReglas(AHORA);
-    expect(sendText).not.toHaveBeenCalled();
+    expect(enviarConFallback).not.toHaveBeenCalled();
     expect(r).toEqual({ reglas: 1, disparadas: 0, avisos: 0, fallos: 0 });
     expect(anotarCorrida).toHaveBeenCalledWith('t-1', 'r-1', AHORA, 0);
   });
@@ -137,7 +146,7 @@ describe('el barrido', () => {
     evaluar.mockResolvedValue([]);
     const r = await vigilarReglas(AHORA);
     expect(sellosDe).not.toHaveBeenCalled();
-    expect(sendText).not.toHaveBeenCalled();
+    expect(enviarConFallback).not.toHaveBeenCalled();
     expect(r).toEqual({ reglas: 1, disparadas: 0, avisos: 0, fallos: 0 });
   });
 
@@ -147,7 +156,7 @@ describe('el barrido', () => {
       DISPARO, { ...DISPARO, objetoId: 'g-2', evidencia: '$9,000.00 de casetas' },
     ]);
     const r = await vigilarReglas(AHORA);
-    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(enviarConFallback).toHaveBeenCalledTimes(1);
     expect(r.avisos).toBe(2);
     expect(r.disparadas).toBe(1);
   });
@@ -157,7 +166,7 @@ describe('lo que NO se sella', () => {
   it('si el WhatsApp no salió: no hay sello, y la corrida cuenta el fallo', async () => {
     reglasActivas.mockResolvedValue([REGLA_DINERO]);
     evaluar.mockResolvedValue([DISPARO]);
-    sendText.mockResolvedValue(null);
+    enviarConFallback.mockResolvedValue(KO_ENVIO);
     const r = await vigilarReglas(AHORA);
     expect(sellarDisparos).not.toHaveBeenCalled();
     expect(r.fallos).toBe(1);
@@ -169,7 +178,7 @@ describe('lo que NO se sella', () => {
     evaluar.mockResolvedValue([DISPARO]);
     telefonoParaDineroDe.mockResolvedValue(null);
     const r = await vigilarReglas(AHORA);
-    expect(sendText).not.toHaveBeenCalled();
+    expect(enviarConFallback).not.toHaveBeenCalled();
     expect(sellarDisparos).not.toHaveBeenCalled();
     expect(r.fallos).toBe(1);
     // Es un problema de configuración que se arregla en un minuto: se dice.
@@ -185,7 +194,7 @@ describe('aislamiento entre reglas y entre flotas', () => {
       .mockResolvedValueOnce([{ ...DISPARO, objeto: 'viaje', objetoId: 'v-9', clave: 'c' }]);
     const r = await vigilarReglas(AHORA);
     expect(r).toEqual({ reglas: 2, disparadas: 1, avisos: 1, fallos: 1 });
-    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(enviarConFallback).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledWith('reglas.regla_fallo', expect.objectContaining({ regla: 'r-1' }));
   });
 
