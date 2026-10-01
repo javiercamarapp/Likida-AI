@@ -56,4 +56,13 @@ describe('BotonConfirmar', () => {
     expect(html).toMatch(/<button type="submit"[^>]*>Borrar<\/button>/);
     expect(html).toContain('Quedarán 12 operadores sin patio.');
   });
+
+  it('el botón que confirma puede decir CUÁL salida del formulario eligió (name/value)', () => {
+    const html = renderToStaticMarkup(
+      <form action="/x">
+        <BotonConfirmar etiqueta="Importar" titulo="t" descripcion="d" etiquetaConfirmar="Sí, importar" nombreConfirmar="paso" valorConfirmar="confirmar" tono="normal" />
+      </form>,
+    );
+    expect(html).toMatch(/<button type="submit" name="paso" value="confirmar"[^>]*>Sí, importar<\/button>/);
+  });
 });
