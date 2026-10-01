@@ -41,8 +41,8 @@ export const esUuid = (s: string | null | undefined): s is string => !!s && UUID
 // ── La firma ────────────────────────────────────────────────────────────────
 
 /** El secreto maestro, o null si falta o es corto (< 32 caracteres: no es un secreto). */
-export function secretoMaestro(env: Record<string, string | undefined> = process.env): string | null {
-  const s = env.PEAJES_INGESTA_SECRETO;
+export function secretoMaestro(env?: Record<string, string | undefined>): string | null {
+  const s = env ? env.PEAJES_INGESTA_SECRETO : process.env.PEAJES_INGESTA_SECRETO;
   return s && s.length >= 32 ? s : null;
 }
 
@@ -53,7 +53,7 @@ export function claveDeFlota(secreto: string, tenantId: string, rotacion: number
 
 /** Lo que firma el cliente: `v1=<hex>` sobre `${timestamp}.${flota}.${cuerpo}`. */
 export function firmarIngesta(clave: string, tenantId: string, timestampSeg: number | string, cuerpo: string): string {
-  const h = createHmac('sha256', Buffer.from(clave, 'hex')).update(`${timestampSeg}.${tenantId.toLowerCase()}.${cuerpo}`, 'utf8').digest('hex');
+  const h = createHmac('sha256', clave).update(`${timestampSeg}.${tenantId.toLowerCase()}.${cuerpo}`, 'utf8').digest('hex');
   return `v1=${h}`;
 }
 

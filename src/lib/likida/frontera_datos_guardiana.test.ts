@@ -60,6 +60,19 @@ import { join, relative } from 'node:path';
  * `consultas_admin_filtran_tenant.test.ts` tiene que poder exentar SOLO esa sin
  * exentar el resto. Funcionalidad nueva, no código migrado.
  *
+ * LOOP PUNTA A PUNTA (1-oct-2026), Agente 2 «conciliación de peajes» — 254 → 258
+ * archivos y 1,328 → 1,344 llamadas (medido con el barrido completo contra el
+ * mismo commit base: 254 archivos y 1,302 llamadas; el techo de llamadas ya traía
+ * 26 de margen y el resto lo consume este agente). Cuatro módulos nuevos, todos
+ * con una razón para no caber en `repo.ts`: `peajes/datos.ts` (los catálogos de
+ * la flota —TAGs, casetas, geocercas, mapeos, buzón— y la lectura de posiciones
+ * por ventana, todo en UN archivo en vez de uno por tabla),
+ * `peajes/ingesta.ts` (la cola de archivos y su claim con lease/token),
+ * `peajes/bitacora_conciliada.ts` (la lectura paginada del export) y
+ * `api/peajes/ingesta/route.ts` (la config del buzón antes de verificar la
+ * firma). Funcionalidad nueva, no código migrado; `intake/desglose_peaje.ts`
+ * (ya fuera de la frontera) suma 4 llamadas por la lectura de TAGs y el barrido.
+ *
  * AUDITORÍA 28, ARQ-M1 (LA UNIDAD EQUIVOCADA): hasta aquí el techo vivía en
  * ARCHIVOS — y con 252 archivos medidos contra un techo de 252, este guardia
  * llevaba CERO margen: cualquier archivo nuevo con un solo `.from(`/`.rpc(`
@@ -80,8 +93,8 @@ import { join, relative } from 'node:path';
  * pestañear deja de medir nada — igual que el de arriba, se sube a mano, en
  * el commit que explica por qué.
  */
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 254;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_328;
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 258;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_344;
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
 
