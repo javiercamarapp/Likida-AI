@@ -36,7 +36,7 @@
 
 import { envPuesta } from '../env';
 
-export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto' | 'transcripcion' | 'contador';
+export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto' | 'transcripcion' | 'contador' | 'vigia_cliente';
 
 const DEFAULTS: Record<ModelRole, string> = {
   // OCR de comprobantes (visión + JSON en una sola llamada).
@@ -156,6 +156,16 @@ const DEFAULTS: Record<ModelRole, string> = {
   // cuadre) deja la corrida de 32 preguntas en el orden de lo presupuestado
   // en 22-evaluacion.md, no en el de una corrida sin caché.
   contador: 'anthropic/claude-sonnet-5',        // $2/$10 (lectura de caché al 10%)
+  // EL VIGÍA DE SERVICIO AL CLIENTE (Agente 4, 0400): clasifica la INTENCIÓN de
+  // un mensaje de un cliente final (¿dónde va mi viaje?, ¿qué documento falta?,
+  // queja, pide humano) y, opcionalmente, pule la redacción de una respuesta que
+  // YA trae sus datos reales. El mismo Gemini barato del chat: es una
+  // clasificación de una línea en español coloquial con salida estructurada.
+  // NUNCA decide una acción ni aporta una cifra: las reglas mandan primero, la
+  // salida es un enum validado, y un texto pulido que traiga un número que no
+  // venga del dato se tira (vigia/redactor.ts). Ver el mensaje del cliente como
+  // DATO no confiable (inyección): el prompt lo dice y el código no depende de ello.
+  vigia_cliente: 'google/gemini-3.5-flash-lite', // $0.3/$2.5
 
   // ── QUÉ ROL CORRE HOY Y CUÁL NO (verificado el 23-ago-2026) ──────────────
   // Tienen llamador en producción: ocr, cuadre, chat, analisis, marketing,
@@ -194,6 +204,7 @@ const ENV_KEY: Record<ModelRole, string> = {
   piloto: 'LIKIDA_MODEL_PILOTO',
   transcripcion: 'LIKIDA_MODEL_TRANSCRIPCION',
   contador: 'LIKIDA_MODEL_CONTADOR',
+  vigia_cliente: 'LIKIDA_MODEL_VIGIA_CLIENTE',
 };
 
 /** Devuelve el slug del modelo para un rol, respetando override por env.
@@ -223,6 +234,7 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
   piloto: { temperature: 0 },                 // un formulario fiscal no se improvisa
   transcripcion: { temperature: 0 },          // se escribe lo que se oye, no se redacta
   contador: { temperature: 0 },               // una opinión fiscal no se improvisa
+  vigia_cliente: { temperature: 0 },          // se clasifica, no se improvisa
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
