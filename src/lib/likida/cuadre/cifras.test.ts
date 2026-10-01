@@ -380,3 +380,71 @@ describe('AUDITORÍA 32 c9 — SEG-32C9-C1: un monto con marca de dinero no es u
     ).toEqual([]);
   });
 })
+
+describe('AUDITORÍA 32 c10 — SEG/AG/TC-32C10-C1: la banda 1900-2099 sin marca de dinero', () => {
+  // Lo que `2d527d6` (c9) cerró fue la MITAD marcada: `$2000`, `2000 pesos`,
+  // `2050 MXN`, `$ 2000`, `$2000.50`. La mitad abierta es la ANCHA, porque es
+  // como se escribe un monto en WhatsApp: pelado. Tres auditores llegaron por
+  // separado (SEG-32C10-C1, AG-32C10-C1, TC-32C10-C1) y el orquestador lo
+  // reprodujo ejecutando este mismo archivo.
+  //
+  // El default estaba invertido en LOS DOS carriles: se borraba el año SALVO
+  // que hubiera marca de dinero. Debe borrarse SÓLO cuando hay marca de AÑO —
+  // que es la asimetría que este archivo ya declara por escrito («ante la duda
+  // se CONSERVA el número»), aplicada al revés.
+  const estado = [{ anticipo: 8000, comprobado: 6000, comprobantes: 4 }];
+  const conSaldo = (s: string) =>
+    `De tus $8,000.00 de anticipo comprobaste $6,000.00, te sobran ${s}.`;
+
+  it('el cotejo atrapa el monto PELADO de la banda, igual que el marcado', () => {
+    // Medido antes del arreglo: los tres daban `[]` — «todo respaldado» — y el
+    // texto salía verbatim al WhatsApp del chofer. `3200`, fuera de la banda,
+    // siempre se atrapó: la única diferencia era caer entre 1900 y 2099.
+    expect(cifrasSinRespaldo(conSaldo('2000'), estado)).toEqual([2000]);
+    expect(cifrasSinRespaldo(conSaldo('1950'), estado)).toEqual([1950]);
+    expect(cifrasSinRespaldo(conSaldo('2099'), estado)).toEqual([2099]);
+    expect(cifrasSinRespaldo(conSaldo('3200'), estado)).toEqual([3200]);
+  });
+
+  it('el PORTÓN también ve el monto pelado de la banda', () => {
+    // La cabecera del arreglo de la c9 afirmaba que aquí «el agujero no existe
+    // porque DINERO_EXPLICITO corre ANTES». Es cierto para los cuatro casos que
+    // enumeró y falso para el quinto: un monto pelado no tiene marca, así que
+    // DINERO_EXPLICITO no encaja y `ANIO` lo borraba antes de buscar.
+    for (const t of [
+      'Te sobran 2000 del anticipo.',
+      'Te sobran 1900 del anticipo.',
+      'Te sobran 2099 del anticipo.',
+      'Tu resultado final: 2000',
+      'Tu saldo: 1950 a tu favor.',
+    ])
+      expect(tieneCifrasDeDinero(t), t).toBe(true);
+  });
+
+  it('la banda COMPLETA, los 200 enteros, en los dos carriles', () => {
+    for (let n = 1900; n <= 2099; n++) {
+      expect(tieneCifrasDeDinero(`Te sobran ${n} del anticipo.`), `portón ${n}`).toBe(true);
+      expect(cifrasSinRespaldo(conSaldo(String(n)), estado), `cotejo ${n}`).toEqual([n]);
+    }
+  });
+
+  it('y un año de verdad SIGUE fuera de los dos carriles', () => {
+    // El contrapeso: si esto se cayera, el arreglo se pasó de largo y un folio
+    // o una cita a una norma dispararían el reemplazo. `del 2026 al 2027` entra
+    // porque es la forma en que el producto habla de un ejercicio.
+    for (const t of [
+      'El viaje VJ-2026-0847 cerró en 2026 con $6,000.00 comprobados de $8,000.00.',
+      'La RFA 2026 aplica; comprobaste $6,000.00 de $8,000.00.',
+      'La regla 2.9 de la RFA 2026 aplica; comprobaste $6,000.00 de $8,000.00.',
+    ]) {
+      expect(cifrasSinRespaldo(t, estado), t).not.toContain(2026);
+    }
+    // `01/01/2026` NO se afirma aquí: el portón ya daba `true` ANTES de este
+    // arreglo, y no por el año sino por el `01` del día, que es un número suelto
+    // de dos dígitos. Es el mismo falso positivo PRE-EXISTENTE que el bloque de
+    // la c9 documenta doce líneas arriba, y atar esta prueba a él la volvería
+    // una prueba de otro defecto. Medido antes de tocar nada.
+    for (const t of ['en 2026', 'el ejercicio 2026', 'del 2026 al 2027'])
+      expect(tieneCifrasDeDinero(t), t).toBe(false);
+  });
+});
