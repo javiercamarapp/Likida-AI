@@ -385,7 +385,7 @@ export async function evaluarGpsDeLineas(
     const filas = await traerTodo<{ linea_id: unknown; lat: unknown; lng: unknown; medida_en: unknown }>(
       (d, h) => acotada(
         supabaseAdmin().rpc('peaje_posiciones_ventana', { p_tenant: tenantId, p_ventanas: ventanas }, conteo(d))
-          .order('linea_id').order('medida_en').range(d, h),
+          .order('linea_id').order('medida_en').order('lat').order('lng').range(d, h),
         'peajes.posiciones_ventana',
       ),
       'peajes.posiciones_ventana',

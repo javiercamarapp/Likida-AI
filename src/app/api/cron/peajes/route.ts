@@ -53,7 +53,7 @@ export async function GET(req: Request) {
   try {
     // Un margen para el latido: lo que no alcance queda con su lease y el
     // siguiente cron lo recupera.
-    const r = await procesarColaPeajes({ limite: 5, venceEn: Date.now() + 100_000 });
+    const r = await procesarColaPeajes({ limite: 3, venceEn: Date.now() + 100_000 });
     logger.info('cron.peajes.ok', { ...r });
     // `fallidos` y `reintentar` son trabajo que NO terminó bien: ni «ok» ni «fallo»
     // total, que son las dos maneras de mentir aquí.
