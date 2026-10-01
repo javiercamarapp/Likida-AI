@@ -36,9 +36,12 @@ vi.mock('@/lib/likida/intake/almacen', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   subirComprobante: (...a: unknown[]) => subirComprobante(...a),
 }));
+const FOTO_DE_PRUEBA = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////';
+const descargarMedia = vi.fn(async (..._a: unknown[]): Promise<string | null> => FOTO_DE_PRUEBA);
 vi.mock('@/lib/meta/client', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   enviarSolicitudUbicacion: (...a: unknown[]) => enviarSolicitudUbicacion(...a),
+  downloadMediaAsDataUrl: (...a: unknown[]) => descargarMedia(...a),
 }));
 vi.mock('@/lib/likida/conv', async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -102,7 +105,7 @@ describe('processInbound — los hitos del chofer, cableados', () => {
   beforeEach(() => {
     salientes.length = 0;
     runAgent.mockReset(); resolveOperador.mockReset(); atenderConductor.mockReset(); atenderAcuseJefe.mockReset();
-    atenderPinConductor.mockReset(); hitoParaEvidenciaDelChofer.mockReset(); registrarEvidenciaDelChofer.mockReset(); subirComprobante.mockReset(); enviarSolicitudUbicacion.mockReset();
+    atenderPinConductor.mockReset(); hitoParaEvidenciaDelChofer.mockReset(); registrarEvidenciaDelChofer.mockReset(); subirComprobante.mockReset(); enviarSolicitudUbicacion.mockReset(); descargarMedia.mockClear();
     atenderPinConductor.mockResolvedValue(null); hitoParaEvidenciaDelChofer.mockResolvedValue(null); enviarSolicitudUbicacion.mockResolvedValue({ ok: true });
     resolveOperador.mockResolvedValue({ tenantId: 't1', operadorId: 'o1' });
     atenderConductor.mockResolvedValue(null);
@@ -245,10 +248,7 @@ describe('processInbound — los hitos del chofer, cableados', () => {
   });
 
   describe('la foto de evidencia (caption «sello», «andén», «recibido»)', () => {
-    const foto = (caption?: string) => ({
-      from: '5219993700779', type: 'image' as const, mediaId: 'media-1', text: caption, waMessageId: 'wa-foto',
-      mediaDataUrlQA: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////',
-    });
+    const foto = (caption?: string) => ({ from: '5219993700779', type: 'image' as const, mediaId: 'media-1', text: caption, waMessageId: 'wa-foto' });
     const hito = { id: 'abcdef12-0000-4000-8000-000000000001', tipo: 'salida_carga', ciclo: 1 };
 
     it('sube la foto con el pipeline del POD (nombre por hito) y registra la evidencia', async () => {
@@ -256,6 +256,7 @@ describe('processInbound — los hitos del chofer, cableados', () => {
       subirComprobante.mockResolvedValue('t1/v1/ev_abcdef12_x.jpg');
       registrarEvidenciaDelChofer.mockResolvedValue('Recibí la foto de el sello ✅');
       await processInbound(foto('sello'));
+      expect(descargarMedia).toHaveBeenCalledWith('media-1');
       expect(hitoParaEvidenciaDelChofer.mock.calls[0][0]).toMatchObject({ tenantId: 't1', operadorId: 'o1', viajeId: 'v1', caption: 'sello' });
       expect(subirComprobante).toHaveBeenCalledWith('t1', 'v1', expect.stringMatching(/^ev_abcdef12_[0-9a-f]{24}$/), expect.stringContaining('data:image'));
       expect(registrarEvidenciaDelChofer.mock.calls[0][0]).toMatchObject({
@@ -276,6 +277,16 @@ describe('processInbound — los hitos del chofer, cableados', () => {
       hitoParaEvidenciaDelChofer.mockResolvedValue({ tipo: 'sello', hito: null });
       await processInbound(foto('sello'));
       expect(salientes[0]).toMatch(/Primero dime/);
+      expect(subirComprobante).not.toHaveBeenCalled();
+      expect(descargarMedia).not.toHaveBeenCalled(); // sin hito no se paga la descarga
+      expect(registrarEvidenciaDelChofer).not.toHaveBeenCalled();
+    });
+
+    it('si la descarga de Meta falla, se le dice y no se sube ni se registra nada', async () => {
+      hitoParaEvidenciaDelChofer.mockResolvedValue({ tipo: 'sello', hito });
+      descargarMedia.mockResolvedValueOnce(null);
+      await processInbound(foto('sello'));
+      expect(salientes[0]).toMatch(/No pude descargar tu foto/);
       expect(subirComprobante).not.toHaveBeenCalled();
       expect(registrarEvidenciaDelChofer).not.toHaveBeenCalled();
     });

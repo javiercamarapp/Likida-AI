@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CONFIG_CONDUCTOR_DEFAULT } from '@/lib/likida/conductor/config';
 import { hitoVacio } from '@/lib/likida/conductor/memoria.fixture';
@@ -153,9 +152,26 @@ describe('el tablero de hitos — lo que ve el jefe de tráfico', () => {
   });
 });
 
+// El código fuente de las pantallas, como texto (sin tocar el disco con rutas armadas a mano).
+const FUENTES = {
+  ...import.meta.glob('./*.tsx', { query: '?raw', import: 'default', eager: true }),
+  ...import.meta.glob('./sitios/*.tsx', { query: '?raw', import: 'default', eager: true }),
+  ...import.meta.glob('./estadias/*.tsx', { query: '?raw', import: 'default', eager: true }),
+} as Record<string, string>;
+
 describe('CERO pesos en la pantalla del jefe de tráfico (área operación)', () => {
-  it.each(['tablero-hitos.tsx', 'acciones-forma.tsx', 'sitios/vista.tsx', 'sitios/formas.tsx', 'estadias/vista.tsx'])('%s no formatea dinero', (archivo) => {
-    const fuente = readFileSync(new URL(`./${archivo}`, import.meta.url), 'utf8');
-    expect(fuente).not.toMatch(/\bmxn\(|\busd\(|formato="mxn"|formato="usd"|montoPropuesto|tarifaHora/);
+  const pantallas = Object.entries(FUENTES).filter(([ruta]) => !ruta.includes('.test.'));
+
+  it('se está escaneando el código de TODAS las pantallas nuevas (no una lista vacía)', () => {
+    const nombres = pantallas.map(([ruta]) => ruta);
+    for (const esperado of ['./tablero-hitos.tsx', './acciones-forma.tsx', './sitios/vista.tsx', './sitios/formas.tsx', './estadias/vista.tsx']) {
+      expect(nombres, `falta ${esperado}`).toContain(esperado);
+    }
+  });
+
+  it.each(pantallas.map(([ruta]) => ruta))('%s no formatea dinero', (ruta) => {
+    expect(FUENTES[ruta]).not.toMatch(/\bmxn\(|\busd\(|formato="mxn"|formato="usd"/);
+    // Las VISTAS tampoco reciben los campos de dinero (la página solo arma un resumen vacío para cumplir el tipo).
+    if (!ruta.endsWith('page.tsx')) expect(FUENTES[ruta]).not.toMatch(/montoPropuesto|tarifaHora/);
   });
 });
