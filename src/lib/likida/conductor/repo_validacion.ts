@@ -531,3 +531,20 @@ export async function leerViajeConHitos(tenantId: string, viajeId: string): Prom
   return { viaje: filaAViajeTablero(f), hitos };
 }
 
+
+/**
+ * Los hitos resueltos de un chofer cuyo MENSAJE cae en [desde, hasta): de cualquier viaje suyo (abierto o cerrado).
+ * Para la evidencia de jornada: el último hito del día. Acotado por flota Y por chofer.
+ */
+export async function leerHitosDeOperador(tenantId: string, operadorId: string, desde: Date, hasta: Date): Promise<HitoFila[]> {
+  if (!UUID.test(operadorId)) return [];
+  const rv = await acotada(supabaseAdmin().from('viaje').select('id')
+    .eq('tenant_id', tenantId).eq('operador_id', operadorId)
+    .gte('created_at', new Date(desde.getTime() - 14 * 86_400_000).toISOString()).limit(500), 'jornada.viajes');
+  const ids = ((exigir(rv as never, 'jornada.viajes') ?? []) as unknown as Fila[]).map((f) => String(f.id));
+  if (ids.length === 0) return [];
+  const filas = await traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin()
+    .from('viaje_hito').select(COLUMNAS_HITO).eq('tenant_id', tenantId).in('viaje_id', t).in('estado', ['recibido', 'validado'])
+    .gte('mensaje_en', desde.toISOString()).lt('mensaje_en', hasta.toISOString()), 'jornada.hitos') as never, 'jornada.hitos');
+  return filas.map(filaAHito);
+}

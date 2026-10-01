@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_FILAS_SITIOS, parsearCsvSitios, PLANTILLA_CSV_SITIOS } from './sitios';
+import { leerSitioManual, MAX_FILAS_SITIOS, parsearCsvSitios, PLANTILLA_CSV_SITIOS } from './sitios';
 
 const CAB = 'codigo,nombre,tipo,lat,lng,radio_m,direccion,cliente,padre';
 
@@ -145,5 +145,57 @@ describe('parsearCsvSitios', () => {
     const r = parsearCsvSitios(`${CAB}\n\nP1,Planta,planta,20.72,-103.39,300,,,\n,,,,,,,,\nP2,Otra,planta,bad,-103.39,300,,,`);
     expect(r.filas.map((f) => f.linea)).toEqual([3]);
     expect(r.errores.map((e) => e.linea)).toEqual([5]);
+  });
+});
+
+describe('leerSitioManual (el editor del panel, mismas reglas que el CSV)', () => {
+  const U1 = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d001';
+  const fd = (o: Record<string, string>) => ({ get: (k: string) => o[k] ?? null });
+  const base = { nombre: 'Planta Zapopan', tipo: 'planta', lat: '20.72', lng: '-103.39', radio_m: '300' };
+
+  it('lee un sitio válido y normaliza espacios, mayúsculas del tipo y ids', () => {
+    const r = leerSitioManual(fd({ ...base, nombre: '  Planta   Zapopan ', tipo: 'Planta', codigo: ' PL-ZAP ', direccion: 'Periférico 1', cliente_id: U1.toUpperCase() }));
+    expect(r).toEqual({ ok: { nombre: 'Planta Zapopan', tipo: 'planta', codigo: 'PL-ZAP', direccion: 'Periférico 1', lat: 20.72, lng: -103.39, radioM: 300, clienteId: U1, padreId: null } });
+  });
+
+  it('edición: trae el id', () => {
+    expect(leerSitioManual(fd({ ...base, id: U1 }))).toMatchObject({ ok: { id: U1 } });
+  });
+
+  it('NO inventa coordenadas: sin lat o lng es error', () => {
+    for (const falta of ['lat', 'lng']) {
+      const o = { ...base, [falta]: '' };
+      expect(leerSitioManual(fd(o))).toMatchObject({ error: expect.stringMatching(/No se calculan/) });
+    }
+  });
+
+  it('acepta coma decimal solo cuando es inequívoca', () => {
+    expect(leerSitioManual(fd({ ...base, lat: '20,72', lng: '-103,39' }))).toMatchObject({ ok: { lat: 20.72, lng: -103.39 } });
+    expect(leerSitioManual(fd({ ...base, lat: '1,020.72' }))).toHaveProperty('error');
+  });
+
+  it('rechaza intercambiadas, fuera de rango y fuera de México', () => {
+    expect(leerSitioManual(fd({ ...base, lat: '-103.39', lng: '20.72' }))).toMatchObject({ error: expect.stringMatching(/intercambiadas/) });
+    expect(leerSitioManual(fd({ ...base, lat: '200' }))).toHaveProperty('error');
+    expect(leerSitioManual(fd({ ...base, lat: '40.4', lng: '-3.7' }))).toMatchObject({ error: expect.stringMatching(/fuera de México/) });
+  });
+
+  it('el radio: entero entre 25 y 100,000', () => {
+    for (const r of ['', '24', '100001', '12.5', 'abc', '-30']) expect(leerSitioManual(fd({ ...base, radio_m: r })), r).toHaveProperty('error');
+    expect(leerSitioManual(fd({ ...base, radio_m: '25' }))).toHaveProperty('ok');
+  });
+
+  it('nombre, tipo, ids y topes', () => {
+    expect(leerSitioManual(fd({ ...base, nombre: '' }))).toHaveProperty('error');
+    expect(leerSitioManual(fd({ ...base, tipo: 'bodega' }))).toHaveProperty('error');
+    expect(leerSitioManual(fd({ ...base, codigo: 'x'.repeat(41) }))).toHaveProperty('error');
+    expect(leerSitioManual(fd({ ...base, direccion: 'x'.repeat(201) }))).toHaveProperty('error');
+    expect(leerSitioManual(fd({ ...base, cliente_id: 'no-uuid' }))).toHaveProperty('error');
+    expect(leerSitioManual(fd({ ...base, id: "x'; --" }))).toHaveProperty('error');
+    expect(leerSitioManual(fd({ ...base, id: U1, padre_id: U1 }))).toMatchObject({ error: expect.stringMatching(/propio padre/) });
+  });
+
+  it('hostil: valores que no son texto no pasan', () => {
+    expect(leerSitioManual({ get: () => 42 })).toHaveProperty('error');
   });
 });

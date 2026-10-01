@@ -122,3 +122,10 @@ export async function leerCandidatosValidacion(desde: Date, limite: number): Pro
     return v && v.tenantId === h.tenantId ? [{ hito: h, viaje: v }] : [];
   });
 }
+
+/** El correo de un usuario del panel por su id (llave primaria): firma la bitácora de las acciones de oficina. `null` = no existe. */
+export async function emailDeUsuario(userId: string): Promise<string | null> {
+  const res = await acotada(supabaseAdmin().from('app_user').select('email').eq('id', userId).maybeSingle(), 'conductor.email_usuario');
+  const f = exigir(res as never, 'conductor.email_usuario') as { email?: unknown } | null;
+  return f && typeof f.email === 'string' && f.email.length > 0 ? f.email : null;
+}
