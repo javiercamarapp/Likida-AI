@@ -124,7 +124,18 @@ import { join, relative, sep } from 'node:path';
 //     para LEER (trae teléfonos de personas); el PUT fusiona con la config de la
 //     flota de la credencial, un `tenant_id` en el cuerpo es 400 y la terminal
 //     de otra flota la rechaza la FK compuesta.
-const RUTAS_APP_REVISADAS = 83;
+//
+// 83 → 86 (loop punta a punta, Agente 5 «Conductor», 2.ª entrega, 2-oct-2026): tres rutas, cada una
+// con su propia puerta (`abrir()` resuelve credencial → flota → ÁREA antes de tocar un dato) —
+//   · `api/v1/estadias/route.ts` — área `dinero` (trae el monto propuesto de cobro: el jefe de tráfico,
+//     que ve operación y nada de pesos, no la lee); fechas validadas (días de México, máx. 93), filtros
+//     uuid, CSV con neutralización de fórmulas; SIEMPRE acotada al tenant de la credencial (`?tenant=` se borra
+//     en el borde) y la lectura truncada se declara;
+//   · `api/v1/sitios/route.ts` — área `operacion`, solo lectura del catálogo de la flota de la credencial;
+//   · `api/v1/viajes/[id]/sitios/route.ts` — área `administracion` + CSRF para la cookie; el sitio se resuelve
+//     (código o id) DENTRO de la flota de la credencial y el UPDATE lleva `.eq('tenant_id', …)`; «no existe» y «no es
+//     de tu flota» contestan lo mismo (404); un `tenant_id` en el cuerpo es 400.
+const RUTAS_APP_REVISADAS = 86;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
