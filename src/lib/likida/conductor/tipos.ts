@@ -14,7 +14,10 @@ export type TipoHito = typeof TIPOS_HITO[number];
 export const ESTADOS_HITO = ['esperado', 'recibido', 'validado', 'omitido', 'escalado'] as const;
 export type EstadoHito = typeof ESTADOS_HITO[number];
 
-export type FuenteHito = 'texto' | 'boton' | 'ubicacion' | 'foto' | 'sistema';
+export type FuenteHito = 'texto' | 'boton' | 'ubicacion' | 'foto' | 'sistema' | 'oficina';
+
+/** Qué papel es la foto que respalda un hito (0385). */
+export type TipoEvidencia = 'sello' | 'anden' | 'recibido' | 'otra';
 export type InterpretacionHito = 'regla' | 'boton' | 'llm' | 'ubicacion' | 'foto' | 'sistema';
 export type ValidadoPor = 'oficina' | 'gps' | 'sistema';
 

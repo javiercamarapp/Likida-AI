@@ -83,3 +83,32 @@ describe('la ventana de la flota (hora de México)', () => {
     expect(inicioDiaMx(mx('23:59')).toISOString()).toBe('2026-10-02T06:00:00.000Z');
   });
 });
+
+describe('validarConfigConductor — validación de ubicación y estadías (0385)', () => {
+  it('los defaults: valida con 150 m de tolerancia, ventana de 30 min, pide ubicación, sin alertas de estadía ni foto', () => {
+    const v = validarConfigConductor({});
+    expect('ok' in v && v.ok).toMatchObject({
+      validarUbicacion: true, toleranciaUbicacionM: 150, ventanaUbicacionMin: 30, pedirUbicacion: true,
+      estadiaAlertaCargaMin: null, estadiaAlertaDescargaMin: null, pedirFotoEvidencia: false,
+    });
+  });
+
+  it('acepta valores propios y la alerta vacía/null la apaga', () => {
+    const v = validarConfigConductor({ toleranciaUbicacionM: 0, ventanaUbicacionMin: 120, estadiaAlertaCargaMin: 180, estadiaAlertaDescargaMin: null, pedirFotoEvidencia: true });
+    expect('ok' in v && v.ok).toMatchObject({ toleranciaUbicacionM: 0, ventanaUbicacionMin: 120, estadiaAlertaCargaMin: 180, estadiaAlertaDescargaMin: null, pedirFotoEvidencia: true });
+  });
+
+  it.each<[string, Parameters<typeof validarConfigConductor>[0], RegExp]>([
+    ['tolerancia negativa', { toleranciaUbicacionM: -1 }, /tolerancia/],
+    ['tolerancia de 9 km', { toleranciaUbicacionM: 9000 }, /tolerancia/],
+    ['tolerancia con decimales', { toleranciaUbicacionM: 12.5 }, /tolerancia/],
+    ['ventana de 1 min', { ventanaUbicacionMin: 1 }, /ventana/],
+    ['ventana de 10 h', { ventanaUbicacionMin: 600 }, /ventana/],
+    ['alerta de 5 min', { estadiaAlertaCargaMin: 5 }, /alerta de estadía de carga/],
+    ['alerta de 4 días', { estadiaAlertaDescargaMin: 6000 }, /alerta de estadía de descarga/],
+    ['alerta no numérica (no se toma por «apagada»)', { estadiaAlertaCargaMin: 'pronto' as unknown as number }, /alerta de estadía de carga/],
+  ])('rechaza %s', (_n, cruda, re) => {
+    const v = validarConfigConductor(cruda);
+    expect('error' in v && v.error).toMatch(re);
+  });
+});
