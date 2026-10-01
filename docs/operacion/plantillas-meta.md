@@ -184,7 +184,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Botones:** ninguno
 
-## Plantillas nuevas, listas para enviar a aprobación (10)
+## Plantillas nuevas, listas para enviar a aprobación (12)
 
 ### `regla_aviso_v1`
 
@@ -210,7 +210,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
 - **Agente / uso:** Agente 5 — Conductor. Pedir al chofer que reporte su llegada a cargar (cita de carga próxima).
-- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Llamador en código:** src/lib/likida/conductor/ejecutor.ts
 - **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
 - **Cuerpo exacto:**
 
@@ -251,7 +251,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
 - **Agente / uso:** Agente 5 — Conductor. Confirmar la salida de la carga (y pedir la foto de la carta porte o remisión).
-- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Llamador en código:** src/lib/likida/conductor/ejecutor.ts
 - **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
 - **Cuerpo exacto:**
 
@@ -270,7 +270,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
 - **Agente / uso:** Agente 5 — Conductor. Pedir que reporte su llegada al destino de descarga.
-- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Llamador en código:** src/lib/likida/conductor/ejecutor.ts
 - **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
 - **Cuerpo exacto:**
 
@@ -290,7 +290,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
 - **Agente / uso:** Agente 5 — Conductor. Confirmar el fin de la descarga y pedir la foto del comprobante de entrega (POD).
-- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Llamador en código:** src/lib/likida/conductor/ejecutor.ts
 - **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
 - **Cuerpo exacto:**
 
@@ -309,7 +309,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
 - **Agente / uso:** Agente 5 — Conductor. Recordatorio escalonado 1 de 3: un hito del viaje sigue sin registrarse.
-- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Llamador en código:** src/lib/likida/conductor/ejecutor.ts
 - **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
 - **Cuerpo exacto:**
 
@@ -329,7 +329,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
 - **Agente / uso:** Agente 5 — Conductor. Recordatorio escalonado 2 de 3.
-- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Llamador en código:** src/lib/likida/conductor/ejecutor.ts
 - **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
 - **Cuerpo exacto:**
 
@@ -350,7 +350,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
 - **Agente / uso:** Agente 5 — Conductor. Recordatorio escalonado 3 de 3: último aviso antes de escalar al jefe de tráfico.
-- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Llamador en código:** src/lib/likida/conductor/ejecutor.ts
 - **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
 - **Cuerpo exacto:**
 
@@ -367,11 +367,50 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Botones:** «Registrar ahora» (respuesta rápida, payload `recordatorio_registrar:<viaje_id>`); «Tengo un problema» (respuesta rápida, payload `recordatorio_problema:<viaje_id>`)
 
+### `conductor_llegada_carga_sin_cita_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor. Pedir al chofer que reporte su llegada a cargar cuando el viaje NO trae cita de carga capturada.
+- **Llamador en código:** src/lib/likida/conductor/ejecutor.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, tu viaje {{2}} carga en {{3}}. Cuando llegues, toca «Ya llegué» para registrar tu llegada.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan |
+| `{{2}}` | folio | F-1042 |
+| `{{3}}` | lugar de carga | Planta Zapopan |
+
+- **Botones:** «Ya llegué» (respuesta rápida, payload `hito_llegada_carga:<viaje_id>`); «Voy con retraso» (respuesta rápida, payload `hito_retraso_carga:<viaje_id>`); «Compartir ubicación» (respuesta rápida, payload `pedir_ubicacion:<viaje_id>`)
+
+### `conductor_solicitud_regreso_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor. Preguntar al chofer si ya va de regreso (hito de regreso) después de la descarga.
+- **Llamador en código:** src/lib/likida/conductor/ejecutor.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, ya registramos tu salida de la descarga del viaje {{2}}. Cuando vayas de regreso, toca «Voy de regreso» para avisarnos.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan |
+| `{{2}}` | folio | F-1042 |
+
+- **Botones:** «Voy de regreso» (respuesta rápida, payload `hito_regreso:<viaje_id>`); «Aún no» (respuesta rápida, payload `hito_aun_no_regreso:<viaje_id>`)
+
 ### `aviso_jefe_trafico_v1`
 
 - **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
 - **Agente / uso:** Agente 5 — Conductor. Escalación al jefe de tráfico: un chofer no registró un hito tras los tres recordatorios.
-- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Llamador en código:** src/lib/likida/conductor/ejecutor.ts
 - **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
 - **Cuerpo exacto:**
 
