@@ -51,6 +51,11 @@ import {
   errorApi,
 } from '../_comun';
 
+import {
+  MAX_CONCEPTOS, MAX_VIAJES, MAX_PDF_BYTES, MAX_DIAS_PERIODO, MONEDAS, TIPOS_CONCEPTO,
+  ESTADOS as ESTADOS_LIQ_EXTERNA,
+} from '@/lib/likida/liquidacion_externa/esquema';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -601,6 +606,86 @@ function documento(servidor: string) {
       },
       schemas: {
         Error: cuerpoError,
+        // ── 0370: la liquidación que calculó el SAP/TMS del cliente ────────
+        LiquidacionExternaAlta: {
+          type: 'object',
+          description:
+            'La liquidación YA CALCULADA en tu SAP/TMS. Likida no la recalcula: solo verifica que `total` sea la suma de tus renglones (percepciones − deducciones, en centavos) y la entrega al chofer por WhatsApp. '
+            + 'Todo campo que el contrato no declare es 400 (un `totl` no se vuelve una liquidación sin total), y mandar la flota en el cuerpo también es 400: la flota sale de la credencial.',
+          properties: {
+            claveExterna: { type: 'string', maxLength: 120, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/#-]*$', description: 'El folio de ESTA liquidación en tu sistema. Es la llave de idempotencia.' },
+            sistemaOrigen: { type: 'string', maxLength: 40, description: 'Cómo se llama tu sistema (p. ej. `SAP`); aparece en el mensaje y en el PDF.' },
+            operador: {
+              type: 'object',
+              description: 'Al menos UNO de los tres. Si mandas varios, TODOS tienen que apuntar al mismo chofer, o es 400: no se adivina a quién va un pago.',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                telefono: { type: 'string', description: 'Celular mexicano; se normaliza a `52` + 10 dígitos.' },
+                numeroEmpleado: { type: 'string', maxLength: 40 },
+              },
+            },
+            viajes: { type: 'array', minItems: 1, maxItems: MAX_VIAJES, items: { type: 'string', maxLength: 40 }, description: 'Folios de los viajes que cubre. No tienen que existir en Likida (`viajesEnLikida` te dice cuántos sí).' },
+            periodo: {
+              type: 'object',
+              properties: { desde: { type: 'string', format: 'date' }, hasta: { type: 'string', format: 'date' } },
+              required: ['desde', 'hasta'],
+              description: `\`AAAA-MM-DD\`, sin hora; de a lo más ${MAX_DIAS_PERIODO} días.`,
+            },
+            conceptos: {
+              type: 'array', minItems: 1, maxItems: MAX_CONCEPTOS,
+              items: {
+                type: 'object',
+                properties: {
+                  clave: { type: 'string', maxLength: 40 },
+                  descripcion: { type: 'string', maxLength: 120 },
+                  tipo: { type: 'string', enum: [...TIPOS_CONCEPTO], description: 'El signo lo da el tipo; el monto va SIEMPRE positivo.' },
+                  monto: { type: 'number', minimum: 0, maximum: 9999999.99, description: 'Hasta dos decimales (más se rechaza, no se redondea). Un renglón sin monto NO es un renglón de cero: manda 0 si de verdad es cero.' },
+                },
+                required: ['descripcion', 'tipo', 'monto'],
+              },
+            },
+            total: { type: 'number', minimum: -9999999.99, maximum: 9999999.99, description: 'Puede ser negativo (el chofer debe). Tiene que cuadrar con los conceptos al centavo.' },
+            moneda: { type: 'string', enum: [...MONEDAS] },
+            pdf: {
+              type: 'object',
+              description: 'OPCIONAL. Sin él, Likida genera un PDF con tus cifras. Con él, se entrega EL TUYO, tal cual. Se comprueba por sus bytes (`%PDF-`, `%%EOF`, sin JavaScript ni archivos incrustados).',
+              properties: {
+                base64: { type: 'string', description: `Base64 estándar; hasta ${MAX_PDF_BYTES} bytes ya decodificado.` },
+                nombre: { type: 'string', maxLength: 80 },
+              },
+              required: ['base64'],
+            },
+          },
+          required: ['claveExterna', 'operador', 'viajes', 'periodo', 'conceptos', 'total', 'moneda'],
+        },
+        LiquidacionExterna: {
+          type: 'object',
+          description: 'Una liquidación externa y su estado de ENTREGA. Las cifras son las de tu sistema, tal cual llegaron.',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            claveExterna: { type: 'string' },
+            sistemaOrigen: anulable('string', 'El que mandaste.'),
+            operador: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, nombre: anulable('string', 'Nombre del chofer.') } },
+            viajes: { type: 'array', items: { type: 'string' } },
+            viajesEnLikida: { type: 'integer', description: 'Cuántos de esos folios existen como viaje en Likida. Menos que `viajes.length` NO es un error.' },
+            periodo: { type: 'object', properties: { desde: { type: 'string', format: 'date' }, hasta: { type: 'string', format: 'date' } } },
+            conceptos: { type: 'array', items: { type: 'object' } },
+            total: { type: 'number' },
+            moneda: { type: 'string', enum: [...MONEDAS] },
+            pdfOrigen: { type: 'string', enum: ['adjunto', 'generado'] },
+            estado: {
+              type: 'string', enum: [...ESTADOS_LIQ_EXTERNA],
+              description: '`pendiente` (recibida, aún sin encolar) → `en_cola` (en la cola de WhatsApp, que reintenta sola) → `enviada` (WhatsApp aceptó el mensaje) → `acusada` (el chofer apretó un botón). `fallida`: no se pudo entregar; se reintenta desde el panel.',
+            },
+            via: anulable('string', '`sesion` (dentro de las 24 h del último mensaje del chofer) o `plantilla` (fuera de ellas, requiere plantilla aprobada en Meta). `null` = todavía no se sabe.'),
+            fallo: anulable('object', 'Por qué falló o se está reintentando: `{ codigo, texto }`. El cuerpo crudo del error de WhatsApp NO cruza.'),
+            enviadaEn: anulable('string', 'Cuándo aceptó WhatsApp el mensaje.'),
+            respuestaChofer: anulable('string', '`recibida` o `no_coincide`. `null` = no ha contestado. **`no_coincide` pide que una persona de tu oficina revise la liquidación con el chofer.**'),
+            respuestaEn: anulable('string', 'Cuándo contestó.'),
+            creadaEn: { type: 'string', format: 'date-time' },
+          },
+          required: ['id', 'claveExterna', 'operador', 'viajes', 'viajesEnLikida', 'periodo', 'conceptos', 'total', 'moneda', 'pdfOrigen', 'estado', 'creadaEn'],
+        },
         // ── BLOQ-6 (mig. 0299): el CIERRE de un viaje, con su firma ────────
         Liquidacion: {
           type: 'object',
@@ -1148,6 +1233,70 @@ function documento(servidor: string) {
                         },
                         required: ['revision', 'significado'],
                       },
+                    },
+                    required: ['datos', 'pagina', 'filtro'],
+                  },
+                },
+              },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/liquidaciones-externas': {
+        post: {
+          operationId: 'crearLiquidacionExterna',
+          'x-likida-area': 'administracion',
+          summary: 'Entrega al chofer, por WhatsApp, una liquidación que ya calculó tu SAP/TMS.',
+          description:
+            'Requiere el área `administracion`: termina en el teléfono de una persona con la firma de su patrón.\n\n'
+            + 'LIKIDA NO RECALCULA TU LIQUIDACIÓN. Es el modo opuesto al de fotos: aquí la cifra es tuya. Lo único que se verifica es que `total` sea la suma de tus conceptos; si no cuadra es 400 con la diferencia, porque un total que no coincide con los renglones que el chofer lee es exactamente el documento que genera una queja de nómina.\n\n'
+            + 'IDEMPOTENCIA POR `claveExterna`. El mismo folio con el MISMO contenido es 200 `idempotente: true` (un reintento tras un timeout). El mismo folio con OTRO contenido es 409 `conflicto`: NO se sobrescribe, porque el chofer pudo haber visto la primera; una corrección se manda con una `claveExterna` nueva. `Idempotency-Key` es opcional aquí: si no la mandas se deriva de la clave externa.\n\n'
+            + 'EL 201 SIGNIFICA «RECIBIDA», NO «ENTREGADA». La entrega es asíncrona (cola de WhatsApp con reintentos): consulta `estado` con GET, o míralo en el tablero de Liquidación del panel. Un fallo de entrega NO convierte la recepción en error.\n\n'
+            + 'FUERA DE LAS 24 H. WhatsApp solo deja iniciar una conversación con una plantilla aprobada. Likida prueba primero el mensaje de sesión y, si WhatsApp contesta «ventana cerrada», cae a la plantilla `liquidacion_externa_v1` (ver `docs/operacion/liquidacion-externa.md`): hasta que esté aprobada en Meta, esas liquidaciones quedan `fallida` con `fallo.codigo = plantilla_no_aprobada`.\n\n'
+            + 'LO QUE NO SALE EN LA RESPUESTA: ni la ruta del PDF, ni URLs firmadas, ni el teléfono del chofer.',
+          tags: ['liquidaciones', 'dinero'],
+          parameters: [{
+            name: CABECERA_IDEMPOTENCIA, in: 'header', required: false,
+            description: `Opcional. Si la mandas, repítela EXACTA al reintentar (entre ${LARGO_MIN_LLAVE} y ${LARGO_MAX_LLAVE} caracteres ASCII imprimibles).`,
+            schema: { type: 'string', minLength: LARGO_MIN_LLAVE, maxLength: LARGO_MAX_LLAVE },
+          }],
+          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/LiquidacionExternaAlta' } } } },
+          responses: {
+            '201': seCreo('La liquidación', { $ref: '#/components/schemas/LiquidacionExterna' }),
+            '200': yaExistia('La liquidación', { $ref: '#/components/schemas/LiquidacionExterna' }),
+            ...respuestasError,
+            '409': conflictoNatural('una liquidación', '`claveExterna`'),
+          },
+        },
+        get: {
+          operationId: 'listarLiquidacionesExternas',
+          'x-likida-area': 'dinero',
+          summary: 'Las liquidaciones externas y su estado de entrega.',
+          description:
+            'Área `dinero`. De la más nueva a la más vieja, SOLO por cursor (`despues`): `desplazamiento` es 400 en esta ruta. El filtro aplicado viaja en `filtro`.\n\n'
+            + '`respuestaChofer=no_coincide` trae las que el chofer marcó como incorrectas: son las que piden a una persona.',
+          tags: ['liquidaciones', 'dinero'],
+          parameters: [
+            parametrosPagina[0], ...parametrosCursor,
+            { name: 'estado', in: 'query', required: false, description: 'Un valor desconocido es 400.', schema: { type: 'string', enum: [...ESTADOS_LIQ_EXTERNA] } },
+            { name: 'respuestaChofer', in: 'query', required: false, schema: { type: 'string', enum: ['recibida', 'no_coincide'] } },
+            { name: 'operadorId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+            { name: 'claveExterna', in: 'query', required: false, schema: { type: 'string', maxLength: 120 } },
+            { name: 'desde', in: 'query', required: false, description: 'Día de México (`AAAA-MM-DD`) de carga, inclusivo.', schema: { type: 'string', format: 'date' } },
+            { name: 'hasta', in: 'query', required: false, description: 'Día de México (`AAAA-MM-DD`) de carga, inclusivo.', schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            '200': {
+              description: 'Página de liquidaciones externas.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      datos: { type: 'array', items: { $ref: '#/components/schemas/LiquidacionExterna' } },
+                      pagina: paginaSobre,
+                      filtro: { type: 'object', description: 'Lo que se aplicó (cada campo `null` = sin filtrar por él).' },
                     },
                     required: ['datos', 'pagina', 'filtro'],
                   },

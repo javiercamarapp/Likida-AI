@@ -17,6 +17,12 @@ import { traerTodo, traerPorIds, conteo } from '../pg';
 // SÍ afirma: «hay N posiciones de esa unidad el día del cruce» (evidencia a
 // favor) o «no hay ninguna» (hueco de datos, CON su motivo exacto).
 //
+// (ACTUALIZACIÓN 1-oct-2026: el escalón espacial YA existe, aparte, en
+// `cruce_gps.ts` — Haversine contra el catálogo `peaje_caseta` en una ventana
+// de minutos alrededor de la hora del cobro, que desde la 0375 sí se guarda.
+// Esta pieza sigue siendo la evidencia POR DÍA y conserva su doctrina: no
+// acusa. Lo que sigue describe su alcance propio.)
+//
 // NO afirma «la unidad estuvo LEJOS de la caseta» — la cubeta
 // "inconsistente" del diseño (tag prestado/clonado) EXIGE la posición de la
 // caseta, y no existe catálogo oficial con lat/lng de plazas de cobro

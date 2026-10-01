@@ -42,6 +42,8 @@ const RUTA: Record<CronId, string> = {
   'descarga-sat': '/api/cron/descarga-sat',
   jornada: '/api/cron/jornada',
   'portales-vivos': '/api/cron/portales-vivos',
+  'liquidaciones-externas': '/api/cron/liquidaciones-externas',
+  peajes: '/api/cron/peajes',
 };
 
 /** Qué hace cada reloj, en una línea, para que el rojo se pueda priorizar. */
@@ -57,6 +59,8 @@ const OFICIO: Record<CronId, string> = {
   'descarga-sat': 'recoge del SAT los CFDI que el comercio ya timbró',
   jornada: 'asienta el registro de jornada del día (LFT 132-XXXIV)',
   'portales-vivos': 'comprueba que los portales de facturación sigan en pie',
+  'liquidaciones-externas': 'entrega y concilia las liquidaciones que calcula el sistema del cliente',
+  peajes: 'importa y concilia los desgloses de peaje que el proveedor mandó por el buzón firmado',
 };
 
 /**

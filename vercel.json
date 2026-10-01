@@ -50,6 +50,14 @@
     {
       "path": "/api/cron/portales-vivos",
       "schedule": "40 6 * * 1"
+    },
+    {
+      "path": "/api/cron/liquidaciones-externas",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/peajes",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

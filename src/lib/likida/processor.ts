@@ -43,6 +43,7 @@ import { puedeAsignar } from '@/lib/auth/permisos';
 import { atenderDespachoOficina } from '@/lib/likida/despacho_wa';
 import { interpretarTalacha, atenderTalachaChofer, atenderAutorizacionTalacha } from '@/lib/likida/talacha_wa';
 import { atenderCcpOficina } from '@/lib/likida/carta_porte_wa';
+import { atenderAcuseLiquidacionExterna } from '@/lib/likida/liquidacion_externa/acuse';
 import { interpretarAsistencia, atenderAsistenciaChofer, atenderReconocimientoAsistencia, atenderAsistenciaOficina, anclarUbicacionIncidencia } from '@/lib/likida/asistencia_wa';
 import { atenderCoordinacionOficina, atenderMensajeProveedor, atenderMedioProveedorSinTexto } from '@/lib/likida/asistencia_coordinacion';
 import { esCaptionPod, guardarPodDelChofer, mensajePod } from '@/lib/likida/pod_wa';
@@ -1980,6 +1981,25 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // da de alta a la flota, y el aviso se vuelve a intentar al siguiente.
       if (avisoPuesto !== 'sin_datos') await soltarClaim();
       return;
+    }
+
+    // ── EL ACUSE DE UNA LIQUIDACIÓN EXTERNA (0370) ─────────────────────────────
+    //
+    // Los dos botones del mensaje con que Likida ENTREGA la liquidación que el
+    // SAP del cliente ya calculó («Recibida» / «No coincide»). Llegan como texto
+    // con el id del botón (webhook) y se atienden AQUÍ, antes del `!viajeId`:
+    // la liquidación llega cuando el viaje ya cerró, o sea que este chofer casi
+    // nunca tiene viaje abierto, y sin esto su respuesta caería en «no tienes
+    // viaje abierto». Va DESPUÉS del aviso de privacidad (arriba): registrar su
+    // respuesta es tratar un dato suyo.
+    if (msg.type === 'text' && msg.text) {
+      const respuestaLiqExterna = await atenderAcuseLiquidacionExterna(
+        { tenantId: op.tenantId, operadorId: op.operadorId }, msg.text,
+      );
+      if (respuestaLiqExterna !== null) {
+        await sendText(msg.from, respuestaLiqExterna);
+        return;
+      }
     }
 
     if (!viajeId) {

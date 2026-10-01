@@ -11,6 +11,10 @@ export type ResumenCruce = {
   noCuadra: number;
   sinContraparte: number;
   noEscritas: number;
+  /** El cruce por caseta con el GPS (0375). Ausentes en corridas anteriores. */
+  gpsConfirma?: number;
+  gpsNoCoincide?: number;
+  gpsSinDatos?: number;
 };
 export type EstadoConciliar = { error?: string; resumen?: ResumenCruce } | null;
 export type AccionConciliar = (prev: EstadoConciliar, fd: FormData) => Promise<EstadoConciliar>;
@@ -68,6 +72,9 @@ export function BotonConciliar({ conciliar, desgloseId }: {
           <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.cuadra}</span> cuadran,{' '}
           <span className="cifra-mono">{r.noCuadra}</span> con discrepancia,{' '}
           <span className="cifra-mono">{r.sinContraparte}</span> sin contraparte
+          {r.gpsConfirma !== undefined && (
+            <> · GPS: <span className="cifra-mono">{r.gpsConfirma}</span> confirman, <span className="cifra-mono">{r.gpsNoCoincide ?? 0}</span> no coinciden, <span className="cifra-mono">{r.gpsSinDatos ?? 0}</span> sin datos</>
+          )}
           {r.noEscritas > 0 && (
             <span style={{ color: 'var(--bad)' }}> · {r.noEscritas} no se pudieron escribir — vuelve a conciliar</span>
           )}.

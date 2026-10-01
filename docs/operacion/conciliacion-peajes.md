@@ -1,0 +1,106 @@
+# Conciliación de peajes (Agente 2) — flujo, contrato y bloqueos
+
+Estado al 1-oct-2026 (loop punta a punta, rama `loop/s3-agentes12`, migraciones 0375 y 0376).
+Todo lo de abajo está construido y probado **con datos sintéticos**; lo que depende del archivo
+real de PASE, del GPS de la flota o de credenciales externas está en «Bloqueos».
+
+## Qué hace
+
+1. **Recibe** el desglose del proveedor (Excel/CSV/PDF con texto) por dos vías: subida manual en
+   `/dashboard/agentes/peajes` o **buzón firmado** `POST /api/peajes/ingesta` (el cron
+   `/api/cron/peajes`, cada 15 min, lo importa y lo cruza solo).
+2. **Lee de forma tolerante**: fechas dd/mm/aaaa, ISO y meses en español con hora (12 y 24 h), serial de
+   Excel con fracción de día, importes con coma decimal («189,50»), paréntesis negativos y CSV con `;`.
+   Un CSV nunca pasa por la librería de hojas (que leía `189,50` como 18950). Formato que no entiende =
+   mensaje con los encabezados leídos (con su letra de columna), sugerencias («¿«Improte»?») y, si se
+   quiere, **mapeo de columnas por proveedor** (por encabezado o por letra) en la pantalla de
+   configuración. Nada se adivina.
+3. **Cruza** cada línea contra los gastos de caseta (fecha ±1 día, monto exacto y luego tolerancia de $1):
+   - **Hora del cobro** guardada (`hora`, `cruce_en` en UTC con el huso real de México).
+   - **TAG ↔ unidad** (`peaje_tag`): desempata entre dos gastos igual de buenos y marca `unidad_distinta`
+     si el TAG es de otra unidad que la del viaje del gasto.
+   - **Cruce por caseta con GPS**: catálogo `peaje_caseta` con coordenadas (carga por CSV), distancia
+     Haversine entre la trayectoria de la unidad y la caseta en ±20 min del cobro. Tres veredictos:
+     `confirma`, `no_coincide` (solo con dos posiciones que envuelven el cobro a ≤ 6 min una de otra y
+     lejos de radio + margen) y `sin_datos` con su motivo exacto.
+4. **Entrega la bitácora conciliada** (`GET /api/export/bitacora-conciliada?desglose=…`, CSV con la
+   leyenda adentro): cada línea **cuadra / sin respaldo / por verificar** con el motivo.
+
+## La doctrina de «no acusar de más»
+
+| Estado | Cuándo |
+|---|---|
+| cuadra | un gasto de caseta respalda el cobro y ninguna señal lo contradice |
+| sin respaldo | hay tickets de caseta cargados en el periodo, ninguno respalda este cobro y el GPS (si existe) tampoco lo confirma. Es un hecho sobre los datos de Likida: **no** afirma que el cobro sea indebido |
+| por verificar | todo lo demás: monto distinto, dos gastos igual de posibles, TAG de otra unidad, GPS que no ubica la unidad (aun con gasto), falta de fecha, **ningún ticket cargado en el periodo**, el GPS confirma pero falta el comprobante |
+
+Lo que el dato no alcanza (sin hora, TAG sin alta, caseta sin coordenadas, sin posiciones cerca) es
+`sin_datos` y nunca cuenta en contra de nadie. El catálogo de casetas **nace vacío**: no se siembran
+coordenadas inventadas (el shapefile del IMT está identificado en `normas/red-nacional-autopistas.yaml`
+y no se ha cargado).
+
+## Contrato del buzón firmado
+
+`POST {APP_URL}/api/peajes/ingesta` — JSON:
+
+```json
+{ "nombre": "corte-pase.xlsx", "proveedor": "PASE", "contenido_base64": "<archivo en base64, ≤ 4 MB>" }
+```
+
+Cabeceras: `x-likida-flota` (UUID de la flota), `x-likida-timestamp` (segundos Unix, ±5 min) y
+`x-likida-firma: v1=<hex>` donde `hex = HMAC-SHA256(llave, "<timestamp>.<flota>.<cuerpo crudo>")` y
+`llave` es el texto de 64 caracteres que se ve (solo quien administra la flota) en
+`/dashboard/agentes/peajes/configuracion` tras **activar el buzón**.
+
+- La llave se **deriva** de `PEAJES_INGESTA_SECRETO` (≥ 32 caracteres, variable del servidor) con la
+  flota y su rotación: no se guarda en la base; **rotar** es subir un entero y la anterior deja de servir.
+- Sin la variable, con la flota sin activar o con la flota desconocida: `401` con el mismo cuerpo que una
+  firma mala (no se revela qué existe).
+- Respuestas: `202` aceptado · `200 duplicado` (misma huella sha256: el mismo archivo es la misma fila,
+  se llame como se llame) · `400` cuerpo mal formado · `401` · `413` · `429` (límite o cola con 50
+  pendientes) · `503` (agente apagado o falla temporal: **reintentar**).
+- La flota sale **solo** de la cabecera firmada; un `tenant_id` en el cuerpo se ignora.
+
+Ejemplo de firma en Node (también en la pantalla de configuración):
+
+```js
+const firma = 'v1=' + createHmac('sha256', LLAVE).update(`${ts}.${FLOTA_ID}.${cuerpo}`).digest('hex');
+```
+
+## La cola y el cron
+
+`peaje_ingesta_archivo` (unique flota+huella) → `/api/cron/peajes` reclama con `peaje_archivo_reclamar`
+(`FOR UPDATE SKIP LOCKED` + lease de 5 min + token): dos cron simultáneos no toman el mismo archivo, un
+worker muerto suelta el suyo al vencer el lease y solo quien conserva el token cierra el archivo.
+Formato ilegible → `fallida` con el motivo (y corrida de fallo en la bitácora del agente); se reintenta desde
+la pantalla tras declarar el mapeo. Fallo de infraestructura → reintento con backoff (1, 5, 15, 30 min) y
+`fallida` al 5.º. El reproceso tras un crash no duplica el desglose (`desglose_peaje.ingesta_archivo_id`
+único).
+
+## Pruebas que existen
+
+- Postgres real: `supabase/tests/0375_peajes_conciliacion.sql` (constraints, FK compuestas, RLS deny-all,
+  claim, ventana GPS, grants, cron_latido; el claim verificado por mutación) y
+  `0375_peajes_claim_concurrencia.sh` (6 sesiones, 60 archivos, cero duplicados; la mutación sin
+  `SKIP LOCKED` la rompe). Ambas en `ci-postgres.yml`.
+- Vitest: lector tolerante con fixtures sintéticos (`src/lib/likida/peajes/fixtures/`), Haversine y
+  cruce GPS, catálogos, clasificador, cola, ruta firmada, cron, export, UI y un recorrido completo
+  (`flujo_completo.test.ts`).
+
+## BLOQUEOS (no cerrables por código)
+
+1. **El archivo REAL de PASE** (columnas, fecha y hora, formato Excel/PDF) para calibrar el lector; hoy
+   se lee por detección y por mapeo declarado, con fixtures sintéticos. Sin él no se puede afirmar que el
+   formato real entre sin mapeo.
+2. **De dónde sale el lado «gasto de caseta» con telepeaje** (CFDI consolidado de la plaza, monedero,
+   captura del chofer): si nadie carga tickets, el estado es `por verificar / sin_gastos_cargados`, nunca
+   «sin respaldo» (lo dice a propósito el clasificador).
+3. **Catálogo oficial de casetas con coordenadas** (shapefile IMT u otro): hay importador por CSV y
+   fixtures, pero ninguna coordenada real cargada.
+4. **GPS de Innovativos conectado a Likida** (proveedor desconocido, detrás de Zero Trust) o su export:
+   sin posiciones, el GPS dice `sin_datos`.
+5. `PEAJES_INGESTA_SECRETO` en Vercel y que el sistema/proveedor firme y mande el archivo (hoy no hay
+   API pública de PASE/IAVE/TeleVía; el envío lo haría un script o el TMS de la flota). Recepción por
+   correo/SFTP no se construyó.
+6. Salida a SAP: solo CSV; no hay escritura a SAP.
+7. Migraciones 0375/0376 sin aplicar a ninguna base remota (a propósito); aplicar antes de desplegar.
