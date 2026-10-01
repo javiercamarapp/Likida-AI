@@ -91,6 +91,26 @@ describe('operadores — la vista previa NO escribe', () => {
   });
 });
 
+describe('entradas hostiles al leer el archivo', () => {
+  it('un archivo con MILLONES de filas (bomba de descompresión) se lee acotado y se rechaza diciendo que rebasa el tope', async () => {
+    // Un CSV chico no es una bomba real, pero ejerce el mismo camino: más filas que el
+    // máximo de lectura. El parser se detiene en FILAS_MAX_LECTURA y el conteo es un piso.
+    const filas: string[][] = [['nombre', 'telefono']];
+    for (let i = 1; i <= 10_500; i++) filas.push([`Chofer Número ${i}`, `55${String(i).padStart(8, '0')}`]);
+    const r = await cargarOperadoresDesdeArchivo(entrada(datos(csv(filas))));
+    expect(r.excedeTope).toBe(true);
+    expect(r.avisos.join(' ')).toMatch(/10,000 o más filas y el tope es 2,000/);
+    expect(r.leidas).toBeLessThanOrEqual(2_000);
+    expect(escrituras()).toBe(0);
+  });
+
+  it('un .xlsx corrupto o un archivo que no es una hoja se rechaza con motivo, sin lanzar', async () => {
+    const r = await cargarOperadoresDesdeArchivo(entrada(datos(new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3])], 'roto.xlsx'))));
+    expect(r.error).toBeTruthy();
+    expect(escrituras()).toBe(0);
+  });
+});
+
 describe('operadores — confirmar', () => {
   it('escribe lo revisado, con su patio, y reporta lo que NO entró', async () => {
     const prev = await cargarOperadoresDesdeArchivo(entrada(datos(csv(OPS))));
