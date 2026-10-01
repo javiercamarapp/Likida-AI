@@ -88,6 +88,25 @@ begin
   end if;
 end $$;
 
+-- (f) 0462: el fallo de la invitación es coherente y no convive con un envío exitoso
+do $$
+begin
+  begin
+    update public.operador set invitacion_fallo = 'número inválido' where id = '46000000-0000-4000-8000-0000000000a3';
+    raise exception 'FALLO_0462: aceptó un motivo sin fecha';
+  exception when check_violation then null; end;
+  -- el operador del bloque (d) ya tiene la invitación reclamada: un fallo encima no entra
+  begin
+    update public.operador set invitacion_fallo = 'número inválido', invitacion_fallo_en = now()
+      where id = '46000000-0000-4000-8000-0000000000a3';
+    raise exception 'FALLO_0462: aceptó un fallo sobre una invitación enviada';
+  exception when check_violation then null; end;
+  -- soltar la invitación y registrar el fallo SÍ entra
+  update public.operador set invitacion_enviada_en = null, invitacion_via = null,
+    invitacion_fallo = 'número inválido', invitacion_fallo_en = now()
+    where id = '46000000-0000-4000-8000-0000000000a3';
+end $$;
+
 -- (b) borrar el patio: el jefe queda sin patio, vivo y en su flota
 delete from public.terminal where id = '46000000-0000-4000-8000-0000000000a2';
 do $$
