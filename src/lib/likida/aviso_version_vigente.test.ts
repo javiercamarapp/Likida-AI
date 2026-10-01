@@ -101,10 +101,39 @@ describe('ponerAvisoADisposicion reclama y confirma con la firma VIGENTE (LEG-A4
     expect(versionDespues, 'pero la firma vigente SÍ tiene que moverse').not.toBe(versionAntes);
   });
 
-  it('sin razón social/domicilio, sigue devolviendo "sin_datos" sin llamar a reclamarEnvioAviso', async () => {
+  // AUDITORÍA OLA 1, #10: la ausencia de razón social/domicilio NO bloquea al chofer
+  // desde su primer mensaje. El aviso sale con el hueco dicho.
+  it('sin razón social el aviso SALE (con el hueco dicho) y se reclama/confirma con SU versión', async () => {
+    getDatosResponsable.mockResolvedValue({ ...RESPONSABLE, razonSocial: '', nombreFlota: 'Transportes Pérez' });
+    const r = await ponerAvisoADisposicion('t1', 'o1', '5219993700779');
+    expect(r).toBe('puesto');
+    expect(reclamarEnvioAviso).toHaveBeenCalledTimes(1);
+    const texto = String(sendText.mock.calls[0][1]);
+    expect(texto).toMatch(/Transportes Pérez/);
+    expect(texto).toMatch(/razón social inscrita/);
+    expect(confirmarEnvioAviso).toHaveBeenCalledTimes(1);
+  });
+
+  it('sin domicilio tampoco bloquea', async () => {
+    getDatosResponsable.mockResolvedValue({ ...RESPONSABLE, domicilio: '' });
+    expect(await ponerAvisoADisposicion('t1', 'o1', '5219993700779')).toBe('puesto');
+  });
+
+  it('la versión del aviso con hueco es DISTINTA de la completa: al capturar los datos el chofer recibe el bueno', async () => {
     getDatosResponsable.mockResolvedValue({ ...RESPONSABLE, razonSocial: '' });
+    await ponerAvisoADisposicion('t1', 'o1', '5219993700779');
+    const versionHueco = reclamarEnvioAviso.mock.calls[0][2];
+    reclamarEnvioAviso.mockClear();
+    getDatosResponsable.mockResolvedValue(RESPONSABLE);
+    await ponerAvisoADisposicion('t1', 'o1', '5219993700779');
+    expect(reclamarEnvioAviso.mock.calls[0][2]).not.toBe(versionHueco);
+  });
+
+  it('SOLO sin flota (null) devuelve sin_datos y no manda nada', async () => {
+    getDatosResponsable.mockResolvedValue(null);
     const r = await ponerAvisoADisposicion('t1', 'o1', '5219993700779');
     expect(r).toBe('sin_datos');
     expect(reclamarEnvioAviso).not.toHaveBeenCalled();
+    expect(sendText).not.toHaveBeenCalled();
   });
 });

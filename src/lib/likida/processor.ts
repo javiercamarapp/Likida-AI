@@ -431,20 +431,25 @@ export async function ponerAvisoADisposicion(
   try {
     const datos = await getDatosResponsable(tenantId);
     if (!datos) {
-      // El tenant no tiene razón social, domicilio o liga del aviso integral.
-      // NO se manda un aviso a medias: uno con el responsable equivocado —o sin
-      // él— no dice a quién reclamarle, que es justo para lo que sirve.
+      // La flota NO EXISTE (o su fila no se pudo resolver). Un tenant sin razón
+      // social o domicilio YA NO cae aquí (auditoría ola 1, #10): su aviso sale
+      // con esos datos dichos como pendientes — ver `lineaResponsable`.
       logger.error('privacidad.tenant_sin_datos_responsable', { tenantId });
       return 'sin_datos';
+    }
+    if (!datos.razonSocial?.trim() || !datos.domicilio?.trim()) {
+      // No bloquea al chofer, pero SÍ se grita: la empresa tiene que capturarlos
+      // (/dashboard/legal) y hasta entonces el aviso sale con el hueco dicho.
+      logger.warn('privacidad.aviso_con_datos_pendientes', {
+        tenantId, sinRazonSocial: !datos.razonSocial?.trim(), sinDomicilio: !datos.domicilio?.trim(),
+      });
     }
     // AUDITORÍA 28, LEG-A4: la firma que decide si se reenvía tiene que cubrir
     // los DOS textos que el aviso promete comunicar (art. 15 fr. VI) — el
     // simplificado, que es el que SALE, y el integral, que antes podía
     // cambiar (p. ej. #401/LEG-B1, plazo de borrado de cámara) sin que ningún
     // operador con constancia recibiera nada.
-    const vigente = versionAvisoVigente(datos);
-    if (!vigente) return 'sin_datos';
-    const { texto, version } = vigente;
+    const { texto, version } = versionAvisoVigente(datos);
     // El claim vive en SQL: el primer mensaje puede llegar por dos caminos a la
     // vez, y sin él el operador recibiría el aviso dos o tres veces seguidas.
     // Ya se le puso a disposición antes: se puede tratar, y no se repite.

@@ -6,7 +6,11 @@ const d = vi.hoisted(() => ({
   sesion: { tenantId: 't-1', rol: 'flota_admin', userId: 'u-dueno' } as Record<string, unknown>,
   filas: [] as unknown[],
   lecturaFalla: false,
-  registrar: vi.fn(), revocar: vi.fn(),
+  registrar: vi.fn(), revocar: vi.fn(), guardarDatos: vi.fn(), leerDatos: vi.fn(),
+}));
+vi.mock('@/lib/legal/datos_responsable', () => ({
+  guardarDatosResponsable: (...a: unknown[]) => d.guardarDatos(...a),
+  leerDatosResponsable: (...a: unknown[]) => d.leerDatos(...a),
 }));
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => d.sesion }));
 vi.mock('next/navigation', () => ({
@@ -41,6 +45,8 @@ beforeEach(() => {
   d.lecturaFalla = false;
   d.registrar.mockResolvedValue({ ok: true, registrada: true });
   d.revocar.mockResolvedValue({ ok: true });
+  d.leerDatos.mockResolvedValue({ razonSocial: null, domicilio: null, contactoPrivacidad: null });
+  d.guardarDatos.mockResolvedValue({ ok: true });
 });
 
 describe('/dashboard/legal', () => {
@@ -112,5 +118,41 @@ describe('/dashboard/legal', () => {
     d.sesion = { tenantId: 't-1', rol: 'superadmin', userId: 'u-sa' };
     expect((await accion!(null, new FormData())).error).toMatch(/Solo el dueño/);
     expect(d.registrar).not.toHaveBeenCalled();
+  });
+
+  it('el dueño ve el formulario de datos del responsable y se le dice que el aviso SALE igual aunque falten', async () => {
+    const html = renderToStaticMarkup(await PaginaLegal(sp));
+    expect(html).toContain('Responsable de privacidad de tu flota');
+    expect(html).toContain('Guardar datos del responsable');
+    expect(html).toMatch(/sale igual/);
+  });
+
+  it('guardar datos: el tenant y el usuario salen de la SESIÓN, no del formulario', async () => {
+    const accion = accionDe(await PaginaLegal(sp), 'Guardar datos del responsable');
+    const fd = new FormData();
+    fd.set('razonSocial', 'TRANSPORTES PÉREZ SA DE CV'); fd.set('domicilio', 'Av. Itzáes 500, Mérida'); fd.set('contactoPrivacidad', 'p@perez.mx');
+    fd.set('tenantId', 'otra-flota');
+    const r = await accion!(null, fd);
+    expect(r.ok).toMatch(/Datos guardados/);
+    expect(d.guardarDatos).toHaveBeenCalledWith('t-1', {
+      razonSocial: 'TRANSPORTES PÉREZ SA DE CV', domicilio: 'Av. Itzáes 500, Mérida', contactoPrivacidad: 'p@perez.mx',
+    }, { id: 'u-dueno' });
+  });
+
+  it('guardar datos: el rechazo de validación llega a la pantalla; un contador no puede', async () => {
+    const accion = accionDe(await PaginaLegal(sp), 'Guardar datos del responsable');
+    d.guardarDatos.mockResolvedValue({ ok: false, error: 'El contacto de privacidad debe ser un correo o un teléfono de al menos 10 dígitos.' });
+    expect((await accion!(null, new FormData())).error).toMatch(/correo o un teléfono/);
+    d.guardarDatos.mockClear();
+    d.sesion = { tenantId: 't-1', rol: 'contador', userId: 'u-c' };
+    expect((await accion!(null, new FormData())).error).toMatch(/Solo el dueño/);
+    expect(d.guardarDatos).not.toHaveBeenCalled();
+  });
+
+  it('una lectura caída de los datos se dice (no se pinta un formulario vacío que pisaría lo real)', async () => {
+    d.leerDatos.mockRejectedValue(new Error('caída'));
+    const html = renderToStaticMarkup(await PaginaLegal(sp));
+    expect(html).toMatch(/No pude leer los datos de tu flota/);
+    expect(html).not.toContain('Guardar datos del responsable');
   });
 });

@@ -52,9 +52,14 @@ export type SenalGps = 'conectado' | 'sin_conector' | 'no_medible';
 
 /** Los datos de la FLOTA. Sin ellos no hay aviso: el responsable es ella. */
 export interface DatosResponsable {
-  /** Razón social tal cual está en el RFC. */
+  /** Razón social tal cual está en el RFC. Puede venir VACÍA (la flota aún no la
+   *  captura): el aviso lo dice como pendiente en vez de bloquear al titular
+   *  (auditoría ola 1, #10 — ver `lineaResponsable`). */
   razonSocial: string;
-  /** Domicilio fiscal. Art. 15 fr. I lo pide junto con la identidad. */
+  /** El nombre con el que la flota se dio de alta (`tenant.nombre`): lo único que
+   *  se puede nombrar mientras su razón social no esté capturada. */
+  nombreFlota?: string | null;
+  /** Domicilio fiscal. Art. 15 fr. I lo pide junto con la identidad. Puede venir vacío. */
   domicilio: string;
   /** Dónde vive el aviso integral. Art. 16 fr. II obliga a señalarlo. */
   urlAvisoIntegral: string;
@@ -205,8 +210,38 @@ export async function sondearAvisoIntegral(
 }
 
 /**
- * Arma el aviso simplificado, o devuelve `null` si a la flota le falta la
- * identidad del responsable.
+ * La línea de identidad del responsable (fr. I) — y qué hacer cuando la flota aún
+ * no captura su razón social o su domicilio.
+ *
+ * AUDITORÍA OLA 1, #10. Antes `avisoSimplificado` devolvía `null` sin razón social
+ * y domicilio, y el procesador lo traducía a «sin_datos»: el chofer se quedaba
+ * SIN servicio desde su primer mensaje (la foto se descartaba y se le decía que su
+ * empresa no terminó de configurar), y `/aviso/<flota>` daba 404. Es un hueco
+ * ADMINISTRATIVO de la flota, no del titular, y cobrarle al chofer el descuido de
+ * su patrón es el error contrario al que el `null` quería evitar.
+ *
+ * Lo que sigue protegiendo al titular: el aviso NO inventa a un responsable. Con
+ * los datos completos el texto es BYTE-IDÉNTICO al de siempre (así ninguna flota ya
+ * configurada recibe un reenvío); con huecos, dice qué falta y le da el camino que
+ * sí funciona: escribir PRIVACIDAD por el mismo chat, que queda registrado para la
+ * empresa. Al completarse los datos la versión del aviso cambia y el chofer recibe
+ * el bueno solo (art. 15 fr. VI).
+ */
+function lineaResponsable(razonSocial: string | undefined, domicilio: string | undefined, nombreFlota?: string | null): string {
+  if (razonSocial && domicilio) return `Responsable de tus datos: *${razonSocial}*, con domicilio en ${domicilio}.`;
+  const camino = `Mientras tanto, para ejercer tus derechos escribe PRIVACIDAD por este mismo chat: queda registrado para tu empresa.`;
+  if (razonSocial) {
+    return `Responsable de tus datos: *${razonSocial}*. Su domicilio aún no está capturado en Likida. ${camino}`;
+  }
+  const quien = nombreFlota?.trim() || 'tu empresa';
+  const falta = domicilio ? 'su razón social inscrita' : 'su razón social inscrita y su domicilio';
+  return `Responsable de tus datos: *${quien}* (la empresa para la que trabajas). Aún no están capturados en Likida ${falta}. ${camino}`;
+}
+
+/**
+ * Arma el aviso simplificado. (Antes devolvía `null` si a la flota le faltaba la
+ * identidad del responsable; desde la auditoría ola 1 #10 nunca bloquea: ver
+ * `lineaResponsable`.)
  *
  * Null y no un texto a medias: un aviso con el responsable equivocado —o sin
  * él— es peor que no tenerlo, porque justo lo que el aviso sirve para decir es a
@@ -226,10 +261,9 @@ export async function sondearAvisoIntegral(
  * distintos, así que `versionAviso` les da hash distinto. El día que la flota
  * publique su integral, el aviso bueno se reenvía solo (art. 15 fr. VI).
  */
-export function avisoSimplificado(r: DatosResponsable): string | null {
+export function avisoSimplificado(r: DatosResponsable): string {
   const razonSocial = r.razonSocial?.trim();
   const domicilio = r.domicilio?.trim();
-  if (!razonSocial || !domicilio) return null;
 
   const estado = revisarAvisoIntegral(r.urlAvisoIntegral);
   const url = r.urlAvisoIntegral?.trim();
@@ -280,7 +314,7 @@ export function avisoSimplificado(r: DatosResponsable): string | null {
     `🔒 *Aviso de privacidad*`,
     ``,
     // Fr. I — identidad y domicilio del responsable.
-    `Responsable de tus datos: *${razonSocial}*, con domicilio en ${domicilio}.`,
+    lineaResponsable(razonSocial, domicilio, r.nombreFlota),
     ``,
     // Fr. II — qué datos. En cristiano, no en abstracto: el operador tiene que
     // reconocer lo que va a mandar.
@@ -395,12 +429,11 @@ export function versionAviso(texto: string): string {
  * comunicación del cambio, y la liga es dónde leerlo completo. Lo que cambia
  * aquí es SOLO sobre qué se calcula la firma que decide SI se reenvía.
  *
- * `null` con el mismo criterio que `avisoSimplificado`: sin razón social o
- * domicilio no hay aviso que versionar.
+ * Ya no devuelve `null` (auditoría ola 1 #10): sin razón social o domicilio hay un
+ * aviso con esos datos DICHOS como pendientes, y su versión cambia al completarlos.
  */
-export function versionAvisoVigente(datos: DatosIntegral): { texto: string; version: string } | null {
+export function versionAvisoVigente(datos: DatosIntegral): { texto: string; version: string } {
   const texto = avisoSimplificado(datos);
-  if (texto === null) return null;
   // Serialización DETERMINISTA del integral: por sección, `[titulo,
   // fundamento, pendiente ? 'pendiente' : '', ...parrafos]` unidos por salto
   // de línea, y las secciones entre sí por doble salto. Nada volátil —sin
@@ -529,8 +562,12 @@ export function pideAtencionPrivacidad(texto: string): boolean {
  * que es lo que el art. 15 fr. I persigue— y se le dice que la liga no existe.
  */
 export function respuestaPrivacidad(r: DatosResponsable): string {
+  const razonSocial = r.razonSocial?.trim();
+  const domicilio = r.domicilio?.trim();
   const partes = [
-    `Claro. El responsable de tus datos es *${r.razonSocial}*, con domicilio en ${r.domicilio}.`,
+    razonSocial && domicilio
+      ? `Claro. El responsable de tus datos es *${razonSocial}*, con domicilio en ${domicilio}.`
+      : `Claro. ${lineaResponsable(razonSocial, domicilio, r.nombreFlota)}`,
     ``,
   ];
 
@@ -629,7 +666,10 @@ export interface DatosIntegral extends DatosResponsable {
  * La vista solo lo pinta.
  */
 export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
-  const razonSocial = r.razonSocial.trim();
+  const razonSocialCapturada = r.razonSocial.trim();
+  // Sin razón social capturada se nombra a la flota por su nombre de alta y la
+  // sección lo DICE y se marca pendiente (auditoría ola 1 #10): nunca un 404.
+  const razonSocial = razonSocialCapturada || r.nombreFlota?.trim() || 'Tu empresa';
   const domicilio = r.domicilio.trim();
   const contacto = r.contactoPrivacidad?.trim();
   // Mismo criterio que en `avisoSimplificado`: ausente = no medido = caso
@@ -645,9 +685,11 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
       // lo DICE y se marca pendiente — mismo criterio que el contacto del
       // art. 29 más abajo. Antes la ruta entera respondía 404, que es dejar
       // al titular sin nada por faltar un dato de la flota.
-      pendiente: !domicilio,
+      pendiente: !domicilio || !razonSocialCapturada,
       parrafos: [
-        domicilio
+        !razonSocialCapturada
+          ? `**${razonSocial}** es la empresa responsable de tus datos personales. **Su razón social inscrita${domicilio ? '' : ' y su domicilio fiscal'} aún no están capturados en Likida** — se dice aquí en vez de dejarlo en blanco o inventarlo; mientras tanto, el camino que sí funciona es escribir **PRIVACIDAD** por el mismo chat de WhatsApp: tu solicitud queda registrada para la empresa.`
+          : domicilio
           ? `**${razonSocial}**, con domicilio en ${domicilio}, es la responsable de tus datos personales. A ella le reclamas y ante ella ejerces tus derechos.`
           : `**${razonSocial}** es la responsable de tus datos personales. A ella le reclamas y ante ella ejerces tus derechos. **La empresa aún no ha capturado su domicilio fiscal** — se dice aquí en vez de dejarlo en blanco o inventar uno; mientras tanto, el camino que sí funciona es escribir **PRIVACIDAD** por el mismo chat de WhatsApp.`,
         // AUDITORÍA 18 (B6): decía "fr. XX", que es la definición de TRANSFERENCIA.

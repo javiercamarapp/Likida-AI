@@ -1294,7 +1294,7 @@ export async function getDatosResponsable(
     // renglón: pedirlo aparte sería otro viaje a la base para tres columnas que
     // ya vienen juntas — y la regla del repo es que el acceso a datos no se
     // duplique, que es el hallazgo que lleva cinco rondas subiendo.
-    .select('razon_social, domicilio_fiscal, url_aviso_privacidad, contacto_privacidad')
+    .select('nombre, razon_social, domicilio_fiscal, url_aviso_privacidad, contacto_privacidad')
     .eq('id', tenantId)
     .maybeSingle(), 'getDatosResponsable');
   if (error) throw new Error(`getDatosResponsable: ${error.message}`);
@@ -1321,8 +1321,9 @@ export async function getDatosResponsable(
     ? columna
     : `${appUrl()}/aviso/${tenantId}`;
   const r = {
-    razonSocial: (data.razon_social as string) ?? '',
-    domicilio: (data.domicilio_fiscal as string) ?? '',
+    razonSocial: ((data.razon_social as string) ?? '').trim(),
+    nombreFlota: (data.nombre as string | null) ?? null,
+    domicilio: ((data.domicilio_fiscal as string) ?? '').trim(),
     urlAvisoIntegral,
     contactoPrivacidad: (data.contacto_privacidad as string | null) ?? null,
     // Nunca lanza: sus fallos ya son `no_medible` (caso amplio) adentro.
@@ -1341,7 +1342,13 @@ export async function getDatosResponsable(
   // que hace con el contacto del art. 29. La razón social SÍ se exige: sin
   // ella el aviso no puede decir NI SIQUIERA a quién reclamarle, y eso ya no
   // es un aviso a medias — es un documento sin responsable.
-  return r.razonSocial ? r : null;
+  //
+  // AUDITORÍA OLA 1, #10: LA RAZÓN SOCIAL TAMPOCO SE EXIGE YA. Exigirla dejaba al
+  // chofer sin servicio desde su primer mensaje y a `/aviso/<flota>` en 404 por un
+  // dato que le toca capturar a su EMPRESA (hoy, en /dashboard/legal). Se devuelve
+  // lo que hay —la identidad vacía se DICE como pendiente en el texto del aviso,
+  // `lineaResponsable`— y `null` queda solo para «esta flota no existe».
+  return r;
 }
 
 /**
