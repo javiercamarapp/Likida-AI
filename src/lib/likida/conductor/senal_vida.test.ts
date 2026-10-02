@@ -6,7 +6,7 @@ import { CONFIG_CONDUCTOR_DEFAULT, type ConfigConductor } from './config';
 import type { MuestraGps, SitiosViaje } from './ciclo_gps';
 import { hitoVacio, viajeBase } from './memoria.fixture';
 import {
-  barridoSenalVida, decidirSenalVida, enTransito, evaluarSenal, silencioDeRespuesta,
+  barridoSenalVida, decidirSenalVida, enTransito, evaluarSenal, silencioDeRespuesta, avisosFallidosAlChofer, marcaAvisoChoferFallido,
   MINUTOS_DETENIDO, MINUTOS_ESCALAR, MINUTOS_GPS_OBSOLETO, MINUTOS_SEGUNDO_AVISO, TOPE_RECHAZOS_SEGUIDOS_SENAL,
   type EpisodioFila, type EstadoEpisodios, type EstadoSenal, type PuertosSenalVida,
 } from './senal_vida';
@@ -243,7 +243,38 @@ describe('barridoSenalVida', () => {
     expect(w.enviados).toHaveLength(1);
     expect(w.enviados[0]).toMatchObject({ telefono: '5219990000099', plantilla: 'aviso_jefe_senal_vida_v1', botones: ['jefe_atiendo:v1'], contexto: 'conductor.senal_vida_jefe' });
     expect(w.enviados[0].texto).toContain('maps.google.com');
-    expect(w.enviados[0].texto).toContain('Se le avisó dos veces sin respuesta');
+    expect(w.enviados[0].texto).toContain('se le avisó dos veces sin respuesta');
+  });
+
+  it('aviso 1 rechazado de forma definitiva: se anota la marca y la escalación NO dice «se le avisó dos veces»', async () => {
+    const w = mundo({ muestras: [M(100)], envio: (e) => (e.contexto.startsWith('conductor.senal_vida_n') ? { ok: false, reintentable: false, mensaje: '132001 plantilla sin aprobar' } : { ok: true }) });
+    await barridoSenalVida(w.puertos, AHORA);
+    expect(w.llamadas.fallos[0]).toMatch(/^aviso_chofer_fallido:1\|/);
+    // segundo aviso (20 min después) también rechazado; la marca conserva los dos niveles
+    const w2 = mundo({
+      muestras: [M(100)], episodio: ep({ nivelEnviado: 1, aviso1En: hace(25).toISOString(), ultimoError: w.llamadas.fallos[0] }),
+      envio: () => ({ ok: false, reintentable: false, mensaje: '132001 plantilla sin aprobar' }),
+    });
+    await barridoSenalVida(w2.puertos, AHORA);
+    expect(w2.llamadas.fallos[0]).toMatch(/^aviso_chofer_fallido:1,2\|/);
+    // escalación con ambos avisos fallidos
+    const w3 = mundo({ muestras: [M(100)], episodio: ep({ nivelEnviado: 2, aviso2En: hace(25).toISOString(), ultimoError: w2.llamadas.fallos[0] }) });
+    await barridoSenalVida(w3.puertos, AHORA);
+    expect(w3.enviados[0].texto).toContain('no se le pudo avisar por WhatsApp');
+    expect(w3.enviados[0].texto).not.toContain('se le avisó dos veces');
+  });
+
+  it('con un solo aviso fallido la escalación dice la verdad: una vez', async () => {
+    const w = mundo({ muestras: [M(100)], episodio: ep({ nivelEnviado: 2, aviso2En: hace(25).toISOString(), ultimoError: 'aviso_chofer_fallido:1|132001' }) });
+    await barridoSenalVida(w.puertos, AHORA);
+    expect(w.enviados[0].texto).toContain('solo se le pudo avisar una vez, sin respuesta');
+  });
+
+  it('un rechazo REINTENTABLE (queda en el outbox) no marca el aviso como fallido', () => {
+    expect(avisosFallidosAlChofer(null)).toBe(0);
+    expect(avisosFallidosAlChofer('algo distinto')).toBe(0);
+    expect(avisosFallidosAlChofer(marcaAvisoChoferFallido(marcaAvisoChoferFallido(null, 1, 'x'), 1, 'y'))).toBe(1);
+    expect(avisosFallidosAlChofer(marcaAvisoChoferFallido(marcaAvisoChoferFallido(null, 1, 'x'), 2, 'y'))).toBe(2);
   });
 
   it('sin a quién escalar se dice y queda anotado en el episodio (no se calla)', async () => {
@@ -287,7 +318,7 @@ describe('barridoSenalVida', () => {
     const w = mundo({ muestras: [M(100)], envio: () => ({ ok: false, reintentable: false, mensaje: 'plantilla no aprobada' }) });
     const r = await barridoSenalVida(w.puertos, AHORA);
     expect(r.avisosChofer).toBe(0);
-    expect(w.llamadas.fallos).toEqual(['plantilla no aprobada']);
+    expect(w.llamadas.fallos).toEqual(['aviso_chofer_fallido:1|plantilla no aprobada']);
     expect(r.fallos[0]).toMatch(/plantilla no aprobada/);
   });
 

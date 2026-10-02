@@ -267,7 +267,7 @@ export async function leerEpisodiosSenalVida(viajeIds: string[], ahora: Date): P
   const salida = new Map<string, EstadoEpisodios>();
   for (const ids of trozos(viajeIds, 150)) {
     const res = await acotada(supabaseAdmin().from('viaje_senal_vida')
-      .select('id, tenant_id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en, cerrado_en, silenciado_hasta')
+      .select('id, tenant_id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en, ultimo_error, cerrado_en, silenciado_hasta')
       .in('viaje_id', ids).or(`cerrado_en.is.null,silenciado_hasta.gt.${ahora.toISOString()}`).order('abierto_en', { ascending: false }).order('id').limit(ids.length * 3), 'conductor.senal_episodios');
     if (res.error) {
       if (faltaEsquema(res.error, /viaje_senal_vida/i)) return salida;

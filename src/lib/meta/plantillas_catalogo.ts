@@ -375,9 +375,9 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     nombre: 'aviso_jefe_senal_vida_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
     proposito: 'Escalación al jefe de tráfico: el chofer de un tractor en tránsito no contestó los dos avisos de «sin señal de vida». Apagado por omisión (misma perilla que el aviso al chofer).',
     llamador: 'src/lib/likida/conductor/senal_vida.ts',
-    cuerpo: 'Atención, jefe de tráfico: no hay señal de vida de {{1}} en el viaje {{2}} ({{3}}). Se le avisó dos veces sin respuesta. Última ubicación conocida: {{4}}. Llámale o revisa el tablero.',
-    ejemplos: ['Juan Pérez', 'F-1042', 'el GPS no reporta desde hace 1 hora', 'hace 52 min: https://maps.google.com/?q=20.67000,-103.35000'],
-    variables: ['chofer', 'folio', 'qué se ve', 'última ubicación conocida'],
+    cuerpo: 'Atención, jefe de tráfico: no hay señal de vida de {{1}} en el viaje {{2}} ({{3}}). Última ubicación conocida: {{4}}. Llámale o revisa el tablero.',
+    ejemplos: ['Juan Pérez', 'F-1042', 'el GPS no reporta desde hace 1 hora; se le avisó dos veces sin respuesta', 'hace 52 min: https://maps.google.com/?q=20.67000,-103.35000'],
+    variables: ['chofer', 'folio', 'qué se ve y qué pasó con los avisos al chofer', 'última ubicación conocida'],
     botones: [
       { tipo: 'QUICK_REPLY', texto: 'Ya lo atiendo', payloadPrefijo: 'jefe_atiendo' },
       { tipo: 'URL', texto: 'Abrir tablero', url: 'https://app.likida.ai/dashboard/despacho' },

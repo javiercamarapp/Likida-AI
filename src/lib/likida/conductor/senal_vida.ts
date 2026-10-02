@@ -105,6 +105,24 @@ export interface EpisodioFila {
   aviso1En: string | null;
   aviso2En: string | null;
   escaladoEn: string | null;
+  /** Último error anotado en el episodio (lleva la marca de los avisos al chofer que fallaron: `avisosFallidosAlChofer`). */
+  ultimoError?: string | null;
+}
+
+const MARCA_AVISO_FALLIDO = 'aviso_chofer_fallido:';
+
+/** Cuántos de los avisos 1 y 2 NO le llegaron al chofer por un rechazo definitivo (ventana de 24 h cerrada, plantilla sin aprobar, teléfono inválido). */
+export function avisosFallidosAlChofer(ultimoError: string | null | undefined): number {
+  if (!ultimoError?.startsWith(MARCA_AVISO_FALLIDO)) return 0;
+  const niveles = ultimoError.slice(MARCA_AVISO_FALLIDO.length).split('|')[0].split(',').filter((n) => n === '1' || n === '2');
+  return new Set(niveles).size;
+}
+
+/** El texto de `ultimo_error` tras un rechazo definitivo del aviso `nivel` al chofer: conserva la marca del nivel anterior. */
+export function marcaAvisoChoferFallido(previo: string | null | undefined, nivel: 1 | 2, mensaje: string): string {
+  const antes = previo?.startsWith(MARCA_AVISO_FALLIDO) ? previo.slice(MARCA_AVISO_FALLIDO.length).split('|')[0].split(',').filter((n) => n === '1' || n === '2') : [];
+  const niveles = [...new Set([...antes, String(nivel)])].sort().join(',');
+  return `${MARCA_AVISO_FALLIDO}${niveles}|${mensaje}`.slice(0, 200);
 }
 
 export interface EstadoEpisodios {
@@ -287,7 +305,9 @@ export async function barridoSenalVida(p: PuertosSenalVida, ahora: Date = new Da
           await p.anotarFallo(ep!, 'sin_destinatario');
           continue;
         }
-        const msg = armarEscalacionSenalVida(v, motivo, accion.minutos, await p.ubicacion(v, hs, ahora));
+        // Lo que se le dice al jefe es lo que PASÓ: si un aviso al chofer fue rechazado, «se le avisó dos veces» sería falso.
+        const avisosEntregados = 2 - Math.min(2, avisosFallidosAlChofer(ep!.ultimoError));
+        const msg = armarEscalacionSenalVida(v, motivo, accion.minutos, await p.ubicacion(v, hs, ahora), avisosEntregados);
         let entregados = 0; let reintentables = 0; let ultimoError = '';
         for (const d of destinos) {
           const envio = await p.enviar(d.telefono, msg, 'conductor.senal_vida_jefe', v.tenantId, ahora);
@@ -312,7 +332,10 @@ export async function barridoSenalVida(p: PuertosSenalVida, ahora: Date = new Da
           r.rechazosReintentables++; rechazosSeguidos++;
           r.fallos.push(`señal de vida ${v.folio ?? v.id}: ${envio.mensaje} (queda en la cola de WhatsApp; no se reenvía)`);
         } else {
-          await p.anotarFallo(ep!, envio.mensaje.slice(0, 200)); // la escalera avanza al siguiente nivel en vez de repetir el fallo
+          // La escalera avanza al siguiente nivel en vez de repetir el fallo, pero deja constancia de que ESTE aviso no llegó.
+          const marca = marcaAvisoChoferFallido(ep!.ultimoError, nivel as 1 | 2, envio.mensaje);
+          await p.anotarFallo(ep!, marca);
+          ep!.ultimoError = marca;
           r.fallos.push(`señal de vida ${v.folio ?? v.id}: ${envio.mensaje}`);
         }
       }

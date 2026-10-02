@@ -540,14 +540,14 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 - **Cuerpo exacto:**
 
   ```text
-  Atención, jefe de tráfico: no hay señal de vida de {{1}} en el viaje {{2}} ({{3}}). Se le avisó dos veces sin respuesta. Última ubicación conocida: {{4}}. Llámale o revisa el tablero.
+  Atención, jefe de tráfico: no hay señal de vida de {{1}} en el viaje {{2}} ({{3}}). Última ubicación conocida: {{4}}. Llámale o revisa el tablero.
   ```
 
 | Variable | Qué es | Ejemplo para Meta |
 | --- | --- | --- |
 | `{{1}}` | chofer | Juan Pérez |
 | `{{2}}` | folio | F-1042 |
-| `{{3}}` | qué se ve | el GPS no reporta desde hace 1 hora |
+| `{{3}}` | qué se ve y qué pasó con los avisos al chofer | el GPS no reporta desde hace 1 hora; se le avisó dos veces sin respuesta |
 | `{{4}}` | última ubicación conocida | hace 52 min: https://maps.google.com/?q=20.67000,-103.35000 |
 
 - **Botones:** «Ya lo atiendo» (respuesta rápida, payload `jefe_atiendo:<viaje_id>`); «Abrir tablero» (URL fija https://app.likida.ai/dashboard/despacho)
