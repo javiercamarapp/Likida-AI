@@ -111,7 +111,16 @@ export interface RepoVigia {
   marcarAvisoPrivacidad(tenantId: string, contactoId: string, ahora: Date): Promise<void>;
   destinatarioNivel(tenantId: string, contacto: Contacto, nivel: 1 | 2): Promise<Destinatario | null>;
 
-  conversacionesEnEspera(limite: number): Promise<FilaEnEspera[]>;
+  /**
+   * Las conversaciones que esta pasada debe mirar: sin las que ya llegaron al nivel 2 y por PRÓXIMO VENCIMIENTO (ver
+   * `seleccionarEnEspera`), no por antigüedad: así una flota con plazo corto no queda detrás de hilos que ya no avisan nada.
+   */
+  conversacionesEnEspera(limite: number, ahora: Date): Promise<FilaEnEspera[]>;
+  /**
+   * Cierra los hilos cuyo cliente lleva esperando desde antes de `antesDe` (ciclo muerto: el cliente se fue, nadie contestó, ya se
+   * escaló lo que se podía). Devuelve los cerrados. Si el cliente vuelve a escribir, abre una conversación nueva.
+   */
+  expirarCiclosInactivos(antesDe: Date, limite: number, ahora: Date): Promise<Array<{ tenantId: string; id: string }>>;
   aprobadosAtorados(antesDe: Date, limite: number): Promise<Array<{ tenantId: string; id: string }>>;
   purgar(limite: number): Promise<number>;
 

@@ -35,7 +35,7 @@ import { nombreDeAdjunto } from './adjuntos';
 import { avisarAprobacion, avisarEscalamiento, interpretarBoton, type DecisionBoton } from './avisos';
 import { clasificar } from './clasificador';
 import { esSpam, limpiarTexto } from './entrada';
-import { evaluarEscalamiento, minutosEsperando, type AccionEscalamiento } from './escalamiento';
+import { DIAS_CICLO_INACTIVO, evaluarEscalamiento, minutosEsperando, type AccionEscalamiento } from './escalamiento';
 import { resolverViaje, type ResumenViaje } from './estatus_viaje';
 import { evaluarMolestia } from './molestia';
 import { decidirEnvio } from './politica';
@@ -449,7 +449,12 @@ async function ejecutarEscalamiento(
     conversacionId: c.conv.id, tipo: 'escalada', clave: a.clave, nivel: a.nivel,
     detalle: { motivo: a.motivo, minutos: a.minutosEsperando },
   });
-  if (!nuevo) return 'duplicado';
+  if (!nuevo) {
+    // El sello ya existía pero la conversación sigue en un nivel menor: una pasada anterior murió entre el sello y la
+    // actualización. Se sube el nivel aquí; si no, el hilo se quedaría en la cola para siempre sin poder avisar.
+    await repo.actualizarConversacion(c.tenantId, c.conv.id, { escalamientoNivel: a.nivel });
+    return 'duplicado';
+  }
 
   await repo.actualizarConversacion(c.tenantId, c.conv.id, { escalamientoNivel: a.nivel, escaladoEn: ahora.toISOString() });
   if (!opciones.enviar) return 'registrado';
@@ -638,18 +643,24 @@ export interface ResultadoBarrido {
   fallosEnvio: number;
   atorados: number;
   purgadas: number;
+  /** Hilos de ciclo muerto que se cerraron (ver `DIAS_CICLO_INACTIVO`). */
+  expiradas: number;
   cortadoPorReloj: boolean;
 }
 
 /** Un aprobado sin enviar tras este tiempo se da por interrumpido (NO se reenvía: podría haber salido). */
 export const MINUTOS_APROBADO_ATORADO = 5;
 
-export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number; vencePorReloj?: number } = {}): Promise<ResultadoBarrido> {
+/**
+ * `mantenimiento: false` salta lo que no corre contra el reloj de un cliente (atorados, expiración, retención): el cron pasa cada
+ * minuto para que la alerta de 10 min salga a tiempo, y eso solo hace falta cada pocos minutos.
+ */
+export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number; vencePorReloj?: number; mantenimiento?: boolean } = {}): Promise<ResultadoBarrido> {
   const { repo } = deps;
   const ahora = ahoraDe(deps);
-  const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, cortadoPorReloj: false };
+  const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, expiradas: 0, cortadoPorReloj: false };
 
-  const filas = await repo.conversacionesEnEspera(opciones.limite ?? 100);
+  const filas = await repo.conversacionesEnEspera(opciones.limite ?? 100, ahora);
   for (const f of filas) {
     if (opciones.vencePorReloj && Date.now() >= opciones.vencePorReloj) { r.cortadoPorReloj = true; break; }
     r.revisadas += 1;
@@ -681,10 +692,22 @@ export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number;
     }
   }
 
+  if (opciones.mantenimiento === false) return r;
+
   const atorados = await repo.aprobadosAtorados(new Date(ahora.getTime() - MINUTOS_APROBADO_ATORADO * 60_000), 50);
   for (const a of atorados) {
     await repo.marcarFallido(a.tenantId, a.id, 'envío interrumpido: no se sabe si salió, revísalo antes de reenviar').catch(() => {});
     r.atorados += 1;
+  }
+  // Ciclos muertos: cerrados con su huella en la bitácora (sin texto ni teléfono). Una falla aquí no tira el barrido.
+  try {
+    const cerradas = await repo.expirarCiclosInactivos(new Date(ahora.getTime() - DIAS_CICLO_INACTIVO * 86_400_000), 100, ahora);
+    for (const x of cerradas) {
+      await repo.evento(x.tenantId, { conversacionId: x.id, tipo: 'cerrada', detalle: { motivo: 'ciclo_inactivo', dias: DIAS_CICLO_INACTIVO } }).catch(() => false);
+    }
+    r.expiradas = cerradas.length;
+  } catch (e) {
+    logger.error('vigia.expirar_ciclos_fallo', { err: e instanceof Error ? e.message : String(e) });
   }
   r.purgadas = await repo.purgar(500).catch((e) => {
     logger.error('vigia.purga_fallo', { err: e instanceof Error ? e.message : String(e) });
