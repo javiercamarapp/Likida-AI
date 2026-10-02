@@ -63,14 +63,16 @@ export async function GET(req: Request) {
       venceEn,
       (): ResultadoWorker => ({
         pendientes: 0, procesados: 0, divididos: 0, fallidos: 0, yaTomados: 0, errores: 1, cortadosPorReloj: 0, paradaPorPresupuesto: false, omitidosPorPresupuesto: 0,
-        paradaPorFallosSeguidos: false, agotados: 0, hallazgos: 0, avisosEnviados: 0, avisosEnCola: 0, avisosFallidos: 0,
+        paradaPorFallosSeguidos: false, agotados: 0, zombisCerrados: 0, divisionesAvisadas: 0, hallazgos: 0, avisosEnviados: 0, avisosEnCola: 0, avisosFallidos: 0,
         avisosPerdidos: 0, sinTelefono: 0, avisosSinMigracion: false, fallos: ['el reloj duro cortó la pasada'],
       }),
     );
 
     // «Parcial» = trabajo que NO terminó o que falló: ni un «ok» limpio ni un «fallo» total.
     const parcial = r.errores > 0 || r.fallidos > 0 || r.avisosFallidos > 0 || r.cortadosPorReloj > 0
-      || r.paradaPorPresupuesto || r.paradaPorFallosSeguidos || r.avisosSinMigracion;
+      || r.paradaPorPresupuesto || r.paradaPorFallosSeguidos || r.avisosSinMigracion
+      // M3 (ronda 15): un zombi cerrado es trabajo que se perdió (cinco intentos interrumpidos): no es un «ok» limpio.
+      || r.zombisCerrados > 0;
     const { fallos, ...cifras } = r;
     logger.info('cron.carta_porte_docs.ok', { ...cifras, fallos: fallos.length });
     latido = { estado: parcial ? 'parcial' : 'ok', detalle: { ...cifras, fallos: fallos.length } };

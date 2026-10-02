@@ -89,6 +89,20 @@ describe('dividirDocumento con la 0672 (accion por hijo)', () => {
   });
 });
 
+describe('cerrarDocumentosZombis (M3, 0672)', () => {
+  it('manda el tope de intentos y la retención y devuelve lo cerrado', async () => {
+    rpcs.cp_documentos_cerrar_zombis = { data: [{ tenant_id: T, id: PADRE }], error: null };
+    expect(await repo.cerrarDocumentosZombis('2027-01-01T00:00:00Z')).toEqual([{ tenantId: T, id: PADRE }]);
+    expect(llamadasRpc[0]).toEqual({ nombre: 'cp_documentos_cerrar_zombis', args: { p_limite: 50, p_max_intentos: 5, p_retener_hasta: '2027-01-01T00:00:00Z' } });
+  });
+  it('SIN la 0672 devuelve null; cualquier otro error se lanza', async () => {
+    rpcs.cp_documentos_cerrar_zombis = { data: null, error: { message: 'Could not find the function', code: 'PGRST202' } };
+    expect(await repo.cerrarDocumentosZombis('x')).toBeNull();
+    rpcs.cp_documentos_cerrar_zombis = { data: null, error: { message: 'timeout', code: '57014' } };
+    await expect(repo.cerrarDocumentosZombis('x')).rejects.toThrow(/timeout/);
+  });
+});
+
 describe('linajeDeDocumentos (mejor esfuerzo: la bandeja nunca se cae por esto)', () => {
   it('sin ids no consulta nada', async () => {
     expect((await repo.linajeDeDocumentos(T, [])).size).toBe(0);

@@ -5,7 +5,7 @@
 import { avisarOficina } from '@/lib/meta/aviso_oficina';
 import { telefonoJefeDe } from '../contactos';
 import * as repo from './repo';
-import { procesarDocumento, type DepsServicio } from './servicio';
+import { DIAS_RETENCION, procesarDocumento, type DepsServicio } from './servicio';
 import type { DepsWorker } from './worker';
 
 /** `servicio` solo lo usan las pruebas (un extractor de guion); en producción va vacío y se usa el modelo real. */
@@ -13,6 +13,7 @@ export function depsWorkerReales(servicio: DepsServicio = {}): DepsWorker {
   return {
     pendientes: (limite) => repo.documentosPendientes(limite),
     procesar: (tenantId, id, signal) => procesarDocumento(tenantId, id, { ...servicio, signal }),
+    cerrarZombis: () => repo.cerrarDocumentosZombis(new Date(Date.now() + DIAS_RETENCION.cerrado * 86_400_000).toISOString()),
     agotados: (limite) => repo.documentosAgotados(limite),
     porAvisar: (umbral, limite) => repo.documentosPorAvisar(umbral, limite),
     leer: (tenantId, id) => repo.leerDocumento(tenantId, id),

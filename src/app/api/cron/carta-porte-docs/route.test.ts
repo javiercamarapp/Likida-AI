@@ -18,7 +18,7 @@ let interruptores: Record<string, 'encendido' | 'apagado' | 'ilegible'> = {};
 vi.mock('@/lib/likida/interruptores', () => ({ leerInterruptor: async (id: string) => interruptores[id] ?? 'encendido' }));
 const base = () => ({
   pendientes: 3, procesados: 3, fallidos: 0, yaTomados: 0, errores: 0, cortadosPorReloj: 0, paradaPorPresupuesto: false, paradaPorFallosSeguidos: false,
-  agotados: 0, hallazgos: 1, avisosEnviados: 1, avisosEnCola: 0, avisosFallidos: 0, avisosPerdidos: 0, sinTelefono: 0, avisosSinMigracion: false, fallos: [] as string[],
+  agotados: 0, zombisCerrados: 0, divisionesAvisadas: 0, hallazgos: 1, avisosEnviados: 1, avisosEnCola: 0, avisosFallidos: 0, avisosPerdidos: 0, sinTelefono: 0, avisosSinMigracion: false, fallos: [] as string[],
 });
 const motor = vi.fn(async (..._a: unknown[]): Promise<Record<string, unknown>> => base());
 vi.mock('@/lib/likida/carta_porte_docs/worker', () => ({ correrWorkerCartaPorte: (...a: unknown[]) => motor(...a) }));
@@ -92,6 +92,12 @@ describe('la corrida', () => {
     motor.mockResolvedValueOnce({ ...base(), ...cambio });
     const r = await llamar();
     expect(r.status).toBe(200);
+    expect(registrarLatido).toHaveBeenCalledWith('carta-porte-docs', 'parcial', expect.anything());
+  });
+
+  it('un documento zombi cerrado en la pasada deja el latido en `parcial` (M3, ronda 15)', async () => {
+    motor.mockImplementation(async () => ({ ...base(), zombisCerrados: 1, agotados: 1 }));
+    await llamar();
     expect(registrarLatido).toHaveBeenCalledWith('carta-porte-docs', 'parcial', expect.anything());
   });
 
