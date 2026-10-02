@@ -118,7 +118,7 @@
 4/10/26 11:30 - Gerente Ficticio de Embarques: ¿A qué hora llega la unidad?
 4/10/26 11:31 - Despacho Innovativos Demo: Le confirmo: llega aproximadamente a las 18:45.
 4/10/26 11:39 - Auxiliar Ficticio de Recibo: ¿Ya tienen el POD? Lo necesita facturación
-4/10/26 11:39 - Auxiliar Ficticio de Recibo: Mi teléfono por si es urgente: 33 5550 0101 y correo ficticio@demo.invalid
+4/10/26 11:39 - Auxiliar Ficticio de Recibo: Mi teléfono por si es urgente: 00 0000 0101 y correo ficticio@demo.invalid
 4/10/26 11:46 - Servicio a Cliente Demo B: Enseguida le comparto la remisión sellada.
 4/10/26 11:51 - Gerente Ficticio de Embarques: Mándenme la remisión sellada del viaje INN-2208, por favor
 4/10/26 11:51 - Gerente Ficticio de Embarques: <Multimedia omitido>
@@ -219,7 +219,7 @@
 17/10/26 09:07 - Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
 17/10/26 10:02 - Auxiliar Ficticio de Recibo: Mándenme la remisión sellada del viaje INN-2065, por favor
 17/10/26 10:03 - Auxiliar Ficticio de Recibo: <Multimedia omitido>
-17/10/26 10:03 - Auxiliar Ficticio de Recibo: Mi teléfono por si es urgente: 33 5550 0101 y correo ficticio@demo.invalid
+17/10/26 10:03 - Auxiliar Ficticio de Recibo: Mi teléfono por si es urgente: 00 0000 0101 y correo ficticio@demo.invalid
 17/10/26 10:43 - Servicio a Cliente Demo B: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
 18/10/26 07:20 - Auxiliar Ficticio de Recibo: ¿Cuánto falta para que llegue el viaje INN-2894?
 18/10/26 07:22 - Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 10:15.
@@ -228,7 +228,7 @@
 18/10/26 08:05 - Auxiliar Ficticio de Recibo: ¿Me pueden mandar la ubicación del tracto?
 18/10/26 08:27 - Despacho Innovativos Demo: Está a unos 32 km de su planta; le aviso al llegar.
 19/10/26 09:26 - Gerente Ficticio de Embarques: Mándenme la remisión sellada del viaje INN-2121, por favor
-19/10/26 09:27 - Gerente Ficticio de Embarques: Mi teléfono por si es urgente: 33 5550 0101 y correo ficticio@demo.invalid
+19/10/26 09:27 - Gerente Ficticio de Embarques: Mi teléfono por si es urgente: 00 0000 0101 y correo ficticio@demo.invalid
 19/10/26 09:31 - Servicio a Cliente Demo B: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
 19/10/26 10:32 - Auxiliar Ficticio de Recibo: ¿Ya tienen el POD? Lo necesita facturación
 19/10/26 10:34 - Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.

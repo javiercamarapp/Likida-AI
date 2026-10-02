@@ -76,6 +76,12 @@ comprobar_huellas "${#TABLAS[@]}" "$TMP/h1.txt" "$TMP/h2.txt" "$TMP/h3.txt" "$TM
 n=$(psql "$URL" -Atq -c "select count(*) from viaje where tenant_id = '$T' and (origen_geocerca_id is null or destino_geocerca_id is null)")
 [ "$n" = "0" ] || { echo "FALLA: $n viajes sin origen_geocerca_id/destino_geocerca_id" >&2; ok=0; }
 
+# Nadie real puede recibir un mensaje: todo teléfono del tenant demo lleva la marca 28999 y los agentes que escriben vienen apagados.
+n=$(psql "$URL" -Atq -c "select count(*) from (select telefono from cliente where tenant_id = '$T' union all select telefono from operador where tenant_id = '$T' union all select telefono from vigia_contacto where tenant_id = '$T' union all select telefono from conductor_contacto_trafico where tenant_id = '$T') x where telefono is null or telefono not like '28999%'")
+[ "$n" = "0" ] || { echo "FALLA: $n teléfonos del tenant demo SIN la marca 28999 (podrían ser de alguien)" >&2; ok=0; }
+n=$(psql "$URL" -Atq -c "select (select count(*) from vigia_config where tenant_id = '$T' and habilitado) + (select count(*) from agente_conductor_config where tenant_id = '$T' and activo)")
+[ "$n" = "0" ] || { echo "FALLA: el Vigía o el Conductor del tenant demo están ENCENDIDOS tras sembrar (deben venir apagados)" >&2; ok=0; }
+
 echo "== rol de solo lectura =="
 err="$(psql "$URL" -q -v ON_ERROR_STOP=1 -c "set role innovativos_demo_lector; insert into innovativos_sim.gps_posicion values ('X', 1, 1, now(), 1, 1)" 2>&1 >/dev/null || true)"
 case "$err" in

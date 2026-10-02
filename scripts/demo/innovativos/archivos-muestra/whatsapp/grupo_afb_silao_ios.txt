@@ -32,7 +32,7 @@
 [25/09/2026, 08:40:56] Coordinadora Ficticia Silao: ¿Pueden llegar antes de las 8? Hay espacio en andén
 [25/09/2026, 09:11:56] Servicio a Cliente Demo A: Sin problema, ajustamos la cita y le aviso.
 [25/09/2026, 10:10:56] Coordinadora Ficticia Silao: Falta la carta porte del embarque INN-2202
-[25/09/2026, 10:11:36] Coordinadora Ficticia Silao: Mi teléfono por si es urgente: 33 5550 0101 y correo ficticio@demo.invalid
+[25/09/2026, 10:11:36] Coordinadora Ficticia Silao: Mi teléfono por si es urgente: 00 0000 0101 y correo ficticio@demo.invalid
 [25/09/2026, 10:11:56] Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
 [25/09/2026, 11:22:56] Coordinadora Ficticia Silao: ¿Pueden llegar antes de las 8? Hay espacio en andén
 [25/09/2026, 11:30:56] Despacho Innovativos Demo: Sin problema, ajustamos la cita y le aviso.

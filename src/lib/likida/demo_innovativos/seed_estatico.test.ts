@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { esTelefonoDemo, PREFIJO_TELEFONO_DEMO } from '@/lib/meta/telefono_demo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS GARANTÍAS DEL SEED DEL DEMO QUE NO NECESITAN BASE:
@@ -61,6 +62,34 @@ describe('el SQL del seed', () => {
       expect(s).toContain('inet_server_addr()');
       expect(s).toContain("'127.0.0.0/8'");
     }
+  });
+});
+
+describe('teléfonos del demo: nadie real puede recibir un mensaje', () => {
+  const todo = sqls.map((f) => [f, sinComentarios(readFileSync(`${DIR}sql/${f}`, 'utf8'))] as const);
+  it('ningún SQL del seed trae un teléfono con forma de móvil mexicano (521…/52…): todos llevan la marca de demo', () => {
+    for (const [f, s] of todo) {
+      expect(s, f).not.toMatch(/'521\d{6,}'/);
+      expect(s, f).not.toMatch(/'521555\d*'\s*\|\|/);
+      expect(s, f).not.toMatch(/'52155\d{4,}/);
+    }
+  });
+  it('clientes, operadores, contactos de Vigía y jefes de tráfico usan el prefijo 28999 (el mismo que rechaza el envío)', () => {
+    expect(PREFIJO_TELEFONO_DEMO).toBe('28999');
+    const base = sinComentarios(readFileSync(`${DIR}sql/01_base.sql`, 'utf8'));
+    const vig = sinComentarios(readFileSync(`${DIR}sql/07_vigia_y_conductor.sql`, 'utf8'));
+    expect([...base.matchAll(/'(28999\d{8})'/g)].length).toBe(14); // 14 clientes
+    expect(base).toMatch(/'289992'\s*\|\|\s*lpad\(n::text, 7, '0'\)/); // operadores
+    expect([...vig.matchAll(/'(28999\d{8})'/g)].length).toBe(3); // 3 contactos de Vigía
+    expect(vig).toMatch(/'289994'\s*\|\|\s*lpad\(/); // jefes de tráfico
+    for (const t of ['2899910000001', '2899920000001', '2899930000001', '2899940000011']) expect(esTelefonoDemo(t), t).toBe(true);
+  });
+  it('el Vigía y el Conductor del tenant demo vienen APAGADOS (ningún cron escribe), y se enciende a propósito', () => {
+    const vig = sinComentarios(readFileSync(`${DIR}sql/07_vigia_y_conductor.sql`, 'utf8'));
+    expect(vig).toMatch(/values \(current_setting\('inn\.tenant'\)::uuid, false, 'siempre'/); // vigia_config.habilitado
+    expect(vig).toMatch(/values \(current_setting\('inn\.tenant'\)::uuid, false, true, true, 60/); // agente_conductor_config.activo
+    const sh = readFileSync(`${DIR}sembrar.sh`, 'utf8');
+    expect(sh).toContain('--encender-agentes');
   });
 });
 

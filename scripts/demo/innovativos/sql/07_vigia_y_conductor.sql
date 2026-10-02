@@ -9,8 +9,18 @@
 -- carga con el importador (archivos-muestra/whatsapp/).
 --
 -- Conductor: parámetros del ciclo y los dos niveles de escalamiento (jefe de
--- tráfico y jefe de flota por terminal). Teléfonos del rango falso 52155597xxxxx.
+-- tráfico y jefe de flota por terminal). Teléfonos con la marca de demo 289994… (ver abajo).
 -- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── NADIE REAL RECIBE UN MENSAJE ───────────────────────────────────────────
+-- 1. TODOS los teléfonos del demo (clientes 289991…, operadores 289992…, contactos del Vigía 289993…, jefes de tráfico
+--    289994…) llevan el prefijo 28999: el código de país 289 no está asignado a ningún país, así que no es de nadie.
+--    Antes eran 52155595…/52155596…/52155597…, con forma válida de móvil de CDMX (México no reserva un rango para ficción).
+-- 2. El envío REAL (meta/client.ts y el cron wa-outbox) rechaza cualquier destinatario 28999… antes de llamar a Meta.
+-- 3. El Vigía y el Conductor del tenant demo vienen APAGADOS (vigia_config.habilitado = false,
+--    agente_conductor_config.activo = false): ningún cron los procesa. Para enseñarlos funcionando:
+--    `sembrar.sh --encender-agentes` (o el interruptor «habilitado» del panel del Vigía), SOLO en una base local; aun
+--    encendidos, la guarda del punto 2 impide cualquier envío a estos teléfonos.
 
 -- OJO: aviso_privacidad_url queda NULL a propósito. El CHECK vigia_config_aviso_url
 -- (0400) usa `{1,480}` y el motor de regex de Postgres limita las repeticiones a
@@ -18,7 +28,7 @@
 -- count(s)». Hallazgo para el stream del Vigía (reportado en la ronda 03).
 insert into vigia_config (tenant_id, habilitado, modo_aprobacion, autoenviar_min_aprobaciones, sla_respuesta_min,
                           escalar_nivel2_min, retencion_dias, updated_at)
-values (current_setting('inn.tenant')::uuid, true, 'siempre', 5, 10, 30, 180, current_setting('inn.ancla')::timestamptz)
+values (current_setting('inn.tenant')::uuid, false, 'siempre', 5, 10, 30, 180, current_setting('inn.ancla')::timestamptz)
 on conflict (tenant_id) do nothing;
 
 insert into vigia_contacto (id, tenant_id, cliente_id, telefono, telefono_hash, nombre, estado,
@@ -28,9 +38,9 @@ select innovativos_sim.uid('vigiacontacto:' || v.cli), current_setting('inn.tena
        current_setting('inn.ancla')::timestamptz - interval '30 days', 'alta_flota',
        current_setting('inn.ancla')::timestamptz - interval '30 days',
        current_setting('inn.ancla')::timestamptz - interval '30 days', current_setting('inn.ancla')::timestamptz
-from (values ('c05', '5215559600001', 'Coordinadora Ficticia de Logística Silao'),
-             ('c10', '5215559600002', 'Gerente Ficticio de Embarques Ramos Arizpe'),
-             ('c12', '5215559600003', 'Jefa Ficticia de CEDIS Apodaca')) v(cli, tel, nombre)
+from (values ('c05', '2899930000001', 'Coordinadora Ficticia de Logística Silao'),
+             ('c10', '2899930000002', 'Gerente Ficticio de Embarques Ramos Arizpe'),
+             ('c12', '2899930000003', 'Jefa Ficticia de CEDIS Apodaca')) v(cli, tel, nombre)
 on conflict (id) do nothing;
 
 insert into vigia_conversacion (id, tenant_id, contacto_id, cliente_id, viaje_id, estado, control,
@@ -74,14 +84,14 @@ on conflict (id) do nothing;
 insert into agente_conductor_config (tenant_id, activo, avisar_oficina_llegada, avisar_oficina_salida, escalar_tras_min,
                                      segundo_nivel_min, validar_ubicacion, tolerancia_ubicacion_m, estadia_alerta_carga_min,
                                      estadia_alerta_descarga_min, updated_at)
-values (current_setting('inn.tenant')::uuid, true, true, true, 60, 30, true, 250, 120, 120, current_setting('inn.ancla')::timestamptz)
+values (current_setting('inn.tenant')::uuid, false, true, true, 60, 30, true, 250, 120, 120, current_setting('inn.ancla')::timestamptz)
 on conflict (tenant_id) do nothing;
 
 insert into conductor_contacto_trafico (id, tenant_id, terminal_id, nivel, nombre, telefono, activo)
 select innovativos_sim.uid('trafico:' || t.cod || ':' || n.nivel), current_setting('inn.tenant')::uuid,
        innovativos_sim.uid('terminal:' || t.cod), n.nivel,
        case n.nivel when 1 then 'Jefe de Tráfico Ficticio ' else 'Jefe de Flota Ficticio ' end || t.nombre,
-       '52155597' || lpad((t.ord * 10 + n.nivel)::text, 5, '0'), true
+       '289994' || lpad((t.ord * 10 + n.nivel)::text, 7, '0'), true
 from (values ('GDL', 'Tlaquepaque', 1), ('SIL', 'Silao', 2), ('APO', 'Apodaca', 3)) t(cod, nombre, ord)
 cross join (values (1), (2)) n(nivel)
 on conflict (id) do nothing;

@@ -43,20 +43,20 @@ create table innovativos_sim.sitio (
   ciudad text not null, cp text not null, dias_credito int not null, crit boolean not null default false
 );
 insert into innovativos_sim.sitio values
- ('c01','GDL','Electrónica Ficticia de Occidente','ELECTRONICA FICTICIA DE OCCIDENTE SA DE CV','EFO100101AA1','5215559100001','Planta El Salto',           20.5150,-103.1850,'El Salto, JAL','45680',30,false),
- ('c02','GDL','Lácteos Ficticios de Jalisco',      'LACTEOS FICTICIOS DE JALISCO SA DE CV',     'LFJ100101AA2','5215559100002','CEDIS Tlaquepaque',        20.6280,-103.2920,'Tlaquepaque, JAL','45500',45,false),
- ('c03','LAG','Alimentos Ficticios de los Altos',  'ALIMENTOS FICTICIOS DE LOS ALTOS SA DE CV', 'AFA100101AA3','5215559100003','Planta Lagos de Moreno',   21.3520,-101.9180,'Lagos de Moreno, JAL','47480',30,false),
- ('c04','LEO','Calzado Ficticio de León',          'CALZADO FICTICIO DE LEON SA DE CV',         'CFL100101AA4','5215559100004','Bodega León',              21.1050,-101.6550,'León, GTO','37500',15,false),
- ('c05','SIL','Autopartes Ficticias del Bajío',    'AUTOPARTES FICTICIAS DEL BAJIO SA DE CV',   'AFB100101AA5','5215559100005','Planta Silao',             20.9350,-101.4250,'Silao, GTO','36100',30,true),
- ('c06','SIL','Ensambladora Ficticia Guanajuato',  'ENSAMBLADORA FICTICIA GUANAJUATO SA DE CV', 'EFG100101AA6','5215559100006','Puerto Seco Silao',        20.9720,-101.3920,'Silao, GTO','36110',45,false),
- ('c07','SLP','Químicos Ficticios del Centro',     'QUIMICOS FICTICIOS DEL CENTRO SA DE CV',    'QFC100101AA7','5215559100007','Planta Química SLP',       22.1150,-100.9250,'San Luis Potosí, SLP','78395',30,false),
- ('c08','SLP','Envases Ficticios Potosinos',       'ENVASES FICTICIOS POTOSINOS SA DE CV',      'EFP100101AA8','5215559100008','Planta Envases SLP',       22.1900,-101.0200,'San Luis Potosí, SLP','78430',30,false),
- ('c09','MAT','Minerales Ficticios del Altiplano', 'MINERALES FICTICIOS DEL ALTIPLANO SA DE CV','MFA100101AA9','5215559100009','Patio Minero Matehuala',   23.6400,-100.6500,'Matehuala, SLP','78700',60,false),
- ('c10','SAL','Armadora Ficticia Ramos Arizpe',    'ARMADORA FICTICIA RAMOS ARIZPE SA DE CV',   'AFR100101AB1','5215559100010','Planta Ramos Arizpe',      25.5600,-100.9400,'Ramos Arizpe, COAH','25900',30,true),
- ('c11','SAL','Acero Ficticio de Coahuila',        'ACERO FICTICIO DE COAHUILA SA DE CV',       'AFC100101AB2','5215559100011','Planta Acero Saltillo',    25.4400,-100.9800,'Saltillo, COAH','25000',45,false),
- ('c12','APO','Cervecería Ficticia del Norte',     'CERVECERIA FICTICIA DEL NORTE SA DE CV',    'CFN100101AB3','5215559100012','CEDIS Apodaca Norte',      25.7750,-100.1850,'Apodaca, NL','66600',30,true),
- ('c13','APO','Electrodomésticos Ficticios Apodaca','ELECTRODOMESTICOS FICTICIOS APODACA SA DE CV','EFA100101AB4','5215559100013','Planta Apodaca',         25.7900,-100.2100,'Apodaca, NL','66610',30,false),
- ('c14','APO','Logística Ficticia Escobedo',       'LOGISTICA FICTICIA ESCOBEDO SA DE CV',      'LFE100101AB5','5215559100014','Bodega Escobedo',          25.8000,-100.3200,'General Escobedo, NL','66050',15,false);
+ ('c01','GDL','Electrónica Ficticia de Occidente','ELECTRONICA FICTICIA DE OCCIDENTE SA DE CV','EFO100101AA1','2899910000001','Planta El Salto',           20.5150,-103.1850,'El Salto, JAL','45680',30,false),
+ ('c02','GDL','Lácteos Ficticios de Jalisco',      'LACTEOS FICTICIOS DE JALISCO SA DE CV',     'LFJ100101AA2','2899910000002','CEDIS Tlaquepaque',        20.6280,-103.2920,'Tlaquepaque, JAL','45500',45,false),
+ ('c03','LAG','Alimentos Ficticios de los Altos',  'ALIMENTOS FICTICIOS DE LOS ALTOS SA DE CV', 'AFA100101AA3','2899910000003','Planta Lagos de Moreno',   21.3520,-101.9180,'Lagos de Moreno, JAL','47480',30,false),
+ ('c04','LEO','Calzado Ficticio de León',          'CALZADO FICTICIO DE LEON SA DE CV',         'CFL100101AA4','2899910000004','Bodega León',              21.1050,-101.6550,'León, GTO','37500',15,false),
+ ('c05','SIL','Autopartes Ficticias del Bajío',    'AUTOPARTES FICTICIAS DEL BAJIO SA DE CV',   'AFB100101AA5','2899910000005','Planta Silao',             20.9350,-101.4250,'Silao, GTO','36100',30,true),
+ ('c06','SIL','Ensambladora Ficticia Guanajuato',  'ENSAMBLADORA FICTICIA GUANAJUATO SA DE CV', 'EFG100101AA6','2899910000006','Puerto Seco Silao',        20.9720,-101.3920,'Silao, GTO','36110',45,false),
+ ('c07','SLP','Químicos Ficticios del Centro',     'QUIMICOS FICTICIOS DEL CENTRO SA DE CV',    'QFC100101AA7','2899910000007','Planta Química SLP',       22.1150,-100.9250,'San Luis Potosí, SLP','78395',30,false),
+ ('c08','SLP','Envases Ficticios Potosinos',       'ENVASES FICTICIOS POTOSINOS SA DE CV',      'EFP100101AA8','2899910000008','Planta Envases SLP',       22.1900,-101.0200,'San Luis Potosí, SLP','78430',30,false),
+ ('c09','MAT','Minerales Ficticios del Altiplano', 'MINERALES FICTICIOS DEL ALTIPLANO SA DE CV','MFA100101AA9','2899910000009','Patio Minero Matehuala',   23.6400,-100.6500,'Matehuala, SLP','78700',60,false),
+ ('c10','SAL','Armadora Ficticia Ramos Arizpe',    'ARMADORA FICTICIA RAMOS ARIZPE SA DE CV',   'AFR100101AB1','2899910000010','Planta Ramos Arizpe',      25.5600,-100.9400,'Ramos Arizpe, COAH','25900',30,true),
+ ('c11','SAL','Acero Ficticio de Coahuila',        'ACERO FICTICIO DE COAHUILA SA DE CV',       'AFC100101AB2','2899910000011','Planta Acero Saltillo',    25.4400,-100.9800,'Saltillo, COAH','25000',45,false),
+ ('c12','APO','Cervecería Ficticia del Norte',     'CERVECERIA FICTICIA DEL NORTE SA DE CV',    'CFN100101AB3','2899910000012','CEDIS Apodaca Norte',      25.7750,-100.1850,'Apodaca, NL','66600',30,true),
+ ('c13','APO','Electrodomésticos Ficticios Apodaca','ELECTRODOMESTICOS FICTICIOS APODACA SA DE CV','EFA100101AB4','2899910000013','Planta Apodaca',         25.7900,-100.2100,'Apodaca, NL','66610',30,false),
+ ('c14','APO','Logística Ficticia Escobedo',       'LOGISTICA FICTICIA ESCOBEDO SA DE CV',      'LFE100101AB5','2899910000014','Bodega Escobedo',          25.8000,-100.3200,'General Escobedo, NL','66050',15,false);
 
 -- Geocercas: patios de las 3 terminales, la planta de cada cliente y su andén (hija).
 insert into geocerca (id, tenant_id, nombre, tipo, lat, lng, radio_m, activa, codigo, direccion, cliente_id, padre_id, fuente)
@@ -135,7 +135,7 @@ select innovativos_sim.uid('operador:' || n), current_setting('inn.tenant')::uui
        || ' ' ||
        (array['Soto','Lara','Rojas','Navarro','Ibarra','Salazar','Cortés','Guerrero','Fuentes','Paredes',
               'Mora','Rangel','Zamora','Cervantes','Villa','Montes','Cisneros','Ponce','Orozco','Varela'])[innovativos_sim.pick('n3' || n, 20)],
-       '521555950' || lpad(n::text, 4, '0'), 'DEMO-' || lpad(n::text, 4, '0'), true,
+       '289992' || lpad(n::text, 7, '0'), 'DEMO-' || lpad(n::text, 4, '0'), true,
        'LF' || lpad((5000000 + n * 17)::text, 7, '0'), 'E',
        (current_setting('inn.ancla')::timestamptz)::date + (-20 + innovativos_sim.h('lic' || n) % 700)::int
 from (

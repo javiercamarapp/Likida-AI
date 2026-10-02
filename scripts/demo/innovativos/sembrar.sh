@@ -8,6 +8,8 @@
 #   ... --reiniciar --ancla '2026-10-20 09:00:00-06'   «ahora» del demo (default: ese). --ancla EXIGE --reiniciar:
 #                            sembrar encima de otra ancla mezclaría dos «ahora» (viajes, posiciones y pases a medias)
 #   ... --solo-limpiar       solo borra
+#   ... --encender-agentes   enciende el Vigía y el Conductor del tenant demo (vienen APAGADOS: ningún cron les escribe a nadie).
+#                            Aun encendidos, el envío rechaza los teléfonos 28999… del demo.
 #
 # NUNCA PRODUCCIÓN. Tres guardas: (1) exige DEMO_DATABASE_URL explícita (no usa
 # DATABASE_URL ni SUPABASE_DB_URL a propósito); (2) guarda-host.mjs: solo socket/localhost/127.x/[::1]; rechaza
@@ -20,11 +22,12 @@ cd "$(dirname "$0")"
 
 URL="${DEMO_DATABASE_URL:-}"
 ANCLA='2026-10-20 09:00:00-06'
-REINICIAR=0; SOLO_LIMPIAR=0; ANCLA_EXPLICITA=0
+REINICIAR=0; SOLO_LIMPIAR=0; ANCLA_EXPLICITA=0; ENCENDER=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --reiniciar) REINICIAR=1 ;;
     --solo-limpiar) SOLO_LIMPIAR=1 ;;
+    --encender-agentes) ENCENDER=1 ;;
     --ancla) shift; ANCLA="${1:?falta el valor de --ancla}"; ANCLA_EXPLICITA=1 ;;
     *) echo "argumento desconocido: $1" >&2; exit 2 ;;
   esac
@@ -51,3 +54,7 @@ fi
 "${P[@]}" -v ancla="$ANCLA" -f sembrar.sql
 # Los veredictos de ubicación NO se escriben a mano: los calcula el motor real del Conductor sobre lo sembrado.
 node generar-veredictos.mjs
+if [ "$ENCENDER" = 1 ]; then
+  "${P[@]}" -c "update vigia_config set habilitado = true where tenant_id = 'eeeeeeee-0620-4000-8000-000000000250'; update agente_conductor_config set activo = true where tenant_id = 'eeeeeeee-0620-4000-8000-000000000250'"
+  echo "Vigía y Conductor del tenant demo ENCENDIDOS (los teléfonos 28999… siguen rechazados por el envío)." >&2
+fi

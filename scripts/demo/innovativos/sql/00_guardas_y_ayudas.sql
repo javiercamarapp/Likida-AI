@@ -2,8 +2,8 @@
 -- 00 — Guardas y ayudas del seed del DEMO «Innovativos (demo)».
 --
 -- TODO ES SINTÉTICO. Nombres de empresas con la palabra «Ficticia/o», RFC y
--- placas inventados, teléfonos del rango falso 52155595xxxxx / 52155596xxxxx /
--- 52155597xxxxx, casetas «Demo». Nada de esto es dato real de Innovativos ni de
+-- placas inventados, teléfonos con la marca de demo 28999… (código de país 289: sin asignar;
+-- el envío real los rechaza), casetas «Demo». Nada de esto es dato real de Innovativos ni de
 -- sus clientes: el día que lleguen sus archivos se reemplaza (docs/demo/innovativos.md).
 --
 -- NUNCA PRODUCCIÓN: este seed solo corre contra una base LOCAL o de laboratorio.

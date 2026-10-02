@@ -251,7 +251,7 @@ function generarChat(g) {
       mensajes.push({ t, autor: quien, texto: pick(preguntas[tm]).replace('{f}', `INN-${f}`) });
       stats.preguntas++; stats.por_tema[tm] = (stats.por_tema[tm] || 0) + 1; if (tm === 'queja') stats.quejas++;
       if (rnd() < 0.08) { mensajes.push({ t: t + 20000, autor: quien, texto: '<Multimedia omitido>' }); }
-      if (tm === 'documentos' && rnd() < 0.1) mensajes.push({ t: t + 40000, autor: quien, texto: 'Mi teléfono por si es urgente: 33 5550 0101 y correo ficticio@demo.invalid' });
+      if (tm === 'documentos' && rnd() < 0.1) mensajes.push({ t: t + 40000, autor: quien, texto: 'Mi teléfono por si es urgente: 00 0000 0101 y correo ficticio@demo.invalid' });
       const lento = rnd() < (tm === 'queja' ? 0.35 : 0.14);
       const demoraMin = lento ? 11 + Math.floor(rnd() * 40) : 1 + Math.floor(rnd() * 8);
       if (lento) stats.sin_respuesta_10min++;
