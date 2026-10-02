@@ -107,8 +107,19 @@ describe('validarConfigConductor — validación de ubicación y estadías (0385
     ['alerta de 5 min', { estadiaAlertaCargaMin: 5 }, /alerta de estadía de carga/],
     ['alerta de 4 días', { estadiaAlertaDescargaMin: 6000 }, /alerta de estadía de descarga/],
     ['alerta no numérica (no se toma por «apagada»)', { estadiaAlertaCargaMin: 'pronto' as unknown as number }, /alerta de estadía de carga/],
+    ['margen de acercamiento negativo', { margenAcercamientoM: -1 }, /margen de acercamiento/],
+    ['margen de acercamiento de 60 km', { margenAcercamientoM: 60_000 }, /margen de acercamiento/],
+    ['margen de acercamiento con decimales', { margenAcercamientoM: 100.5 }, /margen de acercamiento/],
   ])('rechaza %s', (_n, cruda, re) => {
     const v = validarConfigConductor(cruda);
     expect('error' in v && v.error).toMatch(re);
+  });
+
+  it('0604: el aviso por llegada sin confirmar nace APAGADO y el margen de acercamiento en 5,000 m; ambos se pueden ajustar', () => {
+    expect(CONFIG_CONDUCTOR_DEFAULT).toMatchObject({ avisarLlegadaSinConfirmar: false, margenAcercamientoM: 5000 });
+    const v = validarConfigConductor({ avisarLlegadaSinConfirmar: true, margenAcercamientoM: 0 });
+    expect('ok' in v && v.ok).toMatchObject({ avisarLlegadaSinConfirmar: true, margenAcercamientoM: 0 });
+    const tope = validarConfigConductor({ margenAcercamientoM: 50_000 });
+    expect('ok' in tope && tope.ok.margenAcercamientoM).toBe(50_000);
   });
 });

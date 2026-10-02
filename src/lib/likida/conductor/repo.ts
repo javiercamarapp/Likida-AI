@@ -157,7 +157,7 @@ export async function cargarViajeContexto(tenantId: string, viajeId: string): Pr
 
 export type EventoHito =
   | 'solicitado' | 'recibido' | 'validado' | 'omitido' | 'escalado' | 'corregido' | 'pospuesto' | 'atendido' | 'contacto'
-  | 'validacion' | 'evidencia' | 'captura_manual' | 'alerta_estadia';
+  | 'validacion' | 'evidencia' | 'captura_manual' | 'alerta_estadia' | 'alerta_llegada_sin_confirmar';
 
 /** Best-effort: perder un renglón de bitácora no puede romper el registro del hito. SIN datos personales en `detalle`. */
 export async function registrarEvento(
@@ -409,6 +409,9 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     estadiaAlertaDescargaMin: n(f.estadia_alerta_descarga_min),
     pedirFotoEvidencia: f.pedir_foto_evidencia as boolean,
     fotoRegistraHito: f.foto_registra_hito !== false,
+    // 0604: la base sin migrar no trae las columnas; el aviso queda apagado y el margen en su valor de partida.
+    avisarLlegadaSinConfirmar: f.avisar_llegada_sin_confirmar === true,
+    margenAcercamientoM: f.margen_acercamiento_m === undefined || f.margen_acercamiento_m === null ? CONFIG_CONDUCTOR_DEFAULT.margenAcercamientoM : Number(f.margen_acercamiento_m),
   });
   if ('error' in v) {
     // La base tiene CHECKs equivalentes; llegar aquí es una fila corrupta. Se grita y se opera
@@ -595,7 +598,7 @@ export async function guardarCitas(tenantId: string, viajeId: string, cambio: Ca
 export async function guardarConfigConductor(
   tenantId: string, c: ConfigConductor, contactos: ContactoTrafico[] | undefined,
 ): Promise<'ok' | 'terminal_ajena'> {
-  const { error } = await acotada(supabaseAdmin().from('agente_conductor_config').upsert({
+  const fila = {
     tenant_id: tenantId, activo: c.activo, solicitudes_min: c.solicitudesMin, escalar_tras_min: c.escalarTrasMin,
     segundo_nivel_min: c.segundoNivelMin, hora_inicio: c.horaInicio, hora_fin: c.horaFin, dias_semana: c.diasSemana,
     tope_diario_chofer: c.topeDiarioChofer, anticipo_cita_min: c.anticipoCitaMin, espera_sin_cita_min: c.esperaSinCitaMin,
@@ -606,7 +609,18 @@ export async function guardarConfigConductor(
     tolerancia_ubicacion_m: c.toleranciaUbicacionM, ventana_ubicacion_min: c.ventanaUbicacionMin, pedir_ubicacion: c.pedirUbicacion,
     estadia_alerta_carga_min: c.estadiaAlertaCargaMin, estadia_alerta_descarga_min: c.estadiaAlertaDescargaMin,
     pedir_foto_evidencia: c.pedirFotoEvidencia, foto_registra_hito: c.fotoRegistraHito, updated_at: new Date().toISOString(),
-  }, { onConflict: 'tenant_id' }), 'v1.conductor_config');
+  };
+  // 0604 agregó dos columnas. Contra la base SIN migrar se guarda lo demás si esas dos están en su valor de partida;
+  // si el dueño pidió algo distinto (aviso encendido, otro margen) se dice que falta la migración en vez de callarlo.
+  const nuevas = { avisar_llegada_sin_confirmar: c.avisarLlegadaSinConfirmar, margen_acercamiento_m: c.margenAcercamientoM };
+  let { error } = await acotada(supabaseAdmin().from('agente_conductor_config').upsert({ ...fila, ...nuevas }, { onConflict: 'tenant_id' }), 'v1.conductor_config');
+  if (error && /avisar_llegada_sin_confirmar|margen_acercamiento_m/.test(error.message)) {
+    if (c.avisarLlegadaSinConfirmar || c.margenAcercamientoM !== CONFIG_CONDUCTOR_DEFAULT.margenAcercamientoM) {
+      throw new Error('v1.conductor_config: el aviso por llegada sin confirmar y el margen de acercamiento necesitan la migración 0604 (aún no aplicada en esta base).');
+    }
+    logger.warn('conductor.config_sin_0604', { tenant: tenantId });
+    ({ error } = await acotada(supabaseAdmin().from('agente_conductor_config').upsert(fila, { onConflict: 'tenant_id' }), 'v1.conductor_config'));
+  }
   if (error) throw new Error(`v1.conductor_config: ${error.message}`);
   if (contactos === undefined) return 'ok';
 

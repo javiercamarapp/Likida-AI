@@ -1,7 +1,7 @@
 import { logger } from '@/lib/logger';
 import { haversineM } from '../conductor/geo';
 import { acercarInstrucciones, type ResultadoEnvioInstrucciones } from './envio';
-import { leerCandidatosAcercamiento, leerPosicionesRecientes } from './trabajo';
+import { leerCandidatosAcercamiento, leerMargenesAcercamiento, leerPosicionesRecientes } from './trabajo';
 import type { LadoViaje } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -18,7 +18,7 @@ import type { LadoViaje } from './tipos';
 //   · Cada viaje es independiente: el fallo de uno no frena a los demás. Reloj de corrida: se corta antes del tope.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** «Ya vas llegando»: cuántos metros ANTES del borde de la geocerca se avisa. Constante (no configurable por flota todavía). */
+/** «Ya vas llegando»: cuántos metros ANTES del borde de la geocerca se avisa, de partida. Cada flota lo ajusta en su configuración del Conductor (0604). */
 export const MARGEN_ACERCAMIENTO_M = 5_000;
 /** Una posición más vieja que esto no dice dónde está el tractor AHORA. */
 export const VIGENCIA_POSICION_MIN = 20;
@@ -36,6 +36,8 @@ export interface PosicionUnidad { lat: number; lng: number; medidaEn: Date }
 
 export interface PuertosAcercamiento {
   candidatos(limite: number): Promise<CandidatoAcercamiento[]>;
+  /** El margen de acercamiento de cada flota (m). Una flota sin dato en el mapa usa `MARGEN_ACERCAMIENTO_M`. */
+  margenes(tenantIds: string[]): Promise<Map<string, number>>;
   /** La última posición de cada unidad desde `desde` (por id de unidad), acotada a las flotas de los candidatos. */
   posiciones(unidadIds: string[], tenantIds: string[], desde: Date): Promise<Map<string, PosicionUnidad>>;
   enviar(tenantId: string, viajeId: string, lado: LadoViaje, ahora: Date): Promise<ResultadoEnvioInstrucciones>;
@@ -43,6 +45,7 @@ export interface PuertosAcercamiento {
 
 export const puertosAcercamientoReales: PuertosAcercamiento = {
   candidatos: leerCandidatosAcercamiento,
+  margenes: leerMargenesAcercamiento,
   posiciones: leerPosicionesRecientes,
   enviar: (t, v, lado, ahora) => acercarInstrucciones(t, v, lado, undefined, ahora),
 };
@@ -57,8 +60,8 @@ export interface ResultadoAcercamiento {
   cortadosPorReloj: number;
 }
 
-export function estaCerca(pos: PosicionUnidad, sitio: CandidatoAcercamiento['sitio']): boolean {
-  return haversineM({ lat: pos.lat, lng: pos.lng }, { lat: sitio.lat, lng: sitio.lng }) <= sitio.radioM + MARGEN_ACERCAMIENTO_M;
+export function estaCerca(pos: PosicionUnidad, sitio: CandidatoAcercamiento['sitio'], margenM: number = MARGEN_ACERCAMIENTO_M): boolean {
+  return haversineM({ lat: pos.lat, lng: pos.lng }, { lat: sitio.lat, lng: sitio.lng }) <= sitio.radioM + margenM;
 }
 
 export async function barridoAcercamiento(
@@ -68,13 +71,14 @@ export async function barridoAcercamiento(
   const candidatos = await p.candidatos(TOPE_VIAJES_ACERCAMIENTO);
   r.candidatos = candidatos.length;
   if (candidatos.length === 0) return r;
+  const margenes = await p.margenes([...new Set(candidatos.map((c) => c.tenantId))]);
   const posiciones = await p.posiciones([...new Set(candidatos.map((c) => c.unidadId))], [...new Set(candidatos.map((c) => c.tenantId))], new Date(ahora.getTime() - VIGENCIA_POSICION_MIN * 60_000));
 
   for (const [i, c] of candidatos.entries()) {
     if (venceEn !== undefined && Date.now() >= venceEn) { r.cortadosPorReloj = candidatos.length - i; break; }
     const pos = posiciones.get(c.unidadId);
     if (!pos) { r.sinPosicion++; continue; }
-    if (!estaCerca(pos, c.sitio)) { r.lejos++; continue; }
+    if (!estaCerca(pos, c.sitio, margenes.get(c.tenantId) ?? MARGEN_ACERCAMIENTO_M)) { r.lejos++; continue; }
     const res = await p.enviar(c.tenantId, c.viajeId, c.lado, ahora);
     if (res.estado === 'enviado') r.enviados++;
     else if (res.estado === 'rechazado') r.rechazados++;
