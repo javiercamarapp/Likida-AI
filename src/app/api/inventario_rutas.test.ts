@@ -164,7 +164,16 @@ import { join, relative, sep } from 'node:path';
 //   · `api/v1/liquidaciones-externas/exportacion/route.ts` — `abrir(req, 'dinero')`; layout por catálogo cerrado
 //     de columnas, texto neutralizado contra inyección de fórmulas, tope duro que falla en vez de entregar un
 //     archivo parcial, y `?tenant=` ignorado (el tenant sale de la credencial).
-const RUTAS_APP_REVISADAS = 92;
+// 92 → 95 (ola 3, Agente 2 «conciliación de peajes», salida hacia SAP/ERP y anulación), tres rutas con puerta propia
+// (`abrir()` resuelve credencial → flota → ÁREA antes de tocar un dato; el tenant sale SIEMPRE de la credencial):
+//   · `api/v1/peajes/desgloses/route.ts` — área `dinero`, solo lectura de los desgloses de la flota (los anulados no salen);
+//   · `api/v1/peajes/desgloses/[id]/anular/route.ts` — área `administracion`; motivo obligatorio, la anulación lleva
+//     `.eq('tenant_id', …)` y «no existe»/«no es de tu flota» contestan lo mismo (404); no borra nada;
+//   · `api/v1/peajes/exportacion/route.ts` — área `dinero`; el desglose se busca CON el tenant de la credencial, layout por
+//     catálogo cerrado de columnas, texto neutralizado contra fórmulas.
+// El correo `pj-<token>@…` NO suma ruta: comparte el webhook firmado de `api/correo/entrante/route.ts`, que verifica la firma
+// Svix antes de leer el cuerpo y resuelve la flota por el token del destinatario.
+const RUTAS_APP_REVISADAS = 95;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

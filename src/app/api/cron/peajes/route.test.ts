@@ -18,6 +18,10 @@ let interruptores: Record<string, 'encendido' | 'apagado' | 'ilegible'> = {};
 vi.mock('@/lib/likida/interruptores', () => ({ leerInterruptor: async (id: string) => interruptores[id] ?? 'encendido' }));
 const procesar = vi.fn(async (..._a: unknown[]): Promise<Record<string, number>> => ({ tomados: 2, procesados: 2, fallidos: 0, reintentar: 0, claimPerdido: 0 }));
 vi.mock('@/lib/likida/peajes/ingesta', () => ({ procesarColaPeajes: (...a: unknown[]) => procesar(...a) }));
+const pulls = vi.fn(async (..._a: unknown[]): Promise<Record<string, number>> => ({ reclamadas: 0, exitosas: 0, fallidas: 0, recibidos: 0, duplicados: 0, rechazados: 0 }));
+vi.mock('@/lib/likida/peajes/pull', () => ({ ejecutarPulls: (...a: unknown[]) => pulls(...a) }));
+const avisos = vi.fn(async (..._a: unknown[]): Promise<Record<string, number>> => ({ revisados: 0, enviados: 0, pendientes: 0 }));
+vi.mock('@/lib/likida/peajes/aviso_oficina', () => ({ reintentarAvisosPeajes: (...a: unknown[]) => avisos(...a) }));
 const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
@@ -29,7 +33,9 @@ const j = async (r: Response) => (await r.json()) as Record<string, unknown>;
 
 beforeEach(() => {
   autorizado = 'si'; interruptores = {};
-  procesar.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear();
+  procesar.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); pulls.mockClear(); avisos.mockClear();
+  pulls.mockResolvedValue({ reclamadas: 0, exitosas: 0, fallidas: 0, recibidos: 0, duplicados: 0, rechazados: 0 });
+  avisos.mockResolvedValue({ revisados: 0, enviados: 0, pendientes: 0 });
   procesar.mockResolvedValue({ tomados: 2, procesados: 2, fallidos: 0, reintentar: 0, claimPerdido: 0 });
 });
 
@@ -85,5 +91,50 @@ describe('la corrida', () => {
     expect(await j(r)).toMatchObject({ corrio: false, error: 'rpc caído', codigo: 'cod' });
     expect(alertarOperador).toHaveBeenCalledWith('cron.peajes', expect.objectContaining({ error: 'rpc caído' }));
     expect(registrarLatido).toHaveBeenCalledWith('peajes', 'fallo', expect.objectContaining({ error: 'rpc caído' }));
+  });
+});
+
+describe('pull y avisos a la oficina (0563)', () => {
+  it('consulta los pulls ANTES de procesar la cola y barre los avisos DESPUÉS, y todo viaja en el cuerpo', async () => {
+    const orden: string[] = [];
+    pulls.mockImplementationOnce(async () => { orden.push('pull'); return { reclamadas: 1, exitosas: 1, fallidas: 0, recibidos: 2, duplicados: 0, rechazados: 0 }; });
+    procesar.mockImplementationOnce(async () => { orden.push('cola'); return { tomados: 2, procesados: 2, fallidos: 0, reintentar: 0, claimPerdido: 0 }; });
+    avisos.mockImplementationOnce(async () => { orden.push('avisos'); return { revisados: 1, enviados: 1, pendientes: 0 }; });
+    const r = await llamar();
+    expect(orden).toEqual(['pull', 'cola', 'avisos']);
+    expect(await j(r)).toMatchObject({ corrio: true, pulls: { recibidos: 2 }, avisos: { enviados: 1 } });
+    expect(registrarLatido).toHaveBeenCalledWith('peajes', 'ok', expect.objectContaining({ pulls: expect.anything(), avisos: expect.anything() }));
+  });
+
+  it('un pull que LANZA no impide procesar la cola; la corrida queda `parcial`, nunca `ok`', async () => {
+    pulls.mockRejectedValueOnce(new Error('rpc caída'));
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(procesar).toHaveBeenCalled();
+    expect((await j(r)).pulls).toBeNull();
+    expect(registrarLatido).toHaveBeenCalledWith('peajes', 'parcial', expect.anything());
+  });
+
+  it('un pull fallido o un aviso que no salió dejan el latido `parcial`', async () => {
+    pulls.mockResolvedValueOnce({ reclamadas: 1, exitosas: 0, fallidas: 1, recibidos: 0, duplicados: 0, rechazados: 0 });
+    await llamar();
+    expect(registrarLatido).toHaveBeenLastCalledWith('peajes', 'parcial', expect.anything());
+    avisos.mockResolvedValueOnce({ revisados: 1, enviados: 0, pendientes: 1 });
+    await llamar();
+    expect(registrarLatido).toHaveBeenLastCalledWith('peajes', 'parcial', expect.anything());
+  });
+
+  it('un barrido de avisos que lanza no tumba la corrida', async () => {
+    avisos.mockRejectedValueOnce(new Error('boom'));
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect((await j(r)).avisos).toBeNull();
+  });
+
+  it('con una palanca apagada no se consulta ningún pull ni se avisa nada', async () => {
+    interruptores = { 'agente:peajes': 'apagado' };
+    await llamar();
+    expect(pulls).not.toHaveBeenCalled();
+    expect(avisos).not.toHaveBeenCalled();
   });
 });

@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { verificarFirma, mensajeDeRechazo } from '@/lib/correo/firma_entrante';
 import { tokenDeDestinatarios, dominioBuzon } from '@/lib/correo/buzon';
 import { atenderCorreoCartaPorte, tokenCpDeDestinatarios } from '@/lib/likida/carta_porte_docs/correo_entrante';
+import { atenderCorreoPeajes, tokenPjDeDestinatarios } from '@/lib/likida/peajes/correo_entrante';
 import { descargadorResend } from '@/lib/likida/carta_porte_docs/resend';
 import { direccionDeCampana, esRespuestaACampana, procesarRespuestaCampana } from '@/lib/correo/respuesta_campana';
 import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
@@ -152,6 +153,20 @@ export async function POST(req: Request) {
       tokenCp,
       { emailId, from: d.from, subject: d.subject, text: d.text, html: d.html, attachments: d.attachments },
       { descargar: descargadorResend(process.env.RESEND_API_KEY ?? '', restanteCp), restanteMs: restanteCp },
+    );
+    return NextResponse.json(r.cuerpo, { status: r.status });
+  }
+  // ── PEAJES (Agente 2, mig. 0563) ─────────────────────────────────────────
+  // El buzón `pj-<token>@…` recibe el desglose del proveedor de telepeaje: mismo dominio, misma firma
+  // Svix ya verificada, y la flota sale del token del DESTINATARIO. Va antes del buzón de facturas.
+  const tokenPj = tokenPjDeDestinatarios(destinatarios, dominioBuzon());
+  if (tokenPj) {
+    const finPj = Date.now() + (maxDuration * 1000 - 3_000);
+    const restantePj = () => finPj - Date.now();
+    const r = await atenderCorreoPeajes(
+      tokenPj,
+      { emailId, from: d.from, subject: d.subject, text: d.text, html: d.html, attachments: d.attachments },
+      { descargar: descargadorResend(process.env.RESEND_API_KEY ?? '', restantePj) },
     );
     return NextResponse.json(r.cuerpo, { status: r.status });
   }

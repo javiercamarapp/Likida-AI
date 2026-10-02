@@ -1,6 +1,6 @@
 # Conciliación de peajes (Agente 2) — flujo, contrato y bloqueos
 
-Estado al 1-oct-2026 (loop punta a punta, rama `loop/s3-agentes12`, migraciones 0375 y 0376).
+Estado al 1-oct-2026 (loop punta a punta, rama `loop/s3-agentes12`, migraciones 0375 y 0376; ola 3, rama `loop/w3-agentes-1-4`, migración 0563 y retención 0562).
 Todo lo de abajo está construido y probado **con datos sintéticos**; lo que depende del archivo
 real de PASE, del GPS de la flota o de credenciales externas está en «Bloqueos».
 
@@ -67,6 +67,85 @@ Ejemplo de firma en Node (también en la pantalla de configuración):
 const firma = 'v1=' + createHmac('sha256', LLAVE).update(`${ts}.${FLOTA_ID}.${cuerpo}`).digest('hex');
 ```
 
+## Más formas de entrada (ola 3, mig. 0563)
+
+Los tres canales son **independientes** (activar uno no enciende ni enseña la llave de otro) y comparten
+la misma cola, la misma huella sha256 por flota y el mismo cron.
+
+### Correo `pj-<token>@<dominio>`
+
+El proveedor (o la flota) manda el archivo del corte como adjunto a la dirección de la flota (se activa en
+`/dashboard/agentes/peajes/configuracion`, sección «Recepción por correo»). Es el MISMO dominio y el MISMO webhook de
+Resend que los buzones de facturas y de carta porte (`POST /api/correo/entrante`, firma Svix verificada **antes** de leer
+el correo). Reglas:
+
+- La **flota sale del token del destinatario** (24 caracteres al azar), jamás del remitente (el `from` se falsifica).
+  «Cambiar dirección» genera otro token: la anterior deja de servir al instante.
+- **Remitentes permitidos** (opcional, correo o dominio): con lista, un correo de otro remitente se **ignora** (200
+  `remitente_no_permitido`); sin lista, quien tenga la dirección puede mandar (la dirección es la credencial).
+- Adjuntos Excel/CSV/TSV/ODS/PDF de hasta 4 MB (máx. 5 por correo); lo demás se ignora. Se encolan con origen `correo`.
+- Respuestas: `200` terminado o nada que hacer (buzón desconocido/apagado, sin adjuntos, ya procesado) y `503` si es
+  reintentable (descarga caída, claim ocupado, cola llena, base caída, agente apagado, `RESEND_API_KEY` ausente): Resend
+  reintenta y la huella evita duplicar.
+
+### Pull configurable (HTTPS)
+
+No hay API pública de PASE/IAVE/TeleVía. Lo que sí puede hacer una flota —o su TMS, o un script— es **publicar sus
+cortes** en una dirección HTTPS; Likida la consulta cada 15 min–24 h (configurable) y lo que traiga entra a la cola.
+**Contrato que la flota implementa (definido por Likida, no por un proveedor):**
+
+```
+GET <url>[?desde=<instante ISO del último pull exitoso>]
+Authorization: Bearer <token>        (si la flota configuró uno)
+Accept: application/json
+→ 200 { "archivos": [ { "nombre": "corte-pase.xlsx", "proveedor": "PASE", "contenido_base64": "<≤ 4 MB>" } ] }
+```
+
+Cada elemento tiene la misma forma que el cuerpo del buzón firmado. Se toman hasta 20 por consulta; la huella vuelve
+inocuo que el endpoint devuelva el mismo archivo en cada consulta.
+
+- **SSRF**: la consulta va por `httpsPublico` (solo HTTPS, sin credenciales en la URL, DNS validado contra la IP que abre
+  el socket, sin redirects); al guardar se rechaza http, IP privadas, `localhost` y nombres sin dominio.
+- **Token**: se guarda **cifrado** con el cofre de la app (AES-256-GCM, `LIKIDA_COFRE_LLAVE`); sin la llave no se guarda
+  nada (el pull sin token sí funciona). El valor nunca vuelve a la pantalla ni a un log; el cuerpo de la respuesta
+  del endpoint nunca se copia a un error.
+- **Claim con lease** (`peaje_pull_reclamar`, `FOR UPDATE SKIP LOCKED`): dos cron no consultan la misma flota a la vez.
+  Un fallo (token rechazado, HTTP ≠ 200, JSON roto, cola llena) **no avanza el cursor** y reintenta en ≤ 30 min; el
+  último error se muestra en la configuración.
+- **SFTP: no se construyó.** Requiere una librería (`ssh2`) que no está en el repo y credenciales/host de la flota; ver Bloqueos.
+
+## Aviso a la oficina
+
+Cuando el cron concilia un desglose y hay cobros donde el **GPS no ubica la unidad en la caseta** (`no_coincide`) o
+**sin respaldo** en los tickets, se avisa **una vez** por WhatsApp a quien ve dinero (dueño o contador; nunca al
+encargado) por el selector central (texto en ventana, plantilla `aviso_operacion_v1` fuera). El texto dice cuántos cobros
+hay por categoría y que es **una señal, no una acusación**; no lleva montos por cobro. El intento se reclama con
+compare-and-set (`aviso_intentos`), así que dos procesos no mandan dos avisos; si no sale (sin destinatario, plantilla sin
+aprobar) el barrido del cron lo reintenta hasta 5 veces. Un desglose anulado jamás avisa.
+
+## Anulación de un desglose
+
+`POST /v1/peajes/desgloses/{id}/anular` (área `administracion`; también el botón «Anular» del desglose abierto) con
+`{ "motivo": "…" }` (1–500 caracteres, **obligatorio**). No borra: deja quién y por qué (`anulado_por`, `anulado_motivo`).
+El desglose deja de aparecer en el tablero, de contar en la bitácora RMF 9.1.8, de exportarse, de re-conciliarse y de
+avisar, y **libera la huella** de su archivo de la cola para que el archivo correcto (o el mismo ya arreglado) pueda
+volver a mandarse. Idempotente (`yaAnulado: true`); «no existe» y «no es de tu flota» contestan 404.
+
+## Salida a SAP/ERP (por pull, configurable)
+
+| Ruta | Área | Para qué |
+|---|---|---|
+| `GET /v1/peajes/desgloses` | `dinero` | Los desgloses vigentes con su resumen de conciliación medido (`limite` 1–50). |
+| `GET /v1/peajes/exportacion?desglose=<uuid>` | `dinero` | La bitácora conciliada de UN desglose en el layout que pida: `columnas` (catálogo cerrado), `separador` (`coma`/`punto_y_coma`/`tab`), `decimal` (`punto`/`coma`), `fechas` (`iso`/`dmy`/`sap`), `bom`, `encabezado`. |
+
+Cada fila trae `estado` (cuadra / sin respaldo / por verificar), `motivo` y `explicacion`; la doctrina viaja en el
+encabezado `X-Likida-Leyenda`. Texto neutralizado contra fórmulas de Excel. No hay escritura a SAP: es pull.
+
+## Retención (mig. 0562, cron `purgar`)
+
+El **contenido** de los archivos en estado `fallida` se vacía a los 30 días (la fila queda de constancia; reprocesar exige
+volver a subir el archivo). La ventana de WhatsApp (7 días) y el registro de envíos (90 días) también se purgan ahora.
+
 ## La cola y el cron
 
 `peaje_ingesta_archivo` (unique flota+huella) → `/api/cron/peajes` reclama con `peaje_archivo_reclamar`
@@ -84,8 +163,12 @@ la pantalla tras declarar el mapeo. Fallo de infraestructura → reintento con b
   `0375_peajes_claim_concurrencia.sh` (6 sesiones, 60 archivos, cero duplicados; la mutación sin
   `SKIP LOCKED` la rompe). Ambas en `ci-postgres.yml`.
 - Vitest: lector tolerante con fixtures sintéticos (`src/lib/likida/peajes/fixtures/`), Haversine y
-  cruce GPS, catálogos, clasificador, cola, ruta firmada, cron, export, UI y un recorrido completo
-  (`flujo_completo.test.ts`).
+  cruce GPS, catálogos, clasificador, cola, ruta firmada, cron, export, UI y dos recorridos completos:
+  `flujo_completo.test.ts` (buzón firmado) y `ciclo_completo.e2e.test.ts` (ola 3: correo, pull, aviso, `/v1`, anulación;
+  feliz, fallo, duplicado, fuera de orden y otro tenant).
+- Postgres real: `supabase/tests/0563_peajes_correo_pull_anulacion.sql` (origen de la cola, CHECK de la config —token con
+  forma y único entre flotas, URL https, credencial solo cifrada—, claim del pull con lease, barrido de avisos,
+  anulación completa) y `0562_retencion_liquidacion_externa_y_peajes.sql`.
 
 ## BLOQUEOS (no cerrables por código)
 
@@ -100,7 +183,12 @@ la pantalla tras declarar el mapeo. Fallo de infraestructura → reintento con b
 4. **GPS de Innovativos conectado a Likida** (proveedor desconocido, detrás de Zero Trust) o su export:
    sin posiciones, el GPS dice `sin_datos`.
 5. `PEAJES_INGESTA_SECRETO` en Vercel y que el sistema/proveedor firme y mande el archivo (hoy no hay
-   API pública de PASE/IAVE/TeleVía; el envío lo haría un script o el TMS de la flota). Recepción por
-   correo/SFTP no se construyó.
-6. Salida a SAP: solo CSV; no hay escritura a SAP.
-7. Migraciones 0375/0376 sin aplicar a ninguna base remota (a propósito); aplicar antes de desplegar.
+   API pública de PASE/IAVE/TeleVía; el envío lo haría un script o el TMS de la flota). Para el **correo**:
+   `RESEND_EMAIL_DOMAIN` + `RESEND_API_KEY` + el webhook de Resend (`/api/correo/entrante`) configurados. Para el **pull**:
+   un endpoint de la flota que cumpla el contrato de arriba y `LIKIDA_COFRE_LLAVE` si lleva token.
+6. **SFTP**: no construido. Necesita instalar una librería SFTP (hoy no hay ninguna en el repo), el host/usuario/llave
+   de la flota y su alta en el cofre; cuando exista, se implementa como otra fuente del mismo claim.
+7. Salida a SAP: pull (lista + exportación configurable); no hay escritura a SAP ni webhook saliente.
+8. Migraciones 0375/0376/0562/0563 sin aplicar a ninguna base remota (a propósito); aplicar antes de desplegar.
+9. El aviso a la oficina usa la plantilla `aviso_operacion_v1` fuera de la ventana de 24 h: hasta que Meta la apruebe,
+   el aviso sale solo dentro de la ventana (y se reintenta).

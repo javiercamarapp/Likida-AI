@@ -70,7 +70,7 @@ const rotuloGps = (v: unknown): FilaConciliada['gps'] =>
 export async function bitacoraConciliada(tenantId: string, desgloseId: string): Promise<BitacoraConciliada | null> {
   const admin = supabaseAdmin();
   const { data: desglose, error: errD } = await acotada(admin.from('desglose_peaje')
-    .select('id, proveedor, periodo_desde, periodo_hasta').eq('tenant_id', tenantId).eq('id', desgloseId).maybeSingle(), 'bitacora_conciliada.desglose');
+    .select('id, proveedor, periodo_desde, periodo_hasta').eq('tenant_id', tenantId).eq('id', desgloseId).is('anulado_en', null).maybeSingle(), 'bitacora_conciliada.desglose');
   if (errD) throw new Error(`bitacoraConciliada: ${errD.message}`);
   if (!desglose) return null;
 
