@@ -120,6 +120,7 @@ export async function facturaPorUuid(tenantId: string, uuid: string): Promise<Fa
     .select('id, estado, xml_crudo, pdf_ruta')
     .eq('tenant_id', tenantId)
     .eq('cfdi_uuid', uuid.toLowerCase())
+    // orden-no-importa: (tenant_id, cfdi_uuid) es único en factura_proveedor: a lo más una fila
     .limit(1), 'buzon.factura_por_uuid');
   if (error) throw new Error(`facturaPorUuid: ${error.message}`);
   const f = (data ?? [])[0] as { id: string; estado: FacturaExistente['estado']; xml_crudo: string | null; pdf_ruta: string | null } | undefined;
@@ -302,4 +303,15 @@ export async function urlPdfDeRecepcion(tenantId: string, id: string): Promise<s
   if (error) throw new Error(`urlPdfDeRecepcion: ${error.message}`);
   const ruta = (data as { storage_ruta: string | null } | null)?.storage_ruta;
   return ruta ? firmarPdf(ruta) : null;
+}
+
+/** La retención de la bitácora de archivos que no cuelgan de una factura (365 días; los PDF se encolan para
+ *  borrarse de Storage). `null` = la base aún no trae la 0530 (42883): se dice, no se inventa un 0. */
+export async function purgarRecepcionesVencidas(ahora: Date): Promise<number | null> {
+  const r = await acotada(supabaseAdmin().rpc('purgar_buzon_recepcion', { p_ahora: ahora.toISOString(), p_dias: 365 }), 'buzon.purgar');
+  if (r.error) {
+    if (r.error.code === '42883' || r.error.code === 'PGRST202') return null;
+    throw new Error(`purgarRecepcionesVencidas: ${r.error.message}`);
+  }
+  return typeof r.data === 'number' ? r.data : Number(r.data) || 0;
 }

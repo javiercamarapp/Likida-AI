@@ -7,6 +7,7 @@ import { leerCfdiSeguro } from './xml_seguro';
 import {
   leerPdfFactura, esPdf, uuidsEnTexto, requiereRevision, MAX_PDF_BYTES, type PuertosPdf,
 } from './pdf_factura';
+import { aBuffer } from './bytes';
 import * as repoBuzon from './repo';
 import type { EstadoRecepcion, TipoRecepcion } from './repo';
 
@@ -86,7 +87,7 @@ const sha256 = (b: Uint8Array): string => createHash('sha256').update(b).digest(
 function tipoDe(bytes: Uint8Array): TipoRecepcion {
   if (pareceZip(bytes)) return 'zip';
   if (esPdf(bytes)) return 'pdf';
-  const cabeza = Buffer.from(bytes.subarray(0, 64)).toString('latin1').replace(/^﻿/, '').trimStart();
+  const cabeza = aBuffer(bytes.subarray(0, 64)).toString('latin1').replace(/^﻿/, '').trimStart();
   return cabeza.startsWith('<') ? 'xml' : 'otro';
 }
 
