@@ -61,9 +61,10 @@ vi.mock('./repo', () => ({
     return r;
   }),
   // El CONTRATO real de `transicionar`: solo aplica si el estado actual está en `desde`.
-  transicionar: vi.fn(async (tenantId: string, id: string, desde: string[], cambios: Record<string, unknown>) => {
+  transicionar: vi.fn(async (tenantId: string, id: string, desde: string[], cambios: Record<string, unknown>, opciones: { acuseDistintoDe?: string } = {}) => {
     const f = store.get(id);
     if (!f || f.tenantId !== tenantId || !desde.includes(f.estado)) return false;
+    if (opciones.acuseDistintoDe && f.acuseTipo === opciones.acuseDistintoDe) return false;
     const mapa: Record<string, keyof LiquidacionExterna> = {
       estado: 'estado', via: 'via', generacion: 'generacion', intentos: 'intentos', proximo_intento_en: 'proximoIntentoEn',
       ultimo_error: 'ultimoError', wamid: 'wamid', enviada_en: 'enviadaEn', acuse_tipo: 'acuseTipo', acuse_en: 'acuseEn', acuse_confirmado_en: 'acuseConfirmadoEn',
@@ -476,6 +477,25 @@ describe('«No coincide» avisa a la oficina', () => {
     // el mismo botón otra vez NO vuelve a avisar
     expect(await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps)).toEqual({ resultado: 'ya_registrado', avisoOficina: 'no_aplica' });
     expect(deps.avisarNoCoincide).toHaveBeenCalledTimes(1);
+  });
+
+  it('ATÓMICO: dos entregas SIMULTÁNEAS del mismo botón avisan UNA sola vez y dejan un solo evento', async () => {
+    const liq = await recibir();
+    const [a, b] = await Promise.all([
+      registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps),
+      registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps),
+    ]);
+    expect([a.resultado, b.resultado].sort()).toEqual(['registrado', 'ya_registrado']);
+    expect(deps.avisarNoCoincide).toHaveBeenCalledTimes(1);
+    expect(eventos.filter((e) => e.tipo === 'acuse_no_coincide')).toHaveLength(1);
+    expect(eventos.filter((e) => e.tipo === 'aviso_oficina')).toHaveLength(1);
+  });
+
+  it('la transición del acuse pide al repo que el acuse sea DISTINTO del que ya tiene', async () => {
+    const liq = await recibir();
+    await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps);
+    const llamada = vi.mocked(repo.transicionar).mock.calls.find((c) => (c[3] as { acuse_tipo?: string }).acuse_tipo === 'no_coincide');
+    expect(llamada?.[4]).toEqual({ acuseDistintoDe: 'no_coincide' });
   });
 
   it('si el aviso no sale (sin destinatario o Meta lo rechaza), se dice no_enviado y el acuse SÍ queda', async () => {
