@@ -28,7 +28,7 @@ SQL
 # Una sesión se queda un momento con el documento tomado (dentro de su transacción) para que las demás lo encuentren ocupado.
 sesion() {
   local doc="$1" n="$2"
-  "${psql_cmd[@]}" -c "begin; select count(*) from public.cp_documento_reclamar('$tenant', '$doc', 120); select pg_sleep(0.05); commit;" | head -1 > "$work/${doc}.$n"
+  "${psql_cmd[@]}" -c "begin; select count(*) from public.cp_documento_reclamar('$tenant', '$doc', 120); select pg_sleep(0.05); commit;" | sed -n 1p > "$work/${doc}.$n"
 }
 # Seis sesiones a la vez POR documento; los documentos van en serie (180 conexiones simultáneas saturan el socket).
 for d in $(seq 1 "$documentos"); do
