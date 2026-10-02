@@ -27,11 +27,26 @@ let seq = 0;
 /** Lo que se subió a Storage, por ruta (PDF y Excel), y el formato configurado por flota (0564). */
 const archivos = new Map<string, { bytes: Uint8Array; tipo: string }>();
 const formatos = new Map<string, ConfigFormatoFlota>();
+/** Reclamos de la copia al jefe (0620): llave liquidación|generación|teléfono → 'reclamada' | 'aceptada'. */
+const reclamosCopia = new Map<string, 'reclamada' | 'aceptada'>();
+let sinCandado = false;
 
 vi.mock('./repo', () => ({
   TIPO_XLSX: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   subirArchivoExterno: vi.fn(async (ruta: string, bytes: Uint8Array, tipo: string) => { archivos.set(ruta, { bytes, tipo }); }),
   leerFormatoFlota: vi.fn(async (t: string) => formatos.get(t) ?? null),
+  reclamarCopiaJefe: vi.fn(async (_t: string, id: string, gen: number, tel: string) => {
+    if (sinCandado) return 'sin_candado' as const;
+    const k = `${id}|${gen}|${tel}`;
+    if (reclamosCopia.has(k)) return null;
+    reclamosCopia.set(k, 'reclamada');
+    return { token: k };
+  }),
+  cerrarCopiaJefe: vi.fn(async (_t: string, id: string, gen: number, tel: string, _r: unknown, aceptada: boolean) => {
+    const k = `${id}|${gen}|${tel}`;
+    if (aceptada) reclamosCopia.set(k, 'aceptada'); else reclamosCopia.delete(k);
+    return true;
+  }),
   eventosDe: vi.fn(async (_t: string, id: string) => eventos.filter((e) => e.id === id).map((e) => ({ tipo: e.tipo, detalle: e.detalle, creadoEn: '' }))),
   resolverOperadorDestino: vi.fn(async (t: string) => ({ id: t === 't-A' ? 'op-A' : 'op-B', nombre: 'Juan Pérez García', telefono: '525512345678', activo: true })),
   resolverViajeIds: vi.fn(async () => []),
@@ -112,10 +127,11 @@ vi.mock('@/lib/likida/wa_ventana', () => ({
 let telefonoDinero: string | null = '525599990000';
 vi.mock('../contactos', () => ({ telefonoParaDineroDe: vi.fn(async (t: string) => (t === 't-A' ? telefonoDinero : '525588880000')) }));
 const avisos: Array<{ tel: string; texto: string }> = [];
+const telefonosQueFallan = new Set<string>();
 let avisoOk = true;
 vi.mock('@/lib/meta/aviso_oficina', async (orig) => ({
   ...(await orig<typeof import('@/lib/meta/aviso_oficina')>()),
-  avisarOficina: vi.fn(async (tel: string, texto: string) => { avisos.push({ tel, texto }); return avisoOk ? { ok: true, via: 'texto', id: 'w' } : { ok: false, motivo: 'x', fueraDeVentana: true }; }),
+  avisarOficina: vi.fn(async (tel: string, texto: string) => { avisos.push({ tel, texto }); return avisoOk && !telefonosQueFallan.has(tel) ? { ok: true, via: 'texto', id: 'w' } : { ok: false, motivo: 'x', fueraDeVentana: true }; }),
 }));
 vi.mock('../presupuesto', async (orig) => ({ ...(await orig<typeof import('../presupuesto')>()), acotada: (q: unknown) => q }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -143,7 +159,7 @@ async function entrar(tenant = 't-A', clave = 'SAP-1') {
 const tocar = (id: string) => ({ tenantId: store.get(id)!.tenantId, operadorId: store.get(id)!.operadorId });
 
 beforeEach(() => {
-  store.clear(); eventos.length = 0; outbox.clear(); avisos.length = 0; seq = 0; archivos.clear(); formatos.clear();
+  store.clear(); eventos.length = 0; outbox.clear(); avisos.length = 0; seq = 0; archivos.clear(); formatos.clear(); reclamosCopia.clear(); telefonosQueFallan.clear(); sinCandado = false;
   ventana = 'abierta'; avisoOk = true; telefonoDinero = '525599990000';
 });
 
@@ -480,6 +496,67 @@ describe('COPIA AL JEFE DE FLOTA', () => {
     const liq = await entrarFmt();
     await serv.intentarEntrega(liq, depsFormato);
     expect(avisos.map((a) => a.tel)).toEqual([JEFE, '525511110009']);
+  });
+
+  it('M3: si solo uno de dos jefes la recibe, NO queda «enviada» y el reintento va SOLO al faltante', async () => {
+    const OTRO = '525511110009';
+    formatos.set('t-A', formatoDeMuestra('pdf', { copiaTelefonos: [JEFE, OTRO] }));
+    telefonosQueFallan.add(OTRO);
+    const liq = await entrarFmt();
+    await serv.intentarEntrega(liq, depsFormato);
+    const ev = eventos.filter((e) => e.tipo === 'aviso_oficina' && e.detalle.destino === 'copia_jefe');
+    expect(ev).toHaveLength(1);
+    expect(ev[0].detalle).toMatchObject({ enviado: false, aceptados: 1, destinatarios: 2, telefonos_aceptados: [JEFE] });
+
+    telefonosQueFallan.clear();
+    avisos.length = 0;
+    const r = await serv.reenviarCopiaAJefe('t-A', liq.id, depsFormato);
+    expect(r).toMatchObject({ estado: 'enviada', aceptados: 2, destinatarios: 2 });
+    expect(avisos.map((a) => a.tel)).toEqual([OTRO]); // el primero NO la recibe dos veces
+    expect(await serv.reenviarCopiaAJefe('t-A', liq.id, depsFormato)).toEqual({ estado: 'ya_enviada' });
+  });
+
+  it('M3: un evento anterior sin la lista de aceptados y con enviado=true se lee como «todos»', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { copiaTelefonos: [JEFE] }));
+    const liq = await entrarFmt();
+    store.get(liq.id)!.estado = 'enviada';
+    eventos.push({ id: liq.id, tipo: 'aviso_oficina', detalle: { destino: 'copia_jefe', generacion: 1, enviado: true, aceptados: 1, destinatarios: 1 } });
+    expect(await serv.reenviarCopiaAJefe('t-A', liq.id, depsFormato)).toEqual({ estado: 'ya_enviada' });
+    expect(avisos).toHaveLength(0);
+  });
+
+  it('M4: dos invocaciones concurrentes mandan UNA sola copia por teléfono', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { copiaTelefonos: [JEFE, '525511110009'] }));
+    const liq = await entrarFmt();
+    store.get(liq.id)!.estado = 'enviada';
+    await Promise.all([
+      serv.reenviarCopiaAJefe('t-A', liq.id, depsFormato),
+      serv.reenviarCopiaAJefe('t-A', liq.id, depsFormato),
+    ]);
+    expect(avisos.filter((x) => x.tel === JEFE)).toHaveLength(1);
+    expect(avisos.filter((x) => x.tel === '525511110009')).toHaveLength(1);
+    expect(avisos).toHaveLength(2);
+  });
+
+  it('M4: una copia que falla SUELTA el reclamo (se puede reintentar); una aceptada lo deja cerrado', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { copiaTelefonos: [JEFE] }));
+    avisoOk = false;
+    const liq = await entrarFmt();
+    await serv.intentarEntrega(liq, depsFormato);
+    expect([...reclamosCopia.values()]).toEqual([]);
+    avisoOk = true;
+    expect(await serv.reenviarCopiaAJefe('t-A', liq.id, depsFormato)).toMatchObject({ estado: 'enviada' });
+    expect([...reclamosCopia.values()]).toEqual(['aceptada']);
+  });
+
+  it('sin la 0620 en la base (sin candado) la copia sigue saliendo por la bitácora', async () => {
+    sinCandado = true;
+    formatos.set('t-A', formatoDeMuestra('pdf', { copiaTelefonos: [JEFE] }));
+    const liq = await entrarFmt();
+    await serv.intentarEntrega(liq, depsFormato);
+    expect(textoCopia()).toHaveLength(1);
+    expect(await serv.reenviarCopiaAJefe('t-A', liq.id, depsFormato)).toEqual({ estado: 'ya_enviada' });
+    expect(textoCopia()).toHaveLength(1);
   });
 });
 

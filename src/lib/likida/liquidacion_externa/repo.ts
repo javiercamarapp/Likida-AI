@@ -434,6 +434,53 @@ export async function eventosDe(tenantId: string, liquidacionId: string): Promis
     .map((e) => ({ tipo: e.tipo, detalle: e.detalle ?? {}, creadoEn: e.created_at }));
 }
 
+// ── copia al jefe: reclamo atómico por teléfono (mig. 0620) ─────────────────
+
+export interface ReclamoCopia { token: string }
+
+/** La función RPC o la tabla de la 0620 todavía no existen en esta base. */
+const rpcAusente = (e: { code?: string; message?: string }): boolean =>
+  e.code === '42883' || e.code === 'PGRST202' || tablaAusente(e) || /could not find the function/i.test(e.message ?? '');
+
+/**
+ * Reclama el envío de la copia a UN teléfono. `ReclamoCopia` = te toca mandar;
+ * `null` = ya salió o lo está mandando otro; `'sin_candado'` = la base no trae la
+ * 0620 (el código sigue con la bitácora, sin candado atómico). Un error distinto
+ * LANZA: no se manda un mensaje con cifras sin saber si otro ya lo mandó.
+ */
+export async function reclamarCopiaJefe(
+  tenantId: string, liquidacionId: string, generacion: number, telefono: string,
+): Promise<ReclamoCopia | null | 'sin_candado'> {
+  const res = await acotada(supabaseAdmin().rpc('reclamar_copia_jefe', {
+    p_tenant: tenantId, p_liquidacion: liquidacionId, p_generacion: generacion, p_telefono: telefono,
+  }), 'liqext.copia_reclamar');
+  if (res.error) {
+    if (rpcAusente(res.error)) return 'sin_candado';
+    throw new Error(`reclamar_copia_jefe: ${res.error.message}`);
+  }
+  return typeof res.data === 'string' && res.data ? { token: res.data } : null;
+}
+
+/** Cierra el reclamo: aceptada = true no se repite; false lo suelta para reintentar. No lanza. */
+export async function cerrarCopiaJefe(
+  tenantId: string, liquidacionId: string, generacion: number, telefono: string, reclamo: ReclamoCopia, aceptada: boolean,
+): Promise<boolean> {
+  try {
+    const res = await acotada(supabaseAdmin().rpc('cerrar_copia_jefe', {
+      p_tenant: tenantId, p_liquidacion: liquidacionId, p_generacion: generacion, p_telefono: telefono,
+      p_claim: reclamo.token, p_aceptada: aceptada,
+    }), 'liqext.copia_cerrar');
+    if (res.error) {
+      logger.warn('liqext.copia_cerrar_fallo', { err: res.error.message });
+      return false;
+    }
+    return res.data === true;
+  } catch (e) {
+    logger.warn('liqext.copia_cerrar_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+}
+
 /**
  * Transición CONDICIONAL de estado: solo se aplica si la fila sigue en alguno
  * de los estados `desde`. Devuelve si la aplicó. Es el candado contra dos
