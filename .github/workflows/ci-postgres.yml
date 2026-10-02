@@ -267,6 +267,7 @@ jobs:
           PGUSER=postgres bash supabase/tests/0660_reglas_reclamo_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0661_conductor_reparto_justo.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0670_cp_documento_dividir.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0672_cp_documento_reabre_hijos.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0680_retencion_ledgers.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0681_evento_seguridad_agrupar.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0682_techo_ia_tenant.sql

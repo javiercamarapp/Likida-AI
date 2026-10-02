@@ -321,3 +321,29 @@ describe('ADVERSARIAL 07: el aviso que el cliente de Meta ya encoló no se reenv
     expect(m.avisos).toHaveLength(2);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RONDA 15: M3 (zombis) y M1 (aviso cuando un archivo partido reabrió o repitió embarques).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('un archivo partido que reabrió hijos previos avisa a la oficina (M1)', () => {
+  const dividido = (extra: { reabiertos?: number; sinArchivo?: number }): ResultadoProceso => ({ ok: true, estado: 'dividido', embarques: 3, hijos: ['h1', 'h2', 'h3'], yaExistian: 2, ...extra });
+
+  it('con reabiertos o sin archivo: un aviso con el conteo y la liga; sin ellos, ninguno', async () => {
+    const m = mundo({ pendientes: ['a'], proceso: () => dividido({ reabiertos: 1, sinArchivo: 1 }), docs: { a: { nombreArchivo: 'plan.xlsx' } } });
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(r).toMatchObject({ divididos: 1, divisionesAvisadas: 1 });
+    expect(m.avisos).toHaveLength(1);
+    expect(m.avisos[0].texto).toMatch(/plan\.xlsx.*3 embarques.*1 embarque ya estaba en la bandeja rechazado o fallido y se reabrió.*1 ya estaba resuelto/);
+    expect(m.avisos[0].contexto).toMatchObject({ tipo: 'division_con_previos', documentoId: 'a' });
+
+    const sin = mundo({ pendientes: ['a'], proceso: () => dividido({}) });
+    expect((await correrWorkerCartaPorte(sin.deps, opts(sin))).divisionesAvisadas).toBe(0);
+    expect(sin.avisos).toHaveLength(0);
+  });
+
+  it('sin teléfono de la oficina no se rompe nada', async () => {
+    const m = mundo({ pendientes: ['a'], proceso: () => dividido({ reabiertos: 1 }), telefono: null });
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(r).toMatchObject({ divididos: 1, divisionesAvisadas: 0, sinTelefono: 1, errores: 0 });
+  });
+});
