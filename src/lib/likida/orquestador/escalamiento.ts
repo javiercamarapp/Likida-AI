@@ -37,17 +37,43 @@ export interface EscalacionValida {
   resumen: string;
 }
 
+const esDigito = (c: string): boolean => c >= '0' && c <= '9';
+const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+/** Desde cuántos dígitos seguidos una racha es un teléfono, una cuenta, una CLABE o una tarjeta (10 = un teléfono de México). */
+export const DIGITOS_DE_UN_NUMERO_PERSONAL = 10;
+
+/**
+ * Reemplaza toda racha de 10+ dígitos (separados, a lo sumo, por UN espacio, punto o guion) por «[número]». Barrido
+ * lineal a propósito (sin regex con retroceso). Una fecha ISO (2026-10-02) no es un número personal y se respeta.
+ */
+export function taparNumerosLargos(t: string): string {
+  let salida = '';
+  let i = 0;
+  while (i < t.length) {
+    if (!esDigito(t[i])) { salida += t[i]; i++; continue; }
+    let j = i; let digitos = 0; let fin = i;
+    while (j < t.length) {
+      if (esDigito(t[j])) { digitos++; j++; fin = j; }
+      else if ((t[j] === ' ' || t[j] === '.' || t[j] === '-') && j + 1 < t.length && esDigito(t[j + 1])) j++;
+      else break;
+    }
+    const racha = t.slice(i, fin);
+    salida += digitos >= DIGITOS_DE_UN_NUMERO_PERSONAL && !FECHA_ISO.test(racha) ? '[número]' : racha;
+    i = fin;
+  }
+  return salida;
+}
+
 /** Quita lo que una persona no necesita para actuar y el repo no debe guardar de más. */
 export function limpiarResumen(crudo: string): string {
-  return crudo
-    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
-    .replace(/https?:\/\/\S+/gi, '[enlace]')
-    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[correo]')
-    // Teléfonos, cuentas, CLABE, tarjetas: cualquier racha de 8+ dígitos (con separadores comunes).
-    .replace(/\d(?:[\s.-]?\d){7,}/g, '[número]')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, MAX_RESUMEN);
+  return taparNumerosLargos(
+    crudo
+      .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+      .replace(/https?:\/\/\S+/gi, '[enlace]')
+      .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[correo]')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  ).slice(0, MAX_RESUMEN);
 }
 
 export type ResultadoValidacionEscalar = { ok: true; valor: EscalacionValida } | { ok: false; error: string };
