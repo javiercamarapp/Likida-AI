@@ -153,6 +153,11 @@ describe('cron asistencia — el reloj reserva la unidad atómica (REN-31-C1)', 
   // La octava (la ventana de cobranza) la encontró la continuación 2 de la
   // auditoría 31: el `{consultas: 7}` original no la contaba, y el auditor de
   // pruebas demostró que una consulta de más pasaba con 31/31 verdes.
+  // La petición «entra» unos milisegundos DESPUÉS de que la prueba toma `antes` (arranque de la llamada, planificador,
+  // máquina cargada). El margen derivado coincide EXACTO con el peor caso —no tiene holgura—, así que sin esta tolerancia
+  // un milisegundo de retraso ponía la prueba en rojo sin que el reloj estuviera mal (flaky, 1 ms). 250 ms es mínimo frente a
+  // lo que la prueba protege: una consulta o un envío de más suma >= 9.5 s al peor caso y sigue poniéndola en rojo.
+  const TOLERANCIA_ARRANQUE_MS = 250;
   const PEOR_CASO_ESCALADA_MS = 8 * TECHO_PASO_CONSULTA_MS + 2 * TECHO_ENVIO_WHATSAPP_MS;
 
   it('una escalada admitida en el último instante cabe ENTERA antes del maxDuration', async () => {
@@ -190,7 +195,7 @@ describe('cron asistencia — el reloj reserva la unidad atómica (REN-31-C1)', 
     expect(
       opts.venceEn,
       'el plazo se corrió tanto como tardó el prólogo: en producción son dos consultas, hasta 9.5 s cada una',
-    ).toBeLessThanOrEqual(antes + maxDuration * 1000 - margen);
+    ).toBeLessThanOrEqual(antes + maxDuration * 1000 - margen + TOLERANCIA_ARRANQUE_MS);
   });
 
   it('el peor caso REAL cabe entero: 8 consultas —la ventana de cobranza es la octava—, 2 envíos y el latido del cierre', async () => {
@@ -209,7 +214,7 @@ describe('cron asistencia — el reloj reserva la unidad atómica (REN-31-C1)', 
     expect(
       opts.venceEn + PEOR_CASO_REAL_MS + TECHO_PASO_CONSULTA_MS,
       'una escalada ámbar admitida en el último instante, más su latido, tiene que terminar antes del hachazo',
-    ).toBeLessThanOrEqual(antes + maxDuration * 1000);
+    ).toBeLessThanOrEqual(antes + maxDuration * 1000 + TOLERANCIA_ARRANQUE_MS);
   });
 
   it('usa el margen DERIVADO de los techos, no un literal que se le parezca', async () => {
