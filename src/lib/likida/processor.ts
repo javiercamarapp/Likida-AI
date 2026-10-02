@@ -34,6 +34,7 @@ import {
 } from '@/lib/likida/intake/rafaga';
 import { versionAvisoVigente, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/likida/privacidad';
 import { mensajeEvidencia } from '@/lib/likida/conductor/evidencia';
+import { atenderPreguntaConvenio } from '@/lib/likida/convenios/pregunta';
 import { atenderConductor, atenderAcuseJefe, atenderPinConductor, hitoParaEvidenciaDelChofer, registrarEvidenciaDelChofer, registrarHitoDesdeFoto } from '@/lib/likida/conductor/atender';
 import {
   interpretarMarcaJornada, interpretarConformidadJornada,
@@ -3901,6 +3902,19 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     //
     // DAT-38: la hora es la del MENSAJE (Meta), no la del procesamiento; sin ella,
     // el reloj local.
+    // ── ¿PREGUNTA POR LAS INSTRUCCIONES DEL LUGAR? («¿por dónde entro?», 0580) ──
+    //
+    // El convenio del cliente trae la puerta, con quién reportarse, los documentos y las peculiaridades de la planta:
+    // el operador pregunta y se le responde con ese perfil —solo con lo que el convenio dice; sin datos, lo dice y lo
+    // manda con el jefe de tráfico—. Lista cerrada de frases del oficio, sin modelo: lo demás sigue al agente.
+    const respuestaConvenio = await atenderPreguntaConvenio({
+      tenantId: op.tenantId, operadorId: op.operadorId, viajeAbiertoId: viajeId, texto: msg.text,
+    });
+    if (respuestaConvenio) {
+      await say(respuestaConvenio);
+      return;
+    }
+
     const rConductor = await atenderConductor({
       tenantId: op.tenantId,
       operadorId: op.operadorId,

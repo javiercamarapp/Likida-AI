@@ -18147,3 +18147,59 @@ begin
   raise exception E'FISCAL_SIN_COPIAS_0355 n=% monto=% iva=% distingue-distinto=%   (esperado t / t / t / t)',
     n_ok, monto_ok, iva_ok, distingue;
 end $$;
+
+-- ── 580. Convenios de cliente: llave única, FK con flota, claim del envío (mig. 0580) ──
+--
+-- W3 «convenios» (flota de demo): el convenio fija A→B y las instrucciones
+-- de operación que el chofer recibe por WhatsApp. Lo que solo la base garantiza:
+--   unico   — (flota, cliente, nombre) es único: el importador CSV es idempotente;
+--   fk_ajena — un convenio de la flota A no cuelga del cliente de la flota B;
+--   claim   — el envío al operador se reclama con UN UPDATE condicionado: de dos
+--             reclamos sobre el mismo viaje gana exactamente uno;
+--   set_null — borrar el convenio deja el viaje y la foto de sus instrucciones.
+-- La batería completa (RLS por rol, CHECKs, cascadas) vive en
+-- supabase/tests/0580_convenios.sql, que corre en ci-postgres.
+-- Esperado: CONVENIOS_0580 unico=t fk_ajena=t claim=t set_null=t
+do $$
+declare
+  ta uuid; tb uuid; ca uuid; cb uuid; oa uuid; va uuid; conv uuid;
+  unico boolean := false; fk_ajena boolean := false; n int; claim boolean; set_null boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0580 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0580 B') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ cliente A') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (tb, 'ZZZ cliente B') returning id into cb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0580', '5215559990580') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus) values (ta, oa, 'ZZZ-0580', 'abierto') returning id into va;
+  insert into cliente_convenio (tenant_id, cliente_id, nombre) values (ta, ca, 'A → B') returning id into conv;
+
+  begin
+    insert into cliente_convenio (tenant_id, cliente_id, nombre) values (ta, ca, 'A → B');
+  exception when unique_violation then unico := true;
+  end;
+
+  begin
+    insert into cliente_convenio (tenant_id, cliente_id, nombre) values (ta, cb, 'cliente ajeno');
+  exception when foreign_key_violation then fk_ajena := true;
+  end;
+
+  insert into viaje_convenio (viaje_id, tenant_id, convenio_id, instrucciones)
+  values (va, ta, conv, '[{"categoria":"puerta","texto":"Puerta 3"}]'::jsonb);
+  update viaje_convenio set despacho_reclamado_en = now()
+   where viaje_id = va and despacho_enviado_en is null
+     and (despacho_reclamado_en is null or despacho_reclamado_en < now() - interval '5 minutes');
+  get diagnostics n = row_count;
+  claim := n = 1;
+  update viaje_convenio set despacho_reclamado_en = now()
+   where viaje_id = va and despacho_enviado_en is null
+     and (despacho_reclamado_en is null or despacho_reclamado_en < now() - interval '5 minutes');
+  get diagnostics n = row_count;
+  claim := claim and n = 0;
+
+  delete from cliente_convenio where id = conv;
+  select count(*) = 1 into set_null from viaje_convenio
+   where viaje_id = va and convenio_id is null and jsonb_array_length(instrucciones) = 1;
+
+  raise exception E'CONVENIOS_0580 unico=% fk_ajena=% claim=% set_null=%   (esperado t / t / t / t)',
+    unico, fk_ajena, claim, set_null;
+end $$;

@@ -65,6 +65,8 @@ export const OPERACION: Item[] = [
   // real de cada paso. Va primero: es lo que se abre el día uno.
   { href: '/dashboard/arranque', nombre: 'Puesta en marcha', Icono: ListChecks },
   { href: '/dashboard/despacho', nombre: 'Despacho', Icono: ClipboardList },
+  // 0580: el perfil del cliente — de aquí salen las instrucciones (puerta, con quién reportarse, documentos) que el operador recibe.
+  { href: '/dashboard/convenios', nombre: 'Convenios de clientes', Icono: BookOpen },
   // El Registro (F2): la fuente de verdad navegable. Acción en Despacho;
   // aquí se consulta y se cruza.
   { href: '/dashboard/viajes', nombre: 'Viajes', Icono: Truck },
