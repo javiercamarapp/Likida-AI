@@ -19174,3 +19174,66 @@ begin
   raise exception E'SEGURIDAD_OLA9 purga-por-severidad=% ledgers-vigente-intacto=% agrupa-ventana=% tope-desborde=% suma-intacta=% techo-sin-pisar=% techo-quita=% techo-rango=%   (esperado t / t / t / t / t / t / t / t)',
     purga, vigente, agrupa, desborde, suma, sin_pisar, quita, rango;
 end $$;
+
+-- ── 330. Carta Porte, correctivas de la ronda 15: hijos con huella ya conocida, replay completo, zombis y desborde (mig. 0672 + 0676 + 0683) ──
+-- (1) Un hijo cuya huella era de un documento RECHAZADO o FALLIDO se REABRE como `recibido` con el archivo nuevo y su ficha de linaje bajo el padre
+-- nuevo (antes se «reutilizaba» y el embarque quedaba sin documento legible); uno APROBADO y PURGADO no se toca y se avisa `sin_archivo` para que la
+-- app borre el archivo huérfano; el replay de un padre ya dividido devuelve TODOS los hijos. (2) Un `procesando` con 5 intentos y el lease vencido
+-- (zombi: nadie lo reclamaba ni lo avisaba) pasa a `fallido` terminal y entra a la lista de agotados; lo vivo no se toca. (3) Un `detalle.desborde` no
+-- booleano ya no rompe el alta de eventos de seguridad.
+-- Esperado: CP_R15 reabre-rechazado=t reabre-fallido=t aprobado-purgado-sin-archivo=t replay-completo=t zombi-cerrado=t zombi-avisable=t vivo-intacto=t desborde-no-rompe=t
+do $$
+declare
+  ta uuid; pa uuid; z1 uuid; z2 uuid; r record; acc text[] := '{}';
+  reabre_r boolean := false; reabre_f boolean := false; sin_arch boolean := false; replay boolean := false;
+  zombi boolean := false; avisable boolean := false; vivo boolean := false; desb boolean := false;
+  hijos jsonb; h1 uuid; h2 uuid; h3 uuid; n int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0672') returning id into ta;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'excel', 'plan.xlsx', 1000, repeat('1', 64), 'procesando', 2, 1, now() + interval '2 minutes', 'r/1') returning id into pa;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, storage_ruta, purgado_en, rechazo_motivo)
+    values (ta, 'correo', 'csv', 'h1.csv', 50, repeat('a', 64), 'rechazado', 3, 1, null, now(), 'duplicado') returning id into h1;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, storage_ruta)
+    values (ta, 'correo', 'csv', 'h2.csv', 50, repeat('b', 64), 'fallido', 3, 5, 'r/viejo-h2') returning id into h2;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, storage_ruta, purgado_en, aprobado_en)
+    values (ta, 'correo', 'csv', 'h3.csv', 50, repeat('c', 64), 'aprobado', 3, 1, null, now(), now()) returning id into h3;
+  hijos := (select jsonb_agg(jsonb_build_object('indice', g, 'clave', 'F-' || g, 'nombre', 'h' || g || '.csv', 'sha256', repeat(chr(96 + g), 64),
+              'bytes', 100 + g, 'storage_ruta', 'r/n' || g) order by g) from generate_series(1, 3) g);
+
+  for r in select * from cp_documento_dividir(ta, pa, 2, hijos, now() + interval '180 days', now() + interval '90 days') order by indice loop
+    acc := acc || (r.indice || ':' || r.accion);
+  end loop;
+  reabre_r := acc[1] = '1:reabierto'
+    and (select estado = 'recibido' and purgado_en is null and storage_ruta = 'r/n1' and rechazo_motivo is null and intentos = 0 from cp_documento where id = h1)
+    and exists (select 1 from cp_documento_embarque where documento_id = h1 and padre_id = pa)
+    and exists (select 1 from cp_documento_evento where documento_id = h1 and tipo = 'reabierto');
+  reabre_f := acc[2] = '2:reabierto'
+    and (select estado = 'recibido' and intentos = 0 and storage_ruta = 'r/n2' from cp_documento where id = h2);
+  sin_arch := acc[3] = '3:sin_archivo'
+    and (select estado = 'aprobado' and purgado_en is not null and storage_ruta is null from cp_documento where id = h3)
+    and exists (select 1 from cp_documento_evento where documento_id = h3 and tipo = 'duplicado_recibido')
+    and not exists (select 1 from cp_documento_embarque where documento_id = h3);
+  select count(*) into n from cp_documento_dividir(ta, pa, 3, hijos, now(), now()) where not creado and accion = 'reutilizado';
+  replay := n = 3 and (select count(*) = 2 from cp_documento_embarque where padre_id = pa);
+
+  -- Zombis
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'pdf_texto', 'zombi.pdf', 10, repeat('d', 64), 'procesando', 6, 5, now() - interval '10 minutes', 'r/z') returning id into z1;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'pdf_texto', 'vivo.pdf', 10, repeat('e', 64), 'procesando', 6, 5, now() + interval '2 minutes', 'r/v') returning id into z2;
+  perform cp_documentos_cerrar_zombis(50, 5, now() + interval '90 days');
+  zombi := (select estado = 'fallido' and version = 7 and procesando_hasta is null and ultimo_error is not null from cp_documento where id = z1)
+           and exists (select 1 from cp_documento_evento where documento_id = z1 and tipo = 'extraccion_fallida');
+  avisable := exists (select 1 from cp_documentos_agotados(200) where id = z1);
+  vivo := (select estado = 'procesando' from cp_documento where id = z2) and not exists (select 1 from cp_documentos_agotados(200) where id = z2);
+
+  -- Desborde no booleano
+  perform registrar_evento_seguridad('otro', 'firma_invalida', 'media', null, 'zz330-a', '{"desborde": "si"}'::jsonb);
+  perform registrar_evento_seguridad('otro', 'firma_invalida', 'media', null, 'zz330-b', '{"desborde": 1}'::jsonb);
+  desb := (select count(*) = 2 from evento_seguridad where actor in ('zz330-a', 'zz330-b') and not (detalle ? 'desborde'));
+  delete from evento_seguridad where actor in ('zz330-a', 'zz330-b');
+
+  raise exception E'CP_R15 reabre-rechazado=% reabre-fallido=% aprobado-purgado-sin-archivo=% replay-completo=% zombi-cerrado=% zombi-avisable=% vivo-intacto=% desborde-no-rompe=%   (esperado t / t / t / t / t / t / t / t)',
+    reabre_r, reabre_f, sin_arch, replay, zombi, avisable, vivo, desb;
+end $$;
