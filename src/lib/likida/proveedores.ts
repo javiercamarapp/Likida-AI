@@ -135,29 +135,29 @@ export async function guardarFacturaProveedor(
 
   const receptorEsFlota = compararReceptor(xml.rfcReceptor, rfcFlota);
 
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('factura_proveedor')
-    .insert({
-      tenant_id: tenantId,
-      cfdi_uuid: xml.uuid,
-      emisor_rfc: xml.rfcEmisor ?? null,
-      emisor_nombre: null,
-      receptor_rfc: xml.rfcReceptor ?? null,
-      receptor_es_flota: receptorEsFlota,
-      fecha: xml.fecha ? xml.fecha.slice(0, 10) : null,
-      sub_total: typeof xml.subTotal === 'number' ? xml.subTotal : null,
-      iva: xml.ivaTraslado || null,
-      total: xml.total,
-      descripcion: leerDescripcionPrimerConcepto(xmlCrudo),
-      conceptos: Math.max(1, xml.conceptos.length),
-      xml_crudo: xmlCrudo,
-      origen,
-      estado_sat: estadoSat,
-      // El XML es el dato duro del CFDI (0530): se rotula, no se deja al «NULL = no rastreado» de las filas viejas.
-      fuente_datos: 'xml',
-    })
-    .select('id')
-    .single(), 'proveedores.guardar');
+  const fila = {
+    tenant_id: tenantId,
+    cfdi_uuid: xml.uuid,
+    emisor_rfc: xml.rfcEmisor ?? null,
+    emisor_nombre: null,
+    receptor_rfc: xml.rfcReceptor ?? null,
+    receptor_es_flota: receptorEsFlota,
+    fecha: xml.fecha ? xml.fecha.slice(0, 10) : null,
+    sub_total: typeof xml.subTotal === 'number' ? xml.subTotal : null,
+    iva: xml.ivaTraslado || null,
+    total: xml.total,
+    descripcion: leerDescripcionPrimerConcepto(xmlCrudo),
+    conceptos: Math.max(1, xml.conceptos.length),
+    xml_crudo: xmlCrudo,
+    origen,
+    estado_sat: estadoSat,
+  };
+  const insertar = (f: Record<string, unknown>) => acotada(supabaseAdmin().from('factura_proveedor').insert(f).select('id').single(), 'proveedores.guardar');
+  // El XML es el dato duro del CFDI (0530): se rotula `fuente_datos: 'xml'`, no se deja al «NULL = no rastreado» de
+  // las filas viejas. Sobre una base SIN migrar (42703, la columna no existe) se guarda sin el rótulo: el buzón
+  // sigue recibiendo facturas como antes en vez de rechazar cada correo.
+  let { data, error } = await insertar({ ...fila, fuente_datos: 'xml' });
+  if (error?.code === '42703') ({ data, error } = await insertar(fila));
 
   if (error) {
     if (error.code === '23505') return { ok: false, motivo: 'duplicada' };

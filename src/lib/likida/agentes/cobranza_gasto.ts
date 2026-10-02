@@ -52,7 +52,15 @@ export async function leerConfigGasto(tenantId: string): Promise<ConfigGasto> {
     .select('por_gasto, tiers_gasto, max_mensajes_dia, conceptos_cfdi, umbral_foto')
     .eq('tenant_id', tenantId)
     .maybeSingle(), 'cobranza_gasto.config');
-  if (error) throw new Error(`leerConfigGasto: ${error.message}`);
+  if (error) {
+    // Base SIN migrar (0525): columna o tabla inexistente = la cobranza por gasto no existe todavía. Cae al camino
+    // de siempre (por viaje) con la función APAGADA y lo dice en el log; cualquier otro fallo sí lanza.
+    if (error.code === '42703' || error.code === '42P01') {
+      logger.warn('cobranza_gasto.base_sin_migrar', { tenantId, codigo: error.code });
+      return CONFIG_GASTO_DEFAULT;
+    }
+    throw new Error(`leerConfigGasto: ${error.message}`);
+  }
   if (!data) return CONFIG_GASTO_DEFAULT;
   const v = validarConfigGasto({
     porGasto: data.por_gasto as boolean,
