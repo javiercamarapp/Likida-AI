@@ -1,6 +1,6 @@
 # Agente 5 «Conductor» — los hitos del viaje por WhatsApp
 
-> Estado al 2-oct-2026: **construido y probado con dobles/fixtures; NO operando.** Todo lo que depende de WhatsApp real (número/WABA, plantillas aprobadas por Meta) está en «Bloqueos externos». Migraciones: `0380_conductor_hitos.sql` (hitos, escalera, escalamiento) y `0385_conductor_validacion_sitios_evidencia.sql` (sitios, validación contra la ubicación, evidencia, acciones de oficina, indicadores). La segunda entrega está descrita desde «Segunda entrega (0385)».
+> Estado al 2-oct-2026: **construido y probado con dobles/fixtures; NO operando.** Todo lo que depende de WhatsApp real (número/WABA, plantillas aprobadas por Meta) está en «Bloqueos externos». Migraciones: `0380_conductor_hitos.sql` (hitos, escalera, escalamiento) y `0385_conductor_validacion_sitios_evidencia.sql` (sitios, validación contra la ubicación, evidencia, acciones de oficina, indicadores). La segunda entrega está descrita desde «Segunda entrega (0385)». Después se sumaron `0603`-`0604` (pin de WhatsApp fuera del GPS, aviso de llegada sin confirmar), `0630` (polígonos nativos de las geocercas) y `0635`-`0637` (hitos por geocerca, señal de vida, sitio derivado); ninguna de las migraciones está aplicada en una base real.
 
 ## Qué hace
 
@@ -118,22 +118,25 @@ Datos personales nuevos: el nombre de un **tercero** (quien recibe en el andén)
 ## Operación
 
 - Palancas: `global` y `agente:conductores` (fail-closed: ilegible = no corre). Latido `conductor-hitos` (parcial = fallos de envío, cortes por reloj o rechazo masivo).
-- Config por flota: `agente_conductor_config` (sin fila = defaults del código, `conductor/config.ts`), editable con `PUT /v1/conductor/config`. No hay pantalla todavía (ver pendientes).
+- Config por flota: `agente_conductor_config` (sin fila = defaults del código, `conductor/config.ts`), editable en `/dashboard/agentes/conductores/configuracion` (la ven los roles con acceso a la ruta; solo guarda quien puede administrar; si no se pudo leer la config, la pantalla lo dice en vez de enseñar los defaults como si fueran lo guardado) o con `PUT /v1/conductor/config`.
+- Interruptores por flota que nacen APAGADOS (se encienden una flota a la vez): `avisar_oficina_llegada`/`avisar_oficina_salida`, `avisar_llegada_sin_confirmar` (0604), `avisar_senal_vida` (0636), las alertas de estadía y `pedir_foto_evidencia`. Encendidos por defecto: la detección por geocerca (`detectar_hitos_gps`, solo con sitio asignado y GPS de la unidad), la validación de ubicación y la confirmación al chofer.
+- Cada paso proactivo del cron `conductor-hitos` corre aislado: si uno falla, los demás corren y el latido sale `parcial`.
 - Contactos de escalamiento: `conductor_contacto_trafico`, por el mismo `PUT /v1/conductor/config` (teléfonos normalizados a 52+10).
 - Modelo: `LIKIDA_MODEL_CONDUCTOR_HITO` cambia el modelo sin deploy.
 
 ## Bloqueos externos (no cerrables por código)
 
-1. **Número/WABA reales y aprobación de Meta** de las plantillas nuevas del Agente 5 (ver `plantillas-meta.md`): `conductor_solicitud_llegada_carga_v1`, `conductor_llegada_carga_sin_cita_v1`, `conductor_contacto_anden_v1`, `conductor_salida_carga_v1`, `conductor_llegada_descarga_v1`, `conductor_salida_descarga_v1`, `conductor_solicitud_regreso_v1`, `conductor_recordatorio_1/2/3_v1`, `aviso_jefe_trafico_v1` (+ `aviso_operacion_v1` ya existente para el aviso a oficina). Sin aprobación Meta devuelve 132001 y el agente lo reporta (fail-closed), no lo simula. Los textos son ES-MX propuestos: **no se verificaron contra Meta**.
+1. **Número/WABA reales y aprobación de Meta** de las plantillas nuevas del Agente 5 (ver `plantillas-meta.md`): `conductor_solicitud_llegada_carga_v1`, `conductor_llegada_carga_sin_cita_v1`, `conductor_contacto_anden_v1`, `conductor_salida_carga_v1`, `conductor_llegada_descarga_v1`, `conductor_salida_descarga_v1`, `conductor_solicitud_regreso_v1`, `conductor_recordatorio_1/2/3_v1`, `aviso_jefe_trafico_v1`, `conductor_llegada_sin_confirmar_v1` (0604), `conductor_senal_vida_v1` y `aviso_jefe_senal_vida_v1` (0636) (+ `aviso_operacion_v1` ya existente para el aviso a oficina). Las funciones que las usan nacen apagadas, así que aprobarlas no es requisito para el demo salvo lo que se vaya a enseñar en vivo. Sin aprobación Meta devuelve 132001 y el agente lo reporta (fail-closed), no lo simula. Los textos son ES-MX propuestos: **no se verificaron contra Meta**.
 2. **Datos reales del cliente de demo**: citas/ETA por viaje (su TMS tiene que llamar a `PUT …/citas`), choferes con teléfono, contactos de patio por terminal y jefe general.
-3. **GPS/geocercas** del cliente de demo para la validación automática (hoy `validado` solo se alcanza por oficina/sistema; ver pendientes).
+3. **GPS/geocercas** reales del cliente de demo: el código ya concilia («ya llegué» contra la posición del tractor) y detecta llegadas y salidas por geocerca, pero solo con fixtures; hace falta el acceso de solo lectura a sus tablas (ver `gps-proveedores.md`) y sus polígonos (los de patio alargado ya se guardan nativos, P1).
 4. **Política de retención** del dato del tercero (365 días propuesto).
 5. Plazos por defecto sin cita (120/120/480/120/30 min) son **supuestos**: validarlos con su operación.
 
 ## Pendientes de la primera entrega (estado actual)
 
 - ~~Validación automática contra geocerca/GPS, editor de geocercas y foto/evidencia por hito~~ → hecho en la 0385 (ver abajo).
-- ~~Tablero ampliado~~ → hecho (0385). **Sigue pendiente la pantalla de configuración** (escalera, ventana, contactos y las perillas nuevas de la 0385): la config se edita por `PUT /v1/conductor/config`.
+- ~~Tablero ampliado~~ → hecho (0385). ~~Pantalla de configuración~~ → hecha: `/dashboard/agentes/conductores/configuracion` (escalera, ventana, contactos y las perillas de la 0385, 0604 y 0635-0636), además de `PUT /v1/conductor/config`.
+- ~~Detección por geocerca sin que el chofer escriba, «sin señal de vida» y sitio derivado~~ → hecho (P2, 0635-0637; sección «Ciclo por geocerca y señal de vida»).
 - Webhook saliente hacia el sistema del cliente (exige política de destinos/SSRF, secretos y reintentos que no se inventaron).
 - Aviso por correo/Notificaciones a la flota cuando el agente no logra entregar escalaciones (el patrón de `escalar_viaje.ts`).
 - La migración 0380 reescribe enteros los dominios de `cron_latido` y `agente_definicion_modelo_rol_dominio`; al integrar con otras ramas que también los amplían, **reconciliar las listas** (las pruebas `salud.test.ts` y `agente_definicion_modelo_rol_dominio.test.ts` lo detectan). La 0385 NO toca esos dominios (el cron es el mismo).
@@ -217,7 +220,8 @@ Mismo criterio y pipeline que el POD: el **caption** decide qué papel es (`sell
 ## 7. Pruebas
 
 - `supabase/tests/0385_conductor_validacion_sitios.sql` corre contra **Postgres real** (CHECKs, unicidad, FK compuestas entre flotas, «solo mejora», atomicidad hito+bitácora, append-only incluso para `service_role`, indicadores, retención/ARCO de la evidencia, RLS —el contador no ve—, funciones no ejecutables por `authenticated`). `0385_conductor_concurrencia.sh` repite lo atómico con **sesiones reales en paralelo** (24 veredictos mezclados, 12 capturas, 12 atenciones, 8 importaciones del mismo catálogo; el importador se serializa por flota con un advisory lock). Las pruebas SQL y la de concurrencia se agregaron (junto con la de la 0380, que faltaba) a `ci-postgres.yml`.
-- `conductor/ciclo_completo.e2e.test.ts` (38): ciclo completo con dobles de WhatsApp y el **selector real** `enviarConFallback` — viaje feliz con validación y evidencia, chofer que no contesta (escalera exacta minuto a minuto, patio a los 90, jefe a los 120, «Ya lo atiendo»), fuera de orden, duplicados y corridas solapadas, chofer/flota equivocados, fuera de ventana de 24 h (plantilla del catálogo con los mismos botones, registro de ventana viejo, plantilla sin aprobar, 429), validación sin acusar y aislamiento entre flotas en la misma pasada.
+- `conductor/ciclo_completo.e2e.test.ts` (53): ciclo completo con dobles de WhatsApp y el **selector real** `enviarConFallback` — viaje feliz con validación y evidencia, chofer que no contesta (escalera exacta minuto a minuto, patio a los 90, jefe a los 120, «Ya lo atiendo»), fuera de orden, duplicados y corridas solapadas, chofer/flota equivocados, fuera de ventana de 24 h (plantilla del catálogo con los mismos botones, registro de ventana viejo, plantilla sin aprobar, 429), validación sin acusar y aislamiento entre flotas en la misma pasada; y el bloque de P2: el tractor llega y sale solo por geocerca (hitos `sistema` con la hora de la muestra, sin un mensaje del chofer), duplicado y barridos solapados, el que ya avisó manda, flota equivocada, perilla apagada, y la señal de vida (aviso 1 con tres botones, aviso 2, jefe de tráfico, «Sí, estoy», «Voy a cargar», el GPS que vuelve, unidad sin GPS, fuera de ventana).
+- `e2e/agente-10-gps.e2e.test.ts` (17): del poll del proveedor al asentador y al barrido de validación; `conectores/tabla_propia/e2e.test.ts`: su CSV de posiciones y geocercas contra la validación de llegada, con el patio alargado junto a la carretera.
 - Unitarias: geometría, veredicto, CSV, estadías y su CSV, alertas, evidencia, tablero, acciones y permisos, servicios, rutas `/v1`, pantallas (SSR) y que ninguna pantalla de operación formatea dinero.
 
 ## 8. Supuestos y límites (honestos)
@@ -230,7 +234,8 @@ Mismo criterio y pipeline que el POD: el **caption** decide qué papel es (`sell
 
 ## 9. Pendientes reales
 
-- **Pantalla de configuración** de la flota (las perillas de la 0385 y la escalera): hoy solo `PUT /v1/conductor/config`.
+- **Reparto justo del cron** (paquete P9): hoy la cola de hitos se toma por `aceptado_en ASC` cruzando flotas con tope de 400 por pasada, así que con muchas flotas activas una puede quedarse esperando; y el cierre de viajes abiertos viejos. Un `.sh` de concurrencia con sesiones reales sobre el claim de `viaje_hito_aviso` (como el de la 0385).
+- **Umbrales de la señal de vida** (45 min sin muestra, 60 min parado, 20 min entre avisos): son supuestos de ingeniería; medirlos con los datos reales de GPS de la flota.
 - **Jornada**: enganchar el fin derivado de hitos al derivador con su puerta de aviso de privacidad (la RPC ya acepta `hito_viaje`); y que la **liquidación** consuma `estadiasDeViaje`.
 - Evidencia: no hay visor integrado ni recorte/compresión de la foto, ni detección de la foto repetida entre viajes; la retención de 365 días es propuesta.
 - Concurrencia: lo nuevo de la 0385 (veredictos, captura/atención de oficina, importador) **sí** se probó con sesiones reales en paralelo (`0385_conductor_concurrencia.sh`). Sigue **sin** probarse así el claim de avisos de la 0380 (`viaje_hito_aviso`): su garantía es un unique y se probó en una sola sesión y con concurrencia simulada en memoria.

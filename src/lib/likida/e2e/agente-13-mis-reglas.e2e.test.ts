@@ -259,6 +259,5 @@ describe('otro tenant', () => {
   });
 });
 
-describe('plantilla de respaldo en «Mis reglas» y reglas de otros agentes (Ola 3)', () => {
-  it.todo('INTEGRACIÓN PENDIENTE (w3-buzon-cobranza-reglas): el respaldo por plantilla de «Mis reglas» se declara y se prueba desde la pantalla (hoy el selector ya cae a regla_aviso_v1 fuera de ventana; falta la vista de «cuál plantilla usé»)');
-});
+// El respaldo por plantilla de «Mis reglas» (`regla_aviso_v1` fuera de ventana) y la vista de «cuál plantilla usé»
+// (`ultimosAvisos` con `via: 'plantilla'` y su motivo) los ejerce `reglas/e2e_ciclo_completo.test.ts`.

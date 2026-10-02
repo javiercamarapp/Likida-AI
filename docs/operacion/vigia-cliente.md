@@ -2,7 +2,9 @@
 
 Atiende por WhatsApp a los **clientes** de la flota (quien espera su carga): clasifica
 lo que preguntan, contesta con datos reales del viaje, el gerente aprueba con un
-toque, y lo molesto o sin respuesta escala por niveles. Migraciones `0400` y `0401`.
+toque, y lo molesto o sin respuesta escala por niveles. Migraciones `0400` y `0401` (base), `0481`-`0482` (costo de IA propio y
+adjuntos), `0484` (grupos críticos, histórico exportado y alertas) y `0647` (respuestas rápidas aprobadas). Estado al 2-oct-2026:
+construido y probado con dobles; **ninguna de esas migraciones está aplicada en la base real** (ver «Puesta en marcha»).
 
 Antes de este agente, un número que no era chofer, oficina ni proveedor recibía
 «no te tengo registrado como operador». Esa regla **se conserva** para cualquier
@@ -46,7 +48,7 @@ Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`* * * * *`).
 
 ## Puesta en marcha para una flota
 
-1. Aplicar `0400` y `0401` (la compuerta de despliegue exige migraciones antes de `[deploy]`).
+1. Aplicar `0400`, `0401`, `0481`, `0482`, `0484` y `0647` (la compuerta de despliegue exige migraciones antes de `[deploy]`; sin la 0484 no hay grupos, histórico ni plazo crítico, y sin la 0647 no hay respuestas rápidas: el Vigía contesta como siempre).
 2. Plantillas de Meta: aprobar `vigia_respuesta_cliente_v1`, `vigia_aprobacion_v1` y
    `vigia_escalamiento_v1` (texto exacto en `docs/operacion/plantillas-meta.md`). Sin ellas
    todo funciona **dentro** de la ventana de 24 h; fuera, el envío se rechaza y queda como fallido.
@@ -59,19 +61,51 @@ Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`* * * * *`).
    «Autoenviar solo preguntas de bajo riesgo ya validadas» (cada tipo de pregunta se gana tras N
    aprobaciones sin editar).
 
+## Lo que el Vigía le dice al cliente (y de dónde sale)
+
+- **Hora de llegada**: sale de la cita o la ETA que el Conductor guarda en el viaje (la cita manda sobre la ETA; `desde_conductor.ts`).
+  Dice que es la cita capturada, **no GPS**. Sin cita ni ETA contesta «lo consulto» y **escala al gerente**: no inventa una hora.
+- **Dónde va**: el último hito que el operador reportó, con su hora, y si sigue en el andén; es la hora del mensaje del chofer, no
+  telemetría, y el texto lo dice. Si la flota tiene posición en `posicion` agrega el último punto con su antigüedad; si no, dice que no la tiene.
+- **Documentos**: hoy solo el POD es comprobable; los demás no se inventan.
+- **POD adjunto (0482)**: si el POD existe, la respuesta lo lleva, con tres reglas: nunca sin aprobación del gerente (el borrador con
+  adjunto es de riesgo medio y muestra «adjuntará: POD»); solo dentro de la ventana de 24 h (si el texto salió como plantilla el archivo no
+  sale, queda un evento `adjunto_pendiente` a la vista del gerente); y solo el POD de un viaje de ESE cliente (URL firmada de 10 min). Si el archivo ya no existe o
+  Meta lo rechaza queda `adjunto_fallo` y el texto sale igual; el doble toque manda un solo texto y un solo documento.
+
+## Grupos críticos, molestia y la alerta de 10 minutos (0484)
+
+- Cada cliente puede tener **grupos** (`vigia_grupo`) y marcar algunos como **críticos**. Un cliente con algún grupo crítico se atiende con el
+  plazo corto `sla_critico_min` (10 por omisión; se aplica el menor entre este y `sla_respuesta_min`).
+- **Molestia**: `molestia_aviso_nivel` (2 o 3, por omisión 2) decide desde qué nivel de molestia se avisa al gerente responsable; el nivel 3 siempre sube
+  también al dueño. Una queja nunca se autoenvía y «Yo me encargo» detiene al agente en ese hilo.
+- **Lo que NO hace**: leer un grupo de WhatsApp **en vivo**. Eso depende de la API de grupos de Meta (elegibilidad y alta del WABA) y no está simulado:
+  la API de Business no lee los grupos de un WhatsApp común. Hoy el grupo se alimenta del **histórico exportado**; el camino en vivo exige que los
+  grupos críticos migren a un número Business. Verificar la API de grupos de Meta antes de prometer grupos en vivo.
+- **Copiloto**: el agente solo sugiere; un humano aprueba y envía. Ningún flujo depende de leer grupos.
+
+## Histórico exportado → preguntas frecuentes y tendencias (0484)
+
+Pantalla `/dashboard/agentes/vigia/historial`. Se sube el `.txt` de «Exportar chat» de WhatsApp o el `.zip` que lo trae (iOS y Android, varios
+formatos de fecha; máx. 50,000 mensajes por importación y 1,500 caracteres por mensaje).
+
+- **Privacidad** (datos de clientes finales): el autor nunca se guarda en claro, solo un hash corto con sal de la flota; los teléfonos y correos
+  escritos dentro del texto se tapan antes de guardar; las líneas de sistema y lo multimedia omitido se descartan y el reporte lo cuenta.
+  Se purga con la misma retención del Vigía (`vigia_historial_purgar`). La misma exportación (huella sha256) no entra dos veces al mismo grupo.
+- **Qué calcula** (determinista, sin modelo): temas (ubicación, hora de llegada, documentos, factura/POD, citas y andén, tarifas, quejas, pide hablar
+  con alguien y «otros»), preguntas frecuentes con lo que el **equipo** contestó de verdad, tendencia semanal por tema contra las 4 semanas previas y
+  tiempos de respuesta contra el umbral. Lo que ninguna regla reconoce es «otros»; no se inventa un tema.
+- Las respuestas típicas no se publican solas: el gerente las **aprueba** y pasan a ser respuestas rápidas (siguiente sección). El reporte baja a Excel/PDF.
+
 ## Lo que NO existe todavía (dicho sin adornos)
 
-- **ETA / cita por viaje**: Likida no guarda ninguna (no hay columna). Hoy toda pregunta de hora de
-  llegada contesta «la consulto con tu ejecutivo» y escala. El día que exista, `estatusViajeReal`
-  solo tiene que llenar `etaIso`.
-- **GPS**: la posición sale de `posicion` (casi ninguna flota la tiene aún); sin posición dice que no la tiene.
-- **Documentos pendientes**: hoy solo el POD (`pod`) es comprobable; no se inventan los demás.
-- **Entrega del archivo** de la factura o el POD: el Vigía dice el estado y avisa al gerente; no adjunta archivos.
 - **Coexistencia de WhatsApp** (que los chats de servicio que la flota ya tiene en su número lleguen
   a Likida): no hay código; depende de Meta y del número real de la flota.
+- **Otros documentos** además del POD (factura, carta porte): el Vigía dice el estado y avisa al gerente; no los adjunta.
+- **Respaldo por correo** cuando la plantilla no está aprobada o la ventana está cerrada, y lista de directores por nivel en lugar de un solo teléfono (paquete P14, necesita Resend).
 - **Aviso de privacidad para clientes finales**: el texto legal no existe en Likida (el aviso integral
   cubre choferes). La liga configurable y la primera respuesta (que explica el asistente, la liga y la
-  baja con BAJA) están listas; el documento lo redacta legal.
+  baja con BAJA) están listas; el documento lo redacta legal. **Antes de cualquier uso con clientes finales.**
 - **Solicitud ARCO de un cliente por WhatsApp**: `PRIVACIDAD` registra la solicitud a nombre de su
   flota; la supresión de sus chats la ejecuta el dueño desde su fila en el tablero.
 

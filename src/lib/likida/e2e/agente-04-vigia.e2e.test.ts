@@ -233,8 +233,9 @@ describe('otro tenant / otro cliente', () => {
   });
 });
 
-describe('Ola 3: grupos, histórico exportado y alerta de 10 min (w3-conductor-vigia)', () => {
-  it.todo('INTEGRACIÓN PENDIENTE (0484): clientes y grupos CRÍTICOS con plazo corto (10 min) y nivel de molestia configurable por flota: alerta a gerentes/directores al minuto 10 sin respuesta');
-  it.todo('INTEGRACIÓN PENDIENTE (vigia/historial): importar el histórico exportado de WhatsApp (.txt/.zip) → FAQs, tendencias por tema y tiempos de respuesta, sin mezclar flotas');
-  it.todo('INTEGRACIÓN PENDIENTE (riesgo 4.1 del análisis): modo COPILOTO (sugiere, un humano pega) para grupos de WhatsApp comunes que la API de Business no lee; ningún flujo depende de leer grupos en vivo');
-});
+// Los tres pendientes de la Ola 3 YA están construidos y tienen su E2E propio, en `vigia/ciclo_completo.e2e.test.ts`:
+//  · cliente crítico, alerta de 10 min con la cola llena de hilos agotados → «P5 · alerta de 10 min…»;
+//  · histórico exportado (.txt/.zip) → FAQ → respuesta rápida aprobada y usada → Excel → «P5 · del histórico exportado…»;
+//  · copiloto (sugiere, un humano aprueba y envía; nada depende de leer grupos en vivo) → el borrador con aprobación de
+//    «el cliente pregunta y recibe un dato real…» y el aviso de queja de «cliente molesto → escalamiento por niveles».
+// No se duplican aquí: la matriz (docs/e2e/matriz-agentes.md) los cuenta junto a este archivo.
