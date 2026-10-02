@@ -304,7 +304,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 287;
 // (`cp_documento_embarque`: hijos de un padre, linaje por lote de documentos, y el padre de un hijo) y la lectura por ids de los hijos (`cp_documento`).
 // El módulo nuevo `multiembarque.ts` es puro y no suma archivos (su `Array.from` se reescribió para no contar como `.from(`). Medido con el barrido real.
 // Integración P13 + Ola 9 (ronda 13): 1,881 + 5 (P13) + 4 (Ola 9, ver la nota de archivos, arriba) = 1,890.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_890;
+// RONDA 15, paquete P14 «vigia-respaldo-correo» (0673-0674): 0 archivos y +8 llamadas (1,890 → 1,898), todas en `vigia/repo.ts`, que ya contaba y donde cada una va
+// por `acotada` — funcionalidad nueva, no código migrado: la lista de directores por nivel (lectura por nivel para avisar y para el tablero, y las RPC atómicas de
+// alta/corrección y baja), el reclamo del correo de respaldo (RPC de reclamar, cerrar y retomar vencidos, esta última cruza flotas a propósito para el cron) y la
+// lectura de los últimos correos del tablero. El módulo nuevo `respaldo_correo.ts` no toca la base (pide todo por el puerto). Medido con el barrido real.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_898;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
