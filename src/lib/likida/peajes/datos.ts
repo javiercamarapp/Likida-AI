@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
-import { traerTodo, conteo } from '../pg';
+import { traerTodo, conteo, type RespuestaPg } from '../pg';
 import { normalizarNombre, normalizarTag } from './formatos';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import { matrizDeArchivoCatalogo } from './archivo';
@@ -230,15 +230,17 @@ export const TIPOS_GEOCERCA = ['origen', 'destino', 'patio', 'punto_interes', 'r
  * capturadas a mano en peajes. El editor sigue usando la forma por omisión.
  */
 export async function listarGeocercas(tenantId: string, opciones: { zonasParaReclamacion?: boolean } = {}): Promise<GeocercaVista[]> {
-  const filas = await traerTodo<{ id: unknown; nombre: unknown; tipo: unknown; lat: unknown; lng: unknown; radio_m: unknown; activa: unknown; poligono?: unknown; aproximada?: unknown }>(
+  type FilaGeocerca = { id: unknown; nombre: unknown; tipo: unknown; lat: unknown; lng: unknown; radio_m: unknown; activa: unknown; poligono?: unknown; aproximada?: unknown };
+  const filas = await traerTodo<FilaGeocerca>(
     (d, h) => {
       // Solo la reclamación necesita el polígono (0630); con respaldo a círculo si la base aún no tiene la migración.
       const consulta = (conPoligono: boolean) => {
         const q = supabaseAdmin().from('geocerca')
           .select(conPoligono ? `id, nombre, tipo, lat, lng, radio_m, activa, ${COLUMNAS_POLIGONO}` : 'id, nombre, tipo, lat, lng, radio_m, activa', conteo(d))
           .eq('tenant_id', tenantId);
+        // El select es una cadena calculada: el tipado de postgrest no la resuelve, la fila se declara en `traerTodo`.
         return acotada((opciones.zonasParaReclamacion ? q.in('tipo', ['patio', 'restringida']) : q.eq('catalogo', 'peajes'))
-          .order('nombre').order('id').range(d, h), 'peajes.geocercas');
+          .order('nombre').order('id').range(d, h), 'peajes.geocercas') as unknown as PromiseLike<RespuestaPg<FilaGeocerca[]>>;
       };
       return opciones.zonasParaReclamacion ? conPoligonoOCirculo(consulta) : consulta(false);
     },
