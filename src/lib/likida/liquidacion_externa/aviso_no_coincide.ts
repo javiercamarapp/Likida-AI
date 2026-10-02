@@ -20,6 +20,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
+import { appUrl } from '@/lib/env';
 import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
 import { telefonoParaDineroDe } from '../contactos';
 import { leerFormatoFlota } from './repo';
@@ -27,7 +28,7 @@ import type { LiquidacionExterna } from './repo';
 
 export type AvisarNoCoincide = (liq: LiquidacionExterna) => Promise<boolean>;
 
-const liga = () => `${(process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai').replace(/\/+$/, '')}/dashboard/agentes/liquidacion`;
+const liga = () => `${appUrl()}/dashboard/agentes/liquidacion`;
 
 /** A quién se le avisa: la persona responsable designada → la copia al jefe → quien ve dinero. */
 export async function destinatariosDiscrepancia(tenantId: string): Promise<string[]> {
