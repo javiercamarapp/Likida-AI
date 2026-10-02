@@ -21,6 +21,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
+import { appUrl } from '@/lib/env';
 import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
 import { telefonoParaDineroDe } from '../contactos';
 import { bitacoraConciliada } from './bitacora_conciliada';
@@ -37,7 +38,7 @@ export interface DepsAvisoPeajes {
 }
 const depsPorOmision: DepsAvisoPeajes = { telefono: telefonoParaDineroDe, avisar: avisarOficina };
 
-const liga = () => `${(process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai').replace(/\/+$/, '')}/dashboard/agentes/peajes`;
+const liga = () => `${appUrl()}/dashboard/agentes/peajes`;
 
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 

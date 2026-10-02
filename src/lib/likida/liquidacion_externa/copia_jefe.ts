@@ -15,6 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
+import { appUrl } from '@/lib/env';
 import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
 import { dinero, periodoTexto } from './presentacion';
 import { eventosDe, leerFormatoFlota, registrarEvento, type LiquidacionExterna } from './repo';
@@ -29,7 +30,7 @@ export type ResultadoCopia =
 
 export type CopiarAJefe = (liq: LiquidacionExterna, doc: DocumentoCopia | null) => Promise<ResultadoCopia>;
 
-const liga = () => `${(process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai').replace(/\/+$/, '')}/dashboard/agentes/liquidacion`;
+const liga = () => `${appUrl()}/dashboard/agentes/liquidacion`;
 
 export const textoCopia = (liq: LiquidacionExterna, doc: DocumentoCopia | null): string => [
   `Copia de la liquidación ${liq.claveExterna} de ${(liq.operadorNombre ?? '').trim() || 'un operador'}.`,
