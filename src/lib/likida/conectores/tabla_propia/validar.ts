@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-unsafe-regex -- los cuantificadores llevan tope y se aplican a valores de una sola celda (≤ 80 caracteres tras acotar); lectura.test.ts mide que una línea adversaria de 200,000 caracteres no explota. */
 // Validación de datos de SU tabla. Lo que no se entiende se RECHAZA con su motivo (jamás se adivina):
 // ni lat/lon intercambiadas «arregladas», ni una zona supuesta cuando el dato trae la suya, ni una unidad inventada.
 
