@@ -312,7 +312,7 @@ end $$;
 do $$
 begin
   insert into public.cp_export_config (tenant_id, nombre, formato, config)
-  values ('42000000-0000-4000-8000-0000000000a1', 'Innovativos CSV', 'csv', '{"columnas":[]}'::jsonb);
+  values ('42000000-0000-4000-8000-0000000000a1', 'el cliente de demo CSV', 'csv', '{"columnas":[]}'::jsonb);
   begin
     insert into public.cp_export_config (tenant_id, nombre, formato, config)
     values ('42000000-0000-4000-8000-0000000000a1', 'x', 'xml', '{}'::jsonb);
@@ -327,7 +327,7 @@ begin
   end;
   begin
     insert into public.cp_export_config (tenant_id, nombre, formato, config)
-    values ('42000000-0000-4000-8000-0000000000a1', 'Innovativos CSV', 'csv', '{}'::jsonb);
+    values ('42000000-0000-4000-8000-0000000000a1', 'el cliente de demo CSV', 'csv', '{}'::jsonb);
     raise exception '0420: el nombre de exportación se repitió en la flota';
   exception when unique_violation then null;
   end;

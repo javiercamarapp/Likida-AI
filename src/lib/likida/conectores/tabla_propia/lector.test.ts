@@ -149,7 +149,7 @@ describe('SQL de solo lectura (ejecutor de contrato)', () => {
   });
 });
 
-describe('el contrato del demo se cumple (alineación estructural con demo_innovativos/contratos.ts)', () => {
+describe('el contrato del demo se cumple (alineación estructural con demo_<cliente>/contratos.ts)', () => {
   it('los tres lectores son un LectorTablaPropia: modo + leerPosiciones + leerGeocercas', async () => {
     const h = httpDe([ok('')]).http;
     const lectores: LectorTablaPropia[] = [

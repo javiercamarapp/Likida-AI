@@ -33,7 +33,7 @@ import { finalizarPoll, reclamarPolls } from './poll_durable';
 
 // ── AUDITORÍA 24, REN-2 (ALTO): EL TOPE MUDO ─────────────────────────────
 // Era `TOPE_POR_FLOTA = 500` con `.slice()` en silencio: con las 800 unidades
-// de Innovativos, las MISMAS 300 quedaban fuera en las 288 corridas del día,
+// del cliente de demo, las MISMAS 300 quedaban fuera en las 288 corridas del día,
 // sin posición, sin `gps_visto_en`, y el cron latía «ok» con `leidas = 500`.
 // El conciliador de peajes las marcaba «sin evidencia GPS» — una afirmación
 // falsa sobre el comprobante de otro. Ahora el techo es de seguridad (una

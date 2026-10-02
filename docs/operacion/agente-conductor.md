@@ -4,7 +4,7 @@
 
 ## Qué hace
 
-Innovativos (250 camiones) pidió un agente que **pida, persiga, valide y registre** los hitos que el chofer no manda, y que mande los avisos que su sistema actual no manda.
+El cliente de demo (250 camiones) pidió un agente que **pida, persiga, valide y registre** los hitos que el chofer no manda, y que mande los avisos que su sistema actual no manda.
 
 | Hito (`tipo`) | Qué es |
 |---|---|
@@ -115,8 +115,8 @@ Datos personales nuevos: el nombre de un **tercero** (quien recibe en el andén)
 ## Bloqueos externos (no cerrables por código)
 
 1. **Número/WABA reales y aprobación de Meta** de las plantillas nuevas del Agente 5 (ver `plantillas-meta.md`): `conductor_solicitud_llegada_carga_v1`, `conductor_llegada_carga_sin_cita_v1`, `conductor_contacto_anden_v1`, `conductor_salida_carga_v1`, `conductor_llegada_descarga_v1`, `conductor_salida_descarga_v1`, `conductor_solicitud_regreso_v1`, `conductor_recordatorio_1/2/3_v1`, `aviso_jefe_trafico_v1` (+ `aviso_operacion_v1` ya existente para el aviso a oficina). Sin aprobación Meta devuelve 132001 y el agente lo reporta (fail-closed), no lo simula. Los textos son ES-MX propuestos: **no se verificaron contra Meta**.
-2. **Datos reales de Innovativos**: citas/ETA por viaje (su TMS tiene que llamar a `PUT …/citas`), choferes con teléfono, contactos de patio por terminal y jefe general.
-3. **GPS/geocercas** de Innovativos para la validación automática (hoy `validado` solo se alcanza por oficina/sistema; ver pendientes).
+2. **Datos reales del cliente de demo**: citas/ETA por viaje (su TMS tiene que llamar a `PUT …/citas`), choferes con teléfono, contactos de patio por terminal y jefe general.
+3. **GPS/geocercas** del cliente de demo para la validación automática (hoy `validado` solo se alcanza por oficina/sistema; ver pendientes).
 4. **Política de retención** del dato del tercero (365 días propuesto).
 5. Plazos por defecto sin cita (120/120/480/120/30 min) son **supuestos**: validarlos con su operación.
 

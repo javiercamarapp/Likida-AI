@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0091 — Facturas de PROVEEDOR (14-ago-2026, F6 del plan).
 --
--- El tercer agente que pidió Transportes Innovativos: la factura del taller,
+-- El tercer agente que pidió el cliente de demo: la factura del taller,
 -- la refaccionaria o el proveedor de diésel que hoy alguien captura A MANO
 -- en el ERP. Aquí aterriza el XML (dato duro del CFDI, sin OCR), un humano
 -- la aprueba o rechaza (LFPDPPP 26-II: el agente prepara y marca, la

@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0420 — CARTA PORTE MULTI-FORMATO (Agente 3, loop punta a punta, 1-oct-2026)
 --
--- Los clientes grandes de Innovativos mandan la carga en SU formato: PDF con
+-- Los clientes grandes del cliente de demo mandan la carga en SU formato: PDF con
 -- texto, PDF escaneado, foto, Excel/CSV, XML o el cuerpo de un correo. Hasta hoy
 -- Likida solo armaba el complemento Carta Porte 3.1 desde datos capturados a
 -- mano (0204). Esta migración es la persistencia de lo que falta entre el
@@ -291,7 +291,7 @@ create table if not exists public.cp_export_config (
   constraint cp_export_config_forma check (jsonb_typeof(config) = 'object')
 );
 comment on table public.cp_export_config is
-  'Mapeo configurable al formato destino de la flota (0420): el formato real de Innovativos NO se conoce, así que columnas y nombres se declaran aquí, no en código.';
+  'Mapeo configurable al formato destino de la flota (0420): el formato real del cliente de demo NO se conoce, así que columnas y nombres se declaran aquí, no en código.';
 
 -- El renglón de mercancía recuerda de qué documento nació: al volver a aprobar el
 -- documento se reemplazan SOLO esos renglones, nunca los capturados a mano.

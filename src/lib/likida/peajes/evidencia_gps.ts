@@ -3,11 +3,11 @@ import { acotada } from '../presupuesto';
 import { traerTodo, traerPorIds, conteo } from '../pg';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EVIDENCIA GPS DE LOS CRUCES DE PEAJE — el "martirio" de Innovativos.
+// EVIDENCIA GPS DE LOS CRUCES DE PEAJE — la conciliación manual de peajes del cliente de demo.
 //
 // El conciliador v1 (0106/desglose_peaje.ts) contesta "¿este cruce del
 // proveedor coincide con un gasto de caseta de un viaje?". Esta pieza añade
-// la pregunta que Innovativos hoy contesta a mano contra su GPS cada 10
+// la pregunta que el cliente de demo hoy contesta a mano contra su GPS cada 10
 // días: "¿la UNIDAD de ese viaje de verdad anduvo en carretera el día del
 // cruce?" — con las posiciones que el conector GPS (Samsara/Wialon/Geotab/
 // Navixy, o el pin de WhatsApp) ya escribe en `posicion`.

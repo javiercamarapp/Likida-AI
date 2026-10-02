@@ -7,7 +7,7 @@
 // de modo que el Conductor, los Peajes, el mapa y la jornada consumen lo mismo.
 //
 // ALINEACIÓN CON EL DEMO. Estos tipos son ESTRUCTURALMENTE IDÉNTICOS a los de
-// `demo_innovativos/contratos.ts` de la rama `loop/w3-demo` (PosicionTablaPropia,
+// `demo_<cliente>/contratos.ts` de la rama `loop/w3-demo` (PosicionTablaPropia,
 // GeocercaTablaPropia, FilaRechazada, ResultadoLectura, OpcionesLecturaPaginada,
 // LectorTablaPropia, ModoTablaPropia). TypeScript es estructural: una clase de
 // aquí satisface `LectorTablaPropia` del demo y viceversa, sin importar entre

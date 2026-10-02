@@ -80,7 +80,7 @@ function mundo(opciones: { config?: Partial<ConfigEntrega>; facturas?: Fila[] } 
       return resend.shift() ?? { ok: true, id: `re_${correos.length}` };
     },
     descargarPdf: async (ruta) => new Uint8Array(Buffer.from(`%PDF-1.4 ${ruta}`)),
-    nombreFlota: async () => 'Innovativos',
+    nombreFlota: async () => 'Cliente demo',
     ahora: () => ahora,
   };
   return { deps, filas, lotes, eventos, correos, config, avanzar: (ms: number) => { ahora = new Date(ahora.getTime() + ms); }, resend: (...r: ResultadoEnvio[]) => { resend = r; } };

@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // IMPORTACIÓN MASIVA DE OPERADORES (auditoría 24, ADM-2 / faltante 3).
 //
-// Innovativos tiene cientos de choferes y hasta hoy el alta era uno por uno
+// El cliente de demo tiene cientos de choferes y hasta hoy el alta era uno por uno
 // (`crearOperador`) o SQL a mano. Este módulo es UN motor con dos puertas:
 // la carga desde Excel/CSV de `/dashboard/operadores` (bloque «Cargar operadores») y el lote de
 // `POST /v1/operadores`. Las dos validan con las MISMAS funciones que el alta

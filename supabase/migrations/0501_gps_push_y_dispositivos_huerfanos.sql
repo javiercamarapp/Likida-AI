@@ -3,7 +3,7 @@
 --
 -- LOOP PUNTA A PUNTA, W3 «GPS/Jornada» (rango 0500-0519).
 --
--- 1. `gps_push_secreto`: el GPS propio de Innovativos (o cualquier dispositivo
+-- 1. `gps_push_secreto`: el GPS propio del cliente de demo (o cualquier dispositivo
 --    que sepa hacer POST) manda sus posiciones a /api/gps/push/<flota> firmadas
 --    con HMAC-SHA256. El secreto es POR FLOTA, se guarda CIFRADO por la
 --    aplicación (el mismo cofre que las credenciales de conector — un volcado de

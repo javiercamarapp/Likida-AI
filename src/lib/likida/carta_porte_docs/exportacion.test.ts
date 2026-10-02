@@ -25,7 +25,7 @@ describe('validarConfigExport', () => {
   it('cada columna lleva campo O constante', () => {
     expect(validarConfigExport({ columnas: [{ encabezado: 'X' }] }).ok).toBe(false);
     expect(validarConfigExport({ columnas: [{ encabezado: 'X', campo: 'origen_cp', constante: 'y' }] }).ok).toBe(false);
-    expect(validarConfigExport({ columnas: [{ encabezado: 'X', constante: 'Innovativos' }] }).ok).toBe(true);
+    expect(validarConfigExport({ columnas: [{ encabezado: 'X', constante: 'Cliente demo' }] }).ok).toBe(true);
   });
 
   it('encabezados repetidos, vacíos, sin columnas, delimitador raro, decimales fuera de rango', () => {
@@ -82,7 +82,7 @@ describe('construirFilas y CSV', () => {
     const c = cfg({
       decimales: 1, fecha: 'dd/mm/yyyy',
       columnas: [
-        { encabezado: 'Cliente', constante: 'Innovativos' },
+        { encabezado: 'Cliente', constante: 'Cliente demo' },
         { encabezado: 'Remitente', campo: 'origen_nombre', transformacion: 'mayusculas' },
         { encabezado: 'Destino', campo: 'destino_nombre', transformacion: 'sin_acentos' },
         { encabezado: 'Peso', campo: 'mercancia.peso_kg' }, { encabezado: 'Salida', campo: 'fecha_salida' },
@@ -90,7 +90,7 @@ describe('construirFilas y CSV', () => {
       ],
     });
     const [f] = construirFilas([aExportable(docAprobado({}, e), null)], c);
-    expect(f).toEqual({ Cliente: 'Innovativos', Remitente: 'DISTRIBUIDORA ATLAS SA DE CV', Destino: 'Comercializadora Monterrey SA de CV', Peso: 1234.6, Salida: '15/10/2026', Peligroso: 'No', N: 1 });
+    expect(f).toEqual({ Cliente: 'Cliente demo', Remitente: 'DISTRIBUIDORA ATLAS SA DE CV', Destino: 'Comercializadora Monterrey SA de CV', Peso: 1234.6, Salida: '15/10/2026', Peligroso: 'No', N: 1 });
   });
 
   it('INYECCIÓN DE FÓRMULAS: el texto que empieza con = + - @ se neutraliza; los números no', () => {
@@ -137,13 +137,13 @@ describe('exportarDocumentos: solo lo aprobado', () => {
   it('omite los no aprobados diciendo por qué y nombra el archivo sin caracteres raros', () => {
     const r = exportarDocumentos(
       [{ doc: docAprobado(), viajeFolio: null }, { doc: docAprobado({ id: 'd2', estado: 'por_revisar' }), viajeFolio: null }, { doc: docAprobado({ id: 'd3', extraccion: null }), viajeFolio: null }],
-      'csv', cfg(), 'Innovativos — formato 1/2', new Date('2026-10-02T12:00:00Z'),
+      'csv', cfg(), 'el cliente de demo — formato 1/2', new Date('2026-10-02T12:00:00Z'),
     );
     expect(r.documentos).toBe(1);
     expect(r.filas).toBe(1);
     expect(r.omitidos.map((o) => o.id)).toEqual(['d2', 'd3']);
     expect(r.omitidos[0].motivo).toMatch(/solo se exportan documentos aprobados/);
-    expect(r.nombreArchivo).toBe('carta-porte-innovativos-formato-1-2-2026-10-02.csv');
+    expect(r.nombreArchivo).toBe('carta-porte-flota-formato-1-2-2026-10-02.csv');
     expect(r.mime).toBe('text/csv; charset=utf-8');
   });
 

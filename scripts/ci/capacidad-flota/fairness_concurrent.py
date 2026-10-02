@@ -11,7 +11,7 @@ args=parser.parse_args()
 if not Path(args.host).is_absolute() or not 1<=args.port<=65535:parser.error('Host UNIX absoluto y puerto válido requeridos')
 socket=Path(args.host)/f'.s.PGSQL.{args.port}'
 if not socket.exists() or not stat.S_ISSOCK(socket.stat().st_mode):parser.error('Sólo socket PostgreSQL UNIX local existente')
-if not re.fullmatch(r'innovativos_cap_[a-z0-9_]+',args.db):parser.error('Se exige prefijo propio innovativos_cap_')
+if not re.fullmatch(r'flota_cap_[a-z0-9_]+',args.db):parser.error('Se exige prefijo propio flota_cap_')
 DB=args.db
 OUT=args.out
 BASE=['psql','-h',args.host,'-p',str(args.port),'-d',DB,'-X','-v','ON_ERROR_STOP=1','-Atq']
@@ -19,7 +19,7 @@ def sql(q):
  r=subprocess.run([*BASE,'-c',q],text=True,capture_output=True,timeout=30)
  if r.returncode:raise RuntimeError(r.stderr)
  return r.stdout.strip()
-assert sql('select label from innovativos_cap_harness.owner where id=1')=='synthetic-only-0339'
+assert sql('select label from flota_cap_harness.owner where id=1')=='synthetic-only-0339'
 assert sql('select count(*) from public.jornada_derivacion_trabajo')=='0', 'Requiere cola vacía propia; no sobrescribe backlog'
 fixture=(OUT/'fairness.sql').read_text().split('create temp table first_claim')[0]+'commit;'
 sql(fixture)
@@ -44,4 +44,4 @@ try:
  (OUT/'fairness-concurrent.json').write_text(json.dumps({'results':results,'overlap':0,'aggregate_four_per_tenant':True,'aggregate':aggregate,'per_worker_distribution':[{tenant:sum(1 for row in r['claims'] if row['tenant_id']==tenant) for tenant in {row['tenant_id'] for row in r['claims']}} for r in results]},indent=2));print('CONCURRENT_CLAIMS_PASS')
 finally:
  # Fixture y claims son exclusivamente nuestros; no usa DELETE sobre datos de negocio.
- sql("delete from public.jornada_derivacion_trabajo where tenant_id in(select id from public.tenant where nombre like 'SINTETICO INNOVATIVOS CAP %')")
+ sql("delete from public.jornada_derivacion_trabajo where tenant_id in(select id from public.tenant where nombre like 'SINTETICO FLOTA CAP %')")

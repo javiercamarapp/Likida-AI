@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0460 — El patio del jefe de tráfico y la invitación del operador por WhatsApp.
 --
--- LOOP PUNTA A PUNTA, W2 «producto» (1-oct-2026). Innovativos tiene patios,
+-- LOOP PUNTA A PUNTA, W2 «producto» (1-oct-2026). El cliente de demo tiene patios,
 -- jefes de tráfico por patio y capturistas. Hasta hoy el panel no tenía patios
 -- (`terminal` huérfana), el encargado no podía corregir un teléfono ni dar de
 -- baja a un chofer, y el alta de 250 choferes terminaba en «avísales tú».

@@ -52,7 +52,7 @@ sería un cambio de modelo (columna de geometría + prueba de punto-en-polígono
 
 ### Alineación con el demo
 
-`demo_innovativos/contratos.ts` (rama `loop/w3-demo`) define `LectorTablaPropia`. Los tipos de
+`demo_flota-demo/contratos.ts` (rama `loop/w3-demo`) define `LectorTablaPropia`. Los tipos de
 `tabla_propia/contrato.ts` son estructuralmente idénticos (mismos nombres y campos), así que un lector de aquí
 satisface el del demo y al revés. La referencia CSV del demo y este lector usan los mismos alias de columna
 (`id_unidad, latitud, longitud, fecha_hora, velocidad_kmh, ignicion`; geocercas: `codigo, nombre, tipo,

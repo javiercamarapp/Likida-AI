@@ -128,7 +128,7 @@ export function calcularAlertas(
     });
   }
   // AUDITORÍA 24, ADM-5: `r.tenants <= 1` disparaba esta alerta con el
-  // PRIMER cliente real dado de alta (Innovativos, sin el demo) — 1 tenant,
+  // PRIMER cliente real dado de alta (el cliente de demo, sin el demo) — 1 tenant,
   // pero NO el demo. El criterio verificable (mismo que `esSoloDemo` en
   // consola.tsx) es que el ÚNICO tenant que hay sea, de verdad, el tenant
   // demo — no que haya como máximo uno.

@@ -339,7 +339,7 @@ function Exportacion({ configs, acciones, apiSufijo }: { configs: ConfigVista[];
     <section className="space-y-2">
       <h2 className="text-[13px] font-medium flex items-center gap-1.5"><Download width={14} height={14} strokeWidth={1.75} /> Exportar lo aprobado</h2>
       <p className="text-[12px] max-w-3xl" style={{ color: 'var(--muted)' }}>
-        Solo salen documentos <strong>aprobados</strong>. El formato exacto que espera tu cliente (por ejemplo Innovativos) todavía no se conoce:
+        Solo salen documentos <strong>aprobados</strong>. El formato exacto que espera tu cliente (por ejemplo el cliente de demo) todavía no se conoce:
         declara aquí qué columna lleva cada dato y se genera el CSV o JSON a tu medida. Mientras tanto, está el formato estándar de Likida.
       </p>
       <div className="flex flex-wrap gap-2 text-[12px]">
@@ -356,7 +356,7 @@ function Exportacion({ configs, acciones, apiSufijo }: { configs: ConfigVista[];
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label htmlFor="cp-exp-nombre" className={ETIQUETA}>Nombre (si ya existe, se reemplaza)</label>
-                <input id="cp-exp-nombre" name="nombre" required maxLength={80} placeholder="Innovativos" className={CAMPO} style={{ background: 'var(--surface)' }} />
+                <input id="cp-exp-nombre" name="nombre" required maxLength={80} placeholder="Cliente demo" className={CAMPO} style={{ background: 'var(--surface)' }} />
               </div>
               <div>
                 <label htmlFor="cp-exp-formato" className={ETIQUETA}>Formato</label>

@@ -3,7 +3,7 @@
 //
 // El menú arrastraba `?vista=demo` en CADA link cuando la URL no traía
 // parámetros y el rol era superadmin. Ese supuesto («sin sufijo estás en la
-// demo») murió el 16-ago-2026 con /admin/elegir-flota: quien elige Innovativos
+// demo») murió el 16-ago-2026 con /admin/elegir-flota: quien elige el cliente de demo
 // y aterriza en `/dashboard` ve SU panel, y el primer clic del menú lo mandaba
 // a la demo con un parámetro que nadie escribió y sin cinta que lo dijera.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -31,8 +31,8 @@ describe('el sufijo que arrastra el menú', () => {
   });
 
   it('superadmin CON `?tenant=`: el parámetro viaja en cada link (perderlo te saca de la flota que ves)', () => {
-    const html = pintar('superadmin', 'tenant=t-innovativos');
-    expect(html).toContain('href="/dashboard/viajes?tenant=t-innovativos"');
+    const html = pintar('superadmin', 'tenant=t-flota-demo');
+    expect(html).toContain('href="/dashboard/viajes?tenant=t-flota-demo"');
   });
 
   it('`?vista=demo` explícito SÍ se conserva: previsualizar la demo sigue siendo una intención escrita', () => {

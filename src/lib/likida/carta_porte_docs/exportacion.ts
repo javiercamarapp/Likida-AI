@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // EXPORTACIÓN AL FORMATO DESTINO — configurable por mapeo.
 //
-// El formato real que Innovativos espera NO se conoce (es un bloqueo declarado):
+// El formato real que el cliente de demo espera NO se conoce (es un bloqueo declarado):
 // por eso no hay columnas escritas en código. Cada flota declara su mapeo —qué
 // columna sale con qué nombre y de qué campo— en `cp_export_config`, y este módulo
 // lo aplica a los documentos APROBADOS para producir CSV o JSON. Cuando llegue el

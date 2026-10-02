@@ -48,7 +48,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 await import('./chat-tools');
 const { toolSchemas, makeExecutor } = await import('@/lib/llm/tool-executor');
-const TENANT = 'flota-innovativos';
+const TENANT = 'flota-demo';
 const correr = (nombre: string) => makeExecutor({ tenantId: TENANT })(nombre, {});
 
 beforeEach(() => {

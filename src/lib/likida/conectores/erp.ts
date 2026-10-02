@@ -24,7 +24,7 @@ import {
 //      mercado que no es el mexicano.
 //   2. NINGÚN TMS TIENE MERCADO. 22 empresas de 1,987 nombran uno, y ninguna
 //      marca se repite lo suficiente para valer un adaptador. El prospecto real
-//      —Transportes Innovativos— está reescribiendo el suyo. Por eso hay UN
+//      —el cliente de demo— está reescribiendo el suyo. Por eso hay UN
 //      conector genérico de TMS y no seis con nombre propio.
 //
 // ── QUÉ SE PUEDE PROMETER DE UN ERP SIN TENER UNA INSTANCIA ─────────────

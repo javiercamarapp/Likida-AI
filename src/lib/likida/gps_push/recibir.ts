@@ -8,7 +8,7 @@ import { firmaCoincide, firmarPush, leerTimestamp, TOLERANCIA_RELOJ_S } from './
 import { leerSecretosPush, registrarUsoPush, type SecretosPush } from './datos';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EL PUSH ENTRANTE DE POSICIONES — el GPS propio (p. ej. el de Innovativos)
+// EL PUSH ENTRANTE DE POSICIONES — el GPS propio (p. ej. el del cliente de demo)
 // manda POST firmado a /api/gps/push/<flota>. Misma ruta de escritura que el
 // poll de proveedores (`asentarLecturas`): mismo aislamiento por flota, misma
 // compuerta de privacidad, misma idempotencia.

@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0370 — LIQUIDACIÓN EXTERNA (Agente 1, modo «solo entrega»)
 --
--- Innovativos ya calcula la liquidación de su chofer en su SAP/TMS. Lo que
+-- El cliente de demo ya calcula la liquidación de su chofer en su SAP/TMS. Lo que
 -- pidió el 31-ago es que Likida la ENTREGUE por WhatsApp, no que la recalcule.
 -- Este modo es el opuesto exacto del flujo de fotos: aquí la cifra NO nace de
 -- un comprobante leído por OCR ni de un cuadre contra política, nace en el

@@ -8,7 +8,7 @@
 // prueba pedía un `<cfdi:Retenciones>`.
 //
 // Por qué vive aquí y no junto a `cfdi_xml.ts`: la cifra que rompe no es el
-// parser, es el ABONO a «retenciones por pagar» que el contador de Innovativos
+// parser, es el ABONO a «retenciones por pagar» que el contador del cliente de demo
 // importa a su ERP. Un flete subcontratado a un permisionario persona física
 // retiene 4% de IVA (LIVA 1-A) — el caso NORMAL de esta flota— y el archivo
 // tiene que decir cuánto se le debe al SAT por ese concepto, no cuánto de ISR.

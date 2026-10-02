@@ -92,7 +92,7 @@ describe('el archivo', () => {
 
   it('un formato guardado de la flota (otra flota no se ve) y uno inválido (409)', async () => {
     const cfg = { columnas: [{ encabezado: 'Folio', campo: 'folio_cliente' }, { encabezado: 'Sistema', constante: 'LIKIDA' }] };
-    estado.exportConfigs.push({ tenantId: A, id: U1.replace('1', '5'), nombre: 'Innovativos', formato: 'csv', config: cfg, activa: true });
+    estado.exportConfigs.push({ tenantId: A, id: U1.replace('1', '5'), nombre: 'Cliente demo', formato: 'csv', config: cfg, activa: true });
     estado.exportConfigs.push({ tenantId: B, id: U1.replace('1', '6'), nombre: 'De la otra flota', formato: 'csv', config: cfg, activa: true });
     estado.exportConfigs.push({ tenantId: A, id: U1.replace('1', '7'), nombre: 'Roto', formato: 'csv', config: { columnas: [{ encabezado: 'X', campo: 'password' }] }, activa: true });
     const ok = await GET(peticion(`?config=${U1.replace('1', '5')}`));

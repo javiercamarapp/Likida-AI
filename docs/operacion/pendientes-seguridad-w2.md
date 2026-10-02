@@ -71,7 +71,7 @@ Corridos localmente contra PG 17 con todas las migraciones aplicadas en orden so
   `NO_DEDUCIBLE_ISR`/`SIN_IVA_ACREDITABLE`; si el criterio P36 del fiscalista pide «por confirmar» (ni deducible ni acreditable,
   como `cfdi_efos_indeterminado`), es un cambio de dinero que debe decidir el fiscalista.
 - **Techo de IA por flota con pantalla (17)**: el plan «empresa» ya deriva ~$138/día en vez de $5; falta una pantalla de admin
-  para fijar `tenant.config.presupuestoLlmUsdDia` (Innovativos ≥ $50/día).
+  para fijar `tenant.config.presupuestoLlmUsdDia` (el cliente de demo ≥ $50/día).
 - **CSP con nonce (4)**, `/api/health` público con la lista de migraciones (57), retención de las demás tablas (22, 53), costo
   de WhatsApp fuera de la liquidación (20), flood de `evento_seguridad` (19): fuera de este alcance; siguen en la cola.
 

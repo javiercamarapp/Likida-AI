@@ -380,7 +380,7 @@ describe('FIS-3: una deducción por comprobante, no por fotografía', () => {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 24 · PRU-A1 + PRU-A2 (ALTOS, reincidentes 23) — el arnés del
-// export contable: el formato que el contador de Innovativos importa a SAP.
+// export contable: el formato que el contador del cliente de demo importa a SAP.
 //
 // Las dos mutaciones de la 23 siguen VIVAS y se re-corrieron hoy:
 //   · M16 (`route.ts:315-316`): intercambiar `oJournalEntries.txt` con

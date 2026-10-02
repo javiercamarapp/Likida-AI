@@ -39,7 +39,7 @@ const redirect = vi.fn((destino: string) => { throw new ErrorDeRedirect(destino)
 vi.mock('next/navigation', () => ({ redirect: (d: string) => redirect(d) }));
 
 const resolverTenantEfectivo = vi.fn(async () => ({
-  tenantId: 'tenant-1', tenantNombre: 'Transportes Innovativos',
+  tenantId: 'tenant-1', tenantNombre: 'el cliente de demo',
   nombre: 'Javier', rol: 'flota_admin' as string, tenantExiste: true,
 }));
 vi.mock('@/lib/auth/tenant-efectivo', () => ({
@@ -118,7 +118,7 @@ describe('/dashboard — la compuerta de onboarding (FE-19-1)', () => {
 
   it('el encargado no pasa por la compuerta: no es su onboarding', async () => {
     resolverTenantEfectivo.mockResolvedValue({
-      tenantId: 'tenant-1', tenantNombre: 'Transportes Innovativos',
+      tenantId: 'tenant-1', tenantNombre: 'el cliente de demo',
       nombre: 'Ana', rol: 'encargado', tenantExiste: true,
     });
     await expect(DashboardInicio({ searchParams: SIN_PARAMS })).resolves.toBeTruthy();

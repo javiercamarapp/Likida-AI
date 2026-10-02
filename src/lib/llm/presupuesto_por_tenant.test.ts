@@ -61,7 +61,7 @@ describe('el techo diario que llega a la RPC sale de la FLOTA, no de una env glo
   it('tenant.config.presupuestoLlmUsdDia gana a la env: la RPC recibe el de la flota', async () => {
     vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_USD', '5');
     tablas.set('tenant', { data: { config: { [LLAVE_PRESUPUESTO_LLM_TENANT]: 40 } }, error: null });
-    const budget = createLlmBudget('innovativos', RUN, 'interactivo');
+    const budget = createLlmBudget('flota-demo', RUN, 'interactivo');
     await reserveLlmBudget(budget, 0.05);
     expect(reservaEnviada()?.p_tope_tenant_usd).toBe(40);
     // La reserva interactiva se recalcula sobre el techo REAL (0.4 × 40).
@@ -78,7 +78,7 @@ describe('el techo diario que llega a la RPC sale de la FLOTA, no de una env glo
     // $60/día (ver la prueba de abajo). Aquí se usa un plan más chico para
     // seguir probando el camino sin acotar: derivado > piso y < techo.
     tablas.set('suscripcion', { data: { plan: { limite_viajes_mes: 8_000 } }, error: null });
-    const budget = createLlmBudget('innovativos', RUN, 'interactivo');
+    const budget = createLlmBudget('flota-demo', RUN, 'interactivo');
     await reserveLlmBudget(budget, 0.05);
     const esperado = (8_000 / 30) * COSTO_ESTIMADO_USD.viajeCompleto;
     expect(esperado).toBeGreaterThan(5);
@@ -101,7 +101,7 @@ describe('el techo diario que llega a la RPC sale de la FLOTA, no de una env glo
     vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_MAX_USD', '60');
     tablas.set('tenant', { data: { config: { politica: [{ concepto: 'diesel' }] } }, error: null });
     tablas.set('suscripcion', { data: { plan: { limite_viajes_mes: 15_000 } }, error: null });
-    const budget = createLlmBudget('innovativos', RUN, 'interactivo');
+    const budget = createLlmBudget('flota-demo', RUN, 'interactivo');
     await reserveLlmBudget(budget, 0.05);
     const derivadoReal = (15_000 / 30) * COSTO_ESTIMADO_USD.viajeCompleto;
     expect(derivadoReal).toBeGreaterThan(60); // el punto de esta prueba
@@ -127,7 +127,7 @@ describe('el techo diario que llega a la RPC sale de la FLOTA, no de una env glo
     vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_USD', '5');
     tablas.set('tenant', { data: { config: { politica: [{ concepto: 'diesel' }] } }, error: null });
     tablas.set('suscripcion', { data: { plan: { limite_viajes_mes: 15_000 } }, error: null });
-    const budget = createLlmBudget('innovativos', RUN, 'interactivo');
+    const budget = createLlmBudget('flota-demo', RUN, 'interactivo');
     await reserveLlmBudget(budget, 0.05);
     const derivadoReal = (15_000 / 30) * COSTO_ESTIMADO_USD.viajeCompleto;
     expect(derivadoReal).toBeGreaterThan(60); // el $60 viejo ya no alcanza
@@ -159,7 +159,7 @@ describe('el techo diario que llega a la RPC sale de la FLOTA, no de una env glo
       vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_USD', '5');
       tablas.set('tenant', { data: { config: null }, error: null });
       tablas.set('suscripcion', { data: { plan: { limite_viajes_mes: null } }, error: null });
-      const budget = createLlmBudget('innovativos', RUN, 'interactivo');
+      const budget = createLlmBudget('flota-demo', RUN, 'interactivo');
       await reserveLlmBudget(budget, 0.05);
       const techoEscala = Number((500 * COSTO_ESTIMADO_USD.viajeCompleto * 1.5).toFixed(2));
       expect(techoEscala).toBeGreaterThan(100);
@@ -315,14 +315,14 @@ describe('el primer tope_tenant del día avisa al operador — una vez por flota
   it('tope_tenant → LlmBudgetExceededError(tenant) con el techo de la flota, y una alerta', async () => {
     tablas.set('tenant', { data: { config: { [LLAVE_PRESUPUESTO_LLM_TENANT]: 40 } }, error: null });
     rpc.mockResolvedValue({ data: 'tope_tenant', error: null });
-    const budget = createLlmBudget('innovativos', RUN, 'interactivo');
+    const budget = createLlmBudget('flota-demo', RUN, 'interactivo');
     await expect(reserveLlmBudget(budget, 0.05)).rejects.toMatchObject({ scope: 'tenant', limitUsd: 40 });
     expect(alertar).toHaveBeenCalledTimes(1);
-    expect(alertar).toHaveBeenCalledWith('presupuesto_ia.tope_tenant', expect.objectContaining({ tenantId: 'innovativos', topeUsd: 40, origenTope: 'tenant' }));
+    expect(alertar).toHaveBeenCalledWith('presupuesto_ia.tope_tenant', expect.objectContaining({ tenantId: 'flota-demo', topeUsd: 40, origenTope: 'tenant' }));
 
     // Los cientos de rebotes que siguen al primero NO vuelven a avisar.
     await expect(reserveLlmBudget(budget, 0.05)).rejects.toBeInstanceOf(LlmBudgetExceededError);
-    await expect(reserveLlmBudget(createLlmBudget('innovativos', RUN, 'interactivo'), 0.05)).rejects.toBeInstanceOf(LlmBudgetExceededError);
+    await expect(reserveLlmBudget(createLlmBudget('flota-demo', RUN, 'interactivo'), 0.05)).rejects.toBeInstanceOf(LlmBudgetExceededError);
     expect(alertar).toHaveBeenCalledTimes(1);
   });
 

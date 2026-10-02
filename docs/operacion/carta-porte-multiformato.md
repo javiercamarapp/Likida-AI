@@ -33,7 +33,7 @@ El formato se decide por los bytes, nunca por la extensión ni el `mime` declara
 
 1. **Carga manual** — formulario de la bandeja (cliente opcional para reconocer su formato).
 2. **Correo firmado por flota** — `cp-<token>@<dominio de correo>`; comparte el webhook de Resend del buzón de facturas (`/api/correo/entrante`). «Firmado» = (a) la firma Svix del webhook se verifica **antes** de leer el cuerpo, (b) la flota sale del token del **destinatario**, nunca del remitente. La flota puede declarar los remitentes de sus clientes; uno fuera de la lista entra igual, marcado «remitente no reconocido». Reintentos de Resend: claim por `email_id` + huella del documento = idempotente. Descarga de adjuntos caída = 503 (vuelve), formato ilegible o adjunto > 8 MB = ignorado (200).
-   *Interpretación:* el encargo decía «correo firmado por flota»; se implementó como arriba. Si Innovativos espera otra cosa (p. ej. un SFTP o una API firmada como la de peajes), es una pieza aparte.
+   *Interpretación:* el encargo decía «correo firmado por flota»; se implementó como arriba. Si el cliente de demo espera otra cosa (p. ej. un SFTP o una API firmada como la de peajes), es una pieza aparte.
 3. **WhatsApp** — la oficina (usuario identificado que puede despachar) reenvía el documento al número de Likida. Solo en flotas que activaron el buzón. Un PDF/Excel/XML con Carta Porte entra solo; una foto debe llevar el pie «carta porte» o «embarque»; un XML que no es Carta Porte (factura de proveedor) sigue su camino. La respuesta sale por `avisarOficina` → `enviarConFallback` (ventana de 24 h → texto; fuera → plantilla `aviso_operacion_v1`, ya en el catálogo; no se añadió plantilla nueva).
 
 ## El extractor
@@ -69,7 +69,7 @@ Crea el viaje (folio del cliente o `CP-<huella>`) o, si ya existe con ese folio,
 
 ## Exportación
 
-`/api/export/carta-porte-docs?config=estandar|<id>&formato=csv|json[&ids=…]`. El formato real de Innovativos **se desconoce**: cada flota declara el mapeo (`cp_export_config`; columnas = campo del complemento / de mercancía / de sistema / constante; una fila por mercancía o por documento). Solo documentos aprobados. El texto que empieza con `= + - @` sale con apóstrofo (inyección de fórmulas en Excel).
+`/api/export/carta-porte-docs?config=estandar|<id>&formato=csv|json[&ids=…]`. El formato real del cliente de demo **se desconoce**: cada flota declara el mapeo (`cp_export_config`; columnas = campo del complemento / de mercancía / de sistema / constante; una fila por mercancía o por documento). Solo documentos aprobados. El texto que empieza con `= + - @` sale con apóstrofo (inyección de fórmulas en Excel).
 
 ## Métricas
 
@@ -85,7 +85,7 @@ Unitarias con documentos sintéticos de 7 formatos (PDF texto, PDF escaneado, fo
 
 ## Bloqueos externos (no se simulan)
 
-1. **Documentos reales de 2-3 clientes de Innovativos** — todo se probó con fixtures sintéticos; la exactitud real (≥ 95 % por campo) no está medida. Hace falta un banco de ≥ 100 documentos reales para fijar umbrales y elegir modelo.
-2. **El formato destino de Innovativos** — se resuelve por configuración (`cp_export_config`) cuando lo entreguen; si es un sistema (SAP/TMS) y no un archivo, la integración depende de su acceso Zero Trust.
+1. **Documentos reales de 2-3 clientes del cliente de demo** — todo se probó con fixtures sintéticos; la exactitud real (≥ 95 % por campo) no está medida. Hace falta un banco de ≥ 100 documentos reales para fijar umbrales y elegir modelo.
+2. **El formato destino del cliente de demo** — se resuelve por configuración (`cp_export_config`) cuando lo entreguen; si es un sistema (SAP/TMS) y no un archivo, la integración depende de su acceso Zero Trust.
 3. **Slugs de modelos** `google/gemini-3.8-flash` y `anthropic/claude-sonnet-5.5` sin verificar contra OpenRouter; Gemini 3.8 Flash duplica precio el 1-ene-2027.
 4. Aplicar las migraciones 0420/0421 a la base real y correr `ci-postgres` (requiere autorización); `RESEND_EMAIL_DOMAIN` y el webhook de Resend en producción para el canal de correo; número real de WhatsApp para el canal de WhatsApp.

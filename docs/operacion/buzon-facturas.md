@@ -62,7 +62,7 @@ la bandeja se lee con la lista de columnas de antes, la entrega se dice «no dis
 
 - **Autorización de Javier** para aplicar 0530 y 0531 a la base real (con respaldo previo) y crear el bucket `buzon-facturas` (lo crea la 0530).
 - **Resend:** `RESEND_API_KEY`, `RESEND_EMAIL_DOMAIN` con SPF/DKIM verificados, ruta de correo entrante y los **dos** webhooks (`RESEND_WEBHOOK_SECRET` entrante y `RESEND_EVENTOS_WEBHOOK_SECRET` eventos) apuntando a producción.
-- **Correo real del contador de Innovativos** y su formato de importación (el layout SAP B1/CONTPAQi es estándar, **sin compatibilidad certificada**: se valida con su consultor).
+- **Correo real del contador del cliente de demo** y su formato de importación (el layout SAP B1/CONTPAQi es estándar, **sin compatibilidad certificada**: se valida con su consultor).
 - **Archivos reales de proveedores** (PDF y zip) para medir la exactitud de la lectura de PDF: hoy solo hay fixtures; el umbral 0.8 y la confianza máxima 0.9 del texto son heurística declarada.
 - Modelo de visión del PDF: el slug vigente en `llm/models.ts` sin verificar contra el proveedor en vivo.
 

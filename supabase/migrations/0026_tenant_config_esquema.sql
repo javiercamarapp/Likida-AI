@@ -56,7 +56,7 @@
 --     política sin tope, explícita y auditable.
 --
 -- COMPROBADO CONTRA LOS DATOS VIVOS el 28-jul-2026: el único tenant
--- (`11111111-…`, Transportes Innovativos) tiene `config IS NULL`, que el CHECK
+-- (`11111111-…`, el cliente de demo) tiene `config IS NULL`, que el CHECK
 -- deja pasar. Esta migración no rompe nada hoy.
 --
 -- Reversible:

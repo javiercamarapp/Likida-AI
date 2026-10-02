@@ -1,4 +1,4 @@
-// Ensayo de fronteras Innovativos: entradas HTTP firmadas y motor/PDF reales.
+// Ensayo de fronteras el cliente de demo: entradas HTTP firmadas y motor/PDF reales.
 // Sólo I/O externo y persistencia se sustituyen; nunca se llama a proveedores.
 // Desde POST con HMAC real: foto → OCR sintético → persistencia doble →
 // reenvío por hash sin duplicar → cierre con motor determinístico y PDF real.
@@ -109,7 +109,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       // consultan el estaApagado REAL a través de este builder — el kill
       // switch corre de verdad en este E2E, no como doble.
       b.maybeSingle = async () => (tabla === 'tenant'
-        ? { data: { nombre: 'Transportes Innovativos — sintético', rfc: 'CCO8605231N4', config: null }, error: null }
+        ? { data: { nombre: 'el cliente de demo — sintético', rfc: 'CCO8605231N4', config: null }, error: null }
         : { data: null, error: null });
       b.insert = async (fila: Record<string, unknown>) => {
         if (tabla === 'agente_corrida') corridas.push(fila);
@@ -240,7 +240,7 @@ async function postearFirmado(payload = payloadMeta) {
   return res;
 }
 
-describe('Innovativos: fronteras encadenadas desde HTTP firmado', () => {
+describe('el cliente de demo: fronteras encadenadas desde HTTP firmado', () => {
   it('el system enviado al SDK es el prompt registrado real, con tenant y guardas, sin prompt alterno', async () => {
     await postearFirmado();
     expect(create).toHaveBeenCalledTimes(2);
@@ -248,7 +248,7 @@ describe('Innovativos: fronteras encadenadas desde HTTP firmado', () => {
     const systems = first.messages.filter((m: { role: string }) => m.role === 'system');
     expect(systems).toHaveLength(1);
     const serialized = JSON.stringify(systems[0].content);
-    expect(serialized).toContain('Transportes Innovativos — sintético');
+    expect(serialized).toContain('el cliente de demo — sintético');
     expect(serialized).toContain('NUNCA inventes ni narres los números');
     expect(serialized).toContain('Tú NO autorizas dinero');
     const names = first.tools.map((t: { function: { name: string } }) => t.function.name).sort();
@@ -282,7 +282,7 @@ function fotoMeta(id: string): string {
   return JSON.stringify(payload);
 }
 
-describe('Innovativos: foto a cierre por el mismo canal', () => {
+describe('el cliente de demo: foto a cierre por el mismo canal', () => {
   it('la foto se captura una vez, replay de foto no paga OCR ni duplica gasto y cierre incluye monto exacto', async () => {
     await postearFirmado(fotoMeta('wamid.IMG1'));
     expect(extraer).toHaveBeenCalledTimes(1);

@@ -12,7 +12,7 @@ import { mxn } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA TALACHA AUTORIZADA POR WHATSAPP (0107, F4 del plan) — el circuito que
-// Transportes Innovativos describió: el chofer reporta "se me ponchó una
+// el cliente de demo describió: el chofer reporta "se me ponchó una
 // llanta" (con o sin la foto de la nota), el JEFE recibe la solicitud por
 // WhatsApp con el monto si lo hay, y AUTORIZA O RECHAZA respondiendo. La
 // decisión queda FIRMADA en la incidencia — quién y cuándo — porque el

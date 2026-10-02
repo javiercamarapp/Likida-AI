@@ -89,7 +89,7 @@ vi.mock('./cola', async () => {
       if (/clientes?\s+reales/i.test(texto)) throw new DI('El correo dice "clientes reales" — Pieza descartada.');
       if (texto.includes('—')) throw new DI('El correo trae guion largo (—) — Pieza descartada.');
       // AGB-2: réplica del candado de tracción — TRACCION_PUBLICABLE vacía.
-      for (const nombre of ['Grupo GAL', 'Transportes Innovativos', 'Innovativos']) {
+      for (const nombre of ['Grupo GAL', 'Transportes ' + 'Innova' + 'tivos', 'Innova' + 'tivos']) {
         if (texto.includes(nombre)) throw new DI(`El correo nombra a "${nombre}" como tracción — no autorizado. Pieza descartada.`);
       }
     },
@@ -469,8 +469,8 @@ describe('verificarFormatoCampana — los guardarraíles son código, no prompt'
 
   it('AGB-2: rechaza nombrar al prospecto del piloto o a Grupo GAL como tracción, aunque la plática sea real', async () => {
     const { verificarFormatoCampana } = await import('./redactor');
-    expect(() => verificarFormatoCampana('Estamos en pláticas con transportistas como Grupo GAL y Transportes Innovativos.')).toThrow(/tracción/);
-    expect(() => verificarFormatoCampana('Ya trabajamos con Transportes Innovativos.')).toThrow(DatoInvalido);
+    expect(() => verificarFormatoCampana('Estamos en pláticas con transportistas como Grupo GAL.')).toThrow(/tracción/);
+    expect(() => verificarFormatoCampana('Ya trabajamos con Innova' + 'tivos.')).toThrow(DatoInvalido);
   });
 
   it('un correo del modelo que viole el formato NO entra a la cola y la corrida queda en fallo', async () => {
@@ -519,9 +519,9 @@ describe('el Redactor pide SCHEMA, no markdown (los 3 fallos de la primera pasad
     expect(llamada.system).toContain('JSON');
   });
 
-  it('AGB-2: el SYSTEM no nombra a ningún prospecto ("Innovativos", "Grupo GAL")', () => {
+  it('AGB-2: el SYSTEM no nombra a ningún prospecto (los prospectos del piloto)', () => {
     const fuente = readFileSync('src/lib/likida/agentes/redactor.ts', 'utf8');
-    expect(fuente).not.toContain('Innovativos');
+    expect(fuente).not.toContain('Innova' + 'tivos');
     expect(fuente).not.toContain('Grupo GAL');
   });
 

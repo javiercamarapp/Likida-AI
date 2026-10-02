@@ -2,7 +2,7 @@
 // LIQUIDACIÓN EXTERNA — el contrato del cuerpo de POST /v1/liquidaciones-externas
 // y su validación estricta.
 //
-// Innovativos calcula la liquidación en su SAP/TMS; Likida solo la ENTREGA.
+// El cliente de demo calcula la liquidación en su SAP/TMS; Likida solo la ENTREGA.
 // Por eso la regla que manda aquí es la opuesta a la del cuadre: Likida NO
 // recalcula nada. Pero tampoco entrega a ciegas una cifra incoherente a un
 // chofer: lo único que se verifica es que el `total` sea la suma de SUS

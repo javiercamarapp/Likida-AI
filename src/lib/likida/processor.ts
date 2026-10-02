@@ -1843,7 +1843,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // ── AUDITORÍA 24, ADM-6: EL INTERRUPTOR POR FLOTA (mig. 0297) ───────────
     //
     // `interruptor` (0110) es global — apagarlo corta a las 800 unidades de
-    // Innovativos junto con las demás flotas del piloto. Esta palanca es por
+    // El cliente de demo junto con las demás flotas del piloto. Esta palanca es por
     // (tenant, pipeline): Javier puede frenar SOLO el pipeline de whatsapp de
     // una flota con un incidente, sin tocar a las otras. Se pregunta aquí
     // —ya hay tenant, todavía no arrancó OCR ni cuadre— y se avisa (a

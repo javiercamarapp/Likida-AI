@@ -65,7 +65,7 @@ describe('archivos y texto', () => {
     expect(nombreArchivoFactura(null, 'u1', 'pdf')).toBe('SIN-RFC_u1.pdf');
   });
   it('el correo avisa cuando una factura del lote no tiene XML (cifras de lectura, no del CFDI)', () => {
-    const t = textoCorreoEntrega({ nFacturas: 3, total: 100, formato: 'sap_b1', incluyeZip: true, faltanXml: 1, nombreFlota: 'Innovativos' });
+    const t = textoCorreoEntrega({ nFacturas: 3, total: 100, formato: 'sap_b1', incluyeZip: true, faltanXml: 1, nombreFlota: 'Cliente demo' });
     expect(t.asunto).toContain('3');
     expect(t.parrafos.join(' ')).toMatch(/SAP Business One/);
     expect(t.parrafos.join(' ')).toMatch(/no tiene XML/);

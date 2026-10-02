@@ -699,7 +699,7 @@ export function armarReporteValor(flota: Flota, v: ValorDelMes): string {
  *  a 2,000 filas y declaraba el mes INCOMPLETO al pasarlo — a 15,000
  *  viajes/mes eso corta el reporte de valor en el 13% del mes real. Ahora
  *  pagina de verdad con `traerTodo` (pg.ts): 100 páginas de 1,000 = 100,000
- *  filas/mes, un techo que ni Innovativos a escala completa alcanza, y LANZA
+ *  filas/mes, un techo que ni el cliente de demo a escala completa alcanza, y LANZA
  *  si de plano no puede demostrar que trajo todo — en vez de devolver una
  *  suma parcial con cara de completa. El tope numérico desaparece: ya no hay
  *  un número que declarar rebasado. */

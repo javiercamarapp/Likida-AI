@@ -141,8 +141,8 @@ it('remitentes: se normalizan, se quitan duplicados y se validan', async () => {
 it('exportación: valida el mapeo (JSON, formato, campos) y lo guarda ligado a la flota', async () => {
   const p = await pagina();
   const bueno = JSON.stringify({ columnas: [{ encabezado: 'Folio', campo: 'folio_cliente' }] });
-  expect(await p.props.acciones.guardarExport(null, fd({ nombre: 'Innovativos', formato: 'csv', config: bueno }))).toMatchObject({ ok: true });
-  expect(estado.exportConfigs).toEqual([expect.objectContaining({ tenantId: 't-1', nombre: 'Innovativos', formato: 'csv' })]);
+  expect(await p.props.acciones.guardarExport(null, fd({ nombre: 'Cliente demo', formato: 'csv', config: bueno }))).toMatchObject({ ok: true });
+  expect(estado.exportConfigs).toEqual([expect.objectContaining({ tenantId: 't-1', nombre: 'Cliente demo', formato: 'csv' })]);
   expect(await p.props.acciones.guardarExport(null, fd({ nombre: 'X', formato: 'csv', config: '{no json' }))).toEqual({ ok: false, error: 'El mapeo no es un JSON válido.' });
   expect(await p.props.acciones.guardarExport(null, fd({ nombre: 'X', formato: 'xml', config: bueno }))).toMatchObject({ ok: false });
   expect(await p.props.acciones.guardarExport(null, fd({ nombre: '', formato: 'csv', config: bueno }))).toMatchObject({ ok: false });

@@ -4,7 +4,7 @@
 // El éxito redirigía a `/admin?creado=1`, que /admin no lee; los errores a
 // `?error=1`/`?error=2`, que el componente no recibía; y `provisionarUsuario`
 // corría SIN `try`, así que un correo ya registrado tiraba la página de error
-// de Next y se perdía la captura entera. Dar de alta al equipo de Innovativos
+// de Next y se perdía la captura entera. Dar de alta al equipo del cliente de demo
 // así es dar de alta sin saber si quedó.
 //
 // La página es un server component con `requireSuperadmin` y una closure que

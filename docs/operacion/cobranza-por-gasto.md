@@ -38,7 +38,7 @@ Sin las columnas de la 0525 la configuración por gasto cae a **apagada** (con u
 
 - **Plantilla `cobranza_gastos_v1`** aprobada en Meta (texto en `plantillas-meta.md`, sin verificar contra Meta) y número/WABA reales.
 - **Autorización de Javier** para aplicar la 0525 a la base real.
-- Datos reales de gastos y choferes de Innovativos para ajustar la cadencia, el tope y los conceptos que exigen CFDI (hoy diésel y caseta; heurística declarada).
+- Datos reales de gastos y choferes del cliente de demo para ajustar la cadencia, el tope y los conceptos que exigen CFDI (hoy diésel y caseta; heurística declarada).
 
 ## Pendientes reales
 

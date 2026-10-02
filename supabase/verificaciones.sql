@@ -15775,7 +15775,7 @@ begin
   -- La forma buena SÍ entra.
   begin
     insert into public.interruptor_tenant (tenant_id, pipeline, apagado, motivo)
-      values (ta, 'ocr', true, 'gasto disparado en Innovativos');
+      values (ta, 'ocr', true, 'gasto disparado en el cliente de demo');
     acepta_con_motivo := true;
   exception when others then acepta_con_motivo := false;
   end;

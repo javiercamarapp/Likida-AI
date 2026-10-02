@@ -10,7 +10,7 @@ import type { ViajeContexto } from './repo';
 // ═══════════════════════════════════════════════════════════════════════════
 // EL AVISO A LA OFICINA — «Juan llegó a cargar a las 14:32».
 //
-// El sistema actual de Innovativos no manda este aviso. Es CONFIGURABLE por flota
+// El sistema actual del cliente de demo no manda este aviso. Es CONFIGURABLE por flota
 // (`avisar_oficina_llegada` / `avisar_oficina_salida`, apagados por defecto: un
 // aviso por hito a 250 camiones es mucho ruido hasta que el tráfico lo pida) y
 // lleva la hora EXACTA del mensaje del chofer.

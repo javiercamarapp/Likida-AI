@@ -108,9 +108,9 @@ describe('requireSessionTenant', () => {
   it('`?rol=` SOLO, con flota elegida, se queda en esa flota (antes saltaba a la demo en silencio)', async () => {
     vi.stubEnv('DEMO_TENANT_ID', 'demo-tenant-id');
     getSessionTenant.mockResolvedValue(SUPER);
-    leerSeleccionFlota.mockResolvedValue('t-innovativos');
+    leerSeleccionFlota.mockResolvedValue('t-flota-demo');
     const r = await requireSessionTenant('/dashboard', { rol: 'contador' });
-    expect(r.tenantId).toBe('t-innovativos');
+    expect(r.tenantId).toBe('t-flota-demo');
     expect(redirect).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
   });
@@ -128,7 +128,7 @@ describe('requireSessionTenant', () => {
   it('`?tenant=` gana sobre la cookie: el preview explícito manda', async () => {
     vi.stubEnv('DEMO_TENANT_ID', 'demo-tenant-id');
     getSessionTenant.mockResolvedValue(SUPER);
-    leerSeleccionFlota.mockResolvedValue('t-innovativos');
+    leerSeleccionFlota.mockResolvedValue('t-flota-demo');
     const r = await requireSessionTenant('/dashboard', { tenant: 't-7', rol: 'contador' });
     expect(r.tenantId).toBe('demo-tenant-id');
     vi.unstubAllEnvs();

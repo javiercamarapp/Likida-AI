@@ -3,7 +3,7 @@
 --
 -- Lo que pidió el cliente (Zoom 1-oct-2026): atender los grupos de WhatsApp de sus clientes (solo los críticos al inicio),
 -- entrenar con el histórico exportado del chat (.txt/.zip de «Exportar chat»), un reporte de FAQs y tendencias por tema
--- (Lorena) y una alerta al gerente/director cuando un cliente lleva más de 10 minutos sin respuesta o se enoja.
+-- (del levantamiento) y una alerta al gerente/director cuando un cliente lleva más de 10 minutos sin respuesta o se enoja.
 --
 --   · `vigia_grupo`            los grupos de cada cliente y cuáles son CRÍTICOS. Un cliente con algún grupo crítico se atiende
 --                              con el plazo corto `sla_critico_min` (10 min por omisión) en vez del `sla_respuesta_min` general.

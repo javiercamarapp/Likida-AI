@@ -154,7 +154,7 @@ export default async function ConsumoPage() {
           </div>
 
           {/* ── ADM-6 (auditoría 24) · Por FLOTA — cuánto cuesta cada cliente ──
-              Antes no existía ninguna tabla de "cuánto cuesta Innovativos":
+              Antes no existía ninguna tabla de "cuánto cuesta el cliente de demo":
               `costoIaDeTenant`/`flotas[].costoIaUsd` existían en negocio.ts
               sin una sola pantalla que los pintara. `r.flotas` ya trae el
               costo de IA de la MISMA ventana que las tarjetas de arriba (7

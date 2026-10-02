@@ -26,11 +26,11 @@ if not socket.exists() or not stat.S_ISSOCK(socket.stat().st_mode):
  p.error('Se exige socket PostgreSQL UNIX local existente; TCP remoto prohibido')
 HOST=a.host;PORT=str(a.port)
 if not re.fullmatch(r'[a-zA-Z_][a-zA-Z0-9_]*',a.template):p.error('Nombre de plantilla inválido')
-if not re.fullmatch(r'innovativos_cap_[a-z0-9_]+',a.db): p.error('DB debe usar prefijo propio innovativos_cap_')
+if not re.fullmatch(r'flota_cap_[a-z0-9_]+',a.db): p.error('DB debe usar prefijo propio flota_cap_')
 if a.seconds<1 or a.seconds>86400 or not 0<a.rate<=5: p.error('Duración 1..86400; tasa >0 y <=5')
 a.out.mkdir(parents=True,exist_ok=True)
 BASE=['-h',HOST,'-p',PORT]
-ENV={**os.environ,'PGOPTIONS':'-c statement_timeout=30000 -c lock_timeout=5000','PGAPPNAME':'innovativos_cap_harness'}
+ENV={**os.environ,'PGOPTIONS':'-c statement_timeout=30000 -c lock_timeout=5000','PGAPPNAME':'flota_cap_harness'}
 def cmd(args,timeout=600):
  t=time.perf_counter();r=subprocess.run(args,text=True,capture_output=True,env=ENV,timeout=timeout)
  if r.returncode: raise RuntimeError(f'{args[0]} rc={r.returncode}: {r.stderr[-5000:]} {r.stdout[-2000:]}')
@@ -38,13 +38,13 @@ def cmd(args,timeout=600):
 def sql(q,db=None):return cmd(['psql',*BASE,'-d',db or a.db,'-X','-v','ON_ERROR_STOP=1','-Atq','-c',q])[0].strip()
 def save(name,data): (a.out/name).write_text(json.dumps(data,indent=2) if not isinstance(data,str) else data)
 def guard():
- assert sql("select label from innovativos_cap_harness.owner where id=1")=='synthetic-only-0339', 'No existe marcador de propiedad'
-def uid(kind,n): return hashlib.md5(f'innovativos-cap-{kind}-{n}'.encode()).hexdigest()
-def tid(n):return f"md5('innovativos-cap-tenant-{n}')::uuid"
+ assert sql("select label from flota_cap_harness.owner where id=1")=='synthetic-only-0339', 'No existe marcador de propiedad'
+def uid(kind,n): return hashlib.md5(f'flota-cap-{kind}-{n}'.encode()).hexdigest()
+def tid(n):return f"md5('flota-cap-tenant-{n}')::uuid"
 def snapshots():
  result={}
  for table in ['tenant','app_user','unidad','operador','viaje','gasto','comprobante_huerfano']:
-  where="nombre like 'SINTETICO INNOVATIVOS CAP %'" if table=='tenant' else "tenant_id in(select id from public.tenant where nombre like 'SINTETICO INNOVATIVOS CAP %')"
+  where="nombre like 'SINTETICO FLOTA CAP %'" if table=='tenant' else "tenant_id in(select id from public.tenant where nombre like 'SINTETICO FLOTA CAP %')"
   # Hash de TODAS las columnas por fila y orden estable, no solo IDs.
   result[table]=json.loads(sql(f"select json_build_object('count',count(*),'checksum',md5(coalesce(string_agg(md5(row_to_json(x)::text),'' order by id),''))) from(select * from public.{table} where {where})x"))
  return result
@@ -52,7 +52,7 @@ def rls(db):
  results=[]
  for n in range(1,6):
   units=800 if n==1 else 1050;trips=15000 if n==1 else 8750
-  q=f"""begin; set local role authenticated; select set_config('request.jwt.claims',json_build_object('sub',md5('innovativos-cap-user-{n}')::uuid,'role','authenticated')::text,true);
+  q=f"""begin; set local role authenticated; select set_config('request.jwt.claims',json_build_object('sub',md5('flota-cap-user-{n}')::uuid,'role','authenticated')::text,true);
   do $$declare u int;v int;g int;l int;begin
   select count(*) into u from public.unidad; select count(*) into v from public.viaje;select count(*) into g from public.gasto;
   select count(*) into l from public.gasto where tenant_id<>{tid(n)};
@@ -62,24 +62,24 @@ def rls(db):
 if a.action=='seed':
  t=time.perf_counter();cmd(['createdb',*BASE,'-T',a.template,a.db])
  assert sql("select count(*) from pg_constraint where conname='jornada_trabajo_operador_tenant_fkey'")=='1'
- sql("create schema innovativos_cap_harness; create table innovativos_cap_harness.owner(id int primary key,label text); insert into innovativos_cap_harness.owner values(1,'synthetic-only-0339');")
- sql("""insert into public.tenant(id,nombre,zona_horaria) select md5('innovativos-cap-tenant-'||g)::uuid,'SINTETICO INNOVATIVOS CAP '||g,'America/Mexico_City' from generate_series(1,5)g;
- insert into public.app_user(id,tenant_id,email,nombre,rol) select md5('innovativos-cap-user-'||g)::uuid,md5('innovativos-cap-tenant-'||g)::uuid,'innovativos-cap-'||g||'@example.invalid','SINTETICO','flota_admin' from generate_series(1,5)g;""")
+ sql("create schema flota_cap_harness; create table flota_cap_harness.owner(id int primary key,label text); insert into flota_cap_harness.owner values(1,'synthetic-only-0339');")
+ sql("""insert into public.tenant(id,nombre,zona_horaria) select md5('flota-cap-tenant-'||g)::uuid,'SINTETICO FLOTA CAP '||g,'America/Mexico_City' from generate_series(1,5)g;
+ insert into public.app_user(id,tenant_id,email,nombre,rol) select md5('flota-cap-user-'||g)::uuid,md5('flota-cap-tenant-'||g)::uuid,'flota-cap-'||g||'@example.invalid','SINTETICO','flota_admin' from generate_series(1,5)g;""")
  for tenant in range(1,6):
   units=800 if tenant==1 else 1050;trips=15000 if tenant==1 else 8750
-  sql(f"""insert into public.unidad(id,tenant_id,numero_economico) select md5('innovativos-cap-unit-{tenant}-'||g)::uuid,{tid(tenant)},'CAP-{tenant}-'||g from generate_series(1,{units})g;
-  insert into public.operador(id,tenant_id,nombre,telefono,aviso_privacidad_en) select md5('innovativos-cap-op-{tenant}-'||g)::uuid,{tid(tenant)},'SINTETICO OP '||g,'529331{tenant}'||lpad(g::text,8,'0'),'2026-01-01' from generate_series(1,{units})g;""")
+  sql(f"""insert into public.unidad(id,tenant_id,numero_economico) select md5('flota-cap-unit-{tenant}-'||g)::uuid,{tid(tenant)},'CAP-{tenant}-'||g from generate_series(1,{units})g;
+  insert into public.operador(id,tenant_id,nombre,telefono,aviso_privacidad_en) select md5('flota-cap-op-{tenant}-'||g)::uuid,{tid(tenant)},'SINTETICO OP '||g,'529331{tenant}'||lpad(g::text,8,'0'),'2026-01-01' from generate_series(1,{units})g;""")
   for start in range(1,trips+1,250):
    end=min(start+249,trips)
    sql(f"""insert into public.viaje(id,tenant_id,operador_id,unidad_id,estatus,avisado_en,aceptado_en)
-   select md5('innovativos-cap-trip-{tenant}-'||g)::uuid,{tid(tenant)},md5('innovativos-cap-op-{tenant}-'||(1+(g-1)%{units}))::uuid,md5('innovativos-cap-unit-{tenant}-'||(1+(g-1)%{units}))::uuid,
+   select md5('flota-cap-trip-{tenant}-'||g)::uuid,{tid(tenant)},md5('flota-cap-op-{tenant}-'||(1+(g-1)%{units}))::uuid,md5('flota-cap-unit-{tenant}-'||(1+(g-1)%{units}))::uuid,
    'liquidado','2026-08-01T12:00:00Z'::timestamptz+((g-1)/{units})*interval '1 day','2026-08-01T12:05:00Z'::timestamptz+((g-1)/{units})*interval '1 day' from generate_series({start},{end})g;""")
   for start in range(1,trips*3+1,500):
    end=min(start+499,trips*3)
    sql(f"""insert into public.gasto(id,tenant_id,viaje_id,concepto,monto,fecha,folio,imagen_url,ocr_raw,img_hash,created_at)
-   select md5('innovativos-cap-doc-{tenant}-'||g)::uuid,{tid(tenant)},md5('innovativos-cap-trip-{tenant}-'||(1+(g-1)%{trips}))::uuid,
+   select md5('flota-cap-doc-{tenant}-'||g)::uuid,{tid(tenant)},md5('flota-cap-trip-{tenant}-'||(1+(g-1)%{trips}))::uuid,
    case g%3 when 0 then 'diesel' when 1 then 'caseta' else 'alimentacion' end,123.45,'2026-08-01','SINTETICO-'||g,
-   'synthetic://metadata-only/{tenant}/'||g||'.jpg',jsonb_build_object('synthetic',true,'text',repeat('SINTETICO ',100)),md5('innovativos-cap-img-{tenant}-'||g),
+   'synthetic://metadata-only/{tenant}/'||g||'.jpg',jsonb_build_object('synthetic',true,'text',repeat('SINTETICO ',100)),md5('flota-cap-img-{tenant}-'||g),
    '2026-08-01T12:00:00Z'::timestamptz+(g%2592000)*interval '1 second' from generate_series({start},{end})g;""")
   print(f'seed tenant {tenant}: {units} units, {trips} trips, {trips*3} documents',flush=True)
  sql('analyze public.viaje; analyze public.gasto; analyze public.unidad; analyze public.operador;')
@@ -94,9 +94,9 @@ if a.action=='explain':
  'paginacionHuerfano':f"select resuelto_en from public.comprobante_huerfano where tenant_id={tid(1)} order by id limit 1000",
  'viajeReciente':f"select id,folio,estatus from public.viaje where tenant_id={tid(1)} order by created_at desc limit 100",
  'getDocumentos':f"select id,concepto,monto,fecha,folio,rfc_emisor,cfdi_uuid,estado_sat,ocr_confianza,efos,xml_verificado,imagen_url from public.gasto where tenant_id={tid(1)} order by created_at desc limit 100",
- 'gastoExistePorHash':f"select id from public.gasto where tenant_id={tid(1)} and viaje_id=md5('innovativos-cap-trip-1-1')::uuid and img_hash=md5('innovativos-cap-img-1-1') limit 1",
- 'getHuerfanos':f"select id,gasto,motivo,creado_en,ruta_imagen,ofrecido_en from public.comprobante_huerfano where tenant_id={tid(1)} and operador_id=md5('innovativos-cap-op-1-1')::uuid and resuelto_en is null order by creado_en asc limit 50",
- 'viajesUnidadDia':f"select id from public.viaje where tenant_id={tid(1)} and unidad_id=md5('innovativos-cap-unit-1-1')::uuid and aceptado_en>='2026-08-01T00:00:00Z' and aceptado_en<'2026-08-02T00:00:00Z'",
+ 'gastoExistePorHash':f"select id from public.gasto where tenant_id={tid(1)} and viaje_id=md5('flota-cap-trip-1-1')::uuid and img_hash=md5('flota-cap-img-1-1') limit 1",
+ 'getHuerfanos':f"select id,gasto,motivo,creado_en,ruta_imagen,ofrecido_en from public.comprobante_huerfano where tenant_id={tid(1)} and operador_id=md5('flota-cap-op-1-1')::uuid and resuelto_en is null order by creado_en asc limit 50",
+ 'viajesUnidadDia':f"select id from public.viaje where tenant_id={tid(1)} and unidad_id=md5('flota-cap-unit-1-1')::uuid and aceptado_en>='2026-08-01T00:00:00Z' and aceptado_en<'2026-08-02T00:00:00Z'",
  }
  for name,q in queries.items():save(name+'.explain.json',json.loads(sql('explain (analyze,buffers,format json) '+q)))
  save('query-source-map.json',{'getDocumentos':'src/lib/likida/analytics.ts:getDocumentos','gastoExistePorHash':'src/lib/likida/repo.ts:gastoExistePorHash','getHuerfanos':'src/lib/likida/repo.ts:getHuerfanos','viajesUnidadDia':'reclamar_jornadas_por_derivar: GPS exclusividad de unidad/dia (consulta base)'})
@@ -113,7 +113,7 @@ if a.action=='bench':
    if len(cols)>2 and cols[2].isdigit():lat.append(int(cols[2])/1000)
  lat.sort()
  def pct(q):return lat[max(0,math.ceil(len(lat)*q)-1)] if lat else None
- counts=json.loads(sql("select json_object_agg(tenant_id,n) from(select tenant_id,count(*)n from public.comprobante_huerfano where gasto->>'harness'='innovativos-cap-burst' group by tenant_id)x"))
+ counts=json.loads(sql("select json_object_agg(tenant_id,n) from(select tenant_id,count(*)n from public.comprobante_huerfano where gasto->>'harness'='flota-cap-burst' group by tenant_id)x"))
  save('burst.json',{'transactions':len(lat),'elapsed_seconds':elapsed,'p50_ms':pct(.5),'p95_ms':pct(.95),'p99_ms':pct(.99),'max_ms':max(lat) if lat else None,'tenant_counts':counts,'mode':'10 clients, persistent connections; one metadata insert plus document read per transaction','bytes_uploaded':0,'ocr_calls':0})
  assert len(lat)==25000 and sum(counts.values())==25000,(len(lat),counts)
  assert '0 (0.000%)' in output,output
@@ -125,7 +125,7 @@ if a.action=='fairness':
  update public.jornada_derivacion_trabajo set siguiente_intento_en='infinity';
  insert into public.jornada_derivacion_trabajo(tenant_id,operador_id,dia,viaje_id,unidad_id,unidad_ids,aceptado_en,input_version,viajes_version)
  select v.tenant_id,v.operador_id,'2026-08-01',v.id,v.unidad_id,array[v.unidad_id],v.aceptado_en,'synthetic','synthetic'
- from public.viaje v join public.tenant t on t.id=v.tenant_id where t.nombre like 'SINTETICO INNOVATIVOS CAP %' and v.aceptado_en='2026-08-01T12:05:00Z'
+ from public.viaje v join public.tenant t on t.id=v.tenant_id where t.nombre like 'SINTETICO FLOTA CAP %' and v.aceptado_en='2026-08-01T12:05:00Z'
  on conflict(tenant_id,operador_id,dia) do update set siguiente_intento_en='-infinity',claim_token=null,claim_owner=null,lease_expires_at=null,claim_input_version=null;
  create temp table first_claim as select * from public.reclamar_jornadas_por_derivar(10,'synthetic-fairness-1',30);
  create temp table second_claim as select * from public.reclamar_jornadas_por_derivar(10,'synthetic-fairness-2',30);
@@ -152,7 +152,7 @@ if a.action=='soak':
  baseline=int(sql('select pg_database_size(current_database())'));stop=a.out/'STOP'
  if stop.exists():raise RuntimeError('STOP ya existe; usa otro out o revísalo manualmente')
  args=['pgbench',*BASE,'-d',a.db,'-n','-c','5','-j','2','-T',str(a.seconds),'-R',str(a.rate),'-f',str(ROOT/'read.sql')+'@8','-f',str(ROOT/'update.sql')+'@1','-f',str(ROOT/'soak-insert.sql')+'@1','-l','--log-prefix',str(a.out/'soak'),'-P','30','--max-tries','1','--exit-on-abort','--random-seed','20260904']
- childenv={**ENV,'PGOPTIONS':'-c statement_timeout=2000 -c lock_timeout=1000','PGAPPNAME':'innovativos_cap_soak'}
+ childenv={**ENV,'PGOPTIONS':'-c statement_timeout=2000 -c lock_timeout=1000','PGAPPNAME':'flota_cap_soak'}
  with (a.out/'soak.stdout').open('w') as log:
   start=time.time();last_sample=start
   proc=subprocess.Popen(args,stdout=log,stderr=subprocess.STDOUT,env=childenv)

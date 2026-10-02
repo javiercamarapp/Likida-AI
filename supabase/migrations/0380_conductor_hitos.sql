@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0380 — AGENTE 5 «CONDUCTOR»: los hitos del viaje por WhatsApp.
 --
--- Innovativos (250 camiones) pide un agente que PIDA, PERSIGA, VALIDE y REGISTRE
+-- El cliente de demo (250 camiones) pide un agente que PIDA, PERSIGA, VALIDE y REGISTRE
 -- los hitos que el chofer no manda: llegada a cargar (y con quién se reportó),
 -- salida de carga, llegada a descarga, salida de descarga y regreso — y que
 -- mande los avisos que su sistema actual no manda.

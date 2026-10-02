@@ -38,7 +38,7 @@ import { httpsPublico } from '@/lib/http/https_publico';
 // NO puede ser `api_en_vivo` — hay una prueba que lo impide.
 //
 // El modo de falla que esto evita es concreto y ya tiene fecha: el demo de
-// Transportes Innovativos. Un catálogo que dijera "Wialon: disponible" y
+// el cliente de demo. Un catálogo que dijera "Wialon: disponible" y
 // tronara al conectar cuesta el cliente. Uno que diga "Wialon: falta que nos
 // des el token de tu cuenta" no cuesta nada, porque es verdad.
 //

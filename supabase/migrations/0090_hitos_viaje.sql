@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0090 — Los hitos del chofer (14-ago-2026, F4 del plan).
 --
--- Lo que Transportes Innovativos pidió con sus palabras: el chofer avisa
+-- Lo que el cliente de demo pidió con sus palabras: el chofer avisa
 -- "ya llegué", "estoy descargando", "voy de regreso" por WhatsApp y eso
 -- queda SELLADO en el viaje. Tres timestamps y no una tabla de eventos a
 -- propósito: un viaje de carga federal tiene UN destino, y cada hito pasa

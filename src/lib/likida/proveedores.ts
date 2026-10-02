@@ -10,7 +10,7 @@ import type { Gasto } from '@/types/likida';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FACTURAS DE PROVEEDOR (0091 + 0108, F6 del plan) — el ciclo que Transportes
-// Innovativos captura a mano en su ERP: llega la factura del taller o la
+// El cliente de demo captura a mano en su ERP: llega la factura del taller o la
 // refaccionaria (XML por correo/panel, o FOTO), un humano la aprueba o
 // rechaza, y lo aprobado sale en un layout importable a SAP B1/CONTPAQi.
 //

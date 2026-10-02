@@ -2,7 +2,7 @@
 -- 0298 — Terminal con escritor, e importación masiva de unidades/operadores.
 --
 -- AUDITORÍA 24 (ADM-2, FE-4, producto-completitud «recorrido día 1» y
--- faltante 3). Innovativos tiene 800 tractocamiones y cientos de choferes;
+-- faltante 3). El cliente de demo tiene 800 tractocamiones y cientos de choferes;
 -- hasta hoy el panel solo daba de alta uno por uno, y `terminal` era la tabla
 -- huérfana de la 0001: la referencian `operador` y `viaje` y nada la escribe.
 --

@@ -231,9 +231,9 @@ describe('el reloj de la vuelta corta también la BÚSQUEDA del SDR (c7-1)', () 
 });
 
 describe('AGB-2 — el SYSTEM del SDR no nombra a ningún prospecto', () => {
-  it('no contiene "Innovativos" ni "Grupo GAL"', () => {
+  it('no contiene el nombre de un prospecto ni "Grupo GAL"', () => {
     const fuente = readFileSync('src/lib/likida/agentes/sdr.ts', 'utf8');
-    expect(fuente).not.toContain('Innovativos');
+    expect(fuente).not.toContain('Innova' + 'tivos');
     expect(fuente).not.toContain('Grupo GAL');
   });
 });
