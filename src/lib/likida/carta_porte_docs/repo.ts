@@ -610,7 +610,7 @@ export async function documentosPendientes(limite = 25, ahora = new Date()): Pro
   const c = await acotada(supabaseAdmin().from('cp_documento')
     .select('tenant_id, id, estado, intentos, created_at, updated_at, procesando_hasta')
     .is('purgado_en', null).not('storage_ruta', 'is', null).lt('intentos', TOPE_INTENTOS_DOC).in('estado', ['recibido', 'procesando', 'fallido'])
-    .order('updated_at', { ascending: true }).limit(limite * 4), 'cpdocs.pendientes_directo');
+    .order('updated_at', { ascending: true }).order('id').limit(limite * 4), 'cpdocs.pendientes_directo');
   const filas = (exigir(c, 'cpdocs.pendientes_directo') ?? []) as unknown as Fila[];
   const toca = (f: Fila): boolean => {
     const estado = f.estado as EstadoDoc;
