@@ -97,3 +97,16 @@ describe('ADVERSARIAL — forma del archivo', () => {
     expect(() => leerCfdiSeguro(Buffer.from(`<?xml version="1.0"?>${'<a>'.repeat(50_000)}`))).not.toThrow();
   });
 });
+
+describe('ADVERSARIAL — el chequeo de «empieza como XML» es lineal (sin ReDoS)', () => {
+  it('un archivo de comentarios sin cerrar, de ~1 MB, se rechaza en milisegundos', () => {
+    const hostil = Buffer.from('<!--a'.repeat(200_000));
+    const t0 = Date.now();
+    const r = leerCfdiSeguro(hostil);
+    expect(Date.now() - t0).toBeLessThan(1000);
+    expect(r.ok).toBe(false);
+  });
+  it('comentarios legítimos antes del elemento raíz siguen valiendo', () => {
+    expect(leerCfdiSeguro(Buffer.from(cfdi().replace('?>\n', '?>\n<!-- a -->\n<!-- b -->'))).ok).toBe(true);
+  });
+});

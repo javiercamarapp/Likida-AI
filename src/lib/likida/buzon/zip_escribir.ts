@@ -28,7 +28,6 @@ function fechaDos(d: Date): { fecha: number; hora: number } {
 
 /** Un nombre seguro de archivo: sin rutas, sin caracteres de control, ≤ 100 caracteres. */
 export function nombreSeguroZip(nombre: string): string {
-  // eslint-disable-next-line no-control-regex
   const limpio = nombre.replace(/[\u0000-\u001f\u007f\\/:*?"<>|]/g, '_').replace(/^\.+/, '_').trim();
   return (limpio || 'archivo').slice(0, 100);
 }

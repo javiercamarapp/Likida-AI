@@ -106,7 +106,6 @@ function rutaPeligrosa(ruta: string): boolean {
 }
 
 function sanear(ruta: string): string {
-  // eslint-disable-next-line no-control-regex
   return ruta.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 200);
 }
 
