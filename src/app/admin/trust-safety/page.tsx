@@ -63,7 +63,13 @@ function FilaEvento({ e }: { e: FilaSeguridad }) {
     <tr className="hairline-t">
       <td className="py-2 pr-3 align-top text-sm whitespace-nowrap">{fechaHoraMx(e.creadoEn)}</td>
       <td className="py-2 pr-3 align-top">
-        <div className="text-sm font-medium">{e.tipo.replace(/_/g, ' ')}</div>
+        <div className="text-sm font-medium">
+          {e.tipo.replace(/_/g, ' ')}
+          {/* 0681: una ráfaga de la misma señal es UNA fila con su conteo — el número es lo medido, no una estimación. */}
+          {(e.repeticiones ?? 1) > 1 && (
+            <span className="ml-1.5 cifra-mono text-xs" style={{ color: 'var(--muted)' }} title="Veces que se vio la misma señal en su ventana">×{e.repeticiones}</span>
+          )}
+        </div>
         <div className="text-xs" style={{ color: 'var(--muted)' }}>{e.origen}</div>
       </td>
       <td className="py-2 pr-3 align-top"><StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill></td>
