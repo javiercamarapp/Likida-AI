@@ -19172,3 +19172,66 @@ begin
   raise exception E'SEGURIDAD_OLA9 purga-por-severidad=% ledgers-vigente-intacto=% agrupa-ventana=% tope-desborde=% suma-intacta=% techo-sin-pisar=% techo-quita=% techo-rango=%   (esperado t / t / t / t / t / t / t / t)',
     purga, vigente, agrupa, desborde, suma, sin_pisar, quita, rango;
 end $$;
+
+-- ── 320. Peajes: los «cursos» (rutas autorizadas) se guardan atómicos, por flota y con la forma sana (mig. 0665) ──
+-- El cliente pidió reclamar los cruces fuera de curso. Un curso es la lista de casetas autorizadas de un convenio A→B o de una
+-- unidad (o, cuando llegue su formato, una polilínea con buffer). Lo que solo la base demuestra: el lote se guarda todo-o-nada
+-- (un curso malo al final no deja escritos los anteriores), re-aplicar actualiza y no duplica y la lista de casetas se reemplaza
+-- entera con el orden del arreglo, la unidad, el convenio o la caseta de OTRA flota rebotan sin escribir nada (también por
+-- escritura directa, por la FK compuesta), el CHECK de forma rechaza un corredor con buffer corto, un curso de casetas con
+-- polilínea y un curso que no aplica a nadie, y las dos tablas son deny-all.
+-- Esperado: CURSOS_PEAJE_0665 lote-atomico=t idempotente=t orden-del-arreglo=t otra-flota-rebota=t fk-directa-rebota=t forma-sana=t deny-all=t
+do $$
+declare
+  ta uuid; tb uuid; ca uuid; cb uuid; va uuid; vb uuid; ua uuid; ub uuid; k1 uuid; k2 uuid; kb uuid; r jsonb; ids uuid[]; n int;
+  atomico boolean := false; idem boolean := false; en_orden boolean := false; ajena boolean := false; directa boolean := false;
+  forma boolean := false; deny boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0665 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0665 B') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ 0665 CA') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (tb, 'ZZZ 0665 CB') returning id into cb;
+  insert into cliente_convenio (tenant_id, cliente_id, nombre) values (ta, ca, 'ZZZ 0665 conv A') returning id into va;
+  insert into cliente_convenio (tenant_id, cliente_id, nombre) values (tb, cb, 'ZZZ 0665 conv B') returning id into vb;
+  insert into unidad (tenant_id, numero_economico) values (ta, 'ZZZ-0665-A') returning id into ua;
+  insert into unidad (tenant_id, numero_economico) values (tb, 'ZZZ-0665-B') returning id into ub;
+  insert into peaje_caseta (tenant_id, nombre, nombre_norm, lat, lng) values (ta, 'ZZZ K1', 'zzz k1', 19.4, -99.1) returning id into k1;
+  insert into peaje_caseta (tenant_id, nombre, nombre_norm, lat, lng) values (ta, 'ZZZ K2', 'zzz k2', 19.5, -99.2) returning id into k2;
+  insert into peaje_caseta (tenant_id, nombre, nombre_norm, lat, lng) values (tb, 'ZZZ KB', 'zzz kb', 20.0, -100.0) returning id into kb;
+
+  -- orden del arreglo (k2 antes que k1) + idempotencia
+  r := peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-C1', 'nombre', 'Ruta', 'tipo', 'casetas', 'convenio_id', va, 'casetas', jsonb_build_array(k2, k1))));
+  select array_agg(caseta_id order by orden) into ids from peaje_curso_caseta where tenant_id = ta;
+  en_orden := r->>'estado' = 'ok' and ids = array[k2, k1];
+  r := peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-C1', 'nombre', 'Ruta', 'tipo', 'casetas', 'convenio_id', va, 'casetas', jsonb_build_array(k2, k1))));
+  idem := (r->>'actualizados')::int = 1 and (r->>'creados')::int = 0
+    and (select count(*) from peaje_curso where tenant_id = ta) = 1 and (select count(*) from peaje_curso_caseta where tenant_id = ta) = 2;
+
+  -- un curso malo al final del lote revierte el bueno de antes
+  r := peaje_curso_reemplazar(ta, jsonb_build_array(
+    jsonb_build_object('codigo', 'ZZZ-C2', 'nombre', 'Buena', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', jsonb_build_array(k1)),
+    jsonb_build_object('codigo', 'ZZZ-C3', 'nombre', 'Sin casetas', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', '[]'::jsonb)));
+  atomico := r->>'estado' = 'invalida' and not exists (select 1 from peaje_curso where codigo = 'ZZZ-C2');
+
+  -- referencias de otra flota: unidad, convenio y caseta
+  ajena := (peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-X1', 'nombre', 'x', 'tipo', 'casetas', 'unidad_id', ub, 'casetas', jsonb_build_array(k1)))))->>'estado' = 'referencia_invalida'
+    and (peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-X2', 'nombre', 'x', 'tipo', 'casetas', 'convenio_id', vb, 'casetas', jsonb_build_array(k1)))))->>'estado' = 'referencia_invalida'
+    and (peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-X3', 'nombre', 'x', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', jsonb_build_array(kb)))))->>'estado' = 'referencia_invalida'
+    and not exists (select 1 from peaje_curso where codigo like 'ZZZ-X%');
+  begin
+    insert into peaje_curso_caseta (curso_id, caseta_id, tenant_id) select id, kb, tenant_id from peaje_curso where tenant_id = ta and codigo = 'ZZZ-C1';
+  exception when foreign_key_violation then directa := true; end;
+
+  -- la forma sana
+  forma := (peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-F1', 'nombre', 'x', 'tipo', 'corredor', 'unidad_id', ua, 'buffer_m', 5,
+      'corredor', jsonb_build_array(jsonb_build_object('lat', 19.4, 'lng', -99.1), jsonb_build_object('lat', 19.5, 'lng', -99.2))))))->>'estado' = 'invalida'
+    and (peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-F2', 'nombre', 'x', 'tipo', 'casetas', 'casetas', jsonb_build_array(k1)))))->>'estado' = 'invalida'
+    and (peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-F3', 'nombre', 'x', 'tipo', 'corredor', 'unidad_id', ua, 'buffer_m', 300,
+      'corredor', jsonb_build_array(jsonb_build_object('lat', 19.4, 'lng', -99.1), jsonb_build_object('lat', 19.5, 'lng', -99.2)))))) ->>'estado' = 'ok';
+
+  select count(*) into n from pg_policies where tablename in ('peaje_curso', 'peaje_curso_caseta');
+  deny := n = 0 and (select bool_and(relrowsecurity) from pg_class where oid in ('public.peaje_curso'::regclass, 'public.peaje_curso_caseta'::regclass));
+
+  raise exception E'CURSOS_PEAJE_0665 lote-atomico=% idempotente=% orden-del-arreglo=% otra-flota-rebota=% fk-directa-rebota=% forma-sana=% deny-all=%   (esperado t / t / t / t / t / t / t)',
+    atomico, idem, en_orden, ajena, directa, forma, deny;
+end $$;
