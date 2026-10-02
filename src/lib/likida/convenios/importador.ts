@@ -134,9 +134,13 @@ function aFecha(crudo: unknown): string | null | undefined {
 function aPrecio(crudo: unknown): number | null | undefined {
   if (crudo === null || crudo === undefined || String(crudo).trim() === '') return null;
   if (typeof crudo === 'number') return Number.isFinite(crudo) && crudo > 0 ? Math.round(crudo * 100) / 100 : undefined;
-  const t = String(crudo).replace(/[$\s]/g, '').replace(/,(?=\d{3}(\D|$))/g, '');
-  if (!/^\d+(\.\d{1,2})?$/.test(t)) return undefined;
-  const n = Number(t);
+  const [entera, decimales, ...sobra] = String(crudo).replace(/[$\s]/g, '').split('.');
+  if (sobra.length > 0) return undefined;
+  // Los miles con coma («12,500»): el primer grupo de 1 a 3 dígitos y los demás de exactamente 3.
+  const grupos = entera.split(',');
+  const miles = grupos.length === 1 || (/^\d{1,3}$/.test(grupos[0]) && grupos.slice(1).every((g) => /^\d{3}$/.test(g)));
+  if (!miles || !/^\d+$/.test(grupos.join('')) || (decimales !== undefined && !/^\d{1,2}$/.test(decimales))) return undefined;
+  const n = Number(`${grupos.join('')}${decimales !== undefined ? `.${decimales}` : ''}`);
   return n > 0 ? n : undefined;
 }
 

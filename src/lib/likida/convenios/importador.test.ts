@@ -79,6 +79,12 @@ describe('parsearMatrizConvenios', () => {
       expect(r.errores).toEqual([]);
       expect(r.convenios[0].comercial).toEqual({ modo: 'por_viaje', precio: 12500.5, moneda: 'USD', requisitos: ['Factura', 'Carta porte', 'Sello'] });
     });
+    it('la tarifa se entiende con miles, centavos y símbolo; lo raro se rechaza', () => {
+      const precio = (v: string) => parsearMatrizConvenios([CON, ['A', 'x', '', '', '', '', '', '', 'por_km', v, '', '']], { puedeVerFinanzas: true });
+      expect(precio('1,234,567.8').convenios[0].comercial?.precio).toBe(1234567.8);
+      expect(precio(' $ 950 ').convenios[0].comercial?.precio).toBe(950);
+      for (const malo of ['12,50', '1,2345', '12.345.6', '0', '-5', 'abc', '5000.123']) expect(precio(malo).errores, malo).toHaveLength(1);
+    });
     it('modo y precio van juntos', () => {
       const r = parsearMatrizConvenios([CON, ['A', 'x', '', '', '', '', '', '', '', '5000', '', '']], { puedeVerFinanzas: true });
       expect(r.errores[0].motivo).toMatch(/modo y precio juntos/);
