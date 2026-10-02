@@ -68,3 +68,20 @@ export function herramientasDelRol<T extends string>(rol: string | undefined, to
 export function rolPuedeConversar(rol: string | undefined): boolean {
   return !!rol && (puedeVerArea(rol, 'operacion') || puedeVerArea(rol, 'dinero'));
 }
+
+// ── Quién LEE una tarea escalada ─────────────────────────────────────────────
+// Escalar es abierto a cualquier rol con sesión, pero el `resumen` que escribe quien escala puede traer cifras de
+// dinero («diferencia de $45,320 en anticipos»). La tarea la lee la persona a la que va dirigida, no cualquiera con
+// acceso a la pantalla: una tarea de dinero (destino liquidación/contador, o motivo diferencia_liquidacion /
+// duda_fiscal) solo la ve quien tiene el área `dinero`; el resto, quien tiene `operacion`. Un rol desconocido no ve nada.
+const DESTINOS_DE_DINERO = new Set(['liquidacion', 'contador']);
+const MOTIVOS_DE_DINERO = new Set(['diferencia_liquidacion', 'duda_fiscal']);
+
+export function tareaEsDeDinero(t: { destino: string; motivo: string }): boolean {
+  return DESTINOS_DE_DINERO.has(t.destino) || MOTIVOS_DE_DINERO.has(t.motivo);
+}
+
+export function rolPuedeLeerTarea(rol: string | undefined, t: { destino: string; motivo: string }): boolean {
+  if (!rol) return false;
+  return puedeVerArea(rol, tareaEsDeDinero(t) ? 'dinero' : 'operacion');
+}
