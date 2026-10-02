@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
 //
 // Las facturas de talleres, refaccionarias y diésel llegan POR CORREO, no por
 // WhatsApp. Es la pieza que multiplica a los agentes de Peajes y Proveedores, y
-// la que Transportes Innovativos pidió con todas sus letras.
+// la que el cliente de demo pidió con todas sus letras.
 //
 // ── EL ORDEN DE LAS COMPROBACIONES NO ES ARBITRARIO ──────────────────────
 //

@@ -1,6 +1,6 @@
 # Liquidación externa (Agente 1, modo «solo entrega»)
 
-**Qué es.** Transportes Innovativos ya calcula la liquidación de su chofer en su
+**Qué es.** El cliente de demo ya calcula la liquidación de su chofer en su
 SAP/TMS. Lo que pidió (llamada del 31-ago) es que Likida **la entregue** al
 chofer por WhatsApp, no que la recalcule. Este modo es el opuesto exacto del de
 fotos: aquí la cifra **no es nuestra**.
@@ -238,7 +238,7 @@ Javier/su abogado deben confirmar** (ver bloqueos).
    Meta real**; las pruebas usan dobles de contrato.
 4. **Aplicar las migraciones 0370 y 0560–0562 en producción** (con respaldo previo; sin 0560 la entrega por la cola falla; luego `[deploy]`): la compuerta
    de despliegue no construye si la base va atrás de la última migración.
-5. **Integración del lado de Innovativos**: su SAP/TMS tiene que llamar al
+5. **Integración del lado de la flota**: su SAP/TMS tiene que llamar al
    endpoint (acceso bajo Zero Trust, llave de API de área `administracion`).
 6. **Excel de muestra de la flota** (el «formatito» que hoy copian y pegan) y los teléfonos del jefe de flota y de la persona responsable de discrepancias: sin ellos la entrega sale con el PDF genérico y sin copia.
 7. **Plantilla de avisos `aviso_operacion_v1`** aprobada en Meta: la copia al jefe y el aviso de discrepancia usan texto dentro de las 24 h y esa plantilla fuera; sin ella, fuera de ventana quedan `no_enviada` (dicho en el panel, reenviable).

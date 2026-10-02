@@ -131,6 +131,36 @@ El desglose deja de aparecer en el tablero, de contar en la bitácora RMF 9.1.8,
 avisar, y **libera la huella** de su archivo de la cola para que el archivo correcto (o el mismo ya arreglado) pueda
 volver a mandarse. Idempotente (`yaAnulado: true`); «no existe» y «no es de tu flota» contestan 404.
 
+## Reporte de reclamación (ola 3b)
+
+Para pedirle al proveedor de peaje que revise un cobro. Cruza el archivo de pases (el desglose) con el catálogo de TAGs
+(TAG↔unidad), la **hora del pase** (hora local de México tal como la trae el archivo), las **posiciones GPS** de la unidad y las
+**geocercas** de la flota. Se abre desde el agente de Peajes (botón «Reporte de reclamación» del desglose seleccionado), en
+`/dashboard/agentes/peajes/reclamacion?desglose=<id>`, y se descarga en **Excel** (hojas Reclamación, Evidencia GPS y Resumen) y **PDF**
+(`GET /api/export/peajes-reclamacion?desglose=<id>&formato=xlsx|pdf`; mismas puertas que la bitácora conciliada: área dinero +
+`puedeExportar`, y el desglose se busca con el tenant de la sesión).
+
+Por cada cruce reclamable lleva: fecha, hora, caseta (del proveedor y del catálogo), TAG, unidad, monto, el **porqué** en una frase,
+la distancia unidad↔caseta y el radio de la caseta, hasta 3 posiciones GPS como evidencia (con su hora, coordenadas y distancia a la
+caseta) y la geocerca si la hay. Tres motivos, cada uno con su evidencia:
+
+| Motivo | Confianza | Cuándo |
+|---|---|---|
+| GPS lejos de la caseta | alta | Dos posiciones consecutivas, una antes y otra después de la hora del pase y a ≤ 6 min entre sí, ubican a la unidad a más de radio + margen de la caseta (el veredicto `no_coincide` del cruce por caseta). |
+| Unidad en zona no autorizada | alta | La posición más cercana en el tiempo al pase (≤ 10 min) cae dentro de una geocerca de **patio** o **restringida** de la flota y no dentro del radio de la caseta. |
+| Posible doble cobro | media | El mismo TAG cobrado dos veces en la misma caseta con ≤ 10 min de diferencia (se reclama el segundo y se señala el primero). Puede ser un retorno real. |
+
+La doctrina es la de siempre: **solo entra una línea con evidencia positiva en contra del cobro**. «Sin datos» (sin hora, TAG sin dar
+de alta, caseta sin coordenadas, sin posiciones) no se reclama: se cuenta aparte en el resumen para saber qué dato falta. «Reclamable»
+significa «hay evidencia suficiente para pedir la revisión», no «el cobro es indebido»; la decisión de reclamar es de la flota y la
+leyenda del reporte lo dice. Las posiciones solo se piden para las líneas candidatas (el GPS dijo «no coincide» o «no alcanzan las
+muestras»), no para todo el desglose.
+
+**Pendiente de datos de la flota (no se inventa):** los **cursos** (rutas autorizadas por unidad dentro de geocercas) no se evalúan
+hasta contar con su tabla; un cruce fuera de curso pero cerca de su caseta no aparece en el reporte. Tampoco hay posiciones reales
+mientras no esté conectada la tabla/vista de GPS de la flota (bloqueo 4) ni el archivo real de pases (bloqueo 1): el E2E usa un CSV
+sintético y un doble de GPS.
+
 ## Salida a SAP/ERP (por pull, configurable)
 
 | Ruta | Área | Para qué |
@@ -180,7 +210,7 @@ la pantalla tras declarar el mapeo. Fallo de infraestructura → reintento con b
    «sin respaldo» (lo dice a propósito el clasificador).
 3. **Catálogo oficial de casetas con coordenadas** (shapefile IMT u otro): hay importador por CSV y
    fixtures, pero ninguna coordenada real cargada.
-4. **GPS de Innovativos conectado a Likida** (proveedor desconocido, detrás de Zero Trust) o su export:
+4. **GPS de la flota conectado a Likida** (proveedor desconocido, detrás de Zero Trust) o su export:
    sin posiciones, el GPS dice `sin_datos`.
 5. `PEAJES_INGESTA_SECRETO` en Vercel y que el sistema/proveedor firme y mande el archivo (hoy no hay
    API pública de PASE/IAVE/TeleVía; el envío lo haría un script o el TMS de la flota). Para el **correo**:
@@ -190,5 +220,7 @@ la pantalla tras declarar el mapeo. Fallo de infraestructura → reintento con b
    de la flota y su alta en el cofre; cuando exista, se implementa como otra fuente del mismo claim.
 7. Salida a SAP: pull (lista + exportación configurable); no hay escritura a SAP ni webhook saliente.
 8. Migraciones 0375/0376/0562/0563 sin aplicar a ninguna base remota (a propósito); aplicar antes de desplegar.
-9. El aviso a la oficina usa la plantilla `aviso_operacion_v1` fuera de la ventana de 24 h: hasta que Meta la apruebe,
+9. **Tabla de cursos / geocercas de la flota** y la lectura de sus posiciones de GPS: el reporte de reclamación ya usa las geocercas del
+   catálogo de peajes y la tabla `posicion`; los cursos y el lector de sus tablas propias quedan para cuando entreguen el acceso.
+10. El aviso a la oficina usa la plantilla `aviso_operacion_v1` fuera de la ventana de 24 h: hasta que Meta la apruebe,
    el aviso sale solo dentro de la ventana (y se reintenta).

@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // EL DESGLOSE DEL PROVEEDOR DE PEAJE — FASE 5, el PoC del Plaud #2.
 //
-// La recomendación literal de la sesión con Transportes Innovativos: "el
+// La recomendación literal de la sesión con el cliente de demo: "el
 // agente toma el desglose del proveedor [...] y cruza [...] marcando
 // discrepancias automáticamente". El desglose que IAVE/PASE/TeleVía mandan
 // cada corte NO es un CFDI: es una tabla de cruces (fecha, caseta, importe,
