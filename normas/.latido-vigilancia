@@ -1,52 +1,58 @@
 ---
-fecha_corrida: 2026-10-01 (jueves)
-ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-30 (20 días, incluye 4 viernes
-  sin verificar cuota de diésel: 11, 18, 25-sep y la de hoy sería
-  02-oct). Sigue arrancando en 09-11 para la próxima corrida.
+fecha_corrida: 2026-10-02 (viernes)
+ultimo_dia_barrido: 2026-09-10 (sin avanzar desde esa fecha — van ya
+  seis corridas bloqueadas: 12, 15, 20, 26, 27, 28 y 30-sep, y 01 y
+  02-oct)
+rango_pendiente: 2026-09-11 — 2026-10-01 (21 días, incluye 3 viernes de
+  cuota de diésel sin verificar: 11, 18 y 25-sep) sin barrer. El
+  chequeo trimestral de deriva de ley del 01-oct tampoco se pudo
+  correr (ver deriva_ley_check). Sigue arrancando en 09-11 para la
+  próxima corrida.
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes. Sigue sin verificar
-  desde el 05-sep (4 viernes acumulados sin dato).
+cuota_diesel: no_evaluable_hoy — hoy no es viernes de corrida de cuota
+  (esa pieza corre aparte); los viernes 11, 18 y 25-sep siguen sin
+  verificar por el mismo bloqueo. Sin verificar desde el 05-sep.
 etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: BLOQUEADA — hoy 01-oct-2026 SÍ es día de trimestre
-  (ene/abr/jul/oct). HEAD a diputados.gob.mx/LeyesBiblio/pdf/CFF.pdf
-  también devolvió el mismo bloqueo de política (ver estado). No se
-  pudo comparar Last-Modified de CFF/LISR/LIVA/LFPDPPP. Próxima
-  oportunidad: 01-ene-2027, salvo que se corra manualmente antes.
+deriva_ley_check: no evaluado — el 01-oct (día de trimestre) el HEAD a
+  diputados.gob.mx/LeyesBiblio/pdf/CFF.pdf devolvió el mismo bloqueo de
+  política. No se pudo comparar Last-Modified de CFF/LISR/LIVA/LFPDPPP.
+  Próxima ventana de calendario: 01-ene-2027, salvo que se reintente
+  antes si el bloqueo se levanta.
 estado: >
-  INFRA — CUARTA corrida consecutiva bloqueada (12-sep, 15-sep y 20-sep
-  reportaron el mismo corte; ver historial). Probado con TRES rutas
-  independientes esta vez: curl directo por HTTPS_PROXY, la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión), y un segundo curl contra dominios distintos para descartar
-  que fuera un problema puntual del SIDOF.
-  - curl → sidofqa.segob.gob.mx/dof/sidof/notas/30-09-2026: "CONNECT
-    tunnel failed, response 403".
-  - curl → www.google.com (control neutral, no es una fuente de la
-    rutina): también 403 — confirma que el bloqueo es de política
-    general contra dominios no permitidos, no algo específico del SIDOF.
-  - curl → www.diputados.gob.mx/LeyesBiblio/pdf/CFF.pdf: también 403.
-  - curl -I → www.sat.gob.mx/minisitio/...: respondió 403 Forbidden
-    directo del propio curl (no túnel), mismo resultado práctico: sin
-    acceso.
-  - WebFetch → sidofqa.segob.gob.mx: {"error_type":"EGRESS_BLOCKED",
-    "domain":"sidofqa.segob.gob.mx"}.
-  /root/.ccr/__agentproxy/status muestra recentRelayFailures con
-  connect_rejected para sidofqa.segob.gob.mx y www.google.com — gateway
-  responde 403 a CONNECT, no timeout ni reset. Esto es un rechazo de
-  política de egreso del entorno programado, no una caída de los sitios
-  del gobierno mexicano.
-  No se leyó ninguna nota del DOF en esta corrida ni en las tres
-  anteriores (12-sep, 15-sep, 20-sep). No se tocó ninguna ficha de
-  normas/. El rango sin barrer ya cubre 20 días naturales, 4 viernes de
-  cuota de diésel, y el chequeo trimestral de deriva de ley de hoy
-  (01-oct) no se pudo correr.
-  REQUIERE INTERVENCIÓN HUMANA: permitir sidofqa.segob.gob.mx,
-  www.sat.gob.mx, www.diputados.gob.mx (y el resto de
+  INFRA — el egreso de este entorno sigue rechazando los dominios de la
+  rutina. Confirmado otra vez hoy con dos rutas: curl por HTTPS_PROXY →
+  "CONNECT tunnel failed, response 403" contra sidofqa.segob.gob.mx
+  (notas y diarios/porFecha) y contra www.google.com como control
+  (también 403 — confirma rechazo de política general, no caída del
+  sitio del SIDOF). WebFetch (infraestructura propia de Anthropic, no
+  el proxy de la sesión) → {"error_type":"EGRESS_BLOCKED","domain":
+  "sidofqa.segob.gob.mx"}. La corrida del 01-oct ya había confirmado lo
+  mismo también contra www.diputados.gob.mx y www.sat.gob.mx.
+  /root/.ccr/__agentproxy/status muestra recentRelayFailures nuevas,
+  todas "connect_rejected ... policy denial" — rechazo de política, no
+  timeout ni reset. No se leyó ninguna nota del DOF en esta corrida ni
+  en las cinco anteriores. No se tocó ninguna ficha de normas/.
+
+  SEGUNDO BLOQUEO, DISTINTO AL DE RED: el check "verificar" de CI
+  (auditoría npm runtime) viene fallando desde antes del 26-sep con
+  "1 high, 1 critical" — por eso las PRs de latido de esta rutina desde
+  el #489 (26-sep) hasta el #500 (01-oct) siguen abiertas sin mergear
+  en `master`, aunque sean cambios triviales de un solo archivo. Aun si
+  se resolviera el bloqueo de egreso, estas PRs seguirán sin poder
+  mergear hasta que alguien resuelva esa vulnerabilidad de dependencias
+  (fuera del alcance de esta rutina). Por eso esta corrida actualiza el
+  PR #500 existente (rama claude/normativa-2026-10-01) en vez de abrir
+  un séptimo PR duplicado.
+
+  REQUIERE INTERVENCIÓN HUMANA: (1) permitir sidofqa.segob.gob.mx,
+  www.sat.gob.mx, www.diputados.gob.mx y dof.gob.mx (ver
   references/fuentes.md) en la política de egreso de este entorno
-  programado, o correr esta rutina desde un entorno/sesión con esos
-  dominios permitidos. Sin ese cambio, las corridas siguientes seguirán
-  reportando este mismo bloqueo.
+  programado; (2) resolver la vulnerabilidad npm "1 high, 1 critical"
+  que bloquea el check "verificar" para TODAS las PRs, no solo las de
+  esta rutina; (3) decidir qué hacer con los PRs duplicados #489, #490,
+  #495, #496, #499 — todos abiertos, todos reportando el mismo bloqueo
+  de red, todos bloqueados por el mismo check roto.
+</content>
