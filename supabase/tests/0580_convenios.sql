@@ -113,6 +113,12 @@ begin
   exception when check_violation then null;
   end;
   begin
+    insert into public.convenio_instruccion (tenant_id, convenio_id, categoria, texto, lugar)
+    values ('58000000-0000-4000-8000-0000000000a1', '58000000-0000-4000-8000-0000000000a6', 'otro', 'x-lugar', 'afuera');
+    raise exception 'CONV_LUGAR_0580: aceptó un lugar inventado';
+  exception when check_violation then null;
+  end;
+  begin
     insert into public.convenio_instruccion (tenant_id, convenio_id, categoria, texto)
     values ('58000000-0000-4000-8000-0000000000a1', '58000000-0000-4000-8000-0000000000a6', 'otro', repeat('x', 401));
     raise exception 'CONV_TEXTO_0580: aceptó un texto de 401 caracteres';

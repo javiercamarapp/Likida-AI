@@ -102,6 +102,7 @@ create table if not exists public.convenio_instruccion (
   constraint convenio_instruccion_categoria_dominio
     check (categoria in ('puerta', 'reportarse', 'peculiaridad', 'documentos', 'horario', 'seguridad', 'otro')),
   constraint convenio_instruccion_momento_dominio check (momento in ('despacho', 'acercamiento', 'ambos')),
+  constraint convenio_instruccion_lugar_dominio check (lugar in ('origen', 'destino', 'ambos')),
   constraint convenio_instruccion_texto_largo check (char_length(texto) between 1 and 400),
   constraint convenio_instruccion_orden_sano check (orden between 0 and 999),
   constraint convenio_instruccion_unica unique (convenio_id, categoria, texto)
