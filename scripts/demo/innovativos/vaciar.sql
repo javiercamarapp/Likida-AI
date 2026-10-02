@@ -1,7 +1,10 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- vaciar.sql — quita el dato SINTÉTICO de UN conjunto del demo para que entre
 -- el real de Innovativos (docs/demo/innovativos.md). Solo toca el tenant demo y
--- solo filas sembradas por el demo. Uso (lo arma vaciar-sintetico.sh):
+-- SOLO las filas que sembró el demo: cada DELETE/UPDATE se acota por la marca del demo (proveedor/origen
+-- «(demo)», nombres «Demo», o los ids deterministas de innovativos_sim.uid), nunca «todo lo del tenant». Lo real que
+-- ya se haya cargado (sitios con fuente csv, posiciones de su tabla, contactos y mensajes de Vigía) NO se toca.
+-- Lo prueba probar-vaciar-solo-sembrado.sh. Uso (lo arma vaciar-sintetico.sh):
 --   psql -v que=gps|geocercas|pases|liquidaciones|cartaporte|vigia|convenios|todo -f vaciar.sql
 -- Re-sembrar (sembrar.sh) lo vuelve a poner idéntico.
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -42,13 +45,22 @@ select :'que' in ('gps', 'todo') as es_gps, :'que' in ('geocercas', 'todo') as e
 \endif
 
 \if :es_gps
-  delete from posicion where tenant_id = :'t' and proveedor = 'tabla_propia';
-  update unidad set gps_visto_en = null where tenant_id = :'t';
-  \echo 'gps: posiciones sintéticas (proveedor tabla_propia) borradas. La tabla simulada innovativos_sim queda (es «su» tabla de prueba).'
+  -- Marca de la posición sembrada: proveedor tabla_propia, de uno de los 250 tractos sembrados, recibida EXACTAMENTE
+  -- 20 s después de medida (03_gps.sql). Una posición real del mismo proveedor llega con otro desfase y no se toca.
+  delete from posicion p where p.tenant_id = :'t' and p.proveedor = 'tabla_propia'
+    and p.recibida_en - p.medida_en = interval '20 seconds'
+    and p.unidad_id in (select innovativos_sim.uid('unidad:' || g) from generate_series(1, 250) g);
+  update unidad set gps_visto_en = null
+    where tenant_id = :'t' and id in (select innovativos_sim.uid('unidad:' || g) from generate_series(1, 250) g);
+  \echo 'gps: posiciones sintéticas (las 250 unidades sembradas, proveedor tabla_propia) borradas. La tabla simulada innovativos_sim queda (es «su» tabla de prueba).'
 \endif
 \if :es_geo
-  delete from geocerca where tenant_id = :'t' and fuente = 'csv';
-  \echo 'geocercas: borradas (viaje, cliente y andén quedan sin referencia; el catálogo real entra por Sitios).'
+  -- Solo los 3 patios, las 14 plantas y los 14 andenes que sembró el demo (por id determinista), no «todo lo csv».
+  delete from geocerca g where g.tenant_id = :'t' and g.id in (
+    select innovativos_sim.uid('geo:patio:' || c) from unnest(array['GDL', 'SIL', 'APO']) c
+    union all select innovativos_sim.uid('geo:planta:c' || lpad(n::text, 2, '0')) from generate_series(1, 14) n
+    union all select innovativos_sim.uid('geo:anden:c' || lpad(n::text, 2, '0')) from generate_series(1, 14) n);
+  \echo 'geocercas: las sembradas borradas (viaje, cliente y andén quedan sin referencia; re-sembrar las restaura; el catálogo real entra por Sitios y no se toca).'
 \endif
 \if :es_pases
   delete from desglose_peaje where tenant_id = :'t' and proveedor = 'PASE (demo)';
@@ -67,10 +79,17 @@ select :'que' in ('gps', 'todo') as es_gps, :'que' in ('geocercas', 'todo') as e
   \echo 'cartaporte: documentos, perfiles y formato de exportación sintéticos borrados.'
 \endif
 \if :es_vigia
-  delete from vigia_mensaje where tenant_id = :'t';
-  delete from vigia_conversacion where tenant_id = :'t';
-  delete from vigia_contacto where tenant_id = :'t';
-  \echo 'vigia: contactos, conversaciones y mensajes sintéticos borrados.'
+  -- Solo los 3 contactos críticos, sus conversaciones y sus 6 mensajes sembrados (ids deterministas). Un contacto o
+  -- una conversación sembrados que ya tengan mensajes REALES colgando no se borran.
+  delete from vigia_mensaje where tenant_id = :'t' and id in (
+    select innovativos_sim.uid('vigiamsg:' || c || ':' || n) from unnest(array['c05', 'c10', 'c12']) c cross join generate_series(1, 3) n);
+  delete from vigia_conversacion v where v.tenant_id = :'t'
+    and v.id in (select innovativos_sim.uid('vigiaconv:' || c) from unnest(array['c05', 'c10', 'c12']) c)
+    and not exists (select 1 from vigia_mensaje m where m.conversacion_id = v.id);
+  delete from vigia_contacto v where v.tenant_id = :'t'
+    and v.id in (select innovativos_sim.uid('vigiacontacto:' || c) from unnest(array['c05', 'c10', 'c12']) c)
+    and not exists (select 1 from vigia_conversacion x where x.contacto_id = v.id);
+  \echo 'vigia: los contactos, conversaciones y mensajes sembrados borrados (lo real que se haya cargado queda).'
 \endif
 \if :es_conv
   do $$ begin
