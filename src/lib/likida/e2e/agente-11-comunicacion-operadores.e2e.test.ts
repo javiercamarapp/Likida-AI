@@ -46,10 +46,11 @@ const viaje = (id: string, tenant: string, operador: string, extra: Fila = {}): 
 const fila = (id: string) => db.tablas.viaje.find((v) => v.id === id)!;
 
 /** Lo que hace processor.ts con el texto del chofer que tiene un viaje por confirmar, y el acuse por el selector real. */
-async function chofer(texto: string, ctx: { tenantId?: string; operadorId?: string; viajeId?: string | null; ahora?: Date } = {}) {
+async function chofer(texto: string, ctx: { tenantId?: string; operadorId?: string; viajeId?: string | null; ahora?: Date; sinVentana?: boolean } = {}) {
   const tenantId = ctx.tenantId ?? A; const operadorId = ctx.operadorId ?? 'o1'; const ahora = ctx.ahora ?? T0;
   meta.estado.reloj = ahora; meta.entrante(TEL, ahora);
   const conf = await atenderConfirmacion({ tenantId, operadorId, texto, viajeActual: ctx.viajeId ?? null });
+  if (ctx.sinVentana) meta.ultimoEntrante.delete(meta.norm(TEL)); // el chofer lleva más de 24 h sin escribir
   if (conf.mensaje) await enviarConFallback(TEL, { texto: conf.mensaje, plantilla: { nombre: 'recordatorio_cierre', parametros: ['x', 'y'] }, contexto: 'e2e.operadores', tenantId, ahora });
   return conf;
 }
@@ -102,9 +103,12 @@ describe('fallo', () => {
     expect(fila('v1').aceptado_en).toBeNull();
   });
 
-  it('ventana de 24 h cerrada: el acuse sale por plantilla y no se pierde en silencio', async () => {
-    const r = await enviarConFallback(TEL, { texto: 'x', plantilla: { nombre: 'recordatorio_cierre', parametros: ['a', 'b'] }, contexto: 'e2e', tenantId: A, ahora: T0 });
-    expect(r).toMatchObject({ ok: true, via: 'plantilla' });
+  it('ventana de 24 h cerrada: el acuse de la aceptación sale por plantilla (por el camino del chofer) y no se pierde en silencio', async () => {
+    const c = await chofer('sí', { sinVentana: true });
+    expect(c).toMatchObject({ estado: 'confirmado', viajeConfirmado: 'v1' });
+    expect(fila('v1').aceptado_en).not.toBeNull();            // aceptar no depende de poder contestar
+    expect(meta.salientes).toHaveLength(1);
+    expect(meta.salientes[0]).toMatchObject({ tipo: 'plantilla', a: TEL, plantilla: 'recordatorio_cierre' });
   });
 });
 
@@ -115,9 +119,15 @@ describe('duplicado', () => {
     expect(fila('v1').aceptado_en).toBe(primera);
   });
 
-  it('aceptar por foto y por «sí» a la vez: UNA sola aceptación', async () => {
+  it('aceptar por foto y por «sí» a la vez: UNA sola aceptación — el UPDATE de ambos lleva el candado «aceptado_en IS NULL» y la hora no se pisa', async () => {
     await Promise.all([aceptarPorActividad(A, 'v1', 'o1'), atenderConfirmacion({ tenantId: A, operadorId: 'o1', texto: 'sí' })]);
-    expect(fila('v1').aceptado_en).not.toBeNull();
+    const sello = fila('v1').aceptado_en;
+    expect(sello).not.toBeNull();
+    const updates = db.llamadas.filter((l) => l.tabla === 'viaje' && l.op === 'update' && (l.payload as Fila)?.aceptado_en !== undefined);
+    expect(updates.length).toBeGreaterThanOrEqual(1);         // al menos una vía escribió (la otra pudo ver ya el sello)
+    for (const u of updates) expect(u.filtros).toContainEqual(['aceptado_en', 'is', null]);
+    await aceptarPorActividad(A, 'v1', 'o1');                 // un tercer intento tardío tampoco la mueve
+    expect(fila('v1').aceptado_en).toBe(sello);
   });
 });
 
@@ -131,11 +141,13 @@ describe('fuera de orden', () => {
   it('el viaje se cerró antes de que el chofer contestara: no se acepta un viaje que ya no está abierto', async () => {
     fila('v1').estatus = 'liquidado';
     expect((await atenderConfirmacion({ tenantId: A, operadorId: 'o1', texto: 'sí' })).mensaje).toBeNull();
+    expect(fila('v1').aceptado_en).toBeNull();
   });
 
   it('la respuesta es para un viaje que ya no es el actual del chofer: se ignora (no confirma otro por error)', async () => {
     const c = await atenderConfirmacion({ tenantId: A, operadorId: 'o1', texto: 'sí', viajeActual: 'v-inexistente' });
     expect(c.mensaje).toBeNull();
+    expect(fila('v1').aceptado_en).toBeNull();               // v1 (el viaje real del chofer) sigue SIN aceptar
   });
 });
 
@@ -175,7 +187,10 @@ describe('hitos «ya llegué» (motor del Conductor)', () => {
   it('otro tenant: un chofer de OTRA flota con el viaje de la mía no registra nada', async () => {
     const w = mundo();
     await msg(w, 'ya llegué', new Date('2026-10-02T15:00:00Z'), { tenantId: 't-otra', operadorId: 'o-ajeno' });
-    expect(w.m.de(V).every((h) => h.estado !== 'recibido')).toBe(true);
+    expect(w.m.de(V).filter((h) => h.estado === 'recibido')).toHaveLength(0);
+    // Control: el MISMO mensaje del chofer de la flota dueña sí registra el hito (la ausencia de arriba es aislamiento, no un motor roto).
+    await msg(w, 'ya llegué', new Date('2026-10-02T15:05:00Z'), { wa: 'wa-propio' });
+    expect(w.m.de(V).filter((h) => h.estado === 'recibido' && h.tipo === 'llegada_carga')).toHaveLength(1);
   });
 });
 
