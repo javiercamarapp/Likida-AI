@@ -139,9 +139,9 @@ select innovativos_sim.uid('hito:' || p.folio || ':' || e.tipo), current_setting
             then (array['Andén','Báscula','Vigilancia','Almacén','Recibo'])[innovativos_sim.pick('area' || p.folio || e.tipo, 5)] end,
        case when r.estado in ('recibido','validado') and e.tipo in ('llegada_carga','llegada_descarga') and p.u1 >= 0.6 and not r.escenario_llegue then true else false end,
        case when r.estado in ('recibido','validado') then
-            (case when r.escenario_llegue then ld.lat else case when e.tipo in ('llegada_carga','salida_carga') then lo.lat else ld.lat end end) + (innovativos_sim.u('jl' || p.folio || e.tipo) - 0.5) * 0.0008 end,
+            (case when r.escenario_llegue then pl.lat else case when e.tipo in ('llegada_carga','salida_carga') then lo.lat else ld.lat end end) + (innovativos_sim.u('jl' || p.folio || e.tipo) - 0.5) * 0.0008 end,
        case when r.estado in ('recibido','validado') then
-            (case when r.escenario_llegue then ld.lng else case when e.tipo in ('llegada_carga','salida_carga') then lo.lng else ld.lng end end) + (innovativos_sim.u('jg' || p.folio || e.tipo) - 0.5) * 0.0008 end,
+            (case when r.escenario_llegue then pl.lng else case when e.tipo in ('llegada_carga','salida_carga') then lo.lng else ld.lng end end) + (innovativos_sim.u('jg' || p.folio || e.tipo) - 0.5) * 0.0008 end,
        case when r.estado = 'validado' then least(r.recibido + interval '1 minute', r.anc) end,
        case when r.estado = 'validado' then case when r.fuente = 'ubicacion' then 'gps' else 'sistema' end end,
        case when r.estado in ('esperado','escalado') then r.anc - case when r.estado = 'escalado' then interval '150 minutes' else interval '8 minutes' end
@@ -158,12 +158,18 @@ cross join lateral (values ('llegada_carga', 1, p.t_lc), ('salida_carga', 2, p.t
                            ('llegada_descarga', 3, p.t_ld), ('salida_descarga', 4, p.t_sd)) e(tipo, ord, ts)
 cross join lateral (select so.lat as lat, so.lng as lng) lo
 cross join lateral (select sd.lat as lat, sd.lng as lng) ld
+-- Donde REALMENTE va el tractor cuando el operador escribe «ya llegué» (35 % de la ruta): lejos de la planta.
+-- Misma fórmula de progreso que usa 03_gps.sql para sus posiciones.
+cross join lateral innovativos_sim.punto(p.ka + sign(p.kb - p.ka) * 0.35 * abs(p.kb - p.ka)) pl
 cross join lateral (
   select current_setting('inn.ancla')::timestamptz as anc,
          (p.escenario = 'llegue_sin_gps' and e.tipo = 'llegada_descarga') as escenario_llegue,
-         (array['ubicacion','texto','boton'])[case when innovativos_sim.u('f' || p.folio || e.tipo) < 0.55 then 1
+         (array['ubicacion','texto','boton'])[case when p.escenario = 'llegue_sin_gps' and e.tipo = 'llegada_descarga' then 2
+                                                   when innovativos_sim.u('f' || p.folio || e.tipo) < 0.55 then 1
                                                    when innovativos_sim.u('f' || p.folio || e.tipo) < 0.85 then 2 else 3 end] as fuente,
-         least(e.ts + make_interval(mins => (innovativos_sim.h('dl' || p.folio || e.tipo) % 8)::int),
+         -- El reporte llega entre 3 y 10 min DESPUÉS de la hora real (nunca antes de que el GPS llegue al sitio: el GPS
+         -- reporta cada 5 min y un «llegué» a los 0-2 min se compararía con la muestra anterior, aún en la carretera).
+         least(e.ts + make_interval(mins => 3 + (innovativos_sim.h('dl' || p.folio || e.tipo) % 8)::int),
                current_setting('inn.ancla')::timestamptz - interval '1 minute') as recibido,
          case
            when p.tipo = 'cerrado' then 'validado'

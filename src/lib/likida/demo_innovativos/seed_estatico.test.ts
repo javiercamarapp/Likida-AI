@@ -64,6 +64,27 @@ describe('el SQL del seed', () => {
   });
 });
 
+describe('los veredictos de ubicación (excepción «ya llegué» sin GPS)', () => {
+  const viajes = sinComentarios(readFileSync(`${DIR}sql/02_viajes.sql`, 'utf8'));
+  it('el hito del «ya llegué» sin GPS lleva la posición REAL del tractor (lejos de la planta), no las coordenadas de la planta', () => {
+    expect(viajes).toMatch(/case when r\.escenario_llegue then pl\.lat/);
+    expect(viajes).toMatch(/case when r\.escenario_llegue then pl\.lng/);
+    expect(viajes).not.toMatch(/case when r\.escenario_llegue then ld\.(lat|lng)/);
+  });
+  it('ese hito entra por texto (no por pin): se compara contra el GPS', () => {
+    expect(viajes).toMatch(/p\.escenario = 'llegue_sin_gps' and e\.tipo = 'llegada_descarga' then 2/);
+  });
+  it('sembrar.sh corre el motor real (generar-veredictos.mjs) después del SQL, y el motor es el del producto', () => {
+    const sh = readFileSync(`${DIR}sembrar.sh`, 'utf8');
+    expect(sh.indexOf('-f sembrar.sql')).toBeGreaterThan(-1);
+    expect(sh.indexOf('node generar-veredictos.mjs')).toBeGreaterThan(sh.indexOf('-f sembrar.sql'));
+    const gen = readFileSync(`${DIR}generar-veredictos.mjs`, 'utf8');
+    expect(gen).toContain('conductor/validar_hito.ts');
+    expect(gen).toContain('validarHitoContraSitio');
+    expect(gen).not.toMatch(/'sin_coincidencia'\s*,\s*null/); // ningún veredicto escrito a mano
+  });
+});
+
 function correr(script: string, args: string[], env: Record<string, string>) {
   // Entorno mínimo: sin DATABASE_URL heredada. Si una guarda fallara, psql se abriría contra un host inexistente y la prueba lo notaría por el código de salida.
   return spawnSync('bash', [`${DIR}${script}`, ...args], { env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...env } as unknown as NodeJS.ProcessEnv, encoding: 'utf8' });

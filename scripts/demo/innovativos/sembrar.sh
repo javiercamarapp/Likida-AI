@@ -51,3 +51,5 @@ if [ "$SOLO_LIMPIAR" = 1 ] || [ "$REINICIAR" = 1 ]; then
   [ "$SOLO_LIMPIAR" = 1 ] && exit 0
 fi
 "${P[@]}" -v ancla="$ANCLA" -f sembrar.sql
+# Los veredictos de ubicación NO se escriben a mano: los calcula el motor real del Conductor sobre lo sembrado.
+node generar-veredictos.mjs
