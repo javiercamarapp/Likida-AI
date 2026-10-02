@@ -35,8 +35,14 @@ export const estado = {
   correos: new Map<string, { estado: 'claimed' | 'applied'; token: string }>(),
   /** 0640: avisos a la oficina reclamados por documento ({tipo: instante}). */
   avisos: new Map<string, Record<string, string>>(),
+  /** 0670: la ficha de linaje de cada hijo de un archivo dividido. */
+  embarques: [] as Array<{ documentoId: string; tenantId: string; padreId: string; huellaBase: string; indice: number; total: number; clave: string | null }>,
   /** Simula una base SIN la 0641: las RPC del worker dicen «no existe». */
   sinMigracion: false,
+  /** Simula una base SIN la 0670/0671: la RPC de dividir dice «no existe». */
+  sinDivision: false,
+  /** Gancho de prueba: corre justo ANTES de que la RPC de dividir lea el documento (simula una invocación que se cuela). */
+  antesDeDividir: null as null | (() => void),
   /** Para forzar fallos: `fallar.set('subirArchivo', new Error('x'))`. */
   fallar: new Map<string, Error>(),
   reloj: { ahora: () => new Date() },
@@ -47,7 +53,7 @@ export const estado = {
 export function reset(): void {
   estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.buzones.clear();
   estado.perfiles.clear(); estado.versiones.length = 0; estado.exportConfigs.length = 0; estado.viajes.length = 0; estado.mercancias.length = 0;
-  estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.sinMigracion = false; estado.fallar.clear(); estado.llamadas.length = 0;
+  estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0;
   estado.seq = 0; estado.reloj.ahora = () => new Date();
 }
 
@@ -307,6 +313,8 @@ export const api: typeof Real = {
   async borrarDocumento(tenantId, id) {
     const d = estado.docs.get(id);
     if (!d || d.tenantId !== tenantId) return false;
+    // La FK en cascada de la 0670: borrar un documento arrastra SUS fichas de linaje (no los documentos hijos: sus archivos son de la app).
+    estado.embarques = estado.embarques.filter((e) => e.padreId !== id && e.documentoId !== id);
     estado.docs.delete(id);
     estado.eventos = estado.eventos.filter((e) => e.documentoId !== id);
     estado.correcciones = estado.correcciones.filter((c) => c.documentoId !== id);
@@ -370,5 +378,60 @@ export const api: typeof Real = {
     const { [tipo]: _quitado, ...resto } = a;
     estado.avisos.set(id, resto);
     return true;
+  },
+
+  // ── 0670-0671: un archivo con N embarques partido en N hijos (la misma semántica que la RPC `cp_documento_dividir`) ──
+  async dividirDocumento(tenantId, padreId, versionReclamada, hijos, retenerHijos, retenerPadre) {
+    falla('dividirDocumento');
+    if (estado.sinDivision) return { estado: 'sin_migracion' };
+    estado.antesDeDividir?.();
+    if (hijos.length < 2 || hijos.length > 100) throw new Error('cp_documento_dividir: de 2 a 100 hijos');
+    const pad = estado.docs.get(padreId);
+    if (!pad || pad.tenantId !== tenantId) throw new Error('cp_documento_dividir: el documento no existe en esta flota');
+    if (pad.estado === 'dividido') {
+      return { estado: 'ok', hijos: estado.embarques.filter((e) => e.tenantId === tenantId && e.padreId === padreId).sort((a, b) => a.indice - b.indice).map((e) => ({ indice: e.indice, documentoId: e.documentoId, creado: false })) };
+    }
+    if (pad.estado !== 'procesando' || pad.version !== versionReclamada || pad.purgadoEn) return { estado: 'perdido' };
+    const huellas = new Set<string>();
+    hijos.forEach((h, i) => {
+      if (!/^[0-9a-f]{64}$/.test(h.sha256)) throw new Error('cp_documento_dividir: huella inválida');
+      if (huellas.has(h.sha256)) throw new Error('cp_documento_dividir: dos hijos con la misma huella');
+      huellas.add(h.sha256);
+      if (h.indice !== i + 1) throw new Error('cp_documento_dividir: los índices deben ir de 1 a n sin huecos');
+    });
+    const salida: Array<{ indice: number; documentoId: string; creado: boolean }> = [];
+    let nuevos = 0;
+    for (const h of hijos) {
+      const previo = [...estado.docs.values()].find((x) => x.tenantId === tenantId && x.sha256 === h.sha256);
+      if (previo) { salida.push({ indice: h.indice, documentoId: previo.id, creado: false }); continue; }
+      const id = `hijo-${++estado.seq}-${h.indice}`;
+      estado.docs.set(id, {
+        ...clon(pad), id, formato: 'csv', nombreArchivo: h.nombre.slice(0, 255), mime: 'text/csv', bytes: h.bytes, sha256: h.sha256, storageRuta: h.storageRuta,
+        estado: 'recibido', version: 1, perfilId: null, perfilVersion: null, textoExtracto: null, riesgoInyeccion: false, extraccion: null, validacion: null,
+        confianzaMin: null, nivelModelo: null, modelo: null, tokensIn: 0, tokensOut: 0, costoUsd: 0, viajeId: null, procesandoHasta: null, intentos: 0,
+        ultimoError: null, abiertoEn: null, revisadoPor: null, aprobadoPor: null, aprobadoEn: null, rechazoMotivo: null, tiempoRevisionSeg: null,
+        exportadoEn: null, retenerHasta: retenerHijos, purgadoEn: null, createdAt: ahoraIso(), updatedAt: ahoraIso(),
+      });
+      estado.embarques.push({ documentoId: id, tenantId, padreId, huellaBase: pad.sha256, indice: h.indice, total: hijos.length, clave: h.clave.slice(0, 120) });
+      estado.eventos.push({ tenantId, documentoId: id, tipo: 'recibido', actorId: null, detalle: { canal: pad.canal, formato: 'csv', bytes: h.bytes, division: true, indice: h.indice, total: hijos.length }, creadoEn: ahoraIso() });
+      nuevos++;
+      salida.push({ indice: h.indice, documentoId: id, creado: true });
+    }
+    pad.estado = 'dividido'; pad.version++; pad.procesandoHasta = null; pad.ultimoError = null; pad.retenerHasta = retenerPadre; pad.updatedAt = ahoraIso();
+    estado.eventos.push({ tenantId, documentoId: padreId, tipo: 'dividido', actorId: null, detalle: { embarques: hijos.length, nuevos, ya_existian: hijos.length - nuevos }, creadoEn: ahoraIso() });
+    return { estado: 'ok', hijos: salida };
+  },
+  async linajeDeDocumentos(tenantId, ids) {
+    const m = new Map<string, import('./repo').Linaje>();
+    for (const e of estado.embarques) {
+      if (e.tenantId !== tenantId) continue;
+      if (ids.includes(e.documentoId)) m.set(e.documentoId, { rol: 'hijo', padreId: e.padreId, indice: e.indice, total: e.total, clave: e.clave, huellaBase: e.huellaBase });
+      if (e.indice === 1 && ids.includes(e.padreId)) m.set(e.padreId, { rol: 'padre', padreId: e.padreId, indice: null, total: e.total, clave: null, huellaBase: e.huellaBase });
+    }
+    return m;
+  },
+  async hijosDeDocumento(tenantId, padreId) {
+    return estado.embarques.filter((e) => e.tenantId === tenantId && e.padreId === padreId).sort((a, b) => a.indice - b.indice)
+      .flatMap((e) => { const d = estado.docs.get(e.documentoId); return d ? [{ documento: clon(d), indice: e.indice, total: e.total, clave: e.clave }] : []; });
   },
 };
