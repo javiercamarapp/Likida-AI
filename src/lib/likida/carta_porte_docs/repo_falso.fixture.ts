@@ -362,6 +362,19 @@ export const api: typeof Real = {
         && ((d.validacion?.bloqueos ?? 0) > 0 || (d.confianzaMin !== null && d.confianzaMin < umbral)))
       .slice(0, limite).map((d) => ({ tenantId: d.tenantId, id: d.id }));
   },
+  async cerrarDocumentosZombis(retenerHasta, limite = 50) {
+    falla('cerrarDocumentosZombis');
+    if (estado.sinMigracion) return null;
+    const t = estado.reloj.ahora().getTime();
+    const cerrados = [...estado.docs.values()]
+      .filter((d) => d.estado === 'procesando' && !d.purgadoEn && d.intentos >= 5 && d.procesandoHasta !== null && new Date(d.procesandoHasta).getTime() < t)
+      .slice(0, limite);
+    for (const d of cerrados) {
+      Object.assign(d, { estado: 'fallido', version: d.version + 1, procesandoHasta: null, updatedAt: ahoraIso(), retenerHasta, ultimoError: 'La lectura se interrumpió en cada intento (la función se cortó o se cayó) y se agotaron los intentos. Pide el archivo de nuevo o captura el viaje a mano.' });
+      estado.eventos.push({ tenantId: d.tenantId, documentoId: d.id, tipo: 'extraccion_fallida', actorId: null, detalle: { motivo: 'lease_vencido_sin_intentos', permanente: true, intento: d.intentos }, creadoEn: ahoraIso() });
+    }
+    return cerrados.map((d) => ({ tenantId: d.tenantId, id: d.id }));
+  },
   async reclamarAvisoDoc(tenantId, id, tipo) {
     if (estado.sinMigracion) return 'sin_migracion';
     const d = estado.docs.get(id);

@@ -325,6 +325,35 @@ describe('ADVERSARIAL 07: el aviso que el cliente de Meta ya encoló no se reenv
 // ═══════════════════════════════════════════════════════════════════════════
 // RONDA 15: M3 (zombis) y M1 (aviso cuando un archivo partido reabrió o repitió embarques).
 // ═══════════════════════════════════════════════════════════════════════════
+describe('zombis: procesando con los intentos agotados (M3)', () => {
+  it('la pasada los cierra ANTES de avisar, y el aviso de «agotado» sale en la MISMA pasada', async () => {
+    const m = mundo({ agotados: [] });
+    // El doble de «agotados» ve al zombi solo después de que se cerró (como la base: pasa a fallido y entra a la lista).
+    let cerrado = false;
+    m.deps.cerrarZombis = async () => { cerrado = true; return [{ tenantId: T, id: 'z1' }]; };
+    m.deps.agotados = async () => (cerrado ? [{ tenantId: T, id: 'z1' }] : []);
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(r).toMatchObject({ zombisCerrados: 1, agotados: 1, avisosEnviados: 1 });
+    expect(m.avisos[0].contexto).toMatchObject({ tipo: 'agotado', documentoId: 'z1' });
+  });
+
+  it('una base sin la 0672 (null) no cierra nada ni rompe la pasada', async () => {
+    const m = mundo({ pendientes: ['a'] });
+    m.deps.cerrarZombis = async () => null;
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(r).toMatchObject({ zombisCerrados: 0, procesados: 1, errores: 0 });
+  });
+
+  it('si cerrar falla se cuenta como error, pero los avisos siguen', async () => {
+    const m = mundo({ agotados: ['x'] });
+    m.deps.cerrarZombis = async () => { throw new Error('rpc roto'); };
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(r.errores).toBe(1);
+    expect(r.fallos[0]).toContain('zombis');
+    expect(r.agotados).toBe(1);
+  });
+});
+
 describe('un archivo partido que reabrió hijos previos avisa a la oficina (M1)', () => {
   const dividido = (extra: { reabiertos?: number; sinArchivo?: number }): ResultadoProceso => ({ ok: true, estado: 'dividido', embarques: 3, hijos: ['h1', 'h2', 'h3'], yaExistian: 2, ...extra });
 

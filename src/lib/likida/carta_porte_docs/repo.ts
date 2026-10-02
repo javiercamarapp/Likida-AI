@@ -709,6 +709,19 @@ export async function dividirDocumento(
   };
 }
 
+/**
+ * M3 (0672): los documentos `procesando` con los intentos agotados y el lease vencido pasan a `fallido` terminal (con su
+ * evento) para que `documentosAgotados` los vea y la oficina se entere. `null` = la base no tiene la 0672 (no se cierra nada).
+ */
+export async function cerrarDocumentosZombis(retenerHasta: string, limite = 50): Promise<Array<{ tenantId: string; id: string }> | null> {
+  const r = await acotada(supabaseAdmin().rpc('cp_documentos_cerrar_zombis', { p_limite: limite, p_max_intentos: TOPE_INTENTOS_DOC, p_retener_hasta: retenerHasta }), 'cpdocs.cerrar_zombis');
+  if (r.error) {
+    if (funcionAusente(r.error)) { logger.warn('cartaporte_docs.zombis_sin_migracion', { motivo: r.error.message }); return null; }
+    throw new Error(`cpdocs.cerrar_zombis: ${r.error.message}`);
+  }
+  return ((r.data ?? []) as unknown as Fila[]).map((f) => ({ tenantId: String(f.tenant_id), id: String(f.id) }));
+}
+
 /** El linaje de un documento partido: el hijo apunta a su padre; el padre, a cuántos hijos tiene. */
 export interface Linaje {
   /** `hijo`: nació de partir un archivo. `padre`: es ese archivo, ya dividido. */

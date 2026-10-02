@@ -48,6 +48,11 @@ export interface DepsWorker {
   procesar(tenantId: string, id: string, signal?: AbortSignal): Promise<ResultadoProceso>;
   /** `null` = la base no tiene la 0641: los avisos quedan apagados (sin candado atómico se repetirían). */
   agotados(limite: number): Promise<Array<{ tenantId: string; id: string }> | null>;
+  /**
+   * M3 (0672): cierra como `fallido` terminal los `procesando` con los intentos agotados y el lease vencido (zombis), para que
+   * `agotados` los vea y la oficina se entere. `null` = la base no tiene la 0672. Opcional: un doble sin él no cierra nada.
+   */
+  cerrarZombis?(): Promise<Array<{ tenantId: string; id: string }> | null>;
   porAvisar(umbral: number, limite: number): Promise<Array<{ tenantId: string; id: string }> | null>;
   leer(tenantId: string, id: string): Promise<DocumentoFila | null>;
   reclamarAviso(tenantId: string, id: string, tipo: TipoAvisoDoc): Promise<'ganado' | 'perdido' | 'sin_migracion'>;
@@ -87,6 +92,8 @@ export interface ResultadoWorker {
   omitidosPorPresupuesto: number;
   paradaPorFallosSeguidos: boolean;
   agotados: number;
+  /** M3: documentos `procesando` sin intentos y con el lease vencido que esta pasada cerró como fallidos. */
+  zombisCerrados: number;
   /** M1: archivos partidos cuyos hijos ya existían (reabiertos o sin archivo) y de los que se avisó a la oficina. */
   divisionesAvisadas: number;
   hallazgos: number;
@@ -104,7 +111,7 @@ export interface ResultadoWorker {
 
 const vacio = (): ResultadoWorker => ({
   pendientes: 0, procesados: 0, fallidos: 0, yaTomados: 0, divididos: 0, errores: 0, cortadosPorReloj: 0, paradaPorPresupuesto: false, omitidosPorPresupuesto: 0,
-  paradaPorFallosSeguidos: false, agotados: 0, divisionesAvisadas: 0, hallazgos: 0, avisosEnviados: 0, avisosEnCola: 0, avisosFallidos: 0, avisosPerdidos: 0,
+  paradaPorFallosSeguidos: false, agotados: 0, zombisCerrados: 0, divisionesAvisadas: 0, hallazgos: 0, avisosEnviados: 0, avisosEnCola: 0, avisosFallidos: 0, avisosPerdidos: 0,
   sinTelefono: 0, avisosSinMigracion: false, fallos: [],
 });
 
@@ -114,6 +121,10 @@ const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 export async function correrWorkerCartaPorte(deps: DepsWorker, opts: OpcionesWorker): Promise<ResultadoWorker> {
   const r = vacio();
   await procesarPendientes(deps, opts, r);
+  // Los zombis se cierran ANTES de avisar: un documento recién cerrado entra a la lista de `agotados` en esta misma pasada.
+  await cerrarZombis(deps, r);
+  // Los avisos NO dependen del modelo: aunque el proveedor esté caído o el presupuesto agotado, la oficina se
+  // entera de lo que ya está listo (o perdido). Necesitan poco reloj: un envío a Meta.
   await avisarOficinaDe(deps, opts, r);
   return r;
 }
@@ -201,6 +212,22 @@ async function procesarPendientes(deps: DepsWorker, opts: OpcionesWorker, r: Res
       r.fallos.push(`documento ${d.id.slice(0, 8)}: ${msg(e)}`);
       logger.error('cp_worker.documento_fallo', { documentoId: d.id, err: msg(e) });
     }
+  }
+}
+
+// ── Zombis (M3) ─────────────────────────────────────────────────────────────
+
+async function cerrarZombis(deps: DepsWorker, r: ResultadoWorker): Promise<void> {
+  if (!deps.cerrarZombis) return;
+  try {
+    const cerrados = await deps.cerrarZombis();
+    if (cerrados === null) return;
+    r.zombisCerrados = cerrados.length;
+    if (cerrados.length > 0) logger.warn('cp_worker.zombis_cerrados', { cuantos: cerrados.length });
+  } catch (e) {
+    r.errores++;
+    r.fallos.push(`zombis: ${msg(e)}`);
+    logger.error('cp_worker.zombis_fallo', { err: msg(e) });
   }
 }
 
