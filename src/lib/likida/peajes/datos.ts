@@ -642,21 +642,17 @@ const VENTANAS_POR_TANDA = 100;
 
 export interface ResultadoGpsLinea { lineaId: string; casetaId: string | null; veredicto: VeredictoGps }
 
-export async function evaluarGpsDeLineas(
-  tenantId: string,
-  lineas: readonly LineaParaGps[],
-  catalogo: readonly CasetaCatalogo[],
-): Promise<ResultadoGpsLinea[]> {
-  const planes = planificarGps(lineas, catalogo);
-  const listos = planes.filter((p): p is Extract<typeof p, { listo: true }> => p.listo);
+/** Una ventana de posiciones a traer: las de `unidadId` entre `desde` y `hasta`, identificada por la línea que la pide. */
+export interface VentanaPosiciones { lineaId: string; unidadId: string; desde: string; hasta: string }
 
-  const muestrasPorLinea = new Map<string, Muestra[]>();
-  for (let i = 0; i < listos.length; i += VENTANAS_POR_TANDA) {
-    const tanda = listos.slice(i, i + VENTANAS_POR_TANDA);
-    const ventanas = tanda.map((p) => ({ linea_id: p.lineaId, unidad_id: p.unidadId, desde: p.desde, hasta: p.hasta }));
+/** Las posiciones de cada ventana, por línea, en tandas (el RPC `peaje_posiciones_ventana`). Reusada por la conciliación y por el reporte de reclamación. */
+export async function traerMuestrasPorLinea(tenantId: string, ventanas: readonly VentanaPosiciones[]): Promise<Map<string, Muestra[]>> {
+  const porLinea = new Map<string, Muestra[]>();
+  for (let i = 0; i < ventanas.length; i += VENTANAS_POR_TANDA) {
+    const tanda = ventanas.slice(i, i + VENTANAS_POR_TANDA).map((p) => ({ linea_id: p.lineaId, unidad_id: p.unidadId, desde: p.desde, hasta: p.hasta }));
     const filas = await traerTodo<{ linea_id: unknown; lat: unknown; lng: unknown; medida_en: unknown }>(
       (d, h) => acotada(
-        supabaseAdmin().rpc('peaje_posiciones_ventana', { p_tenant: tenantId, p_ventanas: ventanas }, conteo(d))
+        supabaseAdmin().rpc('peaje_posiciones_ventana', { p_tenant: tenantId, p_ventanas: tanda }, conteo(d))
           .order('linea_id').order('medida_en').order('lat').order('lng').range(d, h),
         'peajes.posiciones_ventana',
       ),
@@ -664,11 +660,22 @@ export async function evaluarGpsDeLineas(
     );
     for (const f of filas) {
       const id = String(f.linea_id);
-      const l = muestrasPorLinea.get(id) ?? [];
+      const l = porLinea.get(id) ?? [];
       l.push({ lat: Number(f.lat), lng: Number(f.lng), t: Date.parse(String(f.medida_en)) });
-      muestrasPorLinea.set(id, l);
+      porLinea.set(id, l);
     }
   }
+  return porLinea;
+}
+
+export async function evaluarGpsDeLineas(
+  tenantId: string,
+  lineas: readonly LineaParaGps[],
+  catalogo: readonly CasetaCatalogo[],
+): Promise<ResultadoGpsLinea[]> {
+  const planes = planificarGps(lineas, catalogo);
+  const listos = planes.filter((p): p is Extract<typeof p, { listo: true }> => p.listo);
+  const muestrasPorLinea = await traerMuestrasPorLinea(tenantId, listos.map((p) => ({ lineaId: p.lineaId, unidadId: p.unidadId, desde: p.desde, hasta: p.hasta })));
 
   return planes.map((p) => {
     if (!p.listo) return { lineaId: p.lineaId, casetaId: p.casetaId, veredicto: p.veredicto };
