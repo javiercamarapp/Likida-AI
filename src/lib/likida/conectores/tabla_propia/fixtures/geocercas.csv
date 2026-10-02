@@ -1,0 +1,4 @@
+codigo,nombre,tipo,lat_centro,lon_centro,radio_m,poligono_wkt,cliente
+PATIO-A,Patio Norte,circulo,25.780000,-100.190000,600,,
+PL-01,Planta Poniente,circulo,20.515000,-103.185000,550,,Cliente Ficticio Uno
+PL-02,Planta Cuadrada,poligono,,,,"POLYGON((-103.30 20.62, -103.29 20.62, -103.29 20.63, -103.30 20.63, -103.30 20.62))",

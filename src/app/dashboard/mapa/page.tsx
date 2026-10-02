@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { resolverCiudad, type Ciudad } from '@/lib/likida/geo/ciudades';
 import { getEstadoRastreo, getUltimasPosiciones } from '@/lib/likida/comercial';
+import { huerfanosGps, unidadesConDispositivo } from '@/lib/likida/gps_push/datos';
 import { ahoraMs } from '@/lib/saludo';
 import { proyectar } from './mexico-geo';
 import { VistaMapa, type SinUbicar, type Rastreo } from './vista';
@@ -107,12 +108,19 @@ async function rastreoDe(tenantId: string, ahora: number): Promise<Rastreo> {
     const [estado, posiciones] = await Promise.all([
       getEstadoRastreo(tenantId), getUltimasPosiciones(tenantId),
     ]);
+    // Secundarios: si fallan, el mapa sigue y NO se afirma nada de lo que no se leyó
+    // (huérfanos `null` = «no se pudo contar»; sin el set, ningún pin se rotula respaldo).
+    const [conDispositivo, huerfanos] = await Promise.all([
+      unidadesConDispositivo(tenantId).catch((e) => { logger.warn('mapa.unidades_con_dispositivo', { tenantId, err: e instanceof Error ? e.message : String(e) }); return null; }),
+      huerfanosGps(tenantId).then((h) => h.lista.length).catch((e) => { logger.warn('mapa.huerfanos', { tenantId, err: e instanceof Error ? e.message : String(e) }); return null; }),
+    ]);
     return {
       error: null,
       unidadesConPosicion: estado.unidadesConPosicion,
       ultimaPosicion: estado.ultimaPosicion,
       proveedores: estado.proveedores,
       polls: estado.polls,
+      huerfanos,
       pines: posiciones.map((p): PinUnidad => {
         const { x, y } = proyectar(p.lat, p.lng);
         return {
@@ -129,6 +137,7 @@ async function rastreoDe(tenantId: string, ahora: number): Promise<Rastreo> {
           minutos: Math.max(0, Math.round((ahora - Date.parse(p.medidaEn)) / 60_000)),
           velocidadKmh: p.velocidadKmh,
           proveedor: p.proveedor,
+          respaldoWa: p.proveedor === 'whatsapp' && conDispositivo !== null && conDispositivo.has(p.unidadId),
         };
       }),
     };

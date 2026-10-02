@@ -1957,6 +1957,8 @@ export async function finalizarPollConector(
     elementos?: number;
     invalidos?: number;
     error?: string;
+    /** 0500: clase de la falla del PROVEEDOR (activa el backoff). Sin ella el poll no se espacia. */
+    falla?: 'credencial' | 'proveedor' | 'formato';
   },
 ): Promise<void> {
   // Los tests legacy que pasaron por el fallback no tienen un lease real.
@@ -1976,6 +1978,7 @@ export async function finalizarPollConector(
     p_elementos: resultado.elementos ?? 0,
     p_invalidos: resultado.invalidos ?? 0,
     p_error: resultado.error?.slice(0, 1000) ?? null,
+    p_falla: resultado.falla ?? null,
   }), `${recurso}.finalizar`);
   if (error) throw new Error(`${recurso}.finalizar: ${error.message}`);
   if (data !== true) throw new Error(`${recurso}.finalizar: lease vencido o ajeno`);

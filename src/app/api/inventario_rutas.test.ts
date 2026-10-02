@@ -199,7 +199,23 @@ import { join, relative, sep } from 'node:path';
 //   dinero (área `dinero` Y `puedeExportar`), rate limit por IP y por flota, formato `xlsx|pdf` validado, y el desglose se busca CON el
 //   tenant de la sesión (`reporteReclamacion(t.tenantId, …)`): un uuid de otra flota es 404, nunca datos ajenos. Una lectura incompleta no
 //   sale como archivo corto. Mismo molde que `api/export/bitacora-conciliada`.
-const RUTAS_APP_REVISADAS = 100;
+
+//
+// 93 → 95 (ola 3, W3 «GPS/Jornada»): dos rutas,
+//   · `api/gps/push/[flota]/route.ts` — SIN sesión a propósito: es el endpoint al que un GPS
+//     propio hace POST. Su puerta es la firma HMAC-SHA256 por flota (secreto cifrado en la
+//     base, rotable con ventana de 24 h, tiempo constante, timestamp firmado ±5 min); el
+//     límite de tasa (por IP y por flota) corre ANTES de leer el cuerpo, el cuerpo está
+//     acotado (256 KiB / 500 lecturas), flota inexistente, push apagado y firma mala
+//     responden igual (401) y todo se asienta con el tenant del PATH ya autenticado por su
+//     secreto — nunca con un dato del cuerpo.
+//   · `api/cron/jornada-alertas/route.ts` — cron: `puertaCron` (CRON_SECRET o 401/500) y la
+//     palanca global fail-closed; lee jornadas en curso solo de las flotas con la alerta
+//     ENCENDIDA (apagada por omisión) y manda WhatsApp/correo al encargado y al operador de ESA
+//     flota; claim por (jornada, nivel) en la base y latido en todo camino de salida.
+
+// Integración ola 3b: 100 (peajes-reclamacion) + 2 de GPS/jornada (gps push, cron jornada-alertas).
+const RUTAS_APP_REVISADAS = 102;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
