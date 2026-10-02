@@ -4,9 +4,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // A19 — EL VIGILANTE. Lo que estas pruebas fijan, y es el contrato de la 0202
 // aplicado a las reglas de la flota:
 //
-//   1. SE MANDA PRIMERO Y SE SELLA DESPUÉS. Un WhatsApp que no salió NO deja
-//      sello: se reintenta a la corrida siguiente. Un sello puesto antes
-//      convertiría un fallo de red en un aviso perdido para siempre.
+//   1. SE RECLAMA, SE MANDA Y SE CONFIRMA (0660). Reclamar antes de mandar impide
+//      que dos corridas solapadas manden el mismo aviso; un WhatsApp que no salió
+//      SUELTA el reclamo y se reintenta a la corrida siguiente (un sello puesto
+//      antes convertiría un fallo de red en un aviso perdido para siempre).
 //   2. Lo ya sellado NO vuelve a sonar; un CICLO nuevo sí.
 //   3. El canal se reparte como en los relojes legales: lo que es dinero va a
 //      quien ve dinero, lo que es operación al jefe de tráfico.
@@ -30,6 +31,10 @@ const evaluar = vi.hoisted(() => vi.fn());
 const reglasActivas = vi.hoisted(() => vi.fn());
 const sellosDe = vi.hoisted(() => vi.fn(async () => new Set<string>()));
 const sellarDisparos = vi.hoisted(() => vi.fn(async () => {}));
+type D = { objeto: string; objetoId: string; clave: string; evidencia: string };
+const reclamarDisparos = vi.hoisted(() => vi.fn(async (..._a: unknown[]): Promise<{ modo: 'reclamo'; token: string; ganados: D[] } | { modo: 'sin_rpc' }> => ({ modo: 'reclamo', token: 'tok-1', ganados: [] })));
+const confirmarDisparos = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => 1));
+const liberarDisparos = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => {}));
 const anotarCorrida = vi.hoisted(() => vi.fn(async () => {}));
 const avisosEnviadosDesde = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => [] as Date[]));
 const registrarAviso = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => {}));
@@ -42,6 +47,7 @@ vi.mock('./lectores', () => ({ evaluar }));
 vi.mock('./repo', () => ({
   reglasActivas, sellosDe, sellarDisparos, anotarCorrida,
   avisosEnviadosDesde, registrarAviso, purgarAvisosViejos,
+  reclamarDisparos, confirmarDisparos, liberarDisparos,
   llaveSello: (d: { objeto: string; objetoId: string; clave: string }) => `${d.objeto}|${d.objetoId}|${d.clave}`,
 }));
 
@@ -73,6 +79,10 @@ beforeEach(() => {
   reglasActivas.mockReset().mockResolvedValue([]);
   sellosDe.mockReset().mockResolvedValue(new Set<string>());
   sellarDisparos.mockReset().mockResolvedValue(undefined);
+  // Por omisión el reclamo GANA todo lo que se le pide (una sola corrida).
+  reclamarDisparos.mockReset().mockImplementation(async (...a: unknown[]) => ({ modo: 'reclamo' as const, token: 'tok-1', ganados: a[2] as D[] }));
+  confirmarDisparos.mockReset().mockImplementation(async (..._a: unknown[]) => (reclamarDisparos.mock.calls.at(-1)?.[2] as D[] | undefined)?.length ?? 1);
+  liberarDisparos.mockReset().mockResolvedValue(undefined);
   anotarCorrida.mockReset().mockResolvedValue(undefined);
   avisosEnviadosDesde.mockReset().mockResolvedValue([]);
   registrarAviso.mockReset().mockResolvedValue(undefined);
@@ -106,7 +116,7 @@ describe('mensajeDeRegla — puro, y sin una cifra redactada', () => {
 });
 
 describe('el barrido', () => {
-  it('manda, SELLA DESPUÉS, y cuenta el disparo', async () => {
+  it('RECLAMA, manda, CONFIRMA, y cuenta el disparo', async () => {
     reglasActivas.mockResolvedValue([REGLA_DINERO]);
     evaluar.mockResolvedValue([DISPARO]);
     const r = await vigilarReglas(AHORA);
@@ -117,9 +127,12 @@ describe('el barrido', () => {
       plantilla: expect.objectContaining({ nombre: 'regla_aviso_v1', parametros: expect.arrayContaining(['1']) }),
       tenantId: 't-1',
     }));
-    expect(sellarDisparos).toHaveBeenCalledWith('t-1', 'r-1', [DISPARO]);
-    // El orden es el contrato: primero el envío, después el sello.
-    expect(enviarConFallback.mock.invocationCallOrder[0]).toBeLessThan(sellarDisparos.mock.invocationCallOrder[0]);
+    expect(reclamarDisparos).toHaveBeenCalledWith('t-1', 'r-1', [DISPARO], AHORA);
+    expect(confirmarDisparos).toHaveBeenCalledWith('t-1', 'r-1', 'tok-1', AHORA);
+    expect(sellarDisparos).not.toHaveBeenCalled();
+    // El orden es el contrato: primero el reclamo, luego el envío, al final la confirmación.
+    expect(reclamarDisparos.mock.invocationCallOrder[0]).toBeLessThan(enviarConFallback.mock.invocationCallOrder[0]);
+    expect(enviarConFallback.mock.invocationCallOrder[0]).toBeLessThan(confirmarDisparos.mock.invocationCallOrder[0]);
     expect(anotarCorrida).toHaveBeenCalledWith('t-1', 'r-1', AHORA, 1);
   });
 
@@ -171,11 +184,13 @@ describe('el barrido', () => {
 });
 
 describe('lo que NO se sella', () => {
-  it('si el WhatsApp no salió: no hay sello, y la corrida cuenta el fallo', async () => {
+  it('si el WhatsApp no salió: el reclamo se SUELTA, no hay sello, y la corrida cuenta el fallo', async () => {
     reglasActivas.mockResolvedValue([REGLA_DINERO]);
     evaluar.mockResolvedValue([DISPARO]);
     enviarConFallback.mockResolvedValue(KO_ENVIO);
     const r = await vigilarReglas(AHORA);
+    expect(liberarDisparos).toHaveBeenCalledWith('t-1', 'r-1', 'tok-1');
+    expect(confirmarDisparos).not.toHaveBeenCalled();
     expect(sellarDisparos).not.toHaveBeenCalled();
     expect(r.fallos).toBe(1);
     expect(r.avisos).toBe(0);
@@ -188,9 +203,110 @@ describe('lo que NO se sella', () => {
     const r = await vigilarReglas(AHORA);
     expect(enviarConFallback).not.toHaveBeenCalled();
     expect(sellarDisparos).not.toHaveBeenCalled();
+    // Sin a quién avisarle no se reclama nada: no hay llave que soltar después.
+    expect(reclamarDisparos).not.toHaveBeenCalled();
     expect(r.fallos).toBe(1);
     // Es un problema de configuración que se arregla en un minuto: se dice.
     expect(logger.warn).toHaveBeenCalledWith('reglas.sin_destinatario', expect.objectContaining({ canal: 'dinero' }));
+  });
+});
+
+describe('el reclamo antes de mandar (0660)', () => {
+  it('DOS CORRIDAS SOLAPADAS ven los mismos casos y el aviso sale UNA sola vez', async () => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO]);
+    evaluar.mockResolvedValue([DISPARO]);
+    // La base real: el primero en insertar la llave la gana; el segundo gana cero.
+    const reclamadas = new Set<string>();
+    reclamarDisparos.mockImplementation(async (...a: unknown[]) => {
+      const ganados = (a[2] as D[]).filter((d) => {
+        const k = `${d.objeto}|${d.objetoId}|${d.clave}`;
+        if (reclamadas.has(k)) return false;
+        reclamadas.add(k);
+        return true;
+      });
+      return { modo: 'reclamo' as const, token: `tok-${reclamadas.size}`, ganados };
+    });
+    // Un envío lento hace que las dos corridas estén en vuelo a la vez.
+    enviarConFallback.mockImplementation(async () => { await new Promise((r) => setTimeout(r, 20)); return OK_ENVIO; });
+    confirmarDisparos.mockResolvedValue(1);
+    const [a, b] = await Promise.all([vigilarReglas(AHORA), vigilarReglas(AHORA)]);
+
+    expect(enviarConFallback).toHaveBeenCalledTimes(1);
+    expect(a.avisos + b.avisos).toBe(1);
+    expect(confirmarDisparos).toHaveBeenCalledTimes(1);
+    expect(registrarAviso).toHaveBeenCalledTimes(1);
+  });
+
+  it('si el reclamo no ganó nada, no manda, no registra aviso y anota la corrida en cero', async () => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO]);
+    evaluar.mockResolvedValue([DISPARO]);
+    reclamarDisparos.mockResolvedValue({ modo: 'reclamo', token: '', ganados: [] });
+    const r = await vigilarReglas(AHORA);
+    expect(enviarConFallback).not.toHaveBeenCalled();
+    expect(registrarAviso).not.toHaveBeenCalled();
+    expect(anotarCorrida).toHaveBeenCalledWith('t-1', 'r-1', AHORA, 0);
+    expect(r).toEqual({ reglas: 1, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0 });
+  });
+
+  it('con un reclamo PARCIAL manda solo los casos que ganó', async () => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO]);
+    const g2 = { ...DISPARO, objetoId: 'g-2', evidencia: '$9,000.00 de casetas' };
+    evaluar.mockResolvedValue([DISPARO, g2]);
+    reclamarDisparos.mockResolvedValue({ modo: 'reclamo', token: 'tok-9', ganados: [g2] });
+    const r = await vigilarReglas(AHORA);
+    const texto = (enviarConFallback.mock.calls[0][1] as { texto: string }).texto;
+    expect(texto).toContain('$9,000.00');
+    expect(texto).not.toContain('$3,500.00');
+    expect(r.avisos).toBe(1);
+    expect(registrarAviso).toHaveBeenCalledWith('t-1', 'r-1', expect.objectContaining({ resultado: 'enviado', casos: 1 }));
+  });
+
+  it('si el envío LANZA una excepción, se suelta el reclamo y el error sube', async () => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO]);
+    evaluar.mockResolvedValue([DISPARO]);
+    enviarConFallback.mockRejectedValue(new Error('socket colgado'));
+    const r = await vigilarReglas(AHORA);
+    expect(liberarDisparos).toHaveBeenCalledWith('t-1', 'r-1', 'tok-1');
+    expect(confirmarDisparos).not.toHaveBeenCalled();
+    expect(r.fallos).toBe(1);
+  });
+
+  it('un aviso POSPUESTO por frecuencia no reclama nada', async () => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO]);
+    evaluar.mockResolvedValue([DISPARO]);
+    avisosEnviadosDesde.mockResolvedValue([new Date(AHORA.getTime() - 60_000)]);
+    const r = await vigilarReglas(AHORA);
+    expect(r.diferidas).toBe(1);
+    expect(reclamarDisparos).not.toHaveBeenCalled();
+  });
+
+  it('si el reclamo falla en la base la regla falla POR SU LADO y no se manda a ciegas', async () => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO]);
+    evaluar.mockResolvedValue([DISPARO]);
+    reclamarDisparos.mockRejectedValue(new Error('reclamarDisparos: deadlock'));
+    const r = await vigilarReglas(AHORA);
+    expect(enviarConFallback).not.toHaveBeenCalled();
+    expect(r.fallos).toBe(1);
+  });
+
+  it('sin la 0660 en la base cae al orden anterior: manda y SELLA DESPUÉS', async () => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO]);
+    evaluar.mockResolvedValue([DISPARO]);
+    reclamarDisparos.mockResolvedValue({ modo: 'sin_rpc' });
+    const r = await vigilarReglas(AHORA);
+    expect(r.avisos).toBe(1);
+    expect(sellarDisparos).toHaveBeenCalledWith('t-1', 'r-1', [DISPARO]);
+    expect(confirmarDisparos).not.toHaveBeenCalled();
+    expect(enviarConFallback.mock.invocationCallOrder[0]).toBeLessThan(sellarDisparos.mock.invocationCallOrder[0]);
+  });
+
+  it('un arriendo perdido al confirmar no tumba la corrida, pero queda en el log', async () => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO]);
+    evaluar.mockResolvedValue([DISPARO]);
+    confirmarDisparos.mockResolvedValue(0);
+    const r = await vigilarReglas(AHORA);
+    expect(r.avisos).toBe(1);
+    expect(logger.warn).toHaveBeenCalledWith('reglas.arriendo_perdido_al_confirmar', expect.objectContaining({ casos: 1, confirmadas: 0 }));
   });
 });
 
@@ -251,7 +367,7 @@ describe('límite de frecuencia por regla (0520)', () => {
     expect(antes.diferidas).toBe(1);
     const despues = await vigilarReglas(new Date(AHORA.getTime() + 3_600_000));
     expect(despues).toMatchObject({ disparadas: 1, avisos: 1, diferidas: 0 });
-    expect(sellarDisparos).toHaveBeenCalledTimes(1);
+    expect(confirmarDisparos).toHaveBeenCalledTimes(1);
   });
 
   it('un aviso enviado deja su fila en el historial con el canal y la fecha', async () => {

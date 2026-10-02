@@ -18712,3 +18712,43 @@ begin
   raise exception E'FORMATO_SIN_FORMATO_0645 fila-sin-formato=% telefono-corto-rebota=% mas-de-tres-rebota=% formato-no-objeto-rebota=%   (esperado t / t / t / t)',
     fila, corto, tres, objeto;
 end $$;
+
+-- ── 305. «Mis reglas»: el aviso se reclama ANTES de mandarse, y un arriendo vencido se retoma (mig. 0660) ──
+-- Dos corridas solapadas del cron leían los mismos casos nuevos y ambas mandaban el WhatsApp (el sello llegaba después del envío). La 0660
+-- hace que insertar la llave sea reclamarla: quien pierde el insert no manda. Lo que solo la base demuestra: el segundo reclamo del mismo
+-- lote gana cero llaves, un arriendo vencido se retoma con otro token (y el viejo ya no confirma), confirmar deja la llave `enviado` sin
+-- token y ya no se reclama, liberar (rechazo de Meta) borra lo suyo y la llave se puede reclamar de nuevo, y el sello anterior a la 0660
+-- nunca se reclama.
+-- Esperado: RECLAMO_REGLAS_0660 segundo-reclamo-rebota=t arriendo-se-retoma=t token-viejo-no-confirma=t confirmar-sella=t sellado-no-se-reclama=t liberar-reabre=t sello-viejo-intacto=t
+do $$
+declare
+  t uuid; r uuid; viejo uuid := gen_random_uuid(); lote jsonb;
+  t1 uuid; t2 uuid; n int;
+  segundo boolean; retoma boolean; viejo_no boolean; sella boolean; no_reclama boolean; reabre boolean; intacto boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0660') returning id into t;
+  insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+    values (t, 'gasto_de_concepto_mayor_a', '{"concepto":"caseta","monto":3000}', 'avisa', 'Voy a avisarte…') returning id into r;
+  insert into regla_disparo (tenant_id, regla_id, objeto, objeto_id, clave, evidencia) values (t, r, 'gasto', viejo, '', 'sello viejo');
+  lote := jsonb_build_array(
+    jsonb_build_object('objeto', 'gasto', 'objeto_id', gen_random_uuid(), 'clave', '', 'evidencia', 'uno'),
+    jsonb_build_object('objeto', 'gasto', 'objeto_id', gen_random_uuid(), 'clave', '', 'evidencia', 'dos'),
+    jsonb_build_object('objeto', 'gasto', 'objeto_id', viejo, 'clave', '', 'evidencia', 'sello viejo'));
+
+  select count(*), min(o_token::text)::uuid into n, t1 from reclamar_disparos_regla(t, r, lote);
+  segundo := n = 2 and (select count(*) from reclamar_disparos_regla(t, r, lote)) = 0;
+  select count(*), min(o_token::text)::uuid into n, t2 from reclamar_disparos_regla(t, r, lote, 300, now() + interval '10 minutes');
+  retoma := n = 2 and t2 <> t1;
+  viejo_no := confirmar_disparos_regla(t, r, t1) = 0 and liberar_disparos_regla(t, r, t1) = 0;
+  n := confirmar_disparos_regla(t, r, t2);
+  sella := n = 2
+    and (select count(*) from regla_disparo where regla_id = r and estado = 'enviado' and reclamo_token is null) = 3;
+  no_reclama := (select count(*) from reclamar_disparos_regla(t, r, lote, 300, now() + interval '1 day')) = 0;
+  select count(*), min(o_token::text)::uuid into n, t1 from reclamar_disparos_regla(t, r, jsonb_build_array(
+    jsonb_build_object('objeto', 'gasto', 'objeto_id', gen_random_uuid(), 'clave', 'c2', 'evidencia', 'nuevo')));
+  reabre := n = 1 and liberar_disparos_regla(t, r, t1) = 1;
+  intacto := (select count(*) from regla_disparo where regla_id = r and objeto_id = viejo and estado = 'enviado') = 1;
+
+  raise exception E'RECLAMO_REGLAS_0660 segundo-reclamo-rebota=% arriendo-se-retoma=% token-viejo-no-confirma=% confirmar-sella=% sellado-no-se-reclama=% liberar-reabre=% sello-viejo-intacto=%   (esperado t / t / t / t / t / t / t)',
+    segundo, retoma, viejo_no, sella, no_reclama, reabre, intacto;
+end $$;

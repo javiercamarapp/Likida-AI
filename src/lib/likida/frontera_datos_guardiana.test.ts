@@ -269,7 +269,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 286;
 // `liquidacion_externa/trabajo.ts` suma la lista de avisos pendientes que cruza flotas (como su lista de entregas). Todas por `acotada`.
 // RONDA 08, corrector adversarial (señal de vida): 0 archivos y +2 llamadas, en `conductor/trabajo.ts` (1,849 + 2 = 1,851): la lectura de los sitios
 // de la flota con su geometría (patios donde esperar es normal) y la del estado del conector de GPS (`conector_poll_estado`); ambas por `acotada`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_851;
+// RONDA 09, paquete P9 «claims-concurrencia» (0660): 0 archivos y +3 llamadas (1,851 + 3 = 1,854), en `reglas/repo.ts`, que ya contaba — funcionalidad nueva, no código migrado:
+// las tres RPC del reclamo de «Mis reglas» (reclamar, confirmar y liberar las llaves de un aviso antes/después de mandarlo).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_854;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

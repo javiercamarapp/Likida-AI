@@ -10,9 +10,14 @@
 // es correr consultas y mandar el aviso que la flota pidió por escrito. El
 // interruptor `global` lo apaga con todo lo demás, igual que a los relojes.
 //
-// EL ORDEN IMPORTA Y ES EL DE LA 0202: se manda PRIMERO y se sella DESPUÉS.
-// Un WhatsApp que no salió se reintenta a la corrida siguiente; un sello
-// puesto antes convertiría un fallo de red en un aviso perdido para siempre.
+// EL ORDEN IMPORTA: se RECLAMA, se manda y se CONFIRMA (0660). Reclamar es
+// insertar la llave con estado «enviando» y un arriendo, ANTES de tocar Meta:
+// de dos corridas solapadas del cron (Vercel entrega at-least-once) que ven los
+// mismos casos, cada llave la gana una sola y la otra no manda nada. Si Meta
+// rechaza, la llave se LIBERA y el caso se reintenta a la hora siguiente (un
+// sello puesto sin que el aviso saliera lo perdería para siempre); si la
+// corrida muere a media, el arriendo vence y otra la retoma. Sin la 0660 en la
+// base cae al orden de la 0202: se manda primero y se sella después.
 //
 // CADA REGLA FALLA POR SU LADO. Una regla con una consulta que truena no
 // puede dejar sin vigilancia a las otras veintinueve de la misma flota, ni a
@@ -28,6 +33,7 @@ import { evaluar, type Disparo } from './lectores';
 import {
   reglasActivas, sellosDe, sellarDisparos, anotarCorrida, llaveSello,
   avisosEnviadosDesde, registrarAviso, purgarAvisosViejos,
+  reclamarDisparos, confirmarDisparos, liberarDisparos,
   type ReglaGuardada,
 } from './repo';
 import { evaluarFrecuencia } from './frecuencia';
@@ -78,7 +84,7 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<Resultado
 
   // ¿Cuáles ya se avisaron? Una consulta por regla, no una por candidato — el
   // mismo criterio que `avisarVencimientos` tras c2-4.
-  const sellados = await sellosDe(regla.tenantId, regla.id, candidatos);
+  const sellados = await sellosDe(regla.tenantId, regla.id, candidatos, ahora);
   const nuevos: Disparo[] = candidatos.filter((d) => !sellados.has(llaveSello(d)));
   if (nuevos.length === 0) {
     await anotarCorrida(regla.tenantId, regla.id, ahora, 0);
@@ -118,41 +124,71 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<Resultado
     throw new Error(`la flota no tiene teléfono registrado para avisos de ${plantilla.canal}`);
   }
 
+  // ── EL RECLAMO, ANTES DE TOCAR A META (0660) ───────────────────────────────
+  // Va después del teléfono y de la frecuencia: lo que se pospone o no tiene a
+  // quién avisarse no reclama nada. De dos corridas solapadas, quien pierde el
+  // insert de una llave no la manda; si no ganó ninguna, no hay aviso que dar.
+  const reclamo = await reclamarDisparos(regla.tenantId, regla.id, nuevos, ahora);
+  const aMandar = reclamo.modo === 'reclamo' ? reclamo.ganados : nuevos;
+  if (aMandar.length === 0) {
+    logger.info('reglas.aviso_ya_reclamado', { regla: regla.id, tenant: regla.tenantId, casos: nuevos.length });
+    await anotarCorrida(regla.tenantId, regla.id, ahora, 0);
+    return { avisados: 0, diferida: false };
+  }
+  const token = reclamo.modo === 'reclamo' ? reclamo.token : '';
+
   // ── FUERA DE LA VENTANA DE 24 H TAMBIÉN SALE (auditoría 6-7-9-10-12-13, §13) ─
   // `sendText` a secas fallaba con 131047 cuando el jefe llevaba más de 24 h sin
   // escribirle al número: `correrRegla` lanzaba, no sellaba y reintentaba cada
   // hora SIN LLEGAR JAMÁS. Ahora el selector manda el texto completo dentro de
   // la ventana y la plantilla `regla_aviso_v1` fuera de ella. La semántica no
-  // cambia: se manda primero y se sella solo si Meta ACEPTÓ.
-  const casos = nuevos.length;
-  const envio = await enviarConFallback(telefono, {
-    texto: mensajeDeRegla(regla.frase, nuevos.map((d) => d.evidencia)),
-    plantilla: {
-      nombre: PLANTILLA.reglaAviso,
-      parametros: parametrosReglaAviso(casos, regla.frase, `${appUrl()}/dashboard/reglas`),
-    },
-    contexto: `reglas.vigilante.${regla.plantilla}`,
-    tenantId: regla.tenantId,
-  });
+  // cambia: el sello definitivo solo se pone si Meta ACEPTÓ.
+  const casos = aMandar.length;
+  let envio: Awaited<ReturnType<typeof enviarConFallback>>;
+  try {
+    envio = await enviarConFallback(telefono, {
+      texto: mensajeDeRegla(regla.frase, aMandar.map((d) => d.evidencia)),
+      plantilla: {
+        nombre: PLANTILLA.reglaAviso,
+        parametros: parametrosReglaAviso(casos, regla.frase, `${appUrl()}/dashboard/reglas`),
+      },
+      contexto: `reglas.vigilante.${regla.plantilla}`,
+      tenantId: regla.tenantId,
+    });
+  } catch (e) {
+    // Una excepción antes de saber si Meta aceptó: se suelta el reclamo para que la hora siguiente reintente.
+    await liberarDisparos(regla.tenantId, regla.id, token);
+    throw e;
+  }
   if (!envio.ok) {
     // Sin sello: se reintenta a la siguiente corrida. Es exactamente el
     // contrato de `avisarVencimientos`. El intento fallido SÍ queda en el
     // historial (no cuenta para el tope: no llegó nada al jefe).
+    await liberarDisparos(regla.tenantId, regla.id, token);
     await registrarAviso(regla.tenantId, regla.id, {
       resultado: 'fallido', casos, motivo: envio.motivo, error: envio.mensaje,
     });
     throw new Error(`el WhatsApp no salió: ${envio.mensaje}`);
   }
 
-  await sellarDisparos(regla.tenantId, regla.id, nuevos);
+  if (reclamo.modo === 'reclamo') {
+    const confirmadas = await confirmarDisparos(regla.tenantId, regla.id, token, ahora);
+    if (confirmadas < casos) {
+      // El arriendo venció durante el envío y otra corrida retomó la llave: el aviso pudo salir dos veces. No es un fallo
+      // de ESTA corrida (Meta aceptó), pero se deja a la vista para quien lea el log.
+      logger.warn('reglas.arriendo_perdido_al_confirmar', { regla: regla.id, tenant: regla.tenantId, casos, confirmadas });
+    }
+  } else {
+    await sellarDisparos(regla.tenantId, regla.id, aMandar);
+  }
   await registrarAviso(regla.tenantId, regla.id, {
     resultado: 'enviado', casos, via: envio.via, motivo: envio.motivo, enviadoEn: ahora,
   });
-  await anotarCorrida(regla.tenantId, regla.id, ahora, nuevos.length);
+  await anotarCorrida(regla.tenantId, regla.id, ahora, aMandar.length);
   logger.info('reglas.disparo', {
-    regla: regla.id, tenant: regla.tenantId, plantilla: regla.plantilla, casos: nuevos.length,
+    regla: regla.id, tenant: regla.tenantId, plantilla: regla.plantilla, casos: aMandar.length,
   });
-  return { avisados: nuevos.length, diferida: false };
+  return { avisados: aMandar.length, diferida: false };
 }
 
 /**

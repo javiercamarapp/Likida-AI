@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { crearBaseEnMemoria, type BaseEnMemoria } from '@/lib/pruebas/tablas_en_memoria.fixture';
+import { reclamoEnMemoria } from './reclamo_en_memoria.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // «MIS REGLAS» (Agente 13) — PRUEBA E2E DEL CICLO COMPLETO, con dobles SOLO de
@@ -80,6 +81,11 @@ function nuevaBase(extra: Record<string, Array<Record<string, unknown>>> = {}) {
     ],
     { regla_vigilancia: { max_avisos_dia: 4, min_horas_entre_avisos: 1, ultima_corrida_en: null, ultimo_disparo_en: null } },
   );
+  // Las tres RPC del reclamo (0660) sobre las mismas filas de `regla_disparo` que ve el resto del e2e.
+  const reclamo = reclamoEnMemoria(() => estado.db.tabla('regla_disparo'));
+  estado.db.rpcRespuesta('reclamar_disparos_regla', (a) => ({ data: reclamo.reclamar(a), error: null }));
+  estado.db.rpcRespuesta('confirmar_disparos_regla', (a) => ({ data: reclamo.confirmar(a), error: null }));
+  estado.db.rpcRespuesta('liberar_disparos_regla', (a) => ({ data: reclamo.liberar(a), error: null }));
 }
 
 /** Declara una regla por el camino REAL de la pantalla: interpretar + guardar pendiente. */

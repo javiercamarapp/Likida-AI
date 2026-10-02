@@ -366,18 +366,30 @@ export async function reglasActivas(tope = 500): Promise<ReglaGuardada[]> {
 }
 
 /** Los sellos que YA existen para esta regla, entre los disparos candidatos.
- *  Una consulta por regla, no una por candidato. */
-export async function sellosDe(tenantId: string, reglaId: string, candidatos: Disparo[]): Promise<Set<string>> {
+ *  Una consulta por regla, no una por candidato.
+ *
+ *  Una llave `enviando` (0660) cuenta como sellada MIENTRAS su arriendo siga vigente: otra corrida la lleva. Con el arriendo
+ *  vencido la corrida que la tomó murió a media y la llave vuelve a ser «nueva» para que el reclamo la retome. Sin la 0660
+ *  (columnas ausentes) todas las filas son sellos, como antes. */
+export async function sellosDe(
+  tenantId: string, reglaId: string, candidatos: Disparo[], ahora: Date = new Date(),
+): Promise<Set<string>> {
   if (candidatos.length === 0) return new Set();
-  const { data, error } = await acotada(supabaseAdmin()
+  const consulta = (columnas: string) => acotada(supabaseAdmin()
     .from('regla_disparo')
-    .select('objeto, objeto_id, clave')
+    .select(columnas)
     .eq('tenant_id', tenantId)
     .eq('regla_id', reglaId)
     .in('objeto_id', [...new Set(candidatos.map((c) => c.objetoId))])
     .limit(1_000), 'reglas.sellos');
-  if (error) throw new Error(`sellosDe: ${error.message}`);
-  return new Set(((data ?? []) as Array<{ objeto: string; objeto_id: string; clave: string }>)
+  let res = await consulta('objeto, objeto_id, clave, estado, reclamo_expira_en');
+  if (res.error && esColumnaFaltante(res.error)) res = await consulta('objeto, objeto_id, clave');
+  if (res.error) throw new Error(`sellosDe: ${res.error.message}`);
+  const filas = (res.data ?? []) as unknown as Array<{
+    objeto: string; objeto_id: string; clave: string; estado?: string; reclamo_expira_en?: string | null;
+  }>;
+  return new Set(filas
+    .filter((s) => s.estado !== 'enviando' || (s.reclamo_expira_en != null && new Date(s.reclamo_expira_en).getTime() > ahora.getTime()))
     .map((s) => `${s.objeto}|${s.objeto_id}|${s.clave}`));
 }
 
@@ -404,6 +416,68 @@ export async function sellarDisparos(
     })), { onConflict: 'tenant_id,regla_id,objeto,objeto_id,clave', ignoreDuplicates: true }),
   'reglas.sellar');
   if (error) throw new Error(`sellarDisparos: ${error.message}`);
+}
+
+// ── El reclamo antes de mandar (0660) ──────────────────────────────────────
+
+/** `reclamo` = la base atendió el reclamo; `sin_rpc` = base sin la 0660 (se manda y se sella como antes). */
+export type ReclamoDisparos =
+  | { modo: 'reclamo'; token: string; ganados: Disparo[] }
+  | { modo: 'sin_rpc' };
+
+const PARTES_RPC = /reclamar_disparos_regla|confirmar_disparos_regla|liberar_disparos_regla/;
+function esRpcFaltante(e: { code?: string | null; message?: string | null }): boolean {
+  const msg = e.message ?? '';
+  return PARTES_RPC.test(msg) && (e.code === '42883' || e.code === 'PGRST202' || /could not find the function|does not exist/i.test(msg));
+}
+function esColumnaFaltante(e: { code?: string | null; message?: string | null }): boolean {
+  return e.code === '42703' || /does not exist|could not find/i.test(e.message ?? '');
+}
+
+/**
+ * RECLAMA los casos nuevos ANTES de mandar el aviso: insertar la llave es reclamarla (patrón de `cobranza_gasto`, 0525). De
+ * dos corridas solapadas que ven los mismos casos, cada llave la gana una sola. LANZA si la base falla por otra causa: sin
+ * saber quién la lleva no se manda, y la regla se reintenta a la hora siguiente.
+ */
+export async function reclamarDisparos(
+  tenantId: string, reglaId: string, disparos: Disparo[], ahora: Date = new Date(),
+): Promise<ReclamoDisparos> {
+  if (disparos.length === 0) return { modo: 'reclamo', token: '', ganados: [] };
+  const { data, error } = await acotada(supabaseAdmin().rpc('reclamar_disparos_regla', {
+    p_tenant: tenantId, p_regla: reglaId, p_ahora: ahora.toISOString(),
+    p_items: disparos.map((d) => ({ objeto: d.objeto, objeto_id: d.objetoId, clave: d.clave, evidencia: d.evidencia.slice(0, 1_000) })),
+  }), 'reglas.reclamar');
+  if (error) {
+    if (esRpcFaltante(error)) return { modo: 'sin_rpc' };
+    throw new Error(`reclamarDisparos: ${error.message}`);
+  }
+  const filas = (data ?? []) as Array<{ o_token: string; o_objeto: string; o_objeto_id: string; o_clave: string }>;
+  const ganadas = new Set(filas.map((f) => `${f.o_objeto}|${f.o_objeto_id}|${f.o_clave}`));
+  return {
+    modo: 'reclamo',
+    token: filas[0]?.o_token ?? '',
+    ganados: disparos.filter((d) => ganadas.has(llaveSello(d))),
+  };
+}
+
+/** Meta ACEPTÓ el aviso: las llaves que lleva este token pasan a `enviado`. LANZA si falla (el aviso ya salió; el arriendo
+ *  vencería y otra corrida lo repetiría: mejor que la regla cuente el fallo y quede en el log). */
+export async function confirmarDisparos(tenantId: string, reglaId: string, token: string, ahora: Date = new Date()): Promise<number> {
+  const { data, error } = await acotada(supabaseAdmin().rpc('confirmar_disparos_regla', {
+    p_tenant: tenantId, p_regla: reglaId, p_token: token, p_ahora: ahora.toISOString(),
+  }), 'reglas.confirmar_disparos');
+  if (error) throw new Error(`confirmarDisparos: ${error.message}`);
+  return Number(data ?? 0);
+}
+
+/** El aviso NO salió: se sueltan las llaves de este token para que la corrida siguiente las reintente. Best-effort declarado:
+ *  si falla, el arriendo vence solo (5 min) y la llave vuelve a ser reclamable. */
+export async function liberarDisparos(tenantId: string, reglaId: string, token: string): Promise<void> {
+  if (!token) return;
+  const { error } = await acotada(supabaseAdmin().rpc('liberar_disparos_regla', {
+    p_tenant: tenantId, p_regla: reglaId, p_token: token,
+  }), 'reglas.liberar_disparos');
+  if (error) logger.error('reglas.claim_no_liberado', { regla: reglaId, tenant: tenantId, err: error.message });
 }
 
 /** La bitácora de operación de la regla. Best-effort declarado: si no se pudo
