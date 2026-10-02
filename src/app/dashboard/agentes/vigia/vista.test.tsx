@@ -250,6 +250,15 @@ describe('P14 · lista de directores y respaldo por correo', () => {
     expect(html).toContain('Quitar');
     expect(html).toContain('Agregar a la lista');
   });
+  it('advierte de quien solo tiene correo cuando el respaldo está apagado, y no cuando está encendido (ronda 17)', async () => {
+    const apagado = await pintar(BloqueDirectores({ datos: Promise.resolve(base({ directores: dirs })), puedeAdministrar: true, acciones }));
+    expect(apagado).toContain('Beto Dueño solo tiene correo y el respaldo por correo está apagado: no recibirá ningún aviso');
+    expect(apagado).not.toContain('Ana Gerente solo tiene correo');
+    const mira = await pintar(BloqueDirectores({ datos: Promise.resolve(base({ directores: dirs })), puedeAdministrar: false, acciones }));
+    expect(mira).toContain('no recibirá ningún aviso');
+    const encendido = await pintar(BloqueDirectores({ datos: Promise.resolve(base({ directores: dirs, config: { ...configApagada('t1'), respaldoCorreo: true } })), puedeAdministrar: true, acciones }));
+    expect(encendido).not.toContain('no recibirá ningún aviso');
+  });
   it('quien solo mira no ve campos ni botones, y el teléfono completo NUNCA se pinta', async () => {
     const html = await pintar(BloqueDirectores({ datos: Promise.resolve(base({ directores: dirs })), puedeAdministrar: false, acciones }));
     expect(html).toContain('Ana Gerente');
