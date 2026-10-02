@@ -347,6 +347,27 @@ export async function GET(req: Request) {
       huboFallo = true;
     }
 
+    // ── EL QUINTO BARRIDO: EL ORQUESTADOR VIVO (P6, mig. 0651-0652) ──────────
+    // Barrido de salud de los agentes (con claim por flota: abre/cierra la tarea `falla_de_agente`) y el aviso saliente de las
+    // tareas escaladas que esperan a una persona (apagado por defecto: lo enciende la flota en Notificaciones). Va aquí por la
+    // misma razón que los relojes y las reglas: cadencia horaria suficiente, una URL y un latido menos. Su try/catch propio: un
+    // fallo del barrido no le quita el turno a nadie. Sin palanca propia (la global lo apaga con todo); no llama a ningún modelo.
+    enVuelo = 'orquestador';
+    try {
+      const { correrOrquestadorVivo } = await import('@/lib/likida/orquestador/correr_vivo');
+      const orq = await correrOrquestadorVivo({ venceEn: venceBarridos });
+      logger.info('cron.orquestador.ok', { ...orq });
+      resultado.orquestador = orq;
+      if (orq.fallos > 0) huboFallo = true;
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      const codigo = codigoDeError(e);
+      logger.error('cron.orquestador.falló', { error, codigo });
+      await alertarOperador('cron.orquestador', { error, codigo });
+      resultado.orquestador = { error };
+      huboFallo = true;
+    }
+
     enVuelo = null;
   };
 

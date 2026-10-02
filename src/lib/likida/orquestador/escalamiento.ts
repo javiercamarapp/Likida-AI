@@ -26,6 +26,16 @@ export const ETIQUETA_DESTINO: Readonly<Record<Destino, string>> = {
   contador: 'el contador',
 };
 
+export const ETIQUETA_MOTIVO: Readonly<Record<Motivo, string>> = {
+  operador_sin_respuesta: 'El operador no responde',
+  posible_emergencia: 'Posible emergencia',
+  diferencia_liquidacion: 'Diferencia en una liquidación',
+  cliente_molesto: 'Cliente molesto',
+  falla_de_agente: 'Falla de un agente',
+  duda_fiscal: 'Duda fiscal',
+  otro: 'Otro asunto',
+};
+
 export const MAX_RESUMEN = 300;
 /** Un folio es un código corto; cualquier otra cosa no se manda a la base. */
 export const PATRON_FOLIO = /^[A-Za-z0-9][A-Za-z0-9._\-/]{0,39}$/;

@@ -9,6 +9,12 @@ import type { ControlEmision } from '../autofactura/control_emision';
 import type { ConteoBuzon } from '../buzon/repo';
 import type { GrupoVigia } from '../vigia/historial/repo';
 import type { DatosTablero as DatosVigia } from '../vigia/repo';
+import type { Instruccion } from '../convenios/tipos';
+import type { EstadoLiquidacionExterna } from '../liquidacion_externa/esquema';
+import type { LiquidacionExterna } from '../liquidacion_externa/repo';
+import type { ReporteReclamacion } from '../peajes/reclamacion';
+import type { FilaJornadaDia } from '../jornada/repo';
+import type { ResultadoAvisoTarea } from './aviso_escalacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS FUENTES DEL ORQUESTADOR — el puerto entre las herramientas y los datos.
@@ -30,10 +36,28 @@ export interface EntradaTableroConCatalogos extends EntradaTableroViajes {
 }
 
 export type ResultadoCrearEscalacion =
-  | { estado: 'creada'; id: string }
+  // `aviso`: qué pasó con el aviso saliente en caliente (apagado por defecto: `omitido_apagado`); ausente = no se intentó.
+  | { estado: 'creada'; id: string; aviso?: ResultadoAvisoTarea }
   | { estado: 'ya_abierta'; id: string; creadaEn: string }
   | { estado: 'folio_no_encontrado' }
   | { estado: 'no_disponible' };
+
+/** El convenio ligado a un viaje abierto y sus instrucciones (la foto que se le dijo al operador). */
+export interface ConvenioDeViaje {
+  folio: string; origen: string | null; destino: string | null; cliente: string | null;
+  convenioNombre: string | null; ligadoPor: 'auto' | 'manual' | null; despachoEnviado: boolean; instrucciones: Instruccion[];
+}
+
+/** Estado de entrega de la liquidación externa: conteos por estado y lo que más pide mirar (fallidas y «no coincide»). */
+export interface EntregaLiquidacionExterna {
+  porEstado: Record<EstadoLiquidacionExterna, number | null>;
+  noCoincide: number | null;
+  fallidas: LiquidacionExterna[] | null;
+  conAcuseNoCoincide: LiquidacionExterna[] | null;
+}
+
+/** El último desglose de peajes (no anulado) con su reporte de reclamación PASE × GPS × geocerca. `null` reporte = no hay desglose. */
+export interface ReclamacionPeajes { desglose: { id: string; proveedor: string | null; periodoDesde: string | null; periodoHasta: string | null } | null; reporte: ReporteReclamacion | null }
 
 export interface Fuentes {
   entradaTablero(tenantId: string, ahora: Date): Promise<EntradaTableroConCatalogos>;
@@ -47,6 +71,14 @@ export interface Fuentes {
     quien: { rol: string; usuarioId: string | null },
   ): Promise<ResultadoCrearEscalacion>;
   escalacionesAbiertas(tenantId: string, limite?: number): Promise<TareaAbierta[] | null>;
+  /** Convenio e instrucciones de un viaje ABIERTO por su folio. `null` = la base no tiene los convenios (0580); `'sin_viaje'` = ningún viaje abierto con ese folio. */
+  convenioDeViaje(tenantId: string, folio: string): Promise<ConvenioDeViaje | 'sin_viaje' | null>;
+  /** Entrega de la liquidación externa. `null` = la base no la tiene (0370). */
+  liquidacionExterna(tenantId: string): Promise<EntregaLiquidacionExterna | null>;
+  /** Reclamación de peajes del último desglose. `null` = la base no tiene los peajes. */
+  reclamacionPeajes(tenantId: string): Promise<ReclamacionPeajes | null>;
+  /** Jornada de los últimos `dias` días (incluido hoy). `null` = la base no tiene la jornada. */
+  jornada(tenantId: string, ahora: Date, dias: number): Promise<{ dias: FilaJornadaDia[]; truncada: boolean } | null>;
   /** Una persona atiende una tarea abierta de SU flota. `false` = no existe, no es de esta flota o ya estaba atendida. */
   atenderEscalacion(tenantId: string, id: string, quien: { usuarioId: string | null; nota: string | null }): Promise<boolean>;
 }

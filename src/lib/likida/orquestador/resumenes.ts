@@ -5,6 +5,11 @@ import type { ControlEmision } from '../autofactura/control_emision';
 import type { ConteoBuzon } from '../buzon/repo';
 import type { GrupoVigia } from '../vigia/historial/repo';
 import type { DatosTablero as DatosVigia } from '../vigia/repo';
+import type { ConvenioDeViaje, EntregaLiquidacionExterna, ReclamacionPeajes } from './fuentes';
+import { ETIQUETA_CATEGORIA } from '../convenios/tipos';
+import type { FilaJornadaDia } from '../jornada/repo';
+import type { LiquidacionExterna } from '../liquidacion_externa/repo';
+import { ETIQUETA_MOTIVO_RECLAMACION } from '../peajes/reclamacion';
 import { minutosEsperando } from '../vigia/escalamiento';
 import { configParaCliente } from '../vigia/tipos';
 
@@ -166,5 +171,104 @@ export function resumirAutofactura(
       lista: fases.slice(0, TOPE_LISTA).map((f) => ({ comercio: nombreSeguro(f.comercio), fase: f.fase, emisionesConfirmadas: f.emisionesConfirmadas, ultimaEmisionEn: f.ultimaEmisionEn })),
     },
     ver: '/dashboard/agentes/facturas',
+  };
+}
+
+
+// ── Convenio e instrucciones de un viaje ────────────────────────────────────
+
+/** Lo que se le dijo al operador de ESTE viaje: el convenio ligado y sus instrucciones (sin tarifas: la foto del viaje no las trae). */
+export function resumirConvenioViaje(c: ConvenioDeViaje) {
+  const lista = recortar(c.instrucciones, 12);
+  return {
+    folio: c.folio,
+    ruta: c.origen || c.destino ? `${c.origen ?? '?'} → ${c.destino ?? '?'}` : null,
+    cliente: nombreSeguro(c.cliente),
+    convenio: nombreSeguro(c.convenioNombre, 80),
+    ligadoPor: c.ligadoPor,
+    instruccionesAlOperadorEnviadas: c.despachoEnviado,
+    totalInstrucciones: c.instrucciones.length,
+    instrucciones: lista.items.map((i) => ({ categoria: ETIQUETA_CATEGORIA[i.categoria], texto: nombreSeguro(i.texto, 240), cuando: i.momento, lugar: i.lugar })),
+    masNoMostradas: lista.masNoMostradas,
+    nota: c.convenioNombre === null ? 'Este viaje no tiene un convenio ligado: no hay instrucciones de la planta que citar. No las inventes.' : undefined,
+    ver: '/dashboard/convenios',
+  };
+}
+
+// ── Entrega de la liquidación externa ───────────────────────────────────────
+
+function vistaLiquidacion(l: LiquidacionExterna, ahora: Date) {
+  const foliosDeViaje = recortar(l.foliosViaje, 5);
+  return {
+    folios: foliosDeViaje.items, masFolios: foliosDeViaje.masNoMostradas,
+    periodo: `${l.periodoDesde} a ${l.periodoHasta}`,
+    estado: l.estado, intentos: l.intentos, via: l.via,
+    enviadaHace: l.enviadaEn ? textoHace(l.enviadaEn, ahora) : null,
+    acuse: l.acuseTipo, ultimoError: nombreSeguro(l.ultimoError, 140),
+  };
+}
+
+function textoHace(desde: string, ahora: Date): string {
+  const t = Date.parse(desde);
+  if (!Number.isFinite(t)) return 'fecha ilegible';
+  const min = Math.max(0, Math.floor((ahora.getTime() - t) / MS_MIN));
+  return min < 60 ? `hace ${min} min` : min < 48 * 60 ? `hace ${Math.floor(min / 60)} h` : `hace ${Math.floor(min / 1440)} días`;
+}
+
+/** Cómo va la ENTREGA de la liquidación al chofer: conteos por estado y lo que pide mirar. Sin montos, teléfonos ni nombres del chofer. */
+export function resumirLiquidacionExterna(e: EntregaLiquidacionExterna, ahora: Date) {
+  const fallidas = e.fallidas === null ? null : recortar(e.fallidas, 8);
+  const noCoincide = e.conAcuseNoCoincide === null ? null : recortar(e.conAcuseNoCoincide, 8);
+  return {
+    porEstado: e.porEstado,
+    sinContar: Object.entries(e.porEstado).filter(([, n]) => n === null).map(([k]) => k),
+    choferesDijeronNoCoincide: e.noCoincide,
+    fallidas: fallidas ? fallidas.items.map((l) => vistaLiquidacion(l, ahora)) : null,
+    masFallidasNoMostradas: fallidas?.masNoMostradas ?? null,
+    conAcuseNoCoincide: noCoincide ? noCoincide.items.map((l) => vistaLiquidacion(l, ahora)) : null,
+    nota: 'Un «no coincide» del chofer es una señal para revisar con él, no una acusación. El detalle del cuadre lo ve la oficina en su pantalla; aquí no hay montos.',
+    ver: '/dashboard/agentes/liquidacion',
+  };
+}
+
+// ── Reclamación de peajes ───────────────────────────────────────────────────
+
+/** El reporte de reclamación del último desglose: cuántos cobros no cuadran con el GPS y por qué motivo. Es una SEÑAL, no una acusación. */
+export function resumirReclamacionPeajes(r: ReclamacionPeajes) {
+  if (!r.desglose || !r.reporte) {
+    return { hayDesglose: false, nota: 'Todavía no hay un desglose de peajes para conciliar. No inventes cifras.', ver: '/dashboard/agentes/peajes' };
+  }
+  const x = r.reporte.resumen;
+  const cruces = recortar(r.reporte.cruces, 6);
+  return {
+    hayDesglose: true,
+    proveedor: nombreSeguro(r.desglose.proveedor),
+    periodo: r.desglose.periodoDesde && r.desglose.periodoHasta ? `${r.desglose.periodoDesde} a ${r.desglose.periodoHasta}` : null,
+    lineas: x.lineas, reclamables: x.reclamables, montoReclamableMxn: x.montoReclamable,
+    porMotivo: Object.fromEntries(Object.entries(x.porMotivo).map(([k, v]) => [ETIQUETA_MOTIVO_RECLAMACION[k as keyof typeof ETIQUETA_MOTIVO_RECLAMACION], v])),
+    confirmadasPorGps: x.confirmadas, sinDatos: x.sinDatos, sinEvaluar: x.sinEvaluar,
+    principales: cruces.items.map((c) => ({ fecha: c.fecha, caseta: nombreSeguro(c.caseta), unidad: nombreSeguro(c.unidad, 30), motivo: ETIQUETA_MOTIVO_RECLAMACION[c.motivo], confianza: c.confianza, montoMxn: c.monto })),
+    masNoMostradas: cruces.masNoMostradas,
+    nota: 'Es una señal para pedirle al proveedor que revise un cobro; la decisión de reclamar es de la flota. «Sin datos» no es evidencia en contra de nadie.',
+    ver: '/dashboard/agentes/peajes',
+  };
+}
+
+// ── Jornada ─────────────────────────────────────────────────────────────────
+
+/** El registro de jornada de los últimos días: cuántos expedientes, cuántos cerrados y con la conformidad del operador. Sin nombres ni horas por persona. */
+export function resumirJornada(l: { dias: readonly FilaJornadaDia[]; truncada: boolean }, desde: string, hasta: string) {
+  const cerrados = l.dias.filter((d) => d.estado === 'cerrado');
+  return {
+    ventana: `${desde} a ${hasta}`,
+    expedientes: l.dias.length,
+    operadoresConJornada: new Set(l.dias.map((d) => d.operadorId)).size,
+    abiertos: l.dias.length - cerrados.length,
+    cerrados: cerrados.length,
+    cerradosSinConformidadDelOperador: cerrados.filter((d) => d.conformeOperadorEn === null).length,
+    incompleto: l.truncada,
+    ...(l.truncada ? { notaIncompleto: 'La ventana superó el tope de lectura: estos números son un mínimo, no el total.' } : {}),
+    nota: 'Es un conteo del registro, no un dictamen laboral. Para el detalle por operador y su evaluación se abre la pantalla de jornada.',
+    ver: '/dashboard/jornada',
   };
 }

@@ -4,6 +4,11 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getKpis, detectarAnomalias, contarEscalados } from '@/lib/likida/analytics';
 import { contarHuerfanosPendientes } from '@/lib/likida/repo';
 import { getConexiones } from '@/lib/likida/conexiones';
+import { fuentes } from '@/lib/likida/orquestador/fuentes';
+import '@/lib/likida/orquestador/fuentes_reales';
+import { rolPuedeLeerTarea } from '@/lib/likida/orquestador/permisos';
+import { armarTableroViajes } from '@/lib/likida/orquestador/tablero_viajes';
+import { ahoraMs } from '@/lib/saludo';
 import { calcularAlertasFlota } from '../calcular-alertas-flota';
 import { sufijoTenant } from '../sufijo';
 import { ListaAlertas } from './lista';
@@ -35,12 +40,19 @@ export default async function PaginaNotificaciones({
 
   const sufijo = sufijoTenant(sp);
 
-  const [kpis, anomalias, escalados, huerfanos, conectores] = await Promise.all([
+  // P6: las tareas del asistente y las excepciones del Conductor también son notificaciones (solo si el rol abre viajes en vivo; una tarea
+  // de dinero solo la cuenta quien ve dinero). Se leen aparte y con `catch → null`, como el resto: una fuente caída se confiesa, no se calla.
+  const veViajesEnVivo = puedeVerRuta(rol, '/dashboard/viajes-en-vivo');
+  const [kpis, anomalias, escalados, huerfanos, conectores, tareas, tablero] = await Promise.all([
     getKpis(tenantId).catch(() => null),
     detectarAnomalias(tenantId).catch(() => null),
     contarEscalados(tenantId).catch(() => null),
     contarHuerfanosPendientes(tenantId).catch(() => null),
     getConexiones(tenantId).catch(() => null),
+    veViajesEnVivo ? fuentes().escalacionesAbiertas(tenantId, 60).then((l) => (l === null ? null : l.filter((t) => rolPuedeLeerTarea(rol, t)).length)).catch(() => null) : Promise.resolve(undefined),
+    veViajesEnVivo
+      ? fuentes().entradaTablero(tenantId, new Date(ahoraMs())).then((e) => armarTableroViajes({ ...e, filtros: { terminalId: null, clienteId: null, soloExcepciones: false } }).conteos).catch(() => null)
+      : Promise.resolve(undefined),
   ]);
 
   const alertas = calcularAlertasFlota(
@@ -50,6 +62,10 @@ export default async function PaginaNotificaciones({
       escalados,
       huerfanos,
       conectores,
+      // `undefined` = este rol no ve esa pantalla (la señal no existe); `null` = no se pudo leer (se confiesa).
+      tareasAsistente: tareas,
+      excepcionesConductor: tablero === undefined ? undefined : tablero === null ? null : tablero.conExcepcion,
+      sinSenalDeVida: tablero == null ? undefined : tablero.sinSenal,
     },
     sufijo,
     (href) => puedeVerRuta(rol, href),

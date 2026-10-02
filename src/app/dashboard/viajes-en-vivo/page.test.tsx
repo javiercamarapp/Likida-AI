@@ -67,3 +67,12 @@ it('vista=excepciones deja solo los viajes con excepción', async () => {
   const vista = buscar(pagina, VistaViajesEnVivo)[0];
   expect((vista.props.filtros as { soloExcepciones: boolean }).soloExcepciones).toBe(true);
 });
+
+// P6: el aviso saliente de una tarea nueva (apagado por defecto) se configura aquí, y solo lo configura el dueño.
+it('la sección de Notificaciones del asistente aparece solo para quien puede administrar (el encargado no decide quién recibe los correos)', async () => {
+  const paraEncargado = await Pagina({ searchParams: Promise.resolve({}) });
+  expect(buscar(paraEncargado, VistaViajesEnVivo)[0].props.notificaciones).toBeNull();
+  sesion = { tenantId: 't-1', rol: 'flota_admin', userId: 'u-3' };
+  const paraDueno = await Pagina({ searchParams: Promise.resolve({}) });
+  expect(buscar(paraDueno, VistaViajesEnVivo)[0].props.notificaciones).not.toBeNull();
+});

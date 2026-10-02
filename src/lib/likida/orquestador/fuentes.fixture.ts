@@ -25,6 +25,11 @@ export interface MundoFlota {
   cobranza?: Awaited<ReturnType<Fuentes['cobranza']>>;
   autofactura?: Awaited<ReturnType<Fuentes['autofactura']>>;
   salud?: Awaited<ReturnType<Fuentes['salud']>>;
+  /** Convenio por folio (`undefined` = la base no tiene convenios; un folio ausente = ningún viaje abierto con ese folio). */
+  convenios?: Record<string, Awaited<ReturnType<Fuentes['convenioDeViaje']>>>;
+  liquidacionExterna?: Awaited<ReturnType<Fuentes['liquidacionExterna']>>;
+  reclamacionPeajes?: Awaited<ReturnType<Fuentes['reclamacionPeajes']>>;
+  jornada?: Awaited<ReturnType<Fuentes['jornada']>>;
   /** Folios que existen (para escalar con folio). */
   folios?: string[];
   /** false = la tabla de escalaciones no existe (base sin migrar). */
@@ -80,6 +85,10 @@ export function crearFuentesEnMemoria(mundos: Record<string, MundoFlota>) {
       void quien;
       return true;
     },
+    async convenioDeViaje(t, folio) { const m = mundo('convenioDeViaje', t); return m.convenios === undefined ? null : (m.convenios[folio] ?? 'sin_viaje'); },
+    async liquidacionExterna(t) { return mundo('liquidacionExterna', t).liquidacionExterna ?? null; },
+    async reclamacionPeajes(t) { return mundo('reclamacionPeajes', t).reclamacionPeajes ?? null; },
+    async jornada(t) { return mundo('jornada', t).jornada ?? null; },
     async escalacionesAbiertas(t) { return (tareas.get(t) ?? []).map(({ dedupe: _d, tenantId: _t, usuarioId: _u, ...x }) => x); },
   };
   return { fuentes, llamadas, tareas };
