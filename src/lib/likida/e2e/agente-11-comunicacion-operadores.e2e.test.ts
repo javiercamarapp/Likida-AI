@@ -9,8 +9,8 @@ import { crearDbMemoria, type DbMemoria, type Fila } from './db_memoria.fixture'
 // aceptarPorActividad (una foto cuenta como aceptar) → acuse por el selector real (enviarConFallback, ventana 24 h/plantilla).
 // Hitos: atenderConductor real con el mundo en memoria del Conductor (sincroniza el legado 0090 solo en el destino).
 // El orden de llamadas del dispatcher se replica como en processor.ts (cableado probado en processor_hitos.test.ts).
-// NOTA: hitos_viaje.ts (interpretarHito/sellarHito) ya NO lo llama processor.ts ni lo importa nadie (quedó documentado como
-// utilitario sin llamador); por eso aquí NO se prueba como si fuera el camino del chofer. Los hitos los atiende el Conductor.
+// NOTA: el viejo hitos_viaje.ts (interpretarHito/sellarHito) se retiró en la ronda 11 (nadie lo llamaba desde la Ola 4a).
+// Los hitos del chofer los atiende el Conductor.
 // DOBLES: base en memoria, Meta. Datos sintéticos.
 // ═══════════════════════════════════════════════════════════════════════════
 

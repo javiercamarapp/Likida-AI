@@ -67,8 +67,8 @@ plantilla. El acuse de la aceptación fuera de ventana sale por plantilla y no s
 ## Hitos del viaje
 
 `atenderConductor` (Agente 5) los registra: el primer «ya llegué» es la llegada a CARGAR y no sella el destino del legado 0090; un «ya llegué» repetido deja UN solo
-hito y conserva la primera hora; el chofer de otra flota con el viaje de la mía no registra nada. `hitos_viaje.ts` (el intérprete anterior) ya no está en el camino:
-quedó como utilitario sin llamador y documentado así en su encabezado.
+hito y conserva la primera hora; el chofer de otra flota con el viaje de la mía no registra nada. El intérprete anterior (`hitos_viaje.ts`) ya no está en el camino y se retiró del
+repositorio en la ronda 11.
 
 ## Operación
 

@@ -3,7 +3,7 @@
 Criterio (cola-maestra.md, «PRIORIDAD MÁXIMA»): para cada uno de los 13 agentes, **una prueba E2E del ciclo completo con dobles de proveedor** y estos cinco casos:
 **feliz, fallo, duplicado, fuera de orden y otra flota (otro tenant)**.
 
-Esta matriz es el índice de esas pruebas y refleja el estado del árbol `loop/punta-a-punta` tras la Ola 4d y el paquete P12 (2-oct-2026). Las cifras salen de una
+Esta matriz es el índice de esas pruebas y refleja el estado del árbol `loop/punta-a-punta` tras la Ola 4d, P7 (convenios-edición), P9 (claims-concurrencia), P0 (demo) y P12 (2-oct-2026, ronda 11). Las cifras salen de una
 corrida real de cada archivo con `heavy.sh`; si cambian, se actualiza esta tabla en el mismo commit. Se corre **un archivo a la vez** y con el candado de memoria:
 
 ```bash
@@ -56,7 +56,7 @@ criterio: los archivos `e2e/agente-NN-*.e2e.test.ts` los traen como bloques `des
 | 11 | `e2e/agente-11-comunicacion-operadores.e2e.test.ts` | verde (16) | sí |
 | 12 | `e2e/agentes-pendientes-ola3.e2e.test.ts` | **sin E2E**: todo (5) | los cinco casos escritos como `todo` (paquete P10); hay pruebas unitarias en `jornada/alerta_tope.test.ts` pero no del ciclo |
 | 13 | `e2e/agente-13-mis-reglas.e2e.test.ts` · `reglas/e2e_ciclo_completo.test.ts` | verde (19 + 12) | sí; el respaldo por plantilla y «cuál plantilla usé» en la segunda |
-| — | `convenios/convenios.e2e.test.ts` | verde (3) | feliz y sin convenio; dos corridas del cron, fuera de orden y otra flota llegan con el paquete P7 |
+| — | `convenios/convenios.e2e.test.ts` | verde (3) | sí: feliz y sin convenio; P7 suma el ciclo del cron con convenio editado tras despachar, acercamiento antes del despacho, fuera de orden y otra flota |
 | — | `orquestador/orquestador.e2e.test.ts` · `orquestador/orquestador_vivo.e2e.test.ts` | verde (11 + 7) | rol, aislamiento, escalar a una persona, agente caído, sin PII; aviso apagado por omisión, barrido de salud sin duplicar y cierre solo |
 
 Los únicos `todo` que quedan en todo el árbol son 11: 10 en el archivo de pendientes (Autofactura y Jornada) y 1 en Carta Porte. Ningún archivo de esta tabla tiene fallos.
@@ -66,7 +66,7 @@ Los únicos `todo` que quedan en todo el árbol son 11: 10 en el archivo de pend
 1. **Agentes 6 y 12 sin E2E del ciclo.** Son los únicos. Autofactura (P11) necesita un doble del portal y decidir quién opera el vinculador; Jornada (P10) necesita además su pantalla
    para encender la alerta (hoy la configuración nace apagada y nadie puede escribirla). Sus `todo` están en `agentes-pendientes-ola3.e2e.test.ts`, con los cinco casos nombrados.
 2. **Carta Porte: salida al layout del cliente**: depende de los documentos reales (la exactitud no está medida).
-3. **Convenios**: faltan las dos corridas del cron fuera de orden y otra flota (P7).
+3. **Convenios**: cerrado con P7 (ciclo del cron con convenio editado tras despachar, acercamiento antes del despacho y otra flota). Lo que falta es externo: aplicar 0656/0657/0658 y datos reales.
 4. **Crons sin `route.test.ts`**: `jornada-alertas` y `portales-vivos`. El contrato común de «latido en todo camino de salida» lo cubre `latido-en-toda-salida.test.ts`, que lee el
    fuente de cada ruta, pero no sustituye a la prueba de la ruta.
 5. **Ningún E2E toca proveedores reales**: eso es bloqueo externo (Meta, Resend, PAC, portales, GPS del cliente), no código.
@@ -89,8 +89,8 @@ El arnés compartido vive en `src/lib/likida/e2e/db_memoria.fixture.ts` (base en
 
 ## Límites declarados de esta capa
 
-1. `hitos_viaje.ts` (`interpretarHito`/`sellarHito`) **ya no está en el camino del chofer**: los hitos los atiende el motor del Conductor (`atenderConductor`). Quedó como utilitario sin
-   llamador, documentado así en su encabezado, con sus pruebas unitarias; retirarlo obliga a bajar los dos techos de `frontera_datos_guardiana.test.ts` (-1 archivo, -1 llamada) en la integración.
+1. `hitos_viaje.ts` (`interpretarHito`/`sellarHito`) **se retiró en la ronda 11** (archivo y prueba): ya no estaba en el camino del chofer, los hitos los atiende el motor del Conductor
+   (`atenderConductor`). Los dos techos de `frontera_datos_guardiana.test.ts` bajaron a la vez (286 → 285 archivos, 1,882 → 1,881 llamadas).
 2. La prueba del Agente 11 replica el orden de llamadas del dispatcher (`processor.ts` es demasiado grande para correrlo entero con doble de base); el cableado real lo cubre
    `processor_hitos.test.ts`. Es una limitación declarada, no un hueco oculto.
 3. Los E2E de cobranza (7), escalación (8), reglas (13) y GPS (10) usan una base en memoria, no Postgres: **no validan** los `CHECK`/índices únicos de las migraciones (eso es trabajo de
