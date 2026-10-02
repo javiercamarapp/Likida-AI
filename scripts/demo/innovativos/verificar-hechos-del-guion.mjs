@@ -186,7 +186,7 @@ const p = uno('peajes', `select count(*) as total,
   from desglose_peaje_linea where tenant_id = '${T}'`);
 if (p) {
   hecho('hay líneas de pase', Number(p.total) > 0);
-  dice('379 cruces', `${p.total} cruces de las últimas 24 h`, guion);
+  dice('381 cruces', `${p.total} cruces de las últimas 24 h`, guion);
   dice('fuera de ruta', `${p.fuera} cruces fuera de ruta`, guion);
   dice('duplicados', `${p.dup} cobros duplicados`, guion);
   dice('sin dato de GPS', `${p.sin_datos} cruces sin dato de GPS`, guion);
@@ -315,7 +315,7 @@ try {
   hecho('el análisis real del histórico corrió sobre lo guardado', false, e instanceof Error ? e.message : String(e));
 }
 
-// ── 9. Geocercas de muestra: «4 de 17 son polígonos» sale del archivo ───────
+// ── 9. Geocercas de muestra: «5 de 17 son polígonos» sale del archivo ───────
 const filas = readFileSync(join(aqui, 'archivos-muestra/gps/geocercas.csv'), 'utf8').trim().split('\n');
 const enc = filas[0].split(',');
 const iTipo = enc.indexOf('tipo');

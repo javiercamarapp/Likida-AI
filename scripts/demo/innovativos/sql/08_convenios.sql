@@ -2,14 +2,13 @@
 -- 08 — Convenios de cliente, tarifa e INSTRUCCIONES DE OPERACIÓN («calle de
 -- instrucciones»): qué puerta, con quién reportarse, peculiaridades.
 --
--- El modelo cliente→convenio→instrucciones lo construye el stream
--- w3-convenios (migración 0580: cliente_convenio, convenio_instruccion,
--- convenio_comercial). Este seed hace DOS cosas:
+-- El modelo cliente→convenio→instrucciones es el del producto (migración 0580:
+-- cliente_convenio, convenio_instruccion, convenio_comercial). Este seed hace DOS cosas:
 --   1) deja SIEMPRE los datos en innovativos_sim.convenio* (la «copia de su
---      sistema»; sirve de fuente para convenios.csv y para el contrato);
---   2) SI las tablas de la 0580 YA existen en esta base (rama integrada), los
---      carga también en ellas, con ids deterministas. Si no existen, avisa y
---      sigue: no rompe el seed y no inventa tablas ajenas.
+--      sistema»; sirve de fuente para convenios.csv);
+--   2) SI las tablas de la 0580 existen en esta base (en una base migrada hasta la
+--      0652 siempre), los carga también en ellas, con ids deterministas. Si no
+--      existen, avisa y sigue: no rompe el seed y no inventa tablas ajenas.
 -- ═══════════════════════════════════════════════════════════════════════════
 
 drop table if exists innovativos_sim.convenio_instruccion, innovativos_sim.convenio_comercial, innovativos_sim.convenio cascade;
@@ -50,7 +49,7 @@ begin
   if to_regclass('public.cliente_convenio') is null
      or to_regclass('public.convenio_instruccion') is null
      or to_regclass('public.convenio_comercial') is null then
-    raise warning 'convenios: las tablas de la 0580 (w3-convenios) no existen en esta base; los datos quedan solo en innovativos_sim.convenio*.';
+    raise warning 'convenios: las tablas de la 0580 no existen en esta base (¿migraciones sin aplicar?); los datos quedan solo en innovativos_sim.convenio*.';
     return;
   end if;
 

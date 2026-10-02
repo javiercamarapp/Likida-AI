@@ -7,10 +7,9 @@
 -- y con DOS rarezas a propósito, porque lo real las traerá:
 --   · `fecha_hora` es hora LOCAL de CDMX SIN zona (timestamp, no timestamptz);
 --   · la unidad se llama por su número económico («IN-001»), no por nuestro id.
--- El lector de tabla propia (contrato: src/lib/likida/demo_innovativos/contratos.ts)
--- tiene que resolver las dos. Mientras no exista, `public.posicion` YA trae lo
--- que el lector dejaría (proveedor 'tabla_propia'), para que las pantallas
--- (mapa, conductor, peajes) funcionen en el demo.
+-- El lector de tabla propia del producto (conectores/tabla_propia) resuelve las dos.
+-- Aquí `public.posicion` YA trae lo que el lector dejaría (proveedor 'tabla_propia'),
+-- para que las pantallas (mapa, conductor, peajes) funcionen en el demo sin conectar nada.
 --
 -- Rol de solo lectura: innovativos_demo_lector (NOLOGIN) solo puede SELECT en
 -- este esquema. Es el modelo del «usuario restringido sobre una vista/réplica».
