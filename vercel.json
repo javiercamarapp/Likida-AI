@@ -66,6 +66,10 @@
     {
       "path": "/api/cron/vigia",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/jornada-alertas",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
