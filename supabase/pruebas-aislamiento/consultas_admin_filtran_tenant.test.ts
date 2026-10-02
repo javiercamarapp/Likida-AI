@@ -295,7 +295,17 @@ const ALLOWLIST: Record<string, string> = {
 
 // Exención por cadena exacta: no libera otras consultas del módulo Cal.com.
 const CALCOM_LOOKUP = ".from('prospecto').select('id,estado,calcom_booking_id,calcom_booking_aliases').eq('correo_normalizado', correo).is('duplicado_de', null).limit(2)";
+// Exenciones por cadena exacta del Vigía (Agente 4, 0400): son las DOS consultas de lib/likida/vigia/repo.ts
+// que cruzan flotas a propósito; el resto del archivo (≈50 consultas) sigue vigilado por esta prueba.
+const VIGIA_CONTACTO_POR_TELEFONO = ".from('vigia_contacto').select(COLS_CONTACTO).eq('telefono', normalizarTelefonoWa(telefono)).in('estado', ['activo', 'baja']).order('id').limit(5)";
+const VIGIA_EN_ESPERA = ".from('vigia_conversacion').select(COLS_CONV).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).order('sin_respuesta_desde', { ascending: true }).order('id').limit(limite)";
 const EXENCIONES_CONSULTA = [{
+  archivo: 'src/lib/likida/vigia/repo.ts', tabla: 'vigia_contacto', cadena: VIGIA_CONTACTO_POR_TELEFONO,
+  razon: 'El webhook de WhatsApp solo trae el número del cliente: no existe todavía un tenant por el cual anclar. Un número ACTIVO pertenece a UNA sola flota (índice único parcial de la 0400) y el resto de la atención usa el tenantId del contacto que vuelve de aquí. Solo lo llama processor.ts tras la firma del webhook; no devuelve datos a ninguna pantalla.',
+}, {
+  archivo: 'src/lib/likida/vigia/repo.ts', tabla: 'vigia_conversacion', cadena: VIGIA_EN_ESPERA,
+  razon: 'La lista de trabajo del cron /api/cron/vigia barre las conversaciones en espera de TODAS las flotas con el agente encendido en una corrida (puertaCron + palanca global); cada acción posterior usa el tenantId de la propia conversación y la configuración se relee filtrada por esos tenants. Mismo molde que conductor/trabajo.ts.',
+}, {
   archivo: 'src/lib/admin/calcom.ts', tabla: 'prospecto', cadena: CALCOM_LOOKUP,
   razon: 'CRM global de LIKIDA (0105): tenant_id sólo existe al cerrar. Este SELECT por correo canónico y no duplicado decide 0/1/>1 para reconciliar no-show; la entrada productiva es cron/escalar tras puertaCron y la entrega usa el webhook firmado. No exime escrituras ni otras tablas o consultas.',
 }];
@@ -368,7 +378,7 @@ describe('exención estrecha del lookup CRM de Cal.com', () => {
   it('autoriza sólo la consulta revisada, no todo el archivo ni la tabla', () => {
     const archivo = 'src/lib/admin/calcom.ts';
     expect(ALLOWLIST[archivo]).toBeUndefined();
-    expect(EXENCIONES_CONSULTA[0].razon.length).toBeGreaterThan(100);
+    expect(EXENCIONES_CONSULTA.find((e) => e.archivo === archivo)!.razon.length).toBeGreaterThan(100);
     expect(consultaExenta(archivo, 'prospecto', CALCOM_LOOKUP)).toBe(true);
     expect(consultaExenta(archivo, 'viaje', CALCOM_LOOKUP)).toBe(false);
     expect(consultaExenta('src/lib/admin/otro.ts', 'prospecto', CALCOM_LOOKUP)).toBe(false);
