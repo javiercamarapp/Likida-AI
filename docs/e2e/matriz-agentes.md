@@ -43,13 +43,13 @@ Estado: **verde** = corrió con `heavy.sh` y pasa; **todo** = escrita como `it.t
 | 4 | 1 | 5 | 4 | 4 | 4 | `src/lib/likida/e2e/agente-04-vigia.e2e.test.ts` | verde (18); 3 todo (grupos 10 min, histórico, copiloto) |
 | 5 | 2 | 7 | 5 | 5 | 4 | `src/lib/likida/conductor/ciclo_completo.e2e.test.ts` (38 pruebas, ya existía) | verde; 7 todo en `agentes-pendientes-ola3.e2e.test.ts` (conciliación obligatoria, escalamiento a jefe de tráfico, API de validar) |
 | 6 | — | — | — | — | — | `src/lib/likida/e2e/agentes-pendientes-ola3.e2e.test.ts` | todo (5) — w3-autofactura |
-| 7 | 1 | 5 | 2 | 4 | 3 | `src/lib/likida/e2e/agente-07-cobranza.e2e.test.ts` | verde (15); 1 todo (cobranza por gasto) |
+| 7 | 1 | 6 | 2 | 4 | 3 | `src/lib/likida/e2e/agente-07-cobranza.e2e.test.ts` | verde (16); 1 todo (cobranza por gasto) |
 | 8 | 1 | 5 | 2 | 4 | 3 | `src/lib/likida/e2e/agente-08-escalacion.e2e.test.ts` | verde (15) |
 | 9 | 2 | 5 | 3 | 3 | 2 | `src/lib/likida/e2e/agente-09-buzon.e2e.test.ts` | verde (15); 2 todo (PDF/zip 0530, entrega al contador 0531) |
 | 10 | — | — | — | — | — | `src/lib/likida/e2e/agentes-pendientes-ola3.e2e.test.ts` | todo (6) — w3-gps-jornada |
 | 11 | 3 | 4 | 2 | 3 | 1+3 | `src/lib/likida/e2e/agente-11-comunicacion-operadores.e2e.test.ts` | verde (16); 1 todo (instrucciones del convenio) |
 | 12 | — | — | — | — | — | `src/lib/likida/e2e/agentes-pendientes-ola3.e2e.test.ts` | todo (5) — w3-gps-jornada (cron `jornada-alertas`) |
-| 13 | 2 | 6 | 3 | 3 | 3 | `src/lib/likida/e2e/agente-13-mis-reglas.e2e.test.ts` | verde (17); 1 todo (vista del respaldo por plantilla) |
+| 13 | 2 | 7 | 3 | 3 | 4 | `src/lib/likida/e2e/agente-13-mis-reglas.e2e.test.ts` | verde (19); 1 todo (vista del respaldo por plantilla) |
 | — | Convenios/perfiles; Orquestador y tablero en vivo; modo demo 20-oct | | | | | `src/lib/likida/e2e/agentes-pendientes-ola3.e2e.test.ts` | todo (6) — w3-convenios y streams aún sin construir |
 
 El arnés compartido vive en `src/lib/likida/e2e/db_memoria.fixture.ts` (base en memoria con `unique` → error 23505, RPC, `gt/neq`, defaults) y reutiliza los dobles que ya existían: `conductor/meta.fixture.ts` (Meta con ventana de 24 h, plantillas aprobadas y rate limit), `vigia/repo.fixture.ts`, `carta_porte_docs/{repo_falso,llm_falso,documentos_sinteticos,escenario}.fixture.ts` y `peajes/db_falsa.test.util.ts`.
@@ -68,7 +68,7 @@ El arnés compartido vive en `src/lib/likida/e2e/db_memoria.fixture.ts` (base en
 ## Interfaces esperadas de lo que construye la Ola 3 (para los `todo`)
 
 - **Conductor, conciliación obligatoria**: un «ya llegué» **sin posición GPS que lo respalde** queda `no_confirmado`, **no sella** el hito y aparece como excepción en el tablero; la posición tardía lo concilia (adenda del análisis del 1-oct). Escalamiento: aviso con botones → 2.º aviso → jefe de tráfico, con tiempos y contactos de la pantalla de configuración (w3-conductor-vigia 3106c28b). API: `POST /v1/hitos/{id}/validar` (ae0f416d).
-- **GPS**: `LECTORES_POSICION` con Wialon/Geotab/Navixy/genérico (`posiciones_proveedores.ts`), `/api/gps/push/{flota}` firmado con rotación e idempotencia, asentador común (poll y push), dispositivos huérfanos sin crear unidades, semáforo en vivo/atrasada/obsoleta. **Falta** el lector de **tabla propia** de Innovativos y el importador de geocercas (columnas: unidad, lat, lon, fecha_hora, velocidad, ignición; polígono o centro+radio).
+- **GPS**: `LECTORES_POSICION` con Wialon/Geotab/Navixy/genérico (`posiciones_proveedores.ts`), `/api/gps/push/{flota}` firmado con rotación e idempotencia, asentador común (poll y push), dispositivos huérfanos sin crear unidades, semáforo en vivo/atrasada/obsoleta. **Falta** el lector de **tabla propia** del cliente de demo y el importador de geocercas (columnas: unidad, lat, lon, fecha_hora, velocidad, ignición; polígono o centro+radio).
 - **Jornada**: cron `jornada-alertas` + plantillas nuevas del catálogo (w3-gps-jornada).
 - **Autofactura**: 0540 (paso humano), 0541 (cancelación SW sapien), 0542 (control de emisión real con lote supervisado y cupo diario), arnés `scripts/verificar-portal.mjs` (w3-autofactura).
 - **Buzón**: 0530 (PDF/zip/pareja XML+PDF con rastro por archivo y marca de revisión) y 0531 (entrega al contador con CSV+ZIP, reserva atómica, rebote libera) y el webhook de eventos de Resend (w3-buzon-cobranza-reglas; ya traen su propio E2E de ingesta en su rama).

@@ -33,7 +33,7 @@ describe('Agente 10 — GPS: lectores Wialon/Geotab/Navixy/genérico + PUSH + ta
   it.todo('DUPLICADO: el mismo lote de posiciones por poll y por push, o reenviado, no duplica filas (clave tenant+unidad+medida_en) y el push es idempotente');
   it.todo('FUERA DE ORDEN: posiciones atrasadas o fuera de secuencia no sobreescriben la «última posición»; el pin de WhatsApp es respaldo del GPS cuando este está obsoleto');
   it.todo('OTRO TENANT: el mismo device_id en dos flotas asienta cada lectura en SU unidad; dispositivos sin unidad se listan como huérfanos y NO crean camiones');
-  it.todo('TABLA PROPIA DE INNOVATIVOS (lector genérico de vista SQL de solo lectura / CSV-SFTP / endpoint + importador de geocercas): columnas unidad, lat, lon, fecha_hora, velocidad, ignición; geocercas polígono o centro+radio — pendiente de construir y de recibir el acceso del cliente (12-oct)');
+  it.todo('TABLA PROPIA DEL CLIENTE DE DEMO (lector genérico de vista SQL de solo lectura / CSV-SFTP / endpoint + importador de geocercas): columnas unidad, lat, lon, fecha_hora, velocidad, ignición; geocercas polígono o centro+radio — pendiente de construir y de recibir el acceso del cliente (12-oct)');
 });
 
 describe('Agente 12 — Jornada: alerta saliente al acercarse al tope (w3-gps-jornada, cron jornada-alertas, plantillas nuevas)', () => {
@@ -53,5 +53,5 @@ describe('Orquestador / chat unificado y tablero de viajes en vivo; MODO DEMO 20
   it.todo('FELIZ: una sola pestaña lee SAP/GPS/WhatsApp/convenios del tenant y responde de liquidación o supervisión citando la fuente; la IA NO decide temas delicados: escala a mesa de control o liquidación');
   it.todo('FALLO: si un agente falla, el orquestador lo notifica (no responde con el dato viejo como si fuera actual)');
   it.todo('OTRO TENANT: ninguna consulta cruza flotas; el tablero de viajes con ubicación en vivo filtra por tenant');
-  it.todo('MODO DEMO: tenant de demo de Innovativos que se puebla con SUS archivos reales el día que lleguen; importadores de GPS, geocercas, pases, liquidación y Carta Porte probados con fixtures sintéticos');
+  it.todo('MODO DEMO: tenant del cliente de demo que se puebla con SUS archivos reales el día que lleguen; importadores de GPS, geocercas, pases, liquidación y Carta Porte probados con fixtures sintéticos');
 });

@@ -231,5 +231,5 @@ describe('otro tenant', () => {
 });
 
 describe('salida en el formato del cliente (Ola 3)', () => {
-  it.todo('INTEGRACIÓN PENDIENTE (convenios/perfiles, w3-convenios): la salida directa al Excel/sistema de carga de Innovativos con SU layout configurable, medida contra documentos reales (exactitud sin medir hasta el 12-oct)');
+  it.todo('INTEGRACIÓN PENDIENTE (convenios/perfiles, w3-convenios): la salida directa al Excel/sistema de carga del cliente de demo con SU layout configurable, medida contra documentos reales (exactitud sin medir hasta el 12-oct)');
 });
