@@ -34,7 +34,7 @@ export const ORDEN_SEMAFORO: Semaforo[] = ['sin_reporte', 'atrasado', 'a_tiempo'
 
 const EXCEPCION: Record<TipoExcepcion, string> = {
   escalado_sin_atender: 'Escalado sin atender', sin_reporte: 'Sin reporte', atrasado: 'Atrasado', sin_coincidencia: 'Ubicación sin coincidencia',
-  llegada_sin_confirmar: 'Llegada sin confirmar',
+  llegada_sin_confirmar: 'Llegada sin confirmar', llegada_sin_sitio: 'Llegada sin sitio para conciliar',
   estadia_excedida: 'Estadía excedida', horas_incoherentes: 'Horas incoherentes',
 };
 const GRAVEDAD: Record<1 | 2 | 3, { texto: string; color: string }> = {
@@ -140,7 +140,8 @@ function modosDeExcepcion(e: Excepcion): ModoAccion[] {
     case 'sin_reporte':
     case 'atrasado': return e.hitoId ? ['capturar'] : [];
     case 'sin_coincidencia':
-    case 'llegada_sin_confirmar': return e.hitoId ? ['validar'] : [];
+    case 'llegada_sin_confirmar':
+    case 'llegada_sin_sitio': return e.hitoId ? ['validar'] : [];
     default: return [];
   }
 }

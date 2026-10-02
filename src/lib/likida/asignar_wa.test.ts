@@ -71,6 +71,8 @@ vi.mock('./operacion', () => ({
   asignarUnidad: (...a: unknown[]) => asignarUnidad(...a),
   avisarAlChofer: (...a: unknown[]) => avisarAlChofer(...a),
 }));
+const instruccionesAlCambiarOperador = vi.fn();
+vi.mock('./convenios/envio', () => ({ instruccionesAlCambiarOperador: (...a: unknown[]) => instruccionesAlCambiarOperador(...a) }));
 const reasignarOperador = vi.fn();
 vi.mock('./repo', () => ({ reasignarOperador: (...a: unknown[]) => reasignarOperador(...a) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -94,6 +96,8 @@ beforeEach(() => {
   asignarUnidad.mockReset();
   avisarAlChofer.mockReset();
   reasignarOperador.mockReset();
+  instruccionesAlCambiarOperador.mockReset();
+  instruccionesAlCambiarOperador.mockResolvedValue({ estado: 'sin_convenio' });
 });
 
 // ── El parser ──────────────────────────────────────────────────────────────
@@ -238,6 +242,30 @@ describe('reasignar chofer', () => {
     expect(r2).toContain('reasignado a *Pedro López*');
     // No se afirma la entrega del aviso: no hay dato que la sostenga.
     expect(r2).toContain('confirma en Despacho');
+  });
+
+  it('el chofer nuevo recibe también las instrucciones del convenio, con lo que dijo reasignarOperador, y el jefe lo sabe solo si salieron', async () => {
+    resolver.mockResolvedValue({ operadorId: 'op-pedro', nombre: 'Pedro López' });
+    getOpenViaje.mockResolvedValue('v1');
+    await atenderAsignacionOficina(JEFE, TEL, 'reasigna el viaje de Juan a Pedro', AHORA);
+    avisarAlChofer.mockResolvedValue(undefined);
+    const cambio = { cambio: true, operadorAnteriorId: 'op-juan' };
+    reasignarOperador.mockResolvedValue(cambio);
+    instruccionesAlCambiarOperador.mockResolvedValue({ estado: 'enviado', canal: 'texto' });
+    const r = await atenderAsignacionOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(instruccionesAlCambiarOperador).toHaveBeenCalledWith('t1', 'v1', cambio);
+    expect(r).toContain('instrucciones del convenio');
+  });
+
+  it('sin convenio, o con el envío rechazado, el jefe no lee una promesa falsa de instrucciones', async () => {
+    resolver.mockResolvedValue({ operadorId: 'op-pedro', nombre: 'Pedro López' });
+    getOpenViaje.mockResolvedValue('v1');
+    await atenderAsignacionOficina(JEFE, TEL, 'reasigna el viaje de Juan a Pedro', AHORA);
+    avisarAlChofer.mockResolvedValue(undefined);
+    instruccionesAlCambiarOperador.mockResolvedValue({ estado: 'rechazado', motivo: 'plantilla sin aprobar', reintentable: false });
+    const r = await atenderAsignacionOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(instruccionesAlCambiarOperador).toHaveBeenCalled();
+    expect(r).not.toContain('instrucciones del convenio');
   });
 
   it('si el nuevo chofer ya trae viaje abierto (choque permanente), se dice y NO se reintenta', async () => {

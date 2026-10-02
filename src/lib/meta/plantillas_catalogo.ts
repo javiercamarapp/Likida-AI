@@ -348,6 +348,16 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     textoVerificado: true, estado: 'nueva_para_aprobacion',
   },
   {
+    nombre: 'conductor_llegada_sin_confirmar_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
+    proposito: 'Avisar al jefe de tráfico que un chofer dijo «ya llegué» y ninguna posición lo respalda (o el viaje no tiene sitio contra el cual compararlo). Apagado por omisión: lo enciende cada flota en la configuración del Conductor.',
+    llamador: 'src/lib/likida/conductor/alertas_llegada.ts',
+    cuerpo: 'Aviso para el jefe de tráfico: {{1}} avisó que llegó a {{2}} (viaje {{3}}) y {{4}}. Revísalo en el tablero de hitos de Likida antes de darlo por bueno.',
+    ejemplos: ['Juan Pérez', 'la carga de Planta Zapopan', 'F-1042', 'ninguna posición la respalda todavía'],
+    variables: ['chofer', 'carga o descarga, con el sitio', 'folio', 'por qué quedó sin confirmar (una línea)'],
+    botones: [],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
     nombre: 'operador_invitacion_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'onboarding_operador',
     proposito: 'Invitar al chofer recién dado de alta (alta masiva o ficha) a escribirle a Likida: inicia su conversación y abre la ventana de 24 h. Solo se manda si la flota lo confirma.',
     llamador: 'src/lib/likida/invitacion_operador.ts',

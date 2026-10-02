@@ -133,12 +133,16 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Numero nombre="toleranciaUbicacionM" etiqueta="Tolerancia sobre el radio (m)" valor={valores.toleranciaUbicacionM} deshabilitada={off} ayuda="Supuesto; ajústalo con tus datos." />
           <Numero nombre="ventanaUbicacionMin" etiqueta="Ventana para comparar la posición (min)" valor={valores.ventanaUbicacionMin} deshabilitada={off} />
+          <Numero nombre="margenAcercamientoM" etiqueta="Margen de acercamiento a la planta (m)" valor={valores.margenAcercamientoM} deshabilitada={off}
+            ayuda="Cuántos metros antes del borde de la geocerca se le manda al chofer la calle de instrucciones. De 0 a 50,000; 5,000 de partida." />
         </div>
       </Seccion>
 
       <Seccion id="cfg-avisos" titulo="Avisos a la oficina y estadías">
         <Casilla nombre="avisarOficinaLlegada" etiqueta="Avisar a la oficina la hora exacta de cada llegada" marcada={config.avisarOficinaLlegada} deshabilitada={off} />
         <Casilla nombre="avisarOficinaSalida" etiqueta="Avisar a la oficina la hora exacta de cada salida" marcada={config.avisarOficinaSalida} deshabilitada={off} />
+        <Casilla nombre="avisarLlegadaSinConfirmar" etiqueta="Avisar al jefe de tráfico cuando un «ya llegué» no se confirma con ubicación" marcada={config.avisarLlegadaSinConfirmar} deshabilitada={off}
+          ayuda="Un solo aviso por llegada, después de unos minutos de gracia. Cubre también el viaje sin sitio asignado (nada con qué compararlo). Apagado, solo se ve como excepción en el tablero." />
         <div className="grid sm:grid-cols-2 gap-3">
           <Numero nombre="estadiaAlertaCargaMin" etiqueta="Alerta de estadía en carga (min)" valor={valores.estadiaAlertaCargaMin} deshabilitada={off} placeholder="vacío = sin alerta" ayuda="De 15 a 4,320. Vacío la apaga." />
           <Numero nombre="estadiaAlertaDescargaMin" etiqueta="Alerta de estadía en descarga (min)" valor={valores.estadiaAlertaDescargaMin} deshabilitada={off} placeholder="vacío = sin alerta" />

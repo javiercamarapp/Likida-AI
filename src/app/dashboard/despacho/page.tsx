@@ -8,6 +8,7 @@ import {
   getTableroOperacion, getViajesSinAsignar, getCargaOperadores, crearViaje, avisarAlChofer,
   asignarUnidad,
 } from '@/lib/likida/operacion';
+import { instruccionesAlCambiarOperador } from '@/lib/likida/convenios/envio';
 import { reasignarOperador, buscarCatalogo, contarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/likida/repo';
 import { alcanceDePatio, patioParaCrear } from '@/lib/auth/patio';
 import { crearOperador } from '@/lib/likida/administracion';
@@ -248,21 +249,27 @@ export default async function PaginaDespacho({
     const operadorId = typeof fd.get('operadorId') === 'string' ? (fd.get('operadorId') as string).trim().slice(0, 64) : '';
     if (!viajeId || !operadorId) return { error: 'Falta el viaje o el operador.' };
 
+    let cambio: Awaited<ReturnType<typeof reasignarOperador>>;
     try {
       // `reasignarOperador` verifica que el operador sea de ESTA flota y el
       // update ancla tenant — un id ajeno no encuentra fila.
-      await reasignarOperador(tenantId, viajeId, operadorId);
+      cambio = await reasignarOperador(tenantId, viajeId, operadorId);
     } catch (err) {
       logger.error('despacho.asignar.fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
       return { error: 'No se pudo asignar. Inténtalo de nuevo.' };
     }
+    let avisoFallo = false;
     try {
       await avisarAlChofer(tenantId, operadorId, viajeId);
     } catch (err) {
       // Asignado SÍ quedó; el aviso no salió — se dice y "Reavisar" existe.
       logger.error('despacho.aviso.fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
-      return { error: 'Quedó asignado, pero el aviso de WhatsApp no salió — usa Reavisar en "En curso".' };
+      avisoFallo = true;
     }
+    // Después del aviso del viaje, las instrucciones del convenio (primera asignación o cambio de chofer). Nunca lanza, y un
+    // aviso que no salió no las frena: el chofer ya es el del viaje.
+    await instruccionesAlCambiarOperador(tenantId, viajeId, cambio);
+    if (avisoFallo) return { error: 'Quedó asignado, pero el aviso de WhatsApp no salió — usa Reavisar en "En curso".' };
     redirect(destino);
   }
 

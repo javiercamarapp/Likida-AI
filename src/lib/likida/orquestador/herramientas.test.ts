@@ -20,7 +20,7 @@ function mundos() {
   const sano = viajeTablero('a1', { citaOrigenEn: futuro, terminalId: 'tA', terminalNombre: 'Guadalajara', clienteId: 'cA', clienteNombre: 'Cliente Alfa' });
   const mudo = viajeTablero('a2', { aceptadoEn: hace(300), terminalId: 'tB', terminalNombre: 'Monterrey', clienteId: 'cB', clienteNombre: 'Cliente Beta' });
   const hs = [
-    ...hitosDe('a1', { llegada_carga: { estado: 'recibido', fuente: 'texto', mensajeEn: hace(50), recibidoEn: hace(50), contactoNombre: 'Recibidor Privado', contactoArea: 'Almacén' } }),
+    ...hitosDe('a1', { llegada_carga: { estado: 'validado', validadoPor: 'gps', validadoEn: hace(45), fuente: 'texto', mensajeEn: hace(50), recibidoEn: hace(50), contactoNombre: 'Recibidor Privado', contactoArea: 'Almacén' } }),
     ...hitosDe('a2'),
   ];
   const ajeno = viajeTablero('b1', { citaOrigenEn: futuro, terminalNombre: 'Tijuana', clienteNombre: 'Cliente de Otra Flota' });
@@ -202,7 +202,7 @@ describe('detalle_viaje', () => {
     const r = await llamar('detalle_viaje', { folio: 'f-a1' });
     expect(r.encontrado).toBe(true);
     expect(r.linea).toHaveLength(5);
-    expect(r.linea[0]).toMatchObject({ estado: 'recibido' });
+    expect(r.linea[0]).toMatchObject({ estado: 'validado' });
     expect(r.gps.frescura).toBe('en_vivo');
   });
   it('folio vacío o de un viaje que no está en curso: lo dice', async () => {

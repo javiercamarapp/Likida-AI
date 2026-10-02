@@ -32,7 +32,7 @@ const FRESCURA: Record<NivelFrescura, { etiqueta: string; color: string }> = {
 };
 export const ETIQUETA_EXCEPCION: Record<TipoExcepcionViaje, string> = {
   escalado_sin_atender: 'Escalado sin atender', sin_reporte: 'Sin reporte', atrasado: 'Atrasado', sin_coincidencia: 'Ubicación sin coincidencia',
-  llegada_sin_confirmar: 'Llegada sin confirmar', estadia_excedida: 'Estadía excedida', horas_incoherentes: 'Horas incoherentes',
+  llegada_sin_confirmar: 'Llegada sin confirmar', llegada_sin_sitio: 'Llegada sin sitio para conciliar', estadia_excedida: 'Estadía excedida', horas_incoherentes: 'Horas incoherentes',
   sin_senal_de_vida: 'Sin señal de vida', gps_obsoleto: 'GPS obsoleto', sin_posicion: 'Sin posición', sin_unidad: 'Sin tractor asignado',
 };
 const GRAVEDAD: Record<1 | 2 | 3, { texto: string; color: string }> = {

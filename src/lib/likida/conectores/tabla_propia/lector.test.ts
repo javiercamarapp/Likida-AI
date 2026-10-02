@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { Http, PeticionHttp } from '../tipos';
 import { ErrorTablaPropia, type LectorTablaPropia } from './contrato';
-import { crearLectorTablaPropia, leerPosicionesTablaPropia } from './lector';
+import { crearLectorTablaPropia, leerPosicionesTablaPropia, MINUTOS_DE_BARRIDO_LARGO, ventanaDeLaVuelta } from './lector';
 import { probarTablaPropia, TABLA_PROPIA } from './conector';
 import type { EjecutorSql } from './sql';
 
@@ -181,5 +181,61 @@ describe('el conector del catálogo', () => {
     expect(buena.ok).toBe(true);
     expect(buena.verificadoContra).toBe('https://api.ejemplo.com/posiciones');
     expect(await probarTablaPropia(EP, httpDe([ok('', 401)]).http)).toMatchObject({ ok: false, sobreLaCredencial: 'no_sirve' });
+  });
+});
+
+describe('M2: el búfer tardío — barrido largo por hora y tope visible', () => {
+  const SQL = { modo: 'sql_solo_lectura', sql_host: 'replica.ejemplo.com', sql_base: 'flota', sql_usuario: 'lectura', sql_clave: 'x', vista: 'esquema.posiciones', columnas: '{"unidad":"eco","lat":"lat","lon":"lon","fecha_hora":"ts"}' };
+  const HORA_EN_PUNTO = Date.parse('2026-10-20T14:00:00.000Z'); // 08:00 en CDMX
+  const registro = (ts: string) => ({ unidad: 'UN-1', lat: '25.5', lon: '-100.5', fecha_hora: ts }); // el SELECT devuelve cada columna con su alias
+  function ejecutorQueGuarda(filas: Array<Record<string, unknown>> = []) {
+    const consultas: Array<{ text: string; values: unknown[] }> = [];
+    return { consultas, ejecutor: { ejecutar: async (c: { text: string; values: unknown[] }) => { consultas.push(c); return filas; } } as unknown as EjecutorSql };
+  }
+  const desdeDe = (c: { values: unknown[] }) => String(c.values[0]);
+
+  it('ventanaDeLaVuelta: normal casi siempre; la ventana larga SOLO en la primera vuelta de la hora y SOLO si la flota la encendió', () => {
+    const cfg = { ventanaMinutos: 30, barridoLargoMinutos: 360 };
+    expect(ventanaDeLaVuelta(cfg, Date.parse('2026-10-20T14:00:00Z'))).toBe(360);
+    expect(ventanaDeLaVuelta(cfg, Date.parse('2026-10-20T14:04:59Z'))).toBe(360);
+    expect(ventanaDeLaVuelta(cfg, Date.parse('2026-10-20T14:05:00Z'))).toBe(30);
+    expect(ventanaDeLaVuelta(cfg, Date.parse('2026-10-20T14:35:00Z'))).toBe(30);
+    expect(ventanaDeLaVuelta({ ventanaMinutos: 30, barridoLargoMinutos: 0 }, HORA_EN_PUNTO)).toBe(30);
+    expect(ventanaDeLaVuelta({ ventanaMinutos: 120, barridoLargoMinutos: 60 }, HORA_EN_PUNTO)).toBe(120); // un barrido más corto que la ventana no la acorta
+    expect(MINUTOS_DE_BARRIDO_LARGO).toBe(5); // el cron corre cada 5 min: exactamente una vuelta por hora
+  });
+
+  it('con el barrido largo encendido, la vuelta de la hora en punto lee 6 h hacia atrás; las demás, la ventana normal', async () => {
+    const e1 = ejecutorQueGuarda();
+    await leerPosicionesTablaPropia({ ...SQL, barrido_largo_minutos: '360' }, httpDe([]).http, { ahora: () => HORA_EN_PUNTO, dormir: async () => undefined, ejecutor: e1.ejecutor });
+    expect(desdeDe(e1.consultas[0])).toBe('2026-10-20 02:00:00'); // 14:00Z - 6 h = 08:00Z = 02:00 CDMX
+
+    const e2 = ejecutorQueGuarda();
+    await leerPosicionesTablaPropia({ ...SQL, barrido_largo_minutos: '360' }, httpDe([]).http, { ahora: () => HORA_EN_PUNTO + 10 * 60_000, dormir: async () => undefined, ejecutor: e2.ejecutor });
+    expect(desdeDe(e2.consultas[0])).toBe('2026-10-20 07:40:00'); // 14:10Z - 30 min = 13:40Z = 07:40 CDMX
+  });
+
+  it('APAGADO por omisión: la hora en punto lee la ventana normal', async () => {
+    const e = ejecutorQueGuarda();
+    await leerPosicionesTablaPropia(SQL, httpDe([]).http, { ahora: () => HORA_EN_PUNTO, dormir: async () => undefined, ejecutor: e.ejecutor });
+    expect(desdeDe(e.consultas[0])).toBe('2026-10-20 07:30:00');
+  });
+
+  it('el búfer tardío se recupera en el barrido largo: un punto de hace 3 h entra, y el de la ventana normal también', async () => {
+    const e = ejecutorQueGuarda([registro('2026-10-20 05:10:00'), registro('2026-10-20 07:55:00')]);
+    const r = await leerPosicionesTablaPropia({ ...SQL, barrido_largo_minutos: '360' }, httpDe([]).http, { ahora: () => HORA_EN_PUNTO, dormir: async () => undefined, ejecutor: e.ejecutor });
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    expect(r.posiciones.map((p) => p.medidaEn)).toEqual(['2026-10-20T11:10:00.000Z', '2026-10-20T13:55:00.000Z']);
+  });
+
+  it('si la lectura SQL llega al tope de filas lo dice (la vuelta sale parcial): lo que se pierde son los puntos más viejos de la ventana', async () => {
+    const e = ejecutorQueGuarda([registro('2026-10-20 07:55:00'), registro('2026-10-20 07:54:00')]);
+    const r = await leerPosicionesTablaPropia({ ...SQL, limite_filas: '2' }, httpDe([]).http, { ahora: () => AHORA, dormir: async () => undefined, ejecutor: e.ejecutor });
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    expect(r.posiciones).toHaveLength(2);
+    expect(r.invalidas).toBe(1); // el aviso de tope cuenta como lectura parcial, no como «todo bien»
+    const sinTope = ejecutorQueGuarda([registro('2026-10-20 07:55:00')]);
+    const r2 = await leerPosicionesTablaPropia({ ...SQL, limite_filas: '2' }, httpDe([]).http, { ahora: () => AHORA, dormir: async () => undefined, ejecutor: sinTope.ejecutor });
+    expect(r2).toMatchObject({ ok: true, invalidas: 0 });
   });
 });

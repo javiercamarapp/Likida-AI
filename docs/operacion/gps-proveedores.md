@@ -39,6 +39,20 @@ inventa una unidad. Lo que no se entiende se **rechaza con su motivo** (lat/lon 
 fecha ilegible, velocidad ≥ 250): no se «arregla». Cada vuelta lee una ventana (30 min por omisión) y repetirla
 es seguro (idempotente).
 
+**El búfer tardío (decisión M2, Ola 4a).** La ventana filtra por `fecha_hora` (cuándo se MIDIÓ el punto), no por cuándo
+llegó a su tabla: un tractor que reaparece tras un tramo sin señal sube su búfer de golpe y esos puntos quedan atrás de
+la ventana corta de cada vuelta, así que no se leen nunca. Se decidió **no** filtrar por «llegada» y, en su lugar, ofrecer
+un **barrido largo configurable**: (1) una columna de llegada exige que su tabla la tenga y no la hemos visto (lo que se
+pidió son unidad, lat, lon, fecha_hora, velocidad e ignición, y su tabla puede ser de «posición al momento», sin historia,
+donde ninguna ventana recupera nada); (2) el barrido funciona con cualquier modo (SQL, CSV, endpoint) y no depende de su
+esquema; (3) repetir lectura es seguro, así que el único costo es volumen, y por eso **nace apagado**.
+`barrido_largo_minutos` (0 = apagado; 60 a 1,440 y mayor que la ventana): la vuelta de los primeros 5 minutos de cada hora
+UTC (una por hora con el cron de 5 min) lee tanto hacia atrás. Sin estado: una vuelta perdida solo lo atrasa una hora.
+Además, **si la lectura SQL llega a `limite_filas` lo dice** (la consulta ordena de la más reciente a la más vieja, así que
+lo que el tope pierde son justo los puntos tardíos) y la vuelta sale parcial. Con los datos reales del 12-oct se mide el
+retraso típico (diferencia entre `fecha_hora` y la llegada) y se fija el valor; si su tabla trae una columna de llegada, se
+reabre la decisión.
+
 **Backoff, latido y cron:** no hay un cron nuevo; `tabla_propia` está en `LECTORES_POSICION`, así que lo recorre el
 cron `gps` con el backoff por clase de falla de la 0500 (credencial/formato → espera larga y se dice;
 proveedor → espera corta) y el mismo latido. Filas sucias hacen el poll **parcial**, no «sano».

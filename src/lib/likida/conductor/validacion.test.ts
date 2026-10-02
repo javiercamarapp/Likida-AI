@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  debeReintentarseValidacion, evaluarUbicacion, posicionMasCercanaEnTiempo, textoVeredicto,
+  debeReintentarseValidacion, evaluarUbicacion, llegadaPorConfirmar, llegadaSinSitio, posicionMasCercanaEnTiempo, textoVeredicto,
   type EntradaValidacion, type PosicionComparada, type SitioValidable,
 } from './validacion';
 
@@ -144,5 +144,39 @@ describe('un pin descartado porque el GPS aún no llega', () => {
   it('dice «posición de otra hora», no «sin ubicación» (adversarial ronda 03)', () => {
     expect(evaluarUbicacion(entrada({ posicion: null, gpsPendiente: true }))).toMatchObject({ resultado: 'sin_dato', motivo: 'ubicacion_fuera_de_ventana' });
     expect(evaluarUbicacion(entrada({ posicion: null }))).toMatchObject({ resultado: 'sin_dato', motivo: 'sin_ubicacion' });
+  });
+});
+
+describe('llegadaSinSitio: el «ya llegué» que no se pudo conciliar porque el viaje no trae sitio', () => {
+  const llegada = { tipo: 'llegada_carga', estado: 'recibido', fuente: 'texto' };
+  const sinSitio = { resultado: 'sin_dato', motivo: 'sin_sitio' };
+
+  it('sin sitio y sin veredicto, o con el veredicto «sin sitio»: sí', () => {
+    expect(llegadaSinSitio(llegada, null, true, false)).toBe(true);
+    expect(llegadaSinSitio({ ...llegada, tipo: 'llegada_descarga' }, undefined, true, false)).toBe(true);
+    expect(llegadaSinSitio(llegada, sinSitio, true, true)).toBe(true);
+  });
+
+  it('con sitio y sin veredicto NO (eso es «por confirmar»), ni con otro veredicto', () => {
+    expect(llegadaSinSitio(llegada, null, true, true)).toBe(false);
+    expect(llegadaSinSitio(llegada, { resultado: 'sin_dato', motivo: 'sin_ubicacion' }, true, true)).toBe(false);
+    expect(llegadaSinSitio(llegada, { resultado: 'validado', motivo: null }, true, true)).toBe(false);
+    expect(llegadaSinSitio(llegada, { resultado: 'sin_coincidencia', motivo: null }, true, true)).toBe(false);
+  });
+
+  it('no aplica a lo declarado por la oficina, a hitos que no son llegadas, a los no registrados ni con la validación apagada', () => {
+    expect(llegadaSinSitio({ ...llegada, fuente: 'oficina' }, null, true, false)).toBe(false);
+    expect(llegadaSinSitio({ ...llegada, tipo: 'salida_carga' }, null, true, false)).toBe(false);
+    expect(llegadaSinSitio({ ...llegada, estado: 'validado' }, null, true, false)).toBe(false);
+    expect(llegadaSinSitio({ ...llegada, estado: 'esperado' }, null, true, false)).toBe(false);
+    expect(llegadaSinSitio(llegada, null, false, false)).toBe(false);
+  });
+
+  it('nunca coincide con «por confirmar»: son excepciones distintas del mismo «ya llegué»', () => {
+    for (const haySitio of [true, false]) {
+      for (const v of [null, sinSitio, { resultado: 'sin_dato', motivo: 'sin_ubicacion' }, { resultado: 'sin_coincidencia', motivo: null }, { resultado: 'validado', motivo: null }]) {
+        expect(llegadaSinSitio(llegada, v, true, haySitio) && llegadaPorConfirmar(llegada, v, true, haySitio), JSON.stringify([v, haySitio])).toBe(false);
+      }
+    }
   });
 });

@@ -123,3 +123,62 @@ describe('acercarInstrucciones', () => {
     expect(enviados).toHaveLength(0);
   });
 });
+
+describe('instruccionesAlCambiarOperador (primera asignación y reasignación)', () => {
+  const nuevoChofer = () => mundo.poner('operador', { tenant_id: A, nombre: 'Pedro Gómez', telefono: '5213399998888' });
+
+  it('primera asignación posterior: un viaje creado SIN chofer liga el convenio y le manda las instrucciones al que se le asigna', async () => {
+    const sinChofer = String(mundo.poner('viaje', { tenant_id: A, cliente_id: mundo.tablas.cliente[0].id, operador_id: null, folio: 'F-2000', origen: 'Zapopan', destino: 'Tlaquepaque', estatus: 'abierto' }).id);
+    const pedro = nuevoChofer();
+    mundo.tablas.viaje.find((v) => v.id === sinChofer)!.operador_id = pedro.id; // lo que hace reasignarOperador
+    const r = await envio.instruccionesAlCambiarOperador(A, sinChofer, { cambio: true, operadorAnteriorId: null }, puertos());
+    expect(r).toEqual({ estado: 'enviado', canal: 'texto' });
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0]).toMatchObject({ telefono: '5213399998888', contexto: 'convenios.despacho' });
+    expect(enviados[0].texto).toContain('Puerta 3, lado poniente');
+  });
+
+  it('reasignación: lo ya enviado al chofer anterior se le manda también al nuevo, una vez', async () => {
+    expect(await envio.despacharInstrucciones(A, viajeId, puertos())).toMatchObject({ estado: 'enviado' });
+    expect(enviados).toHaveLength(1);
+
+    const pedro = nuevoChofer();
+    mundo.tablas.viaje.find((v) => v.id === viajeId)!.operador_id = pedro.id;
+    const r = await envio.instruccionesAlCambiarOperador(A, viajeId, { cambio: true, operadorAnteriorId: String(mundo.tablas.operador[0].id) }, puertos());
+    expect(r).toEqual({ estado: 'enviado', canal: 'texto' });
+    expect(enviados).toHaveLength(2);
+    expect(enviados[1]).toMatchObject({ telefono: '5213399998888', plantilla: 'convenio_instrucciones_despacho_v1' });
+    expect(enviados[1].texto).toContain('Puerta 3, lado poniente');
+    // y un segundo gesto idéntico no duplica: el sello del despacho volvió a quedar puesto
+    expect(await envio.despacharInstrucciones(A, viajeId, puertos())).toEqual({ estado: 'ya_enviado' });
+  });
+
+  it('reasignar reinicia también los avisos de acercamiento ya mandados, para que el chofer nuevo los reciba al llegar', async () => {
+    await envio.despacharInstrucciones(A, viajeId, puertos());
+    Object.assign(mundo.tablas.viaje_convenio[0], { acercamiento_origen_enviado_en: new Date().toISOString(), acercamiento_origen_canal: 'texto' });
+    await envio.instruccionesAlCambiarOperador(A, viajeId, { cambio: true, operadorAnteriorId: String(mundo.tablas.operador[0].id) }, puertos());
+    expect(mundo.tablas.viaje_convenio[0].acercamiento_origen_enviado_en).toBeNull();
+    expect(mundo.tablas.viaje_convenio[0].acercamiento_origen_canal).toBeNull();
+  });
+
+  it('el mismo chofer (el gesto no cambió nada) NO recibe el mensaje otra vez', async () => {
+    await envio.despacharInstrucciones(A, viajeId, puertos());
+    const r = await envio.instruccionesAlCambiarOperador(A, viajeId, { cambio: false, operadorAnteriorId: String(mundo.tablas.operador[0].id) }, puertos());
+    expect(r).toEqual({ estado: 'sin_cambio' });
+    expect(enviados).toHaveLength(1);
+  });
+
+  it('un viaje cuyo cliente no tiene convenio no manda nada y no lanza; tampoco una base sin la 0580', async () => {
+    const otro = mundo.poner('cliente', { tenant_id: A, nombre: 'Sin convenio' });
+    const v = String(mundo.poner('viaje', { tenant_id: A, cliente_id: otro.id, operador_id: null, folio: 'F-3', estatus: 'abierto' }).id);
+    expect(await envio.instruccionesAlCambiarOperador(A, v, { cambio: true, operadorAnteriorId: null }, puertos())).toEqual({ estado: 'sin_convenio' });
+    mundo.ausentes.add('viaje_convenio');
+    expect(await envio.instruccionesAlCambiarOperador(A, viajeId, { cambio: true, operadorAnteriorId: 'x' }, puertos())).toEqual({ estado: 'no_disponible' });
+    expect(enviados).toHaveLength(0);
+  });
+
+  it('un doble que no informa el cambio (undefined) se trata como «cambió»', async () => {
+    const r = await envio.instruccionesAlCambiarOperador(A, viajeId, undefined, puertos());
+    expect(r).toMatchObject({ estado: 'enviado' });
+  });
+});

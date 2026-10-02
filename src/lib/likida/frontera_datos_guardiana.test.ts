@@ -235,8 +235,16 @@ import { join, relative } from 'node:path';
 // fallidos del Vigía, folio de un viaje). Todo lo demás COMPONE los lectores que cada agente ya tiene (`conductor/repo_validacion.ts`,
 // `vigia/repo.ts`, `buzon/repo.ts`, `agentes/cobranza*.ts`, `autofactura/control_emision_repo.ts`): no abre una segunda ruta a esos datos.
 // Integración ola 3b con el orquestador: 284/1,784 + (1/7) = 285 / 1,791 (se re-mide con el barrido).
+// OLA 4a, paquete A «conductor-gps»: 0 archivos y +14 llamadas (1,791 → 1,805), todas en archivos que ya contaban — funcionalidad nueva, no
+// código migrado, cada pieza junta SU acceso en el repo del módulo:
+//   · `convenios/repo.ts` (+12): reiniciar los sellos de envío al cambiar de chofer (1), listar los viajes abiertos con su convenio ligado
+//     y las opciones del cliente (5) y corregir a mano el convenio de un viaje (6: viaje, convenio, instrucciones, update/insert de la
+//     fila ligada y los sitios que pasan al viaje);
+//   · `conductor/trabajo.ts` (+1): qué viajes traen sitio de carga/descarga, para distinguir «sin posición» de «sin sitio» en el aviso
+//     de llegada sin confirmar (lectura que cruza flotas, como el resto del archivo);
+//   · `conductor/repo.ts` (+1): el reintento del guardado de la config contra una base sin la 0604.
 const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 285;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_791;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_805;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

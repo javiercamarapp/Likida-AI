@@ -21,7 +21,8 @@ sistema.
    le mandan al operador las de momento `despacho`/`ambos`. Si el viaje no traía sitios de catálogo y el convenio sí,
    se los pasa (solo donde estaban vacíos) para que el Conductor pueda validar y acercar contra esa planta.
 3. **Al acercarse a la planta** (cron `conductor-hitos`, `convenios/acercamiento.ts`): si la última posición del tractor
-   está a menos de *radio de la geocerca + 5 km* de la planta que toca (la de carga hasta que sale de cargar; luego la
+   está a menos de *radio de la geocerca + margen de acercamiento* de la planta que toca (el margen es de cada flota,
+   `margenAcercamientoM` en la configuración del Conductor, de 0 a 50,000 m; 5 km de partida) (la de carga hasta que sale de cargar; luego la
    de descarga), se le mandan **solo** las instrucciones de acercamiento de esa planta, **una vez por planta** (cada planta
    tiene su propio sello: llegar a la de carga y luego a la de descarga son dos avisos).
 4. **«¿Por dónde entro?»** (`convenios/pregunta.ts`, en el processor antes del Conductor y del agente): el operador
@@ -62,6 +63,18 @@ instrucción solo define el convenio. Re-subir el mismo archivo **actualiza, no 
 archivo ya no trae se quitan (el archivo manda). Acepta `.csv` (UTF-8 con o sin BOM, o Windows-1252) y `.xlsx`.
 La plantilla descargable trae una fila de ejemplo que el importador descarta.
 
+## Reasignar y corregir (Ola 4a, paquete A)
+
+- **Reasignar el viaje, o asignarlo por primera vez** (un viaje creado sin chofer): el chofer nuevo recibe las instrucciones
+  del convenio igual que si el viaje se hubiera creado con él (`convenios/envio.ts`, `instruccionesAlCambiarOperador`).
+  Si había otro chofer, los sellos de envío (despacho y acercamiento a cada planta) se reinician para que todo salga una vez
+  hacia el nuevo; si el gesto no cambió al chofer, no se manda nada. Pasa desde `/dashboard/[id]`, desde Despacho y desde la
+  asignación por WhatsApp de la oficina. Nunca lanza ni deshace la asignación.
+- **Corregir a mano el convenio ligado a un viaje** (`/dashboard/convenios`, sección «Convenio ligado a cada viaje en curso»,
+  dueño y jefe de tráfico): elige otro convenio activo **del mismo cliente** (o «sin convenio»), se vuelve a tomar la foto de
+  instrucciones, la fila queda `ligado_por = 'manual'` (el despacho automático ya no la vuelve a elegir; sirve cuando varios
+  convenios empatan) y, si se marca, se mandan de nuevo las instrucciones al operador. Un viaje liquidado ya no se corrige.
+
 ## Qué falta (externo o decisión)
 
 - **Aplicar 0580 en producción**, con respaldo previo (autorización de Javier). Hasta entonces la pantalla dice «falta
@@ -71,11 +84,8 @@ La plantilla descargable trae una fila de ejemplo que el importador descarta.
   ventana de 24 h el mensaje sale como texto libre; fuera de ella, sin plantilla aprobada, no sale y queda en el log.
 - **Qué campo de SU sistema** recibe la «calle de instrucciones»: hoy se entrega CSV y texto para pegar. Una escritura
   directa en su sistema depende de su equipo de sistemas (no simulada).
-- **El margen de acercamiento (5 km)** es una constante, no configuración por flota; y el aviso depende de que el
-  tractor tenga posición reciente (GPS o pin): sin posición no se manda.
-- **Reasignar el viaje a otro operador** después de despachar no reenvía las instrucciones (el envío ya está sellado
-  para ese viaje). Pregunta abierta de producto.
-- **Corrección manual del convenio de un viaje** (`ligado_por = 'manual'` existe en el esquema, sin pantalla todavía).
+- **El aviso de acercamiento depende de que el tractor tenga posición reciente (GPS o pin)**: sin posición no se manda.
+  El margen ya se ajusta por flota (`/dashboard/agentes/conductores/configuracion`, «Margen de acercamiento a la planta»).
 - Importar `convenio_comercial` por pantalla de edición (hoy solo por archivo).
 
 ## Dónde está el código

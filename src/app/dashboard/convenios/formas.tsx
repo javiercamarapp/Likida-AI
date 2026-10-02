@@ -42,3 +42,28 @@ export function FormaImportarConvenios({ accion }: { accion: AccionConvenio }) {
     </form>
   );
 }
+
+export interface OpcionCorregir { id: string; nombre: string }
+
+/** Una fila por viaje: elegir el convenio correcto del cliente (o «sin convenio») y, si se quiere, volver a mandar las instrucciones. */
+export function FormaCorregirConvenio({ accion, viajeId, folio, actual, opciones }: {
+  accion: AccionConvenio; viajeId: string; folio: string; actual: string | null; opciones: OpcionCorregir[];
+}) {
+  const [estado, enviar, pendiente] = useActionState(accion, null);
+  return (
+    <form action={enviar} className="flex items-end gap-2 flex-wrap" aria-label={`Corregir el convenio del viaje ${folio}`}>
+      <input type="hidden" name="viajeId" value={viajeId} />
+      <label className="block min-w-0"><span className={ETIQUETA}>Convenio del viaje</span>
+        <select name="convenioId" defaultValue={actual ?? ''} className={`${CAMPO} max-w-[260px]`}>
+          <option value="">Sin convenio (no mandar instrucciones)</option>
+          {opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+        </select>
+      </label>
+      <label className="flex items-center gap-1.5 text-[12px] h-9"><input type="checkbox" name="reenviar" value="si" defaultChecked />Mandar de nuevo las instrucciones al operador</label>
+      <button type="submit" disabled={pendiente} className="h-9 px-3 rounded-lg text-[12.5px] font-medium hairline disabled:opacity-50" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+        {pendiente ? 'Guardando…' : 'Corregir convenio'}
+      </button>
+      <div className="basis-full"><Aviso r={estado} /></div>
+    </form>
+  );
+}
