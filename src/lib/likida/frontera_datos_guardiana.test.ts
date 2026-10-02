@@ -172,8 +172,14 @@ import { join, relative } from 'node:path';
 // 259 → 268 archivos y 1,347 → 1,580 llamadas (seguridad +2/+12, producto +1/+24,
 // Conductor +3/+85, Vigía +1/+57, Carta Porte +2/+55); cada tramo está explicado arriba
 // y todo es funcionalidad nueva, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 268;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_580;
+//
+// LOOP PUNTA A PUNTA, W3 «GPS/Jornada» (2-oct-2026): 268 → 269 archivos y 1,580 → 1,585
+// llamadas (medido contra la rama integradora). El único módulo nuevo con acceso directo es
+// `gps_push/datos.ts`, que junta en UN archivo el acceso del push de posiciones (secreto por
+// flota, rotación y salud por RPC); las llamadas nuevas de `sincronizar_gps.ts` son el registro
+// de dispositivos huérfanos. Funcionalidad nueva, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 269;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_585;
 
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
