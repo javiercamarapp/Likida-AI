@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { connection } from 'next/server';
 import { Inter, Inter_Tight, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
 import { exigirLegalEnProduccion } from '@/lib/legal/config';
@@ -44,7 +45,11 @@ export const metadata: Metadata = {
 // ninguna renderiza.
 export const viewport = { width: 'device-width', initialScale: 1 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // CSP con nonce en TODAS las rutas (Ola 9b): Next solo puede estampar el nonce por petición en páginas
+  // dinámicas. `connection()` en el layout raíz las vuelve dinámicas (sin caché de CDN); decisión de Javier
+  // del 2-oct-2026. Ver docs/operacion/csp.md. Las rutas /api y los metadatos (sitemap, robots) no pasan por aquí.
+  await connection();
   exigirLegalEnProduccion();
   return (
     <html lang="es" className={`${inter.variable} ${interTight.variable} ${plexMono.variable}`}>
