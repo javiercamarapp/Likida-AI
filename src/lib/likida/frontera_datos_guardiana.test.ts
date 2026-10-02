@@ -178,8 +178,11 @@ import { join, relative } from 'node:path';
 //     y la sección de timbrado; vinculación asistida (0540): `autofactura/vinculacion_remota_repo.ts`, que junta TODO el acceso
 //     a datos del módulo (cinco RPC atómicas y las dos lecturas), y la llamada a `purgar_vinculacion_portal` en el cron de
 //     purga. Funcionalidad nueva, no código migrado. Medido: 268 → 270 archivos, 1,580 → 1,591 llamadas.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 270;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_591;
+//   · control de la emisión real (0542): `autofactura/control_emision_repo.ts` junta TODO el acceso a datos del módulo
+//     (puertos del control, RPC atómicas de cupo/lote/fase y lecturas del tablero) y la pantalla lee tres de ellas.
+//     Funcionalidad nueva. Medido: 270 → 271 archivos, 1,591 → 1,602 llamadas.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 271;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_602;
 
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
