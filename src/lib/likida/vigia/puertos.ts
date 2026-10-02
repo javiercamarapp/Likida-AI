@@ -70,6 +70,13 @@ export interface Destinatario {
   telefono: string;
 }
 
+/**
+ * Condición para que una escritura del BARRIDO no pise a quien contestó mientras corría: solo se aplica si el hilo sigue en el MISMO
+ * ciclo de espera que se leyó (`sin_respuesta_desde` igual; `null` = ya no esperaba, nunca coincide) y, si se pide, su nivel de
+ * escalamiento sigue por debajo del que se va a escribir. `actualizarConversacion` devuelve `false` si no se aplicó.
+ */
+export interface GuardaConversacion { sinRespuestaDesde: string; nivelMenorA?: number }
+
 export interface RepoVigia {
   config(tenantId: string): Promise<ConfigVigia>;
   /** 0647: las respuestas rápidas APROBADAS de la flota. Falla hacia `[]` (el borrador sale como siempre), nunca lanza por una base sin migrar. */
@@ -106,7 +113,7 @@ export interface RepoVigia {
     viajeId: string | null; molestiaNivel: number; molestiaMotivos: string[]; molestiaEn: string | null;
     escalamientoNivel: number; escaladoEn: string | null; control: 'agente' | 'humano'; tomadaPor: string | null; tomadaEn: string | null;
     atendidaEn: string | null; atendidaPor: string | null;
-  }>): Promise<void>;
+  }>, guarda?: GuardaConversacion): Promise<boolean>;
   /** El cliente fue atendido: se apaga el reloj del SLA, la insistencia y la escalera. */
   marcarRespondida(tenantId: string, conversacionId: string, ahora: Date): Promise<void>;
   cerrarConversacion(tenantId: string, conversacionId: string, ahora: Date): Promise<void>;
