@@ -16,7 +16,7 @@ export interface DbMemoria {
   tablas: Record<string, Fila[]>;
   llamadas: Llamada[];
   /** Hace fallar `tabla.op` (select/insert/update/delete/upsert/rpc:nombre) con ese mensaje. */
-  fallar: (clave: string, mensaje: string) => void;
+  fallar: (clave: string, mensaje: string, cuando?: (filtros: Array<[string, string, unknown]>) => boolean) => void;
   cliente: { from: (t: string) => unknown; rpc: (n: string, a?: unknown, o?: unknown) => unknown };
 }
 
@@ -32,7 +32,7 @@ export function crearDbMemoria(
 ): DbMemoria {
   const tablas: Record<string, Fila[]> = Object.fromEntries(Object.entries(inicial).map(([k, v]) => [k, v.map((f) => ({ ...f }))]));
   const llamadas: Llamada[] = [];
-  const fallos = new Map<string, string>();
+  const fallos = new Map<string, { mensaje: string; cuando?: (filtros: Array<[string, string, unknown]>) => boolean }>();
 
   class Q implements PromiseLike<Resp> {
     private filtros: Array<[string, string, unknown]> = [];
@@ -69,7 +69,7 @@ export function crearDbMemoria(
     neq(c: string, v: unknown) { this.filtros.push([c, 'neq', v]); return this; }
     order(c: string, o?: { ascending?: boolean }) { this.orden.push([c, o?.ascending !== false]); return this; }
     range(d: number, h: number) { this.desde = d; this.hasta = h; return this; }
-    limit(n: number) { this.desde = 0; this.hasta = n - 1; return this; }
+    limit(n: number) { this.hasta = Math.min(this.hasta, this.desde + n - 1); return this; }
     maybeSingle() { this.unico = 'maybe'; return this; }
     single() { this.unico = 'single'; return this; }
 
@@ -94,7 +94,7 @@ export function crearDbMemoria(
       const clave = this.clave ?? `${this.tabla}.${this.op}`;
       llamadas.push({ tabla: this.tabla, op: this.clave ? 'rpc' : this.op, filtros: this.filtros, payload: this.payload });
       const falla = fallos.get(clave) ?? fallos.get(`${this.tabla}.*`);
-      if (falla) return { data: null, error: { message: falla } };
+      if (falla && (!falla.cuando || falla.cuando(this.filtros))) return { data: null, error: { message: falla.mensaje } };
 
       if (this.fuente) {
         // Una RPC puede devolver un escalar (p. ej. `true` de finalizar_correo).
@@ -122,6 +122,9 @@ export function crearDbMemoria(
             const llaves = (this.opcionesUpsert.onConflict ?? 'id').split(',').map((s) => s.trim());
             const previa = tabla.find((t) => llaves.every((k) => t[k] === fila[k]));
             if (previa) { Object.assign(previa, n); creados.push(previa); continue; }
+            // Un upsert que NO choca por su onConflict pero sí por OTRA restricción única falla como en Postgres.
+            const choca = (unicos[this.tabla] ?? []).some((cols) => tabla.some((t) => cols.every((k) => JSON.stringify(t[k]) === JSON.stringify(fila[k]))));
+            if (choca) return { data: null, error: { message: 'duplicate key value violates unique constraint', code: '23505' } };
           }
           tabla.push(fila);
           creados.push(fila);
@@ -167,5 +170,5 @@ export function crearDbMemoria(
       return new Q(`rpc:${n}`, () => (f ? f(args as Record<string, unknown>) : []), `rpc:${n}`);
     },
   };
-  return { tablas, llamadas, fallar: (k, m) => { fallos.set(k, m); }, cliente };
+  return { tablas, llamadas, fallar: (k, m, cuando) => { fallos.set(k, { mensaje: m, cuando }); }, cliente };
 }

@@ -119,11 +119,22 @@ describe('fallo', () => {
     expect(r.contactados).toBe(2);
   });
 
-  it('la base no contesta al leer la cola de una flota: esa flota falla DICIÉNDOLO y las demás siguen', async () => {
+  it('la base no contesta al leer la config de UNA flota: esa flota falla DICIÉNDOLO (sin cobrar a ciegas) y la otra sigue', async () => {
+    db.fallar('agente_cobranza_config.select', 'PostgREST 503', (f) => f.some(([c, o, v]) => c === 'tenant_id' && o === 'eq' && v === A));
+    const r = await ejecutarCobranzaGlobal(AHORA);
+    expect(r.fallos.length).toBeGreaterThan(0);
+    expect(contactos('v1')).toHaveLength(0);          // fail-closed: sin config no se contacta con defaults a ciegas
+    expect(contactos('v2')).toHaveLength(0);
+    expect(aBaja(TEL_A1)).toHaveLength(0);
+    expect(contactos('v3')).toMatchObject([{ tenant_id: B, enviado: true }]); // la flota B sí se cobró
+    expect(aBaja(TEL_B1)).toHaveLength(1);
+  });
+
+  it('la base no contesta para NINGUNA flota: todas fallan diciéndolo y nadie recibe un cobro con defaults a ciegas', async () => {
     db.fallar('agente_cobranza_config.select', 'PostgREST 503');
     const r = await ejecutarCobranzaGlobal(AHORA);
     expect(r.fallos.length).toBeGreaterThan(0);
-    expect(r.contactados).toBe(0); // fail-closed: sin config no se contacta con defaults a ciegas
+    expect(r.contactados).toBe(0);
   });
 });
 
