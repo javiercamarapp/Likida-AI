@@ -132,3 +132,18 @@ export async function emailDeUsuario(userId: string): Promise<string | null> {
   const f = exigir(res as never, 'conductor.email_usuario') as { email?: unknown } | null;
   return f && typeof f.email === 'string' && f.email.length > 0 ? f.email : null;
 }
+
+/**
+ * Qué viajes traen sitio de carga y de descarga (solo si están asignados, no sus coordenadas): lo que el aviso de «llegada sin
+ * confirmar» necesita para distinguir «sin posición que la respalde» de «sin sitio contra el cual compararla». Lanza si la base
+ * no contesta o no tiene la columna (0385): sin saberlo no se avisa, porque un «sin sitio» falso es peor que un aviso tardío.
+ */
+export async function leerSitiosDeViajes(viajeIds: string[]): Promise<Map<string, { origen: boolean; destino: boolean }>> {
+  const salida = new Map<string, { origen: boolean; destino: boolean }>();
+  for (const ids of trozos(viajeIds, 150)) {
+    const filas = await traerTodo<Fila>((desde, hasta) => acotada(supabaseAdmin()
+      .from('viaje').select('id, origen_geocerca_id, destino_geocerca_id').in('id', ids).order('id').range(desde, hasta), 'conductor.sitios_viajes') as never, 'conductor.sitios_viajes');
+    for (const f of filas) salida.set(String(f.id), { origen: typeof f.origen_geocerca_id === 'string', destino: typeof f.destino_geocerca_id === 'string' });
+  }
+  return salida;
+}

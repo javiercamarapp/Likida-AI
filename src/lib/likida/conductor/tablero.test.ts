@@ -209,6 +209,27 @@ describe('la cola de excepciones', () => {
       expect(sinSitio.excepciones.find((x) => x.tipo === 'llegada_sin_confirmar')).toBeUndefined();
     });
 
+    it('SIN SITIO asignado el «ya llegué» sale como «llegada sin sitio para conciliar» (con o sin veredicto «sin sitio»), no como «sin confirmar»', () => {
+      const sinVeredicto = armarTablero(datos([viaje('1')], hitos('1', { llegada_carga: hace(30) })), cfg(), AHORA);
+      const e = sinVeredicto.excepciones.find((x) => x.tipo === 'llegada_sin_sitio');
+      expect(e).toMatchObject({ gravedad: 1, hitoTipo: 'llegada_carga', hitoId: '1-llegada_carga' });
+      expect(e?.texto).toMatch(/no tiene sitio de carga asignado/);
+      expect(e?.texto).not.toMatch(/mintió|falso/i);
+      expect(sinVeredicto.excepciones.find((x) => x.tipo === 'llegada_sin_confirmar')).toBeUndefined();
+
+      const conVeredicto = armarTablero(datos([viaje('1', conSitio)], hitos('1', { llegada_carga: hace(30) }), { veredictos: sinDato('sin_sitio') }), cfg(), AHORA);
+      expect(conVeredicto.excepciones.find((x) => x.tipo === 'llegada_sin_sitio')).toBeDefined();
+      expect(conVeredicto.excepciones.find((x) => x.tipo === 'llegada_sin_confirmar')).toBeUndefined();
+    });
+
+    it('la de «sin sitio» respeta lo mismo que las demás: gracia de minutos, oficina, validación apagada, y con sitio no aparece', () => {
+      expect(armarTablero(datos([viaje('1')], hitos('1', { llegada_carga: hace(3) })), cfg(), AHORA).excepciones.find((x) => x.tipo === 'llegada_sin_sitio')).toBeUndefined();
+      const ofi = hitos('1', { llegada_carga: { estado: 'recibido', fuente: 'oficina', mensajeEn: hace(30), recibidoEn: hace(30) } });
+      expect(armarTablero(datos([viaje('1')], ofi), cfg(), AHORA).excepciones.find((x) => x.tipo === 'llegada_sin_sitio')).toBeUndefined();
+      expect(armarTablero(datos([viaje('1')], hitos('1', { llegada_carga: hace(30) })), cfg({ validarUbicacion: false }), AHORA).excepciones.find((x) => x.tipo === 'llegada_sin_sitio')).toBeUndefined();
+      expect(armarTablero(datos([viaje('1', conSitio)], hitos('1', { llegada_carga: hace(30) })), cfg(), AHORA).excepciones.find((x) => x.tipo === 'llegada_sin_sitio')).toBeUndefined();
+    });
+
     it('un aviso de hace pocos minutos todavía no es excepción (el GPS reporta con retraso)', () => {
       const t = armarTablero(datos([viaje('1', conSitio)], hitos('1', { llegada_carga: hace(3) }), { veredictos: sinDato('sin_ubicacion') }), cfg(), AHORA);
       expect(t.excepciones.find((x) => x.tipo === 'llegada_sin_confirmar')).toBeUndefined();
@@ -276,7 +297,11 @@ describe('filtrarPorSemaforo', () => {
   it('el filtro mueve TODO lo que hay debajo: filas y cola', () => {
     const hs = [
       ...hitos('1', { llegada_carga: { estado: 'escalado', escaladoEn: hace(5), escalacionNivel: 1 } }),
-      ...hitos('2', { llegada_carga: hace(500), salida_carga: hace(400), llegada_descarga: hace(300), salida_descarga: hace(200), regreso: hace(100) }),
+      // Las llegadas de un viaje completo las declaró la oficina: un «ya llegué» sin conciliar sería otra excepción, y aquí no la hay.
+      ...hitos('2', {
+        llegada_carga: { estado: 'recibido', fuente: 'oficina', mensajeEn: hace(500), recibidoEn: hace(500) }, salida_carga: hace(400),
+        llegada_descarga: { estado: 'recibido', fuente: 'oficina', mensajeEn: hace(300), recibidoEn: hace(300) }, salida_descarga: hace(200), regreso: hace(100),
+      }),
     ];
     const t = armarTablero(datos([viaje('1'), viaje('2')], hs), cfg(), AHORA);
     const f = filtrarPorSemaforo(t, 'completo');

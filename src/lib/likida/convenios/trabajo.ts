@@ -1,6 +1,9 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
+import { logger } from '@/lib/logger';
+import { leerConfigConductor } from '../conductor/repo';
+import { CONFIG_CONDUCTOR_DEFAULT } from '../conductor/config';
 import type { CandidatoAcercamiento, PosicionUnidad } from './acercamiento';
 import { traducirFaltaDeEsquema } from './repo';
 
@@ -99,6 +102,23 @@ export async function leerPosicionesRecientes(unidadIds: string[], tenantIds: st
     for (const f of filas) {
       const u = String(f.unidad_id);
       if (!salida.has(u)) salida.set(u, { lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(String(f.medida_en)) });
+    }
+  }
+  return salida;
+}
+
+/**
+ * El margen de acercamiento de cada flota (su configuración del Conductor, 0604). Una flota cuya config no se pueda leer usa
+ * el margen de partida y se loguea: el aviso es un recordatorio, no un hito, y no vale tumbar el barrido de las demás.
+ */
+export async function leerMargenesAcercamiento(tenantIds: string[]): Promise<Map<string, number>> {
+  const salida = new Map<string, number>();
+  for (const t of tenantIds) {
+    try {
+      salida.set(t, (await leerConfigConductor(t)).margenAcercamientoM);
+    } catch (e) {
+      salida.set(t, CONFIG_CONDUCTOR_DEFAULT.margenAcercamientoM);
+      logger.warn('convenios.margen_config_ilegible', { tenant: t, err: e instanceof Error ? e.message : String(e) });
     }
   }
   return salida;

@@ -33,7 +33,9 @@ const armar = (d: DatosTablero, posiciones: Record<string, PosicionUnidad>, f: P
 describe('tablero de viajes en vivo', () => {
   it('trae el último hito registrado y la antigüedad de la posición, sin excepciones si todo está al día', () => {
     const v = viaje('1', { citaOrigenEn: new Date(AHORA.getTime() + 600 * 60_000).toISOString() });
-    const t = armar(datos([v], hitos('1', { llegada_carga: hace(50), salida_carga: hace(20) })), { 'u-1': pos(4) });
+    // La llegada ya la confirmó el GPS: «todo al día» no incluye un «ya llegué» sin conciliar.
+    const llegadaValidada = { estado: 'validado' as const, fuente: 'texto' as const, mensajeEn: hace(50), recibidoEn: hace(50), validadoEn: hace(45), validadoPor: 'gps' as const };
+    const t = armar(datos([v], hitos('1', { llegada_carga: llegadaValidada, salida_carga: hace(20) })), { 'u-1': pos(4) });
     const f = t.filas[0];
     expect(f.ultimoHito).toMatchObject({ tipo: 'salida_carga', etiqueta: expect.any(String), estado: 'recibido' });
     expect(f.hitoActivo).toBe('llegada_descarga');

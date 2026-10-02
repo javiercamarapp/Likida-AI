@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { archivarConvenioDelPanel, bytesParaLector, importarArchivoDelPanel, type DepsConvenios } from './acciones';
+import { archivarConvenioDelPanel, bytesParaLector, corregirConvenioDelViajeDelPanel, importarArchivoDelPanel, type DepsConvenios } from './acciones';
 import { ConveniosNoDisponibles } from './repo';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
@@ -109,5 +109,82 @@ describe('un Excel real (.xlsx)', () => {
     const [c] = (d.importar as ReturnType<typeof vi.fn>).mock.calls[0][1] as Array<{ vigenteDesde: string; instrucciones: Array<{ texto: string; lugar: string }> }>;
     expect(c.vigenteDesde).toBe('2026-03-01');
     expect(c.instrucciones).toEqual([expect.objectContaining({ texto: 'Con el Sr. Muñoz, caseta 1', lugar: 'origen' })]);
+  });
+});
+
+describe('corregirConvenioDelViajeDelPanel', () => {
+  const VIAJE = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0aa';
+  const CONV = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d001';
+  const deps = (o: Partial<import('./acciones').DepsCorregirConvenio> = {}) => ({
+    corregir: vi.fn(async () => ({ estado: 'ok' as const, convenioNombre: 'Ruta norte', instrucciones: 2 })),
+    enviar: vi.fn(async () => ({ estado: 'enviado' as const, canal: 'texto' as const })),
+    ...o,
+  });
+  const dueno = { tenantId: 't1', rol: 'flota_admin' };
+
+  it('solo el dueño y el jefe de tráfico corrigen: el contador y los demás no tocan nada', async () => {
+    for (const rol of ['contador', 'vendedor', 'inventado', '']) {
+      const d = deps();
+      const r = await corregirConvenioDelViajeDelPanel({ tenantId: 't1', rol }, { viajeId: VIAJE, convenioId: CONV, reenviar: true }, d);
+      expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/dueño de la flota o el jefe de tráfico/) });
+      expect(d.corregir).not.toHaveBeenCalled();
+      expect(d.enviar).not.toHaveBeenCalled();
+    }
+  });
+
+  it('corrige con el tenant de la SESIÓN, en minúsculas, y manda de nuevo las instrucciones si se pidió', async () => {
+    const d = deps();
+    const r = await corregirConvenioDelViajeDelPanel(dueno, { viajeId: VIAJE.toUpperCase(), convenioId: CONV, reenviar: true }, d);
+    expect(d.corregir).toHaveBeenCalledWith('t1', VIAJE, CONV, { reenviar: true });
+    expect(d.enviar).toHaveBeenCalledWith('t1', VIAJE);
+    expect(r).toMatchObject({ ok: true, mensaje: expect.stringMatching(/«Ruta norte» \(2 instrucciones\).*Ya se le mandaron al operador.*corrección manual/s) });
+  });
+
+  it('sin «reenviar» solo corrige: no manda nada', async () => {
+    const d = deps();
+    const r = await corregirConvenioDelViajeDelPanel(dueno, { viajeId: VIAJE, convenioId: CONV, reenviar: false }, d);
+    expect(d.enviar).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ ok: true });
+  });
+
+  it('«sin convenio» (vacío) guarda null y nunca manda instrucciones, aunque se pida reenviar', async () => {
+    const d = deps({ corregir: vi.fn(async () => ({ estado: 'ok' as const, convenioNombre: null, instrucciones: 0 })) });
+    const r = await corregirConvenioDelViajeDelPanel(dueno, { viajeId: VIAJE, convenioId: '', reenviar: true }, d);
+    expect(d.corregir).toHaveBeenCalledWith('t1', VIAJE, null, { reenviar: true });
+    expect(d.enviar).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ ok: true, mensaje: expect.stringContaining('sin convenio') });
+  });
+
+  it('un id que no es UUID se rechaza sin tocar la base', async () => {
+    const d = deps();
+    expect(await corregirConvenioDelViajeDelPanel(dueno, { viajeId: 'x', convenioId: CONV, reenviar: false }, d)).toMatchObject({ ok: false, error: 'No reconozco el viaje.' });
+    expect(await corregirConvenioDelViajeDelPanel(dueno, { viajeId: VIAJE, convenioId: "1'; drop", reenviar: false }, d)).toMatchObject({ ok: false, error: 'No reconozco el convenio.' });
+    expect(d.corregir).not.toHaveBeenCalled();
+  });
+
+  it('dice en palabras cada rechazo del repositorio', async () => {
+    for (const [estado, texto] of [['viaje_no_encontrado', /ya no existe/], ['viaje_cerrado', /liquidado/], ['sin_cliente', /sin cliente/], ['convenio_no_valido', /no es de este cliente o está archivado/]] as const) {
+      const d = deps({ corregir: vi.fn(async () => ({ estado })) });
+      expect(await corregirConvenioDelViajeDelPanel(dueno, { viajeId: VIAJE, convenioId: CONV, reenviar: true }, d)).toMatchObject({ ok: false, error: expect.stringMatching(texto) });
+      expect(d.enviar).not.toHaveBeenCalled();
+    }
+  });
+
+  it('un envío rechazado o sin operador se cuenta honesto: la corrección SÍ quedó, el mensaje no se promete', async () => {
+    for (const [estado, texto] of [['sin_destinatario', /no tiene operador con teléfono/], ['rechazado', /no aceptó el mensaje/]] as const) {
+      const d = deps({ enviar: vi.fn(async () => (estado === 'rechazado' ? { estado, motivo: 'x', reintentable: false } : { estado })) });
+      const r = await corregirConvenioDelViajeDelPanel(dueno, { viajeId: VIAJE, convenioId: CONV, reenviar: true }, d);
+      expect(r).toMatchObject({ ok: true, mensaje: expect.stringMatching(texto) });
+      expect((r as { mensaje: string }).mensaje).not.toContain('Ya se le mandaron');
+    }
+  });
+
+  it('la base sin la 0580 se dice; un fallo inesperado no filtra el error crudo', async () => {
+    const sin = deps({ corregir: vi.fn(async () => { throw new ConveniosNoDisponibles(); }) });
+    expect(await corregirConvenioDelViajeDelPanel(dueno, { viajeId: VIAJE, convenioId: CONV, reenviar: false }, sin)).toMatchObject({ ok: false, error: expect.stringContaining('0580') });
+    const roto = deps({ corregir: vi.fn(async () => { throw new Error('connection reset 10.0.0.5'); }) });
+    const r = await corregirConvenioDelViajeDelPanel(dueno, { viajeId: VIAJE, convenioId: CONV, reenviar: false }, roto);
+    expect(r).toMatchObject({ ok: false });
+    expect((r as { error: string }).error).not.toContain('10.0.0.5');
   });
 });

@@ -1,7 +1,7 @@
 import { logger } from '@/lib/logger';
 import { enviarConFallback, type ResultadoEnvioConFallback } from '@/lib/meta/enviar_con_fallback';
 import {
-  cerrarEnvio, ConveniosNoDisponibles, leerContextoEnvio, leerLigado, ligarConvenioAViaje, liberarEnvio, reclamarEnvio,
+  cerrarEnvio, ConveniosNoDisponibles, leerContextoEnvio, leerLigado, ligarConvenioAViaje, liberarEnvio, reclamarEnvio, reiniciarEnvios,
   type ContextoEnvio, type Envio, type ResultadoLigar, type ViajeLigado,
 } from './repo';
 import { armarMensajeAcercamiento, armarMensajeDespacho, type MensajeInstrucciones } from './mensajes';
@@ -34,6 +34,7 @@ export interface PuertosEnvio {
   reclamar(tenantId: string, viajeId: string, cual: Envio, ahora: Date): Promise<'ganado' | 'perdido' | 'fallo'>;
   cerrar(tenantId: string, viajeId: string, cual: Envio, canal: 'texto' | 'botones' | 'plantilla', ahora: Date): Promise<void>;
   liberar(tenantId: string, viajeId: string, cual: Envio): Promise<void>;
+  reiniciar(tenantId: string, viajeId: string): Promise<void>;
   enviar(telefono: string, m: MensajeInstrucciones, contexto: string, tenantId: string, ahora: Date): Promise<ResultadoEnvioConFallback>;
 }
 
@@ -44,6 +45,7 @@ export const puertosEnvioReales: PuertosEnvio = {
   reclamar: reclamarEnvio,
   cerrar: cerrarEnvio,
   liberar: liberarEnvio,
+  reiniciar: reiniciarEnvios,
   enviar: (telefono, m, contexto, tenantId, ahora) => enviarConFallback(telefono, { texto: m.texto, plantilla: m.plantilla, contexto, tenantId, ahora }),
 };
 
@@ -108,4 +110,31 @@ export function despacharInstrucciones(tenantId: string, viajeId: string, p: Pue
 /** Al acercarse a la planta del `lado`: manda las de `acercamiento`/`ambos` de ESA planta, una vez POR PLANTA (cada una con su sello). */
 export function acercarInstrucciones(tenantId: string, viajeId: string, lado: LadoViaje, p: PuertosEnvio = puertosEnvioReales, ahora: Date = new Date()): Promise<ResultadoEnvioInstrucciones> {
   return enviarInstrucciones(tenantId, viajeId, lado === 'origen' ? 'acercamiento_origen' : 'acercamiento_destino', p, ahora);
+}
+
+/**
+ * Se cambió (o se puso por primera vez) el operador de un viaje ya existente: le llegan SUS instrucciones del convenio.
+ *
+ *   · Primera asignación (`operadorAnteriorId` null, el viaje se creó sin chofer): no hay nada ligado todavía; liga el convenio
+ *     y manda, igual que al crear el viaje con operador.
+ *   · Reasignación a otro chofer: los sellos de lo ya enviado se reinician y todo vuelve a salir hacia el nuevo, una vez.
+ *   · Mismo operador (el gesto no cambió nada) o `cambio: false`: no manda nada, para no duplicar el mensaje.
+ *
+ * NUNCA LANZA y no deshace la reasignación (el viaje ya cambió de manos); el resultado dice qué pasó para quien quiera contarlo.
+ */
+export async function instruccionesAlCambiarOperador(
+  tenantId: string, viajeId: string, cambio: { cambio: boolean; operadorAnteriorId: string | null } | void,
+  p: PuertosEnvio = puertosEnvioReales, ahora: Date = new Date(),
+): Promise<ResultadoEnvioInstrucciones | { estado: 'sin_cambio' }> {
+  // Quien no informa el cambio (un doble de prueba, un llamador viejo) se trata como «cambió»: peor es no mandarlas.
+  if (cambio && cambio.cambio === false) return { estado: 'sin_cambio' };
+  try {
+    if (cambio && cambio.operadorAnteriorId) await p.reiniciar(tenantId, viajeId);
+    return await enviarInstrucciones(tenantId, viajeId, 'despacho', p, ahora);
+  } catch (e) {
+    if (e instanceof ConveniosNoDisponibles) return { estado: 'no_disponible' };
+    const motivo = e instanceof Error ? e.message : String(e);
+    logger.error('convenios.reasignar_fallo', { viajeId, err: motivo });
+    return { estado: 'fallo', motivo };
+  }
 }

@@ -46,6 +46,10 @@ const eqTenantUpdate = vi.fn(() => updateResult());
 const eqViajeUpdate = vi.fn(() => ({ eq: eqTenantUpdate }));
 const update = vi.fn(() => ({ eq: eqViajeUpdate }));
 
+// El operador que tenía el viaje ANTES del cambio (`select('operador_id')` + dos `.eq` + `maybeSingle`).
+const previoResult = vi.fn();
+const selectPrevio = vi.fn(() => ({ eq: () => ({ eq: () => ({ maybeSingle: () => previoResult() }) }) }));
+
 /**
  * `select()` de la tabla `operador` sirve a DOS llamadores con formas
  * distintas: `listOperadores` (columnas `id, nombre`, filtra activo+tenant,
@@ -59,7 +63,7 @@ const from = vi.fn((tabla: string) => {
   if (tabla === 'cliente' || tabla === 'unidad') {
     return { select: (_c: string, opts?: unknown) => (opts ? selectConteo() : selectLista()) };
   }
-  if (tabla !== 'operador') return { update };
+  if (tabla !== 'operador') return { update, select: selectPrevio };
   return {
     // `getOperador` pide el join a `terminal` (lo usa `avisarAlChofer`); es lo
     // único que la distingue de `listOperadores`, que solo pide `id, nombre`.
@@ -165,7 +169,8 @@ describe('buscarCatalogo / contarCatalogo (FE-2)', () => {
 
 describe('reasignarOperador', () => {
   beforeEach(() => {
-    updateResult.mockReset(); propioResult.mockReset();
+    updateResult.mockReset(); propioResult.mockReset(); previoResult.mockReset(); selectPrevio.mockClear();
+    previoResult.mockResolvedValue({ data: { operador_id: 'o-1' }, error: null });
     from.mockClear(); update.mockClear();
   });
 
@@ -173,7 +178,8 @@ describe('reasignarOperador', () => {
     propioResult.mockResolvedValue({ data: { id: 'o-2', nombre: 'Ana', telefono: '52999', terminal: null }, error: null });
     updateResult.mockResolvedValue({ error: null });
 
-    await reasignarOperador('t-1', 'v-1', 'o-2');
+    const r = await reasignarOperador('t-1', 'v-1', 'o-2');
+    expect(r).toEqual({ cambio: true, operadorAnteriorId: 'o-1' });
 
     expect(eqIdPropio).toHaveBeenCalledWith('id', 'o-2');
     expect(eqTenantPropio).toHaveBeenCalledWith('tenant_id', 't-1');
@@ -181,6 +187,15 @@ describe('reasignarOperador', () => {
     expect(update).toHaveBeenCalledWith({ operador_id: 'o-2' });
     expect(eqViajeUpdate).toHaveBeenCalledWith('id', 'v-1');
     expect(eqTenantUpdate).toHaveBeenCalledWith('tenant_id', 't-1');
+  });
+
+  it('dice quién lo tenía: la primera asignación (sin chofer) y el mismo chofer se distinguen del cambio real', async () => {
+    propioResult.mockResolvedValue({ data: { id: 'o-2', nombre: 'Ana', telefono: '52999', terminal: null }, error: null });
+    updateResult.mockResolvedValue({ error: null });
+    previoResult.mockResolvedValue({ data: { operador_id: null }, error: null });
+    expect(await reasignarOperador('t-1', 'v-1', 'o-2')).toEqual({ cambio: true, operadorAnteriorId: null });
+    previoResult.mockResolvedValue({ data: { operador_id: 'o-2' }, error: null });
+    expect(await reasignarOperador('t-1', 'v-1', 'o-2')).toEqual({ cambio: false, operadorAnteriorId: 'o-2' });
   });
 
   it('AUDITORÍA 10: RECHAZA reasignar a un operador de OTRA flota, y no toca el viaje', async () => {
