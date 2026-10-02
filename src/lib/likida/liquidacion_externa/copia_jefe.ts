@@ -90,12 +90,18 @@ export const copiarAJefePorOmision: CopiarAJefe = async (liq, doc) => {
         parametros: parametrosAvisoOficina(chofer, `copia de la liquidación ${liq.claveExterna}`, liga()),
         contexto: { tenantId: liq.tenantId, agente: 'liquidacion_externa', liquidacion: liq.id },
       });
-      if (r.ok) nuevos.push(tel);
-      else {
+      // Un rechazo transitorio (timeout, 429, 5xx) YA dejó el mensaje en `wa_outbox`, que lo entrega solo:
+      // soltar el reclamo haría que un reintento (o «reenviar copia») lo mande otra vez y el jefe reciba dos
+      // WhatsApp con el monto. Se cierra como aceptada (en cola) y no se vuelve a mandar.
+      const enCola = !r.ok && r.reintentable === true;
+      if (r.ok || enCola) {
+        nuevos.push(tel);
+        if (enCola) logger.warn('liqext.copia_jefe_en_cola', { id: liq.id, motivo: r.motivo, codigo: r.codigo });
+      } else {
         fallidos.push(tel);
         logger.error('liqext.copia_jefe_fallo', { id: liq.id, motivo: r.motivo, codigo: r.codigo });
       }
-      if (reclamo !== 'sin_candado') await cerrarCopiaJefe(liq.tenantId, liq.id, liq.generacion, tel, reclamo, r.ok);
+      if (reclamo !== 'sin_candado') await cerrarCopiaJefe(liq.tenantId, liq.id, liq.generacion, tel, reclamo, r.ok || enCola);
     }
     // Nada que intentar por nuestra cuenta: otra invocación ya la manda o la mandó.
     if (nuevos.length === 0 && fallidos.length === 0) return { estado: 'ya_enviada' };
