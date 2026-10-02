@@ -6,13 +6,23 @@
 -- Re-sembrar (sembrar.sh) lo vuelve a poner idéntico.
 -- ═══════════════════════════════════════════════════════════════════════════
 \set ON_ERROR_STOP on
+\if :{?red_privada}
+\else
+  \set red_privada 0
+\endif
+select set_config('inn.red_privada', :'red_privada', false) \g /dev/null
 \set t 'eeeeeeee-0620-4000-8000-000000000250'
 
 do $$
 declare ip inet := inet_server_addr(); n text;
 begin
-  if not (ip is null or ip <<= '127.0.0.0/8'::inet or ip = '::1'::inet or ip <<= '10.0.0.0/8'::inet or ip <<= '172.16.0.0/12'::inet or ip <<= '192.168.0.0/16'::inet) then
-    raise exception 'DEMO INNOVATIVOS: el servidor no es local; no se vacía nada.';
+  if not (ip is null or ip <<= '127.0.0.0/8'::inet or ip = '::1'::inet
+          or (current_setting('inn.red_privada', true) = '1'
+              and (ip <<= '10.0.0.0/8'::inet or ip <<= '172.16.0.0/12'::inet or ip <<= '192.168.0.0/16'::inet))) then
+    raise exception 'DEMO INNOVATIVOS: el servidor no es loopback (las redes privadas piden DEMO_PERMITIR_RED_PRIVADA=1); no se vacía nada.';
+  end if;
+  if current_database() ~* 'prod' then
+    raise exception 'DEMO INNOVATIVOS: la base se llama «%» (parece de producción). No se vacía nada.', current_database();
   end if;
   select nombre into n from tenant where id = 'eeeeeeee-0620-4000-8000-000000000250';
   if n is distinct from 'Innovativos (demo)' then

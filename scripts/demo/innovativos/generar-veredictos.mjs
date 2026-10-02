@@ -17,7 +17,9 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { exigirBaseLocal } from './guarda-host.mjs';
 
+exigirBaseLocal(); // misma guarda que sembrar.sh, antes de abrir ninguna conexión
 const T = 'eeeeeeee-0620-4000-8000-000000000250';
 const URL_DB = process.env.DEMO_DATABASE_URL;
 if (!URL_DB) { console.error('Define DEMO_DATABASE_URL.'); process.exit(2); }

@@ -12,6 +12,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 URL="${DEMO_DATABASE_URL:?define DEMO_DATABASE_URL}"
+node ./guarda-host.mjs || exit $?   # sembrar.sh y vaciar-sintetico.sh la repiten; aquí también corre psql directo
 T=eeeeeeee-0620-4000-8000-000000000250
 # shellcheck source=lib_huella.sh
 . ./lib_huella.sh

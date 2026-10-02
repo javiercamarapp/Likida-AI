@@ -7,12 +7,17 @@
 -- sus clientes: el día que lleguen sus archivos se reemplaza (docs/demo/innovativos.md).
 --
 -- NUNCA PRODUCCIÓN: este seed solo corre contra una base LOCAL o de laboratorio.
--- Dos guardas: sembrar.sh rechaza hosts remotos, y aquí la base se niega si el
--- servidor no escucha en una dirección loopback/privada (o socket Unix).
+-- Dos guardas: guarda-host.mjs (la corre sembrar.sh) rechaza hosts remotos, y aquí la base se niega si el
+-- servidor no escucha en loopback (o socket Unix); las redes privadas solo con DEMO_PERMITIR_RED_PRIVADA=1.
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- La ancla es «ahora» del demo: todo lo «en curso» se calcula contra ella, así
 -- dos corridas dan EXACTAMENTE las mismas filas. (sembrar.sh la pasa con -v.)
+\if :{?red_privada}
+\else
+  \set red_privada 0
+\endif
+select set_config('inn.red_privada', :'red_privada', false) \g /dev/null
 select set_config('inn.ancla', :'ancla', false) \g /dev/null
 select set_config('inn.tenant', 'eeeeeeee-0620-4000-8000-000000000250', false) \g /dev/null
 
@@ -23,11 +28,15 @@ declare
   t uuid := current_setting('inn.tenant')::uuid;
   n text;
 begin
-  ok := ip is null
-        or ip <<= '127.0.0.0/8'::inet or ip = '::1'::inet
-        or ip <<= '10.0.0.0/8'::inet or ip <<= '172.16.0.0/12'::inet or ip <<= '192.168.0.0/16'::inet;
+  -- Loopback / socket siempre; red privada SOLO con la bandera explícita DEMO_PERMITIR_RED_PRIVADA=1 (sembrar.sh -v red_privada=1).
+  ok := ip is null or ip <<= '127.0.0.0/8'::inet or ip = '::1'::inet
+        or (current_setting('inn.red_privada', true) = '1'
+            and (ip <<= '10.0.0.0/8'::inet or ip <<= '172.16.0.0/12'::inet or ip <<= '192.168.0.0/16'::inet));
   if not ok then
-    raise exception 'DEMO INNOVATIVOS: el servidor escucha en % (no es loopback ni red privada). Este seed NO corre contra una base remota o de producción.', ip;
+    raise exception 'DEMO INNOVATIVOS: el servidor escucha en % (no es loopback; las redes privadas piden DEMO_PERMITIR_RED_PRIVADA=1). Este seed NO corre contra una base remota o de producción.', ip;
+  end if;
+  if current_database() ~* 'prod' then
+    raise exception 'DEMO INNOVATIVOS: la base se llama «%» (parece de producción, quizá por un túnel). No se siembra.', current_database();
   end if;
   select nombre into n from tenant where id = t;
   if n is not null and n <> 'Innovativos (demo)' then
@@ -36,6 +45,21 @@ begin
 end $$;
 
 create schema if not exists innovativos_sim;
+
+-- Segunda línea de defensa de la ancla: sembrar.sh ya exige --reiniciar con --ancla, pero si alguien corre
+-- el SQL a mano (o sembrar.sh sin --ancla sobre una base sembrada con otra), se niega: dos «ahora» mezclados
+-- dejan viajes, posiciones y pases incoherentes entre sí (todo es ON CONFLICT DO NOTHING y no se repara).
+create table if not exists innovativos_sim.meta (clave text primary key, valor text not null);
+do $$
+declare a text; t uuid := current_setting('inn.tenant')::uuid;
+begin
+  select valor into a from innovativos_sim.meta where clave = 'ancla';
+  if a is not null and a::timestamptz <> current_setting('inn.ancla')::timestamptz and exists (select 1 from tenant where id = t) then
+    raise exception 'DEMO INNOVATIVOS: el demo ya está sembrado con otra ancla (%) y pediste %. Usa sembrar.sh --reiniciar --ancla ... para empezar de cero.', a, current_setting('inn.ancla');
+  end if;
+end $$;
+insert into innovativos_sim.meta (clave, valor) values ('ancla', current_setting('inn.ancla'))
+on conflict (clave) do update set valor = excluded.valor;
 comment on schema innovativos_sim is
   'DEMO Innovativos: SIMULA las tablas que Innovativos tiene en su sistema (GPS al momento, geocercas, convenios). No es del producto; vive solo en bases locales. Se borra con scripts/demo/innovativos/limpiar.sql.';
 
