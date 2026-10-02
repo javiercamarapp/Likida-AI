@@ -107,9 +107,12 @@ vi.mock('@/lib/supabase/admin', () => {
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
 
+// El circuito llama a `registrarAcuseConAviso` (el aviso a la oficina viaja con el acuse). El doble conserva la
+// firma vieja `registrarAcuse(...) → resultado` para las pruebas y le suma el aviso que cada prueba programa.
+let avisoOficina: 'enviado' | 'no_enviado' | 'no_aplica' = 'no_enviado';
 const registrarAcuse = vi.fn(async (..._a: unknown[]): Promise<string> => 'registrado');
 vi.mock('@/lib/likida/liquidacion_externa/servicio', () => ({
-  registrarAcuse: (...a: unknown[]) => registrarAcuse(...a),
+  registrarAcuseConAviso: async (...a: unknown[]) => ({ resultado: await registrarAcuse(...a), avisoOficina }),
 }));
 
 
@@ -130,7 +133,7 @@ beforeEach(() => {
   salientes.length = 0;
   for (const m of [addGasto, guardarHuerfano, getHuerfanos, resolverHuerfanos,
                    marcarHuerfanosOfrecidos, getOpenViaje, extraerComprobante, subirComprobante, runAgent, getGastos]) m.mockReset();
-  registrarAcuse.mockReset(); registrarAcuse.mockResolvedValue('registrado');
+  registrarAcuse.mockReset(); registrarAcuse.mockResolvedValue('registrado'); avisoOficina = 'no_enviado';
   logger.info.mockReset(); logger.warn.mockReset(); logger.error.mockReset();
   vi.stubGlobal('fetch', fetchSpy); fetchSpy.mockClear();
   process.env.WHATSAPP_ACCESS_TOKEN = 'tok'; process.env.WHATSAPP_PHONE_NUMBER_ID = '123';
@@ -166,14 +169,20 @@ describe('el botón «Recibida»', () => {
 });
 
 describe('el botón «No coincide»', () => {
-  it('registra el acuse negativo y le dice la verdad: quedó marcada en el panel', async () => {
+  it('registra el acuse negativo y, si el aviso a la oficina NO salió, le dice la verdad: quedó marcada en el panel', async () => {
     await processInbound(texto(`liqext_no:${LIQ_ID}`));
     expect(registrarAcuse).toHaveBeenCalledWith('t1', 'o1', LIQ_ID, 'no_coincide');
     const m = salientes.join(' ');
     expect(m).toMatch(/NO coincide/);
     expect(m).toMatch(/panel de tu oficina/);
-    // No promete un aviso por WhatsApp que no se manda.
-    expect(m).not.toMatch(/ya le avis|le mand/i);
+    // No promete un aviso por WhatsApp que no se mandó.
+    expect(m).not.toMatch(/ya le avis/i);
+  });
+
+  it('solo cuando Meta ACEPTÓ el aviso a la oficina se le promete «ya le avisé»', async () => {
+    avisoOficina = 'enviado';
+    await processInbound(texto(`liqext_no:${LIQ_ID}`));
+    expect(salientes.join(' ')).toMatch(/Ya le avisé a tu oficina/);
   });
 });
 
