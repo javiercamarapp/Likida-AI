@@ -7,10 +7,9 @@
 -- y con DOS rarezas a propósito, porque lo real las traerá:
 --   · `fecha_hora` es hora LOCAL de CDMX SIN zona (timestamp, no timestamptz);
 --   · la unidad se llama por su número económico («IN-001»), no por nuestro id.
--- El lector de tabla propia (contrato: src/lib/likida/demo_innovativos/contratos.ts)
--- tiene que resolver las dos. Mientras no exista, `public.posicion` YA trae lo
--- que el lector dejaría (proveedor 'tabla_propia'), para que las pantallas
--- (mapa, conductor, peajes) funcionen en el demo.
+-- El lector de tabla propia del producto (conectores/tabla_propia) resuelve las dos.
+-- Aquí `public.posicion` YA trae lo que el lector dejaría (proveedor 'tabla_propia'),
+-- para que las pantallas (mapa, conductor, peajes) funcionen en el demo sin conectar nada.
 --
 -- Rol de solo lectura: innovativos_demo_lector (NOLOGIN) solo puede SELECT en
 -- este esquema. Es el modelo del «usuario restringido sobre una vista/réplica».
@@ -65,6 +64,18 @@ cross join lateral generate_series(a.anc - interval '6 hours', a.anc, interval '
 where t.n > 140;
 create index on innovativos_sim.pos_cruda (n, ts);
 
+-- El tracto 142 (sin viaje) pasa por la CARRETERA de junto al patio alargado de Tlaquepaque: 330 m al norte del centro,
+-- dentro del círculo de ~520 m que lo contiene pero fuera de su polígono (franja de ~150 m). Es la muestra que, medida
+-- con el círculo, acusaba a una unidad que solo pasaba (el cruce de peajes de 04_peajes.sql la deja SIN reclamar).
+-- El tracto 141 sigue estacionado DENTRO del polígono (lo normal de un tracto en patio).
+update innovativos_sim.pos_cruda c set
+  lat = pa.lat + 0.0030, lng = pa.lng + 0.0010 * ((extract(epoch from (c.ts - (current_setting('inn.ancla')::timestamptz - interval '150 minutes'))) / 1800)::int),
+  vel = 48, ignicion = true, rumbo = 90
+from geocerca pa
+where pa.id = innovativos_sim.uid('geo:patio:GDL') and c.n = 142
+  and c.ts in (current_setting('inn.ancla')::timestamptz - interval '180 minutes', current_setting('inn.ancla')::timestamptz - interval '150 minutes',
+               current_setting('inn.ancla')::timestamptz - interval '120 minutes');
+
 -- ── «Su» tabla propia ──────────────────────────────────────────────────────
 drop table if exists innovativos_sim.gps_posicion cascade;
 create table innovativos_sim.gps_posicion (
@@ -84,7 +95,9 @@ create or replace view innovativos_sim.v_gps_actual as
 select distinct on (id_unidad) id_unidad, latitud, longitud, fecha_hora, velocidad_kmh, ignicion
 from innovativos_sim.gps_posicion order by id_unidad, fecha_hora desc;
 
--- Geocercas «de ellos»: círculos para casi todo, polígonos (WKT) para 4 plantas.
+-- Geocercas «de ellos»: círculos para casi todo y POLÍGONOS (WKT, lon lat) donde public.geocerca los guarda nativos
+-- (01_base.sql: 4 plantas y el patio alargado de Tlaquepaque). Es el archivo que su sistema entregaría y que el
+-- importador de tabla propia convierte otra vez en polígono nativo + círculo que lo contiene.
 drop table if exists innovativos_sim.geocerca cascade;
 create table innovativos_sim.geocerca (
   codigo      text primary key,
@@ -97,15 +110,12 @@ create table innovativos_sim.geocerca (
   cliente     text
 );
 insert into innovativos_sim.geocerca
-select g.codigo, g.nombre, case when g.codigo in ('PL-C05','PL-C10','PL-C12','PL-C03') then 'poligono' else 'circulo' end,
+select g.codigo, g.nombre, case when g.poligono is not null then 'poligono' else 'circulo' end,
        g.lat, g.lng, g.radio_m,
-       case when g.codigo in ('PL-C05','PL-C10','PL-C12','PL-C03') then
-         format('POLYGON((%s %s, %s %s, %s %s, %s %s, %s %s))',
-                round((g.lng - 0.004)::numeric, 6), round((g.lat - 0.003)::numeric, 6),
-                round((g.lng + 0.004)::numeric, 6), round((g.lat - 0.003)::numeric, 6),
-                round((g.lng + 0.004)::numeric, 6), round((g.lat + 0.003)::numeric, 6),
-                round((g.lng - 0.004)::numeric, 6), round((g.lat + 0.003)::numeric, 6),
-                round((g.lng - 0.004)::numeric, 6), round((g.lat - 0.003)::numeric, 6)) end,
+       case when g.poligono is not null then
+         'POLYGON((' || (select string_agg(format('%s %s', (e.v->>'lng'), (e.v->>'lat')), ', ' order by e.n)
+                           from (select v, n from jsonb_array_elements(g.poligono) with ordinality as t(v, n)
+                                 union all select g.poligono->0, jsonb_array_length(g.poligono) + 1) e(v, n)) || '))' end,
        (select nombre from cliente c where c.id = g.cliente_id)
 from geocerca g
 where g.tenant_id = current_setting('inn.tenant')::uuid and g.tipo in ('planta', 'patio');

@@ -95,3 +95,33 @@ select innovativos_sim.uid('trafico:' || t.cod || ':' || n.nivel), current_setti
 from (values ('GDL', 'Tlaquepaque', 1), ('SIL', 'Silao', 2), ('APO', 'Apodaca', 3)) t(cod, nombre, ord)
 cross join (values (1), (2)) n(nivel)
 on conflict (id) do nothing;
+
+-- ── Conductor: «sin señal de vida» en tránsito (0635/0636) ──────────────────────────────────────────────────────
+-- Los 6 viajes de «silencio» (02_viajes.sql: el GPS dejó de reportar hace >100 min) llevan un episodio del barrido de
+-- señal de vida, en los estados que el guion enseña. La escalera es aviso 1 al chofer → 20 min → aviso 2 → 20 min → jefe de
+-- tráfico; una respuesta del chofer o del jefe cierra el episodio y lo SILENCIA 2 h. El seed deja el estado como lo
+-- dejaría el cron; el barrido nace APAGADO (`avisar_senal_vida = false`) y los teléfonos son 28999…: lo que se enseña es
+-- el estado, no un envío. Los umbrales (45 min obsoleto, 20 min entre avisos, 2 h de silencio) son SUPUESTOS declarados.
+insert into viaje_senal_vida (id, tenant_id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en,
+                              respondido_en, respuesta, cerrado_en, cierre_motivo, silenciado_hasta)
+select innovativos_sim.uid('senal:' || p.folio), current_setting('inn.tenant')::uuid, innovativos_sim.uid('viaje:' || p.folio), 'gps_obsoleto',
+       a.anc - e.abierto, e.nivel,
+       a.anc - e.abierto,
+       case when e.nivel >= 2 then a.anc - e.abierto + interval '20 minutes' end,
+       case when e.nivel >= 3 then a.anc - e.abierto + interval '40 minutes' end,
+       case when e.cierre in ('respondio', 'atendido_por_jefe') then a.anc - e.abierto + e.tarda end,
+       case when e.cierre = 'respondio' then 'estoy_bien' end,
+       case when e.cierre is not null then a.anc - e.abierto + e.tarda end,
+       e.cierre,
+       case when e.cierre is not null then a.anc - e.abierto + e.tarda + interval '120 minutes' end
+from innovativos_sim.plan_viaje p
+cross join (select current_setting('inn.ancla')::timestamptz as anc) a
+join (values (23,  interval '54 minutes', 1, 'respondio',         interval '9 minutes'),   -- el chofer contestó «Estoy bien» tras el aviso 1
+             (46,  interval '55 minutes', 3, null::text,          interval '0 minutes'),   -- escalado al jefe de tráfico, sin atender
+             (69,  interval '34 minutes', 2, null,                interval '0 minutes'),   -- aviso 2 enviado, esperando al chofer
+             (92,  interval '54 minutes', 3, null,                interval '0 minutes'),   -- escalado al jefe de tráfico, sin atender
+             (115, interval '12 minutes', 1, null,                interval '0 minutes'),   -- aviso 1 enviado, esperando al chofer
+             (138, interval '52 minutes', 3, 'atendido_por_jefe', interval '47 minutes')   -- el jefe respondió «Ya lo atiendo»
+      ) e(i, abierto, nivel, cierre, tarda) on e.i = p.i
+where p.escenario = 'silencio'
+on conflict (id) do nothing;

@@ -89,7 +89,12 @@ select :'que' in ('gps', 'todo') as es_gps, :'que' in ('geocercas', 'todo') as e
   delete from vigia_contacto v where v.tenant_id = :'t'
     and v.id in (select innovativos_sim.uid('vigiacontacto:' || c) from unnest(array['c05', 'c10', 'c12']) c)
     and not exists (select 1 from vigia_conversacion x where x.contacto_id = v.id);
-  \echo 'vigia: los contactos, conversaciones y mensajes sembrados borrados (lo real que se haya cargado queda).'
+  -- Los 3 grupos críticos sembrados (con su histórico importado, en cascada) y las respuestas rápidas aprobadas que salieron de él.
+  delete from vigia_grupo where tenant_id = :'t'
+    and id in (select innovativos_sim.uid('vigiagrupo:' || c) from unnest(array['c05', 'c10', 'c12']) c);
+  delete from vigia_respuesta_rapida where tenant_id = :'t'
+    and id in (select innovativos_sim.uid('respuestarapida:' || n) from generate_series(1, 10) n);
+  \echo 'vigia: los contactos, conversaciones, mensajes, grupos, histórico y respuestas rápidas sembrados borrados (lo real que se haya cargado queda).'
 \endif
 \if :es_conv
   do $$ begin

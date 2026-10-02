@@ -19,7 +19,7 @@ T=eeeeeeee-0620-4000-8000-000000000250
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 # Huella de CADA tabla del demo: conteo + md5 de la FILA COMPLETA (to_jsonb), no de unas cuantas columnas.
-# Solo se excluyen las marcas de reloj del servidor (created_at/updated_at/creado_en/creada_en) y, en `posicion`, el
+# Solo se excluyen las marcas de reloj del servidor (created_at/updated_at/creado_en/creada_en/actualizado_en) y, en `posicion`, el
 # id (bigserial: cambia cada vez que se borra y se vuelve a insertar). Así una columna que se pierde
 # (p. ej. viaje.origen_geocerca_id tras borrar las geocercas) cambia la huella.
 # Cada entrada: «nombre|tabla|filtro SQL sobre t|columnas extra a excluir (coma)».
@@ -48,13 +48,26 @@ TABLAS=(
   "agente_conductor_config|agente_conductor_config|t.tenant_id = '$T'"
   "conductor_contacto_trafico|conductor_contacto_trafico|t.tenant_id = '$T'"
   "sim.convenio_instruccion|innovativos_sim.convenio_instruccion|true"
+  "desglose_peaje|desglose_peaje|t.tenant_id = '$T'"
+  "geocerca_poligono|geocerca|t.tenant_id = '$T' and t.poligono is not null"
+  "viaje_cruce_geocerca|viaje_cruce_geocerca|t.tenant_id = '$T'"
+  "viaje_senal_vida|viaje_senal_vida|t.tenant_id = '$T'"
+  "liquidacion_formato_flota|liquidacion_formato_flota|t.tenant_id = '$T'"
+  "liquidacion_aviso_discrepancia|liquidacion_aviso_discrepancia|t.tenant_id = '$T'"
+  "orquestador_escalacion|orquestador_escalacion|t.tenant_id = '$T'"
+  "vigia_grupo|vigia_grupo|t.tenant_id = '$T'"
+  "vigia_historial_import|vigia_historial_import|t.tenant_id = '$T'"
+  "vigia_historial_mensaje|vigia_historial_mensaje|t.tenant_id = '$T'|id"
+  "vigia_respuesta_rapida|vigia_respuesta_rapida|t.tenant_id = '$T'"
+  "cliente_convenio|cliente_convenio|t.tenant_id = '$T'"
+  "convenio_instruccion|convenio_instruccion|t.tenant_id = '$T'"
 )
 
 huella() {
   local def nombre tabla filtro extra excl
   for def in "${TABLAS[@]}"; do
     IFS='|' read -r nombre tabla filtro extra <<<"$def"
-    excl="'created_at','updated_at','creado_en','creada_en'"
+    excl="'created_at','updated_at','creado_en','creada_en','actualizado_en'"
     [ -z "${extra:-}" ] || excl="$excl,'${extra//,/\',\'}'"
     psql "$URL" -Atq -v ON_ERROR_STOP=1 -c "select '$nombre', count(*), coalesce(md5(string_agg(j::text, ',' order by j::text)), 'vacio') from (select to_jsonb(t) - array[$excl] as j from $tabla t where $filtro) q"
   done
@@ -77,9 +90,14 @@ n=$(psql "$URL" -Atq -c "select count(*) from viaje where tenant_id = '$T' and (
 [ "$n" = "0" ] || { echo "FALLA: $n viajes sin origen_geocerca_id/destino_geocerca_id" >&2; ok=0; }
 
 # Nadie real puede recibir un mensaje: todo teléfono del tenant demo lleva la marca 28999 y los agentes que escriben vienen apagados.
-n=$(psql "$URL" -Atq -c "select count(*) from (select telefono from cliente where tenant_id = '$T' union all select telefono from operador where tenant_id = '$T' union all select telefono from vigia_contacto where tenant_id = '$T' union all select telefono from conductor_contacto_trafico where tenant_id = '$T') x where telefono is null or telefono not like '28999%'")
+n=$(psql "$URL" -Atq -c "select count(*) from (select telefono from cliente where tenant_id = '$T' union all select telefono from operador where tenant_id = '$T' union all select telefono from vigia_contacto where tenant_id = '$T' union all select telefono from conductor_contacto_trafico where tenant_id = '$T' union all select unnest(copia_telefonos) from liquidacion_formato_flota where tenant_id = '$T' union all select unnest(discrepancia_telefonos) from liquidacion_formato_flota where tenant_id = '$T' union all select unnest(telefonos_aceptados) from liquidacion_aviso_discrepancia where tenant_id = '$T') x where telefono is null or telefono not like '28999%'")
 [ "$n" = "0" ] || { echo "FALLA: $n teléfonos del tenant demo SIN la marca 28999 (podrían ser de alguien)" >&2; ok=0; }
-n=$(psql "$URL" -Atq -c "select (select count(*) from vigia_config where tenant_id = '$T' and habilitado) + (select count(*) from agente_conductor_config where tenant_id = '$T' and activo)")
+# Copia al jefe y aviso de discrepancia SEMBRADOS (sin ellos el guion no tiene qué enseñar), y ningún aviso con salida pendiente.
+n=$(psql "$URL" -Atq -c "select (select count(*) from liquidacion_formato_flota where tenant_id = '$T' and cardinality(copia_telefonos) > 0 and cardinality(discrepancia_telefonos) > 0)")
+[ "$n" = "1" ] || { echo "FALLA: el formato de la flota no trae teléfonos de copia y de discrepancia sembrados" >&2; ok=0; }
+n=$(psql "$URL" -Atq -c "select (select count(*) from liquidacion_aviso_discrepancia where tenant_id = '$T' and estado in ('pendiente', 'enviando')) + (select count(*) from orquestador_escalacion where tenant_id = '$T' and aviso_estado = 'pendiente') + (select count(*) from liquidacion_externa where tenant_id = '$T' and estado in ('pendiente', 'en_cola'))")
+[ "$n" = "0" ] || { echo "FALLA: hay $n avisos o liquidaciones del tenant demo con salida pendiente (algún cron intentaría mandarlos)" >&2; ok=0; }
+n=$(psql "$URL" -Atq -c "select (select count(*) from vigia_config where tenant_id = '$T' and habilitado) + (select count(*) from agente_conductor_config where tenant_id = '$T' and (activo or avisar_senal_vida))")
 [ "$n" = "0" ] || { echo "FALLA: el Vigía o el Conductor del tenant demo están ENCENDIDOS tras sembrar (deben venir apagados)" >&2; ok=0; }
 
 echo "== rol de solo lectura =="

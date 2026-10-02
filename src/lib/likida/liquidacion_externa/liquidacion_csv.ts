@@ -16,7 +16,8 @@
 // declarado: cuando llegue se agrega una línea de alias en ALIAS.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { leerNumero, llaveEncabezado, partirCsv } from '../demo_innovativos/lector_tabla_propia';
+import { partirCsv } from '../conectores/tabla_propia/csv';
+import { leerNumero, llaveEncabezado } from '../conectores/tabla_propia/validar';
 
 export interface CuerpoLiquidacionExterna {
   claveExterna: string;

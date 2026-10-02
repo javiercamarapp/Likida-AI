@@ -11,7 +11,11 @@
 --   · «llegue_sin_gps»: el operador escribió «ya llegué a descargar» pero el GPS
 --     lo muestra a >100 km. El hito queda RECIBIDO (no confirmado), no validado.
 --   · «silencio»: sin señal de vida: el GPS dejó de reportar hace >100 min y el
---     hito pendiente va ESCALADO (nivel 1 o 2) al jefe de tráfico.
+--     hito pendiente va ESCALADO (nivel 1 o 2) al jefe de tráfico; además el barrido de «señal de vida» (0636)
+--     abre un episodio por viaje (07_vigia_y_conductor.sql).
+--   · «por_geocerca» (7 viajes, timings normales): el chofer NO escribió nada; el barrido del GPS (0635) detectó que el
+--     tractor entró o salió del sitio y registró cada hito con fuente `sistema`, validado por GPS, más su fila de cruce
+--     (viaje_cruce_geocerca, el candado anti-duplicado).
 -- ═══════════════════════════════════════════════════════════════════════════
 
 drop table if exists innovativos_sim.plan_viaje cascade;
@@ -68,6 +72,10 @@ select t.i, t.tipo, t.n, t.folio, t.term, t.economico, t.o_key, t.d_key, t.nodo_
 from tiempos t, a;
 
 alter table innovativos_sim.plan_viaje add primary key (i);
+-- Viajes de timing normal cuyo ciclo lo cerró el GPS por geocerca (sin mensaje del chofer). i % 19 = 7 no cae en los
+-- escenarios de excepción (i % 27 = 5 y i % 23 = 0) salvo i = 140, que ya es «llegue_sin_gps» y no se toca.
+alter table innovativos_sim.plan_viaje add column por_geocerca boolean not null default false;
+update innovativos_sim.plan_viaje set por_geocerca = true where tipo = 'abierto' and escenario = 'normal' and i % 19 = 7;
 alter table innovativos_sim.plan_viaje add column t_lc timestamptz, add column t_sc timestamptz,
   add column t_ld timestamptz, add column t_sd timestamptz;
 update innovativos_sim.plan_viaje set
@@ -135,26 +143,27 @@ select innovativos_sim.uid('hito:' || p.folio || ':' || e.tipo), current_setting
        r.estado, 1,
        case when r.estado in ('recibido','validado') then r.fuente end,
        case when r.estado in ('recibido','validado') then
-            case r.fuente when 'ubicacion' then 'ubicacion' when 'boton' then 'boton' else 'regla' end end,
+            case r.fuente when 'ubicacion' then 'ubicacion' when 'boton' then 'boton' when 'sistema' then 'sistema' else 'regla' end end,
        case when r.estado in ('recibido','validado') then
-            case r.fuente when 'ubicacion' then 0.99 else round((0.9 + 0.09 * p.u3)::numeric, 2)::real end end,
-       case when r.estado in ('recibido','validado') and r.fuente <> 'ubicacion' then r.recibido end,
+            case r.fuente when 'ubicacion' then 0.99 when 'sistema' then null else round((0.9 + 0.09 * p.u3)::numeric, 2)::real end end,
+       case when r.estado in ('recibido','validado') and r.fuente = 'sistema' then r.recibido - interval '1 minute'
+            when r.estado in ('recibido','validado') and r.fuente <> 'ubicacion' then r.recibido end,
        case when r.estado in ('recibido','validado') then r.recibido end,
        case when r.estado in ('recibido','validado') and r.fuente = 'texto' then
             case when r.escenario_llegue then 'Ya llegué a descargar, estoy en la puerta'
                  else (array['Ya llegué a la planta','Llegué, me estoy reportando','Ya cargué, salgo','Ya descargué, saliendo','Ya estoy en andén','Entregado, me retiro'])
                       [innovativos_sim.pick('txt' || p.folio || e.tipo, 6)] end end,
-       case when r.estado in ('recibido','validado') and e.tipo in ('llegada_carga','llegada_descarga') and p.u1 < 0.6 and not r.escenario_llegue
+       case when r.estado in ('recibido','validado') and r.fuente <> 'sistema' and e.tipo in ('llegada_carga','llegada_descarga') and p.u1 < 0.6 and not r.escenario_llegue
             then (array['Sr. Quintero','Sra. Valdés','Ing. Barrera','Don Pedro','Srita. Lucero','Sr. Montaño'])[innovativos_sim.pick('con' || p.folio || e.tipo, 6)] || ' (ficticio)' end,
-       case when r.estado in ('recibido','validado') and e.tipo in ('llegada_carga','llegada_descarga') and p.u1 < 0.6 and not r.escenario_llegue
+       case when r.estado in ('recibido','validado') and r.fuente <> 'sistema' and e.tipo in ('llegada_carga','llegada_descarga') and p.u1 < 0.6 and not r.escenario_llegue
             then (array['Andén','Báscula','Vigilancia','Almacén','Recibo'])[innovativos_sim.pick('area' || p.folio || e.tipo, 5)] end,
-       case when r.estado in ('recibido','validado') and e.tipo in ('llegada_carga','llegada_descarga') and p.u1 >= 0.6 and not r.escenario_llegue then true else false end,
-       case when r.estado in ('recibido','validado') then
+       case when r.estado in ('recibido','validado') and r.fuente <> 'sistema' and e.tipo in ('llegada_carga','llegada_descarga') and p.u1 >= 0.6 and not r.escenario_llegue then true else false end,
+       case when r.estado in ('recibido','validado') and r.fuente <> 'sistema' then
             (case when r.escenario_llegue then pl.lat else case when e.tipo in ('llegada_carga','salida_carga') then lo.lat else ld.lat end end) + (innovativos_sim.u('jl' || p.folio || e.tipo) - 0.5) * 0.0008 end,
-       case when r.estado in ('recibido','validado') then
+       case when r.estado in ('recibido','validado') and r.fuente <> 'sistema' then
             (case when r.escenario_llegue then pl.lng else case when e.tipo in ('llegada_carga','salida_carga') then lo.lng else ld.lng end end) + (innovativos_sim.u('jg' || p.folio || e.tipo) - 0.5) * 0.0008 end,
        case when r.estado = 'validado' then least(r.recibido + interval '1 minute', r.anc) end,
-       case when r.estado = 'validado' then case when r.fuente = 'ubicacion' then 'gps' else 'sistema' end end,
+       case when r.estado = 'validado' then case when r.fuente in ('ubicacion', 'sistema') then 'gps' else 'sistema' end end,
        case when r.estado in ('esperado','escalado') then r.anc - case when r.estado = 'escalado' then interval '150 minutes' else interval '8 minutes' end
             else r.recibido - interval '5 minutes' end,
        case when r.estado = 'escalado' then 2 when r.estado = 'esperado' then (innovativos_sim.h('rec' || p.folio) % 2)::int else 0 end,
@@ -175,22 +184,53 @@ cross join lateral innovativos_sim.punto(p.ka + sign(p.kb - p.ka) * 0.35 * abs(p
 cross join lateral (
   select current_setting('inn.ancla')::timestamptz as anc,
          (p.escenario = 'llegue_sin_gps' and e.tipo = 'llegada_descarga') as escenario_llegue,
-         (array['ubicacion','texto','boton'])[case when p.escenario = 'llegue_sin_gps' and e.tipo = 'llegada_descarga' then 2
+         case when p.por_geocerca then 'sistema'
+              else (array['ubicacion','texto','boton'])[case when p.escenario = 'llegue_sin_gps' and e.tipo = 'llegada_descarga' then 2
                                                    when innovativos_sim.u('f' || p.folio || e.tipo) < 0.55 then 1
-                                                   when innovativos_sim.u('f' || p.folio || e.tipo) < 0.85 then 2 else 3 end] as fuente,
+                                                   when innovativos_sim.u('f' || p.folio || e.tipo) < 0.85 then 2 else 3 end] end as fuente,
          -- El reporte llega entre 3 y 10 min DESPUÉS de la hora real (nunca antes de que el GPS llegue al sitio: el GPS
          -- reporta cada 5 min y un «llegué» a los 0-2 min se compararía con la muestra anterior, aún en la carretera).
-         least(e.ts + make_interval(mins => 3 + (innovativos_sim.h('dl' || p.folio || e.tipo) % 8)::int),
+         -- Por geocerca (sin chofer) el barrido lo da por hecho con ≥ 2 muestras dentro del sitio y corre cada 5 min:
+         -- entre 5 y 9 min después de la hora real, y el hito lleva la hora de la muestra (1 min antes del registro).
+         least(e.ts + make_interval(mins => case when p.por_geocerca then 5 + (innovativos_sim.h('dl' || p.folio || e.tipo) % 5)::int
+                                                  else 3 + (innovativos_sim.h('dl' || p.folio || e.tipo) % 8)::int end),
                current_setting('inn.ancla')::timestamptz - interval '1 minute') as recibido,
          case
            when p.tipo = 'cerrado' then 'validado'
            when p.escenario = 'llegue_sin_gps' and e.tipo = 'llegada_descarga' then 'recibido'
            when p.escenario = 'llegue_sin_gps' and e.ord > 3 then null
-           when e.ts <= current_setting('inn.ancla')::timestamptz then 'validado'
+           -- Un evento de un viaje «por_geocerca» de hace menos de 10 min aún no lo detecta el barrido: sigue esperado.
+           when e.ts + case when p.por_geocerca then interval '10 minutes' else interval '0' end <= current_setting('inn.ancla')::timestamptz then 'validado'
            when e.ord = (select min(x) from (values (1, p.t_lc), (2, p.t_sc), (3, p.t_ld), (4, p.t_sd)) q(x, tt)
-                         where tt > current_setting('inn.ancla')::timestamptz)
+                         where tt + case when p.por_geocerca then interval '10 minutes' else interval '0' end > current_setting('inn.ancla')::timestamptz)
                 then case when p.escenario = 'silencio' then 'escalado' else 'esperado' end
            else null end as estado
 ) r
 where r.estado is not null
 on conflict (id) do nothing;
+
+-- ── Cruces de geocerca: el candado y la bitácora de la detección por GPS (0635) ──────────────────────────────────
+-- Una fila por (viaje, hito) que el barrido de GPS dio por hecho sin que el chofer escribiera: la hora es la de la
+-- muestra que lo prueba (mensaje_en del hito), no la de la corrida. Entrada = el GPS entró al sitio; salida = salió.
+-- (Falta de la bitácora `viaje_hito_evento`: su id es identidad y la prueba de idempotencia compara filas completas.)
+insert into viaje_cruce_geocerca (id, tenant_id, viaje_id, geocerca_id, hito_tipo, tipo, detectado_en, distancia_m, registrado_en, completado_en)
+select innovativos_sim.uid('cruce:' || p.folio || ':' || h.tipo), h.tenant_id, h.viaje_id,
+       case when h.tipo in ('llegada_carga', 'salida_carga') then v.origen_geocerca_id else v.destino_geocerca_id end,
+       h.tipo, case when h.tipo like 'llegada%' then 'entrada' else 'salida' end,
+       h.mensaje_en,
+       case when h.tipo like 'llegada%' then 20 + (innovativos_sim.h('cx' || p.folio || h.tipo) % 160)::int
+            else g.radio_m + 100 + (innovativos_sim.h('cx' || p.folio || h.tipo) % 120)::int end,
+       h.recibido_en, h.recibido_en
+from viaje_hito h
+join viaje v on v.id = h.viaje_id and v.tenant_id = h.tenant_id
+join innovativos_sim.plan_viaje p on p.folio = v.folio
+join geocerca g on g.tenant_id = v.tenant_id
+  and g.id = case when h.tipo in ('llegada_carga', 'salida_carga') then v.origen_geocerca_id else v.destino_geocerca_id end
+where h.tenant_id = current_setting('inn.tenant')::uuid and p.por_geocerca and h.fuente = 'sistema' and h.estado = 'validado'
+on conflict (viaje_id, hito_tipo) do nothing;
+
+-- Igual que origen/destino del viaje: la FK cruce→geocerca es ON DELETE SET NULL; re-sembrar tras vaciar las geocercas lo restaura.
+update viaje_cruce_geocerca c set
+  geocerca_id = case when c.hito_tipo in ('llegada_carga', 'salida_carga') then v.origen_geocerca_id else v.destino_geocerca_id end
+from viaje v
+where v.id = c.viaje_id and v.tenant_id = c.tenant_id and c.tenant_id = current_setting('inn.tenant')::uuid and c.geocerca_id is null;

@@ -68,3 +68,43 @@ cross join lateral (
          (l.r >= 0.62 and l.r < 0.70) as no_coincide
 ) e
 on conflict (id) do nothing;
+
+-- ── Discrepancias: el aviso a la oficina con red y la tarea durable (0643 + 0650) ───────────────────────────────
+-- Cada «No coincide» del chofer abre UNA tarea para una persona en la cola del orquestador (destino liquidación, motivo
+-- diferencia_liquidacion) y un aviso con estado persistido (0643). De las 8 sembradas: 6 con el aviso ya entregado a los
+-- designados (2899950…) y 2 con el aviso FALLIDO (plantilla aún no aprobada en Meta), que son las que el panel marca
+-- «El aviso no llegó» y ofrecen «Reavisar». Las tareas de los avisos entregados que ya se revisaron quedan atendidas;
+-- las demás, abiertas. Los avisos del orquestador a personas nacen apagados: aviso_estado = 'omitido'.
+-- Ninguna fila queda 'pendiente' ni 'enviando': ningún cron intenta mandar nada en el demo.
+drop table if exists innovativos_sim.discrepancia cascade;
+create table innovativos_sim.discrepancia as
+select l.id as liq_id, l.clave_externa, l.acuse_en, l.folios_viaje, l.viaje_ids, o.nombre as operador, l.sistema_origen,
+       row_number() over (order by l.clave_externa)::int as rn
+from liquidacion_externa l join operador o on o.id = l.operador_id and o.tenant_id = l.tenant_id
+where l.tenant_id = current_setting('inn.tenant')::uuid and l.acuse_tipo = 'no_coincide';
+
+insert into orquestador_escalacion (id, tenant_id, creada_en, destino, motivo, viaje_id, viaje_folio, resumen, pedida_por_rol,
+                                    dedupe_key, estado, atendida_en, nota_atencion, aviso_estado, aviso_detalle)
+select innovativos_sim.uid('tarea:' || d.clave_externa), current_setting('inn.tenant')::uuid, d.acuse_en + interval '1 minute',
+       'liquidacion', 'diferencia_liquidacion',
+       case when cardinality(d.viaje_ids) = 1 then d.viaje_ids[1] end, case when cardinality(d.folios_viaje) = 1 then d.folios_viaje[1] end,
+       d.operador || ' respondió «No coincide» a su liquidación ' || d.clave_externa || ' (' || d.sistema_origen || '). Revisa la diferencia con el operador en el panel de liquidaciones.',
+       'sistema', 'liquidacion|diferencia_liquidacion|liq:' || d.liq_id,
+       case when d.rn in (1, 2, 4) then 'atendida' else 'abierta' end,
+       case when d.rn in (1, 2, 4) then d.acuse_en + interval '3 hours' end,
+       case when d.rn in (1, 2, 4) then 'Revisado con el operador (dato de demo).' end,
+       'omitido', 'Avisos del asistente apagados para la flota (demo).'
+from innovativos_sim.discrepancia d
+on conflict (id) do nothing;
+
+insert into liquidacion_aviso_discrepancia (liquidacion_externa_id, tenant_id, ciclo, estado, intentos, proximo_intento_en, ultimo_error,
+                                            telefonos_aceptados, tarea_id, creado_en, actualizado_en, enviado_en)
+select d.liq_id, current_setting('inn.tenant')::uuid, 1, f.estado, f.intentos, d.acuse_en,
+       case when f.estado = 'fallido' then 'La plantilla de avisos aún no está aprobada en Meta (dato de demo).' end,
+       case when f.estado = 'enviado' then array['2899950000002', '2899950000003'] else '{}'::text[] end,
+       innovativos_sim.uid('tarea:' || d.clave_externa), d.acuse_en, d.acuse_en + interval '2 minutes',
+       case when f.estado = 'enviado' then d.acuse_en + interval '1 minute' end
+from innovativos_sim.discrepancia d
+cross join lateral (select case when d.rn in (3, 6) then 'fallido' else 'enviado' end as estado,
+                                case when d.rn in (3, 6) then 5 else 1 end as intentos) f
+on conflict (liquidacion_externa_id, ciclo) do nothing;

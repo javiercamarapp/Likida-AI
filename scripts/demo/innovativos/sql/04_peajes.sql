@@ -103,6 +103,33 @@ join innovativos_sim.caseta c on c.nombre = x.nombre
 join innovativos_sim.tracto tr on tr.n = x.n
 on conflict (id) do nothing;
 
+-- ── Dos cruces de tractos SIN viaje, junto al patio alargado de Tlaquepaque (polígono nativo, 01_base.sql) ─────
+-- Las dos líneas quedan «sin datos» en el cruce por caseta (una sola posición en la ventana: el motor no afirma nada) y
+-- son las que prueba el reporte de reclamación con polígono (peajes/reclamacion.ts):
+--   · IN-141 estaba ESTACIONADO dentro del patio cuando «cruzó» Caseta Demo Zapotlanejo  → «unidad en zona no
+--     autorizada», confianza ALTA (el polígono es exacto: no pudo cruzar la caseta).
+--   · IN-142 iba por la carretera de junto (330 m al norte del centro: dentro del círculo de ~520 m, fuera del
+--     polígono) cuando se le cobró Caseta Demo Tepatitlan → NO se reclama. Con el círculo se le habría acusado.
+insert into desglose_peaje_linea (id, tenant_id, desglose_id, indice, fecha, caseta, monto, tag, viaje_id, estatus,
+                                  diferencia, detalle, hora, cruce_en, unidad_id, caseta_id,
+                                  gps_veredicto, gps_distancia_m, gps_detalle)
+select innovativos_sim.uid('pase:patio:' || z.n || ':' || z.nombre), current_setting('inn.tenant')::uuid, innovativos_sim.uid('desglose:pase-24h'),
+       (select coalesce(max(l.indice), 0) from desglose_peaje_linea l
+         where l.desglose_id = innovativos_sim.uid('desglose:pase-24h') and coalesce(l.detalle ->> 'origen_demo', '') not in ('en_patio', 'junto_al_patio'))::int + z.k,
+       (t0.cruce at time zone 'America/Mexico_City')::date, z.nombre, c.tarifa, tr.tag, null, 'sin_contraparte', null,
+       jsonb_build_object('origen_demo', z.origen, 'tag_cobrado', tr.tag),
+       (t0.cruce at time zone 'America/Mexico_City')::time, t0.cruce, innovativos_sim.uid('unidad:' || z.n), innovativos_sim.uid('caseta:' || z.nombre),
+       'sin_datos',
+       round((1000 * innovativos_sim.dist_km(pa.lat + z.dlat, pa.lng, c.lat, c.lng))::numeric, 1),
+       '{"motivo":"muestras_insuficientes","muestras":1}'::jsonb
+from (values (1, 141, 'Caseta Demo Zapotlanejo', 'en_patio', 0.0::float8),
+             (2, 142, 'Caseta Demo Tepatitlan', 'junto_al_patio', 0.0030::float8)) z(k, n, nombre, origen, dlat)
+cross join lateral (select current_setting('inn.ancla')::timestamptz - interval '146 minutes' as cruce) t0
+join innovativos_sim.caseta c on c.nombre = z.nombre
+join innovativos_sim.tracto tr on tr.n = z.n
+join geocerca pa on pa.id = innovativos_sim.uid('geo:patio:GDL')
+on conflict (id) do nothing;
+
 -- La lista de anomalías sembradas (para el guion y para la prueba de que el
 -- cruce las encuentra).
 drop table if exists innovativos_sim.anomalias_sembradas cascade;
