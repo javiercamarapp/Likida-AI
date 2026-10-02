@@ -6,7 +6,7 @@ import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
 import { dinero } from '@/lib/likida/liquidacion_externa/presentacion';
 import { motivoDeFallo } from '@/lib/likida/liquidacion_externa/api';
 import {
-  ESTADOS, type EstadoLiquidacionExterna, type LiquidacionExterna,
+  ESTADOS, type EstadoLiquidacionExterna, type LiquidacionExterna, type EstadoAvisoDiscrepancia,
 } from '@/lib/likida/liquidacion_externa/repo';
 import { EnlacePagina, NavPaginas } from '../../paginador';
 
@@ -58,7 +58,21 @@ export interface ExternasProps {
   subirArchivo?: (fd: FormData) => Promise<void>;
   /** Lo que dejó la última carga (de la URL: se valida aquí, no se confía). */
   importacion?: { conteo?: string; detalle?: string };
+  /** El estado del aviso a la oficina de cada liquidación en «No coincide» (0643). `null` = la base aún no lo guarda o no se pudo leer:
+   *  no se pinta rótulo (jamás se inventa uno). Una liquidación sin entrada aquí no tiene aviso registrado. */
+  avisos?: Promise<Record<string, { estado: EstadoAvisoDiscrepancia }> | null>;
+  /** Server action del host: vuelve a avisar a la oficina de UNA discrepancia (rearma el aviso fallido o pendiente). */
+  reavisar?: (fd: FormData) => Promise<void>;
 }
+
+/** El rótulo del aviso a la oficina de una discrepancia: lo que la persona necesita saber para no suponer que alguien ya lo sabe. */
+export const ROTULO_AVISO: Record<EstadoAvisoDiscrepancia | 'sin_registro', { rotulo: string; ayuda: string; tono: 'ok' | 'warn' | 'bad' | 'muted' }> = {
+  enviado: { rotulo: 'Oficina avisada', ayuda: 'El aviso por WhatsApp ya salió hacia la persona responsable.', tono: 'ok' },
+  pendiente: { rotulo: 'Aviso pendiente', ayuda: 'El aviso todavía no llega a la oficina; se reintenta solo con espera creciente. Puedes reavisar ya.', tono: 'warn' },
+  enviando: { rotulo: 'Avisando…', ayuda: 'El aviso se está mandando en este momento.', tono: 'warn' },
+  fallido: { rotulo: 'El aviso no llegó', ayuda: 'Se agotaron los intentos: avisa tú o pulsa Reavisar. La tarea para una persona ya está abierta en el asistente.', tono: 'bad' },
+  sin_registro: { rotulo: 'Aviso sin registrar', ayuda: 'No hay registro del aviso a la oficina (el acuse es anterior a esta función). Puedes reavisar.', tono: 'muted' },
+};
 
 const ROTULO_ESTADO: Record<EstadoLiquidacionExterna, { rotulo: string; ayuda: string; fg: string; bg: string }> = {
   pendiente: { rotulo: 'Pendiente', ayuda: 'Recibida; todavía no entra a la cola de WhatsApp.', fg: 'var(--muted)', bg: 'var(--canvas)' },
@@ -68,9 +82,15 @@ const ROTULO_ESTADO: Record<EstadoLiquidacionExterna, { rotulo: string; ayuda: s
   fallida: { rotulo: 'Falló', ayuda: 'No se pudo entregar. Se puede reintentar.', fg: 'var(--bad)', bg: 'var(--badbg)' },
 };
 
-export type MensajeExterno = 'reintentada' | 'no_aplica' | 'no_encontrada' | 'error' | 'copia_enviada' | 'copia_ya' | 'copia_fallo' | 'copia_sin_jefe' | 'importada' | 'importacion_error';
+export type MensajeExterno = 'reintentada' | 'no_aplica' | 'no_encontrada' | 'error' | 'copia_enviada' | 'copia_ya' | 'copia_fallo' | 'copia_sin_jefe' | 'importada' | 'importacion_error'
+  | 'reaviso_ok' | 'reaviso_parcial' | 'reaviso_pendiente' | 'reaviso_ya' | 'reaviso_en_curso';
 
 const MENSAJES: Record<MensajeExterno, { texto: string; tono: 'ok' | 'bad' }> = {
+  reaviso_ok: { texto: 'Listo: el aviso salió hacia la persona responsable.', tono: 'ok' },
+  reaviso_parcial: { texto: 'El aviso salió a una parte de los designados; el resto se reintenta solo.', tono: 'ok' },
+  reaviso_pendiente: { texto: 'WhatsApp no aceptó el aviso (¿la plantilla de avisos sigue sin aprobar?). Se reintenta solo; la tarea para una persona ya está abierta en el asistente.', tono: 'bad' },
+  reaviso_ya: { texto: 'Ese aviso ya había salido: no se mandó otra vez.', tono: 'ok' },
+  reaviso_en_curso: { texto: 'Otra persona o el cron lo está mandando en este momento. Revisa en un minuto.', tono: 'ok' },
   copia_enviada: { texto: 'Listo: la copia salió hacia el jefe de flota.', tono: 'ok' },
   copia_ya: { texto: 'La copia ya se había enviado: no se mandó otra vez.', tono: 'ok' },
   copia_fallo: { texto: 'WhatsApp no aceptó la copia (¿la plantilla de avisos sigue sin aprobar?). La entrega al operador no se afectó. Vuelve a intentarlo más tarde.', tono: 'bad' },
@@ -113,7 +133,7 @@ function query(contexto: Array<[string, string]>, extra: Array<[string, string]>
 
 /** El hijo más sencillo posible de la sección: la que llega por su cuenta. */
 export async function SeccionExternas(p: ExternasProps) {
-  const [fichas, pagina, formato] = await Promise.all([p.fichas, p.pagina, p.formato ?? null]);
+  const [fichas, pagina, formato, avisos] = await Promise.all([p.fichas, p.pagina, p.formato ?? null, p.avisos ?? null]);
   const hoy = hoyMx();
   const hace30 = (() => { const d = new Date(`${hoy}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 30); return d.toISOString().slice(0, 10); })();
   const sinNada = pagina.filas.length === 0 && !p.filtroEstado;
@@ -227,7 +247,7 @@ export async function SeccionExternas(p: ExternasProps) {
                 </tr>
               </thead>
               <tbody>
-                {pagina.filas.map((l) => <Fila key={l.id} l={l} p={p} formato={formato} />)}
+                {pagina.filas.map((l) => <Fila key={l.id} l={l} p={p} formato={formato} avisos={avisos} />)}
               </tbody>
             </table>
           </div>
@@ -248,10 +268,13 @@ export async function SeccionExternas(p: ExternasProps) {
   );
 }
 
-function Fila({ l, p, formato }: { l: LiquidacionExterna; p: ExternasProps; formato: { excel: boolean; copia: boolean } | null }) {
+function Fila({ l, p, formato, avisos }: { l: LiquidacionExterna; p: ExternasProps; formato: { excel: boolean; copia: boolean } | null; avisos: Record<string, { estado: EstadoAvisoDiscrepancia }> | null }) {
   const e = ROTULO_ESTADO[l.estado] ?? { rotulo: l.estado, ayuda: '', fg: 'var(--muted)', bg: 'var(--canvas)' };
   const fallo = motivoDeFallo(l.ultimoError);
   const disputa = l.acuseTipo === 'no_coincide';
+  // El aviso a la oficina solo existe para una discrepancia, y solo se pinta si la base lo guarda (`avisos` no nulo).
+  const aviso = disputa && avisos ? ROTULO_AVISO[avisos[l.id]?.estado ?? 'sin_registro'] : null;
+  const puedeReavisar = disputa && avisos !== null && p.puedeReintentar && !!p.reavisar && (avisos[l.id]?.estado ?? 'sin_registro') !== 'enviado';
   return (
     <tr className="border-t align-top" style={{ borderColor: 'var(--line2)', background: disputa ? 'var(--badbg)' : undefined }}>
       <td className="py-2 font-medium">
@@ -273,6 +296,12 @@ function Fila({ l, p, formato }: { l: LiquidacionExterna; p: ExternasProps; form
         {disputa && <span className="font-medium" style={{ color: 'var(--bad)' }}>No coincide</span>}
         {l.acuseTipo === null && <span style={{ color: 'var(--faint)' }}>Sin respuesta</span>}
         {l.acuseEn && <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaHoraMx(l.acuseEn)}</span>}
+        {aviso && (
+          <span className="block text-[11px] mt-0.5" title={aviso.ayuda}
+            style={{ color: aviso.tono === 'ok' ? 'var(--ok)' : aviso.tono === 'bad' ? 'var(--bad)' : aviso.tono === 'warn' ? 'var(--warn)' : 'var(--faint)' }}>
+            {aviso.rotulo}
+          </span>
+        )}
       </td>
       <td className="py-2" style={{ color: 'var(--muted)' }}>{l.enviadaEn ? fechaHoraMx(l.enviadaEn) : '—'}</td>
       <td className="py-2 text-right whitespace-nowrap">
@@ -293,6 +322,14 @@ function Fila({ l, p, formato }: { l: LiquidacionExterna; p: ExternasProps; form
             <input type="hidden" name="id" value={l.id} />
             <button type="submit" title="Reenvía la copia al jefe de flota (solo se manda si aún no salió)" className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--marca)' }}>
               <Send width={12} height={12} strokeWidth={2} /> Copia al jefe
+            </button>
+          </form>
+        )}
+        {puedeReavisar && p.reavisar && (
+          <form action={p.reavisar} className="inline mr-3">
+            <input type="hidden" name="id" value={l.id} />
+            <button type="submit" title="Vuelve a avisar a la persona responsable (no repite a quien ya recibió el aviso)" className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--marca)' }}>
+              <Send width={12} height={12} strokeWidth={2} /> Reavisar
             </button>
           </form>
         )}

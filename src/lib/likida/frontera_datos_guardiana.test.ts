@@ -262,7 +262,12 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 286;
 // sitios, los episodios de «sin señal de vida» y la última muestra de cada unidad) y `conductor/repo.ts` +12 (las escrituras de la 0635-0637, siempre
 // con `tenant_id`: reclamar/completar/liberar el cruce de geocerca —4—, asignar el sitio derivado —3—, y abrir/reclamar nivel/cerrar/anotar/responder/
 // cerrar por el jefe el episodio de señal de vida —5—). Funcionalidad nueva, no código migrado.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_835;
+// OLA 4c, paquete P4 «liquidacion-discrepancias» (0643-0645): 0 archivos y +14 llamadas (suma de las dos: 1,835 + 14 = 1,849), todas en archivos que ya contaban —
+// funcionalidad nueva, no código migrado: `liquidacion_externa/repo.ts` junta el acceso del aviso de discrepancia (las cuatro RPC de la 0644:
+// «No coincide» atómico, reclamo, cierre y rearme; la lectura de un aviso y la del panel; marcar la tarea abierta; la lectura de los teléfonos
+// de la flota con o sin formato y su guardado sin Excel de muestra (actualizar o crear la fila) y quitar el formato conservando los teléfonos; y las dos de la tarea durable en la cola del orquestador, insertar y leer la previa ante el índice único) y
+// `liquidacion_externa/trabajo.ts` suma la lista de avisos pendientes que cruza flotas (como su lista de entregas). Todas por `acotada`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_849;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

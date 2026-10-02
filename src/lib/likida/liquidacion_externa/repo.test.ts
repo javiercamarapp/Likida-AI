@@ -13,13 +13,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 type Op = [string, ...unknown[]];
 interface Llamada { tabla: string; ops: Op[] }
 const llamadas: Llamada[] = [];
-let respuestas: Array<{ data?: unknown; error?: { message: string } | null; count?: number | null }> = [];
+/** Las RPC (`supabaseAdmin().rpc`): nombre y argumentos; contestan de la misma cola que las consultas. */
+const rpcs: Array<{ fn: string; args: Record<string, unknown> }> = [];
+let respuestas: Array<{ data?: unknown; error?: { message: string; code?: string } | null; count?: number | null }> = [];
 
 function constructor(tabla: string) {
   const ll: Llamada = { tabla, ops: [] };
   llamadas.push(ll);
   const b: Record<string, unknown> = {};
-  for (const m of ['select', 'insert', 'update', 'eq', 'in', 'gte', 'lt', 'or', 'order', 'range', 'limit', 'neq']) {
+  for (const m of ['select', 'insert', 'update', 'delete', 'eq', 'in', 'gte', 'lt', 'or', 'order', 'range', 'limit', 'neq']) {
     b[m] = (...a: unknown[]) => { ll.ops.push([m, ...a]); return b; };
   }
   const resolver = () => respuestas.shift() ?? { data: [], error: null, count: 0 };
@@ -34,6 +36,7 @@ const bucketsUsados: string[] = [];
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: constructor,
+    rpc: async (fn: string, args: Record<string, unknown>) => { rpcs.push({ fn, args }); return respuestas.shift() ?? { data: null, error: null }; },
     storage: { from: (b: string) => { bucketsUsados.push(b); return { upload, createSignedUrl }; } },
   }),
 }));
@@ -48,7 +51,7 @@ const opFila = (p: Record<string, unknown> = {}) => ({ id: ID_OP, nombre: 'Juan 
 const tieneEq = (l: Llamada, col: string, v: unknown) => l.ops.some((o) => o[0] === 'eq' && o[1] === col && o[2] === v);
 
 beforeEach(() => {
-  llamadas.length = 0; respuestas = []; warn.mockReset(); bucketsUsados.length = 0;
+  llamadas.length = 0; rpcs.length = 0; respuestas = []; warn.mockReset(); bucketsUsados.length = 0;
   upload.mockReset(); upload.mockResolvedValue({ error: null });
   createSignedUrl.mockReset(); createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://firmada' }, error: null });
 });
@@ -315,5 +318,182 @@ describe('razón social y cola de WhatsApp', () => {
     expect(tieneEq(llamadas[0], 'estado', 'acusada')).toBe(true);
     respuestas = [{ count: null, error: { message: 'x' } }];
     expect(await repo.contarNoCoincide('t-1')).toBeNull();
+  });
+});
+
+describe('«No coincide» atómico: la transición condicional sobre el acuse', () => {
+  it('transicionar con `acuseDistintoDe` agrega la condición «sin acuse o con otro tipo» (la segunda entrega del botón no aplica)', async () => {
+    respuestas = [{ data: [{ id: 'l-1' }], error: null }];
+    await repo.transicionar('t-1', 'l-1', ['enviada', 'acusada'], { estado: 'acusada', acuse_tipo: 'no_coincide' }, { acuseDistintoDe: 'no_coincide' });
+    expect(llamadas[0].ops).toContainEqual(['or', 'acuse_tipo.is.null,acuse_tipo.neq.no_coincide']);
+    expect(tieneEq(llamadas[0], 'tenant_id', 't-1')).toBe(true);
+  });
+
+  it('sin la opción no agrega ninguna condición de acuse', async () => {
+    respuestas = [{ data: [], error: null }];
+    await repo.transicionar('t-1', 'l-1', ['pendiente'], { estado: 'enviada' });
+    expect(llamadas[0].ops.some((o) => o[0] === 'or')).toBe(false);
+  });
+});
+
+describe('el aviso de discrepancia (0643/0644): RPC con tenant, y base sin migrar', () => {
+  const ausente = { data: null, error: { code: '42883', message: 'function public.registrar_acuse_no_coincide does not exist' } };
+
+  it('registrarNoCoincideAtomico: manda tenant, liquidación, operador y hora; devuelve el ciclo, o null si no la ganó', async () => {
+    respuestas = [{ data: 2, error: null }];
+    expect(await repo.registrarNoCoincideAtomico('t-1', 'l-1', 'op-1', '2026-10-02T10:00:00Z')).toEqual({ ciclo: 2 });
+    expect(rpcs[0]).toEqual({ fn: 'registrar_acuse_no_coincide', args: { p_tenant: 't-1', p_liquidacion: 'l-1', p_operador: 'op-1', p_ahora: '2026-10-02T10:00:00Z' } });
+    respuestas = [{ data: null, error: null }];
+    expect(await repo.registrarNoCoincideAtomico('t-1', 'l-1', 'op-1', 'x')).toEqual({ ciclo: null });
+  });
+
+  it('registrarNoCoincideAtomico: sin la RPC (base sin 0644) → \'sin_rpc\'; otro error LANZA (no se da por acusada)', async () => {
+    respuestas = [ausente];
+    expect(await repo.registrarNoCoincideAtomico('t-1', 'l-1', 'op-1', 'x')).toBe('sin_rpc');
+    respuestas = [{ data: null, error: { code: 'XX000', message: 'boom' } }];
+    await expect(repo.registrarNoCoincideAtomico('t-1', 'l-1', 'op-1', 'x')).rejects.toThrow(/boom/);
+  });
+
+  it('reclamar: token si le toca, null si no; un error LANZA (sin saber si otro lo manda, no se manda)', async () => {
+    respuestas = [{ data: 'tok-1', error: null }];
+    expect(await repo.reclamarAvisoDiscrepancia('t-1', 'l-1', 1, 'x')).toEqual({ token: 'tok-1' });
+    expect(rpcs[0].args).toMatchObject({ p_tenant: 't-1', p_liquidacion: 'l-1', p_ciclo: 1 });
+    respuestas = [{ data: null, error: null }];
+    expect(await repo.reclamarAvisoDiscrepancia('t-1', 'l-1', 1, 'x')).toBeNull();
+    respuestas = [{ data: null, error: { message: 'boom' } }];
+    await expect(repo.reclamarAvisoDiscrepancia('t-1', 'l-1', 1, 'x')).rejects.toThrow(/boom/);
+  });
+
+  it('cerrar: manda el token, el resultado, los aceptados y el tope; NO lanza (devuelve null si no se pudo)', async () => {
+    respuestas = [{ data: 'pendiente', error: null }];
+    expect(await repo.cerrarAvisoDiscrepancia('t-1', 'l-1', 1, { token: 'tok' }, { resultado: 'reintentar', aceptados: ['5255'], error: 'e', proximoIso: 'p' }, 'x')).toBe('pendiente');
+    expect(rpcs[0].args).toMatchObject({ p_claim: 'tok', p_resultado: 'reintentar', p_aceptados: ['5255'], p_error: 'e', p_proximo: 'p', p_max_intentos: repo.MAX_INTENTOS_AVISO });
+    respuestas = [{ data: null, error: { message: 'boom' } }];
+    expect(await repo.cerrarAvisoDiscrepancia('t-1', 'l-1', 1, { token: 'tok' }, { resultado: 'enviado', aceptados: [] }, 'x')).toBeNull();
+  });
+
+  it('rearmar: ciclo, null si ya salió, y \'sin_rpc\' sin la 0644', async () => {
+    respuestas = [{ data: 1, error: null }];
+    expect(await repo.rearmarAvisoDiscrepancia('t-1', 'l-1', 'x')).toEqual({ ciclo: 1 });
+    respuestas = [{ data: null, error: null }];
+    expect(await repo.rearmarAvisoDiscrepancia('t-1', 'l-1', 'x')).toEqual({ ciclo: null });
+    respuestas = [ausente];
+    expect(await repo.rearmarAvisoDiscrepancia('t-1', 'l-1', 'x')).toBe('sin_rpc');
+  });
+
+  it('leerAvisoDiscrepancia: con tenant, liquidación y ciclo; sin la tabla → null; otro error LANZA', async () => {
+    respuestas = [{ data: { liquidacion_externa_id: 'l-1', tenant_id: 't-1', ciclo: 1, estado: 'pendiente', intentos: 2, proximo_intento_en: 'p', ultimo_error: null, telefonos_aceptados: ['5255'], tarea_id: null, enviado_en: null }, error: null }];
+    expect(await repo.leerAvisoDiscrepancia('t-1', 'l-1', 1)).toMatchObject({ estado: 'pendiente', intentos: 2, telefonosAceptados: ['5255'] });
+    expect(tieneEq(llamadas[0], 'tenant_id', 't-1')).toBe(true);
+    expect(tieneEq(llamadas[0], 'liquidacion_externa_id', 'l-1')).toBe(true);
+    respuestas = [{ data: null, error: { code: '42P01', message: 'relation does not exist' } }];
+    expect(await repo.leerAvisoDiscrepancia('t-1', 'l-1', 1)).toBeNull();
+    respuestas = [{ data: null, error: { code: 'XX000', message: 'boom' } }];
+    await expect(repo.leerAvisoDiscrepancia('t-1', 'l-1', 1)).rejects.toThrow(/boom/);
+  });
+
+  it('avisosDiscrepanciaDe: el más reciente de cada liquidación, con tenant; sin tabla o con error → null (no se inventa un estado)', async () => {
+    const f = (id: string, ciclo: number, estado: string) => ({ liquidacion_externa_id: id, tenant_id: 't-1', ciclo, estado, intentos: 0, proximo_intento_en: 'p', ultimo_error: null, telefonos_aceptados: [], tarea_id: null, enviado_en: null });
+    respuestas = [{ data: [f('l-1', 2, 'enviado'), f('l-1', 1, 'fallido'), f('l-2', 1, 'pendiente')], error: null }];
+    const m = await repo.avisosDiscrepanciaDe('t-1', ['l-1', 'l-2']);
+    expect(m?.get('l-1')?.ciclo).toBe(2);
+    expect(m?.get('l-2')?.estado).toBe('pendiente');
+    expect(tieneEq(llamadas[0], 'tenant_id', 't-1')).toBe(true);
+    expect(llamadas[0].ops).toContainEqual(['in', 'liquidacion_externa_id', ['l-1', 'l-2']]);
+    respuestas = [{ data: null, error: { code: '42P01', message: 'relation does not exist' } }];
+    expect(await repo.avisosDiscrepanciaDe('t-1', ['l-1'])).toBeNull();
+    llamadas.length = 0;
+    expect((await repo.avisosDiscrepanciaDe('t-1', []))?.size).toBe(0);
+    expect(llamadas).toHaveLength(0); // sin ids no consulta
+  });
+});
+
+describe('la tarea durable en la cola del orquestador (0650)', () => {
+  const t = { resumen: 'Juan respondió «No coincide».', viajeFolio: 'VJ-1', viajeId: null };
+
+  it('inserta destino liquidación, motivo diferencia_liquidacion y una llave por liquidación, con el tenant', async () => {
+    respuestas = [{ data: { id: 'tarea-1' }, error: null }];
+    expect(await repo.crearTareaDiferenciaLiquidacion('t-1', 'l-1', t)).toEqual({ estado: 'creada', id: 'tarea-1' });
+    const ins = llamadas[0].ops.find((o) => o[0] === 'insert')![1] as Record<string, unknown>;
+    expect(ins).toMatchObject({
+      tenant_id: 't-1', destino: 'liquidacion', motivo: 'diferencia_liquidacion', viaje_folio: 'VJ-1', pedida_por_rol: 'sistema',
+      dedupe_key: 'liquidacion|diferencia_liquidacion|liq:l-1',
+    });
+    expect(llamadas[0].tabla).toBe('orquestador_escalacion');
+  });
+
+  it('ya hay una abierta (índice único, 23505) → ya_abierta con la previa, de ESTA flota', async () => {
+    respuestas = [{ data: null, error: { code: '23505', message: 'duplicate key' } }, { data: [{ id: 'previa-1' }], error: null }];
+    expect(await repo.crearTareaDiferenciaLiquidacion('t-1', 'l-1', t)).toEqual({ estado: 'ya_abierta', id: 'previa-1' });
+    expect(tieneEq(llamadas[1], 'tenant_id', 't-1')).toBe(true);
+    expect(tieneEq(llamadas[1], 'estado', 'abierta')).toBe(true);
+  });
+
+  it('sin la 0650 → no_disponible; un folio inválido no viaja; otro error LANZA', async () => {
+    respuestas = [{ data: null, error: { code: '42P01', message: 'relation "orquestador_escalacion" does not exist' } }];
+    expect(await repo.crearTareaDiferenciaLiquidacion('t-1', 'l-1', t)).toEqual({ estado: 'no_disponible' });
+    respuestas = [{ data: { id: 'x' }, error: null }];
+    await repo.crearTareaDiferenciaLiquidacion('t-1', 'l-1', { ...t, viajeFolio: 'VJ 1; drop' });
+    expect((llamadas[1].ops.find((o) => o[0] === 'insert')![1] as Record<string, unknown>).viaje_folio).toBeNull();
+    respuestas = [{ data: null, error: { code: 'XX000', message: 'boom' } }];
+    await expect(repo.crearTareaDiferenciaLiquidacion('t-1', 'l-1', t)).rejects.toThrow(/boom/);
+  });
+});
+
+describe('teléfonos de la flota con o sin formato (0645)', () => {
+  it('leerTelefonosFlota: copia y discrepancia por tenant, aunque la fila no traiga formato', async () => {
+    respuestas = [{ data: { copia_telefonos: ['5255'], discrepancia_telefonos: null }, error: null }];
+    expect(await repo.leerTelefonosFlota('t-1')).toEqual({ copia: ['5255'], discrepancia: [] });
+    expect(tieneEq(llamadas[0], 'tenant_id', 't-1')).toBe(true);
+    respuestas = [{ data: null, error: null }];
+    expect(await repo.leerTelefonosFlota('t-1')).toBeNull();
+    respuestas = [{ data: null, error: { code: '42P01', message: 'relation does not exist' } }];
+    expect(await repo.leerTelefonosFlota('t-1')).toBeNull();
+    respuestas = [{ data: null, error: { code: 'XX000', message: 'boom' } }];
+    await expect(repo.leerTelefonosFlota('t-1')).rejects.toThrow(/boom/);
+  });
+
+  it('leerFormatoFlota: una fila SOLO de teléfonos (formato nulo) no es un formato', async () => {
+    respuestas = [{ data: { formato: null, nombre_muestra: null, copia_telefonos: ['5255'], discrepancia_telefonos: [] }, error: null }];
+    expect(await repo.leerFormatoFlota('t-1')).toBeNull();
+  });
+
+  it('guardarTelefonosFlota: si la fila existe actualiza SOLO los teléfonos (no toca el formato)', async () => {
+    respuestas = [{ data: [{ tenant_id: 't-1' }], error: null }];
+    await repo.guardarTelefonosFlota('t-1', { copia: ['5255'], discrepancia: [] }, 'dueño');
+    const upd = llamadas[0].ops.find((o) => o[0] === 'update')![1] as Record<string, unknown>;
+    expect(Object.keys(upd).sort()).toEqual(['actualizado_en', 'actualizado_por', 'copia_telefonos', 'discrepancia_telefonos']);
+    expect(tieneEq(llamadas[0], 'tenant_id', 't-1')).toBe(true);
+    expect(llamadas).toHaveLength(1);
+  });
+
+  it('guardarTelefonosFlota: sin fila la crea con formato nulo; sin teléfonos no crea nada; sin la 0645 lo dice en palabras', async () => {
+    respuestas = [{ data: [], error: null }, { data: null, error: null }];
+    await repo.guardarTelefonosFlota('t-1', { copia: [], discrepancia: ['5255'] }, 'dueño');
+    expect((llamadas[1].ops.find((o) => o[0] === 'insert')![1] as Record<string, unknown>)).toMatchObject({ tenant_id: 't-1', formato: null, discrepancia_telefonos: ['5255'] });
+    llamadas.length = 0;
+    respuestas = [{ data: [], error: null }];
+    await repo.guardarTelefonosFlota('t-1', { copia: [], discrepancia: [] }, 'dueño');
+    expect(llamadas).toHaveLength(1); // solo el intento de actualizar
+    respuestas = [{ data: [], error: null }, { data: null, error: { code: '23502', message: 'null value in column "formato"' } }];
+    await expect(repo.guardarTelefonosFlota('t-1', { copia: ['5255'], discrepancia: [] }, 'dueño')).rejects.toThrow(/0645/);
+  });
+
+  it('borrarFormatoFlota: con teléfonos solo vacía el formato (se conservan); sin ellos, o sin la 0645, borra la fila', async () => {
+    respuestas = [{ data: { copia_telefonos: ['5255'], discrepancia_telefonos: [] }, error: null }, { data: null, error: null }];
+    await repo.borrarFormatoFlota('t-1');
+    const upd = llamadas[1].ops.find((o) => o[0] === 'update')![1] as Record<string, unknown>;
+    expect(upd).toMatchObject({ formato: null, nombre_muestra: null });
+    expect(llamadas.some((l) => l.ops.some((o) => o[0] === 'delete'))).toBe(false);
+
+    llamadas.length = 0;
+    respuestas = [{ data: { copia_telefonos: [], discrepancia_telefonos: [] }, error: null }, { data: null, error: null }];
+    await repo.borrarFormatoFlota('t-1');
+    expect(llamadas[1].ops.some((o) => o[0] === 'delete')).toBe(true);
+
+    llamadas.length = 0;
+    respuestas = [{ data: { copia_telefonos: ['5255'], discrepancia_telefonos: [] }, error: null }, { data: null, error: { code: '23502', message: 'not null' } }, { data: null, error: null }];
+    await repo.borrarFormatoFlota('t-1');
+    expect(llamadas[2].ops.some((o) => o[0] === 'delete')).toBe(true); // base sin la 0645: como antes
   });
 });

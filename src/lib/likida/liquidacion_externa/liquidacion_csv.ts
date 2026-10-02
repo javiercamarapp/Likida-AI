@@ -2,7 +2,7 @@
 // LIQUIDACIÓN FASE 1 — del archivo de «su sistema» al cuerpo de
 // POST /v1/liquidaciones-externas (el importador que YA existe: 0370).
 //
-// Innovativos calcula la liquidación en su SAP/TMS; Likida solo la entrega. El
+// La flota calcula la liquidación en su SAP/TMS; Likida solo la entrega. El
 // archivo que mande (CSV, una fila por renglón de la liquidación) se agrupa por
 // `clave_externa` y se convierte al cuerpo del contrato. Este módulo NO valida
 // el contrato a fondo (eso lo hace el endpoint, estricto); solo arma el cuerpo y
@@ -12,11 +12,11 @@
 // Contrato del archivo (encabezados, sin distinguir mayúsculas ni acentos):
 //   clave_externa*  numero_empleado*  periodo_desde*  periodo_hasta*  folios_viaje (separados por |)
 //   concepto_clave  concepto*  tipo* (percepcion|deduccion)  monto*  total_sistema*  moneda
-// El formato EXACTO del Excel de Innovativos (el formato que hoy copian y pegan) es un bloqueo
+// El formato EXACTO del Excel de la flota (el formato que hoy copian y pegan) es un bloqueo
 // declarado: cuando llegue se agrega una línea de alias en ALIAS.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { leerNumero, llaveEncabezado, partirCsv } from './lector_tabla_propia';
+import { leerNumero, llaveEncabezado, partirCsv } from '../demo_innovativos/lector_tabla_propia';
 
 export interface CuerpoLiquidacionExterna {
   claveExterna: string;

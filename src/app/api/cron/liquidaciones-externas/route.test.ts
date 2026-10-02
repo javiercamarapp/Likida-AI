@@ -17,7 +17,7 @@ vi.mock('@/lib/admin/salud', () => ({
 }));
 let interruptores: Record<string, 'encendido' | 'apagado' | 'ilegible'> = {};
 vi.mock('@/lib/likida/interruptores', () => ({ leerInterruptor: async (id: string) => interruptores[id] ?? 'encendido' }));
-const procesar = vi.fn(async (): Promise<Record<string, number>> => ({ tomadas: 2, en_cola: 1, enviadas: 1, reintentar: 0, fallidas: 0, sin_cambio: 0 }));
+const procesar = vi.fn(async (): Promise<Record<string, unknown>> => ({ tomadas: 2, en_cola: 1, enviadas: 1, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 } }));
 vi.mock('@/lib/likida/liquidacion_externa/servicio', () => ({ procesarLiquidacionesExternas: () => procesar() }));
 const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
@@ -31,7 +31,7 @@ const j = async (r: Response) => (await r.json()) as Record<string, unknown>;
 beforeEach(() => {
   autorizado = 'si'; interruptores = {};
   procesar.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear();
-  procesar.mockResolvedValue({ tomadas: 2, en_cola: 1, enviadas: 1, reintentar: 0, fallidas: 0, sin_cambio: 0 });
+  procesar.mockResolvedValue({ tomadas: 2, en_cola: 1, enviadas: 1, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 } });
 });
 
 describe('la puerta', () => {
@@ -87,8 +87,21 @@ describe('la corrida', () => {
     expect(registrarLatido).toHaveBeenCalledWith('liquidaciones-externas', 'ok', expect.objectContaining({ tomadas: 2 }));
   });
 
+  it('un aviso de «No coincide» que no llegó (reintentar o fallido) también es `parcial`', async () => {
+    for (const avisos of [{ tomados: 1, enviados: 0, reintentar: 1, fallidos: 0, en_curso: 0 }, { tomados: 1, enviados: 0, reintentar: 0, fallidos: 1, en_curso: 0 }]) {
+      registrarLatido.mockClear();
+      procesar.mockResolvedValueOnce({ tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos });
+      await llamar();
+      expect(registrarLatido).toHaveBeenCalledWith('liquidaciones-externas', 'parcial', expect.anything());
+    }
+    registrarLatido.mockClear();
+    procesar.mockResolvedValueOnce({ tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos: { tomados: 2, enviados: 2, reintentar: 0, fallidos: 0, en_curso: 0 } });
+    await llamar();
+    expect(registrarLatido).toHaveBeenCalledWith('liquidaciones-externas', 'ok', expect.anything());
+  });
+
   it('trabajo que NO terminó (reintentos o fallidas) es `parcial`: ni «ok» ni «fallo»', async () => {
-    procesar.mockResolvedValueOnce({ tomadas: 3, en_cola: 0, enviadas: 1, reintentar: 1, fallidas: 1, sin_cambio: 0 });
+    procesar.mockResolvedValueOnce({ tomadas: 3, en_cola: 0, enviadas: 1, reintentar: 1, fallidas: 1, sin_cambio: 0, avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 } });
     await llamar();
     expect(registrarLatido).toHaveBeenCalledWith('liquidaciones-externas', 'parcial', expect.anything());
   });

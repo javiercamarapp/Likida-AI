@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { validarLiquidacionExterna } from '../liquidacion_externa/esquema';
 import { entradasDeZip, inspeccionarExportWhatsapp, validarArchivo } from './archivos';
 import { leerConveniosCsv } from './convenios_csv';
-import { cuerposDeLiquidacionesCsv } from './liquidacion_csv';
+import { cuerposDeLiquidacionesCsv } from '../liquidacion_externa/liquidacion_csv';
 import { bytesMuestra, textoMuestra } from './muestras.test.util';
 
 // ═══════════════════════════════════════════════════════════════════════════
