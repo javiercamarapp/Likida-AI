@@ -43,6 +43,17 @@ begin
   select count(*) into n from public.geocerca where tenant_id = '63000000-0000-4000-8000-0000000000a1' and codigo is not null;
   if n <> 3 then raise exception '0630: la re-importación duplicó sitios (%)', n; end if;
 
+  -- la re-importación automática (conservar_activa) NO revive un sitio archivado; la manual sí
+  update public.geocerca set activa = false where tenant_id = '63000000-0000-4000-8000-0000000000a1' and codigo = 'CIR-1';
+  perform public.importar_sitios_conductor('63000000-0000-4000-8000-0000000000a1', jsonb_build_array(
+    jsonb_build_object('linea', 3, 'codigo', 'CIR-1', 'nombre', 'Planta redonda', 'tipo', 'planta', 'lat', 20.6, 'lng', -103.2, 'radio_m', 150, 'conservar_activa', true)));
+  select activa into ap from public.geocerca where tenant_id = '63000000-0000-4000-8000-0000000000a1' and codigo = 'CIR-1';
+  if ap is not false then raise exception '0630: la re-importación automática reactivó un sitio archivado'; end if;
+  perform public.importar_sitios_conductor('63000000-0000-4000-8000-0000000000a1', jsonb_build_array(
+    jsonb_build_object('linea', 3, 'codigo', 'CIR-1', 'nombre', 'Planta redonda', 'tipo', 'planta', 'lat', 20.6, 'lng', -103.2, 'radio_m', 150)));
+  select activa into ap from public.geocerca where tenant_id = '63000000-0000-4000-8000-0000000000a1' and codigo = 'CIR-1';
+  if ap is not true then raise exception '0630: la importación manual debía reactivar el sitio'; end if;
+
   -- un polígono inválido rebota TODO el lote (nada se escribe)
   r := public.importar_sitios_conductor('63000000-0000-4000-8000-0000000000a1', jsonb_build_array(
     jsonb_build_object('linea', 2, 'codigo', 'OK-9', 'nombre', 'Bueno', 'tipo', 'patio', 'lat', 20.5, 'lng', -103.3, 'radio_m', 100),

@@ -70,6 +70,11 @@ vi.mock('@/lib/likida/conectores/sincronizar_eventos', () => ({
   sincronizarEventosTodas: (...a: unknown[]) => sincronizarEventosTodas(...a),
 }));
 
+const reimportarGeocercasTodas = vi.fn(async (..._a: unknown[]): Promise<Record<string, unknown>> => ({ flotas: [], importadas: 0, sinCambios: 0, conError: 0, sinTurno: 0, sinMigracion: false }));
+vi.mock('@/lib/likida/conectores/tabla_propia/reimportar_geocercas', () => ({
+  reimportarGeocercasTodas: (...a: unknown[]) => reimportarGeocercasTodas(...a),
+}));
+
 const alertarOperador = vi.fn(async () => {});
 vi.mock('@/lib/observability/alerta', () => ({
   alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [])),
@@ -190,5 +195,40 @@ describe('el corte por reloj se late y se dice, no se calla', () => {
     expect(alertarOperador).toHaveBeenCalledWith('cron.gps.dlq', expect.objectContaining({
       afectados: expect.stringContaining('t-1'), eventosMuertos: 3,
     }));
+  });
+});
+
+describe('P1: la re-importación diaria de geocercas viaja en la misma corrida', () => {
+  it('corre DESPUÉS de las posiciones, con el MISMO reloj, y su resumen va en el cuerpo', async () => {
+    reimportarGeocercasTodas.mockResolvedValue({
+      flotas: [{ tenantId: 't-1', estado: 'importada' }, { tenantId: 't-2', estado: 'error', error: 'no contestó' }],
+      importadas: 1, sinCambios: 0, conError: 1, sinTurno: 0, sinMigracion: false,
+    });
+    const res = await GET(peticion());
+    const cuerpo = await res.json() as { geocercas: Record<string, unknown> };
+    const optsGps = sincronizarGpsTodas.mock.calls[0][1] as { venceEn: number };
+    expect((reimportarGeocercasTodas.mock.calls[0][0] as { venceEn: number }).venceEn).toBe(optsGps.venceEn);
+    expect(reimportarGeocercasTodas.mock.invocationCallOrder[0]).toBeGreaterThan(sincronizarGpsTodas.mock.invocationCallOrder[0]);
+    expect(cuerpo.geocercas).toMatchObject({ flotas: 2, importadas: 1, conError: 1, errores: [{ tenantId: 't-2', error: 'no contestó' }] });
+  });
+  it('un error de geocercas NO cambia el latido (ok) pero queda anotado en su detalle', async () => {
+    sincronizarGpsTodas.mockResolvedValue([flotaOk('t-1')]);
+    reimportarGeocercasTodas.mockResolvedValue({ flotas: [{ tenantId: 't-1', estado: 'error', error: 'x' }], importadas: 0, sinCambios: 0, conError: 1, sinTurno: 0, sinMigracion: false });
+    await GET(peticion());
+    expect(registrarLatido).toHaveBeenCalledWith('gps', 'ok', expect.objectContaining({ geocercasConError: 1 }));
+  });
+  it('si la re-importación LANZA, el GPS ya sincronizado se responde igual (200) y el fallo se loguea', async () => {
+    sincronizarGpsTodas.mockResolvedValue([flotaOk('t-1')]);
+    reimportarGeocercasTodas.mockRejectedValue(new Error('boom'));
+    const res = await GET(peticion());
+    expect(res.status).toBe(200);
+    expect((await res.json() as { guardadas: number }).guardadas).toBe(2);
+    expect(logger.error).toHaveBeenCalledWith('cron.gps.geocercas_fallo', expect.objectContaining({ error: 'boom' }));
+  });
+  it('una base sin la 0631 se dice en el cuerpo (sinMigracion) y el cron sigue limpio', async () => {
+    reimportarGeocercasTodas.mockResolvedValue({ flotas: [], importadas: 0, sinCambios: 0, conError: 0, sinTurno: 0, sinMigracion: true });
+    const res = await GET(peticion());
+    expect(((await res.json()) as { geocercas: { sinMigracion: boolean } }).geocercas.sinMigracion).toBe(true);
+    expect(registrarLatido.mock.calls[0][1]).toBe('ok');
   });
 });

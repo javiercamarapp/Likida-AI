@@ -18366,12 +18366,12 @@ end $$;
 -- impide uno roto o una fila «aproximada» que además tenga polígono. Lo que solo la base demuestra: la validez del jsonb,
 -- el todo-o-nada de la RPC ante un polígono inválido, que re-importar actualiza sin duplicar y quita la aproximación, y el CHECK
 -- de la tabla fuera de la RPC.
--- Esperado: GEOCERCA_POLIGONO_0630 valida=t guarda-poligono=t lote-invalido-rebota=t idempotente=t check-tabla=t aprox-con-poligono-rebota=t
+-- Esperado: GEOCERCA_POLIGONO_0630 valida=t guarda-poligono=t lote-invalido-rebota=t idempotente=t check-tabla=t aprox-con-poligono-rebota=t conservar-activa=t
 do $$
 declare
   ta uuid; r jsonb; p jsonb; n int;
   patio jsonb := '[{"lat":20.4998,"lng":-103.3030},{"lat":20.4998,"lng":-103.2970},{"lat":20.5002,"lng":-103.2970},{"lat":20.5002,"lng":-103.3030}]'::jsonb;
-  valida boolean := false; guarda boolean := false; rebota boolean := false; idem boolean := false; chk boolean := false; aprox boolean := false;
+  valida boolean := false; guarda boolean := false; rebota boolean := false; idem boolean := false; chk boolean := false; aprox boolean := false; conserva boolean := false; act boolean;
 begin
   insert into tenant (nombre) values ('ZZZ VERIF 0630') returning id into ta;
   valida := geocerca_poligono_valido(patio)
@@ -18400,8 +18400,14 @@ begin
     insert into geocerca (tenant_id, nombre, tipo, lat, lng, radio_m, poligono, aproximada) values (ta, 'ZZZ aprox', 'patio', 20, -103, 100, patio, true);
   exception when check_violation then aprox := true; end;
 
-  raise exception E'GEOCERCA_POLIGONO_0630 valida=% guarda-poligono=% lote-invalido-rebota=% idempotente=% check-tabla=% aprox-con-poligono-rebota=%   (esperado t / t / t / t / t / t)',
-    valida, guarda, rebota, idem, chk, aprox;
+  update geocerca set activa = false where tenant_id = ta and codigo = 'ZZ-PAT';
+  perform importar_sitios_conductor(ta, jsonb_build_array(
+    jsonb_build_object('linea', 2, 'codigo', 'ZZ-PAT', 'nombre', 'ZZZ Patio 0630', 'tipo', 'patio', 'lat', 20.5, 'lng', -103.3, 'radio_m', 340, 'poligono', patio, 'conservar_activa', true)));
+  select activa into act from geocerca where tenant_id = ta and codigo = 'ZZ-PAT';
+  conserva := act is false;
+
+  raise exception E'GEOCERCA_POLIGONO_0630 valida=% guarda-poligono=% lote-invalido-rebota=% idempotente=% check-tabla=% aprox-con-poligono-rebota=% conservar-activa=%   (esperado t / t / t / t / t / t / t)',
+    valida, guarda, rebota, idem, chk, aprox, conserva;
 end $$;
 
 -- ── 273. Re-importación diaria de geocercas: un claim por flota y ventana, y la huella solo avanza con un intento bueno (mig. 0631) ──

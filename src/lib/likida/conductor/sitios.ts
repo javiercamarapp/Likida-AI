@@ -42,6 +42,8 @@ export interface SitioCsv {
   poligono?: Array<{ lat: number; lng: number }> | null;
   /** 0630: el círculo SUSTITUYE a un polígono que no se pudo guardar (la decisión con él es menos fiable). Nunca junto con `poligono`. */
   aproximada?: boolean;
+  /** 0630: la re-importación automática no reactiva un sitio que la flota archivó. */
+  conservar_activa?: boolean;
 }
 
 export interface ErrorCsv {

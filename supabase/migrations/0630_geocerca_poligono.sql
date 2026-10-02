@@ -15,7 +15,9 @@
 --    para el CHECK y para la RPC.
 -- 3. reescribe `importar_sitios_conductor` (misma firma, mismos permisos): acepta
 --    `poligono` y `aproximada` por fila, valida el polígono en la pasada 1 (todo o
---    nada) y los guarda; `aproximada` solo se admite sin polígono.
+--    nada) y los guarda; `aproximada` solo se admite sin polígono. Una fila con
+--    `conservar_activa: true` (la re-importación automática de la 0631) actualiza sin
+--    reactivar un sitio archivado.
 --
 -- FILAS PREVIAS: las que vinieron de un CSV (fuente = 'csv') se marcan aproximada =
 -- true UNA vez: no hay forma de saber cuáles nacieron de un polígono y un círculo
@@ -153,7 +155,10 @@ begin
     else
       update public.geocerca
          set nombre = btrim(f->>'nombre'), tipo = f->>'tipo', lat = (f->>'lat')::double precision, lng = (f->>'lng')::double precision,
-             radio_m = (f->>'radio_m')::integer, direccion = nullif(btrim(f->>'direccion'), ''), cliente_id = v_cliente, fuente = 'csv', activa = true,
+             radio_m = (f->>'radio_m')::integer, direccion = nullif(btrim(f->>'direccion'), ''), cliente_id = v_cliente, fuente = 'csv',
+             -- Re-importar a mano reactiva el sitio (como siempre); la re-importación AUTOMÁTICA diaria manda `conservar_activa` y NO
+             -- revive un sitio que la flota archivó a propósito.
+             activa = case when coalesce((f->>'conservar_activa')::boolean, false) then public.geocerca.activa else true end,
              poligono = v_poligono, aproximada = v_aprox
        where id = v_id and tenant_id = p_tenant;
       actualizados := actualizados + 1;
