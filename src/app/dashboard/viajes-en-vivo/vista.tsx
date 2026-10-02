@@ -172,13 +172,15 @@ export function TareasAbiertas({ tareas, accion, ocultos }: {
   );
 }
 
-export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocultos, hrefMapa, tareas }: {
+export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocultos, hrefMapa, pregunta, tareas }: {
   tablero: TableroViajes;
   filtros: FiltrosVistaViajes;
   catalogo: CatalogoVista;
   accionUrl: string;
   ocultos: Record<string, string>;
   hrefMapa: string;
+  /** La caja de preguntas del asistente (componente de cliente). */
+  pregunta?: ReactNodeLike;
   tareas: ReactNodeLike;
 }) {
   const c = tablero.conteos;
@@ -224,6 +226,7 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
           </tbody>
         </table>
       </div>
+      {pregunta}
       {tareas}
     </div>
   );
