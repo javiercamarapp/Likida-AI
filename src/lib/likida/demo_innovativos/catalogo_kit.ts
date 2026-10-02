@@ -74,7 +74,7 @@ export const KIT: readonly EntradaKit[] = [
     id: 'convenios', agentes: ['Conductor/Vigía', 'Orquestador'],
     muestra: 'convenios/convenios.csv',
     formato: 'una fila por instrucción: clave, cliente, convenio, origen, destino, categoria, momento, orden, texto, tarifa, requisitos_cobro',
-    importador: { estado: 'existe', donde: 'convenios/importador.ts (0580: cliente_convenio, convenio_instruccion, convenio_comercial); el seed los carga en esas tablas y la pantalla /dashboard/convenios los importa por CSV o Excel (el alta y la edición en pantalla todavía no existen)' },
+    importador: { estado: 'existe', donde: 'convenios/importador.ts (0580: cliente_convenio, convenio_instruccion, convenio_comercial); el seed los carga en esas tablas y la pantalla /dashboard/convenios los importa por CSV o Excel y también los da de alta y los edita en pantalla (P7, migraciones 0656-0658; tarifa y requisitos de cobro solo por importación)' },
     pantalla: '/dashboard/convenios y el mensaje de despacho al operador',
   },
   {

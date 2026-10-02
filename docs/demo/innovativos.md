@@ -286,7 +286,7 @@ Para tener a mano cómo se ven los archivos tal como los exportaría «su sistem
   requisitos de cobro son dinero: solo los importa quien ve finanzas, y la exportación para el sistema de la flota (la
   «calle de instrucciones») **no** los lleva. El seed carga los 14 convenios en esas tablas (y deja la copia en
   `innovativos_sim.convenio*`). Las instrucciones salen al despachar, en la primera asignación del viaje y al acercarse a
-  la planta. **Todavía no existe** el alta y la edición de un convenio en pantalla sin volver a subir el archivo.
+  la planta. El alta y la edición de un convenio en pantalla (sin volver a subir el archivo) **ya existen** (P7, migraciones 0656-0658; la tarifa y los requisitos de cobro siguen solo por importación).
 - **Pregunta abierta:** la «calle de instrucciones» puede ser un campo de **su** sistema. El diseño
   debe poder mandar por WhatsApp y exportar para escribirse allá.
 - **Validación:** `validar-archivo.mjs convenios <archivo.csv>` (avisa de convenios sin «reportarse»).
@@ -412,7 +412,7 @@ node scripts/demo/innovativos/verificar-hechos-del-guion.mjs
   externa, peajes, jornada…), de solo lectura y por rol; **no** lee SAP/TMS (no hay conector) y llama a un modelo.
 - **Datos reales de Carta Porte, convenios y del formato de liquidación** (12-oct y 15-oct): hasta entonces todo es
   sintético; el guion dice dónde hay que decirlo.
-- **Lo que no existe todavía:** alta y edición de un convenio en pantalla, los «cursos» de peajes, la partición de un
+- **Lo que no existe todavía:** los «cursos» de peajes, la partición de un
   Excel de Carta Porte con varios embarques y la lectura en vivo de los grupos de un WhatsApp común.
 - **Viajes y operadores reales:** vendrán de su TMS/SAP (importador masivo de operadores/unidades y de viajes ya
   existentes); no son parte de los 5 agentes y aquí son sintéticos.

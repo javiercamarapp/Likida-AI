@@ -113,8 +113,11 @@ Conductor.
 6. **[corre hoy] Las instrucciones por convenio:** 14 convenios con 84 instrucciones (puerta, con quién reportarse,
    peculiaridades, documentos, horario, seguridad) en `/dashboard/convenios`; salen al **despachar**, en la **primera
    asignación** del viaje y al **acercarse** a la planta (el margen es configurable por flota). Si el convenio ligado a
-   un viaje está mal, se corrige a mano desde el viaje. **[todavía no existe]** el alta y la edición de un convenio en
-   pantalla sin volver a subir el Excel.
+   un viaje está mal, se corrige a mano desde el viaje. **[corre hoy]** el **alta y la edición de un convenio en pantalla**
+   («Nuevo convenio» y «Editar convenio e instrucciones»: guardado atómico con control de versión, sin volver a subir el
+   Excel; al editar se puede llevar el cambio a los viajes en curso y avisar solo a quien ya tenía el despacho). La tarifa
+   y los requisitos de cobro **no** se editan en pantalla (son dinero: siguen por importación). **[depende de aplicar]**
+   las migraciones 0656-0658 en la base que se enseñe (en la base local del demo ya están).
 
 **Qué decir (solo lo que corre hoy)**
 - «Si el operador escribe “ya llegué” y el GPS no lo respalda, el sistema **no lo da por validado y lo muestra como

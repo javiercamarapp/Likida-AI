@@ -153,17 +153,25 @@ describe('estructura del guion: cada agente en su sección y cada cosa con su et
   });
   it('lo que NO existe todavía se dice como tal y no se promete', () => {
     const g = guion.replace(/\*\*/g, '');
-    for (const fragmento of ['alta y la edición de un convenio', '«cursos»', 'varios embarques', 'SAP/TMS en vivo']) {
+    for (const fragmento of ['«cursos»', 'varios embarques', 'SAP/TMS en vivo']) {
       const i = g.indexOf(fragmento);
       expect(i, `el guion ya no menciona «${fragmento}»`).toBeGreaterThan(-1);
       expect(g.slice(Math.max(0, i - 300), i + 300), `«${fragmento}» no está marcado [todavía no existe]`).toContain('[todavía no existe]');
     }
   });
-  it('lo que sigue sin existir en el producto es verdad: no hay alta de convenio en pantalla, ni cursos, ni lector de SAP', () => {
+  it('lo que sigue sin existir en el producto es verdad: no hay cursos, ni lector de SAP, ni SFTP', () => {
     const rutas = (rel: string) => existsSync(`${RAIZ}${rel}`);
     expect(rutas('src/lib/likida/peajes/cursos.ts')).toBe(false);
     expect(rutas('src/lib/likida/conectores/sap')).toBe(false);
     expect(rutas('src/lib/likida/conectores/tabla_propia/sftp.ts')).toBe(false);
+  });
+  it('el alta y la edición de convenios en pantalla ya existen (P7) y el guion lo dice como «corre hoy»', () => {
+    expect(existsSync(`${RAIZ}src/lib/likida/convenios/edicion.ts`)).toBe(true);
+    const g = guion.replace(/\*\*/g, '');
+    const i = g.indexOf('alta y la edición de un convenio en pantalla');
+    expect(i).toBeGreaterThan(-1);
+    expect(g.slice(Math.max(0, i - 200), i + 100)).toContain('[corre hoy]');
+    expect(g).not.toContain('[todavía no existe] el alta y la edición de un convenio');
   });
   it('el apartado de terceros cubre Meta, GPS, grupos, pases, liquidación, Carta Porte y la «calle de instrucciones»', () => {
     const t = guion.slice(guion.indexOf('## 8.'));
