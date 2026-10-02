@@ -65,6 +65,49 @@ describe('qué se reclama y por qué', () => {
     expect(cruces[0].porQue).toMatch(/dentro de «Patio Central» \(patio de la flota\)/);
   });
 
+  describe('patio alargado junto a una carretera (0630): el polígono no acusa a quien solo pasa por la vía', () => {
+    // 600 m E-O × 45 m N-S centrado en (19.3, -99.1); la carretera pasa ~70 m al norte del borde.
+    const mLat = 1 / 111_195; const mLng = 1 / (111_195 * Math.cos((19.3 * Math.PI) / 180));
+    const vertices = [
+      { lat: 19.3 - 22.5 * mLat, lng: -99.1 - 300 * mLng }, { lat: 19.3 - 22.5 * mLat, lng: -99.1 + 300 * mLng },
+      { lat: 19.3 + 22.5 * mLat, lng: -99.1 + 300 * mLng }, { lat: 19.3 + 22.5 * mLat, lng: -99.1 - 300 * mLng },
+    ];
+    const ALARGADO: ZonaEntrada = { nombre: 'Patio Largo', tipo: 'patio', lat: 19.3, lng: -99.1, radioM: 340, poligono: vertices, aproximada: false };
+    const CIRCULO_VIEJO: ZonaEntrada = { nombre: 'Patio Largo', tipo: 'patio', lat: 19.3, lng: -99.1, radioM: 340, aproximada: true };
+    const enCarretera = { lat: 19.3 + 90 * mLat, lng: -99.1, t: min(-1) };
+    const enPatioLargo = { lat: 19.3 + 5 * mLat, lng: -99.1 + 200 * mLng, t: min(-1) };
+
+    it('con el polígono, la unidad de la carretera NO se reclama; la que está en el patio sí, con confianza alta', () => {
+      expect(construirReclamacion([linea({ indice: 0, muestras: [enCarretera] })], [ALARGADO]).cruces).toEqual([]);
+      const { cruces } = construirReclamacion([linea({ indice: 0, muestras: [enPatioLargo] })], [ALARGADO]);
+      expect(cruces).toHaveLength(1);
+      expect(cruces[0]).toMatchObject({ motivo: 'unidad_en_zona_no_autorizada', confianza: 'alta', zona: { nombre: 'Patio Largo' } });
+      expect(cruces[0].porQue).toMatch(/dentro de «Patio Largo»/);
+    });
+    it('el MISMO punto con un círculo marcado aproximado se reclama, pero NUNCA con confianza alta y lo dice', () => {
+      const { cruces } = construirReclamacion([linea({ indice: 0, muestras: [enCarretera] })], [CIRCULO_VIEJO]);
+      expect(cruces).toHaveLength(1);
+      expect(cruces[0]).toMatchObject({ motivo: 'unidad_en_zona_no_autorizada', confianza: 'media' });
+      expect(cruces[0].porQue).toMatch(/área aproximada/);
+      expect(cruces[0].porQue).toMatch(/confirma antes de reclamar/);
+      expect(cruces[0].porQue).not.toMatch(/estaba dentro de/);
+    });
+    it('entre una zona exacta y una aproximada que contienen el punto gana la exacta (alta)', () => {
+      const { cruces } = construirReclamacion([linea({ indice: 0, muestras: [enPatioLargo] })], [CIRCULO_VIEJO, ALARGADO]);
+      expect(cruces[0]).toMatchObject({ confianza: 'alta', zona: { nombre: 'Patio Largo' } });
+    });
+    it('un círculo exacto (sin polígono y no aproximado) conserva su comportamiento de siempre: alta', () => {
+      const { cruces } = construirReclamacion([linea({ indice: 0, muestras: [{ lat: PATIO.lat + 0.001, lng: PATIO.lng, t: min(-1) }] })], [PATIO]);
+      expect(cruces[0].confianza).toBe('alta');
+    });
+    it('en el motivo «GPS lejos» el contexto de zona aproximada se dice cerca de, no «en»; con zona exacta sigue diciendo «en»', () => {
+      const lineaGps = (zona: ZonaEntrada) => construirReclamacion([linea({ indice: 0, gps: 'no coincide', gpsDistanciaM: 9_000, muestras: [enCarretera, { ...enCarretera, t: min(2) }] })], [zona]).cruces[0];
+      expect(lineaGps(CIRCULO_VIEJO).porQue).toMatch(/estaba cerca de «Patio Largo» \(zona de forma aproximada\)/);
+      expect(lineaGps(CIRCULO_VIEJO).confianza).toBe('alta'); // la confianza de ESTE motivo es la del GPS contra la caseta, no la de la zona
+      expect(lineaGps({ ...ALARGADO, poligono: null, aproximada: false }).porQue).toMatch(/A esa hora estaba en «Patio Largo»/);
+    });
+  });
+
   it('una posición en el patio pero LEJOS en el tiempo (> 10 min) no cuenta; una geocerca de otro tipo tampoco', () => {
     const viejaEnPatio = { lat: PATIO.lat, lng: PATIO.lng, t: min(-14) };
     expect(construirReclamacion([linea({ indice: 0, muestras: [viejaEnPatio] })], [PATIO]).cruces).toEqual([]);

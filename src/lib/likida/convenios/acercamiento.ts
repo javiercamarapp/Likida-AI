@@ -1,5 +1,5 @@
 import { logger } from '@/lib/logger';
-import { haversineM } from '../conductor/geo';
+import { dentroDeGeocerca, type GeocercaGeom } from '../conductor/geo';
 import { acercarInstrucciones, type ResultadoEnvioInstrucciones } from './envio';
 import { leerCandidatosAcercamiento, leerMargenesAcercamiento, leerPosicionesRecientes } from './trabajo';
 import type { LadoViaje } from './tipos';
@@ -29,7 +29,8 @@ export interface CandidatoAcercamiento {
   viajeId: string;
   unidadId: string;
   lado: LadoViaje;
-  sitio: { lat: number; lng: number; radioM: number };
+  /** Centro + radio, y (0630) el polígono nativo si lo tiene: «cerca» se mide al BORDE de la geocerca. */
+  sitio: GeocercaGeom;
 }
 
 export interface PosicionUnidad { lat: number; lng: number; medidaEn: Date }
@@ -61,7 +62,7 @@ export interface ResultadoAcercamiento {
 }
 
 export function estaCerca(pos: PosicionUnidad, sitio: CandidatoAcercamiento['sitio'], margenM: number = MARGEN_ACERCAMIENTO_M): boolean {
-  return haversineM({ lat: pos.lat, lng: pos.lng }, { lat: sitio.lat, lng: sitio.lng }) <= sitio.radioM + margenM;
+  return dentroDeGeocerca({ lat: pos.lat, lng: pos.lng }, sitio, margenM).dentro;
 }
 
 export async function barridoAcercamiento(

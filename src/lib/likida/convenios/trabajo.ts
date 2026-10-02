@@ -4,6 +4,8 @@ import { exigir, traerTodo } from '../pg';
 import { logger } from '@/lib/logger';
 import { leerConfigConductor } from '../conductor/repo';
 import { CONFIG_CONDUCTOR_DEFAULT } from '../conductor/config';
+import type { GeocercaGeom } from '../conductor/geo';
+import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import type { CandidatoAcercamiento, PosicionUnidad } from './acercamiento';
 import { traducirFaltaDeEsquema } from './repo';
 
@@ -72,10 +74,12 @@ async function candidatos(limite: number): Promise<CandidatoAcercamiento[]> {
   for (const h of hitos) resueltos.set(String(h.viaje_id), (resueltos.get(String(h.viaje_id)) ?? new Set()).add(String(h.tipo)));
 
   const sitioIds = [...new Set(viajes.flatMap((v) => [v.origen_geocerca_id, v.destino_geocerca_id]).filter((x): x is string => typeof x === 'string'))];
-  const sitios = new Map<string, { lat: number; lng: number; radioM: number }>();
+  const sitios = new Map<string, GeocercaGeom>();
   for (const lote of trozos(sitioIds, 150)) {
-    const g = await acotada(admin.from('geocerca').select('id, lat, lng, radio_m').in('tenant_id', tenants).in('id', lote).eq('activa', true), 'convenios.trabajo_sitios');
-    for (const f of (exigir(g as never, 'convenios.trabajo_sitios') ?? []) as Fila[]) sitios.set(String(f.id), { lat: Number(f.lat), lng: Number(f.lng), radioM: Number(f.radio_m) });
+    const g = await conPoligonoOCirculo((conPoligono) => acotada(admin.from('geocerca')
+      .select(conPoligono ? `id, lat, lng, radio_m, ${COLUMNAS_POLIGONO}` : 'id, lat, lng, radio_m')
+      .in('tenant_id', tenants).in('id', lote).eq('activa', true), 'convenios.trabajo_sitios'));
+    for (const f of (exigir(g as never, 'convenios.trabajo_sitios') ?? []) as Fila[]) sitios.set(String(f.id), { lat: Number(f.lat), lng: Number(f.lng), radioM: Number(f.radio_m), ...geometriaDeFila(f) });
   }
 
   return viajes.flatMap((v): CandidatoAcercamiento[] => {

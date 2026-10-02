@@ -180,3 +180,34 @@ describe('llegadaSinSitio: el «ya llegué» que no se pudo conciliar porque el 
     }
   });
 });
+
+describe('evaluarUbicacion con polígono nativo (0630)', () => {
+  // Patio alargado: 600 m de este a oeste × 45 m de norte a sur en (20.72, -103.39); la carretera pasa ~70 m al norte.
+  const mLat = 1 / 111_195; const mLng = 1 / (111_195 * Math.cos((20.72 * Math.PI) / 180));
+  const patio = [
+    { lat: 20.72 - 22.5 * mLat, lng: -103.39 - 300 * mLng }, { lat: 20.72 - 22.5 * mLat, lng: -103.39 + 300 * mLng },
+    { lat: 20.72 + 22.5 * mLat, lng: -103.39 + 300 * mLng }, { lat: 20.72 + 22.5 * mLat, lng: -103.39 - 300 * mLng },
+  ];
+  const sitioPoligono: SitioValidable = { id: 's2', nombre: 'Patio largo', lat: 20.72, lng: -103.39, radioM: 340, poligono: patio };
+  const carretera = pos({ lat: 20.72 + 90 * mLat });
+  const dentro = pos({ lat: 20.72 + 5 * mLat, lng: -103.39 + 250 * mLng });
+
+  it('un punto en el patio valida; la carretera de junto (dentro del círculo de respaldo) NO, aun con la tolerancia de 50 m', () => {
+    expect(evaluarUbicacion(entrada({ sitio: sitioPoligono, posicion: dentro, toleranciaM: 50 })).resultado).toBe('validado');
+    const v = evaluarUbicacion(entrada({ sitio: sitioPoligono, posicion: carretera, toleranciaM: 50 }));
+    expect(v).toMatchObject({ resultado: 'sin_coincidencia', metodo: 'poligono', radioM: 340 });
+    // el mismo punto con el círculo viejo (sin polígono) validaría
+    expect(evaluarUbicacion(entrada({ sitio: { ...sitioPoligono, poligono: null }, posicion: carretera, toleranciaM: 50 })).resultado).toBe('validado');
+  });
+  it('la tolerancia se mide al BORDE del polígono', () => {
+    expect(evaluarUbicacion(entrada({ sitio: sitioPoligono, posicion: carretera, toleranciaM: 90 })).resultado).toBe('validado');
+  });
+  it('el texto dice «su polígono» y no «su radio»', () => {
+    const t = textoVeredicto(evaluarUbicacion(entrada({ sitio: sitioPoligono, posicion: carretera, toleranciaM: 0 })), 'Patio largo');
+    expect(t).toMatch(/fuera de su polígono/);
+    expect(t).not.toMatch(/fuera de su radio/);
+  });
+  it('sin polígono todo sigue igual que antes (círculo)', () => {
+    expect(evaluarUbicacion(entrada()).metodo).toBe('circulo');
+  });
+});

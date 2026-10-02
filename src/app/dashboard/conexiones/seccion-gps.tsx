@@ -22,7 +22,7 @@ export interface HuerfanoPantalla { proveedor: string; deviceId: string; ultimoV
 export type ResultadoSecreto = { ok: true; secreto: string; endpoint: string } | { ok: false; error: string } | null;
 export type AccionSecreto = (previo: ResultadoSecreto, fd: FormData) => Promise<ResultadoSecreto>;
 /** Importar las geocercas de «mis propias tablas» al catálogo de sitios. */
-export type ResultadoImportGeocercas = { ok: true; mensaje: string; aproximadas: number } | { ok: false; error: string; detalles?: string[] } | null;
+export type ResultadoImportGeocercas = { ok: true; mensaje: string; aproximadas: number; poligonos?: number } | { ok: false; error: string; detalles?: string[] } | null;
 export type AccionImportGeocercas = (previo: ResultadoImportGeocercas, fd: FormData) => Promise<ResultadoImportGeocercas>;
 
 function BotonImportarGeocercas() {
@@ -45,13 +45,13 @@ function ImportadorGeocercas({ accion }: { accion: AccionImportGeocercas }) {
       <h3 className="font-display text-[14px] font-semibold">Geocercas de tu sistema</h3>
       <p className="mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
         Si conectaste «Mis propias tablas de GPS» con una vista o archivo de geocercas, aquí las traes al catálogo de sitios
-        (el que usan el Conductor, los peajes y el mapa). Volver a importar actualiza por código, no duplica. Un polígono se
-        guarda como el círculo más chico que lo contiene y se te dice cuáles.
+        (el que usan el Conductor, los peajes y el mapa). Volver a importar actualiza por código, no duplica, y se repite solo una vez al día. Un polígono
+        se guarda con su forma real; el que no se pueda guardar así entra como el círculo que lo contiene y se te dice cuáles.
       </p>
       <form action={despachar} className="mt-2"><BotonImportarGeocercas /></form>
       {estado?.ok === true && (
         <p role="status" className="mt-2 text-[12.5px]" style={{ color: 'var(--ok)' }}>
-          {estado.mensaje}{estado.aproximadas > 0 ? ` ${estado.aproximadas} polígono(s) se guardaron como círculo que los contiene.` : ''}
+          {estado.mensaje}{(estado.poligonos ?? 0) > 0 ? ` ${estado.poligonos} polígono(s) se guardaron con su forma real.` : ''}{estado.aproximadas > 0 ? ` ${estado.aproximadas} polígono(s) no se pudieron guardar con su forma y entran como el círculo que los contiene (las reclamaciones con ellos bajan a confianza media).` : ''}
         </p>
       )}
       {estado?.ok === false && (
