@@ -231,6 +231,24 @@ export async function listarGeocercas(tenantId: string): Promise<GeocercaVista[]
   }));
 }
 
+/**
+ * Zonas (patio / restringida) para cruzar el PASE con las geocercas de la flota, de AMBOS catálogos: las que se
+ * capturan a mano en peajes y las que la flota importó de SUS tablas (catálogo del Conductor, tipo «patio» por
+ * omisión). Solo lectura: el editor de peajes sigue escribiendo y listando únicamente el suyo (`listarGeocercas`).
+ */
+export async function listarZonasParaReclamacion(tenantId: string): Promise<GeocercaVista[]> {
+  const filas = await traerTodo<{ id: unknown; nombre: unknown; tipo: unknown; lat: unknown; lng: unknown; radio_m: unknown; activa: unknown }>(
+    (d, h) => acotada(supabaseAdmin().from('geocerca')
+      .select('id, nombre, tipo, lat, lng, radio_m, activa', conteo(d))
+      .eq('tenant_id', tenantId).in('tipo', ['patio', 'restringida']).order('nombre').order('id').range(d, h), 'peajes.zonas_reclamacion'),
+    'peajes.zonas_reclamacion',
+  );
+  return filas.map((f) => ({
+    id: String(f.id), nombre: String(f.nombre), tipo: String(f.tipo),
+    lat: Number(f.lat), lng: Number(f.lng), radioM: Number(f.radio_m), activa: f.activa !== false,
+  }));
+}
+
 export type ResultadoGeocerca = { ok: true } | { ok: false; motivo: string };
 
 const MOTIVO_SITIO_DEL_CONDUCTOR =
