@@ -21,6 +21,9 @@ const m = vi.hoisted(() => ({
   asentar: vi.fn(async (..._a: unknown[]) => 'ok' as string),
   cerrar: vi.fn(async (..._a: unknown[]) => ({ ok: true as const })),
   politica: vi.fn(async (..._a: unknown[]) => ({ ok: true as const })),
+  guardarAlerta: vi.fn(async (..._a: unknown[]) => null as string | null),
+  alertas: vi.fn(async (..._a: unknown[]): Promise<unknown[]> => []),
+  configAlerta: vi.fn(async (..._a: unknown[]): Promise<unknown> => null),
   bitacora: vi.fn(async (..._a: unknown[]) => true),
 }));
 
@@ -54,6 +57,12 @@ vi.mock('@/lib/likida/jornada/repo', () => ({
   cerrarDia: (...a: unknown[]) => m.cerrar(...a),
   asentarMarca: (...a: unknown[]) => m.asentar(...a),
   guardarPolitica: (...a: unknown[]) => m.politica(...a),
+}));
+
+vi.mock('@/lib/likida/jornada/alerta_tope_datos', () => ({
+  guardarConfigAlerta: (...a: unknown[]) => m.guardarAlerta(...a),
+  alertasDeJornadas: (...a: unknown[]) => m.alertas(...a),
+  leerConfigAlerta: (...a: unknown[]) => m.configAlerta(...a),
 }));
 
 const { default: PaginaJornada } = await import('./page');
@@ -167,5 +176,63 @@ describe('declararPolitica — configuración de la cuenta: solo el dueño', () 
     m.rol = 'flota_admin';
     expect(await p.declararPolitica({ ok: false }, fd({ horasMaxJornada: '8' }))).toMatchObject({ ok: true });
     expect(m.politica).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('guardarAlerta — a quién se le avisa es configuración de la cuenta: solo el dueño', () => {
+  const FORMA = { activa: 'on', topeHoras: '10', umbralAvisoPct: '80', umbralCriticoPct: '95', canalEncargado: 'ambos', canalOperador: 'whatsapp', correoEncargado: 'jefe@flota.mx' };
+
+  it('el jefe de tráfico NO la configura (ni sabiendo la acción); el dueño sí, con firma y bitácora', async () => {
+    const p = await props();
+    expect(p.puedeConfigurarAlerta).toBe(false);
+    expect(await p.guardarAlerta({ ok: false }, fd(FORMA))).toMatchObject({ ok: false, error: expect.stringMatching(/administra la flota/) });
+    expect(m.guardarAlerta).not.toHaveBeenCalled();
+    m.rol = 'flota_admin';
+    expect((await props()).puedeConfigurarAlerta).toBe(true);
+    expect(await p.guardarAlerta({ ok: false }, fd(FORMA))).toMatchObject({ ok: true });
+    expect(m.guardarAlerta).toHaveBeenCalledWith('t1', {
+      activa: true, topeHoras: 10, umbralAvisoPct: 80, umbralCriticoPct: 95, canalEncargado: 'ambos', canalOperador: 'whatsapp', correoEncargado: 'jefe@flota.mx',
+    }, { id: 'u-jefe', email: 'jefe@flota.mx' });
+    expect(m.bitacora).toHaveBeenCalledWith(expect.objectContaining({ accion: 'jornada.alerta_tope_configurada', actor: { id: 'u-jefe', email: 'jefe@flota.mx' } }), expect.anything());
+  });
+
+  it('casilla sin marcar = apagada; tope vacío = null (el de la ley), nunca 0; correo vacío = null', async () => {
+    m.rol = 'flota_admin';
+    const p = await props();
+    await p.guardarAlerta({ ok: false }, fd({ ...FORMA, activa: '', topeHoras: '', canalEncargado: 'whatsapp', correoEncargado: '' }));
+    expect(m.guardarAlerta).toHaveBeenCalledWith('t1', expect.objectContaining({ activa: false, topeHoras: null, correoEncargado: null }), expect.anything());
+  });
+
+  it('un rechazo de validación llega a la pantalla en palabras y NO se anota bitácora', async () => {
+    m.rol = 'flota_admin';
+    m.guardarAlerta.mockResolvedValueOnce('El umbral de aviso debe ser menor que el crítico');
+    const p = await props();
+    expect(await p.guardarAlerta({ ok: false }, fd({ ...FORMA, umbralAvisoPct: '96' }))).toEqual({ ok: false, error: 'El umbral de aviso debe ser menor que el crítico' });
+    expect(m.bitacora).not.toHaveBeenCalled();
+  });
+
+  it('sin umbrales escritos ni siquiera llama al guardado', async () => {
+    m.rol = 'flota_admin';
+    const p = await props();
+    expect(await p.guardarAlerta({ ok: false }, fd({ ...FORMA, umbralAvisoPct: '' }))).toMatchObject({ ok: false, error: expect.stringMatching(/dos umbrales/) });
+    expect(m.guardarAlerta).not.toHaveBeenCalled();
+  });
+});
+
+describe('las lecturas de la alerta no tumban el registro y se dicen', () => {
+  it('config ilegible → alertaConfigIlegible (no «apagada»); alertas ilegibles → null (no «ninguna»); la tabla sigue', async () => {
+    m.configAlerta.mockRejectedValueOnce(new Error('caída'));
+    m.alertas.mockRejectedValueOnce(new Error('caída'));
+    const p = await props();
+    expect(p.alertaConfigIlegible).toBe(true);
+    expect(p.alertaConfig).toBeNull();
+    expect(p.alertas).toBeNull();
+    expect(p.filas).toHaveLength(2);
+  });
+
+  it('pide las alertas solo de las jornadas que enseña la tabla, de ESTA flota', async () => {
+    await props();
+    expect(m.alertas).toHaveBeenCalledWith('t1', [J_NORTE, J_SUR]);
+    expect(m.configAlerta).toHaveBeenCalledWith('t1');
   });
 });

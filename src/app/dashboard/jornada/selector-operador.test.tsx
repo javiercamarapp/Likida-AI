@@ -32,6 +32,11 @@ function pintar(operadores: Array<{ id: string; nombre: string }> | null) {
       capturarMarca={accionOk}
       cerrarElDia={accionOk}
       declararPolitica={accionOk}
+      alertaConfig={null}
+      alertaConfigIlegible={false}
+      alertas={[]}
+      puedeConfigurarAlerta={false}
+      guardarAlerta={accionOk}
     />,
   );
 }

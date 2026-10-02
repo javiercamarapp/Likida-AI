@@ -15,6 +15,7 @@ import {
   JornadaIlegible,
 } from '@/lib/likida/jornada/repo';
 import { correoDelUsuario } from '@/lib/likida/jornada/firma';
+import { alertasDeJornadas, guardarConfigAlerta, leerConfigAlerta, type AlertaDeJornada } from '@/lib/likida/jornada/alerta_tope_datos';
 import { componerJornada, type TipoAsiento } from '@/lib/likida/jornada/modelo';
 import { evaluarRiesgoDia, type PoliticaFlota } from '@/lib/likida/jornada/riesgo';
 import { evaluarSemanas, type SemanaEvaluada } from '@/lib/likida/jornada/semanas';
@@ -400,6 +401,67 @@ export default async function PaginaJornada({
     return { ok: true, mensaje: 'Umbrales de la flota guardados, con tu nombre y la fecha.' };
   }
 
+  async function guardarAlerta(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    // Quién recibe los avisos de una flota es configuración de la cuenta: la misma puerta que los umbrales (solo quien
+    // administra). Se re-resuelve la sesión aquí; el rol del render no decide nada.
+    const p = await puerta(sp, 'politica');
+    if ('ok' in p) return p;
+    const f = await firma(p.userId);
+    if (!f) return { ok: false, error: 'No pude confirmar tu correo, y configurar la alerta lleva firma. Vuelve a intentarlo.' };
+
+    // VACÍO = «NO DECLARADO» (null), nunca 0. Un número ilegible se manda como NaN y el esquema lo rechaza con palabras.
+    const num = (k: string): number | null => {
+      const v = String(fd.get(k) ?? '').trim();
+      return v === '' ? null : Number(v);
+    };
+    const aviso = num('umbralAvisoPct');
+    const critico = num('umbralCriticoPct');
+    if (aviso === null || critico === null) return { ok: false, error: 'Escribe los dos umbrales (aviso y crítico) en porcentaje.' };
+    const correo = String(fd.get('correoEncargado') ?? '').trim();
+    const motivo = await guardarConfigAlerta(p.tenantId, {
+      activa: fd.get('activa') === 'on',
+      topeHoras: num('topeHoras'),
+      umbralAvisoPct: aviso,
+      umbralCriticoPct: critico,
+      canalEncargado: String(fd.get('canalEncargado') ?? ''),
+      canalOperador: String(fd.get('canalOperador') ?? ''),
+      correoEncargado: correo === '' ? null : correo,
+    }, { id: f.id, email: f.email });
+    if (motivo !== null) return { ok: false, error: motivo };
+
+    await anotarBitacora({
+      tenantId: p.tenantId,
+      actor: { id: f.id, email: f.email },
+      accion: 'jornada.alerta_tope_configurada',
+      entidad: 'jornada_dia',
+      entidadId: p.tenantId,
+    }, { evento: 'jornada.bitacora_no_escribio' });
+
+    revalidatePath(RUTA);
+    return { ok: true, mensaje: 'Alerta de tope guardada, con tu nombre y la fecha.' };
+  }
+
+  // La alerta de tope (0502): configuración y alertas emitidas. Lecturas propias y aparte, cada una con su `catch`: que
+  // fallen no puede tumbar el registro, y se DICEN (`null` / `alertaConfigIlegible`), nunca se pintan como «apagada» o
+  // «ninguna alerta».
+  let alertaConfig: Awaited<ReturnType<typeof leerConfigAlerta>> = null;
+  let alertaConfigIlegible = false;
+  try {
+    alertaConfig = await leerConfigAlerta(tenantId);
+  } catch (e) {
+    alertaConfigIlegible = true;
+    logger.warn('jornada.alerta_config_no_leida', { tenantId, err: e instanceof Error ? e.message : String(e) });
+  }
+  let alertas: AlertaDeJornada[] | null = null;
+  if (filas !== null) {
+    try {
+      alertas = filas.length === 0 ? [] : await alertasDeJornadas(tenantId, filas.map((f) => f.jornadaId));
+    } catch (e) {
+      logger.warn('jornada.alertas_no_leidas', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   // FE-19: el filtro `?operador=` ya existía en el servidor (`leerJornadas`,
   // arriba) pero la pantalla no tenía de dónde elegirlo — con cientos de
   // choferes, la ventana por omisión (14 días) nace truncada casi siempre
@@ -433,6 +495,11 @@ export default async function PaginaJornada({
       capturarMarca={capturarMarca}
       cerrarElDia={cerrarElDia}
       declararPolitica={declararPolitica}
+      alertaConfig={alertaConfig}
+      alertaConfigIlegible={alertaConfigIlegible}
+      alertas={alertas}
+      puedeConfigurarAlerta={puedeAdministrar(rol)}
+      guardarAlerta={guardarAlerta}
     />
   );
 }
