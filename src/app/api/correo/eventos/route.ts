@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { suprimirCorreo } from '@/lib/likida/agentes/enviador';
+import { confirmarPorResend } from '@/lib/likida/buzon/entrega_repo';
 import { logger } from '@/lib/logger';
 import { cuerpoAcotado } from '../_cuerpo';
 
@@ -126,6 +127,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'no se pudo escribir el evento' }, { status: 500 });
   }
   if (!Array.isArray(data) || data.length === 0) {
+    // ¿Es la confirmación de un lote de facturas enviado al contador (0531)? Entregado o rebotado; un rebote
+    // suelta las facturas para rearmar el lote. La dirección del contador NO se suprime sola: una persona la corrige.
+    if (estado !== 'queja') {
+      try {
+        const c = await confirmarPorResend(emailId, estado === 'entregado' ? 'entregada' : 'rebotada');
+        if (c !== 'sin_lote') {
+          logger.info('correo.eventos.buzon_entrega', { emailId, estado, resultado: c });
+          return NextResponse.json({ entrega: c, estado });
+        }
+      } catch (e) {
+        logger.error('correo.eventos.buzon_entrega_sin_escribir', { emailId, estado, err: e instanceof Error ? e.message : String(e) });
+        return NextResponse.json({ error: 'no se pudo escribir el evento' }, { status: 500 });
+      }
+    }
     logger.info('correo.eventos.sin_pieza', { emailId, estado });
     return NextResponse.json({ sinPieza: true });
   }

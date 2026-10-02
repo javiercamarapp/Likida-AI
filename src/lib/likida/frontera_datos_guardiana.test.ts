@@ -180,12 +180,33 @@ import { join, relative } from 'node:path';
 //     (el viaje de ESE cliente, su POD y la URL firmada del bucket); el estatus de viaje ya existía.
 //   · grupos e histórico exportado del Vigía (0484): +1 archivo, `vigia/historial/repo.ts` (+13 llamadas: grupos, clientes, importación
 //     por lotes con deshacer, lectura paginada del histórico y borrado), todo filtrado por `tenant_id` y con `acotada`.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 269;
 //   · validar un hito por llave de API (`conductor/repo_validacion.ts`): +1 llamada, `hitoDeFlota` (el hito DE ESA flota
 //     antes de la RPC atómica de validar).
 //   · Vigía, clientes críticos y purga del histórico (0484, `vigia/repo.ts`): +3 llamadas (los clientes con un grupo crítico,
 //     el reintento de guardar la config en una base sin la 0484 y la purga del histórico importado).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_601;
+//
+// LOOP PUNTA A PUNTA, ola 3, W3 «Mis reglas» (Agente 13) — 1,580 → 1,585 llamadas, mismos
+// 268 archivos: las cinco llamadas son de `reglas/repo.ts` (ya medido) para la tabla nueva
+// `regla_aviso` de la 0520 — historial de avisos (lista), avisos enviados en la ventana de
+// 24 h (tope de frecuencia), registrar un aviso, purga de retención y el UPDATE del límite
+// de frecuencia. Funcionalidad nueva, no código migrado.
+//
+// LOOP PUNTA A PUNTA, ola 3, W3 «Cobranza por gasto» (Agente 7) y «Buzón de facturas»
+// (Agente 9) — 268 → 273 archivos y 1,585 → 1,657 llamadas (medido con el barrido completo).
+// Funcionalidad nueva, no código migrado:
+//   · `agentes/cobranza_gasto.ts` (17): toda la cobranza por gasto de la 0525 — gastos con
+//     comprobante faltante, claim de contactos (un contacto por gasto y tier), config por flota;
+//   · `buzon/repo.ts` (16): recepción por archivo, bucket `buzon-facturas`, emparejado PDF↔CFDI
+//     y bitácora de la 0530; `buzon/entrega_repo.ts` (26): config, lotes, reserva atómica de
+//     facturas, claim con lease, eventos y confirmación de Resend de la 0531;
+//   · `buzon/bytes.ts` (6): SOLO conversiones `Buffer.from(` que esta regexp cuenta como `.from(`
+//     (ninguna es Supabase; mismo motivo que `carta_porte_docs/bytes.ts`);
+//   · el resto (≈7) son llamadas añadidas a archivos que ya contaban (purga de la bitácora del
+//     buzón, la lectura de facturas tolerante a la base sin migrar).
+// INTEGRACIÓN ola 3 (ronda-03): suma de W3 Conductor+Vigía (+1 archivo, +21 llamadas) y W3 buzón/cobranza/reglas (+5 archivos, +77 llamadas)
+// sobre 268 / 1,580 → 274 / 1,679 (medido con el barrido; +1 sobre la suma por llamadas compartidas).
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 274;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_679;
 
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;

@@ -237,3 +237,34 @@ export function BorrarRegla({ accion, id }: { accion: AccionForma; id: string })
     </form>
   );
 }
+
+
+/**
+ * El límite de frecuencia de UNA regla (0520): cuántos avisos como máximo en 24 h
+ * y cuántas horas de separación entre dos avisos. Lo que se pospone no se pierde:
+ * sale agrupado en el siguiente aviso permitido.
+ */
+export function FormaFrecuencia({ accion, id, maxAvisosDia, minHorasEntreAvisos }: {
+  accion: AccionForma; id: string; maxAvisosDia: number; minHorasEntreAvisos: number;
+}) {
+  const [estado, despachar] = useActionState(accion, null);
+  return (
+    <form action={despachar} className="space-y-2">
+      <input type="hidden" name="id" value={id} />
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className={ETIQUETA} style={{ color: 'var(--muted)' }}>Máximo de avisos en 24 h</span>
+          <input type="number" name="maxAvisosDia" min={1} max={24} step={1} required
+            defaultValue={maxAvisosDia} className={`${CAMPO} w-28`} />
+        </label>
+        <label className="block">
+          <span className={ETIQUETA} style={{ color: 'var(--muted)' }}>Horas entre un aviso y otro</span>
+          <input type="number" name="minHorasEntreAvisos" min={0} max={168} step={1} required
+            defaultValue={minHorasEntreAvisos} className={`${CAMPO} w-28`} />
+        </label>
+        <BotonEnvio etiqueta="Guardar límite" ocupado="Guardando…" tono="suave" />
+      </div>
+      {estado && <AvisoResultado estado={estado.ok ? { ok: true, mensaje: estado.mensaje } : { ok: false, error: estado.error }} />}
+    </form>
+  );
+}
