@@ -7,6 +7,10 @@ import type { DatosTablero, EvidenciaFila, VeredictoFila, ViajeTablero } from '.
 import type { DepsAcuse } from './atender';
 import type { AvisoReclamado } from './planificador';
 import { validarHitoContraSitio } from './validar_hito';
+import type { PuertosCicloGps, SitiosViaje } from './ciclo_gps';
+import { aplicarDeteccion } from './ciclo_gps_real';
+import type { EpisodioFila, EstadoEpisodios, PuertosSenalVida } from './senal_vida';
+import { silencioDeRespuesta } from './senal_vida';
 import type { DepsValidacion, CandidatoValidacion } from './validar_hito';
 import { debeReintentarseValidacion, type PosicionComparada, type SitioValidable, type Veredicto } from './validacion';
 import type { HitoFila } from './tipos';
@@ -112,12 +116,82 @@ export function crearMundo(o: OpcionesMundo) {
   m.deps.validarHito = (e) => validarHitoContraSitio(depsValidacion, e);
   m.deps.escalarPorProblema = (v, h, hs, ahora) => escalarPorProblema(puertos, v, h, hs, ahora);
 
+  // ── P2: los episodios de «sin señal de vida» (la 0636, en memoria) y los cruces de geocerca (la 0635) ──
+  type EpisodioMem = EpisodioFila & { cerradoEn: string | null; cierre: string | null; respuesta: string | null; silenciadoHasta: string | null };
+  const episodios = new Map<string, EpisodioMem>();
+  let nEpisodio = 0;
+  m.deps.responderSenalVida = async (tenantId, viajeId, respuesta, ahora) => {
+    const e = [...episodios.values()].find((x) => x.tenantId === tenantId && x.viajeId === viajeId && !x.cerradoEn);
+    if (!e) return 'sin_episodio';
+    Object.assign(e, { cerradoEn: ahora.toISOString(), cierre: 'respondio', respuesta, silenciadoHasta: new Date(ahora.getTime() + silencioDeRespuesta(respuesta) * 60_000).toISOString() });
+    return 'cerrado';
+  };
+  const cruces = new Set<string>();
+  const muestrasDe = (tenantId: string, unidadId: string) => (o.gps ?? []).filter((p) => p.tenantId === tenantId && p.unidadId === unidadId && p.fuente === 'gps');
+  const sitiosGeom = async (vs: ViajeContexto[]): Promise<Map<string, SitiosViaje>> => new Map(vs.map((v) => {
+    const s = o.sitios?.[v.id];
+    const g = (x?: SitioValidable & { tenantId: string }) => (x && x.tenantId === v.tenantId ? { id: x.id, nombre: x.nombre, lat: x.lat, lng: x.lng, radioM: x.radioM, poligono: x.poligono ?? null } : null);
+    return [v.id, { origen: g(s?.carga), destino: g(s?.descarga) }];
+  }));
+  const puertosCiclo: PuertosCicloGps = {
+    viajes: puertos.viajesActivos, hitosDe: puertos.hitosDe, configDe: puertos.configDe, sitiosDe: sitiosGeom,
+    muestras: async (us, desde) => new Map(us.map((u) => [`${u.tenantId}|${u.unidadId}`, muestrasDe(u.tenantId, u.unidadId).filter((p) => p.medidaEn >= desde).map(({ lat, lng, medidaEn }) => ({ lat, lng, medidaEn }))])),
+    reclamar: async (c) => { const k = `${c.viajeId}|${c.hitoTipo}`; if (cruces.has(k)) return 'perdido'; cruces.add(k); return 'ganado'; },
+    completar: async () => {},
+    liberar: async (c) => { cruces.delete(`${c.viajeId}|${c.hitoTipo}`); },
+    aplicar: (v, h, d, config, ahora) => aplicarDeteccion(v, h, d, config, ahora, {
+      registrarHito: m.deps.registrarHito, aplicarVeredicto: depsValidacion.aplicar,
+      validarHito: async (x, _por, ahoraV) => { const y = m.hitos.get(x.id); if (!y || y.estado !== 'recibido') return 'carrera'; hacer(x.id, { estado: 'validado', validadoEn: ahoraV.toISOString(), validadoPor: 'gps' }); return 'ok'; },
+      sincronizarLegado: m.deps.sincronizarLegado, evento: m.deps.evento, avisarOficina: m.deps.avisarOficina,
+    }),
+  };
+  const puertosSenal: PuertosSenalVida = {
+    viajes: puertos.viajesActivos, hitosDe: puertos.hitosDe, configDe: puertos.configDe, sitiosDe: sitiosGeom,
+    muestras: async (us, desde) => new Map(us.map((u) => [`${u.tenantId}|${u.unidadId}`, muestrasDe(u.tenantId, u.unidadId).filter((p) => p.medidaEn >= desde).map(({ lat, lng, medidaEn }) => ({ lat, lng, medidaEn }))])),
+    ultimaMuestra: async (us, desde) => new Map(us.flatMap((u) => {
+      const ult = muestrasDe(u.tenantId, u.unidadId).filter((p) => p.medidaEn >= desde).sort((a, b) => b.medidaEn.getTime() - a.medidaEn.getTime())[0];
+      return ult ? [[`${u.tenantId}|${u.unidadId}`, ult.medidaEn] as const] : [];
+    })),
+    episodios: async (ids, ahora) => {
+      const r = new Map<string, EstadoEpisodios>();
+      for (const e of episodios.values()) {
+        if (!ids.includes(e.viajeId)) continue;
+        const x = r.get(e.viajeId) ?? { abierto: null, silenciadoHasta: null };
+        if (!e.cerradoEn) x.abierto = { ...e };
+        else if (e.silenciadoHasta && new Date(e.silenciadoHasta) > ahora) x.silenciadoHasta = new Date(e.silenciadoHasta);
+        r.set(e.viajeId, x);
+      }
+      return r;
+    },
+    abrir: async (tenantId, viajeId, motivo, ahora) => {
+      if ([...episodios.values()].some((e) => e.viajeId === viajeId && !e.cerradoEn)) return null;
+      const e: EpisodioMem = { id: `ep${++nEpisodio}`, tenantId, viajeId, motivo, abiertoEn: ahora.toISOString(), nivelEnviado: 0, aviso1En: null, aviso2En: null, escaladoEn: null, cerradoEn: null, cierre: null, respuesta: null, silenciadoHasta: null };
+      episodios.set(e.id, e);
+      return { ...e };
+    },
+    reclamarNivel: async (ep, nivel, ahora) => {
+      const e = episodios.get(ep.id);
+      if (!e || e.cerradoEn || e.nivelEnviado !== nivel - 1) return 'perdido';
+      e.nivelEnviado = nivel as EpisodioFila['nivelEnviado'];
+      if (nivel === 1) e.aviso1En = ahora.toISOString(); else if (nivel === 2) e.aviso2En = ahora.toISOString(); else e.escaladoEn = ahora.toISOString();
+      return 'ganado';
+    },
+    cerrar: async (ep, motivo, ahora) => { const e = episodios.get(ep.id); if (e && !e.cerradoEn) Object.assign(e, { cerradoEn: ahora.toISOString(), cierre: motivo }); },
+    anotarFallo: async () => {},
+    enviar: o.enviar, destinatarios: puertos.destinatarios, ubicacion: puertos.ubicacion,
+  };
+
   // ── el «Ya lo atiendo» del patio ─────────────────────────────────────────
   const depsAcuse: DepsAcuse = {
     viajePorId: async (id) => { const v = m.viajes.get(id); return v ? { tenantId: v.tenantId } : null; },
     puedeAcusar: async (tenantId, telefono) => {
       const t = telefono.replace(/\D/g, '');
       return [...(o.destinatarios?.[tenantId]?.[1] ?? []), ...(o.destinatarios?.[tenantId]?.[2] ?? [])].some((x) => x.replace(/\D/g, '') === t);
+    },
+    cerrarSenalVida: async (_t, viajeId, ahora) => {
+      let n = 0;
+      for (const e of episodios.values()) if (e.viajeId === viajeId && !e.cerradoEn) { e.cerradoEn = ahora.toISOString(); e.cierre = 'atendido_por_jefe'; n++; }
+      return n;
     },
     marcar: async (tenantId, viajeId, ahora) => {
       const marcados: HitoFila[] = [];
@@ -159,6 +233,6 @@ export function crearMundo(o: OpcionesMundo) {
     return { viajes, hayMas: false, hitos, veredictos: ver, evidencias, acciones: [], sitios };
   };
 
-  return { m, puertos, reclamos, veredictos, depsValidacion, depsAcuse, candidatosValidacion, datosTablero, configDe };
+  return { m, puertos, puertosCiclo, puertosSenal, episodios, cruces, reclamos, veredictos, depsValidacion, depsAcuse, candidatosValidacion, datosTablero, configDe };
 }
 export type Mundo = ReturnType<typeof crearMundo>;

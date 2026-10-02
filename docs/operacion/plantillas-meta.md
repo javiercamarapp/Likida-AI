@@ -184,7 +184,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Botones:** ninguno
 
-## Plantillas nuevas, listas para enviar a aprobación (23)
+## Plantillas nuevas, listas para enviar a aprobación (25)
 
 ### `cobranza_gastos_v1`
 
@@ -510,6 +510,47 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 | `{{4}}` | por qué quedó sin confirmar (una línea) | ninguna posición la respalda todavía |
 
 - **Botones:** ninguno
+
+### `conductor_senal_vida_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor. Preguntarle al chofer «¿sigues bien?» cuando el GPS de su tractor en tránsito queda sin reportar o detenido fuera de un sitio (primer y segundo aviso). Apagado por omisión: lo enciende cada flota en la configuración del Conductor.
+- **Llamador en código:** src/lib/likida/conductor/senal_vida.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, sobre tu viaje {{2}}: {{3}}. ¿Sigues bien? Toca un botón para avisarnos.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan |
+| `{{2}}` | folio | F-1042 |
+| `{{3}}` | qué se ve (una línea, con «segundo aviso:» al principio en el segundo) | no recibimos la señal del GPS de tu unidad desde hace 1 hora |
+
+- **Botones:** «Sí, estoy» (respuesta rápida, payload `senal_vida_estoy:<viaje_id>`); «Voy a cargar» (respuesta rápida, payload `senal_vida_cargar:<viaje_id>`); «Estoy bien» (respuesta rápida, payload `senal_vida_bien:<viaje_id>`)
+
+### `aviso_jefe_senal_vida_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor. Escalación al jefe de tráfico: el chofer de un tractor en tránsito no contestó los dos avisos de «sin señal de vida». Apagado por omisión (misma perilla que el aviso al chofer).
+- **Llamador en código:** src/lib/likida/conductor/senal_vida.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Atención, jefe de tráfico: no hay señal de vida de {{1}} en el viaje {{2}} ({{3}}). Se le avisó dos veces sin respuesta. Última ubicación conocida: {{4}}. Llámale o revisa el tablero.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | chofer | Juan Pérez |
+| `{{2}}` | folio | F-1042 |
+| `{{3}}` | qué se ve | el GPS no reporta desde hace 1 hora |
+| `{{4}}` | última ubicación conocida | hace 52 min: https://maps.google.com/?q=20.67000,-103.35000 |
+
+- **Botones:** «Ya lo atiendo» (respuesta rápida, payload `jefe_atiendo:<viaje_id>`); «Abrir tablero» (URL fija https://app.likida.ai/dashboard/despacho)
 
 ### `operador_invitacion_v1`
 

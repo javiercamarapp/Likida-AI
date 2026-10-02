@@ -46,6 +46,13 @@ export function esFueraDeVentana(codigo?: number): boolean {
  *  simula `./client` a exportar una función más. */
 const esTokenVencido = (codigo?: number, status?: number): boolean => codigo === 190 || (codigo === undefined && status === 401);
 
+/**
+ * ¿El cliente de Meta YA dejó este rechazo en `wa_outbox`? («vuelve más tarde» —código, 429/5xx, timeout— o el token vencido 190/401,
+ * que no es «vuelve más tarde» pero sí se encola.) Es la regla detrás del campo `encolado` del resultado; para quien manda con
+ * `enviarTexto` directo y no recibe ese campo. Quien reclama un «una sola vez» no debe soltar el reclamo ni reenviar si es `true`.
+ */
+export const fueEncoladoPorMeta = (codigo?: number, status?: number): boolean => esReintentableMeta(codigo, status) || esTokenVencido(codigo, status);
+
 /** (#132001) la plantilla no existe o no está aprobada. */
 const PLANTILLA_NO_APROBADA = 132001;
 
@@ -149,7 +156,7 @@ export async function enviarConFallback(
 
     const reintentable = esReintentableMeta(p.codigo, p.status) || esReintentableMeta(undefined, estadoTexto?.status);
     // Lo que `sendTemplate` encoló: «vuelve más tarde» (código, 429/5xx o timeout) y el token vencido.
-    const encolado = esReintentableMeta(p.codigo, p.status) || esTokenVencido(p.codigo, p.status);
+    const encolado = fueEncoladoPorMeta(p.codigo, p.status);
     return registrar({
       ok: false, motivo: 'plantilla_rechazada', mensaje: motivoDeFalloWhatsApp(p.error, p.codigo),
       codigo: p.codigo, codigoTexto: estadoTexto?.codigo, status: p.status ?? estadoTexto?.status, fueraDeVentana: true, reintentable, encolado, ventana: ventana.estado,
@@ -176,7 +183,7 @@ export async function enviarConFallback(
         mensaje: t.codigo !== undefined ? motivoDeFalloWhatsApp(t.error, t.codigo) : t.error,
         codigo: t.codigo, status: t.status, fueraDeVentana: false,
         reintentable: esReintentableMeta(t.codigo, t.status),
-        encolado: esReintentableMeta(t.codigo, t.status) || esTokenVencido(t.codigo, t.status), ventana: ventana.estado,
+        encolado: fueEncoladoPorMeta(t.codigo, t.status), ventana: ventana.estado,
       }, 'ninguno', t.codigo);
     }
 

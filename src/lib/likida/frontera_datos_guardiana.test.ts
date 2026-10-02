@@ -256,7 +256,13 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 286;
 // contaba — funcionalidad nueva, no código migrado: las RPC del worker (qué procesar y su respaldo directo contra una base sin la 0641, qué quedó
 // agotado, qué documento por avisar, y el candado de «una sola vez» del aviso a la oficina con su liberación). Cada una va por `acotada`.
 // INTEGRACIÓN ola 4b (P1 + P3): P1 mide 1,807 → 1,811 (+4) y P3 1,807 → 1,811 (+4) contra la misma base; la suma es 1,815 (se confirma con el barrido del árbol fusionado).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_815;
+// OLA 4c, paquete P2 «conductor-ciclo-gps» (0635-0637): 0 archivos y +20 llamadas (1,815 → 1,835), todas en archivos que ya contaban y todas por
+// `acotada`: `conductor/trabajo.ts` +8 (lecturas que CRUZAN flotas del cron `conductor-hitos`, acotadas por las flotas de cada lote: los sitios
+// con polígono de cada viaje —2—, las muestras de GPS de verdad sin el pin, los viajes sin sitio con sus derivaciones previas —2—, el catálogo de
+// sitios, los episodios de «sin señal de vida» y la última muestra de cada unidad) y `conductor/repo.ts` +12 (las escrituras de la 0635-0637, siempre
+// con `tenant_id`: reclamar/completar/liberar el cruce de geocerca —4—, asignar el sitio derivado —3—, y abrir/reclamar nivel/cerrar/anotar/responder/
+// cerrar por el jefe el episodio de señal de vida —5—). Funcionalidad nueva, no código migrado.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_835;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

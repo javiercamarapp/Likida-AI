@@ -24,14 +24,22 @@ vi.mock('@/lib/likida/conductor/ejecutor', () => ({ correrConductor: (...a: unkn
 let horaMx = 12;
 vi.mock('@/lib/likida/conductor/config', () => ({ horaYDiaMx: () => ({ hora: horaMx, dia: 5 }) }));
 const mantenimiento = vi.fn(async (): Promise<Record<string, number | string>> => ({ anonimizar_conductor_hitos: 3, purgar_conductor_auditoria: 3 }));
-vi.mock('@/lib/likida/conductor/repo', () => ({ correrMantenimientoConductor: () => mantenimiento(), leerConfigConductor: async () => ({}) }));
+vi.mock('@/lib/likida/conductor/repo', () => ({ correrMantenimientoConductor: () => mantenimiento(), leerConfigConductor: async () => ({}), asignarSitioDerivado: async () => 'ok' }));
 const alertasEstadia = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisadas: 1, alertas: 1, yaReclamadas: 0, sinDestinatario: 0, fueraDeVentana: 0, rechazosReintentables: 0, fallos: [] }));
 vi.mock('@/lib/likida/conductor/alertas_estadia', () => ({ correrAlertasEstadia: () => alertasEstadia() }));
 const llegadas = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisadas: 1, avisos: 1, yaReclamados: 0, sinDestinatario: 0, fueraDeVentana: 0, rechazosReintentables: 0, fallos: [] }));
 vi.mock('@/lib/likida/conductor/alertas_llegada', () => ({ correrAlertasLlegadaSinConfirmar: () => llegadas(), puertosAlertaLlegadaReales: () => ({}) }));
 const barrido = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisados: 2, validados: 1, sinCoincidencia: 0, sinDato: 1, saltados: 0, fallos: 0 }));
 vi.mock('@/lib/likida/conductor/validar_hito', () => ({ barridoValidacion: () => barrido(), depsValidacionReales: {} }));
-vi.mock('@/lib/likida/conductor/trabajo', () => ({ leerCandidatosValidacion: async () => [] }));
+vi.mock('@/lib/likida/conductor/trabajo', () => ({ leerCandidatosValidacion: async () => [], leerCandidatosSitioDerivado: async () => [], leerCatalogoSitios: async () => new Map() }));
+const ciclo = vi.fn(async (): Promise<Record<string, unknown>> => ({ viajes: 4, evaluados: 3, detectados: 2, llegadas: 1, salidas: 1, fallos: [] }));
+vi.mock('@/lib/likida/conductor/ciclo_gps', () => ({ barridoCicloGps: () => ciclo() }));
+vi.mock('@/lib/likida/conductor/ciclo_gps_real', () => ({ puertosCicloGpsReales: () => ({}) }));
+const sitios = vi.fn(async (): Promise<Record<string, unknown>> => ({ candidatos: 5, derivados: 3, sinCoincidencia: 2, yaAsignados: 0, fallos: 0, cortadosPorReloj: 0 }));
+vi.mock('@/lib/likida/conductor/sitio_derivado', () => ({ barridoSitioDerivado: () => sitios() }));
+const senal = vi.fn(async (): Promise<Record<string, unknown>> => ({ viajes: 4, avisosChofer: 1, escalaciones: 1, cortadaPorRechazoMasivo: false, fallos: [] }));
+vi.mock('@/lib/likida/conductor/senal_vida', () => ({ barridoSenalVida: () => senal() }));
+vi.mock('@/lib/likida/conductor/senal_vida_real', () => ({ puertosSenalVidaReales: () => ({}) }));
 const acercamiento = vi.fn(async (): Promise<Record<string, unknown>> => ({ candidatos: 3, enviados: 1, sinPosicion: 1, lejos: 1, rechazados: 0, fallos: 0, cortadosPorReloj: 0 }));
 vi.mock('@/lib/likida/convenios/acercamiento', () => ({ barridoAcercamiento: () => acercamiento() }));
 class ConveniosNoDisponiblesDoble extends Error {}
@@ -47,7 +55,7 @@ const j = async (r: Response) => (await r.json()) as Record<string, any>; // esl
 
 beforeEach(() => {
   autorizado = 'si'; interruptores = {}; horaMx = 12;
-  correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear(); alertasEstadia.mockClear(); llegadas.mockClear(); barrido.mockClear(); acercamiento.mockClear();
+  correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear(); alertasEstadia.mockClear(); llegadas.mockClear(); barrido.mockClear(); acercamiento.mockClear(); ciclo.mockClear(); sitios.mockClear(); senal.mockClear();
 });
 
 describe('la puerta y las palancas', () => {
@@ -221,5 +229,52 @@ describe('el aviso de acercamiento a la planta (0580)', () => {
     const r = await j(await llamar());
     expect(r.fallos).toEqual([]);
     expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'ok', expect.anything());
+  });
+});
+
+describe('P2: el ciclo por geocerca, el sitio derivado y la señal de vida', () => {
+  it('corren en cada pasada: sitio → ciclo → (validación y avisos de llegada) → señal de vida, y van al cuerpo y al latido', async () => {
+    const orden: string[] = [];
+    sitios.mockImplementationOnce(async () => { orden.push('sitios'); return { candidatos: 1, derivados: 1, sinCoincidencia: 0, yaAsignados: 0, fallos: 0, cortadosPorReloj: 0 }; });
+    ciclo.mockImplementationOnce(async () => { orden.push('ciclo'); return { viajes: 1, detectados: 2, fallos: [] }; });
+    barrido.mockImplementationOnce(async () => { orden.push('validacion'); return { revisados: 0, validados: 0, sinCoincidencia: 0, sinDato: 0, saltados: 0, fallos: 0 }; });
+    senal.mockImplementationOnce(async () => { orden.push('senal'); return { viajes: 1, avisosChofer: 1, escalaciones: 1, cortadaPorRechazoMasivo: false, fallos: [] }; });
+    const r = await j(await llamar());
+    expect(orden).toEqual(['sitios', 'ciclo', 'validacion', 'senal']);
+    expect(r.cicloGps).toMatchObject({ detectados: 2 });
+    expect(r.senalVida).toMatchObject({ avisosChofer: 1 });
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'ok', expect.objectContaining({ hitosPorGps: 2, sitiosDerivados: 1, senalVidaAvisos: 1, senalVidaEscalaciones: 1 }));
+  });
+
+  it('cada pasada está aislada: si una revienta las demás corren y el latido sale parcial con el motivo', async () => {
+    sitios.mockRejectedValueOnce(new Error('boom sitios'));
+    ciclo.mockRejectedValueOnce(new Error('boom ciclo'));
+    senal.mockRejectedValueOnce(new Error('boom senal'));
+    const r = await j(await llamar());
+    expect(barrido).toHaveBeenCalledTimes(1);
+    expect(acercamiento).toHaveBeenCalledTimes(1);
+    expect(r.fallos.join(' ')).toMatch(/boom sitios[\s\S]*boom ciclo[\s\S]*boom senal/);
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.anything());
+  });
+
+  it('los fallos que reportan las pasadas llegan al cuerpo y vuelven parcial el latido', async () => {
+    ciclo.mockResolvedValueOnce({ viajes: 1, detectados: 0, fallos: ['V-1: no se pudo registrar llegada_carga'] });
+    const r = await j(await llamar());
+    expect(r.fallos).toContain('V-1: no se pudo registrar llegada_carga');
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.anything());
+  });
+
+  it('un rechazo masivo de Meta en la señal de vida deja el latido parcial', async () => {
+    senal.mockResolvedValueOnce({ viajes: 8, avisosChofer: 0, escalaciones: 0, cortadaPorRechazoMasivo: true, fallos: [] });
+    await llamar();
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.anything());
+  });
+
+  it('con el interruptor apagado no corre ninguna de las tres', async () => {
+    interruptores = { 'agente:conductores': 'apagado' };
+    await llamar();
+    expect(ciclo).not.toHaveBeenCalled();
+    expect(sitios).not.toHaveBeenCalled();
+    expect(senal).not.toHaveBeenCalled();
   });
 });

@@ -13,7 +13,7 @@ const ctx = (rol = 'flota_admin') => ({ tenantId: 't1', rol, usuarioId: 'u1', em
 function formulario(extra: Record<string, string> = {}): FormData {
   const fd = new FormData();
   for (const [k, v] of Object.entries(valoresDeForma({ ...CONFIG_CONDUCTOR_DEFAULT }))) fd.set(`f_${k}`, v);
-  for (const k of ['activo', 'usarLlm', 'confirmarAlChofer', 'validarUbicacion', 'pedirUbicacion', 'fotoRegistraHito']) fd.set(`f_${k}`, 'si');
+  for (const k of ['activo', 'usarLlm', 'confirmarAlChofer', 'validarUbicacion', 'pedirUbicacion', 'fotoRegistraHito', 'detectarHitosGps']) fd.set(`f_${k}`, 'si');
   for (const d of [1, 2, 3, 4, 5, 6, 7]) fd.set(`f_dia_${d}`, 'si');
   fd.set('c_filas', '3');
   for (const [k, v] of Object.entries(extra)) fd.set(k, v);

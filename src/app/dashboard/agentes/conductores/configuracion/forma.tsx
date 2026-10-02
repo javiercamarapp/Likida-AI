@@ -143,6 +143,10 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         <Casilla nombre="avisarOficinaSalida" etiqueta="Avisar a la oficina la hora exacta de cada salida" marcada={config.avisarOficinaSalida} deshabilitada={off} />
         <Casilla nombre="avisarLlegadaSinConfirmar" etiqueta="Avisar al jefe de tráfico cuando un «ya llegué» no se confirma con ubicación" marcada={config.avisarLlegadaSinConfirmar} deshabilitada={off}
           ayuda="Un solo aviso por llegada, después de unos minutos de gracia. Cubre también el viaje sin sitio asignado (nada con qué compararlo). Apagado, solo se ve como excepción en el tablero." />
+        <Casilla nombre="detectarHitosGps" etiqueta="Dar por hecha la llegada o la salida cuando el GPS entra o sale del sitio del viaje" marcada={config.detectarHitosGps} deshabilitada={off}
+          ayuda="El tractor entra o sale de la geocerca y el hito se registra solo, sin que el chofer escriba (queda como «sistema» y validado por GPS). Solo actúa con sitio asignado al viaje y GPS de la unidad." />
+        <Casilla nombre="avisarSenalVida" etiqueta="Preguntar «¿sigues bien?» si el GPS de un tractor en tránsito se calla" marcada={config.avisarSenalVida} deshabilitada={off}
+          ayuda="Si la última posición queda vieja o el tractor lleva rato detenido fuera de un sitio: un aviso con botones al chofer, un segundo aviso y después al jefe de tráfico. Apagado: solo se ve en el tablero. Requiere plantilla aprobada fuera de la ventana de 24 h." />
         <div className="grid sm:grid-cols-2 gap-3">
           <Numero nombre="estadiaAlertaCargaMin" etiqueta="Alerta de estadía en carga (min)" valor={valores.estadiaAlertaCargaMin} deshabilitada={off} placeholder="vacío = sin alerta" ayuda="De 15 a 4,320. Vacío la apaga." />
           <Numero nombre="estadiaAlertaDescargaMin" etiqueta="Alerta de estadía en descarga (min)" valor={valores.estadiaAlertaDescargaMin} deshabilitada={off} placeholder="vacío = sin alerta" />
