@@ -37,9 +37,21 @@ test.describe('ARCO: alcance explícito de la cancelación sintética', () => {
       expect(r.ok()).toBeTruthy();
       expect(await r.json()).toEqual([]);
     }
+    // PRU-32C11-C1 (auditoría 32 c11), SEGUNDA SEDE: `vence_en` venía con la
+    // fecha FIJA '2026-10-01', y el CHECK `arco_vence_despues_de_recibida`
+    // (0291:64) exige `vence_en >= recibida_en::date` con `recibida_en` por
+    // default `now()`. El 2-oct-2026 el fixture empezó a morir con 23514 y
+    // tumbó el job entero de Playwright — verde el día anterior, rojo sin que
+    // mediara un commit. Es la misma clase que caducó hoy en
+    // `supabase/tests/0340_arco_alcance.sql`, en otro lenguaje.
+    //
+    // Los 20 días son el plazo del art. 32 de la LFPDPPP para responder una
+    // solicitud ARCO, que es lo que la aplicación calcularía. `vence_en` no
+    // participa en ninguna aserción de este archivo.
+    const vence = new Date(Date.now() + 20 * 864e5).toISOString().slice(0, 10);
     for (const [tabla, datos] of [
       ['operador', { id: OPERADOR, tenant_id: TENANT, nombre: NOMBRE, telefono: TELEFONO }],
-      ['solicitud_arco', { id: SOLICITUD, tenant_id: TENANT, operador_id: OPERADOR, titular_ref: null, tipo: 'cancelacion', canal: 'panel', estado: 'recibida', vence_en: '2026-10-01' }],
+      ['solicitud_arco', { id: SOLICITUD, tenant_id: TENANT, operador_id: OPERADOR, titular_ref: null, tipo: 'cancelacion', canal: 'panel', estado: 'recibida', vence_en: vence }],
     ] as const) {
       const r = await admin.post(tabla, { data: datos, maxRedirects: 0 });
       expect(r.ok(), `fixture ${tabla}: ${await r.text()}`).toBeTruthy();
