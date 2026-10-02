@@ -167,7 +167,12 @@ import { join, relative } from 'node:path';
 // `carta_porte_docs/bytes.ts`, que existe SOLO para sacar de contenido.ts, whatsapp.ts y
 // repo.ts las conversiones `Buffer.from(` que esta regexp cuenta como `.from(` (cinco
 // llamadas, ninguna a Supabase). Funcionalidad nueva, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 267;
+//
+// INTEGRACIÓN OLA 2 (2-oct-2026): al fusionar las cinco ramas el techo es la SUMA medida,
+// 259 → 268 archivos y 1,347 → 1,580 llamadas (seguridad +2/+12, producto +1/+24,
+// Conductor +3/+85, Vigía +1/+57, Carta Porte +2/+55); cada tramo está explicado arriba
+// y todo es funcionalidad nueva, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 268;
 const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_580;
 
 

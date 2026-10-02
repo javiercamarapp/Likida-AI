@@ -147,7 +147,16 @@ import { join, relative, sep } from 'node:path';
 //     usa el tenant de la propia conversación. No acepta cuerpo ni parámetros.
 //     El tablero del Vigía NO añade rutas: sus acciones son server actions de la
 //     página, con la sesión, el rol y el tenant de la cookie.
-const RUTAS_APP_REVISADAS = 88;
+// 88 → 89 (loop punta a punta, Agente 3 «Carta Porte multi-formato», 1-oct-2026): una ruta,
+//   · `api/export/carta-porte-docs/route.ts` — rate limit por IP y por flota,
+//     `resolverTenantApi` (sesión → flota), área `operacion` de la bandeja de documentos
+//     + `puedeExportar`, y todas las lecturas acotadas al tenant de la sesión (un `?ids=`
+//     de otra flota no exporta nada de ella). Solo exporta documentos APROBADOS; no emite
+//     ni timbra nada. El correo `cp-<token>@…` NO suma ruta: comparte el webhook firmado de
+//     `api/correo/entrante/route.ts`, que verifica la firma Svix antes de leer el cuerpo.
+//
+// Conteo de la integración de la ola 2: 78 + 9 (Conductor) + 1 (Vigía) + 1 (Carta Porte) = 89.
+const RUTAS_APP_REVISADAS = 89;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
