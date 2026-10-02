@@ -46,7 +46,18 @@ const COLUMNAS_GEOCERCA_SQL = z.object({
 
 export interface Autenticacion { patron: (typeof PATRONES_HTTP)[number]; nombreCampo: string; token: string }
 
-export interface ConfigComun { zona: string; ventanaMinutos: number; limiteFilas: number }
+export interface ConfigComun {
+  zona: string;
+  ventanaMinutos: number;
+  limiteFilas: number;
+  /**
+   * M2: el barrido LARGO. Un tractor que reaparece tras un tramo sin señal sube su búfer de golpe, con la `fecha_hora` de
+   * cuando se midió cada punto: la ventana corta de cada vuelta ya pasó de largo y esos puntos no se leerían nunca. Con este
+   * valor (minutos, 0 = apagado) la vuelta de los primeros 5 minutos de cada hora lee hacia atrás tanto tiempo. Es seguro
+   * repetir lectura (el asentador es idempotente por unidad + instante + proveedor); el costo es volumen, por eso nace apagado.
+   */
+  barridoLargoMinutos: number;
+}
 export type ConfigTablaPropia = ConfigComun & (
   | {
       modo: 'sql_solo_lectura'; conexion: ConexionSql; vista: string; columnas: ColumnasPosicion;
@@ -108,7 +119,10 @@ export function leerConfigTablaPropia(v: ValoresCredencial): ResultadoConfig {
   if (ventana === null) return no('ventana_minutos debe ser un entero de 1 a 1,440');
   const limite = entero(v.limite_filas, LIMITE_FILAS_POR_OMISION, 1, LIMITE_FILAS_MAXIMO);
   if (limite === null) return no(`limite_filas debe ser un entero de 1 a ${LIMITE_FILAS_MAXIMO}`);
-  const comun = { zona, ventanaMinutos: ventana, limiteFilas: limite };
+  const barrido = entero(v.barrido_largo_minutos, 0, 0, 1_440);
+  if (barrido === null || (barrido !== 0 && barrido < 60)) return no('barrido_largo_minutos debe ser 0 (apagado) o un entero de 60 a 1,440');
+  if (barrido !== 0 && barrido <= ventana) return no('barrido_largo_minutos debe ser mayor que ventana_minutos (o 0 para apagarlo)');
+  const comun = { zona, ventanaMinutos: ventana, limiteFilas: limite, barridoLargoMinutos: barrido };
 
   if (modo === 'sql_solo_lectura') {
     const host = (v.sql_host ?? '').trim();
