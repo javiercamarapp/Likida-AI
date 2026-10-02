@@ -54,6 +54,9 @@ fi
 "${P[@]}" -v ancla="$ANCLA" -f sembrar.sql
 # Los veredictos de ubicación NO se escriben a mano: los calcula el motor real del Conductor sobre lo sembrado.
 node generar-veredictos.mjs
+# Lo que producen los importadores REALES sobre las muestras (formato de liquidación de la flota, grupos críticos, histórico y
+# respuestas rápidas del Vigía) se siembra con ellos, no a mano.
+node sembrar-importadores.mjs
 if [ "$ENCENDER" = 1 ]; then
   "${P[@]}" -c "update vigia_config set habilitado = true where tenant_id = 'eeeeeeee-0620-4000-8000-000000000250'; update agente_conductor_config set activo = true where tenant_id = 'eeeeeeee-0620-4000-8000-000000000250'"
   echo "Vigía y Conductor del tenant demo ENCENDIDOS (los teléfonos 28999… siguen rechazados por el envío)." >&2
