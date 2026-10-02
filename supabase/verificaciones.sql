@@ -5779,7 +5779,7 @@ begin
     coalesce(gatea, false), coalesce(tiene_check, false);
 end $$;
 
--- ── 112. TODA FK entre tablas con tenant_id lleva su compuesta (mig. 0145) ──
+-- ── 112. TODA FK entre tablas con tenant_id lleva su compuesta (mig. 0145 + 0600) ──
 -- La 0028 escribió la regla y la aplicó a cuatro relaciones; la 0073 arregló
 -- una más y dejó escrito que el resto seguía abierto. Este bloque es la regla
 -- hecha catálogo: barre pg_constraint y LISTA cada FK simple entre dos tablas
