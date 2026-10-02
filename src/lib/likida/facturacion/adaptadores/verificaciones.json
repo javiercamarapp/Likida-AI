@@ -1,0 +1,4 @@
+{
+  "_formato": "Una entrada por comercio, escrita SOLO por `scripts/verificar-portal.mjs` tras una visita real con confirmación humana. Ver src/lib/likida/autofactura/verificacion.ts. Vacío = ningún portal está verificado.",
+  "verificaciones": {}
+}
