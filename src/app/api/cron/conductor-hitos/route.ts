@@ -105,7 +105,7 @@ export async function GET(req: Request) {
     // que el GPS acaba de dar por hecha no debe avisar como «sin confirmar». Aislados como los demás.
     try {
       sitios = await barridoSitioDerivado({ candidatos: leerCandidatosSitioDerivado, catalogo: leerCatalogoSitios, asignar: asignarSitioDerivado }, new Date(), venceEn);
-      if (sitios.fallos > 0) extras.push(`sitio derivado: ${sitios.fallos} viaje(s) con fallo`);
+      if (sitios.fallos > 0) extras.push(`sitio derivado: ${sitios.fallos} viajes con fallo`);
     } catch (e) {
       extras.push(`sitio derivado: ${e instanceof Error ? e.message : String(e)}`);
       logger.error('cron.conductor_hitos.sitio_derivado_fallo', { error: e instanceof Error ? e.message : String(e) });
