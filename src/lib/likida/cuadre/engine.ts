@@ -546,7 +546,71 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
     if (previo === undefined || g.rfcEmisor < previo) emisorDelGrupo.set(k, g.rfcEmisor);
   }
 
+  // FIS/BE/ARQ/DAT-32C11-C1 (auditoría 32 c11, CRÍTICO): EL ESPEJO DE LA
+  // 0365/0366 POR EL EJE DEL PAR MIXTO.
+  //
+  // El par mixto —la foto que quedó ligada a su CFDI y la que no, del MISMO
+  // ticket— recibía llaves distintas POR CONSTRUCCIÓN: la fila con UUID salía
+  // por el `continue` de la rama de abajo sin consultar nunca `vistoFolio`, y
+  // la fila sin UUID nunca consultaba `vistoUuid`. Ninguna veía a la otra, así
+  // que el ticket contaba DOS veces, en los dos órdenes de llegada.
+  //
+  // Y es la única forma que puede tomar una copia de un comprobante con folio
+  // fiscal: `uq_gasto_cfdi_uuid` prohíbe que las dos filas traigan el UUID y
+  // `uq_gasto_img_hash` deja entrar la segunda foto.
+  //
+  // LO QUE LO VUELVE CRÍTICO Y NO UNA DIVERGENCIA INTERNA: la 0365 se lo
+  // enseñó al ejercicio y la 0366 al cierre, pero el guardia de
+  // `guardar_liquidacion_tx` es un contrato de IGUALDAD. Con el SQL en 10000 y
+  // este motor en 20000 el cierre rebotaba con CU007, `insumosDeCierreCambiaron`
+  // (`repo.ts:1067-1070`) sólo reconoce CU003/CU006, y el viaje se quedaba en
+  // `en_cuadre` PARA SIEMPRE — con `uq_viaje_abierto_por_operador` dejando
+  // además al operador sin poder abrir el siguiente. Cinco auditores
+  // convergieron; medido con un ticket de $10,000 en dos filas.
+  //
+  // Con DOS O MÁS UUID en el grupo de folio no se toca nada: dos CFDI
+  // DISTINTOS que comparten concepto, folio, monto y emisor son dos
+  // comprobantes, no copias.
+  //
+  // Y el UUID COMPARTIDO sigue mandando sobre el folio, antes que todo lo
+  // demás: dos filas con el mismo `(uuid, orden)` son el mismo comprobante
+  // aunque el OCR les haya leído emisores distintos. La base no puede contener
+  // ese estado (`uq_gasto_cfdi_uuid`), y por eso la 0366 no necesita la
+  // condición; aquí se conserva porque el contrato de esta función sí la
+  // declaraba y no cuesta nada sostenerla.
+  const uuidConOrden = (g: Gasto): string | null =>
+    g.cfdiUuid ? `${g.cfdiUuid.toLowerCase()}#${g.cfdiOrden ?? 1}` : null;
+  const llaveDeFolioDe = (g: Gasto): string | null => {
+    if (!g.folio) return null;
+    const grupo = grupoDeFolio(g);
+    return `${grupo}|${g.rfcEmisor ?? emisorDelGrupo.get(grupo) ?? ''}`;
+  };
+  const filasPorUuid = new Map<string, number>();
+  const uuidsEnGrupo = new Map<string, number>();
   for (const g of gastos) {
+    const u = uuidConOrden(g);
+    if (u !== null) filasPorUuid.set(u, (filasPorUuid.get(u) ?? 0) + 1);
+    const k = llaveDeFolioDe(g);
+    if (k === null) continue;
+    uuidsEnGrupo.set(k, (uuidsEnGrupo.get(k) ?? 0) + (u !== null ? 1 : 0));
+  }
+
+  for (const g of gastos) {
+    const u = uuidConOrden(g);
+    const llaveDeFolio = llaveDeFolioDe(g);
+    // La llave del FOLIO manda para TODAS las filas del grupo —la del UUID
+    // incluida— cuando el grupo trae UNA sola fila con UUID y ese UUID no está
+    // repetido en otra fila.
+    if (
+      llaveDeFolio !== null &&
+      (uuidsEnGrupo.get(llaveDeFolio) ?? 0) <= 1 &&
+      (u === null || (filasPorUuid.get(u) ?? 0) <= 1)
+    ) {
+      const previo = vistoFolio.get(llaveDeFolio);
+      if (previo) originalDe.set(g.id, previo);
+      else vistoFolio.set(llaveDeFolio, g.id);
+      continue;
+    }
     if (g.cfdiUuid) {
       // POR `(uuid, orden)`, NO POR EL UUID SOLO.
       //

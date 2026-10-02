@@ -103,3 +103,102 @@ describe('FIS-C3 · `copiasDeComprobante` espeja el dedup por emisor de la 0358'
     expect(copias.get('b'), 'el mismo folio fiscal es el mismo comprobante, venga de donde venga').toBe('a');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIS/BE/ARQ/DAT-32C11-C1 (auditoría 32 c11, CRÍTICO) — EL SEGUNDO EJE DEL
+// MISMO ESPEJO: EL PAR MIXTO. Y ESTA VEZ NO ERA UNA DIVERGENCIA DE PANTALLAS,
+// ERA UN PARO.
+//
+// El par mixto es UNA foto ligada a su CFDI y OTRA del mismo ticket sin él.
+// Es la única forma que puede tomar una copia de un comprobante con folio
+// fiscal: `uq_gasto_cfdi_uuid` prohíbe que las dos filas traigan el UUID y
+// `uq_gasto_img_hash` deja entrar la segunda foto.
+//
+// `copiasDeComprobante` no lo veía: la fila con UUID hacía `continue` sin
+// consultar nunca `vistoFolio`, y la fila sin UUID nunca consultaba
+// `vistoUuid`. Llaves distintas por construcción, en los dos órdenes.
+//
+// La 0365 se lo enseñó al ejercicio y la 0366 al cierre. El guardia de
+// `guardar_liquidacion_tx` es un contrato de IGUALDAD, así que arreglar un
+// solo lado no dejó una divergencia parcial: dejó una INDISPONIBILIDAD.
+// Medido en los dos lenguajes, con un ticket de $10,000 en dos filas y
+// anticipo $30,000:
+//
+//     engine.ts (este motor)     →  total_comprobado = 20000
+//     guardar_liquidacion_tx     →  v_total          = 10000  → CU007
+//     `insumosDeCierreCambiaron` →  sólo CU003/CU006, no reintenta
+//
+// El viaje se quedaba en `en_cuadre` para siempre —y el reintento da 20000
+// otra vez, porque el cálculo es determinista—, con el PDF ya subido diciendo
+// $20,000.00 comprobados sobre $10,000.00 de combustible del ejercicio. Y
+// `uq_viaje_abierto_por_operador` cubre `en_cuadre`: el operador tampoco podía
+// abrir su siguiente viaje.
+//
+// CINCO auditores convergieron desde sitios distintos (fiscal, backend,
+// arquitectura, modelo de datos y pruebas) y el orquestador lo reprodujo en
+// las dos mitades. La suite estaba verde: 993 archivos / 13,061 pruebas.
+// Ningún arnés cruzaba DOS sedes del dedup sobre LAS MISMAS filas, que es
+// exactamente el hueco que estos casos vienen a tapar.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('FIS-32C11-C1 · `copiasDeComprobante` espeja el dedup del par mixto de la 0365/0366', () => {
+  const diesel = (over: Partial<Gasto>): Gasto => ({
+    id: 'x', concepto: 'diesel', monto: 10000, folio: 'MIX', folioNorm: 'MIX',
+    rfcEmisor: 'ESA030303CC1',
+    ...over,
+  } as unknown as Gasto);
+  const totalDe = (gastos: Gasto[]): number => {
+    const copias = copiasDeComprobante(gastos);
+    return gastos.filter((g) => !copias.has(g.id)).reduce((s, g) => s + g.monto, 0);
+  };
+
+  it('EL PAR MIXTO ES UNA COPIA — la foto con CFDI y la que no son el mismo ticket', () => {
+    const copias = copiasDeComprobante([
+      diesel({ id: 'sinCfdi', cfdiUuid: undefined }),
+      diesel({ id: 'conCfdi', cfdiUuid: '36633333-3333-4333-8333-333333333333' }),
+    ]);
+    expect(
+      copias.size,
+      'el ticket de $10,000 contaba DOS veces y el cierre rebotaba con CU007: el viaje no se podía liquidar',
+    ).toBe(1);
+  });
+
+  it('y el total es $10,000 EN LOS DOS ÓRDENES DE LLEGADA, que es lo que la 0366 deriva', () => {
+    const sinCfdi = diesel({ id: 'sinCfdi', cfdiUuid: undefined });
+    const conCfdi = diesel({ id: 'conCfdi', cfdiUuid: '36633333-3333-4333-8333-333333333333' });
+    // El orden importaba: con la copia sin UUID llegando primero sobrevivían
+    // las dos en el panel, y aquí sobrevivían las dos siempre.
+    expect(totalDe([sinCfdi, conCfdi]), 'copia sin UUID primero').toBe(10000);
+    expect(totalDe([conCfdi, sinCfdi]), 'copia con UUID primero').toBe(10000);
+  });
+
+  it('CONTRAPESO — dos CFDI DISTINTOS que comparten folio, monto, concepto y emisor siguen contando DOS veces', () => {
+    // Si esto se cae, el arreglo se pasó de largo y empezó a fusionar
+    // comprobantes legítimos, que es el daño simétrico y cuesta dinero que la
+    // flota SÍ gastó. Es el mismo control que siembra el arnés de la 0366.
+    const copias = copiasDeComprobante([
+      diesel({ id: 'a', monto: 3000, folio: 'DOS', folioNorm: 'DOS', cfdiUuid: '36644444-4444-4444-8444-444444444444' }),
+      diesel({ id: 'b', monto: 3000, folio: 'DOS', folioNorm: 'DOS', cfdiUuid: '36655555-5555-4555-8555-555555555555' }),
+    ]);
+    expect(copias.size, 'dos folios fiscales propios no son copias').toBe(0);
+  });
+
+  it('CONTRAPESO — la factura consolidada sigue entrando entera: mismo UUID, dos `cfdiOrden`', () => {
+    // La 0065 separó «nació de ese CFDI» de «está amparado por ese CFDI». Si
+    // esto se cae, las ocho casetas de una factura de CAPUFE vuelven a entrar
+    // como UNA y el operador cobra $250 de $2,000.
+    const copias = copiasDeComprobante([
+      diesel({ id: 'a', concepto: 'caseta', monto: 250, folio: 'CAP', folioNorm: 'CAP', cfdiUuid: 'u-cap', cfdiOrden: 1 }),
+      diesel({ id: 'b', concepto: 'caseta', monto: 250, folio: 'CAP', folioNorm: 'CAP', cfdiUuid: 'u-cap', cfdiOrden: 2 }),
+    ]);
+    expect(copias.size, 'dos renglones de la misma factura amparada no son copias').toBe(0);
+  });
+
+  it('CONTRAPESO — un CFDI SIN folio sigue deduplicándose sólo por UUID (frontera 0349)', () => {
+    const copias = copiasDeComprobante([
+      diesel({ id: 'a', folio: undefined, folioNorm: undefined, cfdiUuid: 'u-1' }),
+      diesel({ id: 'b', folio: undefined, folioNorm: undefined, cfdiUuid: 'u-2' }),
+    ]);
+    expect(copias.size).toBe(0);
+  });
+});
