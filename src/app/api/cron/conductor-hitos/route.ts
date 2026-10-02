@@ -177,7 +177,7 @@ export async function GET(req: Request) {
       detalle: {
         sembrados: r.sembrados, viajes: r.viajes, solicitudes: r.solicitudes, recordatorios: r.recordatorios,
         escalaciones: r.escalaciones, fallos: r.fallos.length + extras.length, cortadosPorReloj: r.cortadosPorReloj,
-        rechazoMasivo: r.cortadaPorRechazoMasivo,
+        rechazoMasivo: r.cortadaPorRechazoMasivo, vencidosCerrados: r.vencidosCerrados ?? 0, viajesTruncados: r.viajesTruncados ?? false,
         alertasEstadia: alertas?.alertas ?? null, avisosLlegadaSinConfirmar: llegadas?.avisos ?? null, validados: validacion?.validados ?? null, sinCoincidencia: validacion?.sinCoincidencia ?? null,
         acercamientos: acercamiento?.enviados ?? null,
         hitosPorGps: ciclo?.detectados ?? null, sitiosDerivados: sitios?.derivados ?? null,
