@@ -143,7 +143,9 @@ const muestraCercana = (cruceMs: number, muestras: readonly MuestraCurso[]): Mue
 
 /** ¿Este pase estaba dentro de los cursos que le aplican? Ver la doctrina arriba. */
 export function evaluarCurso(e: EntradaCurso): EvaluacionCurso {
-  const aplican = e.cursos.filter((c) => vigenteEn(c, e.fecha));
+  // Un curso de `casetas` SIN casetas (se las borraron del catálogo) no autoriza ni desautoriza nada: es como no tener curso. Si no,
+  // «ninguna autorizada» reclamaría como fuera de curso TODO lo de su unidad.
+  const aplican = e.cursos.filter((c) => vigenteEn(c, e.fecha) && !(c.tipo === 'casetas' && c.casetaIds.length === 0));
   if (aplican.length === 0) return { estado: 'sin_curso' };
 
   let inconcluso: MotivoSinDatoCurso | null = null;

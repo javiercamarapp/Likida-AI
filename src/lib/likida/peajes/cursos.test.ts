@@ -79,6 +79,14 @@ describe('evaluar el curso por casetas autorizadas', () => {
   it('la caseta sin resolver en el catálogo es dato insuficiente, no una acusación', () => {
     expect(evaluarCurso({ ...base, casetaId: null, cursos: [porCasetas()] })).toEqual({ estado: 'sin_dato', motivo: 'caseta_sin_resolver' });
   });
+  it('un curso de casetas SIN casetas no autoriza ni desautoriza: es como no tener curso (ronda 17)', () => {
+    const vacio = porCasetas({ casetaIds: [], casetaNombres: [] });
+    expect(evaluarCurso({ ...base, casetaId: K3, cursos: [vacio] })).toEqual({ estado: 'sin_curso' });
+    expect(evaluarCurso({ ...base, casetaId: null, cursos: [vacio] })).toEqual({ estado: 'sin_curso' });
+    // y no estorba a otro curso que sí tiene casetas
+    expect(evaluarCurso({ ...base, casetaId: K3, cursos: [vacio, porCasetas()] })).toMatchObject({ estado: 'fuera' });
+    expect(evaluarCurso({ ...base, cursos: [vacio, porCasetas()] })).toEqual({ estado: 'dentro', curso: 'Planta A a Planta B' });
+  });
   it('con varios cursos basta que UNO autorice el pase; fuera solo si ninguno lo autoriza', () => {
     const otro = porCasetas({ id: 'c3', codigo: 'CUR-2', nombre: 'Ruta alterna', casetaIds: [K3], casetaNombres: ['Caseta Tres'] });
     expect(evaluarCurso({ ...base, casetaId: K3, cursos: [porCasetas(), otro] })).toEqual({ estado: 'dentro', curso: 'Ruta alterna' });
