@@ -18282,3 +18282,45 @@ begin
   raise exception E'POSICIONES_SIN_PIN_0603 unidad-con-pin-sale-por-gps=% solo-pin-fuera=% ventana-sin-pin=% otra-flota-nada=%   (esperado t / t / t / t)',
     por_gps, solo_pin_fuera, ventana, otra;
 end $$;
+
+-- ── 270. Conductor: «llegada sin confirmar» (clase de aviso y evento) y margen de acercamiento por flota (mig. 0604) ──
+-- La 0604 reescribe ENTEROS los dominios de `viaje_hito_aviso.clase` y `viaje_hito_evento.evento` y agrega dos perillas a la config.
+-- Lo que solo la base demuestra: el claim de la clase nueva es único por (hito, ciclo, clase, nivel), los dominios anteriores
+-- siguen vigentes, y el margen vive entre 0 y 50,000 con la perilla de aviso apagada por omisión.
+-- Esperado: CONDUCTOR_0604 claim-unico=t clase-inventada-rebota=t evento-nuevo-entra=t margen-por-omision=t margen-fuera-rebota=t aviso-apagado=t
+do $$
+declare
+  ta uuid; oa uuid; va uuid; h uuid;
+  claim_unico boolean := false; clase_mala boolean := false; evento_ok boolean := false; margen_ok boolean := false; margen_malo boolean := false; apagado boolean := false;
+  c record;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0604') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0604', '5215559990604') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, oa, 'ZZZ-0604', 'abierto', now() - interval '5 hours', now() - interval '5 hours') returning id into va;
+  perform sembrar_hitos_conductor(10);
+  select id into h from viaje_hito where viaje_id = va and tipo = 'llegada_carga';
+
+  insert into viaje_hito_aviso (tenant_id, viaje_id, viaje_hito_id, ciclo, clase, nivel) values (ta, va, h, 1, 'llegada_sin_confirmar', 1);
+  begin
+    insert into viaje_hito_aviso (tenant_id, viaje_id, viaje_hito_id, ciclo, clase, nivel) values (ta, va, h, 1, 'llegada_sin_confirmar', 1);
+  exception when unique_violation then claim_unico := true; end;
+  begin
+    insert into viaje_hito_aviso (tenant_id, viaje_id, viaje_hito_id, ciclo, clase, nivel) values (ta, va, h, 1, 'inventada', 1);
+  exception when check_violation then clase_mala := true; end;
+  begin
+    insert into viaje_hito_evento (tenant_id, viaje_id, viaje_hito_id, tipo_hito, evento) values (ta, va, h, 'llegada_carga', 'alerta_llegada_sin_confirmar');
+    insert into viaje_hito_evento (tenant_id, viaje_id, viaje_hito_id, tipo_hito, evento) values (ta, va, h, 'llegada_carga', 'alerta_estadia');
+    evento_ok := true;
+  exception when others then evento_ok := false; end;
+
+  insert into agente_conductor_config (tenant_id) values (ta);
+  select avisar_llegada_sin_confirmar a, margen_acercamiento_m m into c from agente_conductor_config where tenant_id = ta;
+  apagado := c.a = false;
+  margen_ok := c.m = 5000;
+  begin
+    update agente_conductor_config set margen_acercamiento_m = 50001 where tenant_id = ta;
+  exception when check_violation then margen_malo := true; end;
+
+  raise exception E'CONDUCTOR_0604 claim-unico=% clase-inventada-rebota=% evento-nuevo-entra=% margen-por-omision=% margen-fuera-rebota=% aviso-apagado=%   (esperado t / t / t / t / t / t)',
+    claim_unico, clase_mala, evento_ok, margen_ok, margen_malo, apagado;
+end $$;
