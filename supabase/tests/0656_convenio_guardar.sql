@@ -155,6 +155,50 @@ begin
   if n <> 1 then raise exception '0656(f): el viaje liquidado no debía refrescarse'; end if;
 end $$;
 
+-- (h) 0658 (adversarial ronda 10, ALTA): el viaje que nunca recibió el despacho porque su convenio no traía instrucciones de
+-- despacho TAMBIÉN se marca para reenviar (si tiene operador y la foto nueva sí despacha); sin operador o sin despacho nuevo, no.
+do $$
+declare
+  ta constant uuid := '65600000-0000-4000-8000-0000000000a1';
+  ca constant uuid := '65600000-0000-4000-8000-0000000000a2';
+  op constant uuid := '65600000-0000-4000-8000-000000000ab1';
+  op2 constant uuid := '65600000-0000-4000-8000-000000000ab2';
+  op3 constant uuid := '65600000-0000-4000-8000-000000000ab3';
+  conv uuid; r jsonb; v int; n int; cuantos int;
+  vcon constant uuid := '65600000-0000-4000-8000-000000000aa1';
+  vsin constant uuid := '65600000-0000-4000-8000-000000000aa2';
+  vacer constant uuid := '65600000-0000-4000-8000-000000000aa3';
+begin
+  r := public.guardar_convenio(ta, null, ca, 'Ruta 0658', null, null, null, null, null, null, null, null,
+    '[{"categoria":"reportarse","texto":"Con el guardia","momento":"acercamiento","lugar":"origen","orden":1}]');
+  conv := (r->>'id')::uuid;
+  insert into public.operador (id, tenant_id, nombre, telefono) values (op, ta, 'Chofer H1', '525500006581'), (op2, ta, 'Chofer H2', '525500006582'), (op3, ta, 'Chofer H3', '525500006583');
+  insert into public.viaje (id, tenant_id, operador_id, folio, estatus, cliente_id) values
+    (vcon, ta, op, 'H-1', 'abierto', ca), (vsin, ta, op3, 'H-2', 'abierto', ca), (vacer, ta, op2, 'H-3', 'abierto', ca);
+  insert into public.viaje_convenio (viaje_id, tenant_id, convenio_id, cliente_id, instrucciones) values
+    (vcon, ta, conv, ca, '[]'),
+    (vsin, ta, conv, ca, '[{"categoria":"puerta","texto":"Vieja","momento":"ambos","lugar":"origen","orden":0}]'),
+    (vacer, ta, conv, ca, '[{"categoria":"reportarse","texto":"Con el guardia","momento":"acercamiento","lugar":"origen","orden":1}]');
+
+  -- la edición agrega una instrucción de despacho
+  select version into v from public.cliente_convenio where id = conv;
+  perform public.guardar_convenio(ta, conv, null, 'Ruta 0658', null, null, null, null, null, null, null, v,
+    '[{"categoria":"reportarse","texto":"Con el guardia","momento":"acercamiento","lugar":"origen","orden":1},
+      {"categoria":"puerta","texto":"Puerta 9","momento":"despacho","lugar":"origen","orden":2}]');
+  select count(*) filter (where reenviar), count(*) into n, cuantos from public.refrescar_viajes_de_convenio(ta, conv, true);
+  if cuantos <> 3 or n <> 2 then raise exception '0658(h): cambian 3 y reenvían 2 (los que no tenían despacho en la foto vieja), no el que ya tenía despacho en la foto y sigue por su cuenta (cambian %, reenvían %)', cuantos, n; end if;
+  if (select count(*) from public.refrescar_viajes_de_convenio(ta, conv, true)) <> 0 then raise exception '0658(h): idempotente'; end if;
+
+  -- sin p_reenviar nada se marca; y si la foto nueva NO despacha, tampoco
+  update public.viaje_convenio set instrucciones = '[]' where convenio_id = conv;
+  if (select count(*) from public.refrescar_viajes_de_convenio(ta, conv, false) where reenviar) <> 0 then raise exception '0658(h): sin p_reenviar no se marca nada'; end if;
+  update public.viaje_convenio set instrucciones = '[]' where convenio_id = conv;
+  select version into v from public.cliente_convenio where id = conv;
+  perform public.guardar_convenio(ta, conv, null, 'Ruta 0658', null, null, null, null, null, null, null, v,
+    '[{"categoria":"reportarse","texto":"Con el guardia","momento":"acercamiento","lugar":"origen","orden":1}]');
+  if (select count(*) from public.refrescar_viajes_de_convenio(ta, conv, true) where reenviar) <> 0 then raise exception '0658(h): una foto nueva sin despacho no marca reenvíos'; end if;
+end $$;
+
 -- (g) solo service_role ejecuta
 do $$
 begin

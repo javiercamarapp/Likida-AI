@@ -235,6 +235,26 @@ describe('P7 — convenio editado en pantalla y ciclo del cron', () => {
     expect(await atenderPreguntaConvenio({ tenantId: T, operadorId, viajeAbiertoId: viajeId, texto: 'por donde entro' })).toBe('• Por dónde entras: Puerta 5 lado oriente');
   });
 
+  it('RONDA 10 (alta): viaje despachado cuando el convenio NO traía instrucciones de despacho: al editar con «volver a mandar» el operador SÍ las recibe, una vez', async () => {
+    // convenio creado en pantalla SIN instrucciones: el despacho sale con 'sin_instrucciones' y no sella nada
+    const alta = await guardarConvenioDelPanel({ tenantId: T, rol: 'flota_admin' }, entradaEditada({ id: '', version: '' }, { convenioId: '', clienteId, instrucciones: [], llevarAViajes: false, reenviar: false }));
+    expect(alta).toMatchObject({ ok: true });
+    const viajeId = String(await crearViaje(T, { operadorId, unidadId, clienteId, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-3005' }));
+    expect(wa).toHaveLength(0);
+    expect(mundo.tablas.viaje_convenio.find((v) => v.viaje_id === viajeId)!.despacho_enviado_en ?? null).toBeNull();
+
+    const conv = convenioDe(T);
+    const r = await guardarConvenioDelPanel({ tenantId: T, rol: 'encargado' }, entradaEditada(conv, { instrucciones: [{ categoria: 'puerta', texto: 'Puerta 9 de carga', momento: 'despacho', lugar: 'origen' }] }));
+    expect(r).toMatchObject({ ok: true, mensaje: expect.stringMatching(/mandar a 1 operador/) });
+    expect(r.ok && r.mensaje).not.toMatch(/lo recibirán con las instrucciones nuevas/);
+    expect(wa).toHaveLength(1);
+    expect(wa[0].texto).toContain('Puerta 9 de carga');
+    // idempotente: guardar otra vez lo mismo no manda otro
+    const v2 = convenioDe(T);
+    await guardarConvenioDelPanel({ tenantId: T, rol: 'encargado' }, entradaEditada(v2, { instrucciones: [{ categoria: 'puerta', texto: 'Puerta 9 de carga', momento: 'despacho', lugar: 'origen' }] }));
+    expect(wa).toHaveLength(1);
+  });
+
   it('editar SIN marcar «llevar a los viajes»: el viaje en curso conserva lo que se le dijo, y la versión vieja de la forma ya no guarda', async () => {
     await importarArchivoDelPanel({ tenantId: T, rol: 'flota_admin' }, { bytes: null, texto: ARCHIVO });
     const viajeId = String(await crearViaje(T, { operadorId, unidadId, clienteId, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-3003' }));
