@@ -54,6 +54,65 @@ describe('estatusViaje (para el Vigía)', () => {
     });
   });
 
+  // ── ADVERSARIAL RONDA 03: un «ya llegué» sin ubicación que lo respalde no es «en destino» para el cliente ──
+  describe('llegada por confirmar (el chofer avisó; ninguna posición lo respalda)', () => {
+    const sitioDestino = { destinoSitioId: 's-desc' };
+    const hs = (extra: Partial<HitoFila> = {}) => hitos(V1, {
+      llegada_carga: hace(300), salida_carga: hace(240), llegada_descarga: { estado: 'recibido', fuente: 'texto', mensajeEn: hace(20), recibidoEn: hace(20), ...extra },
+    });
+    const ver = (resultado: string, motivo: string | null) => new Map([[`${V1}-llegada_descarga`, { resultado, motivo }]]);
+
+    it('sin veredicto o con sin_dato por falta de posición: el último hito sigue siendo la salida, no hay andén y la cita sigue vigente', () => {
+      for (const vs of [null, ver('sin_dato', 'sin_ubicacion'), ver('sin_dato', 'ubicacion_fuera_de_ventana'), ver('sin_coincidencia', null)]) {
+        const v = viaje(V1, { ...sitioDestino, etaDestinoEn: hace(-30) });
+        const s = construirEstatus(v, hs(), { ...CONFIG_CONDUCTOR_DEFAULT }, AHORA, vs);
+        expect(s.ultimoHito).toMatchObject({ tipo: 'salida_carga' });
+        expect(s.llegadaPorConfirmar).toEqual({ tipo: 'llegada_descarga', hora: hace(20) });
+        expect(s.enAnden).toBeNull();
+        expect(s.citas.descarga).toEqual({ en: hace(-30), fuente: 'eta' }); // el Vigía aún puede dar la hora estimada
+      }
+    });
+
+    it('el Vigía NO dice «en destino»: la etapa que le llega es «en ruta»', async () => {
+      const { parteDelConductor } = await import('../vigia/desde_conductor');
+      const s = construirEstatus(viaje(V1, sitioDestino), hs(), { ...CONFIG_CONDUCTOR_DEFAULT }, AHORA, ver('sin_dato', 'sin_ubicacion'));
+      expect(parteDelConductor(s).etapa).toBe('en_ruta');
+    });
+
+    it('confirmada (validado por GPS u oficina) sí es el último hito y abre el andén', () => {
+      const s = construirEstatus(viaje(V1, sitioDestino), hs({ estado: 'validado', validadoPor: 'gps', validadoEn: hace(15) }), { ...CONFIG_CONDUCTOR_DEFAULT }, AHORA);
+      expect(s.ultimoHito).toMatchObject({ tipo: 'llegada_descarga' });
+      expect(s.llegadaPorConfirmar).toBeNull();
+      expect(s.enAnden).not.toBeNull();
+    });
+
+    it('lo declarado por la oficina no se pone en duda', () => {
+      const s = construirEstatus(viaje(V1, sitioDestino), hs({ fuente: 'oficina' }), { ...CONFIG_CONDUCTOR_DEFAULT }, AHORA);
+      expect(s.ultimoHito).toMatchObject({ tipo: 'llegada_descarga' });
+    });
+
+    it('sin sitio asignado no hay con qué compararlo: se cuenta como siempre (no se deja mudo el destino)', () => {
+      const s = construirEstatus(viaje(V1), hs(), { ...CONFIG_CONDUCTOR_DEFAULT }, AHORA, ver('sin_dato', 'sin_sitio'));
+      expect(s.ultimoHito).toMatchObject({ tipo: 'llegada_descarga' });
+      expect(s.llegadaPorConfirmar).toBeNull();
+    });
+
+    it('una flota que apagó la validación de ubicación cuenta el aviso del chofer como siempre', () => {
+      const s = construirEstatus(viaje(V1, sitioDestino), hs(), { ...CONFIG_CONDUCTOR_DEFAULT, validarUbicacion: false }, AHORA);
+      expect(s.ultimoHito).toMatchObject({ tipo: 'llegada_descarga' });
+    });
+
+    it('estatusViaje lee los veredictos de ESA flota; si no se pueden leer, no afirma la llegada', async () => {
+      const v = viaje(V1, sitioDestino);
+      const leidos = vi.fn(async () => [{ hitoId: `${V1}-llegada_descarga`, ciclo: 1, resultado: 'sin_dato' as const, motivo: 'sin_ubicacion' as const, fuente: null, distanciaM: null, radioM: null, toleranciaM: 150, sitioId: null, medidaEn: null }]);
+      const s = await estatusViaje('t1', V1, AHORA, deps({ viajeConHitos: async () => ({ viaje: v, hitos: hs() }), veredictos: leidos }));
+      expect(leidos).toHaveBeenCalledWith('t1', V1);
+      expect(s?.llegadaPorConfirmar).not.toBeNull();
+      const roto = await estatusViaje('t1', V1, AHORA, deps({ viajeConHitos: async () => ({ viaje: v, hitos: hs() }), veredictos: async () => { throw new Error('base caída'); } }));
+      expect(roto?.ultimoHito).toMatchObject({ tipo: 'salida_carga' });
+    });
+  });
+
   it('la cita manda sobre la ETA', () => {
     const v = viaje(V1, { citaOrigenEn: hace(-30), etaOrigenEn: hace(-90) });
     const s = construirEstatus(v, hitos(V1, {}), { ...CONFIG_CONDUCTOR_DEFAULT }, AHORA);

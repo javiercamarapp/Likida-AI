@@ -50,6 +50,8 @@ export interface EntradaValidacion {
   toleranciaM: number;
   /** Diferencia máxima, en minutos, entre la hora del mensaje y la de la posición. */
   ventanaMin: number;
+  /** Se descartó un pin porque la unidad reporta GPS y la muestra aún no llega: sin posición, pero «esperando al GPS». */
+  gpsPendiente?: boolean;
 }
 
 export interface Veredicto {
@@ -72,7 +74,7 @@ const sinDato = (e: EntradaValidacion, motivo: MotivoSinDato): Veredicto => ({
 export function evaluarUbicacion(e: EntradaValidacion): Veredicto {
   if (!e.sitio) return sinDato(e, 'sin_sitio');
   if (!coordenadasValidas(e.sitio.lat, e.sitio.lng)) return sinDato(e, 'sin_sitio');
-  if (!e.posicion) return sinDato(e, 'sin_ubicacion');
+  if (!e.posicion) return sinDato(e, e.gpsPendiente ? 'ubicacion_fuera_de_ventana' : 'sin_ubicacion');
   if (!coordenadasValidas(e.posicion.lat, e.posicion.lng)) return sinDato(e, 'coordenadas_invalidas');
   const t = e.posicion.medidaEn.getTime();
   if (!Number.isFinite(t) || !Number.isFinite(e.mensajeEn.getTime())) return sinDato(e, 'ubicacion_fuera_de_ventana');
@@ -118,4 +120,53 @@ export function textoVeredicto(v: Veredicto, sitioNombre: string | null): string
         default: return 'Sin dato: las coordenadas recibidas no son válidas.';
       }
   }
+}
+
+/**
+ * ¿El barrido del cron debe volver a medir una llegada con este veredicto (o sin ninguno)? Sí cuando no hay veredicto, cuando
+ * faltó la posición y cuando fue «sin coincidencia»: con GPS muestreado cada pocos minutos, la muestra de la hora del aviso
+ * puede ser de ANTES de que el camión llegara y una posterior, más cercana en el tiempo, sí cae en el sitio. Nunca baja un
+ * veredicto (la base solo deja subir). Un `sin_dato` por sitio o coordenadas no mejora con más muestras: no se reintenta.
+ */
+export function debeReintentarseValidacion(v: { resultado: string; motivo: string | null } | null | undefined): boolean {
+  if (!v) return true;
+  if (v.resultado === 'sin_coincidencia') return true;
+  return v.resultado === 'sin_dato' && (v.motivo === 'sin_ubicacion' || v.motivo === 'ubicacion_fuera_de_ventana');
+}
+
+/**
+ * ¿Este veredicto autoriza sellar `viaje.llegada_en` (la llegada al DESTINO que leen el Vigía y la espera en patio)?
+ *
+ * Un «ya llegué» no es una posición: sin algo que lo respalde el hito queda `recibido` (el chofer sí avisó y no se le
+ * persigue por lo mismo) pero NO se declara al cliente que el camión está en el destino. Se sella cuando la ubicación lo
+ * confirma, cuando NO HAY con qué compararlo (el viaje no tiene sitio asignado: no hay confirmación posible, y dejar el
+ * destino mudo para siempre rompería las flotas sin catálogo) o cuando la flota apagó la validación.
+ */
+export function veredictoSellaLlegada(v: Pick<Veredicto, 'resultado' | 'motivo'> | null | undefined, validarUbicacion: boolean): boolean {
+  if (!validarUbicacion) return true;
+  if (!v) return false;
+  return v.resultado === 'validado' || (v.resultado === 'sin_dato' && v.motivo === 'sin_sitio');
+}
+
+export type VeredictoMinimo = { resultado: string; motivo: string | null };
+
+/**
+ * ¿Este «ya llegué» sigue SIN confirmar? (el hito quedó `recibido` porque el chofer avisó, pero ninguna posición lo respalda).
+ * No es una acusación: es lo que el tablero muestra como excepción y lo que el Vigía no puede afirmarle al cliente como «en
+ * destino». Lo declarado por la oficina, lo validado y las flotas sin validación de ubicación quedan fuera; sin sitio asignado
+ * tampoco hay nada que confirmar (misma regla que `veredictoSellaLlegada`).
+ */
+export function llegadaPorConfirmar(
+  h: { tipo: string; estado: string; fuente: string | null },
+  v: VeredictoMinimo | null | undefined,
+  validarUbicacion: boolean,
+  haySitio: boolean,
+): boolean {
+  if (!validarUbicacion) return false;
+  if (h.tipo !== 'llegada_carga' && h.tipo !== 'llegada_descarga') return false;
+  if (h.estado !== 'recibido' || h.fuente === 'oficina') return false;
+  if (!v) return haySitio; // sin veredicto todavía (o no se pudo leer): con sitio asignado hay algo que confirmar
+  if (v.resultado === 'sin_coincidencia') return true;
+  if (v.resultado === 'sin_dato') return v.motivo !== 'sin_sitio';
+  return false;
 }

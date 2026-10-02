@@ -25,7 +25,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
-import type { ProveedorPac, ResultadoTimbre } from './tipos';
+import type { ProveedorPac, ResultadoCancelacion, ResultadoTimbre, SolicitudCancelacion } from './tipos';
 
 const TIMEOUT_MS = 20_000;
 // SW emite tokens largos; 2 h de caché deja margen de sobra sin acercarse a
@@ -188,10 +188,99 @@ export function crearProveedorSw(cfg: ConfigSw): ProveedorPac {
       return { ok: false, clase: 'rechazado', codigo, mensaje: `${msg}${detalle}` };
     },
 
-    async cancelar(_uuid: string, _motivo: string): Promise<{ ok: boolean; mensaje: string }> {
-      // El contrato existe; el flujo de cancelación (motivos SAT 01-04,
-      // ventana, sustitución) es fase posterior y se dirá cuando exista.
-      return { ok: false, mensaje: 'La cancelación por API aún no está construida — cancela en el panel del PAC.' };
+    /**
+     * CANCELACIÓN POR UUID — documentación oficial de SW sapien:
+     *   https://developers.sw.com.mx/knowledge-base/cancelacion-cfdi/
+     *   POST {urlBase}/cfdi33/cancel/{rfc}/{uuid}/{motivo}[/{folioSustitucion}]
+     *   Authorization: Bearer {token}   (el CSD del emisor vive en la bóveda del PAC)
+     *   200 → { status:'success', data:{ acuse:'<xml…>', uuid:{ 'UUID-EN-MAYUSCULAS': '201' } } }
+     *   400 → { status:'error', message:'CACFDI33 - …', messageDetail:'CA305 - …', data:null }
+     *   Códigos por UUID (…/cancelacion-cfdi-con-estatus/): 201 solicitud exitosa (en
+     *   proceso), 202 ya estaba cancelado, 203 folio no corresponde al emisor, 205 UUID
+     *   inexistente, 207 motivo inválido, 304 certificado revocado, 305 inválido.
+     *
+     * LO QUE NO ESTÁ VERIFICADO contra SW real (va a bloqueos_externos): que la cuenta
+     * de la flota tenga su CSD cargado, el comportamiento con receptor que debe aceptar,
+     * y el endpoint de consulta de estatus (no se usa: la confirmación final es humana).
+     */
+    async cancelar(s: SolicitudCancelacion): Promise<ResultadoCancelacion> {
+      const motivosValidos = ['01', '02', '03', '04'];
+      if (!motivosValidos.includes(s.motivo)) {
+        return { ok: false, clase: 'rechazado', codigo: null, mensaje: `Motivo de cancelación "${s.motivo}" no existe en el catálogo del SAT (01-04).` };
+      }
+      if (s.motivo === '01' && !s.folioSustitucion) {
+        return { ok: false, clase: 'rechazado', codigo: null, mensaje: 'El motivo 01 exige el UUID del comprobante que sustituye al cancelado.' };
+      }
+      if (s.motivo !== '01' && s.folioSustitucion) {
+        return { ok: false, clase: 'rechazado', codigo: null, mensaje: 'Solo el motivo 01 lleva folio de sustitución; con los demás el SAT lo rechaza.' };
+      }
+
+      const auth = await autenticar(cfg);
+      if (typeof auth !== 'string') return auth.error;
+
+      const ruta = [s.rfcEmisor, s.uuid, s.motivo, ...(s.folioSustitucion ? [s.folioSustitucion] : [])]
+        .map(encodeURIComponent).join('/');
+      const llamar = (token: string) => fetch(`${cfg.urlBase}/cfdi33/cancel/${ruta}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+
+      let res: Response;
+      try {
+        res = await llamar(auth);
+        if (res.status === 401 && tokenCache !== null) {
+          tokenCache = null;
+          const fresco = await autenticar(cfg);
+          if (typeof fresco !== 'string') return fresco.error;
+          res = await llamar(fresco);
+        }
+      } catch (e) {
+        // Pedir la misma cancelación otra vez es inocuo (202 «ya cancelado»), pero
+        // sin respuesta no se sabe si el SAT la recibió: se dice y no se da por hecha.
+        logger.error('pac.sw.cancelar_red', { error: e instanceof Error ? e.message : String(e) });
+        return { ok: false, clase: 'red', codigo: null, mensaje: `Sin respuesta del PAC al cancelar (la solicitud PUDO llegar al SAT): ${e instanceof Error ? e.message : String(e)}. Repetir la petición es seguro; hasta confirmar, el CFDI sigue vigente.` };
+      }
+      if (res.status === 401) {
+        return { ok: false, clase: 'auth', codigo: null, mensaje: 'El PAC rechazó las credenciales (401) incluso con token fresco.' };
+      }
+
+      let cuerpo: { status?: unknown; message?: unknown; messageDetail?: unknown; data?: { acuse?: unknown; uuid?: unknown } | null } | null = null;
+      try { cuerpo = await res.json(); } catch { /* abajo */ }
+      if (cuerpo === null) {
+        return { ok: false, clase: 'red', codigo: null, mensaje: `El PAC contestó HTTP ${res.status} sin cuerpo legible: verifica el estatus del CFDI en el SAT/PAC antes de dar la cancelación por hecha.` };
+      }
+
+      if (cuerpo.status === 'success' && cuerpo.data && typeof cuerpo.data.uuid === 'object' && cuerpo.data.uuid !== null) {
+        const porUuid = cuerpo.data.uuid as Record<string, unknown>;
+        const codigo = String(porUuid[s.uuid.toUpperCase()] ?? Object.values(porUuid)[0] ?? '');
+        const acuse = typeof cuerpo.data.acuse === 'string' ? cuerpo.data.acuse : null;
+        if (codigo === '201') return { ok: true, estado: 'en_proceso', codigoSat: codigo, acuse, yaEstaba: false };
+        if (codigo === '202') return { ok: true, estado: 'cancelado', codigoSat: codigo, acuse, yaEstaba: true };
+        // Cualquier otro código por UUID (203, 205, 207…) NO es una cancelación.
+        return { ok: false, clase: 'rechazado', codigo: codigo || null, mensaje: `El SAT/PAC contestó el código ${codigo || '(vacío)'} para este UUID: no quedó cancelado. ${textoCodigoCancelacion(codigo)}` };
+      }
+
+      if (cuerpo.status === 'success') {
+        return { ok: false, clase: 'red', codigo: null, mensaje: 'El PAC contestó éxito sin el código por UUID legible: verifica el estatus del CFDI antes de dar la cancelación por hecha.' };
+      }
+
+      const msg = typeof cuerpo.message === 'string' ? cuerpo.message : `El PAC contestó ${String(cuerpo.status ?? res.status)} sin mensaje.`;
+      const detalle = typeof cuerpo.messageDetail === 'string' && cuerpo.messageDetail.length > 0 ? ` — ${cuerpo.messageDetail}` : '';
+      const codigo = /^([A-Z0-9]{3,12})\s*-\s/.exec(msg)?.[1] ?? null;
+      return { ok: false, clase: 'rechazado', codigo, mensaje: `${msg}${detalle}` };
     },
   };
+}
+
+/** Lo que significa cada código por UUID de la cancelación (doc. oficial de SW). */
+function textoCodigoCancelacion(codigo: string): string {
+  switch (codigo) {
+    case '203': return 'El folio fiscal no corresponde al emisor.';
+    case '205': return 'El UUID no existe (el SAT da hasta 48 h tras el timbrado para que aparezca).';
+    case '207': return 'El motivo de cancelación es inválido o falta.';
+    case '304': return 'El certificado del emisor está revocado o venció.';
+    case '305': return 'El certificado del emisor es inválido.';
+    default: return 'Revisa el código en la documentación del PAC.';
+  }
 }

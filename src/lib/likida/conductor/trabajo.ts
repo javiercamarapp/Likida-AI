@@ -4,6 +4,7 @@ import { exigir, traerTodo } from '../pg';
 import { COLUMNAS_HITO, COLUMNAS_VIAJE_CTX, filaAHito, filaAViajeCtx, type ViajeContexto } from './repo';
 import type { AvisoReclamado } from './planificador';
 import type { HitoFila } from './tipos';
+import { debeReintentarseValidacion } from './validacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA LISTA DE TRABAJO DEL CRON `conductor-hitos` — las lecturas que CRUZAN flotas.
@@ -89,7 +90,7 @@ export async function contarEnviadosPorChofer(operadorIds: string[], desde: Date
  * a propósito (el barrido es del cron); cada candidato trae su `tenantId` y todo lo posterior se
  * ancla a él. Solo viajes abiertos.
  */
-export async function leerCandidatosValidacion(desde: Date, limite: number): Promise<Array<{ hito: HitoFila; viaje: ViajeContexto }>> {
+export async function leerCandidatosValidacion(desde: Date, limite: number): Promise<Array<{ hito: HitoFila; viaje: ViajeContexto; resultadoPrevio: 'sin_coincidencia' | null }>> {
   const res = await acotada(supabaseAdmin()
     .from('viaje_hito').select(COLUMNAS_HITO)
     .in('tipo', ['llegada_carga', 'llegada_descarga']).eq('estado', 'recibido').gte('recibido_en', desde.toISOString())
@@ -107,7 +108,7 @@ export async function leerCandidatosValidacion(desde: Date, limite: number): Pro
   }
   const pendientes = hitos.filter((h) => {
     const v = vistos.get(`${h.id}|${h.ciclo}`);
-    return !v || (v.resultado === 'sin_dato' && (v.motivo === 'sin_ubicacion' || v.motivo === 'ubicacion_fuera_de_ventana'));
+    return debeReintentarseValidacion(v);
   }).slice(0, limite);
   if (pendientes.length === 0) return [];
 
@@ -119,7 +120,9 @@ export async function leerCandidatosValidacion(desde: Date, limite: number): Pro
   // El hito y su viaje SON de la misma flota: se comprueba, no se supone.
   return pendientes.flatMap((h) => {
     const v = viajes.get(h.viajeId);
-    return v && v.tenantId === h.tenantId ? [{ hito: h, viaje: v }] : [];
+    if (!v || v.tenantId !== h.tenantId) return [];
+    const previo = vistos.get(`${h.id}|${h.ciclo}`);
+    return [{ hito: h, viaje: v, resultadoPrevio: previo?.resultado === 'sin_coincidencia' ? 'sin_coincidencia' as const : null }];
   });
 }
 

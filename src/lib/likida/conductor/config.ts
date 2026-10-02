@@ -1,4 +1,4 @@
-import { TZ_MX } from '@/lib/formato';
+import { TZ_MX, hoyMx } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CONFIGURACIÓN POR FLOTA DEL AGENTE 5 (agente_conductor_config, 0380).
@@ -45,6 +45,8 @@ export interface ConfigConductor {
   estadiaAlertaDescargaMin: number | null;
   /** Invitar al chofer a mandar la foto del sello / andén / recibido tras la salida. */
   pedirFotoEvidencia: boolean;
+  /** 0483: una foto con pie «sello»/«andén»/«recibido» sin hito al que colgarla REGISTRA el hito (con la foto como evidencia). */
+  fotoRegistraHito: boolean;
 }
 
 export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze({
@@ -75,6 +77,7 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   estadiaAlertaCargaMin: null,
   estadiaAlertaDescargaMin: null,
   pedirFotoEvidencia: false,
+  fotoRegistraHito: true,
 });
 
 /** El tope de aplazamientos por hito: pasado esto «voy con retraso» ya no calla al agente. */
@@ -187,6 +190,7 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       estadiaAlertaCargaMin: alertaCarga.ok,
       estadiaAlertaDescargaMin: alertaDescarga.ok,
       pedirFotoEvidencia: Boolean(b.pedirFotoEvidencia),
+      fotoRegistraHito: Boolean(b.fotoRegistraHito),
     },
   };
 }
@@ -212,7 +216,7 @@ export function dentroDeVentana(config: Pick<ConfigConductor, 'horaInicio' | 'ho
 
 /** El instante (UTC) en que empieza el día calendario de México de `ahora`. */
 export function inicioDiaMx(ahora: Date): Date {
-  const fecha = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX, year: 'numeric', month: '2-digit', day: '2-digit' }).format(ahora);
+  const fecha = hoyMx(ahora);
   // México no tiene horario de verano desde 2022 (UTC-6 fijo); se calcula con la
   // diferencia real del instante para no depender de ello.
   const mediaNoche = new Date(`${fecha}T00:00:00Z`);

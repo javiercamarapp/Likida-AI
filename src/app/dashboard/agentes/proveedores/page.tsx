@@ -18,6 +18,14 @@ import {
 import { dominioBuzon } from '@/lib/correo/buzon';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../../sufijo';
+import {
+  leerConfigEntrega, guardarConfigEntrega, listarLotes, contarSinEntregar, cancelarLote, reintentarLote,
+} from '@/lib/likida/buzon/entrega_repo';
+import { armarLote, enviarLote } from '@/lib/likida/buzon/entrega';
+import { depsEntregaReales } from '@/lib/likida/buzon/servicio';
+import { parsearDestinatarios, validarConfigEntrega, type ConfigEntrega } from '@/lib/likida/buzon/entrega_pura';
+import { listarRecepciones, conteoBuzon, descartarRecepcion, urlPdfDeRecepcion, urlPdfDeFactura } from '@/lib/likida/buzon/repo';
+import { SeccionEntrega, SeccionRecepcion } from './seccion_buzon';
 import { VistaAgenteProveedores } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
@@ -76,7 +84,7 @@ export default async function PaginaAgenteProveedores({
   // sin que ninguna dependiera de la anterior — cuatro viajes a la base
   // sumados en el reloj de la página. Salen juntas y cada una conserva
   // exactamente el trato que tenía.
-  const [facturas, fiscal, corridas, buzon] = await Promise.all([
+  const [facturas, fiscal, corridas, buzon, entregaCfg, lotes, sinEntregar, recepciones, conteo] = await Promise.all([
     // Primario sin catch: bandeja ciega = página caída, no "no hay facturas".
     // El tope va EXPLÍCITO y espeja `TOPE_FACTURAS` de la vista, que es quien
     // lo declara en pantalla (FE-13). Antes viajaba como default silencioso.
@@ -89,6 +97,13 @@ export default async function PaginaAgenteProveedores({
     // sigue sirviendo, y la sección dice "no se pudo leer" — nunca "sin buzón",
     // que ofrecería generar (y rotar sin querer) encima del que quizá exista.
     getBuzon(tenantId).catch(() => null),
+    // La entrega al contador y lo recibido por correo (Agente 9) también son SECUNDARIOS: una lectura caída
+    // (`null`) se dice en su sección — nunca «sin envíos» ni «nada llegó» sobre una base ciega.
+    leerConfigEntrega(tenantId).catch(() => null),
+    listarLotes(tenantId, 15).catch(() => null),
+    contarSinEntregar(tenantId).catch(() => null),
+    listarRecepciones(tenantId, 30).catch(() => null),
+    conteoBuzon(tenantId, new Date(), 30).catch(() => null),
   ]);
   const rfcFlota = fiscal?.flota?.rfc || null;
   const dominioConfigurado = dominioBuzon() !== null;
@@ -215,6 +230,114 @@ export default async function PaginaAgenteProveedores({
     redirect(`/dashboard/agentes/proveedores${sufijo}`);
   }
 
+  type Estado = { error?: string; aviso?: string } | null;
+  const idDelForm = (fd: FormData, campo: string) => (typeof fd.get(campo) === 'string' ? (fd.get(campo) as string).trim().slice(0, 64) : '');
+
+  /** La configuración de la entrega: CONTROL (a dónde se manda el dinero-papel de la flota), solo el dueño. */
+  async function guardarEntrega(_prev: Estado, fd: FormData): Promise<Estado> {
+    'use server';
+    const permiso = await exigirControlBuzon(tenantId);
+    if ('error' in permiso) return { error: permiso.error };
+    const crudo = typeof fd.get('destinatarios') === 'string' ? (fd.get('destinatarios') as string).slice(0, 600) : '';
+    const lista = parsearDestinatarios(crudo);
+    if (!lista.ok) return { error: lista.error };
+    const formato = fd.get('formato');
+    const config: ConfigEntrega = {
+      activo: fd.get('activo') === 'on',
+      destinatarios: lista.destinatarios,
+      formato: formato === 'sap_b1' || formato === 'contpaqi' ? formato : 'generico',
+      incluirZip: fd.get('incluirZip') === 'on',
+      automatica: fd.get('automatica') === 'on',
+      horaEnvio: Number(fd.get('horaEnvio') ?? 8),
+      minFacturas: Number(fd.get('minFacturas') ?? 1),
+    };
+    const invalida = validarConfigEntrega(config);
+    if (invalida) return { error: invalida };
+    const r = await guardarConfigEntrega(tenantId, config);
+    if (r.error) return { error: r.error };
+    logger.info('proveedores.entrega_config', { tenantId, activo: config.activo, automatica: config.automatica });
+    return { aviso: config.activo ? 'Guardado. La entrega al contador está encendida.' : 'Guardado. La entrega al contador está apagada.' };
+  }
+
+  /** «Enviar ahora»: arma el lote con lo aprobado sin entregar y lo manda en el acto (el cron reintenta si falla). */
+  async function enviarAhora(): Promise<Estado> {
+    'use server';
+    const permiso = await exigirPermiso(tenantId);
+    if ('error' in permiso) return { error: permiso.error };
+    try {
+      const deps = depsEntregaReales();
+      const a = await armarLote(deps, tenantId, 'manual', permiso.quien);
+      if (!a.armado) {
+        const motivos = {
+          apagada: 'La entrega al contador está apagada: enciéndela primero.',
+          sin_destinatarios: 'Captura el correo del contador primero.',
+          sin_facturas: 'No hay aprobadas pendientes de entregar.',
+          bajo_minimo: 'No hay suficientes facturas para un lote.',
+          no_disponible: 'La entrega al contador aún no está disponible en este entorno.',
+          carrera: 'Otra persona acaba de enviarlas: recarga para ver el envío.',
+        } as const;
+        return { error: motivos[a.motivo] };
+      }
+      const lote = (await listarLotes(tenantId, 5)).find((l) => l.id === a.entregaId);
+      const r = lote ? await enviarLote(deps, lote) : null;
+      logger.info('proveedores.entrega_manual', { tenantId, entrega: a.entregaId, facturas: a.nFacturas, resultado: r?.estado });
+      if (r?.estado === 'enviada') return { aviso: `Enviado: ${a.nFacturas} factura(s) al contador. Aparece como «enviada» hasta que el correo confirme la entrega.` };
+      return { aviso: `El lote de ${a.nFacturas} factura(s) quedó en cola y se reintenta solo (${r?.detalle ?? 'no salió al primer intento'}).` };
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'enviar las facturas al contador') };
+    }
+  }
+
+  async function reintentarEntrega(_prev: Estado, fd: FormData): Promise<Estado> {
+    'use server';
+    const permiso = await exigirControlBuzon(tenantId);
+    if ('error' in permiso) return { error: permiso.error };
+    const id = idDelForm(fd, 'id');
+    if (!id) return { error: 'Falta el lote.' };
+    try {
+      return (await reintentarLote(tenantId, id, new Date())) ? { aviso: 'Se reintenta en la siguiente pasada (≤15 min).' } : { error: 'Ese lote ya no está en estado fallido.' };
+    } catch (e) { return { error: mensajeParaPantalla(e, 'reintentar el envío') }; }
+  }
+
+  async function cancelarEntrega(_prev: Estado, fd: FormData): Promise<Estado> {
+    'use server';
+    const permiso = await exigirControlBuzon(tenantId);
+    if ('error' in permiso) return { error: permiso.error };
+    const id = idDelForm(fd, 'id');
+    if (!id) return { error: 'Falta el lote.' };
+    try {
+      return (await cancelarLote(tenantId, id)) ? { aviso: 'Lote cancelado: sus facturas vuelven a la cola de entrega.' } : { error: 'Ese lote ya salió o ya no existe.' };
+    } catch (e) { return { error: mensajeParaPantalla(e, 'cancelar el lote') }; }
+  }
+
+  async function descartarArchivo(_prev: Estado, fd: FormData): Promise<Estado> {
+    'use server';
+    const permiso = await exigirPermiso(tenantId);
+    if ('error' in permiso) return { error: permiso.error };
+    const id = idDelForm(fd, 'id');
+    if (!id) return { error: 'Falta el archivo.' };
+    const r = await descartarRecepcion(tenantId, id, permiso.quien);
+    return r.error ? { error: r.error } : { aviso: 'Archivo descartado.' };
+  }
+
+  /** «Ver PDF» de una factura o de una recepción: URL firmada de 5 min del bucket privado, siempre por tenant. */
+  async function verPdf(_prev: Estado, fd: FormData): Promise<Estado> {
+    'use server';
+    const permiso = await exigirPermiso(tenantId);
+    if ('error' in permiso) return { error: permiso.error };
+    const facturaId = idDelForm(fd, 'facturaId');
+    const recepcionId = idDelForm(fd, 'recepcionId');
+    if (!facturaId && !recepcionId) return { error: 'Falta el archivo.' };
+    let url: string | null;
+    try {
+      url = facturaId ? await urlPdfDeFactura(tenantId, facturaId) : await urlPdfDeRecepcion(tenantId, recepcionId);
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'abrir el PDF') };
+    }
+    if (!url) return { error: 'Ese archivo no tiene PDF guardado (o ya se borró por retención).' };
+    redirect(url);
+  }
+
   return (
     <VistaAgenteProveedores
       facturas={facturas}
@@ -223,7 +346,15 @@ export default async function PaginaAgenteProveedores({
       buzon={buzon}
       dominioConfigurado={dominioConfigurado}
       puedeAdministrarBuzon={puedeAdministrarBuzon}
-      acciones={{ subirFactura, subirFoto, decidir, generarBuzon: generarBuzonAccion, rotarBuzon: rotarBuzonAccion }}
+      acciones={{ subirFactura, subirFoto, decidir, generarBuzon: generarBuzonAccion, rotarBuzon: rotarBuzonAccion, verPdf }}
+      recepcion={<SeccionRecepcion recepciones={recepciones} conteo={conteo} acciones={{ descartar: descartarArchivo, verPdf }} />}
+      entrega={
+        <SeccionEntrega
+          config={entregaCfg?.config ?? null} disponible={entregaCfg?.disponible ?? true}
+          lotes={lotes} sinEntregar={sinEntregar} puedeAdministrar={puedeAdministrarBuzon}
+          acciones={{ guardar: guardarEntrega, enviar: enviarAhora, reintentar: reintentarEntrega, cancelar: cancelarEntrega }}
+        />
+      }
       // ReactNode y no datos, como las notificaciones: la vista no debe
       // importar el módulo de corridas, que trae supabaseAdmin.
       ficha={<FichaCorridas corridas={corridas} />}

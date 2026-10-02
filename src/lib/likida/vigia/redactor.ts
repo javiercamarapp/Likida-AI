@@ -22,8 +22,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { fechaHoraMx } from '@/lib/formato';
 import { cifrasRespaldadas, extraerNumeros } from '@/lib/agents/analista';
-import type { Clasificacion, Intencion, Riesgo } from './tipos';
-import type { EstatusViaje, ResumenViaje } from './estatus_viaje';
+import type { AdjuntoRef, Clasificacion, Intencion, Riesgo } from './tipos';
+import type { EstatusViaje, ResumenViaje, TipoHitoViaje } from './estatus_viaje';
 
 export type ViajeParaRedactar =
   | { tipo: 'uno'; estatus: EstatusViaje }
@@ -49,6 +49,8 @@ export interface Borrador {
   /** Cosas que una PERSONA tiene que hacer aunque el texto sea correcto (p. ej. mandar el archivo de la factura). */
   tareas: string[];
   riesgo: Riesgo;
+  /** Archivos que saldrán junto con el texto (si la ventana de 24 h lo permite). Por eso el borrador es de riesgo medio: lo aprueba una persona. */
+  adjuntos: Array<AdjuntoRef['clave']>;
   /** Aunque el texto salga bien, este caso lo tiene que ver una persona. */
   requiereHumano: boolean;
   /** Los datos exactos con los que se escribió (para la bitácora y la auditoría). */
@@ -60,14 +62,19 @@ export const MAX_RESPUESTA = 700;
 
 const ETAPAS: Record<EstatusViaje['etapa'], string> = {
   en_curso: 'está en curso; el operador todavía no reporta su llegada a destino',
+  en_origen: 'el operador reportó que llegó a cargar',
+  en_ruta: 'la unidad salió de la carga y va en camino al destino',
   en_destino: 'el operador reportó que llegó a destino',
   descargando: 'el operador reportó que está descargando',
+  entregado: 'el operador reportó que terminó de descargar',
   regresando: 'ya se entregó y la unidad va de regreso',
   cerrado: 'el viaje ya está cerrado',
 };
 
-const HITOS: Record<'llegada' | 'descarga' | 'regreso', string> = {
+const HITOS: Record<TipoHitoViaje, string> = {
   llegada: 'llegada a destino', descarga: 'inicio de descarga', regreso: 'salida de regreso',
+  llegada_carga: 'llegada a cargar', salida_carga: 'salida de la carga',
+  llegada_descarga: 'llegada a destino', salida_descarga: 'fin de la descarga',
 };
 
 /** Texto de WhatsApp que viaja en una plantilla: sin saltos, sin tabuladores, sin 4 espacios seguidos. */
@@ -97,8 +104,14 @@ function haceCuanto(min: number): string {
 function seccionUbicacion(e: EstatusViaje, ahora: Date, faltantes: string[], respaldo: Record<string, unknown>): string {
   const partes: string[] = [`${etiquetaViaje(e)}: ${ETAPAS[e.etapa]}.`];
   if (e.ultimoHito) {
-    partes.push(`Último registro: ${HITOS[e.ultimoHito.tipo]} el ${fechaHoraMx(e.ultimoHito.en)}.`);
+    // La hora es la del reporte del operador (o de la oficina), no una medición del GPS: se dice así.
+    partes.push(`Último registro del operador: ${HITOS[e.ultimoHito.tipo]} el ${fechaHoraMx(e.ultimoHito.en)}.`);
     respaldo.ultimoHito = e.ultimoHito;
+  }
+  if (e.enAnden) {
+    const donde = e.enAnden.lugar === 'carga' ? 'la carga' : 'la descarga';
+    partes.push(e.enAnden.desde ? `Sigue en ${donde} desde las ${fechaHoraMx(e.enAnden.desde)}.` : `Sigue en ${donde}.`);
+    respaldo.enAnden = e.enAnden;
   }
   if (e.posicion) {
     const min = minutosDesde(e.posicion.medidaEn, ahora);
@@ -122,7 +135,19 @@ function seccionUbicacion(e: EstatusViaje, ahora: Date, faltantes: string[], res
 function seccionEta(e: EstatusViaje, faltantes: string[], respaldo: Record<string, unknown>): string {
   if (e.etaIso) {
     respaldo.eta = e.etaIso;
-    return `Hora estimada de llegada de ${e.folio ?? 'tu viaje'}: ${fechaHoraMx(e.etaIso)}.`;
+    respaldo.etaFuente = e.etaFuente;
+    // La fuente se dice: una cita es lo pactado; una ETA es lo que tu ejecutivo capturó. Ninguna es telemetría de la unidad.
+    const cuando = fechaHoraMx(e.etaIso);
+    const cabeza = e.etaFuente === 'cita'
+      ? `La cita de llegada a destino de ${e.folio ?? 'tu viaje'} es el ${cuando}.`
+      : `Hora estimada de llegada de ${e.folio ?? 'tu viaje'}: ${cuando}.`;
+    const carga = e.citaCarga && e.etapa === 'en_curso' ? ` La cita de carga es el ${fechaHoraMx(e.citaCarga.en)}.` : '';
+    if (carga) respaldo.citaCarga = e.citaCarga;
+    return `${cabeza}${carga} Es la que tiene registrada tu ejecutivo, no una medición del GPS.`;
+  }
+  // Ya llegó a destino: no hay «hora estimada» por decir, y no falta ningún dato.
+  if (e.etapa === 'en_destino' || e.etapa === 'descargando' || e.etapa === 'entregado' || e.etapa === 'regresando' || e.etapa === 'cerrado') {
+    return `${etiquetaViaje(e)}: ${ETAPAS[e.etapa]}, así que ya no hay hora estimada de llegada por decir.`;
   }
   faltantes.push('eta');
   return `Todavía no tengo registrada una hora estimada de llegada${e.folio ? ` para ${e.folio}` : ''}. La consulto con tu ejecutivo y te confirmo.`;
@@ -143,7 +168,9 @@ function seccionDocumentos(e: EstatusViaje, faltantes: string[], respaldo: Recor
   return `Documentos pendientes del viaje: ${pendientes.join(', ')}.`;
 }
 
-function seccionFacturaPod(e: EstatusViaje, faltantes: string[], tareas: string[], respaldo: Record<string, unknown>): string {
+function seccionFacturaPod(
+  e: EstatusViaje, faltantes: string[], tareas: string[], respaldo: Record<string, unknown>, adjuntos: Array<AdjuntoRef['clave']>,
+): string {
   const partes: string[] = [];
   if (e.podRecibido === null) {
     faltantes.push('pod');
@@ -159,9 +186,16 @@ function seccionFacturaPod(e: EstatusViaje, faltantes: string[], tareas: string[
     respaldo.facturaEmitida = e.facturaEmitida;
     partes.push(e.facturaEmitida ? 'La factura de este viaje ya está emitida.' : 'La factura de este viaje todavía no está emitida.');
   }
-  partes.push('Si necesitas el archivo, tu ejecutivo te lo hace llegar.');
-  // El archivo lo entrega una persona: siempre queda una tarea para el gerente.
-  tareas.push('entrega_de_archivo');
+  const hayPod = e.adjuntos.some((a) => a.clave === 'pod');
+  if (hayPod) {
+    // El archivo sale como adjunto SI la ventana de 24 h lo permite; el texto es verdad en los dos casos.
+    adjuntos.push('pod');
+    partes.push('Si necesitas el archivo y no te llega por aquí, tu ejecutivo te lo hace llegar.');
+  } else {
+    partes.push('Si necesitas el archivo, tu ejecutivo te lo hace llegar.');
+    // Sin archivo que adjuntar, lo entrega una persona: queda una tarea para el gerente.
+    tareas.push('entrega_de_archivo');
+  }
   return partes.join(' ');
 }
 
@@ -180,6 +214,7 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
   const { intencion } = e.clasificacion;
   const faltantes: string[] = [];
   const tareas: string[] = [];
+  const adjuntos: Array<AdjuntoRef['clave']> = [];
   const respaldo: Record<string, unknown> = { intencion };
   const saludo = SALUDA(e.nombreContacto);
   let cuerpo: string;
@@ -220,7 +255,7 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
       if (i === 'ubicacion') secciones.push(seccionUbicacion(estatus, e.ahora, faltantes, respaldo));
       else if (i === 'eta') secciones.push(seccionEta(estatus, faltantes, respaldo));
       else if (i === 'documentos') secciones.push(seccionDocumentos(estatus, faltantes, respaldo));
-      else if (i === 'factura_pod') secciones.push(seccionFacturaPod(estatus, faltantes, tareas, respaldo));
+      else if (i === 'factura_pod') secciones.push(seccionFacturaPod(estatus, faltantes, tareas, respaldo, adjuntos));
     }
     // El ETA usa la etapa como contexto cuando no hay sección de ubicación.
     if (!secciones.some((s) => s.startsWith(etiquetaViaje(estatus))) && intencion === 'eta') {
@@ -228,7 +263,9 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
     }
     cuerpo = `${saludo}. ${secciones.join('\n\n')}`;
     // Lo que falta, o lo que una persona debe entregar, baja de «bajo»: no sale sin aprobación.
-    if (faltantes.length > 0 || tareas.length > 0) riesgo = 'medio';
+    if (faltantes.length > 0 || tareas.length > 0 || adjuntos.length > 0) riesgo = 'medio';
+    // Lo que se guarda para el envío: el archivo se busca por (flota, cliente, viaje), nunca por una ruta del respaldo.
+    if (adjuntos.length > 0) respaldo.adjuntos = adjuntos;
   }
 
   // El riesgo también sube por lo que el cliente intentó (la política lo repite: defensa en capas).
@@ -236,7 +273,7 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
 
   let texto = `${cuerpo}${pie}`;
   if (texto.length > MAX_RESPUESTA + pie.length) texto = `${texto.slice(0, MAX_RESPUESTA + pie.length - 1)}…`;
-  return { texto, faltantes, tareas, riesgo, requiereHumano, respaldo, origen: 'plantilla' };
+  return { texto, faltantes, tareas, riesgo, adjuntos, requiereHumano, respaldo, origen: 'plantilla' };
 }
 
 // ── PULIR CON MODELO: opcional, y guardado ───────────────────────────────────

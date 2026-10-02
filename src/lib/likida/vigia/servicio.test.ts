@@ -712,6 +712,28 @@ describe('el barrido del cron: SLA y escalera por niveles', () => {
     expect((await barridoVigia(d3.deps)).escaladas).toBe(1);
   });
 
+  it('0484 · un cliente CRÍTICO se avisa a los 10 min (el plazo corto); uno que no lo es, no', async () => {
+    const critico = await esperando(11, {});
+    critico.repo.criticos.add(`${T1}:${CLIENTE_A}`);
+    const r = await barridoVigia(critico.deps);
+    expect(r.escaladas).toBe(1);
+    expect(critico.alGerente[0].op.texto).toContain('Nivel 1');
+    const normal = await esperando(11, {});
+    expect((await barridoVigia(normal.deps)).escaladas).toBe(0);
+    expect(normal.alGerente).toEqual([]);
+  });
+
+  it('0484 · el plazo crítico es configurable y nunca es más laxo que el general', async () => {
+    const corto = await esperando(4);
+    corto.repo.criticos.add(`${T1}:${CLIENTE_A}`);
+    corto.repo.configs.set(T1, { ...corto.repo.configs.get(T1)!, slaCriticoMin: 3, slaRespuestaMin: 30 });
+    expect((await barridoVigia(corto.deps)).escaladas).toBe(1);
+    const laxo = await esperando(20, {});
+    laxo.repo.criticos.add(`${T1}:${CLIENTE_A}`);
+    laxo.repo.configs.set(T1, { ...laxo.repo.configs.get(T1)!, slaCriticoMin: 60, slaRespuestaMin: 15 });
+    expect((await barridoVigia(laxo.deps)).escaladas).toBe(1); // rige el menor: 15, no 60
+  });
+
   it('SLA configurable por flota', async () => {
     const { deps, alGerente } = await esperando(10, { slaRespuestaMin: 5, escalarNivel2Min: 30 });
     await barridoVigia(deps);

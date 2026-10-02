@@ -26,11 +26,15 @@ import { hashTelefono } from './servicio';
 import {
   etapaDeViaje, ultimoHitoDe, type EstatusViaje, type ResumenViaje, type ServicioEstatusViaje,
 } from './estatus_viaje';
+import { estatusViaje as estatusDelConductor } from '../conductor/servicios';
+import type { EstatusViaje as EstatusConductor } from '../conductor/estatus_viaje';
+import { mezclarEstatus, parteDelConductor } from './desde_conductor';
+import { adjuntosDeRespaldo, nombreDeAdjunto, nombreDeArchivo, pieDeAdjunto, rutaEsDeLaFlota, SEGUNDOS_URL_ADJUNTO, type ArchivoParaEnviar } from './adjuntos';
 import type {
   CambioReclamo, Destinatario, FilaEnEspera, NuevoEvento, NuevoSaliente, RepoVigia, ResultadoRecibir,
 } from './puertos';
 import {
-  configApagada, type ConfigVigia, type Contacto, type Conversacion, type Intencion, type MensajeVigia, type ModoAprobacion,
+  configApagada, configParaCliente, type ConfigVigia, type Contacto, type Conversacion, type Intencion, type MensajeVigia, type ModoAprobacion,
 } from './tipos';
 
 type Fila = Record<string, unknown>;
@@ -53,6 +57,9 @@ export function aConfig(f: Fila): ConfigVigia {
     autoenviarMinAprobaciones: num(f.autoenviar_min_aprobaciones) || 5,
     slaRespuestaMin: num(f.sla_respuesta_min) || 30,
     escalarNivel2Min: num(f.escalar_nivel2_min) || 60,
+    // 0484: sin migrar la columna no existe → el valor de siempre.
+    slaCriticoMin: num(f.sla_critico_min) || 10,
+    molestiaAvisoNivel: num(f.molestia_aviso_nivel) === 3 ? 3 : 2,
     retencionDias: num(f.retencion_dias) || 180,
     avisoPrivacidadUrl: str(f.aviso_privacidad_url),
   };
@@ -89,21 +96,30 @@ export function aMensaje(f: Fila): MensajeVigia {
     respuestaA: str(f.respuesta_a), riesgo: str(f.riesgo) as MensajeVigia['riesgo'], autoenviado: f.autoenviado === true,
     editado: f.editado === true, aprobadoPor: str(f.aprobado_por), enviadoEn: str(f.enviado_en),
     via: str(f.via) as MensajeVigia['via'], error: str(f.error), senales: Array.isArray(f.senales) ? (f.senales as string[]) : [],
+    adjuntos: adjuntosDeRespaldo(f.datos_respaldo),
     createdAt: String(f.created_at),
   };
 }
 
 const COLS_CONTACTO = 'id, tenant_id, cliente_id, telefono, nombre, gerente_user_id, estado, consentimiento_en, optout_en, aviso_privacidad_en';
 const COLS_CONV = 'id, tenant_id, contacto_id, cliente_id, viaje_id, estado, control, tomada_por, ultima_entrada_en, ultima_salida_en, sin_respuesta_desde, entradas_sin_respuesta, molestia_nivel, molestia_motivos, molestia_en, escalamiento_nivel, escalado_en, atendida_en';
-const COLS_MSG = 'id, tenant_id, conversacion_id, direccion, autor, wamid, tipo, texto, intencion, estado, respuesta_a, riesgo, autoenviado, editado, aprobado_por, enviado_en, via, error, senales, created_at';
+const COLS_MSG = 'id, tenant_id, conversacion_id, direccion, autor, wamid, tipo, texto, intencion, estado, respuesta_a, riesgo, autoenviado, editado, aprobado_por, enviado_en, via, error, senales, datos_respaldo, created_at';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ESTATUS DE VIAJE REAL: viaje + posicion + pod + factura, de UN cliente en UNA flota
+// ESTATUS DE VIAJE REAL: viaje + posicion + pod + factura + lo del Agente 5 «Conductor»,
+// de UN cliente en UNA flota
 // ═══════════════════════════════════════════════════════════════════════════
 
 const ESTATUS_EN_CURSO = ['abierto', 'en_cuadre'];
 
-export const estatusViajeReal: ServicioEstatusViaje = {
+/** Lo que el estatus real necesita de afuera (inyectable para pruebas). */
+export interface DepsEstatusReal {
+  /** El estatus que calcula el Conductor (hitos, cita/ETA, andén) de un viaje de ESA flota; `null` si no existe. */
+  conductor(tenantId: string, viajeId: string): Promise<EstatusConductor | null>;
+}
+
+export function crearEstatusViajeReal(d: DepsEstatusReal): ServicioEstatusViaje {
+  return {
   async viajesEnCurso({ tenantId, clienteId }) {
     const db = supabaseAdmin();
     const { data, error } = await acotada(db.from('viaje')
@@ -171,25 +187,88 @@ export const estatusViajeReal: ServicioEstatusViaje = {
       logger.warn('vigia.estatus_factura_ilegible', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
     }
 
-    return {
-      viajeId: String(v.id), folio: str(v.folio), origen: str(v.origen), destino: str(v.destino),
+    // Lo del Agente 5 «Conductor»: los cinco hitos, la cita/ETA de cada punto y si el operador está en un andén. Si no se
+    // pudo leer, el viaje dice lo que digan sus sellos y SIN ETA (no se rellena: el Vigía contesta «lo consulto» y escala).
+    let delConductor: EstatusConductor | null = null;
+    try {
+      const c = await d.conductor(tenantId, viajeId);
+      // El viaje ya se verificó contra el cliente arriba; que el Conductor hable del MISMO viaje es la segunda llave.
+      if (c && c.viajeId === viajeId) delConductor = c;
+    } catch (e) {
+      logger.warn('vigia.estatus_conductor_ilegible', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+    const parte = parteDelConductor(delConductor);
+    const base = {
       etapa: etapaDeViaje({ estatus: str(v.estatus), llegadaEn, descargaEn, regresoEn }),
       ultimoHito: ultimoHitoDe({ llegadaEn, descargaEn, regresoEn }),
-      posicion,
-      // Likida no guarda cita ni ETA por viaje (no hay columna): hasta que exista, el Vigía lo consulta y escala.
-      etaIso: null,
+    };
+    const mezcla = mezclarEstatus(base, parte);
+    // Un viaje que ya llegó a descarga no tiene «hora estimada de llegada» por decir.
+    const yaLlego = mezcla.etapa === 'cerrado' || ['en_destino', 'descargando', 'entregado', 'regresando'].includes(mezcla.etapa);
+
+    return {
+      viajeId: String(v.id), folio: str(v.folio), origen: str(v.origen), destino: str(v.destino),
+      etapa: mezcla.etapa, ultimoHito: mezcla.ultimoHito, posicion,
+      etaIso: yaLlego ? null : parte.etaIso, etaFuente: yaLlego ? null : parte.etaFuente,
+      citaCarga: parte.citaCarga, enAnden: parte.enAnden,
+      adjuntos: podRecibido === true ? [{ clave: 'pod', nombre: nombreDeAdjunto('pod') }] : [],
       documentos, podRecibido, facturaEmitida,
     };
   },
-};
+  };
+}
+
+export const estatusViajeReal: ServicioEstatusViaje = crearEstatusViajeReal({ conductor: (tenantId, viajeId) => estatusDelConductor(tenantId, viajeId) });
+
+/**
+ * El archivo a adjuntar, de ESE cliente en ESA flota, con URL firmada de 10 min. Se busca por (flota, cliente, viaje): el
+ * POD de un viaje de otro cliente de la misma flota (o de otra flota) devuelve `null`. Si la base no contesta LANZA.
+ */
+export async function archivoAdjuntoReal(a: { tenantId: string; clienteId: string; viajeId: string; clave: 'pod' }): Promise<ArchivoParaEnviar | null> {
+  const db = supabaseAdmin();
+  const v = exigir('adjunto_viaje', await acotada(db.from('viaje')
+    .select('id, folio').eq('id', a.viajeId).eq('tenant_id', a.tenantId).eq('cliente_id', a.clienteId).maybeSingle(), 'vigia.adjunto_viaje')) as Fila | null;
+  if (!v) return null;
+  const pods = exigir('adjunto_pod', await acotada(db.from('pod')
+    .select('storage_path').eq('tenant_id', a.tenantId).eq('viaje_id', a.viajeId).eq('estado', 'subido').order('id').limit(1), 'vigia.adjunto_pod')) as Fila[] | null;
+  const ruta = str(pods?.[0]?.storage_path);
+  if (!ruta || !rutaEsDeLaFlota(a.tenantId, ruta)) return null;
+  const { data, error } = await acotada(db.storage.from('comprobantes').createSignedUrl(ruta, SEGUNDOS_URL_ADJUNTO), 'vigia.adjunto_firma');
+  if (error || !data?.signedUrl) {
+    logger.warn('vigia.adjunto_no_firmado', { tenant: a.tenantId, err: error?.message ?? 'sin url' });
+    return null;
+  }
+  const folio = str(v.folio);
+  return { url: data.signedUrl, nombre: nombreDeArchivo(a.clave, folio, ruta), pie: pieDeAdjunto(a.clave, folio) };
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL REPO
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Los clientes con al menos un grupo CRÍTICO, como `tenant:cliente`. Una base sin la 0484 (tabla inexistente) o una lectura que
+ * falla NO tira el barrido: sin el dato, el cliente se atiende con el plazo general (nunca con uno más laxo que el de siempre).
+ */
+async function clientesCriticos(tenants: string[]): Promise<Set<string>> {
+  try {
+    const { data, error } = await acotada(supabaseAdmin().from('vigia_grupo').select('tenant_id, cliente_id').in('tenant_id', tenants).eq('critico', true).order('id').limit(5000), 'vigia.clientes_criticos');
+    if (error) throw new Error(error.message);
+    return new Set(((data ?? []) as Fila[]).map((f) => `${String(f.tenant_id)}:${String(f.cliente_id)}`));
+  } catch (e) {
+    logger.warn('vigia.clientes_criticos_no_leidos', { err: e instanceof Error ? e.message : String(e) });
+    return new Set();
+  }
+}
+
 export function crearRepoVigia(): RepoVigia {
   return {
+    async clienteCritico(tenantId, clienteId) {
+      return (await clientesCriticos([tenantId])).has(`${tenantId}:${clienteId}`);
+    },
+
     estatus: estatusViajeReal,
+    archivoAdjunto: archivoAdjuntoReal,
 
     async config(tenantId) {
       const f = exigir('config', await acotada(supabaseAdmin().from('vigia_config')
@@ -420,12 +499,13 @@ export function crearRepoVigia(): RepoVigia {
         .select('*').in('tenant_id', tenants).eq('habilitado', true), 'vigia.en_espera_config')) as Fila[] | null ?? []).map(aConfig);
       const contactos = (exigir('en_espera_contactos', await acotada(db.from('vigia_contacto')
         .select(COLS_CONTACTO).in('tenant_id', tenants).in('id', convs.map((c) => c.contactoId)), 'vigia.en_espera_contactos')) as Fila[] | null ?? []).map(aContacto);
+      const criticos = await clientesCriticos(tenants);
       const salida: FilaEnEspera[] = [];
       for (const conversacion of convs) {
         const config = configs.find((c) => c.tenantId === conversacion.tenantId);
         const contacto = contactos.find((c) => c.id === conversacion.contactoId && c.tenantId === conversacion.tenantId);
         // Sin config encendida o sin contacto de ESA flota: no se toca.
-        if (config && contacto) salida.push({ conversacion, contacto, config });
+        if (config && contacto) salida.push({ conversacion, contacto, config: configParaCliente(config, criticos.has(`${conversacion.tenantId}:${conversacion.clienteId}`)) });
       }
       return salida;
     },
@@ -439,6 +519,9 @@ export function crearRepoVigia(): RepoVigia {
     async purgar(limite) {
       const { data, error } = await acotada(supabaseAdmin().rpc('vigia_purgar', { p_limite: limite }), 'vigia.purgar');
       if (error) throw new Error(`vigia.purgar: ${error.message}`);
+      // 0484: el histórico importado caduca con la misma retención. Sin la función (base sin migrar) no es un fallo del barrido.
+      const h = await acotada(supabaseAdmin().rpc('vigia_historial_purgar', { p_limite: limite }), 'vigia.purgar_historial');
+      if (h.error && h.error.code !== '42883' && h.error.code !== 'PGRST202') logger.warn('vigia.purgar_historial_fallo', { err: h.error.message });
       return typeof data === 'number' ? data : 0;
     },
   };
@@ -472,6 +555,8 @@ export interface PendienteTablero {
   intencion: Intencion | null;
   riesgo: 'bajo' | 'medio' | 'alto' | null;
   senales: string[];
+  /** Los archivos que saldrán con la respuesta (nombres legibles) si el gerente la aprueba. */
+  adjuntos: string[];
   creadoEn: string;
 }
 
@@ -553,7 +638,7 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
   const pendientes: PendienteTablero[] = pend.map((m) => ({
     id: m.id, conversacionId: m.conversacionId, clienteNombre: clienteDeConv.get(m.conversacionId) ?? null,
     mensajeCliente: m.respuestaA ? entrantesDe.get(m.respuestaA) ?? null : null, borrador: m.texto ?? '',
-    intencion: m.intencion, riesgo: m.riesgo, senales: m.senales, creadoEn: m.createdAt,
+    intencion: m.intencion, riesgo: m.riesgo, senales: m.senales, adjuntos: m.adjuntos.map((a) => nombreDeAdjunto(a.clave)), creadoEn: m.createdAt,
   }));
 
   // Envíos fallidos de las últimas 24 h.
@@ -612,6 +697,8 @@ export interface ValoresConfig {
   autoenviarMinAprobaciones: number;
   slaRespuestaMin: number;
   escalarNivel2Min: number;
+  slaCriticoMin: number;
+  molestiaAvisoNivel: 2 | 3;
   retencionDias: number;
   avisoPrivacidadUrl: string | null;
 }
@@ -632,23 +719,38 @@ export function validarConfig(c: Record<string, unknown>): Validacion<ValoresCon
   if (sla === null) return { ok: false, error: 'El tiempo de respuesta debe estar entre 5 y 1,440 minutos.' };
   const n2 = entero(c.escalarNivel2Min, 5, 2880);
   if (n2 === null) return { ok: false, error: 'El tiempo para avisar al dueño debe estar entre 5 y 2,880 minutos.' };
+  const vacio = (v: unknown) => v === undefined || v === null || String(v).trim() === '';
+  const crit = vacio(c.slaCriticoMin) ? 10 : entero(c.slaCriticoMin, 2, 1440);
+  if (crit === null) return { ok: false, error: 'El tiempo para clientes críticos debe estar entre 2 y 1,440 minutos.' };
+  const molestia = vacio(c.molestiaAvisoNivel) ? 2 : entero(c.molestiaAvisoNivel, 2, 3);
+  if (molestia === null) return { ok: false, error: 'El nivel de molestia para avisar debe ser 2 o 3.' };
   const ret = entero(c.retencionDias, 30, 730);
   if (ret === null) return { ok: false, error: 'La retención debe estar entre 30 y 730 días.' };
   const urlCruda = typeof c.avisoPrivacidadUrl === 'string' ? c.avisoPrivacidadUrl.trim() : '';
   if (urlCruda && !/^https:\/\/[^\s]{1,480}$/.test(urlCruda)) return { ok: false, error: 'La liga del aviso de privacidad debe empezar con https://' };
   return { ok: true, valor: {
     habilitado: c.habilitado === true, modoAprobacion: modo, autoenviarMinAprobaciones: min, slaRespuestaMin: sla,
-    escalarNivel2Min: n2, retencionDias: ret, avisoPrivacidadUrl: urlCruda || null,
+    escalarNivel2Min: n2, slaCriticoMin: crit, molestiaAvisoNivel: molestia === 3 ? 3 : 2, retencionDias: ret, avisoPrivacidadUrl: urlCruda || null,
   } };
 }
 
 export async function guardarConfigVigia(tenantId: string, userId: string, v: ValoresConfig): Promise<void> {
-  const { error } = await acotada(supabaseAdmin().from('vigia_config').upsert({
+  const base = {
     tenant_id: tenantId, habilitado: v.habilitado, modo_aprobacion: v.modoAprobacion, autoenviar_min_aprobaciones: v.autoenviarMinAprobaciones,
     sla_respuesta_min: v.slaRespuestaMin, escalar_nivel2_min: v.escalarNivel2Min, retencion_dias: v.retencionDias,
     aviso_privacidad_url: v.avisoPrivacidadUrl, updated_at: new Date().toISOString(), updated_by: userId,
-  }, { onConflict: 'tenant_id' }), 'vigia.guardar_config');
-  if (error) throw new Error(`vigia.guardar_config: ${error.message}`);
+  };
+  const db = supabaseAdmin();
+  const { error } = await acotada(db.from('vigia_config').upsert(
+    { ...base, sla_critico_min: v.slaCriticoMin, molestia_aviso_nivel: v.molestiaAvisoNivel }, { onConflict: 'tenant_id' }), 'vigia.guardar_config');
+  if (!error) return;
+  // Base sin la 0484 (columna inexistente): se guarda lo de siempre en vez de perder el cambio entero.
+  if (error.code === '42703' || error.code === 'PGRST204') {
+    const r = await acotada(db.from('vigia_config').upsert(base, { onConflict: 'tenant_id' }), 'vigia.guardar_config_sin_0484');
+    if (!r.error) return;
+    throw new Error(`vigia.guardar_config: ${r.error.message}`);
+  }
+  throw new Error(`vigia.guardar_config: ${error.message}`);
 }
 
 /** Teléfono de un cliente en la forma de la allowlist (52 + 10 dígitos), o `null` si no es mexicano válido. PURA. */

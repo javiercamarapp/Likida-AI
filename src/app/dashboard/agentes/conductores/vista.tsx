@@ -96,6 +96,7 @@ export function VistaAgenteConductores({
           <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12.5px]">
             <Link href={`/dashboard/agentes/conductores/sitios${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Catálogo de sitios (clientes, plantas y andenes)</Link>
             <Link href={`/dashboard/agentes/conductores/estadias${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Estadías en andén</Link>
+            <Link href={`/dashboard/agentes/conductores/configuracion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Configuración (recordatorios, horario, contactos)</Link>
           </nav>
 
           <Bloque mensaje="No se pudieron leer los conteos de la flota." esqueleto={<EsqConteos />}>

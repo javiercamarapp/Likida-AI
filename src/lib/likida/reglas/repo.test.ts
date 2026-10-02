@@ -41,7 +41,7 @@ vi.mock('@/lib/supabase/admin', () => ({
         single: () => Promise.resolve(resolver()),
         then: (res: (v: unknown) => unknown) => Promise.resolve(resolver()).then(res),
       };
-      for (const m of ['select', 'eq', 'in', 'order', 'limit']) {
+      for (const m of ['select', 'eq', 'in', 'order', 'limit', 'gte', 'lt']) {
         api[m] = (...args: unknown[]) => { estado.llamadas.push({ tabla, metodo: m, args }); return api; };
       }
       for (const m of ['insert', 'update', 'delete', 'upsert']) {
@@ -60,7 +60,7 @@ const repo = await import('./repo');
 const {
   desdeFila, crearReglaPendiente, confirmarRegla, alternarPausa, borrarRegla,
   listarReglas, reglasActivas, sellosDe, sellarDisparos, anotarCorrida, llaveSello,
-  TOPE_REGLAS_POR_FLOTA,
+  TOPE_REGLAS_POR_FLOTA, actualizarFrecuencia, avisosEnviadosDesde, registrarAviso, purgarAvisosViejos,
 } = repo;
 
 const TENANT = 't-1';
@@ -235,7 +235,7 @@ describe('pausar / reanudar / borrar', () => {
 });
 
 describe('listar y barrer', () => {
-  it('la lista trae título, canal y las últimas 3 evidencias por regla', async () => {
+  it('la lista trae título, canal y las últimas evidencias y avisos por regla (hasta 10)', async () => {
     pon('regla_vigilancia:select', { data: [FILA] });
     pon('regla_disparo:select', {
       data: [
@@ -249,7 +249,26 @@ describe('listar y barrer', () => {
     expect(r).toHaveLength(1);
     expect(r[0].titulo).toBe('Gasto de un concepto por arriba de un monto');
     expect(r[0].canal).toBe('dinero');
-    expect(r[0].ultimasEvidencias.map((e) => e.evidencia)).toEqual(['e1', 'e2', 'e3']);
+    expect(r[0].ultimasEvidencias.map((e) => e.evidencia)).toEqual(['e1', 'e2', 'e3', 'e4']);
+    expect(r[0].ultimosAvisos).toEqual([]);
+  });
+
+  it('el historial se recorta a 10 renglones por regla y trae los avisos enviados y fallidos', async () => {
+    pon('regla_vigilancia:select', { data: [FILA] });
+    pon('regla_disparo:select', {
+      data: Array.from({ length: 12 }, (_, i) => ({ regla_id: 'r-1', evidencia: `e${i}`, disparado_en: `2026-08-${String(20 - i).padStart(2, '0')}T10:00:00Z` })),
+    });
+    pon('regla_aviso:select', {
+      data: [
+        { regla_id: 'r-1', enviado_en: '2026-08-26T10:00:00Z', resultado: 'fallido', casos: 2, via: null, motivo: 'plantilla_rechazada', error: 'La plantilla no está aprobada' },
+        { regla_id: 'r-1', enviado_en: '2026-08-25T10:00:00Z', resultado: 'enviado', casos: 1, via: 'plantilla', motivo: 'ventana_cerrada', error: null },
+      ],
+    });
+    const r = await listarReglas(TENANT);
+    expect(r[0].ultimasEvidencias).toHaveLength(10);
+    expect(r[0].ultimosAvisos.map((a) => [a.resultado, a.via, a.casos])).toEqual([
+      ['fallido', null, 2], ['enviado', 'plantilla', 1],
+    ]);
   });
 
   it('sin reglas no consulta sellos', async () => {
@@ -333,5 +352,67 @@ describe('los sellos', () => {
     const parche = llamadas('regla_vigilancia', 'update')[0][0] as Record<string, unknown>;
     expect(parche.ultimo_disparo_en).toBe('2026-08-27T18:00:00.000Z');
     expect(logger.warn).toHaveBeenCalledWith('reglas.corrida_no_anotada', expect.anything());
+  });
+});
+
+
+describe('frecuencia e historial (0520)', () => {
+  it('desdeFila trae el límite guardado, y el de omisión en filas anteriores a la 0520', () => {
+    expect(desdeFila({ ...FILA, max_avisos_dia: 2, min_horas_entre_avisos: 6 })).toMatchObject({ maxAvisosDia: 2, minHorasEntreAvisos: 6 });
+    expect(desdeFila(FILA)).toMatchObject({ maxAvisosDia: 4, minHorasEntreAvisos: 1 });
+  });
+
+  it('actualizarFrecuencia valida, ancla por tenant+id, y deja huella en la bitácora', async () => {
+    pon('regla_vigilancia:update', { data: [{ id: 'r-1' }] });
+    const r = await actualizarFrecuencia(TENANT, 'r-1', { maxAvisosDia: '2', minHorasEntreAvisos: '8' }, ACTOR);
+    expect(r).toEqual({ ok: true, valor: { maxAvisosDia: 2, minHorasEntreAvisos: 8 } });
+    expect(llamadas('regla_vigilancia', 'update')[0][0]).toEqual({ max_avisos_dia: 2, min_horas_entre_avisos: 8 });
+    expect(llamadas('regla_vigilancia', 'eq')).toEqual(expect.arrayContaining([['tenant_id', TENANT], ['id', 'r-1']]));
+    expect(anotarBitacora).toHaveBeenCalledWith(expect.objectContaining({ accion: 'regla.frecuencia', entidadId: 'r-1' }), expect.anything());
+  });
+
+  it('un límite fuera de rango NO toca la base', async () => {
+    const r = await actualizarFrecuencia(TENANT, 'r-1', { maxAvisosDia: 99, minHorasEntreAvisos: 1 }, ACTOR);
+    expect(r.ok).toBe(false);
+    expect(llamadas('regla_vigilancia', 'update')).toHaveLength(0);
+  });
+
+  it('una regla de OTRA flota (cero filas tocadas) se dice, no se finge', async () => {
+    pon('regla_vigilancia:update', { data: [] });
+    const r = await actualizarFrecuencia('t-otra', 'r-1', { maxAvisosDia: 2, minHorasEntreAvisos: 1 }, ACTOR);
+    expect(r).toEqual({ ok: false, error: 'Esa regla ya no existe.' });
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('avisosEnviadosDesde lee SOLO los enviados de ESA regla y flota, y lanza si no puede', async () => {
+    pon('regla_aviso:select', { data: [{ enviado_en: '2026-10-02T10:00:00Z' }] });
+    const r = await avisosEnviadosDesde(TENANT, 'r-1', new Date('2026-10-01T10:00:00Z'));
+    expect(r).toEqual([new Date('2026-10-02T10:00:00Z')]);
+    expect(llamadas('regla_aviso', 'eq')).toEqual(expect.arrayContaining([['tenant_id', TENANT], ['regla_id', 'r-1'], ['resultado', 'enviado']]));
+    pon('regla_aviso:select', { error: { message: 'timeout' } });
+    await expect(avisosEnviadosDesde(TENANT, 'r-1', new Date())).rejects.toThrow(/timeout/);
+  });
+
+  it('registrarAviso escribe el canal solo en los enviados y acota el texto; un fallo no lanza', async () => {
+    pon('regla_aviso:insert', { error: null });
+    await registrarAviso(TENANT, 'r-1', { resultado: 'enviado', casos: 3, via: 'plantilla', motivo: 'ventana_cerrada' });
+    const fila = llamadas('regla_aviso', 'insert')[0][0] as Record<string, unknown>;
+    expect(fila).toMatchObject({ tenant_id: TENANT, regla_id: 'r-1', resultado: 'enviado', via: 'plantilla', casos: 3 });
+
+    await registrarAviso(TENANT, 'r-1', { resultado: 'fallido', casos: 1, via: 'texto', error: 'x'.repeat(900) });
+    const fallido = llamadas('regla_aviso', 'insert')[1][0] as Record<string, unknown>;
+    expect(fallido.via).toBeNull();
+    expect((fallido.error as string).length).toBe(300);
+
+    pon('regla_aviso:insert', { error: { message: 'caída' } });
+    await expect(registrarAviso(TENANT, 'r-1', { resultado: 'enviado', casos: 1 })).resolves.toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith('reglas.aviso_no_registrado', expect.anything());
+  });
+
+  it('la purga borra lo de más de 365 días y reporta cuántas; un fallo devuelve 0 sin lanzar', async () => {
+    pon('regla_aviso:delete', { data: [{ id: 'a' }, { id: 'b' }] });
+    expect(await purgarAvisosViejos(new Date('2026-10-02T00:00:00Z'))).toBe(2);
+    pon('regla_aviso:delete', { error: { message: 'x' } });
+    expect(await purgarAvisosViejos(new Date())).toBe(0);
   });
 });

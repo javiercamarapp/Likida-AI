@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  evaluarUbicacion, posicionMasCercanaEnTiempo, textoVeredicto,
+  debeReintentarseValidacion, evaluarUbicacion, posicionMasCercanaEnTiempo, textoVeredicto,
   type EntradaValidacion, type PosicionComparada, type SitioValidable,
 } from './validacion';
 
@@ -122,5 +122,27 @@ describe('textoVeredicto: dice qué pasó sin acusar', () => {
     expect(textoVeredicto(evaluarUbicacion(entrada({ posicion: null })), null)).toMatch(/todavía no hay una posición/);
     expect(textoVeredicto(evaluarUbicacion(entrada({ posicion: pos({ lat: 200 }) })), null)).toMatch(/no son válidas/);
     expect(textoVeredicto(evaluarUbicacion(entrada({ posicion: pos({ medidaEn: new Date(0) }) })), null)).toMatch(/otra hora/);
+  });
+});
+
+describe('debeReintentarseValidacion (el barrido del cron)', () => {
+  it('sin veredicto, sin posición y sin coincidencia se vuelven a medir (una muestra posterior puede validar al chofer honesto)', () => {
+    expect(debeReintentarseValidacion(undefined)).toBe(true);
+    expect(debeReintentarseValidacion(null)).toBe(true);
+    expect(debeReintentarseValidacion({ resultado: 'sin_coincidencia', motivo: null })).toBe(true);
+    expect(debeReintentarseValidacion({ resultado: 'sin_dato', motivo: 'sin_ubicacion' })).toBe(true);
+    expect(debeReintentarseValidacion({ resultado: 'sin_dato', motivo: 'ubicacion_fuera_de_ventana' })).toBe(true);
+  });
+  it('lo que más muestras no arreglan (sin sitio, coordenadas malas) o ya está validado, no se reintenta', () => {
+    expect(debeReintentarseValidacion({ resultado: 'sin_dato', motivo: 'sin_sitio' })).toBe(false);
+    expect(debeReintentarseValidacion({ resultado: 'sin_dato', motivo: 'coordenadas_invalidas' })).toBe(false);
+    expect(debeReintentarseValidacion({ resultado: 'validado', motivo: null })).toBe(false);
+  });
+});
+
+describe('un pin descartado porque el GPS aún no llega', () => {
+  it('dice «posición de otra hora», no «sin ubicación» (adversarial ronda 03)', () => {
+    expect(evaluarUbicacion(entrada({ posicion: null, gpsPendiente: true }))).toMatchObject({ resultado: 'sin_dato', motivo: 'ubicacion_fuera_de_ventana' });
+    expect(evaluarUbicacion(entrada({ posicion: null }))).toMatchObject({ resultado: 'sin_dato', motivo: 'sin_ubicacion' });
   });
 });

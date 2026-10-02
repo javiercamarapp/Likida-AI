@@ -1,7 +1,7 @@
 import { fechaHoraMx } from '@/lib/formato';
 import { EstadoVacio, StatusPill } from '@/app/admin/ui/kit';
 import type { ReglaEnPantalla } from '@/lib/likida/reglas/repo';
-import { BotonDeRegla, BorrarRegla, type AccionForma } from './forma';
+import { BotonDeRegla, BorrarRegla, FormaFrecuencia, type AccionForma } from './forma';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA LISTA DE REGLAS — presentacional, en el servidor.
@@ -17,6 +17,7 @@ export interface AccionesRegla {
   pausar: AccionForma;
   reanudar: AccionForma;
   borrar: AccionForma;
+  frecuencia: AccionForma;
 }
 
 const CANAL: Record<string, string> = {
@@ -49,6 +50,34 @@ function Evidencias({ regla }: { regla: ReglaEnPantalla }) {
   );
 }
 
+const VIA: Record<string, string> = {
+  texto: 'mensaje de WhatsApp', botones: 'mensaje con botones', plantilla: 'plantilla (ventana de 24 h cerrada)',
+};
+
+/** El historial de AVISOS (0520): cada vez que la regla intentó avisar, salió o
+ *  no, y por qué canal. Distinto de «Últimas veces que sonó», que cita los casos. */
+function HistorialAvisos({ regla }: { regla: ReglaEnPantalla }) {
+  if (regla.ultimosAvisos.length === 0) {
+    return (
+      <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+        Todavía no ha mandado ningún aviso.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      {regla.ultimosAvisos.map((a) => (
+        <p key={`${a.enviadoEn}-${a.resultado}`} className="text-[11.5px]" style={{ color: 'var(--ink2)' }}>
+          <span className="cifra-mono" style={{ color: 'var(--faint)' }}>{fechaHoraMx(a.enviadoEn)}</span>{' '}
+          {a.resultado === 'enviado'
+            ? `Avisó ${a.casos} caso${a.casos === 1 ? '' : 's'} por ${VIA[a.via ?? ''] ?? 'WhatsApp'}.`
+            : <span style={{ color: 'var(--bad)' }}>No salió ({a.casos} caso{a.casos === 1 ? '' : 's'}): {a.error ?? 'WhatsApp lo rechazó'}. Se reintenta.</span>}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function Ficha({ regla, acciones }: { regla: ReglaEnPantalla; acciones: AccionesRegla }) {
   const pendiente = regla.estado === 'pendiente';
   return (
@@ -73,6 +102,19 @@ function Ficha({ regla, acciones }: { regla: ReglaEnPantalla; acciones: Acciones
       </div>
 
       {!pendiente && <Evidencias regla={regla} />}
+
+      {!pendiente && (
+        <details className="rounded-lg hairline p-3">
+          <summary className="cursor-pointer text-[12px] font-medium select-none list-none" style={{ color: 'var(--ink2)' }}>
+            Historial de avisos y límite de frecuencia
+          </summary>
+          <div className="pt-3 space-y-3">
+            <HistorialAvisos regla={regla} />
+            <FormaFrecuencia accion={acciones.frecuencia} id={regla.id}
+              maxAvisosDia={regla.maxAvisosDia} minHorasEntreAvisos={regla.minHorasEntreAvisos} />
+          </div>
+        </details>
+      )}
 
       <div className="flex flex-wrap items-start gap-2 pt-1">
         {pendiente ? (

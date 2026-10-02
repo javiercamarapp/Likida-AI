@@ -106,7 +106,7 @@ vi.mock('./pac', () => ({
         llamadas.push({ tabla: '(PAC)', op: 'timbrar', payload: null, filtros: [] });
         return timbrar(...a);
       },
-      cancelar: async () => ({ ok: false, mensaje: '' }),
+      cancelar: async () => ({ ok: false as const, clase: 'rechazado' as const, codigo: null, mensaje: '' }),
     }
     : null),
 }));

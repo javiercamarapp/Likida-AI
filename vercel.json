@@ -68,6 +68,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/buzon-entrega",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/jornada-alertas",
       "schedule": "*/15 * * * *"
     }

@@ -702,7 +702,9 @@ export const CIRCLE_K: GuionPortal = {
   campos: {
     sucursal: { selector: ['input[placeholder="Ej. 001"]', porEtiqueta('NO. DE TIENDA')] },
     folio: { selector: ['input[placeholder="Ej. 123456"]', porEtiqueta('FOLIO')] },
-    fecha: { selector: ['input[type="date"]', porEtiqueta('FECHA DE COMPRA')], formato: 'fecha_dmy' },
+    // `fecha_iso` y no `fecha_dmy`: es un <input type="date"> y esos solo aceptan AAAA-MM-DD al llenarse
+    // por código (con dd/mm/aaaa, `fill` lanza «Malformed value»). Lo cazó la prueba de contrato (autofactura/).
+    fecha: { selector: ['input[type="date"]', porEtiqueta('FECHA DE COMPRA')], formato: 'fecha_iso' },
   },
   receptor: {
     // El paso 2 (Receptor) no se leyó: el portal dice «El Uso CFDI se solicita
