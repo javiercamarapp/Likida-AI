@@ -1,58 +1,75 @@
 # Matriz E2E por agente (criterio g de la cola maestra)
 
-Criterio (cola-maestra.md, «PRIORIDAD MÁXIMA»): para cada uno de los 13 agentes, **una prueba E2E del ciclo completo con dobles de proveedor** y estos cinco casos: **feliz, fallo, duplicado, fuera de orden y otro tenant**.
+Criterio (cola-maestra.md, «PRIORIDAD MÁXIMA»): para cada uno de los 13 agentes, **una prueba E2E del ciclo completo con dobles de proveedor** y estos cinco casos:
+**feliz, fallo, duplicado, fuera de orden y otra flota (otro tenant)**.
 
-Esta matriz es el índice de esas pruebas. Se corre **un archivo a la vez** y con el candado de memoria:
+Esta matriz es el índice de esas pruebas y refleja el estado del árbol `loop/punta-a-punta` tras la Ola 4d y el paquete P12 (2-oct-2026). Las cifras salen de una
+corrida real de cada archivo con `heavy.sh`; si cambian, se actualiza esta tabla en el mismo commit. Se corre **un archivo a la vez** y con el candado de memoria:
 
 ```bash
 export DEVELOPER_DIR=/Library/Developer/CommandLineTools
-~/likida-loop/heavy.sh npx vitest run src/lib/likida/e2e/agente-07-cobranza.e2e.test.ts
+~/likida-loop/heavy.sh npx vitest run --maxWorkers=2 src/lib/likida/e2e/agente-07-cobranza.e2e.test.ts
 ```
 
-Todos los datos son **sintéticos** (flotas «t-a/t-b», operadores «Ficticio», RFC y UUID de prueba, dominios `.invalid`/`.example`). Nada toca producción, Meta, SW, Resend ni OpenRouter reales: cada proveedor es un doble.
+Todos los datos son **sintéticos** (flotas «t-a/t-b», operadores «Ficticio», RFC y UUID de prueba, dominios `.invalid`/`.example`, teléfonos de la serie 28999…).
+Nada toca producción, Meta, SW, Resend ni OpenRouter reales: cada proveedor es un doble.
 
 ## Numeración de los 13 agentes
 
 La numeración histórica del inventario (agentes 5–12) se corrió en uno cuando se insertó el Conductor como Agente 5 (cola maestra). Esta matriz usa la de la cola:
 
-| # | Agente | Ciclo que cubre la prueba |
-|---|---|---|
-| 1 | Liquidación fase 1 (entrega del pago ya calculado) | POST `/v1/liquidaciones-externas` → cron → outbox/Meta → botón del chofer |
-| 2 | Peajes (PASE × gasto × GPS × caseta) | buzón firmado → cola con claim → cruce → bitácora conciliada |
-| 3 | Carta Porte multi-formato | panel / WhatsApp / correo → lectura → revisión → viaje → export |
-| 4 | Vigía de servicio al cliente | mensaje del cliente → borrador con datos reales → aprobación → SLA/escalamiento |
-| 5 | Conductor (ciclo del conductor) | cron + chofer + validación + tablero + estadías |
-| 6 | Autofactura con proveedores | lote supervisado → portal verificado → paso humano |
-| 7 | Cobranza de comprobantes | cron por tier → claim → texto/plantilla → bitácora |
-| 8 | Escalación del viaje no aceptado | cron horario → claim → chofer + jefe |
-| 9 | Buzón de facturas de proveedores | correo Resend firmado → bandeja → aprobación → export SAP/CONTPAQi |
-| 10 | GPS (mapa y lectores) | poll/push → asentador → mapa |
-| 11 | Comunicación con operadores | aceptar viaje, aviso/acuse por selector de WhatsApp, hitos (motor del Conductor) |
-| 12 | Jornada | marcas + GPS → tope → alerta |
-| 13 | Mis reglas | español libre → confirmación humana → vigilante SQL → WhatsApp |
+| # | Agente | Ciclo que cubre la prueba | Doc de operación |
+|---|---|---|---|
+| 1 | Liquidación fase 1 (entrega del pago ya calculado) | POST `/v1/liquidaciones-externas` → cron → outbox/Meta → botón del chofer; formato de la flota, copia al jefe, «No coincide» con red y «Reavisar» | `liquidacion-externa.md` |
+| 2 | Peajes (PASE × gasto × GPS × caseta) | buzón firmado / correo / pull → cola con claim → cruce → bitácora conciliada → reporte de reclamación | `conciliacion-peajes.md` |
+| 3 | Carta Porte multi-formato | panel / WhatsApp / correo → bandeja → worker del cron → revisión → viaje → export (csv, json, xlsx) | `carta-porte-multiformato.md` |
+| 4 | Vigía de servicio al cliente | mensaje del cliente → borrador con datos reales → aprobación → SLA/escalamiento; grupos críticos y alerta de 10 min; histórico → respuesta rápida | `vigia-cliente.md` |
+| 5 | Conductor (ciclo del conductor) | cron + chofer + validación contra GPS + detección por geocerca + señal de vida + tablero + estadías | `agente-conductor.md` |
+| 6 | Autofactura con proveedores | lote supervisado → portal verificado → paso humano | `verificacion-portales.md` |
+| 7 | Cobranza de comprobantes | cron por tier → claim → texto/plantilla → bitácora; cobranza por gasto | `cobranza-por-gasto.md` |
+| 8 | Escalación del viaje no aceptado | cron horario → claim → chofer + jefe | `escalacion-viaje-no-aceptado.md` |
+| 9 | Buzón de facturas de proveedores | correo Resend firmado → bandeja → aprobación → export SAP/CONTPAQi; entrega al contador | `buzon-facturas.md` |
+| 10 | GPS (mapa y lectores) | poll/push → asentador → `posicion` → barrido de validación del Conductor | `gps-proveedores.md` |
+| 11 | Comunicación con operadores | aviso de asignación, aceptación, acuse por selector de WhatsApp, hitos (motor del Conductor) | `comunicacion-operadores.md` |
+| 12 | Jornada | marcas + GPS → tope → alerta | sin doc todavía (paquete P10) |
+| 13 | Mis reglas | español libre → confirmación humana → vigilante SQL → WhatsApp | `mis-reglas.md` |
+| — | Convenios / perfiles de cliente | archivo → despacho → acercamiento a la planta → pregunta → exportación | `convenios-clientes.md` |
+| — | Orquestador / tablero en vivo | pregunta por rol → herramientas de solo lectura → escalar a una persona → barrido de salud y aviso | `orquestador.md` |
 
-## Matriz agente × caso × archivo × estado
+## Matriz agente × archivo × estado
 
-Estado: **verde** = corrió con `heavy.sh` y pasa; **todo** = escrita como `it.todo` con motivo (la implementación vive en un worktree de la Ola 3 y no está integrada en `loop/punta-a-punta`; no hay verde falso).
+**verde (N)** = corrió con `heavy.sh` y pasa N pruebas; **todo** = escrita como `it.todo` con motivo (no hay verde falso). «Cinco casos» dice dónde se ven los cinco casos del
+criterio: los archivos `e2e/agente-NN-*.e2e.test.ts` los traen como bloques `describe` con esos nombres; los demás los reparten en bloques por tema (se indican).
 
-| # | Feliz | Fallo | Duplicado | Fuera de orden | Otro tenant | Archivo | Estado |
-|---|---|---|---|---|---|---|---|
-| 1 | 1 | 4 | 3 | 3 | 3 | `src/lib/likida/e2e/agente-01-liquidacion.e2e.test.ts` | verde (14) |
-| 2 | 1 | 4 | 3 | 3 | 3 | `src/lib/likida/e2e/agente-02-peajes.e2e.test.ts` + `src/lib/likida/peajes/flujo_completo.test.ts` | verde (14 + 5); 2 todo (reclamación PASE×GPS×geocerca) |
-| 3 | 3 | 5 | 4 | 4 | 4 | `src/lib/likida/e2e/agente-03-carta-porte.e2e.test.ts` | verde (20); 1 todo (salida al layout del cliente) |
-| 4 | 1 | 5 | 4 | 4 | 4 | `src/lib/likida/e2e/agente-04-vigia.e2e.test.ts` | verde (18); 3 todo (grupos 10 min, histórico, copiloto) |
-| 5 | 2 | 7 | 5 | 5 | 4 | `src/lib/likida/conductor/ciclo_completo.e2e.test.ts` (38 pruebas, ya existía) | verde; 7 todo en `agentes-pendientes-ola3.e2e.test.ts` (conciliación obligatoria, escalamiento a jefe de tráfico, API de validar) |
-| 6 | — | — | — | — | — | `src/lib/likida/e2e/agentes-pendientes-ola3.e2e.test.ts` | todo (5) — w3-autofactura |
-| 7 | 1 | 6 | 2 | 4 | 3 | `src/lib/likida/e2e/agente-07-cobranza.e2e.test.ts` | verde (16); 1 todo (cobranza por gasto) |
-| 8 | 1 | 5 | 2 | 4 | 3 | `src/lib/likida/e2e/agente-08-escalacion.e2e.test.ts` | verde (15) |
-| 9 | 2 | 5 | 3 | 3 | 2 | `src/lib/likida/e2e/agente-09-buzon.e2e.test.ts` | verde (15); 2 todo (PDF/zip 0530, entrega al contador 0531) |
-| 10 | — | — | — | — | — | `src/lib/likida/e2e/agentes-pendientes-ola3.e2e.test.ts` | todo (6) — w3-gps-jornada |
-| 11 | 3 | 4 | 2 | 3 | 1+3 | `src/lib/likida/e2e/agente-11-comunicacion-operadores.e2e.test.ts` | verde (16); 1 todo (instrucciones del convenio) |
-| 12 | — | — | — | — | — | `src/lib/likida/e2e/agentes-pendientes-ola3.e2e.test.ts` | todo (5) — w3-gps-jornada (cron `jornada-alertas`) |
-| 13 | 2 | 7 | 3 | 3 | 4 | `src/lib/likida/e2e/agente-13-mis-reglas.e2e.test.ts` | verde (19); 1 todo (vista del respaldo por plantilla) |
-| — | Convenios/perfiles; Orquestador y tablero en vivo; modo demo 20-oct | | | | | `src/lib/likida/e2e/agentes-pendientes-ola3.e2e.test.ts` | todo (6) — w3-convenios y streams aún sin construir |
+| # | Archivo(s) E2E | Estado | Cinco casos |
+|---|---|---|---|
+| 1 | `src/lib/likida/e2e/agente-01-liquidacion.e2e.test.ts` · `src/lib/likida/liquidacion_externa/ciclo_completo.e2e.test.ts` | verde (14 + 39) | sí, en ambos (la segunda suma formato de la flota, copia al jefe, discrepancia y discrepancia con red) |
+| 2 | `e2e/agente-02-peajes.e2e.test.ts` · `peajes/ciclo_completo.e2e.test.ts` · `peajes/flujo_completo.test.ts` | verde (14 + 23 + 5) | sí; la reclamación PASE × GPS × geocerca (Excel y PDF, otro tenant, desglose anulado) en `ciclo_completo` |
+| 3 | `e2e/agente-03-carta-porte.e2e.test.ts` | verde (29); 1 todo | sí, más el bloque del **worker del cron** (reclamo, tope de intentos, avisos a la oficina). Todo: salida al layout del cliente, que depende de documentos reales |
+| 4 | `e2e/agente-04-vigia.e2e.test.ts` · `vigia/ciclo_completo.e2e.test.ts` | verde (18 + 20) | sí; el segundo cubre dato real del Conductor, POD adjunto, queja con niveles, alerta de 10 min con la cola llena y del histórico a la respuesta rápida |
+| 5 | `conductor/ciclo_completo.e2e.test.ts` | verde (53) | sí, en 10 bloques: viaje feliz, chofer que no contesta, fuera de orden, duplicados y solapes, chofer y flota equivocados, fuera de ventana de 24 h, validación sin acusar, flotas en la misma pasada, tablero y **P2** (hitos por geocerca y señal de vida) |
+| 6 | `e2e/agentes-pendientes-ola3.e2e.test.ts` | **sin E2E**: todo (5) | los cinco casos escritos como `todo` (paquete P11) |
+| 7 | `e2e/agente-07-cobranza.e2e.test.ts` · `agentes/cobranza_gasto_e2e.test.ts` | verde (16 + 24) | sí; la cobranza por gasto, su base sin migrar y su configuración en la segunda |
+| 8 | `e2e/agente-08-escalacion.e2e.test.ts` | verde (15) | sí |
+| 9 | `e2e/agente-09-buzon.e2e.test.ts` · `buzon/ingesta_e2e.test.ts` · `buzon/entrega_e2e.test.ts` · `src/app/api/cron/buzon-entrega/route.test.ts` | verde (15 + 7 + 13 + 8) | sí en el primero; PDF/zip/pareja XML+PDF en `ingesta_e2e`; entrega al contador (CSV+ZIP, reserva atómica, backoff, cron) en `entrega_e2e`; el contrato del cron en `route.test` |
+| 10 | `e2e/agente-10-gps.e2e.test.ts` · `conectores/tabla_propia/e2e.test.ts` | verde (17 + 1) | sí: feliz, fallo (401, 5xx, formato, cofre, cierre durable por flota), duplicado (poll y push), fuera de orden (muestra atrasada, de ayer, futura) y otra flota (mismo `device_id`, huérfanos) |
+| 11 | `e2e/agente-11-comunicacion-operadores.e2e.test.ts` | verde (16) | sí |
+| 12 | `e2e/agentes-pendientes-ola3.e2e.test.ts` | **sin E2E**: todo (5) | los cinco casos escritos como `todo` (paquete P10); hay pruebas unitarias en `jornada/alerta_tope.test.ts` pero no del ciclo |
+| 13 | `e2e/agente-13-mis-reglas.e2e.test.ts` · `reglas/e2e_ciclo_completo.test.ts` | verde (19 + 12) | sí; el respaldo por plantilla y «cuál plantilla usé» en la segunda |
+| — | `convenios/convenios.e2e.test.ts` | verde (3) | feliz y sin convenio; dos corridas del cron, fuera de orden y otra flota llegan con el paquete P7 |
+| — | `orquestador/orquestador.e2e.test.ts` · `orquestador/orquestador_vivo.e2e.test.ts` | verde (11 + 7) | rol, aislamiento, escalar a una persona, agente caído, sin PII; aviso apagado por omisión, barrido de salud sin duplicar y cierre solo |
 
-El arnés compartido vive en `src/lib/likida/e2e/db_memoria.fixture.ts` (base en memoria con `unique` → error 23505, RPC, `gt/neq`, defaults) y reutiliza los dobles que ya existían: `conductor/meta.fixture.ts` (Meta con ventana de 24 h, plantillas aprobadas y rate limit), `vigia/repo.fixture.ts`, `carta_porte_docs/{repo_falso,llm_falso,documentos_sinteticos,escenario}.fixture.ts` y `peajes/db_falsa.test.util.ts`.
+Los únicos `todo` que quedan en todo el árbol son 11: 10 en el archivo de pendientes (Autofactura y Jornada) y 1 en Carta Porte. Ningún archivo de esta tabla tiene fallos.
+
+## Qué falta (y por qué)
+
+1. **Agentes 6 y 12 sin E2E del ciclo.** Son los únicos. Autofactura (P11) necesita un doble del portal y decidir quién opera el vinculador; Jornada (P10) necesita además su pantalla
+   para encender la alerta (hoy la configuración nace apagada y nadie puede escribirla). Sus `todo` están en `agentes-pendientes-ola3.e2e.test.ts`, con los cinco casos nombrados.
+2. **Carta Porte: salida al layout del cliente**: depende de los documentos reales (la exactitud no está medida).
+3. **Convenios**: faltan las dos corridas del cron fuera de orden y otra flota (P7).
+4. **Crons sin `route.test.ts`**: `jornada-alertas` y `portales-vivos`. El contrato común de «latido en todo camino de salida» lo cubre `latido-en-toda-salida.test.ts`, que lee el
+   fuente de cada ruta, pero no sustituye a la prueba de la ruta.
+5. **Ningún E2E toca proveedores reales**: eso es bloqueo externo (Meta, Resend, PAC, portales, GPS del cliente), no código.
 
 ## Dobles de proveedor por agente
 
@@ -60,24 +77,22 @@ El arnés compartido vive en `src/lib/likida/e2e/db_memoria.fixture.ts` (base en
 |---|---|---|
 | WhatsApp/Meta (texto, botones, plantilla, ventana 24 h, 131047/132001/429) | `crearMeta()` | `conductor/meta.fixture.ts` |
 | Outbox de WhatsApp (liquidación) | `wa_outbox` en memoria + `drenarMeta(ventanaAbierta, plantillaAprobada)` | `e2e/agente-01-…` |
-| GPS (Samsara y tabla propia) | posiciones en memoria vía RPC `peaje_posiciones_ventana`; poller real en `conectores/sincronizar_gps.test.ts` | `e2e/agente-02-…`; la tabla propia es **todo** |
-| PAC (cancelación CFDI) | fixtures de contrato 201/202/205/400 | `w3-autofactura` (todo) |
-| Correo (Resend webhook + descarga de adjuntos + SAT) | `fetch` stub + `consultarCFDI` doble + firma svix real | `e2e/agente-09-…`, `e2e/agente-03-…` |
-| OpenRouter (modelo) | `llmFalso` / `generateStructured` doble | `e2e/agente-03-…`, `e2e/agente-13-…` |
+| GPS (Samsara, y la tabla propia con CSV) | respuesta HTTP simulada del proveedor + base en memoria; poller y asentador reales | `e2e/agente-10-gps.e2e.test.ts`, `conectores/tabla_propia/e2e.test.ts` |
+| Estado durable del poll de GPS | `reclamarPolls`/`finalizarPoll` con un mock que anota con qué clase de falla se cierra cada flota | `e2e/agente-10-gps.e2e.test.ts` |
+| PAC (cancelación CFDI) | fixtures de contrato 201/202/205/400 | Autofactura (pendiente) |
+| Correo (Resend webhook + descarga de adjuntos + SAT) | `fetch` stub + `consultarCFDI` doble + firma svix real | `e2e/agente-09-…`, `e2e/agente-03-…`, `buzon/*_e2e.test.ts` |
+| OpenRouter (modelo) | `llmFalso` / `generateStructured` doble | `e2e/agente-03-…`, `e2e/agente-13-…`, `orquestador/*` |
 
-## Interfaces esperadas de lo que construye la Ola 3 (para los `todo`)
+El arnés compartido vive en `src/lib/likida/e2e/db_memoria.fixture.ts` (base en memoria con `unique` → error 23505, `ON CONFLICT DO NOTHING` con `ignoreDuplicates`, RPC,
+`gt/neq`, defaults) y reutiliza los dobles que ya existían: `conductor/meta.fixture.ts` (Meta con ventana de 24 h, plantillas aprobadas y rate limit),
+`vigia/repo.fixture.ts`, `carta_porte_docs/{repo_falso,llm_falso,documentos_sinteticos,escenario}.fixture.ts` y `peajes/db_falsa.test.util.ts`.
 
-- **Conductor, conciliación obligatoria**: un «ya llegué» **sin posición GPS que lo respalde** queda `no_confirmado`, **no sella** el hito y aparece como excepción en el tablero; la posición tardía lo concilia (adenda del análisis del 1-oct). Escalamiento: aviso con botones → 2.º aviso → jefe de tráfico, con tiempos y contactos de la pantalla de configuración (w3-conductor-vigia 3106c28b). API: `POST /v1/hitos/{id}/validar` (ae0f416d).
-- **GPS**: `LECTORES_POSICION` con Wialon/Geotab/Navixy/genérico (`posiciones_proveedores.ts`), `/api/gps/push/{flota}` firmado con rotación e idempotencia, asentador común (poll y push), dispositivos huérfanos sin crear unidades, semáforo en vivo/atrasada/obsoleta. **Falta** el lector de **tabla propia** del cliente de demo y el importador de geocercas (columnas: unidad, lat, lon, fecha_hora, velocidad, ignición; polígono o centro+radio).
-- **Jornada**: cron `jornada-alertas` + plantillas nuevas del catálogo (w3-gps-jornada).
-- **Autofactura**: 0540 (paso humano), 0541 (cancelación SW sapien), 0542 (control de emisión real con lote supervisado y cupo diario), arnés `scripts/verificar-portal.mjs` (w3-autofactura).
-- **Buzón**: 0530 (PDF/zip/pareja XML+PDF con rastro por archivo y marca de revisión) y 0531 (entrega al contador con CSV+ZIP, reserva atómica, rebote libera) y el webhook de eventos de Resend (w3-buzon-cobranza-reglas; ya traen su propio E2E de ingesta en su rama).
-- **Cobranza por gasto** (w3-buzon-cobranza-reglas): el recordatorio nombra el gasto sin comprobante.
-- **Convenios** (w3-convenios 0580): cliente → convenio → instrucciones, ligado al viaje y al Conductor.
-- **Vigía**: 0484 (grupos y clientes críticos, 10 min), lector del histórico `.txt/.zip` de WhatsApp, FAQs y tendencias (w3-conductor-vigia).
+## Límites declarados de esta capa
 
-## Hallazgos de esta ronda (para la auditoría de cierre de la Ola 4)
-
-1. `hitos_viaje.ts` (`interpretarHito`/`sellarHito`) **ya no lo llama `processor.ts`**: solo lo importan `talacha_wa.ts` y `jornada/wa.ts`. Los hitos del chofer los atiende el motor del Conductor (`atenderConductor`); `hitos_viaje.ts` es código legado que sigue con pruebas unitarias. Conviene decidir si se retira o se documenta como utilitario (la prueba del Agente 11 lo trata así a propósito).
-2. La prueba del Agente 11 replica el orden de llamadas del dispatcher (`processor.ts` es demasiado grande para correrlo entero con doble de base); el cableado real lo cubre `processor_hitos.test.ts`. Es una limitación declarada, no un hueco oculto.
-3. Los E2E de cobranza (7), escalación (8) y reglas (13) usan una base en memoria, no Postgres: **no validan** los `CHECK`/índices únicos de las migraciones (eso es trabajo de pgTAP, `supabase/tests/`), solo la lógica de la aplicación y que cada consulta filtra por tenant.
+1. `hitos_viaje.ts` (`interpretarHito`/`sellarHito`) **ya no está en el camino del chofer**: los hitos los atiende el motor del Conductor (`atenderConductor`). Quedó como utilitario sin
+   llamador, documentado así en su encabezado, con sus pruebas unitarias; retirarlo obliga a bajar los dos techos de `frontera_datos_guardiana.test.ts` (-1 archivo, -1 llamada) en la integración.
+2. La prueba del Agente 11 replica el orden de llamadas del dispatcher (`processor.ts` es demasiado grande para correrlo entero con doble de base); el cableado real lo cubre
+   `processor_hitos.test.ts`. Es una limitación declarada, no un hueco oculto.
+3. Los E2E de cobranza (7), escalación (8), reglas (13) y GPS (10) usan una base en memoria, no Postgres: **no validan** los `CHECK`/índices únicos de las migraciones (eso es trabajo de
+   las pruebas SQL, `supabase/tests/`, y de pgTAP), solo la lógica de la aplicación y que cada consulta filtra por tenant.
+4. Una prueba que mockea al proveedor demuestra el contrato documentado, no el comportamiento del proveedor vivo.
