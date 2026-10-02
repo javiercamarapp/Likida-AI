@@ -6,8 +6,8 @@ import { registrarCorrida } from './agentes/corridas';
 import { avisoEscalados } from '@/lib/correo/avisos';
 import { avisarAlChofer } from './operacion';
 import { telefonosJefe } from './contactos';
-import { enviarTexto, esReintentableMeta } from '@/lib/meta/client';
-import { enviarConFallback } from '@/lib/meta/enviar_con_fallback';
+import { enviarTexto } from '@/lib/meta/client';
+import { enviarConFallback, fueEncoladoPorMeta } from '@/lib/meta/enviar_con_fallback';
 import { PLANTILLA } from '@/lib/meta/plantillas_catalogo';
 import { ventanaDeContacto } from './wa_ventana';
 import { alertarOperador } from '@/lib/observability/alerta';
@@ -346,10 +346,11 @@ export async function escalarViajesSinAceptar(args: {
         // primero, como siempre.
         if (v.operadorTelefono && (await ventanaDeContacto(v.operadorTelefono)).estado !== 'cerrada') {
           const t = await enviarTexto(v.operadorTelefono, armarRecordatorioChofer(v, horasDe(v.tenantId)));
-          // Un rechazo REINTENTABLE (timeout, 429, 5xx) YA dejó el texto en `wa_outbox`, que lo entrega con su
-          // backoff: caer a la plantilla de asignación mandaría un segundo aviso al chofer. Solo el rechazo
-          // definitivo (p. ej. ventana cerrada) pasa a la plantilla.
-          recordado = t.ok || esReintentableMeta(t.codigo, t.status);
+          // Lo que el cliente de Meta YA dejó en `wa_outbox` (un rechazo reintentable —timeout, 429, 5xx— Y el token vencido
+          // 190/401, que no es «vuelve más tarde» pero sí se encola: es la regla del campo `encolado`) lo entrega el outbox con
+          // su backoff: caer a la plantilla de asignación mandaría un segundo aviso al chofer (con el token vencido, dos
+          // mensajes encolados). Solo el rechazo definitivo (p. ej. ventana cerrada) pasa a la plantilla.
+          recordado = t.ok || fueEncoladoPorMeta(t.codigo, t.status);
         }
         // Sin teléfono en la fila o con el texto rechazado: la plantilla. Ella
         // resuelve el teléfono por su cuenta y marca lo que tenga que marcar.
@@ -401,7 +402,7 @@ export async function escalarViajesSinAceptar(args: {
         // corrida siguiente volviera a tomar el viaje y le mandara OTRO recordatorio al chofer y OTRO aviso al
         // jefe, además del que el outbox entrega: avisos dobles. El sello se queda (el viaje cuenta como
         // escalado: el aviso está en cola) y el outbox es quien reintenta. Sigue contando para el corte masivo.
-        } else if (envio.reintentable) {
+        } else if (envio.reintentable || envio.encolado === true) {
           r.rechazosReintentables++;
           rechazosSeguidos++;
           anota(v.tenantId, null, folioAviso);
