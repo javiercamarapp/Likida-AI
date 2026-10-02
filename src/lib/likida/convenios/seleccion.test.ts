@@ -52,3 +52,20 @@ describe('ladoActual', () => {
     expect(ladoActual({ llegadaCarga: true, salidaCarga: true })).toBe('destino');
   });
 });
+
+describe('texto distinto también contradice (ronda 04, adversarial)', () => {
+  const c = (id: string, origen: string, destino: string): ConvenioCandidato => ({
+    id, nombre: id, activo: true, origen, destino, origenSitioId: null, destinoSitioId: null, vigenteDesde: null, vigenteHasta: null, instrucciones: [],
+  });
+  const v = (origen: string, destino: string) => ({ origen, destino, origenSitioId: null, destinoSitioId: null });
+  it('Silao→Monterrey no se le manda a un viaje Silao→Querétaro ni a Tijuana→Mérida', () => {
+    expect(elegirConvenio([c('A', 'Silao', 'Monterrey')], v('Silao', 'Querétaro'), '2026-10-02')).toEqual({ tipo: 'ninguno', motivo: 'contradice_al_viaje' });
+    expect(elegirConvenio([c('A', 'Silao', 'Monterrey')], v('Tijuana', 'Mérida'), '2026-10-02')).toMatchObject({ tipo: 'ninguno' });
+  });
+  it('con A(Silao→Monterrey) y B(León→Querétaro), Silao→Laredo no elige ninguno', () => {
+    expect(elegirConvenio([c('A', 'Silao', 'Monterrey'), c('B', 'León', 'Querétaro')], v('Silao', 'Laredo'), '2026-10-02').tipo).toBe('ninguno');
+  });
+  it('uno contenido en el otro por palabras completas sí coincide', () => {
+    expect(elegirConvenio([c('A', 'Silao', 'Monterrey')], v('Silao Guanajuato', 'Monterrey NL'), '2026-10-02')).toMatchObject({ tipo: 'elegido', puntos: 4 });
+  });
+});
