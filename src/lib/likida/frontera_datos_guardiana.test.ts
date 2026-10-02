@@ -172,8 +172,14 @@ import { join, relative } from 'node:path';
 // 259 → 268 archivos y 1,347 → 1,580 llamadas (seguridad +2/+12, producto +1/+24,
 // Conductor +3/+85, Vigía +1/+57, Carta Porte +2/+55); cada tramo está explicado arriba
 // y todo es funcionalidad nueva, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 268;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_580;
+//
+// OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
+//   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
+//     y la sección de timbrado; vinculación asistida (0540): `autofactura/vinculacion_remota_repo.ts`, que junta TODO el acceso
+//     a datos del módulo (cinco RPC atómicas y las dos lecturas), y la llamada a `purgar_vinculacion_portal` en el cron de
+//     purga. Funcionalidad nueva, no código migrado. Medido: 268 → 270 archivos, 1,580 → 1,591 llamadas.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 270;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_591;
 
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
