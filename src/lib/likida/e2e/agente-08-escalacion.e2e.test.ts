@@ -100,16 +100,18 @@ describe('fallo', () => {
     expect(a(TEL.a1)).toHaveLength(1);
   });
 
-  it('rate limit al avisar al jefe (REINTENTABLE): el sello se LIBERA y la corrida siguiente escala el viaje; Meta no tumba el cron', async () => {
+  it('rate limit al avisar al jefe (REINTENTABLE): el aviso queda en la cola de WhatsApp, el sello se CONSERVA y la corrida siguiente no reenvía; Meta no tumba el cron', async () => {
     meta.estado.bloqueados.add(meta.norm(TEL.jefeA));
     const r = await escalarViajesSinAceptar({ ahora: AHORA });
     expect(r.rechazosReintentables).toBe(1);
-    expect(fila('v1').escalado_en).toBeNull();
+    expect(r.fallos.join()).toMatch(/no se reenvía/);
+    expect(fila('v1').escalado_en).not.toBeNull();                // RES-1 revisado: el outbox reintenta, no el sello
     meta.estado.bloqueados.clear();
+    const salientes = meta.salientes.length;
     const r2 = await escalarViajesSinAceptar({ ahora: new Date(AHORA.getTime() + 3_600_000) });
-    expect(r2.escalados).toBeGreaterThanOrEqual(1);
-    expect(fila('v1').escalado_en).not.toBeNull();
-    expect(a(TEL.jefeA).filter((s) => /F-v1/.test(s.cuerpo))).toHaveLength(1);
+    expect(r2.escalados).toBe(0);                                 // nada de recordatorio ni aviso doble
+    expect(meta.salientes).toHaveLength(salientes);
+    expect(a(TEL.jefeA).filter((s) => /F-v1/.test(s.cuerpo))).toHaveLength(0);
   });
 
   it('la base no contesta: el cron LANZA (un error no es «nadie dejó de aceptar»)', async () => {
