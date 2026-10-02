@@ -34,7 +34,7 @@ import {
 } from '@/lib/likida/intake/rafaga';
 import { versionAvisoVigente, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/likida/privacidad';
 import { mensajeEvidencia } from '@/lib/likida/conductor/evidencia';
-import { atenderConductor, atenderAcuseJefe, atenderPinConductor, hitoParaEvidenciaDelChofer, registrarEvidenciaDelChofer } from '@/lib/likida/conductor/atender';
+import { atenderConductor, atenderAcuseJefe, atenderPinConductor, hitoParaEvidenciaDelChofer, registrarEvidenciaDelChofer, registrarHitoDesdeFoto } from '@/lib/likida/conductor/atender';
 import {
   interpretarMarcaJornada, interpretarConformidadJornada,
   atenderMarcaJornada, atenderConformidadJornada, resumenParaOperador,
@@ -2492,7 +2492,8 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // pipeline y bucket que el POD. No es un gasto: no toca el OCR, la liquidación ni la barrera del «listo».
       const evidenciaPrevia = await hitoParaEvidenciaDelChofer({ tenantId: op.tenantId, operadorId: op.operadorId, viajeId, caption: msg.text });
       if (evidenciaPrevia) {
-        if (!evidenciaPrevia.hito) {
+        // Sin hito al cual colgarla y sin que la foto pueda ser el aviso: se le dice, como siempre.
+        if (!evidenciaPrevia.hito && !evidenciaPrevia.comoHito) {
           await say(mensajeEvidencia('sin_hito', evidenciaPrevia.tipo));
           return;
         }
@@ -2507,16 +2508,36 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
           const huella = await hashImagen(dataUrl);
           // El nombre lleva el hito: la misma foto como evidencia de dos hitos son dos archivos, y purgar una no
-          // le quita el archivo a la otra.
-          const ruta = await subirComprobante(op.tenantId, viajeId, `ev_${evidenciaPrevia.hito.id.slice(0, 8)}_${huella.slice(0, 24)}`, dataUrl);
+          // le quita el archivo a la otra. Cuando la foto ES el aviso (0483) el hito destino es el que la máquina eligió.
+          const hitoDelNombre = evidenciaPrevia.hito ? evidenciaPrevia.hito.id.slice(0, 8) : String(evidenciaPrevia.comoHito);
+          const ruta = await subirComprobante(op.tenantId, viajeId, `ev_${hitoDelNombre}_${huella.slice(0, 24)}`, dataUrl);
           if (!ruta) {
             logger.error('conductor.evidencia_sin_guardar', { viaje: viajeId, tenant: op.tenantId });
             await say(mensajeEvidencia('fallo', evidenciaPrevia.tipo));
             return;
           }
-          await say(await registrarEvidenciaDelChofer({
-            tenantId: op.tenantId, hito: evidenciaPrevia.hito, tipo: evidenciaPrevia.tipo, ruta, sha256: huella, waMessageId: msg.waMessageId ?? null,
-          }));
+          if (evidenciaPrevia.hito) {
+            await say(await registrarEvidenciaDelChofer({
+              tenantId: op.tenantId, hito: evidenciaPrevia.hito, tipo: evidenciaPrevia.tipo, ruta, sha256: huella, waMessageId: msg.waMessageId ?? null,
+            }));
+          } else {
+            // 0483: LA FOTO ES EL AVISO. La hora es la del MENSAJE (Meta), como en cualquier hito.
+            const salida = await registrarHitoDesdeFoto({
+              tenantId: op.tenantId, operadorId: op.operadorId, telefono: msg.from, viajeId, tipo: evidenciaPrevia.tipo, ruta, sha256: huella,
+              waMessageId: msg.waMessageId ?? null, mensajeEn: msg.timestampMs ? new Date(msg.timestampMs) : null,
+            });
+            for (const m of salida.mensajes) {
+              if (m.botones && m.botones.length > 0) {
+                const id = await sendButtons(msg.from, m.texto, m.botones);
+                if (id) { await registrarCostoWhatsApp(op.tenantId, viajeId); continue; }
+              }
+              await say(m.texto);
+            }
+            if (salida.solicitarUbicacion) {
+              const r = await enviarSolicitudUbicacion(msg.from, salida.solicitarUbicacion).catch(() => ({ ok: false }));
+              if (!r.ok) logger.warn('conductor.solicitud_ubicacion_no_enviada', { viaje: viajeId });
+            }
+          }
         } catch (e) {
           logger.error('conductor.evidencia_error', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
           await say(mensajeEvidencia('fallo', evidenciaPrevia.tipo));

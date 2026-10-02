@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { UsersRound, Hand, Clock, Flame, Inbox, ShieldCheck, History, Settings2, AlertTriangle } from 'lucide-react';
 import { numero, fechaHoraMx } from '@/lib/formato';
 import type { DatosTablero, ConversacionTablero } from '@/lib/likida/vigia/repo';
@@ -51,10 +52,13 @@ const NOMBRE_EVENTO: Record<string, string> = {
   escalada: 'Escalamiento', sin_destinatario: 'No había a quién avisar', optout: 'Un cliente pidió su baja', alta: 'Se autorizó un contacto',
   baja_manual: 'Se dio de baja un contacto', suprimido: 'Se suprimieron los datos de un contacto (ARCO)', spam: 'Se detectó spam',
   sin_dato: 'Faltaba un dato real: se consultó', inyeccion: 'Mensaje con instrucciones sospechosas', otro_cliente: 'Preguntó por un folio que no es suyo',
+  adjunto_enviado: 'Se envió el archivo adjunto (POD)', adjunto_pendiente: 'El archivo no salió: la ventana de 24 h del cliente está cerrada; mándaselo tú',
+  adjunto_fallo: 'No se pudo mandar el archivo adjunto: revísalo y mándaselo tú',
 };
 
-export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones }: {
+export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones, sufijo = '' }: {
   datos: Promise<DatosTablero>;
+  sufijo?: string;
   ahoraMs: number;
   /** flota_admin y encargado deciden por los clientes; el resto solo mira. */
   puedeDecidir: boolean;
@@ -70,6 +74,9 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
           titulo="Servicio al cliente (Vigía)"
         />
         <div className="px-5 py-5 flex-1 space-y-4">
+          <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12.5px]">
+            <Link href={`/dashboard/agentes/vigia/historial${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Grupos críticos e histórico (FAQs y tendencias)</Link>
+          </nav>
           <Bloque mensaje="No se pudo leer el tablero del Vigía." esqueleto={<EsqKpis />}>
             <BloqueEstadoYKpis datos={datos} ahoraMs={ahoraMs} />
           </Bloque>
@@ -207,6 +214,7 @@ export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones }: { d
                 {m.riesgo && <Chip tono={m.riesgo === 'alto' ? 'bad' : m.riesgo === 'medio' ? 'warn' : 'ok'}>Riesgo {m.riesgo}</Chip>}
                 {m.senales.includes('inyeccion') && <Chip tono="bad">Mensaje con instrucciones raras</Chip>}
                 {m.senales.includes('folio_ajeno') && <Chip tono="warn">Preguntó por un folio que no es suyo</Chip>}
+                {m.adjuntos.length > 0 && <Chip>Adjuntará: {m.adjuntos.join(', ')}</Chip>}
                 <span className="ml-auto text-[11px]" style={{ color: 'var(--faint)' }}>{fechaHoraMx(m.creadoEn)}</span>
               </div>
               <blockquote className="text-[12.5px] pl-3 border-l-2" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>
@@ -333,7 +341,7 @@ export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones
         <ul className="text-[12.5px] space-y-1" style={{ color: 'var(--muted)' }}>
           <li>Vigía: {config.habilitado ? 'encendido' : 'apagado'}</li>
           <li>Modo: {config.modoAprobacion === 'siempre' ? 'siempre aprobar' : 'autoenviar solo bajo riesgo ya validado'}</li>
-          <li>SLA de respuesta: {numero(config.slaRespuestaMin)} min · dueño a los {numero(config.slaRespuestaMin + config.escalarNivel2Min)} min</li>
+          <li>SLA de respuesta: {numero(config.slaRespuestaMin)} min · dueño a los {numero(config.slaRespuestaMin + config.escalarNivel2Min)} min · clientes críticos: {numero(Math.min(config.slaRespuestaMin, config.slaCriticoMin))} min</li>
           <li>Retención: {numero(config.retencionDias)} días</li>
           <li className="pt-1" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esto.</li>
         </ul>

@@ -172,8 +172,20 @@ import { join, relative } from 'node:path';
 // 259 → 268 archivos y 1,347 → 1,580 llamadas (seguridad +2/+12, producto +1/+24,
 // Conductor +3/+85, Vigía +1/+57, Carta Porte +2/+55); cada tramo está explicado arriba
 // y todo es funcionalidad nueva, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 268;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_580;
+//
+// OLA 3, W3 «Conductor + Vigía» (2-oct-2026), medido contra el commit base (268 / 1,580):
+//   · catálogos separados de `geocerca` (0480): +1 llamada en `peajes/datos.ts` (leer si el
+//     nombre ya es un sitio del Conductor antes del upsert; el resto son filtros añadidos).
+//   · Vigía conectado al Conductor y adjunto del POD (`vigia/repo.ts`): +3 llamadas de `archivoAdjuntoReal`
+//     (el viaje de ESE cliente, su POD y la URL firmada del bucket); el estatus de viaje ya existía.
+//   · grupos e histórico exportado del Vigía (0484): +1 archivo, `vigia/historial/repo.ts` (+13 llamadas: grupos, clientes, importación
+//     por lotes con deshacer, lectura paginada del histórico y borrado), todo filtrado por `tenant_id` y con `acotada`.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 269;
+//   · validar un hito por llave de API (`conductor/repo_validacion.ts`): +1 llamada, `hitoDeFlota` (el hito DE ESA flota
+//     antes de la RPC atómica de validar).
+//   · Vigía, clientes críticos y purga del histórico (0484, `vigia/repo.ts`): +3 llamadas (los clientes con un grupo crítico,
+//     el reintento de guardar la config en una base sin la 0484 y la purga del histórico importado).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_601;
 
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;

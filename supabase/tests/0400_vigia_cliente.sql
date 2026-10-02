@@ -330,9 +330,9 @@ begin
   exception when check_violation then null;
   end;
   -- el dominio de modelo_rol admite el rol nuevo y rechaza basura.
-  insert into public.agente_definicion (id, modelo_rol) values ('vigia_cliente_prueba', 'vigia_cliente');
+  insert into public.agente_definicion (id, nombre, departamento, modelo_rol) values ('vigia_cliente_prueba', 'Prueba 0400', 'producto', 'vigia_cliente');
   begin
-    insert into public.agente_definicion (id, modelo_rol) values ('basura', 'no_existe');
+    insert into public.agente_definicion (id, nombre, departamento, modelo_rol) values ('basura', 'Basura 0400', 'producto', 'no_existe');
     raise exception '0400: modelo_rol aceptó un rol inexistente';
   exception when check_violation then null;
   end;

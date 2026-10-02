@@ -44,7 +44,7 @@ describe('clasificador del Vigía (rol vigia_cliente)', () => {
   it('el costo se asienta a nombre de la flota', async () => {
     generateStructured.mockResolvedValue({ data: { intencion: 'eta', confianza: 1 }, model: 'google/x', tokensIn: 120, tokensOut: 6, cost: 0.0002 });
     await crearModeloClasificador().clasificar('x', { tenantId: 't9' });
-    expect(registrarCosto).toHaveBeenCalledWith({ tenantId: 't9', viajeId: null, fase: 'chat', modelo: 'google/x', tokensIn: 120, tokensOut: 6, costoUsd: 0.0002 });
+    expect(registrarCosto).toHaveBeenCalledWith({ tenantId: 't9', viajeId: null, fase: 'vigia', modelo: 'google/x', tokensIn: 120, tokensOut: 6, costoUsd: 0.0002 });
   });
 
   it('sin presupuesto (tenant inválido) o presupuesto agotado: null, sin llamar a Meta ni lanzar', async () => {
