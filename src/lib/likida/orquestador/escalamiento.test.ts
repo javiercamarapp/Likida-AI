@@ -44,6 +44,10 @@ describe('validarEscalacion', () => {
   });
   it('la llave de dedupe separa por destino, motivo y viaje', () => {
     expect(llaveDedupe({ destino: 'contador', motivo: 'otro' }, null)).toBe('contador|otro|-');
+    const k = (resumen: string) => llaveDedupe({ destino: 'mesa_de_control', motivo: 'falla_de_agente', resumen }, null);
+    expect(k('El Vigía no manda respuestas')).not.toBe(k('El buzón de facturas lleva 2 días sin entregar'));
+    expect(k('El Vigía no manda respuestas')).toBe(k('  el vigía no manda   respuestas '));
+    expect(k('x').length).toBeLessThanOrEqual(120);
     expect(llaveDedupe({ destino: 'contador', motivo: 'otro' }, 'v1')).not.toBe(llaveDedupe({ destino: 'contador', motivo: 'otro' }, 'v2'));
   });
 });
