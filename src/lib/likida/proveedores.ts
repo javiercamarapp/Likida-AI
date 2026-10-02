@@ -52,6 +52,16 @@ export interface FacturaProveedor {
   estadoSat: EstadoSat | null;
   /** Primera vez que salió en un export CSV. Marca anti-doble-import. */
   exportadaEn: string | null;
+  /** 0530: la lectura (PDF/foto) de baja confianza que una persona debe cotejar. */
+  requiereRevision: boolean;
+  revisionMotivo: string | null;
+  /** 0530: xml = dato duro; pdf_texto / pdf_vision / foto = lectura. null = fila anterior, no rastreada. */
+  fuenteDatos: 'xml' | 'pdf_texto' | 'pdf_vision' | 'foto' | null;
+  /** 0530: hay un PDF emparejado en el bucket del buzón. */
+  tienePdf: boolean;
+  /** 0531: lote de entrega al contador que la reservó, y cuándo salió. */
+  entregaId: string | null;
+  entregadaEn: string | null;
 }
 
 export type ResultadoIngesta =
@@ -143,6 +153,8 @@ export async function guardarFacturaProveedor(
       xml_crudo: xmlCrudo,
       origen,
       estado_sat: estadoSat,
+      // El XML es el dato duro del CFDI (0530): se rotula, no se deja al «NULL = no rastreado» de las filas viejas.
+      fuente_datos: 'xml',
     })
     .select('id')
     .single(), 'proveedores.guardar');
@@ -255,9 +267,15 @@ export async function ingresarFacturaDesdeFoto(
 
 /** Las columnas que leen la bandeja y el export — UNA lista para que no se
  *  separen. */
-const COLUMNAS_FACTURA = 'id, cfdi_uuid, emisor_rfc, emisor_nombre, receptor_rfc, receptor_es_flota, fecha, sub_total, iva, total, descripcion, conceptos, estado, decidido_por, decidido_en, created_at, origen, ocr_confianza, estado_sat, exportada_en';
+export const COLUMNAS_FACTURA = 'id, cfdi_uuid, emisor_rfc, emisor_nombre, receptor_rfc, receptor_es_flota, fecha, sub_total, iva, total, descripcion, conceptos, estado, decidido_por, decidido_en, created_at, origen, ocr_confianza, estado_sat, exportada_en, requiere_revision, revision_motivo, fuente_datos, pdf_ruta, entrega_id, entregada_en';
 
-function aFactura(f: Record<string, unknown>): FacturaProveedor {
+/** La lista de ANTES de la 0530/0531: si la base aún no está migrada (42703 columna inexistente) se lee con
+ *  ésta y las marcas nuevas salen en su valor neutro (aFactura las defaultea). */
+export const COLUMNAS_FACTURA_ANTERIOR = 'id, cfdi_uuid, emisor_rfc, emisor_nombre, receptor_rfc, receptor_es_flota, fecha, sub_total, iva, total, descripcion, conceptos, estado, decidido_por, decidido_en, created_at, origen, ocr_confianza, estado_sat, exportada_en';
+
+const columnaFaltante = (e: { code?: string } | null): boolean => e?.code === '42703' || e?.code === '42P01';
+
+export function aFactura(f: Record<string, unknown>): FacturaProveedor {
   return {
     id: f.id as string,
     cfdiUuid: f.cfdi_uuid as string,
@@ -279,6 +297,12 @@ function aFactura(f: Record<string, unknown>): FacturaProveedor {
     ocrConfianza: f.ocr_confianza === null || f.ocr_confianza === undefined ? null : Number(f.ocr_confianza),
     estadoSat: (f.estado_sat as EstadoSat) ?? null,
     exportadaEn: (f.exportada_en as string) ?? null,
+    requiereRevision: f.requiere_revision === true,
+    revisionMotivo: (f.revision_motivo as string) ?? null,
+    fuenteDatos: (f.fuente_datos as FacturaProveedor['fuenteDatos']) ?? null,
+    tienePdf: typeof f.pdf_ruta === 'string' && f.pdf_ruta !== '',
+    entregaId: (f.entrega_id as string) ?? null,
+    entregadaEn: (f.entregada_en as string) ?? null,
   };
 }
 
@@ -290,17 +314,18 @@ export async function listarFacturasProveedor(
   limite = 100,
   estado?: FacturaProveedor['estado'],
 ): Promise<FacturaProveedor[]> {
-  let consulta = supabaseAdmin()
-    .from('factura_proveedor')
-    .select(COLUMNAS_FACTURA)
-    .eq('tenant_id', tenantId);
-  if (estado) consulta = consulta.eq('estado', estado);
-  const { data, error } = await acotada(
-    consulta.order('created_at', { ascending: false }).limit(limite),
-    'proveedores.listar',
-  );
-  if (error) throw new Error(`listarFacturasProveedor: ${error.message}`);
-  return (data ?? []).map(aFactura);
+  const leer = (columnas: string) => {
+    let consulta = supabaseAdmin()
+      .from('factura_proveedor')
+      .select(columnas)
+      .eq('tenant_id', tenantId);
+    if (estado) consulta = consulta.eq('estado', estado);
+    return acotada(consulta.order('created_at', { ascending: false }).limit(limite), 'proveedores.listar');
+  };
+  let r = await leer(COLUMNAS_FACTURA);
+  if (columnaFaltante(r.error)) r = await leer(COLUMNAS_FACTURA_ANTERIOR); // base sin migrar (0530/0531)
+  if (r.error) throw new Error(`listarFacturasProveedor: ${r.error.message}`);
+  return ((r.data ?? []) as unknown as Record<string, unknown>[]).map(aFactura);
 }
 
 /**
@@ -449,10 +474,10 @@ function fechaDdMmAaaa(iso: string | null): string {
  * `range` exige (pg.ts).
  */
 export async function listarAprobadasCompletas(tenantId: string): Promise<FacturaProveedor[]> {
-  const filas = await traerTodo<Record<string, unknown>>(
+  const traer = (columnas: string) => traerTodo<Record<string, unknown>>(
     (d, h) => acotada(supabaseAdmin()
       .from('factura_proveedor')
-      .select(COLUMNAS_FACTURA, conteo(d))
+      .select(columnas, conteo(d))
       .eq('tenant_id', tenantId)
       .eq('estado', 'aprobada')
       .order('created_at', { ascending: false })
@@ -460,7 +485,13 @@ export async function listarAprobadasCompletas(tenantId: string): Promise<Factur
       .range(d, h), 'proveedores.aprobadas'),
     'proveedores.aprobadas',
   );
-  return filas.map(aFactura);
+  try {
+    return (await traer(COLUMNAS_FACTURA)).map(aFactura);
+  } catch (e) {
+    // Base sin migrar (0530/0531): la lista de antes, con las marcas nuevas en su valor neutro.
+    if (/42703|42P01|does not exist/i.test(e instanceof Error ? e.message : String(e))) return (await traer(COLUMNAS_FACTURA_ANTERIOR)).map(aFactura);
+    throw e;
+  }
 }
 
 /**

@@ -76,6 +76,7 @@ const FACTURA: FacturaProveedor = {
   conceptos: 2, estado: 'aprobada', decididoPor: 'ana@flota.mx',
   decididoEn: '2026-08-14T17:00:00Z', creadoEn: '2026-08-14T16:00:00Z',
   origen: 'correo', ocrConfianza: null, estadoSat: 'vigente', exportadaEn: null,
+  requiereRevision: false, revisionMotivo: null, fuenteDatos: 'xml', tienePdf: false, entregaId: null, entregadaEn: null,
 };
 
 describe('aFilaExportProveedor — el contrato del layout genérico', () => {
