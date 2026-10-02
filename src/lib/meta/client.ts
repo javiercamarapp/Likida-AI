@@ -11,6 +11,7 @@ import {
   type SalidaOutboxDedupe,
 } from '@/lib/likida/wa_outbox';
 import { armarComponentesPlantilla, type ComponentePlantilla, type OpcionesPlantilla } from './plantilla_payload';
+import { esTelefonoDemo, RECHAZO_TELEFONO_DEMO } from './telefono_demo';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const DOWNLOAD_TIMEOUT_MS = 15_000;
@@ -161,6 +162,15 @@ function errorDeMeta(crudo: string): { codigo?: number; mensaje?: string } {
 }
 
 /**
+ * El destinatario lleva la marca del tenant demo (`telefono_demo.ts`): se rechaza ANTES de llamar a Meta ni de encolar.
+ * Devuelve el mismo `{ok:false}` en todas las formas de retorno de este archivo (sin código de Meta: no se reintenta).
+ */
+function rechazarDemo(to: string, origen: string): typeof RECHAZO_TELEFONO_DEMO {
+  logger.warn('wa.destinatario_demo_rechazado', { origen, para: destinatarioEnmascarado(to) });
+  return RECHAZO_TELEFONO_DEMO;
+}
+
+/**
  * El resultado de un envío, igual para las cuatro funciones de este archivo.
  * `codigo` es el de la Graph API — lo que distingue "el número no existe" de
  * "vas demasiado rápido" (ver `esReintentableMeta`).
@@ -303,6 +313,7 @@ export async function sondearTokenWhatsApp(ahora: number = Date.now()): Promise<
  * escalación, para no consumir un tier por un 429— lo tiene.
  */
 export async function enviarTexto(to: string, body: string): Promise<EnvioWhatsApp> {
+  if (esTelefonoDemo(to)) return rechazarDemo(to, 'wa.sendText');
   const payload = { messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'text', text: { body } };
   let res: Response;
   try {
@@ -489,6 +500,7 @@ export function payloadBotones(
 export async function enviarBotones(
   to: string, cuerpo: string, botones: BotonAcuse[], documento?: DocumentoEncabezado,
 ): Promise<EnvioWhatsApp> {
+  if (esTelefonoDemo(to)) return rechazarDemo(to, 'wa.sendButtons');
   let payload: Record<string, unknown> | null = null;
   try {
     // La frontera es pública en tiempo de ejecución aunque TypeScript diga
@@ -553,6 +565,7 @@ const MAX_CUERPO_UBICACION = 1024;
  * («Compartir ubicación») y contesta con esto cuando el chofer lo apriete.
  */
 export async function enviarSolicitudUbicacion(to: string, cuerpo: string): Promise<EnvioWhatsApp> {
+  if (esTelefonoDemo(to)) return rechazarDemo(to, 'wa.solicitudUbicacion');
   const texto = typeof cuerpo === 'string' ? cuerpo.trim() : '';
   if (!texto || texto.length > MAX_CUERPO_UBICACION) {
     logger.error('wa.solicitudUbicacion.invalida', { largo: texto.length, max: MAX_CUERPO_UBICACION });
@@ -597,6 +610,7 @@ export async function encolarBotonesWhatsApp(
   botones: BotonAcuse[],
   dedupeKey: string,
 ): Promise<SalidaOutboxDedupe | null> {
+  if (esTelefonoDemo(to)) { rechazarDemo(to, 'wa.encolarButtons'); return null; }
   const invalido = motivoBotonesInvalidos(cuerpo, botones);
   if (invalido || !dedupeKey.trim() || dedupeKey.length > 300) {
     logger.error('wa.encolarButtons.invalido', invalido ?? { dedupeKey: 'inválida' });
@@ -658,6 +672,7 @@ export async function sendTemplate(
   plantilla: string,
   opciones: { idioma?: string } & OpcionesPlantilla = {},
 ): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }> {
+  if (esTelefonoDemo(to)) return rechazarDemo(to, 'wa.sendTemplate');
   const { idioma = 'es_MX', ...resto } = opciones;
 
   // Encabezado (texto/documento/imagen), cuerpo y botones (respuesta rápida/URL):
@@ -758,6 +773,7 @@ export async function sendDocument(
   filename: string,
   caption?: string,
 ): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }> {
+  if (esTelefonoDemo(to)) return rechazarDemo(to, 'wa.sendDocument');
   const payload = {
     messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'document',
     document: { link, filename, caption },
@@ -941,6 +957,7 @@ export async function downloadMediaAsDataUrl(mediaId: string): Promise<string | 
  * UI lo dice (no se miente como "recibió su respuesta").
  */
 export async function enviarRespuestaArco(telefono: string, respuesta: string): Promise<{ ok: boolean; error?: string }> {
+  if (esTelefonoDemo(telefono)) return rechazarDemo(telefono, 'arco.envio');
   const envia = (body: Record<string, unknown>) => fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
