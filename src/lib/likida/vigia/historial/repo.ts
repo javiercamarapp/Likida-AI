@@ -113,10 +113,9 @@ export async function guardarImportacion(tenantId: string, e: EntradaImportacion
   const id = String((imp.data as Fila).id);
   try {
     for (let i = 0; i < ordenados.length; i += LOTE) {
-      const filas = ordenados.slice(i, i + LOTE).map((m) => ({
+      const r = await acotada(db.from('vigia_historial_mensaje').insert(ordenados.slice(i, i + LOTE).map((m) => ({
         tenant_id: tenantId, import_id: id, grupo_id: e.grupoId, enviado_en: m.enviadoEn, rol: m.rol, autor_hash: m.autorHash, texto: m.texto,
-      }));
-      const r = await acotada(db.from('vigia_historial_mensaje').insert(filas), 'vigia.import_mensajes');
+      }))), 'vigia.import_mensajes');
       if (r.error) throw new Error(`vigia.import_mensajes: ${r.error.message}`);
     }
   } catch (err) {
