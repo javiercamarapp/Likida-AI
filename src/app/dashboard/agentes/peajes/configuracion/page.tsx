@@ -5,6 +5,7 @@ import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { sufijoTenant } from '../../../sufijo';
 import { avisoAgentePeajesApagado } from '../apagado';
 import { logger } from '@/lib/logger';
+import { appUrl } from '@/lib/env';
 import { MAX_CATALOGO_BYTES } from '@/lib/likida/peajes/archivo';
 import {
   listarTags, listarUnidades, altaTag, bajaTag, importarTagsArchivo,
@@ -94,7 +95,7 @@ export default async function PaginaConfiguracionPeajes({
 
   // La llave SOLO se calcula para quien administra y SOLO si el buzón está activo.
   const llave = puedeAdministrar && secreto && buzon?.activa ? claveDeFlota(secreto, tenantId, buzon.rotacion) : null;
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.likida.ai').replace(/\/$/, '');
+  const baseUrl = appUrl();
 
   // ── Buzón ──
   async function accionActivarBuzon() {
