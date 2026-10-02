@@ -229,6 +229,6 @@ describe('P1: la re-importación diaria de geocercas viaja en la misma corrida',
     reimportarGeocercasTodas.mockResolvedValue({ flotas: [], importadas: 0, sinCambios: 0, conError: 0, sinTurno: 0, sinMigracion: true });
     const res = await GET(peticion());
     expect(((await res.json()) as { geocercas: { sinMigracion: boolean } }).geocercas.sinMigracion).toBe(true);
-    expect(registrarLatido.mock.calls[0][1]).toBe('ok');
+    expect((registrarLatido.mock.calls[0] as unknown as [string, string])[1]).toBe('ok');
   });
 });
