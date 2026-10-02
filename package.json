@@ -47,6 +47,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "sharp": "^0.35.3",
+    "ssh2": "1.17.0",
     "xlsx": "file:vendor/xlsx-0.20.3.tgz",
     "zod": "^4.6.5",
     "zxing-wasm": "^3.1.4"
@@ -62,6 +63,7 @@
     "@types/node": "^22.20.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/ssh2": "1.15.6",
     "@vitest/coverage-v8": "4.1.11",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.5",
