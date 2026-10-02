@@ -54,9 +54,12 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/;
  * fecha; todo lo demás sigue sin ser fecha y se rechaza con el mismo mensaje.
  */
 export function fechaDeSerialExcel(texto: string): string | null {
-  const m = /^(\d{5})(?:[.,]\d+)?$/.exec(texto.trim());
-  if (!m) return null;
-  const dias = Number(m[1]);
+  const t = texto.trim();
+  const corte = t.search(/[.,]/);
+  const entera = corte === -1 ? t : t.slice(0, corte);
+  const fraccion = corte === -1 ? '' : t.slice(corte + 1);
+  if (!/^\d{5}$/.test(entera) || (corte !== -1 && !/^\d+$/.test(fraccion))) return null;
+  const dias = Number(entera);
   if (dias < 36526 || dias > 73050) return null;
   return new Date(Date.UTC(1899, 11, 30) + dias * 86_400_000).toISOString().slice(0, 10);
 }
