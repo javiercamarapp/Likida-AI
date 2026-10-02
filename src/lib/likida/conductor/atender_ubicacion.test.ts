@@ -4,7 +4,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('esta prueba no toca la base'); } }));
 vi.mock('@/lib/meta/client', () => ({ enviarSolicitudUbicacion: vi.fn(async () => ({ ok: true })) }));
 
-const { atenderConductor, atenderPinConductor, hitoParaEvidenciaDelChofer, registrarEvidenciaDelChofer, TEXTO_PEDIR_UBICACION } = await import('./atender');
+const { atenderConductor, atenderPinConductor, hitoParaEvidenciaDelChofer, registrarEvidenciaDelChofer, registrarHitoDesdeFoto, TEXTO_PEDIR_UBICACION } = await import('./atender');
 const { crearMemoria, viajeBase } = await import('./memoria.fixture');
 type Memoria = ReturnType<typeof import('./memoria.fixture').crearMemoria>;
 
@@ -206,10 +206,124 @@ describe('la foto de evidencia', () => {
     expect(await hitoParaEvidenciaDelChofer({ ...entrada, caption: undefined }, m.deps)).toBeNull();
   });
 
-  it('con el caption pero sin hito al cual colgarla: devuelve el tipo y hito null (el processor lo dice y no descarga)', async () => {
-    const m = nueva();
+  it('con el caption pero sin hito al cual colgarla y la foto-como-aviso APAGADA: devuelve el tipo y hito null (el processor lo dice y no descarga)', async () => {
+    const m = nueva({ config: { fotoRegistraHito: false } });
     const r = await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'sello' }, m.deps);
     expect(r).toEqual({ tipo: 'sello', hito: null });
+  });
+
+  describe('0483 · la foto ES el aviso', () => {
+    const foto = (m: Memoria, tipo: 'anden' | 'sello' | 'recibido', extra: Record<string, unknown> = {}) => registrarHitoDesdeFoto({
+      tenantId: 't1', operadorId: 'o1', telefono: base.telefono, viajeId: V1, tipo, ruta: `t1/${V1}/ev_x.jpg`, sha256: 'e'.repeat(64), waMessageId: 'wamid.foto', mensajeEn: min(-4), ahora: AHORA, ...extra,
+    }, m.deps);
+
+    it('un «andén» sin nada registrado registra la LLEGADA A CARGAR con fuente foto, la hora del mensaje y la foto de evidencia', async () => {
+      const m = nueva();
+      const previa = await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'andén' }, m.deps);
+      expect(previa).toEqual({ tipo: 'anden', hito: null, comoHito: 'llegada_carga' });
+      const r = await foto(m, 'anden');
+      const h = m.de(V1).find((x) => x.tipo === 'llegada_carga')!;
+      expect(h).toMatchObject({ estado: 'recibido', fuente: 'foto', interpretacion: 'foto', mensajeEn: min(-4).toISOString() });
+      expect(m.evidencias).toEqual([expect.objectContaining({ hitoId: h.id, tipo: 'anden', waMessageId: 'wamid.foto' })]);
+      expect(textos(r)).toMatch(/llegaste a CARGAR/);
+      expect(textos(r)).toMatch(/Lo anoté con tu foto de el andén/);
+      expect(m.validaciones).toEqual([{ hito: h.id, tipo: 'llegada_carga', pin: false }]);   // como cualquier llegada: se compara con el sitio
+    });
+
+    it('un «andén» ya salido de la carga registra la LLEGADA A DESCARGAR (no cuelga la foto de la carga)', async () => {
+      const m = nueva();
+      m.registrar(V1, 'llegada_carga', min(-300).toISOString());
+      m.registrar(V1, 'salida_carga', min(-240).toISOString());
+      const previa = await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'andén' }, m.deps);
+      expect(previa).toMatchObject({ hito: null, comoHito: 'llegada_descarga' });
+      await foto(m, 'anden');
+      expect(m.de(V1).find((x) => x.tipo === 'llegada_descarga')).toMatchObject({ estado: 'recibido', fuente: 'foto' });
+    });
+
+    it('un «andén» AMBIGUO (llegó a cargar y no ha salido) no adivina: se cuelga de la parada donde está, como siempre', async () => {
+      const m = nueva();
+      m.registrar(V1, 'llegada_carga', min(-30).toISOString());
+      const previa = await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'andén' }, m.deps);
+      expect(previa?.comoHito).toBeUndefined();
+      expect(previa?.hito?.tipo).toBe('llegada_carga');
+    });
+
+    it('un «sello» registra la SALIDA DE LA CARGA aunque la llegada ya esté (el sello es la carga terminada)', async () => {
+      const m = nueva();
+      m.registrar(V1, 'llegada_carga', min(-90).toISOString());
+      const previa = await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'sello' }, m.deps);
+      expect(previa).toEqual({ tipo: 'sello', hito: null, comoHito: 'salida_carga' });
+      const r = await foto(m, 'sello');
+      expect(m.de(V1).find((x) => x.tipo === 'salida_carga')).toMatchObject({ estado: 'recibido', fuente: 'foto', interpretacion: 'foto' });
+      expect(m.de(V1).find((x) => x.tipo === 'llegada_carga')?.estado).toBe('recibido');       // la llegada NO se toca
+      expect(textos(r)).toMatch(/Lo anoté con tu foto de el sello/);
+    });
+
+    it('un «sello» sin la llegada registrada: la salida entra y la llegada pendiente se marca omitida (fuera de orden, como un texto)', async () => {
+      const m = nueva();
+      await foto(m, 'sello');
+      expect(m.de(V1).find((x) => x.tipo === 'salida_carga')?.estado).toBe('recibido');
+      expect(m.de(V1).find((x) => x.tipo === 'llegada_carga')).toMatchObject({ estado: 'omitido', omitidoMotivo: 'inferido_por_salida_carga' });
+    });
+
+    it('un «recibido» registra la SALIDA DE LA DESCARGA', async () => {
+      const m = nueva();
+      m.registrar(V1, 'llegada_carga', min(-400).toISOString());
+      m.registrar(V1, 'salida_carga', min(-300).toISOString());
+      m.registrar(V1, 'llegada_descarga', min(-100).toISOString());
+      const previa = await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'recibido' }, m.deps);
+      expect(previa).toEqual({ tipo: 'recibido', hito: null, comoHito: 'salida_descarga' });
+      await foto(m, 'recibido');
+      expect(m.de(V1).find((x) => x.tipo === 'salida_descarga')).toMatchObject({ estado: 'recibido', fuente: 'foto' });
+    });
+
+    it('con la perilla APAGADA la foto no registra nada: queda como evidencia de lo ya registrado (o «primero dime»)', async () => {
+      const m = nueva({ config: { fotoRegistraHito: false } });
+      expect(await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'andén' }, m.deps)).toEqual({ tipo: 'anden', hito: null });
+      const r = await foto(m, 'anden');
+      expect(textos(r)).toMatch(/Primero dime/);
+      expect(m.de(V1).every((h) => h.estado === 'esperado')).toBe(true);
+      expect(m.evidencias).toHaveLength(0);
+    });
+
+    it('«otra» (o un caption que no es de evidencia) jamás es un aviso', async () => {
+      const m = nueva();
+      expect(await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'diésel 800' }, m.deps)).toBeNull();
+      const r = await registrarHitoDesdeFoto({ tenantId: 't1', operadorId: 'o1', telefono: base.telefono, viajeId: V1, tipo: 'otra', ruta: 'x', sha256: 'f'.repeat(64), ahora: AHORA }, m.deps);
+      expect(textos(r)).toMatch(/Primero dime/);
+      expect(m.de(V1).every((h) => h.estado === 'esperado')).toBe(true);
+    });
+
+    it('la hora es la del MENSAJE y nunca del futuro; el reintento del webhook (mismo mensaje) no duplica ni el hito ni la foto', async () => {
+      const m = nueva();
+      await foto(m, 'anden', { mensajeEn: min(30) });                                  // un timestamp del futuro se recorta al reloj
+      expect(new Date(m.de(V1).find((x) => x.tipo === 'llegada_carga')!.mensajeEn!).getTime()).toBeLessThanOrEqual(AHORA.getTime());
+      const antes = m.evidencias.length;
+      const otra = await foto(m, 'anden');                                              // reentrega: ya hay hito, es evidencia duplicada
+      expect(textos(otra)).toMatch(/ya la tenía/);
+      expect(m.evidencias.length).toBe(antes);
+      expect(m.de(V1).filter((h) => h.estado === 'recibido')).toHaveLength(1);
+    });
+
+    it('el aviso de la foto respeta «confirmar al chofer» apagado (silencio) y la solicitud de ubicación sigue yendo', async () => {
+      const m = nueva({ config: { confirmarAlChofer: false } });
+      m.validarResultado.valor = salidaValidar('sin_dato', { pedirUbicacion: true });
+      const r = await foto(m, 'anden');
+      expect(r.mensajes).toEqual([]);
+      expect(r.solicitarUbicacion).toBe(TEXTO_PEDIR_UBICACION);
+    });
+
+    it('el viaje de OTRO chofer o de otra flota: la foto no registra nada', async () => {
+      const m = nueva();
+      expect(textos(await foto(m, 'anden', { operadorId: 'o-otro' }))).toMatch(/Primero dime/);
+      expect(textos(await foto(m, 'anden', { tenantId: 't-otro' }))).toMatch(/Primero dime/);
+      expect(m.de(V1).every((h) => h.estado === 'esperado')).toBe(true);
+    });
+
+    it('un viaje liquidado no recibe avisos de una foto', async () => {
+      const m = nueva({ viajes: [viajeBase({ id: V1, unidadId: 'u1', estatus: 'liquidado' })] });
+      expect(await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'andén' }, m.deps)).toEqual({ tipo: 'anden', hito: null });
+    });
   });
 
   it('el viaje de otro chofer o de otra flota nunca aporta hito', async () => {
