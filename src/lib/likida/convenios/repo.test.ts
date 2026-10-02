@@ -160,6 +160,143 @@ describe('ligarConvenioAViaje', () => {
   });
 });
 
+describe('corregir a mano el convenio ligado a un viaje', () => {
+  const viaje = (o: Record<string, unknown> = {}) => mundo.poner('viaje', { tenant_id: A, cliente_id: mundo.tablas.cliente[0].id, origen: 'Zapopan', destino: 'Tlaquepaque', estatus: 'abierto', created_at: '2026-10-01T00:00:00Z', ...o });
+  const idConvenio = (nombre: string) => String(mundo.tablas.cliente_convenio.find((c) => c.nombre === nombre)!.id);
+
+  beforeEach(async () => {
+    await importar([
+      ['Cliente Uno', 'Ruta norte', 'Zapopan', 'Tlaquepaque', 'CED-1', 'puerta', 'Puerta 3', 'ambos', 'destino', '', '', ''],
+      ['Cliente Uno', 'Ruta sur', 'Zapopan', 'Colima', '', 'reportarse', 'Con el guardia sur', 'despacho', 'ambos', '', '', ''],
+    ]);
+  });
+
+  it('cambia al otro convenio del cliente: nueva foto, «manual», y los sellos de envío vuelven a cero si se pide reenviar', async () => {
+    const v = viaje();
+    await repo.ligarConvenioAViaje(A, String(v.id), '2026-10-10');
+    Object.assign(mundo.tablas.viaje_convenio[0], { despacho_enviado_en: '2026-10-10T10:00:00Z', despacho_canal: 'texto' });
+    const r = await repo.corregirConvenioDelViaje(A, String(v.id), idConvenio('Ruta sur'), { reenviar: true });
+    expect(r).toEqual({ estado: 'ok', convenioNombre: 'Ruta sur', instrucciones: 1 });
+    expect(mundo.tablas.viaje_convenio).toHaveLength(1);
+    expect(mundo.tablas.viaje_convenio[0]).toMatchObject({ convenio_id: idConvenio('Ruta sur'), ligado_por: 'manual', despacho_enviado_en: null, despacho_canal: null });
+    expect((mundo.tablas.viaje_convenio[0].instrucciones as Array<{ texto: string }>)[0].texto).toBe('Con el guardia sur');
+  });
+
+  it('sin «reenviar» conserva los sellos de lo ya enviado', async () => {
+    const v = viaje();
+    await repo.ligarConvenioAViaje(A, String(v.id), '2026-10-10');
+    Object.assign(mundo.tablas.viaje_convenio[0], { despacho_enviado_en: '2026-10-10T10:00:00Z', despacho_canal: 'texto' });
+    await repo.corregirConvenioDelViaje(A, String(v.id), idConvenio('Ruta sur'), { reenviar: false });
+    expect(mundo.tablas.viaje_convenio[0]).toMatchObject({ ligado_por: 'manual', despacho_canal: 'texto' });
+  });
+
+  it('un viaje que NUNCA se ligó (empate entre convenios) recibe fila nueva con el convenio elegido, y el despacho ya no lo vuelve a elegir solo', async () => {
+    const v = viaje();
+    expect(mundo.tablas.viaje_convenio).toHaveLength(0);
+    expect(await repo.corregirConvenioDelViaje(A, String(v.id), idConvenio('Ruta norte'), { reenviar: false })).toMatchObject({ estado: 'ok', convenioNombre: 'Ruta norte' });
+    expect(mundo.tablas.viaje_convenio[0]).toMatchObject({ viaje_id: v.id, tenant_id: A, convenio_id: idConvenio('Ruta norte'), ligado_por: 'manual' });
+    expect(await repo.ligarConvenioAViaje(A, String(v.id), '2026-10-10')).toMatchObject({ estado: 'ya_ligado' });
+  });
+
+  it('«sin convenio»: la fila queda con convenio nulo y sin instrucciones; nada se manda', async () => {
+    const v = viaje();
+    await repo.ligarConvenioAViaje(A, String(v.id), '2026-10-10');
+    expect(await repo.corregirConvenioDelViaje(A, String(v.id), null, { reenviar: true })).toEqual({ estado: 'ok', convenioNombre: null, instrucciones: 0 });
+    expect(mundo.tablas.viaje_convenio[0]).toMatchObject({ convenio_id: null, ligado_por: 'manual', instrucciones: [] });
+  });
+
+  it('los sitios del convenio elegido pasan al viaje SOLO donde no traía', async () => {
+    const v = viaje({ destino_geocerca_id: 'sitio-propio' });
+    await repo.corregirConvenioDelViaje(A, String(v.id), idConvenio('Ruta norte'), { reenviar: false });
+    expect(v.destino_geocerca_id).toBe('sitio-propio'); // ya traía uno: no se pisa
+    const w = viaje();
+    await repo.corregirConvenioDelViaje(A, String(w.id), idConvenio('Ruta norte'), { reenviar: false });
+    expect(w.destino_geocerca_id).toBe(mundo.tablas.geocerca[0].id);
+  });
+
+  it('rechaza lo que no se puede: convenio de otro cliente, archivado o de otra flota; viaje liquidado, ajeno o sin cliente', async () => {
+    const v = viaje();
+    const otroCliente = mundo.poner('cliente', { tenant_id: A, nombre: 'Cliente Dos' });
+    const ajeno = mundo.poner('cliente_convenio', { tenant_id: B, cliente_id: mundo.tablas.cliente[1].id, nombre: 'Ruta ajena', activo: true });
+    const deOtroCliente = mundo.poner('cliente_convenio', { tenant_id: A, cliente_id: otroCliente.id, nombre: 'De Cliente Dos', activo: true });
+    expect(await repo.corregirConvenioDelViaje(A, String(v.id), String(deOtroCliente.id), { reenviar: false })).toEqual({ estado: 'convenio_no_valido' });
+    expect(await repo.corregirConvenioDelViaje(A, String(v.id), String(ajeno.id), { reenviar: false })).toEqual({ estado: 'convenio_no_valido' });
+    await repo.cambiarEstadoConvenio(A, idConvenio('Ruta sur'), false);
+    expect(await repo.corregirConvenioDelViaje(A, String(v.id), idConvenio('Ruta sur'), { reenviar: false })).toEqual({ estado: 'convenio_no_valido' });
+    expect(await repo.corregirConvenioDelViaje(A, String(viaje({ estatus: 'liquidado' }).id), idConvenio('Ruta norte'), { reenviar: false })).toEqual({ estado: 'viaje_cerrado' });
+    expect(await repo.corregirConvenioDelViaje(A, String(viaje({ cliente_id: null }).id), idConvenio('Ruta norte'), { reenviar: false })).toEqual({ estado: 'sin_cliente' });
+    const deB = mundo.poner('viaje', { tenant_id: B, cliente_id: mundo.tablas.cliente[1].id, estatus: 'abierto' });
+    expect(await repo.corregirConvenioDelViaje(A, String(deB.id), idConvenio('Ruta norte'), { reenviar: false })).toEqual({ estado: 'viaje_no_encontrado' });
+    expect(mundo.tablas.viaje_convenio).toHaveLength(0);
+  });
+
+  it('TODA consulta de la corrección ancla el tenant de la sesión', async () => {
+    const v = viaje();
+    mundo.consultas.length = 0;
+    await repo.corregirConvenioDelViaje(A, String(v.id), idConvenio('Ruta sur'), { reenviar: true });
+    expect(mundo.consultas.length).toBeGreaterThan(0);
+    // El INSERT lleva su tenant en el cuerpo (no en un filtro): se comprueba en la fila que quedó.
+    for (const c of mundo.consultas.filter((x) => x.op !== 'insert')) expect(c.filtros.some(([col, val]) => col === 'tenant_id' && val === A), `${c.tabla}/${c.op}`).toBe(true);
+    expect(mundo.tablas.viaje_convenio.every((f) => f.tenant_id === A)).toBe(true);
+  });
+
+  it('base sin migrar: lo dice (ConveniosNoDisponibles)', async () => {
+    const v = viaje();
+    mundo.ausentes.add('cliente_convenio');
+    await expect(repo.corregirConvenioDelViaje(A, String(v.id), 'cualquiera', { reenviar: false })).rejects.toBeInstanceOf(repo.ConveniosNoDisponibles);
+  });
+});
+
+describe('listarViajesConConvenio', () => {
+  beforeEach(async () => {
+    await importar([
+      ['Cliente Uno', 'Ruta norte', 'Zapopan', 'Tlaquepaque', '', 'puerta', 'Puerta 3', 'ambos', 'destino', '', '', ''],
+      ['Cliente Uno', 'Ruta sur', 'Zapopan', 'Colima', '', 'reportarse', 'Guardia sur', 'despacho', 'ambos', '', '', ''],
+    ]);
+  });
+
+  it('lista los viajes abiertos con cliente, su convenio ligado y las opciones activas del cliente; ignora liquidados, sin cliente y de otra flota', async () => {
+    const cliente = mundo.tablas.cliente[0].id;
+    const op = mundo.poner('operador', { tenant_id: A, nombre: 'Juan Pérez' });
+    const ligado = mundo.poner('viaje', { tenant_id: A, cliente_id: cliente, operador_id: op.id, folio: 'F-1', estatus: 'abierto', created_at: '2026-10-02T00:00:00Z' });
+    const suelto = mundo.poner('viaje', { tenant_id: A, cliente_id: cliente, folio: 'F-2', estatus: 'abierto', created_at: '2026-10-01T00:00:00Z' });
+    mundo.poner('viaje', { tenant_id: A, cliente_id: cliente, folio: 'F-3', estatus: 'liquidado' });
+    mundo.poner('viaje', { tenant_id: A, cliente_id: null, folio: 'F-4', estatus: 'abierto' });
+    mundo.poner('viaje', { tenant_id: B, cliente_id: mundo.tablas.cliente[1].id, folio: 'F-B', estatus: 'abierto' });
+    // Con dos convenios del mismo cliente el despacho automático empata y no liga: la oficina lo corrige a mano.
+    await repo.corregirConvenioDelViaje(A, String(ligado.id), String(mundo.tablas.cliente_convenio.find((c) => c.nombre === 'Ruta norte')!.id), { reenviar: false });
+
+    const filas = await repo.listarViajesConConvenio(A);
+    expect(filas.map((f) => f.folio)).toEqual(['F-1', 'F-2']); // más reciente primero
+    expect(filas[0]).toMatchObject({ cliente: 'Cliente Uno', operador: 'Juan Pérez', ligadoPor: 'manual', instrucciones: 1, despachoEnviado: false });
+    expect(filas[0].convenioNombre).toBe('Ruta norte');
+    expect(filas[0].opciones.map((o) => o.nombre)).toEqual(['Ruta norte', 'Ruta sur']);
+    expect(filas[1]).toMatchObject({ viajeId: suelto.id, ligadoPor: null, convenioId: null, convenioNombre: null, instrucciones: 0 });
+  });
+
+  it('el nombre de un convenio ya archivado se sigue leyendo, aunque no sea una opción para elegir', async () => {
+    const cliente = mundo.tablas.cliente[0].id;
+    const v = mundo.poner('viaje', { tenant_id: A, cliente_id: cliente, folio: 'F-1', estatus: 'abierto' });
+    const conv = mundo.tablas.cliente_convenio.find((c) => c.nombre === 'Ruta sur')!;
+    await repo.corregirConvenioDelViaje(A, String(v.id), String(conv.id), { reenviar: false });
+    await repo.cambiarEstadoConvenio(A, String(conv.id), false);
+    const [fila] = await repo.listarViajesConConvenio(A);
+    expect(fila).toMatchObject({ convenioNombre: 'Ruta sur', ligadoPor: 'manual' });
+    expect(fila.opciones.map((o) => o.nombre)).toEqual(['Ruta norte']);
+  });
+
+  it('sin viajes devuelve vacío y NO consulta el resto; la base sin migrar lo dice; toda consulta ancla el tenant', async () => {
+    expect(await repo.listarViajesConConvenio(A)).toEqual([]);
+    const v = mundo.poner('viaje', { tenant_id: A, cliente_id: mundo.tablas.cliente[0].id, estatus: 'abierto' });
+    mundo.consultas.length = 0;
+    await repo.listarViajesConConvenio(A);
+    for (const c of mundo.consultas) expect(c.filtros.some(([col, val]) => col === 'tenant_id' && val === A), `${c.tabla}/${c.op}`).toBe(true);
+    mundo.ausentes.add('viaje_convenio');
+    await expect(repo.listarViajesConConvenio(A)).rejects.toBeInstanceOf(repo.ConveniosNoDisponibles);
+    expect(v).toBeDefined();
+  });
+});
+
 describe('el claim del envío', () => {
   let viajeId: string;
   beforeEach(() => {
