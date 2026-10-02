@@ -59,6 +59,28 @@ begin
   begin update public.geocerca_importacion_estado set huella = 'xyz' where tenant_id = a; exception when check_violation then ok := true; end;
   if not ok then raise exception '0631: aceptó una huella que no es sha256'; end if;
 
+  -- la lista de flotas por reimportar: solo las que tienen «mis propias tablas» ACTIVAS y ya les toca
+  insert into public.conector_credencial (tenant_id, conector_id, valores_cifrados, activo) values
+    (a, 'tabla_propia', 'x', true), (b, 'tabla_propia', 'x', false);
+  if exists (select 1 from public.flotas_para_reimportar_geocercas(500) f where f.tenant_id = b) then
+    raise exception '0631: listó una flota con la conexión apagada';
+  end if;
+  update public.geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() where tenant_id = a;
+  if exists (select 1 from public.flotas_para_reimportar_geocercas(500) f where f.tenant_id = a) then
+    raise exception '0631: listó una flota cuya ventana no se cumple';
+  end if;
+  update public.geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() - interval '25 hours' where tenant_id = a;
+  if not exists (select 1 from public.flotas_para_reimportar_geocercas(500) f where f.tenant_id = a) then
+    raise exception '0631: no listó una flota cuya ventana ya se cumplió';
+  end if;
+  delete from public.geocerca_importacion_estado where tenant_id = a;
+  if not exists (select 1 from public.flotas_para_reimportar_geocercas(500) f where f.tenant_id = a) then
+    raise exception '0631: no listó una flota nunca intentada';
+  end if;
+  ok := false;
+  begin perform public.flotas_para_reimportar_geocercas(0); exception when sqlstate '22023' then ok := true; end;
+  if not ok then raise exception '0631: aceptó un límite de 0'; end if;
+
   -- cascada con la flota
   delete from public.tenant where id = b;
   if exists (select 1 from public.geocerca_importacion_estado where tenant_id = b) then raise exception '0631: no hubo cascada al borrar la flota'; end if;
@@ -72,7 +94,8 @@ begin
   end if;
   if has_function_privilege('authenticated', 'public.reclamar_importacion_geocercas(uuid, integer)', 'execute')
      or has_function_privilege('anon', 'public.reclamar_importacion_geocercas(uuid, integer)', 'execute')
-     or has_function_privilege('authenticated', 'public.registrar_importacion_geocercas(uuid, text, text, integer, integer, integer, text)', 'execute') then
+     or has_function_privilege('authenticated', 'public.registrar_importacion_geocercas(uuid, text, text, integer, integer, integer, text)', 'execute')
+     or has_function_privilege('authenticated', 'public.flotas_para_reimportar_geocercas(integer, integer)', 'execute') then
     raise exception '0631: las RPC son ejecutables por anon/authenticated';
   end if;
   if not has_function_privilege('service_role', 'public.reclamar_importacion_geocercas(uuid, integer)', 'execute') then

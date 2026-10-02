@@ -18408,11 +18408,11 @@ end $$;
 -- El cron gps re-importa las geocercas de «mis propias tablas»; dos invocaciones solapadas no deben leer a la vez ni
 -- un fallo «gastar» el cambio pendiente. Lo que solo la base demuestra: el segundo claim de la ventana pierde, otra flota
 -- no espera, un error acorta la ventana a 60 min, el error no pisa la huella buena y los argumentos fuera de dominio rebotan.
--- Esperado: GEOCERCAS_REIMPORTACION_0631 segundo-pierde=t otra-flota=t error-no-pisa-huella=t reintento-tras-error=t sin-reintento-a-10min=t ventana-bueno-respeta=t dominio-rebota=t
+-- Esperado: GEOCERCAS_REIMPORTACION_0631 segundo-pierde=t otra-flota=t error-no-pisa-huella=t reintento-tras-error=t sin-reintento-a-10min=t ventana-bueno-respeta=t dominio-rebota=t lista-solo-activas-y-vencidas=t
 do $$
 declare
   ta uuid; tb uuid; e record;
-  segundo boolean := false; otra boolean := false; huella boolean := false; reint boolean := false; sin10 boolean := false; ventana boolean := false; dom boolean := false;
+  segundo boolean := false; otra boolean := false; huella boolean := false; reint boolean := false; sin10 boolean := false; ventana boolean := false; dom boolean := false; lista boolean := false;
 begin
   insert into tenant (nombre) values ('ZZZ VERIF 0631 A') returning id into ta;
   insert into tenant (nombre) values ('ZZZ VERIF 0631 B') returning id into tb;
@@ -18440,6 +18440,13 @@ begin
   begin perform registrar_importacion_geocercas(ta, 'inventado'); exception when sqlstate '22023' then dom := true; end;
   begin perform reclamar_importacion_geocercas(ta, 0); exception when sqlstate '22023' then dom := dom and true; end;
 
-  raise exception E'GEOCERCAS_REIMPORTACION_0631 segundo-pierde=% otra-flota=% error-no-pisa-huella=% reintento-tras-error=% sin-reintento-a-10min=% ventana-bueno-respeta=% dominio-rebota=%   (esperado t / t / t / t / t / t / t)',
-    segundo, otra, huella, reint, sin10, ventana, dom;
+  insert into conector_credencial (tenant_id, conector_id, valores_cifrados, activo) values (ta, 'tabla_propia', 'x', true), (tb, 'tabla_propia', 'x', false);
+  update geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() - interval '25 hours' where tenant_id = ta;
+  lista := exists (select 1 from flotas_para_reimportar_geocercas(500) f where f.tenant_id = ta)
+    and not exists (select 1 from flotas_para_reimportar_geocercas(500) f where f.tenant_id = tb);
+  update geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() where tenant_id = ta;
+  lista := lista and not exists (select 1 from flotas_para_reimportar_geocercas(500) f where f.tenant_id = ta);
+
+  raise exception E'GEOCERCAS_REIMPORTACION_0631 segundo-pierde=% otra-flota=% error-no-pisa-huella=% reintento-tras-error=% sin-reintento-a-10min=% ventana-bueno-respeta=% dominio-rebota=% lista-solo-activas-y-vencidas=%   (esperado t / t / t / t / t / t / t / t)',
+    segundo, otra, huella, reint, sin10, ventana, dom, lista;
 end $$;
