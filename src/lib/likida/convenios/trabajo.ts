@@ -41,8 +41,8 @@ export async function leerCandidatosAcercamiento(limite: number): Promise<Candid
 async function candidatos(limite: number): Promise<CandidatoAcercamiento[]> {
   const admin = supabaseAdmin();
   const desde = new Date(Date.now() - DIAS_VIGILANCIA * 86_400_000).toISOString();
-  const ligados = exigir(await acotada(admin.from('viaje_convenio').select('viaje_id, tenant_id')
-    .is('acercamiento_enviado_en', null).gte('ligado_en', desde).order('ligado_en', { ascending: false }).order('viaje_id').limit(limite), 'convenios.trabajo_ligados') as never, 'convenios.trabajo_ligados') as Fila[] | null;
+  const ligados = exigir(await acotada(admin.from('viaje_convenio').select('viaje_id, tenant_id, acercamiento_origen_enviado_en, acercamiento_destino_enviado_en')
+    .or('acercamiento_origen_enviado_en.is.null,acercamiento_destino_enviado_en.is.null').gte('ligado_en', desde).order('ligado_en', { ascending: false }).order('viaje_id').limit(limite), 'convenios.trabajo_ligados') as never, 'convenios.trabajo_ligados') as Fila[] | null;
   if (!ligados || ligados.length === 0) return [];
 
   const viajes: Fila[] = [];
@@ -53,6 +53,7 @@ async function candidatos(limite: number): Promise<CandidatoAcercamiento[]> {
   }
   if (viajes.length === 0) return [];
   const tenantDeLigado = new Map(ligados.map((l) => [String(l.viaje_id), String(l.tenant_id)] as const));
+  const yaAvisado = new Map(ligados.map((l) => [String(l.viaje_id), { origen: !!l.acercamiento_origen_enviado_en, destino: !!l.acercamiento_destino_enviado_en }] as const));
 
   // Las flotas de estos viajes: cada lectura de abajo se acota también por ellas (defensa en profundidad: los ids ya son únicos).
   const tenants = [...new Set(viajes.map((v) => String(v.tenant_id)))];
@@ -80,6 +81,7 @@ async function candidatos(limite: number): Promise<CandidatoAcercamiento[]> {
     // Mientras no salga de la carga, la planta es la de origen; ya cargado, la de descarga. Si ya llegó a ella, no hace falta.
     const lado = hechos.has('salida_carga') ? 'destino' : 'origen';
     if (hechos.has(lado === 'origen' ? 'llegada_carga' : 'llegada_descarga')) return [];
+    if (yaAvisado.get(id)?.[lado]) return []; // ya se le avisó de ESA planta (el de la otra planta es otro aviso)
     const sitio = sitios.get(String(lado === 'origen' ? v.origen_geocerca_id : v.destino_geocerca_id));
     // El tenant del candidato es el del VIAJE y debe coincidir con el de su fila de convenio.
     if (!sitio || tenantDeLigado.get(id) !== String(v.tenant_id)) return [];

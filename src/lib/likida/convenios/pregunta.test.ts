@@ -6,7 +6,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('esta prueba no toca la base'); } }));
 
 const LIGADO: ViajeLigado = {
-  convenioId: 'c1', despachoEnviado: true, acercamientoEnviado: false,
+  convenioId: 'c1', despachoEnviado: true, acercamientoOrigenEnviado: false, acercamientoDestinoEnviado: false,
   instrucciones: [
     { categoria: 'puerta', texto: 'Puerta 3, lado poniente', momento: 'ambos', lugar: 'destino', orden: 0 },
     { categoria: 'puerta', texto: 'Puerta 1 para cargar', momento: 'ambos', lugar: 'origen', orden: 1 },

@@ -222,7 +222,8 @@ export interface ViajeLigado {
   convenioId: string | null;
   instrucciones: Instruccion[];
   despachoEnviado: boolean;
-  acercamientoEnviado: boolean;
+  acercamientoOrigenEnviado: boolean;
+  acercamientoDestinoEnviado: boolean;
 }
 
 export type ResultadoLigar =
@@ -233,11 +234,12 @@ export type ResultadoLigar =
 function filaALigado(f: Fila): ViajeLigado {
   return {
     convenioId: s(f.convenio_id), instrucciones: leerFoto(f.instrucciones),
-    despachoEnviado: !!f.despacho_enviado_en, acercamientoEnviado: !!f.acercamiento_enviado_en,
+    despachoEnviado: !!f.despacho_enviado_en,
+    acercamientoOrigenEnviado: !!f.acercamiento_origen_enviado_en, acercamientoDestinoEnviado: !!f.acercamiento_destino_enviado_en,
   };
 }
 
-const COLS_LIGADO = 'viaje_id, convenio_id, instrucciones, despacho_enviado_en, acercamiento_enviado_en';
+const COLS_LIGADO = 'viaje_id, convenio_id, instrucciones, despacho_enviado_en, acercamiento_origen_enviado_en, acercamiento_destino_enviado_en';
 
 /** La foto ya ligada del viaje, si la hay. */
 export async function leerLigado(tenantId: string, viajeId: string): Promise<ViajeLigado | null> {
@@ -310,12 +312,13 @@ export async function ligarConvenioAViaje(tenantId: string, viajeId: string, hoy
     const u = await acotada(admin.from('viaje').update({ [col]: id }).eq('tenant_id', tenantId).eq('id', viajeId).is(col, null), 'convenios.sitio_al_viaje');
     if (u.error) logger.warn('convenios.sitio_al_viaje_fallo', { viajeId, col, err: u.error.message });
   }
-  return { estado: 'ligado', ligado: { convenioId: elegido.id, instrucciones: elegido.instrucciones, despachoEnviado: false, acercamientoEnviado: false } };
+  return { estado: 'ligado', ligado: { convenioId: elegido.id, instrucciones: elegido.instrucciones, despachoEnviado: false, acercamientoOrigenEnviado: false, acercamientoDestinoEnviado: false } };
 }
 
 // ── EL ENVÍO AL OPERADOR, CON CLAIM ─────────────────────────────────────────
 
-export type Envio = 'despacho' | 'acercamiento';
+/** Cada envío tiene su propio sello: el despacho y el acercamiento a cada planta (`<envio>_reclamado_en`, `_enviado_en`, `_canal`). */
+export type Envio = 'despacho' | 'acercamiento_origen' | 'acercamiento_destino';
 
 /** Un reclamo que lleva más de esto sin cerrarse se da por caído (la corrida murió entre reclamar y enviar). */
 export const CLAIM_CADUCA_MIN = 10;
