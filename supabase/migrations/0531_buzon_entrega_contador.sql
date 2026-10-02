@@ -139,7 +139,9 @@ alter table public.buzon_entrega_evento enable row level security;
 revoke all on table public.buzon_entrega_config, public.buzon_entrega, public.buzon_entrega_evento from public, anon, authenticated;
 grant select, insert, update, delete on table public.buzon_entrega_config, public.buzon_entrega, public.buzon_entrega_evento to service_role;
 
--- ── cron_latido: la lista COMPLETA (0401) + buzon-entrega ──────────────────
+-- ── cron_latido: la lista COMPLETA (0401) + buzon-entrega (+ jornada-alertas de la 0503) ──
+-- INTEGRACIÓN ola 3: la 0503 (W3 GPS/Jornada) añade `jornada-alertas` con su propia lista entera; como esta migración
+-- corre DESPUÉS, la lista tiene que traer también ese id o lo pisaría. Las dos migraciones listan los dos ids.
 do $$
 begin
   if exists (select 1 from pg_constraint where conname = 'cron_latido_id_dominio' and conrelid = 'public.cron_latido'::regclass) then
@@ -150,9 +152,9 @@ begin
     check (id in (
       'wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia',
       'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos',
-      'vigia', 'buzon-entrega'
+      'vigia', 'buzon-entrega', 'jornada-alertas'
     ));
 end $$;
 
 comment on constraint cron_latido_id_dominio on public.cron_latido is
-  'El catálogo COMPLETO de ids de cron, espejo de CRONS en lib/admin/salud.ts. Se enumera entero al tocarlo. La 0531 añade buzon-entrega sobre la lista de la 0401 (que añadió vigia sobre la de la 0380).';
+  'El catálogo COMPLETO de ids de cron, espejo de CRONS en lib/admin/salud.ts. Se enumera entero al tocarlo. La 0531 añade buzon-entrega (y conserva jornada-alertas de la 0503) sobre la lista de la 0401 (que añadió vigia sobre la de la 0380).';

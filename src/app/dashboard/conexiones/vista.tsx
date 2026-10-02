@@ -21,7 +21,7 @@ const ESTADO: Record<Conector['estado'], { rotulo: string; fg: string; bg: strin
  * en palabras de persona; las decisiones de negocio (el candado del
  * timbrado) se declaran como decisiones, no como fallas.
  */
-export function VistaConexiones({ conectores, credenciales, integraciones }: {
+export function VistaConexiones({ conectores, credenciales, integraciones, gps }: {
   conectores: Conector[];
   /** La sección "Credenciales de tus sistemas", ya armada en el servidor
    *  (`SeccionCredenciales` + acciones). Entra como ReactNode y no como
@@ -32,6 +32,8 @@ export function VistaConexiones({ conectores, credenciales, integraciones }: {
    *  `/dashboard/integraciones` hasta la fusión de agosto-2026. Mismo criterio
    *  de ReactNode que la de credenciales. */
   integraciones?: React.ReactNode;
+  /** La sección «GPS»: salud por integración, push propio, huérfanos y mapeo (W3). */
+  gps?: React.ReactNode;
 }) {
   return (
     <main className="h-full">
@@ -79,6 +81,8 @@ export function VistaConexiones({ conectores, credenciales, integraciones }: {
               QUÉ sabe conectar Likida, y al final DÓNDE se capturan los
               accesos — que es lo que se hace después de leer las otras dos. */}
           {integraciones}
+
+          {gps}
 
           {credenciales}
         </div>

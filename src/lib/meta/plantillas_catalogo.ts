@@ -61,7 +61,7 @@ export type EncabezadoCatalogo =
 export type AgenteDestino =
   | 'chofer_asignacion' | 'chofer_cobranza' | 'oficina' | 'facturacion' | 'privacidad_arco'
   | 'gps' | 'asistencia' | 'mis_reglas' | 'agente5_conductor' | 'onboarding_operador' | 'vigia_cliente'
-  | 'liquidacion_externa';
+  | 'liquidacion_externa' | 'jornada';
 
 export interface PlantillaCatalogo {
   nombre: string;
@@ -384,6 +384,24 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     ],
     textoVerificado: true, estado: 'nueva_para_aprobacion',
   },
+  {
+    nombre: 'jornada_aviso_encargado_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'jornada',
+    proposito: 'Avisar al encargado que la jornada en curso de un operador llegó al umbral de aviso, al umbral crítico o rebasó el tope que la flota configuró (LFT 132 fr. XXXIV, 68).',
+    llamador: 'src/lib/likida/jornada/alerta_tope.ts',
+    cuerpo: 'Aviso de jornada (LFT) de {{1}}: {{2}}. Horas registradas: {{3}} de un tope de {{4}}. Revísalo en {{5}}. Likida.',
+    ejemplos: ['Juan Pérez', 'va al 80 % del tope', '9.6 h (al menos)', '12 h', 'https://app.likida.ai/dashboard/jornada'],
+    variables: ['operador', 'frase del nivel (≤ 60 caracteres)', 'horas registradas (con «al menos» si el inicio es derivado)', 'tope en horas', 'liga al tablero de jornada'],
+    botones: [], textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'jornada_aviso_operador_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'jornada',
+    proposito: 'Avisar al operador que su jornada de hoy se acerca o rebasó el tope, e indicarle cómo marcar su fin o su descanso por WhatsApp.',
+    llamador: 'src/lib/likida/jornada/alerta_tope.ts',
+    cuerpo: 'Hola {{1}}, tu jornada de hoy registra {{2}} de un máximo de {{3}}. Si ya terminaste, escribe «fin de mi jornada»; si vas a descansar, «voy a descansar». Aviso informativo de Likida.',
+    ejemplos: ['Juan', '9.6 h', '12 h'],
+    variables: ['nombre del operador', 'horas registradas', 'tope en horas'],
+    botones: [], textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
 ];
 
 /** Nombres que usa el código (evita literales sueltos). */
@@ -410,6 +428,8 @@ export const PLANTILLA = {
   vigiaAprobacion: 'vigia_aprobacion_v1',
   vigiaEscalamiento: 'vigia_escalamiento_v1',
   liquidacionExterna: 'liquidacion_externa_v1',
+  jornadaAvisoEncargado: 'jornada_aviso_encargado_v1',
+  jornadaAvisoOperador: 'jornada_aviso_operador_v1',
 } as const;
 
 export function plantillaDeCatalogo(nombre: string): PlantillaCatalogo | undefined {

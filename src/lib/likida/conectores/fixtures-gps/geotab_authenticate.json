@@ -1,0 +1,1 @@
+{ "result": { "path": "ThisServer", "credentials": { "database": "flota_demo", "sessionId": "SESION-GEOTAB-1", "userName": "lectura@flota.example" } }, "jsonrpc": "2.0" }

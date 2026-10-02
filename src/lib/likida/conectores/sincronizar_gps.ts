@@ -26,6 +26,8 @@ import { descifrar } from './cofre';
 import { lectorDe, LECTORES_POSICION } from './posiciones';
 import { httpReal as crearHttpReal, type Http } from './tipos';
 import { conPool } from '../lotes';
+import { llaveEconomico } from './tabla_propia/validar';
+import { PROVEEDOR_TABLA_PROPIA } from './tabla_propia/contrato';
 import { unidadesSinAvisoPrevio } from '../privacidad';
 import { finalizarPoll, reclamarPolls } from './poll_durable';
 
@@ -53,6 +55,8 @@ const TOLERANCIA_FUTURO_MS = 60 * 60 * 1000;
 /** Evita que una instalación con muchas flotas abra una ráfaga ilimitada de
  * conexiones contra proveedores y PostgREST. */
 const ANCHO_FANOUT_FLOTAS = 4;
+/** Techo de dispositivos huérfanos que se registran por corrida (una ráfaga absurda no llena la tabla). */
+const TOPE_HUERFANOS_POR_CORRIDA = 5_000;
 
 export interface ResultadoSync {
   tenantId: string;
@@ -79,14 +83,20 @@ export interface ResultadoSync {
    * piloto. Se cuenta para que el cron lo pinte y la flota pueda cerrarlo.
    */
   sinAvisoPrevio?: number;
+  /** Lecturas (no unidades) que la compuerta de privacidad dejó sin guardar. */
+  lecturasSinAviso?: number;
   /** La corrida se quedó sin presupuesto de tiempo ANTES de tocar esta flota.
    *  No es un error de la flota: le toca en la corrida siguiente (cada 5 min),
    *  y el cron lo reporta como `parcial` — un verde aquí mentiría. */
   sinTurno?: boolean;
   error?: string;
+  /** Clase de la falla del PROVEEDOR (0500): decide el backoff del poll. */
+  falla?: 'credencial' | 'proveedor' | 'formato';
+  /** Unidades que el proveedor lista y todavía no reportan posición (no es error). */
+  sinPosicion?: number;
 }
 
-type Lectura = { deviceId: string; lat: number; lng: number; medidaEn: string; velocidad: number | null; rumbo: number | null };
+export type Lectura = { deviceId: string; lat: number; lng: number; medidaEn: string; velocidad: number | null; rumbo: number | null; ignicion?: boolean | null };
 
 /** La frontera entre un proveedor ajeno y nuestra tabla es estricta: un id
  * vacío, una fecha inválida o números fuera de dominio no llegan a Postgres.
@@ -157,8 +167,6 @@ export async function sincronizarGpsDeFlota(
   opciones: { venceEn?: number; reloj?: () => number; dormir?: (ms: number) => Promise<void> } = {},
 ): Promise<ResultadoSync> {
   const base: ResultadoSync = { tenantId, proveedor: conectorId, leidas: 0, guardadas: 0, huerfanas: 0 };
-  const reloj = opciones.reloj ?? ahora;
-  const sinTiempo = () => opciones.venceEn !== undefined && reloj() >= opciones.venceEn;
 
   const lector = lectorDe(conectorId);
   if (!lector) {
@@ -175,15 +183,89 @@ export async function sincronizarGpsDeFlota(
   }
 
   const r = await lector(valores, http, { venceEn: opciones.venceEn, ahora: opciones.reloj ?? ahora, dormir: opciones.dormir });
-  if (!r.ok) return { ...base, paginas: r.paginas, backlog: r.backlog, error: r.motivo };
-  base.paginas = r.paginas;
+  if (!r.ok) return { ...base, paginas: r.paginas, backlog: r.backlog, error: r.motivo, falla: r.falla };
+  return asentarLecturas(tenantId, conectorId, r.posiciones, {
+    ahora, reloj: opciones.reloj, venceEn: opciones.venceEn,
+    invalidasDelLector: r.invalidas, paginas: r.paginas, sinPosicion: r.sinPosicion,
+    ligarPorEconomico: conectorId === PROVEEDOR_TABLA_PROPIA,
+  });
+}
+
+/** Techo de unidades que se leen para ligar por económico (una flota de 50,000 unidades no existe; es un fusible). */
+const MAX_UNIDADES_POR_ECONOMICO = 50_000;
+const PAGINA_UNIDADES = 1_000;
+
+/** Económico normalizado → id de unidad, solo de ESA flota y solo activas. Ambiguos fuera. `null` = no se pudo leer. */
+async function unidadesPorEconomico(tenantId: string): Promise<Map<string, string> | null> {
+  const mapa = new Map<string, string | null>();
+  for (let desde = 0; desde < MAX_UNIDADES_POR_ECONOMICO; desde += PAGINA_UNIDADES) {
+    const { data, error } = await acotada(
+      supabaseAdmin().from('unidad')
+        .select('id, numero_economico')
+        .eq('tenant_id', tenantId)
+        .eq('activo', true)
+        .order('id', { ascending: true })
+        .range(desde, desde + PAGINA_UNIDADES - 1),
+      'gps.unidades_por_economico',
+    );
+    if (error) {
+      logger.error('gps.unidades_por_economico_no_leidas', { tenantId, err: error.message });
+      return null;
+    }
+    for (const u of data ?? []) {
+      const k = llaveEconomico(String(u.numero_economico ?? ''));
+      if (k === '') continue;
+      mapa.set(k, mapa.has(k) ? null : String(u.id)); // dos económicos que chocan al normalizar => ambiguo
+    }
+    if ((data ?? []).length < PAGINA_UNIDADES) break;
+  }
+  const limpio = new Map<string, string>();
+  for (const [k, v] of mapa) if (v) limpio.set(k, v);
+  return limpio;
+}
+
+/**
+ * EL ASENTADOR — lo que comparten el POLL (lectores de proveedor) y el PUSH
+ * firmado (`/api/gps/push`): valida la frontera, liga dispositivo → unidad de LA
+ * flota, aplica la compuerta de privacidad, guarda idempotente y sella
+ * `gps_visto_en`. Una sola ruta de escritura a `posicion` significa una sola
+ * garantía de aislamiento, dedupe y privacidad, no dos que se desincronicen.
+ */
+export async function asentarLecturas(
+  tenantId: string,
+  conectorId: string,
+  lecturas: readonly Lectura[],
+  opciones: {
+    ahora?: () => number; reloj?: () => number; venceEn?: number;
+    invalidasDelLector?: number; paginas?: number; sinPosicion?: number;
+    /** Lecturas más viejas que esto (ms) se descartan (push: dispositivos con buffer). */
+    maxAntiguedadMs?: number;
+    /** Push: las lecturas malas se cuentan pero NO hacen fallar el lote (no hay reintento que las arregle). */
+    descartadasNoSonError?: boolean;
+    /**
+     * Tabla propia: la flota llama a la unidad por su NÚMERO ECONÓMICO, no por un id de proveedor. Lo que no ligó
+     * `gps_device_id` se liga por `numero_economico` normalizado («IN-001» = «in 001»). Un económico que choca al
+     * normalizar con otro de la misma flota es ambiguo y NO se liga (se registra como huérfano, jamás se adivina).
+     */
+    ligarPorEconomico?: boolean;
+  } = {},
+): Promise<ResultadoSync> {
+  const ahora = opciones.ahora ?? Date.now;
+  const reloj = opciones.reloj ?? ahora;
+  const sinTiempo = () => opciones.venceEn !== undefined && reloj() >= opciones.venceEn;
+  const base: ResultadoSync = { tenantId, proveedor: conectorId, leidas: 0, guardadas: 0, huerfanas: 0 };
+  if (opciones.paginas !== undefined) base.paginas = opciones.paginas;
+  if (opciones.sinPosicion) base.sinPosicion = opciones.sinPosicion;
   const ahoraMs = ahora();
-  const validas = r.posiciones.filter((p) => posicionValida(p, ahoraMs));
-  const descartadas = r.invalidas + (r.posiciones.length - validas.length);
+  const dentroDeRango = (p: Lectura) => opciones.maxAntiguedadMs === undefined || Date.parse(p.medidaEn) >= ahoraMs - opciones.maxAntiguedadMs;
+  const validas = lecturas.filter((p) => posicionValida(p, ahoraMs) && dentroDeRango(p));
+  const descartadas = (opciones.invalidasDelLector ?? 0) + (lecturas.length - validas.length);
   if (descartadas > 0) {
     base.descartadas = descartadas;
-    base.backlog = true;
-    base.error = `${descartadas} lectura(s) GPS inválida(s); poll parcial`;
+    if (!opciones.descartadasNoSonError) {
+      base.backlog = true;
+      base.error = `${descartadas} lectura(s) GPS inválida(s); poll parcial`;
+    }
     logger.warn('gps.lecturas_descartadas', { tenantId, proveedor: conectorId, descartadas: base.descartadas });
   }
   const posiciones = validas;
@@ -218,7 +300,35 @@ export async function sincronizarGpsDeFlota(
     }
   }
 
-  let filas: Array<{ tenant_id: string; unidad_id: string; lat: number; lng: number; velocidad: number | null; rumbo: number | null; medida_en: string; proveedor: string }> = [];
+  if (opciones.ligarPorEconomico && ids.some((id) => !porDevice.has(id))) {
+    if (sinTiempo()) return { ...base, backlog: true, error: 'quedó mapeo de unidades pendiente al vencer el presupuesto' };
+    const porEco = await unidadesPorEconomico(tenantId);
+    if (porEco === null) return { ...base, error: motivoParaPanel('leer_unidades') };
+    for (const id of ids) {
+      if (porDevice.has(id)) continue;
+      const u = porEco.get(llaveEconomico(id));
+      if (u) porDevice.set(id, u);
+    }
+  }
+
+  // ── HUÉRFANOS: se registran (id y hora, jamás coordenadas), NO se vuelven unidades ──
+  const sinUnidad = ids.filter((id) => !porDevice.has(id));
+  if (sinUnidad.length > 0 && !sinTiempo()) {
+    const sello = new Date(ahoraMs).toISOString();
+    for (const tanda of enTandas(sinUnidad.slice(0, TOPE_HUERFANOS_POR_CORRIDA), FILAS_POR_UPSERT)) {
+      const { error: errH } = await acotada(
+        supabaseAdmin().from('gps_dispositivo_huerfano').upsert(
+          tanda.map((device_id) => ({ tenant_id: tenantId, proveedor: conectorId, device_id, ultimo_visto_en: sello })),
+          { onConflict: 'tenant_id,proveedor,device_id' },
+        ),
+        'gps.huerfanos',
+      );
+      // No tumba el poll: la lista de huérfanos es ayuda de mapeo, no el dato.
+      if (errH) { logger.warn('gps.huerfanos_no_guardados', { tenantId, proveedor: conectorId, err: errH.message }); break; }
+    }
+  }
+
+  let filas: Array<{ tenant_id: string; unidad_id: string; lat: number; lng: number; velocidad: number | null; rumbo: number | null; ignicion: boolean | null; medida_en: string; proveedor: string }> = [];
   const unidadesVistas = new Set<string>();
   for (const p of posiciones) {
     const unidadId = porDevice.get(p.deviceId);
@@ -231,6 +341,7 @@ export async function sincronizarGpsDeFlota(
       lng: p.lng,
       velocidad: p.velocidad,
       rumbo: p.rumbo,
+      ignicion: p.ignicion ?? null,
       medida_en: p.medidaEn,
       proveedor: conectorId,
     });
@@ -249,7 +360,9 @@ export async function sincronizarGpsDeFlota(
     }
     if (compuerta.sinAviso.size > 0) {
       base.sinAvisoPrevio = compuerta.sinAviso.size;
+      const antes = filas.length;
       filas = filas.filter((f) => !compuerta.sinAviso.has(f.unidad_id));
+      base.lecturasSinAviso = antes - filas.length;
       for (const u of compuerta.sinAviso) unidadesVistas.delete(u);
       logger.warn('gps.sin_aviso_previo', { tenantId, proveedor: conectorId, unidades: compuerta.sinAviso.size });
     }
@@ -357,6 +470,7 @@ export async function sincronizarGpsTodas(
         paginas: resultado.paginas,
         elementos: resultado.leidas,
         error: resultado.error ?? (!completo ? 'posiciones huérfanas o sin aviso previo' : undefined),
+        falla: resultado.falla,
       });
       if (!completo) resultado.backlog = true;
       return resultado;

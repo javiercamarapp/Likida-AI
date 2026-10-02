@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega', 'jornada-alertas'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -91,6 +91,11 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // La entrega de facturas aprobadas al contador (0531): arma el lote del día y reintenta con backoff
   // (15 min es el primer escalón); cada 15 minutos basta y no duplica (claim + lease + llave de idempotencia).
   'buzon-entrega': 15 * 60_000,
+  // La alerta saliente de tope de jornada (0502/0503). Cada 15 minutos: el 80 % de un tope
+  // de 12 h (9.6 h) a una hora de cron llegaría hasta 60 min tarde; a 15, el retraso máximo
+  // es la cadencia. Sin modelo: lee el expediente, cruza umbrales y manda a lo más dos
+  // mensajes por jornada y nivel (el claim lo impide repetir).
+  'jornada-alertas': 15 * 60_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */
