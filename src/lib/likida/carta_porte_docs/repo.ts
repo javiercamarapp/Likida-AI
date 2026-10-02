@@ -199,7 +199,7 @@ export async function listarDocumentos(tenantId: string, f: FiltroDocumentos = {
   let q = supabaseAdmin().from('cp_documento').select(f.completo ? COLUMNAS_DOC : COLUMNAS_LISTA, { count: 'exact' }).eq('tenant_id', tenantId);
   if (f.estados && f.estados.length > 0) q = q.in('estado', f.estados);
   if (f.desde) q = q.gte('created_at', f.desde);
-  const r = await acotada(q.order('created_at', { ascending: false }).limit(Math.min(f.limite ?? 100, 500)), 'cpdocs.listar');
+  const r = await acotada(q.order('created_at', { ascending: false }).order('id').limit(Math.min(f.limite ?? 100, 500)), 'cpdocs.listar');
   const filas = (exigir(r, 'cpdocs.listar') ?? []) as unknown as Fila[];
   return { filas: filas.map(aDocumento), total: r.count ?? filas.length };
 }
@@ -227,7 +227,7 @@ export async function actualizarDocumento(
 export async function documentosConFolio(tenantId: string, folio: string, exceptoId: string): Promise<Array<{ id: string; estado: EstadoDoc; nombreArchivo: string }>> {
   const r = await acotada(supabaseAdmin().from('cp_documento').select('id, estado, nombre_archivo')
     .eq('tenant_id', tenantId).eq('extraccion->campos->folio_cliente->>valor', folio).neq('id', exceptoId)
-    .neq('estado', 'rechazado').limit(5), 'cpdocs.folio_duplicado');
+    .neq('estado', 'rechazado').order('id').limit(5), 'cpdocs.folio_duplicado');
   return ((exigir(r, 'cpdocs.folio_duplicado') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), estado: f.estado as EstadoDoc, nombreArchivo: String(f.nombre_archivo) }));
 }
 
@@ -263,7 +263,7 @@ export async function contarCorreccionesPorDocumento(tenantId: string, ids: stri
   const cuenta = new Map<string, number>();
   for (let i = 0; i < ids.length; i += 200) {
     const r = await acotada(supabaseAdmin().from('cp_correccion').select('documento_id')
-      .eq('tenant_id', tenantId).in('documento_id', ids.slice(i, i + 200)).limit(50_000), 'cpdocs.contar_correcciones');
+      .eq('tenant_id', tenantId).in('documento_id', ids.slice(i, i + 200)).order('id').limit(50_000), 'cpdocs.contar_correcciones');
     for (const f of (exigir(r, 'cpdocs.contar_correcciones') ?? []) as unknown as Fila[]) cuenta.set(String(f.documento_id), (cuenta.get(String(f.documento_id)) ?? 0) + 1);
   }
   return cuenta;
@@ -314,11 +314,11 @@ export interface PerfilFila extends Perfil { creadaEn: string }
 /** Los perfiles de la flota con su versión ACTIVA (dos consultas, no un join: la versión se elige por `version_activa`). */
 export async function listarPerfiles(tenantId: string): Promise<PerfilFila[]> {
   const p = await acotada(supabaseAdmin().from('cp_perfil')
-    .select('id, clave, nombre, cliente_id, formato, firma, version_activa, created_at').eq('tenant_id', tenantId).order('updated_at', { ascending: false }).limit(200), 'cpdocs.perfiles');
+    .select('id, clave, nombre, cliente_id, formato, firma, version_activa, created_at').eq('tenant_id', tenantId).order('updated_at', { ascending: false }).order('id').limit(200), 'cpdocs.perfiles');
   const perfiles = (exigir(p, 'cpdocs.perfiles') ?? []) as unknown as Fila[];
   if (perfiles.length === 0) return [];
   const v = await acotada(supabaseAdmin().from('cp_perfil_version')
-    .select('perfil_id, version, mapeos, ejemplos, nota').eq('tenant_id', tenantId).in('perfil_id', perfiles.map((x) => String(x.id))).limit(5000), 'cpdocs.perfil_versiones');
+    .select('perfil_id, version, mapeos, ejemplos, nota').eq('tenant_id', tenantId).in('perfil_id', perfiles.map((x) => String(x.id))).order('perfil_id').limit(5000), 'cpdocs.perfil_versiones');
   const versiones = (exigir(v, 'cpdocs.perfil_versiones') ?? []) as unknown as Fila[];
   return perfiles.flatMap((x) => {
     const act = versiones.find((y) => String(y.perfil_id) === String(x.id) && Number(y.version) === Number(x.version_activa));
@@ -333,6 +333,7 @@ export async function listarPerfiles(tenantId: string): Promise<PerfilFila[]> {
 
 export async function listarVersionesPerfil(tenantId: string, perfilId: string): Promise<Array<{ version: number; nota: string | null; mapeos: number; creadaEn: string }>> {
   const r = await acotada(supabaseAdmin().from('cp_perfil_version').select('version, nota, mapeos, created_at')
+    // orden-no-importa: la llave es (perfil_id, version) y perfil_id va fijo; version no se repite
     .eq('tenant_id', tenantId).eq('perfil_id', perfilId).order('version', { ascending: false }).limit(100), 'cpdocs.perfil_hist');
   return ((exigir(r, 'cpdocs.perfil_hist') ?? []) as unknown as Fila[]).map((f) => ({ version: Number(f.version), nota: s(f.nota), mapeos: Array.isArray(f.mapeos) ? f.mapeos.length : 0, creadaEn: String(f.created_at) }));
 }
@@ -391,7 +392,7 @@ export async function activarVersionPerfil(tenantId: string, perfilId: string, v
 export interface ExportConfigFila { id: string; nombre: string; formato: 'csv' | 'json'; config: Record<string, unknown>; activa: boolean }
 
 export async function listarExportConfigs(tenantId: string): Promise<ExportConfigFila[]> {
-  const r = await acotada(supabaseAdmin().from('cp_export_config').select('id, nombre, formato, config, activa').eq('tenant_id', tenantId).order('nombre').limit(50), 'cpdocs.export_configs');
+  const r = await acotada(supabaseAdmin().from('cp_export_config').select('id, nombre, formato, config, activa').eq('tenant_id', tenantId).order('nombre').order('id').limit(50), 'cpdocs.export_configs');
   return ((exigir(r, 'cpdocs.export_configs') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), nombre: String(f.nombre), formato: f.formato as 'csv' | 'json', config: (f.config as Record<string, unknown>) ?? {}, activa: Boolean(f.activa) }));
 }
 
@@ -439,17 +440,17 @@ export async function viajePorId(tenantId: string, id: string): Promise<ViajeMin
 export interface OperadorMin { id: string; nombre: string; activo: boolean }
 
 export async function operadoresDeFlota(tenantId: string): Promise<OperadorMin[]> {
-  const r = await acotada(supabaseAdmin().from('operador').select('id, nombre, activo').eq('tenant_id', tenantId).order('nombre').limit(2000), 'cpdocs.operadores');
+  const r = await acotada(supabaseAdmin().from('operador').select('id, nombre, activo').eq('tenant_id', tenantId).order('nombre').order('id').limit(2000), 'cpdocs.operadores');
   return ((exigir(r, 'cpdocs.operadores') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), nombre: String(f.nombre), activo: f.activo !== false }));
 }
 
 export async function unidadesPorPlacas(tenantId: string, placas: string): Promise<Array<{ id: string; activo: boolean }>> {
-  const r = await acotada(supabaseAdmin().from('unidad').select('id, activo').eq('tenant_id', tenantId).ilike('placas', placas).limit(3), 'cpdocs.unidad_placas');
+  const r = await acotada(supabaseAdmin().from('unidad').select('id, activo').eq('tenant_id', tenantId).ilike('placas', placas).order('id').limit(3), 'cpdocs.unidad_placas');
   return ((exigir(r, 'cpdocs.unidad_placas') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), activo: f.activo !== false }));
 }
 
 export async function viajeAbiertoDeOperador(tenantId: string, operadorId: string): Promise<{ id: string; folio: string | null } | null> {
-  const r = await acotada(supabaseAdmin().from('viaje').select('id, folio').eq('tenant_id', tenantId).eq('operador_id', operadorId).in('estatus', ['abierto', 'en_cuadre']).limit(1), 'cpdocs.viaje_abierto');
+  const r = await acotada(supabaseAdmin().from('viaje').select('id, folio').eq('tenant_id', tenantId).eq('operador_id', operadorId).in('estatus', ['abierto', 'en_cuadre']).order('id').limit(1), 'cpdocs.viaje_abierto');
   const f = ((exigir(r, 'cpdocs.viaje_abierto') ?? []) as unknown as Fila[])[0];
   return f ? { id: String(f.id), folio: s(f.folio) } : null;
 }
@@ -460,7 +461,7 @@ export async function clientePropio(tenantId: string, clienteId: string): Promis
 }
 
 export async function listarClientes(tenantId: string): Promise<Array<{ id: string; nombre: string }>> {
-  const r = await acotada(supabaseAdmin().from('cliente').select('id, nombre').eq('tenant_id', tenantId).order('nombre').limit(1000), 'cpdocs.clientes');
+  const r = await acotada(supabaseAdmin().from('cliente').select('id, nombre').eq('tenant_id', tenantId).order('nombre').order('id').limit(1000), 'cpdocs.clientes');
   return ((exigir(r, 'cpdocs.clientes') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), nombre: String(f.nombre) }));
 }
 

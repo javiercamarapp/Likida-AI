@@ -335,7 +335,7 @@ export async function adjuntarUbicacion(
   const res = await acotada(supabaseAdmin()
     .from('viaje_hito').select(COLUMNAS_HITO)
     .eq('tenant_id', tenantId).eq('viaje_id', viajeId).eq('estado', 'recibido').is('lat', null)
-    .gte('recibido_en', desde).order('recibido_en', { ascending: false }).limit(1), 'conductor.ubicacion_busca');
+    .gte('recibido_en', desde).order('recibido_en', { ascending: false }).order('id').limit(1), 'conductor.ubicacion_busca');
   const filas = (exigir(res as never, 'conductor.ubicacion_busca') ?? []) as unknown as Fila[];
   if (filas.length === 0) return null;
   const h = filaAHito(filas[0]);
@@ -423,7 +423,7 @@ export async function cargarContactosTrafico(tenantId: string): Promise<Contacto
   const res = await acotada(supabaseAdmin()
     .from('conductor_contacto_trafico')
     .select('nombre, telefono, nivel, terminal_id')
-    .eq('tenant_id', tenantId).eq('activo', true).order('created_at', { ascending: true }).limit(200), 'conductor.contactos');
+    .eq('tenant_id', tenantId).eq('activo', true).order('created_at', { ascending: true }).order('id').limit(200), 'conductor.contactos');
   const filas = (exigir(res as never, 'conductor.contactos') ?? []) as unknown as Fila[];
   return filas.map((f) => ({
     nombre: String(f.nombre), telefono: String(f.telefono), nivel: Number(f.nivel) === 2 ? 2 : 1,
@@ -439,7 +439,7 @@ export async function ultimaPosicionUnidad(
   const res = await acotada(supabaseAdmin()
     .from('posicion').select('lat, lng, medida_en')
     .eq('tenant_id', tenantId).eq('unidad_id', unidadId).gte('medida_en', desde)
-    .order('medida_en', { ascending: false }).limit(1), 'conductor.ubicacion_unidad');
+    .order('medida_en', { ascending: false }).order('id').limit(1), 'conductor.ubicacion_unidad');
   const f = ((exigir(res as never, 'conductor.ubicacion_unidad') ?? []) as unknown as Array<{ lat: number; lng: number; medida_en: string }>)[0];
   return f ? { lat: f.lat, lng: f.lng, medidaEn: f.medida_en } : null;
 }
@@ -533,7 +533,7 @@ export async function leerHitos(
 ): Promise<{ filas: HitoApi[]; hayMas: boolean }> {
   let viajeIds: string[] | null = f.viajeId ? [f.viajeId] : null;
   if (f.folio) {
-    const r = await acotada(supabaseAdmin().from('viaje').select('id').eq('tenant_id', tenantId).eq('folio', f.folio).limit(50), 'v1.hitos_folio');
+    const r = await acotada(supabaseAdmin().from('viaje').select('id').eq('tenant_id', tenantId).eq('folio', f.folio).order('id').limit(50), 'v1.hitos_folio');
     viajeIds = ((exigir(r as never, 'v1.hitos_folio') ?? []) as unknown as Fila[]).map((x) => String(x.id));
     if (f.viajeId) viajeIds = viajeIds.filter((id) => id === f.viajeId);
     if (viajeIds.length === 0) return { filas: [], hayMas: false };
@@ -609,7 +609,7 @@ export async function guardarConfigConductor(
   if (error) throw new Error(`v1.conductor_config: ${error.message}`);
   if (contactos === undefined) return 'ok';
 
-  const previos = await acotada(supabaseAdmin().from('conductor_contacto_trafico').select('id, nivel, telefono, terminal_id').eq('tenant_id', tenantId).limit(500), 'v1.conductor_contactos');
+  const previos = await acotada(supabaseAdmin().from('conductor_contacto_trafico').select('id, nivel, telefono, terminal_id').eq('tenant_id', tenantId).order('id').limit(500), 'v1.conductor_contactos');
   const filas = (exigir(previos as never, 'v1.conductor_contactos') ?? []) as unknown as Fila[];
   const clave = (nivel: number, telefono: string, terminal: string | null) => `${terminal ?? ''}|${nivel}|${telefono}`;
   const nuevos = new Map(contactos.map((x) => [clave(x.nivel, x.telefono, x.terminalId), x]));

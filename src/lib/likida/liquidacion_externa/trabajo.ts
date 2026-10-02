@@ -23,6 +23,6 @@ export async function trabajoPendiente(limite: number, ahoraIso: string): Promis
   const res = await acotada(supabaseAdmin().from('liquidacion_externa')
     .select(COLUMNAS)
     .or(`estado.eq.en_cola,and(estado.eq.pendiente,proximo_intento_en.lte.${ahoraIso})`)
-    .order('proximo_intento_en', { ascending: true }).limit(limite), 'liqext.trabajo');
+    .order('proximo_intento_en', { ascending: true }).order('id').limit(limite), 'liqext.trabajo');
   return ((exigir(res, 'liqext.trabajo') ?? []) as unknown as Fila[]).map(aLiquidacionExterna);
 }

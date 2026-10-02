@@ -45,7 +45,7 @@ export async function leerViajesActivos(limite: number): Promise<ViajeContexto[]
   const res = await acotada(supabaseAdmin()
     .from('viaje').select(COLUMNAS_VIAJE_CTX)
     .eq('estatus', 'abierto').not('aceptado_en', 'is', null)
-    .order('aceptado_en', { ascending: true }).limit(limite), 'conductor.viajes');
+    .order('aceptado_en', { ascending: true }).order('id').limit(limite), 'conductor.viajes');
   return ((exigir(res as never, 'conductor.viajes') ?? []) as unknown as Fila[]).map(filaAViajeCtx);
 }
 
@@ -93,7 +93,7 @@ export async function leerCandidatosValidacion(desde: Date, limite: number): Pro
   const res = await acotada(supabaseAdmin()
     .from('viaje_hito').select(COLUMNAS_HITO)
     .in('tipo', ['llegada_carga', 'llegada_descarga']).eq('estado', 'recibido').gte('recibido_en', desde.toISOString())
-    .order('recibido_en', { ascending: false }).limit(limite * 2), 'conductor.candidatos_validacion');
+    .order('recibido_en', { ascending: false }).order('id').limit(limite * 2), 'conductor.candidatos_validacion');
   const hitos = ((exigir(res as never, 'conductor.candidatos_validacion') ?? []) as unknown as Fila[]).map(filaAHito);
   if (hitos.length === 0) return [];
 

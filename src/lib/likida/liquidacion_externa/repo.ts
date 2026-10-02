@@ -175,7 +175,7 @@ export async function resolverOperadorDestino(
   const leer = async (columna: 'id' | 'telefono' | 'numero_empleado', valor: string): Promise<OperadorDestino[]> => {
     const res = await acotada(supabaseAdmin().from('operador')
       .select('id, nombre, telefono, activo')
-      .eq('tenant_id', tenantId).eq(columna, valor).limit(5), 'liqext.operador');
+      .eq('tenant_id', tenantId).eq(columna, valor).order('id').limit(5), 'liqext.operador');
     const filas = (exigir(res, 'liqext.operador') ?? []) as Array<{ id: string; nombre: string; telefono: string; activo: boolean }>;
     return filas.map((f) => ({ id: String(f.id), nombre: String(f.nombre), telefono: String(f.telefono), activo: f.activo === true }));
   };
@@ -190,7 +190,7 @@ export async function resolverOperadorDestino(
     lecturas.push((async () => {
       const res = await acotada(supabaseAdmin().from('operador')
         .select('id, nombre, telefono, activo')
-        .eq('tenant_id', tenantId).in('telefono', variantes).limit(5), 'liqext.operador_tel');
+        .eq('tenant_id', tenantId).in('telefono', variantes).order('id').limit(5), 'liqext.operador_tel');
       const filas = (exigir(res, 'liqext.operador_tel') ?? []) as Array<{ id: string; nombre: string; telefono: string; activo: boolean }>;
       return filas.map((f) => ({ id: String(f.id), nombre: String(f.nombre), telefono: String(f.telefono), activo: f.activo === true }));
     })());
@@ -220,7 +220,7 @@ export async function resolverOperadorDestino(
 export async function resolverViajeIds(tenantId: string, folios: string[]): Promise<string[]> {
   if (folios.length === 0) return [];
   const res = await acotada(supabaseAdmin().from('viaje')
-    .select('id').eq('tenant_id', tenantId).in('folio', folios).limit(200), 'liqext.viajes');
+    .select('id').eq('tenant_id', tenantId).in('folio', folios).order('id').limit(200), 'liqext.viajes');
   return ((exigir(res, 'liqext.viajes') ?? []) as Array<{ id: string }>).map((v) => String(v.id));
 }
 
