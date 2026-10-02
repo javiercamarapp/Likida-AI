@@ -1,7 +1,7 @@
 import { logger } from '@/lib/logger';
 import type { ResultadoEnvioConFallback } from '@/lib/meta/enviar_con_fallback';
 import { dentroDeGeocerca, haversineM } from './geo';
-import type { MuestraGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
+import type { MuestraGps, SitioGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
 import { dentroDeVentana, type ConfigConductor } from './config';
 import type { Destino } from './escalamiento';
 import type { ViajeContexto } from './repo';
@@ -47,6 +47,14 @@ export const HORAS_MUESTRAS_SENAL = 2;
 /** Cuántas horas atrás cuenta una muestra para decir «esta unidad sí reporta GPS». */
 export const HORAS_UNIDAD_CON_GPS = 24;
 export const TOPE_VIAJES_SENAL_VIDA = 400;
+/** Con la ignición apagada el dispositivo deja de reportar: el silencio es esperable. Pasadas tantas horas ya no se da por «descansando». */
+export const MINUTOS_APAGADO_MAXIMO = 12 * 60;
+/**
+ * Si al menos este número de unidades en tránsito de UNA flota con GPS dejan de reportar a la vez y son al menos esta fracción de ellas,
+ * lo que se calló es el CONECTOR (credencial vencida, proveedor caído), no los tractores: no se le pregunta a ningún chofer.
+ */
+export const MIN_UNIDADES_CONECTOR_CAIDO = 3;
+export const FRACCION_CONECTOR_CAIDO = 0.8;
 /** Cinco rechazos reintentables seguidos paran la corrida (es Meta diciendo «hoy no»). */
 export const TOPE_RECHAZOS_SEGUIDOS_SENAL = 5;
 
@@ -62,6 +70,8 @@ export function enTransito(hitos: readonly HitoFila[]): boolean {
 export type EstadoSenal =
   | { estado: 'ok' }
   | { estado: 'sin_gps' }
+  /** Hay silencio, pero es de TODA la flota (conector caído): no es señal de que este tractor esté mal. */
+  | { estado: 'conector_caido'; minutos: number }
   | { estado: MotivoSenalVida; minutos: number; ultimaMuestraEn: Date };
 
 export interface EntradaEvaluar {
@@ -69,7 +79,11 @@ export interface EntradaEvaluar {
   muestras: readonly MuestraGps[];
   /** La última muestra de GPS de las últimas 24 h, para cuando no hay ninguna en la ventana corta. `null` = nunca reportó. */
   ultimaMuestraEn: Date | null;
+  /** Esa última muestra con su posición e ignición (si el puerto la trae): con ella se sabe si el silencio es de una unidad estacionada. */
+  ultimaMuestra?: MuestraGps | null;
   sitios: SitiosViaje;
+  /** Los demás sitios de la flota (patios, plantas de otros clientes): donde esperar es normal. */
+  sitiosFlota?: readonly SitioGps[];
   toleranciaM: number;
   ahora: Date;
 }
@@ -77,11 +91,20 @@ export interface EntradaEvaluar {
 export function evaluarSenal(e: EntradaEvaluar): EstadoSenal {
   const ordenadas = [...e.muestras].filter((m) => Number.isFinite(m.medidaEn.getTime())).sort((a, b) => a.medidaEn.getTime() - b.medidaEn.getTime());
   const ultima = ordenadas.length > 0 ? ordenadas[ordenadas.length - 1] : null;
-  const ultimaEn = ultima?.medidaEn ?? e.ultimaMuestraEn;
+  const ultimaEn = ultima?.medidaEn ?? e.ultimaMuestra?.medidaEn ?? e.ultimaMuestraEn;
   if (!ultimaEn) return { estado: 'sin_gps' }; // nunca reportó (o hace más de un día): no hay «señal que se calló»
+  const sitiosDeEspera = [e.sitios.origen, e.sitios.destino, ...(e.sitiosFlota ?? [])];
+  const enSitioDeEspera = (m: MuestraGps): boolean => sitiosDeEspera.some((s) => s !== null && dentroDeGeocerca(m, s, e.toleranciaM + RADIO_DETENIDO_M).dentro);
 
   const minutos = Math.floor((e.ahora.getTime() - ultimaEn.getTime()) / 60_000);
-  if (minutos > MINUTOS_GPS_OBSOLETO) return { estado: 'gps_obsoleto', minutos, ultimaMuestraEn: ultimaEn };
+  if (minutos > MINUTOS_GPS_OBSOLETO) {
+    // Un tractor que llega a la planta y apaga el motor deja UNA muestra dentro (el poller colapsa la misma lectura) y calla: eso no es
+    // «sin señal de vida». Ni en un sitio del viaje o de la flota, ni con la ignición apagada (un tope de horas, no para siempre).
+    const posicion = ultima ?? e.ultimaMuestra ?? null;
+    if (posicion && enSitioDeEspera(posicion)) return { estado: 'ok' };
+    if (posicion?.ignicion === false && minutos <= MINUTOS_APAGADO_MAXIMO) return { estado: 'ok' };
+    return { estado: 'gps_obsoleto', minutos, ultimaMuestraEn: ultimaEn };
+  }
   if (!ultima) return { estado: 'ok' };
 
   // Detenido: cobertura de toda la ventana, ≥ 3 muestras y todas pegadas a la última, y no en un sitio del viaje.
@@ -90,8 +113,7 @@ export function evaluarSenal(e: EntradaEvaluar): EstadoSenal {
   if (ventana.length < MINIMO_MUESTRAS_DETENIDO) return { estado: 'ok' };
   if (ventana[0].medidaEn.getTime() > inicio + MINUTOS_COBERTURA_DETENIDO * 60_000) return { estado: 'ok' };
   if (!ventana.every((m) => haversineM(m, ultima) <= RADIO_DETENIDO_M)) return { estado: 'ok' };
-  const enSitio = [e.sitios.origen, e.sitios.destino].some((s) => s !== null && dentroDeGeocerca(ultima, s, e.toleranciaM + RADIO_DETENIDO_M).dentro);
-  if (enSitio) return { estado: 'ok' };
+  if (enSitioDeEspera(ultima)) return { estado: 'ok' };
   return { estado: 'gps_detenido', minutos: Math.floor((e.ahora.getTime() - ventana[0].medidaEn.getTime()) / 60_000), ultimaMuestraEn: ultima.medidaEn };
 }
 
@@ -132,7 +154,7 @@ export interface EstadoEpisodios {
 }
 
 export type MotivoNadaSenal =
-  | 'flota_apagada' | 'no_transito' | 'sin_gps' | 'ok' | 'fuera_de_ventana' | 'silenciado' | 'sin_telefono' | 'espera' | 'ya_escalado';
+  | 'flota_apagada' | 'no_transito' | 'sin_gps' | 'conector_caido' | 'ok' | 'fuera_de_ventana' | 'silenciado' | 'sin_telefono' | 'espera' | 'ya_escalado';
 
 export type AccionSenal =
   | { tipo: 'nada'; motivo: MotivoNadaSenal }
@@ -164,6 +186,7 @@ export function decidirSenalVida(e: EntradaDecidirSenal): AccionSenal {
     if (e.senal.estado === 'ok') return { tipo: 'cerrar', motivo: 'senal_recuperada' };
   }
   if (!enTransito(e.hitos)) return { tipo: 'nada', motivo: 'no_transito' };
+  if (e.senal.estado === 'conector_caido') return { tipo: 'nada', motivo: 'conector_caido' }; // ni se abre, ni se avanza, ni se cierra: el silencio no es de este tractor
   if (e.senal.estado === 'sin_gps') return { tipo: 'nada', motivo: 'sin_gps' };
   if (e.senal.estado === 'ok') return { tipo: 'nada', motivo: 'ok' };
   if (!dentroDeVentana(config, ahora)) return { tipo: 'nada', motivo: 'fuera_de_ventana' };
@@ -199,7 +222,12 @@ export interface PuertosSenalVida {
   configDe(tenantId: string): Promise<ConfigConductor>;
   sitiosDe(viajes: ViajeContexto[]): Promise<Map<string, SitiosViaje>>;
   muestras(unidades: UnidadDeViaje[], desde: Date): Promise<Map<string, MuestraGps[]>>;
-  ultimaMuestra(unidades: UnidadDeViaje[], desde: Date): Promise<Map<string, Date>>;
+  /** La última muestra de GPS de verdad de cada unidad desde `desde`, con posición e ignición. */
+  ultimaMuestra(unidades: UnidadDeViaje[], desde: Date): Promise<Map<string, MuestraGps>>;
+  /** Los sitios de la flota (patios y demás) donde esperar es normal. Opcional: sin él solo cuentan el origen y el destino del viaje. */
+  sitiosFlota?(tenantIds: string[]): Promise<Map<string, SitioGps[]>>;
+  /** Las flotas cuyo conector de GPS tiene la última lectura fallida (credencial vencida, proveedor caído). Opcional. */
+  conectoresDegradados?(tenantIds: string[]): Promise<Set<string>>;
   episodios(viajeIds: string[], ahora: Date): Promise<Map<string, EstadoEpisodios>>;
   /** Abre el episodio (único abierto por viaje). `null` = otra corrida lo abrió primero, o no se pudo. */
   abrir(tenantId: string, viajeId: string, motivo: MotivoSenalVida, ahora: Date): Promise<EpisodioFila | null>;
@@ -263,18 +291,47 @@ export async function barridoSenalVida(p: PuertosSenalVida, ahora: Date = new Da
   const unidades = [...new Map(aEvaluar.map((v) => [llave(v), { tenantId: v.tenantId, unidadId: v.unidadId! }])).values()];
   const muestras = await p.muestras(unidades, new Date(ahora.getTime() - HORAS_MUESTRAS_SENAL * 3_600_000));
   const sinMuestras = unidades.filter((u) => !(muestras.get(`${u.tenantId}|${u.unidadId}`)?.length));
-  const ultimas = sinMuestras.length > 0 ? await p.ultimaMuestra(sinMuestras, new Date(ahora.getTime() - HORAS_UNIDAD_CON_GPS * 3_600_000)) : new Map<string, Date>();
+  const ultimas = sinMuestras.length > 0 ? await p.ultimaMuestra(sinMuestras, new Date(ahora.getTime() - HORAS_UNIDAD_CON_GPS * 3_600_000)) : new Map<string, MuestraGps>();
   const sitios = await p.sitiosDe(aEvaluar);
+  const tenantsEvaluados = [...new Set(aEvaluar.map((v) => v.tenantId))];
+  // Los sitios de la flota y el estado del conector son un APOYO: si no se pueden leer, se evalúa sin ellos (y se dice), no se tumba el barrido.
+  let sitiosFlota = new Map<string, SitioGps[]>();
+  let conectoresDegradados = new Set<string>();
+  try { if (p.sitiosFlota) sitiosFlota = await p.sitiosFlota(tenantsEvaluados); } catch (e) {
+    r.fallos.push(`sitios de la flota: ${e instanceof Error ? e.message : 'error'}`);
+    logger.error('conductor.senal_vida_sitios_flota_fallo', { err: e instanceof Error ? e.message : String(e) });
+  }
+  try { if (p.conectoresDegradados) conectoresDegradados = await p.conectoresDegradados(tenantsEvaluados); } catch (e) {
+    r.fallos.push(`estado del conector GPS: ${e instanceof Error ? e.message : 'error'}`);
+    logger.error('conductor.senal_vida_conector_fallo', { err: e instanceof Error ? e.message : String(e) });
+  }
+
+  // Primero la señal de TODOS: así se distingue «este tractor se calló» de «se calló el conector de toda la flota».
+  const senales = new Map<string, EstadoSenal>();
+  for (const v of aEvaluar) {
+    const ultima = ultimas.get(llave(v)) ?? null;
+    senales.set(v.id, evaluarSenal({
+      muestras: muestras.get(llave(v)) ?? [], ultimaMuestraEn: ultima?.medidaEn ?? null, ultimaMuestra: ultima,
+      sitios: sitios.get(v.id) ?? { origen: null, destino: null }, sitiosFlota: sitiosFlota.get(v.tenantId) ?? [],
+      toleranciaM: configs.get(v.tenantId)!.toleranciaUbicacionM, ahora,
+    }));
+  }
+  const conectorCaido = new Set<string>();
+  for (const t of tenantsEvaluados) {
+    const delTenant = aEvaluar.filter((v) => v.tenantId === t);
+    const unidadesConGps = new Set(delTenant.filter((v) => senales.get(v.id)!.estado !== 'sin_gps').map((v) => v.unidadId));
+    const unidadesObsoletas = new Set(delTenant.filter((v) => senales.get(v.id)!.estado === 'gps_obsoleto').map((v) => v.unidadId));
+    const masivo = unidadesConGps.size >= MIN_UNIDADES_CONECTOR_CAIDO && unidadesObsoletas.size / unidadesConGps.size >= FRACCION_CONECTOR_CAIDO;
+    if (unidadesObsoletas.size > 0 && (masivo || conectoresDegradados.has(t))) conectorCaido.add(t);
+  }
 
   let rechazosSeguidos = 0;
   for (const [i, v] of aEvaluar.entries()) {
     if (venceEn !== undefined && Date.now() >= venceEn) { r.cortadosPorReloj = aEvaluar.length - i; break; }
     const config = configs.get(v.tenantId)!;
     const hs = porViaje.get(v.id) ?? [];
-    const senal = evaluarSenal({
-      muestras: muestras.get(llave(v)) ?? [], ultimaMuestraEn: ultimas.get(llave(v)) ?? null,
-      sitios: sitios.get(v.id) ?? { origen: null, destino: null }, toleranciaM: config.toleranciaUbicacionM, ahora,
-    });
+    let senal = senales.get(v.id)!;
+    if (senal.estado === 'gps_obsoleto' && conectorCaido.has(v.tenantId)) senal = { estado: 'conector_caido', minutos: senal.minutos };
     const estado = episodios.get(v.id) ?? { abierto: null, silenciadoHasta: null };
     const accion = decidirSenalVida({ viaje: v, hitos: hs, config, senal, episodios: estado, ahora });
     if (accion.tipo === 'nada') { salta(accion.motivo); continue; }
@@ -306,7 +363,7 @@ export async function barridoSenalVida(p: PuertosSenalVida, ahora: Date = new Da
           continue;
         }
         // Lo que se le dice al jefe es lo que PASÓ: si un aviso al chofer fue rechazado, «se le avisó dos veces» sería falso.
-        const avisosEntregados = 2 - Math.min(2, avisosFallidosAlChofer(ep!.ultimoError));
+        const avisosEntregados = (2 - Math.min(2, avisosFallidosAlChofer(ep!.ultimoError))) as 0 | 1 | 2;
         const msg = armarEscalacionSenalVida(v, motivo, accion.minutos, await p.ubicacion(v, hs, ahora), avisosEntregados);
         let entregados = 0; let reintentables = 0; let ultimoError = '';
         for (const d of destinos) {

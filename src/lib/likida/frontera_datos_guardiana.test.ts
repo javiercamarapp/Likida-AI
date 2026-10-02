@@ -267,7 +267,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 286;
 // «No coincide» atómico, reclamo, cierre y rearme; la lectura de un aviso y la del panel; marcar la tarea abierta; la lectura de los teléfonos
 // de la flota con o sin formato y su guardado sin Excel de muestra (actualizar o crear la fila) y quitar el formato conservando los teléfonos; y las dos de la tarea durable en la cola del orquestador, insertar y leer la previa ante el índice único) y
 // `liquidacion_externa/trabajo.ts` suma la lista de avisos pendientes que cruza flotas (como su lista de entregas). Todas por `acotada`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_849;
+// RONDA 08, corrector adversarial (señal de vida): 0 archivos y +2 llamadas, en `conductor/trabajo.ts` (1,849 + 2 = 1,851): la lectura de los sitios
+// de la flota con su geometría (patios donde esperar es normal) y la del estado del conector de GPS (`conector_poll_estado`); ambas por `acotada`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_851;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

@@ -150,7 +150,7 @@ export function crearMundo(o: OpcionesMundo) {
     muestras: async (us, desde) => new Map(us.map((u) => [`${u.tenantId}|${u.unidadId}`, muestrasDe(u.tenantId, u.unidadId).filter((p) => p.medidaEn >= desde).map(({ lat, lng, medidaEn }) => ({ lat, lng, medidaEn }))])),
     ultimaMuestra: async (us, desde) => new Map(us.flatMap((u) => {
       const ult = muestrasDe(u.tenantId, u.unidadId).filter((p) => p.medidaEn >= desde).sort((a, b) => b.medidaEn.getTime() - a.medidaEn.getTime())[0];
-      return ult ? [[`${u.tenantId}|${u.unidadId}`, ult.medidaEn] as const] : [];
+      return ult ? [[`${u.tenantId}|${u.unidadId}`, { lat: ult.lat, lng: ult.lng, medidaEn: ult.medidaEn }] as const] : [];
     })),
     episodios: async (ids, ahora) => {
       const r = new Map<string, EstadoEpisodios>();
