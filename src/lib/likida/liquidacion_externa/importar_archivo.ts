@@ -1,6 +1,6 @@
 import { logger } from '@/lib/logger';
 import { CampoInvalido } from '@/lib/http/campos_cuerpo';
-import { cuerposDeLiquidacionesCsv } from '../demo_innovativos/liquidacion_csv';
+import { cuerposDeLiquidacionesCsv } from './liquidacion_csv';
 import { matrizDeArchivoCatalogo } from '../peajes/archivo';
 import { validarLiquidacionExterna, huellaContenido, type LiquidacionExternaNormalizada } from './esquema';
 import { buscarPorClave, type LiquidacionExterna } from './repo';

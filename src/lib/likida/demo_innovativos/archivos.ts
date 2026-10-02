@@ -22,7 +22,7 @@ import { parsearTagsMatriz } from '../peajes/tags';
 import { TIPOS_ARCHIVO_KIT, type TipoArchivoKit } from './contratos';
 import { leerConveniosCsv } from './convenios_csv';
 import { geocercasASitiosCsv, leerGeocercasCsv, leerPosicionesCsv, localAUtc, partirCsv } from './lector_tabla_propia';
-import { cuerposDeLiquidacionesCsv } from './liquidacion_csv';
+import { cuerposDeLiquidacionesCsv } from '../liquidacion_externa/liquidacion_csv';
 
 export interface ResultadoValidacion {
   tipo: TipoArchivoKit;
