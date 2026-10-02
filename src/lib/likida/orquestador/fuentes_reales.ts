@@ -73,6 +73,7 @@ async function vigiaFallidos24h(tenantId: string, ahora: Date): Promise<number |
 async function hayFilas(tenantId: string, tabla: string, columna: string, filtro?: { columna: string; valor: boolean }): Promise<boolean | undefined> {
   let q = supabaseAdmin().from(tabla).select(columna).eq('tenant_id', tenantId);
   if (filtro) q = q.eq(filtro.columna, filtro.valor);
+  // orden-no-importa: solo se pregunta si existe al menos una fila de la flota; cualquiera sirve y no se lee su contenido.
   const { data, error } = await acotada(q.order(columna).limit(1), `orquestador.uso_${tabla}`);
   if (error) return undefined;
   return ((data ?? []) as unknown[]).length > 0;
