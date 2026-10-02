@@ -7,6 +7,7 @@ import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { esReintentableMeta, esTokenMetaInvalido, sondearTokenWhatsApp, avisarTokenVencido } from '@/lib/meta/client';
+import { esTelefonoDemo, ERROR_TELEFONO_DEMO } from '@/lib/meta/telefono_demo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -143,6 +144,12 @@ export async function GET(req: Request) {
     let enviadas = 0;
     let fallidas = 0;
     await conPool(salidas, 4, async (s) => {
+      // El tenant demo nunca escribe a nadie: una salida con la marca de demo (28999…) muere aquí, sin llamar a Meta.
+      // (No cuenta como `fallidas`: no es un fallo del canal, y volvería el latido «parcial» por algo esperado.)
+      if (esTelefonoDemo((s.payload as { to?: unknown } | null)?.to)) {
+        await finalizarYAvisarSiMurio(s, undefined, `terminal:${ERROR_TELEFONO_DEMO}`);
+        return;
+      }
       try {
         const r = await fetch(`${GRAPH}/${phoneId}/messages`, {
           method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
