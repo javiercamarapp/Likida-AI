@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "totalWarnings": 164,
+  "totalWarnings": 166,
   "byFileRule": {
     "src/app/admin/evals/error_comprobado.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/app/admin/mi-perfil/avatar_validado.test.ts::security/detect-non-literal-fs-filename": 1,
@@ -51,6 +51,7 @@
     "src/lib/likida/bitacora_escritura.test.ts::security/detect-non-literal-fs-filename": 2,
     "src/lib/likida/carta_porte_datos.ts::security/detect-unsafe-regex": 1,
     "src/lib/likida/conceptos_gasto_espejos.test.ts::security/detect-non-literal-fs-filename": 1,
+    "src/lib/likida/conectores/posiciones_proveedores.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/likida/crear_viaje_wa.ts::security/detect-unsafe-regex": 3,
     "src/lib/likida/cuadre/cifras.ts::security/detect-unsafe-regex": 4,
     "src/lib/likida/cuadre/copias_un_origen.test.ts::security/detect-non-literal-fs-filename": 2,
@@ -88,6 +89,7 @@
     "src/lib/likida/talacha_wa.ts::security/detect-unsafe-regex": 3,
     "src/lib/likida/tope_consulta.test.ts::security/detect-non-literal-fs-filename": 2,
     "src/lib/likida/vendedores.test.ts::security/detect-non-literal-fs-filename": 1,
+    "src/lib/llm/slugs_openrouter.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/meta/telefono_en_logs.test.ts::security/detect-non-literal-fs-filename": 1,
     "src/lib/observability/runbook.test.ts::security/detect-non-literal-fs-filename": 4,
     "src/lib/pruebas/codigo.ts::security/detect-non-literal-fs-filename": 1,
