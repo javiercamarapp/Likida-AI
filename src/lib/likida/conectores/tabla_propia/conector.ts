@@ -1,6 +1,7 @@
 import { probarConGuardas, type CampoCredencial, type Conector, type Http, type ResultadoPrueba, type ValoresCredencial } from '../tipos';
 import { ErrorTablaPropia, MODOS_TABLA_PROPIA, PROVEEDOR_TABLA_PROPIA } from './contrato';
 import { crearLectorTablaPropia } from './lector';
+import type { ClienteSftp } from './sftp';
 import type { EjecutorSql } from './sql';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -13,7 +14,7 @@ import type { EjecutorSql } from './sql';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CAMPOS: readonly CampoCredencial[] = [
-  { clave: 'modo', rotulo: 'Cómo leemos sus tablas', forma: 'texto', requerida: true, ayuda: `Uno de: ${MODOS_TABLA_PROPIA.join(', ')}. «sql_solo_lectura»: un usuario de solo lectura sobre una vista; «csv_sftp»: un archivo CSV en una dirección https; «endpoint»: una dirección de su sistema que devuelve JSON.`, ejemplo: 'sql_solo_lectura' },
+  { clave: 'modo', rotulo: 'Cómo leemos sus tablas', forma: 'texto', requerida: true, ayuda: `Uno de: ${MODOS_TABLA_PROPIA.join(', ')}. «sql_solo_lectura»: un usuario de solo lectura sobre una vista; «csv_sftp»: un archivo CSV en una dirección https o en un servidor SFTP (sftp://); «endpoint»: una dirección de su sistema que devuelve JSON.`, ejemplo: 'sql_solo_lectura' },
   { clave: 'zona', rotulo: 'Zona horaria de su fecha_hora', forma: 'texto', requerida: false, ayuda: 'La zona en la que su sistema escribe la fecha cuando NO trae zona (Región/Ciudad). Si la fecha ya trae zona (Z o -06:00) se respeta tal cual. Por omisión, hora de Ciudad de México.', ejemplo: 'Region/Ciudad' },
   { clave: 'ventana_minutos', rotulo: 'Cuánto hacia atrás leer en cada vuelta (minutos)', forma: 'texto', requerida: false, ayuda: 'De 1 a 1,440; por omisión 30. Repetir la ventana es seguro: una posición ya guardada no se duplica. Una posición que su sistema sube DESPUÉS de esa ventana (búfer tardío) no se lee: para eso está el barrido largo.', ejemplo: '30' },
   { clave: 'barrido_largo_minutos', rotulo: 'Barrido largo cada hora (minutos hacia atrás; 0 = apagado)', forma: 'texto', requerida: false, ayuda: 'Si sus unidades suben posiciones con retraso al recuperar señal (un búfer con la hora de cuando se midió cada punto), la ventana normal ya pasó de largo y esos puntos no se leen. Con este valor (0, o de 60 a 1,440 y mayor que la ventana), la vuelta de la primera hora lee hacia atrás tanto tiempo; repetir lectura es seguro. Apagado por omisión: sube la carga sobre su base.', ejemplo: '360' },
@@ -30,25 +31,28 @@ const CAMPOS: readonly CampoCredencial[] = [
   { clave: 'vista_geocercas', rotulo: 'SQL: vista de geocercas (opcional)', forma: 'texto', requerida: false, ayuda: 'Para importar sus geocercas como sitios.', ejemplo: 'esquema.vista_geocercas' },
   { clave: 'columnas_geocercas', rotulo: 'SQL: columnas de geocercas (JSON)', forma: 'texto', requerida: false, ayuda: 'codigo, nombre y (lat_centro, lon_centro, radio_m) o poligono_wkt; opcional cliente.', ejemplo: '{"codigo":"...","nombre":"..."}' },
   // CSV / endpoint
-  { clave: 'base_url', rotulo: 'Dirección del archivo CSV o del endpoint (https)', forma: 'url', requerida: false, ayuda: 'Debe ser https y pública. Un servidor SFTP todavía no está habilitado; deja el archivo en una dirección https.', ejemplo: 'https://su-sistema.com/posiciones.csv' },
+  { clave: 'base_url', rotulo: 'Dirección del archivo CSV o del endpoint (https o sftp)', forma: 'url', requerida: false, ayuda: 'https y pública; o, solo con csv_sftp, sftp://servidor[:puerto]/ruta/archivo.csv (servidor público; sin usuario ni clave dentro de la dirección: van en sus propios campos). Con sftp:// es obligatoria la huella del servidor (huella_host).', ejemplo: 'https://su-sistema.com/posiciones.csv' },
   { clave: 'patron', rotulo: 'Cómo se manda la credencial', forma: 'texto', requerida: false, ayuda: 'ninguna, bearer, cabecera, query o basic (por omisión, ninguna).', ejemplo: 'bearer' },
-  { clave: 'nombre_campo', rotulo: 'Nombre de la cabecera o del parámetro (o usuario si es basic)', forma: 'texto', requerida: false, ayuda: 'Solo con cabecera, query o basic.', ejemplo: 'X-API-Key' },
-  { clave: 'token', rotulo: 'Token o clave del endpoint', forma: 'secreto', requerida: false, ayuda: 'La credencial de su sistema, si pide una.' },
+  { clave: 'nombre_campo', rotulo: 'Nombre de la cabecera o del parámetro (o usuario si es basic o SFTP)', forma: 'texto', requerida: false, ayuda: 'Solo con cabecera, query o basic. Con sftp:// es el usuario SFTP.', ejemplo: 'X-API-Key' },
+  { clave: 'token', rotulo: 'Token o clave del endpoint (o contraseña SFTP)', forma: 'secreto', requerida: false, ayuda: 'La credencial de su sistema, si pide una. Con sftp:// es la contraseña del usuario (o déjala vacía si entras con llave privada).' },
+  { clave: 'llave_privada', rotulo: 'SFTP: llave privada (alternativa a la contraseña)', forma: 'secreto', requerida: false, ayuda: 'La llave privada del usuario SFTP completa, de «-----BEGIN …» a «-----END …» (se acepta pegada en una sola línea). Se guarda cifrada y no vuelve a mostrarse.' },
+  { clave: 'frase_llave', rotulo: 'SFTP: frase de la llave privada', forma: 'secreto', requerida: false, ayuda: 'Solo si la llave privada está protegida con frase.' },
+  { clave: 'huella_host', rotulo: 'SFTP: huella del servidor (obligatoria con sftp://)', forma: 'texto', requerida: false, ayuda: 'La huella SHA256 de la llave del servidor, la que muestra «ssh-keygen -lf» o WinSCP: SHA256:… Sin ella no se lee: así nunca mandamos la credencial a un servidor que no es el suyo. Admite varias separadas por coma para cambiar la llave del servidor sin cortar la lectura.', ejemplo: 'SHA256:AbCd…' },
   { clave: 'mapeo_posiciones', rotulo: 'Endpoint: mapeo de campos de posiciones (JSON)', forma: 'texto', requerida: false, ayuda: 'Dónde está la lista y qué campo es cada dato: lista, campos {unidad, lat, lon, fecha_hora, velocidad_kmh, ignicion}, formato_fecha, unidad_velocidad y paginacion.', ejemplo: '{"lista":"data","campos":{...}}' },
   { clave: 'geocercas_url', rotulo: 'Dirección del archivo o endpoint de geocercas (opcional)', forma: 'url', requerida: false, ayuda: 'Para importar sus geocercas como sitios. https.', ejemplo: 'https://su-sistema.com/geocercas.csv' },
   { clave: 'mapeo_geocercas', rotulo: 'Endpoint: mapeo de campos de geocercas (JSON)', forma: 'texto', requerida: false, ayuda: 'Solo con endpoint: lista y campos {codigo, nombre, lat_centro, lon_centro, radio_m | poligono_wkt, cliente}.', ejemplo: '{"campos":{"codigo":"...","nombre":"..."}}' },
 ];
 
 const mostrable = (url: string | undefined): string | null => {
-  try { const u = new URL(url ?? ''); return `${u.origin}${u.pathname}`; } catch { return null; }
+  try { const u = new URL(url ?? ''); return u.protocol === 'sftp:' ? `sftp://${u.host}${u.pathname}` : `${u.origin}${u.pathname}`; } catch { return null; }
 };
 
 /**
  * Prueba la configuración LEYENDO de verdad (solo lectura): valida el mapeo, lee la ventana y dice cuántas filas
  * entendió y cuántas rechazó. Un mapeo roto o una vista sin la columna salen aquí, antes del primer poll.
  */
-export async function probarTablaPropia(valores: ValoresCredencial, http: Http, ejecutor?: EjecutorSql): Promise<ResultadoPrueba> {
-  const c = crearLectorTablaPropia(valores, { http, ejecutor });
+export async function probarTablaPropia(valores: ValoresCredencial, http: Http, ejecutor?: EjecutorSql, sftp?: ClienteSftp): Promise<ResultadoPrueba> {
+  const c = crearLectorTablaPropia(valores, { http, ejecutor, sftp });
   if (!c.ok) return { ok: false, detalle: `La configuración no es válida: ${c.motivo}.`, verificadoContra: null, sobreLaCredencial: 'no_se_sabe' };
   const contra = c.config.modo === 'sql_solo_lectura'
     ? `${c.config.conexion.host}:${c.config.conexion.puerto}/${c.config.conexion.base}`
@@ -78,8 +82,8 @@ export const TABLA_PROPIA: Conector = {
   // `requiere_piloto`: la lectura está construida y probada con fixtures de contrato, pero no se ha corrido contra
   // la base real de ninguna flota; decir `api_en_vivo` sería prometer lo que nadie ha verificado.
   formaDeConectar: 'requiere_piloto',
-  comoConectaHoy: 'Eliges cómo leerlas (usuario SQL de solo lectura sobre una vista, un CSV en una dirección https o un endpoint JSON), declaras qué columna es cada dato y probamos leyendo de verdad. El SQL no es libre: solo un SELECT sobre la vista declarada.',
-  paraSubirDeEscalon: 'Una vista (o réplica) real con un usuario de solo lectura, o un CSV/endpoint de muestra con datos reales de su flota. Para SQL, además, el controlador de PostgreSQL habilitado en el despliegue.',
+  comoConectaHoy: 'Eliges cómo leerlas (usuario SQL de solo lectura sobre una vista, un CSV en una dirección https o en tu servidor SFTP, o un endpoint JSON), declaras qué columna es cada dato y probamos leyendo de verdad. El SQL no es libre: solo un SELECT sobre la vista declarada.',
+  paraSubirDeEscalon: 'Una vista (o réplica) real con un usuario de solo lectura, o un CSV/endpoint de muestra con datos reales de su flota; para SFTP, el servidor, el usuario con contraseña o llave y la huella de su llave de host. Para SQL, además, el controlador de PostgreSQL habilitado en el despliegue.',
   capacidades: ['leer_posiciones'],
   claveAlmacen: 'otro',
   fuente: null,

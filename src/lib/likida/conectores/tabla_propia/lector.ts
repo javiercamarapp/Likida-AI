@@ -5,20 +5,21 @@ import {
   ErrorTablaPropia, PROVEEDOR_TABLA_PROPIA, type FallaTablaPropia, type GeocercaTablaPropia, type LectorTablaPropia,
   type OpcionesLecturaPosiciones, type PosicionTablaPropia, type ResultadoLectura,
 } from './contrato';
-import { leerGeocercasCsv, leerPosicionesCsv } from './csv';
+import { MAX_BYTES_CSV, leerGeocercasCsv, leerPosicionesCsv } from './csv';
 import { leerConfigTablaPropia, type Autenticacion, type ConfigComun, type ConfigTablaPropia, type MapeoEndpointGeocercasT, type MapeoEndpointPosicionesT } from './config';
 import { registrosAGeocercas, registrosAPosiciones, type Registro } from './filas';
+import { crearClienteSftp, partirUrlSftp, type ClienteSftp } from './sftp';
 import { TIMEOUT_SQL_MS, construirSelect, crearEjecutorPg, type EjecutorSql } from './sql';
 import { localAUtc, utcALocal } from './tiempo';
 import { llaveEconomico } from './validar';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LOS TRES LECTORES (SQL de solo lectura, CSV por HTTPS y endpoint JSON) detrás
+// LOS TRES LECTORES (SQL de solo lectura, CSV por HTTPS o SFTP y endpoint JSON) detrás
 // del MISMO contrato `LectorTablaPropia`, y el adaptador que lo conecta al
 // asentador común (`leerPosicionesTablaPropia` → `LECTORES_POSICION`).
 // ═══════════════════════════════════════════════════════════════════════════
 
-export interface DepsLector { http: Http; ejecutor?: EjecutorSql; reloj?: OpcionesLecturaPaginada; ahora?: () => number }
+export interface DepsLector { http: Http; ejecutor?: EjecutorSql; sftp?: ClienteSftp; reloj?: OpcionesLecturaPaginada; ahora?: () => number }
 
 const UNIDADES_KMH = { kmh: 1, mph: 1.609344, ms: 3.6, nudos: 1.852 } as const;
 const MAX_FILAS_HTTP = 200_000;
@@ -169,8 +170,14 @@ export class LectorTablaPropiaCsvHttp implements LectorTablaPropia {
 
   private async texto(url: string): Promise<string> {
     if (url.toLowerCase().startsWith('sftp:')) {
-      // BLOQUEO EXTERNO declarado: no hay cliente SFTP entre las dependencias y no se instala nada en esta ola.
-      throw new ErrorTablaPropia('La entrega por SFTP todavía no está habilitada en este despliegue (falta el cliente SFTP). Deja el archivo en una dirección https o usa el endpoint.', 'formato');
+      const s = this.cfg.sftp;
+      const d = partirUrlSftp(url);
+      if (!s || 'error' in d) throw new ErrorTablaPropia('La configuración SFTP no es válida: revisa la dirección, el usuario, la credencial y la huella del servidor.', 'formato');
+      // Un solo servidor por configuración (config.ts lo exige): la ruta sale de ESTA dirección, lo demás de la credencial cifrada.
+      return (this.deps.sftp ?? crearClienteSftp()).leerArchivo(
+        { host: s.host, puerto: s.puerto, usuario: s.usuario, clave: s.clave, llave: s.llave, frase: s.frase, huellas: s.huellas, ruta: d.ok.ruta },
+        { maxBytes: MAX_BYTES_CSV },
+      );
     }
     return obtener(this.deps, peticion(url, this.cfg.auth));
   }
@@ -223,10 +230,10 @@ export function ventanaDeLaVuelta(cfg: Pick<ConfigComun, 'ventanaMinutos' | 'bar
  * Las filas que el lector rechaza se cuentan como inválidas: el poll sale PARCIAL y se dice, no «todo bien».
  */
 export async function leerPosicionesTablaPropia(
-  valores: ValoresCredencial, http: Http, opciones: OpcionesLecturaPaginada & { ejecutor?: EjecutorSql } = {},
+  valores: ValoresCredencial, http: Http, opciones: OpcionesLecturaPaginada & { ejecutor?: EjecutorSql; sftp?: ClienteSftp } = {},
 ): Promise<ResultadoPosiciones> {
   const ahora = opciones.ahora ?? Date.now;
-  const c = crearLectorTablaPropia(valores, { http, ejecutor: opciones.ejecutor, reloj: opciones, ahora });
+  const c = crearLectorTablaPropia(valores, { http, ejecutor: opciones.ejecutor, sftp: opciones.sftp, reloj: opciones, ahora });
   if (!c.ok) return { ok: false, motivo: c.motivo, falla: 'formato' };
   try {
     const r = await c.lector.leerPosiciones({ desdeUtc: new Date(ahora() - ventanaDeLaVuelta(c.config, ahora()) * 60_000) });

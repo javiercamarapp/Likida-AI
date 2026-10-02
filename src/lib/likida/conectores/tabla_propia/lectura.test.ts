@@ -146,7 +146,8 @@ describe('configuración por flota', () => {
     expect(leerConfigTablaPropia({ ...csv, ventana_minutos: '120', barrido_largo_minutos: '120' })).toMatchObject({ ok: false }); // no mayor que la ventana
     expect(leerConfigTablaPropia({ ...csv, ventana_minutos: '120', barrido_largo_minutos: '0' })).toMatchObject({ ok: true });
     expect(leerConfigTablaPropia({ modo: 'telepatia' })).toMatchObject({ ok: false });
-    expect(leerConfigTablaPropia({ ...csv, base_url: 'sftp://s.ejemplo.com/p.csv' })).toMatchObject({ ok: true });
+    // sftp:// ya se lee de verdad, pero exige usuario, credencial y la huella del servidor (ver sftp.test.ts)
+    expect(leerConfigTablaPropia({ ...csv, base_url: 'sftp://s.ejemplo.com/p.csv' })).toMatchObject({ ok: false });
   });
   it('endpoint exige mapeo y rechaza claves de prototipo', () => {
     const e = { modo: 'endpoint', base_url: 'https://api.ejemplo.com/p' };

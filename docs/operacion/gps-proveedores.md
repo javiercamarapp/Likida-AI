@@ -18,7 +18,7 @@ reclamación de peajes (`peaje_posiciones_ventana`) lo excluyen en la base, y la
 solo nunca valida. Código seguro contra la base sin la 0603 (la aplicación ya lo descarta en TS).
 
 **Qué falta para que sea de punta a punta:** el acceso real de la flota (vista/CSV/endpoint de posiciones y geocercas), aplicar las migraciones en la base real y,
-para el modo SQL y SFTP, las decisiones de dependencia que están más abajo. El E2E del ciclo (poll → asentador → `posicion` → barrido de validación del Conductor, con
+para el modo SQL, la decisión de dependencia que está más abajo (el cliente SFTP ya está instalado: `ssh2`). El E2E del ciclo (poll → asentador → `posicion` → barrido de validación del Conductor, con
 falla de credencial, lote duplicado, muestra atrasada y otra flota) vive en `src/lib/likida/e2e/agente-10-gps.e2e.test.ts`.
 
 ## Tabla propia (`tabla_propia`)
@@ -34,7 +34,8 @@ Tres modos, mismo contrato (`LectorTablaPropia`, `src/lib/likida/conectores/tabl
    `;`, comentarios, literales, `into`, `for update` ni palabras de escritura), transacción `READ ONLY`,
    `statement_timeout`, `LIMIT`, TLS verificado (nunca en claro) y servidor **público** (se resuelve y se rechaza
    si cualquier dirección es privada/loopback/enlace local/metadatos; el socket se abre contra la IP ya validada).
-2. **`csv_sftp`**: un CSV en una dirección **https** pública (`base_url`; opcional `geocercas_url`).
+2. **`csv_sftp`**: un CSV en una dirección **https** pública (`base_url`; opcional `geocercas_url`) **o en un servidor SFTP**
+   (`sftp://servidor[:puerto]/ruta/archivo.csv`, ver «SFTP» abajo).
 3. **`endpoint`**: una dirección https que devuelve JSON, con mapeo de campos (`mapeo_posiciones`), paginación por
    cursor o página y velocidad en km/h, mph, m/s o nudos.
 
@@ -90,6 +91,52 @@ satisface el del demo y al revés. La referencia CSV del demo y este lector usan
 lat_centro, lon_centro, radio_m, poligono_wkt, cliente`). Lo extra de aquí: zona configurable por flota y los
 tres modos con su seguridad.
 
+### SFTP (`csv_sftp` con `sftp://`)
+
+Cliente: `ssh2` 1.17.0 (JS puro; sus binarios nativos son opcionales y por eso va en `serverExternalPackages`). Se eligió `ssh2`
+directo y no `ssh2-sftp-client`: necesitamos el `hostVerifier`, el tope de bytes en streaming y el corte por plazo, que la
+envoltura esconde. Código: `src/lib/likida/conectores/tabla_propia/sftp.ts`; el cliente se inyecta (`deps.sftp`) y las pruebas
+lo sustituyen por un doble.
+
+**Qué se guarda** (en la credencial cifrada del conector, igual que los demás modos):
+
+| Campo | Qué es |
+|---|---|
+| `base_url` | `sftp://servidor[:puerto]/ruta/posiciones.csv` (puerto 22 por omisión). Sin usuario ni clave dentro de la dirección. |
+| `geocercas_url` | Opcional; mismo servidor y puerto, otra ruta. Si `base_url` es sftp, esta también (la credencial no viaja a un sitio https). |
+| `nombre_campo` | El usuario SFTP (el mismo campo que el usuario de «basic»). |
+| `token` | La contraseña (secreto). Puede ir vacía si se entra con llave. |
+| `llave_privada` | Alternativa a la contraseña: la llave privada PEM/OpenSSH completa (secreto; se acepta pegada en una línea). |
+| `frase_llave` | Frase de la llave, si la tiene (secreto). |
+| `huella_host` | **Obligatoria.** `SHA256:…` de la llave del servidor (la de `ssh-keygen -lf` o WinSCP). Admite hasta 5 separadas por coma para rotar la llave sin cortar la lectura. |
+
+**Decisión: la huella del host es obligatoria, sin «confiar en el primer contacto».** Sin `huella_host` la configuración no se
+guarda ni se prueba («falla cerrada»); con una huella distinta la conexión se corta ANTES de mandar usuario o clave, con falla de
+`credencial` (hay que actualizar la huella si la llave del servidor cambió a propósito; si no, hay alguien interpuesto) y el
+mensaje dice qué huella presentó el servidor, que es pública, para copiarla al configurar. El cliente no confía en
+`known_hosts` ni en DNS: la identidad es la llave.
+
+**Límites:** el servidor debe tener dirección **pública** (se resuelve y se rechaza si cualquier dirección es interna; el socket se
+abre contra la IP ya validada); plazo total de 25 s (10 s para conectar); archivo de hasta 25 MB, verificado con `stat` antes y
+otra vez mientras se lee. Solo lee un archivo: no lista, no escribe, no borra, no renombra.
+
+**Fallas** (mismas clases que los demás lectores, para el backoff del cron `gps`):
+
+| Qué pasó | Clase | Nota |
+|---|---|---|
+| Usuario, contraseña o llave rechazados; llave ilegible o frase equivocada; sin permiso sobre el archivo; huella distinta | `credencial` | Alguien debe corregir algo; no es transitorio. |
+| DNS, conexión rehusada o cortada, plazo vencido, no negoció SSH | `proveedor` | Transitorio: reintenta con backoff. |
+| Archivo ausente, la ruta es un directorio, archivo de más de 25 MB, CSV vacío o sin las columnas obligatorias | `formato` | Corregir la ruta, acotar el archivo o el mapeo de columnas. |
+
+**Secretos:** los mensajes son frases fijas; jamás se copia el texto de `ssh2` (puede traer rutas o usuario) ni se repite una
+clave, llave o frase. La prueba del panel muestra `sftp://servidor/ruta`, sin usuario. Las pruebas lo verifican con secretos
+centinela. El CSV (columnas, zona, ventana, separador `;` con decimal coma) es el mismo que por https.
+
+**Pruebas:** `sftp.test.ts` (configuración y lectura con un doble del cliente), `sftp_asentar.test.ts` (camino completo hasta el
+asentador, incluida una unidad de otra flota) y `sftp.integracion.test.ts` (servidor SFTP real en proceso —el `Server` de
+ssh2— en 127.0.0.1, con llaves generadas en la prueba: contraseña, llave con y sin frase, huella distinta, archivo ausente,
+sin permiso, enorme, stat mentiroso, timeout, puerto cerrado). No se ha probado contra el servidor de ninguna flota real.
+
 ### BLOQUEOS EXTERNOS (nada se simula como hecho)
 
 - **Controlador de PostgreSQL (`pg`):** no está entre las dependencias del repositorio y agregarlo cambia
@@ -97,8 +144,9 @@ tres modos con su seguridad.
   habilitado en este despliegue» (falla de formato, backoff largo, visible en el panel). El constructor de la
   consulta, la validación, el SSRF y el ejecutor están probados con un `pg` de contrato; al instalar `pg` funciona
   sin tocar más código.
-- **SFTP:** no hay cliente SFTP; `sftp://` se declara y contesta «todavía no está habilitada». El archivo debe
-  estar en una dirección https.
+- **SFTP, credenciales reales del cliente:** el lector está construido y probado (contra un servidor SFTP de prueba en
+  localhost), pero ninguna flota nos ha dado todavía un servidor, usuario (contraseña o llave) y la huella de su llave de
+  host. Hasta tenerlos el modo se queda en `requiere_piloto`.
 - **Una base/archivo/endpoint real de una flota:** todo está probado con fixtures de contrato
   (`tabla_propia/fixtures/`); el conector está marcado `requiere_piloto` y sin fuente hasta verlo contra datos
   reales. Para subirlo: una vista (o réplica) real con usuario de solo lectura, o un CSV/endpoint de muestra.
