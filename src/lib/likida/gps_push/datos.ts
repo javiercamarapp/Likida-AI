@@ -173,7 +173,8 @@ export async function conteosUnidadesGps(tenantId: string): Promise<ConteosUnida
   const base = () => supabaseAdmin().from('unidad').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('activo', true);
   const [a, c, n] = await Promise.all([
     acotada(base(), 'gps_panel.unidades_activas'),
-    acotada(base().not('gps_device_id', 'is', null), 'gps_panel.unidades_con_dispositivo'),
+    // Con fuente GPS = dispositivo ligado O ya reportó (la tabla propia liga por número económico, sin `gps_device_id`).
+    acotada(base().or('gps_device_id.not.is.null,gps_visto_en.not.is.null'), 'gps_panel.unidades_con_dispositivo'),
     acotada(base().not('gps_device_id', 'is', null).is('gps_visto_en', null), 'gps_panel.unidades_sin_senal'),
   ]);
   for (const r of [a, c, n]) if (r.error) throw new Error(`gps_panel.unidades: ${r.error.message}`);
@@ -181,12 +182,12 @@ export async function conteosUnidadesGps(tenantId: string): Promise<ConteosUnida
   return { activas, conDispositivo, sinDispositivo: Math.max(0, activas - conDispositivo), sinSenalNunca: n.count ?? 0 };
 }
 
-/** Ids de las unidades que tienen un dispositivo GPS ligado (para rotular el pin de WhatsApp como respaldo). */
+/** Ids de las unidades con fuente GPS: dispositivo ligado o ya reportó (para rotular el pin de WhatsApp como respaldo). */
 export async function unidadesConDispositivo(tenantId: string): Promise<Set<string>> {
   const salida = new Set<string>();
   for (let d = 0; ; d += 1000) {
     const { data, error } = await acotada(
-      supabaseAdmin().from('unidad').select('id').eq('tenant_id', tenantId).not('gps_device_id', 'is', null).order('id').range(d, d + 999),
+      supabaseAdmin().from('unidad').select('id').eq('tenant_id', tenantId).or('gps_device_id.not.is.null,gps_visto_en.not.is.null').order('id').range(d, d + 999),
       'gps_panel.unidades_con_dispositivo_ids',
     );
     if (error) throw new Error(`gps_panel.unidades_con_dispositivo_ids: ${error.message}`);
