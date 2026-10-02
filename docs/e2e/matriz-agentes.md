@@ -48,27 +48,25 @@ criterio: los archivos `e2e/agente-NN-*.e2e.test.ts` los traen como bloques `des
 | 3 | `e2e/agente-03-carta-porte.e2e.test.ts` | verde (29); 1 todo | sí, más el bloque del **worker del cron** (reclamo, tope de intentos, avisos a la oficina). Todo: salida al layout del cliente, que depende de documentos reales |
 | 4 | `e2e/agente-04-vigia.e2e.test.ts` · `vigia/ciclo_completo.e2e.test.ts` | verde (18 + 20) | sí; el segundo cubre dato real del Conductor, POD adjunto, queja con niveles, alerta de 10 min con la cola llena y del histórico a la respuesta rápida |
 | 5 | `conductor/ciclo_completo.e2e.test.ts` | verde (53) | sí, en 10 bloques: viaje feliz, chofer que no contesta, fuera de orden, duplicados y solapes, chofer y flota equivocados, fuera de ventana de 24 h, validación sin acusar, flotas en la misma pasada, tablero y **P2** (hitos por geocerca y señal de vida) |
-| 6 | `e2e/agentes-pendientes-ola3.e2e.test.ts` | **sin E2E**: todo (5) | los cinco casos escritos como `todo` (paquete P11) |
+| 6 | `e2e/agente-06-autofactura.e2e.test.ts` · `src/app/api/cron/portales-vivos/route.test.ts` | verde (26 + 13) | sí; lote al vuelo real con un doble del portal (feliz, fallo, duplicado, fuera de orden, otra flota); el contrato del vigilante de portales en `route.test` |
 | 7 | `e2e/agente-07-cobranza.e2e.test.ts` · `agentes/cobranza_gasto_e2e.test.ts` | verde (16 + 24) | sí; la cobranza por gasto, su base sin migrar y su configuración en la segunda |
 | 8 | `e2e/agente-08-escalacion.e2e.test.ts` | verde (15) | sí |
 | 9 | `e2e/agente-09-buzon.e2e.test.ts` · `buzon/ingesta_e2e.test.ts` · `buzon/entrega_e2e.test.ts` · `src/app/api/cron/buzon-entrega/route.test.ts` | verde (15 + 7 + 13 + 8) | sí en el primero; PDF/zip/pareja XML+PDF en `ingesta_e2e`; entrega al contador (CSV+ZIP, reserva atómica, backoff, cron) en `entrega_e2e`; el contrato del cron en `route.test` |
 | 10 | `e2e/agente-10-gps.e2e.test.ts` · `conectores/tabla_propia/e2e.test.ts` | verde (17 + 1) | sí: feliz, fallo (401, 5xx, formato, cofre, cierre durable por flota), duplicado (poll y push), fuera de orden (muestra atrasada, de ayer, futura) y otra flota (mismo `device_id`, huérfanos) |
 | 11 | `e2e/agente-11-comunicacion-operadores.e2e.test.ts` | verde (16) | sí |
-| 12 | `e2e/agentes-pendientes-ola3.e2e.test.ts` | **sin E2E**: todo (5) | los cinco casos escritos como `todo` (paquete P10); hay pruebas unitarias en `jornada/alerta_tope.test.ts` pero no del ciclo |
+| 12 | `e2e/agente-12-jornada.e2e.test.ts` · `src/app/api/cron/jornada-alertas/route.test.ts` | verde (26 + 10) | sí; la alerta de tope se enciende desde la sección «Alerta de tope» de `/dashboard/jornada` (P10) |
 | 13 | `e2e/agente-13-mis-reglas.e2e.test.ts` · `reglas/e2e_ciclo_completo.test.ts` | verde (19 + 12) | sí; el respaldo por plantilla y «cuál plantilla usé» en la segunda |
 | — | `convenios/convenios.e2e.test.ts` | verde (3) | sí: feliz y sin convenio; P7 suma el ciclo del cron con convenio editado tras despachar, acercamiento antes del despacho, fuera de orden y otra flota |
 | — | `orquestador/orquestador.e2e.test.ts` · `orquestador/orquestador_vivo.e2e.test.ts` | verde (11 + 7) | rol, aislamiento, escalar a una persona, agente caído, sin PII; aviso apagado por omisión, barrido de salud sin duplicar y cierre solo |
 
-Los únicos `todo` que quedan en todo el árbol son 11: 10 en el archivo de pendientes (Autofactura y Jornada) y 1 en Carta Porte. Ningún archivo de esta tabla tiene fallos.
+El único `todo` que queda en todo el árbol es el de Carta Porte (salida al layout del cliente). El archivo de pendientes se retiró al integrar P10 y P11. Ningún archivo de esta tabla tiene fallos.
 
 ## Qué falta (y por qué)
 
-1. **Agentes 6 y 12 sin E2E del ciclo.** Son los únicos. Autofactura (P11) necesita un doble del portal y decidir quién opera el vinculador; Jornada (P10) necesita además su pantalla
-   para encender la alerta (hoy la configuración nace apagada y nadie puede escribirla). Sus `todo` están en `agentes-pendientes-ola3.e2e.test.ts`, con los cinco casos nombrados.
+1. **Agentes 6 y 12**: cerrados con P11 y P10 (E2E del ciclo y `route.test` de sus crons). Lo pendiente de Autofactura es externo: portales verificados contra el real, mandato legal y quién opera el vinculador.
 2. **Carta Porte: salida al layout del cliente**: depende de los documentos reales (la exactitud no está medida).
 3. **Convenios**: cerrado con P7 (ciclo del cron con convenio editado tras despachar, acercamiento antes del despacho y otra flota). Lo que falta es externo: aplicar 0656/0657/0658 y datos reales.
-4. **Crons sin `route.test.ts`**: `jornada-alertas` y `portales-vivos`. El contrato común de «latido en todo camino de salida» lo cubre `latido-en-toda-salida.test.ts`, que lee el
-   fuente de cada ruta, pero no sustituye a la prueba de la ruta.
+4. **Crons sin `route.test.ts`**: ninguno de los agentes (`jornada-alertas` y `portales-vivos` ya la tienen).
 5. **Ningún E2E toca proveedores reales**: eso es bloqueo externo (Meta, Resend, PAC, portales, GPS del cliente), no código.
 
 ## Dobles de proveedor por agente
