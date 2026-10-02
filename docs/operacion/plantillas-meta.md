@@ -184,7 +184,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Botones:** ninguno
 
-## Plantillas nuevas, listas para enviar a aprobación (20)
+## Plantillas nuevas, listas para enviar a aprobación (22)
 
 ### `cobranza_gastos_v1`
 
@@ -425,6 +425,48 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 | `{{2}}` | folio | F-1042 |
 
 - **Botones:** «Voy de regreso» (respuesta rápida, payload `hito_regreso:<viaje_id>`); «Aún no» (respuesta rápida, payload `hito_aun_no_regreso:<viaje_id>`)
+
+### `convenio_instrucciones_despacho_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor. Al despachar el viaje: las instrucciones de operación del convenio del cliente (puerta, con quién reportarse, documentos, peculiaridades), una sola línea.
+- **Llamador en código:** src/lib/likida/convenios/envio.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, estas son las instrucciones de tu viaje {{2}} ({{3}}): {{4}} Si tienes dudas, escríbeme «¿por dónde entro?» o avisa a tu jefe de tráfico.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan |
+| `{{2}}` | folio | F-1042 |
+| `{{3}}` | ruta origen → destino | Planta Zapopan → CEDIS Tlaquepaque |
+| `{{4}}` | instrucciones en una línea | Por dónde entras: puerta 3, lado poniente · Con quién te reportas: caseta de vigilancia |
+
+- **Botones:** ninguno
+
+### `convenio_instrucciones_acercamiento_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor. Al acercarse a la planta (geocerca): recordar al chofer las instrucciones de ESA planta, una sola línea.
+- **Llamador en código:** src/lib/likida/convenios/acercamiento.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, ya vas llegando a {{2}} (viaje {{3}}). Recuerda: {{4}} Cualquier duda, avisa a tu jefe de tráfico.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan |
+| `{{2}}` | planta | Planta Zapopan |
+| `{{3}}` | folio | F-1042 |
+| `{{4}}` | instrucciones en una línea | Por dónde entras: puerta 3, lado poniente · Documentos que llevas: carta porte y orden de compra |
+
+- **Botones:** ninguno
 
 ### `aviso_jefe_trafico_v1`
 

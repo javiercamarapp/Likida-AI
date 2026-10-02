@@ -123,6 +123,10 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // (liquidación/facturas/cobranza) siguen en dinero.
   '/dashboard/agentes/conductores': 'operacion',
   // 0385: el catálogo de sitios y las estadías en andén del Agente 5 — operación, cero pesos en pantalla (el cobro va por el CSV de /v1/estadias).
+  // 0580: los convenios de clientes (perfiles con instrucciones de operación). Operación: el jefe de tráfico las carga y
+  // las exporta; la tarifa y los requisitos de cobro solo se leen y se pintan con el área de dinero (la página y la base
+  // lo comprueban aparte).
+  '/dashboard/convenios': 'operacion',
   '/dashboard/agentes/conductores/sitios': 'operacion',
   '/dashboard/agentes/conductores/estadias': 'operacion',
   // Ola 3: la configuración de flota del Agente 5 (escalera, ventana, tope, contactos, webhook). La ve la operación; solo el

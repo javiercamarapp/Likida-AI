@@ -215,7 +215,13 @@ import { join, relative, sep } from 'node:path';
 //     flota; claim por (jornada, nivel) en la base y latido en todo camino de salida.
 
 // Integración ola 3b: 100 (peajes-reclamacion) + 2 de GPS/jornada (gps push, cron jornada-alertas).
-const RUTAS_APP_REVISADAS = 102;
+//
+// 93 → 94 en la ola 3, W3 «convenios» (0580): `api/export/convenios/route.ts` — GET de la flota de la SESIÓN (`resolverTenantApi`,
+//   `?tenant=` solo lo vale el superadmin ya validado): puerta del dato (área `operacion`), del verbo (`puedeExportar`) y, para el
+//   tipo `completo` (tarifa y requisitos de cobro), del DINERO (área `dinero`); rate limit por IP y por flota. Las instrucciones
+//   salen sin dinero (ni siquiera se consulta la tabla comercial). Prueba: `export/convenios/route.test.ts`.
+// Integración ola 3b: 102 (peajes-reclamacion, gps push, cron jornada-alertas) + 1 (export/convenios).
+const RUTAS_APP_REVISADAS = 103;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
