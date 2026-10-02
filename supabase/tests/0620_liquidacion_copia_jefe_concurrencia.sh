@@ -25,7 +25,7 @@ SQL
 
 sesion() {
   local n="$1" tel="$2"
-  "${psql_cmd[@]}" -c "begin; select coalesce(public.reclamar_copia_jefe('$tenant','$liq',1,'$tel')::text,'-'); select pg_sleep(0.05); commit;" | grep -v '^$' | head -1 > "$work/$tel.$n"
+  "${psql_cmd[@]}" -c "begin; select coalesce(public.reclamar_copia_jefe('$tenant','$liq',1,'$tel')::text,'-'); select pg_sleep(0.05); commit;" | grep -v '^$' | sed -n 1p > "$work/$tel.$n"
 }
 pids=()
 for n in $(seq 1 8); do sesion "$n" 525511110001 & pids+=($!); sesion "$n" 525511110002 & pids+=($!); done
