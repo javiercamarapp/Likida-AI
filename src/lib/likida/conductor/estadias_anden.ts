@@ -1,6 +1,7 @@
 import { calcularDetencion, resolverPolitica, type Detencion, type OrigenPolitica, type PoliticaDetencion } from '../estadias/motor';
 import { estaResuelto, type HitoFila, type Lugar, type TipoHito } from './tipos';
 import type { ResultadoValidacion } from './validacion';
+import { hoyMx, TZ_MX } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ESTADÍAS EN ANDÉN — cuánto tiempo estuvo la unidad en cada parada. Puro.
@@ -221,11 +222,12 @@ export function horaExactaMx(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  const p = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  // El día sale de `hoyMx` (un solo sitio deletrea la zona); la hora, de las partes de la misma zona.
+  const p = new Intl.DateTimeFormat('en-US', {
+    timeZone: TZ_MX, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   }).formatToParts(d);
   const g = (t: string) => p.find((x) => x.type === t)?.value ?? '';
-  return `${g('year')}-${g('month')}-${g('day')} ${g('hour') === '24' ? '00' : g('hour')}:${g('minute')}:${g('second')}`;
+  return `${hoyMx(d)} ${g('hour') === '24' ? '00' : g('hour')}:${g('minute')}:${g('second')}`;
 }
 
 /** Neutraliza la inyección de fórmulas de hoja de cálculo (=, +, -, @, tab, CR al inicio) y escapa para CSV. */

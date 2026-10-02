@@ -1,4 +1,4 @@
-import { TZ_MX, mxn, fechaCorta } from '@/lib/formato';
+import { TZ_MX, hoyMx, mxn, fechaCorta } from '@/lib/formato';
 import { tierPendiente } from './cobranza_pura';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -320,7 +320,7 @@ export function calcularEfectividad(contactos: readonly ContactoMedible[]): Efec
 
 /** El inicio del día calendario de México (ISO UTC), para contar mensajes «de hoy». */
 export function inicioDelDiaMx(ahora: Date): Date {
-  const partes = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX, year: 'numeric', month: '2-digit', day: '2-digit' }).format(ahora);
+  const partes = hoyMx(ahora);
   // México no tiene horario de verano desde 2022: UTC-6 todo el año. Se calcula con
   // el desfase REAL de esa fecha para no depender de esa suposición.
   const medianocheUtc = new Date(`${partes}T00:00:00Z`);
