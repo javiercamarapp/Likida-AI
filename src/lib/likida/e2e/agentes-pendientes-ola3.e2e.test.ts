@@ -19,13 +19,10 @@ describe('Agente 5 — Conductor: conciliación obligatoria contra la posición 
   it.todo('API: POST /v1/hitos/{id}/validar (w3-conductor-vigia ae0f416d) exige llave de API, deja bitácora firmada y respeta el tenant de la llave');
 });
 
-describe('Agente 6 — Autofactura (w3-autofactura 4d0bbe72/f01c697a/9bdd8331/93285d79, migraciones 0540-0542)', () => {
-  it.todo('FELIZ: lote supervisado de facturas al vuelo → la persona confirma → se consume UNA vez → emisión por portal verificado dentro del cupo diario atómico');
-  it.todo('FALLO: portal sin verificación real (verificaciones.json vacío) o sin mandato legal → falla CERRADO a ensayo; CAPTCHA/MFA → pantalla del paso humano con código de un solo uso, cookies cifradas y cancelar');
-  it.todo('DUPLICADO: el mismo lote confirmado dos veces o el mismo ticket por dos corridas del cron (facturar cada 15 min) emite UNA sola factura');
-  it.todo('FUERA DE ORDEN: el código de vinculación expira/se reclama dos veces; la cancelación de CFDI (SW sapien 201/202/205/400) llega antes de que el timbre quede confirmado');
-  it.todo('OTRO TENANT: credenciales, cupo y bandera de emisión real son por flota; la flota B no puede promover ni consumir el lote de la A');
-});
+// Agente 6 — Autofactura: YA TIENE su E2E del ciclo (feliz, fallo, duplicado, fuera de orden, otra flota) en
+// `agente-06-autofactura.e2e.test.ts`, con un doble del portal. La cancelación de CFDI por API (0541) es de Carta Porte y
+// vive en `carta_porte_cancelacion.test.ts`. Lo que NO se puede probar aquí (portal real verificado) está en
+// docs/operacion/agente-autofactura.md, sección 7.
 
 describe('Agente 10 — GPS: lectores Wialon/Geotab/Navixy/genérico + PUSH + tabla propia (w3-gps-jornada 6ea4f725/ed386ef5/477759a1/bb3eb4c5)', () => {
   it.todo('FELIZ: el poll de cada proveedor (fixtures de contrato) y el push firmado /api/gps/push/{flota} asientan la posición en la unidad CORRECTA vía el asentador común, con ignición y semáforo en vivo/atrasada/obsoleta');
