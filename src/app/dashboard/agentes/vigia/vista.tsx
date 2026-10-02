@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { UsersRound, Hand, Clock, Flame, Inbox, ShieldCheck, History, Settings2, AlertTriangle } from 'lucide-react';
 import { numero, fechaHoraMx } from '@/lib/formato';
 import type { DatosTablero, ConversacionTablero } from '@/lib/likida/vigia/repo';
@@ -55,8 +56,9 @@ const NOMBRE_EVENTO: Record<string, string> = {
   adjunto_fallo: 'No se pudo mandar el archivo adjunto: revísalo y mándaselo tú',
 };
 
-export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones }: {
+export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones, sufijo = '' }: {
   datos: Promise<DatosTablero>;
+  sufijo?: string;
   ahoraMs: number;
   /** flota_admin y encargado deciden por los clientes; el resto solo mira. */
   puedeDecidir: boolean;
@@ -72,6 +74,9 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
           titulo="Servicio al cliente (Vigía)"
         />
         <div className="px-5 py-5 flex-1 space-y-4">
+          <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12.5px]">
+            <Link href={`/dashboard/agentes/vigia/historial${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Grupos críticos e histórico (FAQs y tendencias)</Link>
+          </nav>
           <Bloque mensaje="No se pudo leer el tablero del Vigía." esqueleto={<EsqKpis />}>
             <BloqueEstadoYKpis datos={datos} ahoraMs={ahoraMs} />
           </Bloque>

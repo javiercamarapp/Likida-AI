@@ -14,6 +14,7 @@ import {
   aprobarMensaje, rechazarMensaje, tomarConversacion, devolverConversacion, responderComoHumano, cerrarConversacion,
   type ResultadoDecision,
 } from '@/lib/likida/vigia/servicio';
+import { sufijoTenant } from '../../sufijo';
 import { VistaAgenteVigia } from './vista';
 import type { ResultadoVigia } from './controles';
 
@@ -187,6 +188,7 @@ export default async function PaginaAgenteVigia({
       puedeDecidir={DECIDE.includes(rol)}
       puedeAdministrar={rol === 'flota_admin'}
       acciones={{ decidir, conversacion, config, alta, contacto }}
+      sufijo={sufijoTenant(sp)}
     />
   );
 }

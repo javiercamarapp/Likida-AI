@@ -132,6 +132,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // servicio (flota_admin y encargado). Cero pesos en pantalla; el contador no atiende
   // clientes y no ve chats de clientes (la 0400 también se lo niega en la base).
   '/dashboard/agentes/vigia': 'operacion',
+  // 0484: grupos de clientes críticos, histórico exportado de WhatsApp y su reporte (FAQs, temas, tiempos). Cero pesos; solo el dueño sube/borra.
+  '/dashboard/agentes/vigia/historial': 'operacion',
   // El Agente de Carta Porte (Fases B-C, 25-ago-2026): mismo criterio que su
   // pantalla /dashboard/carta-porte — cero pesos, y la declaración de ruta es
   // del jefe de tráfico. La página del borrador
