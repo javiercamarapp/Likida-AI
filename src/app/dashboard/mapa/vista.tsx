@@ -1,6 +1,7 @@
 import { Map, MapPinOff, Satellite } from 'lucide-react';
 import { numero, fechaHoraMx } from '@/lib/formato';
 import { BarraPagina } from '../resumen-visual';
+import { nivelDePosicion, contarPorFrescura, ROTULO_FRESCURA, TONO_FRESCURA, MINUTOS_ATRASADA } from '@/lib/likida/gps_salud';
 import { MapaVivo, type ViajeEnMapa, type PinUnidad } from './mapa-vivo';
 
 export interface SinUbicar {
@@ -33,12 +34,14 @@ export interface Rastreo {
   }>;
   /** Una por unidad activa con posición, ya proyectada al viewBox. */
   pines: PinUnidad[];
+  /** Dispositivos que el proveedor reporta y ninguna unidad reclama (no se dibujan). `null` = no se pudo contar. */
+  huerfanos?: number | null;
 }
 
 /** A partir de aquí el pin se pinta apagado y la lista lo dice: no es "ahí
  *  está el camión", es "ahí estaba hace rato". Seis horas es más de un turno
  *  de manejo — con eso el camión pudo cruzar medio país. */
-export const MINUTOS_POSICION_FRESCA = 360;
+export const MINUTOS_POSICION_FRESCA = MINUTOS_ATRASADA;
 
 /** «Hace 4 h», «hace 2 días» — con la hora exacta siempre al lado, para que
  *  nadie tenga que confiar en el redondeo. */
@@ -114,7 +117,7 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
             </p>
           </div>
 
-          <MapaVivo viajes={ubicados} pines={rastreo.pines} minutosFrescos={MINUTOS_POSICION_FRESCA} />
+          <MapaVivo viajes={ubicados} pines={rastreo.pines} />
 
           {/* ── EL GPS, CON SUS PALABRAS ──────────────────────────────────
               Tres estados y ninguno se confunde con otro: no se pudo leer /
@@ -158,6 +161,24 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
                       : ''}
                   </p>
                 ))}
+                {rastreo.pines.length > 0 && (() => {
+                  const c = contarPorFrescura(rastreo.pines.map((p) => p.minutos));
+                  return (
+                    <p className="text-[12px] mb-2" style={{ color: 'var(--muted)' }}>
+                      Frescura del dato:{' '}
+                      <span style={{ color: 'var(--ok)' }}>{numero(c.en_vivo)} en vivo</span> ·{' '}
+                      <span style={{ color: 'var(--warn)' }}>{numero(c.atrasada)} atrasadas</span> ·{' '}
+                      <span style={{ color: 'var(--bad)' }}>{numero(c.obsoleta)} obsoletas</span>
+                      {' '}(en vivo ≤ 30 min, atrasada ≤ {Math.round(MINUTOS_POSICION_FRESCA / 60)} h). Un camión parado puede tener la posición vieja sin que nada falle.
+                    </p>
+                  );
+                })()}
+                {typeof rastreo.huerfanos === 'number' && rastreo.huerfanos > 0 && (
+                  <p className="text-[12px] mb-2" style={{ color: 'var(--warn)' }}>
+                    {numero(rastreo.huerfanos)} {rastreo.huerfanos === 1 ? 'dispositivo que reporta tu proveedor no está ligado' : 'dispositivos que reporta tu proveedor no están ligados'} a ninguna unidad:
+                    no se dibujan (Likida no inventa camiones). Lígalos en <a href="/dashboard/conexiones#gps" className="underline">Conexiones</a>.
+                  </p>
+                )}
                 <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
                   Posición MEDIDA de cada unidad: la que manda tu proveedor de GPS o el pin que el chofer
                   comparte por WhatsApp. Es un dato con hora, no el trayecto ilustrativo del mapa.
@@ -198,19 +219,22 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
                       </thead>
                       <tbody>
                         {rastreo.pines.map((p) => {
-                          const vieja = p.minutos > MINUTOS_POSICION_FRESCA;
+                          const nivel = nivelDePosicion(p.minutos);
+                          const vieja = nivel !== 'en_vivo';
                           return (
                             <tr key={p.unidadId} className="border-t" style={{ borderColor: 'var(--line)' }}>
                               <td className="py-2.5">
                                 <span className="font-medium">{p.etiqueta}</span>
                                 {p.placas && <span className="ml-2 cifra-mono text-[11px]" style={{ color: 'var(--faint)' }}>{p.placas}</span>}
                               </td>
-                              <td className="py-2.5" style={vieja ? { color: 'var(--warn)' } : undefined}>
+                              <td className="py-2.5" style={vieja ? { color: `var(--${TONO_FRESCURA[nivel]})` } : undefined}>
+                                <span className="mr-1.5 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                                  style={{ color: `var(--${TONO_FRESCURA[nivel]})`, background: `var(--${TONO_FRESCURA[nivel]}bg)` }}>{ROTULO_FRESCURA[nivel]}</span>
                                 {antiguedad(p.minutos)}
                                 <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaHoraMx(p.medidaEn)}</span>
                               </td>
                               <td className="py-2.5" style={{ color: 'var(--muted)' }}>
-                                {p.proveedor === 'whatsapp' ? 'pin del chofer (WhatsApp)' : p.proveedor}
+                                {p.proveedor === 'whatsapp' ? (p.respaldoWa ? 'pin del chofer (WhatsApp) — respaldo: el GPS de esta unidad no reportó después' : 'pin del chofer (WhatsApp)') : p.proveedor}
                               </td>
                               <td className="py-2.5 text-right tabular">
                                 {/* `null` NO es cero: cero es «parado», null es
@@ -226,8 +250,8 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
                       </tbody>
                     </table>
                     <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
-                      Lo que lleva más de {Math.round(MINUTOS_POSICION_FRESCA / 60)} horas sin reportar se marca en ámbar
-                      aquí y se dibuja apagado en el mapa: sigue siendo la última posición conocida, no dónde
+                      Lo atrasado se marca en ámbar y lo obsoleto (más de {Math.round(MINUTOS_POSICION_FRESCA / 60)} horas) en rojo
+                      aquí, y se dibuja apagado en el mapa: sigue siendo la última posición conocida, no dónde
                       está el camión ahora.
                     </p>
                   </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { nivelDePosicion, ROTULO_FRESCURA, type NivelFrescura } from '@/lib/likida/gps_salud';
 import { useState } from 'react';
 import { numero } from '@/lib/formato';
 import { VIEWBOX, TRAZO_MEXICO, PUNTOS_MEXICO } from './mexico-geo';
@@ -46,6 +47,9 @@ export interface PinUnidad {
   minutos: number;
   velocidadKmh: number | null;
   proveedor: string;
+  /** `true` = el pin es el del chofer por WhatsApp y esta unidad SÍ tiene un
+   *  dispositivo GPS ligado: el GPS no reportó y el pin es el respaldo. */
+  respaldoWa?: boolean;
 }
 
 /** El arco origen→destino: cuadrática con control perpendicular, siempre
@@ -79,13 +83,10 @@ function arcoDe(v: ViajeEnMapa): string | null {
  *
  * `prefers-reduced-motion` apaga todas las animaciones vía CSS.
  */
-export function MapaVivo({ viajes, pines = [], minutosFrescos = 360 }: {
+export function MapaVivo({ viajes, pines = [] }: {
   viajes: ViajeEnMapa[];
   /** Posiciones medidas por unidad. Vacío = la flota no tiene GPS todavía. */
   pines?: PinUnidad[];
-  /** Pasado esto, el pin se dibuja apagado: sigue siendo la última posición
-   *  conocida, no dónde está el camión ahora. */
-  minutosFrescos?: number;
 }) {
   const [fijo, setFijo] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
@@ -161,20 +162,22 @@ export function MapaVivo({ viajes, pines = [], minutosFrescos = 360 }: {
                 círculo, que es el vocabulario de los extremos del arco) y en
                 --ok si reportó hace poco, --faint si lleva horas callado. */}
             {pines.map((p) => {
-              const fresco = p.minutos <= minutosFrescos;
+              const nivel: NivelFrescura = nivelDePosicion(p.minutos);
+              const fresco = nivel === 'en_vivo';
+              const relleno = nivel === 'en_vivo' ? 'var(--ok)' : nivel === 'atrasada' ? 'var(--warn)' : 'var(--faint)';
               return (
                 <g key={p.unidadId}>
                   <rect x={p.x - 3.2} y={p.y - 3.2} width={6.4} height={6.4}
                     transform={`rotate(45 ${p.x} ${p.y})`}
-                    fill={fresco ? 'var(--ok)' : 'var(--faint)'}
+                    fill={relleno}
                     stroke="var(--surface)" strokeWidth={1.2}>
                     <title>
-                      {`${p.etiqueta} — ${fresco ? 'posición reciente' : 'última posición conocida'} (${p.proveedor})`}
+                      {`${p.etiqueta} — ${ROTULO_FRESCURA[nivel]}${fresco ? '' : ': última posición conocida, no dónde está ahora'} (${p.respaldoWa ? 'pin del chofer, respaldo del GPS' : p.proveedor})`}
                     </title>
                   </rect>
                   <text x={p.x} y={p.y + 11} textAnchor="middle" fontSize={9} fontWeight={600}
                     fill="var(--ink)" stroke="var(--surface)" strokeWidth={2.4} paintOrder="stroke"
-                    opacity={fresco ? 1 : 0.6}>
+                    opacity={nivel === 'obsoleta' ? 0.6 : 1}>
                     {p.etiqueta}
                   </text>
                 </g>
