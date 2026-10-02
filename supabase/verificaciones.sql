@@ -18712,3 +18712,80 @@ begin
   raise exception E'FORMATO_SIN_FORMATO_0645 fila-sin-formato=% telefono-corto-rebota=% mas-de-tres-rebota=% formato-no-objeto-rebota=%   (esperado t / t / t / t)',
     fila, corto, tres, objeto;
 end $$;
+
+-- ── 300. Edición de convenios en pantalla: guardado atómico con versión y refresco de viajes en curso (mig. 0656 + 0657) ──
+-- Editar un convenio y su lista de instrucciones eran varias escrituras sueltas: una falla a medias lo dejaba sin instrucciones y
+-- dos jefes editando a la vez se pisaban en silencio. La 0656 hace el guardado en UNA transacción con control de versión (el
+-- trigger la sube en cada UPDATE) y la 0657 lleva la edición a los viajes no liquidados de ese convenio (solo los que cambian).
+-- Lo que solo la base demuestra: la versión vieja da conflicto sin escribir, la lista se reemplaza entera y la repetida es una,
+-- un fallo a media lista revierte todo, el nombre repetido y las referencias de otra flota rebotan, el convenio de otra flota
+-- no existe para quien edita, el refresco no cruza flotas ni toca al liquidado, reabre solo el despacho (no el acercamiento) y es
+-- idempotente.
+-- Esperado: CONVENIO_EDICION_0656 conflicto-sin-escribir=t lista-reemplazada=t fallo-revierte=t duplicado-rebota=t referencia-ajena-rebota=t otra-flota-no-existe=t refresco-solo-abiertos=t reabre-solo-despacho=t idempotente=t
+do $$
+declare
+  ta uuid; tb uuid; ca uuid; cb uuid; oa uuid; oa2 uuid; va uuid; vb uuid; vl uuid; conv uuid; v int; v0 int; n int; r jsonb; foto jsonb;
+  conflicto boolean := false; lista boolean := false; revierte boolean := false; dup boolean := false; ajena boolean := false;
+  otra boolean := false; abiertos boolean := false; solo_despacho boolean := false; idem boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0656 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0656 B') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ 0656 CA') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (tb, 'ZZZ 0656 CB') returning id into cb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0656A', '5215559990656') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0656B', '5215559990657') returning id into oa2;
+  insert into viaje (tenant_id, operador_id, folio, estatus, cliente_id) values (ta, oa, 'ZZZ-0656-1', 'abierto', ca) returning id into va;
+  insert into viaje (tenant_id, operador_id, folio, estatus, cliente_id) values (ta, oa2, 'ZZZ-0656-2', 'liquidado', ca) returning id into vl;
+
+  r := guardar_convenio(ta, null, ca, 'ZZZ ruta', null, null, null, null, null, null, null, null,
+    '[{"categoria":"puerta","texto":"Puerta 1","orden":1},{"categoria":"reportarse","texto":"Con el guardia","orden":2}]');
+  conv := (r->>'id')::uuid; v0 := (r->>'version')::int;
+  update cliente_convenio set activo = true where id = conv;
+  select version into v from cliente_convenio where id = conv;
+
+  r := guardar_convenio(ta, conv, null, 'ZZZ ruta cambiada', null, null, null, null, null, null, null, v0, '[]');
+  select count(*) into n from cliente_convenio where id = conv and nombre = 'ZZZ ruta';
+  conflicto := r->>'estado' = 'conflicto' and v = v0 + 1 and n = 1 and (select count(*) from convenio_instruccion where convenio_id = conv) = 2;
+
+  r := guardar_convenio(ta, conv, null, 'ZZZ ruta', null, null, null, null, null, null, null, v,
+    '[{"categoria":"puerta","texto":"Puerta 1","momento":"despacho","orden":5},{"categoria":"documentos","texto":"Carta porte","orden":6},{"categoria":"documentos","texto":"Carta porte","orden":7}]');
+  select count(*) into n from convenio_instruccion where convenio_id = conv;
+  lista := r->>'estado' = 'ok' and n = 2
+    and not exists (select 1 from convenio_instruccion where convenio_id = conv and categoria = 'reportarse')
+    and exists (select 1 from convenio_instruccion where convenio_id = conv and texto = 'Puerta 1' and momento = 'despacho' and orden = 5);
+
+  select version into v from cliente_convenio where id = conv;
+  r := guardar_convenio(ta, conv, null, 'ZZZ no debe quedar', null, null, null, null, null, null, null, v,
+    '[{"categoria":"puerta","texto":"Buena"},{"categoria":"inventada","texto":"Mala"}]');
+  revierte := r->>'estado' = 'invalida'
+    and exists (select 1 from cliente_convenio where id = conv and nombre = 'ZZZ ruta' and version = v)
+    and not exists (select 1 from convenio_instruccion where convenio_id = conv and texto = 'Buena')
+    and (select count(*) from convenio_instruccion where convenio_id = conv) = 2;
+
+  dup := (guardar_convenio(ta, null, ca, 'ZZZ ruta', null, null, null, null, null, null, null, null, null))->>'estado' = 'duplicado';
+  ajena := (guardar_convenio(ta, null, cb, 'ZZZ con cliente ajeno', null, null, null, null, null, null, null, null, null))->>'estado' = 'referencia_invalida';
+  otra := (guardar_convenio(tb, conv, null, 'ZZZ robado', null, null, null, null, null, null, null, v, null))->>'estado' = 'no_existe';
+
+  select jsonb_agg(jsonb_build_object('categoria', categoria, 'texto', texto, 'momento', momento, 'lugar', lugar, 'orden', orden) order by orden, id)
+    into foto from convenio_instruccion where convenio_id = conv;
+  insert into viaje_convenio (viaje_id, tenant_id, convenio_id, cliente_id, instrucciones, despacho_enviado_en, despacho_canal, acercamiento_origen_enviado_en, acercamiento_origen_canal)
+    values (va, ta, conv, ca, '[{"categoria":"puerta","texto":"Vieja","momento":"ambos","lugar":"ambos","orden":0}]', now(), 'texto', now(), 'texto');
+  insert into viaje_convenio (viaje_id, tenant_id, convenio_id, cliente_id, instrucciones)
+    values (vl, ta, conv, ca, '[{"categoria":"puerta","texto":"Vieja","momento":"ambos","lugar":"ambos","orden":0}]');
+  select count(*) into n from refrescar_viajes_de_convenio(tb, conv, true);
+  abiertos := n = 0;
+  select count(*) into n from refrescar_viajes_de_convenio(ta, conv, false);
+  abiertos := abiertos and n = 1
+    and exists (select 1 from viaje_convenio where viaje_id = va and instrucciones = foto and despacho_enviado_en is not null)
+    and exists (select 1 from viaje_convenio where viaje_id = vl and instrucciones::text like '%Vieja%');
+  -- (sin p_reenviar el despacho de va sigue sellado; el reenvío se prueba con un segundo cambio de convenio)
+  select version into v from cliente_convenio where id = conv;
+  perform guardar_convenio(ta, conv, null, 'ZZZ ruta', null, null, null, null, null, null, null, v, '[{"categoria":"puerta","texto":"Puerta 9"}]');
+  select count(*) into n from refrescar_viajes_de_convenio(ta, conv, true) x(viaje_id, reenviar) where reenviar and x.viaje_id = va;
+  solo_despacho := n = 1
+    and exists (select 1 from viaje_convenio where viaje_id = va and despacho_enviado_en is null and despacho_canal is null and acercamiento_origen_enviado_en is not null);
+  idem := (select count(*) from refrescar_viajes_de_convenio(ta, conv, true)) = 0;
+
+  raise exception E'CONVENIO_EDICION_0656 conflicto-sin-escribir=% lista-reemplazada=% fallo-revierte=% duplicado-rebota=% referencia-ajena-rebota=% otra-flota-no-existe=% refresco-solo-abiertos=% reabre-solo-despacho=% idempotente=%   (esperado t / t / t / t / t / t / t / t / t)',
+    conflicto, lista, revierte, dup, ajena, otra, abiertos, solo_despacho, idem;
+end $$;
