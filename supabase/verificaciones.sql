@@ -18752,3 +18752,44 @@ begin
   raise exception E'RECLAMO_REGLAS_0660 segundo-reclamo-rebota=% arriendo-se-retoma=% token-viejo-no-confirma=% confirmar-sella=% sellado-no-se-reclama=% liberar-reabre=% sello-viejo-intacto=%   (esperado t / t / t / t / t / t / t)',
     segundo, retoma, viejo_no, sella, no_reclama, reabre, intacto;
 end $$;
+
+-- ── 306. Conductor: el cron reparte sus viajes entre flotas y deja de perseguir los vencidos (mig. 0661) ──
+-- El cron leía los 400 viajes abiertos MÁS VIEJOS de todas las flotas juntas: una flota grande se comía la pasada y las chicas no se
+-- atendían nunca; un viaje abierto hace meses ocupaba lugar para siempre. La 0661 reparte por turnos (el más viejo de cada flota, luego el
+-- segundo de cada una), descarta los de más de 30 días y omite los hitos pendientes de esos viajes sin tocar el viaje.
+-- Esperado: REPARTO_JUSTO_0661 tope-reparte=t vencido-fuera=t hitos-omitidos=t recibido-intacto=t viaje-intacto=t idempotente=t
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; ob2 uuid; va uuid; vv uuid; vb uuid; ids uuid[];
+  reparte boolean; fuera boolean; omitidos boolean; recibido boolean; intacto boolean; idem boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0661 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0661 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'A1', '525500066101') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'A2', '525500066102') returning id into ob;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'B1', '525500066103') returning id into ob2;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, oa, 'ZV-A1', 'abierto', now(), now() - interval '10 hours') returning id into va;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, ob, 'ZV-A2', 'abierto', now(), now() - interval '60 days') returning id into vv;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (tb, ob2, 'ZV-B1', 'abierto', now(), now() - interval '2 hours') returning id into vb;
+
+  select array_agg(o_id) into ids from viajes_activos_repartidos(1000);
+  fuera := va = any(ids) and vb = any(ids) and not (vv = any(ids));
+  -- un tope de 2 reparte una por flota aunque la grande tenga más y más viejos
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'A3', '525500066104') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, oa, 'ZV-A3', 'abierto', now(), now() - interval '20 hours');
+  select array_agg(o_id) into ids from viajes_activos_repartidos(2);
+  reparte := cardinality(ids) = 2 and vb = any(ids) and (select count(*) from viaje where id = any(ids) and tenant_id = ta) = 1;
+
+  perform sembrar_hitos_conductor(10000);
+  update viaje_hito set estado = 'recibido', fuente = 'texto', recibido_en = now() - interval '59 days'
+   where viaje_id = vv and tipo = 'llegada_carga';
+  perform cerrar_hitos_viajes_vencidos();
+  omitidos := (select count(*) from viaje_hito where viaje_id = vv and estado = 'omitido' and omitido_motivo = 'viaje_abierto_vencido') = 4;
+  recibido := (select estado from viaje_hito where viaje_id = vv and tipo = 'llegada_carga') = 'recibido';
+  intacto := (select estatus from viaje where id = vv) = 'abierto'
+    and (select count(*) from viaje_hito where viaje_id = va and estado = 'esperado') = 5;
+  idem := cerrar_hitos_viajes_vencidos() = 0;
+
+  raise exception E'REPARTO_JUSTO_0661 tope-reparte=% vencido-fuera=% hitos-omitidos=% recibido-intacto=% viaje-intacto=% idempotente=%   (esperado t / t / t / t / t / t)',
+    reparte, fuera, omitidos, recibido, intacto, idem;
+end $$;

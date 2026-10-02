@@ -47,12 +47,68 @@ export async function sembrarHitos(limite: number): Promise<number> {
   return Number(data ?? 0);
 }
 
-export async function leerViajesActivos(limite: number): Promise<ViajeContexto[]> {
+/** Desde cuándo un viaje que sigue «abierto» deja de ser trabajo del agente (días desde que se aceptó). Un viaje de 30 días que
+ *  nadie liquidó es un viaje olvidado, no uno en curso: ocuparía un lugar del tope para siempre (0661). */
+export const DIAS_VIAJE_ABIERTO_VENCIDO = 30;
+const VENTANA_ROTACION_MS = 5 * 60_000;
+
+/** La base no tiene la RPC (migración 0661 sin aplicar): se lee como antes, sin reparto. */
+function esRpcAusente(e: { code?: string | null; message?: string | null }): boolean {
+  const msg = e.message ?? '';
+  return /viajes_activos_repartidos|cerrar_hitos_viajes_vencidos/.test(msg)
+    && (e.code === '42883' || e.code === 'PGRST202' || /could not find the function|does not exist/i.test(msg));
+}
+
+async function leerViajesActivosPlano(limite: number): Promise<ViajeContexto[]> {
   const res = await acotada(supabaseAdmin()
     .from('viaje').select(COLUMNAS_VIAJE_CTX)
     .eq('estatus', 'abierto').not('aceptado_en', 'is', null)
     .order('aceptado_en', { ascending: true }).order('id').limit(limite), 'conductor.viajes');
   return ((exigir(res as never, 'conductor.viajes') ?? []) as unknown as Fila[]).map(filaAViajeCtx);
+}
+
+/**
+ * Los viajes abiertos y aceptados de TODAS las flotas, REPARTIDOS (0661): primero el más viejo de cada flota, luego el segundo de
+ * cada una, hasta llenar `limite`. Antes eran los `limite` más viejos en bloque y una flota grande se comía la pasada entera,
+ * sin aviso. El turno sobrante rota cada 5 minutos para que no sea siempre de la misma flota. Los de más de
+ * `DIAS_VIAJE_ABIERTO_VENCIDO` días quedan fuera. Sin la 0661 en la base, lectura anterior.
+ */
+export async function leerViajesActivos(limite: number): Promise<ViajeContexto[]> {
+  const { data, error } = await acotada(supabaseAdmin().rpc('viajes_activos_repartidos', {
+    p_limite: limite, p_rotacion: Math.floor(Date.now() / VENTANA_ROTACION_MS), p_max_dias: DIAS_VIAJE_ABIERTO_VENCIDO,
+  }), 'conductor.viajes_repartidos');
+  if (error) {
+    if (esRpcAusente(error)) return leerViajesActivosPlano(limite);
+    throw new Error(`conductor.viajes_repartidos: ${error.message}`);
+  }
+  const ids = ((data ?? []) as Array<{ o_id: string }>).map((f) => f.o_id);
+  const porId = new Map<string, ViajeContexto>();
+  for (const lote of trozos(ids, 150)) {
+    const res = await acotada(supabaseAdmin()
+      .from('viaje').select(COLUMNAS_VIAJE_CTX).in('id', lote).eq('estatus', 'abierto'), 'conductor.viajes_lote');
+    for (const f of (exigir(res as never, 'conductor.viajes_lote') ?? []) as unknown as Fila[]) {
+      const v = filaAViajeCtx(f);
+      porId.set(v.id, v);
+    }
+  }
+  // Se conserva el orden del reparto (turnos), no el de la lectura por lotes.
+  return ids.flatMap((id) => { const v = porId.get(id); return v ? [v] : []; });
+}
+
+/**
+ * Los hitos que siguen esperando de un viaje abierto con más de `DIAS_VIAJE_ABIERTO_VENCIDO` días se marcan `omitido`
+ * (`viaje_abierto_vencido`): la escalera deja de perseguirlos y la oficina los puede capturar a mano. El viaje NO se toca.
+ * Sin la 0661 en la base devuelve 0.
+ */
+export async function cerrarHitosDeViajesVencidos(): Promise<number> {
+  const { data, error } = await acotada(supabaseAdmin().rpc('cerrar_hitos_viajes_vencidos', {
+    p_max_dias: DIAS_VIAJE_ABIERTO_VENCIDO, p_limite: 500,
+  }), 'conductor.cerrar_vencidos');
+  if (error) {
+    if (esRpcAusente(error)) return 0;
+    throw new Error(`conductor.cerrar_vencidos: ${error.message}`);
+  }
+  return Number(data ?? 0);
 }
 
 export async function leerHitosDeViajes(viajeIds: string[]): Promise<HitoFila[]> {
